@@ -14,6 +14,7 @@ add_library(s3re SHARED
     replay/command_log.cpp
 
     game/logic_thread.cpp
+    game/map.cpp
     game/map_directions.cpp
     game/net_thread.cpp
     game/players.cpp
