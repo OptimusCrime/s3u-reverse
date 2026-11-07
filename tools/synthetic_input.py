@@ -7,7 +7,7 @@ Usage: python tools/synthetic_input.py [--seed N] [--duration S] [--start-delay 
 Waits until S3.EXE's window is in the foreground, then for --duration seconds
 performs random actions through SendInput (the same path as a real mouse):
 open the build menu and place buildings, select and move settlers, change
-the goods and settlers menus, and move the camera with the minimap. Every
+the goods and settlers menus (the camera stays where the game puts it). Every
 action is checked to happen while the game window is in front; otherwise
 the script waits, so it never clicks into other programs.
 
@@ -147,8 +147,10 @@ def point(rng, area):
 
 def random_action(rng):
     """Returns a list of (description, button, x, y) clicks."""
+    # No minimap clicks: they move the camera away from the player's land,
+    # after which no building site is ever visible.
     kind = rng.choices(["build", "build", "build", "move", "goods", "settlers",
-                        "camera", "map"], k=1)[0]
+                        "map"], k=1)[0]
     if kind == "build":
         return [("build tab", "L", *TAB_BUILD),
                 ("category", "L", rng.choice(BUILD_CATEGORIES), 200),
@@ -164,8 +166,6 @@ def random_action(rng):
     if kind == "settlers":
         return [("settlers tab", "L", *TAB_SETTLERS),
                 ("settlers menu", "L", *point(rng, MENU))]
-    if kind == "camera":
-        return [("minimap", "L", *point(rng, MINIMAP))]
     return [("map", rng.choice("LR"), *point(rng, MAP))]
 
 

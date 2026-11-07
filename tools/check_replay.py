@@ -94,9 +94,10 @@ def main():
                         help="play the recorded game with random mouse input "
                              "(tools/synthetic_input.py) using this seed")
     parser.add_argument("--dump-every", type=int, metavar="N",
-                        help="dump the world every N ticks in the recording and the replay "
-                             "and, if they differ, show the differing fields "
-                             "(tools/diff_world_dumps.py); about 22 MB per dump")
+                        help="dump the world every N ticks (and the header at every hashed "
+                             "tick) in the recording and the replay and, if they differ, "
+                             "show the differing fields (tools/diff_world_dumps.py); "
+                             "about 22 MB per dump")
     parser.add_argument("--build", default="Debug")
     args = parser.parse_args()
 
@@ -109,10 +110,11 @@ def main():
     os.makedirs(work, exist_ok=True)
     dump_args = []
     if args.dump_every:
-        for old in glob.glob(os.path.join(bin_dir, "determinism-*-world-*.bin")):
+        for old in (glob.glob(os.path.join(bin_dir, "determinism-*-world-*.bin")) +
+                    glob.glob(os.path.join(bin_dir, "determinism-*-headers.bin"))):
             os.remove(old)
         ticks = list(range(args.dump_every, args.ticks + 1, args.dump_every))[:16]
-        dump_args = ["--dump-tick", ",".join(map(str, ticks))]
+        dump_args = ["--dump-tick", ",".join(map(str, ticks)), "--dump-headers"]
 
     if args.recording:
         recording = os.path.abspath(args.recording)
@@ -140,9 +142,22 @@ def main():
         return 2
     ok, report = same_traces(reference, trace)
     print(f"  replay vs recording: {'identical' if ok else 'DIFFERENT'}")
+    # Player commands = recorded commands nobody issued live in the replay.
+    replay_log = open(os.path.join(bin_dir, "s3re.log"), encoding="utf-8",
+                      errors="replace").read()
+    player_commands = len(re.findall(r"was not issued live", replay_log))
+    print(f"  player commands in the recording: {player_commands}"
+          f"{' (at least; the log lists 20 differences at most)' if player_commands >= 20 else ''}")
+    if args.synthetic_input is not None and player_commands == 0:
+        print("  the scripted player issued no commands, so this run proves little")
+        ok = False
     if not ok:
         print(report)
         if dump_args and not args.recording:
+            print("  header differences at hashed ticks:", flush=True)
+            subprocess.run([sys.executable, os.path.join(ROOT, "tools", "diff_world_dumps.py"),
+                            "--headers", record_trace[:-4] + "-headers.bin",
+                            trace[:-4] + "-headers.bin"])
             for tick in dump_args[1].split(","):
                 a = record_trace[:-4] + f"-world-{tick}.bin"
                 b = trace[:-4] + f"-world-{tick}.bin"

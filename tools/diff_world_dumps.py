@@ -2,6 +2,11 @@
 """Compare two world dumps (s3re_launcher --trace-determinism --dump-tick N).
 
 Usage: python tools/diff_world_dumps.py A.bin B.bin [--all] [--runs N]
+       python tools/diff_world_dumps.py --headers A-headers.bin B-headers.bin [--all]
+
+With --headers, compares the header snapshots of two traces made with
+--dump-headers (one per hashed tick) and lists, per differing field range,
+the ticks at which it differs.
 
 Groups the differing bytes by region: header offsets, map tile fields
 (byte offset inside the 24-byte tile record, with the range of tiles), and
@@ -11,6 +16,7 @@ lists as src/s3re/trace/determinism.cpp); --all shows them too.
 """
 
 import argparse
+import struct
 import sys
 from collections import defaultdict
 
@@ -20,7 +26,7 @@ ROW = 0x300 * TILE
 REST = MAP_TILES + 0x300 * ROW
 
 # Keep in sync with src/s3re/trace/determinism.cpp.
-HEADER_SKIPS = [(0x2d02c, 0x2d244), (0x2d254, 0x2d264), (0x2d27c, 0x2d280), (0x2d284, 0x2d294),
+HEADER_SKIPS = [(0x2d02c, 0x2d244), (0x2d254, 0x2d268), (0x2d278, 0x2d284), (0x2d284, 0x2d294),
                 (0x2d2a0, 0x2d2a4), (0x2d2e4, 0x2d2ec), (0x2d2f0, 0x2d2f4), (0x2d300, 0x2d302)]
 REST_SKIPS = [(0x1222ed4, 0x1223656), (0x1539484, 0x15394b0)]
 TILE_SKIPS = (15, 17)
@@ -48,7 +54,45 @@ def differs(a, b, offset, all_bytes):
     return True
 
 
+def read_headers(path):
+    data = open(path, "rb").read()
+    headers, offset = {}, 0
+    while offset + 8 <= len(data):
+        tick, size = struct.unpack_from("<II", data, offset)
+        headers[tick] = data[offset + 8:offset + 8 + size]
+        offset += 8 + size
+    return headers
+
+
+def compare_headers(path_a, path_b, all_bytes):
+    a, b = read_headers(path_a), read_headers(path_b)
+    ranges = defaultdict(list)  # (start, end) -> [(tick, a bytes, b bytes)]
+    for tick in sorted(set(a) & set(b)):
+        ha, hb = a[tick], b[tick]
+        runs = []
+        for i in range(min(len(ha), len(hb))):
+            if differs(ha, hb, i, all_bytes):
+                if runs and i - runs[-1][1] <= 4:
+                    runs[-1][1] = i
+                else:
+                    runs.append([i, i])
+        for start, end in runs:
+            ranges[(start, end)].append((tick, ha[start:end + 1], hb[start:end + 1]))
+    print(f"{len(set(a) & set(b))} common ticks; {len(ranges)} differing header range(s)")
+    for (start, end), hits in sorted(ranges.items()):
+        ticks = [t for t, _, _ in hits]
+        _, va, vb = hits[0]
+        print(f"header {start:#09x}..{end:#09x}: {len(ticks)} tick(s) {ticks[:8]}"
+              f"{'...' if len(ticks) > 8 else ''}  first A={va[:16].hex()} B={vb[:16].hex()}")
+    return 0 if not ranges else 1
+
+
 def main():
+    if "--headers" in sys.argv:
+        args = [x for x in sys.argv[1:] if x != "--headers"]
+        all_bytes = "--all" in args
+        files = [x for x in args if x != "--all"]
+        return compare_headers(files[0], files[1], all_bytes)
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("a")
     parser.add_argument("b")

@@ -15,13 +15,17 @@ simulation code.**
 random mouse input (build menu, placing buildings on detected sites, box
 selection, goods/settlers menus, minimap), replays it, and compares.
 Results so far: the RNG was identical on every tick in every run (up to
-3,000 ticks, 5 input seeds), and removing a player command makes the replay
-diverge. The world hashes kept differing because the game keeps UI state
-inside the world object; each such field was found with world dumps,
-checked in the code, and excluded (list with evidence in
-`src/s3re/trace/determinism.cpp`). Last state: seed 41 passed fully; seed
-67 found the statistics chart (now excluded); seed 53's replay was closed
-by the user mid-run (not a bug).
+3,000 ticks, 9 input seeds), and removing a player command makes the replay
+diverge. The world hashes kept differing because the game keeps UI and
+draw hand-off state inside the world object; each such field was found
+with world dumps / header snapshots (`--dump-every` also writes the header
+at every hashed tick), checked in the code, and excluded (list with
+evidence in `src/s3re/trace/determinism.cpp`). Latest: seed 103 passed
+fully with 9 player commands; seed 97 (10 player commands) differed only
+in a draw "redraw" flag at one tick (now excluded). Earlier "passes" had no
+player commands (minimap clicks moved the camera off the player's land);
+fixed, and `check_replay.py` now fails a scripted run without player
+commands.
 
 Next steps:
 1. Run `check_replay.py --synthetic-input` with a few more seeds (with

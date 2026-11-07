@@ -157,6 +157,35 @@ bool IsDumpTick(std::uint32_t tick) {
     return false;
 }
 
+// S3RE_DUMP_HEADERS (`--dump-headers`): at every hashed tick, append the
+// world header to <trace>-headers.bin as records of (uint32 tick, uint32
+// size, header bytes). Finds short-lived header differences that fall
+// between --dump-tick ticks (tools/diff_world_dumps.py --headers).
+FILE* g_headerFile = nullptr;
+
+bool DumpHeadersEnabled() {
+    static const bool value = GetEnvironmentVariableA("S3RE_DUMP_HEADERS", nullptr, 0) > 0;
+    return value;
+}
+
+void AppendHeader(const std::uint8_t* world, std::uint32_t tick) {
+    if (g_headerFile == nullptr) {
+        char path[MAX_PATH + 32];
+        std::snprintf(path, sizeof(path), "%.*s-headers.bin",
+                      static_cast<int>(std::strlen(g_path) - 4), g_path);
+        if (fopen_s(&g_headerFile, path, "wb") != 0 || g_headerFile == nullptr) {
+            g_headerFile = nullptr;
+            return;
+        }
+        S3RE_LOG("determinism trace: writing headers to %s", path);
+    }
+    const std::uint32_t size = static_cast<std::uint32_t>(
+        ReadableLength(world, s3re::game::world_offset::kMapTiles));
+    std::fwrite(&tick, sizeof(tick), 1, g_headerFile);
+    std::fwrite(&size, sizeof(size), 1, g_headerFile);
+    std::fwrite(world, 1, size, g_headerFile);
+}
+
 void DumpWorld(const std::uint8_t* world, std::uint32_t tick) {
     char path[MAX_PATH + 32];
     std::snprintf(path, sizeof(path), "%.*s-world-%u.bin",
@@ -204,10 +233,15 @@ constexpr ByteRange kHeaderSkips[] = {
     // Camera position (x, y) and a second (target?) pair, in pixels. Moved
     // by the UI (and by command 2, which the game's movie recorder uses);
     // 0x5158f0/0x515980 turn it into the tile at the screen centre.
-    {0x2d254, 0x2d264},
-    // "Refresh the UI" flag: set by ExecuteCommands when a command touches
-    // what the local player's open menu shows (0x53709f).
-    {0x2d27c, 0x2d280},
+    // Then a "redraw" flag (+0x2d264): set by the UI, the simulation and
+    // Step, read only by PrepareDrawData, which hands it to the draw thread
+    // and resets it (0x51f566/0x51f5d8), a timing-dependent number of times.
+    {0x2d254, 0x2d268},
+    // Draw hand-off flags, also reset by PrepareDrawData: minimap ready
+    // (+0x2d278, set by GameWorld::BuildMinimap) and +0x2d280. Between them
+    // the "refresh the UI" flag (+0x2d27c): set by ExecuteCommands when a
+    // command touches what the local player's open menu shows (0x53709f).
+    {0x2d278, 0x2d284},
     // UI selection mode and two parameters; set by the UI, the command
     // executor only reads them to refresh overlays. Then the sub-page of UI
     // menu 2 (+0x2d290), read by ExecuteCommands only to decide whether to
@@ -357,6 +391,9 @@ void OnLogicStep(const void* logicThread) {
     }
 
     if (newTick && tick % kHashInterval == 0) {
+        if (DumpHeadersEnabled()) {
+            AppendHeader(world, tick);
+        }
         RegionHashes hashes{};
         if (HashRegions(world, mapSize, &hashes)) {
             std::fprintf(g_file, "H\t%u\t%016llx\t%016llx\t%016llx\t%zu\n", tick, hashes.header,
@@ -376,6 +413,10 @@ void CloseDeterminismTrace() {
     if (g_file != nullptr) {
         std::fclose(g_file);
         g_file = nullptr;
+    }
+    if (g_headerFile != nullptr) {
+        std::fclose(g_headerFile);
+        g_headerFile = nullptr;
     }
 }
 
