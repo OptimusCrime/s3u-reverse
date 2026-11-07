@@ -18,11 +18,18 @@ Next steps:
 1. DONE: the determinism trace. `s3re_launcher --trace-determinism` writes
    `determinism-<date>-<time>.tsv` next to `s3re.dll`, and
    `python tools/compare_traces.py a.tsv b.tsv` compares two of them.
-2. WAITING ON THE USER: two traced runs of the same single-player map with
-   no input after the game starts. Then compare them. If they match, the
-   simulation is deterministic given the same inputs. If they diverge
-   immediately, find where the seed comes from (time?) and where player
-   commands enter.
+2. DONE: two traced runs of the same map without input differ from tick 1:
+   every game starts with a different RNG seed. Found the seeding:
+   `GameWorld::SeedRandom` (`0x4feb40`), called twice from
+   `CLogicThread::OnStart` (by `GameWorld::Create` and then with the seed
+   from `g_gameSettings+0x88`). Reimplemented and verified it; the hook logs
+   every seed, and `s3re_launcher --seed N` forces it.
+2b. WAITING ON THE USER: two traced runs with the same forced seed
+   (`--trace-determinism --seed 1234`), same map, no input. If they match,
+   the simulation is deterministic given seed + inputs. If they still
+   diverge, the first differing tick/region shows the next nondeterminism
+   source (candidate: the CRT `rand()`, seeded by `srand(time)` at
+   `0x431852` and used in many places, e.g. around `0x549xxx`).
 3. Find how player commands reach the simulation (a command queue that
    lockstep multiplayer would send over the network); that's what a replay
    recorder needs to capture.
@@ -31,6 +38,15 @@ Next steps:
    described in `CLAUDE.md`.
 
 ## Open questions and loose ends
+
+- Where does the game seed (`g_gameSettings+0x88`) originally come from?
+  It's copied from the settings struct at `[0x7e2eb0]+0x364` by `0x567910`.
+  Not traced further. Recording the seed is enough for replays.
+- `CLogicThread::Step` stores the RNG state every 256 ticks into
+  `g_syncRandomHistory` (`0x7dfb58`) and sends it via `0x4309c0`. This is
+  probably the multiplayer desync check, more evidence for lockstep.
+- `CLogicThread::Step` is called about 240 times a second, but the tick
+  advances only about 15 times a second; the step decides when to tick.
 
 - `GameWorld::UpdatePhase2` (`0x4e05e0`): purpose unknown.
 - `GameWorld::UpdateSettlers` (`0x4e9670`): the name is provisional.
@@ -55,6 +71,17 @@ Next steps:
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
 
 ## Session log
+
+### 2026-11-07 (4): first determinism runs, RNG seeding
+
+- First real traces: 384x384 map, about 15 ticks/s, the RNG changes every
+  tick. Two runs without input differ from tick 1 (different seed).
+- Disassembled all of `S3.EXE` with dumpbin to grep for the RNG state
+  offsets (`0x2d2dc..0x2d2e0`). Found `GameWorld::SeedRandom` (`0x4feb40`),
+  its two callers in `CLogicThread::OnStart`, the savegame-load copy of the
+  RNG state (`0x509xxx`), and the sync check in `CLogicThread::Step`.
+- Reimplemented `GameWorld::SeedRandom` (verified, 100,000 cases); added
+  `--seed` to the launcher and step-count diagnostics to `s3re.log`.
 
 ### 2026-11-07 (3): determinism trace
 

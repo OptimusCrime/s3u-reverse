@@ -163,7 +163,14 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
 - **The simulation's random number generator** is `GameWorld::Random`
   (`0x4feb70`), with its state at world `+0x2d2dc`. It's reimplemented and
   verified. Because the state lives in the world, the simulation is probably
-  deterministic.
+  deterministic. It's seeded by `GameWorld::SeedRandom` (`0x4feb40`) at
+  game start, with a different seed each game.
+- **Launcher options for runtime checks:** `--trace-determinism` writes a
+  per-tick trace (compare two with `tools/compare_traces.py`); `--seed N`
+  forces the RNG seed. `s3re.log` logs every seed and the step count.
+- **The full disassembly** (`dumpbin /disasm:nobytes /out:<file> S3.EXE`,
+  run from PowerShell, since Git Bash mangles `/options`) is greppable for
+  field offsets, e.g. `2D2DCh` to find all RNG state accesses.
 - **Global variables** are recorded in `re/globals.csv`, e.g. the tick
   counter `g_gameTick` at `0x7dfd48`.
 - **`DebugLog` (`0x428720`)** is a printf-style call that is just `ret` in the

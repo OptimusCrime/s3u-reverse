@@ -1,10 +1,14 @@
 // s3re_launcher: starts the original S3.EXE with s3re.dll loaded into it.
 //
 // Usage: s3re_launcher [--game-dir <path>] [--test [filter]]
-//                      [--trace-determinism] [-- <arguments passed to S3.EXE>]
+//                      [--trace-determinism] [--seed <n>]
+//                      [-- <arguments passed to S3.EXE>]
 //
 // --trace-determinism writes the tick, RNG state and world hashes after each
 // simulation step to determinism-<date>-<time>.tsv next to s3re.dll.
+//
+// --seed <n> replaces every seed of the simulation's random number generator
+// with n (0..65535), so that two games can start from the same random state.
 //
 // --test runs the differential test suite inside S3.EXE instead of the game
 // (optionally only tests whose name contains <filter>), prints the results
@@ -157,6 +161,7 @@ int wmain(int argc, wchar_t** argv) {
     bool testMode = false;
     bool traceDeterminism = false;
     std::wstring testFilter;
+    std::wstring seed;
 
     for (int i = 1; i < argc; ++i) {
         const std::wstring arg = argv[i];
@@ -169,13 +174,20 @@ int wmain(int argc, wchar_t** argv) {
             }
         } else if (arg == L"--trace-determinism") {
             traceDeterminism = true;
+        } else if (arg == L"--seed" && i + 1 < argc) {
+            seed = argv[++i];
+            wchar_t* end = nullptr;
+            const unsigned long value = wcstoul(seed.c_str(), &end, 0);
+            if (end == seed.c_str() || *end != L'\0' || value > 0xFFFF) {
+                return Fail(L"--seed expects a number from 0 to 65535, got '%s'", seed);
+            }
         } else if (arg == L"--") {
             for (++i; i < argc; ++i) {
                 gameArgs.emplace_back(argv[i]);
             }
         } else if (arg == L"--help" || arg == L"-h") {
             wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
-                    L"[--trace-determinism] [-- <S3.EXE arguments>]\n");
+                    L"[--trace-determinism] [--seed <n>] [-- <S3.EXE arguments>]\n");
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
@@ -224,6 +236,7 @@ int wmain(int argc, wchar_t** argv) {
     SetEnvironmentVariableW(L"S3RE_TEST_FILTER", testFilter.empty() ? nullptr
                                                                     : testFilter.c_str());
     SetEnvironmentVariableW(L"S3RE_TRACE", traceDeterminism ? L"determinism" : nullptr);
+    SetEnvironmentVariableW(L"S3RE_SEED", seed.empty() ? nullptr : seed.c_str());
 
     STARTUPINFOW startup = {};
     startup.cb = sizeof(startup);

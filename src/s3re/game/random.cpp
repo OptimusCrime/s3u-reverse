@@ -26,11 +26,31 @@
 //   ret
 //
 // Only AX is defined on return; callers use the low 16 bits.
+//
+// GameWorld::SeedRandom (0x004feb40) seeds it (thiscall, one stack argument,
+// ret 4; only the low 16 bits of the seed are used):
+//
+//   a = seed, b = seed + 1000, c = seed + 2000
+//
+// Called from CLogicThread::OnStart: by the world creation function
+// (0x005166d0, "creating world") and right after it with the game's seed,
+// the 16-bit field +0x88 of the global object at 0x007a7a18, read by
+// 0x00437050. That value comes from the game settings; its origin (clock?)
+// isn't traced yet.
+//
+// Our hook logs every seed with its caller. If the environment variable
+// S3RE_SEED is set (`s3re_launcher --seed N`), every seed is replaced by N so
+// that two games can start from the same random state.
 
 #include "game/world.h"
 #include "hooks.h"
+#include "log.h"
 #include "test/difftest.h"
 
+#include <intrin.h>
+#include <windows.h>
+
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -62,6 +82,53 @@ std::uint16_t __fastcall GameWorld_Random(GameWorld* world, void* /*edx*/) {
 
 S3RE_HOOK(0x004feb70, GameWorld_Random, GameWorldRandomFn, Original_GameWorld_Random,
           GameWorld_Random);
+
+using GameWorldSeedRandomFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t seed);
+
+// The reimplementation, compared against the original by the tests.
+void __fastcall GameWorld_SeedRandom_Impl(GameWorld* world, void* /*edx*/, std::uint32_t seed) {
+    std::uint16_t* state = &WorldField<std::uint16_t>(world, world_offset::kRandomState);
+    state[0] = static_cast<std::uint16_t>(seed);
+    state[1] = static_cast<std::uint16_t>(seed + 1000);
+    state[2] = static_cast<std::uint16_t>(seed + 2000);
+}
+
+namespace {
+
+// S3RE_SEED as a number, or -1 if unset or invalid.
+long SeedOverride() {
+    static const long value = [] {
+        char text[32] = {};
+        const DWORD length = GetEnvironmentVariableA("S3RE_SEED", text, sizeof(text));
+        if (length == 0 || length >= sizeof(text)) {
+            return -1L;
+        }
+        char* end = nullptr;
+        const unsigned long parsed = std::strtoul(text, &end, 0);
+        return (end != text && *end == '\0' && parsed <= 0xFFFF) ? static_cast<long>(parsed)
+                                                                 : -1L;
+    }();
+    return value;
+}
+
+}  // namespace
+
+// The installed hook: logs the seed, applies the override, then seeds.
+void __fastcall GameWorld_SeedRandom(GameWorld* world, void* edx, std::uint32_t seed) {
+    const long forced = SeedOverride();
+    if (forced >= 0) {
+        S3RE_LOG("GameWorld::SeedRandom(world=%p, seed=%u) called from %p; forced to %ld",
+                 static_cast<void*>(world), seed & 0xFFFF, _ReturnAddress(), forced);
+        seed = static_cast<std::uint32_t>(forced);
+    } else {
+        S3RE_LOG("GameWorld::SeedRandom(world=%p, seed=%u) called from %p",
+                 static_cast<void*>(world), seed & 0xFFFF, _ReturnAddress());
+    }
+    GameWorld_SeedRandom_Impl(world, edx, seed);
+}
+
+S3RE_HOOK(0x004feb40, GameWorld_SeedRandom, GameWorldSeedRandomFn,
+          Original_GameWorld_SeedRandom, GameWorld_SeedRandom);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -132,6 +199,53 @@ S3RE_TEST(GameWorld_Random_MatchesOriginal) {
 S3RE_TEST(GameWorld_Random_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareRandom(probe, &WrongRandom, 2000, 500);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+namespace {
+
+void CompareSeedRandom(test::Context& ctx, GameWorldSeedRandomFn candidate, int cases) {
+    constexpr std::size_t kBufferSize = kWindowBefore + kStateSize + kWindowAfter;
+    std::vector<std::uint8_t> bufferA(kBufferSize);
+    std::vector<std::uint8_t> bufferB(kBufferSize);
+    auto worldOf = [](std::vector<std::uint8_t>& buffer) {
+        return reinterpret_cast<GameWorld*>(buffer.data() + kWindowBefore -
+                                            world_offset::kRandomState);
+    };
+    for (int i = 0; i < cases; ++i) {
+        ctx.rng().Fill(bufferA.data(), kBufferSize);
+        bufferB = bufferA;
+        // Mostly full 32-bit values (the high half must be ignored), plus
+        // values near the 16-bit wrap-around.
+        const std::uint32_t seed = ctx.rng().Chance(1, 4)
+                                       ? 0xFFFFu - ctx.rng().Below(2100)
+                                       : ctx.rng().Next32();
+        Original_GameWorld_SeedRandom(worldOf(bufferA), nullptr, seed);
+        candidate(worldOf(bufferB), nullptr, seed);
+        if (!S3RE_EXPECT_MEM_EQ(bufferA.data(), bufferB.data(), kBufferSize)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, seed 0x%08x", i, seed);
+            return;
+        }
+    }
+}
+
+// Wrong: b gets seed + 100 instead of seed + 1000.
+void __fastcall WrongSeedRandom(GameWorld* world, void* /*edx*/, std::uint32_t seed) {
+    std::uint16_t* state = &WorldField<std::uint16_t>(world, world_offset::kRandomState);
+    state[0] = static_cast<std::uint16_t>(seed);
+    state[1] = static_cast<std::uint16_t>(seed + 100);
+    state[2] = static_cast<std::uint16_t>(seed + 2000);
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_SeedRandom_MatchesOriginal) {
+    CompareSeedRandom(ctx, &GameWorld_SeedRandom_Impl, 100000);
+}
+
+S3RE_TEST(GameWorld_SeedRandom_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSeedRandom(probe, &WrongSeedRandom, 1000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

@@ -332,6 +332,7 @@ address,name,category,status,hook,verified_by,notes
 0x004308b0,CEventQueue::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0 of the base subobject at +0x4).
 0x004308e0,CEventQueue::~CEventQueue,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x004308b0.
 0x00430ca0,CEventQueue::vf03,game,classified,none,,"Virtual function, vtable slot 3; purpose not yet known."
+0x00437050,GameSettings::GetRandomSeed,game,identified,none,,Returns word [this+0x88]; called on the global at 0x7a7a18. Name of the class is provisional.
 0x00437530,WCValOrderedVector_Dirk_CPlayer::vf02,watcom,classified,none,,"Virtual function, vtable slot 2; purpose not yet known."
 0x00437550,WCValSortedVector_Dirk_CTeam::vf04,watcom,classified,none,,"Virtual function, vtable slot 4; purpose not yet known."
 0x00437570,WCValOrderedVector_int::~WCValOrderedVector_int,watcom,classified,none,,Destructor; called by the scalar deleting destructor at 0x00437610.
@@ -901,7 +902,9 @@ address,name,category,status,hook,verified_by,notes
 0x004e9670,GameWorld::UpdateSettlers,game,classified,none,,"Third per-step world update (ECX=world); provisional name. Strings mention settler jobs (thief StealGoodFromP, digger, gong/catapult production). About 7,100 lines of decompiled code."
 0x004fce60,CGameData::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x004fce80,CGameData::~CGameData,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x004fce60.
+0x004feb40,GameWorld::SeedRandom,game,verified,replaced,GameWorld_SeedRandom_MatchesOriginal GameWorld_SeedRandom_ComparisonDetectsWrongImplementation,"a=seed, b=seed+1000, c=seed+2000 (low 16 bits). thiscall, ret 4. Our hook logs each seed and applies S3RE_SEED (launcher --seed)."
 0x004feb70,GameWorld::Random,game,verified,replaced,GameWorld_Random_MatchesOriginal GameWorld_Random_ComparisonDetectsWrongImplementation,"Simulation RNG: three uint16 at world+0x2d2dc; result=(a+b)^c (new a), t=c+b, b=ror1(b^t), c=ror1(t). State lives in the world, which suggests determinism."
+0x005166d0,GameWorld::Create,game,identified,none,,"Logs 'creating world', seeds the RNG with its first argument, builds the world. Called from CLogicThread::OnStart (name provisional)."
 0x0053c7a0,CLogicThread::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0 of the base subobject at +0x4).
 0x0053c7d0,CLogicThread::~CLogicThread,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0053c7a0.
 0x0053c9e0,CLogicThread::OnStart,game,classified,none,,Logic thread startup (slot 4).
