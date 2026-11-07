@@ -331,6 +331,8 @@ address,name,category,status,hook,verified_by,notes
 0x00430560,CEventQueueOverflow::vf01,game,classified,none,,"Virtual function, vtable slot 1; purpose not yet known."
 0x004308b0,CEventQueue::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0 of the base subobject at +0x4).
 0x004308e0,CEventQueue::~CEventQueue,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x004308b0.
+0x00430980,MessageQueue::Pop,game,identified,none,,Returns a pointer to the next dword and advances the read index. thiscall.
+0x004309c0,MessageQueue::Push,game,identified,passthrough,,"Push(const uint32* dwords, int count, bool signal): copies dwords into a ring buffer (+0x14 buffer, +0x18 capacity (power of 2), +0x1c read, +0x20 write, +0x24 count, +0x30 high-water), sets the event at [+0x28]+8 if signal; throws when full. Locks around the copy. thiscall, ret 0xc. Pass-through hook records/replays commands on the logic->net queue (src/s3re/replay/command_log.cpp)."
 0x00430ca0,CEventQueue::vf03,game,classified,none,,"Virtual function, vtable slot 3; purpose not yet known."
 0x00437050,GameSettings::GetRandomSeed,game,identified,none,,Returns word [this+0x88]; called on the global at 0x7a7a18. Name of the class is provisional.
 0x00437530,WCValOrderedVector_Dirk_CPlayer::vf02,watcom,classified,none,,"Virtual function, vtable slot 2; purpose not yet known."
@@ -545,14 +547,16 @@ address,name,category,status,hook,verified_by,notes
 0x0046a090,CNetThreadBase::vf04,game,classified,none,,"Virtual function, vtable slot 4; purpose not yet known."
 0x0046a390,CNetThread::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0 of the base subobject at +0x4).
 0x0046a3c0,CNetThread::~CNetThread,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0046a390.
-0x0046a710,CNetThread::vf04,game,classified,none,,"Virtual function, vtable slot 4; purpose not yet known."
-0x0046ab00,CNetThread::vf06,game,classified,none,,"Virtual function, vtable slot 6; purpose not yet known."
+0x0046a710,CNetThread::OnStart,game,identified,none,,"Thread slot 4. Sets up players and time server; opens the event file: write mode with -record (this+0x89), read mode with -play (this+0x8a; header value -> this+0x8c)."
+0x0046ab00,CNetThread::OnExit,game,identified,none,,Thread slot 6. With -record stores this+0x224 (last ExecuteStep) as the event-file header value and closes it; with -play frees the read buffer.
 0x0046ab50,CNetThread::vf09,game,classified,none,,"Virtual function, vtable slot 9; purpose not yet known."
+0x0046b080,CNetThread::PlayEventsFromFile,game,identified,none,,-play: reads packets from the event file (CEventFile::ReadEvent) and passes them to OnNetAnnounce while their ExecuteStep is at most 300 steps ahead of the current step (0x46dc60).
+0x0046cbd0,CNetThread::OnNetAnnounce,game,identified,passthrough,,"Receives one announce packet (player/AI command scheduled for an ExecuteStep; layout in src/s3re/game/net_thread.cpp). Appends it to the -record event file (this+0x94) if recording (this+0x89), then queues it for its ExecuteStep. thiscall, 1 arg. Pass-through hook logs packets (--log-commands)."
 0x0046f610,CNetBounceThread::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0 of the base subobject at +0x4).
 0x0046f640,CNetBounceThread::~CNetBounceThread,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0046f610.
 0x0046f6a0,CNetBounceThread::vf04,game,classified,none,,"Virtual function, vtable slot 4; purpose not yet known."
-0x0046f6b0,CNetBounceThread::vf06,game,classified,none,,"Virtual function, vtable slot 6; purpose not yet known."
-0x0046f6f0,CNetBounceThread::vf09,game,classified,none,,"Virtual function, vtable slot 9; purpose not yet known."
+0x0046f6b0,CNetBounceThread::OnExit,game,identified,none,,Slot 6. With -record writes header value step+5 and closes the event file (+0x54); with -play frees it.
+0x0046f6f0,CNetBounceThread::Step,game,identified,none,,"Single-player loopback network (slot 9). Pops messages from the logic->net queue (+0x48): 0x21 commands are bounced back as type 1 (with -record also written to the event file with ExecuteStep = step+2); a 0x20 step message (step -> +0x6c) is answered with the collected commands plus a type-2 budget message (step+5) on queue +0x4c. With -play, adds file commands (and live ones still), so -play duplicates commands."
 0x0046fab0,CNetSession::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x0046fad0,CNetSession::~CNetSession,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0046fab0.
 0x00470490,CNetSession::vf03,game,classified,none,,"Virtual function, vtable slot 3; purpose not yet known."
@@ -879,8 +883,13 @@ address,name,category,status,hook,verified_by,notes
 0x0049c060,Menus::priv::CGameLaunchDialog::vf28_subcfc_thunk,compiler,classified,none,,This-adjusting thunk (vtable slot 28 of the base subobject at +0xcfc); jumps to 0x0042a030.
 0x0049d790,CRequestType::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x0049d7d0,CRequestType::~CRequestType,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0049d790.
+0x0049da20,CEventFile::CEventFile,game,identified,none,,"Constructor: fstream base, header magic 0x47832443 at +0x6c, header value +0x70 = 0, buffer +0x74 = 0."
 0x0049da90,CEventFile::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x0049dab0,CEventFile::~CEventFile,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0049da90.
+0x0049db10,CEventFile::Open,game,identified,none,,"Open(path, mode): mode 1 = write (truncate, write 8-byte header); mode 0 = read the whole file after the header into a buffer (+0x74, size +0x78, read pos +0x7c). Mode at +0x68."
+0x0049dda0,CEventFile::Close,game,identified,none,,"Write mode: seek to 0, rewrite the 8-byte header, close. Read mode: free the buffer."
+0x0049ddf0,CEventFile::WriteEvent,game,identified,none,,Writes one packet; its size is the byte at packet+2.
+0x0049de10,CEventFile::ReadEvent,game,identified,none,,"Returns the next packet (operator new copy, size at byte 2) or null at end of file."
 0x004a5b20,Dirk::CMapFile::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x004a5b50,Dirk::CMapFile::~CMapFile,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x004a5b20.
 0x004a6a40,WCValSkipListDict_unsigned_int_int::~WCValSkipListDict_unsigned_int_int,watcom,classified,none,,Destructor; called by the scalar deleting destructor at 0x004a6c00.
@@ -910,6 +919,7 @@ address,name,category,status,hook,verified_by,notes
 0x005166d0,GameWorld::Create,game,identified,none,,"Logs 'creating world', seeds the RNG with its first argument, builds the world. Called from CLogicThread::OnStart (name provisional)."
 0x0051f110,CLogicThread::PrepareDrawData,game,classified,none,,Called by CLogicThread::Step between the update phases when g_stepCountdown == 0. Increments world+0x2d301 and fills the object at this+0x3d0 (draw thread hand-off?). Runs a timing-dependent number of times. Name provisional.
 0x00524fa0,CLogicThread::ProcessEvents,game,classified,none,,"Called by CLogicThread::Step on every step (not only on ticks), after the event queue fetch. Uses the search functions 0x4ff0a0/0x4ff170. Name provisional."
+0x00535990,CLogicThread::ExecuteCommands,game,identified,none,,"Lockstep executor, called before each tick. Step this+0x3b0, budget this+0x3b4. Unless step is 0: pops messages from queue this+0x3c8 (waiting) and executes type-1 command messages (big switch on command id) until a type-2 message sets the budget; if budget > step: step++. Then pushes a 0x20 step message (step) on queue this+0x3c4."
 0x0053c7a0,CLogicThread::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0 of the base subobject at +0x4).
 0x0053c7d0,CLogicThread::~CLogicThread,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0053c7a0.
 0x0053c9e0,CLogicThread::OnStart,game,classified,none,,Logic thread startup (slot 4).

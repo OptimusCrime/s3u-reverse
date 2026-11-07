@@ -11,7 +11,10 @@ add_library(s3re SHARED
 
     trace/determinism.cpp
 
+    replay/command_log.cpp
+
     game/logic_thread.cpp
+    game/net_thread.cpp
     game/random.cpp
     game/winmain.cpp
 )

@@ -7,41 +7,34 @@ progress.
 
 ## Current focus
 
-**Record/replay of player input.**
+**Replay with human input, then start replacing simulation code.**
 
-The simulation is confirmed deterministic: with the same map and a forced
-RNG seed, two unattended runs match on every tick (RNG state) and at every
-world hash for 2,000 ticks, apart from two known timing-dependent scratch
-fields that the trace now skips. `python tools/check_determinism.py` runs
-the whole check without user interaction (`-map` skips the menus,
-`--exit-after-ticks` ends the game).
+Command record/replay works (`--record-commands` / `--replay-commands`,
+see "Commands and lockstep" in `CLAUDE.md`). `python tools/check_replay.py`
+records 1,000 ticks, replays them with an identical determinism trace, and
+checks that a recording with one command removed diverges. So far the
+recordings only hold commands from the computer player and the game itself
+(no human input).
 
 Next steps:
-1. DONE: the determinism trace. `s3re_launcher --trace-determinism` writes
-   `determinism-<date>-<time>.tsv` next to `s3re.dll`, and
-   `python tools/compare_traces.py a.tsv b.tsv` compares two of them.
-2. DONE: two traced runs of the same map without input differ from tick 1:
-   every game starts with a different RNG seed. Found the seeding:
-   `GameWorld::SeedRandom` (`0x4feb40`), called twice from
-   `CLogicThread::OnStart` (by `GameWorld::Create` and then with the seed
-   from `g_gameSettings+0x88`). Reimplemented and verified it; the hook logs
-   every seed, and `s3re_launcher --seed N` forces it.
-2b. DONE: with `--seed 1234` and `-map Map\MULTI\384-2-Lakes.map`, runs
-   are identical (see the session log). The CRT `rand()` (seeded by
-   `srand(time)` at `0x431852`) hasn't caused differences so far; it may
-   matter with computer opponents or other maps (not tested yet).
-3. Try the game's own recorder: `-record` writes the "movie"
-   `Siedler3.evt`, `-play` replays it. If it records player commands per
-   tick, it is the replay system we need (play back in the original and
-   the hooked build, compare traces).
-   Note: `-demo` crashes (access violation at `0x4a6127`, null object in
-   `0x4a60f0`) when combined with `-map`.
-4. Find how player commands reach the simulation (a command queue that
-   lockstep multiplayer would send over the network); that's what a replay
-   recorder needs to capture.
-5. Then build record/replay: record the commands, replay them in the hooked
-   build, and compare per-tick hashes. This is the system-level verification
-   described in `CLAUDE.md`.
+1. Record a game with real human input and replay it: the user plays with
+   `s3re_launcher --trace-determinism --record-commands game.bin --seed 1234
+   --exit-after-ticks 3000 -- -map Map\MULTI84-2-Lakes.map`, then copy the
+   new `determinism-*.tsv` to `game.bin.tsv` and run
+   `python tools/check_replay.py --recording game.bin --ticks 3000`.
+   Alternative without the user: drive the game window with synthetic
+   mouse/keyboard input (SendInput) during the recording.
+   Watch for: UI commands that don't go through the 0x3c4 queue, and UI
+   state inside the hashed world memory (would differ without a real
+   simulation difference).
+2. Make replays self-contained: store the seed and map in the recording
+   header so `--replay-commands` needs no extra options.
+3. Decode the command ids (`ExecuteCommands` `0x535990` switch): 0x01
+   (computer player, map coordinates: build?), 0x0b, 0x0f, 0x11, 0xfb (RNG
+   sync check), 0xf1. Useful for readable recordings and for later
+   reimplementation.
+4. Then begin bottom-up replacement of simulation functions, verifying each
+   with differential tests plus `check_replay.py`.
 
 ## Open questions and loose ends
 
@@ -57,6 +50,15 @@ Next steps:
   side effects depend on timing. Known volatile world fields: `+0x2d2e4`
   to `+0x2d2eb` and `+0x2d301` (skipped by the trace hash). Check whether
   they can ever influence the simulation.
+- Bytes 9..11 of 12-byte command messages are uninitialized stack memory
+  in many commands (vary between runs). Replay feeds the recorded bytes, and
+  no effect on the simulation has been seen, but confirm per command id
+  when decoding them.
+- `ProcessEvents` (`0x524fa0`) does extra work when the game's `-record`
+  flag (`0x7a800a`) is set (mouse positions scaled by `0x7acf84`, pushed
+  somewhere). Not analyzed; we don't use `-record`.
+- The `-record` file header value is the last ExecuteStep + 5; `-play`
+  sends a type 4 message when reaching it (probably "end of movie").
 - Determinism has only been tested on one 2-player map without input.
   Test other maps, computer opponents, and longer runs.
 
@@ -83,6 +85,27 @@ Next steps:
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
 
 ## Session log
+
+### 2026-11-07 (6): commands, lockstep, record/replay
+
+- The game's `-record` writes `Siedler3.evt` (`CEventFile`): 8-byte header
+  (magic `0x47832443`, last step + 5), then 20-byte announce packets. Even
+  without human input it holds about 50 commands per 1,000 ticks (computer
+  player, sync checks). `-play` adds the file's commands to the live ones,
+  so they run twice and the replay diverges (from tick 32).
+- Single player runs a loopback network thread, `CNetBounceThread`.
+  Traced the full command path: logic pushes 0x21 commands and 0x20 step
+  messages on one queue; the bounce thread returns them in order; the
+  executor `CLogicThread::ExecuteCommands` (`0x535990`) runs them.
+- Built our own recorder/replayer on `MessageQueue::Push` (`0x4309c0`):
+  `src/s3re/replay/command_log.cpp`, launcher `--record-commands`,
+  `--replay-commands`, `--log-commands`; `tools/command_log.py`,
+  `tools/check_replay.py`. Result: replay identical over 1,000 ticks
+  (50/50 live commands matched); removing one command diverges from tick 43.
+- `--exit-after-ticks` now shuts down through WM_CLOSE (needed so `-record`
+  files are completed); about 1 s to exit.
+- Pass-through hook on `CNetThread::OnNetAnnounce` (multiplayer only; it's
+  never called in single player).
 
 ### 2026-11-07 (5): unattended runs, determinism confirmed
 

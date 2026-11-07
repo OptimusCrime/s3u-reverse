@@ -4,12 +4,14 @@
 // thread vtable, called repeatedly by DirectX::CGameThread::Main. thiscall,
 // no stack arguments, plain `ret` (EAX is not meaningful to the caller).
 //
-// Status: pass-through hook, used for the determinism trace and for
-// S3RE_EXIT_AFTER_TICKS (`s3re_launcher --exit-after-ticks N`), which ends
-// the process once the game tick reaches N. Not reimplemented.
+// Status: pass-through hook, used for the determinism trace, the command
+// recorder (it registers the logic thread object) and S3RE_EXIT_AFTER_TICKS
+// (`s3re_launcher --exit-after-ticks N`), which shuts the game down once the
+// game tick reaches N. Not reimplemented.
 
 #include "hooks.h"
 #include "log.h"
+#include "replay/command_log.h"
 #include "trace/determinism.h"
 
 #include <windows.h>
@@ -45,7 +47,36 @@ unsigned long ExitAfterTicks() {
     return value;
 }
 
+bool g_exitRequested = false;  // only touched by the logic thread
+
+BOOL CALLBACK CloseProcessWindow(HWND window, LPARAM) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(window, &pid);
+    if (pid == GetCurrentProcessId()) {
+        PostMessageA(window, WM_CLOSE, 0, 0);
+    }
+    return TRUE;
+}
+
+DWORD WINAPI ShutdownWatchdog(LPVOID) {
+    Sleep(15000);
+    S3RE_LOG("clean shutdown did not finish within 15 s; terminating");
+    TerminateProcess(GetCurrentProcess(), 0);
+    return 0;
+}
+
+// Ask the game to quit the normal way (WM_CLOSE to its windows), so its
+// threads run their OnExit handlers and finish their files (e.g. the
+// `-record` event file). A watchdog kills the process if that hangs.
+void RequestShutdown() {
+    EnumWindows(CloseProcessWindow, 0);
+    if (HANDLE thread = CreateThread(nullptr, 0, ShutdownWatchdog, nullptr, 0, nullptr)) {
+        CloseHandle(thread);
+    }
+}
+
 void __fastcall Hooked_CLogicThread_Step(CLogicThread* self, void* edx) {
+    replay::SetLogicThread(self);
     if (!g_loggedFirstStep.exchange(true)) {
         S3RE_LOG("CLogicThread::Step first call (this=%p)", static_cast<void*>(self));
     }
@@ -53,13 +84,13 @@ void __fastcall Hooked_CLogicThread_Step(CLogicThread* self, void* edx) {
     trace::OnLogicStep(self);
 
     const unsigned long exitAfter = ExitAfterTicks();
-    if (exitAfter != 0 &&
+    if (exitAfter != 0 && !g_exitRequested &&
         *reinterpret_cast<const volatile std::uint32_t*>(kGameTickAddress) >= exitAfter) {
-        // A clean shutdown from inside the logic thread isn't possible, so
-        // finish our files and end the process.
+        g_exitRequested = true;
         S3RE_LOG("tick %lu reached; ending the game (--exit-after-ticks)", exitAfter);
         trace::CloseDeterminismTrace();
-        TerminateProcess(GetCurrentProcess(), 0);
+        replay::CloseCommandLog();
+        RequestShutdown();
     }
 }
 

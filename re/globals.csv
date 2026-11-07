@@ -2,6 +2,8 @@ address,name,type,status,notes
 0x006970f0,g_versionNumber,uint32,identified,Game version x100 (logged as %i.%i by CConsoleThread::OnStart).
 0x007a7a18,g_gameSettings,object,classified,"Global object; word +0x88 (0x7a7aa0) is the game random seed, passed to GameWorld::SeedRandom by CLogicThread::OnStart. Filled from the settings struct at [0x7e2eb0]+0x364 by 0x567910 (origin of the value not traced; srand(time) at 0x431852 is a candidate)."
 0x007a8000,g_buildInfo,uint64,classified,Written in CConsoleThread::OnStart from 0x60eff0; logged as two %x values next to the version.
+0x007a800a,g_optionRecord,uint8,identified,"Set by the -record command-line option (CConsoleThread::OnStart). Copied to CNetThread+0x89 / CNetBounceThread+0x59: write commands to Siedler3.evt."
+0x007a800b,g_optionPlay,uint8,identified,"Set by the -play command-line option. Copied to CNetThread+0x8a / CNetBounceThread+0x5a: add commands from Siedler3.evt (on top of the live ones)."
 0x007ace62,g_simulationPaused,uint16,classified,"When non-zero, CLogicThread::Step skips the world updates. Name is a hypothesis (pause or not-yet-started)."
 0x007deb55,g_worldUpdateDisabled,uint8,classified,"When non-zero, GameWorld::UpdateEnvironment returns immediately and CLogicThread::Step skips its game-end check."
 0x007dfb58,g_syncRandomHistory,uint16[32],classified,CLogicThread::Step stores the RNG a-word here when the tick low byte is 0 (index (tick>>8)&31) and sends it via 0x4309c0: probably the lockstep desync check.

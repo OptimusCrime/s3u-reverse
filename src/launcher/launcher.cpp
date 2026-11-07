@@ -1,7 +1,8 @@
 // s3re_launcher: starts the original S3.EXE with s3re.dll loaded into it.
 //
 // Usage: s3re_launcher [--game-dir <path>] [--test [filter]]
-//                      [--trace-determinism] [--seed <n>]
+//                      [--trace-determinism] [--log-commands] [--seed <n>]
+//                      [--record-commands <file>] [--replay-commands <file>]
 //                      [--exit-after-ticks <n>] [--timeout <seconds>]
 //                      [--dump-tick <n>]
 //                      [-- <arguments passed to S3.EXE>]
@@ -14,13 +15,23 @@
 //
 // --dump-tick <n> (with --trace-determinism) also writes the world header at
 // tick n to <trace>-header-<n>.bin, for finding which bytes differ.
-// --exit-after-ticks <n> ends the game once the game tick reaches n.
+// --log-commands logs every command the simulation sends to the network
+// layer (and, in network games, every command announced to CNetThread) to
+// s3re.log.
+//
+// --record-commands <file> records every command with the step it belongs
+// to; --replay-commands <file> replays such a recording instead of the live
+// commands (see src/s3re/replay/command_log.h). Use the same map and --seed.
+//
+// --exit-after-ticks <n> ends the game once the game tick reaches n, through
+// the game's normal shutdown (so `-record` files are completed).
 // --timeout <seconds> kills the game if it is still running after that time
 // (a safety net for unattended runs; exit code 1).
 //
 // Everything after `--` is passed to S3.EXE. The game's own options include
 // -map <file> (startup map), -demo (skip the menus), -record / -play (record
-// or play back the "movie" Siedler3.evt) and -help.
+// or play back the "movie" Siedler3.evt; -play duplicates computer-player
+// commands, so use --replay-commands instead) and -help.
 //
 // --test runs the differential test suite inside S3.EXE instead of the game
 // (optionally only tests whose name contains <filter>), prints the results
@@ -66,6 +77,12 @@ std::wstring ModulePath(HMODULE module) {
         }
         buffer.resize(buffer.size() * 2);
     }
+}
+
+std::wstring FullPath(const std::wstring& path) {
+    wchar_t buffer[MAX_PATH];
+    const DWORD length = GetFullPathNameW(path.c_str(), MAX_PATH, buffer, nullptr);
+    return (length > 0 && length < MAX_PATH) ? std::wstring(buffer) : path;
 }
 
 bool FileExists(const std::wstring& path) {
@@ -172,6 +189,9 @@ int wmain(int argc, wchar_t** argv) {
     std::vector<std::wstring> gameArgs;
     bool testMode = false;
     bool traceDeterminism = false;
+    bool logCommands = false;
+    std::wstring recordCommands;
+    std::wstring replayCommands;
     std::wstring testFilter;
     std::wstring seed;
     std::wstring exitAfterTicks;
@@ -189,6 +209,15 @@ int wmain(int argc, wchar_t** argv) {
             }
         } else if (arg == L"--trace-determinism") {
             traceDeterminism = true;
+        } else if (arg == L"--record-commands" && i + 1 < argc) {
+            recordCommands = FullPath(argv[++i]);
+        } else if (arg == L"--replay-commands" && i + 1 < argc) {
+            replayCommands = FullPath(argv[++i]);
+            if (!FileExists(replayCommands)) {
+                return Fail(L"command recording not found: %s", replayCommands);
+            }
+        } else if (arg == L"--log-commands") {
+            logCommands = true;
         } else if (arg == L"--exit-after-ticks" && i + 1 < argc) {
             exitAfterTicks = argv[++i];
             if (wcstoul(exitAfterTicks.c_str(), nullptr, 10) == 0) {
@@ -216,7 +245,8 @@ int wmain(int argc, wchar_t** argv) {
             }
         } else if (arg == L"--help" || arg == L"-h") {
             wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
-                    L"[--trace-determinism] [--seed <n>] [--exit-after-ticks <n>] "
+                    L"[--trace-determinism] [--log-commands] [--record-commands <file>] "
+                    L"[--replay-commands <file>] [--seed <n>] [--exit-after-ticks <n>] "
                     L"[--timeout <seconds>] [--dump-tick <n>] [-- <S3.EXE arguments>]\n");
             return 0;
         } else {
@@ -266,6 +296,11 @@ int wmain(int argc, wchar_t** argv) {
     SetEnvironmentVariableW(L"S3RE_TEST_FILTER", testFilter.empty() ? nullptr
                                                                     : testFilter.c_str());
     SetEnvironmentVariableW(L"S3RE_TRACE", traceDeterminism ? L"determinism" : nullptr);
+    SetEnvironmentVariableW(L"S3RE_LOG_COMMANDS", logCommands ? L"1" : nullptr);
+    SetEnvironmentVariableW(L"S3RE_RECORD_COMMANDS",
+                            recordCommands.empty() ? nullptr : recordCommands.c_str());
+    SetEnvironmentVariableW(L"S3RE_REPLAY_COMMANDS",
+                            replayCommands.empty() ? nullptr : replayCommands.c_str());
     SetEnvironmentVariableW(L"S3RE_SEED", seed.empty() ? nullptr : seed.c_str());
     SetEnvironmentVariableW(L"S3RE_DUMP_TICK", dumpTick.empty() ? nullptr : dumpTick.c_str());
     SetEnvironmentVariableW(L"S3RE_EXIT_AFTER_TICKS",
