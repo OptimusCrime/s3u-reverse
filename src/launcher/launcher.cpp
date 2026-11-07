@@ -2,6 +2,7 @@
 //
 // Usage: s3re_launcher [--game-dir <path>] [--test [filter]]
 //                      [--trace-determinism] [--seed <n>]
+//                      [--exit-after-ticks <n>] [--timeout <seconds>]
 //                      [-- <arguments passed to S3.EXE>]
 //
 // --trace-determinism writes the tick, RNG state and world hashes after each
@@ -9,6 +10,14 @@
 //
 // --seed <n> replaces every seed of the simulation's random number generator
 // with n (0..65535), so that two games can start from the same random state.
+//
+// --exit-after-ticks <n> ends the game once the game tick reaches n.
+// --timeout <seconds> kills the game if it is still running after that time
+// (a safety net for unattended runs; exit code 1).
+//
+// Everything after `--` is passed to S3.EXE. The game's own options include
+// -map <file> (startup map), -demo (skip the menus), -record / -play (record
+// or play back the "movie" Siedler3.evt) and -help.
 //
 // --test runs the differential test suite inside S3.EXE instead of the game
 // (optionally only tests whose name contains <filter>), prints the results
@@ -162,6 +171,8 @@ int wmain(int argc, wchar_t** argv) {
     bool traceDeterminism = false;
     std::wstring testFilter;
     std::wstring seed;
+    std::wstring exitAfterTicks;
+    DWORD timeoutMs = INFINITE;
 
     for (int i = 1; i < argc; ++i) {
         const std::wstring arg = argv[i];
@@ -174,6 +185,18 @@ int wmain(int argc, wchar_t** argv) {
             }
         } else if (arg == L"--trace-determinism") {
             traceDeterminism = true;
+        } else if (arg == L"--exit-after-ticks" && i + 1 < argc) {
+            exitAfterTicks = argv[++i];
+            if (wcstoul(exitAfterTicks.c_str(), nullptr, 10) == 0) {
+                return Fail(L"--exit-after-ticks expects a positive number, got '%s'",
+                            exitAfterTicks);
+            }
+        } else if (arg == L"--timeout" && i + 1 < argc) {
+            const unsigned long seconds = wcstoul(argv[++i], nullptr, 10);
+            if (seconds == 0 || seconds > 24 * 3600) {
+                return Fail(L"--timeout expects a number of seconds, got '%s'", argv[i]);
+            }
+            timeoutMs = seconds * 1000;
         } else if (arg == L"--seed" && i + 1 < argc) {
             seed = argv[++i];
             wchar_t* end = nullptr;
@@ -187,7 +210,8 @@ int wmain(int argc, wchar_t** argv) {
             }
         } else if (arg == L"--help" || arg == L"-h") {
             wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
-                    L"[--trace-determinism] [--seed <n>] [-- <S3.EXE arguments>]\n");
+                    L"[--trace-determinism] [--seed <n>] [--exit-after-ticks <n>] "
+                    L"[--timeout <seconds>] [-- <S3.EXE arguments>]\n");
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
@@ -237,13 +261,15 @@ int wmain(int argc, wchar_t** argv) {
                                                                     : testFilter.c_str());
     SetEnvironmentVariableW(L"S3RE_TRACE", traceDeterminism ? L"determinism" : nullptr);
     SetEnvironmentVariableW(L"S3RE_SEED", seed.empty() ? nullptr : seed.c_str());
+    SetEnvironmentVariableW(L"S3RE_EXIT_AFTER_TICKS",
+                            exitAfterTicks.empty() ? nullptr : exitAfterTicks.c_str());
 
     STARTUPINFOW startup = {};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process = {};
 
-    wprintf(L"Launching %s%s\n  with %s\n", exePath.c_str(), testMode ? L" (test mode)" : L"",
-            dllPath.c_str());
+    wprintf(L"Launching %s%s\n  with %s\n", commandLine.c_str(),
+            testMode ? L" (test mode)" : L"", dllPath.c_str());
 
     if (!DetourCreateProcessWithDllExW(exePath.c_str(), commandLine.data(), nullptr, nullptr,
                                        FALSE, CREATE_DEFAULT_ERROR_MODE, nullptr,
@@ -258,7 +284,11 @@ int wmain(int argc, wchar_t** argv) {
         return 1;
     }
 
-    WaitForSingleObject(process.hProcess, INFINITE);
+    if (WaitForSingleObject(process.hProcess, timeoutMs) == WAIT_TIMEOUT) {
+        fwprintf(stderr, L"s3re_launcher: timeout reached, killing S3.EXE\n");
+        TerminateProcess(process.hProcess, 1);
+        WaitForSingleObject(process.hProcess, INFINITE);
+    }
     DWORD exitCode = 0;
     GetExitCodeProcess(process.hProcess, &exitCode);
     CloseHandle(process.hThread);
