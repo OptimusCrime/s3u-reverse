@@ -27,6 +27,8 @@ const void* g_lastWorld = nullptr;
 std::uint32_t g_lastTick = 0;
 std::uint16_t g_lastRandom[3] = {};
 bool g_haveLast = false;
+unsigned long g_stepsSeen = 0;
+unsigned long g_stepsWithWorld = 0;
 
 int EnabledState() {
     static const int state = [] {
@@ -156,13 +158,18 @@ bool DeterminismEnabled() {
 }
 
 void OnLogicStep(const void* logicThread) {
-    if (!DeterminismEnabled() || logicThread == nullptr || !OpenFile()) {
+    if (!DeterminismEnabled() || logicThread == nullptr) {
         return;
     }
+    ++g_stepsSeen;
     const auto* thread = static_cast<const std::uint8_t*>(logicThread);
     const auto* world =
         *reinterpret_cast<const std::uint8_t* const*>(thread + kWorldPointerOffset);
     if (world == nullptr) {
+        return;
+    }
+    ++g_stepsWithWorld;
+    if (!OpenFile()) {
         return;
     }
 
@@ -207,6 +214,10 @@ void OnLogicStep(const void* logicThread) {
 }
 
 void CloseDeterminismTrace() {
+    if (DeterminismEnabled()) {
+        S3RE_LOG("determinism trace: %lu step(s) seen, %lu with a world, %d segment(s)",
+                 g_stepsSeen, g_stepsWithWorld, g_segment);
+    }
     if (g_file != nullptr) {
         std::fclose(g_file);
         g_file = nullptr;

@@ -8,7 +8,10 @@
 // reimplemented.
 
 #include "hooks.h"
+#include "log.h"
 #include "trace/determinism.h"
+
+#include <atomic>
 
 namespace s3re::game {
 
@@ -23,7 +26,12 @@ void __fastcall Hooked_CLogicThread_Step(CLogicThread* self, void* edx);
 S3RE_PASSTHROUGH(0x0053db30, CLogicThread_Step, StepFn, Original_CLogicThread_Step,
                  Hooked_CLogicThread_Step);
 
+std::atomic<bool> g_loggedFirstStep{false};
+
 void __fastcall Hooked_CLogicThread_Step(CLogicThread* self, void* edx) {
+    if (!g_loggedFirstStep.exchange(true)) {
+        S3RE_LOG("CLogicThread::Step first call (this=%p)", static_cast<void*>(self));
+    }
     Original_CLogicThread_Step(self, edx);
     trace::OnLogicStep(self);
 }
