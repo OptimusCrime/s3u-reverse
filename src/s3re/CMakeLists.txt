@@ -15,15 +15,19 @@ add_library(s3re SHARED
 
     game/building_flags.cpp
     game/counting.cpp
+    game/id_allocators.cpp
     game/logic_thread.cpp
     game/map.cpp
+    game/map_areas.cpp
     game/map_directions.cpp
+    game/map_marks.cpp
     game/map_neighbourhood.cpp
     game/net_thread.cpp
     game/players.cpp
     game/random.cpp
     game/settlers.cpp
     game/statistics.cpp
+    game/ui_state.cpp
     game/world_search.cpp
     game/winmain.cpp
 )

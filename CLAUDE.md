@@ -334,7 +334,8 @@ replaying, see `src/s3re/replay/command_log.h`):
    byte written to the world/S3.EXE, bytes popped and callee-saved
    registers, and reports basic-block coverage of the original. The gate is
    0 mismatches and every block covered; add presets to a spec when random
-   data doesn't reach a branch. `run.py --self-test` checks that the
+   data doesn't reach a branch (`globals` sets S3.EXE globals, which
+   otherwise keep their image values). `run.py --self-test` checks that the
    harness catches deliberately wrong pairings. Our replacements must not
    rely on DLL startup code (the emulator doesn't run it).
 5. Build, then run `s3re_launcher --test [filter]`. This runs the tests inside

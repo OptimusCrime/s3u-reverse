@@ -4,7 +4,7 @@ A Spec names the original function (address in S3.EXE) and ours (the C++
 function name in s3re.dll), the calling convention, how to generate each
 stack argument, which bits of EAX must match, and optionally world fields
 to pin per case (`presets`, e.g. a small map size so map-wide loops stay
-fast in the emulator). Everything else in the world is lazily random (see
+fast in the emulator) and S3.EXE globals to set per case (`globals`). Everything else in the world is lazily random (see
 emu.py).
 
 Argument generators take (rng, pool); `pool` holds small numbers and the
@@ -54,6 +54,9 @@ class Spec:
     presets: Callable | None = None
     # Upper limit on cases (for functions that are slow to emulate).
     max_cases: int | None = None
+    # (rng, pool, args) -> [(absolute address in S3.EXE, value, size)]: globals
+    # set for the case (otherwise they keep their values from the image).
+    globals: Callable | None = None
 
 
 MAP_SIZE = 0x2d2d0
@@ -116,6 +119,94 @@ def building_request_state(rng, pool, args):
             value = rng.choice([0x80, 0x81, 0x82, 0x7f, 0, 1]) if rng.random() < 0.7                 else rng.getrandbits(16)
         fields.append((record + offset, value, 2))
     return fields
+
+
+UI_FIELDS = {"GameWorld_IsUiSelectionMode": 0x2d284, "GameWorld_IsUiField298": 0x2d298,
+             "GameWorld_IsUiSelectionParam1": 0x2d288, "GameWorld_IsUiSelectionParam2": 0x2d28c}
+
+
+def field_equals_arg_half_the_time(offset: int) -> Callable:
+    def presets(rng, pool, args):
+        return [(offset, args[0] if rng.random() < 0.5 else anything(rng, pool), 4)]
+    return presets
+
+
+def mode4_field298(rng, pool, args):
+    return [(0x2d284, 4 if rng.random() < 0.6 else anything(rng, pool), 4),
+            (0x2d298, 2 if rng.random() < 0.6 else anything(rng, pool), 4)]
+
+
+SCREEN_WIDTH = 0x730f18
+SCREEN_HEIGHT = 0x730f1c
+GAME_OUTCOME = 0x730f64
+
+
+def screen_size(rng, pool, args):
+    def size(high):
+        return rng.randint(0, high) if rng.random() < 0.5 else rng.getrandbits(32)
+    return [(SCREEN_WIDTH, size(2048), 4), (SCREEN_HEIGHT, size(1536), 4)]
+
+
+def game_outcome(rng, pool, args):
+    return [(GAME_OUTCOME, rng.choice([1, 0, 0xFFFFFFFF, 2, rng.getrandbits(32)]), 4)]
+
+
+def ui_feedback_count(rng, pool, args):
+    return [(0x15394ac, rng.randrange(11) if rng.random() < 0.8 else 10, 4)]
+
+
+def id_table(mark: int, table: int, size: int) -> Callable:
+    """Ids 1..firstFree-1 in use, firstFree free (often near or past the end
+    of the table), the high-water mark near it or random."""
+    def presets(rng, pool, args):
+        r = rng.random()
+        if r < 0.25:
+            first_free = size - 1 - rng.randrange(3)
+        elif r < 0.4:
+            first_free = size + rng.randrange(3)  # none free in range
+        else:
+            first_free = 1 + rng.randrange(min(size, 300))
+        fields = [(table + i, rng.randrange(1, 256), 1)
+                  for i in range(1, min(first_free, size + 2))]
+        fields.append((table + first_free, 0, 1))
+        if rng.random() < 0.6:
+            value = (first_free + rng.randint(-2, 2)) & 0xFFFFFFFF
+        else:
+            value = rng.getrandbits(32)
+        fields.append((mark, value, 4))
+        return fields
+    return presets
+
+
+AREA_LIMIT = 0x800  # keeps the area records inside the emulated world
+
+
+def tile_area_offset(x: int, y: int) -> int:
+    return ((x * 0x300 + y + 0x44d9) * 24) & 0xFFFFFFFF
+
+
+def tile_area_of_args(rng, pool, args):
+    return [(tile_area_offset(args[0], args[1]), rng.randrange(AREA_LIMIT), 2)]
+
+
+def building_on_map(rng, pool, args):
+    building = BUILDINGS + args[0] * BUILDING_BYTES
+    x, y = rng.randrange(384), rng.randrange(384)
+    return [(building + 0xa, x, 2), (building + 0xc, y, 2),
+            (tile_area_offset(x, y), rng.randrange(AREA_LIMIT), 2)]
+
+
+def diagonal_map_size(rng, pool, args):
+    """Never 0 (a 2^32-iteration loop in both); 1..3 often (edge cases)."""
+    size = rng.randint(1, 3) if rng.random() < 0.3 else rng.randint(1, 400)
+    return [(MAP_SIZE, size, 4)]
+
+
+def slice_map_size(rng, pool, args):
+    """Mostly small maps: a slice clears size * size / 8 bytes."""
+    r = rng.random()
+    size = rng.randint(1, 3) if r < 0.2 else rng.randint(1, 48) if r < 0.9 else rng.randint(1, 400)
+    return [(MAP_SIZE, size, 4)]
 
 
 TILE = between(2, 381)  # tiles at least 2 from the edge of a 384 map
@@ -183,6 +274,45 @@ SPECS = [
           ("Clear", "08", 0x004df590), ("Clear", "10", 0x004df610),
           ("Set", "02", 0x004df690), ("Set", "04", 0x004df730),
           ("Set", "08", 0x004df7d0), ("Set", "10", 0x004df850)]],
+    # UI state queries (ui_state.cpp)
+    *[Spec(name, address, "thiscall", [anything],
+           presets=field_equals_arg_half_the_time(UI_FIELDS[name]))
+      for name, address in [("GameWorld_IsUiSelectionMode", 0x005157b0),
+                            ("GameWorld_IsUiField298", 0x005157d0),
+                            ("GameWorld_IsUiSelectionParam1", 0x005157f0),
+                            ("GameWorld_IsUiSelectionParam2", 0x00515810)]],
+    Spec("GameWorld_IsUiSelectionMode4Field298Is2", 0x00515830, "thiscall", [],
+         presets=mode4_field298),
+    Spec("GameWorld_IsGameOutcome1", 0x00515ad0, "thiscall", [anything], globals=game_outcome),
+    Spec("GameWorld_ScreenCenterTileX", 0x005158f0, "thiscall", [], globals=screen_size),
+    Spec("GameWorld_ScreenCenterTileY", 0x00515980, "thiscall", [], globals=screen_size),
+    Spec("GameWorld_PushUiFeedback", 0x004febe0, "thiscall", [anything],
+         presets=ui_feedback_count),
+    # free ids (id_allocators.cpp)
+    Spec("GameWorld_FindFreeId256", 0x0051d5b0, "thiscall", [],
+         presets=id_table(0xe114d8, 0xe114dc, 0x100)),
+    Spec("GameWorld_FindFreeId4096", 0x0051d570, "thiscall", [],
+         presets=id_table(0xe115e0, 0xe115e4, 0x1000), max_cases=400),
+    Spec("GameWorld_FindFreeId8192", 0x0051c040, "thiscall", [],
+         presets=id_table(0xe125e4, 0xe125e8, 0x2000), max_cases=200),
+    # map areas (map_areas.cpp)
+    Spec("GameWorld_AssignTileToArea", 0x004e5450, "thiscall",
+         [below(384), below(384), below(AREA_LIMIT)]),
+    Spec("GameWorld_RemoveTileFromArea", 0x004e54a0, "thiscall", [below(384), below(384)],
+         presets=tile_area_of_args),
+    Spec("GameWorld_SetTileAreaMarked", 0x005194b0, "thiscall",
+         [below(384, 0.05), below(384, 0.05), anything]),
+    Spec("GameWorld_SetAreaBuildingSlotA", 0x004ddfe0, "thiscall",
+         [between(0, 2000), below(64)], presets=building_on_map),
+    Spec("GameWorld_SetAreaBuildingSlotB", 0x004de040, "thiscall",
+         [between(0, 2000), below(64)], presets=building_on_map),
+    # map marks (map_marks.cpp)
+    Spec("GameWorld_SetDiagonalTileByteB", 0x00518d10, "thiscall", [anything], eax_mask=0,
+         presets=diagonal_map_size, max_cases=300),
+    Spec("GameWorld_ClearDiagonalTileByteB", 0x00518dc0, "thiscall", [anything], eax_mask=0,
+         presets=diagonal_map_size, max_cases=300),
+    Spec("GameWorld_ClearTileByte11Slice", 0x00518ec0, "thiscall", [below(60, 0.1)],
+         presets=slice_map_size, max_cases=300),
 ]
 
 
@@ -199,4 +329,11 @@ SELF_TEST = [
          presets=map_size(between(0, 400))),
     Spec("GameWorld_ClearBuildingFlag08", 0x004df490, "thiscall", [between(1, 2000)],
          eax_mask=0, presets=building_request_state),
+    Spec("GameWorld_SetAreaBuildingSlotA", 0x004de040, "thiscall",
+         [between(0, 2000), below(64)], presets=building_on_map),
+    Spec("GameWorld_ScreenCenterTileX", 0x00515980, "thiscall", [], globals=screen_size),
+    Spec("GameWorld_FindFreeId4096", 0x0051d5b0, "thiscall", [],
+         presets=id_table(0xe114d8, 0xe114dc, 0x100)),
+    Spec("GameWorld_ClearDiagonalTileByteB", 0x00518d10, "thiscall", [anything], eax_mask=0,
+         presets=diagonal_map_size, max_cases=100),
 ]

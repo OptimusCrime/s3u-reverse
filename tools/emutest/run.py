@@ -81,6 +81,10 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
         edx = rng.getrandbits(32)
         ecx = emu.WORLD_BASE if spec.convention == "thiscall" else rng.getrandbits(32)
         machine.begin_case(rng.getrandbits(32), pool, presets)
+        if spec.globals:
+            for address, value, size in spec.globals(rng, pool, args):
+                mask = (1 << (8 * size)) - 1
+                machine.uc.mem_write(address, (value & mask).to_bytes(size, "little"))
         a = machine.call(spec.original, ecx, edx, args, registers,
                          cover=(original.start, original.end))
         b = machine.call(ours, ecx, edx, args, registers)

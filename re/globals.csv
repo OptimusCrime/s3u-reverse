@@ -1,5 +1,8 @@
 address,name,type,status,notes
 0x006970f0,g_versionNumber,uint32,identified,Game version x100 (logged as %i.%i by CConsoleThread::OnStart).
+0x00730f18,g_screenWidth,int32,classified,"Width of the game view in pixels (used by GameWorld::ScreenCenterTileX/Y with the camera position). Name from that use only."
+0x00730f1c,g_screenHeight,int32,classified,"Height of the game view in pixels (GameWorld::ScreenCenterTileX/Y)."
+0x00730f64,g_gameOutcome,int32,classified,"Set to -1 at the end of 0x4fd0d0 (a loop over the player records, purpose unknown), then to a result by the game-end check 0x511c50 (per-mission cases set 1 or 0, or a function's return value). GameWorld::IsGameOutcome1 tests for 1. Which value means won is not confirmed."
 0x007a7a18,g_gameSettings,object,classified,"Global object; word +0x88 (0x7a7aa0) is the game random seed, passed to GameWorld::SeedRandom by CLogicThread::OnStart. Filled from the settings struct at [0x7e2eb0]+0x364 by 0x567910 (origin of the value not traced; srand(time) at 0x431852 is a candidate)."
 0x007a8000,g_buildInfo,uint64,classified,Written in CConsoleThread::OnStart from 0x60eff0; logged as two %x values next to the version.
 0x007a800a,g_optionRecord,uint8,identified,"Set by the -record command-line option (CConsoleThread::OnStart). Copied to CNetThread+0x89 / CNetBounceThread+0x59: write commands to Siedler3.evt."

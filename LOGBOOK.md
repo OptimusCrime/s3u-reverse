@@ -15,9 +15,10 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 39 replacements pass the emulator suite with full block
-coverage (2,000 cases each; ShiftStatistics 60 because it is slow to
-emulate); `--self-test` catches 5/5 wrong pairings.
+Status: all 59 replacements pass the emulator suite with full block
+coverage (2,000 cases each, fewer for the slow ones: ShiftStatistics 60,
+the map-wide loops 200-400); `--self-test` catches 9/9 wrong pairings.
+Specs can now also set S3.EXE globals per case (`Spec.globals`).
 
 Next steps:
 1. Continue with leaf functions (list below), each with an emulator spec.
@@ -35,6 +36,17 @@ replay identical to the original):
 - settlers: GameWorld::CanSettlerEnterTile, SettlerGroup
 - map: GameWorld::IsOnMap, IsInsideMapBorder, TileScreenX, TileScreenY
 
+Batch 8 (2026-11-07, 20 functions; in-process + emulator tests, full
+coverage; whole-game: see the session log):
+- UI state (ui_state.cpp): IsUiSelectionMode, IsUiField298,
+  IsUiSelectionParam1/2, IsUiSelectionMode4Field298Is2, IsGameOutcome1,
+  ScreenCenterTileX/Y, PushUiFeedback
+- free ids (id_allocators.cpp): FindFreeId256/4096/8192
+- map areas (map_areas.cpp): AssignTileToArea, RemoveTileFromArea,
+  SetTileAreaMarked, SetAreaBuildingSlotA/B
+- map marks (map_marks.cpp): Set/ClearDiagonalTileByteB,
+  ClearTileByte11Slice
+
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
 (function starts from re/ghidra_functions.tsv + re/extra_functions.tsv;
@@ -43,13 +55,21 @@ Skipped so far because their meaning is unclear (do them once understood):
 0x4fa6b0/0x4faa40 (type ids 1/55), 0x4ffb90 (7-byte list at
 world+0x1195dcd), 0x505bc0/0x505bf0 (byte counters in 14-byte records at
 world+0x123885f), 0x510440/0x50e380/0x510470 (settler record fields),
-0x5194b0 (tile word at (x*0x300+y+0x44d9)*24: suggests the tile array
-layout isn't settled), 0x504650, 0x4ff380, 0x4ff3c0.
+0x504650, 0x4ff380, 0x4ff3c0, 0x523540 (reads an uninitialized stack
+byte), 0x5437b0 and 0x51e650 (objects other than the world, class
+unknown), 0x53f530 (CLogicThread, +0x84 unknown).
 
 Next steps:
-1. Continue with leaf functions; then move up to their callers.
-2. Settle the tile record layout (0x5194b0 writes at tile index + 0x44d9,
-   i.e. world+0x67458; world.h assumes records start at 0x67440).
+1. Continue with leaf functions; then move up to their callers (e.g. the
+   area flood fill 0x51a580 uses FindFreeId256; 0x4e6150/0x4e62c0/
+   0x4e6430/0x4e6cd0 use AssignTileToArea/RemoveTileFromArea).
+2. Settle the tile record layout. Evidence so far for records starting at
+   0x67444 (not 0x67440 as in world.h): the tile area word is indexed as
+   (x*0x300+y+0x44d9)*24 = 0x67458 in 130 places, i.e. field +0x14 of a
+   record at 0x67444; 0x67444 is the most used absolute offset (215
+   uses); the y-1 neighbour accesses (0x6742c..0x67436) are fields
+   +0x0..+0xa of the record before. Changing world.h affects
+   determinism.cpp's per-tile hashing; do it as its own step.
 3. Make replays self-contained (seed and map in the recording).
 
 ## Open questions and loose ends
@@ -105,8 +125,36 @@ Next steps:
   `CLAUDE.md`).
 - The user hasn't yet played a game with the hooks active (currently
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
+- **Whole-game check currently blocked by a crash in the original code.**
+  `check_replay.py --recording recordings/scripted-seed127.bin --seed 127
+  --against-original --ticks 3000` crashed twice in the reference run
+  (`--original`, none of our replacements installed), at about tick 1,780
+  and tick 1,030: "Structured Exception c0000005 at 0x005FCDFB, read from
+  6997646f". Draw thread: CDrawThread::vf13 (0x42c710) -> 0x4b26c0 (big
+  draw routine; reads the UI fields and g_gameOutcome) -> 0x5fcdc0, whose
+  `this` (a local at ebp-0x64 of 0x4b26c0) holds a garbage pointer.
+  Different tick each time, so probably a draw/logic thread race (or
+  something in our tooling's replay/trace hooks). The earlier run at
+  22:49 (session 10/11) also left a short trace (2,336 lines); not
+  checked whether it crashed the same way. Investigate before the next
+  milestone check.
 
 ## Session log
+
+### 2026-11-07 (12): batch 8 (20 leaf functions)
+
+- Replaced 20 functions (UI state queries, screen-centre tile, free-id
+  search, tile areas, diagonal/slice tile marks; list under "Current
+  focus"). New files: game/ui_state.cpp, id_allocators.cpp,
+  map_areas.cpp, map_marks.cpp, globals.h. In-process tests 92/92 pass
+  (27 new incl. 4 mutation tests); emulator suite 59/59 with full block
+  coverage; self-test 9/9.
+- emutest: `Spec.globals` sets S3.EXE globals per case (for
+  0x730f18/0x730f1c/0x730f64; added to re/globals.csv).
+- Tile layout: evidence that tile records start at 0x67444 (see next
+  steps); world.h not changed yet.
+- Whole-game check not done: the reference run with the original code
+  crashes (see open questions).
 
 ### 2026-11-07 (11): emulator test harness
 
