@@ -23,7 +23,11 @@ against the original game's behavior, not just "looks right".
   goes in `re/`. Progress goes in `LOGBOOK.md`.
 - **Before stopping, or after finishing a piece of work:** update
   `LOGBOOK.md` (current focus, next steps, open questions, and a dated
-  session-log entry), then commit. The user may restart with a fresh context
+  session-log entry), then commit.
+- **After every finished batch of work** (e.g. a group of replaced
+  functions that passes its tests): commit **and push** (`git push origin
+  main`) right away, one commit per batch, so the history on GitHub shows
+  each step. The user may restart with a fresh context
   at any time, so anything only in the conversation will be lost.
 
 ## Ground rules
@@ -197,9 +201,13 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   the code before excluding anything.
 - **`--exit-after-ticks` shuts the game down normally** (WM_CLOSE to its
   windows, killed after 15 s if that hangs), so threads run their OnExit.
-- **The full disassembly** (`dumpbin /disasm:nobytes /out:<file> S3.EXE`,
-  run from PowerShell, since Git Bash mangles `/options`) is greppable for
-  field offsets, e.g. `2D2DCh` to find all RNG state accesses.
+- **The full disassembly** (`dumpbin /disasm:nobytes /out:build\s3.asm
+  Settlers3Ultimate\S3.EXE`, run from PowerShell, since Git Bash mangles
+  `/options`) is greppable for field offsets, e.g. `2D2DCh` to find all RNG
+  state accesses. `python tools/asm_tools.py` queries it: `disasm ADDR`
+  (whole functions), `leaves` (small call-free functions not yet verified:
+  the next candidates), `eax-use ADDR` (do callers use the return value?),
+  `xrefs REGEX` (which functions read/write a field), `callers ADDR`.
 - **Global variables** are recorded in `re/globals.csv`, e.g. the tick
   counter `g_gameTick` at `0x7dfd48`.
 - **`DebugLog` (`0x428720`)** is a printf-style call that is just `ret` in the
