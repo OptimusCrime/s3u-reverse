@@ -183,7 +183,12 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   while it runs (about 1 minute per 1,000 ticks per run).
 - **Recording and replaying commands:** `--record-commands FILE` records
   every command; `--replay-commands FILE` replays a recording instead of the
-  live commands (same map and `--seed`). `python tools/check_replay.py`
+  live commands. Recordings (format in `src/common/recording_format.h`)
+  store the game seed, the map and the random-race setting; the launcher
+  starts the replay with that seed and map (an explicit `--seed`/`-map`
+  must agree) and the DLL stops the game (exit code 3) if the running game
+  doesn't match. Old version 1 recordings need `--seed` and `-map`, or
+  `tools/command_log.py upgrade`. `python tools/check_replay.py`
   checks record/replay unattended (replay identical, and a recording with one
   command removed must diverge); add `--synthetic-input SEED` to have
   `tools/synthetic_input.py` play the recorded game with random mouse input
@@ -199,11 +204,12 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   sync). To find new ones: `--dump-tick N[,N...]` in both runs, then
   `python tools/diff_world_dumps.py A.bin B.bin`, then check the writers in
   the code before excluding anything.
-- **A replay must use the game seed the recording was made with** (the
-  recording doesn't store it yet). With another seed the recorded
-  commands run in a different game, which can even crash the original
-  (e.g. buildings of the wrong race). `recordings/scripted-seed127.bin`
-  needs seed 1234 (check_replay's default; 127 was the input seed).
+- **A replay only makes sense in the game it was recorded in.** With
+  another seed the recorded commands run in a different game, which can
+  even crash the original (e.g. buildings of the wrong race). Recordings
+  now carry their seed and map (see above).
+  `recordings/scripted-seed127.bin` was recorded with seed 1234 (127 was
+  the synthetic-input seed); it has been upgraded to version 2.
 - **Diagnostics in `s3re.log`:** the game's own `DebugLog` messages (688
   call sites, silent in the release build; at most 5 per call site, with
   callers), and for access violations in game code the registers, memory

@@ -22,8 +22,11 @@
 // recording; without human input they must match exactly (a mismatch means
 // the simulation has diverged), and they are logged.
 //
-// File format (little endian): "S3RECMD1", then one record per message:
-//   uint32 slot, uint32 dwordCount, uint32 dwords[dwordCount]
+// File format: src/common/recording_format.h. A recording starts with the
+// game's seed, random-race setting and map; a replay checks them against
+// the running game and stops (exit code 3) if they differ. The launcher
+// takes seed and map from the recording, so `--replay-commands FILE` alone
+// starts the right game.
 
 #include <cstdint>
 

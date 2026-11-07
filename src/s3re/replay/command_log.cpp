@@ -1,5 +1,7 @@
 #include "replay/command_log.h"
 
+#include "common/recording_format.h"
+#include "game/random.h"
 #include "hooks.h"
 #include "log.h"
 
@@ -33,7 +35,8 @@ S3RE_PASSTHROUGH(0x004309c0, MessageQueue_Push, PushFn, Original_MessageQueue_Pu
 constexpr std::size_t kLogicToNetQueueOffset = 0x3c4;  // CLogicThread -> MessageQueue*
 constexpr std::uint8_t kStepMessage = 0x20;
 constexpr std::uint8_t kCommandMessage = 0x21;
-constexpr char kMagic[8] = {'S', '3', 'R', 'E', 'C', 'M', 'D', '1'};
+// g_gameSettings+0xCC: random races include the Amazons (see random.cpp).
+constexpr std::uintptr_t kRandomRaceAmazons = 0x7a7ae4;
 
 struct Command {
     std::uint32_t slot;
@@ -68,27 +71,101 @@ std::string Env(const char* name) {
     return (length > 0 && length < sizeof(value)) ? std::string(value) : std::string();
 }
 
+// The -map argument of the game's command line ("" if there is none).
+std::string MapArgument() {
+    const char* p = GetCommandLineA();
+    std::string previous;
+    while (*p != '\0') {
+        while (*p == ' ' || *p == '\t') {
+            ++p;
+        }
+        if (*p == '\0') {
+            break;
+        }
+        std::string token;
+        bool quoted = false;
+        for (; *p != '\0' && (quoted || (*p != ' ' && *p != '\t')); ++p) {
+            if (*p == '"') {
+                quoted = !quoted;
+            } else {
+                token += *p;
+            }
+        }
+        if (_stricmp(previous.c_str(), "-map") == 0) {
+            return token;
+        }
+        previous = token;
+    }
+    return std::string();
+}
+
+// The settings of the running game that a recording must match.
+recording::Header CurrentGame() {
+    recording::Header header;
+    header.version = 2;
+    const long seed = game::LastSeed();
+    header.seed = seed < 0 ? 0xFFFFFFFFu : static_cast<std::uint32_t>(seed);
+    header.settings =
+        *reinterpret_cast<const std::uint8_t*>(kRandomRaceAmazons) != 0 ? recording::kSettingAmazons
+                                                                       : 0;
+    header.map = MapArgument();
+    return header;
+}
+
+// A version 2 recording must belong to the running game: same seed, race
+// setting and map. Logs every difference.
+bool MatchesCurrentGame(const recording::Header& recorded) {
+    const recording::Header current = CurrentGame();
+    bool ok = true;
+    if (recorded.seed != current.seed) {
+        S3RE_LOG("replay: recorded with seed %u, this game has seed %u", recorded.seed,
+                 current.seed);
+        ok = false;
+    }
+    if (recorded.settings != current.settings) {
+        S3RE_LOG("replay: recorded with settings %#x, this game has %#x", recorded.settings,
+                 current.settings);
+        ok = false;
+    }
+    if (_stricmp(recorded.map.c_str(), current.map.c_str()) != 0) {
+        S3RE_LOG("replay: recorded on map '%s', this game runs '%s'", recorded.map.c_str(),
+                 current.map.c_str());
+        ok = false;
+    }
+    return ok;
+}
+
 bool LoadRecording(const std::string& path) {
     FILE* file = OpenFile(path.c_str(), "rb");
     if (file == nullptr) {
         S3RE_LOG("replay: cannot open %s", path.c_str());
         return false;
     }
-    char magic[sizeof(kMagic)] = {};
-    bool ok = std::fread(magic, 1, sizeof(magic), file) == sizeof(magic) &&
-              std::memcmp(magic, kMagic, sizeof(kMagic)) == 0;
+    const recording::Header header = recording::ReadHeader(file);
+    bool ok = header.version != 0;
+    if (header.version == 2) {
+        S3RE_LOG("replay: %s was recorded with seed %u, settings %#x, map '%s'", path.c_str(),
+                 header.seed, header.settings, header.map.c_str());
+        if (!MatchesCurrentGame(header)) {
+            std::fclose(file);
+            return false;
+        }
+    } else if (header.version == 1) {
+        S3RE_LOG("replay: %s is a version 1 recording (no seed or map); not checked",
+                 path.c_str());
+    }
     while (ok) {
-        std::uint32_t header[2];
-        if (std::fread(header, sizeof(header[0]), 2, file) != 2) {
+        std::uint32_t record[2];
+        if (std::fread(record, sizeof(record[0]), 2, file) != 2) {
             break;  // end of file
         }
-        if (header[1] == 0 || header[1] > 64) {
+        if (record[1] == 0 || record[1] > 64) {
             ok = false;
             break;
         }
-        Command command{header[0], std::vector<std::uint32_t>(header[1])};
-        ok = std::fread(command.dwords.data(), sizeof(std::uint32_t), header[1], file) ==
-             header[1];
+        Command command{record[0], std::vector<std::uint32_t>(record[1])};
+        ok = std::fread(command.dwords.data(), sizeof(std::uint32_t), record[1], file) ==
+             record[1];
         g_recorded.push_back(std::move(command));
     }
     std::fclose(file);
@@ -112,16 +189,19 @@ void Initialize() {
             S3RE_LOG("record: cannot create %s", recordPath.c_str());
             return;
         }
-        std::fwrite(kMagic, 1, sizeof(kMagic), g_recordFile);
+        const recording::Header header = CurrentGame();
+        recording::WriteHeader(g_recordFile, header);
         std::fflush(g_recordFile);
         g_mode = Mode::Record;
-        S3RE_LOG("record: writing commands to %s", recordPath.c_str());
+        S3RE_LOG("record: writing commands to %s (seed %u, settings %#x, map '%s')",
+                 recordPath.c_str(), header.seed, header.settings, header.map.c_str());
     } else if (!replayPath.empty()) {
         if (LoadRecording(replayPath)) {
             g_mode = Mode::Replay;
         } else {
-            // Running on without the recording would silently play a
-            // different game; stop instead.
+            // Running on without the recording, or with a recording of
+            // another game, would silently play a different game; stop
+            // instead.
             S3RE_LOG("replay: aborting");
             TerminateProcess(GetCurrentProcess(), 3);
         }

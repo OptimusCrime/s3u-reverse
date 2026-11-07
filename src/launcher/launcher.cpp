@@ -27,7 +27,9 @@
 //
 // --record-commands <file> records every command with the step it belongs
 // to; --replay-commands <file> replays such a recording instead of the live
-// commands (see src/s3re/replay/command_log.h). Use the same map and --seed.
+// commands (see src/s3re/replay/command_log.h). A recording stores the game
+// seed and map, and the replay uses them (an explicit --seed or -map must
+// agree); version 1 recordings need --seed and -map.
 //
 // --exit-after-ticks <n> ends the game once the game tick reaches n, through
 // the game's normal shutdown (so `-record` files are completed).
@@ -45,6 +47,8 @@
 //
 // The game directory is taken from, in order: --game-dir, the S3RE_GAME_DIR
 // environment variable, or the default baked in at configure time.
+
+#include "common/recording_format.h"
 
 #include <windows.h>
 #include <bcrypt.h>
@@ -188,6 +192,64 @@ int Fail(const wchar_t* format, const std::wstring& detail = {}) {
     return 1;
 }
 
+std::wstring Widen(const std::string& text) {
+    if (text.empty()) {
+        return std::wstring();
+    }
+    const int length = MultiByteToWideChar(CP_ACP, 0, text.data(), static_cast<int>(text.size()),
+                                           nullptr, 0);
+    std::wstring wide(length, L'\0');
+    MultiByteToWideChar(CP_ACP, 0, text.data(), static_cast<int>(text.size()), &wide[0], length);
+    return wide;
+}
+
+// Takes the game's seed and map from a recording (--replay-commands), so a
+// replay always starts the game the commands were recorded in. An explicit
+// --seed or -map must agree with the recording. Returns 0 or an exit code.
+int ApplyRecording(const std::wstring& path, std::wstring& seed,
+                   std::vector<std::wstring>& gameArgs) {
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, path.c_str(), L"rb") != 0 || file == nullptr) {
+        return Fail(L"cannot read %s", path);
+    }
+    const s3re::recording::Header header = s3re::recording::ReadHeader(file);
+    fclose(file);
+    if (header.version == 0) {
+        return Fail(L"not a command recording: %s", path);
+    }
+    if (header.version == 1) {
+        if (seed.empty()) {
+            return Fail(L"%s is a version 1 recording without seed and map: give --seed and "
+                        L"-map, or convert it with tools/command_log.py upgrade", path);
+        }
+        return 0;
+    }
+    if (header.seed > 0xFFFF) {
+        if (seed.empty()) {
+            return Fail(L"%s doesn't know its seed: give --seed", path);
+        }
+    } else if (seed.empty()) {
+        seed = std::to_wstring(header.seed);
+    } else if (wcstoul(seed.c_str(), nullptr, 0) != header.seed) {
+        return Fail(L"--seed differs from the recording's seed %s",
+                    std::to_wstring(header.seed));
+    }
+    const std::wstring map = Widen(header.map);
+    for (std::size_t i = 0; i + 1 < gameArgs.size(); ++i) {
+        if (_wcsicmp(gameArgs[i].c_str(), L"-map") == 0) {
+            if (_wcsicmp(gameArgs[i + 1].c_str(), map.c_str()) != 0) {
+                return Fail(L"-map differs from the recording's map %s", map);
+            }
+            return 0;
+        }
+    }
+    if (!map.empty()) {
+        gameArgs.push_back(L"-map");
+        gameArgs.push_back(map);
+    }
+    return 0;
+}
+
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
@@ -263,6 +325,12 @@ int wmain(int argc, wchar_t** argv) {
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
+        }
+    }
+
+    if (!replayCommands.empty()) {
+        if (const int error = ApplyRecording(replayCommands, seed, gameArgs)) {
+            return error;
         }
     }
 

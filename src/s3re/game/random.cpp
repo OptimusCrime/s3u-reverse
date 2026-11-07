@@ -42,6 +42,7 @@
 // S3RE_SEED is set (`s3re_launcher --seed N`), every seed is replaced by N so
 // that two games can start from the same random state.
 
+#include "game/random.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "log.h"
@@ -50,6 +51,7 @@
 #include <intrin.h>
 #include <windows.h>
 
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <vector>
@@ -115,6 +117,14 @@ long SeedOverride() {
 
 extern GameWorldSeedRandomFn Original_GameWorld_SeedRandom;
 
+namespace {
+std::atomic<long> g_lastSeed{-1};
+}  // namespace
+
+long LastSeed() {
+    return g_lastSeed.load();
+}
+
 // The installed hook: logs the seed, applies the override, then seeds.
 void __fastcall GameWorld_SeedRandom(GameWorld* world, void* edx, std::uint32_t seed) {
     const long forced = SeedOverride();
@@ -135,6 +145,7 @@ void __fastcall GameWorld_SeedRandom(GameWorld* world, void* edx, std::uint32_t 
     S3RE_LOG("game settings: random race includes Amazons=%u (config byte %u)",
              *reinterpret_cast<const std::uint8_t*>(0x7a7ae4),
              *reinterpret_cast<const std::uint8_t*>(0x7a7c48));
+    g_lastSeed = static_cast<long>(seed & 0xFFFF);
     if (hooks::OriginalMode()) {
         Original_GameWorld_SeedRandom(world, edx, seed);
     } else {

@@ -17,7 +17,9 @@ Usage: python tools/check_replay.py [--ticks N] [--seed N] [--map PATH]
 
 With --recording FILE (e.g. a game a human played with --record-commands),
 step 1 is skipped and the replay is compared against FILE's own trace,
-which must sit next to it as FILE.tsv.
+which must sit next to it as FILE.tsv. Replays take the game seed and map
+from the recording (version 2); --seed and --map only apply when recording,
+or to version 1 recordings, which don't store them.
 
 With --against-original, the reference is instead a replay of the same
 recording with the original code (s3re_launcher --original), and the replay
@@ -42,10 +44,15 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import command_log  # noqa: E402
 
+DEFAULT_SEED = 1234
+DEFAULT_MAP = r"Map\MULTI\384-2-Lakes.map"
 
-def run_game(launcher, bin_dir, args, extra, input_seed=None):
+
+def run_game(launcher, bin_dir, args, extra, input_seed=None, new_game=False):
     """Runs one traced game; returns the new trace file path or None.
-    With input_seed, tools/synthetic_input.py plays during the run."""
+    With input_seed, tools/synthetic_input.py plays during the run.
+    new_game: a recording run, which needs a seed and a map; replays take
+    them from the recording unless given explicitly."""
     before = set(glob.glob(os.path.join(bin_dir, "determinism-*.tsv")))
     player = None
     if input_seed is not None:
@@ -57,9 +64,12 @@ def run_game(launcher, bin_dir, args, extra, input_seed=None):
                                    "--log", os.path.join(bin_dir, "replay-check", "input.log")],
                                   stdout=subprocess.DEVNULL)
     timeout = 60 + args.ticks // 5
-    command = [launcher, "--trace-determinism", "--seed", str(args.seed),
+    seed = args.seed if args.seed is not None else (DEFAULT_SEED if new_game else None)
+    game_map = args.map if args.map is not None else (DEFAULT_MAP if new_game else None)
+    command = [launcher, "--trace-determinism",
+               *(["--seed", str(seed)] if seed is not None else []),
                "--exit-after-ticks", str(args.ticks), "--timeout", str(timeout),
-               *extra, "--", "-map", args.map]
+               *extra, "--", *(["-map", game_map] if game_map is not None else [])]
     result = subprocess.run(command, capture_output=True, text=True)
     if player is not None:
         try:
@@ -90,9 +100,12 @@ def same_traces(a, b):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--ticks", type=int, default=1000)
-    parser.add_argument("--seed", type=int, default=1234)
-    parser.add_argument("--map", default=r"Map\MULTI\384-2-Lakes.map",
-                        help="map path relative to the game directory")
+    parser.add_argument("--seed", type=int,
+                        help=f"game seed for a new recording (default {DEFAULT_SEED}); "
+                             "replays use the recording's")
+    parser.add_argument("--map",
+                        help="map path relative to the game directory, for a new recording "
+                             f"(default {DEFAULT_MAP}); replays use the recording's")
     parser.add_argument("--recording", help="replay this recording instead of making one")
     parser.add_argument("--no-mutation", action="store_true")
     parser.add_argument("--against-original", action="store_true",
@@ -133,17 +146,23 @@ def main():
             return 2
     else:
         recording = os.path.join(work, "recording.bin")
-        print(f"record: {args.ticks} ticks, seed {args.seed}, {args.map}", flush=True)
+        print(f"record: {args.ticks} ticks, seed {args.seed or DEFAULT_SEED}, "
+              f"{args.map or DEFAULT_MAP}", flush=True)
         trace = run_game(launcher, bin_dir, args, ["--record-commands", recording, *dump_args],
-                         input_seed=args.synthetic_input)
+                         input_seed=args.synthetic_input, new_game=True)
         record_trace = trace
         if trace is None:
             return 2
         reference = recording + ".tsv"
         shutil.copyfile(trace, reference)
 
-    commands = command_log.read(recording)
-    print(f"recording has {len(commands)} commands")
+    loaded = command_log.read(recording)
+    commands = loaded.commands
+    print(f"recording has {len(commands)} commands: {command_log.describe(loaded)}")
+    if loaded.version == 1 and (args.seed is None or args.map is None):
+        print("a version 1 recording needs --seed and --map (or convert it with "
+              "tools/command_log.py upgrade)")
+        return 2
 
     if args.against_original:
         args.no_mutation = True
@@ -212,7 +231,9 @@ def main():
             print("mutation check skipped: no command to remove")
         else:
             mutated = os.path.join(work, "mutated.bin")
-            command_log.write(mutated, commands[:index] + commands[index + 1:])
+            command_log.write(mutated, command_log.Recording(
+                loaded.version, loaded.seed, loaded.settings, loaded.map,
+                commands[:index] + commands[index + 1:]))
             print(f"mutation: replay without command {index} (slot {commands[index][0]})",
                   flush=True)
             trace = run_game(launcher, bin_dir, args, ["--replay-commands", mutated])

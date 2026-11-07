@@ -70,7 +70,8 @@ Next steps:
    uses); the y-1 neighbour accesses (0x6742c..0x67436) are fields
    +0x0..+0xa of the record before. Changing world.h affects
    determinism.cpp's per-tile hashing; do it as its own step.
-3. Make replays self-contained (seed and map in the recording).
+3. (done 2026-11-08) Replays are self-contained: seed and map in the
+   recording.
 
 ## Open questions and loose ends
 
@@ -125,8 +126,8 @@ Next steps:
   `CLAUDE.md`).
 - The user hasn't yet played a game with the hooks active (currently
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
-- **Replays need the game seed they were recorded with**, and the
-  recording doesn't store it yet. `recordings/scripted-seed127.bin` was
+- **Replays need the game seed they were recorded with**, which recordings
+  now store (fixed 2026-11-08, see session log). `recordings/scripted-seed127.bin` was
   recorded with game seed 1234 (check_replay's default; "127" is the
   synthetic-input seed). Replaying it with `--seed 127` gives a different
   game (player races 1/2 instead of 2/3: OnStart draws a random race with
@@ -136,10 +137,33 @@ Next steps:
   player, and drawing it looks up a shadow sprite that doesn't exist
   (0x4a9960 -> 0x5fabb0 "GFX: ShadowAnimation not found 0:0", whose bounds
   check only calls DebugLog, then a garbage pointer is dereferenced in
-  0x5fcdc0 at 0x5fcdfb). Fix: store seed and map in the recording (next
-  steps), until then pass the right `--seed`.
+  0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-08 (13): self-contained recordings
+
+- Recording format version 2 (`src/common/recording_format.h`, shared by
+  launcher and DLL): header with game seed, settings (bit 0: random races
+  include the Amazons) and the -map argument. The DLL writes it when
+  recording (seed from the SeedRandom hook, `game::LastSeed`) and, when
+  replaying, stops the game if seed, setting or map differ. The launcher
+  takes seed and map from the recording; a conflicting --seed/-map or a
+  version 1 recording without --seed is refused (checked by hand: all
+  three refused).
+- `tools/command_log.py`: reads both versions, `upgrade` converts version
+  1. `recordings/scripted-seed127.bin` upgraded (seed 1234; the version 1
+  original is kept as `scripted-seed127.v1.bin`).
+- `check_replay.py` passes --seed/--map only when recording (or when given
+  explicitly).
+- Checked with the game: a fresh 300-tick record/replay round trip
+  (header written and applied, mutation detected) REPLAY OK; the upgraded
+  scripted recording, replayed without --seed, original vs our code:
+  traces identical over 1,000 ticks (compared by hand, see next point).
+- Loose end: when the game's clean shutdown hangs ("did not finish within
+  15 s"), the logic thread keeps stepping and the trace reopens as a second
+  file; check_replay.py then reports "run failed (2 new trace files)"
+  although the run was fine. Make run_game take the first new trace.
 
 ### 2026-11-07 (12): batch 8 (20 leaf functions)
 
