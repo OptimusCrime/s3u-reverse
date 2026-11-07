@@ -12,6 +12,20 @@ Reverse engineer and reimplement **The Settlers 3 – Ultimate Collection**
 Correctness is the top priority. Every reimplemented piece must be checked
 against the original game's behavior, not just "looks right".
 
+## Session routine
+
+- **At the start of a session:** read `LOGBOOK.md`. Its "Current focus"
+  section says what to do next. If analysis is needed, open `S3.EXE` in REA
+  (`open_binary`, then any query; Ghidra analysis takes about 2–3 minutes).
+  Then re-apply our names with `set_addresses_names`, using the output of
+  `python tools/inventory.py names`.
+- **While working:** permanent facts and procedures go in this file. Data
+  goes in `re/`. Progress goes in `LOGBOOK.md`.
+- **Before stopping, or after finishing a piece of work:** update
+  `LOGBOOK.md` (current focus, next steps, open questions, and a dated
+  session-log entry), then commit. The user may restart with a fresh context
+  at any time, so anything only in the conversation will be lost.
+
 ## Ground rules
 
 - The original game install lives in `Settlers3Ultimate/` and is gitignored.
