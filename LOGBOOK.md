@@ -16,21 +16,32 @@ build/x86/bin/Debug/recordings/scripted-seed127.bin --against-original
 --ticks 3000` (that recording has 6 scripted player commands; it lives in
 the build folder, recreate one with `--synthetic-input` if it's gone).
 
-Done: TileDistance (0x4ff320), GameWorld::NextSearchGeneration (0x4ff3f0),
-the statistics functions InitStatisticsKernel (0x4ff4c0), ShiftStatistics
-(0x4ff470) and AddStatistic (0x4ff510). Verified: tests plus a 3,000-tick
-replay identical to the original.
+Done (verified: differential tests incl. mutation tests + whole-game
+replay identical to the original):
+- search/statistics: TileDistance, GameWorld::NextSearchGeneration,
+  InitStatisticsKernel, ShiftStatistics, AddStatistic
+- directions: NeighbourX/Y, Previous/NextDirection, DirectionFromDelta
+- players: GameWorld::AddPlayerCounter, SubtractPlayerCounter,
+  ClearPlayerListLengths
+- settlers: GameWorld::CanSettlerEnterTile, SettlerGroup
+- map: GameWorld::IsOnMap, IsInsideMapBorder, TileScreenX, TileScreenY
+
+How to find the next ones: leaf functions (no calls) in
+0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
+(function starts from re/ghidra_functions.tsv + re/extra_functions.tsv;
+count instructions, skip any with `call` or `fs:`). About 110 remain.
+Skipped so far because their meaning is unclear (do them once understood):
+0x4fa6b0/0x4faa40 (type ids 1/55), 0x4ffb90 (7-byte list at
+world+0x1195dcd), 0x505bc0/0x505bf0 (byte counters in 14-byte records at
+world+0x123885f), 0x510440/0x50e380/0x510470 (settler record fields),
+0x5194b0 (tile word at (x*0x300+y+0x44d9)*24: suggests the tile array
+layout isn't settled), 0x504650, 0x4ff380, 0x4ff3c0.
 
 Next steps:
-1. More leaf functions near these: 0x4ff380 (64000 - 8000a - 4000b, meaning
-   unknown), 0x4ff3c0 (clears 9 dwords of a 0x2e0-byte record at
-   world+0xE147BA), GameWorld::BuildStatisticsChart (0x4ff550),
-   FindNearest_a/b (0x4ff0a0/0x4ff170), the footprint check (0x4da440),
-   GameWorld::PushUiFeedback (0x4febe0), BuildMinimap (0x4fb650).
-   A good way to find more: functions in 0x4e0000..0x520000 with no callees
-   (leaves) and few lines.
-2. Make replays self-contained: store the seed and map in the recording.
-3. Decode the command ids (ExecuteCommands 0x535990).
+1. Continue with leaf functions; then move up to their callers.
+2. Settle the tile record layout (0x5194b0 writes at tile index + 0x44d9,
+   i.e. world+0x67458; world.h assumes records start at 0x67440).
+3. Make replays self-contained (seed and map in the recording).
 
 ## Open questions and loose ends
 
@@ -87,6 +98,17 @@ Next steps:
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
 
 ## Session log
+
+### 2026-11-07 (9): more leaf functions
+
+- 14 more functions replaced in three batches (directions, player counters,
+  settler helpers, map coordinates); each batch passed all tests and the
+  whole-game check against the original. Added test/world_buffer.h.
+- Some callers only overwrite AL after a call, so for those functions the
+  exact EAX of the original is reproduced and tested.
+- Don't rebuild while a game run is going: the link fails because the DLL
+  is in use (and a rebuild between the two runs of --against-original
+  would mix builds).
 
 ### 2026-11-07 (8): first simulation functions replaced
 
