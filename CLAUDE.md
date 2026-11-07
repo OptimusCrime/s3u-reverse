@@ -371,6 +371,9 @@ replaying, see `src/s3re/replay/command_log.h`):
    one with `check_replay.py --synthetic-input SEED`).
 7. Set the row to `verified`, `hook=replaced`, `verified_by=<test names>`
    (space-separated). Run `python tools/inventory.py check`.
+   Then run `python tools/progress.py` to regenerate the progress treemap
+   (`docs/progress.svg`, shown in the README, and `docs/progress.html`) and
+   commit it with the batch.
 8. Occasionally play the game normally with all hooks active, as an
    integration check.
 - The user is new to Visual Studio. Drive builds from the command line, and

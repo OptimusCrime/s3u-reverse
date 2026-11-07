@@ -141,6 +141,17 @@ Next steps:
 
 ## Session log
 
+### 2026-11-08 (14): progress treemap
+
+- Added `tools/progress.py`: a treemap of all 9,836 known functions, sized
+  by code bytes (distance to the next function or funclet start) and
+  coloured by inventory status, grouped by category and class (unidentified
+  functions by 64 KB address range). Writes `docs/progress.svg` (in the
+  README) and `docs/progress.html` (stats, hover details, history per
+  inventory commit). Standard library only.
+- Current numbers: 60 functions verified, 5,232 of 2,258,245 bytes (0.23%).
+- The workflow step 7 in CLAUDE.md now includes regenerating it.
+
 ### 2026-11-08 (13): self-contained recordings
 
 - Recording format version 2 (`src/common/recording_format.h`, shared by
