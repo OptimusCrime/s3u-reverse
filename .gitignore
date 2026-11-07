@@ -1,0 +1,44 @@
+# Original game files (copyrighted, not redistributable)
+Settlers3Ultimate/
+
+# REA / analysis leftovers
+*.rea-snapshot
+*.gpr
+*.rep/
+*.lock
+*.lock~
+evidence/
+snapshots/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Build output
+build/
+dist/
+out/
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Local Claude Code settings
+.claude/settings.local.json
