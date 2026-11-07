@@ -13,6 +13,7 @@ add_library(s3re SHARED
 
     replay/command_log.cpp
 
+    game/building_flags.cpp
     game/counting.cpp
     game/logic_thread.cpp
     game/map.cpp
