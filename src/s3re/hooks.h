@@ -23,6 +23,7 @@
 // Every hook needs a row in re/functions.csv with a matching hook column;
 // `python tools/inventory.py check` enforces this.
 
+#include <atomic>
 #include <cstdint>
 
 namespace s3re::hooks {
@@ -36,8 +37,50 @@ enum class HookKind { Replaced, Passthrough, ReplacedAlways };
 
 struct HookRegistrar {
     HookRegistrar(const char* name, std::uintptr_t address, HookKind kind, void** original,
-                  void* replacement);
+                  void* replacement, std::atomic<unsigned long>* calls);
 };
+
+// Writes how often each installed hook was called to s3re.log ("calls
+// <name> <count>"), so a whole-game check can tell which replacements the
+// game actually exercised.
+void LogCallCounts();
+
+namespace detail {
+
+// Installed in place of the replacement: counts the call, then calls it.
+// One specialization per calling convention; the thunk has exactly the
+// replacement's signature, so registers and stack are passed through.
+template <typename Fn, Fn Target>
+struct Counting;
+
+template <typename R, typename... A, R(__fastcall* Target)(A...)>
+struct Counting<R(__fastcall*)(A...), Target> {
+    static inline std::atomic<unsigned long> calls{0};
+    static R __fastcall Call(A... args) {
+        calls.fetch_add(1, std::memory_order_relaxed);
+        return Target(args...);
+    }
+};
+
+template <typename R, typename... A, R(__stdcall* Target)(A...)>
+struct Counting<R(__stdcall*)(A...), Target> {
+    static inline std::atomic<unsigned long> calls{0};
+    static R __stdcall Call(A... args) {
+        calls.fetch_add(1, std::memory_order_relaxed);
+        return Target(args...);
+    }
+};
+
+template <typename R, typename... A, R(__cdecl* Target)(A...)>
+struct Counting<R(__cdecl*)(A...), Target> {
+    static inline std::atomic<unsigned long> calls{0};
+    static R __cdecl Call(A... args) {
+        calls.fetch_add(1, std::memory_order_relaxed);
+        return Target(args...);
+    }
+};
+
+}  // namespace detail
 
 // Installs every registered hook. Returns false if any of them failed, in which
 // case none are installed. In original mode, Replaced hooks are skipped.
@@ -52,27 +95,34 @@ void UninstallAll();
 
 }  // namespace s3re::hooks
 
-#define S3RE_DETAIL_HOOK(address, name, kind, FnType, original, replacement)       \
+// Registers `installed` (the function Detours redirects to) for the hook;
+// `calls` is its call counter or nullptr.
+#define S3RE_DETAIL_HOOK(address, name, kind, FnType, original, installed, calls)  \
     FnType original = reinterpret_cast<FnType>(address);                            \
     static ::s3re::hooks::HookRegistrar s3re_hook_registrar_##name{                 \
         #name, address, kind, reinterpret_cast<void**>(&original),                  \
-        reinterpret_cast<void*>(&replacement)}
+        reinterpret_cast<void*>(installed), calls}
 
 // Declares `original` as a pointer to the original function at `address` and
-// registers our `replacement` to run instead of it.
+// registers our `replacement` to run instead of it, behind a counting thunk
+// (detail::Counting).
 //   S3RE_HOOK(0x00401f60, String_Eos, EosFn, Original_String_Eos, String_Eos);
 #define S3RE_HOOK(address, name, FnType, original, replacement)                    \
     S3RE_DETAIL_HOOK(address, name, ::s3re::hooks::HookKind::Replaced, FnType,      \
-                     original, replacement)
+                     original,                                                      \
+                     (&::s3re::hooks::detail::Counting<FnType, &replacement>::Call), \
+                     (&::s3re::hooks::detail::Counting<FnType, &replacement>::calls))
 
 // A replacement that also provides tooling and therefore stays installed in
 // original mode; it must call `original` itself when OriginalMode() is true.
+// Not counted: tooling hooks may log their caller with _ReturnAddress(),
+// which a thunk would change.
 #define S3RE_HOOK_ALWAYS(address, name, FnType, original, replacement)             \
     S3RE_DETAIL_HOOK(address, name, ::s3re::hooks::HookKind::ReplacedAlways, FnType, \
-                     original, replacement)
+                     original, &replacement, nullptr)
 
 // Same, for a wrapper that observes the original (for example logs its
-// arguments) and then calls it. Not a reimplementation.
+// arguments) and then calls it. Not a reimplementation. Not counted.
 #define S3RE_PASSTHROUGH(address, name, FnType, original, wrapper)                 \
     S3RE_DETAIL_HOOK(address, name, ::s3re::hooks::HookKind::Passthrough, FnType,   \
-                     original, wrapper)
+                     original, &wrapper, nullptr)

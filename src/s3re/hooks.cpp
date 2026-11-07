@@ -16,6 +16,7 @@ struct Hook {
     HookKind kind;
     void** original;
     void* replacement;
+    std::atomic<unsigned long>* calls;
 };
 
 // Function-local static so registration from other translation units' static
@@ -30,8 +31,21 @@ bool g_installed = false;
 }  // namespace
 
 HookRegistrar::HookRegistrar(const char* name, std::uintptr_t address, HookKind kind,
-                             void** original, void* replacement) {
-    Registry().push_back({name, address, kind, original, replacement});
+                             void** original, void* replacement,
+                             std::atomic<unsigned long>* calls) {
+    Registry().push_back({name, address, kind, original, replacement, calls});
+}
+
+void LogCallCounts() {
+    if (!g_installed) {
+        return;
+    }
+    for (const Hook& hook : Registry()) {
+        if (hook.calls == nullptr || (OriginalMode() && hook.kind == HookKind::Replaced)) {
+            continue;  // not counted, or not installed
+        }
+        S3RE_LOG("calls %s %lu", hook.name, hook.calls->load(std::memory_order_relaxed));
+    }
 }
 
 bool OriginalMode() {

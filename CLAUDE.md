@@ -321,10 +321,16 @@ replaying, see `src/s3re/replay/command_log.h`):
 4. Build, then run `s3re_launcher --test [filter]`. This runs the tests inside
    the real `S3.EXE` without opening the game window. The exit code is 0 only
    if every test passed.
-5. Whole-game check for simulation code: `python tools/check_replay.py
-   --recording <file> --against-original --ticks 3000` replays a recorded
-   game with the original code (`s3re_launcher --original` leaves out all
-   replacements) and with ours, and the traces must be identical. Keep
+5. Whole-game check (at milestones, not per batch; it's slow):
+   `python tools/check_replay.py --recording <file> --against-original
+   --ticks 3000` replays a recorded game with the original code
+   (`s3re_launcher --original` leaves out all replacements) and with ours,
+   and the traces must be identical. It only covers functions the game
+   actually called: replacements run behind a counting thunk, the counts
+   are logged at exit ("calls <name> <n>" in s3re.log) and check_replay.py
+   lists the ones that were never called. Record call counts in the
+   inventory notes; never claim whole-game evidence for an uncalled
+   function. Keep
    recordings with player input in `build/x86/bin/Debug/recordings/` (make
    one with `check_replay.py --synthetic-input SEED`).
 6. Set the row to `verified`, `hook=replaced`, `verified_by=<test names>`

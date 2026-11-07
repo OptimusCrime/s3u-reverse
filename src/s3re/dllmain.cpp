@@ -54,6 +54,7 @@ void Startup(HMODULE self) {
 
 void Shutdown() {
     S3RE_LOG("process detaching");
+    s3re::hooks::LogCallCounts();
     s3re::hooks::UninstallAll();
     s3re::trace::CloseDeterminismTrace();
     s3re::log::Close();

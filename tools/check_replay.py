@@ -165,6 +165,16 @@ def main():
     # Player commands = recorded commands nobody issued live in the replay.
     replay_log = open(os.path.join(bin_dir, "s3re.log"), encoding="utf-8",
                       errors="replace").read()
+    # Which of our replacements the game called (s3re logs "calls <name> <n>"
+    # at exit): a function that was never called isn't covered by this run.
+    calls = {m.group(1): int(m.group(2))
+             for m in re.finditer(r"\] calls (\S+) (\d+)", replay_log)}
+    if calls:
+        unused = sorted(name for name, n in calls.items() if n == 0)
+        print(f"  replaced functions called in this game: {len(calls) - len(unused)} of "
+              f"{len(calls)}")
+        if unused:
+            print(f"  not called (not covered by this run): {', '.join(unused)}")
     player_commands = len(re.findall(r"was not issued live", replay_log))
     print(f"  player commands in the recording: {player_commands}"
           f"{' (at least; the log lists 20 differences at most)' if player_commands >= 20 else ''}")

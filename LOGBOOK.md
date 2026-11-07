@@ -7,14 +7,15 @@ progress.
 
 ## Current focus
 
-**Replacing simulation functions, bottom up.**
+**Build the emulator test harness, then continue replacing functions.**
 
-Workflow per function (see `CLAUDE.md`): reimplement, differential tests
-with a mutation test, `s3re_launcher --test`, then the whole-game check
-`python tools/check_replay.py --recording
-build/x86/bin/Debug/recordings/scripted-seed127.bin --against-original
---ticks 3000` (that recording has 6 scripted player commands; it lives in
-the build folder, recreate one with `--synthetic-input` if it's gone).
+Plan (agreed with the user): `tools/` Python harness using Unicorn that
+loads S3.EXE and s3re.dll, runs an original function and our replacement
+on identical emulated memory/arguments, compares return value, memory
+writes, ESP adjustment and callee-saved registers, and measures branch
+(basic-block) coverage of the original. Gate per function: all reachable
+branches of the original covered and matching. The whole-game replay
+becomes a milestone check.
 
 Done (verified: differential tests incl. mutation tests + whole-game
 replay identical to the original):
@@ -98,6 +99,23 @@ Next steps:
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
 
 ## Session log
+
+### 2026-11-07 (10): batches 5-7, call coverage, testing strategy
+
+- Batches 5-7 (tile neighbourhood checks, counting functions, building
+  request flags): all differential tests pass (68/68).
+- Added call counting to replacement hooks. The coverage run showed that
+  16 of 39 replacements were never called in the scripted 3,000-tick game
+  (e.g. NextSearchGeneration, all Count* functions, the SetBuildingFlag*
+  functions, TileScreenX/Y), so the earlier "whole-game check passed"
+  notes were wrong for them; the inventory notes now give call counts.
+- Decided with the user: the whole-game replay is too slow and too
+  coverage-limited as a per-batch gate. Next: an emulator-based
+  differential harness (Unicorn) that runs the original bytes from S3.EXE
+  and ours from s3re.dll, measures branch coverage of the original and
+  checks calling-convention details; later symbolic equivalence proofs
+  (angr/Z3) for loop-free functions, a shadow mode for real game data, a
+  faster game clock and savegames for late-game states.
 
 ### 2026-11-07 (9): more leaf functions
 
