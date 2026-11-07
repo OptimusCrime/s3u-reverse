@@ -7,12 +7,14 @@ progress.
 
 ## Current focus
 
-**Check that the simulation is deterministic.**
+**Record/replay of player input.**
 
-The game loop and simulation step are mapped (see "Runtime structure" in
-`CLAUDE.md`). The RNG keeps its state inside the world object, which points
-towards a deterministic lockstep simulation. Next, confirm that by
-observation.
+The simulation is confirmed deterministic: with the same map and a forced
+RNG seed, two unattended runs match on every tick (RNG state) and at every
+world hash for 2,000 ticks, apart from two known timing-dependent scratch
+fields that the trace now skips. `python tools/check_determinism.py` runs
+the whole check without user interaction (`-map` skips the menus,
+`--exit-after-ticks` ends the game).
 
 Next steps:
 1. DONE: the determinism trace. `s3re_launcher --trace-determinism` writes
@@ -24,16 +26,20 @@ Next steps:
    `CLogicThread::OnStart` (by `GameWorld::Create` and then with the seed
    from `g_gameSettings+0x88`). Reimplemented and verified it; the hook logs
    every seed, and `s3re_launcher --seed N` forces it.
-2b. WAITING ON THE USER: two traced runs with the same forced seed
-   (`--trace-determinism --seed 1234`), same map, no input. If they match,
-   the simulation is deterministic given seed + inputs. If they still
-   diverge, the first differing tick/region shows the next nondeterminism
-   source (candidate: the CRT `rand()`, seeded by `srand(time)` at
-   `0x431852` and used in many places, e.g. around `0x549xxx`).
-3. Find how player commands reach the simulation (a command queue that
+2b. DONE: with `--seed 1234` and `-map Map\MULTI\384-2-Lakes.map`, runs
+   are identical (see the session log). The CRT `rand()` (seeded by
+   `srand(time)` at `0x431852`) hasn't caused differences so far; it may
+   matter with computer opponents or other maps (not tested yet).
+3. Try the game's own recorder: `-record` writes the "movie"
+   `Siedler3.evt`, `-play` replays it. If it records player commands per
+   tick, it is the replay system we need (play back in the original and
+   the hooked build, compare traces).
+   Note: `-demo` crashes (access violation at `0x4a6127`, null object in
+   `0x4a60f0`) when combined with `-map`.
+4. Find how player commands reach the simulation (a command queue that
    lockstep multiplayer would send over the network); that's what a replay
    recorder needs to capture.
-4. Then build record/replay: record the commands, replay them in the hooked
+5. Then build record/replay: record the commands, replay them in the hooked
    build, and compare per-tick hashes. This is the system-level verification
    described in `CLAUDE.md`.
 
@@ -47,6 +53,12 @@ Next steps:
   probably the multiplayer desync check, more evidence for lockstep.
 - `CLogicThread::Step` is called about 240 times a second, but the tick
   advances only about 15 times a second; the step decides when to tick.
+  Some work runs per step, not per tick (`0x524fa0`, `0x51f110`), so its
+  side effects depend on timing. Known volatile world fields: `+0x2d2e4`
+  to `+0x2d2eb` and `+0x2d301` (skipped by the trace hash). Check whether
+  they can ever influence the simulation.
+- Determinism has only been tested on one 2-player map without input.
+  Test other maps, computer opponents, and longer runs.
 
 - `GameWorld::UpdatePhase2` (`0x4e05e0`): purpose unknown.
 - `GameWorld::UpdateSettlers` (`0x4e9670`): the name is provisional.
@@ -71,6 +83,17 @@ Next steps:
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
 
 ## Session log
+
+### 2026-11-07 (5): unattended runs, determinism confirmed
+
+- The game has built-in command-line options (German help text at
+  `0x6960e4`): `-map <file>` starts a map directly, `-record` / `-play`
+  record and replay a "movie" (`Siedler3.evt`), `-demo` skips menus (but
+  crashes with `-map`), `-debug`, `-netmon`, `-version`, `-help`.
+- Added `--exit-after-ticks`, `--timeout` and `--dump-tick` to the
+  launcher, and `tools/check_determinism.py` (unattended runs + compare).
+- Diffing header dumps found only timing-dependent scratch fields; after
+  skipping them, runs are identical (1,000 and 2,000 tick runs).
 
 ### 2026-11-07 (4): first determinism runs, RNG seeding
 

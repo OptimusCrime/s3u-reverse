@@ -904,7 +904,12 @@ address,name,category,status,hook,verified_by,notes
 0x004fce80,CGameData::~CGameData,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x004fce60.
 0x004feb40,GameWorld::SeedRandom,game,verified,replaced,GameWorld_SeedRandom_MatchesOriginal GameWorld_SeedRandom_ComparisonDetectsWrongImplementation,"a=seed, b=seed+1000, c=seed+2000 (low 16 bits). thiscall, ret 4. Our hook logs each seed and applies S3RE_SEED (launcher --seed)."
 0x004feb70,GameWorld::Random,game,verified,replaced,GameWorld_Random_MatchesOriginal GameWorld_Random_ComparisonDetectsWrongImplementation,"Simulation RNG: three uint16 at world+0x2d2dc; result=(a+b)^c (new a), t=c+b, b=ror1(b^t), c=ror1(t). State lives in the world, which suggests determinism."
+0x004ff0a0,GameWorld::FindNearest_a,game,classified,none,,"Searches a list of 20-byte records for the closest entry; stores its (x, y) at world+0x2d2e4/+0x2d2e8 (0,0 if none). Called from 0x524fa0 and 0x533xxx. Name provisional."
+0x004ff170,GameWorld::FindNearest_b,game,classified,none,,"Like 0x4ff0a0, writes a position to world+0x2d2e4/+0x2d2e8. Called from 0x533xxx. Name provisional."
+0x004ff3f0,GameWorld::NextSearchGeneration,game,identified,none,,"Increments byte world+0x2d300 (search generation), clears +0x2d301; on wrap clears the mark byte at tile offset +0xF of every tile. 61 callers."
 0x005166d0,GameWorld::Create,game,identified,none,,"Logs 'creating world', seeds the RNG with its first argument, builds the world. Called from CLogicThread::OnStart (name provisional)."
+0x0051f110,CLogicThread::PrepareDrawData,game,classified,none,,Called by CLogicThread::Step between the update phases when g_stepCountdown == 0. Increments world+0x2d301 and fills the object at this+0x3d0 (draw thread hand-off?). Runs a timing-dependent number of times. Name provisional.
+0x00524fa0,CLogicThread::ProcessEvents,game,classified,none,,"Called by CLogicThread::Step on every step (not only on ticks), after the event queue fetch. Uses the search functions 0x4ff0a0/0x4ff170. Name provisional."
 0x0053c7a0,CLogicThread::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0 of the base subobject at +0x4).
 0x0053c7d0,CLogicThread::~CLogicThread,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0053c7a0.
 0x0053c9e0,CLogicThread::OnStart,game,classified,none,,Logic thread startup (slot 4).

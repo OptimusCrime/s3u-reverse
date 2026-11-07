@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 
@@ -28,6 +29,7 @@ std::uint32_t g_lastTick = 0;
 std::uint16_t g_lastRandom[3] = {};
 bool g_haveLast = false;
 unsigned long g_stepsSeen = 0;
+char g_path[MAX_PATH] = {};  // the trace file, for naming dumps next to it
 unsigned long g_stepsWithWorld = 0;
 
 int EnabledState() {
@@ -70,11 +72,12 @@ bool OpenFile() {
         return false;
     }
     std::setvbuf(g_file, nullptr, _IOFBF, 1 << 16);
-    std::fprintf(g_file, "# s3re determinism trace v1\n");
+    std::fprintf(g_file, "# s3re determinism trace v2 (header hash skips volatile fields)\n");
     std::fprintf(g_file, "# T <tick> <rng a> <rng b> <rng c>   after each step that changed them\n");
     std::fprintf(g_file, "# H <tick> <header hash> <map hash> <rest hash> <rest bytes>   every "
                          "%u ticks\n", kHashInterval);
     std::fflush(g_file);
+    std::memcpy(g_path, path, sizeof(g_path));
     S3RE_LOG("determinism trace: writing %s", path);
     return true;
 }
@@ -118,6 +121,36 @@ std::uint64_t Hash(std::uint64_t hash, const std::uint8_t* data, std::size_t siz
 }
 #pragma optimize("", on)
 
+// S3RE_DUMP_TICK: at this tick, the world header is also written to
+// <trace>-header-<tick>.bin, to find out which bytes differ between runs.
+// 0 if unset.
+std::uint32_t DumpTick() {
+    static const std::uint32_t value = [] {
+        char text[32] = {};
+        const DWORD length = GetEnvironmentVariableA("S3RE_DUMP_TICK", text, sizeof(text));
+        return (length > 0 && length < sizeof(text))
+                   ? static_cast<std::uint32_t>(std::strtoul(text, nullptr, 10))
+                   : 0u;
+    }();
+    return value;
+}
+
+void DumpHeader(const std::uint8_t* world, std::uint32_t tick) {
+    char path[MAX_PATH + 32];
+    std::snprintf(path, sizeof(path), "%.*s-header-%u.bin",
+                  static_cast<int>(std::strlen(g_path) - 4), g_path, tick);
+    FILE* file = nullptr;
+    if (fopen_s(&file, path, "wb") != 0 || file == nullptr) {
+        S3RE_LOG("determinism trace: could not create %s", path);
+        return;
+    }
+    const std::size_t size =
+        ReadableLength(world, s3re::game::world_offset::kMapTiles);
+    std::fwrite(world, 1, size, file);
+    std::fclose(file);
+    S3RE_LOG("determinism trace: dumped %zu header bytes at tick %u to %s", size, tick, path);
+}
+
 constexpr std::uint64_t kHashSeed = 0xcbf29ce484222325ull;
 
 struct RegionHashes {
@@ -127,11 +160,42 @@ struct RegionHashes {
     std::size_t restBytes;
 };
 
+// Header bytes left out of the header hash. They differ between otherwise
+// identical runs because the code writing them runs a timing-dependent
+// number of times (per step, not per tick). Found 2026-11-07 by diffing
+// header dumps (--dump-tick); see LOGBOOK.md.
+struct ByteRange {
+    std::size_t begin;
+    std::size_t end;
+};
+constexpr ByteRange kVolatileHeaderRanges[] = {
+    // Last search result position (x, y), written by 0x4ff0a0/0x4ff170,
+    // called from 0x524fa0 on every step (probably mouse/UI driven).
+    {0x2d2e4, 0x2d2ec},
+    // Byte counter incremented on every call of 0x51f110 (called from
+    // CLogicThread::Step between the update phases; fills the object at
+    // CLogicThread+0x3d0, probably for the draw thread).
+    {0x2d301, 0x2d302},
+};
+
+std::uint64_t HashHeader(const std::uint8_t* world, std::size_t size) {
+    std::uint64_t hash = kHashSeed;
+    std::size_t position = 0;
+    for (const ByteRange& skip : kVolatileHeaderRanges) {
+        if (skip.begin >= size) {
+            break;
+        }
+        hash = Hash(hash, world + position, skip.begin - position);
+        position = skip.end < size ? skip.end : size;
+    }
+    return Hash(hash, world + position, size - position);
+}
+
 // Must not contain objects with destructors because of __try.
 bool HashRegions(const std::uint8_t* world, std::uint32_t mapSize, RegionHashes* out) {
     __try {
         using namespace s3re::game::world_offset;
-        out->header = Hash(kHashSeed, world, ReadableLength(world, kMapTiles));
+        out->header = HashHeader(world, ReadableLength(world, kMapTiles));
 
         out->map = kHashSeed;
         if (mapSize > 0 && mapSize <= kMapRowTiles) {
@@ -200,6 +264,10 @@ void OnLogicStep(const void* logicThread) {
     g_haveLast = true;
 
     std::fprintf(g_file, "T\t%u\t%u\t%u\t%u\n", tick, random[0], random[1], random[2]);
+
+    if (newTick && tick == DumpTick()) {
+        DumpHeader(world, tick);
+    }
 
     if (newTick && tick % kHashInterval == 0) {
         RegionHashes hashes{};

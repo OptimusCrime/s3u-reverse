@@ -3,6 +3,7 @@
 // Usage: s3re_launcher [--game-dir <path>] [--test [filter]]
 //                      [--trace-determinism] [--seed <n>]
 //                      [--exit-after-ticks <n>] [--timeout <seconds>]
+//                      [--dump-tick <n>]
 //                      [-- <arguments passed to S3.EXE>]
 //
 // --trace-determinism writes the tick, RNG state and world hashes after each
@@ -11,6 +12,8 @@
 // --seed <n> replaces every seed of the simulation's random number generator
 // with n (0..65535), so that two games can start from the same random state.
 //
+// --dump-tick <n> (with --trace-determinism) also writes the world header at
+// tick n to <trace>-header-<n>.bin, for finding which bytes differ.
 // --exit-after-ticks <n> ends the game once the game tick reaches n.
 // --timeout <seconds> kills the game if it is still running after that time
 // (a safety net for unattended runs; exit code 1).
@@ -172,6 +175,7 @@ int wmain(int argc, wchar_t** argv) {
     std::wstring testFilter;
     std::wstring seed;
     std::wstring exitAfterTicks;
+    std::wstring dumpTick;
     DWORD timeoutMs = INFINITE;
 
     for (int i = 1; i < argc; ++i) {
@@ -191,6 +195,8 @@ int wmain(int argc, wchar_t** argv) {
                 return Fail(L"--exit-after-ticks expects a positive number, got '%s'",
                             exitAfterTicks);
             }
+        } else if (arg == L"--dump-tick" && i + 1 < argc) {
+            dumpTick = argv[++i];
         } else if (arg == L"--timeout" && i + 1 < argc) {
             const unsigned long seconds = wcstoul(argv[++i], nullptr, 10);
             if (seconds == 0 || seconds > 24 * 3600) {
@@ -211,7 +217,7 @@ int wmain(int argc, wchar_t** argv) {
         } else if (arg == L"--help" || arg == L"-h") {
             wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
                     L"[--trace-determinism] [--seed <n>] [--exit-after-ticks <n>] "
-                    L"[--timeout <seconds>] [-- <S3.EXE arguments>]\n");
+                    L"[--timeout <seconds>] [--dump-tick <n>] [-- <S3.EXE arguments>]\n");
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
@@ -261,6 +267,7 @@ int wmain(int argc, wchar_t** argv) {
                                                                     : testFilter.c_str());
     SetEnvironmentVariableW(L"S3RE_TRACE", traceDeterminism ? L"determinism" : nullptr);
     SetEnvironmentVariableW(L"S3RE_SEED", seed.empty() ? nullptr : seed.c_str());
+    SetEnvironmentVariableW(L"S3RE_DUMP_TICK", dumpTick.empty() ? nullptr : dumpTick.c_str());
     SetEnvironmentVariableW(L"S3RE_EXIT_AFTER_TICKS",
                             exitAfterTicks.empty() ? nullptr : exitAfterTicks.c_str());
 

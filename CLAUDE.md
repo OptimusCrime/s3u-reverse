@@ -165,9 +165,18 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   verified. Because the state lives in the world, the simulation is probably
   deterministic. It's seeded by `GameWorld::SeedRandom` (`0x4feb40`) at
   game start, with a different seed each game.
+- **The simulation is deterministic** given the map, the RNG seed and (so
+  far, no) player input, verified by unattended runs.
 - **Launcher options for runtime checks:** `--trace-determinism` writes a
   per-tick trace (compare two with `tools/compare_traces.py`); `--seed N`
-  forces the RNG seed. `s3re.log` logs every seed and the step count.
+  forces the RNG seed; `--exit-after-ticks N` ends the game at tick N;
+  `--timeout S` kills it after S seconds; `--dump-tick N` dumps the world
+  header at tick N. Game options go after `--`, e.g.
+  `-- -map Map\MULTI\384-2-Lakes.map` starts that map without menus.
+  `s3re.log` logs every seed and the step count.
+- **Unattended determinism check:** `python tools/check_determinism.py
+  [--ticks N]`. It opens the game window, so the user's screen is busy
+  while it runs (about 1 minute per 1,000 ticks per run).
 - **The full disassembly** (`dumpbin /disasm:nobytes /out:<file> S3.EXE`,
   run from PowerShell, since Git Bash mangles `/options`) is greppable for
   field offsets, e.g. `2D2DCh` to find all RNG state accesses.
