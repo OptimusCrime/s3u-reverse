@@ -20,8 +20,7 @@
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
-
-#include <windows.h>
+#include "test/world_buffer.h"
 
 #include <cstdint>
 #include <cstring>
@@ -98,26 +97,7 @@ constexpr std::size_t kLargeWorld =                        // up to the player f
     world_offset::kPlayerRecords +
     world_offset::kStatisticsPlayers * world_offset::kPlayerRecordBytes + 0x100;
 
-// Zeroed, committed memory for a world buffer that is too big for the stack
-// and too slow to fill completely with random bytes.
-class WorldBuffer {
-public:
-    explicit WorldBuffer(std::size_t size)
-        : size_(size),
-          data_(static_cast<std::uint8_t*>(
-              VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE))) {}
-    ~WorldBuffer() { VirtualFree(data_, 0, MEM_RELEASE); }
-    WorldBuffer(const WorldBuffer&) = delete;
-    WorldBuffer& operator=(const WorldBuffer&) = delete;
-
-    std::uint8_t* data() { return data_; }
-    std::size_t size() const { return size_; }
-    GameWorld* world() { return reinterpret_cast<GameWorld*>(data_); }
-
-private:
-    std::size_t size_;
-    std::uint8_t* data_;
-};
+using test::WorldBuffer;
 
 void CompareInitKernel(test::Context& ctx, WorldMethodFn candidate, int cases) {
     std::vector<std::uint8_t> a(0x80);

@@ -14,8 +14,11 @@ add_library(s3re SHARED
     replay/command_log.cpp
 
     game/logic_thread.cpp
+    game/map_directions.cpp
     game/net_thread.cpp
+    game/players.cpp
     game/random.cpp
+    game/settlers.cpp
     game/statistics.cpp
     game/world_search.cpp
     game/winmain.cpp
