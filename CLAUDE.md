@@ -118,10 +118,12 @@ C++ code.
 
 ## Function inventory
 
-- `re/ghidra_functions.tsv` lists the 8,863 function starts Ghidra finds,
-  leaving out 11,817 `Unwind@`/`Catch@` exception-cleanup snippets. Regenerate
-  it with `tools/import_ghidra_functions.py` from an REA evidence bundle
-  (instructions in the script).
+- `re/ghidra_functions.tsv` lists the 8,863 function starts Ghidra finds.
+  It also keeps the 11,817 `Unwind@`/`Catch@` exception-cleanup snippets,
+  with kind `funclet`, which are never counted. Regenerate it with
+  `tools/import_ghidra_functions.py` from an REA evidence bundle
+  (instructions in the script). Together with `re/extra_functions.tsv`, that
+  makes 9,836 known functions.
 - `re/functions.csv` holds one row per function we have identified. The
   columns are documented in `tools/inventory.py`. Names use `Class::Method`.
 - Ghidra names made through REA are lost when the session closes. At the
@@ -132,6 +134,46 @@ C++ code.
   `verified_by` exist.
 - The statically linked C runtime sits at the end of `.text`, roughly from
   `0x61e4ef` onwards (exact boundary unknown). Game code comes before it.
+  Known runtime functions include `operator delete` at `0x61e4ef`,
+  `_purecall` at `0x61f061`, and `operator new` at `0x61efb9`.
+
+## Class structure (RTTI)
+
+- `python tools/rtti.py scan` reads the MSVC RTTI straight from `S3.EXE` and
+  writes three files:
+  - `re/classes.json`: classes, bases, vtables, virtual functions, and the
+    functions that store each vtable
+  - `re/classes.md`: the class hierarchy, for reading
+  - `re/extra_functions.tsv`: function starts that the RTTI proves exist but
+    Ghidra missed
+  `python tools/rtti.py apply` adds `classified` rows to `re/functions.csv`
+  and never changes existing rows.
+- **586 classes:** game 285, Watcom container library 248 (`WC*`), MFC 34,
+  C runtime and old iostreams 16, STL 3. The Watcom classes suggest the code
+  base started on the Watcom compiler.
+- **Game classes** are mostly framework, UI, network and AI: `Win32::*` and
+  `DirectX::*` (the app and window framework, `CSiedlerMainWindow`),
+  `CScreenElement` and its UI controls, `Menus::*`, `Lobby::*` and
+  `LobbyClient::*` (online play), and AI agents (`BLACK_BOARD_AGENT`,
+  `T_ECONOMY_AGENT` and others). The core simulation (settlers, buildings,
+  map) shows no polymorphic classes, so it's probably plain structs and
+  functions that need other ways to map.
+- **Ghidra missed 973 functions** that are only reachable through vtables
+  (listed in `re/extra_functions.tsv`). Ghidra can't decompile them through
+  REA, because REA can't create functions. Disassemble them with
+  `inspect_with_objdump` instead.
+- **Naming in the inventory:**
+  - `Class::vfNN`: virtual function in slot NN; `_subXX` if it sits in the
+    vtable of a base subobject at offset XX
+  - `_thunk`: a compiler-generated this-adjusting thunk
+  - `Class::scalar_deleting_destructor` / `Class::~Class`: deleting destructor
+    and the destructor it calls
+  - `NoOp_retN`: an empty virtual function shared by many classes through
+    linker folding
+  When a function's purpose becomes clear, rename it and set it to
+  `identified`.
+- Constructors aren't named yet. `classes.json` lists the functions that
+  store each vtable (constructors, destructors, or code that inlined them).
 
 ## Workflow: reimplementing a function
 

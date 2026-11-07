@@ -16,12 +16,18 @@ Commands:
 Columns of re/functions.csv:
   address      0x-prefixed, 8 lowercase hex digits; rows sorted by address.
   name         Our name, e.g. WinMain or std::string::_Eos (Class::Method).
-  category     game | crt | stl | compiler
+  category     game | crt | stl | mfc | watcom | compiler
                  game     = written by Blue Byte
-                 crt      = Microsoft C runtime (statically linked)
+                 crt      = Microsoft C runtime (statically linked), including
+                            the old iostream library
                  stl      = Microsoft C++ standard library template code
-                 compiler = other compiler-generated code
-  status       identified    = we know what it is and named it
+                 mfc      = Microsoft Foundation Classes
+                 watcom   = Watcom C++ container library (WC* classes)
+                 compiler = other compiler-generated code (e.g. thunks)
+  status       classified    = we know which class it belongs to and its role
+                               there (vtable slot, destructor), not yet what
+                               it does
+               identified    = we know what it does and named it accordingly
                reimplemented = our replacement is hooked in, not yet verified
                verified      = differential tests prove it matches the original
   hook         none | passthrough (logs, then calls the original)
@@ -40,11 +46,12 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 INVENTORY = ROOT / "re" / "functions.csv"
 BASELINE = ROOT / "re" / "ghidra_functions.tsv"
+EXTRA_FUNCTIONS = ROOT / "re" / "extra_functions.tsv"
 SOURCE_DIR = ROOT / "src"
 
 COLUMNS = ["address", "name", "category", "status", "hook", "verified_by", "notes"]
-CATEGORIES = ("game", "crt", "stl", "compiler")
-STATUSES = ("identified", "reimplemented", "verified")
+CATEGORIES = ("game", "crt", "stl", "mfc", "watcom", "compiler")
+STATUSES = ("classified", "identified", "reimplemented", "verified")
 HOOKS = ("none", "passthrough", "replaced")
 
 ADDRESS_RE = re.compile(r"0x[0-9a-f]{8}")
@@ -54,11 +61,20 @@ TEST_RE = re.compile(r"S3RE_TEST\(\s*(\w+)\s*\)")
 
 
 def load_baseline() -> dict[int, tuple[str, str]]:
+    """All known function starts: Ghidra's list plus the starts the RTTI proves
+    that Ghidra missed (kind "rtti"). Funclets are excluded."""
     functions = {}
     with BASELINE.open(encoding="utf-8") as f:
         lines = (line for line in f if not line.startswith("#"))
         for row in csv.DictReader(lines, delimiter="\t"):
-            functions[int(row["address"], 16)] = (row["kind"], row["ghidra_name"])
+            if row["kind"] != "funclet":
+                functions[int(row["address"], 16)] = (row["kind"], row["ghidra_name"])
+    if EXTRA_FUNCTIONS.exists():
+        with EXTRA_FUNCTIONS.open(encoding="utf-8") as f:
+            lines = (line for line in f if not line.startswith("#"))
+            for row in csv.DictReader(lines, delimiter="\t"):
+                address = int(row["address"], 16)
+                functions.setdefault(address, (row["kind"], f"sub_{address:08x}"))
     return functions
 
 
@@ -107,8 +123,8 @@ def check() -> int:
             errors.append(f"{where}: rows must be sorted by address with no duplicates")
         previous = address
         if address not in baseline:
-            errors.append(f"{where}: {address_text} is not a function start in "
-                          "re/ghidra_functions.tsv")
+            errors.append(f"{where}: {address_text} is not a known function start "
+                          "(re/ghidra_functions.tsv or re/extra_functions.tsv)")
 
         name = row["name"]
         if not NAME_RE.fullmatch(name):
@@ -161,9 +177,10 @@ def stats() -> int:
 
     kinds = collections.Counter(kind for kind, _ in baseline.values())
     total = len(baseline)
-    print(f"Functions in S3.EXE (Ghidra baseline, excluding exception funclets): {total}")
-    print(f"  unidentified code: {kinds['function']}, library matches: {kinds['library']}, "
-          f"thunks: {kinds['thunk']}")
+    print(f"Known functions in S3.EXE (excluding exception funclets): {total}")
+    print(f"  found by Ghidra: {total - kinds['rtti']} (library matches {kinds['library']}, "
+          f"thunks {kinds['thunk']})")
+    print(f"  missed by Ghidra, proven by RTTI: {kinds['rtti']}")
     print()
 
     by_category = collections.defaultdict(collections.Counter)
@@ -178,10 +195,12 @@ def stats() -> int:
             print(f"  {category:<9} {summary}")
     print()
 
-    done = sum(1 for row in rows if row["status"] == "verified")
-    named = len(rows)
-    print(f"Named:    {named:5d} / {total} ({100 * named / total:.2f}%)")
-    print(f"Verified: {done:5d} / {total} ({100 * done / total:.2f}%)")
+    def line(label, count):
+        print(f"{label:<11}{count:5d} / {total} ({100 * count / total:.2f}%)")
+
+    line("Named:", len(rows))
+    line("Understood:", sum(1 for row in rows if row["status"] != "classified"))
+    line("Verified:", sum(1 for row in rows if row["status"] == "verified"))
     return 0
 
 
