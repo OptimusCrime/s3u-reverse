@@ -229,7 +229,9 @@ constexpr ByteRange kHeaderSkips[] = {
     // Statistics chart for drawing: graph buffer, maximum and axis labels,
     // computed by 0x4ff550 only while the statistics window is open (called
     // only from PrepareDrawData; otherwise only initialized by 0x4fce90).
-    {0x2d02c, 0x2d244},
+    // Then the window's selection (+0x2d244): set by ProcessEvents, read
+    // only by PrepareDrawData to choose what to chart.
+    {0x2d02c, 0x2d248},
     // Camera position (x, y) and a second (target?) pair, in pixels. Moved
     // by the UI (and by command 2, which the game's movie recorder uses);
     // 0x5158f0/0x515980 turn it into the tile at the screen centre.

@@ -22,7 +22,9 @@ with world dumps / header snapshots (`--dump-every` also writes the header
 at every hashed tick), checked in the code, and excluded (list with
 evidence in `src/s3re/trace/determinism.cpp`). Latest: seed 103 passed
 fully with 9 player commands; seed 97 (10 player commands) differed only
-in a draw "redraw" flag at one tick (now excluded). Earlier "passes" had no
+in a draw "redraw" flag at one tick (now excluded). Then seed 127 passed
+(6 player commands); seed 113 (10 player commands) differed only in the
+statistics window's selection byte (+0x2d244, now excluded). Earlier "passes" had no
 player commands (minimap clicks moved the camera off the player's land);
 fixed, and `check_replay.py` now fails a scripted run without player
 commands.
