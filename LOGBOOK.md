@@ -149,6 +149,10 @@ Next steps:
   functions by 64 KB address range). Writes `docs/progress.svg` (in the
   README) and `docs/progress.html` (stats, hover details, history per
   inventory commit). Standard library only.
+- Then made `docs/progress.html` a static, hand-written page that draws the
+  treemap in the browser (hover, click to zoom, history chart) from
+  `docs/progress-data.js`. The script only writes the data (a `.js` file
+  rather than JSON so the page also works from `file://`) and the SVG.
 - Current numbers: 60 functions verified, 5,232 of 2,258,245 bytes (0.23%).
 - The workflow step 7 in CLAUDE.md now includes regenerating it.
 

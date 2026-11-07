@@ -65,8 +65,9 @@ python tools/inventory.py stats
 
 The treemap below shows every function in `S3.EXE` as a box, sized by its
 code size: grey = not looked at, red = classified, yellow = purpose known,
-green = reimplemented and verified. `docs/progress.html` (open it locally)
-adds hover details, totals and a history chart. Regenerate both with
-`python tools/progress.py`.
+green = reimplemented and verified. `docs/progress.html` is the interactive
+version (hover details, click to zoom, totals, history): open it in a
+browser, or publish it together with `docs/progress-data.js`, the data file
+it reads. Regenerate the data and the picture with `python tools/progress.py`.
 
 ![Reimplementation progress](docs/progress.svg)
