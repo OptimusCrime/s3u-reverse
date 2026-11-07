@@ -199,6 +199,16 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   sync). To find new ones: `--dump-tick N[,N...]` in both runs, then
   `python tools/diff_world_dumps.py A.bin B.bin`, then check the writers in
   the code before excluding anything.
+- **A replay must use the game seed the recording was made with** (the
+  recording doesn't store it yet). With another seed the recorded
+  commands run in a different game, which can even crash the original
+  (e.g. buildings of the wrong race). `recordings/scripted-seed127.bin`
+  needs seed 1234 (check_replay's default; 127 was the input seed).
+- **Diagnostics in `s3re.log`:** the game's own `DebugLog` messages (688
+  call sites, silent in the release build; at most 5 per call site, with
+  callers), and for access violations in game code the registers, memory
+  and callers (`src/s3re/crash_log.cpp`). The game also appends its own
+  crash reports to `Settlers3Ultimate/errorlog.txt`.
 - **`--exit-after-ticks` shuts the game down normally** (WM_CLOSE to its
   windows, killed after 15 s if that hangs), so threads run their OnExit.
 - **The full disassembly** (`dumpbin /disasm:nobytes /out:build\s3.asm

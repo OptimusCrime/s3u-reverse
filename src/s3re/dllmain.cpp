@@ -2,6 +2,7 @@
 // code runs. Installs the hooks that redirect original functions to our
 // reimplementations.
 
+#include "crash_log.h"
 #include "hooks.h"
 #include "log.h"
 #include "trace/determinism.h"
@@ -42,6 +43,7 @@ void Startup(HMODULE self) {
     char exePath[MAX_PATH] = {};
     GetModuleFileNameA(nullptr, exePath, MAX_PATH);
     S3RE_LOG("s3re loaded into %s (pid %lu)", exePath, GetCurrentProcessId());
+    s3re::crash::Install();
 
     if (!IsExpectedGameBuild()) {
         S3RE_LOG("unexpected host executable; no hooks installed, game runs unmodified");

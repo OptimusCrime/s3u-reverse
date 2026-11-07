@@ -37,7 +37,7 @@ replay identical to the original):
 - map: GameWorld::IsOnMap, IsInsideMapBorder, TileScreenX, TileScreenY
 
 Batch 8 (2026-11-07, 20 functions; in-process + emulator tests, full
-coverage; whole-game: see the session log):
+coverage; whole-game check passed, 7 of the 20 called):
 - UI state (ui_state.cpp): IsUiSelectionMode, IsUiField298,
   IsUiSelectionParam1/2, IsUiSelectionMode4Field298Is2, IsGameOutcome1,
   ScreenCenterTileX/Y, PushUiFeedback
@@ -125,19 +125,19 @@ Next steps:
   `CLAUDE.md`).
 - The user hasn't yet played a game with the hooks active (currently
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
-- **Whole-game check currently blocked by a crash in the original code.**
-  `check_replay.py --recording recordings/scripted-seed127.bin --seed 127
-  --against-original --ticks 3000` crashed twice in the reference run
-  (`--original`, none of our replacements installed), at about tick 1,780
-  and tick 1,030: "Structured Exception c0000005 at 0x005FCDFB, read from
-  6997646f". Draw thread: CDrawThread::vf13 (0x42c710) -> 0x4b26c0 (big
-  draw routine; reads the UI fields and g_gameOutcome) -> 0x5fcdc0, whose
-  `this` (a local at ebp-0x64 of 0x4b26c0) holds a garbage pointer.
-  Different tick each time, so probably a draw/logic thread race (or
-  something in our tooling's replay/trace hooks). The earlier run at
-  22:49 (session 10/11) also left a short trace (2,336 lines); not
-  checked whether it crashed the same way. Investigate before the next
-  milestone check.
+- **Replays need the game seed they were recorded with**, and the
+  recording doesn't store it yet. `recordings/scripted-seed127.bin` was
+  recorded with game seed 1234 (check_replay's default; "127" is the
+  synthetic-input seed). Replaying it with `--seed 127` gives a different
+  game (player races 1/2 instead of 2/3: OnStart draws a random race with
+  GameWorld::Random() % 4) into which the recorded commands are fed, and
+  the original game crashes after ~800-2,300 ticks: a recorded command
+  builds building type 0x24 (an Asian-only building) for the Egyptian
+  player, and drawing it looks up a shadow sprite that doesn't exist
+  (0x4a9960 -> 0x5fabb0 "GFX: ShadowAnimation not found 0:0", whose bounds
+  check only calls DebugLog, then a garbage pointer is dereferenced in
+  0x5fcdc0 at 0x5fcdfb). Fix: store seed and map in the recording (next
+  steps), until then pass the right `--seed`.
 
 ## Session log
 
@@ -153,8 +153,20 @@ Next steps:
   0x730f18/0x730f1c/0x730f64; added to re/globals.csv).
 - Tile layout: evidence that tile records start at 0x67444 (see next
   steps); world.h not changed yet.
-- Whole-game check not done: the reference run with the original code
-  crashes (see open questions).
+- Whole-game check: first attempts crashed in the reference run (original
+  code). Cause: wrong seed for the recording (see open questions), not
+  our code. Found with two new diagnostics: a crash logger
+  (src/s3re/crash_log.cpp: vectored exception handler, logs registers,
+  memory and callers of access violations in game code) and a DebugLog
+  passthrough (src/s3re/debug_log.cpp: the game's 688 debug messages,
+  silent in the release build, now go to s3re.log, 5 per call site). The
+  seed hook also logs the "random race includes Amazons" setting.
+- With the right seed (1234): `check_replay.py --recording
+  recordings/scripted-seed127.bin --against-original --ticks 3000` REPLAY
+  OK with all 59 replacements; 30 of 59 called. Of batch 8: AssignTileToArea
+  (8,179 calls), RemoveTileFromArea (2,092), SetTileAreaMarked (81,023),
+  FindFreeId256/4096/8192 (4/7/83), ClearTileByte11Slice (448); the other
+  13 (UI queries, building slots, diagonals) were not called.
 
 ### 2026-11-07 (11): emulator test harness
 

@@ -1,5 +1,7 @@
 add_library(s3re SHARED
     dllmain.cpp
+    crash_log.cpp
+    debug_log.cpp
     log.cpp
     hooks.cpp
     s3re.def

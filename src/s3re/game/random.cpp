@@ -126,6 +126,15 @@ void __fastcall GameWorld_SeedRandom(GameWorld* world, void* edx, std::uint32_t 
         S3RE_LOG("GameWorld::SeedRandom(world=%p, seed=%u) called from %p",
                  static_cast<void*>(world), seed & 0xFFFF, _ReturnAddress());
     }
+    // Settings that change the start of a game besides the seed. Byte +0xCC
+    // of g_gameSettings (0x7a7a18) chooses how CLogicThread::OnStart draws a
+    // random race (0x53cf96): Random() % 4 if set (Amazons included), else
+    // % 3. GameSetup (0x431ab0) copies it from byte +0x158 of the config
+    // object at 0x7a7af0, which is read from the registry at startup
+    // (0x40eeef).
+    S3RE_LOG("game settings: random race includes Amazons=%u (config byte %u)",
+             *reinterpret_cast<const std::uint8_t*>(0x7a7ae4),
+             *reinterpret_cast<const std::uint8_t*>(0x7a7c48));
     if (hooks::OriginalMode()) {
         Original_GameWorld_SeedRandom(world, edx, seed);
     } else {
