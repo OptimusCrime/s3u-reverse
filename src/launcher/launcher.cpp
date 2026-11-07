@@ -13,8 +13,9 @@
 // --seed <n> replaces every seed of the simulation's random number generator
 // with n (0..65535), so that two games can start from the same random state.
 //
-// --dump-tick <n> (with --trace-determinism) also writes the world header at
-// tick n to <trace>-header-<n>.bin, for finding which bytes differ.
+// --dump-tick <n>[,<n>...] (with --trace-determinism) also writes the hashed
+// world memory at those ticks to <trace>-world-<n>.bin, for finding which
+// bytes differ.
 // --log-commands logs every command the simulation sends to the network
 // layer (and, in network games, every command announced to CNetThread) to
 // s3re.log.

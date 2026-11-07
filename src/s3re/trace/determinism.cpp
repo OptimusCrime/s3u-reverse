@@ -121,34 +121,57 @@ std::uint64_t Hash(std::uint64_t hash, const std::uint8_t* data, std::size_t siz
 }
 #pragma optimize("", on)
 
-// S3RE_DUMP_TICK: at this tick, the world header is also written to
-// <trace>-header-<tick>.bin, to find out which bytes differ between runs.
-// 0 if unset.
-std::uint32_t DumpTick() {
-    static const std::uint32_t value = [] {
-        char text[32] = {};
+// S3RE_DUMP_TICK: comma-separated ticks (up to 16) at which the hashed world
+// memory (header, map tiles and the rest region, as far as readable) is also
+// written to <trace>-world-<tick>.bin, to find out which bytes differ
+// between runs.
+bool IsDumpTick(std::uint32_t tick) {
+    struct Ticks {
+        std::uint32_t values[16] = {};
+        int count = 0;
+    };
+    static const Ticks ticks = [] {
+        Ticks result;
+        char text[256] = {};
         const DWORD length = GetEnvironmentVariableA("S3RE_DUMP_TICK", text, sizeof(text));
-        return (length > 0 && length < sizeof(text))
-                   ? static_cast<std::uint32_t>(std::strtoul(text, nullptr, 10))
-                   : 0u;
+        if (length == 0 || length >= sizeof(text)) {
+            return result;
+        }
+        const char* cursor = text;
+        while (*cursor != '\0' && result.count < 16) {
+            char* end = nullptr;
+            const unsigned long value = std::strtoul(cursor, &end, 10);
+            if (end == cursor) {
+                break;
+            }
+            result.values[result.count++] = static_cast<std::uint32_t>(value);
+            cursor = *end == ',' ? end + 1 : end;
+        }
+        return result;
     }();
-    return value;
+    for (int i = 0; i < ticks.count; ++i) {
+        if (ticks.values[i] == tick && tick != 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
-void DumpHeader(const std::uint8_t* world, std::uint32_t tick) {
+void DumpWorld(const std::uint8_t* world, std::uint32_t tick) {
     char path[MAX_PATH + 32];
-    std::snprintf(path, sizeof(path), "%.*s-header-%u.bin",
+    std::snprintf(path, sizeof(path), "%.*s-world-%u.bin",
                   static_cast<int>(std::strlen(g_path) - 4), g_path, tick);
     FILE* file = nullptr;
     if (fopen_s(&file, path, "wb") != 0 || file == nullptr) {
         S3RE_LOG("determinism trace: could not create %s", path);
         return;
     }
+    using namespace s3re::game::world_offset;
     const std::size_t size =
-        ReadableLength(world, s3re::game::world_offset::kMapTiles);
+        ReadableLength(world, kMapTiles + kMapRowTiles * kMapRowBytes + kRestRegionCap);
     std::fwrite(world, 1, size, file);
     std::fclose(file);
-    S3RE_LOG("determinism trace: dumped %zu header bytes at tick %u to %s", size, tick, path);
+    S3RE_LOG("determinism trace: dumped %zu world bytes at tick %u to %s", size, tick, path);
 }
 
 constexpr std::uint64_t kHashSeed = 0xcbf29ce484222325ull;
@@ -160,55 +183,119 @@ struct RegionHashes {
     std::size_t restBytes;
 };
 
-// Header bytes left out of the header hash. They differ between otherwise
-// identical runs because the code writing them runs a timing-dependent
-// number of times (per step, not per tick). Found 2026-11-07 by diffing
-// header dumps (--dump-tick); see LOGBOOK.md.
+// World bytes left out of the hashes. Two kinds:
+//  - volatile: written by code that runs a timing-dependent number of times
+//    (per step, not per tick); differ between otherwise identical runs.
+//  - UI/presentation state that the game keeps inside the world object; it
+//    changes with the player's mouse input, which a replay doesn't repeat.
+// Found 2026-11-07 by diffing world dumps (--dump-tick) of identical runs
+// and of a played game against its replay (RNG identical throughout); the
+// owners were then checked in the code. See LOGBOOK.md.
 struct ByteRange {
     std::size_t begin;
     std::size_t end;
 };
-constexpr ByteRange kVolatileHeaderRanges[] = {
+// Offsets from the start of the world object, sorted, non-overlapping.
+constexpr ByteRange kHeaderSkips[] = {
+    // Statistics chart for drawing: graph buffer, maximum and axis labels,
+    // computed by 0x4ff550 only while the statistics window is open (called
+    // only from PrepareDrawData; otherwise only initialized by 0x4fce90).
+    {0x2d02c, 0x2d244},
+    // Camera position (x, y) and a second (target?) pair, in pixels. Moved
+    // by the UI (and by command 2, which the game's movie recorder uses);
+    // 0x5158f0/0x515980 turn it into the tile at the screen centre.
+    {0x2d254, 0x2d264},
+    // "Refresh the UI" flag: set by ExecuteCommands when a command touches
+    // what the local player's open menu shows (0x53709f).
+    {0x2d27c, 0x2d280},
+    // UI selection mode and two parameters; set by the UI, the command
+    // executor only reads them to refresh overlays. Then the sub-page of UI
+    // menu 2 (+0x2d290), read by ExecuteCommands only to decide whether to
+    // set the refresh flag.
+    {0x2d284, 0x2d294},
+    // UI menu sub-page; set by ProcessEvents, read by ExecuteCommands only
+    // to decide whether to set the refresh flag above.
+    {0x2d2a0, 0x2d2a4},
     // Last search result position (x, y), written by 0x4ff0a0/0x4ff170,
-    // called from 0x524fa0 on every step (probably mouse/UI driven).
+    // called from 0x524fa0 on every step (volatile).
     {0x2d2e4, 0x2d2ec},
-    // Byte counter incremented on every call of 0x51f110 (called from
-    // CLogicThread::Step between the update phases; fills the object at
-    // CLogicThread+0x3d0, probably for the draw thread).
-    {0x2d301, 0x2d302},
+    // UI cursor mode: set by CLogicThread::ProcessEvents, read by
+    // CLogicThread::PrepareDrawData.
+    {0x2d2f0, 0x2d2f4},
+    // Search generation counter (GameWorld::NextSearchGeneration; UI
+    // overlays bump it too) and the byte counter incremented on every call
+    // of PrepareDrawData (volatile).
+    {0x2d300, 0x2d302},
 };
+// After the map tile array: the 10-entry UI -> draw feedback list and its
+// count (filled via 0x53f560 by the UI handler, drained by PrepareDrawData).
+constexpr ByteRange kRestSkips[] = {
+    // Scratch grids (2 x 31x31 bytes) of the building footprint check
+    // 0x4da440 (via 0x4d99e0), which the UI's placement preview, the command
+    // executor and the computer player all call; fully rewritten per call.
+    {0x1222ed4, 0x1223656},
+    {0x1539484, 0x15394b0},
+};
+// Bytes of every map tile: +15 "visited" mark of searches (stamped with the
+// search generation; UI overlays use it too), +16 overlay value for drawing
+// (written by the overlay functions 0x523560/0x523840 and PrepareDrawData).
+// Also bit 7 of +13, a "redraw this tile" flag: set by simulation code when
+// a tile changes, cleared by PrepareDrawData for the tiles in view.
+constexpr std::size_t kTileSkipBegin = 15;
+constexpr std::size_t kTileSkipEnd = 17;
+constexpr std::size_t kTileRedrawByte = 13;
+constexpr std::uint8_t kTileRedrawBit = 0x80;
 
-std::uint64_t HashHeader(const std::uint8_t* world, std::size_t size) {
-    std::uint64_t hash = kHashSeed;
-    std::size_t position = 0;
-    for (const ByteRange& skip : kVolatileHeaderRanges) {
-        if (skip.begin >= size) {
-            break;
+// Hashes world[begin, begin + size) without the bytes in `skips`.
+template <std::size_t N>
+std::uint64_t HashSkipping(std::uint64_t hash, const std::uint8_t* world, std::size_t begin,
+                           std::size_t size, const ByteRange (&skips)[N]) {
+    std::size_t position = begin;
+    const std::size_t end = begin + size;
+    for (const ByteRange& skip : skips) {
+        if (skip.end <= position || skip.begin >= end) {
+            continue;
         }
         hash = Hash(hash, world + position, skip.begin - position);
-        position = skip.end < size ? skip.end : size;
+        position = skip.end < end ? skip.end : end;
     }
-    return Hash(hash, world + position, size - position);
+    return Hash(hash, world + position, end - position);
+}
+
+// Hashes `tiles` map tiles, leaving out the per-tile UI bytes.
+using s3re::game::world_offset::kMapRowBytes;
+using s3re::game::world_offset::kTileBytes;
+std::uint64_t HashTiles(std::uint64_t hash, const std::uint8_t* row, std::size_t tiles) {
+    std::uint8_t buffer[kMapRowBytes];
+    std::memcpy(buffer, row, tiles * kTileBytes);
+    for (std::size_t tile = 0; tile < tiles; ++tile) {
+        std::uint8_t* record = buffer + tile * kTileBytes;
+        std::memset(record + kTileSkipBegin, 0, kTileSkipEnd - kTileSkipBegin);
+        record[kTileRedrawByte] &= static_cast<std::uint8_t>(~kTileRedrawBit);
+    }
+    return Hash(hash, buffer, tiles * kTileBytes);
 }
 
 // Must not contain objects with destructors because of __try.
 bool HashRegions(const std::uint8_t* world, std::uint32_t mapSize, RegionHashes* out) {
     __try {
         using namespace s3re::game::world_offset;
-        out->header = HashHeader(world, ReadableLength(world, kMapTiles));
+        out->header =
+            HashSkipping(kHashSeed, world, 0, ReadableLength(world, kMapTiles), kHeaderSkips);
 
         out->map = kHashSeed;
         if (mapSize > 0 && mapSize <= kMapRowTiles) {
             for (std::uint32_t row = 0; row < mapSize; ++row) {
                 const std::uint8_t* rowStart = world + kMapTiles + row * kMapRowBytes;
                 const std::size_t rowBytes = (mapSize + 1) * kTileBytes;
-                out->map = Hash(out->map, rowStart, ReadableLength(rowStart, rowBytes));
+                out->map = HashTiles(out->map, rowStart,
+                                     ReadableLength(rowStart, rowBytes) / kTileBytes);
             }
         }
 
-        const std::uint8_t* rest = world + kMapTiles + kMapRowTiles * kMapRowBytes;
-        out->restBytes = ReadableLength(rest, kRestRegionCap);
-        out->rest = Hash(kHashSeed, rest, out->restBytes);
+        const std::size_t restBegin = kMapTiles + kMapRowTiles * kMapRowBytes;
+        out->restBytes = ReadableLength(world + restBegin, kRestRegionCap);
+        out->rest = HashSkipping(kHashSeed, world, restBegin, out->restBytes, kRestSkips);
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
@@ -265,8 +352,8 @@ void OnLogicStep(const void* logicThread) {
 
     std::fprintf(g_file, "T\t%u\t%u\t%u\t%u\n", tick, random[0], random[1], random[2]);
 
-    if (newTick && tick == DumpTick()) {
-        DumpHeader(world, tick);
+    if (newTick && IsDumpTick(tick)) {
+        DumpWorld(world, tick);
     }
 
     if (newTick && tick % kHashInterval == 0) {

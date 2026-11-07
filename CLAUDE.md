@@ -1,8 +1,8 @@
-# Settlers 3 Reverse
+﻿# Settlers 3 Reverse
 
 ## Goal
 
-Reverse engineer and reimplement **The Settlers 3 – Ultimate Collection**
+Reverse engineer and reimplement **The Settlers 3 â€“ Ultimate Collection**
 (Blue Byte, 1998; GOG release).
 
 1. **Phase 1 (current):** reverse the original code and build a reimplementation
@@ -16,7 +16,7 @@ against the original game's behavior, not just "looks right".
 
 - **At the start of a session:** read `LOGBOOK.md`. Its "Current focus"
   section says what to do next. If analysis is needed, open `S3.EXE` in REA
-  (`open_binary`, then any query; Ghidra analysis takes about 2–3 minutes).
+  (`open_binary`, then any query; Ghidra analysis takes about 2â€“3 minutes).
   Then re-apply our names with `set_addresses_names`, using the output of
   `python tools/inventory.py names`.
 - **While working:** permanent facts and procedures go in this file. Data
@@ -170,8 +170,8 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
 - **Launcher options for runtime checks:** `--trace-determinism` writes a
   per-tick trace (compare two with `tools/compare_traces.py`); `--seed N`
   forces the RNG seed; `--exit-after-ticks N` ends the game at tick N;
-  `--timeout S` kills it after S seconds; `--dump-tick N` dumps the world
-  header at tick N. Game options go after `--`, e.g.
+  `--timeout S` kills it after S seconds; `--dump-tick N` dumps the hashed
+  world memory at tick N. Game options go after `--`, e.g.
   `-- -map Map\MULTI\384-2-Lakes.map` starts that map without menus.
   `s3re.log` logs every seed and the step count.
 - **Unattended determinism check:** `python tools/check_determinism.py
@@ -181,8 +181,20 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   every command; `--replay-commands FILE` replays a recording instead of the
   live commands (same map and `--seed`). `python tools/check_replay.py`
   checks record/replay unattended (replay identical, and a recording with one
-  command removed must diverge). `tools/command_log.py list FILE` shows a
-  recording. `--log-commands` logs every command to `s3re.log`.
+  command removed must diverge); add `--synthetic-input SEED` to have
+  `tools/synthetic_input.py` play the recorded game with random mouse input
+  (SendInput; it only acts while `S3.EXE` is the foreground window).
+  `tools/command_log.py list FILE` shows a recording. `--log-commands` logs
+  every command to `s3re.log`.
+- **UI state lives inside the world object.** Camera position, selected
+  menu, overlay marks on map tiles, a scratch buffer shared by the UI and
+  the simulation, and a few more change with mouse input and are not
+  repeated by a replay. The determinism trace leaves them out of its hashes;
+  each excluded field and the code evidence for it is listed in
+  `src/s3re/trace/determinism.cpp` (keep `tools/diff_world_dumps.py` in
+  sync). To find new ones: `--dump-tick N[,N...]` in both runs, then
+  `python tools/diff_world_dumps.py A.bin B.bin`, then check the writers in
+  the code before excluding anything.
 - **`--exit-after-ticks` shuts the game down normally** (WM_CLOSE to its
   windows, killed after 15 s if that hangs), so threads run their OnExit.
 - **The full disassembly** (`dumpbin /disasm:nobytes /out:<file> S3.EXE`,

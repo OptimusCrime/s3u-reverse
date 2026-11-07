@@ -7,32 +7,33 @@ progress.
 
 ## Current focus
 
-**Replay with human input, then start replacing simulation code.**
+**Confirm replay with scripted player input, then start replacing
+simulation code.**
 
-Command record/replay works (`--record-commands` / `--replay-commands`,
-see "Commands and lockstep" in `CLAUDE.md`). `python tools/check_replay.py`
-records 1,000 ticks, replays them with an identical determinism trace, and
-checks that a recording with one command removed diverges. So far the
-recordings only hold commands from the computer player and the game itself
-(no human input).
+`python tools/check_replay.py --ticks 3000 --synthetic-input SEED
+--dump-every 300` records a game that `tools/synthetic_input.py` plays with
+random mouse input (build menu, placing buildings on detected sites, box
+selection, goods/settlers menus, minimap), replays it, and compares.
+Results so far: the RNG was identical on every tick in every run (up to
+3,000 ticks, 5 input seeds), and removing a player command makes the replay
+diverge. The world hashes kept differing because the game keeps UI state
+inside the world object; each such field was found with world dumps,
+checked in the code, and excluded (list with evidence in
+`src/s3re/trace/determinism.cpp`). Last state: seed 41 passed fully; seed
+67 found the statistics chart (now excluded); seed 53's replay was closed
+by the user mid-run (not a bug).
 
 Next steps:
-1. Record a game with real human input and replay it: the user plays with
-   `s3re_launcher --trace-determinism --record-commands game.bin --seed 1234
-   --exit-after-ticks 3000 -- -map Map\MULTI\384-2-Lakes.map`, then copy the
-   new `determinism-*.tsv` to `game.bin.tsv` and run
-   `python tools/check_replay.py --recording game.bin --ticks 3000`.
-   Alternative without the user: drive the game window with synthetic
-   mouse/keyboard input (SendInput) during the recording.
-   Watch for: UI commands that don't go through the 0x3c4 queue, and UI
-   state inside the hashed world memory (would differ without a real
-   simulation difference).
+1. Run `check_replay.py --synthetic-input` with a few more seeds (with
+   `--dump-every 300`) until runs pass consistently. Each new difference:
+   diff the dumps, check the writers, exclude only with evidence.
+   Note: the random input is timed by the wall clock, so a seed doesn't
+   reproduce the same game; keep the dumps of a failing run.
 2. Make replays self-contained: store the seed and map in the recording
    header so `--replay-commands` needs no extra options.
-3. Decode the command ids (`ExecuteCommands` `0x535990` switch): 0x01
-   (computer player, map coordinates: build?), 0x0b, 0x0f, 0x11, 0xfb (RNG
-   sync check), 0xf1. Useful for readable recordings and for later
-   reimplementation.
+3. Decode the command ids (`ExecuteCommands` `0x535990` switch). Player
+   build commands are id 0x01 like the computer player's but with a
+   different byte layout (not understood yet).
 4. Then begin bottom-up replacement of simulation functions, verifying each
    with differential tests plus `check_replay.py`.
 
@@ -50,6 +51,12 @@ Next steps:
   side effects depend on timing. Known volatile world fields: `+0x2d2e4`
   to `+0x2d2eb` and `+0x2d301` (skipped by the trace hash). Check whether
   they can ever influence the simulation.
+- Tile byte 15 is a "visited" stamp shared by the simulation's searches
+  (GameWorld::NextSearchGeneration) and the UI overlays. Safe as long as
+  every search bumps the generation before marking; only spot-checked
+  (0x4fd540 compares with 0 but runs only in OnStart).
+- Byte 3 of command messages varies between runs for the same command
+  (seen 3, 4, 0xa, 0xcc); possibly uninitialized like bytes 9..11.
 - Bytes 9..11 of 12-byte command messages are uninitialized stack memory
   in many commands (vary between runs). Replay feeds the recorded bytes, and
   no effect on the simulation has been seen, but confirm per command id
@@ -85,6 +92,23 @@ Next steps:
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
 
 ## Session log
+
+### 2026-11-07 (7): scripted player input, UI state in the world
+
+- `tools/synthetic_input.py`: random play through SendInput (verified with
+  screenshots: 640x480 full screen; the build menu opens, building-site
+  markers are detected in a screenshot and clicked). It produces real
+  player commands.
+- Replays with player input keep the RNG identical, but the world hashes
+  differed. Dump diffs (`--dump-tick` now takes several ticks and dumps
+  the whole hashed world; `tools/diff_world_dumps.py`) found only UI state
+  inside the world: camera, menu mode/sub-pages, UI refresh flag, cursor
+  mode, search generation, overlay marks (tile bytes 15/16), the tile
+  redraw bit (byte 13 bit 7), the footprint check's scratch grids, a UI
+  feedback list, the statistics chart. All excluded from the hashes with
+  code evidence (trace format v4).
+- `check_replay.py`: `--synthetic-input SEED`, `--dump-every N`; the
+  mutation check now removes a player command when there is one.
 
 ### 2026-11-07 (6): commands, lockstep, record/replay
 
