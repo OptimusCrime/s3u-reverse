@@ -13,6 +13,7 @@ namespace {
 struct Hook {
     const char* name;
     std::uintptr_t address;
+    HookKind kind;
     void** original;
     void* replacement;
 };
@@ -28,9 +29,9 @@ bool g_installed = false;
 
 }  // namespace
 
-HookRegistrar::HookRegistrar(const char* name, std::uintptr_t address, void** original,
-                             void* replacement) {
-    Registry().push_back({name, address, original, replacement});
+HookRegistrar::HookRegistrar(const char* name, std::uintptr_t address, HookKind kind,
+                             void** original, void* replacement) {
+    Registry().push_back({name, address, kind, original, replacement});
 }
 
 bool InstallAll() {
@@ -54,7 +55,8 @@ bool InstallAll() {
     }
 
     for (const Hook& hook : hooks) {
-        S3RE_LOG("hooked %s at 0x%08x", hook.name, static_cast<unsigned>(hook.address));
+        S3RE_LOG("hooked %s at 0x%08x (%s)", hook.name, static_cast<unsigned>(hook.address),
+                 hook.kind == HookKind::Replaced ? "replaced" : "passthrough");
     }
     S3RE_LOG("%u hook(s) installed", static_cast<unsigned>(hooks.size()));
     g_installed = true;

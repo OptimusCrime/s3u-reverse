@@ -1,6 +1,11 @@
 // s3re_launcher: starts the original S3.EXE with s3re.dll loaded into it.
 //
-// Usage: s3re_launcher [--game-dir <path>] [-- <arguments passed to S3.EXE>]
+// Usage: s3re_launcher [--game-dir <path>] [--test [filter]]
+//                      [-- <arguments passed to S3.EXE>]
+//
+// --test runs the differential test suite inside S3.EXE instead of the game
+// (optionally only tests whose name contains <filter>), prints the results
+// and exits with status 0 only if every test passed.
 //
 // The game directory is taken from, in order: --game-dir, the S3RE_GAME_DIR
 // environment variable, or the default baked in at configure time.
@@ -10,6 +15,7 @@
 #include <detours.h>
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -117,6 +123,22 @@ std::wstring QuoteArgument(const std::wstring& argument) {
     return quoted;
 }
 
+// Prints the test lines the DLL wrote to s3re.log.
+void PrintTestResults(const std::wstring& logPath) {
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, logPath.c_str(), L"rb") != 0 || file == nullptr) {
+        fwprintf(stderr, L"s3re_launcher: could not read %s\n", logPath.c_str());
+        return;
+    }
+    char line[2048];
+    while (fgets(line, sizeof(line), file) != nullptr) {
+        if (const char* tag = strstr(line, "[test]")) {
+            fputs(tag, stdout);
+        }
+    }
+    fclose(file);
+}
+
 int Fail(const wchar_t* format, const std::wstring& detail = {}) {
     fwprintf(stderr, L"s3re_launcher: ");
     fwprintf(stderr, format, detail.c_str());
@@ -129,17 +151,25 @@ int Fail(const wchar_t* format, const std::wstring& detail = {}) {
 int wmain(int argc, wchar_t** argv) {
     std::wstring gameDir;
     std::vector<std::wstring> gameArgs;
+    bool testMode = false;
+    std::wstring testFilter;
 
     for (int i = 1; i < argc; ++i) {
         const std::wstring arg = argv[i];
         if (arg == L"--game-dir" && i + 1 < argc) {
             gameDir = argv[++i];
+        } else if (arg == L"--test") {
+            testMode = true;
+            if (i + 1 < argc && argv[i + 1][0] != L'-') {
+                testFilter = argv[++i];
+            }
         } else if (arg == L"--") {
             for (++i; i < argc; ++i) {
                 gameArgs.emplace_back(argv[i]);
             }
         } else if (arg == L"--help" || arg == L"-h") {
-            wprintf(L"Usage: s3re_launcher [--game-dir <path>] [-- <S3.EXE arguments>]\n");
+            wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
+                    L"[-- <S3.EXE arguments>]\n");
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
@@ -183,11 +213,17 @@ int wmain(int argc, wchar_t** argv) {
         commandLine += L" " + QuoteArgument(arg);
     }
 
+    // The game process inherits these; the DLL reads them.
+    SetEnvironmentVariableW(L"S3RE_MODE", testMode ? L"test" : nullptr);
+    SetEnvironmentVariableW(L"S3RE_TEST_FILTER", testFilter.empty() ? nullptr
+                                                                    : testFilter.c_str());
+
     STARTUPINFOW startup = {};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process = {};
 
-    wprintf(L"Launching %s\n  with %s\n", exePath.c_str(), dllPath.c_str());
+    wprintf(L"Launching %s%s\n  with %s\n", exePath.c_str(), testMode ? L" (test mode)" : L"",
+            dllPath.c_str());
 
     if (!DetourCreateProcessWithDllExW(exePath.c_str(), commandLine.data(), nullptr, nullptr,
                                        FALSE, CREATE_DEFAULT_ERROR_MODE, nullptr,
@@ -207,6 +243,11 @@ int wmain(int argc, wchar_t** argv) {
     GetExitCodeProcess(process.hProcess, &exitCode);
     CloseHandle(process.hThread);
     CloseHandle(process.hProcess);
+
+    if (testMode) {
+        PrintTestResults(DirectoryOf(dllPath) + L"\\s3re.log");
+        return exitCode == 0 ? 0 : 1;
+    }
 
     wprintf(L"S3.EXE exited with code %lu\n", exitCode);
     return static_cast<int>(exitCode);

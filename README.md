@@ -43,3 +43,22 @@ The game folder defaults to `Settlers3Ultimate/` in the repository root. You
 can override it with `--game-dir` or the `S3RE_GAME_DIR` environment variable.
 Only the GOG `S3.EXE` build is supported; the launcher checks its SHA-256
 before starting. The DLL writes `s3re.log` next to itself.
+
+## Testing
+
+Every reimplemented function has differential tests that run the original
+code and our version on the same inputs inside the real game process, and
+compare the results byte for byte:
+
+```
+build\x86\bin\Debug\s3re_launcher.exe --test [name filter]
+```
+
+## Progress
+
+`re/functions.csv` records every function identified so far and whether it
+has been reimplemented and verified. Show a summary with:
+
+```
+python tools/inventory.py stats
+```

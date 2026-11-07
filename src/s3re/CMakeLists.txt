@@ -2,8 +2,14 @@ add_library(s3re SHARED
     dllmain.cpp
     log.cpp
     hooks.cpp
-    game/winmain.cpp
     s3re.def
+
+    test/difftest.cpp
+    test/harness_selftest.cpp
+
+    msvc6/string.cpp
+
+    game/winmain.cpp
 )
 
 target_include_directories(s3re PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

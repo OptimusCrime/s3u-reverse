@@ -106,9 +106,54 @@ C++ code.
   Run the launcher to start the game. It writes `s3re.log` next to the DLL.
 - **Code layout:**
   - `src/launcher/`: checks the SHA-256 of `S3.EXE` and starts it with the DLL.
-  - `src/s3re/`: the DLL. Hooks are registered with `S3RE_HOOK`
-    (`hooks.h`); one file per reimplemented function or class, under
-    `src/s3re/game/`.
+  - `src/s3re/`: the DLL. Hooks are registered with `S3RE_HOOK` (replacement)
+    or `S3RE_PASSTHROUGH` (observe and call the original), see `hooks.h`.
+    Game code goes under `src/s3re/game/`, one file per class or subsystem.
+    MSVC 6.0 library code that game data depends on (e.g. `std::string`
+    layout) goes under `src/s3re/msvc6/`.
+  - `src/s3re/test/`: the differential test harness (`difftest.h`).
+  - `re/functions.csv`: the function inventory (source of truth for names,
+    status and verification). `re/ghidra_functions.tsv`: Ghidra's function
+    list (the baseline). `tools/inventory.py`: check, stats and names.
+
+## Function inventory
+
+- `re/ghidra_functions.tsv` lists the 8,863 function starts Ghidra finds,
+  leaving out 11,817 `Unwind@`/`Catch@` exception-cleanup snippets. Regenerate
+  it with `tools/import_ghidra_functions.py` from an REA evidence bundle
+  (instructions in the script).
+- `re/functions.csv` holds one row per function we have identified. The
+  columns are documented in `tools/inventory.py`. Names use `Class::Method`.
+- Ghidra names made through REA are lost when the session closes. At the
+  start of a session, re-apply them from `python tools/inventory.py names`
+  with `set_addresses_names`.
+- `python tools/inventory.py check` must pass before committing. It checks
+  every hook in `src/` against its inventory row, and that the tests named in
+  `verified_by` exist.
+- The statically linked C runtime sits at the end of `.text`, roughly from
+  `0x61e4ef` onwards (exact boundary unknown). Game code comes before it.
+
+## Workflow: reimplementing a function
+
+1. Analyze the function with REA: decompile, read the assembly, check
+   callers and callees. Add or update its row in `re/functions.csv`
+   (`identified`).
+2. Write the replacement with `S3RE_HOOK`, matching the calling convention.
+   Member functions are `__thiscall`; write them as `__fastcall` with a dummy
+   EDX parameter (see `hooks.h`).
+3. Write differential tests with `S3RE_TEST` in the same file. Run the
+   original (through the `Original_*` trampoline) and our version on identical
+   random inputs and starting state, then compare return values and all
+   memory touched (including guard bytes past buffers). Where the comparison
+   is non-trivial, also add a test that a deliberately wrong implementation
+   is caught.
+4. Build, then run `s3re_launcher --test [filter]`. This runs the tests inside
+   the real `S3.EXE` without opening the game window. The exit code is 0 only
+   if every test passed.
+5. Set the row to `verified`, `hook=replaced`, `verified_by=<test names>`.
+   Run `python tools/inventory.py check`.
+6. Occasionally play the game normally with all hooks active, as an
+   integration check.
 - The user is new to Visual Studio. Drive builds from the command line, and
   explain any IDE steps the user has to take.
 - The original game runs fine on the dev machine (Windows 10), so runtime

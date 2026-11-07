@@ -1,0 +1,6 @@
+address,name,category,status,hook,verified_by,notes
+0x00401f60,std::string::_Eos,stl,verified,replaced,String_Eos_MatchesOriginal,"MSVC6 basic_string<char>::_Eos(n): _Len = n; _Ptr[n] = 0. thiscall, ret 4."
+0x00401f80,std::string::_Grow,stl,identified,none,,"MSVC6 basic_string<char>::_Grow(n, trim) -> bool. Reference-counted buffer (count byte at _Ptr[-1], 0xFF = frozen)."
+0x0045a120,WinMain,game,identified,passthrough,,"Called by the CRT entry point with GetModuleHandleA(NULL), NULL, command line, show command. In test mode runs the test suite instead."
+0x0061f802,rand,crt,identified,none,,"Microsoft CRT rand() (Ghidra Function ID). 28 callers; probably not the simulation RNG."
+0x00621bc6,WinMainCRTStartup,crt,identified,none,,"PE entry point. CRT init, then WinMain, then exit()."
