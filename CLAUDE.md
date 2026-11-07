@@ -318,10 +318,21 @@ replaying, see `src/s3re/replay/command_log.h`):
    memory touched (including guard bytes past buffers). Where the comparison
    is non-trivial, also add a test that a deliberately wrong implementation
    is caught.
-4. Build, then run `s3re_launcher --test [filter]`. This runs the tests inside
+4. Add a spec to `tools/emutest/specs.py` and run `python
+   tools/emutest/run.py [filter] --require-coverage` (no game needed; needs
+   `pip install -r tools/requirements.txt`). It runs the original bytes
+   from S3.EXE and our function from s3re.dll in an x86 emulator (Unicorn)
+   on identical arguments and a lazily-random world, compares EAX, every
+   byte written to the world/S3.EXE, bytes popped and callee-saved
+   registers, and reports basic-block coverage of the original. The gate is
+   0 mismatches and every block covered; add presets to a spec when random
+   data doesn't reach a branch. `run.py --self-test` checks that the
+   harness catches deliberately wrong pairings. Our replacements must not
+   rely on DLL startup code (the emulator doesn't run it).
+5. Build, then run `s3re_launcher --test [filter]`. This runs the tests inside
    the real `S3.EXE` without opening the game window. The exit code is 0 only
    if every test passed.
-5. Whole-game check (at milestones, not per batch; it's slow):
+6. Whole-game check (at milestones, not per batch; it's slow):
    `python tools/check_replay.py --recording <file> --against-original
    --ticks 3000` replays a recorded game with the original code
    (`s3re_launcher --original` leaves out all replacements) and with ours,
@@ -333,9 +344,9 @@ replaying, see `src/s3re/replay/command_log.h`):
    function. Keep
    recordings with player input in `build/x86/bin/Debug/recordings/` (make
    one with `check_replay.py --synthetic-input SEED`).
-6. Set the row to `verified`, `hook=replaced`, `verified_by=<test names>`
+7. Set the row to `verified`, `hook=replaced`, `verified_by=<test names>`
    (space-separated). Run `python tools/inventory.py check`.
-7. Occasionally play the game normally with all hooks active, as an
+8. Occasionally play the game normally with all hooks active, as an
    integration check.
 - The user is new to Visual Studio. Drive builds from the command line, and
   explain any IDE steps the user has to take.

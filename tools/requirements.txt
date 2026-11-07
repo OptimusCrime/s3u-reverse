@@ -1,0 +1,4 @@
+# Python packages for tools/ (install: python -m pip install -r tools/requirements.txt)
+unicorn==2.1.4      # x86 emulator (tools/emutest)
+capstone==5.0.6     # disassembler (tools/emutest)
+pefile==2024.8.26   # PE loader (tools/emutest)

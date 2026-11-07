@@ -7,15 +7,23 @@ progress.
 
 ## Current focus
 
-**Build the emulator test harness, then continue replacing functions.**
+**Replacing simulation functions, bottom up, gated by the emulator tests.**
 
-Plan (agreed with the user): `tools/` Python harness using Unicorn that
-loads S3.EXE and s3re.dll, runs an original function and our replacement
-on identical emulated memory/arguments, compares return value, memory
-writes, ESP adjustment and callee-saved registers, and measures branch
-(basic-block) coverage of the original. Gate per function: all reachable
-branches of the original covered and matching. The whole-game replay
-becomes a milestone check.
+Per function: reimplement; in-process differential test (`s3re_launcher
+--test`); emulator spec in `tools/emutest/specs.py` with
+`python tools/emutest/run.py --require-coverage` (0 mismatches, all basic
+blocks of the original covered). The whole-game replay
+(`check_replay.py --against-original`) is a milestone check now.
+
+Status: all 39 replacements pass the emulator suite with full block
+coverage (2,000 cases each; ShiftStatistics 60 because it is slow to
+emulate); `--self-test` catches 5/5 wrong pairings.
+
+Next steps:
+1. Continue with leaf functions (list below), each with an emulator spec.
+2. Shadow mode (compare against the original during normal play), a faster
+   game clock and savegames, for real and late-game data.
+3. Optional: symbolic equivalence proofs (angr/Z3) for loop-free functions.
 
 Done (verified: differential tests incl. mutation tests + whole-game
 replay identical to the original):
@@ -99,6 +107,15 @@ Next steps:
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
 
 ## Session log
+
+### 2026-11-07 (11): emulator test harness
+
+- tools/emutest: Unicorn-based differential harness (emu.py: PE loading,
+  lazy random world, write undo, block coverage; run.py: comparison and
+  report; specs.py: one spec per replacement). Linker map s3re.map added
+  to the build for symbol lookup. Packages pinned in tools/requirements.txt.
+- All 39 replacements match with full block coverage; the first run found
+  uncovered branches in 5 functions (fixed with targeted presets).
 
 ### 2026-11-07 (10): batches 5-7, call coverage, testing strategy
 
