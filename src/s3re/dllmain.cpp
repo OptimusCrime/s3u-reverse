@@ -4,6 +4,7 @@
 
 #include "hooks.h"
 #include "log.h"
+#include "trace/determinism.h"
 
 #include <windows.h>
 #include <detours.h>
@@ -54,6 +55,7 @@ void Startup(HMODULE self) {
 void Shutdown() {
     S3RE_LOG("process detaching");
     s3re::hooks::UninstallAll();
+    s3re::trace::CloseDeterminismTrace();
     s3re::log::Close();
 }
 

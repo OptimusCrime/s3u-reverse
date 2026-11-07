@@ -15,15 +15,14 @@ towards a deterministic lockstep simulation. Next, confirm that by
 observation.
 
 Next steps:
-1. Add a pass-through hook on `CLogicThread::Step` (`0x53db30`). Each step,
-   log the tick (`g_gameTick`), the RNG state (world `+0x2d2dc`) and a cheap
-   hash of selected world regions (e.g. the map at `+0x62c2c`).
-   `CLogicThread::Step` is in `re/extra_functions.tsv`, so check that Detours
-   can hook it (it starts with a normal SEH prologue).
-2. Ask the user to start the same single-player map twice without touching
-   anything, then compare the two logs. If they match, the simulation is
-   deterministic given the same inputs. If they diverge immediately, find
-   where the seed comes from (time?) and where player commands enter.
+1. DONE: the determinism trace. `s3re_launcher --trace-determinism` writes
+   `determinism-<date>-<time>.tsv` next to `s3re.dll`, and
+   `python tools/compare_traces.py a.tsv b.tsv` compares two of them.
+2. WAITING ON THE USER: two traced runs of the same single-player map with
+   no input after the game starts. Then compare them. If they match, the
+   simulation is deterministic given the same inputs. If they diverge
+   immediately, find where the seed comes from (time?) and where player
+   commands enter.
 3. Find how player commands reach the simulation (a command queue that
    lockstep multiplayer would send over the network); that's what a replay
    recorder needs to capture.
@@ -56,6 +55,18 @@ Next steps:
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
 
 ## Session log
+
+### 2026-11-07 (3): determinism trace
+
+- Pass-through hook on `CLogicThread::Step` (`src/s3re/game/logic_thread.cpp`)
+  feeds `src/s3re/trace/determinism.cpp`. After each step that changes them,
+  it logs the tick and RNG state; every 32 ticks it logs hashes of the world
+  header (`0..0x67440`), the map tiles (rows of `mapSize` tiles) and the
+  rest (up to 8 MB after the tile array, clamped to committed memory).
+- Added `tools/compare_traces.py` (checked on synthetic traces).
+- Map tile layout from `UpdateEnvironment`: tile (x, y) at world
+  `+0x67440 + (x*0x300 + y)*24` (record start 0x67440 or 0x67444, not
+  settled).
 
 ### 2026-11-07 (2): game loop and RNG
 

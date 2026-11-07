@@ -1,7 +1,10 @@
 // s3re_launcher: starts the original S3.EXE with s3re.dll loaded into it.
 //
 // Usage: s3re_launcher [--game-dir <path>] [--test [filter]]
-//                      [-- <arguments passed to S3.EXE>]
+//                      [--trace-determinism] [-- <arguments passed to S3.EXE>]
+//
+// --trace-determinism writes the tick, RNG state and world hashes after each
+// simulation step to determinism-<date>-<time>.tsv next to s3re.dll.
 //
 // --test runs the differential test suite inside S3.EXE instead of the game
 // (optionally only tests whose name contains <filter>), prints the results
@@ -152,6 +155,7 @@ int wmain(int argc, wchar_t** argv) {
     std::wstring gameDir;
     std::vector<std::wstring> gameArgs;
     bool testMode = false;
+    bool traceDeterminism = false;
     std::wstring testFilter;
 
     for (int i = 1; i < argc; ++i) {
@@ -163,13 +167,15 @@ int wmain(int argc, wchar_t** argv) {
             if (i + 1 < argc && argv[i + 1][0] != L'-') {
                 testFilter = argv[++i];
             }
+        } else if (arg == L"--trace-determinism") {
+            traceDeterminism = true;
         } else if (arg == L"--") {
             for (++i; i < argc; ++i) {
                 gameArgs.emplace_back(argv[i]);
             }
         } else if (arg == L"--help" || arg == L"-h") {
             wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
-                    L"[-- <S3.EXE arguments>]\n");
+                    L"[--trace-determinism] [-- <S3.EXE arguments>]\n");
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
@@ -217,6 +223,7 @@ int wmain(int argc, wchar_t** argv) {
     SetEnvironmentVariableW(L"S3RE_MODE", testMode ? L"test" : nullptr);
     SetEnvironmentVariableW(L"S3RE_TEST_FILTER", testFilter.empty() ? nullptr
                                                                     : testFilter.c_str());
+    SetEnvironmentVariableW(L"S3RE_TRACE", traceDeterminism ? L"determinism" : nullptr);
 
     STARTUPINFOW startup = {};
     startup.cb = sizeof(startup);

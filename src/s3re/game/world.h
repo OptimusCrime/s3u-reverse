@@ -22,6 +22,15 @@ constexpr std::size_t kMapSize = 0x2d2d0;
 // 3 x uint16: state of the simulation random number generator.
 // GameWorld::Random (0x4feb70).
 constexpr std::size_t kRandomState = 0x2d2dc;
+
+// Map tiles: 24-byte records, tile (x, y) at kMapTiles + (x * 0x300 + y) * 24.
+// From GameWorld::UpdateEnvironment, which reads fields of a tile and its
+// neighbours at 0x6742c..0x67455 (+-0x18 = y+-1, +-0x4800 = x+-1). The exact
+// start of the record (0x67440 or 0x67444) is not settled yet.
+constexpr std::size_t kMapTiles = 0x67440;
+constexpr std::size_t kTileBytes = 0x18;
+constexpr std::size_t kMapRowTiles = 0x300;
+constexpr std::size_t kMapRowBytes = kMapRowTiles * kTileBytes;
 }  // namespace world_offset
 
 template <typename T>

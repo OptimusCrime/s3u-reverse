@@ -9,6 +9,9 @@ add_library(s3re SHARED
 
     msvc6/string.cpp
 
+    trace/determinism.cpp
+
+    game/logic_thread.cpp
     game/random.cpp
     game/winmain.cpp
 )

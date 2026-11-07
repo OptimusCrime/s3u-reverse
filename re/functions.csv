@@ -906,7 +906,7 @@ address,name,category,status,hook,verified_by,notes
 0x0053c7d0,CLogicThread::~CLogicThread,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0053c7a0.
 0x0053c9e0,CLogicThread::OnStart,game,classified,none,,Logic thread startup (slot 4).
 0x0053dab0,CLogicThread::OnExit,game,classified,none,,Logic thread shutdown (slot 6).
-0x0053db30,CLogicThread::Step,game,identified,none,,"One logic-thread iteration (slot 9). Timing via timeGetTime; unless paused (word 0x7ACE62): world->UpdateEnvironment, world->UpdatePhase2, world->UpdateSettlers, then 0x550f80 on 20 objects at this+0x350; game-end check 0x511c50; copies tick [this+0x70] to 0x7DFD48. World pointer at this+0x3a0. Missed by Ghidra."
+0x0053db30,CLogicThread::Step,game,identified,passthrough,,"One logic-thread iteration (slot 9). Timing via timeGetTime; unless paused (word 0x7ACE62): world->UpdateEnvironment, world->UpdatePhase2, world->UpdateSettlers, then 0x550f80 on 20 objects at this+0x350; game-end check 0x511c50; copies tick [this+0x70] to 0x7DFD48. World pointer at this+0x3a0. Missed by Ghidra. Pass-through hook feeds the determinism trace (src/s3re/game/logic_thread.cpp)."
 0x00541650,WCValSortedVector_Lobby_CGamePlayerStatus::vf02,watcom,classified,none,,"Virtual function, vtable slot 2; purpose not yet known."
 0x00541670,WCValSortedVector_Lobby_CGamePlayerStatus::vf04,watcom,classified,none,,"Virtual function, vtable slot 4; purpose not yet known."
 0x00541690,WCValSortedVector_Lobby_CGamePlayerStatus::~WCValSortedVector_Lobby_CGamePlayerStatus,watcom,classified,none,,Destructor; called by the scalar deleting destructor at 0x005416f0.
