@@ -130,6 +130,53 @@ C++ code.
     status and verification). `re/ghidra_functions.tsv`: Ghidra's function
     list (the baseline). `tools/inventory.py`: check, stats and names.
 
+## Runtime structure
+
+How the game runs (verified by reading the code; names are in
+`re/functions.csv`):
+
+```
+WinMain (0x45a120)
+  refuses to start after 2037
+  CConsoleThread app (on WinMain's stack)   application class; derives from
+                                            DirectX::CGameAppDraw -> ... -> Win32::CThread
+  Win32::CThread::Execute (0x60e2d0)        vtable slots: 4 OnStart, 5 Main, 6 OnExit
+    CConsoleThread::OnStart (0x40b3f0)      initialization, starts the other threads
+    CConsoleThread::Main    (0x404860)      UI/message loop (not the simulation)
+
+Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
+  DirectX::CGameThread::Main (0x5b63d0)     loop: quit/stop flags, slot 10 OnEvent,
+                                            otherwise slot 9 Step
+  CLogicThread::Step (0x53db30)             one simulation step:
+    world = this->[+0x3a0]
+    world->UpdateEnvironment (0x4e7810)     map/landscape, timed events
+    world->UpdatePhase2      (0x4e05e0)     unknown
+    world->UpdateSettlers    (0x4e9670)     settler jobs (provisional)
+    0x550f80 on 20 objects at this+0x350    per player? (unknown)
+    game-end check 0x511c50, tick bookkeeping
+```
+
+- **The world object** (`GameWorld`, our name) is one huge non-polymorphic
+  object of more than 20 MB. Known offsets are in `src/s3re/game/world.h`.
+  The map is stored in rows of `0x300` tiles of 24 bytes; the map size is at
+  `+0x2d2d0`.
+- **The simulation's random number generator** is `GameWorld::Random`
+  (`0x4feb70`), with its state at world `+0x2d2dc`. It's reimplemented and
+  verified. Because the state lives in the world, the simulation is probably
+  deterministic.
+- **Global variables** are recorded in `re/globals.csv`, e.g. the tick
+  counter `g_gameTick` at `0x7dfd48`.
+- **`DebugLog` (`0x428720`)** is a printf-style call that is just `ret` in the
+  release build. Its format strings (German) are useful clues about what
+  calling code does.
+- **Functions Ghidra missed** can be disassembled by address range with
+  `dumpbin /disasm /range:<start>,<end> S3.EXE` (VS `dumpbin.exe` in
+  `VC\Tools\MSVC\14.50.35717\bin\Hostx64\x86`). The function end is the next
+  start in `re/ghidra_functions.tsv` / `re/extra_functions.tsv`.
+- **Very large decompilations** (e.g. `UpdateSettlers`, 340k characters) are
+  too big for the context window. Analyze the saved tool output with a
+  script (callees, strings, field offsets) instead of reading it whole.
+
 ## Function inventory
 
 - `re/ghidra_functions.tsv` lists the 8,863 function starts Ghidra finds.

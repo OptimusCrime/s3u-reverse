@@ -9,6 +9,7 @@ add_library(s3re SHARED
 
     msvc6/string.cpp
 
+    game/random.cpp
     game/winmain.cpp
 )
 

@@ -1,6 +1,9 @@
 address,name,category,status,hook,verified_by,notes
 0x00401f60,std::string::_Eos,stl,verified,replaced,String_Eos_MatchesOriginal,"MSVC6 basic_string<char>::_Eos(n): _Len = n; _Ptr[n] = 0. thiscall, ret 4."
 0x00401f80,std::string::_Grow,stl,identified,none,,"MSVC6 basic_string<char>::_Grow(n, trim) -> bool. Reference-counted buffer (count byte at _Ptr[-1], 0xFF = frozen)."
+0x004043d0,CConsoleThread::CConsoleThread,game,identified,none,,"Constructor (thiscall): (hInstance, cmdLine, nShowCmd, initVirtualBases). WinMain constructs the application object on its stack."
+0x00404860,CConsoleThread::Main,game,identified,none,,Main (UI) thread loop (thread slot 5 via thunk): pumps Windows and internal message queues until quit; returns the exit code. Not the simulation.
+0x00404b10,CConsoleThread::OnExit,game,classified,none,,Main thread shutdown (thread slot 6 via thunk).
 0x00404b60,CConsoleThread::vf04,game,classified,none,,"Virtual function, vtable slot 4; purpose not yet known."
 0x00405360,WCExcept::scalar_deleting_destructor,watcom,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x00405380,CConsoleThread::vf05,game,classified,none,,"Virtual function, vtable slot 5; purpose not yet known."
@@ -19,6 +22,7 @@ address,name,category,status,hook,verified_by,notes
 0x0040a810,CConsoleThread::vf00_subdc,game,classified,none,,"Virtual function, vtable slot 0 of the base subobject at +0xdc; purpose not yet known."
 0x0040a8d0,CConsoleThread::vf00_sub104_thunk,compiler,classified,none,,This-adjusting thunk (vtable slot 0 of the base subobject at +0x104); jumps to 0x0040a820.
 0x0040a8e0,CConsoleThread::vf02_sub104_thunk,compiler,classified,none,,This-adjusting thunk (vtable slot 2 of the base subobject at +0x104); jumps to 0x00405c20.
+0x0040b3f0,CConsoleThread::OnStart,game,classified,none,,"Main thread startup (thread slot 4 via thunk). Logs 'Siedler3 Version %i.%i' (version word at 0x6970f0), runs many init functions."
 0x00414180,WCValSortedVector_int::vf04,watcom,classified,none,,"Virtual function, vtable slot 4; purpose not yet known."
 0x004141a0,WCValOrderedVector_Dirk_CPlayer::~WCValOrderedVector_Dirk_CPlayer,watcom,classified,none,,Destructor; called by the scalar deleting destructor at 0x004375d0.
 0x00414240,WCValSortedVector_Dirk_CTeam::~WCValSortedVector_Dirk_CTeam,watcom,classified,none,,Destructor; called by the scalar deleting destructor at 0x004375f0.
@@ -82,7 +86,7 @@ address,name,category,status,hook,verified_by,notes
 0x00428360,WCValSkipListDict_int_CScreenElement::scalar_deleting_destructor,watcom,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x00428380,WCSkipListBase_WCSkipListDictKeyVal_int_CScreenElement::scalar_deleting_destructor,watcom,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x004283a0,WCSkipListBase_WCSkipListDictKeyVal_int_CScreenElement::~WCSkipListBase_WCSkipListDictKeyVal_int_CScreenElement,watcom,classified,none,,Destructor; called by the scalar deleting destructor at 0x00428380.
-0x00428720,Win32::CThread::vf06,game,classified,none,,"Virtual function, vtable slot 6; purpose not yet known."
+0x00428720,DebugLog,game,identified,none,,printf-style debug log (cdecl); compiled to a bare ret in the release build. Linker-folded with the default Win32::CThread::OnExit (CThread vtable slot 6).
 0x00429000,WCValListBase_MsgConsole_WCIsvSListBase_WCNIsvSLink_MsgConsole_WCNIsvSLink_MsgConsole::vf01,watcom,classified,none,,"Virtual function, vtable slot 1; purpose not yet known."
 0x00429040,WCBareVectorBase_CListView_CColumn::vf01,watcom,classified,none,,"Virtual function, vtable slot 1; purpose not yet known."
 0x004293d0,WCBareVectorBase_CListView_CLine::vf01,watcom,classified,none,,"Virtual function, vtable slot 1; purpose not yet known."
@@ -892,13 +896,17 @@ address,name,category,status,hook,verified_by,notes
 0x004a8e70,WCValSkipListDict_int_HFONT::scalar_deleting_destructor,watcom,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x004a8e90,WCSkipListBase_WCSkipListDictKeyVal_int_HFONT::scalar_deleting_destructor,watcom,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x004a8eb0,WCSkipListBase_WCSkipListDictKeyVal_int_HFONT::~WCSkipListBase_WCSkipListDictKeyVal_int_HFONT,watcom,classified,none,,Destructor; called by the scalar deleting destructor at 0x004a8e90.
+0x004e05e0,GameWorld::UpdatePhase2,game,classified,none,,"Second per-step world update (ECX=world), between UpdateEnvironment and UpdateSettlers. Purpose unknown (no strings); about 2,200 lines of decompiled code."
+0x004e7810,GameWorld::UpdateEnvironment,game,identified,none,,"Per-step world maintenance (thiscall, ECX=world): timed map events (catapult/ship hits), per-player values, tree growth and other landscape changes over a slice of the map, using GameWorld::Random and the tick 0x7DFD48. Returns early if byte 0x7DEB55 is set."
+0x004e9670,GameWorld::UpdateSettlers,game,classified,none,,"Third per-step world update (ECX=world); provisional name. Strings mention settler jobs (thief StealGoodFromP, digger, gong/catapult production). About 7,100 lines of decompiled code."
 0x004fce60,CGameData::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x004fce80,CGameData::~CGameData,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x004fce60.
+0x004feb70,GameWorld::Random,game,verified,replaced,GameWorld_Random_MatchesOriginal GameWorld_Random_ComparisonDetectsWrongImplementation,"Simulation RNG: three uint16 at world+0x2d2dc; result=(a+b)^c (new a), t=c+b, b=ror1(b^t), c=ror1(t). State lives in the world, which suggests determinism."
 0x0053c7a0,CLogicThread::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0 of the base subobject at +0x4).
 0x0053c7d0,CLogicThread::~CLogicThread,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0053c7a0.
-0x0053c9e0,CLogicThread::vf04,game,classified,none,,"Virtual function, vtable slot 4; purpose not yet known."
-0x0053dab0,CLogicThread::vf06,game,classified,none,,"Virtual function, vtable slot 6; purpose not yet known."
-0x0053db30,CLogicThread::vf09,game,classified,none,,"Virtual function, vtable slot 9; purpose not yet known."
+0x0053c9e0,CLogicThread::OnStart,game,classified,none,,Logic thread startup (slot 4).
+0x0053dab0,CLogicThread::OnExit,game,classified,none,,Logic thread shutdown (slot 6).
+0x0053db30,CLogicThread::Step,game,identified,none,,"One logic-thread iteration (slot 9). Timing via timeGetTime; unless paused (word 0x7ACE62): world->UpdateEnvironment, world->UpdatePhase2, world->UpdateSettlers, then 0x550f80 on 20 objects at this+0x350; game-end check 0x511c50; copies tick [this+0x70] to 0x7DFD48. World pointer at this+0x3a0. Missed by Ghidra."
 0x00541650,WCValSortedVector_Lobby_CGamePlayerStatus::vf02,watcom,classified,none,,"Virtual function, vtable slot 2; purpose not yet known."
 0x00541670,WCValSortedVector_Lobby_CGamePlayerStatus::vf04,watcom,classified,none,,"Virtual function, vtable slot 4; purpose not yet known."
 0x00541690,WCValSortedVector_Lobby_CGamePlayerStatus::~WCValSortedVector_Lobby_CGamePlayerStatus,watcom,classified,none,,Destructor; called by the scalar deleting destructor at 0x005416f0.
@@ -986,9 +994,9 @@ address,name,category,status,hook,verified_by,notes
 0x005b6070,DirectX::CGameThread::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0 of the base subobject at +0x4).
 0x005b60a0,DirectX::CGameThread::~CGameThread,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x005b6070.
 0x005b6160,DirectX::CGameThread::vf04,game,classified,none,,"Virtual function, vtable slot 4; purpose not yet known."
-0x005b63d0,DirectX::CGameThread::vf05,game,classified,none,,"Virtual function, vtable slot 5; purpose not yet known."
+0x005b63d0,DirectX::CGameThread::Main,game,identified,none,,"Game thread loop (slot 5), shared by CLogicThread/CNetThread/CNetBounceThread. Under lock, flags at +0x2c: bit0 quit, bit2 stop (returns +0x3c), bit1 event -> slot 10 (OnEvent), otherwise slot 9 (Step)."
 0x005b6470,DirectX::CGameThread::vf06,game,classified,none,,"Virtual function, vtable slot 6; purpose not yet known."
-0x005b6520,DirectX::CGameThread::vf10,game,classified,none,,"Virtual function, vtable slot 10; purpose not yet known."
+0x005b6520,DirectX::CGameThread::OnEvent,game,classified,none,,"Default handler for vtable slot 10 (event), called by CGameThread::Main when flag bit 1 is set."
 0x005b6570,DirectX::CGameDrawThread::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0 of the base subobject at +0x4).
 0x005b65a0,DirectX::CGameDrawThread::~CGameDrawThread,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x005b6570.
 0x005b65c0,DirectX::CGameDrawThread::vf11,game,classified,none,,"Virtual function, vtable slot 11; purpose not yet known."
@@ -1353,12 +1361,13 @@ address,name,category,status,hook,verified_by,notes
 0x0060d720,Win32::CMessageQueue::vf01,game,classified,none,,"Virtual function, vtable slot 1; purpose not yet known."
 0x0060dfc0,Win32::CThread::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0 of the base subobject at +0x4).
 0x0060dff0,Win32::CThread::~CThread,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0060dfc0.
-0x0060e2d0,Win32::CThread::vf07,game,classified,none,,"Virtual function, vtable slot 7; purpose not yet known."
+0x0060e2d0,Win32::CThread::Execute,game,identified,none,,Thread body template (vtable slot 7): state=5; OnStart (slot 4); state|=2; result=Main (slot 5); OnExit (slot 6); state=0x12; returns result.
 0x0060e490,Win32::CStructuredException::~CStructuredException,game,classified,none,,Destructor; called by the scalar deleting destructor at 0x0060e590.
 0x0060e590,Win32::CStructuredException::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x0060e5b0,Win32::CRunTimeError::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
 0x0060e5e0,Win32::CThread::vf08,game,classified,none,,"Virtual function, vtable slot 8; purpose not yet known."
 0x0060ed90,Win32::CApplication::vf00,game,classified,none,,"Virtual function, vtable slot 0; purpose not yet known."
+0x0060f000,Win32::CThread::Execute_vbase,compiler,identified,none,,Adjusts this to the Win32::CThread virtual base (via the vbtable at this-0xc) and jumps to Win32::CThread::Execute. Called by WinMain.
 0x0060f860,Win32::CWindowedApp::vf00,game,classified,none,,"Virtual function, vtable slot 0; purpose not yet known."
 0x0060f8b0,Win32::CWindowedApp::vf01,game,classified,none,,"Virtual function, vtable slot 1; purpose not yet known."
 0x0060f980,Win32::CWindowBase::scalar_deleting_destructor,game,classified,none,,Compiler-generated scalar deleting destructor (vtable slot 0).
