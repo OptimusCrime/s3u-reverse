@@ -42,7 +42,11 @@ against the original game's behavior, not just "looks right".
   - Most likely interpretation: `S3_multi.EXE` keeps the original serial/CD-key
     handling that multiplayer needs, and `S3.EXE` has it neutralized for
     single player. Treat `S3.EXE` as the reference binary.
-- **Compiler:** MSVC 6.0 linker, PE timestamp 2000-03-31. 32-bit x86.
+- **Compiler:** MSVC 6.0 linker, PE timestamp `0x38E4B1B0` (2000-03-31). 32-bit x86.
+- **Fixed load address:** relocations are stripped and there's no ASLR, so it
+  always loads at `0x400000` and Ghidra addresses equal runtime addresses.
+- **Known addresses:** entry point (CRT startup) at `0x621bc6`; `WinMain` at
+  `0x45a120`.
 - **Language:** C++ (586 RTTI class names, e.g. `Win32::CApplication`,
   `DirectX::CGameApp`, `CScreenElement`). Ships with `MSVCRT.DLL` and `MSVCIRT.DLL`.
 - **Sections:** `.text` ~2.4 MB of code, `.rdata` ~0.25 MB, `.data` ~1.4 MB.
@@ -63,8 +67,11 @@ against the original game's behavior, not just "looks right".
 **Incremental replacement inside the running original game**, the approach
 used by OpenRCT2 and re3:
 
-1. A 32-bit DLL of our own is loaded into the original `S3.EXE` via a proxy DLL
-   placed in the game folder.
+1. A 32-bit DLL of our own (`s3re.dll`) is loaded into the original `S3.EXE`
+   by `s3re_launcher.exe` using Microsoft Detours
+   (`DetourCreateProcessWithDllEx`). Nothing is added to the game folder.
+   A proxy `ddraw.dll` won't work: `S3.EXE` loads DirectX dynamically, and its
+   static imports are only system DLLs plus GOG's `_INMM.dll`.
 2. Original functions are redirected (hooked) one at a time to our C++
    reimplementations. The game stays playable at every step.
 3. Every replacement is verified:
@@ -94,6 +101,14 @@ C++ code.
   - `...\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`
   - `...\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe`
 - The hook DLL must be built **32-bit (x86)** to load into `S3.EXE`.
+- **Build:** `cmake --preset x86`, then `cmake --build --preset debug`.
+  Output goes to `build/x86/bin/Debug/` (`s3re_launcher.exe`, `s3re.dll`).
+  Run the launcher to start the game. It writes `s3re.log` next to the DLL.
+- **Code layout:**
+  - `src/launcher/`: checks the SHA-256 of `S3.EXE` and starts it with the DLL.
+  - `src/s3re/`: the DLL. Hooks are registered with `S3RE_HOOK`
+    (`hooks.h`); one file per reimplemented function or class, under
+    `src/s3re/game/`.
 - The user is new to Visual Studio. Drive builds from the command line, and
   explain any IDE steps the user has to take.
 - The original game runs fine on the dev machine (Windows 10), so runtime

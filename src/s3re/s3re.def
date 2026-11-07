@@ -1,0 +1,4 @@
+LIBRARY s3re
+EXPORTS
+    ; Detours requires ordinal #1 on any DLL injected with DetourCreateProcessWithDll.
+    DetourFinishHelperProcess @1 NONAME
