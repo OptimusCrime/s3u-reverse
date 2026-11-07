@@ -19,7 +19,7 @@ recordings only hold commands from the computer player and the game itself
 Next steps:
 1. Record a game with real human input and replay it: the user plays with
    `s3re_launcher --trace-determinism --record-commands game.bin --seed 1234
-   --exit-after-ticks 3000 -- -map Map\MULTI84-2-Lakes.map`, then copy the
+   --exit-after-ticks 3000 -- -map Map\MULTI\384-2-Lakes.map`, then copy the
    new `determinism-*.tsv` to `game.bin.tsv` and run
    `python tools/check_replay.py --recording game.bin --ticks 3000`.
    Alternative without the user: drive the game window with synthetic
