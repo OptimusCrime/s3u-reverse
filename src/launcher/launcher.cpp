@@ -17,6 +17,10 @@
 // world memory at those ticks to <trace>-world-<n>.bin, for finding which
 // bytes differ. --dump-headers appends the world header at every hashed
 // tick to <trace>-headers.bin (about 40 MB per 3,000 ticks).
+// --original runs the game with the original code: our reimplementations are
+// not installed (tooling hooks are). Replay one recording with and without it
+// and compare the traces to check our code on whole games.
+//
 // --log-commands logs every command the simulation sends to the network
 // layer (and, in network games, every command announced to CNetThread) to
 // s3re.log.
@@ -193,6 +197,7 @@ int wmain(int argc, wchar_t** argv) {
     bool traceDeterminism = false;
     bool logCommands = false;
     bool dumpHeaders = false;
+    bool originalMode = false;
     std::wstring recordCommands;
     std::wstring replayCommands;
     std::wstring testFilter;
@@ -219,6 +224,8 @@ int wmain(int argc, wchar_t** argv) {
             if (!FileExists(replayCommands)) {
                 return Fail(L"command recording not found: %s", replayCommands);
             }
+        } else if (arg == L"--original") {
+            originalMode = true;
         } else if (arg == L"--dump-headers") {
             dumpHeaders = true;
         } else if (arg == L"--log-commands") {
@@ -252,7 +259,7 @@ int wmain(int argc, wchar_t** argv) {
             wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
                     L"[--trace-determinism] [--log-commands] [--record-commands <file>] "
                     L"[--replay-commands <file>] [--seed <n>] [--exit-after-ticks <n>] "
-                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [-- <S3.EXE arguments>]\n");
+                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [--original] [-- <S3.EXE arguments>]\n");
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
@@ -303,6 +310,7 @@ int wmain(int argc, wchar_t** argv) {
     SetEnvironmentVariableW(L"S3RE_TRACE", traceDeterminism ? L"determinism" : nullptr);
     SetEnvironmentVariableW(L"S3RE_LOG_COMMANDS", logCommands ? L"1" : nullptr);
     SetEnvironmentVariableW(L"S3RE_DUMP_HEADERS", dumpHeaders ? L"1" : nullptr);
+    SetEnvironmentVariableW(L"S3RE_ORIGINAL", originalMode ? L"1" : nullptr);
     SetEnvironmentVariableW(L"S3RE_RECORD_COMMANDS",
                             recordCommands.empty() ? nullptr : recordCommands.c_str());
     SetEnvironmentVariableW(L"S3RE_REPLAY_COMMANDS",

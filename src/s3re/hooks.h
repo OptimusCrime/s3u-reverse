@@ -27,7 +27,12 @@
 
 namespace s3re::hooks {
 
-enum class HookKind { Replaced, Passthrough };
+// Replaced: our reimplementation runs instead of the original.
+// Passthrough: observes and calls the original (tooling).
+// ReplacedAlways: a replacement that also provides tooling (e.g. --seed), so
+// it stays installed in original mode and must itself call the original
+// code when OriginalMode() is true.
+enum class HookKind { Replaced, Passthrough, ReplacedAlways };
 
 struct HookRegistrar {
     HookRegistrar(const char* name, std::uintptr_t address, HookKind kind, void** original,
@@ -35,8 +40,14 @@ struct HookRegistrar {
 };
 
 // Installs every registered hook. Returns false if any of them failed, in which
-// case none are installed.
+// case none are installed. In original mode, Replaced hooks are skipped.
 bool InstallAll();
+
+// True when the game runs with the original code instead of our
+// reimplementations (`s3re_launcher --original`, S3RE_ORIGINAL), for
+// comparing whole games: replay the same recording in both modes and compare
+// the determinism traces.
+bool OriginalMode();
 void UninstallAll();
 
 }  // namespace s3re::hooks
@@ -52,6 +63,12 @@ void UninstallAll();
 //   S3RE_HOOK(0x00401f60, String_Eos, EosFn, Original_String_Eos, String_Eos);
 #define S3RE_HOOK(address, name, FnType, original, replacement)                    \
     S3RE_DETAIL_HOOK(address, name, ::s3re::hooks::HookKind::Replaced, FnType,      \
+                     original, replacement)
+
+// A replacement that also provides tooling and therefore stays installed in
+// original mode; it must call `original` itself when OriginalMode() is true.
+#define S3RE_HOOK_ALWAYS(address, name, FnType, original, replacement)             \
+    S3RE_DETAIL_HOOK(address, name, ::s3re::hooks::HookKind::ReplacedAlways, FnType, \
                      original, replacement)
 
 // Same, for a wrapper that observes the original (for example logs its

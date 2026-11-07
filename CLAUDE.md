@@ -308,7 +308,10 @@ replaying, see `src/s3re/replay/command_log.h`):
    (`identified`).
 2. Write the replacement with `S3RE_HOOK`, matching the calling convention.
    Member functions are `__thiscall`; write them as `__fastcall` with a dummy
-   EDX parameter (see `hooks.h`).
+   EDX parameter (see `hooks.h`). Check whether callers use EAX after the
+   call before declaring a function `void`. A replacement that also provides
+   tooling (like `--seed`) uses `S3RE_HOOK_ALWAYS` and calls the original
+   itself in original mode.
 3. Write differential tests with `S3RE_TEST` in the same file. Run the
    original (through the `Original_*` trampoline) and our version on identical
    random inputs and starting state, then compare return values and all
@@ -318,9 +321,15 @@ replaying, see `src/s3re/replay/command_log.h`):
 4. Build, then run `s3re_launcher --test [filter]`. This runs the tests inside
    the real `S3.EXE` without opening the game window. The exit code is 0 only
    if every test passed.
-5. Set the row to `verified`, `hook=replaced`, `verified_by=<test names>`.
-   Run `python tools/inventory.py check`.
-6. Occasionally play the game normally with all hooks active, as an
+5. Whole-game check for simulation code: `python tools/check_replay.py
+   --recording <file> --against-original --ticks 3000` replays a recorded
+   game with the original code (`s3re_launcher --original` leaves out all
+   replacements) and with ours, and the traces must be identical. Keep
+   recordings with player input in `build/x86/bin/Debug/recordings/` (make
+   one with `check_replay.py --synthetic-input SEED`).
+6. Set the row to `verified`, `hook=replaced`, `verified_by=<test names>`
+   (space-separated). Run `python tools/inventory.py check`.
+7. Occasionally play the game normally with all hooks active, as an
    integration check.
 - The user is new to Visual Studio. Drive builds from the command line, and
   explain any IDE steps the user has to take.

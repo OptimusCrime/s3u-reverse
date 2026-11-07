@@ -113,6 +113,8 @@ long SeedOverride() {
 
 }  // namespace
 
+extern GameWorldSeedRandomFn Original_GameWorld_SeedRandom;
+
 // The installed hook: logs the seed, applies the override, then seeds.
 void __fastcall GameWorld_SeedRandom(GameWorld* world, void* edx, std::uint32_t seed) {
     const long forced = SeedOverride();
@@ -124,10 +126,15 @@ void __fastcall GameWorld_SeedRandom(GameWorld* world, void* edx, std::uint32_t 
         S3RE_LOG("GameWorld::SeedRandom(world=%p, seed=%u) called from %p",
                  static_cast<void*>(world), seed & 0xFFFF, _ReturnAddress());
     }
-    GameWorld_SeedRandom_Impl(world, edx, seed);
+    if (hooks::OriginalMode()) {
+        Original_GameWorld_SeedRandom(world, edx, seed);
+    } else {
+        GameWorld_SeedRandom_Impl(world, edx, seed);
+    }
 }
 
-S3RE_HOOK(0x004feb40, GameWorld_SeedRandom, GameWorldSeedRandomFn,
+// Stays installed in original mode, for --seed.
+S3RE_HOOK_ALWAYS(0x004feb40, GameWorld_SeedRandom, GameWorldSeedRandomFn,
           Original_GameWorld_SeedRandom, GameWorld_SeedRandom);
 
 // ---------------------------------------------------------------------------

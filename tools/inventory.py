@@ -56,7 +56,7 @@ HOOKS = ("none", "passthrough", "replaced")
 
 ADDRESS_RE = re.compile(r"0x[0-9a-f]{8}")
 NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(::~?[A-Za-z_][A-Za-z0-9_]*)*")
-HOOK_RE = re.compile(r"S3RE_(HOOK|PASSTHROUGH)\(\s*(0x[0-9a-fA-F]+)\s*,\s*(\w+)")
+HOOK_RE = re.compile(r"S3RE_(HOOK|HOOK_ALWAYS|PASSTHROUGH)\(\s*(0x[0-9a-fA-F]+)\s*,\s*(\w+)")
 TEST_RE = re.compile(r"S3RE_TEST\(\s*(\w+)\s*\)")
 
 
@@ -92,7 +92,7 @@ def scan_sources() -> tuple[dict[int, tuple[str, str]], dict[str, str]]:
         text = path.read_text(encoding="utf-8")
         rel = path.relative_to(ROOT).as_posix()
         for kind, address, _name in HOOK_RE.findall(text):
-            kind = "replaced" if kind == "HOOK" else "passthrough"
+            kind = "passthrough" if kind == "PASSTHROUGH" else "replaced"
             hooks[int(address, 16)] = (kind, rel)
         for test in TEST_RE.findall(text):
             tests[test] = rel

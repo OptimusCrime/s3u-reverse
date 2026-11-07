@@ -19,6 +19,11 @@ With --recording FILE (e.g. a game a human played with --record-commands),
 step 1 is skipped and the replay is compared against FILE's own trace,
 which must sit next to it as FILE.tsv.
 
+With --against-original, the reference is instead a replay of the same
+recording with the original code (s3re_launcher --original), and the replay
+with our reimplementations must match it: the system-level check for every
+replaced function.
+
 The game window takes over the screen while it runs; don't touch mouse or
 keyboard. Exit code 0 if every check passed.
 """
@@ -90,6 +95,10 @@ def main():
                         help="map path relative to the game directory")
     parser.add_argument("--recording", help="replay this recording instead of making one")
     parser.add_argument("--no-mutation", action="store_true")
+    parser.add_argument("--against-original", action="store_true",
+                        help="verify our reimplementations: replay the recording with the "
+                             "original code (--original) as the reference, then with ours, "
+                             "and compare (implies --no-mutation)")
     parser.add_argument("--synthetic-input", type=int, metavar="SEED",
                         help="play the recorded game with random mouse input "
                              "(tools/synthetic_input.py) using this seed")
@@ -119,7 +128,7 @@ def main():
     if args.recording:
         recording = os.path.abspath(args.recording)
         reference = recording + ".tsv"
-        if not os.path.exists(reference):
+        if not os.path.exists(reference) and not args.against_original:
             print(f"no reference trace {reference}")
             return 2
     else:
@@ -136,7 +145,18 @@ def main():
     commands = command_log.read(recording)
     print(f"recording has {len(commands)} commands")
 
-    print("replay", flush=True)
+    if args.against_original:
+        args.no_mutation = True
+        print("replay with the original code (reference)", flush=True)
+        trace = run_game(launcher, bin_dir, args,
+                         ["--replay-commands", recording, "--original", *dump_args])
+        if trace is None:
+            return 2
+        reference = os.path.join(work, "original.tsv")
+        shutil.copyfile(trace, reference)
+        record_trace = trace
+
+    print("replay" + (" with our code" if args.against_original else ""), flush=True)
     trace = run_game(launcher, bin_dir, args, ["--replay-commands", recording, *dump_args])
     if trace is None:
         return 2
@@ -148,12 +168,12 @@ def main():
     player_commands = len(re.findall(r"was not issued live", replay_log))
     print(f"  player commands in the recording: {player_commands}"
           f"{' (at least; the log lists 20 differences at most)' if player_commands >= 20 else ''}")
-    if args.synthetic_input is not None and player_commands == 0:
+    if args.synthetic_input is not None and player_commands == 0 and not args.against_original:
         print("  the scripted player issued no commands, so this run proves little")
         ok = False
     if not ok:
         print(report)
-        if dump_args and not args.recording:
+        if dump_args and (args.against_original or not args.recording):
             print("  header differences at hashed ticks:", flush=True)
             subprocess.run([sys.executable, os.path.join(ROOT, "tools", "diff_world_dumps.py"),
                             "--headers", record_trace[:-4] + "-headers.bin",

@@ -34,8 +34,22 @@ HookRegistrar::HookRegistrar(const char* name, std::uintptr_t address, HookKind 
     Registry().push_back({name, address, kind, original, replacement});
 }
 
+bool OriginalMode() {
+    static const bool value = GetEnvironmentVariableA("S3RE_ORIGINAL", nullptr, 0) > 0;
+    return value;
+}
+
 bool InstallAll() {
-    std::vector<Hook>& hooks = Registry();
+    std::vector<Hook> hooks;
+    for (const Hook& hook : Registry()) {
+        if (!(OriginalMode() && hook.kind == HookKind::Replaced)) {
+            hooks.push_back(hook);
+        }
+    }
+    if (OriginalMode()) {
+        S3RE_LOG("original mode: %u replacement(s) left out",
+                 static_cast<unsigned>(Registry().size() - hooks.size()));
+    }
 
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
@@ -56,7 +70,9 @@ bool InstallAll() {
 
     for (const Hook& hook : hooks) {
         S3RE_LOG("hooked %s at 0x%08x (%s)", hook.name, static_cast<unsigned>(hook.address),
-                 hook.kind == HookKind::Replaced ? "replaced" : "passthrough");
+                 hook.kind == HookKind::Passthrough ? "passthrough"
+                 : OriginalMode()                    ? "replaced, calls the original"
+                                                     : "replaced");
     }
     S3RE_LOG("%u hook(s) installed", static_cast<unsigned>(hooks.size()));
     g_installed = true;
@@ -70,7 +86,9 @@ void UninstallAll() {
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
     for (const Hook& hook : Registry()) {
-        DetourDetach(hook.original, hook.replacement);
+        if (!(OriginalMode() && hook.kind == HookKind::Replaced)) {
+            DetourDetach(hook.original, hook.replacement);
+        }
     }
     DetourTransactionCommit();
     g_installed = false;

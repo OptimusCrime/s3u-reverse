@@ -16,6 +16,8 @@ add_library(s3re SHARED
     game/logic_thread.cpp
     game/net_thread.cpp
     game/random.cpp
+    game/statistics.cpp
+    game/world_search.cpp
     game/winmain.cpp
 )
 

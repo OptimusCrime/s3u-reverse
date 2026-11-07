@@ -7,41 +7,30 @@ progress.
 
 ## Current focus
 
-**Confirm replay with scripted player input, then start replacing
-simulation code.**
+**Replacing simulation functions, bottom up.**
 
-`python tools/check_replay.py --ticks 3000 --synthetic-input SEED
---dump-every 300` records a game that `tools/synthetic_input.py` plays with
-random mouse input (build menu, placing buildings on detected sites, box
-selection, goods/settlers menus, minimap), replays it, and compares.
-Results so far: the RNG was identical on every tick in every run (up to
-3,000 ticks, 9 input seeds), and removing a player command makes the replay
-diverge. The world hashes kept differing because the game keeps UI and
-draw hand-off state inside the world object; each such field was found
-with world dumps / header snapshots (`--dump-every` also writes the header
-at every hashed tick), checked in the code, and excluded (list with
-evidence in `src/s3re/trace/determinism.cpp`). Latest: seed 103 passed
-fully with 9 player commands; seed 97 (10 player commands) differed only
-in a draw "redraw" flag at one tick (now excluded). Then seed 127 passed
-(6 player commands); seed 113 (10 player commands) differed only in the
-statistics window's selection byte (+0x2d244, now excluded). Earlier "passes" had no
-player commands (minimap clicks moved the camera off the player's land);
-fixed, and `check_replay.py` now fails a scripted run without player
-commands.
+Workflow per function (see `CLAUDE.md`): reimplement, differential tests
+with a mutation test, `s3re_launcher --test`, then the whole-game check
+`python tools/check_replay.py --recording
+build/x86/bin/Debug/recordings/scripted-seed127.bin --against-original
+--ticks 3000` (that recording has 6 scripted player commands; it lives in
+the build folder, recreate one with `--synthetic-input` if it's gone).
+
+Done: TileDistance (0x4ff320), GameWorld::NextSearchGeneration (0x4ff3f0),
+the statistics functions InitStatisticsKernel (0x4ff4c0), ShiftStatistics
+(0x4ff470) and AddStatistic (0x4ff510). Verified: tests plus a 3,000-tick
+replay identical to the original.
 
 Next steps:
-1. Run `check_replay.py --synthetic-input` with a few more seeds (with
-   `--dump-every 300`) until runs pass consistently. Each new difference:
-   diff the dumps, check the writers, exclude only with evidence.
-   Note: the random input is timed by the wall clock, so a seed doesn't
-   reproduce the same game; keep the dumps of a failing run.
-2. Make replays self-contained: store the seed and map in the recording
-   header so `--replay-commands` needs no extra options.
-3. Decode the command ids (`ExecuteCommands` `0x535990` switch). Player
-   build commands are id 0x01 like the computer player's but with a
-   different byte layout (not understood yet).
-4. Then begin bottom-up replacement of simulation functions, verifying each
-   with differential tests plus `check_replay.py`.
+1. More leaf functions near these: 0x4ff380 (64000 - 8000a - 4000b, meaning
+   unknown), 0x4ff3c0 (clears 9 dwords of a 0x2e0-byte record at
+   world+0xE147BA), GameWorld::BuildStatisticsChart (0x4ff550),
+   FindNearest_a/b (0x4ff0a0/0x4ff170), the footprint check (0x4da440),
+   GameWorld::PushUiFeedback (0x4febe0), BuildMinimap (0x4fb650).
+   A good way to find more: functions in 0x4e0000..0x520000 with no callees
+   (leaves) and few lines.
+2. Make replays self-contained: store the seed and map in the recording.
+3. Decode the command ids (ExecuteCommands 0x535990).
 
 ## Open questions and loose ends
 
@@ -98,6 +87,17 @@ Next steps:
   `_Eos` and `GameWorld::Random` replaced) as an integration check.
 
 ## Session log
+
+### 2026-11-07 (8): first simulation functions replaced
+
+- Reimplemented and verified 5 world functions (src/s3re/game/
+  world_search.cpp, statistics.cpp): 10 new differential tests incl.
+  mutation tests, all 19 tests pass. Found that the statistics history
+  (20 players x 36 categories x 256 samples) sits at world+0x38.
+- Added original mode (`s3re_launcher --original`, `S3RE_HOOK_ALWAYS` for
+  hooks that are also tooling) and `check_replay.py --against-original`.
+  A scripted 3,000-tick game replayed identically with the original code
+  and with ours.
 
 ### 2026-11-07 (7): scripted player input, UI state in the world
 
