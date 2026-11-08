@@ -269,10 +269,10 @@ std::uint32_t __fastcall GameWorld_FloodMoveArea(GameWorld* world, void*, std::u
 namespace {
 
 // The neighbour from offset table entry k (1..6) of (x, y).
-std::uint32_t NeighbourX(GameWorld* world, std::uint32_t x, std::uint32_t k) {
+std::uint32_t OffsetNeighbourX(GameWorld* world, std::uint32_t x, std::uint32_t k) {
     return x + At<std::uint32_t>(world, kOffsetTable + k * kOffsetTableBytes);
 }
-std::uint32_t NeighbourY(GameWorld* world, std::uint32_t y, std::uint32_t k) {
+std::uint32_t OffsetNeighbourY(GameWorld* world, std::uint32_t y, std::uint32_t k) {
     return y + At<std::uint32_t>(world, kOffsetTable + k * kOffsetTableBytes + 4);
 }
 
@@ -282,8 +282,8 @@ std::uint32_t __fastcall GameWorld_MergeTileWord16Regions(GameWorld* world, void
     std::uint32_t count = 0;
     std::uint32_t first = 0;
     for (std::uint32_t k = 1; k <= 6; ++k) {
-        const std::uint32_t nx = NeighbourX(world, x, k);
-        const std::uint32_t ny = NeighbourY(world, y, k);
+        const std::uint32_t nx = OffsetNeighbourX(world, x, k);
+        const std::uint32_t ny = OffsetNeighbourY(world, y, k);
         const std::uint32_t id = At<std::uint16_t>(world, Tile(nx, ny) + kTileWord16);
         if (id == 0) {
             continue;
@@ -309,8 +309,8 @@ std::uint32_t __fastcall GameWorld_MergeTileByte10Regions(GameWorld* world, void
     std::uint32_t count = 0;
     std::uint32_t first = 0;
     for (std::uint32_t k = 1; k <= 6; ++k) {
-        const std::uint32_t nx = NeighbourX(world, x, k);
-        const std::uint32_t ny = NeighbourY(world, y, k);
+        const std::uint32_t nx = OffsetNeighbourX(world, x, k);
+        const std::uint32_t ny = OffsetNeighbourY(world, y, k);
         const std::uint32_t tile = Tile(nx, ny);
         if ((At<std::uint8_t>(world, tile + kTileFlags) & kTileBlocked) != 0) {
             continue;
@@ -344,15 +344,15 @@ std::uint32_t __fastcall GameWorld_AssignWord16RegionsAround(GameWorld* world, v
     constexpr std::uint32_t kEntries = 19;
     for (std::uint32_t k = 0; k < kEntries; ++k) {
         const std::uint32_t size = MapSize(world);
-        const std::uint32_t nx = NeighbourX(world, x, k);
-        const std::uint32_t ny = NeighbourY(world, y, k);
+        const std::uint32_t nx = OffsetNeighbourX(world, x, k);
+        const std::uint32_t ny = OffsetNeighbourY(world, y, k);
         if (nx >= size || ny >= size || At<std::uint16_t>(world, Tile(nx, ny) + kTileWord16) != 0) {
             continue;
         }
         bool clear = true;
         for (std::uint32_t j = 0; j < kEntries; ++j) {
-            const std::uint32_t mx = NeighbourX(world, nx, j);
-            const std::uint32_t my = NeighbourY(world, ny, j);
+            const std::uint32_t mx = OffsetNeighbourX(world, nx, j);
+            const std::uint32_t my = OffsetNeighbourY(world, ny, j);
             if (mx >= size || my >= size) {
                 continue;
             }
@@ -714,15 +714,15 @@ std::uint32_t RelativeToWorld(std::uint32_t value, GameWorld* world) {
 std::uint32_t __fastcall WrongAssignWord16RegionsAround(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
     for (std::uint32_t k = 0; k < 19; ++k) {
         const std::uint32_t size = MapSize(world);
-        const std::uint32_t nx = NeighbourX(world, x, k);
-        const std::uint32_t ny = NeighbourY(world, y, k);
+        const std::uint32_t nx = OffsetNeighbourX(world, x, k);
+        const std::uint32_t ny = OffsetNeighbourY(world, y, k);
         if (nx >= size || ny >= size || At<std::uint16_t>(world, Tile(nx, ny) + kTileWord16) != 0) {
             continue;
         }
         bool clear = true;
         for (std::uint32_t j = 0; j < 19; ++j) {
-            const std::uint32_t mx = NeighbourX(world, nx, j);
-            const std::uint32_t my = NeighbourY(world, ny, j);
+            const std::uint32_t mx = OffsetNeighbourX(world, nx, j);
+            const std::uint32_t my = OffsetNeighbourY(world, ny, j);
             if (mx < size && my < size && (At<std::uint8_t>(world, Tile(mx, my) + kTileFlags) & kTileBlocked) != 0) {
                 clear = false;
             }

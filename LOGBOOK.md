@@ -296,6 +296,14 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-08 (23): batch 16, full emulator suite
+
+- Batch 16: AddGoodsToPile (0x505650).
+- Full emulator suite: 124/124, 0 mismatches, full coverage; self-test
+  11/11. It first failed because a file-local helper was named NeighbourX
+  like a replacement: the emulator finds our functions by name in
+  s3re.map, so helper names must not collide with replacement names.
+
 ### 2026-11-08 (22): whole-game check for batches 12-14, batch 15
 
 - Whole-game check (scripted-seed127.bin, 3,000 ticks): REPLAY OK with
