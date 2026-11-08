@@ -348,6 +348,15 @@ def marked_tile(rng, pool, args):
             (0xe0788c, rng.choice([9999, rng.randrange(10000)]), 4)]
 
 
+def replace_tile(offset, size):
+    """Tile field at `offset` often equal to args[2]; ring index near the end."""
+    def presets(rng, pool, args):
+        value = args[2] if rng.random() < 0.7 else rng.randrange(4)
+        return [(tile(args[0], args[1]) + offset, value & ((1 << (8 * size)) - 1), size),
+                (0xe0788c, rng.choice([9999, rng.randrange(10000)]), 4)]
+    return presets
+
+
 def uniform_terrain(rng, pool, args):
     """The tile and its six neighbours mostly share args[2] as terrain."""
     fields = []
@@ -558,6 +567,12 @@ SPECS = [
          [below(384), below(384)], eax_mask=0, presets=marked_tile_terrain),
     Spec("GameWorld_QueueMarkedTileNoOwner", 0x0051d3d0, "thiscall",
          [below(384), below(384)], eax_mask=0, presets=marked_tile_terrain),
+    Spec("GameWorld_ReplaceTileWord16AndQueue", 0x0051c560, "thiscall",
+         [below(384), below(384), below(4, 0.1), anything], eax_mask=0,
+         presets=replace_tile(0x16, 2)),
+    Spec("GameWorld_ReplaceTileByte10AndQueue", 0x0051c820, "thiscall",
+         [below(384), below(384), below(4, 0.1), anything], eax_mask=0,
+         presets=replace_tile(0x10, 1)),
     Spec("GameWorld_CountDownTimers", 0x004fee00, "thiscall", [], eax_mask=0, presets=timers,
          max_cases=200),
     Spec("GameWorld_AddToRecentPositions", 0x00510770, "thiscall", [below(8, 0.1), below(8, 0.1)],

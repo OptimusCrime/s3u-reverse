@@ -45,6 +45,14 @@
 //   before the cursor g_recentPositionsCursor (0x7ace60, wrapping from 0 to
 //   127; loops forever if no slot is empty). The logic thread clears the
 //   cursor's slot and advances it every step (0x53de6f). ret 8; EAX ignored.
+// GameWorld::ReplaceTileWord16AndQueue (0x0051c560): (x, y, expected,
+//   value) if the uint16 at tile +0x16 (zero-extended) equals `expected`
+//   (int32): sets it to `value` (low word) and appends (x, y) to the tile
+//   ring (no flag change, no ring-full check). One step of the flood fill
+//   0x51c6c0, which uses the tile ring as its queue. ret 0x10; EAX ignored.
+// GameWorld::ReplaceTileByte10AndQueue (0x0051c820): the same for the byte
+//   at tile +0x10 (`value` low byte). Step of the flood fill 0x51c8a0.
+//   ret 0x10; EAX ignored.
 // All thiscall (ECX = world).
 
 #include "game/world.h"
@@ -83,6 +91,8 @@ constexpr std::uint32_t kTiles = 0x67444;
 constexpr std::uint32_t kTileOwner = 0x8;
 constexpr std::uint32_t kTileTerrain = 0x6;
 constexpr std::uint32_t kTileFlags = 0xa;
+constexpr std::uint32_t kTileByte10 = 0x10;
+constexpr std::uint32_t kTileWord16 = 0x16;
 constexpr std::uint32_t kTileRing = 0xdfdc48;
 constexpr std::uint32_t kTileRingIndex = 0xe0788c;
 constexpr std::uint32_t kTileRingEntries = 10000;
@@ -127,6 +137,9 @@ using QueueTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std:
 using NoArgFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
 using PositionFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
                                               std::uint32_t y);
+using ReplaceTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
+                                                 std::uint32_t y, std::uint32_t expected,
+                                                 std::uint32_t value);
 
 std::uint32_t __fastcall GameWorld_AllocBuildingExtra(GameWorld* world, void*,
                                                       std::uint32_t value) {
@@ -311,6 +324,40 @@ std::uint32_t __fastcall GameWorld_AddToRecentPositions(GameWorld* world, void*,
     return 0;  // the only caller ignores EAX
 }
 
+namespace {
+
+// Appends (x, y) to the tile ring (without touching the tile flags).
+void PushTile(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+    std::uint32_t& index = At<std::uint32_t>(world, kTileRingIndex);
+    At<std::uint16_t>(world, kTileRing + index * 4) = static_cast<std::uint16_t>(x);
+    At<std::uint16_t>(world, kTileRing + index * 4 + 2) = static_cast<std::uint16_t>(y);
+    index = index + 1 == kTileRingEntries ? 0 : index + 1;
+}
+
+}  // namespace
+
+std::uint32_t __fastcall GameWorld_ReplaceTileWord16AndQueue(GameWorld* world, void*, std::uint32_t x,
+                                                             std::uint32_t y, std::uint32_t expected,
+                                                             std::uint32_t value) {
+    std::uint16_t& field = At<std::uint16_t>(world, kTiles + (x * 0x300 + y) * 24 + kTileWord16);
+    if (field == expected) {
+        field = static_cast<std::uint16_t>(value);
+        PushTile(world, x, y);
+    }
+    return 0;  // callers ignore EAX
+}
+
+std::uint32_t __fastcall GameWorld_ReplaceTileByte10AndQueue(GameWorld* world, void*, std::uint32_t x,
+                                                             std::uint32_t y, std::uint32_t expected,
+                                                             std::uint32_t value) {
+    std::uint8_t& field = At<std::uint8_t>(world, kTiles + (x * 0x300 + y) * 24 + kTileByte10);
+    if (field == expected) {
+        field = static_cast<std::uint8_t>(value);
+        PushTile(world, x, y);
+    }
+    return 0;  // callers ignore EAX
+}
+
 S3RE_HOOK(0x004df0a0, GameWorld_AllocBuildingExtra, ValueFn, Original_GameWorld_AllocBuildingExtra,
           GameWorld_AllocBuildingExtra);
 S3RE_HOOK(0x004fefd0, GameWorld_AllocTable36700Record, Alloc36700Fn,
@@ -323,6 +370,10 @@ S3RE_HOOK(0x0051ce50, GameWorld_QueueMarkedTileTerrain5To7, PositionFn,
           Original_GameWorld_QueueMarkedTileTerrain5To7, GameWorld_QueueMarkedTileTerrain5To7);
 S3RE_HOOK(0x0051d3d0, GameWorld_QueueMarkedTileNoOwner, PositionFn,
           Original_GameWorld_QueueMarkedTileNoOwner, GameWorld_QueueMarkedTileNoOwner);
+S3RE_HOOK(0x0051c560, GameWorld_ReplaceTileWord16AndQueue, ReplaceTileFn,
+          Original_GameWorld_ReplaceTileWord16AndQueue, GameWorld_ReplaceTileWord16AndQueue);
+S3RE_HOOK(0x0051c820, GameWorld_ReplaceTileByte10AndQueue, ReplaceTileFn,
+          Original_GameWorld_ReplaceTileByte10AndQueue, GameWorld_ReplaceTileByte10AndQueue);
 S3RE_HOOK(0x004fee00, GameWorld_CountDownTimers, NoArgFn, Original_GameWorld_CountDownTimers,
           GameWorld_CountDownTimers);
 S3RE_HOOK(0x00510770, GameWorld_AddToRecentPositions, PositionFn,
@@ -516,6 +567,60 @@ S3RE_TEST(GameWorld_QueueMarkedTileTerrain5To7_ComparisonDetectsWrongImplementat
 S3RE_TEST(GameWorld_QueueMarkedTileNoOwner_MatchesOriginal) {
     CompareQueueTile(ctx, Original_GameWorld_QueueMarkedTileNoOwner,
                      &GameWorld_QueueMarkedTileNoOwner, 2000);
+}
+
+namespace {
+
+// Wrong: compares only the low byte of `expected` with a small word.
+std::uint32_t __fastcall WrongReplaceTileWord16AndQueue(GameWorld* world, void* edx, std::uint32_t x,
+                                                        std::uint32_t y, std::uint32_t expected,
+                                                        std::uint32_t value) {
+    const std::uint16_t field = At<std::uint16_t>(world, kTiles + (x * 0x300 + y) * 24 + kTileWord16);
+    return GameWorld_ReplaceTileWord16AndQueue(world, edx, x, y, field <= 0xff ? expected & 0xff : expected,
+                                               value);
+}
+
+// `field` is kTileWord16 (2 bytes) or kTileByte10 (1 byte).
+void CompareReplaceTile(test::Context& ctx, ReplaceTileFn original, ReplaceTileFn candidate,
+                        std::uint32_t field, std::uint32_t size, int cases) {
+    Compare(ctx, cases, false, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
+        const std::uint32_t x = ctx.rng().Below(384);
+        const std::uint32_t y = ctx.rng().Below(384);
+        const std::uint32_t at = kTiles + (x * 0x300 + y) * 24 + field;
+        const std::uint32_t current = ctx.rng().Below(4);
+        if (size == 2) {
+            worlds.Set<std::uint16_t>(at, static_cast<std::uint16_t>(current));
+        } else {
+            worlds.Set<std::uint8_t>(at, static_cast<std::uint8_t>(current));
+        }
+        // Mostly small values (often equal); sometimes high bits set.
+        std::uint32_t want = ctx.rng().Below(4);
+        if (ctx.rng().Chance(1, 8)) {
+            want |= ctx.rng().Next32() & ~0xffu;
+        }
+        const std::uint32_t value = ctx.rng().Next32();
+        worlds.Set<std::uint32_t>(kTileRingIndex, ctx.rng().Chance(1, 8) ? kTileRingEntries - 1
+                                                                         : ctx.rng().Below(kTileRingEntries));
+        expected = original(worlds.original(), nullptr, x, y, want, value);
+        actual = candidate(worlds.ours(), nullptr, x, y, want, value);
+    });
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_ReplaceTileWord16AndQueue_MatchesOriginal) {
+    CompareReplaceTile(ctx, Original_GameWorld_ReplaceTileWord16AndQueue,
+                       &GameWorld_ReplaceTileWord16AndQueue, kTileWord16, 2, 2000);
+}
+S3RE_TEST(GameWorld_ReplaceTileWord16AndQueue_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareReplaceTile(probe, Original_GameWorld_ReplaceTileWord16AndQueue, &WrongReplaceTileWord16AndQueue,
+                       kTileWord16, 2, 2000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+S3RE_TEST(GameWorld_ReplaceTileByte10AndQueue_MatchesOriginal) {
+    CompareReplaceTile(ctx, Original_GameWorld_ReplaceTileByte10AndQueue,
+                       &GameWorld_ReplaceTileByte10AndQueue, kTileByte10, 1, 2000);
 }
 
 S3RE_TEST(GameWorld_CountDownTimers_MatchesOriginal) {

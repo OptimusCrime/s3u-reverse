@@ -15,10 +15,10 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 79 replacements pass the emulator suite with full block
+Status: all 81 replacements pass the emulator suite with full block
 coverage (2,000 cases each, fewer for the slow ones: ShiftStatistics 60,
 the map-wide loops and table scans 150-800); `--self-test` catches 9/9
-wrong pairings. Batches 9 and 10 have not had a whole-game check yet.
+wrong pairings. Batches 9, 10 and 11 have not had a whole-game check yet.
 Specs can now also set S3.EXE globals per case (`Spec.globals`).
 
 Next steps:
@@ -68,6 +68,13 @@ coverage; whole-game check NOT run yet):
   QueueMarkedTileNoOwner (0x51d3d0)
 - ui_state.cpp: ClampCamera (0x51b4d0)
 
+Batch 11 (2026-11-08, 2 functions; in-process + emulator tests, full
+coverage; whole-game check NOT run yet):
+- world_tables.cpp: ReplaceTileWord16AndQueue (0x51c560),
+  ReplaceTileByte10AndQueue (0x51c820): steps of the flood fills
+  0x51c6c0 / 0x51c8a0, which use the tile ring at world+0xdfdc48 as their
+  queue (good next candidates; they only call these steps).
+
 Waiting for emulator support: 0x514a00, 0x514a90, 0x514ae0, 0x514b40
 are leaf helpers of the game-end check 0x511c50 with ECX = CLogicThread
 (world via +0x3a0) and an output buffer pointer argument (int32[20]
@@ -90,7 +97,7 @@ byte), 0x5437b0 and 0x51e650 (objects other than the world, class
 unknown), 0x53f530 (CLogicThread, +0x84 unknown).
 
 Next steps:
-0. Run the whole-game check for batches 9 and 10 (record call counts).
+0. Run the whole-game check for batches 9, 10 and 11 (record call counts).
 1. Continue with leaf functions; then move up to their callers (e.g. the
    area flood fill 0x51a580 uses FindFreeId256; 0x4e6150/0x4e62c0/
    0x4e6430/0x4e6cd0 use AssignTileToArea/RemoveTileFromArea).
@@ -223,6 +230,14 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-08 (18): batch 11 (2 leaf functions, short session)
+
+- Replaced 0x51c560 and 0x51c820 (conditional tile-field replace + push
+  onto the tile ring; flood-fill steps). In-process tests incl. a mutation
+  test, emulator specs with 4/4 blocks covered. No game run this session.
+- Next: whole-game check for batches 9-11, then the flood fills
+  0x51c6c0/0x51c8a0 themselves, or map-file loading.
 
 ### 2026-11-08 (17): original source files
 
