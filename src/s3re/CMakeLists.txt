@@ -25,6 +25,7 @@ add_library(s3re SHARED
     game/godly_events.cpp
     game/goods_piles.cpp
     game/id_allocators.cpp
+    game/landscape_colours.cpp
     game/logic_thread.cpp
     game/map.cpp
     game/map_areas.cpp
@@ -41,6 +42,7 @@ add_library(s3re SHARED
     game/settler_queries.cpp
     game/settlers.cpp
     game/statistics.cpp
+    game/ui_overlays.cpp
     game/ui_state.cpp
     game/world_search.cpp
     game/winmain.cpp

@@ -15,7 +15,7 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 124 replacements pass the emulator suite with full block
+Status: all 133 replacements pass the emulator suite with full block
 coverage (2,000 cases each, fewer for the slow ones: the flood fills 150,
 ShiftStatistics 60, the map-wide loops and table scans 150-800);
 `--self-test` catches 11/11 wrong pairings. Batches 9-11 passed the
@@ -146,6 +146,29 @@ Batch 16 (2026-11-08, 1 function; whole-game check NOT run yet):
 area_piles.cpp: AddGoodsToPile (0x505650, 33 call sites; EAX reproduced
 step by step). Next similar ones: 0x5058c0 (probably taking goods from a
 pile) and 0x507f60, both DebugLog users near it.
+
+Batch 17 (2026-11-08, 9 functions; in-process + emulator tests, full
+coverage; whole-game check NOT run yet):
+- area_piles.cpp: PileIncAmountLeaving (0x5058c0; pile byte +0x2 is
+  "leaving", +0x4 "art"/kind, names from its DebugLog text)
+- player_queries.cpp: LogPlayerLandResources (0x507f60; DebugLog only)
+- flood_fills.cpp: SplitTileWord16Region (0x51c1f0), SplitTileByte10Region
+  (0x51caf0) (a tile leaves its region; a walk around it finds cut-off
+  parts, which get new ids), SplitWord16RegionsAround (0x51c080)
+- settler_queries.cpp: SendNearestWorkerToBuilding (0x4db500, 27 calls
+  from UpdatePhase2; worker lists at player record +0x20 + list*2)
+- ui_overlays.cpp: CLogicThread::DrawOverlayLine (0x523560),
+  DrawWorkAreaOverlay (0x523840; four rings by the offset table's +0x8
+  value, ring number in tile +0xc)
+- landscape_colours.cpp: Landscape::FindOrAddColour (0x54c940; class of
+  ECX not identified, a 255-colour palette)
+- DebugLog calls are now compared: the emulator records format and
+  arguments of every call (tools/emutest/emu.py), in-process tests can use
+  game/debug_log.h's DebugLogRecorder.
+Next candidates (all callees verified): 0x5236b0 (calls DrawOverlayLine,
+128 instructions), 0x4de0a0 (TileDistance, SetSettlerTarget,
+PileIncAmountLeaving; 255 instructions), 0x51b6f0 (blocks a tile; needs
+0x4e5d50, 330 instructions, first).
 
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
@@ -295,6 +318,24 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-08 (24): batch 17
+
+- Batch 17 (9 functions, list under "Current focus"): in-process 196/196
+  (18 new incl. 7 mutation tests); emulator specs with full coverage.
+- New check: DebugLog arguments are compared (emulator: hook on 0x428720
+  counts the format's conversions; in-process: DebugLogRecorder).
+- Found: DebugLog calls made from our DLL are captured but never written
+  to s3re.log, because LogMessage only logs call sites inside S3.EXE's
+  code (the batch-13 claim that replacements keep the diagnostics is
+  wrong in practice; fix by also accepting sites in s3re.dll).
+- Test pitfall: region splits free an id when a tile had no neighbour in
+  its region; with random ids shared by separate stretches, the freed id
+  is handed out again while in use and the flood fill loops for ever
+  (in the original too). Tests for chains of splits label each connected
+  stretch with its own id, as in the game.
+- The emulator calls the spec's argument generators in order, so they can
+  share state (line_args in specs.py correlates end points).
 
 ### 2026-11-08 (23): batch 16, full emulator suite
 

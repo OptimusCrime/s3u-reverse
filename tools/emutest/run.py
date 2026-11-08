@@ -12,6 +12,7 @@ the same arguments, registers and lazily-random world, and compares:
   - every byte written to the world or to S3.EXE's memory,
   - bytes popped from the stack on return,
   - callee-saved registers EBX, ESI, EDI, EBP (must also be preserved),
+  - the calls of the game's DebugLog: format and arguments, in order,
   - faults: if both fault the case is skipped as invalid input; if only one
     faults, that's a mismatch.
 
@@ -46,6 +47,10 @@ def first_difference(original: emu.Outcome, ours: emu.Outcome, mask: int) -> str
         return f"stack: original pops {original.popped} bytes, ours {ours.popped}"
     if mask and (original.eax & mask) != (ours.eax & mask):
         return f"EAX: original {original.eax:#010x}, ours {ours.eax:#010x} (mask {mask:#x})"
+    if original.debug_logs != ours.debug_logs:
+        def show(calls):
+            return "; ".join("(" + ", ".join(f"{v:#x}" for v in call) + ")" for call in calls) or "none"
+        return f"DebugLog calls: original {show(original.debug_logs)}, ours {show(ours.debug_logs)}"
     for name in emu.CALLEE_SAVED:
         if original.saved[name] != ours.saved[name]:
             return f"{name}: original {original.saved[name]:#x}, ours {ours.saved[name]:#x}"

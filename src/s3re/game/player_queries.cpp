@@ -14,13 +14,28 @@
 //   the type a full int32. ECX is not used (callers load the world into it).
 //   The original only sets AL (the rest of EAX is the caller's); every
 //   caller only tests AL. ret 8.
+// GameWorld::LogPlayerLandResources (0x00507f60): (player): only a
+//   DebugLog("Player %u   Land %u  Trees %u  Stone %u ..."). It looks at the
+//   19,995 tiles given by the offset table (int32 dx, dy in 16-byte entries
+//   at world+0x110a588) around the player's position (int32 +0x10/+0x14 of
+//   the player record), skipping tiles off the map (unsigned compare with
+//   the map size), and sums with a weight of 4 for entries below 3,500, 3
+//   below 8,000, 2 below 13,500, else 1: land (high nibble of terrain byte
+//   +0x6 is 1), swamp (terrain 0x15), stream (high nibble 6), trees (object
+//   byte +0x7 in 0x44..0x53), stone (object 0x73..0x7e, weight * (0x7f -
+//   object)), and the resource byte +0x11 (high nibble: 0 fish, 1 coal, 2
+//   iron, 3 gold, 4 gems, 5 sulfur; low nibble = amount, times the weight).
+//   Logs each sum halved. EAX (the only caller ignores it) = land / 2.
+//   thiscall, ret 4.
 
+#include "game/debug_log.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
 #include <cstdint>
+#include <vector>
 
 namespace s3re::game {
 
@@ -73,6 +88,76 @@ std::uint32_t __stdcall BuildingTypeAllowedForRace(std::uint32_t race, std::uint
     }
 }
 
+namespace {
+
+constexpr std::uint32_t kOffsetTable = 0x110a588;  // int32 dx, int32 dy, ... per 16-byte entry
+constexpr std::uint32_t kOffsetTableBytes = 16;
+constexpr std::uint32_t kSurveyEntries = 0x4e1b;
+constexpr std::uint32_t kPlayerX = 0x10;
+constexpr std::uint32_t kPlayerY = 0x14;
+constexpr std::uint32_t kTiles = 0x67444;
+constexpr std::uint32_t kTileTerrain = 0x6;
+constexpr std::uint32_t kTileObject = 0x7;
+constexpr std::uint32_t kTileResource = 0x11;
+constexpr std::uintptr_t kLandMessage = 0x006a63a4;  // "Player %u   Land %u  Trees %u ..."
+
+}  // namespace
+
+using LogLandFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t player);
+
+// Purpose: Debug output only: how much land and how many resources (trees, stone, coal, ...) lie around a
+// player's start position. Probably a leftover from tuning the maps or the computer players.
+std::uint32_t __fastcall GameWorld_LogPlayerLandResources(GameWorld* world, void*, std::uint32_t player) {
+    const std::uint32_t record = world_offset::kPlayerRecords + player * world_offset::kPlayerRecordBytes;
+    const std::uint32_t px = WorldField<std::uint32_t>(world, record + kPlayerX);
+    const std::uint32_t py = WorldField<std::uint32_t>(world, record + kPlayerY);
+    std::uint32_t land = 0, trees = 0, stone = 0, coal = 0, iron = 0, gold = 0, sulfur = 0, gems = 0, fish = 0,
+                  swamp = 0, stream = 0;
+    for (std::uint32_t i = 0; i < kSurveyEntries; ++i) {
+        const std::uint32_t weight = i < 3500 ? 4 : i < 8000 ? 3 : i < 13500 ? 2 : 1;
+        const std::uint32_t x = WorldField<std::uint32_t>(world, kOffsetTable + i * kOffsetTableBytes) + px;
+        const std::uint32_t y = WorldField<std::uint32_t>(world, kOffsetTable + i * kOffsetTableBytes + 4) + py;
+        const std::uint32_t size = WorldField<std::uint32_t>(world, world_offset::kMapSize);
+        if (x >= size || y >= size) {
+            continue;
+        }
+        const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
+        const std::uint32_t terrain = WorldField<std::uint8_t>(world, tile + kTileTerrain);
+        if ((terrain & 0xf0) == 0x10) {
+            land += weight;
+        }
+        if (terrain == 0x15) {
+            swamp += weight;
+        }
+        if ((terrain & 0xf0) == 0x60) {
+            stream += weight;
+        }
+        const std::uint32_t object = WorldField<std::uint8_t>(world, tile + kTileObject);
+        if (object >= 0x44 && object <= 0x53) {
+            trees += weight;
+        }
+        if (object >= 0x73 && object <= 0x7e) {
+            stone += (0x7f - object) * weight;
+        }
+        const std::uint32_t resource = WorldField<std::uint8_t>(world, tile + kTileResource);
+        const std::uint32_t amount = (resource & 0xf) * weight;
+        switch (resource & 0xf0) {
+        case 0x00: fish += amount; break;
+        case 0x10: coal += amount; break;
+        case 0x20: iron += amount; break;
+        case 0x30: gold += amount; break;
+        case 0x40: gems += amount; break;
+        case 0x50: sulfur += amount; break;
+        default: break;
+        }
+    }
+    GameDebugLog(kLandMessage, player, land >> 1, trees >> 1, stone >> 1, coal >> 1, iron >> 1, gold >> 1,
+                 sulfur >> 1, gems >> 1, fish >> 1, swamp >> 1, stream >> 1);
+    return land >> 1;
+}
+
+S3RE_HOOK(0x00507f60, GameWorld_LogPlayerLandResources, LogLandFn, Original_GameWorld_LogPlayerLandResources,
+          GameWorld_LogPlayerLandResources);
 S3RE_HOOK(0x00507f10, GameWorld_FindPlayerByField0C, FindPlayerFn,
           Original_GameWorld_FindPlayerByField0C, GameWorld_FindPlayerByField0C);
 S3RE_HOOK(0x004ffd60, BuildingTypeAllowedForRace, RaceTypeFn, Original_BuildingTypeAllowedForRace,
@@ -155,6 +240,86 @@ S3RE_TEST(BuildingTypeAllowedForRace_MatchesOriginal) {
             return;
         }
     }
+}
+
+namespace {
+
+// Wrong: counts gems as sulfur (rewrites resource nibble 4 to 5 around the call).
+std::uint32_t __fastcall WrongLogPlayerLandResources(GameWorld* world, void* edx, std::uint32_t player) {
+    std::vector<std::uint32_t> changed;
+    const std::uint32_t size = WorldField<std::uint32_t>(world, world_offset::kMapSize);
+    for (std::uint32_t x = 0; x < size; ++x) {
+        for (std::uint32_t y = 0; y < size; ++y) {
+            const std::uint32_t offset = kTiles + (x * 0x300 + y) * 24 + kTileResource;
+            std::uint8_t& r = WorldField<std::uint8_t>(world, offset);
+            if ((r & 0xf0) == 0x40) {
+                r = static_cast<std::uint8_t>(r + 0x10);
+                changed.push_back(offset);
+            }
+        }
+    }
+    const std::uint32_t result = GameWorld_LogPlayerLandResources(world, edx, player);
+    for (const std::uint32_t offset : changed) {
+        std::uint8_t& r = WorldField<std::uint8_t>(world, offset);
+        r = static_cast<std::uint8_t>(r - 0x10);
+    }
+    return result;
+}
+
+// The player records lie beyond the offset table.
+constexpr std::size_t kSurveyTestWorld = world_offset::kPlayerRecords + kPlayers * world_offset::kPlayerRecordBytes;
+
+void CompareLandSurvey(test::Context& ctx, LogLandFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kSurveyTestWorld);
+    // The real table is a spiral of offsets out to about 80 tiles; random
+    // offsets of -90..90 (and some wild ones) reach the same code.
+    for (std::uint32_t i = 0; i < kSurveyEntries; ++i) {
+        const bool wild = ctx.rng().Chance(1, 50);
+        worlds.Set<std::int32_t>(kOffsetTable + i * kOffsetTableBytes,
+                                 wild ? static_cast<std::int32_t>(ctx.rng().Next32())
+                                      : static_cast<std::int32_t>(ctx.rng().Below(181)) - 90);
+        worlds.Set<std::int32_t>(kOffsetTable + i * kOffsetTableBytes + 4,
+                                 static_cast<std::int32_t>(ctx.rng().Below(181)) - 90);
+    }
+    DebugLogRecorder logs;
+    static constexpr std::uint8_t kTerrain[] = {0x10, 0x15, 0x60, 0x1f, 0x65, 0x20, 0x00, 0x30};
+    static constexpr std::uint8_t kObject[] = {0, 0x43, 0x44, 0x50, 0x53, 0x54, 0x72, 0x73, 0x7e, 0x7f};
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : 64 + ctx.rng().Below(320);
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        for (std::uint32_t x = 0; x < size; ++x) {
+            for (std::uint32_t y = 0; y < size; ++y) {
+                const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
+                worlds.Set<std::uint8_t>(tile + kTileTerrain, kTerrain[ctx.rng().Below(8)]);
+                worlds.Set<std::uint8_t>(tile + kTileObject, kObject[ctx.rng().Below(10)]);
+                worlds.Set<std::uint8_t>(tile + kTileResource, static_cast<std::uint8_t>(ctx.rng().Next32() & 0x7f));
+            }
+        }
+        const std::uint32_t player = ctx.rng().Below(20);
+        const std::uint32_t record = world_offset::kPlayerRecords + player * world_offset::kPlayerRecordBytes;
+        worlds.Set<std::uint32_t>(record + kPlayerX, ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(size));
+        worlds.Set<std::uint32_t>(record + kPlayerY, ctx.rng().Below(size));
+        const std::uint32_t expected = Original_GameWorld_LogPlayerLandResources(worlds.original(), nullptr, player);
+        const std::vector<DebugLogCall> expectedLogs = logs.Take();
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr, player);
+        const std::vector<DebugLogCall> actualLogs = logs.Take();
+        if (!S3RE_EXPECT_EQ(expected, actual) || !S3RE_EXPECT(expectedLogs.size() == 1) ||
+            !S3RE_EXPECT(expectedLogs == actualLogs) || !worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: player %u, map %u", i, player, size);
+            return;
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_LogPlayerLandResources_MatchesOriginal) {
+    CompareLandSurvey(ctx, &GameWorld_LogPlayerLandResources, 40);
+}
+S3RE_TEST(GameWorld_LogPlayerLandResources_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareLandSurvey(probe, &WrongLogPlayerLandResources, 5);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 }  // namespace s3re::game

@@ -81,6 +81,7 @@ std::uint32_t __fastcall GameWorld_RandomBelow6(GameWorld* world, void* edx);
 // settler_queries.cpp
 std::uint32_t __fastcall GameWorld_SetSettlerTarget(GameWorld* world, void* edx, std::uint32_t settler,
                                                     std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall GameWorld_RemoveSettlerFromLists(GameWorld* world, void* edx, std::uint32_t settler);
 
 // ui_state.cpp
 std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void* edx);
@@ -89,6 +90,7 @@ std::uint32_t __fastcall GameWorld_CenterCameraOnTile(GameWorld* world, void* ed
 std::uint32_t __fastcall GameWorld_PushUiFeedback(GameWorld* world, void* edx, std::uint32_t value);
 
 // world_search.cpp
+void __fastcall GameWorld_NextSearchGeneration(GameWorld* world, void* edx);
 std::uint32_t __stdcall TileDistance(std::uint32_t x0, std::uint32_t y0, std::uint32_t x1,
                                      std::uint32_t y1);
 

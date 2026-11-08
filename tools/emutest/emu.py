@@ -16,6 +16,11 @@ hit. Tests can pin specific bytes (presets).
 
 Every run logs the bytes it overwrote; afterwards the writes are undone so
 the other function starts from the same state.
+
+Calls of the game's DebugLog (DEBUG_LOG, a bare `ret`) are recorded with
+their format address and as many argument dwords as the format string has
+conversions, so replacements must log the same messages with the same
+arguments in the same order.
 """
 
 from __future__ import annotations
@@ -28,8 +33,8 @@ from dataclasses import dataclass, field
 
 import capstone
 import pefile
-from unicorn import (UC_ARCH_X86, UC_HOOK_BLOCK, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE,
-                     UC_MODE_32, Uc, UcError)
+from unicorn import (UC_ARCH_X86, UC_HOOK_BLOCK, UC_HOOK_CODE, UC_HOOK_MEM_READ,
+                     UC_HOOK_MEM_WRITE, UC_MODE_32, Uc, UcError)
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_EBX, UC_X86_REG_ECX,
                                UC_X86_REG_EDI, UC_X86_REG_EDX, UC_X86_REG_EIP, UC_X86_REG_ESI,
                                UC_X86_REG_ESP)
@@ -38,6 +43,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 WORLD_BASE = 0x40000000
 WORLD_SIZE = 0x02000000  # 32 MB covers every world offset used so far
+DEBUG_LOG = 0x00428720
+_CONVERSION = re.compile(rb"%[-+ #0]*(?:\d+|\*)?(?:\.(?:\d+|\*))?[hlL]*([a-zA-Z%])")
 STACK_BASE = 0x00200000
 STACK_SIZE = 0x00100000
 RETURN_ADDRESS = 0x00010000  # sentinel: emulation stops when it is reached
@@ -113,6 +120,7 @@ class Outcome:
     saved: dict[str, int] = field(default_factory=dict)
     initial: dict[int, int] = field(default_factory=dict)  # compared address -> byte before
     final: dict[int, int] = field(default_factory=dict)    # compared address -> byte after
+    debug_logs: list[tuple[int, ...]] = field(default_factory=list)  # (format, args...) per DebugLog call
 
 
 class Emulator:
@@ -141,6 +149,8 @@ class Emulator:
                          end=WORLD_BASE + WORLD_SIZE - 1)
         self.uc.hook_add(UC_HOOK_MEM_WRITE, self._on_write)
         self.uc.hook_add(UC_HOOK_BLOCK, self._on_block)
+        self.uc.hook_add(UC_HOOK_CODE, self._on_debug_log, begin=DEBUG_LOG, end=DEBUG_LOG)
+        self.debug_logs: list[tuple[int, ...]] = []
 
     # -- symbols and static analysis ---------------------------------------
 
@@ -211,6 +221,17 @@ class Emulator:
             for i in range(size):
                 self.undo.setdefault(address + i, old[i])
 
+    def _on_debug_log(self, uc, address, size, user_data):
+        esp = uc.reg_read(UC_X86_REG_ESP)
+        fmt = struct.unpack("<I", bytes(uc.mem_read(esp + 4, 4)))[0]
+        base, image_size = self.exe_range
+        count = 0
+        if base <= fmt < base + image_size:
+            text = bytes(uc.mem_read(fmt, 256)).split(b"\0", 1)[0]
+            count = sum(1 for m in _CONVERSION.finditer(text) if m.group(1) != b"%")
+        args = struct.unpack(f"<{count}I", bytes(uc.mem_read(esp + 8, 4 * count))) if count else ()
+        self.debug_logs.append((fmt, *args))
+
     def _on_block(self, uc, address, size, user_data):
         low, high = self.cover_range
         if low <= address < high:
@@ -262,6 +283,7 @@ class Emulator:
 
         self.undo = {}
         self.cover_range = cover
+        self.debug_logs = []
         outcome = Outcome()
         try:
             uc.emu_start(address, RETURN_ADDRESS, count=MAX_INSTRUCTIONS)
@@ -271,6 +293,7 @@ class Emulator:
         except UcError as error:
             outcome.fault = f"{error} at {uc.reg_read(UC_X86_REG_EIP):#x}"
         outcome.eax = uc.reg_read(UC_X86_REG_EAX)
+        outcome.debug_logs = self.debug_logs
         outcome.popped = uc.reg_read(UC_X86_REG_ESP) - esp
         outcome.saved = {name: uc.reg_read(reg) for name, reg in CALLEE_SAVED.items()}
         undo, self.undo = self.undo, None

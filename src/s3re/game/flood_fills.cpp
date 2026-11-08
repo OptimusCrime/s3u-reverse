@@ -68,6 +68,31 @@
 //   of terrain kind 0x20 (terrain & 0xf0) gets a region through
 //   GameWorld::MergeTileWord16Regions. EAX (one caller tail-returns it) =
 //   world + 0x110a6bc (the loop's table pointer). ret 8.
+// GameWorld::SplitTileWord16Region (0x0051c1f0): (x, y): the tile leaves
+//   its region (word +0x16 = 0; `old` = its id before). Counts the offset
+//   table neighbours 1..6 that are in `old` (no map check). None: the id is
+//   freed (byte 0 at world+0xe125e8 + old). Only for 2..4 such neighbours
+//   it checks whether the region falls apart: the six neighbours
+//   (NeighbourX/NeighbourY, those on the map) in `old` get flag 0x10 of
+//   +0xa, the others lose it; starting at the last such neighbour s, facing
+//   the tile, it walks along the region (at each step it turns through the
+//   directions upwards from the current one until a tile on the map in
+//   `old` is found, moves there, clears its flag 0x10 and turns back by
+//   one). After each step: if no neighbour of the tile is flagged any more,
+//   the region is still connected and it stops. It is done when it is back
+//   on s facing the same way as on its first move, or when s has no way
+//   out at all; then every neighbour still flagged and in `old` gets a new
+//   id (FindFreeId8192, marked 1) for its part (FloodFillTileWord16). Tiles
+//   visited by the walk keep their flag 0x10 cleared. Callers ignore EAX.
+//   ret 8.
+// GameWorld::SplitTileByte10Region (0x0051caf0): the same for the byte
+//   +0x10 with the 256-id table at world+0xe114dc (FindFreeId256,
+//   FloodFillTileByte10). ret 8.
+// GameWorld::SplitWord16RegionsAround (0x0051c080): (x, y): for the offset
+//   table entries 0..18 (the tile and two rings), each tile on the map
+//   (unsigned compares, map size re-read) with a region id (word +0x16 !=
+//   0) gets GameWorld::SplitTileWord16Region. EAX = 0 (the loop counter).
+//   ret 8.
 // All thiscall (ECX = world).
 
 #include "game/replacements.h"
@@ -77,6 +102,7 @@
 #include "test/world_buffer.h"
 
 #include <cstdint>
+#include <vector>
 
 namespace s3re::game {
 
@@ -389,6 +415,167 @@ std::uint32_t __fastcall GameWorld_AssignWord16RegionsAround(GameWorld* world, v
 
 S3RE_HOOK(0x0051c0f0, GameWorld_AssignWord16RegionsAround, MergeFn, Original_GameWorld_AssignWord16RegionsAround,
           GameWorld_AssignWord16RegionsAround);
+
+namespace {
+
+// The two kinds of region ids that SplitTileRegion works on.
+struct Word16Regions {
+    using Id = std::uint16_t;
+    static constexpr std::uint32_t kField = kTileWord16;
+    static constexpr std::uint32_t kIds = kIds8192;
+    static std::uint32_t NewId(GameWorld* world) { return GameWorld_FindFreeId8192(world, nullptr); }
+    static void Fill(GameWorld* world, std::uint32_t x, std::uint32_t y, std::uint32_t id) {
+        GameWorld_FloodFillTileWord16(world, nullptr, x, y, id);
+    }
+};
+
+struct Byte10Regions {
+    using Id = std::uint8_t;
+    static constexpr std::uint32_t kField = kTileByte10;
+    static constexpr std::uint32_t kIds = kIds256;
+    static std::uint32_t NewId(GameWorld* world) { return GameWorld_FindFreeId256(world, nullptr); }
+    static void Fill(GameWorld* world, std::uint32_t x, std::uint32_t y, std::uint32_t id) {
+        GameWorld_FloodFillTileByte10(world, nullptr, x, y, id);
+    }
+};
+
+constexpr std::uint8_t kTileSplitMark = 0x10;  // in kTileFlags
+
+template <typename Regions>
+void SplitTileRegion(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+    auto id = [&](std::uint32_t tx, std::uint32_t ty) -> std::uint32_t {
+        return At<typename Regions::Id>(world, Tile(tx, ty) + Regions::kField);
+    };
+    auto flags = [&](std::uint32_t tx, std::uint32_t ty) -> std::uint8_t& {
+        return At<std::uint8_t>(world, Tile(tx, ty) + kTileFlags);
+    };
+    auto onMap = [&](std::uint32_t tx, std::uint32_t ty) { return tx < MapSize(world) && ty < MapSize(world); };
+
+    const std::uint32_t old = id(x, y);
+    At<typename Regions::Id>(world, Tile(x, y) + Regions::kField) = 0;
+    std::uint32_t same = 0;
+    for (std::uint32_t k = 1; k <= 6; ++k) {
+        if (id(OffsetNeighbourX(world, x, k), OffsetNeighbourY(world, y, k)) == old) {
+            ++same;
+        }
+    }
+    if (same == 0) {
+        At<std::uint8_t>(world, Regions::kIds + old) = 0;
+        return;
+    }
+    if (same < 2 || same > 4) {
+        return;
+    }
+    // Flag the neighbours in the region; remember the last one.
+    std::uint32_t last = 0;
+    for (std::uint32_t d = 0; d < 6; ++d) {
+        const std::uint32_t nx = NeighbourX(x, d);
+        const std::uint32_t ny = NeighbourY(y, d);
+        if (!onMap(nx, ny)) {
+            continue;
+        }
+        if (id(nx, ny) == old) {
+            flags(nx, ny) = static_cast<std::uint8_t>(flags(nx, ny) | kTileSplitMark);
+            last = d;
+        } else {
+            flags(nx, ny) = static_cast<std::uint8_t>(flags(nx, ny) & ~kTileSplitMark);
+        }
+    }
+    const std::uint32_t sx = NeighbourX(x, last);
+    const std::uint32_t sy = NeighbourY(y, last);
+    std::uint32_t direction = last + 3 >= 6 ? last - 3 : last + 3;  // facing the tile
+    flags(sx, sy) = static_cast<std::uint8_t>(flags(sx, sy) & ~kTileSplitMark);
+    std::uint32_t cx = sx;
+    std::uint32_t cy = sy;
+    bool started = false;
+    std::uint32_t firstDirection = 0;
+    bool split = false;
+    for (;;) {
+        // One step of the walk.
+        for (std::uint32_t tries = 1;; ++tries) {
+            const std::uint32_t nx = NeighbourX(cx, direction);
+            const std::uint32_t ny = NeighbourY(cy, direction);
+            if (onMap(nx, ny) && id(nx, ny) == old) {
+                if (started && cx == sx && cy == sy && firstDirection == direction) {
+                    split = true;
+                }
+                cx = nx;
+                cy = ny;
+                if (!started) {
+                    started = true;
+                    firstDirection = direction;
+                }
+                direction = direction == 0 ? 5 : direction - 1;
+                flags(nx, ny) = static_cast<std::uint8_t>(flags(nx, ny) & ~kTileSplitMark);
+                break;
+            }
+            if (tries == 6 && !started) {
+                split = true;
+            }
+            direction = direction == 5 ? 0 : direction + 1;
+            if (tries == 6) {
+                break;
+            }
+        }
+        bool flagged = false;
+        for (std::uint32_t d = 0; d < 6 && !flagged; ++d) {
+            flagged = (flags(NeighbourX(x, d), NeighbourY(y, d)) & kTileSplitMark) != 0;
+        }
+        if (!flagged) {
+            return;  // every neighbour was reached: still one region
+        }
+        if (split) {
+            break;
+        }
+    }
+    for (std::uint32_t d = 0; d < 6; ++d) {
+        const std::uint32_t nx = NeighbourX(x, d);
+        const std::uint32_t ny = NeighbourY(y, d);
+        if (id(nx, ny) == old && (flags(nx, ny) & kTileSplitMark) != 0) {
+            const std::uint32_t newId = Regions::NewId(world);
+            At<std::uint8_t>(world, Regions::kIds + newId) = 1;
+            Regions::Fill(world, nx, ny, newId);
+        }
+    }
+}
+
+}  // namespace
+
+using SplitFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+
+// Purpose: When a tile stops being part of the walkable network (e.g. something is built on it), its
+// region may fall apart into pieces that can no longer reach each other; each cut-off piece gets a new
+// region number.
+void __fastcall GameWorld_SplitTileWord16Region(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+    SplitTileRegion<Word16Regions>(world, x, y);
+}
+
+// Purpose: Like SplitTileWord16Region, for the other kind of region number.
+void __fastcall GameWorld_SplitTileByte10Region(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+    SplitTileRegion<Byte10Regions>(world, x, y);
+}
+
+// Purpose: After something changed near a tile, checks for every nearby tile with a region number whether
+// its region has fallen apart.
+std::uint32_t __fastcall GameWorld_SplitWord16RegionsAround(GameWorld* world, void*, std::uint32_t x,
+                                                            std::uint32_t y) {
+    for (std::uint32_t k = 0; k < 19; ++k) {
+        const std::uint32_t nx = OffsetNeighbourX(world, x, k);
+        const std::uint32_t ny = OffsetNeighbourY(world, y, k);
+        const std::uint32_t size = MapSize(world);
+        if (nx < size && ny < size && At<std::uint16_t>(world, Tile(nx, ny) + kTileWord16) != 0) {
+            GameWorld_SplitTileWord16Region(world, nullptr, nx, ny);
+        }
+    }
+    return 0;
+}
+
+S3RE_HOOK(0x0051c1f0, GameWorld_SplitTileWord16Region, SplitFn, Original_GameWorld_SplitTileWord16Region,
+          GameWorld_SplitTileWord16Region);
+S3RE_HOOK(0x0051caf0, GameWorld_SplitTileByte10Region, SplitFn, Original_GameWorld_SplitTileByte10Region,
+          GameWorld_SplitTileByte10Region);
+S3RE_HOOK(0x0051c080, GameWorld_SplitWord16RegionsAround, MergeFn, Original_GameWorld_SplitWord16RegionsAround,
+          GameWorld_SplitWord16RegionsAround);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -802,6 +989,213 @@ S3RE_TEST(GameWorld_AssignWord16RegionsAround_ComparisonDetectsWrongImplementati
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareAssignRegions(probe, &WrongAssignWord16RegionsAround, 500);
     S3RE_EXPECT(probe.failures() > 0);
+}
+
+namespace {
+
+// Wrong: never splits (a region stays one even when cut in two).
+void __fastcall WrongSplitTileWord16Region(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+    const std::uint32_t old = At<std::uint16_t>(world, Tile(x, y) + kTileWord16);
+    At<std::uint16_t>(world, Tile(x, y) + kTileWord16) = 0;
+    std::uint32_t same = 0;
+    for (std::uint32_t k = 1; k <= 6; ++k) {
+        if (At<std::uint16_t>(world, Tile(OffsetNeighbourX(world, x, k), OffsetNeighbourY(world, y, k)) + kTileWord16) == old) {
+            ++same;
+        }
+    }
+    if (same == 0) {
+        At<std::uint8_t>(world, kIds8192 + old) = 0;
+    }
+}
+
+// A small map of region ids (field of `bytes` bytes): ids 1..3 and 0 at
+// random, so that regions touch the tile in many ways; random flags (bit
+// 0x10 often set, to show which tiles the walk clears). The frame of tiles
+// just off the map has no region (as on real maps, whose border tiles never
+// get one; a neighbour off the map in a region would be flooded from x or
+// y = 0xffff). The ids table marks 1..3 (and more) in use, so a new id
+// never equals an old one.
+void SetUpSplit(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size, std::uint32_t field,
+                std::uint32_t bytes, std::uint32_t table, std::uint32_t mark, std::uint32_t tableSize) {
+    const std::uint32_t empty = ctx.rng().Below(5);  // in 8: share of tiles without a region
+    const std::uint32_t kinds = 1 + ctx.rng().Below(3);
+    for (std::uint32_t tx = 0xffffffffu; tx != size + 1; ++tx) {
+        for (std::uint32_t ty = 0xffffffffu; ty != size + 1; ++ty) {
+            const bool onMap = tx < size && ty < size;
+            const std::uint32_t value = !onMap || ctx.rng().Below(8) < empty ? 0 : 1 + ctx.rng().Below(kinds);
+            if (bytes == 2) {
+                worlds.Set<std::uint16_t>(Tile(tx, ty) + field, static_cast<std::uint16_t>(value));
+            } else {
+                worlds.Set<std::uint8_t>(Tile(tx, ty) + field, static_cast<std::uint8_t>(value));
+            }
+            worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileFlags, static_cast<std::uint8_t>(ctx.rng().Next32()));
+        }
+    }
+    const std::uint32_t used = 4 + ctx.rng().Below(40);
+    for (std::uint32_t id = 0; id < used + 2 && id < tableSize; ++id) {
+        worlds.Set<std::uint8_t>(table + id, static_cast<std::uint8_t>(id < used ? 1 : 0));
+    }
+    worlds.Set<std::uint32_t>(mark, ctx.rng().Below(used + 2));
+}
+
+// Like the game's regions: random walkable tiles, each connected stretch
+// (six neighbours) with its own id 1, 2, ..., none for the rest and the
+// frame off the map; ids in use marked in the table. (With ids shared by
+// separate stretches, a freed id could be handed out again while still in
+// use, and the flood fill would then loop for ever, in the original too.)
+void SetUpLabelledRegions(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size, std::uint32_t field,
+                          std::uint32_t bytes, std::uint32_t table, std::uint32_t mark, std::uint32_t tableSize) {
+    static constexpr std::int32_t kSteps[6][2] = {{1, 0}, {1, 1}, {0, 1}, {-1, 0}, {-1, -1}, {0, -1}};
+    const std::uint32_t density = 3 + ctx.rng().Below(5);  // of 8
+    std::vector<std::uint8_t> walkable(size * size);
+    for (auto& w : walkable) {
+        w = ctx.rng().Below(8) < density ? 1 : 0;
+    }
+    std::vector<std::uint32_t> label(size * size, 0);
+    std::uint32_t next = 1;
+    std::vector<std::uint32_t> queue;
+    for (std::uint32_t start = 0; start < size * size; ++start) {
+        if (!walkable[start] || label[start] != 0 || next + 1 >= tableSize) {
+            continue;
+        }
+        label[start] = next;
+        queue.assign(1, start);
+        while (!queue.empty()) {
+            const std::uint32_t t = queue.back();
+            queue.pop_back();
+            for (const auto& step : kSteps) {
+                const std::int32_t nx = static_cast<std::int32_t>(t / size) + step[0];
+                const std::int32_t ny = static_cast<std::int32_t>(t % size) + step[1];
+                if (nx < 0 || ny < 0 || nx >= static_cast<std::int32_t>(size) || ny >= static_cast<std::int32_t>(size)) {
+                    continue;
+                }
+                const std::uint32_t n = static_cast<std::uint32_t>(nx) * size + static_cast<std::uint32_t>(ny);
+                if (walkable[n] && label[n] == 0) {
+                    label[n] = next;
+                    queue.push_back(n);
+                }
+            }
+        }
+        ++next;
+    }
+    for (std::uint32_t tx = 0xffffffffu; tx != size + 1; ++tx) {
+        for (std::uint32_t ty = 0xffffffffu; ty != size + 1; ++ty) {
+            const bool onMap = tx < size && ty < size;
+            const std::uint32_t value = onMap ? label[tx * size + ty] : 0;
+            if (bytes == 2) {
+                worlds.Set<std::uint16_t>(Tile(tx, ty) + field, static_cast<std::uint16_t>(value));
+            } else {
+                worlds.Set<std::uint8_t>(Tile(tx, ty) + field, static_cast<std::uint8_t>(value));
+            }
+            worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileFlags, static_cast<std::uint8_t>(ctx.rng().Next32()));
+        }
+    }
+    for (std::uint32_t id = 0; id < next + 2 && id < tableSize; ++id) {
+        worlds.Set<std::uint8_t>(table + id, static_cast<std::uint8_t>(id != 0 && id < next ? 1 : 0));
+    }
+    worlds.Set<std::uint32_t>(mark, ctx.rng().Below(next + 2));
+}
+
+// What to do when the tile itself has no region id (field `field`): give it
+// one (random regions), skip the case (labelled regions, where an id given
+// to it would be shared), or call anyway (SplitWord16RegionsAround).
+enum class Unlabelled { kGiveId, kSkip, kCall };
+
+template <typename Fn, typename Setup>
+void CompareSplit(test::Context& ctx, Fn original, Fn candidate, int cases, bool edges, Setup setup,
+                  Unlabelled unlabelled = Unlabelled::kGiveId, std::uint32_t field = kTileWord16) {
+    test::WorldPair worlds(ctx, kMergeTestWorld);
+    SetUpNeighbourOffsets(worlds);
+    static constexpr std::int32_t kRing2[12][2] = {{2, 0}, {2, 1}, {2, 2}, {1, 2}, {0, 2}, {-1, 1},
+                                                   {-2, 0}, {-2, -1}, {-2, -2}, {-1, -2}, {0, -2}, {1, -1}};
+    for (std::uint32_t k = 0; k < 12; ++k) {
+        worlds.Set<std::int32_t>(kOffsetTable + (7 + k) * kOffsetTableBytes, kRing2[k][0]);
+        worlds.Set<std::int32_t>(kOffsetTable + (7 + k) * kOffsetTableBytes + 4, kRing2[k][1]);
+    }
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t size = 6 + ctx.rng().Below(22);
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        // Mostly inside; with `edges` sometimes on the edge of the map.
+        const bool edge = edges && ctx.rng().Chance(1, 6);
+        const std::uint32_t x = edge ? (ctx.rng().Chance(1, 2) ? 0 : size - 1) : 1 + ctx.rng().Below(size - 2);
+        const std::uint32_t y = edge && ctx.rng().Chance(1, 2) ? (ctx.rng().Chance(1, 2) ? 0 : size - 1) : 1 + ctx.rng().Below(size - 2);
+        setup(worlds, size);
+        // The tile itself is in a region (its callers only call it then).
+        const bool none = field == kTileWord16 ? At<std::uint16_t>(worlds.original(), Tile(x, y) + kTileWord16) == 0
+                                               : At<std::uint8_t>(worlds.original(), Tile(x, y) + kTileByte10) == 0;
+        if (none && unlabelled == Unlabelled::kSkip) {
+            continue;
+        }
+        if (unlabelled == Unlabelled::kGiveId) {
+            if (At<std::uint16_t>(worlds.original(), Tile(x, y) + kTileWord16) == 0) {
+                worlds.Set<std::uint16_t>(Tile(x, y) + kTileWord16, 1);
+            }
+            if (At<std::uint8_t>(worlds.original(), Tile(x, y) + kTileByte10) == 0) {
+                worlds.Set<std::uint8_t>(Tile(x, y) + kTileByte10, 1);
+            }
+        }
+        const std::uint32_t expected = original(worlds.original(), nullptr, x, y);
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y);
+        if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 32 == 31 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 31 before it): (%u, %u) map %u", i, x, y, size);
+            return;
+        }
+    }
+}
+
+// The split functions return nothing; compare them through a wrapper that returns 0.
+template <SplitFn* Fn>
+std::uint32_t __fastcall ReturnZero(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
+    (*Fn)(world, edx, x, y);
+    return 0;
+}
+
+SplitFn g_ourSplitWord16 = &GameWorld_SplitTileWord16Region;
+SplitFn g_ourSplitByte10 = &GameWorld_SplitTileByte10Region;
+SplitFn g_wrongSplitWord16 = &WrongSplitTileWord16Region;
+
+void CompareWord16Split(test::Context& ctx, MergeFn candidate, int cases) {
+    CompareSplit(ctx, &ReturnZero<&Original_GameWorld_SplitTileWord16Region>, candidate, cases, true,
+                 [&](test::WorldPair& worlds, std::uint32_t size) {
+                     SetUpSplit(ctx, worlds, size, kTileWord16, 2, kIds8192, 0xe125e4, 0x2000);
+                 });
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_SplitTileWord16Region_MatchesOriginal) {
+    CompareWord16Split(ctx, &ReturnZero<&g_ourSplitWord16>, 5000);
+}
+S3RE_TEST(GameWorld_SplitTileWord16Region_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareWord16Split(probe, &ReturnZero<&g_wrongSplitWord16>, 1000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+S3RE_TEST(GameWorld_SplitTileByte10Region_MatchesOriginal) {
+    CompareSplit(ctx, &ReturnZero<&Original_GameWorld_SplitTileByte10Region>, &ReturnZero<&g_ourSplitByte10>, 5000, true,
+                 [&](test::WorldPair& worlds, std::uint32_t size) {
+                     SetUpSplit(ctx, worlds, size, kTileByte10, 1, kIds256, 0xe114d8, 0x100);
+                 });
+}
+S3RE_TEST(GameWorld_SplitTileWord16Region_LabelledRegionsMatchOriginal) {
+    CompareSplit(ctx, &ReturnZero<&Original_GameWorld_SplitTileWord16Region>, &ReturnZero<&g_ourSplitWord16>, 3000,
+                 true, [&](test::WorldPair& worlds, std::uint32_t size) {
+                     SetUpLabelledRegions(ctx, worlds, size, kTileWord16, 2, kIds8192, 0xe125e4, 0x2000);
+                 }, Unlabelled::kSkip, kTileWord16);
+}
+S3RE_TEST(GameWorld_SplitTileByte10Region_LabelledRegionsMatchOriginal) {
+    CompareSplit(ctx, &ReturnZero<&Original_GameWorld_SplitTileByte10Region>, &ReturnZero<&g_ourSplitByte10>, 3000,
+                 true, [&](test::WorldPair& worlds, std::uint32_t size) {
+                     SetUpLabelledRegions(ctx, worlds, size, kTileByte10, 1, kIds256, 0xe114d8, 0x100);
+                 }, Unlabelled::kSkip, kTileByte10);
+}
+S3RE_TEST(GameWorld_SplitWord16RegionsAround_MatchesOriginal) {
+    // Labelled regions: it splits several tiles in a row, and a region id
+    // freed by one split must not be in use elsewhere.
+    CompareSplit(ctx, Original_GameWorld_SplitWord16RegionsAround, &GameWorld_SplitWord16RegionsAround, 2000, false,
+                 [&](test::WorldPair& worlds, std::uint32_t size) {
+                     SetUpLabelledRegions(ctx, worlds, size, kTileWord16, 2, kIds8192, 0xe125e4, 0x2000);
+                 }, Unlabelled::kCall);
 }
 
 }  // namespace s3re::game

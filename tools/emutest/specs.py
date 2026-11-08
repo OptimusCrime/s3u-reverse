@@ -951,6 +951,235 @@ def pile_add(rng, pool, args):
             (AREAS + 0xa + (area * 0x170 + goods) * 2, 0 if rng.random() < 0.3 else rng.randrange(1, 0x1000), 2)]
 
 
+# -- batch 17 ---------------------------------------------------------------
+
+BUILDING_COUNT_FIELD = 0x1499e60
+
+
+def pile_leaving(rng, pool, args):
+    """A pile on the map with its links, often all units leaving after this
+    one, sometimes 8+ leaving (DebugLog and the building scan, with a small
+    building count and maybe a building referring to the pile)."""
+    record = PILES + args[0] * PILE_BYTES
+    x, y = rng.randrange(384), rng.randrange(384)
+    leaving = rng.randrange(12) if rng.random() < 0.85 else rng.getrandbits(8)
+    amount = (leaving + 1) & 0xFF if rng.random() < 0.5 else rng.randrange(12)
+    goods = rng.randrange(36)
+    area = rng.randrange(AREA_LIMIT)
+    count = 0 if rng.random() < 0.15 else rng.randrange(1, 60)
+    fields = [(record + 0x4, rng.choice([0xff, 0xfe, 0xff, 0, 1, 7]), 1), (record + 0x2, leaving, 1),
+              (record + 0x1, amount, 1), (record + 0x0, goods, 1), (record + 0x6, x, 2), (record + 0x8, y, 2),
+              (record + 0xa, 0 if rng.random() < 0.4 else rng.randrange(1, 0x1000), 2),
+              (record + 0xc, 0 if rng.random() < 0.4 else rng.randrange(1, 0x1000), 2),
+              (tile_area_offset(x, y), area, 2), (BUILDING_COUNT_FIELD, count, 4)]
+    for b in range(1, count + 1):
+        for word in (0x10, 0x12, 0x14, 0xe):
+            fields.append((BUILDINGS + b * BUILDING_BYTES + word, rng.randrange(0x1000, 0x10000), 2))
+    if count and rng.random() < 0.6:
+        b = rng.randrange(1, count + 1)
+        fields.append((BUILDINGS + b * BUILDING_BYTES + rng.choice((0x10, 0x12, 0x14, 0xe)), args[0], 2))
+    return fields
+
+
+def player_on_map(rng, pool, args):
+    record = PLAYER_RECORDS + args[0] * PLAYER_RECORD_BYTES
+    n = rng.choice([384, rng.randrange(40, 384)])
+    return [(MAP_SIZE, n, 4), (record + 0x10, rng.randrange(n), 4), (record + 0x14, rng.randrange(n), 4)]
+
+
+def colour_table(rng, pool, args):
+    """World +0xa0 points at a 257-slot uint16 table in scratch 0: slots
+    1..n-1 filled (sometimes all), sometimes holding the colour asked for."""
+    fields = [(0xa0, WORLD_BASE + SCRATCH, 4)]
+    filled = 257 if rng.random() < 0.3 else rng.randrange(257)
+    for slot in range(1, 257):
+        value = rng.randrange(1, 0x10000) if slot < filled else 0
+        fields.append((SCRATCH + slot * 2, value, 2))
+    if rng.random() < 0.4:
+        slot = rng.randrange(1, 257)
+        fields.append((SCRATCH + slot * 2, args[0] & 0xFFFF, 2))
+    return fields
+
+
+def colour_arg(rng, pool):
+    r = rng.random()
+    if r < 0.05:
+        return rng.getrandbits(16) << 16  # low word 0
+    return rng.getrandbits(32)
+
+
+def line_args() -> list[Generator]:
+    """(x0, y0, x1, y1, value): end points on the map, often close; rarely
+    a far end point whose tile address wraps around to (x0, y0) (deltas of
+    0x50000000 and -0x60000000: distance 2^31 or more)."""
+    state = {}
+
+    def x0(rng, pool):
+        state["far"] = rng.random() < 0.05
+        state["x0"] = rng.randrange(384)
+        return state["x0"]
+
+    def y0(rng, pool):
+        state["y0"] = rng.randrange(384)
+        return state["y0"]
+
+    def x1(rng, pool):
+        if state["far"]:
+            return (state["x0"] + 0x50000000) & 0xFFFFFFFF
+        if rng.random() < 0.3:
+            return min(383, max(0, state["x0"] + rng.randint(-12, 12)))
+        return rng.randrange(384)
+
+    def y1(rng, pool):
+        if state["far"]:
+            return (state["y0"] - 0x60000000) & 0xFFFFFFFF
+        if rng.random() < 0.3:
+            return min(383, max(0, state["y0"] + rng.randint(-12, 12)))
+        return rng.randrange(384)
+
+    return [x0, y0, x1, y1, anything]
+
+
+def line_map(rng, pool, args):
+    return [(MAP_SIZE, rng.choice([384, rng.randrange(1, 384), rng.getrandbits(32)]), 4)]
+
+
+WORK_AREA_TYPES = {0x02: 3000, 0x03: 3000, 0x05: 1500, 0x0e: 150, 0x18: 300, 0x19: 2000, 0x1e: 800,
+                   0x24: 400, 0x33: 1500}
+
+
+def work_area(rng, pool, args):
+    """The building's type (mostly one with a small working area), buildup,
+    centre and tile; the offset table up to the type's entry with
+    nondecreasing values (sometimes all equal: nothing drawn) and small
+    offsets; areas of the tiles near the centre 0 or 1."""
+    record = BUILDINGS + args[0] * BUILDING_BYTES
+    r = rng.random()
+    if r < 0.6:
+        btype = rng.choice([0x0e, 0x18, 0x24, 0x1e])
+    elif r < 0.85:
+        btype = rng.choice(list(WORK_AREA_TYPES))
+    else:
+        btype = rng.choice([0, 1, 0x30, 0xff, rng.randrange(256)])
+    n = rng.choice([384, rng.randrange(20, 384)])
+    cx, cy = rng.randrange(n), rng.randrange(n)
+    bx, by = min(n - 1, max(0, cx + rng.randint(-3, 3))), min(n - 1, max(0, cy + rng.randint(-3, 3)))
+    fields = [(MAP_SIZE, n, 4), (record + 0x6, btype, 1),
+              (record + 0x21, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1),
+              (record + 0xa, bx, 2), (record + 0xc, by, 2), (tile_area_offset(bx, by), 1, 2),
+              (SEARCH_GENERATION, rng.choice([0xff, rng.randrange(255)]), 1)]
+    for field in ((0x30, 0x32), (0xe, 0x14)):
+        fields += [(record + field[0], cx, 2), (record + field[1], cy, 2)]
+    entries = WORK_AREA_TYPES.get(btype, 0)
+    flat = rng.random() < 0.05
+    value = rng.randrange(3)
+    reach = 1
+    for i in range(entries + 1):
+        if not flat and rng.random() < 0.4:
+            value += rng.randrange(1, 3)
+        if i % 60 == 59:
+            reach += 1
+        fields += [(NEIGHBOUR_OFFSETS + i * 16, rng.randint(-reach, reach) & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + i * 16 + 4, rng.randint(-reach, reach) & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + i * 16 + 8, value, 4)]
+    if flat or rng.random() < 0.05:
+        fields.append((NEIGHBOUR_OFFSETS + 8, value + 5, 4))  # entry 0 above r: nothing drawn
+    for x in range(max(cx - reach - 1, 0), min(cx + reach + 2, n)):
+        for y in range(max(cy - reach - 1, 0), min(cy + reach + 2, n)):
+            fields.append((tile_area_offset(x, y), 1 if rng.random() < 0.7 else 0, 2))
+    return fields
+
+
+RING2 = [(2, 0), (2, 1), (2, 2), (1, 2), (0, 2), (-1, 1), (-2, 0), (-2, -1), (-2, -2), (-1, -2), (0, -2), (1, -1)]
+
+
+def split_regions(field: int, size: int, ids_mark: int, ids_table: int, ids_count: int,
+                  labelled: bool | float) -> Callable:
+    """A 12x12 map: region ids in tile `field` (random 1..3 / 0, or each
+    connected stretch its own id), the frame off the map without one, the
+    real offsets in entries 0..18, random flags, and the ids in use marked
+    (so a new id never equals one in use). A float `labelled` is the
+    chance per case of labelled regions."""
+    def presets(rng, pool, args):
+        n = 12
+        labelled_case = labelled if isinstance(labelled, bool) else rng.random() < labelled
+        fields = [(MAP_SIZE, n, 4)]
+        for k, (dx, dy) in enumerate(AROUND + RING2):
+            fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                       (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4)]
+        density = rng.randrange(3, 8)
+        walk = {(x, y): rng.randrange(8) < density for x in range(n) for y in range(n)}
+        label = {}
+        if labelled_case:
+            next_id = 1
+            for start in walk:
+                if not walk[start] or start in label:
+                    continue
+                label[start] = next_id
+                stack = [start]
+                while stack:
+                    x, y = stack.pop()
+                    for dx, dy in AROUND[1:]:
+                        q = (x + dx, y + dy)
+                        if walk.get(q) and q not in label:
+                            label[q] = next_id
+                            stack.append(q)
+                next_id += 1
+        else:
+            kinds = rng.randrange(1, 4)
+            label = {t: rng.randrange(1, kinds + 1) for t in walk if walk[t]}
+            next_id = 4
+        if args[0] < n and args[1] < n and (args[0], args[1]) not in label and not labelled_case:
+            label[(args[0], args[1])] = 1
+        for x in range(-1, n + 1):
+            for y in range(-1, n + 1):
+                t = tile(x & 0xFFFFFFFF, y & 0xFFFFFFFF)
+                fields += [(t + field, label.get((x, y), 0), size), (t + 0xa, rng.getrandbits(8), 1)]
+        for i in range(next_id + 2):
+            fields.append((ids_table + i, 1 if 0 < i < next_id else 0, 1))
+        fields.append((ids_mark, rng.randrange(next_id + 2), 4))
+        return fields
+    return presets
+
+
+def worker_and_list(rng, pool, args):
+    """A building on the map, its player's list args[1] of settlers near it
+    (on the map), their tiles in the building's region or another; the
+    chosen one's lists for RemoveSettlerFromLists short; event ring indices
+    in range."""
+    record = BUILDINGS + args[0] * BUILDING_BYTES
+    player = rng.randrange(20)
+    x, y = rng.randrange(2, 382), rng.randrange(2, 382)
+    region = rng.randrange(1, 3)
+    fields = [(MAP_SIZE, 384, 4), (record + 0x0, player, 1), (record + 0xa, x, 2), (record + 0xc, y, 2),
+              (record + 0x2, x + rng.randrange(3), 2), (record + 0x4, y + rng.randrange(3), 2),
+              (tile(x, y) + 0x10, region, 1),
+              (0x366fc, rng.randrange(1000), 4), (0x32870, 0, 4), (0x32874, 0, 4)]
+    head = PLAYER_RECORDS + 0x20 + (args[1] + player * (PLAYER_RECORD_BYTES // 2)) * 2
+    length = 0 if rng.random() < 0.1 else rng.randint(1, 10)
+    settlers = rng.sample(range(1, 0x3000), length)
+    fields.append((head, settlers[0] if settlers else 0, 2))
+    owners = set()
+    for i, settler in enumerate(settlers):
+        s = SETTLERS + settler * SETTLER_BYTES
+        sx = min(383, max(0, x + rng.randint(-40, 40)))
+        sy = min(383, max(0, y + rng.randint(-40, 40)))
+        owner = rng.randrange(20)
+        owners.add(owner)
+        fields += [(s + 0x12, settlers[i - 1] if i else 0, 2),
+                   (s + 0x10, settlers[i + 1] if i + 1 < length else 0, 2),
+                   (s + 0x4, sx, 2), (s + 0x6, sy, 2), (s + 0x0, owner, 1),
+                   (tile(sx, sy) + 0x10, region if rng.random() < 0.7 else 3 - region, 1)]
+    for owner in owners:
+        for i in range(10):
+            fields.append((0x11940bc + owner * 40 + i * 4, rng.randrange(4), 4))
+    return fields
+
+
+def worker_globals(rng, pool, args):
+    return [(0x7ad620 + i * 2, rng.randrange(4), 2) for i in range(10)]
+
+
 TILE = between(2, 381)  # tiles at least 2 from the edge of a 384 map
 
 SPECS = [
@@ -1206,6 +1435,26 @@ SPECS = [
     Spec("GameWorld_RemoveSettlerFromLists", 0x0050dff0, "thiscall", [between(1, 8)],
          presets=settler_lists_world, globals=settler_lists_globals, max_cases=500),
     Spec("GameWorld_AddGoodsToPile", 0x00505650, "thiscall", [between(1, 0xfff)], presets=pile_add),
+    # batch 17
+    Spec("GameWorld_PileIncAmountLeaving", 0x005058c0, "thiscall", [between(1, 0xfff)], presets=pile_leaving,
+         max_cases=1000),
+    Spec("GameWorld_LogPlayerLandResources", 0x00507f60, "thiscall", [below(20)], presets=player_on_map,
+         max_cases=6),
+    Spec("Landscape_FindOrAddColour", 0x0054c940, "thiscall", [colour_arg], presets=colour_table,
+         max_cases=500),
+    Spec("CLogicThread_DrawOverlayLine", 0x00523560, "logicthread", line_args(), presets=line_map,
+         max_cases=500),
+    Spec("CLogicThread_DrawWorkAreaOverlay", 0x00523840, "logicthread", [between(1, 0x100)],
+         presets=work_area, max_cases=150),
+    Spec("GameWorld_SplitTileWord16Region", 0x0051c1f0, "thiscall", [below(12), below(12)], eax_mask=0,
+         presets=split_regions(0x16, 2, 0xe125e4, 0xe125e8, 0x2000, 0.1)),
+    Spec("GameWorld_SplitTileByte10Region", 0x0051caf0, "thiscall", [below(12), below(12)], eax_mask=0,
+         presets=split_regions(0x10, 1, 0xe114d8, 0xe114dc, 0x100, 0.1)),
+    Spec("GameWorld_SplitWord16RegionsAround", 0x0051c080, "thiscall", [between(1, 10), between(1, 10)],
+         presets=split_regions(0x16, 2, 0xe125e4, 0xe125e8, 0x2000, True), max_cases=200),
+    Spec("GameWorld_SendNearestWorkerToBuilding", 0x004db500, "thiscall",
+         [between(1, 0x800), below(40), lambda rng, pool: rng.choice([rng.randrange(70), rng.getrandbits(32)])],
+         presets=worker_and_list, globals=worker_globals, max_cases=1000),
 ]
 
 

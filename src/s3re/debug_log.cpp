@@ -11,6 +11,7 @@
 // points into S3.EXE's data are formatted, and formatting is guarded by SEH
 // (a %s argument could be a bad pointer).
 
+#include "game/debug_log.h"
 #include "hooks.h"
 #include "log.h"
 
@@ -20,6 +21,8 @@
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
+#include <vector>
 
 namespace s3re::game {
 
@@ -91,10 +94,45 @@ using DebugLogFn = void(__cdecl*)(const char* format, ...);
 
 namespace {
 
+std::vector<DebugLogCall>* g_capture = nullptr;
+
+// How many arguments a printf format consumes (conversions other than %%).
+std::uint32_t CountConversions(const char* format) {
+    std::uint32_t count = 0;
+    for (const char* p = format; *p != 0; ++p) {
+        if (*p != '%') {
+            continue;
+        }
+        ++p;
+        while (*p != 0 && std::strchr("-+ #0123456789.*hlL", *p) != nullptr) {
+            ++p;
+        }
+        if (*p == 0) {
+            break;
+        }
+        if (*p != '%') {
+            ++count;
+        }
+    }
+    return count;
+}
+
 // `stack` is ESP at entry: [0] return address, [1] format, [2...] arguments.
 void __stdcall LogMessage(const std::uint32_t* stack) {
     const std::uintptr_t site = stack[0];
     const std::uintptr_t formatAddress = stack[1];
+    if (g_capture != nullptr && formatAddress >= kGameDataBegin && formatAddress < kGameDataEnd) {
+        DebugLogCall call{};
+        call.format = static_cast<std::uint32_t>(formatAddress);
+        call.count = CountConversions(reinterpret_cast<const char*>(formatAddress));
+        if (call.count > kDebugLogCaptureArgs) {
+            call.count = kDebugLogCaptureArgs;
+        }
+        for (std::uint32_t i = 0; i < call.count; ++i) {
+            call.args[i] = stack[2 + i];
+        }
+        g_capture->push_back(call);
+    }
     if (site < kGameCodeBegin || site >= kGameCodeEnd || formatAddress < kGameDataBegin ||
         formatAddress >= kGameDataEnd) {
         return;
@@ -133,5 +171,9 @@ __declspec(naked) void __cdecl Hooked_DebugLog(const char* /*format*/, ...) {
 }
 
 S3RE_PASSTHROUGH(0x00428720, DebugLog, DebugLogFn, Original_DebugLog, Hooked_DebugLog);
+
+void SetDebugLogCapture(std::vector<DebugLogCall>* calls) {
+    g_capture = calls;
+}
 
 }  // namespace s3re::game
