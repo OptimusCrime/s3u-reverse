@@ -649,6 +649,87 @@ def area_piles(rng, pool, args):
     return fields
 
 
+# --- batch 13 ---------------------------------------------------------------
+
+
+def landscape(offsets: int, reach_near: int = 5, reach_far: int = 12) -> Callable:
+    """A 64..80 map (one 64-tile block, so few rounds) of 8x8 patches of
+    terrain 0x20/0x21 with some noise, mostly free tiles, the first
+    `offsets` offset entries small, and a random RNG state."""
+    def presets(rng, pool, args):
+        n = rng.randint(64, 80) if rng.random() < 0.9 else rng.choice([0, 63, 128])
+        fields = [(MAP_SIZE, n, 4)]
+        for x in range(min(n, 80)):
+            for y in range(min(n, 80)):
+                patch = ((x >> 3) + (y >> 3) * 3) & 1
+                terrain = (0x20, 0x21)[patch] if rng.random() < 0.94 else rng.choice([0x20, 0x21, 0x80, 0x10])
+                fields += [(tile(x, y) + 0x6, terrain, 1),
+                           (tile(x, y) + 0x7, 0 if rng.random() < 0.97 else 1, 1),
+                           (tile(x, y) + 0xa, rng.getrandbits(8) & (0xfe if rng.random() < 0.97 else 0xff), 1),
+                           (tile(x, y) + 0x11, 0 if rng.random() < 0.75 else 5, 1)]
+        for k in range(offsets):
+            reach = reach_near if k < 96 else reach_far
+            fields += [(NEIGHBOUR_OFFSETS + k * 16, rng.randint(-reach, reach) & 0xFFFFFFFF, 4),
+                       (NEIGHBOUR_OFFSETS + k * 16 + 4, rng.randint(-reach, reach) & 0xFFFFFFFF, 4)]
+        return fields
+    return presets
+
+
+def block_mode_extra(rng, pool):
+    return rng.choice([0, 1, 2, 3, rng.getrandbits(32)])
+
+
+def input_goods(rng, pool, args):
+    """A building of a random type, often a construction site."""
+    record = BUILDINGS + args[0] * BUILDING_BYTES
+    kind = rng.randrange(0x50) if rng.random() < 0.95 else rng.randrange(256)
+    return [(record + 0x6, kind, 1),
+            (record + 0x21, rng.randrange(1, 256) if rng.random() < 0.3 else 0, 1)]
+
+
+def mana(rng, pool, args):
+    record = PLAYER_RECORDS + args[0] * PLAYER_RECORD_BYTES
+    def value():
+        return rng.choice([rng.getrandbits(32), rng.randrange(0x200), rng.getrandbits(32) | 0x80000000])
+    fields = [(record + 0x4, rng.randrange(5), 4), (record + 0x8c, value(), 4)]
+    for slot in range(9):
+        fields.append((record + 0x94 + slot * 4, value(), 4))
+    return fields
+
+
+def tile_pile(rng, pool, args):
+    t = tile(args[0], args[1])
+    pile = 0 if rng.random() < 0.1 else rng.randrange(1, 0x1000)
+    area = rng.randrange(AREA_LIMIT)
+    goods = rng.randrange(36)
+    fields = [(t + 0x2, pile, 2), (t + 0x14, area, 2),
+              (t + 0xa, rng.getrandbits(8) & (0xff if rng.random() < 0.15 else 0xdf), 1),
+              (t + 0x8, 0xff if rng.random() < 0.1 else rng.randrange(20), 1)]
+    if pile:
+        head = 0 if rng.random() < 0.3 else rng.randrange(1, 0x1000)
+        fields += [(PILES + pile * PILE_BYTES + 0x0, goods, 1),
+                   (AREAS + 0xa + (area * 0x170 + goods) * 2, head, 2)]
+    return fields
+
+
+PRESENCE = 0xde7448
+
+
+def presence(rng, pool, args):
+    """Sparse presence bytes in the 26x26 blocks of a 384 map (or smaller)."""
+    n = rng.choice([384, rng.randrange(16, 384)])
+    fields = [(MAP_SIZE, n, 4), (0xde7444, rng.randrange(20), 4),
+              (PLAYER_RECORDS + args[3] * PLAYER_RECORD_BYTES + 0xc,
+               rng.randrange(20) if rng.random() < 0.9 else rng.getrandbits(32), 4)]
+    density = rng.random() * 0.05
+    for bx in range(26):
+        for by in range(26):
+            for index in range(20):
+                fields.append((PRESENCE + bx * 960 + by * 20 + index,
+                               1 if rng.random() < density else 0, 1))
+    return fields
+
+
 TILE = between(2, 381)  # tiles at least 2 from the edge of a 384 map
 
 SPECS = [
@@ -845,8 +926,36 @@ SPECS = [
          [below(4, 0.1), scratch(0), between(-2, 20)], presets=owned_points),
     Spec("CLogicThread_CountTilesOwnedByEither", 0x00514ae0, "logicthread",
          [below(4, 0.1), below(4, 0.1), scratch(0), between(-2, 20)], presets=owned_points),
-    Spec("CLogicThread_SumAreaGoodsPerPlayer", 0x00514b40, "logicthread", [scratch(0)],
+    Spec("CLogicThread_SumAreaGoods10PerPlayer", 0x00514b40, "logicthread", [scratch(0)],
          presets=area_piles),
+    # map generation (map_generation.cpp)
+    Spec("GameWorld_ScatterTileByte11", 0x0051ad40, "thiscall", [anything, below(41)], eax_mask=0,
+         presets=landscape(96), max_cases=300),
+    Spec("GameWorld_ScatterTerrainNear", 0x0051aed0, "thiscall",
+         [one_of(0x20, 0x21, 0x80), anything, between(-3, 24)], eax_mask=0,
+         presets=landscape(0), max_cases=300),
+    Spec("GameWorld_ScatterObjects", 0x0051b010, "thiscall",
+         [one_of(0x20, 0x21, 0x80), anything, below(12), block_mode_extra, block_mode_extra],
+         eax_mask=0, presets=landscape(20), max_cases=300),
+    Spec("GameWorld_ScatterObjectGroups", 0x0051b1a0, "thiscall",
+         [one_of(0x20, 0x21, 0x80), below(8, 0.2), below(16, 0.2), below(48), block_mode_extra,
+          block_mode_extra], eax_mask=0, presets=landscape(512), max_cases=300),
+    # building input goods (building_goods.cpp)
+    Spec("GameWorld_BuildingInputWord2A", 0x004df150, "thiscall", [below(4096), below(36, 0.1)],
+         presets=input_goods),
+    Spec("GameWorld_BuildingInputWord24", 0x004df220, "thiscall", [below(4096), below(36, 0.1)],
+         presets=input_goods),
+    Spec("GameWorld_SetBuildingInputWord2A", 0x004df2f0, "thiscall",
+         [below(4096), below(36, 0.1), anything], presets=input_goods),
+    Spec("GameWorld_SetBuildingInputWord24", 0x004df3c0, "thiscall",
+         [below(4096), below(36, 0.1), anything], presets=input_goods),
+    # god events, piles, presence (godly_events.cpp, area_piles.cpp, player_presence.cpp)
+    Spec("GameWorld_HasManaForSpell", 0x0054b240, "thiscall", [below(20), below(36, 0.1)],
+         presets=mana),
+    Spec("GameWorld_AddTilePileToArea", 0x005051b0, "thiscall", [below(384), below(384)],
+         presets=tile_pile),
+    Spec("GameWorld_IsOtherPlayerNear", 0x00510650, "thiscall",
+         [below(400), below(400), below(40), below(20)], presets=presence, max_cases=400),
 ]
 
 

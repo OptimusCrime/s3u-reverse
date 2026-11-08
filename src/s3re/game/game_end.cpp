@@ -19,12 +19,14 @@
 // CLogicThread::CountTilesOwnedByEither (0x00514ae0): (playerA, playerB,
 //   points, count): the same for owner == playerA or owner == playerB.
 //   ret 0x10.
-// CLogicThread::SumAreaGoodsPerPlayer (0x00514b40): (int32 out[20]): zeroes
+// CLogicThread::SumAreaGoods10PerPlayer (0x00514b40): (int32 out[20]): zeroes
 //   out[0..19], then for each area 1..count (count at world+0xe115dc;
 //   0x2e0-byte records at world+0xe145e8) whose player byte (+0x0) is not
-//   0xff: walks its goods piles (first pile index at +0x1e, next at pile
-//   +0xc; 14-byte pile records at world+0x123885c) and adds each pile's
-//   amount (byte +0x1) to out[player]. EAX (callers ignore it) = count + 1.
+//   0xff: walks its list of goods-type-10 piles (head at +0x1e; the area
+//   keeps one list per goods type, heads at +0xa + type*2, see
+//   area_piles.cpp; next at pile +0xc; 14-byte pile records at
+//   world+0x123885c) and adds each pile's amount (byte +0x1) to
+//   out[player]. EAX (callers ignore it) = count + 1.
 //   ret 4.
 
 #include "game/world.h"
@@ -140,7 +142,7 @@ std::uint32_t __fastcall CLogicThread_CountTilesOwnedByEither(CLogicThread* self
     return result;
 }
 
-std::uint32_t __fastcall CLogicThread_SumAreaGoodsPerPlayer(CLogicThread* self, void*, std::int32_t* out) {
+std::uint32_t __fastcall CLogicThread_SumAreaGoods10PerPlayer(CLogicThread* self, void*, std::int32_t* out) {
     std::memset(out, 0, kPlayers * sizeof(std::int32_t));
     std::uint32_t area = 1;
     for (; area <= At<std::uint32_t>(WorldOf(self), kAreaCount); ++area) {
@@ -164,8 +166,8 @@ S3RE_HOOK(0x00514a90, CLogicThread_CountTilesOwnedBy, CountOwnedFn, Original_CLo
           CLogicThread_CountTilesOwnedBy);
 S3RE_HOOK(0x00514ae0, CLogicThread_CountTilesOwnedByEither, CountOwnedEitherFn,
           Original_CLogicThread_CountTilesOwnedByEither, CLogicThread_CountTilesOwnedByEither);
-S3RE_HOOK(0x00514b40, CLogicThread_SumAreaGoodsPerPlayer, CountPerPlayerFn,
-          Original_CLogicThread_SumAreaGoodsPerPlayer, CLogicThread_SumAreaGoodsPerPlayer);
+S3RE_HOOK(0x00514b40, CLogicThread_SumAreaGoods10PerPlayer, CountPerPlayerFn,
+          Original_CLogicThread_SumAreaGoods10PerPlayer, CLogicThread_SumAreaGoods10PerPlayer);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -320,7 +322,7 @@ S3RE_TEST(CLogicThread_CountTilesOwnedByEither_MatchesOriginal) {
     f.worlds.Checkpoint(ctx);
 }
 
-S3RE_TEST(CLogicThread_SumAreaGoodsPerPlayer_MatchesOriginal) {
+S3RE_TEST(CLogicThread_SumAreaGoods10PerPlayer_MatchesOriginal) {
     Fixture f(ctx);
     for (int i = 0; i < 300; ++i) {
         const std::uint32_t count = ctx.rng().Chance(1, 16) ? 0 : ctx.rng().Below(kTestAreas);
@@ -341,8 +343,8 @@ S3RE_TEST(CLogicThread_SumAreaGoodsPerPlayer_MatchesOriginal) {
             f.worlds.Set<std::uint16_t>(record + kAreaFirstPile, static_cast<std::uint16_t>(first));
         }
         f.FillOutputs(ctx);
-        const std::uint32_t expected = Original_CLogicThread_SumAreaGoodsPerPlayer(f.original(), nullptr, f.outA);
-        const std::uint32_t actual = CLogicThread_SumAreaGoodsPerPlayer(f.ours(), nullptr, f.outB);
+        const std::uint32_t expected = Original_CLogicThread_SumAreaGoods10PerPlayer(f.original(), nullptr, f.outA);
+        const std::uint32_t actual = CLogicThread_SumAreaGoods10PerPlayer(f.ours(), nullptr, f.outB);
         if (!S3RE_EXPECT_EQ(expected, actual) || !f.SameOutputs(ctx) ||
             ((i % 16 == 15 || i == 299) && !f.worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: %u areas", i, count);

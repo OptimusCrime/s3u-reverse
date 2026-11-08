@@ -31,6 +31,14 @@ std::uint32_t __fastcall GameWorld_SetTileAreaMarked(GameWorld* world, void* edx
 // map_neighbourhood.cpp
 std::uint32_t __fastcall GameWorld_ReplaceTerrainType(GameWorld* world, void* edx,
                                                       std::uint32_t oldType, std::uint32_t newType);
+std::uint32_t __fastcall GameWorld_IsNeighbourhoodTerrain(GameWorld* world, void* edx, std::uint32_t x,
+                                                          std::uint32_t y, std::uint32_t terrain);
+std::uint32_t __fastcall GameWorld_AreOffsetTilesClear(GameWorld* world, void* edx, std::uint32_t x,
+                                                       std::uint32_t y, std::uint32_t count);
+
+// players.cpp
+std::uint32_t __fastcall GameWorld_AddPlayerCounter(GameWorld* world, void* edx, std::uint32_t player,
+                                                    std::uint32_t index, std::uint32_t amount);
 
 // random.cpp
 std::uint16_t __fastcall GameWorld_Random(GameWorld* world, void* edx);

@@ -15,12 +15,12 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 99 replacements pass the emulator suite with full block
+Status: all 110 replacements pass the emulator suite with full block
 coverage (2,000 cases each, fewer for the slow ones: the flood fills 150,
 ShiftStatistics 60, the map-wide loops and table scans 150-800);
 `--self-test` catches 11/11 wrong pairings. Batches 9-11 passed the
 whole-game check on 2026-11-08 (call counts in the inventory); batch 12
-hasn't had one yet. Specs can set S3.EXE globals per case
+and 13 haven't had one yet. Specs can set S3.EXE globals per case
 (`Spec.globals`), and take ECX = a fake CLogicThread ("logicthread"
 convention) and pointer arguments into scratch buffers (`scratch(n)`).
 
@@ -92,9 +92,29 @@ functions; our versions call our callees directly (game/replacements.h):
   returns the last tile's settler, an original quirk)
 - game_end.cpp (CLogicThread, game-end check helpers):
   CountBuildingsOfTypes15To18 (0x514a00), CountTilesOwnedBy (0x514a90),
-  CountTilesOwnedByEither (0x514ae0), SumAreaGoodsPerPlayer (0x514b40)
+  CountTilesOwnedByEither (0x514ae0), SumAreaGoods10PerPlayer (0x514b40)
 - ui_state.cpp: CenterCameraOnTile (0x51b560), CLogicThread::PushUiFeedback
   (0x53f560); random.cpp: RandomBelow6 (0x503880)
+
+Batch 13 (2026-11-08, 11 functions; in-process + emulator tests, full
+coverage; whole-game check NOT run yet):
+- map_generation.cpp: ScatterTileByte11 (0x51ad40), ScatterTerrainNear
+  (0x51aed0), ScatterObjects (0x51b010), ScatterObjectGroups (0x51b1a0):
+  random scattering used by GameWorld::Create (map generation; may not
+  run for maps loaded from files, so whole-game evidence may be absent)
+- building_goods.cpp: BuildingInputWord2A/24 (0x4df150/0x4df220) and
+  their setters (0x4df2f0/0x4df3c0): per-input-slot counters of buildings
+  (input goods per type in the table at 0x6a6824)
+- godly_events.cpp: HasManaForSpell (0x54b240); area_piles.cpp:
+  AddTilePileToArea (0x5051b0); player_presence.cpp: IsOtherPlayerNear
+  (0x510650, 16x16-tile presence blocks at world+0xde7448)
+- Replacements can call the game's DebugLog with the original format
+  string (game/debug_log.h), so the diagnostics stay.
+- Found: tile +0xa bit 0 is "blocked" (AreOffsetTilesClear checks it);
+  tile word +0x2 is a pile number when the building flag 0x20 of +0xa is
+  clear; areas keep one pile list per goods type (heads at area +0xa +
+  type*2), so 0x514b40 sums goods type 10 only (renamed
+  SumAreaGoods10PerPlayer).
 
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
@@ -244,6 +264,17 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-08 (20): batch 13 (11 functions)
+
+- Map generation scatterers, building input slots, god-event mana check,
+  pile-to-area link, player presence query (list under "Current focus").
+  In-process 160/160 (15 new incl. 4 mutation tests); emulator specs 11/11
+  with full coverage.
+- First ScatterObjects version blocked tile +0xe instead of +0xa (the old
+  0x67440-based offset); the in-process test caught it, after the test
+  landscape was made patchy enough for placements to happen (uniform
+  8x8 terrain patches, few objects and blocked tiles).
 
 ### 2026-11-08 (19): whole-game check for batches 9-11, batch 12 (18 functions)
 

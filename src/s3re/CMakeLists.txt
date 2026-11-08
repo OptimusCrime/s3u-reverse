@@ -15,21 +15,26 @@ add_library(s3re SHARED
 
     replay/command_log.cpp
 
+    game/area_piles.cpp
     game/building_flags.cpp
+    game/building_goods.cpp
     game/building_tiles.cpp
     game/counting.cpp
     game/flood_fills.cpp
     game/game_end.cpp
+    game/godly_events.cpp
     game/goods_piles.cpp
     game/id_allocators.cpp
     game/logic_thread.cpp
     game/map.cpp
     game/map_areas.cpp
     game/map_directions.cpp
+    game/map_generation.cpp
     game/map_marks.cpp
     game/map_neighbourhood.cpp
     game/map_terrain.cpp
     game/net_thread.cpp
+    game/player_presence.cpp
     game/player_queries.cpp
     game/players.cpp
     game/random.cpp
