@@ -89,6 +89,11 @@ hypothesis, not verified.
 
 ## Translations of the names
 
+The folder names are the programmers' first names. Their full names and
+jobs come from the game's own credits text in `DATA.DAT` (search it for
+`PROGRAMMING`; it uses the same markup as the Credits code, e.g.
+`<CENTER>`, `<DRUCKSCHRIFT>` = "block letters").
+
 Most file names are English. The developers were German, so the German
 parts, abbreviations and German debug texts are translated here.
 
@@ -97,8 +102,10 @@ parts, abbreviations and German debug texts are translated here.
 | Folder | Meaning |
 |---|---|
 | `Siedler3` | German for "Settlers 3" (*Siedler* = settler) |
-| `Dirk`, `Volker`, `Rainer` | German first names. Each folder seems to belong to one programmer. The contents suggest Dirk = application shell, UI, menus, network and lobby; Volker = game logic (simulation); Rainer = computer players (AI). A Rainer file also prints a message signed "Marcus". |
-| `Credits` | Credits screen, with a small HTML-like text formatter |
+| `Volker` | **Volker Wertich**, credited with Game Design and Main Program: game logic (simulation) |
+| `Dirk` | **Dirk Ringe**, credited with Main Program: application shell, UI, menus, network and lobby |
+| `Rainer` | **Rainer Foetzki**, credited with AI: computer players. The message `Marcus: FOE ATTACK EXCEPTION!` in a Rainer file is probably **Marcus Pukropski** (credited with Rainer under "AI and Video Player" in Quest of the Amazons, and with the Level Editor) |
+| `Credits` | Credits screen with a small HTML-like text formatter; probably by **Volker Nitsch**, credited as "Credits Scroller" |
 | `DirectX`, `Win32` | English: framework around DirectX and the Windows API |
 
 ### Files

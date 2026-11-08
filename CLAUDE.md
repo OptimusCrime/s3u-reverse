@@ -292,8 +292,10 @@ replaying, see `src/s3re/replay/command_log.h`):
 - `S3.EXE` has **no debug symbols** (no debug directory, symbols stripped,
   no `.pdb`/linker `.map`). But it contains 57 unreferenced `__FILE__`
   paths like `E:\Siedler3\Volker\LogicHandleNet.cpp`. The folders are
-  `Dirk\` (app shell, UI, network, lobby), `Volker\` (game logic),
-  `Rainer\` (computer players), `Credits\`, `DirectX\`, `Win32\`.
+  the programmers' first names (full names from the game's credits in
+  `DATA.DAT`): `Dirk\` (Dirk Ringe: app shell, UI, network, lobby),
+  `Volker\` (Volker Wertich: game logic), `Rainer\` (Rainer Foetzki:
+  computer players), plus `Credits\`, `DirectX\`, `Win32\`.
 - Each `.obj`'s data and code are laid out in the same order, so the
   strings after a path, and the functions using them, give each named
   file a code range. `python tools/source_files.py scan` writes
