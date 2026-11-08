@@ -144,27 +144,37 @@ void SetRequest(GameWorld* world, std::uint32_t index, std::uint8_t bit,
 
 using BuildingFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building);
 
+// Purpose: Withdraws one kind of request a building has made (one of four request bits), keeping the
+// player's request counters right. Names are provisional.
 void __fastcall GameWorld_ClearBuildingFlag02(GameWorld* world, void*, std::uint32_t b) {
     ClearRequest(world, b, 0x02, 0x20);
 }
+// Purpose: Withdraws another kind of building request (see ClearBuildingFlag02).
 void __fastcall GameWorld_ClearBuildingFlag04(GameWorld* world, void*, std::uint32_t b) {
     ClearRequest(world, b, 0x04, 0x22);
 }
+// Purpose: Withdraws another kind of building request (see ClearBuildingFlag02).
 void __fastcall GameWorld_ClearBuildingFlag08(GameWorld* world, void*, std::uint32_t b) {
     ClearRequest(world, b, 0x08, 0x26);
 }
+// Purpose: Withdraws another kind of building request (see ClearBuildingFlag02).
 void __fastcall GameWorld_ClearBuildingFlag10(GameWorld* world, void*, std::uint32_t b) {
     ClearRequest(world, b, 0x10, 0x28);
 }
+// Purpose: Makes one kind of request for a building (e.g. 'needs a worker'), if the player doesn't have too
+// many open already, and counts it. Names are provisional.
 void __fastcall GameWorld_SetBuildingFlag02(GameWorld* world, void*, std::uint32_t b) {
     SetRequest(world, b, 0x02, 0x20, Condition::TableA);
 }
+// Purpose: Makes another kind of building request (see SetBuildingFlag02).
 void __fastcall GameWorld_SetBuildingFlag04(GameWorld* world, void*, std::uint32_t b) {
     SetRequest(world, b, 0x04, 0x22, Condition::TableB);
 }
+// Purpose: Makes another kind of building request (see SetBuildingFlag02).
 void __fastcall GameWorld_SetBuildingFlag08(GameWorld* world, void*, std::uint32_t b) {
     SetRequest(world, b, 0x08, 0x26, Condition::None);
 }
+// Purpose: Makes another kind of building request (see SetBuildingFlag02).
 void __fastcall GameWorld_SetBuildingFlag10(GameWorld* world, void*, std::uint32_t b) {
     SetRequest(world, b, 0x10, 0x28, Condition::Byte21IsOne);
 }

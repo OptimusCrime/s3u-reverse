@@ -54,14 +54,19 @@ std::uint32_t FindFreeId(GameWorld* world, const IdTable& table) {
 
 using FindFreeIdFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
 
+// Purpose: Finds an unused number (1..254) for a new area/region and marks it as the highest in use. Used
+// when regions are created.
 std::uint32_t __fastcall GameWorld_FindFreeId256(GameWorld* world, void*) {
     return FindFreeId(world, kIds256);
 }
 
+// Purpose: Finds an unused number in a table of 4,096 ids (what the ids are for is not known yet).
 std::uint32_t __fastcall GameWorld_FindFreeId4096(GameWorld* world, void*) {
     return FindFreeId(world, kIds4096);
 }
 
+// Purpose: Finds an unused number in a table of 8,192 ids, used for the word-16 regions (probably connected
+// walkable land).
 std::uint32_t __fastcall GameWorld_FindFreeId8192(GameWorld* world, void*) {
     return FindFreeId(world, kIds8192);
 }

@@ -77,6 +77,8 @@ std::uint32_t Pile(std::uint32_t pile) {
 
 using TileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
 
+// Purpose: A goods pile lying on a tile becomes part of the economy: its goods count towards the tile
+// owner's stock and the pile is listed in its area, so carriers can find it.
 std::uint32_t __fastcall GameWorld_AddTilePileToArea(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
     const std::uint32_t index = x * 0x300 + y;
     const std::uint32_t tile = kTiles + index * 24;
@@ -110,6 +112,8 @@ S3RE_HOOK(0x005051b0, GameWorld_AddTilePileToArea, TileFn, Original_GameWorld_Ad
 
 using PileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t pile);
 
+// Purpose: One more unit of goods arrives on a pile. If the pile has become available for collection, it is
+// listed in its area so carriers can find it.
 std::uint32_t __fastcall GameWorld_AddGoodsToPile(GameWorld* world, void*, std::uint32_t pile) {
     const std::uint32_t record = Pile(pile);
     auto byte = [&](std::uint32_t field) -> std::uint8_t& { return At<std::uint8_t>(world, record + field); };

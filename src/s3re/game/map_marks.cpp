@@ -77,14 +77,19 @@ using FlagsFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t fla
 using SliceFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t first);
 
 // The original reads only the low byte of the argument.
+// Purpose: Map setup: marks the tiles along the map's diagonals (the map is drawn as a diamond, so these
+// are probably its visible edges).
 void __fastcall GameWorld_SetDiagonalTileByteB(GameWorld* world, void*, std::uint32_t flags) {
     WriteDiagonals(world, flags & 0xff, 0xff);
 }
 
+// Purpose: Map setup: clears the diagonal marks set by SetDiagonalTileByteB.
 void __fastcall GameWorld_ClearDiagonalTileByteB(GameWorld* world, void*, std::uint32_t flags) {
     WriteDiagonals(world, flags & 0xff, 0);
 }
 
+// Purpose: Clears one field (probably a resource or effect value) in every eighth row of the map. The
+// landscape update does one slice per step so the work is spread over time.
 std::uint32_t __fastcall GameWorld_ClearTileByte11Slice(GameWorld* world, void*,
                                                         std::uint32_t first) {
     if (first >= MapSize(world)) {

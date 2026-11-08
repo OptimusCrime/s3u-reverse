@@ -103,6 +103,7 @@ using TileCheckFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std:
 using TileValueCheckFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
                                                     std::uint32_t y, std::uint32_t value);
 
+// Purpose: Changes every tile of one terrain type into another. Used by map generation and by GrowTerrain.
 std::uint32_t __fastcall GameWorld_ReplaceTerrainType(GameWorld* world, void* /*edx*/,
                                                       std::uint32_t oldType,
                                                       std::uint32_t newType) {
@@ -121,6 +122,8 @@ std::uint32_t __fastcall GameWorld_ReplaceTerrainType(GameWorld* world, void* /*
     return static_cast<std::uint32_t>(last);
 }
 
+// Purpose: Whether a tile and its six neighbours all have a certain field clear (meaning unknown). Probably
+// a building placement check.
 std::uint32_t __fastcall GameWorld_IsNeighbourhoodByte9Clear(GameWorld* world, void* /*edx*/,
                                                              std::uint32_t x, std::uint32_t y) {
     if (TileByte(world, x, y, kTileByte9) != 0) {
@@ -134,6 +137,8 @@ std::uint32_t __fastcall GameWorld_IsNeighbourhoodByte9Clear(GameWorld* world, v
     return 1;
 }
 
+// Purpose: Whether at most two of a tile's neighbours have a certain terrain (0x70/0xf0, probably mountain
+// or rock). Probably a placement check.
 std::uint32_t __fastcall GameWorld_HasAtMostTwoType70Neighbours(GameWorld* world, void* /*edx*/,
                                                                 std::uint32_t x, std::uint32_t y) {
     int count = 0;
@@ -146,6 +151,8 @@ std::uint32_t __fastcall GameWorld_HasAtMostTwoType70Neighbours(GameWorld* world
     return count <= 2 ? 1 : 0;
 }
 
+// Purpose: Whether no tile around a position has terrain 0x70 (probably mountain or rock). Probably a
+// placement check.
 std::uint32_t __fastcall GameWorld_IsClearOfType70Nearby(GameWorld* world, void* /*edx*/,
                                                          std::uint32_t x, std::uint32_t y) {
     static constexpr int kTiles[10][2] = {{0, 0},  {1, 0},  {-1, 0}, {0, 1},  {0, -1},
@@ -158,6 +165,8 @@ std::uint32_t __fastcall GameWorld_IsClearOfType70Nearby(GameWorld* world, void*
     return 1;
 }
 
+// Purpose: Whether a tile and the tiles around it are free of a particular kind of settler (type 0x29,
+// unknown). Probably a placement check.
 std::uint32_t __fastcall GameWorld_IsFreeOfSettlerType29Nearby(GameWorld* world, void* /*edx*/,
                                                                std::uint32_t x, std::uint32_t y) {
     if (TileOccupant(world, x, y) != 0) {
@@ -182,6 +191,8 @@ std::uint32_t __fastcall GameWorld_IsFreeOfSettlerType29Nearby(GameWorld* world,
     return result;
 }
 
+// Purpose: Whether a tile and its six neighbours all have the same given terrain. Used by map generation to
+// place things only in the middle of suitable terrain.
 std::uint32_t __fastcall GameWorld_IsNeighbourhoodTerrain(GameWorld* world, void* /*edx*/,
                                                          std::uint32_t x, std::uint32_t y,
                                                          std::uint32_t terrain) {
@@ -195,6 +206,8 @@ std::uint32_t __fastcall GameWorld_IsNeighbourhoodTerrain(GameWorld* world, void
     return 1;
 }
 
+// Purpose: Whether all tiles in a given radius around a position are free of objects and not blocked. Used
+// by map generation before placing trees, stones and the like.
 std::uint32_t __fastcall GameWorld_AreOffsetTilesClear(GameWorld* world, void* /*edx*/,
                                                        std::uint32_t x, std::uint32_t y,
                                                        std::uint32_t count) {

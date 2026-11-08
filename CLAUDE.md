@@ -352,6 +352,9 @@ replaying, see `src/s3re/replay/command_log.h`):
    callers and callees. Add or update its row in `re/functions.csv`
    (`identified`).
 2. Write the replacement with `S3RE_HOOK`, matching the calling convention.
+   Put a `// Purpose:` comment right above it: in plain language, what the
+   game uses the function for (not the argument details, which go in the
+   file's header comment); say "probably" where that is a guess.
    Member functions are `__thiscall`; write them as `__fastcall` with a dummy
    EDX parameter (see `hooks.h`). Check whether callers use EAX after the
    call before declaring a function `void`. A replacement that also provides

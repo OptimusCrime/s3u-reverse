@@ -32,23 +32,30 @@ std::uint32_t MapSize(GameWorld* world) {
 using MapXYFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
                                            std::uint32_t y);
 
+// Purpose: Checks that a tile coordinate is inside the map at all. Guards almost every map access.
 std::uint32_t __fastcall GameWorld_IsOnMap(GameWorld* world, void* /*edx*/, std::uint32_t x,
                                            std::uint32_t y) {
     const std::uint32_t size = MapSize(world);
     return (x < size && y < size) ? 1 : 0;
 }
 
+// Purpose: Checks that a tile is inside the map and not on its outermost ring, so that all six of its
+// neighbours exist too.
 std::uint32_t __fastcall GameWorld_IsInsideMapBorder(GameWorld* world, void* /*edx*/,
                                                      std::uint32_t x, std::uint32_t y) {
     const std::uint32_t last = MapSize(world) - 1;
     return (x >= 1 && x < last && y >= 1 && y < last) ? 1 : 0;
 }
 
+// Purpose: Where a tile is drawn on screen horizontally (the map is drawn as a slanted grid). Used by
+// drawing and mouse picking.
 std::uint32_t __fastcall GameWorld_TileScreenX(GameWorld* world, void* /*edx*/, std::uint32_t x,
                                                std::uint32_t y) {
     return (2u * x - y + MapSize(world) + 0x16u) << 3;
 }
 
+// Purpose: Where a tile is drawn on screen vertically, raised by the tile's terrain height. Used by drawing
+// and mouse picking.
 std::uint32_t __fastcall GameWorld_TileScreenY(GameWorld* world, void* /*edx*/, std::uint32_t x,
                                                std::uint32_t y) {
     const std::uint32_t tile = (x * world_offset::kMapRowTiles + y) * world_offset::kTileBytes;

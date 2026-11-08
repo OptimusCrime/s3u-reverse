@@ -96,6 +96,8 @@ using CountOwnedEitherFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* 
                                                       std::uint32_t playerB, const std::int32_t* points,
                                                       std::int32_t count);
 
+// Purpose: For the game-end check: counts, per player, the finished buildings of three particular types
+// (probably castles/military buildings that decide whether a player is still in the game).
 std::uint32_t __fastcall CLogicThread_CountBuildingsOfTypes15To18(CLogicThread* self, void*, std::int32_t* out) {
     std::memset(out, 0, kPlayers * sizeof(std::int32_t));
     std::uint32_t last = 0;
@@ -118,6 +120,8 @@ std::uint32_t __fastcall CLogicThread_CountBuildingsOfTypes15To18(CLogicThread* 
     return last;
 }
 
+// Purpose: For the game-end check: how many of a list of tiles belong to a player (e.g. mission goals like
+// 'hold these places').
 std::uint32_t __fastcall CLogicThread_CountTilesOwnedBy(CLogicThread* self, void*, std::uint32_t player,
                                                         const std::int32_t* points, std::int32_t count) {
     std::uint32_t result = 0;
@@ -129,6 +133,7 @@ std::uint32_t __fastcall CLogicThread_CountTilesOwnedBy(CLogicThread* self, void
     return result;
 }
 
+// Purpose: Like CountTilesOwnedBy, for tiles owned by either of two players (probably allies).
 std::uint32_t __fastcall CLogicThread_CountTilesOwnedByEither(CLogicThread* self, void*, std::uint32_t playerA,
                                                               std::uint32_t playerB, const std::int32_t* points,
                                                               std::int32_t count) {
@@ -142,6 +147,8 @@ std::uint32_t __fastcall CLogicThread_CountTilesOwnedByEither(CLogicThread* self
     return result;
 }
 
+// Purpose: For the game-end check: how much of goods type 10 each player has lying in their areas (probably
+// gold, for 'collect N gold' goals).
 std::uint32_t __fastcall CLogicThread_SumAreaGoods10PerPlayer(CLogicThread* self, void*, std::int32_t* out) {
     std::memset(out, 0, kPlayers * sizeof(std::int32_t));
     std::uint32_t area = 1;

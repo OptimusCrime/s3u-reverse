@@ -139,6 +139,8 @@ using Scatter5Fn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::
 using Scatter6Fn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t a, std::uint32_t b,
                                               std::uint32_t c, std::uint32_t d, std::uint32_t e, std::uint32_t f);
 
+// Purpose: Map generation: scatters clusters of a resource value over suitable land (probably the hidden
+// resources a geologist finds: coal, iron, gold, stone).
 std::uint32_t __fastcall GameWorld_ScatterTileByte11(GameWorld* world, void*, std::uint32_t base,
                                                      std::uint32_t density) {
     for (std::uint32_t round = 0; round < BlockArea(world, density) >> 3; ++round) {
@@ -166,6 +168,7 @@ std::uint32_t __fastcall GameWorld_ScatterTileByte11(GameWorld* world, void*, st
     return 0;
 }
 
+// Purpose: Map generation: sprinkles patches of a terrain type into another terrain, to vary the landscape.
 std::uint32_t __fastcall GameWorld_ScatterTerrainNear(GameWorld* world, void*, std::uint32_t required,
                                                       std::uint32_t terrain, std::uint32_t density) {
     auto rounds = [&] { return static_cast<std::int32_t>(BlockArea(world, density)) / 8; };
@@ -194,6 +197,8 @@ std::uint32_t __fastcall GameWorld_ScatterTerrainNear(GameWorld* world, void*, s
     return 0;
 }
 
+// Purpose: Map generation: places single objects (probably trees, stones and decorations) on random
+// suitable tiles, optionally making them block movement.
 std::uint32_t __fastcall GameWorld_ScatterObjects(GameWorld* world, void*, std::uint32_t required,
                                                   std::uint32_t object, std::uint32_t density,
                                                   std::uint32_t blockMode, std::uint32_t extra) {
@@ -210,6 +215,8 @@ std::uint32_t __fastcall GameWorld_ScatterObjects(GameWorld* world, void*, std::
     return 0;
 }
 
+// Purpose: Map generation: places groups of objects around random centres (probably forests or rock
+// fields), each object picked from a range of types.
 std::uint32_t __fastcall GameWorld_ScatterObjectGroups(GameWorld* world, void*, std::uint32_t required,
                                                        std::uint32_t low, std::uint32_t high, std::uint32_t density,
                                                        std::uint32_t blockMode, std::uint32_t extra) {

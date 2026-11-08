@@ -107,32 +107,42 @@ std::uint32_t ScreenRows(std::uint32_t shift) {
 using WorldValueFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t value);
 using WorldQueryFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
 
+// Purpose: Whether the user interface is in a given selection mode (e.g. building placement). The UI state
+// happens to live inside the world object.
 std::uint32_t __fastcall GameWorld_IsUiSelectionMode(GameWorld* world, void*, std::uint32_t mode) {
     return Field(world, kUiSelectionMode) == mode ? 1 : 0;
 }
 
+// Purpose: Whether a UI state field (meaning unknown) has a given value.
 std::uint32_t __fastcall GameWorld_IsUiField298(GameWorld* world, void*, std::uint32_t value) {
     return Field(world, kUiField298) == value ? 1 : 0;
 }
 
+// Purpose: Whether the first parameter of the current UI selection (e.g. which building type) has a given
+// value.
 std::uint32_t __fastcall GameWorld_IsUiSelectionParam1(GameWorld* world, void*,
                                                        std::uint32_t value) {
     return Field(world, kUiSelectionParam1) == value ? 1 : 0;
 }
 
+// Purpose: Whether the second parameter of the current UI selection has a given value.
 std::uint32_t __fastcall GameWorld_IsUiSelectionParam2(GameWorld* world, void*,
                                                        std::uint32_t value) {
     return Field(world, kUiSelectionParam2) == value ? 1 : 0;
 }
 
+// Purpose: Whether the UI is in selection mode 4 with a particular sub-state. A shortcut check used by the
+// UI.
 std::uint32_t __fastcall GameWorld_IsUiSelectionMode4Field298Is2(GameWorld* world, void*) {
     return (Field(world, kUiSelectionMode) == 4 && Field(world, kUiField298) == 2) ? 1 : 0;
 }
 
+// Purpose: Whether the game has ended with outcome 1 (probably 'won'). Queried by the user interface.
 std::uint32_t __fastcall GameWorld_IsGameOutcome1(GameWorld*, void*, std::uint32_t) {
     return GameGlobal<std::uint32_t>(global_address::kGameOutcome) == 1 ? 1 : 0;
 }
 
+// Purpose: Which tile is at the centre of the screen (x). Used e.g. to know where the player is looking.
 std::uint32_t __fastcall GameWorld_ScreenCenterTileX(GameWorld* world, void*) {
     const std::uint32_t rowsBelowTop = 100u - CameraRow(world);
     const std::uint32_t skew = (Field(world, world_offset::kMapSize) + rowsBelowTop * 2u) >> 1;
@@ -142,10 +152,12 @@ std::uint32_t __fastcall GameWorld_ScreenCenterTileX(GameWorld* world, void*) {
     return column + (ScreenRows(2) - skew + halfColumns);
 }
 
+// Purpose: Which tile is at the centre of the screen (y).
 std::uint32_t __fastcall GameWorld_ScreenCenterTileY(GameWorld* world, void*) {
     return ScreenRows(1) + CameraRow(world) * 2u - 200u;
 }
 
+// Purpose: Keeps the camera inside the map after it has been moved.
 std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void*) {
     auto& cameraX = WorldField<std::int32_t>(world, kCameraX);
     auto& cameraY = WorldField<std::int32_t>(world, kCameraY);
@@ -169,6 +181,8 @@ std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void*) {
     return result;
 }
 
+// Purpose: Queues a small notification from the game for the drawing/sound side (probably sounds or
+// messages for the player). The queue holds up to ten.
 std::uint32_t __fastcall GameWorld_PushUiFeedback(GameWorld* world, void*, std::uint32_t value) {
     auto& count = WorldField<std::uint32_t>(world, kUiFeedbackCount);
     if (count == kUiFeedbackCapacity) {
@@ -179,6 +193,8 @@ std::uint32_t __fastcall GameWorld_PushUiFeedback(GameWorld* world, void*, std::
     return count;
 }
 
+// Purpose: Moves the camera so that a tile is in the middle of the screen (e.g. when jumping to a message's
+// location).
 std::uint32_t __fastcall GameWorld_CenterCameraOnTile(GameWorld* world, void*, std::uint32_t x,
                                                       std::uint32_t y) {
     const auto width = static_cast<std::int32_t>(GameGlobal<std::uint32_t>(global_address::kScreenWidth));
@@ -194,6 +210,8 @@ std::uint32_t __fastcall GameWorld_CenterCameraOnTile(GameWorld* world, void*, s
 
 struct CLogicThread;  // opaque
 
+// Purpose: The same as GameWorld::PushUiFeedback, called from the user interface code through the logic
+// thread.
 std::uint32_t __fastcall CLogicThread_PushUiFeedback(CLogicThread* self, void*, std::uint32_t value) {
     GameWorld* world = *reinterpret_cast<GameWorld**>(reinterpret_cast<std::uint8_t*>(self) + kLogicThreadWorld);
     return GameWorld_PushUiFeedback(world, nullptr, value);
@@ -213,6 +231,8 @@ constexpr std::size_t kPlayerPositionY = 0x14;
 
 }  // namespace
 
+// Purpose: Moves the camera to the local player's home position (probably their castle), e.g. at the start
+// of a game.
 std::uint32_t __fastcall GameWorld_CenterCameraOnLocalPlayer(GameWorld* world, void*) {
     const std::size_t record = kPlayerRecords + Field(world, kLocalPlayer) * kPlayerRecordBytes;
     const std::uint32_t result =

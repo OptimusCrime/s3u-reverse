@@ -60,6 +60,8 @@ using PlayerCounterFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx,
 using ClearFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
 
 // EAX: `player` when nothing is done, else the counter's address.
+// Purpose: Adds to one of a player's per-goods counters (how much of each kind of goods the player has).
+// Used when goods are produced or picked up.
 std::uint32_t __fastcall GameWorld_AddPlayerCounter(GameWorld* world, void* /*edx*/,
                                                     std::uint32_t player, std::uint32_t index,
                                                     std::uint32_t amount) {
@@ -74,6 +76,8 @@ std::uint32_t __fastcall GameWorld_AddPlayerCounter(GameWorld* world, void* /*ed
 // EAX: `player` when nothing is done; otherwise the original has the slot
 // number in EAX with its low 16 bits replaced by the old counter value, minus
 // `amount` if that was subtracted.
+// Purpose: Takes away from one of a player's per-goods counters, never going below zero. Used when goods
+// are used up.
 std::uint32_t __fastcall GameWorld_SubtractPlayerCounter(GameWorld* world, void* /*edx*/,
                                                          std::uint32_t player,
                                                          std::uint32_t index,
@@ -92,6 +96,8 @@ std::uint32_t __fastcall GameWorld_SubtractPlayerCounter(GameWorld* world, void*
     return eax - amount;
 }
 
+// Purpose: Empties the ten per-player lists of settlers (probably lists of settlers assigned to tasks) for
+// all players, at the start of a game.
 std::uint32_t __fastcall GameWorld_ClearPlayerListLengths(GameWorld* world, void* /*edx*/) {
     std::memset(&WorldField<std::int32_t>(world, kPlayerListLengths), 0,
                 kPlayerListLengthCount * sizeof(std::int32_t));

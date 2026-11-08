@@ -109,6 +109,8 @@ std::uint32_t MoveSettlerToBuildingTile(GameWorld* world, std::uint32_t settler,
 
 using IndexFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t index);
 
+// Purpose: Removes a building from the map: its tiles no longer point to it and it no longer belongs to a
+// player. Used when a building is destroyed or torn down.
 std::uint32_t __fastcall GameWorld_RemoveBuildingFromTiles(GameWorld* world, void*,
                                                            std::uint32_t building) {
     const std::uint32_t b = Building(building);
@@ -125,6 +127,8 @@ std::uint32_t __fastcall GameWorld_RemoveBuildingFromTiles(GameWorld* world, voi
     return 0;  // callers ignore EAX
 }
 
+// Purpose: A settler that was inside a building (in one of its slots) leaves it and appears on the
+// building's exit tile.
 std::uint32_t __fastcall GameWorld_LeaveBuildingSlot(GameWorld* world, void*,
                                                      std::uint32_t settler) {
     const std::uint32_t s = settler * kSettlerBytes;
@@ -145,11 +149,14 @@ std::uint32_t __fastcall GameWorld_LeaveBuildingSlot(GameWorld* world, void*,
     return result;
 }
 
+// Purpose: Moves a settler onto the first of the two special tiles of its building (probably the building's
+// main tile, where work happens).
 std::uint32_t __fastcall GameWorld_MoveSettlerToBuildingTileA(GameWorld* world, void*,
                                                               std::uint32_t settler) {
     return MoveSettlerToBuildingTile(world, settler, kBuildingTileA);
 }
 
+// Purpose: Moves a settler onto the second special tile of its building (probably the door/flag tile).
 std::uint32_t __fastcall GameWorld_MoveSettlerToBuildingTileB(GameWorld* world, void*,
                                                               std::uint32_t settler) {
     return MoveSettlerToBuildingTile(world, settler, kBuildingTileB);

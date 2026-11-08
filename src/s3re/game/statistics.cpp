@@ -43,6 +43,8 @@ using WorldMethodFn = void(__fastcall*)(GameWorld* world, void* edx);
 using AddStatisticFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t player,
                                          std::uint32_t category, std::uint32_t amount);
 
+// Purpose: Fills in the small table of weights used to smooth the curves in the statistics screen. Done
+// once when the world is set up.
 void __fastcall GameWorld_InitStatisticsKernel(GameWorld* world, void* /*edx*/) {
     static constexpr std::int32_t kKernel[world_offset::kStatisticsKernelSize] = {
         3, 6, 8, 9, 9, 10, 10, 10, 9, 9, 8, 6, 3};
@@ -53,6 +55,8 @@ void __fastcall GameWorld_InitStatisticsKernel(GameWorld* world, void* /*edx*/) 
 S3RE_HOOK(0x004ff4c0, GameWorld_InitStatisticsKernel, WorldMethodFn,
           Original_GameWorld_InitStatisticsKernel, GameWorld_InitStatisticsKernel);
 
+// Purpose: Moves every player's statistics history one sample back to make room for a new sample. This is
+// what makes the statistics graphs scroll over time.
 void __fastcall GameWorld_ShiftStatistics(GameWorld* world, void* /*edx*/) {
     using namespace world_offset;
     for (std::uint32_t player = 0; player < kStatisticsPlayers; ++player) {
@@ -70,6 +74,8 @@ void __fastcall GameWorld_ShiftStatistics(GameWorld* world, void* /*edx*/) {
 S3RE_HOOK(0x004ff470, GameWorld_ShiftStatistics, WorldMethodFn,
           Original_GameWorld_ShiftStatistics, GameWorld_ShiftStatistics);
 
+// Purpose: Adds to the current statistics sample of a player (e.g. goods produced), capped at 100. Feeds
+// the statistics screen.
 void __fastcall GameWorld_AddStatistic(GameWorld* world, void* /*edx*/, std::uint32_t player,
                                        std::uint32_t category, std::uint32_t amount) {
     std::uint8_t& sample = *History(world, player, category);

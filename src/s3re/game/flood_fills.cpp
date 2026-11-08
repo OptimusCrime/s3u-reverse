@@ -168,6 +168,8 @@ using MoveTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::
                                               std::uint32_t y, std::uint32_t oldArea,
                                               std::uint32_t newArea);
 
+// Purpose: Renumbers a whole connected region: every tile reachable from the start with the same region
+// number gets the new one. Used when two regions merge.
 std::uint32_t __fastcall GameWorld_FloodFillTileWord16(GameWorld* world, void*, std::uint32_t x,
                                                        std::uint32_t y, std::uint32_t value) {
     std::uint16_t& start = At<std::uint16_t>(world, Tile(x, y) + kTileWord16);
@@ -183,6 +185,7 @@ std::uint32_t __fastcall GameWorld_FloodFillTileWord16(GameWorld* world, void*, 
     return At<std::uint32_t>(world, kTileRingRead);
 }
 
+// Purpose: Like FloodFillTileWord16, for the other kind of region number.
 std::uint32_t __fastcall GameWorld_FloodFillTileByte10(GameWorld* world, void*, std::uint32_t x,
                                                        std::uint32_t y, std::uint32_t value) {
     std::uint8_t& start = At<std::uint8_t>(world, Tile(x, y) + kTileByte10);
@@ -197,6 +200,8 @@ std::uint32_t __fastcall GameWorld_FloodFillTileByte10(GameWorld* world, void*, 
     return At<std::uint32_t>(world, kTileRingRead);
 }
 
+// Purpose: Gives one area number to a whole connected stretch of marked tiles of terrain types 5 to 7. Part
+// of recomputing the areas.
 std::uint32_t __fastcall GameWorld_FloodMarkAreaTerrain5To7(GameWorld* world, void*, std::uint32_t x,
                                                             std::uint32_t y, std::uint32_t value) {
     StartRing(world, x, y);
@@ -209,6 +214,8 @@ std::uint32_t __fastcall GameWorld_FloodMarkAreaTerrain5To7(GameWorld* world, vo
     return At<std::uint32_t>(world, kTileRingWrite);
 }
 
+// Purpose: Gives one region number to a whole connected stretch of marked tiles. Part of recomputing the
+// regions.
 std::uint32_t __fastcall GameWorld_FloodSetByte10MarkedTiles(GameWorld* world, void*, std::uint32_t x,
                                                              std::uint32_t y, std::uint32_t value) {
     StartRing(world, x, y);
@@ -221,6 +228,8 @@ std::uint32_t __fastcall GameWorld_FloodSetByte10MarkedTiles(GameWorld* world, v
     return At<std::uint32_t>(world, kTileRingWrite);
 }
 
+// Purpose: One step of moving a whole area to a new number: if a tile belongs to the old area, move it and
+// remember it so its neighbours get checked next.
 std::uint32_t __fastcall GameWorld_MoveTileToAreaAndQueue(GameWorld* world, void*, std::uint32_t x,
                                                           std::uint32_t y, std::uint32_t oldArea,
                                                           std::uint32_t newArea) {
@@ -252,6 +261,8 @@ S3RE_HOOK(0x004e6430, GameWorld_MoveTileToAreaAndQueue, MoveTileFn,
 
 using MergeFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
 
+// Purpose: Moves all tiles connected to a starting tile from one area to another, spreading outwards like
+// paint. Used when areas are joined or split, e.g. after territory changes.
 std::uint32_t __fastcall GameWorld_FloodMoveArea(GameWorld* world, void*, std::uint32_t x, std::uint32_t y,
                                                  std::uint32_t newArea) {
     const std::uint32_t old = At<std::uint16_t>(world, Tile(x, y) + kTileArea);
@@ -278,6 +289,9 @@ std::uint32_t OffsetNeighbourY(GameWorld* world, std::uint32_t y, std::uint32_t 
 
 }  // namespace
 
+// Purpose: When a tile becomes part of the walkable network (e.g. after something blocking it is removed),
+// it joins the region of its neighbours; if it connects several regions they are merged into one;
+// if it has no neighbour region, it starts a new one.
 std::uint32_t __fastcall GameWorld_MergeTileWord16Regions(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
     std::uint32_t count = 0;
     std::uint32_t first = 0;
@@ -305,6 +319,7 @@ std::uint32_t __fastcall GameWorld_MergeTileWord16Regions(GameWorld* world, void
     return id;
 }
 
+// Purpose: Like MergeTileWord16Regions, for the other kind of region (over unblocked tiles).
 std::uint32_t __fastcall GameWorld_MergeTileByte10Regions(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
     std::uint32_t count = 0;
     std::uint32_t first = 0;
@@ -339,6 +354,8 @@ S3RE_HOOK(0x0051c5e0, GameWorld_MergeTileWord16Regions, MergeFn, Original_GameWo
 S3RE_HOOK(0x0051ca00, GameWorld_MergeTileByte10Regions, MergeFn, Original_GameWorld_MergeTileByte10Regions,
           GameWorld_MergeTileByte10Regions);
 
+// Purpose: After something changed near a tile, gives region numbers to the nearby tiles that should have
+// one now (not blocked, not water-like terrain) but don't yet.
 std::uint32_t __fastcall GameWorld_AssignWord16RegionsAround(GameWorld* world, void*, std::uint32_t x,
                                                               std::uint32_t y) {
     constexpr std::uint32_t kEntries = 19;

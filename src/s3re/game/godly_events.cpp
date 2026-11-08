@@ -68,6 +68,8 @@ std::uint32_t HasManaForSpell(GameWorld* world, std::uint32_t player, std::uint3
 
 }  // namespace
 
+// Purpose: Whether a player has enough mana (collected through their temples) to cast a given spell ('god
+// event'). Used by the computer players before they cast.
 std::uint32_t __fastcall GameWorld_HasManaForSpell(GameWorld* world, void*, std::uint32_t player,
                                                    std::uint32_t spell) {
     return HasManaForSpell<false>(world, player, spell);

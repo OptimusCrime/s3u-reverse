@@ -88,6 +88,7 @@ std::uint32_t CountSettlersWhere(GameWorld* world, Match match) {
 using CountFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t player,
                                            std::uint32_t value);
 
+// Purpose: Counts a player's buildings of one type. Used by mission goals and the AI.
 std::uint32_t __fastcall GameWorld_CountBuildings(GameWorld* world, void* /*edx*/,
                                                   std::uint32_t player, std::uint32_t type) {
     return CountBuildingsWhere(world, [&](const std::uint8_t* b) {
@@ -95,6 +96,7 @@ std::uint32_t __fastcall GameWorld_CountBuildings(GameWorld* world, void* /*edx*
     });
 }
 
+// Purpose: Counts a player's finished (not under construction) buildings of one type.
 std::uint32_t __fastcall GameWorld_CountBuildingsWithFlag21Clear(GameWorld* world, void* /*edx*/,
                                                                  std::uint32_t player,
                                                                  std::uint32_t type) {
@@ -104,6 +106,8 @@ std::uint32_t __fastcall GameWorld_CountBuildingsWithFlag21Clear(GameWorld* worl
     });
 }
 
+// Purpose: Counts a player's finished buildings of one type that have a certain field set (meaning unknown;
+// probably 'occupied/working').
 std::uint32_t __fastcall GameWorld_CountBuildingsWithWord8(GameWorld* world, void* /*edx*/,
                                                            std::uint32_t player,
                                                            std::uint32_t type) {
@@ -113,6 +117,7 @@ std::uint32_t __fastcall GameWorld_CountBuildingsWithWord8(GameWorld* world, voi
     });
 }
 
+// Purpose: Counts a player's settlers of one type. Used by mission goals and the AI.
 std::uint32_t __fastcall GameWorld_CountSettlers(GameWorld* world, void* /*edx*/,
                                                  std::uint32_t player, std::uint32_t type) {
     return CountSettlersWhere(world, [&](const std::uint8_t* s) {
@@ -120,6 +125,7 @@ std::uint32_t __fastcall GameWorld_CountSettlers(GameWorld* world, void* /*edx*/
     });
 }
 
+// Purpose: Counts a player's settlers that currently do one job.
 std::uint32_t __fastcall GameWorld_CountSettlersWithJob(GameWorld* world, void* /*edx*/,
                                                         std::uint32_t player, std::uint32_t job) {
     return CountSettlersWhere(world, [&](const std::uint8_t* s) {

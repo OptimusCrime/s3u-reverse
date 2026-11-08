@@ -21,6 +21,9 @@ namespace s3re::msvc6 {
 
 S3RE_HOOK(0x00401f60, String_Eos, StringEosFn, Original_String_Eos, String_Eos);
 
+// Purpose: Part of the C++ standard string the game was built with: sets a string's length and writes the
+// terminating zero. Game data structures contain such strings, so we need the exact same
+// behaviour.
 void __fastcall String_Eos(String* self, void* /*edx*/, std::uint32_t n) {
     self->len = n;
     self->ptr[n] = '\0';

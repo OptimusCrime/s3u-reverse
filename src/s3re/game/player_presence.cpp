@@ -47,6 +47,8 @@ T& At(GameWorld* world, std::uint32_t offset) {
 using NearFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
                                           std::uint32_t radius, std::uint32_t player);
 
+// Purpose: Whether any other player is present near a tile, using a coarse map of who is where. Probably
+// used for military or territory decisions.
 std::uint32_t __fastcall GameWorld_IsOtherPlayerNear(GameWorld* world, void*, std::uint32_t x, std::uint32_t y,
                                                      std::uint32_t radius, std::uint32_t player) {
     if (!GameWorld_IsOnMap(world, nullptr, x, y)) {

@@ -32,6 +32,8 @@ namespace s3re::game {
 using TileDistanceFn = std::uint32_t(__stdcall*)(std::uint32_t x0, std::uint32_t y0,
                                                  std::uint32_t x1, std::uint32_t y1);
 
+// Purpose: The number of steps between two tiles on the six-neighbour grid. Used whenever the game needs
+// 'how far away is this', e.g. to pick the nearest settler or to check a work radius.
 std::uint32_t __stdcall TileDistance(std::uint32_t x0, std::uint32_t y0, std::uint32_t x1,
                                      std::uint32_t y1) {
     if (x0 < x1) {
@@ -54,6 +56,9 @@ S3RE_HOOK(0x004ff320, TileDistance, TileDistanceFn, Original_TileDistance, TileD
 
 using NextSearchGenerationFn = void(__fastcall*)(GameWorld* world, void* edx);
 
+// Purpose: Searches over the map mark the tiles they have visited. Instead of clearing all marks before
+// every search, the game uses a new mark number per search; this starts the next one, and only
+// clears the marks when the number runs out.
 void __fastcall GameWorld_NextSearchGeneration(GameWorld* world, void* /*edx*/) {
     using namespace world_offset;
     auto& generation = WorldField<std::uint8_t>(world, kSearchGeneration);

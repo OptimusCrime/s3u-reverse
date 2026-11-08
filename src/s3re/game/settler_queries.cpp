@@ -157,6 +157,8 @@ using CountNearFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std:
 using FindNearbyFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler,
                                                 std::uint32_t x, std::uint32_t y);
 
+// Purpose: Gives a settler a new place to walk to. Clears its remembered path so the path finder starts
+// fresh. Used by nearly every job (45 places in the code).
 std::uint32_t __fastcall GameWorld_SetSettlerTarget(GameWorld* world, void*, std::uint32_t settler,
                                                     std::uint32_t x, std::uint32_t y) {
     const std::uint32_t record = Settler(settler);
@@ -177,6 +179,8 @@ std::uint32_t __fastcall GameWorld_SetSettlerTarget(GameWorld* world, void*, std
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + (settler << 6);
 }
 
+// Purpose: Counts how many settlers of a list stand within some distance of a tile. Used when preparing
+// what to draw (probably for on-screen indicators).
 std::uint32_t __fastcall GameWorld_CountListSettlersNear(GameWorld* world, void*, std::uint32_t first,
                                                          std::uint32_t maxDistance, std::uint32_t x,
                                                          std::uint32_t y, std::uint32_t value) {
@@ -193,6 +197,8 @@ std::uint32_t __fastcall GameWorld_CountListSettlersNear(GameWorld* world, void*
     return count;
 }
 
+// Purpose: Looks around a tile for a type-0x29 settler of the same player. Its return value has an odd
+// quirk in the original (see the notes above), which we keep.
 std::uint32_t __fastcall GameWorld_FindNearbySettlerType29(GameWorld* world, void*, std::uint32_t settler,
                                                            std::uint32_t x, std::uint32_t y) {
     std::uint32_t last = x;  // the original's register, see above
@@ -223,6 +229,8 @@ S3RE_HOOK(0x0050cdb0, GameWorld_FindNearbySettlerType29, FindNearbyFn,
 using PlaceNearFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler,
                                                std::uint32_t x, std::uint32_t y);
 
+// Purpose: Puts a (new) settler on the nearest free, walkable tile around a position. Used when settlers
+// are created, e.g. by player commands.
 std::uint32_t __fastcall GameWorld_PlaceSettlerNear(GameWorld* world, void*, std::uint32_t settler, std::uint32_t x,
                                                     std::uint32_t y) {
     for (std::uint32_t entry = 0; entry < kPlaceEntries; ++entry) {
@@ -291,6 +299,8 @@ using SendToPileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std
                                                 std::uint32_t building);
 using SendToBuildingFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building);
 
+// Purpose: Assigns work: finds the nearest waiting settler (probably a carrier) of a player and sends it to
+// a goods pile to pick goods up for a building.
 std::uint32_t __fastcall GameWorld_SendNearestSettlerToPile(GameWorld* world, void*, std::uint32_t pile,
                                                             std::uint32_t player, std::uint32_t building) {
     const std::uint32_t head = kPlayerRecords + player * kPlayerRecordBytes + kPlayerWaitingA;
@@ -324,6 +334,8 @@ std::uint32_t __fastcall GameWorld_SendNearestSettlerToPile(GameWorld* world, vo
     return ((pile + 0x14d2e2u) & 0xffffff00u) | reserved;
 }
 
+// Purpose: Assigns work: finds the nearest waiting settler (probably a builder) and sends it to a building
+// site, if one is close enough.
 std::uint32_t __fastcall GameWorld_SendNearestSettlerToBuilding(GameWorld* world, void*, std::uint32_t building) {
     const std::uint32_t record = kBuildings + building * kBuildingBytes;
     const std::uint32_t direction = (At<std::uint16_t>(world, record + kBuildingDirection) + 3u) % 6u;
@@ -386,6 +398,8 @@ void RemoveFromList(std::uint16_t* words, Count& count, std::uint32_t value) {
 
 using RemoveSettlerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler);
 
+// Purpose: Takes a settler out of all the job/assignment lists it may be on, and announces the change as an
+// event. Probably used when a settler dies or changes job.
 std::uint32_t __fastcall GameWorld_RemoveSettlerFromLists(GameWorld* world, void*, std::uint32_t settler) {
     const std::uint32_t record = Settler(settler);
     GameWorld_QueueEvent(world, nullptr, 5, settler, At<std::uint8_t>(world, record + kSettlerType),

@@ -130,21 +130,28 @@ using GetInputFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::
 using SetInputFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building,
                                               std::uint32_t goods, std::uint32_t value);
 
+// Purpose: Every building takes in up to three kinds of goods (a construction site takes building
+// materials). For one kind of goods, this reads the link to the next building in the area's 'wants
+// these goods' list.
 std::uint32_t __fastcall GameWorld_BuildingInputWord2A(GameWorld* world, void*, std::uint32_t building,
                                                        std::uint32_t goods) {
     return GetWord(world, building, goods, kBuildingWord2A, kTroubleGet2A);
 }
 
+// Purpose: For one kind of goods a building takes in, reads how many it has asked for.
 std::uint32_t __fastcall GameWorld_BuildingInputWord24(GameWorld* world, void*, std::uint32_t building,
                                                        std::uint32_t goods) {
     return GetWord(world, building, goods, kBuildingWord24, kTroubleGet24);
 }
 
+// Purpose: Sets the 'next building wanting these goods' link of one of a building's inputs (see
+// BuildingInputWord2A).
 std::uint32_t __fastcall GameWorld_SetBuildingInputWord2A(GameWorld* world, void*, std::uint32_t building,
                                                           std::uint32_t goods, std::uint32_t value) {
     return SetWord(world, building, goods, value, kBuildingWord2A, kTroubleSet2A);
 }
 
+// Purpose: Sets how many of one kind of goods a building has asked for.
 std::uint32_t __fastcall GameWorld_SetBuildingInputWord24(GameWorld* world, void*, std::uint32_t building,
                                                           std::uint32_t goods, std::uint32_t value) {
     return SetWord(world, building, goods, value, kBuildingWord24, kTroubleSet24);
@@ -197,6 +204,8 @@ using AddRequestFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std
                                                 std::uint32_t goods, std::uint32_t amount, std::uint32_t condition);
 using RemoveRequestsFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building);
 
+// Purpose: A building asks for goods: it is added to its area's list of buildings that want that kind of
+// goods, together with the amount. Carriers serve these lists.
 std::uint32_t __fastcall GameWorld_AddBuildingGoodsRequest(GameWorld* world, void*, std::uint32_t building,
                                                            std::uint32_t goods, std::uint32_t amount,
                                                            std::uint32_t condition) {
@@ -213,6 +222,8 @@ std::uint32_t __fastcall GameWorld_AddBuildingGoodsRequest(GameWorld* world, voi
     return GameWorld_SetBuildingInputWord24(world, nullptr, building, goods, amount);
 }
 
+// Purpose: Takes a building off all of its area's 'wants goods' lists (and some special lists for two
+// building types). Used when a building no longer needs goods or is removed.
 std::uint32_t __fastcall GameWorld_RemoveBuildingFromAreaRequests(GameWorld* world, void*, std::uint32_t building) {
     const std::uint32_t area = BuildingArea(world, building);
     const std::uint8_t* record = Record(world, building);

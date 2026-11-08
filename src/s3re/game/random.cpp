@@ -68,6 +68,10 @@ std::uint16_t Ror16(std::uint16_t value) {
 
 using GameWorldRandomFn = std::uint16_t(__fastcall*)(GameWorld* world, void* edx);
 
+// Purpose: The simulation's random number generator. Everything random in the game world (settler
+// decisions, map generation, animations that affect play) draws from it, and because its state
+// lives inside the world object, two games with the same seed and the same commands play out
+// identically. That is what makes multiplayer lockstep and our replays work.
 std::uint16_t __fastcall GameWorld_Random(GameWorld* world, void* /*edx*/) {
     std::uint16_t* state = &WorldField<std::uint16_t>(world, world_offset::kRandomState);
     const std::uint16_t a = state[0];
@@ -88,6 +92,8 @@ S3RE_HOOK(0x004feb70, GameWorld_Random, GameWorldRandomFn, Original_GameWorld_Ra
 // GameWorld::RandomBelow6 (0x00503880): (Random() & 0xff) % 6, i.e. 0..5
 // (EAX, used by all ten callers). Takes no arguments; ECX (the world) is
 // passed on to Random. Plain ret.
+// Purpose: A random number from 0 to 5, i.e. a random direction on the six-sided tile grid. Used when
+// settlers pick a direction to face or wander, and by the landscape update.
 std::uint32_t __fastcall GameWorld_RandomBelow6(GameWorld* world, void* /*edx*/) {
     return (GameWorld_Random(world, nullptr) & 0xffu) % 6u;
 }
@@ -100,6 +106,9 @@ S3RE_HOOK(0x00503880, GameWorld_RandomBelow6, GameWorldRandomBelowFn, Original_G
 using GameWorldSeedRandomFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t seed);
 
 // The reimplementation, compared against the original by the tests.
+// Purpose: Starts the random number generator from a seed at the beginning of a game (each game gets a
+// different seed). Our hook also lets the launcher force a seed (--seed), so test runs are
+// repeatable.
 void __fastcall GameWorld_SeedRandom_Impl(GameWorld* world, void* /*edx*/, std::uint32_t seed) {
     std::uint16_t* state = &WorldField<std::uint16_t>(world, world_offset::kRandomState);
     state[0] = static_cast<std::uint16_t>(seed);

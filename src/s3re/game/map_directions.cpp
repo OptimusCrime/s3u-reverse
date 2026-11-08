@@ -25,6 +25,9 @@ namespace s3re::game {
 using NeighbourFn = std::uint32_t(__stdcall*)(std::uint32_t coordinate, std::uint32_t direction);
 using TurnFn = std::uint32_t(__stdcall*)(std::uint32_t direction);
 
+// Purpose: The map is a grid where every tile has six neighbours. Given a tile's x coordinate and one of
+// the six directions, this returns the neighbour's x coordinate. Used everywhere settlers walk or
+// the game looks around a tile.
 std::uint32_t __stdcall NeighbourX(std::uint32_t x, std::uint32_t direction) {
     if (direction == 0 || direction == 1) {
         ++x;
@@ -35,6 +38,7 @@ std::uint32_t __stdcall NeighbourX(std::uint32_t x, std::uint32_t direction) {
     return x;
 }
 
+// Purpose: The y counterpart of NeighbourX: the neighbour's y coordinate in one of the six directions.
 std::uint32_t __stdcall NeighbourY(std::uint32_t y, std::uint32_t direction) {
     if (direction == 1 || direction == 2) {
         ++y;
@@ -45,14 +49,19 @@ std::uint32_t __stdcall NeighbourY(std::uint32_t y, std::uint32_t direction) {
     return y;
 }
 
+// Purpose: Turns one step counter-clockwise among the six directions (wrapping around). Used when settlers
+// turn or search around themselves.
 std::uint32_t __stdcall PreviousDirection(std::uint32_t direction) {
     return direction == 0 ? 5 : direction - 1;
 }
 
+// Purpose: Turns one step clockwise among the six directions (wrapping around).
 std::uint32_t __stdcall NextDirection(std::uint32_t direction) {
     return direction == 5 ? 0 : direction + 1;
 }
 
+// Purpose: Given how far apart two tiles are, picks which of the six directions points most closely from
+// one to the other. Used to decide which way a settler should step towards a goal.
 std::uint32_t __stdcall DirectionFromDelta(std::int32_t dx, std::int32_t dy) {
     // Comparisons are signed; negations and doublings wrap like the
     // original's 32-bit registers.

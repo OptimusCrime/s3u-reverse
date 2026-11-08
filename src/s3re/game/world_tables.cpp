@@ -141,6 +141,8 @@ using ReplaceTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, st
                                                  std::uint32_t y, std::uint32_t expected,
                                                  std::uint32_t value);
 
+// Purpose: Finds a free record in a table of extra data that some buildings need (probably for production
+// or storage details) and initialises it.
 std::uint32_t __fastcall GameWorld_AllocBuildingExtra(GameWorld* world, void*,
                                                       std::uint32_t value) {
     std::uint32_t record = 1;
@@ -166,6 +168,8 @@ std::uint32_t __fastcall GameWorld_AllocBuildingExtra(GameWorld* world, void*,
     return record;
 }
 
+// Purpose: Finds a free record in a table of small 20-byte records (purpose unknown) and stores ten values
+// in it.
 std::uint32_t __fastcall GameWorld_AllocTable36700Record(GameWorld* world, void*, std::uint32_t a0,
                                                          std::uint32_t a1, std::uint32_t a2,
                                                          std::uint32_t a3, std::uint32_t a4,
@@ -191,6 +195,9 @@ std::uint32_t __fastcall GameWorld_AllocTable36700Record(GameWorld* world, void*
     return Address(world) + record * kTable36700Bytes;
 }
 
+// Purpose: Adds an event to the world's event queue (e.g. 'settler changed', 'building finished'), from
+// which other parts of the game (probably the UI, sound and messages) learn what happened. Some
+// duplicate events are skipped.
 std::uint32_t __fastcall GameWorld_QueueEvent(GameWorld* world, void*, std::uint32_t type,
                                               std::uint32_t a, std::uint32_t b, std::uint32_t c) {
     if (type == kDedupedType) {
@@ -221,6 +228,8 @@ std::uint32_t __fastcall GameWorld_QueueEvent(GameWorld* world, void*, std::uint
     return next;
 }
 
+// Purpose: One step of a flood fill over a player's marked tiles: queues a neighbour if it is marked and
+// belongs to that player, and unmarks it so it is visited only once.
 std::uint32_t __fastcall GameWorld_QueueMarkedTile(GameWorld* world, void*, std::uint32_t x,
                                                    std::uint32_t y, std::uint32_t player) {
     const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
@@ -254,6 +263,8 @@ void PushMarkedTile(GameWorld* world, std::uint32_t tile, std::uint32_t x, std::
 
 }  // namespace
 
+// Purpose: Like QueueMarkedTile, for marked tiles of three particular terrain types (probably water or
+// other non-land terrain).
 std::uint32_t __fastcall GameWorld_QueueMarkedTileTerrain5To7(GameWorld* world, void*,
                                                               std::uint32_t x, std::uint32_t y) {
     const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
@@ -266,6 +277,7 @@ std::uint32_t __fastcall GameWorld_QueueMarkedTileTerrain5To7(GameWorld* world, 
     return 0;  // callers ignore EAX
 }
 
+// Purpose: Like QueueMarkedTile, without the owner check.
 std::uint32_t __fastcall GameWorld_QueueMarkedTileNoOwner(GameWorld* world, void*, std::uint32_t x,
                                                           std::uint32_t y) {
     const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
@@ -277,6 +289,8 @@ std::uint32_t __fastcall GameWorld_QueueMarkedTileNoOwner(GameWorld* world, void
     return 0;  // callers ignore EAX
 }
 
+// Purpose: Counts down the world's timers by one; timers that run out are removed. Called once per
+// simulation update; probably drives delayed actions.
 std::uint32_t __fastcall GameWorld_CountDownTimers(GameWorld* world, void*) {
     for (std::uint32_t list = 0; list < kTimerLists; ++list) {
         const std::uint32_t first = kTimers + list * kTimersPerList * kTimerBytes;
@@ -303,6 +317,8 @@ std::uint32_t __fastcall GameWorld_CountDownTimers(GameWorld* world, void*) {
     return 0;  // the only caller ignores EAX
 }
 
+// Purpose: Remembers a position in a short list of recently used positions (probably for effects or
+// messages that should not repeat at the same place).
 std::uint32_t __fastcall GameWorld_AddToRecentPositions(GameWorld* world, void*, std::uint32_t x,
                                                         std::uint32_t y) {
     const auto x16 = static_cast<std::uint16_t>(x);
@@ -336,6 +352,8 @@ void PushTile(GameWorld* world, std::uint32_t x, std::uint32_t y) {
 
 }  // namespace
 
+// Purpose: One step of a flood fill: if a tile still has the old region number, give it the new one and
+// remember it so its neighbours get checked next.
 std::uint32_t __fastcall GameWorld_ReplaceTileWord16AndQueue(GameWorld* world, void*, std::uint32_t x,
                                                              std::uint32_t y, std::uint32_t expected,
                                                              std::uint32_t value) {
@@ -347,6 +365,7 @@ std::uint32_t __fastcall GameWorld_ReplaceTileWord16AndQueue(GameWorld* world, v
     return 0;  // callers ignore EAX
 }
 
+// Purpose: Like ReplaceTileWord16AndQueue, for the other kind of region number stored in each tile.
 std::uint32_t __fastcall GameWorld_ReplaceTileByte10AndQueue(GameWorld* world, void*, std::uint32_t x,
                                                              std::uint32_t y, std::uint32_t expected,
                                                              std::uint32_t value) {

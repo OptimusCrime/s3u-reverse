@@ -57,6 +57,8 @@ using CanEnterFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::
 using SettlerGroupFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx,
                                                   std::uint32_t settler);
 
+// Purpose: Whether a settler may step onto a tile: it must not be blocked or occupied, and ordinary
+// settlers must stay on their own player's land (soldiers and some others may leave it).
 std::uint32_t __fastcall GameWorld_CanSettlerEnterTile(GameWorld* world, void* /*edx*/,
                                                        std::uint32_t x, std::uint32_t y,
                                                        std::uint32_t player,
@@ -73,6 +75,8 @@ std::uint32_t __fastcall GameWorld_CanSettlerEnterTile(GameWorld* world, void* /
     return tile[kTileOwner] == player ? 1 : 0;
 }
 
+// Purpose: Sorts a settler into a broad group (for example civilians, soldiers, special units). Probably
+// used to decide which rules apply to it, e.g. how it moves or what it may enter.
 std::uint32_t __fastcall GameWorld_SettlerGroup(GameWorld* world, void* /*edx*/,
                                                 std::uint32_t settler) {
     const std::uint8_t* record = Settler(world, settler);

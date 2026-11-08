@@ -92,6 +92,8 @@ using PileSlotFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::
 using RecountFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
 using PileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t pile);
 
+// Purpose: Whether one of a building's goods piles (its input or output stock) has anything on it. Checked
+// constantly by settlers deciding what to do next.
 std::uint32_t __fastcall GameWorld_BuildingPileHasGoods(GameWorld* world, void*,
                                                         std::uint32_t building,
                                                         std::uint32_t slot) {
@@ -135,10 +137,14 @@ std::uint32_t RecountPlayerGoods(GameWorld* world, std::uint8_t maxKind) {
 
 }  // namespace
 
+// Purpose: Recounts from scratch how much of each kind of goods every player has, by adding up all goods
+// piles on their land. Done once at game start.
 std::uint32_t __fastcall GameWorld_RecountPlayerGoods(GameWorld* world, void*) {
     return RecountPlayerGoods(world, 8);
 }
 
+// Purpose: Finds the building next to a goods pile and returns one of its fields (meaning unknown).
+// Probably tells which building a pile belongs to.
 std::uint32_t __fastcall GameWorld_PileNeighbourBuildingByteE(GameWorld* world, void*,
                                                               std::uint32_t pile) {
     const std::uint32_t p = Pile(pile);

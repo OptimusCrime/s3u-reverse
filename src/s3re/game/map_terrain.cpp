@@ -82,10 +82,13 @@ using SpreadTerrainFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, 
 using AroundFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
                                             std::uint32_t y);
 
+// Purpose: Map generation: turns the placeholder terrain 0xf3 into a real terrain type.
 std::uint32_t __fastcall GameWorld_ReplaceTerrainF3(GameWorld* world, void*, std::uint32_t newType) {
     return GameWorld_ReplaceTerrainType(world, nullptr, 0xf3, newType);
 }
 
+// Purpose: Map generation: tiles of one terrain next to another terrain randomly change, so terrain edges
+// look natural instead of straight.
 std::uint32_t __fastcall GameWorld_SpreadTerrainRandomly(GameWorld* world, void*, std::uint32_t from,
                                                          std::uint32_t neighbour, std::uint32_t to,
                                                          std::uint32_t percent) {
@@ -112,6 +115,9 @@ std::uint32_t __fastcall GameWorld_SpreadTerrainRandomly(GameWorld* world, void*
     return At<std::uint32_t>(world, world_offset::kMapSize) - 1;
 }
 
+// Purpose: Updates the 'territory border' mark of a tile and its neighbours: a tile is on the border if it
+// is owned land next to land of another owner. Probably what the game uses to draw the border
+// stones.
 std::uint32_t __fastcall GameWorld_UpdateBorderFlagsAround(GameWorld* world, void*, std::uint32_t x,
                                                            std::uint32_t y) {
     static constexpr std::int32_t kNeighbours[6] = {kRow, kRow + kColumn, kColumn, -kRow, -kRow - kColumn, -kColumn};
@@ -152,12 +158,16 @@ using GrowTerrainFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, st
                                                  std::uint32_t into, std::uint32_t percent);
 using NoArgsFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
 
+// Purpose: Map generation: lets one terrain grow randomly into its neighbour terrain by one step (via a
+// temporary marker, so new tiles don't keep growing in the same pass).
 std::uint32_t __fastcall GameWorld_GrowTerrain(GameWorld* world, void*, std::uint32_t from, std::uint32_t into,
                                                std::uint32_t percent) {
     GameWorld_SpreadTerrainRandomly(world, nullptr, from, into, 0xf0, percent);
     return GameWorld_ReplaceTerrainType(world, nullptr, 0xf0, into);
 }
 
+// Purpose: Recomputes the territory border marks of the whole map (e.g. at game start or after big
+// territory changes).
 std::uint32_t __fastcall GameWorld_UpdateAllBorderFlags(GameWorld* world, void*) {
     auto size = [&] { return At<std::uint32_t>(world, world_offset::kMapSize); };
     for (std::uint32_t x = 0; x < size(); ++x) {

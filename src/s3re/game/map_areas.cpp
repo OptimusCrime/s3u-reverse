@@ -95,6 +95,8 @@ using RemoveTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std
 using BuildingSlotFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx,
                                                   std::uint32_t building, std::uint32_t slot);
 
+// Purpose: Makes a tile part of an area. The map is divided into areas (probably the regions of connected
+// land that make up a player's economy) and each area counts its tiles.
 std::uint32_t __fastcall GameWorld_AssignTileToArea(GameWorld* world, void*, std::uint32_t x,
                                                     std::uint32_t y, std::uint32_t area) {
     std::uint32_t& count = AreaTileCount(world, area);
@@ -103,6 +105,7 @@ std::uint32_t __fastcall GameWorld_AssignTileToArea(GameWorld* world, void*, std
     return area;
 }
 
+// Purpose: Takes a tile out of its area (the opposite of AssignTileToArea).
 std::uint32_t __fastcall GameWorld_RemoveTileFromArea(GameWorld* world, void*, std::uint32_t x,
                                                       std::uint32_t y) {
     std::uint16_t& tileArea = TileArea(world, x, y);
@@ -112,18 +115,22 @@ std::uint32_t __fastcall GameWorld_RemoveTileFromArea(GameWorld* world, void*, s
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&count));
 }
 
+// Purpose: Writes a temporary marked area number into a tile, used while the game recomputes areas.
 std::uint32_t __fastcall GameWorld_SetTileAreaMarked(GameWorld* world, void*, std::uint32_t x,
                                                      std::uint32_t y, std::uint32_t value) {
     TileArea(world, x, y) = static_cast<std::uint16_t>(value + kTileAreaMarked);
     return TileAreaIndex(x, y) * 3u;
 }
 
+// Purpose: Registers a building in one of its area's building lists (list A). Areas keep track of their
+// buildings, probably so carriers and builders can find work nearby.
 std::uint32_t __fastcall GameWorld_SetAreaBuildingSlotA(GameWorld* world, void*,
                                                         std::uint32_t building,
                                                         std::uint32_t slot) {
     return SetAreaBuildingSlot(world, building, slot, kAreaSlotsA);
 }
 
+// Purpose: Like SetAreaBuildingSlotA, for the area's second building list.
 std::uint32_t __fastcall GameWorld_SetAreaBuildingSlotB(GameWorld* world, void*,
                                                         std::uint32_t building,
                                                         std::uint32_t slot) {

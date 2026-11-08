@@ -41,6 +41,8 @@ std::uint32_t& PlayerField(GameWorld* world, std::uint32_t player, std::uint32_t
 using FindPlayerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t value);
 using RaceTypeFn = std::uint32_t(__stdcall*)(std::uint32_t race, std::uint32_t type);
 
+// Purpose: Finds the active player whose index/team field matches a value. Probably used to map between a
+// player's slot and their in-game number.
 std::uint32_t __fastcall GameWorld_FindPlayerByField0C(GameWorld* world, void*,
                                                        std::uint32_t value) {
     for (std::uint32_t player = 0; player < kPlayers; ++player) {
@@ -53,6 +55,8 @@ std::uint32_t __fastcall GameWorld_FindPlayerByField0C(GameWorld* world, void*,
     return 0xffffffffu;
 }
 
+// Purpose: Some buildings exist only for certain races (Romans, Egyptians, Asians, Amazons). This tells the
+// build menu whether a building type is available to a race.
 std::uint32_t __stdcall BuildingTypeAllowedForRace(std::uint32_t race, std::uint32_t type) {
     const auto r = static_cast<std::uint8_t>(race);
     switch (type) {
