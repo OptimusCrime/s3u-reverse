@@ -16,7 +16,9 @@ add_library(s3re SHARED
     replay/command_log.cpp
 
     game/building_flags.cpp
+    game/building_tiles.cpp
     game/counting.cpp
+    game/goods_piles.cpp
     game/id_allocators.cpp
     game/logic_thread.cpp
     game/map.cpp
@@ -25,6 +27,7 @@ add_library(s3re SHARED
     game/map_marks.cpp
     game/map_neighbourhood.cpp
     game/net_thread.cpp
+    game/player_queries.cpp
     game/players.cpp
     game/random.cpp
     game/settlers.cpp
@@ -32,6 +35,7 @@ add_library(s3re SHARED
     game/ui_state.cpp
     game/world_search.cpp
     game/winmain.cpp
+    game/world_tables.cpp
 )
 
 target_include_directories(s3re PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)

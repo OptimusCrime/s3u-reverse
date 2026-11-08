@@ -209,6 +209,181 @@ def slice_map_size(rng, pool, args):
     return [(MAP_SIZE, size, 4)]
 
 
+# --- batch 9 ----------------------------------------------------------------
+
+TILES = 0x67444  # tile records (building_tiles.cpp)
+SETTLERS = 0x12a5e60
+SETTLER_BYTES = 0x40
+PILES = 0x123885c
+PILE_BYTES = 14
+PILE_COUNT = 0x1238858
+
+
+def tile(x: int, y: int) -> int:
+    return (TILES + (x * 0x300 + y) * 24) & 0xFFFFFFFF
+
+
+def building_tile_fields(rng, building: int):
+    record = BUILDINGS + building * BUILDING_BYTES
+    fields = []
+    for field in (0x2, 0xa):
+        fields += [(record + field, rng.randrange(384), 2),
+                   (record + field + 2, rng.randrange(384), 2)]
+    return fields
+
+
+def building_arg_on_map(rng, pool, args):
+    return building_tile_fields(rng, args[0])
+
+
+def settler_in_building(rng, pool, args):
+    settler = SETTLERS + args[0] * SETTLER_BYTES
+    building = rng.randrange(2001)
+    return [(settler + 0x4, rng.randrange(384), 2), (settler + 0x6, rng.randrange(384), 2),
+            (settler + 0x22, building, 2)] + building_tile_fields(rng, building)
+
+
+def building_pile_slots(rng, pool, args):
+    record = BUILDINGS + args[0] * BUILDING_BYTES
+    fields = []
+    for slot in range(3):
+        pile = 0 if rng.random() < 0.3 else rng.randrange(1, 0x10000)
+        fields.append((record + 0x10 + slot * 2, pile, 2))
+        fields.append((PILES + pile * PILE_BYTES + 1,
+                       0 if rng.random() < 0.4 else rng.randrange(256), 1))
+    return fields
+
+
+PILE_KINDS = (0, 7, 8, 9, 0xfd, 0xfe, 0xff)
+
+
+def pile_fields(rng, pile: int):
+    record = PILES + pile * PILE_BYTES
+    x, y = rng.randrange(384), rng.randrange(384)
+    return [(record + 0x0, rng.choice([0xff, rng.randrange(36), rng.randrange(256)]), 1),
+            (record + 0x4, rng.choice(PILE_KINDS), 1),
+            (record + 0x6, x, 2), (record + 0x8, y, 2),
+            (tile(x, y) + 0x8, rng.choice([0xff, rng.randrange(20), rng.randrange(256)]), 1)]
+
+
+def goods_piles(rng, pool, args):
+    count = rng.choice([0, 1, 2, rng.randrange(40)])
+    fields = [(PILE_COUNT, count, 4)]
+    for pile in range(1, count + 1):
+        fields += pile_fields(rng, pile)
+    return fields
+
+
+NEIGHBOUR_OFFSETS = 0x110a588
+
+
+def pile_neighbourhood(rng, pool, args):
+    """Pile on the map, small offsets; most neighbour tiles without a
+    building (so that later offsets and the 'none' result are reached)."""
+    record = PILES + args[0] * PILE_BYTES
+    x, y = rng.randrange(384), rng.randrange(384)
+    fields = [(record + 0x6, x, 2), (record + 0x8, y, 2)]
+    no_building = rng.random() < 0.3
+    for k in range(19):
+        dx, dy = rng.randint(-3, 3), rng.randint(-3, 3)
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4)]
+        t = tile((x + dx) & 0xFFFFFFFF, (y + dy) & 0xFFFFFFFF)
+        r = rng.random()
+        if no_building or r < 0.4:
+            fields.append((t + 0xa, rng.getrandbits(8) & ~0x20, 1))
+        elif r < 0.6:
+            fields.append((t + 0x2, 0, 2))
+    return fields
+
+
+def alloc_table(table: int, stride: int, limit: int, high_water: int, size: int,
+                free_value: int) -> Callable:
+    """Records 1..first_free-1 in use, first_free free (often at or past the
+    limit), the high-water mark near it or random."""
+    def presets(rng, pool, args):
+        r = rng.random()
+        if r < 0.25:
+            first_free = limit + 1 - rng.randrange(3)
+        elif r < 0.4:
+            first_free = limit + 2  # none free
+        else:
+            first_free = 1 + rng.randrange(300)
+        fields = []
+        for record in range(1, min(first_free, limit + 2)):
+            value = rng.randrange(1, 1 << (8 * size))
+            if value == free_value:
+                value ^= 1
+            fields.append((table + record * stride, value, size))
+        if first_free <= limit + 1:
+            fields.append((table + first_free * stride, free_value, size))
+        fields.append((high_water, (first_free + rng.randint(-2, 2)) & 0xFFFFFFFF
+                       if rng.random() < 0.6 else rng.getrandbits(32), 4))
+        return fields
+    return presets
+
+
+PENDING_RING = 0x2f990
+
+
+def event_type(rng, pool):
+    return 6 if rng.random() < 0.6 else anything(rng, pool)
+
+
+def event_rings(rng, pool, args):
+    read = rng.choice([rng.randrange(1000), 999, 995])
+    length = rng.choice([0, 1, rng.randrange(12)])
+    write = (read + length) % 1000
+    fields = [(0x32870, read, 4), (0x32874, write, 4),
+              (0x366fc, rng.choice([999, rng.randrange(1000)]), 4)]
+    for i in range(length):
+        entry = PENDING_RING + ((read + i) % 1000) * 12
+        fields += [(entry, 6 if rng.random() < 0.5 else rng.randrange(10), 4),
+                   (entry + 4, rng.randrange(4), 4)]
+    return fields
+
+
+def marked_tile(rng, pool, args):
+    return [(tile(args[0], args[1]) + 0x8, rng.randrange(4), 1),
+            (0xe0788c, rng.choice([9999, rng.randrange(10000)]), 4)]
+
+
+def timers(rng, pool, args):
+    return [(0x2e5e0 + entry * 12, rng.choice([0, 1, 1, 2, 3, rng.getrandbits(32)]), 4)
+            for entry in range(420)]
+
+
+RECENT_POSITIONS = 0x1195dd4
+
+
+def recent_positions(rng, pool, args):
+    fields = []
+    for slot in range(128):
+        empty = rng.random() < 0.05
+        fields += [(RECENT_POSITIONS + slot * 4, 0 if empty else rng.randrange(8), 2),
+                   (RECENT_POSITIONS + slot * 4 + 2, 0 if empty else rng.randrange(8), 2)]
+    fields.append((RECENT_POSITIONS + rng.randrange(128) * 4, 0, 4))  # never full
+    return fields
+
+
+def recent_positions_cursor(rng, pool, args):
+    return [(0x7ace60, rng.choice([0, 1, 127, rng.randrange(128)]), 2)]
+
+
+def players_field0c(rng, pool, args):
+    fields = []
+    for player in range(20):
+        record = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+        fields += [(record + 0x0, 0 if rng.random() < 0.25 else rng.getrandbits(32) | 1, 4),
+                   (record + 0x18, rng.getrandbits(32) | 1 if rng.random() < 0.3 else 0, 4),
+                   (record + 0xc, rng.randrange(6), 4)]
+    return fields
+
+
+def building_type(rng, pool):
+    return rng.randint(0x14, 0x24) if rng.random() < 0.8 else anything(rng, pool)
+
+
 TILE = between(2, 381)  # tiles at least 2 from the edge of a 384 map
 
 SPECS = [
@@ -313,6 +488,40 @@ SPECS = [
          presets=diagonal_map_size, max_cases=300),
     Spec("GameWorld_ClearTileByte11Slice", 0x00518ec0, "thiscall", [below(60, 0.1)],
          presets=slice_map_size, max_cases=300),
+    # building/settler tile references (building_tiles.cpp)
+    Spec("GameWorld_RemoveBuildingFromTiles", 0x004d9940, "thiscall", [between(0, 2000)],
+         eax_mask=0, presets=building_arg_on_map),
+    Spec("GameWorld_LeaveBuildingSlot", 0x0050cc10, "thiscall", [between(0, 4000)],
+         presets=settler_in_building),
+    Spec("GameWorld_MoveSettlerToBuildingTileA", 0x0050de90, "thiscall", [between(0, 4000)],
+         presets=settler_in_building),
+    Spec("GameWorld_MoveSettlerToBuildingTileB", 0x0050df40, "thiscall", [between(0, 4000)],
+         presets=settler_in_building),
+    # goods piles (goods_piles.cpp)
+    Spec("GameWorld_BuildingPileHasGoods", 0x004df9b0, "thiscall",
+         [between(0, 2000), below(5, 0.15)], eax_mask=0xff, presets=building_pile_slots),
+    Spec("GameWorld_RecountPlayerGoods", 0x004ffa50, "thiscall", [], presets=goods_piles,
+         max_cases=600),
+    Spec("GameWorld_PileNeighbourBuildingByteE", 0x00505fd0, "thiscall", [between(1, 3000)],
+         presets=pile_neighbourhood),
+    # tables, rings, timers (world_tables.cpp)
+    Spec("GameWorld_AllocBuildingExtra", 0x004df0a0, "thiscall", [anything],
+         presets=alloc_table(0x10f45e8, 0x5a, 998, 0x110a578, 1, 0xff), max_cases=600),
+    Spec("GameWorld_AllocTable36700Record", 0x004fefd0, "thiscall", [anything] * 10,
+         presets=alloc_table(0x36700, 20, 9998, 0x67440, 2, 0), max_cases=150),
+    Spec("GameWorld_QueueEvent", 0x004e8ad0, "thiscall",
+         [event_type, below(4, 0.1), anything, anything], presets=event_rings),
+    Spec("GameWorld_QueueMarkedTile", 0x004e6c40, "thiscall",
+         [below(384), below(384), below(4, 0.1)], eax_mask=0, presets=marked_tile),
+    Spec("GameWorld_CountDownTimers", 0x004fee00, "thiscall", [], eax_mask=0, presets=timers,
+         max_cases=200),
+    Spec("GameWorld_AddToRecentPositions", 0x00510770, "thiscall", [below(8, 0.1), below(8, 0.1)],
+         eax_mask=0, presets=recent_positions, globals=recent_positions_cursor, max_cases=800),
+    # player queries (player_queries.cpp)
+    Spec("GameWorld_FindPlayerByField0C", 0x00507f10, "thiscall", [below(6, 0.1)],
+         presets=players_field0c),
+    Spec("BuildingTypeAllowedForRace", 0x004ffd60, "stdcall", [anything, building_type],
+         eax_mask=0xff),
 ]
 
 

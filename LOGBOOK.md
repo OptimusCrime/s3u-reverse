@@ -15,9 +15,10 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 59 replacements pass the emulator suite with full block
+Status: all 74 replacements pass the emulator suite with full block
 coverage (2,000 cases each, fewer for the slow ones: ShiftStatistics 60,
-the map-wide loops 200-400); `--self-test` catches 9/9 wrong pairings.
+the map-wide loops and table scans 150-800); `--self-test` catches 9/9
+wrong pairings. Batch 9 has not had a whole-game check yet.
 Specs can now also set S3.EXE globals per case (`Spec.globals`).
 
 Next steps:
@@ -47,11 +48,25 @@ coverage; whole-game check passed, 7 of the 20 called):
 - map marks (map_marks.cpp): Set/ClearDiagonalTileByteB,
   ClearTileByte11Slice
 
+Batch 9 (2026-11-08, 15 functions; in-process + emulator tests, full
+coverage; whole-game check NOT run yet, so no call counts):
+- building/settler tiles (building_tiles.cpp): RemoveBuildingFromTiles,
+  LeaveBuildingSlot, MoveSettlerToBuildingTileA/B
+- goods piles (goods_piles.cpp): BuildingPileHasGoods, RecountPlayerGoods,
+  PileNeighbourBuildingByteE
+- tables/rings/timers (world_tables.cpp): AllocBuildingExtra,
+  AllocTable36700Record, QueueEvent, QueueMarkedTile, CountDownTimers,
+  AddToRecentPositions
+- players (player_queries.cpp): FindPlayerByField0C,
+  BuildingTypeAllowedForRace
+
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
 (function starts from re/ghidra_functions.tsv + re/extra_functions.tsv;
 count instructions, skip any with `call` or `fs:`). About 110 remain.
-Skipped so far because their meaning is unclear (do them once understood):
+Not yet looked at: the draw-list inserts 0x4d7c90..0x4d8240 (called
+only by the building drawing function 0x4a9960; ECX is probably not the
+world). Skipped so far because their meaning is unclear (do them once understood):
 0x4fa6b0/0x4faa40 (type ids 1/55), 0x4ffb90 (7-byte list at
 world+0x1195dcd), 0x505bc0/0x505bf0 (byte counters in 14-byte records at
 world+0x123885f), 0x510440/0x50e380/0x510470 (settler record fields),
@@ -68,13 +83,19 @@ Next steps:
    (x*0x300+y+0x44d9)*24 = 0x67458 in 130 places, i.e. field +0x14 of a
    record at 0x67444; 0x67444 is the most used absolute offset (215
    uses); the y-1 neighbour accesses (0x6742c..0x67436) are fields
-   +0x0..+0xa of the record before. Changing world.h affects
+   +0x0..+0xa of the record before. New (batch 9): the dword at
+   0x67440 is the high-water mark of the 20-byte table at 0x36700
+   (AllocTable36700Record), so it is not part of the tiles; batch 9's
+   files already address tiles from 0x67444. Changing world.h affects
    determinism.cpp's per-tile hashing; do it as its own step.
 3. (done 2026-11-08) Replays are self-contained: seed and map in the
    recording.
 
 ## Open questions and loose ends
 
+- The 128-slot position list at world+0x1195dd4 is changed per logic step
+  (g_recentPositionsCursor, 0x7ace60), not per tick. Does it affect the
+  simulation, and is it in the determinism hash? (found in batch 9)
 - Where does the game seed (`g_gameSettings+0x88`) originally come from?
   It's copied from the settings struct at `[0x7e2eb0]+0x364` by `0x567910`.
   Not traced further. Recording the seed is enough for replays.
@@ -140,6 +161,30 @@ Next steps:
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-08 (15): batch 9 (15 leaf functions)
+
+- Replaced 15 world functions (list under "Current focus"). New files:
+  game/building_tiles.cpp, goods_piles.cpp, world_tables.cpp,
+  player_queries.cpp. In-process tests 111/111 (19 new incl. 4 mutation
+  tests); emulator suite 74/74 with full block coverage; self-test 9/9.
+- Record layouts learned: settlers are 0x40-byte records from 0x12a5e60
+  (+0x4/+0x6 position, +0x8 state, +0x14 flags, +0x22 building); buildings
+  have two tiles (+0x2/+0x4 "A", +0xa/+0xc "B") and three pile slots
+  (+0x10..+0x14); goods piles are 14-byte records at 0x123885c (count at
+  0x1238858; +0 goods type, +1 amount, +4 kind, +6/+8 position); tile
+  +0x0 settler word, +0x2 building word, +0x8 owner, +0xa flags (0x20 =
+  building). The player counters at 0x11944b8 are goods counts per type
+  (RecountPlayerGoods rebuilds them at start).
+- New global g_recentPositionsCursor (0x7ace60): advanced per logic
+  *step*, not per tick, and it decides which slot AddToRecentPositions
+  uses. If the list influences the simulation, that is timing-dependent;
+  check whether world+0x1195dd4 is in the determinism hash and whether it
+  matters (open question).
+- First QueueEvent version was wrong (the duplicate scan stops at the
+  first match); the in-process test caught it.
+- Next: whole-game check (`check_replay.py --against-original`) to get
+  call counts for batch 9 (at the next milestone), then continue.
 
 ### 2026-11-08 (14): progress treemap
 
