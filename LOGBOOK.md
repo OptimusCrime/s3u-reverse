@@ -15,12 +15,12 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 110 replacements pass the emulator suite with full block
+Status: all 119 replacements pass the emulator suite with full block
 coverage (2,000 cases each, fewer for the slow ones: the flood fills 150,
 ShiftStatistics 60, the map-wide loops and table scans 150-800);
 `--self-test` catches 11/11 wrong pairings. Batches 9-11 passed the
 whole-game check on 2026-11-08 (call counts in the inventory); batch 12
-and 13 haven't had one yet. Specs can set S3.EXE globals per case
+13 and 14 haven't had one yet. Specs can set S3.EXE globals per case
 (`Spec.globals`), and take ECX = a fake CLogicThread ("logicthread"
 convention) and pointer arguments into scratch buffers (`scratch(n)`).
 
@@ -115,6 +115,24 @@ coverage; whole-game check NOT run yet):
   clear; areas keep one pile list per goods type (heads at area +0xa +
   type*2), so 0x514b40 sums goods type 10 only (renamed
   SumAreaGoods10PerPlayer).
+
+Batch 14 (2026-11-08, 9 functions; in-process + emulator tests, full
+coverage; whole-game check NOT run yet):
+- flood_fills.cpp: FloodMoveArea (0x4e62c0), MergeTileWord16Regions
+  (0x51c5e0), MergeTileByte10Regions (0x51ca00; returns the neighbour
+  count, unlike the word version)
+- building_goods.cpp: AddBuildingGoodsRequest (0x4ddf30, 49 calls from
+  UpdatePhase2), RemoveBuildingFromAreaRequests (0x4def80). Input word 2A
+  is the link of the area's per-goods request list (heads at area +0x52 +
+  goods*2), word 24 the requested amount.
+- settler_queries.cpp: PlaceSettlerNear (0x50ce80, called by
+  ExecuteCommands); map_terrain.cpp: GrowTerrain (0x519470),
+  UpdateAllBorderFlags (0x51a420, called by CLogicThread::Step);
+  ui_state.cpp: CenterCameraOnLocalPlayer (0x51b6b0)
+Next candidates (all callees verified): 0x51c0f0 (assigns word-16 region
+ids around a tile, 19 offsets), 0x4ddbd0 / 0x4ddd70 (send the nearest
+settler of a player list to a pile / building), 0x51c1f0, 0x51caf0,
+0x50dff0, 0x505650, 0x5058c0, 0x507f60.
 
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
@@ -264,6 +282,16 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-08 (21): batch 14 (9 functions)
+
+- Region merges, the area flood fill, goods-request list add/remove,
+  settler placement, terrain growth, the all-tiles border pass, camera on
+  the local player. In-process 171/171 (11 new incl. 2 mutation tests);
+  emulator 9/9 with full coverage.
+- MergeTileByte10Regions returns the neighbour count in EAX, its word-16
+  twin returns 0 (different stack slot loaded last); the in-process test
+  caught my first version.
 
 ### 2026-11-08 (20): batch 13 (11 functions)
 

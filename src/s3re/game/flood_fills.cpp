@@ -43,6 +43,24 @@
 //   write index. A step of the area flood fills (callers 0x4e6150 and
 //   others). EAX (ignored by callers) reproduced: oldArea if the area
 //   differed, else the incremented write index before it wraps. ret 0x10.
+// GameWorld::FloodMoveArea (0x004e62c0): (x, y, newArea): the start tile's
+//   area word is `old`; puts the start tile in the ring, moves it to newArea
+//   (RemoveTileFromArea, AssignTileToArea) and floods with the step
+//   GameWorld::MoveTileToAreaAndQueue(neighbour, old, newArea). Loops for
+//   ever if newArea == old. EAX = the final read index (ignored). ret 0xc.
+// GameWorld::MergeTileWord16Regions (0x0051c5e0): (x, y): looks at the
+//   neighbours given by the offset table entries 1..6 (world+0x110a598):
+//   the first with a non-zero word +0x16 gives the tile its word; every
+//   later neighbour with another non-zero word has that id freed (byte 0 in
+//   the 8192-id table at world+0xe125e8) and its region flooded with the
+//   first word (FloodFillTileWord16). With no such neighbour the tile gets a
+//   new id (GameWorld::FindFreeId8192, marked 1 in the table). EAX = 0, or
+//   the new id. ret 8.
+// GameWorld::MergeTileByte10Regions (0x0051ca00): the same for the byte
+//   +0x10, over the neighbours that are not blocked (flag bit 0 of +0xa,
+//   any value counts), with the 256-id table at world+0xe114dc
+//   (FindFreeId256, FloodFillTileByte10). EAX = the number of unblocked
+//   neighbours, or the new id. ret 8.
 // All thiscall (ECX = world).
 
 #include "game/replacements.h"
@@ -67,6 +85,11 @@ constexpr std::uint32_t kTileRing = 0xdfdc48;
 constexpr std::uint32_t kTileRingRead = 0xe07888;
 constexpr std::uint32_t kTileRingWrite = 0xe0788c;
 constexpr std::uint32_t kTileRingEntries = 10000;
+constexpr std::uint8_t kTileBlocked = 0x01;  // in kTileFlags
+constexpr std::uint32_t kOffsetTable = 0x110a588;  // int32 dx, int32 dy, 16-byte stride
+constexpr std::uint32_t kOffsetTableBytes = 0x10;
+constexpr std::uint32_t kIds256 = 0xe114dc;   // uint8 per id, 1 = in use
+constexpr std::uint32_t kIds8192 = 0xe125e8;  // uint8 per id, 1 = in use
 
 template <typename T>
 T& At(GameWorld* world, std::uint32_t offset) {
@@ -219,6 +242,95 @@ S3RE_HOOK(0x0051d450, GameWorld_FloodSetByte10MarkedTiles, FloodFn,
           Original_GameWorld_FloodSetByte10MarkedTiles, GameWorld_FloodSetByte10MarkedTiles);
 S3RE_HOOK(0x004e6430, GameWorld_MoveTileToAreaAndQueue, MoveTileFn,
           Original_GameWorld_MoveTileToAreaAndQueue, GameWorld_MoveTileToAreaAndQueue);
+
+using MergeFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+
+std::uint32_t __fastcall GameWorld_FloodMoveArea(GameWorld* world, void*, std::uint32_t x, std::uint32_t y,
+                                                 std::uint32_t newArea) {
+    const std::uint32_t old = At<std::uint16_t>(world, Tile(x, y) + kTileArea);
+    StartRing(world, x, y);
+    GameWorld_RemoveTileFromArea(world, nullptr, x, y);
+    GameWorld_AssignTileToArea(world, nullptr, x, y, newArea);
+    RunQueue(world, [&](std::uint32_t px, std::uint32_t py) {
+        ForEachNeighbour(world, px, py, [&](std::uint32_t nx, std::uint32_t ny) {
+            GameWorld_MoveTileToAreaAndQueue(world, nullptr, nx, ny, old, newArea);
+        });
+    });
+    return At<std::uint32_t>(world, kTileRingRead);
+}
+
+namespace {
+
+// The neighbour from offset table entry k (1..6) of (x, y).
+std::uint32_t NeighbourX(GameWorld* world, std::uint32_t x, std::uint32_t k) {
+    return x + At<std::uint32_t>(world, kOffsetTable + k * kOffsetTableBytes);
+}
+std::uint32_t NeighbourY(GameWorld* world, std::uint32_t y, std::uint32_t k) {
+    return y + At<std::uint32_t>(world, kOffsetTable + k * kOffsetTableBytes + 4);
+}
+
+}  // namespace
+
+std::uint32_t __fastcall GameWorld_MergeTileWord16Regions(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+    std::uint32_t count = 0;
+    std::uint32_t first = 0;
+    for (std::uint32_t k = 1; k <= 6; ++k) {
+        const std::uint32_t nx = NeighbourX(world, x, k);
+        const std::uint32_t ny = NeighbourY(world, y, k);
+        const std::uint32_t id = At<std::uint16_t>(world, Tile(nx, ny) + kTileWord16);
+        if (id == 0) {
+            continue;
+        }
+        if (++count == 1) {
+            first = id;
+            At<std::uint16_t>(world, Tile(x, y) + kTileWord16) = static_cast<std::uint16_t>(id);
+        } else if (id != first) {
+            At<std::uint8_t>(world, kIds8192 + id) = 0;
+            GameWorld_FloodFillTileWord16(world, nullptr, nx, ny, first);
+        }
+    }
+    if (count != 0) {
+        return 0;
+    }
+    const std::uint32_t id = GameWorld_FindFreeId8192(world, nullptr);
+    At<std::uint8_t>(world, kIds8192 + id) = 1;
+    At<std::uint16_t>(world, Tile(x, y) + kTileWord16) = static_cast<std::uint16_t>(id);
+    return id;
+}
+
+std::uint32_t __fastcall GameWorld_MergeTileByte10Regions(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+    std::uint32_t count = 0;
+    std::uint32_t first = 0;
+    for (std::uint32_t k = 1; k <= 6; ++k) {
+        const std::uint32_t nx = NeighbourX(world, x, k);
+        const std::uint32_t ny = NeighbourY(world, y, k);
+        const std::uint32_t tile = Tile(nx, ny);
+        if ((At<std::uint8_t>(world, tile + kTileFlags) & kTileBlocked) != 0) {
+            continue;
+        }
+        const std::uint32_t id = At<std::uint8_t>(world, tile + kTileByte10);
+        if (++count == 1) {
+            first = id;
+            At<std::uint8_t>(world, Tile(x, y) + kTileByte10) = static_cast<std::uint8_t>(id);
+        } else if (id != first) {
+            At<std::uint8_t>(world, kIds256 + id) = 0;
+            GameWorld_FloodFillTileByte10(world, nullptr, nx, ny, first);
+        }
+    }
+    if (count != 0) {
+        return count;  // unlike MergeTileWord16Regions, which returns 0 here
+    }
+    const std::uint32_t id = GameWorld_FindFreeId256(world, nullptr);
+    At<std::uint8_t>(world, kIds256 + id) = 1;
+    At<std::uint8_t>(world, Tile(x, y) + kTileByte10) = static_cast<std::uint8_t>(id);
+    return id;
+}
+
+S3RE_HOOK(0x004e62c0, GameWorld_FloodMoveArea, FloodFn, Original_GameWorld_FloodMoveArea, GameWorld_FloodMoveArea);
+S3RE_HOOK(0x0051c5e0, GameWorld_MergeTileWord16Regions, MergeFn, Original_GameWorld_MergeTileWord16Regions,
+          GameWorld_MergeTileWord16Regions);
+S3RE_HOOK(0x0051ca00, GameWorld_MergeTileByte10Regions, MergeFn, Original_GameWorld_MergeTileByte10Regions,
+          GameWorld_MergeTileByte10Regions);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -428,6 +540,124 @@ S3RE_TEST(GameWorld_MoveTileToAreaAndQueue_MatchesOriginal) {
         if (!S3RE_EXPECT_EQ(expected, actual) ||
             ((i % 64 == 63 || i == 2999) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 63 before it)", i);
+            return;
+        }
+    }
+}
+
+namespace {
+
+constexpr std::size_t kMergeTestWorld = kOffsetTable + 8 * kOffsetTableBytes;
+
+// The real first 7 entries of the offset table: the tile and its neighbours.
+void SetUpNeighbourOffsets(test::WorldPair& worlds) {
+    static constexpr std::int32_t kOffsets[7][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}, {-1, 0}, {-1, -1}, {0, -1}};
+    for (std::uint32_t k = 0; k < 7; ++k) {
+        worlds.Set<std::int32_t>(kOffsetTable + k * kOffsetTableBytes, kOffsets[k][0]);
+        worlds.Set<std::int32_t>(kOffsetTable + k * kOffsetTableBytes + 4, kOffsets[k][1]);
+    }
+}
+
+// Ids table: ids 1..first-1 used, then free (FindFreeId scans from 1).
+void SetUpIds(test::Context& ctx, test::WorldPair& worlds, std::uint32_t table, std::uint32_t mark,
+              std::uint32_t size) {
+    const std::uint32_t used = 1 + ctx.rng().Below(40);
+    for (std::uint32_t id = 0; id < used + 2 && id < size; ++id) {
+        worlds.Set<std::uint8_t>(table + id, static_cast<std::uint8_t>(id < used ? 1 : 0));
+    }
+    worlds.Set<std::uint32_t>(mark, ctx.rng().Below(used + 2));
+}
+
+template <typename Setup>
+void CompareMerge(test::Context& ctx, MergeFn original, MergeFn candidate, int cases, Setup setup) {
+    test::WorldPair worlds(ctx, kMergeTestWorld);
+    SetUpNeighbourOffsets(worlds);
+    for (int i = 0; i < cases; ++i) {
+        // A small map (the floods stay small), the tile inside it.
+        const std::uint32_t size = 4 + ctx.rng().Below(24);
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        const std::uint32_t x = 1 + ctx.rng().Below(size - 2);
+        const std::uint32_t y = 1 + ctx.rng().Below(size - 2);
+        setup(worlds, size);
+        const std::uint32_t expected = original(worlds.original(), nullptr, x, y);
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y);
+        if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 32 == 31 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 31 before it): (%u, %u) map %u", i, x, y, size);
+            return;
+        }
+    }
+}
+
+// Wrong: frees the merged id in the table of the other kind.
+std::uint32_t __fastcall WrongMergeTileWord16Regions(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
+    const std::uint32_t result = GameWorld_MergeTileWord16Regions(world, edx, x, y);
+    At<std::uint8_t>(world, kIds8192 + 1) = 1;
+    return result;
+}
+
+void CompareWord16Merge(test::Context& ctx, MergeFn candidate, int cases) {
+    CompareMerge(ctx, Original_GameWorld_MergeTileWord16Regions, candidate, cases,
+                 [&](test::WorldPair& worlds, std::uint32_t size) {
+                     // Region ids 0..3 (0 = none) over the whole small map.
+                     for (std::uint32_t tx = 0; tx < size; ++tx) {
+                         for (std::uint32_t ty = 0; ty < size; ++ty) {
+                             worlds.Set<std::uint16_t>(Tile(tx, ty) + kTileWord16,
+                                                       static_cast<std::uint16_t>(ctx.rng().Below(4)));
+                         }
+                     }
+                     SetUpIds(ctx, worlds, kIds8192, 0xe125e4, 0x2000);
+                 });
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_MergeTileWord16Regions_MatchesOriginal) {
+    CompareWord16Merge(ctx, &GameWorld_MergeTileWord16Regions, 3000);
+}
+S3RE_TEST(GameWorld_MergeTileWord16Regions_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareWord16Merge(probe, &WrongMergeTileWord16Regions, 500);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+S3RE_TEST(GameWorld_MergeTileByte10Regions_MatchesOriginal) {
+    CompareMerge(ctx, Original_GameWorld_MergeTileByte10Regions, &GameWorld_MergeTileByte10Regions, 3000,
+                 [&](test::WorldPair& worlds, std::uint32_t size) {
+                     for (std::uint32_t tx = 0; tx < size; ++tx) {
+                         for (std::uint32_t ty = 0; ty < size; ++ty) {
+                             worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileByte10,
+                                                      static_cast<std::uint8_t>(ctx.rng().Below(4)));
+                             const std::uint8_t flags = static_cast<std::uint8_t>(ctx.rng().Next32());
+                             worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileFlags,
+                                                      ctx.rng().Chance(1, 3) ? flags : static_cast<std::uint8_t>(flags & ~kTileBlocked));
+                         }
+                     }
+                     SetUpIds(ctx, worlds, kIds256, 0xe114d8, 0x100);
+                 });
+}
+
+S3RE_TEST(GameWorld_FloodMoveArea_MatchesOriginal) {
+    test::WorldPair worlds(ctx, kAreaTestWorld);
+    for (int i = 0; i < 300; ++i) {
+        const std::uint32_t size = RandomMapSize(ctx);
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        const std::uint32_t x = ctx.rng().Below(size);
+        const std::uint32_t y = ctx.rng().Below(size);
+        // Areas 1..3 in a region around the start; the start in area `old`.
+        const std::uint32_t old = 1 + ctx.rng().Below(3);
+        const Region region = RandomRegion(ctx, size, x, y);
+        ForRegion(region, [&](std::uint32_t tx, std::uint32_t ty) {
+            const bool start = tx == x && ty == y;
+            worlds.Set<std::uint16_t>(Tile(tx, ty) + kTileArea,
+                                      static_cast<std::uint16_t>(start || ctx.rng().Chance(2, 3) ? old : 1 + ctx.rng().Below(3)));
+        });
+        std::uint32_t newArea = 1 + ctx.rng().Below(kTestAreas - 1);
+        if (newArea == old) {
+            newArea = old + 4;  // the same area would loop for ever
+        }
+        const std::uint32_t expected = Original_GameWorld_FloodMoveArea(worlds.original(), nullptr, x, y, newArea);
+        const std::uint32_t actual = GameWorld_FloodMoveArea(worlds.ours(), nullptr, x, y, newArea);
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u) -> area %u, map %u", i, x, y, newArea, size);
             return;
         }
     }

@@ -730,6 +730,128 @@ def presence(rng, pool, args):
     return fields
 
 
+# --- batch 14 ---------------------------------------------------------------
+
+
+def flood_area(rng, pool, args):
+    """Areas 1..3 over the map; the start tile in area `old` != args[2]."""
+    n, big = flood_map(rng, args)
+    old = rng.choice([v for v in (1, 2, 3) if v != args[2]])
+    density = 1.0 if big else rng.choice([0.3, 0.6, 0.9])
+    fields = [(MAP_SIZE, n, 4), (0xe0788c, 1, 4)]
+    for x in range(n):
+        for y in range(n):
+            start = (x, y) == (args[0], args[1])
+            area = old if start or rng.random() < density else rng.choice([v for v in (1, 2, 3) if v != old])
+            fields.append((tile_area_offset(x, y), area, 2))
+    return fields
+
+
+def merge_regions(field: int, size: int, ids_mark: int, ids_table: int, ids_count: int,
+                  blocked: bool) -> Callable:
+    """A 12x12 map of region ids 0..3 in tile `field`, the real neighbour
+    offsets in entries 1..6, the id table partly used; with `blocked`, flag
+    bit 0 of +0xa often set."""
+    ids = id_table(ids_mark, ids_table, ids_count)
+    def presets(rng, pool, args):
+        fields = [(MAP_SIZE, 12, 4)]
+        for k, (dx, dy) in enumerate(AROUND):
+            fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                       (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4)]
+        empty = rng.random() < 0.15
+        for x in range(12):
+            for y in range(12):
+                fields.append((tile(x, y) + field, 0 if empty and not blocked else rng.randrange(4), size))
+                if blocked:
+                    flags = rng.getrandbits(8)
+                    fields.append((tile(x, y) + 0xa, flags | 1 if empty or rng.random() < 0.3 else flags & 0xfe, 1))
+        return fields + ids(rng, pool, args)
+    return presets
+
+
+def goods_request(rng, pool, args):
+    record = BUILDINGS + args[0] * BUILDING_BYTES
+    x, y = rng.randrange(384), rng.randrange(384)
+    area = rng.randrange(64)
+    fields = [(record + 0xa, x, 2), (record + 0xc, y, 2), (tile_area_offset(x, y), area, 2),
+              (AREAS + area * AREA_BYTES + 0x245 + args[3], rng.randrange(2), 1)]
+    return fields + input_goods(rng, pool, args)
+
+
+def request_lists(rng, pool, args):
+    """63 buildings in 4 areas, mostly construction sites (inputs: goods 1 in
+    slot 0, goods 2 in slot 1), some finished of type 0x21/0x22/0x1f; per
+    area acyclic request lists for goods 1 and 2 through word +0x2a/+0x2c,
+    random words at area +0x9a/+0xe2, other heads 0 or a random building."""
+    fields = []
+    area_of = {}
+    construction = set()
+    for b in range(1, 64):
+        record = BUILDINGS + b * BUILDING_BYTES
+        x, y = rng.randrange(384), rng.randrange(384)
+        area = rng.randrange(4)
+        area_of[b] = area
+        site = rng.random() < 0.85
+        if site:
+            construction.add(b)
+        fields += [(record + 0xa, x, 2), (record + 0xc, y, 2), (tile_area_offset(x, y), area, 2),
+                   (record + 0x21, 1 if site else 0, 1),
+                   (record + 0x6, rng.choice([0x21, 0x22, 0x1f, 0x07]), 1)]
+    for area in range(4):
+        base = AREAS + area * AREA_BYTES
+        for goods in range(36):
+            head = 0
+            if goods in (1, 2):
+                for b in range(1, 64):
+                    if area_of[b] == area and b in construction and rng.random() < 0.5:
+                        fields.append((BUILDINGS + b * BUILDING_BYTES + 0x2a + (goods - 1) * 2, head, 2))
+                        head = b
+            elif rng.random() < 0.1:
+                head = rng.randrange(1, 64)
+            fields += [(base + 0x52 + goods * 2, head, 2),
+                       (base + 0x9a + goods * 2, rng.randrange(64), 2),
+                       (base + 0xe2 + goods * 2, rng.randrange(64), 2)]
+    return fields
+
+
+def place_settler(rng, pool, args):
+    n = 384 if rng.random() < 0.7 else rng.randint(1, 40)
+    fields = [(MAP_SIZE, n, 4)]
+    for k in range(1000):
+        reach = 1 + k // 60
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, rng.randint(-reach, reach) & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, rng.randint(-reach, reach) & 0xFFFFFFFF, 4)]
+    free = rng.choice([0.0, 0.002, 0.02, 0.1])
+    for x in range(max(args[1] - 18, 0), min(args[1] + 19, 384)):
+        for y in range(max(args[2] - 18, 0), min(args[2] + 19, 384)):
+            empty = rng.random() < free
+            fields += [(tile(x, y) + 0x0, 0 if empty or rng.random() < 0.5 else rng.randrange(1, 100), 2),
+                       (tile(x, y) + 0x10, rng.randrange(1, 4) if empty or rng.random() < 0.5 else 0, 1)]
+    return fields
+
+
+def small_territory(rng, pool, args):
+    """A map of 0..10 tiles with the real 7-entry offset table and owners."""
+    n = rng.randint(0, 10)
+    fields = [(MAP_SIZE, n, 4)]
+    for k, (dx, dy) in enumerate(AROUND):
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4)]
+    for x in range(n):
+        for y in range(n):
+            terrain = rng.getrandbits(8)
+            fields += [(tile(x, y) + 0x8, 0xff if rng.random() < 0.15 else rng.randrange(3), 1),
+                       (tile(x, y) + 0x6, terrain & 0x0f if rng.random() < 0.2 else terrain, 1)]
+    return fields
+
+
+def local_player_camera(rng, pool, args):
+    player = rng.randrange(20)
+    record = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+    return [(0x2d2d4, player, 4), (record + 0x10, rng.randrange(384), 4), (record + 0x14, rng.randrange(384), 4),
+            (MAP_SIZE, rng.choice([64, 384, rng.randrange(400)]), 4)]
+
+
 TILE = between(2, 381)  # tiles at least 2 from the edge of a 384 map
 
 SPECS = [
@@ -956,6 +1078,25 @@ SPECS = [
          presets=tile_pile),
     Spec("GameWorld_IsOtherPlayerNear", 0x00510650, "thiscall",
          [below(400), below(400), below(40), below(20)], presets=presence, max_cases=400),
+    # batch 14: region merges, area flood, requests, placement, terrain passes
+    Spec("GameWorld_FloodMoveArea", 0x004e62c0, "thiscall", [below(12), below(12), between(1, 6)],
+         presets=flood_area, max_cases=150),
+    Spec("GameWorld_MergeTileWord16Regions", 0x0051c5e0, "thiscall", [between(1, 10), between(1, 10)],
+         presets=merge_regions(0x16, 2, 0xe125e4, 0xe125e8, 0x2000, False), max_cases=500),
+    Spec("GameWorld_MergeTileByte10Regions", 0x0051ca00, "thiscall", [between(1, 10), between(1, 10)],
+         presets=merge_regions(0x10, 1, 0xe114d8, 0xe114dc, 0x100, True), max_cases=500),
+    Spec("GameWorld_AddBuildingGoodsRequest", 0x004ddf30, "thiscall",
+         [below(2000), below(36, 0.1), one_of(0, 1, 7, 0xFFFFFFFF), below(64)], presets=goods_request),
+    Spec("GameWorld_RemoveBuildingFromAreaRequests", 0x004def80, "thiscall", [between(1, 63)],
+         presets=request_lists, max_cases=300),
+    Spec("GameWorld_PlaceSettlerNear", 0x0050ce80, "thiscall",
+         [below(0x3000), below(384, 0.03), below(384)], presets=place_settler, max_cases=400),
+    Spec("GameWorld_GrowTerrain", 0x00519470, "thiscall", [below(4), below(4), between(-5, 110)],
+         presets=small_map_terrain, max_cases=600),
+    Spec("GameWorld_UpdateAllBorderFlags", 0x0051a420, "thiscall", [], presets=small_territory,
+         max_cases=400),
+    Spec("GameWorld_CenterCameraOnLocalPlayer", 0x0051b6b0, "thiscall", [],
+         presets=local_player_camera, globals=screen_size),
 ]
 
 

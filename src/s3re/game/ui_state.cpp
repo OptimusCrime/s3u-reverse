@@ -48,6 +48,10 @@
 //   tile's height in pixels), with signed halves of the view size truncated
 //   toward zero and 32-bit wrapping sums, then calls GameWorld::ClampCamera
 //   and returns its EAX (one caller tail-returns it). ret 8.
+// GameWorld::CenterCameraOnLocalPlayer (0x0051b6b0): CenterCameraOnTile on
+//   the position (int32 +0x10, +0x14) of the player record of the local
+//   player (+0x2d2d4), then clears the int32 +0x2d264. EAX = the
+//   CenterCameraOnTile EAX (one caller tail-returns it). Plain ret.
 
 #include "game/globals.h"
 #include "game/replacements.h"
@@ -198,6 +202,28 @@ std::uint32_t __fastcall CLogicThread_PushUiFeedback(CLogicThread* self, void*, 
 using PositionFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
 using LogicValueFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t value);
 
+namespace {
+
+constexpr std::size_t kLocalPlayer = 0x2d2d4;
+constexpr std::size_t kCameraField264 = 0x2d264;
+constexpr std::size_t kPlayerRecords = 0x11943dc;
+constexpr std::size_t kPlayerRecordBytes = 0x148;
+constexpr std::size_t kPlayerPositionX = 0x10;
+constexpr std::size_t kPlayerPositionY = 0x14;
+
+}  // namespace
+
+std::uint32_t __fastcall GameWorld_CenterCameraOnLocalPlayer(GameWorld* world, void*) {
+    const std::size_t record = kPlayerRecords + Field(world, kLocalPlayer) * kPlayerRecordBytes;
+    const std::uint32_t result =
+        GameWorld_CenterCameraOnTile(world, nullptr, Field(world, record + kPlayerPositionX),
+                                     Field(world, record + kPlayerPositionY));
+    WorldField<std::uint32_t>(world, kCameraField264) = 0;
+    return result;
+}
+
+S3RE_HOOK(0x0051b6b0, GameWorld_CenterCameraOnLocalPlayer, WorldQueryFn, Original_GameWorld_CenterCameraOnLocalPlayer,
+          GameWorld_CenterCameraOnLocalPlayer);
 S3RE_HOOK(0x0051b560, GameWorld_CenterCameraOnTile, PositionFn, Original_GameWorld_CenterCameraOnTile,
           GameWorld_CenterCameraOnTile);
 S3RE_HOOK(0x0053f560, CLogicThread_PushUiFeedback, LogicValueFn, Original_CLogicThread_PushUiFeedback,
@@ -356,6 +382,29 @@ S3RE_TEST(GameWorld_CenterCameraOnTile_MatchesOriginal) {
         if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, kCameraX, 8) ||
             (i % 512 == 511 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u)", i, x, y);
+            return;
+        }
+    }
+    worlds.Checkpoint(ctx);
+}
+
+S3RE_TEST(GameWorld_CenterCameraOnLocalPlayer_MatchesOriginal) {
+    test::WorldPair worlds(ctx, kPlayerRecords + 21 * kPlayerRecordBytes);
+    GlobalOverride width(global_address::kScreenWidth);
+    GlobalOverride height(global_address::kScreenHeight);
+    for (int i = 0; i < 3000; ++i) {
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, ctx.rng().Chance(1, 2) ? 384 : InterestingValue(ctx));
+        width.Set(640 + ctx.rng().Below(1024));
+        height.Set(480 + ctx.rng().Below(768));
+        const std::uint32_t player = ctx.rng().Below(20);
+        worlds.Set<std::uint32_t>(kLocalPlayer, player);
+        worlds.Set<std::uint32_t>(kPlayerRecords + player * kPlayerRecordBytes + kPlayerPositionX, ctx.rng().Below(384));
+        worlds.Set<std::uint32_t>(kPlayerRecords + player * kPlayerRecordBytes + kPlayerPositionY, ctx.rng().Below(384));
+        const std::uint32_t expected = Original_GameWorld_CenterCameraOnLocalPlayer(worlds.original(), nullptr);
+        const std::uint32_t actual = GameWorld_CenterCameraOnLocalPlayer(worlds.ours(), nullptr);
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, kCameraX, 12) ||
+            (i % 512 == 511 && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
             return;
         }
     }

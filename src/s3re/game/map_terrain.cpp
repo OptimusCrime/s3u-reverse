@@ -25,6 +25,14 @@
 //   its six neighbours is owned land of another owner (terrain & 0xf0 and
 //   owner differs), and cleared otherwise. Neighbour order: (x+1, y),
 //   (x+1, y+1), (x, y+1), (x-1, y), (x-1, y-1), (x, y-1). EAX = 0. ret 8.
+// GameWorld::GrowTerrain (0x00519470): (from, into, percent):
+//   SpreadTerrainRandomly(from, into, 0xf0, percent), then
+//   ReplaceTerrainType(0xf0, into): tiles next to `into` become `into` with
+//   the probability, through the marker 0xf0 so that tiles converted in this
+//   pass don't spread further in it. EAX = ReplaceTerrainType's. ret 0xc.
+// GameWorld::UpdateAllBorderFlags (0x0051a420): UpdateBorderFlagsAround(x,
+//   y) for every tile, x outer, y inner (unsigned, map size re-read). EAX =
+//   mapSize (two callers tail-return it). Plain ret.
 // All thiscall (ECX = world).
 
 #include "game/replacements.h"
@@ -139,6 +147,30 @@ S3RE_HOOK(0x00519330, GameWorld_SpreadTerrainRandomly, SpreadTerrainFn,
           Original_GameWorld_SpreadTerrainRandomly, GameWorld_SpreadTerrainRandomly);
 S3RE_HOOK(0x0051a460, GameWorld_UpdateBorderFlagsAround, AroundFn, Original_GameWorld_UpdateBorderFlagsAround,
           GameWorld_UpdateBorderFlagsAround);
+
+using GrowTerrainFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t from,
+                                                 std::uint32_t into, std::uint32_t percent);
+using NoArgsFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
+
+std::uint32_t __fastcall GameWorld_GrowTerrain(GameWorld* world, void*, std::uint32_t from, std::uint32_t into,
+                                               std::uint32_t percent) {
+    GameWorld_SpreadTerrainRandomly(world, nullptr, from, into, 0xf0, percent);
+    return GameWorld_ReplaceTerrainType(world, nullptr, 0xf0, into);
+}
+
+std::uint32_t __fastcall GameWorld_UpdateAllBorderFlags(GameWorld* world, void*) {
+    auto size = [&] { return At<std::uint32_t>(world, world_offset::kMapSize); };
+    for (std::uint32_t x = 0; x < size(); ++x) {
+        for (std::uint32_t y = 0; y < size(); ++y) {
+            GameWorld_UpdateBorderFlagsAround(world, nullptr, x, y);
+        }
+    }
+    return size();
+}
+
+S3RE_HOOK(0x00519470, GameWorld_GrowTerrain, GrowTerrainFn, Original_GameWorld_GrowTerrain, GameWorld_GrowTerrain);
+S3RE_HOOK(0x0051a420, GameWorld_UpdateAllBorderFlags, NoArgsFn, Original_GameWorld_UpdateAllBorderFlags,
+          GameWorld_UpdateAllBorderFlags);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -289,6 +321,51 @@ S3RE_TEST(GameWorld_ReplaceTerrainF3_MatchesOriginal) {
         const std::uint32_t actual = GameWorld_ReplaceTerrainF3(worlds.ours(), nullptr, newType);
         if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Checkpoint(ctx)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return;
+        }
+    }
+}
+
+S3RE_TEST(GameWorld_GrowTerrain_MatchesOriginal) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    for (int i = 0; i < 30; ++i) {
+        const std::uint32_t size = ctx.rng().Chance(1, 4) ? 384 : ctx.rng().Below(60);
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        const std::uint32_t limit = size < 384 ? size + 1 : 384;
+        for (std::uint32_t x = 0; x < limit; ++x) {
+            for (std::uint32_t y = 0; y < limit; ++y) {
+                worlds.Set<std::uint8_t>(Tile(x, y) + kTileTerrain, static_cast<std::uint8_t>(ctx.rng().Below(4)));
+            }
+        }
+        const std::uint32_t from = ctx.rng().Below(4);
+        const std::uint32_t into = ctx.rng().Below(4);
+        const std::uint32_t percent = ctx.rng().Below(110);
+        worlds.Set<std::uint32_t>(world_offset::kRandomState, ctx.rng().Next32());
+        const std::uint32_t expected = Original_GameWorld_GrowTerrain(worlds.original(), nullptr, from, into, percent);
+        const std::uint32_t actual = GameWorld_GrowTerrain(worlds.ours(), nullptr, from, into, percent);
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return;
+        }
+    }
+}
+
+S3RE_TEST(GameWorld_UpdateAllBorderFlags_MatchesOriginal) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    for (int i = 0; i < 12; ++i) {
+        const std::uint32_t size = ctx.rng().Chance(1, 3) ? 384 : ctx.rng().Below(80);
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        SetUpOffsets(ctx, worlds);
+        const std::uint32_t limit = size < 384 ? size : 384;
+        for (std::uint32_t x = 0; x < limit; x += 7) {
+            for (std::uint32_t y = 0; y < limit; y += 7) {
+                SetUpTerritory(ctx, worlds, size, x, y);
+            }
+        }
+        const std::uint32_t expected = Original_GameWorld_UpdateAllBorderFlags(worlds.original(), nullptr);
+        const std::uint32_t actual = GameWorld_UpdateAllBorderFlags(worlds.ours(), nullptr);
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: map %u", i, size);
             return;
         }
     }

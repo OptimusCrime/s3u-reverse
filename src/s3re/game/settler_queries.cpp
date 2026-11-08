@@ -29,6 +29,12 @@
 //   otherwise whatever settler (or 0) stood on the last tile looked at, or
 //   x itself if none of the tiles was on the map. Caller 0x50e9f0.
 //   ret 0xc.
+// GameWorld::PlaceSettlerNear (0x0050ce80): (settler, x, y): the first of
+//   the offset table entries 0..999 whose tile (x+dx, y+dy) is on the map
+//   (unsigned compares), has no settler and a non-zero byte +0x10 gets the
+//   settler: tile word +0x0 = settler, settler +0xc (uint16) = 0, +0x8
+//   (int32) = GameWorld::RandomBelow6(), position +0x4/+0x6 = the tile.
+//   EAX = 1 if placed, else 0. ret 0xc.
 // All thiscall (ECX = world).
 
 #include "game/replacements.h"
@@ -52,6 +58,8 @@ constexpr std::uint32_t kSettlerBytes = 0x40;
 constexpr std::uint32_t kSettlerPlayer = 0x0;
 constexpr std::uint32_t kSettlerType = 0x1;
 constexpr std::uint32_t kSettlerX = 0x4;
+constexpr std::uint32_t kSettlerState = 0x8;  // int32
+constexpr std::uint32_t kSettlerWordC = 0xc;
 constexpr std::uint32_t kSettlerY = 0x6;
 constexpr std::uint32_t kSettlerNext = 0x10;
 constexpr std::uint32_t kSettlerByte19 = 0x19;
@@ -66,6 +74,7 @@ constexpr std::uint32_t kOffsetTable = 0x110a588;  // int32 dx, int32 dy, 16-byt
 constexpr std::uint32_t kOffsetTableBytes = 0x10;
 constexpr std::uint32_t kRingEntriesFirst = 1;
 constexpr std::uint32_t kRingEntriesLast = 36;
+constexpr std::uint32_t kPlaceEntries = 1000;
 
 template <typename T>
 T& At(GameWorld* world, std::uint32_t offset) {
@@ -152,6 +161,37 @@ S3RE_HOOK(0x0050e8f0, GameWorld_CountListSettlersNear, CountNearFn, Original_Gam
           GameWorld_CountListSettlersNear);
 S3RE_HOOK(0x0050cdb0, GameWorld_FindNearbySettlerType29, FindNearbyFn,
           Original_GameWorld_FindNearbySettlerType29, GameWorld_FindNearbySettlerType29);
+
+using PlaceNearFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler,
+                                               std::uint32_t x, std::uint32_t y);
+
+std::uint32_t __fastcall GameWorld_PlaceSettlerNear(GameWorld* world, void*, std::uint32_t settler, std::uint32_t x,
+                                                    std::uint32_t y) {
+    for (std::uint32_t entry = 0; entry < kPlaceEntries; ++entry) {
+        const std::uint32_t at = kOffsetTable + entry * kOffsetTableBytes;
+        const std::uint32_t tx = x + At<std::uint32_t>(world, at);
+        const std::uint32_t ty = y + At<std::uint32_t>(world, at + 4);
+        const std::uint32_t size = At<std::uint32_t>(world, world_offset::kMapSize);
+        if (tx >= size || ty >= size) {
+            continue;
+        }
+        const std::uint32_t tile = Tile(tx, ty);
+        if (At<std::uint16_t>(world, tile + kTileSettler) != 0 || At<std::uint8_t>(world, tile + kTileByte10) == 0) {
+            continue;
+        }
+        At<std::uint16_t>(world, tile + kTileSettler) = static_cast<std::uint16_t>(settler);
+        const std::uint32_t record = Settler(settler);
+        At<std::uint16_t>(world, record + kSettlerWordC) = 0;
+        At<std::uint32_t>(world, record + kSettlerState) = GameWorld_RandomBelow6(world, nullptr);
+        At<std::uint16_t>(world, record + kSettlerX) = static_cast<std::uint16_t>(tx);
+        At<std::uint16_t>(world, record + kSettlerY) = static_cast<std::uint16_t>(ty);
+        return 1;
+    }
+    return 0;
+}
+
+S3RE_HOOK(0x0050ce80, GameWorld_PlaceSettlerNear, PlaceNearFn, Original_GameWorld_PlaceSettlerNear,
+          GameWorld_PlaceSettlerNear);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -312,6 +352,45 @@ S3RE_TEST(GameWorld_FindNearbySettlerType29_ComparisonDetectsWrongImplementation
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareFindNearby(probe, &WrongFindNearbySettlerType29, 500);
     S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(GameWorld_PlaceSettlerNear_MatchesOriginal) {
+    Compare(ctx, 3000, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
+        const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : 4 + ctx.rng().Below(40);
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        std::uint32_t x = ctx.rng().Below(size);
+        const std::uint32_t y = ctx.rng().Below(size);
+        if (ctx.rng().Chance(1, 32)) {
+            x += 1000;  // nothing on the map
+        }
+        // Offsets: entries 0..999 spiral out to about 18 tiles.
+        const std::uint32_t entries = ctx.rng().Chance(1, 8) ? kPlaceEntries : 80;
+        for (std::uint32_t entry = 0; entry < entries; ++entry) {
+            const std::int32_t reach = 1 + static_cast<std::int32_t>(entry / 60);
+            worlds.Set<std::int32_t>(kOffsetTable + entry * kOffsetTableBytes, ctx.rng().Range(-reach, reach));
+            worlds.Set<std::int32_t>(kOffsetTable + entry * kOffsetTableBytes + 4, ctx.rng().Range(-reach, reach));
+        }
+        // Tiles near (x, y): mostly occupied or without byte +0x10.
+        const std::uint32_t free = ctx.rng().Below(64);
+        for (std::int32_t dx = -20; dx <= 20; ++dx) {
+            for (std::int32_t dy = -20; dy <= 20; ++dy) {
+                const std::uint32_t tx = x + dx;
+                const std::uint32_t ty = y + dy;
+                if (tx >= 384 || ty >= 384) {
+                    continue;
+                }
+                const bool empty = ctx.rng().Below(1024) < free;
+                worlds.Set<std::uint16_t>(Tile(tx, ty) + kTileSettler,
+                                          static_cast<std::uint16_t>(empty || ctx.rng().Chance(1, 2) ? 0 : 1 + ctx.rng().Below(100)));
+                worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileByte10,
+                                         static_cast<std::uint8_t>(empty || ctx.rng().Chance(1, 2) ? 1 + ctx.rng().Below(3) : 0));
+            }
+        }
+        worlds.Set<std::uint32_t>(world_offset::kRandomState, ctx.rng().Next32());
+        const std::uint32_t settler = ctx.rng().Below(kTestSettlers);
+        expected = Original_GameWorld_PlaceSettlerNear(worlds.original(), nullptr, settler, x, y);
+        actual = GameWorld_PlaceSettlerNear(worlds.ours(), nullptr, settler, x, y);
+    });
 }
 
 }  // namespace s3re::game

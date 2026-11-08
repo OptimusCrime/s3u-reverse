@@ -14,6 +14,27 @@
 
 namespace s3re::game {
 
+// building_goods.cpp
+std::uint32_t __fastcall GameWorld_BuildingInputWord2A(GameWorld* world, void* edx, std::uint32_t building,
+                                                       std::uint32_t goods);
+std::uint32_t __fastcall GameWorld_SetBuildingInputWord2A(GameWorld* world, void* edx, std::uint32_t building,
+                                                          std::uint32_t goods, std::uint32_t value);
+std::uint32_t __fastcall GameWorld_SetBuildingInputWord24(GameWorld* world, void* edx, std::uint32_t building,
+                                                          std::uint32_t goods, std::uint32_t value);
+
+// flood_fills.cpp
+std::uint32_t __fastcall GameWorld_MoveTileToAreaAndQueue(GameWorld* world, void* edx, std::uint32_t x,
+                                                          std::uint32_t y, std::uint32_t oldArea,
+                                                          std::uint32_t newArea);
+std::uint32_t __fastcall GameWorld_FloodFillTileWord16(GameWorld* world, void* edx, std::uint32_t x,
+                                                       std::uint32_t y, std::uint32_t value);
+std::uint32_t __fastcall GameWorld_FloodFillTileByte10(GameWorld* world, void* edx, std::uint32_t x,
+                                                       std::uint32_t y, std::uint32_t value);
+
+// id_allocators.cpp
+std::uint32_t __fastcall GameWorld_FindFreeId256(GameWorld* world, void* edx);
+std::uint32_t __fastcall GameWorld_FindFreeId8192(GameWorld* world, void* edx);
+
 // map.cpp
 std::uint32_t __fastcall GameWorld_IsOnMap(GameWorld* world, void* edx, std::uint32_t x,
                                            std::uint32_t y);
@@ -40,11 +61,21 @@ std::uint32_t __fastcall GameWorld_AreOffsetTilesClear(GameWorld* world, void* e
 std::uint32_t __fastcall GameWorld_AddPlayerCounter(GameWorld* world, void* edx, std::uint32_t player,
                                                     std::uint32_t index, std::uint32_t amount);
 
+// map_terrain.cpp
+std::uint32_t __fastcall GameWorld_SpreadTerrainRandomly(GameWorld* world, void* edx, std::uint32_t from,
+                                                         std::uint32_t neighbour, std::uint32_t to,
+                                                         std::uint32_t percent);
+std::uint32_t __fastcall GameWorld_UpdateBorderFlagsAround(GameWorld* world, void* edx, std::uint32_t x,
+                                                           std::uint32_t y);
+
 // random.cpp
 std::uint16_t __fastcall GameWorld_Random(GameWorld* world, void* edx);
+std::uint32_t __fastcall GameWorld_RandomBelow6(GameWorld* world, void* edx);
 
 // ui_state.cpp
 std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void* edx);
+std::uint32_t __fastcall GameWorld_CenterCameraOnTile(GameWorld* world, void* edx, std::uint32_t x,
+                                                      std::uint32_t y);
 std::uint32_t __fastcall GameWorld_PushUiFeedback(GameWorld* world, void* edx, std::uint32_t value);
 
 // world_search.cpp
