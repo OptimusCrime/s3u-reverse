@@ -1791,6 +1791,181 @@ SPECS += [
 ]
 
 
+# --- batch 19 ---------------------------------------------------------------
+
+SETTLER_HIGH_WATER = 0x12a5e5c
+LAST_SETTLER = 0x7cff  # never handed out
+
+
+def settler_health(rng, pool, args):
+    """The settler's race (+0x2) often 3, its type (+0x1) mostly a real one."""
+    record = SETTLERS + args[0] * SETTLER_BYTES
+    return [(record + 0x2, 3 if rng.random() < 0.5 else rng.randrange(256), 1),
+            (record + 0x1, rng.randrange(0x50) if rng.random() < 0.8 else rng.randrange(256), 1)]
+
+
+def free_settler(rng) -> list:
+    """Settlers 1..first-1 in use, `first` free: near the start, 0x7cfe,
+    0x7cff (never handed out) or none."""
+    r = rng.random()
+    if r < 0.05:
+        first = LAST_SETTLER - 1
+    elif r < 0.1:
+        first = LAST_SETTLER
+    elif r < 0.15:
+        first = LAST_SETTLER + 1
+    else:
+        first = rng.randrange(1, 64)
+    fields = [(SETTLERS + s * SETTLER_BYTES, 0xff if s == first else rng.randrange(20), 1)
+              for s in range(1, min(first, LAST_SETTLER) + 1)]
+    fields.append((SETTLER_HIGH_WATER, rng.choice([first - 1, first, first + 1, rng.getrandbits(32)]) & 0xFFFFFFFF, 4))
+    return fields
+
+
+def create_settler(rng, pool, args):
+    race = rng.choice([0, 1, 2, 3, 3, 3, rng.getrandbits(32)])
+    return free_settler(rng) + [(PLAYER_RACE + args[3] * PLAYER_RECORD_BYTES, race, 4)]
+
+
+def pile_on_map(rng, pool, args):
+    record = PILES + args[0] * PILE_BYTES
+    return [(record + 0x6, rng.randrange(384), 2), (record + 0x8, rng.randrange(384), 2),
+            (record + 0x3, rng.choice([0, 0xff, rng.randrange(256)]), 1)]
+
+
+def flood_assign(rng, pool, args):
+    """Tiles mostly marked (flag 0x10, not blocked) and owned by the player
+    (args[3]), area words 0..3; the big map all marked and the player's (a
+    fill of all of it wraps the 10,000-entry ring)."""
+    n, big = flood_map(rng, args)
+    player = args[3]
+    density = 1.0 if big else rng.choice([0.3, 0.6, 0.9])
+    fields = [(MAP_SIZE, n, 4)]
+    for x in range(n):
+        for y in range(n):
+            flags = rng.getrandbits(8)
+            if rng.random() < density:
+                flags = (flags | 0x10) & ~0x01
+            owner = player if big or rng.random() < 0.75 else rng.randrange(3)
+            fields += [(tile(x, y) + 0xa, flags, 1), (tile(x, y) + 0x8, owner, 1),
+                       (tile_area_offset(x, y), rng.randrange(4), 2)]
+    return fields
+
+
+EXTRA_OFFSETS = {0x1f: (-2, 4), 0x2f: (-2, 6), 0x30: (-2, 4), 0x32: (-1, 7)}  # S3.EXE 0x659624
+EXTRA_STEPS = [(-1, -1), (0, -1), (-1, 0), (0, 0), (1, 0), (0, 1), (1, 1)]
+SHIP_STEPS = [(1, 0), (1, 1), (0, 1), (-1, 0), (-1, -1), (0, -1)]  # NeighbourX/Y per direction
+
+
+def extra_tiles_map(rng, n: int) -> list:
+    """A join map with word-16 regions, one byte-10 region over the map
+    (connected: a call may split it several times) and few occupants
+    (tile word +0x0), their settlers often of type 0x29."""
+    fields = join_areas_map(rng, n) + word16_regions(rng, n)
+    for x in range(-1, n + 1):
+        for y in range(-1, n + 1):
+            t = tile(x & 0xFFFFFFFF, y & 0xFFFFFFFF)
+            on = 0 <= x < n and 0 <= y < n
+            occupant = rng.randrange(1, 0x8000) if rng.random() < 1 / 40 else 0
+            fields += [(t + 0x10, 1 if on else 0, 1), (t, occupant, 2)]
+            if occupant:
+                fields.append((SETTLERS + occupant * SETTLER_BYTES + 1,
+                               0x29 if rng.random() < 0.5 else rng.randrange(0x50), 1))
+    return fields
+
+
+def extra_tiles_building(rng, n: int, building: int, unset: bool):
+    """A building with extra tiles (seven tiles 4 inside the map), a shipyard
+    (ship tile 4 inside the map; with `unset` the ship position sometimes
+    unset, which only the take function checks) or another type. Returns
+    (fields, extra tiles or [])."""
+    record = BUILDINGS + building * BUILDING_BYTES
+    kind = rng.choice([0x1f, 0x2f, 0x30, 0x32, 0x20, 0x20, 0x20, 0x12]) if rng.random() > 0.1 else rng.randrange(256)
+    state = rng.choice([0x20, 0x30, 0x40, 0, 0x30, 0x40, 0x50]) | (0 if rng.random() < 0.5 else rng.randrange(16))
+    if rng.random() < 0.1:
+        state = 0
+    fields = [(record + 0x6, kind, 1), (record + 0x0, rng.randrange(20), 1),
+              (record + 0x20, 0xfe if rng.random() < 0.125 else rng.randrange(0xfe), 1),
+              (record + 0x1f, state, 1), (record + 0x36, rng.randrange(0x10, 0x20), 1)]
+    extra = []
+    if kind in EXTRA_OFFSETS:
+        dx, dy = EXTRA_OFFSETS[kind]
+        cx, cy = rng.randrange(4, n - 4), rng.randrange(8, n - 4)  # y = cy - dy is a word: not negative
+        fields += [(record + 0x2, (cx - dx) & 0xFFFF, 2), (record + 0x4, (cy - dy) & 0xFFFF, 2)]
+        extra = [(cx + sx, cy + sy) for sx, sy in EXTRA_STEPS]
+    else:
+        d = rng.randrange(6)
+        tx, ty = rng.randrange(4, n - 4), rng.randrange(4, n - 4)
+        sx, sy = SHIP_STEPS[d]
+        fields += [(record + 0x22, (d + 3) % 6 + 6 * rng.randrange(100), 2),
+                   (record + 0x30, 0xffff if unset and rng.random() < 0.1 else tx - 2 * sx, 2),
+                   (record + 0x32, ty - 2 * sy, 2),
+                   (tile(tx, ty), rng.randrange(1, 0x8000) if rng.random() < 0.25 else 0, 2)]
+    return fields, extra
+
+
+def take_extra_tiles(rng, pool, args):
+    n = rng.randint(14, 18)
+    fields, _ = extra_tiles_building(rng, n, args[0], True)
+    return [(MAP_SIZE, n, 4)] + extra_tiles_map(rng, n) + fields
+
+
+def release_extra_tiles(rng, pool, args):
+    """As take_extra_tiles, the extra tiles mostly blocked (area kept; the
+    centre sometimes without area, which can't cut an area in two)."""
+    n = rng.randint(14, 18)
+    fields, extra = extra_tiles_building(rng, n, args[0], False)
+    fields = [(MAP_SIZE, n, 4)] + extra_tiles_map(rng, n) + fields
+    for k, (x, y) in enumerate(extra):
+        if rng.random() < 7 / 8:
+            fields.append((tile(x, y) + 0xa, rng.getrandbits(8) | 1, 1))
+        if k == 3 and rng.random() < 0.3:
+            fields.append((tile_area_offset(x, y), 0, 2))
+    return fields
+
+
+def type12_buildings(rng, pool, args):
+    """1..5 buildings (sometimes none), mostly of type 0x12, of players of
+    race 0 or 1; their tiles (x-2, y+3), (x, y+7), (x, y+6) inside the map,
+    mostly blocked."""
+    n = rng.randint(16, 22)
+    fields = [(MAP_SIZE, n, 4)] + extra_tiles_map(rng, n)
+    count = 0 if rng.random() < 0.1 else rng.randint(1, 5)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        player = rng.randrange(20)
+        x, y = rng.randrange(5, n - 3), rng.randrange(3, n - 10)
+        fields += [(record + 0x6, 0x12 if rng.random() < 2 / 3 else rng.randrange(0x40), 1), (record + 0x0, player, 1),
+                   (PLAYER_RACE + player * PLAYER_RECORD_BYTES, rng.randrange(4) if rng.random() < 1 / 6 else rng.randrange(2), 4),
+                   (record + 0x2, x, 2), (record + 0x4, y, 2)]
+        for tx, ty in ((x - 2, y + 3), (x, y + 7), (x, y + 6)):
+            if rng.random() < 0.75:
+                fields.append((tile(tx, ty) + 0xa, rng.getrandbits(8) | 1, 1))
+    return fields
+
+
+SPECS += [
+    Spec("GameWorld_SettlerStartHealth", 0x00510470, "thiscall", [below(LAST_SETTLER + 1)], presets=settler_health),
+    Spec("GameWorld_CreateSettler", 0x0050c9e0, "thiscall",
+         [below(384), below(384), lambda rng, pool: rng.randrange(0x50) if rng.random() < 0.8 else anything(rng, pool),
+          below(20)], presets=create_settler, max_cases=300),
+    Spec("GameWorld_ClearSettlerJob", 0x00510440, "thiscall", [below(LAST_SETTLER + 1)]),
+    Spec("GameWorld_RestoreSettlerDirection", 0x0050e380, "thiscall", [below(LAST_SETTLER + 1)]),
+    Spec("GameWorld_PileIncAmountComing", 0x00505bc0, "thiscall", [below(0x10000)], presets=pile_on_map),
+    Spec("GameWorld_PileDecAmountComing", 0x00505bf0, "thiscall", [below(0x10000)], presets=pile_on_map),
+    Spec("GameWorld_RemovePileFromTile", 0x00504650, "thiscall", [below(0x10000)], presets=pile_on_map),
+    Spec("GameWorld_ClearAreaGoodsSettings1D2", 0x004ff3c0, "thiscall", [below(0x1000)]),
+    Spec("GameWorld_FloodAssignMarkedTiles", 0x004e6cd0, "thiscall",
+         [below(12), below(12), between(1, 6), below(3)], presets=flood_assign, max_cases=150),
+    Spec("GameWorld_TakeBuildingExtraTiles", 0x004dd6f0, "thiscall", [between(1, 64)], presets=take_extra_tiles,
+         max_cases=300),
+    Spec("GameWorld_ReleaseBuildingExtraTiles", 0x004dda10, "thiscall", [between(1, 64)],
+         presets=release_extra_tiles, max_cases=300),
+    Spec("GameWorld_UnblockType12BuildingTiles", 0x004dfa60, "thiscall", [], presets=type12_buildings,
+         max_cases=200),
+]
+
 # Deliberately wrong pairings for `run.py --self-test`: each must be reported
 # as a mismatch, which shows that the harness notices wrong return values,
 # wrong memory writes and wrong conditions.

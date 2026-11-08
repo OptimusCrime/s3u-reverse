@@ -15,12 +15,12 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 145 replacements pass the emulator suite with full block
+Status: all 157 replacements pass the emulator suite with full block
 coverage (2,000 cases each, fewer for the slow ones: the flood fills 150,
 ShiftStatistics 60, the map-wide loops and table scans 150-800);
 `--self-test` catches 11/11 wrong pairings. Batches 9-14 passed the
 whole-game check on 2026-11-08 (call counts in the inventory); batches
-15-18 haven't had one yet. Specs can set S3.EXE globals per case
+15-19 haven't had one yet. Specs can set S3.EXE globals per case
 (`Spec.globals`), and take ECX = a fake CLogicThread ("logicthread"
 convention) and pointer arguments into scratch buffers (`scratch(n)`).
 
@@ -198,6 +198,31 @@ calling only verified functions (UnblockTile / BlockTile); then 0x4dbb10
 huge Update* functions, so leaves with unclear meaning are getting more
 common.
 
+Batch 19 (2026-11-09, 12 functions; in-process + emulator tests, full
+coverage; whole-game check NOT run yet):
+- area_split.cpp: GameWorld::TakeBuildingExtraTiles (0x4dd6f0; blocks the
+  seven tiles next to building types 0x1f/0x2f/0x30/0x32 at position +
+  offset from S3.EXE 0x659624, or launches a shipyard's ship: CreateSettler
+  type 0x2b/0x2c, DebugLog "Schiffsproduktion"), ReleaseBuildingExtraTiles
+  (0x4dda10, the counterpart), UnblockType12BuildingTiles (0x4dfa60, per
+  race), ClearAreaGoodsSettings1D2 (0x4ff3c0)
+- settler_records.cpp (new): CreateSettler (0x50c9e0, 37 call sites),
+  SettlerStartHealth (0x510470; table 0x6590e4 is the start health per
+  settler type, 250 for ships), ClearSettlerJob (0x510440),
+  RestoreSettlerDirection (0x50e380); settler field layout in its header
+- area_piles.cpp: PileIncAmountComing / PileDecAmountComing (0x505bc0 /
+  0x505bf0, pile byte +0x3), RemovePileFromTile (0x504650)
+- flood_fills.cpp: FloodAssignMarkedTiles (0x4e6cd0; area set-up flood)
+Next candidates: 0x4ffb90 (7-byte list at world+0x1195dcd), 0x4ff380
+(pure arithmetic, 64000 - 8000a - 4000b), 0x4fa6b0/0x4faa40 (type ids
+1/55), then callers whose callees are now all verified (check with
+`asm_tools.py callers` on the batch-19 functions, e.g. 0x51a580 the area
+set-up, which needs 0x51d5b0/0x51d450/0x5194e0/0x51d570/0x51cee0/
+0x51c040/0x51d2b0 checked). Blocked: 0x51b640, 0x504f70, 0x50e980 and
+0x4dbb10 all need 0x50cf50 (920 instructions, settler removal?);
+0x4e6e10 is a static initializer (std::string "S3Qota1.DAT"), not
+simulation code.
+
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
 (function starts from re/ghidra_functions.tsv + re/extra_functions.tsv;
@@ -346,6 +371,28 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (26): batch 19
+
+- Batch 19 (12 functions, list under "Current focus"): in-process 239/239
+  (19 new incl. 7 mutation tests); emulator specs 12/12 with full
+  coverage; full emulator suite 157/157, self-test 11/11.
+- Found: SettlerStartHealth's EAX upper half differs by path (race 3:
+  type * 4, i.e. 0; else settler << 6); the emulator caught my first
+  version.
+- Test pitfall: building positions are words, and the original adds the
+  extra-tile offset to the zero-extended word, so a position that would
+  be negative (cy < dy) reads tiles far off the map: tests keep cy >= 8.
+- Test pitfall: ReleaseBuildingExtraTiles does not check for an unset ship
+  position (0xffff) the way TakeBuildingExtraTiles does; tests only use
+  set ones for it.
+- Test pitfall: a crashing in-process test leaks its WorldPair (no
+  destructors after the SEH catch), and later tests with big worlds then
+  crash too (address space); look at the first CRASH only.
+- Several splits in one call need connected byte-10 regions (the
+  extra-tile tests use one region over the whole map); the release tests
+  block the tiles with the original BlockTile first, so the states are the
+  game's own.
 
 ### 2026-11-08 (25): batch 18
 

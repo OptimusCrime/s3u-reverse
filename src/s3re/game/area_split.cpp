@@ -93,8 +93,47 @@
 //   0xff: JoinAreasAtTile and GameWorld::AddTilePileToArea. EAX = its EAX,
 //   else x * 0x300 + y (the tile had an owner) or (x * 0x300 + y) * 3 +
 //   0xce8b (the original's address arithmetic). ret 0xc.
+// GameWorld::ClearAreaGoodsSettings1D2 (0x004ff3c0): (area): the 36 bytes
+//   at area record +0x1d2 = 0. EAX = 0. ret 4.
+//
+// Building extra tiles (building records: 0x3a bytes at world+0x1499e64,
+// count at world+0x1499e60; +0x0 player, uint16 +0x2/+0x4 position, +0x6
+// type, +0x1f state (high nibble), +0x20 0xfe once the extra tiles are
+// taken, uint16 +0x22 direction, uint16 +0x30/+0x32 a shipyard's ship
+// position, +0x36 a byte):
+// GameWorld::TakeBuildingExtraTiles (0x004dd6f0): (building): nothing if
+//   +0x20 is 0xfe. Types 0x1f, 0x2f, 0x30, 0x32 (probably buildings at the
+//   water): state 0x20 only marks the building done if +0x36 <= 0x18;
+//   otherwise the centre is the position plus the type's offset (int32 dx,
+//   dy at S3.EXE 0x659624 + 8 * k: (-2, 4), (-2, 6), (-2, 4), (-1, 7)),
+//   DebugLog("centerx,centery = %u,%u") for type 0x32, and if the seven
+//   tiles (cx-1, cy-1), (cx, cy-1), (cx-1, cy), (cx, cy), (cx+1, cy),
+//   (cx, cy+1), (cx+1, cy+1) are all GameWorld::IsFreeOfSettlerType29Nearby
+//   they are blocked (BlockTile, same order) and the building is done; EAX
+//   0 if one is not free, else the last BlockTile's EAX. Shipyard (0x20)
+//   with a ship position (+0x30 != 0xffff): the ship tile is two steps
+//   (NeighbourX/Y) from it in direction d = (+0x22 + 3) % 6; if it has no
+//   occupant, state 0x30 / 0x40 creates a ship (GameWorld::CreateSettler of
+//   type 0x2b / 0x2c for the building's player; any other state uses the
+//   number +0x32 instead, a stale register in the original), then
+//   DebugLog("Schiffsproduktion %u owner %u", type, player), ship job +0xe
+//   = 0x145, +0x15 = 0, +0x1c = 0, direction +0x8 = (d + 2) % 6, building
+//   done; EAX (d + 2) / 6, 0 if no ship, the ship tile's y if occupied.
+//   Other types: EAX = building. ret 4.
+// GameWorld::ReleaseBuildingExtraTiles (0x004dda10): (building): the
+//   counterpart: the four types unblock the seven tiles (UnblockTile, same
+//   order; EAX its last EAX; the original's check of the state nibble
+//   against 0x14 never matches). A shipyard with state byte != 0 frees the
+//   occupant of its ship tile (settler byte +0x0 = 0xff, tile word 0; EAX =
+//   the tile's address); it does not check for an unset ship position.
+//   Otherwise EAX = world + building * 0x3a. ret 4.
+// GameWorld::UnblockType12BuildingTiles (0x004dfa60): (): for buildings
+//   1..count (count re-read each time) of type 0x12: owner's race (int32 at
+//   player record +0x4) 0: UnblockTile(x-2, y+3) if that tile is blocked;
+//   race 1: the same for (x, y+7), then (x, y+6). EAX = the count. ret 0.
 // All thiscall (ECX = world).
 
+#include "game/debug_log.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
@@ -660,6 +699,205 @@ std::uint32_t __fastcall GameWorld_SetOwnerOfFreeTile(GameWorld* world, void*, s
     return GameWorld_AddTilePileToArea(world, nullptr, x, y);
 }
 
+// Purpose: Resets one of an area's per-goods settings arrays (+0x1d2, 36 bytes) to 0.
+std::uint32_t __fastcall GameWorld_ClearAreaGoodsSettings1D2(GameWorld* world, void*, std::uint32_t area) {
+    for (std::uint32_t i = 0; i < kGoodsTypes; ++i) {
+        At<std::uint8_t>(world, AreaRecord(area) + 0x1d2 + i) = 0;
+    }
+    return 0;
+}
+
+namespace {
+
+constexpr std::uint32_t kBuildingCount = 0x1499e60;
+constexpr std::uint32_t kBuildings = 0x1499e64;
+constexpr std::uint32_t kBuildingBytes = 0x3a;
+constexpr std::uint32_t kBuildingPlayer = 0x0;
+constexpr std::uint32_t kBuildingX = 0x2;
+constexpr std::uint32_t kBuildingY = 0x4;
+constexpr std::uint32_t kBuildingType = 0x6;
+constexpr std::uint32_t kBuildingState = 0x1f;     // high nibble
+constexpr std::uint32_t kBuildingExtraDone = 0x20;  // 0xfe once the extra tiles are taken
+constexpr std::uint32_t kBuildingDirection = 0x22;  // uint16
+constexpr std::uint32_t kBuildingShipX = 0x30;      // uint16
+constexpr std::uint32_t kBuildingShipY = 0x32;      // uint16
+constexpr std::uint32_t kBuildingByte36 = 0x36;
+constexpr std::uint8_t kExtraDone = 0xfe;
+constexpr std::uint8_t kShipyard = 0x20;
+constexpr std::uint8_t kType12 = 0x12;
+
+constexpr std::uintptr_t kShipProductionMessage = 0x006a5950;  // "Schiffsproduktion %u owner %u"
+constexpr std::uintptr_t kCentreMessage = 0x006a5938;          // "centerx,centery = %u,%u"
+
+std::uint32_t Building(std::uint32_t building) {
+    return kBuildings + building * kBuildingBytes;
+}
+
+// The offset (int32 dx, dy in S3.EXE's data) from a building's position to
+// the centre of its seven extra tiles, for the four building types that
+// have them; nullptr for other types.
+const std::int32_t* ExtraTilesOffset(std::uint8_t type) {
+    switch (type) {
+        case 0x1f: return reinterpret_cast<const std::int32_t*>(0x00659624);
+        case 0x2f: return reinterpret_cast<const std::int32_t*>(0x0065962c);
+        case 0x30: return reinterpret_cast<const std::int32_t*>(0x00659634);
+        case 0x32: return reinterpret_cast<const std::int32_t*>(0x0065963c);
+        default: return nullptr;
+    }
+}
+
+// The seven extra tiles around the centre (cx, cy), in the original's order.
+constexpr std::int32_t kExtraTiles[7][2] = {{-1, -1}, {0, -1}, {-1, 0}, {0, 0}, {1, 0}, {0, 1}, {1, 1}};
+
+// The shipyard's ship tile: two steps from (+0x30, +0x32) in direction (+0x22 + 3) % 6.
+void ShipTile(GameWorld* world, std::uint32_t record, std::uint32_t& direction, std::uint32_t& x, std::uint32_t& y) {
+    direction = (At<std::uint16_t>(world, record + kBuildingDirection) + 3u) % 6u;
+    x = NeighbourX(NeighbourX(At<std::uint16_t>(world, record + kBuildingShipX), direction), direction);
+    y = NeighbourY(NeighbourY(At<std::uint16_t>(world, record + kBuildingShipY), direction), direction);
+}
+
+}  // namespace
+
+// Purpose: Takes the extra tiles a building needs beyond its site: blocks the seven tiles next to some
+// building types (probably harbours and other buildings at the water), or, for a shipyard, launches the
+// ship it has built onto its ship tile (a new ship settler). Marks the building as done.
+std::uint32_t __fastcall GameWorld_TakeBuildingExtraTiles(GameWorld* world, void*, std::uint32_t building) {
+    const std::uint32_t record = Building(building);
+    if (At<std::uint8_t>(world, record + kBuildingExtraDone) == kExtraDone) {
+        return building;
+    }
+    const std::uint8_t type = At<std::uint8_t>(world, record + kBuildingType);
+    if (const std::int32_t* offset = ExtraTilesOffset(type)) {
+        if ((At<std::uint8_t>(world, record + kBuildingState) & 0xf0) == 0x20) {
+            if (At<std::uint8_t>(world, record + kBuildingByte36) <= 0x18) {
+                At<std::uint8_t>(world, record + kBuildingExtraDone) = kExtraDone;
+            }
+            return building;
+        }
+        const std::uint32_t cx = At<std::uint16_t>(world, record + kBuildingX) + static_cast<std::uint32_t>(offset[0]);
+        const std::uint32_t cy = At<std::uint16_t>(world, record + kBuildingY) + static_cast<std::uint32_t>(offset[1]);
+        if (type == 0x32) {
+            GameDebugLog(kCentreMessage, cx, cy);
+        }
+        for (const auto& step : kExtraTiles) {
+            if (GameWorld_IsFreeOfSettlerType29Nearby(world, nullptr, cx + step[0], cy + step[1]) == 0) {
+                return 0;
+            }
+        }
+        std::uint32_t result = 0;
+        for (const auto& step : kExtraTiles) {
+            result = GameWorld_BlockTile(world, nullptr, cx + step[0], cy + step[1]);
+        }
+        At<std::uint8_t>(world, record + kBuildingExtraDone) = kExtraDone;
+        return result;
+    }
+    if (type != kShipyard || At<std::uint16_t>(world, record + kBuildingShipX) == 0xffff) {
+        return building;
+    }
+    std::uint32_t direction = 0;
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    ShipTile(world, record, direction, x, y);
+    if (At<std::uint16_t>(world, kTiles + (x * 0x300 + y) * 24) != 0) {
+        return y;
+    }
+    const std::uint8_t state = At<std::uint8_t>(world, record + kBuildingState) & 0xf0;
+    std::uint32_t ship = 0;
+    if (state == 0x30) {
+        ship = GameWorld_CreateSettler(world, nullptr, x, y, 0x2b, At<std::uint8_t>(world, record + kBuildingPlayer));
+    } else if (state == 0x40) {
+        ship = GameWorld_CreateSettler(world, nullptr, x, y, 0x2c, At<std::uint8_t>(world, record + kBuildingPlayer));
+    } else {
+        ship = At<std::uint16_t>(world, record + kBuildingShipY);  // as the original (a stale register)
+    }
+    if (ship == 0) {
+        return 0;
+    }
+    const std::uint32_t settler = kSettlers + (ship << 6);
+    GameDebugLog(kShipProductionMessage, static_cast<std::uint32_t>(At<std::uint8_t>(world, settler + 0x1)),
+                 static_cast<std::uint32_t>(At<std::uint8_t>(world, settler + 0x0)));
+    At<std::uint16_t>(world, settler + 0xe) = 0x145;
+    At<std::uint8_t>(world, settler + 0x15) = 0;
+    At<std::uint32_t>(world, settler + 0x1c) = 0;
+    At<std::uint32_t>(world, settler + 0x8) = (direction + 2) % 6;
+    At<std::uint8_t>(world, record + kBuildingExtraDone) = kExtraDone;
+    return (direction + 2) / 6;
+}
+
+// Purpose: The opposite of TakeBuildingExtraTiles, probably when such a building is removed: frees the
+// seven extra tiles again, or for a shipyard removes the ship standing on its ship tile.
+std::uint32_t __fastcall GameWorld_ReleaseBuildingExtraTiles(GameWorld* world, void*, std::uint32_t building) {
+    const std::uint32_t record = Building(building);
+    const std::uint32_t recordAddress =
+        static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + building * kBuildingBytes;
+    const std::uint8_t type = At<std::uint8_t>(world, record + kBuildingType);
+    if (const std::int32_t* offset = ExtraTilesOffset(type)) {
+        // (The original also compares the state's high nibble with 0x14, which never matches.)
+        const std::uint32_t cx = At<std::uint16_t>(world, record + kBuildingX) + static_cast<std::uint32_t>(offset[0]);
+        const std::uint32_t cy = At<std::uint16_t>(world, record + kBuildingY) + static_cast<std::uint32_t>(offset[1]);
+        std::uint32_t result = 0;
+        for (const auto& step : kExtraTiles) {
+            result = GameWorld_UnblockTile(world, nullptr, cx + step[0], cy + step[1]);
+        }
+        return result;
+    }
+    if (type != kShipyard || At<std::uint8_t>(world, record + kBuildingState) == 0) {
+        return recordAddress;
+    }
+    std::uint32_t direction = 0;
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    ShipTile(world, record, direction, x, y);
+    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
+    At<std::uint8_t>(world, kSettlers + (static_cast<std::uint32_t>(At<std::uint16_t>(world, tile)) << 6)) = 0xff;
+    At<std::uint16_t>(world, tile) = 0;
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + tile;
+}
+
+// Purpose: For every building of type 0x12, unblocks one or two tiles at a fixed place next to it that
+// depends on the owner's race (race 0: (x-2, y+3); race 1: (x, y+7) and (x, y+6)). Probably repairs tiles
+// after a savegame is loaded.
+std::uint32_t __fastcall GameWorld_UnblockType12BuildingTiles(GameWorld* world, void*) {
+    std::uint32_t count = At<std::uint32_t>(world, kBuildingCount);
+    for (std::uint32_t building = 1; building <= count; ++building) {
+        const std::uint32_t record = Building(building);
+        if (At<std::uint8_t>(world, record + kBuildingType) == kType12) {
+            const std::uint32_t player = At<std::uint8_t>(world, record + kBuildingPlayer);
+            const std::int32_t race = At<std::int32_t>(world, kPlayerRace + player * kPlayerRecordBytes);
+            const std::uint32_t x = At<std::uint16_t>(world, record + kBuildingX);
+            const std::uint32_t y = At<std::uint16_t>(world, record + kBuildingY);
+            if (race == 0) {
+                if ((TileFlags(world, x - 2, y + 3) & kTileBlocked) != 0) {
+                    GameWorld_UnblockTile(world, nullptr, x - 2, y + 3);
+                }
+            } else if (race == 1) {
+                if ((TileFlags(world, x, y + 7) & kTileBlocked) != 0) {
+                    GameWorld_UnblockTile(world, nullptr, x, y + 7);
+                }
+                const std::uint32_t x2 = At<std::uint16_t>(world, record + kBuildingX);
+                const std::uint32_t y2 = At<std::uint16_t>(world, record + kBuildingY);
+                if ((TileFlags(world, x2, y2 + 6) & kTileBlocked) != 0) {
+                    GameWorld_UnblockTile(world, nullptr, x2, y2 + 6);
+                }
+            }
+        }
+        count = At<std::uint32_t>(world, kBuildingCount);
+    }
+    return count;
+}
+
+using AreaFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t area);
+using BuildingFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building);
+using WorldFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
+
+S3RE_HOOK(0x004ff3c0, GameWorld_ClearAreaGoodsSettings1D2, AreaFn, Original_GameWorld_ClearAreaGoodsSettings1D2,
+          GameWorld_ClearAreaGoodsSettings1D2);
+S3RE_HOOK(0x004dd6f0, GameWorld_TakeBuildingExtraTiles, BuildingFn, Original_GameWorld_TakeBuildingExtraTiles,
+          GameWorld_TakeBuildingExtraTiles);
+S3RE_HOOK(0x004dda10, GameWorld_ReleaseBuildingExtraTiles, BuildingFn, Original_GameWorld_ReleaseBuildingExtraTiles,
+          GameWorld_ReleaseBuildingExtraTiles);
+S3RE_HOOK(0x004dfa60, GameWorld_UnblockType12BuildingTiles, WorldFn, Original_GameWorld_UnblockType12BuildingTiles,
+          GameWorld_UnblockType12BuildingTiles);
 S3RE_HOOK(0x004e6510, GameWorld_InitArea, InitAreaFn, Original_GameWorld_InitArea, GameWorld_InitArea);
 S3RE_HOOK(0x004e64c0, GameWorld_AllocArea, AllocAreaFn, Original_GameWorld_AllocArea, GameWorld_AllocArea);
 S3RE_HOOK(0x004e54f0, GameWorld_MoveAreaContents, MoveAreaContentsFn, Original_GameWorld_MoveAreaContents,
@@ -1265,6 +1503,245 @@ S3RE_TEST(GameWorld_BlockTile_MatchesOriginal) {
 S3RE_TEST(GameWorld_BlockTile_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareBlockTile(probe, &WrongBlockTile, 300);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Tests: area settings, building extra tiles
+// ---------------------------------------------------------------------------
+
+namespace {
+
+constexpr std::uint32_t kTestBuildings = 64;
+constexpr std::int32_t kDirectionX[6] = {1, 1, 0, -1, -1, 0};
+constexpr std::int32_t kDirectionY[6] = {0, 1, 1, 0, -1, -1};
+
+// A map for taking and releasing extra tiles: a join map (connected stripe
+// areas, owners), word-16 regions labelled per connected stretch, one
+// byte-10 region over the whole map (connected, so a call may split it
+// several times), and few occupants (tile word +0x0; their settlers often
+// of type 0x29). Returns the number of owners.
+std::uint32_t SetUpExtraTilesMap(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size) {
+    const std::uint32_t owners = SetUpJoinMap(ctx, worlds, size);
+    SetUpWord16Regions(ctx, worlds, size);
+    for (std::uint32_t tx = 0xffffffffu; tx != size + 1; ++tx) {
+        for (std::uint32_t ty = 0xffffffffu; ty != size + 1; ++ty) {
+            const bool onMap = tx < size && ty < size;
+            worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileByte10, static_cast<std::uint8_t>(onMap ? 1 : 0));
+            const std::uint32_t occupant = ctx.rng().Chance(1, 40) ? 1 + ctx.rng().Below(0x8000) : 0;
+            worlds.Set<std::uint16_t>(Tile(tx, ty), static_cast<std::uint16_t>(occupant));
+            if (occupant != 0) {
+                worlds.Set<std::uint8_t>(kSettlers + occupant * kSettlerBytes + 0x1,
+                                         static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0x29 : ctx.rng().Below(0x50)));
+            }
+        }
+    }
+    return owners;
+}
+
+// A building of a random type: one of the four with extra tiles (its seven
+// tiles 4 inside the map), a shipyard (its ship tile 4 inside the map; with
+// `unset`, the ship position sometimes unset: only TakeBuildingExtraTiles
+// checks that, ReleaseBuildingExtraTiles would read far off the map) or
+// another type.
+std::uint32_t SetUpExtraTilesBuilding(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size, bool unset) {
+    const std::uint32_t building = 1 + ctx.rng().Below(kTestBuildings);
+    const std::uint32_t record = Building(building);
+    static constexpr std::uint8_t kTypes[] = {0x1f, 0x2f, 0x30, 0x32, 0x20, 0x20, 0x20, 0x12};
+    const std::uint8_t type =
+        ctx.rng().Chance(1, 10) ? static_cast<std::uint8_t>(ctx.rng().Below(256)) : kTypes[ctx.rng().Below(sizeof(kTypes))];
+    worlds.Set<std::uint8_t>(record + kBuildingType, type);
+    worlds.Set<std::uint8_t>(record + kBuildingPlayer, static_cast<std::uint8_t>(ctx.rng().Below(20)));
+    worlds.Set<std::uint8_t>(record + kBuildingExtraDone,
+                             static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? kExtraDone : ctx.rng().Below(0xfe)));
+    static constexpr std::uint8_t kStates[] = {0x20, 0x30, 0x40, 0x00, 0x30, 0x40, 0x50};
+    const std::uint8_t state = static_cast<std::uint8_t>(kStates[ctx.rng().Below(sizeof(kStates))] |
+                                                         (ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(16)));
+    worlds.Set<std::uint8_t>(record + kBuildingState, ctx.rng().Chance(1, 10) ? std::uint8_t{0} : state);
+    worlds.Set<std::uint8_t>(record + kBuildingByte36, static_cast<std::uint8_t>(0x10 + ctx.rng().Below(0x10)));
+    if (const std::int32_t* offset = ExtraTilesOffset(type)) {
+        // The building's position is a word: y = cy - dy must not be negative.
+        const std::uint32_t cx = 4 + ctx.rng().Below(size - 8);
+        const std::uint32_t cy = 8 + ctx.rng().Below(size - 12);
+        worlds.Set<std::uint16_t>(record + kBuildingX, static_cast<std::uint16_t>(cx - static_cast<std::uint32_t>(offset[0])));
+        worlds.Set<std::uint16_t>(record + kBuildingY, static_cast<std::uint16_t>(cy - static_cast<std::uint32_t>(offset[1])));
+    } else {
+        const std::uint32_t d = ctx.rng().Below(6);
+        worlds.Set<std::uint16_t>(record + kBuildingDirection, static_cast<std::uint16_t>((d + 3) % 6 + 6 * ctx.rng().Below(100)));
+        const std::uint32_t tx = 4 + ctx.rng().Below(size - 8);
+        const std::uint32_t ty = 4 + ctx.rng().Below(size - 8);
+        const std::uint32_t sx = tx - 2 * static_cast<std::uint32_t>(kDirectionX[d]);
+        worlds.Set<std::uint16_t>(record + kBuildingShipX,
+                                  static_cast<std::uint16_t>(unset && ctx.rng().Chance(1, 10) ? 0xffff : sx));
+        worlds.Set<std::uint16_t>(record + kBuildingShipY,
+                                  static_cast<std::uint16_t>(ty - 2 * static_cast<std::uint32_t>(kDirectionY[d])));
+        worlds.Set<std::uint16_t>(Tile(tx, ty),
+                                  static_cast<std::uint16_t>(ctx.rng().Chance(1, 4) ? 1 + ctx.rng().Below(0x8000) : 0));
+    }
+    return building;
+}
+
+// Blocks the building's seven extra tiles (each 7 in 8) the way the game does.
+void BlockExtraTiles(test::Context& ctx, test::WorldPair& worlds, std::uint32_t building) {
+    const std::uint32_t record = Building(building);
+    const std::int32_t* offset = ExtraTilesOffset(At<std::uint8_t>(worlds.original(), record + kBuildingType));
+    if (offset == nullptr) {
+        return;
+    }
+    const std::uint32_t cx = At<std::uint16_t>(worlds.original(), record + kBuildingX) + static_cast<std::uint32_t>(offset[0]);
+    const std::uint32_t cy = At<std::uint16_t>(worlds.original(), record + kBuildingY) + static_cast<std::uint32_t>(offset[1]);
+    for (const auto& step : kExtraTiles) {
+        if (ctx.rng().Chance(7, 8)) {
+            Original_GameWorld_BlockTile(worlds.original(), nullptr, cx + step[0], cy + step[1]);
+            Original_GameWorld_BlockTile(worlds.ours(), nullptr, cx + step[0], cy + step[1]);
+        }
+    }
+}
+
+// Wrong: never marks the building as done.
+std::uint32_t __fastcall WrongTakeBuildingExtraTiles(GameWorld* world, void* edx, std::uint32_t building) {
+    const std::uint8_t done = At<std::uint8_t>(world, Building(building) + kBuildingExtraDone);
+    const std::uint32_t result = GameWorld_TakeBuildingExtraTiles(world, edx, building);
+    At<std::uint8_t>(world, Building(building) + kBuildingExtraDone) = done;
+    return result;
+}
+
+// Wrong: type 0x2f has no extra tiles.
+std::uint32_t __fastcall WrongReleaseBuildingExtraTiles(GameWorld* world, void* edx, std::uint32_t building) {
+    std::uint8_t& type = At<std::uint8_t>(world, Building(building) + kBuildingType);
+    const std::uint8_t saved = type;
+    if (type == 0x2f) {
+        type = 0x2e;
+    }
+    const std::uint32_t result = GameWorld_ReleaseBuildingExtraTiles(world, edx, building);
+    type = saved;
+    return result;
+}
+
+template <typename Fn>
+void CompareExtraTiles(test::Context& ctx, Fn original, Fn candidate, int cases, bool release) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    SetUpOffsets(worlds);
+    DebugLogRecorder logs;
+    std::size_t logged = 0;
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t size = 14 + ctx.rng().Below(8);
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        SetUpExtraTilesMap(ctx, worlds, size);
+        const std::uint32_t building = SetUpExtraTilesBuilding(ctx, worlds, size, !release);
+        if (release) {
+            BlockExtraTiles(ctx, worlds, building);
+        }
+        logs.Take();
+        const std::uint32_t expected = RelativeIfPointer(original(worlds.original(), nullptr, building), worlds.original());
+        const std::vector<DebugLogCall> expectedLogs = logs.Take();
+        const std::uint32_t actual = RelativeIfPointer(candidate(worlds.ours(), nullptr, building), worlds.ours());
+        const std::vector<DebugLogCall> actualLogs = logs.Take();
+        logged += expectedLogs.size();
+        if (!S3RE_EXPECT_EQ(expected, actual) || !S3RE_EXPECT(expectedLogs == actualLogs) ||
+            ((i % 4 == 3 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 3 before it): building %u type 0x%x map %u", i,
+                     building, At<std::uint8_t>(worlds.original(), Building(building) + kBuildingType), size);
+            return;
+        }
+    }
+    S3RE_EXPECT(release || logged > 0);
+}
+
+// Wrong: race 1 unblocks race 0's tile.
+std::uint32_t __fastcall WrongUnblockType12BuildingTiles(GameWorld* world, void* edx) {
+    for (std::uint32_t building = 1; building <= At<std::uint32_t>(world, kBuildingCount); ++building) {
+        const std::uint32_t record = Building(building);
+        if (At<std::uint8_t>(world, record + kBuildingType) == kType12) {
+            const std::int32_t race =
+                At<std::int32_t>(world, kPlayerRace + At<std::uint8_t>(world, record + kBuildingPlayer) * kPlayerRecordBytes);
+            if (race == 0 || race == 1) {
+                GameWorld_UnblockTile(world, edx, At<std::uint16_t>(world, record + kBuildingX) - 2,
+                                      At<std::uint16_t>(world, record + kBuildingY) + 3);
+            }
+        }
+    }
+    return At<std::uint32_t>(world, kBuildingCount);
+}
+
+void CompareUnblockType12(test::Context& ctx, WorldFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    SetUpOffsets(worlds);
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t size = 16 + ctx.rng().Below(8);
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        SetUpExtraTilesMap(ctx, worlds, size);
+        const std::uint32_t count = ctx.rng().Chance(1, 10) ? 0 : 1 + ctx.rng().Below(5);
+        worlds.Set<std::uint32_t>(kBuildingCount, count);
+        for (std::uint32_t building = 1; building <= count; ++building) {
+            const std::uint32_t record = Building(building);
+            worlds.Set<std::uint8_t>(record + kBuildingType,
+                                     static_cast<std::uint8_t>(ctx.rng().Chance(2, 3) ? kType12 : ctx.rng().Below(0x40)));
+            const std::uint32_t player = ctx.rng().Below(20);
+            worlds.Set<std::uint8_t>(record + kBuildingPlayer, static_cast<std::uint8_t>(player));
+            worlds.Set<std::int32_t>(kPlayerRace + player * kPlayerRecordBytes,
+                                     static_cast<std::int32_t>(ctx.rng().Chance(1, 6) ? ctx.rng().Below(4) : ctx.rng().Below(2)));
+            const std::uint32_t x = 5 + ctx.rng().Below(size - 8);
+            const std::uint32_t y = 3 + ctx.rng().Below(size - 13);
+            worlds.Set<std::uint16_t>(record + kBuildingX, static_cast<std::uint16_t>(x));
+            worlds.Set<std::uint16_t>(record + kBuildingY, static_cast<std::uint16_t>(y));
+            const std::uint32_t targets[3][2] = {{x - 2, y + 3}, {x, y + 7}, {x, y + 6}};
+            for (const auto& target : targets) {
+                if (ctx.rng().Chance(3, 4)) {
+                    Original_GameWorld_BlockTile(worlds.original(), nullptr, target[0], target[1]);
+                    Original_GameWorld_BlockTile(worlds.ours(), nullptr, target[0], target[1]);
+                }
+            }
+        }
+        const std::uint32_t expected = Original_GameWorld_UnblockType12BuildingTiles(worlds.original(), nullptr);
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr);
+        if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 4 == 3 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 3 before it): %u buildings, map %u", i, count, size);
+            return;
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_ClearAreaGoodsSettings1D2_MatchesOriginal) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    for (int i = 0; i < 4000; ++i) {
+        const std::uint32_t area = ctx.rng().Below(0x1000);
+        const std::uint32_t expected = Original_GameWorld_ClearAreaGoodsSettings1D2(worlds.original(), nullptr, area);
+        const std::uint32_t actual = GameWorld_ClearAreaGoodsSettings1D2(worlds.ours(), nullptr, area);
+        if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 512 == 511) && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 511 before it): area %u", i, area);
+            return;
+        }
+    }
+}
+S3RE_TEST(GameWorld_TakeBuildingExtraTiles_MatchesOriginal) {
+    CompareExtraTiles<BuildingFn>(ctx, Original_GameWorld_TakeBuildingExtraTiles, &GameWorld_TakeBuildingExtraTiles,
+                                  800, false);
+}
+S3RE_TEST(GameWorld_TakeBuildingExtraTiles_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareExtraTiles<BuildingFn>(probe, Original_GameWorld_TakeBuildingExtraTiles, &WrongTakeBuildingExtraTiles, 200,
+                                  false);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+S3RE_TEST(GameWorld_ReleaseBuildingExtraTiles_MatchesOriginal) {
+    CompareExtraTiles<BuildingFn>(ctx, Original_GameWorld_ReleaseBuildingExtraTiles,
+                                  &GameWorld_ReleaseBuildingExtraTiles, 800, true);
+}
+S3RE_TEST(GameWorld_ReleaseBuildingExtraTiles_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareExtraTiles<BuildingFn>(probe, Original_GameWorld_ReleaseBuildingExtraTiles,
+                                  &WrongReleaseBuildingExtraTiles, 200, true);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+S3RE_TEST(GameWorld_UnblockType12BuildingTiles_MatchesOriginal) {
+    CompareUnblockType12(ctx, &GameWorld_UnblockType12BuildingTiles, 800);
+}
+S3RE_TEST(GameWorld_UnblockType12BuildingTiles_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareUnblockType12(probe, &WrongUnblockType12BuildingTiles, 200);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

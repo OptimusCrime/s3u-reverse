@@ -18,6 +18,10 @@ namespace s3re::game {
 std::uint32_t __fastcall GameWorld_PileIncAmountLeaving(GameWorld* world, void* edx, std::uint32_t pile);
 std::uint32_t __fastcall GameWorld_AddTilePileToArea(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
 
+// area_split.cpp
+std::uint32_t __fastcall GameWorld_BlockTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall GameWorld_UnblockTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+
 // building_goods.cpp
 std::uint32_t __fastcall GameWorld_BuildingInputWord2A(GameWorld* world, void* edx, std::uint32_t building,
                                                        std::uint32_t goods);
@@ -69,6 +73,8 @@ std::uint32_t __fastcall GameWorld_SetTileAreaMarked(GameWorld* world, void* edx
                                                      std::uint32_t y, std::uint32_t value);
 
 // map_neighbourhood.cpp
+std::uint32_t __fastcall GameWorld_IsFreeOfSettlerType29Nearby(GameWorld* world, void* edx, std::uint32_t x,
+                                                               std::uint32_t y);
 std::uint32_t __fastcall GameWorld_ReplaceTerrainType(GameWorld* world, void* edx,
                                                       std::uint32_t oldType, std::uint32_t newType);
 std::uint32_t __fastcall GameWorld_IsNeighbourhoodTerrain(GameWorld* world, void* edx, std::uint32_t x,
@@ -91,6 +97,10 @@ std::uint32_t __fastcall GameWorld_UpdateBorderFlagsAround(GameWorld* world, voi
 std::uint16_t __fastcall GameWorld_Random(GameWorld* world, void* edx);
 std::uint32_t __fastcall GameWorld_RandomBelow6(GameWorld* world, void* edx);
 
+// settler_records.cpp
+std::uint32_t __fastcall GameWorld_CreateSettler(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+                                                 std::uint32_t type, std::uint32_t player);
+
 // settler_queries.cpp
 std::uint32_t __fastcall GameWorld_SetSettlerTarget(GameWorld* world, void* edx, std::uint32_t settler,
                                                     std::uint32_t x, std::uint32_t y);
@@ -110,6 +120,8 @@ std::uint32_t __stdcall TileDistance(std::uint32_t x0, std::uint32_t y0, std::ui
 // world_tables.cpp
 std::uint32_t __fastcall GameWorld_QueueEvent(GameWorld* world, void* edx, std::uint32_t type, std::uint32_t a,
                                               std::uint32_t b, std::uint32_t c);
+std::uint32_t __fastcall GameWorld_QueueMarkedTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+                                                   std::uint32_t player);
 std::uint32_t __fastcall GameWorld_QueuePendingEvent(GameWorld* world, void* edx, std::uint32_t type,
                                                      std::uint32_t a, std::uint32_t b);
 std::uint32_t __fastcall GameWorld_QueueMarkedTileTerrain5To7(GameWorld* world, void* edx,

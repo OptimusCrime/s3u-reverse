@@ -48,6 +48,13 @@
 //   (RemoveTileFromArea, AssignTileToArea) and floods with the step
 //   GameWorld::MoveTileToAreaAndQueue(neighbour, old, newArea). Loops for
 //   ever if newArea == old. EAX = the final read index (ignored). ret 0xc.
+// GameWorld::FloodAssignMarkedTiles (0x004e6cd0): (x, y, area, player):
+//   puts the start tile in the ring; each tile taken from the ring leaves
+//   its area (RemoveTileFromArea), joins `area` (AssignTileToArea) and
+//   queues its neighbours with GameWorld::QueueMarkedTile(player) (marked
+//   0x10, not blocked, owned by the player; clears the mark). The start tile
+//   is taken without these checks. EAX = the final read index. Caller
+//   0x51a580 (area set-up, with a new AllocArea). ret 0x10.
 // GameWorld::MergeTileWord16Regions (0x0051c5e0): (x, y): looks at the
 //   neighbours given by the offset table entries 1..6 (world+0x110a598):
 //   the first with a non-zero word +0x16 gives the tile its word; every
@@ -303,6 +310,21 @@ std::uint32_t __fastcall GameWorld_FloodMoveArea(GameWorld* world, void*, std::u
     return At<std::uint32_t>(world, kTileRingRead);
 }
 
+// Purpose: Puts a connected patch of marked tiles of one player into an area, spreading outwards from a
+// start tile. Used when the map's areas are first set up (probably at game start).
+std::uint32_t __fastcall GameWorld_FloodAssignMarkedTiles(GameWorld* world, void*, std::uint32_t x, std::uint32_t y,
+                                                          std::uint32_t area, std::uint32_t player) {
+    StartRing(world, x, y);
+    RunQueue(world, [&](std::uint32_t px, std::uint32_t py) {
+        GameWorld_RemoveTileFromArea(world, nullptr, px, py);
+        GameWorld_AssignTileToArea(world, nullptr, px, py, area);
+        ForEachNeighbour(world, px, py, [&](std::uint32_t nx, std::uint32_t ny) {
+            GameWorld_QueueMarkedTile(world, nullptr, nx, ny, player);
+        });
+    });
+    return At<std::uint32_t>(world, kTileRingRead);
+}
+
 namespace {
 
 // The neighbour from offset table entry k (1..6) of (x, y).
@@ -375,6 +397,10 @@ std::uint32_t __fastcall GameWorld_MergeTileByte10Regions(GameWorld* world, void
 }
 
 S3RE_HOOK(0x004e62c0, GameWorld_FloodMoveArea, FloodFn, Original_GameWorld_FloodMoveArea, GameWorld_FloodMoveArea);
+using FloodAssignFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+                                                 std::uint32_t area, std::uint32_t player);
+S3RE_HOOK(0x004e6cd0, GameWorld_FloodAssignMarkedTiles, FloodAssignFn, Original_GameWorld_FloodAssignMarkedTiles,
+          GameWorld_FloodAssignMarkedTiles);
 S3RE_HOOK(0x0051c5e0, GameWorld_MergeTileWord16Regions, MergeFn, Original_GameWorld_MergeTileWord16Regions,
           GameWorld_MergeTileWord16Regions);
 S3RE_HOOK(0x0051ca00, GameWorld_MergeTileByte10Regions, MergeFn, Original_GameWorld_MergeTileByte10Regions,
@@ -906,6 +932,71 @@ S3RE_TEST(GameWorld_FloodMoveArea_MatchesOriginal) {
             return;
         }
     }
+}
+
+namespace {
+
+// Wrong: ignores the owner (queues marked tiles of every player).
+std::uint32_t __fastcall WrongFloodAssignMarkedTiles(GameWorld* world, void*, std::uint32_t x, std::uint32_t y,
+                                                     std::uint32_t area, std::uint32_t /*player*/) {
+    StartRing(world, x, y);
+    RunQueue(world, [&](std::uint32_t px, std::uint32_t py) {
+        GameWorld_RemoveTileFromArea(world, nullptr, px, py);
+        GameWorld_AssignTileToArea(world, nullptr, px, py, area);
+        ForEachNeighbour(world, px, py, [&](std::uint32_t nx, std::uint32_t ny) {
+            GameWorld_QueueMarkedTile(world, nullptr, nx, ny, At<std::uint8_t>(world, Tile(nx, ny) + 0x8));
+        });
+    });
+    return At<std::uint32_t>(world, kTileRingRead);
+}
+
+void CompareFloodAssign(test::Context& ctx, FloodAssignFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kAreaTestWorld);
+    // No tile is marked at first; region tiles get valid area words, so
+    // every tile the flood can reach has its area record in the world.
+    for (std::uint32_t tx = 0; tx < 384; ++tx) {
+        for (std::uint32_t ty = 0; ty < 384; ++ty) {
+            const std::uint8_t flags = At<std::uint8_t>(worlds.original(), Tile(tx, ty) + kTileFlags);
+            worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileFlags, static_cast<std::uint8_t>(flags & ~0x10));
+        }
+    }
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t size = RandomMapSize(ctx);
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        const std::uint32_t x = ctx.rng().Below(size);
+        const std::uint32_t y = ctx.rng().Below(size);
+        const std::uint32_t player = ctx.rng().Below(3);
+        const Region region = RandomRegion(ctx, size, x, y);
+        const std::uint32_t density = 1 + ctx.rng().Below(4);  // of 4
+        ForRegion(region, [&](std::uint32_t tx, std::uint32_t ty) {
+            std::uint8_t flags = static_cast<std::uint8_t>(ctx.rng().Next32());
+            flags = static_cast<std::uint8_t>(ctx.rng().Chance(density, 4) ? (flags | 0x10) & ~kTileBlocked : flags);
+            worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileFlags, flags);
+            worlds.Set<std::uint8_t>(Tile(tx, ty) + 0x8,
+                                     static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? player : ctx.rng().Below(3)));
+            worlds.Set<std::uint16_t>(Tile(tx, ty) + kTileArea, static_cast<std::uint16_t>(ctx.rng().Below(4)));
+        });
+        const std::uint32_t area = 1 + ctx.rng().Below(kTestAreas - 1);
+        const std::uint32_t expected =
+            Original_GameWorld_FloodAssignMarkedTiles(worlds.original(), nullptr, x, y, area, player);
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y, area, player);
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u) -> area %u, player %u, map %u", i, x, y, area, player,
+                     size);
+            return;
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_FloodAssignMarkedTiles_MatchesOriginal) {
+    CompareFloodAssign(ctx, &GameWorld_FloodAssignMarkedTiles, 300);
+}
+S3RE_TEST(GameWorld_FloodAssignMarkedTiles_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareFloodAssign(probe, &WrongFloodAssignMarkedTiles, 100);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 namespace {

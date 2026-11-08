@@ -37,6 +37,12 @@
 //   list for its goods type (area = the area word of the pile's tile); its
 //   own links stay. EAX (callers ignore it or tail-return it; some only
 //   overwrite AL) reproduced. ret 4.
+// GameWorld::PileIncAmountComing (0x00505bc0) / PileDecAmountComing
+//   (0x00505bf0): (pile): byte +0x3 (units on the way) += 1 / -= 1. EAX =
+//   the byte's address. ret 4.
+// GameWorld::RemovePileFromTile (0x00504650): (pile): the pile word +0x2 of
+//   the tile at (+0x6, +0x8) = 0 and the goods byte +0x0 = 0. EAX = pile +
+//   0x14d2e2 (the original's index arithmetic). ret 4.
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
@@ -250,6 +256,37 @@ std::uint32_t __fastcall GameWorld_PileIncAmountLeaving(GameWorld* world, void*,
 S3RE_HOOK(0x005058c0, GameWorld_PileIncAmountLeaving, PileFn, Original_GameWorld_PileIncAmountLeaving,
           GameWorld_PileIncAmountLeaving);
 
+// Purpose: One more unit of goods is on its way to a pile (counted in byte +0x3).
+std::uint32_t __fastcall GameWorld_PileIncAmountComing(GameWorld* world, void*, std::uint32_t pile) {
+    std::uint8_t& coming = At<std::uint8_t>(world, Pile(pile) + kPileIncoming);
+    coming = static_cast<std::uint8_t>(coming + 1);
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + Pile(pile) + kPileIncoming;
+}
+
+// Purpose: One unit less is on its way to a pile (probably when a delivery is cancelled).
+std::uint32_t __fastcall GameWorld_PileDecAmountComing(GameWorld* world, void*, std::uint32_t pile) {
+    std::uint8_t& coming = At<std::uint8_t>(world, Pile(pile) + kPileIncoming);
+    coming = static_cast<std::uint8_t>(coming - 1);
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + Pile(pile) + kPileIncoming;
+}
+
+// Purpose: Removes a goods pile from the map: its tile no longer holds it and the record's goods byte is
+// cleared (probably freeing the record).
+std::uint32_t __fastcall GameWorld_RemovePileFromTile(GameWorld* world, void*, std::uint32_t pile) {
+    const std::uint32_t x = At<std::uint16_t>(world, Pile(pile) + kPileX);
+    const std::uint32_t y = At<std::uint16_t>(world, Pile(pile) + kPileY);
+    At<std::uint16_t>(world, kTiles + (x * 0x300 + y) * 24 + kTilePile) = 0;
+    At<std::uint8_t>(world, Pile(pile) + kPileGoods) = 0;
+    return pile + kPiles / kPileBytes;  // the original's index arithmetic
+}
+
+S3RE_HOOK(0x00505bc0, GameWorld_PileIncAmountComing, PileFn, Original_GameWorld_PileIncAmountComing,
+          GameWorld_PileIncAmountComing);
+S3RE_HOOK(0x00505bf0, GameWorld_PileDecAmountComing, PileFn, Original_GameWorld_PileDecAmountComing,
+          GameWorld_PileDecAmountComing);
+S3RE_HOOK(0x00504650, GameWorld_RemovePileFromTile, PileFn, Original_GameWorld_RemovePileFromTile,
+          GameWorld_RemovePileFromTile);
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -410,6 +447,51 @@ S3RE_TEST(GameWorld_PileIncAmountLeaving_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     ComparePileLeaving(probe, &WrongPileIncAmountLeaving, 2000);
     S3RE_EXPECT(probe.failures() > 0);
+}
+
+namespace {
+
+// Compares a pile function on random piles lying on tiles of the map: EAX
+// (relative to the world when it points into it) and the whole world.
+void ComparePileFn(test::Context& ctx, PileTestFn original, PileTestFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    const auto base = [](GameWorld* world) { return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)); };
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t pile = ctx.rng().Below(kTestPiles + 1);
+        worlds.Set<std::uint16_t>(Pile(pile) + kPileX, static_cast<std::uint16_t>(ctx.rng().Below(384)));
+        worlds.Set<std::uint16_t>(Pile(pile) + kPileY, static_cast<std::uint16_t>(ctx.rng().Below(384)));
+        if (ctx.rng().Chance(1, 8)) {
+            worlds.Set<std::uint8_t>(Pile(pile) + kPileIncoming, static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0 : 0xff));
+        }
+        std::uint32_t expected = original(worlds.original(), nullptr, pile);
+        std::uint32_t actual = candidate(worlds.ours(), nullptr, pile);
+        if (expected - base(worlds.original()) < kTestWorld) {
+            expected -= base(worlds.original());
+            actual -= base(worlds.ours());
+        }
+        if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 256 == 255 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 255 before it): pile %u", i, pile);
+            return;
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_PileIncAmountComing_MatchesOriginal) {
+    ComparePileFn(ctx, Original_GameWorld_PileIncAmountComing, &GameWorld_PileIncAmountComing, 20000);
+}
+S3RE_TEST(GameWorld_PileIncAmountComing_ComparisonDetectsWrongImplementation) {
+    // Swapping increment and decrement must be caught.
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    ComparePileFn(probe, Original_GameWorld_PileIncAmountComing, &GameWorld_PileDecAmountComing, 2000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+S3RE_TEST(GameWorld_PileDecAmountComing_MatchesOriginal) {
+    ComparePileFn(ctx, Original_GameWorld_PileDecAmountComing, &GameWorld_PileDecAmountComing, 20000);
+}
+S3RE_TEST(GameWorld_RemovePileFromTile_MatchesOriginal) {
+    ComparePileFn(ctx, Original_GameWorld_RemovePileFromTile, &GameWorld_RemovePileFromTile, 20000);
 }
 
 }  // namespace s3re::game
