@@ -15,10 +15,10 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 74 replacements pass the emulator suite with full block
+Status: all 79 replacements pass the emulator suite with full block
 coverage (2,000 cases each, fewer for the slow ones: ShiftStatistics 60,
 the map-wide loops and table scans 150-800); `--self-test` catches 9/9
-wrong pairings. Batch 9 has not had a whole-game check yet.
+wrong pairings. Batches 9 and 10 have not had a whole-game check yet.
 Specs can now also set S3.EXE globals per case (`Spec.globals`).
 
 Next steps:
@@ -60,6 +60,21 @@ coverage; whole-game check NOT run yet, so no call counts):
 - players (player_queries.cpp): FindPlayerByField0C,
   BuildingTypeAllowedForRace
 
+Batch 10 (2026-11-08, 5 functions; in-process + emulator tests, full
+coverage; whole-game check NOT run yet):
+- map_neighbourhood.cpp: IsNeighbourhoodTerrain (0x51b450),
+  AreOffsetTilesClear (0x51b3c0)
+- world_tables.cpp: QueueMarkedTileTerrain5To7 (0x51ce50),
+  QueueMarkedTileNoOwner (0x51d3d0)
+- ui_state.cpp: ClampCamera (0x51b4d0)
+
+Waiting for emulator support: 0x514a00, 0x514a90, 0x514ae0, 0x514b40
+are leaf helpers of the game-end check 0x511c50 with ECX = CLogicThread
+(world via +0x3a0) and an output buffer pointer argument (int32[20]
+per-player counts). The emulator harness only knows ECX = world; it needs a
+"logicthread" convention (fake CLogicThread whose +0x3a0 points at the
+world) and pointer arguments into a scratch buffer whose bytes are compared.
+
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
 (function starts from re/ghidra_functions.tsv + re/extra_functions.tsv;
@@ -75,6 +90,7 @@ byte), 0x5437b0 and 0x51e650 (objects other than the world, class
 unknown), 0x53f530 (CLogicThread, +0x84 unknown).
 
 Next steps:
+0. Run the whole-game check for batches 9 and 10 (record call counts).
 1. Continue with leaf functions; then move up to their callers (e.g. the
    area flood fill 0x51a580 uses FindFreeId256; 0x4e6150/0x4e62c0/
    0x4e6430/0x4e6cd0 use AssignTileToArea/RemoveTileFromArea).
@@ -161,6 +177,16 @@ Next steps:
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-08 (16): batch 10 (5 leaf functions, short session)
+
+- Replaced IsNeighbourhoodTerrain, AreOffsetTilesClear,
+  QueueMarkedTileTerrain5To7, QueueMarkedTileNoOwner, ClampCamera (all
+  thiscall on the world). In-process tests pass (9 new incl. 3 mutation
+  tests); emulator specs 0 mismatches, all blocks covered (2,000 cases
+  each). Full emulator suite and whole-game check not rerun.
+- Found that 0x514a00/0x514a90/0x514ae0/0x514b40 take CLogicThread in ECX;
+  left for when the emulator supports that (see Current focus).
 
 ### 2026-11-08 (15): batch 9 (15 leaf functions)
 

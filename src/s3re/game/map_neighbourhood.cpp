@@ -22,7 +22,18 @@
 // tile has an occupant (word +0x4); else 0 if any of 18 offsets from the
 // table at world+0x110a598 (int32 dx, dy; 16-byte entries) lands on the map
 // on a tile whose occupant is a settler of type 0x29; else 1.
-// All: thiscall (ECX = world), ret 8.
+// All five: thiscall (ECX = world), ret 8.
+//
+// GameWorld::IsNeighbourhoodTerrain (0x0051b450): (x, y, terrain) -> 1 if
+// byte +0xa is `terrain` (compared as int32) on the tile and its six
+// neighbours, else 0. Order of the checks: tile, x+1, x-1, y+1, y-1,
+// (x+1, y+1), (x-1, y-1). ret 0xc. Callers 0x51aed0, 0x51b010, 0x51b1a0
+// (test EAX).
+// GameWorld::AreOffsetTilesClear (0x0051b3c0): (x, y, count) -> 1 if for
+// each of the first `count` (unsigned) entries of the offset table at
+// world+0x110a588 (int32 dx, dy; 16-byte entries) the tile (x+dx, y+dy) has
+// byte +0xb == 0 and bit 0x1 of byte +0xe clear; 0 otherwise. No bounds
+// check. ret 0xc. Callers 0x51b010, 0x51b1a0 (test EAX).
 
 #include "game/world.h"
 #include "hooks.h"
@@ -50,6 +61,12 @@ constexpr std::uint8_t kTerrainF0 = 0xf0;
 constexpr std::size_t kNearbyOffsets = 0x110a598;  // int32 dx, int32 dy, 16-byte stride
 constexpr std::size_t kNearbyOffsetBytes = 0x10;
 constexpr int kNearbyOffsetCount = 18;
+
+constexpr std::size_t kTileByteB = 0xb;
+constexpr std::size_t kTileFlagsE = 0xe;
+
+constexpr std::size_t kOffsetTable = 0x110a588;  // int32 dx, int32 dy, 16-byte stride
+constexpr std::size_t kOffsetTableBytes = 0x10;
 
 constexpr std::size_t kSettlers = 0x12a5e60;
 constexpr std::size_t kSettlerBytes = 0x40;
@@ -83,6 +100,8 @@ using ReplaceTerrainFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx,
                                                     std::uint32_t oldType, std::uint32_t newType);
 using TileCheckFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
                                                std::uint32_t y);
+using TileValueCheckFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
+                                                    std::uint32_t y, std::uint32_t value);
 
 std::uint32_t __fastcall GameWorld_ReplaceTerrainType(GameWorld* world, void* /*edx*/,
                                                       std::uint32_t oldType,
@@ -163,6 +182,38 @@ std::uint32_t __fastcall GameWorld_IsFreeOfSettlerType29Nearby(GameWorld* world,
     return result;
 }
 
+std::uint32_t __fastcall GameWorld_IsNeighbourhoodTerrain(GameWorld* world, void* /*edx*/,
+                                                         std::uint32_t x, std::uint32_t y,
+                                                         std::uint32_t terrain) {
+    static constexpr int kTiles[7][2] = {{0, 0}, {1, 0},  {-1, 0}, {0, 1},
+                                         {0, -1}, {1, 1}, {-1, -1}};
+    for (const auto& d : kTiles) {
+        if (TileByte(world, x + d[0], y + d[1], kTileTerrain) != terrain) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+std::uint32_t __fastcall GameWorld_AreOffsetTilesClear(GameWorld* world, void* /*edx*/,
+                                                       std::uint32_t x, std::uint32_t y,
+                                                       std::uint32_t count) {
+    for (std::uint32_t i = 0; i < count; ++i) {
+        const std::size_t entry = kOffsetTable + i * kOffsetTableBytes;
+        const std::uint32_t nx = x + WorldField<std::uint32_t>(world, entry);
+        const std::uint32_t ny = y + WorldField<std::uint32_t>(world, entry + 4);
+        if (TileByte(world, nx, ny, kTileByteB) != 0 ||
+            (TileByte(world, nx, ny, kTileFlagsE) & 1) != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+S3RE_HOOK(0x0051b450, GameWorld_IsNeighbourhoodTerrain, TileValueCheckFn,
+          Original_GameWorld_IsNeighbourhoodTerrain, GameWorld_IsNeighbourhoodTerrain);
+S3RE_HOOK(0x0051b3c0, GameWorld_AreOffsetTilesClear, TileValueCheckFn,
+          Original_GameWorld_AreOffsetTilesClear, GameWorld_AreOffsetTilesClear);
 S3RE_HOOK(0x00519210, GameWorld_ReplaceTerrainType, ReplaceTerrainFn,
           Original_GameWorld_ReplaceTerrainType, GameWorld_ReplaceTerrainType);
 S3RE_HOOK(0x00519860, GameWorld_IsNeighbourhoodByte9Clear, TileCheckFn,
@@ -320,7 +371,81 @@ std::uint32_t __fastcall WrongFreeOf29(GameWorld* world, void* edx, std::uint32_
     return result;
 }
 
+// IsNeighbourhoodTerrain and AreOffsetTilesClear: a few terrain values so
+// that all-equal neighbourhoods are common; byte +0xb and flag 0x1 mostly
+// clear; a new offset table (small offsets, count up to 20) now and then.
+void CompareTileValueCheck(test::Context& ctx, TileValueCheckFn original,
+                           TileValueCheckFn candidate, bool countArgument, int cases) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t x = 4 + ctx.rng().Below(kTestMapSize - 8);
+        const std::uint32_t y = 4 + ctx.rng().Below(kTestMapSize - 8);
+        const std::uint8_t common = static_cast<std::uint8_t>(ctx.rng().Below(4));
+        const bool uniform = ctx.rng().Chance(1, 2);
+        for (int dx = -3; dx <= 3; ++dx) {
+            for (int dy = -3; dy <= 3; ++dy) {
+                SetTileByte(worlds, x + dx, y + dy, kTileTerrain,
+                            uniform && ctx.rng().Chance(15, 16)
+                                ? common
+                                : static_cast<std::uint8_t>(ctx.rng().Below(4)));
+                SetTileByte(worlds, x + dx, y + dy, kTileByteB,
+                            ctx.rng().Chance(15, 16) ? 0 : static_cast<std::uint8_t>(ctx.rng().Next32()));
+                SetTileByte(worlds, x + dx, y + dy, kTileFlagsE,
+                            static_cast<std::uint8_t>(ctx.rng().Next32() &
+                                                      (ctx.rng().Chance(15, 16) ? 0xfe : 0xff)));
+            }
+        }
+        if (i % 64 == 0) {
+            for (int k = 0; k < 20; ++k) {
+                const std::size_t entry = kOffsetTable + k * kOffsetTableBytes;
+                worlds.Set<std::int32_t>(entry, ctx.rng().Range(-3, 3));
+                worlds.Set<std::int32_t>(entry + 4, ctx.rng().Range(-3, 3));
+            }
+        }
+        const std::uint32_t value = countArgument
+                                        ? (ctx.rng().Chance(1, 8) ? 0 : ctx.rng().Below(21))
+                                        : (ctx.rng().Chance(1, 16) ? ctx.rng().Next32() : common);
+        const std::uint32_t expected = original(worlds.original(), nullptr, x, y, value);
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y, value);
+        if (!S3RE_EXPECT_EQ(expected, actual) || (i % 2048 == 2047 && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u, %#x)", i, x, y, value);
+            return;
+        }
+    }
+    worlds.Checkpoint(ctx);
+}
+
+// Wrong: ignores flag 0x1 of byte +0xe.
+std::uint32_t __fastcall WrongOffsetTilesClear(GameWorld* world, void* /*edx*/, std::uint32_t x,
+                                               std::uint32_t y, std::uint32_t count) {
+    for (std::uint32_t i = 0; i < count; ++i) {
+        const std::size_t entry = kOffsetTable + i * kOffsetTableBytes;
+        if (TileByte(world, x + WorldField<std::uint32_t>(world, entry),
+                     y + WorldField<std::uint32_t>(world, entry + 4), kTileByteB) != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 }  // namespace
+
+S3RE_TEST(GameWorld_IsNeighbourhoodTerrain_MatchesOriginal) {
+    CompareTileValueCheck(ctx, Original_GameWorld_IsNeighbourhoodTerrain,
+                          &GameWorld_IsNeighbourhoodTerrain, false, 50000);
+}
+
+S3RE_TEST(GameWorld_AreOffsetTilesClear_MatchesOriginal) {
+    CompareTileValueCheck(ctx, Original_GameWorld_AreOffsetTilesClear,
+                          &GameWorld_AreOffsetTilesClear, true, 50000);
+}
+
+S3RE_TEST(GameWorld_AreOffsetTilesClear_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareTileValueCheck(probe, Original_GameWorld_AreOffsetTilesClear, &WrongOffsetTilesClear,
+                          true, 5000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(GameWorld_ReplaceTerrainType_MatchesOriginal) {
     CompareReplaceTerrain(ctx, &GameWorld_ReplaceTerrainType, 200);

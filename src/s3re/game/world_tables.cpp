@@ -26,6 +26,13 @@
 //   +0x8, compared as int32): clears flag 0x10 and appends (x, y) as uint16
 //   pairs to the 10000-entry ring at world+0xdfdc48 (index world+0xe0788c).
 //   ret 0xc; callers ignore EAX.
+// GameWorld::QueueMarkedTileTerrain5To7 (0x0051ce50): (x, y) the same
+//   without the owner check, but only if byte +0x6 (the terrain byte at
+//   world+0x6744a) is 5, 6 or 7 and flag 0x80 of byte +0xa is clear (flag
+//   0x1 is not tested). ret 8; EAX ignored (callers: 0x51cee0).
+// GameWorld::QueueMarkedTileNoOwner (0x0051d3d0): (x, y) like
+//   QueueMarkedTile without the owner check. ret 8; EAX ignored (callers:
+//   0x51d450).
 // GameWorld::CountDownTimers (0x004fee00): 42 lists of 10 entries of 12
 //   bytes at world+0x2e5e0; an entry is active while its int32 +0x0 is not
 //   0, and the active entries come first. Decrements every active entry;
@@ -74,6 +81,7 @@ constexpr std::uint32_t kDedupedType = 6;
 
 constexpr std::uint32_t kTiles = 0x67444;
 constexpr std::uint32_t kTileOwner = 0x8;
+constexpr std::uint32_t kTileTerrain = 0x6;
 constexpr std::uint32_t kTileFlags = 0xa;
 constexpr std::uint32_t kTileRing = 0xdfdc48;
 constexpr std::uint32_t kTileRingIndex = 0xe0788c;
@@ -218,6 +226,44 @@ std::uint32_t __fastcall GameWorld_QueueMarkedTile(GameWorld* world, void*, std:
     return 0;  // callers ignore EAX
 }
 
+namespace {
+
+// Appends (x, y) to the tile ring and clears flag 0x10 of the tile.
+void PushMarkedTile(GameWorld* world, std::uint32_t tile, std::uint32_t x, std::uint32_t y) {
+    At<std::uint16_t>(world, kTileRing + At<std::uint32_t>(world, kTileRingIndex) * 4) =
+        static_cast<std::uint16_t>(x);
+    At<std::uint16_t>(world, kTileRing + At<std::uint32_t>(world, kTileRingIndex) * 4 + 2) =
+        static_cast<std::uint16_t>(y);
+    At<std::uint8_t>(world, tile + kTileFlags) &= 0xef;
+    const std::uint32_t next = At<std::uint32_t>(world, kTileRingIndex) + 1;
+    At<std::uint32_t>(world, kTileRingIndex) = next == kTileRingEntries ? 0 : next;
+}
+
+}  // namespace
+
+std::uint32_t __fastcall GameWorld_QueueMarkedTileTerrain5To7(GameWorld* world, void*,
+                                                              std::uint32_t x, std::uint32_t y) {
+    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
+    const std::uint8_t flags = At<std::uint8_t>(world, tile + kTileFlags);
+    const std::uint8_t terrain = At<std::uint8_t>(world, tile + kTileTerrain);
+    if ((flags & 0x10) == 0 || terrain < 5 || terrain > 7 || (flags & 0x80) != 0) {
+        return 0;
+    }
+    PushMarkedTile(world, tile, x, y);
+    return 0;  // callers ignore EAX
+}
+
+std::uint32_t __fastcall GameWorld_QueueMarkedTileNoOwner(GameWorld* world, void*, std::uint32_t x,
+                                                          std::uint32_t y) {
+    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
+    const std::uint8_t flags = At<std::uint8_t>(world, tile + kTileFlags);
+    if ((flags & 0x10) == 0 || (flags & 0x01) != 0) {
+        return 0;
+    }
+    PushMarkedTile(world, tile, x, y);
+    return 0;  // callers ignore EAX
+}
+
 std::uint32_t __fastcall GameWorld_CountDownTimers(GameWorld* world, void*) {
     for (std::uint32_t list = 0; list < kTimerLists; ++list) {
         const std::uint32_t first = kTimers + list * kTimersPerList * kTimerBytes;
@@ -273,6 +319,10 @@ S3RE_HOOK(0x004e8ad0, GameWorld_QueueEvent, QueueEventFn, Original_GameWorld_Que
           GameWorld_QueueEvent);
 S3RE_HOOK(0x004e6c40, GameWorld_QueueMarkedTile, QueueTileFn, Original_GameWorld_QueueMarkedTile,
           GameWorld_QueueMarkedTile);
+S3RE_HOOK(0x0051ce50, GameWorld_QueueMarkedTileTerrain5To7, PositionFn,
+          Original_GameWorld_QueueMarkedTileTerrain5To7, GameWorld_QueueMarkedTileTerrain5To7);
+S3RE_HOOK(0x0051d3d0, GameWorld_QueueMarkedTileNoOwner, PositionFn,
+          Original_GameWorld_QueueMarkedTileNoOwner, GameWorld_QueueMarkedTileNoOwner);
 S3RE_HOOK(0x004fee00, GameWorld_CountDownTimers, NoArgFn, Original_GameWorld_CountDownTimers,
           GameWorld_CountDownTimers);
 S3RE_HOOK(0x00510770, GameWorld_AddToRecentPositions, PositionFn,
@@ -419,6 +469,53 @@ S3RE_TEST(GameWorld_QueueMarkedTile_MatchesOriginal) {
         expected = Original_GameWorld_QueueMarkedTile(worlds.original(), nullptr, x, y, player);
         actual = GameWorld_QueueMarkedTile(worlds.ours(), nullptr, x, y, player);
     });
+}
+
+namespace {
+
+// Wrong: accepts terrain 4 too.
+std::uint32_t __fastcall WrongQueueMarkedTileTerrain5To7(GameWorld* world, void* edx,
+                                                         std::uint32_t x, std::uint32_t y) {
+    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
+    if (At<std::uint8_t>(world, tile + kTileTerrain) == 4) {
+        At<std::uint8_t>(world, tile + kTileTerrain) = 5;
+        GameWorld_QueueMarkedTileTerrain5To7(world, edx, x, y);
+        At<std::uint8_t>(world, tile + kTileTerrain) = 4;
+        return 0;
+    }
+    return GameWorld_QueueMarkedTileTerrain5To7(world, edx, x, y);
+}
+
+template <typename Fn>
+void CompareQueueTile(test::Context& ctx, Fn original, Fn candidate, int cases) {
+    Compare(ctx, cases, false, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
+        const std::uint32_t x = ctx.rng().Below(384);
+        const std::uint32_t y = ctx.rng().Below(384);
+        const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
+        worlds.Set<std::uint8_t>(tile + kTileTerrain, static_cast<std::uint8_t>(
+                                     ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 3 + ctx.rng().Below(6)));
+        worlds.Set<std::uint32_t>(kTileRingIndex, ctx.rng().Chance(1, 8) ? kTileRingEntries - 1
+                                                                         : ctx.rng().Below(kTileRingEntries));
+        expected = original(worlds.original(), nullptr, x, y);
+        actual = candidate(worlds.ours(), nullptr, x, y);
+    });
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_QueueMarkedTileTerrain5To7_MatchesOriginal) {
+    CompareQueueTile(ctx, Original_GameWorld_QueueMarkedTileTerrain5To7,
+                     &GameWorld_QueueMarkedTileTerrain5To7, 2000);
+}
+S3RE_TEST(GameWorld_QueueMarkedTileTerrain5To7_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareQueueTile(probe, Original_GameWorld_QueueMarkedTileTerrain5To7,
+                     &WrongQueueMarkedTileTerrain5To7, 2000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+S3RE_TEST(GameWorld_QueueMarkedTileNoOwner_MatchesOriginal) {
+    CompareQueueTile(ctx, Original_GameWorld_QueueMarkedTileNoOwner,
+                     &GameWorld_QueueMarkedTileNoOwner, 2000);
 }
 
 S3RE_TEST(GameWorld_CountDownTimers_MatchesOriginal) {

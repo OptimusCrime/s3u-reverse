@@ -348,6 +348,41 @@ def marked_tile(rng, pool, args):
             (0xe0788c, rng.choice([9999, rng.randrange(10000)]), 4)]
 
 
+def uniform_terrain(rng, pool, args):
+    """The tile and its six neighbours mostly share args[2] as terrain."""
+    fields = []
+    for dx, dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1)]:
+        value = args[2] & 0xFF if rng.random() < 0.9 else rng.randrange(256)
+        fields.append((tile(args[0] + dx, args[1] + dy) + 0x6, value, 1))
+    return fields
+
+
+def offset_tiles(rng, pool, args):
+    """Small offsets in the table at 0x110a588; target tiles mostly clear."""
+    fields = []
+    for k in range(20):
+        dx, dy = rng.randint(-3, 3), rng.randint(-3, 3)
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4)]
+        t = tile(args[0] + dx, args[1] + dy)
+        if rng.random() < 0.95:
+            fields += [(t + 0x7, 0, 1), (t + 0xa, rng.getrandbits(8) & 0xFE, 1)]
+    return fields
+
+
+def marked_tile_terrain(rng, pool, args):
+    return [(tile(args[0], args[1]) + 0x6, rng.choice([4, 5, 6, 7, 8, rng.randrange(256)]), 1),
+            (tile(args[0], args[1]) + 0xa, rng.getrandbits(8) | (0x10 if rng.random() < 0.7 else 0), 1),
+            (0xe0788c, rng.choice([9999, rng.randrange(10000)]), 4)]
+
+
+def camera(rng, pool, args):
+    def value():
+        return rng.choice([rng.randint(-5, 5), rng.randint(0, 10000), rng.getrandbits(32)])
+    return [(0x2d25c, value() & 0xFFFFFFFF, 4), (0x2d260, value() & 0xFFFFFFFF, 4),
+            (MAP_SIZE, rng.choice([0, 64, 384, rng.getrandbits(32)]), 4)]
+
+
 def timers(rng, pool, args):
     return [(0x2e5e0 + entry * 12, rng.choice([0, 1, 1, 2, 3, rng.getrandbits(32)]), 4)
             for entry in range(420)]
@@ -427,6 +462,10 @@ SPECS = [
          presets=map_size(between(-1, 14))),
     Spec("GameWorld_IsNeighbourhoodByte9Clear", 0x00519860, "thiscall", [TILE, TILE]),
     Spec("GameWorld_HasAtMostTwoType70Neighbours", 0x005198d0, "thiscall", [TILE, TILE]),
+    Spec("GameWorld_IsNeighbourhoodTerrain", 0x0051b450, "thiscall", [TILE, TILE, below(8, 0.1)],
+         presets=uniform_terrain),
+    Spec("GameWorld_AreOffsetTilesClear", 0x0051b3c0, "thiscall",
+         [between(4, 379), between(4, 379), below(21)], presets=offset_tiles),
     Spec("GameWorld_IsClearOfType70Nearby", 0x00519960, "thiscall", [TILE, TILE]),
     Spec("GameWorld_IsFreeOfSettlerType29Nearby", 0x005199e0, "thiscall", [TILE, TILE],
          presets=full_map),
@@ -461,6 +500,8 @@ SPECS = [
     Spec("GameWorld_IsGameOutcome1", 0x00515ad0, "thiscall", [anything], globals=game_outcome),
     Spec("GameWorld_ScreenCenterTileX", 0x005158f0, "thiscall", [], globals=screen_size),
     Spec("GameWorld_ScreenCenterTileY", 0x00515980, "thiscall", [], globals=screen_size),
+    Spec("GameWorld_ClampCamera", 0x0051b4d0, "thiscall", [], presets=camera,
+         globals=screen_size),
     Spec("GameWorld_PushUiFeedback", 0x004febe0, "thiscall", [anything],
          presets=ui_feedback_count),
     # free ids (id_allocators.cpp)
@@ -513,6 +554,10 @@ SPECS = [
          [event_type, below(4, 0.1), anything, anything], presets=event_rings),
     Spec("GameWorld_QueueMarkedTile", 0x004e6c40, "thiscall",
          [below(384), below(384), below(4, 0.1)], eax_mask=0, presets=marked_tile),
+    Spec("GameWorld_QueueMarkedTileTerrain5To7", 0x0051ce50, "thiscall",
+         [below(384), below(384)], eax_mask=0, presets=marked_tile_terrain),
+    Spec("GameWorld_QueueMarkedTileNoOwner", 0x0051d3d0, "thiscall",
+         [below(384), below(384)], eax_mask=0, presets=marked_tile_terrain),
     Spec("GameWorld_CountDownTimers", 0x004fee00, "thiscall", [], eax_mask=0, presets=timers,
          max_cases=200),
     Spec("GameWorld_AddToRecentPositions", 0x00510770, "thiscall", [below(8, 0.1), below(8, 0.1)],

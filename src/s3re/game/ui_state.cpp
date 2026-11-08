@@ -25,6 +25,14 @@
 //   (signed, as the original's multiply-by-reciprocal code does); sums wrap
 //   at 32 bits; the `>> 1`/`>> 2` are unsigned shifts. No arguments, ret 0.
 //
+// GameWorld::ClampCamera (0x0051b4d0): keeps the camera inside the map:
+//   x in [0, mapSize*24 - width + 0x167], y in [0, mapSize*9 - width +
+//   0x176] (signed compares; the y limit really uses the view width
+//   0x730f18, not the height). Only writes a coordinate that is out of
+//   range. Called after camera moves in ProcessEvents and by 0x51b560,
+//   which returns its EAX: mapSize*9 - width, plus 0x176 if y was clamped
+//   at the top. No arguments, ret 0.
+//
 // GameWorld::PushUiFeedback (0x004febe0): (value) appends value to the
 //   10-entry dword list at +0x1539484 (count at +0x15394ac) unless it is
 //   full. Drained by CLogicThread::PrepareDrawData. EAX = the new count, or
@@ -118,6 +126,29 @@ std::uint32_t __fastcall GameWorld_ScreenCenterTileY(GameWorld* world, void*) {
     return ScreenRows(1) + CameraRow(world) * 2u - 200u;
 }
 
+std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void*) {
+    auto& cameraX = WorldField<std::int32_t>(world, kCameraX);
+    auto& cameraY = WorldField<std::int32_t>(world, kCameraY);
+    const std::uint32_t size = Field(world, world_offset::kMapSize);
+    const std::uint32_t width = GameGlobal<std::uint32_t>(global_address::kScreenWidth);
+    if (cameraX < 0) {
+        cameraX = 0;
+    }
+    const std::uint32_t maxX = size * 24u - width + 0x167u;
+    if (cameraX >= static_cast<std::int32_t>(maxX + 1u)) {
+        cameraX = static_cast<std::int32_t>(maxX);
+    }
+    if (cameraY < 0) {
+        cameraY = 0;
+    }
+    std::uint32_t result = size * 9u - width;
+    if (cameraY >= static_cast<std::int32_t>(result + 0x177u)) {
+        result += 0x176u;
+        cameraY = static_cast<std::int32_t>(result);
+    }
+    return result;
+}
+
 std::uint32_t __fastcall GameWorld_PushUiFeedback(GameWorld* world, void*, std::uint32_t value) {
     auto& count = WorldField<std::uint32_t>(world, kUiFeedbackCount);
     if (count == kUiFeedbackCapacity) {
@@ -145,6 +176,8 @@ S3RE_HOOK(0x005158f0, GameWorld_ScreenCenterTileX, WorldQueryFn,
           Original_GameWorld_ScreenCenterTileX, GameWorld_ScreenCenterTileX);
 S3RE_HOOK(0x00515980, GameWorld_ScreenCenterTileY, WorldQueryFn,
           Original_GameWorld_ScreenCenterTileY, GameWorld_ScreenCenterTileY);
+S3RE_HOOK(0x0051b4d0, GameWorld_ClampCamera, WorldQueryFn, Original_GameWorld_ClampCamera,
+          GameWorld_ClampCamera);
 S3RE_HOOK(0x004febe0, GameWorld_PushUiFeedback, WorldValueFn, Original_GameWorld_PushUiFeedback,
           GameWorld_PushUiFeedback);
 
@@ -242,6 +275,27 @@ std::uint32_t __fastcall WrongScreenCenterTileX(GameWorld* world, void* edx) {
            static_cast<std::uint32_t>(column >> 4);
 }
 
+// Wrong: uses the view height for the y limit.
+std::uint32_t __fastcall WrongClampCamera(GameWorld* world, void* edx) {
+    const auto width = GameGlobal<std::uint32_t>(global_address::kScreenWidth);
+    GameGlobal<std::uint32_t>(global_address::kScreenWidth) =
+        GameGlobal<std::uint32_t>(global_address::kScreenHeight);
+    std::int32_t x = WorldField<std::int32_t>(world, kCameraX);
+    const std::uint32_t result = GameWorld_ClampCamera(world, edx);
+    GameGlobal<std::uint32_t>(global_address::kScreenWidth) = width;
+    WorldField<std::int32_t>(world, kCameraX) = x;
+    const std::uint32_t size = Field(world, world_offset::kMapSize);
+    if (x < 0) {
+        x = 0;
+    }
+    const std::uint32_t maxX = size * 24u - width + 0x167u;
+    if (x >= static_cast<std::int32_t>(maxX + 1u)) {
+        x = static_cast<std::int32_t>(maxX);
+    }
+    WorldField<std::int32_t>(world, kCameraX) = x;
+    return result;
+}
+
 }  // namespace
 
 S3RE_TEST(GameWorld_IsUiSelectionMode_MatchesOriginal) {
@@ -282,6 +336,16 @@ S3RE_TEST(GameWorld_ScreenCenterTileY_MatchesOriginal) {
     using Adapter =
         IgnoreArgument<&Original_GameWorld_ScreenCenterTileY, &GameWorld_ScreenCenterTileY>;
     CompareUiQuery(ctx, &Adapter::CallOriginal, &Adapter::CallOurs, 5000);
+}
+S3RE_TEST(GameWorld_ClampCamera_MatchesOriginal) {
+    using Adapter = IgnoreArgument<&Original_GameWorld_ClampCamera, &GameWorld_ClampCamera>;
+    CompareUiQuery(ctx, &Adapter::CallOriginal, &Adapter::CallOurs, 5000);
+}
+S3RE_TEST(GameWorld_ClampCamera_ComparisonDetectsWrongImplementation) {
+    using Adapter = IgnoreArgument<&Original_GameWorld_ClampCamera, &WrongClampCamera>;
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareUiQuery(probe, &Adapter::CallOriginal, &Adapter::CallOurs, 2000);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 S3RE_TEST(GameWorld_PushUiFeedback_MatchesOriginal) {
     ComparePushUiFeedback(ctx, Original_GameWorld_PushUiFeedback, &GameWorld_PushUiFeedback, 5000);
