@@ -141,7 +141,19 @@ Skip: MFC and the C runtime (standard libraries; use the real ones).
 Suggested next session: whole-game check for batches 9-10, then start on
 map-file loading.
 
+Planned, not started: **reorganize our source tree after the original
+files** (`re/source_files.md`). First plan the full layout: author folders
+(`Dirk/`, `Volker/`, `Rainer/`) or subsystem folders with the original
+file names, what to do with code in unnamed files, and a `source_file`
+column in `re/functions.csv` filled from `tools/source_files.py`.
+
 ## Open questions and loose ends
+
+- Original source files: refine the code ranges (they run from the first
+  to the last voting function; unnamed files sit in the gaps and maybe
+  inside ranges, e.g. `WinMain` lands in LobbyManager.cpp). Does the
+  alphabetical link order of the named files predict the names of unnamed
+  ones? What is `Rainer\Cevaland.cpp` ("land evaluation"?)?
 
 - The 128-slot position list at world+0x1195dd4 is changed per logic step
   (g_recentPositionsCursor, 0x7ace60), not per tick. Does it affect the
@@ -211,6 +223,24 @@ map-file loading.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-08 (17): original source files
+
+- Checked for debug info: none (no debug directory, no PDB or map file).
+- Found 57 `E:\Siedler3\...` source paths and mapped them to code ranges
+  through the strings stored after each path (`tools/source_files.py`,
+  `re/source_files.csv`). About 88% of string references agree with one
+  monotone file order. Known functions land in the expected files (e.g.
+  ExecuteCommands in LogicHandleNet.cpp, CGameThread::Main in
+  Gamebase.cpp).
+- Wrote `re/source_files.md`: method, limits, link order, translations of
+  the folder/file names and of the German debug texts.
+- Pitfalls found on the way: count only string literals (globals are
+  shared and pulled LogicInit.cpp over half the logic); one vote per
+  function; Latin-1 strings, but don't glue a preceding 0xFFFFFFFF global
+  onto a string.
+- Reorganizing our sources after the original layout is postponed until
+  the full layout is planned.
 
 ### 2026-11-08 (16): batch 10 (5 leaf functions, short session)
 

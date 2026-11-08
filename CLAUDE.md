@@ -287,6 +287,25 @@ replaying, see `src/s3re/replay/command_log.h`):
   Known runtime functions include `operator delete` at `0x61e4ef`,
   `_purecall` at `0x61f061`, and `operator new` at `0x61efb9`.
 
+## Original source files
+
+- `S3.EXE` has **no debug symbols** (no debug directory, symbols stripped,
+  no `.pdb`/linker `.map`). But it contains 57 unreferenced `__FILE__`
+  paths like `E:\Siedler3\Volker\LogicHandleNet.cpp`. The folders are
+  `Dirk\` (app shell, UI, network, lobby), `Volker\` (game logic),
+  `Rainer\` (computer players), `Credits\`, `DirectX\`, `Win32\`.
+- Each `.obj`'s data and code are laid out in the same order, so the
+  strings after a path, and the functions using them, give each named
+  file a code range. `python tools/source_files.py scan` writes
+  `re/source_files.csv`; `which ADDR` names the file of an address;
+  `strings [FILTER]` shows a file's strings. Method, limits, link order
+  and translations of the German names and messages: `re/source_files.md`.
+- Only files with that assert macro left a path. Most of the simulation
+  (`0x4c85a0`–`0x509980`, between DrawBuilding.cpp and GameDataSave.cpp)
+  is in unnamed files. The German strings are Latin-1.
+- Our source tree is not reorganized after this yet; that is planned
+  separately (see `LOGBOOK.md`).
+
 ## Class structure (RTTI)
 
 - `python tools/rtti.py scan` reads the MSVC RTTI straight from `S3.EXE` and
