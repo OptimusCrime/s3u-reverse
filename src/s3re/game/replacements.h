@@ -30,10 +30,16 @@ std::uint32_t __fastcall GameWorld_FloodFillTileWord16(GameWorld* world, void* e
                                                        std::uint32_t y, std::uint32_t value);
 std::uint32_t __fastcall GameWorld_FloodFillTileByte10(GameWorld* world, void* edx, std::uint32_t x,
                                                        std::uint32_t y, std::uint32_t value);
+std::uint32_t __fastcall GameWorld_MergeTileWord16Regions(GameWorld* world, void* edx, std::uint32_t x,
+                                                          std::uint32_t y);
 
 // id_allocators.cpp
 std::uint32_t __fastcall GameWorld_FindFreeId256(GameWorld* world, void* edx);
 std::uint32_t __fastcall GameWorld_FindFreeId8192(GameWorld* world, void* edx);
+
+// map_directions.cpp
+std::uint32_t __stdcall NeighbourX(std::uint32_t x, std::uint32_t direction);
+std::uint32_t __stdcall NeighbourY(std::uint32_t y, std::uint32_t direction);
 
 // map.cpp
 std::uint32_t __fastcall GameWorld_IsOnMap(GameWorld* world, void* edx, std::uint32_t x,
@@ -72,6 +78,10 @@ std::uint32_t __fastcall GameWorld_UpdateBorderFlagsAround(GameWorld* world, voi
 std::uint16_t __fastcall GameWorld_Random(GameWorld* world, void* edx);
 std::uint32_t __fastcall GameWorld_RandomBelow6(GameWorld* world, void* edx);
 
+// settler_queries.cpp
+std::uint32_t __fastcall GameWorld_SetSettlerTarget(GameWorld* world, void* edx, std::uint32_t settler,
+                                                    std::uint32_t x, std::uint32_t y);
+
 // ui_state.cpp
 std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void* edx);
 std::uint32_t __fastcall GameWorld_CenterCameraOnTile(GameWorld* world, void* edx, std::uint32_t x,
@@ -83,6 +93,8 @@ std::uint32_t __stdcall TileDistance(std::uint32_t x0, std::uint32_t y0, std::ui
                                      std::uint32_t y1);
 
 // world_tables.cpp
+std::uint32_t __fastcall GameWorld_QueueEvent(GameWorld* world, void* edx, std::uint32_t type, std::uint32_t a,
+                                              std::uint32_t b, std::uint32_t c);
 std::uint32_t __fastcall GameWorld_QueueMarkedTileTerrain5To7(GameWorld* world, void* edx,
                                                               std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall GameWorld_QueueMarkedTileNoOwner(GameWorld* world, void* edx,

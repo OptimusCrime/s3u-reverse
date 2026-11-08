@@ -852,6 +852,92 @@ def local_player_camera(rng, pool, args):
             (MAP_SIZE, rng.choice([64, 384, rng.randrange(400)]), 4)]
 
 
+# --- batch 15 ---------------------------------------------------------------
+
+RING2 = [(2, 0), (2, 1), (2, 2), (1, 2), (0, 2), (-1, 1), (-2, 0), (-2, -1), (-2, -2), (-1, -2), (0, -2),
+         (1, -1)]
+
+
+def region_assignment(rng, pool, args):
+    """A 6..14 map, offset entries 0..18 (the tile and two rings), tiles
+    mostly without region id, some blocked or of terrain kind 0x20."""
+    n = rng.randint(10, 14)
+    fields = [(MAP_SIZE, n, 4)]
+    for k, (dx, dy) in enumerate(AROUND + RING2):
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4)]
+    blocked = rng.choice([0.0, 0.01, 0.05, 0.2])
+    for x in range(16):
+        for y in range(16):
+            flags = rng.getrandbits(8)
+            fields += [(tile(x, y) + 0x16, 0 if rng.random() < 0.7 else rng.randrange(4), 2),
+                       (tile(x, y) + 0xa, flags | 1 if rng.random() < blocked else flags & 0xfe, 1),
+                       (tile(x, y) + 0x6, 0x21 if rng.random() < blocked else 0x10, 1)]
+    return fields + id_table(0xe125e4, 0xe125e8, 0x2000)(rng, pool, args)
+
+
+def waiting_list(rng, head: int, x: int, y: int):
+    """A doubly linked list (+0x10 next, +0x12 previous) of up to 12 distinct
+    settlers at `head`, near (x, y)."""
+    length = 0 if rng.random() < 0.1 else rng.randint(1, 12)
+    settlers = rng.sample(range(1, 0x3000), length)
+    fields = [(head, settlers[0] if settlers else 0, 2)]
+    for i, settler in enumerate(settlers):
+        record = SETTLERS + settler * SETTLER_BYTES
+        reach = rng.choice([8, 60])
+        fields += [(record + 0x12, settlers[i - 1] if i else 0, 2),
+                   (record + 0x10, settlers[i + 1] if i + 1 < length else 0, 2),
+                   (record + 0x4, (x + rng.randint(-reach, reach)) & 0xFFFF, 2),
+                   (record + 0x6, (y + rng.randint(-reach, reach)) & 0xFFFF, 2)]
+    return fields
+
+
+def pile_and_waiting(rng, pool, args):
+    record = PILES + args[0] * PILE_BYTES
+    x, y = rng.randrange(384), rng.randrange(384)
+    fields = [(record + 0x6, x, 2), (record + 0x8, y, 2), (record + 0x1, rng.randrange(10), 1),
+              (record + 0x2, rng.randrange(10) if rng.random() < 0.6 else rng.getrandbits(8), 1)]
+    head = PLAYER_RECORDS + args[1] * PLAYER_RECORD_BYTES + 0x6e
+    return fields + waiting_list(rng, head, x, y)
+
+
+def building_and_waiting(rng, pool, args):
+    record = BUILDINGS + args[0] * BUILDING_BYTES
+    player = rng.randrange(20)
+    x, y = rng.randrange(2, 382), rng.randrange(2, 382)
+    fields = [(record + 0x0, player, 1), (record + 0x30, x, 2), (record + 0x32, y, 2),
+              (record + 0x22, rng.randrange(6) if rng.random() < 0.9 else rng.getrandbits(16), 2)]
+    head = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES + 0x76
+    return fields + waiting_list(rng, head, x, y)
+
+
+def settler_lists_world(rng, pool, args):
+    """The settler's player and that player's ten lists (int32 counts at
+    +0x11940bc + player*40, 100 words each at +0x118a47c + player*2000)
+    with some copies of the settler, sometimes adjacent."""
+    player = rng.randrange(20)
+    fields = [(SETTLERS + args[0] * SETTLER_BYTES + 0x0, player, 1),
+              (0x366fc, rng.randrange(1000), 4), (0x32870, 0, 4), (0x32874, 0, 4)]
+    for i in range(10):
+        count = 0 if rng.random() < 0.15 else rng.randint(0, 100)
+        fields.append((0x11940bc + player * 40 + i * 4, count, 4))
+        for w in range(100):
+            fields.append((0x118a47c + player * 2000 + i * 200 + w * 2,
+                           args[0] if rng.random() < 0.15 else rng.randrange(8), 2))
+    return fields
+
+
+def settler_lists_globals(rng, pool, args):
+    """The ten global lists in S3.EXE (uint16 counts at 0x7ad620, 100 words
+    each at 0x7ad634)."""
+    fields = []
+    for i in range(10):
+        fields.append((0x7ad620 + i * 2, 0 if rng.random() < 0.15 else rng.randint(0, 100), 2))
+        for w in range(100):
+            fields.append((0x7ad634 + i * 200 + w * 2, args[0] if rng.random() < 0.15 else rng.randrange(8), 2))
+    return fields
+
+
 TILE = between(2, 381)  # tiles at least 2 from the edge of a 384 map
 
 SPECS = [
@@ -1097,6 +1183,15 @@ SPECS = [
          max_cases=400),
     Spec("GameWorld_CenterCameraOnLocalPlayer", 0x0051b6b0, "thiscall", [],
          presets=local_player_camera, globals=screen_size),
+    # batch 15
+    Spec("GameWorld_AssignWord16RegionsAround", 0x0051c0f0, "thiscall", [between(3, 12), between(3, 12)],
+         presets=region_assignment, max_cases=400),
+    Spec("GameWorld_SendNearestSettlerToPile", 0x004ddbd0, "thiscall",
+         [between(1, 0x800), below(20), anything], presets=pile_and_waiting),
+    Spec("GameWorld_SendNearestSettlerToBuilding", 0x004ddd70, "thiscall", [between(1, 0x800)],
+         presets=building_and_waiting),
+    Spec("GameWorld_RemoveSettlerFromLists", 0x0050dff0, "thiscall", [between(1, 8)],
+         presets=settler_lists_world, globals=settler_lists_globals, max_cases=500),
 ]
 
 

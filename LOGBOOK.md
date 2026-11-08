@@ -15,7 +15,7 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 119 replacements pass the emulator suite with full block
+Status: all 123 replacements pass the emulator suite with full block
 coverage (2,000 cases each, fewer for the slow ones: the flood fills 150,
 ShiftStatistics 60, the map-wide loops and table scans 150-800);
 `--self-test` catches 11/11 wrong pairings. Batches 9-11 passed the
@@ -133,6 +133,17 @@ Next candidates (all callees verified): 0x51c0f0 (assigns word-16 region
 ids around a tile, 19 offsets), 0x4ddbd0 / 0x4ddd70 (send the nearest
 settler of a player list to a pile / building), 0x51c1f0, 0x51caf0,
 0x50dff0, 0x505650, 0x5058c0, 0x507f60.
+
+Batch 15 (2026-11-08, 4 functions; in-process + emulator tests, full
+coverage; whole-game check NOT run yet):
+- flood_fills.cpp: AssignWord16RegionsAround (0x51c0f0)
+- settler_queries.cpp: SendNearestSettlerToPile (0x4ddbd0),
+  SendNearestSettlerToBuilding (0x4ddd70) (player lists of waiting
+  settlers at player record +0x6e / +0x76, settlers linked +0x10/+0x12),
+  RemoveSettlerFromLists (0x50dff0; also edits ten global lists in
+  S3.EXE's data at 0x7ad620)
+Written but not built yet: AddGoodsToPile (0x505650), patch kept in the
+session scratchpad only (lost); redo from the notes in the session log.
 
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
@@ -282,6 +293,23 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-08 (22): whole-game check for batches 12-14, batch 15
+
+- Whole-game check (scripted-seed127.bin, 3,000 ticks): REPLAY OK with
+  all 119 replacements, 51 called; counts in the inventory (e.g.
+  RandomBelow6 128,668, AddTilePileToArea 6,371, SetSettlerTarget 3,342,
+  AddBuildingGoodsRequest 250, UpdateAllBorderFlags 1). The map
+  generation scatterers were not called (the map comes from a file).
+- Call counts only count calls that go through the hook, i.e. from
+  original code. Callees that our replacements call directly (e.g.
+  IsInsideMapBorder from UpdateBorderFlagsAround, the flood-fill steps)
+  now show fewer or no calls; their earlier evidence still stands.
+- Batch 15 (4 functions, list under "Current focus"): in-process 177/177,
+  emulator 4/4 full coverage.
+- Test pitfall: region merges look one tile beyond the tiles they fill;
+  near the map edge the original floods off the map (real maps have a
+  border), so test tiles must stay 3 tiles inside.
 
 ### 2026-11-08 (21): batch 14 (9 functions)
 

@@ -61,6 +61,13 @@
 //   any value counts), with the 256-id table at world+0xe114dc
 //   (FindFreeId256, FloodFillTileByte10). EAX = the number of unblocked
 //   neighbours, or the new id. ret 8.
+// GameWorld::AssignWord16RegionsAround (0x0051c0f0): (x, y): for the
+//   offset table entries 0..18 (the tile and two rings), a tile on the map
+//   (unsigned compares) without a region id (word +0x16 == 0) whose own 19
+//   offset tiles on the map are all unblocked (flag bit 0 of +0xa) and not
+//   of terrain kind 0x20 (terrain & 0xf0) gets a region through
+//   GameWorld::MergeTileWord16Regions. EAX (one caller tail-returns it) =
+//   world + 0x110a6bc (the loop's table pointer). ret 8.
 // All thiscall (ECX = world).
 
 #include "game/replacements.h"
@@ -332,6 +339,40 @@ S3RE_HOOK(0x0051c5e0, GameWorld_MergeTileWord16Regions, MergeFn, Original_GameWo
 S3RE_HOOK(0x0051ca00, GameWorld_MergeTileByte10Regions, MergeFn, Original_GameWorld_MergeTileByte10Regions,
           GameWorld_MergeTileByte10Regions);
 
+std::uint32_t __fastcall GameWorld_AssignWord16RegionsAround(GameWorld* world, void*, std::uint32_t x,
+                                                              std::uint32_t y) {
+    constexpr std::uint32_t kEntries = 19;
+    for (std::uint32_t k = 0; k < kEntries; ++k) {
+        const std::uint32_t size = MapSize(world);
+        const std::uint32_t nx = NeighbourX(world, x, k);
+        const std::uint32_t ny = NeighbourY(world, y, k);
+        if (nx >= size || ny >= size || At<std::uint16_t>(world, Tile(nx, ny) + kTileWord16) != 0) {
+            continue;
+        }
+        bool clear = true;
+        for (std::uint32_t j = 0; j < kEntries; ++j) {
+            const std::uint32_t mx = NeighbourX(world, nx, j);
+            const std::uint32_t my = NeighbourY(world, ny, j);
+            if (mx >= size || my >= size) {
+                continue;
+            }
+            const std::uint32_t tile = Tile(mx, my);
+            if ((At<std::uint8_t>(world, tile + kTileFlags) & kTileBlocked) != 0 ||
+                (At<std::uint8_t>(world, tile + kTileTerrain) & 0xf0) == 0x20) {
+                clear = false;
+            }
+        }
+        if (clear) {
+            GameWorld_MergeTileWord16Regions(world, nullptr, nx, ny);
+        }
+    }
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + kOffsetTable + 4 +
+           kEntries * kOffsetTableBytes;
+}
+
+S3RE_HOOK(0x0051c0f0, GameWorld_AssignWord16RegionsAround, MergeFn, Original_GameWorld_AssignWord16RegionsAround,
+          GameWorld_AssignWord16RegionsAround);
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -547,7 +588,7 @@ S3RE_TEST(GameWorld_MoveTileToAreaAndQueue_MatchesOriginal) {
 
 namespace {
 
-constexpr std::size_t kMergeTestWorld = kOffsetTable + 8 * kOffsetTableBytes;
+constexpr std::size_t kMergeTestWorld = kOffsetTable + 20 * kOffsetTableBytes;
 
 // The real first 7 entries of the offset table: the tile and its neighbours.
 void SetUpNeighbourOffsets(test::WorldPair& worlds) {
@@ -661,6 +702,89 @@ S3RE_TEST(GameWorld_FloodMoveArea_MatchesOriginal) {
             return;
         }
     }
+}
+
+namespace {
+
+std::uint32_t RelativeToWorld(std::uint32_t value, GameWorld* world) {
+    return value - static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
+}
+
+// Wrong: ignores the terrain check.
+std::uint32_t __fastcall WrongAssignWord16RegionsAround(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+    for (std::uint32_t k = 0; k < 19; ++k) {
+        const std::uint32_t size = MapSize(world);
+        const std::uint32_t nx = NeighbourX(world, x, k);
+        const std::uint32_t ny = NeighbourY(world, y, k);
+        if (nx >= size || ny >= size || At<std::uint16_t>(world, Tile(nx, ny) + kTileWord16) != 0) {
+            continue;
+        }
+        bool clear = true;
+        for (std::uint32_t j = 0; j < 19; ++j) {
+            const std::uint32_t mx = NeighbourX(world, nx, j);
+            const std::uint32_t my = NeighbourY(world, ny, j);
+            if (mx < size && my < size && (At<std::uint8_t>(world, Tile(mx, my) + kTileFlags) & kTileBlocked) != 0) {
+                clear = false;
+            }
+        }
+        if (clear) {
+            GameWorld_MergeTileWord16Regions(world, nullptr, nx, ny);
+        }
+    }
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + kOffsetTable + 4 + 19 * kOffsetTableBytes;
+}
+
+void CompareAssignRegions(test::Context& ctx, MergeFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kMergeTestWorld);
+    SetUpNeighbourOffsets(worlds);
+    // Entries 7..18: the second ring (any order).
+    static constexpr std::int32_t kRing2[12][2] = {{2, 0}, {2, 1}, {2, 2}, {1, 2}, {0, 2}, {-1, 1},
+                                                   {-2, 0}, {-2, -1}, {-2, -2}, {-1, -2}, {0, -2}, {1, -1}};
+    for (std::uint32_t k = 0; k < 12; ++k) {
+        worlds.Set<std::int32_t>(kOffsetTable + (7 + k) * kOffsetTableBytes, kRing2[k][0]);
+        worlds.Set<std::int32_t>(kOffsetTable + (7 + k) * kOffsetTableBytes + 4, kRing2[k][1]);
+    }
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t size = 8 + ctx.rng().Below(20);
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        // At least 3 tiles from the edge: the merge looks one tile beyond
+        // the tiles it fills and would flood off the map (real maps have a
+        // border of tiles that never qualify).
+        const std::uint32_t x = 3 + ctx.rng().Below(size - 6);
+        const std::uint32_t y = 3 + ctx.rng().Below(size - 6);
+        const std::uint32_t blocked = ctx.rng().Below(40);
+        for (std::uint32_t tx = 0; tx < size + 3; ++tx) {
+            for (std::uint32_t ty = 0; ty < size + 3; ++ty) {
+                const std::uint32_t tile = Tile(tx, ty);
+                worlds.Set<std::uint16_t>(tile + kTileWord16,
+                                          static_cast<std::uint16_t>(ctx.rng().Chance(2, 3) ? 0 : ctx.rng().Below(4)));
+                const std::uint8_t flags = static_cast<std::uint8_t>(ctx.rng().Next32());
+                worlds.Set<std::uint8_t>(tile + kTileFlags, static_cast<std::uint8_t>(
+                                                                ctx.rng().Below(1000) < blocked ? flags | 1 : flags & 0xfe));
+                worlds.Set<std::uint8_t>(tile + kTileTerrain,
+                                         static_cast<std::uint8_t>(ctx.rng().Below(1000) < blocked ? 0x21 : 0x10));
+            }
+        }
+        SetUpIds(ctx, worlds, kIds8192, 0xe125e4, 0x2000);
+        const std::uint32_t expected =
+            RelativeToWorld(Original_GameWorld_AssignWord16RegionsAround(worlds.original(), nullptr, x, y), worlds.original());
+        const std::uint32_t actual = RelativeToWorld(candidate(worlds.ours(), nullptr, x, y), worlds.ours());
+        if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 32 == 31 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 31 before it): (%u, %u) map %u", i, x, y, size);
+            return;
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_AssignWord16RegionsAround_MatchesOriginal) {
+    CompareAssignRegions(ctx, &GameWorld_AssignWord16RegionsAround, 3000);
+}
+S3RE_TEST(GameWorld_AssignWord16RegionsAround_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareAssignRegions(probe, &WrongAssignWord16RegionsAround, 500);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 }  // namespace s3re::game
