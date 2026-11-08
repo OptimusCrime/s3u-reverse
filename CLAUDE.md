@@ -160,10 +160,19 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
     game-end check 0x511c50, tick bookkeeping
 ```
 
-- **The world object** (`GameWorld`, our name) is one huge non-polymorphic
-  object of more than 20 MB. Known offsets are in `src/s3re/game/world.h`.
+- **The world object** (`GameWorld`, our name; the original class is
+  `CGameData`, 0x153A128 bytes, vtable at +0) holds the whole simulation
+  state. Known offsets used by our code are in `src/s3re/game/world.h`.
   The map is stored in rows of `0x300` tiles of 24 bytes; the map size is at
   `+0x2d2d0`.
+- **Field knowledge lives in the world-layout files:** `re/world_layout.md`
+  (memory map of the whole object, with confidence levels), `re/structs.md`
+  (field tables per record: tile, area, pile, settler, building, player...)
+  and `re/proposed_structs.h` (a proposed C++ header, not used by the build
+  yet). `python tools/world_fields.py` lists every world displacement in
+  `build/s3.asm` grouped by region and record field (lower bounds; check
+  single fields by hand). New findings about fields go into
+  `re/structs.md` / `re/world_layout.md`, not only into code comments.
 - **The simulation's random number generator** is `GameWorld::Random`
   (`0x4feb70`), with its state at world `+0x2d2dc`. It's reimplemented and
   verified. Because the state lives in the world, the simulation is probably
@@ -224,6 +233,15 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   (whole functions), `leaves` (small call-free functions not yet verified:
   the next candidates), `eax-use ADDR` (do callers use the return value?),
   `xrefs REGEX` (which functions read/write a field), `callers ADDR`.
+- **Picking the next functions:** `python tools/frontier.py` lists READY
+  functions (not verified, every direct callee verified/CRT/DebugLog),
+  ranked by how many others they unblock, then NEAR (one callee missing)
+  and BLOCKERS. Default range `0x4c0000..0x560000` (simulation and logic
+  thread); `--range 401000 61e4ef` for all game code. It hides the ~2,000
+  static-initializer stubs (`mov ecx, global; call ctor; ret`) and lists
+  identified library functions (stl/mfc/watcom/compiler) separately;
+  `--library-done` counts those as done (they are not verified). Batches
+  pick from READY, preferring simulation functions with callers.
 - **Global variables** are recorded in `re/globals.csv`, e.g. the tick
   counter `g_gameTick` at `0x7dfd48`.
 - **`DebugLog` (`0x428720`)** is a printf-style call that is just `ret` in the

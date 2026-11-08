@@ -1,4 +1,6 @@
 address,name,category,status,hook,verified_by,notes
+0x00401a10,std::string::string_from_cstr,stl,identified,none,,"MSVC6 basic_string<char> constructor from (const char* s, size_type n), thiscall, ret 8: tmp1 = string(s) (strlen, _Grow 0x401f80), tmp2.assign(tmp1, 0, n) (0x401d60), this->assign(tmp2, 0, npos); this byte +0 gets the allocator byte (garbage). 1966 static-initializer stubs call it as push -1; push text; mov ecx, global; call; ret (n = -1 always there)."
+0x00401b60,std::string::~string,stl,identified,none,,"MSVC6 basic_string<char> destructor (thiscall, no args, ret): inlined erase() (_Split of a shared buffer, _Grow, _Eos) then _Tidy(true) (refcount byte at _Ptr[-1], operator delete 0x61e4ef), zeroes _Ptr/_Len/_Res. Call sites are end-of-scope sequences over 16-byte locals with falling EH states."
 0x00401f60,std::string::_Eos,stl,verified,replaced,String_Eos_MatchesOriginal,"MSVC6 basic_string<char>::_Eos(n): _Len = n; _Ptr[n] = 0. thiscall, ret 4."
 0x00401f80,std::string::_Grow,stl,identified,none,,"MSVC6 basic_string<char>::_Grow(n, trim) -> bool. Reference-counted buffer (count byte at _Ptr[-1], 0xFF = frozen)."
 0x004043d0,CConsoleThread::CConsoleThread,game,identified,none,,"Constructor (thiscall): (hInstance, cmdLine, nShowCmd, initVirtualBases). WinMain constructs the application object on its stack."

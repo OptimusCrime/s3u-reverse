@@ -12,6 +12,18 @@ Sections (default range 0x4c0000..0x560000, the simulation and logic thread):
   NEAR      exactly one callee missing (listed)
   BLOCKERS  missing callees that would make the most NEAR functions READY
 
+Library code: functions identified as library code (status identified,
+category stl, mfc, watcom or compiler; crt counts as done anyway) are not
+verified, so by default they still block their callers; they are listed in
+their own LIBRARY section. --library-done counts them as done (the header
+then says so).
+
+Static-initializer stubs: the compiler emits one tiny function per global
+object (about 2,000, mostly `push -1; push text; mov ecx, global; call
+std::string ctor; ret`). They are recognized by shape (`mov ecx, constant`
+plus only pushes of constants, one direct call and ret, or a tail jump) and
+hidden from all sections; their number is printed. --show-stubs keeps them.
+
 Flags: api = calls an imported API (call ds:[...]); indirect = calls through
 a register or memory (vtables, function pointers: check the targets by hand);
 seh = uses fs: (exception frame); tail = has tail jumps to other functions.
@@ -19,7 +31,8 @@ Tail jumps count as calls.
 
 Usage:
   python tools/frontier.py [--range LOW HIGH] [--max-instructions N]
-                           [--limit N] [--all-flags]
+                           [--limit N] [--all-flags] [--library-done]
+                           [--show-stubs]
 By default functions with indirect calls are left out of READY/NEAR (their
 real callees are unknown); --all-flags keeps them.
 """
@@ -42,12 +55,15 @@ GAME_LOW, GAME_HIGH = 0x401000, CRT_START
 # --range 401000 61e4ef for all game code.
 SIM_LOW, SIM_HIGH = 0x4c0000, 0x560000
 
+LIBRARY = {"stl", "crt", "mfc", "watcom", "compiler"}
+STUB_PART = re.compile(r"(push\s+(0?[0-9A-F]+h|[0-9])|mov\s+ecx,(0?[0-9A-F]+h|[0-9])|ret)$")
+
 DIRECT = re.compile(r"(call|jmp)\s+([0-9A-F]{8})$")
 
 
 def build_graph(asm, starts, low, high):
     start_set = set(starts)
-    info = defaultdict(lambda: {"n": 0, "callees": set(), "flags": set()})
+    info = defaultdict(lambda: {"n": 0, "callees": set(), "flags": set(), "other": 0})
     for address, ins in asm:
         if not low <= address < high or ins.startswith("nop"):
             continue
@@ -57,6 +73,10 @@ def build_graph(asm, starts, low, high):
         if "fs:" in ins:
             d["flags"].add("seh")
         m = DIRECT.match(ins)
+        if not m and not STUB_PART.match(ins):
+            d["other"] += 1
+        if ins.startswith("mov") and STUB_PART.match(ins):
+            d["mov_ecx"] = True
         if m:
             target = int(m.group(2), 16)
             if m.group(1) == "call":
@@ -81,6 +101,10 @@ def main():
     parser.add_argument("--max-instructions", type=int, default=400)
     parser.add_argument("--limit", type=int, default=40)
     parser.add_argument("--all-flags", action="store_true")
+    parser.add_argument("--library-done", action="store_true",
+                        help="count identified library functions (stl/crt/...) as done")
+    parser.add_argument("--show-stubs", action="store_true",
+                        help="keep static-initializer stubs in the lists")
     args = parser.parse_args()
     if not os.path.exists(args.asm):
         sys.exit(f"{args.asm} not found; see tools/asm_tools.py for how to make it")
@@ -97,17 +121,33 @@ def main():
         for c in d["callees"]:
             callers[c] += 1
 
+    def is_library(address):
+        row = inventory.get(address, {})
+        return row.get("category") in LIBRARY and row.get("status") == "identified"
+
+    def is_stub(f):
+        # Only constant pushes, mov ecx,constant (the global), ret and exactly
+        # one direct call or tail jump: a compiler-generated initializer.
+        d = graph[f]
+        return d["other"] == 0 and d.get("mov_ecx") and len(d["callees"]) == 1 \
+            and d["n"] <= 8 \
+            and "indirect" not in d["flags"] and "api" not in d["flags"]
+
     def done(address):
         row = inventory.get(address, {})
         return (row.get("status") == "verified" or address >= CRT_START
-                or address == DEBUG_LOG or row.get("category") == "crt")
+                or address == DEBUG_LOG or row.get("category") == "crt"
+                or (args.library_done and is_library(address)))
 
     def name(address):
         return inventory.get(address, {}).get("name", "")
 
-    ready, near = [], []
+    ready, near, stubs = [], [], 0
     for f, d in graph.items():
         if not low <= f < high or done(f) or d["n"] < 4 or d["n"] > args.max_instructions:
+            continue
+        if is_stub(f) and not args.show_stubs:
+            stubs += 1
             continue
         if "indirect" in d["flags"] and not args.all_flags:
             continue
@@ -128,13 +168,20 @@ def main():
     def rank(f):  # most unblocked first, then reachable ones, then small ones
         return (-blockers[f], callers[f] == 0, graph[f]["n"])
 
+    library = sorted(f for f in graph if is_library(f))
+    print(f"(range {low:#x}..{high:#x}; {stubs} static-initializer stubs hidden"
+          f"{'' if args.show_stubs else ', --show-stubs lists them'}; "
+          f"{len(library)} identified library functions "
+          f"{'counted as done (--library-done)' if args.library_done else 'not counted as done'})\n")
     print(f"READY ({len(ready)}): all callees done")
     for f in sorted(ready, key=rank)[:args.limit]:
         print("  " + line(f))
     print(f"\nNEAR ({len(near)}): one callee missing")
     for f, m in sorted(near, key=lambda p: rank(p[0]))[:args.limit]:
         print("  " + line(f, f"needs {m:#x} ({graph[m]['n']} ins) {name(m)}"))
-    blockers = Counter(m for _, m in near)
+    print("\nLIBRARY: identified library functions (not verified; callers in all game code)")
+    for f in sorted(library, key=lambda f: -callers[f])[:args.limit]:
+        print(f"  {f:#x} {graph[f]['n']:4} ins {callers[f]:4} callers  {name(f)}")
     print("\nBLOCKERS: missing callees that unblock the most NEAR functions")
     for m, count in blockers.most_common(min(args.limit, 20)):
         print(f"  {m:#x} unblocks {count:3}  {graph[m]['n']:4} ins  {name(m)}")
