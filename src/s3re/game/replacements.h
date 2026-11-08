@@ -1,0 +1,60 @@
+#pragma once
+
+// Our replacements that other replacements call.
+//
+// When an original function calls another original function that we have
+// already replaced, our version of the caller calls our version of the
+// callee directly (in the game the call would land in it anyway, through the
+// hook). Declarations only; each is defined, documented and tested in the
+// file named next to it.
+
+#include "game/world.h"
+
+#include <cstdint>
+
+namespace s3re::game {
+
+// map.cpp
+std::uint32_t __fastcall GameWorld_IsOnMap(GameWorld* world, void* edx, std::uint32_t x,
+                                           std::uint32_t y);
+std::uint32_t __fastcall GameWorld_IsInsideMapBorder(GameWorld* world, void* edx, std::uint32_t x,
+                                                     std::uint32_t y);
+
+// map_areas.cpp
+std::uint32_t __fastcall GameWorld_AssignTileToArea(GameWorld* world, void* edx, std::uint32_t x,
+                                                    std::uint32_t y, std::uint32_t area);
+std::uint32_t __fastcall GameWorld_RemoveTileFromArea(GameWorld* world, void* edx, std::uint32_t x,
+                                                      std::uint32_t y);
+std::uint32_t __fastcall GameWorld_SetTileAreaMarked(GameWorld* world, void* edx, std::uint32_t x,
+                                                     std::uint32_t y, std::uint32_t value);
+
+// map_neighbourhood.cpp
+std::uint32_t __fastcall GameWorld_ReplaceTerrainType(GameWorld* world, void* edx,
+                                                      std::uint32_t oldType, std::uint32_t newType);
+
+// random.cpp
+std::uint16_t __fastcall GameWorld_Random(GameWorld* world, void* edx);
+
+// ui_state.cpp
+std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void* edx);
+std::uint32_t __fastcall GameWorld_PushUiFeedback(GameWorld* world, void* edx, std::uint32_t value);
+
+// world_search.cpp
+std::uint32_t __stdcall TileDistance(std::uint32_t x0, std::uint32_t y0, std::uint32_t x1,
+                                     std::uint32_t y1);
+
+// world_tables.cpp
+std::uint32_t __fastcall GameWorld_QueueMarkedTileTerrain5To7(GameWorld* world, void* edx,
+                                                              std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall GameWorld_QueueMarkedTileNoOwner(GameWorld* world, void* edx,
+                                                          std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall GameWorld_ReplaceTileWord16AndQueue(GameWorld* world, void* edx,
+                                                             std::uint32_t x, std::uint32_t y,
+                                                             std::uint32_t expected,
+                                                             std::uint32_t value);
+std::uint32_t __fastcall GameWorld_ReplaceTileByte10AndQueue(GameWorld* world, void* edx,
+                                                             std::uint32_t x, std::uint32_t y,
+                                                             std::uint32_t expected,
+                                                             std::uint32_t value);
+
+}  // namespace s3re::game

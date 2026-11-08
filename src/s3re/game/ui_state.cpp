@@ -37,8 +37,20 @@
 //   10-entry dword list at +0x1539484 (count at +0x15394ac) unless it is
 //   full. Drained by CLogicThread::PrepareDrawData. EAX = the new count, or
 //   10 when the list was full (callers don't use it, but one tail-calls).
+// CLogicThread::PushUiFeedback (0x0053f560): (value) calls
+//   GameWorld::PushUiFeedback on the logic thread's world (this+0x3a0) and
+//   returns its EAX. ECX = CLogicThread. ret 4. 288 call sites in the UI
+//   code.
+//
+// GameWorld::CenterCameraOnTile (0x0051b560): (x, y) sets the camera to
+//   x = (mapSize + 2x + 0x18 - y) * 8 - width/2 and
+//   y = y*9 + 0xc8 - height/2 - tile byte +0x4 of (x, y) (probably the
+//   tile's height in pixels), with signed halves of the view size truncated
+//   toward zero and 32-bit wrapping sums, then calls GameWorld::ClampCamera
+//   and returns its EAX (one caller tail-returns it). ret 8.
 
 #include "game/globals.h"
+#include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -57,6 +69,10 @@ constexpr std::size_t kUiSelectionMode = 0x2d284;
 constexpr std::size_t kUiSelectionParam1 = 0x2d288;
 constexpr std::size_t kUiSelectionParam2 = 0x2d28c;
 constexpr std::size_t kUiField298 = 0x2d298;
+
+constexpr std::size_t kTiles = 0x67444;
+constexpr std::size_t kTileByte4 = 0x4;
+constexpr std::size_t kLogicThreadWorld = 0x3a0;  // in CLogicThread
 
 constexpr std::size_t kUiFeedback = 0x1539484;
 constexpr std::size_t kUiFeedbackCount = 0x15394ac;
@@ -159,6 +175,33 @@ std::uint32_t __fastcall GameWorld_PushUiFeedback(GameWorld* world, void*, std::
     return count;
 }
 
+std::uint32_t __fastcall GameWorld_CenterCameraOnTile(GameWorld* world, void*, std::uint32_t x,
+                                                      std::uint32_t y) {
+    const auto width = static_cast<std::int32_t>(GameGlobal<std::uint32_t>(global_address::kScreenWidth));
+    const auto height = static_cast<std::int32_t>(GameGlobal<std::uint32_t>(global_address::kScreenHeight));
+    const std::uint32_t size = Field(world, world_offset::kMapSize);
+    WorldField<std::uint32_t>(world, kCameraX) =
+        (size + x * 2u + 0x18u - y) * 8u - static_cast<std::uint32_t>(width / 2);
+    const std::uint32_t tileByte4 = WorldField<std::uint8_t>(world, kTiles + (x * 0x300u + y) * 24u + kTileByte4);
+    WorldField<std::uint32_t>(world, kCameraY) =
+        0u - static_cast<std::uint32_t>(height / 2) - tileByte4 + y * 9u + 0xc8u;
+    return GameWorld_ClampCamera(world, nullptr);
+}
+
+struct CLogicThread;  // opaque
+
+std::uint32_t __fastcall CLogicThread_PushUiFeedback(CLogicThread* self, void*, std::uint32_t value) {
+    GameWorld* world = *reinterpret_cast<GameWorld**>(reinterpret_cast<std::uint8_t*>(self) + kLogicThreadWorld);
+    return GameWorld_PushUiFeedback(world, nullptr, value);
+}
+
+using PositionFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+using LogicValueFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t value);
+
+S3RE_HOOK(0x0051b560, GameWorld_CenterCameraOnTile, PositionFn, Original_GameWorld_CenterCameraOnTile,
+          GameWorld_CenterCameraOnTile);
+S3RE_HOOK(0x0053f560, CLogicThread_PushUiFeedback, LogicValueFn, Original_CLogicThread_PushUiFeedback,
+          CLogicThread_PushUiFeedback);
 S3RE_HOOK(0x005157b0, GameWorld_IsUiSelectionMode, WorldValueFn,
           Original_GameWorld_IsUiSelectionMode, GameWorld_IsUiSelectionMode);
 S3RE_HOOK(0x005157d0, GameWorld_IsUiField298, WorldValueFn, Original_GameWorld_IsUiField298,
@@ -297,6 +340,49 @@ std::uint32_t __fastcall WrongClampCamera(GameWorld* world, void* edx) {
 }
 
 }  // namespace
+
+S3RE_TEST(GameWorld_CenterCameraOnTile_MatchesOriginal) {
+    test::WorldPair worlds(ctx, kTiles + 400 * 0x300 * 24);
+    GlobalOverride width(global_address::kScreenWidth);
+    GlobalOverride height(global_address::kScreenHeight);
+    for (int i = 0; i < 5000; ++i) {
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, ctx.rng().Chance(1, 2) ? 384 : InterestingValue(ctx));
+        width.Set(ctx.rng().Chance(3, 4) ? 640 + ctx.rng().Below(1024) : InterestingValue(ctx));
+        height.Set(ctx.rng().Chance(3, 4) ? 480 + ctx.rng().Below(768) : InterestingValue(ctx));
+        const std::uint32_t x = ctx.rng().Below(400);
+        const std::uint32_t y = ctx.rng().Below(400);
+        const std::uint32_t expected = Original_GameWorld_CenterCameraOnTile(worlds.original(), nullptr, x, y);
+        const std::uint32_t actual = GameWorld_CenterCameraOnTile(worlds.ours(), nullptr, x, y);
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, kCameraX, 8) ||
+            (i % 512 == 511 && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u)", i, x, y);
+            return;
+        }
+    }
+    worlds.Checkpoint(ctx);
+}
+
+S3RE_TEST(CLogicThread_PushUiFeedback_MatchesOriginal) {
+    test::WorldPair worlds(ctx, kUiFeedbackCount + 4);
+    // Two fake logic threads, each pointing at one of the worlds.
+    std::uint8_t threadA[kLogicThreadWorld + 4] = {};
+    std::uint8_t threadB[kLogicThreadWorld + 4] = {};
+    *reinterpret_cast<GameWorld**>(threadA + kLogicThreadWorld) = worlds.original();
+    *reinterpret_cast<GameWorld**>(threadB + kLogicThreadWorld) = worlds.ours();
+    for (int i = 0; i < 2000; ++i) {
+        worlds.Set<std::uint32_t>(kUiFeedbackCount, ctx.rng().Below(kUiFeedbackCapacity + 1));
+        const std::uint32_t value = ctx.rng().Next32();
+        const std::uint32_t expected =
+            Original_CLogicThread_PushUiFeedback(reinterpret_cast<CLogicThread*>(threadA), nullptr, value);
+        const std::uint32_t actual = CLogicThread_PushUiFeedback(reinterpret_cast<CLogicThread*>(threadB), nullptr, value);
+        if (!S3RE_EXPECT_EQ(expected, actual) ||
+            !worlds.Same(ctx, kUiFeedback, kUiFeedbackCount + 4 - kUiFeedback)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return;
+        }
+    }
+    worlds.Checkpoint(ctx);
+}
 
 S3RE_TEST(GameWorld_IsUiSelectionMode_MatchesOriginal) {
     CompareUiQuery(ctx, Original_GameWorld_IsUiSelectionMode, &GameWorld_IsUiSelectionMode, 5000);

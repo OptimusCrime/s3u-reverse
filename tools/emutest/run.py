@@ -79,7 +79,16 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
                     presets[emu.WORLD_BASE + offset + i] = (value >> (8 * i)) & 0xFF
         registers = {name: rng.getrandbits(32) for name in ("eax", *emu.CALLEE_SAVED)}
         edx = rng.getrandbits(32)
-        ecx = emu.WORLD_BASE if spec.convention == "thiscall" else rng.getrandbits(32)
+        if spec.convention == "thiscall":
+            ecx = emu.WORLD_BASE
+        elif spec.convention == "logicthread":
+            # A fake CLogicThread inside the world area whose world pointer
+            # (+0x3a0) is the world; its other fields are lazily random.
+            ecx = emu.WORLD_BASE + specs.LOGIC_THREAD
+            for i in range(4):
+                presets[emu.WORLD_BASE + specs.LOGIC_THREAD + 0x3a0 + i] =                     (emu.WORLD_BASE >> (8 * i)) & 0xFF
+        else:
+            ecx = rng.getrandbits(32)
         machine.begin_case(rng.getrandbits(32), pool, presets)
         if spec.globals:
             for address, value, size in spec.globals(rng, pool, args):

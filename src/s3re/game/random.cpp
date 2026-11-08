@@ -85,6 +85,18 @@ std::uint16_t __fastcall GameWorld_Random(GameWorld* world, void* /*edx*/) {
 S3RE_HOOK(0x004feb70, GameWorld_Random, GameWorldRandomFn, Original_GameWorld_Random,
           GameWorld_Random);
 
+// GameWorld::RandomBelow6 (0x00503880): (Random() & 0xff) % 6, i.e. 0..5
+// (EAX, used by all ten callers). Takes no arguments; ECX (the world) is
+// passed on to Random. Plain ret.
+std::uint32_t __fastcall GameWorld_RandomBelow6(GameWorld* world, void* /*edx*/) {
+    return (GameWorld_Random(world, nullptr) & 0xffu) % 6u;
+}
+
+using GameWorldRandomBelowFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
+
+S3RE_HOOK(0x00503880, GameWorld_RandomBelow6, GameWorldRandomBelowFn, Original_GameWorld_RandomBelow6,
+          GameWorld_RandomBelow6);
+
 using GameWorldSeedRandomFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t seed);
 
 // The reimplementation, compared against the original by the tests.
@@ -227,6 +239,29 @@ S3RE_TEST(GameWorld_Random_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareRandom(probe, &WrongRandom, 2000, 500);
     S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(GameWorld_RandomBelow6_MatchesOriginal) {
+    constexpr std::size_t kBufferSize = kWindowBefore + kStateSize + kWindowAfter;
+    std::vector<std::uint8_t> bufferA(kBufferSize);
+    std::vector<std::uint8_t> bufferB(kBufferSize);
+    auto worldOf = [](std::vector<std::uint8_t>& buffer) {
+        return reinterpret_cast<GameWorld*>(buffer.data() + kWindowBefore - world_offset::kRandomState);
+    };
+    for (int sequence = 0; sequence < 200; ++sequence) {
+        ctx.rng().Fill(bufferA.data(), kBufferSize);
+        bufferB = bufferA;
+        for (int call = 0; call < 500; ++call) {
+            const std::uint32_t expected = Original_GameWorld_RandomBelow6(worldOf(bufferA), nullptr);
+            const std::uint32_t actual = GameWorld_RandomBelow6(worldOf(bufferB), nullptr);
+            bool same = S3RE_EXPECT_EQ(expected, actual);
+            same &= S3RE_EXPECT_MEM_EQ(bufferA.data(), bufferB.data(), kBufferSize);
+            if (!same) {
+                ctx.Fail(__FILE__, __LINE__, "  sequence %d, call %d", sequence, call);
+                return;
+            }
+        }
+    }
 }
 
 namespace {

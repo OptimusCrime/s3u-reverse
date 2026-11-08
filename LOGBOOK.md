@@ -15,11 +15,14 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 81 replacements pass the emulator suite with full block
-coverage (2,000 cases each, fewer for the slow ones: ShiftStatistics 60,
-the map-wide loops and table scans 150-800); `--self-test` catches 9/9
-wrong pairings. Batches 9, 10 and 11 have not had a whole-game check yet.
-Specs can now also set S3.EXE globals per case (`Spec.globals`).
+Status: all 99 replacements pass the emulator suite with full block
+coverage (2,000 cases each, fewer for the slow ones: the flood fills 150,
+ShiftStatistics 60, the map-wide loops and table scans 150-800);
+`--self-test` catches 11/11 wrong pairings. Batches 9-11 passed the
+whole-game check on 2026-11-08 (call counts in the inventory); batch 12
+hasn't had one yet. Specs can set S3.EXE globals per case
+(`Spec.globals`), and take ECX = a fake CLogicThread ("logicthread"
+convention) and pointer arguments into scratch buffers (`scratch(n)`).
 
 Next steps:
 1. Continue with leaf functions (list below), each with an emulator spec.
@@ -75,12 +78,23 @@ coverage; whole-game check NOT run yet):
   0x51c6c0 / 0x51c8a0, which use the tile ring at world+0xdfdc48 as their
   queue (good next candidates; they only call these steps).
 
-Waiting for emulator support: 0x514a00, 0x514a90, 0x514ae0, 0x514b40
-are leaf helpers of the game-end check 0x511c50 with ECX = CLogicThread
-(world via +0x3a0) and an output buffer pointer argument (int32[20]
-per-player counts). The emulator harness only knows ECX = world; it needs a
-"logicthread" convention (fake CLogicThread whose +0x3a0 points at the
-world) and pointer arguments into a scratch buffer whose bytes are compared.
+Batch 12 (2026-11-08, 18 functions; in-process + emulator tests, full
+coverage; whole-game check NOT run yet). First callers of replaced
+functions; our versions call our callees directly (game/replacements.h):
+- flood_fills.cpp: FloodFillTileWord16 (0x51c6c0), FloodFillTileByte10
+  (0x51c8a0), FloodMarkAreaTerrain5To7 (0x51cee0), FloodSetByte10MarkedTiles
+  (0x51d450), MoveTileToAreaAndQueue (0x4e6430)
+- map_terrain.cpp: ReplaceTerrainF3 (0x51a400), SpreadTerrainRandomly
+  (0x519330), UpdateBorderFlagsAround (0x51a460, territory border bit 0x40
+  of tile byte +9)
+- settler_queries.cpp: SetSettlerTarget (0x503610, 45 call sites),
+  CountListSettlersNear (0x50e8f0), FindNearbySettlerType29 (0x50cdb0,
+  returns the last tile's settler, an original quirk)
+- game_end.cpp (CLogicThread, game-end check helpers):
+  CountBuildingsOfTypes15To18 (0x514a00), CountTilesOwnedBy (0x514a90),
+  CountTilesOwnedByEither (0x514ae0), SumAreaGoodsPerPlayer (0x514b40)
+- ui_state.cpp: CenterCameraOnTile (0x51b560), CLogicThread::PushUiFeedback
+  (0x53f560); random.cpp: RandomBelow6 (0x503880)
 
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
@@ -230,6 +244,27 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-08 (19): whole-game check for batches 9-11, batch 12 (18 functions)
+
+- Whole-game check (scripted-seed127.bin, 3,000 ticks, original vs ours):
+  REPLAY OK, 40 of 81 replacements called. Call counts written into the
+  inventory notes of batches 9-11 (12 of their 22 functions were never
+  called; e.g. QueueMarkedTileTerrain5To7 486,138 calls,
+  ReplaceTileWord16AndQueue 900,054, QueueMarkedTileNoOwner 314,910).
+- Batch 12: 18 functions, mostly callers of already replaced ones (flood
+  fills over the tile ring, terrain spreading, border flags, settler
+  targets, game-end counts). In-process 145/145 (23 new tests incl. 6
+  mutation tests); emulator 18/18 full coverage; self-test 11/11.
+- emutest: "logicthread" convention (fake CLogicThread at world+0x1f80000
+  whose +0x3a0 is the world) and `scratch(n)` pointer arguments
+  (world+0x1f90000 + n*0x1000), both inside the lazily random, compared
+  world area.
+- Pitfalls: `near` is a Windows macro (don't use it as a name). The
+  flood fills loop for ever when the new value equals the old one; the
+  first in-process test set-up could produce that (start tile not `old`)
+  and hung the test run. Big emulator flood cases (101x101 map, needed to
+  cover the ring wrap) take ~14 s each; keep them rare.
 
 ### 2026-11-08 (18): batch 11 (2 leaf functions, short session)
 

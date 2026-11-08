@@ -43,11 +43,28 @@ def one_of(*values: int) -> Generator:
     return lambda rng, pool: rng.choice(values)
 
 
+# Unused space at the end of the emulated world (32 MB; the game's world is
+# about 22 MB) for objects other than the world: a fake CLogicThread (see
+# the "logicthread" convention) and scratch buffers that pointer arguments
+# point into (lazily random and compared like the world).
+LOGIC_THREAD = 0x1f80000
+SCRATCH = 0x1f90000
+SCRATCH_SLOT_BYTES = 0x1000
+WORLD_BASE = 0x40000000  # emu.WORLD_BASE
+
+
+def scratch(slot: int) -> Generator:
+    """A pointer to scratch buffer `slot` (world offset SCRATCH + slot * 0x1000)."""
+    return lambda rng, pool: WORLD_BASE + SCRATCH + slot * SCRATCH_SLOT_BYTES
+
+
 @dataclass
 class Spec:
     ours: str            # C++ name of our replacement in s3re.dll
     original: int        # address in S3.EXE
-    convention: str      # "thiscall" (ECX = world; ours is __fastcall) or "stdcall"
+    # "thiscall" (ECX = world; ours is __fastcall), "logicthread" (ECX = a
+    # fake CLogicThread whose +0x3a0 points at the world) or "stdcall"
+    convention: str
     args: list[Generator]
     eax_mask: int = 0xFFFFFFFF  # 0: EAX not compared (callers don't use it)
     # (rng, pool, args) -> [(world offset, value, size)]: fields pinned for the case.
@@ -428,6 +445,210 @@ def building_type(rng, pool):
     return rng.randint(0x14, 0x24) if rng.random() < 0.8 else anything(rng, pool)
 
 
+# --- batch 12 ---------------------------------------------------------------
+
+BIG_FLOOD = 101  # a 101 x 101 map: a fill of all of it wraps the 10,000-entry ring
+
+
+def flood_map(rng, args, big_chance=0.02):
+    """A map size that holds the start tile (args[0], args[1]); sometimes the
+    start is on the last row/column, rarely the big map."""
+    if rng.random() < big_chance:
+        return BIG_FLOOD, True
+    low = max(args[0], args[1]) + 1
+    return (low if rng.random() < 0.3 else rng.randint(low, 12)), False
+
+
+def flood_replace(offset: int, size: int) -> Callable:
+    """Every tile of the map preset: `old` (never the low bytes of args[2],
+    that would loop for ever) or another value; the start tile is `old`."""
+    mask = (1 << (8 * size)) - 1
+    def presets(rng, pool, args):
+        n, big = flood_map(rng, args)
+        old = rng.choice([v for v in range(3) if v != args[2] & mask])
+        density = 1.0 if big else rng.choice([0.3, 0.6, 0.9])
+        fields = [(MAP_SIZE, n, 4)]
+        for x in range(n):
+            for y in range(n):
+                start = (x, y) == (args[0], args[1])
+                value = old if start or rng.random() < density else rng.choice(
+                    [v for v in range(6) if v != old])
+                fields.append((tile(x, y) + offset, value, size))
+        return fields
+    return presets
+
+
+def flood_marked(terrain: bool) -> Callable:
+    """Tiles mostly flagged 0x10 (tile +0xa) and, with `terrain`, of terrain
+    5..7 without flag 0x80, else without flag 0x01."""
+    clear = 0x80 if terrain else 0x01
+    def presets(rng, pool, args):
+        n, big = flood_map(rng, args)
+        density = 1.0 if big else rng.choice([0.3, 0.6, 0.9])
+        fields = [(MAP_SIZE, n, 4)]
+        for x in range(n):
+            for y in range(n):
+                flags = rng.getrandbits(8)
+                if rng.random() < density:
+                    flags = (flags | 0x10) & ~clear
+                fields.append((tile(x, y) + 0xa, flags, 1))
+                if terrain:
+                    value = rng.randint(5, 7) if big or rng.random() < 0.8 else rng.randrange(10)
+                    fields.append((tile(x, y) + 0x6, value, 1))
+        return fields
+    return presets
+
+
+def area_of_args_matching(rng, pool, args):
+    area = args[2] & 0xFFFF if rng.random() < 0.7 else rng.randrange(AREA_LIMIT)
+    return [(tile_area_offset(args[0], args[1]), area, 2),
+            (0xe0788c, rng.choice([9999, rng.randrange(10000)]), 4)]
+
+
+def small_map_terrain(rng, pool, args):
+    """Map size -1..14; all its tiles get terrain 0..3 (so tiles match)."""
+    n = rng.randint(-1, 14)
+    fields = [(MAP_SIZE, n & 0xFFFFFFFF, 4)]
+    for x in range(max(n, 0)):
+        for y in range(max(n, 0)):
+            fields.append((tile(x, y) + 0x6, rng.randrange(4), 1))
+    return fields
+
+
+AROUND = [(0, 0), (1, 0), (1, 1), (0, 1), (-1, 0), (-1, -1), (0, -1)]
+
+
+def territory(rng, pool, args):
+    """Map of 3..16 (or 384) tiles, the real 7-entry offset table (sometimes
+    with a random entry), owners of a few players and mostly land."""
+    n = rng.choice([384, rng.randint(3, 16), rng.randint(3, 16)])
+    fields = [(MAP_SIZE, n, 4)]
+    for k, (dx, dy) in enumerate(AROUND):
+        if rng.random() < 0.05:
+            dx, dy = rng.randint(-3, 3), rng.randint(-3, 3)
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4)]
+    for x in range(max(args[0] - 4, 0), min(args[0] + 5, n)):
+        for y in range(max(args[1] - 4, 0), min(args[1] + 5, n)):
+            owner = 0xff if rng.random() < 0.15 else rng.randrange(3)
+            terrain = rng.getrandbits(8)
+            if rng.random() < 0.2:
+                terrain &= 0x0f
+            fields += [(tile(x, y) + 0x8, owner, 1), (tile(x, y) + 0x6, terrain, 1)]
+    return fields
+
+
+def camera_tile(rng, pool, args):
+    return [(MAP_SIZE, rng.choice([64, 384, rng.randrange(400), rng.getrandbits(32)]), 4)]
+
+
+def settler_list(rng, pool, args):
+    """A list of distinct settlers from args[0] (linked by +0x10, ending at
+    0) near (args[2], args[3]), many on tiles whose byte +0x10 is args[4]."""
+    fields = []
+    settler = args[0]
+    used = {0, settler}
+    for _ in range(rng.randrange(8)):
+        if settler == 0:
+            break
+        record = SETTLERS + settler * SETTLER_BYTES
+        x = args[2] if rng.random() < 0.3 else min(max(args[2] + rng.randint(-8, 8), 0), 383)
+        y = args[3] if rng.random() < 0.3 else min(max(args[3] + rng.randint(-8, 8), 0), 383)
+        following = 0
+        if rng.random() < 0.85:
+            following = rng.randrange(1, 0x3000)
+            while following in used:
+                following = rng.randrange(1, 0x3000)
+            used.add(following)
+        fields += [(record + 0x4, x, 2), (record + 0x6, y, 2), (record + 0x10, following, 2),
+                   (tile(x, y) + 0x10, args[4] & 0xFF if rng.random() < 0.7 else rng.randrange(4), 1)]
+        settler = following
+    if settler != 0:
+        record = SETTLERS + settler * SETTLER_BYTES
+        x, y = rng.randrange(384), rng.randrange(384)
+        fields += [(record + 0x4, x, 2), (record + 0x6, y, 2), (record + 0x10, 0, 2)]  # ends here
+    return fields
+
+
+def ring_offsets(rng, k):
+    """Entry k of a plausible offset table: rings of growing distance."""
+    radius = 1 if k <= 6 else 2 if k <= 18 else 3
+    return rng.randint(-radius, radius), rng.randint(-radius, radius)
+
+
+def settlers_around(rng, pool, args):
+    """Offset entries 1..36; tiles around (args[1], args[2]) with settlers,
+    some of type 0x29 and of args[0]'s player. Sometimes a small map, so
+    that tiles are off the map."""
+    n = 384 if rng.random() < 0.6 else rng.randint(1, 30)
+    me = SETTLERS + args[0] * SETTLER_BYTES
+    player = rng.randrange(3)
+    fields = [(MAP_SIZE, n, 4), (me + 0x0, player, 1)]
+    sparse = rng.random()
+    for k in range(1, 37):
+        dx, dy = ring_offsets(rng, k)
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4)]
+        x, y = (args[1] + dx) & 0xFFFFFFFF, (args[2] + dy) & 0xFFFFFFFF
+        if x >= 384 or y >= 384:
+            continue
+        settler = 0 if rng.random() < sparse else rng.randrange(1, 0x3000)
+        fields.append((tile(x, y) + 0x0, settler, 2))
+        if settler:
+            record = SETTLERS + settler * SETTLER_BYTES
+            fields += [(record + 0x1, 0x29 if rng.random() < 0.15 else rng.randrange(0x40), 1),
+                       (record + 0x0, player if rng.random() < 0.5 else rng.randrange(3), 1)]
+    return fields
+
+
+def game_end_buildings(rng, pool, args):
+    count = rng.choice([0, 1, rng.randrange(40)])
+    fields = [(0x1499e60, count, 4)]
+    for player in range(255):
+        fields.append((PLAYER_RECORDS + player * PLAYER_RECORD_BYTES,
+                       0 if rng.random() < 0.25 else rng.getrandbits(32) | 1, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        player = 0xff if rng.random() < 0.15 else rng.randrange(255) if rng.random() < 0.05 \
+            else rng.randrange(20)
+        fields += [(record + 0x0, player, 1),
+                   (record + 0x21, 0 if rng.random() < 0.7 else rng.randrange(256), 1),
+                   (record + 0x6, rng.randrange(0xe, 0x14), 1)]
+    return fields
+
+
+def owned_points(rng, pool, args):
+    """20 (int32 x, int32 y) points in scratch buffer 0 on tiles of a few owners."""
+    fields = []
+    for i in range(20):
+        x, y = rng.randrange(384), rng.randrange(384)
+        fields += [(SCRATCH + i * 8, x, 4), (SCRATCH + i * 8 + 4, y, 4),
+                   (tile(x, y) + 0x8, 0xff if rng.random() < 0.1 else rng.randrange(4), 1)]
+    return fields
+
+
+AREAS = 0xe145e8
+AREA_BYTES = 0x2e0
+
+
+def area_piles(rng, pool, args):
+    count = rng.choice([0, 1, rng.randrange(30)])
+    fields = [(0xe115dc, count, 4)]
+    next_pile = 1
+    for area in range(1, count + 1):
+        record = AREAS + area * AREA_BYTES
+        player = 0xff if rng.random() < 0.15 else rng.randrange(255) if rng.random() < 0.05 \
+            else rng.randrange(20)
+        first = 0
+        for _ in range(rng.randrange(5)):
+            fields += [(PILES + next_pile * PILE_BYTES + 0xc, first, 2),
+                       (PILES + next_pile * PILE_BYTES + 0x1, rng.getrandbits(8), 1)]
+            first = next_pile
+            next_pile += 1
+        fields += [(record + 0x0, player, 1), (record + 0x1e, first, 2)]
+    return fields
+
+
 TILE = between(2, 381)  # tiles at least 2 from the edge of a 384 map
 
 SPECS = [
@@ -582,6 +803,50 @@ SPECS = [
          presets=players_field0c),
     Spec("BuildingTypeAllowedForRace", 0x004ffd60, "stdcall", [anything, building_type],
          eax_mask=0xff),
+    # flood fills (flood_fills.cpp)
+    Spec("GameWorld_FloodFillTileWord16", 0x0051c6c0, "thiscall",
+         [below(12), below(12), anything], presets=flood_replace(0x16, 2), max_cases=150),
+    Spec("GameWorld_FloodFillTileByte10", 0x0051c8a0, "thiscall",
+         [below(12), below(12), anything], presets=flood_replace(0x10, 1), max_cases=150),
+    Spec("GameWorld_FloodMarkAreaTerrain5To7", 0x0051cee0, "thiscall",
+         [below(12), below(12), anything], eax_mask=0, presets=flood_marked(True), max_cases=150),
+    Spec("GameWorld_FloodSetByte10MarkedTiles", 0x0051d450, "thiscall",
+         [below(12), below(12), anything], eax_mask=0, presets=flood_marked(False), max_cases=150),
+    Spec("GameWorld_MoveTileToAreaAndQueue", 0x004e6430, "thiscall",
+         [below(384), below(384), below(AREA_LIMIT, 0.1), below(AREA_LIMIT)],
+         presets=area_of_args_matching),
+    # terrain and borders (map_terrain.cpp)
+    Spec("GameWorld_ReplaceTerrainF3", 0x0051a400, "thiscall", [anything],
+         presets=map_size(between(-1, 14))),
+    Spec("GameWorld_SpreadTerrainRandomly", 0x00519330, "thiscall",
+         [below(4), below(4), anything, between(-5, 110)], presets=small_map_terrain,
+         max_cases=600),
+    Spec("GameWorld_UpdateBorderFlagsAround", 0x0051a460, "thiscall", [below(16), below(16)],
+         presets=territory),
+    # camera, random, logic thread (ui_state.cpp, random.cpp)
+    Spec("GameWorld_CenterCameraOnTile", 0x0051b560, "thiscall", [below(384), below(384)],
+         presets=camera_tile, globals=screen_size),
+    Spec("GameWorld_RandomBelow6", 0x00503880, "thiscall", []),
+    Spec("CLogicThread_PushUiFeedback", 0x0053f560, "logicthread", [anything],
+         presets=ui_feedback_count),
+    # settlers (settler_queries.cpp)
+    Spec("GameWorld_SetSettlerTarget", 0x00503610, "thiscall",
+         [below(0x10000), below(400, 0.1), below(400, 0.1)], presets=map_size(between(0, 400))),
+    Spec("GameWorld_CountListSettlersNear", 0x0050e8f0, "thiscall",
+         [lambda rng, pool: 0 if rng.random() < 0.1 else rng.randrange(1, 0x3000),
+          below(20, 0.2), below(384), below(384), below(3, 0.1)],
+         presets=settler_list),
+    Spec("GameWorld_FindNearbySettlerType29", 0x0050cdb0, "thiscall",
+         [between(1, 0x2fff), below(384), below(384)], presets=settlers_around),
+    # game-end counts (game_end.cpp)
+    Spec("CLogicThread_CountBuildingsOfTypes15To18", 0x00514a00, "logicthread", [scratch(0)],
+         presets=game_end_buildings, max_cases=500),
+    Spec("CLogicThread_CountTilesOwnedBy", 0x00514a90, "logicthread",
+         [below(4, 0.1), scratch(0), between(-2, 20)], presets=owned_points),
+    Spec("CLogicThread_CountTilesOwnedByEither", 0x00514ae0, "logicthread",
+         [below(4, 0.1), below(4, 0.1), scratch(0), between(-2, 20)], presets=owned_points),
+    Spec("CLogicThread_SumAreaGoodsPerPlayer", 0x00514b40, "logicthread", [scratch(0)],
+         presets=area_piles),
 ]
 
 
@@ -605,4 +870,8 @@ SELF_TEST = [
          presets=id_table(0xe114d8, 0xe114dc, 0x100)),
     Spec("GameWorld_ClearDiagonalTileByteB", 0x00518d10, "thiscall", [anything], eax_mask=0,
          presets=diagonal_map_size, max_cases=100),
+    Spec("CLogicThread_CountTilesOwnedBy", 0x00514ae0, "logicthread",
+         [below(4, 0.1), below(4, 0.1), scratch(0), between(-2, 20)], presets=owned_points),
+    Spec("GameWorld_FloodFillTileByte10", 0x0051c6c0, "thiscall",
+         [below(12), below(12), anything], presets=flood_replace(0x16, 2), max_cases=100),
 ]

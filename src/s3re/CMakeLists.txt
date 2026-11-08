@@ -18,6 +18,8 @@ add_library(s3re SHARED
     game/building_flags.cpp
     game/building_tiles.cpp
     game/counting.cpp
+    game/flood_fills.cpp
+    game/game_end.cpp
     game/goods_piles.cpp
     game/id_allocators.cpp
     game/logic_thread.cpp
@@ -26,10 +28,12 @@ add_library(s3re SHARED
     game/map_directions.cpp
     game/map_marks.cpp
     game/map_neighbourhood.cpp
+    game/map_terrain.cpp
     game/net_thread.cpp
     game/player_queries.cpp
     game/players.cpp
     game/random.cpp
+    game/settler_queries.cpp
     game/settlers.cpp
     game/statistics.cpp
     game/ui_state.cpp
