@@ -15,7 +15,7 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 123 replacements pass the emulator suite with full block
+Status: all 124 replacements pass the emulator suite with full block
 coverage (2,000 cases each, fewer for the slow ones: the flood fills 150,
 ShiftStatistics 60, the map-wide loops and table scans 150-800);
 `--self-test` catches 11/11 wrong pairings. Batches 9-11 passed the
@@ -142,8 +142,10 @@ coverage; whole-game check NOT run yet):
   settlers at player record +0x6e / +0x76, settlers linked +0x10/+0x12),
   RemoveSettlerFromLists (0x50dff0; also edits ten global lists in
   S3.EXE's data at 0x7ad620)
-Written but not built yet: AddGoodsToPile (0x505650), patch kept in the
-session scratchpad only (lost); redo from the notes in the session log.
+Batch 16 (2026-11-08, 1 function; whole-game check NOT run yet):
+area_piles.cpp: AddGoodsToPile (0x505650, 33 call sites; EAX reproduced
+step by step). Next similar ones: 0x5058c0 (probably taking goods from a
+pile) and 0x507f60, both DebugLog users near it.
 
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly

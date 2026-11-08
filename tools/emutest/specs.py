@@ -938,6 +938,19 @@ def settler_lists_globals(rng, pool, args):
     return fields
 
 
+def pile_add(rng, pool, args):
+    record = PILES + args[0] * PILE_BYTES
+    x, y = rng.randrange(384), rng.randrange(384)
+    amount = rng.randrange(10) if rng.random() < 0.85 else rng.getrandbits(8)
+    goods = rng.randrange(36)
+    area = rng.randrange(AREA_LIMIT)
+    return [(record + 0x4, rng.choice([0, 0xfe, 0xff, 0xff, 1, 7]), 1), (record + 0x1, amount, 1),
+            (record + 0x2, amount if rng.random() < 0.5 else rng.randrange(10), 1),
+            (record + 0x3, rng.randrange(3), 1), (record + 0x0, goods, 1),
+            (record + 0x6, x, 2), (record + 0x8, y, 2), (tile_area_offset(x, y), area, 2),
+            (AREAS + 0xa + (area * 0x170 + goods) * 2, 0 if rng.random() < 0.3 else rng.randrange(1, 0x1000), 2)]
+
+
 TILE = between(2, 381)  # tiles at least 2 from the edge of a 384 map
 
 SPECS = [
@@ -1192,6 +1205,7 @@ SPECS = [
          presets=building_and_waiting),
     Spec("GameWorld_RemoveSettlerFromLists", 0x0050dff0, "thiscall", [between(1, 8)],
          presets=settler_lists_world, globals=settler_lists_globals, max_cases=500),
+    Spec("GameWorld_AddGoodsToPile", 0x00505650, "thiscall", [between(1, 0xfff)], presets=pile_add),
 ]
 
 
