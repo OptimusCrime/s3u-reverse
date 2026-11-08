@@ -212,7 +212,7 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   the synthetic-input seed); it has been upgraded to version 2.
 - **Diagnostics in `s3re.log`:** the game's own `DebugLog` messages (688
   call sites, silent in the release build; at most 5 per call site, with
-  callers), and for access violations in game code the registers, memory
+  callers; calls from our replacements show as `s3re.dll+RVA`), and for access violations in game code the registers, memory
   and callers (`src/s3re/crash_log.cpp`). The game also appends its own
   crash reports to `Settlers3Ultimate/errorlog.txt`.
 - **`--exit-after-ticks` shuts the game down normally** (WM_CLOSE to its

@@ -28,6 +28,19 @@
 //   tile is on the map (unsigned compares) and in the same area (tile word
 //   +0x14) as the building's tile (+0xa/+0xc). EAX (one caller
 //   tail-returns it) = the world pointer. ret 4.
+// CLogicThread::DrawBuildingRouteOverlay (0x005236b0): (building): starts a
+//   new search generation and draws up to four DrawOverlayLine segments
+//   (values 1..4) through the points of the building's extra record (uint16
+//   +0x34 = record number; 0x5a-byte records at world+0x10f45e8, see
+//   GameWorld::AllocBuildingExtra): points 1..3 x at +0x2/+0x4/+0x6, y at
+//   +0xa/+0xc/+0xe, 0xffff = not set (skipped); the end point x +0x8, y
+//   +0x10 (nothing is drawn if its x is 0xffff). The line starts at the
+//   building's word pair +0x2/+0x4 for type (+0x6) 0x22, +0x30/+0x32 for
+//   type 0x21, and otherwise (an original quirk, probably never reached) at
+//   (building, building). Probably a trade route (types 0x21/0x22 would be
+//   the trading buildings). Callers (ProcessEvents, ExecuteCommands)
+//   tail-return EAX, but theirs is ignored or overwritten: not reproduced.
+//   ret 4.
 
 #include "game/replacements.h"
 #include "game/world.h"
@@ -57,6 +70,10 @@ constexpr std::uint32_t kBuildingType = 0x6;
 constexpr std::uint32_t kBuildingX = 0xa;
 constexpr std::uint32_t kBuildingY = 0xc;
 constexpr std::uint32_t kBuildingBuildup = 0x21;
+constexpr std::uint32_t kBuildingExtraNumber = 0x34;
+constexpr std::uint32_t kBuildingExtras = 0x10f45e8;
+constexpr std::uint32_t kBuildingExtraBytes = 0x5a;
+constexpr std::uint16_t kNoPoint = 0xffff;
 
 template <typename T>
 T& At(GameWorld* world, std::uint32_t offset) {
@@ -97,6 +114,7 @@ std::uint32_t WorkAreaEntry(std::uint32_t type) {
 using LineFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t x0, std::uint32_t y0,
                                           std::uint32_t x1, std::uint32_t y1, std::uint32_t value);
 using WorkAreaFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t building);
+using RouteFn = void(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t building);
 
 // Purpose: Display only: marks the tiles along a straight line on the map (for an overlay the drawing code
 // shows, e.g. probably a connection between two places).
@@ -180,10 +198,48 @@ std::uint32_t __fastcall CLogicThread_DrawWorkAreaOverlay(CLogicThread* self, vo
     return result;
 }
 
+// Purpose: Display only: when a trading building (probably market or port) is selected, draws its route
+// as lines on the map: from the building through up to three waypoints to the destination.
+void __fastcall CLogicThread_DrawBuildingRouteOverlay(CLogicThread* self, void*, std::uint32_t building) {
+    GameWorld* world = WorldOf(self);
+    const std::uint32_t record = kBuildings + building * kBuildingBytes;
+    const std::uint8_t type = At<std::uint8_t>(world, record + kBuildingType);
+    std::uint32_t x = building;
+    std::uint32_t y = building;
+    if (type == 0x22) {
+        x = At<std::uint16_t>(world, record + 0x2);
+        y = At<std::uint16_t>(world, record + 0x4);
+    } else if (type == 0x21) {
+        x = At<std::uint16_t>(world, record + 0x30);
+        y = At<std::uint16_t>(world, record + 0x32);
+    }
+    const std::uint32_t extra =
+        kBuildingExtras + static_cast<std::uint32_t>(At<std::uint16_t>(world, record + kBuildingExtraNumber)) *
+                              kBuildingExtraBytes;
+    GameWorld_NextSearchGeneration(world, nullptr);
+    if (At<std::uint16_t>(world, extra + 0x8) == kNoPoint) {
+        return;
+    }
+    for (std::uint32_t point = 0; point < 3; ++point) {
+        const std::uint16_t px = At<std::uint16_t>(world, extra + 0x2 + point * 2);
+        if (px == kNoPoint) {
+            continue;
+        }
+        const std::uint32_t py = At<std::uint16_t>(world, extra + 0xa + point * 2);
+        CLogicThread_DrawOverlayLine(self, nullptr, x, y, px, py, point + 1);
+        x = px;
+        y = py;
+    }
+    CLogicThread_DrawOverlayLine(self, nullptr, x, y, At<std::uint16_t>(world, extra + 0x8),
+                                 At<std::uint16_t>(world, extra + 0x10), 4);
+}
+
 S3RE_HOOK(0x00523560, CLogicThread_DrawOverlayLine, LineFn, Original_CLogicThread_DrawOverlayLine,
           CLogicThread_DrawOverlayLine);
 S3RE_HOOK(0x00523840, CLogicThread_DrawWorkAreaOverlay, WorkAreaFn, Original_CLogicThread_DrawWorkAreaOverlay,
           CLogicThread_DrawWorkAreaOverlay);
+S3RE_HOOK(0x005236b0, CLogicThread_DrawBuildingRouteOverlay, RouteFn, Original_CLogicThread_DrawBuildingRouteOverlay,
+          CLogicThread_DrawBuildingRouteOverlay);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -194,6 +250,8 @@ namespace {
 constexpr std::uint32_t kTestBuildings = 0x100;
 constexpr std::size_t kTestWorld = kBuildings + (kTestBuildings + 1) * kBuildingBytes;
 constexpr std::uint32_t kTableEntries = 3200;
+constexpr std::uint32_t kTestExtras = 64;
+static_assert(kBuildingExtras + (kTestExtras + 1) * kBuildingExtraBytes < kTestWorld, "extras inside the test world");
 
 // Two fake logic threads, each pointing at one of the worlds.
 class ThreadPair {
@@ -312,7 +370,60 @@ void CompareWorkArea(test::Context& ctx, WorkAreaFn candidate, int cases) {
     }
 }
 
+// Wrong: skips the second waypoint.
+void __fastcall WrongDrawBuildingRouteOverlay(CLogicThread* self, void* edx, std::uint32_t building) {
+    GameWorld* world = WorldOf(self);
+    const std::uint32_t number = At<std::uint16_t>(world, kBuildings + building * kBuildingBytes + kBuildingExtraNumber);
+    const std::uint32_t extra = kBuildingExtras + number * kBuildingExtraBytes;
+    const std::uint16_t saved = At<std::uint16_t>(world, extra + 0x4);
+    At<std::uint16_t>(world, extra + 0x4) = kNoPoint;
+    CLogicThread_DrawBuildingRouteOverlay(self, edx, building);
+    At<std::uint16_t>(world, extra + 0x4) = saved;
+}
+
+void CompareRoute(test::Context& ctx, RouteFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    ThreadPair threads(worlds);
+    static constexpr std::uint8_t kTypes[] = {0x21, 0x22, 0x21, 0x22, 0x21, 0x22, 0, 0x20, 0xff};
+    for (int i = 0; i < cases; ++i) {
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, ctx.rng().Chance(2, 3) ? 384 : 1 + ctx.rng().Below(384));
+        worlds.Set<std::uint8_t>(world_offset::kSearchGeneration,
+                                 static_cast<std::uint8_t>(ctx.rng().Chance(1, 20) ? 0xff : ctx.rng().Below(255)));
+        const std::uint32_t building = 1 + ctx.rng().Below(kTestBuildings);
+        const std::uint32_t record = kBuildings + building * kBuildingBytes;
+        worlds.Set<std::uint8_t>(record + kBuildingType, kTypes[ctx.rng().Below(sizeof(kTypes))]);
+        static constexpr std::uint32_t kFields[] = {0x2, 0x4, 0x30, 0x32};
+        for (const std::uint32_t field : kFields) {
+            worlds.Set<std::uint16_t>(record + field, static_cast<std::uint16_t>(ctx.rng().Below(384)));
+        }
+        const std::uint32_t number = 1 + ctx.rng().Below(kTestExtras);
+        worlds.Set<std::uint16_t>(record + kBuildingExtraNumber, static_cast<std::uint16_t>(number));
+        const std::uint32_t extra = kBuildingExtras + number * kBuildingExtraBytes;
+        for (std::uint32_t point = 0; point < 4; ++point) {
+            const bool unset = ctx.rng().Chance(1, point == 3 ? 10 : 3);
+            worlds.Set<std::uint16_t>(extra + 0x2 + point * 2,
+                                      unset ? kNoPoint : static_cast<std::uint16_t>(ctx.rng().Below(384)));
+            worlds.Set<std::uint16_t>(extra + 0xa + point * 2, static_cast<std::uint16_t>(ctx.rng().Below(384)));
+        }
+        Original_CLogicThread_DrawBuildingRouteOverlay(threads.original(), nullptr, building);
+        candidate(threads.ours(), nullptr, building);
+        if ((i % 16 == 15 || i == cases - 1) && !worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 15 before it): building %u", i, building);
+            return;
+        }
+    }
+}
+
 }  // namespace
+
+S3RE_TEST(CLogicThread_DrawBuildingRouteOverlay_MatchesOriginal) {
+    CompareRoute(ctx, &CLogicThread_DrawBuildingRouteOverlay, 800);
+}
+S3RE_TEST(CLogicThread_DrawBuildingRouteOverlay_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareRoute(probe, &WrongDrawBuildingRouteOverlay, 200);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(CLogicThread_DrawOverlayLine_MatchesOriginal) {
     CompareLine(ctx, &CLogicThread_DrawOverlayLine, 5000);

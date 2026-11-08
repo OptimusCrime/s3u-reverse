@@ -16,6 +16,7 @@ add_library(s3re SHARED
     replay/command_log.cpp
 
     game/area_piles.cpp
+    game/area_split.cpp
     game/building_flags.cpp
     game/building_goods.cpp
     game/building_tiles.cpp

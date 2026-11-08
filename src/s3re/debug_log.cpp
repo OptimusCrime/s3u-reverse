@@ -10,6 +10,11 @@
 // thiscall without a format string. Only calls whose first stack argument
 // points into S3.EXE's data are formatted, and formatting is guarded by SEH
 // (a %s argument could be a bad pointer).
+//
+// Our replacements call DebugLog too, with the original's format string
+// (game/debug_log.h). Those call sites lie in s3re.dll; they are logged as
+// "s3re.dll+RVA", and the stack callers (return addresses in S3.EXE) tell
+// which original call site reached the replacement.
 
 #include "game/debug_log.h"
 #include "hooks.h"
@@ -36,6 +41,33 @@ constexpr int kPerSite = 5;
 constexpr int kSites = 1024;
 
 SRWLOCK g_lock = SRWLOCK_INIT;
+
+// Our own image (s3re.dll), found from an address inside it.
+struct OwnImage {
+    std::uintptr_t begin = 0;
+    std::uintptr_t end = 0;
+};
+
+OwnImage FindOwnImage() {
+    OwnImage image;
+    HMODULE module = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(&FindOwnImage), &module) &&
+        module != nullptr) {
+        const auto base = reinterpret_cast<const std::uint8_t*>(module);
+        const auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+        const auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+        image.begin = reinterpret_cast<std::uintptr_t>(base);
+        image.end = image.begin + nt->OptionalHeader.SizeOfImage;
+    }
+    return image;
+}
+
+const OwnImage& Own() {
+    static const OwnImage image = FindOwnImage();
+    return image;
+}
 std::uintptr_t g_siteAddress[kSites];
 int g_siteCount[kSites];
 
@@ -133,7 +165,9 @@ void __stdcall LogMessage(const std::uint32_t* stack) {
         }
         g_capture->push_back(call);
     }
-    if (site < kGameCodeBegin || site >= kGameCodeEnd || formatAddress < kGameDataBegin ||
+    const bool fromGame = site >= kGameCodeBegin && site < kGameCodeEnd;
+    const bool fromOurs = site >= Own().begin && site < Own().end;
+    if ((!fromGame && !fromOurs) || formatAddress < kGameDataBegin ||
         formatAddress >= kGameDataEnd) {
         return;
     }
@@ -145,9 +179,17 @@ void __stdcall LogMessage(const std::uint32_t* stack) {
     char message[512];
     const bool ok = Format(message, sizeof(message), format,
                            reinterpret_cast<va_list>(const_cast<std::uint32_t*>(stack + 2)));
-    S3RE_LOG("DebugLog from %08x: %s%s", static_cast<unsigned>(site),
-             ok ? message : "(could not format) ", ok ? "" : format);
-    if (previous == 0) {
+    if (fromGame) {
+        S3RE_LOG("DebugLog from %08x: %s%s", static_cast<unsigned>(site),
+                 ok ? message : "(could not format) ", ok ? "" : format);
+    } else {
+        S3RE_LOG("DebugLog from s3re.dll+%x (replacement): %s%s",
+                 static_cast<unsigned>(site - Own().begin), ok ? message : "(could not format) ",
+                 ok ? "" : format);
+    }
+    // A replacement is reached from many original call sites: log the
+    // callers every time (the per-site limit still applies).
+    if (previous == 0 || fromOurs) {
         LogCallers(stack + 1);
     }
 }

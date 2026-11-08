@@ -21,6 +21,13 @@
 //   nothing if it holds an entry {6, a, ..}. EAX = the new write index
 //   before wrapping (1..1000), or, when skipped, the index after the
 //   duplicate (wrapped; one caller passes EAX on). ret 0x10.
+// GameWorld::QueuePendingEvent (0x004e8ba0): (type, a, b) appends {type,
+//   a, b} (int32 each) to the 12-byte ring at world+0x2f990 (the ring that
+//   QueueEvent checks; read/write indices world+0x32870/+0x32874; no
+//   full check). For type 4 it first scans the ring from read to write and
+//   appends nothing if it holds an entry {4, a, ..}. EAX as in QueueEvent:
+//   the new write index before wrapping (1..1000), or, when skipped, the
+//   index after the duplicate (wrapped). ret 0xc; callers ignore EAX.
 // GameWorld::QueueMarkedTile (0x004e6c40): (x, y, player) if the tile has
 //   flag 0x10 and not flag 0x1 in byte +0xa and is owned by `player` (byte
 //   +0x8, compared as int32): clears flag 0x10 and appends (x, y) as uint16
@@ -86,6 +93,7 @@ constexpr std::uint32_t kPendingRead = 0x32870;
 constexpr std::uint32_t kPendingWrite = 0x32874;
 constexpr std::uint32_t kRingEntries = 1000;
 constexpr std::uint32_t kDedupedType = 6;
+constexpr std::uint32_t kDedupedPendingType = 4;
 
 constexpr std::uint32_t kTiles = 0x67444;
 constexpr std::uint32_t kTileOwner = 0x8;
@@ -132,6 +140,8 @@ using Alloc36700Fn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std
                                                 std::uint32_t a9);
 using QueueEventFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t type,
                                                 std::uint32_t a, std::uint32_t b, std::uint32_t c);
+using QueuePendingEventFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t type,
+                                                       std::uint32_t a, std::uint32_t b);
 using QueueTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
                                                std::uint32_t y, std::uint32_t player);
 using NoArgFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
@@ -377,12 +387,48 @@ std::uint32_t __fastcall GameWorld_ReplaceTileByte10AndQueue(GameWorld* world, v
     return 0;  // callers ignore EAX
 }
 
+// Purpose: Adds an entry to the world's second, smaller event queue (the one QueueEvent checks for
+// duplicates; probably events still to be handled, e.g. for areas); an entry of type 4 for the same
+// thing that is already queued is not added again.
+std::uint32_t __fastcall GameWorld_QueuePendingEvent(GameWorld* world, void*, std::uint32_t type,
+                                                     std::uint32_t a, std::uint32_t b) {
+    if (type == kDedupedPendingType) {
+        std::uint32_t read = At<std::uint32_t>(world, kPendingRead);
+        const std::uint32_t write = At<std::uint32_t>(world, kPendingWrite);
+        if (read != write) {
+            bool found = false;
+            do {
+                const std::uint32_t entry = kPendingRing + read * kPendingBytes;
+                found = At<std::uint32_t>(world, entry) == kDedupedPendingType &&
+                        At<std::uint32_t>(world, entry + 4) == a;
+                if (++read == kRingEntries) {
+                    read = 0;
+                }
+            } while (!found && read != write);
+            if (found) {
+                return read;  // the index after the duplicate
+            }
+        }
+    }
+    At<std::uint32_t>(world, kPendingRing + At<std::uint32_t>(world, kPendingWrite) * kPendingBytes) = type;
+    At<std::uint32_t>(world, kPendingRing + At<std::uint32_t>(world, kPendingWrite) * kPendingBytes + 4) = a;
+    At<std::uint32_t>(world, kPendingRing + At<std::uint32_t>(world, kPendingWrite) * kPendingBytes + 8) = b;
+    const std::uint32_t next = At<std::uint32_t>(world, kPendingWrite) + 1;
+    At<std::uint32_t>(world, kPendingWrite) = next;
+    if (next == kRingEntries) {
+        At<std::uint32_t>(world, kPendingWrite) = 0;
+    }
+    return next;
+}
+
 S3RE_HOOK(0x004df0a0, GameWorld_AllocBuildingExtra, ValueFn, Original_GameWorld_AllocBuildingExtra,
           GameWorld_AllocBuildingExtra);
 S3RE_HOOK(0x004fefd0, GameWorld_AllocTable36700Record, Alloc36700Fn,
           Original_GameWorld_AllocTable36700Record, GameWorld_AllocTable36700Record);
 S3RE_HOOK(0x004e8ad0, GameWorld_QueueEvent, QueueEventFn, Original_GameWorld_QueueEvent,
           GameWorld_QueueEvent);
+S3RE_HOOK(0x004e8ba0, GameWorld_QueuePendingEvent, QueuePendingEventFn, Original_GameWorld_QueuePendingEvent,
+          GameWorld_QueuePendingEvent);
 S3RE_HOOK(0x004e6c40, GameWorld_QueueMarkedTile, QueueTileFn, Original_GameWorld_QueueMarkedTile,
           GameWorld_QueueMarkedTile);
 S3RE_HOOK(0x0051ce50, GameWorld_QueueMarkedTileTerrain5To7, PositionFn,
@@ -524,6 +570,54 @@ S3RE_TEST(GameWorld_QueueEvent_MatchesOriginal) {
 S3RE_TEST(GameWorld_QueueEvent_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareQueueEvent(probe, Original_GameWorld_QueueEvent, &WrongQueueEvent, 500);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+namespace {
+
+// Wrong: checks for duplicates of type 6 instead of 4.
+std::uint32_t __fastcall WrongQueuePendingEvent(GameWorld* world, void* edx, std::uint32_t type, std::uint32_t a,
+                                                std::uint32_t b) {
+    if (type == kDedupedPendingType || type == kDedupedType) {
+        const std::uint32_t write = At<std::uint32_t>(world, kPendingWrite);
+        const std::uint32_t result = GameWorld_QueuePendingEvent(world, edx, type ^ 4 ^ 6, a, b);
+        if (At<std::uint32_t>(world, kPendingWrite) != write) {
+            At<std::uint32_t>(world, kPendingRing + write * kPendingBytes) = type;
+        }
+        return result;
+    }
+    return GameWorld_QueuePendingEvent(world, edx, type, a, b);
+}
+
+void CompareQueuePendingEvent(test::Context& ctx, QueuePendingEventFn candidate, int cases) {
+    Compare(ctx, cases, true, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
+        SetUpRings(ctx, worlds);
+        for (int k = 0; k < 4; ++k) {
+            const std::uint32_t entry = kPendingRing + ctx.rng().Below(kRingEntries) * kPendingBytes;
+            worlds.Set<std::uint32_t>(entry, kDedupedPendingType);
+            worlds.Set<std::uint32_t>(entry + 4, ctx.rng().Below(4));
+        }
+        if (ctx.rng().Chance(1, 8)) {
+            worlds.Set<std::uint32_t>(kPendingWrite, kRingEntries - 1);
+        }
+        const std::uint32_t type = ctx.rng().Chance(1, 2) ? kDedupedPendingType
+                                   : ctx.rng().Chance(1, 3) ? kDedupedType
+                                                            : ctx.rng().Below(10);
+        const std::uint32_t a = ctx.rng().Below(4);
+        const std::uint32_t b = ctx.rng().Next32();
+        expected = Original_GameWorld_QueuePendingEvent(worlds.original(), nullptr, type, a, b);
+        actual = candidate(worlds.ours(), nullptr, type, a, b);
+    });
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_QueuePendingEvent_MatchesOriginal) {
+    CompareQueuePendingEvent(ctx, &GameWorld_QueuePendingEvent, 2000);
+}
+S3RE_TEST(GameWorld_QueuePendingEvent_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareQueuePendingEvent(probe, &WrongQueuePendingEvent, 500);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

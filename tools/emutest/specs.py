@@ -1458,6 +1458,339 @@ SPECS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# batch 18
+# ---------------------------------------------------------------------------
+
+BUILDING_EXTRAS = 0x10f45e8
+BUILDING_EXTRA_BYTES = 0x5a
+AREA_HIGH_WATER = 0xe115dc
+PLAYER_RACE = PLAYER_RECORDS + 4
+
+
+def pending_type(rng, pool):
+    return rng.choice([4, 4, 4, 6, rng.randrange(10), anything(rng, pool)])
+
+
+def pending_rings(rng, pool, args):
+    """The 12-byte ring: read/write indices (sometimes the write index at the
+    end), entries in between often {4, 0..3}."""
+    read = rng.choice([rng.randrange(1000), 999, 995])
+    length = rng.choice([0, 1, rng.randrange(12)])
+    write = (read + length) % 1000
+    fields = []
+    for i in range(length):
+        entry = PENDING_RING + ((read + i) % 1000) * 12
+        fields += [(entry, 4 if rng.random() < 0.5 else rng.randrange(10), 4), (entry + 4, rng.randrange(4), 4)]
+    if rng.random() < 0.1:
+        write = 999
+    return fields + [(0x32870, read, 4), (0x32874, write, 4)]
+
+
+def building_route(rng, pool, args):
+    """The building's type (mostly 0x21/0x22), its start words, its extra
+    record with waypoints (sometimes unset) and end point (rarely unset)."""
+    record = BUILDINGS + args[0] * BUILDING_BYTES
+    number = rng.randrange(1, 999)
+    extra = BUILDING_EXTRAS + number * BUILDING_EXTRA_BYTES
+    n = rng.choice([384, rng.randrange(1, 384)])
+    fields = [(MAP_SIZE, n, 4), (record + 0x6, rng.choice([0x21, 0x22, 0x21, 0x22, 0, 0x20, 0xff]), 1),
+              (record + 0x34, number, 2), (SEARCH_GENERATION, 0xff if rng.random() < 0.05 else rng.randrange(255), 1)]
+    for field in (0x2, 0x4, 0x30, 0x32):
+        fields.append((record + field, rng.randrange(384), 2))
+    for point in range(4):
+        unset = rng.random() < (0.1 if point == 3 else 0.3)
+        fields += [(extra + 0x2 + point * 2, 0xffff if unset else rng.randrange(384), 2),
+                   (extra + 0xa + point * 2, rng.randrange(384), 2)]
+    return fields
+
+
+def fetch_goods(rng, pool, args):
+    """(area, building, goods): the area's piles of the goods type near the
+    building (on tiles of that area), carriers in the area's list, and the
+    building's six piles as a ring."""
+    area, building, goods = args
+    record = BUILDINGS + building * BUILDING_BYTES
+    x, y = rng.randrange(32, 352), rng.randrange(32, 352)
+    fields = [(MAP_SIZE, 384, 4), (BUILDING_COUNT, rng.randrange(4), 4), (record + 0x2, x, 2),
+              (record + 0x4, y, 2), (record + 0x34, rng.randrange(1, 999), 2)]
+    head = AREAS + area * AREA_BYTES + 0xa + goods * 2
+    length = 0 if rng.random() < 0.1 else rng.randint(1, 8)
+    piles = rng.sample(range(1, 0x800), length)
+    fields.append((head, piles[0] if piles else 0, 2))
+    for i, pile in enumerate(piles):
+        r = PILES + pile * PILE_BYTES
+        px, py = x + rng.randint(-30, 30), y + rng.randint(-30, 30)
+        amount = rng.randrange(10)
+        leaving = amount if rng.random() < 0.25 else rng.randrange(10)
+        fields += [(r + 0xc, piles[i + 1] if i + 1 < length else 0, 2), (r + 0x6, px, 2), (r + 0x8, py, 2),
+                   (r + 0x1, amount, 1), (r + 0x2, leaving, 1), (r + 0x4, rng.choice([0xff, 0xff, 0, 0xfe, 1]), 1),
+                   (r + 0x0, goods, 1), (tile_area_offset(px, py), area, 2)]
+    fields += waiting_list(rng, AREAS + area * AREA_BYTES + 0x12a, x, y)
+    ring = [rng.randrange(0x800, 0x1000) for _ in range(6)]
+    fields.append((record + 0xe, ring[0], 2))
+    for k, pile in enumerate(ring):
+        r = PILES + pile * PILE_BYTES
+        c = rng.randrange(4)
+        fields += [(r + 0xc, ring[(k + 1) % 6], 2),
+                   (r + 0x0, goods if c == 0 else 0xff if c == 1 else rng.randrange(36), 1),
+                   (r + 0x1, rng.randrange(9), 1), (r + 0x2, rng.randrange(0x80), 1)]
+    return fields
+
+
+def init_area(rng, pool, args):
+    race = rng.choice([0, 1, 2, 3, 0, 1, 2, 3, 4, rng.getrandbits(32)])
+    return event_rings(rng, pool, args) + [(PLAYER_RACE + args[1] * PLAYER_RECORD_BYTES, race, 4)]
+
+
+def alloc_area(rng, pool, args):
+    """Areas 1..first-1 used, `first` free: near the start, 0xffe, 0xfff
+    (never handed out) or none."""
+    r = rng.random()
+    if r < 0.1:
+        first = 0xffe
+    elif r < 0.2:
+        first = 0xfff
+    elif r < 0.3:
+        first = 0x1000
+    else:
+        first = rng.randrange(1, 64)
+    fields = event_rings(rng, pool, args)
+    for area in range(1, min(first, 0xfff) + 1):
+        fields.append((AREAS + area * AREA_BYTES, 0xff if area == first else rng.randrange(20), 1))
+    fields.append((AREA_HIGH_WATER, rng.choice([first - 1, first, first + 1, rng.getrandbits(32)]) & 0xFFFFFFFF, 4))
+    fields.append((PLAYER_RACE + args[0] * PLAYER_RECORD_BYTES, rng.randrange(4), 4))
+    return fields
+
+
+def area_lists(rng, area: int, n: int, counters: dict) -> list:
+    """Valid terminated lists of area `area` (pile list +0x8, 36 goods pile
+    lists, 48 settler lists), mostly empty, members on tiles of the map."""
+    r = AREAS + area * AREA_BYTES
+    fields = []
+
+    def fill(head, table, size, x_field, y_field, previous_field, next_field, key):
+        length = rng.randint(1, 4) if rng.random() < 0.2 else 0
+        fields.append((head, counters[key] if length else 0, 2))
+        previous = 0
+        for k in range(length):
+            member = counters[key]
+            counters[key] += 1
+            record = table + member * size
+            fields.extend([(record + previous_field, previous, 2),
+                           (record + next_field, counters[key] if k + 1 < length else 0, 2),
+                           (record + x_field, rng.randrange(n), 2), (record + y_field, rng.randrange(n), 2)])
+            previous = member
+
+    fill(r + 0x8, PILES, PILE_BYTES, 0x6, 0x8, 0xa, 0xc, "pile")
+    for i in range(36):
+        fill(r + 0xa + 2 * i, PILES, PILE_BYTES, 0x6, 0x8, 0xa, 0xc, "pile")
+    for i in range(48):
+        fill(r + 0x12a + 2 * i, SETTLERS, SETTLER_BYTES, 0x4, 0x6, 0x12, 0x10, "settler")
+    return fields
+
+
+def area_map(rng, n: int, full: bool = False, stripes: bool = False) -> list:
+    """An n x n map in areas 1..3 (patches, some tiles in none), the frame off
+    the map in none; areas 1..3 used with valid lists, 4..16 used or free
+    (16 free unless `full`), races 0..3 (sometimes other), the real offsets
+    in entries 0..18. With `stripes` every tile is in an area and each area
+    is one connected stripe (merging assumes connected areas: a second
+    piece of a merged area would link its stale lists twice)."""
+    patch = rng.randint(1, 4)
+    empty = rng.randrange(3)
+    orientation = rng.randrange(3)
+    first = rng.randint(-2, n)
+    second = first + rng.randint(1, n)
+    fields = [(MAP_SIZE, n, 4)]
+    for k, (dx, dy) in enumerate(AROUND + RING2):
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4)]
+    for x in range(-1, n + 1):
+        for y in range(-1, n + 1):
+            area = 0
+            if 0 <= x < n and 0 <= y < n and stripes:
+                f = x if orientation == 0 else y if orientation == 1 else x - y
+                area = 1 if f < first else 2 if f < second else 3
+            elif 0 <= x < n and 0 <= y < n and rng.randrange(8) >= empty:
+                area = 1 + ((x // patch) * 5 + (y // patch) * 3 + (1 if rng.random() < 1 / 6 else 0)) % 3
+            xx, yy = x & 0xFFFFFFFF, y & 0xFFFFFFFF
+            fields += [(tile_area_offset(xx, yy), area, 2), (tile(xx, yy) + 0xa, rng.getrandbits(8), 1),
+                       (tile(xx, yy) + 0x8, rng.randrange(20), 1)]
+    counters = {"pile": rng.randrange(1, 0x1000), "settler": rng.randrange(1, 0x1000)}
+    for area in range(1, 17):
+        used = area <= 3 or (area < 16 and rng.random() < 0.5) or full
+        fields.append((AREAS + area * AREA_BYTES, rng.randrange(20) if used else 0xff, 1))
+        if area <= 3:
+            fields += area_lists(rng, area, n, counters)
+    for player in range(20):
+        race = rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(4)
+        fields.append((PLAYER_RACE + player * PLAYER_RECORD_BYTES, race, 4))
+    fields.append((AREA_HIGH_WATER, rng.randrange(18), 4))
+    return fields
+
+
+def two_areas() -> list[Generator]:
+    """(old, new): two different areas of 1..3."""
+    state = {}
+
+    def old(rng, pool):
+        state["old"] = rng.randint(1, 3)
+        return state["old"]
+
+    def new(rng, pool):
+        return rng.choice([a for a in (1, 2, 3) if a != state["old"]])
+
+    return [old, new]
+
+
+def move_area_contents(rng, pool, args):
+    return event_rings(rng, pool, args) + area_map(rng, rng.randint(2, 10))
+
+
+def split_area(rng, pool, args):
+    """The tile (args) on an n x n map (sometimes on its edge), in one of the
+    areas 1..3."""
+    n = rng.randint(max(args[0], args[1]) + 1, 10)
+    fields = event_rings(rng, pool, args) + area_map(rng, n, full=rng.random() < 0.03)
+    return fields + [(tile_area_offset(args[0], args[1]), rng.randint(1, 3), 2)]
+
+
+def word16_regions(rng, n: int) -> list:
+    """Word-16 regions: each connected stretch of random walkable tiles its
+    own id (a shared id could be freed and handed out again while in use:
+    the flood fill would loop for ever), ids in use marked; byte-10 regions:
+    one region over the whole map (one split per call is safe)."""
+    density = rng.randrange(4, 9)
+    walk = {(x, y): rng.randrange(8) < density for x in range(n) for y in range(n)}
+    label = {}
+    next_id = 1
+    for start in walk:
+        if not walk[start] or start in label:
+            continue
+        label[start] = next_id
+        stack = [start]
+        while stack:
+            x, y = stack.pop()
+            for dx, dy in AROUND[1:]:
+                q = (x + dx, y + dy)
+                if walk.get(q) and q not in label:
+                    label[q] = next_id
+                    stack.append(q)
+        next_id += 1
+    fields = []
+    for x in range(-1, n + 1):
+        for y in range(-1, n + 1):
+            t = tile(x & 0xFFFFFFFF, y & 0xFFFFFFFF)
+            on = 0 <= x < n and 0 <= y < n
+            fields += [(t + 0x16, label.get((x, y), 0), 2), (t + 0x10, 1 if on and rng.random() < 7 / 8 else 0, 1)]
+    for i in range(next_id + 2):
+        fields.append((0xe125e8 + i, 1 if 0 < i < next_id else 0, 1))
+    fields.append((0xe125e4, rng.randrange(next_id + 2), 4))
+    for i in range(8):
+        fields.append((0xe114dc + i, 1 if i == 1 else 0, 1))
+    fields.append((0xe114d8, rng.randrange(4), 4))
+    return fields
+
+
+def block_tile(rng, pool, args):
+    """As split_area, plus regions; the tile mostly not yet blocked,
+    sometimes with a marked (>= 0x8000) or no area."""
+    x, y = args
+    n = rng.randint(max(x, y) + 1, 10)
+    fields = event_rings(rng, pool, args) + area_map(rng, n, full=rng.random() < 0.03) + word16_regions(rng, n)
+    r = rng.random()
+    area = rng.randint(1, 3) if r < 0.75 else (0x8000 + rng.randrange(4)) if r < 0.88 else 0
+    flags = rng.getrandbits(8)
+    flags = flags | 1 if rng.random() < 0.15 else flags & 0xFE
+    return fields + [(tile_area_offset(x, y), area, 2), (tile(x, y) + 0xa, flags, 1)]
+
+
+def merge_area_contents(rng, pool, args):
+    fields = event_rings(rng, pool, args) + area_map(rng, rng.randint(2, 10))
+    return fields + [(AREAS + area * AREA_BYTES + 0x4, rng.randrange(4), 4) for area in args]
+
+
+def join_areas_map(rng, n: int) -> list:
+    """An n x n map of connected stripe areas; owners of 1..3 players on the
+    map's tiles, none (0xfe) on the frame; most tiles not blocked."""
+    fields = event_rings(rng, None, None) + area_map(rng, n, full=rng.random() < 0.03, stripes=True)
+    owners = rng.randint(1, 3)
+    for tx in range(-1, n + 1):
+        for ty in range(-1, n + 1):
+            t = tile(tx & 0xFFFFFFFF, ty & 0xFFFFFFFF)
+            on = 0 <= tx < n and 0 <= ty < n
+            flags = rng.getrandbits(8)
+            fields += [(t + 0x8, rng.randrange(owners) if on else 0xfe, 1),
+                       (t + 0xa, flags if rng.random() < 0.25 else flags & 0xFE, 1)]
+    return fields
+
+
+def join_areas(rng, pool, args):
+    """The tile (args, inside a join_areas_map) without an area."""
+    x, y = args
+    fields = join_areas_map(rng, rng.randint(max(x, y) + 2, 10))
+    return fields + [(tile(x, y) + 0x8, rng.randrange(3), 1), (tile_area_offset(x, y), 0, 2)]
+
+
+def unblock_tile(rng, pool, args):
+    """As join_areas plus regions (word 16 labelled per connected stretch,
+    byte 10 one region); the tile 3 inside the map, mostly blocked, often
+    without byte-10 region or area, sometimes without owner."""
+    x, y = args
+    n = rng.randint(max(x, y) + 4, 12)
+    fields = join_areas_map(rng, n) + word16_regions(rng, n)
+    flags = rng.getrandbits(8)
+    flags = flags | 1 if rng.random() < 0.85 else flags & 0xFE
+    area = 0 if rng.random() < 0.75 else rng.randint(1, 3)
+    owner = 0xff if rng.random() < 0.12 else rng.randrange(3)
+    return fields + [(tile(x, y) + 0xa, flags, 1), (tile(x, y) + 0x10, rng.choice([0, 1]), 1),
+                     (tile_area_offset(x, y), area, 2), (tile(x, y) + 0x8, owner, 1)]
+
+
+def free_tile_owner(rng, pool, args):
+    """(x, y, owner): the tile in a join map, mostly without owner and area,
+    sometimes with a pile (small goods type and amount)."""
+    x, y, _ = args
+    n = rng.randint(max(x, y) + 2, 10)
+    fields = join_areas_map(rng, n)
+    pile = 0 if rng.random() < 0.5 else rng.randrange(0x2000, 0x3000)
+    fields += [(tile(x, y) + 0x8, 0xff if rng.random() < 0.8 else rng.randrange(3), 1),
+               (tile_area_offset(x, y), 0 if rng.random() < 0.8 else rng.randint(1, 3), 2), (tile(x, y) + 0x2, pile, 2)]
+    if pile:
+        fields += [(PILES + pile * PILE_BYTES, rng.randrange(36), 1), (PILES + pile * PILE_BYTES + 1, rng.randrange(9), 1)]
+    return fields
+
+
+SPECS += [
+    Spec("GameWorld_UnblockTile", 0x0051b770, "thiscall", [between(3, 8), between(3, 8)], presets=unblock_tile,
+         max_cases=300),
+    Spec("GameWorld_SetOwnerOfFreeTile", 0x0051b5d0, "thiscall",
+         [between(1, 8), between(1, 8), lambda rng, pool: rng.choice([0, 1, 2, 0xff, 0x100, rng.getrandbits(32)])],
+         presets=free_tile_owner, max_cases=400),
+    Spec("GameWorld_MergeAreaContents", 0x004e5a20, "thiscall", two_areas(), eax_mask=0,
+         presets=merge_area_contents, max_cases=300),
+    Spec("GameWorld_JoinAreasAtTile", 0x004e6150, "thiscall", [between(1, 8), between(1, 8)], eax_mask=0,
+         presets=join_areas, max_cases=400),
+    Spec("GameWorld_QueuePendingEvent", 0x004e8ba0, "thiscall", [pending_type, below(4, 0.1), anything],
+         presets=pending_rings),
+    Spec("CLogicThread_DrawBuildingRouteOverlay", 0x005236b0, "logicthread", [between(1, 0x100)], eax_mask=0,
+         presets=building_route, max_cases=400),
+    Spec("GameWorld_FetchGoodsToTradeBuilding", 0x004de0a0, "thiscall",
+         [between(1, 0x40), between(1, 0x800), below(36)], eax_mask=0, presets=fetch_goods, max_cases=1000),
+    Spec("GameWorld_InitArea", 0x004e6510, "thiscall",
+         [between(1, 0xffe), lambda rng, pool: rng.choice([rng.randrange(20), rng.randrange(256)])], eax_mask=0,
+         presets=init_area, max_cases=500),
+    Spec("GameWorld_AllocArea", 0x004e64c0, "thiscall", [below(20)], presets=alloc_area, max_cases=300),
+    Spec("GameWorld_MoveAreaContents", 0x004e54f0, "thiscall", two_areas(), eax_mask=0,
+         presets=move_area_contents, max_cases=300),
+    Spec("GameWorld_SplitAreaAtTile", 0x004e5d50, "thiscall", [below(10), below(10)], eax_mask=0,
+         presets=split_area, max_cases=400),
+    Spec("GameWorld_BlockTile", 0x0051b6f0, "thiscall", [below(10), below(10)], presets=block_tile,
+         max_cases=300),
+]
+
+
 # Deliberately wrong pairings for `run.py --self-test`: each must be reported
 # as a mismatch, which shows that the harness notices wrong return values,
 # wrong memory writes and wrong conditions.

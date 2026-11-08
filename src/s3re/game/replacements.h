@@ -14,6 +14,10 @@
 
 namespace s3re::game {
 
+// area_piles.cpp
+std::uint32_t __fastcall GameWorld_PileIncAmountLeaving(GameWorld* world, void* edx, std::uint32_t pile);
+std::uint32_t __fastcall GameWorld_AddTilePileToArea(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+
 // building_goods.cpp
 std::uint32_t __fastcall GameWorld_BuildingInputWord2A(GameWorld* world, void* edx, std::uint32_t building,
                                                        std::uint32_t goods);
@@ -23,6 +27,11 @@ std::uint32_t __fastcall GameWorld_SetBuildingInputWord24(GameWorld* world, void
                                                           std::uint32_t goods, std::uint32_t value);
 
 // flood_fills.cpp
+std::uint32_t __fastcall GameWorld_FloodMoveArea(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+                                                 std::uint32_t newArea);
+void __fastcall GameWorld_SplitTileByte10Region(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall GameWorld_SplitWord16RegionsAround(GameWorld* world, void* edx, std::uint32_t x,
+                                                            std::uint32_t y);
 std::uint32_t __fastcall GameWorld_MoveTileToAreaAndQueue(GameWorld* world, void* edx, std::uint32_t x,
                                                           std::uint32_t y, std::uint32_t oldArea,
                                                           std::uint32_t newArea);
@@ -30,6 +39,10 @@ std::uint32_t __fastcall GameWorld_FloodFillTileWord16(GameWorld* world, void* e
                                                        std::uint32_t y, std::uint32_t value);
 std::uint32_t __fastcall GameWorld_FloodFillTileByte10(GameWorld* world, void* edx, std::uint32_t x,
                                                        std::uint32_t y, std::uint32_t value);
+std::uint32_t __fastcall GameWorld_MergeTileByte10Regions(GameWorld* world, void* edx, std::uint32_t x,
+                                                          std::uint32_t y);
+std::uint32_t __fastcall GameWorld_AssignWord16RegionsAround(GameWorld* world, void* edx, std::uint32_t x,
+                                                             std::uint32_t y);
 std::uint32_t __fastcall GameWorld_MergeTileWord16Regions(GameWorld* world, void* edx, std::uint32_t x,
                                                           std::uint32_t y);
 
@@ -97,6 +110,8 @@ std::uint32_t __stdcall TileDistance(std::uint32_t x0, std::uint32_t y0, std::ui
 // world_tables.cpp
 std::uint32_t __fastcall GameWorld_QueueEvent(GameWorld* world, void* edx, std::uint32_t type, std::uint32_t a,
                                               std::uint32_t b, std::uint32_t c);
+std::uint32_t __fastcall GameWorld_QueuePendingEvent(GameWorld* world, void* edx, std::uint32_t type,
+                                                     std::uint32_t a, std::uint32_t b);
 std::uint32_t __fastcall GameWorld_QueueMarkedTileTerrain5To7(GameWorld* world, void* edx,
                                                               std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall GameWorld_QueueMarkedTileNoOwner(GameWorld* world, void* edx,

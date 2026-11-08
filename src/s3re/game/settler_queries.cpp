@@ -78,6 +78,29 @@
 //   word +0x22 = building. EAX = that settler, or 0 if none. (The original
 //   also walks the list to its end twice without using the result; that is
 //   left out.) ret 0xc.
+// GameWorld::FetchGoodsToTradeBuilding (0x004de0a0): (area, building,
+//   goods): picks the pile of `goods` in the area's list for that goods type
+//   (area record at world+0xe145e8 + area*0x2e0, uint16 heads at +0xa +
+//   goods*2; piles linked +0xc) that does not have all its units leaving
+//   (amount +0x1 != leaving +0x2) and has the smallest score: d =
+//   TileDistance(building +0x2/+0x4, pile +0x6/+0x8), and for piles whose
+//   kind (+0x4) is not 0xff the 32-bit value (amount*5 + d + (leaving + 1) *
+//   0x7ffffffb) * 2, i.e. 2*(d + 5*(amount - leaving - 1)) mod 2^32
+//   (unsigned compare; the first of equal ones). Then the carrier nearest to
+//   that pile from the area's settler list (uint16 head at area +0x12a,
+//   linked +0x10/+0x12). With both: GameWorld::PileIncAmountLeaving(pile),
+//   the carrier is unlinked, the byte +0x36 + goods of the building's extra
+//   record (uint16 +0x34; 0x5a-byte records at world+0x10f45e8) goes up by
+//   one, and among the six piles of the building (a ring starting at uint16
+//   +0xe, linked +0xc) the last one holding `goods` with (byte +0x2 >> 4) +
+//   amount < 8 is the destination; if there is none, the last free one
+//   (goods byte 0xff), which gets `goods`; if there is none either, nothing
+//   more happens. Otherwise the destination's byte +0x2 += 0x10 (high
+//   nibble: units on the way), the carrier is sent to the source pile
+//   (GameWorld::SetSettlerTarget) and gets job word +0xe = 0x4c, +0xc = 0,
+//   word +0x22 = destination and byte +0x1a = goods. Probably a market or
+//   port ordering goods to trade. Callers (UpdatePhase2) ignore EAX.
+//   ret 0xc.
 // All thiscall (ECX = world).
 
 #include "game/replacements.h"
@@ -88,6 +111,8 @@
 
 #include <cstdint>
 #include <cstring>
+#include <utility>
+#include <vector>
 
 namespace s3re::game {
 
@@ -484,6 +509,118 @@ std::uint32_t __fastcall GameWorld_SendNearestWorkerToBuilding(GameWorld* world,
     At<std::uint16_t>(world, settler + kSettlerWorkplace) = static_cast<std::uint16_t>(building);
     return chosen;
 }
+
+namespace {
+
+constexpr std::uint32_t kAreas = 0xe145e8;
+constexpr std::uint32_t kAreaBytes = 0x2e0;
+constexpr std::uint32_t kAreaPileHeads = 0xa;
+constexpr std::uint32_t kAreaCarriers = 0x12a;
+constexpr std::uint32_t kPileLeaving = 0x2;
+constexpr std::uint32_t kPileKind = 0x4;
+constexpr std::uint32_t kPileNext = 0xc;
+constexpr std::uint32_t kBuildingAimXField = 0x2;
+constexpr std::uint32_t kBuildingAimYField = 0x4;
+constexpr std::uint32_t kBuildingFirstPile = 0xe;
+constexpr std::uint32_t kBuildingExtraNumber = 0x34;
+constexpr std::uint32_t kBuildingExtras = 0x10f45e8;
+constexpr std::uint32_t kBuildingExtraBytes = 0x5a;
+constexpr std::uint32_t kExtraGoodsOrdered = 0x36;  // byte per goods type
+constexpr std::uint32_t kBuildingPiles = 6;
+constexpr std::uint8_t kFreePile = 0xff;
+constexpr std::uint16_t kJobFetchForTrade = 0x4c;
+
+std::uint32_t PileRecord(std::uint32_t pile) {
+    return kPiles + pile * kPileBytes;
+}
+
+}  // namespace
+
+using FetchGoodsFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t area, std::uint32_t building,
+                                       std::uint32_t goods);
+
+// Purpose: Probably a market or port ordering goods: finds the best pile of the wanted goods in its area and
+// the carrier nearest to that pile, and sends the carrier to bring a unit to one of the building's six
+// stock piles.
+void __fastcall GameWorld_FetchGoodsToTradeBuilding(GameWorld* world, void*, std::uint32_t area,
+                                                    std::uint32_t building, std::uint32_t goods) {
+    const std::uint32_t record = kBuildings + building * kBuildingBytes;
+    std::uint32_t source = 0;
+    std::uint32_t bestScore = 0xffffffffu;
+    for (std::uint32_t pile = At<std::uint16_t>(world, kAreas + area * kAreaBytes + kAreaPileHeads + goods * 2);
+         pile != 0; pile = At<std::uint16_t>(world, PileRecord(pile) + kPileNext)) {
+        const std::uint32_t p = PileRecord(pile);
+        const std::uint32_t amount = At<std::uint8_t>(world, p + kPileAmount);
+        const std::uint32_t leaving = At<std::uint8_t>(world, p + kPileLeaving);
+        if (amount == leaving) {
+            continue;
+        }
+        std::uint32_t score = TileDistance(At<std::uint16_t>(world, record + kBuildingAimXField),
+                                           At<std::uint16_t>(world, record + kBuildingAimYField),
+                                           At<std::uint16_t>(world, p + kPileX), At<std::uint16_t>(world, p + kPileY));
+        if (At<std::uint8_t>(world, p + kPileKind) != 0xff) {
+            score = (amount * 5 + score + (leaving + 1) * 0x7ffffffbu) * 2;
+        }
+        if (score < bestScore) {
+            bestScore = score;
+            source = pile;
+        }
+    }
+    if (source == 0) {
+        return;
+    }
+    const std::uint32_t head = kAreas + area * kAreaBytes + kAreaCarriers;
+    const std::uint32_t from = PileRecord(source);
+    std::uint32_t distance = 0;
+    std::uint32_t last = 0;
+    const std::uint32_t carrier = NearestInList(world, head, At<std::uint16_t>(world, from + kPileX),
+                                                At<std::uint16_t>(world, from + kPileY), distance, last);
+    if (carrier == 0) {
+        return;
+    }
+    GameWorld_PileIncAmountLeaving(world, nullptr, source);
+    Unlink(world, head, carrier);
+    const std::uint32_t extra =
+        kBuildingExtras + static_cast<std::uint32_t>(At<std::uint16_t>(world, record + kBuildingExtraNumber)) *
+                              kBuildingExtraBytes;
+    ++At<std::uint8_t>(world, extra + goods + kExtraGoodsOrdered);
+    const std::uint32_t first = At<std::uint16_t>(world, record + kBuildingFirstPile);
+    std::uint32_t target = 0;
+    std::uint32_t pile = first;
+    for (std::uint32_t k = 0; k < kBuildingPiles; ++k) {
+        const std::uint32_t p = PileRecord(pile);
+        if (At<std::uint8_t>(world, p + kPileGoods) == goods &&
+            static_cast<std::int32_t>((At<std::uint8_t>(world, p + kPileLeaving) >> 4) +
+                                      At<std::uint8_t>(world, p + kPileAmount)) < 8) {
+            target = pile;
+        }
+        pile = At<std::uint16_t>(world, p + kPileNext);
+    }
+    if (target == 0) {
+        pile = first;
+        for (std::uint32_t k = 0; k < kBuildingPiles; ++k) {
+            if (At<std::uint8_t>(world, PileRecord(pile) + kPileGoods) == kFreePile) {
+                target = pile;
+            }
+            pile = At<std::uint16_t>(world, PileRecord(pile) + kPileNext);
+        }
+        if (target == 0) {
+            return;
+        }
+        At<std::uint8_t>(world, PileRecord(target) + kPileGoods) = static_cast<std::uint8_t>(goods);
+    }
+    At<std::uint8_t>(world, PileRecord(target) + kPileLeaving) += 0x10;
+    GameWorld_SetSettlerTarget(world, nullptr, carrier, At<std::uint16_t>(world, from + kPileX),
+                               At<std::uint16_t>(world, from + kPileY));
+    const std::uint32_t s = Settler(carrier);
+    At<std::uint16_t>(world, s + kSettlerJob) = kJobFetchForTrade;
+    At<std::uint16_t>(world, s + kSettlerWordC) = 0;
+    At<std::uint16_t>(world, s + kSettlerWorkplace) = static_cast<std::uint16_t>(target);
+    At<std::uint8_t>(world, s + kSettlerGoods) = static_cast<std::uint8_t>(goods);
+}
+
+S3RE_HOOK(0x004de0a0, GameWorld_FetchGoodsToTradeBuilding, FetchGoodsFn, Original_GameWorld_FetchGoodsToTradeBuilding,
+          GameWorld_FetchGoodsToTradeBuilding);
 
 S3RE_HOOK(0x004db500, GameWorld_SendNearestWorkerToBuilding, SendWorkerFn, Original_GameWorld_SendNearestWorkerToBuilding,
           GameWorld_SendNearestWorkerToBuilding);
@@ -939,6 +1076,106 @@ void CompareSendWorker(test::Context& ctx, SendWorkerFn candidate, int cases) {
 }
 
 }  // namespace
+
+namespace {
+
+// Wrong: ignores the kind (scores every pile by distance only).
+void __fastcall WrongFetchGoodsToTradeBuilding(GameWorld* world, void* edx, std::uint32_t area, std::uint32_t building,
+                                               std::uint32_t goods) {
+    std::vector<std::pair<std::uint32_t, std::uint8_t>> kinds;
+    for (std::uint32_t pile = At<std::uint16_t>(world, kAreas + area * kAreaBytes + kAreaPileHeads + goods * 2);
+         pile != 0 && kinds.size() < 64; pile = At<std::uint16_t>(world, PileRecord(pile) + kPileNext)) {
+        kinds.emplace_back(pile, At<std::uint8_t>(world, PileRecord(pile) + kPileKind));
+        At<std::uint8_t>(world, PileRecord(pile) + kPileKind) = 0xff;
+    }
+    GameWorld_FetchGoodsToTradeBuilding(world, edx, area, building, goods);
+    for (auto it = kinds.rbegin(); it != kinds.rend(); ++it) {
+        At<std::uint8_t>(world, PileRecord(it->first) + kPileKind) = it->second;
+    }
+}
+
+void CompareFetchGoods(test::Context& ctx, FetchGoodsFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    for (int i = 0; i < cases; ++i) {
+        worlds.Set<std::uint32_t>(world_offset::kMapSize, 384);
+        worlds.Set<std::uint32_t>(0x1499e60, ctx.rng().Below(4));  // building count (PileIncAmountLeaving's log)
+        const std::uint32_t area = 1 + ctx.rng().Below(0x40);
+        const std::uint32_t goods = ctx.rng().Below(36);
+        const std::uint32_t building = 1 + ctx.rng().Below(0x800);
+        const std::uint32_t record = kBuildings + building * kBuildingBytes;
+        const std::uint32_t x = 32 + ctx.rng().Below(320);
+        const std::uint32_t y = 32 + ctx.rng().Below(320);
+        worlds.Set<std::uint16_t>(record + kBuildingAimXField, static_cast<std::uint16_t>(x));
+        worlds.Set<std::uint16_t>(record + kBuildingAimYField, static_cast<std::uint16_t>(y));
+        worlds.Set<std::uint16_t>(record + kBuildingExtraNumber, static_cast<std::uint16_t>(1 + ctx.rng().Below(998)));
+        // The area's piles of this goods type (1..0x7ff, distinct).
+        const std::uint32_t pileHead = kAreas + area * kAreaBytes + kAreaPileHeads + goods * 2;
+        const std::uint32_t length = ctx.rng().Chance(1, 10) ? 0 : 1 + ctx.rng().Below(8);
+        std::uint32_t piles[8] = {};
+        for (std::uint32_t k = 0; k < length; ++k) {
+            bool fresh = false;
+            while (!fresh) {
+                piles[k] = 1 + ctx.rng().Below(0x7fe);
+                fresh = true;
+                for (std::uint32_t j = 0; j < k; ++j) {
+                    fresh = fresh && piles[j] != piles[k];
+                }
+            }
+        }
+        worlds.Set<std::uint16_t>(pileHead, static_cast<std::uint16_t>(length ? piles[0] : 0));
+        for (std::uint32_t k = 0; k < length; ++k) {
+            const std::uint32_t p = PileRecord(piles[k]);
+            worlds.Set<std::uint16_t>(p + kPileNext, static_cast<std::uint16_t>(k + 1 < length ? piles[k + 1] : 0));
+            worlds.Set<std::uint16_t>(p + kPileX, static_cast<std::uint16_t>(x + ctx.rng().Range(-30, 30)));
+            worlds.Set<std::uint16_t>(p + kPileY, static_cast<std::uint16_t>(y + ctx.rng().Range(-30, 30)));
+            const std::uint8_t amount = static_cast<std::uint8_t>(ctx.rng().Below(9));
+            worlds.Set<std::uint8_t>(p + kPileAmount, amount);
+            worlds.Set<std::uint8_t>(p + kPileLeaving,
+                                     ctx.rng().Chance(1, 4) ? amount : static_cast<std::uint8_t>(ctx.rng().Below(8)));
+            static constexpr std::uint8_t kKinds[] = {0xff, 0xff, 0, 0xfe, 1};
+            worlds.Set<std::uint8_t>(p + kPileKind, kKinds[ctx.rng().Below(sizeof(kKinds))]);
+            worlds.Set<std::uint8_t>(p + kPileGoods, static_cast<std::uint8_t>(goods));
+            // PileIncAmountLeaving unlinks the pile from the list of its tile's area.
+            worlds.Set<std::uint16_t>(Tile(At<std::uint16_t>(worlds.original(), p + kPileX),
+                                           At<std::uint16_t>(worlds.original(), p + kPileY)) + 0x14,
+                                      static_cast<std::uint16_t>(area));
+        }
+        // Carriers near the piles.
+        SetUpWaitingList(ctx, worlds, kAreas + area * kAreaBytes + kAreaCarriers, x, y);
+        // The building's six piles: a ring in 0x800..0xfff.
+        std::uint32_t ring[6];
+        for (auto& r : ring) {
+            r = 0x800 + ctx.rng().Below(0x7ff);
+        }
+        worlds.Set<std::uint16_t>(record + kBuildingFirstPile, static_cast<std::uint16_t>(ring[0]));
+        for (std::uint32_t k = 0; k < 6; ++k) {
+            const std::uint32_t p = PileRecord(ring[k]);
+            worlds.Set<std::uint16_t>(p + kPileNext, static_cast<std::uint16_t>(ring[(k + 1) % 6]));
+            const std::uint32_t r = ctx.rng().Below(4);
+            worlds.Set<std::uint8_t>(p + kPileGoods, static_cast<std::uint8_t>(r == 0 ? goods : r == 1 ? 0xff : ctx.rng().Below(36)));
+            worlds.Set<std::uint8_t>(p + kPileAmount, static_cast<std::uint8_t>(ctx.rng().Below(9)));
+            worlds.Set<std::uint8_t>(p + kPileLeaving, static_cast<std::uint8_t>(ctx.rng().Below(0x80)));
+        }
+        Original_GameWorld_FetchGoodsToTradeBuilding(worlds.original(), nullptr, area, building, goods);
+        candidate(worlds.ours(), nullptr, area, building, goods);
+        if ((i % 32 == 31 || i == cases - 1) && !worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 31 before it): area %u building %u goods %u", i, area,
+                     building, goods);
+            return;
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_FetchGoodsToTradeBuilding_MatchesOriginal) {
+    CompareFetchGoods(ctx, &GameWorld_FetchGoodsToTradeBuilding, 3000);
+}
+S3RE_TEST(GameWorld_FetchGoodsToTradeBuilding_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareFetchGoods(probe, &WrongFetchGoodsToTradeBuilding, 500);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(GameWorld_SendNearestWorkerToBuilding_MatchesOriginal) {
     CompareSendWorker(ctx, &GameWorld_SendNearestWorkerToBuilding, 3000);

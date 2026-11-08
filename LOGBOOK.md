@@ -15,12 +15,12 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 133 replacements pass the emulator suite with full block
+Status: all 145 replacements pass the emulator suite with full block
 coverage (2,000 cases each, fewer for the slow ones: the flood fills 150,
 ShiftStatistics 60, the map-wide loops and table scans 150-800);
-`--self-test` catches 11/11 wrong pairings. Batches 9-11 passed the
-whole-game check on 2026-11-08 (call counts in the inventory); batch 12
-13 and 14 haven't had one yet. Specs can set S3.EXE globals per case
+`--self-test` catches 11/11 wrong pairings. Batches 9-14 passed the
+whole-game check on 2026-11-08 (call counts in the inventory); batches
+15-18 haven't had one yet. Specs can set S3.EXE globals per case
 (`Spec.globals`), and take ECX = a fake CLogicThread ("logicthread"
 convention) and pointer arguments into scratch buffers (`scratch(n)`).
 
@@ -109,7 +109,10 @@ coverage; whole-game check NOT run yet):
   AddTilePileToArea (0x5051b0); player_presence.cpp: IsOtherPlayerNear
   (0x510650, 16x16-tile presence blocks at world+0xde7448)
 - Replacements can call the game's DebugLog with the original format
-  string (game/debug_log.h), so the diagnostics stay.
+  string (game/debug_log.h), so the diagnostics stay. (Correction, batch
+  18: until then those calls never reached s3re.log, because the logging
+  passthrough only accepted call sites in S3.EXE; now sites in s3re.dll
+  are logged too, as "s3re.dll+RVA (replacement)", with the game callers.)
 - Found: tile +0xa bit 0 is "blocked" (AreOffsetTilesClear checks it);
   tile word +0x2 is a pile number when the building flag 0x20 of +0xa is
   clear; areas keep one pile list per goods type (heads at area +0xa +
@@ -169,6 +172,31 @@ Next candidates (all callees verified): 0x5236b0 (calls DrawOverlayLine,
 128 instructions), 0x4de0a0 (TileDistance, SetSettlerTarget,
 PileIncAmountLeaving; 255 instructions), 0x51b6f0 (blocks a tile; needs
 0x4e5d50, 330 instructions, first).
+
+Batch 18 (2026-11-08, 12 functions; in-process + emulator tests, full
+coverage; whole-game check NOT run yet):
+- area_split.cpp (new): the area life cycle. GameWorld::InitArea
+  (0x4e6510; defaults per race), AllocArea (0x4e64c0), MoveAreaContents
+  (0x4e54f0), MergeAreaContents (0x4e5a20), SplitAreaAtTile (0x4e5d50;
+  a border walk around the removed tile finds cut-off parts), JoinAreasAtTile
+  (0x4e6150), BlockTile (0x51b6f0), UnblockTile (0x51b770),
+  SetOwnerOfFreeTile (0x51b5d0)
+- world_tables.cpp: QueuePendingEvent (0x4e8ba0; the 12-byte ring that
+  QueueEvent checks, type 4 deduplicated)
+- settler_queries.cpp: FetchGoodsToTradeBuilding (0x4de0a0; probably
+  market/port: best pile of a goods type in the area, nearest carrier of
+  the area's list +0x12a, one of the building's six piles as destination)
+- ui_overlays.cpp: CLogicThread::DrawBuildingRouteOverlay (0x5236b0;
+  waypoints in the building extra record, probably a trade route)
+- Area record layout written up in area_split.cpp's header (lists at +0x8,
+  +0xa, +0x52, +0x9a, +0xe2, +0x12a; settings arrays).
+- Tooling: DebugLog calls from s3re.dll now reach s3re.log.
+Next candidates: 0x4dda10 (144 instructions) and 0x4dfa60 (76), both
+calling only verified functions (UnblockTile / BlockTile); then 0x4dbb10
+(needs 0x50cf50), 0x4dd6f0 (needs 0x50c9e0), 0x51b640 (needs 0x50e980 and
+0x504f70), 0x4e6cd0 (needs 0x4e6e10). Many of the remaining direct callers are the
+huge Update* functions, so leaves with unclear meaning are getting more
+common.
 
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
@@ -318,6 +346,24 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-08 (25): batch 18
+
+- Batch 18 (12 functions, list under "Current focus"): in-process 220
+  tests all pass (24 new incl. 12 mutation tests); emulator specs 12/12
+  with full coverage; full emulator suite 145/145 (0 mismatches, full
+  coverage), self-test 11/11.
+- Tooling: DebugLog from our DLL is logged ("DebugLog from s3re.dll+RVA
+  (replacement)", plus the game callers each time); the batch-13 note is
+  corrected.
+- Test pitfall: MergeAreaContents leaves the merged area's list heads as
+  they were, so joining a second, disconnected piece of the same area
+  links its lists twice and a later list walk loops for ever (in the
+  original too). Area tests for joins use connected stripe areas
+  (SetUpAreaMap stripes / area_map(stripes=True)). Likewise, every list of
+  an area that a function walks must be set up (random lists cycle).
+- Test pitfall: piles must lie on map tiles whose area record is inside
+  the test world (PileIncAmountLeaving unlinks from the tile's area).
 
 ### 2026-11-08 (24): batch 17
 
