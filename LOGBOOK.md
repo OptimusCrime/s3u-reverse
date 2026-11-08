@@ -107,6 +107,40 @@ Next steps:
 3. (done 2026-11-08) Replays are self-contained: seed and map in the
    recording.
 
+## Roadmap: larger areas to tackle (decided 2026-11-08)
+
+Ranked by value and how easy they are to verify:
+
+1. **File formats: map loading first, then GFX and SND.** Needed anyway
+   for the standalone build and the macOS port. Easy to verify: run the
+   original loader and ours on the same file and compare the decoded bytes
+   (no game state or timing involved). Lead: the byte-decoding loop at file
+   offset 0xFE72 (keystream multiplier 0xFED42531) is probably the
+   decryption for map or data files. Map loading also shows how the world
+   object is filled at game start (helps settle the tile layout and world
+   fields). Start: find where `.map` files are opened (string search,
+   file-API imports) and follow it down.
+2. **Keep climbing the simulation from the leaves**, alongside item 1.
+   Strongest check (whole-game replay, per-tick hashes). Next up: the
+   callers of replaced functions, e.g. the area flood fill 0x51a580 and the
+   tile-area functions 0x4e6150/0x4e62c0/0x4e6430/0x4e6cd0.
+3. **Watcom container library (248 `WC*` classes).** Generic containers
+   with well-defined behaviour, used by all game code; understanding it
+   makes the code built on it (e.g. the AI agents) much easier to read.
+   Mainly a way to read other code, not a goal in itself.
+4. **Rendering (DirectDraw path).** The main obstacle for Phase 2 (macOS)
+   and big. Harder to verify (screenshot/framebuffer comparison instead of
+   byte-exact state). After the file formats, since drawing depends on the
+   decoded graphics.
+5. **UI and menus (`CScreenElement`, `Menus::*`).** Easy to map via RTTI,
+   but hardest to verify automatically and least important for
+   correctness. Last, apart from the UI state that lives in the world.
+
+Skip: MFC and the C runtime (standard libraries; use the real ones).
+
+Suggested next session: whole-game check for batches 9-10, then start on
+map-file loading.
+
 ## Open questions and loose ends
 
 - The 128-slot position list at world+0x1195dd4 is changed per logic step
