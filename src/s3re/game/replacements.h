@@ -17,6 +17,8 @@ namespace s3re::game {
 // area_piles.cpp
 std::uint32_t __fastcall GameWorld_PileIncAmountLeaving(GameWorld* world, void* edx, std::uint32_t pile);
 std::uint32_t __fastcall GameWorld_AddTilePileToArea(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall GameWorld_CreatePile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+                                              std::uint32_t goods, std::uint32_t amount, std::uint32_t kind);
 
 // area_split.cpp
 std::uint32_t __fastcall GameWorld_BlockTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);

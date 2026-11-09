@@ -3780,8 +3780,11 @@ SPECS += [
     # Dead, as at String_FromSubstr: the self-assignment path on a
     # just-emptied string (_Xran, the memmove, _Eos, the second _Xran
     # check, the copy and the release of its null old buffer).
+    # globals: the empty string's count byte is set per case; a value of
+    # 0xfe or more left behind by an earlier spec in a full run otherwise
+    # hides the sharing path (0x408dde).
     Spec("String_FromSubstrDefault", 0x00408cc0, "thiscall", [SELF_OR_OTHER, string_count, string_count],
-         presets=string_world,
+         presets=string_world, globals=null_string_count,
          exempt_blocks=(0x00408d14, 0x00408d2f, 0x00408d57, 0x00408d6f, 0x00408d79, 0x00408da3)),
     Spec("Win32_CProgrammingError_Construct", 0x00614eb0, "thiscall", [message_ptr, mostly_derived],
          presets=string_world),
@@ -3885,7 +3888,7 @@ SPECS += [
          [one_of(WORLD_BASE + SCRATCH + 5 * SCRATCH_SLOT_BYTES, WORLD_BASE + SCRATCH + 5 * SCRATCH_SLOT_BYTES + 0x31),
           one_of(STRING_OTHER_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR, WORLD_BASE + 0x28),
           one_of(0, 0, 0x24, 7, 0x12345678)],
-         presets=string_world,
+         presets=string_world, globals=null_string_count,  # see String_FromSubstrDefault (0x41c4c6)
          # Dead: 0x41c434 caps a length above 0xFFFFFFFF; 0x41c445, 0x41c460
          # and 0x41c488 are the _Xran, erase-memmove and _Eos of the
          # self-assignment, whose length was just set to 0; 0x41c4f9 copies
@@ -4051,4 +4054,263 @@ SPECS += [
     Spec("WCIntVector_ConstructBare", 0x00437730, "thiscall", [small_or_anything(0, 6)], new_fails=0.2),
     Spec("Lobby_CLMMessageBlock_Copy", 0x00601470, "thiscall", [one_of(WORLD_BASE + BLOCK_OTHER)],
          presets=message_block_source, new_fails=0.1),
+]
+
+
+# -- batch 28: building sites (building_sites.cpp) --------------------------
+#
+# CheckBuildingSite 0x4d99e0 (with its callees PlanSiteLevelling 0x4da440
+# and AddBuildingSite 0x4dd280, which run as original code inside it) on a
+# preset 31x31 window of tiles around (x, y): heights a tilted plane with
+# noise (sometimes flat, sometimes steep), mostly owned by the player (or
+# nobody for modes 2/3), ground per race group, sparse flags/objects, one
+# area; the player's race 0..3 (it indexes the layout tables in S3.EXE), the
+# offset table up to ring 22, free levelling slots and building records.
+
+SITE_TILES = 0x67444
+SITE_OFFSETS = 0x110a588
+SITE_CACHE = 0x1196024
+SITE_BUILDINGS = 0x1499e64
+SITE_TYPES = [7, 8, 9, 0x1d, 0x25, 0x38, 0x20, 0x21, 1, 2, 3, 5, 0xe, 0xf, 0x18, 0x19, 0x1e, 0x24, 0x33]
+
+
+def site_type(rng, pool) -> int:
+    return rng.choice(SITE_TYPES) if rng.random() < 0.5 else rng.randint(1, 56)
+
+
+def site_tile(x: int, y: int) -> int:
+    return SITE_TILES + ((x * 0x300 + y) & 0xFFFFFFFF) * 24
+
+
+def hex_distance(dx: int, dy: int) -> int:
+    if (dx >= 0) == (dy >= 0):
+        return max(abs(dx), abs(dy))
+    return abs(dx) + abs(dy)
+
+
+def site_offset_table(rng, rings=22):
+    import math
+    fields = []
+    entry = 0
+    for ring in range(rings + 1):
+        for dx in range(-ring, ring + 1):
+            for dy in range(-ring, ring + 1):
+                if hex_distance(dx, dy) != ring:
+                    continue
+                angle = math.atan2(0.8660254 * dy, dx - 0.5 * dy) * 3 / math.pi
+                sector = 0 if ring == 0 else int(angle % 6) % 6
+                e = SITE_OFFSETS + entry * 16
+                fields += [(e, dx & 0xFFFFFFFF, 4), (e + 4, dy & 0xFFFFFFFF, 4), (e + 8, ring, 4), (e + 12, sector, 4)]
+                entry += 1
+    if rng.random() < 0.03:
+        fields.append((SITE_OFFSETS + 8, 21, 4))  # entry 0 beyond the water range
+    return fields
+
+
+def site_player(rng, player):
+    record = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+    return [(record + 4, rng.randrange(4), 4),
+            (record + 0x84, rng.choice([60001, 60002, 0xffff, rng.randrange(60000, 70000)]), 4)]
+
+
+def site_window(rng, x, y, owner, flat=False):
+    """The 31x31 tiles around (x, y)."""
+    fields = []
+    base = rng.randint(10, 120)
+    slopes = [0, 0, 0, 1, 2, 3, 4, 6, 9]
+    sx = 0 if flat else rng.choice(slopes) * rng.choice([1, -1])
+    sy = 0 if flat else rng.choice(slopes) * rng.choice([1, -1])
+    noise = 0 if flat else rng.choice([0, 1, 2])
+    own = rng.choice([1.0, 1.0, 0.99, 0.9])
+    flag_rate = rng.choice([0, 0, 0.005, 0.03])
+    ground = rng.choice([0x10, 0x10, 0x40, 0x90])
+    other_ground = rng.choice([0x30, 0x20, 0x40, 0x90, 0x04])
+    other_rate = rng.choice([0, 0, 0.01, 0.05])
+    area = rng.randrange(1, 40)
+    bump = rng.random() < 0.2
+    # A hill or hollow under the building (on otherwise even land): the
+    # earth to move spreads over all size classes.
+    dip = rng.randint(-40, 40) if rng.random() < 0.4 else 0
+    dip_radius = rng.randint(1, 6)
+    for i in range(31):
+        for j in range(31):
+            tx, ty = x - 15 + i, y - 15 + j
+            t = site_tile(tx, ty)
+            h = base + sx * (i - 15) // 2 + sy * (j - 15) // 2 + (rng.randint(-noise, noise) if noise else 0)
+            if bump and abs(i - 12) < 3 and abs(j - 18) < 3:
+                h += 30
+            if dip and hex_distance(i - 15, j - 15) <= dip_radius:
+                h += dip * (dip_radius + 1 - hex_distance(i - 15, j - 15)) // (dip_radius + 1)
+            h = min(max(h, 0), 255)
+            terrain = ground + (rng.randrange(4) if rng.random() < 0.2 else 0)
+            if rng.random() < other_rate:
+                terrain = other_ground
+            flags = 0
+            if rng.random() < flag_rate:
+                flags = rng.choice([1, 4, 8, 2, 0x40])
+            fields += [(t + 4, h, 1), (t + 6, terrain, 1), (t + 8, owner if rng.random() < own else rng.randrange(256), 1),
+                       (t + 0xa, flags, 1), (t + 2, 0 if rng.random() > flag_rate else rng.randrange(1, 100), 2),
+                       (t + 0x14, area if rng.random() > other_rate else area + 1, 2)]
+    if rng.random() < 0.5:
+        fields.append((site_tile(x, y) + 6, 0x20 + rng.randrange(4), 1))  # mountain under the building
+    return fields
+
+
+def site_buildings(rng):
+    fields = []
+    if rng.random() < 0.02:
+        return [(SITE_BUILDINGS + b * 0x3a, 1, 1) for b in range(1, 0xfa0)]
+    if rng.random() < 0.02:  # only the last record (0xf9f) free: still "none"
+        return [(SITE_BUILDINGS + b * 0x3a, 1 if b < 0xf9f else 0xff, 1) for b in range(1, 0xfa0)]
+    used = rng.randrange(0, 20)
+    for b in range(1, used + 1):
+        fields.append((SITE_BUILDINGS + b * 0x3a, rng.randrange(0, 0xff), 1))
+    fields.append((SITE_BUILDINGS + (used + 1) * 0x3a, 0xff, 1))
+    fields.append((BUILDING_COUNT, rng.randrange(0, 40), 4))
+    return fields
+
+
+def check_site_state(rng, pool, args):
+    x, y, type_, player, mode = args
+    fields = []
+    r = rng.random()
+    if r < 0.06:
+        size = rng.randint(8, 15)          # border tiles off the map: "illegal building offset"
+    elif r < 0.12:
+        size = rng.randint(16, 200)         # anything, often outside the bounds
+    else:
+        size = max(x, y) + 16 + rng.choice([0, 0, rng.randrange(60)])
+    fields.append((MAP_SIZE, size, 4))
+    fields += site_player(rng, player)
+    owner = 0xff if mode >= 2 else player
+    fields += site_window(rng, x, y, owner, flat=rng.random() < 0.25)
+    fields += site_offset_table(rng)
+    full = rng.random() < 0.08
+    for slot in range(30):
+        fields.append((SITE_CACHE + (player * 30 + slot) * 962, 1 if full or rng.random() < 0.2 else 0, 1))
+    fields += site_buildings(rng)
+    fields += [(0x32870, rng.randrange(1000), 4), (0x32874, rng.randrange(1000), 4)]
+    return fields
+
+
+def plan_site_state(rng, pool, args):
+    x, y, type_, player, height = args
+    fields = [(MAP_SIZE, max(x, y) + rng.choice([-3, 0, 16, 40]), 4)]
+    fields += site_player(rng, player)
+    fields += site_window(rng, x, y, player, flat=rng.random() < 0.25)
+    return fields
+
+
+def add_site_state(rng, pool, args):
+    x, y, player, type_ = args
+    fields = [(MAP_SIZE, max(x, y) + rng.choice([1, 3, 5, 7, 11, 13, 40]), 4)]
+    fields += site_player(rng, player)
+    for dx in range(-8, 9):
+        for dy in range(-8, 9):
+            fields.append((site_tile(x + dx, y + dy) + 0x14, rng.randrange(1, 40), 2))
+    fields += site_buildings(rng)
+    return fields
+
+
+SPECS += [
+    Spec("GameWorld_PlanSiteLevelling", 0x004da440, "thiscall",
+         [between(15, 120), between(15, 120), site_type, below(8), lambda rng, pool: rng.randint(0, 140)],
+         presets=plan_site_state, max_cases=600),
+    Spec("GameWorld_AddBuildingSite", 0x004dd280, "thiscall",
+         [between(15, 120), between(15, 120), below(20), site_type], presets=add_site_state, max_cases=600),
+    # Dead blocks: the size classification after the levelling is entered
+    # only with an amount >= 1 (PlanSiteLevelling returns 1 for flat land and
+    # mines use 1), so the compare chain's branches for 0 never run; and
+    # 0x4d9ece is the path for an empty border list, which no layout in
+    # S3.EXE has (checked for all 4 races x 56 types).
+    Spec("GameWorld_CheckBuildingSite", 0x004d99e0, "thiscall",
+         [between(10, 120), between(10, 120), site_type, below(8), one_of(0, 1, 1, 1, 2, 3)],
+         presets=check_site_state, max_cases=2500,
+         exempt_blocks=(0x4da331, 0x4da34a, 0x4da363, 0x4da37e, 0x4da39b, 0x4da3b8, 0x4da3d5, 0x4da3f2,
+                        0x4d9ece)),
+]
+
+
+# Castle sites for the random start positions (0x5074b0): IsFreeCastleSite
+# 0x508420 = CheckBuildingSite(x, y, 0xf, player, 2) != 0, and
+# IsGoodStartPosition 0x5081a0, which also counts land and resources over
+# the first 9995 offset-table entries around (x, y). The region's densities
+# are drawn around the thresholds (half the cases aim at the strictest).
+
+def castle_site_state(rng, pool, args):
+    player, x, y = args[:3]
+    return check_site_state(rng, pool, [x, y, 0xf, player, 2])
+
+
+START_OFFSETS = None
+
+
+def start_offsets():
+    global START_OFFSETS
+    if START_OFFSETS is None:
+        import random as _random
+        START_OFFSETS = [(f[0], f[1]) for f in site_offset_table(_random.Random(0), rings=58)
+                         if (f[0] - SITE_OFFSETS) % 16 in (0, 4)]
+    return START_OFFSETS
+
+
+def start_position_state(rng, pool, args):
+    player, x, y, attempts = args
+    fields = check_site_state(rng, pool, [x, y, 0xf, player, 2])
+    fields = [f for f in fields if not (SITE_OFFSETS <= f[0] < SITE_OFFSETS + 16 * 2000)]
+    fields.append((MAP_SIZE, rng.choice([x + 60, x + 30, 0x300]) if rng.random() < 0.9 else rng.randint(16, 60), 4))
+    offsets = start_offsets()
+    fields += [(a, v, 4) for a, v in offsets]
+    ideal = rng.random() < 0.5
+    u = lambda low, high: rng.uniform(low, high)
+    grass = 0.9 if ideal else u(0.4, 1.0)
+    trees = 0.0083 if ideal else u(0.002, 0.012)
+    stones = 0.0038 if ideal else u(0.0005, 0.006)
+    unowned = 1.0 if ideal else rng.choice([1.0, 0.985, 0.9, 0.7])
+    kinds = [(0x10, 0.008 if ideal else u(0, 0.008)), (0x20, 0.004 if ideal else u(0, 0.004)),
+             (0x30, 0.002 if ideal else u(0, 0.002)), (0x40, 0.0012 if ideal else u(0, 0.001)),
+             (0x50, 0.0012 if ideal else u(0, 0.001)), (0x60, 0.01)]
+    base = rng.randint(20, 60)
+    for k in range(9995):
+        dx = offsets[2 * k][1]
+        dy = offsets[2 * k + 1][1]
+        dx = dx - (1 << 32) if dx & 0x80000000 else dx
+        dy = dy - (1 << 32) if dy & 0x80000000 else dy
+        tx, ty = x + dx, y + dy
+        if not (0 <= tx < 0x300 and 0 <= ty < 0x300):
+            continue
+        t = site_tile(tx, ty)
+        site = k < 217 and rng.random() > 0.002
+        obj = 0
+        if not site:
+            if rng.random() < trees:
+                obj = 0x44 + rng.randrange(16)
+            elif rng.random() < stones:
+                obj = 0x73 + rng.randrange(12)
+            elif rng.random() < 0.01:
+                obj = rng.randrange(256)
+        res = rng.randrange(16)
+        for kind, p in kinds:
+            if rng.random() < p:
+                res |= kind
+                break
+        fields += [(t + 4, base + rng.randrange(2), 1),
+                   (t + 6, 0x10 + rng.randrange(4) if site or rng.random() < grass else rng.choice([0x20, 0x30, 0x40, 4, 0x60]), 1),
+                   (t + 7, obj, 1), (t + 8, 0xff if site or rng.random() < unowned else rng.randrange(4), 1),
+                   (t + 0xa, 0, 1), (t + 2, 0, 2), (t + 0x14, 0, 2), (t + 0x11, res, 1)]
+    return fields
+
+
+def start_attempts(rng, pool):
+    tier = rng.randrange(4)
+    edges = [0, 29999, 30000, 59999, 60000, 99999, 100000, 250000]
+    return edges[2 * tier + rng.randrange(2)] if rng.random() < 0.3 else edges[2 * tier] + rng.randrange(100)
+
+
+SPECS += [
+    Spec("GameWorld_IsFreeCastleSite", 0x00508420, "thiscall", [below(8), between(10, 120), between(10, 120)],
+         presets=castle_site_state, max_cases=600),
+    Spec("GameWorld_IsGoodStartPosition", 0x005081a0, "thiscall",
+         [below(8), between(15, 400), between(15, 400), start_attempts], presets=start_position_state,
+         max_cases=250),
 ]

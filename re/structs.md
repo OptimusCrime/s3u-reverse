@@ -78,10 +78,10 @@ are not comparable (bump the trace version). Keep
 | 0x04 | u8 | height | terrain height; map file byte 0; TileScreenY subtracts it, CenterCameraOnTile too | TileScreenY 0x519610, map loader | | V |
 | 0x05 | u8 | shade | recomputed from heights for a tile and its six neighbours by 0x519670 (via 0x519720); ~0x40 on flat land (dump: 64 on 93,813 tiles); read for drawing | 0x519670, PrepareDrawData, IsNeighbourhoodByte9Clear | | S |
 | 0x06 | u8 | terrain ("worldart") | ground type; map file byte 1; high nibble = class (owned land when non-zero; 0x10 grass/land, 0x60 stream, 0x15 swamp); 0x70/0xF0 tested together (water?); 0x1C worn path (decays to 0x10); dump: 7 on 79,249 tiles (water on this map), 16 on 42,334 | map_terrain.cpp, LogPlayerLandResources, 0x503980 | | V (field), S (values) |
-| 0x07 | u8 | object | landscape object: trees 0x44..0x53, stone 0x73..0x7E (smaller = more left), others; map file byte 2; must be 0 to build | ScatterObjects, AreOffsetTilesClear, map loader, LogPlayerLandResources | | V |
+| 0x07 | u8 | object | landscape object: trees 0x44..0x53, stone 0x73..0x7E (smaller = more left), others; map file byte 2; must be 0 to build; a new construction site puts 0x70 on its own tile and 0x71 (stakes) on the outermost footprint tile per direction sector (CheckBuildingSite 0x4D99E0); AddBuildingSite 0x4DD280 sets 0xFF on the door tile list of some types | ScatterObjects, AreOffsetTilesClear, map loader, LogPlayerLandResources, building_sites.cpp | | V |
 | 0x08 | u8 | owner | player owning the ground, 0xFF = nobody; map file byte 3 (mapped to game players) | map_terrain.cpp, CountTilesOwnedBy, SetOwnerOfFreeTile; dump 255/0/1 | | V |
 | 0x09 | u8 | draw flags | bit 0x40 territory border (UpdateBorderFlagsAround), bit 0x80 redraw (set by the simulation when the tile changes, e.g. 0x5039DE; cleared by PrepareDrawData); low bits unknown (dump: 63, 191, 146...) | map_terrain.cpp, determinism.cpp | bit 0x80 skip | V (0x40, 0x80) |
-| 0x0A | u8 | flags | 0x01 blocked; 0x02 (UpdateSettlers sets); 0x08 part of a building footprint ("Building-Bits", cleared by the map loader with 0x01 from the footprint table at 0x6AA174); 0x10 temporary mark of flood fills/splits; 0x20 word +0x2 is a building; 0x40 owned (map loader sets it when the owner is valid; 0x519A90); 0x80 tested by FloodMarkAreaTerrain5To7; map file byte 4 | area_split.cpp, flood_fills.cpp, map loader | | V (0x01, 0x10, 0x20), S (others) |
+| 0x0A | u8 | flags | 0x01 blocked; 0x02 (UpdateSettlers sets); 0x04 being levelled (CheckBuildingSite sets it on every tile whose height a placed site changes; PlanSiteLevelling keeps such a tile and five neighbours fixed; building sites need it clear); 0x08 part of a building footprint ("Building-Bits"; set on the footprint and border tiles of a placed site by CheckBuildingSite; cleared by the map loader with 0x01 from the layout table at 0x6AA170); 0x10 temporary mark of flood fills/splits; 0x20 word +0x2 is a building; 0x40 owned (map loader sets it when the owner is valid; 0x519A90); 0x80 tested by FloodMarkAreaTerrain5To7; map file byte 4 | area_split.cpp, flood_fills.cpp, map loader | | V (0x01, 0x10, 0x20), S (others) |
 | 0x0B | u8 | search mark | the search generation (+0x2D300) of the last search/overlay that visited the tile; the map loader sets 1 for tiles of a missing player | NextSearchGeneration, overlays, map loader | skip | V |
 | 0x0C | u8 | overlay value | value drawn for the overlay mark (ring number etc.) | DrawOverlayLine, DrawWorkAreaOverlay, PrepareDrawData | skip, UI | V |
 | 0x0D | u8 | slice byte | cleared one eighth of the map per call (ClearTileByte11Slice, counter +0x110A580); compared with 0x23 in 0x518F20; 0..40 in the dump | map_marks.cpp | | S (writes), G (meaning) |
@@ -206,27 +206,30 @@ counting.cpp, area_split.cpp (Take/ReleaseBuildingExtraTiles), dump.
 | 0x02 | u16 | x | position ("tile A"; tile word +0x2 = the building, flag 0x20) | V |
 | 0x04 | u16 | y | | V |
 | 0x06 | u8 | art | building type (0x0F castle in the dump at the player position; 0x0F/0x10/0x12 military; 0x1F/0x2F/0x30/0x32 at the water; 0x20 shipyard; 0x21/0x22 trade buildings) | V (field), S (values) |
-| 0x07 | u8 | | read by UpdatePhase2/UpdateSettlers | G |
+| 0x07 | u8 | race | the owner's race (AddBuildingSite 0x4DD280; indexes the layout table); read by UpdatePhase2/UpdateSettlers | V |
 | 0x08 | u16 | | non-zero in finished military buildings (2 and 60 in the dump); CountBuildingsWithWord8 | G (garrison?) |
 | 0x0A | u16 | door x | "tile B": the building's area is the area of this tile | V |
 | 0x0C | u16 | door y | | V |
-| 0x0E | u16 | | first pile of the building's ring of six (FetchGoodsToTradeBuilding); also used as a centre while under construction (DrawWorkAreaOverlay) | V (uses) |
+| 0x0E | u16 | | first pile of the building's ring of six (FetchGoodsToTradeBuilding); also used as a centre while under construction (DrawWorkAreaOverlay); set by AddBuildingSite 0x4DD280: 0xFF for type 1, x for types 2, 3, 5, 0x19, 0x1E, 0x33, x + 4/5/6 (clamped to the map) for types 0xE/0x18/0x24 (with +0x14 = y, y + 8/10/12) | V (uses) |
 | 0x10 | u16 | pile 1 | input/construction pile numbers (BuildingPileHasGoods slot 1) | V |
 | 0x12 | u16 | pile 2 | slot 2 | V |
 | 0x14 | u16 | pile 3 | slot 3 | V |
 | 0x16, 0x17 | u8 | | counters (UpdatePhase2 inc/dec) | G |
-| 0x18 | u8 | request flags | bit 0x01 enables bits 0x02/0x04/0x08/0x10 (player counters +0x20..+0x28) | V |
+| 0x18 | u8 | request flags | bit 0x01 enables bits 0x02/0x04/0x08/0x10 (player counters +0x20..+0x28); 1 for a new site | V |
 | 0x19 | u8 | | compared with pile 1's amount (SetBuildingFlag02) | V (use) |
 | 0x1A | u8 | | compared with pile 2's amount (SetBuildingFlag04) | V (use) |
-| 0x1B..0x1E | u8 | | cleared by BuildingDone; used by UpdatePhase2 | G |
+| 0x1B | u8 | | new site: min(8, (earth + 16) / 32 + 2) (8-bit), probably the number of diggers; cleared by BuildingDone | V (value), G (meaning) |
+| 0x1C | u8 | | new site: header word [0] of the layout | V (value), G (meaning) |
+| 0x1D, 0x1E | u8 | | 0 for a new site; cleared by BuildingDone; used by UpdatePhase2 | G |
+| 0x19, 0x1A (new site) | u8 | materials | from the layout's word [1] (high / low byte), probably boards and stones; +0x1F = their sum for a new site | V (values), S (meaning) |
 | 0x1F | u8 | state | high nibble = state (0x20 done, 0x30/0x40 shipyard states) | V (Take/ReleaseBuildingExtraTiles) |
 | 0x20 | u8 | | 0xFE once the extra tiles are taken | V |
-| 0x21 | u8 | buildup | non-zero while a construction site (DebugLog "building[i].buildup") | V |
-| 0x22 | u16 | | shipyard: direction of the slip (Take/ReleaseBuildingExtraTiles); military: the soldier created by BuildingDone (0x4DBFB9, folded form `(n + 0x5AEDF) * 0x3A`) | V |
-| 0x24/0x26/0x28 | u16[3] | input word 24 | requested amount per input slot | V |
+| 0x21 | u8 | buildup | non-zero while a construction site (DebugLog "building[i].buildup"); 1 for a new site, 2 for a new mine (no levelling) | V |
+| 0x22 | u16 | | construction site: its levelling job slot (CheckBuildingSite); shipyard: direction of the slip (Take/ReleaseBuildingExtraTiles); military: the soldier created by BuildingDone (0x4DBFB9, folded form `(n + 0x5AEDF) * 0x3A`) | V |
+| 0x24/0x26/0x28 | u16[3] | input word 24 | requested amount per input slot; construction site: word +0x28 sums the height differences of the levelled tiles (CheckBuildingSite) | V |
 | 0x2A/0x2C/0x2E | u16[3] | input word 2A | next building in the area's request list per slot | V |
-| 0x30 | u16 | work x | = position after BuildingDone; centre of the work area; shipyard: ship position (0xFFFF = none) | V (uses), S (work area) |
-| 0x32 | u16 | work y | | |
+| 0x30 | u16 | work x | construction site: the earth to move (PlanSiteLevelling's amount); = position after BuildingDone; centre of the work area; shipyard: ship position (0xFFFF = none) | V (uses), S (work area) |
+| 0x32 | u16 | work y | construction site: the player's countdown +0x84 when it was placed | V (site) |
 | 0x34 | u16 | trade | number of the building's Trade record (AllocBuildingExtra caller 0x4DBC50) | V |
 | 0x36 | u8 | | compared with 0x18 by TakeBuildingExtraTiles | V (use) |
 | 0x38 | u16 | | 100 after BuildingDone, per type for military (S3.EXE 0x659664..); probably hit points | G |
@@ -252,7 +255,7 @@ building_flags.cpp, settler_queries.cpp, dump (players 0 and 1).
 | 0x020 | u16[48] | heads of idle-settler lists per settler type (lists 5, 8, 0xF, 0x1E..0x23, 0x27 (+0x6E), 0x2B (+0x76) seen); see the overlap below | V |
 | 0x020..0x028 | u16 x5 | building request counters (+0x24 total, capped at 10; +0x20/+0x22/+0x26/+0x28 per bit, bit 7 = "set once") | V |
 | 0x080 | i32 | 0x80 in ctor | G |
-| 0x084 | i32 | 0xFFFF in ctor; 0x4DD280 | G |
+| 0x084 | i32 | 0xFFFF in ctor; counts down by one per new building site (AddBuildingSite 0x4DD280), at 60000 or below it restarts at 0xFFFF; the value goes to building +0x32 | V (mechanics), G (meaning) |
 | 0x088 | i32 | UI (ProcessEvents/PrepareDrawData only) | G |
 | 0x08C | i32 | mana | V |
 | 0x090 | i32 | 0 in ctor; ExecuteCommands, UpdatePhase2, BuildingDone | G |
@@ -337,10 +340,22 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   world+0xDE7448, block (bx, by) at +bx*960 + by*20): non-zero where the
   player is present. Second map at +0xDF2848 with the same shape.
   **V** (A), **S** (B).
-- **Player site cache** (0x3C2 = 962 bytes, 20 players x 30 slots at
-  world+0x1196024, record p*30 + k): u8 valid (set to 1 by
-  CheckBuildingSite 0x4DA24D), then the 31x31 grid copied from the
-  footprint scratch at world+0x1222ED4. **S**.
+- **Levelling jobs** (0x3C2 = 962 bytes, 20 players x 30 slots at
+  world+0x1196024, record p*30 + k): u8 in use (set to 1 when
+  CheckBuildingSite 0x4D99E0 places a site; a site needs a free slot of
+  its player, its number goes to building +0x22), then 31x31 bytes: the
+  planned height of tile (x-15+i, y-15+j) at [i*31 + j], 0 where the
+  height stays. **V** (written by building_sites.cpp; readers not done).
+- **Levelling scratch** (world+0x1222ED4 heights, +0x1223295 states,
+  31x31 bytes each, cell [i*31 + j] = tile (x-15+i, y-15+j)): written by
+  PlanSiteLevelling 0x4DA440 for every check (preview included); states 0
+  free, 1 to propagate, 2 changed this round, 100 fixed. **V**.
+- **Building layouts** (S3.EXE .data 0x6AA170, 2400 bytes per race*57 +
+  type, int32): header [0] (to building +0x1C), [1] materials (high byte
+  +0x19, low byte +0x1A), then marker lists: 0x80000005 (unused here),
+  0x80000004 door (dx, dy) + more tiles, 0x80000000 footprint (levelled; a
+  0x80000001 inside ends the stake candidates), 0x80000002 border (must be
+  free, not levelled), 0x80000003 end. Format in building_sites.cpp. **V**.
 - **Territory scratch** (world+0x1158788): 101 x 101 cells of 20 bytes
   (one per player), centred on (x, y) with an offset of 50; 0xFF = in
   range of a tower. **S**.

@@ -7,6 +7,49 @@ progress.
 
 ## Current focus
 
+**Core gameplay first, no network (user decision 2026-11-09, after
+batch 27).** Skip network code entirely for now: CNetThread, `Lobby::*`,
+`LobbyClient::*`, DirectPlay, the CLM* messages. Single player against
+computer players is easier to test and online play may not matter. The
+user may provide a late-game save file later. Order:
+
+1. **Building-site chain** - done in batch 28: CheckBuildingSite 0x4d99e0,
+   PlanSiteLevelling 0x4da440 (was "EvaluateBuildingFootprint"),
+   AddBuildingSite 0x4dd280, plus IsFreeCastleSite 0x508420 and
+   IsGoodStartPosition 0x5081a0 (start positions).
+2. **GameWorld::Create 0x5166d0** (3,122 instructions). First its three
+   undone callees 0x519440 (16), 0x51a2e0 (87), 0x51a580 (380, the area
+   set-up), all READY.
+3. **The 27 undone callees of GameWorld::UpdateSettlers 0x4e9670** (17,525
+   instructions), small ones first. Decide the x87 question first (below).
+4. **GameWorld::UpdatePhase2 0x4e05e0** (4,919 instructions, 8 undone
+   callees).
+5. **UpdateSettlers itself**, split internally (e.g. per settler job) but
+   hooked as one unit.
+
+x87 floating point (proposal, batch 28, not decided yet): the simulation
+range 0x4c0000..0x560000 has very little real x87 code: 4 `fsqrt`, 4 calls
+of `_ftol` 0x61fe98, a few `fild`/`fmul`/`fstp` (the ~231 `fidiv [esp]`
+and the `fisttp` lines dumpbin shows are data decoded as code, e.g. jump
+tables). The game never sets the FPU control word itself: every `fldcw`
+is in the CRT (`_ftol` switches to truncation and back; the math library).
+Windows starts threads at 53-bit precision, round to nearest (0x27F), and
+plain DirectDraw doesn't change it (only Direct3D device creation does).
+So x87 results equal IEEE double arithmetic, which our SSE2 build
+produces with `double` (`/fp:precise`, no FMA contraction) as long as the
+operations happen in the same order with the same operand widths
+(`float` stores rounded where the original stores a `float`) and `_ftol`
+is reproduced as truncation toward zero. Proposal: write such code with
+`double`, keep the original's operation order, add emulator specs (the
+emulator runs real x87 code) with values near rounding edges, and confirm
+the control word once at runtime (log `_controlfp(0, 0)` from a hook on
+CLogicThread::Step in the game thread). Fall back to inline `__asm` x87
+only if a difference shows up. CRT transcendental functions (sin, atan,
+pow) would need the original CRT code; none were found in the simulation
+range so far.
+
+Earlier (still valid as background):
+
 **More reimplementation coverage, verification may lag (decided
 2026-11-09).** The user wants the number of reimplemented functions to
 grow faster; verification can follow later or when a caller needs it.
@@ -71,6 +114,15 @@ disassembly; "READY" = not done, every direct callee done, all game code
    test. Later, once a caller subsystem (AI, lobby) is tackled.
 
 Next steps (for 2026-11-10, in this order):
+0. (New order, see the top of this section.) Batch 29 = step 2: the
+   GameWorld::Create callees 0x519440 (16 ins), 0x51a2e0 (87), 0x51a580
+   (380, area set-up), then Create 0x5166d0 itself. Skip every network
+   item below (Lobby 0x602580/0x600f10/0x602850/0x5ec550 etc.). Still
+   NEAR in the building area: 0x4dbab0 (needs 0x51b640), 0x4dbb10/
+   0x4dee20/0x4deec0/0x504a00 (all need 0x50cf50, 919 ins, probably
+   settler removal), 0x4d97b0 (needs 0x4d9250, 349 ins). The start
+   placement 0x5074b0 (AddPlayerTowns, 902 ins) now has its two site
+   checks done.
 1. (Batch 27 done 2026-11-09: assertion/out-of-memory exceptions and
    throwers, Lobby::CMemoryBlock/CLMGeneric, CStaticText, the string
    vector resize 0x40a580 (allocator byte = low byte of n, reproduced),
@@ -460,6 +512,53 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (36): new direction (core gameplay, no network); batch 28 (building sites, 5 functions)
+
+- User decision recorded at the top of "Current focus": skip network
+  code, focus on core gameplay in the order building sites, Create,
+  UpdateSettlers callees, UpdatePhase2, UpdateSettlers. x87 proposal there.
+- Emulator suite rerun in full first (batch 27 left 2 functions reported
+  with incomplete coverage from a stale run): 449 functions, 0 mismatches, again 2 with incomplete coverage (String_FromSubstrDefault 0x408dde, CStaticText_Construct 0x41c4c6). Real but harmless: both paths need the static empty string's count byte (S3.EXE 0x65539f) below 0xfe, and in a full run an earlier spec's `null_string_count` preset leaves it at 0xfe+ (globals keep what earlier cases wrote). Fixed by giving both specs `globals=null_string_count`; alone, after the String_ group and in the C* group they are fully covered.
+- Batch 28, all verified, src/s3re/game/building_sites.cpp (new):
+  - GameWorld::CheckBuildingSite 0x4d99e0: (x, y, type, player, mode):
+    whether a building fits and how much earth it needs (size class
+    1..10, the preview marks); mode 1 also places the site (levelling
+    slot, footprint flags, stakes, planned heights); mode + 2 for
+    unowned land (start castles). Race groups: ground 0x10 (races 0/3),
+    +0x40 (race 1), +0x90 (race 2); mines only need mountain under their
+    tile; 0x20/0x21 need water within ring 20.
+  - GameWorld::PlanSiteLevelling 0x4da440 (was EvaluateBuildingFootprint):
+    the 31x31 levelling plan (slopes 5/7 by direction) and its earth amount.
+  - GameWorld::AddBuildingSite 0x4dd280: the construction-site record
+    (materials, door, two empty piles, work centre per type).
+  - GameWorld::IsFreeCastleSite 0x508420 and IsGoodStartPosition
+    0x5081a0 (random start positions: land/resource counts with demands
+    that drop after 30000/60000/100000 attempts).
+  - Building layout tables in S3.EXE at 0x6aa170 (2400 bytes per race*57
+    + type; marker lists 0x80000000..0x80000005) documented in
+    re/structs.md, with new tile flag 0x04 (being levelled), objects
+    0x70/0x71 (site centre/stakes), building +0x07 race, +0x19/+0x1a
+    materials, +0x1b, +0x1c, +0x22 levelling slot, +0x28, +0x30 earth,
+    +0x32 player countdown (+0x84), player +0x84, the levelling jobs at
+    world+0x1196024 and the scratch grids.
+- Tests: in-process 10 new tests (match + mutation for each), on
+  realistic worlds (smooth heights, mountains, water, four players'
+  land with areas, sparse flags; evolving: placed sites change later
+  cases). Full in-process run: 347/347. Emulator: 5 new specs,
+  0 mismatches, every live block covered (CheckBuildingSite: 8 dead
+  blocks of the size-class chain only reachable with amount 0, and the
+  empty-border path, which no layout has, exempt). Self-test 21/21.
+- Whole-game check (scripted-seed127.bin, 3,000 ticks, against the
+  original): REPLAY OK (run twice). Calls: CheckBuildingSite 2,745,
+  AddBuildingSite 2, IsFreeCastleSite 2; PlanSiteLevelling counted 0
+  (only called from our CheckBuildingSite, which calls ours directly);
+  IsGoodStartPosition 0 (this map has fixed start positions).
+- Game runs now use the lock directory
+  Settlers3Ultimate/s3re-game.lock (another agent runs games in
+  parallel in a worktree): mkdir it (retry every 30 s), owner.txt with
+  "batch-agent" and a time, no S3.EXE running; remove it after the run;
+  stale after 2 hours with no S3.EXE.
 
 ### 2026-11-09 (35): batch 27 (44 functions: assertions, lobby buffers, strings, small helpers)
 

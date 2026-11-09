@@ -199,6 +199,14 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   `-- -map Map\MULTI\384-2-Lakes.map` starts that map without menus.
   `--unverified` also installs the unverified reimplementations.
   `s3re.log` logs every seed and the step count.
+- **Game lock (decided 2026-11-09):** agents may run in parallel (git
+  worktrees). Before any run that opens the game window (check_replay.py,
+  check_determinism.py, plain launcher runs; not `--test`), create the
+  directory `Settlers3Ultimate/s3re-game.lock` atomically (mkdir; if it
+  exists, retry every 30 s), write `owner.txt` (who, when) into it, and
+  make sure no `S3.EXE` runs. Remove it when the run ends, also on
+  failure. A lock older than 2 hours with no `S3.EXE` running is stale.
+  Never touch `Settlers3Ultimate/Save/`.
 - **Unattended determinism check:** `python tools/check_determinism.py
   [--ticks N]`. It opens the game window, so the user's screen is busy
   while it runs (about 1 minute per 1,000 ticks per run).

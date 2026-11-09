@@ -25,6 +25,7 @@ add_library(s3re SHARED
     game/area_piles.cpp
     game/area_split.cpp
     game/building_flags.cpp
+    game/building_sites.cpp
     game/building_goods.cpp
     game/building_tiles.cpp
     game/counting.cpp

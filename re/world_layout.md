@@ -103,8 +103,8 @@ Initialization order (all verified by reading the code):
 | 0x1195DCC | 0x1195DD4 | 8 | u8 + u8[7] | | **NewGameObjective**: enabled flag, then the seven chosen objective ids (IsNgoObjectiveChosen 0x4FFB90, chosen by 0x4FFBC0; see structs.md) | strong (verified layout) |
 | 0x1195DD4 | 0x1195FD4 | 0x200 | uint16 y,x | 128 | recent positions (cursor `0x7ACE60`) | verified |
 | 0x1195FD4 | 0x1196024 | 0x50 | int32 | 20 | per player; = race in the dump (2, 3); saved with players | strong |
-| 0x1196024 | 0x1222ED4 | 0x8CEB0 | 0x3C2 B | 20 x 30 | per player and slot: cached 31x31 site grids | strong |
-| 0x1222ED4 | 0x1223656 | 0x782 | 31x31 B | 2 | footprint scratch grids (0x4da440), saved but rewritten per call | verified |
+| 0x1196024 | 0x1222ED4 | 0x8CEB0 | 0x3C2 B | 20 x 30 | levelling jobs per player and slot: in-use byte + 31x31 planned heights (CheckBuildingSite 0x4D99E0) | verified |
+| 0x1222ED4 | 0x1223656 | 0x782 | 31x31 B | 2 | levelling scratch: planned heights, then cell states (PlanSiteLevelling 0x4da440), saved but rewritten per call | verified |
 | 0x1223656 | 0x1238856 | 0x15200 | uint16 | 43264 | minimap image (BuildMinimap, 0x4FB520) | strong |
 | 0x1238856 | 0x1238858 | 2 | | | padding | |
 | 0x1238858 | 0x123885C | 4 | uint32 | | pile high-water mark (`maxusedpile`) | verified |
