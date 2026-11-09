@@ -105,6 +105,17 @@ used by OpenRCT2 and re3:
 
 Never mark a function as done without verification evidence.
 
+**Unverified reimplementations (decided 2026-11-09).** Coverage may run
+ahead of verification: a reimplementation without evidence yet is
+registered with `S3RE_HOOK_UNVERIFIED` and gets inventory status
+`reimplemented`, hook `unverified` (`inventory.py check` enforces the
+pairs verified/replaced and reimplemented/unverified). Such hooks are only
+installed with `s3re_launcher --unverified`, so default runs and whole-game
+checks run verified code only. "Unverified" means "no evidence yet", not
+"skip easy evidence": write the emulator spec whenever it is quick.
+`frontier.py` counts reimplemented functions as done (`--verified-only`
+doesn't). When the evidence exists, switch to `S3RE_HOOK` and `verified`.
+
 Rejected alternatives: a from-scratch rewrite can't prove equivalence. Matching
 decompilation (byte-identical recompile with MSVC 6) is too slow for this much
 C++ code.
@@ -186,6 +197,7 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   `--timeout S` kills it after S seconds; `--dump-tick N` dumps the hashed
   world memory at tick N. Game options go after `--`, e.g.
   `-- -map Map\MULTI\384-2-Lakes.map` starts that map without menus.
+  `--unverified` also installs the unverified reimplementations.
   `s3re.log` logs every seed and the step count.
 - **Unattended determinism check:** `python tools/check_determinism.py
   [--ticks N]`. It opens the game window, so the user's screen is busy
@@ -393,9 +405,17 @@ replaying, see `src/s3re/replay/command_log.h`):
    registers, and reports basic-block coverage of the original. The gate is
    0 mismatches and every block covered; add presets to a spec when random
    data doesn't reach a branch (`globals` sets S3.EXE globals, which
-   otherwise keep their image values). `run.py --self-test` checks that the
+   otherwise keep their image values; `edx` sets EDX for __fastcall
+   helpers; `cover_until`/`exempt_blocks` handle code past a false function
+   start and blocks that are dead or only reachable by a C++ exception, with
+   the reason in a comment). The game's operator new/delete are a bump
+   allocator in the world area (calls compared), std::_Xlen/_Xran end the
+   run as a throw (compared), FS points at a fake TIB so SEH frames work.
+   `run.py --self-test` checks that the
    harness catches deliberately wrong pairings. Our replacements must not
-   rely on DLL startup code (the emulator doesn't run it).
+   rely on DLL startup code (the emulator doesn't run it); call the game's
+   operator new/delete/memmove (0x61efb9/0x61e4ef/0x61e860) where the
+   original does.
 5. Build, then run `s3re_launcher --test [filter]`. This runs the tests inside
    the real `S3.EXE` without opening the game window. The exit code is 0 only
    if every test passed.
@@ -412,7 +432,9 @@ replaying, see `src/s3re/replay/command_log.h`):
    recordings with player input in `build/x86/bin/Debug/recordings/` (make
    one with `check_replay.py --synthetic-input SEED`).
 7. Set the row to `verified`, `hook=replaced`, `verified_by=<test names>`
-   (space-separated). Run `python tools/inventory.py check`.
+   (space-separated); without evidence yet: `reimplemented`,
+   `hook=unverified` and `S3RE_HOOK_UNVERIFIED` (see "Unverified
+   reimplementations" above). Run `python tools/inventory.py check`.
    Then run `python tools/progress.py` to regenerate the progress data
    (`docs/progress-data.js`, read by the static page `docs/progress.html`)
    and the README picture (`docs/progress.svg`), and commit them with the

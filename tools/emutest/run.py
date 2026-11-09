@@ -13,6 +13,9 @@ the same arguments, registers and lazily-random world, and compares:
   - bytes popped from the stack on return,
   - callee-saved registers EBX, ESI, EDI, EBP (must also be preserved),
   - the calls of the game's DebugLog: format and arguments, in order,
+  - the calls of operator new/delete (sizes and blocks) and of std::_Xlen /
+    std::_Xran (which end the run as a throw would; then the stack and the
+    callee-saved registers are not compared),
   - faults: if both fault the case is skipped as invalid input; if only one
     faults, that's a mismatch.
 
@@ -43,16 +46,21 @@ ROOT = emu.ROOT
 def first_difference(original: emu.Outcome, ours: emu.Outcome, mask: int) -> str | None:
     if (original.fault is None) != (ours.fault is None):
         return f"fault: original {original.fault!r}, ours {ours.fault!r}"
-    if original.popped != ours.popped:
+    if original.thrown != ours.thrown:
+        return f"throw: original {original.thrown}, ours {ours.thrown}"
+    if original.heap_calls != ours.heap_calls:
+        return f"heap calls: original {original.heap_calls}, ours {ours.heap_calls}"
+    thrown = original.thrown is not None  # then the stack, EAX and registers are mid-function
+    if not thrown and original.popped != ours.popped:
         return f"stack: original pops {original.popped} bytes, ours {ours.popped}"
-    if mask and (original.eax & mask) != (ours.eax & mask):
+    if not thrown and mask and (original.eax & mask) != (ours.eax & mask):
         return f"EAX: original {original.eax:#010x}, ours {ours.eax:#010x} (mask {mask:#x})"
     if original.debug_logs != ours.debug_logs:
         def show(calls):
             return "; ".join("(" + ", ".join(f"{v:#x}" for v in call) + ")" for call in calls) or "none"
         return f"DebugLog calls: original {show(original.debug_logs)}, ours {show(ours.debug_logs)}"
     for name in emu.CALLEE_SAVED:
-        if original.saved[name] != ours.saved[name]:
+        if not thrown and original.saved[name] != ours.saved[name]:
             return f"{name}: original {original.saved[name]:#x}, ours {ours.saved[name]:#x}"
     for address in sorted(set(original.final) | set(ours.final)):
         before = original.initial.get(address, ours.initial.get(address))
@@ -67,7 +75,7 @@ def first_difference(original: emu.Outcome, ours: emu.Outcome, mask: int) -> str
 
 
 def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> dict:
-    original = machine.analyze(spec.original)
+    original = machine.analyze(spec.original, spec.cover_until)
     ours = machine.our_function(spec.ours)
     rng = random.Random(f"{spec.ours}:{seed}")
     pool = sorted(set(original.constants) | set(range(0, 9)) | {0xFF, 0xFFFF, 0xFFFFFFFF})
@@ -83,7 +91,7 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
                 for i in range(size):
                     presets[emu.WORLD_BASE + offset + i] = (value >> (8 * i)) & 0xFF
         registers = {name: rng.getrandbits(32) for name in ("eax", *emu.CALLEE_SAVED)}
-        edx = rng.getrandbits(32)
+        edx = spec.edx(rng, pool) if spec.edx else rng.getrandbits(32)
         if spec.convention == "thiscall":
             ecx = emu.WORLD_BASE
         elif spec.convention == "logicthread":
@@ -107,7 +115,7 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
             continue
         result["cases"] += 1
         problem = first_difference(a, b, spec.eax_mask)
-        if problem is None:
+        if problem is None and a.thrown is None:
             for name, value in registers.items():
                 if name != "eax" and a.saved[name] != value:
                     problem = f"{name} not preserved by the original (spec wrong?)"
@@ -115,10 +123,11 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
             result["mismatch"] = (f"case {case}: args "
                                   f"[{', '.join(f'{x:#x}' for x in args)}]: {problem}")
             break
-    covered = machine.covered(original.leaders)
-    result["blocks"] = len(original.leaders)
+    leaders = [a for a in original.leaders if a not in spec.exempt_blocks]
+    covered = machine.covered(leaders)
+    result["blocks"] = len(leaders)
     result["covered"] = len(covered)
-    result["uncovered"] = sorted(set(original.leaders) - covered)
+    result["uncovered"] = sorted(set(leaders) - covered)
     return result
 
 

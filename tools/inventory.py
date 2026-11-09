@@ -28,11 +28,17 @@ Columns of re/functions.csv:
                                there (vtable slot, destructor), not yet what
                                it does
                identified    = we know what it does and named it accordingly
-               reimplemented = our replacement is hooked in, not yet verified
+               reimplemented = our replacement exists (S3RE_HOOK_UNVERIFIED) but
+                               there is no verification evidence yet
                verified      = differential tests prove it matches the original
   hook         none | passthrough (logs, then calls the original)
-                    | replaced (our reimplementation runs instead)
-  verified_by  Space-separated S3RE_TEST names. Required when verified.
+                    | replaced (S3RE_HOOK: our reimplementation runs instead;
+                      requires status verified)
+                    | unverified (S3RE_HOOK_UNVERIFIED: only installed with
+                      `s3re_launcher --unverified`; requires status
+                      reimplemented)
+  verified_by  Space-separated S3RE_TEST names. Required when verified;
+               optional (partial evidence) when reimplemented.
   notes        Free text.
 """
 
@@ -52,11 +58,11 @@ SOURCE_DIR = ROOT / "src"
 COLUMNS = ["address", "name", "category", "status", "hook", "verified_by", "notes"]
 CATEGORIES = ("game", "crt", "stl", "mfc", "watcom", "compiler")
 STATUSES = ("classified", "identified", "reimplemented", "verified")
-HOOKS = ("none", "passthrough", "replaced")
+HOOKS = ("none", "passthrough", "replaced", "unverified")
 
 ADDRESS_RE = re.compile(r"0x[0-9a-f]{8}")
 NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(::~?[A-Za-z_][A-Za-z0-9_]*)*")
-HOOK_RE = re.compile(r"S3RE_(HOOK|HOOK_ALWAYS|PASSTHROUGH)\(\s*(0x[0-9a-fA-F]+)\s*,\s*(\w+)")
+HOOK_RE = re.compile(r"S3RE_(HOOK|HOOK_ALWAYS|HOOK_UNVERIFIED|PASSTHROUGH)\(\s*(0x[0-9a-fA-F]+)\s*,\s*(\w+)")
 TEST_RE = re.compile(r"S3RE_TEST\(\s*(\w+)\s*\)")
 
 
@@ -92,7 +98,8 @@ def scan_sources() -> tuple[dict[int, tuple[str, str]], dict[str, str]]:
         text = path.read_text(encoding="utf-8")
         rel = path.relative_to(ROOT).as_posix()
         for kind, address, _name in HOOK_RE.findall(text):
-            kind = "passthrough" if kind == "PASSTHROUGH" else "replaced"
+            kind = {"PASSTHROUGH": "passthrough", "HOOK_UNVERIFIED": "unverified"}.get(
+                kind, "replaced")
             hooks[int(address, 16)] = (kind, rel)
         for test in TEST_RE.findall(text):
             tests[test] = rel
@@ -139,8 +146,12 @@ def check() -> int:
                 errors.append(f"{where}: {column} '{row[column]}' must be one of "
                               f"{', '.join(allowed)}")
 
-        if row["status"] in ("reimplemented", "verified") and row["hook"] != "replaced":
-            errors.append(f"{where}: status '{row['status']}' requires hook 'replaced'")
+        required_hook = {"verified": "replaced", "reimplemented": "unverified"}.get(row["status"])
+        if required_hook and row["hook"] != required_hook:
+            errors.append(f"{where}: status '{row['status']}' requires hook '{required_hook}'")
+        required_status = {"replaced": "verified", "unverified": "reimplemented"}.get(row["hook"])
+        if required_status and row["status"] != required_status:
+            errors.append(f"{where}: hook '{row['hook']}' requires status '{required_status}'")
 
         tests = row["verified_by"].split()
         if row["status"] == "verified" and not tests:
@@ -200,6 +211,7 @@ def stats() -> int:
 
     line("Named:", len(rows))
     line("Understood:", sum(1 for row in rows if row["status"] != "classified"))
+    line("Reimpl.:", sum(1 for row in rows if row["status"] in ("reimplemented", "verified")))
     line("Verified:", sum(1 for row in rows if row["status"] == "verified"))
     return 0
 

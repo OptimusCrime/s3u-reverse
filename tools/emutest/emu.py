@@ -21,6 +21,17 @@ Calls of the game's DebugLog (DEBUG_LOG, a bare `ret`) are recorded with
 their format address and as many argument dwords as the format string has
 conversions, so replacements must log the same messages with the same
 arguments in the same order.
+
+The game's operator new and delete are replaced by a bump allocator in the
+world area (HEAP_OFFSET; reset for every call, so both functions get the
+same addresses, and the blocks are lazily random and compared like the
+world); every call is recorded ("new", size, address) / ("delete",
+address) and must match. std::_Xlen and std::_Xran (which throw a C++
+exception in the game) are recorded as ("throw", address) and end the run;
+the stack and callee-saved registers are then not compared.
+
+FS points at a fake thread information block (outside the compared memory),
+so code with exception-handling frames (fs:[0]) runs.
 """
 
 from __future__ import annotations
@@ -37,7 +48,8 @@ from unicorn import (UC_ARCH_X86, UC_HOOK_BLOCK, UC_HOOK_CODE, UC_HOOK_MEM_READ,
                      UC_HOOK_MEM_WRITE, UC_MODE_32, Uc, UcError)
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_EBX, UC_X86_REG_ECX,
                                UC_X86_REG_EDI, UC_X86_REG_EDX, UC_X86_REG_EIP, UC_X86_REG_ESI,
-                               UC_X86_REG_ESP)
+                               UC_X86_REG_ESP, UC_X86_REG_FS, UC_X86_REG_GDTR,
+                               UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_SS)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -48,6 +60,15 @@ _CONVERSION = re.compile(rb"%[-+ #0]*(?:\d+|\*)?(?:\.(?:\d+|\*))?[hlL]*([a-zA-Z%
 STACK_BASE = 0x00200000
 STACK_SIZE = 0x00100000
 RETURN_ADDRESS = 0x00010000  # sentinel: emulation stops when it is reached
+OPERATOR_NEW = 0x0061efb9
+OPERATOR_DELETE = 0x0061e4ef
+THROWERS = (0x0061e4fa, 0x0061e646)  # std::_Xlen, std::_Xran
+HEAP_OFFSET = 0x01fc0000  # world offset of the fake heap (after specs.SCRATCH)
+HEAP_SIZE = 0x00030000
+TEB_BASE = 0x00300000
+GDT_BASE = 0x00310000
+FLAT_SELECTOR = 2 << 3    # GDT entry 2, RPL 0
+FS_SELECTOR = (3 << 3) | 3  # GDT entry 3, RPL 3
 MAX_INSTRUCTIONS = 20_000_000
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,
@@ -121,6 +142,8 @@ class Outcome:
     initial: dict[int, int] = field(default_factory=dict)  # compared address -> byte before
     final: dict[int, int] = field(default_factory=dict)    # compared address -> byte after
     debug_logs: list[tuple[int, ...]] = field(default_factory=list)  # (format, args...) per DebugLog call
+    heap_calls: list[tuple] = field(default_factory=list)  # ("new", size, address) / ("delete", address)
+    thrown: int | None = None        # address of the std::_Xlen/_Xran called, if any
 
 
 class Emulator:
@@ -151,6 +174,31 @@ class Emulator:
         self.uc.hook_add(UC_HOOK_BLOCK, self._on_block)
         self.uc.hook_add(UC_HOOK_CODE, self._on_debug_log, begin=DEBUG_LOG, end=DEBUG_LOG)
         self.debug_logs: list[tuple[int, ...]] = []
+        for address, handler in ((OPERATOR_NEW, self._on_new), (OPERATOR_DELETE, self._on_delete),
+                                 *((a, self._on_throw) for a in THROWERS)):
+            self.uc.hook_add(UC_HOOK_CODE, handler, begin=address, end=address)
+        self.heap_calls: list[tuple] = []
+        self.heap_next = 0
+        self.thrown: int | None = None
+        self._map_thread_block()
+
+    def _map_thread_block(self) -> None:
+        """A data segment for FS whose base is TEB_BASE. Unicorn can't set the
+        FS base directly in 32-bit mode, so through a GDT; loading one needs
+        flat DS/ES/SS descriptors as well."""
+        def descriptor(base, limit, access, flags):
+            return struct.pack("<Q", (limit & 0xFFFF) | ((base & 0xFFFFFF) << 16) | (access << 40)
+                               | (((limit >> 16) & 0xF) << 48) | (flags << 52) | ((base >> 24) << 56))
+        self.uc.mem_map(TEB_BASE, 0x1000)
+        self.uc.mem_map(GDT_BASE, 0x1000)
+        flat_data = (FLAT_SELECTOR >> 3, 0, 0xFFFFF, 0x93, 0xC)  # ring 0, read/write, 4 GB
+        teb = (FS_SELECTOR >> 3, TEB_BASE, 0xFFF, 0xF3, 0x4)     # ring 3, read/write
+        for index, base, limit, access, flags in (flat_data, teb):
+            self.uc.mem_write(GDT_BASE + 8 * index, descriptor(base, limit, access, flags))
+        self.uc.reg_write(UC_X86_REG_GDTR, (0, GDT_BASE, 0xFFF, 0))
+        for register in (UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_SS):
+            self.uc.reg_write(register, FLAT_SELECTOR)
+        self.uc.reg_write(UC_X86_REG_FS, FS_SELECTOR)
 
     # -- symbols and static analysis ---------------------------------------
 
@@ -164,8 +212,12 @@ class Emulator:
             raise KeyError(f"{name}: {len(found)} matching symbols in s3re.map")
         return found[0]
 
-    def analyze(self, start: int) -> Function:
-        end = self.function_starts[bisect.bisect_right(self.function_starts, start)]
+    def analyze(self, start: int, end: int | None = None) -> Function:
+        """Basic blocks and constants of the function at `start`, which ends at
+        the next known function start (or at `end`, for code that continues
+        past a function start Ghidra put inside it)."""
+        if end is None:
+            end = self.function_starts[bisect.bisect_right(self.function_starts, start)]
         code = bytes(self.uc.mem_read(start, end - start))
         instructions = list(self.disassembler.disasm(code, start))
         last_ret = max((ins.address for ins in instructions
@@ -232,6 +284,33 @@ class Emulator:
         args = struct.unpack(f"<{count}I", bytes(uc.mem_read(esp + 8, 4 * count))) if count else ()
         self.debug_logs.append((fmt, *args))
 
+    def _return_from_cdecl(self, uc, eax: int) -> None:
+        esp = uc.reg_read(UC_X86_REG_ESP)
+        ret = struct.unpack("<I", bytes(uc.mem_read(esp, 4)))[0]
+        uc.reg_write(UC_X86_REG_EAX, eax & 0xFFFFFFFF)
+        uc.reg_write(UC_X86_REG_ESP, esp + 4)
+        uc.reg_write(UC_X86_REG_EIP, ret)
+
+    def _on_new(self, uc, address, size, user_data):
+        esp = uc.reg_read(UC_X86_REG_ESP)
+        count = struct.unpack("<I", bytes(uc.mem_read(esp + 4, 4)))[0]
+        block = 0
+        if count < HEAP_SIZE - self.heap_next:
+            block = WORLD_BASE + HEAP_OFFSET + self.heap_next
+            self.heap_next += (count + 15) & ~15
+        self.heap_calls.append(("new", count, block))
+        self._return_from_cdecl(uc, block)
+
+    def _on_delete(self, uc, address, size, user_data):
+        esp = uc.reg_read(UC_X86_REG_ESP)
+        block = struct.unpack("<I", bytes(uc.mem_read(esp + 4, 4)))[0]
+        self.heap_calls.append(("delete", block))
+        self._return_from_cdecl(uc, 0)
+
+    def _on_throw(self, uc, address, size, user_data):
+        self.thrown = address
+        uc.emu_stop()
+
     def _on_block(self, uc, address, size, user_data):
         low, high = self.cover_range
         if low <= address < high:
@@ -284,16 +363,21 @@ class Emulator:
         self.undo = {}
         self.cover_range = cover
         self.debug_logs = []
+        self.heap_calls = []
+        self.heap_next = 0
+        self.thrown = None
         outcome = Outcome()
         try:
             uc.emu_start(address, RETURN_ADDRESS, count=MAX_INSTRUCTIONS)
             pc = uc.reg_read(UC_X86_REG_EIP)
-            if pc != RETURN_ADDRESS:
+            if pc != RETURN_ADDRESS and self.thrown is None:
                 outcome.fault = f"did not return within {MAX_INSTRUCTIONS} instructions"
         except UcError as error:
             outcome.fault = f"{error} at {uc.reg_read(UC_X86_REG_EIP):#x}"
         outcome.eax = uc.reg_read(UC_X86_REG_EAX)
         outcome.debug_logs = self.debug_logs
+        outcome.heap_calls = self.heap_calls
+        outcome.thrown = self.thrown
         outcome.popped = uc.reg_read(UC_X86_REG_ESP) - esp
         outcome.saved = {name: uc.reg_read(reg) for name, reg in CALLEE_SAVED.items()}
         undo, self.undo = self.undo, None

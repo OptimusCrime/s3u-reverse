@@ -3,8 +3,10 @@
 
 Combines the call graph from the dumpbin disassembly (build/s3.asm, see
 tools/asm_tools.py for how to make it) with the status column of
-re/functions.csv. A callee counts as done when it is verified, is in the
-statically linked C runtime (>= 0x61e4ef, or category crt), or is DebugLog.
+re/functions.csv. A callee counts as done when it is verified or
+reimplemented (unverified, S3RE_HOOK_UNVERIFIED; --verified-only leaves
+those out), is in the statically linked C runtime (>= 0x61e4ef, or category
+crt), or is DebugLog.
 
 Sections (default range 0x4c0000..0x560000, the simulation and logic thread):
   READY     unverified functions whose direct callees are all done; sorted by
@@ -32,7 +34,7 @@ Tail jumps count as calls.
 Usage:
   python tools/frontier.py [--range LOW HIGH] [--max-instructions N]
                            [--limit N] [--all-flags] [--library-done]
-                           [--show-stubs]
+                           [--show-stubs] [--verified-only]
 By default functions with indirect calls are left out of READY/NEAR (their
 real callees are unknown); --all-flags keeps them.
 """
@@ -105,6 +107,8 @@ def main():
                         help="count identified library functions (stl/crt/...) as done")
     parser.add_argument("--show-stubs", action="store_true",
                         help="keep static-initializer stubs in the lists")
+    parser.add_argument("--verified-only", action="store_true",
+                        help="don't count reimplemented (unverified) functions as done")
     args = parser.parse_args()
     if not os.path.exists(args.asm):
         sys.exit(f"{args.asm} not found; see tools/asm_tools.py for how to make it")
@@ -135,7 +139,8 @@ def main():
 
     def done(address):
         row = inventory.get(address, {})
-        return (row.get("status") == "verified" or address >= CRT_START
+        done_statuses = ("verified",) if args.verified_only else ("verified", "reimplemented")
+        return (row.get("status") in done_statuses or address >= CRT_START
                 or address == DEBUG_LOG or row.get("category") == "crt"
                 or (args.library_done and is_library(address)))
 

@@ -21,6 +21,10 @@
 // not installed (tooling hooks are). Replay one recording with and without it
 // and compare the traces to check our code on whole games.
 //
+// --unverified also installs the reimplementations that have no verification
+// evidence yet (S3RE_HOOK_UNVERIFIED, inventory status `reimplemented`). By
+// default only verified ones are installed. Ignored with --original.
+//
 // --log-commands logs every command the simulation sends to the network
 // layer (and, in network games, every command announced to CNetThread) to
 // s3re.log.
@@ -260,6 +264,7 @@ int wmain(int argc, wchar_t** argv) {
     bool logCommands = false;
     bool dumpHeaders = false;
     bool originalMode = false;
+    bool unverifiedMode = false;
     std::wstring recordCommands;
     std::wstring replayCommands;
     std::wstring testFilter;
@@ -288,6 +293,8 @@ int wmain(int argc, wchar_t** argv) {
             }
         } else if (arg == L"--original") {
             originalMode = true;
+        } else if (arg == L"--unverified") {
+            unverifiedMode = true;
         } else if (arg == L"--dump-headers") {
             dumpHeaders = true;
         } else if (arg == L"--log-commands") {
@@ -321,7 +328,7 @@ int wmain(int argc, wchar_t** argv) {
             wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
                     L"[--trace-determinism] [--log-commands] [--record-commands <file>] "
                     L"[--replay-commands <file>] [--seed <n>] [--exit-after-ticks <n>] "
-                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [--original] [-- <S3.EXE arguments>]\n");
+                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [--original] [--unverified] [-- <S3.EXE arguments>]\n");
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
@@ -379,6 +386,7 @@ int wmain(int argc, wchar_t** argv) {
     SetEnvironmentVariableW(L"S3RE_LOG_COMMANDS", logCommands ? L"1" : nullptr);
     SetEnvironmentVariableW(L"S3RE_DUMP_HEADERS", dumpHeaders ? L"1" : nullptr);
     SetEnvironmentVariableW(L"S3RE_ORIGINAL", originalMode ? L"1" : nullptr);
+    SetEnvironmentVariableW(L"S3RE_UNVERIFIED", unverifiedMode ? L"1" : nullptr);
     SetEnvironmentVariableW(L"S3RE_RECORD_COMMANDS",
                             recordCommands.empty() ? nullptr : recordCommands.c_str());
     SetEnvironmentVariableW(L"S3RE_REPLAY_COMMANDS",

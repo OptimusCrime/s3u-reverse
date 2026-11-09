@@ -74,6 +74,15 @@ class Spec:
     # (rng, pool, args) -> [(absolute address in S3.EXE, value, size)]: globals
     # set for the case (otherwise they keep their values from the image).
     globals: Callable | None = None
+    # EDX for the call (for __fastcall functions); otherwise random.
+    edx: Generator | None = None
+    # Coverage: analyze the original up to this address instead of the next
+    # known function start (code that continues past a start Ghidra found
+    # inside it), and leave out these block starts: blocks only reachable
+    # through a C++ exception (catch handlers) or dead code (inlined code
+    # that re-checks a condition already decided); say why at the spec.
+    cover_until: int | None = None
+    exempt_blocks: tuple[int, ...] = ()
 
 
 MAP_SIZE = 0x2d2d0
@@ -2085,6 +2094,163 @@ SPECS += [
 ]
 
 
+
+# --- std::string (MSVC 6.0, src/s3re/msvc6/string.cpp) ----------------------
+# Strings live in the world area: `this` (thiscall) at world offset 0 with its
+# buffer in scratch slot 4, a second string in slot 0 with its buffer in slot
+# 1 (or sharing this one's), C text in slot 2, an operator+ result in slot 3.
+# Buffers come from the emulator's fake heap when the functions allocate.
+
+STRING_SELF = 0x0
+STRING_OTHER = SCRATCH
+STRING_OTHER_BUFFER = SCRATCH + 1 * SCRATCH_SLOT_BYTES
+STRING_TEXT = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+STRING_RESULT = SCRATCH + 3 * SCRATCH_SLOT_BYTES
+STRING_SELF_BUFFER = SCRATCH + 4 * SCRATCH_SLOT_BYTES
+
+
+def string_length(rng) -> int:
+    if rng.random() < 0.5:
+        return rng.choice([0, 0, 1, 2, 3, 0x1e, 0x1f, 0x20, 0x21, 0x3f, 0x40])
+    return rng.randrange(0x60)
+
+
+def string_fields(rng, offset: int, buffer: int, shared_ptr: int | None = None,
+                  overlong: bool = False):
+    """A std::string object at world `offset`: mostly consistent (length <=
+    capacity, a count byte before the text, the text, its zero), sometimes
+    odd (no buffer but a length, text with an earlier or later zero, frozen
+    or nearly full counts; with `overlong`, sometimes 0xFFFFFFFF characters,
+    which reaches std::_Xlen when copied from position 1). An over-long
+    string's text pointer is unmapped, so whatever reads it faults at once
+    instead of copying gigabytes. Returns (fields, ptr)."""
+    length = string_length(rng)
+    capacity = rng.choice([length, length, max(length, 0x1f), length + rng.randrange(0x30),
+                           rng.randrange(0x60)])
+    fields = [(offset, rng.getrandbits(8), 1)]
+    roll = rng.random()
+    if roll < 0.12:
+        ptr = 0
+        if rng.random() < 0.6:
+            length, capacity = 0, 0
+    elif shared_ptr and roll < 0.4:
+        ptr = shared_ptr
+    else:
+        ptr = WORLD_BASE + buffer + 1
+        count = rng.choice([0, 0, 0, 1, 2, 3, 0xfd, 0xfe, 0xff, rng.getrandbits(8)])
+        fields.append((buffer, count, 1))
+        text = length
+        if rng.random() < 0.15:
+            text = rng.randrange(length + 6)  # _Split and ~string use strlen, not the length
+        for i in range(text):
+            fields.append((buffer + 1 + i, rng.randint(1, 255), 1))
+        fields.append((buffer + 1 + text, 0, 1))
+    if overlong and rng.random() < 0.04:
+        length, ptr = 0xFFFFFFFF, 0x7FFF0000
+    fields += [(offset + 4, ptr, 4), (offset + 8, length, 4), (offset + 12, capacity, 4)]
+    return fields, ptr
+
+
+def string_world(rng, pool, args):
+    """`this`, a second string (sometimes sharing its buffer) and C text."""
+    fields, ptr = string_fields(rng, STRING_SELF, STRING_SELF_BUFFER)
+    # Only the second string is ever over-long: `this` would make _Copy
+    # crawl through the emulated world (its size wraps to a tiny block).
+    other, _ = string_fields(rng, STRING_OTHER, STRING_OTHER_BUFFER, shared_ptr=ptr, overlong=True)
+    fields += other
+    text = rng.randrange(0x60) if rng.random() < 0.8 else rng.choice([0, 1, 0x1f, 0x20])
+    for i in range(text):
+        fields.append((STRING_TEXT + i, rng.randint(1, 255), 1))
+    fields.append((STRING_TEXT + text, 0, 1))
+    return fields
+
+
+def string_count(rng, pool) -> int:
+    """Lengths, positions and counts: small, around the 31-character minimum
+    capacity, npos and its neighbours (too long: std::_Xlen), or large
+    (beyond the fake heap, so an allocation returns null and the copy
+    faults at once instead of crawling through megabytes)."""
+    roll = rng.random()
+    if roll < 0.55:
+        return rng.randrange(0x62)
+    if roll < 0.7:
+        return rng.choice([0, 1, 0x1f, 0x20])
+    if roll < 0.85:
+        # Not 0xFFFFFFFD (nor anything from 0x7FFFFFFE up): valid for
+        # _Grow, but _Copy's size turns negative, it allocates 0 bytes and
+        # the copy crawls through the emulated world before it faults.
+        return rng.choice([0xFFFFFFFF, 0xFFFFFFFE])
+    return (rng.getrandbits(31) | 0x10000000)  # positive as an allocation size
+
+
+def copy_count(rng, pool) -> int:
+    """For _Copy alone, which copies only the current text: also sizes whose
+    allocation size turns negative (the allocator then asks for 0 bytes)."""
+    if rng.random() < 0.1:
+        return rng.choice([0x7FFFFFFE, 0xFFFFFFFD, 0x80000000 | rng.getrandbits(31)])
+    return string_count(rng, pool)
+
+
+def string_bool(rng, pool) -> int:
+    return rng.choice([0, 1, 0x100, 0x101, rng.getrandbits(32)])
+
+
+STRING_SELF_PTR = WORLD_BASE + STRING_SELF
+STRING_OTHER_PTR = WORLD_BASE + STRING_OTHER
+STRING_TEXT_PTR = WORLD_BASE + STRING_TEXT
+STRING_RESULT_PTR = WORLD_BASE + STRING_RESULT
+
+
+def text_or_null(rng, pool) -> int:
+    return 0 if rng.random() < 0.15 else STRING_TEXT_PTR
+
+
+SPECS += [
+    Spec("String_Eos", 0x00401f60, "thiscall", [below(0x60)], eax_mask=0, presets=string_world),
+    Spec("String_Tidy", 0x00402170, "thiscall", [string_bool], eax_mask=0, presets=string_world),
+    Spec("String_TidyFree", 0x00401d20, "thiscall", [], eax_mask=0, presets=string_world),
+    Spec("String_MaxSize", 0x00402260, "thiscall", []),
+    # _Copy continues at 0x4022f0 (a separate Ghidra function); its catch
+    # handler (0x4022c9..0x4022ef) only runs if operator new throws.
+    Spec("String_Copy", 0x00402270, "thiscall", [copy_count], eax_mask=0, presets=string_world,
+         cover_until=0x00402380, exempt_blocks=(0x004022c9, 0x004022d6, 0x004022d8, 0x004022ea)),
+    # Dead: 0x401fe4 and 0x402046 decrement a count that the inlined _Tidy
+    # re-checks after _Grow already found it to be 0 or 0xFF.
+    Spec("String_Grow", 0x00401f80, "thiscall", [string_count, string_bool], eax_mask=0xFF,
+         presets=string_world, exempt_blocks=(0x00401fe4, 0x00402046)),
+    # Dead: 0x4020e9 is _Xlen for a strlen above 0xFFFFFFFD; 0x4020f7..0x402106
+    # re-check the buffer pointer that the inlined _Tidy just set to null.
+    Spec("String_Split", 0x004020a0, "thiscall", [], eax_mask=0, presets=string_world,
+         exempt_blocks=(0x004020e9, 0x004020f7, 0x004020fe, 0x00402102, 0x00402106)),
+    Spec("String_AssignChars", 0x004021c0, "thiscall", [one_of(STRING_TEXT_PTR), string_count],
+         presets=string_world),
+    # Dead: 0x401da0 (_Xran in erase(pos + n) of a self-assignment: pos + n
+    # <= length by construction) and 0x401e01 (the second erase finds a
+    # length below pos: the first erase leaves at least pos characters).
+    Spec("String_AssignSubstr", 0x00401d60, "thiscall",
+         [one_of(STRING_SELF_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR), string_count, string_count],
+         presets=string_world, exempt_blocks=(0x00401da0, 0x00401e01)),
+    # Dead: erase() removes everything, so its _Grow(0) is false (0x401c19),
+    # and after _Split the buffer is unshared, so the final release never
+    # just decrements (0x401c3a).
+    Spec("String_Destroy", 0x00401b60, "thiscall", [], eax_mask=0, presets=string_world,
+         exempt_blocks=(0x00401c19, 0x00401c3a)),
+    # Dead: 0x401b07 frees the second temporary, which `this` always shares
+    # (it is non-empty with a fresh count 0, or empty without a buffer).
+    Spec("String_FromChars", 0x00401a10, "thiscall", [text_or_null, string_count],
+         presets=string_world, exempt_blocks=(0x00401b07,)),
+    Spec("String_Default", 0x00407880, "thiscall", [one_of(STRING_TEXT_PTR)], presets=string_world),
+    # Dead: 0x40248a (PlusChars) and 0x401ce6 (ConcatChars) free the
+    # temporary sum, which the result always shares (same reason as above).
+    # Unreachable in practice: 0x4023ee (_Xlen in append) needs a string of
+    # about 4 GB.
+    Spec("String_PlusChars", 0x00402380, "stdcall",
+         [one_of(STRING_RESULT_PTR), one_of(STRING_SELF_PTR, STRING_OTHER_PTR), one_of(STRING_TEXT_PTR)],
+         presets=string_world, exempt_blocks=(0x0040248a, 0x004023ee)),
+    Spec("String_ConcatChars", 0x00401c70, "thiscall", [text_or_null], presets=string_world,
+         edx=one_of(STRING_SELF_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR), exempt_blocks=(0x00401ce6,)),
+]
+
 # Deliberately wrong pairings for `run.py --self-test`: each must be reported
 # as a mismatch, which shows that the harness notices wrong return values,
 # wrong memory writes and wrong conditions.
@@ -2109,4 +2275,6 @@ SELF_TEST = [
          [below(4, 0.1), below(4, 0.1), scratch(0), between(-2, 20)], presets=owned_points),
     Spec("GameWorld_FloodFillTileByte10", 0x0051c6c0, "thiscall",
          [below(12), below(12), anything], presets=flood_replace(0x16, 2), max_cases=100),
+    # ~string erases first, so even on an unshared buffer it writes before freeing.
+    Spec("String_TidyFree", 0x00401b60, "thiscall", [], eax_mask=0, presets=string_world),
 ]

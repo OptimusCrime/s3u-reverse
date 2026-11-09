@@ -41,7 +41,7 @@ void LogCallCounts() {
         return;
     }
     for (const Hook& hook : Registry()) {
-        if (hook.calls == nullptr || (OriginalMode() && hook.kind == HookKind::Replaced)) {
+        if (hook.calls == nullptr || !IsInstalled(hook.kind)) {
             continue;  // not counted, or not installed
         }
         S3RE_LOG("calls %s %lu", hook.name, hook.calls->load(std::memory_order_relaxed));
@@ -53,16 +53,38 @@ bool OriginalMode() {
     return value;
 }
 
+bool UnverifiedMode() {
+    static const bool value = GetEnvironmentVariableA("S3RE_UNVERIFIED", nullptr, 0) > 0;
+    return value;
+}
+
+bool IsInstalled(HookKind kind) {
+    switch (kind) {
+        case HookKind::Replaced:
+            return !OriginalMode();
+        case HookKind::Unverified:
+            return !OriginalMode() && UnverifiedMode();
+        default:
+            return true;
+    }
+}
+
 bool InstallAll() {
     std::vector<Hook> hooks;
+    unsigned unverifiedLeftOut = 0;
     for (const Hook& hook : Registry()) {
-        if (!(OriginalMode() && hook.kind == HookKind::Replaced)) {
+        if (IsInstalled(hook.kind)) {
             hooks.push_back(hook);
+        } else if (hook.kind == HookKind::Unverified && !OriginalMode()) {
+            ++unverifiedLeftOut;
         }
     }
     if (OriginalMode()) {
         S3RE_LOG("original mode: %u replacement(s) left out",
                  static_cast<unsigned>(Registry().size() - hooks.size()));
+    } else if (unverifiedLeftOut > 0) {
+        S3RE_LOG("%u unverified replacement(s) left out (use --unverified to install them)",
+                 unverifiedLeftOut);
     }
 
     DetourTransactionBegin();
@@ -84,7 +106,8 @@ bool InstallAll() {
 
     for (const Hook& hook : hooks) {
         S3RE_LOG("hooked %s at 0x%08x (%s)", hook.name, static_cast<unsigned>(hook.address),
-                 hook.kind == HookKind::Passthrough ? "passthrough"
+                 hook.kind == HookKind::Passthrough  ? "passthrough"
+                 : hook.kind == HookKind::Unverified ? "replaced, unverified"
                  : OriginalMode()                    ? "replaced, calls the original"
                                                      : "replaced");
     }
@@ -100,7 +123,7 @@ void UninstallAll() {
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
     for (const Hook& hook : Registry()) {
-        if (!(OriginalMode() && hook.kind == HookKind::Replaced)) {
+        if (IsInstalled(hook.kind)) {
             DetourDetach(hook.original, hook.replacement);
         }
     }

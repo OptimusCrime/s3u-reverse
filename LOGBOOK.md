@@ -7,39 +7,84 @@ progress.
 
 ## Current focus
 
-**Replacing simulation functions, bottom up, gated by the emulator tests.**
+**More reimplementation coverage, verification may lag (decided
+2026-11-09).** The user wants the number of reimplemented functions to
+grow faster; verification can follow later or when a caller needs it.
+Convention: a reimplementation without evidence uses `S3RE_HOOK_UNVERIFIED`,
+inventory status `reimplemented`, hook `unverified`; it is only installed
+with `s3re_launcher --unverified`, so default runs and whole-game checks
+stay on verified code (CLAUDE.md, "Unverified reimplementations"). Cheap
+evidence (an emulator spec) is still written whenever it is quick.
 
-Per function: reimplement; in-process differential test (`s3re_launcher
---test`); emulator spec in `tools/emutest/specs.py` with
-`python tools/emutest/run.py --require-coverage` (0 mismatches, all basic
-blocks of the original covered). The whole-game replay
-(`check_replay.py --against-original`) is a milestone check now.
+Evaluation (2026-11-09; numbers from `frontier.py`, the inventory and the
+disassembly; "READY" = not done, every direct callee done, all game code
+0x401000..0x61e4ef, strict view without --library-done):
 
-Status: all 169 replacements pass the emulator suite with full block
-coverage (2,000 cases each, fewer for the slow ones: the flood fills 150,
-ShiftStatistics 60, the map-wide loops and table scans 150-800);
-`--self-test` catches 11/11 wrong pairings. Batches 9-14 passed the
-whole-game check on 2026-11-08 (call counts in the inventory); batches
-15-20 haven't had one yet. Specs can set S3.EXE globals per case
-(`Spec.globals`), and take ECX = a fake CLogicThread ("logicthread"
-convention) and pointer arguments into scratch buffers (`scratch(n)`).
+1. **MSVC6 std::string (STL, 63 functions, ~5,000 instructions)** - the
+   single biggest blocker: every game file uses it (~2,400 destructor and
+   ~2,000 constructor call sites). Before batch 21, READY was 602; with
+   the 13 core members of batch 21 done it is 1,029. All of the STL done
+   would give about 1,080 READY game functions (vs 672 before, game
+   category only). Needed anyway (game objects embed the layout; the
+   standalone build needs it). Easy to verify (emulator, fake heap).
+   **Batch 21 did the core; next: the remaining ~35 `std::string::sub_*`
+   members (0x407b10 373 callers, 0x4078a0 215, 0x407a50 156, 0x4077f0
+   54, ...) and the std::logic_error/out_of_range classes (~12).**
+2. **Trivial shared stubs that Detours can't hook.** `NoOp` 0x59f200 (a
+   lone `ret`, 9 vtable slots) alone blocks 92 NEAR functions; the
+   `AdjustorThunk`/`JmpThunk` stubs (0x429d90, 0x429db0, ...) 25 each.
+   Too short for a 5-byte detour, and nothing to reimplement. Proposal
+   (user decision): let frontier.py count byte-proven trivial functions
+   (lone `ret N`, a single `jmp`, `add ecx,N; jmp`) as done, recorded as
+   such in the inventory (status `identified`, note "trivial: proven by its
+   bytes"), not `verified`.
+3. **Compiler/CRT library code: treat as done by mapping, not by hooks.**
+   4,286 compiler stubs are identified (1,966 std::string static
+   initializers, 2,271 atexit registrations, thunks): they are
+   byte-pattern instances of `T global(args)`, and a standalone build
+   recreates them as plain global definitions. CRT (506): use the real
+   one (frontier already counts it as done). Not worth hooks.
+4. **Simulation frontier (0x4c0000..0x560000)** - 100 READY, 124 NEAR.
+   Best: 0x504420 (144 ins, 7 callers), 0x542990 (122, 6 callers),
+   0x51b7f0/0x51d000 (unblock the area set-up 0x51a580), the AI helpers
+   0x551970/0x5519b0 (4 each), the 13 MapEffect make functions. Blocker
+   0x50cf50 (919 ins, settler removal?) unblocks 5 (0x51b640, 0x504f70,
+   0x50e980, 0x4dbb10, 0x4dee20). Strongest checks (whole-game replay).
+5. **File formats: savegames, Picture/GfxData.** Savegame loader 0x508fa0
+   (677 ins, called by CLogicThread::OnStart) needs Dirk/SaveGames.cpp's
+   chunk readers 0x4a60f0/0x4a6310 (unit 0x4a55e0..0x4a77c0, 30 SaveGame
+   functions / 7,200 ins), which need Win32 file wrappers 0x60bab0/0x60bbe0/
+   0x60be20 and probably a decompressor 0x4a57b0/0x4a5930/0x4a5a60 (not
+   analysed), plus std::string 0x413d70. Picture (194 functions, 25,400
+   ins, 79 READY; includes zlib/libpng at 0x5b2fb3..0x5b50ad) and GfxData
+   (67, 7,700 ins, 29 READY) are the graphics loaders: self-contained,
+   verifiable by comparing decoded bytes, needed for the macOS port.
+6. **Win32/DirectX framework classes** - `Win32::CObject::~CObject`
+   0x610330 (13 ins) unblocks 24, `Win32::ThrowWin32Error` 0x610de0 21,
+   `CAssertmentFailed` 0x612a20 14; the UI accessor block 0x429d70..
+   0x42a180 (4-13 ins each, 17-25 callers each) waits on CScreenElement
+   virtuals 0x415xxx-0x418xxx. Many functions per effort, but mostly
+   outside the simulation; good "coverage" batches.
+7. **Watcom containers (545 classified `WC*` functions)** - template
+   instantiations of a few class templates; one C++ template each would
+   cover many functions, but each instantiation needs its own hook and
+   test. Later, once a caller subsystem (AI, lobby) is tackled.
 
 Next steps (for 2026-11-10, in this order):
-1. Whole-game check for batches 15-20 (`python tools/check_replay.py
+1. Batch 22: the rest of std::string (`sub_*` members, logic_error /
+   out_of_range), same harness (fake heap, specs `String_*`).
+2. Decide item 2 above (trivial stubs counted as done); then the UI
+   accessor block and Win32::CObject et al. as coverage batches, with
+   `S3RE_HOOK_UNVERIFIED` where a spec is not quick.
+3. Whole-game check for batches 15-21 (`python tools/check_replay.py
    --recording <file> --against-original --ticks 3000`; the user starts
-   it, it opens the game window). Record the call counts in the inventory.
-2. Library and static-initializer classification pass: mark the ~2,000
-   string-init stubs mechanically (recording each global and its text,
-   also into `re/globals.csv`); name the MSVC6 STL/iostream, Watcom `WC*`,
-   MFC and CRT functions; count library code separately in
-   `tools/progress.py`.
-3. Move the tile base to 0x67444 plus the two `determinism.cpp` fixes from
-   `re/world_layout.md` (bump the trace version).
-4. Adopt `re/proposed_structs.h` gradually.
-5. Reimplement the savegame loader 0x508FA0 (byte-compare the loaded
-   world; gives late-game test states).
-6. 0x50cf50 (920 instructions; blocks 0x51b640, 0x504f70, 0x50e980,
-   0x4dbb10) and continued batches from `python tools/frontier.py`.
+   it, it opens the game window). Batch 21 runs during start-up (all
+   1,966 string initializers go through String_FromChars). Record the
+   call counts in the inventory.
+4. Simulation frontier (item 4) and 0x50cf50.
+5. Savegame loader chain (item 5), then map/GFX loaders.
+6. Older items: tile base 0x67444 + determinism.cpp fixes
+   (`re/world_layout.md`), adopt `re/proposed_structs.h` gradually.
 
 Done (verified: differential tests incl. mutation tests + whole-game
 replay identical to the original):
@@ -394,6 +439,47 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (29): evaluation, unverified convention, batch 21 (std::string)
+
+- Evaluated where reimplementation pays off (ranked list under "Current
+  focus"). Top: the MSVC6 std::string core, which blocked hundreds of
+  functions.
+- Convention for reimplementations without evidence: `S3RE_HOOK_UNVERIFIED`
+  (HookKind::Unverified, installed only with `s3re_launcher --unverified`
+  / S3RE_UNVERIFIED), status `reimplemented`, hook `unverified`.
+  `inventory.py check` now enforces verified<->replaced and
+  reimplemented<->unverified; `stats` prints a "Reimpl." line;
+  `frontier.py` counts reimplemented as done (`--verified-only` for the
+  strict view). No function uses it yet: batch 21 is fully verified.
+- Emulator harness (tools/emutest): fake heap (operator new/delete as a
+  bump allocator in the world area, calls compared), std::_Xlen/_Xran end
+  the run as a throw (compared; stack/registers then not compared), FS
+  through a GDT so SEH prologues run, `Spec.edx` (fastcall),
+  `Spec.cover_until` (code past a false function start) and
+  `Spec.exempt_blocks` (dead or catch-only blocks, reason at the spec).
+- Batch 21 (13 functions, msvc6/string.cpp): std::string _Tidy 0x402170,
+  _Tidy(true) 0x401d20, max_size 0x402260, _Copy 0x402270 (+ its
+  continuation 0x4022f0), _Grow 0x401f80, _Split 0x4020a0 (was misnamed
+  assign_cstr), assign(const char*, n) 0x4021c0, assign(string, pos, n)
+  0x401d60, ~string 0x401b60 (erase() then _Tidy(true)), the (const
+  char*, n) constructor 0x401a10, the default constructor 0x407880,
+  operator+(string, const char*) 0x402380 (was Unknown_sub_402380), and
+  the fastcall concat helper 0x401c70 (ECX = this, EDX = left).
+  Exception paths: ours has no unwind frames, so temporaries leak if
+  _Xlen/_Xran throw (fatal-error paths only).
+- Tests: in-process String_Operations_MatchOriginal (random operation
+  sequences on six strings, real heap, compares fields, text, count bytes
+  and buffer sharing) + its mutation test; all 262 in-process tests
+  pass (2 of them new; the suite counts tests, not functions). Emulator: 14 String_* specs (incl. _Eos,
+  which had none), 0 mismatches, every live block covered (dead and
+  catch-only blocks exempted with the reason at each spec: 15 blocks; one
+  _Xlen needs a 4 GB string); self-test 12/12 (new pairing: _Tidy(true)
+  against ~string). Full emulator suite after the harness changes: 183
+  functions, 0 mismatches, 0 with incomplete coverage.
+- Found: the 1,966 static string initializers run through our
+  String_FromChars at start-up (call counts in --test mode), so these
+  replacements are exercised before WinMain.
 
 ### 2026-11-09 (28): function survey merged
 

@@ -28,12 +28,17 @@
 
 namespace s3re::hooks {
 
-// Replaced: our reimplementation runs instead of the original.
+// Replaced: our reimplementation runs instead of the original (verified;
+// inventory status `verified`).
+// Unverified: a reimplementation without verification evidence yet
+// (inventory status `reimplemented`, hook `unverified`). Installed only with
+// `s3re_launcher --unverified` (S3RE_UNVERIFIED), never in original mode, so
+// default runs and whole-game checks use verified code only.
 // Passthrough: observes and calls the original (tooling).
 // ReplacedAlways: a replacement that also provides tooling (e.g. --seed), so
 // it stays installed in original mode and must itself call the original
 // code when OriginalMode() is true.
-enum class HookKind { Replaced, Passthrough, ReplacedAlways };
+enum class HookKind { Replaced, Passthrough, ReplacedAlways, Unverified };
 
 struct HookRegistrar {
     HookRegistrar(const char* name, std::uintptr_t address, HookKind kind, void** original,
@@ -91,6 +96,14 @@ bool InstallAll();
 // comparing whole games: replay the same recording in both modes and compare
 // the determinism traces.
 bool OriginalMode();
+
+// True when unverified reimplementations are installed as well
+// (`s3re_launcher --unverified`, S3RE_UNVERIFIED).
+bool UnverifiedMode();
+
+// Whether a hook of this kind is installed in the current mode.
+bool IsInstalled(HookKind kind);
+
 void UninstallAll();
 
 }  // namespace s3re::hooks
@@ -109,6 +122,15 @@ void UninstallAll();
 //   S3RE_HOOK(0x00401f60, String_Eos, EosFn, Original_String_Eos, String_Eos);
 #define S3RE_HOOK(address, name, FnType, original, replacement)                    \
     S3RE_DETAIL_HOOK(address, name, ::s3re::hooks::HookKind::Replaced, FnType,      \
+                     original,                                                      \
+                     (&::s3re::hooks::detail::Counting<FnType, &replacement>::Call), \
+                     (&::s3re::hooks::detail::Counting<FnType, &replacement>::calls))
+
+// A reimplementation that has no verification evidence yet: same as
+// S3RE_HOOK, but only installed with --unverified. Switch it to S3RE_HOOK
+// (and the inventory row to verified) once its tests exist and pass.
+#define S3RE_HOOK_UNVERIFIED(address, name, FnType, original, replacement)         \
+    S3RE_DETAIL_HOOK(address, name, ::s3re::hooks::HookKind::Unverified, FnType,    \
                      original,                                                      \
                      (&::s3re::hooks::detail::Counting<FnType, &replacement>::Call), \
                      (&::s3re::hooks::detail::Counting<FnType, &replacement>::calls))
