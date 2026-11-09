@@ -114,6 +114,11 @@ disassembly; "READY" = not done, every direct callee done, all game code
    test. Later, once a caller subsystem (AI, lobby) is tackled.
 
 Next steps (for 2026-11-10, in this order):
+- (Savegame checks, 2026-11-09 (37).) Merge the new whole-game evidence
+  from `re/savegame_checks.md` into the inventory notes; from now on run
+  `python tools/check_save.py "slot N.sav" --ticks 2000
+  --against-original` for the three saves at milestones, next to the
+  recorded-game check (late-game code paths, later UpdateSettlers).
 0. (New order, see the top of this section.) Batch 29 = step 2: the
    GameWorld::Create callees 0x519440 (16 ins), 0x51a2e0 (87), 0x51a580
    (380, area set-up), then Create 0x5166d0 itself. Skip every network
@@ -512,6 +517,39 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (37): whole-game checks from savegames (tooling, parallel worktree)
+
+- `s3re_launcher --load-save FILE` starts the game directly from a
+  savegame with the game's own code. No command-line switch exists, so
+  the launcher passes a copy of the save as `-map` (menu state 0x14), and a
+  pass-through hook on `Menus::CDrawThread::Update` (0x493880) calls
+  `GameSettings::LoadSaveGame` (0x432b00, what the load dialog 0x47a860
+  calls) and then does what `OnDialogResult` (0x494990) does for result 10
+  (state 4, 0x496c90(1)). `CLogicThread::OnStart` then runs the loader
+  0x508fa0 instead of Create/SeedRandom. `--exit-after-ticks` counts from
+  the save's start tick when a save is loaded.
+- `tools/check_save.py SAVE --ticks N [--against-original]`, savegame
+  hash/backup safety net (the user's saves were never changed),
+  `tools/savegame_calls.py` (new whole-game evidence), `tools/game_lock.py`
+  (the shared game-run lock, now used by check_replay.py,
+  check_determinism.py and check_save.py).
+- Worktree pitfall: starting S3.EXE through a junction path loses the
+  `DWM8And16BitMitigation` compatibility layer (registered per path), and
+  DirectDraw fails (`DDERR_UNSUPPORTED`). The launcher now resolves the
+  game directory to its real path.
+- Determinism from a save (original twice, 500 ticks): first the rest hash
+  differed; the cause is the alignment padding of the MapEffect records
+  (uninitialized stack copies, never read). Trace v3 skips it. Then slot
+  1, 2 and 3 (ticks 366,754 / 386,061 / 243,319) are all identical.
+- Original vs ours, 2,000 ticks per save: identical for all three, with
+  batch 27 and again with batch 28. 208 replacements called; 17 of them
+  had no whole-game evidence before (MapEffect make/add/links functions,
+  RemoveSettlerFromLists, MakePileEmpty, Render::PackColour, ...). Of
+  batch 28 only CheckBuildingSite ran (2,690 calls in slot 3, identical);
+  the other four building-site functions were not called.
+  Details and the list: `re/savegame_checks.md`. Not yet merged into the
+  inventory notes (next step).
 
 ### 2026-11-09 (36): new direction (core gameplay, no network); batch 28 (building sites, 5 functions)
 
