@@ -54,12 +54,14 @@
 //   CenterCameraOnTile EAX (one caller tail-returns it). Plain ret.
 
 #include "game/globals.h"
+#include "game/layout.h"
 #include "game/replacements.h"
-#include "game/world.h"
+#include "game/ui_layout.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
@@ -68,23 +70,13 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::size_t kCameraX = 0x2d25c;
-constexpr std::size_t kCameraY = 0x2d260;
-constexpr std::size_t kUiSelectionMode = 0x2d284;
-constexpr std::size_t kUiSelectionParam1 = 0x2d288;
-constexpr std::size_t kUiSelectionParam2 = 0x2d28c;
-constexpr std::size_t kUiField298 = 0x2d298;
-
-constexpr std::size_t kTiles = 0x67444;
-constexpr std::size_t kTileByte4 = 0x4;
-constexpr std::size_t kLogicThreadWorld = 0x3a0;  // in CLogicThread
-
-constexpr std::size_t kUiFeedback = 0x1539484;
-constexpr std::size_t kUiFeedbackCount = 0x15394ac;
 constexpr std::uint32_t kUiFeedbackCapacity = 10;
+static_assert(sizeof(GameWorld::ui_feedback) / sizeof(GameWorld::ui_feedback[0]) == kUiFeedbackCapacity);
 
-std::uint32_t Field(GameWorld* world, std::size_t offset) {
-    return WorldField<std::uint32_t>(world, offset);
+// The UI fields are int32 in the layout; the original compares them as
+// full 32-bit values (as unsigned, which gives the same equality).
+std::uint32_t U32(std::int32_t value) {
+    return static_cast<std::uint32_t>(value);
 }
 
 // Signed division by a positive constant, truncating toward zero, of a
@@ -95,7 +87,7 @@ std::uint32_t DivideTruncating(std::uint32_t value, std::int32_t divisor) {
 
 // Rows of 9 pixels above the camera centre, offset by 0x640 pixels.
 std::uint32_t CameraRow(GameWorld* world) {
-    return DivideTruncating(Field(world, kCameraY) + 0x640u, 18);
+    return DivideTruncating(U32(world->camera_y) + 0x640u, 18);
 }
 
 std::uint32_t ScreenRows(std::uint32_t shift) {
@@ -111,31 +103,31 @@ using WorldQueryFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
 // Purpose: Whether the user interface is in a given selection mode (e.g. building placement). The UI state
 // happens to live inside the world object.
 std::uint32_t __fastcall GameWorld_IsUiSelectionMode(GameWorld* world, void*, std::uint32_t mode) {
-    return Field(world, kUiSelectionMode) == mode ? 1 : 0;
+    return U32(world->ui_selection_mode) == mode ? 1 : 0;
 }
 
 // Purpose: Whether a UI state field (meaning unknown) has a given value.
 std::uint32_t __fastcall GameWorld_IsUiField298(GameWorld* world, void*, std::uint32_t value) {
-    return Field(world, kUiField298) == value ? 1 : 0;
+    return U32(world->ui_special_menu) == value ? 1 : 0;
 }
 
 // Purpose: Whether the first parameter of the current UI selection (e.g. which building type) has a given
 // value.
 std::uint32_t __fastcall GameWorld_IsUiSelectionParam1(GameWorld* world, void*,
                                                        std::uint32_t value) {
-    return Field(world, kUiSelectionParam1) == value ? 1 : 0;
+    return U32(world->ui_selection_param1) == value ? 1 : 0;
 }
 
 // Purpose: Whether the second parameter of the current UI selection has a given value.
 std::uint32_t __fastcall GameWorld_IsUiSelectionParam2(GameWorld* world, void*,
                                                        std::uint32_t value) {
-    return Field(world, kUiSelectionParam2) == value ? 1 : 0;
+    return U32(world->ui_selection_param2) == value ? 1 : 0;
 }
 
 // Purpose: Whether the UI is in selection mode 4 with a particular sub-state. A shortcut check used by the
 // UI.
 std::uint32_t __fastcall GameWorld_IsUiSelectionMode4Field298Is2(GameWorld* world, void*) {
-    return (Field(world, kUiSelectionMode) == 4 && Field(world, kUiField298) == 2) ? 1 : 0;
+    return (U32(world->ui_selection_mode) == 4 && U32(world->ui_special_menu) == 2) ? 1 : 0;
 }
 
 // Purpose: Whether the game has ended with outcome 1 (probably 'won'). Queried by the user interface.
@@ -146,10 +138,10 @@ std::uint32_t __fastcall GameWorld_IsGameOutcome1(GameWorld*, void*, std::uint32
 // Purpose: Which tile is at the centre of the screen (x). Used e.g. to know where the player is looking.
 std::uint32_t __fastcall GameWorld_ScreenCenterTileX(GameWorld* world, void*) {
     const std::uint32_t rowsBelowTop = 100u - CameraRow(world);
-    const std::uint32_t skew = (Field(world, world_offset::kMapSize) + rowsBelowTop * 2u) >> 1;
+    const std::uint32_t skew = (world->map_size + rowsBelowTop * 2u) >> 1;
     const auto width = GameGlobal<std::uint32_t>(global_address::kScreenWidth);
     const std::uint32_t halfColumns = (DivideTruncating(width + 0x17u, 16) + 0xau) >> 1;
-    const std::uint32_t column = DivideTruncating(Field(world, kCameraX) - 0xd0u, 16);
+    const std::uint32_t column = DivideTruncating(U32(world->camera_x) - 0xd0u, 16);
     return column + (ScreenRows(2) - skew + halfColumns);
 }
 
@@ -160,9 +152,9 @@ std::uint32_t __fastcall GameWorld_ScreenCenterTileY(GameWorld* world, void*) {
 
 // Purpose: Keeps the camera inside the map after it has been moved.
 std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void*) {
-    auto& cameraX = WorldField<std::int32_t>(world, kCameraX);
-    auto& cameraY = WorldField<std::int32_t>(world, kCameraY);
-    const std::uint32_t size = Field(world, world_offset::kMapSize);
+    std::int32_t& cameraX = world->camera_x;
+    std::int32_t& cameraY = world->camera_y;
+    const std::uint32_t size = world->map_size;
     const std::uint32_t width = GameGlobal<std::uint32_t>(global_address::kScreenWidth);
     if (cameraX < 0) {
         cameraX = 0;
@@ -185,11 +177,11 @@ std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void*) {
 // Purpose: Queues a small notification from the game for the drawing/sound side (probably sounds or
 // messages for the player). The queue holds up to ten.
 std::uint32_t __fastcall GameWorld_PushUiFeedback(GameWorld* world, void*, std::uint32_t value) {
-    auto& count = WorldField<std::uint32_t>(world, kUiFeedbackCount);
+    std::uint32_t& count = world->ui_feedback_count;
     if (count == kUiFeedbackCapacity) {
         return count;
     }
-    WorldField<std::uint32_t>(world, kUiFeedback + count * 4) = value;
+    world->ui_feedback[count] = value;  // (a count above 10 indexes past the list, as in the original)
     count = count + 1;
     return count;
 }
@@ -200,12 +192,12 @@ std::uint32_t __fastcall GameWorld_CenterCameraOnTile(GameWorld* world, void*, s
                                                       std::uint32_t y) {
     const auto width = static_cast<std::int32_t>(GameGlobal<std::uint32_t>(global_address::kScreenWidth));
     const auto height = static_cast<std::int32_t>(GameGlobal<std::uint32_t>(global_address::kScreenHeight));
-    const std::uint32_t size = Field(world, world_offset::kMapSize);
-    WorldField<std::uint32_t>(world, kCameraX) =
-        (size + x * 2u + 0x18u - y) * 8u - static_cast<std::uint32_t>(width / 2);
-    const std::uint32_t tileByte4 = WorldField<std::uint8_t>(world, kTiles + (x * 0x300u + y) * 24u + kTileByte4);
-    WorldField<std::uint32_t>(world, kCameraY) =
-        0u - static_cast<std::uint32_t>(height / 2) - tileByte4 + y * 9u + 0xc8u;
+    const std::uint32_t size = world->map_size;
+    world->camera_x = static_cast<std::int32_t>((size + x * 2u + 0x18u - y) * 8u - static_cast<std::uint32_t>(width / 2));
+    // Tile (x, y) addressed in 32 bits like the original (x, y unchecked).
+    const std::uint32_t height4 = TileAtOffset(world, TileOffset(x, y)).height;
+    world->camera_y =
+        static_cast<std::int32_t>(0u - static_cast<std::uint32_t>(height / 2) - height4 + y * 9u + 0xc8u);
     return GameWorld_ClampCamera(world, nullptr);
 }
 
@@ -214,32 +206,21 @@ struct CLogicThread;  // opaque
 // Purpose: The same as GameWorld::PushUiFeedback, called from the user interface code through the logic
 // thread.
 std::uint32_t __fastcall CLogicThread_PushUiFeedback(CLogicThread* self, void*, std::uint32_t value) {
-    GameWorld* world = *reinterpret_cast<GameWorld**>(reinterpret_cast<std::uint8_t*>(self) + kLogicThreadWorld);
+    GameWorld* world = ui::LogicThreadOf(self)->world;
     return GameWorld_PushUiFeedback(world, nullptr, value);
 }
 
 using PositionFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
 using LogicValueFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t value);
 
-namespace {
-
-constexpr std::size_t kLocalPlayer = 0x2d2d4;
-constexpr std::size_t kCameraField264 = 0x2d264;
-constexpr std::size_t kPlayerRecords = 0x11943dc;
-constexpr std::size_t kPlayerRecordBytes = 0x148;
-constexpr std::size_t kPlayerPositionX = 0x10;
-constexpr std::size_t kPlayerPositionY = 0x14;
-
-}  // namespace
-
 // Purpose: Moves the camera to the local player's home position (probably their castle), e.g. at the start
 // of a game.
 std::uint32_t __fastcall GameWorld_CenterCameraOnLocalPlayer(GameWorld* world, void*) {
-    const std::size_t record = kPlayerRecords + Field(world, kLocalPlayer) * kPlayerRecordBytes;
+    // (The local player number is not range-checked.)
+    const layout::Player& player = world->players[U32(world->local_player)];
     const std::uint32_t result =
-        GameWorld_CenterCameraOnTile(world, nullptr, Field(world, record + kPlayerPositionX),
-                                     Field(world, record + kPlayerPositionY));
-    WorldField<std::uint32_t>(world, kCameraField264) = 0;
+        GameWorld_CenterCameraOnTile(world, nullptr, U32(player.start_x), U32(player.start_y));
+    world->redraw = 0;
     return result;
 }
 
@@ -291,10 +272,6 @@ namespace {
 
 constexpr std::uintptr_t kGroupCounts = 0x007ad620;  // uint16[10], S3.EXE data
 constexpr std::uintptr_t kGroupSettlers = 0x007ad634;  // uint16[10][100]
-constexpr std::size_t kSettlers = 0x12a5e60;
-constexpr std::size_t kSettlerBytes = 0x40;
-constexpr std::size_t kUiField29c = 0x2d29c;
-constexpr std::size_t kUiRedraw = 0x2d27c;
 
 std::uint16_t GroupWord(std::uintptr_t address) {
     return *reinterpret_cast<const std::uint16_t*>(address);
@@ -312,34 +289,32 @@ S3RE_HOOK(0x00542990, CLogicThread_UpdateGroupMenu, GroupMenuFn, Original_CLogic
 // settlers (e.g. ships or other units with their own commands), probably
 // after the group changed or was selected.
 std::uint32_t __fastcall CLogicThread_UpdateGroupMenu(CLogicThread* self, void* /*edx*/, std::uint32_t group) {
-    GameWorld* world = *reinterpret_cast<GameWorld**>(reinterpret_cast<std::uint8_t*>(self) + kLogicThreadWorld);
+    GameWorld* world = ui::LogicThreadOf(self)->world;
     const std::uint32_t count = GroupWord(kGroupCounts + group * 2);
     const std::uintptr_t settlers = kGroupSettlers + group * 200;
-    auto settlerByte = [&](std::uint32_t settler, std::size_t field) {
-        return static_cast<std::uint32_t>(WorldField<std::uint8_t>(world, kSettlers + settler * kSettlerBytes + field));
-    };
+    auto owner = [&](std::uint32_t settler) { return static_cast<std::uint32_t>(world->settlers[settler].owner); };
+    auto type = [&](std::uint32_t settler) { return static_cast<std::uint32_t>(world->settlers[settler].art); };
     std::uint32_t changed = 1;
     if (count == 1) {
         const std::uint32_t settler = GroupWord(settlers);
-        if (settlerByte(settler, 0) == Field(world, kLocalPlayer) && settlerByte(settler, 1) == 0x24 &&
-            Field(world, kUiField298) != 1) {
-            WorldField<std::uint32_t>(world, kUiField298) = 1;
-            WorldField<std::uint32_t>(world, kUiField29c) = 0;
-            WorldField<std::uint32_t>(world, kUiRedraw) = 1;
+        if (owner(settler) == U32(world->local_player) && type(settler) == 0x24 && U32(world->ui_special_menu) != 1) {
+            world->ui_special_menu = 1;
+            world->ui_2d29c = 0;
+            world->refresh_ui = 1;
             return reinterpret_cast<std::uint32_t>(world);
         }
     }
     if (count != 0) {
-        const std::uint32_t type = settlerByte(GroupWord(settlers), 1);
+        const std::uint32_t firstType = type(GroupWord(settlers));
         bool same = true;
         for (std::uint32_t i = 0; i < count; ++i) {
-            if (settlerByte(GroupWord(settlers + i * 2), 1) != type) {
+            if (type(GroupWord(settlers + i * 2)) != firstType) {
                 same = false;
             }
         }
         if (same) {
             std::uint32_t menu = 0;
-            switch (type) {
+            switch (firstType) {
                 case 0x2c: menu = 2; break;
                 case 0x2b: menu = 3; break;
                 case 0x29: menu = 4; break;
@@ -349,16 +324,16 @@ std::uint32_t __fastcall CLogicThread_UpdateGroupMenu(CLogicThread* self, void* 
                 default: break;
             }
             if (menu != 0) {
-                WorldField<std::uint32_t>(world, kUiField298) = menu;
-                WorldField<std::uint32_t>(world, kUiRedraw) = 1;
+                world->ui_special_menu = static_cast<std::int32_t>(menu);
+                world->refresh_ui = 1;
                 return reinterpret_cast<std::uint32_t>(world);
             }
         }
         changed = 1;
     }
-    if (Field(world, kUiField298) != 0) {
-        WorldField<std::uint32_t>(world, kUiField298) = 0;
-        WorldField<std::uint32_t>(world, kUiRedraw) = changed;
+    if (world->ui_special_menu != 0) {
+        world->ui_special_menu = 0;
+        world->refresh_ui = static_cast<std::int32_t>(changed);
     }
     return reinterpret_cast<std::uint32_t>(world);
 }
@@ -369,7 +344,22 @@ std::uint32_t __fastcall CLogicThread_UpdateGroupMenu(CLogicThread* self, void* 
 
 namespace {
 
-constexpr std::size_t kUiWorld = 0x2d300;
+constexpr std::size_t kUiWorld = offsetof(GameWorld, search_generation);  // the UI block and the map size
+constexpr std::size_t kFeedbackWorld = offsetof(GameWorld, ui_feedback_count) + 4;
+constexpr std::size_t kFeedbackBytes = sizeof(GameWorld::ui_feedback) + sizeof(GameWorld::ui_feedback_count);
+static_assert(offsetof(GameWorld, ui_feedback_count) == offsetof(GameWorld, ui_feedback) + sizeof(GameWorld::ui_feedback));
+
+// Two fake logic threads, each pointing at one of the worlds.
+struct ThreadPair {
+    explicit ThreadPair(test::WorldPair& worlds) {
+        ui::LogicThreadOf(a)->world = worlds.original();
+        ui::LogicThreadOf(b)->world = worlds.ours();
+    }
+    CLogicThread* original() { return reinterpret_cast<CLogicThread*>(a); }
+    CLogicThread* ours() { return reinterpret_cast<CLogicThread*>(b); }
+    std::uint8_t a[sizeof(ui::LogicThreadView)] = {};
+    std::uint8_t b[sizeof(ui::LogicThreadView)] = {};
+};
 
 // Sets a game global for the duration of a test and restores it after.
 class GlobalOverride {
@@ -404,8 +394,10 @@ void CompareUiQuery(test::Context& ctx, WorldValueFn original, WorldValueFn cand
     GlobalOverride height(global_address::kScreenHeight);
     GlobalOverride outcome(global_address::kGameOutcome);
     for (int i = 0; i < cases; ++i) {
-        for (std::size_t field : {kUiSelectionMode, kUiSelectionParam1, kUiSelectionParam2,
-                                  kUiField298, kCameraX, kCameraY, world_offset::kMapSize}) {
+        for (const std::size_t field :
+             {offsetof(GameWorld, ui_selection_mode), offsetof(GameWorld, ui_selection_param1),
+              offsetof(GameWorld, ui_selection_param2), offsetof(GameWorld, ui_special_menu),
+              offsetof(GameWorld, camera_x), offsetof(GameWorld, camera_y), offsetof(GameWorld, map_size)}) {
             worlds.Set<std::uint32_t>(field, InterestingValue(ctx));
         }
         width.Set(ctx.rng().Chance(1, 2) ? 640 + ctx.rng().Below(1024) : ctx.rng().Next32());
@@ -434,14 +426,14 @@ struct IgnoreArgument {
 
 void ComparePushUiFeedback(test::Context& ctx, WorldValueFn original, WorldValueFn candidate,
                            int cases) {
-    test::WorldPair worlds(ctx, kUiFeedbackCount + 4);
+    test::WorldPair worlds(ctx, kFeedbackWorld);
     for (int i = 0; i < cases; ++i) {
-        worlds.Set<std::uint32_t>(kUiFeedbackCount, ctx.rng().Below(kUiFeedbackCapacity + 1));
+        const std::uint32_t count = ctx.rng().Below(kUiFeedbackCapacity + 1);
+        worlds.Both([&](GameWorld* w) { w->ui_feedback_count = count; });
         const std::uint32_t value = ctx.rng().Next32();
         const std::uint32_t expected = original(worlds.original(), nullptr, value);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, value);
-        if (!S3RE_EXPECT_EQ(expected, actual) ||
-            !worlds.Same(ctx, kUiFeedback, kUiFeedbackCount + 4 - kUiFeedback) ||
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(GameWorld, ui_feedback), kFeedbackBytes) ||
             (i % 256 == 255 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d", i);
             return;
@@ -452,7 +444,7 @@ void ComparePushUiFeedback(test::Context& ctx, WorldValueFn original, WorldValue
 
 // Wrong: rounds the column down instead of toward zero.
 std::uint32_t __fastcall WrongScreenCenterTileX(GameWorld* world, void* edx) {
-    const auto column = static_cast<std::int32_t>(Field(world, kCameraX) - 0xd0u);
+    const auto column = static_cast<std::int32_t>(U32(world->camera_x) - 0xd0u);
     return GameWorld_ScreenCenterTileX(world, edx) - DivideTruncating(column, 16) +
            static_cast<std::uint32_t>(column >> 4);
 }
@@ -462,11 +454,11 @@ std::uint32_t __fastcall WrongClampCamera(GameWorld* world, void* edx) {
     const auto width = GameGlobal<std::uint32_t>(global_address::kScreenWidth);
     GameGlobal<std::uint32_t>(global_address::kScreenWidth) =
         GameGlobal<std::uint32_t>(global_address::kScreenHeight);
-    std::int32_t x = WorldField<std::int32_t>(world, kCameraX);
+    std::int32_t x = world->camera_x;
     const std::uint32_t result = GameWorld_ClampCamera(world, edx);
     GameGlobal<std::uint32_t>(global_address::kScreenWidth) = width;
-    WorldField<std::int32_t>(world, kCameraX) = x;
-    const std::uint32_t size = Field(world, world_offset::kMapSize);
+    world->camera_x = x;
+    const std::uint32_t size = world->map_size;
     if (x < 0) {
         x = 0;
     }
@@ -474,25 +466,26 @@ std::uint32_t __fastcall WrongClampCamera(GameWorld* world, void* edx) {
     if (x >= static_cast<std::int32_t>(maxX + 1u)) {
         x = static_cast<std::int32_t>(maxX);
     }
-    WorldField<std::int32_t>(world, kCameraX) = x;
+    world->camera_x = x;
     return result;
 }
 
 }  // namespace
 
 S3RE_TEST(GameWorld_CenterCameraOnTile_MatchesOriginal) {
-    test::WorldPair worlds(ctx, kTiles + 400 * 0x300 * 24);
+    test::WorldPair worlds(ctx, offsetof(GameWorld, tiles) + 400 * kTileRowBytes);
     GlobalOverride width(global_address::kScreenWidth);
     GlobalOverride height(global_address::kScreenHeight);
     for (int i = 0; i < 5000; ++i) {
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, ctx.rng().Chance(1, 2) ? 384 : InterestingValue(ctx));
+        const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : InterestingValue(ctx);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         width.Set(ctx.rng().Chance(3, 4) ? 640 + ctx.rng().Below(1024) : InterestingValue(ctx));
         height.Set(ctx.rng().Chance(3, 4) ? 480 + ctx.rng().Below(768) : InterestingValue(ctx));
         const std::uint32_t x = ctx.rng().Below(400);
         const std::uint32_t y = ctx.rng().Below(400);
         const std::uint32_t expected = Original_GameWorld_CenterCameraOnTile(worlds.original(), nullptr, x, y);
         const std::uint32_t actual = GameWorld_CenterCameraOnTile(worlds.ours(), nullptr, x, y);
-        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, kCameraX, 8) ||
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(GameWorld, camera_x), 8) ||
             (i % 512 == 511 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u)", i, x, y);
             return;
@@ -502,20 +495,26 @@ S3RE_TEST(GameWorld_CenterCameraOnTile_MatchesOriginal) {
 }
 
 S3RE_TEST(GameWorld_CenterCameraOnLocalPlayer_MatchesOriginal) {
-    test::WorldPair worlds(ctx, kPlayerRecords + 21 * kPlayerRecordBytes);
+    test::WorldPair worlds(ctx, offsetof(GameWorld, players) + 21 * sizeof(layout::Player));
     GlobalOverride width(global_address::kScreenWidth);
     GlobalOverride height(global_address::kScreenHeight);
     for (int i = 0; i < 3000; ++i) {
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, ctx.rng().Chance(1, 2) ? 384 : InterestingValue(ctx));
+        const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : InterestingValue(ctx);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         width.Set(640 + ctx.rng().Below(1024));
         height.Set(480 + ctx.rng().Below(768));
         const std::uint32_t player = ctx.rng().Below(20);
-        worlds.Set<std::uint32_t>(kLocalPlayer, player);
-        worlds.Set<std::uint32_t>(kPlayerRecords + player * kPlayerRecordBytes + kPlayerPositionX, ctx.rng().Below(384));
-        worlds.Set<std::uint32_t>(kPlayerRecords + player * kPlayerRecordBytes + kPlayerPositionY, ctx.rng().Below(384));
+        const auto startX = static_cast<std::int32_t>(ctx.rng().Below(384));
+        const auto startY = static_cast<std::int32_t>(ctx.rng().Below(384));
+        worlds.Both([&](GameWorld* w) {
+            w->local_player = static_cast<std::int32_t>(player);
+            w->players[player].start_x = startX;
+            w->players[player].start_y = startY;
+        });
         const std::uint32_t expected = Original_GameWorld_CenterCameraOnLocalPlayer(worlds.original(), nullptr);
         const std::uint32_t actual = GameWorld_CenterCameraOnLocalPlayer(worlds.ours(), nullptr);
-        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, kCameraX, 12) ||
+        // camera_x, camera_y and redraw
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(GameWorld, camera_x), 12) ||
             (i % 512 == 511 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d", i);
             return;
@@ -525,20 +524,15 @@ S3RE_TEST(GameWorld_CenterCameraOnLocalPlayer_MatchesOriginal) {
 }
 
 S3RE_TEST(CLogicThread_PushUiFeedback_MatchesOriginal) {
-    test::WorldPair worlds(ctx, kUiFeedbackCount + 4);
-    // Two fake logic threads, each pointing at one of the worlds.
-    std::uint8_t threadA[kLogicThreadWorld + 4] = {};
-    std::uint8_t threadB[kLogicThreadWorld + 4] = {};
-    *reinterpret_cast<GameWorld**>(threadA + kLogicThreadWorld) = worlds.original();
-    *reinterpret_cast<GameWorld**>(threadB + kLogicThreadWorld) = worlds.ours();
+    test::WorldPair worlds(ctx, kFeedbackWorld);
+    ThreadPair threads(worlds);
     for (int i = 0; i < 2000; ++i) {
-        worlds.Set<std::uint32_t>(kUiFeedbackCount, ctx.rng().Below(kUiFeedbackCapacity + 1));
+        const std::uint32_t count = ctx.rng().Below(kUiFeedbackCapacity + 1);
+        worlds.Both([&](GameWorld* w) { w->ui_feedback_count = count; });
         const std::uint32_t value = ctx.rng().Next32();
-        const std::uint32_t expected =
-            Original_CLogicThread_PushUiFeedback(reinterpret_cast<CLogicThread*>(threadA), nullptr, value);
-        const std::uint32_t actual = CLogicThread_PushUiFeedback(reinterpret_cast<CLogicThread*>(threadB), nullptr, value);
-        if (!S3RE_EXPECT_EQ(expected, actual) ||
-            !worlds.Same(ctx, kUiFeedback, kUiFeedbackCount + 4 - kUiFeedback)) {
+        const std::uint32_t expected = Original_CLogicThread_PushUiFeedback(threads.original(), nullptr, value);
+        const std::uint32_t actual = CLogicThread_PushUiFeedback(threads.ours(), nullptr, value);
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(GameWorld, ui_feedback), kFeedbackBytes)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d", i);
             return;
         }
@@ -616,11 +610,8 @@ private:
 
 void CompareGroupMenu(test::Context& ctx, GroupMenuFn candidate, int cases) {
     const SavedGroups saved;
-    test::WorldPair worlds(ctx, kSettlers + 0x10000 * kSettlerBytes);
-    std::uint8_t threadA[kLogicThreadWorld + 4] = {};
-    std::uint8_t threadB[kLogicThreadWorld + 4] = {};
-    *reinterpret_cast<GameWorld**>(threadA + kLogicThreadWorld) = worlds.original();
-    *reinterpret_cast<GameWorld**>(threadB + kLogicThreadWorld) = worlds.ours();
+    test::WorldPair worlds(ctx, offsetof(GameWorld, settlers) + 0x10000 * sizeof(layout::Settler));
+    ThreadPair threads(worlds);
     static constexpr std::uint8_t kTypes[] = {0x24, 0x2c, 0x2b, 0x29, 0x28, 0x16, 0x17, 0x01, 0x23};
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t group = ctx.rng().Below(10);
@@ -629,24 +620,34 @@ void CompareGroupMenu(test::Context& ctx, GroupMenuFn candidate, int cases) {
         const std::uint8_t type = kTypes[ctx.rng().Below(sizeof(kTypes))];
         const bool allSame = ctx.rng().Chance(2, 3);
         const std::uint32_t localPlayer = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(4);
-        worlds.Set<std::uint32_t>(kLocalPlayer, localPlayer);
+        worlds.Both([&](GameWorld* w) { w->local_player = static_cast<std::int32_t>(localPlayer); });
         for (std::uint32_t k = 0; k < count; ++k) {
             const std::uint32_t settler = ctx.rng().Below(0x10000);
             *reinterpret_cast<std::uint16_t*>(kGroupSettlers + group * 200 + k * 2) = static_cast<std::uint16_t>(settler);
             const std::uint8_t settlerType = allSame || ctx.rng().Chance(1, 2) ? type : kTypes[ctx.rng().Below(sizeof(kTypes))];
-            worlds.Set<std::uint8_t>(kSettlers + settler * kSettlerBytes + 1, settlerType);
-            worlds.Set<std::uint8_t>(kSettlers + settler * kSettlerBytes,
-                                     static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? localPlayer : ctx.rng().Below(4)));
+            const auto settlerOwner =
+                static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? localPlayer : ctx.rng().Below(4));
+            worlds.Both([&](GameWorld* w) {
+                w->settlers[settler].art = settlerType;
+                w->settlers[settler].owner = settlerOwner;
+            });
         }
-        worlds.Set<std::uint32_t>(kUiField298, ctx.rng().Chance(1, 2) ? ctx.rng().Below(8) : ctx.rng().Next32());
-        worlds.Set<std::uint32_t>(kUiRedraw, ctx.rng().Next32());
-        worlds.Set<std::uint32_t>(kUiField29c, ctx.rng().Next32());
-        const std::uint32_t expected =
-            Original_CLogicThread_UpdateGroupMenu(reinterpret_cast<CLogicThread*>(threadA), nullptr, group);
-        const std::uint32_t actual = candidate(reinterpret_cast<CLogicThread*>(threadB), nullptr, group);
+        const std::uint32_t menu = ctx.rng().Chance(1, 2) ? ctx.rng().Below(8) : ctx.rng().Next32();
+        const std::uint32_t refresh = ctx.rng().Next32();
+        const std::uint32_t field29c = ctx.rng().Next32();
+        worlds.Both([&](GameWorld* w) {
+            w->ui_special_menu = static_cast<std::int32_t>(menu);
+            w->refresh_ui = static_cast<std::int32_t>(refresh);
+            w->ui_2d29c = static_cast<std::int32_t>(field29c);
+        });
+        const std::uint32_t expected = Original_CLogicThread_UpdateGroupMenu(threads.original(), nullptr, group);
+        const std::uint32_t actual = candidate(threads.ours(), nullptr, group);
         const auto base = [](GameWorld* w) { return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(w)); };
+        // refresh_ui (+0x2d27c) .. ui_2d29c (+0x2d29c)
+        const std::size_t first = offsetof(GameWorld, refresh_ui);
+        const std::size_t end = offsetof(GameWorld, ui_2d29c) + 4;
         if (!S3RE_EXPECT_EQ(expected - base(worlds.original()), actual - base(worlds.ours())) ||
-            !worlds.Same(ctx, kUiRedraw, kUiField29c + 4 - kUiRedraw)) {
+            !worlds.Same(ctx, first, end - first)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: group %u, count %u, type %#x", i, group, count, type);
             return;
         }
@@ -657,9 +658,9 @@ void CompareGroupMenu(test::Context& ctx, GroupMenuFn candidate, int cases) {
 // Wrong: type 0x17 gets menu 6 like 0x16.
 std::uint32_t __fastcall WrongGroupMenu(CLogicThread* self, void* edx, std::uint32_t group) {
     const std::uint32_t result = CLogicThread_UpdateGroupMenu(self, edx, group);
-    GameWorld* world = *reinterpret_cast<GameWorld**>(reinterpret_cast<std::uint8_t*>(self) + kLogicThreadWorld);
-    if (Field(world, kUiField298) == 7) {
-        WorldField<std::uint32_t>(world, kUiField298) = 6;
+    GameWorld* world = ui::LogicThreadOf(self)->world;
+    if (world->ui_special_menu == 7) {
+        world->ui_special_menu = 6;
     }
     return result;
 }
@@ -692,38 +693,39 @@ S3RE_HOOK(0x0053f530, CLogicThread_ClearPendingUiRefresh, LogicThreadFn, Origina
 // Purpose: Turns a pending UI request of the logic thread (+0x84) into a
 // redraw of the menus (probably after an input event was handled).
 std::uint32_t __fastcall CLogicThread_ClearPendingUiRefresh(CLogicThread* self, void* /*edx*/) {
-    auto* bytes = reinterpret_cast<std::uint8_t*>(self);
-    *reinterpret_cast<std::uint32_t*>(bytes + 0x74) = 0;
-    if (*reinterpret_cast<std::uint32_t*>(bytes + 0x84) == 0) {
+    ui::LogicThreadView* thread = ui::LogicThreadOf(self);
+    thread->unk074 = 0;
+    if (thread->pending_ui_refresh == 0) {
         return 0;
     }
-    *reinterpret_cast<std::uint32_t*>(bytes + 0x84) = 0;
-    auto* world = *reinterpret_cast<std::uint8_t**>(bytes + kLogicThreadWorld);
-    *reinterpret_cast<std::uint32_t*>(world + 0x2d27c) = 1;
+    thread->pending_ui_refresh = 0;
+    GameWorld* world = thread->world;
+    world->refresh_ui = 1;
     return reinterpret_cast<std::uint32_t>(world);
 }
 
 namespace {
 
 void CompareClearPendingUiRefresh(test::Context& ctx, LogicThreadFn candidate, int cases) {
-    test::WorldPair worlds(ctx, 0x2d280);
-    std::uint8_t threadA[kLogicThreadWorld + 4], threadB[kLogicThreadWorld + 4];
+    test::WorldPair worlds(ctx, offsetof(GameWorld, refresh_ui) + 4);
+    std::uint8_t threadA[sizeof(ui::LogicThreadView)], threadB[sizeof(ui::LogicThreadView)];
     for (int i = 0; i < cases; ++i) {
         ctx.rng().Fill(threadA, sizeof(threadA));
         if (ctx.rng().Chance(1, 2)) {
-            std::memset(threadA + 0x84, 0, 4);
+            ui::LogicThreadOf(threadA)->pending_ui_refresh = 0;
         }
         std::memcpy(threadB, threadA, sizeof(threadB));
-        *reinterpret_cast<GameWorld**>(threadA + kLogicThreadWorld) = worlds.original();
-        *reinterpret_cast<GameWorld**>(threadB + kLogicThreadWorld) = worlds.ours();
-        worlds.Set<std::uint32_t>(0x2d27c, ctx.rng().Next32());
+        ui::LogicThreadOf(threadA)->world = worlds.original();
+        ui::LogicThreadOf(threadB)->world = worlds.ours();
+        const std::uint32_t refresh = ctx.rng().Next32();
+        worlds.Both([&](GameWorld* w) { w->refresh_ui = static_cast<std::int32_t>(refresh); });
         const std::uint32_t ra = Original_CLogicThread_ClearPendingUiRefresh(reinterpret_cast<CLogicThread*>(threadA), nullptr);
         const std::uint32_t rb = candidate(reinterpret_cast<CLogicThread*>(threadB), nullptr);
         const std::uint32_t expected = ra == reinterpret_cast<std::uint32_t>(worlds.original()) ? 1 : ra;
         const std::uint32_t actual = rb == reinterpret_cast<std::uint32_t>(worlds.ours()) ? 1 : rb;
         bool same = S3RE_EXPECT_EQ(expected, actual);
-        same &= S3RE_EXPECT_MEM_EQ(threadA, threadB, kLogicThreadWorld);
-        same &= worlds.Same(ctx, 0x2d27c, 4);
+        same &= S3RE_EXPECT_MEM_EQ(threadA, threadB, offsetof(ui::LogicThreadView, world));
+        same &= worlds.SameField(ctx, [](GameWorld* w) -> auto& { return w->refresh_ui; });
         if (!same) {
             ctx.Fail(__FILE__, __LINE__, "  case %d", i);
             return;
@@ -734,7 +736,7 @@ void CompareClearPendingUiRefresh(test::Context& ctx, LogicThreadFn candidate, i
 
 std::uint32_t __fastcall WrongClearPendingUiRefresh(CLogicThread* self, void* edx) {
     const std::uint32_t r = CLogicThread_ClearPendingUiRefresh(self, edx);
-    *(reinterpret_cast<std::uint32_t*>(self) + 0x74 / 4) = 1;  // wrong: +0x74 not cleared
+    ui::LogicThreadOf(self)->unk074 = 1;  // wrong: +0x74 not cleared
     return r;
 }
 

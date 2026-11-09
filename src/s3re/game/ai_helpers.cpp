@@ -59,56 +59,33 @@
 //              takes that tile's area (at x = map size, the tile just past
 //              the row, as the original reads it). EAX = the word.
 
+#include "game/ai_layout.h"
+#include "game/layout.h"
+#include "game/raw.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <vector>
 
 namespace s3re::game {
 
+using namespace ai;
+
 namespace {
 
-constexpr std::uintptr_t kAiWorld = 0x007e3408;
-constexpr std::uintptr_t kAiPlayer = 0x007e3130;
-constexpr std::uintptr_t kAiPlayerNumber = 0x007e2eb8;
-constexpr std::uintptr_t kAiPlayerSetup = 0x007e2eb4;
-constexpr std::uintptr_t kAiPlayerData = 0x007e2eb0;
-constexpr std::uintptr_t kPlayerSetupTable = 0x00731488;
-constexpr std::uintptr_t kCandidateDefaults = 0x007329d0;
-constexpr std::uintptr_t kAiMapSizeY = 0x007e3412;  // uint16 (copied from the world by 0x551b80)
-constexpr std::uintptr_t kAiMapSizeX = 0x007e3414;  // uint16
-constexpr std::uintptr_t kAiMapWorld = 0x007e7b60;
-constexpr std::size_t kTiles = 0x67444;
-constexpr std::size_t kTileBytes = 24;
-constexpr std::size_t kTileFlags = 0xa;
-constexpr std::size_t kTileArea = 0x14;
-
-constexpr std::size_t kMapSize = 0x2d2d0;
-constexpr std::size_t kAreas = 0xe145e8;
-constexpr std::size_t kAreaBytes = 0x2e0;
-constexpr std::size_t kAreaPileLists = 0xa;
-constexpr std::size_t kPiles = 0x123885c;
-constexpr std::size_t kPileBytes = 14;
-constexpr std::size_t kBuildingCount = 0x1499e60;
-constexpr std::size_t kBuildings = 0x1499e64;
-constexpr std::size_t kBuildingBytes = 0x3a;
-
-template <typename T>
-T& At(std::uintptr_t address) {
-    return *reinterpret_cast<T*>(address);
-}
-
-template <typename T>
-T& At(void* base, std::size_t offset) {
-    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(base) + offset);
-}
-
-std::uint8_t* AiWorld() {
-    return At<std::uint8_t*>(kAiWorld);
-}
+// The 6-byte record AI_CopySixBytes copies (a dword and a word).
+#pragma pack(push, 1)
+struct SixByteRecord {
+    std::uint32_t dword0;
+    std::uint16_t word4;
+};
+#pragma pack(pop)
+static_assert(sizeof(SixByteRecord) == 6);
 
 }  // namespace
 
@@ -149,11 +126,13 @@ S3RE_HOOK(0x00551a30, AI_SetCurrentPlayer, SetCurrentPlayerFn, Original_AI_SetCu
 // the AI code finds "its" player number, settings and working data through
 // globals.
 std::uint32_t __fastcall AI_SetCurrentPlayer(void* player) {
-    At<void*>(kAiPlayer) = player;
-    At<std::uint8_t>(kAiPlayerNumber) = At<std::uint8_t>(player, 0x272);
-    At<std::uint32_t>(kAiPlayerSetup) = At<std::uint32_t>(player, 0x770) * 0x180 + kPlayerSetupTable;
-    const std::uint32_t data = At<std::uint32_t>(player, 0x778);
-    At<std::uint32_t>(kAiPlayerData) = data;
+    const auto* computer = static_cast<const ComputerPlayer*>(player);
+    Global<void*>(kAiPlayer) = player;
+    Global<std::uint8_t>(kAiPlayerNumber) = computer->player_number;
+    Global<std::uint32_t>(kAiPlayerSetup) =
+        computer->setup_index * kPlayerSetupBytes + static_cast<std::uint32_t>(kPlayerSetupTable);
+    const std::uint32_t data = computer->data;
+    Global<std::uint32_t>(kAiPlayerData) = data;
     return data;
 }
 
@@ -198,7 +177,7 @@ S3RE_HOOK(0x00572090, AI_IsOnMap, IsOnMapFn, Original_AI_IsOnMap, AI_IsOnMap);
 
 // Purpose: Whether a coordinate lies on the map, for the computer players.
 bool __fastcall AI_IsOnMap(std::int32_t v) {
-    return v >= 0 && v < At<std::int32_t>(AiWorld(), kMapSize);
+    return v >= 0 && v < static_cast<std::int32_t>(AiWorld()->map_size);
 }
 
 S3RE_HOOK(0x00572050, AI_ClampToMap, ClampToMapFn, Original_AI_ClampToMap, AI_ClampToMap);
@@ -211,11 +190,11 @@ std::uint32_t __fastcall AI_ClampToMap(std::int32_t* x, std::int32_t* y) {
     if (*y < 0) {
         *y = 0;
     }
-    const std::int32_t size = At<std::int32_t>(AiWorld(), kMapSize);
+    const auto size = static_cast<std::int32_t>(AiWorld()->map_size);
     if (*x > size) {
         *x = size;
     }
-    const std::int32_t size2 = At<std::int32_t>(AiWorld(), kMapSize);
+    const auto size2 = static_cast<std::int32_t>(AiWorld()->map_size);
     if (*y > size2) {
         *y = size2;
     }
@@ -227,14 +206,15 @@ S3RE_HOOK(0x0059dc10, AI_AreaGoodsAmount, AreaGoodsAmountFn, Original_AI_AreaGoo
 // Purpose: How many units of a goods type lie on the piles of an economy
 // area, as the computer players see it.
 std::uint32_t __fastcall AI_AreaGoodsAmount(const std::uint8_t* goods, const std::uint16_t* area) {
-    std::uint8_t* world = AiWorld();
-    const std::uint32_t list = (static_cast<std::uint32_t>(*area) * kAreaBytes + kAreaPileLists) + *goods * 2u;
-    std::uint16_t pile = At<std::uint16_t>(world, kAreas + list);
+    GameWorld* world = AiWorld();
+    // Neither the area (word) nor the goods type (byte) is range-checked:
+    // indexes past the arrays read what lies there, as the original does.
+    std::uint16_t pile = world->areas[*area].piles_by_goods[*goods];
     std::uint32_t sum = 0;
     while (pile != 0) {
-        const std::size_t record = kPiles + static_cast<std::size_t>(pile) * kPileBytes;
-        sum += At<std::uint8_t>(world, record + 1);
-        pile = At<std::uint16_t>(world, record + 0xc);
+        const layout::Pile& record = world->piles[pile];
+        sum += record.amount;
+        pile = record.next;
     }
     return sum & 0xffff;
 }
@@ -245,14 +225,14 @@ S3RE_HOOK(0x0058e170, AI_GetBuilding, GetBuildingFn, Original_AI_GetBuilding, AI
 // null (with an error flag for a bad number) if there is no such building.
 void* __fastcall AI_GetBuilding(std::uint32_t id, std::uint32_t* error) {
     *error = 0;
-    std::uint8_t* world = AiWorld();
+    GameWorld* world = AiWorld();
     const std::uint32_t index = id & 0xffff;
-    if (index > At<std::uint32_t>(world, kBuildingCount)) {
+    if (index > world->building_high_water) {
         *error = 1;
         return nullptr;
     }
-    std::uint8_t* building = world + kBuildings + static_cast<std::size_t>(index) * kBuildingBytes;
-    return building[0] != 0xff ? building : nullptr;
+    layout::Building* building = &world->buildings[index];
+    return building->owner != 0xff ? building : nullptr;
 }
 
 S3RE_HOOK(0x0058ec50, AI_RecordBestCandidate, RecordBestCandidateFn, Original_AI_RecordBestCandidate,
@@ -264,15 +244,17 @@ S3RE_HOOK(0x0058ec50, AI_RecordBestCandidate, RecordBestCandidateFn, Original_AI
 std::uint32_t __fastcall AI_RecordBestCandidate(std::uint32_t index, std::uint32_t score, std::uint32_t a,
                                                 std::uint32_t b) {
     const std::uint32_t i = index & 0xffff;
-    auto* data = At<std::uint8_t*>(kAiPlayerData);
-    At<std::uint16_t>(data, 0x2d2 + i * 2) = At<std::uint16_t>(kCandidateDefaults + i * 2);
-    auto& best = At<std::uint16_t>(data, 0x26 + i * 6);
-    if (best >= static_cast<std::uint16_t>(score)) {
+    auto* data = Global<AiPlayerData*>(kAiPlayerData);
+    // (The index is not range-checked: the arrays are indexed past their
+    // declared ends like the original's address arithmetic.)
+    data->candidate_values[i] = reinterpret_cast<const std::uint16_t*>(kCandidateDefaults)[i];
+    AiCandidate& candidate = data->best[i];
+    if (candidate.score >= static_cast<std::uint16_t>(score)) {
         return i * 6;
     }
-    best = static_cast<std::uint16_t>(score);
-    At<std::uint16_t>(data, 0x28 + i * 6) = static_cast<std::uint16_t>(a);
-    At<std::uint16_t>(data, (i * 3 + 0x15) * 2) = static_cast<std::uint16_t>(b);
+    candidate.score = static_cast<std::uint16_t>(score);
+    candidate.a = static_cast<std::uint16_t>(a);
+    candidate.b = static_cast<std::uint16_t>(b);  // the original addresses it as (i * 3 + 0x15) * 2
     return i * 3 + 0x15;
 }
 
@@ -281,15 +263,18 @@ S3RE_HOOK(0x00554700, AI_GridCell, GridCellFn, Original_AI_GridCell, AI_GridCell
 // Purpose: The cell at (x, y) of a computer player's map evaluation grid
 // (Cevaland, "evaluate land").
 void* __fastcall AI_GridCell(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t index = y * At<std::uint32_t>(self, 0x140) + x;
-    return reinterpret_cast<void*>(At<std::uint32_t>(self, 0x158) + index * 0xc4);
+    const auto* evaluation = static_cast<const AiLandEvaluation*>(self);
+    const std::uint32_t index = y * evaluation->width + x;
+    // 32-bit address arithmetic (wraps like the original's for any x, y).
+    return reinterpret_cast<void*>(reinterpret_cast<std::uint32_t>(evaluation->cells) +
+                                   index * static_cast<std::uint32_t>(sizeof(AiGridCell)));
 }
 
 S3RE_HOOK(0x00554040, AI_GridFree, GridFreeFn, Original_AI_GridFree, AI_GridFree);
 
 // Purpose: Frees a computer player's map evaluation grid.
 void __fastcall AI_GridFree(void* self, void* /*edx*/) {
-    void*& grid = At<void*>(self, 0x158);
+    AiGridCell*& grid = static_cast<AiLandEvaluation*>(self)->cells;
     if (grid != nullptr) {
         reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(grid);
         grid = nullptr;
@@ -302,8 +287,10 @@ S3RE_HOOK(0x0055a420, AI_CopySixBytes, CopySixBytesFn, Original_AI_CopySixBytes,
 // container of the computer player grows).
 void __fastcall AI_CopySixBytes(void* dst, const void* src) {
     if (dst != nullptr) {
-        At<std::uint32_t>(dst, 0) = At<std::uint32_t>(const_cast<void*>(src), 0);
-        At<std::uint16_t>(dst, 4) = At<std::uint16_t>(const_cast<void*>(src), 4);
+        auto* to = static_cast<SixByteRecord*>(dst);
+        const auto* from = static_cast<const SixByteRecord*>(src);
+        to->dword0 = from->dword0;
+        to->word4 = from->word4;
     }
 }
 
@@ -312,7 +299,8 @@ S3RE_HOOK(0x0055ca60, AI_SetWord4, SetWord4Fn, Original_AI_SetWord4, AI_SetWord4
 // Purpose: Sets a 16-bit field of a computer player's record (meaning not
 // known yet).
 std::uint16_t __fastcall AI_SetWord4(void* self, void* /*edx*/, std::uint32_t value) {
-    At<std::uint16_t>(self, 4) = static_cast<std::uint16_t>(value);
+    // The only known field of this record (layout otherwise unknown).
+    RawAt<std::uint16_t>(self, 4) = static_cast<std::uint16_t>(value);
     return static_cast<std::uint16_t>(value);
 }
 
@@ -321,19 +309,20 @@ S3RE_HOOK(0x00599610, AI_BuildingArea, BuildingAreaFn, Original_AI_BuildingArea,
 // Purpose: The economy area a building stands in, for the computer players
 // (0xffff for a position off the map).
 std::uint32_t __fastcall AI_BuildingArea(const std::uint16_t* building) {
-    std::uint8_t* world = AiWorld();
+    GameWorld* world = AiWorld();
     const std::uint32_t id = *building;
-    const std::size_t record = kBuildings + id * kBuildingBytes;
-    const std::uint16_t x = At<std::uint16_t>(world, record + 0xa);
-    const std::uint16_t y = At<std::uint16_t>(world, record + 0xc);
-    if (x >= At<std::uint16_t>(kAiMapSizeX) || y >= At<std::uint16_t>(kAiMapSizeY)) {
+    const layout::Building& record = world->buildings[id];
+    const std::uint16_t x = record.door_x;
+    const std::uint16_t y = record.door_y;
+    if (x >= Global<std::uint16_t>(kAiMapSizeX) || y >= Global<std::uint16_t>(kAiMapSizeY)) {
         return ((id * 29) & 0xffff0000u) | 0xffffu;  // `or ax, 0FFFFh` on 29 * id
     }
     // The original indexes [world + (tile + 0x44d9) * 24], which is the
-    // tile's area word (0x44d9 * 24 = kTiles + kTileArea).
+    // tile's area word (0x44d9 * 24 = tiles + Tile::area); the upper half of
+    // EAX keeps that index's.
     const std::uint32_t index = x * 0x300u + y + 0x44d9u;
-    static_assert(0x44d9 * kTileBytes == kTiles + kTileArea, "tile area word");
-    return (index & 0xffff0000u) | At<std::uint16_t>(world, index * kTileBytes);
+    static_assert(0x44d9 * kTileBytes == offsetof(GameWorld, tiles) + offsetof(layout::Tile, area), "tile area word");
+    return (index & 0xffff0000u) | TileAtOffset(world, TileOffset(x, y)).area;
 }
 
 S3RE_HOOK(0x0058b480, AI_FreeTileArea, FreeTileAreaFn, Original_AI_FreeTileArea, AI_FreeTileArea);
@@ -344,17 +333,19 @@ std::uint32_t __stdcall AI_FreeTileArea(std::int32_t x, std::int32_t y) {
     if (!AI_IsOnMap(x) || !AI_IsOnMap(y)) {
         return 0xffffffffu;
     }
-    std::uint8_t* world = At<std::uint8_t*>(kAiMapWorld);
-    auto tile = [&](std::int32_t tx) {
-        return kTiles + static_cast<std::uint32_t>(tx * 0x300 + y) * kTileBytes;
+    GameWorld* world = Global<GameWorld*>(kAiMapWorld);
+    // At x = map size the tile is the one just past the row (32-bit offset
+    // arithmetic, as the original reads it).
+    auto tile = [&](std::int32_t tx) -> layout::Tile& {
+        return TileAtOffset(world, TileOffset(static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(y)));
     };
-    if ((At<std::uint8_t>(world, tile(x) + kTileFlags) & 1) != 0) {
-        const std::int32_t size = At<std::int32_t>(world, kMapSize);
+    if ((tile(x).flags & layout::kTileBlocked) != 0) {
+        const auto size = static_cast<std::int32_t>(world->map_size);
         do {
             ++x;
-        } while (x < size && (At<std::uint8_t>(world, tile(x) + kTileFlags) & 1) != 0);
+        } while (x < size && (tile(x).flags & layout::kTileBlocked) != 0);
     }
-    return At<std::uint16_t>(world, tile(x) + kTileArea);
+    return tile(x).area;
 }
 
 // ---------------------------------------------------------------------------
@@ -427,9 +418,9 @@ std::uint32_t __fastcall AI_CountBuildings(std::uint32_t player, std::uint32_t t
     std::uint32_t id = 0;
     do {
         ++id;
-        const auto* building = static_cast<const std::uint8_t*>(AI_GetBuilding(id, &error));
-        if (building != nullptr && building[0] == static_cast<std::uint8_t>(player) && building[0x21] == 0 &&
-            building[6] == static_cast<std::uint8_t>(type)) {
+        const auto* building = static_cast<const layout::Building*>(AI_GetBuilding(id, &error));
+        if (building != nullptr && building->owner == static_cast<std::uint8_t>(player) && building->buildup == 0 &&
+            building->art == static_cast<std::uint8_t>(type)) {
             const std::uint16_t number = static_cast<std::uint16_t>(id);
             const auto found = static_cast<std::uint16_t>(AI_BuildingArea(&number));
             if (static_cast<std::uint16_t>(area) == found || static_cast<std::uint16_t>(area) != 0) {
@@ -446,14 +437,16 @@ S3RE_HOOK(0x005996c0, AI_AreaAlongRow, AreaAlongRowFn, Original_AI_AreaAlongRow,
 // a tile without an area it looks a few tiles further in +x (0xffff off the
 // map).
 std::uint32_t __fastcall AI_AreaAlongRow(std::uint32_t x, std::uint32_t y) {
-    const std::uint16_t sizeX = At<std::uint16_t>(kAiMapSizeX);
-    if (static_cast<std::uint16_t>(x) >= sizeX || static_cast<std::uint16_t>(y) >= At<std::uint16_t>(kAiMapSizeY)) {
+    const std::uint16_t sizeX = Global<std::uint16_t>(kAiMapSizeX);
+    if (static_cast<std::uint16_t>(x) >= sizeX || static_cast<std::uint16_t>(y) >= Global<std::uint16_t>(kAiMapSizeY)) {
         return 0xffff;
     }
-    std::uint8_t* world = AiWorld();
+    GameWorld* world = AiWorld();
     y &= 0xffff;
+    // The original's register holds (tile index + 0x44d9) * 3; times 8 it is
+    // the offset of the tile's area word (see AI_BuildingArea).
     const auto index3 = [&](std::uint32_t tx) { return ((tx & 0xffff) * 0x300 + y + 0x44d9) * 3; };
-    const auto area = [&](std::uint32_t tx) { return At<std::uint16_t>(world, index3(tx) * 8); };
+    const auto area = [&](std::uint32_t tx) { return TileAtOffset(world, TileOffset(tx & 0xffff, y)).area; };
     std::uint32_t upper = index3(x);
     if (area(x) == 0) {
         for (int steps = 0; steps < 16; ++steps) {
@@ -476,9 +469,10 @@ S3RE_HOOK(0x00551910, AI_List32Add, List32AddFn, Original_AI_List32Add, AI_List3
 // Purpose: Adds a number to a computer player's list of up to 50 entries
 // (+0x200) and counts it (+0x264); probably a list of buildings or orders.
 std::uint32_t __fastcall AI_List32Add(void* self, void* /*edx*/, std::uint32_t value) {
-    const std::uint32_t added = AI_WordListInsert(value, &At<std::uint16_t>(self, 0x200), 50);
+    auto* owner = static_cast<AiList50Owner*>(self);
+    const std::uint32_t added = AI_WordListInsert(value, owner->entries, 50);
     if (added != 0) {
-        ++At<std::uint16_t>(self, 0x264);
+        ++owner->count;
     }
     return added;
 }
@@ -488,10 +482,11 @@ S3RE_HOOK(0x00554730, AI_GridCellWrapped, GridCellFn, Original_AI_GridCellWrappe
 // Purpose: A cell of a computer player's map evaluation grid, with the
 // coordinates wrapped around the grid size.
 void* __fastcall AI_GridCellWrapped(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t width = At<std::uint32_t>(self, 0x140);
-    const std::uint32_t row = y % At<std::uint32_t>(self, 0x144);
+    const auto* evaluation = static_cast<const AiLandEvaluation*>(self);
+    const std::uint32_t width = evaluation->width;
+    const std::uint32_t row = y % evaluation->height;
     const std::uint32_t column = x % width;
-    return At<std::uint8_t*>(self, 0x158) + (row * width + column) * 0xc4;
+    return reinterpret_cast<std::uint8_t*>(evaluation->cells) + (row * width + column) * sizeof(AiGridCell);
 }
 
 S3RE_HOOK(0x00554530, AI_GridSumAround, GridSumFn, Original_AI_GridSumAround, AI_GridSumAround);
@@ -500,34 +495,35 @@ S3RE_HOOK(0x00554530, AI_GridSumAround, GridSumFn, Original_AI_GridSumAround, AI
 // into it (probably how good the surroundings of a place are for a
 // building), three of them scaled to percentages.
 std::uint32_t __fastcall AI_GridSumAround(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
-    auto* cell = static_cast<std::uint8_t*>(AI_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
-    cell[0xf] = 0;
-    for (std::size_t offset = 0x10; offset <= 0x1c; offset += 2) {
-        At<std::uint16_t>(cell, offset) = 0;
+    const auto* evaluation = static_cast<const AiLandEvaluation*>(self);
+    auto* cell = static_cast<AiGridCell*>(AI_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
+    cell->sum0f = 0;
+    cell->sum10 = 0;
+    for (std::uint16_t& sum : cell->sums12) {
+        sum = 0;
     }
-    cell[0x1e] = 0;
-    cell[0x1f] = 0;
-    cell[0x20] = 0;
+    cell->percent1e = 0;
+    cell->percent1f = 0;
+    cell->percent20 = 0;
     std::uint32_t sumB = 0, sumC = 0, sumD = 0;
     for (std::uint32_t i = 0; i < 3; ++i) {
         for (std::uint32_t j = 0; j < 3; ++j) {
             const auto cx = static_cast<std::int16_t>(i + x - 1);
             const auto cy = static_cast<std::int16_t>(j + y - 1);
-            if (cx < 0 || static_cast<std::uint32_t>(static_cast<std::int32_t>(cx)) >= At<std::uint32_t>(self, 0x140) ||
-                cy < 0 || static_cast<std::uint32_t>(static_cast<std::int32_t>(cy)) >= At<std::uint32_t>(self, 0x144)) {
+            if (cx < 0 || static_cast<std::uint32_t>(static_cast<std::int32_t>(cx)) >= evaluation->width ||
+                cy < 0 || static_cast<std::uint32_t>(static_cast<std::int32_t>(cy)) >= evaluation->height) {
                 continue;
             }
-            const auto* other = static_cast<const std::uint8_t*>(
+            const auto* other = static_cast<const AiGridCell*>(
                 AI_GridCell(self, nullptr, static_cast<std::uint32_t>(cx), static_cast<std::uint32_t>(cy)));
-            cell[0xf] = static_cast<std::uint8_t>(cell[0xf] + other[4]);
-            At<std::uint16_t>(cell, 0x10) = static_cast<std::uint16_t>(At<std::uint16_t>(cell, 0x10) + other[3]);
+            cell->sum0f = static_cast<std::uint8_t>(cell->sum0f + other->value04);
+            cell->sum10 = static_cast<std::uint16_t>(cell->sum10 + other->value03);
             for (std::size_t k = 0; k < 6; ++k) {
-                At<std::uint16_t>(cell, 0x12 + 2 * k) =
-                    static_cast<std::uint16_t>(At<std::uint16_t>(cell, 0x12 + 2 * k) + other[5 + k]);
+                cell->sums12[k] = static_cast<std::uint16_t>(cell->sums12[k] + other->values05[k]);
             }
-            sumB += other[0xb];
-            sumC += other[0xc];
-            sumD += other[0xd];
+            sumB += other->value0b;
+            sumC += other->value0c;
+            sumD += other->value0d;
         }
     }
     std::uint32_t low = 0;
@@ -536,9 +532,9 @@ std::uint32_t __fastcall AI_GridSumAround(void* self, void* /*edx*/, std::uint32
         low = static_cast<std::uint32_t>(product);
         return static_cast<std::uint8_t>((product >> 32) >> 7);
     };
-    cell[0x1e] = percent(sumB);
-    cell[0x1f] = percent(sumC);
-    cell[0x20] = percent(sumD);
+    cell->percent1e = percent(sumB);
+    cell->percent1f = percent(sumC);
+    cell->percent20 = percent(sumD);
     return low;
 }
 
@@ -547,28 +543,32 @@ S3RE_HOOK(0x0055b770, AI_ResetAgentData, AgentResetFn, Original_AI_ResetAgentDat
 // Purpose: Clears a computer player's working data (probably at the start
 // of a game or when it is created), and empties 20 shared vectors.
 std::uint32_t __fastcall AI_ResetAgentData(void* self, void* /*edx*/) {
-    for (std::size_t offset = 0x18e4; offset <= 0x1ad4; offset += 4) {
-        At<std::uint32_t>(self, offset) = 0;
+    auto* data = static_cast<AiAgentData*>(self);
+    for (std::uint32_t& value : data->dwords18e4) {
+        value = 0;
     }
-    std::memset(&At<std::uint8_t>(self, 0x714), 0, 0x474 * 4);
-    At<std::uint8_t>(self, 1) = 0;
-    std::memset(&At<std::uint8_t>(self, 0x444), 0, 0xb4 * 4);
-    for (const std::size_t offset : {0x3a4u, 0x354u, 0x2b4u, 0x304u, 0x3f4u}) {
-        std::memset(&At<std::uint8_t>(self, offset), 0, 0x14 * 4);
+    std::memset(data->dwords714, 0, sizeof(data->dwords714));
+    data->unk001 = 0;
+    std::memset(data->dwords444, 0, sizeof(data->dwords444));
+    for (std::uint32_t* array : {data->dwords3a4, data->dwords354, data->dwords2b4, data->dwords304, data->dwords3f4}) {
+        std::memset(array, 0, sizeof(data->dwords3a4));
     }
-    for (std::uintptr_t entry = 0x007e7a28; entry < 0x007e7b68; entry += 0x10) {
-        At<std::uint32_t>(entry) = At<std::uint32_t>(entry - 4);  // end = begin
+    AiVector* vectors = AgentVectors();
+    for (std::size_t k = 0; k < kAgentVectorCount; ++k) {
+        vectors[k].end = vectors[k].begin;
     }
-    At<std::uint8_t>(self, 0) = 0;
-    At<std::uint8_t>(self, 2) = 0;
-    At<std::uint8_t>(self, 0x2ac) = 0;
+    data->unk000 = 0;
+    data->unk002 = 0;
+    data->unk2ac = 0;
     for (std::size_t k = 0; k < 20; ++k) {
-        for (const std::size_t base : {0x25cu, 0x2b4u, 0x304u, 0x354u, 0x3f4u}) {
-            At<std::uint32_t>(self, base + 4 * k) = 0;
-        }
+        data->dwords25c[k] = 0;
+        data->dwords2b4[k] = 0;
+        data->dwords304[k] = 0;
+        data->dwords354[k] = 0;
+        data->dwords3f4[k] = 0;
         for (std::size_t j = 0; j < 10; ++j) {
-            At<std::uint16_t>(self, 4 + 20 * k + 2 * j) = 0;
-            At<std::uint8_t>(self, 0x194 + 10 * k + j) = 0;
+            data->words004[k][j] = 0;
+            data->bytes194[k][j] = 0;
         }
     }
     return 10;
@@ -579,8 +579,8 @@ S3RE_HOOK(0x00553e00, AI_ClearGlobals7e0568, ClearGlobalsFn, Original_AI_ClearGl
 // Purpose: Resets two AI globals (0x7e0568, 0x7e056c; meaning unknown)
 // when a computer player's turn is set up.
 std::uint32_t __cdecl AI_ClearGlobals7e0568() {
-    At<std::uint32_t>(0x007e0568) = 0;
-    At<std::uint32_t>(0x007e056c) = 0;
+    Global<std::uint32_t>(kEvaLandRefCount) = 0;
+    Global<std::uint32_t>(kEvaLandInstance) = 0;
     return 0;
 }
 
@@ -589,7 +589,7 @@ S3RE_HOOK(0x00559260, AI_ListFirst, ListFirstFn, Original_AI_ListFirst, AI_ListF
 // Purpose: The first entry of a linked list (the node after the head at
 // this+4), as an iterator written to `out`.
 void* __fastcall AI_ListFirst(void* self, void* /*edx*/, std::uint32_t* out) {
-    *out = *At<std::uint32_t*>(self, 4);
+    *out = static_cast<const AiList*>(self)->head->next;
     return out;
 }
 
@@ -638,15 +638,15 @@ struct SavedGlobals {
                                                      kAiPlayerNumber};
     SavedGlobals() {
         for (int i = 0; i < 4; ++i) {
-            values[i] = At<std::uint32_t>(kAddresses[i]);
+            values[i] = Global<std::uint32_t>(kAddresses[i]);
         }
-        values[4] = At<std::uint8_t>(kAiPlayerNumber);
+        values[4] = Global<std::uint8_t>(kAiPlayerNumber);
     }
     ~SavedGlobals() {
         for (int i = 0; i < 4; ++i) {
-            At<std::uint32_t>(kAddresses[i]) = values[i];
+            Global<std::uint32_t>(kAddresses[i]) = values[i];
         }
-        At<std::uint8_t>(kAiPlayerNumber) = static_cast<std::uint8_t>(values[4]);
+        Global<std::uint8_t>(kAiPlayerNumber) = static_cast<std::uint8_t>(values[4]);
     }
 };
 
@@ -665,22 +665,22 @@ void BuildPileList(test::Context& ctx, test::WorldPair& worlds, std::uint32_t ar
     const std::uint32_t stride = 1 + ctx.rng().Below(1000);
     for (int k = 0; k < length; ++k) {
         const auto pile = static_cast<std::uint16_t>(start + static_cast<std::uint32_t>(k) * stride);
-        worlds.Set<std::uint16_t>(kPiles + pile * kPileBytes + 0xc, next);
+        worlds.Both([&](GameWorld* w) { w->piles[pile].next = next; });
         next = pile;
     }
-    worlds.Set<std::uint16_t>(kAreas + area * kAreaBytes + kAreaPileLists + goods * 2, next);
+    worlds.Both([&](GameWorld* w) { w->areas[area].piles_by_goods[goods] = next; });
 }
 
 void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
     const AiFunctions original = OriginalAi();
     SavedGlobals saved;
-    const std::uint32_t savedMapSizes = At<std::uint32_t>(kAiMapSizeY);  // both words
-    const std::uint32_t savedMapWorld = At<std::uint32_t>(kAiMapWorld);
+    const std::uint32_t savedMapSizes = Global<std::uint32_t>(kAiMapSizeY);  // both words
+    const std::uint32_t savedMapWorld = Global<std::uint32_t>(kAiMapWorld);
     struct Restore {
         std::uint32_t sizes, world;
         ~Restore() {
-            At<std::uint32_t>(kAiMapSizeY) = sizes;
-            At<std::uint32_t>(kAiMapWorld) = world;
+            Global<std::uint32_t>(kAiMapSizeY) = sizes;
+            Global<std::uint32_t>(kAiMapWorld) = world;
         }
     } restore{savedMapSizes, savedMapWorld};
     test::WorldPair worlds(ctx, 0x153a128);
@@ -688,9 +688,9 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
     ctx.rng().Fill(dataA.data(), dataA.size());
     dataB = dataA;
     auto useWorld = [&](bool ours) {
-        At<void*>(kAiWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
-        At<void*>(kAiPlayerData) = ours ? dataB.data() : dataA.data();
-        At<void*>(kAiMapWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
+        Global<void*>(kAiWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
+        Global<void*>(kAiPlayerData) = ours ? dataB.data() : dataA.data();
+        Global<void*>(kAiMapWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
     };
     for (int i = 0; i < cases; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(14));
@@ -699,20 +699,20 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
             case 0: {
                 std::uint8_t player[0x780];
                 ctx.rng().Fill(player, sizeof(player));
-                At<std::uint32_t>(player, 0x770) = ctx.rng().Below(64);
+                reinterpret_cast<ComputerPlayer*>(player)->setup_index = ctx.rng().Below(64);
                 const std::uint32_t ra = original.setCurrentPlayer(player);
-                const std::uint32_t ga[4] = {At<std::uint32_t>(kAiPlayer), At<std::uint8_t>(kAiPlayerNumber),
-                                             At<std::uint32_t>(kAiPlayerSetup), At<std::uint32_t>(kAiPlayerData)};
-                At<std::uint32_t>(kAiPlayer) = 0;
-                At<std::uint8_t>(kAiPlayerNumber) = 0;
-                At<std::uint32_t>(kAiPlayerSetup) = 0;
-                At<std::uint32_t>(kAiPlayerData) = 0;
+                const std::uint32_t ga[4] = {Global<std::uint32_t>(kAiPlayer), Global<std::uint8_t>(kAiPlayerNumber),
+                                             Global<std::uint32_t>(kAiPlayerSetup), Global<std::uint32_t>(kAiPlayerData)};
+                Global<std::uint32_t>(kAiPlayer) = 0;
+                Global<std::uint8_t>(kAiPlayerNumber) = 0;
+                Global<std::uint32_t>(kAiPlayerSetup) = 0;
+                Global<std::uint32_t>(kAiPlayerData) = 0;
                 const std::uint32_t rb = candidate.setCurrentPlayer(player);
                 same &= S3RE_EXPECT_EQ(ra, rb);
-                same &= S3RE_EXPECT_EQ(ga[0], At<std::uint32_t>(kAiPlayer));
-                same &= S3RE_EXPECT_EQ(ga[1], static_cast<std::uint32_t>(At<std::uint8_t>(kAiPlayerNumber)));
-                same &= S3RE_EXPECT_EQ(ga[2], At<std::uint32_t>(kAiPlayerSetup));
-                same &= S3RE_EXPECT_EQ(ga[3], At<std::uint32_t>(kAiPlayerData));
+                same &= S3RE_EXPECT_EQ(ga[0], Global<std::uint32_t>(kAiPlayer));
+                same &= S3RE_EXPECT_EQ(ga[1], static_cast<std::uint32_t>(Global<std::uint8_t>(kAiPlayerNumber)));
+                same &= S3RE_EXPECT_EQ(ga[2], Global<std::uint32_t>(kAiPlayerSetup));
+                same &= S3RE_EXPECT_EQ(ga[3], Global<std::uint32_t>(kAiPlayerData));
                 break;
             }
             case 1:
@@ -733,7 +733,7 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
             }
             case 3: {
                 const std::int32_t size = ctx.rng().Range(-4, 1024);
-                worlds.Set<std::int32_t>(kMapSize, size);
+                worlds.Both([&](GameWorld* w) { w->map_size = static_cast<std::uint32_t>(size); });
                 const std::int32_t v = ctx.rng().Chance(1, 8) ? static_cast<std::int32_t>(ctx.rng().Next32())
                                                               : ctx.rng().Range(-3, 1030);
                 useWorld(false);
@@ -745,7 +745,7 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
             }
             case 4: {
                 const std::int32_t size = ctx.rng().Range(-4, 1024);
-                worlds.Set<std::int32_t>(kMapSize, size);
+                worlds.Both([&](GameWorld* w) { w->map_size = static_cast<std::uint32_t>(size); });
                 std::int32_t xa = ctx.rng().Range(-50, 1100), ya = ctx.rng().Range(-50, 1100);
                 if (ctx.rng().Chance(1, 8)) {
                     xa = static_cast<std::int32_t>(ctx.rng().Next32());
@@ -772,10 +772,11 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
                 break;
             }
             case 6: {
-                worlds.Set<std::uint32_t>(kBuildingCount, ctx.rng().Below(3000));
+                const std::uint32_t count = ctx.rng().Below(3000);
+                worlds.Both([&](GameWorld* w) { w->building_high_water = count; });
                 const std::uint32_t id = (ctx.rng().Next32() & 0xffff0000u) | ctx.rng().Below(3200);
                 if (ctx.rng().Chance(1, 3)) {
-                    worlds.Set<std::uint8_t>(kBuildings + (id & 0xffff) * kBuildingBytes, 0xff);
+                    worlds.Both([&](GameWorld* w) { w->buildings[id & 0xffff].owner = 0xff; });
                 }
                 std::uint32_t ea = 7, eb = 7;
                 useWorld(false);
@@ -795,8 +796,8 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
                 const std::uint32_t a = ctx.rng().Next32(), b = ctx.rng().Next32();
                 if (ctx.rng().Chance(1, 2)) {
                     const auto low = static_cast<std::uint16_t>(score - ctx.rng().Below(3));
-                    std::memcpy(dataA.data() + 0x26 + (index & 0xffff) * 6, &low, 2);
-                    std::memcpy(dataB.data() + 0x26 + (index & 0xffff) * 6, &low, 2);
+                    reinterpret_cast<AiPlayerData*>(dataA.data())->best[index & 0xffff].score = low;
+                    reinterpret_cast<AiPlayerData*>(dataB.data())->best[index & 0xffff].score = low;
                 }
                 useWorld(false);
                 const std::uint32_t ra = original.recordBest(index, score, a, b);
@@ -818,10 +819,13 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
                 ctx.rng().Fill(oa, sizeof(oa));
                 const bool empty = ctx.rng().Chance(1, 3);
                 auto* newFn = reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9);
-                At<void*>(oa, 0x158) = empty ? nullptr : newFn(16);
+                static_assert(sizeof(oa) >= sizeof(AiLandEvaluation));
+                auto& gridA = reinterpret_cast<AiLandEvaluation*>(oa)->cells;
+                auto& gridB = reinterpret_cast<AiLandEvaluation*>(ob)->cells;
+                gridA = empty ? nullptr : static_cast<AiGridCell*>(newFn(16));
                 std::memcpy(ob, oa, sizeof(oa));
-                At<void*>(ob, 0x158) = empty ? nullptr : newFn(16);
-                void* blockB = At<void*>(ob, 0x158);
+                gridB = empty ? nullptr : static_cast<AiGridCell*>(newFn(16));
+                void* blockB = gridB;
                 original.gridFree(oa, nullptr);
                 candidate.gridFree(ob, nullptr);
                 same &= S3RE_EXPECT_MEM_EQ(oa, ob, sizeof(oa));
@@ -841,14 +845,17 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
             }
             case 12: {
                 const std::uint16_t id = static_cast<std::uint16_t>(ctx.rng().Below(3200));
-                const std::size_t record = kBuildings + id * kBuildingBytes;
                 auto coordinate = [&]() {
                     return static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(420));
                 };
-                worlds.Set<std::uint16_t>(record + 0xa, coordinate());
-                worlds.Set<std::uint16_t>(record + 0xc, coordinate());
-                At<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(ctx.rng().Below(420));
-                At<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(ctx.rng().Below(420));
+                const std::uint16_t doorX = coordinate();
+                const std::uint16_t doorY = coordinate();
+                worlds.Both([&](GameWorld* w) {
+                    w->buildings[id].door_x = doorX;
+                    w->buildings[id].door_y = doorY;
+                });
+                Global<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(ctx.rng().Below(420));
+                Global<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(ctx.rng().Below(420));
                 useWorld(false);
                 const std::uint32_t ra = original.buildingArea(&id);
                 useWorld(true);
@@ -858,7 +865,7 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
             }
             case 13: {
                 const std::int32_t size = ctx.rng().Range(1, 400);
-                worlds.Set<std::int32_t>(kMapSize, size);
+                worlds.Both([&](GameWorld* w) { w->map_size = static_cast<std::uint32_t>(size); });
                 const std::int32_t x = ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Next32())
                                                                : ctx.rng().Range(-2, size + 1);
                 const std::int32_t y = ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Next32())
@@ -867,10 +874,10 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
                     // A run of blocked tiles from x on (often to the map edge).
                     const std::int32_t run = ctx.rng().Chance(1, 3) ? 0 : ctx.rng().Range(1, size - x + 1);
                     for (std::int32_t k = 0; k <= run && x + k <= size; ++k) {
-                        const std::size_t tile = kTiles + static_cast<std::size_t>((x + k) * 0x300 + y) * kTileBytes;
                         const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32());
-                        worlds.Set<std::uint8_t>(tile + kTileFlags,
-                                                 static_cast<std::uint8_t>(k < run ? flags | 1 : flags & ~1));
+                        const auto value = static_cast<std::uint8_t>(k < run ? flags | layout::kTileBlocked
+                                                                             : flags & ~layout::kTileBlocked);
+                        worlds.Both([&](GameWorld* w) { w->tiles[x + k][y].flags = value; });
                     }
                 }
                 useWorld(false);
@@ -952,10 +959,13 @@ Ai25Functions OurAi25() {
             &AI_GridSumAround,  &AI_ResetAgentData, &AI_ClearGlobals7e0568, &AI_ListFirst};
 }
 
-// S3.EXE memory the functions write: the two globals and the 20 vectors.
-constexpr std::uintptr_t kGlobalsLow = 0x007e0568;
-constexpr std::uintptr_t kVectorsLow = 0x007e7a24;
-constexpr std::size_t kVectorsBytes = 0x7e7b68 - 0x7e7a24;
+// S3.EXE memory the functions write: the two globals and the 20 vectors
+// (plus the dword after them).
+constexpr std::uintptr_t kGlobalsLow = kEvaLandRefCount;
+static_assert(kEvaLandInstance == kGlobalsLow + 4);
+constexpr std::uintptr_t kVectorsLow = kAgentVectors;
+constexpr std::size_t kVectorsBytes = kAgentVectorCount * sizeof(AiVector) + 4;
+static_assert(kVectorsBytes == 0x7e7b68 - 0x7e7a24);
 
 void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) {
     const Ai25Functions original = OriginalAi25();
@@ -963,7 +973,7 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
     std::vector<std::uint8_t> savedVectors(kVectorsBytes), savedPair(8);
     std::memcpy(savedVectors.data(), reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
     std::memcpy(savedPair.data(), reinterpret_cast<void*>(kGlobalsLow), 8);
-    const std::uint32_t savedMapSizes = At<std::uint32_t>(kAiMapSizeY);
+    const std::uint32_t savedMapSizes = Global<std::uint32_t>(kAiMapSizeY);
     test::WorldPair worlds(ctx, 0x153a128);
     std::vector<std::uint8_t> a(0x8000), b(0x8000), vectorsA(kVectorsBytes), pairA(8);
     for (int i = 0; i < cases; ++i) {
@@ -971,37 +981,42 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
         ctx.rng().Fill(a.data(), a.size());
         ctx.rng().Fill(reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
         ctx.rng().Fill(reinterpret_cast<void*>(kGlobalsLow), 8);
-        At<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 1 + ctx.rng().Below(400));
-        At<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 1 + ctx.rng().Below(400));
+        Global<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 1 + ctx.rng().Below(400));
+        Global<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 1 + ctx.rng().Below(400));
         std::uint32_t args[3] = {ctx.rng().Next32(), ctx.rng().Next32(), ctx.rng().Next32()};
         switch (op) {
             case 0: {
                 const std::uint32_t count = ctx.rng().Below(60);
-                worlds.Set<std::uint32_t>(kBuildingCount, count);
+                worlds.Both([&](GameWorld* w) { w->building_high_water = count; });
                 args[0] = (args[0] & 0xffffff00u) | ctx.rng().Below(3);
                 args[1] = (args[1] & 0xffffff00u) | ctx.rng().Below(3);
                 args[2] = ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(4);
-                At<std::uint16_t>(kAiMapSizeX) = 400;
-                At<std::uint16_t>(kAiMapSizeY) = 400;
+                Global<std::uint16_t>(kAiMapSizeX) = 400;
+                Global<std::uint16_t>(kAiMapSizeY) = 400;
                 for (std::uint32_t id = 1; id <= count; ++id) {
-                    const std::size_t record = kBuildings + id * kBuildingBytes;
-                    worlds.Set<std::uint8_t>(record, static_cast<std::uint8_t>(ctx.rng().Chance(1, 6) ? 0xff : ctx.rng().Below(3)));
-                    worlds.Set<std::uint8_t>(record + 6, static_cast<std::uint8_t>(ctx.rng().Below(3)));
-                    worlds.Set<std::uint8_t>(record + 0x21, static_cast<std::uint8_t>(ctx.rng().Chance(1, 4)));
+                    const auto owner = static_cast<std::uint8_t>(ctx.rng().Chance(1, 6) ? 0xff : ctx.rng().Below(3));
+                    const auto art = static_cast<std::uint8_t>(ctx.rng().Below(3));
+                    const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(1, 4));
                     const auto x = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? 500 : ctx.rng().Below(400));
                     const auto y = static_cast<std::uint16_t>(ctx.rng().Below(400));
-                    worlds.Set<std::uint16_t>(record + 0xa, x);
-                    worlds.Set<std::uint16_t>(record + 0xc, y);
+                    worlds.Both([&](GameWorld* w) {
+                        layout::Building& record = w->buildings[id];
+                        record.owner = owner;
+                        record.art = art;
+                        record.buildup = buildup;
+                        record.door_x = x;
+                        record.door_y = y;
+                    });
                     if (x < 400) {
-                        worlds.Set<std::uint16_t>(kTiles + (x * 0x300u + y) * kTileBytes + kTileArea,
-                                                  static_cast<std::uint16_t>(ctx.rng().Below(4)));
+                        const auto area = static_cast<std::uint16_t>(ctx.rng().Below(4));
+                        worlds.Both([&](GameWorld* w) { w->tiles[x][y].area = area; });
                     }
                 }
                 break;
             }
             case 1: {
-                At<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(1 + ctx.rng().Below(400));
-                At<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(1 + ctx.rng().Below(400));
+                Global<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(1 + ctx.rng().Below(400));
+                Global<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(1 + ctx.rng().Below(400));
                 const std::uint32_t x = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(410);
                 const std::uint32_t y = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(410);
                 args[0] = x;
@@ -1009,23 +1024,24 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
                 for (std::uint32_t k = 0; k < 20; ++k) {
                     const std::uint32_t tx = (x + k) & 0xffff;
                     if (tx < 0x300 && (y & 0xffff) < 0x300) {
-                        worlds.Set<std::uint16_t>(kTiles + (tx * 0x300u + (y & 0xffff)) * kTileBytes + kTileArea,
-                                                  static_cast<std::uint16_t>(ctx.rng().Chance(3, 4) ? 0 : ctx.rng().Next32()));
+                        const auto area = static_cast<std::uint16_t>(ctx.rng().Chance(3, 4) ? 0 : ctx.rng().Next32());
+                        worlds.Both([&](GameWorld* w) { w->tiles[tx][y & 0xffff].area = area; });
                     }
                 }
                 break;
             }
             case 2:
                 for (std::size_t k = 0; k < 50; ++k) {
-                    At<std::uint16_t>(a.data(), 0x200 + 2 * k) = ctx.rng().Chance(1, 10) ? 0xffff : static_cast<std::uint16_t>(ctx.rng().Below(9));
+                    reinterpret_cast<AiList50Owner*>(a.data())->entries[k] =
+                        ctx.rng().Chance(1, 10) ? 0xffff : static_cast<std::uint16_t>(ctx.rng().Below(9));
                 }
                 args[0] = ctx.rng().Chance(1, 4) ? 0xffff : ctx.rng().Below(9);
                 break;
             case 3:
             case 4: {
                 const std::uint32_t w = 1 + ctx.rng().Below(8), h = 1 + ctx.rng().Below(8);
-                At<std::uint32_t>(a.data(), 0x140) = w;
-                At<std::uint32_t>(a.data(), 0x144) = h;
+                reinterpret_cast<AiLandEvaluation*>(a.data())->width = w;
+                reinterpret_cast<AiLandEvaluation*>(a.data())->height = h;
                 if (op == 4) {
                     args[0] = (args[0] & 0xffff0000u) | ctx.rng().Below(w);
                     args[1] = (args[1] & 0xffff0000u) | ctx.rng().Below(h);
@@ -1039,9 +1055,10 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
         std::memcpy(vectorsA.data(), reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
         std::memcpy(pairA.data(), reinterpret_cast<void*>(kGlobalsLow), 8);
         auto run = [&](const Ai25Functions& f, std::uint8_t* object, bool ours) -> std::uint32_t {
-            At<void*>(kAiWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
-            At<std::uint8_t*>(object, 0x158) = object + 0x200;  // the grid's cells
-            At<std::uint8_t*>(object, 4) = object + 0x100;      // the list head
+            Global<void*>(kAiWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
+            // The buffer is the land evaluation (op 3, 4) or a list (op 7).
+            reinterpret_cast<AiLandEvaluation*>(object)->cells = reinterpret_cast<AiGridCell*>(object + 0x200);
+            reinterpret_cast<AiList*>(object)->head = reinterpret_cast<AiListNode*>(object + 0x100);
             switch (op) {
                 case 0: return f.countBuildings(args[0], args[1], args[2]);
                 case 1: return f.areaAlongRow(args[0], args[1]) & 0xffff;
@@ -1065,9 +1082,9 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
         std::memcpy(reinterpret_cast<void*>(kGlobalsLow), pairA.data(), 8);
         const std::uint32_t rb = run(candidate, b.data(), true);
         // The pointers run() stores point into each side's own buffer.
-        std::memcpy(b.data() + 0x158, a.data() + 0x158, 4);
+        std::memcpy(b.data() + offsetof(AiLandEvaluation, cells), a.data() + offsetof(AiLandEvaluation, cells), 4);
         if (op != 5) {  // (ResetAgentData clears +4 itself)
-            std::memcpy(b.data() + 4, a.data() + 4, 4);
+            std::memcpy(b.data() + offsetof(AiList, head), a.data() + offsetof(AiList, head), 4);
         }
         bool same = S3RE_EXPECT_EQ(ra, rb);
         same &= S3RE_EXPECT_MEM_EQ(a.data(), b.data(), a.size());
@@ -1080,17 +1097,17 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
     }
     std::memcpy(reinterpret_cast<void*>(kVectorsLow), savedVectors.data(), kVectorsBytes);
     std::memcpy(reinterpret_cast<void*>(kGlobalsLow), savedPair.data(), 8);
-    At<std::uint32_t>(kAiMapSizeY) = savedMapSizes;
+    Global<std::uint32_t>(kAiMapSizeY) = savedMapSizes;
 }
 
 // Wrong: the 3x3 sum skips the centre cell.
 std::uint32_t __fastcall WrongGridSumAround(void* self, void* edx, std::uint32_t x, std::uint32_t y) {
-    auto* cell = static_cast<std::uint8_t*>(AI_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
-    std::uint8_t saved[0xc4];
-    std::memcpy(saved, cell, sizeof(saved));
-    std::memset(cell, 0, 0xe);
+    auto* cell = static_cast<AiGridCell*>(AI_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
+    AiGridCell saved;
+    std::memcpy(&saved, cell, sizeof(saved));
+    std::memset(cell, 0, offsetof(AiGridCell, unk0e));  // the centre's values read as 0
     const std::uint32_t result = AI_GridSumAround(self, edx, x, y);
-    std::memcpy(cell, saved, 0xe);
+    std::memcpy(cell, &saved, offsetof(AiGridCell, unk0e));
     return result;
 }
 

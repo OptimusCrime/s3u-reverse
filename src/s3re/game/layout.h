@@ -407,7 +407,10 @@ struct GameWorldFields {
     std::int32_t draw_flag_2d280;
     std::int32_t ui_selection_mode;                         // 0x002d284
     std::int32_t ui_selection_param1, ui_selection_param2;  // 0x002d288
-    std::int32_t ui_2d290[5];                               // 0x002d290..0x002d2a0
+    std::int32_t ui_2d290[2];                               // 0x002d290..0x002d294
+    std::int32_t ui_special_menu;                           // 0x002d298 special menu of a settler group (UpdateGroupMenu)
+    std::int32_t ui_2d29c;                                  // 0x002d29c
+    std::int32_t ui_2d2a0;                                  // 0x002d2a0
     std::int32_t ui_2d2a4[11];                              // 0x002d2a4..0x002d2cc
     std::uint32_t map_size;                                 // 0x002d2d0
     std::int32_t local_player;                              // 0x002d2d4
@@ -499,6 +502,8 @@ static_assert(offsetof(GameWorld, camera_x) == 0x2d25c);
 static_assert(offsetof(GameWorld, redraw) == 0x2d264);
 static_assert(offsetof(GameWorld, minimap_ready) == 0x2d278);
 static_assert(offsetof(GameWorld, ui_selection_mode) == 0x2d284);
+static_assert(offsetof(GameWorld, ui_special_menu) == 0x2d298);
+static_assert(offsetof(GameWorld, ui_2d29c) == 0x2d29c);
 static_assert(offsetof(GameWorld, ui_2d2a4) == 0x2d2a4);
 static_assert(offsetof(GameWorld, map_size) == 0x2d2d0);
 static_assert(offsetof(GameWorld, local_player) == 0x2d2d4);
