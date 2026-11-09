@@ -395,6 +395,29 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-09 (28): function survey merged
+
+- A survey classified every remaining function (`tools/survey_functions.py`,
+  `tools/survey_lib.py`, method and findings in `re/function_survey.md`),
+  merged with `tools/merge_survey.py` (never changes existing rows):
+  `re/functions.csv` now has all 9,836 known functions (was 1,685, 17%).
+  Understood 46.6% (mostly 4,286 compiler stubs: 1,966 `std::string`
+  static initializers, 2,271 `atexit` registrations, thunks); 3,771 rows
+  are only `classified` (subsystem by source file, call graph, imports,
+  vtables, world fields), 90 have subsystem Unknown. Confidence is in the
+  notes (high/medium/low); treat low/medium names as provisional.
+- Findings: the static-initializer blocks mark the end of each .obj
+  (`re/obj_units.csv`, 73 units; boundaries match UpdatePhase2,
+  UpdateSettlers, CGameData::CGameData, ExecuteCommands, ...); 243
+  functions push an `E:\Siedler3\...cpp` path, so `re/source_files.md`'s
+  claim that no code references the paths is wrong (to correct); zlib and
+  libpng are linked in (0x5b2fb3..0x5b50ad, subsystem Picture.zlib,
+  category game for lack of a third-party category); the source-file ranges
+  look shifted around the DirectX wrappers (open question, noted per row).
+- The survey files themselves landed in the batch-20 commit 1f5e72c (that
+  agent's `git add -A` picked them up while the survey was finishing); they
+  were complete, so no history rewrite.
+
 ### 2026-11-09 (27): batch 20
 
 - Earlier today, separate commits: fb4ec1b added `tools/frontier.py` (ranked
