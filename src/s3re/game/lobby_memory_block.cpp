@@ -46,6 +46,7 @@
 // silent in the release build).
 
 #include "game/debug_log.h"
+#include "game/framework_layout.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -71,9 +72,23 @@ constexpr std::uintptr_t kProtocolFile = 0x007a34fc;  // "E:\Siedler3\Dirk\proto
 constexpr std::uintptr_t kResizeLog = 0x007a355c;     // "PROT: During Resize"
 constexpr std::uintptr_t kAppendLog = 0x007a3548;     // "PROT: During Append"
 
-template <typename T>
-T& At(void* base, std::size_t offset) {
-    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(base) + offset);
+using framework::CLMGeneric;
+using framework::CMemoryBlock;
+
+CMemoryBlock* Block(void* self) {
+    return static_cast<CMemoryBlock*>(self);
+}
+
+const CMemoryBlock* Block(const void* self) {
+    return static_cast<const CMemoryBlock*>(self);
+}
+
+CLMGeneric* Generic(void* self) {
+    return static_cast<CLMGeneric*>(self);
+}
+
+const CLMGeneric* Generic(const void* self) {
+    return static_cast<const CLMGeneric*>(self);
 }
 
 void* GameNew(std::uint32_t size) {
@@ -114,7 +129,7 @@ S3RE_HOOK(0x00601270, Lobby_MemoryBlock_Size, SizeFn, Original_Lobby_MemoryBlock
 
 // Purpose: The number of bytes in a protocol buffer.
 std::uint32_t __fastcall Lobby_MemoryBlock_Size(void* self, void* /*edx*/) {
-    return At<std::uint32_t>(self, 0xc);
+    return Block(self)->used;
 }
 
 namespace {
@@ -125,7 +140,7 @@ void Reserve(void* self, std::uint32_t n) {
         return;
     }
     const std::uint32_t capacity = (((n - 1) >> 4) + 1) << 4;
-    if (capacity == At<std::uint32_t>(self, 8)) {
+    if (capacity == Block(self)->reserved) {
         return;
     }
     auto* block = static_cast<std::uint8_t*>(GameNew(capacity));
@@ -133,21 +148,21 @@ void Reserve(void* self, std::uint32_t n) {
         Win32_ThrowOutOfMemory(reinterpret_cast<const char*>(kNewDataText),
                                reinterpret_cast<const char*>(kProtocolFile), 0xc2);
     }
-    auto* old = At<std::uint8_t*>(self, 4);
+    auto* old = Block(self)->data;
     if (old != nullptr) {
-        const std::uint32_t used = At<std::uint32_t>(self, 0xc);
+        const std::uint32_t used = Block(self)->used;
         std::memcpy(block, old, used < n ? used : n);
         GameDelete(old);
     }
-    At<std::uint8_t*>(self, 4) = block;
-    At<std::uint32_t>(self, 8) = n;
+    Block(self)->data = block;
+    Block(self)->reserved = n;
 }
 
 void AppendBytes(void* self, const void* p, std::uint32_t n) {
     if (n != 0) {
-        Lobby_MemoryBlock_Reserve(self, nullptr, At<std::uint32_t>(self, 0xc) + n);
-        std::memcpy(At<std::uint8_t*>(self, 4) + At<std::uint32_t>(self, 0xc), p, n);
-        At<std::uint32_t>(self, 0xc) += n;
+        Lobby_MemoryBlock_Reserve(self, nullptr, Block(self)->used + n);
+        std::memcpy(Block(self)->data + Block(self)->used, p, n);
+        Block(self)->used += n;
     }
 }
 
@@ -171,12 +186,11 @@ S3RE_HOOK(0x00601170, Lobby_MemoryBlock_Append, ObjArgFn, Original_Lobby_MemoryB
 
 // Purpose: Appends the bytes of another protocol buffer.
 std::uint32_t __fastcall Lobby_MemoryBlock_Append(void* self, void* /*edx*/, const void* other) {
-    const std::uint32_t n = At<std::uint32_t>(const_cast<void*>(other), 0xc);
+    const std::uint32_t n = Block(other)->used;
     if (n != 0) {
-        Lobby_MemoryBlock_Reserve(self, nullptr, At<std::uint32_t>(self, 0xc) + n);
-        std::memcpy(At<std::uint8_t*>(self, 4) + At<std::uint32_t>(self, 0xc),
-                    At<std::uint8_t*>(const_cast<void*>(other), 4), n);
-        At<std::uint32_t>(self, 0xc) += n;
+        Lobby_MemoryBlock_Reserve(self, nullptr, Block(self)->used + n);
+        std::memcpy(Block(self)->data + Block(self)->used, Block(other)->data, n);
+        Block(self)->used += n;
     }
     return 0;
 }
@@ -198,12 +212,12 @@ S3RE_HOOK(0x00600ee0, Lobby_MemoryBlock_At, AtFn, Original_Lobby_MemoryBlock_At,
 // Purpose: The address of byte `index` of a protocol buffer; writing just
 // past the end grows it by one byte.
 std::uint8_t* __fastcall Lobby_MemoryBlock_At(void* self, void* /*edx*/, std::uint32_t index) {
-    const std::uint32_t used = At<std::uint32_t>(self, 0xc);
+    const std::uint32_t used = Block(self)->used;
     if (index == used) {
         Lobby_MemoryBlock_Reserve(self, nullptr, used + 1);
-        At<std::uint32_t>(self, 0xc) = used + 1;
+        Block(self)->used = used + 1;
     }
-    return At<std::uint8_t*>(self, 4) + index;
+    return Block(self)->data + index;
 }
 
 S3RE_HOOK(0x00600ea0, Lobby_MemoryBlock_Equal, ObjArgFn, Original_Lobby_MemoryBlock_Equal, Lobby_MemoryBlock_Equal);
@@ -211,24 +225,24 @@ S3RE_HOOK(0x00600ea0, Lobby_MemoryBlock_Equal, ObjArgFn, Original_Lobby_MemoryBl
 // Purpose: Compares two protocol buffers byte by byte (e.g. two messages).
 std::uint32_t __fastcall Lobby_MemoryBlock_Equal(void* self, void* /*edx*/, const void* other) {
     const auto thisBits = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(self)) & 0xFFFFFF00u;
-    const std::uint32_t n = At<std::uint32_t>(self, 0xc);
-    if (n != At<std::uint32_t>(const_cast<void*>(other), 0xc)) {
+    const std::uint32_t n = Block(self)->used;
+    if (n != Block(other)->used) {
         return thisBits;
     }
     if (n == 0) {
         return thisBits | 1;
     }
-    return std::memcmp(At<std::uint8_t*>(self, 4), At<std::uint8_t*>(const_cast<void*>(other), 4), n) == 0 ? 1 : 0;
+    return std::memcmp(Block(self)->data, Block(other)->data, n) == 0 ? 1 : 0;
 }
 
 S3RE_HOOK(0x00600e40, Lobby_MemoryBlock_Copy, ObjArgFn, Original_Lobby_MemoryBlock_Copy, Lobby_MemoryBlock_Copy);
 
 // Purpose: Copy constructor of a protocol buffer.
 std::uint32_t __fastcall Lobby_MemoryBlock_Copy(void* self, void* /*edx*/, const void* other) {
-    At<std::uint32_t>(self, 4) = 0;
-    At<std::uint32_t>(self, 8) = 0;
-    At<std::uint32_t>(self, 0xc) = 0;
-    At<std::uint32_t>(self, 0) = kMemoryBlockVtable;
+    Block(self)->data = nullptr;
+    Block(self)->reserved = 0;
+    Block(self)->used = 0;
+    Block(self)->vtable = kMemoryBlockVtable;
     Lobby_MemoryBlock_Append(self, nullptr, other);
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(self));
 }
@@ -238,7 +252,7 @@ S3RE_HOOK(0x00600e70, Lobby_MemoryBlock_Destroy, SizeFn, Original_Lobby_MemoryBl
 
 // Purpose: Destructor of a protocol buffer (frees its data).
 std::uint32_t __fastcall Lobby_MemoryBlock_Destroy(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 0) = kMemoryBlockVtable;
+    Block(self)->vtable = kMemoryBlockVtable;
     return Lobby_FreeBlock_601250(self, nullptr);
 }
 
@@ -248,7 +262,7 @@ S3RE_HOOK(0x00603270, Lobby_CLMGeneric_SetHeader, OneArgFn, Original_Lobby_CLMGe
 // Purpose: Writes a protocol message's header dword (message id and size)
 // at the start of its bytes.
 std::uint32_t __fastcall Lobby_CLMGeneric_SetHeader(void* self, void* /*edx*/, std::uint32_t header) {
-    void* block = static_cast<std::uint8_t*>(self) + 4;
+    void* block = &Generic(self)->block;
     if (Lobby_MemoryBlock_Size(block, nullptr) == 0) {
         return Lobby_MemoryBlock_AppendBytes(block, nullptr, &header, 4);
     }
@@ -264,9 +278,9 @@ S3RE_HOOK(0x00601e80, Lobby_CLMGeneric_Construct, OneArgFn, Original_Lobby_CLMGe
 // Purpose: Constructor of a protocol message with the given message id and
 // an empty body (header only).
 std::uint32_t __fastcall Lobby_CLMGeneric_Construct(void* self, void* /*edx*/, std::uint32_t id) {
-    Lobby_CMemoryBlock_Construct(static_cast<std::uint8_t*>(self) + 4, nullptr);
+    Lobby_CMemoryBlock_Construct(&Generic(self)->block, nullptr);
     const std::uint32_t header = (id & 0xFFu) | (4u << 16);
-    At<std::uint32_t>(self, 0) = kGenericVtable;
+    Generic(self)->vtable = kGenericVtable;
     Lobby_CLMGeneric_SetHeader(self, nullptr, header);
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(self));
 }
@@ -275,16 +289,15 @@ S3RE_HOOK(0x006027d0, Lobby_CLMGeneric_Equal, ObjArgFn, Original_Lobby_CLMGeneri
 
 // Purpose: Compares two protocol messages byte by byte.
 std::uint32_t __fastcall Lobby_CLMGeneric_Equal(void* self, void* /*edx*/, const void* other) {
-    return Lobby_MemoryBlock_Equal(static_cast<std::uint8_t*>(self) + 4, nullptr,
-                                   static_cast<const std::uint8_t*>(other) + 4);
+    return Lobby_MemoryBlock_Equal(&Generic(self)->block, nullptr, &Generic(other)->block);
 }
 
 S3RE_HOOK(0x00602190, Lobby_CLMGeneric_Destroy, SizeFn, Original_Lobby_CLMGeneric_Destroy, Lobby_CLMGeneric_Destroy);
 
 // Purpose: Destructor of a protocol message.
 std::uint32_t __fastcall Lobby_CLMGeneric_Destroy(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 0) = kGenericVtable;
-    return Lobby_MemoryBlock_Destroy(static_cast<std::uint8_t*>(self) + 4, nullptr);
+    Generic(self)->vtable = kGenericVtable;
+    return Lobby_MemoryBlock_Destroy(&Generic(self)->block, nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -483,7 +496,7 @@ void CompareBlocks(test::Context& ctx, const Ops& candidate, int sequences) {
 std::uint32_t __fastcall WrongReserve(void* self, void* edx, std::uint32_t n) {
     Lobby_MemoryBlock_Reserve(self, edx, n);
     if (n != 0) {
-        At<std::uint32_t>(self, 8) = (((n - 1) >> 4) + 1) << 4;  // wrong: stores the rounded size
+        Block(self)->reserved = (((n - 1) >> 4) + 1) << 4;  // wrong: stores the rounded size
     }
     return 0;
 }

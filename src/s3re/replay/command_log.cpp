@@ -1,6 +1,7 @@
 #include "replay/command_log.h"
 
 #include "common/recording_format.h"
+#include "game/logic_thread_layout.h"
 #include "game/random.h"
 #include "hooks.h"
 #include "log.h"
@@ -16,7 +17,9 @@
 
 namespace s3re::replay {
 
-struct MessageQueue;  // opaque: ring buffer of uint32 (Win32 event for wake-ups)
+// The logic <-> network queue: ring buffer of uint32 (Win32 event for
+// wake-ups), opaque.
+using game::MessageQueue;
 
 namespace {
 
@@ -32,7 +35,6 @@ void __fastcall Hooked_MessageQueue_Push(MessageQueue* self, void* edx,
 S3RE_PASSTHROUGH(0x004309c0, MessageQueue_Push, PushFn, Original_MessageQueue_Push,
                  Hooked_MessageQueue_Push);
 
-constexpr std::size_t kLogicToNetQueueOffset = 0x3c4;  // CLogicThread -> MessageQueue*
 constexpr std::uint8_t kStepMessage = 0x20;
 constexpr std::uint8_t kCommandMessage = 0x21;
 // g_gameSettings+0xCC: random races include the Amazons (see random.cpp).
@@ -325,9 +327,7 @@ std::vector<std::uint32_t> Process(const std::uint32_t* dwords, int count) {
 void __fastcall Hooked_MessageQueue_Push(MessageQueue* self, void* edx,
                                          const std::uint32_t* dwords, int count, int signal) {
     void* const logic = g_logicThread.load(std::memory_order_acquire);
-    if (logic == nullptr || count <= 0 ||
-        self != *reinterpret_cast<MessageQueue* const*>(static_cast<std::uint8_t*>(logic) +
-                                                        kLogicToNetQueueOffset)) {
+    if (logic == nullptr || count <= 0 || self != static_cast<const game::CLogicThread*>(logic)->toNet) {
         Original_MessageQueue_Push(self, edx, dwords, count, signal);
         return;
     }
@@ -354,8 +354,7 @@ void SetLogicThread(void* logicThread) {
     void* expected = nullptr;
     if (g_logicThread.compare_exchange_strong(expected, logicThread)) {
         S3RE_LOG("command log: logic thread %p, logic->net queue %p", logicThread,
-                 *reinterpret_cast<void**>(static_cast<std::uint8_t*>(logicThread) +
-                                           kLogicToNetQueueOffset));
+                 static_cast<void*>(static_cast<const game::CLogicThread*>(logicThread)->toNet));
     } else if (expected != logicThread) {
         S3RE_LOG("command log: a second logic thread %p appeared (first %p); ignored",
                  logicThread, expected);

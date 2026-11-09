@@ -47,9 +47,12 @@
 //   when frame >= the word +6 of the group's table (it reads on anyway).
 
 #include "game/debug_log.h"
+#include "game/framework_layout.h"
+#include "game/raw.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -77,10 +80,36 @@ constexpr std::uint32_t kEventVtable = 0x0065d690;
 constexpr std::uint32_t kEventHandleVtable = 0x0065d684;
 constexpr std::uintptr_t kAnimationNotFound = 0x007a2e9c;  // "GFX: Animation not found %u:%u"
 
+using framework::CLMMessageBlock;
+using framework::CRegistryKey;
+using framework::CWaitable;
+using framework::CWin32Handle;
+using framework::GfxData;
+using framework::WideString;
+
 template <typename T>
-T& At(void* base, std::size_t offset) {
-    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(base) + offset);
+T* As(void* self) {
+    return static_cast<T*>(self);
 }
+
+#pragma pack(push, 1)
+// A Watcom intrusive circular list (WCIsvSList-like).
+struct IsvList {
+    std::uint32_t vtable;  // +0x00
+    std::uint32_t unk04;   // +0x04
+    std::uint32_t last;    // +0x08 the last node (its first dword is the next pointer); 0: empty
+    std::uint32_t count;   // +0x0c
+};
+static_assert(offsetof(IsvList, count) == 0x0c);
+
+// A Watcom vector of ints: the vector layout of watcom/ptr_vector.h plus one
+// field of the derived class.
+struct IntVector {
+    watcom::PtrVector vector;  // +0x00
+    std::uint32_t unk18;       // +0x18 second constructor argument
+};
+static_assert(offsetof(IntVector, unk18) == 0x18);
+#pragma pack(pop)
 
 void* GameNew(std::uint32_t size) {
     return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
@@ -95,18 +124,19 @@ std::uint32_t Address(const void* p) {
 }
 
 void ConstructIntVectorStart(void* self, std::uint32_t capacity) {
-    At<std::uint32_t>(self, 4) = 0;
-    At<std::uint32_t>(self, 0) = kIntVectorBaseVtable;
-    At<std::uint32_t>(self, 0xc) = capacity;
-    At<std::uint32_t>(self, 0x10) = 0;
+    watcom::PtrVector* const vector = As<watcom::PtrVector>(self);
+    vector->unknown04 = 0;
+    vector->vtable = kIntVectorBaseVtable;
+    vector->capacity = capacity;
+    vector->filled = 0;
     if (capacity != 0) {
         void* block = GameNew(capacity << 2);
-        At<void*>(self, 8) = block;
+        vector->data = static_cast<std::uint32_t*>(block);
         if (block == nullptr) {
-            At<std::uint32_t>(self, 0xc) = 0;
+            vector->capacity = 0;
         }
     } else {
-        At<std::uint32_t>(self, 8) = 0;
+        vector->data = nullptr;
     }
 }
 
@@ -144,9 +174,10 @@ S3RE_HOOK(0x0060b5a0, WCIsvListBase_Destroy, ThisFn, Original_WCIsvListBase_Dest
 // Purpose: Destructor of a Watcom intrusive list (the library would report
 // a list that still holds nodes; that hook is empty in this build).
 std::uint32_t __fastcall WCIsvListBase_Destroy(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 0) = kIsvListVtable;
-    const std::uint32_t last = At<std::uint32_t>(self, 8);
-    At<std::uint32_t>(self, 0) = kContainerBaseVtable;
+    IsvList* const list = As<IsvList>(self);
+    list->vtable = kIsvListVtable;
+    const std::uint32_t last = list->last;
+    list->vtable = kContainerBaseVtable;
     return last;
 }
 
@@ -154,17 +185,18 @@ S3RE_HOOK(0x0060b430, WCIsvList_Insert, This1Fn, Original_WCIsvList_Insert, WCIs
 
 // Purpose: Puts a node at the front of a Watcom intrusive circular list.
 std::uint32_t __fastcall WCIsvList_Insert(void* self, void* /*edx*/, std::uint32_t node) {
+    IsvList* const list = As<IsvList>(self);
     auto* added = reinterpret_cast<std::uint32_t*>(node);
-    const std::uint32_t last = At<std::uint32_t>(self, 8);
+    const std::uint32_t last = list->last;
     if (last == 0) {
         *added = node;
-        At<std::uint32_t>(self, 8) = node;
-        ++At<std::uint32_t>(self, 0xc);
+        list->last = node;
+        ++list->count;
         return node;
     }
     *added = *reinterpret_cast<std::uint32_t*>(last);
-    *reinterpret_cast<std::uint32_t*>(At<std::uint32_t>(self, 8)) = node;
-    return ++At<std::uint32_t>(self, 0xc);
+    *reinterpret_cast<std::uint32_t*>(list->last) = node;
+    return ++list->count;
 }
 
 S3RE_HOOK(0x004376b0, WCIntVector_Construct, This2Fn, Original_WCIntVector_Construct, WCIntVector_Construct);
@@ -173,9 +205,10 @@ S3RE_HOOK(0x004376b0, WCIntVector_Construct, This2Fn, Original_WCIntVector_Const
 // entries.
 std::uint32_t __fastcall WCIntVector_Construct(void* self, void* /*edx*/, std::uint32_t capacity, std::uint32_t b) {
     ConstructIntVectorStart(self, capacity);
-    At<std::uint32_t>(self, 0x14) = 0;
-    At<std::uint32_t>(self, 0x18) = b;
-    At<std::uint32_t>(self, 0) = kIntVectorVtable;
+    IntVector* const vector = As<IntVector>(self);
+    vector->vector.length = 0;
+    vector->unk18 = b;
+    vector->vector.vtable = kIntVectorVtable;
     return Address(self);
 }
 
@@ -183,12 +216,13 @@ S3RE_HOOK(0x00414590, WCIntVector_Destroy, ThisFn, Original_WCIntVector_Destroy,
 
 // Purpose: Destructor of a Watcom vector of ints (frees its block).
 std::uint32_t __fastcall WCIntVector_Destroy(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 0) = kIntVectorBaseVtable;
-    std::uint32_t result = At<std::uint32_t>(self, 8);
+    watcom::PtrVector* const vector = As<watcom::PtrVector>(self);
+    vector->vtable = kIntVectorBaseVtable;
+    std::uint32_t result = Address(vector->data);
     if (result != 0) {
-        result = GameDelete(At<void*>(self, 8));  // (after the empty error hook 0x59f200)
+        result = GameDelete(vector->data);  // (after the empty error hook 0x59f200)
     }
-    At<std::uint32_t>(self, 0) = kContainerBaseVtable;
+    vector->vtable = kContainerBaseVtable;
     return result;
 }
 
@@ -196,12 +230,13 @@ S3RE_HOOK(0x00458590, WCUIntVector_Destroy, ThisFn, Original_WCUIntVector_Destro
 
 // Purpose: Destructor of a Watcom vector of unsigned ints (frees its block).
 std::uint32_t __fastcall WCUIntVector_Destroy(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 0) = kUIntVectorBaseVtable;
-    std::uint32_t result = At<std::uint32_t>(self, 8);
+    watcom::PtrVector* const vector = As<watcom::PtrVector>(self);
+    vector->vtable = kUIntVectorBaseVtable;
+    std::uint32_t result = Address(vector->data);
     if (result != 0) {
-        result = GameDelete(At<void*>(self, 8));  // (after the empty error hook 0x59f200)
+        result = GameDelete(vector->data);  // (after the empty error hook 0x59f200)
     }
-    At<std::uint32_t>(self, 0) = kContainerBaseVtable;
+    vector->vtable = kContainerBaseVtable;
     return result;
 }
 
@@ -221,12 +256,13 @@ S3RE_HOOK(0x00601470, Lobby_CLMMessageBlock_Copy, This1Fn, Original_Lobby_CLMMes
 // Purpose: Copy constructor of a protocol message block (its bytes and
 // four fields).
 std::uint32_t __fastcall Lobby_CLMMessageBlock_Copy(void* self, void* /*edx*/, std::uint32_t other) {
-    void* from = reinterpret_cast<void*>(other);
-    Lobby_MemoryBlock_Copy(static_cast<std::uint8_t*>(self) + 4, nullptr, static_cast<std::uint8_t*>(from) + 4);
-    for (std::size_t offset = 0x14; offset <= 0x20; offset += 4) {
-        At<std::uint32_t>(self, offset) = At<std::uint32_t>(from, offset);
+    CLMMessageBlock* const to = As<CLMMessageBlock>(self);
+    CLMMessageBlock* const from = reinterpret_cast<CLMMessageBlock*>(other);
+    Lobby_MemoryBlock_Copy(&to->block, nullptr, &from->block);
+    for (std::size_t k = 0; k < 4; ++k) {
+        to->fields[k] = from->fields[k];
     }
-    At<std::uint32_t>(self, 0) = kMessageBlockVtable;
+    to->vtable = kMessageBlockVtable;
     return Address(self);
 }
 
@@ -247,8 +283,8 @@ S3RE_HOOK(0x0060bf00, Win32_CWin32Handle_Set, This2Fn, Original_Win32_CWin32Hand
 
 // Purpose: Sets a Windows handle wrapper's handle and whether it owns it.
 std::uint32_t __fastcall Win32_CWin32Handle_Set(void* self, void* /*edx*/, std::uint32_t handle, std::uint32_t owned) {
-    At<std::uint32_t>(self, 4) = handle;
-    At<std::uint32_t>(self, 8) = owned;
+    As<CWin32Handle>(self)->handle = handle;
+    As<CWin32Handle>(self)->owned = owned;
     return handle;
 }
 
@@ -269,8 +305,8 @@ S3RE_HOOK(0x00616430, Win32_CRegistryKey_Construct, ThisFn, Original_Win32_CRegi
 
 // Purpose: Constructor of the registry key wrapper (no key open yet).
 std::uint32_t __fastcall Win32_CRegistryKey_Construct(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 4) = 0;
-    At<std::uint32_t>(self, 0) = kRegistryKeyVtable;
+    As<CRegistryKey>(self)->key = 0;
+    As<CRegistryKey>(self)->vtable = kRegistryKeyVtable;
     return Address(self);
 }
 
@@ -279,8 +315,8 @@ S3RE_HOOK(0x0060c510, Win32_CEvent_Construct, ThisFn, Original_Win32_CEvent_Cons
 // Purpose: Constructor of the Windows event wrapper (no event yet).
 std::uint32_t __fastcall Win32_CEvent_Construct(void* self, void* /*edx*/) {
     Win32_CWaitable_Construct(self, nullptr, 0, 0);
-    At<std::uint32_t>(self, 0) = kEventVtable;
-    At<std::uint32_t>(self, 4) = kEventHandleVtable;
+    As<CWaitable>(self)->vtable = kEventVtable;
+    As<CWaitable>(self)->handle.vtable = kEventHandleVtable;
     return Address(self);
 }
 
@@ -289,7 +325,8 @@ S3RE_HOOK(0x005da3a0, Lobby_HasField4_5da3a0, ThisFn, Original_Lobby_HasField4_5
 // Purpose: Whether a lobby object's pointer at +4 is set (meaning not
 // identified).
 std::uint32_t __fastcall Lobby_HasField4_5da3a0(void* self, void* /*edx*/) {
-    return At<std::uint32_t>(self, 4) != 0 ? 1 : 0;
+    // The dword at +4 of an unidentified lobby object (its only known field).
+    return RawAt<std::uint32_t>(self, 4) != 0 ? 1 : 0;
 }
 
 S3RE_HOOK(0x00418fb0, UI_CopyWords_418fb0, CopyWordsFn, Original_UI_CopyWords_418fb0, UI_CopyWords_418fb0);
@@ -306,8 +343,10 @@ S3RE_HOOK(0x00428880, UI_WideEos_428880, This1Fn, Original_UI_WideEos_428880, UI
 
 // Purpose: Sets a wide string's length and writes its terminating zero.
 std::uint32_t __fastcall UI_WideEos_428880(void* self, void* /*edx*/, std::uint32_t n) {
-    At<std::uint32_t>(self, 8) = n;
-    reinterpret_cast<std::uint16_t*>(At<std::uint32_t>(self, 4) + n * 2)[0] = 0;
+    WideString* const string = As<WideString>(self);
+    string->len = n;
+    // 32-bit address arithmetic, as the original's [ptr + n * 2].
+    reinterpret_cast<std::uint16_t*>(Address(string->ptr) + n * 2)[0] = 0;
     return n;
 }
 
@@ -319,9 +358,10 @@ S3RE_HOOK(0x005fac70, GfxData_FramePointer_5fac70, This2Fn, Original_GfxData_Fra
 std::uint32_t __fastcall GfxData_FramePointer_5fac70(void* self, void* /*edx*/, std::uint32_t out, std::uint32_t id) {
     const std::uint32_t group = id >> 16;
     const std::uint32_t frame = id & 0xffff;
-    const std::uint32_t table = At<std::uint32_t>(self, 0x5ac + group * 4);
+    GfxData* const gfx = As<GfxData>(self);
+    const std::uint32_t table = gfx->frameTables5ac[group];
     const std::uint32_t offset = *reinterpret_cast<const std::uint32_t*>(table + frame * 4 + 8);
-    *reinterpret_cast<std::uint32_t*>(out) = offset + At<std::uint32_t>(self, 0x264 + group * 4);
+    *reinterpret_cast<std::uint32_t*>(out) = offset + gfx->groupBase[group];
     return out;
 }
 
@@ -334,13 +374,14 @@ std::uint32_t __fastcall GfxData_AnimationPointer_5faaf0(void* self, void* /*edx
                                                          std::uint32_t id) {
     const std::uint32_t group = id >> 16;
     const std::uint32_t frame = id & 0xffff;
-    const std::uint32_t table = At<std::uint32_t>(self, 0x494 + group * 4);
+    GfxData* const gfx = As<GfxData>(self);
+    const std::uint32_t table = gfx->animationTables[group];
     if (frame >= *reinterpret_cast<const std::uint16_t*>(table + 6)) {
         GameDebugLog(kAnimationNotFound, group, frame);
     }
     const std::uint32_t offset =
-        *reinterpret_cast<const std::uint32_t*>(At<std::uint32_t>(self, 0x494 + group * 4) + frame * 4 + 8);
-    *reinterpret_cast<std::uint32_t*>(out) = offset + At<std::uint32_t>(self, 0x264 + group * 4);
+        *reinterpret_cast<const std::uint32_t*>(gfx->animationTables[group] + frame * 4 + 8);
+    *reinterpret_cast<std::uint32_t*>(out) = offset + gfx->groupBase[group];
     return out;
 }
 
@@ -435,7 +476,7 @@ void CompareSmall(test::Context& ctx, const Functions& candidate, int cases) {
             switch (op) {
                 case 1:  // last node: 0 or a node in the buffer, whose next is a node too
                     if (!linked) {
-                        std::memset(buffer + 8, 0, 4);
+                        As<IsvList>(buffer)->last = 0;
                     } else {
                         Link(buffer, 8, 0x20);
                         Link(buffer, 0x20, 0x28);
@@ -443,11 +484,15 @@ void CompareSmall(test::Context& ctx, const Functions& candidate, int cases) {
                     break;
                 case 3:
                 case 14:
-                    std::memset(buffer + 8, 0, 4);  // no block: nothing to free
+                    As<watcom::PtrVector>(buffer)->data = nullptr;  // no block: nothing to free
                     break;
                 case 6:  // a memory block at 0x10 to assign from (empty, so nothing is read)
-                    std::memset(buffer + 4, 0, 12);
-                    std::memset(buffer + 0x14, 0, 12);
+                    for (framework::CMemoryBlock* block : {As<framework::CMemoryBlock>(buffer),
+                                                           As<framework::CMemoryBlock>(buffer + 0x10)}) {
+                        block->data = nullptr;
+                        block->reserved = 0;
+                        block->used = 0;
+                    }
                     break;
                 case 11:  // wide string buffer inside the buffer
                     Link(buffer, 4, 0x20);
@@ -483,12 +528,10 @@ void CompareSmall(test::Context& ctx, const Functions& candidate, int cases) {
                 rb = candidate.intCtor(p.b, nullptr, capacity, y);
                 ra = ra == Address(p.a);
                 rb = rb == Address(p.b);
-                std::uint32_t blockA, blockB;
-                std::memcpy(&blockA, p.a + 8, 4);
-                std::memcpy(&blockB, p.b + 8, 4);
-                compareResult &= S3RE_EXPECT_EQ(blockA == 0, blockB == 0);
-                std::memset(p.a + 8, 0, 4);
-                std::memset(p.b + 8, 0, 4);
+                watcom::PtrVector* const va = As<watcom::PtrVector>(p.a);
+                watcom::PtrVector* const vb = As<watcom::PtrVector>(p.b);
+                compareResult &= S3RE_EXPECT_EQ(va->data == nullptr, vb->data == nullptr);
+                va->data = vb->data = nullptr;
                 break;
             }
             case 3:
@@ -550,8 +593,9 @@ void CompareSmall(test::Context& ctx, const Functions& candidate, int cases) {
                     const std::uint32_t capacity = ctx.rng().Below(6);
                     ra = original.intCtorBare(p.a, nullptr, capacity) == Address(p.a);
                     rb = candidate.intCtorBare(p.b, nullptr, capacity) == Address(p.b);
-                    std::memcpy(&blockA, p.a + 8, 4);
-                    std::memcpy(&blockB, p.b + 8, 4);
+                    blockA = Address(As<watcom::PtrVector>(p.a)->data);
+                    blockB = Address(As<watcom::PtrVector>(p.b)->data);
+                    As<watcom::PtrVector>(p.a)->data = As<watcom::PtrVector>(p.b)->data = nullptr;
                 } else {
                     // Source message: block with `used` heap bytes, four fields.
                     std::uint8_t source[0x24];
@@ -559,21 +603,20 @@ void CompareSmall(test::Context& ctx, const Functions& candidate, int cases) {
                     const std::uint32_t used = ctx.rng().Below(20);
                     auto* data = static_cast<std::uint8_t*>(GameNew(used + 1));
                     ctx.rng().Fill(data, used + 1);
-                    const std::uint32_t dataAddress = Address(data);
-                    std::memcpy(source + 8, &dataAddress, 4);
-                    std::memcpy(source + 0x10, &used, 4);
+                    static_assert(sizeof(source) >= sizeof(CLMMessageBlock));
+                    As<CLMMessageBlock>(source)->block.data = data;
+                    As<CLMMessageBlock>(source)->block.used = used;
                     ra = original.messageBlockCopy(p.a, nullptr, Address(source)) == Address(p.a);
                     rb = candidate.messageBlockCopy(p.b, nullptr, Address(source)) == Address(p.b);
-                    std::memcpy(&blockA, p.a + 8, 4);
-                    std::memcpy(&blockB, p.b + 8, 4);
+                    blockA = Address(As<CLMMessageBlock>(p.a)->block.data);
+                    blockB = Address(As<CLMMessageBlock>(p.b)->block.data);
+                    As<CLMMessageBlock>(p.a)->block.data = As<CLMMessageBlock>(p.b)->block.data = nullptr;
                     if (blockA != 0 && blockB != 0) {
                         compareResult &= S3RE_EXPECT_MEM_EQ(reinterpret_cast<void*>(blockA),
                                                             reinterpret_cast<void*>(blockB), used);
                     }
                 }
                 compareResult &= S3RE_EXPECT_EQ(blockA == 0, blockB == 0);
-                std::memset(p.a + 8, 0, 4);
-                std::memset(p.b + 8, 0, 4);
                 break;
             }
             default: {
@@ -585,7 +628,8 @@ void CompareSmall(test::Context& ctx, const Functions& candidate, int cases) {
                 ctx.rng().Fill(tableA, sizeof(tableA));
                 const std::uint32_t group = ctx.rng().Below(4);
                 const std::uint32_t frame = ctx.rng().Below(6);
-                const std::size_t tableField = op == 12 ? 0x5ac : 0x494;
+                const std::size_t tableField = op == 12 ? offsetof(GfxData, frameTables5ac)
+                                                        : offsetof(GfxData, animationTables);
                 std::memcpy(gfxB, gfxA, sizeof(gfxA));
                 std::memcpy(tableB, tableA, sizeof(tableA));
                 const std::uint32_t ta = Address(tableA), tb = Address(tableB);
@@ -628,8 +672,8 @@ void CompareSmall(test::Context& ctx, const Functions& candidate, int cases) {
 
 std::uint32_t __fastcall WrongInsert(void* self, void* edx, std::uint32_t node) {
     const std::uint32_t r = WCIsvList_Insert(self, edx, node);
-    if (At<std::uint32_t>(self, 0xc) > 1) {
-        At<std::uint32_t>(self, 8) = node;  // wrong: the node becomes the last one
+    if (As<IsvList>(self)->count > 1) {
+        As<IsvList>(self)->last = node;  // wrong: the node becomes the last one
     }
     return r;
 }

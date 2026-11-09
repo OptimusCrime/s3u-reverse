@@ -35,6 +35,7 @@
 //   CDirectSoundBuffer()   0x005c1f70  +4, +8 = 0, vtable (no CObject);
 //                                      EAX = this. ret.
 
+#include "game/framework_layout.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -45,6 +46,15 @@
 namespace s3re::game {
 
 namespace {
+
+using framework::CDirectSoundBuffer;
+using framework::CMessageQueue;
+using framework::CObject;
+using framework::CSimpleSurface;
+using framework::CSurface;
+using framework::CWaitable;
+using framework::CWin32Handle;
+using framework::CWindowBase;
 
 constexpr std::uint32_t kCObjectVtable = 0x0065d67c;
 constexpr std::uint32_t kCWin32HandleVtable = 0x0065d654;
@@ -57,8 +67,13 @@ constexpr std::uint32_t kCSimpleSurfaceVtable = 0x0065cda0;
 constexpr std::uint32_t kCSurfaceVtable = 0x0065cda8;
 constexpr std::uint32_t kCDirectSoundBufferVtable = 0x0065cecc;
 
-void PutDword(void* self, std::size_t offset, std::uint32_t value) {
-    std::memcpy(static_cast<std::uint8_t*>(self) + offset, &value, 4);
+template <typename T>
+T* As(void* self) {
+    return static_cast<T*>(self);
+}
+
+void* AsPointer(std::uint32_t value) {
+    return reinterpret_cast<void*>(static_cast<std::uintptr_t>(value));
 }
 
 void GameOperatorDelete(void* block) {
@@ -94,7 +109,7 @@ S3RE_HOOK(0x00610320, Win32_CObject_Construct, CtorFn, Original_Win32_CObject_Co
 // Purpose: Constructor of the root class of the game's Win32 framework
 // (threads, handles, windows, exceptions and the world object derive from it).
 void* __fastcall Win32_CObject_Construct(void* self, void* /*edx*/) {
-    PutDword(self, 0, kCObjectVtable);
+    As<CObject>(self)->vtable = kCObjectVtable;
     return self;
 }
 
@@ -103,7 +118,7 @@ S3RE_HOOK(0x00610330, Win32_CObject_Destroy, DtorFn, Original_Win32_CObject_Dest
 // Purpose: Destructor of the framework root class; the last step of every
 // framework object's destruction.
 void __fastcall Win32_CObject_Destroy(void* self, void* /*edx*/) {
-    PutDword(self, 0, kCObjectVtable);
+    As<CObject>(self)->vtable = kCObjectVtable;
 }
 
 S3RE_HOOK(0x0060bfc0, Win32_CObject_DeletingDestroy, DeletingDtorFn, Original_Win32_CObject_DeletingDestroy,
@@ -126,9 +141,10 @@ S3RE_HOOK(0x0060be60, Win32_CWin32Handle_Construct, Ctor2Fn, Original_Win32_CWin
 // threads, files).
 void* __fastcall Win32_CWin32Handle_Construct(void* self, void* /*edx*/, std::uint32_t handle, std::uint32_t b) {
     Win32_CObject_Construct(self, nullptr);
-    PutDword(self, 4, handle);
-    PutDword(self, 8, b);
-    PutDword(self, 0, kCWin32HandleVtable);
+    CWin32Handle* const object = As<CWin32Handle>(self);
+    object->handle = handle;
+    object->owned = b;
+    object->vtable = kCWin32HandleVtable;
     return self;
 }
 
@@ -138,12 +154,12 @@ S3RE_HOOK(0x0060bf50, Win32_CWaitable_Construct, Ctor2Fn, Original_Win32_CWaitab
 // Purpose: Constructor of a waitable object (something a thread can wait
 // on, built around a Windows handle).
 void* __fastcall Win32_CWaitable_Construct(void* self, void* /*edx*/, std::uint32_t handle, std::uint32_t b) {
-    auto* bytes = static_cast<std::uint8_t*>(self);
-    PutDword(self, 0, kCWaitableVtableEarly);
-    Win32_CWin32Handle_Construct(bytes + 4, nullptr, handle, b);
-    PutDword(self, 4, kCWaitableHandleVtable);
-    PutDword(self, 0x10, 0);
-    PutDword(self, 0, kCWaitableVtable);
+    CWaitable* const object = As<CWaitable>(self);
+    object->vtable = kCWaitableVtableEarly;
+    Win32_CWin32Handle_Construct(&object->handle, nullptr, handle, b);
+    object->handle.vtable = kCWaitableHandleVtable;
+    object->unk10 = 0;
+    object->vtable = kCWaitableVtable;
     return self;
 }
 
@@ -154,8 +170,8 @@ S3RE_HOOK(0x0060f960, Win32_CWindowBase_Construct, CtorFn, Original_Win32_CWindo
 // handle yet).
 void* __fastcall Win32_CWindowBase_Construct(void* self, void* /*edx*/) {
     Win32_CObject_Construct(self, nullptr);
-    PutDword(self, 4, 0);
-    PutDword(self, 0, kCWindowBaseVtable);
+    As<CWindowBase>(self)->window = 0;
+    As<CWindowBase>(self)->vtable = kCWindowBaseVtable;
     return self;
 }
 
@@ -165,8 +181,8 @@ S3RE_HOOK(0x0060d690, Win32_CMessageQueue_Construct, Ctor1Fn, Original_Win32_CMe
 // Purpose: Constructor of a thread's Windows message queue wrapper.
 void* __fastcall Win32_CMessageQueue_Construct(void* self, void* /*edx*/, std::uint32_t owner) {
     Win32_CObject_Construct(self, nullptr);
-    PutDword(self, 0, kCMessageQueueVtable);
-    PutDword(self, 4, owner);
+    As<CMessageQueue>(self)->vtable = kCMessageQueueVtable;
+    As<CMessageQueue>(self)->owner = owner;
     return self;
 }
 
@@ -177,10 +193,11 @@ S3RE_HOOK(0x005befb0, DirectX_CSimpleSurface_Construct, CtorFn, Original_DirectX
 // yet).
 void* __fastcall DirectX_CSimpleSurface_Construct(void* self, void* /*edx*/) {
     Win32_CObject_Construct(self, nullptr);
-    PutDword(self, 0, kCSimpleSurfaceVtable);
-    PutDword(self, 4, 0);
-    PutDword(self, 8, 0);
-    PutDword(self, 0xc, 0);
+    CSimpleSurface* const object = As<CSimpleSurface>(self);
+    object->vtable = kCSimpleSurfaceVtable;
+    object->createdInterface = nullptr;
+    object->surface = nullptr;
+    object->owner = nullptr;
     return self;
 }
 
@@ -192,11 +209,12 @@ S3RE_HOOK(0x005befe0, DirectX_CSimpleSurface_Construct4, Ctor4Fn, Original_Direc
 void* __fastcall DirectX_CSimpleSurface_Construct4(void* self, void* /*edx*/, std::uint32_t a, std::uint32_t b,
                                                    std::uint32_t c, std::uint32_t d) {
     Win32_CObject_Construct(self, nullptr);
-    PutDword(self, 4, b);
-    PutDword(self, 8, c);
-    PutDword(self, 0x10, d);
-    PutDword(self, 0xc, a);
-    PutDword(self, 0, kCSimpleSurfaceVtable);
+    CSimpleSurface* const object = As<CSimpleSurface>(self);
+    object->createdInterface = AsPointer(b);
+    object->surface = AsPointer(c);
+    object->unk10 = d;
+    object->owner = AsPointer(a);
+    object->vtable = kCSimpleSurfaceVtable;
     return self;
 }
 
@@ -205,9 +223,10 @@ S3RE_HOOK(0x005c1f70, DirectX_CDirectSoundBuffer_Construct, CtorFn,
 
 // Purpose: Constructor of a DirectSound buffer wrapper (no buffer yet).
 void* __fastcall DirectX_CDirectSoundBuffer_Construct(void* self, void* /*edx*/) {
-    PutDword(self, 4, 0);
-    PutDword(self, 8, 0);
-    PutDword(self, 0, kCDirectSoundBufferVtable);
+    CDirectSoundBuffer* const object = As<CDirectSoundBuffer>(self);
+    object->unk04 = 0;
+    object->unk08 = 0;
+    object->vtable = kCDirectSoundBufferVtable;
     return self;
 }
 
@@ -218,10 +237,11 @@ S3RE_HOOK(0x005bf200, DirectX_CSurface_Construct, CtorFn, Original_DirectX_CSurf
 // more state (+0x14, +0x18 and +0x48 start at 0; meaning unknown).
 void* __fastcall DirectX_CSurface_Construct(void* self, void* /*edx*/) {
     DirectX_CSimpleSurface_Construct(self, nullptr);
-    PutDword(self, 0, kCSurfaceVtable);
-    PutDword(self, 0x14, 0);
-    PutDword(self, 0x48, 0);
-    PutDword(self, 0x18, 0);
+    CSurface* const object = As<CSurface>(self);
+    object->simple.vtable = kCSurfaceVtable;
+    object->unk14 = 0;
+    object->unk48 = 0;
+    object->unk18 = 0;
     return self;
 }
 
@@ -323,7 +343,7 @@ void CompareWin32(test::Context& ctx, const Win32Functions& candidate, int cases
 
 void* __fastcall WrongWaitable(void* self, void* /*edx*/, std::uint32_t handle, std::uint32_t b) {
     Win32_CWaitable_Construct(self, nullptr, handle, b);
-    PutDword(self, 0xc, handle);  // wrong: the handle object's second field gets the handle
+    As<CWaitable>(self)->handle.owned = handle;  // wrong: the handle object's second field gets the handle
     return self;
 }
 

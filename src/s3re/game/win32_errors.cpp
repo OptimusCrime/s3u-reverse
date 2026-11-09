@@ -54,6 +54,7 @@
 // object if the constructor itself throws. Both only happen on the way to a
 // fatal error report.
 
+#include "game/framework_layout.h"
 #include "hooks.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
@@ -94,9 +95,15 @@ constexpr std::uintptr_t kCxxThrowException = 0x0061f027;
 constexpr std::uintptr_t kAssertmentThrowInfo = 0x0068edf0;
 constexpr std::uintptr_t kOutOfMemoryThrowInfo = 0x00682f58;
 
-template <typename T>
-T& At(void* base, std::size_t offset) {
-    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(base) + offset);
+using framework::CAssertmentFailed;
+using framework::CException;
+
+CException* AsException(void* self) {
+    return static_cast<CException*>(self);
+}
+
+CAssertmentFailed* AsAssertment(void* self) {
+    return static_cast<CAssertmentFailed*>(self);
 }
 
 const char* Text(std::uintptr_t address) {
@@ -162,10 +169,10 @@ S3RE_HOOK(0x00614eb0, Win32_CProgrammingError_Construct, CtorFn, Original_Win32_
 void* __fastcall Win32_CProgrammingError_Construct(void* self, void* /*edx*/, const String* msg,
                                                    std::uint32_t mostDerived) {
     if (mostDerived != 0) {
-        At<std::uint32_t>(self, 4) = kProgrammingErrorVbase;
+        AsException(self)->vbase = kProgrammingErrorVbase;
     }
     Win32_CException_Construct(self, nullptr, msg, 0);
-    At<std::uint32_t>(self, 0) = kProgrammingErrorVtable;
+    AsException(self)->vtable = kProgrammingErrorVtable;
     return self;
 }
 
@@ -188,13 +195,13 @@ String* __fastcall Win32_CAssertmentFailed_Describe(void* self, void* /*edx*/, S
     AssignThroughTemporaries(&head, Text(kAssertmentText), &allocator);
 
     String withExpression, withFileText, withFile, withLineText, withNumber, whole;
-    msvc6::String_ConcatChars2(&withExpression, &head, At<const char*>(self, 0x18));
+    msvc6::String_ConcatChars2(&withExpression, &head, AsAssertment(self)->expression);
     msvc6::String_ConcatChars(&withFileText, &withExpression, Text(kFileText));
-    msvc6::String_ConcatChars2(&withFile, &withFileText, At<const char*>(self, 0x1c));
+    msvc6::String_ConcatChars2(&withFile, &withFileText, AsAssertment(self)->file);
     msvc6::String_ConcatString(&withLineText, &withFile, &line);
     char digits[16];
     const char* number = reinterpret_cast<char*(__cdecl*)(std::uint32_t, char*, std::int32_t)>(kUltoa)(
-        At<std::uint32_t>(self, 0x20), digits, 10);
+        AsAssertment(self)->line, digits, 10);
     msvc6::String_ConcatChars(&withNumber, &withLineText, number);
     msvc6::String_ConcatString(&whole, &withNumber, &newline);
     msvc6::String_FromSubstrDefault(result, nullptr, &whole, 0, 0xFFFFFFFFu);
@@ -214,7 +221,7 @@ S3RE_HOOK(0x00612a20, Win32_CAssertmentFailed_Construct, AssertCtorFn, Original_
 void* __fastcall Win32_CAssertmentFailed_Construct(void* self, void* /*edx*/, const char* expression,
                                                    const char* file, std::uint32_t line, std::uint32_t mostDerived) {
     if (mostDerived != 0) {
-        At<std::uint32_t>(self, 4) = kAssertmentFailedVbase;
+        AsException(self)->vbase = kAssertmentFailedVbase;
     }
     const auto allocator = static_cast<std::uint8_t>(mostDerived);
     String message;
@@ -236,10 +243,11 @@ void* __fastcall Win32_CAssertmentFailed_Construct(void* self, void* /*edx*/, co
     }
     Win32_CProgrammingError_Construct(self, nullptr, &message, 0);
     EraseAndFree(&message);
-    At<const char*>(self, 0x18) = expression;
-    At<const char*>(self, 0x1c) = file;
-    At<std::uint32_t>(self, 0x20) = line;
-    At<std::uint32_t>(self, 0) = kAssertmentFailedVtable;
+    CAssertmentFailed* const failed = AsAssertment(self);
+    failed->expression = expression;
+    failed->file = file;
+    failed->line = line;
+    failed->base.vtable = kAssertmentFailedVtable;
     String description;
     Win32_CAssertmentFailed_Describe(self, nullptr, &description);
     msvc6::String_Split(&description, nullptr);
@@ -270,10 +278,10 @@ S3RE_HOOK(0x006124a0, Win32_COutOfMemory_Construct, CtorFn, Original_Win32_COutO
 void* __fastcall Win32_COutOfMemory_Construct(void* self, void* /*edx*/, const String* msg,
                                               std::uint32_t mostDerived) {
     if (mostDerived != 0) {
-        At<std::uint32_t>(self, 4) = kOutOfMemoryVbase;
+        AsException(self)->vbase = kOutOfMemoryVbase;
     }
     Win32_CRunTimeError_Construct(self, nullptr, msg, 0);
-    At<std::uint32_t>(self, 0) = kOutOfMemoryVtable;
+    AsException(self)->vtable = kOutOfMemoryVtable;
     const std::uint8_t allocator = 0;  // the original's are uninitialized (freed temporaries)
     String fullStop;
     fullStop.allocator = allocator;
@@ -284,7 +292,7 @@ void* __fastcall Win32_COutOfMemory_Construct(void* self, void* /*edx*/, const S
     msvc6::String_Tidy(&head, nullptr, 0);
     AssignThroughTemporaries(&head, Text(kNotEnoughMemoryText), &allocator);
     String withMessage, whole;
-    msvc6::String_ConcatString(&withMessage, &head, &At<String>(self, 8));
+    msvc6::String_ConcatString(&withMessage, &head, &AsException(self)->message);
     msvc6::String_ConcatString(&whole, &withMessage, &fullStop);
     CallEraseAndFree(&whole);
     CallEraseAndFree(&withMessage);
@@ -426,9 +434,9 @@ void CompareObjects(test::Context& ctx, const Candidate& candidate, int cases) {
                                                             mostDerived);
             rb = candidate.assertment(b + kGuard, nullptr, expressionArg, fileArg, line, mostDerived);
         } else {
-            At<const char*>(a + kGuard, 0x18) = At<const char*>(b + kGuard, 0x18) = expressionArg;
-            At<const char*>(a + kGuard, 0x1c) = At<const char*>(b + kGuard, 0x1c) = fileArg;
-            At<std::uint32_t>(a + kGuard, 0x20) = At<std::uint32_t>(b + kGuard, 0x20) = line;
+            AsAssertment(a + kGuard)->expression = AsAssertment(b + kGuard)->expression = expressionArg;
+            AsAssertment(a + kGuard)->file = AsAssertment(b + kGuard)->file = fileArg;
+            AsAssertment(a + kGuard)->line = AsAssertment(b + kGuard)->line = line;
             String resultA, resultB;
             std::memset(&resultA, 0xcc, sizeof(resultA));
             std::memset(&resultB, 0xcc, sizeof(resultB));
@@ -442,8 +450,8 @@ void CompareObjects(test::Context& ctx, const Candidate& candidate, int cases) {
         }
         same &= S3RE_EXPECT(ra == a + kGuard && rb == b + kGuard);
         if (op != 3) {
-            auto& sa = At<String>(a + kGuard, 8);
-            auto& sb = At<String>(b + kGuard, 8);
+            auto& sa = AsException(a + kGuard)->message;
+            auto& sb = AsException(b + kGuard)->message;
             same &= SameMessage(ctx, sa, sb, op == 2 ? nullptr : &msgA, op == 2 ? nullptr : &msgB);
             sa.ptr = sb.ptr = nullptr;
             if (same && msgA.ptr != nullptr) {
@@ -503,13 +511,13 @@ void CompareThrowers(test::Context& ctx, ThrowFn assertment, ThrowFn outOfMemory
         if (same) {
             same &= S3RE_EXPECT_MEM_EQ(ta.object, tb.object, 9);  // vtable, vbase pointer, allocator
             if (isAssert) {
-                same &= S3RE_EXPECT_MEM_EQ(static_cast<std::uint8_t*>(ta.object) + 0x18,
-                                           static_cast<std::uint8_t*>(tb.object) + 0x18, 12);
+                same &= S3RE_EXPECT_MEM_EQ(&AsAssertment(ta.object)->expression, &AsAssertment(tb.object)->expression,
+                                           12);  // expression, file, line
             }
             // Not the count byte: ThrowOutOfMemory's message shares the
             // buffer, and the original frees its reference while unwinding,
             // ours never (the known difference in the header).
-            same &= SameMessage(ctx, At<String>(ta.object, 8), At<String>(tb.object, 8), nullptr, nullptr,
+            same &= SameMessage(ctx, AsException(ta.object)->message, AsException(tb.object)->message, nullptr, nullptr,
                                 /*compareCount=*/isAssert);
         }
         if (!same) {
@@ -527,7 +535,7 @@ String* __fastcall WrongDescribe(void* self, void* edx, String* result) {
 
 void* __fastcall WrongOutOfMemory(void* self, void* edx, const String* msg, std::uint32_t mostDerived) {
     void* r = Win32_COutOfMemory_Construct(self, edx, msg, mostDerived);
-    At<std::uint32_t>(self, 4) = kOutOfMemoryVbase;  // wrong: set even when not most derived
+    AsException(self)->vbase = kOutOfMemoryVbase;  // wrong: set even when not most derived
     return r;
 }
 

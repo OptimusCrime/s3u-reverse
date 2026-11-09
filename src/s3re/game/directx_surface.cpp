@@ -29,17 +29,21 @@
 //   DirectX::CDirectPlayException (constructor 0x5bfdb0, ThrowInfo
 //   0x681e60). EAX = 0.
 //
-// CSurface fields used: +0x08 the IDirectDrawSurface, +0x0c the owner.
+// CSurface fields used: +0x08 the IDirectDrawSurface, +0x0c the owner
+// (framework::CSimpleSurface in game/framework_layout.h).
 //
 // The original ThrowIfDDFailed has an exception frame that frees the block
 // if the constructor throws; ours has none (such a throw would mean the
 // error report itself failed, and the block leaks).
 
+#include "game/framework_layout.h"
+#include "game/raw.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
 #include <windows.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -61,10 +65,11 @@ constexpr std::uint32_t kDDBltFastWait = 0x10;
 constexpr std::uintptr_t kDirectPlayExceptionCtor = 0x005bfdb0;
 constexpr std::uintptr_t kDirectPlayExceptionThrowInfo = 0x00681e60;
 
-template <typename T>
-T& At(void* base, std::size_t offset) {
-    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(base) + offset);
-}
+using framework::CLandscapeSurface;
+using framework::CSimpleSurface;
+
+CSimpleSurface* AsSurface(void* object) { return static_cast<CSimpleSurface*>(object); }
+CLandscapeSurface* AsLandscape(void* object) { return static_cast<CLandscapeSurface*>(object); }
 
 void* GameNew(std::uint32_t size) {
     return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
@@ -138,7 +143,7 @@ S3RE_HOOK(0x005bf2e0, DirectX_CSurface_CheckResult, CheckResultFn, Original_Dire
 // DirectDraw exception.
 std::int32_t __fastcall DirectX_CSurface_CheckResult(void* self, void* /*edx*/, std::int32_t hr, const char* where) {
     if (hr == kSurfaceLost) {
-        void* owner = At<void*>(self, 0xc);
+        void* owner = AsSurface(self)->owner;
         using Fn = void(__fastcall*)(void* self, void* edx);
         (*reinterpret_cast<Fn*>(*static_cast<std::uint8_t**>(owner) + 0xc))(owner, nullptr);
         return hr;
@@ -159,8 +164,8 @@ std::uint32_t __fastcall DirectX_CSurface_DDBlt(void* self, void* /*edx*/, const
     using SleepFn = void(WINAPI*)(DWORD);
     std::int32_t hr;
     do {
-        void* source = src != nullptr ? At<void*>(src, 8) : nullptr;
-        void* surface = At<void*>(self, 8);
+        void* source = src != nullptr ? AsSurface(src)->surface : nullptr;
+        void* surface = AsSurface(self)->surface;
         hr = (*reinterpret_cast<BltFn*>(*static_cast<std::uint8_t**>(surface) + 0x14))(
             surface, dst, source, srcRect, flags | kDDBltWaitAsync, fx);
         if (hr != 0 && hr != kWasStillDrawing) {
@@ -186,9 +191,9 @@ std::uint32_t __fastcall DirectX_CSurface_DDBltFast(void* self, void* /*edx*/, s
     using SleepFn = void(WINAPI*)(DWORD);
     std::int32_t hr;
     do {
-        void* surface = At<void*>(self, 8);
+        void* surface = AsSurface(self)->surface;
         hr = (*reinterpret_cast<BltFastFn*>(*static_cast<std::uint8_t**>(surface) + 0x1c))(
-            surface, x, y, At<void*>(src, 8), srcRect, flags | kDDBltFastWait);
+            surface, x, y, AsSurface(src)->surface, srcRect, flags | kDDBltFastWait);
         if (hr != 0 && hr != kWasStillDrawing) {
             hr = DirectX_CSurface_CheckResult(self, nullptr, hr, reinterpret_cast<const char*>(kDDBltFastName));
         }
@@ -230,8 +235,9 @@ std::int32_t __stdcall FakeBlt(void* surface, const RECT* dst, void* src, const 
     log.words.insert(log.words.end(), {0xb17u, Relative(surface), Relative(dst), Relative(src), Relative(srcRect),
                                        flags, Relative(fx)});
     if (fx != nullptr) {
-        log.words.push_back(At<std::uint32_t>(fx, 0));
-        log.words.push_back(At<std::uint32_t>(fx, 0x50));
+        // DDBLTFX (ddraw.h, not included): dwSize at +0, dwFillColor at +0x50.
+        log.words.push_back(RawAt<std::uint32_t>(fx, 0));
+        log.words.push_back(RawAt<std::uint32_t>(fx, 0x50));
     }
     return log.next < log.results.size() ? log.results[log.next++] : 0;
 }
@@ -373,11 +379,11 @@ void CompareSurface(test::Context& ctx, const Functions& candidate, int cases) {
         const int op = static_cast<int>(ctx.rng().Below(5));
         ctx.rng().Fill(buffer.data(), buffer.size());
         std::uint8_t* b = buffer.data();
-        At<void*>(b, 0x08) = b + 0x100;    // the surface's COM interface
-        At<void*>(b, 0x0c) = b + 0x140;    // its owner
-        At<void*>(b, 0x100) = g_comVtable;
-        At<void*>(b, 0x140) = g_ownerVtable;
-        At<void*>(b, 0x48) = b + 0x180;    // a source surface's interface
+        AsSurface(b)->surface = b + 0x100;  // the surface's COM interface
+        AsSurface(b)->owner = b + 0x140;    // its owner
+        *reinterpret_cast<void**>(b + 0x100) = g_comVtable;   // fake objects: vtable at +0
+        *reinterpret_cast<void**>(b + 0x140) = g_ownerVtable;
+        AsSurface(b + 0x40)->surface = b + 0x180;  // a source surface's interface
         const bool allowFailure = ctx.rng().Chance(1, 3);
         BltLog logA, logB;
         logA.base = logB.base = b;
@@ -494,13 +500,14 @@ S3RE_HOOK(0x005bf2c0, DirectX_CSurface_Release, SurfaceFn, Original_DirectX_CSur
 // Purpose: Releases a surface's DirectDraw interface and forgets it (when
 // the surface is destroyed or recreated, e.g. after a mode change).
 std::uint32_t __fastcall DirectX_CSurface_Release(void* self, void* /*edx*/) {
-    void* surface = At<void*>(self, 4);
+    framework::CSurface* const s = static_cast<framework::CSurface*>(self);
+    void* surface = s->simple.createdInterface;
     using ReleaseFn = std::uint32_t(__stdcall*)(void* surface);
     (*reinterpret_cast<ReleaseFn*>(*static_cast<std::uint8_t**>(surface) + 8))(surface);
-    At<std::uint32_t>(self, 4) = 0;
-    At<std::uint32_t>(self, 8) = 0;
-    At<std::uint32_t>(self, 0x18) = 0;
-    At<std::uint32_t>(self, 0x14) = 0;
+    s->simple.createdInterface = nullptr;
+    s->simple.surface = nullptr;
+    s->unk18 = 0;
+    s->unk14 = 0;
     return 0;
 }
 
@@ -510,8 +517,8 @@ S3RE_HOOK(0x005bf240, DirectX_CSurface_Destroy, SurfaceFn, Original_DirectX_CSur
 // Purpose: Destructor of a DirectDraw surface wrapper: releases the
 // interface if there is one.
 std::uint32_t __fastcall DirectX_CSurface_Destroy(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 0) = kCSurfaceVtable;
-    if (At<void*>(self, 4) != nullptr) {
+    AsSurface(self)->vtable = kCSurfaceVtable;
+    if (AsSurface(self)->createdInterface != nullptr) {
         DirectX_CSurface_Release(self, nullptr);
     }
     Win32_CObject_Destroy(self, nullptr);
@@ -537,10 +544,12 @@ S3RE_HOOK(0x0054be70, CLandscapeSurface_Destroy, SurfaceFn, Original_CLandscapeS
 // Purpose: Destructor of the landscape surface (the map terrain drawing
 // surface): frees its four tables, then the surface.
 std::uint32_t __fastcall CLandscapeSurface_Destroy(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 0) = kCLandscapeSurfaceVtable;
-    for (const std::size_t offset : {0x94u, 0x9cu, 0xa0u, 0xa4u}) {
-        GameDelete(At<void*>(self, offset));
-    }
+    CLandscapeSurface* const landscape = AsLandscape(self);
+    landscape->surface.simple.vtable = kCLandscapeSurfaceVtable;
+    GameDelete(landscape->table94);
+    GameDelete(landscape->table9c);
+    GameDelete(landscape->tableA0);
+    GameDelete(landscape->tableA4);
     return DirectX_CSurface_Destroy(self, nullptr);
 }
 
@@ -625,10 +634,11 @@ void CompareDestroy(test::Context& ctx, const DestroyFunctions& candidate, int c
                 objects[side] = stackObjects[side].data();
             }
             std::memcpy(objects[side], pattern, kSurfaceObject);
-            At<void*>(iface[side], 0) = g_releaseVtable;
-            At<void*>(objects[side], 4) = noInterface ? nullptr : iface[side];
-            for (const std::size_t offset : {0x94u, 0x9cu, 0xa0u, 0xa4u}) {
-                At<void*>(objects[side], offset) = nullBlocks ? nullptr : GameNewBlock(16);
+            *reinterpret_cast<void**>(iface[side]) = g_releaseVtable;  // fake COM object: vtable at +0
+            CLandscapeSurface* const object = AsLandscape(objects[side]);
+            object->surface.simple.createdInterface = noInterface ? nullptr : iface[side];
+            for (void** table : {&object->table94, &object->table9c, &object->tableA0, &object->tableA4}) {
+                *table = nullBlocks ? nullptr : GameNewBlock(16);
             }
         }
         std::uint32_t results[2];
@@ -647,9 +657,10 @@ void CompareDestroy(test::Context& ctx, const DestroyFunctions& candidate, int c
         same &= S3RE_EXPECT(logs[0] == logs[1]);
         if (!deletes) {
             for (int side = 0; side < 2; ++side) {
-                At<std::uint32_t>(objects[side], 4) = 0;  // interface pointers differ per side
-                for (const std::size_t offset : {0x94u, 0x9cu, 0xa0u, 0xa4u}) {
-                    At<std::uint32_t>(objects[side], offset) = 0;  // blocks differ per side
+                CLandscapeSurface* const object = AsLandscape(objects[side]);
+                object->surface.simple.createdInterface = nullptr;  // interface pointers differ per side
+                for (void** table : {&object->table94, &object->table9c, &object->tableA0, &object->tableA4}) {
+                    *table = nullptr;  // blocks differ per side
                 }
             }
             same &= S3RE_EXPECT_MEM_EQ(objects[0], objects[1], kSurfaceObject);
@@ -663,7 +674,7 @@ void CompareDestroy(test::Context& ctx, const DestroyFunctions& candidate, int c
 
 std::uint32_t __fastcall WrongRelease(void* self, void* edx) {
     const std::uint32_t r = DirectX_CSurface_Release(self, edx);
-    At<std::uint32_t>(self, 0x18) = 1;  // wrong: +0x18 not cleared
+    static_cast<framework::CSurface*>(self)->unk18 = 1;  // wrong: +0x18 not cleared
     return r;
 }
 

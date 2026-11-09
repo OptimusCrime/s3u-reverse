@@ -23,10 +23,13 @@
 // get whatever byte the original copies there, sometimes the low byte of an
 // unrelated stack slot; we copy the same byte.
 
+#include "game/framework_layout.h"
+#include "game/raw.h"
 #include "hooks.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -39,12 +42,55 @@ namespace sd = msvc6::detail;
 
 namespace {
 
+using framework::CRegistryValueInfo;
+using framework::SessionDesc;
+
+// The string member at `offset` of an object whose class is not identified
+// (only that member is known, so it stays a raw offset; see the header).
+// The tests also use it for their generic per-offset comparisons.
 String* StringAt(void* object, std::uint32_t offset) {
-    return reinterpret_cast<String*>(static_cast<std::uint8_t*>(object) + offset);
+    return &RawAt<String>(object, offset);
 }
 
 const String* StringAt(const void* object, std::uint32_t offset) {
-    return reinterpret_cast<const String*>(static_cast<const std::uint8_t*>(object) + offset);
+    return &RawAt<String>(object, offset);
+}
+
+#pragma pack(push, 1)
+// Two dwords and a string (0x4499e0).
+struct TwoDwordsAndString {
+    std::uint32_t first;   // +0x00
+    std::uint32_t second;  // +0x04
+    String text;           // +0x08
+};
+static_assert(offsetof(TwoDwordsAndString, text) == 0x08);
+
+// A lobby record (0x5ed590, Dirk/Lobby.cpp).
+struct LobbyRecord5ed590 {
+    std::uint32_t vtable;     // +0x00 probably the vtable (not copied)
+    std::uint32_t fields[4];  // +0x04
+    String text;              // +0x14
+};
+static_assert(offsetof(LobbyRecord5ed590, text) == 0x14);
+
+// A GUID and two names (0x5b6790).
+struct GuidNames {
+    std::uint32_t guid[4];  // +0x00
+    String first;           // +0x10
+    String second;          // +0x20
+};
+static_assert(offsetof(GuidNames, first) == 0x10);
+static_assert(offsetof(GuidNames, second) == 0x20);
+#pragma pack(pop)
+
+template <typename T>
+T* As(void* self) {
+    return static_cast<T*>(self);
+}
+
+template <typename T>
+const T* As(const void* self) {
+    return static_cast<const T*>(self);
 }
 
 void CopyDwords(void* to, const void* from, std::uint32_t count) {
@@ -55,8 +101,8 @@ void CopyDwords(void* to, const void* from, std::uint32_t count) {
     }
 }
 
-void AssignMember(void* self, const void* x, std::uint32_t offset) {
-    msvc6::String_AssignSubstr(StringAt(self, offset), nullptr, StringAt(x, offset), 0, sd::Npos());
+void AssignMember(String* member, const String* x) {
+    msvc6::String_AssignSubstr(member, nullptr, x, 0, sd::Npos());
 }
 
 // member = string(text) through two temporaries, as 0x5b6790 does it:
@@ -214,8 +260,11 @@ S3RE_HOOK(0x004499e0, AssignTwoDwordsAndString_4499e0, AssignFn,
 
 // Purpose: Copies an object of two numbers and a string (operator=).
 void* __fastcall AssignTwoDwordsAndString_4499e0(void* self, void* /*edx*/, const void* x) {
-    CopyDwords(self, x, 2);
-    AssignMember(self, x, 0x08);
+    TwoDwordsAndString* const to = As<TwoDwordsAndString>(self);
+    const TwoDwordsAndString* const from = As<TwoDwordsAndString>(x);
+    to->first = from->first;
+    to->second = from->second;
+    AssignMember(&to->text, &from->text);
     return self;
 }
 
@@ -225,8 +274,10 @@ S3RE_HOOK(0x005be000, SessionDesc_Assign_5be000, AssignFn, Original_SessionDesc_
 // Purpose: Copies a network session description (operator=): the 80-byte
 // DirectPlay record and the session name string.
 void* __fastcall SessionDesc_Assign_5be000(void* self, void* /*edx*/, const void* x) {
-    CopyDwords(self, x, 0x14);
-    AssignMember(self, x, 0x50);
+    SessionDesc* const to = As<SessionDesc>(self);
+    const SessionDesc* const from = As<SessionDesc>(x);
+    CopyDwords(to, from, 0x14);  // the whole DPSESSIONDESC2 (+0..+0x50), as dwords
+    AssignMember(&to->name, &from->name);
     return self;
 }
 
@@ -238,8 +289,10 @@ S3RE_HOOK(0x005ed590, LobbyRecord_Assign_5ed590, AssignFn, Original_LobbyRecord_
 // vtable) stays.
 void* __fastcall LobbyRecord_Assign_5ed590(void* self, void* /*edx*/, const void* x) {
     if (self != x) {
-        CopyDwords(static_cast<std::uint8_t*>(self) + 4, static_cast<const std::uint8_t*>(x) + 4, 4);
-        AssignMember(self, x, 0x14);
+        LobbyRecord5ed590* const to = As<LobbyRecord5ed590>(self);
+        const LobbyRecord5ed590* const from = As<LobbyRecord5ed590>(x);
+        CopyDwords(to->fields, from->fields, 4);
+        AssignMember(&to->text, &from->text);
     }
     return self;
 }
@@ -258,15 +311,16 @@ S3RE_HOOK(0x005bb0b0, SessionDesc_Construct_5bb0b0, SessionDescConstructFn,
 // a string. Without a record, only the first field is set to 0.
 void* __fastcall SessionDesc_Construct_5bb0b0(void* self, void* /*edx*/, const void* desc) {
     const auto low = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(desc));
-    String* name = StringAt(self, 0x50);
+    SessionDesc* const session = As<SessionDesc>(self);
+    String* name = &session->name;
     name->allocator = low;
     sd::Clear(name);
     if (desc == nullptr) {
-        *static_cast<std::uint32_t*>(self) = 0;
+        session->desc[0] = 0;
         return self;
     }
-    CopyDwords(self, desc, 0x14);
-    const char* text = *reinterpret_cast<const char* const*>(static_cast<const std::uint8_t*>(desc) + 0x30);
+    CopyDwords(session, desc, 0x14);  // the DPSESSIONDESC2, as dwords
+    const char* text = As<SessionDesc>(desc)->sessionName;
     if (text != nullptr) {
         String temporary{};
         temporary.allocator = low;
@@ -293,14 +347,15 @@ S3RE_HOOK(0x005b6790, GuidNames_Construct_5b6790, GuidNamesConstructFn,
 // null names stay empty.
 void* __fastcall GuidNames_Construct_5b6790(void* self, void* /*edx*/, const void* guid,
                                             const char* first, const char* second) {
-    CopyDwords(self, reinterpret_cast<const void*>(0x0065c0b8), 4);
-    String* a = StringAt(self, 0x10);
+    GuidNames* const record = As<GuidNames>(self);
+    CopyDwords(record->guid, reinterpret_cast<const void*>(0x0065c0b8), 4);
+    String* a = &record->first;
     a->allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(first));
     sd::Clear(a);
     if (first != nullptr) {
         AssignTextViaTemporaries(a, first);
     }
-    String* b = StringAt(self, 0x20);
+    String* b = &record->second;
     // The compiler reused the stack slot of `first` for &b, and takes the
     // allocator byte from there.
     b->allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(b));
@@ -309,7 +364,7 @@ void* __fastcall GuidNames_Construct_5b6790(void* self, void* /*edx*/, const voi
         AssignTextViaTemporaries(b, second);
     }
     if (guid != nullptr) {
-        CopyDwords(self, guid, 4);
+        CopyDwords(record->guid, guid, 4);
     }
     return self;
 }
@@ -325,12 +380,13 @@ S3RE_HOOK(0x006161e0, CRegistryValueInfo_Construct, RegistryValueInfoConstructFn
 // registry values.
 void* __fastcall CRegistryValueInfo_Construct(void* self, void* /*edx*/, String name,
                                               std::uint32_t value) {
-    String* member = StringAt(self, 4);
+    CRegistryValueInfo* const info = As<CRegistryValueInfo>(self);
+    String* member = &info->name;
     member->allocator = static_cast<std::uint8_t>(value);
     sd::Clear(member);
     msvc6::String_AssignSubstr(member, nullptr, &name, 0, 0xFFFFFFFFu);
-    *static_cast<std::uint32_t*>(self) = 0x0065d984;  // vtable
-    *reinterpret_cast<std::uint32_t*>(static_cast<std::uint8_t*>(self) + 0x14) = value;
+    info->vtable = 0x0065d984;
+    info->value = value;
     // ~string of the by-value parameter (its fields are not cleared: the
     // parameter goes away with the stack frame).
     sd::Erase(&name, 0, sd::Npos());
@@ -560,7 +616,7 @@ void CompareMembers(test::Context& ctx, const Members& candidate, int iterations
                 std::vector<std::uint8_t> desc(0x50);
                 ctx.rng().Fill(desc.data(), 0x50);
                 const char* name = ctx.rng().Chance(1, 4) ? nullptr : t1.c_str();
-                std::memcpy(desc.data() + 0x30, &name, sizeof(name));
+                As<SessionDesc>(desc.data())->sessionName = name;
                 const void* d = ctx.rng().Chance(1, 8) ? nullptr : desc.data();
                 // The low byte of the record pointer becomes the allocator byte.
                 original.sessionDesc(a1.data(), nullptr, d);
