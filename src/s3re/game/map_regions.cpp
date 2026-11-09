@@ -45,43 +45,29 @@ namespace s3re::game {
 
 namespace {
 
-// Tile records (re/structs.md "Tile").
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kTileTerrain = 0x6;
-constexpr std::uint32_t kTileObject = 0x7;
-constexpr std::uint32_t kTileOwner = 0x8;
-constexpr std::uint32_t kTileFlags = 0xa;
-constexpr std::uint8_t kFlagBlocked = 0x01;
-constexpr std::uint8_t kFlagMark = 0x10;
-constexpr std::uint8_t kFlagNearHarbourWater = 0x80;
+using layout::Tile;
+
+// Tile flags (re/structs.md "Tile").
+constexpr std::uint8_t kFlagBlocked = layout::kTileBlocked;
+constexpr std::uint8_t kFlagMark = layout::kTileFloodMark;
+constexpr std::uint8_t kFlagNearHarbourWater = layout::kTileFlag80;
 constexpr std::uint8_t kNoOwner = 0xff;
-// World fields: the id tables' in-use bytes (id_allocators.cpp) and the
-// offset table (re/structs.md "MapOffset").
-constexpr std::uint32_t kWalkRegionInUse = 0xe114dc;
-constexpr std::uint32_t kWaterBodyInUse = 0xe115e4;
-constexpr std::uint32_t kWideRegionInUse = 0xe125e8;
-constexpr std::uint32_t kOffsetTable = 0x110a588;
-constexpr std::uint32_t kOffsetTableBytes = 0x10;
+// Entries 0..60 of the offset table world->offsets (re/structs.md "MapOffset").
 constexpr std::uint32_t kWaterMarkEntries = 61;
 
-constexpr std::int32_t kRow = 0x300 * 24;  // x + 1
-constexpr std::int32_t kColumn = 24;       // y + 1
+constexpr std::int32_t kRow = static_cast<std::int32_t>(kTileRowBytes);  // x + 1
+constexpr std::int32_t kColumn = static_cast<std::int32_t>(kTileBytes);   // y + 1
 
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(world) + offset);
-}
-
-std::uint32_t Tile(std::uint32_t x, std::uint32_t y) {
-    return kTiles + (x * 0x300 + y) * 24;
+Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+    return TileAtOffset(world, TileOffset(x, y));
 }
 
 std::uint32_t MapSize(GameWorld* world) {
-    return At<std::uint32_t>(world, world_offset::kMapSize);
+    return world->map_size;
 }
 
 std::uint8_t& Flags(GameWorld* world, std::uint32_t x, std::uint32_t y) {
-    return At<std::uint8_t>(world, Tile(x, y) + kTileFlags);
+    return TileAt(world, x, y).flags;
 }
 
 // Calls visit(x, y) for every map tile, y outer and x inner, with mapSize
@@ -107,15 +93,15 @@ bool IsMarkedAndFree(std::uint8_t flags) {
 // harbour or ship-related objects) mark their surroundings.
 void MarkSurroundingsOfWaterObjects(GameWorld* world) {
     ForEachTile(world, [&](std::uint32_t x, std::uint32_t y) {
-        const std::uint32_t tile = Tile(x, y);
-        At<std::uint8_t>(world, tile + kTileFlags) |= kFlagMark;
-        const std::uint8_t object = At<std::uint8_t>(world, tile + kTileObject);
-        if (At<std::uint8_t>(world, tile + kTileTerrain) > 7 || object < 0x0d || object > 0x10) {
+        Tile& tile = TileAt(world, x, y);
+        tile.flags |= kFlagMark;
+        const std::uint8_t object = tile.object;
+        if (tile.terrain > 7 || object < 0x0d || object > 0x10) {
             return;
         }
         for (std::uint32_t entry = 0; entry < kWaterMarkEntries; ++entry) {
-            const std::uint32_t nx = x + At<std::uint32_t>(world, kOffsetTable + entry * kOffsetTableBytes);
-            const std::uint32_t ny = y + At<std::uint32_t>(world, kOffsetTable + entry * kOffsetTableBytes + 4);
+            const std::uint32_t nx = x + static_cast<std::uint32_t>(world->offsets[entry].dx);
+            const std::uint32_t ny = y + static_cast<std::uint32_t>(world->offsets[entry].dy);
             if (GameWorld_IsOnMap(world, nullptr, nx, ny) != 0) {
                 Flags(world, nx, ny) |= kFlagNearHarbourWater;
             }
@@ -132,14 +118,15 @@ constexpr std::int32_t kTwoRings[] = {
     -2 * kColumn,       kRow - kColumn,
 };
 
+// `tile` is a tile's 32-bit byte offset from the world (TileOffset); the
+// ring tiles of edge tiles lie before or after the map.
 bool HasRoomAround(GameWorld* world, std::uint32_t tile) {
-    if ((At<std::uint8_t>(world, tile + kTileTerrain) & 0xf0) == 0x20) {
+    if ((TileAtOffset(world, tile).terrain & 0xf0) == 0x20) {
         return false;
     }
     for (const std::int32_t step : kTwoRings) {
-        const std::uint32_t other = tile + static_cast<std::uint32_t>(step);
-        if ((At<std::uint8_t>(world, other + kTileFlags) & kFlagBlocked) != 0 ||
-            (At<std::uint8_t>(world, other + kTileTerrain) & 0xf0) == 0x20) {
+        const Tile& other = TileAtOffset(world, tile + static_cast<std::uint32_t>(step));
+        if ((other.flags & kFlagBlocked) != 0 || (other.terrain & 0xf0) == 0x20) {
             return false;
         }
     }
@@ -161,7 +148,7 @@ std::uint32_t __fastcall GameWorld_BuildRegionsAndAreas(GameWorld* world, void*)
             return;
         }
         const std::uint32_t id = GameWorld_FindFreeId256(world, nullptr);
-        At<std::uint8_t>(world, kWalkRegionInUse + id) = 1;
+        world->walk_region_used[id] = 1;
         flags &= static_cast<std::uint8_t>(~kFlagMark);
         GameWorld_FloodSetByte10MarkedTiles(world, nullptr, x, y, id);
     });
@@ -169,18 +156,18 @@ std::uint32_t __fastcall GameWorld_BuildRegionsAndAreas(GameWorld* world, void*)
     MarkSurroundingsOfWaterObjects(world);
 
     ForEachTile(world, [&](std::uint32_t x, std::uint32_t y) {
-        const std::uint32_t tile = Tile(x, y);
-        std::uint8_t& flags = At<std::uint8_t>(world, tile + kTileFlags);
-        const std::uint8_t owner = At<std::uint8_t>(world, tile + kTileOwner);
+        Tile& tile = TileAt(world, x, y);
+        std::uint8_t& flags = tile.flags;
+        const std::uint8_t owner = tile.owner;
         if (IsMarkedAndFree(flags) && owner != kNoOwner) {
             const std::uint32_t area = GameWorld_AllocArea(world, nullptr, owner);
             flags &= static_cast<std::uint8_t>(~kFlagMark);
             GameWorld_FloodAssignMarkedTiles(world, nullptr, x, y, area, owner);
         }
-        const std::uint8_t terrain = At<std::uint8_t>(world, tile + kTileTerrain);
+        const std::uint8_t terrain = tile.terrain;
         if ((flags & kFlagMark) != 0 && terrain >= 5 && terrain <= 7 && (flags & kFlagNearHarbourWater) == 0) {
             const std::uint32_t id = GameWorld_FindFreeId4096(world, nullptr);
-            At<std::uint8_t>(world, kWaterBodyInUse + id) = 1;
+            world->ids4096_used[id] = 1;
             flags &= static_cast<std::uint8_t>(~kFlagMark);
             GameWorld_FloodMarkAreaTerrain5To7(world, nullptr, x, y, id);
         }
@@ -188,13 +175,13 @@ std::uint32_t __fastcall GameWorld_BuildRegionsAndAreas(GameWorld* world, void*)
 
     MarkAllTiles(world);
     ForEachTile(world, [&](std::uint32_t x, std::uint32_t y) {
-        const std::uint32_t tile = Tile(x, y);
-        std::uint8_t& flags = At<std::uint8_t>(world, tile + kTileFlags);
+        const std::uint32_t tile = TileOffset(x, y);
+        std::uint8_t& flags = TileAtOffset(world, tile).flags;
         if (!IsMarkedAndFree(flags) || !HasRoomAround(world, tile)) {
             return;
         }
         const std::uint32_t id = GameWorld_FindFreeId8192(world, nullptr);
-        At<std::uint8_t>(world, kWideRegionInUse + id) = 1;
+        world->wide_region_used[id] = 1;
         flags &= static_cast<std::uint8_t>(~kFlagMark);
         GameWorld_FloodSetWord16RoomyTiles(world, nullptr, x, y, id);
     });
@@ -210,15 +197,12 @@ S3RE_HOOK(0x0051a580, GameWorld_BuildRegionsAndAreas, BuildRegionsFn, Original_G
 
 namespace {
 
-constexpr std::size_t kWorldSize = 0x153a128;
-constexpr std::uint32_t kTileRingRead = 0xe07888;
-constexpr std::uint32_t kIdTables = 0xe114d8;      // the three id tables with their marks
-constexpr std::uint32_t kIdTablesEnd = 0xe125e8 + 0x2000;
-constexpr std::uint32_t kAreaRecords = 0xe145e8;
-constexpr std::uint32_t kAreaRecordBytes = 0x2e0;
+constexpr std::size_t kWorldSize = sizeof(GameWorld);
+// The three id tables with their marks (walk_region_high_water up to the
+// area records; includes area_high_water).
+constexpr std::size_t kIdTables = offsetof(GameWorld, walk_region_high_water);
+constexpr std::size_t kIdTablesEnd = offsetof(GameWorld, areas);
 constexpr std::uint32_t kAreaCount = 4096;
-constexpr std::uint32_t kPlayerRace = 0x11943e0;
-constexpr std::uint32_t kPlayerRecordBytes = 0x148;
 
 // Builds the offset table with the game's own builder (0x516530, run by the
 // world constructor).
@@ -227,7 +211,7 @@ void BuildOffsetTable(GameWorld* world) {
     reinterpret_cast<BuildFn>(0x00516530)(world, nullptr);
 }
 
-void Zero(test::WorldPair& worlds, std::uint32_t offset, std::uint32_t size) {
+void Zero(test::WorldPair& worlds, std::size_t offset, std::size_t size) {
     std::memset(worlds.originalBytes() + offset, 0, size);
     std::memset(worlds.oursBytes() + offset, 0, size);
 }
@@ -237,47 +221,51 @@ void Zero(test::WorldPair& worlds, std::uint32_t offset, std::uint32_t size) {
 // free, races 0..3. Everything else keeps the random fill.
 void SetUpRegionMap(test::Context& ctx, test::WorldPair& worlds) {
     const std::uint32_t size = ctx.rng().Chance(1, 2) ? 64 + 64 * ctx.rng().Below(6) : 8 + ctx.rng().Below(120);
-    worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
-    Zero(worlds, kTileRingRead, 8);
-    Zero(worlds, 0x32870, 8);   // pending-event ring read/write index
-    Zero(worlds, 0x366fc, 4);   // event ring write index
+    worlds.Both([&](GameWorld* w) {
+        w->map_size = size;
+        w->tile_ring_index = {};      // tile ring read/write index
+        w->pending_event_index = {};  // pending-event ring read/write index
+        w->event_index.write = 0;     // event ring write index
+    });
     Zero(worlds, kIdTables, kIdTablesEnd - kIdTables);
     for (std::uint32_t area = 0; area < kAreaCount; ++area) {
-        worlds.Set<std::uint8_t>(kAreaRecords + area * kAreaRecordBytes,
-                                 static_cast<std::uint8_t>(ctx.rng().Chance(1, 20) ? 0 : kNoOwner));
+        const auto player = static_cast<std::uint8_t>(ctx.rng().Chance(1, 20) ? 0 : kNoOwner);
+        worlds.Both([&](GameWorld* w) { w->areas[area].player = player; });
     }
     for (std::uint32_t player = 0; player < 20; ++player) {
-        worlds.Set<std::int32_t>(kPlayerRace + player * kPlayerRecordBytes,
-                                 static_cast<std::int32_t>(ctx.rng().Below(5)));
+        const auto race = static_cast<std::int32_t>(ctx.rng().Below(5));
+        worlds.Both([&](GameWorld* w) { w->players[player].race = race; });
     }
     const std::uint32_t owners = ctx.rng().Below(5);
     const std::uint32_t limit = size < 0x300 ? size : 0x300;
     for (std::uint32_t x = 0; x < limit; ++x) {
         for (std::uint32_t y = 0; y < limit; ++y) {
-            const std::uint32_t tile = Tile(x, y);
             const std::uint32_t patch = ((x / 9) * 7 + (y / 11) * 3) % 8;
             std::uint8_t terrain = patch < 4 ? 0x10 : patch < 6 ? static_cast<std::uint8_t>(5 + patch % 3)
                                                      : patch == 6 ? 0x20 : 0x30;
             if (ctx.rng().Chance(1, 30)) {
                 terrain = static_cast<std::uint8_t>(ctx.rng().Next32());
             }
-            worlds.Set<std::uint8_t>(tile + kTileTerrain, terrain);
             const bool water = terrain <= 7;
-            worlds.Set<std::uint8_t>(tile + kTileObject,
-                                     static_cast<std::uint8_t>(water && ctx.rng().Chance(1, 200)
-                                                                   ? 0x0d + ctx.rng().Below(4)
-                                                                   : ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : 0));
+            const auto object = static_cast<std::uint8_t>(water && ctx.rng().Chance(1, 200)
+                                                              ? 0x0d + ctx.rng().Below(4)
+                                                              : ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : 0);
             const std::uint32_t quarter = (x * 2 / size) * 2 + y * 2 / size;
-            worlds.Set<std::uint8_t>(tile + kTileOwner,
-                                     static_cast<std::uint8_t>(quarter < owners ? quarter : kNoOwner));
+            const auto owner = static_cast<std::uint8_t>(quarter < owners ? quarter : kNoOwner);
             std::uint8_t flags = static_cast<std::uint8_t>(ctx.rng().Next32() & 0x6e);
             if (water || ctx.rng().Chance(1, 15)) {
                 flags |= kFlagBlocked;
             }
-            worlds.Set<std::uint8_t>(tile + kTileFlags, flags);
-            // No area yet (as after loading or generating; a garbage area
-            // number would index past the area records).
-            worlds.Set<std::uint16_t>(tile + 0x14, 0);
+            worlds.Both([&](GameWorld* w) {
+                Tile& tile = w->tiles[x][y];
+                tile.terrain = terrain;
+                tile.object = object;
+                tile.owner = owner;
+                tile.flags = flags;
+                // No area yet (as after loading or generating; a garbage area
+                // number would index past the area records).
+                tile.area = 0;
+            });
         }
     }
 }
@@ -300,10 +288,9 @@ void CompareBuildRegions(test::Context& ctx, BuildRegionsFn candidate, int cases
 // Wrong: water bodies ignore flag 0x80 (the surroundings of harbour objects).
 std::uint32_t __fastcall WrongBuildRegions(GameWorld* world, void*) {
     ForEachTile(world, [&](std::uint32_t x, std::uint32_t y) {
-        const std::uint32_t tile = Tile(x, y);
-        if (At<std::uint8_t>(world, tile + kTileTerrain) <= 7 &&
-            At<std::uint8_t>(world, tile + kTileObject) >= 0x0d && At<std::uint8_t>(world, tile + kTileObject) <= 0x10) {
-            At<std::uint8_t>(world, tile + kTileObject) = 0;
+        Tile& tile = TileAt(world, x, y);
+        if (tile.terrain <= 7 && tile.object >= 0x0d && tile.object <= 0x10) {
+            tile.object = 0;
         }
     });
     return GameWorld_BuildRegionsAndAreas(world, nullptr);

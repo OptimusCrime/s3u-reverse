@@ -1,8 +1,9 @@
 // Bulk writes of single tile bytes along lines of the map.
 //
-// Tile offsets as in world.h (records at 0x67440, tile (x, y) at
-// (x * 0x300 + y) * 24); the bytes are tile fields 0xb and 0x11, whose
-// meaning is unknown (0xb is one of the most used tile fields).
+// Tile offsets as in the old world.h (records at 0x67440, tile (x, y) at
+// (x * 0x300 + y) * 24); the bytes are tile fields 0xb and 0x11, i.e.
+// Tile::object (+0x7) and Tile::slice_byte (+0xd) at the real tile base
+// 0x67444 (layout.h).
 //
 // GameWorld::SetDiagonalTileByteB (0x00518d10) / ClearDiagonalTileByteB
 //   (0x00518dc0): (flags) write 0xff / 0 into byte 0xb of the tiles
@@ -32,41 +33,37 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kTileByteB = 0x6744b;            // byte 0xb of tile (0, 0)
-constexpr std::uint32_t kTileByteBUp = 0x67433;          // the same, one tile lower in y
-constexpr std::uint32_t kTileByteBUp2 = 0x6741b;         // two tiles lower in y
-constexpr std::uint32_t kTileByteBRightUp = 0x6bc33;     // x + 1, y - 1
-constexpr std::uint32_t kTileByte11 = 0x67451;           // byte 0x11 of tile (0, 0)
-constexpr std::uint32_t kDiagonalStep = 0x4818;          // (x + 1, y + 1)
-constexpr std::uint32_t kAntiDiagonalStep = 0x2ff;       // (x + 1, y - 1), in tiles
+using layout::Tile;
+
 constexpr std::uint32_t kSliceRows = 8;
 
 std::uint32_t MapSize(GameWorld* world) {
-    return WorldField<std::uint32_t>(world, world_offset::kMapSize);
+    return world->map_size;
 }
 
-void SetByte(GameWorld* world, std::uint32_t offset, std::uint8_t value) {
-    reinterpret_cast<std::uint8_t*>(world)[offset] = value;
-}
-
-// Offset of the anti-diagonal tile i plus `displacement` (32-bit wrap).
-std::uint32_t AntiDiagonal(GameWorld* world, std::uint32_t i, std::uint32_t displacement) {
-    return (MapSize(world) + i * kAntiDiagonalStep) * world_offset::kTileBytes + displacement;
+// Tile (x + dx, size - 1 - x - dy) next to the anti-diagonal, with the map
+// size read once per access like the original. The original addresses it
+// as (size + x * 0x2ff) * 24 + displacement, with displacement 0x67433
+// (dx 0, dy 0), 0x6741b (dx 0, dy 1) or 0x6bc33 (dx 1, dy 0) for
+// Tile::object; TileOffset gives the same 32-bit offsets.
+Tile& AntiDiagonal(GameWorld* world, std::uint32_t x, std::uint32_t dx, std::uint32_t dy) {
+    return TileAtOffset(world, TileOffset(x + dx, MapSize(world) - 1 - x - dy));
 }
 
 void WriteDiagonals(GameWorld* world, std::uint32_t flags, std::uint8_t value) {
     if ((flags & 1) != 0) {
         for (std::uint32_t i = 0; i < MapSize(world); ++i) {
-            SetByte(world, kTileByteB + i * kDiagonalStep, value);
+            // Original: 0x6744b + i * 0x4818.
+            TileAtOffset(world, TileOffset(i, i)).object = value;
         }
     }
     if ((flags & 2) != 0) {
         for (std::uint32_t i = 0; i < MapSize(world); ++i) {
-            SetByte(world, AntiDiagonal(world, i, kTileByteBUp), value);
+            AntiDiagonal(world, i, 0, 0).object = value;
         }
         for (std::uint32_t i = 0; i < MapSize(world) - 1; ++i) {
-            SetByte(world, AntiDiagonal(world, i, kTileByteBUp2), value);
-            SetByte(world, AntiDiagonal(world, i, kTileByteBRightUp), value);
+            AntiDiagonal(world, i, 0, 1).object = value;
+            AntiDiagonal(world, i, 1, 0).object = value;
         }
     }
 }
@@ -96,14 +93,14 @@ std::uint32_t __fastcall GameWorld_ClearTileByte11Slice(GameWorld* world, void*,
         return first;
     }
     std::uint32_t x = 0;
-    std::uint32_t row = first * world_offset::kTileBytes + kTileByte11;
+    std::uint32_t row = TileOffset(0, first);  // 32-bit tile offsets, stepped like the original
     for (std::uint32_t y = first; y < MapSize(world); y += kSliceRows) {
         std::uint32_t tile = row;
         for (x = 0; x < MapSize(world); ++x) {
-            SetByte(world, tile, 0);
-            tile += world_offset::kMapRowBytes;
+            TileAtOffset(world, tile).slice_byte = 0;
+            tile += kTileRowBytes;
         }
-        row += kSliceRows * world_offset::kTileBytes;
+        row += kSliceRows * kTileBytes;
     }
     return x;
 }
@@ -122,8 +119,8 @@ S3RE_HOOK(0x00518ec0, GameWorld_ClearTileByte11Slice, SliceFn,
 namespace {
 
 constexpr std::uint32_t kTestMapSize = 384;
-constexpr std::size_t kMapWorld =
-    world_offset::kMapTiles + (kTestMapSize + 1) * world_offset::kMapRowBytes;
+constexpr std::size_t kMapTilesOffset = offsetof(GameWorld, tiles);
+constexpr std::size_t kMapWorld = kMapTilesOffset + (kTestMapSize + 1) * kTileRowBytes;
 
 std::uint32_t TestMapSize(test::Context& ctx) {
     // Never 0: the anti-diagonal loop would then run 2^32 times (in both).
@@ -136,7 +133,7 @@ void CompareDiagonals(test::Context& ctx, FlagsFn original, FlagsFn candidate, i
     test::WorldPair worlds(ctx, kMapWorld);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = TestMapSize(ctx);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         const std::uint32_t flags = ctx.rng().Next32();
         original(worlds.original(), nullptr, flags);
         candidate(worlds.ours(), nullptr, flags);
@@ -146,8 +143,7 @@ void CompareDiagonals(test::Context& ctx, FlagsFn original, FlagsFn candidate, i
         }
         // Undo the marks now and then so both values keep being visible.
         if (i % 8 == 7) {
-            ctx.rng().Fill(worlds.originalBytes() + world_offset::kMapTiles,
-                           kMapWorld - world_offset::kMapTiles);
+            ctx.rng().Fill(worlds.originalBytes() + kMapTilesOffset, kMapWorld - kMapTilesOffset);
             std::memcpy(worlds.oursBytes(), worlds.originalBytes(), kMapWorld);
         }
     }
@@ -157,7 +153,7 @@ void CompareSlice(test::Context& ctx, SliceFn original, SliceFn candidate, int c
     test::WorldPair worlds(ctx, kMapWorld);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = TestMapSize(ctx);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         const std::uint32_t first =
             ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(size + 9);
         const std::uint32_t expected = original(worlds.original(), nullptr, first);
@@ -167,8 +163,7 @@ void CompareSlice(test::Context& ctx, SliceFn original, SliceFn candidate, int c
             return;
         }
         if (i % 8 == 7) {
-            ctx.rng().Fill(worlds.originalBytes() + world_offset::kMapTiles,
-                           kMapWorld - world_offset::kMapTiles);
+            ctx.rng().Fill(worlds.originalBytes() + kMapTilesOffset, kMapWorld - kMapTilesOffset);
             std::memcpy(worlds.oursBytes(), worlds.originalBytes(), kMapWorld);
         }
     }
@@ -178,9 +173,9 @@ void CompareSlice(test::Context& ctx, SliceFn original, SliceFn candidate, int c
 void __fastcall WrongSetDiagonalTileByteB(GameWorld* world, void*, std::uint32_t flags) {
     if ((flags & 2) != 0 && MapSize(world) > 1) {
         const std::uint32_t last = MapSize(world) - 2;
-        const std::uint8_t keepA = reinterpret_cast<std::uint8_t*>(world)[AntiDiagonal(world, last, kTileByteBUp2)];
+        const std::uint8_t keepA = AntiDiagonal(world, last, 0, 1).object;
         GameWorld_SetDiagonalTileByteB(world, nullptr, flags);
-        SetByte(world, AntiDiagonal(world, last, kTileByteBUp2), keepA);
+        AntiDiagonal(world, last, 0, 1).object = keepA;
         return;
     }
     GameWorld_SetDiagonalTileByteB(world, nullptr, flags);

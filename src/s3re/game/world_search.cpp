@@ -12,7 +12,8 @@
 //   x0 >= x1, y0 >= y1:  max(x0 - x1, y0 - y1)
 //
 // GameWorld::NextSearchGeneration (0x004ff3f0): searches mark visited tiles
-// by writing the current generation into tile byte 15, so starting a search
+// by writing the current generation into tile byte 15 (counted from a tile
+// base of 0x67440; Tile::search_mark at the real base), so starting a search
 // is just "generation + 1" instead of clearing the whole map. When the 8-bit
 // generation wraps to 0, every tile's mark is cleared and the generation
 // restarts at 1. Also resets the byte after the generation (a counter that
@@ -60,20 +61,18 @@ using NextSearchGenerationFn = void(__fastcall*)(GameWorld* world, void* edx);
 // every search, the game uses a new mark number per search; this starts the next one, and only
 // clears the marks when the number runs out.
 void __fastcall GameWorld_NextSearchGeneration(GameWorld* world, void* /*edx*/) {
-    using namespace world_offset;
-    auto& generation = WorldField<std::uint8_t>(world, kSearchGeneration);
-    WorldField<std::uint8_t>(world, kSearchGenerationAux) = 0;
+    auto& generation = world->search_generation;
+    world->draw_call_counter = 0;
     ++generation;
     if (generation != 0) {
         return;
     }
     // Wrapped around: forget all marks. mapSize is a signed int in the
     // original's loop conditions.
-    const auto mapSize = WorldField<std::int32_t>(world, kMapSize);
+    const auto mapSize = static_cast<std::int32_t>(world->map_size);
     for (std::int32_t y = 0; y < mapSize; ++y) {
         for (std::int32_t x = 0; x < mapSize; ++x) {
-            WorldField<std::uint8_t>(world, kMapTiles + x * kMapRowBytes + y * kTileBytes +
-                                                kTileSearchMark) = 0;
+            world->tiles[x][y].search_mark = 0;
         }
     }
     generation = 1;
@@ -140,18 +139,16 @@ namespace {
 // A world buffer reaching to the end of the tile rows of a map of `mapSize`
 // (at least past the generation bytes). Byte 0 of the buffer is world+0.
 std::size_t WorldBytesForMap(std::int32_t mapSize) {
-    using namespace world_offset;
     const std::size_t rows = mapSize > 0 ? static_cast<std::size_t>(mapSize) : 0;
-    return kMapTiles + (rows + 1) * kMapRowBytes;
+    return offsetof(GameWorld, tiles) + (rows + 1) * kTileRowBytes;
 }
 
 void CompareNextSearchGeneration(test::Context& ctx, NextSearchGenerationFn candidate,
                                  int cases, std::int32_t maxMapSize, int bigMapCases) {
-    using namespace world_offset;
     for (int i = 0; i < cases + bigMapCases; ++i) {
         std::int32_t mapSize;
         if (i >= cases) {
-            mapSize = static_cast<std::int32_t>(kMapRowTiles);  // the largest map
+            mapSize = static_cast<std::int32_t>(layout::kMapRowTiles);  // the largest map
         } else if (ctx.rng().Chance(1, 10)) {
             mapSize = ctx.rng().Range(-3, 0);  // empty / invalid
         } else {
@@ -160,11 +157,12 @@ void CompareNextSearchGeneration(test::Context& ctx, NextSearchGenerationFn cand
         const std::size_t size = WorldBytesForMap(mapSize);
         std::vector<std::uint8_t> a(size);
         ctx.rng().Fill(a.data(), size);
+        GameWorld* worldA = reinterpret_cast<GameWorld*>(a.data());
         // Half the cases at the wrap-around.
-        a[kSearchGeneration] = ctx.rng().Chance(1, 2) ? 0xFF
-                                                      : static_cast<std::uint8_t>(
-                                                            ctx.rng().Below(256));
-        std::memcpy(&a[kMapSize], &mapSize, sizeof(mapSize));
+        worldA->search_generation = ctx.rng().Chance(1, 2) ? 0xFF
+                                                           : static_cast<std::uint8_t>(
+                                                                 ctx.rng().Below(256));
+        worldA->map_size = static_cast<std::uint32_t>(mapSize);
         std::vector<std::uint8_t> b = a;
 
         Original_GameWorld_NextSearchGeneration(reinterpret_cast<GameWorld*>(a.data()), nullptr);
@@ -179,7 +177,7 @@ void CompareNextSearchGeneration(test::Context& ctx, NextSearchGenerationFn cand
 // Wrong: after the wrap-around the generation restarts at 0 instead of 1.
 void __fastcall WrongNextSearchGeneration(GameWorld* world, void* edx) {
     GameWorld_NextSearchGeneration(world, edx);
-    auto& generation = WorldField<std::uint8_t>(world, world_offset::kSearchGeneration);
+    auto& generation = world->search_generation;
     if (generation == 1) {
         generation = 0;
     }

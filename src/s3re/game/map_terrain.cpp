@@ -2,7 +2,8 @@
 //
 // Tile fields used here (tile (x, y) at world+0x67444 + (x*0x300 + y)*24):
 // +0x6 terrain type (the high nibble is non-zero for land a player can own),
-// +0x8 owner (player, 0xff = none), +0x9 flags (0x40 = territory border).
+// +0x8 owner (player, 0xff = none), +0x9 draw_flags (0x40 = territory
+// border, kTileDrawBorder).
 //
 // GameWorld::ReplaceTerrainF3 (0x0051a400): (newType): calls
 //   GameWorld::ReplaceTerrainType(0xf3, newType) and returns its EAX. Used
@@ -47,30 +48,23 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kTileTerrain = 0x6;
-constexpr std::uint32_t kTileOwner = 0x8;
-constexpr std::uint32_t kTileFlags9 = 0x9;
-constexpr std::uint8_t kBorderFlag = 0x40;
+using layout::Tile;
+
+constexpr std::uint8_t kBorderFlag = layout::kTileDrawBorder;
 constexpr std::uint32_t kNoOwner = 0xff;
-constexpr std::uint32_t kOffsetTable = 0x110a588;  // int32 dx, int32 dy, 16-byte stride
-constexpr std::uint32_t kOffsetTableBytes = 0x10;
-constexpr std::uint32_t kAroundEntries = 7;
+constexpr std::uint32_t kAroundEntries = 7;  // world->offsets[0..6]
 
-constexpr std::int32_t kRow = 0x300 * 24;  // x + 1
-constexpr std::int32_t kColumn = 24;       // y + 1
-
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(world) + offset);
-}
-
-std::uint32_t Tile(std::uint32_t x, std::uint32_t y) {
-    return kTiles + (x * 0x300 + y) * 24;
-}
+// Tiles are carried as 32-bit byte offsets from the world (TileOffset) and
+// stepped to their neighbours like in the original.
+constexpr std::int32_t kRow = static_cast<std::int32_t>(kTileRowBytes);  // x + 1
+constexpr std::int32_t kColumn = static_cast<std::int32_t>(kTileBytes);   // y + 1
 
 std::uint32_t Terrain(GameWorld* world, std::uint32_t tile) {
-    return At<std::uint8_t>(world, tile + kTileTerrain);
+    return TileAtOffset(world, tile).terrain;
+}
+
+Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+    return TileAtOffset(world, TileOffset(x, y));
 }
 
 }  // namespace
@@ -92,10 +86,10 @@ std::uint32_t __fastcall GameWorld_ReplaceTerrainF3(GameWorld* world, void*, std
 std::uint32_t __fastcall GameWorld_SpreadTerrainRandomly(GameWorld* world, void*, std::uint32_t from,
                                                          std::uint32_t neighbour, std::uint32_t to,
                                                          std::uint32_t percent) {
-    auto last = [&] { return static_cast<std::int32_t>(At<std::uint32_t>(world, world_offset::kMapSize) - 1); };
+    auto last = [&] { return static_cast<std::int32_t>(world->map_size - 1); };
     for (std::int32_t x = 1; x < last(); ++x) {
         for (std::int32_t y = 1; y < last(); ++y) {
-            const std::uint32_t tile = Tile(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
+            const std::uint32_t tile = TileOffset(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
             if (Terrain(world, tile) != from) {
                 continue;
             }
@@ -108,11 +102,11 @@ std::uint32_t __fastcall GameWorld_SpreadTerrainRandomly(GameWorld* world, void*
             }
             const std::int32_t roll = static_cast<std::int32_t>((GameWorld_Random(world, nullptr) & 0xffffu) * 100u) >> 16;
             if (roll < static_cast<std::int32_t>(percent)) {
-                At<std::uint8_t>(world, tile + kTileTerrain) = static_cast<std::uint8_t>(to);
+                TileAtOffset(world, tile).terrain = static_cast<std::uint8_t>(to);
             }
         }
     }
-    return At<std::uint32_t>(world, world_offset::kMapSize) - 1;
+    return world->map_size - 1;
 }
 
 // Purpose: Updates the 'territory border' mark of a tile and its neighbours: a tile is on the border if it
@@ -122,26 +116,25 @@ std::uint32_t __fastcall GameWorld_UpdateBorderFlagsAround(GameWorld* world, voi
                                                            std::uint32_t y) {
     static constexpr std::int32_t kNeighbours[6] = {kRow, kRow + kColumn, kColumn, -kRow, -kRow - kColumn, -kColumn};
     for (std::uint32_t entry = 0; entry < kAroundEntries; ++entry) {
-        const std::uint32_t at = kOffsetTable + entry * kOffsetTableBytes;
-        const std::uint32_t tx = x + At<std::uint32_t>(world, at);
-        const std::uint32_t ty = y + At<std::uint32_t>(world, at + 4);
+        const std::uint32_t tx = x + static_cast<std::uint32_t>(world->offsets[entry].dx);
+        const std::uint32_t ty = y + static_cast<std::uint32_t>(world->offsets[entry].dy);
         if (!GameWorld_IsInsideMapBorder(world, nullptr, tx, ty)) {
             continue;
         }
-        const std::uint32_t tile = Tile(tx, ty);
-        const std::uint32_t owner = At<std::uint8_t>(world, tile + kTileOwner);
+        const std::uint32_t tile = TileOffset(tx, ty);
+        const std::uint32_t owner = TileAtOffset(world, tile).owner;
         bool border = false;
         if ((Terrain(world, tile) & 0xf0) != 0 && owner != kNoOwner) {
             for (const std::int32_t step : kNeighbours) {
                 const std::uint32_t neighbour = tile + step;
-                if (At<std::uint8_t>(world, neighbour + kTileOwner) != owner &&
+                if (TileAtOffset(world, neighbour).owner != owner &&
                     (Terrain(world, neighbour) & 0xf0) != 0) {
                     border = true;
                     break;
                 }
             }
         }
-        std::uint8_t& flags = At<std::uint8_t>(world, tile + kTileFlags9);
+        std::uint8_t& flags = TileAtOffset(world, tile).draw_flags;
         flags = border ? static_cast<std::uint8_t>(flags | kBorderFlag) : static_cast<std::uint8_t>(flags & ~kBorderFlag);
     }
     return 0;
@@ -169,7 +162,7 @@ std::uint32_t __fastcall GameWorld_GrowTerrain(GameWorld* world, void*, std::uin
 // Purpose: Recomputes the territory border marks of the whole map (e.g. at game start or after big
 // territory changes).
 std::uint32_t __fastcall GameWorld_UpdateAllBorderFlags(GameWorld* world, void*) {
-    auto size = [&] { return At<std::uint32_t>(world, world_offset::kMapSize); };
+    auto size = [&] { return world->map_size; };
     for (std::uint32_t x = 0; x < size(); ++x) {
         for (std::uint32_t y = 0; y < size(); ++y) {
             GameWorld_UpdateBorderFlagsAround(world, nullptr, x, y);
@@ -188,7 +181,7 @@ S3RE_HOOK(0x0051a420, GameWorld_UpdateAllBorderFlags, NoArgsFn, Original_GameWor
 
 namespace {
 
-constexpr std::size_t kTestWorld = kOffsetTable + 64 * kOffsetTableBytes;
+constexpr std::size_t kTestWorld = offsetof(GameWorld, offsets) + 64 * sizeof(layout::MapOffset);
 
 // The real offset table starts with the tile itself and its six
 // neighbours; tests use that, sometimes with a random entry.
@@ -201,8 +194,10 @@ void SetUpOffsets(test::Context& ctx, test::WorldPair& worlds) {
             dx = ctx.rng().Range(-3, 3);
             dy = ctx.rng().Range(-3, 3);
         }
-        worlds.Set<std::int32_t>(kOffsetTable + i * kOffsetTableBytes, dx);
-        worlds.Set<std::int32_t>(kOffsetTable + i * kOffsetTableBytes + 4, dy);
+        worlds.Both([&](GameWorld* w) {
+            w->offsets[i].dx = dx;
+            w->offsets[i].dy = dy;
+        });
     }
 }
 
@@ -217,12 +212,11 @@ void SetUpTerritory(test::Context& ctx, test::WorldPair& worlds, std::uint32_t s
             if (tx >= size || ty >= size) {
                 continue;
             }
-            const std::uint32_t tile = Tile(tx, ty);
             const std::uint32_t owner = ctx.rng().Chance(1, 6) ? kNoOwner : ctx.rng().Below(3);
-            worlds.Set<std::uint8_t>(tile + kTileOwner, static_cast<std::uint8_t>(owner));
+            worlds.Both([&](GameWorld* w) { TileAt(w, tx, ty).owner = static_cast<std::uint8_t>(owner); });
             const std::uint8_t terrain = static_cast<std::uint8_t>(ctx.rng().Next32());
-            worlds.Set<std::uint8_t>(tile + kTileTerrain,
-                                     ctx.rng().Chance(1, 5) ? static_cast<std::uint8_t>(terrain & 0x0f) : terrain);
+            const std::uint8_t stored = ctx.rng().Chance(1, 5) ? static_cast<std::uint8_t>(terrain & 0x0f) : terrain;
+            worlds.Both([&](GameWorld* w) { TileAt(w, tx, ty).terrain = stored; });
         }
     }
 }
@@ -232,21 +226,20 @@ std::uint32_t __fastcall WrongUpdateBorderFlagsAround(GameWorld* world, void*, s
                                                       std::uint32_t y) {
     static constexpr std::int32_t kNeighbours[6] = {kRow, kRow + kColumn, kColumn, -kRow, -kRow - kColumn, -kColumn};
     for (std::uint32_t entry = 0; entry < kAroundEntries; ++entry) {
-        const std::uint32_t at = kOffsetTable + entry * kOffsetTableBytes;
-        const std::uint32_t tx = x + At<std::uint32_t>(world, at);
-        const std::uint32_t ty = y + At<std::uint32_t>(world, at + 4);
+        const std::uint32_t tx = x + static_cast<std::uint32_t>(world->offsets[entry].dx);
+        const std::uint32_t ty = y + static_cast<std::uint32_t>(world->offsets[entry].dy);
         if (!GameWorld_IsInsideMapBorder(world, nullptr, tx, ty)) {
             continue;
         }
-        const std::uint32_t tile = Tile(tx, ty);
-        const std::uint32_t owner = At<std::uint8_t>(world, tile + kTileOwner);
+        const std::uint32_t tile = TileOffset(tx, ty);
+        const std::uint32_t owner = TileAtOffset(world, tile).owner;
         bool border = false;
         if ((Terrain(world, tile) & 0xf0) != 0 && owner != kNoOwner) {
             for (const std::int32_t step : kNeighbours) {
-                border = border || At<std::uint8_t>(world, tile + step + kTileOwner) != owner;
+                border = border || TileAtOffset(world, tile + step).owner != owner;
             }
         }
-        std::uint8_t& flags = At<std::uint8_t>(world, tile + kTileFlags9);
+        std::uint8_t& flags = TileAtOffset(world, tile).draw_flags;
         flags = border ? static_cast<std::uint8_t>(flags | kBorderFlag) : static_cast<std::uint8_t>(flags & ~kBorderFlag);
     }
     return 0;
@@ -256,7 +249,7 @@ void CompareBorderFlags(test::Context& ctx, AroundFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : 8 + ctx.rng().Below(40);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         // Anywhere on the map; the edges often on the small maps.
         const std::uint32_t x = ctx.rng().Below(size);
         const std::uint32_t y = ctx.rng().Below(size);
@@ -286,12 +279,13 @@ S3RE_TEST(GameWorld_SpreadTerrainRandomly_MatchesOriginal) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < 40; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 4) ? 384 : ctx.rng().Below(60);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         // Few terrain types, so tiles match often.
         const std::uint32_t limit = size < 384 ? size + 1 : 384;
         for (std::uint32_t x = 0; x < limit; ++x) {
             for (std::uint32_t y = 0; y < limit; ++y) {
-                worlds.Set<std::uint8_t>(Tile(x, y) + kTileTerrain, static_cast<std::uint8_t>(ctx.rng().Below(4)));
+                const auto terrain = static_cast<std::uint8_t>(ctx.rng().Below(4));
+                worlds.Both([&](GameWorld* w) { TileAt(w, x, y).terrain = terrain; });
             }
         }
         const std::uint32_t from = ctx.rng().Below(4);
@@ -301,8 +295,13 @@ S3RE_TEST(GameWorld_SpreadTerrainRandomly_MatchesOriginal) {
             to |= ctx.rng().Next32() & ~0xffu;
         }
         const std::uint32_t percent = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(110);
-        worlds.Set<std::uint16_t>(world_offset::kRandomState, static_cast<std::uint16_t>(ctx.rng().Next32()));
-        worlds.Set<std::uint32_t>(world_offset::kRandomState + 2, ctx.rng().Next32());
+        const auto a = static_cast<std::uint16_t>(ctx.rng().Next32());
+        const std::uint32_t bc = ctx.rng().Next32();
+        worlds.Both([&](GameWorld* w) {
+            w->random_state[0] = a;
+            w->random_state[1] = static_cast<std::uint16_t>(bc);
+            w->random_state[2] = static_cast<std::uint16_t>(bc >> 16);
+        });
         const std::uint32_t expected =
             Original_GameWorld_SpreadTerrainRandomly(worlds.original(), nullptr, from, neighbour, to, percent);
         const std::uint32_t actual = GameWorld_SpreadTerrainRandomly(worlds.ours(), nullptr, from, neighbour, to, percent);
@@ -318,11 +317,11 @@ S3RE_TEST(GameWorld_ReplaceTerrainF3_MatchesOriginal) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < 20; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 4) ? 384 : ctx.rng().Below(60);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         for (std::uint32_t x = 0; x < 64; ++x) {
             for (std::uint32_t y = 0; y < 64; ++y) {
                 if (ctx.rng().Chance(1, 3)) {
-                    worlds.Set<std::uint8_t>(Tile(x, y) + kTileTerrain, 0xf3);
+                    worlds.Both([&](GameWorld* w) { TileAt(w, x, y).terrain = 0xf3; });
                 }
             }
         }
@@ -340,17 +339,22 @@ S3RE_TEST(GameWorld_GrowTerrain_MatchesOriginal) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < 30; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 4) ? 384 : ctx.rng().Below(60);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         const std::uint32_t limit = size < 384 ? size + 1 : 384;
         for (std::uint32_t x = 0; x < limit; ++x) {
             for (std::uint32_t y = 0; y < limit; ++y) {
-                worlds.Set<std::uint8_t>(Tile(x, y) + kTileTerrain, static_cast<std::uint8_t>(ctx.rng().Below(4)));
+                const auto terrain = static_cast<std::uint8_t>(ctx.rng().Below(4));
+                worlds.Both([&](GameWorld* w) { TileAt(w, x, y).terrain = terrain; });
             }
         }
         const std::uint32_t from = ctx.rng().Below(4);
         const std::uint32_t into = ctx.rng().Below(4);
         const std::uint32_t percent = ctx.rng().Below(110);
-        worlds.Set<std::uint32_t>(world_offset::kRandomState, ctx.rng().Next32());
+        const std::uint32_t ab = ctx.rng().Next32();
+        worlds.Both([&](GameWorld* w) {
+            w->random_state[0] = static_cast<std::uint16_t>(ab);
+            w->random_state[1] = static_cast<std::uint16_t>(ab >> 16);
+        });
         const std::uint32_t expected = Original_GameWorld_GrowTerrain(worlds.original(), nullptr, from, into, percent);
         const std::uint32_t actual = GameWorld_GrowTerrain(worlds.ours(), nullptr, from, into, percent);
         if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Checkpoint(ctx)) {
@@ -364,7 +368,7 @@ S3RE_TEST(GameWorld_UpdateAllBorderFlags_MatchesOriginal) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < 12; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 3) ? 384 : ctx.rng().Below(80);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         SetUpOffsets(ctx, worlds);
         const std::uint32_t limit = size < 384 ? size : 384;
         for (std::uint32_t x = 0; x < limit; x += 7) {
@@ -396,10 +400,10 @@ using TileShadeFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std:
 // Purpose: How light a tile is drawn: computed from the slope of the land around it (probably the
 // landscape's lighting, so hills look three-dimensional).
 std::uint32_t __fastcall GameWorld_TileShade(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24 + 0x4;  // height byte
-    const std::int32_t own = At<std::uint8_t>(world, tile);
+    const std::uint32_t tile = TileOffset(x, y);
+    const std::int32_t own = TileAtOffset(world, tile).height;
     auto f = [&](std::int32_t step) {
-        const std::int32_t d = At<std::uint8_t>(world, tile + static_cast<std::uint32_t>(step)) - own;
+        const std::int32_t d = TileAtOffset(world, tile + static_cast<std::uint32_t>(step)).height - own;
         return d > 4 ? d + 4 : d < -4 ? d - 4 : 2 * d;
     };
     const std::int32_t sum = 2 * (f(-kColumn) - f(kColumn)) - f(kRow + kColumn) - f(-kRow) + f(kRow) +
@@ -424,7 +428,7 @@ void CompareTileShade(test::Context& ctx, TileShadeFn candidate, int cases) {
         for (std::uint32_t dx = 0; dx < 3; ++dx) {
             for (std::uint32_t dy = 0; dy < 3; ++dy) {
                 const std::uint32_t h = wide ? ctx.rng().Below(256) : (base + ctx.rng().Below(25)) & 0xff;
-                worlds.Set<std::uint8_t>(kTiles + ((x + dx - 1) * 0x300 + (y + dy - 1)) * 24 + 0x4, static_cast<std::uint8_t>(h));
+                worlds.Both([&](GameWorld* w) { TileAt(w, x + dx - 1, y + dy - 1).height = static_cast<std::uint8_t>(h); });
             }
         }
         const std::uint32_t expected = Original_GameWorld_TileShade(worlds.original(), nullptr, x, y);
@@ -438,10 +442,10 @@ void CompareTileShade(test::Context& ctx, TileShadeFn candidate, int cases) {
 
 // Wrong: rounds toward minus infinity (arithmetic shift) instead of toward zero.
 std::uint32_t __fastcall WrongTileShade(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24 + 0x4;
-    const std::int32_t own = At<std::uint8_t>(world, tile);
+    const std::uint32_t tile = TileOffset(x, y);
+    const std::int32_t own = TileAtOffset(world, tile).height;
     auto f = [&](std::int32_t step) {
-        const std::int32_t d = At<std::uint8_t>(world, tile + static_cast<std::uint32_t>(step)) - own;
+        const std::int32_t d = TileAtOffset(world, tile + static_cast<std::uint32_t>(step)).height - own;
         return d > 4 ? d + 4 : d < -4 ? d - 4 : 2 * d;
     };
     const std::int32_t sum = 2 * (f(-kColumn) - f(kColumn)) - f(kRow + kColumn) - f(-kRow) + f(kRow) +

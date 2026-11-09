@@ -27,20 +27,30 @@ namespace s3re::game {
 namespace {
 
 struct IdTable {
-    std::size_t highWaterMark;
-    std::size_t inUse;
+    std::uint32_t& (*highWaterMark)(GameWorld* world);
+    std::uint8_t* (*inUse)(GameWorld* world);
     std::uint32_t size;
+    std::size_t inUseOffset;  // for sizing test buffers
 };
 
-constexpr IdTable kIds256{0xe114d8, 0xe114dc, 0x100};
-constexpr IdTable kIds4096{0xe115e0, 0xe115e4, 0x1000};
-constexpr IdTable kIds8192{0xe125e4, 0xe125e8, 0x2000};
+constexpr IdTable kIds256{[](GameWorld* w) -> std::uint32_t& { return w->walk_region_high_water; },
+                          [](GameWorld* w) { return w->walk_region_used; }, 0x100,
+                          offsetof(GameWorld, walk_region_used)};
+constexpr IdTable kIds4096{[](GameWorld* w) -> std::uint32_t& { return w->ids4096_high_water; },
+                           [](GameWorld* w) { return w->ids4096_used; }, 0x1000,
+                           offsetof(GameWorld, ids4096_used)};
+constexpr IdTable kIds8192{[](GameWorld* w) -> std::uint32_t& { return w->wide_region_high_water; },
+                           [](GameWorld* w) { return w->wide_region_used; }, 0x2000,
+                           offsetof(GameWorld, wide_region_used)};
+static_assert(sizeof(GameWorld::walk_region_used) == 0x100);
+static_assert(sizeof(GameWorld::ids4096_used) == 0x1000);
+static_assert(sizeof(GameWorld::wide_region_used) == 0x2000);
 
 std::uint32_t FindFreeId(GameWorld* world, const IdTable& table) {
-    const std::uint8_t* inUse = &WorldField<std::uint8_t>(world, table.inUse);
+    const std::uint8_t* inUse = table.inUse(world);
     for (std::uint32_t id = 1; id < table.size - 1; ++id) {
         if (inUse[id] == 0) {
-            auto& mark = WorldField<std::uint32_t>(world, table.highWaterMark);
+            auto& mark = table.highWaterMark(world);
             if (id > mark) {
                 mark = id;
             }
@@ -89,7 +99,7 @@ namespace {
 // with the high-water mark below or above it.
 void CompareFindFreeId(test::Context& ctx, const IdTable& table, FindFreeIdFn original,
                        FindFreeIdFn candidate, int cases) {
-    test::WorldPair worlds(ctx, table.inUse + table.size + 0x100);
+    test::WorldPair worlds(ctx, table.inUseOffset + table.size + 0x100);
     for (int i = 0; i < cases; ++i) {
         std::uint32_t firstFree;
         switch (ctx.rng().Below(4)) {
@@ -107,15 +117,16 @@ void CompareFindFreeId(test::Context& ctx, const IdTable& table, FindFreeIdFn or
             const auto used = static_cast<std::uint8_t>(1 + ctx.rng().Below(255));
             const bool free = id == firstFree || (id > firstFree && ctx.rng().Chance(1, 2));
             const std::uint32_t value = free ? 0 : (id == 0 ? ctx.rng().Below(2) : used);
-            worlds.Set<std::uint8_t>(table.inUse + id, static_cast<std::uint8_t>(value));
+            // Ids up to size+3 lie past the table (in the next field), as before.
+            worlds.Both([&](GameWorld* w) { table.inUse(w)[id] = static_cast<std::uint8_t>(value); });
         }
         const std::uint32_t mark = ctx.rng().Chance(1, 2)
                                        ? firstFree + static_cast<std::uint32_t>(ctx.rng().Range(-2, 2))
                                        : ctx.rng().Next32();
-        worlds.Set<std::uint32_t>(table.highWaterMark, mark);
+        worlds.Both([&](GameWorld* w) { table.highWaterMark(w) = mark; });
         const std::uint32_t expected = original(worlds.original(), nullptr);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr);
-        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, table.highWaterMark, 4) ||
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return table.highWaterMark(w); }) ||
             (i % 64 == 63 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: first free %u, mark %u", i, firstFree, mark);
             return;
@@ -126,7 +137,7 @@ void CompareFindFreeId(test::Context& ctx, const IdTable& table, FindFreeIdFn or
 
 // Wrong: also hands out the last id.
 std::uint32_t __fastcall WrongFindFreeId256(GameWorld* world, void*) {
-    return FindFreeId(world, IdTable{kIds256.highWaterMark, kIds256.inUse, kIds256.size + 1});
+    return FindFreeId(world, IdTable{kIds256.highWaterMark, kIds256.inUse, kIds256.size + 1, kIds256.inUseOffset});
 }
 
 }  // namespace

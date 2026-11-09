@@ -28,19 +28,8 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kPresenceMax = 0xde7444;
-constexpr std::uint32_t kPresence = 0xde7448;
-constexpr std::uint32_t kPresenceRowBytes = 960;  // 48 blocks
-constexpr std::uint32_t kPresenceBlockBytes = 20;
-
-constexpr std::uint32_t kPlayerRecords = 0x11943dc;
-constexpr std::uint32_t kPlayerRecordBytes = 0x148;
-constexpr std::uint32_t kPlayerOwnIndex = 0xc;
-
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(world) + offset);
-}
+// presence_a[bx][by]: 48 blocks per row of 0x300 tiles.
+static_assert(sizeof(GameWorld::presence_a[0]) == 960);
 
 }  // namespace
 
@@ -54,20 +43,22 @@ std::uint32_t __fastcall GameWorld_IsOtherPlayerNear(GameWorld* world, void*, st
     if (!GameWorld_IsOnMap(world, nullptr, x, y)) {
         return 0;
     }
-    const std::uint32_t size = At<std::uint32_t>(world, world_offset::kMapSize);
+    const std::uint32_t size = world->map_size;
     const std::uint32_t x0 = x >= radius ? x - radius : 0;
     const std::uint32_t x1 = x < size - radius ? x + radius : size - 1;
     const std::uint32_t y0 = y >= radius ? y - radius : 0;
     const std::uint32_t y1 = y < size - radius ? y + radius : size - 1;
-    const std::uint32_t own = At<std::uint32_t>(world, kPlayerRecords + player * kPlayerRecordBytes + kPlayerOwnIndex);
+    const auto own = static_cast<std::uint32_t>(world->players[player].presence_index);
     // The original walks the blocks with y outermost and checks for a find
     // before each block; the scan has no side effects, so any order gives
     // the same answer.
     for (std::uint32_t by = y0 >> 4; by <= y1 >> 4; ++by) {
         for (std::uint32_t bx = x0 >> 4; bx <= x1 >> 4; ++bx) {
-            const std::uint32_t block = kPresence + bx * kPresenceRowBytes + by * kPresenceBlockBytes;
-            for (std::uint32_t index = 0; index <= At<std::uint32_t>(world, kPresenceMax); ++index) {
-                if (index != own && At<std::uint8_t>(world, block + index) != 0) {
+            // index runs up to presence_max_player (re-read each step), which
+            // may lie past the block's 20 bytes; the original reads on.
+            const std::uint8_t* block = world->presence_a[bx][by].player;
+            for (std::uint32_t index = 0; index <= world->presence_max_player; ++index) {
+                if (index != own && block[index] != 0) {
                     return 1;
                 }
             }
@@ -85,12 +76,12 @@ S3RE_HOOK(0x00510650, GameWorld_IsOtherPlayerNear, NearFn, Original_GameWorld_Is
 
 namespace {
 
-constexpr std::size_t kTestWorld = kPlayerRecords + 21 * kPlayerRecordBytes;
+constexpr std::size_t kTestWorld = offsetof(GameWorld, players) + 21 * sizeof(layout::Player);
 
 // Wrong: does not clamp the far edge to the map.
 std::uint32_t __fastcall WrongIsOtherPlayerNear(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                 std::uint32_t radius, std::uint32_t player) {
-    std::uint32_t& size = At<std::uint32_t>(world, world_offset::kMapSize);
+    std::uint32_t& size = world->map_size;
     const std::uint32_t saved = size;
     if (!GameWorld_IsOnMap(world, edx, x, y)) {
         return 0;
@@ -105,22 +96,22 @@ void CompareIsOtherPlayerNear(test::Context& ctx, NearFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : 16 + ctx.rng().Below(368);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         const std::uint32_t players = ctx.rng().Below(20);
-        worlds.Set<std::uint32_t>(kPresenceMax, players);
+        worlds.Both([&](GameWorld* w) { w->presence_max_player = players; });
         // Sparse presence: mostly zero bytes, a few players here and there.
         const std::uint32_t density = ctx.rng().Below(64);
         for (std::uint32_t bx = 0; bx < 26; ++bx) {
             for (std::uint32_t by = 0; by < 26; ++by) {
                 for (std::uint32_t index = 0; index < 20; ++index) {
-                    worlds.Set<std::uint8_t>(kPresence + bx * kPresenceRowBytes + by * kPresenceBlockBytes + index,
-                                             static_cast<std::uint8_t>(ctx.rng().Below(1024) < density ? 1 : 0));
+                    const auto value = static_cast<std::uint8_t>(ctx.rng().Below(1024) < density ? 1 : 0);
+                    worlds.Both([&](GameWorld* w) { w->presence_a[bx][by].player[index] = value; });
                 }
             }
         }
         const std::uint32_t player = ctx.rng().Below(20);
-        worlds.Set<std::uint32_t>(kPlayerRecords + player * kPlayerRecordBytes + kPlayerOwnIndex,
-                                  ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(20));
+        const std::uint32_t ownIndex = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(20);
+        worlds.Both([&](GameWorld* w) { w->players[player].presence_index = static_cast<std::int32_t>(ownIndex); });
         std::uint32_t x = ctx.rng().Below(size);
         std::uint32_t y = ctx.rng().Below(size);
         if (ctx.rng().Chance(1, 16)) {
