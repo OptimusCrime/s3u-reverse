@@ -18,7 +18,7 @@
 // Set (0x2: 0x004df690, 0x4: 0x004df730, 0x8: 0x004df7d0,
 // 0x10: 0x004df850), argument: building index. Does nothing unless
 //   - bit 0x2: byte +0x19 differs from byte +0x1 of the 14-byte record
-//     (world+0x123885c) selected by word +0x10;
+//     (world+0x123885c, a Pile: its amount) selected by word +0x10 (piles[0]);
 //     bit 0x4: likewise byte +0x1a and word +0x12;
 //     bit 0x10: byte +0x21 is 1;
 //   - the player's +0x24 counter is below 10, and
@@ -34,110 +34,84 @@
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <initializer_list>
 
 namespace s3re::game {
 
 namespace {
 
-constexpr std::size_t kBuildings = 0x1499e64;
-constexpr std::size_t kBuildingBytes = 0x3a;
-constexpr std::size_t kBuildingPlayer = 0x0;
-constexpr std::size_t kBuildingTableIndexA = 0x10;  // uint16
-constexpr std::size_t kBuildingTableIndexB = 0x12;  // uint16
-constexpr std::size_t kBuildingFlags = 0x18;
-constexpr std::size_t kBuildingValueA = 0x19;
-constexpr std::size_t kBuildingValueB = 0x1a;
-constexpr std::size_t kBuildingByte21 = 0x21;
+using layout::Building;
+using layout::Player;
 
 constexpr std::uint8_t kFlagEnabled = 0x1;
 constexpr std::uint8_t kRequestBits = 0x1e;
 
-constexpr std::size_t kPlayerRequestCount = 0x24;  // uint16, in the player record
 constexpr std::uint16_t kMaxRequestCount = 10;
 
-constexpr std::size_t kTable = 0x123885c;  // 14-byte records; byte +0x1 compared
-constexpr std::size_t kTableBytes = 14;
+// The player's building request counters live in Player::settler_lists:
+// [2] (+0x24) the number of buildings with requests, [0], [1], [3], [4]
+// (+0x20, +0x22, +0x26, +0x28) one per request bit.
+constexpr std::size_t kRequestCount = 2;
 
-std::uint8_t* Building(GameWorld* world, std::uint32_t index) {
-    return reinterpret_cast<std::uint8_t*>(world) + kBuildings + index * kBuildingBytes;
+Player& PlayerOf(GameWorld* world, const Building& building) {
+    return world->players[building.owner];
 }
 
-std::uint8_t* PlayerRecord(GameWorld* world, std::uint8_t player) {
-    return reinterpret_cast<std::uint8_t*>(world) + world_offset::kPlayerRecords +
-           player * world_offset::kPlayerRecordBytes;
-}
-
-std::uint16_t Word(const std::uint8_t* p) {
-    std::uint16_t value;
-    std::memcpy(&value, p, sizeof(value));
-    return value;
-}
-
-void SetWord(std::uint8_t* p, std::uint16_t value) {
-    std::memcpy(p, &value, sizeof(value));
-}
-
-void ClearRequest(GameWorld* world, std::uint32_t index, std::uint8_t bit,
-                  std::size_t counterField) {
-    std::uint8_t* building = Building(world, index);
-    std::uint8_t flags = building[kBuildingFlags];
+void ClearRequest(GameWorld* world, std::uint32_t index, std::uint8_t bit, std::size_t counter) {
+    Building& building = world->buildings[index];
+    std::uint8_t flags = building.request_flags;
     if ((flags & bit) == 0) {
         return;
     }
-    std::uint8_t* player = PlayerRecord(world, building[kBuildingPlayer]);
+    Player& player = PlayerOf(world, building);
     flags = static_cast<std::uint8_t>(flags & ~bit);
-    building[kBuildingFlags] = flags;
+    building.request_flags = flags;
     if ((flags & kRequestBits) == 0) {
-        SetWord(player + kPlayerRequestCount,
-                static_cast<std::uint16_t>(Word(player + kPlayerRequestCount) - 1));
+        player.settler_lists[kRequestCount] = static_cast<std::uint16_t>(player.settler_lists[kRequestCount] - 1);
     }
-    const auto counter = static_cast<std::uint16_t>(Word(player + counterField) - 1);
-    SetWord(player + counterField, counter == 0x80 ? 0 : counter);
+    const auto value = static_cast<std::uint16_t>(player.settler_lists[counter] - 1);
+    player.settler_lists[counter] = value == 0x80 ? 0 : value;
 }
 
 enum class Condition { TableA, TableB, None, Byte21IsOne };
 
-void SetRequest(GameWorld* world, std::uint32_t index, std::uint8_t bit,
-                std::size_t counterField, Condition condition) {
-    std::uint8_t* building = Building(world, index);
-    const auto* base = reinterpret_cast<const std::uint8_t*>(world);
+void SetRequest(GameWorld* world, std::uint32_t index, std::uint8_t bit, std::size_t counter,
+                Condition condition) {
+    Building& building = world->buildings[index];
     switch (condition) {
-    case Condition::TableA:
-        if (building[kBuildingValueA] ==
-            base[kTable + 1 + Word(building + kBuildingTableIndexA) * kTableBytes]) {
+    case Condition::TableA:  // byte +0x19 against the amount of pile +0x10
+        if (building.unk19 == world->piles[building.piles[0]].amount) {
             return;
         }
         break;
-    case Condition::TableB:
-        if (building[kBuildingValueB] ==
-            base[kTable + 1 + Word(building + kBuildingTableIndexB) * kTableBytes]) {
+    case Condition::TableB:  // byte +0x1a against the amount of pile +0x12
+        if (building.unk1a == world->piles[building.piles[1]].amount) {
             return;
         }
         break;
     case Condition::Byte21IsOne:
-        if (building[kBuildingByte21] != 1) {
+        if (building.buildup != 1) {
             return;
         }
         break;
     case Condition::None:
         break;
     }
-    std::uint8_t* player = PlayerRecord(world, building[kBuildingPlayer]);
-    const std::uint16_t requests = Word(player + kPlayerRequestCount);
-    if (requests >= kMaxRequestCount || (building[kBuildingFlags] & kFlagEnabled) == 0) {
+    Player& player = PlayerOf(world, building);
+    const std::uint16_t requests = player.settler_lists[kRequestCount];
+    if (requests >= kMaxRequestCount || (building.request_flags & kFlagEnabled) == 0) {
         return;
     }
-    if ((building[kBuildingFlags] & kRequestBits) == 0) {
-        SetWord(player + kPlayerRequestCount, static_cast<std::uint16_t>(requests + 1));
+    if ((building.request_flags & kRequestBits) == 0) {
+        player.settler_lists[kRequestCount] = static_cast<std::uint16_t>(requests + 1);
     }
-    if ((building[kBuildingFlags] & bit) != 0) {
+    if ((building.request_flags & bit) != 0) {
         return;
     }
-    building[kBuildingFlags] = static_cast<std::uint8_t>(building[kBuildingFlags] | bit);
-    SetWord(player + counterField, static_cast<std::uint16_t>((Word(player + counterField) | 0x80) + 1));
+    building.request_flags = static_cast<std::uint8_t>(building.request_flags | bit);
+    player.settler_lists[counter] = static_cast<std::uint16_t>((player.settler_lists[counter] | 0x80) + 1);
 }
 
 }  // namespace
@@ -147,36 +121,36 @@ using BuildingFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t 
 // Purpose: Withdraws one kind of request a building has made (one of four request bits), keeping the
 // player's request counters right. Names are provisional.
 void __fastcall GameWorld_ClearBuildingFlag02(GameWorld* world, void*, std::uint32_t b) {
-    ClearRequest(world, b, 0x02, 0x20);
+    ClearRequest(world, b, 0x02, 0);  // +0x20
 }
 // Purpose: Withdraws another kind of building request (see ClearBuildingFlag02).
 void __fastcall GameWorld_ClearBuildingFlag04(GameWorld* world, void*, std::uint32_t b) {
-    ClearRequest(world, b, 0x04, 0x22);
+    ClearRequest(world, b, 0x04, 1);  // +0x22
 }
 // Purpose: Withdraws another kind of building request (see ClearBuildingFlag02).
 void __fastcall GameWorld_ClearBuildingFlag08(GameWorld* world, void*, std::uint32_t b) {
-    ClearRequest(world, b, 0x08, 0x26);
+    ClearRequest(world, b, 0x08, 3);  // +0x26
 }
 // Purpose: Withdraws another kind of building request (see ClearBuildingFlag02).
 void __fastcall GameWorld_ClearBuildingFlag10(GameWorld* world, void*, std::uint32_t b) {
-    ClearRequest(world, b, 0x10, 0x28);
+    ClearRequest(world, b, 0x10, 4);  // +0x28
 }
 // Purpose: Makes one kind of request for a building (e.g. 'needs a worker'), if the player doesn't have too
 // many open already, and counts it. Names are provisional.
 void __fastcall GameWorld_SetBuildingFlag02(GameWorld* world, void*, std::uint32_t b) {
-    SetRequest(world, b, 0x02, 0x20, Condition::TableA);
+    SetRequest(world, b, 0x02, 0, Condition::TableA);  // +0x20
 }
 // Purpose: Makes another kind of building request (see SetBuildingFlag02).
 void __fastcall GameWorld_SetBuildingFlag04(GameWorld* world, void*, std::uint32_t b) {
-    SetRequest(world, b, 0x04, 0x22, Condition::TableB);
+    SetRequest(world, b, 0x04, 1, Condition::TableB);  // +0x22
 }
 // Purpose: Makes another kind of building request (see SetBuildingFlag02).
 void __fastcall GameWorld_SetBuildingFlag08(GameWorld* world, void*, std::uint32_t b) {
-    SetRequest(world, b, 0x08, 0x26, Condition::None);
+    SetRequest(world, b, 0x08, 3, Condition::None);  // +0x26
 }
 // Purpose: Makes another kind of building request (see SetBuildingFlag02).
 void __fastcall GameWorld_SetBuildingFlag10(GameWorld* world, void*, std::uint32_t b) {
-    SetRequest(world, b, 0x10, 0x28, Condition::Byte21IsOne);
+    SetRequest(world, b, 0x10, 4, Condition::Byte21IsOne);  // +0x28
 }
 
 S3RE_HOOK(0x004df490, GameWorld_ClearBuildingFlag02, BuildingFn,
@@ -203,7 +177,7 @@ S3RE_HOOK(0x004df850, GameWorld_SetBuildingFlag10, BuildingFn,
 namespace {
 
 constexpr std::uint32_t kTestBuildings = 2000;
-constexpr std::size_t kTestWorld = kBuildings + (kTestBuildings + 1) * kBuildingBytes + 0x100;
+constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + (kTestBuildings + 1) * sizeof(Building) + 0x100;
 
 // Runs random cases of one setter or clearer on biased building and player
 // state, comparing the building and player records after every case and the
@@ -213,43 +187,42 @@ void CompareBuildingFlag(test::Context& ctx, BuildingFn original, BuildingFn can
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t index = 1 + ctx.rng().Below(kTestBuildings);
-        const std::size_t b = kBuildings + index * kBuildingBytes;
+        auto building = [&](GameWorld* w) -> Building& { return w->buildings[index]; };
         const std::uint8_t player = static_cast<std::uint8_t>(
             ctx.rng().Chance(1, 20) ? ctx.rng().Below(256) : ctx.rng().Below(20));
-        worlds.Set<std::uint8_t>(b + kBuildingPlayer, player);
-        worlds.Set<std::uint8_t>(b + kBuildingFlags,
-                                 static_cast<std::uint8_t>(ctx.rng().Next32() &
-                                                           (ctx.rng().Chance(1, 2) ? 0x1f : 0xff)));
-        // Table lookups that match half the time.
-        for (std::size_t field : {kBuildingTableIndexA, kBuildingTableIndexB}) {
-            const auto tableIndex = static_cast<std::uint16_t>(ctx.rng().Next32());
-            worlds.Set<std::uint16_t>(b + field, tableIndex);
-            const std::size_t valueField =
-                field == kBuildingTableIndexA ? kBuildingValueA : kBuildingValueB;
+        const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32() & (ctx.rng().Chance(1, 2) ? 0x1f : 0xff));
+        worlds.Both([&](GameWorld* w) {
+            building(w).owner = player;
+            building(w).request_flags = flags;
+        });
+        // Pile lookups that match half the time.
+        for (int which = 0; which < 2; ++which) {
+            const auto pile = static_cast<std::uint16_t>(ctx.rng().Next32());
             const std::uint8_t value = static_cast<std::uint8_t>(ctx.rng().Below(4));
-            worlds.Set<std::uint8_t>(b + valueField, value);
-            worlds.Set<std::uint8_t>(kTable + 1 + tableIndex * kTableBytes,
-                                     ctx.rng().Chance(1, 2) ? value
-                                                            : static_cast<std::uint8_t>(ctx.rng().Below(4)));
+            const std::uint8_t amount =
+                ctx.rng().Chance(1, 2) ? value : static_cast<std::uint8_t>(ctx.rng().Below(4));
+            worlds.Both([&](GameWorld* w) {
+                building(w).piles[which] = pile;
+                (which == 0 ? building(w).unk19 : building(w).unk1a) = value;
+                w->piles[pile].amount = amount;
+            });
         }
-        worlds.Set<std::uint8_t>(b + kBuildingByte21, static_cast<std::uint8_t>(ctx.rng().Below(3)));
+        const auto buildup = static_cast<std::uint8_t>(ctx.rng().Below(3));
+        worlds.Both([&](GameWorld* w) { building(w).buildup = buildup; });
         // Counters around the interesting values.
-        const std::size_t p = world_offset::kPlayerRecords + player * world_offset::kPlayerRecordBytes;
-        worlds.Set<std::uint16_t>(p + kPlayerRequestCount,
-                                  static_cast<std::uint16_t>(ctx.rng().Chance(1, 8)
-                                                                 ? ctx.rng().Next32()
-                                                                 : 7 + ctx.rng().Below(5)));
-        for (std::size_t counter : {0x20u, 0x22u, 0x26u, 0x28u}) {
-            worlds.Set<std::uint16_t>(p + counter,
-                                      static_cast<std::uint16_t>(ctx.rng().Chance(1, 4)
-                                                                     ? ctx.rng().Next32()
-                                                                     : 0x7e + ctx.rng().Below(5)));
+        const auto requests =
+            static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 7 + ctx.rng().Below(5));
+        worlds.Both([&](GameWorld* w) { w->players[player].settler_lists[kRequestCount] = requests; });
+        for (std::size_t counter : {0u, 1u, 3u, 4u}) {
+            const auto value =
+                static_cast<std::uint16_t>(ctx.rng().Chance(1, 4) ? ctx.rng().Next32() : 0x7e + ctx.rng().Below(5));
+            worlds.Both([&](GameWorld* w) { w->players[player].settler_lists[counter] = value; });
         }
 
         original(worlds.original(), nullptr, index);
         candidate(worlds.ours(), nullptr, index);
-        bool same = worlds.Same(ctx, b, kBuildingBytes) &&
-                    worlds.Same(ctx, p, world_offset::kPlayerRecordBytes);
+        bool same = worlds.SameField(ctx, building) &&
+                    worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return w->players[player]; });
         if (i % 256 == 255) {
             same = same && worlds.Checkpoint(ctx);
         }
@@ -263,37 +236,36 @@ void CompareBuildingFlag(test::Context& ctx, BuildingFn original, BuildingFn can
 
 // Wrong: the "first time" marker handling is missing (plain counter + 1).
 void __fastcall WrongSetBuildingFlag08(GameWorld* world, void*, std::uint32_t index) {
-    std::uint8_t* building = Building(world, index);
-    std::uint8_t* player = PlayerRecord(world, building[kBuildingPlayer]);
-    const std::uint16_t requests = Word(player + kPlayerRequestCount);
-    if (requests >= kMaxRequestCount || (building[kBuildingFlags] & kFlagEnabled) == 0) {
+    Building& building = world->buildings[index];
+    Player& player = PlayerOf(world, building);
+    const std::uint16_t requests = player.settler_lists[kRequestCount];
+    if (requests >= kMaxRequestCount || (building.request_flags & kFlagEnabled) == 0) {
         return;
     }
-    if ((building[kBuildingFlags] & kRequestBits) == 0) {
-        SetWord(player + kPlayerRequestCount, static_cast<std::uint16_t>(requests + 1));
+    if ((building.request_flags & kRequestBits) == 0) {
+        player.settler_lists[kRequestCount] = static_cast<std::uint16_t>(requests + 1);
     }
-    if ((building[kBuildingFlags] & 0x08) != 0) {
+    if ((building.request_flags & 0x08) != 0) {
         return;
     }
-    building[kBuildingFlags] = static_cast<std::uint8_t>(building[kBuildingFlags] | 0x08);
-    SetWord(player + 0x26, static_cast<std::uint16_t>(Word(player + 0x26) + 1));
+    building.request_flags = static_cast<std::uint8_t>(building.request_flags | 0x08);
+    player.settler_lists[3] = static_cast<std::uint16_t>(player.settler_lists[3] + 1);
 }
 
 // Wrong: no reset of a counter that drops to 0x80.
 void __fastcall WrongClearBuildingFlag02(GameWorld* world, void*, std::uint32_t index) {
-    std::uint8_t* building = Building(world, index);
-    std::uint8_t flags = building[kBuildingFlags];
+    Building& building = world->buildings[index];
+    std::uint8_t flags = building.request_flags;
     if ((flags & 0x02) == 0) {
         return;
     }
-    std::uint8_t* player = PlayerRecord(world, building[kBuildingPlayer]);
+    Player& player = PlayerOf(world, building);
     flags = static_cast<std::uint8_t>(flags & ~0x02);
-    building[kBuildingFlags] = flags;
+    building.request_flags = flags;
     if ((flags & kRequestBits) == 0) {
-        SetWord(player + kPlayerRequestCount,
-                static_cast<std::uint16_t>(Word(player + kPlayerRequestCount) - 1));
+        player.settler_lists[kRequestCount] = static_cast<std::uint16_t>(player.settler_lists[kRequestCount] - 1);
     }
-    SetWord(player + 0x20, static_cast<std::uint16_t>(Word(player + 0x20) - 1));
+    player.settler_lists[0] = static_cast<std::uint16_t>(player.settler_lists[0] - 1);
 }
 
 }  // namespace

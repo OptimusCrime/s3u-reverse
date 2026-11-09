@@ -46,32 +46,21 @@
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
+#include <cstddef>
 #include <cstdint>
 
 namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kSettlers = 0x12a5e60;
-constexpr std::uint32_t kSettlerBytes = 0x40;
-constexpr std::uint32_t kSettlerHighWater = 0x12a5e5c;
-constexpr std::uint32_t kLastSettler = 0x7cff;  // never handed out
+using layout::Settler;
+
+constexpr std::uint32_t kSettlerBytes = sizeof(Settler);
+constexpr std::uint32_t kLastSettler = layout::kMaxSettler + 1;  // 0x7cff, never handed out
 constexpr std::uint8_t kFreeSettler = 0xff;
-constexpr std::uint32_t kPlayerRace = 0x11943e0;  // int32 at player record +0x4
-constexpr std::uint32_t kPlayerRecordBytes = 0x148;
 
 const std::int32_t* const kTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);
 const std::int32_t* const kTypeStartHealth = reinterpret_cast<const std::int32_t*>(0x006590e4);
-
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(world) + offset);
-}
-
-std::uint32_t Settler(std::uint32_t settler) {
-    return kSettlers + settler * kSettlerBytes;
-}
 
 std::uint32_t WorldAddress(GameWorld* world) {
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
@@ -85,11 +74,11 @@ using CreateSettlerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, 
 
 // Purpose: The health a new settler starts with, by its type (soldiers of one race start a little weaker).
 std::uint32_t __fastcall GameWorld_SettlerStartHealth(GameWorld* world, void*, std::uint32_t settler) {
-    const std::uint32_t record = Settler(settler);
-    const std::uint32_t type = At<std::uint8_t>(world, record + 0x1);
+    const Settler& record = world->settlers[settler];
+    const std::uint32_t type = record.art;
     // The upper half of EAX: what the original's register held before the word load.
     std::uint32_t upper = (settler << 6) & 0xffff0000u;
-    if (At<std::uint8_t>(world, record + 0x2) == 3) {
+    if (record.race == 3) {
         const std::int32_t typeClass = kTypeClass[type];
         if (typeClass >= 1 && typeClass <= 9) {
             return static_cast<std::uint32_t>(kTypeStartHealth[type] - 20);
@@ -105,7 +94,7 @@ std::uint32_t __fastcall GameWorld_SettlerStartHealth(GameWorld* world, void*, s
 std::uint32_t __fastcall GameWorld_CreateSettler(GameWorld* world, void*, std::uint32_t x, std::uint32_t y,
                                                  std::uint32_t type, std::uint32_t player) {
     std::uint32_t settler = 1;
-    while (At<std::uint8_t>(world, Settler(settler)) != kFreeSettler) {
+    while (world->settlers[settler].owner != kFreeSettler) {
         if (settler == kLastSettler) {
             return 0;
         }
@@ -114,50 +103,55 @@ std::uint32_t __fastcall GameWorld_CreateSettler(GameWorld* world, void*, std::u
     if (settler == kLastSettler) {
         return 0;
     }
-    if (settler > At<std::uint32_t>(world, kSettlerHighWater)) {
-        At<std::uint32_t>(world, kSettlerHighWater) = settler;
+    if (settler > world->settler_high_water) {
+        world->settler_high_water = settler;
     }
-    const std::uint32_t record = Settler(settler);
-    At<std::uint8_t>(world, record + 0x2) =
-        static_cast<std::uint8_t>(At<std::uint32_t>(world, kPlayerRace + player * kPlayerRecordBytes));
-    At<std::uint16_t>(world, record + 0x4) = static_cast<std::uint16_t>(x);
-    At<std::uint16_t>(world, record + 0x6) = static_cast<std::uint16_t>(y);
-    At<std::uint8_t>(world, record + 0x1) = static_cast<std::uint8_t>(type);
-    At<std::uint8_t>(world, record + 0x3) = static_cast<std::uint8_t>(GameWorld_SettlerStartHealth(world, nullptr, settler));
-    At<std::uint8_t>(world, record + 0x0) = static_cast<std::uint8_t>(player);
-    At<std::uint16_t>(world, record + 0xe) = 0;
-    At<std::uint32_t>(world, record + 0x8) = GameWorld_RandomBelow6(world, nullptr);
-    At<std::uint16_t>(world, record + 0xc) = static_cast<std::uint16_t>(GameWorld_Random(world, nullptr) & 0x1f);
-    At<std::uint16_t>(world, record + 0x10) = 0;
-    At<std::uint16_t>(world, record + 0x12) = 0;
-    for (std::uint32_t field = 0x15; field <= 0x1a; ++field) {
-        At<std::uint8_t>(world, record + field) = 0;
-    }
-    At<std::uint32_t>(world, record + 0x1c) = 0;
-    At<std::uint16_t>(world, record + 0x20) = 0;
-    At<std::uint16_t>(world, record + 0x22) = 0;
-    At<std::uint8_t>(world, record + 0x14) = 0;
-    At<std::uint8_t>(world, record + 0x2c) = 0;
-    At<std::uint16_t>(world, kTiles + (x * 0x300 + y) * 24) = static_cast<std::uint16_t>(settler);
+    Settler& record = world->settlers[settler];
+    // Low byte of the int32 player race.
+    record.race = static_cast<std::uint8_t>(world->players[player].race);
+    record.x = static_cast<std::uint16_t>(x);
+    record.y = static_cast<std::uint16_t>(y);
+    record.art = static_cast<std::uint8_t>(type);
+    record.health = static_cast<std::uint8_t>(GameWorld_SettlerStartHealth(world, nullptr, settler));
+    record.owner = static_cast<std::uint8_t>(player);
+    record.job = 0;
+    record.direction = GameWorld_RandomBelow6(world, nullptr);
+    record.counter = static_cast<std::uint16_t>(GameWorld_Random(world, nullptr) & 0x1f);
+    record.next = 0;
+    record.prev = 0;
+    // Bytes +0x15..+0x1a, in this order.
+    record.slot = 0;
+    record.unk16 = 0;
+    record.unk17 = 0;
+    record.unk18 = 0;
+    record.unk19 = 0;
+    record.good = 0;
+    record.saved_direction = 0;
+    record.saved_counter = 0;
+    record.building = 0;
+    record.flags = 0;
+    record.new_target = 0;
+    // The original's 32-bit tile arithmetic (x, y are not range-checked).
+    TileAtOffset(world, TileOffset(x, y)).settler = static_cast<std::uint16_t>(settler);
     return settler;
 }
 
 // Purpose: Clears what a settler is doing (its job, its counter and the building it belongs to), probably
 // when it becomes idle.
 std::uint32_t __fastcall GameWorld_ClearSettlerJob(GameWorld* world, void*, std::uint32_t settler) {
-    const std::uint32_t record = Settler(settler);
-    At<std::uint16_t>(world, record + 0xe) = 0;
-    At<std::uint16_t>(world, record + 0xc) = 0;
-    At<std::uint16_t>(world, record + 0x22) = 0;
+    Settler& record = world->settlers[settler];
+    record.job = 0;
+    record.counter = 0;
+    record.building = 0;
     return WorldAddress(world) + settler * kSettlerBytes;
 }
 
 // Purpose: Gives a settler back the direction and counter it saved earlier (probably after an
 // interruption).
 std::uint32_t __fastcall GameWorld_RestoreSettlerDirection(GameWorld* world, void*, std::uint32_t settler) {
-    const std::uint32_t record = Settler(settler);
-    At<std::uint32_t>(world, record + 0x8) = At<std::uint32_t>(world, record + 0x1c);
-    At<std::uint16_t>(world, record + 0xc) = At<std::uint16_t>(world, record + 0x20);
+    Settler& record = world->settlers[settler];
+    record.direction = record.saved_direction;
+    record.counter = record.saved_counter;
     return WorldAddress(world) + settler * kSettlerBytes;
 }
 
@@ -176,7 +170,7 @@ S3RE_HOOK(0x0050e380, GameWorld_RestoreSettlerDirection, SettlerFn, Original_Gam
 
 namespace {
 
-constexpr std::size_t kTestWorld = kSettlers + (kLastSettler + 1) * kSettlerBytes;
+constexpr std::size_t kTestWorld = offsetof(GameWorld, settlers) + (kLastSettler + 1) * kSettlerBytes;
 
 std::uint32_t Relative(std::uint32_t value, GameWorld* world) {
     const std::uint32_t offset = value - WorldAddress(world);
@@ -201,18 +195,18 @@ void CompareSettlerFn(test::Context& ctx, SettlerFn original, SettlerFn candidat
 }
 
 void SetUpHealthCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t settler) {
-    worlds.Set<std::uint8_t>(Settler(settler) + 0x2,
-                             static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 3 : ctx.rng().Below(256)));
-    worlds.Set<std::uint8_t>(Settler(settler) + 0x1,
-                             static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? ctx.rng().Below(0x50) : ctx.rng().Below(256)));
+    const auto race = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 3 : ctx.rng().Below(256));
+    worlds.Both([&](GameWorld* w) { w->settlers[settler].race = race; });
+    const auto type = static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? ctx.rng().Below(0x50) : ctx.rng().Below(256));
+    worlds.Both([&](GameWorld* w) { w->settlers[settler].art = type; });
 }
 
 // Wrong: no health malus for race 3.
 std::uint32_t __fastcall WrongSettlerStartHealth(GameWorld* world, void* edx, std::uint32_t settler) {
-    const std::uint8_t race = At<std::uint8_t>(world, Settler(settler) + 0x2);
-    At<std::uint8_t>(world, Settler(settler) + 0x2) = 0;
+    const std::uint8_t race = world->settlers[settler].race;
+    world->settlers[settler].race = 0;
     const std::uint32_t result = GameWorld_SettlerStartHealth(world, edx, settler);
-    At<std::uint8_t>(world, Settler(settler) + 0x2) = race;
+    world->settlers[settler].race = race;
     return result;
 }
 
@@ -225,23 +219,24 @@ void SetUpFreeSettler(test::Context& ctx, test::WorldPair& worlds) {
         first = kEdges[ctx.rng().Below(3)];
     }
     for (std::uint32_t s = 1; s < first && s <= kLastSettler; ++s) {
-        if (At<std::uint8_t>(worlds.original(), Settler(s)) == kFreeSettler) {
-            worlds.Set<std::uint8_t>(Settler(s), static_cast<std::uint8_t>(ctx.rng().Below(20)));
+        if (worlds.original()->settlers[s].owner == kFreeSettler) {
+            const auto owner = static_cast<std::uint8_t>(ctx.rng().Below(20));
+            worlds.Both([&](GameWorld* w) { w->settlers[s].owner = owner; });
         }
     }
     if (first <= kLastSettler) {
-        worlds.Set<std::uint8_t>(Settler(first), kFreeSettler);
+        worlds.Both([&](GameWorld* w) { w->settlers[first].owner = kFreeSettler; });
     }
     const std::uint32_t mark = ctx.rng().Chance(1, 2) ? first - 1 + ctx.rng().Below(3) : ctx.rng().Next32();
-    worlds.Set<std::uint32_t>(kSettlerHighWater, mark);
+    worlds.Both([&](GameWorld* w) { w->settler_high_water = mark; });
 }
 
 // Wrong: does not raise the high-water mark.
 std::uint32_t __fastcall WrongCreateSettler(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
                                             std::uint32_t type, std::uint32_t player) {
-    const std::uint32_t mark = At<std::uint32_t>(world, kSettlerHighWater);
+    const std::uint32_t mark = world->settler_high_water;
     const std::uint32_t result = GameWorld_CreateSettler(world, edx, x, y, type, player);
-    At<std::uint32_t>(world, kSettlerHighWater) = mark;
+    world->settler_high_water = mark;
     return result;
 }
 
@@ -253,8 +248,9 @@ void CompareCreateSettler(test::Context& ctx, CreateSettlerFn candidate, int cas
         const std::uint32_t y = ctx.rng().Below(384);
         const std::uint32_t type = ctx.rng().Chance(3, 4) ? ctx.rng().Below(0x50) : ctx.rng().Next32();
         const std::uint32_t player = ctx.rng().Below(20);
-        worlds.Set<std::uint32_t>(kPlayerRace + player * kPlayerRecordBytes,
-                                  ctx.rng().Chance(1, 2) ? 3 : ctx.rng().Chance(1, 2) ? ctx.rng().Below(4) : ctx.rng().Next32());
+        const auto race = static_cast<std::int32_t>(
+            ctx.rng().Chance(1, 2) ? 3 : ctx.rng().Chance(1, 2) ? ctx.rng().Below(4) : ctx.rng().Next32());
+        worlds.Both([&](GameWorld* w) { w->players[player].race = race; });
         const std::uint32_t expected = Original_GameWorld_CreateSettler(worlds.original(), nullptr, x, y, type, player);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y, type, player);
         if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 32 == 31 || i == cases - 1) && !worlds.Checkpoint(ctx))) {

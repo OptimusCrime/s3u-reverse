@@ -20,7 +20,7 @@
 //   new ring index (10000 when it wrapped), else the tile's address.
 // GameWorld_SetSettlerAnimation (0x0050e2c0): (settler, kind), ret 8:
 //   id = table 0x6a8060[kind * 4 + race] (race = settler byte +2); settler
-//   dword +8 = id, word +0xc = GfxData_SpriteWord(id) - 1 on the graphics
+//   dword +8 (Settler::direction) = id, word +0xc = GfxData_SpriteWord(id) - 1 on the graphics
 //   object [0x7a8010] (probably the number of frames - 1). EAX = that
 //   SpriteWord result - 1 (the whole register).
 // CLogicThread_RemoveSettlerFromGroups (0x005428e0): (settler, group), ret 8;
@@ -30,11 +30,14 @@
 //   that moved into the slot is not checked (the index still advances), as
 //   in the original. EAX not used by callers.
 
+#include "game/raw.h"
+#include "game/settler_groups.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -43,35 +46,21 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kTileObject = 0x6;
-constexpr std::uint32_t kTileByte9 = 0x9;
-constexpr std::uint32_t kTileFlags = 0xa;
-constexpr std::uint32_t kTileByte12 = 0x12;
-constexpr std::uint32_t kTileRing = 0xdfdc48;
-constexpr std::uint32_t kTileRingIndex = 0xe0788c;
+using layout::Settler;
+using layout::Tile;
+
 constexpr std::uint32_t kTileRingEntries = 10000;
-constexpr std::uint32_t kSettlers = 0x12a5e60;
-constexpr std::uint32_t kSettlerBytes = 0x40;
-constexpr std::uintptr_t kAnimationTable = 0x006a8060;
+constexpr std::uint32_t kGroups = SettlerGroups::kGroups;
+// int32 animation ids per kind and race, in S3.EXE's data.
+const std::uint32_t* const kAnimationTable = reinterpret_cast<const std::uint32_t*>(0x006a8060);
+// The graphics object pointer, an S3.EXE global.
 constexpr std::uintptr_t kGfxData = 0x007a8010;
-constexpr std::uintptr_t kGroupCounts = 0x007ad620;
-constexpr std::uintptr_t kGroupLists = 0x007ad634;
-constexpr std::uint32_t kGroups = 10;
-constexpr std::uint32_t kGroupListBytes = 200;
 
-template <typename T>
-T& At(void* base, std::size_t offset) {
-    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(base) + offset);
-}
-
-template <typename T>
-T& At(std::uintptr_t address) {
-    return *reinterpret_cast<T*>(address);
-}
-
-std::uint32_t TileOffset(std::uint32_t x, std::uint32_t y) {
-    return (x * 0x300 + y) * 24;
+// Byte distance (x * 0x300 + y) * 24 of tile (x, y) from the first tile,
+// 32-bit like the original. The functions return world + this (not the
+// tile's own address).
+std::uint32_t TileIndexBytes(std::uint32_t x, std::uint32_t y) {
+    return (x * 0x300 + y) * kTileBytes;
 }
 
 // Tile index deltas (x * 0x300 + y) of the neighbours, in the original's
@@ -79,6 +68,12 @@ std::uint32_t TileOffset(std::uint32_t x, std::uint32_t y) {
 constexpr std::int32_t kRing6[6] = {0x300, -0x300, 1, -1, 0x301, -0x301};
 constexpr std::int32_t kRadius2[18] = {0x300,  -0x300, 1,      -1,     0x301,  -0x301, 0x600,  0x601,  0x602,
                                        0x302,  2,      -0x2ff, -0x600, -0x601, -0x602, -0x302, -2,     0x2ff};
+
+// The tile `delta` tile indices from the tile at byte offset `centre` (32-bit
+// wrap-around, may lie outside the map like in the original).
+Tile& TileNear(GameWorld* world, std::uint32_t centre, std::int32_t delta) {
+    return TileAtOffset(world, centre + static_cast<std::uint32_t>(delta * static_cast<std::int32_t>(kTileBytes)));
+}
 
 }  // namespace
 
@@ -105,26 +100,27 @@ S3RE_HOOK(0x0051b7f0, GameWorld_WearPath, PositionFn, Original_GameWorld_WearPat
 // grass or path, smoothing grass variants around it.
 std::uint32_t __fastcall GameWorld_WearPath(GameWorld* world, void* /*edx*/, std::uint32_t x,
                                                      std::uint32_t y) {
-    const std::uint32_t centre = kTiles + TileOffset(x, y);
-    const auto isSmall = [](std::uint8_t object) { return object == 0x12 || object == 0x13 || object == 0x18; };
-    const std::uint8_t object = At<std::uint8_t>(world, centre + kTileObject);
-    const std::uint32_t result = reinterpret_cast<std::uint32_t>(world) + TileOffset(x, y);
-    if (object != 0x10 && !isSmall(object)) {
+    const std::uint32_t centre = TileOffset(x, y);
+    Tile& tile = TileAtOffset(world, centre);
+    const auto isSmall = [](std::uint8_t terrain) { return terrain == 0x12 || terrain == 0x13 || terrain == 0x18; };
+    const std::uint8_t terrain = tile.terrain;
+    const std::uint32_t result = reinterpret_cast<std::uint32_t>(world) + TileIndexBytes(x, y);
+    if (terrain != 0x10 && !isSmall(terrain)) {
         return result;
     }
     for (const std::int32_t delta : kRing6) {
-        const std::uint32_t tile = centre + static_cast<std::uint32_t>(delta * 24);
-        const std::uint8_t neighbour = At<std::uint8_t>(world, tile + kTileObject);
-        if (isSmall(neighbour)) {
-            At<std::uint8_t>(world, tile + kTileObject) = 0x10;
-            At<std::uint8_t>(world, tile + kTileByte9) |= 0x80;
-        } else if (neighbour != 0x10 && neighbour != 0x1c) {
+        Tile& neighbour = TileNear(world, centre, delta);
+        const std::uint8_t value = neighbour.terrain;
+        if (isSmall(value)) {
+            neighbour.terrain = 0x10;
+            neighbour.draw_flags |= layout::kTileDrawRedraw;
+        } else if (value != 0x10 && value != 0x1c) {
             return result;
         }
     }
-    At<std::uint8_t>(world, centre + kTileObject) = 0x1c;
-    At<std::uint8_t>(world, centre + kTileByte9) |= 0x80;
-    At<std::uint8_t>(world, centre + kTileByte12) = static_cast<std::uint8_t>(At<std::uint8_t>(world, centre + kTileByte12) + 9);
+    tile.terrain = 0x1c;
+    tile.draw_flags |= layout::kTileDrawRedraw;
+    tile.traffic = static_cast<std::uint8_t>(tile.traffic + 9);
     return result;
 }
 
@@ -136,29 +132,30 @@ S3RE_HOOK(0x0051d000, GameWorld_QueueMarkedTileWithRoom, PositionFn,
 // steps (probably to find space for something large).
 std::uint32_t __fastcall GameWorld_QueueMarkedTileWithRoom(GameWorld* world, void* /*edx*/, std::uint32_t x,
                                                                   std::uint32_t y) {
-    const std::uint32_t tile = kTiles + TileOffset(x, y);
-    const std::uint32_t result = reinterpret_cast<std::uint32_t>(world) + TileOffset(x, y);
-    const std::uint8_t flags = At<std::uint8_t>(world, tile + kTileFlags);
-    if ((flags & 0x10) == 0 || (flags & 0x01) != 0) {
+    const std::uint32_t centre = TileOffset(x, y);
+    Tile& tile = TileAtOffset(world, centre);
+    const std::uint32_t result = reinterpret_cast<std::uint32_t>(world) + TileIndexBytes(x, y);
+    const std::uint8_t flags = tile.flags;
+    if ((flags & layout::kTileFloodMark) == 0 || (flags & layout::kTileBlocked) != 0) {
         return result;
     }
     for (const std::int32_t delta : kRadius2) {
-        if ((At<std::uint8_t>(world, tile + static_cast<std::uint32_t>(delta * 24) + kTileFlags) & 1) != 0) {
+        if ((TileNear(world, centre, delta).flags & layout::kTileBlocked) != 0) {
             return result;
         }
     }
-    if ((At<std::uint8_t>(world, tile + kTileObject) & 0xf0) == 0x20) {
+    if ((tile.terrain & 0xf0) == 0x20) {
         return result;
     }
     for (const std::int32_t delta : kRadius2) {
-        if ((At<std::uint8_t>(world, tile + static_cast<std::uint32_t>(delta * 24) + kTileObject) & 0xf0) == 0x20) {
+        if ((TileNear(world, centre, delta).terrain & 0xf0) == 0x20) {
             return result;
         }
     }
-    std::uint32_t& index = At<std::uint32_t>(world, kTileRingIndex);
-    At<std::uint16_t>(world, kTileRing + index * 4) = static_cast<std::uint16_t>(x);
-    At<std::uint16_t>(world, kTileRing + index * 4 + 2) = static_cast<std::uint16_t>(y);
-    At<std::uint8_t>(world, tile + kTileFlags) &= 0xef;
+    std::uint32_t& index = world->tile_ring_index.write;
+    world->tile_ring[index].x = static_cast<std::uint16_t>(x);
+    world->tile_ring[index].y = static_cast<std::uint16_t>(y);
+    tile.flags &= 0xef;
     const std::uint32_t next = index + 1;
     index = next == kTileRingEntries ? 0 : next;
     return next;
@@ -171,12 +168,12 @@ S3RE_HOOK(0x0050e2c0, GameWorld_SetSettlerAnimation, SettlerAnimationFn, Origina
 // (graphics id and frame count, probably walking, carrying, working...).
 std::uint32_t __fastcall GameWorld_SetSettlerAnimation(GameWorld* world, void* /*edx*/, std::uint32_t settler,
                                                        std::uint32_t kind) {
-    const std::uint32_t record = kSettlers + (settler << 6);
-    const std::uint32_t entry = At<std::uint8_t>(world, record + 2) + kind * 4;
-    At<std::uint32_t>(world, record + 8) = At<std::uint32_t>(kAnimationTable + entry * 4);
-    const std::uint32_t frames = GfxData_SpriteWord(At<void*>(kGfxData), nullptr,
-                                                    At<std::uint32_t>(kAnimationTable + entry * 4)) - 1;
-    At<std::uint16_t>(world, record + 0xc) = static_cast<std::uint16_t>(frames);
+    Settler& record = world->settlers[settler];
+    const std::uint32_t entry = record.race + kind * 4;
+    // The animation id goes into the dword +0x8 (Settler::direction).
+    record.direction = kAnimationTable[entry];
+    const std::uint32_t frames = GfxData_SpriteWord(RawAtAddress<void*>(kGfxData), nullptr, kAnimationTable[entry]) - 1;
+    record.counter = static_cast<std::uint16_t>(frames);
     return frames;
 }
 
@@ -191,12 +188,13 @@ void __fastcall CLogicThread_RemoveSettlerFromGroups(void* /*self*/, void* /*edx
     if (group == 0) {
         return;
     }
+    SettlerGroups& groups = GlobalSettlerGroups();
     for (std::uint32_t g = 0; g < kGroups; ++g) {
         if (g == group) {
             continue;
         }
-        std::uint16_t& count = At<std::uint16_t>(kGroupCounts + g * 2);
-        auto* list = reinterpret_cast<std::uint16_t*>(kGroupLists + g * kGroupListBytes);
+        std::uint16_t& count = groups.counts[g];
+        std::uint16_t* list = groups.lists[g];
         for (std::uint32_t k = 0; k < count; ++k) {
             if (list[k] != settler) {
                 continue;
@@ -215,23 +213,29 @@ void __fastcall CLogicThread_RemoveSettlerFromGroups(void* /*self*/, void* /*edx
 
 namespace {
 
-constexpr std::size_t kTestWorld = 0x153a128;
+constexpr std::size_t kTestWorld = sizeof(GameWorld);
 
-// Random object bytes / flags around (x, y) from small sets, so all paths
+// Random terrain bytes / flags around (x, y) from small sets, so all paths
 // are reached.
 void SetUpTiles(test::Context& ctx, test::WorldPair& worlds, std::uint32_t x, std::uint32_t y, bool objects) {
     static const std::uint8_t kObjects[] = {0x10, 0x12, 0x13, 0x18, 0x1c, 0x10, 0x12, 0x00, 0x21, 0x2f, 0x31};
-    const std::uint32_t centre = kTiles + TileOffset(x, y);
+    const std::uint32_t centre = TileOffset(x, y);
     for (int k = -1; k < 18; ++k) {
-        const std::uint32_t tile = centre + static_cast<std::uint32_t>((k < 0 ? 0 : kRadius2[k]) * 24);
+        const std::int32_t delta = k < 0 ? 0 : kRadius2[k];
         const bool rare = ctx.rng().Chance(1, 25);
         if (objects) {
-            worlds.Set<std::uint8_t>(tile + kTileObject,
-                                     ctx.rng().Chance(1, 3) && k >= 0 ? (k < 6 ? 0x1c : 0) : kObjects[ctx.rng().Below(rare ? 11 : 7)]);
+            const std::uint8_t terrain =
+                ctx.rng().Chance(1, 3) && k >= 0 ? (k < 6 ? 0x1c : 0) : kObjects[ctx.rng().Below(rare ? 11 : 7)];
+            worlds.Both([&](GameWorld* w) { TileNear(w, centre, delta).terrain = terrain; });
         } else {
-            worlds.Set<std::uint8_t>(tile + kTileObject, static_cast<std::uint8_t>(rare ? 0x20 + ctx.rng().Below(16) : ctx.rng().Below(0x20)));
+            const auto terrain = static_cast<std::uint8_t>(rare ? 0x20 + ctx.rng().Below(16) : ctx.rng().Below(0x20));
             const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32());
-            worlds.Set<std::uint8_t>(tile + kTileFlags, static_cast<std::uint8_t>(k < 0 ? (ctx.rng().Chance(1, 4) ? flags : (flags | 0x10) & ~1) : (rare ? flags | 1 : flags & ~1)));
+            const auto tileFlags = static_cast<std::uint8_t>(
+                k < 0 ? (ctx.rng().Chance(1, 4) ? flags : (flags | 0x10) & ~1) : (rare ? flags | 1 : flags & ~1));
+            worlds.Both([&](GameWorld* w) {
+                TileNear(w, centre, delta).terrain = terrain;
+                TileNear(w, centre, delta).flags = tileFlags;
+            });
         }
     }
 }
@@ -255,7 +259,8 @@ void ComparePosition(test::Context& ctx, Fn original, Fn candidate, bool objects
         const std::uint32_t x = 2 + ctx.rng().Below(380);
         const std::uint32_t y = 2 + ctx.rng().Below(380);
         SetUpTiles(ctx, worlds, x, y, objects);
-        worlds.Set<std::uint32_t>(kTileRingIndex, ctx.rng().Chance(1, 8) ? kTileRingEntries - 1 : ctx.rng().Below(kTileRingEntries));
+        const std::uint32_t index = ctx.rng().Chance(1, 8) ? kTileRingEntries - 1 : ctx.rng().Below(kTileRingEntries);
+        worlds.Both([&](GameWorld* w) { w->tile_ring_index.write = index; });
         expected = original(worlds.original(), nullptr, x, y) - (objects ? reinterpret_cast<std::uint32_t>(worlds.original()) : 0);
         actual = candidate(worlds.ours(), nullptr, x, y) - (objects ? reinterpret_cast<std::uint32_t>(worlds.ours()) : 0);
         if (!objects && expected > kTileRingEntries) {  // a tile address: relative to the world
@@ -267,68 +272,87 @@ void ComparePosition(test::Context& ctx, Fn original, Fn candidate, bool objects
 
 // Wrong: the conversion forgets the redraw bit.
 std::uint32_t __fastcall WrongWearPath(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t centre = kTiles + TileOffset(x, y);
-    const std::uint8_t saved = At<std::uint8_t>(world, centre + kTileByte9);
+    Tile& tile = TileAtOffset(world, TileOffset(x, y));
+    const std::uint8_t saved = tile.draw_flags;
     const std::uint32_t result = GameWorld_WearPath(world, edx, x, y);
-    if (At<std::uint8_t>(world, centre + kTileObject) == 0x1c) {
-        At<std::uint8_t>(world, centre + kTileByte9) = saved;
+    if (tile.terrain == 0x1c) {
+        tile.draw_flags = saved;
     }
     return result;
 }
 
-// A graphics object for SetSettlerAnimation (GfxData_SpriteWord reads
-// [[this+0xb24+group*4] + 8 + index*4] + [this+0x264+group*4]).
+// The fields of the graphics object GfxData_SpriteWord reads:
+// [[this+0xb24+group*4] + 8 + index*4] + [this+0x264+group*4].
+#pragma pack(push, 1)
+struct GfxDataFields {
+    std::uint8_t pad000[0x264];
+    std::uint32_t group_bias[0xb0];    // 0x264
+    std::uint8_t pad524[0x600];
+    std::uint32_t group_tables[0xb0];  // 0xb24, pointers to GfxGroupTable
+};
+struct GfxGroupTable {
+    std::uint32_t unk0[2];
+    std::uint32_t sprites[0x4000];     // +8, pointers
+};
+#pragma pack(pop)
+static_assert(offsetof(GfxDataFields, group_bias) == 0x264);
+static_assert(offsetof(GfxDataFields, group_tables) == 0xb24);
+
+// A graphics object for SetSettlerAnimation.
 struct FakeGfx {
     std::vector<std::uint8_t> object = std::vector<std::uint8_t>(0x1000);
     std::vector<std::uint8_t> data = std::vector<std::uint8_t>(0x80000);
+    GfxDataFields& fields() { return *reinterpret_cast<GfxDataFields*>(object.data()); }
+    GfxGroupTable& table() { return *reinterpret_cast<GfxGroupTable*>(data.data()); }
 };
 
 void CompareSetSettlerAnimation(test::Context& ctx, SettlerAnimationFn candidate, int cases) {
-    const std::uint32_t saved = At<std::uint32_t>(kGfxData);
+    const std::uint32_t saved = RawAtAddress<std::uint32_t>(kGfxData);
     FakeGfx gfx;
-    At<void*>(kGfxData) = gfx.object.data();
+    RawAtAddress<void*>(kGfxData) = gfx.object.data();
     Compare(ctx, cases, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         const std::uint32_t settler = ctx.rng().Below(0x8000);
         const std::uint32_t race = ctx.rng().Below(4);
         const std::uint32_t kind = ctx.rng().Below(40);
-        worlds.Set<std::uint8_t>(kSettlers + settler * kSettlerBytes + 2, static_cast<std::uint8_t>(race));
-        const std::uint32_t id = At<std::uint32_t>(kAnimationTable + (kind * 4 + race) * 4);
+        worlds.Both([&](GameWorld* w) { w->settlers[settler].race = static_cast<std::uint8_t>(race); });
+        const std::uint32_t id = kAnimationTable[kind * 4 + race];
         const std::uint32_t group = id >> 16, index = id & 0xffff;
         if (group >= 0xb0 || index >= 0x4000) {
             expected = actual = 0;
             return;  // not a graphics id (the table holds other data there)
         }
         ctx.rng().Fill(gfx.object.data(), gfx.object.size());
-        At<std::uint8_t*>(gfx.object.data(), 0xb24 + group * 4) = gfx.data.data();
-        At<std::uint32_t>(gfx.object.data(), 0x264 + group * 4) = 0;
-        At<std::uint8_t*>(gfx.data.data(), 8 + index * 4) = gfx.data.data() + 0x40000 + ctx.rng().Below(0x1000);
+        gfx.fields().group_tables[group] = reinterpret_cast<std::uint32_t>(gfx.data.data());
+        gfx.fields().group_bias[group] = 0;
+        gfx.table().sprites[index] = reinterpret_cast<std::uint32_t>(gfx.data.data() + 0x40000 + ctx.rng().Below(0x1000));
         expected = Original_GameWorld_SetSettlerAnimation(worlds.original(), nullptr, settler, kind);
         actual = candidate(worlds.ours(), nullptr, settler, kind);
     });
-    At<std::uint32_t>(kGfxData) = saved;
+    RawAtAddress<std::uint32_t>(kGfxData) = saved;
 }
 
 // Wrong: stores the frame count without the -1.
 std::uint32_t __fastcall WrongSetSettlerAnimation(GameWorld* world, void* edx, std::uint32_t settler,
                                                   std::uint32_t kind) {
     const std::uint32_t result = GameWorld_SetSettlerAnimation(world, edx, settler, kind);
-    ++At<std::uint16_t>(world, kSettlers + (settler << 6) + 0xc);
+    ++world->settlers[settler].counter;
     return result;
 }
 
 void CompareRemoveFromGroups(test::Context& ctx, RemoveFromGroupsFn candidate, int cases) {
-    constexpr std::size_t kBytes = kGroupLists + kGroups * kGroupListBytes - kGroupCounts;
+    constexpr std::size_t kBytes = sizeof(SettlerGroups);
     std::vector<std::uint8_t> saved(kBytes), before(kBytes), afterOriginal(kBytes);
-    auto* globals = reinterpret_cast<std::uint8_t*>(kGroupCounts);
+    SettlerGroups& groups = GlobalSettlerGroups();
+    auto* globals = reinterpret_cast<std::uint8_t*>(&groups);
     std::memcpy(saved.data(), globals, kBytes);
     for (int i = 0; i < cases; ++i) {
         ctx.rng().Fill(globals, kBytes);
         const std::uint32_t settler = ctx.rng().Below(6);
         for (std::uint32_t g = 0; g < kGroups; ++g) {
             const auto count = static_cast<std::uint16_t>(ctx.rng().Chance(1, 4) ? 0 : ctx.rng().Below(101));
-            At<std::uint16_t>(kGroupCounts + g * 2) = count;
+            groups.counts[g] = count;
             for (std::uint32_t k = 0; k < 100; ++k) {
-                At<std::uint16_t>(kGroupLists + g * kGroupListBytes + k * 2) = static_cast<std::uint16_t>(ctx.rng().Below(6));
+                groups.lists[g][k] = static_cast<std::uint16_t>(ctx.rng().Below(6));
             }
         }
         const std::uint32_t argument = ctx.rng().Chance(1, 8) ? (ctx.rng().Next32() & 0xffff0000u) | settler : settler;

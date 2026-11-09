@@ -167,7 +167,7 @@ settler_records.cpp, settler_queries.cpp, building_tiles.cpp, counting.cpp.
 | 0x03 | u8 | health | start health per type (20 less for race 3 soldiers) | V |
 | 0x04 | u16 | x | tile | V |
 | 0x06 | u16 | y | tile | V |
-| 0x08 | u32 | direction | 0..5 (RandomBelow6 at creation; LeaveBuildingSlot sets 2) | V |
+| 0x08 | u32 | direction | 0..5 (RandomBelow6 at creation and in PlaceSettlerNear; LeaveBuildingSlot sets 2); but SetSettlerAnimation (0x50E2C0) stores a graphics/animation id (group << 16 \| index, from the table at S3.EXE 0x6A8060) here and frames - 1 in +0xC, so "direction" is probably too narrow (animation/direction state?); not renamed yet | V (writes), S (name) |
 | 0x0C | u16 | counter | random 0..31 at creation, reset with a new job (animation/step counter?) | V (writes), G (meaning) |
 | 0x0E | u16 | job | current job ("todo"; jobs 1 and 0x37 are followed by 2 and 0x35 (IsSettlerJob01Or37 0x4FA6B0, JobAfter01Or37 0x4FAA40, probably walking); e.g. 3 work, 0x4C fetch for trade, 0x133 carry to pile, 0x145 ship, 0x147 to building, 0xAD soldier in building) | V (values), S (name) |
 | 0x10 | u16 | next | list link (area/player settler lists) | V |
