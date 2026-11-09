@@ -27,9 +27,9 @@ disassembly; "READY" = not done, every direct callee done, all game code
    would give about 1,080 READY game functions (vs 672 before, game
    category only). Needed anyway (game objects embed the layout; the
    standalone build needs it). Easy to verify (emulator, fake heap).
-   **Batch 21 did the core; next: the remaining ~35 `std::string::sub_*`
-   members (0x407b10 373 callers, 0x4078a0 215, 0x407a50 156, 0x4077f0
-   54, ...) and the std::logic_error/out_of_range classes (~12).**
+   **Done: core in batch 21, the rest in batch 22 (39 functions incl. game
+   classes with string members and logic_error/out_of_range). Only the
+   throwing functions remain (bitset::_Xran x3, _Doraise x2).**
 2. **Trivial shared stubs that Detours can't hook.** `NoOp` 0x59f200 (a
    lone `ret`, 9 vtable slots) alone blocks 92 NEAR functions; the
    `AdjustorThunk`/`JmpThunk` stubs (0x429d90, 0x429db0, ...) 25 each.
@@ -71,8 +71,11 @@ disassembly; "READY" = not done, every direct callee done, all game code
    test. Later, once a caller subsystem (AI, lobby) is tackled.
 
 Next steps (for 2026-11-10, in this order):
-1. Batch 22: the rest of std::string (`sub_*` members, logic_error /
-   out_of_range), same harness (fake heap, specs `String_*`).
+1. (Batch 22 done 2026-11-09, whole-game check included.) Next coverage
+   batch: Win32::CObject::~CObject 0x610330 (13 ins, 43 callers, unblocks
+   24) and the framework leaves it unblocks, AI_sub_58ec50 (20 ins, 33
+   callers, unblocks 21), then the UI accessor block 0x429d70..0x42a180;
+   in the simulation range the items of point 4 below.
 2. (Item 2 done 2026-11-09: tools/trivial.py.) Then the UI
    accessor block and Win32::CObject et al. as coverage batches, with
    `S3RE_HOOK_UNVERIFIED` where a spec is not quick.
@@ -440,7 +443,7 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
-### 2026-11-09 (30): trivial functions counted as done; batch 22; whole-game check
+### 2026-11-09 (30): trivial functions counted as done; whole-game check; batch 22
 
 - Trivial functions (user decision, item 2 of the evaluation): new
   `tools/trivial.py` finds bodies that are provably trivial by their bytes
@@ -466,6 +469,54 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   CreateSettler, AddGoodsToPile, BlockTile/UnblockTile, TileShade), 27 not
   called (e.g. the flood fills / region splits, SendNearestSettlerTo*,
   FetchGoodsToTradeBuilding, the overlays, String_TidyFree, MaxSize).
+
+- Batch 22 (39 functions; all verified, none unverified):
+  - msvc6/string.cpp, 16 std::string members: string(x, pos, n) 0x4078a0,
+    string(const char*) 0x407a50, string(n, c) 0x5f3bf0, erase(pos, n)
+    0x407b10 (373 call sites), operator=(const char*) 0x409a90, assign(n,
+    c) 0x41f430, assign-or-empty helper 0x413d70 (null -> the text at
+    0x7a7868), _Freeze 0x414490, operator[] 0x4142d0, operator+ (string,
+    string) 0x409e60 / (const char*, string) 0x409f90 / (string, char)
+    0x421aa0, and the __fastcall concat helpers 0x4077f0, 0x408e50,
+    0x43d8e0 (a twin), 0x420cb0.
+  - game/string_members.cpp (new), 18 game-class functions the survey had
+    filed as std::string::sub_*: nine destructors that only destroy a string
+    member (0x411980, 0x441740, 0x450ae0, 0x455170, 0x4581a0, 0x459440,
+    0x45f060, 0x499470, 0x49a070; several only reached from unwind
+    funclets) plus 0x5e1b10 (two strings), setters 0x412130/0x4181f0,
+    operator= 0x4499e0 / 0x5be000 (session description, 80-byte
+    DPSESSIONDESC2 + name) / 0x5ed590 (lobby record), constructors
+    0x5bb0b0 (session description from a DirectPlay record), 0x5b6790
+    (GUID + two names) and Win32::CRegistryValueInfo 0x6161e0 (name passed
+    by value). The old 0x617350 "constructor" was renamed Unknown_617350.
+  - msvc6/exceptions.cpp (new), std::logic_error what 0x559630,
+    ~logic_error 0x5597e0, its deleting destructor 0x5597c0, copy
+    constructors of logic_error 0x559640 and out_of_range 0x559850. Not
+    reimplemented (they throw, never return): bitset::_Xran 0x559550 and
+    its copies 0x58b520/0x596570, the _Doraise virtuals 0x5597a0/0x559830
+    (named, identified).
+  - Tests: in-process 266/266 (4 new: StringMembers_*, LogicError_*; the
+    String_Operations test got 16 more operations); emulator: 39 new specs,
+    0 mismatches, full coverage of live blocks (dead blocks listed at each
+    spec with a reason code DROP/XLEN/CLEARED/UNSHARED/DESTROY/NPOS; two
+    globals presets reach the copy paths: a non-empty text at 0x7a7868 and
+    a full count on the static empty string); self-test 13/13 (new: a
+    destructor against the one for another offset). `run.py
+    --all-uncovered` lists every uncovered block. Full emulator suite: 222 functions,
+    0 mismatches, 0 with incomplete coverage (globals presets must always
+    write their value: a global keeps what an earlier case wrote).
+  - Found: an embedded zero (assign(n, '\0')) makes the original's
+    erase() crash when the string is shared: _Split re-copies by strlen,
+    so the length shrinks under the running erase (memmove with a negative
+    count). Faithful in ours; the in-process test avoids zero characters.
+  - Whole-game check with batch 22 (same recording, 3,000 ticks): REPLAY
+    OK, 90 of 221 replacements called. Batch 22 called: FromSubstr 221,
+    FromText 215, Erase 212, Freeze 192, ConcatString 330, LobbyRecord_Assign
+    16, ConcatCharsLeft 8, ConcatChar 4, AssignText 2, AssignTextOrEmpty 2,
+    GuidNames 2, FromRepeat 1; the other 27 not called (all destructors,
+    setters, exceptions, operator+ variants, At, AssignRepeat). Counts are in
+    the inventory notes.
+  - Frontier (all game code): READY 1,123 -> 1,144, NEAR 1,542 -> 1,550.
 
 ### 2026-11-09 (29): evaluation, unverified convention, batch 21 (std::string)
 

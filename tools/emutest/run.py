@@ -138,6 +138,8 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--build", default="Debug")
     parser.add_argument("--require-coverage", action="store_true")
+    parser.add_argument("--all-uncovered", action="store_true",
+                        help="list every uncovered block, not just the first six")
     parser.add_argument("--self-test", action="store_true",
                         help="run the deliberately wrong pairings in specs.SELF_TEST; "
                              "each must be caught")
@@ -166,8 +168,9 @@ def main() -> int:
         status = "MISMATCH" if r["mismatch"] else "ok"
         coverage = f"{r['covered']}/{r['blocks']} blocks"
         if r["uncovered"]:
-            coverage += " (uncovered: " + ", ".join(f"{a:#x}" for a in r["uncovered"][:6]) + \
-                        (" ..." if len(r["uncovered"]) > 6 else "") + ")"
+            shown = r["uncovered"] if args.all_uncovered else r["uncovered"][:6]
+            coverage += " (uncovered: " + ", ".join(f"{a:#x}" for a in shown) + \
+                        (" ..." if len(r["uncovered"]) > len(shown) else "") + ")"
             incomplete += 1
         print(f"{status:8} {spec.ours:45} {r['cases']:6} cases, {r['invalid']:4} invalid, "
               f"{coverage}  [{time.time() - started:.1f}s]", flush=True)

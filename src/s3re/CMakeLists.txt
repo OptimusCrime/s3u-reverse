@@ -9,6 +9,7 @@ add_library(s3re SHARED
     test/difftest.cpp
     test/harness_selftest.cpp
 
+    msvc6/exceptions.cpp
     msvc6/string.cpp
 
     trace/determinism.cpp
@@ -45,6 +46,7 @@ add_library(s3re SHARED
     game/settler_queries.cpp
     game/settler_records.cpp
     game/settlers.cpp
+    game/string_members.cpp
     game/statistics.cpp
     game/ui_overlays.cpp
     game/ui_state.cpp

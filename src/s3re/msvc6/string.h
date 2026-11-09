@@ -112,4 +112,110 @@ using StringConcatCharsFn = String*(__fastcall*)(String* self, const String* lef
 String* __fastcall String_ConcatChars(String* self, const String* left, const char* right);
 extern StringConcatCharsFn Original_String_ConcatChars;
 
+// --- Batch 22: the other out-of-line members ------------------------------
+
+// string(const string& x, pos, n, const allocator&) (0x004078a0).
+using StringFromSubstrFn = String*(__fastcall*)(String* self, void* edx, const String* x,
+                                                std::uint32_t pos, std::uint32_t n,
+                                                const std::uint8_t* allocator);
+String* __fastcall String_FromSubstr(String* self, void* edx, const String* x, std::uint32_t pos,
+                                     std::uint32_t n, const std::uint8_t* allocator);
+extern StringFromSubstrFn Original_String_FromSubstr;
+
+// string(const char* s, const allocator&) (0x00407a50).
+using StringFromTextFn = String*(__fastcall*)(String* self, void* edx, const char* s,
+                                              const std::uint8_t* allocator);
+String* __fastcall String_FromText(String* self, void* edx, const char* s,
+                                   const std::uint8_t* allocator);
+extern StringFromTextFn Original_String_FromText;
+
+// string(n, c, const allocator&) (0x005f3bf0).
+using StringFromRepeatFn = String*(__fastcall*)(String* self, void* edx, std::uint32_t n,
+                                                std::uint32_t c, const std::uint8_t* allocator);
+String* __fastcall String_FromRepeat(String* self, void* edx, std::uint32_t n, std::uint32_t c,
+                                     const std::uint8_t* allocator);
+extern StringFromRepeatFn Original_String_FromRepeat;
+
+// erase(pos, n) (0x00407b10).
+using StringEraseFn = String*(__fastcall*)(String* self, void* edx, std::uint32_t pos, std::uint32_t n);
+String* __fastcall String_Erase(String* self, void* edx, std::uint32_t pos, std::uint32_t n);
+extern StringEraseFn Original_String_Erase;
+
+// operator=(const char* s) (0x00409a90).
+using StringAssignTextFn = String*(__fastcall*)(String* self, void* edx, const char* s);
+String* __fastcall String_AssignText(String* self, void* edx, const char* s);
+extern StringAssignTextFn Original_String_AssignText;
+
+// assign(n, c) (0x0041f430).
+using StringAssignRepeatFn = String*(__fastcall*)(String* self, void* edx, std::uint32_t n,
+                                                  std::uint32_t c);
+String* __fastcall String_AssignRepeat(String* self, void* edx, std::uint32_t n, std::uint32_t c);
+extern StringAssignRepeatFn Original_String_AssignRepeat;
+
+// Assigns s, or the empty text at 0x7a7868 when s is null (0x00413d70).
+using StringAssignTextOrEmptyFn = String*(__fastcall*)(String* self, void* edx, const char* s);
+String* __fastcall String_AssignTextOrEmpty(String* self, void* edx, const char* s);
+extern StringAssignTextOrEmptyFn Original_String_AssignTextOrEmpty;
+
+// operator[](pos), the non-const one that freezes the buffer (0x004142d0).
+using StringAtFn = char*(__fastcall*)(String* self, void* edx, std::uint32_t pos);
+char* __fastcall String_At(String* self, void* edx, std::uint32_t pos);
+extern StringAtFn Original_String_At;
+
+// _Freeze() (0x00414490).
+using StringFreezeFn = void(__fastcall*)(String* self, void* edx);
+void __fastcall String_Freeze(String* self, void* edx);
+extern StringFreezeFn Original_String_Freeze;
+
+// operator+(const string&, const string&) (0x00409e60), __cdecl with the
+// result object as hidden first argument.
+using StringPlusStringFn = String*(__cdecl*)(String* result, const String* left, const String* right);
+String* __cdecl String_PlusString(String* result, const String* left, const String* right);
+extern StringPlusStringFn Original_String_PlusString;
+
+// operator+(const char*, const string&) (0x00409f90).
+using StringCharsPlusFn = String*(__cdecl*)(String* result, const char* left, const String* right);
+String* __cdecl String_CharsPlus(String* result, const char* left, const String* right);
+extern StringCharsPlusFn Original_String_CharsPlus;
+
+// operator+(const string&, char) (0x00421aa0); the char is passed as a dword.
+using StringPlusCharFn = String*(__cdecl*)(String* result, const String* left, std::uint32_t c);
+String* __cdecl String_PlusChar(String* result, const String* left, std::uint32_t c);
+extern StringPlusCharFn Original_String_PlusChar;
+
+// Compiler-generated __fastcall helpers like String_ConcatChars (ECX = self,
+// EDX = left, right on the stack) that construct self from operator+:
+// left + right with both strings (0x004077f0), C text + string, or a copy of
+// right when the text is null (0x00408e50 and its twin 0x0043d8e0), and
+// string + char (0x00420cb0).
+using StringConcatStringFn = String*(__fastcall*)(String* self, const String* left, const String* right);
+String* __fastcall String_ConcatString(String* self, const String* left, const String* right);
+extern StringConcatStringFn Original_String_ConcatString;
+
+using StringConcatCharsLeftFn = String*(__fastcall*)(String* self, const char* left, const String* right);
+String* __fastcall String_ConcatCharsLeft(String* self, const char* left, const String* right);
+extern StringConcatCharsLeftFn Original_String_ConcatCharsLeft;
+String* __fastcall String_ConcatCharsLeft2(String* self, const char* left, const String* right);
+extern StringConcatCharsLeftFn Original_String_ConcatCharsLeft2;
+
+using StringConcatCharFn = String*(__fastcall*)(String* self, const String* left, std::uint32_t c);
+String* __fastcall String_ConcatChar(String* self, const String* left, std::uint32_t c);
+extern StringConcatCharFn Original_String_ConcatChar;
+
+// Helpers for other files that work on embedded strings (not hooks).
+namespace detail {
+// npos as the original reads it (its static member at 0x655390).
+std::uint32_t Npos();
+// c_str(): the buffer, or the static empty string at 0x6553a0.
+char* CStr(const String* s);
+// Drop one reference to a buffer: free it when unshared or frozen.
+void Release(char* ptr);
+// erase(p0, m) as the compiler inlines it.
+void Erase(String* self, std::uint32_t p0, std::uint32_t m);
+// Empty the fields (no release).
+void Clear(String* s);
+// strlen.
+std::uint32_t Length(const char* s);
+}  // namespace detail
+
 }  // namespace s3re::msvc6

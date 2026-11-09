@@ -2251,6 +2251,222 @@ SPECS += [
          edx=one_of(STRING_SELF_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR), exempt_blocks=(0x00401ce6,)),
 ]
 
+# --- Batch 22: the other std::string members, string members of game
+# objects (src/s3re/game/string_members.cpp) and std::logic_error /
+# out_of_range (src/s3re/msvc6/exceptions.cpp). `this` is the world base;
+# its string members get buffers in scratch slots 5 and up, a second object
+# at STRING_OTHER (scratch slot 0) gets its strings' buffers in slots 9 and
+# up (sometimes sharing the first object's).
+
+def member_strings(self_offsets, other_offsets=()):
+    def preset(rng, pool, args):
+        fields, ptrs, slot = [], {}, 5
+        for offset in self_offsets:
+            f, ptr = string_fields(rng, offset, SCRATCH + slot * SCRATCH_SLOT_BYTES)
+            fields += f
+            ptrs[offset] = ptr
+            slot += 1
+        slot = 9
+        for offset in other_offsets:
+            f, _ = string_fields(rng, STRING_OTHER + offset, SCRATCH + slot * SCRATCH_SLOT_BYTES,
+                                 shared_ptr=ptrs.get(offset), overlong=True)
+            fields += f
+            slot += 1
+        text = rng.randrange(0x60) if rng.random() < 0.8 else rng.choice([0, 1, 0x1f, 0x20])
+        for i in range(text):
+            fields.append((STRING_TEXT + i, rng.randint(1, 255), 1))
+        fields.append((STRING_TEXT + text, 0, 1))
+        return fields
+    return preset
+
+
+def session_desc(rng, pool, args):
+    """The DirectPlay record at STRING_OTHER: its session name (+0x30) is the
+    C text or null."""
+    fields = member_strings(())(rng, pool, args)
+    fields.append((STRING_OTHER + 0x30, rng.choice([STRING_TEXT_PTR, STRING_TEXT_PTR, 0]), 4))
+    return fields
+
+
+BY_VALUE_BUFFER = SCRATCH + 6 * SCRATCH_SLOT_BYTES
+
+
+def by_value_string(rng, pool, args):
+    """The buffer of the string passed by value (args 0..3): count byte, text,
+    sometimes a zero earlier or later than its length."""
+    fields = member_strings(())(rng, pool, args)
+    fields.append((BY_VALUE_BUFFER, rng.choice([0, 0, 1, 2, 0xfd, 0xfe, 0xff]), 1))
+    text = args[2] if rng.random() < 0.8 else rng.randrange(0x66)
+    for i in range(text):
+        fields.append((BY_VALUE_BUFFER + 1 + i, rng.randint(1, 255), 1))
+    fields.append((BY_VALUE_BUFFER + 1 + text, 0, 1))
+    return fields
+
+
+def error_objects(rng, pool, args):
+    """std::logic_error objects (exception: +4 what, +8 free flag; message
+    string at +0xc) at `this` and at STRING_OTHER."""
+    fields = member_strings((0xc,), (0xc,))(rng, pool, args)
+    for base in (STRING_SELF, STRING_OTHER):
+        fields.append((base + 4, rng.choice([STRING_TEXT_PTR, STRING_TEXT_PTR, 0x00655390]), 4))
+        fields.append((base + 8, rng.choice([0, 0, 1, rng.getrandbits(32)]), 4))
+    return fields
+
+
+SELF_OR_OTHER = one_of(STRING_SELF_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR)
+
+EMPTY_TEXT = 0x007a7868        # the text assigned for a null C string ("" in the image)
+NULL_STRING_COUNT = 0x0065539f  # "count byte" of the static empty string 0x6553a0
+
+
+def empty_text(rng, pool, args):
+    """Sometimes a non-empty text at 0x7a7868 (a writable global), so that
+    the code that copies it is reached."""
+    # Always written: globals keep what an earlier case wrote.
+    if rng.random() < 0.5:
+        return [(EMPTY_TEXT, 0, 1)]
+    n = rng.choice([1, 2, 0x1f, 0x20, 0x40])
+    return [(EMPTY_TEXT + i, rng.randint(1, 255), 1) for i in range(n)] + [(EMPTY_TEXT + n, 0, 1)]
+
+
+def null_string_count(rng, pool, args):
+    """Sometimes a count of 0xfe or more on the static empty string, so that
+    assigning a string without buffer copies instead of sharing it."""
+    # Always written (globals keep what an earlier case wrote); 0x3f is the
+    # image's value (the byte before "" in .rdata).
+    return [(NULL_STRING_COUNT, 0x3f if rng.random() < 0.6 else rng.choice([0xfd, 0xfe, 0xff]), 1)]
+
+
+# Dead blocks shared by many of these (the reasons, referred to below):
+#   DROP: deleting the temporary the result was built from; the result
+#     always shares its buffer (non-empty with a fresh count) or it has none.
+#   XLEN: std::_Xlen for a strlen (or a length minus a removed part) above
+#     0xFFFFFFFD, which needs a string of about 4 GB.
+#   CLEARED: the shared-buffer branch of an inlined _Grow on a string that a
+#     constructor has just emptied (no buffer).
+#   UNSHARED: the not-shared branches of an inlined _Grow after the code
+#     found the buffer shared (or the shared branch after _Split).
+#   DESTROY: the inlined ~string: erase() removes everything, so its
+#     _Grow(0) is false (no _Eos), and after _Split the buffer is unshared,
+#     so the release never just decrements.
+#   NPOS: `count = npos` when npos < the source length (never: lengths are
+#     at most 0xFFFFFFFF = npos), and the self-assignment's _Xran (the count
+#     never exceeds the length).
+
+
+SPECS += [
+    Spec("String_FromSubstr", 0x004078a0, "thiscall",
+         [SELF_OR_OTHER, string_count, string_count, one_of(STRING_TEXT_PTR)], presets=string_world,
+         # Dead: the self-assignment path on a just-emptied string (pos and
+         # count are 0: no _Xran, nothing to move or terminate) and the
+         # release of its (null) old buffer before sharing.
+         exempt_blocks=(0x004078f4, 0x0040790f, 0x00407938, 0x00407950, 0x0040795a, 0x00407984,
+                        0x004079b8, 0x004079c2, 0x004079c6, 0x004079cc)),
+    Spec("String_FromText", 0x00407a50, "thiscall", [one_of(STRING_TEXT_PTR), one_of(STRING_TEXT_PTR)],
+         presets=string_world,  # XLEN 0x407a7f, CLEARED 0x407a8b..0x407a9a
+         exempt_blocks=(0x00407a7f, 0x00407a8b, 0x00407a92, 0x00407a96, 0x00407a9a)),
+    Spec("String_AssignRepeat", 0x0041f430, "thiscall", [string_count, anything], presets=string_world),
+    Spec("String_FromRepeat", 0x005f3bf0, "thiscall", [string_count, anything, one_of(STRING_TEXT_PTR)],
+         presets=string_world,  # CLEARED
+         exempt_blocks=(0x005f3c2a, 0x005f3c31, 0x005f3c35, 0x005f3c39)),
+    Spec("String_Erase", 0x00407b10, "thiscall", [string_count, string_count], presets=string_world,
+         exempt_blocks=(0x00407bbf, 0x00407bd6, 0x00407bda)),  # XLEN, UNSHARED (after _Split)
+    Spec("String_AssignText", 0x00409a90, "thiscall", [one_of(STRING_TEXT_PTR)], presets=string_world,
+         exempt_blocks=(0x00409aad,)),  # XLEN
+    Spec("String_AssignTextOrEmpty", 0x00413d70, "thiscall", [text_or_null], presets=string_world,
+         globals=empty_text, exempt_blocks=(0x00413e2b, 0x00413e4f)),  # DROP, XLEN
+    Spec("String_Freeze", 0x00414490, "thiscall", [], eax_mask=0, presets=string_world,
+         # XLEN (a shared 4 GB string), UNSHARED
+         exempt_blocks=(0x004144ae, 0x004144d9, 0x004144dd, 0x004144e1, 0x004144eb)),
+    Spec("String_At", 0x004142d0, "thiscall", [string_count], presets=string_world,
+         exempt_blocks=(0x004142fa, 0x00414325, 0x00414329, 0x0041432d, 0x00414334)),  # as _Freeze
+    Spec("String_PlusString", 0x00409e60, "stdcall",
+         [one_of(STRING_RESULT_PTR), SELF_OR_OTHER, SELF_OR_OTHER], presets=string_world,
+         exempt_blocks=(0x00409f71,)),  # DROP
+    Spec("String_CharsPlus", 0x00409f90, "stdcall",
+         [one_of(STRING_RESULT_PTR), one_of(STRING_TEXT_PTR), SELF_OR_OTHER], presets=string_world,
+         exempt_blocks=(0x0040a0ba,)),  # DROP
+    Spec("String_PlusChar", 0x00421aa0, "stdcall",
+         [one_of(STRING_RESULT_PTR), SELF_OR_OTHER, anything], presets=string_world,
+         # XLEN (append to a 4 GB string), DROP (0x421b86 and the exit after it;
+         # the sum is never empty)
+         exempt_blocks=(0x00421afa, 0x00421b86, 0x00421b8f)),
+    Spec("String_ConcatString", 0x004077f0, "thiscall", [SELF_OR_OTHER], presets=string_world,
+         edx=SELF_OR_OTHER, exempt_blocks=(0x00407862,)),  # DROP
+    Spec("String_ConcatCharsLeft", 0x00408e50, "thiscall", [SELF_OR_OTHER], presets=string_world,
+         edx=text_or_null, exempt_blocks=(0x00408ec6,)),  # DROP
+    Spec("String_ConcatCharsLeft2", 0x0043d8e0, "thiscall", [SELF_OR_OTHER], presets=string_world,
+         edx=text_or_null, exempt_blocks=(0x0043d956,)),  # DROP
+    Spec("String_ConcatChar", 0x00420cb0, "thiscall", [anything], presets=string_world,
+         edx=SELF_OR_OTHER, exempt_blocks=(0x00420d22,)),  # DROP
+]
+
+SPECS += [
+    # DESTROY: the blocks at +0xbc (_Eos) and +0xdd (decrement) of each.
+    Spec(name, address, "thiscall", [], eax_mask=0, presets=member_strings(offsets),
+         exempt_blocks=(address + 0xbc, address + 0xdd) if len(offsets) == 1 else
+         (0x005e1bb5, 0x005e1bd5, 0x005e1c60, 0x005e1c7d))
+    for name, address, offsets in (
+        ("DestroyStringMember14_411980", 0x00411980, (0x14,)),
+        ("DestroyStringMember08_441740", 0x00441740, (0x08,)),
+        ("DestroyStringMember14_450ae0", 0x00450ae0, (0x14,)),
+        ("DestroyStringMember14_455170", 0x00455170, (0x14,)),
+        ("DestroyStringMember04_4581a0", 0x004581a0, (0x04,)),
+        ("DestroyStringMember04_459440", 0x00459440, (0x04,)),
+        ("DestroyStringMember50_45f060", 0x0045f060, (0x50,)),
+        ("DestroyStringMember04_499470", 0x00499470, (0x04,)),
+        ("DestroyStringMember04_49a070", 0x0049a070, (0x04,)),
+        ("DestroyStringMembers10And00_5e1b10", 0x005e1b10, (0x10, 0x00)),
+    )
+]
+
+SPECS += [
+    Spec("SetStringMember14_412130", 0x00412130, "thiscall",
+         [one_of(WORLD_BASE + 0x14, STRING_OTHER_PTR + 0x14, STRING_OTHER_PTR + 0x14)], eax_mask=0,
+         presets=member_strings((0x14,), (0x14,)), globals=null_string_count,
+         exempt_blocks=(0x0041214a, 0x00412155)),  # NPOS
+    Spec("SetStringMember10_4181f0", 0x004181f0, "thiscall",
+         [one_of(WORLD_BASE + 0x10, STRING_OTHER_PTR + 0x10, STRING_OTHER_PTR + 0x10)], eax_mask=0,
+         presets=member_strings((0x10,), (0x10,)), globals=null_string_count,
+         exempt_blocks=(0x0041820a, 0x00418215)),  # NPOS
+    Spec("AssignTwoDwordsAndString_4499e0", 0x004499e0, "thiscall", [SELF_OR_OTHER],
+         presets=member_strings((0x08,), (0x08,)), globals=null_string_count,
+         exempt_blocks=(0x00449a0e, 0x00449a1d)),  # NPOS
+    Spec("SessionDesc_Assign_5be000", 0x005be000, "thiscall", [SELF_OR_OTHER],
+         presets=member_strings((0x50,), (0x50,)), globals=null_string_count,
+         exempt_blocks=(0x005be02f, 0x005be03a)),  # NPOS
+    # Dead: 0x5ed5d8 (NPOS) and the whole self-assignment path from 0x5ed5de
+    # on: the function returns at once when this == x, so this + 0x14 ==
+    # x + 0x14 never holds.
+    Spec("LobbyRecord_Assign_5ed590", 0x005ed590, "thiscall", [SELF_OR_OTHER],
+         presets=member_strings((0x14,), (0x14,)), globals=null_string_count,
+         exempt_blocks=(0x005ed5d8, 0x005ed5de, 0x005ed5e7, 0x005ed5ec, 0x005ed5fc, 0x005ed5fe,
+                        0x005ed602, 0x005ed62a, 0x005ed632)),
+    Spec("SessionDesc_Construct_5bb0b0", 0x005bb0b0, "thiscall",
+         [one_of(0, STRING_OTHER_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR)], presets=session_desc,
+         globals=empty_text),
+    Spec("GuidNames_Construct_5b6790", 0x005b6790, "thiscall",
+         [one_of(0, STRING_OTHER_PTR), text_or_null, text_or_null], presets=member_strings(()),
+         exempt_blocks=(0x005b689a, 0x005b6978)),  # DROP (the first temporary)
+    Spec("CRegistryValueInfo_Construct", 0x006161e0, "thiscall",
+         [below(256), one_of(0, WORLD_BASE + BY_VALUE_BUFFER + 1, WORLD_BASE + BY_VALUE_BUFFER + 1),
+          below(0x60), below(0x80), anything], presets=by_value_string,
+         exempt_blocks=(0x006162ab, 0x006162cb)),  # DESTROY (of the parameter)
+]
+
+SPECS += [
+    Spec("LogicError_What", 0x00559630, "thiscall", [], presets=error_objects),
+    Spec("LogicError_Destroy", 0x005597e0, "thiscall", [], eax_mask=0, presets=error_objects),
+    Spec("LogicError_DeletingDestructor", 0x005597c0, "thiscall", [string_bool], presets=error_objects),
+    # Dead: 0x559694 (NPOS) and, in the copy onto itself, _Xran, the move
+    # and _Eos of the inlined erase(): the message was just emptied.
+    Spec("LogicError_Copy", 0x00559640, "thiscall", [SELF_OR_OTHER], presets=error_objects,
+         globals=null_string_count, exempt_blocks=(0x00559694, 0x005596a0, 0x005596bb, 0x005596e3)),
+    Spec("OutOfRange_Copy", 0x00559850, "thiscall", [SELF_OR_OTHER], presets=error_objects,
+         globals=null_string_count, exempt_blocks=(0x005598a3, 0x005598af, 0x005598ca, 0x005598f2)),
+]
+
+
 # Deliberately wrong pairings for `run.py --self-test`: each must be reported
 # as a mismatch, which shows that the harness notices wrong return values,
 # wrong memory writes and wrong conditions.
@@ -2277,4 +2493,7 @@ SELF_TEST = [
          [below(12), below(12), anything], presets=flood_replace(0x16, 2), max_cases=100),
     # ~string erases first, so even on an unshared buffer it writes before freeing.
     Spec("String_TidyFree", 0x00401b60, "thiscall", [], eax_mask=0, presets=string_world),
+    # The same destructor shape on a member at another offset (+0x8, not +0x14).
+    Spec("DestroyStringMember14_411980", 0x00441740, "thiscall", [], eax_mask=0,
+         presets=member_strings((0x08, 0x14))),
 ]

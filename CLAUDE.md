@@ -426,7 +426,8 @@ replaying, see `src/s3re/replay/command_log.h`):
    allocator in the world area (calls compared), std::_Xlen/_Xran end the
    run as a throw (compared), FS points at a fake TIB so SEH frames work.
    `run.py --self-test` checks that the
-   harness catches deliberately wrong pairings. Our replacements must not
+   harness catches deliberately wrong pairings; `--all-uncovered` lists
+   every uncovered block (to write the dead-block reasons at a spec). Our replacements must not
    rely on DLL startup code (the emulator doesn't run it); call the game's
    operator new/delete/memmove (0x61efb9/0x61e4ef/0x61e860) where the
    original does.

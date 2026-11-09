@@ -128,6 +128,15 @@ void Erase(String* self, std::uint32_t p0, std::uint32_t m) {
 
 }  // namespace
 
+namespace detail {
+std::uint32_t Npos() { return msvc6::Npos(); }
+char* CStr(const String* s) { return msvc6::CStr(s); }
+void Release(char* ptr) { msvc6::Release(ptr); }
+void Erase(String* self, std::uint32_t p0, std::uint32_t m) { msvc6::Erase(self, p0, m); }
+void Clear(String* s) { msvc6::Clear(s); }
+std::uint32_t Length(const char* s) { return msvc6::Length(s); }
+}  // namespace detail
+
 // ---------------------------------------------------------------------------
 // _Eos (0x00401f60)
 // ---------------------------------------------------------------------------
@@ -425,6 +434,274 @@ String* __fastcall String_ConcatChars(String* self, const String* left, const ch
 }
 
 // ---------------------------------------------------------------------------
+// Batch 22: the remaining out-of-line members. Most of them are the compiled
+// form of a member with assign()/_Grow()/erase() inlined; ours call the
+// members above instead, which do the same steps in the same order.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// The text the game assigns instead of a null C string (a zero byte in
+// S3.EXE's data at 0x7a7868); read at run time, like the original.
+const char* EmptyText() {
+    return reinterpret_cast<const char*>(0x007a7868);
+}
+
+// self = a copy of the temporary, which is then dropped (the pattern every
+// operator+ and helper below ends with).
+void CopyAndDrop(String* self, String* temporary) {
+    self->allocator = temporary->allocator;
+    Clear(self);
+    String_AssignSubstr(self, nullptr, temporary, 0, Npos());
+    if (temporary->ptr != nullptr) {
+        Release(temporary->ptr);
+    }
+}
+
+// append(x) (as append(x, 0, npos) inlined into the operator+ functions).
+void AppendString(String* self, const String* x) {
+    std::uint32_t count = Npos();
+    if (x->len < count) {
+        count = x->len;
+    }
+    if (Npos() - self->len <= count) {
+        GameXlen();
+    }
+    if (count > 0) {
+        const std::uint32_t total = self->len + count;
+        if (String_Grow(self, nullptr, total, 0)) {
+            CopyChars(self->ptr + self->len, CStr(x), count);
+            String_Eos(self, nullptr, total);
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_HOOK(0x004078a0, String_FromSubstr, StringFromSubstrFn, Original_String_FromSubstr,
+          String_FromSubstr);
+
+// Purpose: Standard string constructor from part of another string
+// (string(x, pos, n)).
+String* __fastcall String_FromSubstr(String* self, void* /*edx*/, const String* x, std::uint32_t pos,
+                                     std::uint32_t n, const std::uint8_t* allocator) {
+    self->allocator = *allocator;
+    Clear(self);
+    return String_AssignSubstr(self, nullptr, x, pos, n);
+}
+
+S3RE_HOOK(0x00407a50, String_FromText, StringFromTextFn, Original_String_FromText, String_FromText);
+
+// Purpose: Standard string constructor from C text (string(s)), used wherever
+// the game turns a literal or a buffer into a string.
+String* __fastcall String_FromText(String* self, void* /*edx*/, const char* s,
+                                   const std::uint8_t* allocator) {
+    self->allocator = *allocator;
+    Clear(self);
+    return String_AssignChars(self, nullptr, s, Length(s));
+}
+
+S3RE_HOOK(0x0041f430, String_AssignRepeat, StringAssignRepeatFn, Original_String_AssignRepeat,
+          String_AssignRepeat);
+
+// Purpose: Standard string: sets a string to n copies of one character.
+String* __fastcall String_AssignRepeat(String* self, void* /*edx*/, std::uint32_t n, std::uint32_t c) {
+    if (n == Npos()) {
+        GameXlen();
+    }
+    if (String_Grow(self, nullptr, n, 1)) {
+        for (std::uint32_t i = 0; i < n; ++i) {
+            self->ptr[i] = static_cast<char>(c);
+        }
+        String_Eos(self, nullptr, n);
+    }
+    return self;
+}
+
+S3RE_HOOK(0x005f3bf0, String_FromRepeat, StringFromRepeatFn, Original_String_FromRepeat,
+          String_FromRepeat);
+
+// Purpose: Standard string constructor: n copies of one character.
+String* __fastcall String_FromRepeat(String* self, void* /*edx*/, std::uint32_t n, std::uint32_t c,
+                                     const std::uint8_t* allocator) {
+    self->allocator = *allocator;
+    Clear(self);
+    return String_AssignRepeat(self, nullptr, n, c);
+}
+
+S3RE_HOOK(0x00407b10, String_Erase, StringEraseFn, Original_String_Erase, String_Erase);
+
+// Purpose: Standard string: removes n characters starting at pos.
+String* __fastcall String_Erase(String* self, void* /*edx*/, std::uint32_t pos, std::uint32_t n) {
+    Erase(self, pos, n);
+    return self;
+}
+
+S3RE_HOOK(0x00409a90, String_AssignText, StringAssignTextFn, Original_String_AssignText,
+          String_AssignText);
+
+// Purpose: Standard string: assigns C text (string = "...").
+String* __fastcall String_AssignText(String* self, void* /*edx*/, const char* s) {
+    return String_AssignChars(self, nullptr, s, Length(s));
+}
+
+S3RE_HOOK(0x00413d70, String_AssignTextOrEmpty, StringAssignTextOrEmptyFn,
+          Original_String_AssignTextOrEmpty, String_AssignTextOrEmpty);
+
+// Purpose: Assigns C text that may be null (then the empty text); probably a
+// game helper for optional texts. The text goes through a temporary string,
+// as in the original.
+String* __fastcall String_AssignTextOrEmpty(String* self, void* /*edx*/, const char* s) {
+    if (s != nullptr) {
+        String text{};
+        text.allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(s));
+        String_AssignChars(&text, nullptr, s, Length(s));
+        String_AssignSubstr(self, nullptr, &text, 0, Npos());
+        if (text.ptr != nullptr) {
+            Release(text.ptr);
+        }
+    } else {
+        String_AssignChars(self, nullptr, EmptyText(), Length(EmptyText()));
+    }
+    return self;
+}
+
+S3RE_HOOK(0x00414490, String_Freeze, StringFreezeFn, Original_String_Freeze, String_Freeze);
+
+// Purpose: Standard string helper: before the game gets a writable pointer
+// into a string, gives it an unshared buffer and marks the buffer as never
+// to be shared again (count 0xFF).
+void __fastcall String_Freeze(String* self, void* /*edx*/) {
+    if (IsShared(self)) {
+        String_Grow(self, nullptr, self->len, 0);
+    }
+    if (self->ptr != nullptr) {
+        RefCount(self->ptr) = kFrozen;
+    }
+}
+
+S3RE_HOOK(0x004142d0, String_At, StringAtFn, Original_String_At, String_At);
+
+// Purpose: Standard string: writable access to one character (s[pos]); a
+// position past the end gives the static empty string.
+char* __fastcall String_At(String* self, void* /*edx*/, std::uint32_t pos) {
+    if (self->len < pos || self->ptr == nullptr) {
+        return NullString();
+    }
+    String_Freeze(self, nullptr);
+    // A shared empty string loses its buffer in _Freeze; the original then
+    // returns null + pos as well.
+    return reinterpret_cast<char*>(reinterpret_cast<std::uintptr_t>(self->ptr) + pos);
+}
+
+S3RE_HOOK(0x00409e60, String_PlusString, StringPlusStringFn, Original_String_PlusString,
+          String_PlusString);
+
+// Purpose: Standard string concatenation (string + string), e.g. paths and
+// messages built from pieces.
+String* __cdecl String_PlusString(String* result, const String* left, const String* right) {
+    String sum{};
+    sum.allocator = left->allocator;
+    String_AssignSubstr(&sum, nullptr, left, 0, Npos());
+    AppendString(&sum, right);
+    CopyAndDrop(result, &sum);
+    return result;
+}
+
+S3RE_HOOK(0x00409f90, String_CharsPlus, StringCharsPlusFn, Original_String_CharsPlus,
+          String_CharsPlus);
+
+// Purpose: Standard string concatenation (C text + string).
+String* __cdecl String_CharsPlus(String* result, const char* left, const String* right) {
+    String sum{};
+    // The allocator byte is the low byte of `left` (its stack slot).
+    sum.allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(left));
+    String_AssignChars(&sum, nullptr, left, Length(left));
+    AppendString(&sum, right);
+    CopyAndDrop(result, &sum);
+    return result;
+}
+
+S3RE_HOOK(0x00421aa0, String_PlusChar, StringPlusCharFn, Original_String_PlusChar, String_PlusChar);
+
+// Purpose: Standard string concatenation (string + one character).
+String* __cdecl String_PlusChar(String* result, const String* left, std::uint32_t c) {
+    String sum{};
+    sum.allocator = left->allocator;
+    String_AssignSubstr(&sum, nullptr, left, 0, Npos());
+    // append(1, c); this one compares against a literal npos.
+    if (0xFFFFFFFFu - sum.len <= 1) {
+        GameXlen();
+    }
+    const std::uint32_t total = sum.len + 1;
+    if (String_Grow(&sum, nullptr, total, 0)) {
+        sum.ptr[sum.len] = static_cast<char>(c);
+        String_Eos(&sum, nullptr, total);
+    }
+    CopyAndDrop(result, &sum);
+    return result;
+}
+
+S3RE_HOOK(0x004077f0, String_ConcatString, StringConcatStringFn, Original_String_ConcatString,
+          String_ConcatString);
+
+// Purpose: Builds a string as left + right (both strings); a helper the
+// compiler generated for expressions like `string s = a + b;`.
+String* __fastcall String_ConcatString(String* self, const String* left, const String* right) {
+    String sum{};
+    String_PlusString(&sum, left, right);
+    CopyAndDrop(self, &sum);
+    return self;
+}
+
+namespace {
+
+String* ConcatCharsLeft(String* self, const char* left, const String* right) {
+    if (left != nullptr) {
+        String sum{};
+        String_CharsPlus(&sum, left, right);
+        CopyAndDrop(self, &sum);
+    } else {
+        self->allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(right));
+        Clear(self);
+        String_AssignSubstr(self, nullptr, right, 0, 0xFFFFFFFFu);
+    }
+    return self;
+}
+
+}  // namespace
+
+S3RE_HOOK(0x00408e50, String_ConcatCharsLeft, StringConcatCharsLeftFn,
+          Original_String_ConcatCharsLeft, String_ConcatCharsLeft);
+
+// Purpose: Builds a string as text + right, or as a copy of right when there
+// is no text (a compiler-generated helper like String_ConcatChars).
+String* __fastcall String_ConcatCharsLeft(String* self, const char* left, const String* right) {
+    return ConcatCharsLeft(self, left, right);
+}
+
+S3RE_HOOK(0x0043d8e0, String_ConcatCharsLeft2, StringConcatCharsLeftFn,
+          Original_String_ConcatCharsLeft2, String_ConcatCharsLeft2);
+
+// Purpose: The same helper as String_ConcatCharsLeft, compiled a second time
+// into another source file.
+String* __fastcall String_ConcatCharsLeft2(String* self, const char* left, const String* right) {
+    return ConcatCharsLeft(self, left, right);
+}
+
+S3RE_HOOK(0x00420cb0, String_ConcatChar, StringConcatCharFn, Original_String_ConcatChar,
+          String_ConcatChar);
+
+// Purpose: Builds a string as left + one character (compiler-generated
+// helper).
+String* __fastcall String_ConcatChar(String* self, const String* left, std::uint32_t c) {
+    String sum{};
+    String_PlusChar(&sum, left, c);
+    CopyAndDrop(self, &sum);
+    return self;
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -491,19 +768,47 @@ struct StringOps {
     StringDefaultFn makeDefault;
     StringPlusCharsFn plusChars;
     StringConcatCharsFn concatChars;
+    // Batch 22
+    StringFromSubstrFn fromSubstr;
+    StringFromTextFn fromText;
+    StringFromRepeatFn fromRepeat;
+    StringEraseFn erase;
+    StringAssignTextFn assignText;
+    StringAssignRepeatFn assignRepeat;
+    StringAssignTextOrEmptyFn assignTextOrEmpty;
+    StringAtFn at;
+    StringFreezeFn freeze;
+    StringPlusStringFn plusString;
+    StringCharsPlusFn charsPlus;
+    StringPlusCharFn plusChar;
+    StringConcatStringFn concatString;
+    StringConcatCharsLeftFn concatCharsLeft;
+    StringConcatCharsLeftFn concatCharsLeft2;
+    StringConcatCharFn concatChar;
 };
 
 StringOps OriginalOps() {
     return {Original_String_Tidy,        Original_String_TidyFree,  Original_String_Copy,
             Original_String_Grow,        Original_String_Split,     Original_String_AssignChars,
             Original_String_AssignSubstr, Original_String_Destroy,  Original_String_FromChars,
-            Original_String_Default,     Original_String_PlusChars, Original_String_ConcatChars};
+            Original_String_Default,     Original_String_PlusChars, Original_String_ConcatChars,
+            Original_String_FromSubstr,  Original_String_FromText,  Original_String_FromRepeat,
+            Original_String_Erase,       Original_String_AssignText, Original_String_AssignRepeat,
+            Original_String_AssignTextOrEmpty, Original_String_At,  Original_String_Freeze,
+            Original_String_PlusString,  Original_String_CharsPlus, Original_String_PlusChar,
+            Original_String_ConcatString, Original_String_ConcatCharsLeft,
+            Original_String_ConcatCharsLeft2, Original_String_ConcatChar};
 }
 
 StringOps OurOps() {
     return {&String_Tidy,        &String_TidyFree,  &String_Copy,        &String_Grow,
             &String_Split,       &String_AssignChars, &String_AssignSubstr, &String_Destroy,
-            &String_FromChars,   &String_Default,   &String_PlusChars,   &String_ConcatChars};
+            &String_FromChars,   &String_Default,   &String_PlusChars,   &String_ConcatChars,
+            &String_FromSubstr,  &String_FromText,  &String_FromRepeat,  &String_Erase,
+            &String_AssignText,  &String_AssignRepeat, &String_AssignTextOrEmpty, &String_At,
+            &String_Freeze,      &String_PlusString, &String_CharsPlus,  &String_PlusChar,
+            &String_ConcatString, &String_ConcatCharsLeft, &String_ConcatCharsLeft2,
+            &String_ConcatChar};
 }
 
 // A deliberately wrong assign(string, pos, n): never shares the buffer.
@@ -566,12 +871,16 @@ void CompareStringOperations(test::Context& ctx, const StringOps& candidate, int
         String a[kSlots] = {};
         String b[kSlots] = {};
         for (int step = 0; step < 40; ++step) {
-            const int op = static_cast<int>(ctx.rng().Below(12));
+            const int op = static_cast<int>(ctx.rng().Below(28));
             const int i = static_cast<int>(ctx.rng().Below(kSlots));
             const int j = static_cast<int>(ctx.rng().Below(kSlots));
             const std::string& text = texts[ctx.rng().Below(static_cast<std::uint32_t>(texts.size()))];
             const std::uint32_t n = ctx.rng().Chance(1, 4) ? 0xFFFFFFFFu : ctx.rng().Below(100);
             const std::uint32_t flag = ctx.rng().Below(2) | (ctx.rng().Next32() & 0xFF00u);
+            // A character for the repeat/append operations: never a zero, as
+            // an embedded zero makes a later _Split shorten the string under
+            // a running erase(), which crashes the original too.
+            const std::uint32_t repeated = (ctx.rng().Next32() & 0xFFFFFF00u) | (1 + ctx.rng().Below(255));
             std::uint32_t resultA = 0;
             std::uint32_t resultB = 0;
             switch (op) {
@@ -627,12 +936,115 @@ void CompareStringOperations(test::Context& ctx, const StringOps& candidate, int
                     candidate.concatChars(&b[i], &b[j], right);
                     break;
                 }
-                default:
+                case 11:
                     original.tidyFree(&a[i], nullptr);
                     candidate.tidyFree(&b[i], nullptr);
                     break;
+                case 12: {
+                    // Constructing a slot from itself empties it first, so
+                    // only position 0 is valid then (else std::_Xran throws).
+                    const std::uint32_t pos = i == j ? 0 : ctx.rng().Below(a[j].len + 1);
+                    const std::uint8_t allocator = static_cast<std::uint8_t>(n >> 3);
+                    // A constructor overwrites the slot without releasing it.
+                    original.fromSubstr(&a[i], nullptr, &a[j], pos, n, &allocator);
+                    candidate.fromSubstr(&b[i], nullptr, &b[j], pos, n, &allocator);
+                    break;
+                }
+                case 13: {
+                    const std::uint8_t allocator = static_cast<std::uint8_t>(n >> 3);
+                    original.fromText(&a[i], nullptr, text.c_str(), &allocator);
+                    candidate.fromText(&b[i], nullptr, text.c_str(), &allocator);
+                    break;
+                }
+                case 14: {
+                    const std::uint8_t allocator = static_cast<std::uint8_t>(n >> 3);
+                    original.fromRepeat(&a[i], nullptr, n & 0x7F, repeated, &allocator);
+                    candidate.fromRepeat(&b[i], nullptr, n & 0x7F, repeated, &allocator);
+                    break;
+                }
+                case 15: {
+                    const std::uint32_t pos = ctx.rng().Below(a[i].len + 1);
+                    original.erase(&a[i], nullptr, pos, n);
+                    candidate.erase(&b[i], nullptr, pos, n);
+                    break;
+                }
+                case 16:
+                    original.assignText(&a[i], nullptr, text.c_str());
+                    candidate.assignText(&b[i], nullptr, text.c_str());
+                    break;
+                case 17:
+                    original.assignRepeat(&a[i], nullptr, n & 0x7F, repeated);
+                    candidate.assignRepeat(&b[i], nullptr, n & 0x7F, repeated);
+                    break;
+                case 18: {
+                    const char* s = ctx.rng().Chance(1, 3) ? nullptr : text.c_str();
+                    original.assignTextOrEmpty(&a[i], nullptr, s);
+                    candidate.assignTextOrEmpty(&b[i], nullptr, s);
+                    break;
+                }
+                case 19: {
+                    const std::uint32_t pos = ctx.rng().Below(a[i].len + 3);
+                    char* pa = original.at(&a[i], nullptr, pos);
+                    char* pb = candidate.at(&b[i], nullptr, pos);
+                    // Same position in the respective buffer, or the same
+                    // static empty string.
+                    resultA = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(pa) -
+                                                         reinterpret_cast<std::uintptr_t>(a[i].ptr));
+                    resultB = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(pb) -
+                                                         reinterpret_cast<std::uintptr_t>(b[i].ptr));
+                    if (pa == NullString() || pb == NullString()) {
+                        resultA = pa == NullString();
+                        resultB = pb == NullString();
+                    }
+                    break;
+                }
+                case 20:
+                    original.freeze(&a[i], nullptr);
+                    candidate.freeze(&b[i], nullptr);
+                    break;
+                case 21: {
+                    const int k = static_cast<int>(ctx.rng().Below(kSlots));
+                    original.plusString(&a[i], &a[j], &a[k]);
+                    candidate.plusString(&b[i], &b[j], &b[k]);
+                    break;
+                }
+                case 22:
+                    original.charsPlus(&a[i], text.c_str(), &a[j]);
+                    candidate.charsPlus(&b[i], text.c_str(), &b[j]);
+                    break;
+                case 23:
+                    original.plusChar(&a[i], &a[j], repeated);
+                    candidate.plusChar(&b[i], &b[j], repeated);
+                    break;
+                case 24: {
+                    const int k = static_cast<int>(ctx.rng().Below(kSlots));
+                    original.concatString(&a[i], &a[j], &a[k]);
+                    candidate.concatString(&b[i], &b[j], &b[k]);
+                    break;
+                }
+                case 25:
+                case 26: {
+                    const char* left = ctx.rng().Chance(1, 3) ? nullptr : text.c_str();
+                    const StringConcatCharsLeftFn fa = op == 25 ? original.concatCharsLeft : original.concatCharsLeft2;
+                    const StringConcatCharsLeftFn fb = op == 25 ? candidate.concatCharsLeft : candidate.concatCharsLeft2;
+                    fa(&a[i], left, &a[j]);
+                    fb(&b[i], left, &b[j]);
+                    if (left == nullptr) {
+                        // Without text the allocator byte is the low byte of
+                        // `right`'s address, which differs between the sides.
+                        resultA = a[i].allocator == static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(&a[j]));
+                        resultB = b[i].allocator == static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(&b[j]));
+                        a[i].allocator = b[i].allocator = 0;
+                    }
+                    break;
+                }
+                default:
+                    original.concatChar(&a[i], &a[j], repeated);
+                    candidate.concatChar(&b[i], &b[j], repeated);
+                    break;
             }
-            if (!S3RE_EXPECT_EQ(resultA & 0xFF, resultB & 0xFF) || !SameStrings(ctx, a, b)) {
+            const std::uint32_t mask = op == 19 ? 0xFFFFFFFFu : 0xFFu;
+            if (!S3RE_EXPECT_EQ(resultA & mask, resultB & mask) || !SameStrings(ctx, a, b)) {
                 ctx.Fail(__FILE__, __LINE__, "  sequence %d step %d: op %d i=%d j=%d n=0x%x",
                          sequence, step, op, i, j, n);
                 return;
