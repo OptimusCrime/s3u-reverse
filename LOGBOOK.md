@@ -518,6 +518,29 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-09 (38): whole-game evidence on the progress page (tooling, parallel worktree)
+
+- New `re/whole_game_calls.csv` (tools/whole_game.py): call counts per
+  function and whole-game check source (`replay:scripted-seed127.bin`,
+  `save:slot N.sav`), backfilled from the inventory notes and
+  re/savegame_checks.md (including the 17 functions only the savegames
+  called, and 0 rows for the others). GameWorld::SeedRandom
+  (S3RE_HOOK_ALWAYS, not counted) has a hand-made row (runs at every
+  game start).
+- Of 454 verified: 253 identical in a whole-game check, 201 tests only,
+  0 never measured. 34 of the tests-only ones are reachable from seen
+  replacements through our own code (calls from our code bypass the
+  counting thunk), e.g. PlanSiteLevelling via CheckBuildingSite, the
+  area split/merge helpers via BlockTile/UnblockTile, std::string
+  _Tidy_free: they may have run uncounted. Unconfirmed; a way to confirm
+  would be counting calls inside our own code too.
+- record_call_counts.py and check_save.py (identical runs only) write the
+  CSV; savegame_calls.py --record imports old *-calls.tsv files.
+  progress.py/progress.html: three verified colours, counts, a sortable
+  and filterable list of verified functions with their counts, a history
+  series for whole-game bytes. inventory.py stats shows the split, check
+  validates the CSV (`whole_game.py fix-names` after renames).
+
 ### 2026-11-09 (37): whole-game checks from savegames (tooling, parallel worktree)
 
 - `s3re_launcher --load-save FILE` starts the game directly from a
