@@ -19,7 +19,7 @@ namespace {
 // already checks the full SHA-256; this is a cheap second check in case the
 // DLL is loaded some other way.
 constexpr DWORD kExpectedTimeDateStamp = 0x38E4B1B0;  // 2000-03-31 14:09:52 UTC
-constexpr DWORD kExpectedSizeOfImage = 0x003ED000;
+constexpr DWORD kExpectedSizeOfImage = 0x003ED000;  // raw-ok: PE header value, not a world offset
 
 bool IsExpectedGameBuild() {
     const auto* base = reinterpret_cast<const BYTE*>(GetModuleHandleW(nullptr));

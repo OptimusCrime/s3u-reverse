@@ -180,6 +180,9 @@ def check() -> int:
     import whole_game  # here: progress.py imports this module the other way round
     errors.extend(whole_game.check_errors())
 
+    import typed_access_lint  # no raw world offsets in src/ (CLAUDE.md)
+    errors.extend(typed_access_lint.findings())
+
     for error in errors:
         print(f"error: {error}")
     print(f"inventory check: {len(rows)} rows, {len(code_hooks)} hooks, "

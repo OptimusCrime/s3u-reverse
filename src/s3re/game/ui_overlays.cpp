@@ -44,7 +44,7 @@
 
 #include "game/layout.h"
 #include "game/replacements.h"
-#include "game/ui_layout.h"
+#include "game/logic_thread_layout.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
@@ -54,7 +54,6 @@
 
 namespace s3re::game {
 
-struct CLogicThread;  // opaque
 
 namespace {
 
@@ -63,7 +62,7 @@ using layout::Tile;
 constexpr std::uint16_t kNoPoint = 0xffff;
 
 GameWorld* WorldOf(CLogicThread* self) {
-    return ui::LogicThreadOf(self)->world;
+    return LogicThreadOf(self)->world;
 }
 
 // Tile (x, y), addressed in 32 bits like the original (any x and y).
@@ -240,15 +239,15 @@ static_assert(offsetof(GameWorld, trades) + (kTestExtras + 1) * sizeof(layout::T
 class ThreadPair {
 public:
     explicit ThreadPair(test::WorldPair& worlds) {
-        ui::LogicThreadOf(a_)->world = worlds.original();
-        ui::LogicThreadOf(b_)->world = worlds.ours();
+        LogicThreadOf(a_)->world = worlds.original();
+        LogicThreadOf(b_)->world = worlds.ours();
     }
     CLogicThread* original() { return reinterpret_cast<CLogicThread*>(a_); }
     CLogicThread* ours() { return reinterpret_cast<CLogicThread*>(b_); }
 
 private:
-    std::uint8_t a_[sizeof(ui::LogicThreadView)] = {};
-    std::uint8_t b_[sizeof(ui::LogicThreadView)] = {};
+    std::uint8_t a_[sizeof(CLogicThread)] = {};
+    std::uint8_t b_[sizeof(CLogicThread)] = {};
 };
 
 // Wrong: marks with the value + 1.

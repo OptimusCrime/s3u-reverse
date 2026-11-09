@@ -40,11 +40,6 @@ namespace {
 using framework::GfxData;
 
 template <typename T>
-T& At(std::uintptr_t address) {
-    return RawAtAddress<T>(address);
-}
-
-template <typename T>
 T* As(void* self) {
     return static_cast<T*>(self);
 }
@@ -117,9 +112,9 @@ S3RE_HOOK(0x004c7b00, Render_PackColour, PackColourFn, Original_Render_PackColou
 // Purpose: Probably converts a colour (three channels, 0..255) into a pixel
 // value for the current screen mode, e.g. for the minimap or overlays.
 std::uint32_t __stdcall Render_PackColour(std::uint32_t c1, std::uint32_t c2, std::uint32_t c3) {
-    const std::uint32_t part3 = ((c3 * At<std::uint32_t>(kColourScale3)) >> 8) << (At<std::uint32_t>(kColourShift3) & 31);
-    const std::uint32_t part2 = ((c2 * At<std::uint32_t>(kColourScale2)) >> 8) << (At<std::uint32_t>(kColourShift2) & 31);
-    const std::uint32_t part1 = ((c1 * At<std::uint32_t>(kColourScale1)) >> 8) << (At<std::uint32_t>(kColourShift1) & 31);
+    const std::uint32_t part3 = ((c3 * RawAtAddress<std::uint32_t>(kColourScale3)) >> 8) << (RawAtAddress<std::uint32_t>(kColourShift3) & 31);
+    const std::uint32_t part2 = ((c2 * RawAtAddress<std::uint32_t>(kColourScale2)) >> 8) << (RawAtAddress<std::uint32_t>(kColourShift2) & 31);
+    const std::uint32_t part1 = ((c1 * RawAtAddress<std::uint32_t>(kColourScale1)) >> 8) << (RawAtAddress<std::uint32_t>(kColourShift1) & 31);
     return part3 + part2 + part1;
 }
 
@@ -133,8 +128,8 @@ std::uint32_t __fastcall GfxData_SpriteWord(void* self, void* /*edx*/, std::uint
     GfxData* const gfx = As<GfxData>(self);
     const std::uint32_t table = gfx->spriteTables[group];
     const std::uint32_t offset = gfx->groupBase[group];
-    const std::uint32_t entry = At<std::uint32_t>(table + 8 + index * 4);
-    return (offset & 0xffff0000u) | At<std::uint16_t>(entry + offset);
+    const std::uint32_t entry = RawAtAddress<std::uint32_t>(table + 8 + index * 4);
+    return (offset & 0xffff0000u) | RawAtAddress<std::uint16_t>(entry + offset);
 }
 
 S3RE_HOOK(0x005fc540, GfxData_SetDword, SetDwordFn, Original_GfxData_SetDword, GfxData_SetDword);
@@ -230,7 +225,7 @@ std::uint32_t __fastcall Render_PutPixel16(void* self, void* /*edx*/, std::uint3
                                            std::uint32_t colour) {
     DrawTarget* const target = As<DrawTarget>(self);
     const std::uint32_t index =
-        (target->pitch >> 1) * (y + At<std::uint32_t>(kDrawOriginY)) + At<std::uint32_t>(kDrawOriginX) + x;
+        (target->pitch >> 1) * (y + RawAtAddress<std::uint32_t>(kDrawOriginY)) + RawAtAddress<std::uint32_t>(kDrawOriginX) + x;
     *reinterpret_cast<std::uint16_t*>(target->pixels + index * 2) = static_cast<std::uint16_t>(colour);
     return index;
 }
@@ -325,8 +320,8 @@ void CompareGraphics(test::Context& ctx, const GraphicsFunctions& candidate, int
 
 // Wrong: arithmetic instead of logical shift after the scaling.
 std::uint32_t __stdcall WrongPackColour(std::uint32_t c1, std::uint32_t c2, std::uint32_t c3) {
-    const auto scaled = static_cast<std::uint32_t>(static_cast<std::int32_t>(c1 * At<std::uint32_t>(kColourScale1)) >> 8);
-    return Render_PackColour(0, c2, c3) + (scaled << (At<std::uint32_t>(kColourShift1) & 31));
+    const auto scaled = static_cast<std::uint32_t>(static_cast<std::int32_t>(c1 * RawAtAddress<std::uint32_t>(kColourScale1)) >> 8);
+    return Render_PackColour(0, c2, c3) + (scaled << (RawAtAddress<std::uint32_t>(kColourShift1) & 31));
 }
 
 }  // namespace
@@ -357,7 +352,7 @@ struct Graphics25Functions {
 void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate, int cases) {
     const Graphics25Functions original{Original_GfxData_FrameOffset, Original_Render_PutPixel16,
                                        Original_Render_Entry204};
-    const std::uint32_t savedX = At<std::uint32_t>(kDrawOriginX), savedY = At<std::uint32_t>(kDrawOriginY);
+    const std::uint32_t savedX = RawAtAddress<std::uint32_t>(kDrawOriginX), savedY = RawAtAddress<std::uint32_t>(kDrawOriginY);
     static std::uint8_t a[0x8000], b[0x8000];
     for (int i = 0; i < cases; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(3));
@@ -379,8 +374,8 @@ void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate,
             ra = original.frameOffset(a, nullptr, group << 16 | frame, variant);
             rb = candidate.frameOffset(b, nullptr, group << 16 | frame, variant);
         } else if (op == 1) {
-            At<std::uint32_t>(kDrawOriginX) = ctx.rng().Below(32);
-            At<std::uint32_t>(kDrawOriginY) = ctx.rng().Below(32);
+            RawAtAddress<std::uint32_t>(kDrawOriginX) = ctx.rng().Below(32);
+            RawAtAddress<std::uint32_t>(kDrawOriginY) = ctx.rng().Below(32);
             As<DrawTarget>(a)->pitch = 2 * (32 + ctx.rng().Below(32));
             const std::uint32_t x = ctx.rng().Below(64), y = ctx.rng().Below(64);
             const std::uint32_t colour = ctx.rng().Next32();
@@ -412,8 +407,8 @@ void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate,
             break;
         }
     }
-    At<std::uint32_t>(kDrawOriginX) = savedX;
-    At<std::uint32_t>(kDrawOriginY) = savedY;
+    RawAtAddress<std::uint32_t>(kDrawOriginX) = savedX;
+    RawAtAddress<std::uint32_t>(kDrawOriginY) = savedY;
 }
 
 // Wrong: ignores the "current variant" default.

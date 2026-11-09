@@ -29,6 +29,7 @@
 //   out[player]. EAX (callers ignore it) = count + 1.
 //   ret 4.
 
+#include "game/logic_thread_layout.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -39,22 +40,11 @@
 
 namespace s3re::game {
 
-struct CLogicThread;  // opaque
 
 namespace {
 
 using layout::Area;
 using layout::Building;
-
-// The part of CLogicThread these functions use: the world pointer at +0x3a0
-// (the rest of the object is not mapped here).
-#pragma pack(push, 1)
-struct LogicThreadFields {
-    std::uint8_t unk000[0x3a0];
-    GameWorld* world;  // 0x3a0
-};
-#pragma pack(pop)
-static_assert(offsetof(LogicThreadFields, world) == 0x3a0);
 
 // Goods type whose piles SumAreaGoods10PerPlayer sums (list head at area +0x1e).
 constexpr std::uint32_t kGoods10 = 10;
@@ -64,7 +54,7 @@ constexpr std::uint32_t kNoPlayer = 0xff;
 constexpr std::uint32_t kPlayers = layout::kPlayers;
 
 GameWorld* WorldOf(CLogicThread* self) {
-    return reinterpret_cast<LogicThreadFields*>(self)->world;
+    return self->world;
 }
 
 // The owner of tile (x, y) of a point; the coordinates are not checked
@@ -183,8 +173,8 @@ struct Fixture {
         threadA.world = worlds.original();
         threadB.world = worlds.ours();
     }
-    CLogicThread* original() { return reinterpret_cast<CLogicThread*>(&threadA); }
-    CLogicThread* ours() { return reinterpret_cast<CLogicThread*>(&threadB); }
+    CLogicThread* original() { return &threadA; }
+    CLogicThread* ours() { return &threadB; }
     void FillOutputs(test::Context& ctx) {
         ctx.rng().Fill(outA, sizeof(outA));
         std::memcpy(outB, outA, sizeof(outA));
@@ -194,8 +184,8 @@ struct Fixture {
     }
 
     test::WorldPair worlds;
-    LogicThreadFields threadA = {};
-    LogicThreadFields threadB = {};
+    CLogicThread threadA = {};
+    CLogicThread threadB = {};
     std::int32_t outA[kOutEntries] = {};
     std::int32_t outB[kOutEntries] = {};
 };

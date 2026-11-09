@@ -18,7 +18,11 @@ struct MessageQueue;
 #pragma pack(push, 1)
 
 struct CLogicThread {
-    std::uint8_t unk000[0x3a0];
+    std::uint8_t unk000[0x74];
+    std::uint32_t unk074;              // +0x074 cleared by ClearPendingUiRefresh (ui_state.cpp)
+    std::uint8_t unk078[0xc];
+    std::uint32_t pending_ui_refresh;  // +0x084 turned into the world's refresh_ui (ui_state.cpp)
+    std::uint8_t unk088[0x3a0 - 0x88];
     GameWorld* world;          // +0x3a0 the world (CGameData)
     std::uint8_t unk3a4[0x3c4 - 0x3a4];
     MessageQueue* toNet;       // +0x3c4 logic -> network (0x20 step and 0x21 command messages)
@@ -28,8 +32,16 @@ struct CLogicThread {
 #pragma pack(pop)
 
 static_assert(sizeof(void*) == 4, "32-bit build only");
+static_assert(offsetof(CLogicThread, unk074) == 0x74);
+static_assert(offsetof(CLogicThread, pending_ui_refresh) == 0x84);
 static_assert(offsetof(CLogicThread, world) == 0x3a0);
 static_assert(offsetof(CLogicThread, toNet) == 0x3c4);
 static_assert(offsetof(CLogicThread, fromNet) == 0x3c8);
+
+// The logic thread fields of a CLogicThread pointer or of a test buffer.
+template <typename T>
+CLogicThread* LogicThreadOf(T* thread) {
+    return reinterpret_cast<CLogicThread*>(thread);
+}
 
 }  // namespace s3re::game

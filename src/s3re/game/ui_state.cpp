@@ -56,7 +56,8 @@
 #include "game/globals.h"
 #include "game/layout.h"
 #include "game/replacements.h"
-#include "game/ui_layout.h"
+#include "game/logic_thread_layout.h"
+#include "game/settler_groups.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
@@ -201,12 +202,11 @@ std::uint32_t __fastcall GameWorld_CenterCameraOnTile(GameWorld* world, void*, s
     return GameWorld_ClampCamera(world, nullptr);
 }
 
-struct CLogicThread;  // opaque
 
 // Purpose: The same as GameWorld::PushUiFeedback, called from the user interface code through the logic
 // thread.
 std::uint32_t __fastcall CLogicThread_PushUiFeedback(CLogicThread* self, void*, std::uint32_t value) {
-    GameWorld* world = ui::LogicThreadOf(self)->world;
+    GameWorld* world = LogicThreadOf(self)->world;
     return GameWorld_PushUiFeedback(world, nullptr, value);
 }
 
@@ -270,12 +270,6 @@ S3RE_HOOK(0x004febe0, GameWorld_PushUiFeedback, WorldValueFn, Original_GameWorld
 
 namespace {
 
-constexpr std::uintptr_t kGroupCounts = 0x007ad620;  // uint16[10], S3.EXE data
-constexpr std::uintptr_t kGroupSettlers = 0x007ad634;  // uint16[10][100]
-
-std::uint16_t GroupWord(std::uintptr_t address) {
-    return *reinterpret_cast<const std::uint16_t*>(address);
-}
 
 }  // namespace
 
@@ -289,14 +283,16 @@ S3RE_HOOK(0x00542990, CLogicThread_UpdateGroupMenu, GroupMenuFn, Original_CLogic
 // settlers (e.g. ships or other units with their own commands), probably
 // after the group changed or was selected.
 std::uint32_t __fastcall CLogicThread_UpdateGroupMenu(CLogicThread* self, void* /*edx*/, std::uint32_t group) {
-    GameWorld* world = ui::LogicThreadOf(self)->world;
-    const std::uint32_t count = GroupWord(kGroupCounts + group * 2);
-    const std::uintptr_t settlers = kGroupSettlers + group * 200;
+    GameWorld* world = LogicThreadOf(self)->world;
+    // The group number is not checked (32-bit address arithmetic, as in the
+    // original).
+    const std::uint32_t count = GlobalSettlerGroups().counts[group];
+    const std::uint16_t* settlers = GlobalSettlerGroups().lists[group];
     auto owner = [&](std::uint32_t settler) { return static_cast<std::uint32_t>(world->settlers[settler].owner); };
     auto type = [&](std::uint32_t settler) { return static_cast<std::uint32_t>(world->settlers[settler].art); };
     std::uint32_t changed = 1;
     if (count == 1) {
-        const std::uint32_t settler = GroupWord(settlers);
+        const std::uint32_t settler = settlers[0];
         if (owner(settler) == U32(world->local_player) && type(settler) == 0x24 && U32(world->ui_special_menu) != 1) {
             world->ui_special_menu = 1;
             world->ui_2d29c = 0;
@@ -305,10 +301,10 @@ std::uint32_t __fastcall CLogicThread_UpdateGroupMenu(CLogicThread* self, void* 
         }
     }
     if (count != 0) {
-        const std::uint32_t firstType = type(GroupWord(settlers));
+        const std::uint32_t firstType = type(settlers[0]);
         bool same = true;
         for (std::uint32_t i = 0; i < count; ++i) {
-            if (type(GroupWord(settlers + i * 2)) != firstType) {
+            if (type(settlers[i]) != firstType) {
                 same = false;
             }
         }
@@ -352,13 +348,13 @@ static_assert(offsetof(GameWorld, ui_feedback_count) == offsetof(GameWorld, ui_f
 // Two fake logic threads, each pointing at one of the worlds.
 struct ThreadPair {
     explicit ThreadPair(test::WorldPair& worlds) {
-        ui::LogicThreadOf(a)->world = worlds.original();
-        ui::LogicThreadOf(b)->world = worlds.ours();
+        LogicThreadOf(a)->world = worlds.original();
+        LogicThreadOf(b)->world = worlds.ours();
     }
     CLogicThread* original() { return reinterpret_cast<CLogicThread*>(a); }
     CLogicThread* ours() { return reinterpret_cast<CLogicThread*>(b); }
-    std::uint8_t a[sizeof(ui::LogicThreadView)] = {};
-    std::uint8_t b[sizeof(ui::LogicThreadView)] = {};
+    std::uint8_t a[sizeof(CLogicThread)] = {};
+    std::uint8_t b[sizeof(CLogicThread)] = {};
 };
 
 // Sets a game global for the duration of a test and restores it after.
@@ -595,14 +591,14 @@ S3RE_TEST(GameWorld_PushUiFeedback_MatchesOriginal) {
 
 namespace {
 
-constexpr std::size_t kGroupBytes = 20 + 10 * 200;  // 0x7ad620..0x7ade04
+constexpr std::size_t kGroupBytes = sizeof(SettlerGroups);  // 0x7ad620..0x7ade04
 
 // Saves the ten groups in S3.EXE's data and restores them afterwards.
 class SavedGroups {
 public:
     SavedGroups() { std::memcpy(saved_, Base(), kGroupBytes); }
     ~SavedGroups() { std::memcpy(Base(), saved_, kGroupBytes); }
-    static std::uint8_t* Base() { return reinterpret_cast<std::uint8_t*>(kGroupCounts); }
+    static SettlerGroups* Base() { return &GlobalSettlerGroups(); }
 
 private:
     std::uint8_t saved_[kGroupBytes];
@@ -616,14 +612,14 @@ void CompareGroupMenu(test::Context& ctx, GroupMenuFn candidate, int cases) {
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t group = ctx.rng().Below(10);
         const std::uint32_t count = ctx.rng().Chance(1, 3) ? ctx.rng().Below(2) : ctx.rng().Below(101);
-        *reinterpret_cast<std::uint16_t*>(kGroupCounts + group * 2) = static_cast<std::uint16_t>(count);
+        GlobalSettlerGroups().counts[group] = static_cast<std::uint16_t>(count);
         const std::uint8_t type = kTypes[ctx.rng().Below(sizeof(kTypes))];
         const bool allSame = ctx.rng().Chance(2, 3);
         const std::uint32_t localPlayer = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(4);
         worlds.Both([&](GameWorld* w) { w->local_player = static_cast<std::int32_t>(localPlayer); });
         for (std::uint32_t k = 0; k < count; ++k) {
             const std::uint32_t settler = ctx.rng().Below(0x10000);
-            *reinterpret_cast<std::uint16_t*>(kGroupSettlers + group * 200 + k * 2) = static_cast<std::uint16_t>(settler);
+            GlobalSettlerGroups().lists[group][k] = static_cast<std::uint16_t>(settler);
             const std::uint8_t settlerType = allSame || ctx.rng().Chance(1, 2) ? type : kTypes[ctx.rng().Below(sizeof(kTypes))];
             const auto settlerOwner =
                 static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? localPlayer : ctx.rng().Below(4));
@@ -658,7 +654,7 @@ void CompareGroupMenu(test::Context& ctx, GroupMenuFn candidate, int cases) {
 // Wrong: type 0x17 gets menu 6 like 0x16.
 std::uint32_t __fastcall WrongGroupMenu(CLogicThread* self, void* edx, std::uint32_t group) {
     const std::uint32_t result = CLogicThread_UpdateGroupMenu(self, edx, group);
-    GameWorld* world = ui::LogicThreadOf(self)->world;
+    GameWorld* world = LogicThreadOf(self)->world;
     if (world->ui_special_menu == 7) {
         world->ui_special_menu = 6;
     }
@@ -693,7 +689,7 @@ S3RE_HOOK(0x0053f530, CLogicThread_ClearPendingUiRefresh, LogicThreadFn, Origina
 // Purpose: Turns a pending UI request of the logic thread (+0x84) into a
 // redraw of the menus (probably after an input event was handled).
 std::uint32_t __fastcall CLogicThread_ClearPendingUiRefresh(CLogicThread* self, void* /*edx*/) {
-    ui::LogicThreadView* thread = ui::LogicThreadOf(self);
+    CLogicThread* thread = LogicThreadOf(self);
     thread->unk074 = 0;
     if (thread->pending_ui_refresh == 0) {
         return 0;
@@ -708,15 +704,15 @@ namespace {
 
 void CompareClearPendingUiRefresh(test::Context& ctx, LogicThreadFn candidate, int cases) {
     test::WorldPair worlds(ctx, offsetof(GameWorld, refresh_ui) + 4);
-    std::uint8_t threadA[sizeof(ui::LogicThreadView)], threadB[sizeof(ui::LogicThreadView)];
+    std::uint8_t threadA[sizeof(CLogicThread)], threadB[sizeof(CLogicThread)];
     for (int i = 0; i < cases; ++i) {
         ctx.rng().Fill(threadA, sizeof(threadA));
         if (ctx.rng().Chance(1, 2)) {
-            ui::LogicThreadOf(threadA)->pending_ui_refresh = 0;
+            LogicThreadOf(threadA)->pending_ui_refresh = 0;
         }
         std::memcpy(threadB, threadA, sizeof(threadB));
-        ui::LogicThreadOf(threadA)->world = worlds.original();
-        ui::LogicThreadOf(threadB)->world = worlds.ours();
+        LogicThreadOf(threadA)->world = worlds.original();
+        LogicThreadOf(threadB)->world = worlds.ours();
         const std::uint32_t refresh = ctx.rng().Next32();
         worlds.Both([&](GameWorld* w) { w->refresh_ui = static_cast<std::int32_t>(refresh); });
         const std::uint32_t ra = Original_CLogicThread_ClearPendingUiRefresh(reinterpret_cast<CLogicThread*>(threadA), nullptr);
@@ -724,7 +720,7 @@ void CompareClearPendingUiRefresh(test::Context& ctx, LogicThreadFn candidate, i
         const std::uint32_t expected = ra == reinterpret_cast<std::uint32_t>(worlds.original()) ? 1 : ra;
         const std::uint32_t actual = rb == reinterpret_cast<std::uint32_t>(worlds.ours()) ? 1 : rb;
         bool same = S3RE_EXPECT_EQ(expected, actual);
-        same &= S3RE_EXPECT_MEM_EQ(threadA, threadB, offsetof(ui::LogicThreadView, world));
+        same &= S3RE_EXPECT_MEM_EQ(threadA, threadB, offsetof(CLogicThread, world));
         same &= worlds.SameField(ctx, [](GameWorld* w) -> auto& { return w->refresh_ui; });
         if (!same) {
             ctx.Fail(__FILE__, __LINE__, "  case %d", i);
@@ -736,7 +732,7 @@ void CompareClearPendingUiRefresh(test::Context& ctx, LogicThreadFn candidate, i
 
 std::uint32_t __fastcall WrongClearPendingUiRefresh(CLogicThread* self, void* edx) {
     const std::uint32_t r = CLogicThread_ClearPendingUiRefresh(self, edx);
-    ui::LogicThreadOf(self)->unk074 = 1;  // wrong: +0x74 not cleared
+    LogicThreadOf(self)->unk074 = 1;  // wrong: +0x74 not cleared
     return r;
 }
 

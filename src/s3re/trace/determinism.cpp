@@ -1,5 +1,6 @@
 #include "trace/determinism.h"
 
+#include "game/logic_thread_layout.h"
 #include "game/world.h"
 #include "log.h"
 
@@ -14,7 +15,6 @@ namespace s3re::trace {
 namespace {
 
 constexpr std::uintptr_t kGameTickAddress = 0x007dfd48;  // g_gameTick
-constexpr std::size_t kWorldPointerOffset = 0x3a0;       // CLogicThread -> GameWorld*
 constexpr std::uint32_t kHashInterval = 32;               // ticks between region hashes
 
 using s3re::game::GameWorld;
@@ -403,9 +403,8 @@ void OnLogicStep(const void* logicThread) {
         return;
     }
     ++g_stepsSeen;
-    const auto* thread = static_cast<const std::uint8_t*>(logicThread);
-    const auto* world =
-        *reinterpret_cast<const std::uint8_t* const*>(thread + kWorldPointerOffset);
+    const auto* thread = static_cast<const s3re::game::CLogicThread*>(logicThread);
+    const auto* world = reinterpret_cast<const std::uint8_t*>(thread->world);
     if (world == nullptr) {
         return;
     }

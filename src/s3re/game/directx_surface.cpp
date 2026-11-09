@@ -54,7 +54,7 @@ namespace {
 
 constexpr std::int32_t kSurfaceLost = static_cast<std::int32_t>(0x887601c2);
 constexpr std::int32_t kWasStillDrawing = static_cast<std::int32_t>(0x8876021c);
-constexpr std::uint32_t kDDBltWaitAsync = 0x01000200;
+constexpr std::uint32_t kDDBltWaitAsync = 0x01000200;  // raw-ok: DDBLT flag bits, not an offset
 constexpr std::uintptr_t kDirectDrawExceptionCtor = 0x005be180;
 constexpr std::uintptr_t kCxxThrowException = 0x0061f027;
 constexpr std::uintptr_t kDirectDrawExceptionThrowInfo = 0x0066a698;

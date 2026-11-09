@@ -188,11 +188,29 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
 - **Field knowledge lives in the world-layout files:** `re/world_layout.md`
   (memory map of the whole object, with confidence levels), `re/structs.md`
   (field tables per record: tile, area, pile, settler, building, player...)
-  and `re/proposed_structs.h` (a proposed C++ header, not used by the build
-  yet). `python tools/world_fields.py` lists every world displacement in
+  and `src/s3re/game/layout.h` (the C++ structs, in the build).
+  `python tools/world_fields.py` lists every world displacement in
   `build/s3.asm` grouped by region and record field (lower bounds; check
   single fields by hand). New findings about fields go into
   `re/structs.md` / `re/world_layout.md`, not only into code comments.
+- **Typed access, no raw offsets (decided 2026-11-09).** Our code reads and
+  writes the world through the packed structs of `src/s3re/game/layout.h`
+  (`world->tiles[x][y].owner`, `world->settlers[n].job`,
+  `world->players[p].race`; record types in namespace `layout`, every
+  offset `static_assert`ed). Tiles start at `0x67444` (settled,
+  `re/structs.md`). Code that carries a tile as a 32-bit byte offset and
+  steps it past the map (as the original does) uses `TileOffset` /
+  `TileAtOffset`. Other objects (UI classes, CLogicThread, Watcom vectors,
+  ...) get small packed structs with `static_assert`s next to the code or
+  in a shared header. New field knowledge goes into the structs (and
+  `re/structs.md`), never into new offset constants in `.cpp` files;
+  unknown fields are named `unkXXXX`. The only raw helper is `RawAt` in
+  `game/raw.h`, for genuinely unstructured bytes, with a comment. Tests use
+  `WorldPair::Both` / `SameField` / `OffsetOf` or `offsetof`.
+  `python tools/typed_access_lint.py` (part of `inventory.py check`) flags
+  old `At<`/`WorldField`/`world_offset::` uses, byte casts of the world
+  and world-range offset constants; a justified exception carries `raw-ok`
+  in a comment.
 - **The simulation's random number generator** is `GameWorld::Random`
   (`0x4feb70`), with its state at world `+0x2d2dc`. It's reimplemented and
   verified. Because the state lives in the world, the simulation is probably

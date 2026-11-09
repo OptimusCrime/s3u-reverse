@@ -1147,7 +1147,7 @@ void BuildOffsetTable(GameWorld* world) {
 // and in the tile fields Create doesn't write).
 void PrepareWorld(test::WorldPair& worlds, bool zeroed) {
     worlds.Both([&](GameWorld* w) {
-        auto* bytes = reinterpret_cast<std::uint8_t*>(w);
+        auto* bytes = reinterpret_cast<std::uint8_t*>(w);  // raw-ok: whole test buffer
         if (zeroed) {
             std::memset(bytes, 0, kWorldSize);
         }
