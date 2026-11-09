@@ -73,7 +73,7 @@ disassembly; "READY" = not done, every direct callee done, all game code
 Next steps (for 2026-11-10, in this order):
 1. Batch 22: the rest of std::string (`sub_*` members, logic_error /
    out_of_range), same harness (fake heap, specs `String_*`).
-2. Decide item 2 above (trivial stubs counted as done); then the UI
+2. (Item 2 done 2026-11-09: tools/trivial.py.) Then the UI
    accessor block and Win32::CObject et al. as coverage batches, with
    `S3RE_HOOK_UNVERIFIED` where a spec is not quick.
 3. Whole-game check for batches 15-21 (`python tools/check_replay.py
@@ -439,6 +439,21 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (30): trivial functions counted as done; batch 22; whole-game check
+
+- Trivial functions (user decision, item 2 of the evaluation): new
+  `tools/trivial.py` finds bodies that are provably trivial by their bytes
+  (rule in CLAUDE.md: `ret [N]`, constant return, `jmp`, this-adjusting
+  and vtordisp thunks). 707 in game code (leaf 7, constant 17, forward
+  683); `apply` marked 705 rows `identified` with a "Trivial, proven by
+  its bytes (...)" note (DebugLog and max_size were already done).
+  `frontier.py` counts them as done (forwarders once their target is;
+  `--no-trivial`): all game code READY 1,029 -> 1,123, NEAR 1,609 ->
+  1,542; simulation range READY 251 -> 253, NEAR 95 -> 93. Only 66 of the
+  707 are done today, because most forwarders (635 vtordisp thunks) jump
+  to unverified UI virtuals (e.g. 0x429d90 -> 0x417680, 0x429db0 ->
+  0x418800 `mov al,1; ret`, itself trivial).
 
 ### 2026-11-09 (29): evaluation, unverified convention, batch 21 (std::string)
 

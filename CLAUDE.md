@@ -254,6 +254,20 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   identified library functions (stl/mfc/watcom/compiler) separately;
   `--library-done` counts those as done (they are not verified). Batches
   pick from READY, preferring simulation functions with callers.
+- **Trivial functions count as done, proven by their bytes** (user
+  decision 2026-11-09). Some bodies are too short for a Detours hook and
+  have nothing to reimplement. `python tools/trivial.py list|apply|check`
+  finds them mechanically: the whole body (start to next start, then only
+  `nop`/`int 3`) is `ret [N]`; or one of `xor eax,eax` / `mov eax,IMM` /
+  `or eax,-1` / `xor al,al` / `mov al,IMM` then `ret [N]`; or a forwarder
+  `jmp T`, `add|sub ecx,IMM; jmp T`, or the vtordisp thunk
+  `sub ecx,[ecx-K]; [add|sub ecx,IMM;] jmp T`, with T a known function
+  start. Nothing else (getters, setters, initializer stubs). `apply` sets
+  such rows to `identified` (never `verified`; verified/hooked rows are
+  left alone) with a note starting "Trivial, proven by its bytes (...)",
+  which quotes the instructions. `frontier.py` counts them as done, a
+  forwarder only once its target is done (`--no-trivial` turns this off).
+  Run `trivial.py check` after regenerating the function list.
 - **Global variables** are recorded in `re/globals.csv`, e.g. the tick
   counter `g_gameTick` at `0x7dfd48`.
 - **`DebugLog` (`0x428720`)** is a printf-style call that is just `ret` in the

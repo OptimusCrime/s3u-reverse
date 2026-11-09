@@ -14,6 +14,11 @@ Sections (default range 0x4c0000..0x560000, the simulation and logic thread):
   NEAR      exactly one callee missing (listed)
   BLOCKERS  missing callees that would make the most NEAR functions READY
 
+Trivial functions (tools/trivial.py: a lone `ret`, a constant return, a
+`jmp` or this-adjusting thunk; recorded as identified, proven by their bytes)
+count as done; a forwarding one only once its target is done.
+--no-trivial leaves them out (the header prints how many count).
+
 Library code: functions identified as library code (status identified,
 category stl, mfc, watcom or compiler; crt counts as done anyway) are not
 verified, so by default they still block their callers; they are listed in
@@ -34,7 +39,7 @@ Tail jumps count as calls.
 Usage:
   python tools/frontier.py [--range LOW HIGH] [--max-instructions N]
                            [--limit N] [--all-flags] [--library-done]
-                           [--show-stubs] [--verified-only]
+                           [--show-stubs] [--verified-only] [--no-trivial]
 By default functions with indirect calls are left out of READY/NEAR (their
 real callees are unknown); --all-flags keeps them.
 """
@@ -49,6 +54,7 @@ from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from asm_tools import ROOT, containing, load_inventory, load_starts, read_asm  # noqa: E402
+from trivial import find_trivial  # noqa: E402
 
 CRT_START = 0x61e4ef
 DEBUG_LOG = 0x428720
@@ -109,6 +115,8 @@ def main():
                         help="keep static-initializer stubs in the lists")
     parser.add_argument("--verified-only", action="store_true",
                         help="don't count reimplemented (unverified) functions as done")
+    parser.add_argument("--no-trivial", action="store_true",
+                        help="don't count trivial functions (tools/trivial.py) as done")
     args = parser.parse_args()
     if not os.path.exists(args.asm):
         sys.exit(f"{args.asm} not found; see tools/asm_tools.py for how to make it")
@@ -118,6 +126,7 @@ def main():
     asm = read_asm(args.asm)
     starts = load_starts()
     inventory = load_inventory()
+    trivial = {} if args.no_trivial else find_trivial(asm, starts)
     # Graph over all game code, so caller counts are complete.
     graph = build_graph(asm, starts, GAME_LOW, GAME_HIGH)
     callers = Counter()
@@ -126,8 +135,9 @@ def main():
             callers[c] += 1
 
     def is_library(address):
+        # Trivial functions follow their own rule (see done()), not this one.
         row = inventory.get(address, {})
-        return row.get("category") in LIBRARY and row.get("status") == "identified"
+        return address not in trivial and row.get("category") in LIBRARY and row.get("status") == "identified"
 
     def is_stub(f):
         # Only constant pushes, mov ecx,constant (the global), ret and exactly
@@ -137,12 +147,17 @@ def main():
             and d["n"] <= 8 \
             and "indirect" not in d["flags"] and "api" not in d["flags"]
 
-    def done(address):
+    def done(address, depth=0):
         row = inventory.get(address, {})
         done_statuses = ("verified",) if args.verified_only else ("verified", "reimplemented")
-        return (row.get("status") in done_statuses or address >= CRT_START
+        if (row.get("status") in done_statuses or address >= CRT_START
                 or address == DEBUG_LOG or row.get("category") == "crt"
-                or (args.library_done and is_library(address)))
+                or (args.library_done and is_library(address))):
+            return True
+        t = trivial.get(address)
+        if t and depth < 8:  # a forwarder is done when its target is
+            return t[1] is None or done(t[1], depth + 1)
+        return False
 
     def name(address):
         return inventory.get(address, {}).get("name", "")
@@ -174,10 +189,13 @@ def main():
         return (-blockers[f], callers[f] == 0, graph[f]["n"])
 
     library = sorted(f for f in graph if is_library(f))
+    trivial_done = sum(1 for f in trivial if done(f))
     print(f"(range {low:#x}..{high:#x}; {stubs} static-initializer stubs hidden"
           f"{'' if args.show_stubs else ', --show-stubs lists them'}; "
           f"{len(library)} identified library functions "
-          f"{'counted as done (--library-done)' if args.library_done else 'not counted as done'})\n")
+          f"{'counted as done (--library-done)' if args.library_done else 'not counted as done'}; "
+          f"{trivial_done} of {len(trivial)} trivial functions done"
+          f"{' (--no-trivial)' if args.no_trivial else ''})\n")
     print(f"READY ({len(ready)}): all callees done")
     for f in sorted(ready, key=rank)[:args.limit]:
         print("  " + line(f))
