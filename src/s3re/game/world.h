@@ -2,18 +2,19 @@
 
 // The game world object.
 //
-// The simulation state lives in one very large, non-polymorphic object
-// (more than 20 MB of fields). CLogicThread keeps a pointer to it at
-// this+0x3a0. Its real name is not known; we call it GameWorld. Until its
-// layout is understood we treat it as raw memory and access fields through the
-// offsets below. Each offset is confirmed by the functions noted next to it.
+// The simulation state lives in one very large object (CGameData, 0x153a128
+// bytes). CLogicThread keeps a pointer to it at this+0x3a0. We call it
+// GameWorld; its layout is in game/layout.h (typed access).
+//
+// world_offset below is legacy raw-offset access, kept only until every
+// file is converted to layout.h.
+
+#include "game/layout.h"
 
 #include <cstddef>
 #include <cstdint>
 
 namespace s3re::game {
-
-struct GameWorld;  // opaque
 
 namespace world_offset {
 // uint32: map width/height in tiles (square maps; rows are 0x300 tiles apart).

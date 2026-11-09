@@ -9,6 +9,7 @@
 // a full comparison runs every few cases (Checkpoint) and the test compares
 // the bytes it expects to change after every case.
 
+#include "game/raw.h"
 #include "game/world.h"
 #include "test/difftest.h"
 
@@ -65,6 +66,28 @@ public:
     bool Same(Context& ctx, std::size_t offset, std::size_t size) {
         return ctx.ExpectMemEq(original_.data() + offset, ours_.data() + offset, size,
                                "original world", "our world", __FILE__, __LINE__);
+    }
+
+    // Runs `f(world)` on both buffers (typed set-up of a case), e.g.
+    // worlds.Both([&](game::GameWorld* w) { w->map_size = size; });
+    template <typename F>
+    void Both(F f) {
+        f(original());
+        f(ours());
+    }
+
+    // Compares the field `select(world)` returns a reference to, e.g.
+    // worlds.SameField(ctx, [&](game::GameWorld* w) -> auto& { return w->tiles[x][y]; });
+    template <typename F>
+    bool SameField(Context& ctx, F select) {
+        auto& field = select(original());
+        return Same(ctx, game::OffsetIn(original(), &field), sizeof(field));
+    }
+
+    // Byte offset of the field `select(world)` returns a reference to.
+    template <typename F>
+    std::size_t OffsetOf(F select) {
+        return game::OffsetIn(original(), &select(original()));
     }
 
     // Compares the whole buffers.

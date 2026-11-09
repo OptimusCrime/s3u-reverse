@@ -2,7 +2,7 @@
 
 The simulation state is one object of **0x153A128 bytes (22,258,984)**.
 This file maps it from the first byte to the last. Record layouts are in
-`re/structs.md`; a proposed C++ header is `re/proposed_structs.h`.
+`re/structs.md`; the C++ header is `src/s3re/game/layout.h` (in the build).
 Offsets are from the start of the object (the ECX of `GameWorld::`
 methods, `CLogicThread+0x3a0`).
 
