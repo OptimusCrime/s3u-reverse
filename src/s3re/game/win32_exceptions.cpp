@@ -35,6 +35,7 @@
 // buffer they share keeps one extra reference). It only happens on the way
 // to a fatal error report. Same convention as DirectX_ThrowIfDDFailed.
 
+#include "game/framework_layout.h"
 #include "hooks.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
@@ -66,9 +67,10 @@ constexpr std::uintptr_t kItoa = 0x00621380;
 constexpr std::uintptr_t kCxxThrowException = 0x0061f027;
 constexpr std::uintptr_t kDataErrorThrowInfo = 0x0068bfd0;
 
-template <typename T>
-T& At(void* base, std::size_t offset) {
-    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(base) + offset);
+using framework::CException;
+
+CException* AsException(void* self) {
+    return static_cast<CException*>(self);
 }
 
 std::uint32_t Npos() {
@@ -96,12 +98,12 @@ S3RE_HOOK(0x00611a20, Win32_CException_Construct, ExceptionCtorFn, Original_Win3
 // (the text shown in the game's error report).
 void* __fastcall Win32_CException_Construct(void* self, void* /*edx*/, const String* msg, std::uint32_t mostDerived) {
     if (mostDerived != 0) {
-        At<std::uint32_t>(self, 4) = kCExceptionVbase;
+        AsException(self)->vbase = kCExceptionVbase;
     }
     Win32_CObject_Construct(self, nullptr);
     const auto allocator = static_cast<std::uint8_t>(mostDerived);
-    msvc6::String_FromSubstr(&At<String>(self, 8), nullptr, msg, 0, Npos(), &allocator);
-    At<std::uint32_t>(self, 0) = kCExceptionVtable;
+    msvc6::String_FromSubstr(&AsException(self)->message, nullptr, msg, 0, Npos(), &allocator);
+    AsException(self)->vtable = kCExceptionVtable;
     return self;
 }
 
@@ -113,10 +115,10 @@ S3RE_HOOK(0x00614c60, Win32_CRunTimeError_Construct, ExceptionCtorFn, Original_W
 void* __fastcall Win32_CRunTimeError_Construct(void* self, void* /*edx*/, const String* msg,
                                                std::uint32_t mostDerived) {
     if (mostDerived != 0) {
-        At<std::uint32_t>(self, 4) = kCRunTimeErrorVbase;
+        AsException(self)->vbase = kCRunTimeErrorVbase;
     }
     Win32_CException_Construct(self, nullptr, msg, 0);
-    At<std::uint32_t>(self, 0) = kCRunTimeErrorVtable;
+    AsException(self)->vtable = kCRunTimeErrorVtable;
     return self;
 }
 
@@ -127,10 +129,10 @@ S3RE_HOOK(0x006003b0, Lobby_CDataError_Construct, ExceptionCtorFn, Original_Lobb
 // file or a lobby message is malformed).
 void* __fastcall Lobby_CDataError_Construct(void* self, void* /*edx*/, const String* msg, std::uint32_t mostDerived) {
     if (mostDerived != 0) {
-        At<std::uint32_t>(self, 4) = kCDataErrorVbase;
+        AsException(self)->vbase = kCDataErrorVbase;
     }
     Win32_CRunTimeError_Construct(self, nullptr, msg, 0);
-    At<std::uint32_t>(self, 0) = kCDataErrorVtable;
+    AsException(self)->vtable = kCDataErrorVtable;
     return self;
 }
 
@@ -234,8 +236,8 @@ void CompareCtors(test::Context& ctx, const CtorFunctions& candidate, int cases)
         void* ra = fa(a + kGuard, nullptr, &msgA, mostDerived);
         void* rb = fb(b + kGuard, nullptr, &msgB, mostDerived);
         bool same = S3RE_EXPECT(ra == a + kGuard && rb == b + kGuard);
-        auto& sa = At<String>(a + kGuard, 8);
-        auto& sb = At<String>(b + kGuard, 8);
+        auto& sa = AsException(a + kGuard)->message;
+        auto& sb = AsException(b + kGuard)->message;
         const bool sharedA = sa.ptr != nullptr && sa.ptr == msgA.ptr;
         const bool sharedB = sb.ptr != nullptr && sb.ptr == msgB.ptr;
         same &= S3RE_EXPECT_EQ(sharedA, sharedB);
@@ -307,8 +309,8 @@ void CompareThrow(test::Context& ctx, ThrowDataErrorFn candidate, int cases) {
         same &= S3RE_EXPECT(ta.object != nullptr && tb.object != nullptr);
         if (same) {
             same &= S3RE_EXPECT_MEM_EQ(ta.object, tb.object, 9);  // vtable, vbase pointer, allocator
-            const auto& ma = At<String>(ta.object, 8);
-            const auto& mb = At<String>(tb.object, 8);
+            const auto& ma = AsException(ta.object)->message;
+            const auto& mb = AsException(tb.object)->message;
             same &= S3RE_EXPECT_EQ(ma.len, mb.len);
             same &= S3RE_EXPECT_EQ(ma.res, mb.res);
             same &= S3RE_EXPECT(ma.ptr != nullptr && mb.ptr != nullptr);
@@ -325,7 +327,7 @@ void CompareThrow(test::Context& ctx, ThrowDataErrorFn candidate, int cases) {
 
 void* __fastcall WrongRunTimeError(void* self, void* edx, const String* msg, std::uint32_t mostDerived) {
     void* r = Win32_CRunTimeError_Construct(self, edx, msg, mostDerived);
-    At<std::uint32_t>(self, 4) = kCRunTimeErrorVbase;  // wrong: set even when not most derived
+    AsException(self)->vbase = kCRunTimeErrorVbase;  // wrong: set even when not most derived
     return r;
 }
 

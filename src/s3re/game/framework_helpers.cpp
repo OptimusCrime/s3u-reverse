@@ -37,12 +37,14 @@
 //   +0x1c = a, +0x18 = 1, +0x20 = b, +0x24 = 0, vtables +0 = 0x65d710 and
 //   +4 = 0x65d704; EAX = this. ret 8.
 
+#include "game/framework_layout.h"
 #include "hooks.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
 
 #include <windows.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -55,10 +57,64 @@ void* __fastcall Win32_CWaitable_Construct(void* self, void* edx, std::uint32_t 
 
 namespace {
 
+using framework::CPlayer;
+using framework::CPlayerIndex;
+using framework::CMemoryBlock;
+using framework::CThread;
+using framework::CWin32Handle;
+using framework::SessionDesc;
+using framework::WideString;
+
 template <typename T>
-T& At(void* base, std::size_t offset) {
-    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(base) + offset);
+T* As(void* self) {
+    return static_cast<T*>(self);
 }
+
+#pragma pack(push, 1)
+// An owning pointer (0x49d980 frees what +0 points to).
+struct OwningPointer {
+    void* pointee;  // +0x00
+};
+
+// A pair of dwords (0x5bd200).
+struct DwordPair {
+    std::uint32_t first;   // +0x00
+    std::uint32_t second;  // +0x04
+};
+
+// The credits screen's text record (0x5a0960).
+struct CreditsTextStyle {
+    std::uint32_t font;    // +0x00 probably a default font or palette (an address in .data)
+    std::uint32_t unk04;   // +0x04
+    std::uint32_t size;    // +0x08 probably the size (12)
+    std::uint32_t colour;  // +0x0c probably the colour (255)
+    std::uint32_t unk10;   // +0x10
+    std::uint32_t unk14;   // +0x14
+};
+static_assert(offsetof(CreditsTextStyle, unk14) == 0x14);
+
+// A lobby record with a string at +8 (0x5ebfb0).
+struct LobbyRecord5ebfb0 {
+    std::uint32_t unk00;  // +0x00
+    std::uint32_t unk04;  // +0x04
+    msvc6::String text;   // +0x08
+};
+static_assert(offsetof(LobbyRecord5ebfb0, text) == 0x08);
+
+// The network helper record destroyed by 0x49ec80 (members only).
+struct NetHelpRecord {
+    std::uint8_t unk00[0x18];
+    msvc6::String text18;        // +0x18
+    WideString wide28;           // +0x28
+    watcom::PtrVector vector38;  // +0x38 a Watcom vector of a trivial type
+    std::uint8_t unk50[0xbc - 0x50];
+    msvc6::String textBc;        // +0xbc
+};
+static_assert(offsetof(NetHelpRecord, text18) == 0x18);
+static_assert(offsetof(NetHelpRecord, wide28) == 0x28);
+static_assert(offsetof(NetHelpRecord, vector38) == 0x38);
+static_assert(offsetof(NetHelpRecord, textBc) == 0xbc);
+#pragma pack(pop)
 
 void GameDelete(void* block) {
     reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(block);
@@ -107,7 +163,7 @@ S3RE_HOOK(0x0049d980, Net_DeletePointee_49d980, ObjFn, Original_Net_DeletePointe
 // Purpose: Frees the block an object points to with its first field
 // (network helper code; probably the destructor of an owning pointer).
 std::uint32_t __fastcall Net_DeletePointee_49d980(void* self, void* /*edx*/) {
-    GameDelete(At<void*>(self, 0));
+    GameDelete(As<OwningPointer>(self)->pointee);
     return 0;
 }
 
@@ -117,8 +173,8 @@ S3RE_HOOK(0x005bd200, NetSession_SetPair_5bd200, Obj2Fn, Original_NetSession_Set
 // Purpose: Stores two values in a small network-session record (probably
 // the constructor of a pair such as player id and index).
 std::uint32_t __fastcall NetSession_SetPair_5bd200(void* self, void* /*edx*/, std::uint32_t a, std::uint32_t b) {
-    At<std::uint32_t>(self, 0) = a;
-    At<std::uint32_t>(self, 4) = b;
+    As<DwordPair>(self)->first = a;
+    As<DwordPair>(self)->second = b;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -128,8 +184,9 @@ S3RE_HOOK(0x005dc810, Lobby_ZeroThreeDwords_5dc810, ObjFn, Original_Lobby_ZeroTh
 // Purpose: Empties a three-field lobby record (probably the constructor of
 // an empty vector or list header).
 std::uint32_t __fastcall Lobby_ZeroThreeDwords_5dc810(void* self, void* /*edx*/) {
-    for (std::size_t offset = 0; offset < 0xc; offset += 4) {
-        At<std::uint32_t>(self, offset) = 0;
+    std::uint32_t* const dwords = As<std::uint32_t>(self);  // a record of three dwords
+    for (std::size_t k = 0; k < 3; ++k) {
+        dwords[k] = 0;
     }
     return reinterpret_cast<std::uint32_t>(self);
 }
@@ -140,9 +197,10 @@ S3RE_HOOK(0x006065f0, Lobby_CPlayerIndex_Construct, Obj1Fn, Original_Lobby_CPlay
 // Purpose: Constructor of the online lobby's player index (a player number
 // with one more field).
 std::uint32_t __fastcall Lobby_CPlayerIndex_Construct(void* self, void* /*edx*/, std::uint32_t a) {
-    At<std::uint32_t>(self, 4) = a;
-    At<std::uint32_t>(self, 8) = 0;
-    At<std::uint32_t>(self, 0) = kCPlayerIndexVtable;
+    CPlayerIndex* const object = As<CPlayerIndex>(self);
+    object->index = a;
+    object->unk08 = 0;
+    object->vtable = kCPlayerIndexVtable;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -151,10 +209,11 @@ S3RE_HOOK(0x00600e00, Lobby_CMemoryBlock_Construct, ObjFn, Original_Lobby_CMemor
 
 // Purpose: Constructor of an empty memory block of the online lobby code.
 std::uint32_t __fastcall Lobby_CMemoryBlock_Construct(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 4) = 0;
-    At<std::uint32_t>(self, 8) = 0;
-    At<std::uint32_t>(self, 0xc) = 0;
-    At<std::uint32_t>(self, 0) = kCMemoryBlockVtable;
+    CMemoryBlock* const block = As<CMemoryBlock>(self);
+    block->data = nullptr;
+    block->reserved = 0;
+    block->used = 0;
+    block->vtable = kCMemoryBlockVtable;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -163,8 +222,9 @@ S3RE_HOOK(0x005ec1e0, Lobby_ZeroSixDwords_5ec1e0, ObjFn, Original_Lobby_ZeroSixD
 
 // Purpose: Empties a six-field lobby record (probably a constructor).
 std::uint32_t __fastcall Lobby_ZeroSixDwords_5ec1e0(void* self, void* /*edx*/) {
-    for (std::size_t offset = 0; offset < 0x18; offset += 4) {
-        At<std::uint32_t>(self, offset) = 0;
+    std::uint32_t* const dwords = As<std::uint32_t>(self);  // a record of six dwords
+    for (std::size_t k = 0; k < 6; ++k) {
+        dwords[k] = 0;
     }
     return reinterpret_cast<std::uint32_t>(self);
 }
@@ -174,12 +234,13 @@ S3RE_HOOK(0x005a0960, Credits_TextStyle_5a0960, ObjFn, Original_Credits_TextStyl
 // Purpose: Sets up a text record of the credits screen with its defaults
 // (probably font, size 12 and colour 255).
 std::uint32_t __fastcall Credits_TextStyle_5a0960(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 0x10) = 0;
-    At<std::uint32_t>(self, 0x14) = 0;
-    At<std::uint32_t>(self, 0) = kCreditsDefault;
-    At<std::uint32_t>(self, 4) = 0;
-    At<std::uint32_t>(self, 8) = 0xc;
-    At<std::uint32_t>(self, 0xc) = 0xff;
+    CreditsTextStyle* const style = As<CreditsTextStyle>(self);
+    style->unk10 = 0;
+    style->unk14 = 0;
+    style->font = kCreditsDefault;
+    style->unk04 = 0;
+    style->size = 0xc;
+    style->colour = 0xff;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -189,7 +250,7 @@ S3RE_HOOK(0x006195c0, Win32_CFile_Construct, ObjFn, Original_Win32_CFile_Constru
 // wrapper without a file yet).
 std::uint32_t __fastcall Win32_CFile_Construct(void* self, void* /*edx*/) {
     Win32_CWin32Handle_Construct(self, nullptr, 0, 0);
-    At<std::uint32_t>(self, 0) = kCFileVtable;
+    As<CWin32Handle>(self)->vtable = kCFileVtable;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -198,11 +259,12 @@ S3RE_HOOK(0x005bb040, NetSession_Init_5bb040, ObjFn, Original_NetSession_Init_5b
 // Purpose: Empties a network-session record (probably the constructor of a
 // container with an allocator byte at +0x50).
 std::uint32_t __fastcall NetSession_Init_5bb040(void* self, void* /*edx*/) {
-    At<std::uint8_t>(self, 0x50) = TopByte(self);
-    At<std::uint32_t>(self, 0x54) = 0;
-    At<std::uint32_t>(self, 0x58) = 0;
-    At<std::uint32_t>(self, 0x5c) = 0;
-    At<std::uint32_t>(self, 0) = 0;
+    SessionDesc* const session = As<SessionDesc>(self);
+    session->name.allocator = TopByte(self);
+    session->name.ptr = nullptr;
+    session->name.len = 0;
+    session->name.res = 0;
+    session->desc[0] = 0;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -211,12 +273,13 @@ S3RE_HOOK(0x005ebfb0, Lobby_Init_5ebfb0, ObjFn, Original_Lobby_Init_5ebfb0, Lobb
 // Purpose: Empties a lobby record (probably the constructor of a record
 // holding a container with an allocator byte at +8).
 std::uint32_t __fastcall Lobby_Init_5ebfb0(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 0) = 0;
-    At<std::uint32_t>(self, 4) = 0;
-    At<std::uint8_t>(self, 8) = TopByte(self);
-    At<std::uint32_t>(self, 0xc) = 0;
-    At<std::uint32_t>(self, 0x10) = 0;
-    At<std::uint32_t>(self, 0x14) = 0;
+    LobbyRecord5ebfb0* const record = As<LobbyRecord5ebfb0>(self);
+    record->unk00 = 0;
+    record->unk04 = 0;
+    record->text.allocator = TopByte(self);
+    record->text.ptr = nullptr;
+    record->text.len = 0;
+    record->text.res = 0;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -224,10 +287,11 @@ S3RE_HOOK(0x00601250, Lobby_FreeBlock_601250, ObjFn, Original_Lobby_FreeBlock_60
 
 // Purpose: Frees the buffer of a lobby memory block and empties it.
 std::uint32_t __fastcall Lobby_FreeBlock_601250(void* self, void* /*edx*/) {
-    GameDelete(At<void*>(self, 4));
-    At<std::uint32_t>(self, 4) = 0;
-    At<std::uint32_t>(self, 0xc) = 0;
-    At<std::uint32_t>(self, 8) = 0;
+    CMemoryBlock* const block = As<CMemoryBlock>(self);
+    GameDelete(block->data);
+    block->data = nullptr;
+    block->used = 0;
+    block->reserved = 0;
     return 0;
 }
 
@@ -236,12 +300,12 @@ S3RE_HOOK(0x005c0ef0, DirectX_CPlayer_Clear, ObjFn, Original_DirectX_CPlayer_Cle
 // Purpose: Resets a network player record: two ids to 0 and both names
 // (probably player and computer name) to the empty string.
 std::uint32_t __fastcall DirectX_CPlayer_Clear(void* self, void* /*edx*/) {
-    At<std::uint32_t>(self, 4) = 0;
-    At<std::uint32_t>(self, 8) = 0;
+    CPlayer* const player = As<CPlayer>(self);
+    player->unk04 = 0;
+    player->unk08 = 0;
     const char* empty = reinterpret_cast<const char*>(kEmptyText);
-    msvc6::String_AssignTextOrEmpty(&At<msvc6::String>(self, 0x1c), nullptr, empty);
-    return reinterpret_cast<std::uint32_t>(
-        msvc6::String_AssignTextOrEmpty(&At<msvc6::String>(self, 0xc), nullptr, empty));
+    msvc6::String_AssignTextOrEmpty(&player->name1c, nullptr, empty);
+    return reinterpret_cast<std::uint32_t>(msvc6::String_AssignTextOrEmpty(&player->name0c, nullptr, empty));
 }
 
 S3RE_HOOK(0x0060bf20, Win32_CWin32Handle_Close, ObjFn, Original_Win32_CWin32Handle_Close, Win32_CWin32Handle_Close);
@@ -249,14 +313,15 @@ S3RE_HOOK(0x0060bf20, Win32_CWin32Handle_Close, ObjFn, Original_Win32_CWin32Hand
 // Purpose: Closes the Windows handle a framework object owns (events,
 // threads, files) and forgets it.
 std::uint32_t __fastcall Win32_CWin32Handle_Close(void* self, void* /*edx*/) {
-    std::uint32_t result = At<std::uint32_t>(self, 4);
-    if (result != 0 && At<std::uint32_t>(self, 8) == 1) {
+    CWin32Handle* const object = As<CWin32Handle>(self);
+    std::uint32_t result = object->handle;
+    if (result != 0 && object->owned == 1) {
         using CloseHandleFn = BOOL(WINAPI*)(HANDLE);
         result = static_cast<std::uint32_t>(
             (*reinterpret_cast<CloseHandleFn*>(kCloseHandleImport))(reinterpret_cast<HANDLE>(result)));
     }
-    At<std::uint32_t>(self, 4) = 0;
-    At<std::uint32_t>(self, 8) = 0;
+    object->handle = 0;
+    object->owned = 0;
     return result;
 }
 
@@ -267,13 +332,14 @@ S3RE_HOOK(0x0060df70, Win32_CThread_Construct, Obj2Fn, Original_Win32_CThread_Co
 // later.
 std::uint32_t __fastcall Win32_CThread_Construct(void* self, void* /*edx*/, std::uint32_t a, std::uint32_t b) {
     Win32_CWaitable_Construct(self, nullptr, 0, 0);
-    At<std::uint32_t>(self, 0x14) = 0;
-    At<std::uint32_t>(self, 0x1c) = a;
-    At<std::uint32_t>(self, 0x18) = 1;
-    At<std::uint32_t>(self, 0x20) = b;
-    At<std::uint32_t>(self, 0x24) = 0;
-    At<std::uint32_t>(self, 0) = kCThreadVtable;
-    At<std::uint32_t>(self, 4) = kCThreadWaitableVtable;
+    CThread* const thread = As<CThread>(self);
+    thread->unk14 = 0;
+    thread->unk1c = a;
+    thread->unk18 = 1;
+    thread->unk20 = b;
+    thread->unk24 = 0;
+    thread->waitable.vtable = kCThreadVtable;
+    thread->waitable.handle.vtable = kCThreadWaitableVtable;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -333,16 +399,18 @@ constexpr std::size_t kObject = 0x60;
 void Prepare(int op, std::uint8_t* object, test::Rng& rng, std::uint32_t mode) {
     switch (op) {
         case 0:
-            At<void*>(object, 0) = (mode & 1) != 0 ? nullptr : GameNew(8 + (mode & 0x30));
+            As<OwningPointer>(object)->pointee = (mode & 1) != 0 ? nullptr : GameNew(8 + (mode & 0x30));
             break;
         case 10:
-            At<void*>(object, 4) = (mode & 1) != 0 ? nullptr : GameNew(8 + (mode & 0x30));
+            As<CMemoryBlock>(object)->data =
+                (mode & 1) != 0 ? nullptr : static_cast<std::uint8_t*>(GameNew(8 + (mode & 0x30)));
             break;
-        case 11:
+        case 11: {
             // Both strings: empty (null), or a fresh unshared buffer with text.
-            for (const std::size_t offset : {0x0cu, 0x1cu}) {
-                auto& s = At<msvc6::String>(object, offset);
-                if ((mode & (offset == 0xc ? 1u : 2u)) != 0) {
+            CPlayer* const player = As<CPlayer>(object);
+            for (msvc6::String* const string : {&player->name0c, &player->name1c}) {
+                auto& s = *string;
+                if ((mode & (string == &player->name0c ? 1u : 2u)) != 0) {
                     s.ptr = nullptr;
                     s.len = 0;
                     s.res = 0;
@@ -360,12 +428,13 @@ void Prepare(int op, std::uint8_t* object, test::Rng& rng, std::uint32_t mode) {
                 }
             }
             break;
+        }
         case 12:
             if ((mode & 3) == 0) {
-                At<std::uint32_t>(object, 4) = 0;
+                As<CWin32Handle>(object)->handle = 0;
             }
             if ((mode & 4) != 0) {
-                At<std::uint32_t>(object, 8) = 1;
+                As<CWin32Handle>(object)->owned = 1;
             }
             break;
         default:
@@ -418,8 +487,8 @@ void CompareFramework(test::Context& ctx, const FrameworkFunctions& candidate, i
             // are closed below when the object doesn't own them).
             handles[0] = CreateEventA(nullptr, FALSE, FALSE, nullptr);
             handles[1] = CreateEventA(nullptr, FALSE, FALSE, nullptr);
-            At<HANDLE>(objectA, 4) = handles[0];
-            At<HANDLE>(objectB, 4) = handles[1];
+            As<CWin32Handle>(objectA)->handle = reinterpret_cast<std::uint32_t>(handles[0]);
+            As<CWin32Handle>(objectB)->handle = reinterpret_cast<std::uint32_t>(handles[1]);
         }
         std::uint32_t ra = Run(original, op, objectA, args);
         std::uint32_t rb = Run(candidate, op, objectB, args);
@@ -434,7 +503,7 @@ void CompareFramework(test::Context& ctx, const FrameworkFunctions& candidate, i
         }
         if (op == 0) {
             // The freed pointer stays in the object; the blocks differ per side.
-            At<std::uint32_t>(objectA, 0) = At<std::uint32_t>(objectB, 0) = 0;
+            As<OwningPointer>(objectA)->pointee = As<OwningPointer>(objectB)->pointee = nullptr;
         }
         if (op == 0 || op == 10) {
             ra = rb = 0;  // what delete leaves in EAX is not part of the contract
@@ -450,13 +519,13 @@ void CompareFramework(test::Context& ctx, const FrameworkFunctions& candidate, i
 
 std::uint32_t __fastcall WrongThread(void* self, void* edx, std::uint32_t a, std::uint32_t b) {
     const std::uint32_t r = Win32_CThread_Construct(self, edx, a, b);
-    At<std::uint32_t>(self, 0x18) = 0;  // wrong: not marked as "1"
+    As<CThread>(self)->unk18 = 0;  // wrong: not marked as "1"
     return r;
 }
 
 std::uint32_t __fastcall WrongNetInit(void* self, void* edx) {
     const std::uint32_t r = NetSession_Init_5bb040(self, edx);
-    At<std::uint8_t>(self, 0x50) = static_cast<std::uint8_t>(TopByte(self) ^ 0x5a);  // wrong: not the top byte of ECX
+    As<SessionDesc>(self)->name.allocator = static_cast<std::uint8_t>(TopByte(self) ^ 0x5a);  // wrong: not the top byte of ECX
     return r;
 }
 
@@ -512,15 +581,16 @@ S3RE_HOOK(0x0049ec80, NetHelp_Destroy_49ec80, DestroyMembersFn, Original_NetHelp
 // Purpose: Destructor of a network helper record with three texts and a
 // list (probably a message or session description of the network code).
 void __fastcall NetHelp_Destroy_49ec80(void* self, void* /*edx*/) {
-    msvc6::String_Destroy(&At<msvc6::String>(self, 0xbc), nullptr);
-    At<std::uint32_t>(self, 0x38) = kNetVectorVtable;
-    if (At<void*>(self, 0x40) != nullptr) {
+    NetHelpRecord* const record = As<NetHelpRecord>(self);
+    msvc6::String_Destroy(&record->textBc, nullptr);
+    record->vector38.vtable = kNetVectorVtable;
+    if (record->vector38.data != nullptr) {
         using NoOpFn = void(__fastcall*)(void* self, void* edx);
-        reinterpret_cast<NoOpFn>(0x0059f200)(static_cast<std::uint8_t*>(self) + 0x38, nullptr);
-        GameDelete(At<void*>(self, 0x40));
+        reinterpret_cast<NoOpFn>(0x0059f200)(&record->vector38, nullptr);
+        GameDelete(record->vector38.data);
     }
-    At<std::uint32_t>(self, 0x38) = kWCExceptVtable;
-    auto* wide = At<std::uint8_t*>(self, 0x2c);
+    record->vector38.vtable = kWCExceptVtable;
+    auto* wide = reinterpret_cast<std::uint8_t*>(record->wide28.ptr);
     if (wide != nullptr) {
         const std::uint8_t count = wide[-1];
         if (count != 0 && count != 0xff) {
@@ -529,10 +599,10 @@ void __fastcall NetHelp_Destroy_49ec80(void* self, void* /*edx*/) {
             GameDelete(wide - 2);
         }
     }
-    At<std::uint32_t>(self, 0x2c) = 0;
-    At<std::uint32_t>(self, 0x30) = 0;
-    At<std::uint32_t>(self, 0x34) = 0;
-    msvc6::String_Destroy(&At<msvc6::String>(self, 0x18), nullptr);
+    record->wide28.ptr = nullptr;
+    record->wide28.len = 0;
+    record->wide28.res = 0;
+    msvc6::String_Destroy(&record->text18, nullptr);
 }
 
 namespace {
@@ -548,9 +618,10 @@ struct NetBuffers {
 // `counts`), or none; the vector buffer; the wide string buffer.
 NetBuffers PrepareNet(std::uint8_t* object, std::uint32_t mode, const std::uint8_t* counts, std::uint32_t length) {
     NetBuffers buffers;
-    const std::size_t offsets[2] = {0xbc, 0x18};
+    NetHelpRecord* const record = As<NetHelpRecord>(object);
+    msvc6::String* const strings[2] = {&record->textBc, &record->text18};
     for (int k = 0; k < 2; ++k) {
-        auto& s = At<msvc6::String>(object, offsets[k]);
+        auto& s = *strings[k];
         if ((mode >> k) & 1) {
             s.ptr = nullptr;
             s.len = 0;
@@ -568,14 +639,14 @@ NetBuffers PrepareNet(std::uint8_t* object, std::uint32_t mode, const std::uint8
         s.res = length;
         buffers.narrow[k] = s.ptr;
     }
-    At<void*>(object, 0x40) = ((mode >> 2) & 1) != 0 ? nullptr : GameNew(24);
+    record->vector38.data = ((mode >> 2) & 1) != 0 ? nullptr : static_cast<std::uint32_t*>(GameNew(24));
     if (((mode >> 3) & 1) != 0) {
-        At<void*>(object, 0x2c) = nullptr;
+        record->wide28.ptr = nullptr;
     } else {
         auto* block = static_cast<std::uint8_t*>(GameNew(16));
         block[1] = counts[2];
         buffers.wide = block + 2;
-        At<void*>(object, 0x2c) = buffers.wide;
+        record->wide28.ptr = reinterpret_cast<std::uint16_t*>(buffers.wide);
     }
     return buffers;
 }
@@ -608,7 +679,8 @@ void CompareNetDestroy(test::Context& ctx, DestroyMembersFn candidate, int cases
         if (ba.wide != nullptr && counts[2] != 0 && counts[2] != 0xff) {
             same &= S3RE_EXPECT_EQ(ba.wide[-1], bb.wide[-1]);
         }
-        At<std::uint32_t>(a, 0x40) = At<std::uint32_t>(b, 0x40) = 0;  // the freed vector buffers differ
+        // The freed vector buffers differ.
+        As<NetHelpRecord>(a)->vector38.data = As<NetHelpRecord>(b)->vector38.data = nullptr;
         same &= S3RE_EXPECT_MEM_EQ(a, b, sizeof(a));
         if (!same) {
             ctx.Fail(__FILE__, __LINE__, "  case %d, mode %08x", i, mode);
@@ -619,7 +691,7 @@ void CompareNetDestroy(test::Context& ctx, DestroyMembersFn candidate, int cases
 
 void __fastcall WrongNetDestroy(void* self, void* edx) {
     NetHelp_Destroy_49ec80(self, edx);
-    At<std::uint32_t>(self, 0x38) = kNetVectorVtable;  // wrong: the base vtable is not restored
+    As<NetHelpRecord>(self)->vector38.vtable = kNetVectorVtable;  // wrong: the base vtable is not restored
 }
 
 }  // namespace

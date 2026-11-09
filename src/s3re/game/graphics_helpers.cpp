@@ -23,9 +23,12 @@
 // +0x10 = -1; EAX = this. ret. 100 of them are built at +0xc690c of the
 // object constructed by 0x523480.
 
+#include "game/framework_layout.h"
+#include "game/raw.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
@@ -34,15 +37,59 @@ namespace s3re::game {
 
 namespace {
 
+using framework::GfxData;
+
 template <typename T>
 T& At(std::uintptr_t address) {
-    return *reinterpret_cast<T*>(address);
+    return RawAtAddress<T>(address);
 }
 
 template <typename T>
-T& At(void* base, std::size_t offset) {
-    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(base) + offset);
+T* As(void* self) {
+    return static_cast<T*>(self);
 }
+
+#pragma pack(push, 1)
+// A one-dword graphics record (0x5fc540).
+struct GfxDword {
+    std::uint32_t value;  // +0x00
+};
+
+// A pair of 16-bit values (0x5fdab0; probably a point or size).
+struct Point16 {
+    std::uint16_t x;  // +0x00
+    std::uint16_t y;  // +0x02
+};
+static_assert(sizeof(Point16) == 4);
+
+// The 0x24-byte record of the logic set-up (0x5437b0).
+struct LogicRecord24 {
+    std::uint32_t unk00;  // +0x00
+    std::uint32_t unk04;  // +0x04
+    std::uint32_t unk08;  // +0x08
+    std::uint32_t unk0c;  // +0x0c
+    std::uint32_t unk10;  // +0x10 -1 ("none") after construction
+    std::uint32_t unk14;  // +0x14
+    std::uint32_t unk18;  // +0x18
+    std::uint32_t unk1c;  // +0x1c
+    std::uint32_t unk20;  // +0x20
+};
+static_assert(sizeof(LogicRecord24) == 0x24);
+
+// The drawing object of Render_PutPixel16 / Render_Entry204 (class not
+// identified).
+struct DrawTarget {
+    std::uint8_t unk000[0x90];
+    std::uint32_t pitch;          // +0x90 in bytes
+    std::uint8_t unk094[0xa4 - 0x94];
+    std::uint32_t pixels;         // +0xa4 the 16-bit pixel buffer
+    std::uint8_t unk0a8[0x204 - 0xa8];
+    std::uint32_t* table204;      // +0x204 meaning unknown
+};
+static_assert(offsetof(DrawTarget, pitch) == 0x90);
+static_assert(offsetof(DrawTarget, pixels) == 0xa4);
+static_assert(offsetof(DrawTarget, table204) == 0x204);
+#pragma pack(pop)
 
 constexpr std::uintptr_t kColourShift3 = 0x007dfba0;
 constexpr std::uintptr_t kColourShift2 = 0x007dfba4;
@@ -83,8 +130,9 @@ S3RE_HOOK(0x005fad20, GfxData_SpriteWord, SpriteWordFn, Original_GfxData_SpriteW
 std::uint32_t __fastcall GfxData_SpriteWord(void* self, void* /*edx*/, std::uint32_t id) {
     const std::uint32_t group = id >> 16;
     const std::uint32_t index = id & 0xffff;
-    const std::uint32_t table = At<std::uint32_t>(self, 0xb24 + group * 4);
-    const std::uint32_t offset = At<std::uint32_t>(self, 0x264 + group * 4);
+    GfxData* const gfx = As<GfxData>(self);
+    const std::uint32_t table = gfx->spriteTables[group];
+    const std::uint32_t offset = gfx->groupBase[group];
     const std::uint32_t entry = At<std::uint32_t>(table + 8 + index * 4);
     return (offset & 0xffff0000u) | At<std::uint16_t>(entry + offset);
 }
@@ -94,7 +142,7 @@ S3RE_HOOK(0x005fc540, GfxData_SetDword, SetDwordFn, Original_GfxData_SetDword, G
 // Purpose: Constructor of a one-field graphics record (probably a handle or
 // pointer wrapper).
 void* __fastcall GfxData_SetDword(void* self, void* /*edx*/, std::uint32_t value) {
-    At<std::uint32_t>(self, 0) = value;
+    As<GfxDword>(self)->value = value;
     return self;
 }
 
@@ -103,8 +151,8 @@ S3RE_HOOK(0x005fdab0, Point16_Construct, Point16Fn, Original_Point16_Construct, 
 // Purpose: Constructor of a pair of 16-bit values (probably a point or size
 // on the screen).
 void* __fastcall Point16_Construct(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
-    At<std::uint16_t>(self, 0) = static_cast<std::uint16_t>(x);
-    At<std::uint16_t>(self, 2) = static_cast<std::uint16_t>(y);
+    As<Point16>(self)->x = static_cast<std::uint16_t>(x);
+    As<Point16>(self)->y = static_cast<std::uint16_t>(y);
     return self;
 }
 
@@ -114,9 +162,16 @@ S3RE_HOOK(0x005437b0, LogicRecord24_Construct, Record24Fn, Original_LogicRecord2
 // Purpose: Constructor of a 0x24-byte record of the logic set-up (meaning
 // unknown; its field +0x10 starts as "none", -1).
 void* __fastcall LogicRecord24_Construct(void* self, void* /*edx*/) {
-    for (std::size_t offset = 0; offset < 0x24; offset += 4) {
-        At<std::uint32_t>(self, offset) = offset == 0x10 ? 0xffffffffu : 0;
-    }
+    LogicRecord24* const record = As<LogicRecord24>(self);
+    record->unk00 = 0;
+    record->unk04 = 0;
+    record->unk08 = 0;
+    record->unk0c = 0;
+    record->unk10 = 0xffffffffu;
+    record->unk14 = 0;
+    record->unk18 = 0;
+    record->unk1c = 0;
+    record->unk20 = 0;
     return self;
 }
 
@@ -156,12 +211,15 @@ S3RE_HOOK(0x005faaa0, GfxData_FrameOffset, FrameOffsetFn, Original_GfxData_Frame
 // variant (e.g. a player colour or direction) or the current one.
 std::uint32_t __fastcall GfxData_FrameOffset(void* self, void* /*edx*/, std::uint32_t id, std::uint32_t variant) {
     const std::uint32_t group = id >> 16;
+    GfxData* const gfx = As<GfxData>(self);
     if (variant == 0xffffffffu) {
-        variant = At<std::uint32_t>(self, 0xc40);
+        variant = gfx->currentVariant;
     }
-    auto* table = At<std::uint8_t*>(self, 0x37c + group * 4);
-    const std::uint32_t index = At<std::uint16_t>(table, 8) * variant + (id & 0xffff);
-    return At<std::uint32_t>(table, 0xc + index * 4) + At<std::uint32_t>(self, 0x264 + group * 4);
+    // The frame table (layout not mapped): word +8 frames per variant, dword
+    // offsets from +0xc.
+    auto* table = reinterpret_cast<std::uint8_t*>(gfx->frameTables[group]);
+    const std::uint32_t index = RawAt<std::uint16_t>(table, 8) * variant + (id & 0xffff);
+    return RawAt<std::uint32_t>(table, 0xc + index * 4) + gfx->groupBase[group];
 }
 
 S3RE_HOOK(0x004c7ac0, Render_PutPixel16, PutPixelFn, Original_Render_PutPixel16, Render_PutPixel16);
@@ -170,9 +228,10 @@ S3RE_HOOK(0x004c7ac0, Render_PutPixel16, PutPixelFn, Original_Render_PutPixel16,
 // current drawing origin (probably for the minimap or small markers).
 std::uint32_t __fastcall Render_PutPixel16(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y,
                                            std::uint32_t colour) {
+    DrawTarget* const target = As<DrawTarget>(self);
     const std::uint32_t index =
-        (At<std::uint32_t>(self, 0x90) >> 1) * (y + At<std::uint32_t>(kDrawOriginY)) + At<std::uint32_t>(kDrawOriginX) + x;
-    *reinterpret_cast<std::uint16_t*>(At<std::uint32_t>(self, 0xa4) + index * 2) = static_cast<std::uint16_t>(colour);
+        (target->pitch >> 1) * (y + At<std::uint32_t>(kDrawOriginY)) + At<std::uint32_t>(kDrawOriginX) + x;
+    *reinterpret_cast<std::uint16_t*>(target->pixels + index * 2) = static_cast<std::uint16_t>(colour);
     return index;
 }
 
@@ -181,7 +240,7 @@ S3RE_HOOK(0x004c7ab0, Render_Entry204, Entry204Fn, Original_Render_Entry204, Ren
 // Purpose: Reads entry i of a table of the drawing object (+0x204; meaning
 // unknown, probably per-type graphics ids or offsets).
 std::uint32_t __fastcall Render_Entry204(void* self, void* /*edx*/, std::uint32_t i) {
-    return At<std::uint32_t*>(self, 0x204)[i];
+    return As<DrawTarget>(self)->table204[i];
 }
 
 // ---------------------------------------------------------------------------
@@ -226,12 +285,13 @@ void CompareGraphics(test::Context& ctx, const GraphicsFunctions& candidate, int
             ctx.rng().Fill(data, sizeof(data));
             const std::uint32_t group = ctx.rng().Below(0xb0);
             const std::uint32_t index = ctx.rng().Below(0x100);
-            At<std::uint32_t>(object, 0xb24 + group * 4) = reinterpret_cast<std::uint32_t>(data);
+            static_assert(sizeof(object) >= sizeof(GfxData));
+            As<GfxData>(object)->spriteTables[group] = reinterpret_cast<std::uint32_t>(data);
             // Any offset (its upper half shows in EAX); the entry points so
             // that entry + offset lands in the buffer.
             const std::uint32_t offset = ctx.rng().Next32();
-            At<std::uint32_t>(object, 0x264 + group * 4) = offset;
-            At<std::uint32_t>(data, 8 + index * 4) =
+            As<GfxData>(object)->groupBase[group] = offset;
+            RawAt<std::uint32_t>(data, 8 + index * 4) =  // the sprite table's entries start at +8
                 reinterpret_cast<std::uint32_t>(data) + 0x1000 + ctx.rng().Below(0x1000) - offset;
             same &= S3RE_EXPECT_EQ(original.spriteWord(object, nullptr, group << 16 | index),
                                    candidate.spriteWord(object, nullptr, group << 16 | index));
@@ -309,41 +369,40 @@ void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate,
             const std::uint32_t frames = ctx.rng().Below(8);
             const std::uint32_t frame = ctx.rng().Below(8);
             std::uint32_t variant = ctx.rng().Chance(1, 3) ? 0xffffffffu : ctx.rng().Below(4);
-            At<std::uint32_t>(a, 0xc40) = ctx.rng().Below(4);
+            As<GfxData>(a)->currentVariant = ctx.rng().Below(4);
             std::memcpy(b, a, sizeof(a));
             for (std::uint8_t* side : std::initializer_list<std::uint8_t*>{a, b}) {
                 std::uint8_t* table = side + 0x1000 + group * 0x40;
-                At<std::uint8_t*>(side, 0x37c + group * 4) = table;
-                At<std::uint16_t>(table, 8) = static_cast<std::uint16_t>(frames);
+                As<GfxData>(side)->frameTables[group] = reinterpret_cast<std::uint32_t>(table);
+                RawAt<std::uint16_t>(table, 8) = static_cast<std::uint16_t>(frames);  // frames per variant
             }
             ra = original.frameOffset(a, nullptr, group << 16 | frame, variant);
             rb = candidate.frameOffset(b, nullptr, group << 16 | frame, variant);
         } else if (op == 1) {
             At<std::uint32_t>(kDrawOriginX) = ctx.rng().Below(32);
             At<std::uint32_t>(kDrawOriginY) = ctx.rng().Below(32);
-            At<std::uint32_t>(a, 0x90) = 2 * (32 + ctx.rng().Below(32));
+            As<DrawTarget>(a)->pitch = 2 * (32 + ctx.rng().Below(32));
             const std::uint32_t x = ctx.rng().Below(64), y = ctx.rng().Below(64);
             const std::uint32_t colour = ctx.rng().Next32();
             std::memcpy(b, a, sizeof(a));
-            At<std::uint8_t*>(a, 0xa4) = a + 0x100;
-            At<std::uint8_t*>(b, 0xa4) = b + 0x100;
+            As<DrawTarget>(a)->pixels = reinterpret_cast<std::uint32_t>(a + 0x100);
+            As<DrawTarget>(b)->pixels = reinterpret_cast<std::uint32_t>(b + 0x100);
             ra = original.putPixel(a, nullptr, x, y, colour);
             rb = candidate.putPixel(b, nullptr, x, y, colour);
         } else {
             std::memcpy(b, a, sizeof(a));
-            At<std::uint8_t*>(a, 0x204) = a + 0x400;
-            At<std::uint8_t*>(b, 0x204) = b + 0x400;
+            As<DrawTarget>(a)->table204 = reinterpret_cast<std::uint32_t*>(a + 0x400);
+            As<DrawTarget>(b)->table204 = reinterpret_cast<std::uint32_t*>(b + 0x400);
             const std::uint32_t index = ctx.rng().Below(0x100);
             ra = original.entry204(a, nullptr, index);
             rb = candidate.entry204(b, nullptr, index);
         }
         // The pointers set above point into each side's own buffer.
-        for (const std::size_t offset : {0xa4u, 0x204u}) {
-            std::memcpy(b + offset, a + offset, 4);
-        }
-        for (std::size_t offset = 0x37c; offset < 0x37c + 0xb0 * 4; offset += 4) {
-            if (At<std::uint8_t*>(a, offset) == a + 0x1000 + (offset - 0x37c) / 4 * 0x40) {
-                std::memcpy(b + offset, a + offset, 4);
+        As<DrawTarget>(b)->pixels = As<DrawTarget>(a)->pixels;
+        As<DrawTarget>(b)->table204 = As<DrawTarget>(a)->table204;
+        for (std::uint32_t group = 0; group < 0xb0; ++group) {  // past the 70 groups, like the cases above
+            if (As<GfxData>(a)->frameTables[group] == reinterpret_cast<std::uint32_t>(a + 0x1000 + group * 0x40)) {
+                As<GfxData>(b)->frameTables[group] = As<GfxData>(a)->frameTables[group];
             }
         }
         bool same = S3RE_EXPECT_EQ(ra, rb);

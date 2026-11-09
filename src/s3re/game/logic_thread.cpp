@@ -11,6 +11,7 @@
 // `--load-save`, N ticks after the tick the savegame starts at). Not
 // reimplemented.
 
+#include "game/logic_thread_layout.h"
 #include "hooks.h"
 #include "log.h"
 #include "replay/command_log.h"
@@ -24,7 +25,6 @@
 
 namespace s3re::game {
 
-struct CLogicThread;  // opaque
 
 namespace {
 

@@ -36,13 +36,27 @@
 
 #include <windows.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <string>
 
 namespace s3re::game {
 
-struct CMenuDrawThread;  // Menus::CDrawThread, opaque
+// Menus::CDrawThread: only the fields used here.
+#pragma pack(push, 1)
+struct CMenuDrawThread {
+    std::uint8_t unk000[0x104];
+    std::uint32_t menuState;     // +0x104 0x14: start the startup map, 4: start the game
+    std::uint8_t unk108[0x134 - 0x108];
+    std::uint8_t unk134;         // +0x134 0 when vf13 is about to start the startup map (checked by our hook)
+    std::uint8_t unk135[0x144 - 0x135];
+    std::int32_t unk144;         // +0x144 set to -1 when a loaded game starts
+};
+#pragma pack(pop)
+static_assert(offsetof(CMenuDrawThread, menuState) == 0x104);
+static_assert(offsetof(CMenuDrawThread, unk134) == 0x134);
+static_assert(offsetof(CMenuDrawThread, unk144) == 0x144);
 
 namespace {
 
@@ -64,7 +78,6 @@ const auto Config_ClearStartupMap = reinterpret_cast<ClearStartupMapFn>(0x00413d
 void* const kGameSettings = reinterpret_cast<void*>(0x007a7a18);
 void* const kConfig = reinterpret_cast<void*>(0x007a7af0);
 
-constexpr std::uint32_t kMenuStateOffset = 0x104;
 constexpr std::uint32_t kMenuStartupMap = 0x14;
 constexpr std::uint32_t kMenuStartGame = 4;
 
@@ -75,11 +88,6 @@ std::string SaveToLoad() {
 }
 
 bool g_handled = false;  // only touched by the menu thread
-
-template <typename T>
-T& Field(CMenuDrawThread* self, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(self) + offset);
-}
 
 void LoadSave(CMenuDrawThread* self, const std::string& path) {
     msvc6::String name{};
@@ -95,15 +103,14 @@ void LoadSave(CMenuDrawThread* self, const std::string& path) {
         return;
     }
     S3RE_LOG("load-save: loaded %s; starting the game", path.c_str());
-    Field<std::int32_t>(self, 0x144) = -1;
-    Field<std::uint32_t>(self, kMenuStateOffset) = kMenuStartGame;
+    self->unk144 = -1;
+    self->menuState = kMenuStartGame;
     MenuDrawThread_Post(self, nullptr, 1);
     Config_ClearStartupMap(kConfig, nullptr);
 }
 
 std::uint32_t __fastcall Hooked_MenuDrawThread_Update(CMenuDrawThread* self, void* edx, int arg) {
-    if (!g_handled && Field<std::uint32_t>(self, kMenuStateOffset) == kMenuStartupMap &&
-        Field<std::uint8_t>(self, 0x134) == 0) {
+    if (!g_handled && self->menuState == kMenuStartupMap && self->unk134 == 0) {
         g_handled = true;
         const std::string path = SaveToLoad();
         if (!path.empty()) {
