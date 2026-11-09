@@ -24,7 +24,14 @@ or to version 1 recordings, which don't store them.
 With --against-original, the reference is instead a replay of the same
 recording with the original code (s3re_launcher --original), and the replay
 with our reimplementations must match it: the system-level check for every
-replaced function.
+replaced function. The original's trace is cached (tools/trace_cache.py;
+--no-cache, --refresh-cache, --verify-cache), so usually only our code runs.
+
+Replays run with --fast (the logic ticks as fast as it can, see
+src/s3re/tooling/fast.cpp); --no-fast runs them in real time. A new
+recording runs fast too, except with --synthetic-input: that input is timed
+by the wall clock, so recording with it stays at normal speed (at fast
+speed the script would only get a few clicks into the game).
 
 The game window takes over the screen while it runs; don't touch mouse or
 keyboard. Exit code 0 if every check passed.
@@ -43,7 +50,9 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import command_log  # noqa: E402
+import first_calls  # noqa: E402
 import game_lock  # noqa: E402
+import trace_cache  # noqa: E402
 
 DEFAULT_SEED = 1234
 DEFAULT_MAP = r"Map\MULTI\384-2-Lakes.map"
@@ -58,6 +67,20 @@ def run_game(launcher, bin_dir, args, extra, input_seed=None, new_game=False):
         return _run_game(launcher, bin_dir, args, extra, input_seed, new_game)
 
 
+def game_command(launcher, args, extra, input_seed=None, new_game=False):
+    """The launcher command line of one traced run."""
+    timeout = 60 + args.ticks // 5
+    seed = args.seed if args.seed is not None else (DEFAULT_SEED if new_game else None)
+    game_map = args.map if args.map is not None else (DEFAULT_MAP if new_game else None)
+    # Synthetic input follows the wall clock: record it at normal speed.
+    fast = args.fast and input_seed is None
+    return [launcher, "--trace-determinism",
+            *(["--seed", str(seed)] if seed is not None else []),
+            *(["--fast"] if fast else []),
+            "--exit-after-ticks", str(args.ticks), "--timeout", str(timeout),
+            *extra, "--", *(["-map", game_map] if game_map is not None else [])]
+
+
 def _run_game(launcher, bin_dir, args, extra, input_seed, new_game):
     before = set(glob.glob(os.path.join(bin_dir, "determinism-*.tsv")))
     player = None
@@ -69,14 +92,11 @@ def _run_game(launcher, bin_dir, args, extra, input_seed, new_game):
                                    "--start-delay", "8",
                                    "--log", os.path.join(bin_dir, "replay-check", "input.log")],
                                   stdout=subprocess.DEVNULL)
-    timeout = 60 + args.ticks // 5
-    seed = args.seed if args.seed is not None else (DEFAULT_SEED if new_game else None)
-    game_map = args.map if args.map is not None else (DEFAULT_MAP if new_game else None)
-    command = [launcher, "--trace-determinism",
-               *(["--seed", str(seed)] if seed is not None else []),
-               "--exit-after-ticks", str(args.ticks), "--timeout", str(timeout),
-               *extra, "--", *(["-map", game_map] if game_map is not None else [])]
+    command = game_command(launcher, args, extra, input_seed, new_game)
+    started = time.time()
     result = subprocess.run(command, capture_output=True, text=True)
+    print(f"    {time.time() - started:.0f} s{' (fast)' if '--fast' in command else ''}",
+          flush=True)
     if player is not None:
         try:
             player.wait(timeout=30)
@@ -126,7 +146,10 @@ def main():
                              "tick) in the recording and the replay and, if they differ, "
                              "show the differing fields (tools/diff_world_dumps.py); "
                              "about 22 MB per dump")
+    parser.add_argument("--no-fast", dest="fast", action="store_false",
+                        help="run in real time instead of with --fast")
     parser.add_argument("--build", default="Debug")
+    trace_cache.add_arguments(parser)
     args = parser.parse_args()
 
     bin_dir = os.path.join(ROOT, "build", "x86", "bin", args.build)
@@ -170,13 +193,28 @@ def main():
               "tools/command_log.py upgrade)")
         return 2
 
+    cached = None
     if args.against_original:
         args.no_mutation = True
         print("replay with the original code (reference)", flush=True)
-        trace = run_game(launcher, bin_dir, args,
-                         ["--replay-commands", recording, "--original", *dump_args])
+        original_extra = ["--replay-commands", recording, "--original", *dump_args]
+
+        def run_original():
+            trace = run_game(launcher, bin_dir, args, original_extra)
+            log = open(os.path.join(bin_dir, "s3re.log"), encoding="utf-8",
+                       errors="replace").read() if trace else ""
+            return trace, log
+
+        if dump_args:
+            args.no_cache = True  # the dumps come from the original run itself
+        key = trace_cache.make_key("replay", bin_dir, game_lock.game_dir(), recording,
+                                   game_command(launcher, args, original_extra)[1:])
+        trace, cached, cache_ok = trace_cache.reference(args, key, args.ticks, run_original, work)
         if trace is None:
             return 2
+        if not cache_ok:
+            print("REPLAY FAILED (the original's trace differs from the cached one)")
+            return 1
         reference = os.path.join(work, "original.tsv")
         shutil.copyfile(trace, reference)
         record_trace = trace
@@ -185,8 +223,12 @@ def main():
     trace = run_game(launcher, bin_dir, args, ["--replay-commands", recording, *dump_args])
     if trace is None:
         return 2
-    ok, report = same_traces(reference, trace)
-    print(f"  replay vs recording: {'identical' if ok else 'DIFFERENT'}")
+    if cached is not None:
+        ok, report = trace_cache.compare(cached, trace, args.ticks, work)
+    else:
+        ok, report = same_traces(reference, trace)
+    print(f"  replay vs {'original' if args.against_original else 'recording'}: "
+          f"{'identical' if ok else 'DIFFERENT'}")
     # Player commands = recorded commands nobody issued live in the replay.
     replay_log = open(os.path.join(bin_dir, "s3re.log"), encoding="utf-8",
                       errors="replace").read()
@@ -200,6 +242,7 @@ def main():
               f"{len(calls)}")
         if unused:
             print(f"  not called (not covered by this run): {', '.join(unused)}")
+        print("\n".join(first_calls.summary(first_calls.first_calls(replay_log)[0])))
     player_commands = len(re.findall(r"was not issued live", replay_log))
     print(f"  player commands in the recording: {player_commands}"
           f"{' (at least; the log lists 20 differences at most)' if player_commands >= 20 else ''}")

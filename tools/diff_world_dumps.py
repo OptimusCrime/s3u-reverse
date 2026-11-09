@@ -20,21 +20,22 @@ import struct
 import sys
 from collections import defaultdict
 
-MAP_TILES = 0x67440
+# Trace v5 regions (src/s3re/game/layout.h): tiles start at 0x67444.
+MAP_TILES = 0x67444
 TILE = 24
 ROW = 0x300 * TILE
 REST = MAP_TILES + 0x300 * ROW
 
 # Keep in sync with src/s3re/trace/determinism.cpp.
-HEADER_SKIPS = [(0x2d02c, 0x2d248), (0x2d254, 0x2d268), (0x2d278, 0x2d284), (0x2d284, 0x2d294),
-                (0x2d2a0, 0x2d2a4), (0x2d2e4, 0x2d2ec), (0x2d2f0, 0x2d2f4), (0x2d300, 0x2d302)]
+HEADER_SKIPS = [(0x2d038, 0x2d248), (0x2d254, 0x2d268), (0x2d278, 0x2d284), (0x2d284, 0x2d294),
+                (0x2d2a0, 0x2d2a4), (0x2d2c8, 0x2d2cc), (0x2d2e4, 0x2d2ec), (0x2d2f0, 0x2d2f4), (0x2d300, 0x2d302)]
 REST_SKIPS = [(0x1222ed4, 0x1223656), (0x1539484, 0x15394b0)]
 # Alignment padding of the 5000 MapEffect records (0x4C bytes) at 0x14d2bc8
 # (src/s3re/trace/determinism.cpp, kMapEffectPadding).
 MAP_EFFECTS = (0x14d2bc8, 0x4c, 5000)
 MAP_EFFECT_PADDING = [(0x2a, 0x2c), (0x3b, 0x3c), (0x3e, 0x40)]
-TILE_SKIPS = (15, 17)
-TILE_REDRAW = (13, 0x80)  # byte, bit
+TILE_SKIPS = (0xb, 0xd)  # search_mark, overlay_value
+TILE_REDRAW = (9, 0x80)  # draw_flags byte, bit
 
 
 def skipped(offset):

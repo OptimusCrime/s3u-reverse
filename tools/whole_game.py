@@ -4,15 +4,17 @@
 A verified function has unit-level evidence (differential tests, emulator
 specs). It only has whole-game evidence if the game actually called our
 replacement during a whole-game check that matched the original: a
-recorded-game replay (tools/check_replay.py --against-original) or a
-savegame run (tools/check_save.py --against-original). The counting thunk
+recorded-game replay (tools/check_replay.py --against-original), a
+savegame run (tools/check_save.py --against-original) or a random-map
+game (tools/check_random_map.py --against-original). The counting thunk
 behind every S3RE_HOOK logs "calls <name> <n>" at exit; this module keeps
 those counts in re/whole_game_calls.csv.
 
 Columns of re/whole_game_calls.csv (one row per function and source):
   address  0x-prefixed, 8 lowercase hex digits (as in re/functions.csv)
   name     the inventory name at that address
-  source   replay:<recording file name> or save:<savegame file name>
+  source   replay:<recording file name>, save:<savegame file name> or
+           random:<size>,<symmetry> seed <seed> (a random-map game)
   ticks    how many ticks the check ran
   calls    the largest call count measured for this source; 0 = the hook
            was installed and counted, but the game never called it
@@ -54,7 +56,7 @@ CALLS_CSV = ROOT / "re" / "whole_game_calls.csv"
 INVENTORY = ROOT / "re" / "functions.csv"
 SOURCE_DIR = ROOT / "src"
 COLUMNS = ["address", "name", "source", "ticks", "calls", "commit", "date", "note"]
-SOURCE_RE = re.compile(r"(replay|save):\S.*")
+SOURCE_RE = re.compile(r"(replay|save|random):\S.*")
 
 # S3RE_HOOK(address, name, FnType, original, replacement) and variants.
 HOOK_RE = re.compile(r"S3RE_(HOOK|HOOK_ALWAYS|HOOK_UNVERIFIED)\(\s*(0x[0-9a-fA-F]+)\s*,\s*(\w+)\s*,"
@@ -95,7 +97,7 @@ def record(source: str, ticks: int, counts: dict[int, int], note: str = "") -> t
     largest count per function and source; the commit/date are replaced when
     the new count is at least as large. Returns (new rows, changed rows)."""
     if not SOURCE_RE.fullmatch(source):
-        raise ValueError(f"source must look like replay:NAME or save:NAME, not {source!r}")
+        raise ValueError(f"source must look like replay:NAME, save:NAME or random:NAME, not {source!r}")
     names = inventory_names()
     rows = load()
     index = {(int(r["address"], 16), r["source"]): r for r in rows}
@@ -475,7 +477,7 @@ def check_errors() -> list[str]:
             errors.append(f"{where}: name '{r['name']}' but functions.csv says '{row['name']}' "
                           "(python tools/whole_game.py fix-names)")
         if not SOURCE_RE.fullmatch(r["source"] or ""):
-            errors.append(f"{where}: source must be replay:NAME or save:NAME")
+            errors.append(f"{where}: source must be replay:NAME, save:NAME or random:NAME")
         for column in ("ticks", "calls"):
             if not (r[column] or "").isdigit():
                 errors.append(f"{where}: {column} must be a non-negative integer")

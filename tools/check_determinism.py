@@ -2,11 +2,12 @@
 """Run the game twice with the same seed and map, unattended, and compare.
 
 Usage: python tools/check_determinism.py [--ticks N] [--seed N] [--map PATH]
-                                         [--runs N] [--build Debug|Release]
+                                         [--runs N] [--no-fast] [--build Debug|Release]
 
 Each run starts S3.EXE through s3re_launcher with --trace-determinism, a
 fixed RNG seed, the game's own `-map` option (skips the menus) and
---exit-after-ticks, so nobody has to click anything. The game window takes
+--exit-after-ticks, so nobody has to click anything. Runs use --fast (the
+logic ticks as fast as it can, src/s3re/tooling/fast.cpp) unless --no-fast. The game window takes
 over the screen while it runs; don't touch mouse or keyboard. Then every
 trace is compared with the first one (tools/compare_traces.py).
 
@@ -32,6 +33,8 @@ def main():
     parser.add_argument("--map", default=r"Map\MULTI\384-2-Lakes.map",
                         help="map path relative to the game directory")
     parser.add_argument("--runs", type=int, default=2)
+    parser.add_argument("--no-fast", dest="fast", action="store_false",
+                        help="run in real time instead of with --fast")
     parser.add_argument("--build", default="Debug")
     args = parser.parse_args()
 
@@ -47,11 +50,15 @@ def main():
     for run in range(args.runs):
         before = set(glob.glob(os.path.join(bin_dir, "determinism-*.tsv")))
         command = [launcher, "--trace-determinism", "--seed", str(args.seed),
+                   *(["--fast"] if args.fast else []),
                    "--exit-after-ticks", str(args.ticks), "--timeout", str(timeout),
                    "--", "-map", args.map]
         print(f"run {run + 1}/{args.runs}: {args.ticks} ticks, seed {args.seed}, {args.map}", flush=True)
         with game_lock.held("check_determinism"):
+            started = time.time()
             result = subprocess.run(command, capture_output=True, text=True)
+            print(f"    {time.time() - started:.0f} s{' (fast)' if args.fast else ''}",
+                  flush=True)
         new = sorted(set(glob.glob(os.path.join(bin_dir, "determinism-*.tsv"))) - before)
         if result.returncode != 0 or len(new) != 1:
             print(result.stdout + result.stderr)

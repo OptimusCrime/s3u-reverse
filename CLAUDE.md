@@ -20,7 +20,9 @@ against the original game's behavior, not just "looks right".
   Then re-apply our names with `set_addresses_names`, using the output of
   `python tools/inventory.py names`.
 - **While working:** permanent facts and procedures go in this file. Data
-  goes in `re/`. Progress goes in `LOGBOOK.md`.
+  goes in `re/`. Progress goes in `LOGBOOK.md`. Things that should be done
+  at some point but not now go in `TODO.md` (the backlog); when picking the
+  next piece of work, check it too, and remove items when they are done.
 - **Before stopping, or after finishing a piece of work:** update
   `LOGBOOK.md` (current focus, next steps, open questions, and a dated
   session-log entry), then commit.
@@ -206,16 +208,66 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   `-- -map Map\MULTI\384-2-Lakes.map` starts that map without menus.
   `--unverified` also installs the unverified reimplementations.
   `s3re.log` logs every seed and the step count.
+- **Tick pacing and `--fast`:** `CLogicThread::OnStart` starts a periodic
+  64 ms `Win32::CTimer` (CLogicThread+0x3bc; 15.6 ticks/s), and
+  `CLogicThread::Step` waits on its wait set (+0x3dc,
+  `CWin32Waitable::WaitForXYZ` `0x463100`, 500 ms) and runs a tick only
+  when the timer was the signalled object; other objects wake it without a
+  tick (hence ~240 steps/s). `CNetBounceThread` answers step messages at
+  once, so it doesn't pace. `--fast` (`src/s3re/tooling/fast.cpp`) makes
+  only that wait in Step poll and report the timer: every tick is original
+  code, only the idle steps between ticks go. About 450 ticks/s on the
+  384 map (1,000 ticks: ~65 s -> ~2 s of game time, ~8 s per run with
+  loading). The game's own fast-forward (`g_stepCountdown` += 882) is not
+  used: it skips work in the simulation. Shown identical (2026-11-10): the
+  original with `--fast` twice; normal against `--fast` on
+  scripted-seed127.bin (3,000 ticks) and "slot 1.sav" (2,000 ticks; this
+  found the UI-only field +0x2d2c8, now skipped by trace v4); the original
+  against ours with `--fast`. check_replay.py, check_save.py and
+  check_determinism.py and check_random_map.py use `--fast` by default
+  (`--no-fast` to opt out).
+  Recording with `--synthetic-input` stays at normal speed (that input
+  follows the wall clock).
+- **Cached reference traces of the original:** check_replay.py and
+  check_save.py `--against-original` reuse the original's trace from
+  `build/trace_cache/` (`tools/trace_cache.py`: key = S3.EXE and input
+  hashes, launcher arguments, trace format version and original-mode
+  tooling version; a longer cached run serves a shorter one). Flags:
+  `--no-cache`, `--refresh-cache`, `--verify-cache` (rerun the original and
+  compare with the cache). **Version rules:** change the trace format or
+  what it hashes -> bump "s3re determinism trace vN" in
+  `src/s3re/trace/determinism.cpp` (old reference traces, e.g. a
+  recording's `.tsv`, must then be regenerated); change any code that runs
+  in `--original` mode (passthrough and `S3RE_HOOK_ALWAYS` hooks, trace,
+  replay, seed, load-save, fast) -> bump `S3RE_ORIGINAL_TOOLING_VERSION` in
+  `src/s3re/tooling/version.h`.
+- **First-call ticks:** at exit s3re.log also has "first-call <name>
+  <tick>" for each called replacement; `python tools/first_calls.py
+  s3re.log` (and the checks) summarize how many were first called after
+  ticks 100/500/1,000/2,000.
 - **Game lock (decided 2026-11-09):** agents may run in parallel (git
   worktrees). Before any run that opens the game window (check_replay.py,
   check_determinism.py, plain launcher runs; not `--test`), create the
   directory `Settlers3Ultimate/s3re-game.lock` atomically (mkdir; if it
-  exists, retry every 30 s), write `owner.txt` (who, when) into it, and
+  exists, wait in the queue below), write `owner.txt` (who, when) into it, and
   make sure no `S3.EXE` runs. Remove it when the run ends, also on
   failure. A lock older than 2 hours with no `S3.EXE` running is stale.
+  An `S3.EXE` whose parent is `s3re_launcher --test` (in-process tests,
+  no window) doesn't count as running, so test runs never block game
+  checks (`game_lock.running_games` checks the parent's command line;
+  an `S3.EXE` without a parent counts). **Fair queue (2026-11-10):**
+  waiters write a ticket `<ns time>-<pid>-<owner>.ticket` into
+  `Settlers3Ultimate/s3re-game.queue/` and only the oldest live ticket
+  may mkdir the lock, so runs get the game in arrival order (checked
+  every 3 s; tickets and locks of dead pids are removed; the ticket is
+  removed on exit, errors and Ctrl+C). `held(owner, max_wait=None)`,
+  `acquire`/`release`; `python tools/game_lock.py status` shows the
+  holder, its age and the queue. A lock made by hand (mkdir, no
+  `owner.txt`) is still respected. `python tools/test_game_lock.py`
+  tests it without a game.
   `tools/game_lock.py` implements it (`with game_lock.held(owner):`);
-  `check_replay.py`, `check_determinism.py` and `check_save.py` take it
-  automatically; `python tools/game_lock.py status|release`. Manual
+  `check_replay.py`, `check_determinism.py`, `check_save.py` and
+  `check_random_map.py` take it automatically; `python tools/game_lock.py status|release`. Manual
   launcher runs take it by hand. Never write to `Settlers3Ultimate/Save/`
   (`--load-save` and `check_save.py` only read and copy the savegames).
   In a worktree, make `Settlers3Ultimate` a junction to the main
@@ -239,9 +291,34 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   runs it unattended (twice original, or original vs ours), compares the
   traces, checks that no savegame in `Save\` changed, and writes the call
   counts to `save-check/<save>-calls.tsv`. Results: `re/savegame_checks.md`.
+- **Starting a random-map game:** `--random-map SIZE[,SYMMETRY[,FIELD0C]]`
+  (sizes 128..768 in steps of 64; the dialog offers 384 and up; symmetry
+  bits 0..3) starts a game on a map from the game's random map generator
+  (`0x5166d0`) without menus. The launcher passes `-map` (default
+  `Map\MULTI\384-2-Lakes.map`), whose player setup is used; a pass-through
+  hook on `GameSettings::NewGame` (`0x431ab0`), only at the `-map` call site
+  in `Menus::CDrawThread::Update` (return address `0x493a56`), replaces the
+  map file with a memory-only `Dirk::CMapFile` holding chunk 5 (size, a
+  second dialog value, symmetry, seed) and chunk 1 (random-map kind, start
+  positions), built exactly like the map dialog does (`0x481e90`).
+  `CLogicThread::OnStart` then calls Create with that chunk. `--seed N` also
+  becomes the map seed (Create seeds the RNG through `SeedRandom`). Not
+  combinable with `--load-save` or the command recorder. Code:
+  `src/s3re/tooling/random_map_start.cpp`. `python
+  tools/check_random_map.py --maps "384,0;448,3" --ticks N
+  [--against-original] [--map FILE]` runs it unattended (twice original, or
+  original vs ours) and records call counts as source `random:SIZE,SYM seed N`.
+- **Leaving out single replacements:** `--skip-hooks NAME[,NAME...]` (hook
+  names as in the "hooked NAME" lines of s3re.log) installs everything
+  except those, so the original runs there: to find which replacement makes
+  a whole game diverge, or to count our callees of an original function
+  (calls from our own replacements bypass the counting thunk; e.g.
+  `check_random_map.py --against-original --skip-hooks GameWorld_Create`
+  counts ExpandTerrain and MarkTerrainEdge).
 - **Unattended determinism check:** `python tools/check_determinism.py
   [--ticks N]`. It opens the game window, so the user's screen is busy
-  while it runs (about 1 minute per 1,000 ticks per run).
+  while it runs (with `--fast` about 10 s per 1,000-tick run, mostly
+  loading; about 1 minute per 1,000 ticks with `--no-fast`).
 - **Recording and replaying commands:** `--record-commands FILE` records
   every command; `--replay-commands FILE` replays a recording instead of the
   live commands. Recordings (format in `src/common/recording_format.h`)
@@ -385,10 +462,10 @@ replaying, see `src/s3re/replay/command_log.h`):
   inventory (after a rename: `python tools/whole_game.py fix-names`).
 - **Whole-game evidence** is kept in `re/whole_game_calls.csv`: one row per
   function and whole-game check source (`replay:<recording>`,
-  `save:<savegame>`) with the largest call count, ticks, commit and date
+  `save:<savegame>`, `random:<size>,<symmetry> seed <n>`) with the largest call count, ticks, commit and date
   (columns in `tools/whole_game.py`). `tools/record_call_counts.py` (after
-  check_replay) and `tools/check_save.py --against-original` (when
-  identical) write it. A verified function is then "seen in a whole game"
+  check_replay), `tools/check_save.py --against-original` and
+  `tools/check_random_map.py --against-original` (when identical) write it. A verified function is then "seen in a whole game"
   (some count > 0), "tests only" (counted 0 in every check) or "no
   whole-game check yet" (no row). A 0 can hide real runs: calls from our
   own replacements bypass the counting thunk (e.g. PlanSiteLevelling inside
@@ -459,6 +536,20 @@ replaying, see `src/s3re/replay/command_log.h`):
     linker folding
   When a function's purpose becomes clear, rename it and set it to
   `identified`.
+- **Names are ours and can be wrong.** `S3.EXE` has no symbols: only class
+  names (RTTI) and source file names come from the binary; every function
+  name was given by us from what we understood at the time, and earlier
+  analysis can be wrong (e.g. `EvaluateBuildingFootprint` turned out to be
+  `PlanSiteLevelling`; `GameWorld::Create` is the random map generator).
+  **Whenever a name turns out to be misleading or wrong, rename it** (also
+  for verified functions, and for structs, fields and globals): update
+  `re/functions.csv` (keep the old name in the notes: "Was X"), the hook and
+  code names in `src/` (test names too), `python tools/whole_game.py
+  fix-names`, `re/structs.md` / `re/world_layout.md` / `re/globals.csv`
+  where relevant, then `python tools/inventory.py check`. If a rename is
+  large or collides with work in progress, add it to `TODO.md` instead of
+  skipping it. Prefer the original's real names where the binary gives
+  them (RTTI class names such as `CGameData`, German log strings).
 - Constructors aren't named yet. `classes.json` lists the functions that
   store each vtable (constructors, destructors, or code that inlined them).
 
@@ -528,6 +619,43 @@ replaying, see `src/s3re/replay/command_log.h`):
    rely on DLL startup code (the emulator doesn't run it); call the game's
    operator new/delete/memmove (0x61efb9/0x61e4ef/0x61e860) where the
    original does.
+   - **Parallel runs:** specs run in `--jobs N` worker processes
+     (default: half the cores minus 2, i.e. 8 on the dev machine, capped
+     by free memory at ~600 MB per worker, or `S3RE_EMU_JOBS`; workers
+     run at below-normal priority; `--jobs 1` runs in one process). The
+     user's machine became unresponsive with 18 workers while other agents
+     were busy: don't raise the default, and when several agents work in
+     parallel, only one of them runs a full suite at a time (per batch use
+     `--changed`). Every spec starts from a
+     fresh emulator state (`Emulator.reset`: images as loaded, stack
+     zeroed, no world bytes), so results don't depend on the order or
+     the worker count, and the output is printed in specs.py order.
+     The slowest specs start first (times in the gitignored
+     `build/emutest_times.json`), and specs that took longer than about
+     total/jobs/2 run as several parts (case ranges; the inputs of the
+     skipped cases are still drawn, so the merged result equals a whole
+     run). Full suite on 18 workers: ~15 min wall time (the serial run
+     takes over an hour); a worker peaks at ~380 MB. `--memory` prints
+     workers, peak memory and wall time. `--bin-dir DIR` tests the DLL in another
+     build directory (e.g. the main checkout's).
+   - **Selective runs:** `run.py --changed [--since REF]` runs only the
+     specs the changes since REF (default: the last full clean run,
+     `build/emutest_last_full.json`, written by every full run with 0
+     mismatches; it lists the specs with incomplete coverage, today only
+     GameWorld_Create) can affect, and prints "N of M
+     specs" and why (`--dry-run`: only the selection). The selection
+     comes from the build: MSBuild's compiler tracking log (headers of
+     each object) and s3re.map plus the DLL's code (which objects each
+     replacement reaches through calls and data references), and from
+     specs.py (entries whose code or helpers changed, comments don't
+     count). A change to the harness, `tools/requirements.txt`, the
+     CMake files or `re/*_functions.tsv` selects everything and runs
+     the self-test too. Details: `tools/emutest/changed.py`.
+   - **Policy:** per batch, `run.py --changed --require-coverage` (it
+     includes the batch's new specs); the full suite (parallel) at the
+     end of each parallel round of agents and before milestones, and
+     whenever `--changed` selects more than about half of the specs
+     anyway. Run `--self-test` when the harness changed.
 5. Build, then run `s3re_launcher --test [filter]`. This runs the tests inside
    the real `S3.EXE` without opening the game window. The exit code is 0 only
    if every test passed. A crashing test is logged with the faulting

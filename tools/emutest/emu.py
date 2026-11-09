@@ -198,6 +198,25 @@ def read_dll_symbols(map_path: str) -> dict[str, int]:
     return symbols
 
 
+def find_our_function(symbols: dict[str, int], name: str) -> int:
+    """Address of our replacement `name` in s3re.dll (see
+    Emulator.our_function)."""
+    found = [address for symbol, address in symbols.items()
+             if symbol.startswith(f"?{name}@") and "Counting" not in symbol
+             and not symbol.startswith(f"?{name}@@3")]
+    if len(found) > 1:
+        # A helper of the same name in an anonymous namespace (e.g.
+        # NextDirection in world_create.cpp) doesn't count; functions only
+        # in an anonymous namespace (the self-test's Wrong*) still match.
+        found = [address for symbol, address in symbols.items()
+                 if symbol.startswith(f"?{name}@") and "Counting" not in symbol
+                 and not symbol.startswith(f"?{name}@@3")
+                 and not symbol.startswith(f"?{name}@?A0x")]
+    if len(found) != 1:
+        raise KeyError(f"{name}: {len(found)} matching symbols in s3re.map")
+    return found[0]
+
+
 @dataclass
 class Function:
     """Static facts about an original function."""
@@ -275,6 +294,33 @@ class Emulator:
         self.api_names: list[str] = []
         for path in (exe_path, dll_path):
             self._bind_imports(path)
+        # The loaded images, to give every spec the same starting state
+        # (see reset).
+        self._pristine = [(base, bytes(self.uc.mem_read(base, size)))
+                          for base, size in (self.exe_range, self.dll_range)]
+
+    def reset(self) -> None:
+        """Back to the state right after loading: S3.EXE and s3re.dll as in
+        their files (Spec.globals write S3.EXE globals directly and would
+        otherwise carry over into later specs), the stack zeroed, no world
+        bytes materialized, no probes declared. run.py calls it before every
+        spec, so a spec's result doesn't depend on which specs ran before
+        it in the same process (serial and parallel runs agree)."""
+        chunk = 0x10000
+        for base, image in self._pristine:
+            for offset in range(0, len(image), chunk):
+                want = image[offset:offset + chunk]
+                if bytes(self.uc.mem_read(base + offset, len(want))) != want:
+                    self.uc.mem_write(base + offset, want)
+        self.uc.mem_write(STACK_BASE, bytes(STACK_SIZE))
+        self.begin_case(0, [0], {})
+        self.blocks = set()
+        self.cover_range = (0, 0)
+        self.virtuals = {}
+        self.virtual_effects = {}
+        self.set_callees({})
+        self.new_fails = False
+        self.new_fails_size = None
 
     def _bind_imports(self, path: str) -> None:
         """Points every import of the image at an API probe."""
@@ -405,12 +451,7 @@ class Emulator:
     def our_function(self, name: str) -> int:
         """Address of our replacement `name` (its C++ name, e.g.
         GameWorld_AddStatistic), not of its counting thunk."""
-        found = [address for symbol, address in self.symbols.items()
-                 if symbol.startswith(f"?{name}@") and "Counting" not in symbol
-                 and not symbol.startswith(f"?{name}@@3")]
-        if len(found) != 1:
-            raise KeyError(f"{name}: {len(found)} matching symbols in s3re.map")
-        return found[0]
+        return find_our_function(self.symbols, name)
 
     def analyze(self, start: int, end: int | None = None) -> Function:
         """Basic blocks and constants of the function at `start`, which ends at

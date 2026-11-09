@@ -20,9 +20,8 @@ user may provide a late-game save file later. Order:
 2. **GameWorld::Create 0x5166d0** - done in batch 29 (the random map
    generator), with ExpandTerrain 0x519440, MarkTerrainEdge 0x51a2e0 and
    BuildRegionsAndAreas 0x51a580. Create only runs for random maps, so it
-   has no whole-game evidence yet (needs a way to start a random-map
-   game: a map file with chunk 5 or the setup dialog's "\Random" entry,
-   see 0x48b12a / 0x48ed48).
+   has whole-game evidence since session 40 (`--random-map`,
+   tools/check_random_map.py).
 2b. **Refactor batch (user decision 2026-11-09, next):** bring
    re/proposed_structs.h into the build (e.g. src/s3re/game/layout.h,
    with its static_asserts); convert the replacement files from
@@ -476,12 +475,16 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 - `CLogicThread::Step` stores the RNG state every 256 ticks into
   `g_syncRandomHistory` (`0x7dfb58`) and sends it via `0x4309c0`. This is
   probably the multiplayer desync check, more evidence for lockstep.
-- `CLogicThread::Step` is called about 240 times a second, but the tick
-  advances only about 15 times a second; the step decides when to tick.
-  Some work runs per step, not per tick (`0x524fa0`, `0x51f110`), so its
-  side effects depend on timing. Known volatile world fields: `+0x2d2e4`
-  to `+0x2d2eb` and `+0x2d301` (skipped by the trace hash). Check whether
-  they can ever influence the simulation.
+- Tick pacing is understood (2026-11-10, see CLAUDE.md "Tick pacing and
+  `--fast`"): a 64 ms CTimer, Step ticks only when it fired. Per-step work
+  (`0x524fa0`, `0x51f110` PrepareDrawData) still runs a timing-dependent
+  number of times; volatile/UI world fields known so far: `+0x2d2c8`,
+  `+0x2d2e4..+0x2d2eb`, `+0x2d301` (skipped by the trace hash). Normal
+  speed and `--fast` gave identical traces on the recording and one save;
+  other saves/longer games may still find more such fields. `+0x2d2d8`
+  (incremented by Step before every ExecuteCommands attempt, also when the
+  network allowance stops it) was identical in those runs but is a
+  candidate.
 - Tile byte 15 is a "visited" stamp shared by the simulation's searches
   (GameWorld::NextSearchGeneration) and the UI overlays. Safe as long as
   every search bumps the generation before marking; only spot-checked
@@ -535,6 +538,158 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-10 (41): parallel emulator runs, --changed, fair game lock (tooling, parallel worktree)
+
+- **`run.py --jobs N`** (default cores-2 = 18 here, capped by free memory;
+  a worker peaks at ~380 MB): specs run in spawn worker processes, output
+  in specs.py order, same summary and exit code. Slowest first (times in
+  build/emutest_times.json); specs slower than ~total/jobs/2 run as case
+  ranges whose merged result equals a whole run (checked on 10 specs incl.
+  self-test pairings, 2/3/7 parts). Full suite: 1128 s on the first run
+  (no times yet), 1003 s with times, 856 s with splitting, all on a
+  machine shared with another agent's emulator suite; serial is over an
+  hour (GameWorld_Create alone 840-1000 s). All three parallel outputs
+  identical (458 specs, 0 mismatches, only GameWorld_Create incomplete
+  338/415 as known); the `--jobs 1` run matched on its first 70 specs and
+  was stopped for time (TODO). Self-test parallel = serial (21/21).
+- **Cross-spec state:** `Spec.globals` wrote S3.EXE globals with
+  mem_write, outside the per-call undo, so they leaked into later specs
+  (the 0x65539f case of session 35). `Emulator.reset` before every spec
+  restores both images, zeroes the stack and forgets world bytes and
+  probes. Nothing else carried over (writes are undone per call).
+- **Bug found:** at HEAD the full suite crashed with "NextDirection: 2
+  matching symbols" (world_create.cpp has a NextDirection helper in an
+  anonymous namespace). find_our_function now prefers the non-anonymous
+  match.
+- **`run.py --changed [--since REF] [--dry-run]`** (tools/emutest/changed.py):
+  selection from MSBuild's CL.read tlog (headers per object) and the DLL
+  reference closure (calls, operand addresses and data pointers, symbols
+  from s3re.map); specs.py entries by fingerprint of the entry plus the
+  helpers it uses. Checked: a comment in map_directions.cpp selects 13
+  specs (its 5 plus 8 callers in area_split/settler code); world.h
+  selects 215; a changed helper/entry/comprehension selects exactly its
+  1/1/8 specs; a comment change in specs.py selects 0; harness changes
+  select all. Full runs with 0 mismatches are recorded in
+  build/emutest_last_full.json (incl. the incomplete-coverage list).
+- **Release build:** not usable as is (identical-function folding drops
+  names from s3re.map); TODO.
+- **Game lock:** an S3.EXE whose parent is `s3re_launcher --test` doesn't
+  count (checked with a live --test run). FIFO queue of ticket files in
+  Settlers3Ultimate/s3re-game.queue/, 3 s polling, dead-pid cleanup,
+  max_wait, `status` with holder and queue; tools/test_game_lock.py
+  (3 waiters in arrival order, a dead-pid ticket and lock, a timeout).
+
+### 2026-11-10 (41): `--fast`, cached original traces, first-call ticks (tooling, parallel worktree)
+
+- **Pacing found:** CLogicThread::OnStart starts the CTimer at
+  CLogicThread+0x3bc with 64 ms (`Win32::CTimer::StartPeriodic` 0x60d3a0 ->
+  `Start` 0x60d0a0: SetWaitableTimer, or timeSetEvent); Step waits on the
+  wait set +0x3dc (`CWin32Waitable::WaitForXYZ` 0x463100, 500 ms, throws on
+  timeout) and ticks only if the timer object was signalled. The bounce
+  thread answers at once (its step+5 allowance doesn't pace). The game's
+  own fast-forward (`g_stepCountdown` 0x7dfd2c += 882 in ProcessEvents,
+  0x525cd2) sets 0x7dfd30, which makes UpdateEnvironment and others skip
+  work, so it's not usable. The draw thread doesn't throttle the logic.
+- **`--fast`** (`src/s3re/tooling/fast.cpp`, passthrough on 0x463100, only
+  for the call from Step): poll, report the timer if nothing is signalled.
+  check_replay/check_save/check_determinism use it by default
+  (`--no-fast`); recording with `--synthetic-input` stays at normal speed.
+- **Evidence (all original unless said):** fast twice, 1,000 ticks:
+  identical. Recording scripted-seed127.bin, 3,000 ticks, normal vs fast:
+  identical (trace v3). "slot 1.sav", 2,000 ticks, normal vs fast: header
+  hash differed at a few ticks; header dumps showed only +0x2d2c8, the
+  notification blink bits PrepareDrawData writes and reads only for the
+  draw data (UI, timing-dependent) -> skipped, trace v4; rerun normal vs
+  fast: identical. Ours vs original, both fast: save 2,000 ticks
+  identical (200 of 457 replacements called), recording 3,000 ticks
+  identical.
+- **Speed:** recording 3,000 ticks 198 s normal vs 9-16 s fast per run
+  (about 66 s vs 3-5 s per 1,000 ticks; the game loop itself runs ~450
+  ticks/s, the rest is loading and shutdown). Save 2,000 ticks: 139 s vs
+  20-25 s.
+- **Reference cache** (`tools/trace_cache.py`, `build/trace_cache/`): the
+  original's trace is reused (key: S3.EXE + input hashes, launcher
+  arguments incl. --fast, trace version, `S3RE_ORIGINAL_TOOLING_VERSION`
+  from `src/s3re/tooling/version.h`). `--no-cache`, `--refresh-cache`,
+  `--verify-cache`. Second check_replay run: "CACHED", one run instead of
+  two (saves ~16 s fast, ~200 s at normal speed).
+- **First-call ticks:** the counting thunk also stores g_gameTick of the
+  first call; s3re.log "first-call <name> <tick>", `tools/first_calls.py`.
+  Recording (3,000 ticks): of the called replacements, 15 were first
+  called after tick 500, 10-11 after 1,000, 6 after 2,000 (last at 2,828).
+  Save (2,000 ticks from 366,754): 9 after 500, 6 after 1,000, 0 after
+  2,000 (last ~1,900). Proposal: keep 3,000 ticks for the recording (cheap
+  now) and 2,000 for saves; longer games still add functions late, so a
+  longer recording (10,000+ ticks, now ~1 minute) would find more.
+- Recordings' own reference traces (`FILE.tsv`, used without
+  --against-original) are v3 and must be regenerated before comparing with
+  v4 traces.
+
+### 2026-11-10 (40): random-map games, --skip-hooks, a new 8-player recording (tooling, parallel worktree)
+
+- **Random-map start without menus:** `s3re_launcher --random-map
+  SIZE[,SYMMETRY[,FIELD0C]]`. How the game does it: the map dialog
+  (0x47fea0 / 0x481e90) keeps a Dirk::CMapFile (0x134 bytes, ctor
+  0x4a5a70), makes it memory-only (0x4a60c0: +4 = 1, so the chunk lookup
+  0x4a60f0 never reads a file) and adds chunk 5 (word 5, word 0, 0x18,
+  size = (combo + 6) * 64, a second dialog value, symmetry, seed = atoi of
+  the seed field) and chunk 1 (1, 0, 0x20, kind 2, start positions
+  min(((size-32)^2 >> 14) + 1, 20), zeros) with CMapFile::AddChunk
+  0x4a63f0 (thiscall type, sub-index, data). The free-game dialog then
+  calls GameSettings::NewGame 0x431ab0 (13 args, map file = arg 6);
+  CLogicThread::OnStart finds chunk 5 (0x53cdfe) and calls Create(word
+  seed, size, symmetry). Our tooling (src/s3re/tooling/random_map_start.cpp):
+  a pass-through on NewGame, only at the `-map` call site (return address
+  0x493a56), swaps in such a map file; the player setup stays the `-map`
+  file's (default 384-2-Lakes: one idle human, one computer). With
+  `--seed N` the map seed is N too (Create seeds through SeedRandom).
+  The `-map` start can't use a random map file directly: 0x4a67c0 reads
+  chunk 3, which a random map lacks. 0x431ab0 renamed GameSettings::NewGame
+  (inventory row, hook passthrough).
+- `--skip-hooks NAMES` (S3RE_SKIP_HOOKS, hooks.cpp): leaves single
+  replacements out, for bisecting a divergence or for counting our callees
+  of an original function.
+- `tools/check_random_map.py` (twice original, or `--against-original`;
+  `--skip-hooks`; records call counts as source `random:SIZE,SYM seed N`;
+  whole_game.py accepts `random:` sources).
+- Results, seed 1234: original twice identical for 384,0 and 448,3 (1,000
+  ticks). Original vs ours identical for 384,0, 448,3, 512,1, 640,2
+  (1,500 ticks each; 193-194 replacements called, Create 1 call each).
+  With `--skip-hooks GameWorld_Create` (original Create calling our
+  helpers), 448,3, 300 ticks: identical; ExpandTerrain 29 calls,
+  MarkTerrainEdge 4, BuildRegionsAndAreas 1. 14 functions got their first
+  whole-game evidence from random maps: Create, ExpandTerrain,
+  MarkTerrainEdge, GrowTerrain, ReplaceTerrainF3, the four Scatter*
+  functions, Set/ClearDiagonalTileByteB, IsNeighbourhoodByte9Clear,
+  IsGoodStartPosition, FindPlayerByField0C.
+- New recording (main checkout, build/x86/bin/Debug/recordings/, not
+  committed): `fun8-seed2024-input31.bin` (+ `.tsv` trace): map
+  Map\MULTI\448-8-Fun.map (8 players: 1 human, 7 computers), game seed
+  2024, synthetic input seed 31, 5,000 ticks, 1,913 commands (7 from the
+  scripted player). Replay with ours identical to the recording (205
+  replacements called); a replay with the original code (`--original`) is
+  identical to the recording trace too (5,000 ticks, 156 hashed ticks), so
+  original = ours. Call counts recorded as `replay:fun8-seed2024-input31.bin`.
+  It brought no new whole-game function (all 205 were already seen; only 7
+  commands came from the scripted player, the rest from computers).
+- Whole-game evidence: 258 -> 272 of 458 verified functions seen (all 14
+  new ones from random maps); tests only 200 -> 186.
+- Suggested inventory note text (not written, to avoid conflicts with the
+  struct refactor): GameWorld::Create 0x5166d0: "Whole-game: random maps
+  384,0 / 448,3 / 512,1 / 640,2 (seed 1234, 1,500 ticks) identical to the
+  original, 1 call each (re/whole_game_calls.csv)." ExpandTerrain
+  0x519440 / MarkTerrainEdge 0x51a2e0: "Whole-game: random map 448,3 with
+  the original Create (--skip-hooks GameWorld_Create, 300 ticks)
+  identical, 29 / 4 calls."
+- Why checks are slow (asked by the user): every game run is real time
+  (about 15 ticks/s, 1,000 ticks a minute) plus about 20 s start/stop; a
+  comparison needs 2 runs, a new recording 3-4. Only one game can run at a
+  time, and the lock is not FIFO, so parallel agents queue behind each
+  other's checks; `--test` runs (no lock, about 10 minutes for the full
+  suite) also block, because game_lock waits for any S3.EXE. Emulator
+  suites with ~20 workers compete for the CPU. This session waited about
+  45 minutes for the lock. Ideas in TODO.md.
 
 ### 2026-11-09 (39): batch 29 (random map generator GameWorld::Create, 4 functions)
 
