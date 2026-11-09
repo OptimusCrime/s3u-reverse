@@ -48,6 +48,7 @@ add_library(s3re SHARED
     game/map_effects.cpp
     game/map_generation.cpp
     game/map_marks.cpp
+    game/map_regions.cpp
     game/map_neighbourhood.cpp
     game/map_terrain.cpp
     game/misc_helpers.cpp
@@ -67,6 +68,7 @@ add_library(s3re SHARED
     game/ui_overlays.cpp
     game/ui_static_text.cpp
     game/ui_state.cpp
+    game/world_create.cpp
     game/world_search.cpp
     game/win32_classes.cpp
     game/win32_errors.cpp

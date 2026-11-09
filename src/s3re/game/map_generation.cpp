@@ -418,6 +418,69 @@ void __fastcall GameWorld_ReplaceTerrainNextTo(GameWorld* world, void*, std::uin
 S3RE_HOOK(0x00519270, GameWorld_ReplaceTerrainNextTo, ReplaceNextToFn, Original_GameWorld_ReplaceTerrainNextTo,
           GameWorld_ReplaceTerrainNextTo);
 
+// ---------------------------------------------------------------------------
+// GameWorld::ExpandTerrain (0x00519440): (terrain, into): one growth step:
+// ReplaceTerrainNextTo(into, terrain, 0xf0), then ReplaceTerrainType(0xf0,
+// terrain). Every tile of `into` that touches `terrain` becomes `terrain`;
+// the temporary 0xf0 keeps a converted tile from spreading further in the
+// same step. EAX = ReplaceTerrainType's (mapSize - 1). thiscall, ret 8.
+// Called 29 times by GameWorld::Create (e.g. (0x40, 0x10): mountains grow
+// into grass).
+//
+// GameWorld::MarkTerrainEdge (0x0051a2e0): (terrain): for x = 1 ..
+// mapSize-2, inner y = 1 .. mapSize-2 (signed, mapSize re-read), a tile of
+// `terrain` (32-bit compare of the zero-extended byte) with one of its six
+// neighbours (x, y-1), (x, y+1), (x-1, y), (x+1, y), (x+1, y+1), (x-1, y-1)
+// neither `terrain` nor 0xf3 gets terrain 0xf3. In place, so a marked tile
+// no longer counts as a foreign neighbour. GameWorld::ReplaceTerrainF3
+// (0x51a400) later turns the marks into a border terrain. EAX = mapSize - 1.
+// thiscall, ret 4. Called 4 times by GameWorld::Create, always with 0x10.
+// ---------------------------------------------------------------------------
+
+using ExpandTerrainFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t terrain,
+                                                   std::uint32_t into);
+using MarkTerrainEdgeFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t terrain);
+
+namespace {
+constexpr std::uint32_t kGrowthMark = 0xf0;
+constexpr std::uint32_t kEdgeMark = 0xf3;
+constexpr std::int32_t kSixNeighbours[] = {-kRow, kRow, -kColumn, kColumn, kRow + kColumn, -kRow - kColumn};
+}  // namespace
+
+// Purpose: Map generation: lets a terrain (e.g. mountains, desert) grow by one tile into a neighbouring
+// terrain all along its border.
+std::uint32_t __fastcall GameWorld_ExpandTerrain(GameWorld* world, void*, std::uint32_t terrain, std::uint32_t into) {
+    GameWorld_ReplaceTerrainNextTo(world, nullptr, into, terrain, kGrowthMark);
+    return GameWorld_ReplaceTerrainType(world, nullptr, kGrowthMark, terrain);
+}
+
+// Purpose: Map generation: marks the outer edge of a terrain (tiles bordering another terrain) so that a
+// later step can turn the edge into transition terrain.
+std::uint32_t __fastcall GameWorld_MarkTerrainEdge(GameWorld* world, void*, std::uint32_t terrain) {
+    const std::int32_t& mapSize = At<std::int32_t>(world, world_offset::kMapSize);
+    for (std::int32_t x = 1; x < mapSize - 1; ++x) {
+        for (std::int32_t y = 1; y < mapSize - 1; ++y) {
+            const std::uint32_t tile = Tile(x, y) + kTileTerrain;
+            if (At<std::uint8_t>(world, tile) != terrain) {
+                continue;
+            }
+            for (const std::int32_t step : kSixNeighbours) {
+                const std::uint32_t neighbour = At<std::uint8_t>(world, tile + static_cast<std::uint32_t>(step));
+                if (neighbour != terrain && neighbour != kEdgeMark) {
+                    At<std::uint8_t>(world, tile) = static_cast<std::uint8_t>(kEdgeMark);
+                    break;
+                }
+            }
+        }
+    }
+    return static_cast<std::uint32_t>(mapSize - 1);
+}
+
+S3RE_HOOK(0x00519440, GameWorld_ExpandTerrain, ExpandTerrainFn, Original_GameWorld_ExpandTerrain,
+          GameWorld_ExpandTerrain);
+S3RE_HOOK(0x0051a2e0, GameWorld_MarkTerrainEdge, MarkTerrainEdgeFn, Original_GameWorld_MarkTerrainEdge,
+          GameWorld_MarkTerrainEdge);
+
 namespace {
 
 // Small maps (sometimes 0..3 or negative sizes) with terrains 0..3 (so
@@ -476,6 +539,103 @@ S3RE_TEST(GameWorld_ReplaceTerrainNextTo_MatchesOriginal) {
 S3RE_TEST(GameWorld_ReplaceTerrainNextTo_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareReplaceNextTo(probe, &WrongReplaceTerrainNextTo, 200);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+namespace {
+
+// Small maps of terrains 0..3 plus some 0xf0/0xf3 tiles (the marks); sizes
+// as in CompareReplaceNextTo. Arguments mostly 0..3, sometimes 0xf3 or with
+// high bits (must never match).
+template <typename Call>
+void CompareTerrainPass(test::Context& ctx, int cases, Call call) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    for (int i = 0; i < cases; ++i) {
+        const std::int32_t n = ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Below(8)) - 4
+                                                       : static_cast<std::int32_t>(4 + ctx.rng().Below(30));
+        worlds.Set<std::int32_t>(0x2d2d0, n);
+        for (std::int32_t x = 0; x < 36; ++x) {
+            for (std::int32_t y = 0; y < 36; ++y) {
+                const std::uint32_t pick = ctx.rng().Below(20);
+                const std::uint8_t terrain =
+                    pick == 0 ? 0xf0 : pick == 1 ? 0xf3 : static_cast<std::uint8_t>(pick & 3);
+                worlds.Set<std::uint8_t>(Tile(x, y) + kTileTerrain, terrain);
+            }
+        }
+        auto argument = [&]() {
+            return ctx.rng().Chance(1, 10)   ? ctx.rng().Next32()
+                   : ctx.rng().Chance(1, 10) ? 0xf3u
+                                             : ctx.rng().Below(4);
+        };
+        const std::uint32_t a = argument();
+        const std::uint32_t b = argument();
+        if (!call(worlds, a, b) || !worlds.Same(ctx, kTiles, Tile(36, 0) - kTiles) ||
+            (i % 64 == 63 && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: size %d, (0x%x, 0x%x)", i, n, a, b);
+            return;
+        }
+    }
+}
+
+void CompareExpandTerrain(test::Context& ctx, ExpandTerrainFn candidate, int cases) {
+    CompareTerrainPass(ctx, cases, [&](test::WorldPair& worlds, std::uint32_t terrain, std::uint32_t into) {
+        const std::uint32_t expected = Original_GameWorld_ExpandTerrain(worlds.original(), nullptr, terrain, into);
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr, terrain, into);
+        return S3RE_EXPECT_EQ(expected, actual);
+    });
+}
+
+void CompareMarkTerrainEdge(test::Context& ctx, MarkTerrainEdgeFn candidate, int cases) {
+    CompareTerrainPass(ctx, cases, [&](test::WorldPair& worlds, std::uint32_t terrain, std::uint32_t) {
+        const std::uint32_t expected = Original_GameWorld_MarkTerrainEdge(worlds.original(), nullptr, terrain);
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr, terrain);
+        return S3RE_EXPECT_EQ(expected, actual);
+    });
+}
+
+// Wrong: grows without the temporary mark, so a converted tile spreads on.
+std::uint32_t __fastcall WrongExpandTerrain(GameWorld* world, void*, std::uint32_t terrain, std::uint32_t into) {
+    GameWorld_ReplaceTerrainNextTo(world, nullptr, into, terrain, terrain);
+    return static_cast<std::uint32_t>(At<std::int32_t>(world, world_offset::kMapSize) - 1);
+}
+
+// Wrong: a neighbour already marked 0xf3 counts as foreign.
+std::uint32_t __fastcall WrongMarkTerrainEdge(GameWorld* world, void*, std::uint32_t terrain) {
+    const std::int32_t mapSize = At<std::int32_t>(world, world_offset::kMapSize);
+    for (std::int32_t x = 1; x < mapSize - 1; ++x) {
+        for (std::int32_t y = 1; y < mapSize - 1; ++y) {
+            const std::uint32_t tile = Tile(x, y) + kTileTerrain;
+            if (At<std::uint8_t>(world, tile) != terrain) {
+                continue;
+            }
+            for (const std::int32_t step : kSixNeighbours) {
+                if (At<std::uint8_t>(world, tile + static_cast<std::uint32_t>(step)) != terrain) {
+                    At<std::uint8_t>(world, tile) = static_cast<std::uint8_t>(kEdgeMark);
+                    break;
+                }
+            }
+        }
+    }
+    return static_cast<std::uint32_t>(mapSize - 1);
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_ExpandTerrain_MatchesOriginal) {
+    CompareExpandTerrain(ctx, &GameWorld_ExpandTerrain, 1000);
+}
+S3RE_TEST(GameWorld_ExpandTerrain_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareExpandTerrain(probe, &WrongExpandTerrain, 200);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(GameWorld_MarkTerrainEdge_MatchesOriginal) {
+    CompareMarkTerrainEdge(ctx, &GameWorld_MarkTerrainEdge, 1000);
+}
+S3RE_TEST(GameWorld_MarkTerrainEdge_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareMarkTerrainEdge(probe, &WrongMarkTerrainEdge, 200);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

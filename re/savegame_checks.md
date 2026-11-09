@@ -55,7 +55,7 @@ scripted-seed127.bin). Calls per run (slot 1 / slot 2 / slot 3), from
 `python tools/savegame_calls.py`. Since 2026-11-09 these counts (and the
 0 counts of the other replacements not called in the recorded game) are in
 `re/whole_game_calls.csv` (backfilled by `tools/whole_game.py backfill`);
-the inventory notes were not changed:
+in batch 29 they were also merged into the inventory notes:
 
 | Address | Function | Calls |
 |---|---|---|

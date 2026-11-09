@@ -4113,10 +4113,13 @@ def site_player(rng, player):
             (record + 0x84, rng.choice([60001, 60002, 0xffff, rng.randrange(60000, 70000)]), 4)]
 
 
-def site_window(rng, x, y, owner, flat=False):
-    """The 31x31 tiles around (x, y)."""
+def site_window(rng, x, y, owner, flat=False, height=None):
+    """The 31x31 tiles around (x, y); `height` fixes the base height (a flat
+    window at the site's own height needs no earth)."""
     fields = []
     base = rng.randint(10, 120)
+    if height is not None:
+        base = height
     slopes = [0, 0, 0, 1, 2, 3, 4, 6, 9]
     sx = 0 if flat else rng.choice(slopes) * rng.choice([1, -1])
     sy = 0 if flat else rng.choice(slopes) * rng.choice([1, -1])
@@ -4197,7 +4200,10 @@ def plan_site_state(rng, pool, args):
     x, y, type_, player, height = args
     fields = [(MAP_SIZE, max(x, y) + rng.choice([-3, 0, 16, 40]), 4)]
     fields += site_player(rng, player)
-    fields += site_window(rng, x, y, player, flat=rng.random() < 0.25)
+    flat = rng.random() < 0.25
+    # Some flat windows at exactly the planned height: no earth to move
+    # (PlanSiteLevelling's early "return 1" for an amount of 0).
+    fields += site_window(rng, x, y, player, flat=flat, height=height if flat and rng.random() < 0.3 else None)
     return fields
 
 
@@ -4313,4 +4319,84 @@ SPECS += [
     Spec("GameWorld_IsGoodStartPosition", 0x005081a0, "thiscall",
          [below(8), between(15, 400), between(15, 400), start_attempts], presets=start_position_state,
          max_cases=250),
+]
+
+
+# -- batch 29: random map generation (map_generation.cpp, map_regions.cpp,
+# world_create.cpp) ------------------------------------------------------------
+
+def terrain_or_mark(rng, pool):
+    return rng.choice([0xf3, rng.getrandbits(32)]) if rng.random() < 0.15 else rng.randrange(4)
+
+
+def small_terrain_map_with_marks(rng, pool, args):
+    """Like small_terrain_map, with some 0xf0/0xf3 (growth/edge mark) tiles."""
+    fields = small_terrain_map(rng, pool, args)
+    n = fields[0][1]
+    n = n if n < 0x80000000 else 0
+    for x in range(n):
+        for y in range(n):
+            if rng.random() < 0.1:
+                fields.append((tile(x, y) + 0x6, rng.choice([0xf0, 0xf3]), 1))
+    return fields
+
+
+def fresh_world_tables(offsets: int) -> list:
+    """What the world constructor leaves: empty tile ring and event rings,
+    empty id tables (with their marks), the first `offsets` offset-table
+    entries small (random; the in-process tests use the real table)."""
+    def presets(rng):
+        fields = [(0xe07888, 0, 4), (0xe0788c, 0, 4), (0x32870, 0, 4), (0x32874, 0, 4), (0x366fc, 0, 4)]
+        fields += [(offset, 0, 4) for offset in range(0xe114d8, 0xe125e8 + 0x2000, 4)]
+        for k in range(offsets):
+            reach = 1 if k < 7 else 5 if k < 96 else 12
+            fields += [(NEIGHBOUR_OFFSETS + k * 16, rng.randint(-reach, reach) & 0xFFFFFFFF, 4),
+                       (NEIGHBOUR_OFFSETS + k * 16 + 4, rng.randint(-reach, reach) & 0xFFFFFFFF, 4)]
+        return fields
+    return presets
+
+
+def region_map(rng, pool, args):
+    """A 6..40 map of grass, water (some with harbour objects 0x0d..0x10),
+    mountains (class 0x20), blocked tiles and up to four owners; area
+    records mostly free."""
+    n = rng.randint(6, 40)
+    fields = [(MAP_SIZE, n, 4)] + fresh_world_tables(61)(rng)
+    fields += [(0xe145e8 + area * 0x2e0, 0 if rng.random() < 0.05 else 0xff, 1) for area in range(64)]
+    owners = rng.randrange(5)
+    for x in range(n):
+        for y in range(n):
+            patch = ((x // 5) * 7 + (y // 6) * 3) % 8
+            terrain = 0x10 if patch < 4 else 5 + patch % 3 if patch < 6 else 0x20 if patch == 6 else 0x30
+            if rng.random() < 0.05:
+                terrain = rng.getrandbits(8)
+            water = terrain <= 7
+            obj = 0x0d + rng.randrange(4) if water and rng.random() < 0.03 else rng.getrandbits(8) if rng.random() < 0.1 else 0
+            quarter = (x * 2 // n) * 2 + y * 2 // n
+            flags = rng.getrandbits(8) & 0x6e
+            if water or rng.random() < 0.07:
+                flags |= 1
+            t = tile(x, y)
+            fields += [(t + 0x6, terrain, 1), (t + 0x7, obj, 1), (t + 0x8, quarter if quarter < owners else 0xff, 1),
+                       (t + 0xa, flags, 1), (t + 0x14, 0, 2)]
+    return fields
+
+
+def create_world(rng, pool, args):
+    return fresh_world_tables(600)(rng)
+
+
+SPECS += [
+    Spec("GameWorld_ExpandTerrain", 0x00519440, "thiscall", [terrain_or_mark, terrain_or_mark],
+         presets=small_terrain_map_with_marks, max_cases=300),
+    Spec("GameWorld_MarkTerrainEdge", 0x0051a2e0, "thiscall", [terrain_or_mark],
+         presets=small_terrain_map_with_marks, max_cases=300),
+    Spec("GameWorld_BuildRegionsAndAreas", 0x0051a580, "thiscall", [], presets=region_map, max_cases=60,
+         max_instructions=200_000_000),
+    # Whole random maps of 64 x 64 (sizes of the real game are 128..768,
+    # far too slow here; the in-process tests run those).
+    Spec("GameWorld_Create", 0x005166d0, "thiscall",
+         [anything, one_of(65, 72, 80, 96, 64, 33),
+          lambda rng, pool: rng.choice([0, 0, 0, 1, 2, 3, rng.getrandbits(32)])],
+         presets=create_world, max_cases=10, max_instructions=3_000_000_000),
 ]

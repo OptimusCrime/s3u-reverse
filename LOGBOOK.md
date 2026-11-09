@@ -17,11 +17,28 @@ user may provide a late-game save file later. Order:
    PlanSiteLevelling 0x4da440 (was "EvaluateBuildingFootprint"),
    AddBuildingSite 0x4dd280, plus IsFreeCastleSite 0x508420 and
    IsGoodStartPosition 0x5081a0 (start positions).
-2. **GameWorld::Create 0x5166d0** (3,122 instructions). First its three
-   undone callees 0x519440 (16), 0x51a2e0 (87), 0x51a580 (380, the area
-   set-up), all READY.
+2. **GameWorld::Create 0x5166d0** - done in batch 29 (the random map
+   generator), with ExpandTerrain 0x519440, MarkTerrainEdge 0x51a2e0 and
+   BuildRegionsAndAreas 0x51a580. Create only runs for random maps, so it
+   has no whole-game evidence yet (needs a way to start a random-map
+   game: a map file with chunk 5 or the setup dialog's "\Random" entry,
+   see 0x48b12a / 0x48ed48).
+2b. **Refactor batch (user decision 2026-11-09, next):** bring
+   re/proposed_structs.h into the build (e.g. src/s3re/game/layout.h,
+   with its static_asserts); convert the replacement files from
+   At<T>(world, offset) and local offset constants to typed struct access
+   (31 files define their own At, about 758 offset constants); remove the
+   duplicated helpers and offsets with no behaviour change (proven by the
+   full in-process and emulator suites and a whole-game check); from then
+   on new field knowledge goes into the structs.
 3. **The 27 undone callees of GameWorld::UpdateSettlers 0x4e9670** (17,525
    instructions), small ones first. Decide the x87 question first (below).
+   READY after batch 29 (instructions): 0x50e320 (28), 0x519670 (63),
+   0x50e140 (65), 0x50ccb0 (69), 0x50cb20 (72), 0x50dd20 (111), 0x51ba00
+   (158), 0x5449f0 (207, MapEffects tables), 0x544630 (209, MapEffects
+   tables), 0x5046b0 (221). NEAR: 0x505820 (52), 0x4d97b0 (126), 0x4fec10
+   (159). Big blockers: 0x500860 (3,097, walking), 0x50e9f0 (1,791),
+   0x4dbc50 (1,440), 0x50cf50 (919).
 4. **GameWorld::UpdatePhase2 0x4e05e0** (4,919 instructions, 8 undone
    callees).
 5. **UpdateSettlers itself**, split internally (e.g. per settler job) but
@@ -119,9 +136,10 @@ Next steps (for 2026-11-10, in this order):
   `python tools/check_save.py "slot N.sav" --ticks 2000
   --against-original` for the three saves at milestones, next to the
   recorded-game check (late-game code paths, later UpdateSettlers).
-0. (New order, see the top of this section.) Batch 29 = step 2: the
-   GameWorld::Create callees 0x519440 (16 ins), 0x51a2e0 (87), 0x51a580
-   (380, area set-up), then Create 0x5166d0 itself. Skip every network
+0. (New order, see the top of this section.) Batch 29 (step 2, Create)
+   is done; next is the refactor batch (2b at the top), then step 3, the
+   READY UpdateSettlers callees listed at the top. Optional tooling: start a random-map game unattended, for
+   whole-game evidence of Create. Skip every network
    item below (Lobby 0x602580/0x600f10/0x602850/0x5ec550 etc.). Still
    NEAR in the building area: 0x4dbab0 (needs 0x51b640), 0x4dbb10/
    0x4dee20/0x4deec0/0x504a00 (all need 0x50cf50, 919 ins, probably
@@ -517,6 +535,60 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (39): batch 29 (random map generator GameWorld::Create, 4 functions)
+
+- Emulator suite rerun in full first (the open check from batch 28, on a
+  copy of the batch-28 DLL): 454 functions, 0 mismatches, 1 with
+  incomplete coverage: PlanSiteLevelling missed its "no earth to move"
+  return (0x4da90a; its random flat windows almost never sat at exactly
+  the planned height). site_window can now take the height; with that
+  preset 95/95 blocks.
+- Batch 29, all verified:
+  - map_generation.cpp: GameWorld::ExpandTerrain 0x519440 (one growth step
+    of a terrain into another via the temporary 0xf0) and
+    GameWorld::MarkTerrainEdge 0x51a2e0 (edge tiles of a terrain -> 0xf3).
+  - map_regions.cpp (new): GameWorld::BuildRegionsAndAreas 0x51a580 (the
+    "area set-up"): walk regions, flag 0x80 around water objects
+    0x0d..0x10, economy areas per owner, water bodies, wide regions.
+    Called by Create and by the map loader 0x4fd540.
+  - world_create.cpp (new): GameWorld::Create 0x5166d0 = the random map
+    generator ("Erstelle Zufallswelt"; (seed, mapSize, symmetry); only for
+    random maps, file maps use 0x4fd540). Phases as helpers: ResetTiles,
+    SeedCoarseHeights (every 64th tile), RefineHeights (midpoint steps
+    32..1, border 0), LowerHeights, LogBorderErrors, RaiseRidges (ridge
+    walkers, two walks per peak, a 4-state machine) + MarkRidgeHeights +
+    SmoothRidgeSlopes (or SmoothSlopes with symmetry), ClassifyTerrain,
+    CarveStreams (streams 0x60..0x63, joining), RemoveStrayStreamTiles,
+    ShapeTerrain (fixed terrain passes), PlaceObjects (94 + 8 + 5
+    scatter calls, as tables), ScatterFish, ApplySymmetry (bit 1 point
+    mirror, bit 0 diagonal), FinishTiles, BuildRegionsAndAreas. SeedRandom
+    is called through the game's address so --seed still applies.
+  - Pitfall found while debugging: 0x6bc60 is tile (1,1)+4, not (1,0)+4
+    (0x4818 = one x and one y step); the first version mixed that up in
+    the ridge walker and smoothing.
+- Tests: in-process 9 new tests. Create: the whole 22 MB world, EAX, the
+  DebugLog calls and S3.EXE's writable sections compared, on a zeroed
+  world with the real offset table (built with 0x516530) for sizes
+  128..768 and all symmetry bits, odd sizes 0..200, and a world full of
+  garbage (sizes 128..384); no uninitialized bytes involved (identical
+  everywhere, including garbage bytes Create doesn't write: tile +0xc,
+  +0xd, +0x13, +0x17). Mutations (one height bit, one extra DebugLog)
+  caught. Full in-process run after pulling the save tooling: 357/357.
+- Emulator: ExpandTerrain, MarkTerrainEdge, BuildRegionsAndAreas all
+  blocks covered, 0 mismatches. Create: 10 cases on 33..96-tile maps, 0
+  mismatches, 338/415 blocks; the rest (inner height bands, the ridge
+  walks, the 255 clamp, border errors) needs bigger maps (the in-process
+  tests run those sizes).
+- Whole-game: scripted-seed127.bin, 3,000 ticks, against the original:
+  REPLAY OK (203 of 457 replacements called; BuildRegionsAndAreas 1 call
+  from the map loader; Create, ExpandTerrain, MarkTerrainEdge 0, as
+  expected for a file map). check_save.py "slot 1.sav" 2,000 ticks
+  against the original: SAVE CHECK OK (201 called; Create 0).
+- Save-check evidence of re/savegame_checks.md (17 functions) merged into
+  the inventory notes.
+- Tooling: a crashing in-process test now logs the faulting module+offset
+  and the accessed address.
 
 ### 2026-11-09 (38): whole-game evidence on the progress page (tooling, parallel worktree)
 

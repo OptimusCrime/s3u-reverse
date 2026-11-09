@@ -47,11 +47,23 @@ std::uint64_t BaseSeed() {
 // Runs one test, turning a crash (access violation etc.) in either the
 // original or our code into a reported failure instead of killing the run.
 // Must not contain objects with destructors because of __try.
+// Where the last crash happened (instruction, and for access violations the
+// address accessed), logged with the CRASH line.
+ULONG_PTR g_crashAt = 0;
+ULONG_PTR g_crashAccess = 0;
+
+int RecordCrash(EXCEPTION_POINTERS* pointers) {
+    const EXCEPTION_RECORD* record = pointers->ExceptionRecord;
+    g_crashAt = reinterpret_cast<ULONG_PTR>(record->ExceptionAddress);
+    g_crashAccess = record->NumberParameters >= 2 ? record->ExceptionInformation[1] : 0;
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 DWORD RunGuarded(TestFn fn, Context* ctx) {
     __try {
         fn(*ctx);
         return 0;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (RecordCrash(GetExceptionInformation())) {
         return GetExceptionCode();
     }
 }
@@ -160,8 +172,16 @@ int RunAll() {
         const DWORD elapsed = GetTickCount() - start;
 
         if (exception != 0) {
-            S3RE_LOG("[test] CRASH %s (exception 0x%08lx) [%s]", test.name, exception,
-                     BaseName(test.file));
+            HMODULE module = nullptr;
+            char moduleName[MAX_PATH] = "?";
+            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   reinterpret_cast<LPCSTR>(g_crashAt), &module)) {
+                GetModuleFileNameA(module, moduleName, sizeof(moduleName));
+            }
+            S3RE_LOG("[test] CRASH %s (exception 0x%08lx at %p = %s+0x%lx, address %p) [%s]", test.name, exception,
+                     reinterpret_cast<void*>(g_crashAt), BaseName(moduleName),
+                     static_cast<unsigned long>(g_crashAt - reinterpret_cast<ULONG_PTR>(module)),
+                     reinterpret_cast<void*>(g_crashAccess), BaseName(test.file));
             ++failed;
         } else if (ctx.failures() > 0) {
             S3RE_LOG("[test] FAIL  %s (%d failure(s)) [%s]", test.name, ctx.failures(),

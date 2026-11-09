@@ -21,6 +21,7 @@ std::uint32_t __fastcall GameWorld_CreatePile(GameWorld* world, void* edx, std::
                                               std::uint32_t goods, std::uint32_t amount, std::uint32_t kind);
 
 // area_split.cpp
+std::uint32_t __fastcall GameWorld_AllocArea(GameWorld* world, void* edx, std::uint32_t player);
 std::uint32_t __fastcall GameWorld_BlockTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall GameWorld_UnblockTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
 
@@ -33,6 +34,14 @@ std::uint32_t __fastcall GameWorld_SetBuildingInputWord24(GameWorld* world, void
                                                           std::uint32_t goods, std::uint32_t value);
 
 // flood_fills.cpp
+std::uint32_t __fastcall GameWorld_FloodMarkAreaTerrain5To7(GameWorld* world, void* edx, std::uint32_t x,
+                                                            std::uint32_t y, std::uint32_t value);
+std::uint32_t __fastcall GameWorld_FloodSetByte10MarkedTiles(GameWorld* world, void* edx, std::uint32_t x,
+                                                             std::uint32_t y, std::uint32_t value);
+std::uint32_t __fastcall GameWorld_FloodSetWord16RoomyTiles(GameWorld* world, void* edx, std::uint32_t x,
+                                                            std::uint32_t y, std::uint32_t value);
+std::uint32_t __fastcall GameWorld_FloodAssignMarkedTiles(GameWorld* world, void* edx, std::uint32_t x,
+                                                          std::uint32_t y, std::uint32_t area, std::uint32_t player);
 std::uint32_t __fastcall GameWorld_FloodMoveArea(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                  std::uint32_t newArea);
 void __fastcall GameWorld_SplitTileByte10Region(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
@@ -54,7 +63,32 @@ std::uint32_t __fastcall GameWorld_MergeTileWord16Regions(GameWorld* world, void
 
 // id_allocators.cpp
 std::uint32_t __fastcall GameWorld_FindFreeId256(GameWorld* world, void* edx);
+std::uint32_t __fastcall GameWorld_FindFreeId4096(GameWorld* world, void* edx);
 std::uint32_t __fastcall GameWorld_FindFreeId8192(GameWorld* world, void* edx);
+
+// map_generation.cpp
+void __fastcall GameWorld_ReplaceTerrainNextTo(GameWorld* world, void* edx, std::uint32_t terrain,
+                                               std::uint32_t neighbour, std::uint32_t replacement);
+std::uint32_t __fastcall GameWorld_ExpandTerrain(GameWorld* world, void* edx, std::uint32_t terrain,
+                                                 std::uint32_t into);
+std::uint32_t __fastcall GameWorld_MarkTerrainEdge(GameWorld* world, void* edx, std::uint32_t terrain);
+std::uint32_t __fastcall GameWorld_ScatterTileByte11(GameWorld* world, void* edx, std::uint32_t base,
+                                                     std::uint32_t density);
+std::uint32_t __fastcall GameWorld_ScatterTerrainNear(GameWorld* world, void* edx, std::uint32_t required,
+                                                      std::uint32_t terrain, std::uint32_t density);
+std::uint32_t __fastcall GameWorld_ScatterObjects(GameWorld* world, void* edx, std::uint32_t required,
+                                                  std::uint32_t object, std::uint32_t density,
+                                                  std::uint32_t blockMode, std::uint32_t extra);
+std::uint32_t __fastcall GameWorld_ScatterObjectGroups(GameWorld* world, void* edx, std::uint32_t required,
+                                                       std::uint32_t low, std::uint32_t high, std::uint32_t density,
+                                                       std::uint32_t blockMode, std::uint32_t extra);
+
+// map_marks.cpp
+void __fastcall GameWorld_SetDiagonalTileByteB(GameWorld* world, void* edx, std::uint32_t flags);
+void __fastcall GameWorld_ClearDiagonalTileByteB(GameWorld* world, void* edx, std::uint32_t flags);
+
+// map_regions.cpp
+std::uint32_t __fastcall GameWorld_BuildRegionsAndAreas(GameWorld* world, void* edx);
 
 // map_directions.cpp
 std::uint32_t __stdcall NeighbourX(std::uint32_t x, std::uint32_t direction);
@@ -83,6 +117,12 @@ std::uint32_t __fastcall GameWorld_IsNeighbourhoodTerrain(GameWorld* world, void
                                                           std::uint32_t y, std::uint32_t terrain);
 std::uint32_t __fastcall GameWorld_AreOffsetTilesClear(GameWorld* world, void* edx, std::uint32_t x,
                                                        std::uint32_t y, std::uint32_t count);
+std::uint32_t __fastcall GameWorld_IsNeighbourhoodByte9Clear(GameWorld* world, void* edx, std::uint32_t x,
+                                                             std::uint32_t y);
+std::uint32_t __fastcall GameWorld_HasAtMostTwoType70Neighbours(GameWorld* world, void* edx, std::uint32_t x,
+                                                                std::uint32_t y);
+std::uint32_t __fastcall GameWorld_IsClearOfType70Nearby(GameWorld* world, void* edx, std::uint32_t x,
+                                                         std::uint32_t y);
 
 // players.cpp
 std::uint32_t __fastcall GameWorld_AddPlayerCounter(GameWorld* world, void* edx, std::uint32_t player,
@@ -92,6 +132,9 @@ std::uint32_t __fastcall GameWorld_AddPlayerCounter(GameWorld* world, void* edx,
 std::uint32_t __fastcall GameWorld_SpreadTerrainRandomly(GameWorld* world, void* edx, std::uint32_t from,
                                                          std::uint32_t neighbour, std::uint32_t to,
                                                          std::uint32_t percent);
+std::uint32_t __fastcall GameWorld_ReplaceTerrainF3(GameWorld* world, void* edx, std::uint32_t newType);
+std::uint32_t __fastcall GameWorld_GrowTerrain(GameWorld* world, void* edx, std::uint32_t from, std::uint32_t into,
+                                               std::uint32_t percent);
 std::uint32_t __fastcall GameWorld_UpdateBorderFlagsAround(GameWorld* world, void* edx, std::uint32_t x,
                                                            std::uint32_t y);
 

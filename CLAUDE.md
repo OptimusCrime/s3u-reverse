@@ -176,6 +176,13 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   state. Known offsets used by our code are in `src/s3re/game/world.h`.
   The map is stored in rows of `0x300` tiles of 24 bytes; the map size is at
   `+0x2d2d0`.
+- **How a game's world is built** (`CLogicThread::OnStart` 0x53c9e0):
+  a map file goes through the map loader `0x4fd540`; a map with a
+  random-map chunk (chunk 5, "Erstelle Zufallswelt") through the random map
+  generator `GameWorld::Create` (`0x5166d0`, seeds the RNG itself); a
+  savegame through `0x508fa0`. So the recorded-game and savegame checks
+  never call Create (no random-map start tooling yet); both other paths end
+  in `GameWorld::BuildRegionsAndAreas` (`0x51a580`).
 - **Field knowledge lives in the world-layout files:** `re/world_layout.md`
   (memory map of the whole object, with confidence levels), `re/structs.md`
   (field tables per record: tile, area, pile, settler, building, player...)
@@ -523,7 +530,9 @@ replaying, see `src/s3re/replay/command_log.h`):
    original does.
 5. Build, then run `s3re_launcher --test [filter]`. This runs the tests inside
    the real `S3.EXE` without opening the game window. The exit code is 0 only
-   if every test passed.
+   if every test passed. A crashing test is logged with the faulting
+   instruction as module+offset (look the s3re.dll offset up in
+   `s3re.map`, preferred base 0x10000000) and the address accessed.
 6. Whole-game check (at milestones, not per batch; it's slow):
    `python tools/check_replay.py --recording <file> --against-original
    --ticks 3000` replays a recorded game with the original code
