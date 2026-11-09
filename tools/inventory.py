@@ -8,8 +8,10 @@ copy and the source of truth.
 
 Commands:
   check   Validate the inventory against the Ghidra baseline and the source
-          code (hooks and tests). Exit code 1 on any error.
-  stats   Show progress.
+          code (hooks and tests), and re/whole_game_calls.csv against the
+          inventory. Exit code 1 on any error.
+  stats   Show progress, with verified functions split by whole-game
+          evidence (tools/whole_game.py).
   names   Print a JSON list of {"address", "name"} for re-applying names to a
           fresh REA/Ghidra session (set_addresses_names).
 
@@ -175,6 +177,9 @@ def check() -> int:
             errors.append(f"{path}: {kind} hook at 0x{address:08x} has no inventory row "
                           "with a matching hook column")
 
+    import whole_game  # here: progress.py imports this module the other way round
+    errors.extend(whole_game.check_errors())
+
     for error in errors:
         print(f"error: {error}")
     print(f"inventory check: {len(rows)} rows, {len(code_hooks)} hooks, "
@@ -213,6 +218,18 @@ def stats() -> int:
     line("Understood:", sum(1 for row in rows if row["status"] != "classified"))
     line("Reimpl.:", sum(1 for row in rows if row["status"] in ("reimplemented", "verified")))
     line("Verified:", sum(1 for row in rows if row["status"] == "verified"))
+
+    import whole_game
+    evidence = whole_game.classify()
+    split = collections.Counter(e["category"] for e in evidence.values())
+    print()
+    print("Verified functions by whole-game evidence (re/whole_game_calls.csv):")
+    print(f"  identical in a whole-game check: {split[whole_game.SEEN]}")
+    print(f"  tests only (never called):       {split[whole_game.TESTS_ONLY]} "
+          f"({sum(1 for e in evidence.values() if e['via'])} may run uncounted inside "
+          "our replacements)")
+    print(f"  no whole-game check yet:         {split[whole_game.UNMEASURED]}")
+    print("  (list them: python tools/whole_game.py summary)")
     return 0
 
 

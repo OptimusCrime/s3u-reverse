@@ -16,7 +16,9 @@ With --against-original: runs it once with the original code (reference)
 and once with our reimplementations, and compares the traces: the
 whole-game check for every replaced function the late game calls. Prints
 which replacements were called and writes the call counts to
-build/x86/bin/<build>/save-check/<save>-calls.tsv.
+build/x86/bin/<build>/save-check/<save>-calls.tsv; if the traces are
+identical, it also merges them into re/whole_game_calls.csv (source
+save:<savegame file name>, see tools/whole_game.py).
 
 The user's savegames are never written: the launcher loads a copy. As a
 safety net, this script also checks the SHA-256 of every *.sav under
@@ -39,6 +41,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import game_lock  # noqa: E402
+import whole_game  # noqa: E402
 
 
 def sha256(path):
@@ -198,6 +201,10 @@ def main():
                 for name in sorted(calls):
                     f.write(f"{name}\t{calls[name]}\n")
             print(f"  call counts: {out}")
+            if ok and saves_ok and first is not None:
+                added, updated = whole_game.record_named(
+                    f"save:{os.path.basename(save)}", last - first + 1, calls)
+                print(f"  re/whole_game_calls.csv: {added} rows added, {updated} updated")
 
     if not saves_ok:
         print("a savegame changed during the runs (restored); treat the result with care")

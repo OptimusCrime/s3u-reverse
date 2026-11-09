@@ -52,9 +52,10 @@ these calls evidently didn't reach it.)
 Replacements called in the savegame runs whose inventory notes say "Not
 called in the whole-game check" (the recorded early game,
 scripted-seed127.bin). Calls per run (slot 1 / slot 2 / slot 3), from
-`python tools/savegame_calls.py`. To be merged into the inventory notes
-(not done here, because another agent edits re/functions.csv in
-parallel):
+`python tools/savegame_calls.py`. Since 2026-11-09 these counts (and the
+0 counts of the other replacements not called in the recorded game) are in
+`re/whole_game_calls.csv` (backfilled by `tools/whole_game.py backfill`);
+the inventory notes were not changed:
 
 | Address | Function | Calls |
 |---|---|---|

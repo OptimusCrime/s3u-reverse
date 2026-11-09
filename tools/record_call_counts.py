@@ -11,6 +11,11 @@ all, writes the result:
   or "Not called in the whole-game check (RECORDING, T ticks), so no whole-game evidence."
 Rows that already carry a whole-game note are left alone.
 
+It also merges every count (including 0) into re/whole_game_calls.csv as
+source replay:<recording file name> (tools/whole_game.py; the structured
+record that tools/progress.py reads). Run it only after a check that
+passed.
+
 Usage: python tools/record_call_counts.py --recording NAME --seed S --ticks T [--log PATH]
 """
 
@@ -21,6 +26,8 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import whole_game  # noqa: E402
 INVENTORY = os.path.join(ROOT, "re", "functions.csv")
 HOOK_RE = re.compile(r"S3RE_HOOK(?:_ALWAYS)?\(\s*(0x[0-9a-fA-F]+)\s*,\s*(\w+)")
 PENDING = re.compile(r"\s*Whole-game check not run yet \([^)]*\)\.")
@@ -75,7 +82,10 @@ def main():
         writer = csv.DictWriter(f, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
+    added, updated = whole_game.record(f"replay:{os.path.basename(args.recording)}", args.ticks,
+                                       by_address, note=f"seed {args.seed}")
     print(f"{len(counts)} call counts read, {changed} rows updated")
+    print(f"re/whole_game_calls.csv: {added} rows added, {updated} updated")
     return 0
 
 

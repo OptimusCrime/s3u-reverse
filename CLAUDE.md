@@ -373,8 +373,22 @@ replaying, see `src/s3re/replay/command_log.h`):
   start of a session, re-apply them from `python tools/inventory.py names`
   with `set_addresses_names`.
 - `python tools/inventory.py check` must pass before committing. It checks
-  every hook in `src/` against its inventory row, and that the tests named in
-  `verified_by` exist.
+  every hook in `src/` against its inventory row, that the tests named in
+  `verified_by` exist, and that `re/whole_game_calls.csv` matches the
+  inventory (after a rename: `python tools/whole_game.py fix-names`).
+- **Whole-game evidence** is kept in `re/whole_game_calls.csv`: one row per
+  function and whole-game check source (`replay:<recording>`,
+  `save:<savegame>`) with the largest call count, ticks, commit and date
+  (columns in `tools/whole_game.py`). `tools/record_call_counts.py` (after
+  check_replay) and `tools/check_save.py --against-original` (when
+  identical) write it. A verified function is then "seen in a whole game"
+  (some count > 0), "tests only" (counted 0 in every check) or "no
+  whole-game check yet" (no row). A 0 can hide real runs: calls from our
+  own replacements bypass the counting thunk (e.g. PlanSiteLevelling inside
+  our CheckBuildingSite), and `S3RE_HOOK_ALWAYS` hooks aren't counted;
+  `python tools/whole_game.py summary` lists the tests-only functions and
+  flags those reachable from seen replacements in our code. The progress
+  page and `inventory.py stats` show this split.
 - The statically linked C runtime sits at the end of `.text`, roughly from
   `0x61e4ef` onwards (exact boundary unknown). Game code comes before it.
   Known runtime functions include `operator delete` at `0x61e4ef`,
@@ -517,8 +531,10 @@ replaying, see `src/s3re/replay/command_log.h`):
    and the traces must be identical. It only covers functions the game
    actually called: replacements run behind a counting thunk, the counts
    are logged at exit ("calls <name> <n>" in s3re.log) and check_replay.py
-   lists the ones that were never called. Record call counts in the
-   inventory notes; never claim whole-game evidence for an uncalled
+   lists the ones that were never called. Record the call counts with
+   `python tools/record_call_counts.py --recording NAME --seed S --ticks T`
+   (inventory notes and `re/whole_game_calls.csv`; savegame checks record
+   themselves); never claim whole-game evidence for an uncalled
    function. Keep
    recordings with player input in `build/x86/bin/Debug/recordings/` (make
    one with `check_replay.py --synthetic-input SEED`).

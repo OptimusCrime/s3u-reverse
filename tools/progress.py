@@ -2,9 +2,12 @@
 """Draw the reimplementation progress as a treemap.
 
 Every known function in S3.EXE is one box, sized by its code size in bytes
-and coloured by its status in re/functions.csv. Boxes are grouped by
-category (game, C runtime, Watcom, ...) and then by class. Functions we have
-not identified yet are grouped by address range.
+and coloured by its status in re/functions.csv. Verified functions are split
+by their whole-game evidence (re/whole_game_calls.csv, tools/whole_game.py):
+seen in a whole-game check, tests only (0 calls in every check), or not
+measured yet. Boxes are grouped by category (game, C runtime, Watcom, ...)
+and then by class. Functions we have not identified yet are grouped by
+address range.
 
 Writes:
   docs/progress-data.js  the data for docs/progress.html, a static page that
@@ -32,6 +35,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import inventory  # noqa: E402  (shares the file locations and baseline loader)
+import whole_game  # noqa: E402  (whole-game evidence of verified functions)
 
 ROOT = inventory.ROOT
 OUT_DIR = ROOT / "docs"
@@ -41,14 +45,21 @@ OUT_DIR = ROOT / "docs"
 CRT_START = 0x61E4EF
 BUCKET = 0x10000  # address range per group of unidentified functions
 
-# status -> (label, colour). Order = legend order, worst to best.
+# status -> (label, colour). Order = legend order, worst to best. The three
+# verified_* statuses split inventory status "verified" by whole-game evidence.
 STATUS_STYLE = {
     "unknown": ("Not looked at", "#c9ccd1"),
     "classified": ("Classified (class/role known)", "#e8a39b"),
     "identified": ("Identified (purpose known)", "#f2c86b"),
     "reimplemented": ("Reimplemented, not verified", "#a9d18e"),
-    "verified": ("Reimplemented and verified", "#3d9a50"),
+    "verified_unmeasured": ("Verified by tests, no whole-game check yet", "#a8c8e6"),
+    "verified_tests": ("Verified by tests only (never called in a whole-game check)", "#4f8fc0"),
+    "verified_game": ("Verified, and identical in a whole-game check", "#3d9a50"),
 }
+VERIFIED_STATUSES = ("verified_unmeasured", "verified_tests", "verified_game")
+EVIDENCE_STATUS = {whole_game.UNMEASURED: "verified_unmeasured",
+                   whole_game.TESTS_ONLY: "verified_tests",
+                   whole_game.SEEN: "verified_game"}
 CATEGORY_LABEL = {
     "game": "Game code (Blue Byte)",
     "unidentified": "Not yet identified (probably game code)",
@@ -82,13 +93,15 @@ def load_rows(text: str | None = None) -> dict[int, dict[str, str]]:
     return {int(r["address"], 16): r for r in csv.DictReader(io.StringIO(text))}
 
 
-def build_tree(rows, sizes, baseline):
+def build_tree(rows, sizes, baseline, evidence):
     """category -> group -> list of (address, name, status, size)."""
     tree = collections.defaultdict(lambda: collections.defaultdict(list))
     for address, size in sizes.items():
         row = rows.get(address)
         if row:
             category, status, name = row["category"], row["status"], row["name"]
+            if status == "verified":
+                status = EVIDENCE_STATUS[evidence[address]["category"]]
             group = name.rsplit("::", 1)[0] if "::" in name else "(free functions)"
         else:
             kind, name = baseline[address]
@@ -115,10 +128,14 @@ def totals(tree):
 
 
 def history(sizes, baseline):
-    """(date, commit, verified count, verified bytes, understood bytes) for
-    every commit that changed the inventory. Uses today's sizes."""
+    """(date, commit, verified count, verified bytes, understood bytes,
+    whole-game seen bytes, whole-game seen count) for every commit that
+    changed the inventory or the whole-game calls. Uses today's sizes.
+    Before re/whole_game_calls.csv existed, whole-game results come from the
+    inventory notes."""
     log = subprocess.run(
-        ["git", "log", "--reverse", "--format=%H %cs", "--", "re/functions.csv"],
+        ["git", "log", "--reverse", "--format=%H %cs", "--", "re/functions.csv",
+         "re/whole_game_calls.csv"],
         cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
     points = []
     for commit, date in zip(log[::2], log[1::2]):
@@ -132,8 +149,17 @@ def history(sizes, baseline):
         verified = [a for a, r in rows.items() if r.get("status") == "verified" and a in sizes]
         understood = [a for a, r in rows.items()
                       if r.get("status") in ("identified", "reimplemented", "verified") and a in sizes]
+        calls = subprocess.run(["git", "show", f"{commit}:re/whole_game_calls.csv"],
+                               cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+        if calls.returncode == 0:
+            called = {int(r["address"], 16) for r in whole_game.load(calls.stdout)
+                      if int(r["calls"]) > 0}
+        else:
+            called = whole_game.seen_from_notes(rows)
+        seen = [a for a in verified if a in called]
         points.append((date, commit[:7], len(verified),
-                       sum(sizes[a] for a in verified), sum(sizes[a] for a in understood)))
+                       sum(sizes[a] for a in verified), sum(sizes[a] for a in understood),
+                       sum(sizes[a] for a in seen), len(seen)))
     return points
 
 
@@ -194,9 +220,12 @@ def svg_treemap(tree, width=1600, height=1000) -> str:
     cat_sizes = [sum(f[3] for g in groups.values() for f in g) for _, groups in categories]
     for (category, groups), (cx, cy, cw, ch) in zip(categories, squarify(cat_sizes, 0, 0, width, height)):
         functions_in_cat = [f for g in groups.values() for f in g]
-        done = sum(f[3] for f in functions_in_cat if f[2] == "verified")
+        cat_size = cat_sizes[categories.index((category, groups))]
+        done = sum(f[3] for f in functions_in_cat if f[2] in VERIFIED_STATUSES)
+        game = sum(f[3] for f in functions_in_cat if f[2] == "verified_game")
         header = 18 if ch > 40 and cw > 80 else 0
-        label = f"{CATEGORY_LABEL.get(category, category)} — {100 * done / cat_sizes[categories.index((category, groups))]:.1f}% verified"
+        label = (f"{CATEGORY_LABEL.get(category, category)} — {100 * done / cat_size:.1f}% verified "
+                 f"({100 * game / cat_size:.1f}% in a whole game)")
         out.append(f'<g><rect x="{fmt(cx)}" y="{fmt(cy)}" width="{fmt(cw)}" height="{fmt(ch)}" '
                    f'fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>')
         if header:
@@ -233,9 +262,12 @@ def svg_treemap(tree, width=1600, height=1000) -> str:
 STATUS_CODE = {s: i for i, s in enumerate(STATUS_STYLE)}
 
 
-def data_js(tree, points) -> str:
+def data_js(tree, points, evidence) -> str:
     """The data for docs/progress.html, as a script that sets
-    window.PROGRESS_DATA (a script file, unlike JSON, also loads from file://)."""
+    window.PROGRESS_DATA (a script file, unlike JSON, also loads from file://).
+    "evidence" has one entry per verified function: [address, largest
+    whole-game call count or null if never measured, {source: calls},
+    [seen replacements it may run uncounted inside]]."""
     groups, functions = [], []
     for category, category_groups in sorted(tree.items()):
         for group, members in sorted(category_groups.items()):
@@ -244,8 +276,10 @@ def data_js(tree, points) -> str:
                 functions.append([address, size, STATUS_CODE[status], len(groups) - 1,
                                   None if status == "unknown" else name])
     functions.sort()
-    data = {"generated": datetime.date.today().isoformat(), "groups": groups,
-            "functions": functions, "history": [list(p) for p in points]}
+    ev = [[address, e["calls"], e["sources"], e["via"]] for address, e in sorted(evidence.items())]
+    data = {"generated": datetime.date.today().isoformat(), "statuses": list(STATUS_STYLE),
+            "groups": groups, "functions": functions, "evidence": ev,
+            "history": [list(p) for p in points]}
     body = json.dumps(data, separators=(",", ":"))
     body = body.replace("],[", "],\n[")  # one function per line keeps git diffs readable
     return ("// Generated by tools/progress.py from re/functions.csv. Do not edit.\n"
@@ -259,18 +293,27 @@ def main() -> int:
 
     baseline = inventory.load_baseline()
     sizes = function_sizes()
-    tree = build_tree(load_rows(), sizes, baseline)
+    rows = load_rows()
+    evidence = whole_game.classify(rows=rows)
+    tree = build_tree(rows, sizes, baseline, evidence)
     treemap = svg_treemap(tree)
     points = [] if args.no_history else history(sizes, baseline)
 
     OUT_DIR.mkdir(exist_ok=True)
     (OUT_DIR / "progress.svg").write_text(treemap, encoding="utf-8", newline="\n")
-    (OUT_DIR / "progress-data.js").write_text(data_js(tree, points), encoding="utf-8", newline="\n")
+    (OUT_DIR / "progress-data.js").write_text(data_js(tree, points, evidence), encoding="utf-8", newline="\n")
 
     count, size = totals(tree)
     total = sum(size.values())
-    print(f"verified {count['verified']} functions, {size['verified']:,} of {total:,} bytes "
-          f"({100 * size['verified'] / total:.2f}%)")
+    verified = sum(count[s] for s in VERIFIED_STATUSES)
+    verified_size = sum(size[s] for s in VERIFIED_STATUSES)
+    print(f"verified {verified} functions, {verified_size:,} of {total:,} bytes "
+          f"({100 * verified_size / total:.2f}%)")
+    print(f"  identical in a whole-game check: {count['verified_game']} functions "
+          f"({size['verified_game']:,} bytes, {100 * size['verified_game'] / total:.2f}%); "
+          f"tests only: {count['verified_tests']} "
+          f"({sum(1 for e in evidence.values() if e['via'])} of them may run uncounted inside "
+          f"our replacements); no whole-game check yet: {count['verified_unmeasured']}")
     print(f"wrote {OUT_DIR / 'progress.svg'} and {OUT_DIR / 'progress-data.js'}")
     return 0
 
