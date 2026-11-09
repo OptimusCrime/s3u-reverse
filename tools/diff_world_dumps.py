@@ -29,6 +29,10 @@ REST = MAP_TILES + 0x300 * ROW
 HEADER_SKIPS = [(0x2d02c, 0x2d248), (0x2d254, 0x2d268), (0x2d278, 0x2d284), (0x2d284, 0x2d294),
                 (0x2d2a0, 0x2d2a4), (0x2d2e4, 0x2d2ec), (0x2d2f0, 0x2d2f4), (0x2d300, 0x2d302)]
 REST_SKIPS = [(0x1222ed4, 0x1223656), (0x1539484, 0x15394b0)]
+# Alignment padding of the 5000 MapEffect records (0x4C bytes) at 0x14d2bc8
+# (src/s3re/trace/determinism.cpp, kMapEffectPadding).
+MAP_EFFECTS = (0x14d2bc8, 0x4c, 5000)
+MAP_EFFECT_PADDING = [(0x2a, 0x2c), (0x3b, 0x3c), (0x3e, 0x40)]
 TILE_SKIPS = (15, 17)
 TILE_REDRAW = (13, 0x80)  # byte, bit
 
@@ -39,6 +43,11 @@ def skipped(offset):
     if offset < REST:
         field = (offset - MAP_TILES) % ROW % TILE
         return TILE_SKIPS[0] <= field < TILE_SKIPS[1]
+    begin, size, count = MAP_EFFECTS
+    if begin <= offset < begin + size * count:
+        field = (offset - begin) % size
+        if any(a <= field < b for a, b in MAP_EFFECT_PADDING):
+            return True
     return any(a <= offset < b for a, b in REST_SKIPS)
 
 

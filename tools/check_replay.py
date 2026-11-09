@@ -43,6 +43,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import command_log  # noqa: E402
+import game_lock  # noqa: E402
 
 DEFAULT_SEED = 1234
 DEFAULT_MAP = r"Map\MULTI\384-2-Lakes.map"
@@ -53,6 +54,11 @@ def run_game(launcher, bin_dir, args, extra, input_seed=None, new_game=False):
     With input_seed, tools/synthetic_input.py plays during the run.
     new_game: a recording run, which needs a seed and a map; replays take
     them from the recording unless given explicitly."""
+    with game_lock.held("check_replay"):
+        return _run_game(launcher, bin_dir, args, extra, input_seed, new_game)
+
+
+def _run_game(launcher, bin_dir, args, extra, input_seed, new_game):
     before = set(glob.glob(os.path.join(bin_dir, "determinism-*.tsv")))
     player = None
     if input_seed is not None:

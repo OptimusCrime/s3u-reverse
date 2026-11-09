@@ -7,7 +7,9 @@
 // Status: pass-through hook, used for the determinism trace, the command
 // recorder (it registers the logic thread object) and S3RE_EXIT_AFTER_TICKS
 // (`s3re_launcher --exit-after-ticks N`), which shuts the game down once the
-// game tick reaches N. Not reimplemented.
+// game tick reaches N (when the game was loaded from a savegame with
+// `--load-save`, N ticks after the tick the savegame starts at). Not
+// reimplemented.
 
 #include "hooks.h"
 #include "log.h"
@@ -49,6 +51,14 @@ unsigned long ExitAfterTicks() {
 
 bool g_exitRequested = false;  // only touched by the logic thread
 
+// The tick --exit-after-ticks counts from: 0 for a new game, the first tick
+// seen for a game loaded from a savegame (S3RE_LOAD_SAVE).
+std::uint32_t ExitTickBase(std::uint32_t tick) {
+    static const std::uint32_t base =
+        GetEnvironmentVariableA("S3RE_LOAD_SAVE", nullptr, 0) > 0 ? tick : 0;
+    return base;
+}
+
 BOOL CALLBACK CloseProcessWindow(HWND window, LPARAM) {
     DWORD pid = 0;
     GetWindowThreadProcessId(window, &pid);
@@ -80,14 +90,17 @@ void __fastcall Hooked_CLogicThread_Step(CLogicThread* self, void* edx) {
     if (!g_loggedFirstStep.exchange(true)) {
         S3RE_LOG("CLogicThread::Step first call (this=%p)", static_cast<void*>(self));
     }
+    const std::uint32_t base =
+        ExitTickBase(*reinterpret_cast<const volatile std::uint32_t*>(kGameTickAddress));
     Original_CLogicThread_Step(self, edx);
     trace::OnLogicStep(self);
 
     const unsigned long exitAfter = ExitAfterTicks();
-    if (exitAfter != 0 && !g_exitRequested &&
-        *reinterpret_cast<const volatile std::uint32_t*>(kGameTickAddress) >= exitAfter) {
+    const std::uint32_t tick = *reinterpret_cast<const volatile std::uint32_t*>(kGameTickAddress);
+    if (exitAfter != 0 && !g_exitRequested && tick - base >= exitAfter) {
         g_exitRequested = true;
-        S3RE_LOG("tick %lu reached; ending the game (--exit-after-ticks)", exitAfter);
+        S3RE_LOG("tick %lu reached (%lu ticks after %lu); ending the game (--exit-after-ticks)",
+                 static_cast<unsigned long>(tick), exitAfter, static_cast<unsigned long>(base));
         trace::CloseDeterminismTrace();
         replay::CloseCommandLog();
         RequestShutdown();

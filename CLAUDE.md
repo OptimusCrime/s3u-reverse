@@ -206,7 +206,32 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   exists, retry every 30 s), write `owner.txt` (who, when) into it, and
   make sure no `S3.EXE` runs. Remove it when the run ends, also on
   failure. A lock older than 2 hours with no `S3.EXE` running is stale.
-  Never touch `Settlers3Ultimate/Save/`.
+  `tools/game_lock.py` implements it (`with game_lock.held(owner):`);
+  `check_replay.py`, `check_determinism.py` and `check_save.py` take it
+  automatically; `python tools/game_lock.py status|release`. Manual
+  launcher runs take it by hand. Never write to `Settlers3Ultimate/Save/`
+  (`--load-save` and `check_save.py` only read and copy the savegames).
+  In a worktree, make `Settlers3Ultimate` a junction to the main
+  checkout's (`New-Item -ItemType Junction`; gitignored). The launcher
+  starts S3.EXE from the junction's real path: Windows registers the
+  `DWM8And16BitMitigation` compatibility layer S3.EXE needs by path, and
+  without it DirectDraw fails (`DDERR_UNSUPPORTED` in
+  `CDirectDraw::DDSetDisplayMode`, an "Error!" box).
+- **Starting from a savegame:** `--load-save FILE` (a path, or a name in
+  `Save\`, e.g. `"slot 1.sav"`) starts the game directly from that
+  savegame, with the game's own loader: the launcher passes a copy
+  (`s3re-loaded.sav` next to the DLL) as `-map`, and at the menu thread's
+  first update (`Menus::CDrawThread::Update` `0x493880`, state 0x14) the DLL
+  calls `GameSettings::LoadSaveGame` (`0x432b00`, as the load dialog does)
+  and then does what the dialog's result 10 does (`0x494e03`).
+  `CLogicThread::OnStart` then runs the savegame loader `0x508fa0`; the RNG
+  state comes from the file (`--seed` has no effect). With a loaded save,
+  `--exit-after-ticks N` counts from the save's start tick. Not combinable
+  with `-map` or the command recorder. Code: `src/s3re/game/savegame_start.cpp`.
+  `python tools/check_save.py "slot 1.sav" --ticks N [--against-original]`
+  runs it unattended (twice original, or original vs ours), compares the
+  traces, checks that no savegame in `Save\` changed, and writes the call
+  counts to `save-check/<save>-calls.tsv`. Results: `re/savegame_checks.md`.
 - **Unattended determinism check:** `python tools/check_determinism.py
   [--ticks N]`. It opens the game window, so the user's screen is busy
   while it runs (about 1 minute per 1,000 ticks per run).

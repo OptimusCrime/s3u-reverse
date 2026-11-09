@@ -72,7 +72,7 @@ bool OpenFile() {
         return false;
     }
     std::setvbuf(g_file, nullptr, _IOFBF, 1 << 16);
-    std::fprintf(g_file, "# s3re determinism trace v2 (header hash skips volatile fields)\n");
+    std::fprintf(g_file, "# s3re determinism trace v3 (header hash skips volatile fields; rest hash skips MapEffect padding)\n");
     std::fprintf(g_file, "# T <tick> <rng a> <rng b> <rng c>   after each step that changed them\n");
     std::fprintf(g_file, "# H <tick> <header hash> <map hash> <rest hash> <rest bytes>   every "
                          "%u ticks\n", kHashInterval);
@@ -272,6 +272,17 @@ constexpr ByteRange kRestSkips[] = {
     {0x1222ed4, 0x1223656},
     {0x1539484, 0x15394b0},
 };
+// The 5000 MapEffect records (0x4C bytes) of the member at +0x14D2BC8
+// (re/structs.md): their alignment padding (+0x2A..+0x2B, +0x3B,
+// +0x3E..+0x3F; no constructor writes it and no code reads it) is copied
+// from uninitialized stack memory when a record is added (0x5445E0). It
+// differed between two runs loaded from the same savegame (2026-11-09,
+// tools/check_save.py), so it is left out of the rest hash.
+constexpr std::size_t kMapEffectsBegin = 0x14d2bc8;
+constexpr std::size_t kMapEffectBytes = 0x4c;
+constexpr std::size_t kMapEffectCount = 5000;
+constexpr ByteRange kMapEffectPadding[] = {{0x2a, 0x2c}, {0x3b, 0x3c}, {0x3e, 0x40}};
+
 // Bytes of every map tile: +15 "visited" mark of searches (stamped with the
 // search generation; UI overlays use it too), +16 overlay value for drawing
 // (written by the overlay functions 0x523560/0x523840 and PrepareDrawData).
@@ -312,6 +323,29 @@ std::uint64_t HashTiles(std::uint64_t hash, const std::uint8_t* row, std::size_t
     return Hash(hash, buffer, tiles * kTileBytes);
 }
 
+// Hashes world[begin, end) like HashSkipping with kRestSkips, but with the
+// MapEffect padding bytes zeroed.
+std::uint64_t HashRest(std::uint64_t hash, const std::uint8_t* world, std::size_t begin,
+                       std::size_t end) {
+    const std::size_t effectsEnd = kMapEffectsBegin + kMapEffectCount * kMapEffectBytes;
+    if (end <= kMapEffectsBegin || begin >= effectsEnd) {
+        return HashSkipping(hash, world, begin, end - begin, kRestSkips);
+    }
+    // No skip range overlaps the MapEffect array.
+    hash = HashSkipping(hash, world, begin, kMapEffectsBegin - begin, kRestSkips);
+    const std::size_t recordsEnd = end < effectsEnd ? end : effectsEnd;
+    std::uint8_t record[kMapEffectBytes];
+    std::size_t position = kMapEffectsBegin;
+    for (; position + kMapEffectBytes <= recordsEnd; position += kMapEffectBytes) {
+        std::memcpy(record, world + position, kMapEffectBytes);
+        for (const ByteRange& padding : kMapEffectPadding) {
+            std::memset(record + padding.begin, 0, padding.end - padding.begin);
+        }
+        hash = Hash(hash, record, kMapEffectBytes);
+    }
+    return HashSkipping(hash, world, position, end - position, kRestSkips);
+}
+
 // Must not contain objects with destructors because of __try.
 bool HashRegions(const std::uint8_t* world, std::uint32_t mapSize, RegionHashes* out) {
     __try {
@@ -331,7 +365,7 @@ bool HashRegions(const std::uint8_t* world, std::uint32_t mapSize, RegionHashes*
 
         const std::size_t restBegin = kMapTiles + kMapRowTiles * kMapRowBytes;
         out->restBytes = ReadableLength(world + restBegin, kRestRegionCap);
-        out->rest = HashSkipping(kHashSeed, world, restBegin, out->restBytes, kRestSkips);
+        out->rest = HashRest(kHashSeed, world, restBegin, restBegin + out->restBytes);
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;

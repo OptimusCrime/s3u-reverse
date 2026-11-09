@@ -21,6 +21,8 @@ import sys
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import game_lock  # noqa: E402
 
 
 def main():
@@ -48,7 +50,8 @@ def main():
                    "--exit-after-ticks", str(args.ticks), "--timeout", str(timeout),
                    "--", "-map", args.map]
         print(f"run {run + 1}/{args.runs}: {args.ticks} ticks, seed {args.seed}, {args.map}", flush=True)
-        result = subprocess.run(command, capture_output=True, text=True)
+        with game_lock.held("check_determinism"):
+            result = subprocess.run(command, capture_output=True, text=True)
         new = sorted(set(glob.glob(os.path.join(bin_dir, "determinism-*.tsv"))) - before)
         if result.returncode != 0 or len(new) != 1:
             print(result.stdout + result.stderr)

@@ -4,7 +4,7 @@
 //                      [--trace-determinism] [--log-commands] [--seed <n>]
 //                      [--record-commands <file>] [--replay-commands <file>]
 //                      [--exit-after-ticks <n>] [--timeout <seconds>]
-//                      [--dump-tick <n>]
+//                      [--dump-tick <n>] [--load-save <file>]
 //                      [-- <arguments passed to S3.EXE>]
 //
 // --trace-determinism writes the tick, RNG state and world hashes after each
@@ -44,6 +44,13 @@
 // -map <file> (startup map), -demo (skip the menus), -record / -play (record
 // or play back the "movie" Siedler3.evt; -play duplicates computer-player
 // commands, so use --replay-commands instead) and -help.
+//
+// --load-save <file> starts the game directly from a savegame (no menus),
+// through the game's own load code (see src/s3re/game/savegame_start.cpp).
+// <file> is looked up as given, then in <game dir>\Save\. The launcher
+// loads a copy (s3re-loaded.sav next to s3re.dll), so the game never opens
+// the user's savegame itself. The RNG state comes from the savegame, so
+// --seed has no effect; not combinable with -map or the command recorder.
 //
 // --test runs the differential test suite inside S3.EXE instead of the game
 // (optionally only tests whose name contains <filter>), prints the results
@@ -97,6 +104,32 @@ std::wstring FullPath(const std::wstring& path) {
     wchar_t buffer[MAX_PATH];
     const DWORD length = GetFullPathNameW(path.c_str(), MAX_PATH, buffer, nullptr);
     return (length > 0 && length < MAX_PATH) ? std::wstring(buffer) : path;
+}
+
+// Resolves junctions and symbolic links (e.g. a git worktree's
+// Settlers3Ultimate junction to the main checkout). Windows applies the
+// compatibility settings for S3.EXE (needed for its display modes) by the
+// executable's path, so the game must be started from its real location.
+std::wstring FinalPath(const std::wstring& path) {
+    HANDLE handle = CreateFileW(path.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                                OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return path;
+    }
+    wchar_t buffer[MAX_PATH * 2];
+    const DWORD length = GetFinalPathNameByHandleW(handle, buffer, MAX_PATH * 2,
+                                                   FILE_NAME_NORMALIZED);
+    CloseHandle(handle);
+    if (length == 0 || length >= MAX_PATH * 2) {
+        return path;
+    }
+    std::wstring result(buffer, length);
+    if (result.rfind(L"\\\\?\\UNC\\", 0) == 0) {
+        result = L"\\\\" + result.substr(8);
+    } else if (result.rfind(L"\\\\?\\", 0) == 0) {
+        result = result.substr(4);
+    }
+    return result;
 }
 
 bool FileExists(const std::wstring& path) {
@@ -271,6 +304,7 @@ int wmain(int argc, wchar_t** argv) {
     std::wstring seed;
     std::wstring exitAfterTicks;
     std::wstring dumpTick;
+    std::wstring loadSave;
     DWORD timeoutMs = INFINITE;
 
     for (int i = 1; i < argc; ++i) {
@@ -305,6 +339,8 @@ int wmain(int argc, wchar_t** argv) {
                 return Fail(L"--exit-after-ticks expects a positive number, got '%s'",
                             exitAfterTicks);
             }
+        } else if (arg == L"--load-save" && i + 1 < argc) {
+            loadSave = argv[++i];
         } else if (arg == L"--dump-tick" && i + 1 < argc) {
             dumpTick = argv[++i];
         } else if (arg == L"--timeout" && i + 1 < argc) {
@@ -328,7 +364,7 @@ int wmain(int argc, wchar_t** argv) {
             wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
                     L"[--trace-determinism] [--log-commands] [--record-commands <file>] "
                     L"[--replay-commands <file>] [--seed <n>] [--exit-after-ticks <n>] "
-                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [--original] [--unverified] [-- <S3.EXE arguments>]\n");
+                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [--load-save <file>] [--original] [--unverified] [-- <S3.EXE arguments>]\n");
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
@@ -346,9 +382,42 @@ int wmain(int argc, wchar_t** argv) {
         const DWORD length = GetEnvironmentVariableW(L"S3RE_GAME_DIR", fromEnv, MAX_PATH);
         gameDir = (length > 0 && length < MAX_PATH) ? fromEnv : S3RE_DEFAULT_GAME_DIR;
     }
+    gameDir = FinalPath(gameDir);
 
     const std::wstring exePath = gameDir + L"\\" + kExeName;
     const std::wstring dllPath = DirectoryOf(ModulePath(nullptr)) + L"\\" + kDllName;
+
+    std::wstring loadSaveCopy;
+    if (!loadSave.empty()) {
+        if (!recordCommands.empty() || !replayCommands.empty()) {
+            return Fail(L"--load-save can't be combined with --record-commands or "
+                        L"--replay-commands%s");
+        }
+        for (const std::wstring& arg : gameArgs) {
+            if (_wcsicmp(arg.c_str(), L"-map") == 0) {
+                return Fail(L"--load-save can't be combined with -map%s");
+            }
+        }
+        std::wstring source = FullPath(loadSave);
+        if (!FileExists(source)) {
+            source = FullPath(gameDir + L"\\Save\\" + loadSave);
+        }
+        if (!FileExists(source)) {
+            return Fail(L"savegame not found: %s", loadSave);
+        }
+        // Load a copy: the game keeps the file open while it runs and could
+        // write to its own savegames; the user's files stay untouched.
+        loadSaveCopy = DirectoryOf(dllPath) + L"\\s3re-loaded.sav";
+        if (!CopyFileW(source.c_str(), loadSaveCopy.c_str(), FALSE)) {
+            return Fail(L"could not copy the savegame to %s", loadSaveCopy);
+        }
+        SetFileAttributesW(loadSaveCopy.c_str(), FILE_ATTRIBUTE_NORMAL);
+        wprintf(L"Loading savegame %s (copy: %s)\n", source.c_str(), loadSaveCopy.c_str());
+        // -map makes the menu thread start a game at once; the DLL loads the
+        // savegame at that point instead of the map.
+        gameArgs.push_back(L"-map");
+        gameArgs.push_back(loadSaveCopy);
+    }
 
     if (!FileExists(exePath)) {
         return Fail(L"game executable not found: %s", exePath);
@@ -392,6 +461,8 @@ int wmain(int argc, wchar_t** argv) {
     SetEnvironmentVariableW(L"S3RE_REPLAY_COMMANDS",
                             replayCommands.empty() ? nullptr : replayCommands.c_str());
     SetEnvironmentVariableW(L"S3RE_SEED", seed.empty() ? nullptr : seed.c_str());
+    SetEnvironmentVariableW(L"S3RE_LOAD_SAVE",
+                            loadSaveCopy.empty() ? nullptr : loadSaveCopy.c_str());
     SetEnvironmentVariableW(L"S3RE_DUMP_TICK", dumpTick.empty() ? nullptr : dumpTick.c_str());
     SetEnvironmentVariableW(L"S3RE_EXIT_AFTER_TICKS",
                             exitAfterTicks.empty() ? nullptr : exitAfterTicks.c_str());
