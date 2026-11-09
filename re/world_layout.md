@@ -193,7 +193,7 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 | 0x2D25C, 0x2D260 | int32 | camera x, y in pixels | UI, skip, saved | verified |
 | 0x2D264 | int32 | redraw flag | UI, skip | verified |
 | 0x2D268..0x2D270 | int32 | UI (Init clears; ProcessEvents reads +0x2D268) | UI, hashed | guess |
-| 0x2D274 | int32 | used by Create and the player placement 0x5074B0 | sim | guess |
+| 0x2D274 | int32 | map symmetry: GameWorld::Create stores its symmetry argument here (bit 0 mirror across x = y, bit 1 point symmetry; layout.h unk2d274); also read by the player placement 0x5074B0 | sim | guess |
 | 0x2D278 | int32 | minimap ready (1 after ctor and load) | UI, skip | verified |
 | 0x2D27C | int32 | refresh-UI flag (ExecuteCommands) | UI, skip | verified |
 | 0x2D280 | int32 | draw hand-off flag | UI, skip | strong |

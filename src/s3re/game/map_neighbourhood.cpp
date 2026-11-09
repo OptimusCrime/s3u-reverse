@@ -34,6 +34,12 @@
 // world+0x110a588 (int32 dx, dy; 16-byte entries) the tile (x+dx, y+dy) has
 // byte +0xb == 0 and bit 0x1 of byte +0xe clear; 0 otherwise. No bounds
 // check. ret 0xc. Callers 0x51b010, 0x51b1a0 (test EAX).
+//
+// The byte offsets above count from a tile base of 0x67440; with the real
+// base 0x67444 (layout.h) they are 4 less: word +0x4 = Tile::settler, +0x9 =
+// Tile::shade, +0xa = Tile::terrain, +0xb = Tile::object, +0xe =
+// Tile::flags (bit 0x1 = kTileBlocked). The offset tables are
+// world->offsets[] (0x110a588 = offsets[0], 0x110a598 = offsets[1]).
 
 #include "game/world.h"
 #include "hooks.h"
@@ -47,48 +53,25 @@ namespace s3re::game {
 
 namespace {
 
-using world_offset::kMapRowBytes;
-using world_offset::kMapRowTiles;
-using world_offset::kMapTiles;
-using world_offset::kTileBytes;
+using layout::Tile;
 
-constexpr std::size_t kTileOccupant = 0x4;  // uint16
-constexpr std::size_t kTileByte9 = 0x9;
-constexpr std::size_t kTileTerrain = 0xa;
 constexpr std::uint8_t kTerrain70 = 0x70;
 constexpr std::uint8_t kTerrainF0 = 0xf0;
 
-constexpr std::size_t kNearbyOffsets = 0x110a598;  // int32 dx, int32 dy, 16-byte stride
-constexpr std::size_t kNearbyOffsetBytes = 0x10;
+// The 18 nearby offsets are world->offsets[1..18].
+constexpr int kNearbyOffsetFirst = 1;
 constexpr int kNearbyOffsetCount = 18;
 
-constexpr std::size_t kTileByteB = 0xb;
-constexpr std::size_t kTileFlagsE = 0xe;
-
-constexpr std::size_t kOffsetTable = 0x110a588;  // int32 dx, int32 dy, 16-byte stride
-constexpr std::size_t kOffsetTableBytes = 0x10;
-
-constexpr std::size_t kSettlers = 0x12a5e60;
-constexpr std::size_t kSettlerBytes = 0x40;
-constexpr std::size_t kSettlerType = 0x1;
 constexpr std::uint8_t kSettlerType29 = 0x29;
 
-// Byte offset of tile (x, y) from the world base, with the original's 32-bit
-// arithmetic.
-std::uint32_t TileOffset(std::uint32_t x, std::uint32_t y) {
-    return static_cast<std::uint32_t>(kMapTiles) + (x * kMapRowTiles + y) * kTileBytes;
-}
-
-std::uint8_t TileByte(GameWorld* world, std::uint32_t x, std::uint32_t y, std::size_t field) {
-    return reinterpret_cast<const std::uint8_t*>(world)[TileOffset(x, y) + field];
+// Tile (x, y), with the original's 32-bit arithmetic (neighbours of edge
+// tiles lie outside the map).
+Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+    return TileAtOffset(world, TileOffset(x, y));
 }
 
 std::uint16_t TileOccupant(GameWorld* world, std::uint32_t x, std::uint32_t y) {
-    std::uint16_t value;
-    std::memcpy(&value, reinterpret_cast<const std::uint8_t*>(world) + TileOffset(x, y) +
-                            kTileOccupant,
-                sizeof(value));
-    return value;
+    return TileAt(world, x, y).settler;
 }
 
 // The six neighbours as (dx, dy).
@@ -108,12 +91,11 @@ std::uint32_t __fastcall GameWorld_ReplaceTerrainType(GameWorld* world, void* /*
                                                       std::uint32_t oldType,
                                                       std::uint32_t newType) {
     // Signed loop bounds, as in the original.
-    const auto last = WorldField<std::int32_t>(world, world_offset::kMapSize) - 1;
+    const auto last = static_cast<std::int32_t>(world->map_size) - 1;
     for (std::int32_t x = 1; x < last; ++x) {
         for (std::int32_t y = 1; y < last; ++y) {
-            std::uint8_t& terrain = reinterpret_cast<std::uint8_t*>(
-                world)[TileOffset(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)) +
-                       kTileTerrain];
+            std::uint8_t& terrain =
+                TileAt(world, static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)).terrain;
             if (terrain == oldType) {
                 terrain = static_cast<std::uint8_t>(newType);
             }
@@ -126,11 +108,11 @@ std::uint32_t __fastcall GameWorld_ReplaceTerrainType(GameWorld* world, void* /*
 // a building placement check.
 std::uint32_t __fastcall GameWorld_IsNeighbourhoodByte9Clear(GameWorld* world, void* /*edx*/,
                                                              std::uint32_t x, std::uint32_t y) {
-    if (TileByte(world, x, y, kTileByte9) != 0) {
+    if (TileAt(world, x, y).shade != 0) {
         return 0;
     }
     for (const auto& d : kNeighbours) {
-        if (TileByte(world, x + d[0], y + d[1], kTileByte9) != 0) {
+        if (TileAt(world, x + d[0], y + d[1]).shade != 0) {
             return 0;
         }
     }
@@ -143,7 +125,7 @@ std::uint32_t __fastcall GameWorld_HasAtMostTwoType70Neighbours(GameWorld* world
                                                                 std::uint32_t x, std::uint32_t y) {
     int count = 0;
     for (const auto& d : kNeighbours) {
-        const std::uint8_t terrain = TileByte(world, x + d[0], y + d[1], kTileTerrain);
+        const std::uint8_t terrain = TileAt(world, x + d[0], y + d[1]).terrain;
         if (terrain == kTerrain70 || terrain == kTerrainF0) {
             ++count;
         }
@@ -158,7 +140,7 @@ std::uint32_t __fastcall GameWorld_IsClearOfType70Nearby(GameWorld* world, void*
     static constexpr int kTiles[10][2] = {{0, 0},  {1, 0},  {-1, 0}, {0, 1},  {0, -1},
                                           {1, 1},  {-1, -1}, {0, 2}, {-1, 1}, {1, 2}};
     for (const auto& d : kTiles) {
-        if (TileByte(world, x + d[0], y + d[1], kTileTerrain) == kTerrain70) {
+        if (TileAt(world, x + d[0], y + d[1]).terrain == kTerrain70) {
             return 0;
         }
     }
@@ -172,19 +154,17 @@ std::uint32_t __fastcall GameWorld_IsFreeOfSettlerType29Nearby(GameWorld* world,
     if (TileOccupant(world, x, y) != 0) {
         return 0;
     }
-    const auto mapSize = WorldField<std::uint32_t>(world, world_offset::kMapSize);
+    const std::uint32_t mapSize = world->map_size;
     std::uint32_t result = 1;
     for (int i = 0; i < kNearbyOffsetCount; ++i) {
-        const std::size_t entry = kNearbyOffsets + i * kNearbyOffsetBytes;
-        const std::uint32_t nx = x + WorldField<std::uint32_t>(world, entry);
-        const std::uint32_t ny = y + WorldField<std::uint32_t>(world, entry + 4);
+        const layout::MapOffset& entry = world->offsets[kNearbyOffsetFirst + i];
+        const std::uint32_t nx = x + static_cast<std::uint32_t>(entry.dx);
+        const std::uint32_t ny = y + static_cast<std::uint32_t>(entry.dy);
         if (nx >= mapSize || ny >= mapSize) {
             continue;
         }
         const std::uint16_t occupant = TileOccupant(world, nx, ny);
-        if (occupant != 0 &&
-            WorldField<std::uint8_t>(world, kSettlers + occupant * kSettlerBytes + kSettlerType) ==
-                kSettlerType29) {
+        if (occupant != 0 && world->settlers[occupant].art == kSettlerType29) {
             result = 0;
         }
     }
@@ -199,7 +179,7 @@ std::uint32_t __fastcall GameWorld_IsNeighbourhoodTerrain(GameWorld* world, void
     static constexpr int kTiles[7][2] = {{0, 0}, {1, 0},  {-1, 0}, {0, 1},
                                          {0, -1}, {1, 1}, {-1, -1}};
     for (const auto& d : kTiles) {
-        if (TileByte(world, x + d[0], y + d[1], kTileTerrain) != terrain) {
+        if (TileAt(world, x + d[0], y + d[1]).terrain != terrain) {
             return 0;
         }
     }
@@ -212,11 +192,12 @@ std::uint32_t __fastcall GameWorld_AreOffsetTilesClear(GameWorld* world, void* /
                                                        std::uint32_t x, std::uint32_t y,
                                                        std::uint32_t count) {
     for (std::uint32_t i = 0; i < count; ++i) {
-        const std::size_t entry = kOffsetTable + i * kOffsetTableBytes;
-        const std::uint32_t nx = x + WorldField<std::uint32_t>(world, entry);
-        const std::uint32_t ny = y + WorldField<std::uint32_t>(world, entry + 4);
-        if (TileByte(world, nx, ny, kTileByteB) != 0 ||
-            (TileByte(world, nx, ny, kTileFlagsE) & 1) != 0) {
+        // No bounds check on i (count is unsigned), like the original.
+        const layout::MapOffset& entry = world->offsets[i];
+        const std::uint32_t nx = x + static_cast<std::uint32_t>(entry.dx);
+        const std::uint32_t ny = y + static_cast<std::uint32_t>(entry.dy);
+        if (TileAt(world, nx, ny).object != 0 ||
+            (TileAt(world, nx, ny).flags & layout::kTileBlocked) != 0) {
             return 0;
         }
     }
@@ -247,12 +228,12 @@ namespace {
 
 constexpr std::uint32_t kTestMapSize = 384;
 // Up to the last settler record a 16-bit occupant can name.
-constexpr std::size_t kTestWorld = kSettlers + 0x10000 * kSettlerBytes;
+constexpr std::size_t kTestWorld = offsetof(GameWorld, settlers) + 0x10000 * sizeof(layout::Settler);
 
-// Sets a tile byte in both worlds.
-void SetTileByte(test::WorldPair& worlds, std::uint32_t x, std::uint32_t y, std::size_t field,
-                 std::uint8_t value) {
-    worlds.Set<std::uint8_t>(TileOffset(x, y) + field, value);
+// Sets a tile field (a pointer to the Tile member) in both worlds.
+template <typename T>
+void SetTileField(test::WorldPair& worlds, std::uint32_t x, std::uint32_t y, T Tile::*field, T value) {
+    worlds.Both([&](GameWorld* w) { TileAt(w, x, y).*field = value; });
 }
 
 // Biased random values for the fields the checks look at, in a 7x7 square
@@ -266,20 +247,20 @@ void RandomizeAround(test::Context& ctx, test::WorldPair& worlds, std::uint32_t 
             if (tx >= kTestMapSize || ty >= kTestMapSize) {
                 continue;
             }
-            SetTileByte(worlds, tx, ty, kTileByte9,
-                        ctx.rng().Chance(7, 8) ? 0 : static_cast<std::uint8_t>(ctx.rng().Next32()));
+            SetTileField(worlds, tx, ty, &Tile::shade,
+                         ctx.rng().Chance(7, 8) ? std::uint8_t{0} : static_cast<std::uint8_t>(ctx.rng().Next32()));
             static constexpr std::uint8_t kTerrains[] = {0x70, 0xf0, 0x10, 0x30, 0x71, 0x00};
-            SetTileByte(worlds, tx, ty, kTileTerrain,
-                        ctx.rng().Chance(1, 4) ? kTerrains[ctx.rng().Below(6)]
-                                               : static_cast<std::uint8_t>(ctx.rng().Next32()));
+            SetTileField(worlds, tx, ty, &Tile::terrain,
+                         ctx.rng().Chance(1, 4) ? kTerrains[ctx.rng().Below(6)]
+                                                : static_cast<std::uint8_t>(ctx.rng().Next32()));
             const std::uint16_t occupant =
                 ctx.rng().Chance(1, 2) ? 0 : static_cast<std::uint16_t>(ctx.rng().Next32());
-            worlds.Set<std::uint16_t>(TileOffset(tx, ty) + kTileOccupant, occupant);
+            SetTileField(worlds, tx, ty, &Tile::settler, occupant);
             if (occupant != 0) {
-                worlds.Set<std::uint8_t>(kSettlers + occupant * kSettlerBytes + kSettlerType,
-                                         ctx.rng().Chance(1, 3)
+                const std::uint8_t art = ctx.rng().Chance(1, 3)
                                              ? kSettlerType29
-                                             : static_cast<std::uint8_t>(ctx.rng().Below(64)));
+                                             : static_cast<std::uint8_t>(ctx.rng().Below(64));
+                worlds.Both([&](GameWorld* w) { w->settlers[occupant].art = art; });
             }
         }
     }
@@ -288,7 +269,7 @@ void RandomizeAround(test::Context& ctx, test::WorldPair& worlds, std::uint32_t 
 void CompareTileCheck(test::Context& ctx, TileCheckFn original, TileCheckFn candidate,
                       int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
-    worlds.Set<std::uint32_t>(world_offset::kMapSize, kTestMapSize);
+    worlds.Both([&](GameWorld* w) { w->map_size = kTestMapSize; });
     for (int i = 0; i < cases; ++i) {
         // Tiles at least 2 from the edge (the checks read up to 2 away);
         // some near the edge for the bounds-checked offset table.
@@ -297,11 +278,13 @@ void CompareTileCheck(test::Context& ctx, TileCheckFn original, TileCheckFn cand
         RandomizeAround(ctx, worlds, x, y);
         if (i % 64 == 0) {  // new offset table now and then
             for (int k = 0; k < kNearbyOffsetCount; ++k) {
-                const std::size_t entry = kNearbyOffsets + k * kNearbyOffsetBytes;
-                worlds.Set<std::int32_t>(entry, ctx.rng().Chance(1, 20)
-                                                    ? static_cast<std::int32_t>(ctx.rng().Next32())
-                                                    : ctx.rng().Range(-3, 3));
-                worlds.Set<std::int32_t>(entry + 4, ctx.rng().Range(-3, 3));
+                const std::int32_t dx = ctx.rng().Chance(1, 20) ? static_cast<std::int32_t>(ctx.rng().Next32())
+                                                                : ctx.rng().Range(-3, 3);
+                const std::int32_t dy = ctx.rng().Range(-3, 3);
+                worlds.Both([&](GameWorld* w) {
+                    w->offsets[kNearbyOffsetFirst + k].dx = dx;
+                    w->offsets[kNearbyOffsetFirst + k].dy = dy;
+                });
             }
         }
         const std::uint32_t expected = original(worlds.original(), nullptr, x, y);
@@ -320,12 +303,12 @@ void CompareReplaceTerrain(test::Context& ctx, ReplaceTerrainFn candidate, int c
         // that matches are common.
         const std::int32_t mapSize = i == 0 ? 0 : ctx.rng().Range(-1, 40);
         const std::size_t rows = mapSize > 0 ? static_cast<std::size_t>(mapSize) : 0;
-        test::WorldPair worlds(ctx, kMapTiles + (rows + 1) * kMapRowBytes);
-        worlds.Set<std::int32_t>(world_offset::kMapSize, mapSize);
+        test::WorldPair worlds(ctx, offsetof(GameWorld, tiles) + (rows + 1) * kTileRowBytes);
+        worlds.Both([&](GameWorld* w) { w->map_size = static_cast<std::uint32_t>(mapSize); });
         for (std::size_t x = 0; x < rows; ++x) {
             for (std::size_t y = 0; y < rows; ++y) {
-                SetTileByte(worlds, static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y),
-                            kTileTerrain, static_cast<std::uint8_t>(ctx.rng().Below(4)));
+                SetTileField(worlds, static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y),
+                             &Tile::terrain, static_cast<std::uint8_t>(ctx.rng().Below(4)));
             }
         }
         // `old` sometimes only matches in its low byte (must not count).
@@ -348,12 +331,11 @@ void CompareReplaceTerrain(test::Context& ctx, ReplaceTerrainFn candidate, int c
 // Wrong: also replaces on the outer edge.
 std::uint32_t __fastcall WrongReplaceTerrain(GameWorld* world, void* /*edx*/,
                                              std::uint32_t oldType, std::uint32_t newType) {
-    const auto size = WorldField<std::int32_t>(world, world_offset::kMapSize);
+    const auto size = static_cast<std::int32_t>(world->map_size);
     for (std::int32_t x = 0; x < size; ++x) {
         for (std::int32_t y = 0; y < size; ++y) {
-            std::uint8_t& terrain = reinterpret_cast<std::uint8_t*>(
-                world)[TileOffset(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)) +
-                       kTileTerrain];
+            std::uint8_t& terrain =
+                TileAt(world, static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)).terrain;
             if (terrain == oldType) {
                 terrain = static_cast<std::uint8_t>(newType);
             }
@@ -367,7 +349,7 @@ std::uint32_t __fastcall WrongAtMostTwo(GameWorld* world, void* /*edx*/, std::ui
                                         std::uint32_t y) {
     int count = 0;
     for (const auto& d : kNeighbours) {
-        count += TileByte(world, x + d[0], y + d[1], kTileTerrain) == kTerrain70 ? 1 : 0;
+        count += TileAt(world, x + d[0], y + d[1]).terrain == kTerrain70 ? 1 : 0;
     }
     return count <= 2 ? 1 : 0;
 }
@@ -375,12 +357,11 @@ std::uint32_t __fastcall WrongAtMostTwo(GameWorld* world, void* /*edx*/, std::ui
 // Wrong: misses the occupant check of the tile itself.
 std::uint32_t __fastcall WrongFreeOf29(GameWorld* world, void* edx, std::uint32_t x,
                                        std::uint32_t y) {
-    const std::size_t occupant = TileOffset(x, y) + kTileOccupant;
-    std::uint16_t saved;
-    std::memcpy(&saved, reinterpret_cast<std::uint8_t*>(world) + occupant, 2);
-    std::memset(reinterpret_cast<std::uint8_t*>(world) + occupant, 0, 2);
+    std::uint16_t& occupant = TileAt(world, x, y).settler;
+    const std::uint16_t saved = occupant;
+    occupant = 0;
     const std::uint32_t result = GameWorld_IsFreeOfSettlerType29Nearby(world, edx, x, y);
-    std::memcpy(reinterpret_cast<std::uint8_t*>(world) + occupant, &saved, 2);
+    occupant = saved;
     return result;
 }
 
@@ -397,22 +378,25 @@ void CompareTileValueCheck(test::Context& ctx, TileValueCheckFn original,
         const bool uniform = ctx.rng().Chance(1, 2);
         for (int dx = -3; dx <= 3; ++dx) {
             for (int dy = -3; dy <= 3; ++dy) {
-                SetTileByte(worlds, x + dx, y + dy, kTileTerrain,
-                            uniform && ctx.rng().Chance(15, 16)
-                                ? common
-                                : static_cast<std::uint8_t>(ctx.rng().Below(4)));
-                SetTileByte(worlds, x + dx, y + dy, kTileByteB,
-                            ctx.rng().Chance(15, 16) ? 0 : static_cast<std::uint8_t>(ctx.rng().Next32()));
-                SetTileByte(worlds, x + dx, y + dy, kTileFlagsE,
-                            static_cast<std::uint8_t>(ctx.rng().Next32() &
-                                                      (ctx.rng().Chance(15, 16) ? 0xfe : 0xff)));
+                SetTileField(worlds, x + dx, y + dy, &Tile::terrain,
+                             uniform && ctx.rng().Chance(15, 16)
+                                 ? common
+                                 : static_cast<std::uint8_t>(ctx.rng().Below(4)));
+                SetTileField(worlds, x + dx, y + dy, &Tile::object,
+                             ctx.rng().Chance(15, 16) ? std::uint8_t{0} : static_cast<std::uint8_t>(ctx.rng().Next32()));
+                SetTileField(worlds, x + dx, y + dy, &Tile::flags,
+                             static_cast<std::uint8_t>(ctx.rng().Next32() &
+                                                       (ctx.rng().Chance(15, 16) ? 0xfe : 0xff)));
             }
         }
         if (i % 64 == 0) {
             for (int k = 0; k < 20; ++k) {
-                const std::size_t entry = kOffsetTable + k * kOffsetTableBytes;
-                worlds.Set<std::int32_t>(entry, ctx.rng().Range(-3, 3));
-                worlds.Set<std::int32_t>(entry + 4, ctx.rng().Range(-3, 3));
+                const std::int32_t dx = ctx.rng().Range(-3, 3);
+                const std::int32_t dy = ctx.rng().Range(-3, 3);
+                worlds.Both([&](GameWorld* w) {
+                    w->offsets[k].dx = dx;
+                    w->offsets[k].dy = dy;
+                });
             }
         }
         const std::uint32_t value = countArgument
@@ -432,9 +416,9 @@ void CompareTileValueCheck(test::Context& ctx, TileValueCheckFn original,
 std::uint32_t __fastcall WrongOffsetTilesClear(GameWorld* world, void* /*edx*/, std::uint32_t x,
                                                std::uint32_t y, std::uint32_t count) {
     for (std::uint32_t i = 0; i < count; ++i) {
-        const std::size_t entry = kOffsetTable + i * kOffsetTableBytes;
-        if (TileByte(world, x + WorldField<std::uint32_t>(world, entry),
-                     y + WorldField<std::uint32_t>(world, entry + 4), kTileByteB) != 0) {
+        const layout::MapOffset& entry = world->offsets[i];
+        if (TileAt(world, x + static_cast<std::uint32_t>(entry.dx), y + static_cast<std::uint32_t>(entry.dy))
+                .object != 0) {
             return 0;
         }
     }

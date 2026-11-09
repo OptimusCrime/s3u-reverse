@@ -30,11 +30,18 @@ namespace s3re::game {
 
 namespace {
 
+using layout::kGoodsTypes;
+using layout::kPlayers;
+
+// statistics[kPlayers][kGoodsTypes][kStatisticsSamples]: 36 categories per
+// player (the same count as goods types).
+constexpr std::uint32_t kStatisticsSamples = 256;
+static_assert(sizeof(GameWorld::statistics[0][0]) == kStatisticsSamples);
+
 std::uint8_t* History(GameWorld* world, std::uint32_t player, std::uint32_t category) {
-    using namespace world_offset;
     // The original computes the offset with 32-bit wrap-around.
-    const std::uint32_t row = (player * kStatisticsCategories + category) * kStatisticsSamples;
-    return &WorldField<std::uint8_t>(world, kStatisticsHistory) + row;
+    const std::uint32_t row = (player * static_cast<std::uint32_t>(kGoodsTypes) + category) * kStatisticsSamples;
+    return &world->statistics[0][0][0] + row;
 }
 
 }  // namespace
@@ -46,10 +53,9 @@ using AddStatisticFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint3
 // Purpose: Fills in the small table of weights used to smooth the curves in the statistics screen. Done
 // once when the world is set up.
 void __fastcall GameWorld_InitStatisticsKernel(GameWorld* world, void* /*edx*/) {
-    static constexpr std::int32_t kKernel[world_offset::kStatisticsKernelSize] = {
-        3, 6, 8, 9, 9, 10, 10, 10, 9, 9, 8, 6, 3};
-    std::memcpy(&WorldField<std::int32_t>(world, world_offset::kStatisticsKernel), kKernel,
-                sizeof(kKernel));
+    static constexpr std::int32_t kKernel[13] = {3, 6, 8, 9, 9, 10, 10, 10, 9, 9, 8, 6, 3};
+    static_assert(sizeof(kKernel) == sizeof(world->statistics_kernel));
+    std::memcpy(world->statistics_kernel, kKernel, sizeof(kKernel));
 }
 
 S3RE_HOOK(0x004ff4c0, GameWorld_InitStatisticsKernel, WorldMethodFn,
@@ -58,12 +64,11 @@ S3RE_HOOK(0x004ff4c0, GameWorld_InitStatisticsKernel, WorldMethodFn,
 // Purpose: Moves every player's statistics history one sample back to make room for a new sample. This is
 // what makes the statistics graphs scroll over time.
 void __fastcall GameWorld_ShiftStatistics(GameWorld* world, void* /*edx*/) {
-    using namespace world_offset;
-    for (std::uint32_t player = 0; player < kStatisticsPlayers; ++player) {
-        if (WorldField<std::int32_t>(world, kPlayerRecords + player * kPlayerRecordBytes) == 0) {
+    for (std::uint32_t player = 0; player < kPlayers; ++player) {
+        if (world->players[player].active == 0) {
             continue;
         }
-        for (std::uint32_t category = 0; category < kStatisticsCategories; ++category) {
+        for (std::uint32_t category = 0; category < kGoodsTypes; ++category) {
             std::uint8_t* samples = History(world, player, category);
             std::memmove(samples + 1, samples, kStatisticsSamples - 1);
             samples[0] = 0;
@@ -95,13 +100,10 @@ S3RE_HOOK(0x004ff510, GameWorld_AddStatistic, AddStatisticFn, Original_GameWorld
 
 namespace {
 
-constexpr std::size_t kHistoryEnd =
-    world_offset::kStatisticsHistory +
-    world_offset::kStatisticsPlayers * world_offset::kStatisticsPlayerBytes;
+constexpr std::size_t kHistoryEnd = offsetof(GameWorld, statistics) + sizeof(GameWorld::statistics);
 constexpr std::size_t kSmallWorld = kHistoryEnd + 0x100;  // kernel + histories
 constexpr std::size_t kLargeWorld =                        // up to the player flags
-    world_offset::kPlayerRecords +
-    world_offset::kStatisticsPlayers * world_offset::kPlayerRecordBytes + 0x100;
+    offsetof(GameWorld, players) + sizeof(GameWorld::players) + 0x100;
 
 using test::WorldBuffer;
 
@@ -120,16 +122,15 @@ void CompareInitKernel(test::Context& ctx, WorldMethodFn candidate, int cases) {
 
 void __fastcall WrongInitKernel(GameWorld* world, void* edx) {
     GameWorld_InitStatisticsKernel(world, edx);
-    WorldField<std::int32_t>(world, world_offset::kStatisticsKernel + 4 * 12) = 4;
+    world->statistics_kernel[12] = 4;
 }
 
 void CompareShiftStatistics(test::Context& ctx, WorldMethodFn candidate, int cases) {
-    using namespace world_offset;
     WorldBuffer a(kLargeWorld);
     WorldBuffer b(kLargeWorld);
     for (int i = 0; i < cases; ++i) {
         ctx.rng().Fill(a.data(), kSmallWorld);
-        for (std::uint32_t player = 0; player < kStatisticsPlayers; ++player) {
+        for (std::uint32_t player = 0; player < kPlayers; ++player) {
             // Inactive (0), small flags, and values whose low byte is 0.
             std::int32_t flag = 0;
             switch (ctx.rng().Below(4)) {
@@ -146,8 +147,7 @@ void CompareShiftStatistics(test::Context& ctx, WorldMethodFn candidate, int cas
                 flag = static_cast<std::int32_t>(ctx.rng().Next32());
                 break;
             }
-            WorldField<std::int32_t>(a.world(), kPlayerRecords + player * kPlayerRecordBytes) =
-                flag;
+            a.world()->players[player].active = flag;
         }
         std::memcpy(b.data(), a.data(), a.size());
         Original_GameWorld_ShiftStatistics(a.world(), nullptr);
@@ -161,9 +161,8 @@ void CompareShiftStatistics(test::Context& ctx, WorldMethodFn candidate, int cas
 
 // Wrong: shifts the histories of inactive players too.
 void __fastcall WrongShiftStatistics(GameWorld* world, void* /*edx*/) {
-    using namespace world_offset;
-    for (std::uint32_t player = 0; player < kStatisticsPlayers; ++player) {
-        for (std::uint32_t category = 0; category < kStatisticsCategories; ++category) {
+    for (std::uint32_t player = 0; player < kPlayers; ++player) {
+        for (std::uint32_t category = 0; category < kGoodsTypes; ++category) {
             std::uint8_t* samples = History(world, player, category);
             std::memmove(samples + 1, samples, kStatisticsSamples - 1);
             samples[0] = 0;
@@ -172,14 +171,13 @@ void __fastcall WrongShiftStatistics(GameWorld* world, void* /*edx*/) {
 }
 
 void CompareAddStatistic(test::Context& ctx, AddStatisticFn candidate, int cases) {
-    using namespace world_offset;
     WorldBuffer a(kSmallWorld);
     WorldBuffer b(kSmallWorld);
     ctx.rng().Fill(a.data(), a.size());
     std::memcpy(b.data(), a.data(), a.size());
     for (int i = 0; i < cases; ++i) {
-        const std::uint32_t player = ctx.rng().Below(kStatisticsPlayers);
-        const std::uint32_t category = ctx.rng().Below(kStatisticsCategories);
+        const std::uint32_t player = ctx.rng().Below(kPlayers);
+        const std::uint32_t category = ctx.rng().Below(kGoodsTypes);
         // Samples around the cap, amounts small, large and "negative".
         std::uint8_t* sample = History(a.world(), player, category);
         if (ctx.rng().Chance(1, 2)) {

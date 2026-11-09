@@ -15,22 +15,29 @@
 #include "hooks.h"
 #include "test/difftest.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <vector>
 
 namespace s3re::game {
 
-struct LandscapeColours;  // opaque: the object in ECX
+// The object in ECX; only the table pointer is known.
+#pragma pack(push, 1)
+struct LandscapeColours {
+    std::uint8_t unk00[0xa0];
+    std::uint16_t* colours;  // 0xa0 slots 0..255 (32-bit pointer, like S3.EXE)
+};
+#pragma pack(pop)
+static_assert(offsetof(LandscapeColours, colours) == 0xa0);
 
 namespace {
 
-constexpr std::uint32_t kColourTable = 0xa0;  // uint16* colours
 constexpr std::uint32_t kSlots = 0x100;
 constexpr std::uintptr_t kTooManyColoursMessage = 0x00731278;  // "Error ! zu viele Farben"
 
 std::uint16_t* ColourTable(LandscapeColours* self) {
-    return *reinterpret_cast<std::uint16_t**>(reinterpret_cast<std::uint8_t*>(self) + kColourTable);
+    return self->colours;
 }
 
 }  // namespace
@@ -74,14 +81,11 @@ namespace {
 // An object with only the table pointer, and the table (257 slots: the
 // original reads slot 256) with guard bytes after it.
 struct ColourTest {
-    std::uint8_t object[kColourTable + 4] = {};
+    LandscapeColours object = {};
     std::uint16_t table[kSlots + 1 + 16] = {};
 
-    ColourTest() {
-        std::uint16_t* p = table;
-        std::memcpy(object + kColourTable, &p, sizeof(p));
-    }
-    LandscapeColours* self() { return reinterpret_cast<LandscapeColours*>(object); }
+    ColourTest() { object.colours = table; }
+    LandscapeColours* self() { return &object; }
 };
 
 // Wrong: a full table overwrites slot 1 instead of 255.

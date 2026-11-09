@@ -43,6 +43,7 @@
 // that two games can start from the same random state.
 
 #include "game/random.h"
+#include "game/raw.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "log.h"
@@ -73,7 +74,7 @@ using GameWorldRandomFn = std::uint16_t(__fastcall*)(GameWorld* world, void* edx
 // lives inside the world object, two games with the same seed and the same commands play out
 // identically. That is what makes multiplayer lockstep and our replays work.
 std::uint16_t __fastcall GameWorld_Random(GameWorld* world, void* /*edx*/) {
-    std::uint16_t* state = &WorldField<std::uint16_t>(world, world_offset::kRandomState);
+    std::uint16_t* state = world->random_state;
     const std::uint16_t a = state[0];
     const std::uint16_t b = state[1];
     const std::uint16_t c = state[2];
@@ -110,7 +111,7 @@ using GameWorldSeedRandomFn = void(__fastcall*)(GameWorld* world, void* edx, std
 // different seed). Our hook also lets the launcher force a seed (--seed), so test runs are
 // repeatable.
 void __fastcall GameWorld_SeedRandom_Impl(GameWorld* world, void* /*edx*/, std::uint32_t seed) {
-    std::uint16_t* state = &WorldField<std::uint16_t>(world, world_offset::kRandomState);
+    std::uint16_t* state = world->random_state;
     state[0] = static_cast<std::uint16_t>(seed);
     state[1] = static_cast<std::uint16_t>(seed + 1000);
     state[2] = static_cast<std::uint16_t>(seed + 2000);
@@ -163,9 +164,10 @@ void __fastcall GameWorld_SeedRandom(GameWorld* world, void* edx, std::uint32_t 
     // % 3. GameSetup (0x431ab0) copies it from byte +0x158 of the config
     // object at 0x7a7af0, which is read from the registry at startup
     // (0x40eeef).
+    constexpr std::uintptr_t kRandomRaceAmazons = 0x7a7ae4;        // g_gameSettings + 0xcc
+    constexpr std::uintptr_t kConfigRandomRaceAmazons = 0x7a7c48;  // config object + 0x158
     S3RE_LOG("game settings: random race includes Amazons=%u (config byte %u)",
-             *reinterpret_cast<const std::uint8_t*>(0x7a7ae4),
-             *reinterpret_cast<const std::uint8_t*>(0x7a7c48));
+             RawAtAddress<std::uint8_t>(kRandomRaceAmazons), RawAtAddress<std::uint8_t>(kConfigRandomRaceAmazons));
     g_lastSeed = static_cast<long>(seed & 0xFFFF);
     if (hooks::OriginalMode()) {
         Original_GameWorld_SeedRandom(world, edx, seed);
@@ -202,7 +204,7 @@ void CompareRandom(test::Context& ctx, GameWorldRandomFn candidate, int sequence
     std::vector<std::uint8_t> bufferB(kBufferSize);
     auto worldOf = [](std::vector<std::uint8_t>& buffer) {
         return reinterpret_cast<GameWorld*>(buffer.data() + kWindowBefore -
-                                            world_offset::kRandomState);
+                                            offsetof(GameWorld, random_state));
     };
 
     for (int sequence = 0; sequence < sequences; ++sequence) {
@@ -226,7 +228,7 @@ void CompareRandom(test::Context& ctx, GameWorldRandomFn candidate, int sequence
 // Wrong in one corner case only: when b ^ t is odd, the rotated-in top bit
 // is dropped.
 std::uint16_t __fastcall WrongRandom(GameWorld* world, void* /*edx*/) {
-    std::uint16_t* state = &WorldField<std::uint16_t>(world, world_offset::kRandomState);
+    std::uint16_t* state = world->random_state;
     const std::uint16_t a = state[0];
     const std::uint16_t b = state[1];
     const std::uint16_t c = state[2];
@@ -255,7 +257,7 @@ S3RE_TEST(GameWorld_RandomBelow6_MatchesOriginal) {
     std::vector<std::uint8_t> bufferA(kBufferSize);
     std::vector<std::uint8_t> bufferB(kBufferSize);
     auto worldOf = [](std::vector<std::uint8_t>& buffer) {
-        return reinterpret_cast<GameWorld*>(buffer.data() + kWindowBefore - world_offset::kRandomState);
+        return reinterpret_cast<GameWorld*>(buffer.data() + kWindowBefore - offsetof(GameWorld, random_state));
     };
     for (int sequence = 0; sequence < 200; ++sequence) {
         ctx.rng().Fill(bufferA.data(), kBufferSize);
@@ -281,7 +283,7 @@ void CompareSeedRandom(test::Context& ctx, GameWorldSeedRandomFn candidate, int 
     std::vector<std::uint8_t> bufferB(kBufferSize);
     auto worldOf = [](std::vector<std::uint8_t>& buffer) {
         return reinterpret_cast<GameWorld*>(buffer.data() + kWindowBefore -
-                                            world_offset::kRandomState);
+                                            offsetof(GameWorld, random_state));
     };
     for (int i = 0; i < cases; ++i) {
         ctx.rng().Fill(bufferA.data(), kBufferSize);
@@ -302,7 +304,7 @@ void CompareSeedRandom(test::Context& ctx, GameWorldSeedRandomFn candidate, int 
 
 // Wrong: b gets seed + 100 instead of seed + 1000.
 void __fastcall WrongSeedRandom(GameWorld* world, void* /*edx*/, std::uint32_t seed) {
-    std::uint16_t* state = &WorldField<std::uint16_t>(world, world_offset::kRandomState);
+    std::uint16_t* state = world->random_state;
     state[0] = static_cast<std::uint16_t>(seed);
     state[1] = static_cast<std::uint16_t>(seed + 100);
     state[2] = static_cast<std::uint16_t>(seed + 2000);

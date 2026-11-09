@@ -70,23 +70,11 @@ namespace s3re::game {
 
 namespace {
 
-// Tile records (re/structs.md "Tile"; to become the tile struct of the
-// planned layout header).
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kTileHeight = 0x4;
-constexpr std::uint32_t kTileScratch = 0x5;
-constexpr std::uint32_t kTileTerrain = 0x6;
-constexpr std::uint32_t kTileObject = 0x7;
-constexpr std::uint32_t kTileFlags = 0xa;
-constexpr std::uint32_t kTileObjectCopy = 0xe;
-constexpr std::uint32_t kTileResources = 0x11;
-
-// World fields (re/world_layout.md); the map size is world_offset::kMapSize.
-constexpr std::uint32_t kSymmetry = 0x2d274;
-constexpr std::uint32_t kField2d254 = 0x2d254;
-constexpr std::uint32_t kField2d258 = 0x2d258;
-constexpr std::uint32_t kOffsetTable = 0x110a588;
-constexpr std::uint32_t kOffsetTableBytes = 0x10;
+// Tile records (re/structs.md "Tile"): +0x5, the scratch byte of the stream
+// carving, is Tile::shade. World fields: the symmetry argument is stored in
+// world->unk2d274 (re/world_layout.md: also read by the player placement
+// 0x5074b0), +0x2d254/+0x2d258 are camera_drawn_x/y.
+using layout::Tile;
 
 constexpr std::uint8_t kRidge = 0x70;
 constexpr std::uint8_t kRidgeLow = 0xf0;  // ridge tile that ends up lower (MarkRidgeHeights)
@@ -104,30 +92,32 @@ constexpr std::uintptr_t kErrorRight = 0x72fea0;     // "Error right %u %u %u"
 constexpr std::int32_t kDx[7] = {0, 1, 1, 0, -1, -1, 0};
 constexpr std::int32_t kDy[7] = {0, 0, 1, 1, 0, -1, -1};
 
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(world) + offset);
-}
-
 std::int32_t MapSize(GameWorld* world) {
-    return At<std::int32_t>(world, world_offset::kMapSize);
+    return static_cast<std::int32_t>(world->map_size);
 }
 
-std::uint32_t Tile(std::int32_t x, std::int32_t y) {
-    return kTiles + static_cast<std::uint32_t>(x * 0x300 + y) * 24;
+// The symmetry argument of Create (world+0x2d274).
+std::uint32_t Symmetry(GameWorld* world) {
+    return static_cast<std::uint32_t>(world->unk2d274);
+}
+
+// Tile (x, y) with the original's 32-bit arithmetic (some passes read and
+// write tiles just outside the map).
+Tile& TileAt(GameWorld* world, std::int32_t x, std::int32_t y) {
+    return TileAtOffset(world, TileOffset(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)));
 }
 
 std::uint8_t& Height(GameWorld* world, std::int32_t x, std::int32_t y) {
-    return At<std::uint8_t>(world, Tile(x, y) + kTileHeight);
+    return TileAt(world, x, y).height;
 }
 std::uint8_t& Scratch(GameWorld* world, std::int32_t x, std::int32_t y) {
-    return At<std::uint8_t>(world, Tile(x, y) + kTileScratch);
+    return TileAt(world, x, y).shade;
 }
 std::uint8_t& Terrain(GameWorld* world, std::int32_t x, std::int32_t y) {
-    return At<std::uint8_t>(world, Tile(x, y) + kTileTerrain);
+    return TileAt(world, x, y).terrain;
 }
 std::uint8_t& Object(GameWorld* world, std::int32_t x, std::int32_t y) {
-    return At<std::uint8_t>(world, Tile(x, y) + kTileObject);
+    return TileAt(world, x, y).object;
 }
 
 std::uint32_t Random16(GameWorld* world) {
@@ -156,23 +146,23 @@ void ForEachTile(std::int32_t first, Last last, Visit visit) {
 
 void ResetTiles(GameWorld* world) {
     ForEachTile(0, [&] { return MapSize(world); }, [&](std::int32_t x, std::int32_t y) {
-        const std::uint32_t tile = Tile(x, y);
-        At<std::uint8_t>(world, tile + 0x4) = 0;
-        At<std::uint8_t>(world, tile + 0x6) = 0;
-        At<std::uint8_t>(world, tile + 0x5) = 0x1f;
-        At<std::uint8_t>(world, tile + 0x9) = 0;
-        At<std::uint8_t>(world, tile + 0xa) = 0;
-        At<std::uint16_t>(world, tile + 0x0) = 0;
-        At<std::uint16_t>(world, tile + 0x2) = 0;
-        At<std::uint8_t>(world, tile + 0xb) = 0;
-        At<std::uint8_t>(world, tile + 0x10) = 0;
-        At<std::uint16_t>(world, tile + 0x14) = 0;
-        At<std::uint16_t>(world, tile + 0x16) = 0;
-        At<std::uint8_t>(world, tile + 0x8) = 0xff;
-        At<std::uint16_t>(world, tile + 0xe) = 0;
-        At<std::uint8_t>(world, tile + 0x7) = 0;
-        At<std::uint8_t>(world, tile + 0x11) = 0;
-        At<std::uint8_t>(world, tile + 0x12) = 0;
+        Tile& tile = TileAt(world, x, y);
+        tile.height = 0;
+        tile.terrain = 0;
+        tile.shade = 0x1f;
+        tile.draw_flags = 0;
+        tile.flags = 0;
+        tile.settler = 0;
+        tile.object_number = 0;
+        tile.search_mark = 0;
+        tile.walk_region = 0;
+        tile.area = 0;
+        tile.wide_region = 0;
+        tile.owner = 0xff;
+        tile.original_object = 0;
+        tile.object = 0;
+        tile.resources = 0;
+        tile.traffic = 0;
     });
 }
 
@@ -584,7 +574,7 @@ bool StreamCanEnter(GameWorld* world, std::int32_t x, std::int32_t y) {
                                                static_cast<std::uint32_t>(y)) != 0;
 }
 
-std::int32_t NextDirection(std::int32_t direction) {
+std::int32_t NextHexDirection(std::int32_t direction) {
     return direction + 1 > 6 ? direction - 5 : direction + 1;
 }
 
@@ -686,7 +676,7 @@ void CarveStream(GameWorld* world, std::int32_t x, std::int32_t y) {
                     }
                 }
             }
-            d = NextDirection(d);
+            d = NextHexDirection(d);
         }
         std::int32_t next = 0;
         std::int32_t top = 0;
@@ -696,7 +686,7 @@ void CarveStream(GameWorld* world, std::int32_t x, std::int32_t y) {
                 top = score;
                 next = d;
             }
-            d = NextDirection(d);
+            d = NextHexDirection(d);
         }
         ++length;
         Scratch(world, cx, cy) = 1;
@@ -812,8 +802,8 @@ void RemoveStrayStreamTiles(GameWorld* world) {
         }
         bool foreign = false;
         for (std::uint32_t entry = 1; entry <= 6; ++entry) {
-            const std::int32_t nx = x + At<std::int32_t>(world, kOffsetTable + entry * kOffsetTableBytes);
-            const std::int32_t ny = y + At<std::int32_t>(world, kOffsetTable + entry * kOffsetTableBytes + 4);
+            const std::int32_t nx = x + world->offsets[entry].dx;
+            const std::int32_t ny = y + world->offsets[entry].dy;
             if (GameWorld_IsOnMap(world, nullptr, static_cast<std::uint32_t>(nx), static_cast<std::uint32_t>(ny)) ==
                 0) {
                 continue;
@@ -914,7 +904,7 @@ void ShapeTerrain(GameWorld* world) {
     GameWorld_ReplaceTerrainF3(world, nullptr, 0x10);
     Grow(world, 0x18, 0x10);
 
-    const std::uint32_t symmetry = At<std::uint32_t>(world, kSymmetry);
+    const std::uint32_t symmetry = Symmetry(world);
     if (symmetry != 0) {
         GameWorld_SetDiagonalTileByteB(world, nullptr, symmetry);
     }
@@ -1008,34 +998,37 @@ void ScatterFish(GameWorld* world) {
         if ((Terrain(world, x, y) & 0xf0) != 0 || Random16(world) <= 40000) {
             return;
         }
-        At<std::uint8_t>(world, Tile(x, y) + kTileResources) = static_cast<std::uint8_t>(Random16(world) & 0xf);
+        TileAt(world, x, y).resources = static_cast<std::uint8_t>(Random16(world) & 0xf);
     });
 }
 
 // The fields a symmetric copy carries: height, terrain, object, flags and
 // resources.
-void CopyTileFields(GameWorld* world, std::uint32_t to, std::uint32_t from) {
-    for (const std::uint32_t field : {kTileHeight, kTileTerrain, kTileObject, kTileFlags, kTileResources}) {
-        At<std::uint8_t>(world, to + field) = At<std::uint8_t>(world, from + field);
-    }
+void CopyTileFields(Tile& to, const Tile& from) {
+    to.height = from.height;
+    to.terrain = from.terrain;
+    to.object = from.object;
+    to.flags = from.flags;
+    to.resources = from.resources;
 }
 
 // Bit 1: tile (j, i) is copied to (n-1-i, n-1-j) for i in [0, n-1), j in
 // [0, n-1-i) (in that order, in place). Bit 0: (j, i) to (i, j) for i in
 // [1, n), j in [0, i).
 void ApplySymmetry(GameWorld* world) {
-    if ((At<std::uint8_t>(world, kSymmetry) & 2) != 0) {
+    // The original tests the low byte of the symmetry field.
+    if ((static_cast<std::uint8_t>(Symmetry(world)) & 2) != 0) {
         for (std::int32_t i = 0; i < MapSize(world) - 1; ++i) {
             for (std::int32_t j = 0; j < MapSize(world) - i - 1; ++j) {
                 const std::int32_t size = MapSize(world);
-                CopyTileFields(world, Tile(size - 1 - i, size - 1 - j), Tile(j, i));
+                CopyTileFields(TileAt(world, size - 1 - i, size - 1 - j), TileAt(world, j, i));
             }
         }
     }
-    if ((At<std::uint8_t>(world, kSymmetry) & 1) != 0) {
+    if ((static_cast<std::uint8_t>(Symmetry(world)) & 1) != 0) {
         for (std::int32_t i = 1; i < MapSize(world); ++i) {
             for (std::int32_t j = 0; j < i; ++j) {
-                CopyTileFields(world, Tile(i, j), Tile(j, i));
+                CopyTileFields(TileAt(world, i, j), TileAt(world, j, i));
             }
         }
     }
@@ -1043,11 +1036,11 @@ void ApplySymmetry(GameWorld* world) {
 
 void FinishTiles(GameWorld* world) {
     ForEachTile(0, [&] { return MapSize(world); }, [&](std::int32_t x, std::int32_t y) {
-        const std::uint32_t tile = Tile(x, y);
-        At<std::uint16_t>(world, tile + kTileObjectCopy) = At<std::uint8_t>(world, tile + kTileObject);
-        const std::uint8_t kind = At<std::uint8_t>(world, tile + kTileTerrain) & 0xf0;
+        Tile& tile = TileAt(world, x, y);
+        tile.original_object = tile.object;
+        const std::uint8_t kind = tile.terrain & 0xf0;
         if (kind == 0x00 || kind == 0x50 || kind == 0x70 || kind == 0x80) {
-            At<std::uint8_t>(world, tile + kTileFlags) |= 0x01;
+            tile.flags |= layout::kTileBlocked;
         }
     });
 }
@@ -1069,10 +1062,10 @@ std::uint32_t __fastcall GameWorld_Create(GameWorld* world, void*, std::uint32_t
                                           std::uint32_t symmetry) {
     GameDebugLog(kCreatingWorld);
     SeedRandomThroughGame(world, seed);
-    At<std::uint32_t>(world, kSymmetry) = symmetry;
-    At<std::int32_t>(world, world_offset::kMapSize) = mapSize;
-    At<std::uint32_t>(world, kField2d254) = 0;
-    At<std::uint32_t>(world, kField2d258) = 0;
+    world->unk2d274 = static_cast<std::int32_t>(symmetry);
+    world->map_size = static_cast<std::uint32_t>(mapSize);
+    world->camera_drawn_x = 0;
+    world->camera_drawn_y = 0;
     if (mapSize > 0) {
         ResetTiles(world);
     }
@@ -1082,11 +1075,11 @@ std::uint32_t __fastcall GameWorld_Create(GameWorld* world, void*, std::uint32_t
     LowerHeights(world);
     LogBorderErrors(world);
 
-    if (At<std::uint32_t>(world, kSymmetry) == 0) {
+    if (Symmetry(world) == 0) {
         RaiseRidges(world);
         MarkRidgeHeights(world);
     }
-    if (At<std::uint32_t>(world, kSymmetry) == 0) {
+    if (Symmetry(world) == 0) {
         SmoothRidgeSlopes(world);
     } else {
         SmoothSlopes(world);
@@ -1100,7 +1093,7 @@ std::uint32_t __fastcall GameWorld_Create(GameWorld* world, void*, std::uint32_t
     ShapeTerrain(world);
     PlaceObjects(world);
     ScatterFish(world);
-    const std::uint32_t symmetryAfter = At<std::uint32_t>(world, kSymmetry);
+    const std::uint32_t symmetryAfter = Symmetry(world);
     if (symmetryAfter != 0) {
         GameWorld_ClearDiagonalTileByteB(world, nullptr, symmetryAfter);
     }
@@ -1118,12 +1111,11 @@ S3RE_HOOK(0x005166d0, GameWorld_Create, CreateFn, Original_GameWorld_Create, Gam
 
 namespace {
 
-constexpr std::size_t kWorldSize = 0x153a128;
-constexpr std::uint32_t kTileRingRead = 0xe07888;
-constexpr std::uint32_t kIdTables = 0xe114d8;
-constexpr std::uint32_t kIdTablesEnd = 0xe125e8 + 0x2000;
-constexpr std::uint32_t kAreaRecords = 0xe145e8;
-constexpr std::uint32_t kAreaRecordBytes = 0x2e0;
+constexpr std::size_t kWorldSize = sizeof(GameWorld);
+// The three id tables with their marks (walk_region_high_water up to the
+// area records; includes area_high_water).
+constexpr std::size_t kIdTables = offsetof(GameWorld, walk_region_high_water);
+constexpr std::size_t kIdTablesEnd = offsetof(GameWorld, areas);
 constexpr std::uint32_t kAreaCount = 4096;
 
 // The writable sections of S3.EXE (its globals), for checking that Create
@@ -1154,18 +1146,19 @@ void BuildOffsetTable(GameWorld* world) {
 // constructor), otherwise it keeps the random fill (garbage outside the map
 // and in the tile fields Create doesn't write).
 void PrepareWorld(test::WorldPair& worlds, bool zeroed) {
-    for (std::uint8_t* bytes : {worlds.originalBytes(), worlds.oursBytes()}) {
+    worlds.Both([&](GameWorld* w) {
+        auto* bytes = reinterpret_cast<std::uint8_t*>(w);
         if (zeroed) {
             std::memset(bytes, 0, kWorldSize);
         }
-        std::memset(bytes + kTileRingRead, 0, 8);
-        std::memset(bytes + 0x32870, 0, 8);  // pending-event ring read/write index
-        std::memset(bytes + 0x366fc, 0, 4);  // event ring write index
+        w->tile_ring_index = {};      // tile ring read/write index
+        w->pending_event_index = {};  // pending-event ring read/write index
+        w->event_index.write = 0;     // event ring write index
         std::memset(bytes + kIdTables, 0, kIdTablesEnd - kIdTables);
         for (std::uint32_t area = 0; area < kAreaCount; ++area) {
-            bytes[kAreaRecords + area * kAreaRecordBytes] = 0xff;
+            w->areas[area].player = 0xff;
         }
-    }
+    });
     BuildOffsetTable(worlds.original());
     BuildOffsetTable(worlds.ours());
 }

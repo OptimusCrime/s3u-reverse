@@ -7,7 +7,8 @@
 // GameWorld::TileScreenX (0x00519610): (x, y) -> 8 * (2x - y + mapSize + 22),
 // the tile's horizontal position in the isometric map image (32-bit wrap).
 // GameWorld::TileScreenY (0x00519640): (x, y) -> 9y - height + 0xb6, with
-// the height from tile byte +0x8.
+// the height from tile byte +0x8 (tile base 0x67440; Tile::height at the
+// real base 0x67444).
 // All: thiscall (ECX = world), two stack arguments, ret 8, full EAX result.
 
 #include "game/world.h"
@@ -21,10 +22,8 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::size_t kTileHeight = 0x8;  // uint8, offset in the tile record
-
 std::uint32_t MapSize(GameWorld* world) {
-    return WorldField<std::uint32_t>(world, world_offset::kMapSize);
+    return world->map_size;
 }
 
 }  // namespace
@@ -58,9 +57,8 @@ std::uint32_t __fastcall GameWorld_TileScreenX(GameWorld* world, void* /*edx*/, 
 // and mouse picking.
 std::uint32_t __fastcall GameWorld_TileScreenY(GameWorld* world, void* /*edx*/, std::uint32_t x,
                                                std::uint32_t y) {
-    const std::uint32_t tile = (x * world_offset::kMapRowTiles + y) * world_offset::kTileBytes;
-    const std::uint8_t height = *(reinterpret_cast<const std::uint8_t*>(world) +
-                                  world_offset::kMapTiles + tile + kTileHeight);
+    // Tile offset in 32-bit arithmetic, like the original.
+    const std::uint8_t height = TileAtOffset(world, TileOffset(x, y)).height;
     return 9u * y - height + 0xb6u;
 }
 
@@ -79,8 +77,7 @@ S3RE_HOOK(0x00519640, GameWorld_TileScreenY, MapXYFn, Original_GameWorld_TileScr
 namespace {
 
 constexpr std::uint32_t kTestMapSize = 384;
-constexpr std::size_t kMapWorld =
-    world_offset::kMapTiles + kTestMapSize * world_offset::kMapRowBytes;
+constexpr std::size_t kMapWorld = offsetof(GameWorld, tiles) + kTestMapSize * kTileRowBytes;
 
 // `onMap`: coordinates must be valid tiles (for functions that read the
 // tile); otherwise anything, mostly around the map edges.
@@ -92,7 +89,7 @@ void CompareMapXY(test::Context& ctx, MapXYFn original, MapXYFn candidate, bool 
         if (!onMap && ctx.rng().Chance(1, 20)) {
             mapSize = ctx.rng().Next32();
         }
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, mapSize);
+        worlds.Both([&](GameWorld* w) { w->map_size = mapSize; });
         auto coordinate = [&]() -> std::uint32_t {
             if (onMap) {
                 return ctx.rng().Below(kTestMapSize);
