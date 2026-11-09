@@ -314,24 +314,71 @@ static_assert(sizeof(PlayerSiteCache) == 0x3c2);
 // Map effects (our name; probably visual effects such as smoke or spell
 // effects): the member object at world+0x14d2bc8 (Volker\LogicInit.cpp,
 // constructor 0x5442c0); see map_effects.cpp.
-struct MapEffect {  // constructors 0x543830 / 0x543880
-    std::uint8_t bytes[0x4c];
+struct MapEffect {  // constructors 0x543830 / 0x543880 (argument a<i>)
+    std::uint32_t start_tick;        // 0x00 a1; 0 = free record
+    std::int16_t duration;           // 0x04 a2 (ticks, signed in PositionAt)
+    std::uint16_t unk06;             // 0x06 a3
+    std::int32_t start_x;            // 0x08 a6 (pixels)
+    std::int32_t start_y;            // 0x0c a7
+    std::int32_t end_x;              // 0x10 a8 (gives the block list)
+    std::int32_t end_y;              // 0x14 a9
+    std::uint32_t unk18;             // 0x18 a11
+    std::uint32_t unk1c;             // 0x1c a12
+    std::uint32_t unk20;             // 0x20 a13
+    std::uint32_t unk24;             // 0x24 a14
+    std::int16_t arc;                // 0x28 a10 hop height (PositionAt)
+    std::uint8_t pad2a[2];           // 0x2a never written (copied garbage)
+    std::uint32_t unk2c;             // 0x2c a15 graphics id? (-1 default)
+    std::uint16_t unk30;             // 0x30 a16 (left alone by the default ctor)
+    std::uint16_t unk32;             // 0x32 a17
+    std::uint32_t unk34;             // 0x34 a20 (-1 default)
+    std::uint8_t unk38;              // 0x38 a18 (0xff default)
+    std::uint8_t unk39;              // 0x39 a19
+    std::uint8_t unk3a;              // 0x3a a4
+    std::uint8_t pad3b;              // 0x3b never written
+    std::uint16_t unk3c;             // 0x3c a5
+    std::uint8_t pad3e[2];           // 0x3e never written
+    std::uint32_t list;              // 0x40 block list (cell) it is linked into
+    std::uint32_t previous;          // 0x44 previous slot in that list
+    std::uint32_t next;              // 0x48 next slot (0 = end)
 };
 static_assert(sizeof(MapEffect) == 0x4c);
+static_assert(offsetof(MapEffect, duration) == 0x04);
+static_assert(offsetof(MapEffect, start_x) == 0x08);
+static_assert(offsetof(MapEffect, end_x) == 0x10);
+static_assert(offsetof(MapEffect, unk18) == 0x18);
+static_assert(offsetof(MapEffect, arc) == 0x28);
+static_assert(offsetof(MapEffect, pad2a) == 0x2a);
+static_assert(offsetof(MapEffect, unk2c) == 0x2c);
+static_assert(offsetof(MapEffect, unk30) == 0x30);
+static_assert(offsetof(MapEffect, unk34) == 0x34);
+static_assert(offsetof(MapEffect, unk38) == 0x38);
+static_assert(offsetof(MapEffect, pad3b) == 0x3b);
+static_assert(offsetof(MapEffect, unk3c) == 0x3c);
+static_assert(offsetof(MapEffect, pad3e) == 0x3e);
+static_assert(offsetof(MapEffect, list) == 0x40);
+static_assert(offsetof(MapEffect, previous) == 0x44);
+static_assert(offsetof(MapEffect, next) == 0x48);
 
-struct MapEffectTable {
+struct MapEffectTable {  // records 1..4999 (0 unused)
     MapEffect records[5000];         // 0x00000
-    std::uint32_t cells[10000];      // 0x5cc60
-    std::uint32_t unk668a0;
-    std::uint32_t cells_x;           // 0x668a4
-    std::uint32_t cells_y;           // 0x668a8
+    std::uint32_t cell_heads[10000]; // 0x5cc60 list head per 256-pixel block (cell)
+    std::int32_t slots_used;         // 0x668a0 highest slot handed out so far
+    std::int32_t blocks_x;           // 0x668a4 blocks per row
+    std::int32_t blocks_y;           // 0x668a8 blocks per column
     std::uint32_t unk668ac;
-    std::uint32_t cell_count;        // 0x668b0
-    std::uint32_t width;             // 0x668b4
-    std::uint32_t height;            // 0x668b8
+    std::int32_t block_count_16;     // 0x668b0 blocks_x * blocks_y / 16
+    std::int32_t width;              // 0x668b4 map width in pixels + margin
+    std::int32_t height;             // 0x668b8 map height in pixels + margin
 };
 static_assert(sizeof(MapEffectTable) == 0x668bc);
-static_assert(offsetof(MapEffectTable, cells) == 0x5cc60);
+static_assert(offsetof(MapEffectTable, cell_heads) == 0x5cc60);
+static_assert(offsetof(MapEffectTable, slots_used) == 0x668a0);
+static_assert(offsetof(MapEffectTable, blocks_x) == 0x668a4);
+static_assert(offsetof(MapEffectTable, blocks_y) == 0x668a8);
+static_assert(offsetof(MapEffectTable, block_count_16) == 0x668b0);
+static_assert(offsetof(MapEffectTable, width) == 0x668b4);
+static_assert(offsetof(MapEffectTable, height) == 0x668b8);
 
 struct Ring1000Indices {
     std::uint32_t read, write;

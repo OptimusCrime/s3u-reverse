@@ -62,6 +62,7 @@
 //   ret 0x10; EAX ignored.
 // All thiscall (ECX = world).
 
+
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -72,61 +73,42 @@
 
 namespace s3re::game {
 
+using layout::Effect;
+using layout::Event;
+using layout::NotificationTimer;
+using layout::PendingEvent;
+using layout::Tile;
+using layout::Trade;
+
 namespace {
 
-constexpr std::uint32_t kBuildingExtras = 0x10f45e8;
-constexpr std::uint32_t kBuildingExtraBytes = 0x5a;
-constexpr std::uint32_t kBuildingExtraLimit = 999;
-constexpr std::uint32_t kBuildingExtraHighWater = 0x110a578;
+constexpr std::uint32_t kBuildingExtraLimit = layout::kMaxTrade + 1;  // 999: never used
+constexpr std::uint32_t kTable36700Limit = layout::kMaxEffect + 1;    // 9999: never used
 
-constexpr std::uint32_t kTable36700 = 0x36700;
-constexpr std::uint32_t kTable36700Bytes = 20;
-constexpr std::uint32_t kTable36700Limit = 9999;
-constexpr std::uint32_t kTable36700HighWater = 0x67440;
-
-constexpr std::uint32_t kEventRing = 0x32878;
-constexpr std::uint32_t kEventBytes = 16;
-constexpr std::uint32_t kEventWrite = 0x366fc;
-constexpr std::uint32_t kPendingRing = 0x2f990;
-constexpr std::uint32_t kPendingBytes = 12;
-constexpr std::uint32_t kPendingRead = 0x32870;
-constexpr std::uint32_t kPendingWrite = 0x32874;
 constexpr std::uint32_t kRingEntries = 1000;
 constexpr std::uint32_t kDedupedType = 6;
 constexpr std::uint32_t kDedupedPendingType = 4;
 
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kTileOwner = 0x8;
-constexpr std::uint32_t kTileTerrain = 0x6;
-constexpr std::uint32_t kTileFlags = 0xa;
-constexpr std::uint32_t kTileByte10 = 0x10;
-constexpr std::uint32_t kTileWord16 = 0x16;
-constexpr std::uint32_t kTileRing = 0xdfdc48;
-constexpr std::uint32_t kTileRingIndex = 0xe0788c;
 constexpr std::uint32_t kTileRingEntries = 10000;
 
-constexpr std::uint32_t kTimers = 0x2e5e0;
 constexpr std::uint32_t kTimerLists = 42;
 constexpr std::uint32_t kTimersPerList = 10;
-constexpr std::uint32_t kTimerBytes = 12;
 
-constexpr std::uint32_t kRecentPositions = 0x1195dd4;
 constexpr std::uint32_t kRecentPositionCount = 0x80;
 constexpr std::uintptr_t kRecentPositionsCursor = 0x7ace60;  // uint16, S3.EXE global
 
-std::uint8_t* Bytes(GameWorld* world) {
-    return reinterpret_cast<std::uint8_t*>(world);
-}
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(Bytes(world) + offset);
-}
-std::uint32_t Address(GameWorld* world) {
-    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
+std::uint32_t Address(const void* p) {
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p));
 }
 
 std::uint16_t RecentPositionsCursor() {
     return *reinterpret_cast<const volatile std::uint16_t*>(kRecentPositionsCursor);
+}
+
+// The tile (x, y) for 32-bit coordinates: the offset is computed in 32 bits,
+// as in the original (no range check).
+Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+    return TileAtOffset(world, TileOffset(x, y));
 }
 
 }  // namespace
@@ -156,7 +138,7 @@ using ReplaceTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, st
 std::uint32_t __fastcall GameWorld_AllocBuildingExtra(GameWorld* world, void*,
                                                       std::uint32_t value) {
     std::uint32_t record = 1;
-    while (At<std::uint8_t>(world, kBuildingExtras + record * kBuildingExtraBytes) != 0xff) {
+    while (world->trades[record].kind != 0xff) {
         if (record == kBuildingExtraLimit) {
             return 0;
         }
@@ -165,16 +147,21 @@ std::uint32_t __fastcall GameWorld_AllocBuildingExtra(GameWorld* world, void*,
     if (record == kBuildingExtraLimit) {
         return 0;
     }
-    if (record > At<std::uint32_t>(world, kBuildingExtraHighWater)) {
-        At<std::uint32_t>(world, kBuildingExtraHighWater) = record;
+    if (record > world->trade_high_water) {
+        world->trade_high_water = record;
     }
-    const std::uint32_t r = kBuildingExtras + record * kBuildingExtraBytes;
-    At<std::uint8_t>(world, r + 0x0) = static_cast<std::uint8_t>(value);
-    At<std::uint8_t>(world, r + 0x1) = 1;
-    for (std::uint32_t field = 0x2; field <= 0x10; field += 2) {
-        At<std::uint16_t>(world, r + field) = 0xffff;
+    Trade& trade = world->trades[record];
+    trade.kind = static_cast<std::uint8_t>(value);
+    trade.unk01 = 1;
+    // The words +0x2..+0x10 in address order: route_x[0..3], route_y[0..3].
+    for (std::uint16_t& word : trade.route_x) {
+        word = 0xffff;
     }
-    std::memset(Bytes(world) + r + 0x12, 0, 0x48);
+    for (std::uint16_t& word : trade.route_y) {
+        word = 0xffff;
+    }
+    // Bytes +0x12..+0x59 (unk12 and coming) in one go, as the original.
+    std::memset(trade.unk12, 0, sizeof(Trade) - offsetof(Trade, unk12));
     return record;
 }
 
@@ -187,22 +174,24 @@ std::uint32_t __fastcall GameWorld_AllocTable36700Record(GameWorld* world, void*
                                                          std::uint32_t a7, std::uint32_t a8,
                                                          std::uint32_t a9) {
     std::uint32_t record = 1;
-    while (At<std::uint16_t>(world, kTable36700 + record * kTable36700Bytes) != 0 &&
-           record != kTable36700Limit) {
+    while (world->effects[record].type != 0 && record != kTable36700Limit) {
         ++record;
     }
     if (record == kTable36700Limit) {
-        return Address(world) + kTable36700 + kTable36700Limit * kTable36700Bytes;
+        return Address(&world->effects[kTable36700Limit]);
     }
-    if (record > At<std::uint32_t>(world, kTable36700HighWater)) {
-        At<std::uint32_t>(world, kTable36700HighWater) = record;
+    if (record > world->effects_high_water) {
+        world->effects_high_water = record;
     }
-    const std::uint32_t values[] = {a0, a1, a2, a3, a4, a5, a6, a7, a8, a9};
-    for (std::uint32_t i = 0; i < 10; ++i) {
-        At<std::uint16_t>(world, kTable36700 + record * kTable36700Bytes + i * 2) =
-            static_cast<std::uint16_t>(values[i]);
+    Effect& effect = world->effects[record];
+    effect.type = static_cast<std::uint16_t>(a0);
+    effect.countdown = static_cast<std::uint16_t>(a1);
+    const std::uint32_t params[] = {a2, a3, a4, a5, a6, a7, a8, a9};
+    for (std::uint32_t i = 0; i < 8; ++i) {
+        effect.params[i] = static_cast<std::uint16_t>(params[i]);
     }
-    return Address(world) + record * kTable36700Bytes;
+    // world + 20 * record (not the record's address: the original's index arithmetic).
+    return Address(world) + record * static_cast<std::uint32_t>(sizeof(Effect));
 }
 
 // Purpose: Adds an event to the world's event queue (e.g. 'settler changed', 'building finished'), from
@@ -211,14 +200,14 @@ std::uint32_t __fastcall GameWorld_AllocTable36700Record(GameWorld* world, void*
 std::uint32_t __fastcall GameWorld_QueueEvent(GameWorld* world, void*, std::uint32_t type,
                                               std::uint32_t a, std::uint32_t b, std::uint32_t c) {
     if (type == kDedupedType) {
-        std::uint32_t read = At<std::uint32_t>(world, kPendingRead);
-        const std::uint32_t write = At<std::uint32_t>(world, kPendingWrite);
+        std::uint32_t read = world->pending_event_index.read;
+        const std::uint32_t write = world->pending_event_index.write;
         if (read != write) {
             bool found = false;
             do {
-                const std::uint32_t entry = kPendingRing + read * kPendingBytes;
-                found = At<std::uint32_t>(world, entry) == kDedupedType &&
-                        At<std::uint32_t>(world, entry + 4) == a;
+                const PendingEvent& entry = world->pending_events[read];
+                found = static_cast<std::uint32_t>(entry.type) == kDedupedType &&
+                        static_cast<std::uint32_t>(entry.a) == a;
                 if (++read == kRingEntries) {
                     read = 0;
                 }
@@ -228,58 +217,49 @@ std::uint32_t __fastcall GameWorld_QueueEvent(GameWorld* world, void*, std::uint
             }
         }
     }
-    const std::uint32_t entry = kEventRing + At<std::uint32_t>(world, kEventWrite) * kEventBytes;
-    At<std::uint32_t>(world, entry + 0x0) = type;
-    At<std::uint32_t>(world, kEventRing + At<std::uint32_t>(world, kEventWrite) * kEventBytes + 0x4) = a;
-    At<std::uint32_t>(world, kEventRing + At<std::uint32_t>(world, kEventWrite) * kEventBytes + 0x8) = b;
-    At<std::uint32_t>(world, kEventRing + At<std::uint32_t>(world, kEventWrite) * kEventBytes + 0xc) = c;
-    const std::uint32_t next = At<std::uint32_t>(world, kEventWrite) + 1;
-    At<std::uint32_t>(world, kEventWrite) = next == kRingEntries ? 0 : next;
+    // The write index is read again for every field, as in the original.
+    world->events[world->event_index.write].type = static_cast<std::int32_t>(type);
+    world->events[world->event_index.write].a = static_cast<std::int32_t>(a);
+    world->events[world->event_index.write].b = static_cast<std::int32_t>(b);
+    world->events[world->event_index.write].c = static_cast<std::int32_t>(c);
+    const std::uint32_t next = world->event_index.write + 1;
+    world->event_index.write = next == kRingEntries ? 0 : next;
     return next;
-}
-
-// Purpose: One step of a flood fill over a player's marked tiles: queues a neighbour if it is marked and
-// belongs to that player, and unmarks it so it is visited only once.
-std::uint32_t __fastcall GameWorld_QueueMarkedTile(GameWorld* world, void*, std::uint32_t x,
-                                                   std::uint32_t y, std::uint32_t player) {
-    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
-    const std::uint8_t flags = At<std::uint8_t>(world, tile + kTileFlags);
-    if ((flags & 0x10) == 0 || (flags & 0x01) != 0 ||
-        At<std::uint8_t>(world, tile + kTileOwner) != player) {
-        return 0;
-    }
-    At<std::uint16_t>(world, kTileRing + At<std::uint32_t>(world, kTileRingIndex) * 4) =
-        static_cast<std::uint16_t>(x);
-    At<std::uint16_t>(world, kTileRing + At<std::uint32_t>(world, kTileRingIndex) * 4 + 2) =
-        static_cast<std::uint16_t>(y);
-    At<std::uint8_t>(world, tile + kTileFlags) &= 0xef;
-    const std::uint32_t next = At<std::uint32_t>(world, kTileRingIndex) + 1;
-    At<std::uint32_t>(world, kTileRingIndex) = next == kTileRingEntries ? 0 : next;
-    return 0;  // callers ignore EAX
 }
 
 namespace {
 
 // Appends (x, y) to the tile ring and clears flag 0x10 of the tile.
-void PushMarkedTile(GameWorld* world, std::uint32_t tile, std::uint32_t x, std::uint32_t y) {
-    At<std::uint16_t>(world, kTileRing + At<std::uint32_t>(world, kTileRingIndex) * 4) =
-        static_cast<std::uint16_t>(x);
-    At<std::uint16_t>(world, kTileRing + At<std::uint32_t>(world, kTileRingIndex) * 4 + 2) =
-        static_cast<std::uint16_t>(y);
-    At<std::uint8_t>(world, tile + kTileFlags) &= 0xef;
-    const std::uint32_t next = At<std::uint32_t>(world, kTileRingIndex) + 1;
-    At<std::uint32_t>(world, kTileRingIndex) = next == kTileRingEntries ? 0 : next;
+void PushMarkedTile(GameWorld* world, Tile& tile, std::uint32_t x, std::uint32_t y) {
+    world->tile_ring[world->tile_ring_index.write].x = static_cast<std::uint16_t>(x);
+    world->tile_ring[world->tile_ring_index.write].y = static_cast<std::uint16_t>(y);
+    tile.flags &= 0xef;
+    const std::uint32_t next = world->tile_ring_index.write + 1;
+    world->tile_ring_index.write = next == kTileRingEntries ? 0 : next;
 }
 
 }  // namespace
+
+// Purpose: One step of a flood fill over a player's marked tiles: queues a neighbour if it is marked and
+// belongs to that player, and unmarks it so it is visited only once.
+std::uint32_t __fastcall GameWorld_QueueMarkedTile(GameWorld* world, void*, std::uint32_t x,
+                                                   std::uint32_t y, std::uint32_t player) {
+    Tile& tile = TileAt(world, x, y);
+    const std::uint8_t flags = tile.flags;
+    if ((flags & 0x10) == 0 || (flags & 0x01) != 0 || tile.owner != player) {
+        return 0;
+    }
+    PushMarkedTile(world, tile, x, y);
+    return 0;  // callers ignore EAX
+}
 
 // Purpose: Like QueueMarkedTile, for marked tiles of three particular terrain types (probably water or
 // other non-land terrain).
 std::uint32_t __fastcall GameWorld_QueueMarkedTileTerrain5To7(GameWorld* world, void*,
                                                               std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
-    const std::uint8_t flags = At<std::uint8_t>(world, tile + kTileFlags);
-    const std::uint8_t terrain = At<std::uint8_t>(world, tile + kTileTerrain);
+    Tile& tile = TileAt(world, x, y);
+    const std::uint8_t flags = tile.flags;
+    const std::uint8_t terrain = tile.terrain;
     if ((flags & 0x10) == 0 || terrain < 5 || terrain > 7 || (flags & 0x80) != 0) {
         return 0;
     }
@@ -290,8 +270,8 @@ std::uint32_t __fastcall GameWorld_QueueMarkedTileTerrain5To7(GameWorld* world, 
 // Purpose: Like QueueMarkedTile, without the owner check.
 std::uint32_t __fastcall GameWorld_QueueMarkedTileNoOwner(GameWorld* world, void*, std::uint32_t x,
                                                           std::uint32_t y) {
-    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
-    const std::uint8_t flags = At<std::uint8_t>(world, tile + kTileFlags);
+    Tile& tile = TileAt(world, x, y);
+    const std::uint8_t flags = tile.flags;
     if ((flags & 0x10) == 0 || (flags & 0x01) != 0) {
         return 0;
     }
@@ -303,24 +283,24 @@ std::uint32_t __fastcall GameWorld_QueueMarkedTileNoOwner(GameWorld* world, void
 // simulation update; probably drives delayed actions.
 std::uint32_t __fastcall GameWorld_CountDownTimers(GameWorld* world, void*) {
     for (std::uint32_t list = 0; list < kTimerLists; ++list) {
-        const std::uint32_t first = kTimers + list * kTimersPerList * kTimerBytes;
+        NotificationTimer* const timers = world->notification_timers[list];
         for (std::uint32_t i = 0; i < kTimersPerList; ++i) {
-            std::uint32_t& timer = At<std::uint32_t>(world, first + i * kTimerBytes);
+            std::int32_t& timer = timers[i].countdown;
             if (timer == 0) {
                 break;
             }
-            if (--timer != 0) {
+            timer = static_cast<std::int32_t>(static_cast<std::uint32_t>(timer) - 1);  // 32-bit wrap
+            if (timer != 0) {
                 continue;
             }
-            // Remove entry i: move the later ones up, clear the last one, and
-            // look at slot i again.
+            // Remove entry i: move the later ones up (dword by dword), clear
+            // the last one's countdown, and look at slot i again.
             for (std::uint32_t k = i; k < kTimersPerList - 1; ++k) {
-                for (std::uint32_t word = 0; word < 3; ++word) {
-                    At<std::uint32_t>(world, first + k * kTimerBytes + word * 4) =
-                        At<std::uint32_t>(world, first + (k + 1) * kTimerBytes + word * 4);
-                }
+                timers[k].countdown = timers[k + 1].countdown;
+                timers[k].x = timers[k + 1].x;
+                timers[k].y = timers[k + 1].y;
             }
-            At<std::uint32_t>(world, first + (kTimersPerList - 1) * kTimerBytes) = 0;
+            timers[kTimersPerList - 1].countdown = 0;
             --i;
         }
     }
@@ -333,20 +313,19 @@ std::uint32_t __fastcall GameWorld_AddToRecentPositions(GameWorld* world, void*,
                                                         std::uint32_t y) {
     const auto x16 = static_cast<std::uint16_t>(x);
     const auto y16 = static_cast<std::uint16_t>(y);
+    // Entries are {y, x}.
     for (std::uint32_t slot = 0; slot < kRecentPositionCount; ++slot) {
-        if (At<std::uint16_t>(world, kRecentPositions + slot * 4) == y16 &&
-            At<std::uint16_t>(world, kRecentPositions + slot * 4 + 2) == x16) {
+        if (world->recent_positions[slot][0] == y16 && world->recent_positions[slot][1] == x16) {
             return 0;
         }
     }
     const std::uint16_t cursor = RecentPositionsCursor();
     std::uint32_t slot = cursor == 0 ? kRecentPositionCount - 1 : cursor - 1u;
-    while (At<std::uint16_t>(world, kRecentPositions + slot * 4) != 0 ||
-           At<std::uint16_t>(world, kRecentPositions + slot * 4 + 2) != 0) {
+    while (world->recent_positions[slot][0] != 0 || world->recent_positions[slot][1] != 0) {
         slot = slot == 0 ? kRecentPositionCount - 1 : slot - 1;
     }
-    At<std::uint16_t>(world, kRecentPositions + slot * 4) = y16;
-    At<std::uint16_t>(world, kRecentPositions + slot * 4 + 2) = x16;
+    world->recent_positions[slot][0] = y16;
+    world->recent_positions[slot][1] = x16;
     return 0;  // the only caller ignores EAX
 }
 
@@ -354,9 +333,9 @@ namespace {
 
 // Appends (x, y) to the tile ring (without touching the tile flags).
 void PushTile(GameWorld* world, std::uint32_t x, std::uint32_t y) {
-    std::uint32_t& index = At<std::uint32_t>(world, kTileRingIndex);
-    At<std::uint16_t>(world, kTileRing + index * 4) = static_cast<std::uint16_t>(x);
-    At<std::uint16_t>(world, kTileRing + index * 4 + 2) = static_cast<std::uint16_t>(y);
+    std::uint32_t& index = world->tile_ring_index.write;
+    world->tile_ring[index].x = static_cast<std::uint16_t>(x);
+    world->tile_ring[index].y = static_cast<std::uint16_t>(y);
     index = index + 1 == kTileRingEntries ? 0 : index + 1;
 }
 
@@ -367,7 +346,7 @@ void PushTile(GameWorld* world, std::uint32_t x, std::uint32_t y) {
 std::uint32_t __fastcall GameWorld_ReplaceTileWord16AndQueue(GameWorld* world, void*, std::uint32_t x,
                                                              std::uint32_t y, std::uint32_t expected,
                                                              std::uint32_t value) {
-    std::uint16_t& field = At<std::uint16_t>(world, kTiles + (x * 0x300 + y) * 24 + kTileWord16);
+    std::uint16_t& field = TileAt(world, x, y).wide_region;
     if (field == expected) {
         field = static_cast<std::uint16_t>(value);
         PushTile(world, x, y);
@@ -379,7 +358,7 @@ std::uint32_t __fastcall GameWorld_ReplaceTileWord16AndQueue(GameWorld* world, v
 std::uint32_t __fastcall GameWorld_ReplaceTileByte10AndQueue(GameWorld* world, void*, std::uint32_t x,
                                                              std::uint32_t y, std::uint32_t expected,
                                                              std::uint32_t value) {
-    std::uint8_t& field = At<std::uint8_t>(world, kTiles + (x * 0x300 + y) * 24 + kTileByte10);
+    std::uint8_t& field = TileAt(world, x, y).walk_region;
     if (field == expected) {
         field = static_cast<std::uint8_t>(value);
         PushTile(world, x, y);
@@ -393,14 +372,14 @@ std::uint32_t __fastcall GameWorld_ReplaceTileByte10AndQueue(GameWorld* world, v
 std::uint32_t __fastcall GameWorld_QueuePendingEvent(GameWorld* world, void*, std::uint32_t type,
                                                      std::uint32_t a, std::uint32_t b) {
     if (type == kDedupedPendingType) {
-        std::uint32_t read = At<std::uint32_t>(world, kPendingRead);
-        const std::uint32_t write = At<std::uint32_t>(world, kPendingWrite);
+        std::uint32_t read = world->pending_event_index.read;
+        const std::uint32_t write = world->pending_event_index.write;
         if (read != write) {
             bool found = false;
             do {
-                const std::uint32_t entry = kPendingRing + read * kPendingBytes;
-                found = At<std::uint32_t>(world, entry) == kDedupedPendingType &&
-                        At<std::uint32_t>(world, entry + 4) == a;
+                const PendingEvent& entry = world->pending_events[read];
+                found = static_cast<std::uint32_t>(entry.type) == kDedupedPendingType &&
+                        static_cast<std::uint32_t>(entry.a) == a;
                 if (++read == kRingEntries) {
                     read = 0;
                 }
@@ -410,13 +389,14 @@ std::uint32_t __fastcall GameWorld_QueuePendingEvent(GameWorld* world, void*, st
             }
         }
     }
-    At<std::uint32_t>(world, kPendingRing + At<std::uint32_t>(world, kPendingWrite) * kPendingBytes) = type;
-    At<std::uint32_t>(world, kPendingRing + At<std::uint32_t>(world, kPendingWrite) * kPendingBytes + 4) = a;
-    At<std::uint32_t>(world, kPendingRing + At<std::uint32_t>(world, kPendingWrite) * kPendingBytes + 8) = b;
-    const std::uint32_t next = At<std::uint32_t>(world, kPendingWrite) + 1;
-    At<std::uint32_t>(world, kPendingWrite) = next;
+    // The write index is read again for every field, as in the original.
+    world->pending_events[world->pending_event_index.write].type = static_cast<std::int32_t>(type);
+    world->pending_events[world->pending_event_index.write].a = static_cast<std::int32_t>(a);
+    world->pending_events[world->pending_event_index.write].b = static_cast<std::int32_t>(b);
+    const std::uint32_t next = world->pending_event_index.write + 1;
+    world->pending_event_index.write = next;
     if (next == kRingEntries) {
-        At<std::uint32_t>(world, kPendingWrite) = 0;
+        world->pending_event_index.write = 0;
     }
     return next;
 }
@@ -450,7 +430,8 @@ S3RE_HOOK(0x00510770, GameWorld_AddToRecentPositions, PositionFn,
 
 namespace {
 
-constexpr std::size_t kTestWorld = kRecentPositions + kRecentPositionCount * 4;
+// Up to the end of the recent positions (the last field these functions use).
+constexpr std::size_t kTestWorld = offsetof(GameWorld, recent_positions) + sizeof(GameWorld::recent_positions);
 
 std::uint32_t Relative(std::uint32_t value, GameWorld* world) {
     return value - Address(world);
@@ -474,40 +455,43 @@ void Compare(test::Context& ctx, int cases, bool compareEax, Call call) {
     }
 }
 
-// Marks all records of a table used except a few (or none).
-void FillTable(test::Context& ctx, test::WorldPair& worlds, std::uint32_t table,
-               std::uint32_t bytes, std::uint32_t limit, bool byteField, std::uint32_t usedValue,
-               std::uint32_t freeValue) {
+// Marks all records of a table used except a few (or none). `setFirst(w,
+// record, value)` writes the record's first field (the free marker);
+// `highWater(w)` is the table's high-water mark.
+template <typename SetFirst, typename HighWater>
+void FillTable(test::Context& ctx, test::WorldPair& worlds, std::uint32_t limit, std::uint32_t usedValue,
+               std::uint32_t freeValue, SetFirst setFirst, HighWater highWater) {
     const bool full = ctx.rng().Chance(1, 8);
     const std::uint32_t freeA = full ? limit + 1 : 1 + ctx.rng().Below(limit);
     const std::uint32_t freeB = ctx.rng().Chance(1, 4) ? limit - 1 + ctx.rng().Below(2) : freeA;
     for (std::uint32_t record = 1; record <= limit; ++record) {
         const bool isFree = record == freeA || record == freeB;
         const std::uint32_t value = isFree ? freeValue : (usedValue == 0 ? 1 + ctx.rng().Below(0xfe) : usedValue);
-        if (byteField) {
-            worlds.Set<std::uint8_t>(table + record * bytes, static_cast<std::uint8_t>(value));
-        } else {
-            worlds.Set<std::uint16_t>(table + record * bytes, static_cast<std::uint16_t>(value));
-        }
+        worlds.Both([&](GameWorld* w) { setFirst(w, record, value); });
     }
     if (ctx.rng().Chance(1, 2)) {
-        worlds.Set<std::uint32_t>(table == kBuildingExtras ? kBuildingExtraHighWater : kTable36700HighWater,
-                                  ctx.rng().Below(limit + 2));
+        const std::uint32_t mark = ctx.rng().Below(limit + 2);
+        worlds.Both([&](GameWorld* w) { highWater(w) = mark; });
     }
 }
 
 void SetUpRings(test::Context& ctx, test::WorldPair& worlds) {
-    worlds.Set<std::uint32_t>(kPendingRead, ctx.rng().Below(kRingEntries));
-    worlds.Set<std::uint32_t>(kPendingWrite, ctx.rng().Chance(1, 8)
-                                                 ? At<std::uint32_t>(worlds.original(), kPendingRead)
-                                                 : ctx.rng().Below(kRingEntries));
-    worlds.Set<std::uint32_t>(kEventWrite, ctx.rng().Chance(1, 8) ? kRingEntries - 1
-                                                                   : ctx.rng().Below(kRingEntries));
+    const std::uint32_t read = ctx.rng().Below(kRingEntries);
+    const std::uint32_t write = ctx.rng().Chance(1, 8) ? read : ctx.rng().Below(kRingEntries);
+    const std::uint32_t eventWrite = ctx.rng().Chance(1, 8) ? kRingEntries - 1 : ctx.rng().Below(kRingEntries);
+    worlds.Both([&](GameWorld* w) {
+        w->pending_event_index.read = read;
+        w->pending_event_index.write = write;
+        w->event_index.write = eventWrite;
+    });
     // Some pending entries of type 6 with small values, so that matches occur.
     for (int k = 0; k < 4; ++k) {
-        const std::uint32_t entry = kPendingRing + ctx.rng().Below(kRingEntries) * kPendingBytes;
-        worlds.Set<std::uint32_t>(entry, kDedupedType);
-        worlds.Set<std::uint32_t>(entry + 4, ctx.rng().Below(4));
+        const std::uint32_t entry = ctx.rng().Below(kRingEntries);
+        const auto a = static_cast<std::int32_t>(ctx.rng().Below(4));
+        worlds.Both([&](GameWorld* w) {
+            w->pending_events[entry].type = kDedupedType;
+            w->pending_events[entry].a = a;
+        });
     }
 }
 
@@ -517,9 +501,7 @@ std::uint32_t __fastcall WrongQueueEvent(GameWorld* world, void*, std::uint32_t 
     if (type == kDedupedType) {
         type = 7;
         const std::uint32_t result = GameWorld_QueueEvent(world, nullptr, type, a, b, c);
-        At<std::uint32_t>(world, kEventRing +
-                                     ((At<std::uint32_t>(world, kEventWrite) + kRingEntries - 1) % kRingEntries) *
-                                         kEventBytes) = kDedupedType;
+        world->events[(world->event_index.write + kRingEntries - 1) % kRingEntries].type = kDedupedType;
         return result;
     }
     return GameWorld_QueueEvent(world, nullptr, type, a, b, c);
@@ -541,7 +523,12 @@ void CompareQueueEvent(test::Context& ctx, QueueEventFn original, QueueEventFn c
 
 S3RE_TEST(GameWorld_AllocBuildingExtra_MatchesOriginal) {
     Compare(ctx, 200, true, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
-        FillTable(ctx, worlds, kBuildingExtras, kBuildingExtraBytes, kBuildingExtraLimit, true, 0, 0xff);
+        FillTable(
+            ctx, worlds, kBuildingExtraLimit, 0, 0xff,
+            [](GameWorld* w, std::uint32_t record, std::uint32_t value) {
+                w->trades[record].kind = static_cast<std::uint8_t>(value);
+            },
+            [](GameWorld* w) -> std::uint32_t& { return w->trade_high_water; });
         const std::uint32_t value = ctx.rng().Next32();
         expected = Original_GameWorld_AllocBuildingExtra(worlds.original(), nullptr, value);
         actual = GameWorld_AllocBuildingExtra(worlds.ours(), nullptr, value);
@@ -550,7 +537,12 @@ S3RE_TEST(GameWorld_AllocBuildingExtra_MatchesOriginal) {
 
 S3RE_TEST(GameWorld_AllocTable36700Record_MatchesOriginal) {
     Compare(ctx, 100, true, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
-        FillTable(ctx, worlds, kTable36700, kTable36700Bytes, kTable36700Limit, false, 0, 0);
+        FillTable(
+            ctx, worlds, kTable36700Limit, 0, 0,
+            [](GameWorld* w, std::uint32_t record, std::uint32_t value) {
+                w->effects[record].type = static_cast<std::uint16_t>(value);
+            },
+            [](GameWorld* w) -> std::uint32_t& { return w->effects_high_water; });
         std::uint32_t v[10];
         for (auto& value : v) {
             value = ctx.rng().Next32();
@@ -579,10 +571,10 @@ namespace {
 std::uint32_t __fastcall WrongQueuePendingEvent(GameWorld* world, void* edx, std::uint32_t type, std::uint32_t a,
                                                 std::uint32_t b) {
     if (type == kDedupedPendingType || type == kDedupedType) {
-        const std::uint32_t write = At<std::uint32_t>(world, kPendingWrite);
+        const std::uint32_t write = world->pending_event_index.write;
         const std::uint32_t result = GameWorld_QueuePendingEvent(world, edx, type ^ 4 ^ 6, a, b);
-        if (At<std::uint32_t>(world, kPendingWrite) != write) {
-            At<std::uint32_t>(world, kPendingRing + write * kPendingBytes) = type;
+        if (world->pending_event_index.write != write) {
+            world->pending_events[write].type = static_cast<std::int32_t>(type);
         }
         return result;
     }
@@ -593,12 +585,15 @@ void CompareQueuePendingEvent(test::Context& ctx, QueuePendingEventFn candidate,
     Compare(ctx, cases, true, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         SetUpRings(ctx, worlds);
         for (int k = 0; k < 4; ++k) {
-            const std::uint32_t entry = kPendingRing + ctx.rng().Below(kRingEntries) * kPendingBytes;
-            worlds.Set<std::uint32_t>(entry, kDedupedPendingType);
-            worlds.Set<std::uint32_t>(entry + 4, ctx.rng().Below(4));
+            const std::uint32_t entry = ctx.rng().Below(kRingEntries);
+            const auto a = static_cast<std::int32_t>(ctx.rng().Below(4));
+            worlds.Both([&](GameWorld* w) {
+                w->pending_events[entry].type = kDedupedPendingType;
+                w->pending_events[entry].a = a;
+            });
         }
         if (ctx.rng().Chance(1, 8)) {
-            worlds.Set<std::uint32_t>(kPendingWrite, kRingEntries - 1);
+            worlds.Both([&](GameWorld* w) { w->pending_event_index.write = kRingEntries - 1; });
         }
         const std::uint32_t type = ctx.rng().Chance(1, 2) ? kDedupedPendingType
                                    : ctx.rng().Chance(1, 3) ? kDedupedType
@@ -608,6 +603,11 @@ void CompareQueuePendingEvent(test::Context& ctx, QueuePendingEventFn candidate,
         expected = Original_GameWorld_QueuePendingEvent(worlds.original(), nullptr, type, a, b);
         actual = candidate(worlds.ours(), nullptr, type, a, b);
     });
+}
+
+void SetTileRingWrite(test::Context& ctx, test::WorldPair& worlds) {
+    const std::uint32_t write = ctx.rng().Chance(1, 8) ? kTileRingEntries - 1 : ctx.rng().Below(kTileRingEntries);
+    worlds.Both([&](GameWorld* w) { w->tile_ring_index.write = write; });
 }
 
 }  // namespace
@@ -625,11 +625,10 @@ S3RE_TEST(GameWorld_QueueMarkedTile_MatchesOriginal) {
     Compare(ctx, 2000, false, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         const std::uint32_t x = ctx.rng().Below(384);
         const std::uint32_t y = ctx.rng().Below(384);
-        const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
         const std::uint32_t player = ctx.rng().Chance(1, 16) ? ctx.rng().Next32() : ctx.rng().Below(4);
-        worlds.Set<std::uint8_t>(tile + kTileOwner, static_cast<std::uint8_t>(ctx.rng().Below(4)));
-        worlds.Set<std::uint32_t>(kTileRingIndex, ctx.rng().Chance(1, 8) ? kTileRingEntries - 1
-                                                                         : ctx.rng().Below(kTileRingEntries));
+        const auto owner = static_cast<std::uint8_t>(ctx.rng().Below(4));
+        worlds.Both([&](GameWorld* w) { w->tiles[x][y].owner = owner; });
+        SetTileRingWrite(ctx, worlds);
         expected = Original_GameWorld_QueueMarkedTile(worlds.original(), nullptr, x, y, player);
         actual = GameWorld_QueueMarkedTile(worlds.ours(), nullptr, x, y, player);
     });
@@ -640,11 +639,11 @@ namespace {
 // Wrong: accepts terrain 4 too.
 std::uint32_t __fastcall WrongQueueMarkedTileTerrain5To7(GameWorld* world, void* edx,
                                                          std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
-    if (At<std::uint8_t>(world, tile + kTileTerrain) == 4) {
-        At<std::uint8_t>(world, tile + kTileTerrain) = 5;
+    std::uint8_t& terrain = TileAt(world, x, y).terrain;
+    if (terrain == 4) {
+        terrain = 5;
         GameWorld_QueueMarkedTileTerrain5To7(world, edx, x, y);
-        At<std::uint8_t>(world, tile + kTileTerrain) = 4;
+        terrain = 4;
         return 0;
     }
     return GameWorld_QueueMarkedTileTerrain5To7(world, edx, x, y);
@@ -655,11 +654,10 @@ void CompareQueueTile(test::Context& ctx, Fn original, Fn candidate, int cases) 
     Compare(ctx, cases, false, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         const std::uint32_t x = ctx.rng().Below(384);
         const std::uint32_t y = ctx.rng().Below(384);
-        const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
-        worlds.Set<std::uint8_t>(tile + kTileTerrain, static_cast<std::uint8_t>(
-                                     ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 3 + ctx.rng().Below(6)));
-        worlds.Set<std::uint32_t>(kTileRingIndex, ctx.rng().Chance(1, 8) ? kTileRingEntries - 1
-                                                                         : ctx.rng().Below(kTileRingEntries));
+        const auto terrain =
+            static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 3 + ctx.rng().Below(6));
+        worlds.Both([&](GameWorld* w) { w->tiles[x][y].terrain = terrain; });
+        SetTileRingWrite(ctx, worlds);
         expected = original(worlds.original(), nullptr, x, y);
         actual = candidate(worlds.ours(), nullptr, x, y);
     });
@@ -688,32 +686,32 @@ namespace {
 std::uint32_t __fastcall WrongReplaceTileWord16AndQueue(GameWorld* world, void* edx, std::uint32_t x,
                                                         std::uint32_t y, std::uint32_t expected,
                                                         std::uint32_t value) {
-    const std::uint16_t field = At<std::uint16_t>(world, kTiles + (x * 0x300 + y) * 24 + kTileWord16);
+    const std::uint16_t field = TileAt(world, x, y).wide_region;
     return GameWorld_ReplaceTileWord16AndQueue(world, edx, x, y, field <= 0xff ? expected & 0xff : expected,
                                                value);
 }
 
-// `field` is kTileWord16 (2 bytes) or kTileByte10 (1 byte).
-void CompareReplaceTile(test::Context& ctx, ReplaceTileFn original, ReplaceTileFn candidate,
-                        std::uint32_t field, std::uint32_t size, int cases) {
+// `wideRegion`: the word wide_region (+0x16), else the byte walk_region (+0x10).
+void CompareReplaceTile(test::Context& ctx, ReplaceTileFn original, ReplaceTileFn candidate, bool wideRegion,
+                        int cases) {
     Compare(ctx, cases, false, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         const std::uint32_t x = ctx.rng().Below(384);
         const std::uint32_t y = ctx.rng().Below(384);
-        const std::uint32_t at = kTiles + (x * 0x300 + y) * 24 + field;
         const std::uint32_t current = ctx.rng().Below(4);
-        if (size == 2) {
-            worlds.Set<std::uint16_t>(at, static_cast<std::uint16_t>(current));
-        } else {
-            worlds.Set<std::uint8_t>(at, static_cast<std::uint8_t>(current));
-        }
+        worlds.Both([&](GameWorld* w) {
+            if (wideRegion) {
+                w->tiles[x][y].wide_region = static_cast<std::uint16_t>(current);
+            } else {
+                w->tiles[x][y].walk_region = static_cast<std::uint8_t>(current);
+            }
+        });
         // Mostly small values (often equal); sometimes high bits set.
         std::uint32_t want = ctx.rng().Below(4);
         if (ctx.rng().Chance(1, 8)) {
             want |= ctx.rng().Next32() & ~0xffu;
         }
         const std::uint32_t value = ctx.rng().Next32();
-        worlds.Set<std::uint32_t>(kTileRingIndex, ctx.rng().Chance(1, 8) ? kTileRingEntries - 1
-                                                                         : ctx.rng().Below(kTileRingEntries));
+        SetTileRingWrite(ctx, worlds);
         expected = original(worlds.original(), nullptr, x, y, want, value);
         actual = candidate(worlds.ours(), nullptr, x, y, want, value);
     });
@@ -723,17 +721,17 @@ void CompareReplaceTile(test::Context& ctx, ReplaceTileFn original, ReplaceTileF
 
 S3RE_TEST(GameWorld_ReplaceTileWord16AndQueue_MatchesOriginal) {
     CompareReplaceTile(ctx, Original_GameWorld_ReplaceTileWord16AndQueue,
-                       &GameWorld_ReplaceTileWord16AndQueue, kTileWord16, 2, 2000);
+                       &GameWorld_ReplaceTileWord16AndQueue, true, 2000);
 }
 S3RE_TEST(GameWorld_ReplaceTileWord16AndQueue_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareReplaceTile(probe, Original_GameWorld_ReplaceTileWord16AndQueue, &WrongReplaceTileWord16AndQueue,
-                       kTileWord16, 2, 2000);
+                       true, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 S3RE_TEST(GameWorld_ReplaceTileByte10AndQueue_MatchesOriginal) {
     CompareReplaceTile(ctx, Original_GameWorld_ReplaceTileByte10AndQueue,
-                       &GameWorld_ReplaceTileByte10AndQueue, kTileByte10, 1, 2000);
+                       &GameWorld_ReplaceTileByte10AndQueue, false, 2000);
 }
 
 S3RE_TEST(GameWorld_CountDownTimers_MatchesOriginal) {
@@ -741,7 +739,10 @@ S3RE_TEST(GameWorld_CountDownTimers_MatchesOriginal) {
         // Small timer values (many expire) with a zero somewhere in most lists.
         for (std::uint32_t entry = 0; entry < kTimerLists * kTimersPerList; ++entry) {
             if (ctx.rng().Chance(1, 2)) {
-                worlds.Set<std::uint32_t>(kTimers + entry * kTimerBytes, ctx.rng().Below(4));
+                const auto countdown = static_cast<std::int32_t>(ctx.rng().Below(4));
+                worlds.Both([&](GameWorld* w) {
+                    w->notification_timers[entry / kTimersPerList][entry % kTimersPerList].countdown = countdown;
+                });
             }
         }
         expected = Original_GameWorld_CountDownTimers(worlds.original(), nullptr);
@@ -759,12 +760,18 @@ S3RE_TEST(GameWorld_AddToRecentPositions_MatchesOriginal) {
         // keep at least one empty slot (the original would loop forever).
         for (std::uint32_t slot = 0; slot < kRecentPositionCount; ++slot) {
             const bool empty = ctx.rng().Chance(1, 16);
-            worlds.Set<std::uint16_t>(kRecentPositions + slot * 4,
-                                      empty ? 0 : static_cast<std::uint16_t>(ctx.rng().Below(8)));
-            worlds.Set<std::uint16_t>(kRecentPositions + slot * 4 + 2,
-                                      empty ? 0 : static_cast<std::uint16_t>(ctx.rng().Below(8)));
+            const auto first = empty ? std::uint16_t{0} : static_cast<std::uint16_t>(ctx.rng().Below(8));
+            const auto second = empty ? std::uint16_t{0} : static_cast<std::uint16_t>(ctx.rng().Below(8));
+            worlds.Both([&](GameWorld* w) {
+                w->recent_positions[slot][0] = first;
+                w->recent_positions[slot][1] = second;
+            });
         }
-        worlds.Set<std::uint32_t>(kRecentPositions + ctx.rng().Below(kRecentPositionCount) * 4, 0);
+        const std::uint32_t emptySlot = ctx.rng().Below(kRecentPositionCount);
+        worlds.Both([&](GameWorld* w) {
+            w->recent_positions[emptySlot][0] = 0;
+            w->recent_positions[emptySlot][1] = 0;
+        });
         const std::uint32_t x = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(8);
         const std::uint32_t y = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(8);
         expected = Original_GameWorld_AddToRecentPositions(worlds.original(), nullptr, x, y);
