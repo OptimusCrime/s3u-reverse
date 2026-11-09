@@ -20,7 +20,9 @@ against the original game's behavior, not just "looks right".
   Then re-apply our names with `set_addresses_names`, using the output of
   `python tools/inventory.py names`.
 - **While working:** permanent facts and procedures go in this file. Data
-  goes in `re/`. Progress goes in `LOGBOOK.md`.
+  goes in `re/`. Progress goes in `LOGBOOK.md`. Things that should be done
+  at some point but not now go in `TODO.md` (the backlog); when picking the
+  next piece of work, check it too, and remove items when they are done.
 - **Before stopping, or after finishing a piece of work:** update
   `LOGBOOK.md` (current focus, next steps, open questions, and a dated
   session-log entry), then commit.
@@ -459,6 +461,20 @@ replaying, see `src/s3re/replay/command_log.h`):
     linker folding
   When a function's purpose becomes clear, rename it and set it to
   `identified`.
+- **Names are ours and can be wrong.** `S3.EXE` has no symbols: only class
+  names (RTTI) and source file names come from the binary; every function
+  name was given by us from what we understood at the time, and earlier
+  analysis can be wrong (e.g. `EvaluateBuildingFootprint` turned out to be
+  `PlanSiteLevelling`; `GameWorld::Create` is the random map generator).
+  **Whenever a name turns out to be misleading or wrong, rename it** (also
+  for verified functions, and for structs, fields and globals): update
+  `re/functions.csv` (keep the old name in the notes: "Was X"), the hook and
+  code names in `src/` (test names too), `python tools/whole_game.py
+  fix-names`, `re/structs.md` / `re/world_layout.md` / `re/globals.csv`
+  where relevant, then `python tools/inventory.py check`. If a rename is
+  large or collides with work in progress, add it to `TODO.md` instead of
+  skipping it. Prefer the original's real names where the binary gives
+  them (RTTI class names such as `CGameData`, German log strings).
 - Constructors aren't named yet. `classes.json` lists the functions that
   store each vtable (constructors, destructors, or code that inlined them).
 
