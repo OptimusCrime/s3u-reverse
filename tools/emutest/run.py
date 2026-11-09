@@ -141,9 +141,10 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
             for address, value, size in spec.globals(rng, pool, args):
                 mask = (1 << (8 * size)) - 1
                 machine.uc.mem_write(address, (value & mask).to_bytes(size, "little"))
+        limit = spec.max_instructions or emu.MAX_INSTRUCTIONS
         a = machine.call(spec.original, ecx, edx, stack_args, registers,
-                         cover=(original.start, original.end))
-        b = machine.call(ours, ecx, edx, stack_args, registers)
+                         cover=(original.start, original.end), max_instructions=limit)
+        b = machine.call(ours, ecx, edx, stack_args, registers, max_instructions=limit)
         if a.fault and b.fault and not (a.spec_error or b.spec_error):
             result["invalid"] += 1
             continue

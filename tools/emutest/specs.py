@@ -119,6 +119,9 @@ class Spec:
     # are not reimplemented and can't run in the emulator; say why at the
     # spec.
     callees: dict | None = None
+    # Instruction limit per call instead of emu.MAX_INSTRUCTIONS (for
+    # functions whose debug-build replacement needs more on big inputs).
+    max_instructions: int | None = None
 
 
 MAP_SIZE = 0x2d2d0
@@ -2285,6 +2288,9 @@ SPECS += [
          presets=string_world, exempt_blocks=(0x0040248a, 0x004023ee)),
     Spec("String_ConcatChars", 0x00401c70, "thiscall", [text_or_null], presets=string_world,
          edx=one_of(STRING_SELF_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR), exempt_blocks=(0x00401ce6,)),
+    # Batch 27: the byte-identical twin in Dirk\GameParams.cpp's unit.
+    Spec("String_ConcatChars2", 0x00437480, "thiscall", [text_or_null], presets=string_world,
+         edx=one_of(STRING_SELF_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR), exempt_blocks=(0x004374f6,)),
 ]
 
 # --- Batch 22: the other std::string members, string members of game
@@ -3750,4 +3756,299 @@ SELF_TEST += [
     # in the stationary record's kind (dword +0x34: 0x63 against 0x5d), a few
     # bytes from the ignored padding bytes +0x3b / +0x3e.
     spawn_spec("MapEffects_Spawn_545070", 0x00544f20, [anything] + [coordinate] * 4),
+]
+
+
+# -- batch 27: assertion and out-of-memory errors (win32_errors.cpp) and the
+# default-allocator substring constructor (msvc6/string.cpp) ---------------
+#
+# Objects at world offset 0 as in batch 26 (message string at +8, from
+# scratch slot 0). CAssertmentFailed's expression and file are the C text
+# of string_world or null; 0x7a7868 (the "" the message is built from) is
+# sometimes non-empty (empty_text).
+
+
+def assertment_object(rng, pool, args):
+    """string_world, plus the expression, file and line of a CAssertmentFailed
+    at world offset 0 (for its text function)."""
+    fields = string_world(rng, pool, args)
+    return fields + [(0x18, text_or_null(rng, pool), 4), (0x1c, text_or_null(rng, pool), 4),
+                     (0x20, rng.choice([0, 1, 99, 1234, rng.getrandbits(32)]), 4)]
+
+
+SPECS += [
+    # Dead, as at String_FromSubstr: the self-assignment path on a
+    # just-emptied string (_Xran, the memmove, _Eos, the second _Xran
+    # check, the copy and the release of its null old buffer).
+    Spec("String_FromSubstrDefault", 0x00408cc0, "thiscall", [SELF_OR_OTHER, string_count, string_count],
+         presets=string_world,
+         exempt_blocks=(0x00408d14, 0x00408d2f, 0x00408d57, 0x00408d6f, 0x00408d79, 0x00408da3)),
+    Spec("Win32_CProgrammingError_Construct", 0x00614eb0, "thiscall", [message_ptr, mostly_derived],
+         presets=string_world),
+    # Dead: 0x612700 is the _Eos after erase(0, npos) of a temporary; the
+    # new length is always 0, for which _Grow returns false.
+    Spec("Win32_COutOfMemory_Construct", 0x006124a0, "thiscall", [message_ptr, mostly_derived],
+         presets=string_world, exempt_blocks=(0x00612700,)),
+    # ignore_bytes: the result's allocator byte is the low byte of the
+    # address of the original's last stack temporary (0x408cc0 takes it from
+    # its argument's slot), ours that of our own temporary; MSVC 6.0's
+    # allocator is an empty class that is never read.
+    Spec("Win32_CAssertmentFailed_Describe", 0x00612e80, "thiscall", [one_of(STRING_RESULT_PTR)],
+         presets=assertment_object, ignore_bytes=(STRING_RESULT,)),
+    # Dead: 0x612b72 and 0x612c2e are the _Eos after erase(0, npos) (as
+    # above); 0x612bcd / 0x612bd1 split the text from 0x612e80 (called
+    # directly) when its buffer is shared, but that function frees the
+    # temporary its result shared with, so the count is always 0.
+    Spec("Win32_CAssertmentFailed_Construct", 0x00612a20, "thiscall",
+         [text_or_null, text_or_null, anything, mostly_derived], presets=string_world, globals=empty_text,
+         exempt_blocks=(0x00612b72, 0x00612bcd, 0x00612bd1, 0x00612c2e)),
+    Spec("Win32_ThrowAssertmentFailed", 0x006119b0, "fastcall", [text_or_null, text_or_null, anything],
+         presets=string_world, globals=empty_text, new_fails=0.2, new_fails_size=0x24),
+    Spec("Win32_ThrowOutOfMemory", 0x00610960, "fastcall", [text_or_null, text_or_null, anything],
+         presets=string_world, new_fails=0.2, new_fails_size=0x18),
+]
+
+SELF_TEST += [
+    # ignore_bytes on the result's allocator byte: the wrong text function
+    # drops the newline, so the length dword (+8) and the text differ.
+    Spec("WrongDescribe", 0x00612e80, "thiscall", [one_of(STRING_RESULT_PTR)],
+         presets=assertment_object, ignore_bytes=(STRING_RESULT,)),
+]
+
+
+# -- batch 27: Lobby::CMemoryBlock and CLMGeneric (lobby_memory_block.cpp) ---
+#
+# `this` is a block at world offset 0 (block functions) or a message at 0
+# whose block is at +4 (CLMGeneric). The other block / message is in scratch
+# slot 0; data blocks are in slots 1 and 2 (lazily random bytes).
+
+BLOCK_OTHER = SCRATCH
+BLOCK_DATA = SCRATCH + 1 * SCRATCH_SLOT_BYTES
+BLOCK_OTHER_DATA = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+BLOCK_SOURCE = SCRATCH + 3 * SCRATCH_SLOT_BYTES
+
+
+def block_fields(rng, offset: int, data: int):
+    used = rng.choice([0, 0, 1, 4, 15, 16, 17, rng.randrange(0x40)])
+    has_data = rng.random() < 0.85 or used == 0 and rng.random() < 0.5
+    reserved = rng.choice([used, used, (used + 15) & ~15, rng.randrange(0x50)])
+    return [(offset + 4, WORLD_BASE + data if has_data else 0, 4), (offset + 8, reserved, 4),
+            (offset + 0xc, used if has_data else rng.choice([0, used]), 4)]
+
+
+def block_world(at: int):
+    """A block at world offset `at` (0, or 4 inside a message) and another at
+    the same offset in scratch slot 0."""
+    def presets(rng, pool, args):
+        return block_fields(rng, at, BLOCK_DATA) + block_fields(rng, BLOCK_OTHER + at, BLOCK_OTHER_DATA)
+    return presets
+
+
+def block_size(rng, pool) -> int:
+    return rng.choice([0, 1, 4, 15, 16, 17, 32, 48, rng.randrange(0x60)])
+
+
+SPECS += [
+    Spec("Lobby_MemoryBlock_Size", 0x00601270, "thiscall", [], presets=block_world(0)),
+    # 0x60134b: the catch(...) handler (only reachable by an exception).
+    Spec("Lobby_MemoryBlock_Reserve", 0x00601280, "thiscall", [block_size], eax_mask=0, presets=block_world(0),
+         new_fails=0.15, exempt_blocks=(0x0060134b,)),
+    Spec("Lobby_MemoryBlock_Append", 0x00601170, "thiscall", [one_of(WORLD_BASE + BLOCK_OTHER)], eax_mask=0,
+         presets=block_world(0), new_fails=0.1),
+    # 0x60122d: the catch(...) handler.
+    Spec("Lobby_MemoryBlock_AppendBytes", 0x006011c0, "thiscall", [one_of(WORLD_BASE + BLOCK_SOURCE), block_size],
+         eax_mask=0, presets=block_world(0), new_fails=0.1, exempt_blocks=(0x0060122d,)),
+    Spec("Lobby_MemoryBlock_At", 0x00600ee0, "thiscall", [below(0x42)], presets=block_world(0), new_fails=0.1),
+    Spec("Lobby_MemoryBlock_Equal", 0x00600ea0, "thiscall", [one_of(WORLD_BASE + BLOCK_OTHER, WORLD_BASE)],
+         presets=block_world(0)),
+    Spec("Lobby_MemoryBlock_Copy", 0x00600e40, "thiscall", [one_of(WORLD_BASE + BLOCK_OTHER)],
+         presets=block_world(0), new_fails=0.1),
+    # cover_until: nop padding follows the tail jump.
+    Spec("Lobby_MemoryBlock_Destroy", 0x00600e70, "thiscall", [], presets=block_world(0), cover_until=0x00600e7b),
+    Spec("Lobby_CLMGeneric_SetHeader", 0x00603270, "thiscall", [anything], eax_mask=0, presets=block_world(4),
+         new_fails=0.1),
+    Spec("Lobby_CLMGeneric_Construct", 0x00601e80, "thiscall", [anything], presets=block_world(4), new_fails=0.1),
+    Spec("Lobby_CLMGeneric_Equal", 0x006027d0, "thiscall", [one_of(WORLD_BASE + BLOCK_OTHER, WORLD_BASE)],
+         presets=block_world(4)),
+    Spec("Lobby_CLMGeneric_Destroy", 0x00602190, "thiscall", [], presets=block_world(4), cover_until=0x0060219e),
+]
+
+
+# -- batch 27: CStaticText (ui_static_text.cpp) ------------------------------
+#
+# The object at world offset 0; its text from string_world's second string
+# (scratch slot 0); the rectangle in scratch slot 5 (lazily random). The
+# text member's allocator byte is the low byte of the rectangle's address.
+
+SPECS += [
+    Spec("CStaticText_Construct", 0x0041c3e0, "thiscall",
+         [one_of(WORLD_BASE + SCRATCH + 5 * SCRATCH_SLOT_BYTES, WORLD_BASE + SCRATCH + 5 * SCRATCH_SLOT_BYTES + 0x31),
+          one_of(STRING_OTHER_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR, WORLD_BASE + 0x28),
+          one_of(0, 0, 0x24, 7, 0x12345678)],
+         presets=string_world,
+         # Dead: 0x41c434 caps a length above 0xFFFFFFFF; 0x41c445, 0x41c460
+         # and 0x41c488 are the _Xran, erase-memmove and _Eos of the
+         # self-assignment, whose length was just set to 0; 0x41c4f9 copies
+         # from the static empty string when the source has no buffer but a
+         # non-zero length (an inconsistent string).
+         exempt_blocks=(0x0041c434, 0x0041c445, 0x0041c460, 0x0041c488, 0x0041c4f9)),
+    Spec("CStaticText_SetStyle", 0x0041ca60, "thiscall", [anything]),
+]
+
+
+# -- batch 27: Watcom vector of strings, resize (watcom/string_vector.cpp) ---
+#
+# The vector at world offset 0; its entries (16-byte strings) in scratch
+# slot 0, their buffers in slots 1.. (one 0x100-byte area per entry, some
+# shared). The new strings' allocator byte is the low byte of n.
+
+
+def string_vector_state(rng, pool, args):
+    capacity = rng.choice([0, 1, 2, 3, 4, 5, 6])
+    filled = rng.randint(0, capacity) if rng.random() < 0.9 else rng.randint(-2, 0) & 0xFFFFFFFF
+    fields = [(0, FAKE_VTABLE, 4), (8, WORLD_BASE + SCRATCH if capacity else rng.choice([0, WORLD_BASE + SCRATCH]), 4),
+              (0xc, capacity, 4), (0x10, filled, 4), (0x14, rng.randrange(8), 4)]
+    ptrs = []
+    for i in range(capacity):
+        shared = rng.choice(ptrs) if ptrs and rng.random() < 0.3 else None
+        entry, ptr = string_fields(rng, SCRATCH + 16 * i, SCRATCH + SCRATCH_SLOT_BYTES + 0x100 * i,
+                                   shared_ptr=shared)
+        fields += entry
+        if ptr:
+            ptrs.append(ptr)
+    return fields
+
+
+SPECS += [
+    # Dead, in the inlined destructor of the old entries: 0x40a6d0 is the
+    # _Eos after erase(0, npos) (new length 0: _Grow returns false); 0x40a6fc
+    # decrements the count byte, but the split before the erase left the
+    # buffer unshared (count 0) or frozen.
+    Spec("StringVector_Resize", 0x0040a580, "thiscall", [small_or_anything(0, 8)], presets=string_vector_state,
+         new_fails=0.1, exempt_blocks=(0x0040a6d0, 0x0040a6fc)),
+]
+
+
+# -- batch 27: the "roomy" region flood fill (flood_fills.cpp) ---------------
+#
+# Tiles of the small map mostly marked 0x10 and unblocked, terrain rarely of
+# class 0x2_ (the room check of 0x51d000 looks two steps around each tile;
+# tiles beyond the map are lazily random).
+
+
+def flood_roomy(rng, pool, args):
+    # The big map (all of it roomy) wraps the 10,000-entry ring.
+    n, big = flood_map(rng, args, big_chance=0.03)
+    blocked = 0.0 if big else rng.choice([0.0, 0.02, 0.1])
+    fields = [(MAP_SIZE, n, 4)]
+    for x in range(-2, n + 2):
+        for y in range(-2, n + 2):
+            if x * 0x300 + y < 0:
+                continue
+            flags = rng.getrandbits(8)
+            if rng.random() >= blocked:
+                flags = (flags | 0x10) & ~0x01
+            terrain = rng.getrandbits(8)
+            if terrain & 0xf0 == 0x20 and (big or rng.random() < 0.9):
+                terrain ^= 0x40
+            offset = tile(x, y)
+            fields += [(offset + 0xa, flags, 1), (offset + 0x6, terrain, 1)]
+    return fields
+
+
+SPECS += [
+    Spec("GameWorld_FloodSetWord16RoomyTiles", 0x0051d2b0, "thiscall",
+         [below(12), below(12), anything], eax_mask=0, presets=flood_roomy, max_cases=150,
+         # A fill of the whole 101 x 101 map runs the two-step room check
+         # 60,000 times; our debug build needs more than 20M instructions.
+         max_instructions=100_000_000),
+]
+
+
+# -- batch 27: the shared land evaluation object (ai_evaland.cpp) ------------
+#
+# The object at world offset 0 (grid pointer +0x158 into scratch or null).
+# The CRT's eh vector destructor iterator (0x61f18a) is a callee probe: it
+# would run the original list destructor 0x5591e0 on the 20 lists, which
+# needs real list nodes (in-process tests cover that); here only its
+# arguments are compared.
+
+EH_VECTOR_DESTRUCTOR = {0x0061f18a: (4, "stdcall", "probe")}
+
+
+def evaland_object(rng, pool, args):
+    return [(0x158, rng.choice([0, WORLD_BASE + SCRATCH]), 4)]
+
+
+def evaland_globals(rng, pool, args):
+    return [(0x007e0568, rng.choice([1, 1, 2, 3, 0, rng.getrandbits(32)]), 4),
+            (0x007e056c, rng.choice([WORLD_BASE, WORLD_BASE, 0]), 4),
+            (0x007e3134, rng.getrandbits(32), 4)]
+
+
+SPECS += [
+    Spec("AI_EvaLand_Destroy", 0x00553fe0, "thiscall", [], eax_mask=0, presets=evaland_object,
+         globals=evaland_globals, callees=EH_VECTOR_DESTRUCTOR),
+    Spec("AI_EvaLand_Release", 0x00553dc0, "stdcall", [], presets=evaland_object, globals=evaland_globals,
+         callees=EH_VECTOR_DESTRUCTOR),
+]
+
+
+# -- batch 27: small framework, container, UI and graphics members
+# (framework_small.cpp) and string::compare(const char*) -------------------
+#
+# Objects at world offset 0; nodes, outputs and data in scratch slots.
+
+
+def field_or_zero(offset: int, target: int):
+    return lambda rng, pool, args: [(offset, rng.choice([0, WORLD_BASE + target, rng.getrandbits(32)]), 4)]
+
+
+def gfx_tables(table_field: int):
+    def presets(rng, pool, args):
+        return [(table_field + 4 * g, WORLD_BASE + SCRATCH + (1 + g) * SCRATCH_SLOT_BYTES, 4) for g in range(4)]
+    return presets
+
+
+def gfx_id(rng, pool) -> int:
+    return rng.randrange(4) << 16 | rng.choice([0, 1, 2, 5, 9, rng.randrange(40)])
+
+
+SPECS += [
+    Spec("WCIsvListBase_Destroy", 0x0060b5a0, "thiscall", [], presets=field_or_zero(8, SCRATCH)),
+    Spec("WCIsvList_Insert", 0x0060b430, "thiscall", [one_of(WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES)],
+         presets=lambda rng, pool, args: [(8, rng.choice([0, WORLD_BASE + SCRATCH]), 4)]),
+    Spec("WCIntVector_Construct", 0x004376b0, "thiscall", [small_or_anything(0, 6), anything], new_fails=0.2),
+    Spec("WCIntVector_Destroy", 0x00414590, "thiscall", [],
+         presets=lambda rng, pool, args: [(8, rng.choice([0, WORLD_BASE + SCRATCH]), 4)]),
+    Spec("Lobby_ScaleBy4_44c450", 0x0044c450, "stdcall", [scratch(0), anything, anything, anything, anything]),
+    Spec("Win32_CWin32Handle_Set", 0x0060bf00, "thiscall", [anything, anything]),
+    Spec("Lobby_MemoryBlock_Assign", 0x00600e80, "thiscall", [one_of(WORLD_BASE + BLOCK_OTHER, WORLD_BASE)],
+         presets=block_world(0), new_fails=0.1),
+    Spec("Win32_CRegistryKey_Construct", 0x00616430, "thiscall", []),
+    Spec("Win32_CEvent_Construct", 0x0060c510, "thiscall", []),
+    Spec("Lobby_HasField4_5da3a0", 0x005da3a0, "thiscall", [],
+         presets=lambda rng, pool, args: [(4, rng.choice([0, rng.getrandbits(32)]), 4)]),
+    Spec("UI_CopyWords_418fb0", 0x00418fb0, "fastcall", [scratch(0), scratch(1), below(20)]),
+    Spec("UI_WideEos_428880", 0x00428880, "thiscall", [below(30)],
+         presets=lambda rng, pool, args: [(4, WORLD_BASE + SCRATCH, 4)]),
+    Spec("GfxData_FramePointer_5fac70", 0x005fac70, "thiscall", [scratch(6), gfx_id], presets=gfx_tables(0x5ac)),
+    Spec("GfxData_AnimationPointer_5faaf0", 0x005faaf0, "thiscall", [scratch(6), gfx_id],
+         presets=gfx_tables(0x494)),
+    Spec("String_CompareText", 0x0040a0e0, "thiscall", [one_of(STRING_TEXT_PTR)], presets=string_world),
+]
+
+
+def message_block_source(rng, pool, args):
+    """block_world(4) (the message at world 0, another in scratch slot 0)
+    plus random fields +0x14..+0x20 of the source."""
+    return block_world(4)(rng, pool, args)
+
+
+SPECS += [
+    Spec("WCUIntVector_Destroy", 0x00458590, "thiscall", [],
+         presets=lambda rng, pool, args: [(8, rng.choice([0, WORLD_BASE + SCRATCH]), 4)]),
+    Spec("WCIntVector_ConstructBare", 0x00437730, "thiscall", [small_or_anything(0, 6)], new_fails=0.2),
+    Spec("Lobby_CLMMessageBlock_Copy", 0x00601470, "thiscall", [one_of(WORLD_BASE + BLOCK_OTHER)],
+         presets=message_block_source, new_fails=0.1),
 ]

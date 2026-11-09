@@ -268,6 +268,22 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   which quotes the instructions. `frontier.py` counts them as done, a
   forwarder only once its target is done (`--no-trivial` turns this off).
   Run `trivial.py check` after regenerating the function list.
+- **Allocator bytes of MSVC 6.0 strings** (decided 2026-11-09, batch
+  27). Byte +0 of a `std::string` holds its empty allocator object; it is
+  never read. The compiler fills it from wherever the allocator argument
+  happens to live. (a) A stack slot it shares with an argument (the low
+  byte of `mostDerived`, of a pointer argument, of a count `n`): that is
+  reproducible, so replicate it exactly (0x40a580, 0x408cc0, 0x41c3e0,
+  0x611a20). (b) An uninitialized local of the original's own frame: not
+  reproducible. If that string is freed before the function returns, use 0.
+  If it survives (e.g. a returned string, 0x612e80), the byte is a known,
+  behaviour-irrelevant difference: say so at the function and in its
+  inventory row, leave the byte out of the in-process comparison, and
+  exclude exactly that byte with `Spec.ignore_bytes` plus a self-test
+  pairing.
+- **Detours and tiny functions:** a 4-byte body such as `mov eax,[ecx+0Ch];
+  ret` can be hooked when nop/int 3 padding follows it (Detours uses the
+  padding; 0x601270).
 - **Global variables** are recorded in `re/globals.csv`, e.g. the tick
   counter `g_gameTick` at `0x7dfd48`.
 - **`DebugLog` (`0x428720`)** is a printf-style call that is just `ret` in the
@@ -434,7 +450,8 @@ replaying, see `src/s3re/replay/command_log.h`):
    `fastcall` passes args[0]/args[1] in ECX/EDX. `Spec.virtual_effects`
    lets a probed virtual call change memory (e.g. a child that shrinks its
    parent's list), `Spec.new_fails` makes operator new return null in some
-   cases, and `Spec.ignore_bytes` leaves out output bytes that provably hold
+   cases, `Spec.max_instructions` raises the per-call limit (20M) for
+   inputs our debug build needs more for, and `Spec.ignore_bytes` leaves out output bytes that provably hold
    each function's own stack leftovers (padding of a copied stack
    temporary; say why at the spec and add a self-test pairing that differs
    next to them). timeGetTime and Sleep are probed too (read timeGetTime

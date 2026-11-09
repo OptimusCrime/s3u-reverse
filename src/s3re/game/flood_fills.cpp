@@ -36,6 +36,12 @@
 //   byte) and spreads over tiles flagged 0x10 without flag 0x01
 //   (GameWorld::QueueMarkedTileNoOwner). EAX = write index (ignored).
 //   ret 0xc.
+// GameWorld::FloodSetWord16RoomyTiles (0x0051d2b0, batch 27): (x, y,
+//   value). Like FloodSetByte10MarkedTiles, but sets the word +0x16 to
+//   `value` (low word) and spreads with GameWorld_QueueMarkedTileWithRoom
+//   (logic_helpers.cpp: marked 0x10, and no blocked tile or terrain class
+//   0x2_ within two steps). EAX = write index (ignored). ret 0xc. Called by
+//   the area set-up 0x51a580.
 // GameWorld::MoveTileToAreaAndQueue (0x004e6430): (x, y, oldArea, newArea):
 //   if the tile's area word (tile +0x14) equals oldArea (zero-extended,
 //   32-bit compare): GameWorld::RemoveTileFromArea(x, y),
@@ -197,6 +203,10 @@ void RunQueue(GameWorld* world, Visit visit) {
 
 using FloodFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
                                            std::uint32_t y, std::uint32_t value);
+
+// logic_helpers.cpp
+std::uint32_t __fastcall GameWorld_QueueMarkedTileWithRoom(GameWorld* world, void* edx, std::uint32_t x,
+                                                           std::uint32_t y);
 using MoveTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
                                               std::uint32_t y, std::uint32_t oldArea,
                                               std::uint32_t newArea);
@@ -261,6 +271,21 @@ std::uint32_t __fastcall GameWorld_FloodSetByte10MarkedTiles(GameWorld* world, v
     return At<std::uint32_t>(world, kTileRingWrite);
 }
 
+// Purpose: Gives one word-16 region number to a connected stretch of marked
+// tiles that have room around them (no blocked tile nearby); part of the
+// area set-up (probably regions where large things can move or be built).
+std::uint32_t __fastcall GameWorld_FloodSetWord16RoomyTiles(GameWorld* world, void*, std::uint32_t x,
+                                                            std::uint32_t y, std::uint32_t value) {
+    StartRing(world, x, y);
+    RunQueue(world, [&](std::uint32_t px, std::uint32_t py) {
+        At<std::uint16_t>(world, Tile(px, py) + kTileWord16) = static_cast<std::uint16_t>(value);
+        ForEachNeighbour(world, px, py, [&](std::uint32_t nx, std::uint32_t ny) {
+            GameWorld_QueueMarkedTileWithRoom(world, nullptr, nx, ny);
+        });
+    });
+    return At<std::uint32_t>(world, kTileRingWrite);
+}
+
 // Purpose: One step of moving a whole area to a new number: if a tile belongs to the old area, move it and
 // remember it so its neighbours get checked next.
 std::uint32_t __fastcall GameWorld_MoveTileToAreaAndQueue(GameWorld* world, void*, std::uint32_t x,
@@ -289,6 +314,8 @@ S3RE_HOOK(0x0051cee0, GameWorld_FloodMarkAreaTerrain5To7, FloodFn,
           Original_GameWorld_FloodMarkAreaTerrain5To7, GameWorld_FloodMarkAreaTerrain5To7);
 S3RE_HOOK(0x0051d450, GameWorld_FloodSetByte10MarkedTiles, FloodFn,
           Original_GameWorld_FloodSetByte10MarkedTiles, GameWorld_FloodSetByte10MarkedTiles);
+S3RE_HOOK(0x0051d2b0, GameWorld_FloodSetWord16RoomyTiles, FloodFn,
+          Original_GameWorld_FloodSetWord16RoomyTiles, GameWorld_FloodSetWord16RoomyTiles);
 S3RE_HOOK(0x004e6430, GameWorld_MoveTileToAreaAndQueue, MoveTileFn,
           Original_GameWorld_MoveTileToAreaAndQueue, GameWorld_MoveTileToAreaAndQueue);
 
@@ -789,6 +816,51 @@ S3RE_TEST(GameWorld_FloodSetByte10MarkedTiles_MatchesOriginal) {
     CompareFloods(ctx, Original_GameWorld_FloodSetByte10MarkedTiles, &GameWorld_FloodSetByte10MarkedTiles, 300,
                   [&](test::WorldPair& worlds, std::uint32_t size, std::uint32_t x, std::uint32_t y,
                       std::uint32_t& value) { SetUpMarkedFill(ctx, worlds, size, x, y, value, false); });
+}
+
+namespace {
+
+// Marked tiles (flag 0x10, mostly unblocked) with terrain that is rarely of
+// class 0x2_, so that the two-step room check passes often enough.
+void SetUpRoomyFill(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size, std::uint32_t x,
+                    std::uint32_t y, std::uint32_t& value) {
+    const Region region = RandomRegion(ctx, size, x, y);
+    const std::uint32_t blocked = ctx.rng().Below(40);  // of 1000
+    ForRegion(region, [&](std::uint32_t tx, std::uint32_t ty) {
+        std::uint8_t flags = static_cast<std::uint8_t>(ctx.rng().Next32());
+        if (!ctx.rng().Chance(blocked, 1000)) {
+            flags = static_cast<std::uint8_t>((flags | 0x10) & ~0x01);
+        }
+        worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileFlags, flags);
+        std::uint8_t terrain = static_cast<std::uint8_t>(ctx.rng().Next32());
+        if ((terrain & 0xf0) == 0x20 && !ctx.rng().Chance(1, 20)) {
+            terrain ^= 0x40;
+        }
+        worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileTerrain, terrain);
+    });
+    value = ctx.rng().Chance(1, 2) ? ctx.rng().Below(0x200) : ctx.rng().Next32();
+}
+
+// Wrong: writes only the low byte of the region word.
+std::uint32_t __fastcall WrongFloodSetWord16RoomyTiles(GameWorld* world, void* edx, std::uint32_t x,
+                                                       std::uint32_t y, std::uint32_t value) {
+    return GameWorld_FloodSetWord16RoomyTiles(world, edx, x, y, value & 0xff);
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_FloodSetWord16RoomyTiles_MatchesOriginal) {
+    CompareFloods(ctx, Original_GameWorld_FloodSetWord16RoomyTiles, &GameWorld_FloodSetWord16RoomyTiles, 300,
+                  [&](test::WorldPair& worlds, std::uint32_t size, std::uint32_t x, std::uint32_t y,
+                      std::uint32_t& value) { SetUpRoomyFill(ctx, worlds, size, x, y, value); });
+}
+
+S3RE_TEST(GameWorld_FloodSetWord16RoomyTiles_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareFloods(probe, Original_GameWorld_FloodSetWord16RoomyTiles, &WrongFloodSetWord16RoomyTiles, 100,
+                  [&](test::WorldPair& worlds, std::uint32_t size, std::uint32_t x, std::uint32_t y,
+                      std::uint32_t& value) { SetUpRoomyFill(probe, worlds, size, x, y, value); });
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 S3RE_TEST(GameWorld_MoveTileToAreaAndQueue_MatchesOriginal) {

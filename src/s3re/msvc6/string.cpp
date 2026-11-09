@@ -434,6 +434,16 @@ String* __fastcall String_ConcatChars(String* self, const String* left, const ch
     return self;
 }
 
+S3RE_HOOK(0x00437480, String_ConcatChars2, StringConcatCharsFn, Original_String_ConcatChars2,
+          String_ConcatChars2);
+
+// Purpose: The same helper as String_ConcatChars (base + optional suffix),
+// compiled a second time into another source file (used by the framework's
+// error messages and UI code).
+String* __fastcall String_ConcatChars2(String* self, const String* left, const char* right) {
+    return String_ConcatChars(self, left, right);
+}
+
 // ---------------------------------------------------------------------------
 // Batch 22: the remaining out-of-line members. Most of them are the compiled
 // form of a member with assign()/_Grow()/erase() inlined; ours call the
@@ -489,6 +499,18 @@ String* __fastcall String_FromSubstr(String* self, void* /*edx*/, const String* 
     self->allocator = *allocator;
     Clear(self);
     return String_AssignSubstr(self, nullptr, x, pos, n);
+}
+
+S3RE_HOOK(0x00408cc0, String_FromSubstrDefault, StringFromSubstrDefaultFn, Original_String_FromSubstrDefault,
+          String_FromSubstrDefault);
+
+// Purpose: Standard string constructor from a part of another string, with
+// the default allocator (used to return strings by value, e.g. the text of
+// an assertion message).
+String* __fastcall String_FromSubstrDefault(String* self, void* /*edx*/, const String* x, std::uint32_t pos,
+                                            std::uint32_t n) {
+    const auto allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(x));
+    return String_FromSubstr(self, nullptr, x, pos, n, &allocator);
 }
 
 S3RE_HOOK(0x00407a50, String_FromText, StringFromTextFn, Original_String_FromText, String_FromText);
@@ -741,6 +763,18 @@ std::int32_t __fastcall String_CompareChars(const String* self, void* /*edx*/, s
     return n != count ? 1 : 0;
 }
 
+// compare(const char* s) (0x0040a0e0): compare(0, npos, s, strlen(s)).
+using StringCompareTextFn = std::int32_t(__fastcall*)(const String* self, void* edx, const char* s);
+std::int32_t __fastcall String_CompareText(const String* self, void* edx, const char* s);
+
+S3RE_HOOK(0x0040a0e0, String_CompareText, StringCompareTextFn, Original_String_CompareText, String_CompareText);
+
+// Purpose: Standard string comparison with C text (-1, 0 or 1); the menus
+// and the console use it to look up names.
+std::int32_t __fastcall String_CompareText(const String* self, void* /*edx*/, const char* s) {
+    return String_CompareChars(self, nullptr, 0, 0xFFFFFFFFu, s, Length(s));
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -825,6 +859,8 @@ struct StringOps {
     StringConcatCharsLeftFn concatCharsLeft;
     StringConcatCharsLeftFn concatCharsLeft2;
     StringConcatCharFn concatChar;
+    StringConcatCharsFn concatChars2;
+    StringFromSubstrDefaultFn fromSubstrDefault;
 };
 
 StringOps OriginalOps() {
@@ -837,7 +873,8 @@ StringOps OriginalOps() {
             Original_String_AssignTextOrEmpty, Original_String_At,  Original_String_Freeze,
             Original_String_PlusString,  Original_String_CharsPlus, Original_String_PlusChar,
             Original_String_ConcatString, Original_String_ConcatCharsLeft,
-            Original_String_ConcatCharsLeft2, Original_String_ConcatChar};
+            Original_String_ConcatCharsLeft2, Original_String_ConcatChar, Original_String_ConcatChars2,
+            Original_String_FromSubstrDefault};
 }
 
 StringOps OurOps() {
@@ -848,7 +885,7 @@ StringOps OurOps() {
             &String_AssignText,  &String_AssignRepeat, &String_AssignTextOrEmpty, &String_At,
             &String_Freeze,      &String_PlusString, &String_CharsPlus,  &String_PlusChar,
             &String_ConcatString, &String_ConcatCharsLeft, &String_ConcatCharsLeft2,
-            &String_ConcatChar};
+            &String_ConcatChar, &String_ConcatChars2, &String_FromSubstrDefault};
 }
 
 // A deliberately wrong assign(string, pos, n): never shares the buffer.
@@ -911,7 +948,7 @@ void CompareStringOperations(test::Context& ctx, const StringOps& candidate, int
         String a[kSlots] = {};
         String b[kSlots] = {};
         for (int step = 0; step < 40; ++step) {
-            const int op = static_cast<int>(ctx.rng().Below(28));
+            const int op = static_cast<int>(ctx.rng().Below(30));
             const int i = static_cast<int>(ctx.rng().Below(kSlots));
             const int j = static_cast<int>(ctx.rng().Below(kSlots));
             const std::string& text = texts[ctx.rng().Below(static_cast<std::uint32_t>(texts.size()))];
@@ -970,10 +1007,11 @@ void CompareStringOperations(test::Context& ctx, const StringOps& candidate, int
                     original.plusChars(&a[i], &a[j], text.c_str());
                     candidate.plusChars(&b[i], &b[j], text.c_str());
                     break;
-                case 10: {
+                case 10:
+                case 28: {
                     const char* right = ctx.rng().Chance(1, 3) ? nullptr : text.c_str();
-                    original.concatChars(&a[i], &a[j], right);
-                    candidate.concatChars(&b[i], &b[j], right);
+                    (op == 10 ? original.concatChars : original.concatChars2)(&a[i], &a[j], right);
+                    (op == 10 ? candidate.concatChars : candidate.concatChars2)(&b[i], &b[j], right);
                     break;
                 }
                 case 11:
@@ -988,6 +1026,19 @@ void CompareStringOperations(test::Context& ctx, const StringOps& candidate, int
                     // A constructor overwrites the slot without releasing it.
                     original.fromSubstr(&a[i], nullptr, &a[j], pos, n, &allocator);
                     candidate.fromSubstr(&b[i], nullptr, &b[j], pos, n, &allocator);
+                    break;
+                }
+                case 29: {
+                    // As case 12, with the allocator byte taken from the
+                    // address of the source (differs between the sides).
+                    const std::uint32_t pos = i == j ? 0 : ctx.rng().Below(a[j].len + 1);
+                    const auto lowA = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(&a[j]));
+                    const auto lowB = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(&b[j]));
+                    original.fromSubstrDefault(&a[i], nullptr, &a[j], pos, n);
+                    candidate.fromSubstrDefault(&b[i], nullptr, &b[j], pos, n);
+                    resultA = a[i].allocator == lowA;
+                    resultB = b[i].allocator == lowB;
+                    a[i].allocator = b[i].allocator = 0;
                     break;
                 }
                 case 13: {
@@ -1149,6 +1200,54 @@ std::int32_t __fastcall WrongCompareChars(const String* self, void* edx, std::ui
 }
 
 }  // namespace
+
+namespace {
+
+void CompareCompareText(test::Context& ctx, StringCompareTextFn candidate, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        char text[40], other[40];
+        const std::uint32_t len = ctx.rng().Below(sizeof(text) - 1);
+        const std::uint32_t otherLen = ctx.rng().Below(sizeof(other) - 1);
+        for (char& c : text) {
+            c = static_cast<char>(ctx.rng().Chance(1, 8) ? 1 + ctx.rng().Below(255) : 'a' + ctx.rng().Below(3));
+        }
+        for (char& c : other) {
+            c = static_cast<char>(ctx.rng().Chance(1, 8) ? 1 + ctx.rng().Below(255) : 'a' + ctx.rng().Below(3));
+        }
+        if (ctx.rng().Chance(1, 2)) {
+            std::memcpy(other, text, sizeof(text));  // equal prefixes
+        }
+        other[otherLen] = 0;
+        String str{};
+        str.ptr = len == 0 && ctx.rng().Chance(1, 2) ? nullptr : text;
+        str.len = str.ptr == nullptr ? 0 : len;
+        str.res = str.len;
+        const std::int32_t ra = Original_String_CompareText(&str, nullptr, other);
+        const std::int32_t rb = candidate(&str, nullptr, other);
+        if (!S3RE_EXPECT_EQ(ra, rb)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: len %u other %u", i, str.len, otherLen);
+            return;
+        }
+    }
+}
+
+// Wrong: a longer string with an equal prefix compares as smaller.
+std::int32_t __fastcall WrongCompareText(const String* self, void* edx, const char* s) {
+    const std::int32_t r = String_CompareText(self, edx, s);
+    return r == 1 && self->len > Length(s) ? -1 : r;
+}
+
+}  // namespace
+
+S3RE_TEST(String_CompareText_MatchesOriginal) {
+    CompareCompareText(ctx, &String_CompareText, 50000);
+}
+
+S3RE_TEST(String_CompareText_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareCompareText(probe, &WrongCompareText, 50000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(String_CompareChars_MatchesOriginal) {
     CompareCompareChars(ctx, &String_CompareChars, 50000);

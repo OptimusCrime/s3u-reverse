@@ -71,27 +71,29 @@ disassembly; "READY" = not done, every direct callee done, all game code
    test. Later, once a caller subsystem (AI, lobby) is tackled.
 
 Next steps (for 2026-11-10, in this order):
-1. (Batch 26 done 2026-11-09: exception chain incl. the data-error
-   thrower 0x5ffcc0, CSurface release/destructors, the MapEffects table
-   (find slot, cell, link, Add and 8 spawn functions), AI and framework
-   helpers; 45 in all, see the session log.) Next coverage batch, concrete:
-   - Win32::CAssertmentFailed 0x612a20 (180 ins) -> 0x6119b0 (48 callers,
-     14 unblocks); Win32::ThrowError 0x610960 (-> 0x601280);
-     Win32::ThrowWin32Error 0x610de0 (-> 0x617c80, 0x616d50).
-   - Lobby: 0x603270 (-> CLMGeneric 0x601e80, 24 callers), 0x602850 (->
-     0x602e20, 22 callers), 0x5ec550 (-> CAddress 0x5ecd50, 16 callers),
-     0x601170 (-> 0x600e40).
-   - Tooltip opener 0x418550 (needs 0x41c3e0, 0x41ca60, ThrowError, GDI
-     probes SelectObject / GetTextExtentPoint32A), then 0x4183c0 and
-     0x429f10 (25 callers).
-   - App 0x40a580 (vector<string> resize, 23 callers): the new elements'
-     allocator byte is read from the caller's stack ([esp+8] beyond the
-     argument) - can't be reproduced; decide (known difference, emulator
-     ignore) before doing it.
-   - Simulation: the remaining MapEffects callers (0x544630, 0x5449f0,
-     0x545150, 0x5453f0, 0x545730, 0x5458d0, 0x544390, 0x545c80; check
-     their other callees), 0x51d2b0 (-> area set-up 0x51a580), 0x553fe0
-     (-> 0x553dc0), 0x523540.
+1. (Batch 27 done 2026-11-09: assertion/out-of-memory exceptions and
+   throwers, Lobby::CMemoryBlock/CLMGeneric, CStaticText, the string
+   vector resize 0x40a580 (allocator byte = low byte of n, reproduced),
+   0x51d2b0, CEvaLand release, 17 small framework/container/graphics
+   members; 44 in all, see the session log.) Next batch, concrete:
+   - Simulation: the area set-up 0x51a580 (380 ins, READY now; called by
+     GameWorld::Create and 0x4fd540, so whole-game evidence is likely).
+   - MapEffects callers: 0x545730, 0x545150, 0x5453f0, 0x5458d0 use x87
+     (fild/fsqrt/fmul + _ftol 0x61fe98): decide first how to replicate x87
+     results exactly (probably __asm blocks; our build uses SSE2, and the
+     game's FPU control word may be single precision). 0x544630 and
+     0x5449f0 have no FP but build ~10 local tables indexed by arg2 +
+     2*arg1 (check for uninitialized entries).
+   - Tooltip opener 0x418550 (callees now done except GDI/COM: needs API
+     probes SelectObject 0x655030 / GetTextExtentPoint32A 0x655038 and the
+     surface GetDC/ReleaseDC COM probes), then 0x4183c0 and 0x429f10 (25
+     callers, 25 unblocks).
+   - Win32::ThrowWin32Error 0x610de0 -> CHResult 0x613220 -> its text
+     function 0x6134d0 (FormatMessageA / LocalFree probes needed).
+   - Lobby: 0x602580 (42 callers) and 0x600f10 (40 callers) are READY;
+     0x602850, 0x5ec550.
+   - Small READY ones with many callers (frontier sorted by callers):
+     0x428d10, 0x5da200, 0x463ab0, 0x4148a0, 0x5da3b0, 0x414770, 0x60b5f0.
 2. (Item 2 done 2026-11-09: tools/trivial.py.) Then the UI
    accessor block and Win32::CObject et al. as coverage batches, with
    `S3RE_HOOK_UNVERIFIED` where a spec is not quick.
@@ -458,6 +460,73 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (35): batch 27 (44 functions: assertions, lobby buffers, strings, small helpers)
+
+- Batch 27, all verified (none unverified):
+  - win32_errors.cpp (new): Win32::CProgrammingError 0x614eb0,
+    CAssertmentFailed 0x612a20 and its text function (vf01, our name
+    Describe) 0x612e80, the assert thrower 0x6119b0 (48 callers),
+    COutOfMemory 0x6124a0 and the out-of-memory thrower 0x610960 (was
+    "ThrowError"; it is called where operator new returned null).
+  - msvc6/string.cpp: the twin of ConcatChars 0x437480, the
+    default-allocator substring constructor 0x408cc0 (allocator byte = low
+    byte of the source's address), compare(const char*) 0x40a0e0.
+  - lobby_memory_block.cpp (new): Lobby::CMemoryBlock Size 0x601270 (a
+    4-byte body: Detours hooks it through the nop padding), Reserve
+    0x601280 (+8 keeps the unrounded size, sic), Append 0x601170,
+    AppendBytes 0x6011c0, At 0x600ee0, Equal 0x600ea0, copy constructor
+    0x600e40, destructor 0x600e70; CLMGeneric SetHeader 0x603270,
+    constructor 0x601e80 (24 callers), Equal 0x6027d0, destructor 0x602190.
+    The catch(...) blocks that log and rethrow are SEH filters with the
+    same DebugLog.
+  - ui_static_text.cpp (new): CStaticText constructor 0x41c3e0 and
+    SetStyle 0x41ca60 (both needed by the tooltip opener 0x418550).
+  - watcom/string_vector.cpp (new): WCValVector<String>::resize 0x40a580
+    (23 callers). Decided: the "allocator byte from the caller's stack"
+    was a misreading; it is the low byte of the argument n (same stack
+    slot), so it is reproduced exactly.
+  - flood_fills.cpp: FloodSetWord16RoomyTiles 0x51d2b0 (word +0x16 over
+    marked tiles with room, step 0x51d000); this makes the area set-up
+    0x51a580 READY.
+  - ai_evaland.cpp (new): the shared land evaluation object's destructor
+    0x553fe0 and Release 0x553dc0 (refcount 0x7e0568, instance 0x7e056c).
+  - framework_small.cpp (new): Watcom intrusive list destructor 0x60b5a0
+    (30 callers) and insert 0x60b430, int vector constructors 0x4376b0 /
+    0x437730 and destructors 0x414590 / 0x458590, Lobby_ScaleBy4 0x44c450,
+    CWin32Handle::Set 0x60bf00, CMemoryBlock::operator= 0x600e80,
+    CRegistryKey 0x616430, CEvent 0x60c510, 0x5da3a0, wide-string helpers
+    0x418fb0 / 0x428880, GfxData frame/animation pointers 0x5fac70 /
+    0x5faaf0, CLMMessageBlock copy constructor 0x601470.
+- Rule (CLAUDE.md, "Allocator bytes of MSVC 6.0 strings"): an allocator
+  byte that shares a stack slot with an argument is reproduced; one from an
+  uninitialized local is 0 when the string is freed before returning, and a
+  documented known difference (ignore_bytes + self-test pairing) when it
+  survives (only 0x612e80's result so far).
+- Emulator harness: `Spec.max_instructions` (the whole-map roomy flood
+  needs more than 20M instructions in our debug build). New self-test
+  pairing for the ignored allocator byte.
+- Known differences: the throwers have no exception frame (the
+  out-of-memory message string leaks, as with ThrowDataError); Describe's
+  result allocator byte; Reserve/AppendBytes log during the first SEH pass
+  instead of in the handler.
+- Tests: in-process 337/337; emulator: 44 new specs, 0 mismatches, every
+  live block covered (dead inlined-string blocks and catch handlers exempt
+  with reasons). Full suite 446 functions, 0 mismatches; it reported 2
+  with incomplete coverage, from a run that started before the last
+  exempt/cover_until fixes of this batch; every batch-27 spec group
+  (Lobby_, String_, Win32_, CStaticText, StringVector, AI_, Flood, Gfx,
+  WCI, UI_) was rerun afterwards with full coverage, but the full suite
+  was not rerun - do that first next session. Self-test 21/21.
+- Whole-game check (scripted-seed127.bin, 3,000 ticks, against the
+  original): REPLAY OK, 205 of 448 replacements called; 21 of the 44 new
+  ones (GfxData_AnimationPointer 13.6M, WCIntVector_Construct 2,547,
+  CWin32Handle::Set 218, FloodSetWord16RoomyTiles 73, String_CompareText
+  22, ...). Not called: the assertion/out-of-memory classes and throwers,
+  most CMemoryBlock/CLMGeneric members (lobby), CStaticText::SetStyle,
+  CEvaLand destructor, and a few helpers. Counts in the inventory notes.
+- Frontier (all game code): READY 1,305 -> 1,318, NEAR 1,057 -> 1,074;
+  simulation range READY 253 -> 253, NEAR 60 -> 59.
 
 ### 2026-11-09 (34): batch 26 (45 functions: exceptions, surfaces, MapEffects, helpers)
 

@@ -13,11 +13,13 @@ add_library(s3re SHARED
     msvc6/string.cpp
 
     watcom/ptr_vector.cpp
+    watcom/string_vector.cpp
 
     trace/determinism.cpp
 
     replay/command_log.cpp
 
+    game/ai_evaland.cpp
     game/ai_helpers.cpp
     game/ai_small_helpers.cpp
     game/area_piles.cpp
@@ -29,12 +31,14 @@ add_library(s3re SHARED
     game/directx_surface.cpp
     game/flood_fills.cpp
     game/framework_helpers.cpp
+    game/framework_small.cpp
     game/game_end.cpp
     game/godly_events.cpp
     game/graphics_helpers.cpp
     game/goods_piles.cpp
     game/id_allocators.cpp
     game/landscape_colours.cpp
+    game/lobby_memory_block.cpp
     game/logic_helpers.cpp
     game/logic_thread.cpp
     game/map.cpp
@@ -59,9 +63,11 @@ add_library(s3re SHARED
     game/string_members.cpp
     game/statistics.cpp
     game/ui_overlays.cpp
+    game/ui_static_text.cpp
     game/ui_state.cpp
     game/world_search.cpp
     game/win32_classes.cpp
+    game/win32_errors.cpp
     game/win32_exceptions.cpp
     game/winmain.cpp
     game/world_tables.cpp

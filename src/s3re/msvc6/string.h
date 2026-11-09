@@ -111,6 +111,10 @@ extern StringPlusCharsFn Original_String_PlusChars;
 using StringConcatCharsFn = String*(__fastcall*)(String* self, const String* left, const char* right);
 String* __fastcall String_ConcatChars(String* self, const String* left, const char* right);
 extern StringConcatCharsFn Original_String_ConcatChars;
+// The same helper compiled a second time into Dirk\GameParams.cpp's unit
+// (0x00437480, byte-identical apart from its addresses).
+String* __fastcall String_ConcatChars2(String* self, const String* left, const char* right);
+extern StringConcatCharsFn Original_String_ConcatChars2;
 
 // --- Batch 22: the other out-of-line members ------------------------------
 
@@ -121,6 +125,16 @@ using StringFromSubstrFn = String*(__fastcall*)(String* self, void* edx, const S
 String* __fastcall String_FromSubstr(String* self, void* edx, const String* x, std::uint32_t pos,
                                      std::uint32_t n, const std::uint8_t* allocator);
 extern StringFromSubstrFn Original_String_FromSubstr;
+
+// string(const string& x, pos, n) with the default allocator (0x00408cc0):
+// the same as String_FromSubstr, but the allocator byte is the low byte of
+// x's address (the compiler let the empty allocator argument share the
+// stack slot of x). thiscall, ret 0Ch.
+using StringFromSubstrDefaultFn = String*(__fastcall*)(String* self, void* edx, const String* x,
+                                                       std::uint32_t pos, std::uint32_t n);
+String* __fastcall String_FromSubstrDefault(String* self, void* edx, const String* x, std::uint32_t pos,
+                                            std::uint32_t n);
+extern StringFromSubstrDefaultFn Original_String_FromSubstrDefault;
 
 // string(const char* s, const allocator&) (0x00407a50).
 using StringFromTextFn = String*(__fastcall*)(String* self, void* edx, const char* s,

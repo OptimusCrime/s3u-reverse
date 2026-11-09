@@ -560,7 +560,8 @@ class Emulator:
     # -- calls -------------------------------------------------------------
 
     def call(self, address: int, ecx: int, edx: int, args: list[int],
-             registers: dict[str, int], cover: tuple[int, int] = (0, 0)) -> Outcome:
+             registers: dict[str, int], cover: tuple[int, int] = (0, 0),
+             max_instructions: int = MAX_INSTRUCTIONS) -> Outcome:
         """Calls `address` the way the game does (arguments on the stack, then a
         return address), records the outcome and undoes the writes."""
         uc = self.uc
@@ -587,10 +588,10 @@ class Emulator:
         self.spec_error = None
         outcome = Outcome()
         try:
-            uc.emu_start(address, RETURN_ADDRESS, count=MAX_INSTRUCTIONS)
+            uc.emu_start(address, RETURN_ADDRESS, count=max_instructions)
             pc = uc.reg_read(UC_X86_REG_EIP)
             if pc != RETURN_ADDRESS and self.thrown is None:
-                outcome.fault = f"did not return within {MAX_INSTRUCTIONS} instructions"
+                outcome.fault = f"did not return within {max_instructions} instructions"
         except UcError as error:
             outcome.fault = f"{error} at {uc.reg_read(UC_X86_REG_EIP):#x}"
         outcome.eax = uc.reg_read(UC_X86_REG_EAX)
