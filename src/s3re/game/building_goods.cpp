@@ -495,4 +495,55 @@ S3RE_TEST(GameWorld_RemoveBuildingFromAreaRequests_ComparisonDetectsWrongImpleme
     S3RE_EXPECT(probe.failures() > 0);
 }
 
+// ---------------------------------------------------------------------------
+// GameWorld::GoodsRequestPriority (0x004ff380): (amount, coming) -> 64000 -
+// 8000 * amount - 4000 * coming (32-bit). Called three times by
+// UpdatePhase2 with the amount (pile +0x1) and units on the way (+0x3) of a
+// building's input pile, just before AddBuildingGoodsRequest, so probably
+// the request's priority: the emptier the pile, the more urgent. ECX
+// unused (overwritten). ret 8.
+// ---------------------------------------------------------------------------
+
+using PriorityFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t amount,
+                                              std::uint32_t coming);
+
+// Purpose: How urgently a building asks for more of an input good: high when its input pile is empty and
+// nothing is on the way, lower for every unit there or coming (probably the request priority).
+std::uint32_t __fastcall GameWorld_GoodsRequestPriority(GameWorld*, void*, std::uint32_t amount, std::uint32_t coming) {
+    return 64000u - amount * 8000u - coming * 4000u;
+}
+
+S3RE_HOOK(0x004ff380, GameWorld_GoodsRequestPriority, PriorityFn, Original_GameWorld_GoodsRequestPriority,
+          GameWorld_GoodsRequestPriority);
+
+namespace {
+
+void ComparePriority(test::Context& ctx, PriorityFn candidate) {
+    for (int i = 0; i < 20000; ++i) {
+        const std::uint32_t amount = i < 0x100 ? static_cast<std::uint32_t>(i) >> 4 : (ctx.rng().Chance(1, 2) ? ctx.rng().Below(256) : ctx.rng().Next32());
+        const std::uint32_t coming = i < 0x100 ? static_cast<std::uint32_t>(i) & 15 : (ctx.rng().Chance(1, 2) ? ctx.rng().Below(256) : ctx.rng().Next32());
+        if (!S3RE_EXPECT_EQ(Original_GameWorld_GoodsRequestPriority(nullptr, nullptr, amount, coming),
+                            candidate(nullptr, nullptr, amount, coming))) {
+            ctx.Fail(__FILE__, __LINE__, "  amount 0x%x, coming 0x%x", amount, coming);
+            return;
+        }
+    }
+}
+
+// Wrong: the weights swapped.
+std::uint32_t __fastcall WrongGoodsRequestPriority(GameWorld*, void*, std::uint32_t amount, std::uint32_t coming) {
+    return 64000u - amount * 4000u - coming * 8000u;
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_GoodsRequestPriority_MatchesOriginal) {
+    ComparePriority(ctx, &GameWorld_GoodsRequestPriority);
+}
+S3RE_TEST(GameWorld_GoodsRequestPriority_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    ComparePriority(probe, &WrongGoodsRequestPriority);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 }  // namespace s3re::game

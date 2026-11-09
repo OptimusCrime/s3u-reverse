@@ -377,4 +377,106 @@ S3RE_TEST(GameWorld_ScatterObjectGroups_MatchesOriginal) {
     });
 }
 
+// ---------------------------------------------------------------------------
+// GameWorld::ReplaceTerrainNextTo (0x00519270): (terrain, neighbour,
+// replacement): for x = 1 .. mapSize-2, inner y = 1 .. mapSize-2 (signed
+// compares; mapSize at world+0x2d2d0 re-read per step), a tile whose
+// terrain byte +0x6 equals `terrain` (zero-extended, 32-bit compare) and
+// that has one of the six neighbours (x+1, y), (x-1, y), (x, y-1),
+// (x, y+1), (x+1, y+1), (x-1, y-1) with terrain `neighbour` gets terrain
+// `replacement` (low byte). Works in place, so a replaced tile can make the
+// next one match. Called four times by GameWorld::Create (map generation,
+// probably to put transition terrain such as beaches along borders).
+// thiscall, ret 0xc; EAX is clobbered by every caller (void here).
+// ---------------------------------------------------------------------------
+
+using ReplaceNextToFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t terrain, std::uint32_t neighbour,
+                                          std::uint32_t replacement);
+
+// Purpose: Map generation: turns tiles of one terrain into another where they border a third (probably to
+// add transition terrain, e.g. shore along water).
+void __fastcall GameWorld_ReplaceTerrainNextTo(GameWorld* world, void*, std::uint32_t terrain, std::uint32_t neighbour,
+                                               std::uint32_t replacement) {
+    const std::int32_t& mapSize = At<std::int32_t>(world, 0x2d2d0);
+    for (std::int32_t x = 1; x < mapSize - 1; ++x) {
+        for (std::int32_t y = 1; y < mapSize - 1; ++y) {
+            const std::uint32_t tile = Tile(x, y) + kTileTerrain;
+            if (At<std::uint8_t>(world, tile) != terrain) {
+                continue;
+            }
+            static constexpr std::int32_t kNeighbours[] = {kRow, -kRow, -kColumn, kColumn, kRow + kColumn, -kRow - kColumn};
+            for (const std::int32_t step : kNeighbours) {
+                if (At<std::uint8_t>(world, tile + static_cast<std::uint32_t>(step)) == neighbour) {
+                    At<std::uint8_t>(world, tile) = static_cast<std::uint8_t>(replacement);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+S3RE_HOOK(0x00519270, GameWorld_ReplaceTerrainNextTo, ReplaceNextToFn, Original_GameWorld_ReplaceTerrainNextTo,
+          GameWorld_ReplaceTerrainNextTo);
+
+namespace {
+
+// Small maps (sometimes 0..3 or negative sizes) with terrains 0..3 (so
+// matches and chains are common); arguments mostly 0..3, sometimes with
+// high bits (must never match).
+void CompareReplaceNextTo(test::Context& ctx, ReplaceNextToFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    for (int i = 0; i < cases; ++i) {
+        const std::int32_t n = ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Below(8)) - 4
+                                                       : static_cast<std::int32_t>(4 + ctx.rng().Below(30));
+        worlds.Set<std::int32_t>(0x2d2d0, n);
+        for (std::int32_t x = 0; x < 36; ++x) {
+            for (std::int32_t y = 0; y < 36; ++y) {
+                worlds.Set<std::uint8_t>(Tile(x, y) + kTileTerrain, static_cast<std::uint8_t>(ctx.rng().Below(4)));
+            }
+        }
+        auto argument = [&]() { return ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(4); };
+        const std::uint32_t terrain = argument();
+        const std::uint32_t neighbour = argument();
+        const std::uint32_t replacement = ctx.rng().Chance(1, 4) ? ctx.rng().Next32() : ctx.rng().Below(4);
+        Original_GameWorld_ReplaceTerrainNextTo(worlds.original(), nullptr, terrain, neighbour, replacement);
+        candidate(worlds.ours(), nullptr, terrain, neighbour, replacement);
+        if (!worlds.Same(ctx, kTiles, Tile(36, 0) - kTiles) || (i % 64 == 63 && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: size %d, (%u, %u, %u)", i, n, terrain, neighbour, replacement);
+            return;
+        }
+    }
+}
+
+// Wrong: decides on the terrains before any replacement (not in place).
+void __fastcall WrongReplaceTerrainNextTo(GameWorld* world, void*, std::uint32_t terrain, std::uint32_t neighbour,
+                                          std::uint32_t replacement) {
+    const std::int32_t mapSize = At<std::int32_t>(world, 0x2d2d0);
+    static std::uint8_t copy[40][40];
+    for (std::int32_t x = 0; x < 40; ++x) {
+        for (std::int32_t y = 0; y < 40; ++y) {
+            copy[x][y] = At<std::uint8_t>(world, Tile(x, y) + kTileTerrain);
+        }
+    }
+    for (std::int32_t x = 1; x < mapSize - 1 && x < 39; ++x) {
+        for (std::int32_t y = 1; y < mapSize - 1 && y < 39; ++y) {
+            if (copy[x][y] == terrain && (copy[x + 1][y] == neighbour || copy[x - 1][y] == neighbour ||
+                                          copy[x][y - 1] == neighbour || copy[x][y + 1] == neighbour ||
+                                          copy[x + 1][y + 1] == neighbour || copy[x - 1][y - 1] == neighbour)) {
+                At<std::uint8_t>(world, Tile(x, y) + kTileTerrain) = static_cast<std::uint8_t>(replacement);
+            }
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_ReplaceTerrainNextTo_MatchesOriginal) {
+    CompareReplaceNextTo(ctx, &GameWorld_ReplaceTerrainNextTo, 1000);
+}
+S3RE_TEST(GameWorld_ReplaceTerrainNextTo_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareReplaceNextTo(probe, &WrongReplaceTerrainNextTo, 200);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 }  // namespace s3re::game

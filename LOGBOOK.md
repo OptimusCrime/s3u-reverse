@@ -15,20 +15,31 @@ Per function: reimplement; in-process differential test (`s3re_launcher
 blocks of the original covered). The whole-game replay
 (`check_replay.py --against-original`) is a milestone check now.
 
-Status: all 157 replacements pass the emulator suite with full block
+Status: all 169 replacements pass the emulator suite with full block
 coverage (2,000 cases each, fewer for the slow ones: the flood fills 150,
 ShiftStatistics 60, the map-wide loops and table scans 150-800);
 `--self-test` catches 11/11 wrong pairings. Batches 9-14 passed the
 whole-game check on 2026-11-08 (call counts in the inventory); batches
-15-19 haven't had one yet. Specs can set S3.EXE globals per case
+15-20 haven't had one yet. Specs can set S3.EXE globals per case
 (`Spec.globals`), and take ECX = a fake CLogicThread ("logicthread"
 convention) and pointer arguments into scratch buffers (`scratch(n)`).
 
-Next steps:
-1. Continue with leaf functions (list below), each with an emulator spec.
-2. Shadow mode (compare against the original during normal play), a faster
-   game clock and savegames, for real and late-game data.
-3. Optional: symbolic equivalence proofs (angr/Z3) for loop-free functions.
+Next steps (for 2026-11-10, in this order):
+1. Whole-game check for batches 15-20 (`python tools/check_replay.py
+   --recording <file> --against-original --ticks 3000`; the user starts
+   it, it opens the game window). Record the call counts in the inventory.
+2. Library and static-initializer classification pass: mark the ~2,000
+   string-init stubs mechanically (recording each global and its text,
+   also into `re/globals.csv`); name the MSVC6 STL/iostream, Watcom `WC*`,
+   MFC and CRT functions; count library code separately in
+   `tools/progress.py`.
+3. Move the tile base to 0x67444 plus the two `determinism.cpp` fixes from
+   `re/world_layout.md` (bump the trace version).
+4. Adopt `re/proposed_structs.h` gradually.
+5. Reimplement the savegame loader 0x508FA0 (byte-compare the loaded
+   world; gives late-game test states).
+6. 0x50cf50 (920 instructions; blocks 0x51b640, 0x504f70, 0x50e980,
+   0x4dbb10) and continued batches from `python tools/frontier.py`.
 
 Done (verified: differential tests incl. mutation tests + whole-game
 replay identical to the original):
@@ -223,6 +234,33 @@ set-up, which needs 0x51d5b0/0x51d450/0x5194e0/0x51d570/0x51cee0/
 0x4e6e10 is a static initializer (std::string "S3Qota1.DAT"), not
 simulation code.
 
+Batch 20 (2026-11-09, 12 functions; in-process + emulator tests, full
+coverage; whole-game check NOT run yet):
+- area_piles.cpp: PileDecAmountLeaving (0x505ac0; counterpart of
+  PileIncAmountLeaving: a fully reserved pile is listed again),
+  MakePileEmpty (0x506080; goods byte 0xff, onto the area's empty-pile
+  list +0x8)
+- counting.cpp: CountAreaSettlersOfClass0 (0x50e750), CountAreaSettlersOfType
+  (0x50e820): settlers of the area's player standing on their own tile in
+  the area
+- settler_records.cpp: IsSettlerJob01Or37 (0x4fa6b0), JobAfter01Or37
+  (0x4faa40) (jobs 1 -> 2, 0x37 -> 0x35, probably walking)
+- building_goods.cpp: GoodsRequestPriority (0x4ff380, 64000 - 8000 amount
+  - 4000 coming)
+- objectives.cpp (new): IsNgoObjectiveChosen (0x4ffb90; seven "new game
+  objective" ids at world+0x1195dcd)
+- map_generation.cpp: ReplaceTerrainNextTo (0x519270, GameWorld::Create);
+  map_terrain.cpp: TileShade (0x519720, brightness 0..127 from the
+  neighbours' heights)
+- map_effects.cpp (new): MapEffect::MapEffect default (0x543830) and
+  20-argument (0x543880) constructors of the 0x4c-byte records of the
+  world member at +0x14d2bc8
+Next candidates (READY now): the 13 MapEffect "make" functions
+0x543930..0x543f70 (fixed arguments + 0x543880; they pass the caller's
+EDX as argument 1), 0x519670 (calls TileShade 7 times), 0x504420 (144
+instructions, 7 callers), 0x51b7f0, 0x51d000 (unblocks 0x51d2b0 and so
+0x51a580).
+
 How to find the next ones: leaf functions (no calls) in
 0x4d0000..0x560000, listed by a small script over the dumpbin disassembly
 (function starts from re/ghidra_functions.tsv + re/extra_functions.tsv;
@@ -237,23 +275,8 @@ world+0x123885f), 0x510440/0x50e380/0x510470 (settler record fields),
 byte), 0x5437b0 and 0x51e650 (objects other than the world, class
 unknown), 0x53f530 (CLogicThread, +0x84 unknown).
 
-Next steps:
-0. Run the whole-game check for batches 9, 10 and 11 (record call counts).
-1. Continue with leaf functions; then move up to their callers (e.g. the
-   area flood fill 0x51a580 uses FindFreeId256; 0x4e6150/0x4e62c0/
-   0x4e6430/0x4e6cd0 use AssignTileToArea/RemoveTileFromArea).
-2. Settle the tile record layout. Evidence so far for records starting at
-   0x67444 (not 0x67440 as in world.h): the tile area word is indexed as
-   (x*0x300+y+0x44d9)*24 = 0x67458 in 130 places, i.e. field +0x14 of a
-   record at 0x67444; 0x67444 is the most used absolute offset (215
-   uses); the y-1 neighbour accesses (0x6742c..0x67436) are fields
-   +0x0..+0xa of the record before. New (batch 9): the dword at
-   0x67440 is the high-water mark of the 20-byte table at 0x36700
-   (AllocTable36700Record), so it is not part of the tiles; batch 9's
-   files already address tiles from 0x67444. Changing world.h affects
-   determinism.cpp's per-tile hashing; do it as its own step.
-3. (done 2026-11-08) Replays are self-contained: seed and map in the
-   recording.
+(The older step list that stood here is folded into "Next steps" at the
+top of this section.)
 
 ## Roadmap: larger areas to tackle (decided 2026-11-08)
 
@@ -371,6 +394,32 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (27): batch 20
+
+- Earlier today, separate commits: fb4ec1b added `tools/frontier.py` (ranked
+  READY/NEAR/BLOCKERS lists of functions whose callees are verified);
+  31417fc mapped the world object (it is class `CGameData`, 0x153A128
+  bytes, vtable at +0): `re/world_layout.md`, `re/structs.md`,
+  `re/proposed_structs.h`, `tools/world_fields.py`.
+- Part A: 0x401a10 is the MSVC6 `std::string` constructor from (const
+  char*, n) (strlen, _Grow, two assigns); 1,966 static-initializer stubs
+  call it (`push -1; push text; mov ecx, global; call; ret`). 0x401b60 is
+  the `std::string` destructor (inlined erase + _Tidy; 2,358 call sites in
+  end-of-scope sequences). Both `stl`, identified. `tools/frontier.py` now
+  hides initializer stubs by shape (1,968 in all game code, 749 in the
+  default range), lists identified library functions in a LIBRARY section
+  and has `--library-done`. CLAUDE.md: entries for frontier.py and the
+  world-layout files (and the world object is no longer called
+  non-polymorphic).
+- Batch 20 (12 functions, list under "Current focus"): in-process
+  260/260 (21 new incl. 9 mutation tests); emulator specs 12/12 with full coverage; full emulator suite
+  169/169, self-test 11/11.
+- Found: area +0x8 is the list of empty piles (goods 0xff); the NGO bytes
+  at world+0x1195dcd; the MapEffect record layout (structs.md).
+- Skipped: the 13 MapEffect make functions (mechanical, next batch);
+  0x5437b0/0x51e650/0x53f530/0x523540 (still unclear objects/fields);
+  0x50cf50 (too large for a batch).
 
 ### 2026-11-09 (26): batch 19
 

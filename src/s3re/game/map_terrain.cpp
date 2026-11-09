@@ -381,4 +381,84 @@ S3RE_TEST(GameWorld_UpdateAllBorderFlags_MatchesOriginal) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// GameWorld::TileShade (0x00519720): (x, y) -> a brightness 0..127 for the
+// tile from the heights (byte +0x4) of its six neighbours relative to its
+// own: each difference d becomes d+4 above 4, d-4 below -4, else 2d; then
+// s = 2 * (f(x, y-1) - f(x, y+1)) - f(x+1, y+1) - f(x-1, y) + f(x+1, y) +
+// f(x-1, y-1), shade = s * 45000 / 65536 (signed, rounded toward zero) +
+// 64, clamped to 0..127. Probably the landscape lighting (slopes facing
+// one way lighter). thiscall, ret 8; EAX = the shade.
+// ---------------------------------------------------------------------------
+
+using TileShadeFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+
+// Purpose: How light a tile is drawn: computed from the slope of the land around it (probably the
+// landscape's lighting, so hills look three-dimensional).
+std::uint32_t __fastcall GameWorld_TileShade(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24 + 0x4;  // height byte
+    const std::int32_t own = At<std::uint8_t>(world, tile);
+    auto f = [&](std::int32_t step) {
+        const std::int32_t d = At<std::uint8_t>(world, tile + static_cast<std::uint32_t>(step)) - own;
+        return d > 4 ? d + 4 : d < -4 ? d - 4 : 2 * d;
+    };
+    const std::int32_t sum = 2 * (f(-kColumn) - f(kColumn)) - f(kRow + kColumn) - f(-kRow) + f(kRow) +
+                             f(-kRow - kColumn);
+    const std::int32_t shade = sum * 45000 / 65536 + 64;
+    return static_cast<std::uint32_t>(shade < 0 ? 0 : shade > 127 ? 127 : shade);
+}
+
+S3RE_HOOK(0x00519720, GameWorld_TileShade, TileShadeFn, Original_GameWorld_TileShade, GameWorld_TileShade);
+
+namespace {
+
+// Tiles (1..30, 1..30) with heights near each other (all branches of the
+// difference mapping) or anywhere in 0..255 (clamping).
+void CompareTileShade(test::Context& ctx, TileShadeFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t x = 1 + ctx.rng().Below(30);
+        const std::uint32_t y = 1 + ctx.rng().Below(30);
+        const bool wide = ctx.rng().Chance(1, 4);
+        const std::uint32_t base = ctx.rng().Below(256);
+        for (std::uint32_t dx = 0; dx < 3; ++dx) {
+            for (std::uint32_t dy = 0; dy < 3; ++dy) {
+                const std::uint32_t h = wide ? ctx.rng().Below(256) : (base + ctx.rng().Below(25)) & 0xff;
+                worlds.Set<std::uint8_t>(kTiles + ((x + dx - 1) * 0x300 + (y + dy - 1)) * 24 + 0x4, static_cast<std::uint8_t>(h));
+            }
+        }
+        const std::uint32_t expected = Original_GameWorld_TileShade(worlds.original(), nullptr, x, y);
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y);
+        if (!S3RE_EXPECT_EQ(expected, actual) || (i % 4096 == 4095 && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u)", i, x, y);
+            return;
+        }
+    }
+}
+
+// Wrong: rounds toward minus infinity (arithmetic shift) instead of toward zero.
+std::uint32_t __fastcall WrongTileShade(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24 + 0x4;
+    const std::int32_t own = At<std::uint8_t>(world, tile);
+    auto f = [&](std::int32_t step) {
+        const std::int32_t d = At<std::uint8_t>(world, tile + static_cast<std::uint32_t>(step)) - own;
+        return d > 4 ? d + 4 : d < -4 ? d - 4 : 2 * d;
+    };
+    const std::int32_t sum = 2 * (f(-kColumn) - f(kColumn)) - f(kRow + kColumn) - f(-kRow) + f(kRow) +
+                             f(-kRow - kColumn);
+    const std::int32_t shade = ((sum * 45000) >> 16) + 64;
+    return static_cast<std::uint32_t>(shade < 0 ? 0 : shade > 127 ? 127 : shade);
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_TileShade_MatchesOriginal) {
+    CompareTileShade(ctx, &GameWorld_TileShade, 100000);
+}
+S3RE_TEST(GameWorld_TileShade_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareTileShade(probe, &WrongTileShade, 20000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 }  // namespace s3re::game

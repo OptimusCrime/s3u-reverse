@@ -1966,6 +1966,125 @@ SPECS += [
          max_cases=200),
 ]
 
+
+# --- batch 20 ---------------------------------------------------------------
+
+NGO_OBJECTIVES = 0x1195dcd
+
+
+def ngo_id(rng, pool):
+    """Objective ids 0..39, sometimes with high bits (only the low byte counts)."""
+    return rng.randrange(40) | (rng.getrandbits(32) & ~0xFF if rng.random() < 0.25 else 0)
+
+
+def ngo_objectives(rng, pool, args):
+    return [(NGO_OBJECTIVES + k, rng.randrange(40), 1) for k in range(8)]
+
+
+def job_value(rng, pool):
+    r = rng.random()
+    if r < 0.4:
+        return rng.choice([1, 0x37, 2, 0x35, 0, 0x36, 0x38])
+    if r < 0.6:
+        return (rng.getrandbits(32) & ~0xFF) | rng.choice([1, 0x37])
+    return anything(rng, pool)
+
+
+AREA_SPAN = 12  # settlers stand on tiles 0..11 x 0..11
+
+
+def area_settlers(rng, pool, args):
+    """Up to 40 settlers of players 0..3 with types 0..0x2f (sometimes any)
+    near (0, 0), most on their own tile; tile areas and the area's player
+    0..3 (sometimes free); count 0..40."""
+    count = rng.choice([0, 1, rng.randrange(41), rng.randrange(41)])
+    area = args[0]
+    fields = [(SETTLER_COUNT, count, 4),
+              (AREAS + area * AREA_BYTES, 0xff if rng.random() < 0.125 else rng.randrange(4), 1)]
+    for x in range(AREA_SPAN):
+        for y in range(AREA_SPAN):
+            fields.append((tile_area_offset(x, y), rng.getrandbits(16) if rng.random() < 1 / 16 else rng.randrange(4), 2))
+            fields.append((tile(x, y), 0, 2))
+    for s in range(1, count + 1):
+        record = SETTLERS + s * SETTLER_BYTES
+        x, y = rng.randrange(AREA_SPAN), rng.randrange(AREA_SPAN)
+        fields += [(record, rng.randrange(4), 1),
+                   (record + 1, rng.randrange(256) if rng.random() < 0.1 else rng.randrange(0x30), 1),
+                   (record + 4, x, 2), (record + 6, y, 2)]
+        if rng.random() < 2 / 3:
+            fields.append((tile(x, y), s, 2))
+    return fields
+
+
+def area_settler_type(rng, pool):
+    return rng.randrange(0x30) | (0x100 if rng.random() < 0.125 else 0)
+
+
+def linked_pile(rng, pool, args):
+    """The pile on a tile of the map (area below AREA_LIMIT), kind, amount
+    and leaving count often in the relinking state, links and the list
+    heads often 0."""
+    record = PILES + args[0] * PILE_BYTES
+    x, y = rng.randrange(384), rng.randrange(384)
+    area = rng.randrange(AREA_LIMIT)
+    leaving = rng.getrandbits(8) if rng.random() < 0.125 else rng.randrange(9)
+    goods = rng.getrandbits(8) if rng.random() < 0.1 else rng.randrange(36)
+
+    def link():
+        return 0 if rng.random() < 1 / 3 else rng.randrange(1, 0x1000)
+    return [(record + 4, rng.choice([0xff, 0xfe, 0xff, 0xfe, 0, 1, 0xfd]), 1),
+            (record + 2, leaving, 1),
+            (record + 1, leaving if rng.random() < 0.5 else rng.randrange(9), 1),
+            (record + 0, goods, 1), (record + 6, x, 2), (record + 8, y, 2),
+            (tile_area_offset(x, y), area, 2),
+            (record + 0xa, link(), 2), (record + 0xc, link(), 2),
+            (AREAS + 0xa + (area * 0x170 + goods) * 2, link(), 2),
+            (AREAS + area * AREA_BYTES + 0x8, link(), 2)]
+
+
+def terrain_value(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(4)
+
+
+def small_terrain_map(rng, pool, args):
+    """Maps of size -4..3 (no loop) or 4..20, terrain bytes 0..3."""
+    n = rng.randrange(-4, 4) if rng.random() < 0.1 else rng.randint(4, 20)
+    fields = [(MAP_SIZE, n & 0xFFFFFFFF, 4)]
+    for x in range(max(n, 0)):
+        for y in range(max(n, 0)):
+            fields.append((tile(x, y) + 0x6, rng.randrange(4), 1))
+    return fields
+
+
+def shade_heights(rng, pool, args):
+    """Heights of the tile and its neighbours: near each other (all branches
+    of the difference mapping) or anywhere (clamping)."""
+    x, y = args
+    wide = rng.random() < 0.25
+    base = rng.randrange(256)
+    return [(tile(x + dx, y + dy) + 0x4, rng.randrange(256) if wide else (base + rng.randrange(25)) & 0xFF, 1)
+            for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+
+
+SPECS += [
+    Spec("GameWorld_IsNgoObjectiveChosen", 0x004ffb90, "thiscall", [ngo_id], eax_mask=0xFF, presets=ngo_objectives),
+    Spec("GameWorld_GoodsRequestPriority", 0x004ff380, "thiscall", [anything, anything]),
+    Spec("GameWorld_IsSettlerJob01Or37", 0x004fa6b0, "thiscall", [job_value]),
+    Spec("GameWorld_JobAfter01Or37", 0x004faa40, "thiscall", [job_value]),
+    Spec("GameWorld_CountAreaSettlersOfClass0", 0x0050e750, "thiscall", [below(4)], presets=area_settlers,
+         max_cases=500),
+    Spec("GameWorld_CountAreaSettlersOfType", 0x0050e820, "thiscall", [below(4), area_settler_type],
+         presets=area_settlers, max_cases=500),
+    Spec("GameWorld_PileDecAmountLeaving", 0x00505ac0, "thiscall", [between(1, 0xfff)], presets=linked_pile),
+    Spec("GameWorld_MakePileEmpty", 0x00506080, "thiscall", [between(1, 0xfff)], presets=linked_pile),
+    Spec("GameWorld_ReplaceTerrainNextTo", 0x00519270, "thiscall", [terrain_value, terrain_value, anything],
+         eax_mask=0, presets=small_terrain_map, max_cases=300),
+    Spec("GameWorld_TileShade", 0x00519720, "thiscall", [between(1, 380), between(1, 380)], presets=shade_heights),
+    Spec("MapEffect_DefaultConstruct", 0x00543830, "thiscall", []),
+    Spec("MapEffect_Construct", 0x00543880, "thiscall", [anything] * 20),
+]
+
+
 # Deliberately wrong pairings for `run.py --self-test`: each must be reported
 # as a mismatch, which shows that the harness notices wrong return values,
 # wrong memory writes and wrong conditions.

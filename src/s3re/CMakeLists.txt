@@ -31,11 +31,13 @@ add_library(s3re SHARED
     game/map.cpp
     game/map_areas.cpp
     game/map_directions.cpp
+    game/map_effects.cpp
     game/map_generation.cpp
     game/map_marks.cpp
     game/map_neighbourhood.cpp
     game/map_terrain.cpp
     game/net_thread.cpp
+    game/objectives.cpp
     game/player_presence.cpp
     game/player_queries.cpp
     game/players.cpp

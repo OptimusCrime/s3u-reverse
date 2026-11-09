@@ -107,7 +107,7 @@ reimplementations) unless marked.
 |---|---|---|---|---|
 | 0x000 | u8 | player; 0xFF = free | ctor, AllocArea, SumAreaGoods10PerPlayer; dump | V |
 | 0x004 | u32 | number of tiles | AssignTileToArea, RemoveTileFromArea; dump (3156, 3127) | V |
-| 0x008 | u16 | head of a pile list (not per goods type) | Move/MergeAreaContents | V |
+| 0x008 | u16 | head of the list of **empty piles** (goods byte 0xFF; MakePileEmpty 0x506080 pushes a pile here after unlinking it from its goods list) | Move/MergeAreaContents, MakePileEmpty | V |
 | 0x00A | u16[36] | heads of the pile lists per goods type (piles linked +0xA/+0xC) | AddTilePileToArea, FetchGoodsToTradeBuilding | V |
 | 0x052 | u16[36] | heads of the goods-request lists per goods type (buildings linked by their input word 2A) | AddBuildingGoodsRequest | V |
 | 0x09A | u16[36] | building per goods type, list A (cleared for buildings 0x21/0x22) | SetAreaBuildingSlotA, RemoveBuildingFromAreaRequests | V (layout), G (trade buildings) |
@@ -140,9 +140,9 @@ goods_piles.cpp, the DebugLog `PileIncAmountLeaving: art = %u - pilno =
 
 | Off | Size | Name | Meaning / values | Conf. |
 |---|---|---|---|---|
-| 0x0 | u8 | good | goods type (index into the 36 per-goods lists and player counters); 0 = free record; 0xFF = an allocated building pile without goods (FetchGoodsToTradeBuilding) | V |
+| 0x0 | u8 | good | goods type (index into the 36 per-goods lists and player counters); 0 = free record; 0xFF = an allocated pile without goods, listed in its area's empty-pile list +0x8 (MakePileEmpty, FetchGoodsToTradeBuilding) | V |
 | 0x1 | u8 | amount | units on the pile (up to 8; DebugLog when >= 9) | V |
-| 0x2 | u8 | leaving | units reserved to leave (PileIncAmountLeaving); building output piles use the high nibble for units on the way (FetchGoodsToTradeBuilding `+= 0x10`) | V |
+| 0x2 | u8 | leaving | units reserved to leave (PileIncAmountLeaving / PileDecAmountLeaving 0x505AC0: a pile whose units are all reserved leaves its area's goods list and comes back when one is released); building output piles use the high nibble for units on the way (FetchGoodsToTradeBuilding `+= 0x10`) | V |
 | 0x3 | u8 | coming | units on the way to the pile (PileInc/DecAmountComing, AddGoodsToPile -1) | V |
 | 0x4 | u8 | art (kind) | 0xFF free-standing pile (listed in the area); 0xFE, 0xFD seen in the dump (building piles); <= 8 counted by RecountPlayerGoods | V (values), G (meaning of 0xFE/0xFD) |
 | 0x5 | u8 | | always 0 in the dump, never accessed | S (padding) |
@@ -169,7 +169,7 @@ settler_records.cpp, settler_queries.cpp, building_tiles.cpp, counting.cpp.
 | 0x06 | u16 | y | tile | V |
 | 0x08 | u32 | direction | 0..5 (RandomBelow6 at creation; LeaveBuildingSlot sets 2) | V |
 | 0x0C | u16 | counter | random 0..31 at creation, reset with a new job (animation/step counter?) | V (writes), G (meaning) |
-| 0x0E | u16 | job | current job ("todo"; e.g. 3 work, 0x4C fetch for trade, 0x133 carry to pile, 0x145 ship, 0x147 to building, 0xAD soldier in building) | V (values), S (name) |
+| 0x0E | u16 | job | current job ("todo"; jobs 1 and 0x37 are followed by 2 and 0x35 (IsSettlerJob01Or37 0x4FA6B0, JobAfter01Or37 0x4FAA40, probably walking); e.g. 3 work, 0x4C fetch for trade, 0x133 carry to pile, 0x145 ship, 0x147 to building, 0xAD soldier in building) | V (values), S (name) |
 | 0x10 | u16 | next | list link (area/player settler lists) | V |
 | 0x12 | u16 | prev | list link | V |
 | 0x14 | u8 | flags | bit 0x40: in a building slot (LeaveBuildingSlot) | V (0x40) |
@@ -352,6 +352,22 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   +0x668A8 = those / 256 + 1, +0x668B0 = their product / 16). Probably
   the logic thread's draw/sprite lists in screen cells. **S** (bounds),
   **G** (purpose).
+- **MapEffect** (our name; the 0x4C-byte records of the member above).
+  Default constructor 0x543830: everything 0 except dwords +0x2C, +0x34 =
+  -1 and byte +0x38 = 0xFF (+0x30, +0x40 untouched). The 20-argument
+  constructor 0x543880 writes, in argument order: dword +0x0, word +0x4,
+  word +0x6, byte +0x3A, word +0x3C, dwords +0x8, +0xC, +0x10, +0x14, word
+  +0x28, dwords +0x18, +0x1C, +0x20, +0x24, dword +0x2C, words +0x30,
+  +0x32, bytes +0x38, +0x39, dword +0x34; dwords +0x40..+0x48 = 0. The 13
+  "make" functions 0x543930..0x543F70 pass fixed values (e.g. type 9,
+  graphics id 0xD0031) and the tick; 0x5445E0 adds a record (it passes
+  +0x10/+0x14 to 0x545EB0, probably a position). Meanings **G**; layout
+  **V** (src/s3re/game/map_effects.cpp).
+- **New game objectives** (world+0x1195DCC): byte +0x0 non-zero = enabled;
+  bytes +0x1..+0x7 the seven chosen objective ids (1..34, drawn by 0x4FFBC0
+  with Random, distinct, never 21, 25, 27..31, 33, 34; checked by
+  IsNgoObjectiveChosen 0x4FFB90). **V** (layout), **S** (meaning, from
+  the "NGO" DebugLog texts).
 - **Table at world+0x14D28A8** (16 bytes x 50, mark +0x14D28A4): byte
   +0x0, dword +0x4, dword +0xC written by 0x549530 (Volker area near
   GodlyEvents); UpdateEnvironment and 0x518F20 read it. **G**.

@@ -30,6 +30,14 @@
 // GameWorld::RestoreSettlerDirection (0x0050e380): (settler): direction +0x8
 //   = the saved +0x1c, counter +0xc = the saved +0x20. EAX = world +
 //   settler * 0x40. ret 4.
+// GameWorld::IsSettlerJob01Or37 (0x004fa6b0): (job) -> AL = 1 if job (a
+//   settler's word +0xe, full 32-bit compare) is 1 or 0x37, else 0; the
+//   upper bits of EAX are the argument's. ECX unused. ret 4.
+// GameWorld::JobAfter01Or37 (0x004faa40): (job) -> 2 for job 1, 0x35 for
+//   job 0x37, else 0. ECX unused. ret 4. Both are used by 0x500860 (a
+//   settler update, probably movement: it calls the first and, if true,
+//   saves the position in +0x24/+0x26 and sets the job to the second);
+//   0x4a33d0 (Dirk\Pathing.cpp) calls the first on a tile's settler.
 // All thiscall (ECX = world). Names provisional.
 
 #include "game/replacements.h"
@@ -284,6 +292,68 @@ S3RE_TEST(GameWorld_ClearSettlerJob_MatchesOriginal) {
 S3RE_TEST(GameWorld_RestoreSettlerDirection_MatchesOriginal) {
     CompareSettlerFn(ctx, Original_GameWorld_RestoreSettlerDirection, &GameWorld_RestoreSettlerDirection, 20000,
                      [](test::WorldPair&, std::uint32_t) {});
+}
+
+// ---------------------------------------------------------------------------
+// Job helpers
+// ---------------------------------------------------------------------------
+
+using JobFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t job);
+
+// Purpose: Whether a settler's job is one of two (1 or 0x37) that are probably "walking somewhere" states,
+// which the settler update and the path finder treat specially.
+std::uint32_t __fastcall GameWorld_IsSettlerJob01Or37(GameWorld*, void*, std::uint32_t job) {
+    return (job & 0xffffff00u) | ((job == 1 || job == 0x37) ? 1u : 0u);
+}
+
+// Purpose: The job that follows job 1 (2) or job 0x37 (0x35), probably once the settler has arrived;
+// 0 for other jobs.
+std::uint32_t __fastcall GameWorld_JobAfter01Or37(GameWorld*, void*, std::uint32_t job) {
+    if (job == 1) {
+        return 2;
+    }
+    if (job == 0x37) {
+        return 0x35;
+    }
+    return 0;
+}
+
+S3RE_HOOK(0x004fa6b0, GameWorld_IsSettlerJob01Or37, JobFn, Original_GameWorld_IsSettlerJob01Or37,
+          GameWorld_IsSettlerJob01Or37);
+S3RE_HOOK(0x004faa40, GameWorld_JobAfter01Or37, JobFn, Original_GameWorld_JobAfter01Or37, GameWorld_JobAfter01Or37);
+
+namespace {
+
+// Jobs 0..0x3ff and random 32-bit values; EAX must match exactly.
+void CompareJobFn(test::Context& ctx, JobFn original, JobFn candidate) {
+    for (std::uint32_t i = 0; i < 0x2000; ++i) {
+        const std::uint32_t job = i < 0x400 ? i : (ctx.rng().Chance(1, 2) ? ctx.rng().Next32()
+                                                                            : (ctx.rng().Next32() & ~0xffu) | 0x37);
+        if (!S3RE_EXPECT_EQ(original(nullptr, nullptr, job), candidate(nullptr, nullptr, job))) {
+            ctx.Fail(__FILE__, __LINE__, "  job 0x%x", job);
+            return;
+        }
+    }
+}
+
+// Wrong: compares only the low byte.
+std::uint32_t __fastcall WrongIsSettlerJob01Or37(GameWorld*, void*, std::uint32_t job) {
+    const std::uint32_t low = job & 0xff;
+    return (job & 0xffffff00u) | ((low == 1 || low == 0x37) ? 1u : 0u);
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_IsSettlerJob01Or37_MatchesOriginal) {
+    CompareJobFn(ctx, Original_GameWorld_IsSettlerJob01Or37, &GameWorld_IsSettlerJob01Or37);
+}
+S3RE_TEST(GameWorld_IsSettlerJob01Or37_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareJobFn(probe, Original_GameWorld_IsSettlerJob01Or37, &WrongIsSettlerJob01Or37);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+S3RE_TEST(GameWorld_JobAfter01Or37_MatchesOriginal) {
+    CompareJobFn(ctx, Original_GameWorld_JobAfter01Or37, &GameWorld_JobAfter01Or37);
 }
 
 }  // namespace s3re::game

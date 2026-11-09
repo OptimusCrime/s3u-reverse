@@ -100,7 +100,7 @@ Initialization order (all verified by reading the code):
 | 0x11940BC | 0x11943DC | 0x320 | int32[10] | 20 players | their lengths | verified |
 | 0x11943DC | 0x1195D7C | 0x19A0 | 0x148 B | 20 | **player records** ("Play"), `Player` | verified |
 | 0x1195D7C | 0x1195DCC | 0x50 | int32 | 20 | per player, zeroed by the ctor; no other use found | guess |
-| 0x1195DCC | 0x1195DD4 | 8 | | | **NewGameObjective** (savegame name) | strong |
+| 0x1195DCC | 0x1195DD4 | 8 | u8 + u8[7] | | **NewGameObjective**: enabled flag, then the seven chosen objective ids (IsNgoObjectiveChosen 0x4FFB90, chosen by 0x4FFBC0; see structs.md) | strong (verified layout) |
 | 0x1195DD4 | 0x1195FD4 | 0x200 | uint16 y,x | 128 | recent positions (cursor `0x7ACE60`) | verified |
 | 0x1195FD4 | 0x1196024 | 0x50 | int32 | 20 | per player; = race in the dump (2, 3); saved with players | strong |
 | 0x1196024 | 0x1222ED4 | 0x8CEB0 | 0x3C2 B | 20 x 30 | per player and slot: cached 31x31 site grids | strong |
