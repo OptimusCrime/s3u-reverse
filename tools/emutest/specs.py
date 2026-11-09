@@ -90,6 +90,22 @@ class Spec:
     # stack, whose contents are compared instead of their address. Calls to
     # undeclared slots are reported as spec errors.
     virtuals: dict | None = None
+    # World offsets whose final bytes are not compared. Only for bytes that
+    # provably hold leftovers of each function's own stack (e.g. padding of a
+    # stack temporary copied into the result), which differ between any two
+    # correct implementations; say why at the spec. A self-test pairing must
+    # show that the neighbouring bytes are still compared.
+    ignore_bytes: tuple[int, ...] = ()
+    # Side effects of virtual calls: {slot offset: effect(machine, ecx, args,
+    # h)}, run after the call is recorded; `h` is a random 64-bit value fixed
+    # by the case and the call's position, so both functions see the same
+    # effects as long as they make the same calls. Effects write with
+    # machine.guest_write (e.g. a child that removes itself from a list),
+    # to reach code that only runs when a callee changes the caller's state.
+    virtual_effects: dict | None = None
+    # Chance per case that every operator new of the case returns null (to
+    # reach the out-of-memory paths).
+    new_fails: float = 0.0
 
 
 MAP_SIZE = 0x2d2d0
@@ -2759,6 +2775,332 @@ SPECS += [
 ]
 
 
+# -- batch 24: MapEffect make functions (map_effects.cpp) -------------------
+#
+# Each builds the record in a stack temporary and copies all 0x4c bytes into
+# ECX, so the five padding bytes the constructor never writes hold each
+# function's own stack leftovers: they are not compared (ignore_bytes). The
+# self-test pairing 0x5439a0 / ours 0x543e80 differs only in bytes +0x38 and
+# +0x39, next to the padding byte +0x3b, and must still be caught.
+
+EFFECT_PADDING = (0x2a, 0x2b, 0x3b, 0x3e, 0x3f)
+
+
+def make_effect(address: str, count: int, original: int | None = None) -> Spec:
+    return Spec(f"MapEffect_Make_{address}", original or int(address, 16), "thiscall", [anything] * count,
+                ignore_bytes=EFFECT_PADDING)
+
+
+SPECS += [
+    make_effect("543930", 6),
+    make_effect("5439a0", 7),
+    make_effect("543a10", 10),
+    make_effect("543aa0", 13),
+    make_effect("543b40", 8),
+    make_effect("543bc0", 10),
+    make_effect("543c40", 12),
+    make_effect("543ce0", 9),
+    make_effect("543d60", 10),
+    make_effect("543df0", 11),
+    make_effect("543e80", 7),
+    make_effect("543ef0", 8),
+    make_effect("543f70", 3),
+]
+
+
+# -- batch 24: Watcom pointer vector (watcom/ptr_vector.cpp) ----------------
+#
+# The vector at world offset 0 (ECX = the world): vtable = emu.FAKE_VTABLE
+# (slot 0x04 is the "length changed" call), data in scratch 0.
+
+VECTOR_VIRTUALS = {0x04: 1}
+
+
+def vector_state(rng, pool, args):
+    capacity = rng.choice([0, 0, 1, 2, rng.randrange(8), rng.getrandbits(32)])
+    length = rng.choice([0, 0, 1, 2, 3, rng.randrange(8), 0x80000000, 0x80000001, rng.getrandbits(32)])
+    return [(0, FAKE_VTABLE, 4), (8, WORLD_BASE + SCRATCH, 4), (0xc, capacity, 4),
+            (0x10, rng.randint(-2, 6) & 0xFFFFFFFF, 4), (0x14, length, 4)]
+
+
+def small_or_anything(low, high):
+    return lambda rng, pool: (rng.randint(low, high) if rng.random() < 0.8 else rng.getrandbits(32)) & 0xFFFFFFFF
+
+
+SPECS += [
+    # n * 4 wraps for large n; the fake heap refuses blocks it can't hold.
+    Spec("PtrVector_Resize", 0x00429a00, "thiscall", [small_or_anything(0, 6)], presets=vector_state),
+    Spec("PtrVector_ResizeClampLength", 0x00437fe0, "thiscall", [small_or_anything(0, 6)], presets=vector_state),
+    # 0x428f7f (clamp the length to 1 after growing) is dead: this path is
+    # only taken when the length was 0.
+    Spec("PtrVector_Index", 0x00428ee0, "thiscall", [small_or_anything(-3, 8)], presets=vector_state,
+         virtuals=VECTOR_VIRTUALS, new_fails=0.2, exempt_blocks=(0x428f7f,)),
+]
+
+
+# -- batch 24: CScreenGroup, CControl, CGroupControl (screen_element.cpp) ---
+#
+# On top of ui_objects: the group at UI_GROUP has its children vector at
+# -0x74 (vtable = emu.FAKE_VTABLE, data in scratch 2 pointing at four child
+# elements at UI_BASE + 0x800 + 0x40 * k), the captured child at -0x50, the
+# "use the first rectangle" byte at -0x78. Child calls (virtual_effects)
+# sometimes shorten the vector or make it huge (length 0x80000001: then
+# every index is out of range, and data[0x80000000] wraps around to
+# data[0]); a huge vector is always emptied by the next child call, which
+# ends the loop. CControl: its CScreenElement part ("this") at UI_BASE +
+# 0x600 (control at -0x3c, vbtable at -0x38 -> the element), and for the
+# CGroupControl wrappers at UI_GROUP - 0x7c (vbtable at UI_GROUP - 0xb4).
+#
+# Exempt blocks (EMPTY): the inlined operator[] check's "vector is empty"
+# branch (with the grow-to-one code after it) right after a loop's `index <
+# length` check, with no call in between that could change the vector, is
+# dead code. The same code is covered in PtrVector_Index and in
+# CScreenGroup_HandleMessage's second check (after the 0x20 call).
+
+# NEG: the "index < 0" branch of the same check is dead too (the loop index
+# starts at 0 and would need 2^31 iterations to turn negative). LEN0: the
+# clamp of the length to 1 after growing an empty vector (the length is 0
+# there).
+EMPTY_417BE0 = (0x417c2b, 0x417c40, 0x417c48, 0x417c4d, 0x417c5d, 0x417c68, 0x417c6e, 0x417c70, 0x417c74,
+                0x417c7c, 0x417c84, 0x417ca5, 0x417cb8, 0x417cbd, 0x417cd1)
+EMPTY_417AB0 = (0x417b00, 0x417b15, 0x417b1d, 0x417b22, 0x417b32, 0x417b3d, 0x417b43, 0x417b45, 0x417b49,
+                0x417b51, 0x417b59, 0x417b7a, 0x417b8d, 0x417b92, 0x417ba6)
+EMPTY_417480 = (0x4174d2, 0x4174ec, 0x4174f8, 0x4174fd, 0x417500, 0x41750c, 0x417514,
+                0x417545, 0x41755f, 0x41756b, 0x417570, 0x417573, 0x41757f, 0x417587,
+                0x4175c4, 0x4175de, 0x4175ea, 0x4175ef, 0x4175f2, 0x4175fe, 0x417606)
+EMPTY_417130 = (0x417224, 0x417239, 0x417246, 0x41724a, 0x417263,  # the 0x16 loop
+                0x4172cf, 0x4172e4, 0x4172f5, 0x4172fa, 0x4172fd, 0x41730d, 0x417315,  # first check
+                0x4173d0, 0x4173eb)  # second check: LEN0, NEG
+EMPTY_4176B0 = (0x417706, 0x41771b, 0x417723, 0x417728, 0x417738, 0x417743, 0x417749, 0x41774b, 0x41774f,
+                0x417757, 0x41775f, 0x417780, 0x417793, 0x417798, 0x4177ac)
+
+GROUP_DATA = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+CHILDREN = [UI_BASE + 0x800 + 0x40 * k for k in range(4)]
+CONTROL = UI_BASE + 0x600
+CONTROL_VBTABLE = UI_VBTABLES + 24
+GROUP_CONTROL_VBTABLE = UI_VBTABLES + 32
+GROUP_VIRTUALS = dict(UI_VIRTUALS)
+GROUP_VIRTUALS.update({0x00: 1, 0x18: 1})
+
+
+def shrink_children(machine, ecx, args, h):
+    """A child call that changes the group's vector length (see above)."""
+    address = UI_GROUP - 0x60
+    length = int.from_bytes(machine.guest_read(address, 4), "little")
+    choice = h & 7
+    if length >= 0x80000000 or choice == 0:
+        value = 0
+    elif choice == 1 and not machine.probe_calls[-1][1] in (0x5c, 0x60):
+        # (not from TrackMouse's calls: later children may not call at all)
+        value = 0x80000001
+    elif choice == 2:
+        value = (h >> 8) % 3
+    else:
+        return
+    machine.guest_write(address, value.to_bytes(4, "little"))
+
+
+GROUP_EFFECTS = {slot: shrink_children for slot in (0x18, 0x20, 0x24, 0x28, 0x5c, 0x60, 0x70, 0x74)}
+
+
+def group_objects(rng, pool, args):
+    fields = ui_objects(rng, pool, args)
+    group = UI_GROUP - WORLD_BASE
+    count = rng.choice([0, 1, 2, 3, 4, 4, 0x80000001])
+    fields += [(group - 0x74, FAKE_VTABLE, 4), (group - 0x6c, WORLD_BASE + GROUP_DATA, 4),
+               (group - 0x68, rng.choice([0, 1, 4, rng.getrandbits(32)]), 4),
+               (group - 0x64, rng.randint(-1, 4) & 0xFFFFFFFF, 4), (group - 0x60, count, 4),
+               (group - 0x50, 0 if rng.random() < 0.6 else rng.choice(CHILDREN), 4),
+               (group - 0x78, rng.randrange(2), 1)]
+    for k, child in enumerate(CHILDREN):
+        offset = child - WORLD_BASE
+        fields.append((GROUP_DATA + 4 * k, child, 4))
+        fields += [(offset, FAKE_VTABLE, 4), (offset + 0x18, rng.choice([0, UI_PARENT]), 4),
+                   (offset + 0x1c, rng.randrange(2), 1)]
+        if count == 0x80000001 and k == 0:
+            # The first child sees the mouse arrive (TrackMouse calls 0x5c),
+            # so the huge vector is emptied by an effect in every loop.
+            fields.append((offset + 0x1d, 0, 1))
+            for i, v in enumerate((0, 0, 0x10000, 0x10000)):
+                fields.append((offset + 8 + 4 * i, v & 0xFFFFFFFF, 4))
+        else:
+            fields.append((offset + 0x1d, rng.randrange(3), 1))
+            for i in range(4):
+                fields.append((offset + 8 + 4 * i, small_coordinate(rng), 4))
+    # The CControl parts: vbtable, tooltip, where the tooltip was opened.
+    for this, vbtable in ((CONTROL, CONTROL_VBTABLE), (UI_GROUP - 0x7c, GROUP_CONTROL_VBTABLE)):
+        t = this - WORLD_BASE
+        fields += [(t - 0x38, WORLD_BASE + vbtable, 4), (vbtable + 4, (ELEMENT - (this - 0x38)) & 0xFFFFFFFF, 4),
+                   (t - 0x1c, 0 if rng.random() < 0.3 else UI_CHILD, 4)]
+        for field in (-0xc, -0x8):
+            value = rng.randint(-40, 120) if rng.random() < 0.9 else rng.getrandbits(32)
+            fields.append((t + field, value & 0xFFFFFFFF, 4))
+    # A non-zero move offset at scratch 0 + 0x40 (MoveBy calls 0x70 then).
+    fields += [(SCRATCH + 0x40, rng.choice([1, -1, 5]) & 0xFFFFFFFF, 4),
+               (SCRATCH + 0x44, rng.choice([0, 2, -3]) & 0xFFFFFFFF, 4)]
+    return fields
+
+
+def move_delta(rng, pool) -> int:
+    return WORLD_BASE + SCRATCH + 0x40
+
+
+def group_spec(name, address, args, this=UI_GROUP, **kwargs):
+    return Spec(name, address, "fastcall", [one_of(this), anything, *args], presets=group_objects,
+                virtuals=GROUP_VIRTUALS, virtual_effects=GROUP_EFFECTS, **kwargs)
+
+
+DRAW_ARGS = [anything, one_of(UI_RECTS), one_of(UI_RECTS + 16)]
+
+SPECS += [
+    group_spec("CScreenGroup_SetFlag1F", 0x00417be0, [anything], exempt_blocks=EMPTY_417BE0),
+    group_spec("CScreenGroup_OnMoved", 0x00417ab0, [one_of(UI_RECTS), move_delta], exempt_blocks=EMPTY_417AB0),
+    group_spec("CScreenGroup_Draw", 0x00417480, DRAW_ARGS, exempt_blocks=EMPTY_417480),
+    # AL is undefined in the original when the captured child declines the
+    # message (an uninitialized stack byte), so EAX is not compared here; the
+    # in-process test compares AL on every other path.
+    group_spec("CScreenGroup_HandleMessage", 0x00417130, MESSAGE, eax_mask=0, exempt_blocks=EMPTY_417130,
+               new_fails=0.1),
+    group_spec("CScreenGroup_OnMouseMove", 0x004176b0, MESSAGE, exempt_blocks=EMPTY_4176B0),
+    group_spec("CScreenGroup_SetFlag1F_429dd0", 0x00429dd0, [anything]),
+    group_spec("CScreenGroup_OnMoved_42a030", 0x0042a030, [one_of(UI_RECTS), move_delta]),
+    group_spec("CScreenGroup_Draw_42a180", 0x0042a180, DRAW_ARGS),
+    group_spec("CScreenGroup_HandleMessage_429e10", 0x00429e10, MESSAGE, eax_mask=0),
+    group_spec("CScreen_HandleMessage", 0x00417f60, MESSAGE, this=UI_GROUP + 0x18, eax_mask=0),
+    # CControl (EAX: only AL is defined for the message handlers' results,
+    # but ours reproduce the whole register where it is known).
+    group_spec("CControl_DeleteTooltip", 0x004187b0, [], this=CONTROL - 0x3c, eax_mask=0),
+    group_spec("CControl_OnMessage10", 0x00418380, MESSAGE, this=CONTROL),
+    group_spec("CControl_OnMouseMove", 0x00418430, MESSAGE, this=CONTROL, eax_mask=0xFF),
+    group_spec("CControl_OnMouseEnter", 0x004184b0, MESSAGE, this=CONTROL),
+    group_spec("CControl_OnMouseLeave", 0x004184e0, MESSAGE, this=CONTROL),
+    group_spec("CGroupControl_OnMessage10", 0x00429e80, MESSAGE),
+    group_spec("CGroupControl_OnMouseMove", 0x00429ec0, MESSAGE, eax_mask=0xFF),
+    group_spec("CGroupControl_OnMouseEnter", 0x00429f50, MESSAGE),
+    group_spec("CGroupControl_OnMouseLeave", 0x00429f90, MESSAGE),
+]
+
+# -- batch 24: CStaticControl, CSurface, AI area lookups, CreatePile, -------
+# -- UpdateGroupMenu -------------------------------------------------------
+
+AI_MAP_SIZES = 0x007e3412  # uint16 y size, then uint16 x size at 0x7e3414
+AI_MAP_WORLD = 0x007e7b60
+
+
+def building_position(rng, pool, args):
+    """The building record of the id in scratch 0: x/y around the map size."""
+    building = rng.randrange(3200)
+    record = BUILDINGS + building * BUILDING_BYTES
+    coordinate = lambda: rng.randrange(420) if rng.random() < 0.9 else rng.getrandbits(16)  # noqa: E731
+    return [(SCRATCH, building, 2), (record + 0xa, coordinate(), 2), (record + 0xc, coordinate(), 2)]
+
+
+def ai_map_sizes(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, rng.randrange(420), 2), (AI_MAP_SIZES + 2, rng.randrange(420), 2)]
+
+
+def free_tile_world(rng, pool, args):
+    """A small map; a run of blocked tiles from (x, y) on, often to the edge."""
+    size = rng.randint(1, 40)
+    fields = [(MAP_SIZE, size, 4)]
+    x, y = args
+    if 0 <= x < size and 0 <= y < size:
+        run = 0 if rng.random() < 0.3 else rng.randint(1, size - x + 1)
+        for k in range(run + 1):
+            if x + k > size:
+                break
+            tile = 0x67444 + ((x + k) * 0x300 + y) * 24
+            flags = rng.getrandbits(8)
+            fields.append((tile + 0xa, flags | 1 if k < run else flags & ~1, 1))
+    return fields
+
+
+def ai_both_worlds(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_WORLD, WORLD_BASE, 4)]
+
+
+PILE_LIMIT = 0x7cff
+
+
+def create_pile_state(rng, pool, args):
+    """Sometimes every pile record is in use (the "none free" path); the
+    tile's area word below 0x400 mostly (else 0 or >= 0x8000 with goods)."""
+    x, y, goods, amount, kind = args
+    fields = []
+    if rng.random() < 0.03:
+        fields += [(0x123885c + pile * 14, 1, 1) for pile in range(1, PILE_LIMIT)]
+    tile = 0x67444 + (x * 0x300 + y) * 24
+    if rng.random() < 0.15 and amount != 0:
+        area = rng.choice([0, 0x8000 + rng.randrange(0x8000)])
+    else:
+        area = rng.randrange(0x400)
+    fields.append((tile + 0x14, area, 2))
+    return fields
+
+
+def pile_goods(rng, pool) -> int:
+    return 0xff if rng.random() < 0.25 else rng.randrange(36)
+
+
+def pile_amount(rng, pool) -> int:
+    return rng.choice([0, 0, 1, 5, 0x100])
+
+
+def pile_kind(rng, pool) -> int:
+    return rng.choice([0, 1, 0x32, 0x33, 0xfd, 0xfe, 0xff, 0x100])
+
+
+GROUP_COUNTS = 0x007ad620
+GROUP_SETTLERS = 0x007ad634
+SETTLERS = 0x12a5e60
+
+
+def group_menu_state(rng, pool, args):
+    group = args[0]
+    count = rng.randrange(2) if rng.random() < 0.3 else rng.randrange(101)
+    kind = rng.choice([0x24, 0x2c, 0x2b, 0x29, 0x28, 0x16, 0x17, 0x01])
+    same = rng.random() < 0.7
+    local = rng.randrange(4)
+    world = [(0x2d2d4, local, 4), (0x2d298, rng.randrange(8) if rng.random() < 0.7 else rng.getrandbits(32), 4)]
+    exe = [(GROUP_COUNTS + group * 2, count, 2)]
+    for k in range(count):
+        settler = rng.randrange(0x10000)
+        exe.append((GROUP_SETTLERS + group * 200 + k * 2, settler, 2))
+        world.append((SETTLERS + settler * 0x40 + 1,
+                      kind if same or rng.random() < 0.5 else rng.choice([0x24, 0x2c, 0x17, 0x02]), 1))
+        world.append((SETTLERS + settler * 0x40, local if rng.random() < 0.6 else rng.randrange(4), 1))
+    return world, exe
+
+
+def group_menu_presets(rng, pool, args):
+    """Draws the state once per case (world part); the S3.EXE part is
+    replayed by group_menu_globals from the same draw."""
+    world, exe = group_menu_state(rng, pool, args)
+    GROUP_MENU_EXE[:] = exe
+    return world
+
+
+GROUP_MENU_EXE: list = []
+
+
+def group_menu_globals(rng, pool, args):
+    return list(GROUP_MENU_EXE)
+
+
+SPECS += [
+    ui_spec("CStaticControl_Construct", 0x0041c3c0, [one_of(UI_RECTS, ELEMENT + 8)]),
+    Spec("DirectX_CSurface_Construct", 0x005bf200, "thiscall", []),
+    Spec("AI_BuildingArea", 0x00599610, "fastcall", [scratch(0)], presets=building_position,
+         globals=ai_map_sizes),
+    Spec("AI_FreeTileArea", 0x0058b480, "stdcall", [between(-3, 42), between(-3, 42)],
+         presets=free_tile_world, globals=ai_both_worlds),
+    Spec("GameWorld_CreatePile", 0x00504420, "thiscall",
+         [below(384), below(384), pile_goods, pile_amount, pile_kind], presets=create_pile_state,
+         max_cases=800),
+    Spec("CLogicThread_UpdateGroupMenu", 0x00542990, "logicthread", [below(10)],
+         presets=group_menu_presets, globals=group_menu_globals),
+]
+
 # Deliberately wrong pairings for `run.py --self-test`: each must be reported
 # as a mismatch, which shows that the harness notices wrong return values,
 # wrong memory writes and wrong conditions.
@@ -2792,4 +3134,7 @@ SELF_TEST = [
     ui_spec("CScreenElement_Invalidate", 0x004160d0, [], eax_mask=0),
     # API probes: the clip is intersected with the element (PtInRect is not called).
     ui_spec("CScreenElement_DrawClipped", 0x00415af0, [anything, one_of(UI_RECTS + 16)], eax_mask=0),
+    # ignore_bytes: 0x5439a0 and 0x543e80 differ only in bytes +0x38 / +0x39,
+    # next to the ignored padding byte +0x3b.
+    make_effect("543e80", 7, original=0x005439a0),
 ]

@@ -45,6 +45,19 @@
 //   0x0055ca60 AI record set word(value) thiscall: calls the empty function
 //              0x59f200 (an inlined empty base call), then word +4 = value.
 //              ret 4. Only AX is defined (callers don't use EAX).
+//   0x00599610 AI_BuildingArea(const u16* building) fastcall (ECX): the area
+//              word (+0x14) of the tile under building record *building
+//              (x/y words +0xa/+0xc), or 0xffff if x/y are not below the map
+//              size words 0x7e3414/0x7e3412 (16-bit compares). The upper half
+//              of EAX is left over from the address arithmetic (reproduced:
+//              one caller keeps the whole register).
+//   0x0058b480 AI_FreeTileArea(x, y) stdcall: -1 unless both pass AI_IsOnMap;
+//              else the area word of tile (x, y) of the world at 0x7e7b60 (a
+//              second copy of the AI's world pointer, set by 0x58fa7b),
+//              except that if the tile is blocked (bit 0 of byte +0xa) it
+//              walks to x+1, x+2, ... until a free tile or x = map size, and
+//              takes that tile's area (at x = map size, the tile just past
+//              the row, as the original reads it). EAX = the word.
 
 #include "hooks.h"
 #include "test/difftest.h"
@@ -65,6 +78,13 @@ constexpr std::uintptr_t kAiPlayerSetup = 0x007e2eb4;
 constexpr std::uintptr_t kAiPlayerData = 0x007e2eb0;
 constexpr std::uintptr_t kPlayerSetupTable = 0x00731488;
 constexpr std::uintptr_t kCandidateDefaults = 0x007329d0;
+constexpr std::uintptr_t kAiMapSizeY = 0x007e3412;  // uint16 (copied from the world by 0x551b80)
+constexpr std::uintptr_t kAiMapSizeX = 0x007e3414;  // uint16
+constexpr std::uintptr_t kAiMapWorld = 0x007e7b60;
+constexpr std::size_t kTiles = 0x67444;
+constexpr std::size_t kTileBytes = 24;
+constexpr std::size_t kTileFlags = 0xa;
+constexpr std::size_t kTileArea = 0x14;
 
 constexpr std::size_t kMapSize = 0x2d2d0;
 constexpr std::size_t kAreas = 0xe145e8;
@@ -93,6 +113,10 @@ std::uint8_t* AiWorld() {
 }  // namespace
 
 using SetCurrentPlayerFn = std::uint32_t(__fastcall*)(void* player);
+using BuildingAreaFn = std::uint32_t(__fastcall*)(const std::uint16_t* building);
+using FreeTileAreaFn = std::uint32_t(__stdcall*)(std::int32_t x, std::int32_t y);
+std::uint32_t __fastcall AI_BuildingArea(const std::uint16_t* building);
+std::uint32_t __stdcall AI_FreeTileArea(std::int32_t x, std::int32_t y);
 using WordListFn = std::uint32_t(__stdcall*)(std::uint32_t value, std::uint16_t* list, std::uint32_t count);
 using IsOnMapFn = bool(__fastcall*)(std::int32_t v);
 using ClampToMapFn = std::uint32_t(__fastcall*)(std::int32_t* x, std::int32_t* y);
@@ -292,6 +316,47 @@ std::uint16_t __fastcall AI_SetWord4(void* self, void* /*edx*/, std::uint32_t va
     return static_cast<std::uint16_t>(value);
 }
 
+S3RE_HOOK(0x00599610, AI_BuildingArea, BuildingAreaFn, Original_AI_BuildingArea, AI_BuildingArea);
+
+// Purpose: The economy area a building stands in, for the computer players
+// (0xffff for a position off the map).
+std::uint32_t __fastcall AI_BuildingArea(const std::uint16_t* building) {
+    std::uint8_t* world = AiWorld();
+    const std::uint32_t id = *building;
+    const std::size_t record = kBuildings + id * kBuildingBytes;
+    const std::uint16_t x = At<std::uint16_t>(world, record + 0xa);
+    const std::uint16_t y = At<std::uint16_t>(world, record + 0xc);
+    if (x >= At<std::uint16_t>(kAiMapSizeX) || y >= At<std::uint16_t>(kAiMapSizeY)) {
+        return ((id * 29) & 0xffff0000u) | 0xffffu;  // `or ax, 0FFFFh` on 29 * id
+    }
+    // The original indexes [world + (tile + 0x44d9) * 24], which is the
+    // tile's area word (0x44d9 * 24 = kTiles + kTileArea).
+    const std::uint32_t index = x * 0x300u + y + 0x44d9u;
+    static_assert(0x44d9 * kTileBytes == kTiles + kTileArea, "tile area word");
+    return (index & 0xffff0000u) | At<std::uint16_t>(world, index * kTileBytes);
+}
+
+S3RE_HOOK(0x0058b480, AI_FreeTileArea, FreeTileAreaFn, Original_AI_FreeTileArea, AI_FreeTileArea);
+
+// Purpose: The economy area at a map position for the computer players,
+// skipping blocked tiles in the +x direction; -1 off the map.
+std::uint32_t __stdcall AI_FreeTileArea(std::int32_t x, std::int32_t y) {
+    if (!AI_IsOnMap(x) || !AI_IsOnMap(y)) {
+        return 0xffffffffu;
+    }
+    std::uint8_t* world = At<std::uint8_t*>(kAiMapWorld);
+    auto tile = [&](std::int32_t tx) {
+        return kTiles + static_cast<std::uint32_t>(tx * 0x300 + y) * kTileBytes;
+    };
+    if ((At<std::uint8_t>(world, tile(x) + kTileFlags) & 1) != 0) {
+        const std::int32_t size = At<std::int32_t>(world, kMapSize);
+        do {
+            ++x;
+        } while (x < size && (At<std::uint8_t>(world, tile(x) + kTileFlags) & 1) != 0);
+    }
+    return At<std::uint16_t>(world, tile(x) + kTileArea);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -311,19 +376,23 @@ struct AiFunctions {
     GridFreeFn gridFree;
     CopySixBytesFn copySix;
     SetWord4Fn setWord4;
+    BuildingAreaFn buildingArea;
+    FreeTileAreaFn freeTileArea;
 };
 
 AiFunctions OriginalAi() {
     return {Original_AI_SetCurrentPlayer, Original_AI_WordListInsert, Original_AI_WordListRemove,
             Original_AI_IsOnMap,          Original_AI_ClampToMap,     Original_AI_AreaGoodsAmount,
             Original_AI_GetBuilding,      Original_AI_RecordBestCandidate, Original_AI_GridCell,
-            Original_AI_GridFree,         Original_AI_CopySixBytes,   Original_AI_SetWord4};
+            Original_AI_GridFree,         Original_AI_CopySixBytes,   Original_AI_SetWord4,
+            Original_AI_BuildingArea,     Original_AI_FreeTileArea};
 }
 
 AiFunctions OurAi() {
     return {&AI_SetCurrentPlayer, &AI_WordListInsert, &AI_WordListRemove, &AI_IsOnMap,
             &AI_ClampToMap,       &AI_AreaGoodsAmount, &AI_GetBuilding,   &AI_RecordBestCandidate,
-            &AI_GridCell,         &AI_GridFree,       &AI_CopySixBytes,  &AI_SetWord4};
+            &AI_GridCell,         &AI_GridFree,       &AI_CopySixBytes,  &AI_SetWord4,
+            &AI_BuildingArea,     &AI_FreeTileArea};
 }
 
 // The globals the functions read or write, saved and restored around a test.
@@ -369,6 +438,15 @@ void BuildPileList(test::Context& ctx, test::WorldPair& worlds, std::uint32_t ar
 void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
     const AiFunctions original = OriginalAi();
     SavedGlobals saved;
+    const std::uint32_t savedMapSizes = At<std::uint32_t>(kAiMapSizeY);  // both words
+    const std::uint32_t savedMapWorld = At<std::uint32_t>(kAiMapWorld);
+    struct Restore {
+        std::uint32_t sizes, world;
+        ~Restore() {
+            At<std::uint32_t>(kAiMapSizeY) = sizes;
+            At<std::uint32_t>(kAiMapWorld) = world;
+        }
+    } restore{savedMapSizes, savedMapWorld};
     test::WorldPair worlds(ctx, 0x153a128);
     std::vector<std::uint8_t> dataA(0x2000), dataB(0x2000);
     ctx.rng().Fill(dataA.data(), dataA.size());
@@ -376,9 +454,10 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
     auto useWorld = [&](bool ours) {
         At<void*>(kAiWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
         At<void*>(kAiPlayerData) = ours ? dataB.data() : dataA.data();
+        At<void*>(kAiMapWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
     };
     for (int i = 0; i < cases; ++i) {
-        const int op = static_cast<int>(ctx.rng().Below(12));
+        const int op = static_cast<int>(ctx.rng().Below(14));
         bool same = true;
         switch (op) {
             case 0: {
@@ -522,6 +601,47 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
                 original.copySix(null ? nullptr : da + 2, src);
                 candidate.copySix(null ? nullptr : db + 2, src);
                 same &= S3RE_EXPECT_MEM_EQ(da, db, sizeof(da));
+                break;
+            }
+            case 12: {
+                const std::uint16_t id = static_cast<std::uint16_t>(ctx.rng().Below(3200));
+                const std::size_t record = kBuildings + id * kBuildingBytes;
+                auto coordinate = [&]() {
+                    return static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(420));
+                };
+                worlds.Set<std::uint16_t>(record + 0xa, coordinate());
+                worlds.Set<std::uint16_t>(record + 0xc, coordinate());
+                At<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(ctx.rng().Below(420));
+                At<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(ctx.rng().Below(420));
+                useWorld(false);
+                const std::uint32_t ra = original.buildingArea(&id);
+                useWorld(true);
+                const std::uint32_t rb = candidate.buildingArea(&id);
+                same &= S3RE_EXPECT_EQ(ra, rb);
+                break;
+            }
+            case 13: {
+                const std::int32_t size = ctx.rng().Range(1, 400);
+                worlds.Set<std::int32_t>(kMapSize, size);
+                const std::int32_t x = ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Next32())
+                                                               : ctx.rng().Range(-2, size + 1);
+                const std::int32_t y = ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Next32())
+                                                               : ctx.rng().Range(-2, size + 1);
+                if (x >= 0 && x < size && y >= 0 && y < size) {
+                    // A run of blocked tiles from x on (often to the map edge).
+                    const std::int32_t run = ctx.rng().Chance(1, 3) ? 0 : ctx.rng().Range(1, size - x + 1);
+                    for (std::int32_t k = 0; k <= run && x + k <= size; ++k) {
+                        const std::size_t tile = kTiles + static_cast<std::size_t>((x + k) * 0x300 + y) * kTileBytes;
+                        const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32());
+                        worlds.Set<std::uint8_t>(tile + kTileFlags,
+                                                 static_cast<std::uint8_t>(k < run ? flags | 1 : flags & ~1));
+                    }
+                }
+                useWorld(false);
+                const std::uint32_t ra = original.freeTileArea(x, y);
+                useWorld(true);
+                const std::uint32_t rb = candidate.freeTileArea(x, y);
+                same &= S3RE_EXPECT_EQ(ra, rb);
                 break;
             }
             default: {

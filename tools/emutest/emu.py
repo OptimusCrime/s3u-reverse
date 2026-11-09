@@ -108,6 +108,14 @@ def _api_pt_in_rect(machine, uc, args):
     return int(r[0] <= x < r[2] and r[1] <= y < r[3]), ("PtInRect", *r, x, y)
 
 
+def _api_time_get_time(machine, uc, args):
+    """timeGetTime(): a value fixed by the case and the number of probe calls
+    so far (both functions get the same times as long as they make the same
+    calls)."""
+    value = _mix((machine.seed << 32) ^ (0x71AE0000 + len(machine.probe_calls))) & 0xFFFFFFFF
+    return value, ("timeGetTime",)
+
+
 # name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
 # record holds what the call saw (rectangle contents, not pointers, which
 # differ between the original's and our stack frames).
@@ -115,6 +123,7 @@ API_HANDLERS = {
     "IntersectRect": (3, _api_intersect_rect),
     "IsRectEmpty": (1, _api_is_rect_empty),
     "PtInRect": (3, _api_pt_in_rect),
+    "timeGetTime": (0, _api_time_get_time),
 }
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,
@@ -227,10 +236,12 @@ class Emulator:
             self.uc.hook_add(UC_HOOK_CODE, handler, begin=address, end=address)
         self.heap_calls: list[tuple] = []
         self.heap_next = 0
+        self.new_fails = False  # this case: operator new returns null (Spec.new_fails)
         self.thrown: int | None = None
         self._map_thread_block()
         # Virtual-call and API probes.
         self.virtuals: dict[int, int | tuple[int, tuple[int, ...]]] = {}
+        self.virtual_effects: dict = {}  # offset -> effect(machine, ecx, args, h), see specs.Spec
         self.probe_calls: list[tuple] = []
         self.spec_error: str | None = None
         self.uc.mem_map(PROBE_BASE, PROBE_SIZE)
@@ -293,8 +304,13 @@ class Emulator:
                 shown.append(("contents", self.guest_read(value, pointers[i])))
             else:
                 shown.append(value)
-        self.probe_calls.append(("virtual", offset, uc.reg_read(UC_X86_REG_ECX), *shown))
-        self._finish_probe(uc, esp, ret, count, self._probe_value())
+        ecx = uc.reg_read(UC_X86_REG_ECX)
+        self.probe_calls.append(("virtual", offset, ecx, *shown))
+        eax = self._probe_value()
+        effect = self.virtual_effects.get(offset)
+        if effect is not None:
+            effect(self, ecx, args, _mix((self.seed << 32) ^ (0xEFFEC700 + len(self.probe_calls))))
+        self._finish_probe(uc, esp, ret, count, eax)
 
     def _on_api(self, uc, address, size, user_data):
         name = self.api_names[(address - API_CODE) // 4]
@@ -433,7 +449,7 @@ class Emulator:
         esp = uc.reg_read(UC_X86_REG_ESP)
         count = struct.unpack("<I", bytes(uc.mem_read(esp + 4, 4)))[0]
         block = 0
-        if count < HEAP_SIZE - self.heap_next:
+        if count < HEAP_SIZE - self.heap_next and not self.new_fails:
             block = WORLD_BASE + HEAP_OFFSET + self.heap_next
             self.heap_next += (count + 15) & ~15
         self.heap_calls.append(("new", count, block))

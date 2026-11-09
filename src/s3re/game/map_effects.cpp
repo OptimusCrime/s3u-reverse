@@ -128,6 +128,190 @@ std::uint32_t __fastcall MapEffect_SetLinks(void* self, void*, std::uint32_t lis
 
 S3RE_HOOK(0x00544290, MapEffect_SetLinks, SetLinksFn, Original_MapEffect_SetLinks, MapEffect_SetLinks);
 
+
+// The 13 make functions (0x543930..0x543f70; our names MapEffect_Make_<address>)
+// are thiscall on the destination record, with 3 to 13 stack arguments (ret
+// 4 * count). Each pushes a fixed mix of its arguments, constants and the
+// caller's EDX (which the original code passes along as it is: a value left
+// in the register by the caller) as the 20 constructor arguments, builds the
+// record in a 0x4c-byte stack temporary with 0x543880 and copies all 19
+// dwords into ECX (rep movs). EAX = ECX. The argument mapping per function
+// (a<i> = stack argument i, edx = the caller's EDX) is written out below; it
+// was read off the push sequences by a script and checked by the tests.
+//
+// The copy includes the five padding bytes the constructor never writes
+// (+0x2a, +0x2b, +0x3b, +0x3e, +0x3f), so the original leaves whatever was
+// on its stack there. Ours does the same with its own temporary; the values
+// differ between the two (stack garbage), and the tests ignore exactly these
+// bytes.
+using Make3Fn = void*(__fastcall*)(void* self, void* edx, std::uint32_t, std::uint32_t, std::uint32_t);
+using Make6Fn = void*(__fastcall*)(void* self, void* edx, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+using Make7Fn = void*(__fastcall*)(void* self, void* edx, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+using Make8Fn = void*(__fastcall*)(void* self, void* edx, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+using Make9Fn = void*(__fastcall*)(void* self, void* edx, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+using Make10Fn = void*(__fastcall*)(void* self, void* edx, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+using Make11Fn = void*(__fastcall*)(void* self, void* edx, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+using Make12Fn = void*(__fastcall*)(void* self, void* edx, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+using Make13Fn = void*(__fastcall*)(void* self, void* edx, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+
+namespace {
+
+constexpr std::size_t kPaddingBytes[] = {0x2a, 0x2b, 0x3b, 0x3e, 0x3f};
+
+void* MakeEffect(void* self, std::uint32_t a1, std::uint32_t a2, std::uint32_t a3, std::uint32_t a4,
+                 std::uint32_t a5, std::uint32_t a6, std::uint32_t a7, std::uint32_t a8, std::uint32_t a9,
+                 std::uint32_t a10, std::uint32_t a11, std::uint32_t a12, std::uint32_t a13, std::uint32_t a14,
+                 std::uint32_t a15, std::uint32_t a16, std::uint32_t a17, std::uint32_t a18, std::uint32_t a19,
+                 std::uint32_t a20) {
+    std::uint8_t temporary[kEffectBytes];  // padding left uninitialized, as in the original
+    MapEffect_Construct(temporary, nullptr, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16,
+                        a17, a18, a19, a20);
+    std::memcpy(self, temporary, kEffectBytes);
+    return self;
+}
+
+}  // namespace
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543930(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
+    return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a0, 0u, 0u, a1, a2, a1, a2, 0u, a3, a4, a3, a4,
+                      a5, 0u, a0, 0xffu, 0u, 0xffffffffu);
+}
+
+S3RE_HOOK(0x00543930, MapEffect_Make_543930, Make6Fn, Original_MapEffect_Make_543930, MapEffect_Make_543930);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_5439a0(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6) {
+    return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a0, 0u, 0u, a1, a2, a1, a2, 0u, a3, a4, a3, a4,
+                      a5, 0u, a0, a6, 0u, 0xffffffffu);
+}
+
+S3RE_HOOK(0x005439a0, MapEffect_Make_5439a0, Make7Fn, Original_MapEffect_Make_5439a0, MapEffect_Make_5439a0);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543a10(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
+                                       std::uint32_t a7, std::uint32_t a8, std::uint32_t a9) {
+    return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a9, 0u, 0u, a1, a2, a3, a4, 0u, a5, a6, a5, a6,
+                      a7, a8, a9, 0xffu, 0u, 0xffffffffu);
+}
+
+S3RE_HOOK(0x00543a10, MapEffect_Make_543a10, Make10Fn, Original_MapEffect_Make_543a10, MapEffect_Make_543a10);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543aa0(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
+                                       std::uint32_t a7, std::uint32_t a8, std::uint32_t a9, std::uint32_t a10,
+                                       std::uint32_t a11, std::uint32_t a12) {
+    return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a12, 0u, 0u, a1, a2, a3, a4, a5, a6, a7, a8, a9,
+                      a10, a11, a12, 0xffu, 0u, 0xffffffffu);
+}
+
+S3RE_HOOK(0x00543aa0, MapEffect_Make_543aa0, Make13Fn, Original_MapEffect_Make_543aa0, MapEffect_Make_543aa0);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543b40(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
+                                       std::uint32_t a7) {
+    return MakeEffect(self, a1, a2, a2, reinterpret_cast<std::uint32_t>(edx), a0, a3, a4, a3, a4, 0u, a5, a6, a5, a6,
+                      a7, 0u, a2, 0xffu, 0u, 0xffffffffu);
+}
+
+S3RE_HOOK(0x00543b40, MapEffect_Make_543b40, Make8Fn, Original_MapEffect_Make_543b40, MapEffect_Make_543b40);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543bc0(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
+                                       std::uint32_t a7, std::uint32_t a8, std::uint32_t a9) {
+    return MakeEffect(self, a1, a2, a9, reinterpret_cast<std::uint32_t>(edx), a0, a3, a4, a3, a4, 0u, a5, a6, a5, a6,
+                      a7, a8, a9, 0xffu, 0u, 0xffffffffu);
+}
+
+S3RE_HOOK(0x00543bc0, MapEffect_Make_543bc0, Make10Fn, Original_MapEffect_Make_543bc0, MapEffect_Make_543bc0);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543c40(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
+                                       std::uint32_t a7, std::uint32_t a8, std::uint32_t a9, std::uint32_t a10,
+                                       std::uint32_t a11) {
+    return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a11, 0u, 0u, a1, a2, a3, a4, a5, a6, a7, a8, a9,
+                      a10, 0u, a11, 0xffu, 0u, 0xffffffffu);
+}
+
+S3RE_HOOK(0x00543c40, MapEffect_Make_543c40, Make12Fn, Original_MapEffect_Make_543c40, MapEffect_Make_543c40);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543ce0(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
+                                       std::uint32_t a7, std::uint32_t a8) {
+    return MakeEffect(self, a1, a2, a8, reinterpret_cast<std::uint32_t>(edx), a0, a3, a4, a3, a4, 0u, a5, a6, a5, a6,
+                      a7, 0u, a8, 0xffu, 0u, 0xffffffffu);
+}
+
+S3RE_HOOK(0x00543ce0, MapEffect_Make_543ce0, Make9Fn, Original_MapEffect_Make_543ce0, MapEffect_Make_543ce0);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543d60(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
+                                       std::uint32_t a7, std::uint32_t a8, std::uint32_t a9) {
+    return MakeEffect(self, a1, a2, a3, reinterpret_cast<std::uint32_t>(edx), a0, a4, a5, a4, a5, 0u, a6, a7, a6, a7,
+                      a8, 0u, a9, 0xffu, 0u, 0xffffffffu);
+}
+
+S3RE_HOOK(0x00543d60, MapEffect_Make_543d60, Make10Fn, Original_MapEffect_Make_543d60, MapEffect_Make_543d60);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543df0(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
+                                       std::uint32_t a7, std::uint32_t a8, std::uint32_t a9, std::uint32_t a10) {
+    return MakeEffect(self, a1, a2, a3, reinterpret_cast<std::uint32_t>(edx), a0, a4, a5, a4, a5, 0u, a6, a7, a6, a7,
+                      a8, a9, a10, 0xffu, 0u, 0xffffffffu);
+}
+
+S3RE_HOOK(0x00543df0, MapEffect_Make_543df0, Make11Fn, Original_MapEffect_Make_543df0, MapEffect_Make_543df0);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543e80(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6) {
+    return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a0, 0u, 0u, a1, a2, a1, a2, 0u, a3, a4, a3, a4,
+                      a5, 0u, a0, 0xffu, a6, 0xffffffffu);
+}
+
+S3RE_HOOK(0x00543e80, MapEffect_Make_543e80, Make7Fn, Original_MapEffect_Make_543e80, MapEffect_Make_543e80);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543ef0(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                       std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
+                                       std::uint32_t a7) {
+    return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a1, 0u, 0u, a2, a3, a2, a3, 0u, a4, a5, a4, a5,
+                      a6, 0u, a7, 0xffu, 0u, 0xffffffffu);
+}
+
+S3RE_HOOK(0x00543ef0, MapEffect_Make_543ef0, Make8Fn, Original_MapEffect_Make_543ef0, MapEffect_Make_543ef0);
+
+// Purpose: Builds a map effect record of one kind (probably one kind of
+// visual effect; meaning of the fixed values unknown) in place.
+void* __fastcall MapEffect_Make_543f70(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2) {
+    return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), 0xffffffffu, 1u, 0u, 0u, a0, a1, a0, a1, 0u, 0u, 0u,
+                      0u, 0u, 0xffffffffu, 0u, 0u, 0xffu, 0u, a2);
+}
+
+S3RE_HOOK(0x00543f70, MapEffect_Make_543f70, Make3Fn, Original_MapEffect_Make_543f70, MapEffect_Make_543f70);
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -233,6 +417,103 @@ S3RE_TEST(MapEffect_Construct_ComparisonDetectsWrongImplementation) {
         return CallConstruct(&WrongMapEffectConstruct, original, ours, a);
     });
     S3RE_EXPECT(probe.failures() > 0);
+}
+
+namespace {
+
+struct MakeFunction {
+    void* original;
+    void* ours;
+    int arguments;
+};
+
+const MakeFunction* MakeFunctions() {
+    static const MakeFunction table[] = {
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543930), reinterpret_cast<void*>(&MapEffect_Make_543930), 6},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_5439a0), reinterpret_cast<void*>(&MapEffect_Make_5439a0), 7},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543a10), reinterpret_cast<void*>(&MapEffect_Make_543a10), 10},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543aa0), reinterpret_cast<void*>(&MapEffect_Make_543aa0), 13},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543b40), reinterpret_cast<void*>(&MapEffect_Make_543b40), 8},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543bc0), reinterpret_cast<void*>(&MapEffect_Make_543bc0), 10},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543c40), reinterpret_cast<void*>(&MapEffect_Make_543c40), 12},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543ce0), reinterpret_cast<void*>(&MapEffect_Make_543ce0), 9},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543d60), reinterpret_cast<void*>(&MapEffect_Make_543d60), 10},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543df0), reinterpret_cast<void*>(&MapEffect_Make_543df0), 11},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543e80), reinterpret_cast<void*>(&MapEffect_Make_543e80), 7},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543ef0), reinterpret_cast<void*>(&MapEffect_Make_543ef0), 8},
+    {reinterpret_cast<void*>(Original_MapEffect_Make_543f70), reinterpret_cast<void*>(&MapEffect_Make_543f70), 3}};
+    return table;
+}
+constexpr int kMakeFunctions = 13;
+
+void* InvokeMake(void* fn, int arguments, void* self, void* edx, const std::uint32_t* a) {
+    switch (arguments) {
+        case 3: return reinterpret_cast<Make3Fn>(fn)(self, edx, a[0], a[1], a[2]);
+        case 6: return reinterpret_cast<Make6Fn>(fn)(self, edx, a[0], a[1], a[2], a[3], a[4], a[5]);
+        case 7: return reinterpret_cast<Make7Fn>(fn)(self, edx, a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
+        case 8: return reinterpret_cast<Make8Fn>(fn)(self, edx, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
+        case 9: return reinterpret_cast<Make9Fn>(fn)(self, edx, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8]);
+        case 10: return reinterpret_cast<Make10Fn>(fn)(self, edx, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]);
+        case 11: return reinterpret_cast<Make11Fn>(fn)(self, edx, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10]);
+        case 12: return reinterpret_cast<Make12Fn>(fn)(self, edx, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11]);
+        case 13: return reinterpret_cast<Make13Fn>(fn)(self, edx, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12]);
+        default: return nullptr;
+    }
+}
+
+// Like CompareEffect, but the five padding bytes of the record are copied
+// from the original's result before comparing (they hold stack garbage in
+// both, see the make functions).
+void CompareMake(test::Context& ctx, const MakeFunction& f, void* candidate, int cases) {
+    std::uint8_t original[kBufferBytes];
+    std::uint8_t ours[kBufferBytes];
+    for (int i = 0; i < cases; ++i) {
+        ctx.rng().Fill(original, sizeof(original));
+        std::memcpy(ours, original, sizeof(ours));
+        std::uint32_t args[13];
+        for (std::uint32_t& a : args) {
+            a = ctx.rng().Next32();
+        }
+        void* const edx = reinterpret_cast<void*>(static_cast<std::uintptr_t>(ctx.rng().Next32()));
+        void* const expected = InvokeMake(f.original, f.arguments, original + kGuard, edx, args);
+        void* const actual = InvokeMake(candidate, f.arguments, ours + kGuard, edx, args);
+        for (const std::size_t offset : kPaddingBytes) {
+            ours[kGuard + offset] = original[kGuard + offset];
+        }
+        if (!S3RE_EXPECT(expected == original + kGuard) || !S3RE_EXPECT(actual == ours + kGuard) ||
+            !ctx.ExpectMemEq(original, ours, sizeof(original), "original record", "our record", __FILE__, __LINE__)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (%d arguments)", i, f.arguments);
+            return;
+        }
+    }
+}
+
+// Wrong: correct except byte +0x3c, which follows a padding byte (shows that
+// ignoring the padding doesn't hide its neighbours).
+void* __fastcall WrongMake543930(void* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
+    MapEffect_Make_543930(self, edx, a0, a1, a2, a3, a4, a5);
+    static_cast<std::uint8_t*>(self)[0x3c] ^= 1;
+    return self;
+}
+
+}  // namespace
+
+S3RE_TEST(MapEffect_Make_MatchOriginal) {
+    for (int k = 0; k < kMakeFunctions; ++k) {
+        CompareMake(ctx, MakeFunctions()[k], MakeFunctions()[k].ours, 3000);
+    }
+}
+
+S3RE_TEST(MapEffect_Make_ComparisonDetectsWrongImplementation) {
+    // A neighbouring byte of the padding is wrong.
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareMake(probe, MakeFunctions()[0], reinterpret_cast<void*>(&WrongMake543930), 100);
+    S3RE_EXPECT(probe.failures() > 0);
+    // Another make function with the same argument count (0x543d60 against 0x543bc0, both 10).
+    test::Context probe2(ctx.name(), 2, /*quiet=*/true);
+    CompareMake(probe2, MakeFunctions()[5], MakeFunctions()[8].ours, 100);
+    S3RE_EXPECT(probe2.failures() > 0);
 }
 
 }  // namespace s3re::game

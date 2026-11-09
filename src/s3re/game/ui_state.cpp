@@ -61,6 +61,7 @@
 #include "test/world_buffer.h"
 
 #include <cstdint>
+#include <cstring>
 #include <initializer_list>
 
 namespace s3re::game {
@@ -248,6 +249,22 @@ S3RE_HOOK(0x0051b560, GameWorld_CenterCameraOnTile, PositionFn, Original_GameWor
           GameWorld_CenterCameraOnTile);
 S3RE_HOOK(0x0053f560, CLogicThread_PushUiFeedback, LogicValueFn, Original_CLogicThread_PushUiFeedback,
           CLogicThread_PushUiFeedback);
+
+// CLogicThread::UpdateGroupMenu (0x00542990, our name): (group) picks the
+// special menu (+0x2d298) for one of the ten settler groups in S3.EXE's data
+// (uint16 counts at 0x7ad620 + group * 2, 100 settler words each at
+// 0x7ad634 + group * 200; probably the selection or hotkey groups, the same
+// lists RemoveSettlerFromLists edits):
+//   - a group of one settler of type 0x24 that belongs to the local player
+//     (+0x2d2d4): menu 1 (unless it already is 1), +0x2d29c = 0;
+//   - otherwise, if all its settlers have the same type (byte +0x1 of the
+//     0x40-byte records at world+0x12a5e60): type 0x2c -> 2, 0x2b -> 3,
+//     0x29 -> 4, 0x28 -> 5, 0x16 -> 6, 0x17 -> 7;
+//   - otherwise (or for an empty group) the menu is reset to 0 if it was
+//     set.
+// Each change sets +0x2d27c = 1 (probably "redraw the menu"). Counts and
+// types are compared as zero-extended words / bytes, the player byte with
+// the full dword +0x2d2d4. EAX = the world pointer on every path. ret 4.
 S3RE_HOOK(0x005157b0, GameWorld_IsUiSelectionMode, WorldValueFn,
           Original_GameWorld_IsUiSelectionMode, GameWorld_IsUiSelectionMode);
 S3RE_HOOK(0x005157d0, GameWorld_IsUiField298, WorldValueFn, Original_GameWorld_IsUiField298,
@@ -269,6 +286,82 @@ S3RE_HOOK(0x0051b4d0, GameWorld_ClampCamera, WorldQueryFn, Original_GameWorld_Cl
           GameWorld_ClampCamera);
 S3RE_HOOK(0x004febe0, GameWorld_PushUiFeedback, WorldValueFn, Original_GameWorld_PushUiFeedback,
           GameWorld_PushUiFeedback);
+
+namespace {
+
+constexpr std::uintptr_t kGroupCounts = 0x007ad620;  // uint16[10], S3.EXE data
+constexpr std::uintptr_t kGroupSettlers = 0x007ad634;  // uint16[10][100]
+constexpr std::size_t kSettlers = 0x12a5e60;
+constexpr std::size_t kSettlerBytes = 0x40;
+constexpr std::size_t kUiField29c = 0x2d29c;
+constexpr std::size_t kUiRedraw = 0x2d27c;
+
+std::uint16_t GroupWord(std::uintptr_t address) {
+    return *reinterpret_cast<const std::uint16_t*>(address);
+}
+
+}  // namespace
+
+using GroupMenuFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t group);
+std::uint32_t __fastcall CLogicThread_UpdateGroupMenu(CLogicThread* self, void* edx, std::uint32_t group);
+
+S3RE_HOOK(0x00542990, CLogicThread_UpdateGroupMenu, GroupMenuFn, Original_CLogicThread_UpdateGroupMenu,
+          CLogicThread_UpdateGroupMenu);
+
+// Purpose: Chooses which special command menu the game shows for a group of
+// settlers (e.g. ships or other units with their own commands), probably
+// after the group changed or was selected.
+std::uint32_t __fastcall CLogicThread_UpdateGroupMenu(CLogicThread* self, void* /*edx*/, std::uint32_t group) {
+    GameWorld* world = *reinterpret_cast<GameWorld**>(reinterpret_cast<std::uint8_t*>(self) + kLogicThreadWorld);
+    const std::uint32_t count = GroupWord(kGroupCounts + group * 2);
+    const std::uintptr_t settlers = kGroupSettlers + group * 200;
+    auto settlerByte = [&](std::uint32_t settler, std::size_t field) {
+        return static_cast<std::uint32_t>(WorldField<std::uint8_t>(world, kSettlers + settler * kSettlerBytes + field));
+    };
+    std::uint32_t changed = 1;
+    if (count == 1) {
+        const std::uint32_t settler = GroupWord(settlers);
+        if (settlerByte(settler, 0) == Field(world, kLocalPlayer) && settlerByte(settler, 1) == 0x24 &&
+            Field(world, kUiField298) != 1) {
+            WorldField<std::uint32_t>(world, kUiField298) = 1;
+            WorldField<std::uint32_t>(world, kUiField29c) = 0;
+            WorldField<std::uint32_t>(world, kUiRedraw) = 1;
+            return reinterpret_cast<std::uint32_t>(world);
+        }
+    }
+    if (count != 0) {
+        const std::uint32_t type = settlerByte(GroupWord(settlers), 1);
+        bool same = true;
+        for (std::uint32_t i = 0; i < count; ++i) {
+            if (settlerByte(GroupWord(settlers + i * 2), 1) != type) {
+                same = false;
+            }
+        }
+        if (same) {
+            std::uint32_t menu = 0;
+            switch (type) {
+                case 0x2c: menu = 2; break;
+                case 0x2b: menu = 3; break;
+                case 0x29: menu = 4; break;
+                case 0x28: menu = 5; break;
+                case 0x16: menu = 6; break;
+                case 0x17: menu = 7; break;
+                default: break;
+            }
+            if (menu != 0) {
+                WorldField<std::uint32_t>(world, kUiField298) = menu;
+                WorldField<std::uint32_t>(world, kUiRedraw) = 1;
+                return reinterpret_cast<std::uint32_t>(world);
+            }
+        }
+        changed = 1;
+    }
+    if (Field(world, kUiField298) != 0) {
+        WorldField<std::uint32_t>(world, kUiField298) = 0;
+        WorldField<std::uint32_t>(world, kUiRedraw) = changed;
+    }
+    return reinterpret_cast<std::uint32_t>(world);
+}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -504,6 +597,82 @@ S3RE_TEST(GameWorld_ClampCamera_ComparisonDetectsWrongImplementation) {
 }
 S3RE_TEST(GameWorld_PushUiFeedback_MatchesOriginal) {
     ComparePushUiFeedback(ctx, Original_GameWorld_PushUiFeedback, &GameWorld_PushUiFeedback, 5000);
+}
+
+namespace {
+
+constexpr std::size_t kGroupBytes = 20 + 10 * 200;  // 0x7ad620..0x7ade04
+
+// Saves the ten groups in S3.EXE's data and restores them afterwards.
+class SavedGroups {
+public:
+    SavedGroups() { std::memcpy(saved_, Base(), kGroupBytes); }
+    ~SavedGroups() { std::memcpy(Base(), saved_, kGroupBytes); }
+    static std::uint8_t* Base() { return reinterpret_cast<std::uint8_t*>(kGroupCounts); }
+
+private:
+    std::uint8_t saved_[kGroupBytes];
+};
+
+void CompareGroupMenu(test::Context& ctx, GroupMenuFn candidate, int cases) {
+    const SavedGroups saved;
+    test::WorldPair worlds(ctx, kSettlers + 0x10000 * kSettlerBytes);
+    std::uint8_t threadA[kLogicThreadWorld + 4] = {};
+    std::uint8_t threadB[kLogicThreadWorld + 4] = {};
+    *reinterpret_cast<GameWorld**>(threadA + kLogicThreadWorld) = worlds.original();
+    *reinterpret_cast<GameWorld**>(threadB + kLogicThreadWorld) = worlds.ours();
+    static constexpr std::uint8_t kTypes[] = {0x24, 0x2c, 0x2b, 0x29, 0x28, 0x16, 0x17, 0x01, 0x23};
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t group = ctx.rng().Below(10);
+        const std::uint32_t count = ctx.rng().Chance(1, 3) ? ctx.rng().Below(2) : ctx.rng().Below(101);
+        *reinterpret_cast<std::uint16_t*>(kGroupCounts + group * 2) = static_cast<std::uint16_t>(count);
+        const std::uint8_t type = kTypes[ctx.rng().Below(sizeof(kTypes))];
+        const bool allSame = ctx.rng().Chance(2, 3);
+        const std::uint32_t localPlayer = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(4);
+        worlds.Set<std::uint32_t>(kLocalPlayer, localPlayer);
+        for (std::uint32_t k = 0; k < count; ++k) {
+            const std::uint32_t settler = ctx.rng().Below(0x10000);
+            *reinterpret_cast<std::uint16_t*>(kGroupSettlers + group * 200 + k * 2) = static_cast<std::uint16_t>(settler);
+            const std::uint8_t settlerType = allSame || ctx.rng().Chance(1, 2) ? type : kTypes[ctx.rng().Below(sizeof(kTypes))];
+            worlds.Set<std::uint8_t>(kSettlers + settler * kSettlerBytes + 1, settlerType);
+            worlds.Set<std::uint8_t>(kSettlers + settler * kSettlerBytes,
+                                     static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? localPlayer : ctx.rng().Below(4)));
+        }
+        worlds.Set<std::uint32_t>(kUiField298, ctx.rng().Chance(1, 2) ? ctx.rng().Below(8) : ctx.rng().Next32());
+        worlds.Set<std::uint32_t>(kUiRedraw, ctx.rng().Next32());
+        worlds.Set<std::uint32_t>(kUiField29c, ctx.rng().Next32());
+        const std::uint32_t expected =
+            Original_CLogicThread_UpdateGroupMenu(reinterpret_cast<CLogicThread*>(threadA), nullptr, group);
+        const std::uint32_t actual = candidate(reinterpret_cast<CLogicThread*>(threadB), nullptr, group);
+        const auto base = [](GameWorld* w) { return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(w)); };
+        if (!S3RE_EXPECT_EQ(expected - base(worlds.original()), actual - base(worlds.ours())) ||
+            !worlds.Same(ctx, kUiRedraw, kUiField29c + 4 - kUiRedraw)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: group %u, count %u, type %#x", i, group, count, type);
+            return;
+        }
+    }
+    worlds.Checkpoint(ctx);
+}
+
+// Wrong: type 0x17 gets menu 6 like 0x16.
+std::uint32_t __fastcall WrongGroupMenu(CLogicThread* self, void* edx, std::uint32_t group) {
+    const std::uint32_t result = CLogicThread_UpdateGroupMenu(self, edx, group);
+    GameWorld* world = *reinterpret_cast<GameWorld**>(reinterpret_cast<std::uint8_t*>(self) + kLogicThreadWorld);
+    if (Field(world, kUiField298) == 7) {
+        WorldField<std::uint32_t>(world, kUiField298) = 6;
+    }
+    return result;
+}
+
+}  // namespace
+
+S3RE_TEST(CLogicThread_UpdateGroupMenu_MatchesOriginal) {
+    CompareGroupMenu(ctx, &CLogicThread_UpdateGroupMenu, 20000);
+}
+S3RE_TEST(CLogicThread_UpdateGroupMenu_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareGroupMenu(probe, &WrongGroupMenu, 3000);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 }  // namespace s3re::game

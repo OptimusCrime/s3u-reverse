@@ -71,18 +71,24 @@ disassembly; "READY" = not done, every direct callee done, all game code
    test. Later, once a caller subsystem (AI, lobby) is tackled.
 
 Next steps (for 2026-11-10, in this order):
-1. (Batch 23 done 2026-11-09: Win32/DirectX constructors, AI helpers,
-   CScreenElement core + the first group/accessor functions, 64 in all;
-   the emulator now probes virtual calls and rect APIs.) Next coverage
-   batch: the rest of the UI accessor block, i.e. its targets 0x4183c0,
-   0x4184b0/0x4184e0 (need 0x4187b0), 0x418380, 0x418430 (+0x4187b0),
-   0x417130, 0x417be0, 0x417ab0, 0x417480 (need Watcom vector 0x429a00),
-   0x415b60 (needs 0x5bf0c0), then the wrappers 0x429e10..0x42a180;
-   CStaticControl 0x41c3c0, DirectX::CSurface 0x5bf200, AI 0x599610 /
-   0x58b480; in the simulation range 0x504420, 0x542990 (point 4).
-   The 13 MapEffect make functions copy a stack temporary whose padding
-   bytes are uninitialized: they need an emulator option to ignore those
-   bytes before they can be compared.
+1. (Batch 24 done 2026-11-09: MapEffect make functions, Watcom pointer
+   vector, CScreenGroup/CControl/CGroupControl message and draw members,
+   CStaticControl, CSurface, two AI lookups, CreatePile, UpdateGroupMenu;
+   41 in all, see the session log.) Next coverage batch, concrete:
+   - DDBlt 0x5bf0c0 (needs a COM-call probe that ignores ECX, and the
+     throw path 0x5bf2e0 -> 0x405d10 -> _CxxThrowException 0x61f027 as an
+     emulator "thrower"), then CScreenElement::vf11 0x415b60, 0x417460 and
+     its wrapper 0x429e50.
+   - CControl tooltip: 0x418550 (opens the tooltip: GDI SelectObject /
+     GetTextExtentPoint32A probes, operator new, 0x41c3e0, 0x40a140,
+     0x41ca60), then 0x4183c0 and 0x429f10.
+   - 0x4177f0 / 0x42a000 wait on NoOp_ret4 0x582530, which trivial.py
+     misses because Ghidra didn't find the function at 0x582540 after it
+     (add that start, then trivial.py apply).
+   - READY with callers: AI 0x59dac0 (7 callers, now unblocked), 0x5996c0
+     (12), GfxData 0x5faaa0 (78 callers), Logic 0x5428e0, 0x50e2c0, 0x437400,
+     Lobby 0x4584f0 / 0x606ac0, Picture 0x5aa0a0.
+   - Simulation range READY 250: pick from `python tools/frontier.py`.
 2. (Item 2 done 2026-11-09: tools/trivial.py.) Then the UI
    accessor block and Win32::CObject et al. as coverage batches, with
    `S3RE_HOOK_UNVERIFIED` where a spec is not quick.
@@ -449,6 +455,57 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (32): batch 24 (41 functions: MapEffect, UI groups, misc)
+
+- Batch 24, all verified (none unverified):
+  - map_effects.cpp: the 13 MapEffect make functions 0x543930..0x543f70
+    (MapEffect_Make_<address>; argument mapping read off the push
+    sequences by a script). They build the record in a stack temporary
+    and copy all 0x4c bytes, so the padding bytes +0x2a/+0x2b/+0x3b/
+    +0x3e/+0x3f are stack leftovers in both versions (not compared).
+  - watcom/ptr_vector.cpp (new): the Watcom pointer vector used for
+    CScreenGroup's children: resize 0x429a00, resize + clamp 0x437fe0,
+    operator[] bounds check 0x428ee0 (layout in ptr_vector.h).
+  - screen_element.cpp: CScreenGroup (= the "UiGroup" class) SetFlag1F
+    0x417be0, OnMoved 0x417ab0, Draw 0x417480, HandleMessage 0x417130,
+    OnMouseMove 0x4176b0, the derived copies 0x429dd0 / 0x42a030 / 0x42a180
+    / 0x429e10, CScreen 0x417f60; CControl (tooltip control) DeleteTooltip
+    0x4187b0, OnMessage10 0x418380, OnMouseMove 0x418430 (timeGetTime
+    through the import 0x655358), OnMouseEnter 0x4184b0, OnMouseLeave
+    0x4184e0; CGroupControl 0x429e80 / 0x429ec0 / 0x429f50 / 0x429f90;
+    CStaticControl ctor 0x41c3c0.
+  - win32_classes.cpp: DirectX::CSurface ctor 0x5bf200. ai_helpers.cpp:
+    AI_BuildingArea 0x599610, AI_FreeTileArea 0x58b480 (second AI world
+    pointer 0x7e7b60). area_piles.cpp: GameWorld::CreatePile 0x504420.
+    ui_state.cpp: CLogicThread::UpdateGroupMenu 0x542990 (menu +0x2d298
+    for the ten settler groups at 0x7ad620).
+- Known difference: CScreenGroup::HandleMessage returns an uninitialized
+  stack byte in AL when the captured child declines a message; ours
+  returns 0 (not compared on that path, documented at the function).
+- Emulator harness: `Spec.ignore_bytes` (with a self-test pairing that
+  differs only next to the padding: 0x5439a0 vs ours 0x543e80),
+  `Spec.virtual_effects` (probed virtual calls can change memory; used to
+  shorten or blow up the group's child count so the inlined bounds checks
+  run), `Spec.new_fails` (operator new returns null), timeGetTime probe.
+  Dead inlined-bounds-check blocks are exempt with reasons EMPTY/NEG/LEN0
+  at the specs. In-process: the screen element harness got 19 more
+  operations, child calls that change the child count, and a fake clock
+  in S3.EXE's timeGetTime import.
+- Tests: in-process 285/285; emulator: 41 new specs, 0 mismatches, every
+  live block covered; full suite 327 functions, 0 mismatches, 0 with
+  incomplete coverage; self-test 16/16.
+- Whole-game check (scripted-seed127.bin, 3,000 ticks, against the
+  original): REPLAY OK, 147 of 326 replacements called; 16 of the 41 new
+  ones (AI_BuildingArea 12,324, PtrVector_Index 785, CreatePile 86,
+  CControl_OnMouseMove 39, PtrVector_Resize 18, DeleteTooltip 14, CSurface
+  5, ...). Not called: the 13 MapEffect make functions, UpdateGroupMenu,
+  CScreenGroup HandleMessage/OnMoved/SetFlag1F (+ copies), CControl
+  OnMessage10/Enter/Leave, CGroupControl OnMessage10/Leave,
+  PtrVector_ResizeClampLength. Counts in the inventory notes.
+- Frontier (all game code): READY 1,231 -> 1,232, NEAR 1,414 -> 1,194;
+  trivial functions done 177 -> 390 (forwarders to the group members);
+  simulation range READY 261 -> 250, NEAR 78 -> 91.
 
 ### 2026-11-09 (31): batch 23 (64 functions: framework, AI, UI)
 

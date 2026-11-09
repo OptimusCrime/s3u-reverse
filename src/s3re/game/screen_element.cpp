@@ -33,10 +33,12 @@
 
 #include "hooks.h"
 #include "test/difftest.h"
+#include "watcom/ptr_vector.h"
 
 #include <windows.h>
 
 #include <cstdint>
+#include <array>
 #include <cstring>
 #include <utility>
 #include <vector>
@@ -102,6 +104,10 @@ using GlobalFn = std::uint32_t(__cdecl*)();
 using CopyGlobalsFn = void*(__stdcall*)(void* out);
 using VoidArg1Fn = void(__fastcall*)(void* self, void* edx, std::uint32_t a);
 using TableFn = std::uint32_t(__stdcall*)(std::uint32_t index);
+using MovedFn = std::uint32_t(__fastcall*)(void* self, void* edx, const RECT* rect, const std::int32_t* delta);
+using Draw3PtrFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t surface, const RECT* a,
+                                              const RECT* b);
+using VoidNoArgFn = void(__fastcall*)(void* self, void* edx);
 
 void* __fastcall CScreenElement_Construct(void* self, void* edx);
 void* __fastcall CScreenElement_ConstructRect(void* self, void* edx, const RECT* rect);
@@ -140,6 +146,28 @@ std::uint32_t __fastcall UiGroup_KillFocus(void* self, void* edx);
 std::uint32_t __fastcall UiGroup_SetFocus_429d70(void* self, void* edx, std::uint32_t child);
 std::uint32_t __fastcall UiGroup_WantsMessage_429df0(void* self, void* edx, const Message* message);
 std::uint32_t __fastcall UiGroup_Enable_429fd0(void* self, void* edx, std::uint32_t enable);
+std::uint32_t __fastcall CScreenGroup_SetFlag1F(void* self, void* edx, std::uint32_t argument);
+std::uint32_t __fastcall CScreenGroup_OnMoved(void* self, void* edx, const RECT* rect, const std::int32_t* delta);
+std::uint32_t __fastcall CScreenGroup_Draw(void* self, void* edx, std::uint32_t surface, const RECT* rectA,
+                                           const RECT* rectB);
+std::uint32_t __fastcall CScreenGroup_HandleMessage(void* self, void* edx, Message message);
+std::uint32_t __fastcall CScreenGroup_OnMouseMove(void* self, void* edx, Message message);
+std::uint32_t __fastcall CScreenGroup_SetFlag1F_429dd0(void* self, void* edx, std::uint32_t argument);
+std::uint32_t __fastcall CScreenGroup_OnMoved_42a030(void* self, void* edx, const RECT* rect,
+                                                     const std::int32_t* delta);
+std::uint32_t __fastcall CScreenGroup_Draw_42a180(void* self, void* edx, std::uint32_t surface, const RECT* rectA,
+                                                  const RECT* rectB);
+std::uint32_t __fastcall CScreenGroup_HandleMessage_429e10(void* self, void* edx, Message message);
+std::uint32_t __fastcall CScreen_HandleMessage(void* self, void* edx, Message message);
+void __fastcall CControl_DeleteTooltip(void* control, void* edx);
+std::uint32_t __fastcall CControl_OnMessage10(void* self, void* edx, Message message);
+std::uint32_t __fastcall CControl_OnMouseMove(void* self, void* edx, Message message);
+std::uint32_t __fastcall CControl_OnMouseEnter(void* self, void* edx, Message message);
+std::uint32_t __fastcall CControl_OnMouseLeave(void* self, void* edx, Message message);
+std::uint32_t __fastcall CGroupControl_OnMessage10(void* self, void* edx, Message message);
+std::uint32_t __fastcall CGroupControl_OnMouseMove(void* self, void* edx, Message message);
+std::uint32_t __fastcall CGroupControl_OnMouseEnter(void* self, void* edx, Message message);
+std::uint32_t __fastcall CGroupControl_OnMouseLeave(void* self, void* edx, Message message);
 
 // ---------------------------------------------------------------------------
 // Construction and destruction
@@ -624,6 +652,341 @@ std::uint32_t __fastcall UiGroup_Enable_429fd0(void* self, void* /*edx*/, std::u
     return CScreenElement_Enable(VirtualBase(self, -0xb4), nullptr, enable);
 }
 
+// CStaticControl (RTTI name; vtable 0x6560d8): a CScreenElement with its
+// own vtable (probably static text or pictures in the menus).
+
+constexpr std::uint32_t kCStaticControlVtable = 0x006560d8;
+void* __fastcall CStaticControl_Construct(void* self, void* edx, const RECT* rect);
+
+S3RE_HOOK(0x0041c3c0, CStaticControl_Construct, CtorRectFn, Original_CStaticControl_Construct,
+          CStaticControl_Construct);
+
+// Purpose: Constructor of a static control (probably a text or picture
+// element of a menu) at a screen rectangle.
+void* __fastcall CStaticControl_Construct(void* self, void* /*edx*/, const RECT* rect) {
+    CScreenElement_ConstructRect(self, nullptr, rect);
+    At<std::uint32_t>(self, 0) = kCStaticControlVtable;
+    return self;
+}
+
+// ---------------------------------------------------------------------------
+// CScreenGroup: the container of child elements (the "group class" above;
+// RTTI name CScreenGroup). Its children are a Watcom pointer vector at
+// this-0x74 (watcom/ptr_vector.h; length at this-0x60), its CScreenElement
+// base is reached through the vbtable at this-0x7c, a child that has
+// captured the input is at this-0x50 (our reading of 0x417130) and the
+// focused child at this-0x58. Every access to a child goes through the
+// vector's operator[] bounds check, inlined by the compiler; ours use
+// PtrVector_At, which behaves the same (an index can only be out of range
+// when a child's virtual call changed the vector).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+watcom::PtrVector* Children(void* group) {
+    return &At<watcom::PtrVector>(group, -0x74);
+}
+
+void* Child(void* group, std::uint32_t index) {
+    return reinterpret_cast<void*>(watcom::PtrVector_At(Children(group), static_cast<std::int32_t>(index)));
+}
+
+// The loops re-read the length (this-0x60) before every iteration.
+std::uint32_t ChildCount(void* group) {
+    return At<std::uint32_t>(group, -0x60);
+}
+
+}  // namespace
+
+S3RE_HOOK(0x00417be0, CScreenGroup_SetFlag1F, Arg1Fn, Original_CScreenGroup_SetFlag1F, CScreenGroup_SetFlag1F);
+
+// Purpose: Sets the group's flag +0x1f (vf06, meaning unknown) and passes
+// the call on to every child. EAX: the last child's result, or 0.
+std::uint32_t __fastcall CScreenGroup_SetFlag1F(void* self, void* /*edx*/, std::uint32_t argument) {
+    CScreenElement_SetFlag1F(VirtualBase(self, -0x7c), nullptr, argument);
+    std::uint32_t result = 0;
+    for (std::uint32_t i = 0; i < ChildCount(self); ++i) {
+        result = CallVirtual<std::uint32_t>(Child(self, i), 0x18, argument);
+    }
+    return result;
+}
+
+S3RE_HOOK(0x00417ab0, CScreenGroup_OnMoved, MovedFn, Original_CScreenGroup_OnMoved, CScreenGroup_OnMoved);
+
+// Purpose: The "moved" handler of a group: moves every child by the same
+// offset. The base's handler (0x45c380) is empty. EAX: the last child's
+// MoveBy result, or 0.
+std::uint32_t __fastcall CScreenGroup_OnMoved(void* self, void* /*edx*/, const RECT* /*rect*/,
+                                              const std::int32_t* delta) {
+    std::uint32_t result = 0;
+    for (std::uint32_t i = 0; i < ChildCount(self); ++i) {
+        result = CScreenElement_MoveBy(Child(self, i), nullptr, delta[0], delta[1]);
+    }
+    return result;
+}
+
+S3RE_HOOK(0x00417480, CScreenGroup_Draw, Draw3PtrFn, Original_CScreenGroup_Draw, CScreenGroup_Draw);
+
+// Purpose: Draws a group: its own background, then every child clipped to
+// the area being drawn (the first or second rectangle, by byte -0x78), then
+// clears the group's "needs redraw" byte. EAX: the child count.
+std::uint32_t __fastcall CScreenGroup_Draw(void* self, void* /*edx*/, std::uint32_t surface, const RECT* rectA,
+                                           const RECT* rectB) {
+    CScreenElement_DrawRect(VirtualBase(self, -0x7c), nullptr, surface, rectA, reinterpret_cast<std::uint32_t>(rectB));
+    for (std::uint32_t i = 0; i < ChildCount(self); ++i) {
+        RECT visible;
+        const RECT* area = At<std::uint8_t>(self, -0x78) != 0 ? rectA : rectB;
+        IntersectRect(&visible, area, CScreenElement_Rect(Child(self, i), nullptr));
+        CallVirtual<std::uint32_t>(Child(self, i), 0x28, surface, static_cast<const void*>(&visible), rectB);
+    }
+    At<std::uint8_t>(VirtualBase(self, -0x7c), 0x1e) = 0;
+    return ChildCount(self);
+}
+
+S3RE_HOOK(0x00417130, CScreenGroup_HandleMessage, MessageFn, Original_CScreenGroup_HandleMessage,
+          CScreenGroup_HandleMessage);
+
+// Purpose: Message handling of a group: a child that captured the input
+// gets the message first; otherwise the group's own handlers, then the
+// focused child (types 1..3, probably keys), all children (0x30, 0x16) or
+// the first child that accepts it (other types). AL: handled.
+//
+// Known difference: when the capturing child declines the message, the
+// original returns an uninitialized stack byte in AL; ours returns 0 (not
+// handled).
+std::uint32_t __fastcall CScreenGroup_HandleMessage(void* self, void* /*edx*/, Message message) {
+    if (void* captured = At<void*>(self, -0x50); captured != nullptr) {
+        const std::uint32_t accepted = CallVirtual<std::uint32_t>(captured, 0x20, static_cast<const void*>(&message));
+        if (static_cast<std::uint8_t>(accepted) == 0) {
+            return 0;
+        }
+        return CallVirtual<std::uint32_t>(At<void*>(self, -0x50), 0x24, message);
+    }
+    std::uint8_t handled =
+        static_cast<std::uint8_t>(CScreenElement_DispatchMessage(VirtualBase(self, -0x7c), nullptr, message));
+    if (handled != 0) {
+        return handled;
+    }
+    switch (static_cast<std::uint8_t>(message.d[0])) {
+        case 1: case 2: case 3:
+            if (void* focus = At<void*>(self, -0x58); focus != nullptr) {
+                handled = static_cast<std::uint8_t>(CallVirtual<std::uint32_t>(focus, 0x24, message));
+            }
+            return handled;
+        case 0x30:
+        case 0x16:
+            for (std::uint32_t i = 0; i < ChildCount(self); ++i) {
+                CallVirtual<std::uint32_t>(Child(self, i), 0x24, message);
+            }
+            return handled;
+        default:
+            for (std::uint32_t i = 0; i < ChildCount(self) && handled == 0; ++i) {
+                const std::uint32_t accepts =
+                    CallVirtual<std::uint32_t>(Child(self, i), 0x20, static_cast<const void*>(&message));
+                if (static_cast<std::uint8_t>(accepts) != 0) {
+                    handled = static_cast<std::uint8_t>(CallVirtual<std::uint32_t>(Child(self, i), 0x24, message));
+                }
+            }
+            return handled;
+    }
+}
+
+S3RE_HOOK(0x004176b0, CScreenGroup_OnMouseMove, MessageFn, Original_CScreenGroup_OnMouseMove,
+          CScreenGroup_OnMouseMove);
+
+// Purpose: Mouse movement over a group: tracks entering/leaving for the
+// group and each child. AL is 0 (not handled); the rest of EAX is the last
+// TrackMouse result, or 0.
+std::uint32_t __fastcall CScreenGroup_OnMouseMove(void* self, void* /*edx*/, Message message) {
+    CScreenElement_TrackMouse(VirtualBase(self, -0x7c), nullptr, message);
+    std::uint32_t result = 0;
+    for (std::uint32_t i = 0; i < ChildCount(self); ++i) {
+        result = CScreenElement_TrackMouse(Child(self, i), nullptr, message);
+    }
+    return result & ~0xffu;
+}
+
+// The same members in the vtables of derived classes (CGroupControl,
+// CDialog, the menu dialogs; CScreen for 0x417f60).
+
+S3RE_HOOK(0x00429dd0, CScreenGroup_SetFlag1F_429dd0, Arg1Fn, Original_CScreenGroup_SetFlag1F_429dd0,
+          CScreenGroup_SetFlag1F_429dd0);
+
+// Purpose: A derived class's copy of the group's SetFlag1F.
+std::uint32_t __fastcall CScreenGroup_SetFlag1F_429dd0(void* self, void* /*edx*/, std::uint32_t argument) {
+    return CScreenGroup_SetFlag1F(self, nullptr, argument);
+}
+
+S3RE_HOOK(0x0042a030, CScreenGroup_OnMoved_42a030, MovedFn, Original_CScreenGroup_OnMoved_42a030,
+          CScreenGroup_OnMoved_42a030);
+
+// Purpose: A derived class's copy of the group's "moved" handler.
+std::uint32_t __fastcall CScreenGroup_OnMoved_42a030(void* self, void* /*edx*/, const RECT* rect,
+                                                     const std::int32_t* delta) {
+    return CScreenGroup_OnMoved(self, nullptr, rect, delta);
+}
+
+S3RE_HOOK(0x0042a180, CScreenGroup_Draw_42a180, Draw3PtrFn, Original_CScreenGroup_Draw_42a180,
+          CScreenGroup_Draw_42a180);
+
+// Purpose: A derived class's copy of the group's Draw.
+std::uint32_t __fastcall CScreenGroup_Draw_42a180(void* self, void* /*edx*/, std::uint32_t surface, const RECT* rectA,
+                                                  const RECT* rectB) {
+    return CScreenGroup_Draw(self, nullptr, surface, rectA, rectB);
+}
+
+S3RE_HOOK(0x00429e10, CScreenGroup_HandleMessage_429e10, MessageFn, Original_CScreenGroup_HandleMessage_429e10,
+          CScreenGroup_HandleMessage_429e10);
+
+// Purpose: A derived class's copy of the group's message handling.
+std::uint32_t __fastcall CScreenGroup_HandleMessage_429e10(void* self, void* /*edx*/, Message message) {
+    return CScreenGroup_HandleMessage(self, nullptr, message);
+}
+
+S3RE_HOOK(0x00417f60, CScreen_HandleMessage, MessageFn, Original_CScreen_HandleMessage, CScreen_HandleMessage);
+
+// Purpose: CScreen's message handling: the group's, on its group part at
+// this-0x18.
+std::uint32_t __fastcall CScreen_HandleMessage(void* self, void* /*edx*/, Message message) {
+    return CScreenGroup_HandleMessage(static_cast<std::uint8_t*>(self) - 0x18, nullptr, message);
+}
+
+// ---------------------------------------------------------------------------
+// CControl: a UI element with a tooltip (RTTI name; buttons, edit fields and
+// the dialogs derive from it). These members get the address of its
+// CScreenElement part ("this" below = control + 0x3c); the base is found
+// through the vbtable at this-0x38. Fields (offsets from the control):
+//   +0x08 an object told when the tooltip time is up (0x4183c0, not done)
+//   +0x10 std::string: the tooltip text
+//   +0x20 the tooltip object (deleted through its vtable slot 0)
+//   +0x24 timeGetTime() of the last mouse movement
+//   +0x28, +0x2c the mouse position then (16-bit message coordinates)
+//   +0x30, +0x34 where the mouse was when the tooltip was opened
+// The base's handler they end with (0x415c80, CScreenElement::vf12) is `xor
+// al,al; ret 14h`: it does nothing and returns AL = 0, so these return
+// whatever EAX held with AL cleared (callers only use AL).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::uint32_t BaseHandlerResult(std::uint32_t eax) {
+    return eax & ~0xffu;
+}
+
+void* ControlBase(void* self) {
+    return VirtualBase(self, -0x38);
+}
+
+using TimeGetTimeFn = DWORD(WINAPI*)();
+constexpr std::uintptr_t kTimeGetTimeImport = 0x00655358;  // S3.EXE's import of timeGetTime (_INMM.dll)
+
+std::int32_t AbsoluteDifference(std::uint32_t a, std::uint32_t b) {
+    const std::uint32_t d = a - b;
+    const std::uint32_t sign = static_cast<std::uint32_t>(static_cast<std::int32_t>(d) >> 31);
+    return static_cast<std::int32_t>((d ^ sign) - sign);  // cdq; xor; sub (so -2^31 stays negative)
+}
+
+}  // namespace
+
+S3RE_HOOK(0x004187b0, CControl_DeleteTooltip, VoidNoArgFn, Original_CControl_DeleteTooltip, CControl_DeleteTooltip);
+
+// Purpose: Closes a control's tooltip, if one is open. ECX is the control
+// itself here.
+void __fastcall CControl_DeleteTooltip(void* control, void* /*edx*/) {
+    void* tooltip = At<void*>(control, 0x20);
+    if (tooltip == nullptr) {
+        return;
+    }
+    CallVirtual<std::uint32_t>(tooltip, 0x00, 1u);  // scalar deleting destructor
+    At<std::uint32_t>(control, 0x20) = 0;
+}
+
+S3RE_HOOK(0x00418380, CControl_OnMessage10, MessageFn, Original_CControl_OnMessage10, CControl_OnMessage10);
+
+// Purpose: A control's handler for message type 0x10 (probably a mouse
+// click): gives it the focus (vf03 with 0).
+std::uint32_t __fastcall CControl_OnMessage10(void* self, void* /*edx*/, Message /*message*/) {
+    CallVirtual<std::uint32_t>(ControlBase(self), 0x0c, 0u);
+    return BaseHandlerResult(At<std::uint32_t>(self, -0x38));
+}
+
+S3RE_HOOK(0x00418430, CControl_OnMouseMove, MessageFn, Original_CControl_OnMouseMove, CControl_OnMouseMove);
+
+// Purpose: A control's mouse-movement handler (message type 0x16): notes the
+// time and position (for the tooltip delay) and closes the tooltip once the
+// mouse has moved more than 50 pixels from where it opened. Only AL (0) is
+// defined in EAX.
+std::uint32_t __fastcall CControl_OnMouseMove(void* self, void* /*edx*/, Message message) {
+    At<std::uint32_t>(self, -0x18) = (*reinterpret_cast<TimeGetTimeFn*>(kTimeGetTimeImport))();
+    const std::uint32_t x = message.d[2] & 0xffff;
+    const std::uint32_t y = message.d[2] >> 16;
+    At<std::uint32_t>(self, -0x14) = x;
+    At<std::uint32_t>(self, -0x10) = y;
+    if (At<std::uint32_t>(self, -0x1c) != 0) {
+        if (AbsoluteDifference(At<std::uint32_t>(self, -0x14), At<std::uint32_t>(self, -0xc)) > 50 ||
+            AbsoluteDifference(y, At<std::uint32_t>(self, -0x8)) > 50) {
+            CControl_DeleteTooltip(static_cast<std::uint8_t*>(self) - 0x3c, nullptr);
+        }
+    }
+    return 0;
+}
+
+S3RE_HOOK(0x004184b0, CControl_OnMouseEnter, MessageFn, Original_CControl_OnMouseEnter, CControl_OnMouseEnter);
+
+// Purpose: A control's "mouse entered" handler: nothing beyond the base's
+// (empty) one.
+std::uint32_t __fastcall CControl_OnMouseEnter(void* self, void* /*edx*/, Message /*message*/) {
+    (void)ControlBase(self);
+    return BaseHandlerResult(reinterpret_cast<std::uint32_t>(self));
+}
+
+S3RE_HOOK(0x004184e0, CControl_OnMouseLeave, MessageFn, Original_CControl_OnMouseLeave, CControl_OnMouseLeave);
+
+// Purpose: A control's "mouse left" handler: closes its tooltip.
+std::uint32_t __fastcall CControl_OnMouseLeave(void* self, void* /*edx*/, Message /*message*/) {
+    CControl_DeleteTooltip(static_cast<std::uint8_t*>(self) - 0x3c, nullptr);
+    (void)ControlBase(self);
+    return BaseHandlerResult(At<std::uint32_t>(self, -0x38));
+}
+
+// CGroupControl (a control that is also a group; its group part is "this"
+// here, its control part's CScreenElement address this-0x7c).
+
+S3RE_HOOK(0x00429e80, CGroupControl_OnMessage10, MessageFn, Original_CGroupControl_OnMessage10,
+          CGroupControl_OnMessage10);
+
+// Purpose: CGroupControl's handler for message type 0x10: the control's.
+std::uint32_t __fastcall CGroupControl_OnMessage10(void* self, void* /*edx*/, Message message) {
+    return CControl_OnMessage10(static_cast<std::uint8_t*>(self) - 0x7c, nullptr, message);
+}
+
+S3RE_HOOK(0x00429ec0, CGroupControl_OnMouseMove, MessageFn, Original_CGroupControl_OnMouseMove,
+          CGroupControl_OnMouseMove);
+
+// Purpose: CGroupControl's mouse-movement handler: the control's (tooltip),
+// then the group's (children).
+std::uint32_t __fastcall CGroupControl_OnMouseMove(void* self, void* /*edx*/, Message message) {
+    CControl_OnMouseMove(static_cast<std::uint8_t*>(self) - 0x7c, nullptr, message);
+    return CScreenGroup_OnMouseMove(self, nullptr, message);
+}
+
+S3RE_HOOK(0x00429f50, CGroupControl_OnMouseEnter, MessageFn, Original_CGroupControl_OnMouseEnter,
+          CGroupControl_OnMouseEnter);
+
+// Purpose: CGroupControl's "mouse entered" handler: the control's.
+std::uint32_t __fastcall CGroupControl_OnMouseEnter(void* self, void* /*edx*/, Message message) {
+    return CControl_OnMouseEnter(static_cast<std::uint8_t*>(self) - 0x7c, nullptr, message);
+}
+
+S3RE_HOOK(0x00429f90, CGroupControl_OnMouseLeave, MessageFn, Original_CGroupControl_OnMouseLeave,
+          CGroupControl_OnMouseLeave);
+
+// Purpose: CGroupControl's "mouse left" handler: the control's (closes the
+// tooltip).
+std::uint32_t __fastcall CGroupControl_OnMouseLeave(void* self, void* /*edx*/, Message message) {
+    return CControl_OnMouseLeave(static_cast<std::uint8_t*>(self) - 0x7c, nullptr, message);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -639,7 +1002,7 @@ namespace {
 
 // Stack argument count per vtable slot (offset / 4); -1 = not used here.
 constexpr int kSlotArgs[32] = {
-    -1, 1, -1, 1, 0, -1, -1, 0,   // 0x04, 0x0c, 0x10, 0x1c
+    1, 1, -1, 1, 0, -1, 1, 0,     // 0x00 (delete), 0x04, 0x0c, 0x10, 0x18, 0x1c
     1, 5, 3, 2, 5, 5, 5, 5,       // 0x20 .. 0x3c
     5, 5, 5, 5, 5, 0, 5, 5,       // 0x40 .. 0x5c (0x54 without arguments)
     5, 1, 1, 1, 2, 2, 0, -1,      // 0x60 .. 0x78
@@ -661,8 +1024,41 @@ struct ProbeLog {
     std::uint64_t seed = 0;
     std::uint32_t calls = 0;
     bool undeclared = false;
+    std::uint32_t* groupLength = nullptr;  // the group's child count, changed by child calls
 };
 ProbeLog* g_probeLog = nullptr;
+
+// The value the probe call number `index` of a case returns (as ProbeValue).
+std::uint32_t ProbeValueAt(std::uint64_t seed, std::uint32_t index) {
+    test::Rng rng(seed * 0x9e3779b97f4a7c15ull + index);
+    const std::uint32_t choice = rng.Below(4);
+    return choice == 0 ? 0 : choice == 1 ? 1 : rng.Next32();
+}
+
+// Child calls sometimes change the group's child count, to reach the bounds
+// handling of the groups' loops: 0, 0x80000001 (every index out of range;
+// data[0x80000000] wraps around to data[0]) or 0..2; a huge count is always
+// set back to 0, which ends the loop.
+void MaybeChangeChildCount(int slot) {
+    ProbeLog& log = *g_probeLog;
+    if (log.groupLength == nullptr) {
+        return;
+    }
+    switch (slot * 4) {
+        case 0x18: case 0x20: case 0x24: case 0x28: case 0x5c: case 0x60: case 0x70: case 0x74: break;
+        default: return;
+    }
+    test::Rng rng(log.seed * 0xc2b2ae3d27d4eb4full + log.calls);
+    const std::uint32_t choice = rng.Below(8);
+    if (*log.groupLength >= 0x80000000u || choice == 0) {
+        *log.groupLength = 0;
+    } else if (choice == 1 && slot * 4 != 0x5c && slot * 4 != 0x60) {
+        // (not from TrackMouse's calls: later children may not call at all)
+        *log.groupLength = 0x80000001u;
+    } else if (choice == 2) {
+        *log.groupLength = rng.Below(3);
+    }
+}
 
 std::uint32_t ProbeValue() {
     test::Rng rng(g_probeLog->seed * 0x9e3779b97f4a7c15ull + g_probeLog->calls);
@@ -691,6 +1087,7 @@ std::uint32_t LogCall(int slot, void* self, const std::uint32_t* args, int count
         }
     }
     const std::uint32_t value = ProbeValue();
+    MaybeChangeChildCount(slot);
     ++log.calls;
     log.words.push_back(value);
     return value;
@@ -760,7 +1157,7 @@ const std::vector<void*>& FakeVtable() {
 // at 0x224); group "this" 0x300 (vbptr 0x284 -> base = element), focus
 // child slot 0x2a8, child object 0x380; the 0x429fd0 subobject 0x400 (vbptr
 // 0x34c -> element). Shared inputs (rectangles, message) are in `inputs`.
-constexpr std::size_t kBuffer = 0x500;
+constexpr std::size_t kBuffer = 0xa00;
 constexpr std::size_t kElement = 0x100;
 constexpr std::size_t kParent = 0x200;
 constexpr std::size_t kGroup = 0x300;
@@ -769,6 +1166,18 @@ constexpr std::size_t kEnableThis = 0x400;
 const std::int32_t kParentVbtable[2] = {0, 0x20};
 const std::int32_t kGroupVbtable[2] = {0, static_cast<std::int32_t>(kElement) - 0x284};
 const std::int32_t kEnableVbtable[2] = {0, static_cast<std::int32_t>(kElement) - 0x34c};
+// Batch 24 additions: the group's children vector at kGroup-0x74 (data at
+// kChildData: four children at kChildren + 0x40 * k), the captured child at
+// kGroup-0x50; a CControl's CScreenElement part at kControl (vbtable at
+// -0x38 -> element) and the CGroupControl one at kGroup-0x7c (vbtable at
+// kGroup-0xb4).
+constexpr std::size_t kChildren = 0x800;
+constexpr std::size_t kChildData = 0x980;
+constexpr std::size_t kControl = 0x600;
+constexpr std::size_t kGroupControl = kGroup - 0x7c;
+const std::int32_t kControlVbtable[2] = {0, static_cast<std::int32_t>(kElement) - static_cast<std::int32_t>(kControl - 0x38)};
+const std::int32_t kGroupControlVbtable[2] = {0, static_cast<std::int32_t>(kElement) -
+                                                     static_cast<std::int32_t>(kGroupControl - 0x38)};
 
 struct Functions {
     CtorFn construct;
@@ -807,8 +1216,27 @@ struct Functions {
     Arg1Fn groupSetFocus429d70;
     MessagePtrFn groupWants429df0;
     Arg1Fn groupEnable429fd0;
+    Arg1Fn screenGroupSetFlag1F;
+    MovedFn screenGroupOnMoved;
+    Draw3PtrFn screenGroupDraw;
+    MessageFn screenGroupHandleMessage;
+    MessageFn screenGroupOnMouseMove;
+    Arg1Fn setFlag1F429dd0;
+    MovedFn onMoved42a030;
+    Draw3PtrFn draw42a180;
+    MessageFn handleMessage429e10;
+    MessageFn screenHandleMessage;
+    VoidNoArgFn controlDeleteTooltip;
+    MessageFn controlOnMessage10;
+    MessageFn controlOnMouseMove;
+    MessageFn controlOnMouseEnter;
+    MessageFn controlOnMouseLeave;
+    MessageFn groupControlOnMessage10;
+    MessageFn groupControlOnMouseMove;
+    MessageFn groupControlOnMouseEnter;
+    MessageFn groupControlOnMouseLeave;
 };
-constexpr int kOperations = 36;
+constexpr int kOperations = 55;
 
 Functions OriginalFunctions() {
     return {Original_CScreenElement_Construct,     Original_CScreenElement_ConstructRect,
@@ -828,7 +1256,17 @@ Functions OriginalFunctions() {
             Original_Dialog_Global7a8238,          Original_Dialog_Global7a8240,
             Original_UiGroup_WantsMessage,         Original_UiGroup_SetFocus,
             Original_UiGroup_KillFocus,            Original_UiGroup_SetFocus_429d70,
-            Original_UiGroup_WantsMessage_429df0,  Original_UiGroup_Enable_429fd0};
+            Original_UiGroup_WantsMessage_429df0,  Original_UiGroup_Enable_429fd0,
+            Original_CScreenGroup_SetFlag1F,       Original_CScreenGroup_OnMoved,
+            Original_CScreenGroup_Draw,            Original_CScreenGroup_HandleMessage,
+            Original_CScreenGroup_OnMouseMove,     Original_CScreenGroup_SetFlag1F_429dd0,
+            Original_CScreenGroup_OnMoved_42a030,  Original_CScreenGroup_Draw_42a180,
+            Original_CScreenGroup_HandleMessage_429e10, Original_CScreen_HandleMessage,
+            Original_CControl_DeleteTooltip,       Original_CControl_OnMessage10,
+            Original_CControl_OnMouseMove,         Original_CControl_OnMouseEnter,
+            Original_CControl_OnMouseLeave,        Original_CGroupControl_OnMessage10,
+            Original_CGroupControl_OnMouseMove,    Original_CGroupControl_OnMouseEnter,
+            Original_CGroupControl_OnMouseLeave};
 }
 
 Functions OurFunctions() {
@@ -843,14 +1281,34 @@ Functions OurFunctions() {
             &Dialog_Global7a823c,          &Dialog_CopyGlobals7a8020,     &Dialog_Table7a809c,
             &Dialog_Table7a8064,           &Dialog_Global7a8238,          &Dialog_Global7a8240,
             &UiGroup_WantsMessage,         &UiGroup_SetFocus,             &UiGroup_KillFocus,
-            &UiGroup_SetFocus_429d70,      &UiGroup_WantsMessage_429df0,  &UiGroup_Enable_429fd0};
+            &UiGroup_SetFocus_429d70,      &UiGroup_WantsMessage_429df0,  &UiGroup_Enable_429fd0,
+            &CScreenGroup_SetFlag1F,       &CScreenGroup_OnMoved,         &CScreenGroup_Draw,
+            &CScreenGroup_HandleMessage,   &CScreenGroup_OnMouseMove,     &CScreenGroup_SetFlag1F_429dd0,
+            &CScreenGroup_OnMoved_42a030,  &CScreenGroup_Draw_42a180,     &CScreenGroup_HandleMessage_429e10,
+            &CScreen_HandleMessage,        &CControl_DeleteTooltip,       &CControl_OnMessage10,
+            &CControl_OnMouseMove,         &CControl_OnMouseEnter,        &CControl_OnMouseLeave,
+            &CGroupControl_OnMessage10,    &CGroupControl_OnMouseMove,    &CGroupControl_OnMouseEnter,
+            &CGroupControl_OnMouseLeave};
 }
 
 struct Inputs {
     RECT rects[2];
     Message message;
     std::uint32_t a, b;
+    std::int32_t delta[2];
 };
+
+// HandleMessage's AL when the captured child declines the message is an
+// uninitialized stack byte in the original (see CScreenGroup_HandleMessage):
+// not compared then.
+constexpr std::uint32_t kUndefinedResult = 0xdeadbeefu;
+
+std::uint32_t HandleMessageResult(MessageFn fn, void* self, void* group, Inputs& in) {
+    const bool captured = At<std::uint32_t>(group, -0x50) != 0;
+    const bool declines = captured && (ProbeValueAt(g_probeLog->seed, g_probeLog->calls) & 0xff) == 0;
+    const std::uint32_t result = fn(self, nullptr, in.message) & 0xff;
+    return declines ? kUndefinedResult : result;
+}
 
 // Runs operation `op`; returns EAX (masked where only AL is defined).
 std::uint32_t RunOperation(const Functions& f, int op, std::uint8_t* buffer, Inputs& in) {
@@ -893,7 +1351,26 @@ std::uint32_t RunOperation(const Functions& f, int op, std::uint8_t* buffer, Inp
         case 32: return f.groupKillFocus(group, nullptr) & 0xff;
         case 33: return f.groupSetFocus429d70(group, nullptr, (in.b & 1) ? ptr(buffer + kChild) : in.a);
         case 34: return f.groupWants429df0(group, nullptr, &in.message) & 0xff;
-        default: return f.groupEnable429fd0(buffer + kEnableThis, nullptr, in.a);
+        case 35: return f.groupEnable429fd0(buffer + kEnableThis, nullptr, in.a);
+        case 36: return f.screenGroupSetFlag1F(group, nullptr, in.a);
+        case 37: return f.screenGroupOnMoved(group, nullptr, &in.rects[0], in.delta);
+        case 38: return f.screenGroupDraw(group, nullptr, in.a, &in.rects[0], &in.rects[1]);
+        case 39: return HandleMessageResult(f.screenGroupHandleMessage, group, group, in);
+        case 40: return f.screenGroupOnMouseMove(group, nullptr, in.message);
+        case 41: return f.setFlag1F429dd0(group, nullptr, in.a);
+        case 42: return f.onMoved42a030(group, nullptr, &in.rects[0], in.delta);
+        case 43: return f.draw42a180(group, nullptr, in.a, &in.rects[0], &in.rects[1]);
+        case 44: return HandleMessageResult(f.handleMessage429e10, group, group, in);
+        case 45: return HandleMessageResult(f.screenHandleMessage, buffer + kGroup + 0x18, group, in);
+        case 46: f.controlDeleteTooltip(buffer + kControl - 0x3c, nullptr); return 0;
+        case 47: return f.controlOnMessage10(buffer + kControl, nullptr, in.message);
+        case 48: return f.controlOnMouseMove(buffer + kControl, nullptr, in.message) & 0xff;
+        case 49: return f.controlOnMouseEnter(buffer + kControl, nullptr, in.message);
+        case 50: return f.controlOnMouseLeave(buffer + kControl, nullptr, in.message);
+        case 51: return f.groupControlOnMessage10(group, nullptr, in.message);
+        case 52: return f.groupControlOnMouseMove(group, nullptr, in.message) & 0xff;
+        case 53: return f.groupControlOnMouseEnter(group, nullptr, in.message);
+        default: return f.groupControlOnMouseLeave(group, nullptr, in.message);
     }
 }
 
@@ -916,6 +1393,45 @@ void SetUpBuffer(test::Context& ctx, std::uint8_t* buffer) {
     At<std::uint32_t>(buffer, kGroup - 0x58) = ctx.rng().Chance(1, 3) ? 0 : reinterpret_cast<std::uint32_t>(buffer + kChild);
     At<std::uint8_t>(buffer, kGroup - 0x78) = static_cast<std::uint8_t>(ctx.rng().Below(2));
     At<const void*>(buffer, kEnableThis - 0xb4) = kEnableVbtable;
+    // The group's children (capacity never 0 here, so the bounds handling
+    // never allocates; the emulator spec covers that).
+    const std::uint32_t count = std::array<std::uint32_t, 7>{0, 1, 2, 3, 4, 4, 0x80000001u}[ctx.rng().Below(7)];
+    At<const void*>(buffer, kGroup - 0x74) = vtable;
+    At<std::uint8_t*>(buffer, kGroup - 0x6c) = buffer + kChildData;
+    At<std::uint32_t>(buffer, kGroup - 0x68) = 1 + ctx.rng().Below(8);
+    At<std::int32_t>(buffer, kGroup - 0x64) = ctx.rng().Range(-1, 4);
+    At<std::uint32_t>(buffer, kGroup - 0x60) = count;
+    At<std::uint32_t>(buffer, kGroup - 0x50) =
+        ctx.rng().Chance(3, 5) ? 0 : reinterpret_cast<std::uint32_t>(buffer + kChildren + 0x40 * ctx.rng().Below(4));
+    At<std::uint8_t>(buffer, kGroup - 0x78) = static_cast<std::uint8_t>(ctx.rng().Below(2));
+    for (std::size_t k = 0; k < 4; ++k) {
+        std::uint8_t* child = buffer + kChildren + 0x40 * k;
+        At<std::uint8_t*>(buffer, kChildData + 4 * k) = child;
+        At<void*>(child, 0) = vtable;
+        At<std::uint32_t>(child, 0x18) = ctx.rng().Chance(1, 2) ? 0 : reinterpret_cast<std::uint32_t>(buffer + kParent);
+        At<std::uint8_t>(child, 0x1c) = static_cast<std::uint8_t>(ctx.rng().Below(2));
+        if (count == 0x80000001u && k == 0) {
+            // The mouse arrives at the first child (TrackMouse calls 0x5c),
+            // so a huge vector is always emptied by a child call.
+            At<std::uint8_t>(child, 0x1d) = 0;
+            At<RECT>(child, 8) = RECT{0, 0, 0x10000, 0x10000};
+        } else {
+            At<std::uint8_t>(child, 0x1d) = static_cast<std::uint8_t>(ctx.rng().Below(3));
+            for (std::size_t offset = 8; offset < 0x18; offset += 4) {
+                At<std::int32_t>(child, offset) = ctx.rng().Range(-8, 40);
+            }
+        }
+    }
+    // The CControl parts.
+    for (const auto& [control, vbtable] : {std::pair{kControl, kControlVbtable}, std::pair{kGroupControl, kGroupControlVbtable}}) {
+        At<const void*>(buffer, control - 0x38) = vbtable;
+        At<std::uint32_t>(buffer, control - 0x1c) =
+            ctx.rng().Chance(1, 3) ? 0 : reinterpret_cast<std::uint32_t>(buffer + kChild);
+        for (const std::size_t field : {0xcu, 0x8u}) {
+            At<std::int32_t>(buffer, control - field) =
+                ctx.rng().Chance(9, 10) ? ctx.rng().Range(-40, 120) : static_cast<std::int32_t>(ctx.rng().Next32());
+        }
+    }
 }
 
 void SetUpInputs(test::Context& ctx, Inputs& in) {
@@ -929,10 +1445,41 @@ void SetUpInputs(test::Context& ctx, Inputs& in) {
     reinterpret_cast<std::uint16_t*>(&in.message)[5] = static_cast<std::uint16_t>(ctx.rng().Range(-8, 40));
     in.a = ctx.rng().Chance(1, 2) ? ctx.rng().Below(3) : ctx.rng().Next32();
     in.b = ctx.rng().Chance(1, 2) ? static_cast<std::uint32_t>(ctx.rng().Range(-4, 4)) : ctx.rng().Next32();
+    // Mostly a non-zero move (MoveBy then calls the child's 0x70 handler).
+    in.delta[0] = ctx.rng().Chance(1, 2) ? ctx.rng().Range(1, 5) : ctx.rng().Range(-5, -1);  // never 0: a huge child count must end
+    in.delta[1] = ctx.rng().Range(-3, 3);
 }
+
+// CControl_OnMouseMove reads the time through S3.EXE's import of
+// timeGetTime (0x655358); the tests point that entry at a fake clock while
+// they run, so both versions see the same time.
+DWORD g_fakeTime = 0;
+DWORD WINAPI FakeTimeGetTime() {
+    return g_fakeTime;
+}
+
+class FakeClock {
+public:
+    FakeClock() {
+        VirtualProtect(Entry(), sizeof(void*), PAGE_READWRITE, &protection_);
+        saved_ = *Entry();
+        *Entry() = reinterpret_cast<void*>(&FakeTimeGetTime);
+    }
+    ~FakeClock() {
+        *Entry() = saved_;
+        DWORD ignored = 0;
+        VirtualProtect(Entry(), sizeof(void*), protection_, &ignored);
+    }
+
+private:
+    static void** Entry() { return reinterpret_cast<void**>(0x00655358); }
+    DWORD protection_ = 0;
+    void* saved_ = nullptr;
+};
 
 void CompareScreenElement(test::Context& ctx, const Functions& candidate, int cases) {
     const Functions original = OriginalFunctions();
+    const FakeClock clock;
     std::vector<std::uint8_t> buffer(kBuffer), snapshot(kBuffer), afterOriginal(kBuffer);
     for (int i = 0; i < cases; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(kOperations));
@@ -943,6 +1490,8 @@ void CompareScreenElement(test::Context& ctx, const Functions& candidate, int ca
         const Inputs inputSnapshot = in;
         ProbeLog logA, logB;
         logA.seed = logB.seed = ctx.rng().Next32();
+        logA.groupLength = logB.groupLength = &At<std::uint32_t>(buffer.data(), kGroup - 0x60);
+        g_fakeTime = ctx.rng().Next32();
         g_probeLog = &logA;
         const std::uint32_t ra = RunOperation(original, op, buffer.data(), in);
         afterOriginal = buffer;
@@ -977,10 +1526,20 @@ std::uint32_t __fastcall WrongTrackMouse(void* self, void* edx, Message message)
     return CScreenElement_TrackMouse(self, edx, message);
 }
 
+// Wrong: the group draws its children clipped to the first rectangle only.
+std::uint32_t __fastcall WrongGroupDraw(void* self, void* edx, std::uint32_t surface, const RECT* rectA,
+                                        const RECT* rectB) {
+    const std::uint8_t saved = At<std::uint8_t>(self, -0x78);
+    At<std::uint8_t>(self, -0x78) = 1;
+    const std::uint32_t result = CScreenGroup_Draw(self, edx, surface, rectA, rectB);
+    At<std::uint8_t>(self, -0x78) = saved;
+    return result;
+}
+
 }  // namespace
 
 S3RE_TEST(ScreenElement_MatchOriginal) {
-    CompareScreenElement(ctx, OurFunctions(), 50000);
+    CompareScreenElement(ctx, OurFunctions(), 100000);
 }
 
 S3RE_TEST(ScreenElement_ComparisonDetectsWrongImplementation) {
@@ -989,6 +1548,27 @@ S3RE_TEST(ScreenElement_ComparisonDetectsWrongImplementation) {
     wrong.trackMouse = &WrongTrackMouse;
     CompareScreenElement(probe, wrong, 5000);
     S3RE_EXPECT(probe.failures() > 0);
+    test::Context probe2(ctx.name(), 2, /*quiet=*/true);
+    Functions wrongDraw = OurFunctions();
+    wrongDraw.screenGroupDraw = &WrongGroupDraw;
+    CompareScreenElement(probe2, wrongDraw, 5000);
+    S3RE_EXPECT(probe2.failures() > 0);
+}
+
+S3RE_TEST(CStaticControl_Construct_MatchesOriginal) {
+    std::uint8_t a[0x40], b[0x40];
+    for (int i = 0; i < 2000; ++i) {
+        ctx.rng().Fill(a, sizeof(a));
+        std::memcpy(b, a, sizeof(b));
+        RECT rect;
+        ctx.rng().Fill(&rect, sizeof(rect));
+        const void* ra = Original_CStaticControl_Construct(a + 8, nullptr, &rect);
+        const void* rb = CStaticControl_Construct(b + 8, nullptr, &rect);
+        if (!S3RE_EXPECT(ra == a + 8 && rb == b + 8) || !S3RE_EXPECT_MEM_EQ(a, b, sizeof(a))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return;
+        }
+    }
 }
 
 }  // namespace s3re::game

@@ -12,6 +12,8 @@ add_library(s3re SHARED
     msvc6/exceptions.cpp
     msvc6/string.cpp
 
+    watcom/ptr_vector.cpp
+
     trace/determinism.cpp
 
     replay/command_log.cpp

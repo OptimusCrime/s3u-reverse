@@ -9,11 +9,13 @@ and our replacement from s3re.dll in the emulator (tools/emutest/emu.py) on
 the same arguments, registers and lazily-random world, and compares:
 
   - return value (EAX, masked per spec; 0 = not compared),
-  - every byte written to the world or to S3.EXE's memory,
+  - every byte written to the world or to S3.EXE's memory (except a spec's
+    ignore_bytes, documented at the spec),
   - bytes popped from the stack on return,
   - callee-saved registers EBX, ESI, EDI, EBP (must also be preserved),
   - the calls of the game's DebugLog: format and arguments, in order,
-  - the calls of operator new/delete (sizes and blocks) and of std::_Xlen /
+  - the calls of operator new/delete (sizes and blocks; a spec's new_fails
+    makes new return null in some cases) and of std::_Xlen /
     std::_Xran (which end the run as a throw would; then the stack and the
     callee-saved registers are not compared),
   - faults: if both fault the case is skipped as invalid input; if only one
@@ -43,7 +45,8 @@ import specs  # noqa: E402
 ROOT = emu.ROOT
 
 
-def first_difference(original: emu.Outcome, ours: emu.Outcome, mask: int) -> str | None:
+def first_difference(original: emu.Outcome, ours: emu.Outcome, mask: int,
+                     ignored: frozenset[int] = frozenset()) -> str | None:
     if original.spec_error or ours.spec_error:
         return f"spec error: {original.spec_error or ours.spec_error}"
     if (original.fault is None) != (ours.fault is None):
@@ -71,6 +74,8 @@ def first_difference(original: emu.Outcome, ours: emu.Outcome, mask: int) -> str
         if not thrown and original.saved[name] != ours.saved[name]:
             return f"{name}: original {original.saved[name]:#x}, ours {ours.saved[name]:#x}"
     for address in sorted(set(original.final) | set(ours.final)):
+        if address in ignored:
+            continue  # Spec.ignore_bytes
         before = original.initial.get(address, ours.initial.get(address))
         a = original.final.get(address, before)
         b = ours.final.get(address, before)
@@ -89,6 +94,8 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
     pool = sorted(set(original.constants) | set(range(0, 9)) | {0xFF, 0xFFFF, 0xFFFFFFFF})
     machine.blocks = set()
     machine.virtuals = spec.virtuals or {}
+    machine.virtual_effects = spec.virtual_effects or {}
+    ignored = frozenset(emu.WORLD_BASE + offset for offset in spec.ignore_bytes)
     result = {"cases": 0, "invalid": 0, "mismatch": None}
     if spec.max_cases is not None:
         cases = min(cases, spec.max_cases)
@@ -119,6 +126,7 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
         else:
             ecx = rng.getrandbits(32)
         machine.begin_case(rng.getrandbits(32), pool, presets)
+        machine.new_fails = spec.new_fails > 0 and rng.random() < spec.new_fails
         if spec.globals:
             for address, value, size in spec.globals(rng, pool, args):
                 mask = (1 << (8 * size)) - 1
@@ -130,7 +138,7 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
             result["invalid"] += 1
             continue
         result["cases"] += 1
-        problem = first_difference(a, b, spec.eax_mask)
+        problem = first_difference(a, b, spec.eax_mask, ignored)
         if problem is None and a.thrown is None:
             for name, value in registers.items():
                 if name != "eax" and a.saved[name] != value:

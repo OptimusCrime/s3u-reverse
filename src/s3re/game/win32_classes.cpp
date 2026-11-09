@@ -28,6 +28,9 @@
 //                                      left alone); EAX = this. ret.
 //   CSimpleSurface(a,b,c,d) 0x005befe0 CObject(); +0xc = a, +4 = b, +8 = c,
 //                                      +0x10 = d; EAX = this. ret 0x10.
+// DirectX::CSurface (vtable 0x65cda8), derived from CSimpleSurface:
+//   CSurface()             0x005bf200  CSimpleSurface(); +0x14, +0x48, +0x18 =
+//                                      0; EAX = this. ret.
 // DirectX::CDirectSoundBuffer (vtable 0x65cecc):
 //   CDirectSoundBuffer()   0x005c1f70  +4, +8 = 0, vtable (no CObject);
 //                                      EAX = this. ret.
@@ -51,6 +54,7 @@ constexpr std::uint32_t kCWaitableHandleVtable = 0x0065d670;
 constexpr std::uint32_t kCWindowBaseVtable = 0x0065d854;
 constexpr std::uint32_t kCMessageQueueVtable = 0x0065d6f4;
 constexpr std::uint32_t kCSimpleSurfaceVtable = 0x0065cda0;
+constexpr std::uint32_t kCSurfaceVtable = 0x0065cda8;
 constexpr std::uint32_t kCDirectSoundBufferVtable = 0x0065cecc;
 
 void PutDword(void* self, std::size_t offset, std::uint32_t value) {
@@ -82,6 +86,7 @@ void* __fastcall DirectX_CSimpleSurface_Construct(void* self, void* edx);
 void* __fastcall DirectX_CSimpleSurface_Construct4(void* self, void* edx, std::uint32_t a, std::uint32_t b,
                                                    std::uint32_t c, std::uint32_t d);
 void* __fastcall DirectX_CDirectSoundBuffer_Construct(void* self, void* edx);
+void* __fastcall DirectX_CSurface_Construct(void* self, void* edx);
 
 S3RE_HOOK(0x00610320, Win32_CObject_Construct, CtorFn, Original_Win32_CObject_Construct,
           Win32_CObject_Construct);
@@ -206,6 +211,20 @@ void* __fastcall DirectX_CDirectSoundBuffer_Construct(void* self, void* /*edx*/)
     return self;
 }
 
+S3RE_HOOK(0x005bf200, DirectX_CSurface_Construct, CtorFn, Original_DirectX_CSurface_Construct,
+          DirectX_CSurface_Construct);
+
+// Purpose: Default constructor of DirectX::CSurface, a CSimpleSurface with
+// more state (+0x14, +0x18 and +0x48 start at 0; meaning unknown).
+void* __fastcall DirectX_CSurface_Construct(void* self, void* /*edx*/) {
+    DirectX_CSimpleSurface_Construct(self, nullptr);
+    PutDword(self, 0, kCSurfaceVtable);
+    PutDword(self, 0x14, 0);
+    PutDword(self, 0x48, 0);
+    PutDword(self, 0x18, 0);
+    return self;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -223,6 +242,7 @@ struct Win32Functions {
     CtorFn simpleSurfaceCtor;
     Ctor4Fn simpleSurfaceCtor4;
     CtorFn soundBufferCtor;
+    CtorFn surfaceCtor;
 };
 
 Win32Functions OriginalWin32() {
@@ -230,7 +250,8 @@ Win32Functions OriginalWin32() {
             Original_Win32_CObject_DeletingDestroy, Original_Win32_CWin32Handle_Construct,
             Original_Win32_CWaitable_Construct,     Original_Win32_CWindowBase_Construct,
             Original_Win32_CMessageQueue_Construct, Original_DirectX_CSimpleSurface_Construct,
-            Original_DirectX_CSimpleSurface_Construct4, Original_DirectX_CDirectSoundBuffer_Construct};
+            Original_DirectX_CSimpleSurface_Construct4, Original_DirectX_CDirectSoundBuffer_Construct,
+            Original_DirectX_CSurface_Construct};
 }
 
 Win32Functions OurWin32() {
@@ -238,7 +259,8 @@ Win32Functions OurWin32() {
             &Win32_CObject_DeletingDestroy, &Win32_CWin32Handle_Construct,
             &Win32_CWaitable_Construct,     &Win32_CWindowBase_Construct,
             &Win32_CMessageQueue_Construct, &DirectX_CSimpleSurface_Construct,
-            &DirectX_CSimpleSurface_Construct4, &DirectX_CDirectSoundBuffer_Construct};
+            &DirectX_CSimpleSurface_Construct4, &DirectX_CDirectSoundBuffer_Construct,
+            &DirectX_CSurface_Construct};
 }
 
 void* GameOperatorNew(std::uint32_t size) {
@@ -258,17 +280,18 @@ std::uintptr_t RunWin32(const Win32Functions& f, int op, std::uint8_t* object, c
         case 6: return reinterpret_cast<std::uintptr_t>(f.messageQueueCtor(object, nullptr, args[0])) - reinterpret_cast<std::uintptr_t>(object);
         case 7: return reinterpret_cast<std::uintptr_t>(f.simpleSurfaceCtor(object, nullptr)) - reinterpret_cast<std::uintptr_t>(object);
         case 8: return reinterpret_cast<std::uintptr_t>(f.simpleSurfaceCtor4(object, nullptr, args[0], args[1], args[2], args[3])) - reinterpret_cast<std::uintptr_t>(object);
-        default: return reinterpret_cast<std::uintptr_t>(f.soundBufferCtor(object, nullptr)) - reinterpret_cast<std::uintptr_t>(object);
+        case 9: return reinterpret_cast<std::uintptr_t>(f.soundBufferCtor(object, nullptr)) - reinterpret_cast<std::uintptr_t>(object);
+        default: return reinterpret_cast<std::uintptr_t>(f.surfaceCtor(object, nullptr)) - reinterpret_cast<std::uintptr_t>(object);
     }
 }
 
 void CompareWin32(test::Context& ctx, const Win32Functions& candidate, int cases) {
     const Win32Functions original = OriginalWin32();
     constexpr std::size_t kGuard = 16;
-    constexpr std::size_t kObject = 0x20;
+    constexpr std::size_t kObject = 0x50;
     std::vector<std::uint8_t> a(kGuard * 2 + kObject), b(a.size());
     for (int i = 0; i < cases; ++i) {
-        const int op = static_cast<int>(ctx.rng().Below(10));
+        const int op = static_cast<int>(ctx.rng().Below(11));
         std::uint32_t args[4];
         for (auto& arg : args) {
             arg = ctx.rng().Next32();
