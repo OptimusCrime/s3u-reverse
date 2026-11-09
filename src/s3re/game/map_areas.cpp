@@ -5,14 +5,15 @@
 //   tile(x, y) + 0x18 with tile records at 0x67440 (world.h). 130 places in
 //   the code index it this way; it is the strongest hint that the 24-byte
 //   tile records really start at 0x67444 (then this word is field +0x14,
-//   and the neighbour accesses at 0x6742c.. are fields of tile y-1). Not
-//   changed in world.h yet; the formula below is the original's, including
-//   its 32-bit wrap. Bit 0x8000 is set by 0x5194b0 (meaning unknown).
-// Area records: 0x2e0 bytes at world+0xe145ec, indexed by the area number;
-//   uint32 +0x0 = number of tiles in the area; uint16 slots at +0x96 and
-//   +0xde hold building numbers (two lists of 36, meaning unknown).
+//   and the neighbour accesses at 0x6742c.. are fields of tile y-1). That
+//   is now settled (layout.h: Tile::area). The original's 32-bit wrap is
+//   kept through TileOffset. Bit 0x8000 is set by 0x5194b0 (kTileAreaWater).
+// Area records: 0x2e0 bytes (layout::Area at world+0xe145e8); the original
+//   addresses them from world+0xe145ec = Area::tile_count (+0x4, number of
+//   tiles in the area); uint16 slots at +0x96 and +0xde from there are
+//   Area::buildings_a / buildings_b (+0x9a / +0xe2; two lists of 36).
 // Buildings: 0x3a-byte records at world+0x1499e64 (see counting.cpp);
-//   uint16 +0xa and +0xc are the building's tile (x, y).
+//   uint16 +0xa and +0xc are the building's tile (Building::door_x/door_y).
 //
 // GameWorld::AssignTileToArea (0x004e5450): (x, y, area): count of `area`
 //   += 1, then tile area word = area. EAX = area. ret 0xc.
@@ -38,51 +39,40 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kTileAreaIndexBias = 0x44d9;  // * 24 = 0x67458
-constexpr std::uint32_t kTileAreaMarked = 0x8000;
+using layout::Area;
 
-constexpr std::size_t kAreaRecords = 0xe145ec;
-constexpr std::uint32_t kAreaRecordBytes = 0x2e0;
-constexpr std::size_t kAreaTileCount = 0x0;
-constexpr std::uint32_t kAreaSlotsA = 0x96;
-constexpr std::uint32_t kAreaSlotsB = 0xde;
-
-constexpr std::size_t kBuildings = 0x1499e64;
-constexpr std::uint32_t kBuildingBytes = 0x3a;
-constexpr std::size_t kBuildingX = 0xa;
-constexpr std::size_t kBuildingY = 0xc;
-
-std::uint8_t* Bytes(GameWorld* world) {
-    return reinterpret_cast<std::uint8_t*>(world);
-}
+// The tile area word is Tile::area, at world + TileOffset(x, y) + 0x14. The
+// original computes its address as (x * 0x300 + y + 0x44d9) * 24 in 32 bits;
+// the index in 24-byte units is also SetTileAreaMarked's return value.
+constexpr std::uint32_t kTileAreaIndexBias =
+    (offsetof(GameWorld, tiles) + offsetof(layout::Tile, area)) / kTileBytes;
+static_assert((offsetof(GameWorld, tiles) + offsetof(layout::Tile, area)) % kTileBytes == 0);
+static_assert(kTileAreaIndexBias == 0x44d9);
 
 // Index of the tile area word in 24-byte units (32-bit wrap, as the original).
 std::uint32_t TileAreaIndex(std::uint32_t x, std::uint32_t y) {
-    return x * world_offset::kMapRowTiles + y + kTileAreaIndexBias;
+    return x * layout::kMapRowTiles + y + kTileAreaIndexBias;
 }
 
 std::uint16_t& TileArea(GameWorld* world, std::uint32_t x, std::uint32_t y) {
-    return *reinterpret_cast<std::uint16_t*>(Bytes(world) + TileAreaIndex(x, y) * 24u);
+    // TileOffset wraps at 2^32 like the original's index arithmetic.
+    return TileAtOffset(world, TileOffset(x, y)).area;
 }
 
 std::uint32_t& AreaTileCount(GameWorld* world, std::uint32_t area) {
-    return *reinterpret_cast<std::uint32_t*>(Bytes(world) + kAreaRecords +
-                                             area * kAreaRecordBytes + kAreaTileCount);
+    return world->areas[area].tile_count;
 }
 
-std::uint16_t BuildingWord(GameWorld* world, std::uint32_t building, std::size_t field) {
-    return *reinterpret_cast<const std::uint16_t*>(Bytes(world) + kBuildings +
-                                                   building * kBuildingBytes + field);
-}
+// Area::buildings_a or Area::buildings_b.
+using AreaBuildingList = std::uint16_t (Area::*)[layout::kGoodsTypes];
 
 std::uint32_t SetAreaBuildingSlot(GameWorld* world, std::uint32_t building, std::uint32_t slot,
-                                  std::uint32_t list) {
-    const std::uint32_t area =
-        TileArea(world, BuildingWord(world, building, kBuildingX), BuildingWord(world, building, kBuildingY));
-    // Same address arithmetic as the original: ((area * 0x170 + slot) * 2).
-    const std::uint32_t offset = (area * (kAreaRecordBytes / 2) + slot) * 2u;
-    *reinterpret_cast<std::uint16_t*>(Bytes(world) + kAreaRecords + list + offset) =
-        static_cast<std::uint16_t>(building);
+                                  AreaBuildingList list) {
+    const layout::Building& record = world->buildings[building];
+    const std::uint32_t area = TileArea(world, record.door_x, record.door_y);
+    // The original computes ((area * 0x170 + slot) * 2) from the list's start;
+    // slots past 36 run into the following fields, like this 32-bit indexing.
+    (world->areas[area].*list)[slot] = static_cast<std::uint16_t>(building);
     return slot;
 }
 
@@ -118,7 +108,7 @@ std::uint32_t __fastcall GameWorld_RemoveTileFromArea(GameWorld* world, void*, s
 // Purpose: Writes a temporary marked area number into a tile, used while the game recomputes areas.
 std::uint32_t __fastcall GameWorld_SetTileAreaMarked(GameWorld* world, void*, std::uint32_t x,
                                                      std::uint32_t y, std::uint32_t value) {
-    TileArea(world, x, y) = static_cast<std::uint16_t>(value + kTileAreaMarked);
+    TileArea(world, x, y) = static_cast<std::uint16_t>(value + layout::kTileAreaWater);
     return TileAreaIndex(x, y) * 3u;
 }
 
@@ -127,14 +117,14 @@ std::uint32_t __fastcall GameWorld_SetTileAreaMarked(GameWorld* world, void*, st
 std::uint32_t __fastcall GameWorld_SetAreaBuildingSlotA(GameWorld* world, void*,
                                                         std::uint32_t building,
                                                         std::uint32_t slot) {
-    return SetAreaBuildingSlot(world, building, slot, kAreaSlotsA);
+    return SetAreaBuildingSlot(world, building, slot, &Area::buildings_a);
 }
 
 // Purpose: Like SetAreaBuildingSlotA, for the area's second building list.
 std::uint32_t __fastcall GameWorld_SetAreaBuildingSlotB(GameWorld* world, void*,
                                                         std::uint32_t building,
                                                         std::uint32_t slot) {
-    return SetAreaBuildingSlot(world, building, slot, kAreaSlotsB);
+    return SetAreaBuildingSlot(world, building, slot, &Area::buildings_b);
 }
 
 S3RE_HOOK(0x004e5450, GameWorld_AssignTileToArea, AssignTileFn,
@@ -157,16 +147,11 @@ namespace {
 constexpr std::uint32_t kTestMapSize = 384;
 constexpr std::uint32_t kTestAreas = 0x800;  // area numbers stay inside the test world
 constexpr std::uint32_t kTestBuildings = 2000;
-constexpr std::size_t kMapWorld = kAreaRecords + kTestAreas * kAreaRecordBytes;
-constexpr std::size_t kBuildingWorld = kBuildings + (kTestBuildings + 1) * kBuildingBytes;
-
-std::size_t TileAreaOffset(std::uint32_t x, std::uint32_t y) {
-    return TileAreaIndex(x, y) * 24u;
-}
-
-std::size_t AreaRecordOffset(std::uint32_t area) {
-    return kAreaRecords + area * kAreaRecordBytes;
-}
+// Up to the tile count of area kTestAreas (the old kAreaRecords bound).
+constexpr std::size_t kMapWorld =
+    offsetof(GameWorld, areas) + kTestAreas * sizeof(Area) + offsetof(Area, tile_count);
+constexpr std::size_t kBuildingWorld =
+    offsetof(GameWorld, buildings) + (kTestBuildings + 1) * sizeof(layout::Building);
 
 // Ours and the original return a world address in RemoveTileFromArea; make
 // it relative to the world so the two buffers compare equal.
@@ -188,7 +173,7 @@ void CompareTileOp(test::Context& ctx, TileOp op, AssignTileFn originalAssign,
         // Assign indexes the area records with the full 32-bit argument, so
         // it must be a valid area number.
         const std::uint32_t value = op == TileOp::Mark ? ctx.rng().Next32() : area;
-        worlds.Set<std::uint16_t>(TileAreaOffset(x, y), static_cast<std::uint16_t>(area));
+        worlds.Both([&](GameWorld* w) { w->tiles[x][y].area = static_cast<std::uint16_t>(area); });
         std::uint32_t expected;
         std::uint32_t actual;
         if (op == TileOp::Remove) {
@@ -199,8 +184,9 @@ void CompareTileOp(test::Context& ctx, TileOp op, AssignTileFn originalAssign,
             expected = originalAssign(worlds.original(), nullptr, x, y, value);
             actual = candidateAssign(worlds.ours(), nullptr, x, y, value);
         }
-        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, TileAreaOffset(x, y), 2) ||
-            !worlds.Same(ctx, AreaRecordOffset(area), 4) ||
+        if (!S3RE_EXPECT_EQ(expected, actual) ||
+            !worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return w->tiles[x][y].area; }) ||
+            !worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return w->areas[area].tile_count; }) ||
             (i % 128 == 127 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u), area %u, value %#x", i, x, y, area,
                      value);
@@ -219,14 +205,19 @@ void CompareBuildingSlot(test::Context& ctx, BuildingSlotFn original, BuildingSl
         const auto x = static_cast<std::uint16_t>(ctx.rng().Below(kTestMapSize));
         const auto y = static_cast<std::uint16_t>(ctx.rng().Below(kTestMapSize));
         const auto area = static_cast<std::uint16_t>(ctx.rng().Below(kTestAreas));
-        const std::size_t record = kBuildings + building * kBuildingBytes;
-        worlds.Set<std::uint16_t>(record + kBuildingX, x);
-        worlds.Set<std::uint16_t>(record + kBuildingY, y);
-        worlds.Set<std::uint16_t>(TileAreaOffset(x, y), area);
+        worlds.Both([&](GameWorld* w) {
+            w->buildings[building].door_x = x;
+            w->buildings[building].door_y = y;
+            w->tiles[x][y].area = area;
+        });
         const std::uint32_t expected = original(worlds.original(), nullptr, building, slot);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, building, slot);
+        // From the area's tile count, the whole record plus the 64 slots'
+        // reach (slot < 64 runs past the record).
+        const std::size_t window =
+            worlds.OffsetOf([&](GameWorld* w) -> auto& { return w->areas[area].tile_count; });
         if (!S3RE_EXPECT_EQ(expected, actual) ||
-            !worlds.Same(ctx, AreaRecordOffset(area), kAreaRecordBytes + 0x40) ||
+            !worlds.Same(ctx, window, sizeof(Area) + 0x40) ||
             (i % 128 == 127 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: building %u, slot %u, area %u", i, building,
                      slot, area);
@@ -239,7 +230,7 @@ void CompareBuildingSlot(test::Context& ctx, BuildingSlotFn original, BuildingSl
 // Wrong: stores the slot into list A instead of list B.
 std::uint32_t __fastcall WrongSetAreaBuildingSlotB(GameWorld* world, void*, std::uint32_t building,
                                                    std::uint32_t slot) {
-    return SetAreaBuildingSlot(world, building, slot, kAreaSlotsA);
+    return SetAreaBuildingSlot(world, building, slot, &Area::buildings_a);
 }
 
 }  // namespace

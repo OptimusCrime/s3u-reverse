@@ -41,15 +41,9 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kPlayers = 20;
-constexpr std::uint32_t kPlayerActive = 0x0;
-constexpr std::uint32_t kPlayerField0C = 0xc;
-constexpr std::uint32_t kPlayerField18 = 0x18;
+using layout::Player;
 
-std::uint32_t& PlayerField(GameWorld* world, std::uint32_t player, std::uint32_t field) {
-    return WorldField<std::uint32_t>(
-        world, world_offset::kPlayerRecords + player * world_offset::kPlayerRecordBytes + field);
-}
+constexpr std::uint32_t kPlayers = layout::kPlayers;
 
 }  // namespace
 
@@ -60,10 +54,11 @@ using RaceTypeFn = std::uint32_t(__stdcall*)(std::uint32_t race, std::uint32_t t
 // player's slot and their in-game number.
 std::uint32_t __fastcall GameWorld_FindPlayerByField0C(GameWorld* world, void*,
                                                        std::uint32_t value) {
+    // Field +0xc is Player::presence_index, +0x18 Player::unk018.
     for (std::uint32_t player = 0; player < kPlayers; ++player) {
-        if (PlayerField(world, player, kPlayerActive) != 0 &&
-            PlayerField(world, player, kPlayerField18) == 0 &&
-            PlayerField(world, player, kPlayerField0C) == value) {
+        const Player& record = world->players[player];
+        if (record.active != 0 && record.unk018 == 0 &&
+            static_cast<std::uint32_t>(record.presence_index) == value) {
             return player;
         }
     }
@@ -90,15 +85,7 @@ std::uint32_t __stdcall BuildingTypeAllowedForRace(std::uint32_t race, std::uint
 
 namespace {
 
-constexpr std::uint32_t kOffsetTable = 0x110a588;  // int32 dx, int32 dy, ... per 16-byte entry
-constexpr std::uint32_t kOffsetTableBytes = 16;
-constexpr std::uint32_t kSurveyEntries = 0x4e1b;
-constexpr std::uint32_t kPlayerX = 0x10;
-constexpr std::uint32_t kPlayerY = 0x14;
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kTileTerrain = 0x6;
-constexpr std::uint32_t kTileObject = 0x7;
-constexpr std::uint32_t kTileResource = 0x11;
+constexpr std::uint32_t kSurveyEntries = 0x4e1b;  // entries of world->offsets
 constexpr std::uintptr_t kLandMessage = 0x006a63a4;  // "Player %u   Land %u  Trees %u ..."
 
 }  // namespace
@@ -108,21 +95,21 @@ using LogLandFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::u
 // Purpose: Debug output only: how much land and how many resources (trees, stone, coal, ...) lie around a
 // player's start position. Probably a leftover from tuning the maps or the computer players.
 std::uint32_t __fastcall GameWorld_LogPlayerLandResources(GameWorld* world, void*, std::uint32_t player) {
-    const std::uint32_t record = world_offset::kPlayerRecords + player * world_offset::kPlayerRecordBytes;
-    const std::uint32_t px = WorldField<std::uint32_t>(world, record + kPlayerX);
-    const std::uint32_t py = WorldField<std::uint32_t>(world, record + kPlayerY);
+    const Player& record = world->players[player];  // player is not checked
+    const auto px = static_cast<std::uint32_t>(record.start_x);
+    const auto py = static_cast<std::uint32_t>(record.start_y);
     std::uint32_t land = 0, trees = 0, stone = 0, coal = 0, iron = 0, gold = 0, sulfur = 0, gems = 0, fish = 0,
                   swamp = 0, stream = 0;
     for (std::uint32_t i = 0; i < kSurveyEntries; ++i) {
         const std::uint32_t weight = i < 3500 ? 4 : i < 8000 ? 3 : i < 13500 ? 2 : 1;
-        const std::uint32_t x = WorldField<std::uint32_t>(world, kOffsetTable + i * kOffsetTableBytes) + px;
-        const std::uint32_t y = WorldField<std::uint32_t>(world, kOffsetTable + i * kOffsetTableBytes + 4) + py;
-        const std::uint32_t size = WorldField<std::uint32_t>(world, world_offset::kMapSize);
+        const std::uint32_t x = static_cast<std::uint32_t>(world->offsets[i].dx) + px;
+        const std::uint32_t y = static_cast<std::uint32_t>(world->offsets[i].dy) + py;
+        const std::uint32_t size = world->map_size;  // re-read every entry, like the original
         if (x >= size || y >= size) {
             continue;
         }
-        const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
-        const std::uint32_t terrain = WorldField<std::uint8_t>(world, tile + kTileTerrain);
+        const layout::Tile& tile = world->tiles[x][y];
+        const std::uint32_t terrain = tile.terrain;
         if ((terrain & 0xf0) == 0x10) {
             land += weight;
         }
@@ -132,14 +119,14 @@ std::uint32_t __fastcall GameWorld_LogPlayerLandResources(GameWorld* world, void
         if ((terrain & 0xf0) == 0x60) {
             stream += weight;
         }
-        const std::uint32_t object = WorldField<std::uint8_t>(world, tile + kTileObject);
+        const std::uint32_t object = tile.object;
         if (object >= 0x44 && object <= 0x53) {
             trees += weight;
         }
         if (object >= 0x73 && object <= 0x7e) {
             stone += (0x7f - object) * weight;
         }
-        const std::uint32_t resource = WorldField<std::uint8_t>(world, tile + kTileResource);
+        const std::uint32_t resource = tile.resources;
         const std::uint32_t amount = (resource & 0xf) * weight;
         switch (resource & 0xf0) {
         case 0x00: fish += amount; break;
@@ -169,21 +156,22 @@ S3RE_HOOK(0x004ffd60, BuildingTypeAllowedForRace, RaceTypeFn, Original_BuildingT
 
 namespace {
 
-constexpr std::size_t kTestWorld =
-    world_offset::kPlayerRecords + kPlayers * world_offset::kPlayerRecordBytes;
+// Up to the end of the player records.
+constexpr std::size_t kTestWorld = offsetof(GameWorld, players) + sizeof(GameWorld::players);
 
 void CompareFind(test::Context& ctx, FindPlayerFn original, FindPlayerFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
         // Small field values so that matches, near-matches and duplicates occur.
         for (std::uint32_t player = 0; player < kPlayers; ++player) {
-            const std::uint32_t record =
-                world_offset::kPlayerRecords + player * world_offset::kPlayerRecordBytes;
-            worlds.Set<std::uint32_t>(record + kPlayerActive,
-                                      ctx.rng().Chance(1, 4) ? 0 : ctx.rng().Next32() | 1);
-            worlds.Set<std::uint32_t>(record + kPlayerField18,
-                                      ctx.rng().Chance(1, 3) ? ctx.rng().Next32() | 1 : 0);
-            worlds.Set<std::uint32_t>(record + kPlayerField0C, ctx.rng().Below(6));
+            const auto active = static_cast<std::int32_t>(ctx.rng().Chance(1, 4) ? 0 : ctx.rng().Next32() | 1);
+            const auto field18 = static_cast<std::int32_t>(ctx.rng().Chance(1, 3) ? ctx.rng().Next32() | 1 : 0);
+            const auto field0c = static_cast<std::int32_t>(ctx.rng().Below(6));
+            worlds.Both([&](GameWorld* w) {
+                w->players[player].active = active;
+                w->players[player].unk018 = field18;
+                w->players[player].presence_index = field0c;
+            });
         }
         const std::uint32_t value = ctx.rng().Chance(1, 16) ? ctx.rng().Next32() : ctx.rng().Below(6);
         const std::uint32_t expected = original(worlds.original(), nullptr, value);
@@ -199,8 +187,8 @@ void CompareFind(test::Context& ctx, FindPlayerFn original, FindPlayerFn candida
 // Wrong: ignores field +0x18.
 std::uint32_t __fastcall WrongFindPlayerByField0C(GameWorld* world, void*, std::uint32_t value) {
     for (std::uint32_t player = 0; player < kPlayers; ++player) {
-        if (PlayerField(world, player, kPlayerActive) != 0 &&
-            PlayerField(world, player, kPlayerField0C) == value) {
+        const Player& record = world->players[player];
+        if (record.active != 0 && static_cast<std::uint32_t>(record.presence_index) == value) {
             return player;
         }
     }
@@ -246,28 +234,26 @@ namespace {
 
 // Wrong: counts gems as sulfur (rewrites resource nibble 4 to 5 around the call).
 std::uint32_t __fastcall WrongLogPlayerLandResources(GameWorld* world, void* edx, std::uint32_t player) {
-    std::vector<std::uint32_t> changed;
-    const std::uint32_t size = WorldField<std::uint32_t>(world, world_offset::kMapSize);
+    std::vector<std::uint8_t*> changed;
+    const std::uint32_t size = world->map_size;
     for (std::uint32_t x = 0; x < size; ++x) {
         for (std::uint32_t y = 0; y < size; ++y) {
-            const std::uint32_t offset = kTiles + (x * 0x300 + y) * 24 + kTileResource;
-            std::uint8_t& r = WorldField<std::uint8_t>(world, offset);
+            std::uint8_t& r = world->tiles[x][y].resources;
             if ((r & 0xf0) == 0x40) {
                 r = static_cast<std::uint8_t>(r + 0x10);
-                changed.push_back(offset);
+                changed.push_back(&r);
             }
         }
     }
     const std::uint32_t result = GameWorld_LogPlayerLandResources(world, edx, player);
-    for (const std::uint32_t offset : changed) {
-        std::uint8_t& r = WorldField<std::uint8_t>(world, offset);
-        r = static_cast<std::uint8_t>(r - 0x10);
+    for (std::uint8_t* r : changed) {
+        *r = static_cast<std::uint8_t>(*r - 0x10);
     }
     return result;
 }
 
 // The player records lie beyond the offset table.
-constexpr std::size_t kSurveyTestWorld = world_offset::kPlayerRecords + kPlayers * world_offset::kPlayerRecordBytes;
+constexpr std::size_t kSurveyTestWorld = offsetof(GameWorld, players) + sizeof(GameWorld::players);
 
 void CompareLandSurvey(test::Context& ctx, LogLandFn candidate, int cases) {
     test::WorldPair worlds(ctx, kSurveyTestWorld);
@@ -275,30 +261,40 @@ void CompareLandSurvey(test::Context& ctx, LogLandFn candidate, int cases) {
     // offsets of -90..90 (and some wild ones) reach the same code.
     for (std::uint32_t i = 0; i < kSurveyEntries; ++i) {
         const bool wild = ctx.rng().Chance(1, 50);
-        worlds.Set<std::int32_t>(kOffsetTable + i * kOffsetTableBytes,
-                                 wild ? static_cast<std::int32_t>(ctx.rng().Next32())
-                                      : static_cast<std::int32_t>(ctx.rng().Below(181)) - 90);
-        worlds.Set<std::int32_t>(kOffsetTable + i * kOffsetTableBytes + 4,
-                                 static_cast<std::int32_t>(ctx.rng().Below(181)) - 90);
+        const std::int32_t dx = wild ? static_cast<std::int32_t>(ctx.rng().Next32())
+                                     : static_cast<std::int32_t>(ctx.rng().Below(181)) - 90;
+        const std::int32_t dy = static_cast<std::int32_t>(ctx.rng().Below(181)) - 90;
+        worlds.Both([&](GameWorld* w) {
+            w->offsets[i].dx = dx;
+            w->offsets[i].dy = dy;
+        });
     }
     DebugLogRecorder logs;
     static constexpr std::uint8_t kTerrain[] = {0x10, 0x15, 0x60, 0x1f, 0x65, 0x20, 0x00, 0x30};
     static constexpr std::uint8_t kObject[] = {0, 0x43, 0x44, 0x50, 0x53, 0x54, 0x72, 0x73, 0x7e, 0x7f};
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : 64 + ctx.rng().Below(320);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         for (std::uint32_t x = 0; x < size; ++x) {
             for (std::uint32_t y = 0; y < size; ++y) {
-                const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
-                worlds.Set<std::uint8_t>(tile + kTileTerrain, kTerrain[ctx.rng().Below(8)]);
-                worlds.Set<std::uint8_t>(tile + kTileObject, kObject[ctx.rng().Below(10)]);
-                worlds.Set<std::uint8_t>(tile + kTileResource, static_cast<std::uint8_t>(ctx.rng().Next32() & 0x7f));
+                const std::uint8_t terrain = kTerrain[ctx.rng().Below(8)];
+                const std::uint8_t object = kObject[ctx.rng().Below(10)];
+                const auto resources = static_cast<std::uint8_t>(ctx.rng().Next32() & 0x7f);
+                worlds.Both([&](GameWorld* w) {
+                    layout::Tile& tile = w->tiles[x][y];
+                    tile.terrain = terrain;
+                    tile.object = object;
+                    tile.resources = resources;
+                });
             }
         }
         const std::uint32_t player = ctx.rng().Below(20);
-        const std::uint32_t record = world_offset::kPlayerRecords + player * world_offset::kPlayerRecordBytes;
-        worlds.Set<std::uint32_t>(record + kPlayerX, ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(size));
-        worlds.Set<std::uint32_t>(record + kPlayerY, ctx.rng().Below(size));
+        const auto startX = static_cast<std::int32_t>(ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(size));
+        const auto startY = static_cast<std::int32_t>(ctx.rng().Below(size));
+        worlds.Both([&](GameWorld* w) {
+            w->players[player].start_x = startX;
+            w->players[player].start_y = startY;
+        });
         const std::uint32_t expected = Original_GameWorld_LogPlayerLandResources(worlds.original(), nullptr, player);
         const std::vector<DebugLogCall> expectedLogs = logs.Take();
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, player);

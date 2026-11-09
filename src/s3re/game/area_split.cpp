@@ -132,6 +132,14 @@
 //   player record +0x4) 0: UnblockTile(x-2, y+3) if that tile is blocked;
 //   race 1: the same for (x, y+7), then (x, y+6). EAX = the count. ret 0.
 // All thiscall (ECX = world).
+//
+// Field names (layout.h): area +0x8 Area::pile_list, +0xa piles_by_goods,
+// +0x52 requests_by_goods, +0x9a/+0xe2 buildings_a/b, +0x12a
+// settlers_by_type, +0x18a..+0x21a settings1..5, +0x23e settings_extra,
+// +0x241 setting_241, +0x242 counters_242, +0x245 condition_enabled, +0x278
+// counters_278; tile byte +0x10 Tile::walk_region ("byte 10"), word +0x16
+// Tile::wide_region ("word 16"); building +0x20 Building::extra_tiles,
+// +0x22 unk22, +0x30/+0x32 work_x/work_y, +0x36 unk36.
 
 #include "game/debug_log.h"
 #include "game/replacements.h"
@@ -147,183 +155,230 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kTileOwner = 0x8;
-constexpr std::uint32_t kTileFlags = 0xa;
-constexpr std::uint32_t kTileByte10 = 0x10;
-constexpr std::uint8_t kTileBlocked = 0x01;
-constexpr std::uint8_t kTileSplitMark = 0x10;
-constexpr std::uint32_t kTileAreaIndexBias = 0x44d9;
+using layout::Area;
+using layout::Pile;
+using layout::Settler;
+using layout::Tile;
+using layout::kTileBlocked;
 
-constexpr std::uint32_t kAreas = 0xe145e8;
-constexpr std::uint32_t kAreaBytes = 0x2e0;
-constexpr std::uint32_t kAreaPlayer = 0x0;
-constexpr std::uint32_t kAreaTileCount = 0x4;
-constexpr std::uint32_t kAreaPileList = 0x8;
-constexpr std::uint32_t kAreaGoodsPiles = 0xa;
-constexpr std::uint32_t kAreaRequests = 0x52;
-constexpr std::uint32_t kAreaSlotsA = 0x9a;
-constexpr std::uint32_t kAreaSlotsB = 0xe2;
-constexpr std::uint32_t kAreaSettlerLists = 0x12a;
-constexpr std::uint32_t kAreaSettlerListCount = 0x30;
-constexpr std::uint32_t kGoodsTypes = 0x24;
-constexpr std::uint32_t kAreaWords51 = 0x278;
-constexpr std::uint32_t kAreaBytes51 = 0x245;
-constexpr std::uint32_t kAreaCount51 = 0x33;
+// Tile flag 0x10 (layout::kTileFloodMark): SplitAreaAtTile marks the
+// neighbours that the border walk still has to reach with it.
+constexpr std::uint8_t kTileSplitMark = layout::kTileFloodMark;
+// The original computes the address of a tile's area word as
+// (x * 0x300 + y + 0x44d9) * 24, SetOwnerOfFreeTile as
+// ((x * 0x300 + y) * 3 + 0xce8b) * 8 (its EAX keeps the part before * 8):
+// both are TileOffset(x, y) + 0x14 (Tile::area), in 32 bits.
+constexpr std::uint32_t kTileAreaWordBytes =
+    static_cast<std::uint32_t>(offsetof(GameWorld, tiles) + offsetof(Tile, area));
+static_assert(kTileAreaWordBytes % 8 == 0 && kTileAreaWordBytes / 8 == 0xce8b);
+
 constexpr std::uint8_t kFreeArea = 0xff;
 constexpr std::uint32_t kLastArea = 0xfff;  // never handed out
-constexpr std::uint32_t kAreaHighWater = 0xe115dc;
-// Byte arrays per goods type, in the order InitArea clears them.
-constexpr std::uint32_t kGoodsArraysInitOrder[] = {0x18a, 0x1f6, 0x1ae, 0x21a, 0x1d2};
-// ... and in the order MoveAreaContents copies them.
-constexpr std::uint32_t kGoodsArraysCopyOrder[] = {0x18a, 0x1ae, 0x1d2, 0x1f6, 0x21a};
+constexpr std::uint32_t kGoodsTypes = layout::kGoodsTypes;
+constexpr std::uint32_t kAreaSettlerListCount = layout::kSettlerTypes;
+constexpr std::uint32_t kAreaCount51 = 51;
+static_assert(sizeof(Area::condition_enabled) == kAreaCount51);
+static_assert(sizeof(Area::counters_278) == kAreaCount51 * 2);
 
-constexpr std::uint32_t kPlayerRace = 0x11943e0;  // int32 at player record +0x4
-constexpr std::uint32_t kPlayerRecordBytes = 0x148;
-
-constexpr std::uint32_t kPiles = 0x123885c;
-constexpr std::uint32_t kPileBytes = 14;
-constexpr std::uint32_t kPileX = 0x6;
-constexpr std::uint32_t kPileY = 0x8;
-constexpr std::uint32_t kPilePrevious = 0xa;
-constexpr std::uint32_t kPileNext = 0xc;
-
-constexpr std::uint32_t kSettlers = 0x12a5e60;
-constexpr std::uint32_t kSettlerBytes = 0x40;
-constexpr std::uint32_t kSettlerX = 0x4;
-constexpr std::uint32_t kSettlerY = 0x6;
-constexpr std::uint32_t kSettlerNext = 0x10;
-constexpr std::uint32_t kSettlerPrevious = 0x12;
-
-constexpr std::uint32_t kNeighbourOffsets = 0x110a598;  // offset table entries 1..6
-constexpr std::uint32_t kOffsetBytes = 16;
 constexpr std::uint32_t kDirections = 6;
 
 constexpr std::uint32_t kPendingAreaEvent = 4;
 constexpr std::uint32_t kAreaEvent = 6;
 
+// The byte arrays of an area record: Area::settings1..5 (36 bytes each, at
+// +0x18a, +0x1ae, +0x1d2, +0x1f6, +0x21a) and Area::condition_enabled (51
+// bytes at +0x245).
+enum AreaByteArray : std::uint8_t { kSettings1, kSettings2, kSettings3, kSettings4, kSettings5, kConditions };
+
+std::uint8_t* AreaBytes(Area& area, AreaByteArray array) {
+    switch (array) {
+        case kSettings1: return area.settings1;
+        case kSettings2: return area.settings2;
+        case kSettings3: return area.settings3;
+        case kSettings4: return area.settings4;
+        case kSettings5: return area.settings5;
+        default: return area.condition_enabled;
+    }
+}
+
+// Byte arrays per goods type, in the order InitArea clears them.
+constexpr AreaByteArray kGoodsArraysInitOrder[] = {kSettings1, kSettings4, kSettings2, kSettings5, kSettings3};
+// ... and in the order MoveAreaContents copies them.
+constexpr AreaByteArray kGoodsArraysCopyOrder[] = {kSettings1, kSettings2, kSettings3, kSettings4, kSettings5};
+
+// One byte store of InitArea: AreaBytes(array)[index] = value.
 struct ByteStore {
-    std::uint16_t offset;
+    AreaByteArray array;
+    std::uint8_t index;
     std::uint8_t value;
 };
 
 // InitArea's defaults for every race (after the clearing loops).
 constexpr ByteStore kAreaDefaults[] = {
-    {0x246, 0x10}, {0x247, 0x10}, {0x248, 0xc}, {0x249, 0x6}, {0x24c, 0x10}, {0x24d, 0x10}, {0x24e, 0x8},
-    {0x252, 0x10}, {0x253, 0x8}, {0x255, 0x10}, {0x257, 0x10}, {0x25b, 0x10}, {0x25c, 0x10}, {0x25d, 0x8},
-    {0x25f, 0x10}, {0x260, 0x10}, {0x261, 0x8}, {0x263, 0x10}, {0x264, 0x0}, {0x265, 0x0}, {0x268, 0x10},
-    {0x269, 0x0}, {0x26a, 0x0}, {0x26c, 0x10}, {0x26d, 0x0}, {0x26e, 0x0}, {0x273, 0x0}, {0x274, 0x0},
-    {0x275, 0x0}, {0x276, 0x0}, {0x277, 0x0}, {0x1c0, 0x10}, {0x1c1, 0xc}, {0x1c2, 0x8}, {0x227, 0x1},
-    {0x226, 0x1}, {0x228, 0x1}, {0x229, 0x1}, {0x22a, 0x1}, {0x23a, 0x1}, {0x22b, 0x1}, {0x22c, 0x1},
-    {0x22d, 0x1}, {0x22e, 0x1}, {0x224, 0x1},
+    {kConditions, 1, 0x10}, {kConditions, 2, 0x10}, {kConditions, 3, 0xc}, {kConditions, 4, 0x6},
+    {kConditions, 7, 0x10}, {kConditions, 8, 0x10}, {kConditions, 9, 0x8}, {kConditions, 13, 0x10},
+    {kConditions, 14, 0x8}, {kConditions, 16, 0x10}, {kConditions, 18, 0x10}, {kConditions, 22, 0x10},
+    {kConditions, 23, 0x10}, {kConditions, 24, 0x8}, {kConditions, 26, 0x10}, {kConditions, 27, 0x10},
+    {kConditions, 28, 0x8}, {kConditions, 30, 0x10}, {kConditions, 31, 0x0}, {kConditions, 32, 0x0},
+    {kConditions, 35, 0x10}, {kConditions, 36, 0x0}, {kConditions, 37, 0x0}, {kConditions, 39, 0x10},
+    {kConditions, 40, 0x0}, {kConditions, 41, 0x0}, {kConditions, 46, 0x0}, {kConditions, 47, 0x0},
+    {kConditions, 48, 0x0}, {kConditions, 49, 0x0}, {kConditions, 50, 0x0}, {kSettings2, 18, 0x10},
+    {kSettings2, 19, 0xc}, {kSettings2, 20, 0x8}, {kSettings5, 13, 0x1}, {kSettings5, 12, 0x1},
+    {kSettings5, 14, 0x1}, {kSettings5, 15, 0x1}, {kSettings5, 16, 0x1}, {kSettings5, 32, 0x1},
+    {kSettings5, 17, 0x1}, {kSettings5, 18, 0x1}, {kSettings5, 19, 0x1}, {kSettings5, 20, 0x1},
+    {kSettings5, 10, 0x1},
 };
 
 constexpr ByteStore kRace0Defaults[] = {
-    {0x24a, 0x0}, {0x24b, 0x0}, {0x24f, 0x8}, {0x250, 0x0}, {0x251, 0x0}, {0x270, 0x8}, {0x271, 0x0},
-    {0x272, 0x0}, {0x254, 0x4}, {0x256, 0x8}, {0x258, 0x0}, {0x259, 0x0}, {0x25a, 0x0}, {0x25e, 0x0},
-    {0x262, 0x0}, {0x266, 0x0}, {0x267, 0x0}, {0x26b, 0x0}, {0x26f, 0x0}, {0x1f7, 0x1}, {0x1f8, 0x2},
-    {0x1f9, 0x3}, {0x1fa, 0x7}, {0x1fb, 0x6}, {0x1fc, 0x18}, {0x1fd, 0x5}, {0x1fe, 0x8}, {0x1ff, 0xb},
-    {0x200, 0x19}, {0x201, 0x4}, {0x202, 0x11}, {0x203, 0x12}, {0x204, 0x13}, {0x205, 0x14}, {0x206, 0x15},
-    {0x207, 0x16}, {0x208, 0xe}, {0x209, 0xf}, {0x20a, 0x10}, {0x20c, 0xa}, {0x20d, 0xc}, {0x20e, 0x9},
-    {0x210, 0xd}, {0x216, 0x17}, {0x20b, 0x1a},
+    {kConditions, 5, 0x0}, {kConditions, 6, 0x0}, {kConditions, 10, 0x8}, {kConditions, 11, 0x0},
+    {kConditions, 12, 0x0}, {kConditions, 43, 0x8}, {kConditions, 44, 0x0}, {kConditions, 45, 0x0},
+    {kConditions, 15, 0x4}, {kConditions, 17, 0x8}, {kConditions, 19, 0x0}, {kConditions, 20, 0x0},
+    {kConditions, 21, 0x0}, {kConditions, 25, 0x0}, {kConditions, 29, 0x0}, {kConditions, 33, 0x0},
+    {kConditions, 34, 0x0}, {kConditions, 38, 0x0}, {kConditions, 42, 0x0}, {kSettings4, 1, 0x1},
+    {kSettings4, 2, 0x2}, {kSettings4, 3, 0x3}, {kSettings4, 4, 0x7}, {kSettings4, 5, 0x6}, {kSettings4, 6, 0x18},
+    {kSettings4, 7, 0x5}, {kSettings4, 8, 0x8}, {kSettings4, 9, 0xb}, {kSettings4, 10, 0x19}, {kSettings4, 11, 0x4},
+    {kSettings4, 12, 0x11}, {kSettings4, 13, 0x12}, {kSettings4, 14, 0x13}, {kSettings4, 15, 0x14},
+    {kSettings4, 16, 0x15}, {kSettings4, 17, 0x16}, {kSettings4, 18, 0xe}, {kSettings4, 19, 0xf},
+    {kSettings4, 20, 0x10}, {kSettings4, 22, 0xa}, {kSettings4, 23, 0xc}, {kSettings4, 24, 0x9},
+    {kSettings4, 26, 0xd}, {kSettings4, 32, 0x17}, {kSettings4, 21, 0x1a},
 };
 
 constexpr ByteStore kRace1Defaults[] = {
-    {0x24a, 0x0}, {0x24b, 0x0}, {0x24f, 0x0}, {0x250, 0x8}, {0x251, 0x0}, {0x270, 0x0}, {0x271, 0x8},
-    {0x272, 0x0}, {0x254, 0x0}, {0x256, 0x0}, {0x258, 0x4}, {0x259, 0x0}, {0x25a, 0x0}, {0x25e, 0x8},
-    {0x262, 0x8}, {0x266, 0x0}, {0x267, 0x0}, {0x26b, 0x0}, {0x26f, 0x10}, {0x1f7, 0x1}, {0x1f8, 0x2},
-    {0x1f9, 0x3}, {0x1fa, 0x7}, {0x1fb, 0x6}, {0x1fc, 0x18}, {0x1fd, 0x5}, {0x1fe, 0x8}, {0x1ff, 0xb},
-    {0x200, 0x19}, {0x201, 0x4}, {0x202, 0x11}, {0x203, 0x12}, {0x204, 0x13}, {0x205, 0x14}, {0x206, 0x15},
-    {0x207, 0x16}, {0x208, 0xe}, {0x209, 0xf}, {0x20a, 0x10}, {0x20c, 0xa}, {0x20d, 0xc}, {0x20e, 0x9},
-    {0x210, 0xd}, {0x216, 0x17}, {0x213, 0x1a}, {0x212, 0x1b}, {0x236, 0x1},
+    {kConditions, 5, 0x0}, {kConditions, 6, 0x0}, {kConditions, 10, 0x0}, {kConditions, 11, 0x8},
+    {kConditions, 12, 0x0}, {kConditions, 43, 0x0}, {kConditions, 44, 0x8}, {kConditions, 45, 0x0},
+    {kConditions, 15, 0x0}, {kConditions, 17, 0x0}, {kConditions, 19, 0x4}, {kConditions, 20, 0x0},
+    {kConditions, 21, 0x0}, {kConditions, 25, 0x8}, {kConditions, 29, 0x8}, {kConditions, 33, 0x0},
+    {kConditions, 34, 0x0}, {kConditions, 38, 0x0}, {kConditions, 42, 0x10}, {kSettings4, 1, 0x1},
+    {kSettings4, 2, 0x2}, {kSettings4, 3, 0x3}, {kSettings4, 4, 0x7}, {kSettings4, 5, 0x6}, {kSettings4, 6, 0x18},
+    {kSettings4, 7, 0x5}, {kSettings4, 8, 0x8}, {kSettings4, 9, 0xb}, {kSettings4, 10, 0x19}, {kSettings4, 11, 0x4},
+    {kSettings4, 12, 0x11}, {kSettings4, 13, 0x12}, {kSettings4, 14, 0x13}, {kSettings4, 15, 0x14},
+    {kSettings4, 16, 0x15}, {kSettings4, 17, 0x16}, {kSettings4, 18, 0xe}, {kSettings4, 19, 0xf},
+    {kSettings4, 20, 0x10}, {kSettings4, 22, 0xa}, {kSettings4, 23, 0xc}, {kSettings4, 24, 0x9},
+    {kSettings4, 26, 0xd}, {kSettings4, 32, 0x17}, {kSettings4, 29, 0x1a}, {kSettings4, 28, 0x1b},
+    {kSettings5, 28, 0x1},
 };
 
 constexpr ByteStore kRace2Defaults[] = {
-    {0x24a, 0x8}, {0x24b, 0x4}, {0x24f, 0x0}, {0x250, 0x0}, {0x251, 0x8}, {0x270, 0x0}, {0x271, 0x0},
-    {0x272, 0x8}, {0x254, 0x0}, {0x256, 0x0}, {0x258, 0x0}, {0x259, 0x10}, {0x25a, 0x10}, {0x25e, 0x0},
-    {0x262, 0x0}, {0x266, 0x0}, {0x267, 0x0}, {0x26b, 0x0}, {0x26f, 0x0}, {0x1f7, 0x1}, {0x1f8, 0x2},
-    {0x1f9, 0x3}, {0x1fa, 0x7}, {0x1fb, 0x6}, {0x1fc, 0x18}, {0x1fd, 0x5}, {0x1fe, 0x8}, {0x1ff, 0xb},
-    {0x200, 0x19}, {0x201, 0x4}, {0x202, 0x11}, {0x203, 0x12}, {0x204, 0x13}, {0x205, 0x14}, {0x206, 0x15},
-    {0x207, 0x16}, {0x208, 0xe}, {0x209, 0xf}, {0x20a, 0x10}, {0x20c, 0xa}, {0x20d, 0xc}, {0x20e, 0x9},
-    {0x210, 0xd}, {0x216, 0x17}, {0x217, 0x1a}, {0x214, 0x1c}, {0x211, 0x1b}, {0x20f, 0x1d},
+    {kConditions, 5, 0x8}, {kConditions, 6, 0x4}, {kConditions, 10, 0x0}, {kConditions, 11, 0x0},
+    {kConditions, 12, 0x8}, {kConditions, 43, 0x0}, {kConditions, 44, 0x0}, {kConditions, 45, 0x8},
+    {kConditions, 15, 0x0}, {kConditions, 17, 0x0}, {kConditions, 19, 0x0}, {kConditions, 20, 0x10},
+    {kConditions, 21, 0x10}, {kConditions, 25, 0x0}, {kConditions, 29, 0x0}, {kConditions, 33, 0x0},
+    {kConditions, 34, 0x0}, {kConditions, 38, 0x0}, {kConditions, 42, 0x0}, {kSettings4, 1, 0x1},
+    {kSettings4, 2, 0x2}, {kSettings4, 3, 0x3}, {kSettings4, 4, 0x7}, {kSettings4, 5, 0x6}, {kSettings4, 6, 0x18},
+    {kSettings4, 7, 0x5}, {kSettings4, 8, 0x8}, {kSettings4, 9, 0xb}, {kSettings4, 10, 0x19}, {kSettings4, 11, 0x4},
+    {kSettings4, 12, 0x11}, {kSettings4, 13, 0x12}, {kSettings4, 14, 0x13}, {kSettings4, 15, 0x14},
+    {kSettings4, 16, 0x15}, {kSettings4, 17, 0x16}, {kSettings4, 18, 0xe}, {kSettings4, 19, 0xf},
+    {kSettings4, 20, 0x10}, {kSettings4, 22, 0xa}, {kSettings4, 23, 0xc}, {kSettings4, 24, 0x9},
+    {kSettings4, 26, 0xd}, {kSettings4, 32, 0x17}, {kSettings4, 33, 0x1a}, {kSettings4, 30, 0x1c},
+    {kSettings4, 27, 0x1b}, {kSettings4, 25, 0x1d},
 };
 
 constexpr ByteStore kRace3Defaults[] = {
-    {0x24a, 0x0}, {0x24b, 0x0}, {0x24f, 0x0}, {0x250, 0x0}, {0x251, 0x0}, {0x270, 0x0}, {0x271, 0x0},
-    {0x272, 0x0}, {0x254, 0x0}, {0x256, 0x0}, {0x258, 0x0}, {0x259, 0x0}, {0x25a, 0x0}, {0x25e, 0x0},
-    {0x262, 0x0}, {0x266, 0x0}, {0x267, 0x0}, {0x26b, 0x0}, {0x26f, 0x8}, {0x273, 0x8}, {0x274, 0x8},
-    {0x275, 0x8}, {0x276, 0x8}, {0x277, 0x8}, {0x1f7, 0x1}, {0x1f8, 0x2}, {0x1f9, 0x3}, {0x1fa, 0x7},
-    {0x1fb, 0x6}, {0x1fc, 0x18}, {0x1fd, 0x5}, {0x1fe, 0x8}, {0x1ff, 0xb}, {0x200, 0x19}, {0x201, 0x4},
-    {0x202, 0x11}, {0x203, 0x12}, {0x204, 0x13}, {0x205, 0x14}, {0x206, 0x15}, {0x207, 0x16}, {0x208, 0xe},
-    {0x209, 0xf}, {0x20a, 0x10}, {0x20c, 0xa}, {0x20d, 0xc}, {0x20e, 0x9}, {0x210, 0xd}, {0x216, 0x17},
-    {0x218, 0x1a}, {0x219, 0x1b}, {0x212, 0x1c}, {0x20f, 0x1d},
+    {kConditions, 5, 0x0}, {kConditions, 6, 0x0}, {kConditions, 10, 0x0}, {kConditions, 11, 0x0},
+    {kConditions, 12, 0x0}, {kConditions, 43, 0x0}, {kConditions, 44, 0x0}, {kConditions, 45, 0x0},
+    {kConditions, 15, 0x0}, {kConditions, 17, 0x0}, {kConditions, 19, 0x0}, {kConditions, 20, 0x0},
+    {kConditions, 21, 0x0}, {kConditions, 25, 0x0}, {kConditions, 29, 0x0}, {kConditions, 33, 0x0},
+    {kConditions, 34, 0x0}, {kConditions, 38, 0x0}, {kConditions, 42, 0x8}, {kConditions, 46, 0x8},
+    {kConditions, 47, 0x8}, {kConditions, 48, 0x8}, {kConditions, 49, 0x8}, {kConditions, 50, 0x8},
+    {kSettings4, 1, 0x1}, {kSettings4, 2, 0x2}, {kSettings4, 3, 0x3}, {kSettings4, 4, 0x7}, {kSettings4, 5, 0x6},
+    {kSettings4, 6, 0x18}, {kSettings4, 7, 0x5}, {kSettings4, 8, 0x8}, {kSettings4, 9, 0xb}, {kSettings4, 10, 0x19},
+    {kSettings4, 11, 0x4}, {kSettings4, 12, 0x11}, {kSettings4, 13, 0x12}, {kSettings4, 14, 0x13},
+    {kSettings4, 15, 0x14}, {kSettings4, 16, 0x15}, {kSettings4, 17, 0x16}, {kSettings4, 18, 0xe},
+    {kSettings4, 19, 0xf}, {kSettings4, 20, 0x10}, {kSettings4, 22, 0xa}, {kSettings4, 23, 0xc},
+    {kSettings4, 24, 0x9}, {kSettings4, 26, 0xd}, {kSettings4, 32, 0x17}, {kSettings4, 34, 0x1a},
+    {kSettings4, 35, 0x1b}, {kSettings4, 28, 0x1c}, {kSettings4, 25, 0x1d},
 };
 
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(world) + offset);
-}
-
-std::uint32_t AreaRecord(std::uint32_t area) {
-    return kAreas + area * kAreaBytes;
+// Tile (x, y), with the original's 32-bit address arithmetic (x and y may
+// be off the map: neighbours are looked up without a map check).
+Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+    return TileAtOffset(world, TileOffset(x, y));
 }
 
 std::uint32_t TileAreaWord(GameWorld* world, std::uint32_t x, std::uint32_t y) {
-    return At<std::uint16_t>(world, (x * 0x300 + y + kTileAreaIndexBias) * 24);
+    return TileAt(world, x, y).area;
 }
 
 std::uint8_t& TileFlags(GameWorld* world, std::uint32_t x, std::uint32_t y) {
-    return At<std::uint8_t>(world, kTiles + (x * 0x300 + y) * 24 + kTileFlags);
+    return TileAt(world, x, y).flags;
 }
 
 template <std::size_t N>
-void StoreAll(GameWorld* world, std::uint32_t record, const ByteStore (&stores)[N]) {
+void StoreAll(Area& area, const ByteStore (&stores)[N]) {
     for (const ByteStore& store : stores) {
-        At<std::uint8_t>(world, record + store.offset) = store.value;
+        AreaBytes(area, store.array)[store.index] = store.value;
     }
 }
 
-// Moves the members of a doubly linked list (uint16 head at `from`) whose
-// tile is in area `area` to the front of the list at `to`. Records of
-// `bytes` bytes at `table` with position words +x/+y and links +previous/+next.
-void MoveListMembers(GameWorld* world, std::uint32_t from, std::uint32_t to, std::uint32_t area, std::uint32_t table,
-                     std::uint32_t bytes, std::uint32_t xField, std::uint32_t yField, std::uint32_t previousField,
-                     std::uint32_t nextField) {
-    auto record = [&](std::uint32_t member) { return table + member * bytes; };
-    std::uint32_t member = At<std::uint16_t>(world, from);
+// The fields that link records of a doubly linked list (piles or settlers)
+// and give their tile.
+template <typename Record>
+struct ListLinks {
+    std::uint16_t Record::*x;
+    std::uint16_t Record::*y;
+    std::uint16_t Record::*previous;
+    std::uint16_t Record::*next;
+};
+constexpr ListLinks<Pile> kPileLinks{&Pile::x, &Pile::y, &Pile::prev, &Pile::next};
+constexpr ListLinks<Settler> kSettlerLinks{&Settler::x, &Settler::y, &Settler::prev, &Settler::next};
+
+// Moves the members of a doubly linked list (head `from`) whose tile is in
+// area `area` to the front of the list with head `to`.
+template <typename Record>
+void MoveListMembers(GameWorld* world, std::uint16_t& from, std::uint16_t& to, std::uint32_t area, Record* table,
+                     const ListLinks<Record>& links) {
+    std::uint32_t member = from;
     while (member != 0) {
-        const std::uint32_t r = record(member);
-        const std::uint16_t next = At<std::uint16_t>(world, r + nextField);
-        if (TileAreaWord(world, At<std::uint16_t>(world, r + xField), At<std::uint16_t>(world, r + yField)) == area) {
-            const std::uint16_t previous = At<std::uint16_t>(world, r + previousField);
+        Record& r = table[member];
+        const std::uint16_t next = r.*links.next;
+        if (TileAreaWord(world, r.*links.x, r.*links.y) == area) {
+            const std::uint16_t previous = r.*links.previous;
             if (previous != 0) {
-                At<std::uint16_t>(world, record(previous) + nextField) = next;
+                table[previous].*links.next = next;
             } else {
-                At<std::uint16_t>(world, from) = next;
+                from = next;
             }
-            const std::uint16_t after = At<std::uint16_t>(world, r + nextField);
+            const std::uint16_t after = r.*links.next;
             if (after != 0) {
-                At<std::uint16_t>(world, record(after) + previousField) = At<std::uint16_t>(world, r + previousField);
+                table[after].*links.previous = r.*links.previous;
             }
-            const std::uint16_t head = At<std::uint16_t>(world, to);
-            At<std::uint16_t>(world, r + nextField) = head;
+            const std::uint16_t head = to;
+            r.*links.next = head;
             if (head != 0) {
-                At<std::uint16_t>(world, record(head) + previousField) = static_cast<std::uint16_t>(member);
+                table[head].*links.previous = static_cast<std::uint16_t>(member);
             }
-            At<std::uint16_t>(world, r + previousField) = 0;
-            At<std::uint16_t>(world, to) = static_cast<std::uint16_t>(member);
+            r.*links.previous = 0;
+            to = static_cast<std::uint16_t>(member);
         }
         member = next;
     }
 }
 
-void MovePiles(GameWorld* world, std::uint32_t from, std::uint32_t to, std::uint32_t area) {
-    MoveListMembers(world, from, to, area, kPiles, kPileBytes, kPileX, kPileY, kPilePrevious, kPileNext);
+void MovePiles(GameWorld* world, std::uint16_t& from, std::uint16_t& to, std::uint32_t area) {
+    MoveListMembers(world, from, to, area, world->piles, kPileLinks);
 }
 
-void MoveSettlers(GameWorld* world, std::uint32_t from, std::uint32_t to, std::uint32_t area) {
-    MoveListMembers(world, from, to, area, kSettlers, kSettlerBytes, kSettlerX, kSettlerY, kSettlerPrevious,
-                    kSettlerNext);
+void MoveSettlers(GameWorld* world, std::uint16_t& from, std::uint16_t& to, std::uint32_t area) {
+    MoveListMembers(world, from, to, area, world->settlers, kSettlerLinks);
+}
+
+// Puts every member of the list with head `source` at the front of the list
+// with head `target` (one by one, so in reverse order; `source` keeps its head).
+template <typename Record>
+void PrependAll(std::uint16_t& source, std::uint16_t& target, Record* table, const ListLinks<Record>& links) {
+    std::uint32_t member = source;
+    while (member != 0) {
+        Record& r = table[member];
+        const std::uint16_t next = r.*links.next;
+        const std::uint16_t head = target;
+        r.*links.next = head;
+        if (head != 0) {
+            table[head].*links.previous = static_cast<std::uint16_t>(member);
+        }
+        r.*links.previous = 0;
+        target = static_cast<std::uint16_t>(member);
+        member = next;
+    }
 }
 
 }  // namespace
@@ -343,46 +398,47 @@ using BlockTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std:
 void __fastcall GameWorld_InitArea(GameWorld* world, void*, std::uint32_t area, std::uint32_t player) {
     GameWorld_QueuePendingEvent(world, nullptr, kPendingAreaEvent, area, 0);
     GameWorld_QueueEvent(world, nullptr, kAreaEvent, area, 0, 0);
-    const std::uint32_t r = AreaRecord(area);
-    At<std::uint8_t>(world, r + kAreaPlayer) = static_cast<std::uint8_t>(player);
-    At<std::uint32_t>(world, r + kAreaTileCount) = 0;
-    At<std::uint16_t>(world, r + kAreaPileList) = 0;
-    At<std::uint8_t>(world, r + 0x23e) = 0x14;
-    At<std::uint8_t>(world, r + 0x23f) = 0x19;
-    At<std::uint8_t>(world, r + 0x240) = 0x19;
-    At<std::uint8_t>(world, r + 0x241) = 1;
-    At<std::uint8_t>(world, r + 0x242) = 0;
-    At<std::uint8_t>(world, r + 0x243) = 0;
-    At<std::uint8_t>(world, r + 0x244) = 0;
+    Area& r = world->areas[area];
+    r.player = static_cast<std::uint8_t>(player);
+    r.tile_count = 0;
+    r.pile_list = 0;
+    r.settings_extra[0] = 0x14;
+    r.settings_extra[1] = 0x19;
+    r.settings_extra[2] = 0x19;
+    r.setting_241 = 1;
+    r.counters_242[0] = 0;
+    r.counters_242[1] = 0;
+    r.counters_242[2] = 0;
     for (std::uint32_t i = 0; i < kGoodsTypes; ++i) {
-        At<std::uint16_t>(world, r + kAreaGoodsPiles + i * 2) = 0;
-        At<std::uint16_t>(world, r + kAreaRequests + i * 2) = 0;
-        At<std::uint16_t>(world, r + kAreaSlotsA + i * 2) = 0;
-        At<std::uint16_t>(world, r + kAreaSlotsB + i * 2) = 0;
-        for (const std::uint32_t array : kGoodsArraysInitOrder) {
-            At<std::uint8_t>(world, r + array + i) = 0;
+        r.piles_by_goods[i] = 0;
+        r.requests_by_goods[i] = 0;
+        r.buildings_a[i] = 0;
+        r.buildings_b[i] = 0;
+        for (const AreaByteArray array : kGoodsArraysInitOrder) {
+            AreaBytes(r, array)[i] = 0;
         }
     }
     for (std::uint32_t i = 0; i < kAreaSettlerListCount; ++i) {
-        At<std::uint16_t>(world, r + kAreaSettlerLists + i * 2) = 0;
+        r.settlers_by_type[i] = 0;
     }
     for (std::uint32_t i = 0; i < kAreaCount51; ++i) {
-        At<std::uint8_t>(world, r + kAreaBytes51 + i) = 0;
-        At<std::uint16_t>(world, r + kAreaWords51 + i * 2) = 0;
+        r.condition_enabled[i] = 0;
+        r.counters_278[i] = 0;
     }
-    StoreAll(world, r, kAreaDefaults);
-    const std::uint32_t race = kPlayerRace + player * kPlayerRecordBytes;
-    if (At<std::int32_t>(world, race) == 0) {
-        StoreAll(world, r, kRace0Defaults);
+    StoreAll(r, kAreaDefaults);
+    // The race (player record +0x4) is read again for each check.
+    const std::int32_t& race = world->players[player].race;
+    if (race == 0) {
+        StoreAll(r, kRace0Defaults);
     }
-    if (At<std::int32_t>(world, race) == 1) {
-        StoreAll(world, r, kRace1Defaults);
+    if (race == 1) {
+        StoreAll(r, kRace1Defaults);
     }
-    if (At<std::int32_t>(world, race) == 2) {
-        StoreAll(world, r, kRace2Defaults);
+    if (race == 2) {
+        StoreAll(r, kRace2Defaults);
     }
-    if (At<std::int32_t>(world, race) == 3) {
-        StoreAll(world, r, kRace3Defaults);
+    if (race == 3) {
+        StoreAll(r, kRace3Defaults);
     }
 }
 
@@ -390,7 +446,7 @@ void __fastcall GameWorld_InitArea(GameWorld* world, void*, std::uint32_t area, 
 // are in use.
 std::uint32_t __fastcall GameWorld_AllocArea(GameWorld* world, void*, std::uint32_t player) {
     std::uint32_t area = 1;
-    while (At<std::uint8_t>(world, AreaRecord(area) + kAreaPlayer) != kFreeArea) {
+    while (world->areas[area].player != kFreeArea) {
         if (area == kLastArea) {
             return 0;
         }
@@ -399,8 +455,8 @@ std::uint32_t __fastcall GameWorld_AllocArea(GameWorld* world, void*, std::uint3
     if (area == kLastArea) {
         return 0;
     }
-    if (area > At<std::uint32_t>(world, kAreaHighWater)) {
-        At<std::uint32_t>(world, kAreaHighWater) = area;
+    if (area > world->area_high_water) {
+        world->area_high_water = area;
     }
     GameWorld_InitArea(world, nullptr, area, player);
     return area;
@@ -413,32 +469,32 @@ void __fastcall GameWorld_MoveAreaContents(GameWorld* world, void*, std::uint32_
     GameWorld_QueuePendingEvent(world, nullptr, kPendingAreaEvent, newArea, 0);
     GameWorld_QueueEvent(world, nullptr, kAreaEvent, oldArea, 0, 0);
     GameWorld_QueueEvent(world, nullptr, kAreaEvent, newArea, 0, 0);
-    const std::uint32_t from = AreaRecord(oldArea);
-    const std::uint32_t to = AreaRecord(newArea);
-    MovePiles(world, from + kAreaPileList, to + kAreaPileList, newArea);
+    Area& from = world->areas[oldArea];
+    Area& to = world->areas[newArea];
+    MovePiles(world, from.pile_list, to.pile_list, newArea);
     for (std::uint32_t i = 0; i < kGoodsTypes; ++i) {
-        MovePiles(world, from + kAreaGoodsPiles + i * 2, to + kAreaGoodsPiles + i * 2, newArea);
-        for (const std::uint32_t list : {from, to}) {
-            At<std::uint16_t>(world, list + kAreaRequests + i * 2) = 0;
-            At<std::uint16_t>(world, list + kAreaSlotsA + i * 2) = 0;
-            At<std::uint16_t>(world, list + kAreaSlotsB + i * 2) = 0;
+        MovePiles(world, from.piles_by_goods[i], to.piles_by_goods[i], newArea);
+        for (Area* list : {&from, &to}) {
+            list->requests_by_goods[i] = 0;
+            list->buildings_a[i] = 0;
+            list->buildings_b[i] = 0;
         }
-        for (const std::uint32_t array : kGoodsArraysCopyOrder) {
-            At<std::uint8_t>(world, to + array + i) = At<std::uint8_t>(world, from + array + i);
+        for (const AreaByteArray array : kGoodsArraysCopyOrder) {
+            AreaBytes(to, array)[i] = AreaBytes(from, array)[i];
         }
     }
     for (std::uint32_t i = 0; i < kAreaSettlerListCount; ++i) {
-        MoveSettlers(world, from + kAreaSettlerLists + i * 2, to + kAreaSettlerLists + i * 2, newArea);
+        MoveSettlers(world, from.settlers_by_type[i], to.settlers_by_type[i], newArea);
     }
-    for (const std::uint32_t field : {0x23e, 0x23f, 0x240}) {
-        At<std::uint8_t>(world, to + field) = At<std::uint8_t>(world, from + field);
+    for (std::uint32_t k = 0; k < 3; ++k) {
+        to.settings_extra[k] = from.settings_extra[k];
     }
     for (std::uint32_t i = 0; i < kAreaCount51; ++i) {
-        At<std::uint8_t>(world, to + kAreaBytes51 + i) = At<std::uint8_t>(world, from + kAreaBytes51 + i);
-        At<std::uint16_t>(world, to + kAreaWords51 + i * 2) = 0;
-        At<std::uint16_t>(world, from + kAreaWords51 + i * 2) = 0;
+        to.condition_enabled[i] = from.condition_enabled[i];
+        to.counters_278[i] = 0;
+        from.counters_278[i] = 0;
     }
-    At<std::uint8_t>(world, to + 0x241) = At<std::uint8_t>(world, from + 0x241);
+    to.setting_241 = from.setting_241;
 }
 
 // Purpose: When two areas grow together, moves all goods piles and settlers of one area into the other's
@@ -448,57 +504,37 @@ void __fastcall GameWorld_MergeAreaContents(GameWorld* world, void*, std::uint32
     GameWorld_QueuePendingEvent(world, nullptr, kPendingAreaEvent, from, 0);
     GameWorld_QueueEvent(world, nullptr, kAreaEvent, into, 0, 0);
     GameWorld_QueueEvent(world, nullptr, kAreaEvent, from, 0, 0);
-    const std::uint32_t a = AreaRecord(into);
-    const std::uint32_t b = AreaRecord(from);
-    // Puts every member of the list at `source` at the front of the list at `target`.
-    auto prependAll = [&](std::uint32_t source, std::uint32_t target, std::uint32_t table, std::uint32_t bytes,
-                          std::uint32_t previousField, std::uint32_t nextField) {
-        std::uint32_t member = At<std::uint16_t>(world, source);
-        while (member != 0) {
-            const std::uint32_t r = table + member * bytes;
-            const std::uint16_t next = At<std::uint16_t>(world, r + nextField);
-            const std::uint16_t head = At<std::uint16_t>(world, target);
-            At<std::uint16_t>(world, r + nextField) = head;
-            if (head != 0) {
-                At<std::uint16_t>(world, table + head * bytes + previousField) = static_cast<std::uint16_t>(member);
-            }
-            At<std::uint16_t>(world, r + previousField) = 0;
-            At<std::uint16_t>(world, target) = static_cast<std::uint16_t>(member);
-            member = next;
-        }
-    };
-    prependAll(b + kAreaPileList, a + kAreaPileList, kPiles, kPileBytes, kPilePrevious, kPileNext);
+    Area& a = world->areas[into];
+    Area& b = world->areas[from];
+    PrependAll(b.pile_list, a.pile_list, world->piles, kPileLinks);
     for (std::uint32_t i = 0; i < kGoodsTypes; ++i) {
-        prependAll(b + kAreaGoodsPiles + i * 2, a + kAreaGoodsPiles + i * 2, kPiles, kPileBytes, kPilePrevious,
-                   kPileNext);
-        At<std::uint16_t>(world, a + kAreaRequests + i * 2) = 0;
-        At<std::uint16_t>(world, a + kAreaSlotsA + i * 2) = 0;
-        At<std::uint16_t>(world, a + kAreaSlotsB + i * 2) = 0;
+        PrependAll(b.piles_by_goods[i], a.piles_by_goods[i], world->piles, kPileLinks);
+        a.requests_by_goods[i] = 0;
+        a.buildings_a[i] = 0;
+        a.buildings_b[i] = 0;
     }
     for (std::uint32_t i = 0; i < kAreaSettlerListCount; ++i) {
-        prependAll(b + kAreaSettlerLists + i * 2, a + kAreaSettlerLists + i * 2, kSettlers, kSettlerBytes,
-                   kSettlerPrevious, kSettlerNext);
+        PrependAll(b.settlers_by_type[i], a.settlers_by_type[i], world->settlers, kSettlerLinks);
     }
-    for (const std::uint32_t field : {0x242, 0x243, 0x244}) {
-        At<std::uint8_t>(world, a + field) =
-            static_cast<std::uint8_t>(At<std::uint8_t>(world, a + field) + At<std::uint8_t>(world, b + field));
+    for (std::uint32_t k = 0; k < 3; ++k) {
+        a.counters_242[k] = static_cast<std::uint8_t>(a.counters_242[k] + b.counters_242[k]);
     }
-    if (At<std::uint32_t>(world, a + kAreaTileCount) < At<std::uint32_t>(world, b + kAreaTileCount)) {
+    if (a.tile_count < b.tile_count) {
         for (std::uint32_t i = 0; i < kGoodsTypes; ++i) {
-            for (const std::uint32_t array : kGoodsArraysCopyOrder) {
-                At<std::uint8_t>(world, a + array + i) = At<std::uint8_t>(world, b + array + i);
+            for (const AreaByteArray array : kGoodsArraysCopyOrder) {
+                AreaBytes(a, array)[i] = AreaBytes(b, array)[i];
             }
         }
-        for (const std::uint32_t field : {0x23e, 0x23f, 0x240}) {
-            At<std::uint8_t>(world, a + field) = At<std::uint8_t>(world, b + field);
+        for (std::uint32_t k = 0; k < 3; ++k) {
+            a.settings_extra[k] = b.settings_extra[k];
         }
         for (std::uint32_t i = 0; i < kAreaCount51; ++i) {
-            At<std::uint8_t>(world, a + kAreaBytes51 + i) = At<std::uint8_t>(world, b + kAreaBytes51 + i);
+            a.condition_enabled[i] = b.condition_enabled[i];
         }
-        At<std::uint8_t>(world, a + 0x241) = At<std::uint8_t>(world, b + 0x241);
+        a.setting_241 = b.setting_241;
     }
     for (std::uint32_t i = 0; i < kAreaCount51; ++i) {
-        At<std::uint16_t>(world, a + kAreaWords51 + i * 2) = 0;
+        a.counters_278[i] = 0;
     }
 }
 
@@ -506,17 +542,16 @@ void __fastcall GameWorld_MergeAreaContents(GameWorld* world, void*, std::uint32
 // the area of its neighbours of the same owner, merging their areas if they were different, or into a new
 // area if it has no such neighbour.
 void __fastcall GameWorld_JoinAreasAtTile(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t ownerField = kTiles + (x * 0x300 + y) * 24 + kTileOwner;
-    const std::uint32_t owner = At<std::uint8_t>(world, ownerField);
+    Tile& tile = TileAt(world, x, y);
+    const std::uint32_t owner = tile.owner;
     std::uint32_t count = 0;
     std::uint32_t base = 0;
     for (std::uint32_t k = 0; k < kDirections; ++k) {
-        const std::uint32_t entry = kNeighbourOffsets + k * kOffsetBytes;
-        const std::uint32_t nx = x + At<std::uint32_t>(world, entry);
-        const std::uint32_t ny = y + At<std::uint32_t>(world, entry + 4);
-        const std::uint32_t tile = kTiles + (nx * 0x300 + ny) * 24;
-        if ((At<std::uint8_t>(world, tile + kTileFlags) & kTileBlocked) != 0 ||
-            At<std::uint8_t>(world, tile + kTileOwner) != owner) {
+        const layout::MapOffset& entry = world->offsets[k + 1];  // entries 1..6: the six neighbours
+        const std::uint32_t nx = x + static_cast<std::uint32_t>(entry.dx);
+        const std::uint32_t ny = y + static_cast<std::uint32_t>(entry.dy);
+        const Tile& neighbour = TileAt(world, nx, ny);
+        if ((neighbour.flags & kTileBlocked) != 0 || neighbour.owner != owner) {
             continue;
         }
         ++count;
@@ -530,14 +565,14 @@ void __fastcall GameWorld_JoinAreasAtTile(GameWorld* world, void*, std::uint32_t
             continue;
         }
         GameWorld_MergeAreaContents(world, nullptr, base, other);
-        GameWorld_FloodMoveArea(world, nullptr, x + At<std::uint32_t>(world, entry), y + At<std::uint32_t>(world, entry + 4),
-                                base);
-        At<std::uint8_t>(world, AreaRecord(other) + kAreaPlayer) = kFreeArea;
+        GameWorld_FloodMoveArea(world, nullptr, x + static_cast<std::uint32_t>(entry.dx),
+                                y + static_cast<std::uint32_t>(entry.dy), base);
+        world->areas[other].player = kFreeArea;
         GameWorld_QueuePendingEvent(world, nullptr, kPendingAreaEvent, other, 0);
         GameWorld_QueueEvent(world, nullptr, kAreaEvent, other, 0, 0);
     }
     if (count == 0) {
-        const std::uint32_t area = GameWorld_AllocArea(world, nullptr, At<std::uint8_t>(world, ownerField));
+        const std::uint32_t area = GameWorld_AllocArea(world, nullptr, tile.owner);
         GameWorld_AssignTileToArea(world, nullptr, x, y, area);
     }
 }
@@ -550,14 +585,14 @@ void __fastcall GameWorld_SplitAreaAtTile(GameWorld* world, void*, std::uint32_t
     GameWorld_RemoveTileFromArea(world, nullptr, x, y);
     std::uint32_t count = 0;
     for (std::uint32_t k = 0; k < kDirections; ++k) {
-        const std::uint32_t entry = kNeighbourOffsets + k * kOffsetBytes;
-        if (TileAreaWord(world, At<std::uint32_t>(world, entry) + x, At<std::uint32_t>(world, entry + 4) + y) ==
+        const layout::MapOffset& entry = world->offsets[k + 1];  // entries 1..6: the six neighbours
+        if (TileAreaWord(world, static_cast<std::uint32_t>(entry.dx) + x, static_cast<std::uint32_t>(entry.dy) + y) ==
             area) {
             ++count;
         }
     }
     if (count == 0) {
-        At<std::uint8_t>(world, AreaRecord(area) + kAreaPlayer) = kFreeArea;
+        world->areas[area].player = kFreeArea;
         GameWorld_QueuePendingEvent(world, nullptr, kPendingAreaEvent, area, 0);
         GameWorld_QueueEvent(world, nullptr, kAreaEvent, area, 0, 0);
         return;
@@ -634,10 +669,9 @@ void __fastcall GameWorld_SplitAreaAtTile(GameWorld* world, void*, std::uint32_t
         if (TileAreaWord(world, nx, ny) != area || (TileFlags(world, nx, ny) & kTileSplitMark) == 0) {
             continue;
         }
-        const std::uint32_t newArea =
-            GameWorld_AllocArea(world, nullptr, At<std::uint8_t>(world, kTiles + (nx * 0x300 + ny) * 24 + kTileOwner));
+        const std::uint32_t newArea = GameWorld_AllocArea(world, nullptr, TileAt(world, nx, ny).owner);
         GameWorld_FloodMoveArea(world, nullptr, nx, ny, newArea);
-        At<std::uint8_t>(world, AreaRecord(newArea) + kAreaPlayer) = At<std::uint8_t>(world, AreaRecord(area) + kAreaPlayer);
+        world->areas[newArea].player = world->areas[area].player;
         GameWorld_MoveAreaContents(world, nullptr, area, newArea);
     }
 }
@@ -645,17 +679,17 @@ void __fastcall GameWorld_SplitAreaAtTile(GameWorld* world, void*, std::uint32_t
 // Purpose: Makes a tile impassable (e.g. when something is built or placed on it) and updates the
 // regions and areas that the tile connected.
 std::uint32_t __fastcall GameWorld_BlockTile(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
-    const std::uint8_t flags = At<std::uint8_t>(world, tile + kTileFlags);
+    Tile& tile = TileAt(world, x, y);
+    const std::uint8_t flags = tile.flags;
     if ((flags & kTileBlocked) != 0) {
-        return x * 0x300 + flags;
+        return x * layout::kMapRowTiles + flags;
     }
-    At<std::uint8_t>(world, tile + kTileFlags) = static_cast<std::uint8_t>(flags | kTileBlocked);
-    if (At<std::uint8_t>(world, tile + kTileByte10) != 0) {
+    tile.flags = static_cast<std::uint8_t>(flags | kTileBlocked);
+    if (tile.walk_region != 0) {
         GameWorld_SplitTileByte10Region(world, nullptr, x, y);
     }
-    const std::uint16_t area = At<std::uint16_t>(world, (x * 0x300 + y + kTileAreaIndexBias) * 24);
-    if (area != 0 && area < 0x8000) {
+    const std::uint16_t area = tile.area;
+    if (area != 0 && area < layout::kTileAreaWater) {
         GameWorld_SplitAreaAtTile(world, nullptr, x, y);
     }
     return GameWorld_SplitWord16RegionsAround(world, nullptr, x, y);
@@ -664,17 +698,16 @@ std::uint32_t __fastcall GameWorld_BlockTile(GameWorld* world, void*, std::uint3
 // Purpose: Makes a blocked tile passable again (the opposite of BlockTile) and joins it to the regions and
 // areas around it.
 std::uint32_t __fastcall GameWorld_UnblockTile(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
-    const std::uint8_t flags = At<std::uint8_t>(world, tile + kTileFlags);
+    Tile& tile = TileAt(world, x, y);
+    const std::uint8_t flags = tile.flags;
     if ((flags & kTileBlocked) == 0) {
-        return x * 0x300 + flags;
+        return x * layout::kMapRowTiles + flags;
     }
-    At<std::uint8_t>(world, tile + kTileFlags) = static_cast<std::uint8_t>(flags & ~kTileBlocked);
-    if (At<std::uint8_t>(world, tile + kTileByte10) == 0) {
+    tile.flags = static_cast<std::uint8_t>(flags & ~kTileBlocked);
+    if (tile.walk_region == 0) {
         GameWorld_MergeTileByte10Regions(world, nullptr, x, y);
     }
-    if (At<std::uint16_t>(world, (x * 0x300 + y + kTileAreaIndexBias) * 24) == 0 &&
-        At<std::uint8_t>(world, tile + kTileOwner) != 0xff) {
+    if (tile.area == 0 && tile.owner != 0xff) {
         GameWorld_JoinAreasAtTile(world, nullptr, x, y);
     }
     return GameWorld_AssignWord16RegionsAround(world, nullptr, x, y);
@@ -684,15 +717,14 @@ std::uint32_t __fastcall GameWorld_UnblockTile(GameWorld* world, void*, std::uin
 // goods pile lying on it into that player's area.
 std::uint32_t __fastcall GameWorld_SetOwnerOfFreeTile(GameWorld* world, void*, std::uint32_t x, std::uint32_t y,
                                                       std::uint32_t owner) {
-    const std::uint32_t index = x * 0x300 + y;
-    const std::uint32_t tile = kTiles + index * 24;
-    if (At<std::uint8_t>(world, tile + kTileOwner) != 0xff) {
+    const std::uint32_t index = x * layout::kMapRowTiles + y;
+    Tile& tile = TileAt(world, x, y);
+    if (tile.owner != 0xff) {
         return index;
     }
-    At<std::uint8_t>(world, tile + kTileOwner) = static_cast<std::uint8_t>(owner);
-    const std::uint32_t areaIndex = index * 3 + 0xce8b;  // * 8 = the tile's area word
-    if (At<std::uint16_t>(world, areaIndex * 8) != 0 || (At<std::uint8_t>(world, tile + kTileFlags) & kTileBlocked) != 0 ||
-        owner == 0xff) {
+    tile.owner = static_cast<std::uint8_t>(owner);
+    const std::uint32_t areaIndex = index * 3 + kTileAreaWordBytes / 8;  // * 8 = the tile's area word
+    if (tile.area != 0 || (tile.flags & kTileBlocked) != 0 || owner == 0xff) {
         return areaIndex;
     }
     GameWorld_JoinAreasAtTile(world, nullptr, x, y);
@@ -702,36 +734,22 @@ std::uint32_t __fastcall GameWorld_SetOwnerOfFreeTile(GameWorld* world, void*, s
 // Purpose: Resets one of an area's per-goods settings arrays (+0x1d2, 36 bytes) to 0.
 std::uint32_t __fastcall GameWorld_ClearAreaGoodsSettings1D2(GameWorld* world, void*, std::uint32_t area) {
     for (std::uint32_t i = 0; i < kGoodsTypes; ++i) {
-        At<std::uint8_t>(world, AreaRecord(area) + 0x1d2 + i) = 0;
+        world->areas[area].settings3[i] = 0;
     }
     return 0;
 }
 
 namespace {
 
-constexpr std::uint32_t kBuildingCount = 0x1499e60;
-constexpr std::uint32_t kBuildings = 0x1499e64;
-constexpr std::uint32_t kBuildingBytes = 0x3a;
-constexpr std::uint32_t kBuildingPlayer = 0x0;
-constexpr std::uint32_t kBuildingX = 0x2;
-constexpr std::uint32_t kBuildingY = 0x4;
-constexpr std::uint32_t kBuildingType = 0x6;
-constexpr std::uint32_t kBuildingState = 0x1f;     // high nibble
-constexpr std::uint32_t kBuildingExtraDone = 0x20;  // 0xfe once the extra tiles are taken
-constexpr std::uint32_t kBuildingDirection = 0x22;  // uint16
-constexpr std::uint32_t kBuildingShipX = 0x30;      // uint16
-constexpr std::uint32_t kBuildingShipY = 0x32;      // uint16
-constexpr std::uint32_t kBuildingByte36 = 0x36;
+using layout::Building;
+
+// Building::extra_tiles (+0x20) once the extra tiles are taken.
 constexpr std::uint8_t kExtraDone = 0xfe;
 constexpr std::uint8_t kShipyard = 0x20;
 constexpr std::uint8_t kType12 = 0x12;
 
 constexpr std::uintptr_t kShipProductionMessage = 0x006a5950;  // "Schiffsproduktion %u owner %u"
 constexpr std::uintptr_t kCentreMessage = 0x006a5938;          // "centerx,centery = %u,%u"
-
-std::uint32_t Building(std::uint32_t building) {
-    return kBuildings + building * kBuildingBytes;
-}
 
 // The offset (int32 dx, dy in S3.EXE's data) from a building's position to
 // the centre of its seven extra tiles, for the four building types that
@@ -749,11 +767,12 @@ const std::int32_t* ExtraTilesOffset(std::uint8_t type) {
 // The seven extra tiles around the centre (cx, cy), in the original's order.
 constexpr std::int32_t kExtraTiles[7][2] = {{-1, -1}, {0, -1}, {-1, 0}, {0, 0}, {1, 0}, {0, 1}, {1, 1}};
 
-// The shipyard's ship tile: two steps from (+0x30, +0x32) in direction (+0x22 + 3) % 6.
-void ShipTile(GameWorld* world, std::uint32_t record, std::uint32_t& direction, std::uint32_t& x, std::uint32_t& y) {
-    direction = (At<std::uint16_t>(world, record + kBuildingDirection) + 3u) % 6u;
-    x = NeighbourX(NeighbourX(At<std::uint16_t>(world, record + kBuildingShipX), direction), direction);
-    y = NeighbourY(NeighbourY(At<std::uint16_t>(world, record + kBuildingShipY), direction), direction);
+// The shipyard's ship tile: two steps from the ship position (Building::work_x/work_y, +0x30/+0x32) in
+// direction (Building::unk22 + 3) % 6.
+void ShipTile(const Building& record, std::uint32_t& direction, std::uint32_t& x, std::uint32_t& y) {
+    direction = (record.unk22 + 3u) % 6u;
+    x = NeighbourX(NeighbourX(record.work_x, direction), direction);
+    y = NeighbourY(NeighbourY(record.work_y, direction), direction);
 }
 
 }  // namespace
@@ -762,20 +781,20 @@ void ShipTile(GameWorld* world, std::uint32_t record, std::uint32_t& direction, 
 // building types (probably harbours and other buildings at the water), or, for a shipyard, launches the
 // ship it has built onto its ship tile (a new ship settler). Marks the building as done.
 std::uint32_t __fastcall GameWorld_TakeBuildingExtraTiles(GameWorld* world, void*, std::uint32_t building) {
-    const std::uint32_t record = Building(building);
-    if (At<std::uint8_t>(world, record + kBuildingExtraDone) == kExtraDone) {
+    Building& record = world->buildings[building];
+    if (record.extra_tiles == kExtraDone) {
         return building;
     }
-    const std::uint8_t type = At<std::uint8_t>(world, record + kBuildingType);
+    const std::uint8_t type = record.art;
     if (const std::int32_t* offset = ExtraTilesOffset(type)) {
-        if ((At<std::uint8_t>(world, record + kBuildingState) & 0xf0) == 0x20) {
-            if (At<std::uint8_t>(world, record + kBuildingByte36) <= 0x18) {
-                At<std::uint8_t>(world, record + kBuildingExtraDone) = kExtraDone;
+        if ((record.state & 0xf0) == 0x20) {
+            if (record.unk36 <= 0x18) {
+                record.extra_tiles = kExtraDone;
             }
             return building;
         }
-        const std::uint32_t cx = At<std::uint16_t>(world, record + kBuildingX) + static_cast<std::uint32_t>(offset[0]);
-        const std::uint32_t cy = At<std::uint16_t>(world, record + kBuildingY) + static_cast<std::uint32_t>(offset[1]);
+        const std::uint32_t cx = record.x + static_cast<std::uint32_t>(offset[0]);
+        const std::uint32_t cy = record.y + static_cast<std::uint32_t>(offset[1]);
         if (type == 0x32) {
             GameDebugLog(kCentreMessage, cx, cy);
         }
@@ -788,84 +807,86 @@ std::uint32_t __fastcall GameWorld_TakeBuildingExtraTiles(GameWorld* world, void
         for (const auto& step : kExtraTiles) {
             result = GameWorld_BlockTile(world, nullptr, cx + step[0], cy + step[1]);
         }
-        At<std::uint8_t>(world, record + kBuildingExtraDone) = kExtraDone;
+        record.extra_tiles = kExtraDone;
         return result;
     }
-    if (type != kShipyard || At<std::uint16_t>(world, record + kBuildingShipX) == 0xffff) {
+    if (type != kShipyard || record.work_x == 0xffff) {
         return building;
     }
     std::uint32_t direction = 0;
     std::uint32_t x = 0;
     std::uint32_t y = 0;
-    ShipTile(world, record, direction, x, y);
-    if (At<std::uint16_t>(world, kTiles + (x * 0x300 + y) * 24) != 0) {
+    ShipTile(record, direction, x, y);
+    if (TileAt(world, x, y).settler != 0) {
         return y;
     }
-    const std::uint8_t state = At<std::uint8_t>(world, record + kBuildingState) & 0xf0;
+    const std::uint8_t state = record.state & 0xf0;
     std::uint32_t ship = 0;
     if (state == 0x30) {
-        ship = GameWorld_CreateSettler(world, nullptr, x, y, 0x2b, At<std::uint8_t>(world, record + kBuildingPlayer));
+        ship = GameWorld_CreateSettler(world, nullptr, x, y, 0x2b, record.owner);
     } else if (state == 0x40) {
-        ship = GameWorld_CreateSettler(world, nullptr, x, y, 0x2c, At<std::uint8_t>(world, record + kBuildingPlayer));
+        ship = GameWorld_CreateSettler(world, nullptr, x, y, 0x2c, record.owner);
     } else {
-        ship = At<std::uint16_t>(world, record + kBuildingShipY);  // as the original (a stale register)
+        ship = record.work_y;  // as the original (a stale register)
     }
     if (ship == 0) {
         return 0;
     }
-    const std::uint32_t settler = kSettlers + (ship << 6);
-    GameDebugLog(kShipProductionMessage, static_cast<std::uint32_t>(At<std::uint8_t>(world, settler + 0x1)),
-                 static_cast<std::uint32_t>(At<std::uint8_t>(world, settler + 0x0)));
-    At<std::uint16_t>(world, settler + 0xe) = 0x145;
-    At<std::uint8_t>(world, settler + 0x15) = 0;
-    At<std::uint32_t>(world, settler + 0x1c) = 0;
-    At<std::uint32_t>(world, settler + 0x8) = (direction + 2) % 6;
-    At<std::uint8_t>(world, record + kBuildingExtraDone) = kExtraDone;
+    // The original addresses the settler as settlers + (ship << 6), in 32 bits like this indexing.
+    Settler& settler = world->settlers[ship];
+    GameDebugLog(kShipProductionMessage, static_cast<std::uint32_t>(settler.art),
+                 static_cast<std::uint32_t>(settler.owner));
+    settler.job = 0x145;
+    settler.slot = 0;
+    settler.saved_direction = 0;
+    settler.direction = (direction + 2) % 6;
+    record.extra_tiles = kExtraDone;
     return (direction + 2) / 6;
 }
 
 // Purpose: The opposite of TakeBuildingExtraTiles, probably when such a building is removed: frees the
 // seven extra tiles again, or for a shipyard removes the ship standing on its ship tile.
 std::uint32_t __fastcall GameWorld_ReleaseBuildingExtraTiles(GameWorld* world, void*, std::uint32_t building) {
-    const std::uint32_t record = Building(building);
-    const std::uint32_t recordAddress =
-        static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + building * kBuildingBytes;
-    const std::uint8_t type = At<std::uint8_t>(world, record + kBuildingType);
+    const Building& record = world->buildings[building];
+    // The original's EAX: world + building * 0x3a (without the table's start).
+    const std::uint32_t recordAddress = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) +
+                                        building * static_cast<std::uint32_t>(sizeof(Building));
+    const std::uint8_t type = record.art;
     if (const std::int32_t* offset = ExtraTilesOffset(type)) {
         // (The original also compares the state's high nibble with 0x14, which never matches.)
-        const std::uint32_t cx = At<std::uint16_t>(world, record + kBuildingX) + static_cast<std::uint32_t>(offset[0]);
-        const std::uint32_t cy = At<std::uint16_t>(world, record + kBuildingY) + static_cast<std::uint32_t>(offset[1]);
+        const std::uint32_t cx = record.x + static_cast<std::uint32_t>(offset[0]);
+        const std::uint32_t cy = record.y + static_cast<std::uint32_t>(offset[1]);
         std::uint32_t result = 0;
         for (const auto& step : kExtraTiles) {
             result = GameWorld_UnblockTile(world, nullptr, cx + step[0], cy + step[1]);
         }
         return result;
     }
-    if (type != kShipyard || At<std::uint8_t>(world, record + kBuildingState) == 0) {
+    if (type != kShipyard || record.state == 0) {
         return recordAddress;
     }
     std::uint32_t direction = 0;
     std::uint32_t x = 0;
     std::uint32_t y = 0;
-    ShipTile(world, record, direction, x, y);
-    const std::uint32_t tile = kTiles + (x * 0x300 + y) * 24;
-    At<std::uint8_t>(world, kSettlers + (static_cast<std::uint32_t>(At<std::uint16_t>(world, tile)) << 6)) = 0xff;
-    At<std::uint16_t>(world, tile) = 0;
-    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + tile;
+    ShipTile(record, direction, x, y);
+    Tile& tile = TileAt(world, x, y);
+    world->settlers[tile.settler].owner = 0xff;
+    tile.settler = 0;
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&tile));
 }
 
 // Purpose: For every building of type 0x12, unblocks one or two tiles at a fixed place next to it that
 // depends on the owner's race (race 0: (x-2, y+3); race 1: (x, y+7) and (x, y+6)). Probably repairs tiles
 // after a savegame is loaded.
 std::uint32_t __fastcall GameWorld_UnblockType12BuildingTiles(GameWorld* world, void*) {
-    std::uint32_t count = At<std::uint32_t>(world, kBuildingCount);
+    std::uint32_t count = world->building_high_water;
     for (std::uint32_t building = 1; building <= count; ++building) {
-        const std::uint32_t record = Building(building);
-        if (At<std::uint8_t>(world, record + kBuildingType) == kType12) {
-            const std::uint32_t player = At<std::uint8_t>(world, record + kBuildingPlayer);
-            const std::int32_t race = At<std::int32_t>(world, kPlayerRace + player * kPlayerRecordBytes);
-            const std::uint32_t x = At<std::uint16_t>(world, record + kBuildingX);
-            const std::uint32_t y = At<std::uint16_t>(world, record + kBuildingY);
+        const Building& record = world->buildings[building];
+        if (record.art == kType12) {
+            const std::uint32_t player = record.owner;
+            const std::int32_t race = world->players[player].race;
+            const std::uint32_t x = record.x;
+            const std::uint32_t y = record.y;
             if (race == 0) {
                 if ((TileFlags(world, x - 2, y + 3) & kTileBlocked) != 0) {
                     GameWorld_UnblockTile(world, nullptr, x - 2, y + 3);
@@ -874,14 +895,14 @@ std::uint32_t __fastcall GameWorld_UnblockType12BuildingTiles(GameWorld* world, 
                 if ((TileFlags(world, x, y + 7) & kTileBlocked) != 0) {
                     GameWorld_UnblockTile(world, nullptr, x, y + 7);
                 }
-                const std::uint32_t x2 = At<std::uint16_t>(world, record + kBuildingX);
-                const std::uint32_t y2 = At<std::uint16_t>(world, record + kBuildingY);
+                const std::uint32_t x2 = record.x;
+                const std::uint32_t y2 = record.y;
                 if ((TileFlags(world, x2, y2 + 6) & kTileBlocked) != 0) {
                     GameWorld_UnblockTile(world, nullptr, x2, y2 + 6);
                 }
             }
         }
-        count = At<std::uint32_t>(world, kBuildingCount);
+        count = world->building_high_water;
     }
     return count;
 }
@@ -919,42 +940,34 @@ S3RE_HOOK(0x0051b5d0, GameWorld_SetOwnerOfFreeTile, SetOwnerFn, Original_GameWor
 
 namespace {
 
-constexpr std::size_t kTestWorld = kSettlers + 0x10000 * kSettlerBytes;
-constexpr std::uint32_t kOffsetTable = 0x110a588;
-constexpr std::uint32_t kTileWord16 = 0x16;
-constexpr std::uint32_t kIds256 = 0xe114dc;
-constexpr std::uint32_t kIds256Mark = 0xe114d8;
-constexpr std::uint32_t kIds8192 = 0xe125e8;
-constexpr std::uint32_t kIds8192Mark = 0xe125e4;
-constexpr std::uint32_t kPendingRead = 0x32870;
-constexpr std::uint32_t kPendingWrite = 0x32874;
-constexpr std::uint32_t kEventWrite = 0x366fc;
+// Up to settler 0x10000 (pile and settler numbers handed out stay below it).
+constexpr std::size_t kTestWorld = offsetof(GameWorld, settlers) + 0x10000 * sizeof(Settler);
 constexpr std::uint32_t kUsedAreas = 3;     // areas 1..3 hold the map's tiles
 constexpr std::uint32_t kTestAreas = 16;    // 4..16 used or free
 constexpr std::int32_t kSteps[19][2] = {{0, 0},  {1, 0},  {1, 1},   {0, 1},   {-1, 0}, {-1, -1}, {0, -1},
                                         {2, 0},  {2, 1},  {2, 2},   {1, 2},   {0, 2},  {-1, 1},  {-2, 0},
                                         {-2, -1}, {-2, -2}, {-1, -2}, {0, -2}, {1, -1}};
 
-std::uint32_t Tile(std::uint32_t x, std::uint32_t y) {
-    return kTiles + (x * 0x300 + y) * 24;
-}
-std::uint32_t TileArea(std::uint32_t x, std::uint32_t y) {
-    return (x * 0x300 + y + kTileAreaIndexBias) * 24;
-}
-
 // Event ring indices in range (InitArea and MoveAreaContents queue events).
 void SetUpEvents(test::Context& ctx, test::WorldPair& worlds) {
-    worlds.Set<std::uint32_t>(kPendingRead, ctx.rng().Below(1000));
-    worlds.Set<std::uint32_t>(kPendingWrite, ctx.rng().Below(1000));
-    worlds.Set<std::uint32_t>(kEventWrite, ctx.rng().Below(1000));
+    const std::uint32_t pendingRead = ctx.rng().Below(1000);
+    const std::uint32_t pendingWrite = ctx.rng().Below(1000);
+    const std::uint32_t eventWrite = ctx.rng().Below(1000);
+    worlds.Both([&](GameWorld* w) {
+        w->pending_event_index.read = pendingRead;
+        w->pending_event_index.write = pendingWrite;
+        w->event_index.write = eventWrite;
+    });
 }
 
 // The real offset table entries 0..18 (the tile, its six neighbours, the ring around them).
 void SetUpOffsets(test::WorldPair& worlds) {
-    for (std::uint32_t k = 0; k < 19; ++k) {
-        worlds.Set<std::int32_t>(kOffsetTable + k * kOffsetBytes, kSteps[k][0]);
-        worlds.Set<std::int32_t>(kOffsetTable + k * kOffsetBytes + 4, kSteps[k][1]);
-    }
+    worlds.Both([&](GameWorld* w) {
+        for (std::uint32_t k = 0; k < 19; ++k) {
+            w->offsets[k].dx = kSteps[k][0];
+            w->offsets[k].dy = kSteps[k][1];
+        }
+    });
 }
 
 // Valid, terminated lists for the area: the pile list +0x8, the 36 goods
@@ -962,29 +975,36 @@ void SetUpOffsets(test::WorldPair& worlds) {
 // tiles of the size x size map. `nextPile`/`nextSettler` hand out numbers.
 void SetUpAreaLists(test::Context& ctx, test::WorldPair& worlds, std::uint32_t area, std::uint32_t size,
                     std::uint32_t& nextPile, std::uint32_t& nextSettler) {
-    const std::uint32_t r = AreaRecord(area);
-    auto fill = [&](std::uint32_t head, std::uint32_t table, std::uint32_t bytes, std::uint32_t xField,
-                    std::uint32_t yField, std::uint32_t previousField, std::uint32_t nextField, std::uint32_t& next) {
+    // `head(w)` is the list head in world w, `table(w)` the record table.
+    auto fill = [&](auto head, auto table, const auto& links, std::uint32_t& next) {
         const std::uint32_t length = ctx.rng().Chance(1, 5) ? 1 + ctx.rng().Below(4) : 0;
         std::uint32_t previous = 0;
-        worlds.Set<std::uint16_t>(head, static_cast<std::uint16_t>(length ? next : 0));
+        const auto first = static_cast<std::uint16_t>(length ? next : 0);
+        worlds.Both([&](GameWorld* w) { head(w) = first; });
         for (std::uint32_t k = 0; k < length; ++k) {
             const std::uint32_t member = next++;
-            const std::uint32_t m = table + member * bytes;
-            worlds.Set<std::uint16_t>(m + previousField, static_cast<std::uint16_t>(previous));
-            worlds.Set<std::uint16_t>(m + nextField, static_cast<std::uint16_t>(k + 1 < length ? next : 0));
-            worlds.Set<std::uint16_t>(m + xField, static_cast<std::uint16_t>(ctx.rng().Below(size)));
-            worlds.Set<std::uint16_t>(m + yField, static_cast<std::uint16_t>(ctx.rng().Below(size)));
+            const auto after = static_cast<std::uint16_t>(k + 1 < length ? next : 0);
+            const auto x = static_cast<std::uint16_t>(ctx.rng().Below(size));
+            const auto y = static_cast<std::uint16_t>(ctx.rng().Below(size));
+            worlds.Both([&](GameWorld* w) {
+                auto& m = table(w)[member];
+                m.*links.previous = static_cast<std::uint16_t>(previous);
+                m.*links.next = after;
+                m.*links.x = x;
+                m.*links.y = y;
+            });
             previous = member;
         }
     };
-    fill(r + kAreaPileList, kPiles, kPileBytes, kPileX, kPileY, kPilePrevious, kPileNext, nextPile);
+    auto piles = [](GameWorld* w) { return w->piles; };
+    auto settlers = [](GameWorld* w) { return w->settlers; };
+    fill([&](GameWorld* w) -> auto& { return w->areas[area].pile_list; }, piles, kPileLinks, nextPile);
     for (std::uint32_t i = 0; i < kGoodsTypes; ++i) {
-        fill(r + kAreaGoodsPiles + i * 2, kPiles, kPileBytes, kPileX, kPileY, kPilePrevious, kPileNext, nextPile);
+        fill([&](GameWorld* w) -> auto& { return w->areas[area].piles_by_goods[i]; }, piles, kPileLinks, nextPile);
     }
     for (std::uint32_t i = 0; i < kAreaSettlerListCount; ++i) {
-        fill(r + kAreaSettlerLists + i * 2, kSettlers, kSettlerBytes, kSettlerX, kSettlerY, kSettlerPrevious,
-             kSettlerNext, nextSettler);
+        fill([&](GameWorld* w) -> auto& { return w->areas[area].settlers_by_type[i]; }, settlers, kSettlerLinks,
+             nextSettler);
     }
 }
 
@@ -1014,27 +1034,33 @@ void SetUpAreaMap(test::Context& ctx, test::WorldPair& worlds, std::uint32_t siz
             } else if (onMap && ctx.rng().Below(8) >= empty) {
                 area = 1 + ((tx / patch) * 5 + (ty / patch) * 3 + (ctx.rng().Chance(1, 6) ? 1 : 0)) % kUsedAreas;
             }
-            worlds.Set<std::uint16_t>(TileArea(tx, ty), static_cast<std::uint16_t>(area));
-            worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileFlags, static_cast<std::uint8_t>(ctx.rng().Next32()));
-            worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileOwner, static_cast<std::uint8_t>(ctx.rng().Below(20)));
+            const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32());
+            const auto owner = static_cast<std::uint8_t>(ctx.rng().Below(20));
+            worlds.Both([&](GameWorld* w) {
+                Tile& tile = TileAt(w, tx, ty);
+                tile.area = static_cast<std::uint16_t>(area);
+                tile.flags = flags;
+                tile.owner = owner;
+            });
         }
     }
     std::uint32_t nextPile = 1 + ctx.rng().Below(0x1000);
     std::uint32_t nextSettler = 1 + ctx.rng().Below(0x1000);
     for (std::uint32_t area = 1; area <= kTestAreas; ++area) {
         const bool used = area <= kUsedAreas || (area < kTestAreas && ctx.rng().Chance(1, 2)) || full;
-        worlds.Set<std::uint8_t>(AreaRecord(area) + kAreaPlayer,
-                                 static_cast<std::uint8_t>(used ? ctx.rng().Below(20) : kFreeArea));
+        const auto player = static_cast<std::uint8_t>(used ? ctx.rng().Below(20) : kFreeArea);
+        worlds.Both([&](GameWorld* w) { w->areas[area].player = player; });
         if (area <= kUsedAreas) {
             SetUpAreaLists(ctx, worlds, area, size, nextPile, nextSettler);
         }
     }
     for (std::uint32_t player = 0; player < 20; ++player) {
-        worlds.Set<std::int32_t>(kPlayerRace + player * kPlayerRecordBytes,
-                                 ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Next32())
-                                                         : static_cast<std::int32_t>(ctx.rng().Below(4)));
+        const std::int32_t race = ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Next32())
+                                                          : static_cast<std::int32_t>(ctx.rng().Below(4));
+        worlds.Both([&](GameWorld* w) { w->players[player].race = race; });
     }
-    worlds.Set<std::uint32_t>(kAreaHighWater, ctx.rng().Below(kTestAreas + 2));
+    const std::uint32_t highWater = ctx.rng().Below(kTestAreas + 2);
+    worlds.Both([&](GameWorld* w) { w->area_high_water = highWater; });
     SetUpEvents(ctx, worlds);
 }
 
@@ -1077,28 +1103,35 @@ void SetUpWord16Regions(test::Context& ctx, test::WorldPair& worlds, std::uint32
     for (std::uint32_t tx = 0xffffffffu; tx != size + 1; ++tx) {
         for (std::uint32_t ty = 0xffffffffu; ty != size + 1; ++ty) {
             const bool onMap = tx < size && ty < size;
-            worlds.Set<std::uint16_t>(Tile(tx, ty) + kTileWord16,
-                                      static_cast<std::uint16_t>(onMap ? label[tx * size + ty] : 0));
+            const auto wide = static_cast<std::uint16_t>(onMap ? label[tx * size + ty] : 0);
             // Byte-10 regions: one region over the whole map (one split per call is safe).
-            worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileByte10,
-                                     static_cast<std::uint8_t>(onMap && ctx.rng().Chance(7, 8) ? 1 : 0));
+            const auto walk = static_cast<std::uint8_t>(onMap && ctx.rng().Chance(7, 8) ? 1 : 0);
+            worlds.Both([&](GameWorld* w) {
+                Tile& tile = TileAt(w, tx, ty);
+                tile.wide_region = wide;
+                tile.walk_region = walk;
+            });
         }
     }
-    for (std::uint32_t id = 0; id < next + 2; ++id) {
-        worlds.Set<std::uint8_t>(kIds8192 + id, static_cast<std::uint8_t>(id != 0 && id < next ? 1 : 0));
-    }
-    worlds.Set<std::uint32_t>(kIds8192Mark, ctx.rng().Below(next + 2));
-    for (std::uint32_t id = 0; id < 8; ++id) {
-        worlds.Set<std::uint8_t>(kIds256 + id, static_cast<std::uint8_t>(id == 1 ? 1 : 0));
-    }
-    worlds.Set<std::uint32_t>(kIds256Mark, ctx.rng().Below(4));
+    const std::uint32_t wideHighWater = ctx.rng().Below(next + 2);
+    const std::uint32_t walkHighWater = ctx.rng().Below(4);
+    worlds.Both([&](GameWorld* w) {
+        for (std::uint32_t id = 0; id < next + 2; ++id) {
+            w->wide_region_used[id] = static_cast<std::uint8_t>(id != 0 && id < next ? 1 : 0);
+        }
+        w->wide_region_high_water = wideHighWater;
+        for (std::uint32_t id = 0; id < 8; ++id) {
+            w->walk_region_used[id] = static_cast<std::uint8_t>(id == 1 ? 1 : 0);
+        }
+        w->walk_region_high_water = walkHighWater;
+    });
 }
 
 // Wrong: race 1 gets race 0's defaults.
 void __fastcall WrongInitArea(GameWorld* world, void* edx, std::uint32_t area, std::uint32_t player) {
     GameWorld_InitArea(world, edx, area, player);
-    if (At<std::int32_t>(world, kPlayerRace + player * kPlayerRecordBytes) == 1) {
-        StoreAll(world, AreaRecord(area), kRace0Defaults);
+    if (world->players[player].race == 1) {
+        StoreAll(world->areas[area], kRace0Defaults);
     }
 }
 
@@ -1108,9 +1141,9 @@ void CompareInitArea(test::Context& ctx, InitAreaFn candidate, int cases) {
         SetUpEvents(ctx, worlds);
         const std::uint32_t area = 1 + ctx.rng().Below(0xffe);
         const std::uint32_t player = ctx.rng().Chance(1, 10) ? ctx.rng().Below(256) : ctx.rng().Below(20);
-        worlds.Set<std::int32_t>(kPlayerRace + player * kPlayerRecordBytes,
-                                 ctx.rng().Chance(1, 8) ? static_cast<std::int32_t>(ctx.rng().Next32())
-                                                        : static_cast<std::int32_t>(ctx.rng().Below(5)));
+        const std::int32_t race = ctx.rng().Chance(1, 8) ? static_cast<std::int32_t>(ctx.rng().Next32())
+                                                         : static_cast<std::int32_t>(ctx.rng().Below(5));
+        worlds.Both([&](GameWorld* w) { w->players[player].race = race; });
         Original_GameWorld_InitArea(worlds.original(), nullptr, area, player);
         candidate(worlds.ours(), nullptr, area, player);
         if ((i % 32 == 31 || i == cases - 1) && !worlds.Checkpoint(ctx)) {
@@ -1122,10 +1155,10 @@ void CompareInitArea(test::Context& ctx, InitAreaFn candidate, int cases) {
 
 // Wrong: never hands out the last free area found by a full scan (off by one in the limit).
 std::uint32_t __fastcall WrongAllocArea(GameWorld* world, void* edx, std::uint32_t player) {
-    if (At<std::uint8_t>(world, AreaRecord(kLastArea - 1) + kAreaPlayer) == kFreeArea) {
+    if (world->areas[kLastArea - 1].player == kFreeArea) {
         bool othersUsed = true;
         for (std::uint32_t a = 1; a < kLastArea - 1 && othersUsed; ++a) {
-            othersUsed = At<std::uint8_t>(world, AreaRecord(a) + kAreaPlayer) != kFreeArea;
+            othersUsed = world->areas[a].player != kFreeArea;
         }
         if (othersUsed) {
             return 0;
@@ -1143,13 +1176,14 @@ void CompareAllocArea(test::Context& ctx, AllocAreaFn candidate, int cases) {
         const std::uint32_t first = r == 0 ? kLastArea - 1 : r == 1 ? kLastArea + ctx.rng().Below(2)
                                                        : 1 + ctx.rng().Below(64);
         for (std::uint32_t a = 1; a <= kLastArea; ++a) {
-            worlds.Set<std::uint8_t>(AreaRecord(a) + kAreaPlayer,
-                                     static_cast<std::uint8_t>(a == first ? kFreeArea : ctx.rng().Below(20)));
+            const auto player = static_cast<std::uint8_t>(a == first ? kFreeArea : ctx.rng().Below(20));
+            worlds.Both([&](GameWorld* w) { w->areas[a].player = player; });
         }
-        worlds.Set<std::uint32_t>(kAreaHighWater, ctx.rng().Chance(1, 2) ? first + ctx.rng().Below(3) - 1
-                                                                          : ctx.rng().Next32());
+        const std::uint32_t highWater = ctx.rng().Chance(1, 2) ? first + ctx.rng().Below(3) - 1 : ctx.rng().Next32();
+        worlds.Both([&](GameWorld* w) { w->area_high_water = highWater; });
         const std::uint32_t player = ctx.rng().Below(20);
-        worlds.Set<std::int32_t>(kPlayerRace + player * kPlayerRecordBytes, static_cast<std::int32_t>(ctx.rng().Below(4)));
+        const auto race = static_cast<std::int32_t>(ctx.rng().Below(4));
+        worlds.Both([&](GameWorld* w) { w->players[player].race = race; });
         const std::uint32_t expected = Original_GameWorld_AllocArea(worlds.original(), nullptr, player);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, player);
         if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 16 == 15 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
@@ -1163,12 +1197,12 @@ void CompareAllocArea(test::Context& ctx, AllocAreaFn candidate, int cases) {
 void __fastcall WrongMoveAreaContents(GameWorld* world, void* edx, std::uint32_t oldArea, std::uint32_t newArea) {
     std::uint16_t saved[kAreaSettlerListCount];
     for (std::uint32_t i = 0; i < kAreaSettlerListCount; ++i) {
-        saved[i] = At<std::uint16_t>(world, AreaRecord(oldArea) + kAreaSettlerLists + i * 2);
-        At<std::uint16_t>(world, AreaRecord(oldArea) + kAreaSettlerLists + i * 2) = 0;
+        saved[i] = world->areas[oldArea].settlers_by_type[i];
+        world->areas[oldArea].settlers_by_type[i] = 0;
     }
     GameWorld_MoveAreaContents(world, edx, oldArea, newArea);
     for (std::uint32_t i = 0; i < kAreaSettlerListCount; ++i) {
-        At<std::uint16_t>(world, AreaRecord(oldArea) + kAreaSettlerLists + i * 2) = saved[i];
+        world->areas[oldArea].settlers_by_type[i] = saved[i];
     }
 }
 
@@ -1176,7 +1210,7 @@ void CompareMoveAreaContents(test::Context& ctx, MoveAreaContentsFn candidate, i
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = 4 + ctx.rng().Below(20);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         SetUpAreaMap(ctx, worlds, size);
         const std::uint32_t oldArea = 1 + ctx.rng().Below(kUsedAreas);
         const std::uint32_t newArea = 1 + (oldArea + ctx.rng().Below(kUsedAreas - 1)) % kUsedAreas;
@@ -1191,22 +1225,23 @@ void CompareMoveAreaContents(test::Context& ctx, MoveAreaContentsFn candidate, i
 
 // Wrong: keeps into's settings even when `from` is bigger.
 void __fastcall WrongMergeAreaContents(GameWorld* world, void* edx, std::uint32_t into, std::uint32_t from) {
-    const std::uint32_t saved = At<std::uint32_t>(world, AreaRecord(into) + kAreaTileCount);
-    At<std::uint32_t>(world, AreaRecord(into) + kAreaTileCount) = 0xffffffffu;
+    const std::uint32_t saved = world->areas[into].tile_count;
+    world->areas[into].tile_count = 0xffffffffu;
     GameWorld_MergeAreaContents(world, edx, into, from);
-    At<std::uint32_t>(world, AreaRecord(into) + kAreaTileCount) = saved;
+    world->areas[into].tile_count = saved;
 }
 
 void CompareMergeAreaContents(test::Context& ctx, MergeAreaContentsFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = 4 + ctx.rng().Below(20);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         SetUpAreaMap(ctx, worlds, size);
         const std::uint32_t into = 1 + ctx.rng().Below(kUsedAreas);
         const std::uint32_t from = 1 + (into + ctx.rng().Below(kUsedAreas - 1)) % kUsedAreas;
         for (const std::uint32_t area : {into, from}) {
-            worlds.Set<std::uint32_t>(AreaRecord(area) + kAreaTileCount, ctx.rng().Below(4));
+            const std::uint32_t tiles = ctx.rng().Below(4);
+            worlds.Both([&](GameWorld* w) { w->areas[area].tile_count = tiles; });
         }
         Original_GameWorld_MergeAreaContents(worlds.original(), nullptr, into, from);
         candidate(worlds.ours(), nullptr, into, from);
@@ -1220,13 +1255,13 @@ void CompareMergeAreaContents(test::Context& ctx, MergeAreaContentsFn candidate,
 // Never joins with a neighbour of another owner (it sets the neighbour's owner for the call).
 void __fastcall WrongJoinAreasAtTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
     const std::uint32_t nx = x + 1;
-    const std::uint32_t tile = kTiles + (nx * 0x300 + y) * 24 + kTileOwner;
-    const std::uint8_t saved = At<std::uint8_t>(world, tile);
+    std::uint8_t& owner = TileAt(world, nx, y).owner;
+    const std::uint8_t saved = owner;
     if (TileAreaWord(world, nx, y) != 0) {
-        At<std::uint8_t>(world, tile) = At<std::uint8_t>(world, kTiles + (x * 0x300 + y) * 24 + kTileOwner);
+        owner = TileAt(world, x, y).owner;
     }
     GameWorld_JoinAreasAtTile(world, edx, x, y);
-    At<std::uint8_t>(world, tile) = saved;
+    owner = saved;
 }
 
 // A map for joining areas: connected stripe areas, owners of 1..3 players
@@ -1237,12 +1272,16 @@ std::uint32_t SetUpJoinMap(test::Context& ctx, test::WorldPair& worlds, std::uin
     const std::uint32_t owners = 1 + ctx.rng().Below(3);
     for (std::uint32_t tx = 0xffffffffu; tx != size + 1; ++tx) {
         for (std::uint32_t ty = 0xffffffffu; ty != size + 1; ++ty) {
-            const bool none = At<std::uint16_t>(worlds.original(), TileArea(tx, ty)) == 0;
-            worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileOwner,
-                                     static_cast<std::uint8_t>(none ? 0xfe : ctx.rng().Below(owners)));
-            const std::uint8_t flags = At<std::uint8_t>(worlds.original(), Tile(tx, ty) + kTileFlags);
-            worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileFlags,
-                                     static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? flags : flags & ~kTileBlocked));
+            const Tile& before = TileAt(worlds.original(), tx, ty);
+            const bool none = before.area == 0;
+            const auto owner = static_cast<std::uint8_t>(none ? 0xfe : ctx.rng().Below(owners));
+            const std::uint8_t flags = before.flags;
+            const auto newFlags = static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? flags : flags & ~kTileBlocked);
+            worlds.Both([&](GameWorld* w) {
+                Tile& tile = TileAt(w, tx, ty);
+                tile.owner = owner;
+                tile.flags = newFlags;
+            });
         }
     }
     return owners;
@@ -1255,11 +1294,12 @@ std::uint32_t RelativeIfPointer(std::uint32_t value, GameWorld* world) {
 
 // Wrong: never merges byte-10 regions.
 std::uint32_t __fastcall WrongUnblockTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
-    const std::uint8_t saved = At<std::uint8_t>(world, Tile(x, y) + kTileByte10);
-    At<std::uint8_t>(world, Tile(x, y) + kTileByte10) = 1;
+    std::uint8_t& walk = TileAt(world, x, y).walk_region;
+    const std::uint8_t saved = walk;
+    walk = 1;
     const std::uint32_t result = GameWorld_UnblockTile(world, edx, x, y);
-    if (saved == 0 && At<std::uint8_t>(world, Tile(x, y) + kTileByte10) == 1) {
-        At<std::uint8_t>(world, Tile(x, y) + kTileByte10) = 0;
+    if (saved == 0 && walk == 1) {
+        walk = 0;
     }
     return result;
 }
@@ -1269,19 +1309,25 @@ void CompareUnblockTile(test::Context& ctx, BlockTileFn candidate, int cases) {
     SetUpOffsets(worlds);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = 8 + ctx.rng().Below(12);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         const std::uint32_t owners = SetUpJoinMap(ctx, worlds, size);
         SetUpWord16Regions(ctx, worlds, size);
         // Three tiles inside (region merges look one tile beyond their tiles).
         const std::uint32_t x = 3 + ctx.rng().Below(size - 6);
         const std::uint32_t y = 3 + ctx.rng().Below(size - 6);
         const std::uint8_t flags = static_cast<std::uint8_t>(ctx.rng().Next32());
-        worlds.Set<std::uint8_t>(Tile(x, y) + kTileFlags,
-                                 static_cast<std::uint8_t>(ctx.rng().Chance(5, 6) ? flags | kTileBlocked : flags & ~kTileBlocked));
-        worlds.Set<std::uint8_t>(Tile(x, y) + kTileByte10, static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0 : 1));
-        worlds.Set<std::uint16_t>(TileArea(x, y), static_cast<std::uint16_t>(ctx.rng().Chance(3, 4) ? 0 : 1 + ctx.rng().Below(3)));
-        worlds.Set<std::uint8_t>(Tile(x, y) + kTileOwner,
-                                 static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? 0xff : ctx.rng().Below(owners)));
+        const auto newFlags =
+            static_cast<std::uint8_t>(ctx.rng().Chance(5, 6) ? flags | kTileBlocked : flags & ~kTileBlocked);
+        const auto walk = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0 : 1);
+        const auto area = static_cast<std::uint16_t>(ctx.rng().Chance(3, 4) ? 0 : 1 + ctx.rng().Below(3));
+        const auto owner = static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? 0xff : ctx.rng().Below(owners));
+        worlds.Both([&](GameWorld* w) {
+            Tile& tile = w->tiles[x][y];
+            tile.flags = newFlags;
+            tile.walk_region = walk;
+            tile.area = area;
+            tile.owner = owner;
+        });
         const std::uint32_t expected =
             RelativeIfPointer(Original_GameWorld_UnblockTile(worlds.original(), nullptr, x, y), worlds.original());
         const std::uint32_t actual = RelativeIfPointer(candidate(worlds.ours(), nullptr, x, y), worlds.ours());
@@ -1295,8 +1341,9 @@ void CompareUnblockTile(test::Context& ctx, BlockTileFn candidate, int cases) {
 // Wrong: also takes tiles that have an owner.
 std::uint32_t __fastcall WrongSetOwnerOfFreeTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                  std::uint32_t owner) {
-    if (At<std::uint8_t>(world, Tile(x, y) + kTileOwner) != 0xff) {
-        At<std::uint8_t>(world, Tile(x, y) + kTileOwner) = 0xff;
+    std::uint8_t& tileOwner = TileAt(world, x, y).owner;
+    if (tileOwner != 0xff) {
+        tileOwner = 0xff;
     }
     return GameWorld_SetOwnerOfFreeTile(world, edx, x, y, owner);
 }
@@ -1306,20 +1353,28 @@ void CompareSetOwnerOfFreeTile(test::Context& ctx, SetOwnerFn candidate, int cas
     SetUpOffsets(worlds);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = 4 + ctx.rng().Below(16);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         const std::uint32_t owners = SetUpJoinMap(ctx, worlds, size);
         const std::uint32_t x = 1 + ctx.rng().Below(size - 2);
         const std::uint32_t y = 1 + ctx.rng().Below(size - 2);
-        const std::uint32_t t = Tile(x, y);
-        worlds.Set<std::uint8_t>(t + kTileOwner, static_cast<std::uint8_t>(ctx.rng().Chance(4, 5) ? 0xff : ctx.rng().Below(owners)));
-        worlds.Set<std::uint16_t>(TileArea(x, y), static_cast<std::uint16_t>(ctx.rng().Chance(4, 5) ? 0 : 1 + ctx.rng().Below(3)));
+        const auto tileOwner = static_cast<std::uint8_t>(ctx.rng().Chance(4, 5) ? 0xff : ctx.rng().Below(owners));
+        const auto area = static_cast<std::uint16_t>(ctx.rng().Chance(4, 5) ? 0 : 1 + ctx.rng().Below(3));
         // A pile on the tile or not (AddTilePileToArea): pile words in the
         // used range, small goods types and amounts.
         const std::uint32_t pile = ctx.rng().Chance(1, 2) ? 0 : 0x2000 + ctx.rng().Below(0x1000);
-        worlds.Set<std::uint16_t>(t + 0x2, static_cast<std::uint16_t>(pile));
+        worlds.Both([&](GameWorld* w) {
+            Tile& tile = w->tiles[x][y];
+            tile.owner = tileOwner;
+            tile.area = area;
+            tile.object_number = static_cast<std::uint16_t>(pile);
+        });
         if (pile != 0) {
-            worlds.Set<std::uint8_t>(kPiles + pile * kPileBytes + 0x0, static_cast<std::uint8_t>(ctx.rng().Below(36)));
-            worlds.Set<std::uint8_t>(kPiles + pile * kPileBytes + 0x1, static_cast<std::uint8_t>(ctx.rng().Below(9)));
+            const auto good = static_cast<std::uint8_t>(ctx.rng().Below(36));
+            const auto amount = static_cast<std::uint8_t>(ctx.rng().Below(9));
+            worlds.Both([&](GameWorld* w) {
+                w->piles[pile].good = good;
+                w->piles[pile].amount = amount;
+            });
         }
         const std::uint32_t owner = ctx.rng().Chance(1, 8) ? 0xff : ctx.rng().Chance(1, 20) ? 0x100 + ctx.rng().Below(owners)
                                                                                            : ctx.rng().Below(owners);
@@ -1339,12 +1394,15 @@ void CompareJoinAreas(test::Context& ctx, TileFn candidate, int cases) {
     SetUpOffsets(worlds);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = 4 + ctx.rng().Below(16);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         const std::uint32_t owners = SetUpJoinMap(ctx, worlds, size);
         const std::uint32_t x = 1 + ctx.rng().Below(size - 2);
         const std::uint32_t y = 1 + ctx.rng().Below(size - 2);
-        worlds.Set<std::uint8_t>(Tile(x, y) + kTileOwner, static_cast<std::uint8_t>(ctx.rng().Below(owners)));
-        worlds.Set<std::uint16_t>(TileArea(x, y), 0);
+        const auto owner = static_cast<std::uint8_t>(ctx.rng().Below(owners));
+        worlds.Both([&](GameWorld* w) {
+            w->tiles[x][y].owner = owner;
+            w->tiles[x][y].area = 0;
+        });
         Original_GameWorld_JoinAreasAtTile(worlds.original(), nullptr, x, y);
         candidate(worlds.ours(), nullptr, x, y);
         if ((i % 8 == 7 || i == cases - 1) && !worlds.Checkpoint(ctx)) {
@@ -1376,7 +1434,7 @@ void CompareOnAreaMap(test::Context& ctx, int cases, bool regions, Call call) {
     SetUpOffsets(worlds);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = 4 + ctx.rng().Below(16);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         SetUpAreaMap(ctx, worlds, size, ctx.rng().Chance(1, 40));
         if (regions) {
             SetUpWord16Regions(ctx, worlds, size);
@@ -1385,7 +1443,8 @@ void CompareOnAreaMap(test::Context& ctx, int cases, bool regions, Call call) {
         const std::uint32_t y = 1 + ctx.rng().Below(size - 2);
         // The tile in one of the used areas (its callers only call it then).
         if (!regions || ctx.rng().Chance(3, 4)) {
-            worlds.Set<std::uint16_t>(TileArea(x, y), static_cast<std::uint16_t>(1 + ctx.rng().Below(kUsedAreas)));
+            const auto area = static_cast<std::uint16_t>(1 + ctx.rng().Below(kUsedAreas));
+            worlds.Both([&](GameWorld* w) { w->tiles[x][y].area = area; });
         }
         std::uint32_t expected = 0;
         std::uint32_t actual = 0;
@@ -1407,10 +1466,11 @@ void CompareSplitArea(test::Context& ctx, TileFn candidate, int cases) {
 
 // Wrong: does not split byte-10 regions.
 std::uint32_t __fastcall WrongBlockTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
-    const std::uint8_t saved = At<std::uint8_t>(world, Tile(x, y) + kTileByte10);
-    At<std::uint8_t>(world, Tile(x, y) + kTileByte10) = 0;
+    std::uint8_t& walk = TileAt(world, x, y).walk_region;
+    const std::uint8_t saved = walk;
+    walk = 0;
     const std::uint32_t result = GameWorld_BlockTile(world, edx, x, y);
-    At<std::uint8_t>(world, Tile(x, y) + kTileByte10) = saved;
+    walk = saved;
     return result;
 }
 
@@ -1419,12 +1479,13 @@ void CompareBlockTile(test::Context& ctx, BlockTileFn candidate, int cases) {
         ctx, cases, true,
         [&](test::WorldPair& worlds, std::uint32_t x, std::uint32_t y, std::uint32_t& expected, std::uint32_t& actual) {
             // Mostly not yet blocked; sometimes a marked area word (>= 0x8000).
-            const std::uint8_t flags = At<std::uint8_t>(worlds.original(), Tile(x, y) + kTileFlags);
-            worlds.Set<std::uint8_t>(Tile(x, y) + kTileFlags,
-                                     static_cast<std::uint8_t>(ctx.rng().Chance(1, 6) ? flags | kTileBlocked
-                                                                                      : flags & ~kTileBlocked));
+            const std::uint8_t flags = worlds.original()->tiles[x][y].flags;
+            const auto newFlags =
+                static_cast<std::uint8_t>(ctx.rng().Chance(1, 6) ? flags | kTileBlocked : flags & ~kTileBlocked);
+            worlds.Both([&](GameWorld* w) { w->tiles[x][y].flags = newFlags; });
             if (ctx.rng().Chance(1, 10)) {
-                worlds.Set<std::uint16_t>(TileArea(x, y), static_cast<std::uint16_t>(0x8000 + ctx.rng().Below(4)));
+                const auto area = static_cast<std::uint16_t>(layout::kTileAreaWater + ctx.rng().Below(4));
+                worlds.Both([&](GameWorld* w) { w->tiles[x][y].area = area; });
             }
             expected = Original_GameWorld_BlockTile(worlds.original(), nullptr, x, y);
             actual = candidate(worlds.ours(), nullptr, x, y);
@@ -1527,12 +1588,15 @@ std::uint32_t SetUpExtraTilesMap(test::Context& ctx, test::WorldPair& worlds, st
     for (std::uint32_t tx = 0xffffffffu; tx != size + 1; ++tx) {
         for (std::uint32_t ty = 0xffffffffu; ty != size + 1; ++ty) {
             const bool onMap = tx < size && ty < size;
-            worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileByte10, static_cast<std::uint8_t>(onMap ? 1 : 0));
             const std::uint32_t occupant = ctx.rng().Chance(1, 40) ? 1 + ctx.rng().Below(0x8000) : 0;
-            worlds.Set<std::uint16_t>(Tile(tx, ty), static_cast<std::uint16_t>(occupant));
+            worlds.Both([&](GameWorld* w) {
+                Tile& tile = TileAt(w, tx, ty);
+                tile.walk_region = static_cast<std::uint8_t>(onMap ? 1 : 0);
+                tile.settler = static_cast<std::uint16_t>(occupant);
+            });
             if (occupant != 0) {
-                worlds.Set<std::uint8_t>(kSettlers + occupant * kSettlerBytes + 0x1,
-                                         static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0x29 : ctx.rng().Below(0x50)));
+                const auto art = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0x29 : ctx.rng().Below(0x50));
+                worlds.Both([&](GameWorld* w) { w->settlers[occupant].art = art; });
             }
         }
     }
@@ -1546,50 +1610,60 @@ std::uint32_t SetUpExtraTilesMap(test::Context& ctx, test::WorldPair& worlds, st
 // another type.
 std::uint32_t SetUpExtraTilesBuilding(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size, bool unset) {
     const std::uint32_t building = 1 + ctx.rng().Below(kTestBuildings);
-    const std::uint32_t record = Building(building);
+    auto record = [&](GameWorld* w) -> Building& { return w->buildings[building]; };
     static constexpr std::uint8_t kTypes[] = {0x1f, 0x2f, 0x30, 0x32, 0x20, 0x20, 0x20, 0x12};
     const std::uint8_t type =
         ctx.rng().Chance(1, 10) ? static_cast<std::uint8_t>(ctx.rng().Below(256)) : kTypes[ctx.rng().Below(sizeof(kTypes))];
-    worlds.Set<std::uint8_t>(record + kBuildingType, type);
-    worlds.Set<std::uint8_t>(record + kBuildingPlayer, static_cast<std::uint8_t>(ctx.rng().Below(20)));
-    worlds.Set<std::uint8_t>(record + kBuildingExtraDone,
-                             static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? kExtraDone : ctx.rng().Below(0xfe)));
+    const auto owner = static_cast<std::uint8_t>(ctx.rng().Below(20));
+    const auto extraTiles = static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? kExtraDone : ctx.rng().Below(0xfe));
     static constexpr std::uint8_t kStates[] = {0x20, 0x30, 0x40, 0x00, 0x30, 0x40, 0x50};
     const std::uint8_t state = static_cast<std::uint8_t>(kStates[ctx.rng().Below(sizeof(kStates))] |
                                                          (ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(16)));
-    worlds.Set<std::uint8_t>(record + kBuildingState, ctx.rng().Chance(1, 10) ? std::uint8_t{0} : state);
-    worlds.Set<std::uint8_t>(record + kBuildingByte36, static_cast<std::uint8_t>(0x10 + ctx.rng().Below(0x10)));
+    const std::uint8_t storedState = ctx.rng().Chance(1, 10) ? std::uint8_t{0} : state;
+    const auto byte36 = static_cast<std::uint8_t>(0x10 + ctx.rng().Below(0x10));
+    worlds.Both([&](GameWorld* w) {
+        record(w).art = type;
+        record(w).owner = owner;
+        record(w).extra_tiles = extraTiles;
+        record(w).state = storedState;
+        record(w).unk36 = byte36;
+    });
     if (const std::int32_t* offset = ExtraTilesOffset(type)) {
         // The building's position is a word: y = cy - dy must not be negative.
         const std::uint32_t cx = 4 + ctx.rng().Below(size - 8);
         const std::uint32_t cy = 8 + ctx.rng().Below(size - 12);
-        worlds.Set<std::uint16_t>(record + kBuildingX, static_cast<std::uint16_t>(cx - static_cast<std::uint32_t>(offset[0])));
-        worlds.Set<std::uint16_t>(record + kBuildingY, static_cast<std::uint16_t>(cy - static_cast<std::uint32_t>(offset[1])));
+        worlds.Both([&](GameWorld* w) {
+            record(w).x = static_cast<std::uint16_t>(cx - static_cast<std::uint32_t>(offset[0]));
+            record(w).y = static_cast<std::uint16_t>(cy - static_cast<std::uint32_t>(offset[1]));
+        });
     } else {
         const std::uint32_t d = ctx.rng().Below(6);
-        worlds.Set<std::uint16_t>(record + kBuildingDirection, static_cast<std::uint16_t>((d + 3) % 6 + 6 * ctx.rng().Below(100)));
+        const auto direction = static_cast<std::uint16_t>((d + 3) % 6 + 6 * ctx.rng().Below(100));
         const std::uint32_t tx = 4 + ctx.rng().Below(size - 8);
         const std::uint32_t ty = 4 + ctx.rng().Below(size - 8);
         const std::uint32_t sx = tx - 2 * static_cast<std::uint32_t>(kDirectionX[d]);
-        worlds.Set<std::uint16_t>(record + kBuildingShipX,
-                                  static_cast<std::uint16_t>(unset && ctx.rng().Chance(1, 10) ? 0xffff : sx));
-        worlds.Set<std::uint16_t>(record + kBuildingShipY,
-                                  static_cast<std::uint16_t>(ty - 2 * static_cast<std::uint32_t>(kDirectionY[d])));
-        worlds.Set<std::uint16_t>(Tile(tx, ty),
-                                  static_cast<std::uint16_t>(ctx.rng().Chance(1, 4) ? 1 + ctx.rng().Below(0x8000) : 0));
+        const auto shipX = static_cast<std::uint16_t>(unset && ctx.rng().Chance(1, 10) ? 0xffff : sx);
+        const auto shipY = static_cast<std::uint16_t>(ty - 2 * static_cast<std::uint32_t>(kDirectionY[d]));
+        const auto occupant = static_cast<std::uint16_t>(ctx.rng().Chance(1, 4) ? 1 + ctx.rng().Below(0x8000) : 0);
+        worlds.Both([&](GameWorld* w) {
+            record(w).unk22 = direction;
+            record(w).work_x = shipX;
+            record(w).work_y = shipY;
+            w->tiles[tx][ty].settler = occupant;
+        });
     }
     return building;
 }
 
 // Blocks the building's seven extra tiles (each 7 in 8) the way the game does.
 void BlockExtraTiles(test::Context& ctx, test::WorldPair& worlds, std::uint32_t building) {
-    const std::uint32_t record = Building(building);
-    const std::int32_t* offset = ExtraTilesOffset(At<std::uint8_t>(worlds.original(), record + kBuildingType));
+    const Building& record = worlds.original()->buildings[building];
+    const std::int32_t* offset = ExtraTilesOffset(record.art);
     if (offset == nullptr) {
         return;
     }
-    const std::uint32_t cx = At<std::uint16_t>(worlds.original(), record + kBuildingX) + static_cast<std::uint32_t>(offset[0]);
-    const std::uint32_t cy = At<std::uint16_t>(worlds.original(), record + kBuildingY) + static_cast<std::uint32_t>(offset[1]);
+    const std::uint32_t cx = record.x + static_cast<std::uint32_t>(offset[0]);
+    const std::uint32_t cy = record.y + static_cast<std::uint32_t>(offset[1]);
     for (const auto& step : kExtraTiles) {
         if (ctx.rng().Chance(7, 8)) {
             Original_GameWorld_BlockTile(worlds.original(), nullptr, cx + step[0], cy + step[1]);
@@ -1600,15 +1674,15 @@ void BlockExtraTiles(test::Context& ctx, test::WorldPair& worlds, std::uint32_t 
 
 // Wrong: never marks the building as done.
 std::uint32_t __fastcall WrongTakeBuildingExtraTiles(GameWorld* world, void* edx, std::uint32_t building) {
-    const std::uint8_t done = At<std::uint8_t>(world, Building(building) + kBuildingExtraDone);
+    const std::uint8_t done = world->buildings[building].extra_tiles;
     const std::uint32_t result = GameWorld_TakeBuildingExtraTiles(world, edx, building);
-    At<std::uint8_t>(world, Building(building) + kBuildingExtraDone) = done;
+    world->buildings[building].extra_tiles = done;
     return result;
 }
 
 // Wrong: type 0x2f has no extra tiles.
 std::uint32_t __fastcall WrongReleaseBuildingExtraTiles(GameWorld* world, void* edx, std::uint32_t building) {
-    std::uint8_t& type = At<std::uint8_t>(world, Building(building) + kBuildingType);
+    std::uint8_t& type = world->buildings[building].art;
     const std::uint8_t saved = type;
     if (type == 0x2f) {
         type = 0x2e;
@@ -1626,7 +1700,7 @@ void CompareExtraTiles(test::Context& ctx, Fn original, Fn candidate, int cases,
     std::size_t logged = 0;
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = 14 + ctx.rng().Below(8);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         SetUpExtraTilesMap(ctx, worlds, size);
         const std::uint32_t building = SetUpExtraTilesBuilding(ctx, worlds, size, !release);
         if (release) {
@@ -1641,7 +1715,7 @@ void CompareExtraTiles(test::Context& ctx, Fn original, Fn candidate, int cases,
         if (!S3RE_EXPECT_EQ(expected, actual) || !S3RE_EXPECT(expectedLogs == actualLogs) ||
             ((i % 4 == 3 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 3 before it): building %u type 0x%x map %u", i,
-                     building, At<std::uint8_t>(worlds.original(), Building(building) + kBuildingType), size);
+                     building, worlds.original()->buildings[building].art, size);
             return;
         }
     }
@@ -1650,18 +1724,16 @@ void CompareExtraTiles(test::Context& ctx, Fn original, Fn candidate, int cases,
 
 // Wrong: race 1 unblocks race 0's tile.
 std::uint32_t __fastcall WrongUnblockType12BuildingTiles(GameWorld* world, void* edx) {
-    for (std::uint32_t building = 1; building <= At<std::uint32_t>(world, kBuildingCount); ++building) {
-        const std::uint32_t record = Building(building);
-        if (At<std::uint8_t>(world, record + kBuildingType) == kType12) {
-            const std::int32_t race =
-                At<std::int32_t>(world, kPlayerRace + At<std::uint8_t>(world, record + kBuildingPlayer) * kPlayerRecordBytes);
+    for (std::uint32_t building = 1; building <= world->building_high_water; ++building) {
+        const Building& record = world->buildings[building];
+        if (record.art == kType12) {
+            const std::int32_t race = world->players[record.owner].race;
             if (race == 0 || race == 1) {
-                GameWorld_UnblockTile(world, edx, At<std::uint16_t>(world, record + kBuildingX) - 2,
-                                      At<std::uint16_t>(world, record + kBuildingY) + 3);
+                GameWorld_UnblockTile(world, edx, record.x - 2u, record.y + 3u);
             }
         }
     }
-    return At<std::uint32_t>(world, kBuildingCount);
+    return world->building_high_water;
 }
 
 void CompareUnblockType12(test::Context& ctx, WorldFn candidate, int cases) {
@@ -1669,22 +1741,25 @@ void CompareUnblockType12(test::Context& ctx, WorldFn candidate, int cases) {
     SetUpOffsets(worlds);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = 16 + ctx.rng().Below(8);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        worlds.Both([&](GameWorld* w) { w->map_size = size; });
         SetUpExtraTilesMap(ctx, worlds, size);
         const std::uint32_t count = ctx.rng().Chance(1, 10) ? 0 : 1 + ctx.rng().Below(5);
-        worlds.Set<std::uint32_t>(kBuildingCount, count);
+        worlds.Both([&](GameWorld* w) { w->building_high_water = count; });
         for (std::uint32_t building = 1; building <= count; ++building) {
-            const std::uint32_t record = Building(building);
-            worlds.Set<std::uint8_t>(record + kBuildingType,
-                                     static_cast<std::uint8_t>(ctx.rng().Chance(2, 3) ? kType12 : ctx.rng().Below(0x40)));
+            const auto type = static_cast<std::uint8_t>(ctx.rng().Chance(2, 3) ? kType12 : ctx.rng().Below(0x40));
             const std::uint32_t player = ctx.rng().Below(20);
-            worlds.Set<std::uint8_t>(record + kBuildingPlayer, static_cast<std::uint8_t>(player));
-            worlds.Set<std::int32_t>(kPlayerRace + player * kPlayerRecordBytes,
-                                     static_cast<std::int32_t>(ctx.rng().Chance(1, 6) ? ctx.rng().Below(4) : ctx.rng().Below(2)));
+            const auto race =
+                static_cast<std::int32_t>(ctx.rng().Chance(1, 6) ? ctx.rng().Below(4) : ctx.rng().Below(2));
             const std::uint32_t x = 5 + ctx.rng().Below(size - 8);
             const std::uint32_t y = 3 + ctx.rng().Below(size - 13);
-            worlds.Set<std::uint16_t>(record + kBuildingX, static_cast<std::uint16_t>(x));
-            worlds.Set<std::uint16_t>(record + kBuildingY, static_cast<std::uint16_t>(y));
+            worlds.Both([&](GameWorld* w) {
+                Building& record = w->buildings[building];
+                record.art = type;
+                record.owner = static_cast<std::uint8_t>(player);
+                w->players[player].race = race;
+                record.x = static_cast<std::uint16_t>(x);
+                record.y = static_cast<std::uint16_t>(y);
+            });
             const std::uint32_t targets[3][2] = {{x - 2, y + 3}, {x, y + 7}, {x, y + 6}};
             for (const auto& target : targets) {
                 if (ctx.rng().Chance(3, 4)) {
