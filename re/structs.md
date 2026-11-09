@@ -210,7 +210,7 @@ counting.cpp, area_split.cpp (Take/ReleaseBuildingExtraTiles), dump.
 | 0x08 | u16 | | non-zero in finished military buildings (2 and 60 in the dump); CountBuildingsWithWord8 | G (garrison?) |
 | 0x0A | u16 | door x | "tile B": the building's area is the area of this tile | V |
 | 0x0C | u16 | door y | | V |
-| 0x0E | u16 | | first pile of the building's ring of six (FetchGoodsToTradeBuilding); also used as a centre while under construction (DrawWorkAreaOverlay); set by AddBuildingSite 0x4DD280: 0xFF for type 1, x for types 2, 3, 5, 0x19, 0x1E, 0x33, x + 4/5/6 (clamped to the map) for types 0xE/0x18/0x24 (with +0x14 = y, y + 8/10/12) | V (uses) |
+| 0x0E | u16 | | first pile of the building's ring of six (FetchGoodsToTradeBuilding); also used as a centre while under construction (DrawWorkAreaOverlay); set by AddBuildingSite 0x4DD280: 0xFF for type 1, x for types 2, 3, 5, 0x19, 0x1E, 0x33, x + 4/5/6 (clamped to the map) for types 0xE/0x18/0x24 (with +0x14 = y, y + 8/10/12); PileNeighbourBuildingByteE 0x505FD0 reads only its low byte (`mov al, [..+0x1499E72]`), PileIncAmountLeaving 0x5058C0 the whole word | V (uses) |
 | 0x10 | u16 | pile 1 | input/construction pile numbers (BuildingPileHasGoods slot 1) | V |
 | 0x12 | u16 | pile 2 | slot 2 | V |
 | 0x14 | u16 | pile 3 | slot 3 | V |
@@ -378,6 +378,18 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   graphics id 0xD0031) and the tick; 0x5445E0 adds a record (it passes
   +0x10/+0x14 to 0x545EB0, probably a position). Meanings **G**; layout
   **V** (src/s3re/game/map_effects.cpp).
+  Field names in `layout.h` (`MapEffect`): +0x0 start_tick (0 = free
+  record; MapEffects_FindFreeSlot), +0x4 duration (i16), +0x8/+0xC
+  start_x/y, +0x10/+0x14 end_x/y (pixels; MapEffect_PositionAt
+  interpolates, MapEffects_Add files the record under the end position's
+  256-pixel block), +0x28 arc (i16 hop height), +0x40 list (block),
+  +0x44 previous, +0x48 next (MapEffect_SetLinks); the rest unkXX. Never
+  written by either constructor: +0x2A..+0x2B, +0x3B, +0x3E..+0x3F
+  (pad fields; the make functions copy stack garbage there). The table
+  (`MapEffectTable`): +0x5CC60 cell_heads[10000], +0x668A0 slots_used,
+  +0x668A4 blocks_x, +0x668A8 blocks_y, +0x668AC unknown, +0x668B0
+  block_count_16, +0x668B4 width, +0x668B8 height. **V** (layout, from
+  map_effects.cpp's verified functions), **S** (names).
 - **New game objectives** (world+0x1195DCC): byte +0x0 non-zero = enabled;
   bytes +0x1..+0x7 the seven chosen objective ids (1..34, drawn by 0x4FFBC0
   with Random, distinct, never 21, 25, 27..31, 33, 34; checked by

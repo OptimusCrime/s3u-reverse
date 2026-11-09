@@ -27,6 +27,8 @@
 //   reproduced anyway. ret 4.
 // All thiscall (ECX = world).
 
+
+#include "game/raw.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -36,54 +38,17 @@
 
 namespace s3re::game {
 
+using layout::Building;
+using layout::Pile;
+using layout::Tile;
+using layout::kTileHasBuilding;
+
 namespace {
 
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kTileBuilding = 0x2;
-constexpr std::uint32_t kTileOwner = 0x8;
-constexpr std::uint32_t kTileFlags = 0xa;
-constexpr std::uint8_t kTileHasBuilding = 0x20;
-
-constexpr std::uint32_t kPileCount = 0x1238858;
-constexpr std::uint32_t kPiles = 0x123885c;
-constexpr std::uint32_t kPileBytes = 14;
-constexpr std::uint32_t kPileGoods = 0x0;
-constexpr std::uint32_t kPileAmount = 0x1;
-constexpr std::uint32_t kPileKind = 0x4;
-constexpr std::uint32_t kPileX = 0x6;
-constexpr std::uint32_t kPileY = 0x8;
-
-constexpr std::uint32_t kBuildings = 0x1499e64;
-constexpr std::uint32_t kBuildingBytes = 0x3a;
-constexpr std::uint32_t kBuildingByteE = 0xe;
-constexpr std::uint32_t kBuildingPiles = 0x10;  // uint16[3]
-
-constexpr std::uint32_t kGoodsCounters = 0x11944b8;  // player 0; 0x148 bytes per player
-constexpr std::uint32_t kPlayers = 20;
-constexpr std::uint32_t kGoodsCounterDwords = 18;  // 36 uint16
-
-constexpr std::uint32_t kNeighbourOffsets = 0x110a588;  // int32 dx, dy; 16-byte stride
-constexpr std::uint32_t kNeighbourCount = 19;
+constexpr std::uint32_t kGoodsCounterDwords = sizeof(layout::Player::goods) / 4;  // 36 uint16 cleared as 18 dwords
+constexpr std::uint32_t kNeighbourCount = 19;  // the first 19 entries of world->offsets
 
 constexpr std::uint8_t kNone = 0xff;
-
-std::uint8_t* Bytes(GameWorld* world) {
-    return reinterpret_cast<std::uint8_t*>(world);
-}
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(Bytes(world) + offset);
-}
-
-std::uint32_t Tile(std::uint32_t x, std::uint32_t y) {
-    return kTiles + (x * 0x300 + y) * 24;
-}
-std::uint32_t Pile(std::uint32_t pile) {
-    return kPiles + pile * kPileBytes;
-}
-std::uint32_t Building(std::uint32_t building) {
-    return kBuildings + building * kBuildingBytes;
-}
 
 }  // namespace
 
@@ -101,36 +66,33 @@ std::uint32_t __fastcall GameWorld_BuildingPileHasGoods(GameWorld* world, void*,
     if (slot < 1 || slot > 3) {
         return 0;
     }
-    const std::uint16_t pile =
-        At<std::uint16_t>(world, Building(building) + kBuildingPiles + (slot - 1) * 2);
-    return pile != 0 && At<std::uint8_t>(world, Pile(pile) + kPileAmount) > 0 ? 1 : 0;
+    const std::uint16_t pile = world->buildings[building].piles[slot - 1];
+    return pile != 0 && world->piles[pile].amount > 0 ? 1 : 0;
 }
 
 namespace {
 
 std::uint32_t RecountPlayerGoods(GameWorld* world, std::uint8_t maxKind) {
-    for (std::uint32_t player = 0; player < kPlayers; ++player) {
+    for (std::uint32_t player = 0; player < layout::kPlayers; ++player) {
         for (std::uint32_t i = 0; i < kGoodsCounterDwords; ++i) {
-            At<std::uint32_t>(world, kGoodsCounters + player * world_offset::kPlayerRecordBytes +
-                                         i * 4) = 0;
+            // The original clears the 36 goods words as 18 dwords.
+            RawAt<std::uint32_t>(world->players[player].goods, i * 4) = 0;
         }
     }
-    std::uint32_t count = At<std::uint32_t>(world, kPileCount);
+    std::uint32_t count = world->pile_high_water;
     for (std::uint32_t pile = 1; pile <= count; ++pile) {
-        const std::uint32_t p = Pile(pile);
-        const std::uint8_t kind = At<std::uint8_t>(world, p + kPileKind);
-        const std::uint8_t goods = At<std::uint8_t>(world, p + kPileGoods);
+        const Pile& p = world->piles[pile];
+        const std::uint8_t kind = p.art;
+        const std::uint8_t goods = p.good;
         if ((kind <= maxKind || kind == 0xfe) && goods != kNone) {
-            const std::uint8_t owner = At<std::uint8_t>(
-                world, Tile(At<std::uint16_t>(world, p + kPileX), At<std::uint16_t>(world, p + kPileY)) +
-                           kTileOwner);
+            const std::uint8_t owner = world->tiles[p.x][p.y].owner;
             if (owner != kNone) {
-                std::uint16_t& counter = At<std::uint16_t>(
-                    world, kGoodsCounters + (goods + owner * 164u) * 2u);
-                counter = static_cast<std::uint16_t>(counter + At<std::uint8_t>(world, p + kPileAmount));
+                // goods <= 0xfe and owner <= 0xfe are not range-checked, as in the original.
+                std::uint16_t& counter = world->players[owner].goods[goods];
+                counter = static_cast<std::uint16_t>(counter + p.amount);
             }
         }
-        count = At<std::uint32_t>(world, kPileCount);  // re-read every step, as the original
+        count = world->pile_high_water;  // re-read every step, as the original
     }
     return count;
 }
@@ -147,22 +109,24 @@ std::uint32_t __fastcall GameWorld_RecountPlayerGoods(GameWorld* world, void*) {
 // Probably tells which building a pile belongs to.
 std::uint32_t __fastcall GameWorld_PileNeighbourBuildingByteE(GameWorld* world, void*,
                                                               std::uint32_t pile) {
-    const std::uint32_t p = Pile(pile);
+    const Pile& p = world->piles[pile];
     std::uint32_t building = 0;
     for (std::uint32_t i = 0; i < kNeighbourCount && building == 0; ++i) {
-        const std::uint32_t entry = kNeighbourOffsets + i * 16;
-        const std::uint32_t tile =
-            Tile(At<std::uint16_t>(world, p + kPileX) + At<std::uint32_t>(world, entry),
-                 At<std::uint16_t>(world, p + kPileY) + At<std::uint32_t>(world, entry + 4));
-        const std::uint16_t found = At<std::uint16_t>(world, tile + kTileBuilding);
-        if (found != 0 && (At<std::uint8_t>(world, tile + kTileFlags) & kTileHasBuilding) != 0) {
+        const layout::MapOffset& offset = world->offsets[i];
+        // 32-bit coordinates (the neighbour can lie off the map): tile offset as in the original.
+        const Tile& tile = TileAtOffset(world, TileOffset(p.x + static_cast<std::uint32_t>(offset.dx),
+                                                          p.y + static_cast<std::uint32_t>(offset.dy)));
+        const std::uint16_t found = tile.object_number;
+        if (found != 0 && (tile.flags & kTileHasBuilding) != 0) {
             building = found;
         }
     }
     if (building == 0) {
         return kNone;  // the original: loop counter 0x13 | 0xff
     }
-    return ((building * 7) & 0xffffff00u) | At<std::uint8_t>(world, Building(building) + kBuildingByteE);
+    // The original reads only the low byte of the word +0xe (pile_ring).
+    const std::uint8_t byteE = *reinterpret_cast<const std::uint8_t*>(&world->buildings[building].pile_ring);
+    return ((building * 7) & 0xffffff00u) | byteE;
 }
 
 S3RE_HOOK(0x004df9b0, GameWorld_BuildingPileHasGoods, PileSlotFn,
@@ -181,21 +145,27 @@ namespace {
 constexpr std::uint32_t kTestBuildings = 2000;
 constexpr std::uint32_t kTestPiles = 3000;
 // Building numbers come from random tile words (up to 0xffff).
-constexpr std::size_t kTestWorld = kBuildings + 0x10000 * kBuildingBytes;
+constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + 0x10000 * sizeof(Building);
 
 std::uint16_t Coordinate(test::Context& ctx) {
     return static_cast<std::uint16_t>(ctx.rng().Below(384));
 }
 
 void PlacePile(test::Context& ctx, test::WorldPair& worlds, std::uint32_t pile) {
-    worlds.Set<std::uint16_t>(Pile(pile) + kPileX, Coordinate(ctx));
-    worlds.Set<std::uint16_t>(Pile(pile) + kPileY, Coordinate(ctx));
+    const std::uint16_t x = Coordinate(ctx);
+    const std::uint16_t y = Coordinate(ctx);
+    worlds.Both([&](GameWorld* w) {
+        w->piles[pile].x = x;
+        w->piles[pile].y = y;
+    });
     if (ctx.rng().Chance(1, 4)) {
         static constexpr std::uint8_t kKinds[] = {0, 8, 9, 0xfe, 0xfd, 0xff};
-        worlds.Set<std::uint8_t>(Pile(pile) + kPileKind, kKinds[ctx.rng().Below(6)]);
+        const std::uint8_t kind = kKinds[ctx.rng().Below(6)];
+        worlds.Both([&](GameWorld* w) { w->piles[pile].art = kind; });
     }
     if (ctx.rng().Chance(1, 2)) {  // a real goods type (else random, often > 36)
-        worlds.Set<std::uint8_t>(Pile(pile) + kPileGoods, static_cast<std::uint8_t>(ctx.rng().Below(36)));
+        const auto goods = static_cast<std::uint8_t>(ctx.rng().Below(36));
+        worlds.Both([&](GameWorld* w) { w->piles[pile].good = goods; });
     }
 }
 
@@ -211,8 +181,9 @@ void CompareSlot(test::Context& ctx, PileSlotFn original, PileSlotFn candidate, 
             return;
         }
         if (i % 16 == 15) {  // new random pile amounts and numbers
-            worlds.Set<std::uint8_t>(Pile(ctx.rng().Below(0x10000)) + kPileAmount,
-                                     ctx.rng().Chance(1, 2) ? 0 : 1);
+            const std::uint32_t pile = ctx.rng().Below(0x10000);
+            const std::uint8_t amount = ctx.rng().Chance(1, 2) ? 0 : 1;
+            worlds.Both([&](GameWorld* w) { w->piles[pile].amount = amount; });
         }
     }
     worlds.Checkpoint(ctx);
@@ -222,7 +193,7 @@ void CompareRecount(test::Context& ctx, RecountFn original, RecountFn candidate,
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t count = ctx.rng().Below(kTestPiles);
-        worlds.Set<std::uint32_t>(kPileCount, count);
+        worlds.Both([&](GameWorld* w) { w->pile_high_water = count; });
         for (std::uint32_t pile = 1; pile <= count; ++pile) {
             PlacePile(ctx, worlds, pile);
         }
@@ -241,22 +212,24 @@ void CompareNeighbour(test::Context& ctx, PileFn original, PileFn candidate, int
         const std::uint32_t pile = 1 + ctx.rng().Below(kTestPiles);
         PlacePile(ctx, worlds, pile);
         for (std::uint32_t k = 0; k < kNeighbourCount; ++k) {
-            worlds.Set<std::int32_t>(kNeighbourOffsets + k * 16, ctx.rng().Range(-3, 3));
-            worlds.Set<std::int32_t>(kNeighbourOffsets + k * 16 + 4, ctx.rng().Range(-3, 3));
+            const std::int32_t dx = ctx.rng().Range(-3, 3);
+            const std::int32_t dy = ctx.rng().Range(-3, 3);
+            worlds.Both([&](GameWorld* w) {
+                w->offsets[k].dx = dx;
+                w->offsets[k].dy = dy;
+            });
         }
         // Tiles mostly without a building, so that later offsets get used.
         for (std::uint32_t k = 0; k < kNeighbourCount; ++k) {
-            const std::uint32_t tile =
-                Tile(At<std::uint16_t>(worlds.original(), Pile(pile) + kPileX) +
-                         At<std::uint32_t>(worlds.original(), kNeighbourOffsets + k * 16),
-                     At<std::uint16_t>(worlds.original(), Pile(pile) + kPileY) +
-                         At<std::uint32_t>(worlds.original(), kNeighbourOffsets + k * 16 + 4));
+            GameWorld* const w0 = worlds.original();
+            const std::uint32_t tile = TileOffset(w0->piles[pile].x + static_cast<std::uint32_t>(w0->offsets[k].dx),
+                                                  w0->piles[pile].y + static_cast<std::uint32_t>(w0->offsets[k].dy));
             if (ctx.rng().Chance(7, 8)) {
-                worlds.Set<std::uint8_t>(tile + kTileFlags,
-                                         static_cast<std::uint8_t>(ctx.rng().Next32() & ~kTileHasBuilding));
+                const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32() & ~kTileHasBuilding);
+                worlds.Both([&](GameWorld* w) { TileAtOffset(w, tile).flags = flags; });
             }
             if (ctx.rng().Chance(1, 4)) {
-                worlds.Set<std::uint16_t>(tile + kTileBuilding, 0);
+                worlds.Both([&](GameWorld* w) { TileAtOffset(w, tile).object_number = 0; });
             }
         }
         const std::uint32_t expected = original(worlds.original(), nullptr, pile);
