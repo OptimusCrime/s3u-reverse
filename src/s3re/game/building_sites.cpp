@@ -95,6 +95,7 @@
 //   5, 15, 20, 10; otherwise anything. EAX 1 or 0. ret 0x10.
 
 #include "game/debug_log.h"
+#include "game/raw.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
@@ -103,6 +104,7 @@
 #include "test/world_buffer.h"
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -111,43 +113,23 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kMapSize = 0x2d2d0;
+using layout::Building;
+using layout::MapOffset;
+using layout::PlayerSiteCache;
+using layout::Tile;
 
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kTileBytes = 24;
-constexpr std::uint32_t kTileObjectNumber = 0x2;  // uint16: building or pile
-constexpr std::uint32_t kTileHeight = 0x4;
-constexpr std::uint32_t kTileTerrain = 0x6;
-constexpr std::uint32_t kTileObject = 0x7;
-constexpr std::uint32_t kTileOwner = 0x8;
-constexpr std::uint32_t kTileFlags = 0xa;
-constexpr std::uint32_t kTileResources = 0x11;  // high nibble kind, low nibble amount
-constexpr std::uint32_t kTileArea = 0x14;
-constexpr std::uint8_t kFlagBlocked = 0x01;
+constexpr std::uint8_t kFlagBlocked = layout::kTileBlocked;
 constexpr std::uint8_t kFlagLevelling = 0x04;
-constexpr std::uint8_t kFlagFootprint = 0x08;
-constexpr std::uint8_t kFlagBuilding = 0x20;
+constexpr std::uint8_t kFlagFootprint = layout::kTileBuildingFootprint;
+constexpr std::uint8_t kFlagBuilding = layout::kTileHasBuilding;
 
-constexpr std::uint32_t kPlayers = 0x11943dc;
-constexpr std::uint32_t kPlayerBytes = 0x148;
-constexpr std::uint32_t kPlayerRace = 0x4;
-constexpr std::uint32_t kPlayerSiteCountdown = 0x84;
-
-constexpr std::uint32_t kOffsetTable = 0x110a588;  // int32 dx, dy, ring, sector
-constexpr std::uint32_t kOffsetBytes = 16;
-
-constexpr std::uint32_t kSiteCache = 0x1196024;  // 20 players x 30 slots x 962 bytes
-constexpr std::uint32_t kSiteCacheBytes = 962;
 constexpr std::uint32_t kSiteSlots = 30;
 
-constexpr std::uint32_t kHeightGrid = 0x1222ed4;  // 31 x 31 bytes
-constexpr std::uint32_t kStateGrid = 0x1223295;   // 31 x 31 bytes
+// The levelling window: two 31 x 31 byte grids in GameWorld::footprint_scratch
+// (heights at world+0x1222ed4, states at world+0x1223295).
 constexpr std::int32_t kGrid = 31;
 constexpr std::int32_t kGridCentre = 15;
 
-constexpr std::uint32_t kBuildingHighWater = 0x1499e60;
-constexpr std::uint32_t kBuildings = 0x1499e64;
-constexpr std::uint32_t kBuildingBytes = 0x3a;
 constexpr std::uint32_t kBuildingLimit = 0xf9f;
 
 constexpr std::uintptr_t kLayouts = 0x006aa170;
@@ -167,34 +149,13 @@ constexpr std::uintptr_t kIllegalOffsetMessage = 0x006a587c;  // "illegal buildi
 // Ground requirements (CheckBuildingSite).
 enum class SiteGroup { kPlain, kRace1, kRace2, kMine };
 
-std::uint8_t* Bytes(GameWorld* world) {
-    return reinterpret_cast<std::uint8_t*>(world);
-}
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(Bytes(world) + offset);
-}
-
 // Tile (x, y); the index wraps in 32 bits like the original's.
-std::uint8_t* Tile(GameWorld* world, std::uint32_t x, std::uint32_t y) {
-    return Bytes(world) + kTiles + (x * 0x300u + y) * kTileBytes;
-}
-std::uint16_t TileWord(const std::uint8_t* tile, std::uint32_t field) {
-    std::uint16_t value;
-    std::memcpy(&value, tile + field, sizeof(value));
-    return value;
-}
-
-std::uint8_t* Building(GameWorld* world, std::uint32_t building) {
-    return Bytes(world) + kBuildings + building * kBuildingBytes;
-}
-template <typename T>
-void Put(std::uint8_t* record, std::uint32_t field, T value) {
-    std::memcpy(record + field, &value, sizeof(T));
+Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+    return TileAtOffset(world, TileOffset(x, y));
 }
 
 std::uint32_t PlayerRace(GameWorld* world, std::uint32_t player) {
-    return At<std::uint32_t>(world, kPlayers + player * kPlayerBytes + kPlayerRace);
+    return static_cast<std::uint32_t>(world->players[player].race);
 }
 
 const std::uint32_t* Layout(std::uint32_t race, std::uint32_t type) {
@@ -212,12 +173,20 @@ bool IsMine(std::uint32_t type) {
     return type == 7 || type == 9 || type == 8 || type == 0x25 || type == 0x1d || type == 0x38;
 }
 
-// The levelling window: cell [i][j] is tile (x - 15 + i, y - 15 + j).
+// The levelling window: cell [i][j] (index i * 31 + j) is tile
+// (x - 15 + i, y - 15 + j). The index may lie outside 0..960 for odd
+// layouts; the original's address arithmetic is the same.
+std::uint8_t& HeightCell(GameWorld* world, std::int32_t cell) {
+    return world->footprint_scratch[0][cell];
+}
+std::uint8_t& StateCell(GameWorld* world, std::int32_t cell) {
+    return world->footprint_scratch[1][cell];
+}
 std::uint8_t& HeightCell(GameWorld* world, std::int32_t i, std::int32_t j) {
-    return At<std::uint8_t>(world, kHeightGrid + i * kGrid + j);
+    return HeightCell(world, i * kGrid + j);
 }
 std::uint8_t& StateCell(GameWorld* world, std::int32_t i, std::int32_t j) {
-    return At<std::uint8_t>(world, kStateGrid + i * kGrid + j);
+    return StateCell(world, i * kGrid + j);
 }
 
 constexpr std::uint8_t kCellFree = 0;
@@ -282,15 +251,15 @@ std::uint32_t __fastcall GameWorld_PlanSiteLevelling(GameWorld* world, void* /*e
                                                      std::uint32_t y, std::uint32_t type, std::uint32_t player,
                                                      std::uint32_t height) {
     std::memset(&StateCell(world, 0, 0), kCellFree, kGrid * kGrid);
-    const std::uint32_t mapSize = At<std::uint32_t>(world, kMapSize);
+    const std::uint32_t mapSize = world->map_size;
     for (std::int32_t j = 0; j < kGrid; ++j) {
         for (std::int32_t i = 0; i < kGrid; ++i) {
             const std::uint32_t tx = x - kGridCentre + i;
             const std::uint32_t ty = y - kGridCentre + j;
-            const std::uint8_t* tile = Tile(world, tx, ty);
-            HeightCell(world, i, j) = tile[kTileHeight];
+            const Tile& tile = TileAt(world, tx, ty);
+            HeightCell(world, i, j) = tile.height;
             const bool edge = tx >= mapSize || ty >= mapSize || i == 0 || j == 0 || i == kGrid - 1 || j == kGrid - 1;
-            const std::uint8_t flags = tile[kTileFlags];
+            const std::uint8_t flags = tile.flags;
             if (!edge && (flags & kFlagLevelling) != 0) {
                 // Another site is levelling this tile: keep it and its neighbours.
                 StateCell(world, i, j) = kCellFixed;
@@ -300,8 +269,8 @@ std::uint32_t __fastcall GameWorld_PlanSiteLevelling(GameWorld* world, void* /*e
                 StateCell(world, i, j - 1) = kCellFixed;
                 StateCell(world, i + 1, j + 1) = kCellFixed;
                 StateCell(world, i - 1, j - 1) = kCellFixed;
-            } else if (edge || (flags & (kFlagBlocked | kFlagFootprint)) != 0 || tile[kTileOwner] != player ||
-                       (tile[kTileTerrain] & 0xf0) == 0x30) {
+            } else if (edge || (flags & (kFlagBlocked | kFlagFootprint)) != 0 || tile.owner != player ||
+                       (tile.terrain & 0xf0) == 0x30) {
                 StateCell(world, i, j) = kCellFixed;
             }
         }
@@ -316,8 +285,8 @@ std::uint32_t __fastcall GameWorld_PlanSiteLevelling(GameWorld* world, void* /*e
         const std::int32_t cell = static_cast<std::int32_t>(p[0]) * kGrid + static_cast<std::int32_t>(p[1]) +
                                   kGridCentre * kGrid + kGridCentre;
         p += 2;
-        At<std::uint8_t>(world, kHeightGrid + cell) = static_cast<std::uint8_t>(height);
-        At<std::uint8_t>(world, kStateGrid + cell) = kCellPending;
+        HeightCell(world, cell) = static_cast<std::uint8_t>(height);
+        StateCell(world, cell) = kCellPending;
     }
 
     // Spread the slope limits outwards until nothing changes.
@@ -356,7 +325,7 @@ std::uint32_t __fastcall GameWorld_PlanSiteLevelling(GameWorld* world, void* /*e
     for (std::int32_t j = 1; j < kGrid - 1; ++j) {
         for (std::int32_t i = 1; i < kGrid - 1; ++i) {
             const std::int32_t planned = HeightCell(world, i, j);
-            const std::int32_t current = Tile(world, x - kGridCentre + i, y - kGridCentre + j)[kTileHeight];
+            const std::int32_t current = TileAt(world, x - kGridCentre + i, y - kGridCentre + j).height;
             earth += static_cast<std::uint32_t>(planned > current ? planned - current : current - planned);
         }
     }
@@ -369,90 +338,97 @@ std::uint32_t __fastcall GameWorld_PlanSiteLevelling(GameWorld* world, void* /*e
 std::uint32_t __fastcall GameWorld_AddBuildingSite(GameWorld* world, void* /*edx*/, std::uint32_t x,
                                                    std::uint32_t y, std::uint32_t player, std::uint32_t type) {
     std::uint32_t building = 1;
-    while (Building(world, building)[0] != 0xff && building != kBuildingLimit) {
+    while (world->buildings[building].owner != 0xff && building != kBuildingLimit) {
         ++building;
     }
     if (building == kBuildingLimit) {
         return 0;
     }
-    if (building > At<std::uint32_t>(world, kBuildingHighWater)) {
-        At<std::uint32_t>(world, kBuildingHighWater) = building;
+    if (building > world->building_high_water) {
+        world->building_high_water = building;
     }
 
-    std::uint8_t* const b = Building(world, building);
-    std::uint8_t* const playerRecord = Bytes(world) + kPlayers + player * kPlayerBytes;
-    const std::uint32_t race = At<std::uint32_t>(world, kPlayers + player * kPlayerBytes + kPlayerRace);
+    Building& b = world->buildings[building];
+    layout::Player& playerRecord = world->players[player];
+    const std::uint32_t race = static_cast<std::uint32_t>(playerRecord.race);
     const std::uint32_t* const layout = Layout(race, type);
 
-    Put<std::uint16_t>(b, 0x02, static_cast<std::uint16_t>(x));
-    Put<std::uint16_t>(b, 0x04, static_cast<std::uint16_t>(y));
-    b[0x00] = static_cast<std::uint8_t>(player);
-    b[0x07] = static_cast<std::uint8_t>(race);
-    b[0x06] = static_cast<std::uint8_t>(type);
-    b[0x21] = 1;  // buildup: a construction site
-    for (std::uint32_t field = 0x0e; field <= 0x14; field += 2) {
-        Put<std::uint16_t>(b, field, 0);
+    b.x = static_cast<std::uint16_t>(x);
+    b.y = static_cast<std::uint16_t>(y);
+    b.owner = static_cast<std::uint8_t>(player);
+    b.unk07 = static_cast<std::uint8_t>(race);  // the owner's race
+    b.art = static_cast<std::uint8_t>(type);
+    b.buildup = 1;  // a construction site
+    // Words +0x0e..+0x14.
+    b.pile_ring = 0;
+    b.piles[0] = 0;
+    b.piles[1] = 0;
+    b.piles[2] = 0;
+    b.unk16 = 0;
+    b.unk17 = 0;
+    b.request_flags = 1;
+    b.unk19 = static_cast<std::uint8_t>(static_cast<std::int32_t>(layout[1]) >> 8);  // materials
+    b.unk1a = static_cast<std::uint8_t>(layout[1]);
+    b.unk1b[0] = 0;
+    b.unk1b[1] = 0;
+    b.unk1b[2] = 0;
+    b.unk1b[3] = 0;
+    b.state = static_cast<std::uint8_t>(b.unk19 + b.unk1a);
+    b.extra_tiles = 0;
+    // Words +0x24..+0x34.
+    for (std::uint16_t& word : b.input_amount) {
+        word = 0;
     }
-    b[0x16] = 0;
-    b[0x17] = 0;
-    b[0x18] = 1;
-    b[0x19] = static_cast<std::uint8_t>(static_cast<std::int32_t>(layout[1]) >> 8);  // materials
-    b[0x1a] = static_cast<std::uint8_t>(layout[1]);
-    b[0x1b] = 0;
-    b[0x1c] = 0;
-    b[0x1d] = 0;
-    b[0x1e] = 0;
-    b[0x1f] = static_cast<std::uint8_t>(b[0x19] + b[0x1a]);
-    b[0x20] = 0;
-    for (std::uint32_t field = 0x24; field <= 0x34; field += 2) {
-        Put<std::uint16_t>(b, field, 0);
+    for (std::uint16_t& word : b.input_next) {
+        word = 0;
     }
-    b[0x36] = 0;
+    b.work_x = 0;
+    b.work_y = 0;
+    b.trade = 0;
+    b.unk36 = 0;
 
-    std::uint32_t countdown;
-    std::memcpy(&countdown, playerRecord + kPlayerSiteCountdown, sizeof(countdown));
+    // The player's countdown (int32 +0x84), used as uint32 like the original.
+    std::uint32_t countdown = static_cast<std::uint32_t>(playerRecord.unk084);
     countdown -= 1;
     if (countdown <= 60000) {
         countdown = 0xffff;
     }
-    std::memcpy(playerRecord + kPlayerSiteCountdown, &countdown, sizeof(countdown));
-    Put<std::uint16_t>(b, 0x32, static_cast<std::uint16_t>(countdown));
-    Put<std::uint16_t>(b, 0x08, 0);
+    playerRecord.unk084 = static_cast<std::int32_t>(countdown);
+    b.work_y = static_cast<std::uint16_t>(countdown);
+    b.unk08 = 0;
 
-    std::uint8_t* const tile = Tile(world, x, y);
-    Put<std::uint16_t>(tile, kTileObjectNumber, static_cast<std::uint16_t>(building));
-    tile[kTileFlags] |= kFlagBuilding;
+    Tile& tile = TileAt(world, x, y);
+    tile.object_number = static_cast<std::uint16_t>(building);
+    tile.flags |= kFlagBuilding;
 
     // The door, then the tiles listed after it (the door included).
-    const std::uint32_t* p = After(Layout(b[0x07], type), kMarkDoor);
+    const std::uint32_t* p = After(Layout(b.unk07, type), kMarkDoor);
     const std::uint16_t doorX = static_cast<std::uint16_t>(p[0] + x);
     const std::uint16_t doorY = static_cast<std::uint16_t>(p[1] + y);
-    Put<std::uint16_t>(b, 0x0a, doorX);
-    Put<std::uint16_t>(b, 0x0c, doorY);
+    b.door_x = doorX;
+    b.door_y = doorY;
     const bool clearsObjects = type == 1 || type == 5 || type == 6 || type == 0xf || type == 0x10 || type == 0x12 ||
                                type == 0x13 || type == 0x1a || type == 0x1b || type == 0x1c || type == 0x1f ||
                                type == 0x20 || type == 0x21 || (type >= 0x29 && type <= 0x32) || type == 0x36 ||
                                type == 0x37;
     for (; *p != kMarkFootprint; p += 2) {
         if (clearsObjects) {
-            Tile(world, x + p[0], y + p[1])[kTileObject] = 0xff;
+            TileAt(world, x + p[0], y + p[1]).object = 0xff;
         }
     }
 
     // Empty construction piles left and right of the door.
-    Put<std::uint16_t>(b, 0x10,
-                       static_cast<std::uint16_t>(GameWorld_CreatePile(world, nullptr, doorX - 1u, doorY, 1, 0, 0xfd)));
-    Put<std::uint16_t>(b, 0x12,
-                       static_cast<std::uint16_t>(GameWorld_CreatePile(world, nullptr, doorX + 1u, doorY, 2, 0, 0xfd)));
+    b.piles[0] = static_cast<std::uint16_t>(GameWorld_CreatePile(world, nullptr, doorX - 1u, doorY, 1, 0, 0xfd));
+    b.piles[1] = static_cast<std::uint16_t>(GameWorld_CreatePile(world, nullptr, doorX + 1u, doorY, 2, 0, 0xfd));
 
-    // Work centre.
+    // Work centre: words +0x0e (x) and +0x14 (y) of a construction site.
     if (type == 1) {
-        Put<std::uint16_t>(b, 0x0e, 0xff);
+        b.pile_ring = 0xff;
         return building;
     }
     if (type == 2 || type == 3 || type == 5 || type == 0x19 || type == 0x1e || type == 0x33) {
-        Put<std::uint16_t>(b, 0x0e, static_cast<std::uint16_t>(x));
-        Put<std::uint16_t>(b, 0x14, static_cast<std::uint16_t>(y));
+        b.pile_ring = static_cast<std::uint16_t>(x);
+        b.piles[2] = static_cast<std::uint16_t>(y);
     }
     std::int32_t dx = 0;
     std::int32_t dy = 0;
@@ -467,7 +443,7 @@ std::uint32_t __fastcall GameWorld_AddBuildingSite(GameWorld* world, void* /*edx
         dy = 12;
     }
     if (dx != 0) {
-        const std::int32_t mapSize = At<std::int32_t>(world, kMapSize);
+        const auto mapSize = static_cast<std::int32_t>(world->map_size);
         std::int32_t cx = static_cast<std::uint16_t>(x) + dx;
         std::int32_t cy = static_cast<std::uint16_t>(y) + dy;
         if (cx >= mapSize) {
@@ -476,8 +452,8 @@ std::uint32_t __fastcall GameWorld_AddBuildingSite(GameWorld* world, void* /*edx
         if (cy >= mapSize) {
             cy = mapSize - 1;
         }
-        Put<std::uint16_t>(b, 0x0e, static_cast<std::uint16_t>(cx));
-        Put<std::uint16_t>(b, 0x14, static_cast<std::uint16_t>(cy));
+        b.pile_ring = static_cast<std::uint16_t>(cx);
+        b.piles[2] = static_cast<std::uint16_t>(cy);
     }
     return building;
 }
@@ -486,12 +462,12 @@ namespace {
 
 // Whether a footprint or border tile suits the building: owned by `owner`,
 // free and in the building's area, on the right ground for the group.
-bool TileSuitsSite(const std::uint8_t* tile, std::uint32_t owner, std::uint32_t area, SiteGroup group,
-                   bool checkGround, bool mineCentre) {
-    if (tile[kTileOwner] != owner) {
+bool TileSuitsSite(const Tile& tile, std::uint32_t owner, std::uint32_t area, SiteGroup group, bool checkGround,
+                   bool mineCentre) {
+    if (tile.owner != owner) {
         return false;
     }
-    const std::uint8_t ground = tile[kTileTerrain] & 0xf0;
+    const std::uint8_t ground = tile.terrain & 0xf0;
     switch (group) {
         case SiteGroup::kPlain:
             if (ground != 0x10) {
@@ -515,8 +491,8 @@ bool TileSuitsSite(const std::uint8_t* tile, std::uint32_t owner, std::uint32_t 
             }
             break;
     }
-    return (tile[kTileFlags] & (kFlagBlocked | kFlagLevelling | kFlagFootprint)) == 0 &&
-           TileWord(tile, kTileArea) == area && TileWord(tile, kTileObjectNumber) == 0;
+    return (tile.flags & (kFlagBlocked | kFlagLevelling | kFlagFootprint)) == 0 && tile.area == area &&
+           tile.object_number == 0;
 }
 
 std::uint32_t EarthClass(std::uint32_t earth) {
@@ -563,11 +539,11 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
         group = SiteGroup::kMine;
     }
 
-    const std::uint32_t mapSize = At<std::uint32_t>(world, kMapSize);
+    const std::uint32_t mapSize = world->map_size;
     if (x < 15 || x > mapSize - 16 || y < 15 || y > mapSize - 16) {
         return 0;
     }
-    const std::uint32_t area = TileWord(Tile(world, x, y), kTileArea);
+    const std::uint32_t area = TileAt(world, x, y).area;
 
     bool unsuitable = false;
     std::uint32_t heightSum = 0;
@@ -580,11 +556,11 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
         const std::int32_t dx = static_cast<std::int32_t>(p[0]);
         const std::int32_t dy = static_cast<std::int32_t>(p[1]);
         p += 2;
-        const std::uint8_t* tile = Tile(world, x + dx, y + dy);
+        const Tile& tile = TileAt(world, x + dx, y + dy);
         if (!TileSuitsSite(tile, owner, area, group, true, dx == 0 && dy == 0)) {
             unsuitable = true;
         } else if (group != SiteGroup::kMine) {
-            heightSum += tile[kTileHeight];
+            heightSum += tile.height;
             ++tileCount;
         }
     }
@@ -596,7 +572,7 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
         if (GameWorld_IsOnMap(world, nullptr, tx, ty) == 0) {
             GameDebugLog(kIllegalOffsetMessage, x, y, dx, dy);
         }
-        if (!TileSuitsSite(Tile(world, tx, ty), owner, area, group, false, false)) {
+        if (!TileSuitsSite(TileAt(world, tx, ty), owner, area, group, false, false)) {
             unsuitable = true;
         }
     }
@@ -606,26 +582,21 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
 
     if (type == 0x20 || type == 0x21) {
         // Needs water (terrain 4) within distance 20.
-        const std::uint8_t* entry = Bytes(world) + kOffsetTable;
-        auto field = [](const std::uint8_t* e, std::uint32_t offset) {
-            std::int32_t value;
-            std::memcpy(&value, e + offset, sizeof(value));
-            return value;
-        };
-        if (field(entry, 8) > 20) {
+        const MapOffset* entry = world->offsets;
+        if (entry->distance > 20) {
             return 0;
         }
         bool water = false;
         do {
-            const std::int32_t tx = static_cast<std::int32_t>(x) + field(entry, 0);
-            const std::int32_t ty = static_cast<std::int32_t>(y) + field(entry, 4);
+            const std::int32_t tx = static_cast<std::int32_t>(x) + entry->dx;
+            const std::int32_t ty = static_cast<std::int32_t>(y) + entry->dy;
             const std::int32_t size = static_cast<std::int32_t>(mapSize);
             if (tx >= 0 && tx < size && ty >= 0 && ty < size &&
-                Tile(world, static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty))[kTileTerrain] == 4) {
+                TileAt(world, static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty)).terrain == 4) {
                 water = true;
             }
-            entry += kOffsetBytes;
-        } while (field(entry, 8) <= 20);
+            ++entry;
+        } while (entry->distance <= 20);
         if (!water) {
             return 0;
         }
@@ -646,8 +617,7 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
     // Place the construction site.
     std::uint32_t slot = 0;
     if (group != SiteGroup::kMine) {
-        while (slot < kSiteSlots &&
-               At<std::uint8_t>(world, kSiteCache + (player * kSiteSlots + slot) * kSiteCacheBytes) != 0) {
+        while (slot < kSiteSlots && world->site_cache[player][slot].valid != 0) {
             ++slot;
         }
         if (slot == kSiteSlots) {
@@ -661,8 +631,8 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
     GameWorld_QueuePendingEvent(world, nullptr, 2, building, 0);
 
     const std::uint32_t* const layout = Layout(PlayerRace(world, player), type);
-    std::uint8_t* const b = Building(world, building);
-    b[0x1c] = static_cast<std::uint8_t>(layout[0]);
+    Building& b = world->buildings[building];
+    b.unk1b[1] = static_cast<std::uint8_t>(layout[0]);  // +0x1c
 
     // Footprint and border tiles get the footprint flag; per direction
     // sector the outermost tile of the first part of the footprint gets a stake.
@@ -681,69 +651,59 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
         }
         const std::int32_t dx = static_cast<std::int32_t>(p[0]);
         const std::int32_t dy = static_cast<std::int32_t>(p[1]);
-        Tile(world, x + dx, y + dy)[kTileFlags] |= kFlagFootprint;
+        TileAt(world, x + dx, y + dy).flags |= kFlagFootprint;
         if (!stakeCandidates || (dx == 0 && dy == 0)) {
             continue;
         }
-        const std::uint8_t* entry = Bytes(world) + kOffsetTable;
-        for (;;) {
-            std::int32_t ex;
-            std::int32_t ey;
-            std::memcpy(&ex, entry, sizeof(ex));
-            std::memcpy(&ey, entry + 4, sizeof(ey));
-            if (ex == dx && ey == dy) {
-                break;
-            }
-            entry += kOffsetBytes;
+        const MapOffset* entry = world->offsets;
+        while (entry->dx != dx || entry->dy != dy) {
+            ++entry;
         }
-        std::uint32_t ring;
-        std::uint32_t sector;
-        std::memcpy(&ring, entry + 8, sizeof(ring));
-        std::memcpy(&sector, entry + 12, sizeof(sector));
+        const auto ring = static_cast<std::uint32_t>(entry->distance);
+        const auto sector = static_cast<std::uint32_t>(entry->sector);
         if (ring >= stakes[sector].ring) {
             stakes[sector] = {ring, dx, dy};
         }
     }
     for (const Stake& stake : stakes) {
         if (stake.ring >= 1) {
-            Tile(world, x + stake.dx, y + stake.dy)[kTileObject] = 0x71;
+            TileAt(world, x + stake.dx, y + stake.dy).object = 0x71;
         }
     }
-    Tile(world, x, y)[kTileObject] = 0x70;
+    TileAt(world, x, y).object = 0x70;
 
     if (group == SiteGroup::kMine) {
-        b[0x21] = 2;
+        b.buildup = 2;
         return EarthClass(earth);
     }
 
-    Put<std::uint16_t>(b, 0x22, static_cast<std::uint16_t>(slot));
-    Put<std::uint16_t>(b, 0x30, static_cast<std::uint16_t>(earth));
+    b.unk22 = static_cast<std::uint16_t>(slot);
+    b.work_x = static_cast<std::uint16_t>(earth);  // a construction site: the earth to move
     const std::uint8_t work = static_cast<std::uint8_t>(static_cast<std::uint8_t>((earth + 16) >> 5) + 2);
-    b[0x1b] = work > 8 ? 8 : work;  // probably the number of diggers
+    b.unk1b[0] = work > 8 ? 8 : work;  // +0x1b, probably the number of diggers
 
     // The levelling job: target heights where the ground changes.
-    std::uint8_t* const cache = Bytes(world) + kSiteCache + (player * kSiteSlots + slot) * kSiteCacheBytes;
-    cache[0] = 1;
-    std::uint16_t moved;
-    std::memcpy(&moved, b + 0x28, sizeof(moved));
+    PlayerSiteCache& cache = world->site_cache[player][slot];
+    cache.valid = 1;
+    std::uint16_t moved = b.input_amount[2];  // word +0x28: the height differences
     for (std::int32_t j = 0; j < kGrid; ++j) {
         for (std::int32_t i = 0; i < kGrid; ++i) {
-            std::uint8_t* tile = Tile(world, x - kGridCentre + i, y - kGridCentre + j);
+            Tile& tile = TileAt(world, x - kGridCentre + i, y - kGridCentre + j);
             const std::uint8_t target = HeightCell(world, i, j);
-            std::uint8_t& cell = cache[1 + i * kGrid + j];
-            if (tile[kTileHeight] == target) {
+            std::uint8_t& cell = cache.grid[i * kGrid + j];
+            if (tile.height == target) {
                 cell = 0;
                 continue;
             }
-            tile[kTileFlags] |= kFlagLevelling;
+            tile.flags |= kFlagLevelling;
             cell = target;
             if (target != 0) {
-                const std::int32_t difference = tile[kTileHeight] - target;
+                const std::int32_t difference = tile.height - target;
                 moved = static_cast<std::uint16_t>(moved + (difference > 0 ? difference : -difference));
             }
         }
     }
-    std::memcpy(b + 0x28, &moved, sizeof(moved));
+    b.input_amount[2] = moved;
     return EarthClass(earth);
 }
 
@@ -788,34 +748,32 @@ std::uint32_t __fastcall GameWorld_IsGoodStartPosition(GameWorld* world, void* /
     std::uint32_t gold = 0;
     std::uint32_t sulfur = 0;
     std::uint32_t gems = 0;
-    const std::uint32_t mapSize = At<std::uint32_t>(world, kMapSize);
+    const std::uint32_t mapSize = world->map_size;
     for (std::uint32_t k = 0; k < 9995; ++k) {
-        std::int32_t dx;
-        std::int32_t dy;
-        std::memcpy(&dx, Bytes(world) + kOffsetTable + k * kOffsetBytes, sizeof(dx));
-        std::memcpy(&dy, Bytes(world) + kOffsetTable + k * kOffsetBytes + 4, sizeof(dy));
+        const std::int32_t dx = world->offsets[k].dx;
+        const std::int32_t dy = world->offsets[k].dy;
         const std::uint32_t tx = x + dx;
         const std::uint32_t ty = y + dy;
         if (tx >= mapSize || ty >= mapSize) {
             continue;
         }
-        const std::uint8_t* tile = Tile(world, tx, ty);
+        const Tile& tile = TileAt(world, tx, ty);
         if (k < 3000) {
-            if ((tile[kTileTerrain] & 0xf0) == 0x10) {
+            if ((tile.terrain & 0xf0) == 0x10) {
                 ++grass;
             }
-            const std::uint8_t object = tile[kTileObject];
+            const std::uint8_t object = tile.object;
             if (object >= 0x44 && object <= 0x53) {
                 ++trees;
             }
             if (object >= 0x73 && object <= 0x7e) {
                 stone += 0x7f - object;
             }
-            if (tile[kTileOwner] == 0xff) {
+            if (tile.owner == 0xff) {
                 ++unowned;
             }
         }
-        switch (tile[kTileResources] & 0xf0) {
+        switch (tile.resources & 0xf0) {
             case 0x10: ++coal; break;
             case 0x20: ++iron; break;
             case 0x30: ++gold; break;
@@ -856,9 +814,7 @@ std::uint32_t __fastcall GameWorld_IsGoodStartPosition(GameWorld* world, void* /
 
 namespace {
 
-constexpr std::size_t kTestWorld = kBuildings + (kBuildingLimit + 1) * kBuildingBytes;
-constexpr std::uint32_t kPendingRead = 0x32870;
-constexpr std::uint32_t kPendingWrite = 0x32874;
+constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + (kBuildingLimit + 1) * sizeof(Building);
 constexpr std::uint32_t kTestPlayers = 8;
 constexpr std::uint32_t kOwningPlayers = 4;
 
@@ -868,8 +824,10 @@ struct SiteWorld {
     std::uint32_t centreY[kOwningPlayers];
 };
 
-std::uint32_t TileOffset(std::uint32_t x, std::uint32_t y) {
-    return kTiles + (x * 0x300 + y) * kTileBytes;
+// Sets `field` (a field of the original world) to `value` in both worlds.
+template <typename T, typename V>
+void SetField(test::WorldPair& worlds, T& field, V value) {
+    worlds.Set<T>(OffsetIn(worlds.original(), &field), static_cast<T>(value));
 }
 
 std::int32_t HexDistance(std::int32_t dx, std::int32_t dy) {
@@ -885,6 +843,7 @@ std::int32_t HexDistance(std::int32_t dx, std::int32_t dy) {
 // reads 9995) ordered by ring (as built by 0x516530), each with
 // a direction sector 0..5 from its angle on the hexagonal grid.
 void SetUpOffsetTable(test::WorldPair& worlds) {
+    GameWorld* o = worlds.original();
     std::uint32_t entry = 0;
     for (std::int32_t ring = 0; ring <= 58; ++ring) {
         for (std::int32_t dx = -ring; dx <= ring; ++dx) {
@@ -899,11 +858,11 @@ void SetUpOffsetTable(test::WorldPair& worlds) {
                     angle += 6.0;
                 }
                 const std::int32_t sector = ring == 0 ? 0 : static_cast<std::int32_t>(angle) % 6;
-                const std::uint32_t e = kOffsetTable + entry * kOffsetBytes;
-                worlds.Set<std::int32_t>(e, dx);
-                worlds.Set<std::int32_t>(e + 4, dy);
-                worlds.Set<std::int32_t>(e + 8, ring);
-                worlds.Set<std::int32_t>(e + 12, sector);
+                MapOffset& e = o->offsets[entry];
+                SetField(worlds, e.dx, dx);
+                SetField(worlds, e.dy, dy);
+                SetField(worlds, e.distance, ring);
+                SetField(worlds, e.sector, sector);
                 ++entry;
             }
         }
@@ -913,25 +872,25 @@ void SetUpOffsetTable(test::WorldPair& worlds) {
 SiteWorld SetUpSiteWorld(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size, std::uint32_t noise) {
     SiteWorld site{};
     site.size = size;
-    worlds.Set<std::uint32_t>(kMapSize, size);
-    worlds.Set<std::uint32_t>(kPendingRead, ctx.rng().Below(1000));
-    worlds.Set<std::uint32_t>(kPendingWrite, ctx.rng().Below(1000));
+    GameWorld* o = worlds.original();
+    SetField(worlds, o->map_size, size);
+    SetField(worlds, o->pending_event_index.read, ctx.rng().Below(1000));
+    SetField(worlds, o->pending_event_index.write, ctx.rng().Below(1000));
     SetUpOffsetTable(worlds);
     for (std::uint32_t player = 0; player < 20; ++player) {
-        const std::uint32_t record = kPlayers + player * kPlayerBytes;
-        worlds.Set<std::uint32_t>(record + kPlayerRace, ctx.rng().Below(4));
-        worlds.Set<std::uint32_t>(record + kPlayerSiteCountdown,
-                                  ctx.rng().Chance(1, 4) ? 60001 + ctx.rng().Below(3) : 60000 + ctx.rng().Below(6000));
+        layout::Player& record = o->players[player];
+        SetField(worlds, record.race, ctx.rng().Below(4));
+        SetField(worlds, record.unk084,
+                 ctx.rng().Chance(1, 4) ? 60001 + ctx.rng().Below(3) : 60000 + ctx.rng().Below(6000));
         const bool full = ctx.rng().Chance(1, 10);
         for (std::uint32_t slot = 0; slot < kSiteSlots; ++slot) {
-            worlds.Set<std::uint8_t>(kSiteCache + (player * kSiteSlots + slot) * kSiteCacheBytes,
-                                     static_cast<std::uint8_t>(full || ctx.rng().Chance(1, 4) ? 1 : 0));
+            SetField(worlds, o->site_cache[player][slot].valid, full || ctx.rng().Chance(1, 4) ? 1 : 0);
         }
     }
     // A third of the building records free (owner 0xff).
     for (std::uint32_t b = 1; b <= kBuildingLimit; ++b) {
         if (ctx.rng().Chance(1, 3)) {
-            worlds.Set<std::uint8_t>(kBuildings + b * kBuildingBytes, 0xff);
+            SetField(worlds, o->buildings[b].owner, 0xff);
         }
     }
     for (std::uint32_t player = 0; player < kOwningPlayers; ++player) {
@@ -1002,13 +961,13 @@ SiteWorld SetUpSiteWorld(test::Context& ctx, test::WorldPair& worlds, std::uint3
             }
             if (ctx.rng().Chance(1, 50)) flags |= 0x02;
             if (ctx.rng().Chance(1, 50)) flags |= 0x40;
-            const std::uint32_t tile = TileOffset(x, y);
-            worlds.Set<std::uint8_t>(tile + kTileHeight, static_cast<std::uint8_t>(height < 0 ? 0 : height));
-            worlds.Set<std::uint8_t>(tile + kTileTerrain, terrain);
-            worlds.Set<std::uint8_t>(tile + kTileOwner, owner);
-            worlds.Set<std::uint8_t>(tile + kTileFlags, flags);
-            worlds.Set<std::uint16_t>(tile + kTileObjectNumber, object);
-            worlds.Set<std::uint16_t>(tile + kTileArea, area);
+            Tile& tile = o->tiles[x][y];
+            SetField(worlds, tile.height, height < 0 ? 0 : height);
+            SetField(worlds, tile.terrain, terrain);
+            SetField(worlds, tile.owner, owner);
+            SetField(worlds, tile.flags, flags);
+            SetField(worlds, tile.object_number, object);
+            SetField(worlds, tile.area, area);
         }
     }
     return site;
@@ -1075,7 +1034,7 @@ void CompareCheckBuildingSite(test::Context& ctx, CheckBuildingSiteFn candidate,
         static constexpr std::uint32_t kNoise[] = {0, 1, 0, 10};
         const SiteWorld site = SetUpSiteWorld(ctx, worlds, kSizes[w % 4], kNoise[(w / 2) % 4]);
         if (tiny) {
-            worlds.Set<std::uint32_t>(kMapSize, 8 + ctx.rng().Below(8));
+            SetField(worlds, worlds.original()->map_size, 8 + ctx.rng().Below(8));
         }
         DebugLogRecorder recorder;
         for (int i = 0; i < cases; ++i) {
@@ -1094,7 +1053,7 @@ void CompareCheckBuildingSite(test::Context& ctx, CheckBuildingSiteFn candidate,
             if (ctx.rng().Chance(1, 400)) {
                 // Every building record in use.
                 for (std::uint32_t b = 1; b <= kBuildingLimit; ++b) {
-                    worlds.Set<std::uint8_t>(kBuildings + b * kBuildingBytes, 0);
+                    SetField(worlds, worlds.original()->buildings[b].owner, 0);
                 }
             }
             const std::uint32_t expected =
@@ -1128,19 +1087,19 @@ void ComparePlanSiteLevelling(test::Context& ctx, PlanSiteLevellingFn candidate,
             if (x < 15) x = 15;
             if (y < 15) y = 15;
             const std::uint32_t type = RandomBuildingType(ctx);
-            const std::int32_t here = worlds.originalBytes()[TileOffset(x, y) + kTileHeight];
+            GameWorld* o = worlds.original();
+            const std::int32_t here = TileAt(o, x, y).height;
             const std::uint32_t height = ctx.rng().Chance(1, 10)
                                              ? ctx.rng().Below(256)
                                              : static_cast<std::uint32_t>(here + ctx.rng().Range(-3, 3)) & 0xff;
             if (ctx.rng().Chance(1, 4)) {
                 // A flat footprint: the plan may need no levelling at all.
-                const std::uint32_t* p = After(Layout(At<std::uint32_t>(worlds.original(), kPlayers + player * kPlayerBytes + kPlayerRace) & 3, type), kMarkFootprint);
+                const std::uint32_t* p = After(Layout(PlayerRace(o, player) & 3, type), kMarkFootprint);
                 for (; *p != kMarkBorder; p += 2) {
                     if (*p == kMarkNoStakes) {
                         ++p;
                     }
-                    worlds.Set<std::uint8_t>(TileOffset(x + p[0], y + p[1]) + kTileHeight,
-                                             static_cast<std::uint8_t>(height));
+                    SetField(worlds, TileAt(o, x + p[0], y + p[1]).height, height);
                 }
             }
             const std::uint32_t expected =
@@ -1149,7 +1108,8 @@ void ComparePlanSiteLevelling(test::Context& ctx, PlanSiteLevellingFn candidate,
             if (outcomes != nullptr) {
                 ++outcomes[expected == 0 ? 0 : expected == 1 ? 1 : 2];
             }
-            if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, kHeightGrid, 2 * kGrid * kGrid) ||
+            if (!S3RE_EXPECT_EQ(expected, actual) ||
+                !worlds.SameField(ctx, [](GameWorld* w) -> auto& { return w->footprint_scratch; }) ||
                 ((i % 64 == 63 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
                 ctx.Fail(__FILE__, __LINE__, "  world %d case %d: (%u, %u) type %u player %u height %u", w, i, x, y,
                          type, player, height);
@@ -1171,18 +1131,18 @@ void CompareAddBuildingSite(test::Context& ctx, AddBuildingSiteFn candidate, int
             player = ctx.rng().Below(20);
         }
         const std::uint32_t type = ctx.rng().Chance(1, 3) ? RandomBuildingType(ctx) : 1 + ctx.rng().Below(56);
+        GameWorld* o = worlds.original();
         if (ctx.rng().Chance(1, 8)) {
-            worlds.Set<std::uint32_t>(kBuildingHighWater, ctx.rng().Below(kBuildingLimit + 10));
+            SetField(worlds, o->building_high_water, ctx.rng().Below(kBuildingLimit + 10));
         }
         if (i == cases / 2) {
             // Every record in use (the "none free" path); then a few free again.
             for (std::uint32_t b = 1; b <= kBuildingLimit; ++b) {
-                worlds.Set<std::uint8_t>(kBuildings + b * kBuildingBytes, 1);
+                SetField(worlds, o->buildings[b].owner, 1);
             }
         } else if (i == cases / 2 + 1) {
             for (std::uint32_t b = 1; b <= kBuildingLimit; ++b) {
-                worlds.Set<std::uint8_t>(kBuildings + b * kBuildingBytes,
-                                         static_cast<std::uint8_t>(ctx.rng().Chance(1, 50) ? 0xff : 1));
+                SetField(worlds, o->buildings[b].owner, ctx.rng().Chance(1, 50) ? 0xff : 1);
             }
         }
         const std::uint32_t expected =
@@ -1205,20 +1165,20 @@ std::uint32_t __fastcall WrongPlanSiteLevelling(GameWorld* world, void* edx, std
 // Wrong: the player's countdown +0x84 is not counted down.
 std::uint32_t __fastcall WrongAddBuildingSite(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
                                               std::uint32_t player, std::uint32_t type) {
-    const std::uint32_t field = kPlayers + player * kPlayerBytes + kPlayerSiteCountdown;
-    const std::uint32_t saved = At<std::uint32_t>(world, field);
+    std::int32_t& field = world->players[player].unk084;
+    const std::int32_t saved = field;
     const std::uint32_t result = GameWorld_AddBuildingSite(world, edx, x, y, player, type);
-    At<std::uint32_t>(world, field) = saved;
+    field = saved;
     return result;
 }
 
 // Wrong: a placed site's own tile does not get the footprint flag.
 std::uint32_t __fastcall WrongCheckBuildingSite(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                 std::uint32_t type, std::uint32_t player, std::uint32_t mode) {
-    const std::uint8_t saved = Tile(world, x, y)[kTileFlags];
+    const std::uint8_t saved = TileAt(world, x, y).flags;
     const std::uint32_t result = GameWorld_CheckBuildingSite(world, edx, x, y, type, player, mode);
     if ((mode & 1) != 0 && result != 0) {
-        std::uint8_t& flags = Tile(world, x, y)[kTileFlags];
+        std::uint8_t& flags = TileAt(world, x, y).flags;
         flags = static_cast<std::uint8_t>((flags & ~kFlagFootprint) | (saved & kFlagFootprint));
     }
     return result;
@@ -1307,17 +1267,16 @@ void SetUpStartRegion(test::Context& ctx, test::WorldPair& worlds, std::uint32_t
     const double sulfur = ideal ? 0.0012 : uniform(0, 0.001);
     const double gems = ideal ? 0.0012 : uniform(0, 0.001);
     const std::uint8_t base = static_cast<std::uint8_t>(20 + ctx.rng().Below(40));
+    GameWorld* o = worlds.original();
     for (std::uint32_t k = 0; k < 9995; ++k) {
-        std::int32_t dx;
-        std::int32_t dy;
-        std::memcpy(&dx, worlds.originalBytes() + kOffsetTable + k * kOffsetBytes, sizeof(dx));
-        std::memcpy(&dy, worlds.originalBytes() + kOffsetTable + k * kOffsetBytes + 4, sizeof(dy));
+        const std::int32_t dx = o->offsets[k].dx;
+        const std::int32_t dy = o->offsets[k].dy;
         const std::uint32_t tx = x + dx;
         const std::uint32_t ty = y + dy;
         if (tx >= 0x300 || ty >= 0x300) {
             continue;
         }
-        const std::uint32_t tile = TileOffset(tx, ty);
+        Tile& tile = o->tiles[tx][ty];
         // The castle's site (offsets up to distance 8) is mostly clean.
         const bool site = k < 217 && !chance(0.002);
         std::uint8_t object = 0;
@@ -1344,16 +1303,16 @@ void SetUpStartRegion(test::Context& ctx, test::WorldPair& worlds, std::uint32_t
             resources |= 0x60;
         }
         static constexpr std::uint8_t kOtherGround[] = {0x20, 0x30, 0x40, 0x04, 0x60};
-        worlds.Set<std::uint8_t>(tile + kTileHeight, static_cast<std::uint8_t>(base + ctx.rng().Below(2)));
-        worlds.Set<std::uint8_t>(tile + kTileTerrain,
-                                 site || chance(grass) ? static_cast<std::uint8_t>(0x10 + ctx.rng().Below(4))
-                                               : kOtherGround[ctx.rng().Below(5)]);
-        worlds.Set<std::uint8_t>(tile + kTileObject, object);
-        worlds.Set<std::uint8_t>(tile + kTileOwner, site || chance(unowned) ? 0xff : static_cast<std::uint8_t>(ctx.rng().Below(4)));
-        worlds.Set<std::uint8_t>(tile + kTileFlags, 0);
-        worlds.Set<std::uint16_t>(tile + kTileObjectNumber, 0);
-        worlds.Set<std::uint16_t>(tile + kTileArea, 0);
-        worlds.Set<std::uint8_t>(tile + kTileResources, resources);
+        SetField(worlds, tile.height, base + ctx.rng().Below(2));
+        SetField(worlds, tile.terrain,
+                 site || chance(grass) ? static_cast<std::uint8_t>(0x10 + ctx.rng().Below(4))
+                                       : kOtherGround[ctx.rng().Below(5)]);
+        SetField(worlds, tile.object, object);
+        SetField(worlds, tile.owner, site || chance(unowned) ? 0xff : static_cast<std::uint8_t>(ctx.rng().Below(4)));
+        SetField(worlds, tile.flags, 0);
+        SetField(worlds, tile.object_number, 0);
+        SetField(worlds, tile.area, 0);
+        SetField(worlds, tile.resources, resources);
     }
 }
 

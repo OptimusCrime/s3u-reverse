@@ -53,6 +53,7 @@
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <initializer_list>
 
@@ -60,12 +61,9 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kBuildings = 0x1499e64;
-constexpr std::uint32_t kBuildingBytes = 0x3a;
-constexpr std::uint32_t kBuildingType = 0x6;
-constexpr std::uint32_t kBuildingConstruction = 0x21;
-constexpr std::uint32_t kBuildingWord24 = 0x24;
-constexpr std::uint32_t kBuildingWord2A = 0x2a;
+using layout::Area;
+using layout::Building;
+using layout::kGoodsTypes;
 
 // int32[type][3]: the input goods of each building type, in S3.EXE.
 const std::int32_t (*const kInputGoods)[3] = reinterpret_cast<const std::int32_t (*)[3]>(0x006a6824);
@@ -78,15 +76,17 @@ constexpr std::uintptr_t kTroubleSet24 = 0x006a5a3c;
 
 constexpr int kNoSlot = -1;
 
-std::uint8_t* Record(GameWorld* world, std::uint32_t building) {
-    return reinterpret_cast<std::uint8_t*>(world) + kBuildings + building * kBuildingBytes;
-}
+// One of the two per-slot word arrays: "word 24" (input_amount) or "word 2A"
+// (input_next).
+using InputWords = std::uint16_t (Building::*)[3];
+constexpr InputWords kWord24 = &Building::input_amount;
+constexpr InputWords kWord2A = &Building::input_next;
 
-int InputSlot(const std::uint8_t* record, std::uint32_t goods) {
-    if (record[kBuildingConstruction] != 0) {
+int InputSlot(const Building& record, std::uint32_t goods) {
+    if (record.buildup != 0) {
         return goods == 1 ? 0 : goods == 2 ? 1 : kNoSlot;
     }
-    const std::int32_t* inputs = kInputGoods[record[kBuildingType]];
+    const std::int32_t* inputs = kInputGoods[record.art];
     for (int slot = 0; slot < 3; ++slot) {
         if (goods == static_cast<std::uint32_t>(inputs[slot])) {
             return slot;
@@ -95,32 +95,29 @@ int InputSlot(const std::uint8_t* record, std::uint32_t goods) {
     return kNoSlot;
 }
 
-std::uint16_t& Word(std::uint8_t* record, std::uint32_t base, int slot) {
-    return *reinterpret_cast<std::uint16_t*>(record + base + slot * 2);
-}
-
-std::uint32_t GetWord(GameWorld* world, std::uint32_t building, std::uint32_t goods, std::uint32_t base,
+std::uint32_t GetWord(GameWorld* world, std::uint32_t building, std::uint32_t goods, InputWords words,
                       std::uintptr_t trouble) {
-    std::uint8_t* record = Record(world, building);
+    Building& record = world->buildings[building];
     const int slot = InputSlot(record, goods);
     if (slot == kNoSlot) {
-        GameDebugLog(trouble, goods, static_cast<std::uint32_t>(record[kBuildingType]));
+        GameDebugLog(trouble, goods, static_cast<std::uint32_t>(record.art));
         return 0;
     }
-    return Word(record, base, slot);
+    return (record.*words)[slot];
 }
 
 std::uint32_t SetWord(GameWorld* world, std::uint32_t building, std::uint32_t goods, std::uint32_t value,
-                      std::uint32_t base, std::uintptr_t trouble) {
-    std::uint8_t* record = Record(world, building);
+                      InputWords words, std::uintptr_t trouble) {
+    Building& record = world->buildings[building];
     const int slot = InputSlot(record, goods);
     if (slot == kNoSlot) {
-        GameDebugLog(trouble, goods, static_cast<std::uint32_t>(record[kBuildingType]));
+        GameDebugLog(trouble, goods, static_cast<std::uint32_t>(record.art));
     } else {
-        Word(record, base, slot) = static_cast<std::uint16_t>(value);
+        (record.*words)[slot] = static_cast<std::uint16_t>(value);
     }
     // world + building * 0x3a, computed in 32 bits as the original does.
-    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + building * kBuildingBytes;
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) +
+           building * static_cast<std::uint32_t>(sizeof(Building));
 }
 
 }  // namespace
@@ -135,26 +132,26 @@ using SetInputFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::
 // these goods' list.
 std::uint32_t __fastcall GameWorld_BuildingInputWord2A(GameWorld* world, void*, std::uint32_t building,
                                                        std::uint32_t goods) {
-    return GetWord(world, building, goods, kBuildingWord2A, kTroubleGet2A);
+    return GetWord(world, building, goods, kWord2A, kTroubleGet2A);
 }
 
 // Purpose: For one kind of goods a building takes in, reads how many it has asked for.
 std::uint32_t __fastcall GameWorld_BuildingInputWord24(GameWorld* world, void*, std::uint32_t building,
                                                        std::uint32_t goods) {
-    return GetWord(world, building, goods, kBuildingWord24, kTroubleGet24);
+    return GetWord(world, building, goods, kWord24, kTroubleGet24);
 }
 
 // Purpose: Sets the 'next building wanting these goods' link of one of a building's inputs (see
 // BuildingInputWord2A).
 std::uint32_t __fastcall GameWorld_SetBuildingInputWord2A(GameWorld* world, void*, std::uint32_t building,
                                                           std::uint32_t goods, std::uint32_t value) {
-    return SetWord(world, building, goods, value, kBuildingWord2A, kTroubleSet2A);
+    return SetWord(world, building, goods, value, kWord2A, kTroubleSet2A);
 }
 
 // Purpose: Sets how many of one kind of goods a building has asked for.
 std::uint32_t __fastcall GameWorld_SetBuildingInputWord24(GameWorld* world, void*, std::uint32_t building,
                                                           std::uint32_t goods, std::uint32_t value) {
-    return SetWord(world, building, goods, value, kBuildingWord24, kTroubleSet24);
+    return SetWord(world, building, goods, value, kWord24, kTroubleSet24);
 }
 
 S3RE_HOOK(0x004df150, GameWorld_BuildingInputWord2A, GetInputFn, Original_GameWorld_BuildingInputWord2A,
@@ -168,34 +165,24 @@ S3RE_HOOK(0x004df3c0, GameWorld_SetBuildingInputWord24, SetInputFn, Original_Gam
 
 namespace {
 
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kTileArea = 0x14;
-constexpr std::uint32_t kBuildingTileBX = 0xa;
-constexpr std::uint32_t kBuildingTileBY = 0xc;
-constexpr std::uint32_t kAreas = 0xe145e8;
-constexpr std::uint32_t kAreaBytes = 0x2e0;
-constexpr std::uint32_t kAreaConditions = 0x245;  // uint8 per condition index
-constexpr std::uint32_t kAreaRequestHeads = 0x52;  // uint16 per goods type
-constexpr std::uint32_t kAreaWordsA = 0x9a;        // uint16[36]
-constexpr std::uint32_t kAreaWordsB = 0xe2;        // uint16[36]
-constexpr std::uint32_t kGoodsTypes = 36;
-
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(world) + offset);
-}
-
+// The area of the building's tile B (door_x, door_y), with the original's
+// 32-bit tile arithmetic.
 std::uint32_t BuildingArea(GameWorld* world, std::uint32_t building) {
-    const std::uint8_t* record = Record(world, building);
-    const std::uint32_t x = *reinterpret_cast<const std::uint16_t*>(record + kBuildingTileBX);
-    const std::uint32_t y = *reinterpret_cast<const std::uint16_t*>(record + kBuildingTileBY);
-    return At<std::uint16_t>(world, kTiles + (x * 0x300 + y) * 24 + kTileArea);
+    const Building& record = world->buildings[building];
+    const std::uint32_t x = record.door_x;
+    const std::uint32_t y = record.door_y;
+    return TileAtOffset(world, TileOffset(x, y)).area;
 }
 
-// Offset of the area's uint16 at `field` + index*2, as the original
-// computes it: ((area * 0x170 + index) * 2).
-std::uint32_t AreaWord(std::uint32_t area, std::uint32_t field, std::uint32_t index) {
-    return kAreas + field + (area * (kAreaBytes / 2) + index) * 2;
+// The head of the area's request list for the goods. The original computes
+// its offset as 0xe145e8 + 0x52 + ((area * 0x170 + goods) * 2) in 32 bits;
+// indexing gives the same address for any area and goods.
+std::uint16_t& RequestHead(GameWorld* world, std::uint32_t area, std::uint32_t goods) {
+    return world->areas[area].requests_by_goods[goods];
+}
+
+std::uint32_t Address(const void* p) {
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p));
 }
 
 }  // namespace
@@ -210,13 +197,13 @@ std::uint32_t __fastcall GameWorld_AddBuildingGoodsRequest(GameWorld* world, voi
                                                            std::uint32_t goods, std::uint32_t amount,
                                                            std::uint32_t condition) {
     const std::uint32_t area = BuildingArea(world, building);
-    if (condition != 0 && At<std::uint8_t>(world, kAreas + area * kAreaBytes + kAreaConditions + condition) == 0) {
+    if (condition != 0 && world->areas[area].condition_enabled[condition] == 0) {
         return area;
     }
     if (amount == 0) {
         return area;
     }
-    std::uint16_t& head = At<std::uint16_t>(world, AreaWord(area, kAreaRequestHeads, goods));
+    std::uint16_t& head = RequestHead(world, area, goods);
     GameWorld_SetBuildingInputWord2A(world, nullptr, building, goods, head);
     head = static_cast<std::uint16_t>(building);
     return GameWorld_SetBuildingInputWord24(world, nullptr, building, goods, amount);
@@ -226,30 +213,30 @@ std::uint32_t __fastcall GameWorld_AddBuildingGoodsRequest(GameWorld* world, voi
 // building types). Used when a building no longer needs goods or is removed.
 std::uint32_t __fastcall GameWorld_RemoveBuildingFromAreaRequests(GameWorld* world, void*, std::uint32_t building) {
     const std::uint32_t area = BuildingArea(world, building);
-    const std::uint8_t* record = Record(world, building);
-    const std::uint8_t type = record[kBuildingType];
-    const auto base = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
-    if ((type == 0x22 || type == 0x21) && record[kBuildingConstruction] == 0) {
+    const Building& record = world->buildings[building];
+    const std::uint8_t type = record.art;
+    if ((type == 0x22 || type == 0x21) && record.buildup == 0) {
+        Area& areaRecord = world->areas[area];
         for (std::uint32_t k = 0; k < kGoodsTypes; ++k) {
-            for (const std::uint32_t field : {kAreaWordsA, kAreaWordsB}) {
-                std::uint16_t& word = At<std::uint16_t>(world, kAreas + area * kAreaBytes + field + k * 2);
+            for (std::uint16_t* words : {areaRecord.buildings_a, areaRecord.buildings_b}) {
+                std::uint16_t& word = words[k];
                 if (word == building) {
                     word = 0;
                 }
             }
         }
-        return base + kAreas + area * kAreaBytes + kAreaWordsB + kGoodsTypes * 2;
+        // The address just past buildings_b (the original's last pointer).
+        return Address(areaRecord.buildings_b + kGoodsTypes);
     }
     std::uint32_t last = 0;
     for (std::uint32_t goods = 0; goods < kGoodsTypes; ++goods) {
-        const std::uint32_t headOffset = AreaWord(area, kAreaRequestHeads, goods);
-        std::uint16_t& head = At<std::uint16_t>(world, headOffset);
+        std::uint16_t& head = RequestHead(world, area, goods);
         std::uint32_t other = head;
         if (other == building) {
             last = GameWorld_BuildingInputWord2A(world, nullptr, building, goods);
             head = static_cast<std::uint16_t>(last);
         } else if (other == 0) {
-            last = base + headOffset;
+            last = Address(&head);
         } else {
             do {
                 if (GameWorld_BuildingInputWord2A(world, nullptr, other, goods) == building) {
@@ -276,17 +263,18 @@ S3RE_HOOK(0x004def80, GameWorld_RemoveBuildingFromAreaRequests, RemoveRequestsFn
 namespace {
 
 constexpr std::uint32_t kTestBuildings = 4096;
-constexpr std::size_t kTestWorld = kBuildings + (kTestBuildings + 1) * kBuildingBytes;
+constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + (kTestBuildings + 1) * sizeof(Building);
 
 // A building of a random type (all 0x50 types; most have no inputs), often a
 // construction site, and goods that often match one of its inputs.
 std::uint32_t SetUpBuilding(test::Context& ctx, test::WorldPair& worlds, std::uint32_t& goods) {
     const std::uint32_t building = ctx.rng().Below(kTestBuildings);
-    const std::uint32_t record = kBuildings + building * kBuildingBytes;
     const std::uint8_t type = static_cast<std::uint8_t>(ctx.rng().Chance(1, 16) ? ctx.rng().Below(256) : ctx.rng().Below(0x50));
-    worlds.Set<std::uint8_t>(record + kBuildingType, type);
-    worlds.Set<std::uint8_t>(record + kBuildingConstruction,
-                             static_cast<std::uint8_t>(ctx.rng().Chance(1, 3) ? 1 + ctx.rng().Below(255) : 0));
+    const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(1, 3) ? 1 + ctx.rng().Below(255) : 0);
+    worlds.Both([&](GameWorld* w) {
+        w->buildings[building].art = type;
+        w->buildings[building].buildup = buildup;
+    });
     switch (ctx.rng().Below(4)) {
     case 0:
         goods = ctx.rng().Next32();
@@ -304,12 +292,12 @@ std::uint32_t SetUpBuilding(test::Context& ctx, test::WorldPair& worlds, std::ui
 // Wrong: on a construction site, looks the goods up in the type table too.
 std::uint32_t __fastcall WrongBuildingInputWord2A(GameWorld* world, void* edx, std::uint32_t building,
                                                   std::uint32_t goods) {
-    std::uint8_t* record = Record(world, building);
-    const std::uint8_t construction = record[kBuildingConstruction];
+    Building& record = world->buildings[building];
+    const std::uint8_t construction = record.buildup;
     if (construction != 0 && goods != 1 && goods != 2) {
-        record[kBuildingConstruction] = 0;
+        record.buildup = 0;
         const std::uint32_t result = GameWorld_BuildingInputWord2A(world, edx, building, goods);
-        record[kBuildingConstruction] = construction;
+        record.buildup = construction;
         return result;
     }
     return GameWorld_BuildingInputWord2A(world, edx, building, goods);
@@ -343,7 +331,7 @@ void CompareSet(test::Context& ctx, SetInputFn original, SetInputFn candidate, i
         const std::uint32_t expected = Relative(original(worlds.original(), nullptr, building, goods, value), worlds.original());
         const std::uint32_t actual = Relative(candidate(worlds.ours(), nullptr, building, goods, value), worlds.ours());
         if (!S3RE_EXPECT_EQ(expected, actual) ||
-            !worlds.Same(ctx, kBuildings + building * kBuildingBytes, kBuildingBytes) ||
+            !worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return w->buildings[building]; }) ||
             ((i % 512 == 511) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: building %u, goods %u", i, building, goods);
             return;
@@ -384,15 +372,19 @@ constexpr std::uint32_t kRequestBuildings = 64;
 void SetUpRequests(test::Context& ctx, test::WorldPair& worlds) {
     static constexpr std::uint8_t kTypes[] = {0x1f, 0x20, 0x07, 0x0a, 0x13, 0x21, 0x22, 0x14, 0x30, 0x47};
     for (std::uint32_t building = 1; building < kRequestBuildings; ++building) {
-        const std::uint32_t record = kBuildings + building * kBuildingBytes;
         const std::uint32_t x = ctx.rng().Below(384);
         const std::uint32_t y = ctx.rng().Below(384);
-        worlds.Set<std::uint16_t>(record + kBuildingTileBX, static_cast<std::uint16_t>(x));
-        worlds.Set<std::uint16_t>(record + kBuildingTileBY, static_cast<std::uint16_t>(y));
-        worlds.Set<std::uint16_t>(kTiles + (x * 0x300 + y) * 24 + kTileArea,
-                                  static_cast<std::uint16_t>(ctx.rng().Below(kRequestAreas)));
-        worlds.Set<std::uint8_t>(record + kBuildingType, kTypes[ctx.rng().Below(sizeof(kTypes))]);
-        worlds.Set<std::uint8_t>(record + kBuildingConstruction, static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? 1 : 0));
+        const auto area = static_cast<std::uint16_t>(ctx.rng().Below(kRequestAreas));
+        const std::uint8_t type = kTypes[ctx.rng().Below(sizeof(kTypes))];
+        const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? 1 : 0);
+        worlds.Both([&](GameWorld* w) {
+            Building& record = w->buildings[building];
+            record.door_x = static_cast<std::uint16_t>(x);
+            record.door_y = static_cast<std::uint16_t>(y);
+            w->tiles[x][y].area = area;
+            record.art = type;
+            record.buildup = buildup;
+        });
     }
     for (std::uint32_t area = 0; area < kRequestAreas; ++area) {
         for (std::uint32_t goods = 0; goods < kGoodsTypes; ++goods) {
@@ -401,19 +393,20 @@ void SetUpRequests(test::Context& ctx, test::WorldPair& worlds) {
                 if (BuildingArea(worlds.original(), building) != area || !ctx.rng().Chance(1, 2)) {
                     continue;
                 }
-                const int slot = InputSlot(Record(worlds.original(), building), goods);
+                const int slot = InputSlot(worlds.original()->buildings[building], goods);
                 if (slot == kNoSlot) {
                     continue;
                 }
-                worlds.Set<std::uint16_t>(kBuildings + building * kBuildingBytes + kBuildingWord2A + slot * 2,
-                                          static_cast<std::uint16_t>(head));
+                worlds.Both([&](GameWorld* w) { w->buildings[building].input_next[slot] = static_cast<std::uint16_t>(head); });
                 head = building;
             }
-            worlds.Set<std::uint16_t>(AreaWord(area, kAreaRequestHeads, goods), static_cast<std::uint16_t>(head));
-            worlds.Set<std::uint16_t>(kAreas + area * kAreaBytes + kAreaWordsA + goods * 2,
-                                      static_cast<std::uint16_t>(ctx.rng().Below(kRequestBuildings)));
-            worlds.Set<std::uint16_t>(kAreas + area * kAreaBytes + kAreaWordsB + goods * 2,
-                                      static_cast<std::uint16_t>(ctx.rng().Below(kRequestBuildings)));
+            const auto a = static_cast<std::uint16_t>(ctx.rng().Below(kRequestBuildings));
+            const auto b = static_cast<std::uint16_t>(ctx.rng().Below(kRequestBuildings));
+            worlds.Both([&](GameWorld* w) {
+                w->areas[area].requests_by_goods[goods] = static_cast<std::uint16_t>(head);
+                w->areas[area].buildings_a[goods] = a;
+                w->areas[area].buildings_b[goods] = b;
+            });
         }
     }
 }
@@ -425,8 +418,8 @@ std::uint32_t RelativeToWorld(std::uint32_t value, GameWorld* world) {
 
 // Wrong: stops at the first match instead of walking the whole list.
 std::uint32_t __fastcall WrongRemoveBuildingFromAreaRequests(GameWorld* world, void* edx, std::uint32_t building) {
-    const std::uint8_t* record = Record(world, building);
-    if ((record[kBuildingType] == 0x22 || record[kBuildingType] == 0x21) && record[kBuildingConstruction] == 0) {
+    const Building& record = world->buildings[building];
+    if ((record.art == 0x22 || record.art == 0x21) && record.buildup == 0) {
         return GameWorld_RemoveBuildingFromAreaRequests(world, edx, building);
     }
     // Clears the building's own link first: later predecessors keep pointing at it.
@@ -449,8 +442,9 @@ void CompareRemoveRequests(test::Context& ctx, RemoveRequestsFn candidate, int c
             RelativeToWorld(Original_GameWorld_RemoveBuildingFromAreaRequests(worlds.original(), nullptr, building),
                             worlds.original());
         const std::uint32_t actual = RelativeToWorld(candidate(worlds.ours(), nullptr, building), worlds.ours());
-        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, kAreas, kRequestAreas * kAreaBytes) ||
-            !worlds.Same(ctx, kBuildings, kRequestBuildings * kBuildingBytes) ||
+        if (!S3RE_EXPECT_EQ(expected, actual) ||
+            !worlds.Same(ctx, offsetof(GameWorld, areas), kRequestAreas * sizeof(Area)) ||
+            !worlds.Same(ctx, offsetof(GameWorld, buildings), kRequestBuildings * sizeof(Building)) ||
             ((i % 16 == 15 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: building %u", i, building);
             return;
@@ -471,8 +465,8 @@ S3RE_TEST(GameWorld_AddBuildingGoodsRequest_MatchesOriginal) {
         const std::uint32_t amount = ctx.rng().Chance(1, 4) ? 0 : ctx.rng().Next32();
         const std::uint32_t condition = ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(64);
         const std::uint32_t area = BuildingArea(worlds.original(), building);
-        worlds.Set<std::uint8_t>(kAreas + area * kAreaBytes + kAreaConditions + condition,
-                                 static_cast<std::uint8_t>(ctx.rng().Below(2)));
+        const auto enabled = static_cast<std::uint8_t>(ctx.rng().Below(2));
+        worlds.Both([&](GameWorld* w) { w->areas[area].condition_enabled[condition] = enabled; });
         const std::uint32_t expected = RelativeToWorld(
             Original_GameWorld_AddBuildingGoodsRequest(worlds.original(), nullptr, building, goods, amount, condition),
             worlds.original());

@@ -103,12 +103,15 @@
 //   ret 0xc.
 // All thiscall (ECX = world).
 
+#include "game/raw.h"
 #include "game/replacements.h"
+#include "game/settler_groups.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <utility>
@@ -118,70 +121,30 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kTiles = 0x67444;
-constexpr std::uint32_t kTileSettler = 0x0;
-constexpr std::uint32_t kTileByte10 = 0x10;
+using layout::Area;
+using layout::Building;
+using layout::Pile;
+using layout::Player;
+using layout::Settler;
+using layout::Tile;
 
-constexpr std::uint32_t kSettlers = 0x12a5e60;
-constexpr std::uint32_t kSettlerBytes = 0x40;
-constexpr std::uint32_t kSettlerPlayer = 0x0;
-constexpr std::uint32_t kSettlerType = 0x1;
-constexpr std::uint32_t kSettlerX = 0x4;
-constexpr std::uint32_t kSettlerState = 0x8;  // int32
-constexpr std::uint32_t kSettlerWordC = 0xc;
-constexpr std::uint32_t kSettlerY = 0x6;
-constexpr std::uint32_t kSettlerNext = 0x10;
-constexpr std::uint32_t kSettlerPrevious = 0x12;
-constexpr std::uint32_t kSettlerJob = 0xe;
-constexpr std::uint32_t kSettlerByte17 = 0x17;
-constexpr std::uint32_t kSettlerGoods = 0x1a;
-constexpr std::uint32_t kSettlerWorkplace = 0x22;
-constexpr std::uint32_t kSettlerByte3C = 0x3c;
-constexpr std::uint32_t kSettlerByte19 = 0x19;
-constexpr std::uint32_t kSettlerTargetX = 0x24;
-constexpr std::uint32_t kSettlerTargetY = 0x26;
-constexpr std::uint32_t kSettlerNewTarget = 0x2c;
-constexpr std::uint32_t kSettlerPath = 0x30;  // 6 x uint16
-constexpr std::uint32_t kSettlerPathWords = 6;
 constexpr std::uint8_t kSettlerType29 = 0x29;
-
-constexpr std::uint32_t kPlayerRecords = 0x11943dc;
-constexpr std::uint32_t kPlayerRecordBytes = 0x148;
-constexpr std::uint32_t kPlayerWaitingA = 0x6e;  // uint16 head
-constexpr std::uint32_t kPlayerWaitingB = 0x76;  // uint16 head
-
-constexpr std::uint32_t kPiles = 0x123885c;
-constexpr std::uint32_t kPileBytes = 14;
-constexpr std::uint32_t kPileGoods = 0x0;
-constexpr std::uint32_t kPileAmount = 0x1;
-constexpr std::uint32_t kPileReserved = 0x2;
-constexpr std::uint32_t kPileX = 0x6;
-constexpr std::uint32_t kPileY = 0x8;
-
-constexpr std::uint32_t kBuildings = 0x1499e64;
-constexpr std::uint32_t kBuildingBytes = 0x3a;
-constexpr std::uint32_t kBuildingPlayer = 0x0;
-constexpr std::uint32_t kBuildingDirection = 0x22;
-constexpr std::uint32_t kBuildingDoorX = 0x30;
-constexpr std::uint32_t kBuildingDoorY = 0x32;
-
-constexpr std::uint32_t kOffsetTable = 0x110a588;  // int32 dx, int32 dy, 16-byte stride
-constexpr std::uint32_t kOffsetTableBytes = 0x10;
 constexpr std::uint32_t kRingEntriesFirst = 1;
 constexpr std::uint32_t kRingEntriesLast = 36;
 constexpr std::uint32_t kPlaceEntries = 1000;
 
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(world) + offset);
+// The two waiting lists of a player: settler_lists[39] (+0x6e) and [43]
+// (+0x76) of the player record.
+constexpr std::size_t kPlayerWaitingA = (0x6e - 0x20) / 2;
+constexpr std::size_t kPlayerWaitingB = (0x76 - 0x20) / 2;
+
+// Tile (x, y) with the original's 32-bit arithmetic.
+Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+    return TileAtOffset(world, TileOffset(x, y));
 }
 
-std::uint32_t Tile(std::uint32_t x, std::uint32_t y) {
-    return kTiles + (x * 0x300 + y) * 24;
-}
-
-std::uint32_t Settler(std::uint32_t settler) {
-    return kSettlers + settler * kSettlerBytes;
+std::uint32_t Address(const void* p) {
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p));
 }
 
 }  // namespace
@@ -198,20 +161,20 @@ using FindNearbyFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std
 // fresh. Used by nearly every job (45 places in the code).
 std::uint32_t __fastcall GameWorld_SetSettlerTarget(GameWorld* world, void*, std::uint32_t settler,
                                                     std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t record = Settler(settler);
+    Settler& record = world->settlers[settler];
     if (GameWorld_IsOnMap(world, nullptr, x, y)) {
-        At<std::uint16_t>(world, record + kSettlerTargetX) = static_cast<std::uint16_t>(x);
-        At<std::uint16_t>(world, record + kSettlerTargetY) = static_cast<std::uint16_t>(y);
+        record.target_x = static_cast<std::uint16_t>(x);
+        record.target_y = static_cast<std::uint16_t>(y);
     } else {
-        At<std::uint16_t>(world, record + kSettlerTargetX) = At<std::uint16_t>(world, record + kSettlerX);
-        At<std::uint16_t>(world, record + kSettlerTargetY) = At<std::uint16_t>(world, record + kSettlerY);
+        record.target_x = record.x;
+        record.target_y = record.y;
     }
-    for (std::uint32_t i = 0; i < kSettlerPathWords; ++i) {
-        At<std::uint16_t>(world, record + kSettlerPath + i * 2) = 0xffff;
+    for (std::uint16_t& word : record.path_cache) {
+        word = 0xffff;
     }
-    At<std::uint8_t>(world, record + kSettlerNewTarget) = 1;
-    if (At<std::uint8_t>(world, record + kSettlerByte19) == 0) {
-        At<std::uint8_t>(world, record + kSettlerByte19) = 1;
+    record.new_target = 1;
+    if (record.unk19 == 0) {
+        record.unk19 = 1;
     }
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + (settler << 6);
 }
@@ -222,12 +185,10 @@ std::uint32_t __fastcall GameWorld_CountListSettlersNear(GameWorld* world, void*
                                                          std::uint32_t maxDistance, std::uint32_t x,
                                                          std::uint32_t y, std::uint32_t value) {
     std::uint32_t count = 0;
-    for (std::uint32_t settler = first; settler != 0;
-         settler = At<std::uint16_t>(world, Settler(settler) + kSettlerNext)) {
-        const std::uint32_t sx = At<std::uint16_t>(world, Settler(settler) + kSettlerX);
-        const std::uint32_t sy = At<std::uint16_t>(world, Settler(settler) + kSettlerY);
-        if (At<std::uint8_t>(world, Tile(sx, sy) + kTileByte10) == value &&
-            TileDistance(x, y, sx, sy) < maxDistance) {
+    for (std::uint32_t settler = first; settler != 0; settler = world->settlers[settler].next) {
+        const std::uint32_t sx = world->settlers[settler].x;
+        const std::uint32_t sy = world->settlers[settler].y;
+        if (TileAt(world, sx, sy).walk_region == value && TileDistance(x, y, sx, sy) < maxDistance) {
             ++count;
         }
     }
@@ -240,16 +201,14 @@ std::uint32_t __fastcall GameWorld_FindNearbySettlerType29(GameWorld* world, voi
                                                            std::uint32_t x, std::uint32_t y) {
     std::uint32_t last = x;  // the original's register, see above
     for (std::uint32_t entry = kRingEntriesFirst; entry <= kRingEntriesLast; ++entry) {
-        const std::uint32_t at = kOffsetTable + entry * kOffsetTableBytes;
-        const std::uint32_t tx = x + At<std::uint32_t>(world, at);
-        const std::uint32_t ty = y + At<std::uint32_t>(world, at + 4);
+        const std::uint32_t tx = x + static_cast<std::uint32_t>(world->offsets[entry].dx);
+        const std::uint32_t ty = y + static_cast<std::uint32_t>(world->offsets[entry].dy);
         if (!GameWorld_IsOnMap(world, nullptr, tx, ty)) {
             continue;
         }
-        last = At<std::uint16_t>(world, Tile(tx, ty) + kTileSettler);
-        if (last != 0 && At<std::uint8_t>(world, Settler(last) + kSettlerType) == kSettlerType29 &&
-            At<std::uint8_t>(world, Settler(last) + kSettlerPlayer) ==
-                At<std::uint8_t>(world, Settler(settler) + kSettlerPlayer)) {
+        last = TileAt(world, tx, ty).settler;
+        if (last != 0 && world->settlers[last].art == kSettlerType29 &&
+            world->settlers[last].owner == world->settlers[settler].owner) {
             break;
         }
     }
@@ -271,23 +230,22 @@ using PlaceNearFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std:
 std::uint32_t __fastcall GameWorld_PlaceSettlerNear(GameWorld* world, void*, std::uint32_t settler, std::uint32_t x,
                                                     std::uint32_t y) {
     for (std::uint32_t entry = 0; entry < kPlaceEntries; ++entry) {
-        const std::uint32_t at = kOffsetTable + entry * kOffsetTableBytes;
-        const std::uint32_t tx = x + At<std::uint32_t>(world, at);
-        const std::uint32_t ty = y + At<std::uint32_t>(world, at + 4);
-        const std::uint32_t size = At<std::uint32_t>(world, world_offset::kMapSize);
+        const std::uint32_t tx = x + static_cast<std::uint32_t>(world->offsets[entry].dx);
+        const std::uint32_t ty = y + static_cast<std::uint32_t>(world->offsets[entry].dy);
+        const std::uint32_t size = world->map_size;
         if (tx >= size || ty >= size) {
             continue;
         }
-        const std::uint32_t tile = Tile(tx, ty);
-        if (At<std::uint16_t>(world, tile + kTileSettler) != 0 || At<std::uint8_t>(world, tile + kTileByte10) == 0) {
+        Tile& tile = TileAt(world, tx, ty);
+        if (tile.settler != 0 || tile.walk_region == 0) {
             continue;
         }
-        At<std::uint16_t>(world, tile + kTileSettler) = static_cast<std::uint16_t>(settler);
-        const std::uint32_t record = Settler(settler);
-        At<std::uint16_t>(world, record + kSettlerWordC) = 0;
-        At<std::uint32_t>(world, record + kSettlerState) = GameWorld_RandomBelow6(world, nullptr);
-        At<std::uint16_t>(world, record + kSettlerX) = static_cast<std::uint16_t>(tx);
-        At<std::uint16_t>(world, record + kSettlerY) = static_cast<std::uint16_t>(ty);
+        tile.settler = static_cast<std::uint16_t>(settler);
+        Settler& record = world->settlers[settler];
+        record.counter = 0;
+        record.direction = GameWorld_RandomBelow6(world, nullptr);
+        record.x = static_cast<std::uint16_t>(tx);
+        record.y = static_cast<std::uint16_t>(ty);
         return 1;
     }
     return 0;
@@ -300,14 +258,12 @@ namespace {
 
 // The nearest settler of the list at `head` to (x, y); 0 if the list is
 // empty. `distance` gets its distance, `last` the last distance computed.
-std::uint32_t NearestInList(GameWorld* world, std::uint32_t head, std::uint32_t x, std::uint32_t y,
+std::uint32_t NearestInList(GameWorld* world, const std::uint16_t& head, std::uint32_t x, std::uint32_t y,
                             std::uint32_t& distance, std::uint32_t& last) {
     std::uint32_t best = 0;
     distance = 0xffffffffu;
-    for (std::uint32_t settler = At<std::uint16_t>(world, head); settler != 0;
-         settler = At<std::uint16_t>(world, Settler(settler) + kSettlerNext)) {
-        last = TileDistance(x, y, At<std::uint16_t>(world, Settler(settler) + kSettlerX),
-                            At<std::uint16_t>(world, Settler(settler) + kSettlerY));
+    for (std::uint32_t settler = head; settler != 0; settler = world->settlers[settler].next) {
+        last = TileDistance(x, y, world->settlers[settler].x, world->settlers[settler].y);
         if (last < distance) {
             distance = last;
             best = settler;
@@ -316,17 +272,17 @@ std::uint32_t NearestInList(GameWorld* world, std::uint32_t head, std::uint32_t 
     return best;
 }
 
-void Unlink(GameWorld* world, std::uint32_t head, std::uint32_t settler) {
-    const std::uint32_t record = Settler(settler);
-    const std::uint32_t previous = At<std::uint16_t>(world, record + kSettlerPrevious);
+void Unlink(GameWorld* world, std::uint16_t& head, std::uint32_t settler) {
+    Settler& record = world->settlers[settler];
+    const std::uint32_t previous = record.prev;
     if (previous != 0) {
-        At<std::uint16_t>(world, Settler(previous) + kSettlerNext) = At<std::uint16_t>(world, record + kSettlerNext);
+        world->settlers[previous].next = record.next;
     } else {
-        At<std::uint16_t>(world, head) = At<std::uint16_t>(world, record + kSettlerNext);
+        head = record.next;
     }
-    const std::uint32_t next = At<std::uint16_t>(world, record + kSettlerNext);
+    const std::uint32_t next = record.next;
     if (next != 0) {
-        At<std::uint16_t>(world, Settler(next) + kSettlerPrevious) = At<std::uint16_t>(world, record + kSettlerPrevious);
+        world->settlers[next].prev = record.prev;
     }
 }
 
@@ -340,50 +296,49 @@ using SendToBuildingFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx,
 // a goods pile to pick goods up for a building.
 std::uint32_t __fastcall GameWorld_SendNearestSettlerToPile(GameWorld* world, void*, std::uint32_t pile,
                                                             std::uint32_t player, std::uint32_t building) {
-    const std::uint32_t head = kPlayerRecords + player * kPlayerRecordBytes + kPlayerWaitingA;
-    if (At<std::uint16_t>(world, head) == 0) {
-        return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + head;
+    std::uint16_t& head = world->players[player].settler_lists[kPlayerWaitingA];
+    if (head == 0) {
+        return Address(&head);
     }
-    const std::uint32_t record = kPiles + pile * kPileBytes;
-    const std::uint32_t px = At<std::uint16_t>(world, record + kPileX);
-    const std::uint32_t py = At<std::uint16_t>(world, record + kPileY);
+    Pile& record = world->piles[pile];
+    const std::uint32_t px = record.x;
+    const std::uint32_t py = record.y;
     std::uint32_t distance = 0;
     std::uint32_t last = 0;
     const std::uint32_t best = NearestInList(world, head, px, py, distance, last);
     if (best == 0) {
         return last;
     }
-    std::uint8_t& reserved = At<std::uint8_t>(world, record + kPileReserved);
+    std::uint8_t& reserved = record.leaving;
     reserved = static_cast<std::uint8_t>(reserved + 1);
     Unlink(world, head, best);
-    GameWorld_SetSettlerTarget(world, nullptr, best, At<std::uint16_t>(world, record + kPileX),
-                               At<std::uint16_t>(world, record + kPileY));
-    const std::uint32_t settler = Settler(best);
-    At<std::uint16_t>(world, settler + kSettlerJob) = 0x133;
-    At<std::uint16_t>(world, settler + kSettlerWordC) = 0;
-    At<std::uint8_t>(world, settler + kSettlerGoods) = At<std::uint8_t>(world, record + kPileGoods);
-    At<std::uint8_t>(world, settler + kSettlerByte17) = 0;
-    if (At<std::uint8_t>(world, record + kPileAmount) != (reserved & 0x0f)) {
+    GameWorld_SetSettlerTarget(world, nullptr, best, record.x, record.y);
+    Settler& settler = world->settlers[best];
+    settler.job = 0x133;
+    settler.counter = 0;
+    settler.good = record.good;
+    settler.unk17 = 0;
+    if (record.amount != (reserved & 0x0f)) {
         reserved = static_cast<std::uint8_t>(reserved + 1);
-        At<std::uint8_t>(world, settler + kSettlerByte17) = 1;
+        settler.unk17 = 1;
     }
-    At<std::uint16_t>(world, settler + kSettlerWorkplace) = static_cast<std::uint16_t>(building);
+    settler.building = static_cast<std::uint16_t>(building);
     return ((pile + 0x14d2e2u) & 0xffffff00u) | reserved;
 }
 
 // Purpose: Assigns work: finds the nearest waiting settler (probably a builder) and sends it to a building
 // site, if one is close enough.
 std::uint32_t __fastcall GameWorld_SendNearestSettlerToBuilding(GameWorld* world, void*, std::uint32_t building) {
-    const std::uint32_t record = kBuildings + building * kBuildingBytes;
-    const std::uint32_t direction = (At<std::uint16_t>(world, record + kBuildingDirection) + 3u) % 6u;
-    const std::uint32_t x1 = NeighbourX(At<std::uint16_t>(world, record + kBuildingDoorX), direction);
-    const std::uint32_t y1 = NeighbourY(At<std::uint16_t>(world, record + kBuildingDoorY), direction);
+    const Building& record = world->buildings[building];
+    const std::uint32_t direction = (record.unk22 + 3u) % 6u;
+    const std::uint32_t x1 = NeighbourX(record.work_x, direction);
+    const std::uint32_t y1 = NeighbourY(record.work_y, direction);
     const std::uint32_t x2 = NeighbourX(x1, direction);
     const std::uint32_t y2 = NeighbourY(y1, direction);
-    const std::uint32_t player = At<std::uint8_t>(world, record + kBuildingPlayer);
-    const std::uint32_t head = kPlayerRecords + player * kPlayerRecordBytes + kPlayerWaitingB;
-    if (At<std::uint16_t>(world, head) == 0) {
-        return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + head;
+    const std::uint32_t player = record.owner;
+    std::uint16_t& head = world->players[player].settler_lists[kPlayerWaitingB];
+    if (head == 0) {
+        return Address(&head);
     }
     std::uint32_t distance = 0;
     std::uint32_t last = 0;
@@ -393,11 +348,11 @@ std::uint32_t __fastcall GameWorld_SendNearestSettlerToBuilding(GameWorld* world
     }
     Unlink(world, head, best);
     const std::uint32_t result = GameWorld_SetSettlerTarget(world, nullptr, best, x2, y2);
-    const std::uint32_t settler = Settler(best);
-    At<std::uint16_t>(world, settler + kSettlerJob) = 0x147;
-    At<std::uint8_t>(world, settler + kSettlerByte3C) = 0;
-    At<std::uint16_t>(world, settler + kSettlerWordC) = 0;
-    At<std::uint16_t>(world, settler + kSettlerWorkplace) = static_cast<std::uint16_t>(building);
+    Settler& settler = world->settlers[best];
+    settler.job = 0x147;
+    settler.unk3c = 0;
+    settler.counter = 0;
+    settler.building = static_cast<std::uint16_t>(building);
     return (result & 0xffff0000u) | (building & 0xffffu);
 }
 
@@ -408,12 +363,8 @@ S3RE_HOOK(0x004ddd70, GameWorld_SendNearestSettlerToBuilding, SendToBuildingFn,
 
 namespace {
 
-constexpr std::uintptr_t kGlobalListCounts = 0x007ad620;  // uint16[10], S3.EXE data
-constexpr std::uintptr_t kGlobalLists = 0x007ad634;       // uint16[10][100]
-constexpr std::uint32_t kListCount = 10;
-constexpr std::uint32_t kListWords = 100;
-constexpr std::uint32_t kPlayerListCounts = 0x11940bc;  // int32[20][10]
-constexpr std::uint32_t kPlayerLists = 0x118a47c;       // uint16[20][10][100]
+constexpr std::uint32_t kListCount = SettlerGroups::kGroups;
+constexpr std::uint32_t kListWords = SettlerGroups::kWords;
 
 // Removes `value` from words[0..count) as the original does; `count` is
 // re-read through the reference.
@@ -431,6 +382,12 @@ void RemoveFromList(std::uint16_t* words, Count& count, std::uint32_t value) {
     }
 }
 
+// The int32 length of a player's list, read and written as uint32 like the
+// original (no signed overflow on the decrement).
+std::uint32_t& PlayerListLength(GameWorld* world, std::uint32_t player, std::uint32_t list) {
+    return reinterpret_cast<std::uint32_t&>(world->player_list_lengths[player][list]);
+}
+
 }  // namespace
 
 using RemoveSettlerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler);
@@ -438,18 +395,15 @@ using RemoveSettlerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, 
 // Purpose: Takes a settler out of all the job/assignment lists it may be on, and announces the change as an
 // event. Probably used when a settler dies or changes job.
 std::uint32_t __fastcall GameWorld_RemoveSettlerFromLists(GameWorld* world, void*, std::uint32_t settler) {
-    const std::uint32_t record = Settler(settler);
-    GameWorld_QueueEvent(world, nullptr, 5, settler, At<std::uint8_t>(world, record + kSettlerType),
-                         At<std::uint8_t>(world, record + kSettlerPlayer));
-    const std::uint32_t player = At<std::uint8_t>(world, record + kSettlerPlayer);
+    const Settler& record = world->settlers[settler];
+    GameWorld_QueueEvent(world, nullptr, 5, settler, record.art, record.owner);
+    const std::uint32_t player = record.owner;
+    SettlerGroups& groups = GlobalSettlerGroups();
     for (std::uint32_t list = 0; list < kListCount; ++list) {
-        auto& count = *reinterpret_cast<std::uint16_t*>(kGlobalListCounts + list * 2);
-        RemoveFromList(reinterpret_cast<std::uint16_t*>(kGlobalLists + list * kListWords * 2), count, settler);
+        RemoveFromList(groups.lists[list], groups.counts[list], settler);
     }
     for (std::uint32_t list = 0; list < kListCount; ++list) {
-        auto& count = At<std::uint32_t>(world, kPlayerListCounts + player * (kListCount * 4) + list * 4);
-        RemoveFromList(&At<std::uint16_t>(world, kPlayerLists + player * (kListCount * kListWords * 2) + list * kListWords * 2),
-                       count, settler);
+        RemoveFromList(world->player_lists[player][list], PlayerListLength(world, player, list), settler);
     }
     return 0;
 }
@@ -459,11 +413,11 @@ S3RE_HOOK(0x0050dff0, GameWorld_RemoveSettlerFromLists, RemoveSettlerFn, Origina
 
 namespace {
 
-constexpr std::uint32_t kPlayerWorkerLists = 0x20;  // uint16 heads
-constexpr std::uint32_t kBuildingAimX = 0x2;
-constexpr std::uint32_t kBuildingAimY = 0x4;
-constexpr std::uint32_t kBuildingX = 0xa;
-constexpr std::uint32_t kBuildingY = 0xc;
+// Head of the player's settler list `list`: Player::settler_lists[list]
+// (player record +0x20 + list*2; any list number, as in the original).
+std::uint16_t& WorkerListHead(GameWorld* world, std::uint32_t player, std::uint32_t list) {
+    return world->players[player].settler_lists[list];
+}
 
 }  // namespace
 
@@ -474,23 +428,21 @@ using SendWorkerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std
 // (same region of the map) and is close enough, takes it off the free list and sends it to the building.
 std::uint32_t __fastcall GameWorld_SendNearestWorkerToBuilding(GameWorld* world, void*, std::uint32_t building,
                                                                std::uint32_t list, std::uint32_t maxDistance) {
-    const std::uint32_t record = kBuildings + building * kBuildingBytes;
-    const std::uint32_t bx = At<std::uint16_t>(world, record + kBuildingX);
-    const std::uint32_t by = At<std::uint16_t>(world, record + kBuildingY);
-    const std::uint32_t region = At<std::uint8_t>(world, Tile(bx, by) + kTileByte10);
-    const std::uint32_t player = At<std::uint8_t>(world, record + kBuildingPlayer);
-    const std::uint32_t head = kPlayerRecords + kPlayerWorkerLists + (list + player * (kPlayerRecordBytes / 2)) * 2;
+    const Building& record = world->buildings[building];
+    const std::uint32_t bx = record.door_x;
+    const std::uint32_t by = record.door_y;
+    const std::uint32_t region = TileAt(world, bx, by).walk_region;
+    const std::uint32_t player = record.owner;
+    std::uint16_t& head = WorkerListHead(world, player, list);
     std::uint32_t best = 0xffffffffu;
     std::uint32_t chosen = 0;
-    for (std::uint32_t settler = At<std::uint16_t>(world, head); settler != 0;
-         settler = At<std::uint16_t>(world, Settler(settler) + kSettlerNext)) {
-        const std::uint32_t sx = At<std::uint16_t>(world, Settler(settler) + kSettlerX);
-        const std::uint32_t sy = At<std::uint16_t>(world, Settler(settler) + kSettlerY);
-        if (At<std::uint8_t>(world, Tile(sx, sy) + kTileByte10) != region) {
+    for (std::uint32_t settler = head; settler != 0; settler = world->settlers[settler].next) {
+        const std::uint32_t sx = world->settlers[settler].x;
+        const std::uint32_t sy = world->settlers[settler].y;
+        if (TileAt(world, sx, sy).walk_region != region) {
             continue;
         }
-        const std::uint32_t distance = TileDistance(At<std::uint16_t>(world, record + kBuildingAimX),
-                                                    At<std::uint16_t>(world, record + kBuildingAimY), sx, sy);
+        const std::uint32_t distance = TileDistance(record.x, record.y, sx, sy);
         if (distance < maxDistance && distance < best) {
             best = distance;
             chosen = settler;
@@ -501,38 +453,19 @@ std::uint32_t __fastcall GameWorld_SendNearestWorkerToBuilding(GameWorld* world,
     }
     Unlink(world, head, chosen);
     GameWorld_RemoveSettlerFromLists(world, nullptr, chosen);
-    GameWorld_SetSettlerTarget(world, nullptr, chosen, At<std::uint16_t>(world, record + kBuildingX),
-                               At<std::uint16_t>(world, record + kBuildingY));
-    const std::uint32_t settler = Settler(chosen);
-    At<std::uint16_t>(world, settler + kSettlerJob) = 3;
-    At<std::uint16_t>(world, settler + kSettlerWordC) = 0;
-    At<std::uint16_t>(world, settler + kSettlerWorkplace) = static_cast<std::uint16_t>(building);
+    GameWorld_SetSettlerTarget(world, nullptr, chosen, record.door_x, record.door_y);
+    Settler& settler = world->settlers[chosen];
+    settler.job = 3;
+    settler.counter = 0;
+    settler.building = static_cast<std::uint16_t>(building);
     return chosen;
 }
 
 namespace {
 
-constexpr std::uint32_t kAreas = 0xe145e8;
-constexpr std::uint32_t kAreaBytes = 0x2e0;
-constexpr std::uint32_t kAreaPileHeads = 0xa;
-constexpr std::uint32_t kAreaCarriers = 0x12a;
-constexpr std::uint32_t kPileLeaving = 0x2;
-constexpr std::uint32_t kPileKind = 0x4;
-constexpr std::uint32_t kPileNext = 0xc;
-constexpr std::uint32_t kBuildingAimXField = 0x2;
-constexpr std::uint32_t kBuildingAimYField = 0x4;
-constexpr std::uint32_t kBuildingFirstPile = 0xe;
-constexpr std::uint32_t kBuildingExtraNumber = 0x34;
-constexpr std::uint32_t kBuildingExtras = 0x10f45e8;
-constexpr std::uint32_t kBuildingExtraBytes = 0x5a;
-constexpr std::uint32_t kExtraGoodsOrdered = 0x36;  // byte per goods type
 constexpr std::uint32_t kBuildingPiles = 6;
 constexpr std::uint8_t kFreePile = 0xff;
 constexpr std::uint16_t kJobFetchForTrade = 0x4c;
-
-std::uint32_t PileRecord(std::uint32_t pile) {
-    return kPiles + pile * kPileBytes;
-}
 
 }  // namespace
 
@@ -544,21 +477,18 @@ using FetchGoodsFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_
 // stock piles.
 void __fastcall GameWorld_FetchGoodsToTradeBuilding(GameWorld* world, void*, std::uint32_t area,
                                                     std::uint32_t building, std::uint32_t goods) {
-    const std::uint32_t record = kBuildings + building * kBuildingBytes;
+    const Building& record = world->buildings[building];
     std::uint32_t source = 0;
     std::uint32_t bestScore = 0xffffffffu;
-    for (std::uint32_t pile = At<std::uint16_t>(world, kAreas + area * kAreaBytes + kAreaPileHeads + goods * 2);
-         pile != 0; pile = At<std::uint16_t>(world, PileRecord(pile) + kPileNext)) {
-        const std::uint32_t p = PileRecord(pile);
-        const std::uint32_t amount = At<std::uint8_t>(world, p + kPileAmount);
-        const std::uint32_t leaving = At<std::uint8_t>(world, p + kPileLeaving);
+    for (std::uint32_t pile = world->areas[area].piles_by_goods[goods]; pile != 0; pile = world->piles[pile].next) {
+        const Pile& p = world->piles[pile];
+        const std::uint32_t amount = p.amount;
+        const std::uint32_t leaving = p.leaving;
         if (amount == leaving) {
             continue;
         }
-        std::uint32_t score = TileDistance(At<std::uint16_t>(world, record + kBuildingAimXField),
-                                           At<std::uint16_t>(world, record + kBuildingAimYField),
-                                           At<std::uint16_t>(world, p + kPileX), At<std::uint16_t>(world, p + kPileY));
-        if (At<std::uint8_t>(world, p + kPileKind) != 0xff) {
+        std::uint32_t score = TileDistance(record.x, record.y, p.x, p.y);
+        if (p.art != 0xff) {
             score = (amount * 5 + score + (leaving + 1) * 0x7ffffffbu) * 2;
         }
         if (score < bestScore) {
@@ -569,54 +499,48 @@ void __fastcall GameWorld_FetchGoodsToTradeBuilding(GameWorld* world, void*, std
     if (source == 0) {
         return;
     }
-    const std::uint32_t head = kAreas + area * kAreaBytes + kAreaCarriers;
-    const std::uint32_t from = PileRecord(source);
+    // The area's settler list at +0x12a (settlers_by_type[0]).
+    std::uint16_t& head = world->areas[area].settlers_by_type[0];
+    const Pile& from = world->piles[source];
     std::uint32_t distance = 0;
     std::uint32_t last = 0;
-    const std::uint32_t carrier = NearestInList(world, head, At<std::uint16_t>(world, from + kPileX),
-                                                At<std::uint16_t>(world, from + kPileY), distance, last);
+    const std::uint32_t carrier = NearestInList(world, head, from.x, from.y, distance, last);
     if (carrier == 0) {
         return;
     }
     GameWorld_PileIncAmountLeaving(world, nullptr, source);
     Unlink(world, head, carrier);
-    const std::uint32_t extra =
-        kBuildingExtras + static_cast<std::uint32_t>(At<std::uint16_t>(world, record + kBuildingExtraNumber)) *
-                              kBuildingExtraBytes;
-    ++At<std::uint8_t>(world, extra + goods + kExtraGoodsOrdered);
-    const std::uint32_t first = At<std::uint16_t>(world, record + kBuildingFirstPile);
+    ++world->trades[record.trade].coming[goods];
+    const std::uint32_t first = record.pile_ring;
     std::uint32_t target = 0;
     std::uint32_t pile = first;
     for (std::uint32_t k = 0; k < kBuildingPiles; ++k) {
-        const std::uint32_t p = PileRecord(pile);
-        if (At<std::uint8_t>(world, p + kPileGoods) == goods &&
-            static_cast<std::int32_t>((At<std::uint8_t>(world, p + kPileLeaving) >> 4) +
-                                      At<std::uint8_t>(world, p + kPileAmount)) < 8) {
+        const Pile& p = world->piles[pile];
+        if (p.good == goods && static_cast<std::int32_t>((p.leaving >> 4) + p.amount) < 8) {
             target = pile;
         }
-        pile = At<std::uint16_t>(world, p + kPileNext);
+        pile = p.next;
     }
     if (target == 0) {
         pile = first;
         for (std::uint32_t k = 0; k < kBuildingPiles; ++k) {
-            if (At<std::uint8_t>(world, PileRecord(pile) + kPileGoods) == kFreePile) {
+            if (world->piles[pile].good == kFreePile) {
                 target = pile;
             }
-            pile = At<std::uint16_t>(world, PileRecord(pile) + kPileNext);
+            pile = world->piles[pile].next;
         }
         if (target == 0) {
             return;
         }
-        At<std::uint8_t>(world, PileRecord(target) + kPileGoods) = static_cast<std::uint8_t>(goods);
+        world->piles[target].good = static_cast<std::uint8_t>(goods);
     }
-    At<std::uint8_t>(world, PileRecord(target) + kPileLeaving) += 0x10;
-    GameWorld_SetSettlerTarget(world, nullptr, carrier, At<std::uint16_t>(world, from + kPileX),
-                               At<std::uint16_t>(world, from + kPileY));
-    const std::uint32_t s = Settler(carrier);
-    At<std::uint16_t>(world, s + kSettlerJob) = kJobFetchForTrade;
-    At<std::uint16_t>(world, s + kSettlerWordC) = 0;
-    At<std::uint16_t>(world, s + kSettlerWorkplace) = static_cast<std::uint16_t>(target);
-    At<std::uint8_t>(world, s + kSettlerGoods) = static_cast<std::uint8_t>(goods);
+    world->piles[target].leaving += 0x10;
+    GameWorld_SetSettlerTarget(world, nullptr, carrier, from.x, from.y);
+    Settler& s = world->settlers[carrier];
+    s.job = kJobFetchForTrade;
+    s.counter = 0;
+    s.building = static_cast<std::uint16_t>(target);
+    s.good = static_cast<std::uint8_t>(goods);
 }
 
 S3RE_HOOK(0x004de0a0, GameWorld_FetchGoodsToTradeBuilding, FetchGoodsFn, Original_GameWorld_FetchGoodsToTradeBuilding,
@@ -632,7 +556,21 @@ S3RE_HOOK(0x004db500, GameWorld_SendNearestWorkerToBuilding, SendWorkerFn, Origi
 namespace {
 
 constexpr std::uint32_t kTestSettlers = 0x400;
-constexpr std::size_t kTestWorld = kSettlers + 0x10000 * kSettlerBytes;
+constexpr std::size_t kTestWorld = offsetof(GameWorld, settlers) + 0x10000 * sizeof(Settler);
+
+// Sets `field` (a field of the original world) to `value` in both worlds.
+template <typename T, typename V>
+void SetField(test::WorldPair& worlds, T& field, V value) {
+    worlds.Set<T>(OffsetIn(worlds.original(), &field), static_cast<T>(value));
+}
+
+// Event ring indices as QueueEvent expects (write index in range).
+void SetUpEventRings(test::Context& ctx, test::WorldPair& worlds) {
+    GameWorld* o = worlds.original();
+    SetField(worlds, o->event_index.write, ctx.rng().Below(1000));
+    SetField(worlds, o->pending_event_index.read, 0u);
+    SetField(worlds, o->pending_event_index.write, 0u);
+}
 
 // Runs `cases` cases; `call` prepares both worlds and returns both EAX values.
 template <typename Call>
@@ -656,6 +594,7 @@ std::uint32_t Relative(std::uint32_t value, GameWorld* world) {
 // The real offset table: the tile, then rings of growing distance (only the
 // first 37 entries are set; the order within a ring doesn't matter here).
 void SetUpRings(test::Context& ctx, test::WorldPair& worlds) {
+    GameWorld* o = worlds.original();
     std::uint32_t entry = 0;
     for (std::int32_t radius = 0; entry <= kRingEntriesLast; ++radius) {
         for (std::int32_t dx = -radius; dx <= radius && entry <= kRingEntriesLast; ++dx) {
@@ -664,9 +603,8 @@ void SetUpRings(test::Context& ctx, test::WorldPair& worlds) {
                     continue;
                 }
                 const bool random = ctx.rng().Chance(1, 32);
-                worlds.Set<std::int32_t>(kOffsetTable + entry * kOffsetTableBytes, random ? ctx.rng().Range(-9, 9) : dx);
-                worlds.Set<std::int32_t>(kOffsetTable + entry * kOffsetTableBytes + 4,
-                                         random ? ctx.rng().Range(-9, 9) : dy);
+                SetField(worlds, o->offsets[entry].dx, random ? ctx.rng().Range(-9, 9) : dx);
+                SetField(worlds, o->offsets[entry].dy, random ? ctx.rng().Range(-9, 9) : dy);
                 ++entry;
             }
         }
@@ -680,16 +618,16 @@ std::uint32_t __fastcall WrongFindNearbySettlerType29(GameWorld* world, void* ed
     if (last == 0 || last == x) {
         return last;
     }
-    const bool match = At<std::uint8_t>(world, Settler(last) + kSettlerType) == kSettlerType29 &&
-                       At<std::uint8_t>(world, Settler(last) + kSettlerPlayer) ==
-                           At<std::uint8_t>(world, Settler(settler) + kSettlerPlayer);
+    const bool match = world->settlers[last].art == kSettlerType29 &&
+                       world->settlers[last].owner == world->settlers[settler].owner;
     return match ? last : 0;
 }
 
 void CompareFindNearby(test::Context& ctx, FindNearbyFn candidate, int cases) {
     Compare(ctx, cases, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
+        GameWorld* o = worlds.original();
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : 4 + ctx.rng().Below(30);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        SetField(worlds, o->map_size, size);
         SetUpRings(ctx, worlds);
         std::uint32_t x = ctx.rng().Below(size);
         std::uint32_t y = ctx.rng().Below(size);
@@ -697,7 +635,7 @@ void CompareFindNearby(test::Context& ctx, FindNearbyFn candidate, int cases) {
             x += 400;  // nothing on the map
         }
         const std::uint32_t settler = 1 + ctx.rng().Below(kTestSettlers - 1);
-        worlds.Set<std::uint8_t>(Settler(settler) + kSettlerPlayer, static_cast<std::uint8_t>(ctx.rng().Below(3)));
+        SetField(worlds, o->settlers[settler].owner, ctx.rng().Below(3));
         const std::uint32_t sparse = ctx.rng().Below(4);
         for (std::int32_t dx = -5; dx <= 5; ++dx) {
             for (std::int32_t dy = -5; dy <= 5; ++dy) {
@@ -707,11 +645,11 @@ void CompareFindNearby(test::Context& ctx, FindNearbyFn candidate, int cases) {
                     continue;
                 }
                 const std::uint32_t other = ctx.rng().Below(4) < sparse ? 0 : 1 + ctx.rng().Below(kTestSettlers - 1);
-                worlds.Set<std::uint16_t>(Tile(tx, ty) + kTileSettler, static_cast<std::uint16_t>(other));
+                SetField(worlds, o->tiles[tx][ty].settler, other);
                 if (other != 0) {
-                    worlds.Set<std::uint8_t>(Settler(other) + kSettlerType,
-                                             ctx.rng().Chance(1, 6) ? kSettlerType29 : static_cast<std::uint8_t>(ctx.rng().Below(0x40)));
-                    worlds.Set<std::uint8_t>(Settler(other) + kSettlerPlayer, static_cast<std::uint8_t>(ctx.rng().Below(3)));
+                    SetField(worlds, o->settlers[other].art,
+                             ctx.rng().Chance(1, 6) ? kSettlerType29 : static_cast<std::uint8_t>(ctx.rng().Below(0x40)));
+                    SetField(worlds, o->settlers[other].owner, ctx.rng().Below(3));
                 }
             }
         }
@@ -724,15 +662,16 @@ void CompareFindNearby(test::Context& ctx, FindNearbyFn candidate, int cases) {
 
 S3RE_TEST(GameWorld_SetSettlerTarget_MatchesOriginal) {
     Compare(ctx, 5000, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
+        GameWorld* o = worlds.original();
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : ctx.rng().Below(64);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        SetField(worlds, o->map_size, size);
         const std::uint32_t settler = ctx.rng().Below(0x10000);
         std::uint32_t x = ctx.rng().Below(400);
         std::uint32_t y = ctx.rng().Below(400);
         if (ctx.rng().Chance(1, 8)) {
             x = ctx.rng().Next32();
         }
-        worlds.Set<std::uint8_t>(Settler(settler) + kSettlerByte19, static_cast<std::uint8_t>(ctx.rng().Below(3)));
+        SetField(worlds, o->settlers[settler].unk19, ctx.rng().Below(3));
         expected = Relative(Original_GameWorld_SetSettlerTarget(worlds.original(), nullptr, settler, x, y),
                             worlds.original());
         actual = Relative(GameWorld_SetSettlerTarget(worlds.ours(), nullptr, settler, x, y), worlds.ours());
@@ -742,6 +681,7 @@ S3RE_TEST(GameWorld_SetSettlerTarget_MatchesOriginal) {
 S3RE_TEST(GameWorld_CountListSettlersNear_MatchesOriginal) {
     Compare(ctx, 3000, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         // A list of up to 20 settlers on tiles near (x, y), some with the value.
+        GameWorld* o = worlds.original();
         const std::uint32_t x = ctx.rng().Below(384);
         const std::uint32_t y = ctx.rng().Below(384);
         const std::uint32_t value = ctx.rng().Below(3);
@@ -752,13 +692,11 @@ S3RE_TEST(GameWorld_CountListSettlersNear_MatchesOriginal) {
             const std::uint32_t sx = static_cast<std::uint32_t>(ctx.rng().Range(0, 383));
             const std::uint32_t sy = ctx.rng().Chance(1, 2) ? static_cast<std::uint32_t>(ctx.rng().Range(0, 383))
                                                             : y + ctx.rng().Below(10) - (y > 9 ? 5 : 0);
-            worlds.Set<std::uint16_t>(Settler(settler) + kSettlerX, static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? x : sx));
-            worlds.Set<std::uint16_t>(Settler(settler) + kSettlerY, static_cast<std::uint16_t>(sy % 384));
-            worlds.Set<std::uint16_t>(Settler(settler) + kSettlerNext, static_cast<std::uint16_t>(first));
-            const std::uint32_t tile = Tile(At<std::uint16_t>(worlds.original(), Settler(settler) + kSettlerX),
-                                            At<std::uint16_t>(worlds.original(), Settler(settler) + kSettlerY));
-            worlds.Set<std::uint8_t>(tile + kTileByte10,
-                                     static_cast<std::uint8_t>(ctx.rng().Chance(2, 3) ? value : ctx.rng().Below(256)));
+            Settler& s = o->settlers[settler];
+            SetField(worlds, s.x, ctx.rng().Chance(1, 2) ? x : sx);
+            SetField(worlds, s.y, sy % 384);
+            SetField(worlds, s.next, first);
+            SetField(worlds, o->tiles[s.x][s.y].walk_region, ctx.rng().Chance(2, 3) ? value : ctx.rng().Below(256));
             first = settler;
         }
         // A list may loop through an earlier settler; make it end.
@@ -766,7 +704,7 @@ S3RE_TEST(GameWorld_CountListSettlersNear_MatchesOriginal) {
         // Walk the list as built (it can contain the same settler twice and loop);
         // only call when it ends within 64 steps.
         std::uint32_t steps = 0;
-        for (std::uint32_t s = first; s != 0 && steps < 64; s = At<std::uint16_t>(worlds.original(), Settler(s) + kSettlerNext)) {
+        for (std::uint32_t s = first; s != 0 && steps < 64; s = o->settlers[s].next) {
             ++steps;
         }
         if (steps == 64) {
@@ -788,8 +726,9 @@ S3RE_TEST(GameWorld_FindNearbySettlerType29_ComparisonDetectsWrongImplementation
 
 S3RE_TEST(GameWorld_PlaceSettlerNear_MatchesOriginal) {
     Compare(ctx, 3000, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
+        GameWorld* o = worlds.original();
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : 4 + ctx.rng().Below(40);
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, size);
+        SetField(worlds, o->map_size, size);
         std::uint32_t x = ctx.rng().Below(size);
         const std::uint32_t y = ctx.rng().Below(size);
         if (ctx.rng().Chance(1, 32)) {
@@ -799,8 +738,8 @@ S3RE_TEST(GameWorld_PlaceSettlerNear_MatchesOriginal) {
         const std::uint32_t entries = ctx.rng().Chance(1, 8) ? kPlaceEntries : 80;
         for (std::uint32_t entry = 0; entry < entries; ++entry) {
             const std::int32_t reach = 1 + static_cast<std::int32_t>(entry / 60);
-            worlds.Set<std::int32_t>(kOffsetTable + entry * kOffsetTableBytes, ctx.rng().Range(-reach, reach));
-            worlds.Set<std::int32_t>(kOffsetTable + entry * kOffsetTableBytes + 4, ctx.rng().Range(-reach, reach));
+            SetField(worlds, o->offsets[entry].dx, ctx.rng().Range(-reach, reach));
+            SetField(worlds, o->offsets[entry].dy, ctx.rng().Range(-reach, reach));
         }
         // Tiles near (x, y): mostly occupied or without byte +0x10.
         const std::uint32_t free = ctx.rng().Below(64);
@@ -812,13 +751,15 @@ S3RE_TEST(GameWorld_PlaceSettlerNear_MatchesOriginal) {
                     continue;
                 }
                 const bool empty = ctx.rng().Below(1024) < free;
-                worlds.Set<std::uint16_t>(Tile(tx, ty) + kTileSettler,
-                                          static_cast<std::uint16_t>(empty || ctx.rng().Chance(1, 2) ? 0 : 1 + ctx.rng().Below(100)));
-                worlds.Set<std::uint8_t>(Tile(tx, ty) + kTileByte10,
-                                         static_cast<std::uint8_t>(empty || ctx.rng().Chance(1, 2) ? 1 + ctx.rng().Below(3) : 0));
+                SetField(worlds, o->tiles[tx][ty].settler, empty || ctx.rng().Chance(1, 2) ? 0 : 1 + ctx.rng().Below(100));
+                SetField(worlds, o->tiles[tx][ty].walk_region,
+                         empty || ctx.rng().Chance(1, 2) ? 1 + ctx.rng().Below(3) : 0);
             }
         }
-        worlds.Set<std::uint32_t>(world_offset::kRandomState, ctx.rng().Next32());
+        // The first two words of the random state.
+        const std::uint32_t state = ctx.rng().Next32();
+        SetField(worlds, o->random_state[0], state & 0xffff);
+        SetField(worlds, o->random_state[1], state >> 16);
         const std::uint32_t settler = ctx.rng().Below(kTestSettlers);
         expected = Original_GameWorld_PlaceSettlerNear(worlds.original(), nullptr, settler, x, y);
         actual = GameWorld_PlaceSettlerNear(worlds.ours(), nullptr, settler, x, y);
@@ -828,8 +769,9 @@ S3RE_TEST(GameWorld_PlaceSettlerNear_MatchesOriginal) {
 namespace {
 
 // A doubly linked list of up to 12 distinct settlers at `head`, near (x, y).
-void SetUpWaitingList(test::Context& ctx, test::WorldPair& worlds, std::uint32_t head, std::uint32_t x,
+void SetUpWaitingList(test::Context& ctx, test::WorldPair& worlds, std::uint16_t& head, std::uint32_t x,
                       std::uint32_t y) {
+    GameWorld* o = worlds.original();
     std::uint32_t used[16] = {};
     const std::uint32_t length = ctx.rng().Chance(1, 8) ? 0 : 1 + ctx.rng().Below(12);
     for (std::uint32_t i = 0; i < length; ++i) {
@@ -844,16 +786,14 @@ void SetUpWaitingList(test::Context& ctx, test::WorldPair& worlds, std::uint32_t
         }
         used[i] = settler;
     }
-    worlds.Set<std::uint16_t>(head, static_cast<std::uint16_t>(length ? used[0] : 0));
+    SetField(worlds, head, length ? used[0] : 0);
     for (std::uint32_t i = 0; i < length; ++i) {
-        const std::uint32_t record = Settler(used[i]);
-        worlds.Set<std::uint16_t>(record + kSettlerPrevious, static_cast<std::uint16_t>(i ? used[i - 1] : 0));
-        worlds.Set<std::uint16_t>(record + kSettlerNext, static_cast<std::uint16_t>(i + 1 < length ? used[i + 1] : 0));
+        Settler& record = o->settlers[used[i]];
+        SetField(worlds, record.prev, i ? used[i - 1] : 0);
+        SetField(worlds, record.next, i + 1 < length ? used[i + 1] : 0);
         const std::int32_t reach = ctx.rng().Chance(1, 2) ? 8 : 60;
-        worlds.Set<std::uint16_t>(record + kSettlerX,
-                                  static_cast<std::uint16_t>((x + ctx.rng().Range(-reach, reach)) & 0xffff));
-        worlds.Set<std::uint16_t>(record + kSettlerY,
-                                  static_cast<std::uint16_t>((y + ctx.rng().Range(-reach, reach)) & 0xffff));
+        SetField(worlds, record.x, (x + ctx.rng().Range(-reach, reach)) & 0xffff);
+        SetField(worlds, record.y, (y + ctx.rng().Range(-reach, reach)) & 0xffff);
     }
 }
 
@@ -866,17 +806,18 @@ std::uint32_t RelativeIfPointer(std::uint32_t value, GameWorld* world) {
 
 S3RE_TEST(GameWorld_SendNearestSettlerToPile_MatchesOriginal) {
     Compare(ctx, 3000, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, 384);
+        GameWorld* o = worlds.original();
+        SetField(worlds, o->map_size, 384u);
         const std::uint32_t pile = 1 + ctx.rng().Below(0x800);
         const std::uint32_t player = ctx.rng().Below(20);
         const std::uint32_t x = ctx.rng().Below(384);
         const std::uint32_t y = ctx.rng().Below(384);
-        const std::uint32_t record = kPiles + pile * kPileBytes;
-        worlds.Set<std::uint16_t>(record + kPileX, static_cast<std::uint16_t>(x));
-        worlds.Set<std::uint16_t>(record + kPileY, static_cast<std::uint16_t>(y));
-        worlds.Set<std::uint8_t>(record + kPileAmount, static_cast<std::uint8_t>(ctx.rng().Below(10)));
-        worlds.Set<std::uint8_t>(record + kPileReserved, static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? ctx.rng().Below(10) : ctx.rng().Next32()));
-        SetUpWaitingList(ctx, worlds, kPlayerRecords + player * kPlayerRecordBytes + kPlayerWaitingA, x, y);
+        Pile& record = o->piles[pile];
+        SetField(worlds, record.x, x);
+        SetField(worlds, record.y, y);
+        SetField(worlds, record.amount, ctx.rng().Below(10));
+        SetField(worlds, record.leaving, ctx.rng().Chance(1, 2) ? ctx.rng().Below(10) : ctx.rng().Next32());
+        SetUpWaitingList(ctx, worlds, o->players[player].settler_lists[kPlayerWaitingA], x, y);
         const std::uint32_t building = ctx.rng().Next32();
         expected = RelativeIfPointer(
             Original_GameWorld_SendNearestSettlerToPile(worlds.original(), nullptr, pile, player, building), worlds.original());
@@ -887,17 +828,18 @@ S3RE_TEST(GameWorld_SendNearestSettlerToPile_MatchesOriginal) {
 
 S3RE_TEST(GameWorld_SendNearestSettlerToBuilding_MatchesOriginal) {
     Compare(ctx, 3000, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, 384);
+        GameWorld* o = worlds.original();
+        SetField(worlds, o->map_size, 384u);
         const std::uint32_t building = 1 + ctx.rng().Below(0x800);
-        const std::uint32_t record = kBuildings + building * kBuildingBytes;
+        Building& record = o->buildings[building];
         const std::uint32_t player = ctx.rng().Below(20);
         const std::uint32_t x = 2 + ctx.rng().Below(380);
         const std::uint32_t y = 2 + ctx.rng().Below(380);
-        worlds.Set<std::uint8_t>(record + kBuildingPlayer, static_cast<std::uint8_t>(player));
-        worlds.Set<std::uint16_t>(record + kBuildingDoorX, static_cast<std::uint16_t>(x));
-        worlds.Set<std::uint16_t>(record + kBuildingDoorY, static_cast<std::uint16_t>(y));
-        worlds.Set<std::uint16_t>(record + kBuildingDirection, static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(6)));
-        SetUpWaitingList(ctx, worlds, kPlayerRecords + player * kPlayerRecordBytes + kPlayerWaitingB, x, y);
+        SetField(worlds, record.owner, player);
+        SetField(worlds, record.work_x, x);
+        SetField(worlds, record.work_y, y);
+        SetField(worlds, record.unk22, ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(6));
+        SetUpWaitingList(ctx, worlds, o->players[player].settler_lists[kPlayerWaitingB], x, y);
         expected = RelativeIfPointer(Original_GameWorld_SendNearestSettlerToBuilding(worlds.original(), nullptr, building),
                                      worlds.original());
         actual = RelativeIfPointer(GameWorld_SendNearestSettlerToBuilding(worlds.ours(), nullptr, building), worlds.ours());
@@ -906,14 +848,14 @@ S3RE_TEST(GameWorld_SendNearestSettlerToBuilding_MatchesOriginal) {
 
 namespace {
 
-constexpr std::size_t kGlobalListBytes = kListCount * 2 + kListCount * kListWords * 2;  // 0x7ad620..0x7ade04
+constexpr std::size_t kGlobalListBytes = sizeof(SettlerGroups);  // 0x7ad620..0x7ade04
 
 // Saves the global lists, sets them per case and restores them at the end.
 class GlobalLists {
 public:
     GlobalLists() { std::memcpy(saved_, Base(), sizeof(saved_)); }
     ~GlobalLists() { std::memcpy(Base(), saved_, sizeof(saved_)); }
-    static std::uint8_t* Base() { return reinterpret_cast<std::uint8_t*>(kGlobalListCounts); }
+    static std::uint8_t* Base() { return reinterpret_cast<std::uint8_t*>(&GlobalSettlerGroups()); }
 
 private:
     std::uint8_t saved_[kGlobalListBytes];
@@ -931,11 +873,11 @@ void FillList(test::Context& ctx, std::uint16_t* words, Count& count, std::uint3
 
 // Wrong: rescans the moved-down element (removes adjacent copies too).
 std::uint32_t __fastcall WrongRemoveSettlerFromLists(GameWorld* world, void* edx, std::uint32_t settler) {
-    const std::uint32_t player = At<std::uint8_t>(world, Settler(settler) + kSettlerPlayer);
+    const std::uint32_t player = world->settlers[settler].owner;
     GameWorld_RemoveSettlerFromLists(world, edx, settler);
+    SettlerGroups& groups = GlobalSettlerGroups();
     for (std::uint32_t list = 0; list < kListCount; ++list) {
-        auto& count = *reinterpret_cast<std::uint16_t*>(kGlobalListCounts + list * 2);
-        RemoveFromList(reinterpret_cast<std::uint16_t*>(kGlobalLists + list * kListWords * 2), count, settler);
+        RemoveFromList(groups.lists[list], groups.counts[list], settler);
     }
     (void)player;  // the player lists are left as they are
     return 0;
@@ -948,22 +890,19 @@ void CompareRemoveSettler(test::Context& ctx, RemoveSettlerFn candidate, int cas
     std::uint8_t globalsOriginal[kGlobalListBytes];
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t settler = 1 + ctx.rng().Below(8);
-        const std::uint32_t record = Settler(settler);
+        GameWorld* o = worlds.original();
         const std::uint32_t player = ctx.rng().Below(20);
-        worlds.Set<std::uint8_t>(record + kSettlerPlayer, static_cast<std::uint8_t>(player));
-        // Event rings as QueueEvent expects (write index in range).
-        worlds.Set<std::uint32_t>(0x366fc, ctx.rng().Below(1000));
-        worlds.Set<std::uint32_t>(0x32870, 0);
-        worlds.Set<std::uint32_t>(0x32874, 0);
+        SetField(worlds, o->settlers[settler].owner, player);
+        SetUpEventRings(ctx, worlds);
+        SettlerGroups& groups = GlobalSettlerGroups();
         for (std::uint32_t list = 0; list < kListCount; ++list) {
-            FillList(ctx, reinterpret_cast<std::uint16_t*>(kGlobalLists + list * kListWords * 2),
-                     *reinterpret_cast<std::uint16_t*>(kGlobalListCounts + list * 2), settler);
+            FillList(ctx, groups.lists[list], groups.counts[list], settler);
             std::uint32_t count = 0;
             std::uint16_t words[kListWords];
             FillList(ctx, words, count, settler);
-            worlds.Set<std::uint32_t>(kPlayerListCounts + player * 40 + list * 4, count);
+            SetField(worlds, o->player_list_lengths[player][list], count);
             for (std::uint32_t w = 0; w < kListWords; ++w) {
-                worlds.Set<std::uint16_t>(kPlayerLists + player * 2000 + list * 200 + w * 2, words[w]);
+                SetField(worlds, o->player_lists[player][list][w], words[w]);
             }
         }
         std::memcpy(globalsBefore, GlobalLists::Base(), kGlobalListBytes);
@@ -997,16 +936,13 @@ namespace {
 // Wrong: ignores the region (any settler of the list may be sent).
 std::uint32_t __fastcall WrongSendNearestWorkerToBuilding(GameWorld* world, void* edx, std::uint32_t building,
                                                           std::uint32_t list, std::uint32_t maxDistance) {
-    const std::uint32_t record = kBuildings + building * kBuildingBytes;
-    const std::uint32_t tile = Tile(At<std::uint16_t>(world, record + kBuildingX), At<std::uint16_t>(world, record + kBuildingY));
+    const Building& record = world->buildings[building];
+    const Tile& tile = TileAt(world, record.door_x, record.door_y);
     // Put every listed settler's tile into the building's region for the call.
-    const std::uint32_t player = At<std::uint8_t>(world, record + kBuildingPlayer);
-    const std::uint32_t head = kPlayerRecords + kPlayerWorkerLists + (list + player * (kPlayerRecordBytes / 2)) * 2;
-    for (std::uint32_t settler = At<std::uint16_t>(world, head); settler != 0;
-         settler = At<std::uint16_t>(world, Settler(settler) + kSettlerNext)) {
-        At<std::uint8_t>(world, Tile(At<std::uint16_t>(world, Settler(settler) + kSettlerX),
-                                     At<std::uint16_t>(world, Settler(settler) + kSettlerY)) + kTileByte10) =
-            At<std::uint8_t>(world, tile + kTileByte10);
+    const std::uint16_t& head = WorkerListHead(world, record.owner, list);
+    for (std::uint32_t settler = head; settler != 0; settler = world->settlers[settler].next) {
+        const Settler& s = world->settlers[settler];
+        TileAt(world, s.x, s.y).walk_region = tile.walk_region;
     }
     return GameWorld_SendNearestWorkerToBuilding(world, edx, building, list, maxDistance);
 }
@@ -1017,45 +953,43 @@ void CompareSendWorker(test::Context& ctx, SendWorkerFn candidate, int cases) {
     std::uint8_t globalsBefore[kGlobalListBytes];
     std::uint8_t globalsOriginal[kGlobalListBytes];
     for (int i = 0; i < cases; ++i) {
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, 384);
+        GameWorld* o = worlds.original();
+        SetField(worlds, o->map_size, 384u);
         const std::uint32_t building = 1 + ctx.rng().Below(0x800);
-        const std::uint32_t record = kBuildings + building * kBuildingBytes;
+        Building& record = o->buildings[building];
         const std::uint32_t player = ctx.rng().Below(20);
         const std::uint32_t list = ctx.rng().Below(40);
         const std::uint32_t x = 2 + ctx.rng().Below(380);
         const std::uint32_t y = 2 + ctx.rng().Below(380);
-        worlds.Set<std::uint8_t>(record + kBuildingPlayer, static_cast<std::uint8_t>(player));
-        worlds.Set<std::uint16_t>(record + kBuildingX, static_cast<std::uint16_t>(x));
-        worlds.Set<std::uint16_t>(record + kBuildingY, static_cast<std::uint16_t>(y));
-        worlds.Set<std::uint16_t>(record + kBuildingAimX, static_cast<std::uint16_t>(x + ctx.rng().Below(3)));
-        worlds.Set<std::uint16_t>(record + kBuildingAimY, static_cast<std::uint16_t>(y + ctx.rng().Below(3)));
-        const std::uint32_t head = kPlayerRecords + kPlayerWorkerLists + (list + player * (kPlayerRecordBytes / 2)) * 2;
+        SetField(worlds, record.owner, player);
+        SetField(worlds, record.door_x, x);
+        SetField(worlds, record.door_y, y);
+        SetField(worlds, record.x, x + ctx.rng().Below(3));
+        SetField(worlds, record.y, y + ctx.rng().Below(3));
+        std::uint16_t& head = WorkerListHead(o, player, list);
         SetUpWaitingList(ctx, worlds, head, x, y);
         // Regions: the building's tile and the settlers' tiles in one of two.
         const std::uint8_t region = static_cast<std::uint8_t>(1 + ctx.rng().Below(2));
-        worlds.Set<std::uint8_t>(Tile(x, y) + kTileByte10, region);
-        for (std::uint32_t s = At<std::uint16_t>(worlds.original(), head); s != 0;
-             s = At<std::uint16_t>(worlds.original(), Settler(s) + kSettlerNext)) {
+        SetField(worlds, o->tiles[x][y].walk_region, region);
+        for (std::uint32_t s = head; s != 0; s = o->settlers[s].next) {
             // On the map (the region byte of their tile is read).
             auto onMap = [&](std::uint32_t v) {
                 const std::int32_t c = static_cast<std::int32_t>(v) + ctx.rng().Range(-40, 40);
                 return static_cast<std::uint16_t>(c < 0 ? 0 : c > 383 ? 383 : c);
             };
-            worlds.Set<std::uint16_t>(Settler(s) + kSettlerX, onMap(x));
-            worlds.Set<std::uint16_t>(Settler(s) + kSettlerY, onMap(y));
-            worlds.Set<std::uint8_t>(Tile(At<std::uint16_t>(worlds.original(), Settler(s) + kSettlerX),
-                                          At<std::uint16_t>(worlds.original(), Settler(s) + kSettlerY)) + kTileByte10,
-                                     static_cast<std::uint8_t>(ctx.rng().Chance(2, 3) ? region : 3 - region));
-            worlds.Set<std::uint8_t>(Settler(s) + kSettlerPlayer, static_cast<std::uint8_t>(ctx.rng().Below(20)));
+            Settler& settler = o->settlers[s];
+            SetField(worlds, settler.x, onMap(x));
+            SetField(worlds, settler.y, onMap(y));
+            SetField(worlds, o->tiles[settler.x][settler.y].walk_region,
+                     ctx.rng().Chance(2, 3) ? region : 3 - region);
+            SetField(worlds, settler.owner, ctx.rng().Below(20));
         }
         // For RemoveSettlerFromLists: event ring indices in range, empty lists.
-        worlds.Set<std::uint32_t>(0x366fc, ctx.rng().Below(1000));
-        worlds.Set<std::uint32_t>(0x32870, 0);
-        worlds.Set<std::uint32_t>(0x32874, 0);
+        SetUpEventRings(ctx, worlds);
         for (std::uint32_t l = 0; l < kListCount; ++l) {
-            *reinterpret_cast<std::uint16_t*>(kGlobalListCounts + l * 2) = 0;
+            GlobalSettlerGroups().counts[l] = 0;
             for (std::uint32_t p = 0; p < 20; ++p) {
-                worlds.Set<std::uint32_t>(kPlayerListCounts + p * 40 + l * 4, 0);
+                SetField(worlds, o->player_list_lengths[p][l], 0);
             }
         }
         const std::uint32_t maxDistance = ctx.rng().Chance(1, 4) ? ctx.rng().Next32() : ctx.rng().Below(70);
@@ -1083,33 +1017,34 @@ namespace {
 void __fastcall WrongFetchGoodsToTradeBuilding(GameWorld* world, void* edx, std::uint32_t area, std::uint32_t building,
                                                std::uint32_t goods) {
     std::vector<std::pair<std::uint32_t, std::uint8_t>> kinds;
-    for (std::uint32_t pile = At<std::uint16_t>(world, kAreas + area * kAreaBytes + kAreaPileHeads + goods * 2);
-         pile != 0 && kinds.size() < 64; pile = At<std::uint16_t>(world, PileRecord(pile) + kPileNext)) {
-        kinds.emplace_back(pile, At<std::uint8_t>(world, PileRecord(pile) + kPileKind));
-        At<std::uint8_t>(world, PileRecord(pile) + kPileKind) = 0xff;
+    for (std::uint32_t pile = world->areas[area].piles_by_goods[goods]; pile != 0 && kinds.size() < 64;
+         pile = world->piles[pile].next) {
+        kinds.emplace_back(pile, world->piles[pile].art);
+        world->piles[pile].art = 0xff;
     }
     GameWorld_FetchGoodsToTradeBuilding(world, edx, area, building, goods);
     for (auto it = kinds.rbegin(); it != kinds.rend(); ++it) {
-        At<std::uint8_t>(world, PileRecord(it->first) + kPileKind) = it->second;
+        world->piles[it->first].art = it->second;
     }
 }
 
 void CompareFetchGoods(test::Context& ctx, FetchGoodsFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
-        worlds.Set<std::uint32_t>(world_offset::kMapSize, 384);
-        worlds.Set<std::uint32_t>(0x1499e60, ctx.rng().Below(4));  // building count (PileIncAmountLeaving's log)
+        GameWorld* o = worlds.original();
+        SetField(worlds, o->map_size, 384u);
+        SetField(worlds, o->building_high_water, ctx.rng().Below(4));  // PileIncAmountLeaving's log
         const std::uint32_t area = 1 + ctx.rng().Below(0x40);
         const std::uint32_t goods = ctx.rng().Below(36);
         const std::uint32_t building = 1 + ctx.rng().Below(0x800);
-        const std::uint32_t record = kBuildings + building * kBuildingBytes;
+        Building& record = o->buildings[building];
         const std::uint32_t x = 32 + ctx.rng().Below(320);
         const std::uint32_t y = 32 + ctx.rng().Below(320);
-        worlds.Set<std::uint16_t>(record + kBuildingAimXField, static_cast<std::uint16_t>(x));
-        worlds.Set<std::uint16_t>(record + kBuildingAimYField, static_cast<std::uint16_t>(y));
-        worlds.Set<std::uint16_t>(record + kBuildingExtraNumber, static_cast<std::uint16_t>(1 + ctx.rng().Below(998)));
+        SetField(worlds, record.x, x);
+        SetField(worlds, record.y, y);
+        SetField(worlds, record.trade, 1 + ctx.rng().Below(998));
         // The area's piles of this goods type (1..0x7ff, distinct).
-        const std::uint32_t pileHead = kAreas + area * kAreaBytes + kAreaPileHeads + goods * 2;
+        std::uint16_t& pileHead = o->areas[area].piles_by_goods[goods];
         const std::uint32_t length = ctx.rng().Chance(1, 10) ? 0 : 1 + ctx.rng().Below(8);
         std::uint32_t piles[8] = {};
         for (std::uint32_t k = 0; k < length; ++k) {
@@ -1122,39 +1057,36 @@ void CompareFetchGoods(test::Context& ctx, FetchGoodsFn candidate, int cases) {
                 }
             }
         }
-        worlds.Set<std::uint16_t>(pileHead, static_cast<std::uint16_t>(length ? piles[0] : 0));
+        SetField(worlds, pileHead, length ? piles[0] : 0);
         for (std::uint32_t k = 0; k < length; ++k) {
-            const std::uint32_t p = PileRecord(piles[k]);
-            worlds.Set<std::uint16_t>(p + kPileNext, static_cast<std::uint16_t>(k + 1 < length ? piles[k + 1] : 0));
-            worlds.Set<std::uint16_t>(p + kPileX, static_cast<std::uint16_t>(x + ctx.rng().Range(-30, 30)));
-            worlds.Set<std::uint16_t>(p + kPileY, static_cast<std::uint16_t>(y + ctx.rng().Range(-30, 30)));
+            Pile& p = o->piles[piles[k]];
+            SetField(worlds, p.next, k + 1 < length ? piles[k + 1] : 0);
+            SetField(worlds, p.x, x + ctx.rng().Range(-30, 30));
+            SetField(worlds, p.y, y + ctx.rng().Range(-30, 30));
             const std::uint8_t amount = static_cast<std::uint8_t>(ctx.rng().Below(9));
-            worlds.Set<std::uint8_t>(p + kPileAmount, amount);
-            worlds.Set<std::uint8_t>(p + kPileLeaving,
-                                     ctx.rng().Chance(1, 4) ? amount : static_cast<std::uint8_t>(ctx.rng().Below(8)));
+            SetField(worlds, p.amount, amount);
+            SetField(worlds, p.leaving, ctx.rng().Chance(1, 4) ? amount : static_cast<std::uint8_t>(ctx.rng().Below(8)));
             static constexpr std::uint8_t kKinds[] = {0xff, 0xff, 0, 0xfe, 1};
-            worlds.Set<std::uint8_t>(p + kPileKind, kKinds[ctx.rng().Below(sizeof(kKinds))]);
-            worlds.Set<std::uint8_t>(p + kPileGoods, static_cast<std::uint8_t>(goods));
+            SetField(worlds, p.art, kKinds[ctx.rng().Below(sizeof(kKinds))]);
+            SetField(worlds, p.good, goods);
             // PileIncAmountLeaving unlinks the pile from the list of its tile's area.
-            worlds.Set<std::uint16_t>(Tile(At<std::uint16_t>(worlds.original(), p + kPileX),
-                                           At<std::uint16_t>(worlds.original(), p + kPileY)) + 0x14,
-                                      static_cast<std::uint16_t>(area));
+            SetField(worlds, o->tiles[p.x][p.y].area, area);
         }
         // Carriers near the piles.
-        SetUpWaitingList(ctx, worlds, kAreas + area * kAreaBytes + kAreaCarriers, x, y);
+        SetUpWaitingList(ctx, worlds, o->areas[area].settlers_by_type[0], x, y);
         // The building's six piles: a ring in 0x800..0xfff.
         std::uint32_t ring[6];
         for (auto& r : ring) {
             r = 0x800 + ctx.rng().Below(0x7ff);
         }
-        worlds.Set<std::uint16_t>(record + kBuildingFirstPile, static_cast<std::uint16_t>(ring[0]));
+        SetField(worlds, record.pile_ring, ring[0]);
         for (std::uint32_t k = 0; k < 6; ++k) {
-            const std::uint32_t p = PileRecord(ring[k]);
-            worlds.Set<std::uint16_t>(p + kPileNext, static_cast<std::uint16_t>(ring[(k + 1) % 6]));
+            Pile& p = o->piles[ring[k]];
+            SetField(worlds, p.next, ring[(k + 1) % 6]);
             const std::uint32_t r = ctx.rng().Below(4);
-            worlds.Set<std::uint8_t>(p + kPileGoods, static_cast<std::uint8_t>(r == 0 ? goods : r == 1 ? 0xff : ctx.rng().Below(36)));
-            worlds.Set<std::uint8_t>(p + kPileAmount, static_cast<std::uint8_t>(ctx.rng().Below(9)));
-            worlds.Set<std::uint8_t>(p + kPileLeaving, static_cast<std::uint8_t>(ctx.rng().Below(0x80)));
+            SetField(worlds, p.good, r == 0 ? goods : r == 1 ? 0xff : ctx.rng().Below(36));
+            SetField(worlds, p.amount, ctx.rng().Below(9));
+            SetField(worlds, p.leaving, ctx.rng().Below(0x80));
         }
         Original_GameWorld_FetchGoodsToTradeBuilding(worlds.original(), nullptr, area, building, goods);
         candidate(worlds.ours(), nullptr, area, building, goods);
