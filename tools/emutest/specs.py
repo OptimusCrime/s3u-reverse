@@ -63,7 +63,8 @@ class Spec:
     ours: str            # C++ name of our replacement in s3re.dll
     original: int        # address in S3.EXE
     # "thiscall" (ECX = world; ours is __fastcall), "logicthread" (ECX = a
-    # fake CLogicThread whose +0x3a0 points at the world) or "stdcall"
+    # fake CLogicThread whose +0x3a0 points at the world), "stdcall", or
+    # "fastcall" (args[0] in ECX, args[1] in EDX, the rest on the stack)
     convention: str
     args: list[Generator]
     eax_mask: int = 0xFFFFFFFF  # 0: EAX not compared (callers don't use it)
@@ -83,6 +84,12 @@ class Spec:
     # that re-checks a condition already decided); say why at the spec.
     cover_until: int | None = None
     exempt_blocks: tuple[int, ...] = ()
+    # Virtual calls through emu.FAKE_VTABLE (point an object's vtable there
+    # with a preset): {slot offset: stack argument count} or {offset:
+    # (count, {argument index: bytes})} for arguments that point into the
+    # stack, whose contents are compared instead of their address. Calls to
+    # undeclared slots are reported as spec errors.
+    virtuals: dict | None = None
 
 
 MAP_SIZE = 0x2d2d0
@@ -2467,6 +2474,291 @@ SPECS += [
 ]
 
 
+# -- batch 23: framework constructors (win32_classes.cpp) ------------------
+
+SPECS += [
+    Spec("Win32_CObject_Construct", 0x00610320, "thiscall", []),
+    # Ghidra's function also takes in the unrelated code at 0x610340.
+    Spec("Win32_CObject_Destroy", 0x00610330, "thiscall", [], eax_mask=0, cover_until=0x00610340),
+    Spec("Win32_CObject_DeletingDestroy", 0x0060bfc0, "thiscall", [string_bool]),
+    Spec("Win32_CWin32Handle_Construct", 0x0060be60, "thiscall", [anything, anything]),
+    Spec("Win32_CWaitable_Construct", 0x0060bf50, "thiscall", [anything, anything]),
+    Spec("Win32_CWindowBase_Construct", 0x0060f960, "thiscall", []),
+    Spec("Win32_CMessageQueue_Construct", 0x0060d690, "thiscall", [anything]),
+    Spec("DirectX_CSimpleSurface_Construct", 0x005befb0, "thiscall", []),
+    Spec("DirectX_CSimpleSurface_Construct4", 0x005befe0, "thiscall",
+         [anything, anything, anything, anything]),
+    Spec("DirectX_CDirectSoundBuffer_Construct", 0x005c1f70, "thiscall", []),
+]
+
+# -- batch 23: computer-player helpers (ai_helpers.cpp) ---------------------
+
+AI_WORLD = 0x007e3408
+AI_PLAYER_DATA = 0x007e2eb0
+AI_AREAS = 0xe145e8
+AI_PILES = 0x123885c
+
+
+def ai_world(rng, pool, args):
+    """g_aiWorld points at the emulated world."""
+    return [(AI_WORLD, WORLD_BASE, 4)]
+
+
+def ai_player_data(rng, pool, args):
+    """g_aiPlayerData points at scratch buffer 0 (its candidate records)."""
+    return [(AI_PLAYER_DATA, WORLD_BASE + SCRATCH, 4)]
+
+
+def word_list(rng, pool, args):
+    """A word list at scratch 0: free slots (0xffff) and small values, so
+    the searched value is often present."""
+    return [(SCRATCH + 2 * i, 0xFFFF if rng.random() < 0.3 else rng.randrange(6), 2)
+            for i in range(16)]
+
+
+def ai_map_size(rng, pool, args):
+    return [(MAP_SIZE, rng.randint(-3, 400) & 0xFFFFFFFF, 4)]
+
+
+def clamp_points(rng, pool, args):
+    fields = ai_map_size(rng, pool, args)
+    for slot in (0, 1):
+        value = rng.randint(-20, 420) if rng.random() < 0.8 else rng.getrandbits(32)
+        fields.append((SCRATCH + slot * SCRATCH_SLOT_BYTES, value & 0xFFFFFFFF, 4))
+    return fields
+
+
+def area_pile_list(rng, pool, args):
+    """Goods type (byte, scratch 0) and area (word < 4096, scratch 1), and
+    a list of up to 7 distinct piles for them."""
+    goods = rng.randrange(256)
+    area = rng.randrange(4096)
+    fields = [(SCRATCH, goods, 1), (SCRATCH + SCRATCH_SLOT_BYTES, area, 2)]
+    start, stride = rng.randint(1, 20000), rng.randint(1, 1000)
+    head = 0
+    for k in range(rng.randrange(8)):
+        pile = start + k * stride
+        fields.append((AI_PILES + pile * 14 + 0xc, head, 2))
+        head = pile
+    fields.append((AI_AREAS + area * 0x2e0 + 0xa + goods * 2, head, 2))
+    return fields
+
+
+def building_lookup(rng, pool, args):
+    fields = [(BUILDING_COUNT, rng.randrange(3000), 4)]
+    if rng.random() < 0.3:
+        fields.append((BUILDINGS + (args[0] & 0xFFFF) * BUILDING_BYTES, 0xFF, 1))
+    return fields
+
+
+def best_candidate(rng, pool, args):
+    """Often a stored best score next to the new one (args[1])."""
+    index = args[0] & 0xFFFF
+    if rng.random() < 0.6:
+        return [(SCRATCH + 0x26 + index * 6, (args[1] + rng.randint(-2, 2)) & 0xFFFF, 2)]
+    return []
+
+
+def id_with_noise(limit: int) -> Generator:
+    """An index below `limit`, sometimes with garbage in the upper half."""
+    def generate(rng, pool):
+        value = rng.randrange(limit)
+        return value | (rng.getrandbits(16) << 16) if rng.random() < 0.3 else value
+    return generate
+
+
+SPECS += [
+    Spec("AI_SetCurrentPlayer", 0x00551a30, "fastcall", [scratch(0)]),
+    Spec("AI_WordListInsert", 0x00551970, "stdcall", [id_with_noise(8), scratch(0), id_with_noise(17)],
+         presets=word_list),
+    Spec("AI_WordListRemove", 0x005519b0, "stdcall", [id_with_noise(8), scratch(0), id_with_noise(17)],
+         presets=word_list),
+    Spec("AI_IsOnMap", 0x00572090, "fastcall", [between(-5, 410)], eax_mask=0xFF,
+         presets=ai_map_size, globals=ai_world),
+    Spec("AI_ClampToMap", 0x00572050, "fastcall", [scratch(0), scratch(1)], presets=clamp_points,
+         globals=ai_world),
+    Spec("AI_AreaGoodsAmount", 0x0059dc10, "fastcall", [scratch(0), scratch(1)],
+         presets=area_pile_list, globals=ai_world),
+    Spec("AI_GetBuilding", 0x0058e170, "fastcall", [id_with_noise(3200), scratch(1)],
+         presets=building_lookup, globals=ai_world),
+    Spec("AI_RecordBestCandidate", 0x0058ec50, "fastcall",
+         [id_with_noise(0x300), anything, anything, anything], presets=best_candidate,
+         globals=ai_player_data),
+    Spec("AI_GridCell", 0x00554700, "thiscall", [anything, anything]),
+    Spec("AI_GridFree", 0x00554040, "thiscall", [], eax_mask=0,
+         presets=lambda rng, pool, args: [(0x158, 0, 4)] if rng.random() < 0.3 else []),
+    Spec("AI_CopySixBytes", 0x0055a420, "fastcall", [one_of(0, WORLD_BASE + SCRATCH), scratch(1)],
+         eax_mask=0),
+    Spec("AI_SetWord4", 0x0055ca60, "thiscall", [anything], eax_mask=0xFFFF),
+]
+
+# -- batch 23: graphics helpers (graphics_helpers.cpp), MapEffect_SetLinks --
+
+COLOUR_GLOBALS = 0x007dfba0
+
+
+def colour_format(rng, pool, args):
+    """Shifts (mostly 0..23) and scales (mostly 0..0x1ff) of the pixel format."""
+    fields = []
+    for i in range(3):
+        fields.append((COLOUR_GLOBALS + 4 * i,
+                       rng.randrange(24) if rng.random() < 0.9 else rng.getrandbits(32), 4))
+        fields.append((COLOUR_GLOBALS + 12 + 4 * i,
+                       rng.randrange(0x200) if rng.random() < 0.9 else rng.getrandbits(32), 4))
+    return fields
+
+
+def sprite_tables(rng, pool, args):
+    """The group's table (scratch 0) and the entry it points to, placed so
+    that entry + the group's offset lands in scratch 2."""
+    group, index = args[0] >> 16, args[0] & 0xFFFF
+    offset = rng.getrandbits(32)
+    target = WORLD_BASE + SCRATCH + 2 * SCRATCH_SLOT_BYTES + rng.randrange(0x800)
+    return [(0xb24 + group * 4, WORLD_BASE + SCRATCH, 4),
+            (0x264 + group * 4, offset, 4),
+            (SCRATCH + 8 + index * 4, (target - offset) & 0xFFFFFFFF, 4)]
+
+
+def keep_or_value(rng, pool) -> int:
+    return 0xFFFFFFFF if rng.random() < 0.5 else rng.getrandbits(32)
+
+
+SPECS += [
+    Spec("Render_PackColour", 0x004c7b00, "stdcall", [anything, anything, anything],
+         globals=colour_format),
+    Spec("GfxData_SpriteWord", 0x005fad20, "thiscall",
+         [lambda rng, pool: (rng.randrange(0x100) << 16) | rng.randrange(0x100)],
+         presets=sprite_tables),
+    Spec("GfxData_SetDword", 0x005fc540, "thiscall", [anything]),
+    Spec("Point16_Construct", 0x005fdab0, "thiscall", [anything, anything]),
+    Spec("LogicRecord24_Construct", 0x005437b0, "thiscall", []),
+    Spec("MapEffect_SetLinks", 0x00544290, "thiscall", [anything, keep_or_value, keep_or_value]),
+]
+
+
+# -- batch 23: CScreenElement and friends (screen_element.cpp) --------------
+#
+# Objects at UI_BASE (offsets as in the in-process test): the element at
+# +0x100 (vtable = emu.FAKE_VTABLE), its parent at +0x200 (vbtable at +4,
+# CScreenElement part at +0x224), the group subobject at +0x300 (vbptr
+# -0x7c -> the element, focus child at -0x58, child object at +0x380), the
+# 0x429fd0 subobject at +0x400 (vbptr -0xb4 -> the element). Rectangles and
+# messages passed by pointer are in scratch 0 / 1.
+
+FAKE_VTABLE = 0x00340000  # emu.FAKE_VTABLE
+UI_OFFSET = 0x10000
+UI_BASE = WORLD_BASE + UI_OFFSET
+UI_VBTABLES = 0x20000  # three vbtables of 8 bytes
+ELEMENT = UI_BASE + 0x100
+UI_PARENT = UI_BASE + 0x200
+UI_GROUP = UI_BASE + 0x300
+UI_CHILD = UI_BASE + 0x380
+UI_ENABLE = UI_BASE + 0x400
+UI_RECTS = WORLD_BASE + SCRATCH
+UI_MESSAGE = WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES
+
+UI_VIRTUALS = {0x04: 1, 0x0c: 1, 0x10: 0, 0x1c: 0, 0x20: (1, {0: 20}), 0x24: 5,
+               0x28: (3, {1: 16, 2: 16}), 0x2c: 2, 0x54: 0, 0x64: 1, 0x68: 1, 0x6c: 1,
+               0x70: (2, {0: 16, 1: 8}), 0x74: (2, {0: 16, 1: 8}), 0x78: 0}
+UI_VIRTUALS.update({slot: 5 for slot in (0x30, 0x34, 0x38, 0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x58,
+                                         0x5c, 0x60)})
+
+MESSAGE_TYPES = (1, 2, 3, 0x10, 0x12, 0x13, 0x15, 0x16, 0x20, 0x30, 0x40, 0, 5, 0x41, 0xFF)
+
+
+def small_coordinate(rng) -> int:
+    return rng.randint(-8, 40) & 0xFFFFFFFF
+
+
+def ui_objects(rng, pool, args):
+    """The object graph above, small rectangles, a message at scratch 1."""
+    fields = [(UI_OFFSET + 0x100, FAKE_VTABLE, 4), (UI_OFFSET + 0x200, FAKE_VTABLE, 4),
+              (UI_OFFSET + 0x204, WORLD_BASE + UI_VBTABLES, 4), (UI_VBTABLES + 4, 0x20, 4),
+              (UI_OFFSET + 0x224, FAKE_VTABLE, 4), (UI_OFFSET + 0x380, FAKE_VTABLE, 4),
+              (UI_OFFSET + 0x300 - 0x7c, WORLD_BASE + UI_VBTABLES + 8, 4),
+              (UI_VBTABLES + 12, (0x100 - 0x284) & 0xFFFFFFFF, 4),
+              (UI_OFFSET + 0x400 - 0xb4, WORLD_BASE + UI_VBTABLES + 16, 4),
+              (UI_VBTABLES + 20, (0x100 - 0x34c) & 0xFFFFFFFF, 4),
+              (UI_OFFSET + 0x118, 0 if rng.random() < 0.3 else UI_PARENT, 4),
+              (UI_OFFSET + 0x11c, rng.randrange(2), 1), (UI_OFFSET + 0x11d, rng.randrange(3), 1),
+              (UI_OFFSET + 0x300 - 0x58, 0 if rng.random() < 0.3 else UI_CHILD, 4),
+              (UI_OFFSET + 0x300 - 0x78, rng.randrange(2), 1)]
+    for i in range(4):
+        fields.append((UI_OFFSET + 0x108 + 4 * i, small_coordinate(rng), 4))
+    for i in range(8):
+        fields.append((SCRATCH + 4 * i, small_coordinate(rng), 4))
+    fields.append((SCRATCH + SCRATCH_SLOT_BYTES, rng.choice(MESSAGE_TYPES), 1))
+    fields.append((SCRATCH + SCRATCH_SLOT_BYTES + 8, small_coordinate(rng) & 0xFFFF, 2))
+    fields.append((SCRATCH + SCRATCH_SLOT_BYTES + 10, small_coordinate(rng) & 0xFFFF, 2))
+    return fields
+
+
+def message_type(rng, pool) -> int:
+    return rng.choice(MESSAGE_TYPES) | (rng.getrandbits(24) << 8)
+
+
+def message_position(rng, pool) -> int:
+    return (small_coordinate(rng) & 0xFFFF) | ((small_coordinate(rng) & 0xFFFF) << 16)
+
+
+MESSAGE = [message_type, anything, message_position, anything, anything]
+small = lambda rng, pool: rng.choice([0, 1, 2]) if rng.random() < 0.5 else rng.getrandbits(32)  # noqa: E731
+
+
+def ui_spec(name, address, args, this=ELEMENT, **kwargs):
+    """A thiscall UI member: ECX = `this`, EDX random, then `args`."""
+    return Spec(name, address, "fastcall", [one_of(this), anything, *args], presets=ui_objects,
+                virtuals=UI_VIRTUALS, **kwargs)
+
+
+def dialog_globals(rng, pool, args):
+    return [(0x007a8020 + 4 * i, rng.getrandbits(32), 4) for i in range(8)] + \
+           [(address, rng.getrandbits(32), 4) for address in (0x007a8238, 0x007a823c, 0x007a8240)]
+
+
+SPECS += [
+    ui_spec("CScreenElement_Construct", 0x00415610, []),
+    ui_spec("CScreenElement_ConstructRect", 0x00415660, [one_of(UI_RECTS, ELEMENT + 8)]),
+    ui_spec("CScreenElement_Destroy", 0x004156b0, []),
+    ui_spec("CScreenElement_DeletingDestroy", 0x00415640, [string_bool]),
+    ui_spec("CScreenElement_Rect", 0x004156d0, []),
+    ui_spec("CScreenElement_SetRect", 0x004156e0, [one_of(UI_RECTS, UI_RECTS, ELEMENT + 8)]),
+    ui_spec("CScreenElement_MoveBy", 0x00415780, [small, small]),
+    ui_spec("CScreenElement_SetParent", 0x004157d0, [one_of(0, UI_PARENT, UI_PARENT, 0x1234)]),
+    ui_spec("CScreenElement_ContainsPoint", 0x00415800, [message_position, message_position]),
+    ui_spec("CScreenElement_NeedsRedraw", 0x00415830, [], eax_mask=0xFF),
+    ui_spec("CScreenElement_IsQuery78Zero", 0x00415840, []),
+    ui_spec("CScreenElement_OnMessage", 0x00415850, MESSAGE),
+    ui_spec("CScreenElement_WantsMessage", 0x00415890, [one_of(UI_MESSAGE)], eax_mask=0xFF),
+    # The jump table's data (0x415a22..0x415a93) follows the last ret.
+    ui_spec("CScreenElement_DispatchMessage", 0x004158d0, MESSAGE, cover_until=0x00415a22),
+    ui_spec("CScreenElement_DrawClipped", 0x00415aa0, [anything, one_of(UI_RECTS + 16)]),
+    ui_spec("CScreenElement_DrawRect", 0x00415af0, [anything, one_of(UI_RECTS, UI_RECTS + 16), anything]),
+    ui_spec("CScreenElement_IntersectRects", 0x00415b20,
+            [one_of(UI_BASE + 0x40), one_of(UI_RECTS), one_of(UI_RECTS + 16)]),
+    ui_spec("CScreenElement_SetFocus", 0x00415ba0, [anything]),
+    ui_spec("CScreenElement_KillFocus", 0x00415bd0, [], eax_mask=0xFF),
+    ui_spec("CScreenElement_Invalidate", 0x00415bf0, []),
+    ui_spec("CScreenElement_TrackMouse", 0x00415c10, MESSAGE),
+    ui_spec("CScreenElement_Enable", 0x00415ca0, [small]),
+    ui_spec("CScreenElement_ParentQuery78", 0x004160d0, []),
+    ui_spec("CScreenElement_SetFlag1F", 0x00416c60, [anything], eax_mask=0),
+    ui_spec("UiGroup_WantsMessage", 0x00417100, [one_of(UI_MESSAGE)], this=UI_GROUP, eax_mask=0xFF),
+    ui_spec("UiGroup_SetFocus", 0x00417650, [one_of(0, UI_CHILD, UI_CHILD)], this=UI_GROUP),
+    ui_spec("UiGroup_KillFocus", 0x00417680, [], this=UI_GROUP, eax_mask=0xFF),
+    ui_spec("UiGroup_SetFocus_429d70", 0x00429d70, [one_of(0, UI_CHILD, UI_CHILD)], this=UI_GROUP),
+    ui_spec("UiGroup_WantsMessage_429df0", 0x00429df0, [one_of(UI_MESSAGE)], this=UI_GROUP,
+            eax_mask=0xFF),
+    ui_spec("UiGroup_Enable_429fd0", 0x00429fd0, [small], this=UI_ENABLE),
+    Spec("Dialog_Global7a823c", 0x00416870, "stdcall", [], globals=dialog_globals),
+    Spec("Dialog_Global7a8238", 0x004168c0, "stdcall", [], globals=dialog_globals),
+    Spec("Dialog_Global7a8240", 0x00416c50, "stdcall", [], globals=dialog_globals),
+    Spec("Dialog_CopyGlobals7a8020", 0x00416880, "stdcall", [scratch(0)], globals=dialog_globals),
+    Spec("Dialog_Table7a809c", 0x004168a0, "stdcall", [below(14)]),
+    Spec("Dialog_Table7a8064", 0x004168b0, "stdcall", [below(14)]),
+]
+
+
 # Deliberately wrong pairings for `run.py --self-test`: each must be reported
 # as a mismatch, which shows that the harness notices wrong return values,
 # wrong memory writes and wrong conditions.
@@ -2496,4 +2788,8 @@ SELF_TEST = [
     # The same destructor shape on a member at another offset (+0x8, not +0x14).
     Spec("DestroyStringMember14_411980", 0x00441740, "thiscall", [], eax_mask=0,
          presets=member_strings((0x08, 0x14))),
+    # Virtual-call probes: the same parent call, but slot 0x1c instead of 0x78.
+    ui_spec("CScreenElement_Invalidate", 0x004160d0, [], eax_mask=0),
+    # API probes: the clip is intersected with the element (PtInRect is not called).
+    ui_spec("CScreenElement_DrawClipped", 0x00415af0, [anything, one_of(UI_RECTS + 16)], eax_mask=0),
 ]

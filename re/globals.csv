@@ -11,6 +11,12 @@ address,name,type,status,notes
 0x007ace62,g_simulationPaused,uint16,classified,"When non-zero, CLogicThread::Step skips the world updates. Name is a hypothesis (pause or not-yet-started)."
 0x007deb55,g_worldUpdateDisabled,uint8,classified,"When non-zero, GameWorld::UpdateEnvironment returns immediately and CLogicThread::Step skips its game-end check."
 0x007dfb58,g_syncRandomHistory,uint16[32],classified,CLogicThread::Step stores the RNG a-word here when the tick low byte is 0 (index (tick>>8)&31) and sends it via 0x4309c0: probably the lockstep desync check.
+0x007dfba0,g_pixelChannelShifts,uint32[3],classified,"Shift counts of the three colour channels in the screen's pixel format, followed by their scale factors at 0x7dfbac..0x7dfbb4 (Render::PackColour 0x4c7b00: (c * scale) >> 8 << shift per channel)."
 0x007dfd2c,g_stepCountdown,uint32,classified,Checked and decremented in CLogicThread::Step; when non-zero some per-phase calls (0x51f110) are skipped. Purpose unknown.
 0x007dfd44,g_logicStartState,uint32,classified,"CLogicThread::Step does one-time setup when this equals 0xFA, then sets it to 0."
 0x007dfd48,g_gameTick,uint32,identified,"Simulation tick counter; copied from CLogicThread+0x70 at the end of each CLogicThread::Step. Used throughout the world update (e.g. tick & 0x3f, tick % 220)."
+0x007e2eb0,g_aiPlayerData,pointer,classified,"Working data of the computer player whose turn it is (from CComputerPlayer +0x778, set by AI::SetCurrentPlayer 0x551a30); candidate records at +0x26 + i*6 and per-type words at +0x2d2 (AI::RecordBestCandidate)."
+0x007e2eb4,g_aiPlayerSetup,pointer,classified,"0x731488 + index * 0x180 with the index from CComputerPlayer +0x770 (AI::SetCurrentPlayer): probably the player's entry of a settings table."
+0x007e2eb8,g_aiPlayerNumber,uint8,classified,"Player number of the current computer player (CComputerPlayer +0x272, AI::SetCurrentPlayer)."
+0x007e3130,g_aiPlayer,pointer,classified,"The CComputerPlayer whose turn it is (AI::SetCurrentPlayer 0x551a30; cleared by 0x551b80)."
+0x007e3408,g_aiWorld,pointer,classified,"The world (CGameData) as the computer players see it, from CComputerPlayer +0x75c (0x551b80, which also copies the map size to the words 0x7e3412/0x7e3414). Used by AI::IsOnMap, ClampToMap, AreaGoodsAmount, GetBuilding."

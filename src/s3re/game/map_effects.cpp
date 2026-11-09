@@ -104,6 +104,30 @@ S3RE_HOOK(0x00543830, MapEffect_DefaultConstruct, DefaultEffectFn, Original_MapE
           MapEffect_DefaultConstruct);
 S3RE_HOOK(0x00543880, MapEffect_Construct, EffectFn, Original_MapEffect_Construct, MapEffect_Construct);
 
+// MapEffect::SetLinks (0x00544290): (list, previous, next) thiscall, ret
+// 0xc. The records are kept in doubly linked lists (heads at table +0x5cc60
+// + list * 4, pushed by 0x545df0 and unlinked by 0x545e40): +0x40 = list;
+// +0x44 = previous and +0x48 = next unless the argument is -1 (keep). EAX =
+// next (the last argument loaded).
+using SetLinksFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t list, std::uint32_t previous,
+                                              std::uint32_t next);
+
+// Purpose: Links a map effect record into one of the effect table's lists
+// (probably one list per kind or state of effect), or updates its links.
+std::uint32_t __fastcall MapEffect_SetLinks(void* self, void*, std::uint32_t list, std::uint32_t previous,
+                                            std::uint32_t next) {
+    Put<std::uint32_t>(self, 0x40, list);
+    if (previous != 0xffffffffu) {
+        Put<std::uint32_t>(self, 0x44, previous);
+    }
+    if (next != 0xffffffffu) {
+        Put<std::uint32_t>(self, 0x48, next);
+    }
+    return next;
+}
+
+S3RE_HOOK(0x00544290, MapEffect_SetLinks, SetLinksFn, Original_MapEffect_SetLinks, MapEffect_SetLinks);
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -171,6 +195,38 @@ S3RE_TEST(MapEffect_Construct_MatchesOriginal) {
         return CallConstruct(&MapEffect_Construct, original, ours, a);
     });
 }
+namespace {
+
+void CompareSetLinks(test::Context& ctx, SetLinksFn candidate, int cases) {
+    CompareEffect(ctx, cases, [&](std::uint8_t* original, std::uint8_t* ours, const std::uint32_t* a) {
+        const std::uint32_t previous = ctx.rng().Chance(1, 2) ? 0xffffffffu : a[1];
+        const std::uint32_t next = ctx.rng().Chance(1, 2) ? 0xffffffffu : a[2];
+        const std::uint32_t ra = Original_MapEffect_SetLinks(original, nullptr, a[0], previous, next);
+        const std::uint32_t rb = candidate(ours, nullptr, a[0], previous, next);
+        S3RE_EXPECT_EQ(ra, rb);
+        return Results{original, ours};
+    });
+}
+
+// Wrong: -1 is stored as a previous link instead of keeping the old one.
+std::uint32_t __fastcall WrongSetLinks(void* self, void* edx, std::uint32_t list, std::uint32_t previous,
+                                       std::uint32_t next) {
+    Put<std::uint32_t>(self, 0x44, previous);
+    return MapEffect_SetLinks(self, edx, list, previous, next);
+}
+
+}  // namespace
+
+S3RE_TEST(MapEffect_SetLinks_MatchesOriginal) {
+    CompareSetLinks(ctx, &MapEffect_SetLinks, 20000);
+}
+
+S3RE_TEST(MapEffect_SetLinks_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSetLinks(probe, &WrongSetLinks, 200);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 S3RE_TEST(MapEffect_Construct_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareEffect(probe, 100, [](std::uint8_t* original, std::uint8_t* ours, const std::uint32_t* a) {

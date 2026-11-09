@@ -16,6 +16,7 @@ add_library(s3re SHARED
 
     replay/command_log.cpp
 
+    game/ai_helpers.cpp
     game/area_piles.cpp
     game/area_split.cpp
     game/building_flags.cpp
@@ -25,6 +26,7 @@ add_library(s3re SHARED
     game/flood_fills.cpp
     game/game_end.cpp
     game/godly_events.cpp
+    game/graphics_helpers.cpp
     game/goods_piles.cpp
     game/id_allocators.cpp
     game/landscape_colours.cpp
@@ -43,6 +45,7 @@ add_library(s3re SHARED
     game/player_queries.cpp
     game/players.cpp
     game/random.cpp
+    game/screen_element.cpp
     game/settler_queries.cpp
     game/settler_records.cpp
     game/settlers.cpp
@@ -51,6 +54,7 @@ add_library(s3re SHARED
     game/ui_overlays.cpp
     game/ui_state.cpp
     game/world_search.cpp
+    game/win32_classes.cpp
     game/winmain.cpp
     game/world_tables.cpp
 )

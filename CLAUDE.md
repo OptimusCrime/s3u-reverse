@@ -425,6 +425,11 @@ replaying, see `src/s3re/replay/command_log.h`):
    the reason in a comment). The game's operator new/delete are a bump
    allocator in the world area (calls compared), std::_Xlen/_Xran end the
    run as a throw (compared), FS points at a fake TIB so SEH frames work.
+   Virtual calls: point an object's vtable at `emu.FAKE_VTABLE` with a
+   preset and declare the slots in `Spec.virtuals` (calls recorded and
+   compared); imported Windows functions go to API probes
+   (`emu.API_HANDLERS`; add a handler for a new one). Convention
+   `fastcall` passes args[0]/args[1] in ECX/EDX.
    `run.py --self-test` checks that the
    harness catches deliberately wrong pairings; `--all-uncovered` lists
    every uncovered block (to write the dead-block reasons at a spec). Our replacements must not

@@ -70,6 +70,52 @@ GDT_BASE = 0x00310000
 FLAT_SELECTOR = 2 << 3    # GDT entry 2, RPL 0
 FS_SELECTOR = (3 << 3) | 3  # GDT entry 3, RPL 3
 MAX_INSTRUCTIONS = 20_000_000
+# Probes: a fake vtable whose slot k points at VIRTUAL_CODE + k, and stub
+# addresses for imported Windows functions (API_CODE + 4 * n, written into
+# the import tables of S3.EXE and s3re.dll). Calling one records the call
+# instead of running anything (see Emulator._on_virtual / _on_api).
+PROBE_BASE = 0x00340000
+FAKE_VTABLE = PROBE_BASE              # 0x400 slots
+VIRTUAL_CODE = PROBE_BASE + 0x1000
+API_CODE = PROBE_BASE + 0x2000
+PROBE_SIZE = 0x3000
+
+
+def _rect(machine, address):
+    return struct.unpack("<4i", machine.guest_read(address, 16))
+
+
+def _api_intersect_rect(machine, uc, args):
+    """IntersectRect(dst, a, b), as user32 does it: an empty result (all 0)
+    and FALSE unless both are non-empty and overlap."""
+    dst, a, b = args
+    ra, rb = _rect(machine, a), _rect(machine, b)
+    empty = lambda r: r[2] <= r[0] or r[3] <= r[1]
+    result = (max(ra[0], rb[0]), max(ra[1], rb[1]), min(ra[2], rb[2]), min(ra[3], rb[3]))
+    ok = not empty(ra) and not empty(rb) and not empty(result)
+    machine.guest_write(dst, struct.pack("<4i", *(result if ok else (0, 0, 0, 0))))
+    return int(ok), ("IntersectRect", *ra, *rb)
+
+
+def _api_is_rect_empty(machine, uc, args):
+    r = _rect(machine, args[0])
+    return int(r[2] <= r[0] or r[3] <= r[1]), ("IsRectEmpty", *r)
+
+
+def _api_pt_in_rect(machine, uc, args):
+    r = _rect(machine, args[0])
+    x, y = (struct.unpack("<i", struct.pack("<I", v))[0] for v in args[1:3])
+    return int(r[0] <= x < r[2] and r[1] <= y < r[3]), ("PtInRect", *r, x, y)
+
+
+# name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
+# record holds what the call saw (rectangle contents, not pointers, which
+# differ between the original's and our stack frames).
+API_HANDLERS = {
+    "IntersectRect": (3, _api_intersect_rect),
+    "IsRectEmpty": (1, _api_is_rect_empty),
+    "PtInRect": (3, _api_pt_in_rect),
+}
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,
                 "ebp": UC_X86_REG_EBP}
@@ -144,6 +190,8 @@ class Outcome:
     debug_logs: list[tuple[int, ...]] = field(default_factory=list)  # (format, args...) per DebugLog call
     heap_calls: list[tuple] = field(default_factory=list)  # ("new", size, address) / ("delete", address)
     thrown: int | None = None        # address of the std::_Xlen/_Xran called, if any
+    probe_calls: list[tuple] = field(default_factory=list)  # virtual and API calls, in order
+    spec_error: str | None = None    # a call the spec didn't declare
 
 
 class Emulator:
@@ -181,6 +229,84 @@ class Emulator:
         self.heap_next = 0
         self.thrown: int | None = None
         self._map_thread_block()
+        # Virtual-call and API probes.
+        self.virtuals: dict[int, int | tuple[int, tuple[int, ...]]] = {}
+        self.probe_calls: list[tuple] = []
+        self.spec_error: str | None = None
+        self.uc.mem_map(PROBE_BASE, PROBE_SIZE)
+        self.uc.mem_write(FAKE_VTABLE, b"".join(struct.pack("<I", VIRTUAL_CODE + 4 * k)
+                                                for k in range(0x400)))
+        self.uc.mem_write(VIRTUAL_CODE, b"\xc3" * 0x2000)
+        self.uc.hook_add(UC_HOOK_CODE, self._on_virtual, begin=VIRTUAL_CODE, end=VIRTUAL_CODE + 0xFFF)
+        self.uc.hook_add(UC_HOOK_CODE, self._on_api, begin=API_CODE, end=API_CODE + 0xFFF)
+        self.api_names: list[str] = []
+        for path in (exe_path, dll_path):
+            self._bind_imports(path)
+
+    def _bind_imports(self, path: str) -> None:
+        """Points every import of the image at an API probe."""
+        pe = pefile.PE(path)
+        for entry in getattr(pe, "DIRECTORY_ENTRY_IMPORT", []):
+            for imp in entry.imports:
+                name = imp.name.decode() if imp.name else f"{entry.dll.decode()}#{imp.ordinal}"
+                if name not in self.api_names:
+                    self.api_names.append(name)
+                stub = API_CODE + 4 * self.api_names.index(name)
+                self.uc.mem_write(imp.address, struct.pack("<I", stub))
+
+    def _probe_value(self) -> int:
+        """EAX of a probed virtual call: 0, 1 or random, from the case seed
+        and the call's position (so both functions get the same values as
+        long as they make the same calls)."""
+        h = _mix((self.seed << 32) ^ (0x5EED0000 + len(self.probe_calls)))
+        choice = h & 3
+        return 0 if choice == 0 else 1 if choice == 1 else (h >> 8) & 0xFFFFFFFF
+
+    def _stack_args(self, uc, count: int) -> tuple[int, int, tuple[int, ...]]:
+        esp = uc.reg_read(UC_X86_REG_ESP)
+        values = struct.unpack(f"<{count + 1}I", bytes(uc.mem_read(esp, 4 * (count + 1))))
+        return esp, values[0], values[1:]
+
+    def _finish_probe(self, uc, esp: int, ret: int, count: int, eax: int) -> None:
+        uc.reg_write(UC_X86_REG_EAX, eax & 0xFFFFFFFF)
+        uc.reg_write(UC_X86_REG_ESP, esp + 4 + 4 * count)
+        uc.reg_write(UC_X86_REG_EIP, ret)
+
+    def _on_virtual(self, uc, address, size, user_data):
+        """A call through the fake vtable: recorded as ("virtual", slot
+        offset, ECX, arguments...). The spec declares each slot's stack
+        argument count (callee pops) and, optionally, which arguments are
+        pointers into the stack whose first bytes are recorded instead of
+        the address: virtuals = {offset: count} or {offset: (count, {arg:
+        bytes})}."""
+        offset = address - VIRTUAL_CODE
+        declared = self.virtuals.get(offset)
+        if declared is None:
+            self.spec_error = f"virtual call to slot {offset:#x} not declared in the spec"
+            uc.emu_stop()
+            return
+        count, pointers = (declared, {}) if isinstance(declared, int) else declared
+        esp, ret, args = self._stack_args(uc, count)
+        shown = []
+        for i, value in enumerate(args):
+            if i in pointers:
+                shown.append(("contents", self.guest_read(value, pointers[i])))
+            else:
+                shown.append(value)
+        self.probe_calls.append(("virtual", offset, uc.reg_read(UC_X86_REG_ECX), *shown))
+        self._finish_probe(uc, esp, ret, count, self._probe_value())
+
+    def _on_api(self, uc, address, size, user_data):
+        name = self.api_names[(address - API_CODE) // 4]
+        if name not in API_HANDLERS:
+            self.spec_error = f"call of {name}, which the emulator doesn't implement"
+            uc.emu_stop()
+            return
+        count, handler = API_HANDLERS[name]
+        esp, ret, args = self._stack_args(uc, count)
+        eax, record = handler(self, uc, args)
+        self.probe_calls.append(record)
+        self._finish_probe(uc, esp, ret, count, eax)
 
     def _map_thread_block(self) -> None:
         """A data segment for FS whose base is TEB_BASE. Unicorn can't set the
@@ -272,6 +398,18 @@ class Emulator:
             old = bytes(uc.mem_read(address, size))
             for i in range(size):
                 self.undo.setdefault(address + i, old[i])
+
+    def guest_read(self, address: int, size: int) -> bytes:
+        """A read made on the guest's behalf: lazy world bytes get their
+        value first (Python's mem_read doesn't trigger the hooks)."""
+        self._materialize(address, size)
+        return bytes(self.uc.mem_read(address, size))
+
+    def guest_write(self, address: int, data: bytes) -> None:
+        """A write made on the guest's behalf (by a probe), tracked like the
+        guest's own writes (Python's mem_write doesn't trigger the hooks)."""
+        self._on_write(self.uc, None, address, len(data), 0, None)
+        self.uc.mem_write(address, data)
 
     def _on_debug_log(self, uc, address, size, user_data):
         esp = uc.reg_read(UC_X86_REG_ESP)
@@ -366,6 +504,8 @@ class Emulator:
         self.heap_calls = []
         self.heap_next = 0
         self.thrown = None
+        self.probe_calls = []
+        self.spec_error = None
         outcome = Outcome()
         try:
             uc.emu_start(address, RETURN_ADDRESS, count=MAX_INSTRUCTIONS)
@@ -378,6 +518,8 @@ class Emulator:
         outcome.debug_logs = self.debug_logs
         outcome.heap_calls = self.heap_calls
         outcome.thrown = self.thrown
+        outcome.probe_calls = self.probe_calls
+        outcome.spec_error = self.spec_error
         outcome.popped = uc.reg_read(UC_X86_REG_ESP) - esp
         outcome.saved = {name: uc.reg_read(reg) for name, reg in CALLEE_SAVED.items()}
         undo, self.undo = self.undo, None

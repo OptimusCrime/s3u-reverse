@@ -71,11 +71,18 @@ disassembly; "READY" = not done, every direct callee done, all game code
    test. Later, once a caller subsystem (AI, lobby) is tackled.
 
 Next steps (for 2026-11-10, in this order):
-1. (Batch 22 done 2026-11-09, whole-game check included.) Next coverage
-   batch: Win32::CObject::~CObject 0x610330 (13 ins, 43 callers, unblocks
-   24) and the framework leaves it unblocks, AI_sub_58ec50 (20 ins, 33
-   callers, unblocks 21), then the UI accessor block 0x429d70..0x42a180;
-   in the simulation range the items of point 4 below.
+1. (Batch 23 done 2026-11-09: Win32/DirectX constructors, AI helpers,
+   CScreenElement core + the first group/accessor functions, 64 in all;
+   the emulator now probes virtual calls and rect APIs.) Next coverage
+   batch: the rest of the UI accessor block, i.e. its targets 0x4183c0,
+   0x4184b0/0x4184e0 (need 0x4187b0), 0x418380, 0x418430 (+0x4187b0),
+   0x417130, 0x417be0, 0x417ab0, 0x417480 (need Watcom vector 0x429a00),
+   0x415b60 (needs 0x5bf0c0), then the wrappers 0x429e10..0x42a180;
+   CStaticControl 0x41c3c0, DirectX::CSurface 0x5bf200, AI 0x599610 /
+   0x58b480; in the simulation range 0x504420, 0x542990 (point 4).
+   The 13 MapEffect make functions copy a stack temporary whose padding
+   bytes are uninitialized: they need an emulator option to ignore those
+   bytes before they can be compared.
 2. (Item 2 done 2026-11-09: tools/trivial.py.) Then the UI
    accessor block and Win32::CObject et al. as coverage batches, with
    `S3RE_HOOK_UNVERIFIED` where a spec is not quick.
@@ -442,6 +449,65 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (31): batch 23 (64 functions: framework, AI, UI)
+
+- Batch 23, all verified (none unverified):
+  - game/win32_classes.cpp (10): Win32::CObject ctor 0x610320 / dtor
+    0x610330 / deleting dtor 0x60bfc0, CWin32Handle 0x60be60, CWaitable
+    0x60bf50, CWindowBase 0x60f960, CMessageQueue 0x60d690,
+    DirectX::CSimpleSurface 0x5befb0 / 0x5befe0, CDirectSoundBuffer
+    0x5c1f70.
+  - game/ai_helpers.cpp (12, Rainer): AI::SetCurrentPlayer 0x551a30 (the
+    AI context globals, now in re/globals.csv: g_aiWorld 0x7e3408,
+    g_aiPlayer 0x7e3130, g_aiPlayerData 0x7e2eb0, ...), WordListInsert /
+    Remove 0x551970 / 0x5519b0, IsOnMap 0x572090, ClampToMap 0x572050,
+    AreaGoodsAmount 0x59dc10, GetBuilding 0x58e170, RecordBestCandidate
+    0x58ec50, the CEvaLand grid cell / free 0x554700 / 0x554040,
+    CopySixBytes 0x55a420, SetWord4 0x55ca60.
+  - game/graphics_helpers.cpp (5): Render::PackColour 0x4c7b00,
+    GfxData::SpriteWord 0x5fad20, GfxData::SetDword 0x5fc540, Point16
+    0x5fdab0, LogicRecord24 0x5437b0; map_effects.cpp: MapEffect::SetLinks
+    0x544290 (the effect records are in doubly linked lists).
+  - game/screen_element.cpp (36): CScreenElement (Dirk\dialog.cpp) layout
+    and 24 members (constructors, destructor, rect, SetRect/MoveBy,
+    SetParent, focus, Invalidate, message entry/WantsMessage/dispatch
+    jump table/TrackMouse, drawing), six dialog-global getters
+    0x416870..0x416c50, and the group class reached through a virtual base
+    (vbptr at this-0x7c): WantsMessage 0x417100, SetFocus 0x417650,
+    KillFocus 0x417680, plus the forwarders 0x429d70, 0x429df0, 0x429fd0.
+    4-byte functions (0x4156d0, 0x415830) hook fine (Detours uses the
+    padding after them).
+- Emulator harness: `fastcall` convention (args[0] = ECX, args[1] = EDX);
+  virtual-call probes (emu.FAKE_VTABLE: each slot records slot, ECX and
+  arguments; stack-pointer arguments by contents; return values 0 / 1 /
+  random per call; slots declared per spec in `Spec.virtuals`, undeclared
+  ones are spec errors); every import of S3.EXE and s3re.dll is bound to
+  an API probe, IntersectRect / IsRectEmpty / PtInRect implemented, others
+  are spec errors. The in-process UI test uses a fake vtable of recording
+  stubs the same way and runs original and ours on the same buffer
+  (snapshot/restore), so object pointers compare directly.
+- Tests: in-process 276/276 (10 new: Win32Classes_*, AiHelpers_*,
+  GraphicsHelpers_*, MapEffect_SetLinks_*, ScreenElement_*); emulator 64
+  new specs, 0 mismatches, every block covered; full suite 286 functions,
+  0 mismatches, 0 incomplete; self-test 15/15 (new: a wrong virtual slot,
+  a wrong API call).
+- Whole-game check (scripted-seed127.bin, 3,000 ticks, against the
+  original): REPLAY OK, 136 of 285 replacements called; 46 of the 64 new
+  ones (e.g. GfxData_SetDword 774M, Point16 116M, AI_GetBuilding 159k,
+  AI_GridCell 115k, AI_AreaGoodsAmount 27k, AI_SetCurrentPlayer 9k, the
+  UI ones at start-up). Not called: AI_ClampToMap, Render_PackColour,
+  MapEffect_SetLinks, Win32_CObject_DeletingDestroy, CSimpleSurface(4),
+  ContainsPoint, DeletingDestroy, IntersectRects, IsQuery78Zero,
+  KillFocus, MoveBy, SetFlag1F, SetFocus, WantsMessage, two dialog
+  getters, CopyGlobals, UiGroup_WantsMessage_429df0. Counts in the
+  inventory notes.
+- Frontier (all game code): READY 1,144 -> 1,231, NEAR 1,550 -> 1,414;
+  trivial functions done 66 -> 177 (forwarders whose targets are now
+  done); simulation range READY 261, NEAR 78.
+- Not done: the 13 MapEffect make functions (0x543930..): they copy a
+  stack temporary with uninitialized padding into the result, so the
+  bytes differ between runs; needs an "ignore these bytes" spec option.
 
 ### 2026-11-09 (30): trivial functions counted as done; whole-game check; batch 22
 

@@ -44,12 +44,20 @@ ROOT = emu.ROOT
 
 
 def first_difference(original: emu.Outcome, ours: emu.Outcome, mask: int) -> str | None:
+    if original.spec_error or ours.spec_error:
+        return f"spec error: {original.spec_error or ours.spec_error}"
     if (original.fault is None) != (ours.fault is None):
         return f"fault: original {original.fault!r}, ours {ours.fault!r}"
     if original.thrown != ours.thrown:
         return f"throw: original {original.thrown}, ours {ours.thrown}"
     if original.heap_calls != ours.heap_calls:
         return f"heap calls: original {original.heap_calls}, ours {ours.heap_calls}"
+    if original.probe_calls != ours.probe_calls:
+        def show_probes(calls):
+            return "; ".join(str(tuple(f"{v:#x}" if isinstance(v, int) else v for v in call))
+                             for call in calls) or "none"
+        return (f"virtual/API calls: original {show_probes(original.probe_calls)}, "
+                f"ours {show_probes(ours.probe_calls)}")
     thrown = original.thrown is not None  # then the stack, EAX and registers are mid-function
     if not thrown and original.popped != ours.popped:
         return f"stack: original pops {original.popped} bytes, ours {ours.popped}"
@@ -80,6 +88,7 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
     rng = random.Random(f"{spec.ours}:{seed}")
     pool = sorted(set(original.constants) | set(range(0, 9)) | {0xFF, 0xFFFF, 0xFFFFFFFF})
     machine.blocks = set()
+    machine.virtuals = spec.virtuals or {}
     result = {"cases": 0, "invalid": 0, "mismatch": None}
     if spec.max_cases is not None:
         cases = min(cases, spec.max_cases)
@@ -92,7 +101,14 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
                     presets[emu.WORLD_BASE + offset + i] = (value >> (8 * i)) & 0xFF
         registers = {name: rng.getrandbits(32) for name in ("eax", *emu.CALLEE_SAVED)}
         edx = spec.edx(rng, pool) if spec.edx else rng.getrandbits(32)
-        if spec.convention == "thiscall":
+        stack_args = args
+        if spec.convention == "fastcall":
+            # The first two arguments go in ECX and EDX, the rest on the stack.
+            ecx = args[0]
+            if len(args) > 1:
+                edx = args[1]
+            stack_args = args[2:]
+        elif spec.convention == "thiscall":
             ecx = emu.WORLD_BASE
         elif spec.convention == "logicthread":
             # A fake CLogicThread inside the world area whose world pointer
@@ -107,10 +123,10 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
             for address, value, size in spec.globals(rng, pool, args):
                 mask = (1 << (8 * size)) - 1
                 machine.uc.mem_write(address, (value & mask).to_bytes(size, "little"))
-        a = machine.call(spec.original, ecx, edx, args, registers,
+        a = machine.call(spec.original, ecx, edx, stack_args, registers,
                          cover=(original.start, original.end))
-        b = machine.call(ours, ecx, edx, args, registers)
-        if a.fault and b.fault:
+        b = machine.call(ours, ecx, edx, stack_args, registers)
+        if a.fault and b.fault and not (a.spec_error or b.spec_error):
             result["invalid"] += 1
             continue
         result["cases"] += 1
