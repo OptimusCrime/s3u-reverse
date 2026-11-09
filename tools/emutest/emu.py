@@ -29,6 +29,14 @@ world); every call is recorded ("new", size, address) / ("delete",
 address) and must match. std::_Xlen and std::_Xran (which throw a C++
 exception in the game) are recorded as ("throw", address) and end the run;
 the stack and callee-saved registers are then not compared.
+_CxxThrowException (CXX_THROW) is a thrower too; it is recorded with the
+thrown object pointer (read through its first argument, which points into
+the frame of the function that throws) and the throw info.
+
+Callee probes (Spec.callees): calls of chosen S3.EXE functions that are not
+reimplemented (and whose own code the emulator can't run, e.g. constructors
+of exception objects or the C runtime's free) are recorded with their
+arguments instead of being run; see Emulator.set_callees.
 
 FS points at a fake thread information block (outside the compared memory),
 so code with exception-handling frames (fs:[0]) runs.
@@ -62,7 +70,8 @@ STACK_SIZE = 0x00100000
 RETURN_ADDRESS = 0x00010000  # sentinel: emulation stops when it is reached
 OPERATOR_NEW = 0x0061efb9
 OPERATOR_DELETE = 0x0061e4ef
-THROWERS = (0x0061e4fa, 0x0061e646)  # std::_Xlen, std::_Xran
+CXX_THROW = 0x0061f027  # _CxxThrowException(object, throw info)
+THROWERS = (0x0061e4fa, 0x0061e646, CXX_THROW)  # std::_Xlen, std::_Xran, _CxxThrowException
 HEAP_OFFSET = 0x01fc0000  # world offset of the fake heap (after specs.SCRATCH)
 HEAP_SIZE = 0x00030000
 TEB_BASE = 0x00300000
@@ -108,6 +117,10 @@ def _api_pt_in_rect(machine, uc, args):
     return int(r[0] <= x < r[2] and r[1] <= y < r[3]), ("PtInRect", *r, x, y)
 
 
+def _api_sleep(machine, uc, args):
+    return 0, ("Sleep", args[0])
+
+
 def _api_time_get_time(machine, uc, args):
     """timeGetTime(): a value fixed by the case and the number of probe calls
     so far (both functions get the same times as long as they make the same
@@ -124,6 +137,7 @@ API_HANDLERS = {
     "IsRectEmpty": (1, _api_is_rect_empty),
     "PtInRect": (3, _api_pt_in_rect),
     "timeGetTime": (0, _api_time_get_time),
+    "Sleep": (1, _api_sleep),
 }
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,
@@ -198,7 +212,7 @@ class Outcome:
     final: dict[int, int] = field(default_factory=dict)    # compared address -> byte after
     debug_logs: list[tuple[int, ...]] = field(default_factory=list)  # (format, args...) per DebugLog call
     heap_calls: list[tuple] = field(default_factory=list)  # ("new", size, address) / ("delete", address)
-    thrown: int | None = None        # address of the std::_Xlen/_Xran called, if any
+    thrown: int | tuple | None = None  # the thrower called, if any (see _on_throw)
     probe_calls: list[tuple] = field(default_factory=list)  # virtual and API calls, in order
     spec_error: str | None = None    # a call the spec didn't declare
 
@@ -242,6 +256,8 @@ class Emulator:
         # Virtual-call and API probes.
         self.virtuals: dict[int, int | tuple[int, tuple[int, ...]]] = {}
         self.virtual_effects: dict = {}  # offset -> effect(machine, ecx, args, h), see specs.Spec
+        self.callees: dict = {}          # address -> (count, convention, returns), see set_callees
+        self._callee_hooks: list = []
         self.probe_calls: list[tuple] = []
         self.spec_error: str | None = None
         self.uc.mem_map(PROBE_BASE, PROBE_SIZE)
@@ -296,21 +312,57 @@ class Emulator:
             self.spec_error = f"virtual call to slot {offset:#x} not declared in the spec"
             uc.emu_stop()
             return
-        count, pointers = (declared, {}) if isinstance(declared, int) else declared
+        options: dict = {}
+        if isinstance(declared, int):
+            count, pointers = declared, {}
+        elif len(declared) == 2:
+            count, pointers = declared
+        else:
+            count, pointers, options = declared
         esp, ret, args = self._stack_args(uc, count)
         shown = []
         for i, value in enumerate(args):
-            if i in pointers:
+            if i in pointers and value == 0:
+                shown.append(("null",))
+            elif i in pointers and isinstance(pointers[i], int):
                 shown.append(("contents", self.guest_read(value, pointers[i])))
+            elif i in pointers:  # ((offset, size), ...): only these parts are defined
+                shown.append(("contents", *(self.guest_read(value + o, n) for o, n in pointers[i])))
             else:
                 shown.append(value)
-        ecx = uc.reg_read(UC_X86_REG_ECX)
+        # COM methods (options["com"]) are stdcall with the interface as
+        # their first stack argument; ECX is whatever the caller left there.
+        ecx = None if options.get("com") else uc.reg_read(UC_X86_REG_ECX)
         self.probe_calls.append(("virtual", offset, ecx, *shown))
         eax = self._probe_value()
+        if "returns" in options:  # returns(h) -> EAX, e.g. one of a set of HRESULTs
+            eax = options["returns"](_mix((self.seed << 32) ^ (0x2E7C0000 + len(self.probe_calls))))
         effect = self.virtual_effects.get(offset)
         if effect is not None:
             effect(self, ecx, args, _mix((self.seed << 32) ^ (0xEFFEC700 + len(self.probe_calls))))
         self._finish_probe(uc, esp, ret, count, eax)
+
+    def set_callees(self, callees: dict) -> None:
+        """Probes calls of S3.EXE functions instead of running them:
+        {address: (stack argument count, convention, returns)} with convention
+        "cdecl" (caller pops), "stdcall" or "thiscall" (ECX recorded too) and
+        returns "this" (EAX = ECX, a constructor) or "probe" (0, 1 or random,
+        as for virtual calls). Recorded as ("callee", address, ECX or None,
+        arguments...)."""
+        for handle in self._callee_hooks:
+            self.uc.hook_del(handle)
+        self._callee_hooks = []
+        self.callees = dict(callees)
+        for address in self.callees:
+            self._callee_hooks.append(self.uc.hook_add(UC_HOOK_CODE, self._on_callee, begin=address, end=address))
+
+    def _on_callee(self, uc, address, size, user_data):
+        count, convention, returns = self.callees[address]
+        esp, ret, args = self._stack_args(uc, count)
+        ecx = uc.reg_read(UC_X86_REG_ECX) if convention == "thiscall" else None
+        self.probe_calls.append(("callee", address, ecx, *args))
+        eax = ecx if returns == "this" else self._probe_value()
+        self._finish_probe(uc, esp, ret, 0 if convention == "cdecl" else count, eax)
 
     def _on_api(self, uc, address, size, user_data):
         name = self.api_names[(address - API_CODE) // 4]
@@ -463,6 +515,10 @@ class Emulator:
 
     def _on_throw(self, uc, address, size, user_data):
         self.thrown = address
+        if address == CXX_THROW:
+            esp = uc.reg_read(UC_X86_REG_ESP)
+            pointer, info = struct.unpack("<II", bytes(uc.mem_read(esp + 4, 8)))
+            self.thrown = (address, struct.unpack("<I", self.guest_read(pointer, 4))[0], info)
         uc.emu_stop()
 
     def _on_block(self, uc, address, size, user_data):

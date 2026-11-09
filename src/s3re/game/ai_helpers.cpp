@@ -358,6 +358,242 @@ std::uint32_t __stdcall AI_FreeTileArea(std::int32_t x, std::int32_t y) {
 }
 
 // ---------------------------------------------------------------------------
+// Batch 25
+// ---------------------------------------------------------------------------
+//
+//   0x0059dac0 AI_CountBuildings(player, type, area) fastcall (CL, DL, one
+//              stack word; ret 4): walks building ids 1, 2, ... through
+//              AI_GetBuilding until it reports an error; counts buildings
+//              of that player (byte +0) and type (byte +6) whose byte +0x21
+//              is 0, if their area (AI_BuildingArea) equals `area` or
+//              `area` is not 0 (sic: a non-zero area counts every such
+//              building). AX = the count; the upper half of EAX is the error
+//              flag's (0).
+//   0x005996c0 AI_AreaAlongRow(x, y) fastcall (CX, DX): 0xffff off the AI
+//              map (16-bit compares with 0x7e3414 / 0x7e3412); else the area
+//              word of tile (x, y), or, while that is 0, of x+1, x+2, ... (at
+//              most 16 steps, and only while x+k < map size x - 1). Only AX is
+//              used by callers; the upper half is reproduced (the last tile
+//              index * 3, or 0 after stopping at the edge) except off the
+//              map, where the original keeps its caller's.
+//   0x00551910 AI_List32Add(value) thiscall, ret 4: AI_WordListInsert(value,
+//              this+0x200, 50); on success ++word this+0x264. EAX = the
+//              insert's result.
+//   0x00554730 AI_GridCellWrapped(x, y) thiscall, ret 8: like AI_GridCell
+//              with x mod width (+0x140) and y mod height (+0x144).
+//   0x00554530 AI_GridSumAround(x, y) thiscall, ret 8: in cell (x, y) (low
+//              words) clears byte +0xf, words +0x10..+0x1c and bytes
+//              +0x1e..+0x20, then adds the 3x3 cells around it (16-bit
+//              coordinates x-1..x+1, y-1..y+1 that are on the grid): byte +4
+//              into byte +0xf, bytes +3 and +5..+0xa into the words; bytes
+//              +0xb/+0xc/+0xd are summed and stored as sum * 100 / 576 into
+//              bytes +0x1e/+0x1f/+0x20 (via the multiply 0x38e38e39 >> 39).
+//              EAX = the low half of the last multiplication.
+//   0x0055b770 AI_ResetAgentData() thiscall: zeroes a computer player's
+//              working data (dwords +0x18e4..+0x1ad4, +0x714 (0x474 dwords),
+//              +0x444 (0xb4), five arrays of 20 dwords at +0x2b4/+0x304/
+//              +0x354/+0x3a4/+0x3f4, bytes +0, +1, +2, +0x2ac, dwords +0x25c..
+//              (20), 20x10 words at +4 and 20x10 bytes at +0x194) and empties
+//              the 20 vectors at 0x7e7a24 (end = begin, 16-byte entries).
+//              EAX = 10.
+//   0x00553e00 AI_ClearGlobals7e0568(): 0x7e0568 = 0x7e056c = 0; EAX = 0.
+//   0x00559260 AI_ListFirst(out) thiscall, ret 4: *out = **(this+4) (the
+//              first node after the list head); EAX = out.
+
+using CountBuildingsFn = std::uint32_t(__fastcall*)(std::uint32_t player, std::uint32_t type, std::uint32_t area);
+using AreaAlongRowFn = std::uint32_t(__fastcall*)(std::uint32_t x, std::uint32_t y);
+using List32AddFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t value);
+using GridSumFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t x, std::uint32_t y);
+using AgentResetFn = std::uint32_t(__fastcall*)(void* self, void* edx);
+using ClearGlobalsFn = std::uint32_t(__cdecl*)();
+using ListFirstFn = void*(__fastcall*)(void* self, void* edx, std::uint32_t* out);
+
+std::uint32_t __fastcall AI_CountBuildings(std::uint32_t player, std::uint32_t type, std::uint32_t area);
+std::uint32_t __fastcall AI_AreaAlongRow(std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall AI_List32Add(void* self, void* edx, std::uint32_t value);
+void* __fastcall AI_GridCellWrapped(void* self, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall AI_GridSumAround(void* self, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall AI_ResetAgentData(void* self, void* edx);
+std::uint32_t __cdecl AI_ClearGlobals7e0568();
+void* __fastcall AI_ListFirst(void* self, void* edx, std::uint32_t* out);
+
+S3RE_HOOK(0x0059dac0, AI_CountBuildings, CountBuildingsFn, Original_AI_CountBuildings, AI_CountBuildings);
+
+// Purpose: Counts a computer player's buildings of one type (probably "how
+// many sawmills do I have"), optionally restricted to an economy area.
+std::uint32_t __fastcall AI_CountBuildings(std::uint32_t player, std::uint32_t type, std::uint32_t area) {
+    std::uint32_t count = 0;
+    std::uint32_t error = 0;
+    std::uint32_t id = 0;
+    do {
+        ++id;
+        const auto* building = static_cast<const std::uint8_t*>(AI_GetBuilding(id, &error));
+        if (building != nullptr && building[0] == static_cast<std::uint8_t>(player) && building[0x21] == 0 &&
+            building[6] == static_cast<std::uint8_t>(type)) {
+            const std::uint16_t number = static_cast<std::uint16_t>(id);
+            const auto found = static_cast<std::uint16_t>(AI_BuildingArea(&number));
+            if (static_cast<std::uint16_t>(area) == found || static_cast<std::uint16_t>(area) != 0) {
+                ++count;
+            }
+        }
+    } while (error == 0);
+    return (error & 0xffff0000u) | (count & 0xffffu);
+}
+
+S3RE_HOOK(0x005996c0, AI_AreaAlongRow, AreaAlongRowFn, Original_AI_AreaAlongRow, AI_AreaAlongRow);
+
+// Purpose: The economy area at a map position for the computer players; on
+// a tile without an area it looks a few tiles further in +x (0xffff off the
+// map).
+std::uint32_t __fastcall AI_AreaAlongRow(std::uint32_t x, std::uint32_t y) {
+    const std::uint16_t sizeX = At<std::uint16_t>(kAiMapSizeX);
+    if (static_cast<std::uint16_t>(x) >= sizeX || static_cast<std::uint16_t>(y) >= At<std::uint16_t>(kAiMapSizeY)) {
+        return 0xffff;
+    }
+    std::uint8_t* world = AiWorld();
+    y &= 0xffff;
+    const auto index3 = [&](std::uint32_t tx) { return ((tx & 0xffff) * 0x300 + y + 0x44d9) * 3; };
+    const auto area = [&](std::uint32_t tx) { return At<std::uint16_t>(world, index3(tx) * 8); };
+    std::uint32_t upper = index3(x);
+    if (area(x) == 0) {
+        for (int steps = 0; steps < 16; ++steps) {
+            ++x;
+            if (static_cast<std::int32_t>(x & 0xffff) >= static_cast<std::int32_t>(sizeX) - 1) {
+                upper = 0;
+                break;
+            }
+            upper = index3(x);
+            if (area(x) != 0) {
+                break;
+            }
+        }
+    }
+    return (upper & 0xffff0000u) | area(x);
+}
+
+S3RE_HOOK(0x00551910, AI_List32Add, List32AddFn, Original_AI_List32Add, AI_List32Add);
+
+// Purpose: Adds a number to a computer player's list of up to 50 entries
+// (+0x200) and counts it (+0x264); probably a list of buildings or orders.
+std::uint32_t __fastcall AI_List32Add(void* self, void* /*edx*/, std::uint32_t value) {
+    const std::uint32_t added = AI_WordListInsert(value, &At<std::uint16_t>(self, 0x200), 50);
+    if (added != 0) {
+        ++At<std::uint16_t>(self, 0x264);
+    }
+    return added;
+}
+
+S3RE_HOOK(0x00554730, AI_GridCellWrapped, GridCellFn, Original_AI_GridCellWrapped, AI_GridCellWrapped);
+
+// Purpose: A cell of a computer player's map evaluation grid, with the
+// coordinates wrapped around the grid size.
+void* __fastcall AI_GridCellWrapped(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
+    const std::uint32_t width = At<std::uint32_t>(self, 0x140);
+    const std::uint32_t row = y % At<std::uint32_t>(self, 0x144);
+    const std::uint32_t column = x % width;
+    return At<std::uint8_t*>(self, 0x158) + (row * width + column) * 0xc4;
+}
+
+S3RE_HOOK(0x00554530, AI_GridSumAround, GridSumFn, Original_AI_GridSumAround, AI_GridSumAround);
+
+// Purpose: Sums the evaluation values of the 3x3 grid cells around a cell
+// into it (probably how good the surroundings of a place are for a
+// building), three of them scaled to percentages.
+std::uint32_t __fastcall AI_GridSumAround(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
+    auto* cell = static_cast<std::uint8_t*>(AI_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
+    cell[0xf] = 0;
+    for (std::size_t offset = 0x10; offset <= 0x1c; offset += 2) {
+        At<std::uint16_t>(cell, offset) = 0;
+    }
+    cell[0x1e] = 0;
+    cell[0x1f] = 0;
+    cell[0x20] = 0;
+    std::uint32_t sumB = 0, sumC = 0, sumD = 0;
+    for (std::uint32_t i = 0; i < 3; ++i) {
+        for (std::uint32_t j = 0; j < 3; ++j) {
+            const auto cx = static_cast<std::int16_t>(i + x - 1);
+            const auto cy = static_cast<std::int16_t>(j + y - 1);
+            if (cx < 0 || static_cast<std::uint32_t>(static_cast<std::int32_t>(cx)) >= At<std::uint32_t>(self, 0x140) ||
+                cy < 0 || static_cast<std::uint32_t>(static_cast<std::int32_t>(cy)) >= At<std::uint32_t>(self, 0x144)) {
+                continue;
+            }
+            const auto* other = static_cast<const std::uint8_t*>(
+                AI_GridCell(self, nullptr, static_cast<std::uint32_t>(cx), static_cast<std::uint32_t>(cy)));
+            cell[0xf] = static_cast<std::uint8_t>(cell[0xf] + other[4]);
+            At<std::uint16_t>(cell, 0x10) = static_cast<std::uint16_t>(At<std::uint16_t>(cell, 0x10) + other[3]);
+            for (std::size_t k = 0; k < 6; ++k) {
+                At<std::uint16_t>(cell, 0x12 + 2 * k) =
+                    static_cast<std::uint16_t>(At<std::uint16_t>(cell, 0x12 + 2 * k) + other[5 + k]);
+            }
+            sumB += other[0xb];
+            sumC += other[0xc];
+            sumD += other[0xd];
+        }
+    }
+    std::uint32_t low = 0;
+    const auto percent = [&low](std::uint32_t sum) {
+        const std::uint64_t product = static_cast<std::uint64_t>(sum * 100u) * 0x38e38e39u;
+        low = static_cast<std::uint32_t>(product);
+        return static_cast<std::uint8_t>((product >> 32) >> 7);
+    };
+    cell[0x1e] = percent(sumB);
+    cell[0x1f] = percent(sumC);
+    cell[0x20] = percent(sumD);
+    return low;
+}
+
+S3RE_HOOK(0x0055b770, AI_ResetAgentData, AgentResetFn, Original_AI_ResetAgentData, AI_ResetAgentData);
+
+// Purpose: Clears a computer player's working data (probably at the start
+// of a game or when it is created), and empties 20 shared vectors.
+std::uint32_t __fastcall AI_ResetAgentData(void* self, void* /*edx*/) {
+    for (std::size_t offset = 0x18e4; offset <= 0x1ad4; offset += 4) {
+        At<std::uint32_t>(self, offset) = 0;
+    }
+    std::memset(&At<std::uint8_t>(self, 0x714), 0, 0x474 * 4);
+    At<std::uint8_t>(self, 1) = 0;
+    std::memset(&At<std::uint8_t>(self, 0x444), 0, 0xb4 * 4);
+    for (const std::size_t offset : {0x3a4u, 0x354u, 0x2b4u, 0x304u, 0x3f4u}) {
+        std::memset(&At<std::uint8_t>(self, offset), 0, 0x14 * 4);
+    }
+    for (std::uintptr_t entry = 0x007e7a28; entry < 0x007e7b68; entry += 0x10) {
+        At<std::uint32_t>(entry) = At<std::uint32_t>(entry - 4);  // end = begin
+    }
+    At<std::uint8_t>(self, 0) = 0;
+    At<std::uint8_t>(self, 2) = 0;
+    At<std::uint8_t>(self, 0x2ac) = 0;
+    for (std::size_t k = 0; k < 20; ++k) {
+        for (const std::size_t base : {0x25cu, 0x2b4u, 0x304u, 0x354u, 0x3f4u}) {
+            At<std::uint32_t>(self, base + 4 * k) = 0;
+        }
+        for (std::size_t j = 0; j < 10; ++j) {
+            At<std::uint16_t>(self, 4 + 20 * k + 2 * j) = 0;
+            At<std::uint8_t>(self, 0x194 + 10 * k + j) = 0;
+        }
+    }
+    return 10;
+}
+
+S3RE_HOOK(0x00553e00, AI_ClearGlobals7e0568, ClearGlobalsFn, Original_AI_ClearGlobals7e0568, AI_ClearGlobals7e0568);
+
+// Purpose: Resets two AI globals (0x7e0568, 0x7e056c; meaning unknown)
+// when a computer player's turn is set up.
+std::uint32_t __cdecl AI_ClearGlobals7e0568() {
+    At<std::uint32_t>(0x007e0568) = 0;
+    At<std::uint32_t>(0x007e056c) = 0;
+    return 0;
+}
+
+S3RE_HOOK(0x00559260, AI_ListFirst, ListFirstFn, Original_AI_ListFirst, AI_ListFirst);
+
+// Purpose: The first entry of a linked list (the node after the head at
+// this+4), as an iterator written to `out`.
+void* __fastcall AI_ListFirst(void* self, void* /*edx*/, std::uint32_t* out) {
+    *out = *At<std::uint32_t*>(self, 4);
+    return out;
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -685,6 +921,190 @@ S3RE_TEST(AiHelpers_ComparisonDetectsWrongImplementation) {
     AiFunctions wrong = OurAi();
     wrong.clamp = &WrongClamp;
     CompareAi(probe, wrong, 3000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+// Batch 25 functions: original and ours on identical copies of the state
+// (two worlds for the AI world pointer, buffers for the objects, S3.EXE's
+// globals saved, set and restored around each side).
+
+namespace {
+
+struct Ai25Functions {
+    CountBuildingsFn countBuildings;
+    AreaAlongRowFn areaAlongRow;
+    List32AddFn list32Add;
+    GridCellFn gridCellWrapped;
+    GridSumFn gridSumAround;
+    AgentResetFn resetAgentData;
+    ClearGlobalsFn clearGlobals;
+    ListFirstFn listFirst;
+};
+
+Ai25Functions OriginalAi25() {
+    return {Original_AI_CountBuildings, Original_AI_AreaAlongRow,  Original_AI_List32Add,
+            Original_AI_GridCellWrapped, Original_AI_GridSumAround, Original_AI_ResetAgentData,
+            Original_AI_ClearGlobals7e0568, Original_AI_ListFirst};
+}
+
+Ai25Functions OurAi25() {
+    return {&AI_CountBuildings, &AI_AreaAlongRow,  &AI_List32Add,     &AI_GridCellWrapped,
+            &AI_GridSumAround,  &AI_ResetAgentData, &AI_ClearGlobals7e0568, &AI_ListFirst};
+}
+
+// S3.EXE memory the functions write: the two globals and the 20 vectors.
+constexpr std::uintptr_t kGlobalsLow = 0x007e0568;
+constexpr std::uintptr_t kVectorsLow = 0x007e7a24;
+constexpr std::size_t kVectorsBytes = 0x7e7b68 - 0x7e7a24;
+
+void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) {
+    const Ai25Functions original = OriginalAi25();
+    SavedGlobals saved;
+    std::vector<std::uint8_t> savedVectors(kVectorsBytes), savedPair(8);
+    std::memcpy(savedVectors.data(), reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
+    std::memcpy(savedPair.data(), reinterpret_cast<void*>(kGlobalsLow), 8);
+    const std::uint32_t savedMapSizes = At<std::uint32_t>(kAiMapSizeY);
+    test::WorldPair worlds(ctx, 0x153a128);
+    std::vector<std::uint8_t> a(0x8000), b(0x8000), vectorsA(kVectorsBytes), pairA(8);
+    for (int i = 0; i < cases; ++i) {
+        const int op = static_cast<int>(ctx.rng().Below(8));
+        ctx.rng().Fill(a.data(), a.size());
+        ctx.rng().Fill(reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
+        ctx.rng().Fill(reinterpret_cast<void*>(kGlobalsLow), 8);
+        At<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 1 + ctx.rng().Below(400));
+        At<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 1 + ctx.rng().Below(400));
+        std::uint32_t args[3] = {ctx.rng().Next32(), ctx.rng().Next32(), ctx.rng().Next32()};
+        switch (op) {
+            case 0: {
+                const std::uint32_t count = ctx.rng().Below(60);
+                worlds.Set<std::uint32_t>(kBuildingCount, count);
+                args[0] = (args[0] & 0xffffff00u) | ctx.rng().Below(3);
+                args[1] = (args[1] & 0xffffff00u) | ctx.rng().Below(3);
+                args[2] = ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(4);
+                At<std::uint16_t>(kAiMapSizeX) = 400;
+                At<std::uint16_t>(kAiMapSizeY) = 400;
+                for (std::uint32_t id = 1; id <= count; ++id) {
+                    const std::size_t record = kBuildings + id * kBuildingBytes;
+                    worlds.Set<std::uint8_t>(record, static_cast<std::uint8_t>(ctx.rng().Chance(1, 6) ? 0xff : ctx.rng().Below(3)));
+                    worlds.Set<std::uint8_t>(record + 6, static_cast<std::uint8_t>(ctx.rng().Below(3)));
+                    worlds.Set<std::uint8_t>(record + 0x21, static_cast<std::uint8_t>(ctx.rng().Chance(1, 4)));
+                    const auto x = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? 500 : ctx.rng().Below(400));
+                    const auto y = static_cast<std::uint16_t>(ctx.rng().Below(400));
+                    worlds.Set<std::uint16_t>(record + 0xa, x);
+                    worlds.Set<std::uint16_t>(record + 0xc, y);
+                    if (x < 400) {
+                        worlds.Set<std::uint16_t>(kTiles + (x * 0x300u + y) * kTileBytes + kTileArea,
+                                                  static_cast<std::uint16_t>(ctx.rng().Below(4)));
+                    }
+                }
+                break;
+            }
+            case 1: {
+                At<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(1 + ctx.rng().Below(400));
+                At<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(1 + ctx.rng().Below(400));
+                const std::uint32_t x = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(410);
+                const std::uint32_t y = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(410);
+                args[0] = x;
+                args[1] = y;
+                for (std::uint32_t k = 0; k < 20; ++k) {
+                    const std::uint32_t tx = (x + k) & 0xffff;
+                    if (tx < 0x300 && (y & 0xffff) < 0x300) {
+                        worlds.Set<std::uint16_t>(kTiles + (tx * 0x300u + (y & 0xffff)) * kTileBytes + kTileArea,
+                                                  static_cast<std::uint16_t>(ctx.rng().Chance(3, 4) ? 0 : ctx.rng().Next32()));
+                    }
+                }
+                break;
+            }
+            case 2:
+                for (std::size_t k = 0; k < 50; ++k) {
+                    At<std::uint16_t>(a.data(), 0x200 + 2 * k) = ctx.rng().Chance(1, 10) ? 0xffff : static_cast<std::uint16_t>(ctx.rng().Below(9));
+                }
+                args[0] = ctx.rng().Chance(1, 4) ? 0xffff : ctx.rng().Below(9);
+                break;
+            case 3:
+            case 4: {
+                const std::uint32_t w = 1 + ctx.rng().Below(8), h = 1 + ctx.rng().Below(8);
+                At<std::uint32_t>(a.data(), 0x140) = w;
+                At<std::uint32_t>(a.data(), 0x144) = h;
+                if (op == 4) {
+                    args[0] = (args[0] & 0xffff0000u) | ctx.rng().Below(w);
+                    args[1] = (args[1] & 0xffff0000u) | ctx.rng().Below(h);
+                }
+                break;
+            }
+            default:
+                break;
+        }
+        b = a;
+        std::memcpy(vectorsA.data(), reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
+        std::memcpy(pairA.data(), reinterpret_cast<void*>(kGlobalsLow), 8);
+        auto run = [&](const Ai25Functions& f, std::uint8_t* object, bool ours) -> std::uint32_t {
+            At<void*>(kAiWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
+            At<std::uint8_t*>(object, 0x158) = object + 0x200;  // the grid's cells
+            At<std::uint8_t*>(object, 4) = object + 0x100;      // the list head
+            switch (op) {
+                case 0: return f.countBuildings(args[0], args[1], args[2]);
+                case 1: return f.areaAlongRow(args[0], args[1]) & 0xffff;
+                case 2: return f.list32Add(object, nullptr, args[0]);
+                case 3: return static_cast<std::uint32_t>(static_cast<std::uint8_t*>(f.gridCellWrapped(object, nullptr, args[0], args[1])) - object);
+                case 4: return f.gridSumAround(object, nullptr, args[0], args[1]);
+                case 5: return f.resetAgentData(object, nullptr);
+                case 6: return f.clearGlobals();
+                default: {
+                    std::uint32_t out = 0;
+                    void* r = f.listFirst(object, nullptr, &out);
+                    return (r == &out ? 0x5a5a5a5au : 0) ^ out;  // the first node (the same dword on both sides)
+                }
+            }
+        };
+        const std::uint32_t ra = run(original, a.data(), false);
+        std::vector<std::uint8_t> vectorsAfterA(kVectorsBytes), pairAfterA(8);
+        std::memcpy(vectorsAfterA.data(), reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
+        std::memcpy(pairAfterA.data(), reinterpret_cast<void*>(kGlobalsLow), 8);
+        std::memcpy(reinterpret_cast<void*>(kVectorsLow), vectorsA.data(), kVectorsBytes);
+        std::memcpy(reinterpret_cast<void*>(kGlobalsLow), pairA.data(), 8);
+        const std::uint32_t rb = run(candidate, b.data(), true);
+        // The pointers run() stores point into each side's own buffer.
+        std::memcpy(b.data() + 0x158, a.data() + 0x158, 4);
+        if (op != 5) {  // (ResetAgentData clears +4 itself)
+            std::memcpy(b.data() + 4, a.data() + 4, 4);
+        }
+        bool same = S3RE_EXPECT_EQ(ra, rb);
+        same &= S3RE_EXPECT_MEM_EQ(a.data(), b.data(), a.size());
+        same &= S3RE_EXPECT_MEM_EQ(vectorsAfterA.data(), reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
+        same &= S3RE_EXPECT_MEM_EQ(pairAfterA.data(), reinterpret_cast<void*>(kGlobalsLow), 8);
+        if (!same || ((i % 64 == 63) && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, op %d", i, op);
+            break;
+        }
+    }
+    std::memcpy(reinterpret_cast<void*>(kVectorsLow), savedVectors.data(), kVectorsBytes);
+    std::memcpy(reinterpret_cast<void*>(kGlobalsLow), savedPair.data(), 8);
+    At<std::uint32_t>(kAiMapSizeY) = savedMapSizes;
+}
+
+// Wrong: the 3x3 sum skips the centre cell.
+std::uint32_t __fastcall WrongGridSumAround(void* self, void* edx, std::uint32_t x, std::uint32_t y) {
+    auto* cell = static_cast<std::uint8_t*>(AI_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
+    std::uint8_t saved[0xc4];
+    std::memcpy(saved, cell, sizeof(saved));
+    std::memset(cell, 0, 0xe);
+    const std::uint32_t result = AI_GridSumAround(self, edx, x, y);
+    std::memcpy(cell, saved, 0xe);
+    return result;
+}
+
+}  // namespace
+
+S3RE_TEST(AiHelpers25_MatchOriginal) {
+    CompareAi25(ctx, OurAi25(), 20000);
+}
+
+S3RE_TEST(AiHelpers25_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    Ai25Functions wrong = OurAi25();
+    wrong.gridSumAround = &WrongGridSumAround;
+    CompareAi25(probe, wrong, 3000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

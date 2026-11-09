@@ -16,6 +16,7 @@
 #include "hooks.h"
 #include "test/difftest.h"
 
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -702,6 +703,45 @@ String* __fastcall String_ConcatChar(String* self, const String* left, std::uint
 }
 
 // ---------------------------------------------------------------------------
+// compare(pos, n0, const char* s, count) (0x0040a140)
+// ---------------------------------------------------------------------------
+
+using StringCompareCharsFn = std::int32_t(__fastcall*)(const String* self, void* edx, std::uint32_t pos,
+                                                       std::uint32_t n0, const char* s, std::uint32_t count);
+std::int32_t __fastcall String_CompareChars(const String* self, void* edx, std::uint32_t pos, std::uint32_t n0,
+                                            const char* s, std::uint32_t count);
+
+S3RE_HOOK(0x0040a140, String_CompareChars, StringCompareCharsFn, Original_String_CompareChars,
+          String_CompareChars);
+
+// Purpose: Standard string comparison of a part of the string (n0
+// characters from pos) with `count` characters: -1, 0 or 1, comparing bytes
+// unsigned, a shorter equal prefix first. Used e.g. to test for an empty
+// tooltip text.
+std::int32_t __fastcall String_CompareChars(const String* self, void* /*edx*/, std::uint32_t pos, std::uint32_t n0,
+                                            const char* s, std::uint32_t count) {
+    if (self->len < pos) {
+        GameXran();
+    }
+    std::uint32_t n = self->len - pos;
+    if (n0 < n) {
+        n = n0;
+    }
+    const std::uint32_t compared = n < count ? n : count;
+    const auto* p = reinterpret_cast<const unsigned char*>(self->ptr == nullptr ? nullptr : self->ptr + pos);
+    const auto* q = reinterpret_cast<const unsigned char*>(s);
+    for (std::uint32_t i = 0; i < compared; ++i) {
+        if (p[i] != q[i]) {
+            return p[i] < q[i] ? -1 : 1;
+        }
+    }
+    if (n < count) {
+        return -1;
+    }
+    return n != count ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1060,6 +1100,65 @@ void CompareStringOperations(test::Context& ctx, const StringOps& candidate, int
 }
 
 }  // namespace
+
+namespace {
+
+void CompareCompareChars(test::Context& ctx, StringCompareCharsFn candidate, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        char text[40], other[44];
+        const std::uint32_t len = ctx.rng().Below(sizeof(text) - 1);
+        const std::uint32_t otherLen = ctx.rng().Below(40);
+        for (char& c : text) {
+            c = static_cast<char>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 'a' + ctx.rng().Below(3));
+        }
+        for (char& c : other) {
+            c = static_cast<char>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 'a' + ctx.rng().Below(3));
+        }
+        if (ctx.rng().Chance(1, 2)) {
+            std::memcpy(other, text, sizeof(text));  // equal prefixes
+        }
+        String str{};
+        str.allocator = static_cast<std::uint8_t>(ctx.rng().Next32());
+        str.ptr = len == 0 && ctx.rng().Chance(1, 2) ? nullptr : text;
+        str.len = str.ptr == nullptr ? 0 : len;
+        str.res = str.len;
+        const std::uint32_t pos = ctx.rng().Below(str.len + 1);
+        const std::uint32_t n0 = ctx.rng().Chance(1, 4) ? 0xffffffffu : ctx.rng().Below(40);
+        const std::uint32_t pos2 = ctx.rng().Below(4);
+        const std::int32_t ra = Original_String_CompareChars(&str, nullptr, pos, n0, other + pos2, otherLen - (otherLen > pos2 ? pos2 : 0));
+        const std::int32_t rb = candidate(&str, nullptr, pos, n0, other + pos2, otherLen - (otherLen > pos2 ? pos2 : 0));
+        if (!S3RE_EXPECT_EQ(ra, rb)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: len %u pos %u n0 %u", i, str.len, pos, n0);
+            return;
+        }
+    }
+}
+
+// Wrong: compares bytes as signed chars.
+std::int32_t __fastcall WrongCompareChars(const String* self, void* edx, std::uint32_t pos, std::uint32_t n0,
+                                          const char* s, std::uint32_t count) {
+    const std::int32_t result = String_CompareChars(self, edx, pos, n0, s, count);
+    std::uint32_t n = self->len - pos;
+    n = n0 < n ? n0 : n;
+    for (std::uint32_t i = 0; i < (n < count ? n : count); ++i) {
+        if (self->ptr[pos + i] != s[i]) {
+            return self->ptr[pos + i] < s[i] ? -1 : 1;
+        }
+    }
+    return result;
+}
+
+}  // namespace
+
+S3RE_TEST(String_CompareChars_MatchesOriginal) {
+    CompareCompareChars(ctx, &String_CompareChars, 50000);
+}
+
+S3RE_TEST(String_CompareChars_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareCompareChars(probe, &WrongCompareChars, 50000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(String_Eos_MatchesOriginal) {
     CompareEos(ctx, &String_Eos, 100000);

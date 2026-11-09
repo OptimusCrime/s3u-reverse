@@ -5,7 +5,8 @@
 //
 // CScreenElement layout (vtable 0x655a68; all thiscall):
 //   +0x00 vtable
-//   +0x04 dword, 0x1111 after construction (meaning unknown)
+//   +0x04 dword, 0x1111 after construction: the background fill colour
+//         (vf11, FillBackground)
 //   +0x08 RECT: left, top, right, bottom (screen coordinates)
 //   +0x18 parent: a container object; its own vbtable at +4 leads to its
 //         CScreenElement-like virtual base, whose vtable is used
@@ -13,7 +14,8 @@
 //   +0x1d byte: the mouse is inside (TrackMouse)
 //   +0x1e byte: needs redrawing (set by construction and vf07, cleared after
 //         drawing)
-//   +0x1f byte: set by vf06 (meaning unknown)
+//   +0x1f byte: set by vf06; when set, vf11 does not fill the background
+//         (probably "transparent")
 // Virtual slots used here (byte offsets): 0x04 parent: remove child, 0x0c
 // parent: child got the focus, 0x1c parent: invalidate, 0x20 accepts message
 // (pointer to it), 0x24 handle message, 0x28 / 0x2c draw, 0x30..0x58
@@ -168,6 +170,14 @@ std::uint32_t __fastcall CGroupControl_OnMessage10(void* self, void* edx, Messag
 std::uint32_t __fastcall CGroupControl_OnMouseMove(void* self, void* edx, Message message);
 std::uint32_t __fastcall CGroupControl_OnMouseEnter(void* self, void* edx, Message message);
 std::uint32_t __fastcall CGroupControl_OnMouseLeave(void* self, void* edx, Message message);
+std::uint32_t __fastcall CScreenGroup_OnEnable(void* self, void* edx, std::uint32_t enable);
+std::uint32_t __fastcall CControl_OnEnable(void* self, void* edx, std::uint32_t enable);
+std::uint32_t __fastcall CGroupControl_OnEnable(void* self, void* edx, std::uint32_t enable);
+std::uint32_t __fastcall CScreenElement_FillBackground(void* self, void* edx, void* surface, const RECT* rect);
+std::uint32_t __fastcall CScreenGroup_FillBackground(void* self, void* edx, void* surface, const RECT* rect);
+std::uint32_t __fastcall CScreenGroup_FillBackground_429e50(void* self, void* edx, void* surface, const RECT* rect);
+std::uint32_t __fastcall DirectX_CSurface_DDBlt(void* self, void* edx, const RECT* dst, void* src,
+                                                const RECT* srcRect, std::uint32_t flags, void* fx);
 
 // ---------------------------------------------------------------------------
 // Construction and destruction
@@ -988,6 +998,80 @@ std::uint32_t __fastcall CGroupControl_OnMouseLeave(void* self, void* /*edx*/, M
 }
 
 // ---------------------------------------------------------------------------
+// Batch 25: the "enabled changed" notification (vtable slot 0x6c, vf27) of
+// groups and controls, and the background fill (slot 0x2c, vf11)
+// ---------------------------------------------------------------------------
+
+S3RE_HOOK(0x004177f0, CScreenGroup_OnEnable, Arg1Fn, Original_CScreenGroup_OnEnable, CScreenGroup_OnEnable);
+
+// Purpose: Tells every child of a group that the group was enabled or
+// disabled (vf27 of each child). The base's handler (0x582530) is empty.
+// EAX: the vbtable pointer at this-0x7c (left over from that base call).
+std::uint32_t __fastcall CScreenGroup_OnEnable(void* self, void* /*edx*/, std::uint32_t enable) {
+    for (std::uint32_t i = 0; i < ChildCount(self); ++i) {
+        CallVirtual<std::uint32_t>(Child(self, i), 0x6c, enable);
+    }
+    return At<std::uint32_t>(self, -0x7c);
+}
+
+S3RE_HOOK(0x00418520, CControl_OnEnable, Arg1Fn, Original_CControl_OnEnable, CControl_OnEnable);
+
+// Purpose: A control being disabled closes its tooltip (only the low byte
+// of the argument counts). EAX: the vbtable pointer at this-0x38.
+std::uint32_t __fastcall CControl_OnEnable(void* self, void* /*edx*/, std::uint32_t enable) {
+    if (static_cast<std::uint8_t>(enable) == 0) {
+        CControl_DeleteTooltip(static_cast<std::uint8_t*>(self) - 0x3c, nullptr);
+    }
+    return At<std::uint32_t>(self, -0x38);
+}
+
+S3RE_HOOK(0x0042a000, CGroupControl_OnEnable, Arg1Fn, Original_CGroupControl_OnEnable, CGroupControl_OnEnable);
+
+// Purpose: CGroupControl's "enabled changed" handler: the control's
+// (tooltip), then the group's (children).
+std::uint32_t __fastcall CGroupControl_OnEnable(void* self, void* /*edx*/, std::uint32_t enable) {
+    CControl_OnEnable(static_cast<std::uint8_t*>(self) - 0x7c, nullptr, enable);
+    return CScreenGroup_OnEnable(self, nullptr, enable);
+}
+
+using FillFn = std::uint32_t(__fastcall*)(void* self, void* edx, void* surface, const RECT* rect);
+
+S3RE_HOOK(0x00415b60, CScreenElement_FillBackground, FillFn, Original_CScreenElement_FillBackground,
+          CScreenElement_FillBackground);
+
+// Purpose: Fills an element's area on a surface with its background colour
+// (+0x04, 0x1111 after construction), unless its byte +0x1f is set
+// (probably "transparent"). EAX: DDBlt's 0, else the byte in AL (the rest
+// of EAX is the caller's; callers only pass it on).
+std::uint32_t __fastcall CScreenElement_FillBackground(void* self, void* /*edx*/, void* surface, const RECT* rect) {
+    const std::uint8_t transparent = At<std::uint8_t>(self, 0x1f);
+    if (transparent != 0) {
+        return transparent;
+    }
+    std::uint32_t fx[25] = {};  // DDBLTFX: the original leaves all but these two fields uninitialized
+    fx[0] = sizeof(fx);
+    fx[0x50 / 4] = At<std::uint32_t>(self, 4);  // dwFillColor
+    return DirectX_CSurface_DDBlt(surface, nullptr, rect, nullptr, nullptr, 0x400 /* DDBLT_COLORFILL */, fx);
+}
+
+S3RE_HOOK(0x00417460, CScreenGroup_FillBackground, FillFn, Original_CScreenGroup_FillBackground,
+          CScreenGroup_FillBackground);
+
+// Purpose: A group's background fill: its CScreenElement part's.
+std::uint32_t __fastcall CScreenGroup_FillBackground(void* self, void* /*edx*/, void* surface, const RECT* rect) {
+    return CScreenElement_FillBackground(VirtualBase(self, -0x7c), nullptr, surface, rect);
+}
+
+S3RE_HOOK(0x00429e50, CScreenGroup_FillBackground_429e50, FillFn, Original_CScreenGroup_FillBackground_429e50,
+          CScreenGroup_FillBackground_429e50);
+
+// Purpose: A derived class's copy of the group's background fill.
+std::uint32_t __fastcall CScreenGroup_FillBackground_429e50(void* self, void* /*edx*/, void* surface,
+                                                            const RECT* rect) {
+    return CScreenGroup_FillBackground(self, nullptr, surface, rect);
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 //
@@ -1045,7 +1129,7 @@ void MaybeChangeChildCount(int slot) {
         return;
     }
     switch (slot * 4) {
-        case 0x18: case 0x20: case 0x24: case 0x28: case 0x5c: case 0x60: case 0x70: case 0x74: break;
+        case 0x18: case 0x20: case 0x24: case 0x28: case 0x5c: case 0x60: case 0x6c: case 0x70: case 0x74: break;
         default: return;
     }
     test::Rng rng(log.seed * 0xc2b2ae3d27d4eb4full + log.calls);
@@ -1235,8 +1319,11 @@ struct Functions {
     MessageFn groupControlOnMouseMove;
     MessageFn groupControlOnMouseEnter;
     MessageFn groupControlOnMouseLeave;
+    Arg1Fn screenGroupOnEnable;
+    Arg1Fn controlOnEnable;
+    Arg1Fn groupControlOnEnable;
 };
-constexpr int kOperations = 55;
+constexpr int kOperations = 58;
 
 Functions OriginalFunctions() {
     return {Original_CScreenElement_Construct,     Original_CScreenElement_ConstructRect,
@@ -1266,7 +1353,8 @@ Functions OriginalFunctions() {
             Original_CControl_OnMouseMove,         Original_CControl_OnMouseEnter,
             Original_CControl_OnMouseLeave,        Original_CGroupControl_OnMessage10,
             Original_CGroupControl_OnMouseMove,    Original_CGroupControl_OnMouseEnter,
-            Original_CGroupControl_OnMouseLeave};
+            Original_CGroupControl_OnMouseLeave,   Original_CScreenGroup_OnEnable,
+            Original_CControl_OnEnable,            Original_CGroupControl_OnEnable};
 }
 
 Functions OurFunctions() {
@@ -1288,7 +1376,8 @@ Functions OurFunctions() {
             &CScreen_HandleMessage,        &CControl_DeleteTooltip,       &CControl_OnMessage10,
             &CControl_OnMouseMove,         &CControl_OnMouseEnter,        &CControl_OnMouseLeave,
             &CGroupControl_OnMessage10,    &CGroupControl_OnMouseMove,    &CGroupControl_OnMouseEnter,
-            &CGroupControl_OnMouseLeave};
+            &CGroupControl_OnMouseLeave,   &CScreenGroup_OnEnable,        &CControl_OnEnable,
+            &CGroupControl_OnEnable};
 }
 
 struct Inputs {
@@ -1370,7 +1459,10 @@ std::uint32_t RunOperation(const Functions& f, int op, std::uint8_t* buffer, Inp
         case 51: return f.groupControlOnMessage10(group, nullptr, in.message);
         case 52: return f.groupControlOnMouseMove(group, nullptr, in.message) & 0xff;
         case 53: return f.groupControlOnMouseEnter(group, nullptr, in.message);
-        default: return f.groupControlOnMouseLeave(group, nullptr, in.message);
+        case 54: return f.groupControlOnMouseLeave(group, nullptr, in.message);
+        case 55: return f.screenGroupOnEnable(group, nullptr, in.a);
+        case 56: return f.controlOnEnable(buffer + kControl, nullptr, in.a);
+        default: return f.groupControlOnEnable(group, nullptr, in.a);
     }
 }
 
@@ -1553,6 +1645,84 @@ S3RE_TEST(ScreenElement_ComparisonDetectsWrongImplementation) {
     wrongDraw.screenGroupDraw = &WrongGroupDraw;
     CompareScreenElement(probe2, wrongDraw, 5000);
     S3RE_EXPECT(probe2.failures() > 0);
+}
+
+// The background fill: a fake CSurface (+8 a fake COM surface whose Blt,
+// slot 0x14, records its arguments and the two DDBLTFX fields that count)
+// in a buffer with an element and a group reaching it through its vbtable.
+namespace {
+
+std::vector<std::uint32_t>* g_fillLog = nullptr;
+std::uint8_t* g_fillBase = nullptr;
+
+std::int32_t __stdcall RecordingBlt(void* surface, const RECT* dst, void* src, const RECT* srcRect,
+                                    std::uint32_t flags, void* fx) {
+    const auto rel = [](const void* p) {
+        return p == nullptr ? 0xffffffffu : static_cast<std::uint32_t>(static_cast<const std::uint8_t*>(p) - g_fillBase);
+    };
+    g_fillLog->insert(g_fillLog->end(), {rel(surface), rel(dst), rel(src), rel(srcRect), flags,
+                                         At<std::uint32_t>(fx, 0), At<std::uint32_t>(fx, 0x50)});
+    return 0;
+}
+
+void* g_fillComVtable[8] = {};
+
+void CompareFill(test::Context& ctx, FillFn candidate, FillFn original, int which, int cases) {
+    for (void*& slot : g_fillComVtable) {
+        slot = reinterpret_cast<void*>(&RecordingBlt);
+    }
+    static const std::int32_t kVbtable[2] = {0, 0x100 - 0x184};  // group 0x200: vbptr 0x184 -> element 0x100
+    std::vector<std::uint8_t> buffer(0x400);
+    for (int i = 0; i < cases; ++i) {
+        ctx.rng().Fill(buffer.data(), buffer.size());
+        std::uint8_t* b = buffer.data();
+        At<std::uint8_t>(b, 0x100 + 0x1f) = ctx.rng().Chance(1, 2) ? 0 : static_cast<std::uint8_t>(ctx.rng().Next32());
+        At<const void*>(b, 0x184) = kVbtable;
+        At<void*>(b, 0x308) = b + 0x340;
+        At<void*>(b, 0x340) = g_fillComVtable;
+        void* self = which == 0 ? b + 0x100 : b + 0x200;
+        const RECT* rect = ctx.rng().Chance(1, 4) ? nullptr : reinterpret_cast<const RECT*>(b + 0x380);
+        const std::vector<std::uint8_t> snapshot = buffer;
+        std::vector<std::uint32_t> logA, logB;
+        g_fillBase = b;
+        g_fillLog = &logA;
+        const std::uint32_t ra = original(self, nullptr, b + 0x300, rect);
+        const std::vector<std::uint8_t> afterA = buffer;
+        buffer = snapshot;
+        g_fillLog = &logB;
+        const std::uint32_t rb = candidate(self, nullptr, b + 0x300, rect);
+        g_fillLog = nullptr;
+        bool same = S3RE_EXPECT_EQ(ra & 0xff, rb & 0xff);
+        same &= S3RE_EXPECT(logA == logB);
+        same &= S3RE_EXPECT_MEM_EQ(afterA.data(), buffer.data(), buffer.size());
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, function %d", i, which);
+            return;
+        }
+    }
+}
+
+// Wrong: fills even a "transparent" element.
+std::uint32_t __fastcall WrongFill(void* self, void* edx, void* surface, const RECT* rect) {
+    const std::uint8_t saved = At<std::uint8_t>(self, 0x1f);
+    At<std::uint8_t>(self, 0x1f) = 0;
+    const std::uint32_t result = CScreenElement_FillBackground(self, edx, surface, rect);
+    At<std::uint8_t>(self, 0x1f) = saved;
+    return result;
+}
+
+}  // namespace
+
+S3RE_TEST(ScreenElement_FillBackground_MatchesOriginal) {
+    CompareFill(ctx, &CScreenElement_FillBackground, Original_CScreenElement_FillBackground, 0, 3000);
+    CompareFill(ctx, &CScreenGroup_FillBackground, Original_CScreenGroup_FillBackground, 1, 3000);
+    CompareFill(ctx, &CScreenGroup_FillBackground_429e50, Original_CScreenGroup_FillBackground_429e50, 1, 3000);
+}
+
+S3RE_TEST(ScreenElement_FillBackground_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareFill(probe, &WrongFill, Original_CScreenElement_FillBackground, 0, 500);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 S3RE_TEST(CStaticControl_Construct_MatchesOriginal) {

@@ -88,7 +88,11 @@ class Spec:
     # with a preset): {slot offset: stack argument count} or {offset:
     # (count, {argument index: bytes})} for arguments that point into the
     # stack, whose contents are compared instead of their address. Calls to
-    # undeclared slots are reported as spec errors.
+    # undeclared slots are reported as spec errors. A third tuple element
+    # holds options: "com" (a COM method: stdcall, ECX not recorded) and
+    # "returns" (h -> EAX instead of 0 / 1 / random). A pointer argument's
+    # bytes may also be ((offset, size), ...): only those parts are
+    # recorded (for structures whose other fields are left uninitialized).
     virtuals: dict | None = None
     # World offsets whose final bytes are not compared. Only for bytes that
     # provably hold leftovers of each function's own stack (e.g. padding of a
@@ -106,6 +110,12 @@ class Spec:
     # Chance per case that every operator new of the case returns null (to
     # reach the out-of-memory paths).
     new_fails: float = 0.0
+    # Calls of S3.EXE functions that are recorded instead of run (see
+    # emu.Emulator.set_callees): {address: (stack argument count,
+    # "cdecl"/"stdcall"/"thiscall", "this"/"probe")}. Only for callees that
+    # are not reimplemented and can't run in the emulator; say why at the
+    # spec.
+    callees: dict | None = None
 
 
 MAP_SIZE = 0x2d2d0
@@ -3101,6 +3111,365 @@ SPECS += [
          presets=group_menu_presets, globals=group_menu_globals),
 ]
 
+# -- batch 25: DirectX surface blits and error checks (directx_surface.cpp) --
+#
+# ECX = the world as a CSurface: +8 its COM interface (UI_BASE + 0x500,
+# vtable = emu.FAKE_VTABLE: Blt slot 0x14 and BltFast slot 0x1c are COM
+# probes returning one of the HRESULTs below), +0xc its owner (UI_BASE +
+# 0x540, slot 0x0c = restore); a source CSurface at UI_BASE + 0x580 (its +8
+# another interface). Callee probes: the exception constructors 0x5be180
+# (CDirectDrawException) and 0x5bfdb0 (CDirectPlayException) build objects
+# with strings, std::string and the runtime-error base, none reimplemented
+# yet; they are recorded with their arguments (and return `this`).
+
+DD_OK = 0
+DDERR_SURFACELOST = 0x887601C2
+DDERR_WASSTILLDRAWING = 0x8876021C
+SURFACE_IFACE = UI_BASE + 0x500
+SURFACE_OWNER = UI_BASE + 0x540
+SOURCE_SURFACE = UI_BASE + 0x580
+SOURCE_IFACE = UI_BASE + 0x5c0
+EXCEPTION_CTORS = {0x005be180: (3, "thiscall", "this"), 0x005bfdb0: (3, "thiscall", "this")}
+
+
+def hresult_from(h: int) -> int:
+    """DD_OK most often (ends the retry loops), the two handled errors, a
+    success code, other failures."""
+    choice = h % 8
+    if choice < 3:
+        return DD_OK
+    return [DDERR_WASSTILLDRAWING, DDERR_SURFACELOST, 1 + ((h >> 8) & 0xFF),
+            0x88760000 | ((h >> 8) & 0xFFFF), (h >> 8) & 0xFFFFFFFF][choice - 3]
+
+
+def hresult(rng, pool) -> int:
+    return hresult_from(rng.getrandbits(40))
+
+
+def surface_objects(rng, pool, args):
+    fields = [(8, SURFACE_IFACE, 4), (0xc, SURFACE_OWNER, 4),
+              (SURFACE_IFACE - WORLD_BASE, FAKE_VTABLE, 4), (SURFACE_OWNER - WORLD_BASE, FAKE_VTABLE, 4),
+              (SOURCE_SURFACE - WORLD_BASE + 8, SOURCE_IFACE, 4)]
+    return fields
+
+
+SURFACE_VIRTUALS = {0x14: (6, {}, {"com": True, "returns": hresult_from}),
+                    0x1c: (6, {}, {"com": True, "returns": hresult_from}),
+                    0x0c: 0}
+
+
+def surface_spec(name, address, args, **kwargs):
+    return Spec(name, address, "thiscall", args, presets=surface_objects, virtuals=SURFACE_VIRTUALS,
+                callees=EXCEPTION_CTORS, new_fails=0.2, **kwargs)
+
+
+SPECS += [
+    Spec("DirectX_ThrowIfDDFailed", 0x00405d10, "stdcall", [hresult, anything], callees=EXCEPTION_CTORS,
+         new_fails=0.2),
+    Spec("DirectX_ThrowIfDPFailed", 0x005bb890, "stdcall", [hresult, anything], callees=EXCEPTION_CTORS,
+         new_fails=0.2),
+    surface_spec("DirectX_CSurface_CheckResult", 0x005bf2e0, [hresult, anything]),
+    surface_spec("DirectX_CSurface_DDBlt", 0x005bf0c0,
+                 [anything, one_of(0, SOURCE_SURFACE), anything, anything, anything]),
+    surface_spec("DirectX_CSurface_DDBltFast", 0x005bf130,
+                 [anything, anything, one_of(SOURCE_SURFACE), anything, anything]),
+]
+
+# -- batch 25: background fill and "enabled changed" (screen_element.cpp) ---
+#
+# The fill (vf11) gets a surface: the world as a CSurface (surface_objects
+# above, in the same world as the UI objects at UI_BASE). DDBlt (ours) runs
+# inside; its Blt probe records the two DDBLTFX fields that are set (dwSize,
+# dwFillColor at +0x50); the original leaves the rest uninitialized.
+
+FILL_VIRTUALS = dict(UI_VIRTUALS)
+FILL_VIRTUALS[0x14] = (6, {5: ((0, 4), (0x50, 4))}, {"com": True, "returns": hresult_from})
+FILL_VIRTUALS[0x0c] = 0  # (also the owner's restore slot)
+
+
+def fill_objects(rng, pool, args):
+    return ui_objects(rng, pool, args) + surface_objects(rng, pool, args)
+
+
+def fill_spec(name, address, this):
+    return Spec(name, address, "fastcall", [one_of(this), anything, one_of(WORLD_BASE), one_of(0, UI_RECTS)],
+                presets=fill_objects, virtuals=FILL_VIRTUALS, callees=EXCEPTION_CTORS, eax_mask=0xFF)
+
+
+GROUP_EFFECTS[0x6c] = shrink_children
+
+# Dead inlined-bounds-check blocks of 0x4177f0's loop (EMPTY: the
+# "vector is empty" branch and its grow-to-one code, right after the loop's
+# index < length check with no call in between; NEG: the index < 0 branch;
+# see batch 24 above).
+EMPTY_4177F0 = (0x417825, 0x41783a, 0x417842, 0x417847, 0x417857, 0x417862, 0x417868, 0x41786a, 0x41786e,
+                0x417876, 0x41787e, 0x41789f, 0x4178b2, 0x4178b7, 0x4178cb)
+
+SPECS += [
+    fill_spec("CScreenElement_FillBackground", 0x00415b60, ELEMENT),
+    fill_spec("CScreenGroup_FillBackground", 0x00417460, UI_GROUP),
+    fill_spec("CScreenGroup_FillBackground_429e50", 0x00429e50, UI_GROUP),
+    group_spec("CScreenGroup_OnEnable", 0x004177f0, [anything], exempt_blocks=EMPTY_4177F0),
+    group_spec("CControl_OnEnable", 0x00418520, [anything], this=CONTROL),
+    group_spec("CGroupControl_OnEnable", 0x0042a000, [anything]),
+]
+
+# -- batch 25: std::string compare (msvc6/string.cpp) -----------------------
+
+
+def compare_world(rng, pool, args):
+    """`this` = a string at world+0 over a buffer of small letters (or
+    empty with a null pointer); the other text at scratch 1."""
+    length = rng.randrange(24)
+    null = length == 0 and rng.random() < 0.5
+    fields = [(4, 0 if null else WORLD_BASE + SCRATCH, 4), (8, length, 4)]
+    letters = [rng.choice(b"ab\x80\xff") for _ in range(32)]
+    other = list(letters) if rng.random() < 0.5 else [rng.choice(b"ab\x80\xff") for _ in range(32)]
+    for i in range(32):
+        fields.append((SCRATCH + i, letters[i], 1))
+        fields.append((SCRATCH + SCRATCH_SLOT_BYTES + i, other[i], 1))
+    return fields
+
+
+SPECS += [
+    Spec("String_CompareChars", 0x0040a140, "thiscall",
+         [below(26), one_of(0, 1, 3, 30, 0xFFFFFFFF), scratch(1), below(26)], presets=compare_world),
+]
+
+# -- batch 25: computer-player helpers (ai_helpers.cpp) ---------------------
+
+
+def count_buildings_world(rng, pool, args):
+    count = rng.randrange(30)
+    fields = [(BUILDING_COUNT, count, 4)]
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        x = rng.randrange(400) if rng.random() < 0.9 else 500
+        y = rng.randrange(400)
+        fields += [(record, 0xFF if rng.random() < 0.15 else rng.randrange(3), 1), (record + 6, rng.randrange(3), 1),
+                   (record + 0x21, int(rng.random() < 0.25), 1), (record + 0xa, x, 2), (record + 0xc, y, 2)]
+        if x < 400:
+            fields.append((TILES + (x * 0x300 + y) * 24 + 0x14, rng.randrange(4), 2))
+    return fields
+
+
+def ai_world_400(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, 400, 2), (AI_MAP_SIZES + 2, 400, 2)]
+
+
+def area_row_world(rng, pool, args):
+    x, y = args[0] & 0xFFFF, args[1] & 0xFFFF
+    fields = []
+    for k in range(20):
+        if x + k < 0x300 and y < 0x300:
+            value = 0 if rng.random() < 0.8 else rng.randrange(1, 0x10000)
+            fields.append((TILES + ((x + k) * 0x300 + y) * 24 + 0x14, value, 2))
+    return fields
+
+
+def ai_small_map(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, rng.randrange(1, 60), 2), (AI_MAP_SIZES + 2, rng.randrange(1, 60), 2)]
+
+
+def list32_world(rng, pool, args):
+    return [(0x200 + 2 * i, 0xFFFF if rng.random() < 0.1 else rng.randrange(6), 2) for i in range(50)]
+
+
+GRID_CELLS = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+
+
+def grid_world(rng, pool, args):
+    return [(0x140, rng.randint(1, 6), 4), (0x144, rng.randint(1, 6), 4), (0x158, WORLD_BASE + GRID_CELLS, 4)]
+
+
+def small_with_noise(low: int, high: int) -> Generator:
+    def generate(rng, pool):
+        value = rng.randint(low, high) & 0xFFFF
+        return value | (rng.getrandbits(16) << 16) if rng.random() < 0.3 else value
+    return generate
+
+
+def ai_vectors(rng, pool, args):
+    """The 20 vectors (begin at -4, end at +0 of each 16-byte entry)."""
+    return [(0x007e7a24 + 4 * i, rng.getrandbits(32), 4) for i in range(0x50)]
+
+
+SPECS += [
+    Spec("AI_CountBuildings", 0x0059dac0, "fastcall", [below(3), below(3), one_of(0, 0, 1, 2, 3, 0x10000)],
+         presets=count_buildings_world, globals=ai_world_400, max_cases=600),
+    Spec("AI_AreaAlongRow", 0x005996c0, "fastcall", [small_with_noise(0, 64), small_with_noise(0, 64)],
+         eax_mask=0xFFFF, presets=area_row_world, globals=ai_small_map),
+    Spec("AI_List32Add", 0x00551910, "thiscall", [id_with_noise(8)], presets=list32_world),
+    Spec("AI_GridCellWrapped", 0x00554730, "thiscall", [anything, anything]),
+    Spec("AI_GridSumAround", 0x00554530, "thiscall", [small_with_noise(-1, 6), small_with_noise(-1, 6)],
+         presets=grid_world),
+    # DEAD 0x55b802: the element copy of an inlined erase(begin, end) whose
+    # source range is empty (it starts with source = end).
+    Spec("AI_ResetAgentData", 0x0055b770, "thiscall", [], globals=ai_vectors, max_cases=200,
+         exempt_blocks=(0x55b802,)),
+    Spec("AI_ClearGlobals7e0568", 0x00553e00, "stdcall", [],
+         globals=lambda rng, pool, args: [(0x007e0568, rng.getrandbits(32), 4), (0x007e056c, rng.getrandbits(32), 4)]),
+    Spec("AI_ListFirst", 0x00559260, "thiscall", [scratch(0)],
+         presets=lambda rng, pool, args: [(4, WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES, 4)]),
+]
+
+# -- batch 25: graphics and misc helpers ------------------------------------
+
+
+def frame_offset_world(rng, pool, args):
+    group = args[0] >> 16
+    return [(0x37c + group * 4, WORLD_BASE + SCRATCH, 4), (SCRATCH + 8, rng.randrange(8), 2),
+            (0xc40, rng.randrange(4), 4)]
+
+
+def frame_id(rng, pool) -> int:
+    return (rng.randrange(0xb0) << 16) | rng.randrange(8)
+
+
+def put_pixel_world(rng, pool, args):
+    return [(0x90, 2 * rng.randint(32, 64), 4), (0xa4, WORLD_BASE + SCRATCH, 4)]
+
+
+def draw_origin(rng, pool, args):
+    return [(0x00730f3c, rng.randrange(32), 4), (0x00730f40, rng.randrange(32), 4)]
+
+
+def equal_ids(rng, pool, args):
+    value = rng.getrandbits(32)
+    other = value if rng.random() < 0.5 else value ^ (1 << rng.randrange(32))
+    return [(4, value, 4), (SCRATCH + 4, other, 4)]
+
+
+SPECS += [
+    Spec("GfxData_FrameOffset", 0x005faaa0, "thiscall", [frame_id, one_of(0, 1, 3, 0xFFFFFFFF)],
+         presets=frame_offset_world),
+    Spec("Render_PutPixel16", 0x004c7ac0, "thiscall", [below(64), below(64), anything],
+         presets=put_pixel_world, globals=draw_origin),
+    Spec("Render_Entry204", 0x004c7ab0, "thiscall", [below(256)],
+         presets=lambda rng, pool, args: [(0x204, WORLD_BASE + SCRATCH, 4)]),
+    Spec("GameParams_CopyRectB0", 0x00437400, "thiscall", [scratch(0)]),
+    Spec("Watcom_CopyByte", 0x004584f0, "stdcall", [scratch(0), scratch(1)]),
+    Spec("Lobby_EqualField4", 0x00606ac0, "thiscall", [scratch(0)], presets=equal_ids),
+    # The C runtime's free (0x621b7e) locks the heap and calls HeapFree: probed.
+    Spec("Picture_FreeIfBoth", 0x005aa0a0, "stdcall", [one_of(0, WORLD_BASE + SCRATCH), one_of(0, WORLD_BASE + SCRATCH + 0x100)],
+         callees={0x00621b7e: (1, "cdecl", "probe")}),
+]
+
+# -- batch 25: simulation helpers (logic_helpers.cpp, map_effects.cpp) ------
+
+RADIUS2 = [0x300, -0x300, 1, -1, 0x301, -0x301, 0x600, 0x601, 0x602, 0x302, 2, -0x2ff, -0x600, -0x601,
+           -0x602, -0x302, -2, 0x2ff]
+
+
+def wear_path_world(rng, pool, args):
+    x, y = args
+    centre = (x * 0x300 + y) * 24 + TILES
+    objects = [0x10, 0x12, 0x13, 0x18, 0x1c, 0x10, 0x12, 0x00, 0x21]
+    fields = [(centre + 6, rng.choice(objects), 1)]
+    for delta in RADIUS2[:6]:
+        value = 0x1c if rng.random() < 0.4 else rng.choice(objects[:7] if rng.random() < 0.95 else objects)
+        fields.append((centre + delta * 24 + 6, value, 1))
+    return fields
+
+
+def clear_around_world(rng, pool, args):
+    x, y = args
+    centre = (x * 0x300 + y) * 24 + TILES
+    flags = rng.getrandbits(8)
+    fields = [(centre + 0xa, flags if rng.random() < 0.25 else (flags | 0x10) & ~1, 1),
+              (centre + 6, 0x20 + rng.randrange(16) if rng.random() < 0.05 else rng.randrange(0x20), 1),
+              (0xe0788c, 9999 if rng.random() < 0.1 else rng.randrange(10000), 4)]
+    for delta in RADIUS2:
+        rare = rng.random() < 0.04
+        f = rng.getrandbits(8)
+        fields.append((centre + delta * 24 + 0xa, f | 1 if rare else f & ~1, 1))
+        rare = rng.random() < 0.04
+        fields.append((centre + delta * 24 + 6, 0x20 + rng.randrange(16) if rare else rng.randrange(0x20), 1))
+    return fields
+
+
+GFX_OBJECT = 0x1000000
+GFX_POINTERS = 0x1100000
+GFX_HEADERS = 0x1200000
+_ANIMATION_TABLE: list[int] = []
+
+
+def animation_table() -> list[int]:
+    """The dwords of S3.EXE's table at 0x6a8060 (read once from the file)."""
+    if not _ANIMATION_TABLE:
+        import os
+        import struct
+
+        import pefile
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                            "Settlers3Ultimate", "S3.EXE")
+        pe = pefile.PE(path, fast_load=True)
+        data = pe.get_data(0x6a8060 - 0x400000, 4 * 256)
+        _ANIMATION_TABLE.extend(struct.unpack("<256I", data))
+    return _ANIMATION_TABLE
+
+
+def settler_animation_world(rng, pool, args):
+    settler, kind = args
+    race = rng.randrange(4)
+    fields = [(0x12a5e60 + settler * 0x40 + 2, race, 1)]
+    animation = animation_table()[kind * 4 + race]
+    group, index = animation >> 16, animation & 0xFFFF
+    if group < 0x130:
+        fields += [(GFX_OBJECT + 0xb24 + group * 4, WORLD_BASE + GFX_POINTERS, 4),
+                   (GFX_OBJECT + 0x264 + group * 4, 0, 4),
+                   (GFX_POINTERS + 8 + index * 4, WORLD_BASE + GFX_HEADERS + rng.randrange(0x100), 4)]
+    return fields
+
+
+def remove_from_groups_globals(rng, pool, args):
+    fields = []
+    for group in range(10):
+        count = 0 if rng.random() < 0.25 else rng.randrange(101)
+        fields.append((GROUP_COUNTS + group * 2, count, 2))
+        for k in range(100):
+            fields.append((GROUP_SETTLERS + group * 200 + k * 2, rng.randrange(6), 2))
+    return fields
+
+
+EFFECT_RECORD = SCRATCH
+EFFECT_OUT = SCRATCH + SCRATCH_SLOT_BYTES
+
+
+def effect_record(rng, pool, args):
+    start = rng.randint(-5, 1000)
+    duration = -rng.randint(1, 50) if rng.random() < 0.1 else rng.randint(1, 200)
+    fields = [(EFFECT_RECORD, start & 0xFFFFFFFF, 4), (EFFECT_RECORD + 4, duration & 0xFFFF, 2),
+              (EFFECT_RECORD + 0x28, 0 if rng.random() < 0.3 else rng.randint(-100, 300) & 0xFFFF, 2)]
+    for offset in (0x8, 0xc, 0x10, 0x14):
+        value = rng.getrandbits(32) if rng.random() < 0.1 else rng.randint(-500, 20000) & 0xFFFFFFFF
+        fields.append((EFFECT_RECORD + offset, value, 4))
+    return fields
+
+
+def effect_tick(rng, pool) -> int:
+    return rng.randint(-20, 1300) & 0xFFFFFFFF
+
+
+SPECS += [
+    Spec("GameWorld_WearPath", 0x0051b7f0, "thiscall", [TILE, TILE], presets=wear_path_world),
+    Spec("GameWorld_QueueMarkedTileWithRoom", 0x0051d000, "thiscall", [TILE, TILE],
+         presets=clear_around_world),
+    Spec("GameWorld_SetSettlerAnimation", 0x0050e2c0, "thiscall", [below(0x8000), below(40)],
+         presets=settler_animation_world,
+         globals=lambda rng, pool, args: [(0x007a8010, WORLD_BASE + GFX_OBJECT, 4)]),
+    Spec("CLogicThread_RemoveSettlerFromGroups", 0x005428e0, "fastcall",
+         [anything, anything, id_with_noise(6), one_of(0, 1, 2, 5, 9, 10, 0x10001)], eax_mask=0,
+         globals=remove_from_groups_globals, max_cases=500),
+    Spec("MapEffect_PositionAt", 0x00544210, "fastcall",
+         [one_of(WORLD_BASE + EFFECT_RECORD), anything, effect_tick,
+          one_of(WORLD_BASE + EFFECT_OUT, WORLD_BASE + EFFECT_RECORD + 0x8),
+          one_of(WORLD_BASE + EFFECT_OUT + 4, WORLD_BASE + EFFECT_RECORD + 0x28)],
+         eax_mask=0, presets=effect_record),
+    Spec("MapEffects_SetMapSize", 0x00544320, "thiscall",
+         [between(-10, 1100), one_of(0xc8, 0, 1, 0xFFFFFFFF, 0x7FFFFFFF)]),
+]
+
 # Deliberately wrong pairings for `run.py --self-test`: each must be reported
 # as a mismatch, which shows that the harness notices wrong return values,
 # wrong memory writes and wrong conditions.
@@ -3137,4 +3506,10 @@ SELF_TEST = [
     # ignore_bytes: 0x5439a0 and 0x543e80 differ only in bytes +0x38 / +0x39,
     # next to the ignored padding byte +0x3b.
     make_effect("543e80", 7, original=0x005439a0),
+    # COM probes: Blt (slot 0x14) against BltFast (slot 0x1c).
+    surface_spec("DirectX_CSurface_DDBlt", 0x005bf130,
+                 [anything, one_of(SOURCE_SURFACE), one_of(SOURCE_SURFACE), anything, anything]),
+    # Callee probes and _CxxThrowException: the DirectPlay check throws for
+    # success codes too, with another constructor and throw info.
+    Spec("DirectX_ThrowIfDDFailed", 0x005bb890, "stdcall", [hresult, anything], callees=EXCEPTION_CTORS),
 ]

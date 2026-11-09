@@ -71,24 +71,25 @@ disassembly; "READY" = not done, every direct callee done, all game code
    test. Later, once a caller subsystem (AI, lobby) is tackled.
 
 Next steps (for 2026-11-10, in this order):
-1. (Batch 24 done 2026-11-09: MapEffect make functions, Watcom pointer
-   vector, CScreenGroup/CControl/CGroupControl message and draw members,
-   CStaticControl, CSurface, two AI lookups, CreatePile, UpdateGroupMenu;
-   41 in all, see the session log.) Next coverage batch, concrete:
-   - DDBlt 0x5bf0c0 (needs a COM-call probe that ignores ECX, and the
-     throw path 0x5bf2e0 -> 0x405d10 -> _CxxThrowException 0x61f027 as an
-     emulator "thrower"), then CScreenElement::vf11 0x415b60, 0x417460 and
-     its wrapper 0x429e50.
-   - CControl tooltip: 0x418550 (opens the tooltip: GDI SelectObject /
-     GetTextExtentPoint32A probes, operator new, 0x41c3e0, 0x40a140,
-     0x41ca60), then 0x4183c0 and 0x429f10.
-   - 0x4177f0 / 0x42a000 wait on NoOp_ret4 0x582530, which trivial.py
-     misses because Ghidra didn't find the function at 0x582540 after it
-     (add that start, then trivial.py apply).
-   - READY with callers: AI 0x59dac0 (7 callers, now unblocked), 0x5996c0
-     (12), GfxData 0x5faaa0 (78 callers), Logic 0x5428e0, 0x50e2c0, 0x437400,
-     Lobby 0x4584f0 / 0x606ac0, Picture 0x5aa0a0.
-   - Simulation range READY 250: pick from `python tools/frontier.py`.
+1. (Batch 25 done 2026-11-09: DirectDraw blits and error checks, the UI
+   "enabled changed" and background-fill members, std::string compare, AI
+   and graphics helpers, worn paths and five more simulation helpers; 33
+   in all, see the session log.) Next coverage batch, concrete:
+   - Exceptions chain: Win32::CException 0x611a20 (129 ins, READY) ->
+     CRunTimeError 0x614c60 -> Lobby CDataError 0x6003b0 -> Sound
+     0x5ffcc0 (102 callers, 36 unblocks). Callee probes now exist for
+     constructors the emulator can't run.
+   - The rest of CSurface: ~CSurface 0x5bf240 (needs vf01 0x5bf2c0),
+     DDRestore 0x5bf400, the DDGetDC/DDReleaseDC wrappers (strings at
+     0x697704 / 0x697718; COM probes are ready).
+   - Tooltip opener 0x418550: needs CStaticText ctor 0x41c3e0, 0x41ca60 and
+     Win32::ThrowError 0x610960 (probe it as a callee), plus GDI probes
+     SelectObject / GetTextExtentPoint32A; then 0x4183c0 and 0x429f10 (25
+     callers).
+   - READY with callers: WCExcept 0x49ec80 (26 callers), 0x40a580 (23),
+     Lobby 0x5ed220, Picture 0x5aa130.
+   - Simulation range READY 252: 0x51d2b0 (unblocks the area set-up
+     0x51a580), 0x553fe0, 0x551780 (now READY), 0x5445e0 (blocks 0x5450d0).
 2. (Item 2 done 2026-11-09: tools/trivial.py.) Then the UI
    accessor block and Win32::CObject et al. as coverage batches, with
    `S3RE_HOOK_UNVERIFIED` where a spec is not quick.
@@ -455,6 +456,71 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (33): batch 25 (33 functions: DirectDraw, UI, AI, simulation)
+
+- Ghidra missed the function start 0x582540 (a static-initializer table
+  entry right after NoOp_ret4 0x582530). `re/extra_functions.tsv` now has
+  rows of kind `manual` (added by hand with evidence; `tools/rtti.py scan`
+  keeps them); with it, trivial.py recognises 0x582530 and the vf27
+  members below became READY.
+- Batch 25, all verified (none unverified):
+  - directx_surface.cpp (new): DirectX::ThrowIfDDFailed 0x405d10 (throws
+    CDirectDrawException for hr < 0), ThrowIfDPFailed 0x5bb890 (DirectPlay,
+    hr != 0), CSurface::CheckResult 0x5bf2e0 (42 callers; lost surface ->
+    owner's restore), DDBlt 0x5bf0c0, DDBltFast 0x5bf130.
+  - screen_element.cpp: the "enabled changed" vf27 of CScreenGroup 0x4177f0,
+    CControl 0x418520 (closes the tooltip), CGroupControl 0x42a000 (25
+    trivial thunks forward to them), and the background fill vf11
+    0x415b60 (+0x04 is the fill colour, +0x1f "transparent") with the
+    group's 0x417460 and 0x429e50.
+  - msvc6/string.cpp: compare(pos, n, const char*, count) 0x40a140.
+  - ai_helpers.cpp: CountBuildings 0x59dac0 (a non-zero area counts every
+    building, sic), AreaAlongRow 0x5996c0, List32Add 0x551910,
+    GridCellWrapped 0x554730, GridSumAround 0x554530, ResetAgentData
+    0x55b770, ClearGlobals7e0568 0x553e00, ListFirst 0x559260.
+  - graphics_helpers.cpp: GfxData::FrameOffset 0x5faaa0 (78 callers),
+    Render::PutPixel16 0x4c7ac0, Render::Entry204 0x4c7ab0.
+  - misc_helpers.cpp (new): GameParams::CopyRectB0 0x437400,
+    Watcom::CopyByte 0x4584f0, Lobby::EqualField4 0x606ac0,
+    Picture::FreeIfBoth 0x5aa0a0 (CRT free).
+  - logic_helpers.cpp (new): GameWorld::WearPath 0x51b7f0 (traffic 12 on
+    grass -> worn path 0x1c; neighbours' grass variants smoothed to 0x10),
+    QueueMarkedTileWithRoom 0x51d000, SetSettlerAnimation 0x50e2c0
+    (table 0x6a8060[kind * 4 + race], frame count from GfxData),
+    CLogicThread::RemoveSettlerFromGroups 0x5428e0; map_effects.cpp:
+    MapEffect::PositionAt 0x544210 (linear move with a parabolic hop),
+    MapEffects::SetMapSize 0x544320.
+- Emulator harness: COM probes (`Spec.virtuals` options "com": ECX not
+  recorded, "returns": EAX from a function, e.g. HRESULTs), partial
+  pointer contents ((offset, size) pairs, for DDBLTFX), `Spec.callees`
+  (probe S3.EXE functions that can't run in the emulator: exception
+  constructors, CRT free), _CxxThrowException as a thrower (compared with
+  the thrown pointer and throw info), Sleep probe. Self-test pairings for
+  the COM probe (DDBlt vs DDBltFast) and the callee probe/throw (DD vs DP
+  check). In-process: game C++ exceptions are caught with SEH in the test.
+- Known differences: ThrowIfDD/DPFailed have no exception frame (if the
+  exception's constructor itself throws, the block leaks); FillBackground
+  zeroes the unused DDBLTFX fields (the original passes stack garbage);
+  AreaAlongRow off the map returns 0xffff with a zero upper half (the
+  original keeps the caller's; callers use AX).
+- Tests: in-process 307/307; emulator: 33 new specs, 0 mismatches, every
+  live block covered (dead inlined-check blocks of 0x4177f0 and an empty
+  copy loop in 0x55b770 exempt with reasons); full suite 360 functions,
+  0 mismatches, 0 with incomplete coverage;
+  self-test 18/18.
+- Whole-game check (scripted-seed127.bin, 3,000 ticks, against the
+  original): REPLAY OK, 169 of 359 replacements called; 23 of the 33 new
+  ones (Render_Entry204 18.0M, CheckResult 272,664, QueueMarkedTileWithRoom
+  160,422, ThrowIfDDFailed 45,356, GridSumAround 9,123, CountBuildings
+  8,850, WearPath 4,536, SetSettlerAnimation 3,212, AreaAlongRow 531,
+  DDBlt 102, DDBltFast 101, ...). Not called: CScreenGroup::OnEnable,
+  FillBackground 0x415b60 / 0x429e50, RemoveSettlerFromGroups,
+  MapEffect::PositionAt, PutPixel16, CopyRectB0, Watcom::CopyByte,
+  Lobby::EqualField4, Picture::FreeIfBoth. Counts in the inventory notes.
+- Frontier (all game code): READY 1,232 -> 1,255, NEAR 1,194 -> 1,111;
+  trivial functions done 390 -> 433; simulation range READY 250 -> 252,
+  NEAR 91 -> 77.
 
 ### 2026-11-09 (32): batch 24 (41 functions: MapEffect, UI groups, misc)
 

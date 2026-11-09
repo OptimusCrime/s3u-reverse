@@ -16,8 +16,10 @@ the same arguments, registers and lazily-random world, and compares:
   - the calls of the game's DebugLog: format and arguments, in order,
   - the calls of operator new/delete (sizes and blocks; a spec's new_fails
     makes new return null in some cases) and of std::_Xlen /
-    std::_Xran (which end the run as a throw would; then the stack and the
-    callee-saved registers are not compared),
+    std::_Xran / _CxxThrowException (which end the run as a throw would;
+    then the stack and the callee-saved registers are not compared),
+  - the probed calls (virtual, COM, API and Spec.callees) and their
+    arguments, in order,
   - faults: if both fault the case is skipped as invalid input; if only one
     faults, that's a mismatch.
 
@@ -52,7 +54,13 @@ def first_difference(original: emu.Outcome, ours: emu.Outcome, mask: int,
     if (original.fault is None) != (ours.fault is None):
         return f"fault: original {original.fault!r}, ours {ours.fault!r}"
     if original.thrown != ours.thrown:
-        return f"throw: original {original.thrown}, ours {ours.thrown}"
+        def show_throw(thrown):
+            if thrown is None:
+                return "none"
+            if isinstance(thrown, int):
+                return f"{thrown:#x}"
+            return "(" + ", ".join(f"{v:#x}" for v in thrown) + ")"
+        return f"throw: original {show_throw(original.thrown)}, ours {show_throw(ours.thrown)}"
     if original.heap_calls != ours.heap_calls:
         return f"heap calls: original {original.heap_calls}, ours {ours.heap_calls}"
     if original.probe_calls != ours.probe_calls:
@@ -95,6 +103,7 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int) -> 
     machine.blocks = set()
     machine.virtuals = spec.virtuals or {}
     machine.virtual_effects = spec.virtual_effects or {}
+    machine.set_callees(spec.callees or {})
     ignored = frozenset(emu.WORLD_BASE + offset for offset in spec.ignore_bytes)
     result = {"cases": 0, "invalid": 0, "mismatch": None}
     if spec.max_cases is not None:

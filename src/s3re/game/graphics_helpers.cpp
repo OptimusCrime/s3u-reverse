@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 
 namespace s3re::game {
 
@@ -117,6 +118,70 @@ void* __fastcall LogicRecord24_Construct(void* self, void* /*edx*/) {
         At<std::uint32_t>(self, offset) = offset == 0x10 ? 0xffffffffu : 0;
     }
     return self;
+}
+
+// Batch 25.
+//
+// GfxData_FrameOffset (0x005faaa0): (id, variant) thiscall, ret 8. id =
+//   group << 16 | frame; variant -1 means the object's current one
+//   (+0xc40). table = [this+0x37c+group*4]; returns the dword at table +
+//   0xc + (word table+8 * variant + frame) * 4 plus [this+0x264+group*4]
+//   (the group's base offset). 78 callers.
+// Render_PutPixel16 (0x004c7ac0): (x, y, colour) thiscall, ret 0xc: the
+//   16-bit pixel at ((pitch +0x90) / 2) * (y + [0x730f40]) + [0x730f3c] + x
+//   of the pixel buffer +0xa4 = colour (16-bit screen modes; the two
+//   globals are the drawing origin). EAX = the pixel index.
+// Render_Entry204 (0x004c7ab0): (i) thiscall, ret 4: dword i of the table
+//   at [this+0x204].
+
+using FrameOffsetFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t id, std::uint32_t variant);
+using PutPixelFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t x, std::uint32_t y,
+                                              std::uint32_t colour);
+using Entry204Fn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t i);
+
+std::uint32_t __fastcall GfxData_FrameOffset(void* self, void* edx, std::uint32_t id, std::uint32_t variant);
+std::uint32_t __fastcall Render_PutPixel16(void* self, void* edx, std::uint32_t x, std::uint32_t y,
+                                           std::uint32_t colour);
+std::uint32_t __fastcall Render_Entry204(void* self, void* edx, std::uint32_t i);
+
+namespace {
+constexpr std::uintptr_t kDrawOriginX = 0x00730f3c;
+constexpr std::uintptr_t kDrawOriginY = 0x00730f40;
+}  // namespace
+
+S3RE_HOOK(0x005faaa0, GfxData_FrameOffset, FrameOffsetFn, Original_GfxData_FrameOffset, GfxData_FrameOffset);
+
+// Purpose: Where a frame of a graphics group starts in the loaded graphics
+// data (probably the offset of a sprite's image in the GFX file), for one
+// variant (e.g. a player colour or direction) or the current one.
+std::uint32_t __fastcall GfxData_FrameOffset(void* self, void* /*edx*/, std::uint32_t id, std::uint32_t variant) {
+    const std::uint32_t group = id >> 16;
+    if (variant == 0xffffffffu) {
+        variant = At<std::uint32_t>(self, 0xc40);
+    }
+    auto* table = At<std::uint8_t*>(self, 0x37c + group * 4);
+    const std::uint32_t index = At<std::uint16_t>(table, 8) * variant + (id & 0xffff);
+    return At<std::uint32_t>(table, 0xc + index * 4) + At<std::uint32_t>(self, 0x264 + group * 4);
+}
+
+S3RE_HOOK(0x004c7ac0, Render_PutPixel16, PutPixelFn, Original_Render_PutPixel16, Render_PutPixel16);
+
+// Purpose: Sets one pixel of a 16-bit drawing surface, relative to the
+// current drawing origin (probably for the minimap or small markers).
+std::uint32_t __fastcall Render_PutPixel16(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y,
+                                           std::uint32_t colour) {
+    const std::uint32_t index =
+        (At<std::uint32_t>(self, 0x90) >> 1) * (y + At<std::uint32_t>(kDrawOriginY)) + At<std::uint32_t>(kDrawOriginX) + x;
+    *reinterpret_cast<std::uint16_t*>(At<std::uint32_t>(self, 0xa4) + index * 2) = static_cast<std::uint16_t>(colour);
+    return index;
+}
+
+S3RE_HOOK(0x004c7ab0, Render_Entry204, Entry204Fn, Original_Render_Entry204, Render_Entry204);
+
+// Purpose: Reads entry i of a table of the drawing object (+0x204; meaning
+// unknown, probably per-type graphics ids or offsets).
+std::uint32_t __fastcall Render_Entry204(void* self, void* /*edx*/, std::uint32_t i) {
+    return At<std::uint32_t*>(self, 0x204)[i];
 }
 
 // ---------------------------------------------------------------------------
@@ -217,6 +282,95 @@ S3RE_TEST(GraphicsHelpers_ComparisonDetectsWrongImplementation) {
     CompareGraphics(probe, {&WrongPackColour, &GfxData_SpriteWord, &GfxData_SetDword, &Point16_Construct,
                             &LogicRecord24_Construct},
                     5000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+// Batch 25 functions.
+namespace {
+
+struct Graphics25Functions {
+    FrameOffsetFn frameOffset;
+    PutPixelFn putPixel;
+    Entry204Fn entry204;
+};
+
+void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate, int cases) {
+    const Graphics25Functions original{Original_GfxData_FrameOffset, Original_Render_PutPixel16,
+                                       Original_Render_Entry204};
+    const std::uint32_t savedX = At<std::uint32_t>(kDrawOriginX), savedY = At<std::uint32_t>(kDrawOriginY);
+    static std::uint8_t a[0x8000], b[0x8000];
+    for (int i = 0; i < cases; ++i) {
+        const int op = static_cast<int>(ctx.rng().Below(3));
+        ctx.rng().Fill(a, sizeof(a));
+        std::uint32_t ra = 0, rb = 0;
+        if (op == 0) {
+            // Group tables at +0x1000 + group * 0x100 (inside the buffer).
+            const std::uint32_t group = ctx.rng().Below(0xb0);
+            const std::uint32_t frames = ctx.rng().Below(8);
+            const std::uint32_t frame = ctx.rng().Below(8);
+            std::uint32_t variant = ctx.rng().Chance(1, 3) ? 0xffffffffu : ctx.rng().Below(4);
+            At<std::uint32_t>(a, 0xc40) = ctx.rng().Below(4);
+            std::memcpy(b, a, sizeof(a));
+            for (std::uint8_t* side : std::initializer_list<std::uint8_t*>{a, b}) {
+                std::uint8_t* table = side + 0x1000 + group * 0x40;
+                At<std::uint8_t*>(side, 0x37c + group * 4) = table;
+                At<std::uint16_t>(table, 8) = static_cast<std::uint16_t>(frames);
+            }
+            ra = original.frameOffset(a, nullptr, group << 16 | frame, variant);
+            rb = candidate.frameOffset(b, nullptr, group << 16 | frame, variant);
+        } else if (op == 1) {
+            At<std::uint32_t>(kDrawOriginX) = ctx.rng().Below(32);
+            At<std::uint32_t>(kDrawOriginY) = ctx.rng().Below(32);
+            At<std::uint32_t>(a, 0x90) = 2 * (32 + ctx.rng().Below(32));
+            const std::uint32_t x = ctx.rng().Below(64), y = ctx.rng().Below(64);
+            const std::uint32_t colour = ctx.rng().Next32();
+            std::memcpy(b, a, sizeof(a));
+            At<std::uint8_t*>(a, 0xa4) = a + 0x100;
+            At<std::uint8_t*>(b, 0xa4) = b + 0x100;
+            ra = original.putPixel(a, nullptr, x, y, colour);
+            rb = candidate.putPixel(b, nullptr, x, y, colour);
+        } else {
+            std::memcpy(b, a, sizeof(a));
+            At<std::uint8_t*>(a, 0x204) = a + 0x400;
+            At<std::uint8_t*>(b, 0x204) = b + 0x400;
+            const std::uint32_t index = ctx.rng().Below(0x100);
+            ra = original.entry204(a, nullptr, index);
+            rb = candidate.entry204(b, nullptr, index);
+        }
+        // The pointers set above point into each side's own buffer.
+        for (const std::size_t offset : {0xa4u, 0x204u}) {
+            std::memcpy(b + offset, a + offset, 4);
+        }
+        for (std::size_t offset = 0x37c; offset < 0x37c + 0xb0 * 4; offset += 4) {
+            if (At<std::uint8_t*>(a, offset) == a + 0x1000 + (offset - 0x37c) / 4 * 0x40) {
+                std::memcpy(b + offset, a + offset, 4);
+            }
+        }
+        bool same = S3RE_EXPECT_EQ(ra, rb);
+        same &= S3RE_EXPECT_MEM_EQ(a, b, sizeof(a));
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, op %d", i, op);
+            break;
+        }
+    }
+    At<std::uint32_t>(kDrawOriginX) = savedX;
+    At<std::uint32_t>(kDrawOriginY) = savedY;
+}
+
+// Wrong: ignores the "current variant" default.
+std::uint32_t __fastcall WrongFrameOffset(void* self, void* edx, std::uint32_t id, std::uint32_t variant) {
+    return GfxData_FrameOffset(self, edx, id, variant == 0xffffffffu ? 0 : variant);
+}
+
+}  // namespace
+
+S3RE_TEST(GraphicsHelpers25_MatchOriginal) {
+    CompareGraphics25(ctx, {&GfxData_FrameOffset, &Render_PutPixel16, &Render_Entry204}, 30000);
+}
+
+S3RE_TEST(GraphicsHelpers25_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareGraphics25(probe, {&WrongFrameOffset, &Render_PutPixel16, &Render_Entry204}, 3000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

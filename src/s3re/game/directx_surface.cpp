@@ -1,0 +1,448 @@
+// DirectDraw error handling and DirectX::CSurface::DDBlt (DirectX\*.cpp;
+// RTTI and string names).
+//
+// DirectX::ThrowIfDDFailed (0x00405d10): (hr, where) stdcall, ret 8. For a
+//   failed HRESULT (hr < 0) it builds a DirectX::CDirectDrawException (0x20
+//   bytes from the game's operator new; constructor 0x5be180 with (hr,
+//   where, 1)) and throws it with _CxxThrowException (ThrowInfo 0x66a698).
+//   If operator new returns null the null pointer is thrown. Otherwise EAX
+//   = 0. `where` is the name of the failing call (e.g. "CSurface::DDBlt").
+// DirectX::CSurface::CheckResult (0x005bf2e0): (hr, where) thiscall, ret 8.
+//   DDERR_SURFACELOST (0x887601c2): calls virtual slot 0x0c of the object
+//   at this+0xc (no arguments; probably the DirectDraw owner restoring its
+//   surfaces); otherwise ThrowIfDDFailed(hr, where). EAX = hr.
+// DirectX::CSurface::DDBlt (0x005bf0c0): (dstRect, src CSurface* or null,
+//   srcRect, flags, fx) thiscall, ret 0x14. Calls IDirectDrawSurface::Blt
+//   (COM slot 0x14 of the interface at this+8) with src's interface (+8),
+//   flags | DDBLT_WAIT | 0x200, until it returns DD_OK: on
+//   DDERR_WASSTILLDRAWING (0x8876021c) after Sleep(0), on any other result
+//   after CheckResult (which throws for failures and restores lost
+//   surfaces). EAX = 0.
+//
+// DirectX::CSurface::DDBltFast (0x005bf130): (x, y, src CSurface*, srcRect,
+//   flags) thiscall, ret 0x14: the same loop around IDirectDrawSurface::
+//   BltFast (COM slot 0x1c) with src's interface (src is not checked for
+//   null) and flags | DDBLTFAST_WAIT (0x10); errors named
+//   "CSurface::DDBltFast". EAX = 0.
+// DirectX::ThrowIfDPFailed (0x005bb890): (hr, where) stdcall, ret 8: like
+//   ThrowIfDDFailed for DirectPlay: any hr other than 0 throws a
+//   DirectX::CDirectPlayException (constructor 0x5bfdb0, ThrowInfo
+//   0x681e60). EAX = 0.
+//
+// CSurface fields used: +0x08 the IDirectDrawSurface, +0x0c the owner.
+//
+// The original ThrowIfDDFailed has an exception frame that frees the block
+// if the constructor throws; ours has none (such a throw would mean the
+// error report itself failed, and the block leaks).
+
+#include "hooks.h"
+#include "test/difftest.h"
+
+#include <windows.h>
+
+#include <cstdint>
+#include <cstring>
+#include <vector>
+
+namespace s3re::game {
+
+namespace {
+
+constexpr std::int32_t kSurfaceLost = static_cast<std::int32_t>(0x887601c2);
+constexpr std::int32_t kWasStillDrawing = static_cast<std::int32_t>(0x8876021c);
+constexpr std::uint32_t kDDBltWaitAsync = 0x01000200;
+constexpr std::uintptr_t kDirectDrawExceptionCtor = 0x005be180;
+constexpr std::uintptr_t kCxxThrowException = 0x0061f027;
+constexpr std::uintptr_t kDirectDrawExceptionThrowInfo = 0x0066a698;
+constexpr std::uintptr_t kSleepImport = 0x006550dc;  // S3.EXE's import of Sleep
+constexpr std::uintptr_t kDDBltName = 0x007a01e0;    // "CSurface::DDBlt"
+constexpr std::uintptr_t kDDBltFastName = 0x007a01f0;  // "CSurface::DDBltFast"
+constexpr std::uint32_t kDDBltFastWait = 0x10;
+constexpr std::uintptr_t kDirectPlayExceptionCtor = 0x005bfdb0;
+constexpr std::uintptr_t kDirectPlayExceptionThrowInfo = 0x00681e60;
+
+template <typename T>
+T& At(void* base, std::size_t offset) {
+    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(base) + offset);
+}
+
+void* GameNew(std::uint32_t size) {
+    return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
+}
+
+}  // namespace
+
+using ThrowIfFailedFn = std::uint32_t(__stdcall*)(std::int32_t hr, const char* where);
+using CheckResultFn = std::int32_t(__fastcall*)(void* self, void* edx, std::int32_t hr, const char* where);
+using DDBltFn = std::uint32_t(__fastcall*)(void* self, void* edx, const RECT* dst, void* src, const RECT* srcRect,
+                                           std::uint32_t flags, void* fx);
+
+using DDBltFastFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t x, std::uint32_t y, void* src,
+                                               const RECT* srcRect, std::uint32_t flags);
+
+std::uint32_t __stdcall DirectX_ThrowIfDDFailed(std::int32_t hr, const char* where);
+std::uint32_t __stdcall DirectX_ThrowIfDPFailed(std::int32_t hr, const char* where);
+std::uint32_t __fastcall DirectX_CSurface_DDBltFast(void* self, void* edx, std::uint32_t x, std::uint32_t y, void* src,
+                                                    const RECT* srcRect, std::uint32_t flags);
+std::int32_t __fastcall DirectX_CSurface_CheckResult(void* self, void* edx, std::int32_t hr, const char* where);
+std::uint32_t __fastcall DirectX_CSurface_DDBlt(void* self, void* edx, const RECT* dst, void* src,
+                                                const RECT* srcRect, std::uint32_t flags, void* fx);
+
+namespace {
+
+// new + constructor(hr, where, 1) + _CxxThrowException, as both throw
+// helpers do.
+void ThrowGameException(std::uintptr_t ctor, std::uintptr_t throwInfo, std::int32_t hr, const char* where) {
+    void* exception = GameNew(0x20);
+    if (exception != nullptr) {
+        using CtorFn = void*(__fastcall*)(void* self, void* edx, std::int32_t hr, const char* where, std::uint32_t c);
+        exception = reinterpret_cast<CtorFn>(ctor)(exception, nullptr, hr, where, 1);
+    }
+    using ThrowFn = void(__stdcall*)(void* object, const void* info);
+    reinterpret_cast<ThrowFn>(kCxxThrowException)(&exception, reinterpret_cast<const void*>(throwInfo));
+}
+
+}  // namespace
+
+S3RE_HOOK(0x00405d10, DirectX_ThrowIfDDFailed, ThrowIfFailedFn, Original_DirectX_ThrowIfDDFailed,
+          DirectX_ThrowIfDDFailed);
+
+// Purpose: Turns a failed DirectDraw call into the game's C++ exception
+// (CDirectDrawException with the error code and the name of the call); the
+// framework catches it and reports the error.
+std::uint32_t __stdcall DirectX_ThrowIfDDFailed(std::int32_t hr, const char* where) {
+    if (hr < 0) {
+        ThrowGameException(kDirectDrawExceptionCtor, kDirectDrawExceptionThrowInfo, hr, where);
+    }
+    return 0;
+}
+
+S3RE_HOOK(0x005bb890, DirectX_ThrowIfDPFailed, ThrowIfFailedFn, Original_DirectX_ThrowIfDPFailed,
+          DirectX_ThrowIfDPFailed);
+
+// Purpose: Turns a failed DirectPlay call (network play) into the game's
+// C++ exception (CDirectPlayException); unlike the DirectDraw check, any
+// result other than 0 counts as failed.
+std::uint32_t __stdcall DirectX_ThrowIfDPFailed(std::int32_t hr, const char* where) {
+    if (hr != 0) {
+        ThrowGameException(kDirectPlayExceptionCtor, kDirectPlayExceptionThrowInfo, hr, where);
+    }
+    return 0;
+}
+
+S3RE_HOOK(0x005bf2e0, DirectX_CSurface_CheckResult, CheckResultFn, Original_DirectX_CSurface_CheckResult,
+          DirectX_CSurface_CheckResult);
+
+// Purpose: Checks the result of a DirectDraw call on a surface: a lost
+// surface is restored through its owner, other failures become the game's
+// DirectDraw exception.
+std::int32_t __fastcall DirectX_CSurface_CheckResult(void* self, void* /*edx*/, std::int32_t hr, const char* where) {
+    if (hr == kSurfaceLost) {
+        void* owner = At<void*>(self, 0xc);
+        using Fn = void(__fastcall*)(void* self, void* edx);
+        (*reinterpret_cast<Fn*>(*static_cast<std::uint8_t**>(owner) + 0xc))(owner, nullptr);
+        return hr;
+    }
+    DirectX_ThrowIfDDFailed(hr, where);
+    return hr;
+}
+
+S3RE_HOOK(0x005bf0c0, DirectX_CSurface_DDBlt, DDBltFn, Original_DirectX_CSurface_DDBlt, DirectX_CSurface_DDBlt);
+
+// Purpose: Copies or fills a rectangle on a DirectDraw surface (the game's
+// basic drawing call for the menus and the map), waiting while the card is
+// busy and restoring lost surfaces.
+std::uint32_t __fastcall DirectX_CSurface_DDBlt(void* self, void* /*edx*/, const RECT* dst, void* src,
+                                                const RECT* srcRect, std::uint32_t flags, void* fx) {
+    using BltFn = std::int32_t(__stdcall*)(void* surface, const RECT* dst, void* src, const RECT* srcRect,
+                                           std::uint32_t flags, void* fx);
+    using SleepFn = void(WINAPI*)(DWORD);
+    std::int32_t hr;
+    do {
+        void* source = src != nullptr ? At<void*>(src, 8) : nullptr;
+        void* surface = At<void*>(self, 8);
+        hr = (*reinterpret_cast<BltFn*>(*static_cast<std::uint8_t**>(surface) + 0x14))(
+            surface, dst, source, srcRect, flags | kDDBltWaitAsync, fx);
+        if (hr != 0 && hr != kWasStillDrawing) {
+            hr = DirectX_CSurface_CheckResult(self, nullptr, hr, reinterpret_cast<const char*>(kDDBltName));
+        }
+        if (hr == kWasStillDrawing) {
+            (*reinterpret_cast<SleepFn*>(kSleepImport))(0);
+        }
+    } while (hr != 0);
+    return 0;
+}
+
+S3RE_HOOK(0x005bf130, DirectX_CSurface_DDBltFast, DDBltFastFn, Original_DirectX_CSurface_DDBltFast,
+          DirectX_CSurface_DDBltFast);
+
+// Purpose: Copies a rectangle of one surface to a position on another
+// without scaling (DirectDraw's fast blit), with the same waiting and error
+// handling as DDBlt.
+std::uint32_t __fastcall DirectX_CSurface_DDBltFast(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y,
+                                                    void* src, const RECT* srcRect, std::uint32_t flags) {
+    using BltFastFn = std::int32_t(__stdcall*)(void* surface, std::uint32_t x, std::uint32_t y, void* src,
+                                               const RECT* srcRect, std::uint32_t flags);
+    using SleepFn = void(WINAPI*)(DWORD);
+    std::int32_t hr;
+    do {
+        void* surface = At<void*>(self, 8);
+        hr = (*reinterpret_cast<BltFastFn*>(*static_cast<std::uint8_t**>(surface) + 0x1c))(
+            surface, x, y, At<void*>(src, 8), srcRect, flags | kDDBltFastWait);
+        if (hr != 0 && hr != kWasStillDrawing) {
+            hr = DirectX_CSurface_CheckResult(self, nullptr, hr, reinterpret_cast<const char*>(kDDBltFastName));
+        }
+        if (hr == kWasStillDrawing) {
+            (*reinterpret_cast<SleepFn*>(kSleepImport))(0);
+        }
+    } while (hr != 0);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+//
+// A fake CSurface whose +8 is a fake COM surface (slot 0x14 Blt records its
+// arguments and returns scripted results) and whose +0xc is a fake owner
+// (slot 0x0c records the call). Failures throw the game's C++ exception;
+// the test catches it with SEH and compares the thrown object's vtable and
+// ThrowInfo. Both versions must make the same calls in the same order.
+
+namespace {
+
+struct BltLog {
+    std::vector<std::uint32_t> words;
+    std::vector<std::int32_t> results;  // what Blt returns, in order
+    std::size_t next = 0;
+    std::uint8_t* base = nullptr;       // pointers are logged relative to it
+};
+BltLog* g_bltLog = nullptr;
+
+std::uint32_t Relative(const void* p) {
+    return p == nullptr ? 0xffffffffu
+                        : static_cast<std::uint32_t>(static_cast<const std::uint8_t*>(p) - g_bltLog->base);
+}
+
+std::int32_t __stdcall FakeBlt(void* surface, const RECT* dst, void* src, const RECT* srcRect, std::uint32_t flags,
+                               void* fx) {
+    BltLog& log = *g_bltLog;
+    log.words.insert(log.words.end(), {0xb17u, Relative(surface), Relative(dst), Relative(src), Relative(srcRect),
+                                       flags, Relative(fx)});
+    if (fx != nullptr) {
+        log.words.push_back(At<std::uint32_t>(fx, 0));
+        log.words.push_back(At<std::uint32_t>(fx, 0x50));
+    }
+    return log.next < log.results.size() ? log.results[log.next++] : 0;
+}
+
+std::int32_t __stdcall FakeBltFast(void* surface, std::uint32_t x, std::uint32_t y, void* src, const RECT* srcRect,
+                                   std::uint32_t flags) {
+    BltLog& log = *g_bltLog;
+    log.words.insert(log.words.end(), {0xb1f7u, Relative(surface), x, y, Relative(src), Relative(srcRect), flags});
+    return log.next < log.results.size() ? log.results[log.next++] : 0;
+}
+
+void __fastcall FakeRestore(void* owner, void*) {
+    g_bltLog->words.insert(g_bltLog->words.end(), {0x7e57u, Relative(owner)});
+}
+
+void* g_comVtable[8] = {};
+void* g_ownerVtable[8] = {};
+
+struct Outcome {
+    std::uint32_t eax = 0;
+    bool threw = false;
+    std::uint32_t thrownVtable = 0;
+    std::uint32_t throwInfo = 0;
+    std::uint32_t thrownNull = 0;
+};
+
+int Filter(EXCEPTION_POINTERS* info, Outcome* out) {
+    const EXCEPTION_RECORD* record = info->ExceptionRecord;
+    if (record->ExceptionCode != 0xE06D7363 || record->NumberParameters < 3) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    out->threw = true;
+    const auto* object = reinterpret_cast<void* const*>(record->ExceptionInformation[1]);
+    // The thrown value is a pointer (CDirectDrawException*): the record
+    // holds the address of that pointer.
+    const auto* thrown = object != nullptr ? static_cast<const std::uint32_t*>(*object) : nullptr;
+    out->thrownNull = thrown == nullptr;
+    out->thrownVtable = thrown != nullptr ? *thrown : 0;
+    out->throwInfo = static_cast<std::uint32_t>(record->ExceptionInformation[2]);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+// Calls through plain function pointers (no C++ objects in the __try frame).
+struct Args {
+    int op;
+    void* self;
+    std::int32_t hr;
+    const char* where;
+    const RECT* dst;
+    void* src;
+    const RECT* srcRect;
+    std::uint32_t flags;
+    void* fx;
+};
+
+std::uint32_t RunThrow(ThrowIfFailedFn fn, const Args* a) { return fn(a->hr, a->where); }
+std::uint32_t RunCheck(CheckResultFn fn, const Args* a) {
+    return static_cast<std::uint32_t>(fn(a->self, nullptr, a->hr, a->where));
+}
+std::uint32_t RunBlt(DDBltFn fn, const Args* a) {
+    return fn(a->self, nullptr, a->dst, a->src, a->srcRect, a->flags, a->fx);
+}
+std::uint32_t RunBltFast(DDBltFastFn fn, const Args* a) {
+    return fn(a->self, nullptr, a->flags >> 16, a->flags & 0xffff, a->src, a->srcRect, a->flags);
+}
+
+Outcome GuardedThrow(ThrowIfFailedFn fn, const Args* a) {
+    Outcome out;
+    __try {
+        out.eax = RunThrow(fn, a);
+    } __except (Filter(GetExceptionInformation(), &out)) {
+    }
+    return out;
+}
+Outcome GuardedCheck(CheckResultFn fn, const Args* a) {
+    Outcome out;
+    __try {
+        out.eax = RunCheck(fn, a);
+    } __except (Filter(GetExceptionInformation(), &out)) {
+    }
+    return out;
+}
+Outcome GuardedBlt(DDBltFn fn, const Args* a) {
+    Outcome out;
+    __try {
+        out.eax = RunBlt(fn, a);
+    } __except (Filter(GetExceptionInformation(), &out)) {
+    }
+    return out;
+}
+Outcome GuardedBltFast(DDBltFastFn fn, const Args* a) {
+    Outcome out;
+    __try {
+        out.eax = RunBltFast(fn, a);
+    } __except (Filter(GetExceptionInformation(), &out)) {
+    }
+    return out;
+}
+
+struct Functions {
+    ThrowIfFailedFn throwIfFailed;
+    CheckResultFn checkResult;
+    DDBltFn ddblt;
+    DDBltFastFn ddbltFast;
+    ThrowIfFailedFn throwIfDPFailed;
+};
+
+Outcome Run(const Functions& f, int op, const Args* args) {
+    switch (op) {
+        case 0: return GuardedThrow(f.throwIfFailed, args);
+        case 1: return GuardedCheck(f.checkResult, args);
+        case 2: return GuardedBlt(f.ddblt, args);
+        case 3: return GuardedBltFast(f.ddbltFast, args);
+        default: return GuardedThrow(f.throwIfDPFailed, args);
+    }
+}
+
+std::int32_t RandomResult(test::Rng& rng, bool allowFailure) {
+    switch (rng.Below(allowFailure ? 6 : 4)) {
+        case 0: return 0;
+        case 1: return kWasStillDrawing;
+        case 2: return kSurfaceLost;
+        case 3: return static_cast<std::int32_t>(1 + rng.Below(0x7fffffff));
+        case 4: return static_cast<std::int32_t>(0x80000000u | rng.Next32());
+        default: return static_cast<std::int32_t>(0x88760000u | rng.Below(0x10000));
+    }
+}
+
+void CompareSurface(test::Context& ctx, const Functions& candidate, int cases) {
+    const Functions original{Original_DirectX_ThrowIfDDFailed, Original_DirectX_CSurface_CheckResult,
+                             Original_DirectX_CSurface_DDBlt, Original_DirectX_CSurface_DDBltFast,
+                             Original_DirectX_ThrowIfDPFailed};
+    for (int i = 0; i < 8; ++i) {
+        g_comVtable[i] = i == 7 ? reinterpret_cast<void*>(&FakeBltFast) : reinterpret_cast<void*>(&FakeBlt);
+        g_ownerVtable[i] = reinterpret_cast<void*>(&FakeRestore);
+    }
+    std::vector<std::uint8_t> buffer(0x400);
+    for (int i = 0; i < cases; ++i) {
+        const int op = static_cast<int>(ctx.rng().Below(5));
+        ctx.rng().Fill(buffer.data(), buffer.size());
+        std::uint8_t* b = buffer.data();
+        At<void*>(b, 0x08) = b + 0x100;    // the surface's COM interface
+        At<void*>(b, 0x0c) = b + 0x140;    // its owner
+        At<void*>(b, 0x100) = g_comVtable;
+        At<void*>(b, 0x140) = g_ownerVtable;
+        At<void*>(b, 0x48) = b + 0x180;    // a source surface's interface
+        const bool allowFailure = ctx.rng().Chance(1, 3);
+        BltLog logA, logB;
+        logA.base = logB.base = b;
+        const int results = static_cast<int>(ctx.rng().Below(6));
+        for (int k = 0; k < results; ++k) {
+            logA.results.push_back(RandomResult(ctx.rng(), allowFailure && k == results - 1));
+        }
+        logB.results = logA.results;
+        Args args{};
+        args.op = op;
+        args.self = b;
+        args.hr = RandomResult(ctx.rng(), true);
+        args.where = reinterpret_cast<const char*>(kDDBltName);
+        args.dst = ctx.rng().Chance(1, 4) ? nullptr : reinterpret_cast<const RECT*>(b + 0x200);
+        args.src = ctx.rng().Chance(1, 3) && op != 3 ? nullptr : b + 0x40;
+        args.srcRect = ctx.rng().Chance(1, 4) ? nullptr : reinterpret_cast<const RECT*>(b + 0x220);
+        args.flags = ctx.rng().Chance(1, 2) ? 0x400 : ctx.rng().Next32();
+        args.fx = ctx.rng().Chance(1, 3) ? nullptr : b + 0x280;
+        const std::vector<std::uint8_t> snapshot = buffer;
+        g_bltLog = &logA;
+        const Outcome a = Run(original, op, &args);
+        const std::vector<std::uint8_t> afterA = buffer;
+        buffer = snapshot;
+        g_bltLog = &logB;
+        const Outcome o = Run(candidate, op, &args);
+        g_bltLog = nullptr;
+        bool same = S3RE_EXPECT_EQ(a.threw, o.threw);
+        if (!a.threw) {
+            same &= S3RE_EXPECT_EQ(a.eax, o.eax);
+        } else {
+            same &= S3RE_EXPECT_EQ(a.thrownNull, o.thrownNull);
+            same &= S3RE_EXPECT_EQ(a.thrownVtable, o.thrownVtable);
+            same &= S3RE_EXPECT_EQ(a.throwInfo, o.throwInfo);
+        }
+        same &= S3RE_EXPECT(logA.words == logB.words);
+        same &= S3RE_EXPECT_MEM_EQ(afterA.data(), buffer.data(), buffer.size());
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, op %d, hr 0x%x", i, op, static_cast<unsigned>(args.hr));
+            return;
+        }
+    }
+}
+
+// Wrong: a lost surface is not restored.
+std::int32_t __fastcall WrongCheckResult(void* self, void* edx, std::int32_t hr, const char* where) {
+    if (hr == kSurfaceLost) {
+        return hr;
+    }
+    return DirectX_CSurface_CheckResult(self, edx, hr, where);
+}
+
+}  // namespace
+
+S3RE_TEST(DirectXSurface_MatchOriginal) {
+    CompareSurface(ctx, {&DirectX_ThrowIfDDFailed, &DirectX_CSurface_CheckResult, &DirectX_CSurface_DDBlt,
+                         &DirectX_CSurface_DDBltFast, &DirectX_ThrowIfDPFailed},
+                   20000);
+}
+
+S3RE_TEST(DirectXSurface_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSurface(probe, {&DirectX_ThrowIfDDFailed, &WrongCheckResult, &DirectX_CSurface_DDBlt,
+                           &DirectX_CSurface_DDBltFast, &DirectX_ThrowIfDPFailed},
+                   2000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+}  // namespace s3re::game

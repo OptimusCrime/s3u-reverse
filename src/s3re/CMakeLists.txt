@@ -25,6 +25,7 @@ add_library(s3re SHARED
     game/building_goods.cpp
     game/building_tiles.cpp
     game/counting.cpp
+    game/directx_surface.cpp
     game/flood_fills.cpp
     game/game_end.cpp
     game/godly_events.cpp
@@ -32,6 +33,7 @@ add_library(s3re SHARED
     game/goods_piles.cpp
     game/id_allocators.cpp
     game/landscape_colours.cpp
+    game/logic_helpers.cpp
     game/logic_thread.cpp
     game/map.cpp
     game/map_areas.cpp
@@ -41,6 +43,7 @@ add_library(s3re SHARED
     game/map_marks.cpp
     game/map_neighbourhood.cpp
     game/map_terrain.cpp
+    game/misc_helpers.cpp
     game/net_thread.cpp
     game/objectives.cpp
     game/player_presence.cpp

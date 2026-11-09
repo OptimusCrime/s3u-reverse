@@ -312,6 +312,97 @@ void* __fastcall MapEffect_Make_543f70(void* self, void* edx, std::uint32_t a0, 
 
 S3RE_HOOK(0x00543f70, MapEffect_Make_543f70, Make3Fn, Original_MapEffect_Make_543f70, MapEffect_Make_543f70);
 
+// Batch 25.
+//
+// MapEffect_PositionAt (0x00544210): (tick, int* x, int* y) thiscall on a
+//   record, ret 0xc. Linear interpolation from (+0x8, +0xc) at the start
+//   tick +0x0 to (+0x10, +0x14) over the duration word +0x4 (signed):
+//   *x = x0 + (x1 - x0) * (tick - start) / duration, the same for *y (32-bit
+//   products, signed division). If the word +0x28 (signed, probably an arc
+//   height) is not 0, *y -= arc * min(tick - start, duration - (tick -
+//   start)) * 2 / duration: a hop that peaks halfway. The fields are read
+//   again after each store, as in the original. EAX not used by callers.
+// MapEffects_SetMapSize (0x00544320): (a, b) thiscall on the effect table
+//   (world+0x14d2bc8), ret 8; called once at game start with (map size,
+//   200). +0x668b4 = 24a + 2b and +0x668b8 = 9a + 2b (probably the map's
+//   size in pixels plus a margin), +0x668a4 / +0x668a8 = (each - 1) / 256 +
+//   1 (blocks of 256 pixels; signed division), +0x668b0 = the product of
+//   the two block counts / 16 (signed). EAX = that last value.
+
+using PositionAtFn = void(__fastcall*)(void* self, void* edx, std::int32_t tick, std::int32_t* x, std::int32_t* y);
+using SetMapSizeFn = std::int32_t(__fastcall*)(void* self, void* edx, std::int32_t a, std::int32_t b);
+
+void __fastcall MapEffect_PositionAt(void* self, void* edx, std::int32_t tick, std::int32_t* x, std::int32_t* y);
+std::int32_t __fastcall MapEffects_SetMapSize(void* self, void* edx, std::int32_t a, std::int32_t b);
+
+namespace {
+
+template <typename T>
+T Get(const void* self, std::size_t offset) {
+    T value;
+    std::memcpy(&value, static_cast<const std::uint8_t*>(self) + offset, sizeof(T));
+    return value;
+}
+
+// (a * b) / c with the 32-bit wrap-around of imul and a signed idiv.
+std::int32_t MulDiv32(std::int32_t a, std::int32_t b, std::int32_t c) {
+    const auto product = static_cast<std::int32_t>(static_cast<std::uint32_t>(a) * static_cast<std::uint32_t>(b));
+    return product / c;
+}
+
+}  // namespace
+
+S3RE_HOOK(0x00544210, MapEffect_PositionAt, PositionAtFn, Original_MapEffect_PositionAt, MapEffect_PositionAt);
+
+// Purpose: Where a moving map effect is at a given tick (probably flying
+// objects such as stones or spells, with a parabolic hop).
+void __fastcall MapEffect_PositionAt(void* self, void* /*edx*/, std::int32_t tick, std::int32_t* x, std::int32_t* y) {
+    const auto elapsed = [&]() {
+        return static_cast<std::int32_t>(static_cast<std::uint32_t>(tick) - Get<std::uint32_t>(self, 0));
+    };
+    const std::int32_t x0 = Get<std::int32_t>(self, 0x8);
+    *x = static_cast<std::int32_t>(static_cast<std::uint32_t>(MulDiv32(
+                                       static_cast<std::int32_t>(Get<std::uint32_t>(self, 0x10) - static_cast<std::uint32_t>(x0)),
+                                       elapsed(), Get<std::int16_t>(self, 4))) + static_cast<std::uint32_t>(x0));
+    const std::int32_t y0 = Get<std::int32_t>(self, 0xc);
+    std::int32_t yy = static_cast<std::int32_t>(static_cast<std::uint32_t>(MulDiv32(
+                                                    static_cast<std::int32_t>(Get<std::uint32_t>(self, 0x14) - static_cast<std::uint32_t>(y0)),
+                                                    elapsed(), Get<std::int16_t>(self, 4))) + static_cast<std::uint32_t>(y0));
+    *y = yy;
+    const std::int16_t arc = Get<std::int16_t>(self, 0x28);
+    if (arc != 0) {
+        const std::int32_t duration = Get<std::int16_t>(self, 4);
+        const std::uint32_t start = Get<std::uint32_t>(self, 0);
+        std::int32_t a = static_cast<std::int32_t>(static_cast<std::uint32_t>(tick) - start);
+        const std::int32_t b = static_cast<std::int32_t>(static_cast<std::uint32_t>(duration) - static_cast<std::uint32_t>(tick) + start);
+        if (a >= b) {
+            a = b;
+        }
+        const std::uint32_t product = static_cast<std::uint32_t>(arc) * static_cast<std::uint32_t>(a) * 2u;
+        yy = static_cast<std::int32_t>(static_cast<std::uint32_t>(yy) - static_cast<std::uint32_t>(static_cast<std::int32_t>(product) / duration));
+        *y = yy;
+    }
+}
+
+S3RE_HOOK(0x00544320, MapEffects_SetMapSize, SetMapSizeFn, Original_MapEffects_SetMapSize, MapEffects_SetMapSize);
+
+// Purpose: Sets up the map effect table's grid of 256-pixel blocks for the
+// map size at the start of a game (probably to find the effects to draw).
+std::int32_t __fastcall MapEffects_SetMapSize(void* self, void* /*edx*/, std::int32_t a, std::int32_t b) {
+    const auto ua = static_cast<std::uint32_t>(a), ub = static_cast<std::uint32_t>(b);
+    const auto width = static_cast<std::int32_t>(2 * (ub + 12 * ua));
+    const auto height = static_cast<std::int32_t>(9 * ua + 2 * ub);
+    Put<std::int32_t>(self, 0x668b4, width);
+    Put<std::int32_t>(self, 0x668b8, height);
+    const std::int32_t blocksX = static_cast<std::int32_t>(static_cast<std::uint32_t>(width) - 1) / 256 + 1;
+    Put<std::int32_t>(self, 0x668a4, blocksX);
+    const std::int32_t blocksY = static_cast<std::int32_t>(static_cast<std::uint32_t>(height) - 1) / 256 + 1;
+    Put<std::int32_t>(self, 0x668a8, blocksY);
+    const std::int32_t cells = static_cast<std::int32_t>(static_cast<std::uint32_t>(blocksY) * static_cast<std::uint32_t>(blocksX)) / 16;
+    Put<std::int32_t>(self, 0x668b0, cells);
+    return cells;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -514,6 +605,74 @@ S3RE_TEST(MapEffect_Make_ComparisonDetectsWrongImplementation) {
     test::Context probe2(ctx.name(), 2, /*quiet=*/true);
     CompareMake(probe2, MakeFunctions()[5], MakeFunctions()[8].ours, 100);
     S3RE_EXPECT(probe2.failures() > 0);
+}
+
+// Batch 25: PositionAt and SetMapSize on random records / tables; the
+// outputs may alias the record (stores followed by reloads).
+namespace {
+
+void CompareEffectMath(test::Context& ctx, PositionAtFn positionAt, SetMapSizeFn setMapSize, int cases) {
+    static std::uint8_t a[0x66900], b[0x66900];
+    for (int i = 0; i < cases; ++i) {
+        const bool table = ctx.rng().Chance(1, 4);
+        if (table) {
+            const std::int32_t sa = ctx.rng().Chance(1, 8) ? static_cast<std::int32_t>(ctx.rng().Next32()) : ctx.rng().Range(-10, 1100);
+            const std::int32_t sb = ctx.rng().Chance(1, 8) ? static_cast<std::int32_t>(ctx.rng().Next32()) : ctx.rng().Range(-10, 300);
+            ctx.rng().Fill(a + 0x668a0, 0x20);
+            std::memcpy(b + 0x668a0, a + 0x668a0, 0x20);
+            const std::int32_t ra = Original_MapEffects_SetMapSize(a, nullptr, sa, sb);
+            const std::int32_t rb = setMapSize(b, nullptr, sa, sb);
+            if (!S3RE_EXPECT_EQ(ra, rb) || !S3RE_EXPECT_MEM_EQ(a + 0x668a0, b + 0x668a0, 0x20)) {
+                ctx.Fail(__FILE__, __LINE__, "  case %d: SetMapSize(%d, %d)", i, sa, sb);
+                return;
+            }
+            continue;
+        }
+        ctx.rng().Fill(a, 0x60);
+        auto put = [&](std::size_t offset, std::int32_t value) { std::memcpy(a + offset, &value, 4); };
+        const std::int32_t start = ctx.rng().Range(-5, 1000);
+        put(0, start);
+        std::int16_t duration = static_cast<std::int16_t>(ctx.rng().Chance(1, 10) ? -ctx.rng().Range(1, 50) : ctx.rng().Range(1, 200));
+        std::memcpy(a + 4, &duration, 2);
+        for (std::size_t offset : {0x8u, 0xcu, 0x10u, 0x14u}) {
+            put(offset, ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Next32()) : ctx.rng().Range(-500, 20000));
+        }
+        const std::int16_t arc = static_cast<std::int16_t>(ctx.rng().Chance(1, 3) ? 0 : ctx.rng().Range(-100, 300));
+        std::memcpy(a + 0x28, &arc, 2);
+        const std::int32_t tick = start + ctx.rng().Range(-10, 220);
+        std::memcpy(b, a, 0x60);
+        // Outputs: separate slots, or aliasing record fields.
+        static const std::size_t kSlots[] = {0x40, 0x44, 0x0, 0x8, 0xc, 0x10, 0x14, 0x28};
+        const std::size_t sx = kSlots[ctx.rng().Chance(3, 4) ? 0 : ctx.rng().Below(8)];
+        const std::size_t sy = kSlots[ctx.rng().Chance(3, 4) ? 1 : ctx.rng().Below(8)];
+        Original_MapEffect_PositionAt(a, nullptr, tick, reinterpret_cast<std::int32_t*>(a + sx), reinterpret_cast<std::int32_t*>(a + sy));
+        positionAt(b, nullptr, tick, reinterpret_cast<std::int32_t*>(b + sx), reinterpret_cast<std::int32_t*>(b + sy));
+        if (!S3RE_EXPECT_MEM_EQ(a, b, 0x60)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: PositionAt(%d) slots %u %u", i, tick,
+                     static_cast<unsigned>(sx), static_cast<unsigned>(sy));
+            return;
+        }
+    }
+}
+
+// Wrong: the hop is one pixel too high.
+void __fastcall WrongPositionAt(void* self, void* edx, std::int32_t tick, std::int32_t* x, std::int32_t* y) {
+    MapEffect_PositionAt(self, edx, tick, x, y);
+    if (Get<std::int16_t>(self, 0x28) != 0) {
+        *y -= 1;
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(MapEffect_Math_MatchesOriginal) {
+    CompareEffectMath(ctx, &MapEffect_PositionAt, &MapEffects_SetMapSize, 50000);
+}
+
+S3RE_TEST(MapEffect_Math_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareEffectMath(probe, &WrongPositionAt, &MapEffects_SetMapSize, 5000);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 }  // namespace s3re::game

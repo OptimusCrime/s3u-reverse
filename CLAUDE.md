@@ -317,7 +317,7 @@ replaying, see `src/s3re/replay/command_log.h`):
   with kind `funclet`, which are never counted. Regenerate it with
   `tools/import_ghidra_functions.py` from an REA evidence bundle
   (instructions in the script). Together with `re/extra_functions.tsv`, that
-  makes 9,836 known functions.
+  makes 9,837 known functions.
 - `re/functions.csv` holds one row per function we have identified. The
   columns are documented in `tools/inventory.py`. Names use `Class::Method`.
 - Ghidra names made through REA are lost when the session closes. At the
@@ -360,7 +360,9 @@ replaying, see `src/s3re/replay/command_log.h`):
     functions that store each vtable
   - `re/classes.md`: the class hierarchy, for reading
   - `re/extra_functions.tsv`: function starts that the RTTI proves exist but
-    Ghidra missed
+    Ghidra missed (kind `rtti`). Starts found otherwise are added by hand as
+    kind `manual` with their evidence (e.g. 0x582540, a static-initializer
+    table entry); a rescan keeps them.
   `python tools/rtti.py apply` adds `classified` rows to `re/functions.csv`
   and never changes existing rows.
 - **586 classes:** game 285, Watcom container library 248 (`WC*`), MFC 34,
@@ -435,8 +437,20 @@ replaying, see `src/s3re/replay/command_log.h`):
    cases, and `Spec.ignore_bytes` leaves out output bytes that provably hold
    each function's own stack leftovers (padding of a copied stack
    temporary; say why at the spec and add a self-test pairing that differs
-   next to them). timeGetTime is probed too (read it through S3.EXE's
-   import 0x655358, which in-process tests can point at a fake clock).
+   next to them). timeGetTime and Sleep are probed too (read timeGetTime
+   through S3.EXE's import 0x655358, which in-process tests can point at a
+   fake clock). COM methods: a `Spec.virtuals` entry `(count, pointers,
+   {"com": True, "returns": f})` records the call without ECX (stdcall,
+   interface as the first argument) and lets `f(h)` pick EAX (e.g. a set of
+   HRESULTs); a pointer argument's recorded bytes can be `((offset, size),
+   ...)` for structures with uninitialized fields. `Spec.callees` probes
+   calls of S3.EXE functions that are not reimplemented and can't run in
+   the emulator (exception constructors, the CRT's free): recorded with
+   their arguments, returning `this` or a probe value. `_CxxThrowException`
+   0x61f027 ends the run like _Xlen/_Xran and is compared with the thrown
+   object pointer and throw info. In-process, a game C++ exception can be
+   caught with SEH (`__try`/`__except`, code 0xE06D7363; ExceptionInformation
+   [1] is the address of the thrown value), see directx_surface.cpp.
    `run.py --self-test` checks that the
    harness catches deliberately wrong pairings; `--all-uncovered` lists
    every uncovered block (to write the dead-block reasons at a spec). Our replacements must not
