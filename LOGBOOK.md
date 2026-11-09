@@ -76,9 +76,9 @@ Next steps (for 2026-11-10, in this order):
 2. (Item 2 done 2026-11-09: tools/trivial.py.) Then the UI
    accessor block and Win32::CObject et al. as coverage batches, with
    `S3RE_HOOK_UNVERIFIED` where a spec is not quick.
-3. Whole-game check for batches 15-21 (`python tools/check_replay.py
-   --recording <file> --against-original --ticks 3000`; the user starts
-   it, it opens the game window). Batch 21 runs during start-up (all
+3. (Done 2026-11-09 for batches 15-21: identical.) Whole-game check
+   (`python tools/check_replay.py --recording <file> --against-original
+   --ticks 3000`, then `tools/record_call_counts.py`). Batch 21 runs during start-up (all
    1,966 string initializers go through String_FromChars). Record the
    call counts in the inventory.
 4. Simulation frontier (item 4) and 0x50cf50.
@@ -454,6 +454,18 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   707 are done today, because most forwarders (635 vtordisp thunks) jump
   to unverified UI virtuals (e.g. 0x429d90 -> 0x417680, 0x429db0 ->
   0x418800 `mov al,1; ret`, itself trivial).
+
+- Whole-game check for batches 15-21 (`check_replay.py --recording
+  recordings/scripted-seed127.bin --against-original --ticks 3000`, run
+  unattended): REPLAY OK, traces identical to the original over 3,000
+  ticks; 79 of the 182 replacements were called. New
+  `tools/record_call_counts.py` wrote the counts from s3re.log into the
+  notes of the 64 rows that still said "not run yet" or had no
+  whole-game note: 37 called (all 12 std::string core members, e.g.
+  _Tidy 2,034, assign_substr 48,394, plus 25 simulation functions such as
+  CreateSettler, AddGoodsToPile, BlockTile/UnblockTile, TileShade), 27 not
+  called (e.g. the flood fills / region splits, SendNearestSettlerTo*,
+  FetchGoodsToTradeBuilding, the overlays, String_TidyFree, MaxSize).
 
 ### 2026-11-09 (29): evaluation, unverified convention, batch 21 (std::string)
 
