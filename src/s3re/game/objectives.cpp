@@ -21,9 +21,17 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kNgoEnabled = 0x1195dcc;
-constexpr std::uint32_t kNgoObjectives = 0x1195dcd;
+// GameWorld::new_game_objective: [0] = enabled, [1..7] = the chosen objectives.
 constexpr std::uint32_t kNgoObjectiveCount = 7;
+static_assert(sizeof(GameWorld::new_game_objective) == 1 + kNgoObjectiveCount);
+
+std::uint8_t& NgoEnabled(GameWorld* world) {
+    return world->new_game_objective[0];
+}
+
+std::uint8_t* NgoObjectives(GameWorld* world) {
+    return &world->new_game_objective[1];
+}
 
 }  // namespace
 
@@ -32,7 +40,7 @@ using IsChosenFn = bool(__fastcall*)(GameWorld* world, void* edx, std::uint32_t 
 // Purpose: Whether an objective has already been chosen for this game's "new game objectives" (used while
 // drawing the seven objectives at random, so none is picked twice).
 bool __fastcall GameWorld_IsNgoObjectiveChosen(GameWorld* world, void*, std::uint32_t id) {
-    const std::uint8_t* chosen = reinterpret_cast<const std::uint8_t*>(world) + kNgoObjectives;
+    const std::uint8_t* chosen = NgoObjectives(world);
     for (std::uint32_t i = 0; i < kNgoObjectiveCount; ++i) {
         if (chosen[i] == static_cast<std::uint8_t>(id)) {
             return true;
@@ -50,15 +58,19 @@ S3RE_HOOK(0x004ffb90, GameWorld_IsNgoObjectiveChosen, IsChosenFn, Original_GameW
 
 namespace {
 
-constexpr std::size_t kTestWorld = kNgoObjectives + 0x100;
+// 0x100 bytes past the start of the chosen objectives.
+constexpr std::size_t kTestWorld = offsetof(GameWorld, new_game_objective) + 1 + 0x100;
 
 void CompareIsChosen(test::Context& ctx, IsChosenFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
         for (std::uint32_t k = 0; k < kNgoObjectiveCount + 1; ++k) {  // one byte past the list too
-            worlds.Set<std::uint8_t>(kNgoObjectives + k, static_cast<std::uint8_t>(ctx.rng().Below(40)));
+            const auto value = static_cast<std::uint8_t>(ctx.rng().Below(40));
+            // k == 7 is the byte after the list (the first byte of recent_positions).
+            worlds.Both([&](GameWorld* w) { NgoObjectives(w)[k] = value; });
         }
-        worlds.Set<std::uint8_t>(kNgoEnabled, static_cast<std::uint8_t>(ctx.rng().Below(2)));
+        const auto enabled = static_cast<std::uint8_t>(ctx.rng().Below(2));
+        worlds.Both([&](GameWorld* w) { NgoEnabled(w) = enabled; });
         const std::uint32_t id = (ctx.rng().Chance(1, 4) ? ctx.rng().Next32() & ~0xffu : 0) | ctx.rng().Below(40);
         const bool expected = Original_GameWorld_IsNgoObjectiveChosen(worlds.original(), nullptr, id);
         const bool actual = candidate(worlds.ours(), nullptr, id);
@@ -71,7 +83,7 @@ void CompareIsChosen(test::Context& ctx, IsChosenFn candidate, int cases) {
 
 // Wrong: looks at the first six objectives only.
 bool __fastcall WrongIsNgoObjectiveChosen(GameWorld* world, void*, std::uint32_t id) {
-    const std::uint8_t* chosen = reinterpret_cast<const std::uint8_t*>(world) + kNgoObjectives;
+    const std::uint8_t* chosen = NgoObjectives(world);
     for (std::uint32_t i = 0; i < kNgoObjectiveCount - 1; ++i) {
         if (chosen[i] == static_cast<std::uint8_t>(id)) {
             return true;

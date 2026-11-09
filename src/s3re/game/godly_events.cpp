@@ -2,7 +2,8 @@
 // Volker\GodlyEvents.cpp (see re/source_files.md).
 //
 // Player records: 0x148 bytes at world+0x11943dc; +0x4 race, +0x8c mana,
-// +0x94 int32[8] mana needed per spell slot. The spells of each race are
+// +0x94 int32[8] mana needed per spell slot (Player::race / mana /
+// spell_mana). The spells of each race are
 // listed in the table at 0x00658d64 in S3.EXE (8 int32 per race, 32-byte
 // stride), e.g. race 0: 5, 3, 9, 10, 21, 18, 8, 11.
 //
@@ -26,21 +27,14 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::uint32_t kPlayerRecords = 0x11943dc;
-constexpr std::uint32_t kPlayerRecordBytes = 0x148;
-constexpr std::uint32_t kPlayerRace = 0x4;
-constexpr std::uint32_t kPlayerMana = 0x8c;
-constexpr std::uint32_t kPlayerManaNeeded = 0x94;  // int32[8]
+using layout::Player;
+
 constexpr std::uint32_t kSpellSlots = 8;
+static_assert(sizeof(Player::spell_mana) == kSpellSlots * sizeof(std::int32_t));
 
 // int32[race][8]: the spells of each race, in S3.EXE.
 constexpr std::uintptr_t kRaceSpells = 0x00658d64;
 constexpr std::uintptr_t kManaNeededMessage = 0x007311d0;  // "xxx Godevent mana needed: %u at slot: %u"
-
-template <typename T>
-T& At(GameWorld* world, std::uint32_t offset) {
-    return *reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(world) + offset);
-}
 
 }  // namespace
 
@@ -51,17 +45,19 @@ namespace {
 
 template <bool kSigned>
 std::uint32_t HasManaForSpell(GameWorld* world, std::uint32_t player, std::uint32_t spell) {
-    const std::uint32_t record = kPlayerRecords + player * kPlayerRecordBytes;
-    const std::uint32_t race = At<std::uint32_t>(world, record + kPlayerRace);
+    Player& record = world->players[player];  // player is not checked
+    const auto race = static_cast<std::uint32_t>(record.race);
     // The original walks from kRaceSpells + race * 32 (32-bit address arithmetic).
     const auto* spells = reinterpret_cast<const std::uint32_t*>(kRaceSpells + race * 32u);
     std::uint32_t slot = 0;
     while (slot < kSpellSlots && spells[slot] != spell) {
         ++slot;
     }
-    const std::uint32_t needed = At<std::uint32_t>(world, record + kPlayerManaNeeded + slot * 4);
+    // Slot 8 (spell not in the list) reads the dword after spell_mana
+    // (Player::unk0b4[0]), like the original.
+    const auto needed = static_cast<std::uint32_t>(record.spell_mana[slot]);
     GameDebugLog(kManaNeededMessage, needed, slot);
-    const std::uint32_t mana = At<std::uint32_t>(world, record + kPlayerMana);
+    const auto mana = static_cast<std::uint32_t>(record.mana);
     const bool enough = kSigned ? static_cast<std::int32_t>(mana) >= static_cast<std::int32_t>(needed) : mana >= needed;
     return (needed & 0xffffff00u) | (enough ? 1u : 0u);
 }
@@ -85,7 +81,7 @@ S3RE_HOOK(0x0054b240, GameWorld_HasManaForSpell, HasManaFn, Original_GameWorld_H
 namespace {
 
 constexpr std::uint32_t kTestPlayers = 20;
-constexpr std::size_t kTestWorld = kPlayerRecords + (kTestPlayers + 1) * kPlayerRecordBytes;
+constexpr std::size_t kTestWorld = offsetof(GameWorld, players) + (kTestPlayers + 1) * sizeof(Player);
 
 // Wrong: compares signed.
 std::uint32_t __fastcall WrongHasManaForSpell(GameWorld* world, void*, std::uint32_t player, std::uint32_t spell) {
@@ -96,9 +92,8 @@ void CompareHasMana(test::Context& ctx, HasManaFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t player = ctx.rng().Below(kTestPlayers);
-        const std::uint32_t record = kPlayerRecords + player * kPlayerRecordBytes;
         const std::uint32_t race = ctx.rng().Below(5);
-        worlds.Set<std::uint32_t>(record + kPlayerRace, race);
+        worlds.Both([&](GameWorld* w) { w->players[player].race = static_cast<std::int32_t>(race); });
         const auto* spells = reinterpret_cast<const std::uint32_t*>(kRaceSpells + race * 32u);
         const std::uint32_t spell = ctx.rng().Chance(4, 5) ? spells[ctx.rng().Below(kSpellSlots)] : ctx.rng().Below(40);
         auto value = [&] {
@@ -111,9 +106,12 @@ void CompareHasMana(test::Context& ctx, HasManaFn candidate, int cases) {
                 return ctx.rng().Next32() | 0x80000000u;
             }
         };
-        worlds.Set<std::uint32_t>(record + kPlayerMana, value());
+        const auto mana = static_cast<std::int32_t>(value());
+        worlds.Both([&](GameWorld* w) { w->players[player].mana = mana; });
+        // Slots 0..7 and the dword after them (read for a spell not in the list).
         for (std::uint32_t slot = 0; slot <= kSpellSlots; ++slot) {
-            worlds.Set<std::uint32_t>(record + kPlayerManaNeeded + slot * 4, value());
+            const auto needed = static_cast<std::int32_t>(value());
+            worlds.Both([&](GameWorld* w) { w->players[player].spell_mana[slot] = needed; });
         }
         const std::uint32_t expected = Original_GameWorld_HasManaForSpell(worlds.original(), nullptr, player, spell);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, player, spell);

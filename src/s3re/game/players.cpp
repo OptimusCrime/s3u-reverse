@@ -31,25 +31,25 @@ namespace s3re::game {
 
 namespace {
 
-constexpr std::size_t kPlayerCounters = 0x11944b8;  // world offset of player 0's counters
-constexpr std::size_t kWorldUpdateDisabledFlag = 0x2d250;
+using layout::Player;
+
 constexpr std::uint32_t kNoPlayer = 0xff;
-constexpr std::size_t kPlayerListLengths = 0x11940bc;
-constexpr std::size_t kPlayerListLengthCount = 200;
 
 // The original's index arithmetic: index + player * 164 (164 words = 0x148
-// bytes per record), 32-bit.
+// bytes per record), 32-bit. The low 16 bits of the result show up in
+// SubtractPlayerCounter's EAX.
 std::uint32_t CounterIndex(std::uint32_t player, std::uint32_t index) {
-    return index + player * (world_offset::kPlayerRecordBytes / 2);
+    return index + player * static_cast<std::uint32_t>(sizeof(Player) / 2);
 }
 
-std::uint16_t* Counter(GameWorld* world, std::uint32_t slot) {
-    return reinterpret_cast<std::uint16_t*>(reinterpret_cast<std::uint8_t*>(world) +
-                                            kPlayerCounters + slot * 2u);
+// Player::goods[index] of `player`: the same 32-bit address as the original's
+// world + 0x11944b8 + CounterIndex(player, index) * 2 (index is not checked).
+std::uint16_t* Counter(GameWorld* world, std::uint32_t player, std::uint32_t index) {
+    return &world->players[player].goods[index];
 }
 
 bool CountersFrozen(GameWorld* world, std::uint32_t player) {
-    return player == kNoPlayer || WorldField<std::uint8_t>(world, kWorldUpdateDisabledFlag) != 0;
+    return player == kNoPlayer || world->counters_disabled != 0;
 }
 
 }  // namespace
@@ -68,7 +68,7 @@ std::uint32_t __fastcall GameWorld_AddPlayerCounter(GameWorld* world, void* /*ed
     if (CountersFrozen(world, player)) {
         return player;
     }
-    std::uint16_t* counter = Counter(world, CounterIndex(player, index));
+    std::uint16_t* counter = Counter(world, player, index);
     *counter = static_cast<std::uint16_t>(*counter + amount);
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(counter));
 }
@@ -86,7 +86,7 @@ std::uint32_t __fastcall GameWorld_SubtractPlayerCounter(GameWorld* world, void*
         return player;
     }
     const std::uint32_t slot = CounterIndex(player, index);
-    std::uint16_t* counter = Counter(world, slot);
+    std::uint16_t* counter = Counter(world, player, index);
     const std::uint32_t eax = (slot & 0xffff0000u) | *counter;
     if (amount > *counter) {
         *counter = 0;
@@ -99,8 +99,7 @@ std::uint32_t __fastcall GameWorld_SubtractPlayerCounter(GameWorld* world, void*
 // Purpose: Empties the ten per-player lists of settlers (probably lists of settlers assigned to tasks) for
 // all players, at the start of a game.
 std::uint32_t __fastcall GameWorld_ClearPlayerListLengths(GameWorld* world, void* /*edx*/) {
-    std::memset(&WorldField<std::int32_t>(world, kPlayerListLengths), 0,
-                kPlayerListLengthCount * sizeof(std::int32_t));
+    std::memset(world->player_list_lengths, 0, sizeof(world->player_list_lengths));
     return 0;
 }
 
@@ -118,8 +117,10 @@ S3RE_HOOK(0x0050c9c0, GameWorld_ClearPlayerListLengths, ClearFn,
 namespace {
 
 constexpr std::uint32_t kTestCounters = 64;  // indices tried per player
+// Player 0's counters, start of the compared window.
+constexpr std::size_t kPlayerCounters = offsetof(GameWorld, players) + offsetof(Player, goods);
 constexpr std::size_t kCountersWorld =
-    kPlayerCounters + (19 * 164 + kTestCounters) * 2 + 0x100;
+    kPlayerCounters + 19 * sizeof(Player) + kTestCounters * 2 + 0x100;
 
 void ComparePlayerCounter(test::Context& ctx, PlayerCounterFn original,
                           PlayerCounterFn candidate, int cases) {
@@ -142,11 +143,12 @@ void ComparePlayerCounter(test::Context& ctx, PlayerCounterFn original,
             amount = ctx.rng().Below(200);
             break;
         }
-        worlds.Set<std::uint8_t>(kWorldUpdateDisabledFlag, ctx.rng().Chance(1, 8) ? 1 : 0);
+        const std::uint8_t disabled = ctx.rng().Chance(1, 8) ? 1 : 0;
+        worlds.Both([&](GameWorld* w) { w->counters_disabled = disabled; });
         // Small counters half the time, so subtraction hits the floor.
         if (player != kNoPlayer && ctx.rng().Chance(1, 2)) {
-            worlds.Set<std::uint16_t>(kPlayerCounters + CounterIndex(player, index) * 2,
-                                      static_cast<std::uint16_t>(ctx.rng().Below(300)));
+            const auto value = static_cast<std::uint16_t>(ctx.rng().Below(300));
+            worlds.Both([&](GameWorld* w) { *Counter(w, player, index) = value; });
         }
         // Return values that are addresses differ between the two buffers;
         // compare them relative to the buffer.
@@ -176,10 +178,10 @@ void ComparePlayerCounter(test::Context& ctx, PlayerCounterFn original,
 // Wrong: ignores the "world update disabled" flag.
 std::uint32_t __fastcall WrongAddPlayerCounter(GameWorld* world, void* edx, std::uint32_t player,
                                                std::uint32_t index, std::uint32_t amount) {
-    const std::uint8_t flag = WorldField<std::uint8_t>(world, kWorldUpdateDisabledFlag);
-    WorldField<std::uint8_t>(world, kWorldUpdateDisabledFlag) = 0;
+    const std::uint8_t flag = world->counters_disabled;
+    world->counters_disabled = 0;
     const std::uint32_t result = GameWorld_AddPlayerCounter(world, edx, player, index, amount);
-    WorldField<std::uint8_t>(world, kWorldUpdateDisabledFlag) = flag;
+    world->counters_disabled = flag;
     return result;
 }
 
@@ -191,19 +193,21 @@ std::uint32_t __fastcall WrongSubtractPlayerCounter(GameWorld* world, void* /*ed
         return player;
     }
     const std::uint32_t slot = CounterIndex(player, index);
-    std::uint16_t* counter = Counter(world, slot);
+    std::uint16_t* counter = Counter(world, player, index);
     const std::uint32_t eax = (slot & 0xffff0000u) | *counter;
     *counter = static_cast<std::uint16_t>(*counter - amount);
     return eax - amount;
 }
 
 void CompareClearLists(test::Context& ctx, ClearFn candidate, int cases) {
-    const std::size_t size = kPlayerListLengths + kPlayerListLengthCount * 4 + 0x100;
+    constexpr std::size_t kLengths = offsetof(GameWorld, player_list_lengths);
+    const std::size_t size = kLengths + sizeof(GameWorld::player_list_lengths) + 0x100;
     test::WorldPair worlds(ctx, size);
     for (int i = 0; i < cases; ++i) {
-        ctx.rng().Fill(worlds.originalBytes() + kPlayerListLengths - 0x40, 0x400);
-        std::memcpy(worlds.oursBytes() + kPlayerListLengths - 0x40,
-                    worlds.originalBytes() + kPlayerListLengths - 0x40, 0x400);
+        // Random bytes around the lengths (0x40 before to 0x100 after).
+        ctx.rng().Fill(worlds.originalBytes() + kLengths - 0x40, 0x400);
+        std::memcpy(worlds.oursBytes() + kLengths - 0x40, worlds.originalBytes() + kLengths - 0x40,
+                    0x400);
         bool same = S3RE_EXPECT_EQ(Original_GameWorld_ClearPlayerListLengths(worlds.original(),
                                                                              nullptr),
                                    candidate(worlds.ours(), nullptr));
@@ -216,8 +220,8 @@ void CompareClearLists(test::Context& ctx, ClearFn candidate, int cases) {
 
 // Wrong: clears one entry too few.
 std::uint32_t __fastcall WrongClearPlayerListLengths(GameWorld* world, void* /*edx*/) {
-    std::memset(&WorldField<std::int32_t>(world, kPlayerListLengths), 0,
-                (kPlayerListLengthCount - 1) * sizeof(std::int32_t));
+    std::memset(world->player_list_lengths, 0,
+                sizeof(world->player_list_lengths) - sizeof(std::int32_t));
     return 0;
 }
 
