@@ -110,6 +110,9 @@ class Spec:
     # Chance per case that every operator new of the case returns null (to
     # reach the out-of-memory paths).
     new_fails: float = 0.0
+    # With new_fails: only allocations of this size fail (e.g. the exception
+    # object, not the strings built before it).
+    new_fails_size: int | None = None
     # Calls of S3.EXE functions that are recorded instead of run (see
     # emu.Emulator.set_callees): {address: (stack argument count,
     # "cdecl"/"stdcall"/"thiscall", "this"/"probe")}. Only for callees that
@@ -3512,4 +3515,239 @@ SELF_TEST = [
     # Callee probes and _CxxThrowException: the DirectPlay check throws for
     # success codes too, with another constructor and throw info.
     Spec("DirectX_ThrowIfDDFailed", 0x005bb890, "stdcall", [hresult, anything], callees=EXCEPTION_CTORS),
+]
+
+
+# -- batch 26: framework helpers (framework_helpers.cpp) ---------------------
+#
+# Objects at world offset 0 (ECX = the world). Freed pointers point into
+# scratch (operator delete is recorded by the fake heap). CloseHandle is an
+# API probe (emu.API_HANDLERS).
+
+NET_WIDE = SCRATCH + 12 * SCRATCH_SLOT_BYTES
+NET_VECTOR = SCRATCH + 13 * SCRATCH_SLOT_BYTES
+
+
+def pointer_or_null(offset: int, target: int):
+    return lambda rng, pool, args: [(offset, rng.choice([0, WORLD_BASE + target]), 4)]
+
+
+def handle_world(rng, pool, args):
+    return [(4, rng.choice([0, 0, rng.getrandbits(32)]), 4), (8, rng.choice([1, 1, 0, rng.getrandbits(32)]), 4)]
+
+
+def net_destroy_world(rng, pool, args):
+    fields = member_strings((0x18, 0xbc))(rng, pool, args)
+    fields.append((0x40, rng.choice([0, WORLD_BASE + NET_VECTOR]), 4))
+    wide = rng.choice([0, WORLD_BASE + NET_WIDE + 2])
+    fields.append((0x2c, wide, 4))
+    fields.append((NET_WIDE + 1, rng.choice([0, 0, 1, 2, 0xfe, 0xff]), 1))
+    return fields
+
+
+SPECS += [
+    Spec("Net_DeletePointee_49d980", 0x0049d980, "thiscall", [], eax_mask=0,
+         presets=pointer_or_null(0, SCRATCH)),
+    Spec("NetSession_SetPair_5bd200", 0x005bd200, "thiscall", [anything, anything]),
+    Spec("Lobby_ZeroThreeDwords_5dc810", 0x005dc810, "thiscall", []),
+    Spec("Lobby_CPlayerIndex_Construct", 0x006065f0, "thiscall", [anything]),
+    Spec("Lobby_CMemoryBlock_Construct", 0x00600e00, "thiscall", []),
+    Spec("Lobby_ZeroSixDwords_5ec1e0", 0x005ec1e0, "thiscall", []),
+    Spec("Credits_TextStyle_5a0960", 0x005a0960, "thiscall", []),
+    Spec("Win32_CFile_Construct", 0x006195c0, "thiscall", []),
+    Spec("NetSession_Init_5bb040", 0x005bb040, "thiscall", []),
+    Spec("Lobby_Init_5ebfb0", 0x005ebfb0, "thiscall", []),
+    Spec("Lobby_FreeBlock_601250", 0x00601250, "thiscall", [], presets=pointer_or_null(4, SCRATCH)),
+    Spec("DirectX_CPlayer_Clear", 0x005c0ef0, "thiscall", [], presets=member_strings((0x0c, 0x1c))),
+    Spec("Win32_CWin32Handle_Close", 0x0060bf20, "thiscall", [], presets=handle_world),
+    Spec("Win32_CThread_Construct", 0x0060df70, "thiscall", [anything, anything]),
+    # DEAD 0x49ecf7 / 0x49edbf: the inlined erase() of ~string removes every
+    # character, so its _Grow(0, false) is false and the _Eos after it never
+    # runs (as in String_Destroy).
+    Spec("NetHelp_Destroy_49ec80", 0x0049ec80, "thiscall", [], eax_mask=0, presets=net_destroy_world,
+         exempt_blocks=(0x0049ecf7, 0x0049edbf)),
+]
+
+# -- batch 26: computer player helpers (ai_small_helpers.cpp, ui_state.cpp) --
+
+
+def word8_record(rng, pool, args):
+    return list32_world(rng, pool, args) + [(SCRATCH + 8, rng.getrandbits(16), 2)]
+
+
+def tile_words(rng, pool, args):
+    return [(SCRATCH, rng.randrange(70), 2), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(70), 2)]
+
+
+def building_count(rng, pool, args):
+    count = rng.randrange(40)
+    fields = [(0x1499e60, count, 4)]
+    id_ = args[0] & 0xFFFF
+    if id_ < 64 and rng.random() < 0.4:
+        fields.append((0x1499e64 + id_ * 0x3a, 0xFF, 1))
+    return fields
+
+
+def ui_refresh(rng, pool, args):
+    return [(LOGIC_THREAD + 0x84, rng.choice([0, 0, 1, rng.getrandbits(32)]), 4)]
+
+
+SPECS += [
+    Spec("AI_List32AddValue_551780", 0x00551780, "thiscall", [anything], presets=list32_world),
+    Spec("AI_List32AddWord8_551760", 0x00551760, "thiscall", [scratch(0)], presets=word8_record),
+    Spec("AI_EvaLand_ResetGrid_554070", 0x00554070, "thiscall", []),
+    Spec("AI_TileCentre_554880", 0x00554880, "stdcall", [anything, anything, scratch(0), scratch(1)]),
+    # Callers use AX; off the map the upper half is the caller's EAX.
+    Spec("AI_TileByte8_599570", 0x00599570, "fastcall", [scratch(0), scratch(1)], eax_mask=0xFFFF,
+         presets=tile_words, globals=ai_small_map),
+    Spec("AI_BlockCentreByte8_554850", 0x00554850, "stdcall",
+         [small_with_noise(0, 9), small_with_noise(0, 9)], globals=ai_small_map),
+    Spec("AI_EvaLand_GridCellOfTile_554770", 0x00554770, "thiscall", [anything, anything], presets=grid_world),
+    Spec("AI_BuildingIfUsed_58e1c0", 0x0058e1c0, "fastcall", [small_with_noise(0, 64)],
+         presets=building_count, globals=ai_world),
+    Spec("CLogicThread_ClearPendingUiRefresh", 0x0053f530, "logicthread", [], presets=ui_refresh),
+]
+
+# -- batch 26: exception classes (win32_exceptions.cpp) -----------------------
+#
+# The constructors build the object at world offset 0 (its message string
+# at +8) from the string in scratch slot 0 (string_world's second string;
+# sometimes the object's own message member, the self-assignment path).
+# ThrowDataError gets two strings from member_strings (STRING_OTHER and
+# STRING_OTHER + 0x10) and throws through _CxxThrowException.
+
+
+def message_ptr(rng, pool) -> int:
+    return WORLD_BASE + 8 if rng.random() < 0.1 else STRING_OTHER_PTR
+
+
+def mostly_derived(rng, pool) -> int:
+    return rng.choice([0, 1, rng.getrandbits(32)])
+
+
+SPECS += [
+    # DEAD: 0x611a7d caps a length above 0xFFFFFFFF (`cmp ebx, -1; jbe`);
+    # 0x611a8e, 0x611aa9 and 0x611ad1 are the _Xran, erase-memmove and _Eos
+    # of the inlined self-assignment, whose length the constructor has just
+    # set to 0 (the message member is cleared before assign() reads it).
+    Spec("Win32_CException_Construct", 0x00611a20, "thiscall", [message_ptr, mostly_derived], presets=string_world,
+         exempt_blocks=(0x00611a7d, 0x00611a8e, 0x00611aa9, 0x00611ad1)),
+    Spec("Win32_CRunTimeError_Construct", 0x00614c60, "thiscall", [message_ptr, mostly_derived], presets=string_world),
+    Spec("Lobby_CDataError_Construct", 0x006003b0, "thiscall", [message_ptr, mostly_derived], presets=string_world),
+    Spec("Lobby_ThrowDataError", 0x005ffcc0, "fastcall",
+         [one_of(STRING_OTHER_PTR), one_of(STRING_OTHER_PTR + 0x10), anything],
+         presets=member_strings((), (0x0, 0x10)), new_fails=0.2, new_fails_size=0x18),
+]
+
+# -- batch 26: CSurface release and destructors (directx_surface.cpp) --------
+#
+# The surface at world offset 0 with its interface (+4) at SURFACE_IFACE
+# (vtable = emu.FAKE_VTABLE, slot 8 = IUnknown::Release, a COM probe).
+
+
+def surface_release_world(rng, pool, args):
+    blocks = [(offset, rng.choice([0, WORLD_BASE + SCRATCH + offset]), 4) for offset in (0x94, 0x98, 0x9c, 0xa0, 0xa4)]
+    return [(4, rng.choice([SURFACE_IFACE, SURFACE_IFACE, 0]), 4),
+            (SURFACE_IFACE - WORLD_BASE, FAKE_VTABLE, 4)] + blocks
+
+
+def surface_release_always(rng, pool, args):
+    return [(4, SURFACE_IFACE, 4), (SURFACE_IFACE - WORLD_BASE, FAKE_VTABLE, 4)]
+
+
+RELEASE_VIRTUALS = {0x08: (1, {}, {"com": True})}
+
+SPECS += [
+    Spec("DirectX_CSurface_Release", 0x005bf2c0, "thiscall", [], presets=surface_release_always,
+         virtuals=RELEASE_VIRTUALS),
+    Spec("DirectX_CSurface_Destroy", 0x005bf240, "thiscall", [], presets=surface_release_world,
+         virtuals=RELEASE_VIRTUALS),
+    Spec("DirectX_CSurface_DeletingDestroy", 0x005bf220, "thiscall", [anything], presets=surface_release_world,
+         virtuals=RELEASE_VIRTUALS),
+    Spec("CLandscapeSurface_Destroy", 0x0054be70, "thiscall", [], presets=surface_release_world,
+         virtuals=RELEASE_VIRTUALS),
+    Spec("CLandscapeSurface_DeletingDestroy", 0x0054be40, "thiscall", [anything], presets=surface_release_world,
+         virtuals=RELEASE_VIRTUALS),
+]
+
+# -- batch 26: adding map effects (map_effects.cpp) --------------------------
+#
+# The effect table at world offset 0: slot count +0x668a0 (small, sometimes
+# at the 4999 limit), blocks per row +0x668a4, records 1..count+12 with a
+# random "in use" dword +0 and a valid next link +0x48, valid list heads
+# for the first 1400 cells (sometimes -1). Coordinates stay small so every
+# cell is a real head. The spawn functions' records get their padding bytes
+# from the make functions' stack temporaries: ignored for the slots they
+# can use (1..64; the count stays below 50 for them).
+
+EFFECT_COUNT = 0x668a0
+EFFECT_HEADS = 0x5cc60
+
+
+def effect_table(full_chance: float):
+    def preset(rng, pool, args):
+        full = rng.random() < full_chance
+        used = 4985 + rng.randrange(15) if full else rng.randrange(45)
+        last = min(used + 12, 4999)
+        fields = [(EFFECT_COUNT, used, 4), (0x668a4, rng.randint(1, 40), 4)]
+        free_slot = rng.randint(1, used) if full and used and rng.random() < 0.5 else None
+        for slot in range(1, last + 1):
+            if full and slot != free_slot:
+                in_use = 1 + rng.randrange(0xFFFF)  # (not 0: no free record before the end)
+            else:
+                in_use = 0 if (not full and rng.random() < 0.15) or slot == free_slot else 1 + rng.randrange(0xFFFF)
+            fields.append((slot * 0x4c, in_use, 4))
+            if not full or slot > used - 20:
+                fields.append((slot * 0x4c + 0x48, 0 if rng.random() < 0.3 else rng.randrange(last + 1), 4))
+        for cell in range(1400):
+            fields.append((EFFECT_HEADS + cell * 4, 0xFFFFFFFF if rng.random() < 0.05 else rng.randrange(last + 1), 4))
+        return fields
+    return preset
+
+
+def effect_source(rng, pool, args):
+    fields = effect_table(0.1)(rng, pool, args)
+    used = fields[0][1]
+    fields += [(SCRATCH + 0x10, rng.randrange(7000), 4), (SCRATCH + 0x14, rng.randrange(7000), 4),
+               (SCRATCH + 0x48, rng.randrange(min(used + 12, 4999) + 1), 4)]
+    return fields
+
+
+def coordinate(rng, pool) -> int:
+    return rng.randrange(7000)
+
+
+EFFECT_TABLE_PADDING = tuple(slot * 0x4c + p for slot in range(1, 65) for p in EFFECT_PADDING)
+
+
+def spawn_spec(name, address, args, **kwargs):
+    return Spec(name, address, "thiscall", args, presets=effect_table(0.0), ignore_bytes=EFFECT_TABLE_PADDING,
+                max_cases=150, **kwargs)
+
+
+SPECS += [
+    Spec("MapEffects_FindFreeSlot", 0x00545ee0, "thiscall", [], presets=effect_table(0.3), max_cases=150),
+    Spec("MapEffects_CellOfPosition", 0x00545eb0, "thiscall", [anything, anything],
+         presets=lambda rng, pool, args: [(0x668a4, rng.choice([1, 38, rng.getrandbits(32)]), 4)]),
+    Spec("MapEffects_LinkIntoCell", 0x00545df0, "thiscall", [below(1400), between(1, 56)],
+         presets=effect_table(0.0), max_cases=150),
+    Spec("MapEffects_Add", 0x005445e0, "thiscall", [scratch(0)], presets=effect_source, max_cases=200),
+    spawn_spec("MapEffects_Spawn_5450d0", 0x005450d0, [anything] + [coordinate] * 4),
+    spawn_spec("MapEffects_Spawn_545120", 0x00545120, [anything] + [coordinate] * 4),
+    spawn_spec("MapEffects_Spawn_544f20", 0x00544f20, [anything] + [coordinate] * 4),
+    spawn_spec("MapEffects_Spawn_545070", 0x00545070, [anything] + [coordinate] * 4),
+    spawn_spec("MapEffects_Spawn_544f80", 0x00544f80, [anything] + [coordinate] * 4),
+    spawn_spec("MapEffects_Spawn_544dc0", 0x00544dc0, [coordinate, below(4)] + [coordinate] * 5),
+    spawn_spec("MapEffects_Spawn_544e70", 0x00544e70,
+               [anything] + [coordinate] * 5 + [lambda rng, pool: rng.choice([3, 0x103, 2, rng.getrandbits(32)])]),
+    spawn_spec("MapEffects_Spawn_545860", 0x00545860, [anything] + [coordinate] * 8),
+]
+
+SELF_TEST += [
+    # API probe CloseHandle against operator delete of +4 (and +0xc cleared).
+    Spec("Lobby_FreeBlock_601250", 0x0060bf20, "thiscall", [], presets=handle_world),
+    # ignore_bytes on the effect table: the two spawn functions differ only
+    # in the stationary record's kind (dword +0x34: 0x63 against 0x5d), a few
+    # bytes from the ignored padding bytes +0x3b / +0x3e.
+    spawn_spec("MapEffects_Spawn_545070", 0x00544f20, [anything] + [coordinate] * 4),
 ]

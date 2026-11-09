@@ -121,6 +121,10 @@ def _api_sleep(machine, uc, args):
     return 0, ("Sleep", args[0])
 
 
+def _api_close_handle(machine, uc, args):
+    return 1, ("CloseHandle", args[0])
+
+
 def _api_time_get_time(machine, uc, args):
     """timeGetTime(): a value fixed by the case and the number of probe calls
     so far (both functions get the same times as long as they make the same
@@ -138,6 +142,7 @@ API_HANDLERS = {
     "PtInRect": (3, _api_pt_in_rect),
     "timeGetTime": (0, _api_time_get_time),
     "Sleep": (1, _api_sleep),
+    "CloseHandle": (1, _api_close_handle),
 }
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,
@@ -251,6 +256,7 @@ class Emulator:
         self.heap_calls: list[tuple] = []
         self.heap_next = 0
         self.new_fails = False  # this case: operator new returns null (Spec.new_fails)
+        self.new_fails_size: int | None = None  # only for this block size (Spec.new_fails_size)
         self.thrown: int | None = None
         self._map_thread_block()
         # Virtual-call and API probes.
@@ -501,7 +507,8 @@ class Emulator:
         esp = uc.reg_read(UC_X86_REG_ESP)
         count = struct.unpack("<I", bytes(uc.mem_read(esp + 4, 4)))[0]
         block = 0
-        if count < HEAP_SIZE - self.heap_next and not self.new_fails:
+        fails = self.new_fails and (self.new_fails_size is None or count == self.new_fails_size)
+        if count < HEAP_SIZE - self.heap_next and not fails:
             block = WORLD_BASE + HEAP_OFFSET + self.heap_next
             self.heap_next += (count + 15) & ~15
         self.heap_calls.append(("new", count, block))

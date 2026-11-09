@@ -21,12 +21,15 @@
 //   pass their caller's EDX (uninitialized) as a1. EAX = this. ret 0x50.
 // thiscall (ECX = the record).
 
+#include "game/debug_log.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
 #include <cstdint>
+#include <algorithm>
 #include <cstring>
 #include <initializer_list>
+#include <vector>
 
 namespace s3re::game {
 
@@ -673,6 +676,468 @@ S3RE_TEST(MapEffect_Math_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareEffectMath(probe, &WrongPositionAt, &MapEffects_SetMapSize, 5000);
     S3RE_EXPECT(probe.failures() > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Batch 26: adding effects to the table and the functions that create them
+// ---------------------------------------------------------------------------
+//
+// The effect table (ECX; world+0x14d2bc8): records 1..4999 at this + slot *
+// 0x4c (slot 0 is never used; a record is free while its dword +0 is 0),
+// list heads at +0x5cc60 + cell * 4 (one list per 256x256-pixel block of
+// the map, cell = by * blocksX + bx + 1), the number of slots in use so far
+// at +0x668a0, blocks per row at +0x668a4 (see MapEffects_SetMapSize).
+//
+// MapEffects_FindFreeSlot (0x00545ee0): () the first slot 1..count whose
+//   record's dword +0 is 0; otherwise count + 1 if that is below 5000
+//   (count is increased), else DebugLog "EFFECT: Effect overflow" and 0.
+//   EAX = the slot.
+// MapEffects_CellOfPosition (0x00545eb0): (x, y) ret 8: (y / 256) *
+//   blocksX + x / 256 + 1 (signed divisions rounding towards 0; 32-bit
+//   product). EAX = the cell.
+// MapEffects_LinkIntoCell (0x00545df0): (cell, slot) ret 8: SetLinks(cell,
+//   0, head) on the record (head = the cell's list head), then, if the
+//   record's next (+0x48) is not 0, SetLinks(cell, slot, -1) on that next
+//   record; head = slot. EAX = 0 when there was no next record, else -1
+//   (SetLinks' result).
+// MapEffects_Add (0x005445e0): (const MapEffect* effect) ret 4: slot =
+//   FindFreeSlot(); if not 0: copies the 0x4c bytes into the slot, then
+//   LinkIntoCell(CellOfPosition(effect+0x10, effect+0x14), slot) (the
+//   effect's end position, read from the source). EAX = 0 without a slot,
+//   else LinkIntoCell's result.
+//
+// The "spawn" functions below (our names; thiscall on the table, all in
+// Volker\LogicInit.cpp's range) build records with the make functions in a
+// 0x4c-byte stack temporary and add them; a<i> are the stack arguments,
+// "edx" is what each passes as the make function's EDX (the record's start
+// tick). EAX = the last Add's result unless noted.
+//   0x005450d0 (5 args): Make_543ef0(edx a1; 0x23, 0xa, a2, a3, a4, a5,
+//              0x30001, 2).
+//   0x00545120 (5 args, a4/a5 unused): Make_543f70(edx a1; a2, a3, 0x18).
+//   0x00544f20 (5 args): Make_543930(edx a1; 0x10, a2, a3, a4, a5 + 5,
+//              0xd0026), then Make_543f70(edx a1; a2, a3, 0x5d).
+//   0x00545070 (5 args): the same with 0x63 instead of 0x5d.
+//   0x00544dc0 (7 args): with k = a2 (0..3; the original indexes stack
+//              arrays with it, other values read its stack):
+//              Make_543ce0(edx 0; a3, a1 + T0[k], T1[k], a4, a5, a6, a7,
+//              G[k], 0xc), T0 = S3.EXE 0x65a19c, T1 = 0x65a1ac, G =
+//              {0xd000f, 0x170016, 0x210015, 0x2b0014}.
+//   0x00545860 (9 args, a4..a9 unused): Make_543f70(edx a1 + 0x14 * n;
+//              a2, a3, 0x70) for n = 0, 1, 2. EAX = 0x3c.
+//   0x00544e70 (7 args): if the low byte of a7 is 3: Make_5439a0(edx a1;
+//              0x16, a2, a3, a4, a5, 0x2a0012, a6), then Make_543f70(edx
+//              a1; a2, a3, 0x71); otherwise 0xc0012 and 0x23.
+//   0x00544f80 (5 args): Make_543930(edx a1 + d; 9, a2 + dx, a3 + dy, a4,
+//              a5, 0xd0031) for (d, dx, dy) = (0, 10, -5), (7, -2, 20),
+//              (1, 0, 0), (5, 20, 5), then Make_543f70(edx a1; a2, a3,
+//              0x5d).
+// The records' five padding bytes come from the make functions' stack
+// temporaries (see the make functions), in the original as in ours.
+
+using FindFreeSlotFn = std::uint32_t(__fastcall*)(void* self, void* edx);
+using CellOfPositionFn = std::int32_t(__fastcall*)(void* self, void* edx, std::int32_t x, std::int32_t y);
+using LinkIntoCellFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t cell, std::uint32_t slot);
+using AddEffectFn = std::uint32_t(__fastcall*)(void* self, void* edx, const void* effect);
+using Spawn5Fn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t a1, std::uint32_t a2, std::uint32_t a3,
+                                            std::uint32_t a4, std::uint32_t a5);
+using Spawn7Fn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t a1, std::uint32_t a2, std::uint32_t a3,
+                                            std::uint32_t a4, std::uint32_t a5, std::uint32_t a6, std::uint32_t a7);
+using Spawn9Fn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t a1, std::uint32_t a2, std::uint32_t a3,
+                                            std::uint32_t a4, std::uint32_t a5, std::uint32_t a6, std::uint32_t a7,
+                                            std::uint32_t a8, std::uint32_t a9);
+
+std::uint32_t __fastcall MapEffects_FindFreeSlot(void* self, void* edx);
+std::int32_t __fastcall MapEffects_CellOfPosition(void* self, void* edx, std::int32_t x, std::int32_t y);
+std::uint32_t __fastcall MapEffects_LinkIntoCell(void* self, void* edx, std::uint32_t cell, std::uint32_t slot);
+std::uint32_t __fastcall MapEffects_Add(void* self, void* edx, const void* effect);
+
+namespace {
+
+constexpr std::size_t kEffectSlots = 5000;
+constexpr std::size_t kCellHeads = 0x5cc60;
+constexpr std::size_t kSlotsUsed = 0x668a0;
+constexpr std::size_t kBlocksX = 0x668a4;
+constexpr std::uintptr_t kOverflowText = 0x00730ed4;  // "EFFECT: Effect overflow"
+
+std::uint8_t* Record(void* table, std::uint32_t slot) {
+    return static_cast<std::uint8_t*>(table) + slot * kEffectBytes;
+}
+
+std::uint32_t& Head(void* table, std::uint32_t cell) {
+    return *reinterpret_cast<std::uint32_t*>(static_cast<std::uint8_t*>(table) + kCellHeads + cell * 4);
+}
+
+void* Edx(std::uint32_t value) {
+    return reinterpret_cast<void*>(static_cast<std::uintptr_t>(value));
+}
+
+}  // namespace
+
+S3RE_HOOK(0x00545ee0, MapEffects_FindFreeSlot, FindFreeSlotFn, Original_MapEffects_FindFreeSlot,
+          MapEffects_FindFreeSlot);
+
+// Purpose: Finds a free record in the map effect table (reusing freed ones
+// first); 0 when all 4999 are taken.
+std::uint32_t __fastcall MapEffects_FindFreeSlot(void* self, void* /*edx*/) {
+    const auto used = Get<std::int32_t>(self, kSlotsUsed);
+    std::int32_t slot = 1;
+    for (; slot <= used; ++slot) {
+        if (Get<std::uint32_t>(Record(self, static_cast<std::uint32_t>(slot)), 0) == 0) {
+            return static_cast<std::uint32_t>(slot);
+        }
+    }
+    slot = used + 1;
+    if (slot < static_cast<std::int32_t>(kEffectSlots)) {
+        Put<std::int32_t>(self, kSlotsUsed, slot);
+        return static_cast<std::uint32_t>(slot);
+    }
+    GameDebugLog(kOverflowText);
+    return 0;
+}
+
+S3RE_HOOK(0x00545eb0, MapEffects_CellOfPosition, CellOfPositionFn, Original_MapEffects_CellOfPosition,
+          MapEffects_CellOfPosition);
+
+// Purpose: The 256x256-pixel block of the map that a position (in pixels)
+// falls into; each block keeps a list of the effects in it (probably so the
+// drawing only visits the effects on screen).
+std::int32_t __fastcall MapEffects_CellOfPosition(void* self, void* /*edx*/, std::int32_t x, std::int32_t y) {
+    const std::uint32_t row = static_cast<std::uint32_t>(y / 256) * Get<std::uint32_t>(self, kBlocksX);
+    return static_cast<std::int32_t>(row + static_cast<std::uint32_t>(x / 256) + 1);
+}
+
+S3RE_HOOK(0x00545df0, MapEffects_LinkIntoCell, LinkIntoCellFn, Original_MapEffects_LinkIntoCell,
+          MapEffects_LinkIntoCell);
+
+// Purpose: Puts an effect record at the front of its block's list.
+std::uint32_t __fastcall MapEffects_LinkIntoCell(void* self, void* /*edx*/, std::uint32_t cell, std::uint32_t slot) {
+    std::uint8_t* record = Record(self, slot);
+    MapEffect_SetLinks(record, nullptr, cell, 0, Head(self, cell));
+    std::uint32_t result = Get<std::uint32_t>(record, 0x48);
+    if (result != 0) {
+        result = MapEffect_SetLinks(Record(self, result), nullptr, cell, slot, 0xffffffffu);
+    }
+    Head(self, cell) = slot;
+    return result;
+}
+
+S3RE_HOOK(0x005445e0, MapEffects_Add, AddEffectFn, Original_MapEffects_Add, MapEffects_Add);
+
+// Purpose: Adds a map effect (probably a visual effect such as smoke or a
+// spell) to the table and to the list of its map block; dropped when the
+// table is full.
+std::uint32_t __fastcall MapEffects_Add(void* self, void* /*edx*/, const void* effect) {
+    const std::uint32_t slot = MapEffects_FindFreeSlot(self, nullptr);
+    if (slot == 0) {
+        return 0;
+    }
+    std::memcpy(Record(self, slot), effect, kEffectBytes);
+    const std::int32_t cell = MapEffects_CellOfPosition(self, nullptr, Get<std::int32_t>(effect, 0x10),
+                                                        Get<std::int32_t>(effect, 0x14));
+    return MapEffects_LinkIntoCell(self, nullptr, static_cast<std::uint32_t>(cell), slot);
+}
+
+std::uint32_t __fastcall MapEffects_Spawn_5450d0(void* self, void* edx, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5);
+std::uint32_t __fastcall MapEffects_Spawn_545120(void* self, void* edx, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5);
+std::uint32_t __fastcall MapEffects_Spawn_544f20(void* self, void* edx, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5);
+std::uint32_t __fastcall MapEffects_Spawn_545070(void* self, void* edx, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5);
+std::uint32_t __fastcall MapEffects_Spawn_544f80(void* self, void* edx, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5);
+std::uint32_t __fastcall MapEffects_Spawn_544dc0(void* self, void* edx, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5,
+                                                 std::uint32_t a6, std::uint32_t a7);
+std::uint32_t __fastcall MapEffects_Spawn_544e70(void* self, void* edx, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5,
+                                                 std::uint32_t a6, std::uint32_t a7);
+std::uint32_t __fastcall MapEffects_Spawn_545860(void* self, void* edx, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5,
+                                                 std::uint32_t a6, std::uint32_t a7, std::uint32_t a8,
+                                                 std::uint32_t a9);
+
+S3RE_HOOK(0x005450d0, MapEffects_Spawn_5450d0, Spawn5Fn, Original_MapEffects_Spawn_5450d0, MapEffects_Spawn_5450d0);
+
+// Purpose: Adds one map effect of a fixed kind (type 0x23, graphics
+// 0x30001; meaning unknown).
+std::uint32_t __fastcall MapEffects_Spawn_5450d0(void* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
+    std::uint8_t effect[kEffectBytes];
+    MapEffect_Make_543ef0(effect, Edx(a1), 0x23, 0xa, a2, a3, a4, a5, 0x30001, 2);
+    return MapEffects_Add(self, nullptr, effect);
+}
+
+S3RE_HOOK(0x00545120, MapEffects_Spawn_545120, Spawn5Fn, Original_MapEffects_Spawn_545120, MapEffects_Spawn_545120);
+
+// Purpose: Adds one stationary map effect of kind 0x18 at a position.
+std::uint32_t __fastcall MapEffects_Spawn_545120(void* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t, std::uint32_t) {
+    std::uint8_t effect[kEffectBytes];
+    MapEffect_Make_543f70(effect, Edx(a1), a2, a3, 0x18);
+    return MapEffects_Add(self, nullptr, effect);
+}
+
+namespace {
+
+std::uint32_t SpawnPair(void* self, std::uint32_t a1, std::uint32_t a2, std::uint32_t a3, std::uint32_t a4,
+                        std::uint32_t a5, std::uint32_t kind) {
+    std::uint8_t effect[kEffectBytes];
+    MapEffect_Make_543930(effect, Edx(a1), 0x10, a2, a3, a4, a5 + 5, 0xd0026);
+    MapEffects_Add(self, nullptr, effect);
+    MapEffect_Make_543f70(effect, Edx(a1), a2, a3, kind);
+    return MapEffects_Add(self, nullptr, effect);
+}
+
+}  // namespace
+
+S3RE_HOOK(0x00544f20, MapEffects_Spawn_544f20, Spawn5Fn, Original_MapEffects_Spawn_544f20, MapEffects_Spawn_544f20);
+
+// Purpose: Adds a moving effect (graphics 0xd0026) plus a stationary one of
+// kind 0x5d at the start (probably a projectile and its launch effect).
+std::uint32_t __fastcall MapEffects_Spawn_544f20(void* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
+    return SpawnPair(self, a1, a2, a3, a4, a5, 0x5d);
+}
+
+S3RE_HOOK(0x00545070, MapEffects_Spawn_545070, Spawn5Fn, Original_MapEffects_Spawn_545070, MapEffects_Spawn_545070);
+
+// Purpose: The same pair of effects as 0x544f20 with kind 0x63 for the
+// stationary one.
+std::uint32_t __fastcall MapEffects_Spawn_545070(void* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
+    return SpawnPair(self, a1, a2, a3, a4, a5, 0x63);
+}
+
+S3RE_HOOK(0x00544f80, MapEffects_Spawn_544f80, Spawn5Fn, Original_MapEffects_Spawn_544f80, MapEffects_Spawn_544f80);
+
+// Purpose: Adds four staggered effects (graphics 0xd0031) around a position
+// plus a stationary one of kind 0x5d (probably a burst of sparks or smoke).
+std::uint32_t __fastcall MapEffects_Spawn_544f80(void* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
+    static constexpr std::uint32_t kSteps[4][3] = {
+        {0, 10, 0xfffffffbu}, {7, 0xfffffffeu, 20}, {1, 0, 0}, {5, 20, 5}};
+    std::uint8_t effect[kEffectBytes];
+    for (const auto& step : kSteps) {
+        MapEffect_Make_543930(effect, Edx(a1 + step[0]), 9, a2 + step[1], a3 + step[2], a4, a5, 0xd0031);
+        MapEffects_Add(self, nullptr, effect);
+    }
+    MapEffect_Make_543f70(effect, Edx(a1), a2, a3, 0x5d);
+    return MapEffects_Add(self, nullptr, effect);
+}
+
+S3RE_HOOK(0x00544dc0, MapEffects_Spawn_544dc0, Spawn7Fn, Original_MapEffects_Spawn_544dc0, MapEffects_Spawn_544dc0);
+
+// Purpose: Adds one effect whose graphics and offsets depend on a variant
+// 0..3 (probably a direction or a race).
+std::uint32_t __fastcall MapEffects_Spawn_544dc0(void* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5,
+                                                 std::uint32_t a6, std::uint32_t a7) {
+    static constexpr std::uint32_t kGraphics[4] = {0xd000f, 0x170016, 0x210015, 0x2b0014};
+    const auto* offsets0 = reinterpret_cast<const std::uint32_t*>(0x0065a19c);
+    const auto* offsets1 = reinterpret_cast<const std::uint32_t*>(0x0065a1ac);
+    std::uint8_t effect[kEffectBytes];
+    MapEffect_Make_543ce0(effect, nullptr, a3, offsets0[a2] + a1, offsets1[a2], a4, a5, a6, a7, kGraphics[a2], 0xc);
+    return MapEffects_Add(self, nullptr, effect);
+}
+
+S3RE_HOOK(0x00544e70, MapEffects_Spawn_544e70, Spawn7Fn, Original_MapEffects_Spawn_544e70, MapEffects_Spawn_544e70);
+
+// Purpose: Adds a moving effect of kind 0x16 and a stationary one; variant
+// 3 uses other graphics (0x2a0012, kind 0x71) than the rest (0xc0012, 0x23).
+std::uint32_t __fastcall MapEffects_Spawn_544e70(void* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t a4, std::uint32_t a5,
+                                                 std::uint32_t a6, std::uint32_t a7) {
+    const bool three = static_cast<std::uint8_t>(a7) == 3;
+    std::uint8_t effect[kEffectBytes];
+    MapEffect_Make_5439a0(effect, Edx(a1), 0x16, a2, a3, a4, a5, three ? 0x2a0012u : 0xc0012u, a6);
+    MapEffects_Add(self, nullptr, effect);
+    MapEffect_Make_543f70(effect, Edx(a1), a2, a3, three ? 0x71u : 0x23u);
+    return MapEffects_Add(self, nullptr, effect);
+}
+
+S3RE_HOOK(0x00545860, MapEffects_Spawn_545860, Spawn9Fn, Original_MapEffects_Spawn_545860, MapEffects_Spawn_545860);
+
+// Purpose: Adds three stationary effects of kind 0x70 at one position,
+// starting 0x14 ticks apart (probably a repeating animation). Returns 0x3c
+// (probably the total duration).
+std::uint32_t __fastcall MapEffects_Spawn_545860(void* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
+                                                 std::uint32_t a3, std::uint32_t, std::uint32_t, std::uint32_t,
+                                                 std::uint32_t, std::uint32_t, std::uint32_t) {
+    std::uint8_t effect[kEffectBytes];
+    for (std::uint32_t n = 0; n < 3; ++n) {
+        MapEffect_Make_543f70(effect, Edx(a1 + 0x14 * n), a2, a3, 0x70);
+        MapEffects_Add(self, nullptr, effect);
+    }
+    return 0x3c;
+}
+
+namespace {
+
+// Tests: two effect tables (0x668c0 bytes) with identical random contents,
+// made consistent per case: a slot count (mostly small, sometimes near the
+// 4999 limit), blocks per row 1..40, valid list heads and next links, some
+// free records. Positions and coordinates stay small so every cell is a
+// real list head. The records' padding bytes (written by the make
+// functions from their stack temporaries) are not compared for the spawn
+// functions; a mutation test checks that a neighbouring byte still is.
+
+constexpr std::size_t kTableBytes = 0x668c0;
+constexpr std::size_t kTestCells = 1400;
+
+struct AddFunctions {
+    FindFreeSlotFn findFreeSlot;
+    CellOfPositionFn cellOfPosition;
+    LinkIntoCellFn linkIntoCell;
+    AddEffectFn add;
+    Spawn5Fn spawn5450d0;
+    Spawn5Fn spawn545120;
+    Spawn5Fn spawn544f20;
+    Spawn5Fn spawn545070;
+    Spawn5Fn spawn544f80;
+    Spawn7Fn spawn544dc0;
+    Spawn7Fn spawn544e70;
+    Spawn9Fn spawn545860;
+};
+
+AddFunctions OriginalAdd() {
+    return {Original_MapEffects_FindFreeSlot, Original_MapEffects_CellOfPosition, Original_MapEffects_LinkIntoCell,
+            Original_MapEffects_Add,          Original_MapEffects_Spawn_5450d0,  Original_MapEffects_Spawn_545120,
+            Original_MapEffects_Spawn_544f20, Original_MapEffects_Spawn_545070,  Original_MapEffects_Spawn_544f80,
+            Original_MapEffects_Spawn_544dc0, Original_MapEffects_Spawn_544e70,  Original_MapEffects_Spawn_545860};
+}
+
+AddFunctions OurAdd() {
+    return {&MapEffects_FindFreeSlot, &MapEffects_CellOfPosition, &MapEffects_LinkIntoCell,
+            &MapEffects_Add,          &MapEffects_Spawn_5450d0,  &MapEffects_Spawn_545120,
+            &MapEffects_Spawn_544f20, &MapEffects_Spawn_545070,  &MapEffects_Spawn_544f80,
+            &MapEffects_Spawn_544dc0, &MapEffects_Spawn_544e70,  &MapEffects_Spawn_545860};
+}
+
+std::uint32_t RunAdd(const AddFunctions& f, int op, std::uint8_t* table, const std::uint32_t* a,
+                     const std::uint8_t* effect) {
+    switch (op) {
+        case 0: return f.findFreeSlot(table, nullptr);
+        case 1: return static_cast<std::uint32_t>(f.cellOfPosition(table, nullptr, static_cast<std::int32_t>(a[0]),
+                                                                   static_cast<std::int32_t>(a[1])));
+        case 2: return f.linkIntoCell(table, nullptr, a[0] % kTestCells, 1 + a[1] % 4999);
+        case 3: return f.add(table, nullptr, effect);
+        case 4: return f.spawn5450d0(table, nullptr, a[0], a[1], a[2], a[3], a[4]);
+        case 5: return f.spawn545120(table, nullptr, a[0], a[1], a[2], a[3], a[4]);
+        case 6: return f.spawn544f20(table, nullptr, a[0], a[1], a[2], a[3], a[4]);
+        case 7: return f.spawn545070(table, nullptr, a[0], a[1], a[2], a[3], a[4]);
+        case 8: return f.spawn544f80(table, nullptr, a[0], a[1], a[2], a[3], a[4]);
+        case 9: return f.spawn544dc0(table, nullptr, a[0], a[1] & 3, a[2], a[3], a[4], a[5], a[6]);
+        case 10: return f.spawn544e70(table, nullptr, a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
+        default: return f.spawn545860(table, nullptr, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8]);
+    }
+}
+
+void CompareAdd(test::Context& ctx, const AddFunctions& candidate, int cases) {
+    const AddFunctions original = OriginalAdd();
+    std::vector<std::uint8_t> a(kTableBytes), b(kTableBytes);
+    ctx.rng().Fill(a.data(), a.size());
+    std::uint8_t effect[kEffectBytes];
+    for (int i = 0; i < cases; ++i) {
+        const int op = static_cast<int>(ctx.rng().Below(12));
+        const bool full = ctx.rng().Chance(1, 12);
+        const std::uint32_t used = full ? 4985 + ctx.rng().Below(15) : ctx.rng().Below(60);
+        Put<std::uint32_t>(a.data(), kSlotsUsed, used);
+        Put<std::uint32_t>(a.data(), kBlocksX, 1 + ctx.rng().Below(40));
+        const std::uint32_t last = std::min<std::uint32_t>(used + 12, 4999);
+        for (std::uint32_t slot = 1; slot <= last; ++slot) {
+            std::uint8_t* record = a.data() + slot * kEffectBytes;
+            const bool free = !full && ctx.rng().Chance(1, 6);
+            Put<std::uint32_t>(record, 0, free ? 0 : 1 + ctx.rng().Below(0xffff));
+            Put<std::uint32_t>(record, 0x48, ctx.rng().Chance(1, 3) ? 0 : ctx.rng().Below(last + 1));
+        }
+        if (full && ctx.rng().Chance(1, 2)) {
+            Put<std::uint32_t>(a.data() + (1 + ctx.rng().Below(used)) * kEffectBytes, 0, 0);
+        }
+        for (std::uint32_t cell = 0; cell < kTestCells; ++cell) {
+            const std::uint32_t head = ctx.rng().Chance(1, 20) ? 0xffffffffu : ctx.rng().Below(last + 1);
+            Put<std::uint32_t>(a.data(), kCellHeads + cell * 4, head);
+        }
+        std::uint32_t args[9];
+        for (auto& arg : args) {
+            arg = ctx.rng().Below(7000);
+        }
+        args[0] = ctx.rng().Next32();  // the start tick
+        if (op == 1) {
+            args[0] = ctx.rng().Next32();
+            args[1] = ctx.rng().Next32();
+        }
+        ctx.rng().Fill(effect, sizeof(effect));
+        Put<std::uint32_t>(effect, 0x10, ctx.rng().Below(7000));
+        Put<std::uint32_t>(effect, 0x14, ctx.rng().Below(7000));
+        Put<std::uint32_t>(effect, 0x48, ctx.rng().Below(last + 1));
+        if (op == 10 && ctx.rng().Chance(1, 2)) {
+            args[6] = (ctx.rng().Next32() & ~0xffu) | 3;
+        }
+        b = a;
+        const std::uint32_t ra = RunAdd(original, op, a.data(), args, effect);
+        const std::uint32_t rb = RunAdd(candidate, op, b.data(), args, effect);
+        if (op >= 4) {
+            for (std::uint32_t slot = 1; slot < 5000; ++slot) {
+                for (const std::size_t padding : kPaddingBytes) {
+                    b[slot * kEffectBytes + padding] = a[slot * kEffectBytes + padding];
+                }
+            }
+        }
+        bool same = S3RE_EXPECT_EQ(ra, rb);
+        same &= S3RE_EXPECT_MEM_EQ(a.data(), b.data(), a.size());
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, op %d, used %u", i, op, used);
+            return;
+        }
+    }
+}
+
+// Wrong: the variant-3 graphics of 0x544e70 differ only in the bytes
+// +0x34..+0x37 next to the padding (+0x3b is padding, +0x38 is not).
+std::uint32_t __fastcall WrongSpawn544e70(void* self, void* edx, std::uint32_t a1, std::uint32_t a2, std::uint32_t a3,
+                                          std::uint32_t a4, std::uint32_t a5, std::uint32_t a6, std::uint32_t a7) {
+    return MapEffects_Spawn_544e70(self, edx, a1, a2, a3, a4, a5, a6 ^ 1, a7);
+}
+
+std::uint32_t __fastcall WrongFindFreeSlot(void* self, void* edx) {
+    // Wrong: allows the 5000th slot.
+    const auto used = Get<std::int32_t>(self, kSlotsUsed);
+    if (used == 4999) {
+        bool any = false;
+        for (std::uint32_t slot = 1; slot <= 4999 && !any; ++slot) {
+            any = Get<std::uint32_t>(Record(self, slot), 0) == 0;
+        }
+        if (!any) {
+            Put<std::int32_t>(self, kSlotsUsed, 5000);
+            return 5000;
+        }
+    }
+    return MapEffects_FindFreeSlot(self, edx);
+}
+
+}  // namespace
+
+S3RE_TEST(MapEffects_Add_MatchOriginal) {
+    CompareAdd(ctx, OurAdd(), 3000);
+}
+
+S3RE_TEST(MapEffects_Add_ComparisonDetectsWrongImplementation) {
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        AddFunctions wrong = OurAdd();
+        wrong.spawn544e70 = &WrongSpawn544e70;
+        CompareAdd(probe, wrong, 400);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        AddFunctions wrong = OurAdd();
+        wrong.findFreeSlot = &WrongFindFreeSlot;
+        CompareAdd(probe, wrong, 1500);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
 }
 
 }  // namespace s3re::game

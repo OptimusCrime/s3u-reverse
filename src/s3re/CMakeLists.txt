@@ -19,6 +19,7 @@ add_library(s3re SHARED
     replay/command_log.cpp
 
     game/ai_helpers.cpp
+    game/ai_small_helpers.cpp
     game/area_piles.cpp
     game/area_split.cpp
     game/building_flags.cpp
@@ -27,6 +28,7 @@ add_library(s3re SHARED
     game/counting.cpp
     game/directx_surface.cpp
     game/flood_fills.cpp
+    game/framework_helpers.cpp
     game/game_end.cpp
     game/godly_events.cpp
     game/graphics_helpers.cpp
@@ -60,6 +62,7 @@ add_library(s3re SHARED
     game/ui_state.cpp
     game/world_search.cpp
     game/win32_classes.cpp
+    game/win32_exceptions.cpp
     game/winmain.cpp
     game/world_tables.cpp
 )

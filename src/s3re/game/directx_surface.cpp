@@ -445,4 +445,242 @@ S3RE_TEST(DirectXSurface_ComparisonDetectsWrongImplementation) {
     S3RE_EXPECT(probe.failures() > 0);
 }
 
+// ---------------------------------------------------------------------------
+// Batch 26: releasing and destroying surfaces
+// ---------------------------------------------------------------------------
+//
+// DirectX::CSurface::vf01 (0x005bf2c0), our DirectX_CSurface_Release: ()
+//   IUnknown::Release (COM slot 8) of the interface at +4 (not checked for
+//   null; the destructor checks), then +4, +8, +0x18, +0x14 = 0. EAX = 0.
+//   (+4 is the interface the surface was created with, +8 the one DDBlt
+//   uses; probably IDirectDrawSurface and a later version of it.)
+// DirectX::CSurface::~CSurface (0x005bf240): vtable 0x65cda8; if +4 is not
+//   0, vf01 (called directly); ~CObject. EAX = 0 (vf01's result or the null
+//   it tested; the original ~CObject leaves EAX alone, ours may not;
+//   callers don't use it).
+// DirectX::CSurface scalar deleting destructor (0x005bf220): (flags)
+//   ~CSurface, operator delete if flags bit 0; EAX = this. ret 4.
+// CLandscapeSurface::~CLandscapeSurface (0x0054be70): vtable 0x65a520;
+//   operator delete of the blocks at +0x94, +0x9c, +0xa0, +0xa4 (not
+//   +0x98); ~CSurface. EAX = 0. (The map's terrain surface; probably its
+//   shading tables.)
+// CLandscapeSurface scalar deleting destructor (0x0054be40): the same shape.
+
+void __fastcall Win32_CObject_Destroy(void* self, void* edx);  // win32_classes.cpp
+
+using SurfaceFn = std::uint32_t(__fastcall*)(void* self, void* edx);
+using SurfaceDeletingFn = void*(__fastcall*)(void* self, void* edx, std::uint32_t flags);
+
+std::uint32_t __fastcall DirectX_CSurface_Release(void* self, void* edx);
+std::uint32_t __fastcall DirectX_CSurface_Destroy(void* self, void* edx);
+void* __fastcall DirectX_CSurface_DeletingDestroy(void* self, void* edx, std::uint32_t flags);
+std::uint32_t __fastcall CLandscapeSurface_Destroy(void* self, void* edx);
+void* __fastcall CLandscapeSurface_DeletingDestroy(void* self, void* edx, std::uint32_t flags);
+
+namespace {
+
+constexpr std::uint32_t kCSurfaceVtable = 0x0065cda8;
+constexpr std::uint32_t kCLandscapeSurfaceVtable = 0x0065a520;
+
+void GameDelete(void* block) {
+    reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(block);
+}
+
+}  // namespace
+
+S3RE_HOOK(0x005bf2c0, DirectX_CSurface_Release, SurfaceFn, Original_DirectX_CSurface_Release,
+          DirectX_CSurface_Release);
+
+// Purpose: Releases a surface's DirectDraw interface and forgets it (when
+// the surface is destroyed or recreated, e.g. after a mode change).
+std::uint32_t __fastcall DirectX_CSurface_Release(void* self, void* /*edx*/) {
+    void* surface = At<void*>(self, 4);
+    using ReleaseFn = std::uint32_t(__stdcall*)(void* surface);
+    (*reinterpret_cast<ReleaseFn*>(*static_cast<std::uint8_t**>(surface) + 8))(surface);
+    At<std::uint32_t>(self, 4) = 0;
+    At<std::uint32_t>(self, 8) = 0;
+    At<std::uint32_t>(self, 0x18) = 0;
+    At<std::uint32_t>(self, 0x14) = 0;
+    return 0;
+}
+
+S3RE_HOOK(0x005bf240, DirectX_CSurface_Destroy, SurfaceFn, Original_DirectX_CSurface_Destroy,
+          DirectX_CSurface_Destroy);
+
+// Purpose: Destructor of a DirectDraw surface wrapper: releases the
+// interface if there is one.
+std::uint32_t __fastcall DirectX_CSurface_Destroy(void* self, void* /*edx*/) {
+    At<std::uint32_t>(self, 0) = kCSurfaceVtable;
+    if (At<void*>(self, 4) != nullptr) {
+        DirectX_CSurface_Release(self, nullptr);
+    }
+    Win32_CObject_Destroy(self, nullptr);
+    return 0;
+}
+
+S3RE_HOOK(0x005bf220, DirectX_CSurface_DeletingDestroy, SurfaceDeletingFn,
+          Original_DirectX_CSurface_DeletingDestroy, DirectX_CSurface_DeletingDestroy);
+
+// Purpose: The compiler's deleting destructor of a surface wrapper
+// (destroys it and frees it when bit 0 of flags is set).
+void* __fastcall DirectX_CSurface_DeletingDestroy(void* self, void* /*edx*/, std::uint32_t flags) {
+    DirectX_CSurface_Destroy(self, nullptr);
+    if ((flags & 1) != 0) {
+        GameDelete(self);
+    }
+    return self;
+}
+
+S3RE_HOOK(0x0054be70, CLandscapeSurface_Destroy, SurfaceFn, Original_CLandscapeSurface_Destroy,
+          CLandscapeSurface_Destroy);
+
+// Purpose: Destructor of the landscape surface (the map terrain drawing
+// surface): frees its four tables, then the surface.
+std::uint32_t __fastcall CLandscapeSurface_Destroy(void* self, void* /*edx*/) {
+    At<std::uint32_t>(self, 0) = kCLandscapeSurfaceVtable;
+    for (const std::size_t offset : {0x94u, 0x9cu, 0xa0u, 0xa4u}) {
+        GameDelete(At<void*>(self, offset));
+    }
+    return DirectX_CSurface_Destroy(self, nullptr);
+}
+
+S3RE_HOOK(0x0054be40, CLandscapeSurface_DeletingDestroy, SurfaceDeletingFn,
+          Original_CLandscapeSurface_DeletingDestroy, CLandscapeSurface_DeletingDestroy);
+
+// Purpose: The compiler's deleting destructor of the landscape surface.
+void* __fastcall CLandscapeSurface_DeletingDestroy(void* self, void* /*edx*/, std::uint32_t flags) {
+    CLandscapeSurface_Destroy(self, nullptr);
+    if ((flags & 1) != 0) {
+        GameDelete(self);
+    }
+    return self;
+}
+
+namespace {
+
+// Tests: a fake COM interface whose Release logs the call; the surface's
+// blocks are fresh game heap blocks per side (so both free real memory);
+// the deleting destructors get heap-allocated objects when they delete.
+
+std::vector<std::uint32_t>* g_releaseLog = nullptr;
+std::uint8_t* g_releaseBase = nullptr;
+
+std::uint32_t __stdcall FakeRelease(void* surface) {
+    g_releaseLog->push_back(0x2e1u);
+    g_releaseLog->push_back(static_cast<std::uint32_t>(static_cast<std::uint8_t*>(surface) - g_releaseBase));
+    return 7;
+}
+
+void* g_releaseVtable[4] = {};
+
+struct DestroyFunctions {
+    SurfaceFn release;
+    SurfaceFn destroy;
+    SurfaceDeletingFn deleting;
+    SurfaceFn landscape;
+    SurfaceDeletingFn landscapeDeleting;
+};
+
+void* GameNewBlock(std::uint32_t size) {
+    return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
+}
+
+constexpr std::size_t kSurfaceObject = 0xb0;
+
+// Runs op on a surface object at `object` (heap memory when it is deleted).
+std::uint32_t RunDestroy(const DestroyFunctions& f, int op, std::uint8_t* object, std::uint32_t flags) {
+    switch (op) {
+        case 0: return f.release(object, nullptr);
+        case 1: return f.destroy(object, nullptr);
+        case 2: return static_cast<std::uint32_t>(static_cast<std::uint8_t*>(f.deleting(object, nullptr, flags)) - object);
+        case 3: return f.landscape(object, nullptr);
+        default: return static_cast<std::uint32_t>(static_cast<std::uint8_t*>(f.landscapeDeleting(object, nullptr, flags)) - object);
+    }
+}
+
+void CompareDestroy(test::Context& ctx, const DestroyFunctions& candidate, int cases) {
+    const DestroyFunctions original{Original_DirectX_CSurface_Release, Original_DirectX_CSurface_Destroy,
+                                    Original_DirectX_CSurface_DeletingDestroy, Original_CLandscapeSurface_Destroy,
+                                    Original_CLandscapeSurface_DeletingDestroy};
+    for (void*& slot : g_releaseVtable) {
+        slot = reinterpret_cast<void*>(&FakeRelease);
+    }
+    std::uint8_t pattern[kSurfaceObject];
+    std::uint8_t iface[2][16];
+    for (int i = 0; i < cases; ++i) {
+        const int op = static_cast<int>(ctx.rng().Below(5));
+        const std::uint32_t flags = ctx.rng().Next32();
+        const bool deletes = (op == 2 || op == 4) && (flags & 1) != 0;
+        const bool noInterface = op != 0 && ctx.rng().Chance(1, 3);
+        const bool nullBlocks = ctx.rng().Chance(1, 4);
+        ctx.rng().Fill(pattern, sizeof(pattern));
+        std::uint8_t* objects[2];
+        std::vector<std::uint8_t> stackObjects[2];
+        std::vector<std::uint32_t> logs[2];
+        for (int side = 0; side < 2; ++side) {
+            if (deletes) {
+                objects[side] = static_cast<std::uint8_t*>(GameNewBlock(kSurfaceObject));
+            } else {
+                stackObjects[side].resize(kSurfaceObject);
+                objects[side] = stackObjects[side].data();
+            }
+            std::memcpy(objects[side], pattern, kSurfaceObject);
+            At<void*>(iface[side], 0) = g_releaseVtable;
+            At<void*>(objects[side], 4) = noInterface ? nullptr : iface[side];
+            for (const std::size_t offset : {0x94u, 0x9cu, 0xa0u, 0xa4u}) {
+                At<void*>(objects[side], offset) = nullBlocks ? nullptr : GameNewBlock(16);
+            }
+        }
+        std::uint32_t results[2];
+        for (int side = 0; side < 2; ++side) {
+            g_releaseLog = &logs[side];
+            g_releaseBase = iface[side];
+            results[side] = RunDestroy(side == 0 ? original : candidate, op, objects[side], flags);
+        }
+        g_releaseLog = nullptr;
+        if (op == 1 || op == 3) {
+            // The destructors' EAX is what the (hooked) ~CObject leaves;
+            // callers don't use it.
+            results[0] = results[1] = 0;
+        }
+        bool same = S3RE_EXPECT_EQ(results[0], results[1]);
+        same &= S3RE_EXPECT(logs[0] == logs[1]);
+        if (!deletes) {
+            for (int side = 0; side < 2; ++side) {
+                At<std::uint32_t>(objects[side], 4) = 0;  // interface pointers differ per side
+                for (const std::size_t offset : {0x94u, 0x9cu, 0xa0u, 0xa4u}) {
+                    At<std::uint32_t>(objects[side], offset) = 0;  // blocks differ per side
+                }
+            }
+            same &= S3RE_EXPECT_MEM_EQ(objects[0], objects[1], kSurfaceObject);
+        }
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, op %d", i, op);
+            return;
+        }
+    }
+}
+
+std::uint32_t __fastcall WrongRelease(void* self, void* edx) {
+    const std::uint32_t r = DirectX_CSurface_Release(self, edx);
+    At<std::uint32_t>(self, 0x18) = 1;  // wrong: +0x18 not cleared
+    return r;
+}
+
+}  // namespace
+
+S3RE_TEST(DirectXSurfaceDestroy_MatchOriginal) {
+    CompareDestroy(ctx, {&DirectX_CSurface_Release, &DirectX_CSurface_Destroy, &DirectX_CSurface_DeletingDestroy,
+                         &CLandscapeSurface_Destroy, &CLandscapeSurface_DeletingDestroy},
+                   5000);
+}
+
+S3RE_TEST(DirectXSurfaceDestroy_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareDestroy(probe, {&WrongRelease, &DirectX_CSurface_Destroy, &DirectX_CSurface_DeletingDestroy,
+                           &CLandscapeSurface_Destroy, &CLandscapeSurface_DeletingDestroy},
+                   500);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 }  // namespace s3re::game

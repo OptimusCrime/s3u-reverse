@@ -71,25 +71,27 @@ disassembly; "READY" = not done, every direct callee done, all game code
    test. Later, once a caller subsystem (AI, lobby) is tackled.
 
 Next steps (for 2026-11-10, in this order):
-1. (Batch 25 done 2026-11-09: DirectDraw blits and error checks, the UI
-   "enabled changed" and background-fill members, std::string compare, AI
-   and graphics helpers, worn paths and five more simulation helpers; 33
-   in all, see the session log.) Next coverage batch, concrete:
-   - Exceptions chain: Win32::CException 0x611a20 (129 ins, READY) ->
-     CRunTimeError 0x614c60 -> Lobby CDataError 0x6003b0 -> Sound
-     0x5ffcc0 (102 callers, 36 unblocks). Callee probes now exist for
-     constructors the emulator can't run.
-   - The rest of CSurface: ~CSurface 0x5bf240 (needs vf01 0x5bf2c0),
-     DDRestore 0x5bf400, the DDGetDC/DDReleaseDC wrappers (strings at
-     0x697704 / 0x697718; COM probes are ready).
-   - Tooltip opener 0x418550: needs CStaticText ctor 0x41c3e0, 0x41ca60 and
-     Win32::ThrowError 0x610960 (probe it as a callee), plus GDI probes
-     SelectObject / GetTextExtentPoint32A; then 0x4183c0 and 0x429f10 (25
-     callers).
-   - READY with callers: WCExcept 0x49ec80 (26 callers), 0x40a580 (23),
-     Lobby 0x5ed220, Picture 0x5aa130.
-   - Simulation range READY 252: 0x51d2b0 (unblocks the area set-up
-     0x51a580), 0x553fe0, 0x551780 (now READY), 0x5445e0 (blocks 0x5450d0).
+1. (Batch 26 done 2026-11-09: exception chain incl. the data-error
+   thrower 0x5ffcc0, CSurface release/destructors, the MapEffects table
+   (find slot, cell, link, Add and 8 spawn functions), AI and framework
+   helpers; 45 in all, see the session log.) Next coverage batch, concrete:
+   - Win32::CAssertmentFailed 0x612a20 (180 ins) -> 0x6119b0 (48 callers,
+     14 unblocks); Win32::ThrowError 0x610960 (-> 0x601280);
+     Win32::ThrowWin32Error 0x610de0 (-> 0x617c80, 0x616d50).
+   - Lobby: 0x603270 (-> CLMGeneric 0x601e80, 24 callers), 0x602850 (->
+     0x602e20, 22 callers), 0x5ec550 (-> CAddress 0x5ecd50, 16 callers),
+     0x601170 (-> 0x600e40).
+   - Tooltip opener 0x418550 (needs 0x41c3e0, 0x41ca60, ThrowError, GDI
+     probes SelectObject / GetTextExtentPoint32A), then 0x4183c0 and
+     0x429f10 (25 callers).
+   - App 0x40a580 (vector<string> resize, 23 callers): the new elements'
+     allocator byte is read from the caller's stack ([esp+8] beyond the
+     argument) - can't be reproduced; decide (known difference, emulator
+     ignore) before doing it.
+   - Simulation: the remaining MapEffects callers (0x544630, 0x5449f0,
+     0x545150, 0x5453f0, 0x545730, 0x5458d0, 0x544390, 0x545c80; check
+     their other callees), 0x51d2b0 (-> area set-up 0x51a580), 0x553fe0
+     (-> 0x553dc0), 0x523540.
 2. (Item 2 done 2026-11-09: tools/trivial.py.) Then the UI
    accessor block and Win32::CObject et al. as coverage batches, with
    `S3RE_HOOK_UNVERIFIED` where a spec is not quick.
@@ -456,6 +458,59 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-09 (34): batch 26 (45 functions: exceptions, surfaces, MapEffects, helpers)
+
+- Batch 26, all verified (none unverified):
+  - win32_exceptions.cpp (new): Win32::CException 0x611a20 (message
+    string by an inlined assign; allocator byte = low byte of the hidden
+    mostDerived argument), CRunTimeError 0x614c60, Lobby CDataError
+    0x6003b0, Lobby_ThrowDataError 0x5ffcc0 (text + ", file " + file +
+    ", line " + itoa(line), built twice, thrown as new CDataError; 102
+    callers).
+  - directx_surface.cpp: CSurface::Release (vf01 0x5bf2c0), ~CSurface
+    0x5bf240 and its deleting destructor 0x5bf220, ~CLandscapeSurface
+    0x54be70 and 0x54be40.
+  - map_effects.cpp: the effect table's FindFreeSlot 0x545ee0 (DebugLog
+    "EFFECT: Effect overflow" at 5000), CellOfPosition 0x545eb0 (256-pixel
+    blocks), LinkIntoCell 0x545df0, Add 0x5445e0, and eight spawn functions
+    (0x5450d0, 0x545120, 0x544f20, 0x545070, 0x544f80, 0x544dc0, 0x544e70,
+    0x545860) that build records with the make functions and add them.
+  - ai_small_helpers.cpp (new): 0x551780, 0x551760 (passes the caller's
+    EDX upper half), EvaLand grid reset 0x554070 and cell of tile
+    0x554770, TileCentre 0x554880, TileByte8 0x599570, BlockCentreByte8
+    0x554850, BuildingIfUsed 0x58e1c0. ui_state.cpp:
+    CLogicThread::ClearPendingUiRefresh 0x53f530.
+  - framework_helpers.cpp (new): 14 small constructors/clean-ups
+    (CPlayerIndex, CMemoryBlock, CFile, CThread, CWin32Handle::Close
+    (CloseHandle), CPlayer::Clear, lobby/net initializers that store the
+    top byte of ECX as an allocator byte, ...) and the destructor
+    NetHelp_Destroy_49ec80 (26 callers).
+- Function start 0x545f30 (static initializer entry Ghidra merged into
+  0x545ee0) added to re/extra_functions.tsv (kind manual) and the
+  inventory.
+- Emulator harness: CloseHandle API probe; `Spec.new_fails_size` (only
+  allocations of one size fail: reaches the "exception object is null"
+  path after the strings were built). 2 new self-test pairings (API probe
+  vs delete; effect-table ignore_bytes).
+- Known differences: Lobby_ThrowDataError leaks the four temporaries of the
+  thrown message (the original's unwinding frees them; fatal-error path
+  only); AI_TileByte8 returns 0 in the upper half of EAX off the map (the
+  original keeps the caller's; callers use AX); the CSurface destructors'
+  EAX is whatever ~CObject leaves (unused).
+- Tests: in-process 321/321; emulator: 45 new specs (full suite 405
+  functions, 0 mismatches, 0 incomplete coverage), every
+  live block covered (dead inlined blocks of 0x611a20 and 0x49ec80 exempt
+  with reasons); self-test 20/20.
+- Whole-game check (scripted-seed127.bin, 3,000 ticks, against the
+  original): REPLAY OK, 188 of 404 replacements called; 21 of the 45 new
+  ones (AI_BlockCentreByte8 166,380, MapEffects_CellOfPosition 136,011,
+  AI_TileByte8 59,231, CWin32Handle_Close 367, ...). Not called: the
+  exception constructors except CRunTimeError, ThrowDataError, MapEffects
+  Add/FindFreeSlot/LinkIntoCell and all spawn functions, and a few lobby
+  helpers. Counts in the inventory notes.
+- Frontier (all game code): READY 1,255 -> 1,305, NEAR 1,111 -> 1,057;
+  simulation range READY 252 -> 253, NEAR 77 -> 60.
 
 ### 2026-11-09 (33): batch 25 (33 functions: DirectDraw, UI, AI, simulation)
 

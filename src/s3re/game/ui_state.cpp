@@ -675,4 +675,79 @@ S3RE_TEST(CLogicThread_UpdateGroupMenu_ComparisonDetectsWrongImplementation) {
     S3RE_EXPECT(probe.failures() > 0);
 }
 
+// Batch 26.
+//
+// CLogicThread::ClearPendingUiRefresh (0x0053f530, our name): () thiscall on
+//   the logic thread: +0x74 = 0; if +0x84 is set, +0x84 = 0 and the world's
+//   "refresh the UI" flag (+0x2d27c) = 1. EAX = 0, or the world pointer when
+//   the flag was set (callers ignore it). Called eight times by
+//   ProcessEvents.
+
+using LogicThreadFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx);
+std::uint32_t __fastcall CLogicThread_ClearPendingUiRefresh(CLogicThread* self, void* edx);
+
+S3RE_HOOK(0x0053f530, CLogicThread_ClearPendingUiRefresh, LogicThreadFn, Original_CLogicThread_ClearPendingUiRefresh,
+          CLogicThread_ClearPendingUiRefresh);
+
+// Purpose: Turns a pending UI request of the logic thread (+0x84) into a
+// redraw of the menus (probably after an input event was handled).
+std::uint32_t __fastcall CLogicThread_ClearPendingUiRefresh(CLogicThread* self, void* /*edx*/) {
+    auto* bytes = reinterpret_cast<std::uint8_t*>(self);
+    *reinterpret_cast<std::uint32_t*>(bytes + 0x74) = 0;
+    if (*reinterpret_cast<std::uint32_t*>(bytes + 0x84) == 0) {
+        return 0;
+    }
+    *reinterpret_cast<std::uint32_t*>(bytes + 0x84) = 0;
+    auto* world = *reinterpret_cast<std::uint8_t**>(bytes + kLogicThreadWorld);
+    *reinterpret_cast<std::uint32_t*>(world + 0x2d27c) = 1;
+    return reinterpret_cast<std::uint32_t>(world);
+}
+
+namespace {
+
+void CompareClearPendingUiRefresh(test::Context& ctx, LogicThreadFn candidate, int cases) {
+    test::WorldPair worlds(ctx, 0x2d280);
+    std::uint8_t threadA[kLogicThreadWorld + 4], threadB[kLogicThreadWorld + 4];
+    for (int i = 0; i < cases; ++i) {
+        ctx.rng().Fill(threadA, sizeof(threadA));
+        if (ctx.rng().Chance(1, 2)) {
+            std::memset(threadA + 0x84, 0, 4);
+        }
+        std::memcpy(threadB, threadA, sizeof(threadB));
+        *reinterpret_cast<GameWorld**>(threadA + kLogicThreadWorld) = worlds.original();
+        *reinterpret_cast<GameWorld**>(threadB + kLogicThreadWorld) = worlds.ours();
+        worlds.Set<std::uint32_t>(0x2d27c, ctx.rng().Next32());
+        const std::uint32_t ra = Original_CLogicThread_ClearPendingUiRefresh(reinterpret_cast<CLogicThread*>(threadA), nullptr);
+        const std::uint32_t rb = candidate(reinterpret_cast<CLogicThread*>(threadB), nullptr);
+        const std::uint32_t expected = ra == reinterpret_cast<std::uint32_t>(worlds.original()) ? 1 : ra;
+        const std::uint32_t actual = rb == reinterpret_cast<std::uint32_t>(worlds.ours()) ? 1 : rb;
+        bool same = S3RE_EXPECT_EQ(expected, actual);
+        same &= S3RE_EXPECT_MEM_EQ(threadA, threadB, kLogicThreadWorld);
+        same &= worlds.Same(ctx, 0x2d27c, 4);
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return;
+        }
+    }
+    worlds.Checkpoint(ctx);
+}
+
+std::uint32_t __fastcall WrongClearPendingUiRefresh(CLogicThread* self, void* edx) {
+    const std::uint32_t r = CLogicThread_ClearPendingUiRefresh(self, edx);
+    *(reinterpret_cast<std::uint32_t*>(self) + 0x74 / 4) = 1;  // wrong: +0x74 not cleared
+    return r;
+}
+
+}  // namespace
+
+S3RE_TEST(CLogicThread_ClearPendingUiRefresh_MatchesOriginal) {
+    CompareClearPendingUiRefresh(ctx, &CLogicThread_ClearPendingUiRefresh, 5000);
+}
+
+S3RE_TEST(CLogicThread_ClearPendingUiRefresh_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareClearPendingUiRefresh(probe, &WrongClearPendingUiRefresh, 500);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 }  // namespace s3re::game

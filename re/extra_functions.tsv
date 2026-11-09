@@ -792,6 +792,7 @@ address	kind	evidence
 0x0053db30	rtti	virtual function (vtable entry)
 0x00541650	rtti	virtual function (vtable entry)
 0x00541670	rtti	virtual function (vtable entry)
+0x00545f30	manual	static initializer: its address is in the CRT initializer table (file offset 0x29362c); body: call 0x545f40, jmp 0x545f60
 0x0054cbc0	rtti	virtual function (vtable entry)
 0x00559630	rtti	virtual function (vtable entry)
 0x005597a0	rtti	virtual function (vtable entry)
