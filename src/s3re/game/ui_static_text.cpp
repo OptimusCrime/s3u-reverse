@@ -14,6 +14,7 @@
 // CStaticText_SetStyle (0x0041ca60, our name): (style) ret 4: +0x40 = style;
 //   EAX = style.
 
+#include "game/screen_element_layout.h"
 #include "hooks.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
@@ -31,12 +32,12 @@ void* __fastcall CStaticControl_Construct(void* self, void* edx, const RECT* rec
 namespace {
 
 using msvc6::String;
+using ui::StaticText;
 
 constexpr std::uint32_t kCStaticTextVtable = 0x0065615c;
 
-template <typename T>
-T& At(void* base, std::size_t offset) {
-    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(base) + offset);
+StaticText* TextOf(void* self) {
+    return static_cast<StaticText*>(self);
 }
 
 }  // namespace
@@ -56,14 +57,15 @@ S3RE_HOOK(0x0041c3e0, CStaticText_Construct, StaticTextCtorFn, Original_CStaticT
 void* __fastcall CStaticText_Construct(void* self, void* /*edx*/, const RECT* rect, const String* text,
                                        std::uint32_t font) {
     CStaticControl_Construct(self, nullptr, rect);
-    At<std::uint8_t>(self, 0x20) = 0;
+    StaticText* label = TextOf(self);
+    label->unk20 = 0;
     const auto allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(rect));
-    msvc6::String_FromSubstr(&At<String>(self, 0x28), nullptr, text, 0, msvc6::detail::Npos(), &allocator);
-    At<std::uint8_t>(self, 0x38) = 0;
-    At<std::uint32_t>(self, 0x3c) = font != 0 ? font : 0x24;
-    At<std::uint32_t>(self, 0x40) = 5;
-    At<std::uint32_t>(self, 0) = kCStaticTextVtable;
-    At<std::uint8_t>(self, 0x1f) = 1;
+    msvc6::String_FromSubstr(&label->text, nullptr, text, 0, msvc6::detail::Npos(), &allocator);
+    label->unk38 = 0;
+    label->font = font != 0 ? font : 0x24;
+    label->style = 5;
+    label->element.vtable = kCStaticTextVtable;
+    label->element.flag1f = 1;
     return self;
 }
 
@@ -72,7 +74,7 @@ S3RE_HOOK(0x0041ca60, CStaticText_SetStyle, SetStyleFn, Original_CStaticText_Set
 // Purpose: Sets a text label's style (probably the alignment; the tooltip
 // uses 0xc).
 std::uint32_t __fastcall CStaticText_SetStyle(void* self, void* /*edx*/, std::uint32_t style) {
-    At<std::uint32_t>(self, 0x40) = style;
+    TextOf(self)->style = style;
     return style;
 }
 
@@ -110,7 +112,7 @@ String MakeText(std::uint32_t length, std::uint8_t count, const char* text, bool
 }
 
 void CompareStaticText(test::Context& ctx, StaticTextCtorFn ctor, SetStyleFn setStyle, int cases) {
-    constexpr std::size_t kGuard = 8, kObject = 0x44;
+    constexpr std::size_t kGuard = 8, kObject = sizeof(StaticText);
     std::uint8_t a[kGuard * 2 + kObject], b[sizeof(a)];
     char text[64];
     RECT rects[4];
@@ -137,8 +139,8 @@ void CompareStaticText(test::Context& ctx, StaticTextCtorFn ctor, SetStyleFn set
             same &= S3RE_EXPECT_EQ(Original_CStaticText_SetStyle(a + kGuard, nullptr, style),
                                    setStyle(b + kGuard, nullptr, style));
         }
-        auto& sa = At<String>(a + kGuard, 0x28);
-        auto& sb = At<String>(b + kGuard, 0x28);
+        String& sa = TextOf(a + kGuard)->text;
+        String& sb = TextOf(b + kGuard)->text;
         same &= S3RE_EXPECT_EQ(sa.ptr == nullptr, sb.ptr == nullptr);
         same &= S3RE_EXPECT_EQ(sa.ptr != nullptr && sa.ptr == textA.ptr, sb.ptr != nullptr && sb.ptr == textB.ptr);
         if (same && sa.ptr != nullptr) {
@@ -159,7 +161,7 @@ void CompareStaticText(test::Context& ctx, StaticTextCtorFn ctor, SetStyleFn set
 
 void* __fastcall WrongStaticText(void* self, void* edx, const RECT* rect, const String* text, std::uint32_t font) {
     CStaticText_Construct(self, edx, rect, text, font);
-    At<std::uint8_t>(self, 0x28) = 0;  // wrong: allocator byte not taken from the rectangle's address
+    TextOf(self)->text.allocator = 0;  // wrong: allocator byte not taken from the rectangle's address
     return self;
 }
 

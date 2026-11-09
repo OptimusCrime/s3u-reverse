@@ -201,7 +201,7 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 | 0x2D288, 0x2D28C | int32 | selection parameters 1, 2 | UI, skip | verified |
 | 0x2D290 | int32 | sub-page of menu 2 | UI, skip | strong |
 | 0x2D294 | int32 | UI (ProcessEvents writes, PrepareDrawData reads) | UI, hashed | strong |
-| 0x2D298 | int32 | `IsUiField298`; 340 reads | UI | strong |
+| 0x2D298 | int32 | special menu of the selected settler group (`ui_special_menu`; set by CLogicThread::UpdateGroupMenu 0x542990: 1 for one own settler of type 0x24, 2..7 for groups of types 0x2C/0x2B/0x29/0x28/0x16/0x17, else 0); `IsUiField298`; 340 reads | UI | strong |
 | 0x2D29C | int32 | UI (also 0x542990) | UI, hashed | strong |
 | 0x2D2A0 | int32 | UI menu sub-page | UI, skip | strong |
 | 0x2D2A4..0x2D2CC | int32 x 10 | UI fields written by ProcessEvents, read by PrepareDrawData | UI, hashed | strong |

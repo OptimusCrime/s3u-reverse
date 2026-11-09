@@ -14,6 +14,7 @@
 //   count, or what operator delete returned when the instance was freed (the
 //   caller 0x550f30 tail-jumps here).
 
+#include "game/ai_layout.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -22,18 +23,15 @@
 
 namespace s3re::game {
 
+using namespace ai;
+
 namespace {
 
-constexpr std::uintptr_t kRefCount = 0x007e0568;
-constexpr std::uintptr_t kInstance = 0x007e056c;
+constexpr std::uintptr_t kRefCount = kEvaLandRefCount;
+constexpr std::uintptr_t kInstance = kEvaLandInstance;
 constexpr std::uintptr_t kGlobal7e3134 = 0x007e3134;
 constexpr std::uintptr_t kEhVectorDestructor = 0x0061f18a;
 constexpr std::uintptr_t kListDestructor = 0x005591e0;
-
-template <typename T>
-T& Global(std::uintptr_t address) {
-    return *reinterpret_cast<T*>(address);
-}
 
 std::uint32_t GameDelete(void* block) {
     return reinterpret_cast<std::uint32_t(__cdecl*)(void*)>(0x0061e4ef)(block);
@@ -59,7 +57,10 @@ std::uint32_t __fastcall AI_EvaLand_Destroy(void* self, void* /*edx*/) {
     Global<std::uint32_t>(kGlobal7e3134) = 0;
     using EhVectorDestructorFn = void(__stdcall*)(void* array, std::uint32_t size, std::uint32_t count,
                                                   std::uintptr_t destructor);
-    reinterpret_cast<EhVectorDestructorFn>(kEhVectorDestructor)(self, 0xc, 0x14, kListDestructor);
+    auto* evaluation = static_cast<AiLandEvaluation*>(self);
+    reinterpret_cast<EhVectorDestructorFn>(kEhVectorDestructor)(evaluation->lists, sizeof(AiList),
+                                                                 sizeof(evaluation->lists) / sizeof(AiList),
+                                                                 kListDestructor);
     return 0;
 }
 
@@ -100,18 +101,16 @@ void* GameNew(std::uint32_t size) {
     return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
 }
 
-std::uint8_t* MakeEvaLand(test::Context& ctx) {
-    auto* object = static_cast<std::uint8_t*>(GameNew(0x15c));
-    ctx.rng().Fill(object, 0x15c);
-    for (int i = 0; i < 20; ++i) {
-        auto* head = static_cast<std::uint32_t*>(GameNew(8));
-        head[0] = head[1] = reinterpret_cast<std::uintptr_t>(head);
-        std::memcpy(object + 12 * i + 4, &head, 4);
-        const std::uint32_t zero = 0;
-        std::memcpy(object + 12 * i + 8, &zero, 4);
+AiLandEvaluation* MakeEvaLand(test::Context& ctx) {
+    auto* object = static_cast<AiLandEvaluation*>(GameNew(sizeof(AiLandEvaluation)));
+    ctx.rng().Fill(object, sizeof(AiLandEvaluation));
+    for (AiList& list : object->lists) {
+        auto* head = static_cast<AiListNode*>(GameNew(sizeof(AiListNode)));
+        head->next = head->prev = reinterpret_cast<std::uintptr_t>(head);
+        list.head = head;
+        list.count = 0;
     }
-    void* grid = ctx.rng().Chance(1, 4) ? nullptr : GameNew(16);
-    std::memcpy(object + 0x158, &grid, 4);
+    object->cells = ctx.rng().Chance(1, 4) ? nullptr : static_cast<AiGridCell*>(GameNew(16));
     return object;
 }
 
@@ -122,9 +121,9 @@ void CompareEvaLand(test::Context& ctx, ThisFn destroy, GlobalFn release, int ca
     for (int i = 0; i < cases; ++i) {
         bool same = true;
         if (ctx.rng().Chance(1, 2)) {
-            std::uint8_t* a = MakeEvaLand(ctx);
-            std::uint8_t* b = MakeEvaLand(ctx);
-            std::memcpy(b, a, 4);  // same first dword (garbage there is overwritten anyway)
+            AiLandEvaluation* a = MakeEvaLand(ctx);
+            AiLandEvaluation* b = MakeEvaLand(ctx);
+            b->lists[0].unk0 = a->lists[0].unk0;  // same first dword (garbage there is overwritten anyway)
             Global<std::uint32_t>(kGlobal7e3134) = 0x1234;
             Original_AI_EvaLand_Destroy(a, nullptr);
             same &= S3RE_EXPECT_EQ(Global<std::uint32_t>(kGlobal7e3134), 0u);
@@ -132,19 +131,19 @@ void CompareEvaLand(test::Context& ctx, ThisFn destroy, GlobalFn release, int ca
             destroy(b, nullptr);
             same &= S3RE_EXPECT_EQ(Global<std::uint32_t>(kGlobal7e3134), 0u);
             for (int k = 0; k < 20; ++k) {
-                same &= S3RE_EXPECT_MEM_EQ(a + 12 * k + 4, b + 12 * k + 4, 8);
+                same &= S3RE_EXPECT_MEM_EQ(&a->lists[k].head, &b->lists[k].head, 8);  // head and count
             }
-            same &= S3RE_EXPECT_MEM_EQ(a + 0x158, b + 0x158, 4);
+            same &= S3RE_EXPECT_MEM_EQ(&a->cells, &b->cells, 4);
         } else {
             const std::uint32_t count = ctx.rng().Chance(1, 2) ? 1 : ctx.rng().Below(4) + 2;
             const bool none = ctx.rng().Chance(1, 4);
             Global<std::uint32_t>(kRefCount) = count;
-            Global<std::uint8_t*>(kInstance) = none ? nullptr : MakeEvaLand(ctx);
+            Global<AiLandEvaluation*>(kInstance) = none ? nullptr : MakeEvaLand(ctx);
             const std::uint32_t ra = Original_AI_EvaLand_Release();
             const std::uint32_t ca = Global<std::uint32_t>(kRefCount);
             const std::uint32_t ia = Global<std::uint32_t>(kInstance);
             Global<std::uint32_t>(kRefCount) = count;
-            Global<std::uint8_t*>(kInstance) = none ? nullptr : MakeEvaLand(ctx);
+            Global<AiLandEvaluation*>(kInstance) = none ? nullptr : MakeEvaLand(ctx);
             const std::uint32_t keep = Global<std::uint32_t>(kInstance);
             const std::uint32_t rb = release();
             same &= S3RE_EXPECT_EQ(ca, Global<std::uint32_t>(kRefCount));
