@@ -20,9 +20,8 @@ user may provide a late-game save file later. Order:
 2. **GameWorld::Create 0x5166d0** - done in batch 29 (the random map
    generator), with ExpandTerrain 0x519440, MarkTerrainEdge 0x51a2e0 and
    BuildRegionsAndAreas 0x51a580. Create only runs for random maps, so it
-   has no whole-game evidence yet (needs a way to start a random-map
-   game: a map file with chunk 5 or the setup dialog's "\Random" entry,
-   see 0x48b12a / 0x48ed48).
+   has whole-game evidence since session 40 (`--random-map`,
+   tools/check_random_map.py).
 2b. **Refactor batch (user decision 2026-11-09, next):** bring
    re/proposed_structs.h into the build (e.g. src/s3re/game/layout.h,
    with its static_asserts); convert the replacement files from
@@ -535,6 +534,71 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-10 (40): random-map games, --skip-hooks, a new 8-player recording (tooling, parallel worktree)
+
+- **Random-map start without menus:** `s3re_launcher --random-map
+  SIZE[,SYMMETRY[,FIELD0C]]`. How the game does it: the map dialog
+  (0x47fea0 / 0x481e90) keeps a Dirk::CMapFile (0x134 bytes, ctor
+  0x4a5a70), makes it memory-only (0x4a60c0: +4 = 1, so the chunk lookup
+  0x4a60f0 never reads a file) and adds chunk 5 (word 5, word 0, 0x18,
+  size = (combo + 6) * 64, a second dialog value, symmetry, seed = atoi of
+  the seed field) and chunk 1 (1, 0, 0x20, kind 2, start positions
+  min(((size-32)^2 >> 14) + 1, 20), zeros) with CMapFile::AddChunk
+  0x4a63f0 (thiscall type, sub-index, data). The free-game dialog then
+  calls GameSettings::NewGame 0x431ab0 (13 args, map file = arg 6);
+  CLogicThread::OnStart finds chunk 5 (0x53cdfe) and calls Create(word
+  seed, size, symmetry). Our tooling (src/s3re/tooling/random_map_start.cpp):
+  a pass-through on NewGame, only at the `-map` call site (return address
+  0x493a56), swaps in such a map file; the player setup stays the `-map`
+  file's (default 384-2-Lakes: one idle human, one computer). With
+  `--seed N` the map seed is N too (Create seeds through SeedRandom).
+  The `-map` start can't use a random map file directly: 0x4a67c0 reads
+  chunk 3, which a random map lacks. 0x431ab0 renamed GameSettings::NewGame
+  (inventory row, hook passthrough).
+- `--skip-hooks NAMES` (S3RE_SKIP_HOOKS, hooks.cpp): leaves single
+  replacements out, for bisecting a divergence or for counting our callees
+  of an original function.
+- `tools/check_random_map.py` (twice original, or `--against-original`;
+  `--skip-hooks`; records call counts as source `random:SIZE,SYM seed N`;
+  whole_game.py accepts `random:` sources).
+- Results, seed 1234: original twice identical for 384,0 and 448,3 (1,000
+  ticks). Original vs ours identical for 384,0, 448,3, 512,1, 640,2
+  (1,500 ticks each; 193-194 replacements called, Create 1 call each).
+  With `--skip-hooks GameWorld_Create` (original Create calling our
+  helpers), 448,3, 300 ticks: identical; ExpandTerrain 29 calls,
+  MarkTerrainEdge 4, BuildRegionsAndAreas 1. 14 functions got their first
+  whole-game evidence from random maps: Create, ExpandTerrain,
+  MarkTerrainEdge, GrowTerrain, ReplaceTerrainF3, the four Scatter*
+  functions, Set/ClearDiagonalTileByteB, IsNeighbourhoodByte9Clear,
+  IsGoodStartPosition, FindPlayerByField0C.
+- New recording (main checkout, build/x86/bin/Debug/recordings/, not
+  committed): `fun8-seed2024-input31.bin` (+ `.tsv` trace): map
+  Map\MULTI\448-8-Fun.map (8 players: 1 human, 7 computers), game seed
+  2024, synthetic input seed 31, 5,000 ticks, 1,913 commands (7 from the
+  scripted player). Replay with ours identical to the recording (205
+  replacements called); a replay with the original code (`--original`) is
+  identical to the recording trace too (5,000 ticks, 156 hashed ticks), so
+  original = ours. Call counts recorded as `replay:fun8-seed2024-input31.bin`.
+  It brought no new whole-game function (all 205 were already seen; only 7
+  commands came from the scripted player, the rest from computers).
+- Whole-game evidence: 258 -> 272 of 458 verified functions seen (all 14
+  new ones from random maps); tests only 200 -> 186.
+- Suggested inventory note text (not written, to avoid conflicts with the
+  struct refactor): GameWorld::Create 0x5166d0: "Whole-game: random maps
+  384,0 / 448,3 / 512,1 / 640,2 (seed 1234, 1,500 ticks) identical to the
+  original, 1 call each (re/whole_game_calls.csv)." ExpandTerrain
+  0x519440 / MarkTerrainEdge 0x51a2e0: "Whole-game: random map 448,3 with
+  the original Create (--skip-hooks GameWorld_Create, 300 ticks)
+  identical, 29 / 4 calls."
+- Why checks are slow (asked by the user): every game run is real time
+  (about 15 ticks/s, 1,000 ticks a minute) plus about 20 s start/stop; a
+  comparison needs 2 runs, a new recording 3-4. Only one game can run at a
+  time, and the lock is not FIFO, so parallel agents queue behind each
+  other's checks; `--test` runs (no lock, about 10 minutes for the full
+  suite) also block, because game_lock waits for any S3.EXE. Emulator
+  suites with ~20 workers compete for the CPU. This session waited about
+  45 minutes for the lock. Ideas in TODO.md.
 
 ### 2026-11-09 (39): batch 29 (random map generator GameWorld::Create, 4 functions)
 
