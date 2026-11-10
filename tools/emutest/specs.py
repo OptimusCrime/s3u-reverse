@@ -5381,3 +5381,41 @@ SPECS += [
     Spec("GameWorld_DispatchPileCarrier", 0x005052c0, "thiscall", [between(1, 30)], eax_mask=0,
          presets=dispatch_world, callees=ECONOMY_PROBES, max_cases=1500),
 ]
+
+
+# Package C, batch 5: BuildingDone 0x4dbc50 (building_done.cpp). UnblockTile
+# (verified, own spec) is probed (region floods on the lazily random map);
+# CreatePile, CreateSettler, AllocBuildingExtra, QueuePendingEvent and
+# RemovePileFromTile run. Races above 3 only for military types (elsewhere
+# they index past the race tables, which the game never does).
+MILITARY_TYPES = (0xF, 0x10, 0x12)
+
+
+def building_done_world(rng, pool, args):
+    number = args[0]
+    b = BUILDINGS + number * BUILDING_BYTES
+    type_ = rng.randrange(0x39) if rng.random() < 0.85 else rng.choice(MILITARY_TYPES)
+    owner = rng.randrange(4)
+    x, y = rng.randint(30, 350), rng.randint(30, 350)
+    pile0, pile1 = rng.randint(1, 250), rng.randint(1, 250)
+    fields = [(MAP_SIZE, 384, 4), (b, owner, 1), (b + 6, type_, 1), (b + 2, x, 2), (b + 4, y, 2),
+              (b + 0xA, x + rng.randrange(5) - 2, 2), (b + 0xC, y + rng.randrange(5), 2),
+              (b + 0xE, rng.randrange(40) if type_ == 1 else rng.getrandbits(16), 2),
+              (b + 0x10, pile0, 2), (b + 0x12, pile1, 2),
+              (PILES + pile0 * PILE_BYTES + 6, rng.randint(20, 360), 2), (PILES + pile0 * PILE_BYTES + 8, rng.randint(20, 360), 2),
+              (PILES + pile1 * PILE_BYTES + 6, rng.randint(20, 360), 2), (PILES + pile1 * PILE_BYTES + 8, rng.randint(20, 360), 2),
+              (0x32870, rng.randrange(1000), 4), (0x32874, rng.randrange(1000), 4)]
+    for p in range(4):
+        race = rng.randrange(8) if type_ in MILITARY_TYPES and rng.random() < 0.2 else rng.randrange(4)
+        fields += [(PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, race, 4),
+                   (PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 8, rng.getrandbits(32), 4)]
+    for tx in range(x - 12, x + 13):
+        for ty in range(y - 12, y + 13):
+            fields.append((tile(tx, ty) + 0x14, rng.randint(1, 50), 2))
+    return fields
+
+
+SPECS += [
+    Spec("GameWorld_BuildingDone", 0x004dbc50, "thiscall", [between(1, 50)], eax_mask=0,
+         presets=building_done_world, callees={0x0051b770: (2, "thiscall", "probe")}, max_cases=3000),
+]

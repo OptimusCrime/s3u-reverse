@@ -4466,7 +4466,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-10","statuses":["unknown","classifi
 [5094064,96,1,68,"Logic_sub_4dbab0"],
 [5094160,128,4,177,"GameWorld::BlockTileAndMoveSettler"],
 [5094288,192,4,177,"GameWorld::BlockBuildingLine"],
-[5094480,5680,1,68,"Logic_sub_4dbc50"],
+[5094480,5680,4,177,"GameWorld::BuildingDone"],
 [5100160,1136,6,177,"GameWorld::AddBuildingSite"],
 [5101296,800,5,177,"GameWorld::TakeBuildingExtraTiles"],
 [5102096,448,5,177,"GameWorld::ReleaseBuildingExtraTiles"],
@@ -10479,6 +10479,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-10","statuses":["unknown","classifi
 [5092608,33,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip GameWorld_Create":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fun8-seed2024-input31.bin":33,"replay:scripted-seed127.bin":3,"save:slot 1.sav":0},[]],
 [5094160,null,{},[]],
 [5094288,null,{},[]],
+[5094480,null,{},[]],
 [5100160,8,{"random:384,0 seed 1234":2,"random:448,3 seed 1234":2,"random:448,3 seed 1234 skip GameWorld_Create":2,"random:512,1 seed 1234":2,"random:640,2 seed 1234":2,"replay:fun8-seed2024-input31.bin":8,"replay:scripted-seed127.bin":2,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
 [5101296,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip GameWorld_Create":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fun8-seed2024-input31.bin":0,"replay:scripted-seed127.bin":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
 [5102096,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip GameWorld_Create":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fun8-seed2024-input31.bin":0,"replay:scripted-seed127.bin":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
@@ -10895,4 +10896,5 @@ window.PROGRESS_DATA = {"generated":"2026-11-10","statuses":["unknown","classifi
 ["2026-11-10","6ce8fac",488,99571,459515,52969,274],
 ["2026-11-10","9a215d1",496,103971,463915,52969,274],
 ["2026-11-10","b96c5e7",507,109443,469387,52969,274],
-["2026-11-10","9c06ee8",515,111955,471899,52969,274]]};
+["2026-11-10","9c06ee8",515,111955,471899,52969,274],
+["2026-11-10","ea0817d",517,114963,474907,52969,274]]};
