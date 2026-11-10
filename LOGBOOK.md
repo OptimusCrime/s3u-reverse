@@ -29,8 +29,9 @@ user may provide a late-game save file later. Order:
    `re/update_settlers.md`.** Started 2026-11-10 (session 43, cut to one
    hour by the user): package C batch 1 = 3 functions (UpdateShadeAround
    0x519670, SetTerrain16Patch 0x51ba00, CountOtherPileClaims 0x510800).
-   **Left of the round:** package A (walking/pathfinding, all 26), package
-   B (settler state, piles, soldiers, mines, map effects, all 28), and
+   **Package B (session 44): 27 of 28 done and verified; left:
+   UpdateSoldier 0x50e9f0 (analysis notes in the session 44 entry).**
+   **Left of the round:** package A (walking/pathfinding, all 26), and
    package C minus those 3 (19 functions; the analysis notes for the next
    ones are in the session 43 entry), plus the renames in TODO.md.
 3. **The 27 undone callees of GameWorld::UpdateSettlers 0x4e9670** (17,525
@@ -541,6 +542,62 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-10 (44): package B of the UpdateSettlers round (parallel worktree)
+
+27 of package B's 28 functions verified (in-process diff + mutation
+tests, emulator specs with full coverage), in four pushed batches:
+
+- Batch 1: SetPileGood 0x5061b0, DropGoodNear 0x5046b0
+  (pile_goods_moves.cpp), NotifyLocalPlayer 0x4fec10 (notifications.cpp),
+  SpawnSettlersAround 0x50cb20, EnterBuildingSlot 0x50ccb0,
+  CreateSevenTileUnit 0x50dd20, SetSoldierAnimationInBuilding 0x50e140,
+  SetSettlerSavedAnimation 0x50e320 (settler_spawn.cpp), TileSlope
+  0x4faa70 (miner_jobs.cpp), and the linker-folded getters
+  GetMemberDword64 0x49f510 / GetMemberByte189 0x414030
+  (folded_getters.cpp; both hookable thanks to nop padding; "Config::"
+  names were wrong, the code serves several classes).
+- Batch 2: map_effect_spawns.cpp (map_effects.cpp untouched): Reset
+  0x543fd0, Unlink 0x545e40, RemoveMatching 0x545c80, SpawnArrow
+  0x545150, SpawnProjectile0/1/2 0x5458d0/0x5453f0/0x545730,
+  SpawnProjectile 0x545b90, Spawn_544630/5449f0 (stack tables);
+  MinerJobEnter 0x4f9a00.
+- Batch 3: ResetSettlerToIdle 0x50cf50 (settler_idle.cpp),
+  TakeGoodFromPile 0x505820, StealGoodFromPile 0x505c20.
+- Batch 4: MinerJobFood 0x4f9b80, MinerJobDig 0x4fa220.
+
+**x87 decided and done:** fild/fsqrt/fmul/_ftol reproduced with `double`
+in the original order and `_ftol` as truncation through int64 (NaN and
+out-of-range give 0 in EAX). In-process tests (real control word) include
+flight times landing exactly on integers and wrapped negative squares
+(NaN); all identical. **Harness change:** `emu.py` now sets the x87
+control word 0x27f before every emulated call (Unicorn starts with 0:
+24-bit precision, exceptions unmasked); self-test 21/21, the MapEffect
+specs clean; the full suite has not been run with it (left to the round's
+end).
+
+Notes: `build/annotate.py`-style stack annotation (track esp through
+push/pop/calls) made the long push sequences reliable; it is not
+committed (scratch tool). MinerJobDig leaves job/animation as
+uninitialized stack for non-mine building types (not reproduced, only
+mines call it). 0x544630/0x5449f0 index stack tables with race and
+variant; other indices read stack garbage (not reproduced). New globals:
+g_campaignMission 0x7dfdb0, g_playerTallies 0x7acfd4 (per player 0x44
+bytes; meals, ore found, points; re/globals.csv). specs.py's
+animation_table() reads 0x600 entries now.
+
+**Left:** UpdateSoldier 0x50e9f0 (1,791 instructions, 5 call sites use
+EAX). Callees all verified except C's 0x519a90 (call through its
+address) and 0x51b640 (C, done in C batch 3). Structure from the call
+list: IsOtherPlayerNear twice (0x50eaab, 0x50ff0a), attack animations
+(SetSettlerAnimation x8) with TileScreenX/Y and SpawnArrow (bowmen,
+g_gameTick 0x7dfd48), damage with the divisor 0x730eec (256) at
+0x50f248, deaths (QueueEvent, RemoveSettlerFromLists x3,
+ClearSettlerJob, DebugLogs 0x6a67fc/0x6a67dc), tower capture
+(QueuePendingEvent, CreateSettler, ClearTileOwner/SetOwnerOfFreeTile
+x2, RecalculateTerritory 0x519a90), notifications (NotifyLocalPlayer
+x5), campaign check (g_campaignMission + GetMemberByte189 at 0x50f36f)
+and movement (TileDistance, NeighbourX/Y, SetSettlerTarget) at the end.
 
 ### 2026-11-10 (43): housekeeping; package C batch 1 (3 functions); game files restored
 

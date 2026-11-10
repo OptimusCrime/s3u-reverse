@@ -4691,8 +4691,8 @@ window.PROGRESS_DATA = {"generated":"2026-11-10","statuses":["unknown","classifi
 [5150288,32,2,0,"StaticDtorReg_7ab100"],
 [5150320,66448,1,177,"GameWorld::UpdateSettlers"],
 [5216768,384,4,177,"GameWorld::MinerJobEnter"],
-[5217152,1696,1,68,"Logic_sub_4f9b80"],
-[5218848,1168,1,68,"Logic_sub_4fa220"],
+[5217152,1696,4,177,"GameWorld::MinerJobFood"],
+[5218848,1168,4,177,"GameWorld::MinerJobDig"],
 [5220016,32,6,177,"GameWorld::IsSettlerJob01Or37"],
 [5220048,432,4,177,"GameWorld::IsWalkingJob"],
 [5220480,448,4,177,"GameWorld::IsStationaryJob"],
@@ -10520,6 +10520,8 @@ window.PROGRESS_DATA = {"generated":"2026-11-10","statuses":["unknown","classifi
 [5147344,103,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip GameWorld_Create":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fun8-seed2024-input31.bin":0,"replay:scripted-seed127.bin":103,"save:slot 1.sav":13},[]],
 [5147552,63,{"random:384,0 seed 1234":3,"random:448,3 seed 1234":3,"random:448,3 seed 1234 skip GameWorld_Create":2,"random:512,1 seed 1234":2,"random:640,2 seed 1234":2,"replay:fun8-seed2024-input31.bin":63,"replay:scripted-seed127.bin":22,"save:slot 1.sav":3},[]],
 [5216768,null,{},[]],
+[5217152,null,{},[]],
+[5218848,null,{},[]],
 [5220016,476822,{"random:384,0 seed 1234":1274,"random:448,3 seed 1234":1124,"random:448,3 seed 1234 skip GameWorld_Create":566,"random:512,1 seed 1234":1209,"random:640,2 seed 1234":1145,"replay:fun8-seed2024-input31.bin":12648,"replay:scripted-seed127.bin":2822,"save:slot 1.sav":476822},[]],
 [5220048,null,{},[]],
 [5220480,null,{},[]],
@@ -10901,4 +10903,5 @@ window.PROGRESS_DATA = {"generated":"2026-11-10","statuses":["unknown","classifi
 ["2026-11-10","b96c5e7",507,109443,469387,52969,274],
 ["2026-11-10","9c06ee8",515,111955,471899,52969,274],
 ["2026-11-10","ea0817d",517,114963,474907,52969,274],
-["2026-11-10","ae3ef03",518,120643,480587,52969,274]]};
+["2026-11-10","ae3ef03",518,120643,480587,52969,274],
+["2026-11-10","b12dc4d",521,125011,484955,52969,274]]};

@@ -5561,3 +5561,78 @@ SPECS += [
     Spec("GameWorld_StealGoodFromPile", 0x00505c20, "thiscall", [between(1, 0xfff)], eax_mask=0xFF,
          presets=steal_state, max_cases=1500),
 ]
+
+
+# Package B, batch 4 (miner_jobs.cpp: MinerJobFood, MinerJobDig)
+MINES = [7, 8, 9, 0x25, 0x1d, 0x38]
+TALLIES = 0x007acfd4
+CAMPAIGN_MISSION = 0x007dfdb0
+
+
+def miner_common(rng, settler, building, art):
+    record = SETTLERS + settler * SETTLER_BYTES
+    b = BUILDINGS + building * BUILDING_BYTES
+    owner = rng.randrange(4)
+    bx, by = rng.randrange(10, 370), rng.randrange(10, 370)
+    fields = [(MAP_SIZE, 384, 4), (BUILDING_COUNT, rng.randrange(20), 4),
+              (record + 0x22, building, 2), (record + 0x0, owner, 1), (record + 0x4, bx, 2),
+              (record + 0x6, by + 1, 2), (b + 0x6, art, 1), (b + 0x2, bx, 2), (b + 0x4, by, 2),
+              (PLAYER_RECORDS + owner * PLAYER_RECORD_BYTES, rng.choice([1, 2, 0]), 4),
+              (PLAYER_RECORDS + owner * PLAYER_RECORD_BYTES + 4, rng.randrange(4), 4)]
+    return fields, record, b, bx, by
+
+
+def miner_food_state(rng, pool, args):
+    building = rng.randrange(1, 0x100)
+    fields, record, b, bx, by = miner_common(rng, args[0], building, rng.choice(MINES + [0x30]))
+    fields += spiral_offsets(19)
+    fields.append((record + 0x17, 0 if rng.random() < 0.6 else rng.randrange(1, 20), 1))
+    for k in range(3):
+        pile = 0 if rng.random() < 0.15 else rng.randrange(1, 0x1000)
+        fields.append((b + 0x10 + 2 * k, pile, 2))
+        if pile:
+            fields += pile_on_tile(rng, pile)
+            fields += [(PILES + pile * PILE_BYTES + 0x1, 0 if rng.random() < 0.5 else rng.randrange(1, 4), 1),
+                       (PILES + pile * PILE_BYTES + 0x2, 0, 1),
+                       (PILES + pile * PILE_BYTES + 0x4, rng.choice([0, 0xfe]), 1)]
+    out = rng.randrange(1, 0x1000)
+    fields += [(b + 0xe, out, 2), (b + 0x18, rng.getrandbits(8), 1),
+               (PILES + out * PILE_BYTES + 0x1, rng.randrange(5, 10), 1)]
+    return fields
+
+
+def miner_dig_state(rng, pool, args):
+    building = rng.randrange(1, 0x100)
+    art = rng.choice(MINES)
+    fields, record, b, bx, by = miner_common(rng, args[0], building, art)
+    for k in range(64):
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, (k % 9 - 4) & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, (k // 9 - 3) & 0xFFFFFFFF, 4)]
+    for dx in range(-4, 5):
+        for dy in range(-3, 5):
+            fields.append((tile(bx + dx, by + dy) + 0x11,
+                           rng.choice([0x10, 0x20, 0x30, 0x40, 0x50]) | rng.randrange(16), 1))
+    fields += [(b + 0x30, 0 if rng.random() < 0.5 else rng.getrandbits(16), 2), (b + 0x1a, rng.randrange(0x22), 1)]
+    return fields + settler_animation_gfx(rng, args[0])
+
+
+def settler_animation_gfx(rng, settler):
+    """Every animation kind the mines use made a valid sprite for the settler's race."""
+    race = rng.randrange(4)
+    fields = [(SETTLERS + settler * SETTLER_BYTES + 2, race, 1)]
+    for kind in (0x5e, 0x5f, 0x64, 0x65, 0x61, 0x62, 0xd8, 0xd9, 0xdb, 0xdc):
+        fields += gfx_sprite(animation_table()[kind * 4 + race], rng)
+    return fields
+
+
+def miner_globals(rng, pool, args):
+    return [(CAMPAIGN_MISSION, rng.choice([0, 0, 3, 12]), 4), (0x007a7af0 + 0x189, rng.randrange(2), 1),
+            (0x007a8010, WORLD_BASE + GFX_OBJECT, 4)]
+
+
+SPECS += [
+    Spec("GameWorld_MinerJobFood", 0x004f9b80, "thiscall", [between(1, 0x3000)], eax_mask=0,
+         presets=miner_food_state, globals=miner_globals, max_cases=1500),
+    Spec("GameWorld_MinerJobDig", 0x004fa220, "thiscall", [between(1, 0x3000)], eax_mask=0,
+         presets=miner_dig_state, globals=miner_globals, max_cases=1500),
+]
