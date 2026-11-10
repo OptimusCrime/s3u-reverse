@@ -30,7 +30,9 @@ user may provide a late-game save file later. Order:
    hour by the user): package C batch 1 = 3 functions (UpdateShadeAround
    0x519670, SetTerrain16Patch 0x51ba00, CountOtherPileClaims 0x510800).
    **Package B (session 44): 27 of 28 done and verified; left:
-   UpdateSoldier 0x50e9f0 (analysis notes in the session 44 entry).**
+   UpdateSoldier 0x50e9f0: implemented on branch
+   `wip/package-b-update-soldier` (commit 7461635), not in main yet; see
+   the session 44 entry.**
    **Package C is complete (2026-11-10, session 44, parallel worktree):
    all 22 functions verified** (batches 2-6; session entry below). Left of
    the round: whatever packages A and B have not finished (see their
@@ -589,7 +591,25 @@ g_campaignMission 0x7dfdb0, g_playerTallies 0x7acfd4 (per player 0x44
 bytes; meals, ore found, points; re/globals.csv). specs.py's
 animation_table() reads 0x600 entries now.
 
-**Left:** UpdateSoldier 0x50e9f0 (1,791 instructions, 5 call sites use
+**UpdateSoldier, later in session 44:** fully implemented in
+`src/s3re/game/soldier.cpp` on branch `wip/package-b-update-soldier`
+(commit 7461635; ClearTileOwner 0x51b640 and RecalculateTerritory
+0x519a90 called through their addresses and probed in the spec). The
+in-process diff test passes (4000 cases, mutation caught; tower captures
+are left out there because RecalculateTerritory needs a consistent
+world). Emulator spec: 0 mismatches in 1499 cases, but only 280/295
+blocks covered. Missing: kills of job-3/4 victims per class
+(0x50f40a..0x50f46c), garrison walks over 2+ nodes and the 0xae kill
+(0x50f943..0x50f9ac), a capture-loop job (0x50fa7c), attacker idle-list
+head (0x50faf0), capture class branches 2/3 (0x50fde3..0x50fdff).
+Next: steer the presets (victims in job 3 with low health, 0xae victims
+in longer lists, class 2/3 attackers that take empty towers), reach full
+coverage, add the inventory row, merge. Test-setup pitfalls found: keep
+`presence_max_player` small (IsOtherPlayerNear loops over it), sanitize
+player list lengths (RemoveSettlerFromLists), valid tower slots (the
+arrow offset table 0x659738), and give non-placed settlers a harmless job
+(random 0xae jobs make the original's garrison walk loop forever).
+Earlier analysis: **Left:** UpdateSoldier 0x50e9f0 (1,791 instructions, 5 call sites use
 EAX). Callees all verified except C's 0x519a90 (call through its
 address) and 0x51b640 (C, done in C batch 3). Structure from the call
 list: IsOtherPlayerNear twice (0x50eaab, 0x50ff0a), attack animations
