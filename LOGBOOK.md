@@ -35,10 +35,9 @@ user may provide a late-game save file later. Order:
    the session 44 entry.**
    **Package C is complete (2026-11-10, session 44, parallel worktree):
    all 22 functions verified** (batches 2-6; session entry below). Left of
-   the round: whatever packages A and B have not finished (see their
-   entries), the round-end checks (full emulator suite, whole-game replays
-   with call counts: none of the 19 new package C functions has
-   whole-game evidence yet), and the renames in TODO.md.
+   the round: WalkSettler and UpdateSoldier (below), FollowRightWall
+   coverage, replay call counts, the renames in TODO.md. Round-end checks
+   done (see the round-end entry of session 44).
    **Package A (session 44): 25 of 26 done** (all of Dirk\Pathing.cpp,
    AddTileTraffic, IsWalkingJob, IsStationaryJob); **left: WalkSettler
    0x500860** (analysis in the session 44 entry).
@@ -550,6 +549,26 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-10 (44): round end of the UpdateSettlers parallel round
+
+- Main at ff0bd87 has packages A (25/26), B (27/28), C (22/22). Left:
+  WalkSettler 0x500860 (A, not started, plan in A's entry) and
+  UpdateSoldier 0x50e9f0 (B, branch `wip/package-b-update-soldier`,
+  280/295 blocks).
+- Emulator self-test 21/21 (with B's x87 control word 0x27F change in
+  emu.py); full suite at 0ff5e0c: 528 specs, 0 mismatches, only
+  GameWorld_Create incomplete (as before), 761 s on 8 workers.
+  `--changed --since 0ff5e0c` for A batch 3: 28 specs, 0 mismatches, but
+  Pathing_FollowRightWall now covers 114/116 (0x4a44c9, 0x4a453c
+  uncovered) after A's last route_case preset change; it was complete
+  before. To fix next session (TODO.md).
+- Whole-game at 0ff5e0c (before A batch 3), all identical to the
+  original: scripted-seed127.bin and fun8-seed2024-input31.bin (3,000
+  ticks each, 222/224 replacements called), "slot 1.sav" (2,000 ticks, 215
+  called; call counts recorded in re/whole_game_calls.csv). The replays'
+  call counts were not recorded (record_call_counts.py not run); A batch 3
+  has no whole-game run yet.
 
 ### 2026-11-10 (44): package B of the UpdateSettlers round (parallel worktree)
 

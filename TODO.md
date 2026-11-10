@@ -134,3 +134,7 @@ Each item: what, why, and where to start.
   DirectPlay, CLM* messages): skipped since 2026-11-09 (single player
   against computer players is easier to verify; online play may not matter
   today). Revisit when the single-player game is far along.
+- Pathing_FollowRightWall emulator spec: blocks 0x4a44c9 and 0x4a453c lost
+  coverage after package A's last route_case preset change (114/116;
+  exempt or add presets). Then record replay call counts
+  (record_call_counts.py) for the new package A/B/C functions.
