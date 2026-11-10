@@ -620,8 +620,13 @@ replaying, see `src/s3re/replay/command_log.h`):
    operator new/delete/memmove (0x61efb9/0x61e4ef/0x61e860) where the
    original does.
    - **Parallel runs:** specs run in `--jobs N` worker processes
-     (default: cores minus 2, capped by free memory at ~600 MB per
-     worker; `--jobs 1` runs in one process). Every spec starts from a
+     (default: half the cores minus 2, i.e. 8 on the dev machine, capped
+     by free memory at ~600 MB per worker, or `S3RE_EMU_JOBS`; workers
+     run at below-normal priority; `--jobs 1` runs in one process). The
+     user's machine became unresponsive with 18 workers while other agents
+     were busy: don't raise the default, and when several agents work in
+     parallel, only one of them runs a full suite at a time (per batch use
+     `--changed`). Every spec starts from a
      fresh emulator state (`Emulator.reset`: images as loaded, stack
      zeroed, no world bytes), so results don't depend on the order or
      the worker count, and the output is printed in specs.py order.

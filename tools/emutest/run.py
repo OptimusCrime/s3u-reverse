@@ -28,8 +28,9 @@ It reports the basic-block coverage of each original function; functions
 with uncovered blocks are listed. Exit code 0 only if there were no
 mismatches (and, with --require-coverage, full coverage).
 
-Specs run in parallel worker processes (--jobs, default: the number of
-cores minus 2, fewer if memory is short). Each worker has its own emulator
+Specs run in parallel worker processes (--jobs, default: half the cores
+minus 2, fewer if memory is short, or S3RE_EMU_JOBS; workers run at
+below-normal priority). Each worker has its own emulator
 and resets it before every spec (emu.Emulator.reset), so the results don't
 depend on the number of workers or on the order; the output is printed in
 the order of specs.py either way. Each spec's run time is kept in
@@ -278,7 +279,13 @@ def peak_memory() -> int:
 
 
 def default_jobs() -> int:
-    jobs = max(1, (os.cpu_count() or 1) - 2)
+    # Half the cores at most (the user's machine became unresponsive with 18
+    # workers while other agents were also running), overridable with the
+    # environment variable S3RE_EMU_JOBS.
+    override = os.environ.get("S3RE_EMU_JOBS")
+    if override:
+        return max(1, int(override))
+    jobs = max(1, (os.cpu_count() or 1) // 2 - 2)
     memory = available_memory()
     if memory is not None:
         jobs = min(jobs, max(1, int(memory * 0.8) // WORKER_MEMORY))
@@ -292,6 +299,11 @@ _machine: emu.Emulator | None = None
 
 def _worker_init(bin_dir: str) -> None:
     global _machine
+    # Below-normal priority keeps the machine responsive while the suite runs.
+    if sys.platform == "win32":
+        BELOW_NORMAL_PRIORITY_CLASS = 0x4000
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetPriorityClass(kernel32.GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS)
     _machine = emu.Emulator(os.path.join(ROOT, "Settlers3Ultimate", "S3.EXE"),
                             os.path.join(bin_dir, "s3re.dll"),
                             os.path.join(bin_dir, "s3re.map"))
