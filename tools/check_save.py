@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Whole-game check from a savegame, unattended.
 
-Usage: python tools/check_save.py SAVE [--ticks N] [--against-original] [--build B]
+Usage: python tools/check_save.py SAVE [--ticks N] [--against-original] [--no-fast]
+                                  [--no-cache | --refresh-cache | --verify-cache]
+                                  [--build B]
 
 SAVE is a savegame, as a path or a name in <game dir>\\Save (e.g.
 "slot 1.sav"). Every run starts the game directly from it
@@ -14,7 +16,9 @@ deterministic?
 
 With --against-original: runs it once with the original code (reference)
 and once with our reimplementations, and compares the traces: the
-whole-game check for every replaced function the late game calls. Prints
+whole-game check for every replaced function the late game calls. The
+original's trace is cached (tools/trace_cache.py), so usually only our code
+runs. Runs use --fast (src/s3re/tooling/fast.cpp) unless --no-fast. Prints
 which replacements were called and writes the call counts to
 build/x86/bin/<build>/save-check/<save>-calls.tsv; if the traces are
 identical, it also merges them into re/whole_game_calls.csv (source
@@ -40,7 +44,9 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
+import first_calls  # noqa: E402
 import game_lock  # noqa: E402
+import trace_cache  # noqa: E402
 import whole_game  # noqa: E402
 
 
@@ -83,14 +89,21 @@ def check_saves(hashes, backup_dir):
     return ok
 
 
+def game_command(launcher, save, ticks, extra):
+    timeout = 120 + ticks // 3
+    return [launcher, "--trace-determinism", "--load-save", save,
+            "--exit-after-ticks", str(ticks), "--timeout", str(timeout), *extra]
+
+
 def run_game(launcher, bin_dir, save, ticks, extra, label):
     before = set(glob.glob(os.path.join(bin_dir, "determinism-*.tsv")))
-    timeout = 120 + ticks // 3
-    command = [launcher, "--trace-determinism", "--load-save", save,
-               "--exit-after-ticks", str(ticks), "--timeout", str(timeout), *extra]
+    command = game_command(launcher, save, ticks, extra)
     print(f"{label}: {ticks} ticks from {save}", flush=True)
     with game_lock.held("check_save"):
+        started = time.time()
         result = subprocess.run(command, capture_output=True, text=True)
+        print(f"    {time.time() - started:.0f} s{' (fast)' if '--fast' in command else ''}",
+              flush=True)
     time.sleep(2)  # trace file names have one-second resolution
     new = sorted(set(glob.glob(os.path.join(bin_dir, "determinism-*.tsv"))) - before)
     log = open(os.path.join(bin_dir, "s3re.log"), encoding="utf-8", errors="replace").read()
@@ -129,7 +142,11 @@ def main():
     parser.add_argument("--dump-tick", metavar="T[,T...]",
                         help="also dump the hashed world at these (absolute) ticks in both "
                              "runs and show the differing fields (tools/diff_world_dumps.py)")
+    parser.add_argument("--no-fast", dest="fast", action="store_false",
+                        help="run in real time instead of with --fast "
+                             "(src/s3re/tooling/fast.cpp)")
     parser.add_argument("--build", default="Debug")
+    trace_cache.add_arguments(parser)
     args = parser.parse_args()
 
     bin_dir = os.path.join(ROOT, "build", "x86", "bin", args.build)
@@ -155,11 +172,27 @@ def main():
     runs = ([("original", ["--original"]), ("ours", [])] if args.against_original
             else [("original run 1", ["--original"]), ("original run 2", ["--original"])])
     dump = ["--dump-tick", args.dump_tick] if args.dump_tick else []
+    fast = ["--fast"] if args.fast else []
+    if dump:
+        args.no_cache = True  # the dumps come from the runs themselves
     traces = []
     logs = []
+    cached = None
     try:
-        for label, extra in runs:
-            trace, log = run_game(launcher, bin_dir, save, args.ticks, extra + dump, label)
+        for index, (label, extra) in enumerate(runs):
+            extra = extra + fast + dump
+            if args.against_original and index == 0:
+                key = trace_cache.make_key("save", bin_dir, game_lock.game_dir(), save,
+                                           game_command(launcher, save, args.ticks, extra)[1:])
+                trace, cached, cache_ok = trace_cache.reference(
+                    args, key, args.ticks,
+                    lambda: run_game(launcher, bin_dir, save, args.ticks, extra, label), work)
+                if not cache_ok:
+                    print("SAVE CHECK FAILED (the original's trace differs from the cached one)")
+                    return 1
+                log = ""
+            else:
+                trace, log = run_game(launcher, bin_dir, save, args.ticks, extra, label)
             if trace is None:
                 return 2
             copy = os.path.join(work, f"{stem}-{label.replace(' ', '-')}.tsv")
@@ -175,7 +208,10 @@ def main():
     finally:
         saves_ok = check_saves(hashes, backup_dir)
 
-    ok, report = same_traces(traces[0], traces[1])
+    if cached is not None:
+        ok, report = trace_cache.compare(cached, traces[1], args.ticks, work)
+    else:
+        ok, report = same_traces(traces[0], traces[1])
     print(f"  {runs[0][0]} vs {runs[1][0]}: {'identical' if ok else 'DIFFERENT'}")
     if not ok:
         print(report)
@@ -193,6 +229,7 @@ def main():
         if calls:
             called = sorted(n for n, c in calls.items() if c > 0)
             print(f"  replaced functions called in this game: {len(called)} of {len(calls)}")
+            print("\n".join(first_calls.summary(first_calls.first_calls(logs[1])[0])))
             first, last = trace_ticks(traces[1])
             out = os.path.join(work, f"{stem}-calls.tsv")
             with open(out, "w", encoding="utf-8", newline="\n") as f:

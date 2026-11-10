@@ -109,6 +109,9 @@ def main():
                                       r"Map\MULTI\384-2-Lakes.map)")
     parser.add_argument("--against-original", action="store_true")
     parser.add_argument("--skip-hooks", help="replacements to leave out of the run with our code")
+    parser.add_argument("--no-fast", dest="fast", action="store_false",
+                        help="run in real time instead of with --fast "
+                             "(src/s3re/tooling/fast.cpp)")
     parser.add_argument("--build", default="Debug")
     args = parser.parse_args()
 
@@ -131,7 +134,8 @@ def main():
         traces, logs = [], []
         for label, extra in runs:
             trace, log = run_game(launcher, bin_dir, f"{size},{symmetry}", args.seed,
-                                  args.ticks, args.map, extra, label)
+                                  args.ticks, args.map,
+                                  extra + (["--fast"] if args.fast else []), label)
             if trace is None:
                 return 2
             copy = os.path.join(work, f"{stem}-{label.replace(' ', '-')}.tsv")

@@ -5,6 +5,7 @@
 #include "crash_log.h"
 #include "hooks.h"
 #include "log.h"
+#include "tooling/version.h"
 #include "trace/determinism.h"
 
 #include <windows.h>
@@ -43,6 +44,7 @@ void Startup(HMODULE self) {
     char exePath[MAX_PATH] = {};
     GetModuleFileNameA(nullptr, exePath, MAX_PATH);
     S3RE_LOG("s3re loaded into %s (pid %lu)", exePath, GetCurrentProcessId());
+    S3RE_LOG("%s", S3RE_ORIGINAL_TOOLING_VERSION);
     s3re::crash::Install();
 
     if (!IsExpectedGameBuild()) {

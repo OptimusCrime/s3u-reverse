@@ -4,7 +4,7 @@
 //                      [--trace-determinism] [--log-commands] [--seed <n>]
 //                      [--record-commands <file>] [--replay-commands <file>]
 //                      [--exit-after-ticks <n>] [--timeout <seconds>]
-//                      [--dump-tick <n>] [--load-save <file>]
+//                      [--dump-tick <n>] [--load-save <file>] [--fast]
 //                      [--random-map <size>[,<symmetry>[,<field0c>]]]
 //                      [--skip-hooks <name>[,<name>...]]
 //                      [-- <arguments passed to S3.EXE>]
@@ -46,6 +46,12 @@
 // -map <file> (startup map), -demo (skip the menus), -record / -play (record
 // or play back the "movie" Siedler3.evt; -play duplicates computer-player
 // commands, so use --replay-commands instead) and -help.
+//
+// --fast lets the simulation tick as fast as the logic thread can instead
+// of every 64 ms (src/s3re/tooling/fast.cpp). Every tick runs the original
+// code; only the idle steps between ticks are left out, and the draw thread
+// draws fewer frames per tick. For unattended checks; not for playing or for
+// recording with synthetic input (that input follows the wall clock).
 //
 // --load-save <file> starts the game directly from a savegame (no menus),
 // through the game's own load code (see src/s3re/game/savegame_start.cpp).
@@ -316,6 +322,7 @@ int wmain(int argc, wchar_t** argv) {
     bool dumpHeaders = false;
     bool originalMode = false;
     bool unverifiedMode = false;
+    bool fastMode = false;
     std::wstring recordCommands;
     std::wstring replayCommands;
     std::wstring testFilter;
@@ -347,6 +354,8 @@ int wmain(int argc, wchar_t** argv) {
             }
         } else if (arg == L"--original") {
             originalMode = true;
+        } else if (arg == L"--fast") {
+            fastMode = true;
         } else if (arg == L"--unverified") {
             unverifiedMode = true;
         } else if (arg == L"--dump-headers") {
@@ -388,7 +397,7 @@ int wmain(int argc, wchar_t** argv) {
             wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
                     L"[--trace-determinism] [--log-commands] [--record-commands <file>] "
                     L"[--replay-commands <file>] [--seed <n>] [--exit-after-ticks <n>] "
-                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [--load-save <file>] [--random-map <size>[,<symmetry>[,<field0c>]]] [--skip-hooks <names>] [--original] [--unverified] [-- <S3.EXE arguments>]\n");
+                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [--load-save <file>] [--random-map <size>[,<symmetry>[,<field0c>]]] [--skip-hooks <names>] [--fast] [--original] [--unverified] [-- <S3.EXE arguments>]\n");
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
@@ -524,6 +533,7 @@ int wmain(int argc, wchar_t** argv) {
     SetEnvironmentVariableW(L"S3RE_DUMP_HEADERS", dumpHeaders ? L"1" : nullptr);
     SetEnvironmentVariableW(L"S3RE_ORIGINAL", originalMode ? L"1" : nullptr);
     SetEnvironmentVariableW(L"S3RE_UNVERIFIED", unverifiedMode ? L"1" : nullptr);
+    SetEnvironmentVariableW(L"S3RE_FAST", fastMode ? L"1" : nullptr);
     SetEnvironmentVariableW(L"S3RE_RECORD_COMMANDS",
                             recordCommands.empty() ? nullptr : recordCommands.c_str());
     SetEnvironmentVariableW(L"S3RE_REPLAY_COMMANDS",

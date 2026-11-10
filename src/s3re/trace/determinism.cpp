@@ -72,7 +72,7 @@ bool OpenFile() {
         return false;
     }
     std::setvbuf(g_file, nullptr, _IOFBF, 1 << 16);
-    std::fprintf(g_file, "# s3re determinism trace v3 (header hash skips volatile fields; rest hash skips MapEffect padding)\n");
+    std::fprintf(g_file, "# s3re determinism trace v4 (header hash skips volatile fields; rest hash skips MapEffect padding)\n");
     std::fprintf(g_file, "# T <tick> <rng a> <rng b> <rng c>   after each step that changed them\n");
     std::fprintf(g_file, "# H <tick> <header hash> <map hash> <rest hash> <rest bytes>   every "
                          "%u ticks\n", kHashInterval);
@@ -252,6 +252,15 @@ constexpr ByteRange kHeaderSkips[] = {
     // UI menu sub-page; set by ProcessEvents, read by ExecuteCommands only
     // to decide whether to set the refresh flag above.
     {0x2d2a0, 0x2d2a4},
+    // Notification blink bits for the draw thread: PrepareDrawData (0x51f110)
+    // copies the old value into the draw data, resets it and sets bits 1/2/
+    // 4/8 for the pending notifications (+0x2d320, +0x2d7d0, +0x2dc80,
+    // +0x2e130) when bit 5 of the step counter +0x2d2d8 is set; it is read
+    // only there (0x51f748, 0x51f7e0) and otherwise only initialized by
+    // 0x4fce90. PrepareDrawData runs a timing-dependent number of times, so
+    // the value differs between normal speed and --fast (found 2026-11-10,
+    // savegame "slot 1.sav", header dumps).
+    {0x2d2c8, 0x2d2cc},
     // Last search result position (x, y), written by 0x4ff0a0/0x4ff170,
     // called from 0x524fa0 on every step (volatile).
     {0x2d2e4, 0x2d2ec},

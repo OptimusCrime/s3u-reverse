@@ -31,11 +31,6 @@ Each item: what, why, and where to start.
   with the command recorder, because recordings store only a map file
   name. Add the random-map parameters to the recording format (version 3)
   so synthetic-input games on random maps can be replayed.
-- **Faster unattended runs (in progress in a parallel worktree, `--fast`):**
-  every check runs the game in real time (about
-  15 ticks/s). A tooling hook that removes the logic thread's pacing
-  (and maybe skips drawing) would speed up every whole-game check.
-  Start at CLogicThread / DirectX::CGameThread::Main 0x5b63d0.
 - **Fair game lock:** tools/game_lock.py polls every 30 s with no queue, so
   one agent's series of checks can starve another's; it also waits for
   `--test` runs (any S3.EXE). A FIFO ticket directory and a shorter poll
@@ -54,6 +49,19 @@ Each item: what, why, and where to start.
   original caller then calls our callee through the thunk).
 - **Integration play:** the user hasn't played a normal game with all
   hooks active yet (CLAUDE.md workflow step 8).
+
+- **Longer and more varied fast runs:** with `--fast` a 10,000-tick
+  recording takes about a minute; record one (synthetic input records at
+  normal speed, so a long one takes real time once) and check whether
+  more replacements get called late (first-call ticks, `tools/first_calls.py`).
+- **Run normal vs `--fast` on the other savegames** ("slot 2/3.sav") once;
+  only "slot 1.sav" and the recording are shown identical so far. Watch
+  `+0x2d2d8` (per-step counter, see LOGBOOK open questions).
+- **Trace cache refinements:** cache the original's runs for
+  check_determinism.py and check_random_map.py too; prune old entries.
+- **Normal vs `--fast` on a random map:** check_random_map.py uses
+  `--fast` by default, but normal vs fast has only been compared on file
+  maps and a savegame.
 
 ## Known differences to clean up
 

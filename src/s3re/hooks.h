@@ -40,17 +40,37 @@ namespace s3re::hooks {
 // code when OriginalMode() is true.
 enum class HookKind { Replaced, Passthrough, ReplacedAlways, Unverified };
 
+// Call statistics of a counted hook: how often it was called, and the game
+// tick (g_gameTick) of its first call (kNotCalled if never).
+struct CallStats {
+    static constexpr std::uint32_t kNotCalled = 0xFFFFFFFFu;
+    std::atomic<unsigned long> calls{0};
+    std::atomic<std::uint32_t> firstTick{kNotCalled};
+};
+
 struct HookRegistrar {
     HookRegistrar(const char* name, std::uintptr_t address, HookKind kind, void** original,
-                  void* replacement, std::atomic<unsigned long>* calls);
+                  void* replacement, CallStats* stats);
 };
 
 // Writes how often each installed hook was called to s3re.log ("calls
 // <name> <count>"), so a whole-game check can tell which replacements the
-// game actually exercised.
+// game actually exercised, and for each called one the tick of its first
+// call ("first-call <name> <tick>"), which shows how long a run must be.
 void LogCallCounts();
 
 namespace detail {
+
+// The game tick counter g_gameTick (S3.EXE 0x7dfd48).
+inline std::uint32_t CurrentGameTick() {
+    return *reinterpret_cast<const volatile std::uint32_t*>(0x007dfd48);
+}
+
+inline void CountCall(CallStats& stats) {
+    if (stats.calls.fetch_add(1, std::memory_order_relaxed) == 0) {
+        stats.firstTick.store(CurrentGameTick(), std::memory_order_relaxed);
+    }
+}
 
 // Installed in place of the replacement: counts the call, then calls it.
 // One specialization per calling convention; the thunk has exactly the
@@ -60,27 +80,27 @@ struct Counting;
 
 template <typename R, typename... A, R(__fastcall* Target)(A...)>
 struct Counting<R(__fastcall*)(A...), Target> {
-    static inline std::atomic<unsigned long> calls{0};
+    static inline CallStats stats;
     static R __fastcall Call(A... args) {
-        calls.fetch_add(1, std::memory_order_relaxed);
+        CountCall(stats);
         return Target(args...);
     }
 };
 
 template <typename R, typename... A, R(__stdcall* Target)(A...)>
 struct Counting<R(__stdcall*)(A...), Target> {
-    static inline std::atomic<unsigned long> calls{0};
+    static inline CallStats stats;
     static R __stdcall Call(A... args) {
-        calls.fetch_add(1, std::memory_order_relaxed);
+        CountCall(stats);
         return Target(args...);
     }
 };
 
 template <typename R, typename... A, R(__cdecl* Target)(A...)>
 struct Counting<R(__cdecl*)(A...), Target> {
-    static inline std::atomic<unsigned long> calls{0};
+    static inline CallStats stats;
     static R __cdecl Call(A... args) {
-        calls.fetch_add(1, std::memory_order_relaxed);
+        CountCall(stats);
         return Target(args...);
     }
 };
@@ -109,12 +129,12 @@ void UninstallAll();
 }  // namespace s3re::hooks
 
 // Registers `installed` (the function Detours redirects to) for the hook;
-// `calls` is its call counter or nullptr.
-#define S3RE_DETAIL_HOOK(address, name, kind, FnType, original, installed, calls)  \
+// `stats` is its call statistics or nullptr.
+#define S3RE_DETAIL_HOOK(address, name, kind, FnType, original, installed, stats)  \
     FnType original = reinterpret_cast<FnType>(address);                            \
     static ::s3re::hooks::HookRegistrar s3re_hook_registrar_##name{                 \
         #name, address, kind, reinterpret_cast<void**>(&original),                  \
-        reinterpret_cast<void*>(installed), calls}
+        reinterpret_cast<void*>(installed), stats}
 
 // Declares `original` as a pointer to the original function at `address` and
 // registers our `replacement` to run instead of it, behind a counting thunk
@@ -124,7 +144,7 @@ void UninstallAll();
     S3RE_DETAIL_HOOK(address, name, ::s3re::hooks::HookKind::Replaced, FnType,      \
                      original,                                                      \
                      (&::s3re::hooks::detail::Counting<FnType, &replacement>::Call), \
-                     (&::s3re::hooks::detail::Counting<FnType, &replacement>::calls))
+                     (&::s3re::hooks::detail::Counting<FnType, &replacement>::stats))
 
 // A reimplementation that has no verification evidence yet: same as
 // S3RE_HOOK, but only installed with --unverified. Switch it to S3RE_HOOK
@@ -133,7 +153,7 @@ void UninstallAll();
     S3RE_DETAIL_HOOK(address, name, ::s3re::hooks::HookKind::Unverified, FnType,    \
                      original,                                                      \
                      (&::s3re::hooks::detail::Counting<FnType, &replacement>::Call), \
-                     (&::s3re::hooks::detail::Counting<FnType, &replacement>::calls))
+                     (&::s3re::hooks::detail::Counting<FnType, &replacement>::stats))
 
 // A replacement that also provides tooling and therefore stays installed in
 // original mode; it must call `original` itself when OriginalMode() is true.

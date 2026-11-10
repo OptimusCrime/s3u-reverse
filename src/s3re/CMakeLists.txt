@@ -20,6 +20,7 @@ add_library(s3re SHARED
     replay/command_log.cpp
 
     tooling/random_map_start.cpp
+    tooling/fast.cpp
 
     game/ai_evaland.cpp
     game/ai_helpers.cpp

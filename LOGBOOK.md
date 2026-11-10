@@ -475,12 +475,16 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 - `CLogicThread::Step` stores the RNG state every 256 ticks into
   `g_syncRandomHistory` (`0x7dfb58`) and sends it via `0x4309c0`. This is
   probably the multiplayer desync check, more evidence for lockstep.
-- `CLogicThread::Step` is called about 240 times a second, but the tick
-  advances only about 15 times a second; the step decides when to tick.
-  Some work runs per step, not per tick (`0x524fa0`, `0x51f110`), so its
-  side effects depend on timing. Known volatile world fields: `+0x2d2e4`
-  to `+0x2d2eb` and `+0x2d301` (skipped by the trace hash). Check whether
-  they can ever influence the simulation.
+- Tick pacing is understood (2026-11-10, see CLAUDE.md "Tick pacing and
+  `--fast`"): a 64 ms CTimer, Step ticks only when it fired. Per-step work
+  (`0x524fa0`, `0x51f110` PrepareDrawData) still runs a timing-dependent
+  number of times; volatile/UI world fields known so far: `+0x2d2c8`,
+  `+0x2d2e4..+0x2d2eb`, `+0x2d301` (skipped by the trace hash). Normal
+  speed and `--fast` gave identical traces on the recording and one save;
+  other saves/longer games may still find more such fields. `+0x2d2d8`
+  (incremented by Step before every ExecuteCommands attempt, also when the
+  network allowance stops it) was identical in those runs but is a
+  candidate.
 - Tile byte 15 is a "visited" stamp shared by the simulation's searches
   (GameWorld::NextSearchGeneration) and the UI overlays. Safe as long as
   every search bumps the generation before marking; only spot-checked
@@ -534,6 +538,52 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-10 (41): `--fast`, cached original traces, first-call ticks (tooling, parallel worktree)
+
+- **Pacing found:** CLogicThread::OnStart starts the CTimer at
+  CLogicThread+0x3bc with 64 ms (`Win32::CTimer::StartPeriodic` 0x60d3a0 ->
+  `Start` 0x60d0a0: SetWaitableTimer, or timeSetEvent); Step waits on the
+  wait set +0x3dc (`CWin32Waitable::WaitForXYZ` 0x463100, 500 ms, throws on
+  timeout) and ticks only if the timer object was signalled. The bounce
+  thread answers at once (its step+5 allowance doesn't pace). The game's
+  own fast-forward (`g_stepCountdown` 0x7dfd2c += 882 in ProcessEvents,
+  0x525cd2) sets 0x7dfd30, which makes UpdateEnvironment and others skip
+  work, so it's not usable. The draw thread doesn't throttle the logic.
+- **`--fast`** (`src/s3re/tooling/fast.cpp`, passthrough on 0x463100, only
+  for the call from Step): poll, report the timer if nothing is signalled.
+  check_replay/check_save/check_determinism use it by default
+  (`--no-fast`); recording with `--synthetic-input` stays at normal speed.
+- **Evidence (all original unless said):** fast twice, 1,000 ticks:
+  identical. Recording scripted-seed127.bin, 3,000 ticks, normal vs fast:
+  identical (trace v3). "slot 1.sav", 2,000 ticks, normal vs fast: header
+  hash differed at a few ticks; header dumps showed only +0x2d2c8, the
+  notification blink bits PrepareDrawData writes and reads only for the
+  draw data (UI, timing-dependent) -> skipped, trace v4; rerun normal vs
+  fast: identical. Ours vs original, both fast: save 2,000 ticks
+  identical (200 of 457 replacements called), recording 3,000 ticks
+  identical.
+- **Speed:** recording 3,000 ticks 198 s normal vs 9-16 s fast per run
+  (about 66 s vs 3-5 s per 1,000 ticks; the game loop itself runs ~450
+  ticks/s, the rest is loading and shutdown). Save 2,000 ticks: 139 s vs
+  20-25 s.
+- **Reference cache** (`tools/trace_cache.py`, `build/trace_cache/`): the
+  original's trace is reused (key: S3.EXE + input hashes, launcher
+  arguments incl. --fast, trace version, `S3RE_ORIGINAL_TOOLING_VERSION`
+  from `src/s3re/tooling/version.h`). `--no-cache`, `--refresh-cache`,
+  `--verify-cache`. Second check_replay run: "CACHED", one run instead of
+  two (saves ~16 s fast, ~200 s at normal speed).
+- **First-call ticks:** the counting thunk also stores g_gameTick of the
+  first call; s3re.log "first-call <name> <tick>", `tools/first_calls.py`.
+  Recording (3,000 ticks): of the called replacements, 15 were first
+  called after tick 500, 10-11 after 1,000, 6 after 2,000 (last at 2,828).
+  Save (2,000 ticks from 366,754): 9 after 500, 6 after 1,000, 0 after
+  2,000 (last ~1,900). Proposal: keep 3,000 ticks for the recording (cheap
+  now) and 2,000 for saves; longer games still add functions late, so a
+  longer recording (10,000+ ticks, now ~1 minute) would find more.
+- Recordings' own reference traces (`FILE.tsv`, used without
+  --against-original) are v3 and must be regenerated before comparing with
+  v4 traces.
 
 ### 2026-11-10 (40): random-map games, --skip-hooks, a new 8-player recording (tooling, parallel worktree)
 

@@ -208,6 +208,43 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   `-- -map Map\MULTI\384-2-Lakes.map` starts that map without menus.
   `--unverified` also installs the unverified reimplementations.
   `s3re.log` logs every seed and the step count.
+- **Tick pacing and `--fast`:** `CLogicThread::OnStart` starts a periodic
+  64 ms `Win32::CTimer` (CLogicThread+0x3bc; 15.6 ticks/s), and
+  `CLogicThread::Step` waits on its wait set (+0x3dc,
+  `CWin32Waitable::WaitForXYZ` `0x463100`, 500 ms) and runs a tick only
+  when the timer was the signalled object; other objects wake it without a
+  tick (hence ~240 steps/s). `CNetBounceThread` answers step messages at
+  once, so it doesn't pace. `--fast` (`src/s3re/tooling/fast.cpp`) makes
+  only that wait in Step poll and report the timer: every tick is original
+  code, only the idle steps between ticks go. About 450 ticks/s on the
+  384 map (1,000 ticks: ~65 s -> ~2 s of game time, ~8 s per run with
+  loading). The game's own fast-forward (`g_stepCountdown` += 882) is not
+  used: it skips work in the simulation. Shown identical (2026-11-10): the
+  original with `--fast` twice; normal against `--fast` on
+  scripted-seed127.bin (3,000 ticks) and "slot 1.sav" (2,000 ticks; this
+  found the UI-only field +0x2d2c8, now skipped by trace v4); the original
+  against ours with `--fast`. check_replay.py, check_save.py and
+  check_determinism.py and check_random_map.py use `--fast` by default
+  (`--no-fast` to opt out).
+  Recording with `--synthetic-input` stays at normal speed (that input
+  follows the wall clock).
+- **Cached reference traces of the original:** check_replay.py and
+  check_save.py `--against-original` reuse the original's trace from
+  `build/trace_cache/` (`tools/trace_cache.py`: key = S3.EXE and input
+  hashes, launcher arguments, trace format version and original-mode
+  tooling version; a longer cached run serves a shorter one). Flags:
+  `--no-cache`, `--refresh-cache`, `--verify-cache` (rerun the original and
+  compare with the cache). **Version rules:** change the trace format or
+  what it hashes -> bump "s3re determinism trace vN" in
+  `src/s3re/trace/determinism.cpp` (old reference traces, e.g. a
+  recording's `.tsv`, must then be regenerated); change any code that runs
+  in `--original` mode (passthrough and `S3RE_HOOK_ALWAYS` hooks, trace,
+  replay, seed, load-save, fast) -> bump `S3RE_ORIGINAL_TOOLING_VERSION` in
+  `src/s3re/tooling/version.h`.
+- **First-call ticks:** at exit s3re.log also has "first-call <name>
+  <tick>" for each called replacement; `python tools/first_calls.py
+  s3re.log` (and the checks) summarize how many were first called after
+  ticks 100/500/1,000/2,000.
 - **Game lock (decided 2026-11-09):** agents may run in parallel (git
   worktrees). Before any run that opens the game window (check_replay.py,
   check_determinism.py, plain launcher runs; not `--test`), create the
@@ -267,7 +304,8 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   counts ExpandTerrain and MarkTerrainEdge).
 - **Unattended determinism check:** `python tools/check_determinism.py
   [--ticks N]`. It opens the game window, so the user's screen is busy
-  while it runs (about 1 minute per 1,000 ticks per run).
+  while it runs (with `--fast` about 10 s per 1,000-tick run, mostly
+  loading; about 1 minute per 1,000 ticks with `--no-fast`).
 - **Recording and replaying commands:** `--record-commands FILE` records
   every command; `--replay-commands FILE` replays a recording instead of the
   live commands. Recordings (format in `src/common/recording_format.h`)
