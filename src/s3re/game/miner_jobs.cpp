@@ -7,6 +7,14 @@
 //   (x+1, y+1) / (x-1, y-1). 0 unless 1 <= x, y < map size - 1 (unsigned;
 //   map size 0 makes the limit 0xffffffff). Callers compare it with 7
 //   (UpdateSettlers' work jobs, the AI 0x5540f0, 0x599a30). ret 8.
+// GameWorld::MinerJobEnter (0x004f9a00): (settler): a miner goes into his
+//   mine: job (+0xe) by the mine's building type: 7 -> 0x55, 8 -> 0x56,
+//   9 -> 0x57, 0x25 -> 0xd8, 0x1d and 0x38 -> 0xd9, others unchanged
+//   (jump table); the building's byte +0x19 += 1 (miners inside?), byte
+//   +0x1a = 0, words +0x30/+0x32 = 0; the settler leaves its tile (tile
+//   settler word = 0), counter +0xc = 0, byte +0x17 = 10. EAX = world +
+//   settler * 0x40 (the original's register; UpdateSettlers overwrites
+//   it). ret 4. Caller: UpdateSettlers (job of settler type 0xa).
 // thiscall (ECX = world).
 
 #include "game/world.h"
@@ -45,6 +53,33 @@ std::uint32_t __fastcall GameWorld_TileSlope(GameWorld* world, void*, std::uint3
     return static_cast<std::uint32_t>(slope);
 }
 
+using SettlerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler);
+
+// Purpose: A miner enters his mine and starts the work cycle that fits the mine type (coal, iron,
+// gold, stone, sulphur...); he disappears from the map while inside.
+std::uint32_t __fastcall GameWorld_MinerJobEnter(GameWorld* world, void*, std::uint32_t settler) {
+    layout::Settler& s = world->settlers[settler];
+    switch (world->buildings[s.building].art) {
+    case 0x07: s.job = 0x55; break;
+    case 0x08: s.job = 0x56; break;
+    case 0x09: s.job = 0x57; break;
+    case 0x25: s.job = 0xd8; break;
+    case 0x1d:
+    case 0x38: s.job = 0xd9; break;
+    default: break;
+    }
+    layout::Building& b = world->buildings[s.building];
+    b.unk19 = static_cast<std::uint8_t>(b.unk19 + 1);
+    world->buildings[s.building].unk1a = 0;
+    world->buildings[s.building].work_x = 0;
+    world->buildings[s.building].work_y = 0;
+    TileAtOffset(world, TileOffset(s.x, s.y)).settler = 0;
+    s.counter = 0;
+    s.unk17 = 10;
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + settler * sizeof(layout::Settler);
+}
+
+S3RE_HOOK(0x004f9a00, GameWorld_MinerJobEnter, SettlerFn, Original_GameWorld_MinerJobEnter, GameWorld_MinerJobEnter);
 S3RE_HOOK(0x004faa70, GameWorld_TileSlope, TileSlopeFn, Original_GameWorld_TileSlope, GameWorld_TileSlope);
 
 // ---------------------------------------------------------------------------
@@ -96,7 +131,54 @@ void CompareTileSlope(test::Context& ctx, TileSlopeFn candidate, int cases) {
     S3RE_EXPECT(worlds.Checkpoint(ctx));
 }
 
+// Wrong: type 0x38 gets job 0xd8.
+std::uint32_t __fastcall WrongMinerJobEnter(GameWorld* world, void* edx, std::uint32_t settler) {
+    const std::uint32_t result = GameWorld_MinerJobEnter(world, edx, settler);
+    layout::Settler& s = world->settlers[settler];
+    if (world->buildings[s.building].art == 0x38) {
+        s.job = 0xd8;
+    }
+    return result;
+}
+
+void CompareMinerJobEnter(test::Context& ctx, SettlerFn candidate, int cases) {
+    test::WorldPair worlds(ctx, offsetof(GameWorld, buildings) + 0x101 * sizeof(layout::Building));
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t settler = ctx.rng().Below(0x7d00);
+        const std::uint32_t building = ctx.rng().Below(0x100);
+        static constexpr std::uint8_t kArts[] = {7, 8, 9, 0x1d, 0x25, 0x38, 6, 0x0a, 0x39, 0x24};
+        const std::uint8_t art = ctx.rng().Chance(1, 10) ? static_cast<std::uint8_t>(ctx.rng().Next32())
+                                                          : kArts[ctx.rng().Below(10)];
+        const auto x = static_cast<std::uint16_t>(ctx.rng().Below(384));
+        const auto y = static_cast<std::uint16_t>(ctx.rng().Below(384));
+        worlds.Both([&](GameWorld* w) {
+            w->settlers[settler].building = static_cast<std::uint16_t>(building);
+            w->settlers[settler].x = x;
+            w->settlers[settler].y = y;
+            w->buildings[building].art = art;
+        });
+        const std::uint32_t expected = Original_GameWorld_MinerJobEnter(worlds.original(), nullptr, settler) -
+                                       static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(worlds.original()));
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr, settler) -
+                                     static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(worlds.ours()));
+        if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 256 == 255 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 255 before it): settler %u art 0x%x", i, settler,
+                     art);
+            return;
+        }
+    }
+}
+
 }  // namespace
+
+S3RE_TEST(GameWorld_MinerJobEnter_MatchesOriginal) {
+    CompareMinerJobEnter(ctx, &GameWorld_MinerJobEnter, 20000);
+}
+S3RE_TEST(GameWorld_MinerJobEnter_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareMinerJobEnter(probe, &WrongMinerJobEnter, 2000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(GameWorld_TileSlope_MatchesOriginal) {
     CompareTileSlope(ctx, &GameWorld_TileSlope, 20000);

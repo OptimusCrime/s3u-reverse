@@ -53,6 +53,7 @@ add_library(s3re SHARED
     game/map.cpp
     game/map_areas.cpp
     game/map_directions.cpp
+    game/map_effect_spawns.cpp
     game/map_effects.cpp
     game/map_generation.cpp
     game/map_marks.cpp

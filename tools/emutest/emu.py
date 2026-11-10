@@ -56,7 +56,7 @@ from unicorn import (UC_ARCH_X86, UC_HOOK_BLOCK, UC_HOOK_CODE, UC_HOOK_MEM_READ,
                      UC_HOOK_MEM_WRITE, UC_MODE_32, Uc, UcError)
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_EBX, UC_X86_REG_ECX,
                                UC_X86_REG_EDI, UC_X86_REG_EDX, UC_X86_REG_EIP, UC_X86_REG_ESI,
-                               UC_X86_REG_ESP, UC_X86_REG_FS, UC_X86_REG_GDTR,
+                               UC_X86_REG_ESP, UC_X86_REG_FPCW, UC_X86_REG_FS, UC_X86_REG_GDTR,
                                UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_SS)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -618,6 +618,10 @@ class Emulator:
         uc.reg_write(UC_X86_REG_EAX, registers["eax"])
         for name, reg in CALLEE_SAVED.items():
             uc.reg_write(reg, registers[name])
+        # The x87 control word Windows gives every thread (53-bit precision,
+        # round to nearest, exceptions masked); the game never changes it
+        # (only _ftol does, and restores it). Unicorn starts with 0.
+        uc.reg_write(UC_X86_REG_FPCW, 0x27F)
 
         self.undo = {}
         self.cover_range = cover

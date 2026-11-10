@@ -5041,3 +5041,98 @@ SPECS += [
     Spec("Pathing_WalkLine", 0x004a22f0, "thiscall", [walk_settler, scratch(0)], presets=walk_with_settler,
          max_cases=1500),
 ]
+
+
+# Package B, batch 2 (map_effect_spawns.cpp)
+def linked_effects(rng, pool, args):
+    """Slots 0..used+12 with consistent cell lists (cells 0..7), kinds 0..2
+    and ids 0..2 / -1 / -2 (word +0x3c), some free records; 3 blocks per row."""
+    used = rng.randrange(40, 60)
+    last = used + 12
+    heads = [0] * 10
+    records = {}
+    for slot in range(last + 1):
+        free = slot == 0 or rng.random() < 1 / 6
+        record = {"tick": 0 if free else rng.randrange(1, 0x10000), "kind": rng.randrange(3),
+                  "id": rng.choice([0, 1, 2, 0xfffe, 0xffff]), "list": 0, "prev": 0, "next": 0}
+        if not free:
+            cell = rng.randrange(8)
+            record["list"], record["next"] = cell, heads[cell]
+            if heads[cell]:
+                records[heads[cell]]["prev"] = slot
+            heads[cell] = slot
+        records[slot] = record
+    fields = [(EFFECT_COUNT, used, 4), (0x668a4, 3, 4)]
+    for slot, r in records.items():
+        base = slot * 0x4c
+        fields += [(base, r["tick"], 4), (base + 0x3a, r["kind"], 1), (base + 0x3c, r["id"], 2),
+                   (base + 0x40, r["list"], 4), (base + 0x44, r["prev"], 4), (base + 0x48, r["next"], 4)]
+    fields += [(EFFECT_HEADS + cell * 4, heads[cell] if cell < 10 else 0, 4) for cell in range(1400)]
+    return fields
+
+
+def flight_table(rng, pool, args):
+    """The usual effect table, with 1..10 blocks per row so that positions up
+    to y = 13000 stay in the first 1400 cells."""
+    fields = effect_table(0.0)(rng, pool, args)
+    return [f for f in fields if f[0] != 0x668a4] + [(0x668a4, rng.randint(1, 10), 4)]
+
+
+def flight_x(rng, pool) -> int:
+    return 3000 + 20 * rng.randrange(60) if rng.random() < 0.3 else rng.randrange(7000)
+
+
+def flight_y(rng, pool) -> int:
+    return 6000 if rng.random() < 0.3 else rng.randrange(6000, 13000)
+
+
+def short_x(rng, pool) -> int:
+    return 3000 + 20 * rng.randrange(60) if rng.random() < 0.3 else rng.randrange(3000, 4500)
+
+
+def short_y(rng, pool) -> int:
+    return 6000 if rng.random() < 0.3 else rng.randrange(6000, 7500)
+
+
+FLIGHT_ARGS = [anything, flight_x, flight_y, coordinate, coordinate, flight_x, flight_y, coordinate, coordinate]
+SHORT_ARGS = [anything, short_x, short_y, coordinate, coordinate, short_x, short_y, coordinate, coordinate]
+
+SPECS += [
+    Spec("MapEffect_Reset", 0x00543fd0, "thiscall", []),
+    Spec("MapEffects_Unlink", 0x00545e40, "thiscall", [between(1, 52)], presets=linked_effects, max_cases=300),
+    Spec("MapEffects_RemoveMatching", 0x00545c80, "thiscall",
+         [below(3, 0.05), one_of(0, 1, 2, 0xfffffffe, 0xffffffff),
+          lambda rng, pool: 0xFFFFFFFF if rng.random() < 0.3 else rng.randrange(768),
+          lambda rng, pool: 0xFFFFFFFF if rng.random() < 0.3 else rng.randrange(512)],
+         eax_mask=0, presets=linked_effects, max_cases=300),
+    Spec("MapEffects_SpawnArrow", 0x00545150, "thiscall", FLIGHT_ARGS, presets=flight_table,
+         ignore_bytes=EFFECT_TABLE_PADDING, max_cases=300),
+    Spec("MapEffects_SpawnProjectile1", 0x005453f0, "thiscall", FLIGHT_ARGS, presets=flight_table,
+         ignore_bytes=EFFECT_TABLE_PADDING, max_cases=300),
+    Spec("MapEffects_SpawnProjectile2", 0x00545730, "thiscall", FLIGHT_ARGS, presets=flight_table,
+         ignore_bytes=EFFECT_TABLE_PADDING, max_cases=300),
+    Spec("MapEffects_SpawnProjectile0", 0x005458d0, "thiscall", SHORT_ARGS, presets=flight_table,
+         ignore_bytes=EFFECT_TABLE_PADDING, max_cases=300),
+    Spec("MapEffects_SpawnProjectile", 0x00545b90, "thiscall",
+         [anything, lambda rng, pool: rng.choice([0, 1, 2, 3, 4, rng.getrandbits(32)])] + SHORT_ARGS[1:],
+         presets=flight_table, ignore_bytes=EFFECT_TABLE_PADDING, max_cases=300),
+    Spec("MapEffects_Spawn_544630", 0x00544630, "thiscall",
+         [anything, below(4), below(2)] + [coordinate] * 5, presets=effect_table(0.0),
+         ignore_bytes=EFFECT_TABLE_PADDING, max_cases=200),
+    Spec("MapEffects_Spawn_5449f0", 0x005449f0, "thiscall",
+         [anything, below(4), below(4)] + [coordinate] * 5, presets=effect_table(0.0),
+         ignore_bytes=EFFECT_TABLE_PADDING, max_cases=300),
+]
+
+
+def miner_state(rng, pool, args):
+    settler = SETTLERS + args[0] * SETTLER_BYTES
+    building = rng.randrange(0x1000)
+    art = rng.choice([7, 8, 9, 0x1d, 0x25, 0x38, 6, 0x0a, 0x39, rng.getrandbits(8)])
+    return [(settler + 0x22, building, 2), (settler + 0x4, rng.randrange(384), 2),
+            (settler + 0x6, rng.randrange(384), 2), (BUILDINGS + building * BUILDING_BYTES + 0x6, art, 1)]
+
+
+SPECS += [
+    Spec("GameWorld_MinerJobEnter", 0x004f9a00, "thiscall", [below(0x7d00)], presets=miner_state, max_cases=1000),
+]
