@@ -22,14 +22,11 @@ user may provide a late-game save file later. Order:
    BuildRegionsAndAreas 0x51a580. Create only runs for random maps, so it
    has whole-game evidence since session 40 (`--random-map`,
    tools/check_random_map.py).
-2b. **Refactor batch (user decision 2026-11-09, next):** bring
-   re/proposed_structs.h into the build (e.g. src/s3re/game/layout.h,
-   with its static_asserts); convert the replacement files from
-   At<T>(world, offset) and local offset constants to typed struct access
-   (31 files define their own At, about 758 offset constants); remove the
-   duplicated helpers and offsets with no behaviour change (proven by the
-   full in-process and emulator suites and a whole-game check); from then
-   on new field knowledge goes into the structs.
+2b. **Refactor batch - done 2026-11-10:** typed world structs
+   (`src/s3re/game/layout.h`), all replacement files converted, no raw
+   offsets left (`tools/typed_access_lint.py` in `inventory.py check`).
+   **Next: step 3, as the parallel round of 3 packages planned in
+   `re/update_settlers.md`.**
 3. **The 27 undone callees of GameWorld::UpdateSettlers 0x4e9670** (17,525
    instructions), small ones first. Decide the x87 question first (below).
    READY after batch 29 (instructions): 0x50e320 (28), 0x519670 (63),
@@ -538,6 +535,55 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-10 (42): refactor batch 2b, typed world structs
+
+- `re/proposed_structs.h` moved into the build as
+  `src/s3re/game/layout.h`: `GameWorld` derives from
+  `layout::GameWorldFields` (record types in namespace `layout`), every
+  offset `static_assert`ed; tiles from 0x67444 (settled earlier, now used
+  everywhere: the old 0x67440-based files map.cpp, map_neighbourhood.cpp,
+  settlers.cpp, world_search.cpp now use the real Tile fields, same
+  absolute addresses). `TileOffset`/`TileAtOffset` keep the original's
+  32-bit tile byte-offset arithmetic where it steps past the map.
+  `game/raw.h` (`RawAt`, `RawAtAddress`, `OffsetIn`) is the only raw
+  helper; `WorldPair::Both`/`SameField`/`OffsetOf` for typed tests.
+- Six parallel worktree workers converted ~60 files (groups: map/tiles,
+  settlers/buildings, areas/players, piles/tables/effects, AI/UI,
+  framework). Removed: ~37 per-file `At`-style helpers, all `WorldField` /
+  `world_offset::` uses (world.h now just includes layout.h), ~440 world
+  offset constants. New object layouts: `framework_layout.h` (Win32,
+  DirectX, exceptions, lobby, GfxData), `logic_thread_layout.h`
+  (CLogicThread +0x74, +0x84, world +0x3a0, queues +0x3c4/+0x3c8; one view
+  shared by ui_state, ui_overlays, game_end, determinism), `ai_layout.h`,
+  `screen_element_layout.h`, `settler_groups.h` (S3.EXE groups at
+  0x7ad620). `MapEffect` got real fields (padding explicit);
+  `ui_2d290[5]` split (ui_special_menu 0x2d298, ...).
+- No code/layout conflicts found. Notes: building +0xe is read both as a
+  byte and a word (kept uint16 pile_ring); AI_TileByte8 reads the owner,
+  not terrain; `Settler::direction` also holds an animation id (rename in
+  TODO.md). world_create.cpp's local `NextDirection` clashed with the
+  hooked one in the emulator's symbol lookup (renamed NextHexDirection).
+- Determinism trace v5: regions follow layout.h (header up to 0x67444, map
+  rows of mapSize tiles, rest up to the object end 0x153a128), first header
+  skip from 0x2d038 (was 0x2d02c), named per-tile skips;
+  tools/diff_world_dumps.py in sync; keeps session 41's v4 skip of
+  +0x2d2c8. Older traces (and cached original reference traces) aren't
+  comparable: S3RE_ORIGINAL_TOOLING_VERSION bumped to 2.
+- Rule in CLAUDE.md ("Typed access, no raw offsets"); postponed items
+  (unk fields to name, remaining RawAt objects, MessageQueue) in TODO.md.
+- Verification (whole-game checks ran before `--fast` landed, at normal
+  speed, on trace v5 without the 0x2d2c8 skip; the code checked is the
+  same, the rebase only added that skip): build clean, no warnings; in-process 357/357; emulator
+  (see below); whole game: recorded game 3000 ticks against the original
+  REPLAY OK (203 of 457 replacements called), `slot 1.sav` 2000 ticks
+  against the original identical (201 called); inventory, trivial checks
+  pass. No inventory status changes.
+- Emulator (parallel runner from the emulator agent's worktree, `--jobs
+  18`, our DLL): 458 functions, 0 mismatches; the only incomplete coverage
+  is GameWorld_Create 338/415 (the known gap, TODO.md). `--self-test` 21 of
+  21 caught. Still unverified by this refactor: nothing beyond what was
+  unverified before (the 77 emulator blocks of Create).
 
 ### 2026-11-10 (41): parallel emulator runs, --changed, fair game lock (tooling, parallel worktree)
 

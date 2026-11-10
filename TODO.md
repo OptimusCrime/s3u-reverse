@@ -22,6 +22,15 @@ Each item: what, why, and where to start.
   evidence (e.g. `GameWorld::UpdateSettlers`, `GameWorld::UpdatePhase2`,
   `Logic_sub_*` / `SaveGame_sub_*` / `AI_sub_*` survey names). Review them
   when the functions are worked on; see the naming rule in `CLAUDE.md`.
+- **Rename `Settler::direction` (+0x8).** `GameWorld::SetSettlerAnimation`
+  (0x50e2c0) stores an animation id there, so "direction" is too narrow
+  (found in the typed-access refactor, re/structs.md).
+- **Name the layout.h fields the refactor left as `unk`:** e.g.
+  `GameWorld::unk2d274` (the symmetry argument of GameWorld::Create),
+  `Building::unk07`, `Building::unk1b[0/1]`, and split
+  `Player`/`GameWorld::new_game_objective` into enabled + objectives.
+  Workers kept the old names to avoid merge conflicts; the meanings are in
+  the code comments and re/structs.md.
 - **Name constructors** (`re/classes.json` lists the functions that store
   each vtable).
 
@@ -78,6 +87,17 @@ Each item: what, why, and where to start.
   helpers 0x5ffcc0 / ThrowOutOfMemory, ...). Harmless today (the game
   ends), but worth fixing for the standalone build. List: inventory notes
   containing "Known difference".
+
+## Typed access leftovers
+
+- A few `RawAt`/`RawAtAddress` uses remain, each with a comment, for
+  objects whose layout isn't mapped yet (GfxData frame tables in
+  graphics_helpers.cpp, screen_element.cpp's parent vbtable pointer and
+  dialog globals, single fields of unidentified lobby/AI objects, the
+  single-string classes in string_members.cpp). Give them packed structs
+  once more of their fields are known (`grep -rn RawAt src`).
+- `MessageQueue` (logic_thread_layout.h) is opaque; map its ring-buffer
+  fields when the net/bounce thread code is reimplemented.
 
 ## Code organisation
 
