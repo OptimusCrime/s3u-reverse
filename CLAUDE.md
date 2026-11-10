@@ -249,9 +249,22 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   worktrees). Before any run that opens the game window (check_replay.py,
   check_determinism.py, plain launcher runs; not `--test`), create the
   directory `Settlers3Ultimate/s3re-game.lock` atomically (mkdir; if it
-  exists, retry every 30 s), write `owner.txt` (who, when) into it, and
+  exists, wait in the queue below), write `owner.txt` (who, when) into it, and
   make sure no `S3.EXE` runs. Remove it when the run ends, also on
   failure. A lock older than 2 hours with no `S3.EXE` running is stale.
+  An `S3.EXE` whose parent is `s3re_launcher --test` (in-process tests,
+  no window) doesn't count as running, so test runs never block game
+  checks (`game_lock.running_games` checks the parent's command line;
+  an `S3.EXE` without a parent counts). **Fair queue (2026-11-10):**
+  waiters write a ticket `<ns time>-<pid>-<owner>.ticket` into
+  `Settlers3Ultimate/s3re-game.queue/` and only the oldest live ticket
+  may mkdir the lock, so runs get the game in arrival order (checked
+  every 3 s; tickets and locks of dead pids are removed; the ticket is
+  removed on exit, errors and Ctrl+C). `held(owner, max_wait=None)`,
+  `acquire`/`release`; `python tools/game_lock.py status` shows the
+  holder, its age and the queue. A lock made by hand (mkdir, no
+  `owner.txt`) is still respected. `python tools/test_game_lock.py`
+  tests it without a game.
   `tools/game_lock.py` implements it (`with game_lock.held(owner):`);
   `check_replay.py`, `check_determinism.py`, `check_save.py` and
   `check_random_map.py` take it automatically; `python tools/game_lock.py status|release`. Manual
@@ -606,6 +619,38 @@ replaying, see `src/s3re/replay/command_log.h`):
    rely on DLL startup code (the emulator doesn't run it); call the game's
    operator new/delete/memmove (0x61efb9/0x61e4ef/0x61e860) where the
    original does.
+   - **Parallel runs:** specs run in `--jobs N` worker processes
+     (default: cores minus 2, capped by free memory at ~600 MB per
+     worker; `--jobs 1` runs in one process). Every spec starts from a
+     fresh emulator state (`Emulator.reset`: images as loaded, stack
+     zeroed, no world bytes), so results don't depend on the order or
+     the worker count, and the output is printed in specs.py order.
+     The slowest specs start first (times in the gitignored
+     `build/emutest_times.json`), and specs that took longer than about
+     total/jobs/2 run as several parts (case ranges; the inputs of the
+     skipped cases are still drawn, so the merged result equals a whole
+     run). Full suite on 18 workers: ~15 min wall time (the serial run
+     takes over an hour); a worker peaks at ~380 MB. `--memory` prints
+     workers, peak memory and wall time. `--bin-dir DIR` tests the DLL in another
+     build directory (e.g. the main checkout's).
+   - **Selective runs:** `run.py --changed [--since REF]` runs only the
+     specs the changes since REF (default: the last full clean run,
+     `build/emutest_last_full.json`, written by every full run with 0
+     mismatches; it lists the specs with incomplete coverage, today only
+     GameWorld_Create) can affect, and prints "N of M
+     specs" and why (`--dry-run`: only the selection). The selection
+     comes from the build: MSBuild's compiler tracking log (headers of
+     each object) and s3re.map plus the DLL's code (which objects each
+     replacement reaches through calls and data references), and from
+     specs.py (entries whose code or helpers changed, comments don't
+     count). A change to the harness, `tools/requirements.txt`, the
+     CMake files or `re/*_functions.tsv` selects everything and runs
+     the self-test too. Details: `tools/emutest/changed.py`.
+   - **Policy:** per batch, `run.py --changed --require-coverage` (it
+     includes the batch's new specs); the full suite (parallel) at the
+     end of each parallel round of agents and before milestones, and
+     whenever `--changed` selects more than about half of the specs
+     anyway. Run `--self-test` when the harness changed.
 5. Build, then run `s3re_launcher --test [filter]`. This runs the tests inside
    the real `S3.EXE` without opening the game window. The exit code is 0 only
    if every test passed. A crashing test is logged with the faulting
