@@ -5861,3 +5861,247 @@ SPECS += [
          callees={0x004d97b0: (2, "thiscall", "probe"), 0x0051b5d0: (3, "thiscall", "probe"),
                   0x0051b640: (2, "thiscall", "probe")}),
 ]
+
+
+# Package A, batch 3: whole paths (pathing.cpp): TraceLine, FollowRightWall,
+# PlanLine, FindPath on a window of free tiles (regions 0) with obstacles
+# (regions 1); the lazily random tiles around it almost never match the
+# regions, so they act as a wall.
+ROUTE_WINDOW = 12
+SPLIT = (0, 1, 1, -1, -1, 1, 1, 0, -1, 0, 0, 1, 0, -1, -1, 1, 1, -1, -1, 0, 1, 0, 0, -1)  # 0x6586ac
+AXES = (1, 1, 1, 0, 0, 1, 1, 1, -1, 0, 0, 1, -1, -1, -1, 0, 0, -1, -1, -1, 1, 0, 0, -1)   # 0x65870c
+ROUTE_MODES = (1, 2, 8, 0x18)
+
+
+def route_window(rng, x, y):
+    """Fields of the window around (x, y) and the set of obstacle tiles."""
+    fields, blocked = [], set()
+    r = ROUTE_WINDOW
+    for dx in range(-r, r + 1):
+        for dy in range(-r, r + 1):
+            t = tile(x + dx, y + dy)
+            other = rng.randint(1, 31999) if rng.random() < 0.1 else 0
+            fields += [(t + 0x10, 0, 1), (t + 0x14, 0, 2), (t + 0x16, 0, 2), (t + 0x0, other, 2),
+                       (t + 0x6, rng.choice((0x10, 0x12, 0x13, 0x18, 0x1C, 0x16, 0x05, 0x20)), 1)]
+            if other:
+                record = SETTLERS + other * SETTLER_BYTES
+                fields += [(record + 0xE, rng.choice(PATH_JOBS), 2), (record + 0x2C, rng.randrange(256), 1),
+                           (record + 0x2E, rng.randrange(6), 1)]
+    for _ in range(rng.randrange(6)):
+        ox, oy = x + rng.randint(-r + 3, r - 3), y + rng.randint(-r + 3, r - 3)
+        cells = []
+        if rng.random() < 0.5:
+            d, side, length = rng.randrange(6), rng.randrange(6), rng.randint(3, 12)
+            thick = rng.random() < 0.5
+            for i in range(-length // 2, length // 2 + 1):
+                cx, cy = ox + i * DIR_X[d], oy + i * DIR_Y[d]
+                cells.append((cx, cy))
+                if thick:
+                    cells.append((cx + DIR_X[side], cy + DIR_Y[side]))
+        else:
+            rad = rng.randint(1, 3)
+            cells = [(ox + dx, oy + dy) for dx in range(-rad, rad + 1) for dy in range(-rad, rad + 1)
+                     if abs(dx) + abs(dy) <= rad + 1]
+        for cx, cy in cells:
+            if abs(cx - x) <= r and abs(cy - y) <= r:
+                t = tile(cx, cy)
+                fields += [(t + 0x10, 1, 1), (t + 0x14, 1, 2), (t + 0x16, 1, 2)]
+                blocked.add((cx, cy))
+    return fields, blocked
+
+
+def direction_of_delta(dx, dy):
+    if dx > 0 and dy >= 0:
+        return 1 if dx <= dy else 0
+    if dx <= 0 and dy > 0:
+        return 2
+    if dx < 0 and dy <= 0:
+        return 4 if dx >= dy else 3
+    return 5
+
+
+def route_case(rng, n, state=True, line=True):
+    """Settler n at (x, y) in a window, its target in the window (free in
+    four of five cases), a realistic path mode (4 only ever comes from
+    WalkLine in the same FindPath round), and (state) the path state as
+    FindPath and PlanLine set it up for the line from the target."""
+    x, y = rng.randint(20, 360), rng.randint(20, 360)
+    fields, blocked = route_window(rng, x, y)
+    tx, ty = x + rng.randint(-10, 10), y + rng.randint(-10, 10)
+    if (tx, ty) == (x, y):
+        tx += 1
+    wx = x if rng.random() < 0.5 else x + rng.randint(-6, 6)
+    wy = y if rng.random() < 0.5 else y + rng.randint(-6, 6)
+    mode = rng.choice(ROUTE_MODES) | (rng.randrange(4) << 6) | (0x20 if rng.random() < 0.25 else 0)
+    record = SETTLERS + n * SETTLER_BYTES
+    here = tile(x, y)
+    fields += [(MAP_SIZE, 384, 4), (here + 0x10, 0, 1), (here + 0x14, 0, 2), (here + 0x16, 0, 2), (here, n, 2),
+               (record + 0x1, rng.randrange(48), 1), (record + 0x4, x, 2), (record + 0x6, y, 2),
+               (record + 0x8, rng.randrange(6) if rng.random() < 0.9 else rng.getrandbits(32), 4),
+               (record + 0xE, 0xAB if rng.random() < 0.1 else 2, 2), (record + 0x24, tx, 2), (record + 0x26, ty, 2),
+               (record + 0x28, wx, 2), (record + 0x2A, wy, 2), (record + 0x2C, mode, 1),
+               (record + 0x2D, rng.randrange(5), 1), (record + 0x2E, rng.randrange(6), 1)]
+    if rng.random() < 0.8:
+        t = tile(tx, ty)
+        fields += [(t + 0x10, 0, 1), (t + 0x14, 0, 2), (t + 0x16, 0, 2)]
+    shape = rng.random()
+    if shape < 0.15:
+        # The settler walled in (all six neighbours blocked): no step in
+        # three rounds, FindPath's fallback direction.
+        for k in range(6):
+            t = tile(x + DIR_X[k], y + DIR_Y[k])
+            fields += [(t + 0x10, 1, 1), (t + 0x14, 1, 2), (t + 0x16, 1, 2)]
+    elif shape < 0.3:
+        # The settler surrounded by working settlers (stationary jobs): the
+        # line is free when target_free is 0, but no step is possible, so
+        # FindPath runs three rounds and takes its fallback direction.
+        for k in range(6):
+            other = rng.randint(1, 31999)
+            fields += [(tile(x + DIR_X[k], y + DIR_Y[k]), other, 2),
+                       (SETTLERS + other * SETTLER_BYTES + 0xE, rng.choice((4, 5, 0x100)), 2)]
+    elif shape < 0.5:
+        # A ring of radius 2..4 around the settler with a gap: PlanLine may
+        # need many rounds (intermediate targets) or give up.
+        rad, gap = rng.randint(2, 4), rng.randrange(6)
+        for k in range(6):
+            for j in range(rad):
+                if k == gap and j == rad // 2:
+                    continue
+                cx = x + rad * DIR_X[k] + j * DIR_X[(k + 2) % 6]
+                cy = y + rad * DIR_Y[k] + j * DIR_Y[(k + 2) % 6]
+                t = tile(cx, cy)
+                fields += [(t + 0x10, 1, 1), (t + 0x14, 1, 2), (t + 0x16, 1, 2)]
+    if state:
+        fields += [(PATH_STATE + 0x0, n, 4), (PATH_STATE + 0x4, x, 4), (PATH_STATE + 0x8, y, 4),
+                   (PATH_STATE + 0x54, 0, 4), (PATH_STATE + 0x58, 0, 4), (PATH_STATE + 0x5C, 0, 4),
+                   (PATH_STATE + 0x60, rng.choice([1, 2, 3]), 4),
+                   (PATH_STATE + 0x48, 1000 if rng.random() < 0.2 else rng.randrange(6), 4),
+                   (PATH_STATE + 0x4C, rng.randint(1, 2), 4), (PATH_STATE + 0x94, rng.randrange(2), 4)]
+    if line:
+        dx, dy = x - tx, y - ty
+        d = direction_of_delta(dx, dy)
+        a = SPLIT[d * 4 + 1] * dy + SPLIT[d * 4] * dx
+        b = SPLIT[d * 4 + 3] * dy + SPLIT[d * 4 + 2] * dx
+        ax_x, bx_x, ax_y, bx_y = AXES[d * 4:d * 4 + 4]
+        if a > b:
+            f = int((b << 16) / a)
+            major_a, major_b, minor_a, minor_b = 0x10000, 0, 0, f
+        else:
+            f = int((a << 16) / b)
+            major_a, major_b, minor_a, minor_b = 0, 0x10000, f, 0
+        values = {0x0C: dx, 0x10: dy, 0x14: abs(dx), 0x18: abs(dy), 0x1C: a, 0x20: b, 0x34: ax_x, 0x38: bx_x,
+                  0x3C: ax_y, 0x40: bx_y, 0x44: d, 0x64: tx, 0x68: ty,
+                  0x6C: ax_x * major_a + bx_x * major_b, 0x70: ax_y * major_a + bx_y * major_b,
+                  0x74: ax_x * minor_a + bx_x * minor_b, 0x78: ax_y * minor_a + bx_y * minor_b,
+                  0x7C: (tx << 16) + 0x8000, 0x80: (ty << 16) + 0x8000, 0x94: 0}
+        fields += [(PATH_STATE + k, v & 0xFFFFFFFF, 4) for k, v in values.items()]
+        fields.append((PATH_STATE + 0x98, rng.randrange(2), 1))
+    return fields, (x, y, tx, ty, blocked)
+
+
+def route_trace(rng, pool, args):
+    return route_case(rng, rng.randint(1, 31999))[0]
+
+
+def route_wall(rng, pool, args):
+    """FollowRightWall after a blocked trace: a hit point (a free tile next to
+    an obstacle, or a random one), the blocked direction and a trace point
+    behind the obstacle (or anywhere)."""
+    fields, (x, y, tx, ty, blocked) = route_case(rng, settler_number(args[0]))
+    r = ROUTE_WINDOW
+    hx, hy = x + rng.randint(-r + 1, r - 1), y + rng.randint(-r + 1, r - 1)
+    d = rng.randrange(6)
+    if blocked and rng.random() < 0.8:
+        bx, by = rng.choice(sorted(blocked))
+        hx, hy = bx - DIR_X[d], by - DIR_Y[d]
+        px, py = bx + DIR_X[d], by + DIR_Y[d]
+        while (px, py) in blocked:
+            px, py = px + DIR_X[d], py + DIR_Y[d]
+    else:
+        px, py = x + rng.randint(-r, r), y + rng.randint(-r, r)
+    if rng.random() < 0.3:
+        # A trace point next to the hit point: reached in the first round.
+        px, py = hx + rng.randint(-2, 2), hy + rng.randint(-2, 2)
+    if rng.random() < 0.6:
+        # No retries in the path mode: the first round runs (when the
+        # trace point lies behind the hit point).
+        record = SETTLERS + settler_number(args[0]) * SETTLER_BYTES
+        fields.append((record + 0x2C, rng.choice(ROUTE_MODES) | (0x20 if rng.random() < 0.25 else 0), 1))
+    if rng.random() < 0.1:
+        # An enclosed hit point (every neighbour blocked): "no direction".
+        for k in range(6):
+            t = tile(hx + DIR_X[k], hy + DIR_Y[k])
+            fields += [(t + 0x10, 1, 1), (t + 0x14, 1, 2), (t + 0x16, 1, 2)]
+    t = tile(hx, hy)
+    fields += [(t + 0x10, 0, 1), (t + 0x14, 0, 2), (t + 0x16, 0, 2)]
+    if rng.random() < 0.2:
+        # A pocket: the hit point is a blocked tile (the trace's start, the
+        # target, when the first step was blocked) with one or two exits,
+        # each sometimes a dead end. Reaches a walker that is enclosed after
+        # its first step. target_free 0: settlers don't block.
+        def block(bx, by):
+            tb = tile(bx, by)
+            return [(tb + 0x10, 1, 1), (tb + 0x14, 1, 2), (tb + 0x16, 1, 2)]
+
+        def free(bx, by):
+            tb = tile(bx, by)
+            return [(tb + 0x10, 0, 1), (tb + 0x14, 0, 2), (tb + 0x16, 0, 2)]
+
+        exits = {rng.randrange(6), rng.randrange(6)}
+        fields += block(hx, hy) + [(PATH_STATE + 0x98, 0, 1)]
+        for k in range(6):
+            if k not in exits:
+                fields += block(hx + DIR_X[k], hy + DIR_Y[k])
+        for k in exits:
+            ex, ey = hx + DIR_X[k], hy + DIR_Y[k]
+            if rng.random() < 0.6:
+                for m in range(6):
+                    if (ex + DIR_X[m], ey + DIR_Y[m]) != (hx, hy):
+                        fields += block(ex + DIR_X[m], ey + DIR_Y[m])
+            fields += free(ex, ey)
+    fields += [(PATH_STATE + 0x84, (hx << 16) + 0x8000, 4), (PATH_STATE + 0x88, (hy << 16) + 0x8000, 4),
+               (PATH_STATE + 0x8C, d, 4), (PATH_STATE + 0x7C, (px << 16) + 0x8000, 4),
+               (PATH_STATE + 0x80, (py << 16) + 0x8000, 4)]
+    if rng.random() < 0.3:
+        # The "no angle" logs compare the target with the walkers' best
+        # point: a tile near the hit point.
+        k, j = rng.randrange(6), rng.randint(1, 3)
+        fields += [(PATH_STATE + 0x64, hx + j * DIR_X[k], 4), (PATH_STATE + 0x68, hy + j * DIR_Y[k], 4)]
+    return fields
+
+
+def route_plan(rng, pool, args):
+    return route_case(rng, settler_number(args[0]), line=False)[0]
+
+
+def route_find(rng, pool, args):
+    return route_case(rng, args[0], state=False, line=False)[0]
+
+
+SPECS += [
+    Spec("Pathing_TraceLine", 0x004a3e30, "thiscall", [scratch(0)], presets=route_trace, max_cases=1000),
+    # Exempt: 0x4a4546/0x4a4550 and 0x4a476d/0x4a4777/0x4a4781, the "no
+    # angle" DebugLogs: they need the target to equal the walker's best
+    # point just when the other walker has failed (the preset would have
+    # to replay both walks); they only log (silent in the release build)
+    # and the comparisons in front of them are covered; the in-process
+    # route test compares the DebugLog calls. 0x4a4422/0x4a4438 (right-wall
+    # walker enclosed while the left one already failed, 0x81): dead. A
+    # walker can only be enclosed at the start tile or right after leaving
+    # a blocked start tile (its previous tile is free otherwise), i.e. in
+    # the first two rounds, and the left walker can only fail in round 1
+    # when enclosed at the same start tile (then the right one failed
+    # first) and not by returning to a blocked start tile.
+    Spec("Pathing_FollowRightWall", 0x004a4050, "thiscall", [walk_settler, scratch(0)], presets=route_wall,
+         max_cases=600,
+         exempt_blocks=(0x4a4422, 0x4a4438, 0x4a4546, 0x4a4550, 0x4a476d, 0x4a4777, 0x4a4781),
+         max_instructions=300_000_000),  # walks of up to 10000 rounds in the debug build
+    Spec("Pathing_PlanLine", 0x004a3ab0, "thiscall", [walk_settler, scratch(0)], presets=route_plan, max_cases=300,
+         max_instructions=300_000_000),
+    # 0x4a229c/0x4a22a6 (fallback while standing on the waypoint): dead.
+    # Standing on the waypoint sets mode 1 at the round's start, and PlanLine
+    # then sets the waypoint to the target or to a walker's best point,
+    # never the settler's own tile (a target there asserts earlier).
+    Spec("Pathing_FindPath", 0x004a1ee0, "thiscall", [between(1, 31999)], presets=route_find, max_cases=300,
+         max_instructions=300_000_000, exempt_blocks=(0x4a229c, 0x4a22a6)),
+]

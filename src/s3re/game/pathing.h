@@ -59,12 +59,18 @@ struct PathState {
     std::int32_t step_a_y;    // 0x70
     std::int32_t step_b_x;    // 0x74
     std::int32_t step_b_y;    // 0x78
-    std::int32_t fixed_x;     // 0x7c (16.16)
-    std::int32_t fixed_y;     // 0x80
-    std::int32_t unk84[3];    // 0x84
+    // 0x7c: the point TraceLine (0x4a3e30) starts from (16.16, the centre
+    // of the target tile; moved past an obstacle when the line is blocked).
+    std::int32_t trace_x;
+    std::int32_t trace_y;     // 0x80
+    std::int32_t hit_x;       // 0x84 last free point before the obstacle (16.16)
+    std::int32_t hit_y;       // 0x88
+    std::int32_t hit_direction;  // 0x8c direction of the blocked step (DirectionOfStep)
     std::int32_t angle_base;  // 0x90 subtracted from Angle() by 0x4a48f0
-    std::int32_t unk94;       // 0x94 cleared by SetupLineStep
-    std::uint8_t unk98;       // 0x98
+    std::int32_t step_toggle; // 0x94 TraceLine alternates step A and step B
+    // 0x98: 1 if the target tile itself is passable (PlanLine); passed as
+    // TileCost's blockBusy while tracing.
+    std::uint8_t target_free;
     std::uint8_t pad99[3];
 };
 static_assert(sizeof(PathState) == 0x9c);
@@ -74,9 +80,10 @@ static_assert(offsetof(PathState, sextant) == 0x44);
 static_assert(offsetof(PathState, walk_region) == 0x54);
 static_assert(offsetof(PathState, sector_type) == 0x60);
 static_assert(offsetof(PathState, step_a_x) == 0x6c);
-static_assert(offsetof(PathState, fixed_x) == 0x7c);
+static_assert(offsetof(PathState, trace_x) == 0x7c);
+static_assert(offsetof(PathState, hit_direction) == 0x8c);
 static_assert(offsetof(PathState, angle_base) == 0x90);
-static_assert(offsetof(PathState, unk98) == 0x98);
+static_assert(offsetof(PathState, target_free) == 0x98);
 
 #pragma pack(pop)
 

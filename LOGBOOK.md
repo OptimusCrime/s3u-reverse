@@ -39,6 +39,9 @@ user may provide a late-game save file later. Order:
    entries), the round-end checks (full emulator suite, whole-game replays
    with call counts: none of the 19 new package C functions has
    whole-game evidence yet), and the renames in TODO.md.
+   **Package A (session 44): 25 of 26 done** (all of Dirk\Pathing.cpp,
+   AddTileTraffic, IsWalkingJob, IsStationaryJob); **left: WalkSettler
+   0x500860** (analysis in the session 44 entry).
 3. **The 27 undone callees of GameWorld::UpdateSettlers 0x4e9670** (17,525
    instructions), small ones first. Decide the x87 question first (below).
    READY after batch 29 (instructions): 0x50e320 (28), 0x519670 (63),
@@ -673,6 +676,104 @@ end):
   lists, garrison chains) and "remaining amount" fields drop 2^31 units;
   set those up explicitly. A stopped background test run leaves its
   S3.EXE running; kill it by its launcher's PID (only your own).
+
+### 2026-11-10 (44): package A (walking and pathfinding), 25 of 26 functions (parallel worktree)
+
+Package A of the UpdateSettlers round (re/update_settlers.md), in three
+batches, all verified (in-process differential + mutation tests, emulator
+specs with full coverage or justified exempt blocks). WalkSettler 0x500860
+is left for a follow-up batch (analysis below).
+
+- **Batch 1 (13, 5ec27ac):** settler_walk.cpp: AddTileTraffic 0x503940,
+  IsWalkingJob 0x4fa6d0, IsStationaryJob 0x4fa880 (the CSV's
+  "IsWalkingOrIdleJob" returns the inverse: 1 = neither walking nor idle).
+  pathing.cpp (Dirk\Pathing.cpp): TileCost 0x4a36a0, SectorTileCost
+  0x4a3870, FreeTileCost 0x4a3940, DirectionOfDelta 0x4a3a40,
+  DirectionOfStep 0x4a4b00, DistanceAlong 0x4a4860 (was "AreaDirection"),
+  Angle 0x4a49d0 (was "SelectAngle"), TrackAngle 0x4a48f0, ChooseSextant
+  0x4a23e0, SetupLineStep 0x4a3d30.
+- **Batch 2 (8):** StepOut 0x4a2ec0, CompareEdges 0x4a2f70, StartEdgeWalk
+  0x4a2e20, ResolveBlocker 0x4a33d0, TryStep 0x4a2c70, ChooseStepByCost
+  0x4a2660, FollowEdge 0x4a3170, WalkLine 0x4a22f0.
+- **Batch 3 (4):** TraceLine 0x4a3e30, FollowRightWall 0x4a4050 (the CSV's
+  name kept: its DebugLogs say "Rightwall"/"Leftwall"), PlanLine 0x4a3ab0,
+  FindPath 0x4a1ee0.
+- **How the pathfinder works** (details in pathing.cpp and the inventory
+  notes): FindPath keeps a 0x9c-byte state (layout::PathState, pathing.h)
+  and runs the settler's path mode (Settler +0x2c, named in layout.h and
+  re/structs.md: 1 plan a straight leg, 2 walk to the waypoint +0x28/+0x2a,
+  4 blocked: look for a way around, 8 follow the obstacle's edge with
+  +0x2d steps from direction +0x2e, 0x10 the edge side, 0x20 waiting for a
+  settler in the way, top two bits a retry counter). PlanLine traces a line
+  from the target back to the settler and walks both hands along an
+  obstacle in the way to place an intermediate target. Directions 0..5
+  are (1,0) (1,1) (0,1) (-1,0) (-1,-1) (0,-1) (tables 0x65867c/0x658694).
+  The global 0x7a9d98 is a progress marker (sector type << 8 | phase |
+  area << 16), only read by DebugLogs in CDrawThread::vf13.
+- **Facts / surprises:** FollowRightWall's two walkers track TrackAngle
+  maxima/minima; the left-wall walker's turn counter starts at -0x80000.
+  CompareEdges ends with count 5 (no "all blocked" result) when the
+  right-hand walker is enclosed. FollowRightWall's first round ignores a
+  hit found in the second round. Path mode 4 is never seen at FindPath's
+  start (StepOut would read the unset sextant 0xff): tests use realistic
+  modes. TrackAngle's catch(...) (DebugLog + rethrow) is left out (known
+  difference, only on Angle's assertion).
+- **Tests:** in-process Pathing_* (10) and the walk helpers (5); emulator
+  specs for all 25 (presets: a window of free tiles with obstacles and
+  settler queues; the tiles around it are lazily random and act as a
+  wall). Note: in-process, an original pathing function's callees are our
+  hooked replacements; the emulator runs pure original code.
+  Exempt blocks (reasons at the specs): FollowRightWall 7 (two dead, five
+  "no angle" DebugLog calls), FindPath 2 (dead), ChooseSextant 1 (dead),
+  the code after assertion calls and TrackAngle's catch handler. The
+  emulator runs of FollowRightWall/PlanLine/FindPath are slow (~18 min for
+  FollowRightWall's 600 cases with 8 jobs); the last preset change (walled-in
+  and ringed settlers in route_case) was run for FindPath (40/40) but not
+  rerun for TraceLine/PlanLine/FollowRightWall (session ended; their
+  earlier runs: 22/22, 23/23, 116/118 + exempt). Rerun them in the round's
+  full suite.
+- **WalkSettler 0x500860 (not done), analysis so far** (Ghidra pseudocode
+  read completely; jump tables 0x5033e8 and 0x503418 on the job, 0x503534
+  on the job >= 0x135): (1) settler +0x16 = (+0x16 + +0x19) % (type 0x29 ?
+  0x24 : 0xc) (animation step). (2) If not at the waypoint +0x24/+0x26
+  ... (or a distance check with +0x34..+0x3a when +0x38 == -3): "Settler
+  tries to reach spot out of map" DebugLog; type 0x29 (a 7-tile unit, cf.
+  CreateSevenTileUnit 0x50dd20): clears/sets the six neighbour tiles' settler
+  words from the path_cache-like chain at (n + 0x4a97a) << 6 (= Settler
+  +0x20 saved_counter list), FindPath, moves; other types except ships
+  (0x2b/0x2c with +0x3c != 0xff): FindPath; 0xff -> ResetSettlerToIdle
+  0x50cf50 (package B, call by address); | 8 -> wait (direction stored,
+  +0xc/+0x16/+0x19 = 0); | 0x10 -> swap places with the blocking settler
+  (class-0 settler on foreign ground: "TROUBLE: wollte auf illegales Feld"
+  + ResetSettlerToIdle of the other), with IsSettlerJob01Or37 /
+  JobAfter01Or37 for an idle one; else step: NeighbourX/Y, tile settler
+  words moved, AddTileTraffic (twice for jobs 0xc/0x4e, not for class !=
+  0), +0x19 = terrain speed table 0x658c1c[terrain] + per-type 0x6591a4
+  (type 0x17 with +0x15: +1), +0xc = +0x19 - 1. Ships: scans 7 rings for
+  settlers on the six neighbour tiles, FindPath twice, "Illegal walkcount
+  vorher %u Shi..." and a walk counter in +0x3c (& 7 = last direction,
+  >= 0xf8 -> job 0x37, EAX = 1). (3) At the waypoint: per-job switch (47
+  walking jobs -> next job, many simply job + 1 and counter 0; 0xe8/0x30/
+  0x93/0xf9/0x141/0x168: MoveSettlerToBuildingTileA + SetSettlerAnimation;
+  0xab soldier at a building: ClearSettlerJob or a MapEffects Spawn_544e70
+  "dies"; 0x135/0x148/0x149/0x14a ships pop the next waypoint from +0x30..
+  +0x3a; 2 -> job 1, EAX = 1). Jobs 0x35/0xb0 (soldiers): byte +0x1a
+  states 5/4/3/2/1: SetSettlerTarget, job 0x152, "suche Ziel bei %u %u"
+  target search over the offset table world+0x110a588 (radius 5): enemy
+  catapult ("Angriff Katapult"), ships, or an enemy military building
+  ("Angriff Gebaeude", unless a type-0xae settler guards it) -> per-race
+  random delay (Random, races 0..3), direction DirectionFromDelta 0x5037f0
+  + 0x8000, job 0x151, SpawnProjectile 0x545b90 (package B, by address,
+  with g_gameTick) and AllocTable36700Record 0x4fefd0; type 0x2c/0x2b
+  ship boarding (counters per player 0x659644, list relinking of +0x10/
+  +0x12, RemoveSettlerFromLists, job 0x146). (4) Types 0x28/0x16 with
+  +0x1c != 0xffff: tile flags +0xa checks, jobs 0x12e (SetSettlerAnimation
+  0x10f) / 0xd4. (5) No new job: path_cache shift (+0x30.. pop into
+  +0x24/+0x26, job 0x35) or job 0x37 with EAX = 1. EAX = the "run again"
+  flag UpdateSettlers stores. Plan: one file settler_walk.cpp, hooked as
+  one unit; tests per branch family (normal step, wait/swap, type 0x29,
+  ships, soldiers' target search, waypoint jobs) with B's 0x50cf50 and
+  0x545b90 probed in the emulator (Spec.callees) and stubbed in-process.
 
 ### 2026-11-10 (43): housekeeping; package C batch 1 (3 functions); game files restored
 
