@@ -31,10 +31,6 @@ Each item: what, why, and where to start.
   with the command recorder, because recordings store only a map file
   name. Add the random-map parameters to the recording format (version 3)
   so synthetic-input games on random maps can be replayed.
-- **Fair game lock:** tools/game_lock.py polls every 30 s with no queue, so
-  one agent's series of checks can starve another's; it also waits for
-  `--test` runs (any S3.EXE). A FIFO ticket directory and a shorter poll
-  would help; `--test` runs could take a shared/readers lock.
 - **Emulator coverage of `GameWorld::Create`:** 338/415 blocks; the rest
   needs maps of 130+ tiles, too slow in the emulator (a 320-tile case ran
   for over an hour). Options: a release build of s3re.dll for the emulator,
