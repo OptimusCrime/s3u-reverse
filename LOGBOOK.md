@@ -26,7 +26,13 @@ user may provide a late-game save file later. Order:
    (`src/s3re/game/layout.h`), all replacement files converted, no raw
    offsets left (`tools/typed_access_lint.py` in `inventory.py check`).
    **Next: step 3, as the parallel round of 3 packages planned in
-   `re/update_settlers.md`.**
+   `re/update_settlers.md`.** Started 2026-11-10 (session 43, cut to one
+   hour by the user): package C batch 1 = 3 functions (UpdateShadeAround
+   0x519670, SetTerrain16Patch 0x51ba00, CountOtherPileClaims 0x510800).
+   **Left of the round:** package A (walking/pathfinding, all 26), package
+   B (settler state, piles, soldiers, mines, map effects, all 28), and
+   package C minus those 3 (19 functions; the analysis notes for the next
+   ones are in the session 43 entry), plus the renames in TODO.md.
 3. **The 27 undone callees of GameWorld::UpdateSettlers 0x4e9670** (17,525
    instructions), small ones first. Decide the x87 question first (below).
    READY after batch 29 (instructions): 0x50e320 (28), 0x519670 (63),
@@ -535,6 +541,91 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-10 (43): housekeeping; package C batch 1 (3 functions); game files restored
+
+Session cut to one hour by the user (only the smallest ready package C
+functions).
+
+- **Reference traces regenerated (trace v5)** from replays with the
+  original code (`--original --fast`, via `check_replay.py
+  --against-original`): `recordings/scripted-seed127.bin.tsv` (3,000
+  ticks; it had none) and `fun8-seed2024-input31.bin.tsv` (5,000 ticks;
+  was v3). Plain replay checks against them: identical, mutation
+  detected (good), both. Ours vs original: identical on both (203 and 206
+  replacements called; 3,000 and 5,000 ticks).
+- **Full emulator suite** on c561f41 (default 8 jobs): 458 specs, 0 mismatches, only GameWorld_Create incomplete (338/415, known); recorded as the last full clean pass. (The DLL was rebuilt while its last spec ran; the later run below repeats it.).
+- **Worktrees:** removed the 10 agent worktrees whose branches were fully
+  merged into origin/main and had no uncommitted changes, and their
+  branches. Kept `agent-a06bfddbf49ac7135` (branch not merged by hash;
+  TODO.md). **Accident:** `git worktree remove -f -f` followed each
+  worktree's `Settlers3Ultimate` junction and deleted the main checkout's
+  game files. Restored by extracting `Settlers 3 Ultimate.zip` from the
+  GOG install folder (`C:\Program Files (x86)\GOG Galaxy\Games\Settlers 3
+  Ultimate`; the copy was made from it on 2026-11-07): S3.EXE SHA-256
+  matches, the three savegames equal the GOG folder's, and the cached
+  original traces (whose keys include the input files' hashes) were hit
+  for the recording and for `slot 1.sav`, so the inputs are the same as
+  before. Lost: only game-written files (errorlog.txt, the lock queue
+  directory). Rule added to CLAUDE.md (delete the junction first).
+- **Package C batch 1** (re/update_settlers.md), 3 functions, all
+  verified (in-process differential + mutation tests, emulator specs with
+  full coverage, whole-game):
+  - `GameWorld::UpdateShadeAround` 0x519670 (was Logic_sub_519670):
+    after a tile's height changes (diggers levelling a site), the shade of
+    it and its six neighbours is recomputed. terrain_updates.cpp.
+  - `GameWorld::SetTerrain16Patch` 0x51ba00 (was Logic_sub_51ba00; the
+    CSV's "RestoreGrassAt" was wrong): a grass tile surrounded by grass
+    becomes terrain 0x16 (probably a field or bed made by the workers of
+    settler types 0x10/0x26/0x1d, jobs 0x91/0xe6/0xf7), the grass
+    variants around it plain grass; stops at the first other neighbour.
+    terrain_updates.cpp; re/structs.md terrain row.
+  - `GameWorld::CountOtherPileClaims` 0x510800 (was Logic_sub_510800):
+    the 128-entry list at world+0x1195dd4 ("recent positions") really
+    holds pile claims {pile, settler}: its only writer,
+    AddToRecentPositions, is called by job 0x152 as (settler, pile); this
+    counts other settlers' claims on a pile. economy_helpers.cpp; rename
+    of the old names in TODO.md; re/world_layout.md updated.
+  - Whole-game (`--fast`, cached original): scripted-seed127.bin 3,000
+    ticks identical (UpdateShadeAround 2,858 calls, SetTerrain16Patch 0,
+    CountOtherPileClaims 0); `slot 1.sav` 2,000 ticks identical
+    (SetTerrain16Patch 738, others 0); fun8-seed2024-input31.bin 5,000
+    ticks identical (UpdateShadeAround 15,026, SetTerrain16Patch 5,
+    CountOtherPileClaims 0). CountOtherPileClaims has test evidence only
+    (job 0x152 never ran in these games).
+  - In-process: full `--test` 363/363 passed. Emulator `--changed`: selected all 461 specs (CMakeLists.txt changed) and ran the self-test: 0 mismatches, only GameWorld_Create incomplete (known), self-test 21/21 caught; the 3 new specs cover all blocks (1/1, 61/61, 6/6).
+- **Analysed, not done (for the next package C batch):**
+  - 0x50e200 (proposal `GameWorld::SetTowerSoldierAnimation`): animation
+    0x176, by soldier type 0x20/0x23/8/0x1e/0x21/0xf/0x1f/0x22 ->
+    0x177..0x17e, +9 for building type 0x10, +0x12 for 0x12, +0x1b /
+    +0x36 for building byte +0x7 == 1 / 2, then SetSettlerAnimation (EAX =
+    its). Its in-process test needs a fake GfxData object for animation
+    ids 0x176..0x1d0 (logic_helpers.cpp's CompareSetSettlerAnimation only
+    covers kinds < 40); dropped from this batch for time.
+  - 0x5104c0 RecountPlayerPopulation: per player p, int32s at player
+    +0xc4..+0xd4: +0xc4 = civilians (class 0 or 10..29), +0xc8 = +0xcc
+    (base) + 10/30/100 per finished residence 0x1a/0x1b/0x1c, +0xd0 =
+    carriers (type 0), +0xd4 = carriers - carriers * ((+0xc8 << 16) /
+    +0xc4) >> 16 when +0xc4 > +0xc8 (unsigned), else 0. Name the fields
+    in layout.h (Player::unk0c4) when it is done.
+  - 0x50e980, 0x51b640, 0x504f70, 0x504a00, 0x504b70, 0x504e20, 0x4dbb10,
+    0x4dbb90, 0x51aae0 read (ghidra + asm); they call package B's
+    ResetSettlerToIdle 0x50cf50 (and TakeGoodFromPile 0x505820) on
+    settlers found by scans up to the settler high-water mark. Plan for
+    their tests: stub 0x50cf50/0x505820 during in-process tests (patch a
+    `jmp` to a recording stub, restore afterwards) and probe them in the
+    emulator (`Spec.callees`), so both versions' calls are compared
+    without running B's code on random worlds. Facts found: settler +0x22
+    holds the pile number for carrier jobs 0x4c..0x4f; 0x51b640's EAX is
+    not used (asm_tools' "flow" hit continues into SetOwnerOfFreeTile);
+    0x51aae0 clears a building's footprint (layout table 0x6aa170 by type
+    + race * 0x39, entries 0x960 bytes, markers 0x80000000..3, footprint
+    bit 0x08, search mark 0x71 -> 0, UnblockTile on the first list) and,
+    for a site still in buildup 1, the levelling bit 0x04 of its 31x31
+    site-cache grid (proposal `GameWorld::ClearBuildingFootprint`).
+  - REA: Ghidra on Windows doesn't allow renames (`set_addresses_names`:
+    "Windows Ghidra P0 does not admit database mutation"), so names can't
+    be re-applied in REA sessions on this machine.
 
 ### 2026-11-10 (42): refactor batch 2b, typed world structs
 

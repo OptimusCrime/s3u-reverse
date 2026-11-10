@@ -137,6 +137,7 @@ std::uint32_t __fastcall GameWorld_GrowTerrain(GameWorld* world, void* edx, std:
                                                std::uint32_t percent);
 std::uint32_t __fastcall GameWorld_UpdateBorderFlagsAround(GameWorld* world, void* edx, std::uint32_t x,
                                                            std::uint32_t y);
+std::uint32_t __fastcall GameWorld_TileShade(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
 
 // random.cpp
 std::uint16_t __fastcall GameWorld_Random(GameWorld* world, void* edx);

@@ -4400,3 +4400,47 @@ SPECS += [
           lambda rng, pool: rng.choice([0, 0, 0, 1, 2, 3, rng.getrandbits(32)])],
          presets=create_world, max_cases=10, max_instructions=3_000_000_000),
 ]
+
+
+# Package C, batch 1 (terrain_updates.cpp, economy_helpers.cpp)
+def shade_around_heights(rng, pool, args):
+    """Heights of the 5x5 block around the tile: the shade of the tile and of
+    its six neighbours reads their neighbours too."""
+    x, y = args
+    wide = rng.random() < 0.25
+    base = rng.randrange(256)
+    return [(tile(x + dx, y + dy) + 0x4, rng.randrange(256) if wide else (base + rng.randrange(25)) & 0xFF, 1)
+            for dx in range(-2, 3) for dy in range(-2, 3)]
+
+
+PATCH_TERRAINS = (0x10, 0x16, 0x12, 0x13, 0x18, 0x1C)
+
+
+def terrain16_patch(rng, pool, args):
+    """Terrains of the tile and its six neighbours: mostly accepted ones, so
+    every neighbour check and the final change are reached."""
+    x, y = args
+    fields = []
+    for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1)):
+        value = rng.choice(PATCH_TERRAINS) if rng.random() < 0.93 else rng.randrange(256)
+        fields.append((tile(x + dx, y + dy) + 0x6, value, 1))
+    return fields
+
+
+def pile_claims(rng, pool, args):
+    settler, pile = args
+    fields = []
+    for slot in range(128):
+        fields += [(RECENT_POSITIONS + slot * 4, pile if rng.random() < 0.5 else rng.randrange(6), 2),
+                   (RECENT_POSITIONS + slot * 4 + 2, settler if rng.random() < 0.5 else rng.randrange(6), 2)]
+    return fields
+
+
+SPECS += [
+    Spec("GameWorld_UpdateShadeAround", 0x00519670, "thiscall", [between(2, 380), between(2, 380)],
+         eax_mask=0, presets=shade_around_heights, max_cases=1000),
+    Spec("GameWorld_SetTerrain16Patch", 0x0051ba00, "thiscall", [between(1, 380), between(1, 380)],
+         eax_mask=0, presets=terrain16_patch, max_cases=2000),
+    Spec("GameWorld_CountOtherPileClaims", 0x00510800, "thiscall", [below(6, 0.1), below(6, 0.1)],
+         presets=pile_claims, max_cases=500),
+]

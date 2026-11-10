@@ -294,6 +294,13 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   `DWM8And16BitMitigation` compatibility layer S3.EXE needs by path, and
   without it DirectDraw fails (`DDERR_UNSUPPORTED` in
   `CDirectDraw::DDSetDisplayMode`, an "Error!" box).
+  **Removing a worktree: delete the junction first** (`cmd /c rmdir
+  <worktree>\Settlers3Ultimate`, which removes only the link), then
+  `git worktree remove`. `git worktree remove --force` follows the
+  junction and deletes the main checkout's game files (happened
+  2026-11-10; restored from `Settlers 3 Ultimate.zip` in the GOG install
+  folder `C:\Program Files (x86)\GOG Galaxy\Games\Settlers 3 Ultimate`,
+  whose contents equal the original copy: same S3.EXE hash, same saves).
 - **Starting from a savegame:** `--load-save FILE` (a path, or a name in
   `Save\`, e.g. `"slot 1.sav"`) starts the game directly from that
   savegame, with the game's own loader: the launcher passes a copy

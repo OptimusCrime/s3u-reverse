@@ -33,6 +33,7 @@ add_library(s3re SHARED
     game/building_tiles.cpp
     game/counting.cpp
     game/directx_surface.cpp
+    game/economy_helpers.cpp
     game/flood_fills.cpp
     game/framework_helpers.cpp
     game/framework_small.cpp
@@ -67,6 +68,7 @@ add_library(s3re SHARED
     game/settler_records.cpp
     game/settlers.cpp
     game/string_members.cpp
+    game/terrain_updates.cpp
     game/statistics.cpp
     game/ui_overlays.cpp
     game/ui_static_text.cpp

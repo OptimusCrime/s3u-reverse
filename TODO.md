@@ -31,6 +31,13 @@ Each item: what, why, and where to start.
   `Player`/`GameWorld::new_game_objective` into enabled + objectives.
   Workers kept the old names to avoid merge conflicts; the meanings are in
   the code comments and re/structs.md.
+- **Rename `GameWorld::AddToRecentPositions` (0x510770) to
+  `GameWorld::AddPileClaim`**, and the layout field `recent_positions`
+  (world+0x1195dd4) to `pile_claims` (entries {pile, settler}), the global
+  `g_recentPositionsCursor` (0x7ace60) and the emulator presets. Its only
+  caller, UpdateSettlers job 0x152, passes (settler, pile), and
+  CountOtherPileClaims (0x510800) counts the entries of one pile held by
+  other settlers (found 2026-11-10, session 43; re/world_layout.md).
 - **Name constructors** (`re/classes.json` lists the functions that store
   each vtable).
 
@@ -87,6 +94,17 @@ Each item: what, why, and where to start.
   helpers 0x5ffcc0 / ThrowOutOfMemory, ...). Harmless today (the game
   ends), but worth fixing for the standalone build. List: inventory notes
   containing "Known difference".
+
+## Worktrees
+
+- **Leftover worktree `.claude/worktrees/agent-a06bfddbf49ac7135`**
+  (branch `worktree-agent-a06bfddbf49ac7135`, "Typed access: settlers and
+  buildings (group B)", not merged by hash into origin/main; its content
+  was probably merged as "Merge typed-access conversion (group B)"). Check
+  with `git diff origin/main...worktree-agent-a06bfddbf49ac7135`, then
+  remove it **only after deleting its `Settlers3Ultimate` junction first**
+  (`cmd /c rmdir .claude\worktrees\agent-a06bfddbf49ac7135\Settlers3Ultimate`,
+  see CLAUDE.md: `git worktree remove --force` deletes through junctions).
 
 ## Typed access leftovers
 
