@@ -27,12 +27,15 @@ add_library(s3re SHARED
     game/ai_small_helpers.cpp
     game/area_piles.cpp
     game/area_split.cpp
+    game/building_crush.cpp
+    game/building_done.cpp
     game/building_flags.cpp
     game/building_sites.cpp
     game/building_goods.cpp
     game/building_tiles.cpp
     game/counting.cpp
     game/directx_surface.cpp
+    game/economy.cpp
     game/economy_helpers.cpp
     game/flood_fills.cpp
     game/folded_getters.cpp
@@ -73,6 +76,7 @@ add_library(s3re SHARED
     game/settlers.cpp
     game/settler_spawn.cpp
     game/string_members.cpp
+    game/territory.cpp
     game/terrain_updates.cpp
     game/pathing.cpp
     game/settler_walk.cpp

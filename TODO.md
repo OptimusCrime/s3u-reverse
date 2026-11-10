@@ -38,6 +38,12 @@ Each item: what, why, and where to start.
   caller, UpdateSettlers job 0x152, passes (settler, pile), and
   CountOtherPileClaims (0x510800) counts the entries of one pile held by
   other settlers (found 2026-11-10, session 43; re/world_layout.md).
+- **Drop the layout aliases `Building::unk07` and `Player::unk0c4[6]`**
+  (layout.h unions): package C named them `Building::race` and
+  `Player::population` .. `surplus_carriers_marked` (+0xc4..+0xd8) while
+  package B's `settler_spawn.cpp` still used the old names. Switch
+  settler_spawn.cpp to the new names (`unk0c4[2]` = `population_limit_base`)
+  and remove the unions once package B is done.
 - **Name constructors** (`re/classes.json` lists the functions that store
   each vtable).
 

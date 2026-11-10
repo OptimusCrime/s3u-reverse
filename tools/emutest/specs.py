@@ -3413,8 +3413,8 @@ def animation_table() -> list[int]:
         path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                             "Settlers3Ultimate", "S3.EXE")
         pe = pefile.PE(path, fast_load=True)
-        data = pe.get_data(0x6a8060 - 0x400000, 4 * 0x600)
-        _ANIMATION_TABLE.extend(struct.unpack("<1536I", data))
+        data = pe.get_data(0x6a8060 - 0x400000, 4 * 0x800)
+        _ANIMATION_TABLE.extend(struct.unpack("<2048I", data))
     return _ANIMATION_TABLE
 
 
@@ -4850,4 +4850,94 @@ SPECS += [
          presets=saved_animation_state, globals=gfx_global, max_cases=1000),
     Spec("GameWorld_TileSlope", 0x004faa70, "thiscall", [slope_coordinate, slope_coordinate],
          presets=slope_state, max_cases=2000),
+]
+
+
+# Package C, batch 2 (economy.cpp, building_crush.cpp)
+def population_world(rng, pool, args):
+    """Up to 40 settlers and 40 buildings with owners (sometimes beyond the
+    20 players, as in the original's unchecked indexing), carriers and
+    residences, and the players' limit bases."""
+    settlers, buildings = rng.randrange(40), rng.randrange(40)
+    wild = rng.random() < 0.1
+
+    def owner():
+        if rng.random() < 0.15:
+            return 0xFF
+        return rng.randrange(255) if wild and rng.random() < 0.1 else rng.randrange(20)
+
+    fields = [(SETTLER_COUNT, settlers, 4), (BUILDING_COUNT, buildings, 4)]
+    for n in range(1, settlers + 1):
+        fields += [(SETTLERS + n * 0x40, owner(), 1), (SETTLERS + n * 0x40 + 1, 0 if rng.random() < 0.3 else rng.randrange(0x30), 1)]
+    for n in range(1, buildings + 1):
+        b = BUILDINGS + n * BUILDING_BYTES
+        fields += [(b, owner(), 1), (b + 6, rng.choice([0x1a, 0x1b, 0x1c, rng.randrange(0x39)]), 1),
+                   (b + 0x21, 0 if rng.random() < 0.75 else rng.randrange(256), 1)]
+    for p in range(20):
+        base = rng.getrandbits(32) if rng.random() < 0.2 else rng.randrange(200)
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xcc, base, 4))
+    if rng.random() < 0.3:  # many civilians: surplus carriers
+        for p in range(20):
+            fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xcc, rng.randrange(3), 4))
+    return fields
+
+
+TOWER_SOLDIER_TYPES = (0x20, 0x23, 8, 0x1E, 0x21, 0xF, 0x1F, 0x22)
+
+
+def tower_soldier_world(rng, pool, args):
+    settler = args[0]
+    s = SETTLERS + settler * 0x40
+    building = rng.randrange(1, 0x200)
+    art = rng.choice(TOWER_SOLDIER_TYPES) if rng.random() < 0.8 else rng.randrange(256)
+    btype = rng.choice([0x10, 0x12, 0xF, 0x11]) if rng.random() < 0.8 else rng.randrange(256)
+    brace = rng.randrange(4) if rng.random() < 0.9 else rng.randrange(256)
+    race = rng.randrange(4)
+    fields = [(s + 1, art, 1), (s + 2, race, 1), (s + 0x22, building, 2),
+              (BUILDINGS + building * BUILDING_BYTES + 6, btype, 1),
+              (BUILDINGS + building * BUILDING_BYTES + 7, brace, 1)]
+    kind = 0x176
+    if art in TOWER_SOLDIER_TYPES:
+        kind = 0x177 + TOWER_SOLDIER_TYPES.index(art)
+    kind += 9 if btype == 0x10 else 0x12 if btype == 0x12 else 0
+    kind += 0x1B if brace == 1 else 0x36 if brace == 2 else 0
+    animation = animation_table()[kind * 4 + race]
+    group, index = animation >> 16, animation & 0xFFFF
+    fields += [(GFX_OBJECT + 0xb24 + group * 4, WORLD_BASE + GFX_POINTERS, 4),
+               (GFX_OBJECT + 0x264 + group * 4, 0, 4),
+               (GFX_POINTERS + 8 + index * 4, WORLD_BASE + GFX_HEADERS + rng.randrange(0x100), 4)]
+    return fields
+
+
+SITE_CACHE_BYTES = 0x3c2
+
+
+def footprint_world(rng, pool, args):
+    """The building in args[0]: a real type/race layout, owner and site slot
+    in range, mostly buildup 1 (levelling grid), stakes on its tiles."""
+    number = args[0]
+    b = BUILDINGS + number * BUILDING_BYTES
+    x, y = rng.randint(20, 360), rng.randint(20, 360)
+    owner, slot = rng.randrange(20), rng.randrange(30)
+    fields = [(b, owner, 1), (b + 2, x, 2), (b + 4, y, 2), (b + 6, rng.randint(1, 56), 1), (b + 7, rng.randrange(4), 1),
+              (b + 0x21, 1 if rng.random() < 0.6 else rng.randrange(4), 1), (b + 0x22, slot, 2)]
+    cache = SITE_CACHE + (owner * 30 + slot) * SITE_CACHE_BYTES
+    for k in range(31 * 31):
+        fields.append((cache + 1 + k, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1))
+    for dx in range(-8, 9):
+        for dy in range(-8, 9):
+            fields.append((tile(x + dx, y + dy) + 7, 0x71 if rng.random() < 0.5 else rng.randrange(256), 1))
+    return fields
+
+
+SPECS += [
+    Spec("GameWorld_RecountPlayerPopulation", 0x005104c0, "thiscall", [], eax_mask=0, presets=population_world,
+         max_cases=400),
+    Spec("GameWorld_SetTowerSoldierAnimation", 0x0050e200, "thiscall", [between(1, 0x7cfe)], presets=tower_soldier_world,
+         globals=lambda rng, pool, args: [(0x007a8010, WORLD_BASE + GFX_OBJECT, 4)], max_cases=1000),
+    # UnblockTile (verified, own spec) is probed: on the lazily random map
+    # its region floods would make the cases very slow; the calls and their
+    # arguments are compared.
+    Spec("GameWorld_ClearBuildingFootprint", 0x0051aae0, "thiscall", [between(1, 0xf9f)], eax_mask=0,
+         presets=footprint_world, callees={0x0051b770: (2, "thiscall", "probe")}, max_cases=400),
 ]

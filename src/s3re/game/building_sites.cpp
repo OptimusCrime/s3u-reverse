@@ -356,7 +356,7 @@ std::uint32_t __fastcall GameWorld_AddBuildingSite(GameWorld* world, void* /*edx
     b.x = static_cast<std::uint16_t>(x);
     b.y = static_cast<std::uint16_t>(y);
     b.owner = static_cast<std::uint8_t>(player);
-    b.unk07 = static_cast<std::uint8_t>(race);  // the owner's race
+    b.race = static_cast<std::uint8_t>(race);  // the owner's race
     b.art = static_cast<std::uint8_t>(type);
     b.buildup = 1;  // a construction site
     // Words +0x0e..+0x14.
@@ -402,7 +402,7 @@ std::uint32_t __fastcall GameWorld_AddBuildingSite(GameWorld* world, void* /*edx
     tile.flags |= kFlagBuilding;
 
     // The door, then the tiles listed after it (the door included).
-    const std::uint32_t* p = After(Layout(b.unk07, type), kMarkDoor);
+    const std::uint32_t* p = After(Layout(b.race, type), kMarkDoor);
     const std::uint16_t doorX = static_cast<std::uint16_t>(p[0] + x);
     const std::uint16_t doorY = static_cast<std::uint16_t>(p[1] + y);
     b.door_x = doorX;

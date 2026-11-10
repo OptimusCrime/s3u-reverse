@@ -261,7 +261,12 @@ building_flags.cpp, settler_queries.cpp, dump (players 0 and 1).
 | 0x090 | i32 | 0 in ctor; ExecuteCommands, UpdatePhase2, BuildingDone | G |
 | 0x094 | i32[8] | mana needed per spell slot (1 in ctor, then S3.EXE 0x658E64[spell of the race's slot]) | V |
 | 0x0B4..0x0C0 | i32 x4 | written by 0x508450 (per player init) | G |
-| 0x0C4..0x0D8 | i32 x6 | read by UpdatePhase2, 0x5104C0, UpdateSettlers; +0xCC (`unk0c4[2]`) += 1 per settler of type class 0 or 10..29 made by SpawnSettlersAround 0x50CB20 (probably the civilian count) | G |
+| 0x0C4 | u32 | population: civilians (settler class 0 or 10..29), recounted by RecountPlayerPopulation 0x5104C0 (UpdatePhase2); UpdatePhase2 creates no new settler while it is above +0xC8 | V (count), G (use) |
+| 0x0C8 | u32 | population limit: +0xCC + 10/30/100 per finished building of type 0x1A/0x1B/0x1C (residences, probably) | V (formula), G (meaning) |
+| 0x0CC | u32 | base of the limit; +1 per civilian (type class 0 or 10..29) created by SpawnSettlersAround 0x50CB20 and in UpdatePhase2 0x4E36B7 | S |
+| 0x0D0 | u32 | carriers (settler type 0) | V |
+| 0x0D4 | u32 | surplus carriers: carriers - ((limit << 16) / population * carriers >> 16) when population > limit, else 0 | V (formula), G (meaning) |
+| 0x0D8 | u32 | carriers marked with settler flag 0x80; UpdateSettlers job 1 marks/unmarks idle carriers until it equals +0xD4 | S |
 | 0x0DC | u16[36] | goods counters per goods type (Add/SubtractPlayerCounter, RecountPlayerGoods) | V |
 | 0x124 | u8 | 0 in ctor; OnStart, Step, 0x5495D0 | G |
 | 0x128 | i32 | 0 in ctor; Step, 0x5495D0 | G |
