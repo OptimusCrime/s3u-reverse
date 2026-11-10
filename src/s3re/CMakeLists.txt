@@ -69,6 +69,8 @@ add_library(s3re SHARED
     game/settlers.cpp
     game/string_members.cpp
     game/terrain_updates.cpp
+    game/pathing.cpp
+    game/settler_walk.cpp
     game/statistics.cpp
     game/ui_overlays.cpp
     game/ui_static_text.cpp

@@ -143,6 +143,9 @@ std::uint32_t __fastcall GameWorld_TileShade(GameWorld* world, void* edx, std::u
 std::uint16_t __fastcall GameWorld_Random(GameWorld* world, void* edx);
 std::uint32_t __fastcall GameWorld_RandomBelow6(GameWorld* world, void* edx);
 
+// logic_helpers.cpp
+std::uint32_t __fastcall GameWorld_WearPath(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+
 // settler_records.cpp
 std::uint32_t __fastcall GameWorld_CreateSettler(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                  std::uint32_t type, std::uint32_t player);
@@ -151,6 +154,14 @@ std::uint32_t __fastcall GameWorld_CreateSettler(GameWorld* world, void* edx, st
 std::uint32_t __fastcall GameWorld_SetSettlerTarget(GameWorld* world, void* edx, std::uint32_t settler,
                                                     std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall GameWorld_RemoveSettlerFromLists(GameWorld* world, void* edx, std::uint32_t settler);
+
+// settler_walk.cpp
+std::uint32_t __fastcall GameWorld_AddTileTraffic(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall GameWorld_IsWalkingJob(GameWorld* world, void* edx, std::uint32_t job);
+std::uint32_t __fastcall GameWorld_IsStationaryJob(GameWorld* world, void* edx, std::uint32_t job);
+
+// settlers.cpp
+std::uint32_t __fastcall GameWorld_SettlerGroup(GameWorld* world, void* edx, std::uint32_t settler);
 
 // ui_state.cpp
 std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void* edx);
@@ -182,5 +193,8 @@ std::uint32_t __fastcall GameWorld_ReplaceTileByte10AndQueue(GameWorld* world, v
                                                              std::uint32_t x, std::uint32_t y,
                                                              std::uint32_t expected,
                                                              std::uint32_t value);
+
+// win32_errors.cpp (the framework's assert; never returns)
+void __fastcall Win32_ThrowAssertmentFailed(const char* expression, const char* file, std::int32_t line);
 
 }  // namespace s3re::game

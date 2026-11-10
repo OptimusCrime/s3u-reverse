@@ -4444,3 +4444,135 @@ SPECS += [
     Spec("GameWorld_CountOtherPileClaims", 0x00510800, "thiscall", [below(6, 0.1), below(6, 0.1)],
          presets=pile_claims, max_cases=500),
 ]
+
+
+# Package A, batch 1: pathfinder leaves (pathing.cpp) and walking helpers
+# (settler_walk.cpp). The pathfinder's state (layout::PathState, 0x9c bytes)
+# lies in scratch slot 0.
+PATH_STATE = SCRATCH
+PATH_OUT = SCRATCH + SCRATCH_SLOT_BYTES  # TrackAngle's *last and *turns
+
+
+def path_state_fields(rng, x=None, y=None):
+    """Position, region values (small, so that tiles prepared with
+    path_tile_fields match them) and a sector type that is mostly valid."""
+    x = rng.randint(4, 379) if x is None else x
+    y = rng.randint(4, 379) if y is None else y
+    sector = rng.choice([1, 2, 3, 1, 2, 3, 1, 2, 3, 0, 4, rng.getrandbits(32)]) if rng.random() < 0.1 \
+        else rng.choice([1, 2, 3])
+    return [(PATH_STATE + 0x4, x, 4), (PATH_STATE + 0x8, y, 4),
+            (PATH_STATE + 0x54, rng.randrange(2) if rng.random() < 0.9 else rng.getrandbits(32), 4),
+            (PATH_STATE + 0x58, rng.randrange(2) if rng.random() < 0.9 else rng.getrandbits(32), 4),
+            (PATH_STATE + 0x5c, rng.randrange(2) if rng.random() < 0.9 else rng.getrandbits(32), 4),
+            (PATH_STATE + 0x60, sector, 4)]
+
+
+PATH_JOBS = (1, 0x37, 2, 0x16D, 0xB0, 4, 5, 0x100)
+
+
+def path_tile_fields(rng, x, y):
+    """One tile: regions 0/1, mostly no settler, else a settler with a
+    walking, idle or working job."""
+    t = tile(x, y)
+    settler = 0 if rng.random() < 0.5 else rng.randint(1, 31999)
+    fields = [(t + 0x10, rng.randrange(2), 1), (t + 0x14, rng.randrange(2), 2), (t + 0x16, rng.randrange(2), 2),
+              (t + 0x0, settler, 2)]
+    if settler:
+        fields.append((SETTLERS + settler * SETTLER_BYTES + 0xE, rng.choice(PATH_JOBS), 2))
+    return fields
+
+
+def path_tile_case(rng, pool, args):
+    x, y = args[1], args[2]
+    return path_state_fields(rng) + path_tile_fields(rng, x, y)
+
+
+def path_delta(rng, pool):
+    """Offsets for the direction functions; |d| < 2000 keeps Angle's
+    reciprocal index inside the emulated world."""
+    pick = rng.random()
+    if pick < 0.4:
+        return rng.randint(-2, 2) & 0xFFFFFFFF
+    if pick < 0.8:
+        return rng.randint(-40, 40) & 0xFFFFFFFF
+    return rng.randint(-1999, 1999) & 0xFFFFFFFF
+
+
+def path_sextant(rng, pool, args):
+    """A sextant 0..5, sometimes an invalid one (assertion)."""
+    value = rng.randrange(6) if rng.random() < 0.9 else rng.choice([6, 7, 0xFFFFFFFF, rng.getrandbits(32)])
+    return [(PATH_STATE + 0x44, value, 4)]
+
+
+def path_choose_sextant(rng, pool, args):
+    fields = path_state_fields(rng)
+    dx, dy = path_delta(rng, pool), path_delta(rng, pool)
+    if rng.random() < 0.03:
+        dx = dy = 0
+    turn = 1000 if rng.random() < 0.2 else rng.randrange(6)
+    fields += [(PATH_STATE + 0xC, dx, 4), (PATH_STATE + 0x10, dy, 4), (PATH_STATE + 0x48, turn, 4)]
+    for offset in (0x14, 0x18):  # abs_dx / abs_dy: the near test of sextants 3 and 4
+        fields.append((PATH_STATE + offset, rng.randint(-1, 6) & 0xFFFFFFFF, 4))
+    return fields
+
+
+def path_line_step(rng, pool, args):
+    fields = path_state_fields(rng)
+    a, b = rng.randint(0, 300), rng.randint(0, 300)
+    if rng.random() < 0.2:
+        a = b
+    if a == 0 and b == 0:
+        b = 1
+    fields += [(PATH_STATE + 0x1C, a, 4), (PATH_STATE + 0x20, b, 4)]
+    for offset in (0x34, 0x38, 0x3C, 0x40):
+        fields.append((PATH_STATE + offset, rng.randint(-1, 1) & 0xFFFFFFFF, 4))
+    return fields
+
+
+def path_track_angle(rng, pool, args):
+    last = 0x7FFFFFFF if rng.random() < 0.2 else rng.choice(
+        [rng.randrange(0x30000), 0x50001 + rng.randrange(0x30000), rng.randrange(0x80000)])
+    return path_state_fields(rng) + [
+        (PATH_STATE + 0x90, 0 if rng.random() < 0.5 else rng.randrange(0x80000), 4),
+        (PATH_OUT, last, 4), (PATH_OUT + 4, (rng.randrange(5) * 0x80000 - 0x100000) & 0xFFFFFFFF, 4)]
+
+
+def traffic_tile(rng, pool, args):
+    x, y = args
+    traffic = rng.choice([11, 11, 0xFF, 0xFE, 0, rng.randrange(256)])
+    fields = [(tile(x, y) + 0x12, traffic, 1)]
+    return fields + wear_path_world(rng, pool, args)
+
+
+SPECS += [
+    Spec("GameWorld_AddTileTraffic", 0x00503940, "thiscall", [TILE, TILE], presets=traffic_tile,
+         max_cases=2000),
+    Spec("GameWorld_IsWalkingJob", 0x004fa6d0, "thiscall", [below(0x180, 0.3)], max_cases=4000),
+    Spec("GameWorld_IsStationaryJob", 0x004fa880, "thiscall", [below(0x180, 0.3)], max_cases=4000),
+    Spec("Pathing_TileCost", 0x004a36a0, "thiscall",
+         [scratch(0), TILE, TILE, below(3), below(3), below(3)], presets=path_tile_case, max_cases=3000),
+    Spec("Pathing_SectorTileCost", 0x004a3870, "thiscall", [scratch(0), TILE, TILE],
+         presets=path_tile_case, max_cases=2000),
+    Spec("Pathing_FreeTileCost", 0x004a3940, "thiscall", [scratch(0), TILE, TILE],
+         presets=path_tile_case, max_cases=2000),
+    # 0x4a3aa9: the code after the assertion call (it never returns).
+    Spec("Pathing_DirectionOfDelta", 0x004a3a40, "thiscall", [path_delta, path_delta], max_cases=3000,
+         exempt_blocks=(0x4a3aa9,)),
+    Spec("Pathing_DirectionOfStep", 0x004a4b00, "thiscall", [between(-1, 1), between(-1, 1)], max_cases=500),
+    # 0x4a48c7: after the assertion call.
+    Spec("Pathing_DistanceAlong", 0x004a4860, "thiscall", [scratch(0), path_delta, path_delta],
+         presets=path_sextant, max_cases=2000, exempt_blocks=(0x4a48c7,)),
+    # 0x4a4af4: after the assertion call.
+    Spec("Pathing_Angle", 0x004a49d0, "thiscall", [path_delta, path_delta], max_cases=3000,
+         exempt_blocks=(0x4a4af4,)),
+    # 0x4a4992: the catch(...) handler (logs and rethrows); only reachable
+    # through an exception, i.e. Angle's assertion at (0, 0), which the
+    # emulator ends as a throw inside Angle.
+    Spec("Pathing_TrackAngle", 0x004a48f0, "thiscall",
+         [scratch(0), path_delta, path_delta, scratch(1), lambda rng, pool: WORLD_BASE + PATH_OUT + 4],
+         presets=path_track_angle, max_cases=3000, exempt_blocks=(0x4a4992,)),
+    # 0x4a25d6: dead (dx < 0 with dy > 0 was already sent to sextant 2).
+    Spec("Pathing_ChooseSextant", 0x004a23e0, "thiscall", [scratch(0)], presets=path_choose_sextant,
+         max_cases=3000, exempt_blocks=(0x4a25d6,)),
+    Spec("Pathing_SetupLineStep", 0x004a3d30, "thiscall", [scratch(0)], presets=path_line_step, max_cases=1000),
+]
