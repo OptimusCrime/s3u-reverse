@@ -36,7 +36,7 @@ user may provide a late-game save file later. Order:
    **Package C is complete (2026-11-10, session 44, parallel worktree):
    all 22 functions verified** (batches 2-6; session entry below). Left of
    the round: WalkSettler and UpdateSoldier (below), FollowRightWall
-   coverage, replay call counts, the renames in TODO.md. Round-end checks
+   coverage, the renames in TODO.md. Round-end checks
    done (see the round-end entry of session 44).
    **Package A (session 44): 25 of 26 done** (all of Dirk\Pathing.cpp,
    AddTileTraffic, IsWalkingJob, IsStationaryJob); **left: WalkSettler
@@ -567,8 +567,10 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   original: scripted-seed127.bin and fun8-seed2024-input31.bin (3,000
   ticks each, 222/224 replacements called), "slot 1.sav" (2,000 ticks, 215
   called; call counts recorded in re/whole_game_calls.csv). The replays'
-  call counts were not recorded (record_call_counts.py not run); A batch 3
-  has no whole-game run yet.
+  call counts were then recorded at ff0bd87 (A batch 3 included): both
+  replays identical again, 211/214 replacements counted (fewer than
+  before because our FindPath calls its callees directly, past the
+  counting thunk).
 
 ### 2026-11-10 (44): package B of the UpdateSettlers round (parallel worktree)
 
