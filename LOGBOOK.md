@@ -31,9 +31,12 @@ user may provide a late-game save file later. Order:
    0x519670, SetTerrain16Patch 0x51ba00, CountOtherPileClaims 0x510800).
    **Package B (session 44): 27 of 28 done and verified; left:
    UpdateSoldier 0x50e9f0 (analysis notes in the session 44 entry).**
-   **Left of the round:** package A (walking/pathfinding, all 26), and
-   package C minus those 3 (19 functions; the analysis notes for the next
-   ones are in the session 43 entry), plus the renames in TODO.md.
+   **Package C is complete (2026-11-10, session 44, parallel worktree):
+   all 22 functions verified** (batches 2-6; session entry below). Left of
+   the round: whatever packages A and B have not finished (see their
+   entries), the round-end checks (full emulator suite, whole-game replays
+   with call counts: none of the 19 new package C functions has
+   whole-game evidence yet), and the renames in TODO.md.
 3. **The 27 undone callees of GameWorld::UpdateSettlers 0x4e9670** (17,525
    instructions), small ones first. Decide the x87 question first (below).
    READY after batch 29 (instructions): 0x50e320 (28), 0x519670 (63),
@@ -598,6 +601,58 @@ ClearSettlerJob, DebugLogs 0x6a67fc/0x6a67dc), tower capture
 x2, RecalculateTerritory 0x519a90), notifications (NotifyLocalPlayer
 x5), campaign check (g_campaignMission + GetMemberByte189 at 0x50f36f)
 and movement (TileDistance, NeighbourX/Y, SetSettlerTarget) at the end.
+
+### 2026-11-10 (44): package C complete (19 functions, parallel worktree)
+
+All of package C of the UpdateSettlers round (re/update_settlers.md) is
+reimplemented and verified, in 5 pushed batches (in-process differential
+and mutation tests, emulator specs with full coverage or justified exempt
+blocks; no game window runs, whole-game checks are left for the round's
+end):
+
+- Batch 2: RecountPlayerPopulation 0x5104c0, SetTowerSoldierAnimation
+  0x50e200, ClearBuildingFootprint 0x51aae0 (economy.cpp,
+  building_crush.cpp). Player +0xc4..+0xd8 named (population,
+  population_limit(+_base), carriers, surplus_carriers(+_marked));
+  Building +0x07 is the race. Both still have their old names as union
+  aliases in layout.h because package B's settler_spawn.cpp uses them
+  (TODO.md).
+- Batch 3: ResetCivilianOnTile 0x50e980, LosePileOnTile 0x504f70,
+  ClearTileOwner 0x51b640 (territory.cpp); BlockTileAndMoveSettler
+  0x4dbb10, BlockBuildingLine 0x4dbb90 (the line ends at terrain 0x30,
+  not a flag), DropInputPile 0x504a00, DropStoragePile 0x504b70,
+  DropOutputPile 0x504e20 (building_crush.cpp).
+- Batch 4: RequestSettlerForBuilding 0x4dacd0, DispatchPileCarrier
+  0x5052c0 (economy.cpp). The original passes SetPileGood's good with
+  garbage upper bytes (only CL loaded); SetPileGood uses the low byte.
+- Batch 5: BuildingDone 0x4dbc50 (building_done.cpp). New global
+  0x7acfe0 (int32[20][17], temples add 8; re/globals.csv). For races above
+  3 the soldier tile of a military building is (number, number): the
+  original reads its overwritten argument slot.
+- Batch 6: RemoveBuildingGoods 0x4de430 (was the proposal
+  "RemoveBuildingStorage") and the cycle ReleaseSiteWorkers 0x50e3b0,
+  CrushBuilding 0x4d9250, DestroyBuildingAt 0x4d97b0,
+  RecalculateTerritory 0x519a90. The recursion test
+  GameWorld_DestructionCycle_MatchesOriginal crushes a garrisoned tower;
+  the recalculation without it hands its land to the neighbouring tower's
+  player and destroys a construction site there (DestroyBuildingAt ->
+  CrushBuilding -> ReleaseSiteWorkers resets its diggers); the original
+  side runs all four as original code (test::ScopedJump points each hooked
+  address at its trampoline), ours runs our four. Known difference:
+  CrushBuilding on a free record returns whether an uninitialized stack
+  slot of the original is 0; ours returns 1.
+- Test tooling: `src/s3re/test/callee_stub.h`: CalleeStubs (temporary
+  recording stubs over a callee's first five bytes, 1..5 stack arguments,
+  optional side effects; the plan from session 43 for package B's callees)
+  and ScopedJump. Replacements call such callees (package B's, the
+  flooding BlockTile/UnblockTile/SplitAreaAtTile/SetOwnerOfFreeTile, the
+  cycle functions) through their S3.EXE addresses, so that tests can stub
+  them; in the game Detours sends the call to the replacement as usual (and
+  the call is counted). Emulator specs probe the same callees.
+- Lessons: random test worlds make list walks loop (request lists, area
+  lists, garrison chains) and "remaining amount" fields drop 2^31 units;
+  set those up explicitly. A stopped background test run leaves its
+  S3.EXE running; kill it by its launcher's PID (only your own).
 
 ### 2026-11-10 (43): housekeeping; package C batch 1 (3 functions); game files restored
 

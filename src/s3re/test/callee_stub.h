@@ -14,7 +14,7 @@
 // also change the world, e.g. set a settler's job, so that both versions
 // see the same side effects). Tests compare the two call logs.
 //
-// Only for thiscall callees with 1..4 stack arguments (ret 4*N). The tests
+// Only for thiscall callees with 1..5 stack arguments (ret 4*N). The tests
 // run before the game starts, so no other thread calls the patched code.
 
 #include "game/world.h"
@@ -31,7 +31,7 @@ namespace s3re::test {
 struct StubCall {
     std::uintptr_t callee;
     std::uint32_t self;  // ECX minus the current world
-    std::uint32_t args[4];
+    std::uint32_t args[5];
     bool operator==(const StubCall& other) const {
         return callee == other.callee && self == other.self &&
                std::memcmp(args, other.args, sizeof(args)) == 0;
@@ -57,7 +57,7 @@ public:
     // recording stub; `effect` (optional) gives EAX and side effects.
     template <int N, std::uintptr_t Address>
     void Install(StubEffect effect = nullptr) {
-        static_assert(N >= 1 && N <= 4);
+        static_assert(N >= 1 && N <= 5);
         Patch patch{Address, {}, std::move(effect)};
         std::memcpy(patch.saved, reinterpret_cast<const void*>(Address), 5);
         void* target = nullptr;
@@ -67,8 +67,10 @@ public:
             target = reinterpret_cast<void*>(&Stub2<Address>);
         } else if constexpr (N == 3) {
             target = reinterpret_cast<void*>(&Stub3<Address>);
-        } else {
+        } else if constexpr (N == 4) {
             target = reinterpret_cast<void*>(&Stub4<Address>);
+        } else {
+            target = reinterpret_cast<void*>(&Stub5<Address>);
         }
         std::uint8_t jump[5] = {0xe9};
         const std::uint32_t rel = reinterpret_cast<std::uint32_t>(target) - (static_cast<std::uint32_t>(Address) + 5);
@@ -109,12 +111,12 @@ private:
     }
 
     static std::uint32_t Record(std::uintptr_t address, void* self, std::uint32_t a0, std::uint32_t a1,
-                                std::uint32_t a2, std::uint32_t a3) {
+                                std::uint32_t a2, std::uint32_t a3, std::uint32_t a4 = 0) {
         CalleeStubs* stubs = Current();
         StubCall call{address,
                       static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(self) -
                                                  reinterpret_cast<std::uintptr_t>(stubs->world_)),
-                      {a0, a1, a2, a3}};
+                      {a0, a1, a2, a3, a4}};
         stubs->calls_.push_back(call);
         for (Patch& patch : stubs->patches_) {
             if (patch.address == address && patch.effect) {
@@ -141,10 +143,45 @@ private:
                                           std::uint32_t a3) {
         return Record(Address, self, a0, a1, a2, a3);
     }
+    template <std::uintptr_t Address>
+    static std::uint32_t __fastcall Stub5(void* self, void*, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
+                                          std::uint32_t a3, std::uint32_t a4) {
+        return Record(Address, self, a0, a1, a2, a3, a4);
+    }
 
     std::vector<Patch> patches_;
     std::vector<StubCall> calls_;
     game::GameWorld* world_ = nullptr;
+};
+
+// Sends calls of the function at `address` to `target` while it lives (a
+// `jmp` over the first five bytes, restored afterwards). Used to run a chain
+// of hooked functions entirely as original code: point each hooked address
+// at its Original_* trampoline.
+class ScopedJump {
+public:
+    ScopedJump(std::uintptr_t address, const void* target) : address_(address) {
+        std::memcpy(saved_, reinterpret_cast<const void*>(address), 5);
+        std::uint8_t jump[5] = {0xe9};
+        const std::uint32_t rel = reinterpret_cast<std::uint32_t>(target) - (static_cast<std::uint32_t>(address) + 5);
+        std::memcpy(jump + 1, &rel, 4);
+        Write(jump);
+    }
+    ~ScopedJump() { Write(saved_); }
+    ScopedJump(const ScopedJump&) = delete;
+    ScopedJump& operator=(const ScopedJump&) = delete;
+
+private:
+    void Write(const void* bytes) {
+        DWORD old = 0;
+        VirtualProtect(reinterpret_cast<void*>(address_), 5, PAGE_EXECUTE_READWRITE, &old);
+        std::memcpy(reinterpret_cast<void*>(address_), bytes, 5);
+        VirtualProtect(reinterpret_cast<void*>(address_), 5, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(address_), 5);
+    }
+
+    std::uintptr_t address_;
+    std::uint8_t saved_[5];
 };
 
 }  // namespace s3re::test

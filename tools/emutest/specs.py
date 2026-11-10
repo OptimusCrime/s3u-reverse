@@ -5273,8 +5273,6 @@ SPECS += [
 # both sides): DispatchPileCarrier passes the good with garbage in the upper
 # three bytes (only CL is loaded; SetPileGood uses only the low byte), so
 # its effects are compared instead of its argument.
-AREAS = 0xe145e8
-AREA_BYTES = 0x2e0
 ECONOMY_PROBES = {0x004fec10: (4, "thiscall", "probe")}
 ECONOMY_GOODS = (0xC, 0xD, 0xE, 0xF, 0x10, 0x11, 0x20, 3, 7)
 ECONOMY_TYPES = (1, 2, 3, 4, 6, 7, 9, 0xA, 0xB, 0xC, 0xE, 0x10, 0x11, 0x12, 0x13, 0x14, 0x1D, 0x26, 0x2E, 5, 8, 0xF, 0)
@@ -5635,4 +5633,231 @@ SPECS += [
          presets=miner_food_state, globals=miner_globals, max_cases=1500),
     Spec("GameWorld_MinerJobDig", 0x004fa220, "thiscall", [between(1, 0x3000)], eax_mask=0,
          presets=miner_dig_state, globals=miner_globals, max_cases=1500),
+]
+
+
+# Package C, batches 6-7: RemoveBuildingGoods 0x4de430 and the destruction
+# cycle (CrushBuilding 0x4d9250, DestroyBuildingAt 0x4d97b0,
+# ReleaseSiteWorkers 0x50e3b0, RecalculateTerritory 0x519a90). Each spec
+# probes the other cycle functions (the recursion is tested in-process,
+# GameWorld_DestructionCycle_MatchesOriginal), package B's callees and the
+# verified callees that flood regions or need a consistent map
+# (UnblockTile, SetOwnerOfFreeTile, ClearTileOwner, the Drop*Pile functions
+# and the MapEffects calls, all with own specs); calls are compared.
+RESET = {0x0050cf50: (1, "thiscall", "probe")}
+_LAYOUTS: dict = {}
+
+
+def layout_dwords(race, type_):
+    """The 600 dwords of the building layout (S3.EXE 0x6aa170)."""
+    key = (race, type_)
+    if key not in _LAYOUTS:
+        import os
+        import struct
+
+        import pefile
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                            "Settlers3Ultimate", "S3.EXE")
+        pe = pefile.PE(path, fast_load=True)
+        data = pe.get_data(0x6aa170 + (type_ + race * 57) * 2400 - 0x400000, 2400)
+        _LAYOUTS[key] = struct.unpack("<600I", data)
+    return _LAYOUTS[key]
+
+
+def footprint(race, type_):
+    """(dx, dy) of the layout's footprint list (after 0x80000000 up to 0x80000001)."""
+    d = layout_dwords(race, type_)
+    k = d.index(0x80000000) + 1
+    out = []
+    while d[k] != 0x80000001:
+        dx, dy = d[k], d[k + 1]
+        out.append((dx - (1 << 32) if dx & 0x80000000 else dx, dy - (1 << 32) if dy & 0x80000000 else dy))
+        k += 2
+    return out
+
+
+def worker_settlers(rng, number, x, y, garrison=True):
+    """Settlers 1..30 bound to the building (site and garrison jobs) and a
+    chain of up to 4 garrison soldiers (next +0x10); returns (fields, head)."""
+    fields = [(SETTLER_COUNT, 30, 4)]
+    jobs = (0x68, 0x69, 3, 4, 5, 6, 7, 8, 9, 0xE, 0xF, 0x11, 0x12, 0x10, 0x6A, 0x8B, 0x8C, 1, 0x37, 0xA, 0xB, 0xA9,
+            0xAA, 0xC, 0xD, 0x50)
+    for n in range(1, 31):
+        s = SETTLERS + n * 0x40
+        fields += [(s, 0xFF if rng.random() < 0.12 else rng.randrange(4), 1),
+                   (s + 1, rng.randrange(3) if rng.random() < 0.5 else rng.randrange(0x30), 1),
+                   (s + 0xE, rng.choice(jobs), 2), (s + 0x18, rng.randrange(4), 1),
+                   (s + 0x22, number if rng.random() < 0.65 else rng.randrange(60), 2),
+                   (s + 0x14, rng.randrange(256) & 0xBF, 1), (s + 0x10, 0, 2),
+                   (s + 4, x + rng.randrange(-5, 6), 2), (s + 6, y + rng.randrange(-5, 6), 2)]
+    head = 0
+    if garrison:
+        members = rng.sample(range(1, 31), rng.randrange(5))
+        for k, n in enumerate(members):
+            s = SETTLERS + n * 0x40
+            fields += [(s + 0x10, members[k + 1] if k + 1 < len(members) else 0, 2), (s + 0x22, number, 2),
+                       (s + 0x14, rng.randrange(256), 1)]
+        head = members[0] if members else 0
+    return fields, head
+
+
+def building_record(rng, number, type_, x, y, buildup=None):
+    b = BUILDINGS + number * BUILDING_BYTES
+    if buildup is None:
+        buildup = 0 if rng.random() < 0.6 else rng.randint(1, 10)
+    return [(b, rng.randrange(4), 1), (b + 6, type_, 1), (b + 7, rng.randrange(4), 1), (b + 0x21, buildup, 1),
+            (b + 2, x, 2), (b + 4, y, 2), (b + 0xA, x + 1, 2), (b + 0xC, y + 1, 2), (b + 0x16, rng.randrange(256), 1),
+            (b + 0x17, rng.randrange(256), 1), (b + 0x1F, rng.randrange(256), 1),
+            (b + 0x20, 0xFF if rng.random() < 0.25 else rng.randrange(256), 1),
+            (b + 0x22, 0xFFFF if rng.random() < 0.3 else rng.randrange(30), 2)]
+
+
+def remove_goods_world(rng, pool, args):
+    number = args[0]
+    type_ = rng.choice([1, 0xC, 0xD, 0x35, 0x21, 0x22, 2, 3, 0x1D, 0x38, 0x34, 0xF, 0x1A]) if rng.random() < 0.7 \
+        else rng.randint(1, 0x38)
+    x, y = rng.randint(30, 350), rng.randint(30, 350)
+    b = BUILDINGS + number * BUILDING_BYTES
+    fields = building_record(rng, number, type_, x, y)
+    race = fields[2][1]
+    materials = layout_dwords(race, type_)[1]
+    fields += [(b + 0x19, rng.randrange(((materials >> 8) & 0xFF) + 1), 1),
+               (b + 0x1A, rng.randrange((materials & 0xFF) + 1), 1), (b + 0xE, rng.getrandbits(16), 2)]
+    for k in range(3):
+        pile = 0 if rng.random() < 0.25 else rng.randint(1, 150)
+        fields.append((b + 0x10 + 2 * k, pile, 2))
+        if pile:
+            p = PILES + pile * PILE_BYTES
+            fields += [(p + 6, rng.randint(20, 360), 2), (p + 8, rng.randint(20, 360), 2),
+                       (p + 1, 0 if rng.random() < 0.3 else rng.randrange(9), 1), (p + 3, rng.randrange(9), 1),
+                       (p, rng.randint(1, 35), 1)]
+    area = rng.randint(1, 50)
+    fields += [(tile(x + 1, y + 1) + 0x14, area, 2)]
+    fields += [(AREAS + area * AREA_BYTES + 0x52 + 2 * g, 0, 2) for g in range(36)]
+    f, _ = worker_settlers(rng, number, x, y, garrison=False)
+    return fields + f
+
+
+def release_workers_world(rng, pool, args):
+    number = args[0]
+    type_ = rng.choice([0xF, 0x10, 0x12, 0x13, 2, 3, 0x1D, 0x21, 1]) if rng.random() < 0.75 else rng.randrange(0x39)
+    x, y = rng.randint(30, 330), rng.randint(30, 330)
+    fields = building_record(rng, number, type_, x, y)
+    f, head = worker_settlers(rng, number, x, y, garrison=rng.random() < 0.8)
+    fields += f + [(BUILDINGS + number * BUILDING_BYTES + 8, head, 2)]
+    return fields
+
+
+CRUSH_PROTECTED = ((0x10A, 0x215), (0x114, 0x20C), (0x125, 0x200), (0x138, 0x1FF), (0x143, 0x1FE), (0x156, 0x203),
+                   (0x168, 0x210), (0x179, 0x214), (0x194, 0x22B), (0x174, 0x220), (0x16D, 0x24A), (0x15C, 0x252),
+                   (0x146, 0x254), (0x131, 0x24F), (0x129, 0x242), (0x14B, 0x23A), (0x1AD, 0x21E))
+
+
+def crush_world(rng, pool, args):
+    number = args[0]
+    type_ = rng.choice([0xF, 0x10, 0x12, 0x20, 0x21, 0x1F, 0x2F, 0x30, 0x32, 3]) if rng.random() < 0.75 \
+        else rng.randrange(0x39)
+    x, y = rng.randint(30, 350), rng.randint(30, 350)
+    if rng.random() < 0.15:
+        x, y = rng.choice(CRUSH_PROTECTED)
+    b = BUILDINGS + number * BUILDING_BYTES
+    fields = building_record(rng, number, type_, x, y)
+    fields += [(MAP_SIZE, 384, 4), (b, 0xFF if rng.random() < 0.04 else rng.randrange(4), 1),
+               (b + 8, 0 if rng.random() < 0.25 else rng.randint(1, 50), 2),
+               (0x32870, 0, 4), (0x32874, 0, 4), (0x366f8, 0, 4), (0x366fc, 0, 4)]
+    if type_ in (0xF, 0x10, 0x12):
+        fields.append((b + 0x22, rng.randint(1, 50), 2))
+    for p in range(4):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xC, rng.randrange(3), 4))
+    fields += site_offset_table(rng, rings=16)
+    for dx in range(-16, 17):
+        for dy in range(-16, 17):
+            fields.append((tile(x + dx, y + dy), rng.randint(1, 60) if rng.random() < 0.03 else 0, 2))
+    for n in range(1, 61):
+        s = SETTLERS + n * 0x40
+        fields += [(s, rng.randrange(4), 1), (s + 1, rng.randrange(0x30), 1),
+                   (s + 4, x + rng.randrange(-5, 6), 2), (s + 6, y + rng.randrange(-5, 6), 2)]
+    return fields
+
+
+def crush_globals(rng, pool, args):
+    return [(0x007dfdb0, 70 if rng.random() < 0.3 else 3, 4), (0x007dfd48, rng.getrandbits(16), 4)]
+
+
+def destroy_at_world(rng, pool, args):
+    """One to three buildings around the target, their footprints marked;
+    the first one placed so that one of its footprint tiles is the target."""
+    x, y = args
+    fields = [(MAP_SIZE, 384, 4)] + site_offset_table(rng, rings=12)
+    for dx in range(-14, 15):
+        for dy in range(-14, 15):
+            fields.append((tile(x + dx, y + dy) + 0xA, rng.randrange(256) & 0xDF, 1))
+    for k in range(rng.randint(1, 3)):
+        number = rng.randint(1, 50)
+        type_, race = rng.randint(1, 56), rng.randrange(4)
+        tiles = [(0, 0)] + footprint(race, type_)
+        if k == 0:
+            dx, dy = rng.choice(tiles)
+            bx, by = x - dx, y - dy
+        else:
+            bx, by = x + rng.randrange(-3, 4), y + rng.randrange(-3, 4)
+        b = BUILDINGS + number * BUILDING_BYTES
+        fields += [(b + 6, type_, 1), (b + 7, race, 1), (b + 2, bx, 2), (b + 4, by, 2)]
+        for dx, dy in tiles:
+            t = tile(bx + dx, by + dy)
+            fields += [(t + 0xA, 0x28, 1), (t + 2, number, 2)]
+    if rng.random() < 0.5:  # the target tile itself unmarked: the search goes on
+        fields.append((tile(x, y) + 0xA, 0, 1))
+    return fields
+
+
+def territory_world(rng, pool, args):
+    """A small map (40..90) with owners in two halves, some free tiles, and
+    up to six buildings (mostly garrisoned military) on it."""
+    x, y = args
+    n = rng.randint(40, 90)
+    fields = [(MAP_SIZE, n, 4)] + site_offset_table(rng, rings=41)
+    split = rng.randint(0, n)
+    for tx in range(-2, n + 2):
+        for ty in range(-2, n + 2):
+            t = tile(tx, ty)
+            owner = 0xFF if (tx + ty) % 7 == 0 else (0 if tx < split else 1 + (ty & 1))
+            fields += [(t + 8, owner, 1), (t + 0xA, rng.randrange(256) & 0x5F, 1), (t + 2, 0, 2)]
+    for k in range(rng.randrange(7)):
+        number = k + 1
+        bx, by = rng.randrange(n), rng.randrange(n)
+        b = BUILDINGS + number * BUILDING_BYTES
+        fields += [(b, rng.randrange(4), 1), (b + 6, rng.choice([0xF, 0x10, 0x12, 0x12, 3]), 1),
+                   (b + 0x21, 0 if rng.random() < 0.8 else 1, 1), (b + 8, rng.randint(1, 99) if rng.random() < 0.85 else 0, 2),
+                   (tile(bx, by) + 0xA, 0x28, 1), (tile(bx, by) + 2, number, 2)]
+    return fields
+
+
+def territory_args(rng, pool):
+    return rng.randrange(-5, 95) & 0xFFFFFFFF
+
+
+SPECS += [
+    Spec("GameWorld_RemoveBuildingGoods", 0x004de430, "thiscall", [between(1, 50)], eax_mask=0,
+         presets=remove_goods_world, max_cases=800,
+         callees={**RESET, 0x005046b0: (4, "thiscall", "probe"), 0x00504a00: (1, "thiscall", "probe"),
+                  0x00504b70: (1, "thiscall", "probe"), 0x00504e20: (1, "thiscall", "probe")}),
+    Spec("GameWorld_ReleaseSiteWorkers", 0x0050e3b0, "thiscall", [between(1, 50)], eax_mask=0,
+         presets=release_workers_world, max_cases=800, callees={**RESET, 0x00519a90: (2, "thiscall", "probe")}),
+    Spec("GameWorld_CrushBuilding", 0x004d9250, "thiscall", [between(1, 50)], presets=crush_world,
+         globals=crush_globals, max_cases=600,
+         callees={0x0050e3b0: (1, "thiscall", "probe"), 0x004de430: (1, "thiscall", "probe"),
+                  0x0051aae0: (1, "thiscall", "probe"), 0x004d9940: (1, "thiscall", "probe"),
+                  0x004dbb90: (1, "thiscall", "probe"), 0x004dda10: (1, "thiscall", "probe"),
+                  0x00544f20: (5, "thiscall", "probe"), 0x00545c80: (4, "thiscall", "probe")}),
+    # 0x4d9909: the DebugLog after 9900 offset entries without finding the
+    # building (an error path; it needs the whole offset table preset and a
+    # map without the building).
+    Spec("GameWorld_DestroyBuildingAt", 0x004d97b0, "thiscall", [between(30, 350), between(30, 350)],
+         presets=destroy_at_world, max_cases=500, callees={0x004d9250: (1, "thiscall", "probe")},
+         exempt_blocks=(0x4d9909,)),
+    Spec("GameWorld_RecalculateTerritory", 0x00519a90, "thiscall", [territory_args, territory_args],
+         presets=territory_world, max_cases=25, max_instructions=400_000_000,
+         callees={0x004d97b0: (2, "thiscall", "probe"), 0x0051b5d0: (3, "thiscall", "probe"),
+                  0x0051b640: (2, "thiscall", "probe")}),
 ]

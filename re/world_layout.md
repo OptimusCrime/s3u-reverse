@@ -95,7 +95,7 @@ Initialization order (all verified by reading the code):
 | 0x110A578 | 0x110A57C | 4 | uint32 | | trade high-water mark (`maxusedtrade`) | verified |
 | 0x110A57C | 0x110A588 | 0xC | uint32 x3 | | saved counters: +0 (UpdatePhase2), +4 tile-slice counter 0..7 (UpdateEnvironment), +8 (UpdateEnvironment, reset to 0x3F) | strong |
 | 0x110A588 | 0x1158788 | 0x4E200 | 16 B | 20000 | **offset table** (tiles sorted by distance), `MapOffset` | verified |
-| 0x1158788 | 0x118A47C | 0x31CF4 | uint8[20] | 101 x 101 | territory influence scratch around a tower | strong |
+| 0x1158788 | 0x118A47C | 0x31CF4 | uint8[20] | 101 x 101 | territory claims of the players for the 101 x 101 tiles around (x, y) (cell [i][j] = tile (x - 50 + i, y - 50 + j)), filled by RecalculateTerritory 0x519A90 | verified |
 | 0x118A47C | 0x11940BC | 0x9C40 | uint16[10][100] | 20 players | player settler lists (set by command 3) | verified |
 | 0x11940BC | 0x11943DC | 0x320 | int32[10] | 20 players | their lengths | verified |
 | 0x11943DC | 0x1195D7C | 0x19A0 | 0x148 B | 20 | **player records** ("Play"), `Player` | verified |
