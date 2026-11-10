@@ -4941,3 +4941,103 @@ SPECS += [
     Spec("GameWorld_ClearBuildingFootprint", 0x0051aae0, "thiscall", [between(1, 0xf9f)], eax_mask=0,
          presets=footprint_world, callees={0x0051b770: (2, "thiscall", "probe")}, max_cases=400),
 ]
+
+
+# Package A, batch 2: the pathfinder's walking helpers (pathing.cpp). The
+# settler argument points at settler record n; the state names the same n.
+DIR_X = (1, 1, 0, -1, -1, 0)
+DIR_Y = (0, 1, 1, 0, -1, -1)
+
+
+def settler_number(pointer: int) -> int:
+    return (pointer - WORLD_BASE - SETTLERS) // SETTLER_BYTES
+
+
+def walk_settler(rng, pool):
+    return WORLD_BASE + SETTLERS + rng.randint(1, 31999) * SETTLER_BYTES
+
+
+def walk_case_fields(rng, n):
+    """A settler n at (x, y) with a neighbourhood of radius 5 (regions mostly
+    0, a third of the tiles taken by settlers with walking, idle or working
+    jobs), a matching path state and sometimes a queue of walking settlers
+    that leads back to n (two neighbours or a ring of three)."""
+    x, y = rng.randint(10, 370), rng.randint(10, 370)
+    sextant = rng.randrange(6)
+    axis_a = (sextant + 1) % 6
+    fields = [(MAP_SIZE, 384 if rng.random() < 0.95 else x + 1, 4),
+              (PATH_STATE + 0x0, n, 4), (PATH_STATE + 0x4, x, 4), (PATH_STATE + 0x8, y, 4),
+              (PATH_STATE + 0x24, x + rng.randint(-3, 3), 4), (PATH_STATE + 0x28, y + rng.randint(-3, 3), 4),
+              (PATH_STATE + 0x34, DIR_X[axis_a], 4), (PATH_STATE + 0x38, DIR_X[sextant], 4),
+              (PATH_STATE + 0x3C, DIR_Y[axis_a], 4), (PATH_STATE + 0x40, DIR_Y[sextant], 4),
+              (PATH_STATE + 0x1C, 0 if rng.random() < 0.2 else rng.randint(0, 30), 4),
+              (PATH_STATE + 0x20, 0 if rng.random() < 0.2 else rng.randint(0, 30), 4),
+              (PATH_STATE + 0x44, sextant if rng.random() < 0.97 else rng.randrange(8), 4),
+              (PATH_STATE + 0x48, 1000 if rng.random() < 0.2 else rng.randrange(6), 4),
+              (PATH_STATE + 0x4C, rng.randint(1, 2), 4), (PATH_STATE + 0x50, rng.randrange(6), 4),
+              (PATH_STATE + 0x54, 0, 4), (PATH_STATE + 0x58, 0, 4), (PATH_STATE + 0x5C, 0, 4),
+              (PATH_STATE + 0x60, rng.choice([1, 2, 3]), 4)]
+    for dx in range(-5, 6):
+        for dy in range(-5, 6):
+            t = tile(x + dx, y + dy)
+            other = 0 if rng.random() < 0.6 else rng.randint(1, 31999)
+            fields += [(t + 0x10, 0 if rng.random() < 0.75 else 1, 1), (t + 0x14, 0 if rng.random() < 0.75 else 1, 2),
+                       (t + 0x16, 0 if rng.random() < 0.75 else 1, 2), (t + 0x6, rng.randrange(256), 1),
+                       (t + 0x0, other, 2)]
+            if other:
+                record = SETTLERS + other * SETTLER_BYTES
+                fields += [(record + 0xE, rng.choice(PATH_JOBS), 2), (record + 0x2E, rng.randrange(6), 1)]
+    wdx, wdy = rng.randint(-9, 9), rng.randint(-9, 9)
+    if wdx == 0 and wdy == 0:
+        wdx = 1
+    record = SETTLERS + n * SETTLER_BYTES
+    fields += [(record + 0x4, x, 2), (record + 0x6, y, 2), (record + 0x28, x + wdx, 2), (record + 0x2A, y + wdy, 2),
+               (record + 0x2C, rng.randrange(256), 1), (record + 0x2D, rng.randrange(5), 1),
+               (record + 0x2E, rng.randrange(6), 1), (record + 0xE, 2, 2), (tile(x, y), n, 2)]
+    queue, d = rng.randrange(5), rng.randrange(6)
+    a, b = rng.randint(1, 31999), rng.randint(1, 31999)
+    if queue == 1 and a != n:
+        t = tile(x + DIR_X[d], y + DIR_Y[d])
+        fields += [(t, a, 2), (t + 0x14, 0 if rng.random() < 0.75 else 1, 2),
+                   (SETTLERS + a * SETTLER_BYTES + 0xE, 2, 2),
+                   (SETTLERS + a * SETTLER_BYTES + 0x2C, rng.randrange(256) | 0x20, 1),
+                   (SETTLERS + a * SETTLER_BYTES + 0x2E, (d + 3) % 6, 1),
+                   (SETTLERS + a * SETTLER_BYTES + 0x2D, rng.choice([0, 1, 1, 2]), 1)]
+    elif queue == 3:
+        # The settler itself on the neighbour tile (a queue of length 1).
+        fields.append((tile(x + DIR_X[d], y + DIR_Y[d]), n, 2))
+    elif queue == 2 and len({a, b, n}) == 3:
+        ax, ay = x + DIR_X[d], y + DIR_Y[d]
+        d2 = (d + 2) % 6
+        fields += [(tile(ax, ay), a, 2), (SETTLERS + a * SETTLER_BYTES + 0xE, 0x16D, 2),
+                   (SETTLERS + a * SETTLER_BYTES + 0x2C, rng.randrange(256) | 0x20, 1),
+                   (SETTLERS + a * SETTLER_BYTES + 0x2E, d2, 1),
+                   (tile(ax + DIR_X[d2], ay + DIR_Y[d2]), b, 2), (SETTLERS + b * SETTLER_BYTES + 0xE, 2, 2),
+                   (SETTLERS + b * SETTLER_BYTES + 0x2C, rng.randrange(256) | 0x20, 1),
+                   (SETTLERS + b * SETTLER_BYTES + 0x2E, (d + 4) % 6, 1)]
+    return fields
+
+
+def walk_state_only(rng, pool, args):
+    return walk_case_fields(rng, rng.randint(1, 31999))
+
+
+def walk_with_settler(rng, pool, args):
+    return walk_case_fields(rng, settler_number(args[0]))
+
+
+SPECS += [
+    Spec("Pathing_StepOut", 0x004a2ec0, "thiscall", [scratch(0)], presets=walk_state_only, max_cases=1500),
+    Spec("Pathing_CompareEdges", 0x004a2f70, "thiscall", [walk_settler, scratch(0)], presets=walk_with_settler,
+         max_cases=1500),
+    Spec("Pathing_StartEdgeWalk", 0x004a2e20, "thiscall", [walk_settler, scratch(0)], presets=walk_with_settler,
+         max_cases=1500),
+    Spec("Pathing_ResolveBlocker", 0x004a33d0, "thiscall", [scratch(0), below(6)], presets=walk_state_only,
+         max_cases=2000),
+    Spec("Pathing_TryStep", 0x004a2c70, "thiscall", [scratch(0)], presets=walk_state_only, max_cases=1500),
+    Spec("Pathing_ChooseStepByCost", 0x004a2660, "thiscall", [scratch(0)], presets=walk_state_only, max_cases=1500),
+    Spec("Pathing_FollowEdge", 0x004a3170, "thiscall", [walk_settler, scratch(0)], presets=walk_with_settler,
+         max_cases=1500),
+    Spec("Pathing_WalkLine", 0x004a22f0, "thiscall", [walk_settler, scratch(0)], presets=walk_with_settler,
+         max_cases=1500),
+]

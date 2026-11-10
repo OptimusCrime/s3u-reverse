@@ -130,7 +130,7 @@ std::uint32_t __fastcall GameWorld_CreateSettler(GameWorld* world, void*, std::u
     record.saved_counter = 0;
     record.building = 0;
     record.flags = 0;
-    record.new_target = 0;
+    record.path_mode = 0;
     // The original's 32-bit tile arithmetic (x, y are not range-checked).
     TileAtOffset(world, TileOffset(x, y)).settler = static_cast<std::uint16_t>(settler);
     return settler;

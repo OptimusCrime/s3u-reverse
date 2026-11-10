@@ -172,7 +172,7 @@ std::uint32_t __fastcall GameWorld_SetSettlerTarget(GameWorld* world, void*, std
     for (std::uint16_t& word : record.path_cache) {
         word = 0xffff;
     }
-    record.new_target = 1;
+    record.path_mode = 1;
     if (record.unk19 == 0) {
         record.unk19 = 1;
     }

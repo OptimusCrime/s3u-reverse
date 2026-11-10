@@ -158,11 +158,12 @@ struct Settler {
     std::uint16_t building;        // 0x22
     std::uint16_t target_x;        // 0x24
     std::uint16_t target_y;        // 0x26
-    std::uint16_t x2;              // 0x28 a second position?
-    std::uint16_t y2;              // 0x2a
-    std::uint8_t new_target;       // 0x2c
-    std::uint8_t unk2d;            // 0x2d pathing
-    std::uint16_t unk2e;           // 0x2e pathing
+    std::uint16_t waypoint_x;      // 0x28 end of the current straight leg (Pathing::PlanLine)
+    std::uint16_t waypoint_y;      // 0x2a
+    std::uint8_t path_mode;        // 0x2c see kPath* below; 1 with a new target
+    std::uint8_t path_steps;       // 0x2d steps left along an obstacle's edge
+    std::uint8_t path_direction;   // 0x2e direction 0..5 of the edge walk / blocked step
+    std::uint8_t unk2f;            // 0x2f
     std::uint16_t path_cache[6];   // 0x30 0xffff = empty
     std::uint8_t unk3c;            // 0x3c
     std::uint8_t unused3d[3];      // 0x3d
@@ -172,6 +173,15 @@ static_assert(offsetof(Settler, job) == 0x0e);
 static_assert(offsetof(Settler, saved_direction) == 0x1c);
 static_assert(offsetof(Settler, building) == 0x22);
 static_assert(offsetof(Settler, path_cache) == 0x30);
+static_assert(offsetof(Settler, path_mode) == 0x2c);
+
+// Settler::path_mode: what Pathing::FindPath (0x4a1ee0) does next.
+constexpr std::uint8_t kPathPlanLine = 0x01;     // plan a straight leg to the target (0x4a3ab0)
+constexpr std::uint8_t kPathWalkLine = 0x02;     // walk towards the waypoint (0x4a22f0)
+constexpr std::uint8_t kPathStepOut = 0x04;      // blocked: look for a way around (0x4a2e20)
+constexpr std::uint8_t kPathFollowEdge = 0x08;   // walk along the obstacle's edge (0x4a3170)
+constexpr std::uint8_t kPathEdgeLeft = 0x10;     // edge walk turns the other way
+constexpr std::uint8_t kPathWaiting = 0x20;      // path_direction holds a blocked step
 
 // ---------------------------------------------------------------- Building
 struct Building {

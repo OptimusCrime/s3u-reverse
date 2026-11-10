@@ -147,6 +147,7 @@ std::uint32_t __fastcall GameWorld_RandomBelow6(GameWorld* world, void* edx);
 std::uint32_t __fastcall GameWorld_WearPath(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
 
 // settler_records.cpp
+std::uint32_t __fastcall GameWorld_IsSettlerJob01Or37(GameWorld* world, void* edx, std::uint32_t job);
 std::uint32_t __fastcall GameWorld_CreateSettler(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                  std::uint32_t type, std::uint32_t player);
 

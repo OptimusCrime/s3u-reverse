@@ -183,10 +183,12 @@ settler_records.cpp, settler_queries.cpp, building_tiles.cpp, counting.cpp.
 | 0x22 | u16 | building | the settler's building / destination record | V |
 | 0x24 | u16 | target x | SetSettlerTarget | V |
 | 0x26 | u16 | target y | | V |
-| 0x28 | u16 | x2 | a second position (equals the position in the dump); written by ExecuteCommands | G |
-| 0x2A | u16 | y2 | | G |
-| 0x2C | u8 | | 1 with a new target (path request?) | V |
-| 0x2D, 0x2E | u8 | | 0x4A33D0 (Dirk\Pathing.cpp) | S (pathing) |
+| 0x28 | u16 | waypoint x | end of the current straight leg of the path: Pathing::WalkLine (0x4A22F0) walks towards it, FindPath plans a new leg when the settler reaches it (equals the position in the dump); written by ExecuteCommands | V (pathing) |
+| 0x2A | u16 | waypoint y | | V (pathing) |
+| 0x2C | u8 | path mode | what Pathing::FindPath does next: 0x01 plan a new straight leg (SetSettlerTarget sets 1), 0x02 walk towards the waypoint (WalkLine), 0x04 blocked, look for a way around (StartEdgeWalk), 0x08 walk along the obstacle's edge (FollowEdge), 0x10 the edge walk's side, 0x20 waiting for a settler in the way (+0x2E = the blocked direction; ResolveBlocker follows such queues); 0xC1 = plan anew | V (pathing) |
+| 0x2D | u8 | path steps | steps left of an edge walk (CompareEdges sets it, FollowEdge counts down, back to mode 2 at 0) | V (pathing) |
+| 0x2E | u8 | path direction | direction 0..5 where the edge walk's search starts, or the blocked step while waiting | V (pathing) |
+| 0x2F | u8 | | not seen accessed yet | |
 | 0x30..0x3A | u16[6] | path cache | set to 0xFFFF with a new target | V (writes), S (meaning) |
 | 0x3C | u8 | | cleared by SendNearestSettlerToBuilding | V |
 | 0x3D..0x3F | | | not accessed | |

@@ -174,6 +174,8 @@ using StateTileFn = std::int32_t(__fastcall*)(GameWorld* world, void* edx, PathS
                                               std::int32_t y);
 using DeltaFn = std::int32_t(__fastcall*)(GameWorld* world, void* edx, std::int32_t dx, std::int32_t dy);
 using StateFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, PathState* state);
+using SettlerStateFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, Settler* settler, PathState* state);
+using ResolveFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, PathState* state, std::uint32_t direction);
 using TrackAngleFn = std::int32_t(__fastcall*)(GameWorld* world, void* edx, PathState* state, std::int32_t dx,
                                                std::int32_t dy, std::int32_t* last, std::int32_t* turns);
 
@@ -466,6 +468,475 @@ std::uint32_t __fastcall Pathing_SetupLineStep(GameWorld*, void*, PathState* sta
     return SetPathPhase(s, 0xa);
 }
 
+namespace {
+
+std::int32_t Add(std::int32_t a, std::int32_t b) {
+    return static_cast<std::int32_t>(static_cast<std::uint32_t>(a) + static_cast<std::uint32_t>(b));
+}
+
+std::int32_t Min(std::int32_t a, std::int32_t b) {
+    return a < b ? a : b;
+}
+
+// direction + 1, wrapping only at exactly 6 (like the original).
+std::int32_t NextDirection(std::int32_t direction) {
+    ++direction;
+    return direction == 6 ? 0 : direction;
+}
+
+// direction - 1, 0 becomes 5.
+std::int32_t PreviousDirection(std::int32_t direction) {
+    return direction == 0 ? 5 : direction - 1;
+}
+
+// The neighbour of (x, y) in `direction` (any value; the tables are read
+// like the original reads them).
+std::int32_t StepX(std::int32_t x, std::int32_t direction) {
+    return Add(x, kDirX[direction]);
+}
+std::int32_t StepY(std::int32_t y, std::int32_t direction) {
+    return Add(y, kDirY[direction]);
+}
+
+// TileCost(state, neighbour in `direction` of (x, y), ...).
+std::int32_t NeighbourCost(GameWorld* world, PathState* state, std::int32_t x, std::int32_t y, std::int32_t direction,
+                           std::uint32_t needEmpty, std::uint32_t blockBusy) {
+    return Pathing_TileCost(world, nullptr, state, StepX(x, direction), StepY(y, direction), needEmpty, 0, blockBusy);
+}
+
+void FinishEdgeStep(Settler& settler) {
+    if (--settler.path_steps == 0) {
+        settler.path_mode = static_cast<std::uint8_t>((settler.path_mode & 0xc2) | layout::kPathWalkLine);
+    }
+}
+
+}  // namespace
+
+// Purpose: Checks whether the settler can get past an obstacle: steps out up to two tiles in the
+// current sextant's direction and reports whether one of them is passable (0), all are blocked
+// (0x20) or the walk left the map (0xff).
+std::uint32_t __fastcall Pathing_StepOut(GameWorld* world, void*, PathState* state) {
+    PathState& s = *state;
+    const std::int32_t direction = s.sextant;
+    std::uint32_t result = 0x20;
+    s.probe_x = s.x;
+    s.probe_y = s.y;
+    std::int32_t count = 0;
+    do {
+        s.probe_x = StepX(s.probe_x, direction);
+        s.probe_y = StepY(s.probe_y, direction);
+        const auto mapSize = static_cast<std::int32_t>(world->map_size);
+        if (s.probe_x < 0 || s.probe_x >= mapSize || s.probe_y < 0 || s.probe_y >= mapSize) {
+            result = 0xff;
+        }
+        if (Pathing_TileCost(world, nullptr, state, s.probe_x, s.probe_y, 0, 0, 1) < kBlocked) {
+            result = 0;
+        }
+        ++count;
+    } while (count < 2 && result == 0x20);
+    return result;
+}
+
+// Purpose: Walks around the obstacle in front of the settler along both of its edges at once (left
+// and right hand), at most four steps each, to see which side reaches the free tile found by StepOut
+// first; remembers the side and the number of steps in the settler.
+std::uint32_t __fastcall Pathing_CompareEdges(GameWorld* world, void*, Settler* settler, PathState* state) {
+    PathState& s = *state;
+    std::int32_t count = 0;
+    std::uint32_t result = 0xff;
+    std::int32_t leftX = s.x, leftY = s.y;
+    std::int32_t rightX = s.x, rightY = s.y;
+    std::int32_t left = s.chosen == 0 ? 5 : s.chosen - 1;
+    std::int32_t right = NextDirection(s.chosen);
+    while (count <= 3) {
+        // Left hand: the first free direction, turning clockwise.
+        int tries = 0;
+        std::int32_t direction = left;
+        while (NeighbourCost(world, state, leftX, leftY, direction, 0, 1) >= kBlocked) {
+            direction = PreviousDirection(direction);
+            if (++tries >= 6) {
+                direction = -1;
+                break;
+            }
+        }
+        left = direction;
+        if (direction == -1) {
+            count = 4;
+        } else {
+            leftX = StepX(leftX, direction);
+            leftY = StepY(leftY, direction);
+            left = NextDirection(direction);
+            if (leftX == s.probe_x && leftY == s.probe_y) {
+                result = 1;
+            } else {
+                // Right hand, turning the other way.
+                tries = 0;
+                direction = right;
+                while (NeighbourCost(world, state, rightX, rightY, direction, 0, 1) >= kBlocked) {
+                    direction = NextDirection(direction);
+                    if (++tries >= 6) {
+                        direction = -1;
+                        break;
+                    }
+                }
+                right = direction;
+                if (direction == -1) {
+                    count = 4;  // + 1 below: the original ends with 5 here (no "all blocked" result)
+                } else {
+                    rightX = StepX(rightX, direction);
+                    rightY = StepY(rightY, direction);
+                    right = direction == 0 ? 5 : direction - 1;
+                    if (rightX == s.probe_x && rightY == s.probe_y) {
+                        result = 0;
+                    }
+                }
+            }
+            ++count;
+        }
+        if (result != 0xff) {
+            break;
+        }
+    }
+    if (count == 4) {
+        result = 0x20;
+    }
+    settler->path_direction = static_cast<std::uint8_t>(s.chosen);
+    settler->path_steps = static_cast<std::uint8_t>(count - 1 < 0 ? 0 : count - 1);
+    return result;
+}
+
+// Purpose: The settler is blocked: checks whether it can get past the obstacle and, if so, starts
+// walking along the obstacle's edge on the shorter side; otherwise gives up and plans a new line.
+std::uint32_t __fastcall Pathing_StartEdgeWalk(GameWorld* world, void*, Settler* settler, PathState* state) {
+    SetPathPhase(*state, 6);
+    if (Pathing_StepOut(world, nullptr, state) != 0) {
+        settler->path_mode = 0xc1;
+    } else {
+        const std::uint32_t edges = Pathing_CompareEdges(world, nullptr, settler, state);
+        if ((edges & 0x20) != 0) {
+            settler->path_mode = 0xc1;
+        } else {
+            settler->path_mode = static_cast<std::uint8_t>((((edges & 1) << 4) & 0xff) | (settler->path_mode & 0xc8) |
+                                                           layout::kPathFollowEdge);
+        }
+    }
+    SetPathPhase(*state, 1);
+    return 0xff;
+}
+
+// Purpose: The step in `direction` is taken by another settler: if that settler is idle in the same
+// area, or a queue of walking settlers leads back to this one, they swap or give way (0x10); if
+// another settler waits for this one, a random free direction is chosen (0x40); otherwise the settler
+// has to wait (8).
+std::uint32_t __fastcall Pathing_ResolveBlocker(GameWorld* world, void*, PathState* state, std::uint32_t direction) {
+    PathState& s = *state;
+    const auto first = static_cast<std::int32_t>(direction);
+    const std::uint16_t ownArea = TileAt(world, s.x, s.y).area;
+    const Tile& next = TileAt(world, StepX(s.x, first), StepY(s.y, first));
+    if (next.settler != 0 &&
+        static_cast<std::uint8_t>(GameWorld_IsSettlerJob01Or37(world, nullptr, SettlerAt(world, next.settler).job)) != 0 &&
+        next.area == ownArea) {
+        return direction | 0x10;
+    }
+    std::int32_t current = s.settler;
+    std::int32_t count = 0;
+    std::int32_t x = s.x, y = s.y;
+    std::int32_t step = first;
+    do {
+        x = StepX(x, step);
+        y = StepY(y, step);
+        const std::uint16_t number = TileAt(world, x, y).settler;
+        if (number == 0) {
+            return direction | 8;
+        }
+        const Settler& other = SettlerAt(world, number);
+        if (static_cast<std::uint8_t>(GameWorld_IsWalkingJob(world, nullptr, other.job)) == 0) {
+            return direction | 8;
+        }
+        if ((other.path_mode & layout::kPathWaiting) == 0 && number != static_cast<std::uint32_t>(s.settler)) {
+            return direction | 8;
+        }
+        current = number;
+        step = other.path_direction;
+        ++count;
+    } while (current != s.settler && count < 20000);
+    if (count < 2) {
+        return direction | 8;
+    }
+    if (count == 2) {
+        const Tile& neighbour = TileAt(world, StepX(s.x, first), StepY(s.y, first));
+        if (neighbour.area == ownArea) {
+            Settler& other = SettlerAt(world, neighbour.settler);
+            const std::uint8_t mode = other.path_mode;
+            if ((mode & layout::kPathFollowEdge) != 0) {
+                const std::int32_t turned =
+                    (mode & layout::kPathEdgeLeft) != 0 ? NextDirection(first) : PreviousDirection(first);
+                other.path_direction = static_cast<std::uint8_t>(turned);
+                FinishEdgeStep(other);
+            }
+            return direction | 0x10;
+        }
+    }
+    std::int32_t random = static_cast<std::int32_t>(GameWorld_RandomBelow6(world, nullptr));
+    for (int i = 0; i < 6; ++i) {
+        if (NeighbourCost(world, state, s.x, s.y, random, 1, 1) < kBlocked) {
+            return static_cast<std::uint32_t>(random) | 0x40;
+        }
+        random = PreviousDirection(random);
+    }
+    return direction | 8;
+}
+
+// Purpose: Tries to take one step in the sextant towards the waypoint (the better of its two
+// directions first); a step blocked by another settler goes to ResolveBlocker; 0x20 when both
+// directions are blocked for good.
+std::uint32_t __fastcall Pathing_TryStep(GameWorld* world, void*, PathState* state) {
+    PathState& s = *state;
+    SetPathPhase(s, 5);
+    std::int32_t first, second;
+    if (s.along_a > s.along_b) {
+        second = s.sextant;
+        first = NextDirection(s.sextant);
+    } else {
+        first = s.sextant;
+        second = NextDirection(s.sextant);
+    }
+    s.chosen = first;
+    const auto uFirst = static_cast<std::uint32_t>(first);
+    const auto uSecond = static_cast<std::uint32_t>(second);
+    std::uint32_t result;
+    if (NeighbourCost(world, state, s.x, s.y, first, 1, 1) < 0xffff) {
+        result = uFirst;
+    } else if (s.along_a == 0) {
+        result = NeighbourCost(world, state, s.x, s.y, first, 0, 1) < 0xffff ? (uFirst | 8) : (uFirst | 0x20);
+    } else if (NeighbourCost(world, state, s.x, s.y, second, 1, 1) < 0xffff) {
+        result = uSecond;
+    } else if (NeighbourCost(world, state, s.x, s.y, first, 0, 1) < 0xffff) {
+        result = uFirst | 8;
+    } else if (NeighbourCost(world, state, s.x, s.y, second, 0, 1) < 0xffff) {
+        result = uSecond | 8;
+    } else {
+        result = uFirst | 0x20;
+    }
+    if ((result & 8) != 0) {
+        result = Pathing_ResolveBlocker(world, nullptr, state, result & 7);
+    }
+    SetPathPhase(s, 1);
+    return result;
+}
+
+namespace {
+
+// Tile (x, y) + i * axis A + j * axis B of the state.
+std::int32_t AxisX(const PathState& s, std::int32_t i, std::int32_t j) {
+    return Add(Add(s.x, Mul(s.axis_a_x, i)), Mul(s.axis_b_x, j));
+}
+std::int32_t AxisY(const PathState& s, std::int32_t i, std::int32_t j) {
+    return Add(Add(s.y, Mul(s.axis_a_y, i)), Mul(s.axis_b_y, j));
+}
+
+}  // namespace
+
+// Purpose: Compares the terrain costs of the next few tiles on the two (or, near the sextant's edge,
+// three) candidate directions and returns the cheapest; 0x20 when every way is blocked.
+std::uint32_t __fastcall Pathing_ChooseStepByCost(GameWorld* world, void*, PathState* state) {
+    PathState& s = *state;
+    SetPathPhase(s, 4);
+    auto freeCost = [&](std::int32_t i, std::int32_t j) {
+        return Pathing_FreeTileCost(world, nullptr, state, AxisX(s, i, j), AxisY(s, i, j));
+    };
+    auto cost = [&](std::int32_t i, std::int32_t j) {
+        return Pathing_SectorTileCost(world, nullptr, state, AxisX(s, i, j), AxisY(s, i, j));
+    };
+    std::int32_t biasA = 0, biasB = 0, biasC = 0;
+    std::uint32_t result;
+    std::int32_t best;
+    const std::int32_t a3 = Mul(s.along_a, 3);
+    if (a3 > Mul(s.along_b, 2) || a3 > s.along_b) {
+        // Two candidates. `mirrored`: the target lies closer to axis B, so
+        // the roles of the axes swap.
+        const bool mirrored = !(a3 > Mul(s.along_b, 2));
+        std::int32_t f1, f2, c3, c4, c5, c6, c7, c8;
+        if (!mirrored) {
+            if (s.turn == 0) biasA = Negate(s.art_cost);
+            if (s.turn == 5) biasB = Negate(s.art_cost);
+            f1 = freeCost(1, 0);
+            f2 = freeCost(0, 1);
+            c3 = cost(1, 1);
+            c4 = cost(2, 0);
+            c5 = cost(0, 2);
+            c6 = cost(2, 1);
+            c7 = cost(3, 0);
+            c8 = cost(1, 2);
+        } else {
+            if (s.turn == 0) biasB = Negate(s.art_cost);
+            if (s.turn == 5) biasA = Negate(s.art_cost);
+            f1 = freeCost(0, 1);
+            f2 = freeCost(1, 0);
+            c3 = cost(1, 1);
+            c4 = cost(0, 2);
+            c5 = cost(2, 0);
+            c6 = cost(1, 2);
+            c7 = cost(0, 3);
+            c8 = cost(2, 1);
+        }
+        const std::int32_t straightA = Add(c7, c4);
+        const std::int32_t bentA = Add(Add(Min(c4, c3), c6), -3);
+        const std::int32_t pathA = straightA < bentA ? straightA : bentA;
+        const std::int32_t scoreA = Add(Add(f1, pathA), biasA);
+        const std::int32_t bentB = Add(Add(c6, c3), -3);
+        const std::int32_t straightB = Add(Min(c3, c5), c8);
+        const std::int32_t pathB = bentB < straightB ? bentB : straightB;
+        const std::int32_t scoreB = Add(Add(pathB, f2), biasB);
+        if (mirrored) {
+            if (scoreA <= scoreB) {
+                result = static_cast<std::uint32_t>(s.sextant);
+                best = scoreA;
+            } else {
+                result = static_cast<std::uint32_t>(NextDirection(s.sextant));
+                best = scoreB;
+            }
+        } else if (scoreA > scoreB) {
+            result = static_cast<std::uint32_t>(s.sextant);
+            best = scoreB;
+        } else {
+            result = static_cast<std::uint32_t>(NextDirection(s.sextant));
+            best = scoreA;
+        }
+    } else {
+        // Close to axis B: the directions of B - A (the one before the
+        // sextant), axis A and axis B.
+        if (s.turn == 0) biasC = Negate(s.art_cost);
+        if (s.turn == 5) biasA = Negate(s.art_cost);
+        if (s.turn == 4) biasB = Negate(s.art_cost);
+        const std::int32_t g1 = freeCost(0, 1);
+        const std::int32_t g2 = freeCost(-1, 1);
+        const std::int32_t g3 = freeCost(1, 0);
+        const std::int32_t h1 = cost(0, 2);
+        const std::int32_t h2 = cost(-1, 2);
+        const std::int32_t h3 = cost(1, 1);
+        const std::int32_t h4 = cost(0, 3);
+        const std::int32_t h5 = cost(1, 3);
+        const std::int32_t h6 = cost(1, 2);
+        const std::int32_t scoreR = Add(Add(Add(h5, h2), g2), biasB);
+        const std::int32_t viaR = Add(Min(h1, h2), h5);
+        const std::int32_t viaL = Add(Min(h1, h3), h6);
+        const std::int32_t bent = viaR < viaL ? viaR : viaL;
+        const std::int32_t straight = Add(Add(h4, h1), -3);
+        const std::int32_t path = bent < straight ? bent : straight;
+        const std::int32_t scoreA = Add(Add(path, g1), biasA);
+        const std::int32_t scoreC = Add(Add(Add(h3, h6), g3), biasC);
+        if (scoreA > scoreR) {
+            if (scoreR < scoreC) {
+                result = static_cast<std::uint32_t>(PreviousDirection(s.sextant));
+                best = scoreR;
+            } else {
+                result = static_cast<std::uint32_t>(NextDirection(s.sextant));
+                best = scoreC;
+            }
+        } else if (scoreA > scoreC) {
+            result = static_cast<std::uint32_t>(NextDirection(s.sextant));
+            best = scoreC;
+        } else {
+            result = static_cast<std::uint32_t>(s.sextant);
+            best = scoreA;
+        }
+    }
+    if (best >= 0xf000) {
+        result |= 0x20;
+    }
+    SetPathPhase(s, 1);
+    return result;
+}
+
+// Purpose: One step along an obstacle's edge (keeping a hand on the wall): the first free direction
+// turning from the remembered one; when the counted steps are used up, the settler goes back to
+// walking towards its waypoint.
+std::uint32_t __fastcall Pathing_FollowEdge(GameWorld* world, void*, Settler* settler, PathState* state) {
+    PathState& s = *state;
+    SetPathPhase(s, 8);
+    const std::int32_t x = settler->x;
+    const std::int32_t y = settler->y;
+    std::int32_t direction = settler->path_direction;
+    std::int32_t next;
+    if ((settler->path_mode & layout::kPathEdgeLeft) != 0) {
+        int tries = 0;
+        while (NeighbourCost(world, state, x, y, direction, 0, 1) >= kBlocked) {
+            direction = PreviousDirection(direction);
+            if (++tries >= 6) {
+                direction = -1;
+                break;
+            }
+        }
+        next = NextDirection(direction);
+    } else {
+        int tries = 0;
+        while (NeighbourCost(world, state, x, y, direction, 0, 1) >= kBlocked) {
+            direction = NextDirection(direction);
+            if (++tries >= 6) {
+                direction = -1;
+                break;
+            }
+        }
+        next = direction == 0 ? 5 : direction - 1;
+    }
+    std::uint32_t result;
+    if (direction == -1 || NeighbourCost(world, state, s.x, s.y, direction, 0, 1) != 0) {
+        result = 0xff;
+        settler->path_mode = static_cast<std::uint8_t>((settler->path_mode & 0xc2) | layout::kPathWalkLine);
+    } else if (NeighbourCost(world, state, s.x, s.y, direction, 1, 1) < kBlocked) {
+        result = static_cast<std::uint32_t>(direction);
+        settler->path_direction = static_cast<std::uint8_t>(next);
+        FinishEdgeStep(*settler);
+    } else {
+        result = Pathing_ResolveBlocker(world, nullptr, state, static_cast<std::uint32_t>(direction) & 7);
+        if ((result & 0x40) != 0) {
+            settler->path_mode = 0xc1;
+            result &= 7;
+        }
+        if ((result & 0x10) != 0) {
+            settler->path_direction = static_cast<std::uint8_t>(next);
+            FinishEdgeStep(*settler);
+        }
+        if ((result & 8) != 0) {
+            settler->path_mode |= layout::kPathWaiting;
+            settler->path_direction = static_cast<std::uint8_t>(result & 7);
+        }
+    }
+    SetPathPhase(s, 1);
+    return result;
+}
+
+// Purpose: One step of walking towards the settler's waypoint: picks the direction (by terrain cost
+// when the waypoint is still far), tries it, and switches to walking around an obstacle when the way
+// is blocked.
+std::uint32_t __fastcall Pathing_WalkLine(GameWorld* world, void*, Settler* settler, PathState* state) {
+    PathState& s = *state;
+    SetPathPhase(s, 2);
+    s.dx = static_cast<std::int32_t>(settler->waypoint_x) - static_cast<std::int32_t>(settler->x);
+    s.dy = static_cast<std::int32_t>(settler->waypoint_y) - static_cast<std::int32_t>(settler->y);
+    s.abs_dx = Abs(s.dx);
+    s.abs_dy = Abs(s.dy);
+    std::uint32_t result = Pathing_ChooseSextant(world, nullptr, state);
+    if ((result & 0x20) == 0) {
+        result = Pathing_ChooseStepByCost(world, nullptr, state);
+    }
+    if ((result & 0x20) != 0) {
+        result = Pathing_TryStep(world, nullptr, state);
+    }
+    if ((result & 0x40) != 0) {
+        result &= 7;
+    } else if ((result & 0x20) != 0) {
+        settler->path_mode = static_cast<std::uint8_t>((settler->path_mode & 0xc4) | layout::kPathStepOut);
+        result = 0xff;
+    } else if ((result & 8) != 0) {
+        settler->path_mode |= layout::kPathWaiting;
+        settler->path_direction = static_cast<std::uint8_t>(result & 7);
+    }
+    SetPathPhase(s, 1);
+    return result;
+}
+
 S3RE_HOOK(0x004a36a0, Pathing_TileCost, TileCostFn, Original_Pathing_TileCost, Pathing_TileCost);
 S3RE_HOOK(0x004a3870, Pathing_SectorTileCost, StateTileFn, Original_Pathing_SectorTileCost, Pathing_SectorTileCost);
 S3RE_HOOK(0x004a3940, Pathing_FreeTileCost, StateTileFn, Original_Pathing_FreeTileCost, Pathing_FreeTileCost);
@@ -477,6 +948,15 @@ S3RE_HOOK(0x004a49d0, Pathing_Angle, DeltaFn, Original_Pathing_Angle, Pathing_An
 S3RE_HOOK(0x004a48f0, Pathing_TrackAngle, TrackAngleFn, Original_Pathing_TrackAngle, Pathing_TrackAngle);
 S3RE_HOOK(0x004a23e0, Pathing_ChooseSextant, StateFn, Original_Pathing_ChooseSextant, Pathing_ChooseSextant);
 S3RE_HOOK(0x004a3d30, Pathing_SetupLineStep, StateFn, Original_Pathing_SetupLineStep, Pathing_SetupLineStep);
+S3RE_HOOK(0x004a2ec0, Pathing_StepOut, StateFn, Original_Pathing_StepOut, Pathing_StepOut);
+S3RE_HOOK(0x004a2f70, Pathing_CompareEdges, SettlerStateFn, Original_Pathing_CompareEdges, Pathing_CompareEdges);
+S3RE_HOOK(0x004a2e20, Pathing_StartEdgeWalk, SettlerStateFn, Original_Pathing_StartEdgeWalk, Pathing_StartEdgeWalk);
+S3RE_HOOK(0x004a33d0, Pathing_ResolveBlocker, ResolveFn, Original_Pathing_ResolveBlocker, Pathing_ResolveBlocker);
+S3RE_HOOK(0x004a2c70, Pathing_TryStep, StateFn, Original_Pathing_TryStep, Pathing_TryStep);
+S3RE_HOOK(0x004a2660, Pathing_ChooseStepByCost, StateFn, Original_Pathing_ChooseStepByCost,
+          Pathing_ChooseStepByCost);
+S3RE_HOOK(0x004a3170, Pathing_FollowEdge, SettlerStateFn, Original_Pathing_FollowEdge, Pathing_FollowEdge);
+S3RE_HOOK(0x004a22f0, Pathing_WalkLine, SettlerStateFn, Original_Pathing_WalkLine, Pathing_WalkLine);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -714,6 +1194,224 @@ void CompareStateFns(test::Context& ctx, StateTileFn distanceAlong, TrackAngleFn
     }
 }
 
+// Batch 2: the walking helpers on a prepared neighbourhood.
+
+// Every tile's settler number below 32000 and every settler's path
+// direction 0..5 (both worlds equally), so that chains of settlers
+// (ResolveBlocker) stay inside the test world.
+void SanitizeWorld(test::Context& ctx, test::WorldPair& worlds) {
+    GameWorld* a = worlds.original();
+    GameWorld* b = worlds.ours();
+    for (std::uint32_t x = 0; x < layout::kMapRowTiles; ++x) {
+        for (std::uint32_t y = 0; y < layout::kMapRowTiles; ++y) {
+            const auto settler = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(32000));
+            a->tiles[x][y].settler = settler;
+            b->tiles[x][y].settler = settler;
+        }
+    }
+    for (std::uint32_t n = 0; n < 32000; ++n) {
+        const auto direction = static_cast<std::uint8_t>(ctx.rng().Below(6));
+        a->settlers[n].path_direction = direction;
+        b->settlers[n].path_direction = direction;
+    }
+}
+
+struct WalkCase {
+    PathState state;
+    std::uint32_t settler;
+};
+
+// A settler at a random position with a prepared neighbourhood (radius 7)
+// and a matching state, as FindPath would set it up.
+WalkCase PrepareWalkCase(test::Context& ctx, test::WorldPair& worlds) {
+    WalkCase c;
+    PathState& s = c.state;
+    s = RandomState(ctx);
+    s.x = ctx.rng().Range(16, 750);
+    s.y = ctx.rng().Range(16, 750);
+    s.walk_region = ctx.rng().Chance(1, 30) ? 1 : 0;
+    s.area = ctx.rng().Chance(1, 30) ? 1 : 0;
+    s.wide_region = ctx.rng().Chance(1, 30) ? 1 : 0;
+    PrepareTiles(ctx, worlds, s.x, s.y, 7);
+    c.settler = 1 + ctx.rng().Below(31998);
+    s.settler = static_cast<std::int32_t>(c.settler);
+    const std::int32_t sextant = static_cast<std::int32_t>(ctx.rng().Below(6));
+    s.sextant = ctx.rng().Chance(1, 50) ? static_cast<std::int32_t>(ctx.rng().Below(8)) : sextant;
+    const std::int32_t axisA = (sextant + 1) % 6;
+    s.axis_a_x = ctx.rng().Chance(1, 20) ? ctx.rng().Range(-1, 1) : kDirX[axisA];
+    s.axis_a_y = ctx.rng().Chance(1, 20) ? ctx.rng().Range(-1, 1) : kDirY[axisA];
+    s.axis_b_x = kDirX[sextant];
+    s.axis_b_y = kDirY[sextant];
+    s.along_a = ctx.rng().Chance(1, 5) ? 0 : ctx.rng().Range(0, 30);
+    s.along_b = ctx.rng().Chance(1, 5) ? 0 : ctx.rng().Range(0, 30);
+    s.chosen = static_cast<std::int32_t>(ctx.rng().Below(6));
+    s.probe_x = s.x + ctx.rng().Range(-3, 3);
+    s.probe_y = s.y + ctx.rng().Range(-3, 3);
+    s.art_cost = 1 + static_cast<std::int32_t>(ctx.rng().Below(2));
+    // Never the position itself (ChooseSextant asserts on (0, 0); FindPath
+    // plans a new line before that).
+    std::int32_t wdx = ctx.rng().Range(-9, 9);
+    const std::int32_t wdy = ctx.rng().Range(-9, 9);
+    if (wdx == 0 && wdy == 0) {
+        wdx = 1;
+    }
+    const auto waypointX = static_cast<std::uint16_t>(s.x + wdx);
+    const auto waypointY = static_cast<std::uint16_t>(s.y + wdy);
+    const auto mode = static_cast<std::uint8_t>(ctx.rng().Below(256));
+    const auto steps = static_cast<std::uint8_t>(ctx.rng().Below(5));
+    const auto direction = static_cast<std::uint8_t>(ctx.rng().Below(6));
+    const std::int32_t x = s.x, y = s.y;
+    const std::uint32_t n = c.settler;
+    // Sometimes a queue of walking settlers: two neighbours that lead back
+    // to this settler (count 2 in ResolveBlocker) or a ring of three.
+    const std::uint32_t queue = ctx.rng().Below(5);
+    const std::int32_t qd = static_cast<std::int32_t>(ctx.rng().Below(6));
+    const auto a = static_cast<std::uint16_t>(1 + ctx.rng().Below(31998));
+    const auto b = static_cast<std::uint16_t>(1 + ctx.rng().Below(31998));
+    const auto modeA = static_cast<std::uint8_t>(ctx.rng().Below(256) | 0x20);
+    const auto modeB = static_cast<std::uint8_t>(ctx.rng().Below(256) | 0x20);
+    const auto areaA = static_cast<std::uint16_t>(ctx.rng().Chance(1, 4) ? 1 : 0);
+    const auto stepsA = static_cast<std::uint8_t>(ctx.rng().Below(3));
+    worlds.Both([&](GameWorld* w) {
+        Settler& settler = w->settlers[n];
+        settler.x = static_cast<std::uint16_t>(x);
+        settler.y = static_cast<std::uint16_t>(y);
+        settler.waypoint_x = waypointX;
+        settler.waypoint_y = waypointY;
+        settler.path_mode = mode;
+        settler.path_steps = steps;
+        settler.path_direction = direction;
+        settler.job = 2;
+        w->tiles[x][y].settler = static_cast<std::uint16_t>(n);
+        if (queue == 1 && a != n) {
+            // Neighbour in direction qd walks back to (x, y).
+            Tile& t = w->tiles[x + kDirX[qd]][y + kDirY[qd]];
+            t.settler = a;
+            t.area = areaA;
+            w->settlers[a].job = 2;
+            w->settlers[a].path_mode = modeA;
+            w->settlers[a].path_direction = static_cast<std::uint8_t>((qd + 3) % 6);
+            w->settlers[a].path_steps = stepsA;
+        } else if (queue == 3) {
+            // The settler itself on the neighbour tile (a queue of length 1).
+            w->tiles[x + kDirX[qd]][y + kDirY[qd]].settler = static_cast<std::uint16_t>(n);
+        } else if (queue == 2 && a != n && b != n && a != b) {
+            // A ring of three: (x, y) -> qd -> qd + 2 -> qd + 4 = back.
+            const std::int32_t ax = x + kDirX[qd], ay = y + kDirY[qd];
+            const std::int32_t d2 = (qd + 2) % 6;
+            Tile& ta = w->tiles[ax][ay];
+            ta.settler = a;
+            w->settlers[a].job = 0x16d;
+            w->settlers[a].path_mode = modeA;
+            w->settlers[a].path_direction = static_cast<std::uint8_t>(d2);
+            Tile& tb = w->tiles[ax + kDirX[d2]][ay + kDirY[d2]];
+            tb.settler = b;
+            w->settlers[b].job = 2;
+            w->settlers[b].path_mode = modeB;
+            w->settlers[b].path_direction = static_cast<std::uint8_t>((qd + 4) % 6);
+        }
+    });
+    return c;
+}
+
+
+struct WalkFns {
+    StateFn stepOut;
+    SettlerStateFn compareEdges;
+    SettlerStateFn startEdgeWalk;
+    ResolveFn resolveBlocker;
+    StateFn tryStep;
+    StateFn chooseStepByCost;
+    SettlerStateFn followEdge;
+    SettlerStateFn walkLine;
+};
+
+void CompareWalkFns(test::Context& ctx, const WalkFns& fns, int cases) {
+    test::WorldPair worlds(ctx, kFullWorld);
+    worlds.Both([](GameWorld* w) { w->map_size = 768; });
+    SanitizeWorld(ctx, worlds);
+    const std::size_t settlersOffset = offsetof(GameWorld, settlers);
+    for (int i = 0; i < cases; ++i) {
+        const WalkCase c = PrepareWalkCase(ctx, worlds);
+        if (ctx.rng().Chance(1, 20)) {
+            const std::uint32_t size = ctx.rng().Chance(1, 2) ? 768 : static_cast<std::uint32_t>(c.state.x + 1);
+            worlds.Both([&](GameWorld* w) { w->map_size = size; });
+        }
+        const int which = static_cast<int>(ctx.rng().Below(8));
+        const std::uint32_t direction = ctx.rng().Below(6);
+        const std::uint32_t n = c.settler;
+        const bool ok = RunPathCase(
+            ctx, worlds, c.state,
+            [&](bool original, GameWorld* w, PathState* state) -> std::int32_t {
+                Settler* settler = &w->settlers[n];
+                std::uint32_t r = 0;
+                switch (which) {
+                    case 0:
+                        r = (original ? Original_Pathing_StepOut : fns.stepOut)(w, nullptr, state);
+                        break;
+                    case 1:
+                        r = (original ? Original_Pathing_CompareEdges : fns.compareEdges)(w, nullptr, settler, state);
+                        break;
+                    case 2:
+                        r = (original ? Original_Pathing_StartEdgeWalk : fns.startEdgeWalk)(w, nullptr, settler, state);
+                        break;
+                    case 3:
+                        r = (original ? Original_Pathing_ResolveBlocker : fns.resolveBlocker)(w, nullptr, state, direction);
+                        break;
+                    case 4:
+                        r = (original ? Original_Pathing_TryStep : fns.tryStep)(w, nullptr, state);
+                        break;
+                    case 5:
+                        r = (original ? Original_Pathing_ChooseStepByCost : fns.chooseStepByCost)(w, nullptr, state);
+                        break;
+                    case 6:
+                        r = (original ? Original_Pathing_FollowEdge : fns.followEdge)(w, nullptr, settler, state);
+                        break;
+                    default:
+                        r = (original ? Original_Pathing_WalkLine : fns.walkLine)(w, nullptr, settler, state);
+                        break;
+                }
+                return static_cast<std::int32_t>(r);
+            },
+            i, 1000);
+        bool same = worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return w->settlers[n]; });
+        for (std::int32_t dx = -3; dx <= 3 && same; ++dx) {
+            for (std::int32_t dy = -3; dy <= 3 && same; ++dy) {
+                const std::uint16_t other = worlds.original()->tiles[c.state.x + dx][c.state.y + dy].settler;
+                same = worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return w->settlers[other]; });
+            }
+        }
+        if (!ok || !same || (i % 64 == 63 && !worlds.Same(ctx, settlersOffset, 32000 * sizeof(Settler))) ||
+            !worlds.SameField(ctx, [](GameWorld* w) -> auto& { return w->random_state; })) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, function %d, settler %u", i, which, n);
+            return;
+        }
+    }
+    S3RE_EXPECT(worlds.Checkpoint(ctx));
+}
+
+const WalkFns kOurWalkFns = {&Pathing_StepOut,      &Pathing_CompareEdges,      &Pathing_StartEdgeWalk,
+                             &Pathing_ResolveBlocker, &Pathing_TryStep,          &Pathing_ChooseStepByCost,
+                             &Pathing_FollowEdge,   &Pathing_WalkLine};
+
+// Wrong: the edge walk's step counter is not decreased.
+std::uint32_t __fastcall WrongFollowEdge(GameWorld* world, void*, Settler* settler, PathState* state) {
+    const std::uint8_t steps = settler->path_steps;
+    const std::uint8_t mode = settler->path_mode;
+    const std::uint32_t result = Pathing_FollowEdge(world, nullptr, settler, state);
+    if (settler->path_steps == static_cast<std::uint8_t>(steps - 1)) {
+        settler->path_steps = steps;
+        settler->path_mode = mode;
+    }
+    return result;
+}
+
+// Wrong: a ring of three settlers is treated like a pair.
+std::uint32_t __fastcall WrongResolveBlocker(GameWorld* world, void*, PathState* state, std::uint32_t direction) {
+    const std::uint32_t result = Pathing_ResolveBlocker(world, nullptr, state, direction);
+    return (result & 0x40) != 0 ? (direction | 0x10) : result;
+}
+
 // Wrong: a settler on the tile does not block when needEmpty is set.
 std::int32_t __fastcall WrongTileCost(GameWorld* world, void*, PathState* state, std::int32_t x, std::int32_t y,
                                       std::uint32_t, std::uint32_t withCost, std::uint32_t blockBusy) {
@@ -765,6 +1463,22 @@ S3RE_TEST(Pathing_StateFunctions_ComparisonDetectsWrongImplementation) {
     CompareStateFns(probe, &Pathing_DistanceAlong, &Pathing_TrackAngle, &WrongChooseSextant, &Pathing_SetupLineStep,
                     20000);
     S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(Pathing_WalkFunctions_MatchOriginal) {
+    CompareWalkFns(ctx, kOurWalkFns, 40000);
+}
+S3RE_TEST(Pathing_WalkFunctions_ComparisonDetectsWrongImplementation) {
+    WalkFns wrongEdge = kOurWalkFns;
+    wrongEdge.followEdge = &WrongFollowEdge;
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareWalkFns(probe, wrongEdge, 4000);
+    S3RE_EXPECT(probe.failures() > 0);
+    WalkFns wrongBlocker = kOurWalkFns;
+    wrongBlocker.resolveBlocker = &WrongResolveBlocker;
+    test::Context probe2(ctx.name(), 2, /*quiet=*/true);
+    CompareWalkFns(probe2, wrongBlocker, 4000);
+    S3RE_EXPECT(probe2.failures() > 0);
 }
 
 }  // namespace s3re::game
