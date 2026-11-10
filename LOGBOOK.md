@@ -539,6 +539,47 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-10 (41): parallel emulator runs, --changed, fair game lock (tooling, parallel worktree)
+
+- **`run.py --jobs N`** (default cores-2 = 18 here, capped by free memory;
+  a worker peaks at ~380 MB): specs run in spawn worker processes, output
+  in specs.py order, same summary and exit code. Slowest first (times in
+  build/emutest_times.json); specs slower than ~total/jobs/2 run as case
+  ranges whose merged result equals a whole run (checked on 10 specs incl.
+  self-test pairings, 2/3/7 parts). Full suite: 1128 s on the first run
+  (no times yet), 1003 s with times, 856 s with splitting, all on a
+  machine shared with another agent's emulator suite; serial is over an
+  hour (GameWorld_Create alone 840-1000 s). All three parallel outputs
+  identical (458 specs, 0 mismatches, only GameWorld_Create incomplete
+  338/415 as known); the `--jobs 1` run matched on its first 70 specs and
+  was stopped for time (TODO). Self-test parallel = serial (21/21).
+- **Cross-spec state:** `Spec.globals` wrote S3.EXE globals with
+  mem_write, outside the per-call undo, so they leaked into later specs
+  (the 0x65539f case of session 35). `Emulator.reset` before every spec
+  restores both images, zeroes the stack and forgets world bytes and
+  probes. Nothing else carried over (writes are undone per call).
+- **Bug found:** at HEAD the full suite crashed with "NextDirection: 2
+  matching symbols" (world_create.cpp has a NextDirection helper in an
+  anonymous namespace). find_our_function now prefers the non-anonymous
+  match.
+- **`run.py --changed [--since REF] [--dry-run]`** (tools/emutest/changed.py):
+  selection from MSBuild's CL.read tlog (headers per object) and the DLL
+  reference closure (calls, operand addresses and data pointers, symbols
+  from s3re.map); specs.py entries by fingerprint of the entry plus the
+  helpers it uses. Checked: a comment in map_directions.cpp selects 13
+  specs (its 5 plus 8 callers in area_split/settler code); world.h
+  selects 215; a changed helper/entry/comprehension selects exactly its
+  1/1/8 specs; a comment change in specs.py selects 0; harness changes
+  select all. Full runs with 0 mismatches are recorded in
+  build/emutest_last_full.json (incl. the incomplete-coverage list).
+- **Release build:** not usable as is (identical-function folding drops
+  names from s3re.map); TODO.
+- **Game lock:** an S3.EXE whose parent is `s3re_launcher --test` doesn't
+  count (checked with a live --test run). FIFO queue of ticket files in
+  Settlers3Ultimate/s3re-game.queue/, 3 s polling, dead-pid cleanup,
+  max_wait, `status` with holder and queue; tools/test_game_lock.py
+  (3 waiters in arrival order, a dead-pid ticket and lock, a timeout).
+
 ### 2026-11-10 (41): `--fast`, cached original traces, first-call ticks (tooling, parallel worktree)
 
 - **Pacing found:** CLogicThread::OnStart starts the CTimer at

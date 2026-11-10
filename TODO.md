@@ -35,6 +35,18 @@ Each item: what, why, and where to start.
   needs maps of 130+ tiles, too slow in the emulator (a 320-tile case ran
   for over an hour). Options: a release build of s3re.dll for the emulator,
   a faster emulator path, or accept the in-process whole-world comparison.
+  The plain Release build doesn't work for the emulator yet (2026-11-10):
+  `run.py --build Release` stops with "GameWorld_CenterCameraOnLocalPlayer:
+  0 matching symbols in s3re.map", because the linker folds identical
+  functions (/OPT:ICF) and keeps only one name. A separate emulator
+  configuration with `/OPT:NOICF` (maybe `/Ob1`) would be needed; then
+  compare its full run with Debug's and time GameWorld_Create.
+- **Full serial emulator run as a cross-check of `--jobs`:** the parallel
+  runs (3 schedules: specs.py order, longest first, slow specs split into
+  parts) gave identical output; the `--jobs 1` run was stopped after its
+  first 70 specs (all identical). Run `python tools/emutest/run.py
+  --require-coverage --jobs 1` once overnight and compare it (without the
+  `[...s]` times) with a parallel run's output.
 - **186 verified functions have only test evidence** (never called
   in a whole-game check; see the progress page's tests-only list). Done
   so far: random maps (session 40) and an 8-player recording
