@@ -5136,3 +5136,135 @@ def miner_state(rng, pool, args):
 SPECS += [
     Spec("GameWorld_MinerJobEnter", 0x004f9a00, "thiscall", [below(0x7d00)], presets=miner_state, max_cases=1000),
 ]
+
+
+# Package C, batch 3 (territory.cpp, building_crush.cpp). ResetSettlerToIdle
+# 0x50cf50 and TakeGoodFromPile 0x505820 belong to package B (not
+# reimplemented yet, they need a consistent world), BlockTile 0x51b6f0 and
+# SplitAreaAtTile 0x4e5d50 (verified, own specs) flood regions over the
+# lazily random map: all four are probed, their calls compared.
+SETTLER_PROBES = {0x0050cf50: (1, "thiscall", "probe"), 0x00505820: (1, "thiscall", "probe"),
+                  0x0051b6f0: (2, "thiscall", "probe"), 0x004e5d50: (2, "thiscall", "probe")}
+PACKAGE_C_JOBS = (0x0a, 0x0b, 0xa9, 0x4c, 0x4d, 0x4e, 0x4f, 0x68, 0x69, 0x133, 0x134, 0x1)
+
+
+def settler_scan(rng, pile, px, py, owner=None):
+    """Settlers 1..count with jobs, owners, targets and buildings around a pile/tile."""
+    count = rng.randrange(30)
+    fields = [(SETTLER_COUNT, count, 4)]
+    for n in range(1, count + 1):
+        s = SETTLERS + n * 0x40
+        job = rng.choice(PACKAGE_C_JOBS) if rng.random() < 0.8 else rng.randrange(0x195)
+        o = 0xFF if rng.random() < 0.15 else (owner if owner is not None and rng.random() < 0.5 else rng.randrange(8))
+        fields += [(s, o, 1), (s + 1, rng.randrange(0x30), 1), (s + 0xE, job, 2),
+                   (s + 0x22, pile if rng.random() < 0.5 else rng.randrange(100), 2),
+                   (s + 0x24, px if rng.random() < 0.7 else rng.randrange(384), 2),
+                   (s + 0x26, py if rng.random() < 0.7 else rng.randrange(384), 2)]
+    return fields
+
+
+def pile_record(rng, number, x, y):
+    p = PILES + number * PILE_BYTES
+    return [(p, 0xFF if rng.random() < 0.2 else rng.randint(1, 35), 1),
+            (p + 1, 0 if rng.random() < 0.25 else rng.randrange(9), 1),
+            (p + 2, 0 if rng.random() < 0.3 else rng.randrange(256), 1),
+            (p + 3, 0 if rng.random() < 0.3 else rng.randrange(9), 1),
+            (p + 4, rng.choice([0, 0xFE, 0xFD, 0xFF, 1]) if rng.random() < 0.8 else rng.randrange(256), 1),
+            (p + 6, x, 2), (p + 8, y, 2),
+            (p + 0xA, 0 if rng.random() < 0.5 else rng.randint(101, 150), 2),
+            (p + 0xC, 0 if rng.random() < 0.5 else rng.randint(101, 150), 2)]
+
+
+def drop_pile_world(rng, pool, args):
+    number = args[0]
+    x, y = rng.randint(10, 370), rng.randint(10, 370)
+    fields = pile_record(rng, number, x, y)
+    fields += [(tile(x, y) + 2, number, 2), (tile(x, y) + 0x14, rng.randint(1, 50), 2),
+               (MAP_SIZE, 384, 4), (BUILDING_COUNT, rng.randrange(40), 4), (PILE_COUNT, 160, 4)]
+    for _ in range(3):
+        free = rng.randint(1, 160)
+        if free != number:
+            fields.append((PILES + free * PILE_BYTES, 0, 1))
+    fields += settler_scan(rng, number, x, y)
+    return fields
+
+
+def owned_tile_world(rng, pool, args):
+    """The tile (x, y) with a settler, owner, area kind (none / water / land)
+    and a pile; the settlers scanning for that pile."""
+    x, y = args
+    number = 0 if rng.random() < 0.1 else rng.randint(1, 100)
+    owner = 0xFF if rng.random() < 0.12 else rng.randrange(8)
+    kind = rng.randrange(8)
+    area = 0 if kind == 0 else 0x8000 + rng.randrange(0x8000) if kind == 1 else rng.randint(1, 50)
+    t = tile(x, y)
+    settler = 0 if rng.random() < 0.2 else rng.randint(1, 30)
+    px = x if rng.random() < 0.8 else rng.randrange(384)
+    py = y if rng.random() < 0.8 else rng.randrange(384)
+    fields = [(t, settler, 2), (t + 2, number, 2), (t + 8, owner, 1), (t + 0x14, area, 2),
+              (t + 0xA, rng.getrandbits(8) & (0xDF if rng.random() < 0.5 else 0xFF), 1)]
+    fields += pile_record(rng, number, px, py)
+    if rng.random() < 0.7:
+        fields.append((PILES + number * PILE_BYTES + 4, 0xFE, 1))
+    fields += settler_scan(rng, number, px, py, owner)
+    if settler and rng.random() < 0.5:  # a civilian of the tile's owner
+        fields += [(SETTLERS + settler * 0x40, owner, 1), (SETTLERS + settler * 0x40 + 1, 0, 1)]
+    return fields
+
+
+def block_tile_world(rng, pool, args):
+    x, y = args
+    fields = [(MAP_SIZE, 384, 4), (tile(x, y), 0 if rng.random() < 0.3 else rng.randint(1, 30), 2)]
+    fields += site_offset_table(rng, rings=4)
+    for dx in range(-4, 5):
+        for dy in range(-4, 5):
+            if dx or dy:
+                fields += [(tile(x + dx, y + dy), 0 if rng.random() < 0.5 else rng.randint(1, 30), 2),
+                           (tile(x + dx, y + dy) + 0x10, 0 if rng.random() < 0.25 else rng.randint(1, 200), 1)]
+    fields += settler_scan(rng, 0, x, y)
+    return fields
+
+
+def neighbour(x, y, direction):
+    dx = 1 if direction in (0, 1) else -1 if direction in (3, 4) else 0
+    dy = 1 if direction in (1, 2) else -1 if direction in (4, 5) else 0
+    return (x + dx) & 0xFFFFFFFF, (y + dy) & 0xFFFFFFFF
+
+
+def block_line_world(rng, pool, args):
+    number = args[0]
+    b = BUILDINGS + number * BUILDING_BYTES
+    direction = 0xFFFF if rng.random() < 0.12 else rng.randrange(6)
+    wx, wy = rng.randint(30, 350), rng.randint(30, 350)
+    fields = [(b + 0x21, 0 if rng.random() < 0.8 else rng.randrange(256), 1), (b + 0x22, direction, 2),
+              (b + 0x30, wx, 2), (b + 0x32, wy, 2), (MAP_SIZE, 384, 4)]
+    fields += site_offset_table(rng, rings=4)
+    if direction != 0xFFFF:
+        x, y = wx, wy
+        length = rng.randrange(8)
+        for k in range(length + 1):
+            terrain = 0x30 if k == length else (0x10 if rng.random() < 0.5 else rng.randrange(0x30))
+            fields += [(tile(x, y) + 6, terrain, 1), (tile(x, y), 0 if rng.random() < 0.5 else rng.randint(1, 30), 2)]
+            x, y = neighbour(x, y, direction)
+    fields += settler_scan(rng, 0, wx, wy)
+    return fields
+
+
+SPECS += [
+    Spec("GameWorld_ResetCivilianOnTile", 0x0050e980, "thiscall", [between(10, 370), between(10, 370)], eax_mask=0,
+         presets=owned_tile_world, callees=SETTLER_PROBES, max_cases=1000),
+    Spec("GameWorld_LosePileOnTile", 0x00504f70, "thiscall", [between(10, 370), between(10, 370)], eax_mask=0,
+         presets=owned_tile_world, callees=SETTLER_PROBES, max_cases=1000),
+    Spec("GameWorld_ClearTileOwner", 0x0051b640, "thiscall", [between(10, 370), between(10, 370)], eax_mask=0,
+         presets=owned_tile_world, callees=SETTLER_PROBES, max_cases=1000),
+    Spec("GameWorld_BlockTileAndMoveSettler", 0x004dbb10, "thiscall", [between(20, 360), between(20, 360)],
+         eax_mask=0, presets=block_tile_world, callees=SETTLER_PROBES, max_cases=600),
+    Spec("GameWorld_BlockBuildingLine", 0x004dbb90, "thiscall", [between(1, 50)], eax_mask=0,
+         presets=block_line_world, callees=SETTLER_PROBES, max_cases=600),
+    Spec("GameWorld_DropInputPile", 0x00504a00, "thiscall", [between(1, 100)], eax_mask=0,
+         presets=drop_pile_world, callees=SETTLER_PROBES, max_cases=600),
+    Spec("GameWorld_DropStoragePile", 0x00504b70, "thiscall", [between(1, 100)], eax_mask=0,
+         presets=drop_pile_world, callees=SETTLER_PROBES, max_cases=600),
+    Spec("GameWorld_DropOutputPile", 0x00504e20, "thiscall", [between(1, 100)], eax_mask=0,
+         presets=drop_pile_world, callees=SETTLER_PROBES, max_cases=600),
+]

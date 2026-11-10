@@ -227,7 +227,7 @@ counting.cpp, area_split.cpp (Take/ReleaseBuildingExtraTiles), dump.
 | 0x1F | u8 | state | high nibble = state (0x20 done, 0x30/0x40 shipyard states) | V (Take/ReleaseBuildingExtraTiles) |
 | 0x20 | u8 | | 0xFE once the extra tiles are taken | V |
 | 0x21 | u8 | buildup | non-zero while a construction site (DebugLog "building[i].buildup"); 1 for a new site, 2 for a new mine (no levelling) | V |
-| 0x22 | u16 | | construction site: its levelling job slot (CheckBuildingSite); shipyard: direction of the slip (Take/ReleaseBuildingExtraTiles); military: the soldier created by BuildingDone (0x4DBFB9, folded form `(n + 0x5AEDF) * 0x3A`) | V |
+| 0x22 | u16 | | construction site: its levelling job slot (CheckBuildingSite); shipyard: direction of the slip (Take/ReleaseBuildingExtraTiles; BlockBuildingLine 0x4DBB90 blocks the tiles from the work tile along it up to terrain 0x30, then sets 0xFFFF); site cache slot read by ClearBuildingFootprint 0x51AAE0 while buildup is 1; military: the soldier created by BuildingDone (0x4DBFB9, folded form `(n + 0x5AEDF) * 0x3A`) | V |
 | 0x24/0x26/0x28 | u16[3] | input word 24 | requested amount per input slot; construction site: word +0x28 sums the height differences of the levelled tiles (CheckBuildingSite) | V |
 | 0x2A/0x2C/0x2E | u16[3] | input word 2A | next building in the area's request list per slot | V |
 | 0x30 | u16 | work x | construction site: the earth to move (PlanSiteLevelling's amount); = position after BuildingDone; centre of the work area; shipyard: ship position (0xFFFF = none) | V (uses), S (work area) |
