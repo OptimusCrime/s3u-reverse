@@ -5,6 +5,8 @@
 //                      [--record-commands <file>] [--replay-commands <file>]
 //                      [--exit-after-ticks <n>] [--timeout <seconds>]
 //                      [--dump-tick <n>] [--load-save <file>]
+//                      [--random-map <size>[,<symmetry>[,<field0c>]]]
+//                      [--skip-hooks <name>[,<name>...]]
 //                      [-- <arguments passed to S3.EXE>]
 //
 // --trace-determinism writes the tick, RNG state and world hashes after each
@@ -51,6 +53,22 @@
 // loads a copy (s3re-loaded.sav next to s3re.dll), so the game never opens
 // the user's savegame itself. The RNG state comes from the savegame, so
 // --seed has no effect; not combinable with -map or the command recorder.
+//
+// --random-map <size>[,<symmetry>[,<field0c>]] starts a game on a random map
+// (the game's random map generator, CGameData 0x5166d0) without menus, the
+// way the map dialog sets one up (see src/s3re/tooling/random_map_start.cpp).
+// <size> is the map size (the dialog offers 384, 448, ...; 128..768,
+// multiples of 64, are accepted), <symmetry> the symmetry bits 0..3 (bit 0
+// diagonal mirror, bit 1 point mirror), <field0c> the second dialog value
+// (not read by the simulation). The player setup comes from the -map file
+// (default Map\MULTI\384-2-Lakes.map: you and one computer player). The map
+// seed is --seed (which also replaces the generator's RNG seed), else 0.
+// Not combinable with --load-save or the command recorder.
+//
+// --skip-hooks <name>[,<name>...] leaves out these replacements (hook names as
+// in "hooked <name>" lines of s3re.log), so the original code runs there:
+// for finding which replacement makes a game diverge, or for letting the
+// original call our replacements of its callees, which then get counted.
 //
 // --test runs the differential test suite inside S3.EXE instead of the game
 // (optionally only tests whose name contains <filter>), prints the results
@@ -305,6 +323,8 @@ int wmain(int argc, wchar_t** argv) {
     std::wstring exitAfterTicks;
     std::wstring dumpTick;
     std::wstring loadSave;
+    std::wstring randomMap;
+    std::wstring skipHooks;
     DWORD timeoutMs = INFINITE;
 
     for (int i = 1; i < argc; ++i) {
@@ -341,6 +361,10 @@ int wmain(int argc, wchar_t** argv) {
             }
         } else if (arg == L"--load-save" && i + 1 < argc) {
             loadSave = argv[++i];
+        } else if (arg == L"--skip-hooks" && i + 1 < argc) {
+            skipHooks = argv[++i];
+        } else if (arg == L"--random-map" && i + 1 < argc) {
+            randomMap = argv[++i];
         } else if (arg == L"--dump-tick" && i + 1 < argc) {
             dumpTick = argv[++i];
         } else if (arg == L"--timeout" && i + 1 < argc) {
@@ -364,7 +388,7 @@ int wmain(int argc, wchar_t** argv) {
             wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
                     L"[--trace-determinism] [--log-commands] [--record-commands <file>] "
                     L"[--replay-commands <file>] [--seed <n>] [--exit-after-ticks <n>] "
-                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [--load-save <file>] [--original] [--unverified] [-- <S3.EXE arguments>]\n");
+                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [--load-save <file>] [--random-map <size>[,<symmetry>[,<field0c>]]] [--skip-hooks <names>] [--original] [--unverified] [-- <S3.EXE arguments>]\n");
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
@@ -419,6 +443,50 @@ int wmain(int argc, wchar_t** argv) {
         gameArgs.push_back(loadSaveCopy);
     }
 
+    std::wstring randomMapParams;
+    if (!randomMap.empty()) {
+        if (!loadSave.empty() || !recordCommands.empty() || !replayCommands.empty()) {
+            return Fail(L"--random-map can't be combined with --load-save, --record-commands "
+                        L"or --replay-commands%s");
+        }
+        unsigned long values[3] = {0, 0, 0};
+        const wchar_t* cursor = randomMap.c_str();
+        for (int count = 0;; ++count) {
+            wchar_t* end = nullptr;
+            values[count] = wcstoul(cursor, &end, 0);
+            const bool more = *end == L',';
+            if (end == cursor || (!more && *end != L'\0') || (more && count == 2)) {
+                return Fail(L"--random-map expects <size>[,<symmetry>[,<field0c>]], got '%s'",
+                            randomMap);
+            }
+            if (!more) {
+                break;
+            }
+            cursor = end + 1;
+        }
+        if (values[0] < 128 || values[0] > 768 || values[0] % 64 != 0) {
+            return Fail(L"--random-map: the size must be a multiple of 64 from 128 to 768, "
+                        L"got '%s'", randomMap);
+        }
+        if (values[1] > 3) {
+            return Fail(L"--random-map: the symmetry must be 0..3, got '%s'", randomMap);
+        }
+        const unsigned long mapSeed = seed.empty() ? 0 : wcstoul(seed.c_str(), nullptr, 0);
+        randomMapParams = std::to_wstring(values[0]) + L"," + std::to_wstring(values[1]) + L"," +
+                          std::to_wstring(values[2]) + L"," + std::to_wstring(mapSeed);
+        bool hasMap = false;
+        for (const std::wstring& arg : gameArgs) {
+            hasMap = hasMap || _wcsicmp(arg.c_str(), L"-map") == 0;
+        }
+        if (!hasMap) {
+            // The player setup comes from this file; the landscape doesn't.
+            gameArgs.push_back(L"-map");
+            gameArgs.push_back(L"Map\\MULTI\\384-2-Lakes.map");
+        }
+        wprintf(L"Random map: size %lu, symmetry %lu, field0c %lu, seed %lu\n", values[0],
+                values[1], values[2], mapSeed);
+    }
+
     if (!FileExists(exePath)) {
         return Fail(L"game executable not found: %s", exePath);
     }
@@ -463,6 +531,9 @@ int wmain(int argc, wchar_t** argv) {
     SetEnvironmentVariableW(L"S3RE_SEED", seed.empty() ? nullptr : seed.c_str());
     SetEnvironmentVariableW(L"S3RE_LOAD_SAVE",
                             loadSaveCopy.empty() ? nullptr : loadSaveCopy.c_str());
+    SetEnvironmentVariableW(L"S3RE_SKIP_HOOKS", skipHooks.empty() ? nullptr : skipHooks.c_str());
+    SetEnvironmentVariableW(L"S3RE_RANDOM_MAP",
+                            randomMapParams.empty() ? nullptr : randomMapParams.c_str());
     SetEnvironmentVariableW(L"S3RE_DUMP_TICK", dumpTick.empty() ? nullptr : dumpTick.c_str());
     SetEnvironmentVariableW(L"S3RE_EXIT_AFTER_TICKS",
                             exitAfterTicks.empty() ? nullptr : exitAfterTicks.c_str());

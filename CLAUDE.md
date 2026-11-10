@@ -216,8 +216,8 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   make sure no `S3.EXE` runs. Remove it when the run ends, also on
   failure. A lock older than 2 hours with no `S3.EXE` running is stale.
   `tools/game_lock.py` implements it (`with game_lock.held(owner):`);
-  `check_replay.py`, `check_determinism.py` and `check_save.py` take it
-  automatically; `python tools/game_lock.py status|release`. Manual
+  `check_replay.py`, `check_determinism.py`, `check_save.py` and
+  `check_random_map.py` take it automatically; `python tools/game_lock.py status|release`. Manual
   launcher runs take it by hand. Never write to `Settlers3Ultimate/Save/`
   (`--load-save` and `check_save.py` only read and copy the savegames).
   In a worktree, make `Settlers3Ultimate` a junction to the main
@@ -241,6 +241,30 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   runs it unattended (twice original, or original vs ours), compares the
   traces, checks that no savegame in `Save\` changed, and writes the call
   counts to `save-check/<save>-calls.tsv`. Results: `re/savegame_checks.md`.
+- **Starting a random-map game:** `--random-map SIZE[,SYMMETRY[,FIELD0C]]`
+  (sizes 128..768 in steps of 64; the dialog offers 384 and up; symmetry
+  bits 0..3) starts a game on a map from the game's random map generator
+  (`0x5166d0`) without menus. The launcher passes `-map` (default
+  `Map\MULTI\384-2-Lakes.map`), whose player setup is used; a pass-through
+  hook on `GameSettings::NewGame` (`0x431ab0`), only at the `-map` call site
+  in `Menus::CDrawThread::Update` (return address `0x493a56`), replaces the
+  map file with a memory-only `Dirk::CMapFile` holding chunk 5 (size, a
+  second dialog value, symmetry, seed) and chunk 1 (random-map kind, start
+  positions), built exactly like the map dialog does (`0x481e90`).
+  `CLogicThread::OnStart` then calls Create with that chunk. `--seed N` also
+  becomes the map seed (Create seeds the RNG through `SeedRandom`). Not
+  combinable with `--load-save` or the command recorder. Code:
+  `src/s3re/tooling/random_map_start.cpp`. `python
+  tools/check_random_map.py --maps "384,0;448,3" --ticks N
+  [--against-original] [--map FILE]` runs it unattended (twice original, or
+  original vs ours) and records call counts as source `random:SIZE,SYM seed N`.
+- **Leaving out single replacements:** `--skip-hooks NAME[,NAME...]` (hook
+  names as in the "hooked NAME" lines of s3re.log) installs everything
+  except those, so the original runs there: to find which replacement makes
+  a whole game diverge, or to count our callees of an original function
+  (calls from our own replacements bypass the counting thunk; e.g.
+  `check_random_map.py --against-original --skip-hooks GameWorld_Create`
+  counts ExpandTerrain and MarkTerrainEdge).
 - **Unattended determinism check:** `python tools/check_determinism.py
   [--ticks N]`. It opens the game window, so the user's screen is busy
   while it runs (about 1 minute per 1,000 ticks per run).
@@ -387,10 +411,10 @@ replaying, see `src/s3re/replay/command_log.h`):
   inventory (after a rename: `python tools/whole_game.py fix-names`).
 - **Whole-game evidence** is kept in `re/whole_game_calls.csv`: one row per
   function and whole-game check source (`replay:<recording>`,
-  `save:<savegame>`) with the largest call count, ticks, commit and date
+  `save:<savegame>`, `random:<size>,<symmetry> seed <n>`) with the largest call count, ticks, commit and date
   (columns in `tools/whole_game.py`). `tools/record_call_counts.py` (after
-  check_replay) and `tools/check_save.py --against-original` (when
-  identical) write it. A verified function is then "seen in a whole game"
+  check_replay), `tools/check_save.py --against-original` and
+  `tools/check_random_map.py --against-original` (when identical) write it. A verified function is then "seen in a whole game"
   (some count > 0), "tests only" (counted 0 in every check) or "no
   whole-game check yet" (no row). A 0 can hide real runs: calls from our
   own replacements bypass the counting thunk (e.g. PlanSiteLevelling inside

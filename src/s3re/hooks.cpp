@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <detours.h>
 
+#include <string>
 #include <vector>
 
 namespace s3re::hooks {
@@ -28,6 +29,29 @@ std::vector<Hook>& Registry() {
 
 bool g_installed = false;
 
+// Replacements left out by name (`s3re_launcher --skip-hooks A,B`,
+// S3RE_SKIP_HOOKS): for finding which replacement makes a whole game
+// diverge, and for letting the original code call our replacements of its
+// callees (e.g. the original Create calling our ExpandTerrain, so those
+// calls are counted). Only applies to Replaced and Unverified hooks.
+bool SkippedByName(const char* name) {
+    static const std::string list = [] {
+        char text[4096] = {};
+        const DWORD length = GetEnvironmentVariableA("S3RE_SKIP_HOOKS", text, sizeof(text));
+        return (length > 0 && length < sizeof(text)) ? "," + std::string(text, length) + ","
+                                                     : std::string();
+    }();
+    return !list.empty() && list.find("," + std::string(name) + ",") != std::string::npos;
+}
+
+bool Installed(const Hook& hook) {
+    if (!IsInstalled(hook.kind)) {
+        return false;
+    }
+    return !((hook.kind == HookKind::Replaced || hook.kind == HookKind::Unverified) &&
+             SkippedByName(hook.name));
+}
+
 }  // namespace
 
 HookRegistrar::HookRegistrar(const char* name, std::uintptr_t address, HookKind kind,
@@ -41,7 +65,7 @@ void LogCallCounts() {
         return;
     }
     for (const Hook& hook : Registry()) {
-        if (hook.calls == nullptr || !IsInstalled(hook.kind)) {
+        if (hook.calls == nullptr || !Installed(hook)) {
             continue;  // not counted, or not installed
         }
         S3RE_LOG("calls %s %lu", hook.name, hook.calls->load(std::memory_order_relaxed));
@@ -73,8 +97,11 @@ bool InstallAll() {
     std::vector<Hook> hooks;
     unsigned unverifiedLeftOut = 0;
     for (const Hook& hook : Registry()) {
-        if (IsInstalled(hook.kind)) {
+        if (Installed(hook)) {
             hooks.push_back(hook);
+        } else if (IsInstalled(hook.kind)) {
+            S3RE_LOG("skipped %s at 0x%08x (--skip-hooks)", hook.name,
+                     static_cast<unsigned>(hook.address));
         } else if (hook.kind == HookKind::Unverified && !OriginalMode()) {
             ++unverifiedLeftOut;
         }
@@ -123,7 +150,7 @@ void UninstallAll() {
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
     for (const Hook& hook : Registry()) {
-        if (IsInstalled(hook.kind)) {
+        if (Installed(hook)) {
             DetourDetach(hook.original, hook.replacement);
         }
     }
