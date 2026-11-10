@@ -4580,11 +4580,6 @@ SPECS += [
 
 # Package B, batch 1 (pile_goods_moves.cpp, notifications.cpp, folded_getters.cpp,
 # settler_spawn.cpp, miner_jobs.cpp)
-def hex_distance(dx: int, dy: int) -> int:
-    """TileDistance from (0, 0): max(|dx|, |dy|) for deltas of the same sign, else |dx| + |dy|."""
-    return max(abs(dx), abs(dy)) if (dx >= 0) == (dy >= 0) else abs(dx) + abs(dy)
-
-
 def _spiral(entries: int) -> list:
     points = sorted(((dx, dy) for dx in range(-12, 13) for dy in range(-12, 13)),
                     key=lambda p: (hex_distance(*p), p))
@@ -5418,4 +5413,151 @@ def building_done_world(rng, pool, args):
 SPECS += [
     Spec("GameWorld_BuildingDone", 0x004dbc50, "thiscall", [between(1, 50)], eax_mask=0,
          presets=building_done_world, callees={0x0051b770: (2, "thiscall", "probe")}, max_cases=3000),
+]
+
+
+# Package B, batch 3 (settler_idle.cpp, pile_goods_moves.cpp, miner_jobs.cpp)
+IDLE_JOBS = [0x37, 0x35, 0xb0, 0x8e, 0xd4, 0xd5, 0x12e, 0x12f, 1, 2, 0x68, 0x69, 3, 4, 0x8a, 0x1c, 0x2a, 0xe5,
+             0x168, 5, 6, 7, 8, 9, 0xe, 0xf, 0x11, 0x12, 0x133, 0x134, 0xa, 0xb, 0xa9, 0x4c, 0x4d, 0x4e, 0x4f,
+             0xaa, 0xc, 0xd, 0x50, 0xac, 0x100]
+IDLE_TYPES = [0, 1, 2, 0x16, 0x28, 0x0f, 0x20, 0x08, 0x1e, 0x05, 0x0a, 0x30]
+
+
+def pile_on_tile(rng, pile, area_limit=AREA_LIMIT):
+    """A pile record with a position on the map and an area below the limit."""
+    record = PILES + pile * PILE_BYTES
+    x, y = rng.randrange(5, 379), rng.randrange(5, 379)
+    return [(record + 0x6, x, 2), (record + 0x8, y, 2), (tile_area_offset(x, y), rng.randrange(area_limit), 2),
+            (record + 0xa, rng.randrange(0x1000), 2), (record + 0xc, rng.randrange(0x1000), 2)]
+
+
+def neighbour_offsets(rng):
+    """Offset entries 0..90 in the game's order (DropGoodNear, PlaceSettlerNear,
+    PileNeighbourBuildingByteE)."""
+    return spiral_offsets(91)
+
+
+WORK_JOBS = [3, 4, 0x8a, 0x68, 0x69, 0x1c, 0x1d, 0x20, 0x21, 0x22, 0x23, 0x2a, 0x2b, 0x2d, 0x2e, 0x2f, 0x30, 0x90,
+             0x91, 0x92, 0x93, 0x96, 0x97, 0x98, 0x9c, 0xb5, 0xb2, 0xbb, 0xbc, 0xe5, 0xe6, 0xe7, 0xe8, 0xeb, 0xec,
+             0xed, 0xf1, 0xf6, 0xf7, 0xf8, 0xf9, 0xfc, 0xfd, 0xfe, 0x102, 0x165, 0x168]
+
+
+def idle_state(rng, pool, args):
+    """A settler in one of the jobs ResetSettlerToIdle handles; half the
+    cases aim at one step (building worker counts and bit sets, input
+    piles under construction); tiles around it mostly free (DropGoodNear,
+    PlaceSettlerNear)."""
+    settler = args[0]
+    record = SETTLERS + settler * SETTLER_BYTES
+    job = rng.choice(IDLE_JOBS)
+    art = rng.choice(IDLE_TYPES)
+    saved = rng.randrange(5)
+    unk18 = rng.randrange(4)
+    good = rng.randrange(36)
+    buildup = 0 if rng.random() < 0.5 else rng.randrange(1, 4)
+    scenario = rng.randrange(8)
+    if scenario == 0:
+        job, art, saved = rng.choice([3, 4, 0x8a]), 0, rng.randrange(1, 4)
+    elif scenario == 1:
+        job, art = rng.choice(WORK_JOBS), rng.choice([1, 2])
+    elif scenario == 2:
+        job, art, unk18 = rng.choice([0x68, 0x69]), rng.choice([0, 3, 4]), rng.randrange(1, 3)
+    elif scenario == 3:
+        job = rng.choice([5, 6, 7, 8, 9, 0xe, 0xf, 0x11, 0x12])
+    elif scenario == 4:
+        job, good, buildup = rng.choice([0xa, 0xb, 0xa9]), rng.randrange(1, 3), rng.randrange(1, 4)
+    x, y = rng.randrange(10, 370), rng.randrange(10, 370)
+    tx, ty = x + rng.randint(-2, 2), y + rng.randint(-2, 2)
+    building = rng.randrange(1, 0x1000)
+    b = BUILDINGS + building * BUILDING_BYTES
+    area = 0 if rng.random() < 0.15 else rng.randrange(1, AREA_LIMIT)
+    slot = 0 if rng.random() < 0.3 else rng.randrange(1, 36)
+    pile_word = rng.randrange(1, 0x1000) if 0x4c <= job <= 0x4f else building
+    target_pile = rng.randrange(1, 0x1000)
+    fields = [(MAP_SIZE, 384, 4)] + neighbour_offsets(rng)
+    # Tiles around (x, y) for DropGoodNear and PlaceSettlerNear: mostly free.
+    for dx, dy in SPIRAL[:127]:
+        t = tile(x + dx, y + dy)
+        free = rng.random() < 0.6
+        fields += [(t + 0x0, 0 if free else rng.randrange(1, 100), 2), (t + 0x2, 0, 2),
+                   (t + 0xa, rng.getrandbits(8) & (0xd0 if free else 0xff), 1),
+                   (t + 0x10, rng.randrange(1, 4) if free else 0, 1)]
+    # Free pile records for CreatePile.
+    fields += [(PILES + p * PILE_BYTES, 0 if p % 5 == 0 else 1, 1) for p in range(1, 20)]
+    fields += [(record + 0xe, job, 2), (record + 0x1, art, 1), (record + 0x0, rng.randrange(4), 1),
+               (record + 0x4, x, 2), (record + 0x6, y, 2), (record + 0x24, tx, 2), (record + 0x26, ty, 2),
+               (record + 0x22, pile_word, 2), (record + 0x15, slot, 1), (record + 0x1a, good, 1),
+               (record + 0x20, saved, 2), (record + 0x17, rng.randrange(2), 1), (record + 0x18, unk18, 1),
+               (record + 0x8, rng.getrandbits(32) if rng.random() < 0.3 else rng.randrange(6), 4),
+               (record + 0x10, 0 if rng.random() < 0.3 else rng.randrange(1, 0x3000), 2),
+               (record + 0x12, 0 if rng.random() < 0.3 else rng.randrange(1, 0x3000), 2),
+               (tile_area_offset(x, y), area, 2),
+               (tile(x, y) + 0x0, settler if rng.random() < 0.75 else rng.randrange(1, 0x3000), 2),
+               (tile(x, y) + 0x10, 0 if rng.random() < 0.2 else rng.randrange(1, 6), 1),
+               (tile(tx, ty) + 0x2, target_pile, 2),
+               (b + 0x21, buildup, 1)]
+    for field in (0x16, 0x17):
+        bits = rng.choice([0, 1 << rng.randrange(8), rng.getrandbits(8)])
+        fields.append((b + field, bits, 1))
+    fields += pile_on_tile(rng, target_pile)
+    for k in range(3):
+        pile = rng.randrange(1, 0x1000)
+        fields += [(b + 0x10 + 2 * k, pile, 2),
+                   (PILES + pile * PILE_BYTES, rng.choice([slot, good, rng.randrange(36)]), 1)]
+    if 0x4c <= job <= 0x4f:
+        p = PILES + pile_word * PILE_BYTES
+        fields += pile_on_tile(rng, pile_word)
+        fields += [(p + 0x4, 0xfc if rng.random() < 0.25 else rng.choice(PILE_KINDS), 1),
+                   (p + 0x1, 0 if rng.random() < 0.5 else rng.randrange(5), 1),
+                   (p + 0x3, 1 if rng.random() < 0.5 else rng.randrange(5), 1)]
+    return fields
+
+
+def take_good_state(rng, pool, args):
+    record = PILES + args[0] * PILE_BYTES
+    amount = rng.choice([1, 1, 2, 0, rng.randrange(256)])
+    return pile_on_tile(rng, args[0]) + spiral_offsets(19) + [
+        (record + 0x1, amount, 1), (record + 0x2, rng.randrange(4), 1),
+        (record + 0x3, 0 if rng.random() < 0.6 else rng.randrange(1, 4), 1),
+        (record + 0x4, rng.choice([0, 0, 0xfe, 0xfe, 0xff, 7]), 1)]
+
+
+SPECS += [
+    Spec("GameWorld_ResetSettlerToIdle", 0x0050cf50, "thiscall", [between(1, 0x3000)],
+         presets=idle_state, max_cases=1500),
+    Spec("GameWorld_TakeGoodFromPile", 0x00505820, "thiscall", [between(1, 0xfff)], presets=take_good_state,
+         max_cases=1500),
+]
+
+
+def steal_state(rng, pool, args):
+    """The pile (kind from the switch's cases), amount/leaving around the
+    'all promised' edge, and settlers 1..count, some fetching from its tile
+    (fetch jobs, 0x133/0x134) with small building/pile words."""
+    pile = args[0]
+    record = PILES + pile * PILE_BYTES
+    kind = rng.choice([0, 5, 0x32, 0x33, 0xfc, 0xfc, 0xfd, 0xfe, 0xfe, 0xff, 0xff, 0x80])
+    amount = 0 if rng.random() < 0.1 else rng.randrange(1, 5)
+    leaving = (amount + rng.randrange(2)) if rng.random() < 0.5 else (rng.randrange(5) | (rng.randrange(3) << 4))
+    x, y = rng.randrange(10, 370), rng.randrange(10, 370)
+    count = rng.randrange(30)
+    fields = [(MAP_SIZE, 384, 4), (BUILDING_COUNT, rng.randrange(20), 4), (SETTLER_HIGH_WATER, count, 4),
+              (record + 0x4, kind, 1), (record + 0x1, amount, 1), (record + 0x2, leaving & 0xFF, 1),
+              (record + 0x6, x, 2), (record + 0x8, y, 2), (tile_area_offset(x, y), rng.randrange(AREA_LIMIT), 2),
+              (tile(x, y) + 0x2, pile, 2), (record + 0xa, rng.randrange(0x1000), 2),
+              (record + 0xc, rng.randrange(0x1000), 2)] + spiral_offsets(19)
+    for s in range(1, count + 1):
+        r = SETTLERS + s * SETTLER_BYTES
+        here = rng.random() < 0.3
+        fields += [(r + 0x0, 0xff if rng.random() < 0.15 else rng.randrange(4), 1),
+                   (r + 0xe, rng.choice([0xa, 0xb, 0xa9, 0x68, 0x69, 0x133, 0x134, 5]), 2),
+                   (r + 0x24, x if here else rng.randrange(384), 2), (r + 0x26, y if here else rng.randrange(384), 2),
+                   (r + 0x17, rng.randrange(2), 1), (r + 0x15, 0, 1), (r + 0x22, rng.randrange(1, 20), 2),
+                   (r + 0x4, rng.randrange(10, 370), 2), (r + 0x6, rng.randrange(10, 370), 2)]
+    return fields
+
+
+SPECS += [
+    Spec("GameWorld_StealGoodFromPile", 0x00505c20, "thiscall", [between(1, 0xfff)], eax_mask=0xFF,
+         presets=steal_state, max_cases=1500),
 ]

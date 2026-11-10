@@ -72,6 +72,7 @@ add_library(s3re SHARED
     game/random.cpp
     game/savegame_start.cpp
     game/screen_element.cpp
+    game/settler_idle.cpp
     game/settler_queries.cpp
     game/settler_records.cpp
     game/settlers.cpp
