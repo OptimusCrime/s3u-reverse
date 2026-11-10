@@ -572,9 +572,12 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   comparable: S3RE_ORIGINAL_TOOLING_VERSION bumped to 2.
 - Rule in CLAUDE.md ("Typed access, no raw offsets"); postponed items
   (unk fields to name, remaining RawAt objects, MessageQueue) in TODO.md.
-- Verification (whole-game checks ran before `--fast` landed, at normal
-  speed, on trace v5 without the 0x2d2c8 skip; the code checked is the
-  same, the rebase only added that skip): build clean, no warnings; in-process 357/357; emulator
+- After rebasing onto `--fast` (2090710): +0x2d2c8 named
+  `notification_blink` in layout.h, trace v5 keeps its skip; rechecked on
+  the final code with `--fast`: recorded game 3000 ticks vs original
+  identical (202 called), `slot 1.sav` 2000 ticks identical (200 called),
+  in-process 357/357.
+- Verification before the rebase (normal speed): build clean, no warnings; in-process 357/357; emulator
   (see below); whole game: recorded game 3000 ticks against the original
   REPLAY OK (203 of 457 replacements called), `slot 1.sav` 2000 ticks
   against the original identical (201 called); inventory, trivial checks

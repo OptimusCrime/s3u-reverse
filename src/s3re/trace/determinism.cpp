@@ -259,7 +259,7 @@ constexpr ByteRange kHeaderSkips[] = {
     {offsetof(GameWorld, ui_selection_mode), offsetof(GameWorld, ui_2d290) + 4},
     // UI menu sub-page; set by ProcessEvents, read by ExecuteCommands only
     // to decide whether to set the refresh flag above.
-    {offsetof(GameWorld, ui_2d290) + 16, offsetof(GameWorld, ui_2d2a4)},
+    {offsetof(GameWorld, ui_2d2a0), offsetof(GameWorld, ui_2d2a4)},
     // Notification blink bits for the draw thread: PrepareDrawData (0x51f110)
     // copies the old value into the draw data, resets it and sets bits 1/2/
     // 4/8 for the pending notifications (+0x2d320, +0x2d7d0, +0x2dc80,
@@ -268,7 +268,7 @@ constexpr ByteRange kHeaderSkips[] = {
     // 0x4fce90. PrepareDrawData runs a timing-dependent number of times, so
     // the value differs between normal speed and --fast (found 2026-11-10,
     // savegame "slot 1.sav", header dumps).
-    {offsetof(GameWorld, ui_2d2a4) + 0x24, offsetof(GameWorld, ui_2d2a4) + 0x28},
+    {offsetof(GameWorld, notification_blink), offsetof(GameWorld, ui_2d2cc)},
     // Last search result position (x, y), written by 0x4ff0a0/0x4ff170,
     // called from 0x524fa0 on every step (volatile).
     {offsetof(GameWorld, last_search_x), offsetof(GameWorld, unk2d2ec)},
