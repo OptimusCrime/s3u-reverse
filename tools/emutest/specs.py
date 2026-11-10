@@ -5268,3 +5268,116 @@ SPECS += [
     Spec("GameWorld_DropOutputPile", 0x00504e20, "thiscall", [between(1, 100)], eax_mask=0,
          presets=drop_pile_world, callees=SETTLER_PROBES, max_cases=600),
 ]
+
+
+# Package C, batch 4 (economy.cpp): RequestSettlerForBuilding 0x4dacd0 and
+# DispatchPileCarrier 0x5052c0 on an area with well-formed settler and pile
+# lists (random next pointers would loop). NotifyLocalPlayer 0x4fec10
+# (package B, verified, own spec; reads the registry config object) is
+# probed, its calls compared. SetPileGood 0x5061b0 runs (original code on
+# both sides): DispatchPileCarrier passes the good with garbage in the upper
+# three bytes (only CL is loaded; SetPileGood uses only the low byte), so
+# its effects are compared instead of its argument.
+AREAS = 0xe145e8
+AREA_BYTES = 0x2e0
+ECONOMY_PROBES = {0x004fec10: (4, "thiscall", "probe")}
+ECONOMY_GOODS = (0xC, 0xD, 0xE, 0xF, 0x10, 0x11, 0x20, 3, 7)
+ECONOMY_TYPES = (1, 2, 3, 4, 6, 7, 9, 0xA, 0xB, 0xC, 0xE, 0x10, 0x11, 0x12, 0x13, 0x14, 0x1D, 0x26, 0x2E, 5, 8, 0xF, 0)
+
+
+def chain(base, size, next_offset, prev_offset, members):
+    fields = []
+    for k, n in enumerate(members):
+        r = base + n * size
+        fields += [(r + prev_offset, members[k - 1] if k else 0, 2),
+                   (r + next_offset, members[k + 1] if k + 1 < len(members) else 0, 2)]
+    return fields, (members[0] if members else 0)
+
+
+def economy_world(rng, building, type_, pile, no_idle=0.0):
+    """`no_idle`: chance that no settler of `type_` is idle (RequestSettlerForBuilding
+    then converts a carrier)."""
+    area = rng.randint(1, 30)
+    idle_ok = rng.random() >= no_idle
+    a = AREAS + area * AREA_BYTES
+    base = rng.randint(40, 340)
+
+    def nearby():
+        return base + rng.randrange(20)
+
+    fields = [(MAP_SIZE, 384, 4), (SETTLER_COUNT, 30, 4), (BUILDING_COUNT, 50, 4), (PILE_COUNT, 30, 4)]
+    owner = rng.randrange(3)
+    typed, carriers = [], []
+    for n in range(1, 31):
+        which = rng.randrange(2 if rng.random() < 0.25 else 3)
+        if which == 1:
+            carriers.append(n)
+        elif which == 2 and type_ != 0 and idle_ok:
+            typed.append(n)
+        s = SETTLERS + n * 0x40
+        x, y = nearby(), nearby()
+        art = 0 if which == 1 else type_ if which == 2 else rng.randrange(0x30)
+        flags = (0x80 | rng.randrange(256)) if rng.random() < 0.25 else rng.randrange(0x80)
+        fields += [(s, rng.randrange(3), 1), (s + 1, art, 1), (s + 4, x, 2), (s + 6, y, 2), (s + 0x14, flags, 1),
+                   (tile(x, y), n, 2), (tile(x, y) + 0x14, area, 2)]
+    if rng.random() < 0.33:
+        carriers = carriers[:len(carriers) * rng.randrange(4) // 4]
+    goods_members = {g: [] for g in ECONOMY_GOODS}
+    empty = []
+    for q in range(1, 31):
+        g = rng.choice(ECONOMY_GOODS)
+        where = rng.randrange(4)
+        if where < 2 and q != pile:
+            goods_members[g].append(q)
+        elif where == 2 and q != pile:
+            empty.append(q)
+        amount = rng.randrange(9)
+        leaving = amount if rng.random() < 0.33 else rng.randrange(amount + 1)
+        p = PILES + q * PILE_BYTES
+        x, y = nearby(), nearby()
+        fields += [(p, g if rng.random() < 0.8 else rng.randrange(36), 1), (p + 1, amount, 1), (p + 2, leaving, 1),
+                   (p + 3, rng.randrange(9 - amount), 1), (p + 4, rng.choice([0xFF, 0xFE, 0xFD, 1, 0x20, 0x32, 0x33]), 1),
+                   (p + 6, x, 2), (p + 8, y, 2), (tile(x, y) + 0x14, area, 2)]
+    f, head = chain(SETTLERS, 0x40, 0x10, 0x12, typed)
+    fields += f + [(a + 0x12A + type_ * 2, head, 2)]
+    f, head = chain(SETTLERS, 0x40, 0x10, 0x12, carriers)
+    fields += f + [(a + 0x12A, head, 2)]
+    for g, members in goods_members.items():
+        f, head = chain(PILES, PILE_BYTES, 0xC, 0xA, members)
+        fields += f + [(a + 0xA + g * 2, head, 2)]
+    f, head = chain(PILES, PILE_BYTES, 0xC, 0xA, empty)
+    fields += f + [(a + 8, head, 2), (a, owner, 1)]
+    for k in range(3):
+        share = rng.choice([0, 1, 5, 10, 20, 40]) if rng.random() < 0.75 else rng.randrange(256)
+        fields.append((a + 0x23E + k, share, 1))
+    pile_good = rng.choice(ECONOMY_GOODS)
+    fields.append((a + 0x21A + pile_good, 0 if rng.random() < 0.12 else rng.randint(1, 255), 1))
+    b = BUILDINGS + building * BUILDING_BYTES
+    dx, dy = nearby(), nearby()
+    fields += [(b, owner, 1), (b + 2, nearby(), 2), (b + 4, nearby(), 2), (b + 0xA, dx, 2), (b + 0xC, dy, 2),
+               (tile(dx, dy) + 0x14, area, 2), (PILES + pile * PILE_BYTES, pile_good, 1)]
+    px, py = nearby(), nearby()
+    fields += [(PILES + pile * PILE_BYTES + 6, px, 2), (PILES + pile * PILE_BYTES + 8, py, 2), (tile(px, py) + 0x14, area, 2)]
+    return fields
+
+
+def request_world(rng, pool, args):
+    return economy_world(rng, args[0], args[1], 1, no_idle=0.7)
+
+
+def dispatch_world(rng, pool, args):
+    return economy_world(rng, 1, 1, args[0])
+
+
+def economy_type(rng, pool):
+    return rng.choice(ECONOMY_TYPES) if rng.random() < 0.9 else rng.randrange(0x30)
+
+
+SPECS += [
+    # 0x4db404: dead (the tool 0xc is only needed by type 1, and "no pile of
+    # tool 0xc" notifies only for other types).
+    Spec("GameWorld_RequestSettlerForBuilding", 0x004dacd0, "thiscall", [between(1, 50), economy_type],
+         presets=request_world, callees=ECONOMY_PROBES, max_cases=1500, exempt_blocks=(0x4db404,)),
+    Spec("GameWorld_DispatchPileCarrier", 0x005052c0, "thiscall", [between(1, 30)], eax_mask=0,
+         presets=dispatch_world, callees=ECONOMY_PROBES, max_cases=1500),
+]
