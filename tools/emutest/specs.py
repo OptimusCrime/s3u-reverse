@@ -3413,8 +3413,8 @@ def animation_table() -> list[int]:
         path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                             "Settlers3Ultimate", "S3.EXE")
         pe = pefile.PE(path, fast_load=True)
-        data = pe.get_data(0x6a8060 - 0x400000, 4 * 256)
-        _ANIMATION_TABLE.extend(struct.unpack("<256I", data))
+        data = pe.get_data(0x6a8060 - 0x400000, 4 * 0x600)
+        _ANIMATION_TABLE.extend(struct.unpack("<1536I", data))
     return _ANIMATION_TABLE
 
 
@@ -4575,4 +4575,279 @@ SPECS += [
     Spec("Pathing_ChooseSextant", 0x004a23e0, "thiscall", [scratch(0)], presets=path_choose_sextant,
          max_cases=3000, exempt_blocks=(0x4a25d6,)),
     Spec("Pathing_SetupLineStep", 0x004a3d30, "thiscall", [scratch(0)], presets=path_line_step, max_cases=1000),
+]
+
+
+# Package B, batch 1 (pile_goods_moves.cpp, notifications.cpp, folded_getters.cpp,
+# settler_spawn.cpp, miner_jobs.cpp)
+def hex_distance(dx: int, dy: int) -> int:
+    """TileDistance from (0, 0): max(|dx|, |dy|) for deltas of the same sign, else |dx| + |dy|."""
+    return max(abs(dx), abs(dy)) if (dx >= 0) == (dy >= 0) else abs(dx) + abs(dy)
+
+
+def _spiral(entries: int) -> list:
+    points = sorted(((dx, dy) for dx in range(-12, 13) for dy in range(-12, 13)),
+                    key=lambda p: (hex_distance(*p), p))
+    return points[:entries]
+
+
+SPIRAL = _spiral(400)  # the game's offset table order: nearest first (entries 0..36 = radius 0..3)
+
+
+def spiral_offsets(entries: int) -> list:
+    fields = []
+    for k, (dx, dy) in enumerate(SPIRAL[:entries]):
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4)]
+    return fields
+
+
+def set_pile_good_state(rng, pool, args):
+    """The pile on a tile (area below AREA_LIMIT), its links, the empty-list
+    head (often the pile itself) and the head for the new goods type."""
+    pile, good = args
+    record = PILES + pile * PILE_BYTES
+    x, y = rng.randrange(384), rng.randrange(384)
+    area = rng.randrange(AREA_LIMIT)
+
+    def link():
+        return 0 if rng.random() < 1 / 3 else rng.randrange(1, 0x1000)
+    return [(record + 6, x, 2), (record + 8, y, 2), (tile_area_offset(x, y), area, 2),
+            (record + 0xa, link(), 2), (record + 0xc, link(), 2),
+            (AREAS + 0xa + (area * 0x170 + (good & 0xff)) * 2, link(), 2),
+            (AREAS + area * AREA_BYTES + 0x8, pile if rng.random() < 0.5 else link(), 2)]
+
+
+def drop_good_state(rng, pool, args):
+    """Offset entries 0..90 in the game's order, tiles within radius 6 of
+    (x, y): dropped piles (kind 0xfe) of the goods type with some room, some
+    all leaving, others; free tiles (no flags 0x0f, settler or object, a
+    walk region) with occupied neighbours now and then. Sometimes nothing
+    is free (the 10,000-entry limit) or the map is small."""
+    good, amount, x, y = args
+    n = 384 if rng.random() < 0.85 else rng.randint(1, 40)
+    fields = [(MAP_SIZE, n, 4)] + spiral_offsets(91)
+    crowded = rng.random() < 0.1
+    for dx, dy in SPIRAL[:127]:
+        tx, ty = x + dx, y + dy
+        if not (0 <= tx < 384 and 0 <= ty < 384):
+            continue
+        t = tile(tx, ty)
+        r = rng.random()
+        flags = rng.getrandbits(8) if rng.random() < 0.1 else rng.getrandbits(8) & 0xd0
+        settler = 0 if rng.random() < 0.85 else rng.randrange(1, 100)
+        obj = 0
+        if crowded:
+            settler = 1
+        if r < 0.3:
+            pile = rng.randrange(1, 0x1000)
+            obj = pile
+            record = PILES + pile * PILE_BYTES
+            amt = rng.randrange(9) if rng.random() < 0.9 else rng.getrandbits(8)
+            area = rng.randrange(AREA_LIMIT)
+            pile_good = good if rng.random() < 0.75 else rng.randrange(36)
+            fields += [(record + 0x0, pile_good, 1),
+                       (record + 0x1, amt, 1),
+                       (record + 0x2, amt if rng.random() < 0.3 else rng.randrange(9), 1),
+                       (record + 0x4, 0xfe if rng.random() < 0.8 else rng.choice(PILE_KINDS), 1),
+                       (record + 0x6, tx, 2), (record + 0x8, ty, 2),
+                       (tile_area_offset(tx, ty), area, 2),
+                       (AREAS + 0xa + (area * 0x170 + pile_good) * 2, rng.randrange(0x1000), 2)]
+            if rng.random() < 0.9:
+                flags &= ~0x20
+        elif r < 0.4:
+            obj = rng.randrange(1, 0x1000)
+            flags |= 0x20
+        elif r < 0.55 and not crowded:
+            settler = 0
+            flags &= 0xf0
+        fields += [(t + 0x0, settler, 2), (t + 0x2, obj, 2), (t + 0xa, flags, 1),
+                   (t + 0x10, 0 if rng.random() < 0.1 else rng.randrange(1, 20), 1),
+                   (t + 0x8, rng.randrange(20), 1)]
+    return fields
+
+
+def drop_amount(rng, pool) -> int:
+    return rng.choice([0, 1, 2, 3, 5, 8, 9, 13, 20])
+
+
+NOTIFICATION_LISTS = 0x2d320
+NOTIFICATION_TIMERS = 0x2e5e0
+LOCAL_PLAYER = 0x2d2d4
+CONFIG_NOTIFICATION_LEVEL = 0x7a7af0 + 0x64
+UI_FEEDBACK_COUNT = 0x15394ac
+
+
+def notification_state(rng, pool, args):
+    """Local player mostly the caller; the type's timers: a few running near
+    (x, y), the rest free (sometimes all running); the lists mostly with
+    room (sometimes full); the UI feedback list sometimes full."""
+    player, kind, x, y = args
+    fields = [(LOCAL_PLAYER, player if rng.random() < 0.85 else rng.randrange(4), 4),
+              (UI_FEEDBACK_COUNT, rng.randrange(11), 4)]
+    running = 10 if rng.random() < 0.1 else rng.randrange(4)
+    for k in range(10):
+        entry = NOTIFICATION_TIMERS + (kind * 10 + k) * 12
+        if k < running:
+            fields += [(entry, rng.randrange(1, 100), 4),
+                       (entry + 4, (x + rng.randint(-60, 60)) & 0xFFFFFFFF, 4),
+                       (entry + 8, (y + rng.randint(-60, 60)) & 0xFFFFFFFF, 4)]
+        else:
+            fields.append((entry, 0 if rng.random() < 0.8 else rng.randrange(1, 100), 4))
+    used = 100 if rng.random() < 0.1 else rng.randrange(6)
+    for lst in range(-1, 4):
+        for k in range(100):
+            entry = NOTIFICATION_LISTS + (lst * 100 + k) * 12
+            fields.append((entry & 0xFFFFFFFF, rng.randrange(1, 40) if k < used else 0, 4))
+    return fields
+
+
+def notification_level(rng, pool, args):
+    return [(CONFIG_NOTIFICATION_LEVEL, rng.choice([0, 1, 3, 5, 7, 8, 9, 10, rng.getrandbits(32)]), 4)]
+
+
+def spawn_settlers_state(rng, pool, args):
+    """Offsets 0..126 in the game's order and tiles within radius 6 of (x, y):
+    usable ones (the player's land, no flags 0x0f, no settler) and others;
+    at least five usable on the map, so the walk ends inside the table.
+    Free settler records and the player's race for CreateSettler."""
+    count, kind, player, x, y = args
+    n = 384 if rng.random() < 0.8 or max(x, y) >= 50 else rng.randint(max(x, y) + 1, 60)
+    fields = [(MAP_SIZE, n, 4), (PLAYER_RACE + player * PLAYER_RECORD_BYTES, rng.randrange(4), 4)]
+    fields += spiral_offsets(127)
+    usable = 0
+    for dx, dy in SPIRAL[:127]:
+        tx, ty = x + dx, y + dy
+        if not (0 <= tx < n and 0 <= ty < n):
+            continue
+        good = rng.random() < 0.3
+        owner = player if good or rng.random() < 0.5 else rng.randrange(4)
+        terrain = rng.randrange(0x10, 0x40) if good or rng.random() < 0.5 else rng.randrange(0x10)
+        flags = rng.getrandbits(8) & (0xf0 if good else 0xff)
+        settler = 0 if good or rng.random() < 0.5 else rng.randrange(1, 100)
+        if owner == player and terrain >= 0x10 and flags & 0xf == 0 and settler == 0:
+            usable += 1
+        t = tile(tx, ty)
+        fields += [(t + 0x8, owner, 1), (t + 0x6, terrain, 1), (t + 0xa, flags, 1), (t + 0x0, settler, 2)]
+    if usable < 5:
+        for dx, dy in SPIRAL[:127]:
+            tx, ty = x + dx, y + dy
+            if usable >= 5:
+                break
+            if 0 <= tx < n and 0 <= ty < n:
+                t = tile(tx, ty)
+                fields += [(t + 0x8, player, 1), (t + 0x6, 0x10, 1), (t + 0xa, 0, 1), (t + 0x0, 0, 2)]
+                usable += 1
+    # Free settler records: every fourth of 1..40 in use.
+    fields += [(SETTLERS + s * SETTLER_BYTES, rng.randrange(20) if s % 4 == 0 else 0xff, 1) for s in range(1, 41)]
+    fields.append((SETTLER_HIGH_WATER, rng.randrange(60), 4))
+    return fields
+
+
+def enter_slot_state(rng, pool, args):
+    settler = SETTLERS + args[0] * SETTLER_BYTES
+    building = rng.randrange(1, 0x1000)
+    record = BUILDINGS + building * BUILDING_BYTES
+    bx, by = rng.randrange(1, 370), rng.randrange(1, 380)
+    taken = rng.randrange(6)
+    fields = [(settler + 0x14, rng.getrandbits(8) & (0xff if rng.random() < 0.25 else 0xbf), 1),
+              (settler + 0x22, building, 2),
+              (record + 0x2, bx, 2), (record + 0x4, by, 2),
+              (record + 0x6, rng.choice([0x0f, 0x10, 0x12, 0x11, 0x05]), 1),
+              (record + 0x7, rng.randrange(4) if rng.random() < 0.9 else rng.getrandbits(8), 1)]
+    for k in range(1, 8):
+        fields.append((tile(bx + k, by) + 0x0, rng.randrange(1, 100) if k <= taken else 0, 2))
+    return fields
+
+
+def seven_tile_state(rng, pool, args):
+    kind, player, x, y = args
+    fields = [(PLAYER_RACE + player * PLAYER_RECORD_BYTES, rng.randrange(4), 4)]
+    fields += [(SETTLERS + s * SETTLER_BYTES, rng.randrange(20) if s % 3 == 0 else 0xff, 1) for s in range(1, 30)]
+    fields.append((SETTLER_HIGH_WATER, rng.randrange(40), 4))
+    return fields
+
+
+def gfx_sprite(animation: int, rng) -> list:
+    """Presets that make `animation` a valid sprite id of the fake graphics object."""
+    group, index = animation >> 16, animation & 0xFFFF
+    if group >= 0x130:
+        return []
+    return [(GFX_OBJECT + 0xb24 + group * 4, WORLD_BASE + GFX_POINTERS, 4),
+            (GFX_OBJECT + 0x264 + group * 4, 0, 4),
+            (GFX_POINTERS + 8 + index * 4, WORLD_BASE + GFX_HEADERS + rng.randrange(0x100), 4)]
+
+
+SOLDIER_TYPES = [0x20, 0x23, 0x08, 0x1e, 0x21, 0x0f, 0x1f, 0x22]
+
+
+def soldier_animation_state(rng, pool, args):
+    settler = SETTLERS + args[0] * SETTLER_BYTES
+    building = rng.randrange(1, 0x1000)
+    record = BUILDINGS + building * BUILDING_BYTES
+    kind_type = rng.choice(SOLDIER_TYPES + [0x05, 0x30])
+    art = rng.choice([0x10, 0x12, 0x11, 0x0f])
+    race = rng.randrange(3) if rng.random() < 0.9 else rng.getrandbits(8)
+    settler_race = rng.randrange(4)
+    kind = 0x126 + SOLDIER_TYPES.index(kind_type) if kind_type in SOLDIER_TYPES else 0x125
+    kind += 9 if art == 0x10 else 0x12 if art == 0x12 else 0
+    kind += 0x1b if race == 1 else 0x36 if race == 2 else 0
+    return ([(settler + 0x1, kind_type, 1), (settler + 0x2, settler_race, 1), (settler + 0x22, building, 2),
+             (record + 0x6, art, 1), (record + 0x7, race, 1)]
+            + gfx_sprite(animation_table()[kind * 4 + settler_race], rng))
+
+
+def saved_animation_state(rng, pool, args):
+    settler, kind = args
+    race = rng.randrange(4)
+    return [(SETTLERS + settler * SETTLER_BYTES + 2, race, 1)] + gfx_sprite(animation_table()[kind * 4 + race], rng)
+
+
+def gfx_global(rng, pool, args):
+    return [(0x007a8010, WORLD_BASE + GFX_OBJECT, 4)]
+
+
+def slope_state(rng, pool, args):
+    x, y = args
+    n = rng.choice([384, 384, 384, 0, 1, 2, 3, 100])
+    fields = [(MAP_SIZE, n, 4)]
+    base = rng.randrange(256)
+    if 1 <= x < 383 and 1 <= y < 383:
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1)):
+            fields.append((tile(x + dx, y + dy) + 0x4, (base + rng.randrange(20)) & 0xFF, 1))
+    return fields
+
+
+def slope_coordinate(rng, pool) -> int:
+    return rng.choice([0, 1, 382, 383, 384, rng.randrange(384), rng.randrange(384)])
+
+
+SPECS += [
+    Spec("GameWorld_SetPileGood", 0x005061b0, "thiscall",
+         [between(1, 0xfff), lambda rng, pool: rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(36)],
+         presets=set_pile_good_state, max_cases=2000),
+    Spec("GameWorld_DropGoodNear", 0x005046b0, "thiscall",
+         [below(36), drop_amount, between(0, 383), between(0, 383)], eax_mask=0,
+         presets=drop_good_state, max_cases=300),
+    Spec("GameWorld_NotifyLocalPlayer", 0x004fec10, "thiscall",
+         [below(4), below(42), below(384), below(384)], eax_mask=0,
+         presets=notification_state, globals=notification_level, max_cases=1500),
+    Spec("GetMemberDword64", 0x0049f510, "thiscall", []),
+    Spec("GetMemberByte189", 0x00414030, "thiscall", [], eax_mask=0xFF),
+    Spec("GameWorld_SpawnSettlersAround", 0x0050cb20, "thiscall",
+         [between(1, 5), lambda rng, pool: rng.randrange(0x30) if rng.random() < 0.9 else rng.randrange(0x50),
+          below(4), lambda rng, pool: rng.randrange(60) if rng.random() < 0.3 else rng.randrange(384),
+          lambda rng, pool: rng.randrange(60) if rng.random() < 0.3 else rng.randrange(384)],
+         eax_mask=0, presets=spawn_settlers_state, max_cases=300),
+    Spec("GameWorld_EnterBuildingSlot", 0x0050ccb0, "thiscall", [between(1, 0x7cfe)], eax_mask=0,
+         presets=enter_slot_state, max_cases=1000),
+    Spec("GameWorld_CreateSevenTileUnit", 0x0050dd20, "thiscall",
+         [below(0x50), below(4), between(1, 382), between(1, 382)], eax_mask=0,
+         presets=seven_tile_state, max_cases=300),
+    Spec("GameWorld_SetSoldierAnimationInBuilding", 0x0050e140, "thiscall", [between(1, 0x7cfe)],
+         presets=soldier_animation_state, globals=gfx_global, max_cases=1000),
+    Spec("GameWorld_SetSettlerSavedAnimation", 0x0050e320, "thiscall", [below(0x8000), below(0x180)],
+         presets=saved_animation_state, globals=gfx_global, max_cases=1000),
+    Spec("GameWorld_TileSlope", 0x004faa70, "thiscall", [slope_coordinate, slope_coordinate],
+         presets=slope_state, max_cases=2000),
 ]

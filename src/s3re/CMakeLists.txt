@@ -35,6 +35,7 @@ add_library(s3re SHARED
     game/directx_surface.cpp
     game/economy_helpers.cpp
     game/flood_fills.cpp
+    game/folded_getters.cpp
     game/framework_helpers.cpp
     game/framework_small.cpp
     game/game_end.cpp
@@ -55,9 +56,12 @@ add_library(s3re SHARED
     game/map_regions.cpp
     game/map_neighbourhood.cpp
     game/map_terrain.cpp
+    game/miner_jobs.cpp
     game/misc_helpers.cpp
     game/net_thread.cpp
+    game/notifications.cpp
     game/objectives.cpp
+    game/pile_goods_moves.cpp
     game/player_presence.cpp
     game/player_queries.cpp
     game/players.cpp
@@ -67,6 +71,7 @@ add_library(s3re SHARED
     game/settler_queries.cpp
     game/settler_records.cpp
     game/settlers.cpp
+    game/settler_spawn.cpp
     game/string_members.cpp
     game/terrain_updates.cpp
     game/pathing.cpp

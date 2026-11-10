@@ -179,7 +179,7 @@ settler_records.cpp, settler_queries.cpp, building_tiles.cpp, counting.cpp.
 | 0x19 | u8 | | set to 1 with a new target if it was 0 | V |
 | 0x1A | u8 | good | goods type being carried / fetched | V |
 | 0x1C | u32 | saved direction | restored by RestoreSettlerDirection | V |
-| 0x20 | u16 | saved counter | restored with it (accessed in the folded form `(n + 0x4A97A) << 6`) | V |
+| 0x20 | u16 | saved counter | restored with it (accessed in the folded form `(n + 0x4A97A) << 6`); SetSettlerSavedAnimation 0x50E320 stores the frame count - 1 here. For seven-tile units (CreateSevenTileUnit 0x50DD20) it is the next part settler instead (main settler -> part 1 -> ... -> part 6) | V |
 | 0x22 | u16 | building | the settler's building / destination record | V |
 | 0x24 | u16 | target x | SetSettlerTarget | V |
 | 0x26 | u16 | target y | | V |
@@ -261,7 +261,7 @@ building_flags.cpp, settler_queries.cpp, dump (players 0 and 1).
 | 0x090 | i32 | 0 in ctor; ExecuteCommands, UpdatePhase2, BuildingDone | G |
 | 0x094 | i32[8] | mana needed per spell slot (1 in ctor, then S3.EXE 0x658E64[spell of the race's slot]) | V |
 | 0x0B4..0x0C0 | i32 x4 | written by 0x508450 (per player init) | G |
-| 0x0C4..0x0D8 | i32 x6 | read by UpdatePhase2, 0x5104C0, UpdateSettlers | G |
+| 0x0C4..0x0D8 | i32 x6 | read by UpdatePhase2, 0x5104C0, UpdateSettlers; +0xCC (`unk0c4[2]`) += 1 per settler of type class 0 or 10..29 made by SpawnSettlersAround 0x50CB20 (probably the civilian count) | G |
 | 0x0DC | u16[36] | goods counters per goods type (Add/SubtractPlayerCounter, RecountPlayerGoods) | V |
 | 0x124 | u8 | 0 in ctor; OnStart, Step, 0x5495D0 | G |
 | 0x128 | i32 | 0 in ctor; Step, 0x5495D0 | G |
