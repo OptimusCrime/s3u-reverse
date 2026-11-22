@@ -10,10 +10,6 @@ Each item: what, why, and where to start.
 
 ## Naming
 
-- **Rename `CGameData::Create` (0x5166d0) to `CGameData::GenerateRandomMap`.**
-  It is the random map generator ("Erstelle Zufallswelt"), not a general
-  world constructor; file maps use 0x4fd540, savegames 0x508fa0.
-  Postponed until the struct refactor (batch 2b) has landed.
 - **Audit provisional names.** Many names were given early from partial
   evidence (e.g. `CGameData::UpdateSettlers`,
   `Logic_sub_*` / `SaveGame_sub_*` / `AI_sub_*` survey names). Review them
@@ -51,7 +47,7 @@ Each item: what, why, and where to start.
   with the command recorder, because recordings store only a map file
   name. Add the random-map parameters to the recording format (version 3)
   so synthetic-input games on random maps can be replayed.
-- **Emulator coverage of `CGameData::Create`:** 338/415 blocks; the rest
+- **Emulator coverage of `CGameData::GenerateRandomMap`:** 338/415 blocks; the rest
   needs maps of 130+ tiles, too slow in the emulator (a 320-tile case ran
   for over an hour). Options: a release build of s3re.dll for the emulator,
   a faster emulator path, or accept the in-process whole-world comparison.
@@ -60,7 +56,7 @@ Each item: what, why, and where to start.
   0 matching symbols in s3re.map", because the linker folds identical
   functions (/OPT:ICF) and keeps only one name. A separate emulator
   configuration with `/OPT:NOICF` (maybe `/Ob1`) would be needed; then
-  compare its full run with Debug's and time CGameData_Create.
+  compare its full run with Debug's and time CGameData_GenerateRandomMap.
 - **Full serial emulator run as a cross-check of `--jobs`:** the parallel
   runs (3 schedules: specs.py order, longest first, slow specs split into
   parts) gave identical output; the `--jobs 1` run was stopped after its

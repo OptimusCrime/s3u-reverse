@@ -32,7 +32,7 @@ bool g_installed = false;
 // Replacements left out by name (`s3re_launcher --skip-hooks A,B`,
 // S3RE_SKIP_HOOKS): for finding which replacement makes a whole game
 // diverge, and for letting the original code call our replacements of its
-// callees (e.g. the original Create calling our ExpandTerrain, so those
+// callees (e.g. the original GenerateRandomMap calling our ExpandTerrain, so those
 // calls are counted). Only applies to Replaced and Unverified hooks.
 bool SkippedByName(const char* name) {
     static const std::string list = [] {

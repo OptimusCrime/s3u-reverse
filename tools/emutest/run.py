@@ -497,7 +497,7 @@ def main() -> int:
     show_memory(jobs, peak)
     failed = bool(mismatches or (args.require_coverage and incomplete))
     if full_run and not mismatches:
-        # Also with incomplete coverage (CGameData_Create is known to be
+        # Also with incomplete coverage (CGameData_GenerateRandomMap is known to be
         # incomplete): a spec whose inputs didn't change has the same
         # coverage next time, so --changed may skip it. The incomplete ones
         # are kept in the record.

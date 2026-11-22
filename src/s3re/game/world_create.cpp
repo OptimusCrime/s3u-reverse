@@ -1,4 +1,4 @@
-// CGameData::Create (0x005166d0): the random map generator.
+// CGameData::GenerateRandomMap (0x005166d0): the random map generator.
 //
 // (seed, mapSize, symmetry), thiscall, ret 0xc. Called by
 // CLogicThread::OnStart (0x53ce35) when the map file holds a random-map
@@ -91,7 +91,7 @@ std::int32_t MapSize(CGameData* world) {
     return static_cast<std::int32_t>(world->map_size);
 }
 
-// The symmetry argument of Create (world+0x2d274).
+// The symmetry argument of GenerateRandomMap (world+0x2d274).
 std::uint32_t Symmetry(CGameData* world) {
     return static_cast<std::uint32_t>(world->random_map_symmetry);
 }
@@ -1047,13 +1047,13 @@ void SeedRandomThroughGame(CGameData* world, std::uint32_t seed) {
 
 }  // namespace
 
-using CreateFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
+using GenerateRandomMapFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
                                             std::uint32_t symmetry);
 
 // Purpose: Generates a random map ("random world" in the game setup): heights, mountains, water, rivers,
 // landscapes, trees, stones and resources, optionally mirrored for fair multiplayer starts, then the
 // regions and areas.
-std::uint32_t __fastcall CGameData_Create(CGameData* world, void*, std::uint32_t seed, std::int32_t mapSize,
+std::uint32_t __fastcall CGameData_GenerateRandomMap(CGameData* world, void*, std::uint32_t seed, std::int32_t mapSize,
                                           std::uint32_t symmetry) {
     GameDebugLog(texts::kCreatingWorld);
     SeedRandomThroughGame(world, seed);
@@ -1098,7 +1098,7 @@ std::uint32_t __fastcall CGameData_Create(CGameData* world, void*, std::uint32_t
     return CGameData_BuildRegionsAndAreas(world, nullptr);
 }
 
-S3RE_HOOK(0x005166d0, CGameData_Create, CreateFn, Original_CGameData_Create, CGameData_Create);
+S3RE_HOOK(0x005166d0, CGameData_GenerateRandomMap, GenerateRandomMapFn, Original_CGameData_GenerateRandomMap, CGameData_GenerateRandomMap);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -1113,7 +1113,7 @@ constexpr std::size_t kIdTables = offsetof(CGameData, walk_region_high_water);
 constexpr std::size_t kIdTablesEnd = offsetof(CGameData, areas);
 constexpr std::uint32_t kAreaCount = 4096;
 
-// The writable sections of S3.EXE (its globals), for checking that Create
+// The writable sections of S3.EXE (its globals), for checking that GenerateRandomMap
 // writes none of them.
 std::vector<std::uint8_t> SnapshotGlobals() {
     std::vector<std::uint8_t> bytes;
@@ -1135,11 +1135,11 @@ void BuildOffsetTable(CGameData* world) {
     reinterpret_cast<BuildFn>(0x00516530)(world, nullptr);
 }
 
-// The state a freshly constructed world has where Create and its callees
+// The state a freshly constructed world has where GenerateRandomMap and its callees
 // depend on it: the offset table, empty tile ring, empty id tables, free
 // areas. With `zeroed` everything else is zero as well (as after the world
 // constructor), otherwise it keeps the random fill (garbage outside the map
-// and in the tile fields Create doesn't write).
+// and in the tile fields GenerateRandomMap doesn't write).
 void PrepareWorld(test::WorldPair& worlds, bool zeroed) {
     worlds.Both([&](CGameData* w) {
         auto* bytes = reinterpret_cast<std::uint8_t*>(w);  // raw-ok: whole test buffer
@@ -1158,23 +1158,23 @@ void PrepareWorld(test::WorldPair& worlds, bool zeroed) {
     BuildOffsetTable(worlds.ours());
 }
 
-struct CreateCase {
+struct GenerateRandomMapCase {
     std::uint32_t seed;
     std::int32_t size;
     std::uint32_t symmetry;
 };
 
-// Runs Create on both worlds for every case (each on a freshly prepared
+// Runs GenerateRandomMap on both worlds for every case (each on a freshly prepared
 // world) and compares EAX, the whole world, the DebugLog calls and the
 // S3.EXE globals.
-void CompareCreate(test::Context& ctx, CreateFn candidate, const CreateCase* cases, int count, bool zeroed) {
+void CompareGenerateRandomMap(test::Context& ctx, GenerateRandomMapFn candidate, const GenerateRandomMapCase* cases, int count, bool zeroed) {
     test::WorldPair worlds(ctx, kWorldSize);
     for (int i = 0; i < count; ++i) {
-        const CreateCase& c = cases[i];
+        const GenerateRandomMapCase& c = cases[i];
         PrepareWorld(worlds, zeroed);
         DebugLogRecorder log;
         const std::vector<std::uint8_t> before = SnapshotGlobals();
-        const std::uint32_t expected = Original_CGameData_Create(worlds.original(), nullptr, c.seed, c.size, c.symmetry);
+        const std::uint32_t expected = Original_CGameData_GenerateRandomMap(worlds.original(), nullptr, c.seed, c.size, c.symmetry);
         const std::vector<DebugLogCall> expectedLog = log.Take();
         const std::vector<std::uint8_t> afterOriginal = SnapshotGlobals();
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, c.seed, c.size, c.symmetry);
@@ -1196,48 +1196,48 @@ void CompareCreate(test::Context& ctx, CreateFn candidate, const CreateCase* cas
 
 // Map sizes of the game's random maps are multiples of 64 (probably 128 ..
 // 768); odd sizes and the symmetry bits cover the remaining paths.
-constexpr CreateCase kRealCases[] = {
+constexpr GenerateRandomMapCase kRealCases[] = {
     {1234, 384, 0}, {7, 256, 1}, {65535, 256, 2}, {42, 192, 3}, {31337, 768, 0}, {99, 128, 0},
 };
-constexpr CreateCase kOddCases[] = {
+constexpr GenerateRandomMapCase kOddCases[] = {
     {5, 100, 0}, {6, 64, 3}, {77, 200, 2}, {123, 13, 0}, {9, 0, 0}, {11, 70, 1},
 };
 
 // Wrong: one tile's height off by one.
-std::uint32_t __fastcall WrongCreateHeight(CGameData* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
+std::uint32_t __fastcall WrongGenerateRandomMapHeight(CGameData* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
                                            std::uint32_t symmetry) {
-    const std::uint32_t result = CGameData_Create(world, edx, seed, mapSize, symmetry);
+    const std::uint32_t result = CGameData_GenerateRandomMap(world, edx, seed, mapSize, symmetry);
     Height(world, mapSize / 2, mapSize / 3) ^= 1;
     return result;
 }
 
 // Wrong: an extra DebugLog call.
-std::uint32_t __fastcall WrongCreateLog(CGameData* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
+std::uint32_t __fastcall WrongGenerateRandomMapLog(CGameData* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
                                         std::uint32_t symmetry) {
     GameDebugLog(texts::kErrorTop, 0, 0, 0u);
-    return CGameData_Create(world, edx, seed, mapSize, symmetry);
+    return CGameData_GenerateRandomMap(world, edx, seed, mapSize, symmetry);
 }
 
 }  // namespace
 
-S3RE_TEST(CGameData_Create_MatchesOriginal) {
-    CompareCreate(ctx, &CGameData_Create, kRealCases, static_cast<int>(std::size(kRealCases)), /*zeroed=*/true);
+S3RE_TEST(CGameData_GenerateRandomMap_MatchesOriginal) {
+    CompareGenerateRandomMap(ctx, &CGameData_GenerateRandomMap, kRealCases, static_cast<int>(std::size(kRealCases)), /*zeroed=*/true);
 }
 // Odd sizes on a zeroed world; on a world full of garbage only real sizes
 // (with odd sizes the height refinement writes past the map, and a ridge
 // walk may then wander over garbage heights out of the tile array).
-S3RE_TEST(CGameData_Create_OddSizes_MatchesOriginal) {
-    CompareCreate(ctx, &CGameData_Create, kOddCases, static_cast<int>(std::size(kOddCases)), /*zeroed=*/true);
+S3RE_TEST(CGameData_GenerateRandomMap_OddSizes_MatchesOriginal) {
+    CompareGenerateRandomMap(ctx, &CGameData_GenerateRandomMap, kOddCases, static_cast<int>(std::size(kOddCases)), /*zeroed=*/true);
 }
-S3RE_TEST(CGameData_Create_GarbageWorld_MatchesOriginal) {
-    CompareCreate(ctx, &CGameData_Create, kRealCases, 4, /*zeroed=*/false);
+S3RE_TEST(CGameData_GenerateRandomMap_GarbageWorld_MatchesOriginal) {
+    CompareGenerateRandomMap(ctx, &CGameData_GenerateRandomMap, kRealCases, 4, /*zeroed=*/false);
 }
-S3RE_TEST(CGameData_Create_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_GenerateRandomMap_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareCreate(probe, &WrongCreateHeight, kRealCases + 5, 1, true);
+    CompareGenerateRandomMap(probe, &WrongGenerateRandomMapHeight, kRealCases + 5, 1, true);
     S3RE_EXPECT(probe.failures() > 0);
     test::Context probeLog(ctx.name(), 1, /*quiet=*/true);
-    CompareCreate(probeLog, &WrongCreateLog, kRealCases + 5, 1, true);
+    CompareGenerateRandomMap(probeLog, &WrongGenerateRandomMapLog, kRealCases + 5, 1, true);
     S3RE_EXPECT(probeLog.failures() > 0);
 }
 

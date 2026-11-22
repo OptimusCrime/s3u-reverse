@@ -5037,7 +5037,7 @@
 17520 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="899.9" y="158.1" width="90.9" height="85.2" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CGameData::WalkSettler @ 0x00500860
 11696 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="899.9" y="243.3" width="90.9" height="71.3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CGameData::Create @ 0x005166d0
+<rect x="899.9" y="243.3" width="90.9" height="71.3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CGameData::GenerateRandomMap @ 0x005166d0
 9792 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="990.8" y="30.5" width="74.6" height="59.8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CGameData::UpdateSoldier @ 0x0050e9f0
 6736 bytes — Verified, and identical in a whole-game check</title></rect>

@@ -1,8 +1,8 @@
 // Building the region and area numbers of a fresh map.
 //
 // CGameData::BuildRegionsAndAreas (0x0051a580): (), thiscall, ret 0; EAX =
-// mapSize (the last value the loops leave in EAX; CGameData::Create returns
-// it, nobody reads it). Called at the end of CGameData::Create (random maps)
+// mapSize (the last value the loops leave in EAX; CGameData::GenerateRandomMap returns
+// it, nobody reads it). Called at the end of CGameData::GenerateRandomMap (random maps)
 // and by the map loader 0x4fd540. Five passes over the map, each over
 // tile (x, y) at world+0x67444 + (x*0x300 + y)*24 with x and y in
 // [0, mapSize) (unsigned compares, mapSize at +0x2d2d0 re-read per step);

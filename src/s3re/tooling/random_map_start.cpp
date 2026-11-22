@@ -1,6 +1,6 @@
 // Starting a random-map game without menus (`s3re_launcher --random-map
 // SIZE[,SYMMETRY[,FIELD0C[,SEED]]]`, S3RE_RANDOM_MAP), for whole-game checks
-// of the random map generator CGameData 0x5166d0 (CGameData::Create).
+// of the random map generator CGameData 0x5166d0 (CGameData::GenerateRandomMap).
 //
 // Tooling, not a reimplementation. How the game starts a random map:
 //
@@ -36,7 +36,7 @@
 // as they are. So the launcher passes a real map file as -map for the player
 // setup; the landscape comes from the random map generator.
 //
-// The seed: Create seeds the RNG through CGameData::SeedRandom, so with
+// The seed: GenerateRandomMap seeds the RNG through CGameData::SeedRandom, so with
 // `--seed N` (S3RE_SEED) the map is generated from N as well.
 
 #include "hooks.h"

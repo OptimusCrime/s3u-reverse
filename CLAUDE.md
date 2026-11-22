@@ -181,9 +181,9 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
 - **How a game's world is built** (`CLogicThread::OnStart` 0x53c9e0):
   a map file goes through the map loader `0x4fd540`; a map with a
   random-map chunk (chunk 5, "Erstelle Zufallswelt") through the random map
-  generator `CGameData::Create` (`0x5166d0`, seeds the RNG itself); a
+  generator `CGameData::GenerateRandomMap` (`0x5166d0`, seeds the RNG itself); a
   savegame through `0x508fa0`. So the recorded-game and savegame checks
-  never call Create (no random-map start tooling yet); both other paths end
+  never call GenerateRandomMap (no random-map start tooling yet); both other paths end
   in `CGameData::BuildRegionsAndAreas` (`0x51a580`).
 - **Field knowledge lives in the world-layout files:** `re/world_layout.md`
   (memory map of the whole object, with confidence levels), `re/structs.md`
@@ -338,8 +338,8 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   map file with a memory-only `Dirk::CMapFile` holding chunk 5 (size, a
   second dialog value, symmetry, seed) and chunk 1 (random-map kind, start
   positions), built exactly like the map dialog does (`0x481e90`).
-  `CLogicThread::OnStart` then calls Create with that chunk. `--seed N` also
-  becomes the map seed (Create seeds the RNG through `SeedRandom`). Not
+  `CLogicThread::OnStart` then calls GenerateRandomMap with that chunk. `--seed N` also
+  becomes the map seed (GenerateRandomMap seeds the RNG through `SeedRandom`). Not
   combinable with `--load-save` or the command recorder. Code:
   `src/s3re/tooling/random_map_start.cpp`. `python
   tools/check_random_map.py --maps "384,0;448,3" --ticks N
@@ -350,7 +350,7 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   except those, so the original runs there: to find which replacement makes
   a whole game diverge, or to count our callees of an original function
   (calls from our own replacements bypass the counting thunk; e.g.
-  `check_random_map.py --against-original --skip-hooks CGameData_Create`
+  `check_random_map.py --against-original --skip-hooks CGameData_GenerateRandomMap`
   counts ExpandTerrain and MarkTerrainEdge).
 - **Unattended determinism check:** `python tools/check_determinism.py
   [--ticks N]`. It opens the game window, so the user's screen is busy
@@ -577,7 +577,7 @@ replaying, see `src/s3re/replay/command_log.h`):
   names (RTTI) and source file names come from the binary; every function
   name was given by us from what we understood at the time, and earlier
   analysis can be wrong (e.g. `EvaluateBuildingFootprint` turned out to be
-  `PlanSiteLevelling`; `CGameData::Create` is the random map generator).
+  `PlanSiteLevelling`; `CGameData::GenerateRandomMap` is the random map generator).
   **Whenever a name turns out to be misleading or wrong, rename it** (also
   for verified functions, and for structs, fields and globals): update
   `re/functions.csv` (keep the old name in the notes: "Was X"), the hook and
@@ -679,7 +679,7 @@ replaying, see `src/s3re/replay/command_log.h`):
      specs the changes since REF (default: the last full clean run,
      `build/emutest_last_full.json`, written by every full run with 0
      mismatches; it lists the specs with incomplete coverage, today only
-     CGameData_Create) can affect, and prints "N of M
+     CGameData_GenerateRandomMap) can affect, and prints "N of M
      specs" and why (`--dry-run`: only the selection). The selection
      comes from the build: MSBuild's compiler tracking log (headers of
      each object) and s3re.map plus the DLL's code (which objects each

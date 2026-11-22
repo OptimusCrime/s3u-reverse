@@ -7,7 +7,7 @@
 //
 // CGameData::ReplaceTerrainF3 (0x0051a400): (newType): calls
 //   CGameData::ReplaceTerrainType(0xf3, newType) and returns its EAX. Used
-//   four times by CGameData::Create. ret 4.
+//   four times by CGameData::GenerateRandomMap. ret 4.
 // CGameData::SpreadTerrainRandomly (0x00519330): (from, neighbour, to, percent):
 //   for x in [1, mapSize-1), y in [1, mapSize-1) (signed bounds; nothing if
 //   mapSize - 1 <= 1), a tile whose terrain is `from` and that has a

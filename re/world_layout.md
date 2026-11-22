@@ -56,7 +56,7 @@ Initialization order (all verified by reading the code):
 3. Map loading `0x4FD540` (map file chunks 6 = landscape, 8 = buildings,
    settlers, piles; logs "Loading map...", "Worldsize: %u") or savegame
    loading `CLogicThread::LoadGame` (0x508FA0), or map generation
-   `CGameData::Create` (0x5166D0). `0x4FD020` (from OnStart) then resets
+   `CGameData::GenerateRandomMap` (0x5166D0). `0x4FD020` (from OnStart) then resets
    per-game state (players' lists, spell costs, camera).
 
 ## Top-level map
@@ -193,7 +193,7 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 | 0x2D25C, 0x2D260 | int32 | camera x, y in pixels | UI, skip, saved | verified |
 | 0x2D264 | int32 | redraw flag | UI, skip | verified |
 | 0x2D268..0x2D270 | int32 | UI (Init clears; ProcessEvents reads +0x2D268) | UI, hashed | guess |
-| 0x2D274 | int32 | `random_map_symmetry`: CGameData::Create stores its symmetry argument here (bit 0 mirror across x = y, bit 1 point symmetry); also read by the player placement 0x5074B0 | sim | strong |
+| 0x2D274 | int32 | `random_map_symmetry`: CGameData::GenerateRandomMap stores its symmetry argument here (bit 0 mirror across x = y, bit 1 point symmetry); also read by the player placement 0x5074B0 | sim | strong |
 | 0x2D278 | int32 | minimap ready (1 after ctor and load) | UI, skip | verified |
 | 0x2D27C | int32 | refresh-UI flag (ExecuteCommands) | UI, skip | verified |
 | 0x2D280 | int32 | draw hand-off flag | UI, skip | strong |
@@ -228,7 +228,7 @@ Counts are the displacement uses `tools/world_fields.py regions` finds
   BlockTile, UnblockTile, SetOwnerOfFreeTile, SplitAreaAtTile,
   JoinAreasAtTile, the flood fills, Scatter*, ReplaceTerrain*,
   UpdateBorderFlags*, CanSettlerEnterTile, NextSearchGeneration, overlays.
-  Writers of the whole array: ctor, map loader 0x4FD540, LoadGame, Create.
+  Writers of the whole array: ctor, map loader 0x4FD540, LoadGame, GenerateRandomMap.
 - **Areas** (728 uses, 61 functions): AllocArea, InitArea,
   Move/MergeAreaContents, Split/JoinAreasAtTile, AssignTileToArea,
   AddTilePileToArea, AddGoodsToPile, PileIncAmountLeaving,

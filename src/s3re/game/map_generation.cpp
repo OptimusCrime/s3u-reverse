@@ -1,4 +1,4 @@
-// Random scattering of map features, used by CGameData::Create (0x5166d0)
+// Random scattering of map features, used by CGameData::GenerateRandomMap (0x5166d0)
 // when it builds a world (each is called several times there, 0x51b010 94
 // times). All draw from CGameData::Random, so the order of the draws below
 // is part of the behaviour.
@@ -396,7 +396,7 @@ S3RE_TEST(CGameData_ScatterObjectGroups_MatchesOriginal) {
 // that has one of the six neighbours (x+1, y), (x-1, y), (x, y-1),
 // (x, y+1), (x+1, y+1), (x-1, y-1) with terrain `neighbour` gets terrain
 // `replacement` (low byte). Works in place, so a replaced tile can make the
-// next one match. Called four times by CGameData::Create (map generation,
+// next one match. Called four times by CGameData::GenerateRandomMap (map generation,
 // probably to put transition terrain such as beaches along borders).
 // thiscall, ret 0xc; EAX is clobbered by every caller (void here).
 // ---------------------------------------------------------------------------
@@ -435,7 +435,7 @@ S3RE_HOOK(0x00519270, CGameData_ReplaceTerrainNextTo, ReplaceNextToFn, Original_
 // terrain). Every tile of `into` that touches `terrain` becomes `terrain`;
 // the temporary 0xf0 keeps a converted tile from spreading further in the
 // same step. EAX = ReplaceTerrainType's (mapSize - 1). thiscall, ret 8.
-// Called 29 times by CGameData::Create (e.g. (0x40, 0x10): mountains grow
+// Called 29 times by CGameData::GenerateRandomMap (e.g. (0x40, 0x10): mountains grow
 // into grass).
 //
 // CGameData::MarkTerrainEdge (0x0051a2e0): (terrain): for x = 1 ..
@@ -445,7 +445,7 @@ S3RE_HOOK(0x00519270, CGameData_ReplaceTerrainNextTo, ReplaceNextToFn, Original_
 // neither `terrain` nor 0xf3 gets terrain 0xf3. In place, so a marked tile
 // no longer counts as a foreign neighbour. CGameData::ReplaceTerrainF3
 // (0x51a400) later turns the marks into a border terrain. EAX = mapSize - 1.
-// thiscall, ret 4. Called 4 times by CGameData::Create, always with 0x10.
+// thiscall, ret 4. Called 4 times by CGameData::GenerateRandomMap, always with 0x10.
 // ---------------------------------------------------------------------------
 
 using ExpandTerrainFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t terrain,

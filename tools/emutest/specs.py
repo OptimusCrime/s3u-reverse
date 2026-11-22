@@ -4396,7 +4396,7 @@ SPECS += [
          max_instructions=200_000_000),
     # Whole random maps of 64 x 64 (sizes of the real game are 128..768,
     # far too slow here; the in-process tests run those).
-    Spec("CGameData_Create", 0x005166d0, "thiscall",
+    Spec("CGameData_GenerateRandomMap", 0x005166d0, "thiscall",
          [anything, one_of(65, 72, 80, 96, 64, 33),
           lambda rng, pool: rng.choice([0, 0, 0, 1, 2, 3, rng.getrandbits(32)])],
          presets=create_world, max_cases=10, max_instructions=3_000_000_000),

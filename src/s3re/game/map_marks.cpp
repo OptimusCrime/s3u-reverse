@@ -10,7 +10,7 @@
 //   - if flags & 1: on the diagonal (i, i), i < size;
 //   - if flags & 2: on the anti-diagonal (i, size-1-i), i < size, and on
 //     both lines next to it, (i, size-2-i) and (i+1, size-1-i), i < size-1.
-//   Only CGameData::Create calls them. The addresses are computed with the
+//   Only CGameData::GenerateRandomMap calls them. The addresses are computed with the
 //   original's 32-bit arithmetic ((size + i * 0x2ff) * 24 + displacement)
 //   and the map size is re-read for every access, as in the original.
 //   ret 4; EAX not reproduced (the only caller overwrites it).

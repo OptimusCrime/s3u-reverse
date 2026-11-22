@@ -36,9 +36,9 @@ user may provide a late-game save file later. Order:
    PlanSiteLevelling 0x4da440 (was "EvaluateBuildingFootprint"),
    AddBuildingSite 0x4dd280, plus IsFreeCastleSite 0x508420 and
    IsGoodStartPosition 0x5081a0 (start positions).
-2. **CGameData::Create 0x5166d0** - done in batch 29 (the random map
+2. **CGameData::GenerateRandomMap 0x5166d0** - done in batch 29 (the random map
    generator), with ExpandTerrain 0x519440, MarkTerrainEdge 0x51a2e0 and
-   BuildRegionsAndAreas 0x51a580. Create only runs for random maps, so it
+   BuildRegionsAndAreas 0x51a580. GenerateRandomMap only runs for random maps, so it
    has whole-game evidence since session 40 (`--random-map`,
    tools/check_random_map.py).
 2b. **Refactor batch - done 2026-11-10:** typed world structs
@@ -165,10 +165,10 @@ Next steps (for 2026-11-10, in this order):
   `python tools/check_save.py "slot N.sav" --ticks 2000
   --against-original` for the three saves at milestones, next to the
   recorded-game check (late-game code paths, later UpdateSettlers).
-0. (New order, see the top of this section.) Batch 29 (step 2, Create)
+0. (New order, see the top of this section.) Batch 29 (step 2, GenerateRandomMap)
    is done; next is the refactor batch (2b at the top), then step 3, the
    READY UpdateSettlers callees listed at the top. Optional tooling: start a random-map game unattended, for
-   whole-game evidence of Create. Skip every network
+   whole-game evidence of GenerateRandomMap. Skip every network
    item below (Lobby 0x602580/0x600f10/0x602850/0x5ec550 etc.). Still
    NEAR in the building area: 0x4dbab0 (needs 0x51b640), 0x4dbb10/
    0x4dee20/0x4deec0/0x504a00 (all need 0x50cf50, 919 ins, probably
@@ -181,7 +181,7 @@ Next steps (for 2026-11-10, in this order):
    0x51d2b0, CEvaLand release, 17 small framework/container/graphics
    members; 44 in all, see the session log.) Next batch, concrete:
    - Simulation: the area set-up 0x51a580 (380 ins, READY now; called by
-     CGameData::Create and 0x4fd540, so whole-game evidence is likely).
+     CGameData::GenerateRandomMap and 0x4fd540, so whole-game evidence is likely).
    - MapEffects callers: 0x545730, 0x545150, 0x5453f0, 0x5458d0 use x87
      (fild/fsqrt/fmul + _ftol 0x61fe98): decide first how to replicate x87
      results exactly (probably __asm blocks; our build uses SSE2, and the
@@ -281,7 +281,7 @@ Batch 13 (2026-11-08, 11 functions; in-process + emulator tests, full
 coverage; whole-game check NOT run yet):
 - map_generation.cpp: ScatterTileByte11 (0x51ad40), ScatterTerrainNear
   (0x51aed0), ScatterObjects (0x51b010), ScatterObjectGroups (0x51b1a0):
-  random scattering used by CGameData::Create (map generation; may not
+  random scattering used by CGameData::GenerateRandomMap (map generation; may not
   run for maps loaded from files, so whole-game evidence may be absent)
 - building_goods.cpp: BuildingInputWord2A/24 (0x4df150/0x4df220) and
   their setters (0x4df2f0/0x4df3c0): per-input-slot counters of buildings
@@ -419,7 +419,7 @@ coverage; whole-game check NOT run yet):
   - 4000 coming)
 - objectives.cpp (new): IsNgoObjectiveChosen (0x4ffb90; seven "new game
   objective" ids at world+0x1195dcd)
-- map_generation.cpp: ReplaceTerrainNextTo (0x519270, CGameData::Create);
+- map_generation.cpp: ReplaceTerrainNextTo (0x519270, CGameData::GenerateRandomMap);
   map_terrain.cpp: TileShade (0x519720, brightness 0..127 from the
   neighbours' heights)
 - map_effects.cpp (new): MapEffect::MapEffect default (0x543830) and
@@ -577,6 +577,11 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   rename, so no "Was" notes), re/*.csv and re/*.md, CLAUDE.md, TODO.md and
   the LOGBOOK above the session log (older session entries keep the old
   name). 7,786 occurrences in 97 files.
+- `GameWorld::Create` 0x5166d0 is now `CGameData::GenerateRandomMap` (the
+  random map generator, "Erstelle Zufallswelt"; "Was" note in the
+  inventory): hook, tests, spec, docs, and the whole-game source
+  "random:448,3 seed 1234 skip CGameData_GenerateRandomMap". Both TODO
+  items removed.
 - Test inputs are seeded from the test/spec name, so the new names gave new
   inputs, and `CGameData_ReleaseSiteWorkers_MatchesOriginal` crashed inside
   the original (TODO.md, "In-process tests that crash on other inputs").

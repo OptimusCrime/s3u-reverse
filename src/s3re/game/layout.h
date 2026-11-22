@@ -581,7 +581,7 @@ struct CGameDataFields {
     std::int32_t camera_x, camera_y;                        // 0x002d25c (UI)
     std::int32_t redraw;                                    // 0x002d264 (UI)
     std::int32_t ui_2d268[3];                               // 0x002d268
-    std::int32_t random_map_symmetry;                       // 0x002d274 symmetry argument of the random map generator (CGameData::Create); read by the player placement 0x5074b0
+    std::int32_t random_map_symmetry;                       // 0x002d274 symmetry argument of the random map generator (CGameData::GenerateRandomMap); read by the player placement 0x5074b0
     std::int32_t minimap_ready;                             // 0x002d278
     std::int32_t refresh_ui;                                // 0x002d27c
     std::int32_t draw_flag_2d280;
