@@ -47,11 +47,13 @@ using layout::Building;
 using layout::Settler;
 using layout::Tile;
 
-constexpr std::uint8_t kUnused = 0xff;
-constexpr std::uint8_t kSettlerInSlot = 0x40;
+constexpr std::uint8_t kUnusedRecord = 0xff;     // Building::owner of a free record
+constexpr std::uint8_t kSettlerInSlot = 0x40;    // Settler::flags: inside one of its building's slots
+constexpr std::uint8_t kSlotOffsetMask = 7;      // Settler::slot: low 3 bits are the slot's x offset
+constexpr std::uint32_t kStateLeftSlot = 2;      // Settler::direction after leaving a slot (0x50cc10)
 
 std::uint32_t TileIndex(std::uint32_t x, std::uint32_t y) {
-    return x * 0x300 + y;
+    return x * static_cast<std::uint32_t>(layout::kMapRowTiles) + y;
 }
 // Tile (x, y) with the original's 32-bit arithmetic.
 Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
@@ -66,16 +68,17 @@ struct BuildingTile {
 constexpr BuildingTile kTileA = {&Building::x, &Building::y};
 constexpr BuildingTile kTileB = {&Building::door_x, &Building::door_y};
 
-std::uint32_t MoveSettlerToBuildingTile(CGameData* world, std::uint32_t settler, BuildingTile tile) {
-    Settler& s = world->settlers[settler];
-    TileAt(world, s.x, s.y).settler = 0;
-    s.x = world->buildings[s.building].*tile.x;
-    const std::uint16_t y = world->buildings[s.building].*tile.y;  // re-reads the building number
-    s.y = y;
-    const std::uint32_t index = TileIndex(s.x, y);
+// 0x50de90 / 0x50df40: both functions are this body with tile A or B.
+std::uint32_t MoveSettlerToBuildingTile(CGameData* world, std::uint32_t settlerId, BuildingTile tile) {
+    Settler& settler = world->settlers[settlerId];
+    TileAt(world, settler.x, settler.y).settler = 0;
+    settler.x = world->buildings[settler.building].*tile.x;
+    const std::uint16_t y = world->buildings[settler.building].*tile.y;  // re-reads the building number
+    settler.y = y;
+    const std::uint32_t index = TileIndex(settler.x, y);
     TileAtOffset(world, static_cast<std::uint32_t>(offsetof(CGameData, tiles)) + index * kTileBytes).settler =
-        static_cast<std::uint16_t>(settler);
-    return index * 3;
+        static_cast<std::uint16_t>(settlerId);
+    return index * 3;  // the original's leftover EAX (callers ignore it)
 }
 
 }  // namespace
@@ -83,45 +86,47 @@ std::uint32_t MoveSettlerToBuildingTile(CGameData* world, std::uint32_t settler,
 using IndexFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t index);
 
 // Purpose: Removes a building from the map: its tiles no longer point to it and it no longer belongs to a
-// player. Used when a building is destroyed or torn down.
+// player. Used when a building is destroyed or torn down. CGameData::RemoveBuildingFromTiles (0x4d9940).
 std::uint32_t __fastcall CGameData_RemoveBuildingFromTiles(CGameData* world, void*,
-                                                           std::uint32_t building) {
-    Building& b = world->buildings[building];
-    TileAt(world, b.x, b.y).object_number = 0;
-    TileAt(world, b.door_x, b.door_y).object = 0;
-    TileAt(world, b.x, b.y).flags &= static_cast<std::uint8_t>(~layout::kTileHasBuilding);
-    b.owner = kUnused;
+                                                           std::uint32_t buildingId) {
+    Building& building = world->buildings[buildingId];
+    TileAt(world, building.x, building.y).object_number = 0;
+    TileAt(world, building.door_x, building.door_y).object = 0;
+    TileAt(world, building.x, building.y).flags &= static_cast<std::uint8_t>(~layout::kTileHasBuilding);
+    building.owner = kUnusedRecord;
     return 0;  // callers ignore EAX
 }
 
 // Purpose: A settler that was inside a building (in one of its slots) leaves it and appears on the
-// building's exit tile.
+// building's exit tile. CGameData::LeaveBuildingSlot (0x50cc10).
 std::uint32_t __fastcall CGameData_LeaveBuildingSlot(CGameData* world, void*,
-                                                     std::uint32_t settler) {
+                                                     std::uint32_t settlerId) {
+    // EAX = world + settler * 0x40, left over from the address arithmetic (one caller keeps the upper half).
     const std::uint32_t result = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) +
-                                 settler * static_cast<std::uint32_t>(sizeof(Settler));
-    Settler& s = world->settlers[settler];
-    if ((s.flags & kSettlerInSlot) == 0) {
+                                 settlerId * static_cast<std::uint32_t>(sizeof(Settler));
+    Settler& settler = world->settlers[settlerId];
+    if ((settler.flags & kSettlerInSlot) == 0) {
         return result;
     }
-    const Building& b = world->buildings[s.building];
-    const std::uint32_t x = b.x + (s.slot & 7u) + 1;
-    TileAt(world, x, b.y).settler = 0;
-    s.flags &= static_cast<std::uint8_t>(~kSettlerInSlot);
-    s.x = b.door_x;
-    s.y = b.door_y;
-    s.direction = 2;  // the "state" above
+    const Building& building = world->buildings[settler.building];
+    const std::uint32_t slotX = building.x + (settler.slot & kSlotOffsetMask) + 1;
+    TileAt(world, slotX, building.y).settler = 0;
+    settler.flags &= static_cast<std::uint8_t>(~kSettlerInSlot);
+    settler.x = building.door_x;
+    settler.y = building.door_y;
+    settler.direction = kStateLeftSlot;
     return result;
 }
 
 // Purpose: Moves a settler onto the first of the two special tiles of its building (probably the building's
-// main tile, where work happens).
+// main tile, where work happens). CGameData::MoveSettlerToBuildingTileA (0x50de90).
 std::uint32_t __fastcall CGameData_MoveSettlerToBuildingTileA(CGameData* world, void*,
                                                               std::uint32_t settler) {
     return MoveSettlerToBuildingTile(world, settler, kTileA);
 }
 
 // Purpose: Moves a settler onto the second special tile of its building (probably the door/flag tile).
+// CGameData::MoveSettlerToBuildingTileB (0x50df40).
 std::uint32_t __fastcall CGameData_MoveSettlerToBuildingTileB(CGameData* world, void*,
                                                               std::uint32_t settler) {
     return MoveSettlerToBuildingTile(world, settler, kTileB);

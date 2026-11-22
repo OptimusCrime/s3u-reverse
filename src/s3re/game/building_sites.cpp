@@ -30,11 +30,11 @@
 //   Checks: x and y in 15..mapSize-16; every footprint and border tile owned,
 //   free (flags 0x1/0x4/0x8 clear, object word +0x2 0) and in the same
 //   economy area as the building's tile; ground class (terrain high nibble)
-//   0x10 for the race group 0 (races 0, 3), 0x10/0x40 for race 1, 0x10/0x90
-//   for race 2. Mines (types 7, 8, 9, 0x1d, 0x25, 0x38) only need mountain
-//   (0x20) under the building's own tile and are never levelled. Types 0x20
-//   and 0x21 (shipyard, harbour?) also need a water tile (terrain byte 4)
-//   within distance 20. The levelling plan (PlanSiteLevelling) for the
+//   0x10 for the race group 0 (Romans, Amazons), 0x10/0x40 for the
+//   Egyptians, 0x10/0x90 for the Asians. Mines (types 7, 8, 9, 0x1d, 0x25,
+//   0x38) only need mountain (0x20) under the building's own tile and are
+//   never levelled. The shipyard (0x20) and the harbour (0x21) also need a
+//   water tile (terrain byte 4) within distance 20. The levelling plan (PlanSiteLevelling) for the
 //   rounded mean height of the footprint must exist.
 //   A border tile off the map is only logged (DebugLog "illegal building
 //   offset"), as in the original.
@@ -80,7 +80,10 @@
 //   position + (4, 8) / (5, 10) / (6, 12) clamped to the map for types 0xe /
 //   0x18 / 0x24. EAX = the building. ret 0x10.
 // CGameData::IsFreeCastleSite (0x00508420): (player, x, y): 1 if
-//   CheckBuildingSite(x, y, castle 0xf, player, mode 2) is non-zero, else 0.
+//   CheckBuildingSite(x, y, 0xf, player, mode 2) is non-zero, else 0. Type
+//   0xf is the small tower (250 hit points in BuildingDone; the castle is
+//   0x12), so the name "castle site" is probably too narrow: the check uses
+//   the small tower's footprint.
 //   ret 0xc.
 // CGameData::IsGoodStartPosition (0x005081a0): (player, x, y, attempts):
 //   0 unless a castle fits (as above); then counts over the offset table
@@ -95,10 +98,12 @@
 //   5, 15, 20, 10; otherwise anything. EAX 1 or 0. ret 0x10.
 
 #include "game/debug_log.h"
+#include "game/enums.h"
 #include "game/raw.h"
 #include "game/replacements.h"
 #include "game/tables.h"
 #include "game/texts.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "log.h"
@@ -109,6 +114,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <vector>
 
 namespace s3re::game {
@@ -120,33 +126,77 @@ using layout::MapOffset;
 using layout::PlayerSiteCache;
 using layout::Tile;
 
+using B = BuildingType;
+
 constexpr std::uint8_t kFlagBlocked = layout::kTileBlocked;
-constexpr std::uint8_t kFlagLevelling = 0x04;
+constexpr std::uint8_t kFlagLevelling = 0x04;  // "being levelled" by a construction site
 constexpr std::uint8_t kFlagFootprint = layout::kTileBuildingFootprint;
 constexpr std::uint8_t kFlagBuilding = layout::kTileHasBuilding;
 
+constexpr std::uint8_t kNobody = 0xff;  // Tile::owner of unowned land, Building::owner of a free record
+
+// Terrain classes (Tile::terrain & kTerrainClassMask) that matter for building sites.
+constexpr std::uint8_t kTerrainClassGrass = 0x10;  // building ground of every race; counted as grass
+constexpr std::uint8_t kTerrainClassShore = 0x30;  // never levelled (0x30 is kTerrainShore)
+constexpr std::uint8_t kTerrainClass40 = 0x40;     // Egyptians may build here too
+constexpr std::uint8_t kTerrainClass90 = 0x90;     // Asians may build here too
+// The shipyard and the harbour need this terrain byte within kWaterDistance.
+constexpr std::uint8_t kTerrainHarbourWater = 4;
+constexpr std::int32_t kWaterDistance = 20;
+
+// Landscape objects (Tile::object).
+constexpr std::uint8_t kObjectCleared = 0xff;    // tiles after the door of some types (AddBuildingSite)
+constexpr std::uint8_t kObjectSiteCentre = 112;  // 0x70: the site's own tile
+constexpr std::uint8_t kObjectStake = 113;       // 0x71: the outermost footprint tile per direction
+constexpr std::uint8_t kObjectFirstTree = 0x44;  // trees 0x44..0x53 (IsGoodStartPosition)
+constexpr std::uint8_t kObjectLastTree = 0x53;
+constexpr std::uint8_t kObjectFirstStone = 0x73;  // stone 0x73..0x7e, 0x7f - object units left
+constexpr std::uint8_t kObjectLastStone = 0x7e;
+constexpr std::uint8_t kStoneEnd = 0x7f;
+
+// Tile::resources: the high nibble is the kind.
+constexpr std::uint8_t kResourceMask = 0xf0;
+constexpr std::uint8_t kResourceCoal = 0x10;
+constexpr std::uint8_t kResourceIron = 0x20;
+constexpr std::uint8_t kResourceGold = 0x30;
+constexpr std::uint8_t kResourceGems = 0x40;
+constexpr std::uint8_t kResourceSulfur = 0x50;
+
+// Pile kind of the site's two empty construction piles (CreatePile's last argument).
+constexpr std::uint8_t kPileInput = 0xfd;
+// The pending event a new site queues (QueuePendingEvent(2, building, 0)).
+constexpr std::uint32_t kEventSitePlaced = 2;
+
 constexpr std::uint32_t kSiteSlots = 30;
+// Sites keep this border to the map edge (x and y in 15..mapSize-16).
+constexpr std::uint32_t kMapMargin = 15;
 
 // The levelling window: two 31 x 31 byte grids in CGameData::footprint_scratch
 // (heights at world+0x1222ed4, states at world+0x1223295).
 constexpr std::int32_t kGrid = 31;
 constexpr std::int32_t kGridCentre = 15;
 
-constexpr std::uint32_t kBuildingLimit = 0xf9f;
+constexpr std::uint32_t kBuildingLimit = 3999;  // 0xf9f: records 1..3998
 
-constexpr std::uint32_t kLayoutTypes = 57;
+constexpr std::uint32_t kLayoutTypes = kBuildingTypeCount;
 constexpr std::uint32_t kMarkFootprint = 0x80000000;
 constexpr std::uint32_t kMarkNoStakes = 0x80000001;
 constexpr std::uint32_t kMarkBorder = 0x80000002;
 constexpr std::uint32_t kMarkEnd = 0x80000003;
 constexpr std::uint32_t kMarkDoor = 0x80000004;
 
-constexpr std::uint32_t kCastleType = 0xf;
-constexpr std::uint32_t kModeCheckUnowned = 2;
+// The building type IsFreeCastleSite and IsGoodStartPosition check: 0xf is the small tower, not the
+// castle (0x12); kept as the original has it.
+constexpr std::uint32_t kStartSiteType = Value(B::SmallTower);
+constexpr std::uint32_t kModeCheck = 0;
+constexpr std::uint32_t kModePlace = 1;
+constexpr std::uint32_t kModeUnowned = 2;  // added to the mode: the land must belong to nobody
 
+// The size classes CheckBuildingSite returns.
+constexpr std::uint32_t kEarthClasses = 10;
 
 // Ground requirements (CheckBuildingSite).
-enum class SiteGroup { kPlain, kRace1, kRace2, kMine };
+enum class SiteGroup { kPlain, kEgyptian, kAsian, kMine };
 
 // Tile (x, y); the index wraps in 32 bits like the original's.
 Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
@@ -155,6 +205,28 @@ Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
 
 std::uint32_t PlayerRace(CGameData* world, std::uint32_t player) {
     return static_cast<std::uint32_t>(world->players[player].race);
+}
+
+// Whether the type argument (a dword; all 32 bits are compared, as in the original) is one of `types`.
+bool IsType(std::uint32_t type, std::initializer_list<B> types) {
+    for (const B candidate : types) {
+        if (type == static_cast<std::uint32_t>(Value(candidate))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The types whose tiles listed after the door lose their landscape object (AddBuildingSite).
+bool ClearsObjectsAfterDoor(std::uint32_t type) {
+    // 41..50: the Egyptian, Roman and Asian temples, the ballista and cannon workshops, the donkey farm and
+    // the large gong.
+    if (type >= static_cast<std::uint32_t>(Value(B::Pyramid)) && type <= static_cast<std::uint32_t>(Value(B::LargeGong))) {
+        return true;
+    }
+    return IsType(type, {B::Storehouse, B::Forester, B::LookoutTower, B::SmallTower, B::LargeTower, B::Castle,
+                         B::Barracks, B::SmallResidence, B::MediumResidence, B::LargeResidence, B::CatapultWorkshop,
+                         B::Shipyard, B::Harbour, B::AmazonSmallTemple, B::AmazonLargeTemple});
 }
 
 const std::uint32_t* Layout(std::uint32_t race, std::uint32_t type) {
@@ -169,7 +241,7 @@ const std::uint32_t* After(const std::uint32_t* p, std::uint32_t marker) {
 }
 
 bool IsMine(std::uint32_t type) {
-    return type == 7 || type == 9 || type == 8 || type == 0x25 || type == 0x1d || type == 0x38;
+    return IsType(type, {B::CoalMine, B::IronMine, B::GoldMine, B::GemMine, B::SulfurMine, B::AmazonSulfurMine});
 }
 
 // The levelling window: cell [i][j] (index i * 31 + j) is tile
@@ -192,6 +264,10 @@ constexpr std::uint8_t kCellFree = 0;
 constexpr std::uint8_t kCellPending = 1;
 constexpr std::uint8_t kCellChanged = 2;
 constexpr std::uint8_t kCellFixed = 100;
+
+// Height limits between neighbouring cells of the plan.
+constexpr std::int32_t kSteep = 5;
+constexpr std::int32_t kGentle = 7;
 
 // One neighbour of a cell at height `h` must lie within [h - maxBelow,
 // h + maxAbove]. A free neighbour is moved to the limit and propagates in
@@ -246,6 +322,7 @@ S3RE_HOOK(0x004dd280, CGameData_AddBuildingSite, AddBuildingSiteFn, Original_CGa
 // levelled: the building's tiles get one height and the slopes around them
 // are evened out; returns how much earth that moves (0 if impossible).
 // Used for the placement preview and when a building site is placed.
+// CGameData::PlanSiteLevelling (0x4da440).
 std::uint32_t __fastcall CGameData_PlanSiteLevelling(CGameData* world, void* /*edx*/, std::uint32_t x,
                                                      std::uint32_t y, std::uint32_t type, std::uint32_t player,
                                                      std::uint32_t height) {
@@ -269,7 +346,7 @@ std::uint32_t __fastcall CGameData_PlanSiteLevelling(CGameData* world, void* /*e
                 StateCell(world, i + 1, j + 1) = kCellFixed;
                 StateCell(world, i - 1, j - 1) = kCellFixed;
             } else if (edge || (flags & (kFlagBlocked | kFlagFootprint)) != 0 || tile.owner != player ||
-                       (tile.terrain & 0xf0) == 0x30) {
+                       (tile.terrain & kTerrainClassMask) == kTerrainClassShore) {
                 StateCell(world, i, j) = kCellFixed;
             }
         }
@@ -299,10 +376,12 @@ std::uint32_t __fastcall CGameData_PlanSiteLevelling(CGameData* world, void* /*e
                 }
                 StateCell(world, i, j) = kCellFixed;
                 const std::int32_t h = HeightCell(world, i, j);
-                PullNeighbour(world, i - 1, j - 1, h, 5, 7, changed, failed);
-                PullNeighbour(world, i, j - 1, h, 5, 7, changed, failed);
-                PullNeighbour(world, i + 1, j + 1, h, 7, 5, changed, failed);
-                PullNeighbour(world, i, j + 1, h, 7, 5, changed, failed);
+                // The slope may fall by kSteep or rise by kGentle towards (i-1, j-1) and (i, j-1), and the
+                // other way round towards (i+1, j+1) and (i, j+1).
+                PullNeighbour(world, i - 1, j - 1, h, kSteep, kGentle, changed, failed);
+                PullNeighbour(world, i, j - 1, h, kSteep, kGentle, changed, failed);
+                PullNeighbour(world, i + 1, j + 1, h, kGentle, kSteep, changed, failed);
+                PullNeighbour(world, i, j + 1, h, kGentle, kSteep, changed, failed);
             }
         }
         for (std::int32_t j = 1; j < kGrid - 1; ++j) {
@@ -334,10 +413,11 @@ std::uint32_t __fastcall CGameData_PlanSiteLevelling(CGameData* world, void* /*e
 // Purpose: Creates the record of a new construction site (a building with
 // buildup 1) at (x, y) for a player, with its two empty material piles
 // next to the door. Returns the building number, 0 if all are in use.
+// CGameData::AddBuildingSite (0x4dd280).
 std::uint32_t __fastcall CGameData_AddBuildingSite(CGameData* world, void* /*edx*/, std::uint32_t x,
                                                    std::uint32_t y, std::uint32_t player, std::uint32_t type) {
     std::uint32_t building = 1;
-    while (world->buildings[building].owner != 0xff && building != kBuildingLimit) {
+    while (world->buildings[building].owner != kNobody && building != kBuildingLimit) {
         ++building;
     }
     if (building == kBuildingLimit) {
@@ -386,11 +466,14 @@ std::uint32_t __fastcall CGameData_AddBuildingSite(CGameData* world, void* /*edx
     b.trade = 0;
     b.unk36 = 0;
 
-    // The player's countdown (int32 +0x84), used as uint32 like the original.
+    // The player's countdown (int32 +0x84), used as uint32 like the original: it counts down from 65535
+    // and restarts there once it reaches 60000.
+    constexpr std::uint32_t kStampStart = 0xffff;
+    constexpr std::uint32_t kStampRestart = 60000;
     std::uint32_t countdown = static_cast<std::uint32_t>(playerRecord.site_stamp);
     countdown -= 1;
-    if (countdown <= 60000) {
-        countdown = 0xffff;
+    if (countdown <= kStampRestart) {
+        countdown = kStampStart;
     }
     playerRecord.site_stamp = static_cast<std::int32_t>(countdown);
     b.work_y = static_cast<std::uint16_t>(countdown);
@@ -406,38 +489,37 @@ std::uint32_t __fastcall CGameData_AddBuildingSite(CGameData* world, void* /*edx
     const std::uint16_t doorY = static_cast<std::uint16_t>(p[1] + y);
     b.door_x = doorX;
     b.door_y = doorY;
-    const bool clearsObjects = type == 1 || type == 5 || type == 6 || type == 0xf || type == 0x10 || type == 0x12 ||
-                               type == 0x13 || type == 0x1a || type == 0x1b || type == 0x1c || type == 0x1f ||
-                               type == 0x20 || type == 0x21 || (type >= 0x29 && type <= 0x32) || type == 0x36 ||
-                               type == 0x37;
     for (; *p != kMarkFootprint; p += 2) {
-        if (clearsObjects) {
-            TileAt(world, x + p[0], y + p[1]).object = 0xff;
+        if (ClearsObjectsAfterDoor(type)) {
+            TileAt(world, x + p[0], y + p[1]).object = kObjectCleared;
         }
     }
 
     // Empty construction piles left and right of the door.
-    b.piles[0] = static_cast<std::uint16_t>(CGameData_CreatePile(world, nullptr, doorX - 1u, doorY, 1, 0, 0xfd));
-    b.piles[1] = static_cast<std::uint16_t>(CGameData_CreatePile(world, nullptr, doorX + 1u, doorY, 2, 0, 0xfd));
+    b.piles[0] = static_cast<std::uint16_t>(
+        CGameData_CreatePile(world, nullptr, doorX - 1u, doorY, Value(Good::Board), 0, kPileInput));
+    b.piles[1] = static_cast<std::uint16_t>(
+        CGameData_CreatePile(world, nullptr, doorX + 1u, doorY, Value(Good::Stone), 0, kPileInput));
 
     // Work centre: words +0x0e (x) and +0x14 (y) of a construction site.
-    if (type == 1) {
-        b.pile_ring = 0xff;
+    if (IsType(type, {B::Storehouse})) {
+        b.pile_ring = Value(Good::Empty);  // the storehouse's production good (BuildingDone logs it): none yet
         return building;
     }
-    if (type == 2 || type == 3 || type == 5 || type == 0x19 || type == 0x1e || type == 0x33) {
+    if (IsType(type, {B::Woodcutter, B::Stonecutter, B::Forester, B::Fishery, B::Waterworks, B::Apiary})) {
         b.pile_ring = static_cast<std::uint16_t>(x);
         b.piles[2] = static_cast<std::uint16_t>(y);
     }
+    // The fields of vineyards, farms and rice farms lie off the building.
     std::int32_t dx = 0;
     std::int32_t dy = 0;
-    if (type == 0xe) {
+    if (IsType(type, {B::Vineyard})) {
         dx = 4;
         dy = 8;
-    } else if (type == 0x18) {
+    } else if (IsType(type, {B::Farm})) {
         dx = 5;
         dy = 10;
-    } else if (type == 0x24) {
+    } else if (IsType(type, {B::RiceFarm})) {
         dx = 6;
         dy = 12;
     }
@@ -466,26 +548,26 @@ bool TileSuitsSite(const Tile& tile, std::uint32_t owner, std::uint32_t area, Si
     if (tile.owner != owner) {
         return false;
     }
-    const std::uint8_t ground = tile.terrain & 0xf0;
+    const std::uint8_t ground = tile.terrain & kTerrainClassMask;
     switch (group) {
         case SiteGroup::kPlain:
-            if (ground != 0x10) {
+            if (ground != kTerrainClassGrass) {
                 return false;
             }
             break;
-        case SiteGroup::kRace1:
-            if (ground != 0x10 && ground != 0x40) {
+        case SiteGroup::kEgyptian:
+            if (ground != kTerrainClassGrass && ground != kTerrainClass40) {
                 return false;
             }
             break;
-        case SiteGroup::kRace2:
-            if (ground != 0x10 && ground != 0x90) {
+        case SiteGroup::kAsian:
+            if (ground != kTerrainClassGrass && ground != kTerrainClass90) {
                 return false;
             }
             break;
         case SiteGroup::kMine:
             // Only the building's own tile must be mountain.
-            if (checkGround && mineCentre && ground != 0x20) {
+            if (checkGround && mineCentre && ground != kTerrainClassMountain) {
                 return false;
             }
             break;
@@ -494,17 +576,18 @@ bool TileSuitsSite(const Tile& tile, std::uint32_t owner, std::uint32_t area, Si
            tile.object_number == 0;
 }
 
+// The size class 1..10 of the earth to move (1: flat).
 std::uint32_t EarthClass(std::uint32_t earth) {
-    static constexpr std::uint32_t kLimits[] = {30, 70, 120, 180, 250, 330, 420, 510, 600};
+    static constexpr std::uint32_t kLimits[kEarthClasses - 1] = {30, 70, 120, 180, 250, 330, 420, 510, 600};
     if (earth == 0) {
-        return 10;
+        return kEarthClasses;
     }
-    for (std::uint32_t k = 0; k < 9; ++k) {
+    for (std::uint32_t k = 0; k < kEarthClasses - 1; ++k) {
         if (earth < kLimits[k]) {
             return k + 1;
         }
     }
-    return 10;
+    return kEarthClasses;
 }
 
 struct Stake {
@@ -519,27 +602,28 @@ struct Stake {
 // and how much levelling it needs (the size of the placement-preview
 // marks); with mode 1 it also places the construction site. Used by the
 // placement preview, the build command and the computer players.
+// CGameData::CheckBuildingSite (0x4d99e0).
 std::uint32_t __fastcall CGameData_CheckBuildingSite(CGameData* world, void* /*edx*/, std::uint32_t x,
                                                      std::uint32_t y, std::uint32_t type, std::uint32_t player,
                                                      std::uint32_t mode) {
     std::uint32_t owner = player;
-    if (mode >= 2) {
-        mode -= 2;
-        owner = 0xff;  // unowned land
+    if (mode >= kModeUnowned) {
+        mode -= kModeUnowned;
+        owner = kNobody;
     }
     const std::uint32_t race = PlayerRace(world, player);
     SiteGroup group = SiteGroup::kPlain;
-    if (race == 1) {
-        group = SiteGroup::kRace1;
-    } else if (race == 2) {
-        group = SiteGroup::kRace2;
+    if (race == static_cast<std::uint32_t>(Race::Egyptian)) {
+        group = SiteGroup::kEgyptian;
+    } else if (race == static_cast<std::uint32_t>(Race::Asian)) {
+        group = SiteGroup::kAsian;
     }
     if (IsMine(type)) {
         group = SiteGroup::kMine;
     }
 
     const std::uint32_t mapSize = world->map_size;
-    if (x < 15 || x > mapSize - 16 || y < 15 || y > mapSize - 16) {
+    if (x < kMapMargin || x > mapSize - (kMapMargin + 1) || y < kMapMargin || y > mapSize - (kMapMargin + 1)) {
         return 0;
     }
     const std::uint32_t area = TileAt(world, x, y).area;
@@ -579,10 +663,10 @@ std::uint32_t __fastcall CGameData_CheckBuildingSite(CGameData* world, void* /*e
         return 0;
     }
 
-    if (type == 0x20 || type == 0x21) {
-        // Needs water (terrain 4) within distance 20.
+    if (IsType(type, {B::Shipyard, B::Harbour})) {
+        // Needs water within distance 20 (the offset table is ordered by distance).
         const MapOffset* entry = world->offsets;
-        if (entry->distance > 20) {
+        if (entry->distance > kWaterDistance) {
             return 0;
         }
         bool water = false;
@@ -591,11 +675,12 @@ std::uint32_t __fastcall CGameData_CheckBuildingSite(CGameData* world, void* /*e
             const std::int32_t ty = static_cast<std::int32_t>(y) + entry->dy;
             const std::int32_t size = static_cast<std::int32_t>(mapSize);
             if (tx >= 0 && tx < size && ty >= 0 && ty < size &&
-                TileAt(world, static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty)).terrain == 4) {
+                TileAt(world, static_cast<std::uint32_t>(tx), static_cast<std::uint32_t>(ty)).terrain ==
+                    kTerrainHarbourWater) {
                 water = true;
             }
             ++entry;
-        } while (entry->distance <= 20);
+        } while (entry->distance <= kWaterDistance);
         if (!water) {
             return 0;
         }
@@ -609,7 +694,7 @@ std::uint32_t __fastcall CGameData_CheckBuildingSite(CGameData* world, void* /*e
             return 0;
         }
     }
-    if (mode != 1) {
+    if (mode != kModePlace) {
         return EarthClass(earth);
     }
 
@@ -627,7 +712,7 @@ std::uint32_t __fastcall CGameData_CheckBuildingSite(CGameData* world, void* /*e
     if (building == 0) {
         return 0;
     }
-    CGameData_QueuePendingEvent(world, nullptr, 2, building, 0);
+    CGameData_QueuePendingEvent(world, nullptr, kEventSitePlaced, building, 0);
 
     const std::uint32_t* const layout = Layout(PlayerRace(world, player), type);
     Building& b = world->buildings[building];
@@ -635,7 +720,7 @@ std::uint32_t __fastcall CGameData_CheckBuildingSite(CGameData* world, void* /*e
 
     // Footprint and border tiles get the footprint flag; per direction
     // sector the outermost tile of the first part of the footprint gets a stake.
-    Stake stakes[6];
+    Stake stakes[kDirectionCount];
     for (Stake& stake : stakes) {
         stake.ring = 0;
     }
@@ -666,20 +751,23 @@ std::uint32_t __fastcall CGameData_CheckBuildingSite(CGameData* world, void* /*e
     }
     for (const Stake& stake : stakes) {
         if (stake.ring >= 1) {
-            TileAt(world, x + stake.dx, y + stake.dy).object = 0x71;
+            TileAt(world, x + stake.dx, y + stake.dy).object = kObjectStake;
         }
     }
-    TileAt(world, x, y).object = 0x70;
+    TileAt(world, x, y).object = kObjectSiteCentre;
 
     if (group == SiteGroup::kMine) {
-        b.buildup = 2;
+        b.buildup = 2;  // mines skip the levelling stage
         return EarthClass(earth);
     }
 
     b.levelling_slot = static_cast<std::uint16_t>(slot);
     b.work_x = static_cast<std::uint16_t>(earth);  // a construction site: the earth to move
-    const std::uint8_t work = static_cast<std::uint8_t>(static_cast<std::uint8_t>((earth + 16) >> 5) + 2);
-    b.site.diggers = work > 8 ? 8 : work;  // +0x1b, probably the number of diggers
+    // +0x1b, probably the number of diggers: 2 plus one per 32 units of earth (rounded), at most 8; the
+    // original computes it in 8 bits.
+    constexpr std::uint8_t kMaxDiggers = 8;
+    const std::uint8_t work = static_cast<std::uint8_t>(static_cast<std::uint8_t>((earth + 16) / 32) + 2);
+    b.site.diggers = work > kMaxDiggers ? kMaxDiggers : work;
 
     // The levelling job: target heights where the ground changes.
     PlayerSiteCache& cache = world->site_cache[player][slot];
@@ -722,22 +810,28 @@ S3RE_HOOK(0x005081a0, CGameData_IsGoodStartPosition, StartPositionFn, Original_C
           CGameData_IsGoodStartPosition);
 
 // Purpose: Whether a player's castle could stand at (x, y) on land nobody
-// owns yet; used when the start positions are chosen (0x5074b0).
+// owns yet; used when the start positions are chosen (0x5074b0). It checks the small tower's footprint
+// (type 0xf), not the castle's. CGameData::IsFreeCastleSite (0x508420).
 std::uint32_t __fastcall CGameData_IsFreeCastleSite(CGameData* world, void* /*edx*/, std::uint32_t player,
                                                     std::uint32_t x, std::uint32_t y) {
-    return CGameData_CheckBuildingSite(world, nullptr, x, y, kCastleType, player, kModeCheckUnowned) != 0 ? 1 : 0;
+    return CGameData_CheckBuildingSite(world, nullptr, x, y, kStartSiteType, player, kModeUnowned + kModeCheck) != 0
+               ? 1
+               : 0;
 }
 
 // Purpose: Whether (x, y) is a good random start position for a player
 // (0x5074b0, "AddPlayerTowns"): a castle must fit on unowned land and the
 // surroundings must offer enough free land, grass, trees, stone and
 // resources; the demands drop as the number of attempts grows.
+// CGameData::IsGoodStartPosition (0x5081a0).
 std::uint32_t __fastcall CGameData_IsGoodStartPosition(CGameData* world, void* /*edx*/, std::uint32_t player,
                                                        std::uint32_t x, std::uint32_t y, std::uint32_t attempts) {
-    if (CGameData_CheckBuildingSite(world, nullptr, x, y, kCastleType, player, kModeCheckUnowned) == 0) {
+    if (CGameData_CheckBuildingSite(world, nullptr, x, y, kStartSiteType, player, kModeUnowned + kModeCheck) == 0) {
         return 0;
     }
     // Land within the first 3000 offsets (about 31 tiles), resources within 9995.
+    constexpr std::uint32_t kLandOffsets = 3000;
+    constexpr std::uint32_t kResourceOffsets = 9995;
     std::uint32_t grass = 0;
     std::uint32_t trees = 0;
     std::uint32_t stone = 0;  // stone left: 0x7f - object for objects 0x73..0x7e
@@ -748,7 +842,8 @@ std::uint32_t __fastcall CGameData_IsGoodStartPosition(CGameData* world, void* /
     std::uint32_t sulfur = 0;
     std::uint32_t gems = 0;
     const std::uint32_t mapSize = world->map_size;
-    for (std::uint32_t k = 0; k < 9995; ++k) {
+    // 0x5081a0..: the counts over the offset table around (x, y).
+    for (std::uint32_t k = 0; k < kResourceOffsets; ++k) {
         const std::int32_t dx = world->offsets[k].dx;
         const std::int32_t dy = world->offsets[k].dy;
         const std::uint32_t tx = x + dx;
@@ -757,27 +852,27 @@ std::uint32_t __fastcall CGameData_IsGoodStartPosition(CGameData* world, void* /
             continue;
         }
         const Tile& tile = TileAt(world, tx, ty);
-        if (k < 3000) {
-            if ((tile.terrain & 0xf0) == 0x10) {
+        if (k < kLandOffsets) {
+            if ((tile.terrain & kTerrainClassMask) == kTerrainClassGrass) {
                 ++grass;
             }
             const std::uint8_t object = tile.object;
-            if (object >= 0x44 && object <= 0x53) {
+            if (object >= kObjectFirstTree && object <= kObjectLastTree) {
                 ++trees;
             }
-            if (object >= 0x73 && object <= 0x7e) {
-                stone += 0x7f - object;
+            if (object >= kObjectFirstStone && object <= kObjectLastStone) {
+                stone += kStoneEnd - object;
             }
-            if (tile.owner == 0xff) {
+            if (tile.owner == kNobody) {
                 ++unowned;
             }
         }
-        switch (tile.resources & 0xf0) {
-            case 0x10: ++coal; break;
-            case 0x20: ++iron; break;
-            case 0x30: ++gold; break;
-            case 0x50: ++sulfur; break;
-            case 0x40: ++gems; break;
+        switch (tile.resources & kResourceMask) {
+            case kResourceCoal: ++coal; break;
+            case kResourceIron: ++iron; break;
+            case kResourceGold: ++gold; break;
+            case kResourceSulfur: ++sulfur; break;
+            case kResourceGems: ++gems; break;
             default: break;
         }
     }
@@ -1349,7 +1444,7 @@ void CompareIsGoodStartPosition(test::Context& ctx, StartPositionFn candidate, i
 // Wrong: a castle on the player's own land counts as free.
 std::uint32_t __fastcall WrongIsFreeCastleSite(CGameData* world, void* /*edx*/, std::uint32_t player, std::uint32_t x,
                                                std::uint32_t y) {
-    return CGameData_CheckBuildingSite(world, nullptr, x, y, kCastleType, player, 0) != 0 ? 1 : 0;
+    return CGameData_CheckBuildingSite(world, nullptr, x, y, kStartSiteType, player, kModeCheck) != 0 ? 1 : 0;
 }
 
 // Wrong: in the third tier (60000..99999 attempts) every third refused

@@ -23,9 +23,10 @@
 //   Only for a finished building (+0x21 == 0) whose word +0x22 is a
 //   direction (not 0xffff): from the work tile (+0x30/+0x32) along that
 //   direction (NeighbourX/Y), BlockTileAndMoveSettler on every tile until
-//   one of terrain 0x30 (probably the shore or shallow water); then +0x22 =
-//   0xffff. Probably the line a shipyard keeps free for its ship (low
-//   confidence). Callers CrushBuilding and ExecuteCommands; EAX unused.
+//   one of terrain 0x30 (the shore, kTerrainShore); then +0x22 = 0xffff.
+//   CrushBuilding calls it for shipyards and harbours, so probably the line
+//   to the water their ships use. Callers CrushBuilding and ExecuteCommands;
+//   EAX unused.
 // The three "Drop...Pile" functions (pile) thiscall, ret 4, called by
 // RemoveBuildingStorage 0x4de430 for a building's input, storage and output
 // piles: settlers bound to the pile get ResetSettlerToIdle, the pile is
@@ -80,10 +81,12 @@
 //   the CSV's proposal.)
 
 #include "game/debug_log.h"
+#include "game/enums.h"
 #include "game/globals.h"
 #include "game/replacements.h"
 #include "game/tables.h"
 #include "game/texts.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -92,6 +95,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <utility>
 #include <vector>
 
@@ -103,13 +107,16 @@ using layout::Building;
 using layout::PlayerSiteCache;
 using layout::Tile;
 
-constexpr std::uint32_t kLayoutTypes = 57;
+using B = BuildingType;
+using Job = SettlerJob;
+
+constexpr std::uint32_t kLayoutTypes = kBuildingTypeCount;
 constexpr std::uint32_t kMarkFootprint = 0x80000000;
 constexpr std::uint32_t kMarkFootprintEnd = 0x80000001;
 constexpr std::uint32_t kMarkBorder = 0x80000002;
 constexpr std::uint32_t kMarkEnd = 0x80000003;
 
-constexpr std::uint8_t kObjectStake = 0x71;
+constexpr std::uint8_t kObjectStake = 113;     // 0x71: a stake on a footprint tile (CheckBuildingSite)
 constexpr std::uint8_t kTileFootprint = 0x08;  // Tile::flags: part of a building
 constexpr std::uint8_t kTileLevelling = 0x04;  // Tile::flags: being levelled
 constexpr std::uint32_t kGrid = 31;
@@ -124,10 +131,28 @@ const std::uint32_t* Layout(std::uint32_t race, std::uint32_t type) {
     return g_buildingLayouts[type + race * kLayoutTypes];
 }
 
+bool IsOneOf(Job job, std::initializer_list<Job> jobs) {
+    for (const Job candidate : jobs) {
+        if (candidate == job) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsOneOf(BuildingType type, std::initializer_list<BuildingType> types) {
+    for (const BuildingType candidate : types) {
+        if (candidate == type) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Clears the footprint mark and a stake on one tile.
 void ClearFootprintTile(CGameData* world, std::uint32_t x, std::uint32_t y) {
-    TileAt(world, x, y).flags &= static_cast<std::uint8_t>(~kTileFootprint);
     Tile& tile = TileAt(world, x, y);
+    tile.flags &= static_cast<std::uint8_t>(~kTileFootprint);
     if (tile.object == kObjectStake) {
         tile.object = 0;
     }
@@ -152,21 +177,21 @@ void TakeGoodFromPile(CGameData* world, std::uint32_t pile) {
     reinterpret_cast<PileFn>(kTakeGoodFromPile)(world, nullptr, pile);
 }
 
-constexpr std::uint8_t kFree = 0xff;
-constexpr std::uint8_t kPileDropped = 0xfe;
-constexpr std::uint8_t kGoodNone = 0xff;
-constexpr std::uint8_t kLineEndTerrain = 0x30;  // Tile::terrain that ends the line (shore?)
+constexpr std::uint8_t kFree = 0xff;         // Settler::owner / Building::owner of an unused record
+constexpr std::uint8_t kPileDropped = 0xfe;  // pile kind: goods left on the ground
+constexpr std::uint8_t kGoodNone = Value(Good::Empty);
+constexpr std::uint8_t kLineEndTerrain = kTerrainShore;  // a building's line ends at the shore (0x30)
 constexpr std::uint16_t kNoDirection = 0xffff;
 
-
-// Carriers bringing goods to a building pile.
-bool IsDeliveringJob(std::uint16_t job) {
-    return job == 0x4c || job == 0x4d || job == 0x4e || job == 0x4f;
+// Carriers bringing goods to a building pile (jobs 76..79, 0x4c..0x4f).
+bool IsDeliveringJob(Job job) {
+    return IsOneOf(job, {Job::Job76, Job::Job77, Job::Job78, Job::Job79});
 }
 
 // Settlers on their way to take goods from a pile (its position is their target).
-bool IsFetchingJob(std::uint16_t job) {
-    return job == 0x0a || job == 0x0b || job == 0xa9 || job == 0x4c || job == 0x4d || job == 0x68 || job == 0x69;
+bool IsFetchingJob(Job job) {
+    return IsOneOf(job, {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::Job76, Job::Job77,
+                         Job::CarrierWalkToTool, Job::CarrierTakeTool});
 }
 
 // Resets every settler with an owner for which `match` is true.
@@ -183,7 +208,7 @@ void ResetSettlersWhere(CGameData* world, Match match) {
 // Resets the settlers about to fetch goods from the pile.
 void ResetFetchers(CGameData* world, const layout::Pile& pile) {
     ResetSettlersWhere(world, [&](const layout::Settler& s) {
-        return IsFetchingJob(s.job) && s.target_x == pile.x && s.target_y == pile.y;
+        return IsFetchingJob(JobOf(s)) && s.target_x == pile.x && s.target_y == pile.y;
     });
 }
 
@@ -201,6 +226,7 @@ std::uint32_t __fastcall CGameData_MakePileEmpty(CGameData* world, void* edx, st
 // Purpose: Takes a building (or construction site) off the map: clears its
 // footprint marks and stakes, unblocks the tiles it stood on and, for a site
 // still being levelled, the levelling marks and its slot in the site cache.
+// CGameData::ClearBuildingFootprint (0x51aae0).
 void __fastcall CGameData_ClearBuildingFootprint(CGameData* world, void*, std::uint32_t number) {
     Building& building = world->buildings[number];
     const std::uint32_t x = building.x;
@@ -209,12 +235,14 @@ void __fastcall CGameData_ClearBuildingFootprint(CGameData* world, void*, std::u
     const std::uint32_t* p = Layout(building.race, building.art);
     while (*p++ != kMarkFootprint) {
     }
+    // The part of the footprint that was blocked: also unblocked.
     for (; *p != kMarkFootprintEnd; p += 2) {
         const std::uint32_t tx = x + p[0];
         const std::uint32_t ty = y + p[1];
         ClearFootprintTile(world, tx, ty);
         reinterpret_cast<TileFn>(kUnblockTile)(world, nullptr, tx, ty);
     }
+    // The rest of the footprint and the border.
     ++p;
     while (*p != kMarkEnd) {
         if (*p == kMarkBorder) {
@@ -223,9 +251,10 @@ void __fastcall CGameData_ClearBuildingFootprint(CGameData* world, void*, std::u
         ClearFootprintTile(world, x + p[0], y + p[1]);
         p += 2;
     }
-    if (building.buildup != 1) {
+    if (building.buildup != 1) {  // only a site in its levelling stage
         return;
     }
+    // The original indexes the site caches as one flat array (owner * 30 + slot), re-reading both per cell.
     for (std::uint32_t i = 0; i < kGrid; ++i) {
         for (std::uint32_t j = 0; j < kGrid; ++j) {
             const PlayerSiteCache& cache = world->site_cache[0][building.owner * kSlotsPerPlayer + building.levelling_slot];
@@ -240,6 +269,7 @@ void __fastcall CGameData_ClearBuildingFootprint(CGameData* world, void*, std::u
 
 // Purpose: Blocks a tile for a building, removing its landscape object and
 // sending a settler standing there to the nearest free tile.
+// CGameData::BlockTileAndMoveSettler (0x4dbb10).
 void __fastcall CGameData_BlockTileAndMoveSettler(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     Tile& tile = TileAt(world, x, y);
     const std::uint32_t settler = tile.settler;
@@ -256,8 +286,9 @@ void __fastcall CGameData_BlockTileAndMoveSettler(CGameData* world, void*, std::
 }
 
 // Purpose: Blocks the straight line of tiles a finished building keeps from
-// its work tile in one direction (probably a shipyard's slipway) and forgets
-// the direction.
+// its work tile in one direction down to the shore (probably a shipyard's
+// slipway or a harbour's landing) and forgets the direction.
+// CGameData::BlockBuildingLine (0x4dbb90).
 void __fastcall CGameData_BlockBuildingLine(CGameData* world, void*, std::uint32_t number) {
     Building& building = world->buildings[number];
     if (building.buildup != 0 || building.dock_direction == kNoDirection) {
@@ -276,17 +307,19 @@ void __fastcall CGameData_BlockBuildingLine(CGameData* world, void*, std::uint32
 
 // Purpose: Gives up a building's input pile: carriers bringing goods to it
 // and ships loading from it stop, and its goods are left on the ground.
+// CGameData::DropInputPile (0x504a00).
 void __fastcall CGameData_DropInputPile(CGameData* world, void*, std::uint32_t number) {
     layout::Pile& pile = world->piles[number];
-    if ((pile.leaving >> 4) != 0) {
+    if ((pile.leaving >> 4) != 0) {  // units coming, in the high nibble
         ResetSettlersWhere(world, [&](const layout::Settler& s) {
-            return s.building == number && IsDeliveringJob(s.job);
+            return s.building == number && IsDeliveringJob(JobOf(s));
         });
     }
-    GameDebugLog(texts::kCannotFindBringers);
+    GameDebugLog(texts::kCannotFindBringers);  // always, as in the original
     if (pile.leaving != 0) {
+        // Jobs 307/308 (0x133/0x134): probably ships loading at a trade building.
         ResetSettlersWhere(world, [&](const layout::Settler& s) {
-            return (s.job == 0x133 || s.job == 0x134) && s.target_x == pile.x && s.target_y == pile.y;
+            return IsOneOf(JobOf(s), {Job::Job307, Job::Job308}) && s.target_x == pile.x && s.target_y == pile.y;
         });
     }
     const std::uint32_t x = pile.x;
@@ -303,6 +336,7 @@ void __fastcall CGameData_DropInputPile(CGameData* world, void*, std::uint32_t n
 
 // Purpose: Gives up a storage pile of a building: deliveries to it and
 // fetches from it are cancelled and its goods are left on the ground.
+// CGameData::DropStoragePile (0x504b70).
 void __fastcall CGameData_DropStoragePile(CGameData* world, void*, std::uint32_t number) {
     layout::Pile& pile = world->piles[number];
     const std::uint32_t area = TileAt(world, pile.x, pile.y).area;
@@ -310,7 +344,7 @@ void __fastcall CGameData_DropStoragePile(CGameData* world, void*, std::uint32_t
     if (coming != 0) {
         for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
             const layout::Settler& settler = world->settlers[n];
-            if (settler.owner != kFree && settler.building == number && IsDeliveringJob(settler.job)) {
+            if (settler.owner != kFree && settler.building == number && IsDeliveringJob(JobOf(settler))) {
                 ResetSettlerToIdle(world, n);
                 --coming;
             }
@@ -334,6 +368,7 @@ void __fastcall CGameData_DropStoragePile(CGameData* world, void*, std::uint32_t
         GameDebugLog(texts::kPushingPileInEmptyList);
         CGameData_MakePileEmpty(world, nullptr, number);
     }
+    // An empty pile record leaves its area's list of empty piles.
     if (pile.art == 0 && pile.amount == 0 && pile.coming == 0) {
         if (pile.prev != 0) {
             world->piles[pile.prev].next = pile.next;
@@ -353,6 +388,7 @@ void __fastcall CGameData_DropStoragePile(CGameData* world, void*, std::uint32_t
 
 // Purpose: Gives up a building's output pile: settlers about to fetch from it
 // stop, and its goods are left on the ground.
+// CGameData::DropOutputPile (0x504e20).
 void __fastcall CGameData_DropOutputPile(CGameData* world, void*, std::uint32_t number) {
     layout::Pile& pile = world->piles[number];
     if (pile.amount == 0) {
@@ -400,8 +436,11 @@ constexpr std::uintptr_t kDropInputPile = 0x00504a00;
 constexpr std::uintptr_t kDropStoragePile = 0x00504b70;
 constexpr std::uintptr_t kDropOutputPile = 0x00504e20;
 
-constexpr std::uint32_t kGoodBoards = 1;                // construction materials (probably boards
-constexpr std::uint32_t kGoodStones = 2;                // and stones)
+constexpr std::uint32_t kGoodBoards = Value(Good::Board);  // the construction materials
+constexpr std::uint32_t kGoodStones = Value(Good::Stone);
+constexpr std::uint32_t kDropPortion = 8;  // DropGoodNear takes at most a full pile
+constexpr std::uint32_t kInputPiles = 3;   // Building::piles
+constexpr std::uint32_t kStorePiles = 6;   // around a harbour or marketplace
 
 void DropGoodNear(CGameData* world, std::uint32_t good, std::uint32_t amount, std::uint32_t x, std::uint32_t y) {
     reinterpret_cast<DropGoodFn>(kDropGoodNear)(world, nullptr, good, amount, x, y);
@@ -416,32 +455,81 @@ std::uint32_t PileOn(CGameData* world, std::uint32_t x, std::uint32_t y, std::in
     return TileAt(world, x + static_cast<std::uint32_t>(dx), y + static_cast<std::uint32_t>(dy)).object_number;
 }
 
-// Settlers busy with the building's goods: carriers and workers on their way
-// with or for goods (jobs 0xa, 0xb, 0xa9, 0xaa, 0xc, 0xd, 0x50).
-bool IsBuildingGoodsJob(std::uint16_t job) {
-    return job == 0x0a || job == 0x0b || job == 0xa9 || job == 0xaa || job == 0x0c || job == 0x0d || job == 0x50;
+// Settlers busy with the building's goods: carriers on their way with or for goods.
+bool IsBuildingGoodsJob(Job job) {
+    return IsOneOf(job, {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::CarrierLeavePile,
+                         Job::CarrierWalkToBuilding, Job::CarrierAtBuilding, Job::CarrierDeliver});
 }
 
-bool HasOutputPile(std::uint8_t type) {
-    switch (type) {
-        case 2: case 3: case 4: case 7: case 8: case 9: case 0xa: case 0xb: case 0xe: case 0x11: case 0x14:
-        case 0x15: case 0x16: case 0x17: case 0x18: case 0x19: case 0x1d: case 0x38: case 0x1e: case 0x24:
-        case 0x25: case 0x26: case 0x27: case 0x28: case 0x33: case 0x34:
-            return true;
-        default:
-            return false;
-    }
+// The types with one output pile at the door (Building::pile_ring, created by BuildingDone).
+bool HasOutputPile(BuildingType type) {
+    return IsOneOf(type, {B::Woodcutter, B::Stonecutter, B::Sawmill, B::CoalMine, B::GoldMine, B::IronMine,
+                          B::GoldSmelter, B::IronSmelter, B::Vineyard, B::Mill, B::Bakery, B::Slaughterhouse,
+                          B::Distillery, B::PigFarm, B::Farm, B::Fishery, B::SulfurMine, B::AmazonSulfurMine,
+                          B::Waterworks, B::RiceFarm, B::GemMine, B::Brewery, B::CharcoalBurner, B::PowderMaker,
+                          B::Apiary, B::Meadery});
 }
 
 // Puts `amount` units of `good` near (x, y) in portions of at most 8.
 void DropInPortions(CGameData* world, std::uint32_t good, std::uint32_t amount, std::uint32_t x, std::uint32_t y) {
     while (amount != 0) {
-        if (amount <= 8) {
+        if (amount <= kDropPortion) {
             DropGoodNear(world, good, amount, x, y);
             return;
         }
-        DropGoodNear(world, good, 8, x, y);
-        amount -= 8;
+        DropGoodNear(world, good, kDropPortion, x, y);
+        amount -= kDropPortion;
+    }
+}
+
+// A finished building's piles are given up (the original's part for buildup 0).
+void DropFinishedBuildingPiles(CGameData* world, const Building& b) {
+    if (b.piles[0] != 0) {
+        CGameData_RemovePileFromTile(world, nullptr, b.piles[0]);
+    }
+    if (b.piles[1] != 0) {
+        CGameData_RemovePileFromTile(world, nullptr, b.piles[1]);
+    }
+    if (b.piles[2] != 0) {
+        CGameData_RemovePileFromTile(world, nullptr, b.piles[2]);
+    }
+    const BuildingType type = TypeOf(b);
+    if (HasOutputPile(type)) {
+        CallPileFn(world, kDropOutputPile, b.pile_ring);
+    }
+    // The smiths' and the laboratory's piles around the door (BuildingDone), in the original's order.
+    if (type == B::Toolsmith) {
+        static constexpr std::int32_t kTools[7][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, 1}};
+        for (const auto& d : kTools) {
+            CallPileFn(world, kDropOutputPile, PileOn(world, b.door_x, b.door_y, d[0], d[1]));
+        }
+    }
+    if (type == B::Weaponsmith) {
+        static constexpr std::int32_t kWeapons[3][2] = {{0, 0}, {-1, 0}, {1, 0}};
+        for (const auto& d : kWeapons) {
+            CallPileFn(world, kDropOutputPile, PileOn(world, b.door_x, b.door_y, d[0], d[1]));
+        }
+    }
+    if (type == B::Laboratory) {
+        CallPileFn(world, kDropOutputPile, PileOn(world, b.door_x, b.door_y, 1, 0));
+        CallPileFn(world, kDropOutputPile, PileOn(world, b.door_x, b.door_y, -1, 0));
+    }
+    if (type == B::Storehouse) {
+        static constexpr std::int32_t kStores[kStorePiles][2] = {{2, 0}, {-2, 0}, {0, 2}, {0, -2}, {2, 2}, {-2, -2}};
+        for (const auto& d : kStores) {
+            CallPileFn(world, kDropStoragePile, PileOn(world, b.x, b.y, d[0], d[1]));
+        }
+    }
+    // The ring of store piles of a marketplace or harbour (S3.EXE tables 0x6594a4, 0x659564, by race).
+    for (const auto& store : {std::pair<B, const std::int32_t*>{B::Marketplace, &g_storePileOffsets22[0][0][0]},
+                              std::pair<B, const std::int32_t*>{B::Harbour, &g_storePileOffsets21[0][0][0]}}) {
+        if (type != store.first) {
+            continue;
+        }
+        const std::int32_t* offsets = store.second + b.race * (kStorePiles * 2);
+        for (std::uint32_t k = 0; k < kStorePiles; ++k) {
+            CallPileFn(world, kDropInputPile, PileOn(world, b.x, b.y, offsets[2 * k], offsets[2 * k + 1]));
+        }
     }
 }
 
@@ -455,11 +543,13 @@ std::uint32_t __fastcall CGameData_RemoveBuildingFromAreaRequests(CGameData* wor
 // site): the goods in its piles go on the ground nearby, carriers and
 // workers busy with them stop, its piles are given up, and half of its
 // construction materials (of what was delivered, for a site) are left on the
-// ground.
+// ground. CGameData::RemoveBuildingGoods (0x4de430).
 void __fastcall CGameData_RemoveBuildingGoods(CGameData* world, void*, std::uint32_t number) {
     Building& b = world->buildings[number];
+    // The input piles' goods go on the ground (the third only for a finished building); the pile fields
+    // are re-read after each call, as in the original.
     std::uint32_t coming = 0;
-    for (std::uint32_t k = 0; k < 3; ++k) {
+    for (std::uint32_t k = 0; k < kInputPiles; ++k) {
         if (b.piles[k] == 0 || (k == 2 && b.buildup != 0)) {
             continue;
         }
@@ -477,7 +567,7 @@ void __fastcall CGameData_RemoveBuildingGoods(CGameData* world, void*, std::uint
     GameDebugLog(texts::kGoodsOnTheirWay, coming);
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
         const layout::Settler& settler = world->settlers[n];
-        if (settler.owner != kFree && settler.building == number && IsBuildingGoodsJob(settler.job)) {
+        if (settler.owner != kFree && settler.building == number && IsBuildingGoodsJob(JobOf(settler))) {
             ResetSettlerToIdle(world, n);
             --coming;
         }
@@ -485,50 +575,7 @@ void __fastcall CGameData_RemoveBuildingGoods(CGameData* world, void*, std::uint
     GameDebugLog(texts::kResultAfterReduction, coming);
 
     if (b.buildup == 0) {
-        if (b.piles[0] != 0) {
-            CGameData_RemovePileFromTile(world, nullptr, b.piles[0]);
-        }
-        if (b.piles[1] != 0) {
-            CGameData_RemovePileFromTile(world, nullptr, b.piles[1]);
-        }
-        if (b.piles[2] != 0) {
-            CGameData_RemovePileFromTile(world, nullptr, b.piles[2]);
-        }
-        if (HasOutputPile(b.art)) {
-            CallPileFn(world, kDropOutputPile, b.pile_ring);
-        }
-        if (b.art == 0xc) {
-            static constexpr std::int32_t kTools[7][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, 1}};
-            for (const auto& d : kTools) {
-                CallPileFn(world, kDropOutputPile, PileOn(world, b.door_x, b.door_y, d[0], d[1]));
-            }
-        }
-        if (b.art == 0xd) {
-            static constexpr std::int32_t kWeapons[3][2] = {{0, 0}, {-1, 0}, {1, 0}};
-            for (const auto& d : kWeapons) {
-                CallPileFn(world, kDropOutputPile, PileOn(world, b.door_x, b.door_y, d[0], d[1]));
-            }
-        }
-        if (b.art == 0x35) {
-            CallPileFn(world, kDropOutputPile, PileOn(world, b.door_x, b.door_y, 1, 0));
-            CallPileFn(world, kDropOutputPile, PileOn(world, b.door_x, b.door_y, -1, 0));
-        }
-        if (b.art == 1) {
-            static constexpr std::int32_t kStores[6][2] = {{2, 0}, {-2, 0}, {0, 2}, {0, -2}, {2, 2}, {-2, -2}};
-            for (const auto& d : kStores) {
-                CallPileFn(world, kDropStoragePile, PileOn(world, b.x, b.y, d[0], d[1]));
-            }
-        }
-        for (const auto& store : {std::pair<std::uint8_t, const std::int32_t*>{0x22, &g_storePileOffsets22[0][0][0]},
-                                  std::pair<std::uint8_t, const std::int32_t*>{0x21, &g_storePileOffsets21[0][0][0]}}) {
-            if (b.art != store.first) {
-                continue;
-            }
-            const std::int32_t* offsets = store.second + b.race * 12u;
-            for (std::uint32_t k = 0; k < 6; ++k) {
-                CallPileFn(world, kDropInputPile, PileOn(world, b.x, b.y, offsets[2 * k], offsets[2 * k + 1]));
-            }
-        }
+        DropFinishedBuildingPiles(world, b);
     } else {
         if (b.piles[0] != 0) {
             CGameData_RemovePileFromTile(world, nullptr, b.piles[0]);
@@ -549,8 +596,8 @@ void __fastcall CGameData_RemoveBuildingGoods(CGameData* world, void*, std::uint
         boards -= b.site.boards_missing;
         stones -= b.site.stones_missing;
     }
-    DropInPortions(world, kGoodBoards, boards >> 1, b.x, b.y);
-    DropInPortions(world, kGoodStones, stones >> 1, b.x, b.y);
+    DropInPortions(world, kGoodBoards, boards / 2, b.x, b.y);
+    DropInPortions(world, kGoodStones, stones / 2, b.x, b.y);
 }
 
 S3RE_HOOK(0x004de430, CGameData_RemoveBuildingGoods, BuildingFn, Original_CGameData_RemoveBuildingGoods,
@@ -580,18 +627,27 @@ using Effects4Fn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32
                                               std::uint32_t a3, std::uint32_t a4);
 using CrushFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t building);
 
+// The events CrushBuilding queues (meaning of the numbers not known beyond their arguments).
+constexpr std::uint32_t kPendingEventCrushedAt = 3;    // QueuePendingEvent(3, x, y)
+constexpr std::uint32_t kPendingEventCrushedType = 6;  // QueuePendingEvent(6, type, owner)
+constexpr std::uint32_t kEventBuildingCrushed = 2;     // QueueEvent(2, building, type, owner)
 
+// A garrisoned military building can't be crushed with an enemy soldier this close (offset table distance).
+constexpr std::int32_t kEnemyProtectionDistance = 15;
+constexpr std::int32_t kFirstSoldierClass = 1;  // classes 1..9 count as soldiers here
+constexpr std::int32_t kLastSoldierClass = 9;
 
+constexpr std::int32_t kProtectedMission = 70;  // g_campaignMission
+constexpr std::uint32_t kSearchWarning = 9900;  // DestroyBuildingAt logs past this many offsets (0x26ac)
 
-bool IsMilitary(std::uint8_t type) {
-    return type == 0xf || type == 0x10 || type == 0x12;
+bool IsMilitary(BuildingType type) {
+    return IsOneOf(type, {B::SmallTower, B::LargeTower, B::Castle});
 }
 
 // Positions of mission 70 whose buildings must not be crushed.
 constexpr std::uint32_t kCampaign70Protected[17][2] = {
-    {0x10a, 0x215}, {0x114, 0x20c}, {0x125, 0x200}, {0x138, 0x1ff}, {0x143, 0x1fe}, {0x156, 0x203},
-    {0x168, 0x210}, {0x179, 0x214}, {0x194, 0x22b}, {0x174, 0x220}, {0x16d, 0x24a}, {0x15c, 0x252},
-    {0x146, 0x254}, {0x131, 0x24f}, {0x129, 0x242}, {0x14b, 0x23a}, {0x1ad, 0x21e},
+    {266, 533}, {276, 524}, {293, 512}, {312, 511}, {323, 510}, {342, 515}, {360, 528}, {377, 532}, {404, 555},
+    {372, 544}, {365, 586}, {348, 594}, {326, 596}, {305, 591}, {297, 578}, {331, 570}, {429, 542},
 };
 
 void CallBuildingFn(CGameData* world, std::uintptr_t address, std::uint32_t building) {
@@ -599,26 +655,35 @@ void CallBuildingFn(CGameData* world, std::uintptr_t address, std::uint32_t buil
 }
 
 // Types whose worker in +0x8 is sent away when the finished building goes.
-bool HasWorker(std::uint8_t type) {
-    switch (type) {
-        case 2: case 3: case 4: case 5: case 6: case 7: case 9: case 8: case 0xa: case 0xb: case 0xc: case 0xd:
-        case 0xe: case 0x11: case 0x14: case 0x15: case 0x16: case 0x17: case 0x18: case 0x19: case 0x1d:
-        case 0x38: case 0x1e: case 0x1f: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27: case 0x28:
-        case 0x2f: case 0x30: case 0x31: case 0x20: case 0x33: case 0x34: case 0x35: case 0x32:
-            return true;
-        default:
-            return false;
-    }
+bool HasWorker(BuildingType type) {
+    return IsOneOf(type, {B::Woodcutter, B::Stonecutter, B::Sawmill, B::Forester, B::LookoutTower, B::CoalMine,
+                          B::IronMine, B::GoldMine, B::GoldSmelter, B::IronSmelter, B::Toolsmith, B::Weaponsmith,
+                          B::Vineyard, B::Mill, B::Bakery, B::Slaughterhouse, B::Distillery, B::PigFarm, B::Farm,
+                          B::Fishery, B::SulfurMine, B::AmazonSulfurMine, B::Waterworks, B::CatapultWorkshop,
+                          B::Hospital, B::RiceFarm, B::GemMine, B::Brewery, B::CharcoalBurner, B::PowderMaker,
+                          B::BallistaWorkshop, B::CannonWorkshop, B::DonkeyFarm, B::Shipyard, B::Apiary, B::Meadery,
+                          B::Laboratory, B::LargeGong});
 }
 
 // Jobs of the construction workers and helpers bound to a building.
 bool IsSiteWorker(const layout::Settler& s) {
-    const bool digOrBuild = s.tool_type == 1 || s.tool_type == 2;
-    const bool diggerOrBuilder = s.art == 1 || s.art == 2;
-    switch (s.job) {
-        case 0x68: case 0x69: return digOrBuild;
-        case 3: case 4: return diggerOrBuilder;
-        case 5: case 6: case 7: case 9: case 8: case 0xe: case 0x11: case 0x12: case 0xf: return true;
+    // A carrier fetching a shovel or hammer to become a digger or builder (tool_type = the type it becomes).
+    const bool digOrBuild = s.tool_type == Value(SettlerType::Digger) || s.tool_type == Value(SettlerType::Builder);
+    const bool diggerOrBuilder = TypeOf(s) == SettlerType::Digger || TypeOf(s) == SettlerType::Builder;
+    switch (JobOf(s)) {
+        case Job::CarrierWalkToTool:
+        case Job::CarrierTakeTool: return digOrBuild;
+        case Job::WalkToWork:
+        case Job::ArriveAtWork: return diggerOrBuilder;
+        case Job::DiggerDig:
+        case Job::DiggerWalkToSpot:
+        case Job::DiggerLevel:
+        case Job::Job9:
+        case Job::Job8:
+        case Job::BuilderStart:
+        case Job::Job17:
+        case Job::BuilderBuild:
+        case Job::Job15: return true;
         default: return false;
     }
 }
@@ -636,10 +701,12 @@ void __fastcall CGameData_ClearBuildingFlag10(CGameData* world, void* edx, std::
 // Purpose: Sends away everybody working at or for a building that is being
 // removed: diggers, builders and tool fetchers of a site, the worker of a
 // finished building, and the garrison of a military building, whose
-// territory is then recalculated without it.
+// territory is then recalculated without it. CGameData::ReleaseSiteWorkers (0x50e3b0).
 void __fastcall CGameData_ReleaseSiteWorkers(CGameData* world, void*, std::uint32_t number) {
     Building& b = world->buildings[number];
-    for (std::uint32_t i = 0; i < 8; ++i) {
+    // Only logged: the occupied digger and builder slots.
+    constexpr std::uint32_t kSiteSlots = 8;
+    for (std::uint32_t i = 0; i < kSiteSlots; ++i) {
         const std::uint8_t bit = static_cast<std::uint8_t>(1u << i);
         if ((b.digger_slots & bit) != 0) {
             GameDebugLog(texts::kDigger);
@@ -649,27 +716,30 @@ void __fastcall CGameData_ReleaseSiteWorkers(CGameData* world, void*, std::uint3
         }
     }
     ResetSettlersWhere(world, [&](const layout::Settler& s) { return s.building == number && IsSiteWorker(s); });
-    if (b.art == 0x13) {
+    if (TypeOf(b) == B::Barracks) {
         if (b.buildup != 0) {
             return;
         }
+        // Carriers on their way to become recruits.
         ResetSettlersWhere(world, [&](const layout::Settler& s) {
-            return s.building == number && s.job == 3 && s.art == 0;
+            return s.building == number && JobOf(s) == Job::WalkToWork && TypeOf(s) == SettlerType::Carrier;
         });
     }
     if (b.buildup != 0) {
         return;
     }
-    if (b.worker != 0 && HasWorker(b.art)) {
+    if (b.worker != 0 && HasWorker(TypeOf(b))) {
         ResetSettlerToIdle(world, b.worker);
     }
-    if (!IsMilitary(b.art)) {
+    if (!IsMilitary(TypeOf(b))) {
         return;
     }
+    // The garrison leaves (soldiers in job 140 sit in a slot of the building) and the territory is
+    // recalculated without it.
     std::uint32_t soldier = b.garrison;
     if (soldier != 0) {
         while (soldier != 0) {
-            if (world->settlers[soldier].job == 0x8c) {
+            if (JobOf(world->settlers[soldier]) == Job::Job140) {
                 CGameData_LeaveBuildingSlot(world, nullptr, soldier);
             }
             ResetSettlerToIdle(world, soldier);
@@ -678,18 +748,50 @@ void __fastcall CGameData_ReleaseSiteWorkers(CGameData* world, void*, std::uint3
         b.garrison = 0;
         reinterpret_cast<TileFn>(kRecalculateTerritory)(world, nullptr, b.x, b.y);
     }
+    // Non-civilians on their way to it.
     ResetSettlersWhere(world, [&](const layout::Settler& s) {
-        return g_settlerTypeClass[s.art] != 0 && s.building == number &&
-               (s.job == 3 || s.job == 4 || s.job == 0x10 || s.job == 0x6a || s.job == 0x8b);
+        return ClassOf(s) != SettlerClass::Civilian && s.building == number &&
+               IsOneOf(JobOf(s), {Job::WalkToWork, Job::ArriveAtWork, Job::Job16, Job::Job106, Job::Job139});
     });
 }
+
+namespace {
+
+// Part of CrushBuilding: a garrisoned military building is protected while an enemy soldier stands within the
+// protection distance; the original checks its "protected" flag at the top of every step.
+bool EnemySoldierNear(CGameData* world, const Building& b, std::uint32_t protectedBuilding) {
+    const layout::MapOffset* entry = world->offsets;
+    do {
+        if (protectedBuilding != 0) {
+            return true;
+        }
+        const std::uint32_t tx = b.x + static_cast<std::uint32_t>(entry->dx);
+        const std::uint32_t ty = b.y + static_cast<std::uint32_t>(entry->dy);
+        if (CGameData_IsOnMap(world, nullptr, tx, ty) != 0) {
+            const std::uint32_t settler = TileAt(world, tx, ty).settler;
+            if (settler != 0) {
+                const layout::Settler& s = world->settlers[settler];
+                const std::int32_t theirs = (world->players + s.owner)->team;
+                const std::int32_t ours = (world->players + b.owner)->team;
+                const std::int32_t settlerClass = g_settlerTypeClass[s.art];
+                if (theirs != ours && settlerClass >= kFirstSoldierClass && settlerClass <= kLastSoldierClass) {
+                    protectedBuilding = 1;
+                }
+            }
+        }
+        ++entry;
+    } while (entry->distance < kEnemyProtectionDistance);
+    return protectedBuilding != 0;
+}
+
+}  // namespace
 
 // Purpose: Destroys a building (or construction site), unless it is a
 // protected one: in mission 70 the listed positions, and a garrisoned
 // military building with an enemy soldier within 14 steps. Logs the stages,
 // queues the events for the UI and statistics, shows the destruction effect,
 // and removes footprint, workers, goods and the building record. EAX = 1 if
-// it was destroyed, 0 if protected.
+// it was destroyed, 0 if protected. CGameData::CrushBuilding (0x4d9250).
 std::uint32_t __fastcall CGameData_CrushBuilding(CGameData* world, void*, std::uint32_t number) {
     Building& b = world->buildings[number];
     GameDebugLog(texts::kStartCrushing, number, static_cast<std::uint32_t>(b.art));
@@ -701,7 +803,7 @@ std::uint32_t __fastcall CGameData_CrushBuilding(CGameData* world, void*, std::u
         GameDebugLog(texts::kEndOfCrushing);
         return 1;
     }
-    if (g_campaignMission == 70) {
+    if (g_campaignMission == kProtectedMission) {
         for (const auto& position : kCampaign70Protected) {
             if (b.x == position[0] && b.y == position[1]) {
                 GameDebugLog(texts::kCampaign70NoCrush);
@@ -709,29 +811,12 @@ std::uint32_t __fastcall CGameData_CrushBuilding(CGameData* world, void*, std::u
             }
         }
     }
-    if (b.buildup == 0 && IsMilitary(b.art) && b.garrison != 0 && world->offsets[0].distance < 15) {
-        const layout::MapOffset* entry = world->offsets;
-        do {
-            if (protectedBuilding != 0) {
-                GameDebugLog(texts::kEndOfCrushing);
-                return 0;
-            }
-            const std::uint32_t tx = b.x + static_cast<std::uint32_t>(entry->dx);
-            const std::uint32_t ty = b.y + static_cast<std::uint32_t>(entry->dy);
-            if (CGameData_IsOnMap(world, nullptr, tx, ty) != 0) {
-                const std::uint32_t settler = TileAt(world, tx, ty).settler;
-                if (settler != 0) {
-                    const layout::Settler& s = world->settlers[settler];
-                    const std::int32_t theirs = (world->players + s.owner)->team;
-                    const std::int32_t ours = (world->players + b.owner)->team;
-                    const std::int32_t settlerClass = g_settlerTypeClass[s.art];
-                    if (theirs != ours && settlerClass >= 1 && settlerClass <= 9) {
-                        protectedBuilding = 1;
-                    }
-                }
-            }
-            ++entry;
-        } while (entry->distance < 15);
+    if (b.buildup == 0 && IsMilitary(TypeOf(b)) && b.garrison != 0 &&
+        world->offsets[0].distance < kEnemyProtectionDistance) {
+        if (EnemySoldierNear(world, b, protectedBuilding)) {
+            GameDebugLog(texts::kEndOfCrushing);
+            return 0;
+        }
     }
     if (protectedBuilding != 0) {
         GameDebugLog(texts::kEndOfCrushing);
@@ -743,31 +828,34 @@ std::uint32_t __fastcall CGameData_CrushBuilding(CGameData* world, void*, std::u
         CGameData_ClearBuildingFlag10(world, nullptr, number);
         CGameData_ClearBuildingFlag08(world, nullptr, number);
     }
-    if (b.buildup == 0 && IsMilitary(b.art)) {
-        layout::Settler& soldier = world->settlers[b.guard];
-        soldier.owner = kFree;
-        TileAt(world, soldier.x, soldier.y).settler = 0;
+    if (b.buildup == 0 && IsMilitary(TypeOf(b))) {
+        // The guard settler (BuildingDone) disappears with the building.
+        layout::Settler& guard = world->settlers[b.guard];
+        guard.owner = kFree;
+        TileAt(world, guard.x, guard.y).settler = 0;
     }
-    CGameData_QueuePendingEvent(world, nullptr, 3, b.x, b.y);
-    CGameData_QueuePendingEvent(world, nullptr, 6, b.art, b.owner);
-    CGameData_QueueEvent(world, nullptr, 2, number, b.art, b.owner);
+    CGameData_QueuePendingEvent(world, nullptr, kPendingEventCrushedAt, b.x, b.y);
+    CGameData_QueuePendingEvent(world, nullptr, kPendingEventCrushedType, b.art, b.owner);
+    CGameData_QueueEvent(world, nullptr, kEventBuildingCrushed, number, b.art, b.owner);
     void* effects = &world->map_effects;
     {
+        // The destruction effect; the screen y is computed before the screen x, as in the original.
         const std::uint32_t x = b.x;
         const std::uint32_t y = b.y;
         const std::uint32_t sy = CGameData_TileScreenY(world, nullptr, x, y);
         const std::uint32_t sx = CGameData_TileScreenX(world, nullptr, x, y);
-        reinterpret_cast<Effects5Fn>(kSpawnEffect)(effects, nullptr, g_gameTick, sx, sy, x,
-                                                   y);
+        reinterpret_cast<Effects5Fn>(kSpawnEffect)(effects, nullptr, g_gameTick, sx, sy, x, y);
     }
-    const std::uint8_t type = b.art;
-    if ((type == 0x20 || type == 0x1f || type == 0x2f || type == 0x30 || type == 0x32) && b.buildup == 0) {
+    // The war machine workshops, the shipyard and the gong give back their extra tiles (state nibble 0x20
+    // and up, extra_tiles set).
+    if (IsOneOf(TypeOf(b), {B::Shipyard, B::CatapultWorkshop, B::BallistaWorkshop, B::CannonWorkshop, B::LargeGong}) &&
+        b.buildup == 0) {
         const std::uint8_t state = static_cast<std::uint8_t>(b.water.state & 0xf0);
         if (state != 0 && state != 0x10 && b.water.extra_tiles != 0xff) {
             CallBuildingFn(world, kReleaseBuildingExtraTiles, number);
         }
     }
-    if ((b.art == 0x20 || b.art == 0x21) && b.dock_direction != 0xffff) {
+    if (IsOneOf(TypeOf(b), {B::Shipyard, B::Harbour}) && b.dock_direction != kNoDirection) {
         CallBuildingFn(world, kBlockBuildingLine, number);
     }
     {
@@ -791,6 +879,7 @@ std::uint32_t __fastcall CGameData_CrushBuilding(CGameData* world, void*, std::u
 // Purpose: Destroys the building standing on tile (x, y): searches outwards
 // over the offset table for a building whose layout covers the tile and
 // crushes it. Logs every step past 9900 entries and keeps searching.
+// CGameData::DestroyBuildingAt (0x4d97b0).
 std::uint32_t __fastcall CGameData_DestroyBuildingAt(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     std::uint32_t found = 0;
     std::uint32_t number = y;  // the original's register starts with y (never used unless found)
@@ -802,6 +891,7 @@ std::uint32_t __fastcall CGameData_DestroyBuildingAt(CGameData* world, void*, st
             (TileAt(world, tx, ty).flags & layout::kTileHasBuilding) != 0) {
             number = TileAt(world, tx, ty).object_number;
             const Building& b = world->buildings[number];
+            // Whether (x, y) is one of its footprint or border tiles (the whole layout is scanned).
             const std::uint32_t* p = Layout(b.race, b.art);
             while (*p++ != kMarkFootprint) {
             }
@@ -821,7 +911,7 @@ std::uint32_t __fastcall CGameData_DestroyBuildingAt(CGameData* world, void*, st
                 p += 2;
             }
         }
-        if (k + 1 >= 0x26ac) {
+        if (k + 1 >= kSearchWarning) {
             GameDebugLog(texts::kBuildingNotInRange, x, y);
         }
     }
@@ -1554,7 +1644,7 @@ void CompareCrushBuilding(test::Context& ctx, CrushFn candidate, int cases) {
         worlds.Both([&](CGameData* w) {
             w->buildings[number].owner = owner;
             w->buildings[number].garrison = garrison;
-            if (IsMilitary(type)) {
+            if (IsMilitary(static_cast<BuildingType>(type))) {
                 w->buildings[number].guard = soldier;
             }
             for (int p = 0; p < 4; ++p) {
