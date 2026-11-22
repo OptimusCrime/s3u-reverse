@@ -7620,10 +7620,105 @@ def _us_family_m(rng, fields, n, ctx):
 
 # ---- family f (food, settler_jobs_food.cpp) ----
 US_EXEMPT_F = ()
+US_FOOD_TYPES = (0xB, 0x1C, 0xE, 0x10, 0xC, 0xD, 0x11, 0x12)
+US_FOOD_TERRAINS = (0x10, 0x10, 0x10, 0x30, 0x30, 0x00, 0x05, 0x60, 0x60, 0x20, 0x40)
+US_FOOD_OBJECTS = (0x55, 0x5A, 0x5B, 0x5C, 0x5D, 0x59, 0x01, 0x80)
+
+
+def _us_food_patch(rng, fields, cx, cy, radius, area):
+    """Tiles around (cx, cy) as the food jobs look for them: mostly free
+    grass, shore, water and class 0x60 tiles of the door's area, fields
+    (0x55 sown, 0x5a..0x5c ripe, 0x5d harvested) here and there."""
+    for dx in range(-radius, radius + 1):
+        for dy in range(-radius, radius + 1):
+            if cx + dx < 0 or cy + dy < 0:
+                continue
+            t = tile(cx + dx, cy + dy)
+            fields += [(t + 6, rng.choice(US_FOOD_TERRAINS), 1),
+                       (t + 7, 0 if rng.random() < 0.7 else rng.choice(US_FOOD_OBJECTS), 1),
+                       (t + 2, 0 if rng.random() < 0.85 else rng.randint(1, US_PILES), 2),
+                       (t + 0xA, rng.getrandbits(8) & (0xF6 if rng.random() < 0.85 else 0xFF), 1),
+                       (t + 0x14, area if rng.random() < 0.85 else rng.randrange(US_AREAS), 2),
+                       (t + 0x11, rng.randrange(8), 1)]
 
 
 def _us_family_f(rng, fields, n, ctx):
-    pass
+    """Like the in-process FoodCustomize (settler_jobs_food.cpp): the
+    settler's own building with its door, work spot, output pile and the
+    three weapon piles at the door, area weapon settings (18..20: ordered,
+    share, made; zeros and 0xff), tile patches around the work spot and the
+    settler."""
+    s = ctx["record"]
+    b = rng.randint(1, US_OTHERS)
+    r = BUILDINGS + b * BUILDING_BYTES
+    door_x, door_y = rng.randint(50, 330), rng.randint(50, 330)
+    if rng.random() < 0.1:
+        # At the map's edge: searches look at spots off the map.
+        door_x = rng.choice((2, 3, 4, 379, 380, 381)) if rng.random() < 0.5 else door_x
+        door_y = rng.choice((2, 3, 4, 379, 380, 381)) if door_x in (50, 330) or rng.random() < 0.5 else door_y
+    work_x, work_y = door_x + rng.randint(-3, 3), door_y + rng.randint(-3, 3)
+    x, y = work_x + rng.randint(-4, 4), work_y + rng.randint(-4, 4)
+    area = rng.randint(1, US_AREAS - 1)
+    art = rng.choice(US_FOOD_TYPES) if rng.random() < 0.7 else ctx["art"]
+    if rng.random() < 0.3:
+        # The rarer paths: weapon smith start / finish (0x75, 0x86), sowing
+        # (0x91), harvesting (0x96), the fisher's and the waterworker's
+        # searches (0x76, 0x7c).
+        fields.append((s + 0xE, rng.choice((0x75, 0x86, 0x86, 0x91, 0x96, 0x76, 0x7C, 0x7C)), 2))
+    nxt = rng.randrange(40)
+    if rng.random() < 0.1:
+        # A search cursor just before its wrap at 2000, with a sane offset
+        # table there (the generic rings cover only the first 217 entries).
+        nxt = rng.randint(1985, 1999)
+        for k in range(1950, 2051):
+            o = NEIGHBOUR_OFFSETS + 16 * k
+            fields += [(o, rng.randint(-6, 6) & 0xFFFFFFFF, 4), (o + 4, rng.randint(-6, 6) & 0xFFFFFFFF, 4)]
+    fields += [(s + 0x1, art, 1), (s + 0x4, x, 2), (s + 0x6, y, 2), (s + 0x22, b, 2),
+               (s + 0x10, nxt, 2),
+               (s + 0x15, 0 if rng.random() < 0.5 else rng.randrange(30), 1), (s + 0x17, rng.randrange(4), 1),
+               (r + 0x18, (rng.getrandbits(8) | 1) if rng.random() < 0.8 else rng.getrandbits(8) & 0xFE, 1),
+               (r + 0x1D, rng.randrange(7), 1),
+               (r + 0xA, door_x, 2), (r + 0xC, door_y, 2), (r + 0x30, work_x, 2), (r + 0x32, work_y, 2)]
+    piles = [rng.randint(1, US_PILES) for _ in range(4)]
+    amounts = [rng.randrange(9) if rng.random() < 0.75 else rng.getrandbits(8) for _ in range(4)]
+    fields += [(r + 0xE, piles[0], 2), (PILES + piles[0] * PILE_BYTES + 1, amounts[0], 1)]
+    a = AREAS + area * AREA_BYTES
+    no_weapons = rng.random() < 0.2  # nothing ordered and no shares: the smith waits
+    for k in range(3):
+        for base in (0x18A, 0x1AE, 0x1D2):
+            v = 0 if rng.random() < 0.5 else 0xFF if rng.random() < (0.5 if base == 0x1D2 else 0.3) else rng.randrange(10)
+            fields.append((a + base + 18 + k, 0 if no_weapons and base != 0x1D2 else v, 1))
+    if rng.random() < 0.15:
+        # Nothing ordered, every weapon has a share, some made counts are
+        # 0xff: the share path picks any of the three and clears the
+        # settings (ClearAreaGoodsSettings1D2) before counting.
+        for k in range(3):
+            fields += [(a + 0x18A + 18 + k, 0, 1), (a + 0x1AE + 18 + k, rng.randint(1, 9), 1),
+                       (a + 0x1D2 + 18 + k, 0xFF if rng.random() < 0.5 else rng.randrange(10), 1)]
+    _us_food_patch(rng, fields, work_x, work_y, 7, area)
+    _us_food_patch(rng, fields, x, y, 2, area)
+    if rng.random() < 0.1:
+        # No shore near the work spot: the fisher's search tries all 50
+        # offsets in vain.
+        for dx in range(-7, 8):
+            for dy in range(-7, 8):
+                if work_x + dx >= 0 and work_y + dy >= 0:
+                    fields.append((tile(work_x + dx, work_y + dy) + 6, 0x10, 1))
+    if rng.random() < 0.3:
+        # A free grass spot to sow on (job 0x91): the settler's tile and its
+        # six neighbours without objects, numbers and blocking flags.
+        for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1)):
+            t = tile(x + dx, y + dy)
+            fields += [(t + 7, 0, 1), (t + 2, 0, 2), (t + 0xA, rng.getrandbits(8) & 0xF6, 1)]
+        fields.append((tile(x, y) + 6, 0x10 | rng.randrange(16), 1))
+    elif rng.random() < 0.3:
+        fields.append((tile(x, y) + 7, rng.randint(0x5A, 0x5C), 1))  # a ripe field to harvest (job 0x96)
+    # The door tile's area and the weapon piles (after the patches).
+    fields.append((tile(door_x, door_y) + 0x14, area, 2))
+    full = rng.random() < 0.3  # the weapon piles have no room
+    for k, dx in ((1, 0), (2, 1), (3, -1)):
+        fields += [(tile(door_x + dx, door_y) + 2, piles[k], 2),
+                   (PILES + piles[k] * PILE_BYTES + 1, rng.randint(3, 8) if full else amounts[k] & 3, 1)]
 
 
 
