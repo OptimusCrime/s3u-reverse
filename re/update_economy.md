@@ -1,4 +1,4 @@
-# UpdatePhase2 (0x4E05E0): what it is and how it is built
+# UpdateEconomy (0x4E05E0): what it is and how it is built
 
 Companion of `re/update_settlers.md` (packages, risks, CSV files). Made
 2026-11-10 from `build/s3.asm` and the jump tables in `S3.EXE`.
@@ -18,11 +18,12 @@ So presence map A always holds the military presence of the last full
 cycle (read by IsOtherPlayerNear), and every building and settler is
 visited once per 16 calls.
 
-**Name proposal: `GameWorld::UpdateEconomy`** (medium): goods requests,
-worker requests, population counts and goods distribution, time-sliced.
-The presence-map part is military, so `UpdateEconomyAndPresence` would be
-more exact but clumsy. The current name "UpdatePhase2" only says where it
-is called.
+**Name: `GameWorld::UpdateEconomy`** (was "UpdatePhase2", which only said
+where it is called; renamed 2026-11-22 when it was reimplemented in
+`src/s3re/game/update_economy.cpp`, whose header and handler comments are
+the exact description): goods requests, worker requests, population counts
+and goods distribution, time-sliced. The presence-map part is military, so
+`UpdateEconomyAndPresence` would be more exact but clumsy.
 
 ## Buildings (phases 1..16)
 
@@ -103,3 +104,27 @@ Risks specific to this function: a 0x5C8-byte stack frame (check for
 locals read before they are written per building type); the presence
 maps and the notification timers are also written by UI-side code
 (re/world_layout.md); everything else as in `re/update_settlers.md`.
+
+## Corrections from the reimplementation (2026-11-22)
+
+The reimplementation (`src/s3re/game/update_economy.cpp`, verified) settled
+the details; where this analysis differs, the code is right:
+
+- The "SendCarriersToPile when a pile's +1 and +2 differ" step is per
+  building: production buildings send a carrier to their output pile (+0xE)
+  once amount - leaving >= 5 (signed); types 0xC/0xD/0x35 check the piles
+  dropped on the tiles around the door instead (7, 3 and 2 tiles).
+- Types 2, 3, 0xE, 0x18, 0x19, 0x1E, 0x24 do have work: they request their
+  worker (types 3, 4, 0x1D, 0x10, 0x11, 0x12, 0x26) and collect output;
+  only type 6 (and types outside 2..0x38) do nothing.
+- Phase 17 per area: FetchGoodsToTradeBuilding for slot list B (+0xE2),
+  then for each priority rank 1..0x1A/0x1B/0x1D (by race) the goods with
+  that rank in +0x1F6, then slot list A (+0x9A). Per goods type: the
+  consumer type (per-goods lists in the code) with the lowest
+  (counter +0x278 * 256 + 128) / weight +0x245 that has a requesting
+  building, then the requesting building with the highest requested amount
+  (BuildingInputWord24 << 16) / pile distance score gets a carrier (job 10)
+  from the best pile; goods 5 get a second delivery.
+- Uninitialized stack the original reads: see the header of
+  update_economy.cpp (trade buildings' goods table, phase 17's highest
+  rank for races above 3).

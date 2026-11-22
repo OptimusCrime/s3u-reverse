@@ -32,7 +32,7 @@ unit,code_start,code_end,init_block_start,functions,init_stubs,first_function,na
 31,0x4d3050,0x4d65e0,0x4d5be0,5,41,0x4d3050 Logic_sub_4d3050,
 32,0x4d65e0,0x4d9250,0x4d8850,31,41,0x4d65e0 Logic_sub_4d65e0,
 33,0x4d9250,0x4e05e0,0x4dfbe0,45,41,0x4d9250 Logic_sub_4d9250,
-34,0x4e05e0,0x4e5450,0x4e4a50,4,41,0x4e05e0 GameWorld::UpdatePhase2,
+34,0x4e05e0,0x4e5450,0x4e4a50,4,41,0x4e05e0 GameWorld::UpdateEconomy,
 35,0x4e5450,0x4e7810,0x4e6e10,15,41,0x4e5450 GameWorld::AssignTileToArea,
 36,0x4e7810,0x4e9670,0x4e8c70,6,41,0x4e7810 GameWorld::UpdateEnvironment,
 37,0x4e9670,0x4fb520,0x4fab20,12,41,0x4e9670 GameWorld::UpdateSettlers,

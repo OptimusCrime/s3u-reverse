@@ -492,7 +492,7 @@ S3RE_TEST(GameWorld_RemoveBuildingFromAreaRequests_ComparisonDetectsWrongImpleme
 // ---------------------------------------------------------------------------
 // GameWorld::GoodsRequestPriority (0x004ff380): (amount, coming) -> 64000 -
 // 8000 * amount - 4000 * coming (32-bit). Called three times by
-// UpdatePhase2 with the amount (pile +0x1) and units on the way (+0x3) of a
+// UpdateEconomy with the amount (pile +0x1) and units on the way (+0x3) of a
 // building's input pile, just before AddBuildingGoodsRequest, so probably
 // the request's priority: the emptier the pile, the more urgent. ECX
 // unused (overwritten). ret 8.

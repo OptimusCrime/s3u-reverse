@@ -19,7 +19,7 @@ Each item: what, why, and where to start.
   from RTTI. Large mechanical change; do it in one dedicated commit after
   the struct refactor.
 - **Audit provisional names.** Many names were given early from partial
-  evidence (e.g. `GameWorld::UpdateSettlers`, `GameWorld::UpdatePhase2`,
+  evidence (e.g. `GameWorld::UpdateSettlers`,
   `Logic_sub_*` / `SaveGame_sub_*` / `AI_sub_*` survey names). Review them
   when the functions are worked on; see the naming rule in `CLAUDE.md`.
 - **Rename `Settler::direction` (+0x8).** `GameWorld::SetSettlerAnimation`

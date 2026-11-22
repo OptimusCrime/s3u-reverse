@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1000" fill="#ffffff"/>
 <g><rect x="0" y="0" width="1220.1" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 9.4% verified (5.7% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 10.4% verified (6.8% in a whole game)</text>
 <g><title>(free functions): 2512 functions</title><rect x="2" y="19" width="742.6" height="979" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="337.2" height="144.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -5033,8 +5033,8 @@
 <text x="746.6" y="27.5" font-size="8.5" fill="#ffffff">GameWorld</text>
 <rect x="745.1" y="30.5" width="155.8" height="282.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::UpdateSettlers @ 0x004e9670
 66448 bytes — Classified (class/role known)</title></rect>
-<rect x="900.9" y="30.5" width="91.5" height="126.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::UpdatePhase2 @ 0x004e05e0
-17520 bytes — Classified (class/role known)</title></rect>
+<rect x="900.9" y="30.5" width="91.5" height="126.8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::UpdateEconomy @ 0x004e05e0
+17520 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="900.9" y="157.3" width="91.5" height="84.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::WalkSettler @ 0x00500860
 11696 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="900.9" y="241.9" width="91.5" height="70.8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::Create @ 0x005166d0

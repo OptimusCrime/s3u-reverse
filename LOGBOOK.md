@@ -550,6 +550,45 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-22 (45): UpdateEconomy (was UpdatePhase2), parallel worktree
+
+- **GameWorld::UpdateEconomy 0x4e05e0** (was "UpdatePhase2", ~4,800
+  instructions) reimplemented and verified, hooked as one unit in
+  `src/s3re/game/update_economy.cpp`: StartEconomyCycle (phase 0),
+  MarkMilitaryPresence, UpdateConstructionSite, UpdateFinishedBuilding
+  (one switch on the type; helpers Production/RequestInput/CollectOutput
+  and UpdateMilitaryBuilding, UpdateTileDropBuilding (0xC/0xD),
+  UpdateBuilding13, UpdateResidence, UpdateWaterBuilding, UpdateShipyard,
+  UpdateTradeBuilding, UpdateTemple, UpdateOffering), DistributeAreaGoods /
+  DistributeGoods (phase 17). Every callee is called through its S3.EXE
+  address. Renamed everywhere (inventory, docs, comments; whole_game.py
+  fix-names); `re/update_phase2.md` is now `re/update_economy.md` with a
+  corrections section (the earlier analysis had a few wrong details).
+- **Evidence:** in-process GameWorld_UpdateEconomy_MatchesOriginal (4,000
+  cases; list-walking callees as CalleeStubs with argument-derived returns
+  and side effects; DebugLogs and the global 0x7acfe0 compared) + mutation
+  test; emulator spec 4,000 cases, 0 mismatches, 863/863 blocks with two
+  exempt dead blocks (a zero candidate; the 0x80000002 skip of the site
+  object-clear list, which no table entry reaches: the original parses that
+  list one dword off, from the block list's end marker on, harmless through
+  the 32-bit wrap, reproduced). Whole-game, all identical to the original:
+  both replays (3,000 ticks), saves slot 1..3 (2,000), random map 384,0
+  (2,000); call counts recorded. Per handler type (temporary census log,
+  removed again; same code otherwise): reached 2-5 7 9 0xB-0x15 0x17-0x1C
+  0x1E 0x1F 0x23 0x27 0x2B 0x33 0x34 0x36 0x37 and sites; tests only: 8
+  0x16 0x1D 0x20-0x22 (shipyard, trade) 0x24-0x26 0x28-0x2A 0x2C-0x32 0x35
+  0x38 (a late-game recording would cover them).
+- **Known differences** (unrealistic data only; header of the .cpp): trade
+  buildings' goods table reads stale stack beyond 0x24 entries (ours: 0);
+  phase 17's highest rank is stale stack for a first area of race > 3 (the
+  original then loops/crashes; tests keep the first area's race 0..3).
+- **Harness (emu.py):** Spec.callees entries may give `returns` as a
+  function returns(h) and a fourth element effect(machine, ecx, args, h).
+  Backward compatible; self-test 21/21 and a few probe specs rerun, the
+  full suite was not run (other agents) - include it in the next round end.
+- Building fields learned (re/structs.md): +0x08 worker / garrison head,
+  +0x0E output pile, +0x16/+0x17 digger/builder slot bits, per-type
+  meanings of +0x19..+0x20, +0x18 request-flag uses.
 ### 2026-11-22 (45): package D: UpdateEnvironment (parallel worktree)
 
 Call tree of GameWorld::UpdateEnvironment 0x4E7810 mapped in

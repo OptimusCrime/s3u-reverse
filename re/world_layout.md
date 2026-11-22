@@ -93,7 +93,7 @@ Initialization order (all verified by reading the code):
 | 0xE145E8 | 0x10F45E8 | 0x2E0000 | 0x2E0 B | 4096 | **areas = economy sectors** ("Econ"), `Area` | verified |
 | 0x10F45E8 | 0x110A578 | 0x15F90 | 0x5A B | 1000 | **trade records** ("Trad", our "building extra"), `Trade` | verified (layout) |
 | 0x110A578 | 0x110A57C | 4 | uint32 | | trade high-water mark (`maxusedtrade`) | verified |
-| 0x110A57C | 0x110A588 | 0xC | uint32 x3 | | saved counters: +0 (UpdatePhase2), +4 fog-of-war cycle counter 0..55 (UpdateEnvironment; fog_of_war.cpp), +8 minimap cycle counter 0..63 (UpdateEnvironment, 0x4FB520; reset to 0x3F) | strong |
+| 0x110A57C | 0x110A588 | 0xC | uint32 x3 | | saved counters: +0 (UpdateEconomy), +4 fog-of-war cycle counter 0..55 (UpdateEnvironment; fog_of_war.cpp), +8 minimap cycle counter 0..63 (UpdateEnvironment, 0x4FB520; reset to 0x3F) | strong |
 | 0x110A588 | 0x1158788 | 0x4E200 | 16 B | 20000 | **offset table** (tiles sorted by distance), `MapOffset` | verified |
 | 0x1158788 | 0x118A47C | 0x31CF4 | uint8[20] | 101 x 101 | territory claims of the players for the 101 x 101 tiles around (x, y) (cell [i][j] = tile (x - 50 + i, y - 50 + j)), filled by RecalculateTerritory 0x519A90 | verified |
 | 0x118A47C | 0x11940BC | 0x9C40 | uint16[10][100] | 20 players | player settler lists (set by command 3) | verified |
@@ -234,7 +234,7 @@ Counts are the displacement uses `tools/world_fields.py regions` finds
   AddTilePileToArea, AddGoodsToPile, PileIncAmountLeaving,
   AddBuildingGoodsRequest, RemoveBuildingFromAreaRequests,
   SetAreaBuildingSlotA/B, FetchGoodsToTradeBuilding, ClearAreaGoodsSettings1D2,
-  SumAreaGoods10PerPlayer; UpdateSettlers/UpdatePhase2/ExecuteCommands for
+  SumAreaGoods10PerPlayer; UpdateSettlers/UpdateEconomy/ExecuteCommands for
   the settings arrays.
 - **Settlers** (3844 uses, 118 functions): CreateSettler, SetSettlerTarget,
   ClearSettlerJob, RestoreSettlerDirection, SettlerStartHealth,
@@ -244,7 +244,7 @@ Counts are the displacement uses `tools/world_fields.py regions` finds
   (settler removal), 0x50E9F0.
 - **Buildings** (2629 uses, 97 functions): 0x4DBC50 (BuildingDone),
   0x4DD280, RemoveBuildingFromTiles, Take/ReleaseBuildingExtraTiles,
-  building flags/goods functions, CountBuildings*, UpdatePhase2.
+  building flags/goods functions, CountBuildings*, UpdateEconomy.
 - **Piles** (729 uses, 51 functions): area_piles.cpp and goods_piles.cpp
   functions, 0x504420, 0x504F70 ("Pile %u Lost"), 0x5052C0, 0x505AC0.
 - **Players** (739 uses, 105 functions): ShiftStatistics,
@@ -268,9 +268,9 @@ Counts are the displacement uses `tools/world_fields.py regions` finds
   y) adds a notification for the local player only, unless a recent one of
   the same type lies within the type's radius (table S3.EXE 0x659DD0, 20
   bytes per type; it also depends on a UI setting read by 0x49F510 on
-  0x7A7AF0); CountDownTimers ages the timers each UpdatePhase2; 0x4FEE90 and
+  0x7A7AF0); CountDownTimers ages the timers each UpdateEconomy; 0x4FEE90 and
   ProcessEvents/PrepareDrawData show them.
-- **Presence maps**: IsOtherPlayerNear (A), UpdatePhase2 (B), OnStart.
+- **Presence maps**: IsOtherPlayerNear (A), UpdateEconomy (B), OnStart.
 - **Territory scratch 0x1158788**: 0x519A90 (cleared on each call): for
   military buildings of types 0xF/0x10/0x12 with +0x8 != 0 and +0x21 == 0
   it marks, per player byte, the cells within offset-table entry 0xDAC /

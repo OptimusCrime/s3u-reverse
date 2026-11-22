@@ -167,7 +167,7 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   CLogicThread::Step (0x53db30)             one simulation step:
     world = this->[+0x3a0]
     world->UpdateEnvironment (0x4e7810)     map/landscape, timed events
-    world->UpdatePhase2      (0x4e05e0)     unknown
+    world->UpdateEconomy     (0x4e05e0)     economy, 18 time slices (was "UpdatePhase2")
     world->UpdateSettlers    (0x4e9670)     settler jobs (provisional)
     0x550f80 on 20 objects at this+0x350    per player? (unknown)
     game-end check 0x511c50, tick bookkeeping

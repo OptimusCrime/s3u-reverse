@@ -44,7 +44,7 @@
 //   bytes at world+0x2e5e0; an entry is active while its int32 +0x0 is not
 //   0, and the active entries come first. Decrements every active entry;
 //   an entry that reaches 0 is removed (the entries after it move up, the
-//   last one is cleared). Called once per UpdatePhase2. Plain ret; EAX
+//   last one is cleared). Called once per UpdateEconomy. Plain ret; EAX
 //   ignored.
 // GameWorld::AddToRecentPositions (0x00510770): (x, y) 128 uint16 pairs
 //   {y, x} at world+0x1195dd4. If (x, y) is not in the list, stores it in

@@ -131,7 +131,7 @@ votes only.
   object file. `re/obj_units.csv` lists the 73 units (blocks closer than
   0x400 bytes are merged, so a few units hold 2-3 small files: those with
   82-124 stubs). Evidence that the boundaries are real: units start exactly
-  at known first-of-file functions, e.g. `GameWorld::UpdatePhase2`
+  at known first-of-file functions, e.g. `GameWorld::UpdateEconomy`
   (0x4e05e0), `GameWorld::UpdateEnvironment` (0x4e7810),
   `GameWorld::UpdateSettlers` (0x4e9670), `CGameData::CGameData`
   (0x4fc990), `CLogicThread::ExecuteCommands` (0x535990),
@@ -140,7 +140,7 @@ votes only.
   (0x45a120) sits right after a block, alone with its own block, so it has
   its own source file (as source_files.md suspected).
 - **The simulation gap has about 15 unnamed source files** (units 31-42,
-  45-47): one each for UpdatePhase2, UpdateEnvironment, UpdateSettlers, the
+  45-47): one each for UpdateEconomy, UpdateEnvironment, UpdateSettlers, the
   CGameData constructor/init, map generation (0x516530..), and others.
   Unit 1 (0x401000..0x401a10) is almost only initializers (3 other functions); unit 2
   (0x401a10..0x4043d0) is the std::string instantiation.

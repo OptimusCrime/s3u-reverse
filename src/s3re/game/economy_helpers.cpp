@@ -1,5 +1,5 @@
 // Small helpers of the settler and economy updates (UpdateSettlers,
-// UpdatePhase2).
+// UpdateEconomy).
 //
 // GameWorld::CountOtherPileClaims (0x00510800): (settler, pile) -> how many
 //   of the 128 entries at world+0x1195dd4 have word 0 == pile and word 1 !=

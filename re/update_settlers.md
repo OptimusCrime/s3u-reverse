@@ -1,7 +1,7 @@
 # UpdateSettlers and its callees: work map
 
 Analysis for the batches that replace `GameWorld::UpdateSettlers` (0x4E9670),
-`GameWorld::UpdatePhase2` (0x4E05E0, see `re/update_phase2.md`) and their
+`GameWorld::UpdateEconomy` (0x4E05E0, see `re/update_economy.md`) and their
 callees. Made 2026-11-10 from `build/s3.asm`, the jump tables read from
 `S3.EXE`, `re/functions.csv` and `tools/world_fields.py`; no game runs, no
 decompiler output. Names below are proposals (ours, can be wrong), not
@@ -26,7 +26,7 @@ How the forest was computed: direct calls in the function ranges of
 `reimplemented` or CRT/DebugLog or a done trivial forwarder (frontier.py's
 rule). Calls into `StaticInit_*`/`StaticDtorReg_*` were dropped: they come
 from static-initializer stubs that sit inside a Ghidra range after the real
-function end (UpdatePhase2's range contains the stub `call 0x4E4A50; jmp
+function end (UpdateEconomy's range contains the stub `call 0x4E4A50; jmp
 0x4E4A70` at 0x4E4A40, so a naive walk adds 270 bogus nodes through the
 "\General"/"\Index Server"/"\Patches" initializers).
 
@@ -35,14 +35,14 @@ function end (UpdatePhase2's range contains the stub `call 0x4E4A50; jmp
 | | instructions | undone direct callees | undone transitive |
 |---|---|---|---|
 | UpdateSettlers 0x4E9670 | 16,626 code (+~900 lines of jump-table data dumpbin decodes as code) | 25 | 70 |
-| UpdatePhase2 0x4E05E0 | 4,797 code (to `ret` at 0x4E492B; tables and the init stub follow) | 6 | 10 |
+| UpdateEconomy 0x4E05E0 | 4,797 code (to `ret` at 0x4E492B; tables and the init stub follow) | 6 | 10 |
 | Both trees together | | | 76 functions, 18,628 instructions |
 
 The direct undone callees of UpdateSettlers: 0x4D97B0, 0x4DBC50, 0x4F9A00,
 0x4F9B80, 0x4FA220, 0x4FAA70, 0x4FEC10, 0x500860, 0x5046B0, 0x505820,
 0x505C20, 0x50CB20, 0x50CCB0, 0x50CF50, 0x50DD20, 0x50E140, 0x50E320,
 0x50E9F0, 0x510800, 0x519670, 0x519A90, 0x51B640, 0x51BA00, 0x544630,
-0x5449F0. Of UpdatePhase2: 0x4DACD0, 0x4FEC10, 0x5052C0, 0x505820,
+0x5449F0. Of UpdateEconomy: 0x4DACD0, 0x4FEC10, 0x5052C0, 0x505820,
 0x50E200, 0x5104C0. Shared by both roots: 0x4FEC10, 0x505820 (and below
 them 0x5061B0, 0x49F510). (LOGBOOK said 27/8; the difference is the two
 compiler stubs above and counting conventions.)
@@ -57,7 +57,7 @@ Big subtrees (exclusive sizes):
 | Building destruction (0x4D97B0, 0x4D9250, 0x4DE430 and helpers) | 13 | 2,362 |
 | BuildingDone 0x4DBC50 | 1 | 1,440 |
 | Settler reset 0x50CF50 + 0x5046B0 + 0x5061B0 | 3 | 1,213 |
-| UpdatePhase2 callees | 4 | 1,028 |
+| UpdateEconomy callees | 4 | 1,028 |
 | Miner helpers 0x4F9A00, 0x4F9B80, 0x4FA220, 0x4FAA70 | 4 | 890 |
 | Projectile effects 0x545B90 + 3 (x87) | 4 | 688 |
 | Territory 0x519A90, 0x51B640, 0x504F70, 0x50E980 | 4 | 517 |
@@ -119,13 +119,13 @@ Order (the first wave is what A and C call most):
    0x4DEE20, 0x4DEEC0), 0x505C20, 0x4F9B80, 0x4FA220.
 4. 0x50E9F0 UpdateSoldier (calls C's 0x519A90 and 0x51B640).
 
-### Package C: buildings, territory, terrain, UpdatePhase2 callees (22 functions, 5,448 instructions)
+### Package C: buildings, territory, terrain, UpdateEconomy callees (22 functions, 5,448 instructions)
 
 Files: `game/building_done.cpp` (0x4DBC50), `game/building_crush.cpp`
 (0x4D97B0, 0x4D9250, 0x4DE430, 0x504A00, 0x504B70, 0x504E20, 0x50E3B0,
 0x51AAE0, 0x4DBB10, 0x4DBB90), `game/territory.cpp` (0x519A90, 0x51B640,
 0x504F70, 0x50E980), `game/terrain_updates.cpp` (0x519670, 0x51BA00,
-0x510800), `game/economy.cpp` (UpdatePhase2's 0x4DACD0, 0x5052C0,
+0x510800), `game/economy.cpp` (UpdateEconomy's 0x4DACD0, 0x5052C0,
 0x5104C0, 0x50E200).
 
 Order:
@@ -145,10 +145,10 @@ Order:
 | callee | owner | called from other packages |
 |---|---|---|
 | 0x50CF50 ResetSettlerToIdle | B | A (0x500860), C (0x4DBB10, 0x4DE430, 0x504A00, 0x504B70, 0x504E20, 0x504F70, 0x50E3B0, 0x50E980) |
-| 0x505820 TakeGoodFromPile | B | C (0x504B70, 0x504E20), UpdatePhase2 |
+| 0x505820 TakeGoodFromPile | B | C (0x504B70, 0x504E20), UpdateEconomy |
 | 0x5046B0 DropGoodNear | B | C (0x4DE430) |
 | 0x5061B0 SetPileGood | B | C (0x5052C0) |
-| 0x4FEC10 NotifyLocalPlayer | B | C (0x4DACD0), UpdatePhase2, UpdateEnvironment |
+| 0x4FEC10 NotifyLocalPlayer | B | C (0x4DACD0), UpdateEconomy, UpdateEnvironment |
 | 0x545B90 SpawnProjectile | B | A (0x500860) |
 | 0x519A90 RecalculateTerritory | C | B (0x50E9F0) |
 | 0x51B640 ClearTileOwner | C | B (0x50E9F0) |
@@ -361,7 +361,7 @@ subsystem guess came from their position.
 - **x87.** Only in four MapEffects projectile helpers of package B:
   0x545150, 0x5453F0, 0x5458D0 (fild, fmul by 0.05/0.05/0.1, `_ftol`) and
   0x545730 (fild of dx*dx+dy*dy, fsqrt, fmul 0.04, `_ftol`). UpdateSettlers
-  and UpdatePhase2 have none (the f-instructions dumpbin shows in them are
+  and UpdateEconomy have none (the f-instructions dumpbin shows in them are
   jump-table data). Per the LOGBOOK proposal: `double`, same operation
   order, truncation for `_ftol`; emulator cases where the product lands
   next to an integer (e.g. distance 20 * 0.05); confirm the control word

@@ -243,7 +243,7 @@ struct Player {
     std::int32_t spell_mana[8];      // 0x094
     std::int32_t unk0b4[4];          // 0x0b4
     // 0x0c4..0x0d4: recomputed by RecountPlayerPopulation (0x5104c0) in
-    // UpdatePhase2; meanings partly guesses (re/structs.md).
+    // UpdateEconomy; meanings partly guesses (re/structs.md).
     std::uint32_t population;        // 0x0c4 civilians (settler class 0 or 10..29)
     std::uint32_t population_limit;  // 0x0c8 limit_base + 10/30/100 per finished residence 0x1a/0x1b/0x1c
     std::uint32_t population_limit_base;  // 0x0cc +1 per civilian created by 0x50cb20 (probably)

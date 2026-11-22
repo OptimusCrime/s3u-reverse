@@ -398,8 +398,12 @@ class Emulator:
         """Probes calls of S3.EXE functions instead of running them:
         {address: (stack argument count, convention, returns)} with convention
         "cdecl" (caller pops), "stdcall" or "thiscall" (ECX recorded too) and
-        returns "this" (EAX = ECX, a constructor) or "probe" (0, 1 or random,
-        as for virtual calls). Recorded as ("callee", address, ECX or None,
+        returns "this" (EAX = ECX, a constructor), "probe" (0, 1 or random,
+        as for virtual calls) or a function returns(h) -> EAX (h: a random
+        64-bit value fixed by the case and the call's position). An optional
+        fourth element effect(machine, ECX, arguments, h) runs after the
+        call is recorded (a callee's side effects, written with
+        guest_write). Recorded as ("callee", address, ECX or None,
         arguments...)."""
         for handle in self._callee_hooks:
             self.uc.hook_del(handle)
@@ -409,11 +413,17 @@ class Emulator:
             self._callee_hooks.append(self.uc.hook_add(UC_HOOK_CODE, self._on_callee, begin=address, end=address))
 
     def _on_callee(self, uc, address, size, user_data):
-        count, convention, returns = self.callees[address]
+        count, convention, returns = self.callees[address][:3]
+        effect = self.callees[address][3] if len(self.callees[address]) > 3 else None
         esp, ret, args = self._stack_args(uc, count)
         ecx = uc.reg_read(UC_X86_REG_ECX) if convention == "thiscall" else None
         self.probe_calls.append(("callee", address, ecx, *args))
-        eax = ecx if returns == "this" else self._probe_value()
+        if callable(returns):
+            eax = returns(_mix((self.seed << 32) ^ (0xCA11E000 + len(self.probe_calls))))
+        else:
+            eax = ecx if returns == "this" else self._probe_value()
+        if effect is not None:
+            effect(self, ecx, args, _mix((self.seed << 32) ^ (0xCA11EF00 + len(self.probe_calls))))
         self._finish_probe(uc, esp, ret, 0 if convention == "cdecl" else count, eax)
 
     def _on_api(self, uc, address, size, user_data):

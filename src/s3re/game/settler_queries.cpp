@@ -99,7 +99,7 @@
 //   nibble: units on the way), the carrier is sent to the source pile
 //   (GameWorld::SetSettlerTarget) and gets job word +0xe = 0x4c, +0xc = 0,
 //   word +0x22 = destination and byte +0x1a = goods. Probably a market or
-//   port ordering goods to trade. Callers (UpdatePhase2) ignore EAX.
+//   port ordering goods to trade. Callers (UpdateEconomy) ignore EAX.
 //   ret 0xc.
 // All thiscall (ECX = world).
 

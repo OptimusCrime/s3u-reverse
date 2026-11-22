@@ -1,4 +1,4 @@
-// Callees of GameWorld::UpdatePhase2 (0x4e05e0): population counts and
+// Callees of GameWorld::UpdateEconomy (0x4e05e0): population counts and
 // helpers of the economy step.
 //
 // GameWorld::RecountPlayerPopulation (0x005104c0): () thiscall, ret. For
@@ -14,17 +14,17 @@
 //   = carriers - (((limit << 16) / population) * carriers >> 16) (all 32-bit
 //   unsigned, truncating), else 0. The owner indexes the player records
 //   without a bound check, as in the original. EAX: not used by the only
-//   caller (UpdatePhase2).
+//   caller (UpdateEconomy).
 // GameWorld::SetTowerSoldierAnimation (0x0050e200): (settler) thiscall,
 //   ret 4. Animation kind 0x176, or 0x177..0x17e for settler types 0x20,
 //   0x23, 8, 0x1e, 0x21, 0xf, 0x1f, 0x22 (the soldier types); + 9 if the
 //   settler's building (+0x22) has type 0x10, + 0x12 for type 0x12; + 0x1b
 //   / + 0x36 for the building's race 1 / 2. Then SetSettlerAnimation(settler,
 //   kind); EAX = its result (the one caller overwrites AL at once). Called by
-//   UpdatePhase2 when a soldier enters a military building.
+//   UpdateEconomy when a soldier enters a military building.
 // GameWorld::RequestSettlerForBuilding (0x004dacd0): (building, type)
 //   thiscall, ret 8; EAX = the settler sent, or 0 (25 call sites in
-//   UpdatePhase2 test it). Area = the area of the building's door tile
+//   UpdateEconomy test it). Area = the area of the building's door tile
 //   (+0xa/+0xc). 1) The nearest (TileDistance from the building's position
 //   +0x2/+0x4, first of equals) settler in the area's idle list of `type`
 //   (area +0x12a, linked by settler +0x10/+0x12) without flag 0x80 (+0x14)
@@ -59,7 +59,7 @@
 //   PileIncAmountLeaving(pile), PileIncAmountComing(target), SetPileGood(
 //   target, good) if its good differs, carrier unlinked, SetSettlerTarget(
 //   pile), job 0x4c, counter 0, building = target, good = the pile's good.
-//   Callers UpdatePhase2 and UpdateEnvironment; EAX unused.
+//   Callers UpdateEconomy and UpdateEnvironment; EAX unused.
 
 #include "game/replacements.h"
 #include "game/world.h"

@@ -89,7 +89,7 @@ constexpr std::uintptr_t kGoodType0B = 0x00730ef0;         // int32 11: output g
 constexpr std::uintptr_t kResidenceUnit = 0x00730f00;      // int8 10: residence capacity unit
 // int32[20][17] in S3.EXE's data; [owner][0] += 8 when a temple-like
 // building (0x29/0x2b/0x2d/0x37) is finished (also read/written by
-// UpdatePhase2 0x4e34a2). Meaning unknown.
+// UpdateEconomy 0x4e34a2). Meaning unknown.
 constexpr std::uintptr_t kPlayerCounters = 0x007acfe0;
 constexpr std::uint32_t kPlayerCountersStride = 17;
 

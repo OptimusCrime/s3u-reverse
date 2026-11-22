@@ -53,7 +53,7 @@ Checks against functions we already know:
 - **Only files that used the assert macro left a path.** The rest are
   unnamed and sit in the gaps between ranges. The biggest gap is
   `0x4c85a0`–`0x509980` (between DrawBuilding.cpp and GameDataSave.cpp).
-  It holds most of the simulation: `UpdatePhase2`, `UpdateEnvironment`,
+  It holds most of the simulation: `UpdateEconomy`, `UpdateEnvironment`,
   `UpdateSettlers` and `GameWorld::Random`.
 - **A range runs from the first to the last function that voted for the
   file.** The real file can start earlier and end later, and unnamed files

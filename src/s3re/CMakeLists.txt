@@ -93,6 +93,7 @@ add_library(s3re SHARED
     game/ui_overlays.cpp
     game/ui_static_text.cpp
     game/ui_state.cpp
+    game/update_economy.cpp
     game/world_create.cpp
     game/world_search.cpp
     game/win32_classes.cpp
