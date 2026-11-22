@@ -7601,20 +7601,322 @@ def _us_family_u(rng, fields, n, ctx):
 
 
 # ---- family b (building, settler_jobs_building.cpp) ----
-US_EXEMPT_B = ()
+US_EXEMPT_B = (
+    # "Digger trouble" (0x4f922f): DebugLog, then `jmp $` on purpose; the
+    # emulator would only stop at the instruction limit (ours: an endless
+    # Sleep loop). Reached only when no tile of the site needs levelling
+    # although the site says so.
+    0x004f922f, 0x004f9263,
+)
+_US_B_IMAGE: dict = {}
+
+
+def _us_b_image() -> dict:
+    """The layout lists (S3.EXE 0x6aa170) and building input goods
+    (0x6a6824) the building family's presets need."""
+    if not _US_B_IMAGE:
+        import os
+        import struct
+
+        import pefile
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                            "Settlers3Ultimate", "S3.EXE")
+        pe = pefile.PE(path, fast_load=True)
+        layouts = pe.get_data(0x6aa170 - 0x400000, 0x960 * 4 * 0x39)
+        _US_B_IMAGE["layouts"] = layouts
+        _US_B_IMAGE["inputs"] = struct.unpack("<%di" % (0x39 * 3), pe.get_data(0x6a6824 - 0x400000, 0x39 * 12))
+    return _US_B_IMAGE
+
+
+US_B_TYPES = (0, 1, 2, 3, 4, 6, 7, 5, 8, 0xf, 0x20, 0x21, 9)
+US_B_SITE_CACHE = 0x1196024
+US_B_TRADES = 0x10f45e8
 
 
 def _us_family_b(rng, fields, n, ctx):
-    pass
+    """The searches of the building family succeed now and then (as the
+    in-process test's CustomizeBuilding): small offset-table entries, the
+    tiles around the settler's building never blocked (the original hangs
+    after "Digger trouble"), a levelling grid, layouts with free spots,
+    goods the building wants."""
+    import struct
+    image = _us_b_image()
+    s = ctx["record"]
+    x, y = ctx["x"], ctx["y"]
+    if rng.random() < 0.7:
+        fields.append((s + 0x1, rng.choice(US_B_TYPES), 1))
+    job = ctx["job"]
+    if rng.random() < 0.55:  # more of the long handlers (diggers, builders, recruits, searches)
+        job = rng.choice((5, 5, 5, 5, 5, 7, 0xe, 0xe, 0x12, 0x12, 0x12, 0x12, 0x2e, 0x50, 0x18, 0x18, 0x19, 0x19, 0x1b,
+                          0x8a, 0x8a, 0xaa, 0xaa, 0x21, 0x23, 0x23, 0xe, 0xe, 0x69, 0x4f))
+        fields.append((s + 0xe, job, 2))
+    building = 0 if rng.random() < 0.1 else rng.randint(1, US_OTHERS)  # 0: the site the UI shows (global 0)
+    fields.append((s + 0x22, building, 2))
+    b = BUILDINGS + building * BUILDING_BYTES
+    bx, by = rng.randint(24, 343), rng.randint(24, 343)
+    race = rng.randrange(4)
+    art = rng.randint(1, 0x38)
+    owner = rng.randrange(4)
+    pick = rng.randrange(8)
+    buildup = 0 if pick < 2 else 1 if pick < 4 else 2 if pick < 5 else 3 if pick < 7 else \
+        (50 if rng.random() < 0.25 else rng.randint(4, 51))
+    piles = [rng.randint(1, US_PILES) for _ in range(4)]
+    levelling = rng.randrange(30)
+    fields += [(b, owner if rng.random() < 0.9 else 0xFF, 1), (b + 0x2, bx, 2), (b + 0x4, by, 2), (b + 0x6, art, 1),
+               (b + 0x7, race, 1), (b + 0xa, bx + rng.randint(-2, 2), 2), (b + 0xc, by + rng.randint(-2, 2), 2),
+               (b + 0x30, bx + rng.randint(-3, 3), 2), (b + 0x32, by + rng.randint(-3, 3), 2),
+               (b + 0x22, levelling, 2), (b + 0x18, rng.getrandbits(8), 1), (b + 0x21, buildup, 1),
+               (b + 0xe, piles[0], 2), (b + 0x10, piles[1], 2), (b + 0x12, piles[2], 2), (b + 0x14, piles[3], 2),
+               (b + 0x8, 0 if rng.random() < 0.25 else rng.randint(1, US_OTHERS), 2)]
+    amounts = [rng.randrange(9) for _ in range(4)]
+    goods = [rng.choice((0xFF, rng.randint(1, 35))) for _ in range(4)]
+    for k in range(4):
+        p = PILES + piles[k] * PILE_BYTES
+        if k > 0 and rng.random() < 0.25:
+            amounts[k] = 0
+        if k == 0 and rng.random() < 0.67:
+            amounts[k] = rng.randrange(8)
+        fields += [(p, goods[k], 1), (p + 1, amounts[k], 1)]
+    if rng.random() < 0.5:
+        fields += [(b + 0x19, amounts[1], 1), (b + 0x1a, amounts[2], 1)]
+    elif rng.random() < 0.2:
+        fields += [(b + 0x19, 0, 1), (b + 0x1a, 0, 1)]
+    # The settler: near its building, slot, saved counter, tool type, food.
+    if rng.random() < 0.5:
+        x, y = bx + rng.randint(-12, 12), by + rng.randint(-12, 12)
+        fields += [(s + 0x4, x, 2), (s + 0x6, y, 2)]
+    slot = rng.randint(1, 3) if rng.random() < 0.67 else rng.getrandbits(8)
+    good_pick = rng.randrange(4)
+    if rng.random() < 0.33 and buildup == 0:
+        slot = goods[1 + good_pick % 3]
+    food_pick = rng.randrange(4)
+    food = 0 if food_pick == 0 else rng.getrandbits(8) if food_pick == 1 else rng.randrange(12)
+    fields += [(s + 0x15, slot & 0xFF, 1), (s + 0x20, rng.randint(1, 3) if rng.random() < 0.8 else rng.randrange(5), 2),
+               (s + 0x18, rng.randrange(4), 1), (s + 0x17, food, 1)]
+    next_pick = rng.randrange(8)
+    if next_pick < 2:
+        fields.append((s + 0x10, (2960 if next_pick == 0 else 1460) + rng.randrange(40), 2))
+    if good_pick < 3:
+        fields.append((s + 0x1a, image["inputs"][art * 3 + good_pick] & 0xFF, 1))
+    elif buildup != 0:
+        fields.append((s + 0x1a, 1 + rng.randrange(2), 1))
+    # Small offset table entries 0..299 (the builder's door search has no limit).
+    offsets = [(rng.randint(-4, 4), rng.randint(-4, 4)) for _ in range(300)]
+    for k, (ox, oy) in enumerate(offsets):
+        o = NEIGHBOUR_OFFSETS + 16 * k
+        fields += [(o, ox & 0xFFFFFFFF, 4), (o + 4, oy & 0xFFFFFFFF, 4)]
+    # The tiles around the building: never blocked, often one area, a
+    # cleared patch with trees or stones.
+    same_area = rng.random() < 0.75
+    area = rng.randrange(US_AREAS)
+    clear = rng.random() < 0.5
+    tree_near = rng.random() < 0.5
+    tree = 0x44 + rng.randrange(15)
+    stone = rng.choice((0x7e, 0x7f)) if rng.random() < 0.35 else 0x73 + rng.randrange(12)
+    # Heights near each other, so that the diggers' neighbour tests (equal
+    # to the cell's height +-5 / +-7) sometimes hold.
+    heights = (100, 100, 105, 107, 93, 95)
+    near_heights = rng.random() < 0.5
+    # A slope rising by 5 per x: the lower cell's neighbour (x+1, y+1) is 5
+    # higher, its others are not 7 / 5 higher (0x4eb5e2).
+    slope = ctx["job"] == 5 or job == 5
+    slope = slope and rng.random() < 0.3
+    for ox in range(-17, 18):
+        for oy in range(-17, 18):
+            t = tile(bx + ox, by + oy)
+            flags = rng.getrandbits(8) & 0xFE
+            if clear and -8 <= ox <= 8 and -8 <= oy <= 8:
+                flags &= 0xF0
+                if (ox + oy) & 3 == 0:
+                    fields += [(t + 0x7, 0, 1), (t + 0x2, 0, 2), (t, 0, 2), (t + 0x6, 0x10, 1)]
+                elif (ox + oy) & 3 == 1:
+                    fields.append((t + 0x7, tree if tree_near else stone, 1))
+            height = ((bx + ox) * 5) & 0xFF if slope else rng.choice(heights) if near_heights else rng.getrandbits(8)
+            fields += [(t + 0xa, flags, 1), (t + 0x4, height, 1)]
+            if same_area:
+                fields.append((t + 0x14, area, 2))
+    # Where the cutters look; the trade pile under the settler.
+    if tree_near:
+        fields.append((tile(x - 1, y - 1) + 0x7, tree, 1))
+    fields.append((tile(x - 2, y - 2) + 0x7, stone, 1))
+    under = rng.randint(1, US_PILES)
+    fields.append((tile(x, y) + 0x2, under, 2))
+    pr = PILES + under * PILE_BYTES
+    if rng.random() < 0.5:
+        fields.append((pr + 4, 0xFC, 1))
+    pile_building = rng.randint(1, US_OTHERS)
+    trade = rng.randint(1, 20)
+    fields += [(pr + 0xa, pile_building, 2), (BUILDINGS + pile_building * BUILDING_BYTES + 0x34, trade, 2)]
+    if rng.random() < 0.5:
+        fields.append((US_B_TRADES + trade * 0x5a + 0x12 + (slot & 0xFF), 0, 1))
+    if rng.random() < 0.33:  # sometimes the levelling height equals the tile's
+        level = rng.getrandbits(8)
+        fields += [(s + 0x17, level, 1), (tile(x, y) + 0x4, level, 1)]
+    # Builders at the building stage need a layout with free spots.
+    layouts = image["layouts"]
+    entry = struct.unpack_from("<600I", layouts, (race * 0x39 + art) * 0x960) if art < 0x39 else ()
+    if 0x80000005 in entry and entry.index(0x80000005) < 597:
+        m = entry.index(0x80000005)
+        for k in range(2):
+            dx, dy = entry[m + 1 + 3 * k], entry[m + 2 + 3 * k]
+            dx, dy = dx - (1 << 32) if dx >= 1 << 31 else dx, dy - (1 << 32) if dy >= 1 << 31 else dy
+            if -20 <= dx < 20 and -20 <= dy < 20:
+                t = tile(bx + dx, by + dy)
+                # The first spot sometimes taken already (flag 2): the search goes on.
+                taken = 2 if k == 0 and rng.random() < 0.4 else 0
+                fields.append((t + 0xa, (rng.getrandbits(8) & 0xFC) | taken, 1))
+    elif buildup >= 3:
+        fields.append((b + 0x21, 1, 1))
+    # A digger's levelling grid: a few cells with wanted heights, sometimes empty.
+    fields.append((s, owner if rng.random() < 0.95 else 0xFF, 1))
+    cache = US_B_SITE_CACHE + owner * 30 * 0x3C2 + levelling * 0x3C2 + 1
+    grid = bytearray(31 * 31)
+    if rng.random() >= (0.4 if job == 5 else 0.125):  # an empty grid: the site is levelled
+        for _ in range(rng.randint(1, 40)):
+            grid[rng.randrange(31 * 31)] = 1 if slope else rng.choice((90, 100, 110, rng.randint(1, 255)))
+    for k in range(0, 31 * 31, 4):
+        chunk = grid[k:k + 4]
+        fields.append((cache + k, int.from_bytes(chunk, "little"), len(chunk)))
+    # Digger / builder slot bits: one bit (the bit scans 0x4eb725.., 0x4ec62a..).
+    fields += [(b + 0x16, 1 << rng.randrange(8) if rng.random() < 0.8 else rng.getrandbits(8), 1),
+               (b + 0x17, 1 << rng.randrange(8) if rng.random() < 0.8 else rng.getrandbits(8), 1)]
+    # Soldier levels per weapon kind (player +0xb8..+0xc0): 0..3.
+    for p in range(4):
+        for k in range(3):
+            fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xb8 + 4 * k, rng.randrange(4), 4))
+    if job in (0x21, 0x23):  # cutting states 1..9 (table 0x4f99d0)
+        fields.append((s + 0x17, rng.randrange(10), 1))
+    if job == 0x23 and rng.random() < 0.5:  # the stone's last stage (object 0x7e -> 0x7f at x-2, y-2)
+        fields += [(tile(x - 2, y - 2) + 0x7, 0x7E, 1), (s + 0x17, 0, 1)]
+    if job == 0x69 and rng.random() < 0.5:  # a carrier fetching a digger's tool (+0x18 = 1)
+        fields.append((s + 0x18, 1, 1))
+    if job == 0x2f:  # planting: the second visit
+        fields.append((s + 0x17, rng.randrange(3), 1))
+    search_mode = rng.random()  # cutters' and forester's searches: < 0.4 the cursor wraps, < 0.9 found at once
+    if job in (0x18, 0x19, 0x1b) and search_mode < 0.4:  # the search cursor wraps (notification)
+        fields += [(s + 0x10, (2960 if job != 0x1b else 1460) + rng.randrange(40), 2),
+                   (s + 0x18, 0 if rng.random() < 0.5 else 1, 1)]
+    if job == 0x1b and 0.4 <= search_mode < 0.9:
+        # A free grass spot at the first place the forester looks (0x4edd26).
+        k = rng.randrange(300)
+        fields += [(b + 0x30, bx, 2), (b + 0x32, by, 2), (s + 0x10, k, 2)]
+        tx, ty = bx + offsets[k][0], by + offsets[k][1]
+        door_area = rng.randrange(US_AREAS)
+        for ox in range(-2, 3):
+            for oy in range(-2, 4):
+                fields.append((tile(tx + ox, ty + oy) + 0xa, rng.getrandbits(8) & 0xF0, 1))
+        t = tile(tx, ty)
+        fields += [(t, 0, 2), (t + 0x2, 0, 2), (t + 0x7, 0, 1), (t + 0x6, rng.choice((0x10, 0x11, 0x1c)), 1),
+                   (t + 0x14, door_area, 2), (b + 0xa, bx + 1, 2), (b + 0xc, by + 1, 2),
+                   (tile(bx + 1, by + 1) + 0x14, door_area, 2)]
+    if job == 0x50 and rng.random() < 0.5:  # the site the UI shows (g_global7dfd6c, 0 in the image)
+        fields.append((s + 0x22, 0, 2))
+    if job == 0x18 and 0.4 <= search_mode < 0.9:
+        # A tree at the first place the woodcutter looks (0x4ed14d: found at once).
+        k = rng.randrange(300)
+        wx, wy = (bx + 0, by + 0)
+        fields += [(b + 0x30, wx, 2), (b + 0x32, wy, 2), (s + 0x10, k, 2)]
+        tx, ty = wx + offsets[k][0], wy + offsets[k][1]
+        door_area = rng.randrange(US_AREAS)
+        # The tree at (tx, ty); the area and CanSettlerEnterTile are those of (tx + 1, ty + 1).
+        fields += [(tile(tx, ty) + 0x7, 0x44 + rng.randrange(15), 1), (tile(tx + 1, ty + 1) + 0x14, door_area, 2),
+                   (b + 0xa, bx + 1, 2), (b + 0xc, by + 1, 2), (tile(bx + 1, by + 1) + 0x14, door_area, 2)]
+    if job == 0xe and rng.random() < 0.5:
+        # The builder's own tile free, most of its neighbours occupied
+        # (flags), so that a free one is found late (0x4ec852: only in the
+        # sixth direction tried).
+        fields.append((tile(x, y) + 0xa, rng.getrandbits(8) & 0xF0, 1))
+        for ox, oy in ((1, 0), (1, 1), (0, 1), (-1, 0), (-1, -1), (0, -1)):
+            t = tile(x + ox, y + oy)
+            fields.append((t + 0xa, (rng.getrandbits(8) & 0xF0) | (0 if rng.random() < 0.2 else 1), 1))
+    if job == 0x2e and rng.random() < 0.7:
+        # The forester at a free spot: the tile below it free, its
+        # neighbourhood unblocked, grass.
+        x, y = rng.randint(40, 340), rng.randint(40, 340)
+        fields += [(s + 0x4, x, 2), (s + 0x6, y, 2)]
+        for ox in range(-2, 3):
+            for oy in range(-2, 4):
+                t = tile(x + ox, y + oy)
+                fields += [(t + 0xa, rng.getrandbits(8) & 0xF0, 1)]
+        t = tile(x, y)
+        below = tile(x, y + 1)
+        fields += [(t + 0x2, 0, 2), (below, 0, 2), (below + 0x7, 0, 1),
+                   (below + 0x6, rng.choice((0x10, 0x11, 0x15, 0x1c, 0x20)), 1)]
 
 
 
 # ---- family m (metal, settler_jobs_metal.cpp) ----
 US_EXEMPT_M = ()
+US_M_TOOLS = (16, 12, 13, 14, 15, 17, 32)  # goods of the toolsmith's seven piles (all of them get set)
+US_M_TOOL_TILES = ((0, 0), (-1, 0), (1, 0), (-1, -1), (1, 1), (0, -1), (0, 1))
+US_M_RARE_JOBS = (0x80, 0x80, 0x80, 0x74, 0x74, 0xaf, 0xaf, 0x36, 0x129, 0x12b, 0x12d, 0x137, 0x138, 0x139)
+
+
+def _us_m_toolsmith(rng, fields, b):
+    """The door of building b: seven tool piles with few units, an area
+    whose tool orders (settings1), shares (settings2) and made counts
+    (settings3) reach every branch of the start and the share choice."""
+    r = BUILDINGS + b * BUILDING_BYTES
+    dx, dy = rng.randint(60, 320), rng.randint(60, 320)
+    fields += [(r + 0xa, dx, 2), (r + 0xc, dy, 2)]
+    full = rng.random() < 0.15
+    for k, (ox, oy) in enumerate(US_M_TOOL_TILES):
+        p = rng.randint(1, US_PILES)
+        fields += [(tile(dx + ox, dy + oy) + 2, p, 2),
+                   (PILES + p * PILE_BYTES + 1, rng.randint(2, 8) if full else rng.choice((0, 0, 0, 1)), 1)]
+    area = rng.randint(1, US_AREAS - 1)
+    fields.append((tile(dx, dy) + 0x14, area, 2))
+    a = AREAS + area * AREA_BYTES
+    pick = rng.random()
+    # 20%: one tool is the share rule's choice and its made count is 0xff
+    # (share 255: (0xff * 256 + 128) / 255 = 256; the others 640 and more).
+    chosen = rng.choice(US_M_TOOLS) if rng.random() < 0.2 else None
+    for g in US_M_TOOLS:
+        ordered = 0 if pick < 0.7 or chosen else rng.choice((0, 0, 0, 1, 2))
+        share = 0 if rng.random() < (0.9 if pick < 0.1 else 0.3) else rng.randint(1, 6)
+        made = rng.choice((0, 1, 2, 5, 9, 0xFF, rng.getrandbits(8)))
+        if chosen is not None:
+            share, made = (255, 0xFF) if g == chosen else (1, 5)
+        fields += [(a + 0x18a + g, ordered, 1), (a + 0x1ae + g, share, 1), (a + 0x1d2 + g, made, 1)]
+
+
+def _us_m_garrison(rng, fields, b, n):
+    """A garrison list (Building::worker, linked by next, increasing
+    numbers, ending in 0) of soldiers of all classes and some others."""
+    members = sorted(rng.sample(range(10, US_OTHERS + 1), rng.randrange(5)))
+    fields.append((BUILDINGS + b * BUILDING_BYTES + 8, members[0] if members else 0, 2))
+    for k, s in enumerate(members):
+        r = SETTLERS + s * SETTLER_BYTES
+        fields += [(r + 1, rng.choice((5, 0x20, 0x23, 8, 0x1e, 0x21, 0xf, 0x1f, 0x22, 0, 0x17)), 1),
+                   (r + 0x10, members[k + 1] if k + 1 < len(members) else 0, 2)]
 
 
 def _us_family_m(rng, fields, n, ctx):
-    pass
+    s = ctx["record"]
+    x, y = ctx["x"], ctx["y"]
+    job = ctx["job"]
+    if rng.random() < 0.5:
+        job = rng.choice(US_M_RARE_JOBS)
+        fields.append((s + 0xe, job, 2))
+    b = rng.randint(1, US_OTHERS)
+    r = BUILDINGS + b * BUILDING_BYTES
+    fields += [(s + 0x22, b, 2), (r + 0x18, rng.getrandbits(8) | (1 if rng.random() < 0.8 else 0), 1)]
+    if rng.random() < 0.6:
+        fields.append((tile(x, y), n, 2))  # the settler stands on its own tile
+    if job in (0x74, 0x80) or rng.random() < 0.1:
+        fields.append((s + 0x1, 0xb, 1))
+        _us_m_toolsmith(rng, fields, b)
+    elif job == 0xaf:
+        _us_m_garrison(rng, fields, b, n)
+    elif job == 0x36:
+        fields += [(s + 0x1, 0x17 if rng.random() < 0.5 else rng.randrange(0x30), 1),
+                   (s + 0x15, rng.choice((0, rng.randint(1, 35))), 1)]
+    elif job in (0x129, 0x12b, 0x12d, 0x137, 0x138, 0x139):
+        k = (0x129, 0x12b, 0x12d, 0x137, 0x138, 0x139).index(job) % 3
+        fields += [(r + 0x20, rng.choice((0, 0, 1, 2, 0xfa, 0xfb, rng.getrandbits(8))), 1),
+                   (r + 0x1f, rng.choice((0x10 + k, 0x20 + k, 0x10 + k, 0x20 + k, 0, rng.getrandbits(8))), 1)]
+        for w in range(3):
+            fields.append((r + 0x1a + w, rng.choice((0, 0, 1, 3)), 1))
 
 
 
@@ -7723,20 +8025,358 @@ def _us_family_f(rng, fields, n, ctx):
 
 
 # ---- family d (drinks, settler_jobs_drinks.cpp) ----
-US_EXEMPT_D = ()
+US_EXEMPT_D = (
+    # 0x4f3c25: the flood fill of PioneerWork meets a tile the pioneer's
+    # player already owns: dead, the same-team check before it
+    # (0x4f3bd9..) skips every tile of the player's own team.
+    0x004f3c25,
+)
+
+# Jobs of this family that need a prepared neighbourhood, drawn more often
+# than the uniform choice of the generic part: geologist 0xd4, pioneer
+# 0x12e, the field searches 0xe3 / 0xf4, planting 0xe6 / 0xf7, harvests
+# 0xeb / 0xec / 0xfc / 0xfd.
+_US_D_HARD = (0xd4, 0xd4, 0x12e, 0x12e, 0x12e, 0xe3, 0xe3, 0xf4, 0xf4, 0xf4, 0xf4, 0xe6, 0xf7, 0xf7, 0xf7,
+              0xeb, 0xec, 0xfc, 0xfd)
+_US_D_SIGN_RANGES = ((0x11, 0x17), (0x18, 0x1f), (0x21, 0x27), (0x28, 0x2f), (0x31, 0x37), (0x38, 0x3f),
+                     (0x41, 0x47), (0x48, 0x4f), (0x51, 0x57), (0x58, 0x5f))
+
+
+def _us_d_window(rng, fields, cx, cy, radius, area, terrains, ripe):
+    """Tiles around (cx, cy) for the field searches and planting: mostly
+    free tiles of the building's area, some ripe fields and obstacles."""
+    for dx in range(-radius, radius + 1):
+        for dy in range(-radius, radius + 1):
+            t = tile(cx + dx, cy + dy)
+            r = rng.random()
+            obj = rng.randint(ripe[0], ripe[1]) if r < 0.03 else 0 if r < 0.94 else rng.getrandbits(8)
+            fields += [(t + 0x14, area if rng.random() < 0.93 else rng.randrange(US_AREAS), 2),
+                       (t + 0x7, obj, 1),
+                       (t + 0x2, 0 if rng.random() < 0.96 else rng.randint(1, US_OTHERS), 2),
+                       (t + 0xa, 0 if rng.random() < 0.9 else rng.getrandbits(8), 1),
+                       (t + 0x6, rng.choice(terrains) if rng.random() < 0.8 else rng.getrandbits(8), 1)]
+
+
+def _us_d_pioneer(rng, fields, x, y, owner):
+    """A patch around the pioneer: takeable foreign / free tiles (flags 1 or
+    8, terrain with a high nibble) inside a ring of the player's own tiles,
+    so that the edge walk and the flood fill stay inside."""
+    for dx in range(-4, 5):
+        for dy in range(-4, 5):
+            d = hex_distance(dx, dy)
+            if d > 4:
+                continue
+            t = tile(x + dx, y + dy)
+            if d == 4 or (d == 3 and rng.random() < 0.5):
+                fields += [(t + 0x8, owner, 1), (t + 0xa, 0, 1)]
+                continue
+            pick = rng.random()
+            tile_owner = owner if pick < 0.25 else (owner ^ 1) if pick < 0.4 else rng.choice((2, 3, 0xFF))
+            flags = rng.choice((1, 8, 9, 0x20 | 8, 0)) if rng.random() < 0.7 else rng.getrandbits(8) & 0xb2
+            fields += [(t + 0x8, tile_owner, 1), (t + 0xa, flags, 1),
+                       (t + 0x6, rng.choice((0x10, 0x20, 0x30, 0x15, 0x05, 0x06)), 1)]
+    here = tile(x, y)
+    fields += [(here + 0xa, 0 if rng.random() < 0.85 else rng.choice((1, 4, 8, 0x40)), 1),
+               (here + 0x8, rng.choice((0xFF, 0xFF, owner, owner ^ 1, 2)), 1)]
+
+
+def _us_d_big_fill(rng, fields, x, y, owner):
+    """A takeable region of more than 10,000 tiles (radius 58) inside a ring
+    of the player's tiles: the flood fill's ring buffer (tile_ring2, 10,000
+    entries) wraps (0x4f3c8c, 0x4f3cbe)."""
+    for dx in range(-59, 60):
+        for dy in range(-59, 60):
+            d = hex_distance(dx, dy)
+            if d > 59:
+                continue
+            t = tile(x + dx, y + dy)
+            if d == 59:
+                fields += [(t + 0x8, owner, 1), (t + 0xa, 0, 1)]
+            else:
+                fields += [(t + 0x8, 0xFF, 1), (t + 0xa, 1, 1), (t + 0x6, 0x10, 1)]
+    here = tile(x, y)
+    fields += [(here + 0xa, 0, 1), (here + 0x8, 0xFF, 1)]
 
 
 def _us_family_d(rng, fields, n, ctx):
-    pass
-
+    s, x, y = ctx["record"], ctx["x"], ctx["y"]
+    job = rng.choice(_US_D_HARD) if rng.random() < 0.6 else ctx["job"]
+    owner = rng.randrange(4)
+    fields += [(s + 0xe, job, 2), (s, owner, 1), (s + 0xc, 0, 2), (s + 0x14, rng.getrandbits(7), 1)]
+    # Teams: players 0 and 1 against 2 and 3.
+    for p in range(4):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xc, p // 2, 4))
+    # The work building.
+    bn = rng.randint(1, US_OTHERS)
+    b = BUILDINGS + bn * BUILDING_BYTES
+    area = rng.randint(1, US_AREAS - 1)
+    if rng.random() < 0.03:
+        wx, wy = rng.choice((1, 2, 3, 381, 382)), rng.randint(3, 380)
+    else:
+        wx, wy = x + rng.randint(-3, 3), y + rng.randint(-3, 3)
+    dx, dy = wx + rng.randint(-2, 2), wy + rng.randint(-2, 2)
+    pile = rng.randint(1, US_PILES)
+    fields += [(s + 0x22, bn, 2), (s + 0x17, rng.choice((0, 0, 1, 1, 2, rng.getrandbits(8))), 1),
+               (s + 0x10, rng.choice((0, rng.randrange(40), rng.randrange(40), rng.randint(100, 149),
+                                      rng.randint(350, 399))), 2),
+               (b + 0x18, 1 | rng.getrandbits(8) if rng.random() < 0.9 else 0, 1),
+               (b + 0x30, wx, 2), (b + 0x32, wy, 2), (b + 0xa, dx, 2), (b + 0xc, dy, 2),
+               (b + 0xe, pile, 2), (PILES + pile * PILE_BYTES + 1, rng.choice((0, 3, 7, 8, 9)), 1),
+               (tile(dx, dy) + 0x14, area, 2)]
+    if job == 0xd4:
+        if rng.random() < 0.1:
+            x = rng.randint(0, 2)  # signs off the map (IsOnMap fails, 0x4f3584)
+            fields.append((s + 0x4, x, 2))
+        # The geologist's tile and the signs within distance 4.
+        lo, hi = rng.choice(_US_D_SIGN_RANGES)
+        res = 0 if rng.random() < 0.1 else rng.randint(lo, hi) if rng.random() < 0.85 else rng.getrandbits(8)
+        sign = 0xe9 + 2 * ((lo - 0x11) // 16)
+        density = rng.choice((0.0, 0.1, 0.3, 0.9))
+        for ddx in range(-4, 5):
+            for ddy in range(-4, 5):
+                if 0 < hex_distance(ddx, ddy) <= 4:
+                    fields.append((tile(x + ddx, y + ddy) + 0x7,
+                                   rng.choice((sign, sign + 1)) if rng.random() < density else 0, 1))
+        fields.append((tile(x, y) + 0x11, res, 1))
+        if rng.random() < 0.1:
+            fields.append((NEIGHBOUR_OFFSETS + 16 + 8, 5, 4))  # no ring within distance 4
+    elif job == 0x12e:
+        if n == 1 and rng.random() < 0.02:
+            x, y = rng.randint(62, 320), rng.randint(62, 320)
+            fields += [(s + 0x4, x, 2), (s + 0x6, y, 2)]
+            _us_d_big_fill(rng, fields, x, y, owner)
+        else:
+            _us_d_pioneer(rng, fields, x, y, owner)
+    elif job in (0xe3, 0xe6):
+        _us_d_window(rng, fields, wx, wy, 5, area, (0x15,), (0x6c, 0x6e))
+        if job == 0xe6:
+            _us_d_window(rng, fields, x, y, 1, area, (0x15,), (0x6c, 0x6e))
+    elif job in (0xf4, 0xf7):
+        _us_d_window(rng, fields, wx, wy, 6, area, (0x10, 0x16, 0x18), (0x63, 0x65))
+        if job == 0xf7:
+            _us_d_window(rng, fields, x, y, 3, area, (0x10, 0x16, 0x18), (0x63, 0x65))
+    elif job in (0xeb, 0xfc):
+        ripe = (0x6c, 0x6e) if job == 0xeb else (0x63, 0x65)
+        fields.append((tile(x, y) + 0x7, rng.randint(*ripe) if rng.random() < 0.6 else rng.getrandbits(8), 1))
 
 
 # ---- family s (special, settler_jobs_special.cpp) ----
 US_EXEMPT_S = ()
 
+US_TRADES = 0x10f45e8
+US_TRADE_BYTES = 0x5a
+US_OFFSETS = 0x110a588
+# The jobs of the family, the long handlers drawn more often.
+US_SPECIAL_JOBS = (
+    0x17, 0x8d, 0x145, 0x146, 0x130, 0x134, 0x136, 0x14b, 0x14c, 0x13a, 0x13b, 0x13c, 0x13e, 0x13d, 0x13f, 0x143,
+    0x144, 0x142, 0x150, 0x14d, 0x14e, 0x14f, 0x151, 0x152, 0x193, 0x194, 0x161, 0x163, 0x164, 0x166, 0x167, 0x169,
+    0x16b, 0x16c, 0x16e, 0x16f, 0x171, 0x153, 0x155, 0x156, 0x15f, 0x157, 0x158, 0x159, 0x15a, 0x15b, 0x15c, 0x15d,
+    0x15e, 0x160, 0x17c, 0x17e, 0x17f, 0x180, 0x181, 0x182, 0x183, 0x184, 0x185, 0x190, 0x191, 0x192,
+    0x134, 0x136, 0x136, 0x14b, 0x14b, 0x14c, 0x14c, 0x14d, 0x14d, 0x163, 0x166, 0x166, 0x143, 0x192, 0x192,
+    0x15a, 0x15b, 0x152, 0x152,
+    # The handlers with rare branches (scenarios in _us_special_scenario) once more.
+    0x14b, 0x14b, 0x14b, 0x14d, 0x14d, 0x152, 0x152, 0x152, 0x155, 0x155, 0x155, 0x163, 0x163, 0x136, 0x136,
+    0x143, 0x143, 0x191, 0x191, 0x152, 0x152, 0x152, 0x14b, 0x14b, 0x17e, 0x17e, 0x14c, 0x14c, 0x183, 0x183, 0x15a, 0x134, 0x134)
+US_SPECIAL_TYPES = (0x13, 0x15, 0x17, 0x2d, 0x2f, 0x2e, 0x2b, 0x2c, 0x27, 0x08, 0x21)
+US_DIR_X = (1, 1, 0, -1, -1, 0)   # NeighbourX/Y step per direction (map_directions.cpp)
+US_DIR_Y = (0, 1, 1, 0, -1, -1)
+
+
+def _us_near(rng, v, r):
+    return v - r + rng.randrange(2 * r + 1)
+
 
 def _us_family_s(rng, fields, n, ctx):
-    pass
+    """The settler's building with a trade route (often ending here, its
+    points in the settler's area and walk region), ring piles, door piles,
+    the pile under the settler (whose +0xa names the building), flowers /
+    hives / free spots around the work point, patients for the healer, a
+    ship on the shipyard's ship tile; players 0..3 in two teams. As the
+    in-process test's CustomizeSpecial (settler_jobs_special.cpp)."""
+    s = ctx["record"]
+    sx, sy = ctx["x"], ctx["y"]
+    job = rng.choice(US_SPECIAL_JOBS)
+    art = rng.choice(US_SPECIAL_TYPES) if rng.random() < 0.8 else rng.randrange(0x30)
+    owner = rng.randrange(4)
+    building = rng.randint(1, US_OTHERS)
+    b = BUILDINGS + building * BUILDING_BYTES
+    fields += [(s, owner, 1), (s + 0x1, art, 1), (s + 0xe, job, 2), (s + 0x22, building, 2)]
+    btype = rng.choice((0x21, 0x22, 0x21, 0x22, 0x20, 0x33, 0x34, 0x35, 0x23)) if rng.random() < 0.8 \
+        else rng.randrange(0x39)
+    kinds = [rng.choice((0, 1, 2, 3, 0x13, 250, 251, 0x10)) for _ in range(8)]
+    if rng.random() < 1 / 3:  # an ordered gong, all steps done
+        kinds[6], kinds[7] = 0x13, 0
+    dock = rng.randrange(6) if rng.random() < 0.9 else rng.getrandbits(16)
+    bx, by = _us_near(rng, sx, 4), _us_near(rng, sy, 4)
+    wx, wy = _us_near(rng, sx, 3), _us_near(rng, sy, 3)
+    dx, dy = _us_near(rng, sx, 3), _us_near(rng, sy, 3)
+    trade = rng.randint(1, 20)
+    fields += [(b, owner if rng.random() < 0.8 else rng.randrange(4), 1), (b + 0x2, bx, 2), (b + 0x4, by, 2),
+               (b + 0x6, btype, 1), (b + 0xa, dx, 2), (b + 0xc, dy, 2), (b + 0x18, rng.getrandbits(8), 1),
+               (b + 0x21, 0 if rng.random() < 0.8 else 1, 1), (b + 0x22, dock, 2),
+               (b + 0x30, wx, 2), (b + 0x32, wy, 2), (b + 0x34, trade, 2)]
+    fields += [(b + 0x19 + k, kinds[k], 1) for k in range(8)]
+    # Ring piles.
+    ring = [rng.randint(1, US_PILES) for _ in range(6)]
+    fields.append((b + 0xe, ring[0], 2))
+    for k, p in enumerate(ring):
+        r = PILES + p * PILE_BYTES
+        fields += [(r + 0xc, ring[(k + 1) % 6], 2), (r + 1, 0 if rng.random() < 1 / 3 else rng.randrange(9), 1),
+                   (r + 2, 0 if rng.random() < 0.5 else rng.randrange(4), 1)]
+    # The settler's own tile: area and walk region shared with the route.
+    area, region = rng.randrange(US_AREAS), rng.randint(1, 3)
+    here = tile(sx, sy)
+    route = []
+    at_end = rng.random() < 0.75
+    for k in range(4):
+        unset = rng.random() < 0.25 and not (k == 3 and at_end)
+        route.append((0xFFFF, 0xFFFF) if unset else (_us_near(rng, sx, 6), _us_near(rng, sy, 6)))
+    if at_end:
+        route[3] = (sx, sy)
+    same = rng.random() < 0.8
+    t = US_TRADES + trade * US_TRADE_BYTES
+    for k, (x, y) in enumerate(route):
+        fields += [(t + 2 + 2 * k, x, 2), (t + 0xa + 2 * k, y, 2)]
+    for x, y in route:
+        if x != 0xFFFF:
+            fields += [(tile(x, y) + 0x14, area if same else rng.randrange(US_AREAS), 2),
+                       (tile(x, y) + 0x10, region if same else rng.randint(1, 3), 1)]
+    # The pile under the settler names the building (pile 0 too).
+    tile_pile = rng.randint(1, US_PILES) if rng.random() < 2 / 3 else 0
+    tp = PILES + tile_pile * PILE_BYTES
+    fields += [(tp + 0xa, building, 2), (PILES + 0xa, building, 2), (tp + 1, rng.randrange(5), 1),
+               (tp + 2, rng.randrange(3), 1)]
+    # Door piles.
+    for side in (-1, 1):
+        p = rng.randrange(US_PILES + 1)
+        fields += [(tile(dx + side, dy) + 2, p, 2), (PILES + p * PILE_BYTES + 1, rng.randrange(9), 1)]
+    fields += [(s + 0x10, rng.randrange(200) if rng.random() < 0.9 else rng.getrandbits(16), 2),
+               (s + 0x15, 0 if rng.random() < 0.5 else rng.randrange(8), 1),
+               (s + 0x1a, 0 if rng.random() < 1 / 3 else 1 if rng.random() < 0.5 else rng.randrange(12), 1)]
+    # Flowers, hives and free spots around the work point.
+    door_area = rng.randrange(US_AREAS)
+    fields.append((tile(dx, dy) + 0x14, door_area, 2))
+    if rng.random() < 0.5:
+        fields += [(tile(sx, sy - 2) + 7, 0 if rng.random() < 0.5 else 250 + rng.randrange(4), 1),
+                   (tile(sx, sy - 2) + 0xa, rng.getrandbits(8) & 0xf6, 1),
+                   (tile(sx, sy - 2) + 0x14, door_area, 2), (here + 0xa, rng.getrandbits(8) & 0xf6, 1)]
+    for _ in range(6):
+        x, y = _us_near(rng, wx, 3), _us_near(rng, wy, 3)
+        fields += [(tile(x, y) + 7, rng.choice((250, 251, 252, 253, 0x44, 0x4a, 0x52, 0, 247, 0xf8)), 1),
+                   (tile(x, y) + 0xa, rng.getrandbits(8) & 0xf6, 1),
+                   (tile(x, y + 1) + 7, 0, 1), (tile(x, y + 1) + 0xa, rng.getrandbits(8) & 0xf6, 1),
+                   (tile(x, y + 1) + 0x14, door_area, 2), (tile(x, y + 2) + 0x14, door_area, 2),
+                   (tile(x, y + 3) + 0xa, rng.getrandbits(8) & 0xf6, 1)]
+    # Teams 0/1.
+    for p in range(4):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xc, p & 1, 4))
+    # Patients near the door and the work point.
+    for k in range(4):
+        m = rng.randint(4, US_OTHERS)
+        r = SETTLERS + m * SETTLER_BYTES
+        px, py = (dx, dy) if k == 0 and rng.random() < 0.5 else (_us_near(rng, wx, 5), _us_near(rng, wy, 5))
+        fields += [(r, owner, 1), (r + 1, 5, 1), (r + 3, 100 if rng.random() < 0.25 else rng.randrange(100), 1),
+                   (r + 0xe, 0x37 if rng.random() < 0.75 else 1, 2), (tile(px, py), m, 2)]
+    # A ship two steps from the work point, away from the landing.
+    if dock < 6 and rng.random() < 0.75:
+        away = (dock + 3) % 6
+        shx, shy = wx + 2 * US_DIR_X[away], wy + 2 * US_DIR_Y[away]
+        m = rng.randint(4, US_OTHERS)
+        r = SETTLERS + m * SETTLER_BYTES
+        fields += [(r + 1, rng.choice((0x2b, 0x2c)), 1), (r + 0xe, 0x145 if rng.random() < 0.75 else 0x130, 2),
+                   (tile(shx, shy), m, 2)]
+    # Last: the settler's own tile.
+    fields += [(here + 0x14, area, 2), (here + 0x10, region, 1), (here + 2, tile_pile, 2)]
+    _us_special_scenario(rng, fields, n, job, owner, s, sx, sy, b, wx, wy, dx, dy, ring, tile_pile, door_area)
+
+
+def _us_special_scenario(rng, fields, n, job, owner, s, sx, sy, b, wx, wy, dx, dy, ring, tile_pile, door_area):
+    """Rare branches of single jobs."""
+    if job == 0x143 and rng.random() < 0.6:  # shipyard: the last step launches a trade ship or a ferry (0x4f72eb)
+        dock = rng.randrange(6)
+        away = (dock + 3) % 6
+        m = rng.randint(4, US_OTHERS)
+        r = SETTLERS + m * SETTLER_BYTES
+        fields += [(b + 0x22, dock, 2), (b + 0x20, 0, 1), (s + 0x1a, 1, 1),
+                   (r + 1, rng.choice((0x2b, 0x2c)), 1), (r + 0xe, 0x145, 2),
+                   (tile(wx + 2 * US_DIR_X[away], wy + 2 * US_DIR_Y[away]), m, 2)]
+    elif job in (0x17e, 0x183) and rng.random() < 0.6:  # mead maker: wants work, room in the output (0x4f8be4, 0x4f8e8c)
+        fields += [(b + 0x18, 1, 1), (PILES + ring[0] * PILE_BYTES + 1, rng.randrange(8), 1)]
+    elif job == 0x14c and rng.random() < 0.6:  # ship unloads at its own finished harbour (0x4f6ca6)
+        fields += [(b, owner, 1), (b + 0x6, 0x21, 1), (b + 0x21, 0, 1)]
+    elif job == 0x15a and rng.random() < 0.5:  # alchemist: the yield doesn't fit the door piles (0x4f86d7)
+        for side in (-1, 1):
+            p = rng.randint(1, US_PILES)
+            fields += [(tile(dx + side, dy) + 2, p, 2), (PILES + p * PILE_BYTES + 1, rng.randint(6, 8), 1)]
+    elif job == 0x134 and tile_pile != 0 and rng.random() < 0.6:  # donkey takes the pile's last units (0x4f61e4)
+        two = rng.random() < 0.5
+        fields += [(s + 0x17, 1 if two else 0, 1), (PILES + tile_pile * PILE_BYTES + 1, 2 if two else 1, 1),
+                   (PILES + tile_pile * PILE_BYTES + 2, 2 if two else 1, 1)]
+    elif job == 0x191 and rng.random() < 0.6:  # gong: steps left, some inputs wanted (0x4f902f)
+        fields += [(b + 0x20, rng.randint(1, 5), 1)] + [(b + 0x1a + k, rng.choice((0, 0, 1, 2)), 1) for k in range(3)]
+    elif job == 0x14b and rng.random() < 0.25:  # harbour: every ring pile empty, no cargo (0x4f69ac)
+        fields += [(PILES + p * PILE_BYTES + 1, 0, 1) for p in ring]
+    elif job == 0x14b and rng.random() < 0.5:  # harbour: race 1 ships take four cargo goods (0x4f67b5)
+        fields.append((PLAYER_RECORDS + owner * PLAYER_RECORD_BYTES + 4, 1, 4))
+        fields += [(PILES + p * PILE_BYTES + 1, rng.randint(1, 8), 1) for p in ring]
+        last = ring[0]  # the ring's end (a full turn): sometimes empty and not leaving
+        if rng.random() < 0.5:
+            fields += [(PILES + last * PILE_BYTES + 2, 0, 1)]
+    elif job == 0x151:  # race 3 bowmen with arrows left (0x4f7861)
+        fields += [(PLAYER_RECORDS + owner * PLAYER_RECORD_BYTES + 4, 3, 4), (s + 0x15, rng.randrange(3, 9), 1)]
+    elif job == 0x152 and rng.random() < 0.25:  # thief: carries something (0x4f7a6f): generic presets
+        pass
+    elif job == 0x152 and rng.random() < 0.7:  # thief: nothing in reach (0x4f79e1), or only at offset 1000
+        fields.append((s + 0x15, 0, 1))
+        for ddx in range(-8, 9):
+            for ddy in range(-8, 9):
+                if hex_distance(ddx, ddy) <= 8:
+                    fields.append((tile(sx + ddx, sy + ddy) + 2, 0, 2))
+        if rng.random() < 0.85:
+            o = US_OFFSETS + 1000 * 16
+            p = rng.randint(1, US_PILES)
+            # Off the cleared rings (distance 10).
+            fields += [(o, 10, 4), (o + 4, 0, 4), (tile(sx + 10, sy) + 2, p, 2), (tile(sx + 10, sy) + 8, 0xFF, 1),
+                       (tile(sx + 10, sy) + 0xa, rng.getrandbits(8) & 0xdf, 1),
+                       (PILES + p * PILE_BYTES + 1, rng.randint(1, 8), 1),
+                       (PILES + p * PILE_BYTES + 6, sx + (10 if rng.random() < 0.5 else 0), 2),
+                       (PILES + p * PILE_BYTES + 8, sy, 2)]
+    elif job == 0x152:  # thief: a pile on its own tile (0x4f7a15, 0x4f7a25)
+        p = rng.randint(1, US_PILES)
+        fields += [(s + 0x15, 0, 1), (tile(sx, sy) + 2, p, 2), (tile(sx, sy) + 8, 0xFF, 1),
+                   (tile(sx, sy) + 0xa, rng.getrandbits(8) & 0xdf, 1), (PILES + p * PILE_BYTES + 1, rng.randint(1, 8), 1),
+                   (PILES + p * PILE_BYTES + 6, sx, 2), (PILES + p * PILE_BYTES + 8, sy if rng.random() < 0.7 else sy + 1, 2)]
+    elif job == 0x193 and tile_pile != 0:  # steal: its claim is released (0x4f7b57)
+        k = rng.randrange(128)
+        fields += [(0x1195dd4 + 4 * k, tile_pile, 2), (0x1195dd4 + 4 * k + 2, n, 2)]
+    elif job == 0x14d and rng.random() < 0.25:  # healer: the search wraps at 2000 (0x4f76eb)
+        fields += [(s + 0x10, rng.randint(1990, 1999), 2), (s + 0x1a, 0, 1), (b + 0x18, 1, 1), (tile(dx, dy), 0, 2)]
+    elif job == 0x14d and rng.random() < 0.6:  # healer: a patient at the first offset (0x4f76d8)
+        m = rng.randint(4, US_OTHERS)
+        r = SETTLERS + m * SETTLER_BYTES
+        fields += [(s + 0x10, 0, 2), (s + 0x1a, 0, 1), (b + 0x18, 1, 1), (tile(dx, dy), 0, 2),
+                   (r, owner, 1), (r + 1, 5, 1), (r + 3, rng.randrange(100), 1), (r + 0xe, 0x37, 2), (tile(wx, wy), m, 2)]
+    elif job == 0x163 and rng.random() < 0.2:  # beekeeper: the search wraps at 1500 (0x4f7f2f)
+        fields += [(s + 0x10, rng.randint(1455, 1499), 2), (b + 0x18, 1, 1)]
+    elif job == 0x163 and rng.random() < 0.7:  # beekeeper: a flower field or a hive spot at offset 0 (0x4f7fde, 0x4f800c)
+        hive = rng.random() < 0.6
+        fields += [(s + 0x10, 0, 2), (b + 0x18, 1, 1), (tile(dx, dy) + 0x14, door_area, 2),
+                   (PILES + ring[0] * PILE_BYTES + 1, rng.randrange(8), 1)]
+        if hive:
+            for ddx in range(-4, 5):
+                for ddy in range(-4, 5):
+                    if hex_distance(ddx, ddy) <= 4:
+                        fields.append((tile(wx + ddx, wy + 1 + ddy) + 7, 0, 1))
+            if rng.random() < 0.3:  # a hive or flowers too near: the spot is not taken (0x4f7eba)
+                ddx, ddy = rng.choice(((1, 0), (0, 1), (-1, 1), (2, 0), (0, 2), (1, 1)))
+                fields.append((tile(wx + ddx, wy + 1 + ddy) + 7, rng.randint(247, 253), 1))
+        fields += [(tile(wx, wy) + 7, rng.randint(0x44, 0x52) if hive else rng.randint(250, 253), 1),
+                   (tile(wx, wy + 1) + 0x14, door_area, 2), (tile(wx, wy + 1) + 0xa, rng.getrandbits(8) & 0xf6, 1),
+                   (tile(wx, wy + 2) + 0x14, door_area, 2), (tile(wx, wy + 3) + 0xa, rng.getrandbits(8) & 0xf6, 1)]
+    elif job == 0x155 and rng.random() < 0.5:  # alchemist: both door piles full enough to wait (0x4f8472)
+        for side in (-1, 1):
+            p = rng.randint(1, US_PILES)
+            fields += [(tile(dx + side, dy) + 2, p, 2), (PILES + p * PILE_BYTES + 1, rng.randint(6, 8), 1)]
 
 
 
