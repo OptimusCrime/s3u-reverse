@@ -7,6 +7,25 @@ progress.
 
 ## Current focus
 
+**Struct pass (user request 2026-11-22, session 45).** Replace the
+"address hacks" with typed structures that mirror the real objects:
+typed globals instead of raw data addresses, real class layouts (RTTI
+names) instead of `RawAt` and per-file partial structs, named world
+record fields instead of `unkXXXX`. Worklist: `re/typed_access_todo.md`
+(regenerate with `python tools/raw_access_report.py --write`). Not all
+at once; started as three parallel packages (globals, classes, world
+records). Afterwards: the `GameWorld` -> `CGameData` rename (TODO.md).
+
+**Simulation state (2026-11-22):** every callee of
+`GameWorld::UpdateSettlers` 0x4e9670 is verified (WalkSettler,
+UpdateSoldier done in session 45), as are `UpdateEnvironment` 0x4e7810
+(except 17 spell functions, TODO.md) and `UpdateEconomy` 0x4e05e0 (was
+UpdatePhase2). Next simulation step: UpdateSettlers itself (16,600
+instructions, hooked as one unit, split per job internally; see
+re/update_settlers.md and re/update_settlers_jobs.csv). The user will
+later record a full game from start to finish for the late-game paths
+(spells, ships, tower captures, shooting soldiers, late building types).
+
 **Core gameplay first, no network (user decision 2026-11-09, after
 batch 27).** Skip network code entirely for now: CNetThread, `Lobby::*`,
 `LobbyClient::*`, DirectPlay, the CLM* messages. Single player against
@@ -549,6 +568,25 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-22 (45): round end (WalkSettler, UpdateSoldier, UpdateEconomy, UpdateEnvironment)
+
+- Four parallel agents (entries below): package A WalkSettler, package B
+  UpdateSoldier (+ FollowRightWall coverage, layout aliases dropped),
+  UpdateEconomy (was UpdatePhase2), package D UpdateEnvironment (21
+  functions; 17 spell functions left, TODO.md).
+- Round-end checks at 9adc76c: emulator self-test 21/21; full suite 555
+  specs, 0 mismatches, incomplete coverage only GameWorld_Create (as
+  before) and GameWorld_UpdateEconomy 862/863 (0x4e26d7, a rare branch:
+  the full run uses 2,000 cases, the spec's own run 4,000; needs a preset).
+  Whole game, all identical to the original: scripted-seed127.bin and
+  fun8-seed2024-input31.bin (3,000 ticks), slots 1-3 (2,000 ticks),
+  random maps 384,0 and 448,3 (2,000 ticks).
+- New: `tools/raw_access_report.py` and its worklist
+  `re/typed_access_todo.md` for the struct pass: 21 RawAt uses, 255 uses
+  of 190 raw data addresses (23 of them named in re/globals.csv), ~200
+  code addresses (calls of original functions, allowed), ~120 local
+  structs in .cpp files (some duplicated, e.g. GfxData in 4 files).
 
 ### 2026-11-22 (45): UpdateEconomy (was UpdatePhase2), parallel worktree
 
