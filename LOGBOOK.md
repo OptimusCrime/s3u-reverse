@@ -595,7 +595,11 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 - Evidence: build without warnings; `--test` 490/490; `inventory.py check`
   clean; emulator `--self-test` 21/21, sample specs CGameData_Random*,
   Pathing_*, CGameData_WalkSettler (428/428), CGameData_UpdateEconomy
-  (863/863) 0 mismatches; all 555 spec names resolve in s3re.map.
+  (863/863) 0 mismatches; all 555 spec names resolve in s3re.map;
+  `--test GenerateRandomMap` 4/4. Whole game: `check_save.py "slot 1.sav"
+  --ticks 2000 --against-original` identical, 215 of 554 replacements
+  called, counts logged under the new names (0 rows added, 474 updated in
+  re/whole_game_calls.csv, i.e. every name matched a renamed row).
 - Note for the next full emulator run: `build/emutest_times.json` and
   `build/emutest_last_full.json` are keyed by spec name, so the old entries
   no longer match until the next full run rewrites them.
