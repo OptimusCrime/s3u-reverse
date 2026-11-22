@@ -113,6 +113,14 @@ inline constexpr GameGlobal<const std::uint32_t> g_manaPerOffering{0x730ef4};
 inline constexpr GameGlobal<const std::int8_t> g_residenceUnit{0x730f00};
 inline constexpr GameGlobal<const std::uint32_t> g_smithInputFull{0x730f04};
 
+// UpdateSettlers: two int32 tables of four values each (0x46, 0x46, 0x46,
+// 0x46 and 0x54, 0x54, 0x60, 0x54 in the image), read per race; meaning
+// still to be named (settler_jobs_food.cpp).
+inline constexpr GameGlobal<const std::int32_t[8]> g_table658adc{0x658adc};
+// UpdateSettlers: per race (3, 4, 2, 3 in the image), compared in the ship
+// jobs (settler_jobs_special.cpp); meaning still to be named.
+inline constexpr GameGlobal<const std::int32_t[4]> g_table659654{0x659654};
+
 // ------------------------------------------------------------ effects and spells
 // Per variant 0..3 the x and y offsets of MapEffects_Spawn_544dc0.
 inline constexpr GameGlobal<const std::uint32_t[4]> g_spawnOffsetsX{0x65a19c};
