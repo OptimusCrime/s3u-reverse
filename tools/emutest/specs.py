@@ -7536,6 +7536,7 @@ def _us_settler(rng, fields, n, family):
                (s + 0x24, x + rng.randint(-10, 10), 2), (s + 0x26, y + rng.randint(-10, 10), 2),
                (s + 0x28, x + rng.randint(-10, 10), 2), (s + 0x2a, y + rng.randint(-10, 10), 2)]
     _us_tiles(rng, fields, x, y)
+    return {"x": x, "y": y, "job": job, "art": art, "record": s}
 
 
 def _us_building(rng, fields, b):
@@ -7559,10 +7560,104 @@ def _us_pile(rng, fields, p):
                (r + 0xa, rng.randrange(US_PILES + 1), 2), (r + 0xc, rng.randrange(US_PILES + 1), 2)]
 
 
+def _us_clear_job(machine, ecx, args, h):
+    """ClearSettlerJob's effect: the settler idles (job 0x39, counter and
+    building 0), so handlers that clear a job and run again end."""
+    r = SETTLERS + args[0] * SETTLER_BYTES
+    _write(machine, r + 0xe, 0x39, 2)
+    _write(machine, r + 0xc, 0, 2)
+    _write(machine, r + 0x22, 0, 2)
+
+
+def _us_set_owner(machine, ecx, args, h):
+    """SetOwnerOfFreeTile (x, y, owner): the tile gets the owner (fills end)."""
+    _write(machine, tile(args[0] & 0xFFFF, args[1] & 0xFFFF) + 8, args[2], 1)
+
+
+def _us_clear_owner(machine, ecx, args, h):
+    """ClearTileOwner (x, y): the tile has no owner any more."""
+    _write(machine, tile(args[0] & 0xFFFF, args[1] & 0xFFFF) + 8, 0xFF, 1)
+
+
+US_PROBES[0x00510440] = (1, "thiscall", "probe", _us_clear_job)
+US_PROBES[0x0051b5d0] = (3, "thiscall", "probe", _us_set_owner)
+US_PROBES[0x0051b640] = (2, "thiscall", "probe", _us_clear_owner)
+
+
+# Per family: more set-up for settler n of a case (after the generic part
+# of _us_settler; `ctx` holds the case's choices: "x", "y", "job", "art",
+# "building", ...), and the family's exempt blocks (dead code etc., each
+# with its reason). One function per family so that they can be extended
+# independently.
+
+
+# ---- family u (units, settler_jobs_units.cpp) ----
+US_EXEMPT_U = ()
+
+
+def _us_family_u(rng, fields, n, ctx):
+    pass
+
+
+
+# ---- family b (building, settler_jobs_building.cpp) ----
+US_EXEMPT_B = ()
+
+
+def _us_family_b(rng, fields, n, ctx):
+    pass
+
+
+
+# ---- family m (metal, settler_jobs_metal.cpp) ----
+US_EXEMPT_M = ()
+
+
+def _us_family_m(rng, fields, n, ctx):
+    pass
+
+
+
+# ---- family f (food, settler_jobs_food.cpp) ----
+US_EXEMPT_F = ()
+
+
+def _us_family_f(rng, fields, n, ctx):
+    pass
+
+
+
+# ---- family d (drinks, settler_jobs_drinks.cpp) ----
+US_EXEMPT_D = ()
+
+
+def _us_family_d(rng, fields, n, ctx):
+    pass
+
+
+
+# ---- family s (special, settler_jobs_special.cpp) ----
+US_EXEMPT_S = ()
+
+
+def _us_family_s(rng, fields, n, ctx):
+    pass
+
+
+
+US_FAMILY_SETUP = {"u": _us_family_u, "b": _us_family_b, "m": _us_family_m, "f": _us_family_f,
+                   "d": _us_family_d, "s": _us_family_s, "-": lambda rng, fields, n, ctx: None}
+US_EXEMPT = US_EXEMPT_U + US_EXEMPT_B + US_EXEMPT_M + US_EXEMPT_F + US_EXEMPT_D + US_EXEMPT_S
+
+
 def update_settlers_world(rng, pool, args):
-    family = rng.choice("uuubbbmmmfffdddsss-")
+    """One case: 1..3 settlers with jobs of one family (S3RE_US_FAMILY=<letters>
+    restricts the families, for working on one family's presets)."""
+    import os
+    families = os.environ.get("S3RE_US_FAMILY") or "uuubbbmmmfffdddsss-"
+    family = rng.choice(families)
     count = rng.randint(1, 3)
-    fields = [(MAP_SIZE, 384, 4), (SETTLER_COUNT, count, 4)]
+    fields = [(MAP_SIZE, 384, 4), (SETTLER_COUNT, count, 4)] + walk_rings(8)
     for p in range(4):
         fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, rng.randrange(4), 4))
     for b in range(1, US_OTHERS + 1):
@@ -7574,7 +7669,8 @@ def update_settlers_world(rng, pool, args):
         fields += [(s + 0x4, rng.randint(40, 340), 2), (s + 0x6, rng.randint(40, 340), 2),
                    (s + 0x22, rng.randrange(US_OTHERS + 1), 2)]
     for n in range(1, count + 1):
-        _us_settler(rng, fields, n, family)
+        ctx = _us_settler(rng, fields, n, family)
+        US_FAMILY_SETUP[family](rng, fields, n, ctx)
     return fields
 
 
@@ -7583,6 +7679,8 @@ def update_settlers_globals(rng, pool, args):
 
 
 SPECS += [
+    # The code ends at 0x4f926d; the jump tables follow it.
     Spec("CGameData_UpdateSettlers", 0x004e9670, "thiscall", [], presets=update_settlers_world,
-         globals=update_settlers_globals, callees=US_PROBES, max_cases=4000, cover_until=0x004f926d),
+         globals=update_settlers_globals, callees=US_PROBES, max_cases=12000, cover_until=0x004f926d,
+         exempt_blocks=US_EXEMPT),
 ]
