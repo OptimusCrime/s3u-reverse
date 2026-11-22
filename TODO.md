@@ -40,6 +40,9 @@ Each item: what, why, and where to start.
   other settlers (found 2026-11-10, session 43; re/world_layout.md).
 - **Name constructors** (`re/classes.json` lists the functions that store
   each vtable).
+- **Rename `Player::presence_index` (+0xc) to `team`.** It is the team /
+  alliance index: the fog of war (fog_of_war.cpp), the minimap and
+  CrushBuilding compare it between players (package D, session 45).
 
 ## Evidence and testing
 
@@ -86,6 +89,22 @@ Each item: what, why, and where to start.
 - **Normal vs `--fast` on a random map:** check_random_map.py uses
   `--fast` by default, but normal vs fast has only been compared on file
   maps and a savegame.
+
+## Spells left of UpdateEnvironment's call tree (package D, session 45)
+
+The dispatcher GameWorld::ExecuteSpell 0x5480B0 and spells 5..9 and 31 are
+verified (spells.cpp); the other handlers of Volker\GodlyEvents.cpp are
+still original code, called by address (plan and sizes in
+`re/update_environment.md`): 0x548340 (spells 0..3, with 0x548380 area
+effect -> 0x548760, 0x548A10, 0x548BB0, 0x548D50; 0x548380 is also called
+by UpdateEnvironment for burning trees 0xF4), 0x548FB0 (4), 0x549F40 (10,
+12, 16, 17, 24, 25), 0x54A370 (11), 0x54A7C0 (13), 0x54A540 (14),
+0x54A1E0 (15) with helpers 0x54AF60 / 0x54B000, 0x549BD0 (EventConvert,
+18..20, 27), 0x5499B0 (EventGodlyG.., 21..23, 26; x87), 0x54AA40 /
+0x54ACD0 (EventGoodsB/S, 28/29), 0x5492A0 (EventTreeCut, 30). About 2,800
+instructions. No recorded game casts spells yet (all spell counts 0 in the
+replays and savegames): a recording with spells (temples, mana) would give
+whole-game evidence.
 
 ## Known differences to clean up
 

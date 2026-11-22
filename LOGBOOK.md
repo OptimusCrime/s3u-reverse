@@ -587,6 +587,23 @@ instructions; most of it is Volker\GodlyEvents.cpp, the spells).
   MinimapPixel 0x4FB720 (fog brightness, settlers, borders, footprints,
   owner/terrain colours; two dead blocks exempt). Globals of the minimap
   options in re/globals.csv.
+- **Batch 4: spells** (spells.cpp): the dispatcher ExecuteSpell 0x5480B0
+  (handlers stubbed/probed) and spells 5 SpellRevealSpot 0x549530, 6
+  SpellBurnTrees 0x549650, 7 SpellAddFish 0x549700, 8 SpellHalveResources
+  0x5497F0, 9 SpellGrowTrees 0x5498A0, 31 SpellRevealMap 0x5495D0 (area
+  sizes from the int32 table 0x65A1F0, which Ghidra had folded into
+  constants). The other 17 spell functions (~2,800 instructions) are in
+  TODO.md; they stay original code, called by address.
+- **Whole game at the end (all identical to the original):**
+  scripted-seed127.bin and fun8-seed2024-input31.bin (3,000 ticks), slots
+  1..3 (2,000 ticks); call counts recorded (re/whole_game_calls.csv,
+  inventory notes). UpdateEnvironment, ExpireSome, UpdateMinimapSlice 3,000
+  calls per replay, MinimapPixel ~784k, DecayTraffic 219k, the fog
+  functions ~900 each. Never called in any of them: every spell function,
+  SpawnSpellEffects, PayForSpell (no game casts spells), and IsExpired in
+  the replays. A recording with spells is needed for those.
+- Pitfall: a Bash heredoc with `'\0'` in Python wrote a NUL byte into a
+  .cpp; check with `grep -c $'\x00'` after scripted edits.
 
 ### 2026-11-22 (45): package B: UpdateSoldier
 

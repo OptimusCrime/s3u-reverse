@@ -22,12 +22,14 @@ Ghidra pseudocode.
    +0x38; destroyed: NotifyLocalPlayer 9 + CrushBuilding), 6 catapult hit
    ("Katapult getroffen", the 7-tile unit 0x29: unlinks it and clears its
    seven tiles; MapEffects 0x544F80), 7 ship hit ("Schiff getroffen" /
-   "Schiff sinkt": ships 0x2B/0x2C, cargo goods back via 0x4FFB40,
+   "Schiff sinkt": ships 0x2B/0x2C, the cargo subtracted from the owner's tallies (0x4FFB40),
    passengers freed, MapEffects 0x545070); then type = 0.
-4. **Mana**: per area the amounts of two pile lists (+0x1E, +0x42) are
-   summed per player; each active player's +0x80 (mana income?) =
-   f(0x600 / (0x7ACFA4 + 4) + sums), damped above 0x100/0x140/0x180/0x1C0,
-   halved; with new_game_objective[0] set, * 50 / 100.
+4. **Soldier strength**: per area the amounts on the pile lists of goods
+   10 and 28 (+0x1E, +0x42) are summed per player; each player's
+   `soldier_strength` (+0x80, read by UpdateSoldier's damage) =
+   0x600 / (g_strengthDivisor + 4) + 4 * goods10 (race 1: 2 * (goods10 +
+   4 * goods28)), damped above 0x100/0x140/0x180/0x1C0, halved; with
+   new_game_objective[0] set, * 50 / 100.
 5. **Reveal points**: countdowns of world+0x14D28A8 (fog_of_war.cpp).
 6. **Fog of war cycle** (56 steps, counter +0x110A580) unless 0x7DFD30
    (fast-forwarding) - done: ClearSightSlice, MarkBuildingSight,
@@ -41,9 +43,9 @@ Ghidra pseudocode.
    0x44..0x53 seeding with Random, growth stages 0x55..0x6E, dead trees,
    0xB8..0xE7 stages, 0xF3..0xFD burning/spreading with Random and the
    ring table, 0x548380(0x20, x, y) for 0xF4), DecayTraffic (0x503980),
-   resources (+0x11 low nibble) spreading to a random neighbour
-   (RandomBelow6, NeighbourX/Y 0x503700/0x503730), random removal of
-   0xE8..0xF2.
+   fish (resources of kind 0, amount 1..15) moving to a random water
+   neighbour (RandomBelow6, NeighbourX/Y 0x503700/0x503730), random
+   removal of 0xE8..0xF2.
 9. Every 220 ticks 0x4FF470; then MapEffects::ExpireSome (0x545D40) with
    g_gameTick.
 
@@ -63,12 +65,18 @@ Ghidra pseudocode.
 | 0x5474E0 | 1,056 | SpawnSpellEffects | jump table on spell, make+Add | batch 1 |
 | 0x4FB520 | 95 | UpdateMinimapSlice | interleaved 8x8 order | batch 3 |
 | 0x4FB720 | 618 | MinimapPixel | UI globals 0x730F58/5C/60, pixel format 0x7DFBA0.. | batch 3 |
-| 0x5480B0 | 262 | ExecuteSpell (dispatcher) | 18 spell handlers | |
+| 0x5480B0 | 262 | ExecuteSpell (dispatcher) | 18 spell handlers | batch 4 |
 | 0x548340..0x54B000 | ~3,000 | spell handlers + helpers | Volker\GodlyEvents.cpp: 548340 (spells 0..3: 548380 area effect, needs 548760/548A10/548BB0/548D50), 548FB0, 549530 (reveal), 549650, 549700, 5497F0, 5498A0, 549F40, 54A370, 54A7C0, 54A540, 54A1E0 (+54AF60, 54B000), 5495D0 (EventReveal), 5492A0 (EventTreeCut), 54AA40 (EventGoodsB), 54ACD0 (EventGoodsS), 549BD0 (EventConvert), 5499B0 (EventGodlyG.., x87) | |
 
 UpdateEnvironment itself: batch 2 (verified, whole-game identical).
 
 0x61FF50 (called by 0x548380) is in the CRT range.
 
-Spells are only cast by players and computer players; whether the
-recorded games reach them is shown by the whole-game call counts.
+Batch 4 (spells.cpp): spells 5 SpellRevealSpot 0x549530, 6 SpellBurnTrees
+0x549650, 7 SpellAddFish 0x549700, 8 SpellHalveResources 0x5497F0, 9
+SpellGrowTrees 0x5498A0, 31 SpellRevealMap 0x5495D0. The other handlers
+are listed in TODO.md ("Spells left of UpdateEnvironment's call tree").
+
+Spells are only cast by players and computer players; none of the
+recorded games or savegames casts one (all spell call counts 0, session
+45), so the spells have test evidence only.

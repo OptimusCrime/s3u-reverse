@@ -6800,3 +6800,70 @@ SPECS += [
     Spec("GameWorld_UpdateMinimapSlice", 0x004fb520, "thiscall", [below(64)], eax_mask=0, presets=minimap_slice,
          globals=minimap_slice_globals, max_cases=150),
 ]
+
+
+# --- package D: spells (spells.cpp) -------------------------------------------
+
+def spell_area(rng, pool, args):
+    """Player args[0] with some mana, a small map, a ring table of 320 small
+    offsets and interesting tiles around (args[1], args[2])."""
+    size = rng.randint(32, 96)
+    fields = [(SIGHT_MAP, size, 4), (LOCAL_PLAYER, rng.randrange(4), 4)]
+    record = PLAYER_RECORDS + args[0] * PLAYER_RECORD_BYTES
+    fields += [(record + 0x4, rng.randrange(4), 4), (record + 0x8c, rng.randrange(100), 4)]
+    fields += [(record + 0x94 + slot * 4, rng.randrange(60), 4) for slot in range(9)]
+    offsets = []
+    for n in range(320):
+        d = 1 + n // 12
+        dx, dy = rng.randint(-d, d), rng.randint(-d, d)
+        offsets.append((dx, dy))
+        fields += [(NEIGHBOUR_OFFSETS + n * 16, dx & 0xFFFFFFFF, 4), (NEIGHBOUR_OFFSETS + n * 16 + 4, dy & 0xFFFFFFFF, 4)]
+    x, y = (a - (1 << 32) if a >= 1 << 31 else a for a in args[1:3])
+    seen = set()
+    for dx, dy in offsets:
+        tx, ty = x + dx, y + dy
+        if 0 <= tx < size and 0 <= ty < size and (tx, ty) not in seen:
+            seen.add((tx, ty))
+            t = tile(tx, ty)
+            fields += [(t + 0x7, 0x40 + rng.randrange(0x34) if rng.random() < 0.6 else rng.randrange(256), 1),
+                       (t + 0x6, rng.randrange(16) if rng.random() < 0.5 else rng.randrange(256), 1),
+                       (t + 0x11, rng.randrange(256), 1)]
+    high = rng.randint(-1, 49)
+    fields.append((REVEAL_COUNT, high & 0xFFFFFFFF, 4))
+    full = rng.random() < 0.3
+    fields += [(REVEAL_POINTS + i * 16, 1 if full or rng.random() < 0.85 else 0, 1) for i in range(50)]
+    return fields
+
+
+def spell_x(rng, pool):
+    return rng.randint(-10, 100) & 0xFFFFFFFF
+
+
+SPELL_HANDLERS = {address: (count, "thiscall", "probe") for address, count in [
+    (0x00548340, 4), (0x00548fb0, 3), (0x00549530, 3), (0x00549650, 3), (0x00549700, 3), (0x005497f0, 3),
+    (0x005498a0, 3), (0x00549f40, 4), (0x0054a370, 3), (0x0054a7c0, 4), (0x0054a540, 4), (0x0054a1e0, 3),
+    (0x00549bd0, 3), (0x005499b0, 3), (0x0054aa40, 4), (0x0054acd0, 4), (0x005492a0, 3), (0x005495d0, 1)]}
+
+
+def spell_spec(name, address, **kwargs):
+    return Spec(name, address, "thiscall", [below(4), spell_x, spell_x], eax_mask=0, presets=spell_area,
+                max_cases=300, **kwargs)
+
+
+SPECS += [
+    spell_spec("GameWorld_SpellRevealSpot", 0x00549530),
+    spell_spec("GameWorld_SpellBurnTrees", 0x00549650),
+    # Exempt: 0x54978e (the signed-modulo fix-up of (Random & 0xffff) % 4):
+    # dead, the value is never negative.
+    spell_spec("GameWorld_SpellAddFish", 0x00549700, exempt_blocks=(0x54978e,)),
+    spell_spec("GameWorld_SpellHalveResources", 0x005497f0),
+    spell_spec("GameWorld_SpellGrowTrees", 0x005498a0),
+    Spec("GameWorld_SpellRevealMap", 0x005495d0, "thiscall", [below(4)], eax_mask=0,
+         presets=lambda rng, pool, args: spell_area(rng, pool, args + [0, 0]),
+         globals=lambda rng, pool, args: [(0x007dfd84, rng.choice([0, 1, 1, 2]), 4)],
+         callees={0x004febe0: (1, "thiscall", "probe")}, max_cases=300),
+    Spec("GameWorld_ExecuteSpell", 0x005480b0, "thiscall",
+         [anything, lambda rng, pool: rng.randint(-50, 800) & 0xFFFFFFFF,
+          lambda rng, pool: rng.randint(-50, 800) & 0xFFFFFFFF, anything, below(34, 0.1)], eax_mask=0,
+         presets=lambda rng, pool, args: [(SIGHT_MAP, rng.randint(1, 768), 4)], callees=SPELL_HANDLERS),
+]
