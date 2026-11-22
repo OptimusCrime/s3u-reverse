@@ -12,7 +12,8 @@ all, writes the result:
 Rows that already carry a whole-game note are left alone.
 
 It also merges every count (including 0) into re/whole_game_calls.csv as
-source replay:<recording file name> (tools/whole_game.py; the structured
+source replay:<recording name> (the file name without its extension;
+tools/whole_game.py; the structured
 record that tools/progress.py reads). Run it only after a check that
 passed.
 
@@ -82,7 +83,8 @@ def main():
         writer = csv.DictWriter(f, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
-    added, updated = whole_game.record(f"replay:{os.path.basename(args.recording)}", args.ticks,
+    stem = os.path.splitext(os.path.basename(args.recording))[0]
+    added, updated = whole_game.record(f"replay:{stem}", args.ticks,
                                        by_address, note=f"seed {args.seed}")
     print(f"{len(counts)} call counts read, {changed} rows updated")
     print(f"re/whole_game_calls.csv: {added} rows added, {updated} updated")

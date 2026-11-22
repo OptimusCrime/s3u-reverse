@@ -23,3 +23,6 @@
 *.zip  binary
 *.7z   binary
 *.pdf  binary
+
+# Command recordings (version 4 text)
+*.s3rec text eol=lf

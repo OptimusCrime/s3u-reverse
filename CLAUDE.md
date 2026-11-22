@@ -361,8 +361,8 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
 - **Recording a whole game played by the user:** `python
   tools/play_game.py` (defaults: 768 random map, 2 computer players, high
   goods, random seed, `--original`, normal speed, trace on; takes the game
-  lock for the session) writes `build/x86/bin/Debug/recordings/NAME.bin`
-  (+ `.bin.tsv` trace, `.log`). User guide: `docs/recording_a_game.md`.
+  lock for the session) writes `recordings/NAME.s3rec` (+ `.s3rec.tsv`
+  trace and `.log`, both gitignored). User guide: `docs/recording_a_game.md`.
   Commands are flushed per command; quitting or closing the window ends the
   recording. F12 (the game's fast-forward, `g_stepCountdown` += 882) is a
   UI event that a recording can't contain; the recorder logs a warning.
@@ -382,8 +382,17 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
 - **Recording and replaying commands:** `--record-commands FILE` records
   every command; `--replay-commands FILE` replays a recording instead of the
   live commands. Recordings (format in `src/common/recording_format.h`)
-  store the game seed, the map and the random-race setting (version 3 also
-  the `--random-map` setup); the launcher
+  store the game seed, the map and the random-race setting (version 3+ also
+  the `--random-map` setup). **Recordings are committed, as text** (user
+  decision 2026-11-22): format version 4 (`s3re-recording 4`, one line per
+  command: step, then the message bytes as hex; `#` comments), extension
+  `.s3rec`, in the top-level `recordings/` (list and provenance in
+  `recordings/README.md`; traces `.tsv` there are gitignored). The DLL
+  writes v4 and flushes every line; all readers still read the binary
+  versions 1-3 (`tools/command_log.py convert IN OUT` turns them into v4;
+  `python tools/test_command_log.py` tests the formats). Tools take a path
+  or a name in `recordings/` (`--recording scripted-seed127`). Whole-game
+  sources are `replay:<name without extension>`. The launcher
   starts the replay with that seed and map (an explicit `--seed`/`-map`
   must agree) and the DLL stops the game (exit code 3) if the running game
   doesn't match. Old version 1 recordings need `--seed` and `-map`, or
@@ -407,8 +416,9 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   another seed the recorded commands run in a different game, which can
   even crash the original (e.g. buildings of the wrong race). Recordings
   now carry their seed and map (see above).
-  `recordings/scripted-seed127.bin` was recorded with seed 1234 (127 was
-  the synthetic-input seed); it has been upgraded to version 2.
+  `recordings/scripted-seed127.s3rec` was recorded with seed 1234 (127 was
+  the synthetic-input seed); it was upgraded to version 2 and converted to
+  version 4.
 - **Diagnostics in `s3re.log`:** the game's own `DebugLog` messages (688
   call sites, silent in the release build; at most 5 per call site, with
   callers; calls from our replacements show as `s3re.dll+RVA`), and for access violations in game code the registers, memory
@@ -745,8 +755,9 @@ replaying, see `src/s3re/replay/command_log.h`):
    (inventory notes and `re/whole_game_calls.csv`; savegame checks record
    themselves); never claim whole-game evidence for an uncalled
    function. Keep
-   recordings with player input in `build/x86/bin/Debug/recordings/` (make
-   one with `check_replay.py --synthetic-input SEED`).
+   recordings worth keeping in `recordings/` (committed, with a line in
+   its README; make one with `check_replay.py --synthetic-input SEED`, the
+   recording is `replay-check/recording.s3rec` next to the DLL).
 7. Set the row to `verified`, `hook=replaced`, `verified_by=<test names>`
    (space-separated); without evidence yet: `reimplemented`,
    `hook=unverified` and `S3RE_HOOK_UNVERIFIED` (see "Unverified

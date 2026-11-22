@@ -42,3 +42,6 @@ desktop.ini
 
 # Local Claude Code settings
 .claude/settings.local.json
+
+# Determinism traces next to the committed recordings (regenerable)
+recordings/*.tsv

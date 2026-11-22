@@ -17,10 +17,12 @@ Usage: python tools/check_replay.py [--ticks N] [--seed N] [--map PATH]
 3. Mutation check: replay the recording with one command removed. The trace
    must now differ, which proves the replay really drives the game.
 
-With --recording FILE (e.g. a game a human played with --record-commands),
-step 1 is skipped and the replay is compared against FILE's own trace,
-which must sit next to it as FILE.tsv. Replays take the game seed and map
-from the recording (version 2), and a random-map game's setup (version 3);
+With --recording FILE (e.g. a game a human played with --record-commands;
+a path, or a name in recordings/ such as `scripted-seed127`), step 1 is
+skipped and the replay is compared against FILE's own trace, which must sit
+next to it as FILE.tsv (traces are not committed: use --against-original,
+or keep the .tsv locally). Replays take the game seed and map from the
+recording (version 2+), and a random-map game's setup (version 3+);
 --seed, --map, --random-map, --goods, --computers and --race only apply when
 recording (they are passed to s3re_launcher), --seed and --map also to
 version 1 recordings, which don't store them.
@@ -42,6 +44,7 @@ keyboard. Exit code 0 if every check passed.
 """
 
 import argparse
+import dataclasses
 import glob
 import os
 import re
@@ -148,7 +151,9 @@ def main():
     parser.add_argument("--computers", type=int,
                         help="with --random-map: number of computer opponents")
     parser.add_argument("--race", help="with --random-map: your race")
-    parser.add_argument("--recording", help="replay this recording instead of making one")
+    parser.add_argument("--recording",
+                        help="replay this recording instead of making one (a path, or a name "
+                             "in recordings/, e.g. scripted-seed127)")
     parser.add_argument("--no-mutation", action="store_true")
     parser.add_argument("--against-original", action="store_true",
                         help="verify our reimplementations: replay the recording with the "
@@ -184,13 +189,13 @@ def main():
         dump_args = ["--dump-tick", ",".join(map(str, ticks)), "--dump-headers"]
 
     if args.recording:
-        recording = os.path.abspath(args.recording)
+        recording = os.path.abspath(command_log.resolve(args.recording))
         reference = recording + ".tsv"
         if not os.path.exists(reference) and not args.against_original:
             print(f"no reference trace {reference}")
             return 2
     else:
-        recording = os.path.join(work, "recording.bin")
+        recording = os.path.join(work, "recording" + command_log.EXTENSION)
         print(f"record: {args.ticks} ticks, seed {args.seed or DEFAULT_SEED}, "
               f"{args.map or DEFAULT_MAP}", flush=True)
         trace = run_game(launcher, bin_dir, args, ["--record-commands", recording, *dump_args],
@@ -295,10 +300,10 @@ def main():
         if index is None:
             print("mutation check skipped: no command to remove")
         else:
-            mutated = os.path.join(work, "mutated.bin")
-            command_log.write(mutated, command_log.Recording(
-                loaded.version, loaded.seed, loaded.settings, loaded.map,
-                commands[:index] + commands[index + 1:], loaded.setup, loaded.setup_extra))
+            mutated = os.path.join(work, "mutated" + (command_log.EXTENSION if loaded.version > 1
+                                                      else ".bin"))
+            command_log.write(mutated, dataclasses.replace(
+                loaded, commands=commands[:index] + commands[index + 1:]))
             print(f"mutation: replay without command {index} (slot {commands[index][0]})",
                   flush=True)
             trace = run_game(launcher, bin_dir, args, ["--replay-commands", mutated])

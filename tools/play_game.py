@@ -14,11 +14,12 @@ is written to the recording as it happens, and the determinism trace of
 the game is written alongside, so the recording can later be replayed fast
 against the original (tools/check_replay.py --recording FILE).
 
-The files go to build/x86/bin/<build>/recordings/:
-  NAME.bin       the recording (format version 3: seed, map, game setup)
-  NAME.bin.tsv   the determinism trace of the played game (the reference
-                 for `check_replay.py --recording NAME.bin`)
-  NAME.log       s3re.log of the session
+The files go to recordings/ in the repository (--out-dir to change):
+  NAME.s3rec      the recording (format version 4, a text file: seed, map,
+                  game setup, one line per command); committed to git
+  NAME.s3rec.tsv  the determinism trace of the played game (the reference
+                  for `check_replay.py --recording NAME`; not committed)
+  NAME.log        s3re.log of the session (not committed)
 NAME defaults to fullgame-<date>-<time>-seed<N>.
 
 Quit through the game's own menu or by closing the window; the recording is
@@ -57,7 +58,9 @@ def main():
     parser.add_argument("--race", choices=("roman", "egyptian", "asian", "amazon"),
                         help="your race (default: random, chosen by the game)")
     parser.add_argument("--seed", type=int, help="game and map seed 1..65535 (default random)")
-    parser.add_argument("--name", help="file name of the recording, without .bin")
+    parser.add_argument("--name", help="file name of the recording, without .s3rec")
+    parser.add_argument("--out-dir", default=command_log.RECORDINGS_DIR,
+                        help="folder for the files (default: recordings/)")
     parser.add_argument("--ours", action="store_true",
                         help="play with our verified reimplementations instead of the "
                              "original code")
@@ -78,9 +81,9 @@ def main():
         return 2
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
     name = args.name or f"fullgame-{stamp}-seed{seed}"
-    out_dir = os.path.join(bin_dir, "recordings")
+    out_dir = os.path.abspath(args.out_dir)
     os.makedirs(out_dir, exist_ok=True)
-    recording = os.path.join(out_dir, name + ".bin")
+    recording = os.path.join(out_dir, name + command_log.EXTENSION)
     if os.path.exists(recording):
         print(f"{recording} exists already; choose another --name")
         return 2

@@ -32,9 +32,11 @@ re/update_settlers.md and re/update_settlers_jobs.csv). The user will
 later record a full game from start to finish for the late-game paths
 (spells, ships, tower captures, shooting soldiers, late building types):
 the tool is ready, `python tools/play_game.py` (docs/recording_a_game.md;
-session 45 entry "play-and-record tool"). When the recording arrives:
-`check_replay.py --recording FILE --against-original --ticks N`, then
-`record_call_counts.py`.
+session 45 entry "play-and-record tool"); it lands as text in
+`recordings/NAME.s3rec` (format v4, committed; session 45 entry "text
+recordings v4"). When the recording arrives: commit it with a line in
+recordings/README.md, `check_replay.py --recording NAME --against-original
+--ticks N`, then `record_call_counts.py --recording NAME`.
 
 **Core gameplay first, no network (user decision 2026-11-09, after
 batch 27).** Skip network code entirely for now: CNetThread, `Lobby::*`,
@@ -578,6 +580,53 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-22 (45): text recordings v4 (parallel worktree)
+
+User decision: recordings are committed to the repository, as text. The
+user plays a multi-hour game tonight with `tools/play_game.py`, written
+directly in the new format.
+
+- **Format version 4** (`src/common/recording_format.h`, also
+  docs/recording_a_game.md): line 1 `s3re-recording 4`; header lines
+  `seed`, `settings`, `map` (required), `setup flags=.. size=..
+  symmetry=.. field0c=.. map-seed=.. goods=.. race=.. computers=..`
+  (optional: absent = not checked, as in v2); then one line per command:
+  `STEP HEX8 HEX8 ...  # cmd XX` (step = 0x20 messages before it; the
+  message bytes in memory order, 4 per group, uninitialized bytes 9..11
+  kept). `#` comments anywhere, CRLF accepted, unknown keys rejected.
+  Extension `.s3rec`.
+- **DLL:** the recorder writes v4 and flushes every line; one parser
+  (`recording::ParseRecording`, header-only, shared with the launcher)
+  reads v1-v3 binary and v4 text. Exit-3 checks unchanged (setup compared
+  when the file has one). In-process tests `RecordingFormat_*` (4).
+  Original-mode tooling version 4.
+- **Tools:** `command_log.py convert IN OUT` (binary -> v4, v4 -> normal
+  form, verified by reading back), `list`/`drop`/`upgrade` on all versions
+  (upgrade writes v4); `tools/test_command_log.py` (normal form of every
+  committed recording, binary -> text round trip with `--binary DIR`,
+  random round trips, CRLF, rejection cases). `check_replay.py
+  --recording NAME` takes a name in `recordings/`; `play_game.py` writes
+  `recordings/NAME.s3rec` (+ gitignored `.s3rec.tsv`, `.log`);
+  `trace_cache.py` keys a recording by the hash of its normal form (binary
+  and converted file share an entry; old entries invalidated once).
+  Whole-game sources are now `replay:<stem>` (`replay:scripted-seed127`;
+  `whole_game.load` maps old `NAME.bin` labels).
+- **`recordings/`** (README with provenance): scripted-seed127,
+  fun8-seed2024-input31 (converted from the main checkout's .bin),
+  random768-seed4321-input7 (session 44's random-map test).
+- **Evidence:** `check_replay.py --recording NAME --against-original`
+  on the v4 files: scripted-seed127 (3,000 ticks), fun8-seed2024-input31
+  (3,000) and random768-seed4321-input7 (1,500) all REPLAY OK (original
+  reran: tooling version bump), and the original's v4 replay trace equals
+  each recording's stored binary-era `.tsv`. `test_command_log.py --binary
+  <main checkout recordings>`: binary -> v4 -> parsed identical, committed
+  files = conversion. Fresh game with the new writer (`play_game.py --size
+  384 --seed 777 --exit-after-ticks 600`): the DLL's file is byte-identical
+  to `command_log.py convert`'s normal form; replay vs recorded trace
+  identical, mutation diverges, replay vs original identical. A file with
+  `settings 0` stops the game with exit 3; a bad hex group is refused by
+  the launcher. `s3re_launcher --test`: 494/494; inventory check 0 errors.
 
 ### 2026-11-22 (45): play-and-record tool (parallel worktree)
 

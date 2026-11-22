@@ -37,10 +37,12 @@
 // to; --replay-commands <file> replays such a recording instead of the live
 // commands (see src/s3re/replay/command_log.h). A recording stores the game
 // seed and map, and the replay uses them (an explicit --seed or -map must
-// agree); version 1 recordings need --seed and -map. A version 3 recording
-// of a --random-map game also stores the random map and the player setup
-// (--goods, --computers, --race), and the replay starts that game.
-// Commands are flushed to the file as they happen. docs/recording_a_game.md
+// agree); version 1 recordings need --seed and -map. A recording (version 3
+// and 4) of a --random-map game also stores the random map and the player
+// setup (--goods, --computers, --race), and the replay starts that game.
+// New recordings are text (version 4, src/common/recording_format.h; by
+// convention NAME.s3rec in recordings/); commands are flushed to the file as
+// they happen. docs/recording_a_game.md
 // describes recording a whole game played by a person.
 //
 // --exit-after-ticks <n> ends the game once the game tick reaches n, through
@@ -293,11 +295,14 @@ int ApplyRecording(const std::wstring& path, std::wstring& seed,
     if (_wfopen_s(&file, path.c_str(), L"rb") != 0 || file == nullptr) {
         return Fail(L"cannot read %s", path);
     }
-    const s3re::recording::Header header = s3re::recording::ReadHeader(file);
+    s3re::recording::Recording recording;
+    std::string error;
+    const bool ok = s3re::recording::ReadRecording(file, recording, &error);
     fclose(file);
-    if (header.version == 0) {
-        return Fail(L"not a command recording: %s", path);
+    if (!ok) {
+        return Fail(L"not a valid command recording: %s", path + L" (" + Widen(error) + L")");
     }
+    const s3re::recording::Header& header = recording.header;
     setup = header.setup;
     if (setup.IsRandomMap() && setup.mapSeed != header.seed) {
         return Fail(L"%s: the random map seed differs from the game seed; such a game "

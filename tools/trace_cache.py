@@ -10,9 +10,13 @@ So check_replay.py / check_save.py --against-original store the original's
 trace here and reuse it instead of running the original every time.
 
 Cache key (all of it; a change of any part is a miss):
-  - SHA-256 of S3.EXE and of the input file (recording or savegame)
+  - SHA-256 of S3.EXE and of the input file (recording or savegame). For a
+    command recording it is the SHA-256 of its content in normal form
+    (tools/command_log.py: version 4 text, own comments dropped), so a
+    binary recording and its version 4 conversion, or a v4 file with
+    edited comments, share one entry ("recording:<sha>")
   - the launcher arguments of the run, without --exit-after-ticks and
-    --timeout, with file paths replaced by their SHA-256
+    --timeout, with file paths replaced by their SHA-256 (as above)
   - the trace format version ("s3re determinism trace vN", read from
     s3re.dll) and the original-mode tooling version (S3RE_ORIGINAL_TOOLING
     _VERSION in src/s3re/tooling/version.h, read from s3re.dll; bump it when
@@ -50,6 +54,28 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_DIR = os.path.join(ROOT, "build", "trace_cache")
 
 _sha_cache = {}
+_content_cache = {}
+
+
+def content_sha256(path):
+    """sha256(path), or for a command recording "recording:" + the SHA-256
+    of its normal form (what a replay uses: header and command bytes)."""
+    path = os.path.abspath(path)
+    stat = os.stat(path)
+    key = (path, stat.st_size, stat.st_mtime_ns)
+    if key not in _content_cache:
+        data = open(path, "rb").read()
+        value = None
+        if data.startswith((b"S3RECMD2", b"S3RECMD3", b"s3re-recording 4")):
+            sys.path.insert(0, os.path.join(ROOT, "tools"))
+            import command_log
+            try:
+                text = command_log.format_text(command_log.parse(data))
+                value = "recording:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+            except command_log.FormatError:
+                value = None
+        _content_cache[key] = value or sha256(path)
+    return _content_cache[key]
 
 
 def sha256(path):
@@ -101,13 +127,13 @@ def make_key(kind, bin_dir, game_dir, input_file, launcher_args):
             skip = True
             continue
         if os.path.isfile(arg):
-            arg = "file:" + sha256(arg)
+            arg = "file:" + content_sha256(arg)
         args.append(arg)
     trace_version, tooling_version = dll_versions(bin_dir)
     return {
         "kind": kind,
         "exe_sha256": sha256(os.path.join(game_dir, "S3.EXE")),
-        "input_sha256": sha256(input_file),
+        "input_sha256": content_sha256(input_file),
         "args": args,
         "trace_version": trace_version,
         "tooling_version": tooling_version,
