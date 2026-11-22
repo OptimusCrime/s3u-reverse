@@ -569,6 +569,35 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-22 (45): struct pass S2: classes (parallel worktree)
+
+- Object `RawAt`s 21 -> 0 (two test-only uses in string_members.cpp
+  marked `raw-ok`); data-address uses 255 -> 250 (globals are package S1).
+- `CGraphicsData` (was `GfxData`, RTTI name, Dirk\graphicsdata.cpp):
+  full 0xc44 layout from its constructor 0x5f67c0 / Close 0x5fa690 (11
+  per-group arrays of 70, file mappings, views) and typed frame / offset /
+  sprite tables, in game/gfx_layout.h. The five test copies
+  (GfxDataFields, GfxGroupTable, FakeGfx, AnyGfx, GfxFields) became one
+  `test::FakeGraphics` (test/fake_graphics.h).
+- UI structs renamed to their RTTI classes and completed with own vtable,
+  vbptr and vtordisp (CScreenElement, CStaticText, CScreenGroup 0x80,
+  CScreen 0x98, CControl 0x3c); `Menus::CDrawThread` moved to
+  game/menus_layout.h with its CScreen base (+0x54) and virtual base
+  (+0x150). CLandscapeSurface completed (0xa8; +0x90 CGraphicsData,
+  +0xa0 colour table, now also used by Landscape_FindOrAddColour).
+  GameSettings (g_gameSettings) layout header; LobbyIdObject,
+  AiTaggedRecord, ComObject; DDBLTFX from <ddraw.h>; per-function structs
+  for the string_members.cpp classes. Field knowledge in re/structs.md
+  ("Classes outside the world"); what is left in TODO.md (typed access
+  leftovers).
+- Evidence: build; `s3re_launcher --test` 490/490; emulator `--changed`
+  367 specs, 0 mismatches (incomplete coverage only the known
+  GameWorld_Create and UpdateEconomy 0x4e26d7), plus the landscape, UI
+  and surface specs after the last edits; check_save "slot 1.sav" 2,000
+  ticks against the original: identical; inventory check clean.
+- savegame_start.cpp (original-mode tooling) only changed a type name;
+  the compiled code is the same, so the tooling version was not bumped.
+
 ### 2026-11-22 (45): round end (WalkSettler, UpdateSoldier, UpdateEconomy, UpdateEnvironment)
 
 - Four parallel agents (entries below): package A WalkSettler, package B
