@@ -57,10 +57,7 @@ public:
         return get()[index];
     }
 
-    template <typename U>
-    T& operator=(U&& value) const {
-        return get() = static_cast<U&&>(value);
-    }
+    T& operator=(const std::remove_cv_t<T>& value) const { return get() = value; }
     template <typename U>
     T& operator+=(const U& value) const {
         return get() += value;
