@@ -7,6 +7,7 @@
 #include "game/random.h"
 #include "hooks.h"
 #include "log.h"
+#include "test/difftest.h"
 #include "tooling/random_map_start.h"
 
 #include <windows.h>
@@ -41,10 +42,7 @@ S3RE_PASSTHROUGH(0x004309c0, MessageQueue_Push, PushFn, Original_MessageQueue_Pu
 constexpr std::uint8_t kStepMessage = 0x20;
 constexpr std::uint8_t kCommandMessage = 0x21;
 
-struct Command {
-    std::uint32_t slot;
-    std::vector<std::uint32_t> dwords;
-};
+using recording::Command;  // .step = the slot: 0x20 messages pushed before it
 
 enum class Mode { Off, Record, Replay };
 
@@ -107,7 +105,8 @@ std::string MapArgument() {
 // The settings of the running game that a recording must match.
 recording::Header CurrentGame() {
     recording::Header header;
-    header.version = 3;
+    header.version = 4;
+    header.hasSetup = true;
     const long seed = game::LastSeed();
     header.seed = seed < 0 ? 0xFFFFFFFFu : static_cast<std::uint32_t>(seed);
     header.settings =
@@ -118,7 +117,7 @@ recording::Header CurrentGame() {
     return header;
 }
 
-// A version 2 recording must belong to the running game: same seed, race
+// A version 2+ recording must belong to the running game: same seed, race
 // setting and map. Logs every difference.
 bool MatchesCurrentGame(const recording::Header& recorded) {
     const recording::Header current = CurrentGame();
@@ -138,7 +137,7 @@ bool MatchesCurrentGame(const recording::Header& recorded) {
                  current.map.c_str());
         ok = false;
     }
-    if (recorded.version >= 3 && recorded.setup != current.setup) {
+    if (recorded.hasSetup && recorded.setup != current.setup) {
         const recording::GameSetup& a = recorded.setup;
         const recording::GameSetup& b = current.setup;
         S3RE_LOG("replay: recorded with game setup flags %u size %u symmetry %u field0c %u "
@@ -167,41 +166,29 @@ bool LoadRecording(const std::string& path) {
         S3RE_LOG("replay: cannot open %s", path.c_str());
         return false;
     }
-    const recording::Header header = recording::ReadHeader(file);
-    bool ok = header.version != 0;
+    recording::Recording loaded;
+    std::string error;
+    const bool ok = recording::ReadRecording(file, loaded, &error);
+    std::fclose(file);
+    if (!ok) {
+        S3RE_LOG("replay: %s is not a valid command recording (%s)", path.c_str(),
+                 error.c_str());
+        return false;
+    }
+    const recording::Header& header = loaded.header;
     if (header.version >= 2) {
         S3RE_LOG("replay: %s (version %d) was recorded with seed %u, settings %#x, map '%s'",
                  path.c_str(), header.version, header.seed, header.settings,
                  header.map.c_str());
         LogSetup("replay", header.setup);
         if (!MatchesCurrentGame(header)) {
-            std::fclose(file);
             return false;
         }
-    } else if (header.version == 1) {
+    } else {
         S3RE_LOG("replay: %s is a version 1 recording (no seed or map); not checked",
                  path.c_str());
     }
-    while (ok) {
-        std::uint32_t record[2];
-        if (std::fread(record, sizeof(record[0]), 2, file) != 2) {
-            break;  // end of file
-        }
-        if (record[1] == 0 || record[1] > 64) {
-            ok = false;
-            break;
-        }
-        Command command{record[0], std::vector<std::uint32_t>(record[1])};
-        ok = std::fread(command.dwords.data(), sizeof(std::uint32_t), record[1], file) ==
-             record[1];
-        g_recorded.push_back(std::move(command));
-    }
-    std::fclose(file);
-    if (!ok) {
-        S3RE_LOG("replay: %s is not a valid command recording", path.c_str());
-        g_recorded.clear();
-        return false;
-    }
+    g_recorded = std::move(loaded.commands);
     S3RE_LOG("replay: loaded %zu commands from %s", g_recorded.size(), path.c_str());
     return true;
 }
@@ -218,10 +205,11 @@ void Initialize() {
             return;
         }
         const recording::Header header = CurrentGame();
-        recording::WriteHeader(g_recordFile, header);
+        const std::string text = recording::FormatHeader(header);
+        std::fwrite(text.data(), 1, text.size(), g_recordFile);
         std::fflush(g_recordFile);
         g_mode = Mode::Record;
-        S3RE_LOG("record: writing commands to %s (seed %u, settings %#x, map '%s')",
+        S3RE_LOG("record: writing commands to %s (format version 4, seed %u, settings %#x, map '%s')",
                  recordPath.c_str(), header.seed, header.settings, header.map.c_str());
         LogSetup("record", header.setup);
     } else if (!replayPath.empty()) {
@@ -267,7 +255,7 @@ void LogMismatch(const char* what, const std::uint32_t* live, std::size_t liveCo
     const std::string liveText = live ? "[" + Hex(live, liveCount) + "]" : "(none)";
     const std::string recordedText =
         recorded ? "#" + std::to_string(recorded - g_recorded.data()) + " slot " +
-                       std::to_string(recorded->slot) + " [" +
+                       std::to_string(recorded->step) + " [" +
                        Hex(recorded->dwords.data(), recorded->dwords.size()) + "]"
                  : "(none)";
     S3RE_LOG("replay: %s at slot %u: live %s, recorded %s", what, g_slot, liveText.c_str(),
@@ -278,14 +266,14 @@ void LogMismatch(const char* what, const std::uint32_t* live, std::size_t liveCo
 // must come in the same order and in the same slot as recorded.
 void CompareLive(const std::uint32_t* dwords, std::size_t count) {
     // Recorded commands of past slots that no live command matched.
-    while (g_nextCompare < g_recorded.size() && g_recorded[g_nextCompare].slot < g_slot) {
+    while (g_nextCompare < g_recorded.size() && g_recorded[g_nextCompare].step < g_slot) {
         LogMismatch("recorded command was not issued live", nullptr, 0,
                     &g_recorded[g_nextCompare]);
         ++g_nextCompare;
     }
     const Command* expected =
         g_nextCompare < g_recorded.size() ? &g_recorded[g_nextCompare] : nullptr;
-    const bool sameSlot = expected != nullptr && expected->slot == g_slot &&
+    const bool sameSlot = expected != nullptr && expected->step == g_slot &&
                           expected->dwords.size() == count;
     if (sameSlot && std::memcmp(expected->dwords.data(), dwords, count * 4) == 0) {
         ++g_nextCompare;
@@ -343,9 +331,10 @@ std::vector<std::uint32_t> Process(const std::uint32_t* dwords, int count) {
                 S3RE_LOG("command slot=%u [%s]", g_slot, Hex(message, length).c_str());
             }
             if (g_mode == Mode::Record) {
-                const std::uint32_t header[2] = {g_slot, static_cast<std::uint32_t>(length)};
-                std::fwrite(header, sizeof(header[0]), 2, g_recordFile);
-                std::fwrite(message, sizeof(std::uint32_t), length, g_recordFile);
+                // One text line per command, flushed at once: a crash or a
+                // killed game keeps everything recorded so far.
+                const std::string line = recording::FormatCommand(g_slot, message, length);
+                std::fwrite(line.data(), 1, line.size(), g_recordFile);
                 std::fflush(g_recordFile);
             }
             if (g_mode == Mode::Replay) {
@@ -358,7 +347,7 @@ std::vector<std::uint32_t> Process(const std::uint32_t* dwords, int count) {
             }
             if (g_mode == Mode::Replay) {
                 while (g_nextInject < g_recorded.size() &&
-                       g_recorded[g_nextInject].slot <= g_slot) {
+                       g_recorded[g_nextInject].step <= g_slot) {
                     const Command& command = g_recorded[g_nextInject++];
                     out.insert(out.end(), command.dwords.begin(), command.dwords.end());
                 }
@@ -422,6 +411,189 @@ void CloseCommandLog() {
                  g_paddingDifferences, g_mismatches);
     }
     g_mode = Mode::Off;
+}
+
+}  // namespace s3re::replay
+
+// ---------------------------------------------------------------- tests
+// The recording file format (src/common/recording_format.h); no game state
+// involved. tools/test_command_log.py checks the Python reader/writer.
+
+namespace s3re::replay {
+namespace {
+
+recording::Recording ParseOrEmpty(const std::string& text, std::string* error = nullptr) {
+    recording::Recording out;
+    std::string ignored;
+    recording::ParseRecording(text, out, error != nullptr ? error : &ignored);
+    return out;
+}
+
+bool SameCommands(const std::vector<Command>& a, const std::vector<Command>& b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        if (a[i].step != b[i].step || a[i].dwords != b[i].dwords) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+S3RE_TEST(RecordingFormat_ParsesTextExample) {
+    const std::string text =
+        "s3re-recording 4\r\n"
+        "# comment\n"
+        "seed 1234  # trailing comment\n"
+        "settings 1\n"
+        "map Map\\MULTI\\384-2-Lakes.map\n"
+        "setup flags=1 size=768 symmetry=2 field0c=5 map-seed=1234 goods=3 race=255 "
+        "computers=2\n"
+        "\n"
+        "12 21fb0c00 9d2b0000 00a8f612  # cmd fb\n"
+        "12\t21010C00 AABBCCDD 01020304\n"
+        "4294967295 21030400";
+    std::string error;
+    const recording::Recording r = ParseOrEmpty(text, &error);
+    S3RE_EXPECT_EQ(r.header.version, 4);
+    S3RE_EXPECT(error.empty());
+    S3RE_EXPECT_EQ(r.header.seed, 1234u);
+    S3RE_EXPECT_EQ(r.header.settings, 1u);
+    S3RE_EXPECT(r.header.map == "Map\\MULTI\\384-2-Lakes.map");
+    S3RE_EXPECT(r.header.hasSetup);
+    S3RE_EXPECT_EQ(r.header.setup.flags, 1u);
+    S3RE_EXPECT_EQ(r.header.setup.size, 768u);
+    S3RE_EXPECT_EQ(r.header.setup.symmetry, 2u);
+    S3RE_EXPECT_EQ(r.header.setup.field0c, 5u);
+    S3RE_EXPECT_EQ(r.header.setup.mapSeed, 1234u);
+    S3RE_EXPECT_EQ(r.header.setup.goods, 3u);
+    S3RE_EXPECT_EQ(r.header.setup.race, 255u);
+    S3RE_EXPECT_EQ(r.header.setup.computers, 2u);
+    const std::vector<Command> expected = {
+        {12, {0x000cfb21u, 0x00002b9du, 0x12f6a800u}},
+        {12, {0x000c0121u, 0xddccbbaau, 0x04030201u}},
+        {0xffffffffu, {0x00040321u}},
+    };
+    S3RE_EXPECT(SameCommands(r.commands, expected));
+    // The writer gives the canonical form of the same thing.
+    S3RE_EXPECT(recording::FormatCommand(12, expected[0].dwords.data(), 3) ==
+                "12 21fb0c00 9d2b0000 00a8f612  # cmd fb\n");
+}
+
+S3RE_TEST(RecordingFormat_TextRoundTrip) {
+    for (int round = 0; round < 200; ++round) {
+        recording::Header header;
+        header.version = 4;
+        header.seed = ctx.rng().Next32();
+        header.settings = ctx.rng().Below(2);
+        header.map = round % 3 == 0 ? std::string()
+                                    : "Map\\MULTI\\some map " + std::to_string(round) + ".map";
+        header.hasSetup = round % 2 == 0;
+        if (header.hasSetup) {
+            ctx.rng().Fill(&header.setup, sizeof(header.setup));
+        }
+        std::vector<Command> commands(ctx.rng().Below(40));
+        std::uint32_t step = ctx.rng().Below(10);
+        std::string text = recording::FormatHeader(header);
+        for (Command& command : commands) {
+            step += ctx.rng().Below(3);
+            command.step = step;
+            command.dwords.resize(1 + ctx.rng().Below(recording::kMaxCommandDwords));
+            ctx.rng().Fill(command.dwords.data(), command.dwords.size() * 4);
+            text += recording::FormatCommand(command.step, command.dwords.data(),
+                                             command.dwords.size());
+        }
+        std::string error;
+        const recording::Recording r = ParseOrEmpty(text, &error);
+        if (r.header.version != 4) {
+            ctx.Fail(__FILE__, __LINE__, "parse error: %s", error.c_str());
+            return;
+        }
+        S3RE_EXPECT_EQ(r.header.seed, header.seed);
+        S3RE_EXPECT_EQ(r.header.settings, header.settings);
+        S3RE_EXPECT(r.header.map == header.map);
+        S3RE_EXPECT_EQ(r.header.hasSetup, header.hasSetup);
+        S3RE_EXPECT(!header.hasSetup || r.header.setup == header.setup);
+        S3RE_EXPECT(SameCommands(r.commands, commands));
+    }
+}
+
+S3RE_TEST(RecordingFormat_ReadsBinaryVersion3) {
+    std::string data("S3RECMD3", 8);
+    auto put32 = [&](std::uint32_t v) { data.append(reinterpret_cast<const char*>(&v), 4); };
+    auto put16 = [&](std::uint16_t v) { data.append(reinterpret_cast<const char*>(&v), 2); };
+    put32(77);
+    put32(1);
+    put16(5);
+    data += "a.map";
+    put16(32);
+    const std::uint32_t setup[8] = {1, 448, 3, 0, 77, 2, 1, 3};
+    for (std::uint32_t v : setup) {
+        put32(v);
+    }
+    put32(9);  // slot
+    put32(3);  // dword count
+    put32(0x000c1021u);
+    put32(0xdeadbeefu);
+    put32(0x12345678u);
+    const recording::Recording r = ParseOrEmpty(data);
+    S3RE_EXPECT_EQ(r.header.version, 3);
+    S3RE_EXPECT_EQ(r.header.seed, 77u);
+    S3RE_EXPECT(r.header.map == "a.map");
+    S3RE_EXPECT(r.header.hasSetup);
+    S3RE_EXPECT_EQ(r.header.setup.size, 448u);
+    S3RE_EXPECT_EQ(r.header.setup.computers, 3u);
+    const std::vector<Command> expected = {{9, {0x000c1021u, 0xdeadbeefu, 0x12345678u}}};
+    S3RE_EXPECT(SameCommands(r.commands, expected));
+    // Converted to text and back: the same.
+    std::string text = recording::FormatHeader(r.header);
+    for (const Command& c : r.commands) {
+        text += recording::FormatCommand(c.step, c.dwords.data(), c.dwords.size());
+    }
+    const recording::Recording back = ParseOrEmpty(text);
+    S3RE_EXPECT_EQ(back.header.version, 4);
+    S3RE_EXPECT(back.header.setup == r.header.setup);
+    S3RE_EXPECT(SameCommands(back.commands, r.commands));
+    // Truncated: rejected.
+    S3RE_EXPECT_EQ(ParseOrEmpty(data.substr(0, data.size() - 1)).header.version, 0);
+}
+
+S3RE_TEST(RecordingFormat_RejectsBadText) {
+    const std::string head = "s3re-recording 4\nseed 1\nsettings 0\nmap x.map\n";
+    const char* bad[] = {
+        "s3re-recording 5\nseed 1\nsettings 0\nmap\n",  // wrong version
+        "s3re-recording 4\nsettings 0\nmap\n",          // no seed
+        "s3re-recording 4\nseed 1\nmap\n",              // no settings
+        "s3re-recording 4\nseed 1\nsettings 0\n",       // no map
+        "s3re-recording 4\nseed 1\nseed 2\nsettings 0\nmap\n",
+        "s3re-recording 4\nseed -1\nsettings 0\nmap\n",
+        "s3re-recording 4\nseed 4294967296\nsettings 0\nmap\n",
+        "s3re-recording 4\nseed 1\nsettings 0\nmap\ncolour blue\n",
+        "s3re-recording 4\nseed 1\nsettings 0\nmap\nsetup flags=1\n",
+    };
+    for (const char* text : bad) {
+        S3RE_EXPECT_EQ(ParseOrEmpty(text).header.version, 0);
+    }
+    const char* badCommands[] = {
+        "5 21fb0c0\n",           // 7 digits
+        "5 21fb0c000\n",         // 9 digits
+        "5 21fb0c0g\n",          // not hex
+        "5\n",                   // no bytes
+        "5x 21fb0c00\n",         // bad step
+        "1 21fb0c00\nseed 2\n",  // header line after a command
+    };
+    for (const char* text : badCommands) {
+        S3RE_EXPECT_EQ(ParseOrEmpty(head + text).header.version, 0);
+    }
+    std::string tooLong = head + "1";
+    for (int i = 0; i < 65; ++i) {
+        tooLong += " 00000000";
+    }
+    S3RE_EXPECT_EQ(ParseOrEmpty(tooLong + "\n").header.version, 0);
+    S3RE_EXPECT_EQ(ParseOrEmpty(head + "1 21fb0c00\n").header.version, 4);
 }
 
 }  // namespace s3re::replay

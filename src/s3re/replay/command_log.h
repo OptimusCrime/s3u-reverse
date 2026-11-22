@@ -13,8 +13,9 @@
 // at which step.
 //
 // Recording (`s3re_launcher --record-commands FILE`, S3RE_RECORD_COMMANDS):
-// every 0x21 message is written with its slot, the number of 0x20 messages
-// pushed before it.
+// every 0x21 message is written with its slot (the "step" of the text
+// format), the number of 0x20 messages pushed before it, as one text line
+// that is flushed at once.
 //
 // Replaying (`--replay-commands FILE`, S3RE_REPLAY_COMMANDS): live 0x21
 // messages are dropped, and the recorded ones are pushed just before the

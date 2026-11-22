@@ -13,7 +13,9 @@ those counts in re/whole_game_calls.csv.
 Columns of re/whole_game_calls.csv (one row per function and source):
   address  0x-prefixed, 8 lowercase hex digits (as in re/functions.csv)
   name     the inventory name at that address
-  source   replay:<recording file name>, save:<savegame file name> or
+  source   replay:<recording name> (the file name in recordings/ without its
+           extension; older rows said NAME.bin, which load() still reads as
+           NAME), save:<savegame file name> or
            random:<size>,<symmetry> seed <seed> (a random-map game)
   ticks    how many ticks the check ran
   calls    the largest call count measured for this source; 0 = the hook
@@ -68,12 +70,25 @@ SEEN, TESTS_ONLY, UNMEASURED = "whole_game", "tests_only", "unmeasured"
 
 # ---------------------------------------------------------------- the CSV
 
+def normalize_source(source: str) -> str:
+    """replay:NAME.bin / replay:NAME.s3rec -> replay:NAME (the recording's
+    stem, independent of the file format)."""
+    if source.startswith("replay:"):
+        for extension in (".bin", ".s3rec"):
+            if source.endswith(extension):
+                return source[:-len(extension)]
+    return source
+
+
 def load(text: str | None = None) -> list[dict[str, str]]:
     if text is None:
         if not CALLS_CSV.exists():
             return []
         text = CALLS_CSV.read_text(encoding="utf-8")
-    return list(csv.DictReader(io.StringIO(text)))
+    rows = list(csv.DictReader(io.StringIO(text)))
+    for row in rows:
+        row["source"] = normalize_source(row["source"])
+    return rows
 
 
 def save(rows: list[dict[str, str]]) -> None:
@@ -96,6 +111,7 @@ def record(source: str, ticks: int, counts: dict[int, int], note: str = "") -> t
     """Merges one whole-game run (address -> calls) into the CSV. Keeps the
     largest count per function and source; the commit/date are replaced when
     the new count is at least as large. Returns (new rows, changed rows)."""
+    source = normalize_source(source)
     if not SOURCE_RE.fullmatch(source):
         raise ValueError(f"source must look like replay:NAME, save:NAME or random:NAME, not {source!r}")
     names = inventory_names()
@@ -290,9 +306,7 @@ def parse_notes(notes: str) -> list[tuple[str, int, int, str]]:
         for m in pattern.finditer(notes):
             recording, ticks, calls, note = values(m)
             recording = os.path.basename(recording.strip())
-            if not recording.endswith(".bin"):
-                recording += ".bin"
-            found.append((f"replay:{recording}", int(ticks.replace(",", "")),
+            found.append((normalize_source(f"replay:{recording}"), int(ticks.replace(",", "")),
                           int(calls.replace(",", "")), note))
     return found
 
@@ -393,8 +407,8 @@ def backfill() -> int:
     # CGameData::SeedRandom is an S3RE_HOOK_ALWAYS hook: not counted, but it
     # seeds every game the launcher starts (s3re.log logs each seed).
     if rows.get(0x4feb40, {}).get("status") == "verified":
-        out[(0x4feb40, "replay:scripted-seed127.bin")] = {
-            "address": "0x004feb40", "name": names[0x4feb40], "source": "replay:scripted-seed127.bin",
+        out[(0x4feb40, "replay:scripted-seed127")] = {
+            "address": "0x004feb40", "name": names[0x4feb40], "source": "replay:scripted-seed127",
             "ticks": "3000", "calls": "1", "commit": "", "date": "",
             "note": "S3RE_HOOK_ALWAYS is not counted; 1 = it seeds every game start "
                     "(s3re.log logs the seed)"}

@@ -86,7 +86,9 @@ itself.
 
 To play a whole game on a big random map against computer players and
 record it for later checks: `python tools/play_game.py`, see
-[docs/recording_a_game.md](docs/recording_a_game.md).
+[docs/recording_a_game.md](docs/recording_a_game.md). The recording lands
+in [`recordings/`](recordings/README.md) as a text file (`NAME.s3rec`);
+recorded games are kept there in git.
 
 ## Testing
 

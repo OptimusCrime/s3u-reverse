@@ -13,4 +13,4 @@
 // comparing against stale cached references. (The trace format has its own
 // version, "s3re determinism trace vN" in trace/determinism.cpp, which is
 // part of the key as well.)
-#define S3RE_ORIGINAL_TOOLING_VERSION "s3re original-mode tooling version 3"
+#define S3RE_ORIGINAL_TOOLING_VERSION "s3re original-mode tooling version 4"
