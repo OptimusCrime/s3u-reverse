@@ -7639,9 +7639,220 @@ def _us_family_d(rng, fields, n, ctx):
 # ---- family s (special, settler_jobs_special.cpp) ----
 US_EXEMPT_S = ()
 
+US_TRADES = 0x10f45e8
+US_TRADE_BYTES = 0x5a
+US_OFFSETS = 0x110a588
+# The jobs of the family, the long handlers drawn more often.
+US_SPECIAL_JOBS = (
+    0x17, 0x8d, 0x145, 0x146, 0x130, 0x134, 0x136, 0x14b, 0x14c, 0x13a, 0x13b, 0x13c, 0x13e, 0x13d, 0x13f, 0x143,
+    0x144, 0x142, 0x150, 0x14d, 0x14e, 0x14f, 0x151, 0x152, 0x193, 0x194, 0x161, 0x163, 0x164, 0x166, 0x167, 0x169,
+    0x16b, 0x16c, 0x16e, 0x16f, 0x171, 0x153, 0x155, 0x156, 0x15f, 0x157, 0x158, 0x159, 0x15a, 0x15b, 0x15c, 0x15d,
+    0x15e, 0x160, 0x17c, 0x17e, 0x17f, 0x180, 0x181, 0x182, 0x183, 0x184, 0x185, 0x190, 0x191, 0x192,
+    0x134, 0x136, 0x136, 0x14b, 0x14b, 0x14c, 0x14c, 0x14d, 0x14d, 0x163, 0x166, 0x166, 0x143, 0x192, 0x192,
+    0x15a, 0x15b, 0x152, 0x152,
+    # The handlers with rare branches (scenarios in _us_special_scenario) once more.
+    0x14b, 0x14b, 0x14b, 0x14d, 0x14d, 0x152, 0x152, 0x152, 0x155, 0x155, 0x155, 0x163, 0x163, 0x136, 0x136,
+    0x143, 0x143, 0x191, 0x191, 0x152, 0x152, 0x152, 0x14b, 0x14b, 0x17e, 0x17e, 0x14c, 0x14c, 0x183, 0x183, 0x15a, 0x134, 0x134)
+US_SPECIAL_TYPES = (0x13, 0x15, 0x17, 0x2d, 0x2f, 0x2e, 0x2b, 0x2c, 0x27, 0x08, 0x21)
+US_DIR_X = (1, 1, 0, -1, -1, 0)   # NeighbourX/Y step per direction (map_directions.cpp)
+US_DIR_Y = (0, 1, 1, 0, -1, -1)
+
+
+def _us_near(rng, v, r):
+    return v - r + rng.randrange(2 * r + 1)
+
 
 def _us_family_s(rng, fields, n, ctx):
-    pass
+    """The settler's building with a trade route (often ending here, its
+    points in the settler's area and walk region), ring piles, door piles,
+    the pile under the settler (whose +0xa names the building), flowers /
+    hives / free spots around the work point, patients for the healer, a
+    ship on the shipyard's ship tile; players 0..3 in two teams. As the
+    in-process test's CustomizeSpecial (settler_jobs_special.cpp)."""
+    s = ctx["record"]
+    sx, sy = ctx["x"], ctx["y"]
+    job = rng.choice(US_SPECIAL_JOBS)
+    art = rng.choice(US_SPECIAL_TYPES) if rng.random() < 0.8 else rng.randrange(0x30)
+    owner = rng.randrange(4)
+    building = rng.randint(1, US_OTHERS)
+    b = BUILDINGS + building * BUILDING_BYTES
+    fields += [(s, owner, 1), (s + 0x1, art, 1), (s + 0xe, job, 2), (s + 0x22, building, 2)]
+    btype = rng.choice((0x21, 0x22, 0x21, 0x22, 0x20, 0x33, 0x34, 0x35, 0x23)) if rng.random() < 0.8 \
+        else rng.randrange(0x39)
+    kinds = [rng.choice((0, 1, 2, 3, 0x13, 250, 251, 0x10)) for _ in range(8)]
+    if rng.random() < 1 / 3:  # an ordered gong, all steps done
+        kinds[6], kinds[7] = 0x13, 0
+    dock = rng.randrange(6) if rng.random() < 0.9 else rng.getrandbits(16)
+    bx, by = _us_near(rng, sx, 4), _us_near(rng, sy, 4)
+    wx, wy = _us_near(rng, sx, 3), _us_near(rng, sy, 3)
+    dx, dy = _us_near(rng, sx, 3), _us_near(rng, sy, 3)
+    trade = rng.randint(1, 20)
+    fields += [(b, owner if rng.random() < 0.8 else rng.randrange(4), 1), (b + 0x2, bx, 2), (b + 0x4, by, 2),
+               (b + 0x6, btype, 1), (b + 0xa, dx, 2), (b + 0xc, dy, 2), (b + 0x18, rng.getrandbits(8), 1),
+               (b + 0x21, 0 if rng.random() < 0.8 else 1, 1), (b + 0x22, dock, 2),
+               (b + 0x30, wx, 2), (b + 0x32, wy, 2), (b + 0x34, trade, 2)]
+    fields += [(b + 0x19 + k, kinds[k], 1) for k in range(8)]
+    # Ring piles.
+    ring = [rng.randint(1, US_PILES) for _ in range(6)]
+    fields.append((b + 0xe, ring[0], 2))
+    for k, p in enumerate(ring):
+        r = PILES + p * PILE_BYTES
+        fields += [(r + 0xc, ring[(k + 1) % 6], 2), (r + 1, 0 if rng.random() < 1 / 3 else rng.randrange(9), 1),
+                   (r + 2, 0 if rng.random() < 0.5 else rng.randrange(4), 1)]
+    # The settler's own tile: area and walk region shared with the route.
+    area, region = rng.randrange(US_AREAS), rng.randint(1, 3)
+    here = tile(sx, sy)
+    route = []
+    at_end = rng.random() < 0.75
+    for k in range(4):
+        unset = rng.random() < 0.25 and not (k == 3 and at_end)
+        route.append((0xFFFF, 0xFFFF) if unset else (_us_near(rng, sx, 6), _us_near(rng, sy, 6)))
+    if at_end:
+        route[3] = (sx, sy)
+    same = rng.random() < 0.8
+    t = US_TRADES + trade * US_TRADE_BYTES
+    for k, (x, y) in enumerate(route):
+        fields += [(t + 2 + 2 * k, x, 2), (t + 0xa + 2 * k, y, 2)]
+    for x, y in route:
+        if x != 0xFFFF:
+            fields += [(tile(x, y) + 0x14, area if same else rng.randrange(US_AREAS), 2),
+                       (tile(x, y) + 0x10, region if same else rng.randint(1, 3), 1)]
+    # The pile under the settler names the building (pile 0 too).
+    tile_pile = rng.randint(1, US_PILES) if rng.random() < 2 / 3 else 0
+    tp = PILES + tile_pile * PILE_BYTES
+    fields += [(tp + 0xa, building, 2), (PILES + 0xa, building, 2), (tp + 1, rng.randrange(5), 1),
+               (tp + 2, rng.randrange(3), 1)]
+    # Door piles.
+    for side in (-1, 1):
+        p = rng.randrange(US_PILES + 1)
+        fields += [(tile(dx + side, dy) + 2, p, 2), (PILES + p * PILE_BYTES + 1, rng.randrange(9), 1)]
+    fields += [(s + 0x10, rng.randrange(200) if rng.random() < 0.9 else rng.getrandbits(16), 2),
+               (s + 0x15, 0 if rng.random() < 0.5 else rng.randrange(8), 1),
+               (s + 0x1a, 0 if rng.random() < 1 / 3 else 1 if rng.random() < 0.5 else rng.randrange(12), 1)]
+    # Flowers, hives and free spots around the work point.
+    door_area = rng.randrange(US_AREAS)
+    fields.append((tile(dx, dy) + 0x14, door_area, 2))
+    if rng.random() < 0.5:
+        fields += [(tile(sx, sy - 2) + 7, 0 if rng.random() < 0.5 else 250 + rng.randrange(4), 1),
+                   (tile(sx, sy - 2) + 0xa, rng.getrandbits(8) & 0xf6, 1),
+                   (tile(sx, sy - 2) + 0x14, door_area, 2), (here + 0xa, rng.getrandbits(8) & 0xf6, 1)]
+    for _ in range(6):
+        x, y = _us_near(rng, wx, 3), _us_near(rng, wy, 3)
+        fields += [(tile(x, y) + 7, rng.choice((250, 251, 252, 253, 0x44, 0x4a, 0x52, 0, 247, 0xf8)), 1),
+                   (tile(x, y) + 0xa, rng.getrandbits(8) & 0xf6, 1),
+                   (tile(x, y + 1) + 7, 0, 1), (tile(x, y + 1) + 0xa, rng.getrandbits(8) & 0xf6, 1),
+                   (tile(x, y + 1) + 0x14, door_area, 2), (tile(x, y + 2) + 0x14, door_area, 2),
+                   (tile(x, y + 3) + 0xa, rng.getrandbits(8) & 0xf6, 1)]
+    # Teams 0/1.
+    for p in range(4):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xc, p & 1, 4))
+    # Patients near the door and the work point.
+    for k in range(4):
+        m = rng.randint(4, US_OTHERS)
+        r = SETTLERS + m * SETTLER_BYTES
+        px, py = (dx, dy) if k == 0 and rng.random() < 0.5 else (_us_near(rng, wx, 5), _us_near(rng, wy, 5))
+        fields += [(r, owner, 1), (r + 1, 5, 1), (r + 3, 100 if rng.random() < 0.25 else rng.randrange(100), 1),
+                   (r + 0xe, 0x37 if rng.random() < 0.75 else 1, 2), (tile(px, py), m, 2)]
+    # A ship two steps from the work point, away from the landing.
+    if dock < 6 and rng.random() < 0.75:
+        away = (dock + 3) % 6
+        shx, shy = wx + 2 * US_DIR_X[away], wy + 2 * US_DIR_Y[away]
+        m = rng.randint(4, US_OTHERS)
+        r = SETTLERS + m * SETTLER_BYTES
+        fields += [(r + 1, rng.choice((0x2b, 0x2c)), 1), (r + 0xe, 0x145 if rng.random() < 0.75 else 0x130, 2),
+                   (tile(shx, shy), m, 2)]
+    # Last: the settler's own tile.
+    fields += [(here + 0x14, area, 2), (here + 0x10, region, 1), (here + 2, tile_pile, 2)]
+    _us_special_scenario(rng, fields, n, job, owner, s, sx, sy, b, wx, wy, dx, dy, ring, tile_pile, door_area)
+
+
+def _us_special_scenario(rng, fields, n, job, owner, s, sx, sy, b, wx, wy, dx, dy, ring, tile_pile, door_area):
+    """Rare branches of single jobs."""
+    if job == 0x143 and rng.random() < 0.6:  # shipyard: the last step launches a trade ship or a ferry (0x4f72eb)
+        dock = rng.randrange(6)
+        away = (dock + 3) % 6
+        m = rng.randint(4, US_OTHERS)
+        r = SETTLERS + m * SETTLER_BYTES
+        fields += [(b + 0x22, dock, 2), (b + 0x20, 0, 1), (s + 0x1a, 1, 1),
+                   (r + 1, rng.choice((0x2b, 0x2c)), 1), (r + 0xe, 0x145, 2),
+                   (tile(wx + 2 * US_DIR_X[away], wy + 2 * US_DIR_Y[away]), m, 2)]
+    elif job in (0x17e, 0x183) and rng.random() < 0.6:  # mead maker: wants work, room in the output (0x4f8be4, 0x4f8e8c)
+        fields += [(b + 0x18, 1, 1), (PILES + ring[0] * PILE_BYTES + 1, rng.randrange(8), 1)]
+    elif job == 0x14c and rng.random() < 0.6:  # ship unloads at its own finished harbour (0x4f6ca6)
+        fields += [(b, owner, 1), (b + 0x6, 0x21, 1), (b + 0x21, 0, 1)]
+    elif job == 0x15a and rng.random() < 0.5:  # alchemist: the yield doesn't fit the door piles (0x4f86d7)
+        for side in (-1, 1):
+            p = rng.randint(1, US_PILES)
+            fields += [(tile(dx + side, dy) + 2, p, 2), (PILES + p * PILE_BYTES + 1, rng.randint(6, 8), 1)]
+    elif job == 0x134 and tile_pile != 0 and rng.random() < 0.6:  # donkey takes the pile's last units (0x4f61e4)
+        two = rng.random() < 0.5
+        fields += [(s + 0x17, 1 if two else 0, 1), (PILES + tile_pile * PILE_BYTES + 1, 2 if two else 1, 1),
+                   (PILES + tile_pile * PILE_BYTES + 2, 2 if two else 1, 1)]
+    elif job == 0x191 and rng.random() < 0.6:  # gong: steps left, some inputs wanted (0x4f902f)
+        fields += [(b + 0x20, rng.randint(1, 5), 1)] + [(b + 0x1a + k, rng.choice((0, 0, 1, 2)), 1) for k in range(3)]
+    elif job == 0x14b and rng.random() < 0.25:  # harbour: every ring pile empty, no cargo (0x4f69ac)
+        fields += [(PILES + p * PILE_BYTES + 1, 0, 1) for p in ring]
+    elif job == 0x14b and rng.random() < 0.5:  # harbour: race 1 ships take four cargo goods (0x4f67b5)
+        fields.append((PLAYER_RECORDS + owner * PLAYER_RECORD_BYTES + 4, 1, 4))
+        fields += [(PILES + p * PILE_BYTES + 1, rng.randint(1, 8), 1) for p in ring]
+        last = ring[0]  # the ring's end (a full turn): sometimes empty and not leaving
+        if rng.random() < 0.5:
+            fields += [(PILES + last * PILE_BYTES + 2, 0, 1)]
+    elif job == 0x151:  # race 3 bowmen with arrows left (0x4f7861)
+        fields += [(PLAYER_RECORDS + owner * PLAYER_RECORD_BYTES + 4, 3, 4), (s + 0x15, rng.randrange(3, 9), 1)]
+    elif job == 0x152 and rng.random() < 0.25:  # thief: carries something (0x4f7a6f): generic presets
+        pass
+    elif job == 0x152 and rng.random() < 0.7:  # thief: nothing in reach (0x4f79e1), or only at offset 1000
+        fields.append((s + 0x15, 0, 1))
+        for ddx in range(-8, 9):
+            for ddy in range(-8, 9):
+                if hex_distance(ddx, ddy) <= 8:
+                    fields.append((tile(sx + ddx, sy + ddy) + 2, 0, 2))
+        if rng.random() < 0.85:
+            o = US_OFFSETS + 1000 * 16
+            p = rng.randint(1, US_PILES)
+            # Off the cleared rings (distance 10).
+            fields += [(o, 10, 4), (o + 4, 0, 4), (tile(sx + 10, sy) + 2, p, 2), (tile(sx + 10, sy) + 8, 0xFF, 1),
+                       (tile(sx + 10, sy) + 0xa, rng.getrandbits(8) & 0xdf, 1),
+                       (PILES + p * PILE_BYTES + 1, rng.randint(1, 8), 1),
+                       (PILES + p * PILE_BYTES + 6, sx + (10 if rng.random() < 0.5 else 0), 2),
+                       (PILES + p * PILE_BYTES + 8, sy, 2)]
+    elif job == 0x152:  # thief: a pile on its own tile (0x4f7a15, 0x4f7a25)
+        p = rng.randint(1, US_PILES)
+        fields += [(s + 0x15, 0, 1), (tile(sx, sy) + 2, p, 2), (tile(sx, sy) + 8, 0xFF, 1),
+                   (tile(sx, sy) + 0xa, rng.getrandbits(8) & 0xdf, 1), (PILES + p * PILE_BYTES + 1, rng.randint(1, 8), 1),
+                   (PILES + p * PILE_BYTES + 6, sx, 2), (PILES + p * PILE_BYTES + 8, sy if rng.random() < 0.7 else sy + 1, 2)]
+    elif job == 0x193 and tile_pile != 0:  # steal: its claim is released (0x4f7b57)
+        k = rng.randrange(128)
+        fields += [(0x1195dd4 + 4 * k, tile_pile, 2), (0x1195dd4 + 4 * k + 2, n, 2)]
+    elif job == 0x14d and rng.random() < 0.25:  # healer: the search wraps at 2000 (0x4f76eb)
+        fields += [(s + 0x10, rng.randint(1990, 1999), 2), (s + 0x1a, 0, 1), (b + 0x18, 1, 1), (tile(dx, dy), 0, 2)]
+    elif job == 0x14d and rng.random() < 0.6:  # healer: a patient at the first offset (0x4f76d8)
+        m = rng.randint(4, US_OTHERS)
+        r = SETTLERS + m * SETTLER_BYTES
+        fields += [(s + 0x10, 0, 2), (s + 0x1a, 0, 1), (b + 0x18, 1, 1), (tile(dx, dy), 0, 2),
+                   (r, owner, 1), (r + 1, 5, 1), (r + 3, rng.randrange(100), 1), (r + 0xe, 0x37, 2), (tile(wx, wy), m, 2)]
+    elif job == 0x163 and rng.random() < 0.2:  # beekeeper: the search wraps at 1500 (0x4f7f2f)
+        fields += [(s + 0x10, rng.randint(1455, 1499), 2), (b + 0x18, 1, 1)]
+    elif job == 0x163 and rng.random() < 0.7:  # beekeeper: a flower field or a hive spot at offset 0 (0x4f7fde, 0x4f800c)
+        hive = rng.random() < 0.6
+        fields += [(s + 0x10, 0, 2), (b + 0x18, 1, 1), (tile(dx, dy) + 0x14, door_area, 2),
+                   (PILES + ring[0] * PILE_BYTES + 1, rng.randrange(8), 1)]
+        if hive:
+            for ddx in range(-4, 5):
+                for ddy in range(-4, 5):
+                    if hex_distance(ddx, ddy) <= 4:
+                        fields.append((tile(wx + ddx, wy + 1 + ddy) + 7, 0, 1))
+            if rng.random() < 0.3:  # a hive or flowers too near: the spot is not taken (0x4f7eba)
+                ddx, ddy = rng.choice(((1, 0), (0, 1), (-1, 1), (2, 0), (0, 2), (1, 1)))
+                fields.append((tile(wx + ddx, wy + 1 + ddy) + 7, rng.randint(247, 253), 1))
+        fields += [(tile(wx, wy) + 7, rng.randint(0x44, 0x52) if hive else rng.randint(250, 253), 1),
+                   (tile(wx, wy + 1) + 0x14, door_area, 2), (tile(wx, wy + 1) + 0xa, rng.getrandbits(8) & 0xf6, 1),
+                   (tile(wx, wy + 2) + 0x14, door_area, 2), (tile(wx, wy + 3) + 0xa, rng.getrandbits(8) & 0xf6, 1)]
+    elif job == 0x155 and rng.random() < 0.5:  # alchemist: both door piles full enough to wait (0x4f8472)
+        for side in (-1, 1):
+            p = rng.randint(1, US_PILES)
+            fields += [(tile(dx + side, dy) + 2, p, 2), (PILES + p * PILE_BYTES + 1, rng.randint(6, 8), 1)]
 
 
 
