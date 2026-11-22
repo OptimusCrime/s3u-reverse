@@ -1,6 +1,7 @@
 #include "replay/command_log.h"
 
 #include "common/recording_format.h"
+#include "game/game_settings_layout.h"
 #include "game/globals.h"
 #include "game/logic_thread_layout.h"
 #include "game/random.h"
@@ -107,7 +108,7 @@ recording::Header CurrentGame() {
     const long seed = game::LastSeed();
     header.seed = seed < 0 ? 0xFFFFFFFFu : static_cast<std::uint32_t>(seed);
     header.settings =
-        game::g_gameSettings->random_race_amazons != 0 ? recording::kSettingAmazons
+        game::g_gameSettings->randomRaceAmazons != 0 ? recording::kSettingAmazons
                                                                        : 0;
     header.map = MapArgument();
     return header;

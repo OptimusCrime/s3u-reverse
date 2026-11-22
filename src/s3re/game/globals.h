@@ -8,7 +8,8 @@
 // in a name means the purpose is not known yet.
 //
 // Record types used here are forward-declared; include their header
-// (layout.h, ai_layout.h, gfx_layout.h, settler_groups.h) to use the
+// (layout.h, ai_layout.h, gfx_layout.h, game_settings_layout.h,
+// settler_groups.h) to use the
 // fields.
 
 #include "game/global_access.h"
@@ -18,6 +19,7 @@
 
 namespace s3re::game {
 
+struct GameSettings;  // game_settings_layout.h
 struct GameWorld;
 struct SettlerGroups;
 
@@ -48,17 +50,6 @@ struct PlayerTally {
 static_assert(sizeof(PlayerTally) == 0x44);
 static_assert(offsetof(PlayerTally, unk0c) == 0x0c);
 static_assert(offsetof(PlayerTally, unk14) == 0x14);
-
-// The game settings of the current game (g_gameSettings; class name not
-// known). Only the fields our code reads are named.
-struct GameSettings {
-    std::uint8_t unk000[0x88];
-    std::uint32_t seed;               // +0x88 the game's random seed (CLogicThread::OnStart)
-    std::uint8_t unk08c[0xcc - 0x8c];
-    std::uint8_t random_race_amazons;  // +0xcc random races include the Amazons (0x53cf96)
-};
-static_assert(offsetof(GameSettings, seed) == 0x88);
-static_assert(offsetof(GameSettings, random_race_amazons) == 0xcc);
 
 // The configuration read from the registry at startup (g_config;
 // Dirk\DGlobals.cpp). Size not known.

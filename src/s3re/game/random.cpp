@@ -42,6 +42,7 @@
 // S3RE_SEED is set (`s3re_launcher --seed N`), every seed is replaced by N so
 // that two games can start from the same random state.
 
+#include "game/game_settings_layout.h"
 #include "game/globals.h"
 #include "game/random.h"
 #include "game/raw.h"
@@ -166,7 +167,7 @@ void __fastcall GameWorld_SeedRandom(GameWorld* world, void* edx, std::uint32_t 
     // object at 0x7a7af0, which is read from the registry at startup
     // (0x40eeef).
     S3RE_LOG("game settings: random race includes Amazons=%u (config byte %u)",
-             static_cast<unsigned>(g_gameSettings->random_race_amazons),
+             static_cast<unsigned>(g_gameSettings->randomRaceAmazons),
              static_cast<unsigned>(g_config->random_race_amazons));
     g_lastSeed = static_cast<long>(seed & 0xFFFF);
     if (hooks::OriginalMode()) {

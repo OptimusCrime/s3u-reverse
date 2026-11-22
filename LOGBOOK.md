@@ -640,7 +640,7 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 - Every S3.EXE data address our code used (255 uses of 190 addresses in
   ~55 files, plus ~45 vtable/vbtable/throw-info constants) is now one
   typed declaration: `game/globals.h` (variables, incl. records
-  `PlayerTally`, `GameSettings`, `GameConfig`, `PixelFormat` and the
+  `PlayerTally`, `GameConfig`, `PixelFormat` and the
   import slots), `game/tables.h` (constant tables, `NotificationKind`,
   `ShipyardInputs`, `TowerSlotOffset`), `game/texts.h` (DebugLog formats
   and other strings as `GameText`; `GameDebugLog` takes a `GameText`),
@@ -657,7 +657,7 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   vtables are in re/classes.json). `typed_access_lint.py` now rejects
   any data-address literal outside those headers (3 `raw-ok`: section
   bounds in crash_log.cpp/debug_log.cpp). `raw_access_report.py` counts
-  every literal; worklist: 0 data addresses left, 21 RawAt (S2).
+  every literal; worklist after S1 and S2: 0 data addresses, 0 RawAt.
 - Verification: build clean (/W4, no warnings); `s3re_launcher --test`
   490/490; emulator `--changed` (selected all 555 specs, --jobs 3): 0
   mismatches; incomplete coverage GameWorld_Create and UpdateEconomy
@@ -665,6 +665,12 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   cases of a split run), 428/428 when rerun alone; check_replay
   fun8-seed2024-input31.bin --against-original 3,000 ticks: identical.
   Tooling version not bumped (original-mode code changed only in form).
+  After rebasing on S2 (f66fdb7): g_gfxData is a `gfx::CGraphicsData*`,
+  `test/fake_graphics.h` uses it, `GameSettings` comes from S2's
+  `game_settings_layout.h`; rebuilt, `--test` 490/490, emulator subsets
+  of the merged files (AI_, Landscape_, Render_, GfxData, UpdateSoldier,
+  MinerJob, Dialog_, CScreenElement, CControl_, Win32_, Lobby_, ...) 0
+  mismatches, full coverage; replay check identical again.
 
 ### 2026-11-22 (45): round end (WalkSettler, UpdateSoldier, UpdateEconomy, UpdateEnvironment)
 
