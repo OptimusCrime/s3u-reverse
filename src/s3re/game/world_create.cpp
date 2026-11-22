@@ -159,7 +159,7 @@ void ResetTiles(GameWorld* world) {
         tile.area = 0;
         tile.wide_region = 0;
         tile.owner = 0xff;
-        tile.original_object = 0;
+        tile.seen_object = 0;
         tile.object = 0;
         tile.resources = 0;
         tile.traffic = 0;
@@ -1037,7 +1037,7 @@ void ApplySymmetry(GameWorld* world) {
 void FinishTiles(GameWorld* world) {
     ForEachTile(0, [&] { return MapSize(world); }, [&](std::int32_t x, std::int32_t y) {
         Tile& tile = TileAt(world, x, y);
-        tile.original_object = tile.object;
+        tile.seen_object = tile.object;
         const std::uint8_t kind = tile.terrain & 0xf0;
         if (kind == 0x00 || kind == 0x50 || kind == 0x70 || kind == 0x80) {
             tile.flags |= layout::kTileBlocked;

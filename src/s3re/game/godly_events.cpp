@@ -13,6 +13,10 @@
 //   slot: %u", needed, slot); returns mana >= needed (unsigned) in AL. The
 //   other bits of EAX are those of `needed` (setae only writes AL),
 //   reproduced. 18 call sites in the AI code around 0x548340. ret 8.
+// GameWorld::PayForSpell (0x0054b2b0): (player, spell): the same slot
+//   lookup (no DebugLog); mana -= needed, then the spell gets dearer:
+//   needed += (needed - 1) / 4 + 1 (unsigned). Called by every spell after it
+//   was cast (0x548340 and the GodlyEvents handlers). ret 8; EAX not used.
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
@@ -71,6 +75,23 @@ std::uint32_t __fastcall GameWorld_HasManaForSpell(GameWorld* world, void*, std:
     return HasManaForSpell<false>(world, player, spell);
 }
 
+using PayFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t player, std::uint32_t spell);
+
+// Purpose: Takes the mana for a cast spell from the player and makes the next cast of that spell dearer.
+void __fastcall GameWorld_PayForSpell(GameWorld* world, void*, std::uint32_t player, std::uint32_t spell) {
+    Player& record = world->players[player];
+    const auto* spells = reinterpret_cast<const std::uint32_t*>(kRaceSpells + static_cast<std::uint32_t>(record.race) * 32u);
+    std::uint32_t slot = 0;
+    while (slot < kSpellSlots && spells[slot] != spell) {
+        ++slot;
+    }
+    // Slot 8 is the dword after spell_mana (Player::unk0b4[0]), as in the original.
+    auto& needed = reinterpret_cast<std::uint32_t*>(record.spell_mana)[slot];
+    record.mana = static_cast<std::int32_t>(static_cast<std::uint32_t>(record.mana) - needed);
+    needed = ((needed - 1) >> 2) + 1 + needed;
+}
+
+S3RE_HOOK(0x0054b2b0, GameWorld_PayForSpell, PayFn, Original_GameWorld_PayForSpell, GameWorld_PayForSpell);
 S3RE_HOOK(0x0054b240, GameWorld_HasManaForSpell, HasManaFn, Original_GameWorld_HasManaForSpell,
           GameWorld_HasManaForSpell);
 
@@ -124,6 +145,53 @@ void CompareHasMana(test::Context& ctx, HasManaFn candidate, int cases) {
 }
 
 }  // namespace
+
+namespace {
+
+// Wrong: the cost grows by a third instead of a quarter.
+void __fastcall WrongPayForSpell(GameWorld* world, void*, std::uint32_t player, std::uint32_t spell) {
+    GameWorld_PayForSpell(world, nullptr, player, spell);
+    for (auto& needed : world->players[player].spell_mana) {
+        if (needed == 7) {
+            needed = 8;
+        }
+    }
+}
+
+void ComparePay(test::Context& ctx, PayFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t player = ctx.rng().Below(kTestPlayers);
+        const std::uint32_t race = ctx.rng().Below(5);
+        worlds.Both([&](GameWorld* w) { w->players[player].race = static_cast<std::int32_t>(race); });
+        const auto* spells = reinterpret_cast<const std::uint32_t*>(kRaceSpells + race * 32u);
+        const std::uint32_t spell = ctx.rng().Chance(4, 5) ? spells[ctx.rng().Below(kSpellSlots)] : ctx.rng().Below(40);
+        if (ctx.rng().Chance(1, 4)) {
+            for (std::uint32_t slot = 0; slot <= kSpellSlots; ++slot) {
+                const auto needed = static_cast<std::int32_t>(ctx.rng().Chance(1, 2) ? ctx.rng().Below(12) : ctx.rng().Next32());
+                worlds.Both([&](GameWorld* w) { w->players[player].spell_mana[slot] = needed; });
+            }
+        }
+        Original_GameWorld_PayForSpell(worlds.original(), nullptr, player, spell);
+        candidate(worlds.ours(), nullptr, player, spell);
+        if (!worlds.Same(ctx, offsetof(GameWorld, players), (kTestPlayers + 1) * sizeof(Player))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: player %u, spell %u", i, player, spell);
+            return;
+        }
+    }
+    worlds.Checkpoint(ctx);
+}
+
+}  // namespace
+
+S3RE_TEST(GameWorld_PayForSpell_MatchesOriginal) {
+    ComparePay(ctx, &GameWorld_PayForSpell, 20000);
+}
+S3RE_TEST(GameWorld_PayForSpell_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    ComparePay(probe, &WrongPayForSpell, 20000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(GameWorld_HasManaForSpell_MatchesOriginal) {
     CompareHasMana(ctx, &GameWorld_HasManaForSpell, 20000);

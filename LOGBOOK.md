@@ -550,6 +550,28 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-22 (45): package D: UpdateEnvironment (parallel worktree)
+
+Call tree of GameWorld::UpdateEnvironment 0x4E7810 mapped in
+`re/update_environment.md` (39 undone functions at the start, ~7,700
+instructions; most of it is Volker\GodlyEvents.cpp, the spells).
+
+- **Batch 1 (10 functions, verified: in-process diff + mutation tests,
+  emulator specs with full coverage):** the fog of war
+  (fog_of_war.cpp): MarkRevealPointsSight 0x518F20, MarkBuildingSight
+  0x519FA0, MarkSettlerSight 0x51A150, UpdateFogSlice 0x519010,
+  SeenObjectAt 0x51D5F0; DecayTraffic 0x503980 (environment.cpp);
+  MapEffect::IsExpired 0x5440C0 and MapEffects::ExpireSome 0x545D40
+  (map_effect_expiry.cpp); PayForSpell 0x54B2B0 (godly_events.cpp);
+  SpawnSpellEffects 0x5474E0 (spell_effects.cpp, a table of the effects
+  per spell, read off the push sequences with a small symbolic walker).
+- **Renames:** Tile +0xD `slice_byte` -> `sight` (fog of war), +0xE
+  `original_object` -> `seen_object`, ClearTileByte11Slice ->
+  ClearSightSlice, world+0x14D28A8 -> `reveal_points` (RevealPoint).
+  draw_flags bits 0..5 are the fog levels (re/structs.md).
+- `s3re_launcher --test` filters take several substrings separated by
+  `|` now.
+
 ### 2026-11-10 (44): round end of the UpdateSettlers parallel round
 
 - Main at ff0bd87 has packages A (25/26), B (27/28), C (22/22). Left:

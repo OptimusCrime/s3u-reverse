@@ -2404,14 +2404,14 @@ address,name,source,ticks,calls,commit,date,note
 0x00518dc0,GameWorld::ClearDiagonalTileByteB,save:slot 1.sav,2000,0,0ff5e0c,2026-11-10,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x00518dc0,GameWorld::ClearDiagonalTileByteB,save:slot 2.sav,2000,0,f3f4a64,2026-11-09,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x00518dc0,GameWorld::ClearDiagonalTileByteB,save:slot 3.sav,2000,0,f3f4a64,2026-11-09,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x00518ec0,GameWorld::ClearTileByte11Slice,"random:384,0 seed 1234",1500,232,21f1f01,2026-11-10,
-0x00518ec0,GameWorld::ClearTileByte11Slice,"random:448,3 seed 1234",1500,232,21f1f01,2026-11-10,
-0x00518ec0,GameWorld::ClearTileByte11Slice,"random:448,3 seed 1234 skip GameWorld_Create",300,64,5536f09,2026-11-10,
-0x00518ec0,GameWorld::ClearTileByte11Slice,"random:512,1 seed 1234",1500,232,21f1f01,2026-11-10,
-0x00518ec0,GameWorld::ClearTileByte11Slice,"random:640,2 seed 1234",1500,232,21f1f01,2026-11-10,
-0x00518ec0,GameWorld::ClearTileByte11Slice,replay:fun8-seed2024-input31.bin,5000,736,c561f41,2026-11-10,seed 2024
-0x00518ec0,GameWorld::ClearTileByte11Slice,replay:scripted-seed127.bin,3000,448,2cea13b,2026-11-10,seed 1234
-0x00518ec0,GameWorld::ClearTileByte11Slice,save:slot 1.sav,2000,288,0ff5e0c,2026-11-10,
+0x00518ec0,GameWorld::ClearSightSlice,"random:384,0 seed 1234",1500,232,21f1f01,2026-11-10,
+0x00518ec0,GameWorld::ClearSightSlice,"random:448,3 seed 1234",1500,232,21f1f01,2026-11-10,
+0x00518ec0,GameWorld::ClearSightSlice,"random:448,3 seed 1234 skip GameWorld_Create",300,64,5536f09,2026-11-10,
+0x00518ec0,GameWorld::ClearSightSlice,"random:512,1 seed 1234",1500,232,21f1f01,2026-11-10,
+0x00518ec0,GameWorld::ClearSightSlice,"random:640,2 seed 1234",1500,232,21f1f01,2026-11-10,
+0x00518ec0,GameWorld::ClearSightSlice,replay:fun8-seed2024-input31.bin,5000,736,c561f41,2026-11-10,seed 2024
+0x00518ec0,GameWorld::ClearSightSlice,replay:scripted-seed127.bin,3000,448,2cea13b,2026-11-10,seed 1234
+0x00518ec0,GameWorld::ClearSightSlice,save:slot 1.sav,2000,288,0ff5e0c,2026-11-10,
 0x00519210,GameWorld::ReplaceTerrainType,"random:384,0 seed 1234",1500,0,21f1f01,2026-11-10,
 0x00519210,GameWorld::ReplaceTerrainType,"random:448,3 seed 1234",1500,0,21f1f01,2026-11-10,
 0x00519210,GameWorld::ReplaceTerrainType,"random:448,3 seed 1234 skip GameWorld_Create",300,4,5536f09,2026-11-10,

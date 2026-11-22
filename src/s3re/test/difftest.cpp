@@ -152,6 +152,31 @@ bool IsTestMode() {
     return length > 0 && length < sizeof(mode) && std::strcmp(mode, "test") == 0;
 }
 
+// A filter is one or more substrings separated by '|'; a test runs if its
+// name contains any of them.
+bool MatchesFilter(const char* name, const char* filter) {
+    if (filter[0] == '\0') {
+        return true;
+    }
+    char part[256];
+    const char* p = filter;
+    while (true) {
+        const char* end = std::strchr(p, '|');
+        const std::size_t n = end ? static_cast<std::size_t>(end - p) : std::strlen(p);
+        if (n > 0 && n < sizeof(part)) {
+            std::memcpy(part, p, n);
+            part[n] = '\0';
+            if (std::strstr(name, part) != nullptr) {
+                return true;
+            }
+        }
+        if (end == nullptr) {
+            return false;
+        }
+        p = end + 1;
+    }
+}
+
 int RunAll() {
     char filter[256] = {};
     GetEnvironmentVariableA("S3RE_TEST_FILTER", filter, sizeof(filter));
@@ -162,7 +187,7 @@ int RunAll() {
     int run = 0;
     int failed = 0;
     for (const RegisteredTest& test : Registry()) {
-        if (filter[0] != '\0' && std::strstr(test.name, filter) == nullptr) {
+        if (!MatchesFilter(test.name, filter)) {
             continue;
         }
         ++run;

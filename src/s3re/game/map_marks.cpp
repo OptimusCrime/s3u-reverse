@@ -2,7 +2,7 @@
 //
 // Tile offsets as in the old world.h (records at 0x67440, tile (x, y) at
 // (x * 0x300 + y) * 24); the bytes are tile fields 0xb and 0x11, i.e.
-// Tile::object (+0x7) and Tile::slice_byte (+0xd) at the real tile base
+// Tile::object (+0x7) and Tile::sight (+0xd) at the real tile base
 // 0x67444 (layout.h).
 //
 // GameWorld::SetDiagonalTileByteB (0x00518d10) / ClearDiagonalTileByteB
@@ -14,7 +14,7 @@
 //   original's 32-bit arithmetic ((size + i * 0x2ff) * 24 + displacement)
 //   and the map size is re-read for every access, as in the original.
 //   ret 4; EAX not reproduced (the only caller overwrites it).
-// GameWorld::ClearTileByte11Slice (0x00518ec0): (first) clears byte 0x11 of
+// GameWorld::ClearSightSlice (0x00518ec0): (first) clears byte 0x11 of
 //   every tile in rows y = first, first+8, ... (< size). UpdateEnvironment
 //   clears one such slice per call (counter at world+0x110a580, 0..7);
 //   0x518e70 clears all eight. EAX = first if first >= size, otherwise the
@@ -87,7 +87,7 @@ void __fastcall GameWorld_ClearDiagonalTileByteB(GameWorld* world, void*, std::u
 
 // Purpose: Clears one field (probably a resource or effect value) in every eighth row of the map. The
 // landscape update does one slice per step so the work is spread over time.
-std::uint32_t __fastcall GameWorld_ClearTileByte11Slice(GameWorld* world, void*,
+std::uint32_t __fastcall GameWorld_ClearSightSlice(GameWorld* world, void*,
                                                         std::uint32_t first) {
     if (first >= MapSize(world)) {
         return first;
@@ -97,7 +97,7 @@ std::uint32_t __fastcall GameWorld_ClearTileByte11Slice(GameWorld* world, void*,
     for (std::uint32_t y = first; y < MapSize(world); y += kSliceRows) {
         std::uint32_t tile = row;
         for (x = 0; x < MapSize(world); ++x) {
-            TileAtOffset(world, tile).slice_byte = 0;
+            TileAtOffset(world, tile).sight = 0;
             tile += kTileRowBytes;
         }
         row += kSliceRows * kTileBytes;
@@ -109,8 +109,8 @@ S3RE_HOOK(0x00518d10, GameWorld_SetDiagonalTileByteB, FlagsFn,
           Original_GameWorld_SetDiagonalTileByteB, GameWorld_SetDiagonalTileByteB);
 S3RE_HOOK(0x00518dc0, GameWorld_ClearDiagonalTileByteB, FlagsFn,
           Original_GameWorld_ClearDiagonalTileByteB, GameWorld_ClearDiagonalTileByteB);
-S3RE_HOOK(0x00518ec0, GameWorld_ClearTileByte11Slice, SliceFn,
-          Original_GameWorld_ClearTileByte11Slice, GameWorld_ClearTileByte11Slice);
+S3RE_HOOK(0x00518ec0, GameWorld_ClearSightSlice, SliceFn,
+          Original_GameWorld_ClearSightSlice, GameWorld_ClearSightSlice);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -197,8 +197,8 @@ S3RE_TEST(GameWorld_ClearDiagonalTileByteB_MatchesOriginal) {
     CompareDiagonals(ctx, Original_GameWorld_ClearDiagonalTileByteB,
                      &GameWorld_ClearDiagonalTileByteB, 200);
 }
-S3RE_TEST(GameWorld_ClearTileByte11Slice_MatchesOriginal) {
-    CompareSlice(ctx, Original_GameWorld_ClearTileByte11Slice, &GameWorld_ClearTileByte11Slice,
+S3RE_TEST(GameWorld_ClearSightSlice_MatchesOriginal) {
+    CompareSlice(ctx, Original_GameWorld_ClearSightSlice, &GameWorld_ClearSightSlice,
                  200);
 }
 

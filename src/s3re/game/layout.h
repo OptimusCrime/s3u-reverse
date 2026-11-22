@@ -50,12 +50,12 @@ struct Tile {
     std::uint8_t terrain;         // 0x06 "worldart"
     std::uint8_t object;          // 0x07 tree / stone / other landscape object
     std::uint8_t owner;           // 0x08 player, 0xff = nobody
-    std::uint8_t draw_flags;      // 0x09 0x40 border, 0x80 redraw (UI)
+    std::uint8_t draw_flags;      // 0x09 0x40 border, 0x80 redraw (UI); bits 3..5 fog level, 0..2 the previous one (0x519010)
     std::uint8_t flags;           // 0x0a see kTile* below
     std::uint8_t search_mark;     // 0x0b search generation (UI/scratch)
     std::uint8_t overlay_value;   // 0x0c overlay drawing value (UI)
-    std::uint8_t slice_byte;      // 0x0d cleared in eighths by UpdateEnvironment
-    std::uint16_t original_object;  // 0x0e copy of the object byte at map load
+    std::uint8_t sight;           // 0x0d local team's sight (0 = unseen), set around its units, cleared in eighths (fog_of_war.cpp)
+    std::uint16_t seen_object;    // 0x0e what the local team last saw here (object, building or pile; 0x51d5f0)
     std::uint8_t walk_region;     // 0x10 id from the 256-id table
     std::uint8_t resources;       // 0x11 high nibble kind, low nibble amount
     std::uint8_t traffic;         // 0x12 foot traffic (paths)
@@ -326,6 +326,15 @@ struct MapOffset {  // world+0x110a588
 };
 static_assert(sizeof(MapOffset) == 0x10);
 
+struct RevealPoint {  // world+0x14d28a8: a revealed spot (spell "EventReveal"?)
+    std::uint8_t active;             // 0x00 0 = free
+    std::uint8_t pad01[3];
+    std::int32_t x;                  // 0x04
+    std::int32_t y;                  // 0x08
+    std::int32_t countdown;          // 0x0c steps left; at 0 the point goes (UpdateEnvironment)
+};
+static_assert(sizeof(RevealPoint) == 0x10);
+
 struct TilePosition {  // tile rings
     std::uint16_t x, y;
 };
@@ -508,8 +517,8 @@ struct GameWorldFields {
     Settler settlers[32000];                                // 0x12a5e60
     std::uint32_t building_high_water;                      // 0x1499e60
     Building buildings[4000];                               // 0x1499e64
-    std::uint32_t table14d28a8_high_water;                  // 0x14d28a4
-    std::uint8_t table14d28a8[50][16];                      // 0x14d28a8
+    std::int32_t reveal_point_high_water;                   // 0x14d28a4 (signed: -1 = none)
+    RevealPoint reveal_points[50];                          // 0x14d28a8
     MapEffectTable map_effects;                             // 0x14d2bc8
     std::uint32_t ui_feedback[10];                          // 0x1539484
     std::uint32_t ui_feedback_count;                        // 0x15394ac
@@ -588,7 +597,7 @@ static_assert(offsetof(GameWorld, settler_high_water) == 0x12a5e5c);
 static_assert(offsetof(GameWorld, settlers) == 0x12a5e60);
 static_assert(offsetof(GameWorld, building_high_water) == 0x1499e60);
 static_assert(offsetof(GameWorld, buildings) == 0x1499e64);
-static_assert(offsetof(GameWorld, table14d28a8) == 0x14d28a8);
+static_assert(offsetof(GameWorld, reveal_points) == 0x14d28a8);
 static_assert(offsetof(GameWorld, map_effects) == 0x14d2bc8);
 static_assert(offsetof(GameWorld, ui_feedback) == 0x1539484);
 static_assert(offsetof(GameWorld, ui_feedback_count) == 0x15394ac);

@@ -93,7 +93,7 @@ Initialization order (all verified by reading the code):
 | 0xE145E8 | 0x10F45E8 | 0x2E0000 | 0x2E0 B | 4096 | **areas = economy sectors** ("Econ"), `Area` | verified |
 | 0x10F45E8 | 0x110A578 | 0x15F90 | 0x5A B | 1000 | **trade records** ("Trad", our "building extra"), `Trade` | verified (layout) |
 | 0x110A578 | 0x110A57C | 4 | uint32 | | trade high-water mark (`maxusedtrade`) | verified |
-| 0x110A57C | 0x110A588 | 0xC | uint32 x3 | | saved counters: +0 (UpdatePhase2), +4 tile-slice counter 0..7 (UpdateEnvironment), +8 (UpdateEnvironment, reset to 0x3F) | strong |
+| 0x110A57C | 0x110A588 | 0xC | uint32 x3 | | saved counters: +0 (UpdatePhase2), +4 fog-of-war cycle counter 0..55 (UpdateEnvironment; fog_of_war.cpp), +8 minimap cycle counter 0..63 (UpdateEnvironment, 0x4FB520; reset to 0x3F) | strong |
 | 0x110A588 | 0x1158788 | 0x4E200 | 16 B | 20000 | **offset table** (tiles sorted by distance), `MapOffset` | verified |
 | 0x1158788 | 0x118A47C | 0x31CF4 | uint8[20] | 101 x 101 | territory claims of the players for the 101 x 101 tiles around (x, y) (cell [i][j] = tile (x - 50 + i, y - 50 + j)), filled by RecalculateTerritory 0x519A90 | verified |
 | 0x118A47C | 0x11940BC | 0x9C40 | uint16[10][100] | 20 players | player settler lists (set by command 3) | verified |
@@ -113,8 +113,8 @@ Initialization order (all verified by reading the code):
 | 0x12A5E60 | 0x1499E60 | 0x1F4000 | 0x40 B | 32000 | **settlers** ("Sett"), `Settler` | verified |
 | 0x1499E60 | 0x1499E64 | 4 | uint32 | | building high-water mark (`maxusedbuilding`) | verified |
 | 0x1499E64 | 0x14D28A4 | 0x38A40 | 0x3A B | 4000 | **buildings** ("Buil"), `Building` | verified |
-| 0x14D28A4 | 0x14D28A8 | 4 | uint32 | | high-water mark of 0x14D28A8 | verified |
-| 0x14D28A8 | 0x14D2BC8 | 0x320 | 16 B | 50 | small table (0x549530 writes, UpdateEnvironment reads) | guess |
+| 0x14D28A4 | 0x14D28A8 | 4 | int32 | | highest used reveal point (signed, -1 = none) | verified |
+| 0x14D28A8 | 0x14D2BC8 | 0x320 | 16 B | 50 | **reveal points** (`RevealPoint`: active, x, y, countdown; 0x549530 writes, UpdateEnvironment counts down, MarkRevealPointsSight 0x518F20 reads) | strong |
 | 0x14D2BC8 | 0x1539484 | 0x668BC | | | member object (Volker\LogicInit.cpp): 5000 x 0x4C + 10000 dwords + 7 dwords | strong (bounds) |
 | 0x1539484 | 0x15394AC | 0x28 | uint32 | 10 | UI feedback list (`PushUiFeedback`) | verified |
 | 0x15394AC | 0x15394B0 | 4 | uint32 | | its count | verified |

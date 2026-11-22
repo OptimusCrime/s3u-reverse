@@ -1336,7 +1336,7 @@ SPECS = [
          presets=diagonal_map_size, max_cases=300),
     Spec("GameWorld_ClearDiagonalTileByteB", 0x00518dc0, "thiscall", [anything], eax_mask=0,
          presets=diagonal_map_size, max_cases=300),
-    Spec("GameWorld_ClearTileByte11Slice", 0x00518ec0, "thiscall", [below(60, 0.1)],
+    Spec("GameWorld_ClearSightSlice", 0x00518ec0, "thiscall", [below(60, 0.1)],
          presets=slice_map_size, max_cases=300),
     # building/settler tile references (building_tiles.cpp)
     Spec("GameWorld_RemoveBuildingFromTiles", 0x004d9940, "thiscall", [between(0, 2000)],
@@ -6104,4 +6104,220 @@ SPECS += [
     # never the settler's own tile (a target there asserts earlier).
     Spec("Pathing_FindPath", 0x004a1ee0, "thiscall", [between(1, 31999)], presets=route_find, max_cases=300,
          max_instructions=300_000_000, exempt_blocks=(0x4a229c, 0x4a22a6)),
+]
+
+
+# --- package D batch 1: fog of war, map effect expiry, traffic, spell cost --
+
+SIGHT_MAP = 0x2d2d0
+LOCAL_PLAYER = 0x2d2d4
+REVEAL_COUNT = 0x14d28a4
+REVEAL_POINTS = 0x14d28a8
+
+
+def ring_table(rng, top: int):
+    """The ring table at 0x110a588 with every distance 0..top (the sight loops
+    stop at the first entry whose distance equals the radius), 1..3 offsets
+    per distance."""
+    fields, n = [], 0
+    for d in range(top + 1):
+        for _ in range(1 if d == 0 else rng.randint(1, 3)):
+            dx, dy = (0, 0) if d == 0 else (rng.randint(-d, d), rng.randint(-d, d))
+            base = NEIGHBOUR_OFFSETS + n * 16
+            fields += [(base, dx & 0xFFFFFFFF, 4), (base + 4, dy & 0xFFFFFFFF, 4), (base + 8, d, 4)]
+            n += 1
+    return fields
+
+
+def teams(rng):
+    fields = [(LOCAL_PLAYER, rng.randrange(20), 4)]
+    for p in range(20):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xc, rng.randrange(3), 4))
+    return fields
+
+
+def sight_bytes(rng, centres):
+    """Small sight values on and around the given centres."""
+    fields = []
+    for x, y in centres:
+        for dx in range(-1, 2):
+            for dy in range(-1, 2):
+                fields.append((tile((x + dx) & 0xFFFFFFFF, (y + dy) & 0xFFFFFFFF) + 0xd,
+                               rng.choice([0, 0, rng.randrange(0x40)]), 1))
+    return fields
+
+
+def sight_owner(rng):
+    return 0xff if rng.random() < 0.2 else rng.randrange(20)
+
+
+def reveal_points(rng, pool, args):
+    size = rng.randint(16, 48)
+    high = rng.randrange(-2, 8)
+    fields = [(SIGHT_MAP, size, 4), (REVEAL_COUNT, high & 0xFFFFFFFF, 4)] + ring_table(rng, 0x24)
+    centres = []
+    for i in range(max(high + 1, 0)):
+        x, y = rng.randint(-2, size + 2), rng.randint(-2, size + 2)
+        centres.append((x, y))
+        base = REVEAL_POINTS + i * 16
+        fields += [(base, 0 if rng.random() < 0.3 else rng.randrange(1, 256), 1),
+                   (base + 4, x & 0xFFFFFFFF, 4), (base + 8, y & 0xFFFFFFFF, 4)]
+    return fields + sight_bytes(rng, centres)
+
+
+def building_sight(rng, pool, args):
+    size = rng.randint(16, 48)
+    high = rng.randrange(0, 80)
+    fields = [(SIGHT_MAP, size, 4), (BUILDING_COUNT, high, 4)] + ring_table(rng, 0x37) + teams(rng)
+    centres = []
+    for i in range(args[0], high + 1, 16):
+        x, y = rng.randrange(size + 2), rng.randrange(size + 2)
+        centres.append((x, y))
+        base = BUILDINGS + i * BUILDING_BYTES
+        fields += [(base, sight_owner(rng), 1), (base + 2, x, 2), (base + 4, y, 2),
+                   (base + 6, rng.choice([6, 0xf, 0x10, 0x12, 1, 0x20]), 1),
+                   (base + 8, rng.choice([0, 0, 1, 3]), 2),
+                   (base + 0x21, 0 if rng.random() < 0.8 else rng.randrange(256), 1)]
+    return fields + sight_bytes(rng, centres)
+
+
+def settler_sight(rng, pool, args):
+    size = rng.randint(16, 48)
+    high = rng.randrange(0, 80)
+    fields = [(SIGHT_MAP, size, 4), (SETTLER_COUNT, high, 4)] + ring_table(rng, 0x1e) + teams(rng)
+    centres = []
+    for i in range(args[0], high + 1, 16):
+        x, y = rng.randrange(size + 2), rng.randrange(size + 2)
+        centres.append((x, y))
+        base = SETTLERS + i * SETTLER_BYTES
+        fields += [(base, sight_owner(rng), 1), (base + 4, x, 2), (base + 6, y, 2),
+                   (base + 1, rng.choice([0x17, 0x17, 0x25, 0x27, 0x29, 0x2a, 0x2b, 0x2c, 1, 0x30]), 1)]
+    return fields + sight_bytes(rng, centres)
+
+
+def seen_tile_fields(rng, x, y):
+    t = tile(x, y)
+    kind = rng.randrange(4)
+    flags = rng.getrandbits(8)
+    fields = [(t + 0x6, 0x1c if rng.random() < 0.3 else rng.randrange(256), 1),
+              (t + 0x7, 0 if rng.random() < 0.3 else rng.randrange(256), 1)]
+    if kind == 0:
+        number = rng.randrange(1, 4000)
+        b = BUILDINGS + number * BUILDING_BYTES
+        total = rng.randrange(8)
+        fields += [(t + 0x2, number, 2), (t + 0xa, flags | 0x20, 1),
+                   (b + 0x21, 0 if rng.random() < 0.3 else rng.randrange(256), 1),
+                   (b + 0x1f, total, 1), (b + 0x20, rng.randrange(total + 1), 1)]
+    elif kind == 1:
+        number = rng.randrange(1, 32000)
+        fields += [(t + 0x2, number, 2), (t + 0xa, flags & ~0x20, 1),
+                   (PILES + number * PILE_BYTES + 1, 0 if rng.random() < 0.3 else rng.randrange(256), 1)]
+    else:
+        fields += [(t + 0x2, 0, 2), (t + 0xa, flags, 1)]
+    return fields
+
+
+def seen_tile(rng, pool, args):
+    return seen_tile_fields(rng, args[0], args[1])
+
+
+def fog_slice(rng, pool, args):
+    size = rng.choice([16, 32, rng.randint(16, 40)])
+    fields = [(SIGHT_MAP, size, 4)]
+    rows = size // 16
+    for x in range(size):
+        for y in range(args[0] * rows, (args[0] + 1) * rows):
+            t = tile(x, y)
+            fields += [(t + 0xd, rng.choice([0, 1, 2, 3, rng.randrange(10)]), 1), (t + 0x9, rng.getrandbits(8), 1)]
+            if rng.random() < 0.3:
+                fields += seen_tile_fields(rng, x, y)
+    return fields
+
+
+def expiring_effects(rng, pool, args):
+    """A consistent effect table: up to 40 cells with lists of 0..4 effects,
+    durations around the tick (args[0]) and -1."""
+    bx, by = rng.randint(1, 8), rng.randint(1, 5)
+    cells = bx * by
+    count16 = rng.randrange(-1, 2) if rng.random() < 0.1 else rng.randint(1, cells + 3)
+    fields = [(0x668a4, bx, 4), (0x668a8, by, 4), (0x668b0, count16 & 0xFFFFFFFF, 4),
+              (0x668ac, rng.randrange(cells + 2), 4)]
+    slot = 1
+    for cell in range(cells + 1):
+        previous = 0
+        head = 0
+        for _ in range(rng.randrange(5)):
+            base = slot * 0x4c
+            duration = 0xffff if rng.random() < 0.25 else rng.randint(-5, 60) & 0xffff
+            fields += [(base, (args[0] - rng.randrange(60)) & 0xFFFFFFFF, 4), (base + 4, duration, 2),
+                       (base + 0x40, cell, 4), (base + 0x44, previous, 4), (base + 0x48, 0, 4)]
+            if previous:
+                fields.append((previous * 0x4c + 0x48, slot, 4))
+            else:
+                head = slot
+            previous = slot
+            slot += 1
+        fields.append((EFFECT_HEADS + cell * 4, head, 4))
+    return fields
+
+
+def effect_timing(rng, pool, args):
+    start = rng.getrandbits(32) if rng.random() < 0.3 else (args[0] - rng.randrange(-5, 60)) & 0xFFFFFFFF
+    duration = 0xffff if rng.random() < 0.3 else (rng.getrandbits(16) if rng.random() < 0.3 else rng.randrange(60))
+    return [(0, start, 4), (4, duration, 2)]
+
+
+def traffic_tile(rng, pool, args):
+    t = tile(args[0], args[1])
+    return [(t + 0x12, rng.choice([0, 7, 8, 9, rng.randrange(256)]), 1),
+            (t + 0x6, 0x1c if rng.random() < 0.5 else rng.randrange(256), 1), (t + 0xa, rng.getrandbits(8), 1)]
+
+
+def spell_number(rng, pool):
+    return rng.randrange(40)
+
+
+SPECS += [
+    Spec("GameWorld_MarkRevealPointsSight", 0x00518f20, "thiscall", [], eax_mask=0, presets=reveal_points,
+         max_cases=300),
+    Spec("GameWorld_MarkBuildingSight", 0x00519fa0, "thiscall", [below(16, 0.02)], eax_mask=0,
+         presets=building_sight, max_cases=300),
+    Spec("GameWorld_MarkSettlerSight", 0x0051a150, "thiscall", [below(16, 0.02)], eax_mask=0,
+         presets=settler_sight, max_cases=300),
+    Spec("GameWorld_SeenObjectAt", 0x0051d5f0, "thiscall", [below(64), below(64)], eax_mask=0xffff,
+         presets=seen_tile),
+    # Exempt: 0x519186 (level 7 when 0x7dfd84 is set, re-read inside the
+    # branch taken only when it was 0): dead unless another thread changes it.
+    Spec("GameWorld_UpdateFogSlice", 0x00519010, "thiscall", [below(16)], eax_mask=0, presets=fog_slice,
+         globals=lambda rng, pool, args: [(0x007dfd84, 1 if rng.random() < 0.3 else 0, 4)], max_cases=200,
+         exempt_blocks=(0x519186,)),
+    Spec("MapEffect_IsExpired", 0x005440c0, "thiscall", [between(900, 1100)], eax_mask=0xff,
+         presets=effect_timing),
+    Spec("MapEffects_ExpireSome", 0x00545d40, "thiscall", [between(1000, 1100)], eax_mask=0,
+         presets=expiring_effects, max_cases=300),
+    Spec("GameWorld_DecayTraffic", 0x00503980, "thiscall", [below(64), below(64)], eax_mask=0,
+         presets=traffic_tile),
+    Spec("GameWorld_PayForSpell", 0x0054b2b0, "thiscall", [below(20), spell_number], eax_mask=0,
+         presets=mana),
+]
+
+
+WORLD_EFFECTS = 0x14d2bc8  # the map effect table inside the world
+
+
+def world_effect_table(rng, pool, args):
+    """The usual effect table, moved to its place in the world, and a map size."""
+    fields = [(WORLD_EFFECTS + offset, value, size) for offset, value, size in effect_table(0.0)(rng, pool, args)]
+    return fields + [(SIGHT_MAP, rng.randint(16, 384), 4)]
+
+
+def spell_coordinate(rng, pool) -> int:
+    return rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(400)
+
+
+SPECS += [
+    Spec("GameWorld_SpawnSpellEffects", 0x005474e0, "thiscall",
+         [anything, spell_coordinate, spell_coordinate, anything, below(34, 0.05)], eax_mask=0,
+         presets=world_effect_table, ignore_bytes=tuple(WORLD_EFFECTS + b for b in EFFECT_TABLE_PADDING),
+         globals=lambda rng, pool, args: [(0x007dfd48, rng.getrandbits(32), 4)], max_cases=400),
 ]

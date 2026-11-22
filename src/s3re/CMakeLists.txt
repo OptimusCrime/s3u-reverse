@@ -57,6 +57,10 @@ add_library(s3re SHARED
     game/map_effects.cpp
     game/map_generation.cpp
     game/map_marks.cpp
+    game/fog_of_war.cpp
+    game/map_effect_expiry.cpp
+    game/environment.cpp
+    game/spell_effects.cpp
     game/map_regions.cpp
     game/map_neighbourhood.cpp
     game/map_terrain.cpp

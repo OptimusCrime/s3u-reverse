@@ -681,7 +681,8 @@ replaying, see `src/s3re/replay/command_log.h`):
      end of each parallel round of agents and before milestones, and
      whenever `--changed` selects more than about half of the specs
      anyway. Run `--self-test` when the harness changed.
-5. Build, then run `s3re_launcher --test [filter]`. This runs the tests inside
+5. Build, then run `s3re_launcher --test [filter]` (substrings, several
+   separated by `|`, e.g. `"Fog|Sight"`). This runs the tests inside
    the real `S3.EXE` without opening the game window. The exit code is 0 only
    if every test passed. A crashing test is logged with the faulting
    instruction as module+offset (look the s3re.dll offset up in
