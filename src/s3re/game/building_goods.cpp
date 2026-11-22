@@ -48,6 +48,8 @@
 
 #include "game/debug_log.h"
 #include "game/replacements.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -65,14 +67,7 @@ using layout::Area;
 using layout::Building;
 using layout::kGoodsTypes;
 
-// int32[type][3]: the input goods of each building type, in S3.EXE.
-const std::int32_t (*const kInputGoods)[3] = reinterpret_cast<const std::int32_t (*)[3]>(0x006a6824);
 
-// "TROUBLE: illegal goodcheck 1..4 at building %u %u" in S3.EXE.
-constexpr std::uintptr_t kTroubleGet2A = 0x006a59ac;
-constexpr std::uintptr_t kTroubleGet24 = 0x006a59dc;
-constexpr std::uintptr_t kTroubleSet2A = 0x006a5a0c;
-constexpr std::uintptr_t kTroubleSet24 = 0x006a5a3c;
 
 constexpr int kNoSlot = -1;
 
@@ -86,7 +81,7 @@ int InputSlot(const Building& record, std::uint32_t goods) {
     if (record.buildup != 0) {
         return goods == 1 ? 0 : goods == 2 ? 1 : kNoSlot;
     }
-    const std::int32_t* inputs = kInputGoods[record.art];
+    const std::int32_t* inputs = g_buildingInputGoods[record.art];
     for (int slot = 0; slot < 3; ++slot) {
         if (goods == static_cast<std::uint32_t>(inputs[slot])) {
             return slot;
@@ -96,7 +91,7 @@ int InputSlot(const Building& record, std::uint32_t goods) {
 }
 
 std::uint32_t GetWord(GameWorld* world, std::uint32_t building, std::uint32_t goods, InputWords words,
-                      std::uintptr_t trouble) {
+                      const GameText& trouble) {
     Building& record = world->buildings[building];
     const int slot = InputSlot(record, goods);
     if (slot == kNoSlot) {
@@ -107,7 +102,7 @@ std::uint32_t GetWord(GameWorld* world, std::uint32_t building, std::uint32_t go
 }
 
 std::uint32_t SetWord(GameWorld* world, std::uint32_t building, std::uint32_t goods, std::uint32_t value,
-                      InputWords words, std::uintptr_t trouble) {
+                      InputWords words, const GameText& trouble) {
     Building& record = world->buildings[building];
     const int slot = InputSlot(record, goods);
     if (slot == kNoSlot) {
@@ -132,26 +127,26 @@ using SetInputFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::
 // these goods' list.
 std::uint32_t __fastcall GameWorld_BuildingInputWord2A(GameWorld* world, void*, std::uint32_t building,
                                                        std::uint32_t goods) {
-    return GetWord(world, building, goods, kWord2A, kTroubleGet2A);
+    return GetWord(world, building, goods, kWord2A, texts::kIllegalGoodCheck1);
 }
 
 // Purpose: For one kind of goods a building takes in, reads how many it has asked for.
 std::uint32_t __fastcall GameWorld_BuildingInputWord24(GameWorld* world, void*, std::uint32_t building,
                                                        std::uint32_t goods) {
-    return GetWord(world, building, goods, kWord24, kTroubleGet24);
+    return GetWord(world, building, goods, kWord24, texts::kIllegalGoodCheck2);
 }
 
 // Purpose: Sets the 'next building wanting these goods' link of one of a building's inputs (see
 // BuildingInputWord2A).
 std::uint32_t __fastcall GameWorld_SetBuildingInputWord2A(GameWorld* world, void*, std::uint32_t building,
                                                           std::uint32_t goods, std::uint32_t value) {
-    return SetWord(world, building, goods, value, kWord2A, kTroubleSet2A);
+    return SetWord(world, building, goods, value, kWord2A, texts::kIllegalGoodCheck3);
 }
 
 // Purpose: Sets how many of one kind of goods a building has asked for.
 std::uint32_t __fastcall GameWorld_SetBuildingInputWord24(GameWorld* world, void*, std::uint32_t building,
                                                           std::uint32_t goods, std::uint32_t value) {
-    return SetWord(world, building, goods, value, kWord24, kTroubleSet24);
+    return SetWord(world, building, goods, value, kWord24, texts::kIllegalGoodCheck4);
 }
 
 S3RE_HOOK(0x004df150, GameWorld_BuildingInputWord2A, GetInputFn, Original_GameWorld_BuildingInputWord2A,
@@ -283,7 +278,7 @@ std::uint32_t SetUpBuilding(test::Context& ctx, test::WorldPair& worlds, std::ui
         goods = ctx.rng().Below(4);
         break;
     default:
-        goods = static_cast<std::uint32_t>(kInputGoods[type][ctx.rng().Below(3)]);
+        goods = static_cast<std::uint32_t>(g_buildingInputGoods[type][ctx.rng().Below(3)]);
         break;
     }
     return building;

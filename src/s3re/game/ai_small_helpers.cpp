@@ -35,6 +35,7 @@
 //   slot), else null.
 
 #include "game/ai_layout.h"
+#include "game/globals.h"
 #include "game/layout.h"
 #include "game/raw.h"
 #include "hooks.h"
@@ -59,12 +60,12 @@ namespace {
 
 // AI_TileByte8 with the caller's EAX (kept in the upper half off the map).
 std::uint32_t TileByte8(std::uint16_t x, std::uint16_t y, std::uint32_t callerEax) {
-    if (x >= Global<std::uint16_t>(kAiMapSizeX) || y >= Global<std::uint16_t>(kAiMapSizeY)) {
+    if (x >= g_aiMapSizeX || y >= g_aiMapSizeY) {
         return callerEax | 0xffffu;
     }
     // The upper half of EAX keeps the original's (tile index * 3).
     const std::uint32_t index3 = (static_cast<std::uint32_t>(x) * 0x300 + y) * 3;
-    return (index3 & 0xffff0000u) | AiWorld()->tiles[x][y].owner;
+    return (index3 & 0xffff0000u) | g_aiWorld.get()->tiles[x][y].owner;
 }
 
 }  // namespace
@@ -168,7 +169,7 @@ S3RE_HOOK(0x0058e1c0, AI_BuildingIfUsed_58e1c0, BuildingIfUsedFn, Original_AI_Bu
 // Purpose: The record of a building for the computer players, or null for
 // an id past the building count or an unused slot.
 void* __fastcall AI_BuildingIfUsed_58e1c0(std::uint32_t id) {
-    GameWorld* world = AiWorld();
+    GameWorld* world = g_aiWorld.get();
     id &= 0xffff;
     if (id > world->building_high_water) {
         return nullptr;
@@ -278,23 +279,23 @@ void CompareObjects(test::Context& ctx, const AiSmallFunctions& candidate, int c
 void CompareWorld(test::Context& ctx, const AiSmallFunctions& candidate, int cases) {
     const AiSmallFunctions original = OriginalAiSmall();
     test::WorldPair worlds(ctx, kWorldBytes);
-    void* const savedWorld = Global<void*>(kAiWorld);
-    const std::uint32_t savedSizes = Global<std::uint32_t>(kAiMapSizeY);  // both words
+    GameWorld* const savedWorld = g_aiWorld;
+    const std::uint16_t savedSizeX = g_aiMapSizeX, savedSizeY = g_aiMapSizeY;
     for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(3));
         const std::uint16_t sizeX = static_cast<std::uint16_t>(ctx.rng().Below(300));
         const std::uint16_t sizeY = static_cast<std::uint16_t>(ctx.rng().Below(0x300));
-        Global<std::uint16_t>(kAiMapSizeX) = sizeX;
-        Global<std::uint16_t>(kAiMapSizeY) = sizeY;
+        g_aiMapSizeX = sizeX;
+        g_aiMapSizeY = sizeY;
         const std::uint32_t count = ctx.rng().Below(kMaxBuildings - 50);
         worlds.Both([&](GameWorld* w) { w->building_high_water = count; });
         std::uint32_t ra = 0, rb = 0;
         if (op == 0) {
             const std::uint16_t x = static_cast<std::uint16_t>(ctx.rng().Below(sizeX + 8u));
             const std::uint16_t y = static_cast<std::uint16_t>(ctx.rng().Below(sizeY + 8u));
-            Global<void*>(kAiWorld) = worlds.original();
+            g_aiWorld = worlds.original();
             ra = original.tileByte(&x, &y);
-            Global<void*>(kAiWorld) = worlds.ours();
+            g_aiWorld = worlds.ours();
             rb = candidate.tileByte(&x, &y);
             ra &= 0xffff;  // callers use AX; the upper half off the map is the caller's EAX
             rb &= 0xffff;
@@ -304,9 +305,9 @@ void CompareWorld(test::Context& ctx, const AiSmallFunctions& candidate, int cas
             const std::uint16_t cx = static_cast<std::uint16_t>(bx * 8 + 4);
             const std::uint16_t cy = static_cast<std::uint16_t>(by * 8 + 4);
             if (cx < sizeX && cy < sizeY || ctx.rng().Chance(1, 2)) {
-                Global<void*>(kAiWorld) = worlds.original();
+                g_aiWorld = worlds.original();
                 ra = original.blockByte(bx, by);
-                Global<void*>(kAiWorld) = worlds.ours();
+                g_aiWorld = worlds.ours();
                 rb = candidate.blockByte(bx, by);
                 // Callers compare AX only. In-process the original calls our
                 // 0x599570 (hooked), whose upper half differs off the map.
@@ -318,9 +319,9 @@ void CompareWorld(test::Context& ctx, const AiSmallFunctions& candidate, int cas
             if ((id & 0xffff) <= kMaxBuildings && ctx.rng().Chance(1, 3)) {
                 worlds.Both([&](GameWorld* w) { w->buildings[id & 0xffff].owner = 0xff; });
             }
-            Global<void*>(kAiWorld) = worlds.original();
+            g_aiWorld = worlds.original();
             void* pa = original.buildingIfUsed(id);
-            Global<void*>(kAiWorld) = worlds.ours();
+            g_aiWorld = worlds.ours();
             void* pb = candidate.buildingIfUsed(id);
             ra = pa == nullptr ? 0 : static_cast<std::uint32_t>(static_cast<std::uint8_t*>(pa) - worlds.originalBytes());
             rb = pb == nullptr ? 0 : static_cast<std::uint32_t>(static_cast<std::uint8_t*>(pb) - worlds.oursBytes());
@@ -329,8 +330,9 @@ void CompareWorld(test::Context& ctx, const AiSmallFunctions& candidate, int cas
             ctx.Fail(__FILE__, __LINE__, "  case %d, op %d", i, op);
         }
     }
-    Global<void*>(kAiWorld) = savedWorld;
-    Global<std::uint32_t>(kAiMapSizeY) = savedSizes;
+    g_aiWorld = savedWorld;
+    g_aiMapSizeX = savedSizeX;
+    g_aiMapSizeY = savedSizeY;
 }
 
 std::uint32_t __fastcall WrongAddWord8(void* self, void* /*edx*/, std::uint32_t record) {
@@ -341,7 +343,7 @@ std::uint32_t __fastcall WrongAddWord8(void* self, void* /*edx*/, std::uint32_t 
 void* __fastcall WrongBuildingIfUsed(std::uint32_t id) {
     // Wrong: id == count is treated as past the end.
     id &= 0xffff;
-    if (id == AiWorld()->building_high_water) {
+    if (id == g_aiWorld.get()->building_high_water) {
         return nullptr;
     }
     return AI_BuildingIfUsed_58e1c0(id);

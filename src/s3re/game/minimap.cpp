@@ -34,6 +34,8 @@
 //   ret 0x10. The full EAX is reproduced (the caller stores AX).
 // thiscall (ECX = world).
 
+#include "game/globals.h"
+#include "game/tables.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -50,22 +52,7 @@ using layout::Settler;
 using layout::Tile;
 using U = std::uint32_t;
 
-constexpr std::uintptr_t kMinimapWidth = 0x00730f28;    // int32 g_minimapWidth (0x80 in the image)
-constexpr std::uintptr_t kMinimapMode = 0x00730f58;     // int32: 0 territory colours, else terrain (1 plain)
-constexpr std::uintptr_t kMinimapBuildings = 0x00730f5c;  // int32: show building footprints
-constexpr std::uintptr_t kMinimapSettlers = 0x00730f60;   // int32: show settlers (2 = all)
-constexpr std::uintptr_t kSliceDirty = 0x007ad4f8;      // int32[64] g_minimapSliceDirty
-constexpr std::uintptr_t kPlayerColourIndex = 0x007ace64;  // uint16[] per player
-constexpr std::uintptr_t kColours = 0x007ace90;         // {R, G, B} uint32, 12 bytes each
-constexpr std::uintptr_t kChannelShifts = 0x007dfba0;   // uint32[3]
-constexpr std::uintptr_t kChannelScales = 0x007dfbac;   // uint32[3]
-constexpr std::uintptr_t kSettlerTypeSeen = 0x00658f64;  // int32 per settler type
 constexpr std::uintptr_t kMinimapPixel = 0x004fb720;
-
-template <typename T>
-T Global(std::uintptr_t address) {
-    return *reinterpret_cast<const volatile T*>(address);
-}
 
 Tile& TileAt(GameWorld* world, U offset) {
     return TileAtOffset(world, offset);
@@ -80,14 +67,14 @@ struct Rgb {
 };
 
 const U* PlayerColour(U owner) {
-    const U index = *reinterpret_cast<const std::uint16_t*>(kPlayerColourIndex + owner * 2);
-    return reinterpret_cast<const U*>(kColours + index * 12);
+    const U index = g_playerColourIndex[owner];
+    return &g_playerColours[index].c0;
 }
 
 // esi, edi, ebx of the original -> the packed pixel.
 U Pack(U esi, U edi, U ebx) {
-    const auto* shifts = reinterpret_cast<const U*>(kChannelShifts);
-    const auto* scales = reinterpret_cast<const U*>(kChannelScales);
+    const auto* shifts = g_pixelFormat->shift;
+    const auto* scales = g_pixelFormat->scale;
     return (((scales[0] * ebx) >> 8) << (shifts[0] & 31)) + (((scales[1] * edi) >> 8) << (shifts[1] & 31)) +
            (((scales[2] * esi) >> 8) << (shifts[2] & 31));
 }
@@ -108,7 +95,7 @@ U __fastcall GameWorld_MinimapPixel(GameWorld* world, void*, std::int32_t x0, st
     const U origin = TileOffset(static_cast<U>(x0), static_cast<U>(y0));
     const Tile& t = TileAt(world, origin);
     const U level = t.draw_flags & 7u;
-    const std::int32_t mode = Global<std::int32_t>(kMinimapMode);
+    const std::int32_t mode = g_minimapMode;
     const U local = static_cast<U>(world->local_player);
     // Visits the rectangle's tiles (rows y0..y1 outside, x0..x1 inside).
     auto scan = [&](auto visit) {
@@ -147,12 +134,12 @@ U __fastcall GameWorld_MinimapPixel(GameWorld* world, void*, std::int32_t x0, st
             return Pack(esi, edi, ebx);
         }
         bool none = true;
-        const std::int32_t settlers = Global<std::int32_t>(kMinimapSettlers);
+        const std::int32_t settlers = g_minimapShowSettlers;
         if (settlers != 0 && level >= 3 && y0 <= y1) {
             scan([&](const Tile& tile) {
                 if (none && tile.settler != 0) {
                     if (settlers == 2 ||
-                        *reinterpret_cast<const std::int32_t*>(kSettlerTypeSeen + world->settlers[tile.settler].art * 4u) != 0) {
+                        g_settlerTypeClass[world->settlers[tile.settler].art] != 0) {
                         esi = edi = ebx = 0;
                         none = false;
                     }
@@ -162,7 +149,7 @@ U __fastcall GameWorld_MinimapPixel(GameWorld* world, void*, std::int32_t x0, st
                 return Pack(esi, edi, ebx);
             }
         }
-        if (level >= 3 && Global<std::int32_t>(kMinimapBuildings) != 0 && (t.flags & 8) != 0) {
+        if (level >= 3 && g_minimapShowBuildings != 0 && (t.flags & 8) != 0) {
             const U* c = PlayerColour(t.owner);
             esi = ((c[0] >> 1) * bright) >> 8;
             edi = ((c[1] >> 1) * bright) >> 8;
@@ -183,7 +170,7 @@ U __fastcall GameWorld_MinimapPixel(GameWorld* world, void*, std::int32_t x0, st
         return Pack(esi, edi, ebx);
     }
     bool none = true;
-    const std::int32_t settlers = Global<std::int32_t>(kMinimapSettlers);
+    const std::int32_t settlers = g_minimapShowSettlers;
     if (settlers != 0 && level >= 3) {
         if (y0 <= y1) {
             scan([&](const Tile& tile) {
@@ -193,7 +180,7 @@ U __fastcall GameWorld_MinimapPixel(GameWorld* world, void*, std::int32_t x0, st
                 const Settler& s = world->settlers[tile.settler];
                 const bool hidden = s.art == 0x17 && (s.flags & 0x10) == 0;
                 if (settlers != 2) {
-                    if (*reinterpret_cast<const std::int32_t*>(kSettlerTypeSeen + s.art * 4u) == 0) {
+                    if (g_settlerTypeClass[s.art] == 0) {
                         return;
                     }
                     if (hidden && Team(world, s.owner) != Team(world, local)) {
@@ -224,7 +211,7 @@ U __fastcall GameWorld_MinimapPixel(GameWorld* world, void*, std::int32_t x0, st
             return Pack(esi, edi, ebx);
         }
     }
-    if (Global<std::int32_t>(kMinimapBuildings) != 0 && (t.flags & 8) != 0) {
+    if (g_minimapShowBuildings != 0 && (t.flags & 8) != 0) {
         return Pack(0, 0, 0);
     }
     U r = 0x32;
@@ -267,9 +254,9 @@ U __fastcall GameWorld_MinimapPixel(GameWorld* world, void*, std::int32_t x0, st
 // Purpose: Redraws one sixty-fourth of the minimap (spread evenly over it) from the current map state.
 void __fastcall GameWorld_UpdateMinimapSlice(GameWorld* world, void*, U slice) {
     const auto pixel = reinterpret_cast<PixelFn>(kMinimapPixel);
-    auto width = [] { return Global<U>(kMinimapWidth); };
+    auto width = [] { return static_cast<U>(g_minimapWidth); };
     const U scale = static_cast<U>(static_cast<std::int32_t>(world->map_size << 8) / static_cast<std::int32_t>(width()));
-    *reinterpret_cast<volatile std::int32_t*>(kSliceDirty + slice * 4) = 1;
+    g_minimapSliceDirty[slice] = 1;
     const U order = ((slice >> 1) & 8) + 2 * ((slice & 2) + 2 * ((slice & 4) + 8 * (slice & 1))) +
                     ((slice >> 5) & 1) + ((slice >> 2) & 2);
     U w = width();
@@ -301,35 +288,35 @@ struct SavedGlobals {
     U shifts[3], scales[3];
     std::int32_t dirty[64];
     SavedGlobals() {
-        width = Global<std::int32_t>(kMinimapWidth);
-        mode = Global<std::int32_t>(kMinimapMode);
-        buildings = Global<std::int32_t>(kMinimapBuildings);
-        settlers = Global<std::int32_t>(kMinimapSettlers);
-        std::memcpy(shifts, reinterpret_cast<const void*>(kChannelShifts), sizeof(shifts));
-        std::memcpy(scales, reinterpret_cast<const void*>(kChannelScales), sizeof(scales));
-        std::memcpy(dirty, reinterpret_cast<const void*>(kSliceDirty), sizeof(dirty));
+        width = g_minimapWidth;
+        mode = g_minimapMode;
+        buildings = g_minimapShowBuildings;
+        settlers = g_minimapShowSettlers;
+        std::memcpy(shifts, g_pixelFormat->shift, sizeof(shifts));
+        std::memcpy(scales, g_pixelFormat->scale, sizeof(scales));
+        std::memcpy(dirty, &g_minimapSliceDirty, sizeof(dirty));
     }
     ~SavedGlobals() {
-        *reinterpret_cast<std::int32_t*>(kMinimapWidth) = width;
-        *reinterpret_cast<std::int32_t*>(kMinimapMode) = mode;
-        *reinterpret_cast<std::int32_t*>(kMinimapBuildings) = buildings;
-        *reinterpret_cast<std::int32_t*>(kMinimapSettlers) = settlers;
-        std::memcpy(reinterpret_cast<void*>(kChannelShifts), shifts, sizeof(shifts));
-        std::memcpy(reinterpret_cast<void*>(kChannelScales), scales, sizeof(scales));
-        std::memcpy(reinterpret_cast<void*>(kSliceDirty), dirty, sizeof(dirty));
+        g_minimapWidth = width;
+        g_minimapMode = mode;
+        g_minimapShowBuildings = buildings;
+        g_minimapShowSettlers = settlers;
+        std::memcpy(g_pixelFormat->shift, shifts, sizeof(shifts));
+        std::memcpy(g_pixelFormat->scale, scales, sizeof(scales));
+        std::memcpy(&g_minimapSliceDirty, dirty, sizeof(dirty));
     }
 };
 
 void RandomGlobals(test::Context& ctx) {
     auto& rng = ctx.rng();
-    *reinterpret_cast<std::int32_t*>(kMinimapMode) = static_cast<std::int32_t>(rng.Below(3));
-    *reinterpret_cast<std::int32_t*>(kMinimapBuildings) = static_cast<std::int32_t>(rng.Below(2));
-    *reinterpret_cast<std::int32_t*>(kMinimapSettlers) = static_cast<std::int32_t>(rng.Below(3));
+    g_minimapMode = static_cast<std::int32_t>(rng.Below(3));
+    g_minimapShowBuildings = static_cast<std::int32_t>(rng.Below(2));
+    g_minimapShowSettlers = static_cast<std::int32_t>(rng.Below(3));
     static constexpr U kShifts[][3] = {{11, 5, 0}, {10, 5, 0}, {16, 8, 0}};
     static constexpr U kScales[][3] = {{31, 63, 31}, {31, 31, 31}, {255, 255, 255}};
     const U format = rng.Below(3);
-    std::memcpy(reinterpret_cast<void*>(kChannelShifts), kShifts[format], sizeof(kShifts[0]));
-    std::memcpy(reinterpret_cast<void*>(kChannelScales), kScales[format], sizeof(kScales[0]));
+    std::memcpy(g_pixelFormat->shift, kShifts[format], sizeof(kShifts[0]));
+    std::memcpy(g_pixelFormat->scale, kScales[format], sizeof(kScales[0]));
 }
 
 // Tiles around the minimap's area with fog levels, borders, footprints,
@@ -377,7 +364,7 @@ void ComparePixels(test::Context& ctx, PixelFn candidate, int cases) {
         const U actual = candidate(worlds.ours(), nullptr, x0, y0, x1, y1);
         if (!S3RE_EXPECT_EQ(expected, actual)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%d, %d)..(%d, %d) mode %d", i, x0, y0, x1, y1,
-                     Global<std::int32_t>(kMinimapMode));
+                     g_minimapMode.get());
             return;
         }
     }
@@ -394,15 +381,15 @@ void CompareSlices(test::Context& ctx, SliceFn candidate, int cases) {
         // The game's width (0x80) is below every map size; a wider minimap
         // would give pixels a rectangle with x1 < x0 - 1 (an unsigned wrap).
         const U widest = size < 208 ? size : 208;
-        *reinterpret_cast<std::int32_t*>(kMinimapWidth) = static_cast<std::int32_t>(16 + ctx.rng().Below(widest - 15));
+        g_minimapWidth = static_cast<std::int32_t>(16 + ctx.rng().Below(widest - 15));
         const U slice = ctx.rng().Below(64);
-        std::memset(reinterpret_cast<void*>(kSliceDirty), 0, 256);
+        std::memset(&g_minimapSliceDirty, 0, 256);
         Original_GameWorld_UpdateMinimapSlice(worlds.original(), nullptr, slice);
         std::int32_t dirty[64];
-        std::memcpy(dirty, reinterpret_cast<const void*>(kSliceDirty), sizeof(dirty));
-        std::memset(reinterpret_cast<void*>(kSliceDirty), 0, 256);
+        std::memcpy(dirty, &g_minimapSliceDirty, sizeof(dirty));
+        std::memset(&g_minimapSliceDirty, 0, 256);
         candidate(worlds.ours(), nullptr, slice);
-        if (!S3RE_EXPECT(std::memcmp(dirty, reinterpret_cast<const void*>(kSliceDirty), sizeof(dirty)) == 0) ||
+        if (!S3RE_EXPECT(std::memcmp(dirty, &g_minimapSliceDirty, sizeof(dirty)) == 0) ||
             !worlds.Checkpoint(ctx)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: slice %u", i, slice);
             return;

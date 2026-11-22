@@ -24,6 +24,7 @@
 // object constructed by 0x523480.
 
 #include "game/gfx_layout.h"
+#include "game/globals.h"
 #include "game/raw.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -86,12 +87,6 @@ static_assert(offsetof(DrawTarget, pixels) == 0xa4);
 static_assert(offsetof(DrawTarget, table204) == 0x204);
 #pragma pack(pop)
 
-constexpr std::uintptr_t kColourShift3 = 0x007dfba0;
-constexpr std::uintptr_t kColourShift2 = 0x007dfba4;
-constexpr std::uintptr_t kColourShift1 = 0x007dfba8;
-constexpr std::uintptr_t kColourScale3 = 0x007dfbac;
-constexpr std::uintptr_t kColourScale2 = 0x007dfbb0;
-constexpr std::uintptr_t kColourScale1 = 0x007dfbb4;
 
 }  // namespace
 
@@ -112,9 +107,9 @@ S3RE_HOOK(0x004c7b00, Render_PackColour, PackColourFn, Original_Render_PackColou
 // Purpose: Probably converts a colour (three channels, 0..255) into a pixel
 // value for the current screen mode, e.g. for the minimap or overlays.
 std::uint32_t __stdcall Render_PackColour(std::uint32_t c1, std::uint32_t c2, std::uint32_t c3) {
-    const std::uint32_t part3 = ((c3 * RawAtAddress<std::uint32_t>(kColourScale3)) >> 8) << (RawAtAddress<std::uint32_t>(kColourShift3) & 31);
-    const std::uint32_t part2 = ((c2 * RawAtAddress<std::uint32_t>(kColourScale2)) >> 8) << (RawAtAddress<std::uint32_t>(kColourShift2) & 31);
-    const std::uint32_t part1 = ((c1 * RawAtAddress<std::uint32_t>(kColourScale1)) >> 8) << (RawAtAddress<std::uint32_t>(kColourShift1) & 31);
+    const std::uint32_t part3 = ((c3 * g_pixelFormat->scale[0]) >> 8) << (g_pixelFormat->shift[0] & 31);
+    const std::uint32_t part2 = ((c2 * g_pixelFormat->scale[1]) >> 8) << (g_pixelFormat->shift[1] & 31);
+    const std::uint32_t part1 = ((c1 * g_pixelFormat->scale[2]) >> 8) << (g_pixelFormat->shift[2] & 31);
     return part3 + part2 + part1;
 }
 
@@ -195,8 +190,6 @@ std::uint32_t __fastcall Render_PutPixel16(void* self, void* edx, std::uint32_t 
 std::uint32_t __fastcall Render_Entry204(void* self, void* edx, std::uint32_t i);
 
 namespace {
-constexpr std::uintptr_t kDrawOriginX = 0x00730f3c;
-constexpr std::uintptr_t kDrawOriginY = 0x00730f40;
 }  // namespace
 
 S3RE_HOOK(0x005faaa0, GfxData_FrameOffset, FrameOffsetFn, Original_GfxData_FrameOffset, GfxData_FrameOffset);
@@ -223,7 +216,7 @@ std::uint32_t __fastcall Render_PutPixel16(void* self, void* /*edx*/, std::uint3
                                            std::uint32_t colour) {
     DrawTarget* const target = As<DrawTarget>(self);
     const std::uint32_t index =
-        (target->pitch >> 1) * (y + RawAtAddress<std::uint32_t>(kDrawOriginY)) + RawAtAddress<std::uint32_t>(kDrawOriginX) + x;
+        (target->pitch >> 1) * (y + g_drawOriginY) + g_drawOriginX + x;
     *reinterpret_cast<std::uint16_t*>(target->pixels + index * 2) = static_cast<std::uint16_t>(colour);
     return index;
 }
@@ -255,7 +248,7 @@ void CompareGraphics(test::Context& ctx, const GraphicsFunctions& candidate, int
                                      Original_GfxData_SetDword, Original_Point16_Construct,
                                      Original_LogicRecord24_Construct};
     std::uint32_t saved[6];
-    std::memcpy(saved, reinterpret_cast<void*>(kColourShift3), sizeof(saved));
+    std::memcpy(saved, &g_pixelFormat, sizeof(saved));
     for (int i = 0; i < cases; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(5));
         bool same = true;
@@ -265,7 +258,7 @@ void CompareGraphics(test::Context& ctx, const GraphicsFunctions& candidate, int
                 globals[g] = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(24);
                 globals[g + 3] = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(0x200);
             }
-            std::memcpy(reinterpret_cast<void*>(kColourShift3), globals, sizeof(globals));
+            std::memcpy(&g_pixelFormat, globals, sizeof(globals));
             const std::uint32_t c1 = ctx.rng().Chance(1, 4) ? ctx.rng().Next32() : ctx.rng().Below(256);
             const std::uint32_t c2 = ctx.rng().Chance(1, 4) ? ctx.rng().Next32() : ctx.rng().Below(256);
             const std::uint32_t c3 = ctx.rng().Chance(1, 4) ? ctx.rng().Next32() : ctx.rng().Below(256);
@@ -313,13 +306,13 @@ void CompareGraphics(test::Context& ctx, const GraphicsFunctions& candidate, int
             break;
         }
     }
-    std::memcpy(reinterpret_cast<void*>(kColourShift3), saved, sizeof(saved));
+    std::memcpy(&g_pixelFormat, saved, sizeof(saved));
 }
 
 // Wrong: arithmetic instead of logical shift after the scaling.
 std::uint32_t __stdcall WrongPackColour(std::uint32_t c1, std::uint32_t c2, std::uint32_t c3) {
-    const auto scaled = static_cast<std::uint32_t>(static_cast<std::int32_t>(c1 * RawAtAddress<std::uint32_t>(kColourScale1)) >> 8);
-    return Render_PackColour(0, c2, c3) + (scaled << (RawAtAddress<std::uint32_t>(kColourShift1) & 31));
+    const auto scaled = static_cast<std::uint32_t>(static_cast<std::int32_t>(c1 * g_pixelFormat->scale[2]) >> 8);
+    return Render_PackColour(0, c2, c3) + (scaled << (g_pixelFormat->shift[2] & 31));
 }
 
 }  // namespace
@@ -350,7 +343,7 @@ struct Graphics25Functions {
 void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate, int cases) {
     const Graphics25Functions original{Original_GfxData_FrameOffset, Original_Render_PutPixel16,
                                        Original_Render_Entry204};
-    const std::uint32_t savedX = RawAtAddress<std::uint32_t>(kDrawOriginX), savedY = RawAtAddress<std::uint32_t>(kDrawOriginY);
+    const std::uint32_t savedX = g_drawOriginX, savedY = g_drawOriginY;
     static std::uint8_t a[0x8000], b[0x8000];
     for (int i = 0; i < cases; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(3));
@@ -372,8 +365,8 @@ void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate,
             ra = original.frameOffset(a, nullptr, group << 16 | frame, variant);
             rb = candidate.frameOffset(b, nullptr, group << 16 | frame, variant);
         } else if (op == 1) {
-            RawAtAddress<std::uint32_t>(kDrawOriginX) = ctx.rng().Below(32);
-            RawAtAddress<std::uint32_t>(kDrawOriginY) = ctx.rng().Below(32);
+            g_drawOriginX = ctx.rng().Below(32);
+            g_drawOriginY = ctx.rng().Below(32);
             As<DrawTarget>(a)->pitch = 2 * (32 + ctx.rng().Below(32));
             const std::uint32_t x = ctx.rng().Below(64), y = ctx.rng().Below(64);
             const std::uint32_t colour = ctx.rng().Next32();
@@ -406,8 +399,8 @@ void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate,
             break;
         }
     }
-    RawAtAddress<std::uint32_t>(kDrawOriginX) = savedX;
-    RawAtAddress<std::uint32_t>(kDrawOriginY) = savedY;
+    g_drawOriginX = savedX;
+    g_drawOriginY = savedY;
 }
 
 // Wrong: ignores the "current variant" default.

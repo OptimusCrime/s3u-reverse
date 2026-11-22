@@ -20,6 +20,8 @@
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -37,8 +39,6 @@ constexpr std::uint32_t kSpellSlots = 8;
 static_assert(sizeof(Player::spell_mana) == kSpellSlots * sizeof(std::int32_t));
 
 // int32[race][8]: the spells of each race, in S3.EXE.
-constexpr std::uintptr_t kRaceSpells = 0x00658d64;
-constexpr std::uintptr_t kManaNeededMessage = 0x007311d0;  // "xxx Godevent mana needed: %u at slot: %u"
 
 }  // namespace
 
@@ -51,8 +51,8 @@ template <bool kSigned>
 std::uint32_t HasManaForSpell(GameWorld* world, std::uint32_t player, std::uint32_t spell) {
     Player& record = world->players[player];  // player is not checked
     const auto race = static_cast<std::uint32_t>(record.race);
-    // The original walks from kRaceSpells + race * 32 (32-bit address arithmetic).
-    const auto* spells = reinterpret_cast<const std::uint32_t*>(kRaceSpells + race * 32u);
+    // The original walks from g_raceSpells[race] (32-bit address arithmetic).
+    const auto* spells = g_raceSpells[race];
     std::uint32_t slot = 0;
     while (slot < kSpellSlots && spells[slot] != spell) {
         ++slot;
@@ -60,7 +60,7 @@ std::uint32_t HasManaForSpell(GameWorld* world, std::uint32_t player, std::uint3
     // Slot 8 (spell not in the list) reads the dword after spell_mana
     // (Player::unk0b4[0]), like the original.
     const auto needed = static_cast<std::uint32_t>(record.spell_mana[slot]);
-    GameDebugLog(kManaNeededMessage, needed, slot);
+    GameDebugLog(texts::kManaNeeded, needed, slot);
     const auto mana = static_cast<std::uint32_t>(record.mana);
     const bool enough = kSigned ? static_cast<std::int32_t>(mana) >= static_cast<std::int32_t>(needed) : mana >= needed;
     return (needed & 0xffffff00u) | (enough ? 1u : 0u);
@@ -80,7 +80,7 @@ using PayFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t playe
 // Purpose: Takes the mana for a cast spell from the player and makes the next cast of that spell dearer.
 void __fastcall GameWorld_PayForSpell(GameWorld* world, void*, std::uint32_t player, std::uint32_t spell) {
     Player& record = world->players[player];
-    const auto* spells = reinterpret_cast<const std::uint32_t*>(kRaceSpells + static_cast<std::uint32_t>(record.race) * 32u);
+    const auto* spells = g_raceSpells[static_cast<std::uint32_t>(record.race)];
     std::uint32_t slot = 0;
     while (slot < kSpellSlots && spells[slot] != spell) {
         ++slot;
@@ -115,7 +115,7 @@ void CompareHasMana(test::Context& ctx, HasManaFn candidate, int cases) {
         const std::uint32_t player = ctx.rng().Below(kTestPlayers);
         const std::uint32_t race = ctx.rng().Below(5);
         worlds.Both([&](GameWorld* w) { w->players[player].race = static_cast<std::int32_t>(race); });
-        const auto* spells = reinterpret_cast<const std::uint32_t*>(kRaceSpells + race * 32u);
+        const auto* spells = g_raceSpells[race];
         const std::uint32_t spell = ctx.rng().Chance(4, 5) ? spells[ctx.rng().Below(kSpellSlots)] : ctx.rng().Below(40);
         auto value = [&] {
             switch (ctx.rng().Below(3)) {
@@ -164,7 +164,7 @@ void ComparePay(test::Context& ctx, PayFn candidate, int cases) {
         const std::uint32_t player = ctx.rng().Below(kTestPlayers);
         const std::uint32_t race = ctx.rng().Below(5);
         worlds.Both([&](GameWorld* w) { w->players[player].race = static_cast<std::int32_t>(race); });
-        const auto* spells = reinterpret_cast<const std::uint32_t*>(kRaceSpells + race * 32u);
+        const auto* spells = g_raceSpells[race];
         const std::uint32_t spell = ctx.rng().Chance(4, 5) ? spells[ctx.rng().Below(kSpellSlots)] : ctx.rng().Below(40);
         if (ctx.rng().Chance(1, 4)) {
             for (std::uint32_t slot = 0; slot <= kSpellSlots; ++slot) {

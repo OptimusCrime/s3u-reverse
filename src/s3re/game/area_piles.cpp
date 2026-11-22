@@ -71,6 +71,7 @@
 
 #include "game/debug_log.h"
 #include "game/replacements.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -89,10 +90,6 @@ using layout::kTileHasBuilding;
 
 namespace {
 
-constexpr std::uintptr_t kPileTakenMessage = 0x006a6138;  // "Pile %u Taken , eco %u"
-constexpr std::uintptr_t kPileMessage = 0x006a6150;
-constexpr std::uintptr_t kPileLeavingMessage = 0x006a61bc;   // "PileIncAmountLeaving: art = %u ..."
-constexpr std::uintptr_t kPileLeavingBuildingMessage = 0x006a6174;  // "... Building[i].art = %u ..."
 
 // The original computes the area's list head as (area * 0x170 + goods) * 2
 // bytes into the area table, and returns area * 0x170 in EAX.
@@ -127,7 +124,7 @@ std::uint32_t __fastcall GameWorld_AddTilePileToArea(GameWorld* world, void*, st
         return Address(world) + index * kTileBytes;
     }
     const std::uint32_t area = tile.area;
-    GameDebugLog(kPileTakenMessage, pile, area);
+    GameDebugLog(texts::kPileTaken, pile, area);
     GameWorld_AddPlayerCounter(world, nullptr, tile.owner, world->piles[pile].good, world->piles[pile].amount);
     const std::uint32_t areaWords = area * kAreaWords;
     std::uint16_t& head = world->areas[area].piles_by_goods[world->piles[pile].good];
@@ -153,7 +150,7 @@ using PileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint
 std::uint32_t __fastcall GameWorld_AddGoodsToPile(GameWorld* world, void*, std::uint32_t pile) {
     Pile& p = world->piles[pile];
     auto log = [&](std::uint32_t kind) {
-        GameDebugLog(kPileMessage, pile, kind, static_cast<std::uint32_t>(p.good), static_cast<std::uint32_t>(p.x),
+        GameDebugLog(texts::kPileDetails, pile, kind, static_cast<std::uint32_t>(p.good), static_cast<std::uint32_t>(p.x),
                      static_cast<std::uint32_t>(p.y));
     };
     // The original's EAX, step by step (see the doc comment).
@@ -201,7 +198,7 @@ std::uint32_t __fastcall GameWorld_PileIncAmountLeaving(GameWorld* world, void*,
     // The original's EAX, step by step.
     std::uint32_t eax = ((pile * 7u) & 0xffffff00u) | p.leaving;
     if (p.leaving >= 8) {
-        GameDebugLog(kPileLeavingMessage, static_cast<std::uint32_t>(p.art), pile,
+        GameDebugLog(texts::kPileIncAmountLeaving, static_cast<std::uint32_t>(p.art), pile,
                      static_cast<std::uint32_t>(p.amount), static_cast<std::uint32_t>(p.good),
                      static_cast<std::uint32_t>(p.leaving), static_cast<std::uint32_t>(p.x),
                      static_cast<std::uint32_t>(p.y));
@@ -214,7 +211,7 @@ std::uint32_t __fastcall GameWorld_PileIncAmountLeaving(GameWorld* world, void*,
                 if (building.piles[0] == pile || building.piles[1] == pile || building.piles[2] == pile ||
                     building.pile_ring == pile) {
                     const Building& found = world->buildings[i & 0xffffu];
-                    GameDebugLog(kPileLeavingBuildingMessage, static_cast<std::uint32_t>(found.art),
+                    GameDebugLog(texts::kPileIncAmountLeavingBuilding, static_cast<std::uint32_t>(found.art),
                                  static_cast<std::uint32_t>(found.buildup));
                     eax = Address(world) + (i & 0xffffu) * static_cast<std::uint32_t>(sizeof(Building));
                     break;

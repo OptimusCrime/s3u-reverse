@@ -20,6 +20,7 @@
 // S3RE_LOG_COMMANDS is set (`s3re_launcher --log-commands`). Not
 // reimplemented.
 
+#include "game/globals.h"
 #include "hooks.h"
 #include "log.h"
 
@@ -46,7 +47,6 @@ void __fastcall Hooked_CNetThread_OnNetAnnounce(CNetThread* self, void* edx,
 S3RE_PASSTHROUGH(0x0046cbd0, CNetThread_OnNetAnnounce, OnNetAnnounceFn,
                  Original_CNetThread_OnNetAnnounce, Hooked_CNetThread_OnNetAnnounce);
 
-constexpr std::uintptr_t kGameTickAddress = 0x007dfd48;  // g_gameTick
 
 // The announce packet's header (layout in the comment at the top); the
 // command payload follows it.
@@ -81,7 +81,7 @@ void __fastcall Hooked_CNetThread_OnNetAnnounce(CNetThread* self, void* edx,
         }
         const std::uint32_t step = header->executeStep;
         S3RE_LOG("announce tick=%u from=%p cmd=%02x size=%u b3=%u player=%u seq=%u step=%u payload=%s",
-                 *reinterpret_cast<const volatile std::uint32_t*>(kGameTickAddress),
+                 static_cast<std::uint32_t>(game::g_gameTick),
                  _ReturnAddress(), header->command, size, header->unk03, header->player,
                  header->sequence, step, payload);
     }

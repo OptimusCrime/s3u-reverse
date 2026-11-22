@@ -1,0 +1,142 @@
+#pragma once
+
+// Constant tables and constants in S3.EXE's data (.rdata, and .data values
+// the code never writes). One typed declaration per table, the only place
+// its address appears (game/global_access.h); re/globals.csv records them.
+// The original reads them at their addresses, so our replacements do too
+// (the values are not copied into our code).
+//
+// Where the original indexes a table past what looks like its end (no range
+// checks), the declared bound is not a limit: indexing works by the same
+// address arithmetic. A bound of [] means the size is not known.
+
+#include "game/global_access.h"
+
+#include <cstddef>
+#include <cstdint>
+
+namespace s3re::game {
+
+#pragma pack(push, 1)
+
+// Per notification type (g_notificationKinds).
+struct NotificationKind {
+    std::int32_t list;     // 0x00 1..4 (0 for unused types)
+    std::int32_t level;    // 0x04 shown if level >= 9 - setting
+    std::int32_t icon;     // 0x08 graphics id (0x800c1...), probably the icon
+    std::int32_t repeat;   // 0x0c repeat-timer start value
+    std::uint32_t radius;  // 0x10 0 = no repeat timer
+};
+static_assert(sizeof(NotificationKind) == 20);
+
+// The wanted amounts of the shipyard's inputs while it builds a ship
+// (g_shipyardInputs); the original reads the low byte of each.
+struct ShipyardInputs {
+    std::int32_t first;   // +0x0 Building byte 0x1a
+    std::int32_t second;  // +0x4 Building byte 0x1b
+    std::int32_t third;   // +0x8 Building byte 0x1c
+    std::int32_t unkc;
+};
+static_assert(sizeof(ShipyardInputs) == 0x10);
+
+// Pixel offset of a soldier's place in a tower (g_towerSlotOffsets).
+struct TowerSlotOffset {
+    std::int32_t x;
+    std::int32_t y;
+    std::int32_t unk8;
+};
+static_assert(sizeof(TowerSlotOffset) == 12);
+
+#pragma pack(pop)
+
+// ------------------------------------------------------------ map and movement
+// Pathing cost per terrain type (signed).
+inline constexpr GameGlobal<const std::int8_t[256]> g_terrainCost{0x65857c};
+// x and y steps of the six directions.
+inline constexpr GameGlobal<const std::int32_t[6]> g_directionDx{0x65867c};
+inline constexpr GameGlobal<const std::int32_t[6]> g_directionDy{0x658694};
+// Per direction four values used to split a turn into two axes
+// (pathing.cpp, AngleSetup), and the two axes.
+inline constexpr GameGlobal<const std::int32_t[6][4]> g_pathSplitTable{0x6586ac};
+inline constexpr GameGlobal<const std::int32_t[6][4]> g_pathAxisTable{0x65870c};
+// Walking time added per terrain type.
+inline constexpr GameGlobal<const std::uint8_t[256]> g_terrainSpeed{0x658c1c};
+
+// ------------------------------------------------------------ settler types
+// Per settler type (0x30 types): its class (0 = civilian; 9 and 1 are
+// builders and diggers, 3 carriers...), the pathing turn cost, the start
+// health and the walking speed (the original reads its low byte).
+inline constexpr GameGlobal<const std::int32_t[0x30]> g_settlerTypeClass{0x658f64};
+inline constexpr GameGlobal<const std::int32_t[0x30]> g_settlerTypeTurnCost{0x659024};
+inline constexpr GameGlobal<const std::int32_t[0x30]> g_settlerTypeStartHealth{0x6590e4};
+inline constexpr GameGlobal<const std::int32_t[0x30]> g_settlerTypeSpeed{0x6591a4};
+// Animation ids per (kind * 4 + race).
+inline constexpr GameGlobal<const std::uint32_t[]> g_settlerAnimations{0x6a8060};
+
+// ------------------------------------------------------------ races
+// Per race the eight spells it can cast.
+inline constexpr GameGlobal<const std::uint32_t[][8]> g_raceSpells{0x658d64};
+// Per race the number of settlers a ship carries.
+inline constexpr GameGlobal<const std::int32_t[4]> g_raceShipCapacity{0x659644};
+// Per race the length of the shooting animation (the original reads the
+// low word).
+inline constexpr GameGlobal<const std::int32_t[4]> g_raceShotTime{0x659dc0};
+
+// ------------------------------------------------------------ buildings
+// Building layouts: per (race * 57 + type) 2400 bytes of uint32 lists
+// (footprint, land, levelling tiles...), each ended by a marker.
+inline constexpr GameGlobal<const std::uint32_t[][600]> g_buildingLayouts{0x6aa170};
+// Per building type its three input goods.
+inline constexpr GameGlobal<const std::int32_t[][3]> g_buildingInputGoods{0x6a6824};
+// Per ((race * 57 + type) * 3 + input) the pile offset (dx, dy).
+inline constexpr GameGlobal<const std::int32_t[][2]> g_buildingInputOffsets{0x6a6ad0};
+// Per race six pile offsets (dx, dy) of the storehouses 0x22 and 0x21.
+inline constexpr GameGlobal<const std::int32_t[4][6][2]> g_storePileOffsets22{0x6594a4};
+inline constexpr GameGlobal<const std::int32_t[4][6][2]> g_storePileOffsets21{0x659564};
+// Offset (dx, dy) from the building to the centre of its seven extra tiles,
+// for the types 0x1f, 0x2f, 0x30 and 0x32.
+inline constexpr GameGlobal<const std::int32_t[4][2]> g_extraTilesCentre{0x659624};
+// Hit points of the military buildings 0xf, 0x10, 0x12.
+inline constexpr GameGlobal<const std::int32_t[3]> g_militaryHitPoints{0x659664};
+// Shipyard inputs per ship (state & 0xf): [ship][0] for the states
+// 0x30..0x33, [ship][1] for 0x40..0x43.
+inline constexpr GameGlobal<const ShipyardInputs[4][2]> g_shipyardInputs{0x659670};
+// Per tower slot index the pixel offset of the soldier.
+inline constexpr GameGlobal<const TowerSlotOffset[]> g_towerSlotOffsets{0x659738};
+// The building type whose goods a consumer type wants (UpdateEconomy).
+inline constexpr GameGlobal<const std::uint32_t[]> g_consumerBuildingType{0x659264};
+// Single constants in .data: the output good of building type 0xb (11),
+// mana per offering (1), the residence capacity unit (10) and the smith's
+// full input amount (8).
+inline constexpr GameGlobal<const std::int32_t> g_goodType0B{0x730ef0};
+inline constexpr GameGlobal<const std::uint32_t> g_manaPerOffering{0x730ef4};
+inline constexpr GameGlobal<const std::int8_t> g_residenceUnit{0x730f00};
+inline constexpr GameGlobal<const std::uint32_t> g_smithInputFull{0x730f04};
+
+// ------------------------------------------------------------ effects and spells
+// Per variant 0..3 the x and y offsets of MapEffects_Spawn_544dc0.
+inline constexpr GameGlobal<const std::uint32_t[4]> g_spawnOffsetsX{0x65a19c};
+inline constexpr GameGlobal<const std::uint32_t[4]> g_spawnOffsetsY{0x65a1ac};
+// Flight-time factors of projectiles (sqrt(distance) * factor).
+inline constexpr GameGlobal<const double> g_flightFactor05{0x65a1c0};
+inline constexpr GameGlobal<const double> g_flightFactor2{0x65a1c8};
+inline constexpr GameGlobal<const double> g_flightFactor0{0x65a1d0};
+// Per spell area index its size.
+inline constexpr GameGlobal<const std::int32_t[]> g_spellAreaSizes{0x65a1f0};
+// Per notification type.
+inline constexpr GameGlobal<const NotificationKind[]> g_notificationKinds{0x659dd0};
+
+// ------------------------------------------------------------ computer players
+// Default per-candidate value (AI_RecordBestCandidate).
+inline constexpr GameGlobal<const std::uint16_t[]> g_aiCandidateDefaults{0x7329d0};
+
+// ------------------------------------------------------------ library data
+// std::string::npos of S3.EXE's statically linked library (read at run
+// time, like the original).
+inline constexpr GameGlobal<const volatile std::uint32_t> g_stringNpos{0x655390};
+// The shared empty buffer of S3.EXE's std::string (a zero byte).
+inline constexpr GameGlobal<char[1]> g_stringNullBuffer{0x6553a0};
+// GUID_NULL (16 zero bytes).
+inline constexpr GameGlobal<const std::uint32_t[4]> g_guidNull{0x65c0b8};
+
+}  // namespace s3re::game

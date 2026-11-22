@@ -143,6 +143,8 @@
 
 #include "game/debug_log.h"
 #include "game/replacements.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -748,18 +750,16 @@ constexpr std::uint8_t kExtraDone = 0xfe;
 constexpr std::uint8_t kShipyard = 0x20;
 constexpr std::uint8_t kType12 = 0x12;
 
-constexpr std::uintptr_t kShipProductionMessage = 0x006a5950;  // "Schiffsproduktion %u owner %u"
-constexpr std::uintptr_t kCentreMessage = 0x006a5938;          // "centerx,centery = %u,%u"
 
 // The offset (int32 dx, dy in S3.EXE's data) from a building's position to
 // the centre of its seven extra tiles, for the four building types that
 // have them; nullptr for other types.
 const std::int32_t* ExtraTilesOffset(std::uint8_t type) {
     switch (type) {
-        case 0x1f: return reinterpret_cast<const std::int32_t*>(0x00659624);
-        case 0x2f: return reinterpret_cast<const std::int32_t*>(0x0065962c);
-        case 0x30: return reinterpret_cast<const std::int32_t*>(0x00659634);
-        case 0x32: return reinterpret_cast<const std::int32_t*>(0x0065963c);
+        case 0x1f: return g_extraTilesCentre[0];
+        case 0x2f: return g_extraTilesCentre[1];
+        case 0x30: return g_extraTilesCentre[2];
+        case 0x32: return g_extraTilesCentre[3];
         default: return nullptr;
     }
 }
@@ -796,7 +796,7 @@ std::uint32_t __fastcall GameWorld_TakeBuildingExtraTiles(GameWorld* world, void
         const std::uint32_t cx = record.x + static_cast<std::uint32_t>(offset[0]);
         const std::uint32_t cy = record.y + static_cast<std::uint32_t>(offset[1]);
         if (type == 0x32) {
-            GameDebugLog(kCentreMessage, cx, cy);
+            GameDebugLog(texts::kCentreXY, cx, cy);
         }
         for (const auto& step : kExtraTiles) {
             if (GameWorld_IsFreeOfSettlerType29Nearby(world, nullptr, cx + step[0], cy + step[1]) == 0) {
@@ -834,7 +834,7 @@ std::uint32_t __fastcall GameWorld_TakeBuildingExtraTiles(GameWorld* world, void
     }
     // The original addresses the settler as settlers + (ship << 6), in 32 bits like this indexing.
     Settler& settler = world->settlers[ship];
-    GameDebugLog(kShipProductionMessage, static_cast<std::uint32_t>(settler.art),
+    GameDebugLog(texts::kShipProduction, static_cast<std::uint32_t>(settler.art),
                  static_cast<std::uint32_t>(settler.owner));
     settler.job = 0x145;
     settler.slot = 0;

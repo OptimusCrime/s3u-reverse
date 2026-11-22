@@ -80,7 +80,10 @@
 //   the CSV's proposal.)
 
 #include "game/debug_log.h"
+#include "game/globals.h"
 #include "game/replacements.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -100,8 +103,6 @@ using layout::Building;
 using layout::PlayerSiteCache;
 using layout::Tile;
 
-constexpr std::uintptr_t kLayouts = 0x006aa170;
-constexpr std::uint32_t kLayoutBytes = 2400;
 constexpr std::uint32_t kLayoutTypes = 57;
 constexpr std::uint32_t kMarkFootprint = 0x80000000;
 constexpr std::uint32_t kMarkFootprintEnd = 0x80000001;
@@ -120,7 +121,7 @@ Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
 }
 
 const std::uint32_t* Layout(std::uint32_t race, std::uint32_t type) {
-    return reinterpret_cast<const std::uint32_t*>(kLayouts + (type + race * kLayoutTypes) * kLayoutBytes);
+    return g_buildingLayouts[type + race * kLayoutTypes];
 }
 
 // Clears the footprint mark and a stake on one tile.
@@ -157,8 +158,6 @@ constexpr std::uint8_t kGoodNone = 0xff;
 constexpr std::uint8_t kLineEndTerrain = 0x30;  // Tile::terrain that ends the line (shore?)
 constexpr std::uint16_t kNoDirection = 0xffff;
 
-constexpr std::uintptr_t kTroubleMessage = 0x006a6060;    // "TROUBLE: cannot find all people that wanted..."
-constexpr std::uintptr_t kEmptyListMessage = 0x006a609c;  // "RemoveStorage: Pushing pile in EmptyList!"
 
 // Carriers bringing goods to a building pile.
 bool IsDeliveringJob(std::uint16_t job) {
@@ -284,7 +283,7 @@ void __fastcall GameWorld_DropInputPile(GameWorld* world, void*, std::uint32_t n
             return s.building == number && IsDeliveringJob(s.job);
         });
     }
-    GameDebugLog(kTroubleMessage);
+    GameDebugLog(texts::kCannotFindBringers);
     if (pile.leaving != 0) {
         ResetSettlersWhere(world, [&](const layout::Settler& s) {
             return (s.job == 0x133 || s.job == 0x134) && s.target_x == pile.x && s.target_y == pile.y;
@@ -317,7 +316,7 @@ void __fastcall GameWorld_DropStoragePile(GameWorld* world, void*, std::uint32_t
             }
         }
         if (coming != 0) {
-            GameDebugLog(kTroubleMessage);
+            GameDebugLog(texts::kCannotFindBringers);
         }
     }
     if (pile.leaving != 0) {
@@ -332,7 +331,7 @@ void __fastcall GameWorld_DropStoragePile(GameWorld* world, void*, std::uint32_t
         TakeGoodFromPile(world, number);
     }
     if (pile.good != kGoodNone) {
-        GameDebugLog(kEmptyListMessage);
+        GameDebugLog(texts::kPushingPileInEmptyList);
         GameWorld_MakePileEmpty(world, nullptr, number);
     }
     if (pile.art == 0 && pile.amount == 0 && pile.coming == 0) {
@@ -401,10 +400,6 @@ constexpr std::uintptr_t kDropInputPile = 0x00504a00;
 constexpr std::uintptr_t kDropStoragePile = 0x00504b70;
 constexpr std::uintptr_t kDropOutputPile = 0x00504e20;
 
-constexpr std::uintptr_t kComingMessage = 0x006a5990;   // "%u Waren hierher unterwegs"
-constexpr std::uintptr_t kReducedMessage = 0x006a5970;  // "Ergebnis nach Reduzierung %u"
-constexpr std::uintptr_t kStoreTable22 = 0x006594a4;    // int32 (dx, dy)[6] per race, type 0x22
-constexpr std::uintptr_t kStoreTable21 = 0x00659564;    // the same for type 0x21
 constexpr std::uint32_t kGoodBoards = 1;                // construction materials (probably boards
 constexpr std::uint32_t kGoodStones = 2;                // and stones)
 
@@ -479,7 +474,7 @@ void __fastcall GameWorld_RemoveBuildingGoods(GameWorld* world, void*, std::uint
         DropGoodNear(world, world->piles[b.piles[k]].good, world->piles[b.piles[k]].amount, b.x, b.y);
         world->piles[b.piles[k]].amount = 0;
     }
-    GameDebugLog(kComingMessage, coming);
+    GameDebugLog(texts::kGoodsOnTheirWay, coming);
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
         const layout::Settler& settler = world->settlers[n];
         if (settler.owner != kFree && settler.building == number && IsBuildingGoodsJob(settler.job)) {
@@ -487,7 +482,7 @@ void __fastcall GameWorld_RemoveBuildingGoods(GameWorld* world, void*, std::uint
             --coming;
         }
     }
-    GameDebugLog(kReducedMessage, coming);
+    GameDebugLog(texts::kResultAfterReduction, coming);
 
     if (b.buildup == 0) {
         if (b.piles[0] != 0) {
@@ -524,12 +519,12 @@ void __fastcall GameWorld_RemoveBuildingGoods(GameWorld* world, void*, std::uint
                 CallPileFn(world, kDropStoragePile, PileOn(world, b.x, b.y, d[0], d[1]));
             }
         }
-        for (const auto& store : {std::pair<std::uint8_t, std::uintptr_t>{0x22, kStoreTable22},
-                                  std::pair<std::uint8_t, std::uintptr_t>{0x21, kStoreTable21}}) {
+        for (const auto& store : {std::pair<std::uint8_t, const std::int32_t*>{0x22, &g_storePileOffsets22[0][0][0]},
+                                  std::pair<std::uint8_t, const std::int32_t*>{0x21, &g_storePileOffsets21[0][0][0]}}) {
             if (b.art != store.first) {
                 continue;
             }
-            const std::int32_t* offsets = reinterpret_cast<const std::int32_t*>(store.second) + b.race * 12u;
+            const std::int32_t* offsets = store.second + b.race * 12u;
             for (std::uint32_t k = 0; k < 6; ++k) {
                 CallPileFn(world, kDropInputPile, PileOn(world, b.x, b.y, offsets[2 * k], offsets[2 * k + 1]));
             }
@@ -585,22 +580,8 @@ using Effects4Fn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32
                                               std::uint32_t a3, std::uint32_t a4);
 using CrushFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building);
 
-constexpr std::uintptr_t kCampaignMission = 0x007dfdb0;  // g_campaignMission (int32)
-constexpr std::uintptr_t kGameTick = 0x007dfd48;         // g_gameTick
 
-constexpr std::uintptr_t kStartCrushingMessage = 0x006a5824;  // "Start crushing nr. %u art %u"
-constexpr std::uintptr_t kCampaign70Message = 0x006a57f8;     // "Campaign 70: Building must not be crushed!"
-constexpr std::uintptr_t kCrushStep1 = 0x006a57f0;
-constexpr std::uintptr_t kCrushStep2 = 0x006a57e8;
-constexpr std::uintptr_t kCrushStep3 = 0x006a57e0;
-constexpr std::uintptr_t kCrushStep4 = 0x006a57d8;
-constexpr std::uintptr_t kCrushStep5 = 0x006a57d0;
-constexpr std::uintptr_t kCrushEnd = 0x006a57c0;
-constexpr std::uintptr_t kDiggerMessage = 0x006a67d4;    // "digger!"
-constexpr std::uintptr_t kBuilderMessage = 0x006a67c8;   // "builder!"
-constexpr std::uintptr_t kNotFoundMessage = 0x006a5844;  // "DestroyBuilding: Can't find building in range (%u,%u)"
 
-const std::int32_t* const kTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);
 
 bool IsMilitary(std::uint8_t type) {
     return type == 0xf || type == 0x10 || type == 0x12;
@@ -661,10 +642,10 @@ void __fastcall GameWorld_ReleaseSiteWorkers(GameWorld* world, void*, std::uint3
     for (std::uint32_t i = 0; i < 8; ++i) {
         const std::uint8_t bit = static_cast<std::uint8_t>(1u << i);
         if ((b.digger_slots & bit) != 0) {
-            GameDebugLog(kDiggerMessage);
+            GameDebugLog(texts::kDigger);
         }
         if ((b.builder_slots & bit) != 0) {
-            GameDebugLog(kBuilderMessage);
+            GameDebugLog(texts::kBuilder);
         }
     }
     ResetSettlersWhere(world, [&](const layout::Settler& s) { return s.building == number && IsSiteWorker(s); });
@@ -698,7 +679,7 @@ void __fastcall GameWorld_ReleaseSiteWorkers(GameWorld* world, void*, std::uint3
         reinterpret_cast<TileFn>(kRecalculateTerritory)(world, nullptr, b.x, b.y);
     }
     ResetSettlersWhere(world, [&](const layout::Settler& s) {
-        return kTypeClass[s.art] != 0 && s.building == number &&
+        return g_settlerTypeClass[s.art] != 0 && s.building == number &&
                (s.job == 3 || s.job == 4 || s.job == 0x10 || s.job == 0x6a || s.job == 0x8b);
     });
 }
@@ -711,19 +692,19 @@ void __fastcall GameWorld_ReleaseSiteWorkers(GameWorld* world, void*, std::uint3
 // it was destroyed, 0 if protected.
 std::uint32_t __fastcall GameWorld_CrushBuilding(GameWorld* world, void*, std::uint32_t number) {
     Building& b = world->buildings[number];
-    GameDebugLog(kStartCrushingMessage, number, static_cast<std::uint32_t>(b.art));
+    GameDebugLog(texts::kStartCrushing, number, static_cast<std::uint32_t>(b.art));
     std::uint32_t protectedBuilding = 0;
     if (b.owner == kFree) {
         // The original leaves its "protected" flag uninitialized on this path
         // (EAX = whether that stack slot was 0); 1 is returned here, as for a
         // zeroed stack (known difference, see the inventory).
-        GameDebugLog(kCrushEnd);
+        GameDebugLog(texts::kEndOfCrushing);
         return 1;
     }
-    if (RawAtAddress<std::int32_t>(kCampaignMission) == 70) {
+    if (g_campaignMission == 70) {
         for (const auto& position : kCampaign70Protected) {
             if (b.x == position[0] && b.y == position[1]) {
-                GameDebugLog(kCampaign70Message);
+                GameDebugLog(texts::kCampaign70NoCrush);
                 protectedBuilding = 1;
             }
         }
@@ -732,7 +713,7 @@ std::uint32_t __fastcall GameWorld_CrushBuilding(GameWorld* world, void*, std::u
         const layout::MapOffset* entry = world->offsets;
         do {
             if (protectedBuilding != 0) {
-                GameDebugLog(kCrushEnd);
+                GameDebugLog(texts::kEndOfCrushing);
                 return 0;
             }
             const std::uint32_t tx = b.x + static_cast<std::uint32_t>(entry->dx);
@@ -743,7 +724,7 @@ std::uint32_t __fastcall GameWorld_CrushBuilding(GameWorld* world, void*, std::u
                     const layout::Settler& s = world->settlers[settler];
                     const std::int32_t theirs = (world->players + s.owner)->team;
                     const std::int32_t ours = (world->players + b.owner)->team;
-                    const std::int32_t settlerClass = kTypeClass[s.art];
+                    const std::int32_t settlerClass = g_settlerTypeClass[s.art];
                     if (theirs != ours && settlerClass >= 1 && settlerClass <= 9) {
                         protectedBuilding = 1;
                     }
@@ -753,7 +734,7 @@ std::uint32_t __fastcall GameWorld_CrushBuilding(GameWorld* world, void*, std::u
         } while (entry->distance < 15);
     }
     if (protectedBuilding != 0) {
-        GameDebugLog(kCrushEnd);
+        GameDebugLog(texts::kEndOfCrushing);
         return 0;
     }
     if (b.buildup != 0) {
@@ -776,7 +757,7 @@ std::uint32_t __fastcall GameWorld_CrushBuilding(GameWorld* world, void*, std::u
         const std::uint32_t y = b.y;
         const std::uint32_t sy = GameWorld_TileScreenY(world, nullptr, x, y);
         const std::uint32_t sx = GameWorld_TileScreenX(world, nullptr, x, y);
-        reinterpret_cast<Effects5Fn>(kSpawnEffect)(effects, nullptr, RawAtAddress<std::uint32_t>(kGameTick), sx, sy, x,
+        reinterpret_cast<Effects5Fn>(kSpawnEffect)(effects, nullptr, g_gameTick, sx, sy, x,
                                                    y);
     }
     const std::uint8_t type = b.art;
@@ -794,16 +775,16 @@ std::uint32_t __fastcall GameWorld_CrushBuilding(GameWorld* world, void*, std::u
         const std::uint32_t sx = GameWorld_TileScreenX(world, nullptr, b.x, b.y);
         reinterpret_cast<Effects4Fn>(kRemoveMatchingEffects)(effects, nullptr, 0, number, sx, sy);
     }
-    GameDebugLog(kCrushStep1);
+    GameDebugLog(texts::kCrush1);
     CallBuildingFn(world, kClearBuildingFootprint, number);
-    GameDebugLog(kCrushStep2);
+    GameDebugLog(texts::kCrush2);
     CallBuildingFn(world, kReleaseSiteWorkers, number);
-    GameDebugLog(kCrushStep3);
+    GameDebugLog(texts::kCrush3);
     CallBuildingFn(world, kRemoveBuildingGoods, number);
-    GameDebugLog(kCrushStep4);
+    GameDebugLog(texts::kCrush4);
     CallBuildingFn(world, kRemoveBuildingFromTiles, number);
-    GameDebugLog(kCrushStep5);
-    GameDebugLog(kCrushEnd);
+    GameDebugLog(texts::kCrush5);
+    GameDebugLog(texts::kEndOfCrushing);
     return 1;
 }
 
@@ -841,7 +822,7 @@ std::uint32_t __fastcall GameWorld_DestroyBuildingAt(GameWorld* world, void*, st
             }
         }
         if (k + 1 >= 0x26ac) {
-            GameDebugLog(kNotFoundMessage, x, y);
+            GameDebugLog(texts::kBuildingNotInRange, x, y);
         }
     }
     return reinterpret_cast<CrushFn>(kCrushBuilding)(world, nullptr, number);
@@ -1543,7 +1524,7 @@ void CompareCrushBuilding(test::Context& ctx, CrushFn candidate, int cases) {
     DebugLogRecorder logs;
     SetUpWorld(ctx, worlds);
     SetRingOffsets(worlds, 1000);
-    std::int32_t& mission = RawAtAddress<std::int32_t>(kCampaignMission);
+    std::int32_t& mission = g_campaignMission;
     const std::int32_t savedMission = mission;
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t number = 1 + ctx.rng().Below(50);
@@ -1713,7 +1694,7 @@ void __fastcall WrongReleaseSiteWorkers(GameWorld* world, void* edx, std::uint32
 std::uint32_t __fastcall WrongCrushBuilding(GameWorld* world, void* edx, std::uint32_t number) {
     std::vector<std::uint32_t> changed;
     for (std::uint32_t n = 1; n <= 60; ++n) {
-        if (kTypeClass[world->settlers[n].art] == 9 || kTypeClass[world->settlers[n].art] == 1) {
+        if (g_settlerTypeClass[world->settlers[n].art] == 9 || g_settlerTypeClass[world->settlers[n].art] == 1) {
             changed.push_back(n);
         }
     }

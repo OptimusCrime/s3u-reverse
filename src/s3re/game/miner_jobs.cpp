@@ -45,6 +45,7 @@
 //   stack (not reproduced; only mines call it). EAX unused. ret 4.
 // thiscall (ECX = world).
 
+#include "game/globals.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
@@ -103,26 +104,13 @@ namespace {
 // Per-player tallies in S3.EXE's data (0x44 bytes per player from
 // 0x7acfd4; more fields follow, used elsewhere): probably the statistics
 // shown after a game (re/globals.csv g_playerTallies).
-#pragma pack(push, 1)
-struct PlayerTally {
-    std::int32_t meals;       // 0x7acfd4 +1 per food a miner eats (MinerJobFood)
-    std::int32_t ore_found;   // 0x7acfd8 +1 per successful dig (MinerJobDig)
-    std::int32_t points;      // 0x7acfdc +4 for resource 0x40 by race 1 (MinerJobDig); +2 in UpdateSettlers
-    std::uint8_t unk0c[0x38];
-};
-#pragma pack(pop)
-static_assert(sizeof(PlayerTally) == 0x44);
-
 PlayerTally& Tally(std::uint32_t player) {
-    return reinterpret_cast<PlayerTally*>(0x007acfd4)[player];
+    return g_playerTallies[player];
 }
 
-// int32: number of the running campaign mission (0 outside campaigns), S3.EXE 0x7dfdb0.
 std::int32_t CampaignMission() {
-    return *reinterpret_cast<const std::int32_t*>(0x007dfdb0);
+    return g_campaignMission;
 }
-
-void* const kConfig = reinterpret_cast<void*>(0x007a7af0);
 
 // The building's pile word for an input slot 1..3 (any other value: the third).
 std::uint16_t SlotPile(const layout::Building& b, std::uint32_t slot) {
@@ -217,7 +205,7 @@ std::uint32_t __fastcall GameWorld_MinerJobDig(GameWorld* world, void*, std::uin
                 if ((resources & 0x0f) == 0) {
                     resources = 0;
                 }
-                if (CampaignMission() != 0 && (GetMemberByte189(kConfig, nullptr) & 0xff) != 0 &&
+                if (CampaignMission() != 0 && (GetMemberByte189(&g_config, nullptr) & 0xff) != 0 &&
                     world->players[s.owner].active == 2 && GameWorld_Random(world, nullptr) > 0x55f0) {
                     found = 0;  // in campaigns computer players sometimes find nothing
                 }
@@ -405,8 +393,8 @@ void CompareMinerJob(test::Context& ctx, SettlerFn original, SettlerFn candidate
             }
         }
     });
-    std::int32_t& mission = *reinterpret_cast<std::int32_t*>(0x007dfdb0);
-    std::uint8_t& configByte = *reinterpret_cast<std::uint8_t*>(0x007a7af0 + 0x189);
+    std::int32_t& mission = g_campaignMission;
+    std::uint8_t& configByte = g_config->unk189;
     const std::int32_t savedMission = mission;
     const std::uint8_t savedConfig = configByte;
     std::vector<std::uint8_t> tallies(kTallyBytes), before(kTallyBytes);

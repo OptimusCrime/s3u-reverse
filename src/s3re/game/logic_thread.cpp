@@ -11,6 +11,7 @@
 // `--load-save`, N ticks after the tick the savegame starts at). Not
 // reimplemented.
 
+#include "game/globals.h"
 #include "game/logic_thread_layout.h"
 #include "hooks.h"
 #include "log.h"
@@ -37,7 +38,6 @@ S3RE_PASSTHROUGH(0x0053db30, CLogicThread_Step, StepFn, Original_CLogicThread_St
 
 std::atomic<bool> g_loggedFirstStep{false};
 
-constexpr std::uintptr_t kGameTickAddress = 0x007dfd48;  // g_gameTick
 
 // S3RE_EXIT_AFTER_TICKS, or 0 if unset.
 unsigned long ExitAfterTicks() {
@@ -91,12 +91,12 @@ void __fastcall Hooked_CLogicThread_Step(CLogicThread* self, void* edx) {
         S3RE_LOG("CLogicThread::Step first call (this=%p)", static_cast<void*>(self));
     }
     const std::uint32_t base =
-        ExitTickBase(*reinterpret_cast<const volatile std::uint32_t*>(kGameTickAddress));
+        ExitTickBase(g_gameTick);
     Original_CLogicThread_Step(self, edx);
     trace::OnLogicStep(self);
 
     const unsigned long exitAfter = ExitAfterTicks();
-    const std::uint32_t tick = *reinterpret_cast<const volatile std::uint32_t*>(kGameTickAddress);
+    const std::uint32_t tick = g_gameTick;
     if (exitAfter != 0 && !g_exitRequested && tick - base >= exitAfter) {
         g_exitRequested = true;
         S3RE_LOG("tick %lu reached (%lu ticks after %lu); ending the game (--exit-after-ticks)",

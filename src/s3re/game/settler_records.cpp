@@ -41,6 +41,7 @@
 // All thiscall (ECX = world). Names provisional.
 
 #include "game/replacements.h"
+#include "game/tables.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -59,8 +60,6 @@ constexpr std::uint32_t kSettlerBytes = sizeof(Settler);
 constexpr std::uint32_t kLastSettler = layout::kMaxSettler + 1;  // 0x7cff, never handed out
 constexpr std::uint8_t kFreeSettler = 0xff;
 
-const std::int32_t* const kTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);
-const std::int32_t* const kTypeStartHealth = reinterpret_cast<const std::int32_t*>(0x006590e4);
 
 std::uint32_t WorldAddress(GameWorld* world) {
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
@@ -79,13 +78,13 @@ std::uint32_t __fastcall GameWorld_SettlerStartHealth(GameWorld* world, void*, s
     // The upper half of EAX: what the original's register held before the word load.
     std::uint32_t upper = (settler << 6) & 0xffff0000u;
     if (record.race == 3) {
-        const std::int32_t typeClass = kTypeClass[type];
+        const std::int32_t typeClass = g_settlerTypeClass[type];
         if (typeClass >= 1 && typeClass <= 9) {
-            return static_cast<std::uint32_t>(kTypeStartHealth[type] - 20);
+            return static_cast<std::uint32_t>(g_settlerTypeStartHealth[type] - 20);
         }
         upper = 0;  // type * 4
     }
-    const std::uint32_t health = *reinterpret_cast<const std::uint16_t*>(&kTypeStartHealth[type]);
+    const std::uint32_t health = static_cast<std::uint16_t>(g_settlerTypeStartHealth[type]);
     return upper | health;
 }
 

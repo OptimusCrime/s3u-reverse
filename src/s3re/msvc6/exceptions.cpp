@@ -10,6 +10,8 @@
 // error 0x559550 and its copies 0x58b520 / 0x596570, and the _Doraise
 // virtuals 0x5597a0 / 0x559830); they never return.
 
+#include "game/tables.h"
+#include "game/vtables.h"
 #include "hooks.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
@@ -22,8 +24,6 @@ namespace s3re::msvc6 {
 
 namespace {
 
-constexpr std::uint32_t kLogicErrorVtable = 0x0065a548;
-constexpr std::uint32_t kOutOfRangeVtable = 0x0065a538;
 constexpr std::uint32_t kMessage = 0x0c;
 
 String* Message(void* self) {
@@ -86,7 +86,7 @@ S3RE_HOOK(0x005597e0, LogicError_Destroy, DestroyFn, Original_LogicError_Destroy
 // Purpose: Destructor of std::logic_error (and the errors derived from it):
 // releases the message, then runs exception's destructor.
 void __fastcall LogicError_Destroy(void* self, void* /*edx*/) {
-    SetVtable(self, kLogicErrorVtable);
+    SetVtable(self, game::vtables::kStdLogicError);
     String* message = Message(self);
     if (message->ptr != nullptr) {
         detail::Release(message->ptr);
@@ -115,7 +115,7 @@ S3RE_HOOK(0x00559640, LogicError_Copy, CopyFn, Original_LogicError_Copy, LogicEr
 // Purpose: Copy constructor of std::logic_error (used when an error is
 // thrown or caught by value).
 void* __fastcall LogicError_Copy(void* self, void* /*edx*/, const void* x) {
-    return CopyError(self, x, kLogicErrorVtable);
+    return CopyError(self, x, game::vtables::kStdLogicError);
 }
 
 S3RE_HOOK(0x00559850, OutOfRange_Copy, CopyFn, Original_OutOfRange_Copy, OutOfRange_Copy);
@@ -123,7 +123,7 @@ S3RE_HOOK(0x00559850, OutOfRange_Copy, CopyFn, Original_OutOfRange_Copy, OutOfRa
 // Purpose: Copy constructor of std::out_of_range (the "invalid position"
 // error).
 void* __fastcall OutOfRange_Copy(void* self, void* /*edx*/, const void* x) {
-    return CopyError(self, x, kOutOfRangeVtable);
+    return CopyError(self, x, game::vtables::kStdOutOfRange);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +149,7 @@ void* __fastcall WrongCopy(void* self, void* /*edx*/, const void* x) {
     message->allocator = Message(x)->allocator;
     detail::Clear(message);
     String_AssignChars(message, nullptr, detail::CStr(Message(x)), Message(x)->len);
-    SetVtable(self, kLogicErrorVtable);
+    SetVtable(self, game::vtables::kStdLogicError);
     return self;
 }
 
@@ -203,8 +203,8 @@ void CompareErrors(test::Context& ctx, const ErrorOps& candidate, int iterations
         if (op == 0) {
             const char* wa = original.what(a, nullptr);
             const char* wb = candidate.what(b, nullptr);
-            same &= S3RE_EXPECT(wa == (Message(a)->ptr ? Message(a)->ptr : reinterpret_cast<const char*>(0x006553a0)));
-            same &= S3RE_EXPECT(wb == (Message(b)->ptr ? Message(b)->ptr : reinterpret_cast<const char*>(0x006553a0)));
+            same &= S3RE_EXPECT(wa == (Message(a)->ptr ? Message(a)->ptr : static_cast<const char*>(game::g_stringNullBuffer)));
+            same &= S3RE_EXPECT(wb == (Message(b)->ptr ? Message(b)->ptr : static_cast<const char*>(game::g_stringNullBuffer)));
         } else if (op == 1) {
             // Give the message a second reference first, so that the
             // destructor only decrements and the result stays visible.

@@ -12,38 +12,19 @@
 
 namespace s3re::game::ai {
 
-// ---------------------------------------------------------------- globals
 // The AI code reaches the game through globals set before each player's
-// turn (AI_SetCurrentPlayer and 0x551b80).
-constexpr std::uintptr_t kAiWorld = 0x007e3408;         // GameWorld*: the world, from computer player +0x75c
-constexpr std::uintptr_t kAiPlayer = 0x007e3130;        // the CComputerPlayer whose turn it is
-constexpr std::uintptr_t kAiPlayerNumber = 0x007e2eb8;  // uint8: its player number
-constexpr std::uintptr_t kAiPlayerSetup = 0x007e2eb4;   // its entry of the settings table below
-constexpr std::uintptr_t kAiPlayerData = 0x007e2eb0;    // AiPlayerData*: its working data
-constexpr std::uintptr_t kPlayerSetupTable = 0x00731488;  // 0x180-byte entries
-constexpr std::uint32_t kPlayerSetupBytes = 0x180;
-constexpr std::uintptr_t kCandidateDefaults = 0x007329d0;  // uint16 per candidate index
-constexpr std::uintptr_t kAiMapSizeY = 0x007e3412;  // uint16 (copied from the world by 0x551b80)
-constexpr std::uintptr_t kAiMapSizeX = 0x007e3414;  // uint16
-constexpr std::uintptr_t kAiMapWorld = 0x007e7b60;  // GameWorld*: a second copy of the AI's world pointer (0x58fa7b)
-// The shared land evaluation object (AI_EvaLand_Release): reference count
-// and instance (also cleared by AI_ClearGlobals7e0568).
-constexpr std::uintptr_t kEvaLandRefCount = 0x007e0568;
-constexpr std::uintptr_t kEvaLandInstance = 0x007e056c;
-// 20 vectors (AiVector below), emptied by AI_ResetAgentData.
-constexpr std::uintptr_t kAgentVectors = 0x007e7a24;
-constexpr std::size_t kAgentVectorCount = 20;
-
-template <typename T>
-T& Global(std::uintptr_t address) {
-    return *reinterpret_cast<T*>(address);
-}
-
-inline GameWorld* AiWorld() {
-    return Global<GameWorld*>(kAiWorld);
-}
+// turn (AI_SetCurrentPlayer and 0x551b80): g_aiWorld, g_aiPlayer,
+// g_aiPlayerData, ... in game/globals.h.
+constexpr std::size_t kAgentVectorCount = 20;  // g_aiAgentVectors
 
 #pragma pack(push, 1)
+
+// ---------------------------------------------------------------- player setup
+// An entry of the settings table g_aiPlayerSetups (contents not known).
+struct AiPlayerSetup {
+    std::uint8_t unk000[0x180];
+};
+static_assert(sizeof(AiPlayerSetup) == 0x180);
 
 // ---------------------------------------------------------------- CComputerPlayer
 // The fields AI_SetCurrentPlayer copies into the globals (size unknown).
@@ -53,7 +34,7 @@ struct ComputerPlayer {
     std::uint8_t unk273[0x75c - 0x273];
     std::uint32_t world;          // 0x75c GameWorld*
     std::uint8_t unk760[0x10];
-    std::uint32_t setup_index;    // 0x770 index into kPlayerSetupTable
+    std::uint32_t setup_index;    // 0x770 index into g_aiPlayerSetups
     std::uint32_t unk774;
     std::uint32_t data;           // 0x778 AiPlayerData*
 };
@@ -65,7 +46,7 @@ static_assert(offsetof(ComputerPlayer, data) == 0x778);
 // ---------------------------------------------------------------- AI player data
 // g_aiPlayerData: the best place found per candidate index (probably per
 // building type, AI_RecordBestCandidate) and a per-index value reset to
-// its default from kCandidateDefaults. Indexes are not range-checked by the
+// its default from g_aiCandidateDefaults. Indexes are not range-checked by the
 // original (callers pass up to 0xffff), so the arrays are indexed past their
 // declared ends like the original's address arithmetic.
 struct AiCandidate {
@@ -185,7 +166,7 @@ static_assert(offsetof(AiLandEvaluation, height) == 0x144);
 static_assert(offsetof(AiLandEvaluation, cells) == 0x158);
 static_assert(sizeof(AiLandEvaluation) == 0x15c);
 
-// A vector of 16-byte entries (the 20 at kAgentVectors).
+// A vector of 16-byte entries (the 20 of g_aiAgentVectors).
 struct AiVector {
     std::uint32_t begin;  // +0
     std::uint32_t end;    // +4 (end = begin empties it)
@@ -193,10 +174,6 @@ struct AiVector {
     std::uint32_t unkc;
 };
 static_assert(sizeof(AiVector) == 0x10);
-
-inline AiVector* AgentVectors() {
-    return reinterpret_cast<AiVector*>(kAgentVectors);
-}
 
 // ---------------------------------------------------------------- tagged record
 // The objects AI_SetWord4 (0x55ca60) starts: their constructors (e.g.

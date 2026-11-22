@@ -37,6 +37,7 @@
 
 #include "game/debug_log.h"
 #include "game/replacements.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -212,7 +213,6 @@ std::uint32_t __fastcall GameWorld_PileDecAmountLeaving(GameWorld* world, void* 
 
 namespace {
 
-constexpr std::uintptr_t kNoFreeOrderPileText = 0x006a6224;  // "StealGoodFromPile: OrderPile nix mehr frei!"
 
 bool IsFetchJob(std::uint16_t job) {
     return job == 0xa || job == 0xb || job == 0xa9 || job == 0x4c || job == 0x4d || job == 0x68 || job == 0x69;
@@ -270,7 +270,7 @@ std::uint32_t __fastcall GameWorld_StealGoodFromPile(GameWorld* world, void*, st
         }
     } else if (p.art == 0xfd) {
         if (free <= 0) {
-            GameDebugLog(kNoFreeOrderPileText);
+            GameDebugLog(texts::kOrderPileFull);
             return 0;
         }
     } else if (p.art == kDroppedPile) {

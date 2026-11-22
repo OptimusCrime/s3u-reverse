@@ -41,6 +41,8 @@
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
+#include "game/globals.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -125,18 +127,7 @@ constexpr std::uintptr_t kShiftStatistics = 0x004ff470;
 constexpr std::uintptr_t kExpireSome = 0x00545d40;
 constexpr std::uintptr_t kDebugLogFn = 0x00428720;
 
-// Globals.
-constexpr std::uintptr_t kWorldUpdateDisabled = 0x007deb55;  // uint8 g_worldUpdateDisabled
-constexpr std::uintptr_t kGameTick = 0x007dfd48;             // g_gameTick
-constexpr std::uintptr_t kFastForwarding = 0x007dfd30;       // int32, set while CLogicThread::Step catches up
-constexpr std::uintptr_t kStrengthBase = 0x007acfa4;         // uint32, see SoldierStrength
-constexpr std::uintptr_t kGrowthStart = 0x00730efc;          // uint32, first object that grows (0xd8 in the image)
 
-// DebugLog formats.
-constexpr std::uintptr_t kBuildingHitText = 0x006a5aec;  // "Gebaeude getroffen %u"
-constexpr std::uintptr_t kCatapultHitText = 0x006a5ad4;  // "Katapult getroffen %u"
-constexpr std::uintptr_t kShipSinksText = 0x006a5ac0;    // "Schiff sinkt !!!"
-constexpr std::uintptr_t kShipHitText = 0x006a5aac;      // "Schiff getroffen %u"
 
 using Fn0 = U(__fastcall*)(GameWorld* world, void* edx);
 using Fn1 = U(__fastcall*)(GameWorld* world, void* edx, U);
@@ -154,21 +145,21 @@ F Callee(std::uintptr_t address) {
 }
 
 U Tick() {
-    return *reinterpret_cast<const volatile U*>(kGameTick);
+    return g_gameTick;
 }
 
 Tile& TileAt(GameWorld* world, U x, U y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
-void DebugLog(std::uintptr_t format) {
+void DebugLog(const GameText& format) {
     using LogFn = void(__cdecl*)(const char*, ...);
-    reinterpret_cast<LogFn>(kDebugLogFn)(reinterpret_cast<const char*>(format));
+    reinterpret_cast<LogFn>(kDebugLogFn)(format.c_str());
 }
 
-void DebugLog(std::uintptr_t format, U value) {
+void DebugLog(const GameText& format, U value) {
     using LogFn = void(__cdecl*)(const char*, ...);
-    reinterpret_cast<LogFn>(kDebugLogFn)(reinterpret_cast<const char*>(format), value);
+    reinterpret_cast<LogFn>(kDebugLogFn)(format.c_str(), value);
 }
 
 // Removes a settler from its owner's list of its type (prev/next links;
@@ -203,7 +194,7 @@ void BuildingHit(GameWorld* world, const Effect& e) {
         Callee<Fn4>(kNotifyLocalPlayer)(world, nullptr, b.owner, 9, b.x, b.y);
         Callee<Fn1>(kCrushBuilding)(world, nullptr, number);
     }
-    DebugLog(kBuildingHitText, e.params[1]);
+    DebugLog(texts::kBuildingHit, e.params[1]);
 }
 
 // Event type 6: a catapult (the seven-tile unit, type 0x29) hit.
@@ -233,7 +224,7 @@ void CatapultHit(GameWorld* world, const Effect& e) {
             Callee<TableFn5>(kSpawnCatapultHit)(&world->map_effects, nullptr, Tick(), sx, sy, x, y);
         }
     }
-    DebugLog(kCatapultHitText, e.params[1]);
+    DebugLog(texts::kCatapultHit, e.params[1]);
 }
 
 // Event type 7: a ship (type 0x2b, or 0x2c which carries settlers) hit.
@@ -246,7 +237,7 @@ void ShipHit(GameWorld* world, const Effect& e) {
             s.health = static_cast<std::uint8_t>(s.health - damage);
             Callee<Fn4>(kNotifyLocalPlayer)(world, nullptr, s.owner, 10, s.x, s.y);
         } else {
-            DebugLog(kShipSinksText);
+            DebugLog(texts::kShipSinks);
             if (s.art != 0x2c) {
                 UnlinkSettler(world, s, s.art);
             }
@@ -290,7 +281,7 @@ void ShipHit(GameWorld* world, const Effect& e) {
             s.owner = 0xff;
         }
     }
-    DebugLog(kShipHitText, e.params[1]);
+    DebugLog(texts::kShipHit, e.params[1]);
 }
 
 void RunTimedEvents(GameWorld* world) {
@@ -362,7 +353,7 @@ void UpdateSoldierStrength(GameWorld* world) {
     }
     for (U p = 0; p < layout::kPlayers; ++p) {
         Player& player = world->players[p];
-        const U base = 0x600u / (*reinterpret_cast<const U*>(kStrengthBase) + 4);
+        const U base = 0x600u / (g_strengthDivisor + 4);
         U value = player.race == 1 ? base + (sums[p] + extra[p] * 4) * 2 : base + sums[p] * 4;
         for (U limit : {0x100u, 0x140u, 0x180u, 0x1c0u}) {
             if (value > limit) {
@@ -416,7 +407,7 @@ void UpdateLandscapeTile(GameWorld* world) {
     if (object() >= 0xb8 && object() <= 0xcf) {
         object() = static_cast<std::uint8_t>(object() + 8);
     }
-    if (object() >= *reinterpret_cast<const U*>(kGrowthStart) && object() <= 0xdf) {
+    if (object() >= g_objectAgeStart && object() <= 0xdf) {
         std::uint8_t& o = object();
         const U r = random(world, nullptr);
         o = static_cast<std::uint8_t>((r & 1) + ((o + 0x4a) << 1));
@@ -532,7 +523,7 @@ using UpdateFn = void(__fastcall*)(GameWorld* world, void* edx);
 // and ship hits, ...), the soldiers' strength, the fog of war and minimap cycles, and the slow life of the
 // landscape (trees growing, spreading and burning, fields returning to grass, fish moving).
 void __fastcall GameWorld_UpdateEnvironment(GameWorld* world, void*) {
-    if (*reinterpret_cast<const volatile std::uint8_t*>(kWorldUpdateDisabled) != 0) {
+    if (g_worldUpdateDisabled != 0) {
         return;
     }
     // Every 64th pile: building piles whose area lets the good be moved.
@@ -557,7 +548,7 @@ void __fastcall GameWorld_UpdateEnvironment(GameWorld* world, void*) {
         }
         ++i;
     } while (i <= static_cast<U>(world->reveal_point_high_water));
-    const auto fastForwarding = [] { return *reinterpret_cast<const volatile std::int32_t*>(kFastForwarding) != 0; };
+    const auto fastForwarding = [] { return g_fastForwarding != 0; };
     // Fog of war, 56 steps.
     bool resetFog = true;
     if (!fastForwarding()) {
@@ -701,14 +692,13 @@ struct Globals {
     U tick, fast, base;
     std::uint8_t disabled;
     static Globals Save() {
-        return {*reinterpret_cast<U*>(kGameTick), *reinterpret_cast<U*>(kFastForwarding),
-                *reinterpret_cast<U*>(kStrengthBase), *reinterpret_cast<std::uint8_t*>(kWorldUpdateDisabled)};
+        return {g_gameTick, static_cast<U>(g_fastForwarding), g_strengthDivisor, g_worldUpdateDisabled};
     }
     void Restore() const {
-        *reinterpret_cast<U*>(kGameTick) = tick;
-        *reinterpret_cast<U*>(kFastForwarding) = fast;
-        *reinterpret_cast<U*>(kStrengthBase) = base;
-        *reinterpret_cast<std::uint8_t*>(kWorldUpdateDisabled) = disabled;
+        g_gameTick = tick;
+        g_fastForwarding = static_cast<std::int32_t>(fast);
+        g_strengthDivisor = base;
+        g_worldUpdateDisabled = disabled;
     }
 };
 
@@ -832,10 +822,10 @@ void SetUpEnvironment(test::Context& ctx, test::WorldPair& worlds) {
     w->fog_cycle = rng.Below(0x38);
     w->minimap_cycle = rng.Chance(1, 8) ? rng.Next32() : rng.Below(0x40);
     std::memcpy(worlds.oursBytes(), worlds.originalBytes(), kFullWorld);
-    *reinterpret_cast<U*>(kGameTick) = rng.Chance(1, 4) ? 220 * rng.Below(1000) : rng.Next32();
-    *reinterpret_cast<U*>(kFastForwarding) = rng.Chance(1, 5) ? 1 : 0;
-    *reinterpret_cast<U*>(kStrengthBase) = rng.Below(20);
-    *reinterpret_cast<std::uint8_t*>(kWorldUpdateDisabled) = rng.Chance(1, 20) ? 1 : 0;
+    g_gameTick = rng.Chance(1, 4) ? 220 * rng.Below(1000) : rng.Next32();
+    g_fastForwarding = rng.Chance(1, 5) ? 1 : 0;
+    g_strengthDivisor = rng.Below(20);
+    g_worldUpdateDisabled = static_cast<std::uint8_t>(rng.Chance(1, 20) ? 1 : 0);
 }
 
 void CompareEnvironment(test::Context& ctx, UpdateFn candidate, int cases) {

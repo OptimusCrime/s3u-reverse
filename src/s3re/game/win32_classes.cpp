@@ -36,6 +36,7 @@
 //                                      EAX = this. ret.
 
 #include "game/framework_layout.h"
+#include "game/vtables.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -56,16 +57,6 @@ using framework::CWaitable;
 using framework::CWin32Handle;
 using framework::CWindowBase;
 
-constexpr std::uint32_t kCObjectVtable = 0x0065d67c;
-constexpr std::uint32_t kCWin32HandleVtable = 0x0065d654;
-constexpr std::uint32_t kCWaitableVtableEarly = 0x0065d3c8;
-constexpr std::uint32_t kCWaitableVtable = 0x0065d660;
-constexpr std::uint32_t kCWaitableHandleVtable = 0x0065d670;
-constexpr std::uint32_t kCWindowBaseVtable = 0x0065d854;
-constexpr std::uint32_t kCMessageQueueVtable = 0x0065d6f4;
-constexpr std::uint32_t kCSimpleSurfaceVtable = 0x0065cda0;
-constexpr std::uint32_t kCSurfaceVtable = 0x0065cda8;
-constexpr std::uint32_t kCDirectSoundBufferVtable = 0x0065cecc;
 
 template <typename T>
 T* As(void* self) {
@@ -109,7 +100,7 @@ S3RE_HOOK(0x00610320, Win32_CObject_Construct, CtorFn, Original_Win32_CObject_Co
 // Purpose: Constructor of the root class of the game's Win32 framework
 // (threads, handles, windows, exceptions and the world object derive from it).
 void* __fastcall Win32_CObject_Construct(void* self, void* /*edx*/) {
-    As<CObject>(self)->vtable = kCObjectVtable;
+    As<CObject>(self)->vtable = vtables::kCObject;
     return self;
 }
 
@@ -118,7 +109,7 @@ S3RE_HOOK(0x00610330, Win32_CObject_Destroy, DtorFn, Original_Win32_CObject_Dest
 // Purpose: Destructor of the framework root class; the last step of every
 // framework object's destruction.
 void __fastcall Win32_CObject_Destroy(void* self, void* /*edx*/) {
-    As<CObject>(self)->vtable = kCObjectVtable;
+    As<CObject>(self)->vtable = vtables::kCObject;
 }
 
 S3RE_HOOK(0x0060bfc0, Win32_CObject_DeletingDestroy, DeletingDtorFn, Original_Win32_CObject_DeletingDestroy,
@@ -144,7 +135,7 @@ void* __fastcall Win32_CWin32Handle_Construct(void* self, void* /*edx*/, std::ui
     CWin32Handle* const object = As<CWin32Handle>(self);
     object->handle = handle;
     object->owned = b;
-    object->vtable = kCWin32HandleVtable;
+    object->vtable = vtables::kCWin32Handle;
     return self;
 }
 
@@ -155,11 +146,11 @@ S3RE_HOOK(0x0060bf50, Win32_CWaitable_Construct, Ctor2Fn, Original_Win32_CWaitab
 // on, built around a Windows handle).
 void* __fastcall Win32_CWaitable_Construct(void* self, void* /*edx*/, std::uint32_t handle, std::uint32_t b) {
     CWaitable* const object = As<CWaitable>(self);
-    object->vtable = kCWaitableVtableEarly;
+    object->vtable = vtables::kCWaitable;
     Win32_CWin32Handle_Construct(&object->handle, nullptr, handle, b);
-    object->handle.vtable = kCWaitableHandleVtable;
+    object->handle.vtable = vtables::kCWin32Waitable_sub4;
     object->unk10 = 0;
-    object->vtable = kCWaitableVtable;
+    object->vtable = vtables::kCWin32Waitable;
     return self;
 }
 
@@ -171,7 +162,7 @@ S3RE_HOOK(0x0060f960, Win32_CWindowBase_Construct, CtorFn, Original_Win32_CWindo
 void* __fastcall Win32_CWindowBase_Construct(void* self, void* /*edx*/) {
     Win32_CObject_Construct(self, nullptr);
     As<CWindowBase>(self)->window = 0;
-    As<CWindowBase>(self)->vtable = kCWindowBaseVtable;
+    As<CWindowBase>(self)->vtable = vtables::kCWindowBase;
     return self;
 }
 
@@ -181,7 +172,7 @@ S3RE_HOOK(0x0060d690, Win32_CMessageQueue_Construct, Ctor1Fn, Original_Win32_CMe
 // Purpose: Constructor of a thread's Windows message queue wrapper.
 void* __fastcall Win32_CMessageQueue_Construct(void* self, void* /*edx*/, std::uint32_t owner) {
     Win32_CObject_Construct(self, nullptr);
-    As<CMessageQueue>(self)->vtable = kCMessageQueueVtable;
+    As<CMessageQueue>(self)->vtable = vtables::kCMessageQueue;
     As<CMessageQueue>(self)->owner = owner;
     return self;
 }
@@ -194,7 +185,7 @@ S3RE_HOOK(0x005befb0, DirectX_CSimpleSurface_Construct, CtorFn, Original_DirectX
 void* __fastcall DirectX_CSimpleSurface_Construct(void* self, void* /*edx*/) {
     Win32_CObject_Construct(self, nullptr);
     CSimpleSurface* const object = As<CSimpleSurface>(self);
-    object->vtable = kCSimpleSurfaceVtable;
+    object->vtable = vtables::kCSimpleSurface;
     object->createdInterface = nullptr;
     object->surface = nullptr;
     object->owner = nullptr;
@@ -214,7 +205,7 @@ void* __fastcall DirectX_CSimpleSurface_Construct4(void* self, void* /*edx*/, st
     object->surface = AsPointer(c);
     object->unk10 = d;
     object->owner = AsPointer(a);
-    object->vtable = kCSimpleSurfaceVtable;
+    object->vtable = vtables::kCSimpleSurface;
     return self;
 }
 
@@ -226,7 +217,7 @@ void* __fastcall DirectX_CDirectSoundBuffer_Construct(void* self, void* /*edx*/)
     CDirectSoundBuffer* const object = As<CDirectSoundBuffer>(self);
     object->unk04 = 0;
     object->unk08 = 0;
-    object->vtable = kCDirectSoundBufferVtable;
+    object->vtable = vtables::kCDirectSoundBuffer;
     return self;
 }
 
@@ -238,7 +229,7 @@ S3RE_HOOK(0x005bf200, DirectX_CSurface_Construct, CtorFn, Original_DirectX_CSurf
 void* __fastcall DirectX_CSurface_Construct(void* self, void* /*edx*/) {
     DirectX_CSimpleSurface_Construct(self, nullptr);
     CSurface* const object = As<CSurface>(self);
-    object->simple.vtable = kCSurfaceVtable;
+    object->simple.vtable = vtables::kCSurface;
     object->unk14 = 0;
     object->unk48 = 0;
     object->unk18 = 0;

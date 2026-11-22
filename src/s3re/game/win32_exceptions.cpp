@@ -36,6 +36,9 @@
 // to a fatal error report. Same convention as DirectX_ThrowIfDDFailed.
 
 #include "game/framework_layout.h"
+#include "game/tables.h"
+#include "game/texts.h"
+#include "game/vtables.h"
 #include "hooks.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
@@ -55,17 +58,8 @@ namespace {
 
 using msvc6::String;
 
-constexpr std::uint32_t kCExceptionVbase = 0x0065d898;
-constexpr std::uint32_t kCExceptionVtable = 0x0065d890;
-constexpr std::uint32_t kCRunTimeErrorVbase = 0x0065d884;
-constexpr std::uint32_t kCRunTimeErrorVtable = 0x0065d744;
-constexpr std::uint32_t kCDataErrorVbase = 0x0065d4c0;
-constexpr std::uint32_t kCDataErrorVtable = 0x0065d4b8;
-constexpr std::uintptr_t kFileText = 0x007a2a3c;  // ", file "
-constexpr std::uintptr_t kLineText = 0x007a2a34;  // ", line "
 constexpr std::uintptr_t kItoa = 0x00621380;
 constexpr std::uintptr_t kCxxThrowException = 0x0061f027;
-constexpr std::uintptr_t kDataErrorThrowInfo = 0x0068bfd0;
 
 using framework::CException;
 
@@ -74,7 +68,7 @@ CException* AsException(void* self) {
 }
 
 std::uint32_t Npos() {
-    return *reinterpret_cast<const volatile std::uint32_t*>(0x00655390);
+    return g_stringNpos;
 }
 
 void* GameNew(std::uint32_t size) {
@@ -98,12 +92,12 @@ S3RE_HOOK(0x00611a20, Win32_CException_Construct, ExceptionCtorFn, Original_Win3
 // (the text shown in the game's error report).
 void* __fastcall Win32_CException_Construct(void* self, void* /*edx*/, const String* msg, std::uint32_t mostDerived) {
     if (mostDerived != 0) {
-        AsException(self)->vbase = kCExceptionVbase;
+        AsException(self)->vbase = vbtables::kCException;
     }
     Win32_CObject_Construct(self, nullptr);
     const auto allocator = static_cast<std::uint8_t>(mostDerived);
     msvc6::String_FromSubstr(&AsException(self)->message, nullptr, msg, 0, Npos(), &allocator);
-    AsException(self)->vtable = kCExceptionVtable;
+    AsException(self)->vtable = vtables::kCException;
     return self;
 }
 
@@ -115,10 +109,10 @@ S3RE_HOOK(0x00614c60, Win32_CRunTimeError_Construct, ExceptionCtorFn, Original_W
 void* __fastcall Win32_CRunTimeError_Construct(void* self, void* /*edx*/, const String* msg,
                                                std::uint32_t mostDerived) {
     if (mostDerived != 0) {
-        AsException(self)->vbase = kCRunTimeErrorVbase;
+        AsException(self)->vbase = vbtables::kCRunTimeError;
     }
     Win32_CException_Construct(self, nullptr, msg, 0);
-    AsException(self)->vtable = kCRunTimeErrorVtable;
+    AsException(self)->vtable = vtables::kCRunTimeError;
     return self;
 }
 
@@ -129,10 +123,10 @@ S3RE_HOOK(0x006003b0, Lobby_CDataError_Construct, ExceptionCtorFn, Original_Lobb
 // file or a lobby message is malformed).
 void* __fastcall Lobby_CDataError_Construct(void* self, void* /*edx*/, const String* msg, std::uint32_t mostDerived) {
     if (mostDerived != 0) {
-        AsException(self)->vbase = kCDataErrorVbase;
+        AsException(self)->vbase = vbtables::kCDataError;
     }
     Win32_CRunTimeError_Construct(self, nullptr, msg, 0);
-    AsException(self)->vtable = kCDataErrorVtable;
+    AsException(self)->vtable = vtables::kCDataError;
     return self;
 }
 
@@ -142,9 +136,9 @@ namespace {
 // the whole message), with the same calls as the original.
 void BuildMessage(String t[4], const String* text, const String* file, std::int32_t line) {
     char digits[16];
-    msvc6::String_ConcatChars(&t[0], text, reinterpret_cast<const char*>(kFileText));
+    msvc6::String_ConcatChars(&t[0], text, texts::kCommaFile.c_str());
     msvc6::String_ConcatString(&t[1], &t[0], file);
-    msvc6::String_ConcatChars(&t[2], &t[1], reinterpret_cast<const char*>(kLineText));
+    msvc6::String_ConcatChars(&t[2], &t[1], texts::kCommaLine.c_str());
     const char* number = reinterpret_cast<char*(__cdecl*)(std::int32_t, char*, std::int32_t)>(kItoa)(line, digits, 10);
     msvc6::String_ConcatChars(&t[3], &t[2], number);
 }
@@ -170,7 +164,7 @@ void __fastcall Lobby_ThrowDataError(const String* text, const String* file, std
         thrown = Lobby_CDataError_Construct(error, nullptr, &message[3], 1);
     }
     using ThrowFn = void(__stdcall*)(void* object, const void* info);
-    reinterpret_cast<ThrowFn>(kCxxThrowException)(&thrown, reinterpret_cast<const void*>(kDataErrorThrowInfo));
+    reinterpret_cast<ThrowFn>(kCxxThrowException)(&thrown, reinterpret_cast<const void*>(throw_info::kCDataError));
 }
 
 // ---------------------------------------------------------------------------
@@ -327,7 +321,7 @@ void CompareThrow(test::Context& ctx, ThrowDataErrorFn candidate, int cases) {
 
 void* __fastcall WrongRunTimeError(void* self, void* edx, const String* msg, std::uint32_t mostDerived) {
     void* r = Win32_CRunTimeError_Construct(self, edx, msg, mostDerived);
-    AsException(self)->vbase = kCRunTimeErrorVbase;  // wrong: set even when not most derived
+    AsException(self)->vbase = vbtables::kCRunTimeError;  // wrong: set even when not most derived
     return r;
 }
 

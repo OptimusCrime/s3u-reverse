@@ -92,7 +92,7 @@ std::uint32_t CameraRow(GameWorld* world) {
 }
 
 std::uint32_t ScreenRows(std::uint32_t shift) {
-    const auto height = GameGlobal<std::uint32_t>(global_address::kScreenHeight);
+    const std::uint32_t height = g_screenHeight;
     return (DivideTruncating(height + 0xffu, 9) + 0xbu) >> shift;
 }
 
@@ -133,14 +133,14 @@ std::uint32_t __fastcall GameWorld_IsUiSelectionMode4Field298Is2(GameWorld* worl
 
 // Purpose: Whether the game has ended with outcome 1 (probably 'won'). Queried by the user interface.
 std::uint32_t __fastcall GameWorld_IsGameOutcome1(GameWorld*, void*, std::uint32_t) {
-    return GameGlobal<std::uint32_t>(global_address::kGameOutcome) == 1 ? 1 : 0;
+    return g_gameOutcome == 1 ? 1 : 0;
 }
 
 // Purpose: Which tile is at the centre of the screen (x). Used e.g. to know where the player is looking.
 std::uint32_t __fastcall GameWorld_ScreenCenterTileX(GameWorld* world, void*) {
     const std::uint32_t rowsBelowTop = 100u - CameraRow(world);
     const std::uint32_t skew = (world->map_size + rowsBelowTop * 2u) >> 1;
-    const auto width = GameGlobal<std::uint32_t>(global_address::kScreenWidth);
+    const std::uint32_t width = g_screenWidth;
     const std::uint32_t halfColumns = (DivideTruncating(width + 0x17u, 16) + 0xau) >> 1;
     const std::uint32_t column = DivideTruncating(U32(world->camera_x) - 0xd0u, 16);
     return column + (ScreenRows(2) - skew + halfColumns);
@@ -156,7 +156,7 @@ std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void*) {
     std::int32_t& cameraX = world->camera_x;
     std::int32_t& cameraY = world->camera_y;
     const std::uint32_t size = world->map_size;
-    const std::uint32_t width = GameGlobal<std::uint32_t>(global_address::kScreenWidth);
+    const std::uint32_t width = g_screenWidth;
     if (cameraX < 0) {
         cameraX = 0;
     }
@@ -191,8 +191,8 @@ std::uint32_t __fastcall GameWorld_PushUiFeedback(GameWorld* world, void*, std::
 // location).
 std::uint32_t __fastcall GameWorld_CenterCameraOnTile(GameWorld* world, void*, std::uint32_t x,
                                                       std::uint32_t y) {
-    const auto width = static_cast<std::int32_t>(GameGlobal<std::uint32_t>(global_address::kScreenWidth));
-    const auto height = static_cast<std::int32_t>(GameGlobal<std::uint32_t>(global_address::kScreenHeight));
+    const auto width = static_cast<std::int32_t>(g_screenWidth);
+    const auto height = static_cast<std::int32_t>(g_screenHeight);
     const std::uint32_t size = world->map_size;
     world->camera_x = static_cast<std::int32_t>((size + x * 2u + 0x18u - y) * 8u - static_cast<std::uint32_t>(width / 2));
     // Tile (x, y) addressed in 32 bits like the original (x, y unchecked).
@@ -358,16 +358,16 @@ struct ThreadPair {
 };
 
 // Sets a game global for the duration of a test and restores it after.
+template <typename T>
 class GlobalOverride {
 public:
-    explicit GlobalOverride(std::uintptr_t address)
-        : address_(address), saved_(GameGlobal<std::uint32_t>(address)) {}
-    ~GlobalOverride() { GameGlobal<std::uint32_t>(address_) = saved_; }
-    void Set(std::uint32_t value) { GameGlobal<std::uint32_t>(address_) = value; }
+    explicit GlobalOverride(const GameGlobal<T>& global) : global_(global), saved_(global) {}
+    ~GlobalOverride() { global_ = saved_; }
+    void Set(std::uint32_t value) { global_ = static_cast<T>(value); }
 
 private:
-    std::uintptr_t address_;
-    std::uint32_t saved_;
+    const GameGlobal<T>& global_;
+    T saved_;
 };
 
 std::uint32_t InterestingValue(test::Context& ctx) {
@@ -386,9 +386,9 @@ std::uint32_t InterestingValue(test::Context& ctx) {
 void CompareUiQuery(test::Context& ctx, WorldValueFn original, WorldValueFn candidate,
                     int cases) {
     test::WorldPair worlds(ctx, kUiWorld);
-    GlobalOverride width(global_address::kScreenWidth);
-    GlobalOverride height(global_address::kScreenHeight);
-    GlobalOverride outcome(global_address::kGameOutcome);
+    GlobalOverride width(g_screenWidth);
+    GlobalOverride height(g_screenHeight);
+    GlobalOverride outcome(g_gameOutcome);
     for (int i = 0; i < cases; ++i) {
         for (const std::size_t field :
              {offsetof(GameWorld, ui_selection_mode), offsetof(GameWorld, ui_selection_param1),
@@ -447,12 +447,11 @@ std::uint32_t __fastcall WrongScreenCenterTileX(GameWorld* world, void* edx) {
 
 // Wrong: uses the view height for the y limit.
 std::uint32_t __fastcall WrongClampCamera(GameWorld* world, void* edx) {
-    const auto width = GameGlobal<std::uint32_t>(global_address::kScreenWidth);
-    GameGlobal<std::uint32_t>(global_address::kScreenWidth) =
-        GameGlobal<std::uint32_t>(global_address::kScreenHeight);
+    const std::uint32_t width = g_screenWidth;
+    g_screenWidth = g_screenHeight.get();
     std::int32_t x = world->camera_x;
     const std::uint32_t result = GameWorld_ClampCamera(world, edx);
-    GameGlobal<std::uint32_t>(global_address::kScreenWidth) = width;
+    g_screenWidth = width;
     world->camera_x = x;
     const std::uint32_t size = world->map_size;
     if (x < 0) {
@@ -470,8 +469,8 @@ std::uint32_t __fastcall WrongClampCamera(GameWorld* world, void* edx) {
 
 S3RE_TEST(GameWorld_CenterCameraOnTile_MatchesOriginal) {
     test::WorldPair worlds(ctx, offsetof(GameWorld, tiles) + 400 * kTileRowBytes);
-    GlobalOverride width(global_address::kScreenWidth);
-    GlobalOverride height(global_address::kScreenHeight);
+    GlobalOverride width(g_screenWidth);
+    GlobalOverride height(g_screenHeight);
     for (int i = 0; i < 5000; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : InterestingValue(ctx);
         worlds.Both([&](GameWorld* w) { w->map_size = size; });
@@ -492,8 +491,8 @@ S3RE_TEST(GameWorld_CenterCameraOnTile_MatchesOriginal) {
 
 S3RE_TEST(GameWorld_CenterCameraOnLocalPlayer_MatchesOriginal) {
     test::WorldPair worlds(ctx, offsetof(GameWorld, players) + 21 * sizeof(layout::Player));
-    GlobalOverride width(global_address::kScreenWidth);
-    GlobalOverride height(global_address::kScreenHeight);
+    GlobalOverride width(g_screenWidth);
+    GlobalOverride height(g_screenHeight);
     for (int i = 0; i < 3000; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : InterestingValue(ctx);
         worlds.Both([&](GameWorld* w) { w->map_size = size; });

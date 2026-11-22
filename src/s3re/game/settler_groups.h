@@ -6,6 +6,8 @@
 // (settler_queries.cpp) and CLogicThread::RemoveSettlerFromGroups
 // (logic_helpers.cpp).
 
+#include "game/globals.h"
+
 #include <cstddef>
 #include <cstdint>
 
@@ -23,10 +25,9 @@ struct SettlerGroups {
 static_assert(sizeof(SettlerGroups) == 0x7e4);  // 0x7ad620..0x7ade04
 static_assert(offsetof(SettlerGroups, lists) == 0x14);
 
-constexpr std::uintptr_t kSettlerGroupsAddress = 0x007ad620;
-
+// g_settlerGroups (game/globals.h).
 inline SettlerGroups& GlobalSettlerGroups() {
-    return *reinterpret_cast<SettlerGroups*>(kSettlerGroupsAddress);
+    return g_settlerGroups;
 }
 
 }  // namespace s3re::game

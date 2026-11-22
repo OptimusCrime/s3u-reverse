@@ -29,6 +29,7 @@
 //   thiscall, ret 4.
 
 #include "game/debug_log.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -86,7 +87,6 @@ std::uint32_t __stdcall BuildingTypeAllowedForRace(std::uint32_t race, std::uint
 namespace {
 
 constexpr std::uint32_t kSurveyEntries = 0x4e1b;  // entries of world->offsets
-constexpr std::uintptr_t kLandMessage = 0x006a63a4;  // "Player %u   Land %u  Trees %u ..."
 
 }  // namespace
 
@@ -138,7 +138,7 @@ std::uint32_t __fastcall GameWorld_LogPlayerLandResources(GameWorld* world, void
         default: break;
         }
     }
-    GameDebugLog(kLandMessage, player, land >> 1, trees >> 1, stone >> 1, coal >> 1, iron >> 1, gold >> 1,
+    GameDebugLog(texts::kPlayerLand, player, land >> 1, trees >> 1, stone >> 1, coal >> 1, iron >> 1, gold >> 1,
                  sulfur >> 1, gems >> 1, fish >> 1, swamp >> 1, stream >> 1);
     return land >> 1;
 }

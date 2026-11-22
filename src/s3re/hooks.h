@@ -23,6 +23,8 @@
 // Every hook needs a row in re/functions.csv with a matching hook column;
 // `python tools/inventory.py check` enforces this.
 
+#include "game/globals.h"
+
 #include <atomic>
 #include <cstdint>
 
@@ -61,9 +63,9 @@ void LogCallCounts();
 
 namespace detail {
 
-// The game tick counter g_gameTick (S3.EXE 0x7dfd48).
+// The game tick counter g_gameTick.
 inline std::uint32_t CurrentGameTick() {
-    return *reinterpret_cast<const volatile std::uint32_t*>(0x007dfd48);
+    return game::g_gameTick;
 }
 
 inline void CountCall(CallStats& stats) {

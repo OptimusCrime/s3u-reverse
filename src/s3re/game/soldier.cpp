@@ -55,7 +55,10 @@
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
+#include "game/globals.h"
 #include "game/replacements.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -102,7 +105,6 @@ using layout::Player;
 using layout::Settler;
 using layout::Tile;
 
-const std::int32_t* const kTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);
 
 // Package C's functions, called through their S3.EXE addresses (Detours
 // sends the calls to C's replacements once they are hooked).
@@ -110,26 +112,10 @@ using TileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint
 const TileFn kClearTileOwner = reinterpret_cast<TileFn>(0x0051b640);
 const TileFn kRecalculateTerritory = reinterpret_cast<TileFn>(0x00519a90);
 
-void* const kConfig = reinterpret_cast<void*>(0x007a7af0);
-constexpr std::uintptr_t kGameTick = 0x007dfd48;
-constexpr std::uintptr_t kCampaignMission = 0x007dfdb0;
-constexpr std::uintptr_t kDamageDivisor = 0x00730eec;   // uint32 256 in S3.EXE's data
-constexpr std::uintptr_t kTowerOffsets = 0x00659738;    // {dx, dy, ?} pixels per tower slot
-constexpr std::uintptr_t kLayouts = 0x006aa170;          // building layouts, 2400 bytes per race/type
-constexpr std::uintptr_t kTally = 0x007acfd4;            // g_playerTallies, 0x44 bytes per player
-constexpr std::uintptr_t kSoldiersLeftText = 0x006a67fc;
-constexpr std::uintptr_t kWinsTowerText = 0x006a67dc;     // "Player %u wins tower from %u"
 
 constexpr std::uint32_t kLayoutEnd1 = 0x80000000u, kLayoutEnd2 = 0x80000001u, kLayoutSkip = 0x80000002u,
                         kLayoutEnd = 0x80000003u;
 
-std::uint32_t U32(std::uintptr_t address) {
-    return *reinterpret_cast<const std::uint32_t*>(address);
-}
-
-std::int32_t& TallyField(std::uint32_t player, std::uint32_t offset) {
-    return *reinterpret_cast<std::int32_t*>(kTally + player * 0x44 + offset);
-}
 
 Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
@@ -140,7 +126,7 @@ std::int32_t Team(GameWorld* world, std::uint32_t player) {
 }
 
 std::int32_t ClassOf(const Settler& s) {
-    return kTypeClass[s.art];
+    return g_settlerTypeClass[s.art];
 }
 
 bool In(std::int32_t v, std::int32_t low, std::int32_t high) {
@@ -194,7 +180,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     }
     std::uint32_t damage = 0;  // the original's is uninitialized for other types
     const Settler& e = world->settlers[t];
-    const std::uint32_t tick = U32(kGameTick);
+    const std::uint32_t tick = g_gameTick;
     auto* const effects = &world->map_effects;
     auto melee = [&](std::uint32_t animation, std::uint32_t base, std::uint32_t strong) {
         damage = base;
@@ -206,9 +192,9 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     };
     auto towerArrow = [&]() {
         const std::uint32_t slot = s.slot;
-        const std::uint32_t index = ((slot & 7) + 12 * (3 * (slot >> 5) + ((slot >> 3) & 3))) * 12;
-        const std::uint32_t offsetX = U32(kTowerOffsets + index) - 16 * ((slot & 7) + 1);
-        const std::uint32_t offsetY = U32(kTowerOffsets + index + 4);
+        const std::uint32_t index = (slot & 7) + 12 * (3 * (slot >> 5) + ((slot >> 3) & 3));
+        const std::uint32_t offsetX = static_cast<std::uint32_t>(g_towerSlotOffsets[index].x) - 16 * ((slot & 7) + 1);
+        const std::uint32_t offsetY = static_cast<std::uint32_t>(g_towerSlotOffsets[index].y);
         const std::uint32_t ex = e.x, ey = e.y, sx = s.x, sy = s.y;
         const std::uint32_t a7 = GameWorld_TileScreenY(world, nullptr, ex, ey) - 0x14;
         const std::uint32_t a6 = GameWorld_TileScreenX(world, nullptr, ex, ey);
@@ -264,7 +250,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
         if ((s.flags & 1) != 0) {
             damage >>= 1;
         }
-        damage = (static_cast<std::uint32_t>(world->players[s.owner].soldier_strength) * damage + 0x80) / U32(kDamageDivisor);
+        damage = (static_cast<std::uint32_t>(world->players[s.owner].soldier_strength) * damage + 0x80) / g_damageDivisor;
     }
     const std::int32_t targetClass = ClassOf(world->settlers[t]);
     if (targetClass == 3 || targetClass == 0x29) {
@@ -293,7 +279,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
         damage = 0;
     }
     v.flags &= 0xdf;
-    if (static_cast<std::int32_t>(U32(kCampaignMission)) != 0 && (GetMemberByte189(kConfig, nullptr) & 0xff) != 0 &&
+    if (g_campaignMission != 0 && (GetMemberByte189(&g_config, nullptr) & 0xff) != 0 &&
         world->players[v.owner].active == 2) {
         damage += damage >> 1;
     }
@@ -339,13 +325,13 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
             for (const auto& p : kParts) {
                 TileAt(world, v.x + p[0], v.y + p[1]).settler = 0;
             }
-            TallyField(s.owner, 0x14) += 5;
+            g_playerTallies[s.owner].unk14 += 5;
             const std::uint32_t screenY = GameWorld_TileScreenY(world, nullptr, v.x, v.y);
             const std::uint32_t screenX = GameWorld_TileScreenX(world, nullptr, v.x, v.y);
-            MapEffects_Spawn_544f80(effects, nullptr, U32(kGameTick), screenX, screenY, v.x, v.y);
+            MapEffects_Spawn_544f80(effects, nullptr, g_gameTick, screenX, screenY, v.x, v.y);
             return;
         }
-        ++TallyField(s.owner, 0x14);
+        ++g_playerTallies[s.owner].unk14;
         GameWorld_QueueEvent(world, nullptr, 1, victim, v.art, v.owner);
         GameWorld_RemoveSettlerFromLists(world, nullptr, victim);
         v.job = 0x36;
@@ -381,7 +367,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     std::uint32_t left = static_cast<std::uint32_t>(b.military.class1_coming) + b.military.class3_coming + b.military.class2_coming;
     for (std::uint32_t i = 1; i <= world->settler_high_water; ++i) {
         const Settler& r = world->settlers[i];
-        if (r.owner == 0xff || r.building != tower || kTypeClass[r.art] == 0) {
+        if (r.owner == 0xff || r.building != tower || g_settlerTypeClass[r.art] == 0) {
             continue;
         }
         if (r.job == 3 || r.job == 4 || r.job == 0x10 || r.job == 0x6a || r.job == 0x8b) {
@@ -390,11 +376,11 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
         }
     }
     if (left != 0) {
-        GameDebugLog(kSoldiersLeftText, left);
+        GameDebugLog(texts::kSoldiersLeft, left);
     }
     UnlinkIdle(world, s);
     GameWorld_RemoveSettlerFromLists(world, nullptr, settler);
-    GameDebugLog(kWinsTowerText, static_cast<std::uint32_t>(s.owner), static_cast<std::uint32_t>(v.owner));
+    GameDebugLog(texts::kWinsTower, static_cast<std::uint32_t>(s.owner), static_cast<std::uint32_t>(v.owner));
     GameWorld_NotifyLocalPlayer(world, nullptr, s.owner, 7, s.x, s.y);
     GameWorld_NotifyLocalPlayer(world, nullptr, v.owner, 8, v.x, v.y);
     GameWorld_QueuePendingEvent(world, nullptr, 5, tower, b.owner);
@@ -406,8 +392,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     world->settlers[guard].health = 1;
     b.guard = static_cast<std::uint16_t>(guard);
     // Re-own the building's land: the layout's second and third lists.
-    const auto* item = reinterpret_cast<const std::uint32_t*>(
-        kLayouts + 4 + (57 * static_cast<std::uint32_t>(b.race) + b.art) * 2400);
+    const std::uint32_t* item = g_buildingLayouts[57 * static_cast<std::uint32_t>(b.race) + b.art] + 1;
     if (item[-1] != kLayoutEnd1) {
         while (*item++ != kLayoutEnd1) {
         }
@@ -630,15 +615,15 @@ constexpr std::uint32_t kTestBuildings = 0x40;
 struct Globals {
     static constexpr std::size_t kTallyBytes = 20 * 0x44;
     std::vector<std::uint8_t> saved = std::vector<std::uint8_t>(kTallyBytes);
-    std::int32_t mission = static_cast<std::int32_t>(U32(kCampaignMission));
-    std::uint8_t config = *reinterpret_cast<std::uint8_t*>(0x007a7af0 + 0x189);
+    std::int32_t mission = g_campaignMission;
+    std::uint8_t config = g_config->unk189;
     Globals() { std::memcpy(saved.data(), Tallies(), kTallyBytes); }
     ~Globals() {
         std::memcpy(Tallies(), saved.data(), kTallyBytes);
-        *reinterpret_cast<std::int32_t*>(kCampaignMission) = mission;
-        *reinterpret_cast<std::uint8_t*>(0x007a7af0 + 0x189) = config;
+        g_campaignMission = mission;
+        g_config->unk189 = config;
     }
-    static std::uint8_t* Tallies() { return reinterpret_cast<std::uint8_t*>(kTally); }
+    static void* Tallies() { return &g_playerTallies; }
 };
 
 constexpr std::uint8_t kSoldierTypes[] = {5, 0x20, 0x23, 8, 0x1e, 0x21, 0x0f, 0x1f, 0x22};
@@ -836,8 +821,8 @@ void Compare(test::Context& ctx, SoldierFn candidate, int cases) {
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t soldier = 1 + ctx.rng().Below(kTestSettlers - 1);
         SetUpCase(ctx, worlds, soldier, placed);
-        *reinterpret_cast<std::int32_t*>(kCampaignMission) = ctx.rng().Chance(1, 2) ? 0 : 5;
-        *reinterpret_cast<std::uint8_t*>(0x007a7af0 + 0x189) = static_cast<std::uint8_t>(ctx.rng().Below(2));
+        g_campaignMission = ctx.rng().Chance(1, 2) ? 0 : 5;
+        g_config->unk189 = static_cast<std::uint8_t>(ctx.rng().Below(2));
         std::memcpy(before.data(), Globals::Tallies(), before.size());
         const std::uint32_t expected = Original_GameWorld_UpdateSoldier(worlds.original(), nullptr, soldier);
         const std::vector<DebugLogCall> expectedLogs = logs.Take();

@@ -635,6 +635,32 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 - Checks: build; `--test` 490/490; emulator `--changed` (357 specs);
   check_replay scripted-seed127.bin 3,000 ticks against the original.
 
+### 2026-11-22 (45): struct pass S1: typed globals (parallel worktree)
+
+- Every S3.EXE data address our code used (255 uses of 190 addresses in
+  ~55 files, plus ~45 vtable/vbtable/throw-info constants) is now one
+  typed declaration: `game/globals.h` (variables, incl. records
+  `PlayerTally`, `GameSettings`, `GameConfig`, `PixelFormat` and the
+  import slots), `game/tables.h` (constant tables, `NotificationKind`,
+  `ShipyardInputs`, `TowerSlotOffset`), `game/texts.h` (DebugLog formats
+  and other strings as `GameText`; `GameDebugLog` takes a `GameText`),
+  `game/vtables.h`. Mechanism: `GameGlobal<T>` in `game/global_access.h`
+  (constexpr, so no dynamic initializer; not copyable, so passing one to
+  a variadic or deducing call fails to compile). Duplicates merged
+  (settler type classes in 12 files, g_gameTick in 10, building layouts
+  in 5); `g_playerCounters7acfe0` folded into `PlayerTally::unk0c`
+  (+0x14 named too); `g_pixelChannelShifts` became `g_pixelFormat`.
+  `global_address::`/old `GameGlobal()`, `ai::Global`, `AiWorld()`,
+  `AgentVectors()` are gone; `RawAtAddress` stays only for computed
+  heap addresses (package S2).
+- `re/globals.csv`: 33 -> 190 rows (every declared global/table/string;
+  vtables are in re/classes.json). `typed_access_lint.py` now rejects
+  any data-address literal outside those headers (3 `raw-ok`: section
+  bounds in crash_log.cpp/debug_log.cpp). `raw_access_report.py` counts
+  every literal; worklist: 0 data addresses left, 21 RawAt (S2).
+- Verification: see the commit message (build clean, `--test`, emulator,
+  whole-game replay).
+
 ### 2026-11-22 (45): round end (WalkSettler, UpdateSoldier, UpdateEconomy, UpdateEnvironment)
 
 - Four parallel agents (entries below): package A WalkSettler, package B

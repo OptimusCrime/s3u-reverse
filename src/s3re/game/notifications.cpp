@@ -18,7 +18,9 @@
 //   when the list was full). EAX: callers don't use it. ret 0x10.
 // thiscall (ECX = world).
 
+#include "game/globals.h"
 #include "game/replacements.h"
+#include "game/tables.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -36,19 +38,6 @@ namespace {
 using layout::Notification;
 using layout::NotificationTimer;
 
-#pragma pack(push, 1)
-struct NotificationKind {  // S3.EXE 0x659dd0, per notification type
-    std::int32_t list;       // 0x00 1..4 (0 for unused types)
-    std::int32_t level;      // 0x04 shown if level >= 9 - setting
-    std::int32_t icon;       // 0x08 graphics id (0x800c1...), probably the icon
-    std::int32_t repeat;     // 0x0c repeat-timer start value
-    std::uint32_t radius;    // 0x10 0 = no repeat timer
-};
-#pragma pack(pop)
-static_assert(sizeof(NotificationKind) == 20);
-
-const NotificationKind* const kKinds = reinterpret_cast<const NotificationKind*>(0x00659dd0);
-void* const kConfig = reinterpret_cast<void*>(0x007a7af0);  // registry settings (Dirk\DGlobals.cpp)
 
 constexpr std::uint32_t kListEntries = 100;
 constexpr std::uint32_t kTimersPerType = 10;
@@ -65,8 +54,8 @@ std::uint32_t __fastcall GameWorld_NotifyLocalPlayer(GameWorld* world, void*, st
     if (static_cast<std::int32_t>(player) != world->local_player) {
         return 0;
     }
-    const NotificationKind& kind = kKinds[type];
-    const auto setting = static_cast<std::int32_t>(GetMemberDword64(kConfig, nullptr));
+    const NotificationKind& kind = g_notificationKinds[type];
+    const auto setting = static_cast<std::int32_t>(GetMemberDword64(&g_config, nullptr));
     if (kind.level < 9 - setting) {
         return 0;
     }
@@ -136,7 +125,7 @@ constexpr std::uint32_t kTypes = 42;
 // Wrong: the timers are checked with <= radius.
 std::uint32_t __fastcall WrongNotifyLocalPlayer(GameWorld* world, void* edx, std::uint32_t player, std::uint32_t type,
                                                 std::uint32_t x, std::uint32_t y) {
-    const NotificationKind& kind = kKinds[type];
+    const NotificationKind& kind = g_notificationKinds[type];
     if (kind.radius != 0 && static_cast<std::int32_t>(player) == world->local_player) {
         for (std::uint32_t k = 0; k < kTimersPerType && world->notification_timers[type][k].countdown != 0; ++k) {
             const NotificationTimer& t = world->notification_timers[type][k];
@@ -149,7 +138,7 @@ std::uint32_t __fastcall WrongNotifyLocalPlayer(GameWorld* world, void* edx, std
 }
 
 void CompareNotify(test::Context& ctx, NotifyFn candidate, int cases) {
-    std::uint32_t& setting = *reinterpret_cast<std::uint32_t*>(0x007a7af0 + 0x64);
+    std::uint32_t& setting = g_config->notification_level;
     const std::uint32_t savedSetting = setting;
     // Full-size worlds: PushUiFeedback writes world+0x1539484.
     test::WorldPair full(ctx, sizeof(GameWorld));
@@ -161,7 +150,7 @@ void CompareNotify(test::Context& ctx, NotifyFn candidate, int cases) {
         setting = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(10);
         // Timers of the type: a few running ones near (x, y), then free.
         const std::uint32_t running = ctx.rng().Chance(1, 8) ? kTimersPerType : ctx.rng().Below(4);
-        const NotificationKind& kind = kKinds[type];
+        const NotificationKind& kind = g_notificationKinds[type];
         for (std::uint32_t k = 0; k < kTimersPerType; ++k) {
             NotificationTimer t{};
             if (k < running) {

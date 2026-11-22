@@ -13,6 +13,8 @@
 
 #include "msvc6/string.h"
 
+#include "game/tables.h"
+#include "game/texts.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -54,11 +56,11 @@ void GameXran() {
 }
 
 std::uint32_t Npos() {
-    return *reinterpret_cast<const volatile std::uint32_t*>(0x00655390);
+    return game::g_stringNpos;
 }
 
 char* NullString() {
-    return reinterpret_cast<char*>(0x006553a0);
+    return game::g_stringNullBuffer;
 }
 
 std::uint8_t& RefCount(char* ptr) {
@@ -453,9 +455,9 @@ String* __fastcall String_ConcatChars2(String* self, const String* left, const c
 namespace {
 
 // The text the game assigns instead of a null C string (a zero byte in
-// S3.EXE's data at 0x7a7868); read at run time, like the original.
+// S3.EXE's data, texts::kEmpty); read at run time, like the original.
 const char* EmptyText() {
-    return reinterpret_cast<const char*>(0x007a7868);
+    return game::texts::kEmpty;
 }
 
 // self = a copy of the temporary, which is then dropped (the pattern every

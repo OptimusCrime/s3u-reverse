@@ -211,6 +211,18 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   old `At<`/`WorldField`/`world_offset::` uses, byte casts of the world
   and world-range offset constants; a justified exception carries `raw-ok`
   in a comment.
+  **Globals (2026-11-22):** every S3.EXE data address (0x63a000..0x7ed000)
+  is declared once, typed, in `game/globals.h` (variables, e.g.
+  `inline constexpr GameGlobal<std::uint32_t> g_gameTick{0x7dfd48};`),
+  `game/tables.h` (constant tables), `game/texts.h` (strings, `GameText`,
+  passed to `GameDebugLog`) or `game/vtables.h` (vtables, vbtables, throw
+  info), and recorded in `re/globals.csv`. `GameGlobal`
+  (`game/global_access.h`) is constant-initialized (works in the emulator)
+  and used like a variable (`g_gameTick & 0x3f`, `g_settlerTypeClass[t]`,
+  `g_config->unk189`, `&g_playerTallies`); write `.get()` for variadic or
+  deducing calls (it is not copyable, so a mistake fails to compile). The
+  lint rejects data-address literals anywhere else; code addresses
+  (function calls, hooks) stay allowed.
 - **The simulation's random number generator** is `GameWorld::Random`
   (`0x4feb70`), with its state at world `+0x2d2dc`. It's reimplemented and
   verified. Because the state lives in the world, the simulation is probably

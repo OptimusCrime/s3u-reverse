@@ -49,7 +49,10 @@
 //   by zero in both.
 
 #include "game/debug_log.h"
+#include "game/globals.h"
 #include "game/replacements.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -107,17 +110,6 @@ constexpr std::uintptr_t kBuildingInputWord24 = 0x004df220;
 constexpr std::uintptr_t kTileDistance = 0x004ff320;  // stdcall; called with ECX = world like the original
 constexpr std::uintptr_t kSetSettlerTarget = 0x00503610;
 
-// S3.EXE data.
-const std::int32_t* const kSettlerTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);
-const std::uint32_t* const kMilitaryMaxHitPoints = reinterpret_cast<const std::uint32_t*>(0x00659664);  // 0xf 0x10 0x12
-const std::uint32_t* const kManaPerOffering = reinterpret_cast<const std::uint32_t*>(0x00730ef4);       // 1
-const std::uint32_t* const kSmithInputFull = reinterpret_cast<const std::uint32_t*>(0x00730f04);       // 8
-const std::uint32_t* const kConsumerBuildingType = reinterpret_cast<const std::uint32_t*>(0x00659264);
-constexpr std::uintptr_t kSiteLevellingTable = 0x006aa170;  // int32 lists per (race * 0x39 + type), 0x960 bytes each
-constexpr std::uintptr_t kShipyardTable30 = 0x00659670;     // states 0x30..0x33: 3 bytes at +0/+4/+8, stride 0x20
-constexpr std::uintptr_t kShipyardTable40 = 0x00659680;     // states 0x40..0x43
-constexpr std::uintptr_t kFormatTempleExtraTiles = 0x006a5a6c;  // "Gong bauen - nach SecureProduction (%u..."
-std::int32_t* const kPlayerTallies = reinterpret_cast<std::int32_t*>(0x007acfe0);  // int32[20][17], g_playerCounters7acfe0
 
 constexpr std::uint8_t kFree = 0xff;
 constexpr std::uint32_t kPhases = 18;
@@ -137,7 +129,7 @@ Settler& SettlerAt(GameWorld* w, std::uint32_t n) { return *(w->settlers + n); }
 Pile& PileAt(GameWorld* w, std::uint32_t n) { return *(w->piles + n); }
 Player& PlayerAt(GameWorld* w, std::uint32_t n) { return *(w->players + n); }
 Area& AreaAt(GameWorld* w, std::uint32_t n) { return *(w->areas + n); }
-std::int32_t SettlerClass(std::uint32_t type) { return kSettlerTypeClass[type]; }
+std::int32_t SettlerClass(std::uint32_t type) { return g_settlerTypeClass[type]; }
 Tile& TileAt(GameWorld* w, std::uint32_t x, std::uint32_t y) { return TileAtOffset(w, TileOffset(x, y)); }
 Tile& DoorTile(GameWorld* w, const Building& b) { return TileAt(w, b.door_x, b.door_y); }
 // The pile on the tile `delta` bytes from the door tile (tile word +0x2).
@@ -262,8 +254,7 @@ void RequestSiteWorkers(GameWorld* w, std::uint32_t n, std::uint8_t Building::*b
 // * 0x18 are multiples of 2^32), and no 0x80000002 of the game's table lands
 // on a pair start. Reproduced as is.
 const std::int32_t* SiteTileList(const Building& b) {
-    const auto* entry = reinterpret_cast<const std::int32_t*>(
-        kSiteLevellingTable + (U(b.race) * 0x39 + U(b.art)) * 0x960);
+    const auto* entry = reinterpret_cast<const std::int32_t*>(g_buildingLayouts[U(b.race) * 0x39 + U(b.art)]);
     const std::int32_t* p = entry + 1;
     if (entry[0] != static_cast<std::int32_t>(0x80000000u)) {
         std::int32_t v;
@@ -354,7 +345,7 @@ void UpdateMilitaryBuilding(GameWorld* w, std::uint32_t n) {
     Building& b = BuildingAt(w, n);
     for (std::uint32_t k = 0; k < 3; ++k) {
         static constexpr std::uint8_t kTypes[] = {0xf, 0x10, 0x12};
-        if (b.art == kTypes[k] && U(b.hit_points) != kMilitaryMaxHitPoints[k]) {
+        if (b.art == kTypes[k] && U(b.hit_points) != static_cast<std::uint32_t>(g_militaryHitPoints[k])) {
             ++b.hit_points;
         }
     }
@@ -526,7 +517,7 @@ void UpdateBuilding13(GameWorld* w, std::uint32_t n) {
             const Pile& p = PileAt(w, b.piles[k]);
             const std::uint32_t amount = p.amount;
             const std::uint32_t coming = p.coming;
-            if (amount + coming != *kSmithInputFull && (k == 0 || (b.request_flags & 1) != 0)) {
+            if (amount + coming != g_smithInputFull && (k == 0 || (b.request_flags & 1) != 0)) {
                 AddRequest(w, n, 0x12 + k, Priority(w, amount, coming), 0);
             }
         }
@@ -581,7 +572,7 @@ void UpdateWaterBuilding(GameWorld* w, std::uint32_t n, const WaterSpec& spec) {
     if (b.water.state != 0 && b.water.extra_tiles == 0xff) {
         Call(kTakeBuildingExtraTiles, w, n);
         if (spec.log) {
-            GameDebugLog(kFormatTempleExtraTiles, U(b.water.extra_tiles));
+            GameDebugLog(texts::kBuildGong, U(b.water.extra_tiles));
         }
         if (b.water.extra_tiles == 0xfe) {
             if (b.water.state == spec.stateA) {
@@ -610,16 +601,17 @@ void UpdateShipyard(GameWorld* w, std::uint32_t n) {
         Call(kTakeBuildingExtraTiles, w, n);
         if (b.water.extra_tiles == 0xfe) {
             const std::uint8_t state = b.water.state;
-            std::uintptr_t table = 0;
+            int column = -1;
             if (state >= 0x30 && state <= 0x33) {
-                table = kShipyardTable30;
+                column = 0;
             } else if (state >= 0x40 && state <= 0x43) {
-                table = kShipyardTable40;
+                column = 1;
             }
-            if (table != 0) {
-                b.water.wanted[0] = *reinterpret_cast<const std::uint8_t*>(table + (b.water.state & 0xfu) * 0x20);
-                b.water.wanted[1] = *reinterpret_cast<const std::uint8_t*>(table + 4 + (b.water.state & 0xfu) * 0x20);
-                b.water.wanted[2] = *reinterpret_cast<const std::uint8_t*>(table + 8 + (b.water.state & 0xfu) * 0x20);
+            if (column >= 0) {
+                const ShipyardInputs& inputs = g_shipyardInputs[b.water.state & 0xfu][column];
+                b.water.wanted[0] = static_cast<std::uint8_t>(inputs.first);
+                b.water.wanted[1] = static_cast<std::uint8_t>(inputs.second);
+                b.water.wanted[2] = static_cast<std::uint8_t>(inputs.third);
             }
             b.water.extra_tiles = static_cast<std::uint8_t>(b.water.wanted[2] + b.water.wanted[0] + b.water.wanted[1]);
         }
@@ -754,10 +746,10 @@ void UpdateOffering(GameWorld* w, std::uint32_t n, std::uint32_t good, bool twic
     Call(kTakeGoodFromPile, w, U(b.piles[0]));
     Call(kSubtractPlayerCounter, w, U(b.owner), U(PileAt(w, b.piles[0]).good), 1u);
     for (int k = 0; k < (twice ? 2 : 1); ++k) {
-        PlayerAt(w, b.owner).mana += static_cast<std::int32_t>(*kManaPerOffering);
-        PlayerAt(w, b.owner).mana_total += static_cast<std::int32_t>(*kManaPerOffering);
+        PlayerAt(w, b.owner).mana += static_cast<std::int32_t>(g_manaPerOffering.get());
+        PlayerAt(w, b.owner).mana_total += static_cast<std::int32_t>(g_manaPerOffering.get());
     }
-    kPlayerTallies[U(b.owner) * 17] += twice ? 2 : 1;
+    g_playerTallies[U(b.owner)].unk0c += twice ? 2 : 1;
 }
 
 const WaterSpec kWater1F = {0xb, 0x10, {6, 3, 6}, 0x20, {0, 0, 6}, {{1, 0, 0, 0x2b}, {0xb, 0, 0, 10}, {2, 0, 0, 0x11}}, false};
@@ -986,7 +978,7 @@ void DistributeGoods(GameWorld* w, std::uint32_t areaNumber, std::uint32_t good)
             if (share >= best) {
                 continue;
             }
-            const std::uint32_t wantedType = kConsumerBuildingType[t];
+            const std::uint32_t wantedType = g_consumerBuildingType[t];
             bool found = false;
             for (std::uint32_t q = area.requests_by_goods[good]; q != 0 && !found;) {
                 if (IsConsumerBuilding(w, q, wantedType)) {
@@ -1670,10 +1662,11 @@ private:
     test::WorldPair& worlds_;
 };
 
-std::int32_t* const kTallies = kPlayerTallies;
 constexpr std::size_t kTallyCount = 20 * 17;
 
 void CompareUpdateEconomy(test::Context& ctx, UpdateEconomyFn candidate, int cases) {
+    // The tallies from PlayerTally::unk0c on, as int32 (to 12 bytes past the end, as before).
+    std::int32_t* const kTallies = &g_playerTallies[0].unk0c;
     test::WorldPair worlds(ctx, kTestWorld);
     test::CalleeStubs stubs;
     InstallEconomyStubs(stubs);

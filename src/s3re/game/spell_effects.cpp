@@ -20,6 +20,7 @@
 //   effect; the determinism trace and the emulator spec leave them out).
 // thiscall (ECX = world).
 
+#include "game/globals.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -43,7 +44,6 @@ constexpr std::uintptr_t kMake7 = 0x00543e80;
 constexpr std::uintptr_t kAdd = 0x005445e0;
 constexpr std::uintptr_t kTileScreenX = 0x00519610;
 constexpr std::uintptr_t kTileScreenY = 0x00519640;
-constexpr std::uintptr_t kGameTick = 0x007dfd48;
 
 using Make3Fn = void*(__fastcall*)(MapEffect* self, void* edx, U, U, U);
 using Make6Fn = void*(__fastcall*)(MapEffect* self, void* edx, U, U, U, U, U, U);
@@ -154,7 +154,7 @@ void __fastcall GameWorld_SpawnSpellEffects(GameWorld* world, void*, U, std::int
         const Step& s = steps.steps[i];
         const U sy = screenY(world, nullptr, static_cast<U>(x + s.sy_dx), static_cast<U>(y + s.sy_dy));
         const U sx = screenX(world, nullptr, static_cast<U>(x + s.sx_dx), static_cast<U>(y + s.sx_dy));
-        void* const tick = reinterpret_cast<void*>(static_cast<std::uintptr_t>(*reinterpret_cast<const U*>(kGameTick) + s.delay));
+        void* const tick = reinterpret_cast<void*>(static_cast<std::uintptr_t>(g_gameTick + s.delay));
         MapEffect effect;
         const U tx = static_cast<U>(x + s.dx);
         const U ty = static_cast<U>(y + s.dy);
@@ -214,12 +214,12 @@ void SetUpEffectTable(test::Context& ctx, test::WorldPair& worlds) {
 
 void Compare(test::Context& ctx, SpawnSpellFn candidate, int cases) {
     test::WorldPair worlds(ctx, kWorld);
-    const U savedTick = *reinterpret_cast<U*>(kGameTick);
+    const U savedTick = g_gameTick;
     for (int i = 0; i < cases; ++i) {
         const U size = 32 + ctx.rng().Below(353);
         worlds.Both([&](GameWorld* w) { w->map_size = size; });
         SetUpEffectTable(ctx, worlds);
-        *reinterpret_cast<U*>(kGameTick) = ctx.rng().Next32();
+        g_gameTick = ctx.rng().Next32();
         const auto x = static_cast<std::int32_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(size + 4));
         const auto y = static_cast<std::int32_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(size + 4));
         const U spell = ctx.rng().Chance(1, 16) ? ctx.rng().Next32() : ctx.rng().Below(34);
@@ -232,7 +232,7 @@ void Compare(test::Context& ctx, SpawnSpellFn candidate, int cases) {
             break;
         }
     }
-    *reinterpret_cast<U*>(kGameTick) = savedTick;
+    g_gameTick = savedTick;
 }
 
 // Wrong: spell 8's last effect uses the screen x of its own tile.

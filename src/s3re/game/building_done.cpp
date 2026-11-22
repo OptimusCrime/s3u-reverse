@@ -53,8 +53,11 @@
 // Coordinates are computed in 32 bits (word + offset) as in the original.
 
 #include "game/debug_log.h"
+#include "game/globals.h"
 #include "game/raw.h"
 #include "game/replacements.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -75,23 +78,7 @@ namespace {
 using layout::Building;
 using layout::Player;
 
-constexpr std::uintptr_t kBuildingDoneMessage = 0x006a5908;  // "BuildingDone: Storage.ProductionPile Good = %u"
-constexpr std::uintptr_t kPileFoundMessage = 0x006a58d8;     // "%u. Warenstapel an Gebaude gefunden! Typ = %u"
-constexpr std::uintptr_t kAddBuildingMessage = 0x006a58a0;   // "AddBuilding: y = %u - OP1 = %u ..."
 
-// S3.EXE data (read at their addresses, never written by code).
-constexpr std::uintptr_t kMilitaryHitPoints = 0x00659664;  // int32[3] for types 0xf, 0x10, 0x12
-constexpr std::uintptr_t kStoreTable22 = 0x006594a4;       // int32 (dx, dy)[6] per race, type 0x22
-constexpr std::uintptr_t kStoreTable21 = 0x00659564;       // int32 (dx, dy)[6] per race, type 0x21
-constexpr std::uintptr_t kInputGoods = 0x006a6824;         // int32[3] per building type
-constexpr std::uintptr_t kInputOffsets = 0x006a6ad0;       // int32 (dx, dy) per (race * 57 + type) * 3 + k
-constexpr std::uintptr_t kGoodType0B = 0x00730ef0;         // int32 11: output good of type 0xb
-constexpr std::uintptr_t kResidenceUnit = 0x00730f00;      // int8 10: residence capacity unit
-// int32[20][17] in S3.EXE's data; [owner][0] += 8 when a temple-like
-// building (0x29/0x2b/0x2d/0x37) is finished (also read/written by
-// UpdateEconomy 0x4e34a2). Meaning unknown.
-constexpr std::uintptr_t kPlayerCounters = 0x007acfe0;
-constexpr std::uint32_t kPlayerCountersStride = 17;
 
 constexpr std::uint8_t kPileOutput = 0xff;
 constexpr std::uint8_t kPileStore = 0xfc;
@@ -103,10 +90,6 @@ constexpr std::uint32_t kSoldierType = 0x25;
 // tests can replace its region floods by a recording stub.
 using TileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
 constexpr std::uintptr_t kUnblockTile = 0x0051b770;
-
-const std::int32_t* Table(std::uintptr_t address) {
-    return reinterpret_cast<const std::int32_t*>(address);
-}
 
 std::uint32_t PileAt(GameWorld* world, std::uint32_t x, std::uint32_t y, std::uint32_t good, std::uint32_t kind) {
     return GameWorld_CreatePile(world, nullptr, x, y, good, 0, kind);
@@ -155,7 +138,7 @@ void FinishTemple(GameWorld* world, Building& b) {
     }
     player.mana += 8;
     world->players[b.owner].mana_total += 8;
-    RawAtAddress<std::int32_t>(kPlayerCounters + b.owner * kPlayerCountersStride * 4) += 8;
+    g_playerTallies[b.owner].unk0c += 8;
 }
 
 void ClearFlags1aTo20(Building& b) {
@@ -201,7 +184,7 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
     const std::uint8_t type = b.art;
     if (type == 0xf || type == 0x10 || type == 0x12) {
         const std::uint32_t index = type == 0xf ? 0 : type == 0x10 ? 1 : 2;
-        b.hit_points = static_cast<std::uint16_t>(Table(kMilitaryHitPoints)[index]);
+        b.hit_points = static_cast<std::uint16_t>(g_militaryHitPoints[index]);
         b.military.class1_wanted = 1;
         b.military.class2_wanted = 0;
         b.military.class3_wanted = 0;
@@ -255,7 +238,7 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
         b.pile_ring = DoorPile(world, b, 0xa);
     }
     if (b.art == 0xb) {
-        b.pile_ring = DoorPile(world, b, static_cast<std::uint32_t>(*Table(kGoodType0B)));
+        b.pile_ring = DoorPile(world, b, static_cast<std::uint32_t>(g_goodType0B));
     }
     if (b.art == 0xc) {
         PileAt(world, b.door_x, b.door_y, 0xd, kPileOutput);
@@ -293,23 +276,23 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
     }
     if (b.art == 0x22) {
         b.trading.goods_cursor = 0;
-        CreateStorePiles(world, number, Table(kStoreTable22) + static_cast<std::uint32_t>(race) * 12);
+        CreateStorePiles(world, number, &g_storePileOffsets22[0][0][0] + static_cast<std::uint32_t>(race) * 12);
     }
     if (b.art == 0x21) {
         b.dock_direction = 0xffff;
         b.trading.goods_cursor = 0;
         b.trading.call_countdown = 0;
-        CreateStorePiles(world, number, Table(kStoreTable21) + static_cast<std::uint32_t>(race) * 12);
+        CreateStorePiles(world, number, &g_storePileOffsets21[0][0][0] + static_cast<std::uint32_t>(race) * 12);
     }
     if (b.art == 1) {
-        GameDebugLog(kBuildingDoneMessage, static_cast<std::uint32_t>(b.pile_ring));
+        GameDebugLog(texts::kBuildingDoneProductionPile, static_cast<std::uint32_t>(b.pile_ring));
         static constexpr std::int32_t kAround[6][2] = {{-2, 0}, {2, 0}, {-2, -2}, {2, 2}, {0, -2}, {0, 2}};
         for (const auto& d : kAround) {
             PileAt(world, b.x + static_cast<std::uint32_t>(d[0]), b.y + static_cast<std::uint32_t>(d[1]), b.pile_ring,
                    0);
         }
     }
-    const std::int8_t unit = RawAtAddress<std::int8_t>(kResidenceUnit);
+    const std::int8_t unit = g_residenceUnit;
     if (b.art == 0x1a) {
         b.residence.births = static_cast<std::uint8_t>(unit);
     }
@@ -345,19 +328,19 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
     b.piles[1] = 0;
     b.piles[2] = 0;
     for (std::uint32_t k = 0; k <= 2; ++k) {
-        const std::int32_t good = Table(kInputGoods)[b.art * 3 + k];
+        const std::int32_t good = g_buildingInputGoods[b.art][k];
         if (good == 0) {
             continue;
         }
-        GameDebugLog(kPileFoundMessage, k + 1, static_cast<std::uint32_t>(good));
+        GameDebugLog(texts::kPileFoundAtBuilding, k + 1, static_cast<std::uint32_t>(good));
         const std::uint32_t entry =
             (static_cast<std::uint32_t>(world->players[b.owner].race) * 57 + b.art) * 3 + k;
-        const std::int32_t* offset = Table(kInputOffsets) + entry * 2;
+        const std::int32_t* offset = g_buildingInputOffsets[entry];
         const std::uint32_t pile = PileAt(world, b.x + static_cast<std::uint32_t>(offset[0]),
                                           b.y + static_cast<std::uint32_t>(offset[1]),
                                           static_cast<std::uint32_t>(good), kPileInput);
         b.piles[k] = static_cast<std::uint16_t>(pile);
-        GameDebugLog(kAddBuildingMessage, pile, static_cast<std::uint32_t>(b.piles[0]),
+        GameDebugLog(texts::kAddBuilding, pile, static_cast<std::uint32_t>(b.piles[0]),
                      static_cast<std::uint32_t>(b.piles[1]), static_cast<std::uint32_t>(b.piles[2]));
     }
 }
@@ -371,13 +354,13 @@ S3RE_HOOK(0x004dbc50, GameWorld_BuildingDone, BuildingDoneFn, Original_GameWorld
 namespace {
 
 constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + 64 * sizeof(Building);
-constexpr std::size_t kCountersBytes = layout::kPlayers * kPlayerCountersStride * 4;
+constexpr std::size_t kCountersBytes = sizeof(g_playerTallies.get());
 
 // A building 1..50 of a random type (mostly 0..0x38) of player 0..3, with
 // sane material piles (RemovePileFromTile clears their tiles), positions
 // in the map, a small pending-event ring index; the players' races mostly
 // 0..3 and the temple flag bit random. UnblockTile is a recording stub; the
-// S3.EXE counters at 0x7acfe0 are compared and restored per run.
+// tallies' counters (PlayerTally::unk0c on) are compared and restored per run.
 void CompareBuildingDone(test::Context& ctx, BuildingDoneFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     test::CalleeStubs stubs;
@@ -387,7 +370,7 @@ void CompareBuildingDone(test::Context& ctx, BuildingDoneFn candidate, int cases
     });
     DebugLogRecorder logs;
     std::vector<std::uint8_t> saved(kCountersBytes), afterOriginal(kCountersBytes);
-    void* counters = reinterpret_cast<void*>(kPlayerCounters);
+    void* counters = &g_playerTallies[0].unk0c;  // (to 12 bytes past the tallies, as before)
     std::memcpy(saved.data(), counters, kCountersBytes);
     worlds.Both([&](GameWorld* w) {
         w->map_size = 384;

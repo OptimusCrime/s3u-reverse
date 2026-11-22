@@ -19,6 +19,7 @@
 // or 0xac, else 1; 2 for all other classes. thiscall, ret 4; EAX is the
 // result.
 
+#include "game/tables.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -35,7 +36,6 @@ using layout::Settler;
 using layout::Tile;
 
 // int32 per settler type, in S3.EXE's read-only data.
-const std::int32_t* const kSettlerTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);
 
 Tile& TileRecord(GameWorld* world, std::uint32_t x, std::uint32_t y) {
     // The original's arithmetic: ((x * 0x300 + y) * 24), 32-bit (wraps).
@@ -60,7 +60,7 @@ std::uint32_t __fastcall GameWorld_CanSettlerEnterTile(GameWorld* world, void* /
     if ((tile.flags & layout::kTileBlocked) != 0 || tile.settler != 0) {
         return 0;
     }
-    if (kSettlerTypeClass[settlerType] != 0) {
+    if (g_settlerTypeClass[settlerType] != 0) {
         return 1;
     }
     return tile.owner == player ? 1 : 0;
@@ -75,7 +75,7 @@ std::uint32_t __fastcall GameWorld_SettlerGroup(GameWorld* world, void* /*edx*/,
     if (type == 0x29) {
         return 3;
     }
-    const std::int32_t typeClass = kSettlerTypeClass[type];
+    const std::int32_t typeClass = g_settlerTypeClass[type];
     if (typeClass >= 50 && typeClass <= 59) {
         return 1;
     }
@@ -170,7 +170,7 @@ void CompareSettlerGroup(test::Context& ctx, SettlerGroupFn candidate, int cases
 // Wrong: treats only 0xab as the special job.
 std::uint32_t __fastcall WrongSettlerGroup(GameWorld* world, void* edx, std::uint32_t settler) {
     const Settler& record = world->settlers[settler];
-    if (record.art != 0x29 && kSettlerTypeClass[record.art] == 0 && record.job == 0xac) {
+    if (record.art != 0x29 && g_settlerTypeClass[record.art] == 0 && record.job == 0xac) {
         return 1;
     }
     return GameWorld_SettlerGroup(world, edx, settler);

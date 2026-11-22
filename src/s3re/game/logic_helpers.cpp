@@ -30,8 +30,10 @@
 //   that moved into the slot is not checked (the index still advances), as
 //   in the original. EAX not used by callers.
 
+#include "game/globals.h"
 #include "game/raw.h"
 #include "game/settler_groups.h"
+#include "game/tables.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -52,10 +54,6 @@ using layout::Tile;
 
 constexpr std::uint32_t kTileRingEntries = 10000;
 constexpr std::uint32_t kGroups = SettlerGroups::kGroups;
-// int32 animation ids per kind and race, in S3.EXE's data.
-const std::uint32_t* const kAnimationTable = reinterpret_cast<const std::uint32_t*>(0x006a8060);
-// The graphics object pointer, an S3.EXE global.
-constexpr std::uintptr_t kGfxData = 0x007a8010;
 
 // Byte distance (x * 0x300 + y) * 24 of tile (x, y) from the first tile,
 // 32-bit like the original. The functions return world + this (not the
@@ -172,8 +170,8 @@ std::uint32_t __fastcall GameWorld_SetSettlerAnimation(GameWorld* world, void* /
     Settler& record = world->settlers[settler];
     const std::uint32_t entry = record.race + kind * 4;
     // The animation id goes into the dword +0x8 (Settler::direction).
-    record.animation = kAnimationTable[entry];
-    const std::uint32_t frames = GfxData_SpriteWord(RawAtAddress<void*>(kGfxData), nullptr, kAnimationTable[entry]) - 1;
+    record.animation = g_settlerAnimations[entry];
+    const std::uint32_t frames = GfxData_SpriteWord(g_gfxData.get(), nullptr, g_settlerAnimations[entry]) - 1;
     record.counter = static_cast<std::uint16_t>(frames);
     return frames;
 }
@@ -289,7 +287,7 @@ void CompareSetSettlerAnimation(test::Context& ctx, SettlerAnimationFn candidate
         const std::uint32_t race = ctx.rng().Below(4);
         const std::uint32_t kind = ctx.rng().Below(40);
         worlds.Both([&](GameWorld* w) { w->settlers[settler].race = static_cast<std::uint8_t>(race); });
-        if (!gfx.PrepareSprite(ctx, kAnimationTable[kind * 4 + race])) {
+        if (!gfx.PrepareSprite(ctx, g_settlerAnimations[kind * 4 + race])) {
             expected = actual = 0;
             return;  // not a graphics id (the table holds other data there)
         }

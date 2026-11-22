@@ -23,7 +23,7 @@ namespace s3re::crash {
 namespace {
 
 constexpr std::uintptr_t kGameCodeBegin = 0x00401000;
-constexpr std::uintptr_t kGameCodeEnd = 0x0063a000;  // end of .text (approx.)
+constexpr std::uintptr_t kGameCodeEnd = 0x0063a000;  // end of .text (approx.); raw-ok: section bound
 constexpr int kMaxLogged = 8;  // the game might use access violations on purpose
 constexpr int kStackDwords = 256;
 

@@ -13,6 +13,7 @@
 
 #include "game/debug_log.h"
 #include "game/framework_layout.h"
+#include "game/texts.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -28,7 +29,6 @@ using framework::CLandscapeSurface;
 namespace {
 
 constexpr std::uint32_t kSlots = 0x100;
-constexpr std::uintptr_t kTooManyColoursMessage = 0x00731278;  // "Error ! zu viele Farben"
 
 std::uint16_t* ColourTable(CLandscapeSurface* self) {
     return static_cast<std::uint16_t*>(self->colours);
@@ -56,7 +56,7 @@ std::uint32_t __fastcall Landscape_FindOrAddColour(CLandscapeSurface* self, void
         ++slot;
     }
     if (slot == kSlots) {
-        GameDebugLog(kTooManyColoursMessage);
+        GameDebugLog(texts::kTooManyColours);
         slot = 0xff;
     }
     ColourTable(self)[slot] = wanted;

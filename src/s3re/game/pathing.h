@@ -89,12 +89,11 @@ static_assert(offsetof(PathState, target_free) == 0x98);
 
 }  // namespace layout
 
-// The pathfinder's progress marker (S3.EXE 0x7a9d98): (sector type << 8) |
+// The pathfinder's progress marker (g_pathPhase, game/globals.h): (sector type << 8) |
 // phase | (area << 16), set by every pathing helper on entry and exit (1 =
 // back in FindPath), 0 when FindPath returns. Only read by DebugLog calls in
 // CDrawThread::vf13 (0x42c746, 0x42c7e0, next to the global 0x7dfd28):
 // probably a report of where the logic thread was. Each update is three stores (phase, then
 // sector type, then area), done the same way here.
-constexpr std::uintptr_t kPathPhaseAddress = 0x7a9d98;
 
 }  // namespace s3re::game

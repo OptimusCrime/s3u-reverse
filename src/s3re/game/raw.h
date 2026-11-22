@@ -22,8 +22,9 @@ const T& RawAt(const void* base, std::size_t offset) {
     return *reinterpret_cast<const T*>(static_cast<const std::uint8_t*>(base) + offset);
 }
 
-// The T at a fixed address in S3.EXE's image (globals, tables); S3.EXE
-// always loads at 0x400000.
+// The T at a computed address held as an integer (e.g. a pointer the game
+// keeps in a dword). Not for globals: those are declared in game/globals.h,
+// tables.h and texts.h (see game/global_access.h).
 template <typename T>
 T& RawAtAddress(std::uintptr_t address) {
     return *reinterpret_cast<T*>(address);

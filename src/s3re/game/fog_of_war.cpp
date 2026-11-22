@@ -65,9 +65,6 @@ using layout::Pile;
 using layout::Settler;
 using layout::Tile;
 
-// int32: non-zero while the whole map is revealed (set by the reveal spell
-// 0x5495d0 and the editor/cheat paths in CLogicThread).
-constexpr std::uintptr_t kRevealMap = 0x007dfd84;
 constexpr std::uintptr_t kSeenObjectAt = 0x0051d5f0;
 
 Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
@@ -227,7 +224,7 @@ std::uint32_t __fastcall GameWorld_SeenObjectAt(GameWorld* world, void*, std::ui
 // is drawn, remembering what was last seen on tiles that fall back into the fog.
 void __fastcall GameWorld_UpdateFogSlice(GameWorld* world, void*, std::uint32_t slice) {
     const auto seenObjectAt = reinterpret_cast<SeenFn>(kSeenObjectAt);
-    const bool revealed = GameGlobal<std::int32_t>(kRevealMap) != 0;
+    const bool revealed = g_revealMap != 0;
     auto rows = [world]() { return static_cast<std::uint32_t>(static_cast<std::int32_t>(world->map_size) / 16); };
     for (std::uint32_t x = 0; x < world->map_size; ++x) {
         for (std::uint32_t y = rows() * slice; y < rows() * (slice + 1); ++y) {
@@ -479,7 +476,7 @@ void FogCompare(test::Context& ctx, FirstFn original, FirstFn candidate, int cas
                 }
             }
             const std::int32_t revealed = ctx.rng().Chance(1, 4) ? 1 : 0;
-            GameGlobal<std::int32_t>(kRevealMap) = revealed;
+            g_revealMap = revealed;
             return ctx.rng().Below(16);
         },
         [&](test::WorldPair& worlds, std::uint32_t slice) {
@@ -487,7 +484,7 @@ void FogCompare(test::Context& ctx, FirstFn original, FirstFn candidate, int cas
             candidate(worlds.ours(), nullptr, slice);
             return true;
         });
-    GameGlobal<std::int32_t>(kRevealMap) = 0;
+    g_revealMap = 0;
 }
 
 void __fastcall WrongUpdateFogSlice(GameWorld* world, void*, std::uint32_t slice) {

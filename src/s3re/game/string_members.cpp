@@ -25,6 +25,9 @@
 
 #include "game/framework_layout.h"
 #include "game/raw.h"
+#include "game/tables.h"
+#include "game/texts.h"
+#include "game/vtables.h"
 #include "hooks.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
@@ -390,7 +393,7 @@ void* __fastcall SessionDesc_Construct_5bb0b0(void* self, void* /*edx*/, const v
             sd::Release(temporary.ptr);
         }
     } else {
-        const char* empty = reinterpret_cast<const char*>(0x007a7868);
+        const char* empty = texts::kEmpty;
         msvc6::String_AssignChars(name, nullptr, empty, sd::Length(empty));
     }
     return self;
@@ -408,7 +411,7 @@ S3RE_HOOK(0x005b6790, GuidNames_Construct_5b6790, GuidNamesConstructFn,
 void* __fastcall GuidNames_Construct_5b6790(void* self, void* /*edx*/, const void* guid,
                                             const char* first, const char* second) {
     GuidNames* const record = As<GuidNames>(self);
-    CopyDwords(record->guid, reinterpret_cast<const void*>(0x0065c0b8), 4);
+    CopyDwords(record->guid, &g_guidNull, 4);
     String* a = &record->first;
     a->allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(first));
     sd::Clear(a);
@@ -445,7 +448,7 @@ void* __fastcall CRegistryValueInfo_Construct(void* self, void* /*edx*/, String 
     member->allocator = static_cast<std::uint8_t>(value);
     sd::Clear(member);
     msvc6::String_AssignSubstr(member, nullptr, &name, 0, 0xFFFFFFFFu);
-    info->vtable = 0x0065d984;
+    info->vtable = vtables::kCRegistryValueInfo;
     info->value = value;
     // ~string of the by-value parameter (its fields are not cleared: the
     // parameter goes away with the stack frame).

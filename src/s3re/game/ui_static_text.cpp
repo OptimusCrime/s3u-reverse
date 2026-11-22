@@ -15,6 +15,7 @@
 //   EAX = style.
 
 #include "game/screen_element_layout.h"
+#include "game/vtables.h"
 #include "hooks.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
@@ -34,7 +35,6 @@ namespace {
 using msvc6::String;
 using ui::CStaticText;
 
-constexpr std::uint32_t kCStaticTextVtable = 0x0065615c;
 
 CStaticText* TextOf(void* self) {
     return static_cast<CStaticText*>(self);
@@ -64,7 +64,7 @@ void* __fastcall CStaticText_Construct(void* self, void* /*edx*/, const RECT* re
     label->unk38 = 0;
     label->font = font != 0 ? font : 0x24;
     label->style = 5;
-    label->element.vtable = kCStaticTextVtable;
+    label->element.vtable = vtables::kCStaticText;
     label->element.flag1f = 1;
     return self;
 }

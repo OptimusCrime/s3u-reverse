@@ -37,7 +37,10 @@
 // error report itself failed, and the block leaks).
 
 #include "game/framework_layout.h"
+#include "game/globals.h"
 #include "game/raw.h"
+#include "game/texts.h"
+#include "game/vtables.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -58,13 +61,8 @@ constexpr std::int32_t kWasStillDrawing = static_cast<std::int32_t>(0x8876021c);
 constexpr std::uint32_t kDDBltWaitAsync = 0x01000200;  // raw-ok: DDBLT flag bits, not an offset
 constexpr std::uintptr_t kDirectDrawExceptionCtor = 0x005be180;
 constexpr std::uintptr_t kCxxThrowException = 0x0061f027;
-constexpr std::uintptr_t kDirectDrawExceptionThrowInfo = 0x0066a698;
-constexpr std::uintptr_t kSleepImport = 0x006550dc;  // S3.EXE's import of Sleep
-constexpr std::uintptr_t kDDBltName = 0x007a01e0;    // "CSurface::DDBlt"
-constexpr std::uintptr_t kDDBltFastName = 0x007a01f0;  // "CSurface::DDBltFast"
 constexpr std::uint32_t kDDBltFastWait = 0x10;
 constexpr std::uintptr_t kDirectPlayExceptionCtor = 0x005bfdb0;
-constexpr std::uintptr_t kDirectPlayExceptionThrowInfo = 0x00681e60;
 
 using framework::CLandscapeSurface;
 using framework::CSimpleSurface;
@@ -118,7 +116,7 @@ S3RE_HOOK(0x00405d10, DirectX_ThrowIfDDFailed, ThrowIfFailedFn, Original_DirectX
 // framework catches it and reports the error.
 std::uint32_t __stdcall DirectX_ThrowIfDDFailed(std::int32_t hr, const char* where) {
     if (hr < 0) {
-        ThrowGameException(kDirectDrawExceptionCtor, kDirectDrawExceptionThrowInfo, hr, where);
+        ThrowGameException(kDirectDrawExceptionCtor, throw_info::kDirectDrawException, hr, where);
     }
     return 0;
 }
@@ -131,7 +129,7 @@ S3RE_HOOK(0x005bb890, DirectX_ThrowIfDPFailed, ThrowIfFailedFn, Original_DirectX
 // result other than 0 counts as failed.
 std::uint32_t __stdcall DirectX_ThrowIfDPFailed(std::int32_t hr, const char* where) {
     if (hr != 0) {
-        ThrowGameException(kDirectPlayExceptionCtor, kDirectPlayExceptionThrowInfo, hr, where);
+        ThrowGameException(kDirectPlayExceptionCtor, throw_info::kDirectPlayException, hr, where);
     }
     return 0;
 }
@@ -162,7 +160,6 @@ std::uint32_t __fastcall DirectX_CSurface_DDBlt(void* self, void* /*edx*/, const
                                                 const RECT* srcRect, std::uint32_t flags, void* fx) {
     using BltFn = std::int32_t(__stdcall*)(void* surface, const RECT* dst, void* src, const RECT* srcRect,
                                            std::uint32_t flags, void* fx);
-    using SleepFn = void(WINAPI*)(DWORD);
     std::int32_t hr;
     do {
         void* source = src != nullptr ? AsSurface(src)->surface : nullptr;
@@ -170,10 +167,10 @@ std::uint32_t __fastcall DirectX_CSurface_DDBlt(void* self, void* /*edx*/, const
         hr = (*reinterpret_cast<BltFn*>(*static_cast<std::uint8_t**>(surface) + 0x14))(
             surface, dst, source, srcRect, flags | kDDBltWaitAsync, fx);
         if (hr != 0 && hr != kWasStillDrawing) {
-            hr = DirectX_CSurface_CheckResult(self, nullptr, hr, reinterpret_cast<const char*>(kDDBltName));
+            hr = DirectX_CSurface_CheckResult(self, nullptr, hr, texts::kDDBltName.c_str());
         }
         if (hr == kWasStillDrawing) {
-            (*reinterpret_cast<SleepFn*>(kSleepImport))(0);
+            g_importSleep.get()(0);
         }
     } while (hr != 0);
     return 0;
@@ -189,17 +186,16 @@ std::uint32_t __fastcall DirectX_CSurface_DDBltFast(void* self, void* /*edx*/, s
                                                     void* src, const RECT* srcRect, std::uint32_t flags) {
     using BltFastFn = std::int32_t(__stdcall*)(void* surface, std::uint32_t x, std::uint32_t y, void* src,
                                                const RECT* srcRect, std::uint32_t flags);
-    using SleepFn = void(WINAPI*)(DWORD);
     std::int32_t hr;
     do {
         void* surface = AsSurface(self)->surface;
         hr = (*reinterpret_cast<BltFastFn*>(*static_cast<std::uint8_t**>(surface) + 0x1c))(
             surface, x, y, AsSurface(src)->surface, srcRect, flags | kDDBltFastWait);
         if (hr != 0 && hr != kWasStillDrawing) {
-            hr = DirectX_CSurface_CheckResult(self, nullptr, hr, reinterpret_cast<const char*>(kDDBltFastName));
+            hr = DirectX_CSurface_CheckResult(self, nullptr, hr, texts::kDDBltFastName.c_str());
         }
         if (hr == kWasStillDrawing) {
-            (*reinterpret_cast<SleepFn*>(kSleepImport))(0);
+            g_importSleep.get()(0);
         }
     } while (hr != 0);
     return 0;
@@ -397,7 +393,7 @@ void CompareSurface(test::Context& ctx, const Functions& candidate, int cases) {
         args.op = op;
         args.self = b;
         args.hr = RandomResult(ctx.rng(), true);
-        args.where = reinterpret_cast<const char*>(kDDBltName);
+        args.where = texts::kDDBltName.c_str();
         args.dst = ctx.rng().Chance(1, 4) ? nullptr : reinterpret_cast<const RECT*>(b + 0x200);
         args.src = ctx.rng().Chance(1, 3) && op != 3 ? nullptr : b + 0x40;
         args.srcRect = ctx.rng().Chance(1, 4) ? nullptr : reinterpret_cast<const RECT*>(b + 0x220);
@@ -486,8 +482,6 @@ void* __fastcall CLandscapeSurface_DeletingDestroy(void* self, void* edx, std::u
 
 namespace {
 
-constexpr std::uint32_t kCSurfaceVtable = 0x0065cda8;
-constexpr std::uint32_t kCLandscapeSurfaceVtable = 0x0065a520;
 
 void GameDelete(void* block) {
     reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(block);
@@ -518,7 +512,7 @@ S3RE_HOOK(0x005bf240, DirectX_CSurface_Destroy, SurfaceFn, Original_DirectX_CSur
 // Purpose: Destructor of a DirectDraw surface wrapper: releases the
 // interface if there is one.
 std::uint32_t __fastcall DirectX_CSurface_Destroy(void* self, void* /*edx*/) {
-    AsSurface(self)->vtable = kCSurfaceVtable;
+    AsSurface(self)->vtable = vtables::kCSurface;
     if (AsSurface(self)->createdInterface != nullptr) {
         DirectX_CSurface_Release(self, nullptr);
     }
@@ -546,7 +540,7 @@ S3RE_HOOK(0x0054be70, CLandscapeSurface_Destroy, SurfaceFn, Original_CLandscapeS
 // surface): frees its four tables, then the surface.
 std::uint32_t __fastcall CLandscapeSurface_Destroy(void* self, void* /*edx*/) {
     CLandscapeSurface* const landscape = AsLandscape(self);
-    landscape->surface.simple.vtable = kCLandscapeSurfaceVtable;
+    landscape->surface.simple.vtable = vtables::kCLandscapeSurface;
     GameDelete(landscape->table94);
     GameDelete(landscape->table9c);
     GameDelete(landscape->colours);

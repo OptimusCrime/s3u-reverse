@@ -25,6 +25,8 @@
 
 #include "game/debug_log.h"
 #include "game/replacements.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -44,14 +46,10 @@ using layout::Pile;
 using layout::Settler;
 using layout::Tile;
 
-const std::int32_t* const kSettlerTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);
 
 constexpr std::uint8_t kFree = 0xff;
 constexpr std::uint8_t kPileDropped = 0xfe;
 
-constexpr std::uintptr_t kPileLostMessage = 0x006a6120;     // "Pile %u Lost, eco %u"
-constexpr std::uintptr_t kIllegalPileMessage = 0x006a60d8;  // "illegal pile in changing land: nr.: %u ..."
-constexpr std::uintptr_t kPositionMessage = 0x006a60c8;     // "(x,y) = (%u,%u)"
 
 // Callees reached through their S3.EXE addresses (so that the tests can
 // replace them by recording stubs): ResetSettlerToIdle belongs to another
@@ -95,7 +93,7 @@ void __fastcall GameWorld_ResetCivilianOnTile(GameWorld* world, void*, std::uint
         return;
     }
     const Settler& record = world->settlers[settler];
-    if (record.owner != tile.owner || kSettlerTypeClass[record.art] != 0) {
+    if (record.owner != tile.owner || g_settlerTypeClass[record.art] != 0) {
         return;
     }
     ResetSettlerToIdle(world, settler);
@@ -125,7 +123,7 @@ void __fastcall GameWorld_LosePileOnTile(GameWorld* world, void*, std::uint32_t 
                 }
             }
         }
-        GameDebugLog(kPileLostMessage, number, area);
+        GameDebugLog(texts::kPileLost, number, area);
         if (pile.prev != 0) {
             world->piles[pile.prev].next = pile.next;
         } else {
@@ -136,9 +134,9 @@ void __fastcall GameWorld_LosePileOnTile(GameWorld* world, void*, std::uint32_t 
             world->piles[pile.next].prev = pile.prev;
         }
     } else {
-        GameDebugLog(kIllegalPileMessage, number, static_cast<std::uint32_t>(pile.amount),
+        GameDebugLog(texts::kIllegalPileInChangingLand, number, static_cast<std::uint32_t>(pile.amount),
                      static_cast<std::uint32_t>(pile.art), static_cast<std::uint32_t>(pile.good));
-        GameDebugLog(kPositionMessage, static_cast<std::uint32_t>(pile.x), static_cast<std::uint32_t>(pile.y));
+        GameDebugLog(texts::kPositionXY, static_cast<std::uint32_t>(pile.x), static_cast<std::uint32_t>(pile.y));
     }
     GameWorld_SubtractPlayerCounter(world, nullptr, tile.owner, pile.good, pile.amount);
 }
@@ -514,7 +512,6 @@ extern TileFn Original_GameWorld_DestroyBuildingAt;
 namespace {
 
 constexpr std::size_t kTerritoryWorld = offsetof(GameWorld, buildings) + 64 * sizeof(layout::Building);
-constexpr std::uintptr_t kLayouts = 0x006aa170;
 constexpr std::uint32_t kMarkFootprint = 0x80000000;
 constexpr std::uint32_t kMarkFootprintEnd = 0x80000001;
 
@@ -559,8 +556,7 @@ void PlaceBuilding(test::WorldPair& worlds, std::uint32_t number, std::uint8_t t
         b.garrison = garrison;
         b.site.boards_missing = 0;  // no materials missing (RemoveBuildingGoods returns half)
         b.site.stones_missing = 0;
-        const std::uint32_t* p =
-            reinterpret_cast<const std::uint32_t*>(kLayouts + (type + race * 57u) * 2400u);
+        const std::uint32_t* p = g_buildingLayouts[type + race * 57u];
         while (*p++ != kMarkFootprint) {
         }
         TileAt(w, x, y).flags |= 0x28;

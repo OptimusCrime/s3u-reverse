@@ -44,6 +44,9 @@
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
+#include "game/globals.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -67,10 +70,6 @@ constexpr std::uintptr_t kPayForSpell = 0x0054b2b0;
 constexpr std::uintptr_t kRandom = 0x004feb70;
 constexpr std::uintptr_t kPushUiFeedback = 0x004febe0;
 constexpr std::uintptr_t kDebugLogFn = 0x00428720;
-constexpr std::uintptr_t kGameTick = 0x007dfd48;
-constexpr std::uintptr_t kRevealMap = 0x007dfd84;     // int32 g_revealMap
-constexpr std::uintptr_t kSpellAreas = 0x0065a1f0;    // int32[]: offsets per spell area
-constexpr std::uintptr_t kRevealMapText = 0x007310c0;  // "xxx GE done: optionviewall SET"
 
 // The handlers, by address.
 constexpr std::uintptr_t kSpellArea = 0x00548340;      // spells 0..3
@@ -91,12 +90,6 @@ constexpr std::uintptr_t kGoodsB = 0x0054aa40;
 constexpr std::uintptr_t kGoodsS = 0x0054acd0;
 constexpr std::uintptr_t kTreeCut = 0x005492a0;
 constexpr std::uintptr_t kRevealMapSpell = 0x005495d0;
-constexpr std::uintptr_t kConvertText = 0x00730f90;
-constexpr std::uintptr_t kGodlyText = 0x00730f68;
-constexpr std::uintptr_t kGoodsBText = 0x00730fe0;
-constexpr std::uintptr_t kGoodsSText = 0x00730fb8;
-constexpr std::uintptr_t kTreeCutText = 0x00731004;
-constexpr std::uintptr_t kRevealText = 0x00731028;
 
 using Fn0 = U(__fastcall*)(GameWorld*, void*);
 using Fn1 = U(__fastcall*)(GameWorld*, void*, U);
@@ -109,9 +102,9 @@ F Callee(std::uintptr_t address) {
     return reinterpret_cast<F>(address);
 }
 
-void DebugLog(std::uintptr_t format) {
+void DebugLog(const GameText& format) {
     using LogFn = void(__cdecl*)(const char*, ...);
-    reinterpret_cast<LogFn>(kDebugLogFn)(reinterpret_cast<const char*>(format));
+    reinterpret_cast<LogFn>(kDebugLogFn)(format.c_str());
 }
 
 bool HasMana(GameWorld* world, U player, U spell) {
@@ -123,7 +116,7 @@ void Pay(GameWorld* world, U player, U spell) {
 }
 
 std::int32_t AreaSize(U index) {
-    return *reinterpret_cast<const volatile std::int32_t*>(kSpellAreas + index * 4);
+    return g_spellAreaSizes[index];
 }
 
 // Calls visit(tile) for the map tiles among the first AreaSize(area)
@@ -179,13 +172,13 @@ U __fastcall GameWorld_SpellRevealMap(GameWorld* world, void*, U player) {
         return 0;
     }
     if (player == static_cast<U>(world->local_player)) {
-        auto& reveal = *reinterpret_cast<volatile std::int32_t*>(kRevealMap);
+        std::int32_t& reveal = g_revealMap;
         if (reveal != 1) {
             reveal = 1;
             layout::Player& p = world->players[player];
             p.map_revealed = 1;
-            p.map_revealed_tick = *reinterpret_cast<const volatile std::int32_t*>(kGameTick);
-            DebugLog(kRevealMapText);
+            p.map_revealed_tick = static_cast<std::int32_t>(g_gameTick.get());
+            DebugLog(texts::kRevealMapDone);
             Pay(world, player, 0x1f);
             return 0;
         }
@@ -320,22 +313,22 @@ U __fastcall GameWorld_ExecuteSpell(GameWorld* world, void*, U player, std::int3
     case 15:
         return Callee<Fn3>(kSpell15)(world, nullptr, player, ux, uy);
     case 18: case 19: case 20: case 27:
-        DebugLog(kConvertText);
+        DebugLog(texts::kExecuteConvertGoods);
         return Callee<Fn3>(kConvert)(world, nullptr, player, ux, uy);
     case 21: case 22: case 23: case 26:
-        DebugLog(kGodlyText);
+        DebugLog(texts::kExecuteGodlyGoods);
         return Callee<Fn3>(kGodly)(world, nullptr, player, ux, uy);
     case 28:
-        DebugLog(kGoodsBText);
+        DebugLog(texts::kExecuteGoodsBan);
         return Callee<Fn4>(kGoodsB)(world, nullptr, player, ux, uy, a4);
     case 29:
-        DebugLog(kGoodsSText);
+        DebugLog(texts::kExecuteGoodsSummon);
         return Callee<Fn4>(kGoodsS)(world, nullptr, player, ux, uy, a4);
     case 30:
-        DebugLog(kTreeCutText);
+        DebugLog(texts::kExecuteTreeCurse);
         return Callee<Fn3>(kTreeCut)(world, nullptr, player, ux, uy);
     case 31:
-        DebugLog(kRevealText);
+        DebugLog(texts::kExecuteRevealMap);
         return Callee<Fn1>(kRevealMapSpell)(world, nullptr, player);
     default:
         return 0;
@@ -430,7 +423,7 @@ void CompareSpell(test::Context& ctx, SpellFn original, SpellFn candidate, int c
 }
 
 void CompareRevealMap(test::Context& ctx, RevealMapFn candidate, int cases) {
-    const std::int32_t savedReveal = *reinterpret_cast<std::int32_t*>(kRevealMap);
+    const std::int32_t savedReveal = g_revealMap;
     test::WorldPair worlds(ctx, kWorld);
     test::CalleeStubs stubs;
     stubs.Install<1, kPushUiFeedback>();
@@ -441,23 +434,23 @@ void CompareRevealMap(test::Context& ctx, RevealMapFn candidate, int cases) {
         }
         const U player = Player(ctx);
         const std::int32_t reveal = ctx.rng().Chance(1, 2) ? 1 : static_cast<std::int32_t>(ctx.rng().Below(3)) - 1;
-        *reinterpret_cast<std::int32_t*>(kRevealMap) = reveal;
+        g_revealMap = reveal;
         stubs.SetWorld(worlds.original());
         Original_GameWorld_SpellRevealMap(worlds.original(), nullptr, player);
-        const std::int32_t expectedReveal = *reinterpret_cast<std::int32_t*>(kRevealMap);
+        const std::int32_t expectedReveal = g_revealMap;
         const auto expectedCalls = stubs.Take();
         const auto expectedLogs = logs.Take();
-        *reinterpret_cast<std::int32_t*>(kRevealMap) = reveal;
+        g_revealMap = reveal;
         stubs.SetWorld(worlds.ours());
         candidate(worlds.ours(), nullptr, player);
-        const std::int32_t actualReveal = *reinterpret_cast<std::int32_t*>(kRevealMap);
+        const std::int32_t actualReveal = g_revealMap;
         if (!S3RE_EXPECT_EQ(expectedReveal, actualReveal) || !S3RE_EXPECT(expectedCalls == stubs.Take()) ||
             !S3RE_EXPECT(expectedLogs == logs.Take()) || !worlds.Checkpoint(ctx)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: player %u, reveal %d", i, player, reveal);
             break;
         }
     }
-    *reinterpret_cast<std::int32_t*>(kRevealMap) = savedReveal;
+    g_revealMap = savedReveal;
 }
 
 void InstallHandlerStubs(test::CalleeStubs& stubs) {

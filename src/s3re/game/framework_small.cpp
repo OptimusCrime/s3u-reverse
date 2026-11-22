@@ -49,6 +49,8 @@
 #include "game/debug_log.h"
 #include "game/framework_layout.h"
 #include "game/gfx_layout.h"
+#include "game/texts.h"
+#include "game/vtables.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -69,16 +71,6 @@ std::uint32_t __fastcall Lobby_MemoryBlock_Copy(void* self, void* edx, const voi
 
 namespace {
 
-constexpr std::uint32_t kIsvListVtable = 0x00655fa4;
-constexpr std::uint32_t kContainerBaseVtable = 0x00655438;
-constexpr std::uint32_t kIntVectorBaseVtable = 0x00655a5c;
-constexpr std::uint32_t kIntVectorVtable = 0x006559f8;
-constexpr std::uint32_t kUIntVectorBaseVtable = 0x00657158;
-constexpr std::uint32_t kMessageBlockVtable = 0x0065d4fc;
-constexpr std::uint32_t kRegistryKeyVtable = 0x0065d98c;
-constexpr std::uint32_t kEventVtable = 0x0065d690;
-constexpr std::uint32_t kEventHandleVtable = 0x0065d684;
-constexpr std::uintptr_t kAnimationNotFound = 0x007a2e9c;  // "GFX: Animation not found %u:%u"
 
 using framework::CLMMessageBlock;
 using framework::CRegistryKey;
@@ -125,7 +117,7 @@ std::uint32_t Address(const void* p) {
 void ConstructIntVectorStart(void* self, std::uint32_t capacity) {
     watcom::PtrVector* const vector = As<watcom::PtrVector>(self);
     vector->unknown04 = 0;
-    vector->vtable = kIntVectorBaseVtable;
+    vector->vtable = vtables::kWCBareVectorBase_int;
     vector->capacity = capacity;
     vector->filled = 0;
     if (capacity != 0) {
@@ -174,9 +166,9 @@ S3RE_HOOK(0x0060b5a0, WCIsvListBase_Destroy, ThisFn, Original_WCIsvListBase_Dest
 // a list that still holds nodes; that hook is empty in this build).
 std::uint32_t __fastcall WCIsvListBase_Destroy(void* self, void* /*edx*/) {
     IsvList* const list = As<IsvList>(self);
-    list->vtable = kIsvListVtable;
+    list->vtable = vtables::kWCIsvListBase;
     const std::uint32_t last = list->last;
-    list->vtable = kContainerBaseVtable;
+    list->vtable = vtables::kWCExcept;
     return last;
 }
 
@@ -207,7 +199,7 @@ std::uint32_t __fastcall WCIntVector_Construct(void* self, void* /*edx*/, std::u
     IntVector* const vector = As<IntVector>(self);
     vector->vector.length = 0;
     vector->unk18 = b;
-    vector->vector.vtable = kIntVectorVtable;
+    vector->vector.vtable = vtables::kWCVectorBase_int;
     return Address(self);
 }
 
@@ -216,12 +208,12 @@ S3RE_HOOK(0x00414590, WCIntVector_Destroy, ThisFn, Original_WCIntVector_Destroy,
 // Purpose: Destructor of a Watcom vector of ints (frees its block).
 std::uint32_t __fastcall WCIntVector_Destroy(void* self, void* /*edx*/) {
     watcom::PtrVector* const vector = As<watcom::PtrVector>(self);
-    vector->vtable = kIntVectorBaseVtable;
+    vector->vtable = vtables::kWCBareVectorBase_int;
     std::uint32_t result = Address(vector->data);
     if (result != 0) {
         result = GameDelete(vector->data);  // (after the empty error hook 0x59f200)
     }
-    vector->vtable = kContainerBaseVtable;
+    vector->vtable = vtables::kWCExcept;
     return result;
 }
 
@@ -230,12 +222,12 @@ S3RE_HOOK(0x00458590, WCUIntVector_Destroy, ThisFn, Original_WCUIntVector_Destro
 // Purpose: Destructor of a Watcom vector of unsigned ints (frees its block).
 std::uint32_t __fastcall WCUIntVector_Destroy(void* self, void* /*edx*/) {
     watcom::PtrVector* const vector = As<watcom::PtrVector>(self);
-    vector->vtable = kUIntVectorBaseVtable;
+    vector->vtable = vtables::kWCBareVectorBase_uint;
     std::uint32_t result = Address(vector->data);
     if (result != 0) {
         result = GameDelete(vector->data);  // (after the empty error hook 0x59f200)
     }
-    vector->vtable = kContainerBaseVtable;
+    vector->vtable = vtables::kWCExcept;
     return result;
 }
 
@@ -261,7 +253,7 @@ std::uint32_t __fastcall Lobby_CLMMessageBlock_Copy(void* self, void* /*edx*/, s
     for (std::size_t k = 0; k < 4; ++k) {
         to->fields[k] = from->fields[k];
     }
-    to->vtable = kMessageBlockVtable;
+    to->vtable = vtables::kCLMMessageBlock;
     return Address(self);
 }
 
@@ -305,7 +297,7 @@ S3RE_HOOK(0x00616430, Win32_CRegistryKey_Construct, ThisFn, Original_Win32_CRegi
 // Purpose: Constructor of the registry key wrapper (no key open yet).
 std::uint32_t __fastcall Win32_CRegistryKey_Construct(void* self, void* /*edx*/) {
     As<CRegistryKey>(self)->key = 0;
-    As<CRegistryKey>(self)->vtable = kRegistryKeyVtable;
+    As<CRegistryKey>(self)->vtable = vtables::kCRegistryKey;
     return Address(self);
 }
 
@@ -314,8 +306,8 @@ S3RE_HOOK(0x0060c510, Win32_CEvent_Construct, ThisFn, Original_Win32_CEvent_Cons
 // Purpose: Constructor of the Windows event wrapper (no event yet).
 std::uint32_t __fastcall Win32_CEvent_Construct(void* self, void* /*edx*/) {
     Win32_CWaitable_Construct(self, nullptr, 0, 0);
-    As<CWaitable>(self)->vtable = kEventVtable;
-    As<CWaitable>(self)->handle.vtable = kEventHandleVtable;
+    As<CWaitable>(self)->vtable = vtables::kCEvent;
+    As<CWaitable>(self)->handle.vtable = vtables::kCEvent_sub4;
     return Address(self);
 }
 
@@ -373,7 +365,7 @@ std::uint32_t __fastcall GfxData_AnimationPointer_5faaf0(void* self, void* /*edx
     const std::uint32_t frame = id & 0xffff;
     const gfx::CGraphicsData* const gfx = As<gfx::CGraphicsData>(self);
     if (frame >= gfx->animationTables[group]->count) {
-        GameDebugLog(kAnimationNotFound, group, frame);
+        GameDebugLog(texts::kAnimationNotFound, group, frame);
     }
     // Read again after the call, as the original does.
     const std::uint32_t offset = gfx->animationTables[group]->offsets[frame];

@@ -69,8 +69,11 @@
 //   building 0.
 
 #include "game/debug_log.h"
+#include "game/globals.h"
 #include "game/raw.h"
 #include "game/replacements.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -193,23 +196,7 @@ std::uint32_t NeighbourYOf(std::uint32_t y, std::uint32_t direction) {
     return CallStd<kNeighbourY>(y, direction);
 }
 
-// S3.EXE data tables.
-const std::uint8_t* const kTerrainSpeed = reinterpret_cast<const std::uint8_t*>(0x00658c1c);  // per terrain
-const std::uint8_t* const kTypeSpeed = reinterpret_cast<const std::uint8_t*>(0x006591a4);     // int32 per type
-const std::int32_t* const kWalkTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);  // 0 = civilian
-constexpr std::uintptr_t kRaceShotTime = 0x00659dc0;  // u16 per race (stride 4): shot animation length
-const std::int32_t* const kRaceShipCapacity = reinterpret_cast<const std::int32_t*>(0x00659644);
-const std::uint16_t* const kPlayerColours = reinterpret_cast<const std::uint16_t*>(0x007ace64);
-constexpr std::uintptr_t kGameTick = 0x007dfd48;  // g_gameTick
 
-constexpr std::uintptr_t kOutOfMapText = 0x006a5ffc;      // "Settler tries to reach spot out of map"
-constexpr std::uintptr_t kFiveNumbersText = 0x006a5fec;   // "%u %u %u %u %u"
-constexpr std::uintptr_t kNotThereText = 0x006a5fbc;      // "SnotThere nr: %u  owner %u   art %u   job  %u"
-constexpr std::uintptr_t kIllegalSwapText = 0x006a5f84;   // "TROUBLE: wollte auf illegals Feld wechseln ..."
-constexpr std::uintptr_t kWalkCountText = 0x006a5f5c;     // "Illegal walkcount vorher %u, Ship %u"
-constexpr std::uintptr_t kSearchTargetText = 0x006a6048;  // "suche Ziel bei %u %u"
-constexpr std::uintptr_t kAttackBuildingText = 0x006a6038;  // "Angriff Gebaeude"
-constexpr std::uintptr_t kAttackCatapultText = 0x006a6024;  // "Angriff Katapult"
 
 constexpr std::uint16_t kNoWaypoint = 0xffff;
 constexpr std::uint16_t kPatrolMark = 0xfffe;   // path_cache[4]: swap the two waypoints
@@ -241,9 +228,9 @@ bool IsShipLegJob(std::uint16_t job) {
 // The step time of a settler entering `tile`; counter = time - 1.
 void SetStepTime(Settler& s, const Tile& tile) {
     if (s.art == 0x17 && s.slot != 0) {
-        s.step_time = static_cast<std::uint8_t>(kTerrainSpeed[tile.terrain] + kTypeSpeed[0x17 * 4] + 1);
+        s.step_time = static_cast<std::uint8_t>(g_terrainSpeed[tile.terrain] + static_cast<std::uint8_t>(g_settlerTypeSpeed[0x17]) + 1);
     } else {
-        s.step_time = static_cast<std::uint8_t>(kTerrainSpeed[tile.terrain] + kTypeSpeed[s.art * 4u]);
+        s.step_time = static_cast<std::uint8_t>(g_terrainSpeed[tile.terrain] + static_cast<std::uint8_t>(g_settlerTypeSpeed[s.art]));
     }
     s.counter = static_cast<std::uint16_t>(s.step_time - 1u);
 }
@@ -429,7 +416,7 @@ std::uint32_t WalkShip(Walk& w) {
     {
         const std::uint8_t count = s.ship_walk;
         if (((count & 7) == 6 || (count & 7) == 7) && count != 0xff) {
-            GameDebugLog(kWalkCountText, static_cast<std::uint32_t>(count), w.n);
+            GameDebugLog(texts::kIllegalWalkCount, static_cast<std::uint32_t>(count), w.n);
             s.ship_walk = static_cast<std::uint8_t>(s.ship_walk & 0xf8);
         }
     }
@@ -529,7 +516,7 @@ std::uint32_t WalkOne(Walk& w) {
     Settler& s = w.s;
     Tile& tile = TileAt(world, s.x, s.y);
     if (tile.settler != w.n) {
-        GameDebugLog(kNotThereText, w.n, static_cast<std::uint32_t>(s.owner), static_cast<std::uint32_t>(s.art),
+        GameDebugLog(texts::kNotThere, w.n, static_cast<std::uint32_t>(s.owner), static_cast<std::uint32_t>(s.art),
                      static_cast<std::uint32_t>(s.job));
         TileAt(world, s.x, s.y).settler = static_cast<std::uint16_t>(w.n);
     }
@@ -548,7 +535,7 @@ std::uint32_t WalkOne(Walk& w) {
             Call<kAddTileTraffic>(world, nx, ny);
             Call<kAddTileTraffic>(world, nx, ny);
             Call<kAddTileTraffic>(world, nx, ny);
-        } else if (kWalkTypeClass[s.art] == 0) {
+        } else if (g_settlerTypeClass[s.art] == 0) {
             Call<kAddTileTraffic>(world, nx, ny);
         }
         s.x = static_cast<std::uint16_t>(nx);
@@ -575,10 +562,10 @@ std::uint32_t WalkOne(Walk& w) {
     Tile& next = TileAt(world, nx, ny);
     const std::uint32_t other = next.settler;
     const Settler& blocker = world->settlers[other];
-    if (kWalkTypeClass[blocker.art] == 0 && blocker.job != 0xab && blocker.job != 0xac) {
+    if (g_settlerTypeClass[blocker.art] == 0 && blocker.job != 0xab && blocker.job != 0xac) {
         const Tile& here = TileAt(world, s.x, s.y);
         if (here.owner != blocker.owner) {
-            GameDebugLog(kIllegalSwapText, static_cast<std::uint32_t>(here.owner),
+            GameDebugLog(texts::kIllegalSwap, static_cast<std::uint32_t>(here.owner),
                          static_cast<std::uint32_t>(blocker.owner), static_cast<std::uint32_t>(here.area),
                          static_cast<std::uint32_t>(next.area));
             s.counter = 0;
@@ -601,8 +588,8 @@ std::uint32_t WalkStep(Walk& w) {
     Settler& s = w.s;
     const auto size = static_cast<std::int32_t>(world->map_size);
     if (static_cast<std::int32_t>(s.target_x) >= size || static_cast<std::int32_t>(s.target_y) >= size) {
-        GameDebugLog(kOutOfMapText);
-        GameDebugLog(kFiveNumbersText, static_cast<std::uint32_t>(s.target_x), static_cast<std::uint32_t>(s.target_y),
+        GameDebugLog(texts::kSpotOutOfMap);
+        GameDebugLog(texts::kFiveNumbers, static_cast<std::uint32_t>(s.target_x), static_cast<std::uint32_t>(s.target_y),
                      static_cast<std::uint32_t>(s.art), static_cast<std::uint32_t>(s.job), w.n);
     }
     if (s.art == kTypeSevenTile) {
@@ -620,7 +607,7 @@ bool SoldierShoot(Walk& w) {
     GameWorld* world = w.world;
     Settler& s = w.s;
     const std::uint32_t cx = s.path_cache[2], cy = s.path_cache[3];
-    GameDebugLog(kSearchTargetText, cx, cy);
+    GameDebugLog(texts::kSearchTarget, cx, cy);
     std::uint32_t kind = 0;   // 5 building, 6 catapult, 7 ship
     std::uint32_t target = 0;  // its record number
     std::uint32_t tx = 0, ty = 0;
@@ -659,7 +646,7 @@ bool SoldierShoot(Walk& w) {
                     continue;
                 }
                 const std::uint32_t guard = TileAt(world, qx, qy).settler;
-                if (guard != 0 && kWalkTypeClass[world->settlers[guard].art] != 0 &&
+                if (guard != 0 && g_settlerTypeClass[world->settlers[guard].art] != 0 &&
                     world->settlers[guard].job == 0xae) {
                     guarded = true;
                 }
@@ -669,7 +656,7 @@ bool SoldierShoot(Walk& w) {
             }
             tx = b.x;
             ty = b.y;
-            GameDebugLog(kAttackBuildingText);
+            GameDebugLog(texts::kAttackBuilding);
             kind = 5;
             target = number;
         } else if (t.settler != 0) {
@@ -681,7 +668,7 @@ bool SoldierShoot(Walk& w) {
             if (o.art == kTypeSevenTile) {
                 tx = o.x;
                 ty = o.y;
-                GameDebugLog(kAttackCatapultText);
+                GameDebugLog(texts::kAttackCatapult);
                 kind = 6;
                 target = number;
             } else if ((o.art == kTypeShip2b || o.art == kTypeShip) && o.job != 0x145) {
@@ -731,7 +718,7 @@ bool SoldierShoot(Walk& w) {
         }
     }
     s.counter = static_cast<std::uint16_t>(
-        RawAtAddress<std::uint16_t>(kRaceShotTime + static_cast<std::uint32_t>(me.race) * 4u) - 1u);
+        static_cast<std::uint16_t>(g_raceShotTime[me.race]) - 1u);
     s.direction = CallStd<kDirectionFromDelta>(tx - s.x, ty - s.y) + 0x8000;
     s.job = 0x151;
     if (me.race == 3) {
@@ -743,7 +730,7 @@ bool SoldierShoot(Walk& w) {
     const std::uint32_t screenY = Call<kTileScreenY>(world, x, y);
     const std::uint32_t screenX = Call<kTileScreenX>(world, s.x, s.y);
     const std::uint32_t projectile =
-        Call<kSpawnProjectile>(&world->map_effects, RawAtAddress<std::uint32_t>(kGameTick),
+        Call<kSpawnProjectile>(&world->map_effects, static_cast<std::uint32_t>(g_gameTick),
                                static_cast<std::uint32_t>(me.race), screenX, screenY, x, y, targetScreenX,
                                targetScreenY, tx, ty);
     Call<kAllocTable36700Record>(world, kind, projectile, target, delay, 0u, 0u, 0u, 0u, 0u, 0u);
@@ -781,7 +768,7 @@ bool BoardShip(Walk& w) {
         if (water != 5 && water != 6) {
             continue;
         }
-        if (static_cast<std::int32_t>(boat.passengers) >= kRaceShipCapacity[world->players[boat.owner].race]) {
+        if (static_cast<std::int32_t>(boat.passengers) >= g_raceShipCapacity[world->players[boat.owner].race]) {
             continue;
         }
         std::uint32_t xs[6], ys[6];
@@ -938,10 +925,10 @@ std::uint32_t ArriveSoldierAtArea(Walk& w) {
             // The original passes the race with the upper bytes of
             // area * 0x2e0 (left in EDX); only the low byte is used.
             const std::uint32_t raceWord = ((area * 0x2e0u) & 0xffffff00u) | s.race;
-            const std::uint32_t colour = kPlayerColours[s.owner];
+            const std::uint32_t colour = g_playerColourIndex[s.owner];
             const std::uint32_t screenY = Call<kTileScreenY>(world, x, y);
             const std::uint32_t screenX = Call<kTileScreenX>(world, s.x, s.y);
-            Call<kSpawnDeathEffect>(&world->map_effects, RawAtAddress<std::uint32_t>(kGameTick), screenX, screenY,
+            Call<kSpawnDeathEffect>(&world->map_effects, static_cast<std::uint32_t>(g_gameTick), screenX, screenY,
                                     x, y, colour, raceWord);
             s.owner = 0xff;
             TileAt(world, s.x, s.y).settler = 0;
@@ -1428,15 +1415,15 @@ void CompareWalkSettler(test::Context& ctx, WalkFn candidate, int cases) {
     stubs.Install<2, kSetSettlerAnimation>();
     static_assert(sizeof(kStubbed) / sizeof(kStubbed[0]) == 8);
     DebugLogRecorder logs;
-    const std::uint32_t savedTick = RawAtAddress<std::uint32_t>(kGameTick);
+    const std::uint32_t savedTick = g_gameTick;
     struct RestoreTick {
         std::uint32_t value;
-        ~RestoreTick() { RawAtAddress<std::uint32_t>(kGameTick) = value; }
+        ~RestoreTick() { g_gameTick = value; }
     } restoreTick{savedTick};
     for (int i = 0; i < cases; ++i) {
         current = SetUpWalkCase(ctx, worlds);
         const std::uint32_t tick = ctx.rng().Next32();
-        RawAtAddress<std::uint32_t>(kGameTick) = tick;
+        g_gameTick = tick;
         stubs.SetWorld(worlds.original());
         pathCalls = 0;
         const std::uint32_t expected = Original_GameWorld_WalkSettler(worlds.original(), nullptr, current.n);

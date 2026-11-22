@@ -38,6 +38,9 @@
 //   +4 = 0x65d704; EAX = this. ret 8.
 
 #include "game/framework_layout.h"
+#include "game/globals.h"
+#include "game/texts.h"
+#include "game/vtables.h"
 #include "hooks.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
@@ -124,14 +127,6 @@ void* GameNew(std::uint32_t size) {
     return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
 }
 
-constexpr std::uint32_t kCPlayerIndexVtable = 0x0065d5ec;
-constexpr std::uint32_t kCMemoryBlockVtable = 0x0065d4f4;
-constexpr std::uint32_t kCreditsDefault = 0x0069fff0;
-constexpr std::uint32_t kCFileVtable = 0x0065d9b8;
-constexpr std::uint32_t kCThreadVtable = 0x0065d710;
-constexpr std::uint32_t kCThreadWaitableVtable = 0x0065d704;
-constexpr std::uintptr_t kEmptyText = 0x007a7868;
-constexpr std::uintptr_t kCloseHandleImport = 0x00655180;
 
 std::uint8_t TopByte(const void* self) {
     return static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(self) >> 24);
@@ -200,7 +195,7 @@ std::uint32_t __fastcall Lobby_CPlayerIndex_Construct(void* self, void* /*edx*/,
     CPlayerIndex* const object = As<CPlayerIndex>(self);
     object->index = a;
     object->unk08 = 0;
-    object->vtable = kCPlayerIndexVtable;
+    object->vtable = vtables::kCPlayerIndex;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -213,7 +208,7 @@ std::uint32_t __fastcall Lobby_CMemoryBlock_Construct(void* self, void* /*edx*/)
     block->data = nullptr;
     block->reserved = 0;
     block->used = 0;
-    block->vtable = kCMemoryBlockVtable;
+    block->vtable = vtables::kCMemoryBlock;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -237,7 +232,7 @@ std::uint32_t __fastcall Credits_TextStyle_5a0960(void* self, void* /*edx*/) {
     CreditsTextStyle* const style = As<CreditsTextStyle>(self);
     style->unk10 = 0;
     style->unk14 = 0;
-    style->font = kCreditsDefault;
+    style->font = static_cast<std::uint32_t>(g_creditsDefaultStyle.address());
     style->unk04 = 0;
     style->size = 0xc;
     style->colour = 0xff;
@@ -250,7 +245,7 @@ S3RE_HOOK(0x006195c0, Win32_CFile_Construct, ObjFn, Original_Win32_CFile_Constru
 // wrapper without a file yet).
 std::uint32_t __fastcall Win32_CFile_Construct(void* self, void* /*edx*/) {
     Win32_CWin32Handle_Construct(self, nullptr, 0, 0);
-    As<CWin32Handle>(self)->vtable = kCFileVtable;
+    As<CWin32Handle>(self)->vtable = vtables::kCFile;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -303,7 +298,7 @@ std::uint32_t __fastcall DirectX_CPlayer_Clear(void* self, void* /*edx*/) {
     CPlayer* const player = As<CPlayer>(self);
     player->unk04 = 0;
     player->unk08 = 0;
-    const char* empty = reinterpret_cast<const char*>(kEmptyText);
+    const char* empty = texts::kEmpty;
     msvc6::String_AssignTextOrEmpty(&player->name1c, nullptr, empty);
     return reinterpret_cast<std::uint32_t>(msvc6::String_AssignTextOrEmpty(&player->name0c, nullptr, empty));
 }
@@ -316,9 +311,7 @@ std::uint32_t __fastcall Win32_CWin32Handle_Close(void* self, void* /*edx*/) {
     CWin32Handle* const object = As<CWin32Handle>(self);
     std::uint32_t result = object->handle;
     if (result != 0 && object->owned == 1) {
-        using CloseHandleFn = BOOL(WINAPI*)(HANDLE);
-        result = static_cast<std::uint32_t>(
-            (*reinterpret_cast<CloseHandleFn*>(kCloseHandleImport))(reinterpret_cast<HANDLE>(result)));
+        result = static_cast<std::uint32_t>(g_importCloseHandle.get()(reinterpret_cast<HANDLE>(result)));
     }
     object->handle = 0;
     object->owned = 0;
@@ -338,8 +331,8 @@ std::uint32_t __fastcall Win32_CThread_Construct(void* self, void* /*edx*/, std:
     thread->unk18 = 1;
     thread->unk20 = b;
     thread->unk24 = 0;
-    thread->waitable.vtable = kCThreadVtable;
-    thread->waitable.handle.vtable = kCThreadWaitableVtable;
+    thread->waitable.vtable = vtables::kCThread;
+    thread->waitable.handle.vtable = vtables::kCThread_sub4;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -570,8 +563,6 @@ void __fastcall NetHelp_Destroy_49ec80(void* self, void* edx);
 
 namespace {
 
-constexpr std::uint32_t kNetVectorVtable = 0x00657404;
-constexpr std::uint32_t kWCExceptVtable = 0x00655438;
 
 }  // namespace
 
@@ -583,13 +574,13 @@ S3RE_HOOK(0x0049ec80, NetHelp_Destroy_49ec80, DestroyMembersFn, Original_NetHelp
 void __fastcall NetHelp_Destroy_49ec80(void* self, void* /*edx*/) {
     NetHelpRecord* const record = As<NetHelpRecord>(self);
     msvc6::String_Destroy(&record->textBc, nullptr);
-    record->vector38.vtable = kNetVectorVtable;
+    record->vector38.vtable = vtables::kWCBareVectorBase_ushort;
     if (record->vector38.data != nullptr) {
         using NoOpFn = void(__fastcall*)(void* self, void* edx);
         reinterpret_cast<NoOpFn>(0x0059f200)(&record->vector38, nullptr);
         GameDelete(record->vector38.data);
     }
-    record->vector38.vtable = kWCExceptVtable;
+    record->vector38.vtable = vtables::kWCExcept;
     auto* wide = reinterpret_cast<std::uint8_t*>(record->wide28.ptr);
     if (wide != nullptr) {
         const std::uint8_t count = wide[-1];
@@ -691,7 +682,7 @@ void CompareNetDestroy(test::Context& ctx, DestroyMembersFn candidate, int cases
 
 void __fastcall WrongNetDestroy(void* self, void* edx) {
     NetHelp_Destroy_49ec80(self, edx);
-    As<NetHelpRecord>(self)->vector38.vtable = kNetVectorVtable;  // wrong: the base vtable is not restored
+    As<NetHelpRecord>(self)->vector38.vtable = vtables::kWCBareVectorBase_ushort;  // wrong: the base vtable is not restored
 }
 
 }  // namespace

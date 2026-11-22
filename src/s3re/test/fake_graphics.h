@@ -1,7 +1,7 @@
 #pragma once
 
 // A stand-in for the game's graphics object (game::gfx::CGraphicsData, the
-// pointer at 0x7a8010), for tests of simulation code that reads animation
+// pointer g_gfxData), for tests of simulation code that reads animation
 // lengths through GfxData_SpriteWord ([spriteTables[group]->sprites[index]
 // + views[group]]). While a FakeGraphics exists, the game's pointer points
 // at it; the destructor restores the old pointer.
@@ -13,6 +13,7 @@
 // buffer.
 
 #include "game/gfx_layout.h"
+#include "game/globals.h"
 #include "test/difftest.h"
 
 #include <cstdint>
@@ -28,8 +29,8 @@ public:
     static constexpr std::size_t kDataSize = 512 * 1024;
     static constexpr std::size_t kSpriteArea = kDataSize / 2;  // offset of the sprite headers in the data buffer
 
-    FakeGraphics() : saved_(Pointer()) { Pointer() = Address(object_.data()); }
-    ~FakeGraphics() { Pointer() = saved_; }
+    FakeGraphics() : saved_(game::g_gfxData) { game::g_gfxData = &object(); }
+    ~FakeGraphics() { game::g_gfxData = saved_; }
     FakeGraphics(const FakeGraphics&) = delete;
     FakeGraphics& operator=(const FakeGraphics&) = delete;
 
@@ -72,12 +73,10 @@ public:
 
 private:
     static std::uint32_t Address(const void* p) { return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p)); }
-    // The game's graphics object pointer.
-    static std::uint32_t& Pointer() { return *reinterpret_cast<std::uint32_t*>(0x007a8010); }
 
     std::vector<std::uint8_t> object_ = std::vector<std::uint8_t>(0x1000);
     std::vector<std::uint8_t> data_ = std::vector<std::uint8_t>(kDataSize);
-    std::uint32_t saved_;
+    game::gfx::CGraphicsData* saved_;
 };
 
 }  // namespace s3re::test

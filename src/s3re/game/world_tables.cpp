@@ -65,6 +65,7 @@
 // All thiscall (ECX = world).
 
 
+#include "game/globals.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -97,14 +98,13 @@ constexpr std::uint32_t kTimerLists = 42;
 constexpr std::uint32_t kTimersPerList = 10;
 
 constexpr std::uint32_t kPileClaimCount = 0x80;
-constexpr std::uintptr_t kPileClaimsCursor = 0x7ace60;  // uint16, S3.EXE global
 
 std::uint32_t Address(const void* p) {
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p));
 }
 
 std::uint16_t PileClaimsCursor() {
-    return *reinterpret_cast<const volatile std::uint16_t*>(kPileClaimsCursor);
+    return g_pileClaimsCursor;
 }
 
 // The tile (x, y) for 32-bit coordinates: the offset is computed in 32 bits,
@@ -752,7 +752,7 @@ S3RE_TEST(GameWorld_CountDownTimers_MatchesOriginal) {
 
 S3RE_TEST(GameWorld_AddPileClaim_MatchesOriginal) {
     // The cursor is an S3.EXE global; the test sets it and restores it.
-    volatile std::uint16_t& cursor = *reinterpret_cast<volatile std::uint16_t*>(kPileClaimsCursor);
+    std::uint16_t& cursor = g_pileClaimsCursor;
     const std::uint16_t saved = cursor;
     Compare(ctx, 3000, false, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         cursor = static_cast<std::uint16_t>(ctx.rng().Below(kPileClaimCount));

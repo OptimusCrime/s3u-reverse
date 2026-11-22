@@ -34,6 +34,7 @@
 // GameWorld::CountAreaSettlersOfType (0x0050e820): (area, type): settlers of
 //   one type (byte +0x1, zero-extended compare). ret 8.
 
+#include "game/tables.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -52,8 +53,6 @@ using layout::Tile;
 
 constexpr std::uint8_t kFreeArea = 0xff;
 
-// int32 per settler type, in S3.EXE's read-only data.
-const std::int32_t* const kSettlerTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);
 
 // Counts buildings 1..count for which `match(record)` holds.
 template <typename Match>
@@ -163,7 +162,7 @@ using CountAreaFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std:
 // the area; probably used by the economy to see how many workers/carriers an area has.
 std::uint32_t __fastcall GameWorld_CountAreaSettlersOfClass0(GameWorld* world, void* /*edx*/, std::uint32_t area) {
     return CountAreaSettlersWhere(world, area,
-                                  [](const Settler& s) { return kSettlerTypeClass[s.art] == 0; });
+                                  [](const Settler& s) { return g_settlerTypeClass[s.art] == 0; });
 }
 
 // Purpose: How many settlers of one type (e.g. carriers) of an area's player stand inside the area.

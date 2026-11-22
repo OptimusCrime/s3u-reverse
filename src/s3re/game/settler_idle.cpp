@@ -47,6 +47,8 @@
 
 #include "game/debug_log.h"
 #include "game/replacements.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -77,10 +79,6 @@ using layout::Pile;
 using layout::Settler;
 using layout::Tile;
 
-const std::int32_t* const kTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);
-constexpr std::uintptr_t kSectorZeroText = 0x006a6784;   // "JobNothing/StepAside auf economysector 0 ..."
-constexpr std::uintptr_t kTileText = 0x006a6740;         // "Owner %u, world[x][y].owner %u, object %u ..."
-constexpr std::uintptr_t kNoRegionText = 0x006a6704;     // "Siedler steht auf sector 0, art %u ..."
 
 constexpr std::uint16_t kWorkJobs[] = {
     3,    4,    0x8a, 0x68, 0x69, 0x1c, 0x1d, 0x20, 0x21, 0x22, 0x23, 0x2a, 0x2b, 0x2d, 0x2e, 0x2f, 0x30,
@@ -162,12 +160,12 @@ std::uint32_t __fastcall GameWorld_ResetSettlerToIdle(GameWorld* world, void*, s
     if (s.job == 1 || s.job == 2) {
         const std::uint32_t area = TileAt(world, s.x, s.y).area;
         if (area == 0) {
-            GameDebugLog(kSectorZeroText, static_cast<std::uint32_t>(s.art), static_cast<std::uint32_t>(s.x),
+            GameDebugLog(texts::kStepAsideOnSectorZero, static_cast<std::uint32_t>(s.art), static_cast<std::uint32_t>(s.x),
                          static_cast<std::uint32_t>(s.y));
             const Tile& tile = TileAt(world, s.x, s.y);
             const std::uint32_t owner = s.owner;
             // Argument order as the original pushes them.
-            GameDebugLog(kTileText, owner, static_cast<std::uint32_t>(tile.owner), owner,
+            GameDebugLog(texts::kTileOwnerDetails, owner, static_cast<std::uint32_t>(tile.owner), owner,
                          static_cast<std::uint32_t>(tile.object), owner, static_cast<std::uint32_t>(tile.area), owner,
                          static_cast<std::uint32_t>(tile.terrain));
         }
@@ -189,7 +187,7 @@ std::uint32_t __fastcall GameWorld_ResetSettlerToIdle(GameWorld* world, void*, s
                 --world->buildings[s.building].recruiting.recruits[2];
             }
         } else {
-            const std::int32_t typeClass = kTypeClass[art];
+            const std::int32_t typeClass = g_settlerTypeClass[art];
             if (typeClass != 0) {
                 if (typeClass == 1) {
                     --world->buildings[s.building].military.class1_coming;
@@ -289,10 +287,10 @@ std::uint32_t __fastcall GameWorld_ResetSettlerToIdle(GameWorld* world, void*, s
         GameWorld_PlaceSettlerNear(world, nullptr, settler, s.x, s.y);
     }
     if (TileAt(world, s.x, s.y).walk_region == 0) {
-        GameDebugLog(kNoRegionText, static_cast<std::uint32_t>(s.art), static_cast<std::uint32_t>(s.x),
+        GameDebugLog(texts::kSettlerOnSectorZero, static_cast<std::uint32_t>(s.art), static_cast<std::uint32_t>(s.x),
                      static_cast<std::uint32_t>(s.y), static_cast<std::uint32_t>(s.job));
         const Tile& tile = TileAt(world, s.x, s.y);
-        GameDebugLog(kTileText, static_cast<std::uint32_t>(s.owner), static_cast<std::uint32_t>(tile.owner),
+        GameDebugLog(texts::kTileOwnerDetails, static_cast<std::uint32_t>(s.owner), static_cast<std::uint32_t>(tile.owner),
                      static_cast<std::uint32_t>(tile.object), static_cast<std::uint32_t>(tile.area),
                      static_cast<std::uint32_t>(tile.terrain));
     }
@@ -473,7 +471,7 @@ void Compare(test::Context& ctx, SettlerFn candidate, int cases) {
 // Wrong: the class-3 soldiers give back building byte +0x1b instead of +0x1f.
 std::uint32_t __fastcall WrongResetSettlerToIdle(GameWorld* world, void* edx, std::uint32_t settler) {
     Settler& s = world->settlers[settler];
-    if (IsWorkJob(s.job) && s.art != 0 && kTypeClass[s.art] == 3) {
+    if (IsWorkJob(s.job) && s.art != 0 && g_settlerTypeClass[s.art] == 3) {
         Building& b = world->buildings[s.building];
         ++b.military.class3_coming;
         --b.military.class2_coming;

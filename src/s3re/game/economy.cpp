@@ -61,7 +61,9 @@
 //   pile), job 0x4c, counter 0, building = target, good = the pile's good.
 //   Callers UpdateEconomy and UpdateEnvironment; EAX unused.
 
+#include "game/globals.h"
 #include "game/replacements.h"
+#include "game/tables.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -80,7 +82,6 @@ using layout::Building;
 using layout::Player;
 using layout::Settler;
 
-const std::int32_t* const kSettlerTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);
 
 constexpr std::uint8_t kFree = 0xff;
 
@@ -112,7 +113,7 @@ void __fastcall GameWorld_RecountPlayerPopulation(GameWorld* world, void*) {
         if (settler.owner == kFree) {
             continue;
         }
-        const std::int32_t settlerClass = kSettlerTypeClass[settler.art];
+        const std::int32_t settlerClass = g_settlerTypeClass[settler.art];
         if (settlerClass != 0 && (settlerClass < 10 || settlerClass > 29)) {
             continue;
         }

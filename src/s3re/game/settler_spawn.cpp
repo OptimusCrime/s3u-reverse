@@ -39,8 +39,10 @@
 //   on the graphics object [0x7a8010]. EAX = SpriteWord - 1. ret 8.
 // All thiscall (ECX = world).
 
+#include "game/globals.h"
 #include "game/raw.h"
 #include "game/replacements.h"
+#include "game/tables.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -65,9 +67,6 @@ using layout::Player;
 using layout::Settler;
 using layout::Tile;
 
-const std::int32_t* const kTypeClass = reinterpret_cast<const std::int32_t*>(0x00658f64);
-const std::uint32_t* const kAnimationTable = reinterpret_cast<const std::uint32_t*>(0x006a8060);
-constexpr std::uintptr_t kGfxData = 0x007a8010;  // the graphics object pointer
 
 constexpr std::uint8_t kSettlerInSlot = 0x40;  // Settler::flags
 constexpr std::uint32_t kPartType = 0x2a;
@@ -102,7 +101,7 @@ std::uint32_t __fastcall GameWorld_SpawnSettlersAround(GameWorld* world, void*, 
         }
         GameWorld_CreateSettler(world, nullptr, tx, ty, type, player);
         --remaining;
-        const std::int32_t typeClass = kTypeClass[type];
+        const std::int32_t typeClass = g_settlerTypeClass[type];
         if (typeClass == 0 || (typeClass >= 10 && typeClass <= 0x1d)) {
             ++world->players[player].population_limit_base;
         }
@@ -195,9 +194,9 @@ std::uint32_t __fastcall GameWorld_SetSoldierAnimationInBuilding(GameWorld* worl
 std::uint32_t __fastcall GameWorld_SetSettlerSavedAnimation(GameWorld* world, void*, std::uint32_t settler,
                                                             std::uint32_t kind) {
     Settler& s = world->settlers[settler];
-    s.saved_animation = kAnimationTable[s.race + kind * 4];
+    s.saved_animation = g_settlerAnimations[s.race + kind * 4];
     const std::uint32_t frames =
-        GfxData_SpriteWord(RawAtAddress<void*>(kGfxData), nullptr, kAnimationTable[s.race + kind * 4]) - 1;
+        GfxData_SpriteWord(g_gfxData.get(), nullptr, g_settlerAnimations[s.race + kind * 4]) - 1;
     s.saved_counter = static_cast<std::uint16_t>(frames);
     return frames;
 }
@@ -393,7 +392,7 @@ void CompareSavedAnimation(test::Context& ctx, SettlerKindFn candidate, int case
         const std::uint32_t settler = ctx.rng().Below(0x7d00);
         const std::uint32_t race = ctx.rng().Below(4);
         const std::uint32_t kind = ctx.rng().Below(0x180);
-        if (!gfx.PrepareSprite(ctx, kAnimationTable[kind * 4 + race])) {
+        if (!gfx.PrepareSprite(ctx, g_settlerAnimations[kind * 4 + race])) {
             return;
         }
         worlds.Both([&](GameWorld* w) { w->settlers[settler].race = static_cast<std::uint8_t>(race); });
@@ -439,7 +438,7 @@ void CompareSoldierAnimation(test::Context& ctx, SettlerFn candidate, int cases)
         }
         kind += art == 0x10 ? 9 : art == 0x12 ? 0x12 : 0;
         kind += race == 1 ? 0x1b : race == 2 ? 0x36 : 0;
-        if (!gfx.PrepareSprite(ctx, kAnimationTable[kind * 4 + settlerRace])) {
+        if (!gfx.PrepareSprite(ctx, g_settlerAnimations[kind * 4 + settlerRace])) {
             return;
         }
         expected = Original_GameWorld_SetSoldierAnimationInBuilding(worlds.original(), nullptr, settler);
@@ -454,7 +453,7 @@ std::uint32_t __fastcall WrongSetSoldierAnimationInBuilding(GameWorld* world, vo
     const std::uint32_t result = GameWorld_SetSoldierAnimationInBuilding(world, edx, settler);
     Settler& s = world->settlers[settler];
     if (world->buildings[s.building].race == 2) {
-        s.animation = kAnimationTable[s.race + (s.direction == 0 ? 0 : 0)];  // some other id
+        s.animation = g_settlerAnimations[s.race + (s.direction == 0 ? 0 : 0)];  // some other id
     }
     return result;
 }

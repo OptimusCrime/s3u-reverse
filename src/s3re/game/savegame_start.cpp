@@ -30,6 +30,7 @@
 // as vf13 does after starting a map), and lets the original vf13 run on in
 // state 4. If the load fails, the game is ended (exit code 4).
 
+#include "game/globals.h"
 #include "game/menus_layout.h"
 #include "hooks.h"
 #include "log.h"
@@ -61,8 +62,6 @@ const auto GameSettings_LoadSaveGame = reinterpret_cast<LoadSaveGameFn>(0x00432b
 const auto MenuDrawThread_Post = reinterpret_cast<DrawThreadPostFn>(0x00496c90);
 const auto Config_ClearStartupMap = reinterpret_cast<ClearStartupMapFn>(0x00413d50);
 
-void* const kGameSettings = reinterpret_cast<void*>(0x007a7a18);
-void* const kConfig = reinterpret_cast<void*>(0x007a7af0);
 
 constexpr std::uint32_t kMenuStartupMap = 0x14;
 constexpr std::uint32_t kMenuStartGame = 4;
@@ -80,7 +79,7 @@ void LoadSave(menus::CDrawThread* self, const std::string& path) {
     msvc6::Original_String_Tidy(&name, nullptr, 0);
     msvc6::Original_String_AssignChars(&name, nullptr, path.c_str(),
                                        static_cast<std::uint32_t>(path.size()));
-    const int result = GameSettings_LoadSaveGame(kGameSettings, nullptr, &name, 0);
+    const int result = GameSettings_LoadSaveGame(&g_gameSettings, nullptr, &name, 0);
     msvc6::Original_String_Tidy(&name, nullptr, 1);
     if (result != 0) {
         S3RE_LOG("load-save: GameSettings::LoadSaveGame(%s) failed with %d; ending the game",
@@ -92,7 +91,7 @@ void LoadSave(menus::CDrawThread* self, const std::string& path) {
     self->unk144 = -1;
     self->menuState = kMenuStartGame;
     MenuDrawThread_Post(self, nullptr, 1);
-    Config_ClearStartupMap(kConfig, nullptr);
+    Config_ClearStartupMap(&g_config, nullptr);
 }
 
 std::uint32_t __fastcall Hooked_MenuDrawThread_Update(menus::CDrawThread* self, void* edx, int arg) {

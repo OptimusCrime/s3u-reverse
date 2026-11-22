@@ -4,7 +4,9 @@
 // original function does, so that replacements keep the original's
 // diagnostics: in the release build it is a bare `ret`; with our DLL its
 // passthrough writes the message to s3re.log. `format` is the address of
-// the original's format string in S3.EXE.
+// the original's format string in S3.EXE (declared in game/texts.h).
+
+#include "game/global_access.h"
 
 #include <cstdint>
 #include <vector>
@@ -12,9 +14,9 @@
 namespace s3re::game {
 
 template <typename... Args>
-void GameDebugLog(std::uintptr_t format, Args... args) {
+void GameDebugLog(const GameText& format, Args... args) {
     using DebugLogFn = void(__cdecl*)(const char* format, ...);
-    reinterpret_cast<DebugLogFn>(0x00428720)(reinterpret_cast<const char*>(format), args...);
+    reinterpret_cast<DebugLogFn>(0x00428720)(format.c_str(), args...);
 }
 
 // For tests: while a capture is set, every DebugLog call with a format in

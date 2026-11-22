@@ -54,6 +54,7 @@
 
 #include "game/debug_log.h"
 #include "game/replacements.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -80,12 +81,6 @@ constexpr std::uint8_t kRidge = 0x70;
 constexpr std::uint8_t kRidgeLow = 0xf0;  // ridge tile that ends up lower (MarkRidgeHeights)
 constexpr std::uint8_t kStream = 0x60;
 
-// DebugLog format strings in S3.EXE.
-constexpr std::uintptr_t kCreatingWorld = 0x72fef8;  // "creating world"
-constexpr std::uintptr_t kErrorTop = 0x72fee4;       // "Error top %u %u %u"
-constexpr std::uintptr_t kErrorBottom = 0x72fecc;    // "Error bottom %u %u %u"
-constexpr std::uintptr_t kErrorLeft = 0x72feb8;      // "Error left %u %u %u"
-constexpr std::uintptr_t kErrorRight = 0x72fea0;     // "Error right %u %u %u"
 
 // The six directions of the hex grid, 1..6 (index 0 unused), as in the
 // original's local table: (1,0), (1,1), (0,1), (-1,0), (-1,-1), (0,-1).
@@ -268,21 +263,21 @@ void LogBorderErrors(GameWorld* world) {
     for (std::int32_t i = 0; i < MapSize(world); ++i) {
         const std::uint8_t top = Height(world, i, 0);
         if (top != 0) {
-            GameDebugLog(kErrorTop, i, 0, static_cast<std::uint32_t>(top));
+            GameDebugLog(texts::kErrorTop, i, 0, static_cast<std::uint32_t>(top));
         }
         const std::int32_t bottomSize = MapSize(world);
         const std::uint8_t bottom = Height(world, i, bottomSize - 1);
         if (bottom != 0) {
-            GameDebugLog(kErrorBottom, i, bottomSize - 1, static_cast<std::uint32_t>(bottom));
+            GameDebugLog(texts::kErrorBottom, i, bottomSize - 1, static_cast<std::uint32_t>(bottom));
         }
         const std::uint8_t left = Height(world, 0, i);
         if (left != 0) {
-            GameDebugLog(kErrorLeft, 0, i, static_cast<std::uint32_t>(left));
+            GameDebugLog(texts::kErrorLeft, 0, i, static_cast<std::uint32_t>(left));
         }
         const std::int32_t rightSize = MapSize(world);
         const std::uint8_t right = Height(world, rightSize - 1, i);
         if (right != 0) {
-            GameDebugLog(kErrorRight, rightSize - 1, i, static_cast<std::uint32_t>(right));
+            GameDebugLog(texts::kErrorRight, rightSize - 1, i, static_cast<std::uint32_t>(right));
         }
     }
 }
@@ -1060,7 +1055,7 @@ using CreateFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::ui
 // regions and areas.
 std::uint32_t __fastcall GameWorld_Create(GameWorld* world, void*, std::uint32_t seed, std::int32_t mapSize,
                                           std::uint32_t symmetry) {
-    GameDebugLog(kCreatingWorld);
+    GameDebugLog(texts::kCreatingWorld);
     SeedRandomThroughGame(world, seed);
     world->random_map_symmetry = static_cast<std::int32_t>(symmetry);
     world->map_size = static_cast<std::uint32_t>(mapSize);
@@ -1219,7 +1214,7 @@ std::uint32_t __fastcall WrongCreateHeight(GameWorld* world, void* edx, std::uin
 // Wrong: an extra DebugLog call.
 std::uint32_t __fastcall WrongCreateLog(GameWorld* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
                                         std::uint32_t symmetry) {
-    GameDebugLog(kErrorTop, 0, 0, 0u);
+    GameDebugLog(texts::kErrorTop, 0, 0, 0u);
     return GameWorld_Create(world, edx, seed, mapSize, symmetry);
 }
 

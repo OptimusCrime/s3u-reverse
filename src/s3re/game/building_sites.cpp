@@ -97,6 +97,8 @@
 #include "game/debug_log.h"
 #include "game/raw.h"
 #include "game/replacements.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "log.h"
@@ -132,8 +134,6 @@ constexpr std::int32_t kGridCentre = 15;
 
 constexpr std::uint32_t kBuildingLimit = 0xf9f;
 
-constexpr std::uintptr_t kLayouts = 0x006aa170;
-constexpr std::uint32_t kLayoutBytes = 2400;
 constexpr std::uint32_t kLayoutTypes = 57;
 constexpr std::uint32_t kMarkFootprint = 0x80000000;
 constexpr std::uint32_t kMarkNoStakes = 0x80000001;
@@ -144,7 +144,6 @@ constexpr std::uint32_t kMarkDoor = 0x80000004;
 constexpr std::uint32_t kCastleType = 0xf;
 constexpr std::uint32_t kModeCheckUnowned = 2;
 
-constexpr std::uintptr_t kIllegalOffsetMessage = 0x006a587c;  // "illegal building offset %u %u %u %u"
 
 // Ground requirements (CheckBuildingSite).
 enum class SiteGroup { kPlain, kRace1, kRace2, kMine };
@@ -159,7 +158,7 @@ std::uint32_t PlayerRace(GameWorld* world, std::uint32_t player) {
 }
 
 const std::uint32_t* Layout(std::uint32_t race, std::uint32_t type) {
-    return reinterpret_cast<const std::uint32_t*>(kLayouts + (race * kLayoutTypes + type) * kLayoutBytes);
+    return g_buildingLayouts[race * kLayoutTypes + type];
 }
 
 // The entry after the first `marker` of the layout.
@@ -570,7 +569,7 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
         const std::uint32_t tx = x + dx;
         const std::uint32_t ty = y + dy;
         if (GameWorld_IsOnMap(world, nullptr, tx, ty) == 0) {
-            GameDebugLog(kIllegalOffsetMessage, x, y, dx, dy);
+            GameDebugLog(texts::kIllegalBuildingOffset, x, y, dx, dy);
         }
         if (!TileSuitsSite(TileAt(world, tx, ty), owner, area, group, false, false)) {
             unsuitable = true;

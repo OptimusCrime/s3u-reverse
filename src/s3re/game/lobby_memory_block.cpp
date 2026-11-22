@@ -47,6 +47,8 @@
 
 #include "game/debug_log.h"
 #include "game/framework_layout.h"
+#include "game/texts.h"
+#include "game/vtables.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -65,12 +67,6 @@ void __fastcall Win32_ThrowOutOfMemory(const char* text, const char* file, std::
 
 namespace {
 
-constexpr std::uint32_t kMemoryBlockVtable = 0x0065d4f4;
-constexpr std::uint32_t kGenericVtable = 0x0065d52c;
-constexpr std::uintptr_t kNewDataText = 0x007a3570;   // "lpNewData"
-constexpr std::uintptr_t kProtocolFile = 0x007a34fc;  // "E:\Siedler3\Dirk\protocol.cpp"
-constexpr std::uintptr_t kResizeLog = 0x007a355c;     // "PROT: During Resize"
-constexpr std::uintptr_t kAppendLog = 0x007a3548;     // "PROT: During Append"
 
 using framework::CLMGeneric;
 using framework::CMemoryBlock;
@@ -99,7 +95,7 @@ void GameDelete(void* block) {
     reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(block);
 }
 
-int LogAndPass(std::uintptr_t text) {
+int LogAndPass(const GameText& text) {
     GameDebugLog(text);
     return EXCEPTION_CONTINUE_SEARCH;
 }
@@ -145,8 +141,7 @@ void Reserve(void* self, std::uint32_t n) {
     }
     auto* block = static_cast<std::uint8_t*>(GameNew(capacity));
     if (block == nullptr) {
-        Win32_ThrowOutOfMemory(reinterpret_cast<const char*>(kNewDataText),
-                               reinterpret_cast<const char*>(kProtocolFile), 0xc2);
+        Win32_ThrowOutOfMemory(texts::kNewDataName, texts::kProtocolFile, 0xc2);
     }
     auto* old = Block(self)->data;
     if (old != nullptr) {
@@ -176,7 +171,7 @@ S3RE_HOOK(0x00601280, Lobby_MemoryBlock_Reserve, OneArgFn, Original_Lobby_Memory
 std::uint32_t __fastcall Lobby_MemoryBlock_Reserve(void* self, void* /*edx*/, std::uint32_t n) {
     __try {
         Reserve(self, n);
-    } __except (LogAndPass(kResizeLog)) {
+    } __except (LogAndPass(texts::kDuringResize)) {
     }
     return 0;
 }
@@ -202,7 +197,7 @@ S3RE_HOOK(0x006011c0, Lobby_MemoryBlock_AppendBytes, AppendBytesFn, Original_Lob
 std::uint32_t __fastcall Lobby_MemoryBlock_AppendBytes(void* self, void* /*edx*/, const void* p, std::uint32_t n) {
     __try {
         AppendBytes(self, p, n);
-    } __except (LogAndPass(kAppendLog)) {
+    } __except (LogAndPass(texts::kDuringAppend)) {
     }
     return 0;
 }
@@ -242,7 +237,7 @@ std::uint32_t __fastcall Lobby_MemoryBlock_Copy(void* self, void* /*edx*/, const
     Block(self)->data = nullptr;
     Block(self)->reserved = 0;
     Block(self)->used = 0;
-    Block(self)->vtable = kMemoryBlockVtable;
+    Block(self)->vtable = vtables::kCMemoryBlock;
     Lobby_MemoryBlock_Append(self, nullptr, other);
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(self));
 }
@@ -252,7 +247,7 @@ S3RE_HOOK(0x00600e70, Lobby_MemoryBlock_Destroy, SizeFn, Original_Lobby_MemoryBl
 
 // Purpose: Destructor of a protocol buffer (frees its data).
 std::uint32_t __fastcall Lobby_MemoryBlock_Destroy(void* self, void* /*edx*/) {
-    Block(self)->vtable = kMemoryBlockVtable;
+    Block(self)->vtable = vtables::kCMemoryBlock;
     return Lobby_FreeBlock_601250(self, nullptr);
 }
 
@@ -280,7 +275,7 @@ S3RE_HOOK(0x00601e80, Lobby_CLMGeneric_Construct, OneArgFn, Original_Lobby_CLMGe
 std::uint32_t __fastcall Lobby_CLMGeneric_Construct(void* self, void* /*edx*/, std::uint32_t id) {
     Lobby_CMemoryBlock_Construct(&Generic(self)->block, nullptr);
     const std::uint32_t header = (id & 0xFFu) | (4u << 16);
-    Generic(self)->vtable = kGenericVtable;
+    Generic(self)->vtable = vtables::kCLMGeneric;
     Lobby_CLMGeneric_SetHeader(self, nullptr, header);
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(self));
 }
@@ -296,7 +291,7 @@ S3RE_HOOK(0x00602190, Lobby_CLMGeneric_Destroy, SizeFn, Original_Lobby_CLMGeneri
 
 // Purpose: Destructor of a protocol message.
 std::uint32_t __fastcall Lobby_CLMGeneric_Destroy(void* self, void* /*edx*/) {
-    Generic(self)->vtable = kGenericVtable;
+    Generic(self)->vtable = vtables::kCLMGeneric;
     return Lobby_MemoryBlock_Destroy(&Generic(self)->block, nullptr);
 }
 

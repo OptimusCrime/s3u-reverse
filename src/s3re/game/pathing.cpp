@@ -64,7 +64,7 @@
 //   products; signed division, b = 0 there divides by zero like the
 //   original); unk94 = 0. Phases 0x64 -> 0xa; EAX = the final marker.
 //
-// Phase marker (kPathPhaseAddress, see pathing.h): written on entry and exit
+// Phase marker (g_pathPhase, see pathing.h): written on entry and exit
 // of the helpers that do so in the original, with the same three stores.
 
 #include "game/pathing.h"
@@ -72,6 +72,8 @@
 #include "game/debug_log.h"
 #include "game/globals.h"
 #include "game/replacements.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -93,22 +95,14 @@ using layout::Settler;
 using layout::Tile;
 
 // Tables in S3.EXE's read-only data.
-const std::int32_t* const kDirX = reinterpret_cast<const std::int32_t*>(0x0065867c);
-const std::int32_t* const kDirY = reinterpret_cast<const std::int32_t*>(0x00658694);
-const std::int8_t* const kTerrainCost = reinterpret_cast<const std::int8_t*>(0x0065857c);
 
 // Assertion texts in S3.EXE.
-const char* const kPathingFile = reinterpret_cast<const char*>(0x0069f9dc);  // E:\Siedler3\Dirk\Pathing.cpp
-const char* const kTextShouldManage = reinterpret_cast<const char*>(0x0069f9bc);  // "Das solltest du schon schaffen"
-const char* const kTextSectorType = reinterpret_cast<const char*>(0x0069f9fc);   // "Unsupported SectorType"
-const char* const kTextInvalidArea = reinterpret_cast<const char*>(0x0069fb04);  // "Invalid area"
-const char* const kTextInvalidAngle = reinterpret_cast<const char*>(0x0069fb2c);  // "Invalid angle selection"
 
 constexpr std::int32_t kBlocked = 0x10000;
 
 // Returns the final value (some helpers leave it in EAX).
 std::uint32_t SetPathPhase(const PathState& state, std::uint32_t phase) {
-    volatile std::uint32_t& marker = *reinterpret_cast<volatile std::uint32_t*>(kPathPhaseAddress);
+    volatile std::uint32_t& marker = g_pathPhase;
     marker = phase;
     const std::uint32_t withType = (state.sector_type << 8) | phase;
     marker = withType;
@@ -144,7 +138,7 @@ bool InSector(const PathState& state, const Tile& tile) {
 }
 
 std::int32_t TerrainCost(const Tile& tile) {
-    return kTerrainCost[tile.terrain];
+    return g_terrainCost[tile.terrain];
 }
 
 std::int32_t Negate(std::int32_t value) {
@@ -188,7 +182,7 @@ using TrackAngleFn = std::int32_t(__fastcall*)(GameWorld* world, void* edx, Path
 std::int32_t __fastcall Pathing_TileCost(GameWorld* world, void*, PathState* state, std::int32_t x, std::int32_t y,
                                          std::uint32_t needEmpty, std::uint32_t withCost, std::uint32_t blockBusy) {
     if (!IsValidSectorType(*state)) {
-        Win32_ThrowAssertmentFailed(kTextSectorType, kPathingFile, 0x409);
+        Win32_ThrowAssertmentFailed(texts::kUnsupportedSectorType, texts::kPathingFile, 0x409);
         return kBlocked;
     }
     const Tile& tile = TileAt(world, x, y);
@@ -213,7 +207,7 @@ std::int32_t __fastcall Pathing_TileCost(GameWorld* world, void*, PathState* sta
 std::int32_t __fastcall Pathing_SectorTileCost(GameWorld* world, void*, PathState* state, std::int32_t x,
                                                std::int32_t y) {
     if (!IsValidSectorType(*state)) {
-        Win32_ThrowAssertmentFailed(kTextSectorType, kPathingFile, 0x426);
+        Win32_ThrowAssertmentFailed(texts::kUnsupportedSectorType, texts::kPathingFile, 0x426);
         return kBlocked;
     }
     const Tile& tile = TileAt(world, x, y);
@@ -224,7 +218,7 @@ std::int32_t __fastcall Pathing_SectorTileCost(GameWorld* world, void*, PathStat
 std::int32_t __fastcall Pathing_FreeTileCost(GameWorld* world, void*, PathState* state, std::int32_t x,
                                              std::int32_t y) {
     if (!IsValidSectorType(*state)) {
-        Win32_ThrowAssertmentFailed(kTextSectorType, kPathingFile, 0x449);
+        Win32_ThrowAssertmentFailed(texts::kUnsupportedSectorType, texts::kPathingFile, 0x449);
         return kBlocked;
     }
     const Tile& tile = TileAt(world, x, y);
@@ -250,7 +244,7 @@ std::int32_t __fastcall Pathing_DirectionOfDelta(GameWorld*, void*, std::int32_t
     } else if (dy < 0) {
         return 5;
     }
-    Win32_ThrowAssertmentFailed(kTextShouldManage, kPathingFile, 0x493);
+    Win32_ThrowAssertmentFailed(texts::kShouldManage, texts::kPathingFile, 0x493);
     return 0xff;
 }
 
@@ -286,7 +280,7 @@ std::int32_t __fastcall Pathing_DistanceAlong(GameWorld*, void*, PathState* stat
         case 5:
             return static_cast<std::int32_t>(static_cast<std::uint32_t>(a) - static_cast<std::uint32_t>(b));
         default:
-            Win32_ThrowAssertmentFailed(kTextInvalidArea, kPathingFile, 0x716);
+            Win32_ThrowAssertmentFailed(texts::kInvalidArea, texts::kPathingFile, 0x716);
             return a;
     }
 }
@@ -322,7 +316,7 @@ std::int32_t __fastcall Pathing_Angle(GameWorld* world, void*, std::int32_t dx, 
         }
         return static_cast<std::int32_t>(0x80000u - static_cast<std::uint32_t>(Mul(Reciprocal(world, ay), ax)));
     }
-    Win32_ThrowAssertmentFailed(kTextInvalidAngle, kPathingFile, 0x76c);
+    Win32_ThrowAssertmentFailed(texts::kInvalidAngle, texts::kPathingFile, 0x76c);
     return 0;
 }
 
@@ -432,7 +426,7 @@ std::uint32_t __fastcall Pathing_ChooseSextant(GameWorld*, void*, PathState* sta
             result = 0x25;
         }
     } else {
-        Win32_ThrowAssertmentFailed(kTextShouldManage, kPathingFile, 0x140);
+        Win32_ThrowAssertmentFailed(texts::kShouldManage, texts::kPathingFile, 0x140);
         result = 0xff;
     }
     s.sextant = static_cast<std::int32_t>(result & 0x1f);
@@ -496,10 +490,10 @@ std::int32_t PreviousDirection(std::int32_t direction) {
 // The neighbour of (x, y) in `direction` (any value; the tables are read
 // like the original reads them).
 std::int32_t StepX(std::int32_t x, std::int32_t direction) {
-    return Add(x, kDirX[direction]);
+    return Add(x, g_directionDx[direction]);
 }
 std::int32_t StepY(std::int32_t y, std::int32_t direction) {
-    return Add(y, kDirY[direction]);
+    return Add(y, g_directionDy[direction]);
 }
 
 // TileCost(state, neighbour in `direction` of (x, y), ...).
@@ -1024,14 +1018,8 @@ std::int32_t FirstFreeDirection(GameWorld* world, PathState* state, std::int32_t
     return -1;
 }
 
-constexpr std::uintptr_t kLogRightWallNoDirection = 0x0069fad8;  // "PATH: Rightwall, No Direction %i %i %i %i"
-constexpr std::uintptr_t kLogRightWallNoWay = 0x0069fab4;        // "PATH: Rightwall, No way %i %i %i %i"
-constexpr std::uintptr_t kLogRightWallNoAngle = 0x0069fa8c;      // "PATH: Right wall, no angle %i %i %i %i"
-constexpr std::uintptr_t kLogLeftWallNoDirection = 0x0069fa60;   // "PATH: Leftwall, no direction %i %i %i %i"
-constexpr std::uintptr_t kLogLeftWallNoWay = 0x0069fa3c;         // "PATH: Leftwall, no way  %i %i %i %i"
-constexpr std::uintptr_t kLogLeftWallNoAngle = 0x0069fa14;       // "PATH: Leftwall, no angle %i %i %i %i"
 
-void LogWall(std::uintptr_t format, const Settler& settler, std::int32_t x, std::int32_t y) {
+void LogWall(const GameText& format, const Settler& settler, std::int32_t x, std::int32_t y) {
     GameDebugLog(format, static_cast<std::uint32_t>(settler.art), static_cast<std::uint32_t>(settler.job), x, y);
 }
 
@@ -1120,7 +1108,7 @@ std::uint32_t __fastcall Pathing_FollowRightWall(GameWorld* world, void*, Settle
                     if (result == 0x81) {
                         result = 0x82;
                         if (s.target_free == 0) {
-                            LogWall(kLogRightWallNoDirection, *settler, ax, ay);
+                            LogWall(texts::kRightWallNoDirection, *settler, ax, ay);
                         }
                         doB = false;
                     } else {
@@ -1134,7 +1122,7 @@ std::uint32_t __fastcall Pathing_FollowRightWall(GameWorld* world, void*, Settle
                         if (result == 0x81) {
                             result = 0x82;
                             if (s.target_free == 0) {
-                                LogWall(kLogRightWallNoWay, *settler, ax, ay);
+                                LogWall(texts::kRightWallNoWay, *settler, ax, ay);
                             }
                             doB = false;
                         } else {
@@ -1142,7 +1130,7 @@ std::uint32_t __fastcall Pathing_FollowRightWall(GameWorld* world, void*, Settle
                         }
                     } else if ((ax == TileOf(s.trace_x) && ay == TileOf(s.trace_y)) || (ax == s.x && ay == s.y)) {
                         if (s.target_x == bestAx && s.target_y == bestAy && result == 0x81 && s.target_free == 0) {
-                            LogWall(kLogRightWallNoAngle, *settler, ax, ay);
+                            LogWall(texts::kRightWallNoAngle, *settler, ax, ay);
                         }
                         s.target_x = bestAx;
                         s.target_y = bestAy;
@@ -1170,7 +1158,7 @@ std::uint32_t __fastcall Pathing_FollowRightWall(GameWorld* world, void*, Settle
                     if (result == 0x80) {
                         result = 0x82;
                         if (s.target_free == 0) {
-                            LogWall(kLogLeftWallNoDirection, *settler, bx, by);
+                            LogWall(texts::kLeftWallNoDirection, *settler, bx, by);
                         }
                     } else {
                         result = 0x81;
@@ -1183,14 +1171,14 @@ std::uint32_t __fastcall Pathing_FollowRightWall(GameWorld* world, void*, Settle
                         if (result == 0x80) {
                             result = 0x82;
                             if (s.target_free == 0) {
-                                LogWall(kLogLeftWallNoWay, *settler, bx, by);
+                                LogWall(texts::kLeftWallNoWay, *settler, bx, by);
                             }
                         } else {
                             result = 0x81;
                         }
                     } else if ((bx == TileOf(s.trace_x) && by == TileOf(s.trace_y)) || (bx == s.x && by == s.y)) {
                         if (s.target_x == bestBx && s.target_y == bestBy && result == 0x80 && s.target_free == 0) {
-                            LogWall(kLogLeftWallNoAngle, *settler, bx, by);
+                            LogWall(texts::kLeftWallNoAngle, *settler, bx, by);
                         }
                         s.target_x = bestBx;
                         s.target_y = bestBy;
@@ -1219,8 +1207,6 @@ namespace {
 
 // Per direction (16 bytes each): the coefficients that split (dx, dy) into
 // the two axis components (0x6586ac) and the two axes (0x65870c).
-const std::int32_t* const kSplitTable = reinterpret_cast<const std::int32_t*>(0x006586ac);
-const std::int32_t* const kAxisTable = reinterpret_cast<const std::int32_t*>(0x0065870c);
 
 }  // namespace
 
@@ -1258,10 +1244,10 @@ std::uint32_t __fastcall Pathing_PlanLine(GameWorld* world, void*, Settler* sett
         s.trace_x = static_cast<std::int32_t>((static_cast<std::uint32_t>(s.target_x) << 16) + 0x8000u);
         const std::int32_t direction = Pathing_DirectionOfDelta(world, nullptr, s.dx, s.dy);
         s.sextant = direction;
-        const std::int32_t* split = kSplitTable + direction * 4;
+        const std::int32_t* split = g_pathSplitTable[direction];
         s.along_a = Add(Mul(split[1], s.dy), Mul(split[0], s.dx));
         s.along_b = Add(Mul(split[3], s.dy), Mul(split[2], s.dx));
-        const std::int32_t* axes = kAxisTable + direction * 4;
+        const std::int32_t* axes = g_pathAxisTable[direction];
         s.axis_a_x = axes[0];
         s.axis_b_x = axes[1];
         s.axis_a_y = axes[2];
@@ -1302,7 +1288,6 @@ namespace {
 
 // int32 per settler type: the bonus of keeping the current direction in
 // ChooseStepByCost (1, or 2 for a few types).
-const std::int32_t* const kSettlerTypeTurnCost = reinterpret_cast<const std::int32_t*>(0x00659024);
 
 bool SameRegion(std::uint32_t sectorType, const Tile& a, const Tile& b) {
     switch (sectorType) {
@@ -1340,11 +1325,11 @@ std::uint32_t __fastcall Pathing_FindPath(GameWorld* world, void*, std::uint32_t
     const std::uint32_t sector = GameWorld_SettlerGroup(world, nullptr, number);
     s.sector_type = sector;
     s.turn = settler.direction < 6 ? static_cast<std::int32_t>(settler.direction) : 1000;
-    s.art_cost = kSettlerTypeTurnCost[settler.art];
+    s.art_cost = g_settlerTypeTurnCost[settler.art];
     if (!SameRegion(sector, TileAt(world, settler.x, settler.y), TileAt(world, settler.target_x, settler.target_y))) {
         return 0xff;
     }
-    volatile std::uint32_t& marker = *reinterpret_cast<volatile std::uint32_t*>(kPathPhaseAddress);
+    volatile std::uint32_t& marker = g_pathPhase;
     marker = (((s.walk_region << 8) | sector) << 8) | 1;
     settler.path_mode &= 0xdf;
     std::uint32_t result = 0xff;
@@ -1428,8 +1413,8 @@ constexpr std::size_t kFullWorld = sizeof(GameWorld);
 constexpr std::int32_t kTestMin = 8;
 constexpr std::int32_t kTestMax = 760;
 
-std::uint32_t& PathPhase() {
-    return GameGlobal<std::uint32_t>(kPathPhaseAddress);
+volatile std::uint32_t& PathPhase() {
+    return g_pathPhase;
 }
 
 // A random state for a position in kTestMin..kTestMax; region values small
@@ -1489,7 +1474,7 @@ bool RunPathCase(test::Context& ctx, test::WorldPair& worlds, const PathState& s
                  int checkEvery) {
     PathState a = start;
     PathState b = start;
-    std::uint32_t& phase = PathPhase();
+    volatile std::uint32_t& phase = PathPhase();
     const std::uint32_t saved = phase;
     phase = 0x5a5a5a5a;
     const std::int32_t expected = call(true, worlds.original(), &a);
@@ -1697,10 +1682,10 @@ WalkCase PrepareWalkCase(test::Context& ctx, test::WorldPair& worlds) {
     const std::int32_t sextant = static_cast<std::int32_t>(ctx.rng().Below(6));
     s.sextant = ctx.rng().Chance(1, 50) ? static_cast<std::int32_t>(ctx.rng().Below(8)) : sextant;
     const std::int32_t axisA = (sextant + 1) % 6;
-    s.axis_a_x = ctx.rng().Chance(1, 20) ? ctx.rng().Range(-1, 1) : kDirX[axisA];
-    s.axis_a_y = ctx.rng().Chance(1, 20) ? ctx.rng().Range(-1, 1) : kDirY[axisA];
-    s.axis_b_x = kDirX[sextant];
-    s.axis_b_y = kDirY[sextant];
+    s.axis_a_x = ctx.rng().Chance(1, 20) ? ctx.rng().Range(-1, 1) : g_directionDx[axisA];
+    s.axis_a_y = ctx.rng().Chance(1, 20) ? ctx.rng().Range(-1, 1) : g_directionDy[axisA];
+    s.axis_b_x = g_directionDx[sextant];
+    s.axis_b_y = g_directionDy[sextant];
     s.along_a = ctx.rng().Chance(1, 5) ? 0 : ctx.rng().Range(0, 30);
     s.along_b = ctx.rng().Chance(1, 5) ? 0 : ctx.rng().Range(0, 30);
     s.chosen = static_cast<std::int32_t>(ctx.rng().Below(6));
@@ -1744,7 +1729,7 @@ WalkCase PrepareWalkCase(test::Context& ctx, test::WorldPair& worlds) {
         w->tiles[x][y].settler = static_cast<std::uint16_t>(n);
         if (queue == 1 && a != n) {
             // Neighbour in direction qd walks back to (x, y).
-            Tile& t = w->tiles[x + kDirX[qd]][y + kDirY[qd]];
+            Tile& t = w->tiles[x + g_directionDx[qd]][y + g_directionDy[qd]];
             t.settler = a;
             t.area = areaA;
             w->settlers[a].job = 2;
@@ -1753,17 +1738,17 @@ WalkCase PrepareWalkCase(test::Context& ctx, test::WorldPair& worlds) {
             w->settlers[a].path_steps = stepsA;
         } else if (queue == 3) {
             // The settler itself on the neighbour tile (a queue of length 1).
-            w->tiles[x + kDirX[qd]][y + kDirY[qd]].settler = static_cast<std::uint16_t>(n);
+            w->tiles[x + g_directionDx[qd]][y + g_directionDy[qd]].settler = static_cast<std::uint16_t>(n);
         } else if (queue == 2 && a != n && b != n && a != b) {
             // A ring of three: (x, y) -> qd -> qd + 2 -> qd + 4 = back.
-            const std::int32_t ax = x + kDirX[qd], ay = y + kDirY[qd];
+            const std::int32_t ax = x + g_directionDx[qd], ay = y + g_directionDy[qd];
             const std::int32_t d2 = (qd + 2) % 6;
             Tile& ta = w->tiles[ax][ay];
             ta.settler = a;
             w->settlers[a].job = 0x16d;
             w->settlers[a].path_mode = modeA;
             w->settlers[a].path_direction = static_cast<std::uint8_t>(d2);
-            Tile& tb = w->tiles[ax + kDirX[d2]][ay + kDirY[d2]];
+            Tile& tb = w->tiles[ax + g_directionDx[d2]][ay + g_directionDy[d2]];
             tb.settler = b;
             w->settlers[b].job = 2;
             w->settlers[b].path_mode = modeB;
@@ -1924,10 +1909,10 @@ void PrepareObstacleWindow(test::Context& ctx, test::WorldPair& worlds, std::int
             const std::int32_t side = static_cast<std::int32_t>(ctx.rng().Below(6));
             const bool thick = ctx.rng().Chance(1, 2);
             for (std::int32_t i = -length / 2; i <= length / 2; ++i) {
-                const std::int32_t x = ox + i * kDirX[direction], y = oy + i * kDirY[direction];
+                const std::int32_t x = ox + i * g_directionDx[direction], y = oy + i * g_directionDy[direction];
                 block(x, y);
                 if (thick) {
-                    block(x + kDirX[side], y + kDirY[side]);
+                    block(x + g_directionDx[side], y + g_directionDy[side]);
                 }
             }
         } else {
@@ -1993,21 +1978,21 @@ PathCase PreparePathCase(test::Context& ctx, test::WorldPair& worlds) {
         };
         if (shape < 3) {
             for (std::int32_t k = 0; k < 6; ++k) {
-                block(x + kDirX[k], y + kDirY[k]);
+                block(x + g_directionDx[k], y + g_directionDy[k]);
             }
         } else if (shape < 6) {
             // Surrounded by working settlers: no step, the fallback.
             for (std::int32_t k = 0; k < 6; ++k) {
                 const auto other = static_cast<std::uint16_t>(1 + (n + 97 * (k + 1)) % 31998);
-                w->tiles[x + kDirX[k]][y + kDirY[k]].settler = other;
+                w->tiles[x + g_directionDx[k]][y + g_directionDy[k]].settler = other;
                 w->settlers[other].job = 4;
             }
         } else if (shape < 10) {
             for (std::int32_t k = 0; k < 6; ++k) {
                 for (std::int32_t j = 0; j < ringRadius; ++j) {
                     if (k != gap || j != ringRadius / 2) {
-                        block(x + ringRadius * kDirX[k] + j * kDirX[(k + 2) % 6],
-                              y + ringRadius * kDirY[k] + j * kDirY[(k + 2) % 6]);
+                        block(x + ringRadius * g_directionDx[k] + j * g_directionDx[(k + 2) % 6],
+                              y + ringRadius * g_directionDy[k] + j * g_directionDy[(k + 2) % 6]);
                     }
                 }
             }
@@ -2055,7 +2040,7 @@ PathState BuildLineState(GameWorld* world, std::uint32_t number, std::uint8_t ta
     s.wide_region = here.wide_region;
     s.sector_type = GameWorld_SettlerGroup(world, nullptr, number);
     s.turn = settler.direction < 6 ? static_cast<std::int32_t>(settler.direction) : 1000;
-    s.art_cost = kSettlerTypeTurnCost[settler.art];
+    s.art_cost = g_settlerTypeTurnCost[settler.art];
     s.target_x = settler.target_x;
     s.target_y = settler.target_y;
     s.target_free = targetFree;
@@ -2067,10 +2052,10 @@ PathState BuildLineState(GameWorld* world, std::uint32_t number, std::uint8_t ta
     s.trace_y = (s.target_y << 16) + 0x8000;
     const std::int32_t direction = Pathing_DirectionOfDelta(world, nullptr, s.dx, s.dy);
     s.sextant = direction;
-    const std::int32_t* split = kSplitTable + direction * 4;
+    const std::int32_t* split = g_pathSplitTable[direction];
     s.along_a = split[1] * s.dy + split[0] * s.dx;
     s.along_b = split[3] * s.dy + split[2] * s.dx;
-    const std::int32_t* axes = kAxisTable + direction * 4;
+    const std::int32_t* axes = g_pathAxisTable[direction];
     s.axis_a_x = axes[0];
     s.axis_b_x = axes[1];
     s.axis_a_y = axes[2];

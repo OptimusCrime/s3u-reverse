@@ -41,6 +41,7 @@
 
 #include "game/layout.h"
 #include "game/raw.h"
+#include "game/tables.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -119,8 +120,8 @@ U Ftol(double value) {
 }
 
 // _ftol(sqrt((double)(int32)squares) * factor), factor read from S3.EXE's data.
-U FlightTime(U squares, std::uintptr_t factorAddress) {
-    const double factor = *reinterpret_cast<const double*>(factorAddress);
+U FlightTime(U squares, const double& factorInData) {
+    const double factor = factorInData;
     return Ftol(std::sqrt(static_cast<double>(static_cast<std::int32_t>(squares))) * factor);
 }
 
@@ -132,13 +133,13 @@ struct Flight {
     U time;      // FlightTime
 };
 
-Flight MakeFlight(U a2, U a3, U a6, U a7, std::int32_t divisor, std::uintptr_t factorAddress) {
+Flight MakeFlight(U a2, U a3, U a6, U a7, std::int32_t divisor, const double& factor) {
     Flight f{};
     f.dx = a6 - a2;
     f.dy = a7 - a3;
     f.squares = f.dx * f.dx + f.dy * f.dy;
     f.arc = static_cast<U>(static_cast<std::int32_t>(f.dx * f.dx + 4 * (f.dy * f.dy)) / divisor);
-    f.time = FlightTime(f.squares, factorAddress);
+    f.time = FlightTime(f.squares, factor);
     return f;
 }
 
@@ -183,9 +184,6 @@ void EndEffects(MapEffectTable* self, U tick, U time, U startKind, U endKind, U 
     MapEffects_Add(self, nullptr, &effect);
 }
 
-constexpr std::uintptr_t kFactor05 = 0x0065a1c0;  // used by 0x545150, 0x5453f0
-constexpr std::uintptr_t kFactor2 = 0x0065a1c8;   // 0x545730
-constexpr std::uintptr_t kFactor0 = 0x0065a1d0;   // 0x5458d0
 
 }  // namespace
 
@@ -279,7 +277,7 @@ std::uint32_t __fastcall MapEffects_RemoveMatching(MapEffectTable* self, void*, 
 std::uint32_t __fastcall MapEffects_SpawnArrow(MapEffectTable* self, void*, U a1, U a2, U a3, U a4, U a5, U a6, U a7,
                                                U a8, U a9) {
     const U tick = a1 + 10;
-    const Flight f = MakeFlight(a2, a3, a6, a7, 12000, kFactor05);
+    const Flight f = MakeFlight(a2, a3, a6, a7, 12000, g_flightFactor05);
     return ThreeStages(self, tick, f, DirectionGraphics(f, 0x10064), a2, a3, a4, a5, a6, a7, a8, a9);
 }
 
@@ -288,7 +286,7 @@ std::uint32_t __fastcall MapEffects_SpawnArrow(MapEffectTable* self, void*, U a1
 std::uint32_t __fastcall MapEffects_SpawnProjectile1(MapEffectTable* self, void*, U a1, U a2, U a3, U a4, U a5, U a6,
                                                      U a7, U a8, U a9) {
     const U tick = a1 + 3;
-    const Flight f = MakeFlight(a2, a3, a6, a7, 12000, kFactor05);
+    const Flight f = MakeFlight(a2, a3, a6, a7, 12000, g_flightFactor05);
     ThreeStages(self, tick, f, DirectionGraphics(f, 0x160008), a2, a3, a4, a5, a6, a7, a8, a9);
     EndEffects(self, tick, f.time, 0x55, 0x59, a2, a3, a6, a7, a8, a9);
     return f.time + 3;
@@ -299,7 +297,7 @@ std::uint32_t __fastcall MapEffects_SpawnProjectile1(MapEffectTable* self, void*
 std::uint32_t __fastcall MapEffects_SpawnProjectile0(MapEffectTable* self, void*, U a1, U a2, U a3, U a4, U a5, U a6,
                                                      U a7, U a8, U a9) {
     const U tick = a1 + 2;
-    const Flight f = MakeFlight(a2, a3, a6, a7, 1500, kFactor0);
+    const Flight f = MakeFlight(a2, a3, a6, a7, 1500, g_flightFactor0);
     const U p1x = Div256(f.dx * 64) + a2, p2x = Div256(f.dx * 192) + a2;
     const U lift = Div256(f.arc * 160);
     const U p1y = Div256(f.dy * 64) - lift + a3, p2y = Div256(f.dy * 192) - lift + a3;
@@ -321,7 +319,7 @@ std::uint32_t __fastcall MapEffects_SpawnProjectile0(MapEffectTable* self, void*
 std::uint32_t __fastcall MapEffects_SpawnProjectile2(MapEffectTable* self, void*, U a1, U a2, U a3, U a4, U a5, U a6,
                                                      U a7, U a8, U a9) {
     const U tick = a1 + 8;
-    const Flight f = MakeFlight(a2, a3, a6, a7, 12000, kFactor2);
+    const Flight f = MakeFlight(a2, a3, a6, a7, 12000, g_flightFactor2);
     MapEffect effect;
     MapEffect_Make_543c40(&effect, Edx(tick), f.time, a2, a3, a6, a7, f.arc, a4, a5, a8, a9, 0x200008, 0xc);
     MapEffects_Add(self, nullptr, &effect);
@@ -585,9 +583,9 @@ void Compare(test::Context& ctx, const Functions& candidate, int cases, int only
 // Wrong: rounds the flight time to nearest instead of truncating.
 std::uint32_t __fastcall WrongSpawnProjectile2(MapEffectTable* self, void* edx, U a1, U a2, U a3, U a4, U a5, U a6,
                                                U a7, U a8, U a9) {
-    const Flight f = MakeFlight(a2, a3, a6, a7, 12000, kFactor2);
+    const Flight f = MakeFlight(a2, a3, a6, a7, 12000, g_flightFactor2);
     const double exact = std::sqrt(static_cast<double>(static_cast<std::int32_t>(f.squares))) *
-                         *reinterpret_cast<const double*>(kFactor2);
+                         g_flightFactor2;
     if (exact - std::floor(exact) >= 0.5) {
         return MapEffects_SpawnProjectile2(self, edx, a1 + 1, a2, a3, a4, a5, a6, a7, a8, a9);
     }

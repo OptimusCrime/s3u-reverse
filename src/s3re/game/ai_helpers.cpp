@@ -60,7 +60,9 @@
 //              the row, as the original reads it). EAX = the word.
 
 #include "game/ai_layout.h"
+#include "game/globals.h"
 #include "game/layout.h"
+#include "game/tables.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
@@ -126,12 +128,11 @@ S3RE_HOOK(0x00551a30, AI_SetCurrentPlayer, SetCurrentPlayerFn, Original_AI_SetCu
 // globals.
 std::uint32_t __fastcall AI_SetCurrentPlayer(void* player) {
     const auto* computer = static_cast<const ComputerPlayer*>(player);
-    Global<void*>(kAiPlayer) = player;
-    Global<std::uint8_t>(kAiPlayerNumber) = computer->player_number;
-    Global<std::uint32_t>(kAiPlayerSetup) =
-        computer->setup_index * kPlayerSetupBytes + static_cast<std::uint32_t>(kPlayerSetupTable);
+    g_aiPlayer = static_cast<ComputerPlayer*>(player);
+    g_aiPlayerNumber = computer->player_number;
+    g_aiPlayerSetup = &g_aiPlayerSetups[computer->setup_index];
     const std::uint32_t data = computer->data;
-    Global<std::uint32_t>(kAiPlayerData) = data;
+    g_aiPlayerData = reinterpret_cast<AiPlayerData*>(data);
     return data;
 }
 
@@ -176,7 +177,7 @@ S3RE_HOOK(0x00572090, AI_IsOnMap, IsOnMapFn, Original_AI_IsOnMap, AI_IsOnMap);
 
 // Purpose: Whether a coordinate lies on the map, for the computer players.
 bool __fastcall AI_IsOnMap(std::int32_t v) {
-    return v >= 0 && v < static_cast<std::int32_t>(AiWorld()->map_size);
+    return v >= 0 && v < static_cast<std::int32_t>(g_aiWorld.get()->map_size);
 }
 
 S3RE_HOOK(0x00572050, AI_ClampToMap, ClampToMapFn, Original_AI_ClampToMap, AI_ClampToMap);
@@ -189,11 +190,11 @@ std::uint32_t __fastcall AI_ClampToMap(std::int32_t* x, std::int32_t* y) {
     if (*y < 0) {
         *y = 0;
     }
-    const auto size = static_cast<std::int32_t>(AiWorld()->map_size);
+    const auto size = static_cast<std::int32_t>(g_aiWorld.get()->map_size);
     if (*x > size) {
         *x = size;
     }
-    const auto size2 = static_cast<std::int32_t>(AiWorld()->map_size);
+    const auto size2 = static_cast<std::int32_t>(g_aiWorld.get()->map_size);
     if (*y > size2) {
         *y = size2;
     }
@@ -205,7 +206,7 @@ S3RE_HOOK(0x0059dc10, AI_AreaGoodsAmount, AreaGoodsAmountFn, Original_AI_AreaGoo
 // Purpose: How many units of a goods type lie on the piles of an economy
 // area, as the computer players see it.
 std::uint32_t __fastcall AI_AreaGoodsAmount(const std::uint8_t* goods, const std::uint16_t* area) {
-    GameWorld* world = AiWorld();
+    GameWorld* world = g_aiWorld.get();
     // Neither the area (word) nor the goods type (byte) is range-checked:
     // indexes past the arrays read what lies there, as the original does.
     std::uint16_t pile = world->areas[*area].piles_by_goods[*goods];
@@ -224,7 +225,7 @@ S3RE_HOOK(0x0058e170, AI_GetBuilding, GetBuildingFn, Original_AI_GetBuilding, AI
 // null (with an error flag for a bad number) if there is no such building.
 void* __fastcall AI_GetBuilding(std::uint32_t id, std::uint32_t* error) {
     *error = 0;
-    GameWorld* world = AiWorld();
+    GameWorld* world = g_aiWorld.get();
     const std::uint32_t index = id & 0xffff;
     if (index > world->building_high_water) {
         *error = 1;
@@ -243,10 +244,10 @@ S3RE_HOOK(0x0058ec50, AI_RecordBestCandidate, RecordBestCandidateFn, Original_AI
 std::uint32_t __fastcall AI_RecordBestCandidate(std::uint32_t index, std::uint32_t score, std::uint32_t a,
                                                 std::uint32_t b) {
     const std::uint32_t i = index & 0xffff;
-    auto* data = Global<AiPlayerData*>(kAiPlayerData);
+    AiPlayerData* data = g_aiPlayerData;
     // (The index is not range-checked: the arrays are indexed past their
     // declared ends like the original's address arithmetic.)
-    data->candidate_values[i] = reinterpret_cast<const std::uint16_t*>(kCandidateDefaults)[i];
+    data->candidate_values[i] = g_aiCandidateDefaults[i];
     AiCandidate& candidate = data->best[i];
     if (candidate.score >= static_cast<std::uint16_t>(score)) {
         return i * 6;
@@ -307,12 +308,12 @@ S3RE_HOOK(0x00599610, AI_BuildingArea, BuildingAreaFn, Original_AI_BuildingArea,
 // Purpose: The economy area a building stands in, for the computer players
 // (0xffff for a position off the map).
 std::uint32_t __fastcall AI_BuildingArea(const std::uint16_t* building) {
-    GameWorld* world = AiWorld();
+    GameWorld* world = g_aiWorld.get();
     const std::uint32_t id = *building;
     const layout::Building& record = world->buildings[id];
     const std::uint16_t x = record.door_x;
     const std::uint16_t y = record.door_y;
-    if (x >= Global<std::uint16_t>(kAiMapSizeX) || y >= Global<std::uint16_t>(kAiMapSizeY)) {
+    if (x >= g_aiMapSizeX || y >= g_aiMapSizeY) {
         return ((id * 29) & 0xffff0000u) | 0xffffu;  // `or ax, 0FFFFh` on 29 * id
     }
     // The original indexes [world + (tile + 0x44d9) * 24], which is the
@@ -331,7 +332,7 @@ std::uint32_t __stdcall AI_FreeTileArea(std::int32_t x, std::int32_t y) {
     if (!AI_IsOnMap(x) || !AI_IsOnMap(y)) {
         return 0xffffffffu;
     }
-    GameWorld* world = Global<GameWorld*>(kAiMapWorld);
+    GameWorld* world = g_aiMapWorld;
     // At x = map size the tile is the one just past the row (32-bit offset
     // arithmetic, as the original reads it).
     auto tile = [&](std::int32_t tx) -> layout::Tile& {
@@ -435,11 +436,11 @@ S3RE_HOOK(0x005996c0, AI_AreaAlongRow, AreaAlongRowFn, Original_AI_AreaAlongRow,
 // a tile without an area it looks a few tiles further in +x (0xffff off the
 // map).
 std::uint32_t __fastcall AI_AreaAlongRow(std::uint32_t x, std::uint32_t y) {
-    const std::uint16_t sizeX = Global<std::uint16_t>(kAiMapSizeX);
-    if (static_cast<std::uint16_t>(x) >= sizeX || static_cast<std::uint16_t>(y) >= Global<std::uint16_t>(kAiMapSizeY)) {
+    const std::uint16_t sizeX = g_aiMapSizeX;
+    if (static_cast<std::uint16_t>(x) >= sizeX || static_cast<std::uint16_t>(y) >= g_aiMapSizeY) {
         return 0xffff;
     }
-    GameWorld* world = AiWorld();
+    GameWorld* world = g_aiWorld.get();
     y &= 0xffff;
     // The original's register holds (tile index + 0x44d9) * 3; times 8 it is
     // the offset of the tile's area word (see AI_BuildingArea).
@@ -551,7 +552,7 @@ std::uint32_t __fastcall AI_ResetAgentData(void* self, void* /*edx*/) {
     for (std::uint32_t* array : {data->dwords3a4, data->dwords354, data->dwords2b4, data->dwords304, data->dwords3f4}) {
         std::memset(array, 0, sizeof(data->dwords3a4));
     }
-    AiVector* vectors = AgentVectors();
+    AiVector* vectors = g_aiAgentVectors;
     for (std::size_t k = 0; k < kAgentVectorCount; ++k) {
         vectors[k].end = vectors[k].begin;
     }
@@ -577,8 +578,8 @@ S3RE_HOOK(0x00553e00, AI_ClearGlobals7e0568, ClearGlobalsFn, Original_AI_ClearGl
 // Purpose: Resets two AI globals (0x7e0568, 0x7e056c; meaning unknown)
 // when a computer player's turn is set up.
 std::uint32_t __cdecl AI_ClearGlobals7e0568() {
-    Global<std::uint32_t>(kEvaLandRefCount) = 0;
-    Global<std::uint32_t>(kEvaLandInstance) = 0;
+    g_aiEvaLandRefCount = 0;
+    g_aiEvaLand = nullptr;
     return 0;
 }
 
@@ -630,21 +631,23 @@ AiFunctions OurAi() {
 }
 
 // The globals the functions read or write, saved and restored around a test.
+// A pointer global's value as a dword (for comparing and printing).
+std::uint32_t PointerBits(const void* p) {
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p));
+}
+
 struct SavedGlobals {
-    std::uint32_t values[5];
-    static constexpr std::uintptr_t kAddresses[5] = {kAiWorld, kAiPlayer, kAiPlayerSetup, kAiPlayerData,
-                                                     kAiPlayerNumber};
-    SavedGlobals() {
-        for (int i = 0; i < 4; ++i) {
-            values[i] = Global<std::uint32_t>(kAddresses[i]);
-        }
-        values[4] = Global<std::uint8_t>(kAiPlayerNumber);
-    }
+    GameWorld* world = g_aiWorld;
+    ComputerPlayer* player = g_aiPlayer;
+    AiPlayerSetup* setup = g_aiPlayerSetup;
+    AiPlayerData* data = g_aiPlayerData;
+    std::uint8_t number = g_aiPlayerNumber;
     ~SavedGlobals() {
-        for (int i = 0; i < 4; ++i) {
-            Global<std::uint32_t>(kAddresses[i]) = values[i];
-        }
-        Global<std::uint8_t>(kAiPlayerNumber) = static_cast<std::uint8_t>(values[4]);
+        g_aiWorld = world;
+        g_aiPlayer = player;
+        g_aiPlayerSetup = setup;
+        g_aiPlayerData = data;
+        g_aiPlayerNumber = number;
     }
 };
 
@@ -672,23 +675,23 @@ void BuildPileList(test::Context& ctx, test::WorldPair& worlds, std::uint32_t ar
 void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
     const AiFunctions original = OriginalAi();
     SavedGlobals saved;
-    const std::uint32_t savedMapSizes = Global<std::uint32_t>(kAiMapSizeY);  // both words
-    const std::uint32_t savedMapWorld = Global<std::uint32_t>(kAiMapWorld);
     struct Restore {
-        std::uint32_t sizes, world;
+        std::uint16_t sizeX = g_aiMapSizeX, sizeY = g_aiMapSizeY;
+        GameWorld* world = g_aiMapWorld;
         ~Restore() {
-            Global<std::uint32_t>(kAiMapSizeY) = sizes;
-            Global<std::uint32_t>(kAiMapWorld) = world;
+            g_aiMapSizeX = sizeX;
+            g_aiMapSizeY = sizeY;
+            g_aiMapWorld = world;
         }
-    } restore{savedMapSizes, savedMapWorld};
+    } restore;
     test::WorldPair worlds(ctx, 0x153a128);
     std::vector<std::uint8_t> dataA(0x2000), dataB(0x2000);
     ctx.rng().Fill(dataA.data(), dataA.size());
     dataB = dataA;
     auto useWorld = [&](bool ours) {
-        Global<void*>(kAiWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
-        Global<void*>(kAiPlayerData) = ours ? dataB.data() : dataA.data();
-        Global<void*>(kAiMapWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
+        g_aiWorld = ours ? worlds.ours() : worlds.original();
+        g_aiPlayerData = reinterpret_cast<AiPlayerData*>(ours ? dataB.data() : dataA.data());
+        g_aiMapWorld = ours ? worlds.ours() : worlds.original();
     };
     for (int i = 0; i < cases; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(14));
@@ -699,18 +702,18 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
                 ctx.rng().Fill(player, sizeof(player));
                 reinterpret_cast<ComputerPlayer*>(player)->setup_index = ctx.rng().Below(64);
                 const std::uint32_t ra = original.setCurrentPlayer(player);
-                const std::uint32_t ga[4] = {Global<std::uint32_t>(kAiPlayer), Global<std::uint8_t>(kAiPlayerNumber),
-                                             Global<std::uint32_t>(kAiPlayerSetup), Global<std::uint32_t>(kAiPlayerData)};
-                Global<std::uint32_t>(kAiPlayer) = 0;
-                Global<std::uint8_t>(kAiPlayerNumber) = 0;
-                Global<std::uint32_t>(kAiPlayerSetup) = 0;
-                Global<std::uint32_t>(kAiPlayerData) = 0;
+                const std::uint32_t ga[4] = {PointerBits(g_aiPlayer.get()), g_aiPlayerNumber.get(),
+                                             PointerBits(g_aiPlayerSetup.get()), PointerBits(g_aiPlayerData.get())};
+                g_aiPlayer = nullptr;
+                g_aiPlayerNumber = 0;
+                g_aiPlayerSetup = nullptr;
+                g_aiPlayerData = nullptr;
                 const std::uint32_t rb = candidate.setCurrentPlayer(player);
                 same &= S3RE_EXPECT_EQ(ra, rb);
-                same &= S3RE_EXPECT_EQ(ga[0], Global<std::uint32_t>(kAiPlayer));
-                same &= S3RE_EXPECT_EQ(ga[1], static_cast<std::uint32_t>(Global<std::uint8_t>(kAiPlayerNumber)));
-                same &= S3RE_EXPECT_EQ(ga[2], Global<std::uint32_t>(kAiPlayerSetup));
-                same &= S3RE_EXPECT_EQ(ga[3], Global<std::uint32_t>(kAiPlayerData));
+                same &= S3RE_EXPECT_EQ(ga[0], PointerBits(g_aiPlayer.get()));
+                same &= S3RE_EXPECT_EQ(ga[1], static_cast<std::uint32_t>(g_aiPlayerNumber.get()));
+                same &= S3RE_EXPECT_EQ(ga[2], PointerBits(g_aiPlayerSetup.get()));
+                same &= S3RE_EXPECT_EQ(ga[3], PointerBits(g_aiPlayerData.get()));
                 break;
             }
             case 1:
@@ -852,8 +855,8 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
                     w->buildings[id].door_x = doorX;
                     w->buildings[id].door_y = doorY;
                 });
-                Global<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(ctx.rng().Below(420));
-                Global<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(ctx.rng().Below(420));
+                g_aiMapSizeX = static_cast<std::uint16_t>(ctx.rng().Below(420));
+                g_aiMapSizeY = static_cast<std::uint16_t>(ctx.rng().Below(420));
                 useWorld(false);
                 const std::uint32_t ra = original.buildingArea(&id);
                 useWorld(true);
@@ -959,28 +962,27 @@ Ai25Functions OurAi25() {
 
 // S3.EXE memory the functions write: the two globals and the 20 vectors
 // (plus the dword after them).
-constexpr std::uintptr_t kGlobalsLow = kEvaLandRefCount;
-static_assert(kEvaLandInstance == kGlobalsLow + 4);
-constexpr std::uintptr_t kVectorsLow = kAgentVectors;
+static_assert(g_aiEvaLand.address() == g_aiEvaLandRefCount.address() + 4);
 constexpr std::size_t kVectorsBytes = kAgentVectorCount * sizeof(AiVector) + 4;
-static_assert(kVectorsBytes == 0x7e7b68 - 0x7e7a24);
+void* GlobalsLow() { return &g_aiEvaLandRefCount; }
+void* VectorsLow() { return &g_aiAgentVectors; }
 
 void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) {
     const Ai25Functions original = OriginalAi25();
     SavedGlobals saved;
     std::vector<std::uint8_t> savedVectors(kVectorsBytes), savedPair(8);
-    std::memcpy(savedVectors.data(), reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
-    std::memcpy(savedPair.data(), reinterpret_cast<void*>(kGlobalsLow), 8);
-    const std::uint32_t savedMapSizes = Global<std::uint32_t>(kAiMapSizeY);
+    std::memcpy(savedVectors.data(), VectorsLow(), kVectorsBytes);
+    std::memcpy(savedPair.data(), GlobalsLow(), 8);
+    const std::uint16_t savedSizeX = g_aiMapSizeX, savedSizeY = g_aiMapSizeY;
     test::WorldPair worlds(ctx, 0x153a128);
     std::vector<std::uint8_t> a(0x8000), b(0x8000), vectorsA(kVectorsBytes), pairA(8);
     for (int i = 0; i < cases; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(8));
         ctx.rng().Fill(a.data(), a.size());
-        ctx.rng().Fill(reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
-        ctx.rng().Fill(reinterpret_cast<void*>(kGlobalsLow), 8);
-        Global<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 1 + ctx.rng().Below(400));
-        Global<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 1 + ctx.rng().Below(400));
+        ctx.rng().Fill(VectorsLow(), kVectorsBytes);
+        ctx.rng().Fill(GlobalsLow(), 8);
+        g_aiMapSizeX = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 1 + ctx.rng().Below(400));
+        g_aiMapSizeY = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 1 + ctx.rng().Below(400));
         std::uint32_t args[3] = {ctx.rng().Next32(), ctx.rng().Next32(), ctx.rng().Next32()};
         switch (op) {
             case 0: {
@@ -989,8 +991,8 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
                 args[0] = (args[0] & 0xffffff00u) | ctx.rng().Below(3);
                 args[1] = (args[1] & 0xffffff00u) | ctx.rng().Below(3);
                 args[2] = ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(4);
-                Global<std::uint16_t>(kAiMapSizeX) = 400;
-                Global<std::uint16_t>(kAiMapSizeY) = 400;
+                g_aiMapSizeX = 400;
+                g_aiMapSizeY = 400;
                 for (std::uint32_t id = 1; id <= count; ++id) {
                     const auto owner = static_cast<std::uint8_t>(ctx.rng().Chance(1, 6) ? 0xff : ctx.rng().Below(3));
                     const auto art = static_cast<std::uint8_t>(ctx.rng().Below(3));
@@ -1013,8 +1015,8 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
                 break;
             }
             case 1: {
-                Global<std::uint16_t>(kAiMapSizeX) = static_cast<std::uint16_t>(1 + ctx.rng().Below(400));
-                Global<std::uint16_t>(kAiMapSizeY) = static_cast<std::uint16_t>(1 + ctx.rng().Below(400));
+                g_aiMapSizeX = static_cast<std::uint16_t>(1 + ctx.rng().Below(400));
+                g_aiMapSizeY = static_cast<std::uint16_t>(1 + ctx.rng().Below(400));
                 const std::uint32_t x = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(410);
                 const std::uint32_t y = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(410);
                 args[0] = x;
@@ -1050,10 +1052,10 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
                 break;
         }
         b = a;
-        std::memcpy(vectorsA.data(), reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
-        std::memcpy(pairA.data(), reinterpret_cast<void*>(kGlobalsLow), 8);
+        std::memcpy(vectorsA.data(), VectorsLow(), kVectorsBytes);
+        std::memcpy(pairA.data(), GlobalsLow(), 8);
         auto run = [&](const Ai25Functions& f, std::uint8_t* object, bool ours) -> std::uint32_t {
-            Global<void*>(kAiWorld) = ours ? static_cast<void*>(worlds.ours()) : static_cast<void*>(worlds.original());
+            g_aiWorld = ours ? worlds.ours() : worlds.original();
             // The buffer is the land evaluation (op 3, 4) or a list (op 7).
             reinterpret_cast<AiLandEvaluation*>(object)->cells = reinterpret_cast<AiGridCell*>(object + 0x200);
             reinterpret_cast<AiList*>(object)->head = reinterpret_cast<AiListNode*>(object + 0x100);
@@ -1074,10 +1076,10 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
         };
         const std::uint32_t ra = run(original, a.data(), false);
         std::vector<std::uint8_t> vectorsAfterA(kVectorsBytes), pairAfterA(8);
-        std::memcpy(vectorsAfterA.data(), reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
-        std::memcpy(pairAfterA.data(), reinterpret_cast<void*>(kGlobalsLow), 8);
-        std::memcpy(reinterpret_cast<void*>(kVectorsLow), vectorsA.data(), kVectorsBytes);
-        std::memcpy(reinterpret_cast<void*>(kGlobalsLow), pairA.data(), 8);
+        std::memcpy(vectorsAfterA.data(), VectorsLow(), kVectorsBytes);
+        std::memcpy(pairAfterA.data(), GlobalsLow(), 8);
+        std::memcpy(VectorsLow(), vectorsA.data(), kVectorsBytes);
+        std::memcpy(GlobalsLow(), pairA.data(), 8);
         const std::uint32_t rb = run(candidate, b.data(), true);
         // The pointers run() stores point into each side's own buffer.
         std::memcpy(b.data() + offsetof(AiLandEvaluation, cells), a.data() + offsetof(AiLandEvaluation, cells), 4);
@@ -1086,16 +1088,17 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
         }
         bool same = S3RE_EXPECT_EQ(ra, rb);
         same &= S3RE_EXPECT_MEM_EQ(a.data(), b.data(), a.size());
-        same &= S3RE_EXPECT_MEM_EQ(vectorsAfterA.data(), reinterpret_cast<void*>(kVectorsLow), kVectorsBytes);
-        same &= S3RE_EXPECT_MEM_EQ(pairAfterA.data(), reinterpret_cast<void*>(kGlobalsLow), 8);
+        same &= S3RE_EXPECT_MEM_EQ(vectorsAfterA.data(), VectorsLow(), kVectorsBytes);
+        same &= S3RE_EXPECT_MEM_EQ(pairAfterA.data(), GlobalsLow(), 8);
         if (!same || ((i % 64 == 63) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d, op %d", i, op);
             break;
         }
     }
-    std::memcpy(reinterpret_cast<void*>(kVectorsLow), savedVectors.data(), kVectorsBytes);
-    std::memcpy(reinterpret_cast<void*>(kGlobalsLow), savedPair.data(), 8);
-    Global<std::uint32_t>(kAiMapSizeY) = savedMapSizes;
+    std::memcpy(VectorsLow(), savedVectors.data(), kVectorsBytes);
+    std::memcpy(GlobalsLow(), savedPair.data(), 8);
+    g_aiMapSizeX = savedSizeX;
+    g_aiMapSizeY = savedSizeY;
 }
 
 // Wrong: the 3x3 sum skips the centre cell.

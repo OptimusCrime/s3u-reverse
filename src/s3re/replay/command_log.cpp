@@ -1,6 +1,7 @@
 #include "replay/command_log.h"
 
 #include "common/recording_format.h"
+#include "game/globals.h"
 #include "game/logic_thread_layout.h"
 #include "game/random.h"
 #include "hooks.h"
@@ -37,8 +38,6 @@ S3RE_PASSTHROUGH(0x004309c0, MessageQueue_Push, PushFn, Original_MessageQueue_Pu
 
 constexpr std::uint8_t kStepMessage = 0x20;
 constexpr std::uint8_t kCommandMessage = 0x21;
-// g_gameSettings+0xCC: random races include the Amazons (see random.cpp).
-constexpr std::uintptr_t kRandomRaceAmazons = 0x7a7ae4;
 
 struct Command {
     std::uint32_t slot;
@@ -108,7 +107,7 @@ recording::Header CurrentGame() {
     const long seed = game::LastSeed();
     header.seed = seed < 0 ? 0xFFFFFFFFu : static_cast<std::uint32_t>(seed);
     header.settings =
-        *reinterpret_cast<const std::uint8_t*>(kRandomRaceAmazons) != 0 ? recording::kSettingAmazons
+        game::g_gameSettings->random_race_amazons != 0 ? recording::kSettingAmazons
                                                                        : 0;
     header.map = MapArgument();
     return header;

@@ -34,8 +34,8 @@ namespace s3re::game {
 namespace {
 
 constexpr std::uintptr_t kGameCodeBegin = 0x00401000;
-constexpr std::uintptr_t kGameCodeEnd = 0x0063a000;
-constexpr std::uintptr_t kGameDataBegin = 0x0063a000;  // .rdata and .data
+constexpr std::uintptr_t kGameCodeEnd = 0x0063a000;    // raw-ok: section bound
+constexpr std::uintptr_t kGameDataBegin = 0x0063a000;  // .rdata and .data; raw-ok: section bound
 constexpr std::uintptr_t kGameDataEnd = 0x007ed000;
 constexpr int kPerSite = 5;
 constexpr int kSites = 1024;

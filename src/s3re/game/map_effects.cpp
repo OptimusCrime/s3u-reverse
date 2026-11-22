@@ -24,6 +24,8 @@
 #include "game/debug_log.h"
 #include "game/layout.h"
 #include "game/raw.h"
+#include "game/tables.h"
+#include "game/texts.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -772,7 +774,6 @@ std::uint32_t __fastcall MapEffects_Add(MapEffectTable* self, void* edx, const M
 namespace {
 
 constexpr std::size_t kEffectSlots = sizeof(MapEffectTable::records) / sizeof(MapEffect);  // 5000
-constexpr std::uintptr_t kOverflowText = 0x00730ed4;  // "EFFECT: Effect overflow"
 
 void* Edx(std::uint32_t value) {
     return reinterpret_cast<void*>(static_cast<std::uintptr_t>(value));
@@ -798,7 +799,7 @@ std::uint32_t __fastcall MapEffects_FindFreeSlot(MapEffectTable* self, void* /*e
         self->slots_used = slot;
         return static_cast<std::uint32_t>(slot);
     }
-    GameDebugLog(kOverflowText);
+    GameDebugLog(texts::kEffectOverflow);
     return 0;
 }
 
@@ -943,8 +944,8 @@ std::uint32_t __fastcall MapEffects_Spawn_544dc0(MapEffectTable* self, void* /*e
                                                  std::uint32_t a3, std::uint32_t a4, std::uint32_t a5,
                                                  std::uint32_t a6, std::uint32_t a7) {
     static constexpr std::uint32_t kGraphics[4] = {0xd000f, 0x170016, 0x210015, 0x2b0014};
-    const auto* offsets0 = reinterpret_cast<const std::uint32_t*>(0x0065a19c);
-    const auto* offsets1 = reinterpret_cast<const std::uint32_t*>(0x0065a1ac);
+    const std::uint32_t* offsets0 = g_spawnOffsetsX;
+    const std::uint32_t* offsets1 = g_spawnOffsetsY;
     MapEffect effect;
     MapEffect_Make_543ce0(&effect, nullptr, a3, offsets0[a2] + a1, offsets1[a2], a4, a5, a6, a7, kGraphics[a2], 0xc);
     return MapEffects_Add(self, nullptr, &effect);

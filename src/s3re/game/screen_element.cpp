@@ -34,8 +34,10 @@
 // derived classes that forward to them.
 
 #include "game/framework_layout.h"
+#include "game/globals.h"
 #include "game/raw.h"
 #include "game/screen_element_layout.h"
+#include "game/vtables.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "watcom/ptr_vector.h"
@@ -62,7 +64,6 @@ using ui::CScreenGroup;
 
 namespace {
 
-constexpr std::uint32_t kScreenElementVtable = 0x00655a68;
 
 // CGroupControl: the "this" its control part's methods get is 0x7c bytes
 // before the group part's "this" (it is where the group part starts).
@@ -222,7 +223,7 @@ void InitScreenElement(void* self) {
     element->has_focus = 0;
     element->mouse_inside = 0;
     element->needs_redraw = 1;
-    element->vtable = kScreenElementVtable;
+    element->vtable = vtables::kCScreenElement;
 }
 
 }  // namespace
@@ -253,7 +254,7 @@ S3RE_HOOK(0x004156b0, CScreenElement_Destroy, DtorFn, Original_CScreenElement_De
 
 // Purpose: Destructor of a UI element: removes it from its parent.
 std::uint32_t __fastcall CScreenElement_Destroy(void* self, void* /*edx*/) {
-    ElementOf(self)->vtable = kScreenElementVtable;
+    ElementOf(self)->vtable = vtables::kCScreenElement;
     void* parent = reinterpret_cast<void*>(ElementOf(self)->parent);
     if (parent == nullptr) {
         return reinterpret_cast<std::uint32_t>(self);
@@ -576,14 +577,14 @@ S3RE_HOOK(0x00416870, Dialog_Global7a823c, GlobalFn, Original_Dialog_Global7a823
 // Purpose: Returns a dialog-system global (0x7a823c; probably a font or
 // palette handle).
 std::uint32_t __cdecl Dialog_Global7a823c() {
-    return RawAtAddress<std::uint32_t>(0x007a823c);
+    return g_dialogValue7a823c;
 }
 
 S3RE_HOOK(0x004168c0, Dialog_Global7a8238, GlobalFn, Original_Dialog_Global7a8238, Dialog_Global7a8238);
 
 // Purpose: Returns a dialog-system global (0x7a8238).
 std::uint32_t __cdecl Dialog_Global7a8238() {
-    return RawAtAddress<std::uint32_t>(0x007a8238);
+    return g_dialogValue7a8238;
 }
 
 S3RE_HOOK(0x00416c50, Dialog_Global7a8240, GlobalFn, Original_Dialog_Global7a8240, Dialog_Global7a8240);
@@ -591,7 +592,7 @@ S3RE_HOOK(0x00416c50, Dialog_Global7a8240, GlobalFn, Original_Dialog_Global7a824
 // Purpose: Returns a dialog-system global (0x7a8240; a GDI object that
 // 0x416760 deletes).
 std::uint32_t __cdecl Dialog_Global7a8240() {
-    return RawAtAddress<std::uint32_t>(0x007a8240);
+    return g_dialogGdiObject7a8240;
 }
 
 S3RE_HOOK(0x00416880, Dialog_CopyGlobals7a8020, CopyGlobalsFn, Original_Dialog_CopyGlobals7a8020,
@@ -601,7 +602,7 @@ S3RE_HOOK(0x00416880, Dialog_CopyGlobals7a8020, CopyGlobalsFn, Original_Dialog_C
 void* __stdcall Dialog_CopyGlobals7a8020(void* out) {
     auto* to = static_cast<std::uint32_t*>(out);
     for (int i = 0; i < 8; ++i) {
-        to[i] = RawAtAddress<std::uint32_t>(0x007a8020 + 4 * i);
+        to[i] = g_dialogSettings[i];
     }
     return out;
 }
@@ -611,14 +612,14 @@ S3RE_HOOK(0x004168a0, Dialog_Table7a809c, TableFn, Original_Dialog_Table7a809c, 
 // Purpose: An entry of a dialog-system table (0x7a809c; probably fonts or
 // colours by index).
 std::uint32_t __stdcall Dialog_Table7a809c(std::uint32_t index) {
-    return RawAtAddress<std::uint32_t>(0x007a809c + index * 4);
+    return g_dialogTable7a809c[index];
 }
 
 S3RE_HOOK(0x004168b0, Dialog_Table7a8064, TableFn, Original_Dialog_Table7a8064, Dialog_Table7a8064);
 
 // Purpose: An entry of another dialog-system table (0x7a8064, 14 entries).
 std::uint32_t __stdcall Dialog_Table7a8064(std::uint32_t index) {
-    return RawAtAddress<std::uint32_t>(0x007a8064 + index * 4);
+    return g_dialogTable7a8064[index];
 }
 
 // ---------------------------------------------------------------------------
@@ -695,7 +696,6 @@ std::uint32_t __fastcall UiGroup_Enable_429fd0(void* self, void* /*edx*/, std::u
 // CStaticControl (RTTI name; vtable 0x6560d8): a CScreenElement with its
 // own vtable (probably static text or pictures in the menus).
 
-constexpr std::uint32_t kCStaticControlVtable = 0x006560d8;
 void* __fastcall CStaticControl_Construct(void* self, void* edx, const RECT* rect);
 
 S3RE_HOOK(0x0041c3c0, CStaticControl_Construct, CtorRectFn, Original_CStaticControl_Construct,
@@ -705,7 +705,7 @@ S3RE_HOOK(0x0041c3c0, CStaticControl_Construct, CtorRectFn, Original_CStaticCont
 // element of a menu) at a screen rectangle.
 void* __fastcall CStaticControl_Construct(void* self, void* /*edx*/, const RECT* rect) {
     CScreenElement_ConstructRect(self, nullptr, rect);
-    ElementOf(self)->vtable = kCStaticControlVtable;
+    ElementOf(self)->vtable = vtables::kCStaticControl;
     return self;
 }
 
@@ -923,8 +923,6 @@ std::uint32_t ControlVbptr(void* self) {
     return reinterpret_cast<std::uint32_t>(ControlOf(self)->vbptr);
 }
 
-using TimeGetTimeFn = DWORD(WINAPI*)();
-constexpr std::uintptr_t kTimeGetTimeImport = 0x00655358;  // S3.EXE's import of timeGetTime (_INMM.dll)
 
 std::int32_t AbsoluteDifference(std::uint32_t a, std::uint32_t b) {
     const std::uint32_t d = a - b;
@@ -965,7 +963,7 @@ S3RE_HOOK(0x00418430, CControl_OnMouseMove, MessageFn, Original_CControl_OnMouse
 // defined in EAX.
 std::uint32_t __fastcall CControl_OnMouseMove(void* self, void* /*edx*/, Message message) {
     CControl* control = ControlOf(self);
-    control->last_move_time = (*reinterpret_cast<TimeGetTimeFn*>(kTimeGetTimeImport))();
+    control->last_move_time = g_importTimeGetTime.get()();
     const std::uint32_t x = message.x;
     const std::uint32_t y = message.y;
     control->mouse_x = x;
@@ -1619,7 +1617,7 @@ public:
     }
 
 private:
-    static void** Entry() { return reinterpret_cast<void**>(0x00655358); }
+    static void** Entry() { return reinterpret_cast<void**>(&g_importTimeGetTime); }
     DWORD protection_ = 0;
     void* saved_ = nullptr;
 };
