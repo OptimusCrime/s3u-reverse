@@ -4866,7 +4866,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-22","statuses":["unknown","classifi
 [5244912,48,2,0,"StaticDtorReg_7ab530"],
 [5244960,32,2,0,"StaticInit_7ab520"],
 [5244992,32,2,0,"StaticDtorReg_7ab520"],
-[5245024,11696,1,68,"Logic_sub_500860"],
+[5245024,11696,6,177,"GameWorld::WalkSettler"],
 [5256720,240,6,177,"GameWorld::SetSettlerTarget"],
 [5256960,48,6,68,"NeighbourX"],
 [5257008,48,6,68,"NeighbourY"],
@@ -10555,6 +10555,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-22","statuses":["unknown","classifi
 [5241664,566,{"random:384,0 seed 1234":28,"random:448,3 seed 1234":27,"random:448,3 seed 1234 skip GameWorld_Create":9,"random:512,1 seed 1234":27,"random:640,2 seed 1234":23,"replay:fun8-seed2024-input31.bin":566,"replay:scripted-seed127.bin":88,"save:slot 1.sav":403,"save:slot 2.sav":305,"save:slot 3.sav":115},[]],
 [5241744,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip GameWorld_Create":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fun8-seed2024-input31.bin":0,"replay:scripted-seed127.bin":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
 [5242208,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip GameWorld_Create":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fun8-seed2024-input31.bin":0,"replay:scripted-seed127.bin":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
+[5245024,721577,{"replay:fun8-seed2024-input31.bin":83180,"replay:scripted-seed127.bin":17521,"save:slot 1.sav":721577},[]],
 [5256720,54058,{"random:384,0 seed 1234":1404,"random:448,3 seed 1234":1617,"random:448,3 seed 1234 skip GameWorld_Create":590,"random:512,1 seed 1234":1602,"random:640,2 seed 1234":1564,"replay:fun8-seed2024-input31.bin":30603,"replay:scripted-seed127.bin":3342,"save:slot 1.sav":54058,"save:slot 2.sav":41936,"save:slot 3.sav":26506},[]],
 [5256960,756531,{"random:384,0 seed 1234":24204,"random:448,3 seed 1234":27043,"random:448,3 seed 1234 skip GameWorld_Create":5176,"random:512,1 seed 1234":34414,"random:640,2 seed 1234":45428,"replay:fun8-seed2024-input31.bin":117669,"replay:scripted-seed127.bin":756531,"save:slot 1.sav":392563,"save:slot 2.sav":376514,"save:slot 3.sav":161470},[]],
 [5257008,756531,{"random:384,0 seed 1234":24204,"random:448,3 seed 1234":27043,"random:448,3 seed 1234 skip GameWorld_Create":5176,"random:512,1 seed 1234":34414,"random:640,2 seed 1234":45428,"replay:fun8-seed2024-input31.bin":117669,"replay:scripted-seed127.bin":756531,"save:slot 1.sav":392563,"save:slot 2.sav":376514,"save:slot 3.sav":161470},[]],
@@ -10943,4 +10944,6 @@ window.PROGRESS_DATA = {"generated":"2026-11-22","statuses":["unknown","classifi
 ["2026-11-22","d98fe1c",542,143923,503867,77867,308],
 ["2026-11-22","d53275f",543,150659,510603,84923,310],
 ["2026-11-22","3f46c5a",544,155459,510603,92075,319],
-["2026-11-22","8ee6e3b",546,157923,513067,92075,319]]};
+["2026-11-22","8ee6e3b",546,157923,513067,92075,319],
+["2026-11-22","d897abd",553,159731,514875,94539,321],
+["2026-11-22","3b8e590",554,171427,526571,106235,322]]};
