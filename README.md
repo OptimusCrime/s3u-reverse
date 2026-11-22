@@ -84,6 +84,10 @@ The game folder defaults to `Settlers3Ultimate/` in the repository root
 `S3RE_GAME_DIR` environment variable. The DLL writes `s3re.log` next to
 itself.
 
+To play a whole game on a big random map against computer players and
+record it for later checks: `python tools/play_game.py`, see
+[docs/recording_a_game.md](docs/recording_a_game.md).
+
 ## Testing
 
 ```

@@ -6,6 +6,8 @@
 //                      [--exit-after-ticks <n>] [--timeout <seconds>]
 //                      [--dump-tick <n>] [--load-save <file>] [--fast]
 //                      [--random-map <size>[,<symmetry>[,<field0c>]]]
+//                      [--goods low|medium|high] [--computers <n>]
+//                      [--race roman|egyptian|asian|amazon]
 //                      [--skip-hooks <name>[,<name>...]]
 //                      [-- <arguments passed to S3.EXE>]
 //
@@ -35,7 +37,11 @@
 // to; --replay-commands <file> replays such a recording instead of the live
 // commands (see src/s3re/replay/command_log.h). A recording stores the game
 // seed and map, and the replay uses them (an explicit --seed or -map must
-// agree); version 1 recordings need --seed and -map.
+// agree); version 1 recordings need --seed and -map. A version 3 recording
+// of a --random-map game also stores the random map and the player setup
+// (--goods, --computers, --race), and the replay starts that game.
+// Commands are flushed to the file as they happen. docs/recording_a_game.md
+// describes recording a whole game played by a person.
 //
 // --exit-after-ticks <n> ends the game once the game tick reaches n, through
 // the game's normal shutdown (so `-record` files are completed).
@@ -66,10 +72,21 @@
 // <size> is the map size (the dialog offers 384, 448, ...; 128..768,
 // multiples of 64, are accepted), <symmetry> the symmetry bits 0..3 (bit 0
 // diagonal mirror, bit 1 point mirror), <field0c> the second dialog value
-// (not read by the simulation). The player setup comes from the -map file
-// (default Map\MULTI\384-2-Lakes.map: you and one computer player). The map
-// seed is --seed (which also replaces the generator's RNG seed), else 0.
-// Not combinable with --load-save or the command recorder.
+// (not read by the generator or the simulation). The player setup comes
+// from the -map file (default Map\MULTI\384-2-Lakes.map: you and one
+// computer player) unless --computers is given. The map seed is --seed
+// (which also replaces the generator's RNG seed); without --seed the
+// launcher picks a random one and prints it. Not combinable with
+// --load-save. With --random-map:
+//   --goods low|medium|high   start goods (the free-game dialog's goods
+//                             setting; default: the map's own, i.e. medium)
+//   --computers <n>           n computer opponents, each in a party of its
+//                             own, you alone in the first (1..19, at most
+//                             the map's start positions minus one)
+//   --race <race>             your race (roman, egyptian, asian, amazon);
+//                             default random (drawn by the game)
+// The game has no difficulty setting for computer players
+// (re/game_setup.md).
 //
 // --skip-hooks <name>[,<name>...] leaves out these replacements (hook names as
 // in "hooked <name>" lines of s3re.log), so the original code runs there:
@@ -82,6 +99,9 @@
 //
 // The game directory is taken from, in order: --game-dir, the S3RE_GAME_DIR
 // environment variable, or the default baked in at configure time.
+
+#define _CRT_RAND_S  // rand_s
+#include <stdlib.h>
 
 #include "common/recording_format.h"
 
@@ -268,7 +288,7 @@ std::wstring Widen(const std::string& text) {
 // replay always starts the game the commands were recorded in. An explicit
 // --seed or -map must agree with the recording. Returns 0 or an exit code.
 int ApplyRecording(const std::wstring& path, std::wstring& seed,
-                   std::vector<std::wstring>& gameArgs) {
+                   std::vector<std::wstring>& gameArgs, s3re::recording::GameSetup& setup) {
     FILE* file = nullptr;
     if (_wfopen_s(&file, path.c_str(), L"rb") != 0 || file == nullptr) {
         return Fail(L"cannot read %s", path);
@@ -277,6 +297,11 @@ int ApplyRecording(const std::wstring& path, std::wstring& seed,
     fclose(file);
     if (header.version == 0) {
         return Fail(L"not a command recording: %s", path);
+    }
+    setup = header.setup;
+    if (setup.IsRandomMap() && setup.mapSeed != header.seed) {
+        return Fail(L"%s: the random map seed differs from the game seed; such a game "
+                    L"can't be started again", path);
     }
     if (header.version == 1) {
         if (seed.empty()) {
@@ -311,6 +336,87 @@ int ApplyRecording(const std::wstring& path, std::wstring& seed,
     return 0;
 }
 
+constexpr const wchar_t* kGoodsNames[] = {L"map", L"low", L"medium", L"high"};
+constexpr const wchar_t* kRaceNames[] = {L"roman", L"egyptian", L"asian", L"amazon"};
+
+const wchar_t* GoodsName(std::uint32_t goods) {
+    return goods < 4 ? kGoodsNames[goods] : L"?";
+}
+
+const wchar_t* RaceName(std::uint32_t race) {
+    return race < 4 ? kRaceNames[race] : L"random";
+}
+
+// Parses --random-map <size>[,<symmetry>[,<field0c>]] and the options that
+// go with it into `setup` (mapSeed is filled in later). Returns 0 or an exit
+// code.
+int ParseGameSetup(const std::wstring& randomMap, const std::wstring& goods,
+                   const std::wstring& computers, const std::wstring& race,
+                   s3re::recording::GameSetup& setup) {
+    unsigned long values[3] = {0, 0, 0};
+    const wchar_t* cursor = randomMap.c_str();
+    for (int count = 0;; ++count) {
+        wchar_t* end = nullptr;
+        values[count] = wcstoul(cursor, &end, 0);
+        const bool more = *end == L',';
+        if (end == cursor || (!more && *end != L'\0') || (more && count == 2)) {
+            return Fail(L"--random-map expects <size>[,<symmetry>[,<field0c>]], got '%s'",
+                        randomMap);
+        }
+        if (!more) {
+            break;
+        }
+        cursor = end + 1;
+    }
+    if (values[0] < 128 || values[0] > 768 || values[0] % 64 != 0) {
+        return Fail(L"--random-map: the size must be a multiple of 64 from 128 to 768, "
+                    L"got '%s'", randomMap);
+    }
+    if (values[1] > 3) {
+        return Fail(L"--random-map: the symmetry must be 0..3, got '%s'", randomMap);
+    }
+    setup.flags = s3re::recording::kSetupRandomMap;
+    setup.size = values[0];
+    setup.symmetry = values[1];
+    setup.field0c = values[2];
+    if (!goods.empty()) {
+        setup.goods = 0;
+        for (std::uint32_t i = 1; i < 4; ++i) {
+            if (_wcsicmp(goods.c_str(), kGoodsNames[i]) == 0) {
+                setup.goods = i;
+            }
+        }
+        if (setup.goods == 0) {
+            return Fail(L"--goods expects low, medium or high, got '%s'", goods);
+        }
+    }
+    if (!race.empty()) {
+        setup.race = s3re::recording::kRandomRace;
+        for (std::uint32_t i = 0; i < 4; ++i) {
+            if (_wcsicmp(race.c_str(), kRaceNames[i]) == 0) {
+                setup.race = i;
+            }
+        }
+        if (setup.race == s3re::recording::kRandomRace) {
+            return Fail(L"--race expects roman, egyptian, asian or amazon, got '%s'", race);
+        }
+    }
+    if (!computers.empty()) {
+        // The map dialog's number of start positions (random_map_start.cpp).
+        const std::uint32_t distance = setup.size - 32;
+        std::uint32_t positions = ((distance * distance) >> 14) + 1;
+        positions = positions < 20 ? positions : 20;
+        wchar_t* end = nullptr;
+        const unsigned long count = wcstoul(computers.c_str(), &end, 10);
+        if (end == computers.c_str() || *end != L'\0' || count < 1 || count + 1 > positions) {
+            return Fail(L"--computers expects 1 to %s computer players for this map size",
+                        std::to_wstring(positions - 1));
+        }
+        setup.computers = count;
+    }
+    return 0;
+}
+
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
@@ -332,6 +438,9 @@ int wmain(int argc, wchar_t** argv) {
     std::wstring loadSave;
     std::wstring randomMap;
     std::wstring skipHooks;
+    std::wstring goods;
+    std::wstring computers;
+    std::wstring race;
     DWORD timeoutMs = INFINITE;
 
     for (int i = 1; i < argc; ++i) {
@@ -374,6 +483,12 @@ int wmain(int argc, wchar_t** argv) {
             skipHooks = argv[++i];
         } else if (arg == L"--random-map" && i + 1 < argc) {
             randomMap = argv[++i];
+        } else if (arg == L"--goods" && i + 1 < argc) {
+            goods = argv[++i];
+        } else if ((arg == L"--computers" || arg == L"--ai") && i + 1 < argc) {
+            computers = argv[++i];
+        } else if (arg == L"--race" && i + 1 < argc) {
+            race = argv[++i];
         } else if (arg == L"--dump-tick" && i + 1 < argc) {
             dumpTick = argv[++i];
         } else if (arg == L"--timeout" && i + 1 < argc) {
@@ -397,17 +512,37 @@ int wmain(int argc, wchar_t** argv) {
             wprintf(L"Usage: s3re_launcher [--game-dir <path>] [--test [filter]] "
                     L"[--trace-determinism] [--log-commands] [--record-commands <file>] "
                     L"[--replay-commands <file>] [--seed <n>] [--exit-after-ticks <n>] "
-                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [--load-save <file>] [--random-map <size>[,<symmetry>[,<field0c>]]] [--skip-hooks <names>] [--fast] [--original] [--unverified] [-- <S3.EXE arguments>]\n");
+                    L"[--timeout <seconds>] [--dump-tick <n>] [--dump-headers] [--load-save <file>] [--random-map <size>[,<symmetry>[,<field0c>]]] [--goods low|medium|high] [--computers <n>] [--race roman|egyptian|asian|amazon] [--skip-hooks <names>] [--fast] [--original] [--unverified] [-- <S3.EXE arguments>]\n");
             return 0;
         } else {
             return Fail(L"unknown argument '%s' (try --help)", arg);
         }
     }
 
+    // The game setup of a --random-map game (recording version 3).
+    s3re::recording::GameSetup setup;
     if (!replayCommands.empty()) {
-        if (const int error = ApplyRecording(replayCommands, seed, gameArgs)) {
+        if (!randomMap.empty() || !goods.empty() || !computers.empty() || !race.empty()) {
+            return Fail(L"--random-map, --goods, --computers and --race come from the "
+                        L"recording when replaying%s");
+        }
+        if (const int error = ApplyRecording(replayCommands, seed, gameArgs, setup)) {
             return error;
         }
+    } else if (!randomMap.empty()) {
+        if (const int error = ParseGameSetup(randomMap, goods, computers, race, setup)) {
+            return error;
+        }
+    } else if (!goods.empty() || !computers.empty() || !race.empty()) {
+        return Fail(L"--goods, --computers and --race need --random-map%s");
+    }
+    if (setup.IsRandomMap() && seed.empty()) {
+        // The random map is generated from the seed, and a recording can only
+        // restart the game if map seed and game seed agree: pick one.
+        unsigned int random = 0;
+        rand_s(&random);
+        seed = std::to_wstring(random % 0xFFFF + 1);
+        wprintf(L"No --seed given: using seed %s\n", seed.c_str());
     }
 
     if (gameDir.empty()) {
@@ -453,36 +588,16 @@ int wmain(int argc, wchar_t** argv) {
     }
 
     std::wstring randomMapParams;
-    if (!randomMap.empty()) {
-        if (!loadSave.empty() || !recordCommands.empty() || !replayCommands.empty()) {
-            return Fail(L"--random-map can't be combined with --load-save, --record-commands "
-                        L"or --replay-commands%s");
+    if (setup.IsRandomMap()) {
+        if (!loadSave.empty()) {
+            return Fail(L"--random-map can't be combined with --load-save%s");
         }
-        unsigned long values[3] = {0, 0, 0};
-        const wchar_t* cursor = randomMap.c_str();
-        for (int count = 0;; ++count) {
-            wchar_t* end = nullptr;
-            values[count] = wcstoul(cursor, &end, 0);
-            const bool more = *end == L',';
-            if (end == cursor || (!more && *end != L'\0') || (more && count == 2)) {
-                return Fail(L"--random-map expects <size>[,<symmetry>[,<field0c>]], got '%s'",
-                            randomMap);
-            }
-            if (!more) {
-                break;
-            }
-            cursor = end + 1;
-        }
-        if (values[0] < 128 || values[0] > 768 || values[0] % 64 != 0) {
-            return Fail(L"--random-map: the size must be a multiple of 64 from 128 to 768, "
-                        L"got '%s'", randomMap);
-        }
-        if (values[1] > 3) {
-            return Fail(L"--random-map: the symmetry must be 0..3, got '%s'", randomMap);
-        }
-        const unsigned long mapSeed = seed.empty() ? 0 : wcstoul(seed.c_str(), nullptr, 0);
-        randomMapParams = std::to_wstring(values[0]) + L"," + std::to_wstring(values[1]) + L"," +
-                          std::to_wstring(values[2]) + L"," + std::to_wstring(mapSeed);
+        setup.mapSeed = wcstoul(seed.c_str(), nullptr, 0);
+        randomMapParams = std::to_wstring(setup.size) + L"," + std::to_wstring(setup.symmetry) +
+                          L"," + std::to_wstring(setup.field0c) + L"," +
+                          std::to_wstring(setup.mapSeed) + L"," + std::to_wstring(setup.goods) +
+                          L"," + std::to_wstring(setup.race) + L"," +
+                          std::to_wstring(setup.computers);
         bool hasMap = false;
         for (const std::wstring& arg : gameArgs) {
             hasMap = hasMap || _wcsicmp(arg.c_str(), L"-map") == 0;
@@ -492,8 +607,13 @@ int wmain(int argc, wchar_t** argv) {
             gameArgs.push_back(L"-map");
             gameArgs.push_back(L"Map\\MULTI\\384-2-Lakes.map");
         }
-        wprintf(L"Random map: size %lu, symmetry %lu, field0c %lu, seed %lu\n", values[0],
-                values[1], values[2], mapSeed);
+        wprintf(L"Random map: size %u, symmetry %u, field0c %u, seed %u; start goods %s, "
+                L"your race %s, %s\n",
+                setup.size, setup.symmetry, setup.field0c, setup.mapSeed,
+                GoodsName(setup.goods), RaceName(setup.race),
+                setup.computers == 0
+                    ? L"players from the -map file"
+                    : (std::to_wstring(setup.computers) + L" computer opponent(s)").c_str());
     }
 
     if (!FileExists(exePath)) {

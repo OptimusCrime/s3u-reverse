@@ -10,7 +10,9 @@ Usage:
 
 The format is described in src/common/recording_format.h. Version 2
 ("S3RECMD2") starts with the game seed, the settings (bit 0: random races
-include the Amazons) and the -map argument; version 1 ("S3RECMD1") has
+include the Amazons) and the -map argument; version 3 ("S3RECMD3") adds the
+game setup of a --random-map game (map size, symmetry, field0c, map seed,
+start goods, your race, computer opponents); version 1 ("S3RECMD1") has
 none of that. Then, per command: uint32 slot, uint32 dword count, the
 message dwords. A command message starts with bytes 0x21 (type), command
 id, size in bytes, 0.
@@ -31,6 +33,13 @@ from dataclasses import dataclass, field
 
 MAGIC_V1 = b"S3RECMD1"
 MAGIC_V2 = b"S3RECMD2"
+MAGIC_V3 = b"S3RECMD3"
+SETUP_FIELDS = ("flags", "size", "symmetry", "field0c", "map_seed", "goods", "race",
+                "computers")
+SETUP_DEFAULTS = (0, 0, 0, 0, 0, 0, 0xFF, 0)
+SETUP_RANDOM_MAP = 1
+GOODS_NAMES = ("the map's", "low", "medium", "high")
+RACE_NAMES = ("roman", "egyptian", "asian", "amazon")
 SETTING_AMAZONS = 1
 UNKNOWN_SEED = 0xFFFFFFFF
 
@@ -42,16 +51,33 @@ class Recording:
     settings: int | None = None
     map: str | None = None
     commands: list[tuple[int, list[int]]] = field(default_factory=list)
+    # Version 3: the game setup (SETUP_FIELDS) and any bytes after the known
+    # fields (kept when rewriting).
+    setup: tuple[int, ...] = SETUP_DEFAULTS
+    setup_extra: bytes = b""
+
+    def setup_dict(self) -> dict:
+        return dict(zip(SETUP_FIELDS, self.setup))
 
 
 def read(path) -> Recording:
     data = open(path, "rb").read()
-    if data.startswith(MAGIC_V2):
+    if data.startswith(MAGIC_V2) or data.startswith(MAGIC_V3):
+        version = 3 if data.startswith(MAGIC_V3) else 2
         seed, settings, map_length = struct.unpack_from("<IIH", data, 8)
         offset = 8 + 10
-        recording = Recording(2, None if seed == UNKNOWN_SEED else seed, settings,
+        recording = Recording(version, None if seed == UNKNOWN_SEED else seed, settings,
                               data[offset:offset + map_length].decode("mbcs", "replace"))
         offset += map_length
+        if version == 3:
+            (setup_length,) = struct.unpack_from("<H", data, offset)
+            offset += 2
+            block = data[offset:offset + setup_length]
+            offset += setup_length
+            known = min(len(block) // 4, len(SETUP_FIELDS))
+            recording.setup = (struct.unpack_from(f"<{known}I", block) +
+                               SETUP_DEFAULTS[known:])
+            recording.setup_extra = block[known * 4:]
     elif data.startswith(MAGIC_V1):
         recording, offset = Recording(1), len(MAGIC_V1)
     else:
@@ -66,13 +92,18 @@ def read(path) -> Recording:
 
 
 def write(path, recording: Recording):
-    """Writes in the recording's version (2 needs seed, settings and map)."""
+    """Writes in the recording's version (2 and 3 need seed, settings and map)."""
     with open(path, "wb") as out:
-        if recording.version == 2:
+        if recording.version in (2, 3):
             map_bytes = (recording.map or "").encode("mbcs")
             seed = UNKNOWN_SEED if recording.seed is None else recording.seed
-            out.write(MAGIC_V2 + struct.pack("<IIH", seed, recording.settings or 0,
-                                             len(map_bytes)) + map_bytes)
+            magic = MAGIC_V3 if recording.version == 3 else MAGIC_V2
+            out.write(magic + struct.pack("<IIH", seed, recording.settings or 0,
+                                          len(map_bytes)) + map_bytes)
+            if recording.version == 3:
+                block = struct.pack(f"<{len(SETUP_FIELDS)}I", *recording.setup)
+                block += recording.setup_extra
+                out.write(struct.pack("<H", len(block)) + block)
         else:
             out.write(MAGIC_V1)
         for slot, dwords in recording.commands:
@@ -84,8 +115,20 @@ def describe(recording: Recording) -> str:
         return "version 1 (no seed or map: replay needs --seed and -map)"
     amazons = "included" if (recording.settings or 0) & SETTING_AMAZONS else "not included"
     seed = "unknown" if recording.seed is None else recording.seed
-    return (f"version 2, seed {seed}, map '{recording.map}', "
+    text = (f"version {recording.version}, seed {seed}, map '{recording.map}', "
             f"random races: Amazons {amazons}")
+    setup = recording.setup_dict()
+    if recording.version >= 3 and setup["flags"] & SETUP_RANDOM_MAP:
+        goods = setup["goods"]
+        race = setup["race"]
+        computers = setup["computers"]
+        text += (f"; random map {setup['size']},{setup['symmetry']},{setup['field0c']} "
+                 f"(size, symmetry, field0c), map seed {setup['map_seed']}, start goods "
+                 f"{GOODS_NAMES[goods] if goods < 4 else goods}, your race "
+                 f"{RACE_NAMES[race] if race < 4 else 'random'}, "
+                 + (f"{computers} computer opponent(s)" if computers
+                    else "players from the map file"))
+    return text
 
 
 def main():

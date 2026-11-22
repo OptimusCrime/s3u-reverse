@@ -2,6 +2,8 @@
 """Check command record/replay, unattended.
 
 Usage: python tools/check_replay.py [--ticks N] [--seed N] [--map PATH]
+                                    [--random-map SPEC [--goods G]
+                                     [--computers N] [--race R]]
                                     [--synthetic-input SEED]
                                     [--recording FILE] [--no-mutation]
                                     [--build Debug|Release]
@@ -18,8 +20,10 @@ Usage: python tools/check_replay.py [--ticks N] [--seed N] [--map PATH]
 With --recording FILE (e.g. a game a human played with --record-commands),
 step 1 is skipped and the replay is compared against FILE's own trace,
 which must sit next to it as FILE.tsv. Replays take the game seed and map
-from the recording (version 2); --seed and --map only apply when recording,
-or to version 1 recordings, which don't store them.
+from the recording (version 2), and a random-map game's setup (version 3);
+--seed, --map, --random-map, --goods, --computers and --race only apply when
+recording (they are passed to s3re_launcher), --seed and --map also to
+version 1 recordings, which don't store them.
 
 With --against-original, the reference is instead a replay of the same
 recording with the original code (s3re_launcher --original), and the replay
@@ -74,7 +78,13 @@ def game_command(launcher, args, extra, input_seed=None, new_game=False):
     game_map = args.map if args.map is not None else (DEFAULT_MAP if new_game else None)
     # Synthetic input follows the wall clock: record it at normal speed.
     fast = args.fast and input_seed is None
-    return [launcher, "--trace-determinism",
+    setup = []
+    if new_game and args.random_map:
+        setup = ["--random-map", args.random_map]
+        for option in ("goods", "computers", "race"):
+            if getattr(args, option) is not None:
+                setup += [f"--{option}", str(getattr(args, option))]
+    return [launcher, "--trace-determinism", *setup,
             *(["--seed", str(seed)] if seed is not None else []),
             *(["--fast"] if fast else []),
             "--exit-after-ticks", str(args.ticks), "--timeout", str(timeout),
@@ -132,6 +142,12 @@ def main():
     parser.add_argument("--map",
                         help="map path relative to the game directory, for a new recording "
                              f"(default {DEFAULT_MAP}); replays use the recording's")
+    parser.add_argument("--random-map", metavar="SIZE[,SYM[,FIELD0C]]",
+                        help="record a game on a random map (s3re_launcher --random-map)")
+    parser.add_argument("--goods", help="with --random-map: start goods (low, medium, high)")
+    parser.add_argument("--computers", type=int,
+                        help="with --random-map: number of computer opponents")
+    parser.add_argument("--race", help="with --random-map: your race")
     parser.add_argument("--recording", help="replay this recording instead of making one")
     parser.add_argument("--no-mutation", action="store_true")
     parser.add_argument("--against-original", action="store_true",
@@ -282,7 +298,7 @@ def main():
             mutated = os.path.join(work, "mutated.bin")
             command_log.write(mutated, command_log.Recording(
                 loaded.version, loaded.seed, loaded.settings, loaded.map,
-                commands[:index] + commands[index + 1:]))
+                commands[:index] + commands[index + 1:], loaded.setup, loaded.setup_extra))
             print(f"mutation: replay without command {index} (slot {commands[index][0]})",
                   flush=True)
             trace = run_game(launcher, bin_dir, args, ["--replay-commands", mutated])

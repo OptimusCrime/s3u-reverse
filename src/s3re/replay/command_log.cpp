@@ -7,6 +7,7 @@
 #include "game/random.h"
 #include "hooks.h"
 #include "log.h"
+#include "tooling/random_map_start.h"
 
 #include <windows.h>
 
@@ -61,6 +62,8 @@ unsigned long g_mismatches = 0;
 unsigned long g_paddingDifferences = 0;  // see EqualIgnoringPadding
 unsigned long g_matched = 0;
 bool g_logCommands = false;
+std::uint32_t g_lastStepCountdown = 0;  // record: g_stepCountdown at the last step message
+unsigned long g_fastForwards = 0;       // record: F12 fast-forwards seen
 
 FILE* OpenFile(const char* path, const char* mode) {
     FILE* file = nullptr;
@@ -104,13 +107,14 @@ std::string MapArgument() {
 // The settings of the running game that a recording must match.
 recording::Header CurrentGame() {
     recording::Header header;
-    header.version = 2;
+    header.version = 3;
     const long seed = game::LastSeed();
     header.seed = seed < 0 ? 0xFFFFFFFFu : static_cast<std::uint32_t>(seed);
     header.settings =
         game::g_gameSettings->randomRaceAmazons != 0 ? recording::kSettingAmazons
                                                                        : 0;
     header.map = MapArgument();
+    header.setup = tooling::AppliedGameSetup();
     return header;
 }
 
@@ -134,7 +138,27 @@ bool MatchesCurrentGame(const recording::Header& recorded) {
                  current.map.c_str());
         ok = false;
     }
+    if (recorded.version >= 3 && recorded.setup != current.setup) {
+        const recording::GameSetup& a = recorded.setup;
+        const recording::GameSetup& b = current.setup;
+        S3RE_LOG("replay: recorded with game setup flags %u size %u symmetry %u field0c %u "
+                 "map seed %u goods %u race %u computers %u; this game has flags %u size %u "
+                 "symmetry %u field0c %u map seed %u goods %u race %u computers %u",
+                 a.flags, a.size, a.symmetry, a.field0c, a.mapSeed, a.goods, a.race,
+                 a.computers, b.flags, b.size, b.symmetry, b.field0c, b.mapSeed, b.goods,
+                 b.race, b.computers);
+        ok = false;
+    }
     return ok;
+}
+
+void LogSetup(const char* what, const recording::GameSetup& setup) {
+    if (setup.IsRandomMap()) {
+        S3RE_LOG("%s: random map size %u, symmetry %u, field0c %u, map seed %u, start goods %u, "
+                 "human race %u, computer players %u",
+                 what, setup.size, setup.symmetry, setup.field0c, setup.mapSeed, setup.goods,
+                 setup.race, setup.computers);
+    }
 }
 
 bool LoadRecording(const std::string& path) {
@@ -145,9 +169,11 @@ bool LoadRecording(const std::string& path) {
     }
     const recording::Header header = recording::ReadHeader(file);
     bool ok = header.version != 0;
-    if (header.version == 2) {
-        S3RE_LOG("replay: %s was recorded with seed %u, settings %#x, map '%s'", path.c_str(),
-                 header.seed, header.settings, header.map.c_str());
+    if (header.version >= 2) {
+        S3RE_LOG("replay: %s (version %d) was recorded with seed %u, settings %#x, map '%s'",
+                 path.c_str(), header.version, header.seed, header.settings,
+                 header.map.c_str());
+        LogSetup("replay", header.setup);
         if (!MatchesCurrentGame(header)) {
             std::fclose(file);
             return false;
@@ -197,6 +223,7 @@ void Initialize() {
         g_mode = Mode::Record;
         S3RE_LOG("record: writing commands to %s (seed %u, settings %#x, map '%s')",
                  recordPath.c_str(), header.seed, header.settings, header.map.c_str());
+        LogSetup("record", header.setup);
     } else if (!replayPath.empty()) {
         if (LoadRecording(replayPath)) {
             g_mode = Mode::Replay;
@@ -275,6 +302,22 @@ void CompareLive(const std::uint32_t* dwords, std::size_t count) {
     }
 }
 
+// The game's own fast-forward (F12 in single player, ProcessEvents
+// 0x525cd2: g_stepCountdown += 882) is a UI event, not a command, so a
+// recording doesn't contain it and a replay won't repeat it; it also skips
+// work in the simulation (fog of war, minimap), so the replay may diverge
+// from there. Warn in the log when it happens while recording.
+void WarnAboutFastForward() {
+    const std::uint32_t countdown = game::g_stepCountdown;
+    if (countdown > g_lastStepCountdown) {
+        ++g_fastForwards;
+        S3RE_LOG("record: WARNING: the game's fast-forward (F12) was used at slot %u (step "
+                 "countdown %u -> %u); a replay doesn't repeat it and may diverge from here",
+                 g_slot, g_lastStepCountdown, countdown);
+    }
+    g_lastStepCountdown = countdown;
+}
+
 // Rewrites one push on the logic->net queue. Returns the dwords to forward.
 std::vector<std::uint32_t> Process(const std::uint32_t* dwords, int count) {
     std::vector<std::uint32_t> out;
@@ -310,6 +353,9 @@ std::vector<std::uint32_t> Process(const std::uint32_t* dwords, int count) {
                 continue;  // dropped; the recorded copy is injected instead
             }
         } else if (type == kStepMessage) {
+            if (g_mode == Mode::Record) {
+                WarnAboutFastForward();
+            }
             if (g_mode == Mode::Replay) {
                 while (g_nextInject < g_recorded.size() &&
                        g_recorded[g_nextInject].slot <= g_slot) {
@@ -366,7 +412,8 @@ void CloseCommandLog() {
     if (g_mode == Mode::Record && g_recordFile != nullptr) {
         std::fclose(g_recordFile);
         g_recordFile = nullptr;
-        S3RE_LOG("record: %lu commands in %u step slots", g_commands, g_slot);
+        S3RE_LOG("record: %lu commands in %u step slots, %lu fast-forwards (F12)", g_commands,
+                 g_slot, g_fastForwards);
     } else if (g_mode == Mode::Replay) {
         S3RE_LOG("replay: injected %zu of %zu recorded commands over %u step slots; "
                  "%lu live commands, %lu matched the recording (%lu only in padding bytes), "

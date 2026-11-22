@@ -87,6 +87,9 @@ static_assert(sizeof(PixelFormat) == 0x18);
 inline constexpr GameGlobal<volatile std::uint32_t> g_gameTick{0x7dfd48};
 // Non-zero: UpdateEnvironment returns at once, Step skips the game-end check.
 inline constexpr GameGlobal<std::uint8_t> g_worldUpdateDisabled{0x7deb55};
+// Steps still to catch up (CLogicThread::Step); the single-player F12 key
+// adds 882 (ProcessEvents 0x525cd2, the game's own fast-forward).
+inline constexpr GameGlobal<volatile std::uint32_t> g_stepCountdown{0x7dfd2c};
 // Set while CLogicThread::Step catches up (fog of war and minimap skipped).
 inline constexpr GameGlobal<std::int32_t> g_fastForwarding{0x7dfd30};
 // Non-zero while the whole map is shown (reveal spell, CLogicThread).

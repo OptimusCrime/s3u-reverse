@@ -66,10 +66,6 @@ Each item: what, why, and where to start.
   values), and have a crashing test's CalleeStubs restore its patches
   (the SEH guard skips the destructor).
 
-- **Record/replay of random-map games:** `--random-map` can't be combined
-  with the command recorder, because recordings store only a map file
-  name. Add the random-map parameters to the recording format (version 3)
-  so synthetic-input games on random maps can be replayed.
 - **Emulator coverage of `CGameData::GenerateRandomMap`:** 338/415 blocks; the rest
   needs maps of 130+ tiles, too slow in the emulator (a 320-tile case ran
   for over an hour). Options: a release build of s3re.dll for the emulator,

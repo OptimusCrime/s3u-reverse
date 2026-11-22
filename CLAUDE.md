@@ -345,12 +345,29 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   second dialog value, symmetry, seed) and chunk 1 (random-map kind, start
   positions), built exactly like the map dialog does (`0x481e90`).
   `CLogicThread::OnStart` then calls GenerateRandomMap with that chunk. `--seed N` also
-  becomes the map seed (GenerateRandomMap seeds the RNG through `SeedRandom`). Not
-  combinable with `--load-save` or the command recorder. Code:
+  becomes the map seed (GenerateRandomMap seeds the RNG through `SeedRandom`); without
+  `--seed` the launcher picks a random one. `--goods low|medium|high` (start
+  goods, NewGame arg 9), `--computers N` (N computer opponents, one party
+  each; rewrites NewGame's party vectors) and `--race R` (your race, via a
+  pass-through on `GamePlayerSetup::Set` 0x49f120) go with it; there is no
+  computer-player difficulty in the game (`re/game_setup.md`, which also
+  documents NewGame's arguments). Combinable with the command recorder
+  (recording version 3 stores the setup; `--replay-commands` restarts the
+  same game), not with `--load-save`. Code:
   `src/s3re/tooling/random_map_start.cpp`. `python
   tools/check_random_map.py --maps "384,0;448,3" --ticks N
   [--against-original] [--map FILE]` runs it unattended (twice original, or
   original vs ours) and records call counts as source `random:SIZE,SYM seed N`.
+- **Recording a whole game played by the user:** `python
+  tools/play_game.py` (defaults: 768 random map, 2 computer players, high
+  goods, random seed, `--original`, normal speed, trace on; takes the game
+  lock for the session) writes `build/x86/bin/Debug/recordings/NAME.bin`
+  (+ `.bin.tsv` trace, `.log`). User guide: `docs/recording_a_game.md`.
+  Commands are flushed per command; quitting or closing the window ends the
+  recording. F12 (the game's fast-forward, `g_stepCountdown` += 882) is a
+  UI event that a recording can't contain; the recorder logs a warning.
+  Single-player saving is not a command (ProcessEvents) and doesn't affect
+  the recording.
 - **Leaving out single replacements:** `--skip-hooks NAME[,NAME...]` (hook
   names as in the "hooked NAME" lines of s3re.log) installs everything
   except those, so the original runs there: to find which replacement makes
@@ -365,7 +382,8 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
 - **Recording and replaying commands:** `--record-commands FILE` records
   every command; `--replay-commands FILE` replays a recording instead of the
   live commands. Recordings (format in `src/common/recording_format.h`)
-  store the game seed, the map and the random-race setting; the launcher
+  store the game seed, the map and the random-race setting (version 3 also
+  the `--random-map` setup); the launcher
   starts the replay with that seed and map (an explicit `--seed`/`-map`
   must agree) and the DLL stops the game (exit code 3) if the running game
   doesn't match. Old version 1 recordings need `--seed` and `-map`, or

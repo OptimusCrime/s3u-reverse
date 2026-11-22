@@ -30,7 +30,11 @@ UpdatePhase2). Next simulation step: UpdateSettlers itself (16,600
 instructions, hooked as one unit, split per job internally; see
 re/update_settlers.md and re/update_settlers_jobs.csv). The user will
 later record a full game from start to finish for the late-game paths
-(spells, ships, tower captures, shooting soldiers, late building types).
+(spells, ships, tower captures, shooting soldiers, late building types):
+the tool is ready, `python tools/play_game.py` (docs/recording_a_game.md;
+session 45 entry "play-and-record tool"). When the recording arrives:
+`check_replay.py --recording FILE --against-original --ticks N`, then
+`record_call_counts.py`.
 
 **Core gameplay first, no network (user decision 2026-11-09, after
 batch 27).** Skip network code entirely for now: CNetThread, `Lobby::*`,
@@ -574,6 +578,50 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-22 (45): play-and-record tool (parallel worktree)
+
+For the user's whole-game recording (late-game code paths).
+
+- **Game setup analysed** (`re/game_setup.md`): `GameSettings::NewGame`
+  0x431ab0's 13 arguments (players / computers per party as Watcom int
+  vectors, start goods arg 9 -> +0x74 = 1 low / 2 medium (0 too) / 3 high,
+  read by the town placement 0x506cf0; NGO goods objective args 12/13;
+  Amazons arg 11). Player records via `GamePlayerSetup::Set` 0x49f120
+  (was Net_sub_49f120): type 0 human / 2 computer, race 0xff = random
+  (drawn by OnStart). **No computer-player difficulty exists** (no field,
+  `CComputerPlayer` 0x550900 takes world, queue, player, first). The map
+  dialog's second random-map value (field0c) is read by nobody but the
+  network/info screen, so landscape resources can't be chosen. F12 =
+  the single-player fast-forward (ProcessEvents jump table 0x534cbc,
+  `g_stepCountdown` += 882; a UI event, not a command). Single-player
+  saving is in ProcessEvents (0x50ac40), not a command; sets only UI
+  fields.
+- **Launcher:** `--random-map` now takes `--goods low|medium|high`,
+  `--computers N` (N+1 one-player parties, you in party 0; rewrites the
+  party vectors, growing their buffers with the game's new/delete) and
+  `--race R` (pass-through on 0x49f120 during that NewGame call), picks a
+  random seed when none is given, and combines with `--record-commands`.
+- **Recording format version 3** (`S3RECMD3`): v2 + a length-prefixed game
+  setup block (random map size/symmetry/field0c/map seed, goods, race,
+  computers). `--replay-commands` restarts the same game; the DLL checks
+  the setup. v1/v2 still read (scripted-seed127.bin replayed identical).
+  `command_log.py list` shows the setup; `check_replay.py` takes
+  `--random-map/--goods/--computers/--race` for new recordings. The
+  recorder logs a warning when F12 is used. Original-mode tooling
+  version 3.
+- **`tools/play_game.py`**: one command for the user (768 map, 2
+  computers, high goods, random seed, `--original`, normal speed, trace
+  on, game lock held), writes `recordings/NAME.bin` + `.bin.tsv` + `.log`.
+  Guide: `docs/recording_a_game.md` (README and CLAUDE.md point to it).
+- **Evidence:** `check_replay.py --random-map 768,0 --goods high
+  --computers 2 --race roman --seed 4321 --synthetic-input 7 --ticks 1500`:
+  replay identical, mutation differs, REPLAY OK; log shows 3 players (0
+  human race 0, 1 and 2 computers in parties 1 and 2), towns placed for
+  all three. Same recording `--against-original`: identical (214
+  replacements called). `play_game.py --size 640 --race amazon
+  --exit-after-ticks 600` (original code): recording v3, replay with our
+  code vs the recorded trace identical.
 
 ### 2026-11-22 (45): readability pilot: enums.h (parallel worktree)
 
