@@ -91,6 +91,8 @@ Order:
 5. 0x4A1EE0 FindPath (sets and clears the global 0x7A9D98).
 6. 0x500860 WalkSettler (3,097 instructions, 3 jump tables; calls B's
    0x50CF50 and 0x545B90 through their addresses).
+   Done in session 45 (settler_walk.cpp; every callee through its
+   address).
 
 Heaviest package, but self-contained (no other package calls into it).
 

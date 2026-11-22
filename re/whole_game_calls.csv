@@ -2095,6 +2095,9 @@ address,name,source,ticks,calls,commit,date,note
 0x004ffd60,BuildingTypeAllowedForRace,save:slot 1.sav,2000,0,8ee6e3b,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x004ffd60,BuildingTypeAllowedForRace,save:slot 2.sav,2000,0,8ee6e3b,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x004ffd60,BuildingTypeAllowedForRace,save:slot 3.sav,2000,0,8ee6e3b,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x00500860,GameWorld::WalkSettler,replay:fun8-seed2024-input31.bin,3000,83180,17dae2f,2026-11-22,seed 2024
+0x00500860,GameWorld::WalkSettler,replay:scripted-seed127.bin,3000,17521,17dae2f,2026-11-22,seed 1234
+0x00500860,GameWorld::WalkSettler,save:slot 1.sav,2000,721577,17dae2f,2026-11-22,
 0x00503610,GameWorld::SetSettlerTarget,"random:384,0 seed 1234",1500,1404,21f1f01,2026-11-10,
 0x00503610,GameWorld::SetSettlerTarget,"random:448,3 seed 1234",1500,1617,21f1f01,2026-11-10,
 0x00503610,GameWorld::SetSettlerTarget,"random:448,3 seed 1234 skip GameWorld_Create",300,590,5536f09,2026-11-10,

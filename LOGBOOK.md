@@ -635,6 +635,48 @@ instructions; most of it is Volker\GodlyEvents.cpp, the spells).
 - Package B is complete (28/28). Left of the round: WalkSettler 0x500860
   (package A).
 
+### 2026-11-22 (45): package A: WalkSettler (parallel worktree)
+
+`GameWorld::WalkSettler` 0x500860 (was Logic_sub_500860, 3,097
+instructions) is reimplemented and verified in
+`src/s3re/game/settler_walk.cpp`; package A is complete. Behaviour
+summary in the file header and the inventory row; new settler field
+knowledge (+0x15 arrows/passengers, +0x16 frame, +0x19 step time, +0x1A
+soldier state, path cache marks 0xFFFD/0xFFFE, +0x3C ship walk counter)
+in re/structs.md.
+
+- **Structure:** frame update; not at the target -> a step (type 0x29
+  seven-tile unit, ships with two FindPath runs and temporarily closed
+  neighbour areas, everyone else: step / wait / swap / ResetSettlerToIdle);
+  at the target -> the job switch (three jump tables), soldiers' states
+  (shoot: target search, per-race delay, SpawnProjectile +
+  AllocTable36700Record; board a ship), types 0x28/0x16, path cache.
+  Every callee is called through its S3.EXE address.
+- **Known difference:** race 3 soldiers shooting at a catapult/ship with a
+  delay roll above 0x4e20 take building +0x38 of the last building tile
+  the search looked at; without one, the original reads an uninitialized
+  local (ours: building 0). Tests and spec put a building on the post tile
+  for race 3.
+- **Tests:** `GameWorld_WalkSettler_MatchesOriginal` (40,000 cases on a
+  sanitized full world; FindPath, ResetSettlerToIdle, SpawnProjectile,
+  Spawn_544e70, AllocTable36700Record, RemoveSettlerFromLists,
+  MoveSettlerToBuildingTileA, SetSettlerAnimation are recording stubs;
+  DebugLogs compared) and two mutation tests (shot direction, ship
+  counter). `test/callee_stub.h` now takes 1..10 stack arguments (one
+  generic stub template). Full in-process suite: 454/454.
+- **Emulator spec:** 2,000 cases, 0 mismatches, 428/428 blocks (4 seeds
+  checked); 6 dead blocks exempt (the type-0x17 step-time case inlined
+  into the type 0x29 and ship paths). FindPath is replaced per case by a
+  small stub written over its first bytes through `globals` (logs its
+  argument, returns chosen results in call order) -- no harness change;
+  7 callees probed.
+- **Whole game (all identical to the original, --fast, cached
+  references):** scripted-seed127.bin 3,000 ticks: 17,521 calls;
+  fun8-seed2024-input31.bin 3,000 ticks: 83,180 calls; "slot 1.sav"
+  2,000 ticks: 721,577 calls. SpawnProjectile/AllocTable36700Record were
+  never called, so the soldier shooting (and probably ship boarding)
+  paths are test-only so far.
+
 ### 2026-11-10 (44): round end of the UpdateSettlers parallel round
 
 - Main at ff0bd87 has packages A (25/26), B (27/28), C (22/22). Left:

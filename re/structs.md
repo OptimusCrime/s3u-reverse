@@ -173,11 +173,12 @@ settler_records.cpp, settler_queries.cpp, building_tiles.cpp, counting.cpp.
 | 0x10 | u16 | next | list link (area/player settler lists) | V |
 | 0x12 | u16 | prev | list link | V |
 | 0x14 | u8 | flags | bit 0x40: in a building slot (LeaveBuildingSlot) | V (0x40) |
-| 0x15 | u8 | slot | low 3 bits: the settler's slot in its building; LeaveBuildingSlot clears the tile (A.x + slot + 1, A.y) | V |
-| 0x16..0x18 | u8 | | job state bytes (UpdateSettlers) | G |
+| 0x15 | u8 | slot | low 3 bits: the settler's slot in its building; LeaveBuildingSlot clears the tile (A.x + slot + 1, A.y). WalkSettler: a shooting soldier's arrows (-1 per shot; race 3 sets 6), a ship's passenger count (+1 per boarding settler, capacity per race S3.EXE 0x659644); type 0x17 with +0x15 != 0 walks one tick slower | V |
+| 0x16 | u8 | frame | animation frame while walking: WalkSettler adds +0x19 each step modulo 12 (type 0x29: 36), 0 at the target, 1 after a step if 0 | V |
+| 0x17..0x18 | u8 | | job state bytes (UpdateSettlers) | G |
 | 0x17 | u8 | | 1 when a carrier takes two units (SendNearestSettlerToPile) | V |
-| 0x19 | u8 | | set to 1 with a new target if it was 0 | V |
-| 0x1A | u8 | good | goods type being carried / fetched | V |
+| 0x19 | u8 | step time | set to 1 with a new target if it was 0; WalkSettler: ticks per step = terrain speed (S3.EXE 0x658c1c) + type speed (0x6591a4), counter +0xC = it - 1; 0 while waiting | V |
+| 0x1A | u8 | good | goods type being carried / fetched; for jobs 0x35/0xB0 (WalkSettler) a state: 1 look for a ship to board, 2 shoot from the post (path cache [2]/[3]), 3/4/5 for type 0x17 | V |
 | 0x1C | u32 | saved direction | restored by RestoreSettlerDirection | V |
 | 0x20 | u16 | saved counter | restored with it (accessed in the folded form `(n + 0x4A97A) << 6`); SetSettlerSavedAnimation 0x50E320 stores the frame count - 1 here. For seven-tile units (CreateSevenTileUnit 0x50DD20) it is the next part settler instead (main settler -> part 1 -> ... -> part 6) | V |
 | 0x22 | u16 | building | the settler's building / destination record | V |
@@ -189,8 +190,8 @@ settler_records.cpp, settler_queries.cpp, building_tiles.cpp, counting.cpp.
 | 0x2D | u8 | path steps | steps left of an edge walk (CompareEdges sets it, FollowEdge counts down, back to mode 2 at 0) | V (pathing) |
 | 0x2E | u8 | path direction | direction 0..5 where the edge walk's search starts, or the blocked step while waiting | V (pathing) |
 | 0x2F | u8 | | not seen accessed yet | |
-| 0x30..0x3A | u16[6] | path cache | set to 0xFFFF with a new target | V (writes), S (meaning) |
-| 0x3C | u8 | | cleared by SendNearestSettlerToBuilding | V |
+| 0x30..0x3A | u16[6] | path cache | set to 0xFFFF with a new target. WalkSettler: (0, 1) the next target, taken when the settler arrives (the rest shifts down); [4] = 0xFFFE: patrol, (0, 1) and (2, 3) swap; [4] = 0xFFFD: arrived when within [5] steps of ([2], [3]) (a soldier's post) | V |
+| 0x3C | u8 | | cleared by SendNearestSettlerToBuilding. Ships (WalkSettler): low 3 bits the last direction, upper 5 bits a count of steps where its two path searches disagreed (at 0xF8 it gives up: job 0x37); type 0x2B with 0xFF walks like a settler | V |
 | 0x3D..0x3F | | | not accessed | |
 
 ---

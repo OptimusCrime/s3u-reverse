@@ -14,7 +14,7 @@
 // also change the world, e.g. set a settler's job, so that both versions
 // see the same side effects). Tests compare the two call logs.
 //
-// Only for thiscall callees with 1..5 stack arguments (ret 4*N). The tests
+// Only for thiscall callees with 1..10 stack arguments (ret 4*N). The tests
 // run before the game starts, so no other thread calls the patched code.
 
 #include "game/world.h"
@@ -24,14 +24,17 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <utility>
 #include <vector>
 
 namespace s3re::test {
 
+constexpr int kMaxStubArgs = 10;
+
 struct StubCall {
     std::uintptr_t callee;
     std::uint32_t self;  // ECX minus the current world
-    std::uint32_t args[5];
+    std::uint32_t args[10];
     bool operator==(const StubCall& other) const {
         return callee == other.callee && self == other.self &&
                std::memcmp(args, other.args, sizeof(args)) == 0;
@@ -57,21 +60,10 @@ public:
     // recording stub; `effect` (optional) gives EAX and side effects.
     template <int N, std::uintptr_t Address>
     void Install(StubEffect effect = nullptr) {
-        static_assert(N >= 1 && N <= 5);
+        static_assert(N >= 1 && N <= kMaxStubArgs);
         Patch patch{Address, {}, std::move(effect)};
         std::memcpy(patch.saved, reinterpret_cast<const void*>(Address), 5);
-        void* target = nullptr;
-        if constexpr (N == 1) {
-            target = reinterpret_cast<void*>(&Stub1<Address>);
-        } else if constexpr (N == 2) {
-            target = reinterpret_cast<void*>(&Stub2<Address>);
-        } else if constexpr (N == 3) {
-            target = reinterpret_cast<void*>(&Stub3<Address>);
-        } else if constexpr (N == 4) {
-            target = reinterpret_cast<void*>(&Stub4<Address>);
-        } else {
-            target = reinterpret_cast<void*>(&Stub5<Address>);
-        }
+        void* target = StubFor<Address>(std::make_index_sequence<N>{});
         std::uint8_t jump[5] = {0xe9};
         const std::uint32_t rel = reinterpret_cast<std::uint32_t>(target) - (static_cast<std::uint32_t>(Address) + 5);
         std::memcpy(jump + 1, &rel, 4);
@@ -110,13 +102,15 @@ private:
         FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(address), size);
     }
 
-    static std::uint32_t Record(std::uintptr_t address, void* self, std::uint32_t a0, std::uint32_t a1,
-                                std::uint32_t a2, std::uint32_t a3, std::uint32_t a4 = 0) {
+    static std::uint32_t Record(std::uintptr_t address, void* self, const std::uint32_t* args, std::size_t count) {
         CalleeStubs* stubs = Current();
         StubCall call{address,
                       static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(self) -
                                                  reinterpret_cast<std::uintptr_t>(stubs->world_)),
-                      {a0, a1, a2, a3, a4}};
+                      {}};
+        for (std::size_t i = 0; i < count; ++i) {
+            call.args[i] = args[i];
+        }
         stubs->calls_.push_back(call);
         for (Patch& patch : stubs->patches_) {
             if (patch.address == address && patch.effect) {
@@ -126,27 +120,18 @@ private:
         return 0;
     }
 
-    template <std::uintptr_t Address>
-    static std::uint32_t __fastcall Stub1(void* self, void*, std::uint32_t a0) {
-        return Record(Address, self, a0, 0, 0, 0);
+    // A __fastcall stub (ECX = this, EDX unused) with sizeof...(I) dword
+    // stack arguments, which it pops like the thiscall callee.
+    template <std::size_t>
+    using Dword = std::uint32_t;
+    template <std::uintptr_t Address, std::size_t... I>
+    static std::uint32_t __fastcall Stub(void* self, void*, Dword<I>... args) {
+        const std::uint32_t values[] = {args...};
+        return Record(Address, self, values, sizeof...(I));
     }
-    template <std::uintptr_t Address>
-    static std::uint32_t __fastcall Stub2(void* self, void*, std::uint32_t a0, std::uint32_t a1) {
-        return Record(Address, self, a0, a1, 0, 0);
-    }
-    template <std::uintptr_t Address>
-    static std::uint32_t __fastcall Stub3(void* self, void*, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2) {
-        return Record(Address, self, a0, a1, a2, 0);
-    }
-    template <std::uintptr_t Address>
-    static std::uint32_t __fastcall Stub4(void* self, void*, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
-                                          std::uint32_t a3) {
-        return Record(Address, self, a0, a1, a2, a3);
-    }
-    template <std::uintptr_t Address>
-    static std::uint32_t __fastcall Stub5(void* self, void*, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
-                                          std::uint32_t a3, std::uint32_t a4) {
-        return Record(Address, self, a0, a1, a2, a3, a4);
+    template <std::uintptr_t Address, std::size_t... I>
+    static void* StubFor(std::index_sequence<I...>) {
+        return reinterpret_cast<void*>(&Stub<Address, I...>);
     }
 
     std::vector<Patch> patches_;

@@ -13,6 +13,7 @@ constants found in the original function's code.
 
 from __future__ import annotations
 
+import struct
 from dataclasses import dataclass
 from typing import Callable
 
@@ -6866,4 +6867,246 @@ SPECS += [
          [anything, lambda rng, pool: rng.randint(-50, 800) & 0xFFFFFFFF,
           lambda rng, pool: rng.randint(-50, 800) & 0xFFFFFFFF, anything, below(34, 0.1)], eax_mask=0,
          presets=lambda rng, pool, args: [(SIGHT_MAP, rng.randint(1, 768), 4)], callees=SPELL_HANDLERS),
+]
+
+
+# WalkSettler 0x500860 (package A): one step of a walking settler. The
+# window around the settler (and around a soldier's post, and radius 15
+# for settlers looking for a ship) holds small settler/building numbers
+# whose records are set up near the settler; everything else is lazily
+# random. FindPath is replaced for the case by a stub written over its
+# first bytes (WALK_FIND_PATH_CODE): it logs its argument (compared like
+# any write) and returns the case's results in call order, so that every
+# combination of the two searches of a ship can be chosen (FindPath itself
+# has its own spec). The other callees with effects beyond simple fields
+# are probes (all verified): ResetSettlerToIdle, RemoveSettlerFromLists
+# and the map effects walk lists, SetSettlerAnimation needs the graphics
+# object, MoveSettlerToBuildingTileA uses the building's coordinates,
+# AllocTable36700Record scans 10000 records.
+WALK_JOBS = (0x002, 0x003, 0x006, 0x00a, 0x00c, 0x00f, 0x011, 0x01c, 0x01d, 0x02a, 0x02b, 0x02d, 0x030,
+             0x035, 0x04c, 0x04e, 0x068, 0x090, 0x093, 0x098, 0x09c, 0x0ab, 0x0b0, 0x0b2, 0x0b5, 0x0bb,
+             0x0bc, 0x0e5, 0x0e8, 0x0ed, 0x0f1, 0x0f6, 0x0f9, 0x0fe, 0x102, 0x133, 0x135, 0x140, 0x141,
+             0x146, 0x147, 0x148, 0x149, 0x14a, 0x165, 0x168, 0x16a, 0x16d, 0x001, 0x037, 0x0ac, 0x004)
+WALK_TYPES = (0x29, 0x2c, 0x2b, 0x17, 0x28, 0x16, 0x05, 0x08, 0x0f, 0x24, 0x00, 0x01, 0x20, 0x13)
+WALK_LAND_TYPES = (0x05, 0x08, 0x0f, 0x20, 0x1e, 0x1f, 0x23, 0x21, 0x22, 0x16, 0x28, 0x17, 0x24)
+WALK_TERRAINS = (0x10, 0x30, 0x05, 0x06, 0x20, 0x21, 0x2f, 0x00, 0x12, 0x1c, 0x40, 0x08)
+WALK_OTHERS = 30  # settlers 1..30 and buildings 1..30 are the ones the windows refer to
+WALK_FIND_PATH = 0x004a1ee0
+WALK_PATH_INDEX = 0x004a1f40
+WALK_PATH_LOG = 0x004a1f44      # 4 dwords: FindPath's arguments
+WALK_PATH_RESULTS = 0x004a1f60  # 4 dwords
+WALK_FIND_PATH_CODE = (
+    b"\xa1" + struct.pack("<I", WALK_PATH_INDEX)              # mov eax, [index]
+    + b"\x8b\x54\x24\x04"                                       # mov edx, [esp+4]
+    + b"\x89\x14\x85" + struct.pack("<I", WALK_PATH_LOG)      # mov [log+eax*4], edx
+    + b"\xff\x05" + struct.pack("<I", WALK_PATH_INDEX)         # inc dword [index]
+    + b"\x8b\x04\x85" + struct.pack("<I", WALK_PATH_RESULTS)  # mov eax, [results+eax*4]
+    + b"\xc2\x04\x00")                                          # ret 4
+WALK_PROBES = {0x0050cf50: (1, "thiscall", "probe"), 0x00545b90: (10, "thiscall", "probe"),
+               0x00544e70: (7, "thiscall", "probe"), 0x004fefd0: (10, "thiscall", "probe"),
+               0x0050dff0: (1, "thiscall", "probe"), 0x0050de90: (1, "thiscall", "probe"),
+               0x0050e2c0: (2, "thiscall", "probe")}
+_WALK_RINGS: dict = {}
+
+
+def walk_rings(rings: int) -> list:
+    """The offset table (world+0x110a588: dx, dy, distance) for rings
+    0..rings-1, then an entry with distance 1000 that ends every search."""
+    if rings not in _WALK_RINGS:
+        fields, k = [], 0
+        for r in range(rings):
+            for dx in range(-r, r + 1):
+                for dy in range(-r, r + 1):
+                    if hex_distance(dx, dy) == r:
+                        record = NEIGHBOUR_OFFSETS + k * 16
+                        fields += [(record, dx & 0xFFFFFFFF, 4), (record + 4, dy & 0xFFFFFFFF, 4), (record + 8, r, 4)]
+                        k += 1
+        fields.append((NEIGHBOUR_OFFSETS + k * 16 + 8, 1000, 4))
+        _WALK_RINGS[rings] = fields
+    return _WALK_RINGS[rings]
+
+
+def walk_path_result(rng) -> int:
+    pick = rng.randrange(11)
+    if pick < 3:
+        return rng.randrange(6)
+    if pick == 10:
+        return 0x10 | rng.randrange(6)
+    return (rng.randrange(8), 8 | rng.randrange(8), 0x10 | rng.randrange(8), 0xff, 8 + rng.randrange(8),
+            rng.randrange(0x20), rng.getrandbits(9))[pick - 3]
+
+
+def walk_globals(rng, pool, args):
+    first = walk_path_result(rng)
+    second = first if rng.random() < 0.25 else walk_path_result(rng)
+    if rng.random() < 0.3:
+        # A ship's two searches near each other: the second one in the
+        # first's direction or next to it (or straight back).
+        c = rng.randrange(6)
+        first = rng.choice((c, c | 8))
+        second = rng.choice((c, (c + 5) % 6, (c + 1) % 6, (c + 3) % 6))
+    fields = [(WALK_FIND_PATH + i, b, 1) for i, b in enumerate(WALK_FIND_PATH_CODE)]
+    fields += [(WALK_PATH_INDEX, 0, 4), (WALK_PATH_RESULTS, first, 4), (WALK_PATH_RESULTS + 4, second, 4),
+               (WALK_PATH_RESULTS + 8, rng.getrandbits(32), 4), (WALK_PATH_RESULTS + 12, rng.getrandbits(32), 4)]
+    return fields
+
+
+def walk_other(rng, k, x, y, owner):
+    """Settler k (1..30) near (x, y), often of the walker's player."""
+    record = SETTLERS + k * SETTLER_BYTES
+    art = rng.choice(WALK_TYPES + (0x2c, 0x2c, 0x29, 0x17, 0x17, 0x17))
+    job = rng.choice((0xae, 0xae, 0x145, 0xab, 0xac, 0x01, 0x37, 0x01, 0x37, 0x35)) if rng.random() < 0.7 \
+        else rng.choice(WALK_JOBS)
+    return [(record, owner if rng.random() < 0.5 else rng.randrange(4), 1), (record + 0x1, art, 1),
+            (record + 0x2, rng.randrange(4), 1), (record + 0x4, x + rng.randint(-15, 15), 2), (record + 0x6, y + rng.randint(-15, 15), 2),
+            (record + 0xe, job, 2), (record + 0x15, rng.randrange(8), 1),
+            (record + 0x20, rng.randrange(1, WALK_OTHERS + 1), 2)]
+
+
+def walk_state(rng, pool, args):
+    n = args[0]
+    record = SETTLERS + n * SETTLER_BYTES
+    scenario = rng.choice(("walk", "walk", "walk", "walk", "arrive", "arrive", "arrive", "arrive", "shoot",
+                           "shoot", "board", "board", "tail"))
+    x, y = rng.randint(40, 340), rng.randint(40, 340)
+    fields = [(MAP_SIZE, 384, 4)] + walk_rings(16 if scenario == "board" else 8)
+    races = [rng.randrange(4) if rng.random() < 0.85 else rng.randint(4, 6) for _ in range(4)]
+    for p in range(4):
+        fields += [(PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, races[p], 4),
+                   (PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xc, rng.randrange(3), 4)]
+    owner = rng.randrange(4)
+    if scenario == "walk":
+        pick = rng.random()
+        art = 0x29 if pick < 0.2 else rng.choice((0x2c, 0x2b)) if pick < 0.5 else rng.choice(WALK_TYPES)
+        job = rng.choice(WALK_JOBS)
+        if art in (0x2b, 0x2c) and rng.random() < 0.5:
+            job = rng.choice((0x147, 0x148, 0x149))
+    elif scenario in ("shoot", "board"):
+        art = rng.choice(WALK_LAND_TYPES) if rng.random() < 0.8 else rng.choice(WALK_TYPES)
+        job = rng.choice((0x35, 0xb0))
+    elif scenario == "tail":
+        art = rng.choice((0x28, 0x16, 0x17))
+        job = rng.choice((0x35, 0xb0))
+    else:
+        art = rng.choice(WALK_TYPES)
+        job = rng.choice(WALK_JOBS + (0x35, 0xb0, 0xab, 0xab, 0xab, 0xab, 0x135, 0x148, 0x149, 0x14a))
+    cache = [0xFFFF if rng.random() < 0.5 else rng.randint(30, 350) for _ in range(6)]
+    if rng.random() < 0.5:
+        cache[0], cache[1] = rng.randint(30, 350), rng.randint(30, 350)
+    cache[4] = rng.choice((0xFFFD, 0xFFFE, cache[4]))
+    post = (x + rng.randint(-20, 20), y + rng.randint(-20, 20))
+    cache[2], cache[3], cache[5] = post[0], post[1], rng.choice((40, 40, rng.randrange(20)))
+    state = rng.randrange(7)
+    if scenario == "shoot":
+        state, cache[4] = 2, 0xFFFD
+    elif scenario == "board":
+        state = 1
+    if scenario == "walk":
+        tx, ty = x + rng.randint(-10, 10), y + rng.randint(-10, 10)
+        if (tx, ty) == (x, y):
+            tx += 1
+        if rng.random() < 0.05:
+            tx = rng.choice((384, 385, 0xFFFF))
+        if rng.random() < 0.3:
+            cache[4], cache[5] = 0xFFFD, rng.randrange(10)
+    else:
+        tx, ty = (x, y) if rng.random() < 0.85 else (x + rng.randint(-3, 3), y + rng.randint(-3, 3))
+    count = rng.choice((0xff, 0xf0 + rng.randrange(16), 6 + rng.randrange(2) + 8 * rng.randrange(4),
+                        rng.getrandbits(8)))
+    fields += [(record, owner, 1), (record + 0x1, art, 1), (record + 0x2, rng.randrange(4), 1),
+               (record + 0x3, rng.randrange(8), 1), (record + 0x4, x, 2), (record + 0x6, y, 2),
+               (record + 0xe, job, 2), (record + 0x10, rng.randrange(WALK_OTHERS + 1), 2),
+               (record + 0x12, 0 if rng.random() < 0.5 else rng.randrange(WALK_OTHERS + 1), 2),
+               (record + 0x15, 0 if rng.random() < 0.25 else rng.randrange(8), 1),
+               (record + 0x16, 0 if rng.random() < 0.4 else rng.getrandbits(8), 1),
+               (record + 0x19, 0 if rng.random() < 0.4 else rng.getrandbits(8), 1),
+               (record + 0x1a, state, 1),
+               (record + 0x1c, 0xFFFF if rng.random() < 0.5 else rng.randrange(6), 4),
+               (record + 0x20, rng.randrange(1, WALK_OTHERS + 1), 2),
+               (record + 0x24, tx, 2), (record + 0x26, ty, 2), (record + 0x3c, count, 1)]
+    fields += [(record + 0x30 + 2 * k, cache[k], 2) for k in range(6)]
+    region = rng.randint(1, 3)
+    here = tile(x, y)
+    area = rng.choice((0, 0x8000 | rng.getrandbits(15), rng.randint(1, 0xfff), rng.randint(1, 0xfff)))
+    # The six neighbours (step, swap partner) and the ring around them
+    # (seven-tile units).
+    for dx in range(-2, 3):
+        for dy in range(-2, 3):
+            if hex_distance(dx, dy) > 2 or (dx, dy) == (0, 0):
+                continue
+            t = tile(x + dx, y + dy)
+            fields += [(t, 0 if rng.random() < (0.5 if hex_distance(dx, dy) == 1 else 0.75) else
+                        rng.randrange(1, WALK_OTHERS + 1), 2),
+                       (t + 0x2, 0 if rng.random() < 0.85 else rng.getrandbits(16), 2),
+                       (t + 0x6, rng.choice(WALK_TERRAINS), 1)]
+            if hex_distance(dx, dy) == 1:
+                fields += [(t + 0x8, rng.choice((0xff, owner, rng.randrange(4))), 1),
+                           (t + 0x7, 0 if rng.random() < (0.97 if scenario == "tail" else 0.75)
+                            else rng.getrandbits(8), 1),
+                           (t + 0x14, rng.getrandbits(16), 2)]
+    for k in range(1, WALK_OTHERS + 1):
+        fields += walk_other(rng, k, x, y, owner)
+    if scenario == "shoot":
+        px, py = post
+        for b in range(1, WALK_OTHERS + 1):
+            r = BUILDINGS + b * BUILDING_BYTES
+            fields += [(r, rng.randrange(4), 1), (r + 0x2, px + rng.randint(-15, 15), 2),
+                       (r + 0x4, py + rng.randint(-15, 15), 2),
+                       (r + 0x6, rng.choice((0xf, 0x10, 0x12, rng.randrange(0x40))), 1)]
+        for dx in range(-5, 6):
+            for dy in range(-5, 6):
+                if hex_distance(dx, dy) > 5:
+                    continue
+                t = tile(px + dx, py + dy)
+                flags = rng.getrandbits(8) & 0xdf
+                if rng.random() < 0.4 or (races[owner] == 3 and (dx, dy) == (0, 0)):
+                    # A building; race 3 soldiers always see one first (see
+                    # the known difference in settler_walk.cpp).
+                    flags |= 0x20
+                fields += [(t + 0xa, flags, 1), (t + 0x2, rng.randrange(1, WALK_OTHERS + 1), 2),
+                           (t, 0 if rng.random() < 0.6 else rng.randrange(1, WALK_OTHERS + 1), 2)]
+    if scenario == "board":
+        for dx in range(-15, 16):
+            for dy in range(-15, 16):
+                if hex_distance(dx, dy) < 15 and hex_distance(dx, dy) > 2:
+                    fields.append((tile(x + dx, y + dy), 0 if rng.random() < 0.9 else
+                                   rng.randrange(1, WALK_OTHERS + 1), 2))
+        # A few ships with shore tiles in reach (sometimes the settler's own tile).
+        for _ in range(rng.randint(1, 3)):
+            k = rng.randrange(1, WALK_OTHERS + 1)
+            side, ring = rng.randrange(6), rng.randint(1, 8)
+            if rng.random() < 0.5:
+                bx, by = x - DIR_X[side] * ring, y - DIR_Y[side] * ring  # the settler stands on the shore
+            else:
+                bx, by = x + rng.randint(-10, 10), y + rng.randint(-10, 10)
+            r = SETTLERS + k * SETTLER_BYTES
+            fields += [(r, rng.choice((owner, rng.randrange(4))), 1), (r + 0x1, 0x2c, 1), (r + 0x4, bx, 2),
+                       (r + 0x6, by, 2), (r + 0xe, 0x145 if rng.random() < 0.1 else 0x35, 2),
+                       (r + 0x15, rng.randrange(8), 1), (tile(bx, by) + 0x6, rng.choice((5, 6, 6, 0x10)), 1)]
+            if 0 < hex_distance(bx - x, by - y) < 15:
+                fields.append((tile(bx, by), k, 2))
+            sx, sy = bx + DIR_X[side] * ring, by + DIR_Y[side] * ring
+            fields += [(tile(sx, sy) + 0x6, 0x30, 1),
+                       (tile(sx, sy) + 0x10, region if rng.random() < 0.8 else rng.randint(1, 3), 1)]
+    # The settler's own tile last (the windows above may cover it).
+    fields += [(here, n if rng.random() < 0.85 else rng.randrange(WALK_OTHERS + 1), 2), (here + 0x14, area, 2),
+               (here + 0x10, region, 1),
+               (here + 0x6, 0x30 if scenario == "board" and rng.random() < 0.5 else
+                rng.choice((0x20, 0x21, 0x2f)) if scenario == "tail" and rng.random() < 0.7 else
+                rng.choice(WALK_TERRAINS), 1),
+               (here + 0x8, rng.choice((0xff, owner, rng.randrange(4))), 1),
+               (here + 0x7, 0 if rng.random() < 0.75 else rng.getrandbits(8), 1),
+               (here + 0xa, rng.getrandbits(8) & rng.choice((0xff, 0xf2, 0xf0)), 1),
+               (AREAS + (area & 0xfff) * AREA_BYTES, rng.choice((owner, rng.randrange(5))), 1)]
+    return fields
+
+
+SPECS += [
+    # 0x502444/0x50244e (type 0x29), 0x5030d7/0x5030e1 and 0x50323a/
+    # 0x503244 (ships): dead. The step time's special case for type 0x17
+    # is inlined into every step, but these paths only run for types 0x29
+    # and 0x2b/0x2c.
+    Spec("GameWorld_WalkSettler", 0x00500860, "thiscall", [between(WALK_OTHERS + 1, 400)], presets=walk_state,
+         globals=walk_globals, callees=WALK_PROBES, max_cases=4000,
+         exempt_blocks=(0x502444, 0x50244e, 0x5030d7, 0x5030e1, 0x50323a, 0x503244)),
 ]

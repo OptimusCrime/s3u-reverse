@@ -25,6 +25,15 @@ Each item: what, why, and where to start.
 - **Rename `Settler::direction` (+0x8).** `GameWorld::SetSettlerAnimation`
   (0x50e2c0) stores an animation id there, so "direction" is too narrow
   (found in the typed-access refactor, re/structs.md).
+- **Name the settler fields WalkSettler explained** (layout.h still has
+  `Settler::unk16` = animation frame, `unk19` = step time, `unk3c` =
+  ship walk counter, and `good`/`slot` double as soldier state / arrows /
+  ship passengers; see re/structs.md). Postponed to avoid conflicts with the
+  parallel round.
+- **WalkSettler whole-game evidence for shooting and boarding:** no check
+  so far calls SpawnProjectile (soldiers shooting from a post) or, probably,
+  boards a ship; a recorded late game with fighting and ships would cover
+  them (settler_walk.cpp; LOGBOOK session 45).
 - **Name the layout.h fields the refactor left as `unk`:** e.g.
   `GameWorld::unk2d274` (the symmetry argument of GameWorld::Create),
   `Building::unk1b[0/1]`, and split
