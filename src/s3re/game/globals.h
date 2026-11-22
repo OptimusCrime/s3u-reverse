@@ -105,6 +105,12 @@ inline constexpr GameGlobal<std::uint32_t> g_strengthDivisor{0x7acfa4};
 inline constexpr GameGlobal<std::uint32_t> g_objectAgeStart{0x730efc};
 // Divisor of soldier damage (256 in the image), UpdateSoldier.
 inline constexpr GameGlobal<std::uint32_t> g_damageDivisor{0x730eec};
+// Read by UpdateSettlers (job 0x50, compared with a settler field) and
+// 0x4a99e8, 0x520415..; meaning still to be named.
+inline constexpr GameGlobal<std::int32_t> g_global7dfd6c{0x7dfd6c};
+// A byte in .data read by UpdateSettlers (carrier job 0x4f) and 0x42f7a1;
+// meaning still to be named.
+inline constexpr GameGlobal<const std::uint8_t> g_byte730ef8{0x730ef8};
 // Per-player tallies, probably end-of-game statistics.
 inline constexpr GameGlobal<PlayerTally[20]> g_playerTallies{0x7acfd4};
 // Cursor 0..127 into the 128 pile claims at world+0x1195dd4 (pile_claims).

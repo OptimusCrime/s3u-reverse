@@ -79,6 +79,12 @@ add_library(s3re SHARED
     game/savegame_start.cpp
     game/screen_element.cpp
     game/settler_idle.cpp
+    game/settler_jobs_building.cpp
+    game/settler_jobs_drinks.cpp
+    game/settler_jobs_food.cpp
+    game/settler_jobs_metal.cpp
+    game/settler_jobs_special.cpp
+    game/settler_jobs_units.cpp
     game/settler_queries.cpp
     game/settler_records.cpp
     game/settlers.cpp
@@ -94,6 +100,7 @@ add_library(s3re SHARED
     game/ui_static_text.cpp
     game/ui_state.cpp
     game/update_economy.cpp
+    game/update_settlers.cpp
     game/world_create.cpp
     game/world_search.cpp
     game/win32_classes.cpp

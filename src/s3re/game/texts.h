@@ -91,6 +91,15 @@ inline constexpr GameText kAttackBuilding{0x6a6038};    // "Angriff Gebaeude"
 inline constexpr GameText kAttackCatapult{0x6a6024};    // "Angriff Katapult"
 inline constexpr GameText kSoldiersLeft{0x6a67fc};      // "TROUBLE ????   Soviele sind ubrig: %u"
 inline constexpr GameText kWinsTower{0x6a67dc};         // "Player %u wins tower from %u"
+// UpdateSettlers (settler_jobs_*.cpp)
+inline constexpr GameText kSettlerOnForeignGround{0x6a5be0};  // "nr. %u art %u owner %u groundowner %u"
+inline constexpr GameText kTypeNumber{0x6a5bd0};        // "Typ: %u Nr %u"
+inline constexpr GameText kCatapultProduction{0x6a5bb4};  // "Katapultproduktion owner %u"
+inline constexpr GameText kShipUnloads{0x6a5ba4};       // "Schiff lädt ab" (ship unloads)
+inline constexpr GameText kThiefStealFail{0x6a5b78};    // "Dieb[%u (%u,%u)]: StealGoodFromPile fail!"
+inline constexpr GameText kThiefNoPile{0x6a5b34};       // "Dieb[%u (%u,%u)]: SpyTakeGood -> no pile there? so search again! "
+inline constexpr GameText kGongProduction{0x6a5b1c};    // "Gongproduktion owner %u"
+inline constexpr GameText kDiggerTrouble{0x6a5b04};     // "Digger trouble %u %u"
 // Environment and effects
 inline constexpr GameText kBuildingHit{0x6a5aec};       // "Gebaeude getroffen %u"
 inline constexpr GameText kCatapultHit{0x6a5ad4};       // "Katapult getroffen %u"
