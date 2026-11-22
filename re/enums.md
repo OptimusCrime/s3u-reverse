@@ -99,6 +99,14 @@ More checks:
   old name for now (TODO.md).
 - 0xc/0xd "tile drop buildings" are the **tool smith and weapon smith**;
   0x13 is the **barracks**.
+- **Settler type 0x29 is the catapult** (session 45 rollout): the
+  "SettlerType29" in `FindNearbySettlerType29` / `IsFreeOfSettlerType29Nearby`
+  means catapult; the seven extra tiles of the war machine workshops
+  (TakeBuildingExtraTiles) are where the machine stands. `UnblockType12BuildingTiles`
+  works on **castles** (type 18). Terrain 0x16, which `SetTerrain16Patch`
+  makes (jobs 145, 230, 247 of the farmer, rice farmer and winegrower), is a
+  **field**, and UpdateEnvironment turns a field without growing objects (0x55..0x6f) around back
+  into grass. The function names are kept for now (TODO.md).
 
 ## Open questions
 
@@ -240,6 +248,36 @@ More checks:
 | 34 | Mead | high | Amazon offering |
 | 35 | Honey | high | meadery input, Amazon mine food |
 | 255 | Empty | high | building pile without a goods type |
+
+## Spells (`Spell`, uint32; the spell argument of ExecuteSpell)
+
+Each race has eight spells (int32[4][8] at 0x658d64, the slots of
+`Player::spell_mana`): Romans 5, 3, 9, 10, 21, 18, 8, 11; Egyptians 2, 0,
+19, 6, 22, 12, 13, 15; Asians 1, 4, 7, 23, 20, 16, 17, 14; Amazons 31, 30,
+29, 28, 26, 27, 24, 25. Names come from ExecuteSpell's (0x5480b0) handlers
+(reimplemented in spells.cpp) and the DebugLog text it logs before a call
+("xxx about to execute EventConvertGoods", "...EventGodlyGoods",
+"...EventGoodsBan", "...EventGoodsSummon", "...EventTreeCurse",
+"...EventRevealMap"). The race of the variants follows from the lists
+(each race has one ConvertGoods and one GodlyGoods spell).
+
+| value | name | confidence | evidence |
+|---|---|---|---|
+| 0..3 | Spell0..Spell3 | placeholder | handler 0x548340 (spell passed on) |
+| 4 | Spell4 | placeholder | handler 0x548fb0 |
+| 5 | RevealSpot | high | SpellRevealSpot: a reveal point for 250 ticks |
+| 6 | BurnTrees | high | SpellBurnTrees: trees catch fire |
+| 7 | AddFish | high | SpellAddFish: fish in water tiles |
+| 8 | HalveResources | high | SpellHalveResources |
+| 9 | GrowTrees | high | SpellGrowTrees: young trees +3 stages |
+| 10, 12, 16, 17, 24, 25 | Spell10 ... | placeholder | shared handler 0x549f40 |
+| 11, 13, 14, 15 | Spell11 ... | placeholder | handlers 0x54a370, 0x54a7c0, 0x54a540, 0x54a1e0 |
+| 18, 19, 20, 27 | ConvertGoods{Roman,Egyptian,Asian,Amazon} | high | "EventConvertGoods", handler 0x549bd0 |
+| 21, 22, 23, 26 | GodlyGoods{Roman,Egyptian,Asian,Amazon} | high | "EventGodlyGoods", handler 0x5499b0 |
+| 28 | GoodsBan | high | "EventGoodsBan", handler 0x54aa40 |
+| 29 | GoodsSummon | high | "EventGoodsSummon", handler 0x54acd0 |
+| 30 | TreeCurse | high | "EventTreeCurse", handler 0x5492a0 |
+| 31 | RevealMap | high | "EventRevealMap", SpellRevealMap |
 
 ## Settler jobs (`SettlerJob`, uint16; Settler::job)
 

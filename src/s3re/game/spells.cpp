@@ -4,7 +4,7 @@
 // The ring table world+0x110a588 (MapOffset) gives the area: the first N
 // offsets around (x, y), N from a table of int32 at 0x65a1f0 (127, 200,
 // 100, 200, 300 in the image; re-read every step of a loop), tiles checked
-// signed against the map size.
+// signed against the map size. Spell numbers: the Spell enum (enums.h).
 //
 // CGameData::ExecuteSpell (0x005480b0): (player, x, y, a4, spell), the
 //   timed event of type 2 (UpdateEnvironment). x, y clamped to the map
@@ -20,12 +20,12 @@
 //   EAX not used (the caller overwrites it).
 // CGameData::SpellRevealSpot (0x00549530): (player, x, y) spell 5: for the
 //   local player, the first free reveal point (active == 0, of 50) gets (x,
-//   y), countdown 0xfa and active 1, the high-water mark raised (signed).
+//   y), countdown 250 (0xfa) and active 1, the high-water mark raised (signed).
 //   Paid also for other players and when all 50 are taken. ret 0xc.
 // CGameData::SpellRevealMap (0x005495d0): (player) spell 31: for the local
 //   player: if g_revealMap is not 1 yet: g_revealMap = 1, player +0x124 =
 //   1, +0x128 = g_gameTick, DebugLog("xxx GE done: optionviewall SET");
-//   else PushUiFeedback(0x36). Always paid. ret 4.
+//   else PushUiFeedback(54, 0x36). Always paid. ret 4.
 // CGameData::SpellBurnTrees (0x00549650): (player, x, y) spell 6: trees
 //   0x44..0x51 among the first 127 offsets catch fire (object 0xf3); paid
 //   if any did. ret 0xc.
@@ -44,6 +44,7 @@
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
+#include "game/enums.h"
 #include "game/globals.h"
 #include "game/tables.h"
 #include "game/texts.h"
@@ -70,6 +71,28 @@ constexpr std::uintptr_t kPayForSpell = 0x0054b2b0;
 constexpr std::uintptr_t kRandom = 0x004feb70;
 constexpr std::uintptr_t kPushUiFeedback = 0x004febe0;
 constexpr std::uintptr_t kDebugLogFn = 0x00428720;
+
+// The area sizes (index into g_spellAreaSizes, 0x65a1f0: 127, 200, 100, 200, ...).
+constexpr U kBurnTreesArea = 0;
+constexpr U kAddFishArea = 1;
+constexpr U kHalveResourcesArea = 2;
+constexpr U kGrowTreesArea = 3;
+
+constexpr std::int32_t kRevealPoints = 50;
+constexpr std::int32_t kRevealSpotTicks = 250;  // 0xfa
+constexpr U kFeedbackMapAlreadyRevealed = 54;   // PushUiFeedback 0x36 (probably "not possible")
+
+// Tile::object values (hex, see environment.cpp): trees 0x44..0x51 catch
+// fire (object 0xf3); the three kinds of young trees grow in 0x55..0x5d,
+// 0x5e..0x66 and 0x67..0x6f.
+constexpr std::uint8_t kFirstTree = 0x44;
+constexpr std::uint8_t kLastBurningTree = 0x51;
+constexpr std::uint8_t kFireStart = 0xf3;
+constexpr std::int32_t kGrowStages = 3;
+
+// Tile::resources: fish in the low nibble, up to 15.
+constexpr std::uint8_t kMaxFish = 15;
+constexpr U kFishVariants = 4;  // AddFish adds 1..4
 
 // The handlers, by address.
 constexpr std::uintptr_t kSpellArea = 0x00548340;      // spells 0..3
@@ -142,33 +165,35 @@ using ExecuteFn = U(__fastcall*)(CGameData* world, void* edx, U player, std::int
 
 // Purpose: Spell 5: lets the casting (local) player see a spot of the map for a while.
 U __fastcall CGameData_SpellRevealSpot(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
-    if (!HasMana(world, player, 5)) {
+    constexpr U kSpell = Value(Spell::RevealSpot);
+    if (!HasMana(world, player, kSpell)) {
         return 0;
     }
     if (player == static_cast<U>(world->local_player)) {
         std::int32_t i = 0;
         while (world->reveal_points[i].active != 0) {
-            if (++i >= 50) {
-                Pay(world, player, 5);
+            if (++i >= kRevealPoints) {
+                Pay(world, player, kSpell);  // all taken: paid all the same
                 return 0;
             }
         }
         layout::RevealPoint& point = world->reveal_points[i];
         point.x = x;
         point.y = y;
-        point.countdown = 0xfa;
+        point.countdown = kRevealSpotTicks;
         point.active = 1;
         if (i > world->reveal_point_high_water) {
             world->reveal_point_high_water = i;
         }
     }
-    Pay(world, player, 5);
+    Pay(world, player, kSpell);
     return 0;
 }
 
 // Purpose: Spell 31: shows the local player the whole map.
 U __fastcall CGameData_SpellRevealMap(CGameData* world, void*, U player) {
-    if (!HasMana(world, player, 0x1f)) {
+    constexpr U kSpell = Value(Spell::RevealMap);
+    if (!HasMana(world, player, kSpell)) {
         return 0;
     }
     if (player == static_cast<U>(world->local_player)) {
@@ -179,93 +204,101 @@ U __fastcall CGameData_SpellRevealMap(CGameData* world, void*, U player) {
             p.map_revealed = 1;
             p.map_revealed_tick = static_cast<std::int32_t>(g_gameTick.get());
             DebugLog(texts::kRevealMapDone);
-            Pay(world, player, 0x1f);
+            Pay(world, player, kSpell);
             return 0;
         }
-        Callee<Fn1>(kPushUiFeedback)(world, nullptr, 0x36);
+        Callee<Fn1>(kPushUiFeedback)(world, nullptr, kFeedbackMapAlreadyRevealed);
     }
-    Pay(world, player, 0x1f);
+    Pay(world, player, kSpell);
     return 0;
 }
 
 // Purpose: Spell 6: sets the trees around a spot on fire.
 U __fastcall CGameData_SpellBurnTrees(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
-    if (!HasMana(world, player, 6)) {
+    constexpr U kSpell = Value(Spell::BurnTrees);
+    if (!HasMana(world, player, kSpell)) {
         return 0;
     }
     bool done = false;
-    ForArea(world, 0, x, y, [&](Tile& t) {
-        if (t.object >= 0x44 && t.object <= 0x51) {
-            t.object = 0xf3;
+    ForArea(world, kBurnTreesArea, x, y, [&](Tile& t) {
+        if (t.object >= kFirstTree && t.object <= kLastBurningTree) {
+            t.object = kFireStart;
             done = true;
         }
     });
     if (done) {
-        Pay(world, player, 6);
+        Pay(world, player, kSpell);
     }
     return 0;
 }
 
 // Purpose: Spell 7: fills the waters around a spot with fish.
 U __fastcall CGameData_SpellAddFish(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
-    if (!HasMana(world, player, 7)) {
+    constexpr U kSpell = Value(Spell::AddFish);
+    if (!HasMana(world, player, kSpell)) {
         return 0;
     }
     bool done = false;
-    ForArea(world, 1, x, y, [&](Tile& t) {
-        if ((t.terrain & 0xf0) != 0) {
+    ForArea(world, kAddFishArea, x, y, [&](Tile& t) {
+        if ((t.terrain & kTerrainClassMask) != kTerrainClassWater) {
             return;
         }
         done = true;
         const U r = Callee<Fn0>(kRandom)(world, nullptr) & 0xffff;
-        const auto fish = static_cast<std::uint8_t>(t.resources + static_cast<std::uint8_t>(r % 4 + 1));
+        // Byte arithmetic: the store comes first, then the cap.
+        const auto fish = static_cast<std::uint8_t>(t.resources + static_cast<std::uint8_t>(r % kFishVariants + 1));
         t.resources = fish;
-        if (fish >= 0x10) {
-            t.resources = 0xf;
+        if (fish > kMaxFish) {
+            t.resources = kMaxFish;
         }
     });
     if (done) {
-        Pay(world, player, 7);
+        Pay(world, player, kSpell);
     }
     return 0;
 }
 
 // Purpose: Spell 8: halves the resources (ore, fish) around a spot, probably to harm an enemy.
 U __fastcall CGameData_SpellHalveResources(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
-    if (!HasMana(world, player, 8)) {
+    constexpr U kSpell = Value(Spell::HalveResources);
+    if (!HasMana(world, player, kSpell)) {
         return 0;
     }
     bool done = false;
-    ForArea(world, 2, x, y, [&](Tile& t) {
+    ForArea(world, kHalveResourcesArea, x, y, [&](Tile& t) {
         done = true;
+        // The amount (low nibble) halves; the kind (high nibble) stays.
         const std::uint8_t r = t.resources;
         t.resources = static_cast<std::uint8_t>(((r >> 1) & 7) | (r & 0xf0));
     });
     if (done) {
-        Pay(world, player, 8);
+        Pay(world, player, kSpell);
     }
     return 0;
 }
 
 // Purpose: Spell 9: makes the young trees around a spot grow faster.
 U __fastcall CGameData_SpellGrowTrees(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
-    if (!HasMana(world, player, 9)) {
+    constexpr U kSpell = Value(Spell::GrowTrees);
+    if (!HasMana(world, player, kSpell)) {
         return 0;
     }
     bool done = false;
-    ForArea(world, 3, x, y, [&](Tile& t) {
+    ForArea(world, kGrowTreesArea, x, y, [&](Tile& t) {
+        // The three kinds of young trees (first and last stage); one kind
+        // after the other on the same tile, as in the original.
         static constexpr std::uint8_t kKinds[3][2] = {{0x55, 0x5d}, {0x5e, 0x66}, {0x67, 0x6f}};
         for (const auto& kind : kKinds) {
             const std::uint8_t o = t.object;
             if (o >= kind[0] && o <= kind[1]) {
                 done = true;
-                const std::int32_t grown = o + 3;
+                const std::int32_t grown = o + kGrowStages;
                 t.object = static_cast<std::uint8_t>(grown > kind[1] ? kind[1] : grown);
             }
         }
     });
     if (done) {
-        Pay(world, player, 9);
+        Pay(world, player, kSpell);
     }
     return 0;
 }
@@ -287,47 +320,51 @@ U __fastcall CGameData_ExecuteSpell(CGameData* world, void*, U player, std::int3
     }
     const U ux = static_cast<U>(x);
     const U uy = static_cast<U>(y);
-    switch (spell) {
-    case 0: case 1: case 2: case 3:
+    // The spell is a dword (same width as Spell); values past 31 do nothing.
+    switch (static_cast<Spell>(spell)) {
+    case Spell::Spell0: case Spell::Spell1: case Spell::Spell2: case Spell::Spell3:
         return Callee<Fn4>(kSpellArea)(world, nullptr, player, ux, uy, spell);
-    case 4:
+    case Spell::Spell4:
         return Callee<Fn3>(kSpell4)(world, nullptr, player, ux, uy);
-    case 5:
+    case Spell::RevealSpot:
         return Callee<Fn3>(kRevealSpot)(world, nullptr, player, ux, uy);
-    case 6:
+    case Spell::BurnTrees:
         return Callee<Fn3>(kBurnTrees)(world, nullptr, player, ux, uy);
-    case 7:
+    case Spell::AddFish:
         return Callee<Fn3>(kAddFish)(world, nullptr, player, ux, uy);
-    case 8:
+    case Spell::HalveResources:
         return Callee<Fn3>(kHalveResources)(world, nullptr, player, ux, uy);
-    case 9:
+    case Spell::GrowTrees:
         return Callee<Fn3>(kGrowTrees)(world, nullptr, player, ux, uy);
-    case 10: case 12: case 16: case 17: case 24: case 25:
+    case Spell::Spell10: case Spell::Spell12: case Spell::Spell16: case Spell::Spell17: case Spell::Spell24:
+    case Spell::Spell25:
         return Callee<Fn4>(kSpell549f40)(world, nullptr, player, ux, uy, spell);
-    case 11:
+    case Spell::Spell11:
         return Callee<Fn3>(kSpell11)(world, nullptr, player, ux, uy);
-    case 13:
+    case Spell::Spell13:
         return Callee<Fn4>(kSpell13)(world, nullptr, player, ux, uy, a4);
-    case 14:
+    case Spell::Spell14:
         return Callee<Fn4>(kSpell14)(world, nullptr, player, ux, uy, a4);
-    case 15:
+    case Spell::Spell15:
         return Callee<Fn3>(kSpell15)(world, nullptr, player, ux, uy);
-    case 18: case 19: case 20: case 27:
+    case Spell::ConvertGoodsRoman: case Spell::ConvertGoodsEgyptian: case Spell::ConvertGoodsAsian:
+    case Spell::ConvertGoodsAmazon:
         DebugLog(texts::kExecuteConvertGoods);
         return Callee<Fn3>(kConvert)(world, nullptr, player, ux, uy);
-    case 21: case 22: case 23: case 26:
+    case Spell::GodlyGoodsRoman: case Spell::GodlyGoodsEgyptian: case Spell::GodlyGoodsAsian:
+    case Spell::GodlyGoodsAmazon:
         DebugLog(texts::kExecuteGodlyGoods);
         return Callee<Fn3>(kGodly)(world, nullptr, player, ux, uy);
-    case 28:
+    case Spell::GoodsBan:
         DebugLog(texts::kExecuteGoodsBan);
         return Callee<Fn4>(kGoodsB)(world, nullptr, player, ux, uy, a4);
-    case 29:
+    case Spell::GoodsSummon:
         DebugLog(texts::kExecuteGoodsSummon);
         return Callee<Fn4>(kGoodsS)(world, nullptr, player, ux, uy, a4);
-    case 30:
+    case Spell::TreeCurse:
         DebugLog(texts::kExecuteTreeCurse);
         return Callee<Fn3>(kTreeCut)(world, nullptr, player, ux, uy);
-    case 31:
+    case Spell::RevealMap:
         DebugLog(texts::kExecuteRevealMap);
         return Callee<Fn1>(kRevealMapSpell)(world, nullptr, player);
     default:
@@ -523,7 +560,9 @@ U __fastcall WrongSpellGrowTrees(CGameData* world, void*, U player, std::int32_t
 
 // Wrong: spells 13 and 14 are swapped.
 U __fastcall WrongExecuteSpell(CGameData* world, void*, U player, std::int32_t x, std::int32_t y, U a4, U spell) {
-    const U swapped = spell == 13 ? 14 : spell == 14 ? 13 : spell;
+    constexpr U k13 = Value(Spell::Spell13);
+    constexpr U k14 = Value(Spell::Spell14);
+    const U swapped = spell == k13 ? k14 : spell == k14 ? k13 : spell;
     return CGameData_ExecuteSpell(world, nullptr, player, x, y, a4, swapped);
 }
 

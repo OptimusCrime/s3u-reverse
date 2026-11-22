@@ -5,7 +5,8 @@
 // +0x94 int32[8] mana needed per spell slot (Player::race / mana /
 // spell_mana). The spells of each race are
 // listed in the table at 0x00658d64 in S3.EXE (8 int32 per race, 32-byte
-// stride), e.g. race 0: 5, 3, 9, 10, 21, 18, 8, 11.
+// stride), e.g. the Romans: 5, 3, 9, 10, 21, 18, 8, 11 (RevealSpot,
+// Spell3, GrowTrees, ...; all four lists and the names: Spell in enums.h).
 //
 // CGameData::HasManaForSpell (0x0054b240): (player, spell): slot = the
 //   index of `spell` in the race's list (8 if it isn't there, which reads

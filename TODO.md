@@ -11,8 +11,18 @@ Each item: what, why, and where to start.
 ## Readability pass (docs/coding_style.md)
 
 - **Convert the remaining files** to the style guide (pilot done in
-  session 45: settler_idle.cpp, update_economy.cpp, settler_walk.cpp).
-  Batches by file group, see the LOGBOOK session 45 entry.
+  session 45: settler_idle.cpp, update_economy.cpp, settler_walk.cpp;
+  rollout groups 4 map and 5 environment/spells done, see LOGBOOK
+  "readability rollout"). Still to do: map_effects.cpp (light touch only
+  so far: map_effect_spawns.cpp), the AI, UI and framework files, and the
+  rest of logic_helpers.cpp / player_queries.cpp.
+- **Tile::object enum:** the landscape object values (trees 0x44..0x52,
+  young trees 0x55..0x6f, fire 0xf3..0xf6, ...) stay hex in
+  environment.cpp, spells.cpp and map_generation.cpp until they have names.
+- **Rename the functions named after old guesses** (re/enums.md
+  "Corrections"): `FindNearbySettlerType29` / `IsFreeOfSettlerType29Nearby`
+  (catapult), `UnblockType12BuildingTiles` (castle), `SetTerrain16Patch`
+  (makes a field); with inventory, whole_game fix-names and specs.
 - **Typed fields:** once every user of `Settler::job`, `Settler::art`,
   `Building::art`, `Pile::good` or the race fields is converted, give the
   field its enum type in `layout.h` and drop its accessor from
