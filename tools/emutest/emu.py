@@ -57,7 +57,8 @@ from unicorn import (UC_ARCH_X86, UC_HOOK_BLOCK, UC_HOOK_CODE, UC_HOOK_MEM_READ,
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_EBX, UC_X86_REG_ECX,
                                UC_X86_REG_EDI, UC_X86_REG_EDX, UC_X86_REG_EIP, UC_X86_REG_ESI,
                                UC_X86_REG_ESP, UC_X86_REG_FPCW, UC_X86_REG_FS, UC_X86_REG_GDTR,
-                               UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_SS)
+                               UC_X86_REG_DS, UC_X86_REG_EFLAGS, UC_X86_REG_ES, UC_X86_REG_FPSW,
+                               UC_X86_REG_FPTAG, UC_X86_REG_SS)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -178,6 +179,15 @@ def map_pe(uc: Uc, path: str) -> tuple[int, int]:
     return base, size
 
 
+def code_ranges(path: str) -> list[tuple[int, int]]:
+    """(start, end) of the image's executable sections at its preferred base."""
+    pe = pefile.PE(path, fast_load=True)
+    base = pe.OPTIONAL_HEADER.ImageBase
+    IMAGE_SCN_MEM_EXECUTE = 0x20000000
+    return [(base + s.VirtualAddress, base + s.VirtualAddress + _page_up(s.Misc_VirtualSize or s.SizeOfRawData))
+            for s in pe.sections if s.Characteristics & IMAGE_SCN_MEM_EXECUTE]
+
+
 def read_function_starts() -> list[int]:
     starts = set()
     for name in ("ghidra_functions.tsv", "extra_functions.tsv"):
@@ -246,6 +256,7 @@ class Emulator:
         self.uc = Uc(UC_ARCH_X86, UC_MODE_32)
         self.exe_range = map_pe(self.uc, exe_path)
         self.dll_range = map_pe(self.uc, dll_path)
+        self.code_ranges = code_ranges(exe_path) + code_ranges(dll_path)
         self.symbols = read_dll_symbols(map_path)
         self.function_starts = read_function_starts()
         self.uc.mem_map(WORLD_BASE, WORLD_SIZE)
@@ -303,15 +314,25 @@ class Emulator:
         """Back to the state right after loading: S3.EXE and s3re.dll as in
         their files (Spec.globals write S3.EXE globals directly and would
         otherwise carry over into later specs), the stack zeroed, no world
-        bytes materialized, no probes declared. run.py calls it before every
-        spec, so a spec's result doesn't depend on which specs ran before
-        it in the same process (serial and parallel runs agree)."""
+        bytes materialized, no probes declared, no translated code cached.
+        run.py calls it before every spec, so a spec's result doesn't depend
+        on which specs ran before it in the same process (serial and
+        parallel runs agree).
+
+        Unicorn keeps translated blocks of guest code and doesn't notice
+        when Python's mem_write changes the bytes they came from: a spec
+        that writes a stub over a function another spec ran (WalkSettler's
+        FindPath stub after Pathing_FindPath, found 2026-11-22) would run
+        the old code. Hence the flush here, write_image for writes made by
+        specs, and the flush in set_callees (code hooks only take effect in
+        blocks translated after they were added)."""
         chunk = 0x10000
         for base, image in self._pristine:
             for offset in range(0, len(image), chunk):
                 want = image[offset:offset + chunk]
                 if bytes(self.uc.mem_read(base + offset, len(want))) != want:
                     self.uc.mem_write(base + offset, want)
+        self.uc.ctl_flush_tb()
         self.uc.mem_write(STACK_BASE, bytes(STACK_SIZE))
         self.begin_case(0, [0], {})
         self.blocks = set()
@@ -411,6 +432,7 @@ class Emulator:
         self.callees = dict(callees)
         for address in self.callees:
             self._callee_hooks.append(self.uc.hook_add(UC_HOOK_CODE, self._on_callee, begin=address, end=address))
+        self.uc.ctl_flush_tb()  # blocks translated without (or with) these hooks
 
     def _on_callee(self, uc, address, size, user_data):
         count, convention, returns = self.callees[address][:3]
@@ -524,6 +546,21 @@ class Emulator:
             for i in range(size):
                 self.undo.setdefault(address + i, old[i])
 
+    def _code_changed(self, address: int, size: int) -> None:
+        """Python wrote [address, address+size): drops the translated blocks
+        made from those bytes if they are code (see reset)."""
+        for start, end in self.code_ranges:
+            if address < end and start < address + size:
+                self.uc.ctl_remove_cache(max(address, start), min(address + size, end))
+
+    def write_image(self, address: int, data: bytes) -> None:
+        """A write by the harness (Spec.globals) into S3.EXE or s3re.dll,
+        e.g. a stub over a function's first bytes; not tracked (it is the
+        case's starting state)."""
+        if bytes(self.uc.mem_read(address, len(data))) != data:
+            self.uc.mem_write(address, data)
+            self._code_changed(address, len(data))
+
     def guest_read(self, address: int, size: int) -> bytes:
         """A read made on the guest's behalf: lazy world bytes get their
         value first (Python's mem_read doesn't trigger the hooks)."""
@@ -535,6 +572,7 @@ class Emulator:
         guest's own writes (Python's mem_write doesn't trigger the hooks)."""
         self._on_write(self.uc, None, address, len(data), 0, None)
         self.uc.mem_write(address, data)
+        self._code_changed(address, len(data))
 
     def _on_debug_log(self, uc, address, size, user_data):
         esp = uc.reg_read(UC_X86_REG_ESP)
@@ -632,6 +670,13 @@ class Emulator:
         # round to nearest, exceptions masked); the game never changes it
         # (only _ftol does, and restores it). Unicorn starts with 0.
         uc.reg_write(UC_X86_REG_FPCW, 0x27F)
+        # Nothing else of the CPU state carries over from earlier calls
+        # (a case must not depend on the cases before it, see run_spec):
+        # an empty x87 stack (a float result, or a run that faulted in the
+        # middle, leaves values on it), cleared flags.
+        uc.reg_write(UC_X86_REG_FPSW, 0)
+        uc.reg_write(UC_X86_REG_FPTAG, 0xFFFF)
+        uc.reg_write(UC_X86_REG_EFLAGS, 0x202)
 
         self.undo = {}
         self.cover_range = cover
@@ -664,4 +709,6 @@ class Emulator:
                 outcome.final[a] = bytes(uc.mem_read(a, 1))[0]
         for a, old in undo.items():
             uc.mem_write(a, bytes([old]))
+            if any(start <= a < end for start, end in self.code_ranges):
+                self._code_changed(a, 1)  # e.g. a stub's data next to code
         return outcome

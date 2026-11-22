@@ -125,7 +125,10 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int,
     """Runs the spec's cases first..last-1 (default: all). The inputs of the
     skipped cases before `first` are still drawn (and their globals
     written), so case k gets the same inputs and state as in a run of all
-    cases; merge_chunks combines the parts of a spec run in pieces."""
+    cases; merge_chunks combines the parts of a spec run in pieces. This
+    relies on no case depending on how earlier cases or specs ran: their
+    writes are undone, and Emulator.call/reset/write_image reset the CPU
+    state and the translated-code cache (independence_check tests it)."""
     machine.reset()  # every spec starts from the loaded images
     original = machine.analyze(spec.original, spec.cover_until)
     ours = machine.our_function(spec.ours)
@@ -171,7 +174,7 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int,
         if spec.globals:
             for address, value, size in spec.globals(rng, pool, args):
                 mask = (1 << (8 * size)) - 1
-                machine.uc.mem_write(address, (value & mask).to_bytes(size, "little"))
+                machine.write_image(address, (value & mask).to_bytes(size, "little"))
         if case < first:
             continue  # another part of the spec runs this case
         limit =spec.max_instructions or emu.MAX_INSTRUCTIONS
@@ -220,6 +223,47 @@ def merge_chunks(parts: list[dict]) -> dict:
     merged["uncovered"] = sorted(leaders - covered)
     merged["covered_set"] = sorted(covered)
     return merged
+
+
+# The independence check of --self-test: (spec, cases, a spec run just
+# before each part). Pathing_FindPath runs the code that WalkSettler's
+# globals replace with a stub (the bug of 2026-11-22: stale translated code).
+INDEPENDENCE_CHECKS = (("CGameData_WalkSettler", 300, "Pathing_FindPath"),
+                       ("Pathing_WalkLine", 300, None))
+
+
+def independence_check(bin_dir: str) -> bool:
+    """Checks the promise run_all relies on: a spec split into parts, each
+    run after another spec in the same emulator, gives the same merged
+    result as one whole run (cases, invalid cases, mismatch and covered
+    blocks)."""
+    by_name = {spec.ours: spec for spec in specs.SPECS}
+    keys = ("cases", "invalid", "mismatch", "covered_set")
+
+    def shown(result, key):
+        return len(result[key]) if key == "covered_set" else result[key]
+
+    ok = True
+    for name, cases, before in INDEPENDENCE_CHECKS:
+        spec = by_name[name]
+        _worker_init(bin_dir)  # the whole run in a fresh emulator
+        whole = run_spec(_machine, spec, cases, 1)
+        _worker_init(bin_dir)
+        parts = []
+        for first, last in ((0, cases // 3), (cases // 3, 2 * cases // 3), (2 * cases // 3, cases)):
+            if before:
+                run_spec(_machine, by_name[before], 1, 1)
+            parts.append(run_spec(_machine, spec, cases, 1, first, last))
+        merged = merge_chunks(parts)
+        same = all(whole[k] == merged[k] for k in keys)
+        ok &= same
+        details = ", ".join(f"{k} {shown(whole, k)}" + ("" if whole[k] == merged[k]
+                                                         else f" vs {shown(merged, k)}")
+                            for k in keys)
+        after = f" (each after {before})" if before else ""
+        print(f"{'same' if same else 'DIFFERENT':9} {name}: whole vs 3 parts{after}: {details}",
+              flush=True)
+    return ok
 
 
 TIMES_PATH = os.path.join(ROOT, "build", "emutest_times.json")
@@ -410,8 +454,9 @@ def main() -> int:
     parser.add_argument("--all-uncovered", action="store_true",
                         help="list every uncovered block, not just the first six")
     parser.add_argument("--self-test", action="store_true",
-                        help="run the deliberately wrong pairings in specs.SELF_TEST; "
-                             "each must be caught")
+                        help="run the deliberately wrong pairings in specs.SELF_TEST "
+                             "(each must be caught) and the check that a spec split into "
+                             "parts gives the result of a whole run")
     parser.add_argument("--changed", action="store_true",
                         help="only the specs the changes since the last full clean run "
                              "(or --since REF) can affect; see tools/emutest/changed.py")
@@ -444,7 +489,8 @@ def main() -> int:
         peak = run_all(selected, True, 500, args.seed, bin_dir, jobs, report)
         print(f"self-test: {caught} of {len(specs.SELF_TEST)} wrong pairings caught")
         show_memory(jobs, peak)
-        return caught == len(specs.SELF_TEST)
+        independent = independence_check(bin_dir)
+        return caught == len(specs.SELF_TEST) and independent
 
     if args.self_test:
         return 0 if self_test() else 1

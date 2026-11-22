@@ -665,13 +665,20 @@ replaying, see `src/s3re/replay/command_log.h`):
      parallel, only one of them runs a full suite at a time (per batch use
      `--changed`). Every spec starts from a
      fresh emulator state (`Emulator.reset`: images as loaded, stack
-     zeroed, no world bytes), so results don't depend on the order or
-     the worker count, and the output is printed in specs.py order.
+     zeroed, no world bytes, Unicorn's translated-code cache flushed),
+     and every call starts with an empty x87 stack and fixed flags, so
+     results don't depend on the order or the worker count, and the
+     output is printed in specs.py order. Python writes over S3.EXE code
+     (a stub in `Spec.globals`) go through `Emulator.write_image`, which
+     drops the stale translated blocks: Unicorn doesn't notice them (a
+     WalkSettler FindPath stub ran the real FindPath after
+     Pathing_FindPath in the same worker, 2026-11-22).
      The slowest specs start first (times in the gitignored
      `build/emutest_times.json`), and specs that took longer than about
      total/jobs/2 run as several parts (case ranges; the inputs of the
      skipped cases are still drawn, so the merged result equals a whole
-     run). Full suite on 18 workers: ~15 min wall time (the serial run
+     run; `--self-test` checks this for two specs, with each part run
+     after another spec). Full suite on 18 workers: ~15 min wall time (the serial run
      takes over an hour); a worker peaks at ~380 MB. `--memory` prints
      workers, peak memory and wall time. `--bin-dir DIR` tests the DLL in another
      build directory (e.g. the main checkout's).

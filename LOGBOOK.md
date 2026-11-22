@@ -569,6 +569,30 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-22 (45): emulator: split parts exact
+
+- The WalkSettler result of the parallel suite (1976 cases, 24 invalid,
+  348/428) was not caused by the case split (whole vs parts 0..1000/
+  1000..2000 run alone: identical outcomes call by call) but by worker
+  history: Unicorn's translated-block cache doesn't notice Python's
+  mem_write. WalkSettler's Spec.globals write a stub over FindPath
+  (0x4a1ee0); if Pathing_FindPath ran earlier in the same worker, the
+  cached real FindPath ran instead of the stub (reproduced: FindPath 20
+  cases, then WalkSettler 200 cases: 2 invalid, 295 blocks; fixed: 0,
+  354 as alone).
+- Fix (emu.py): `reset` flushes the cache; `write_image` (used for
+  Spec.globals) and `guest_write`/undo of code bytes drop the stale
+  blocks (`ctl_remove_cache`, only for executable sections);
+  `set_callees` flushes (code hooks need retranslation); every call
+  starts with an empty x87 stack (FPSW 0, FPTAG 0xFFFF) and EFLAGS 0x202.
+- Regression check in `--self-test`: WalkSettler (each part after a
+  Pathing_FindPath case) and Pathing_WalkLine, whole in a fresh emulator
+  vs 3 parts: identical (the old harness reports 297 cases, 3 invalid,
+  313 vs 386 blocks). Self-test 21/21.
+- Full suite `--jobs 6`, before and after: identical output (555 specs,
+  0 mismatches, only GenerateRandomMap incomplete as known; the "before"
+  run's schedule didn't hit the bug this time). After: 1532 s wall time.
+
 ### 2026-11-22 (45): rename GameWorld -> CGameData
 
 - The world class `GameWorld` is now `CGameData`, its RTTI name, everywhere:

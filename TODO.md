@@ -62,7 +62,9 @@ Each item: what, why, and where to start.
   parts) gave identical output; the `--jobs 1` run was stopped after its
   first 70 specs (all identical). Run `python tools/emutest/run.py
   --require-coverage --jobs 1` once overnight and compare it (without the
-  `[...s]` times) with a parallel run's output.
+  `[...s]` times) with a parallel run's output. (Session 45 found and
+  fixed one schedule dependence: stale translated code after a spec's
+  stub over FindPath; `--self-test` now checks split runs.)
 - **186 verified functions have only test evidence** (never called
   in a whole-game check; see the progress page's tests-only list). Done
   so far: random maps (session 40) and an 8-player recording
