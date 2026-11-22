@@ -7628,12 +7628,139 @@ def _us_family_f(rng, fields, n, ctx):
 
 
 # ---- family d (drinks, settler_jobs_drinks.cpp) ----
-US_EXEMPT_D = ()
+US_EXEMPT_D = (
+    # 0x4f3c25: the flood fill of PioneerWork meets a tile the pioneer's
+    # player already owns: dead, the same-team check before it
+    # (0x4f3bd9..) skips every tile of the player's own team.
+    0x004f3c25,
+)
+
+# Jobs of this family that need a prepared neighbourhood, drawn more often
+# than the uniform choice of the generic part: geologist 0xd4, pioneer
+# 0x12e, the field searches 0xe3 / 0xf4, planting 0xe6 / 0xf7, harvests
+# 0xeb / 0xec / 0xfc / 0xfd.
+_US_D_HARD = (0xd4, 0xd4, 0x12e, 0x12e, 0x12e, 0xe3, 0xe3, 0xf4, 0xf4, 0xf4, 0xf4, 0xe6, 0xf7, 0xf7, 0xf7,
+              0xeb, 0xec, 0xfc, 0xfd)
+_US_D_SIGN_RANGES = ((0x11, 0x17), (0x18, 0x1f), (0x21, 0x27), (0x28, 0x2f), (0x31, 0x37), (0x38, 0x3f),
+                     (0x41, 0x47), (0x48, 0x4f), (0x51, 0x57), (0x58, 0x5f))
+
+
+def _us_d_window(rng, fields, cx, cy, radius, area, terrains, ripe):
+    """Tiles around (cx, cy) for the field searches and planting: mostly
+    free tiles of the building's area, some ripe fields and obstacles."""
+    for dx in range(-radius, radius + 1):
+        for dy in range(-radius, radius + 1):
+            t = tile(cx + dx, cy + dy)
+            r = rng.random()
+            obj = rng.randint(ripe[0], ripe[1]) if r < 0.03 else 0 if r < 0.94 else rng.getrandbits(8)
+            fields += [(t + 0x14, area if rng.random() < 0.93 else rng.randrange(US_AREAS), 2),
+                       (t + 0x7, obj, 1),
+                       (t + 0x2, 0 if rng.random() < 0.96 else rng.randint(1, US_OTHERS), 2),
+                       (t + 0xa, 0 if rng.random() < 0.9 else rng.getrandbits(8), 1),
+                       (t + 0x6, rng.choice(terrains) if rng.random() < 0.8 else rng.getrandbits(8), 1)]
+
+
+def _us_d_pioneer(rng, fields, x, y, owner):
+    """A patch around the pioneer: takeable foreign / free tiles (flags 1 or
+    8, terrain with a high nibble) inside a ring of the player's own tiles,
+    so that the edge walk and the flood fill stay inside."""
+    for dx in range(-4, 5):
+        for dy in range(-4, 5):
+            d = hex_distance(dx, dy)
+            if d > 4:
+                continue
+            t = tile(x + dx, y + dy)
+            if d == 4 or (d == 3 and rng.random() < 0.5):
+                fields += [(t + 0x8, owner, 1), (t + 0xa, 0, 1)]
+                continue
+            pick = rng.random()
+            tile_owner = owner if pick < 0.25 else (owner ^ 1) if pick < 0.4 else rng.choice((2, 3, 0xFF))
+            flags = rng.choice((1, 8, 9, 0x20 | 8, 0)) if rng.random() < 0.7 else rng.getrandbits(8) & 0xb2
+            fields += [(t + 0x8, tile_owner, 1), (t + 0xa, flags, 1),
+                       (t + 0x6, rng.choice((0x10, 0x20, 0x30, 0x15, 0x05, 0x06)), 1)]
+    here = tile(x, y)
+    fields += [(here + 0xa, 0 if rng.random() < 0.85 else rng.choice((1, 4, 8, 0x40)), 1),
+               (here + 0x8, rng.choice((0xFF, 0xFF, owner, owner ^ 1, 2)), 1)]
+
+
+def _us_d_big_fill(rng, fields, x, y, owner):
+    """A takeable region of more than 10,000 tiles (radius 58) inside a ring
+    of the player's tiles: the flood fill's ring buffer (tile_ring2, 10,000
+    entries) wraps (0x4f3c8c, 0x4f3cbe)."""
+    for dx in range(-59, 60):
+        for dy in range(-59, 60):
+            d = hex_distance(dx, dy)
+            if d > 59:
+                continue
+            t = tile(x + dx, y + dy)
+            if d == 59:
+                fields += [(t + 0x8, owner, 1), (t + 0xa, 0, 1)]
+            else:
+                fields += [(t + 0x8, 0xFF, 1), (t + 0xa, 1, 1), (t + 0x6, 0x10, 1)]
+    here = tile(x, y)
+    fields += [(here + 0xa, 0, 1), (here + 0x8, 0xFF, 1)]
 
 
 def _us_family_d(rng, fields, n, ctx):
-    pass
-
+    s, x, y = ctx["record"], ctx["x"], ctx["y"]
+    job = rng.choice(_US_D_HARD) if rng.random() < 0.6 else ctx["job"]
+    owner = rng.randrange(4)
+    fields += [(s + 0xe, job, 2), (s, owner, 1), (s + 0xc, 0, 2), (s + 0x14, rng.getrandbits(7), 1)]
+    # Teams: players 0 and 1 against 2 and 3.
+    for p in range(4):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xc, p // 2, 4))
+    # The work building.
+    bn = rng.randint(1, US_OTHERS)
+    b = BUILDINGS + bn * BUILDING_BYTES
+    area = rng.randint(1, US_AREAS - 1)
+    if rng.random() < 0.03:
+        wx, wy = rng.choice((1, 2, 3, 381, 382)), rng.randint(3, 380)
+    else:
+        wx, wy = x + rng.randint(-3, 3), y + rng.randint(-3, 3)
+    dx, dy = wx + rng.randint(-2, 2), wy + rng.randint(-2, 2)
+    pile = rng.randint(1, US_PILES)
+    fields += [(s + 0x22, bn, 2), (s + 0x17, rng.choice((0, 0, 1, 1, 2, rng.getrandbits(8))), 1),
+               (s + 0x10, rng.choice((0, rng.randrange(40), rng.randrange(40), rng.randint(100, 149),
+                                      rng.randint(350, 399))), 2),
+               (b + 0x18, 1 | rng.getrandbits(8) if rng.random() < 0.9 else 0, 1),
+               (b + 0x30, wx, 2), (b + 0x32, wy, 2), (b + 0xa, dx, 2), (b + 0xc, dy, 2),
+               (b + 0xe, pile, 2), (PILES + pile * PILE_BYTES + 1, rng.choice((0, 3, 7, 8, 9)), 1),
+               (tile(dx, dy) + 0x14, area, 2)]
+    if job == 0xd4:
+        if rng.random() < 0.1:
+            x = rng.randint(0, 2)  # signs off the map (IsOnMap fails, 0x4f3584)
+            fields.append((s + 0x4, x, 2))
+        # The geologist's tile and the signs within distance 4.
+        lo, hi = rng.choice(_US_D_SIGN_RANGES)
+        res = 0 if rng.random() < 0.1 else rng.randint(lo, hi) if rng.random() < 0.85 else rng.getrandbits(8)
+        sign = 0xe9 + 2 * ((lo - 0x11) // 16)
+        density = rng.choice((0.0, 0.1, 0.3, 0.9))
+        for ddx in range(-4, 5):
+            for ddy in range(-4, 5):
+                if 0 < hex_distance(ddx, ddy) <= 4:
+                    fields.append((tile(x + ddx, y + ddy) + 0x7,
+                                   rng.choice((sign, sign + 1)) if rng.random() < density else 0, 1))
+        fields.append((tile(x, y) + 0x11, res, 1))
+        if rng.random() < 0.1:
+            fields.append((NEIGHBOUR_OFFSETS + 16 + 8, 5, 4))  # no ring within distance 4
+    elif job == 0x12e:
+        if n == 1 and rng.random() < 0.02:
+            x, y = rng.randint(62, 320), rng.randint(62, 320)
+            fields += [(s + 0x4, x, 2), (s + 0x6, y, 2)]
+            _us_d_big_fill(rng, fields, x, y, owner)
+        else:
+            _us_d_pioneer(rng, fields, x, y, owner)
+    elif job in (0xe3, 0xe6):
+        _us_d_window(rng, fields, wx, wy, 5, area, (0x15,), (0x6c, 0x6e))
+        if job == 0xe6:
+            _us_d_window(rng, fields, x, y, 1, area, (0x15,), (0x6c, 0x6e))
+    elif job in (0xf4, 0xf7):
+        _us_d_window(rng, fields, wx, wy, 6, area, (0x10, 0x16, 0x18), (0x63, 0x65))
+        if job == 0xf7:
+            _us_d_window(rng, fields, x, y, 3, area, (0x10, 0x16, 0x18), (0x63, 0x65))
+    elif job in (0xeb, 0xfc):
+        ripe = (0x6c, 0x6e) if job == 0xeb else (0x63, 0x65)
+        fields.append((tile(x, y) + 0x7, rng.randint(*ripe) if rng.random() < 0.6 else rng.getrandbits(8), 1))
 
 
 # ---- family s (special, settler_jobs_special.cpp) ----
