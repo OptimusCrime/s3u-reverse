@@ -6730,3 +6730,73 @@ SPECS += [
     Spec("GameWorld_UpdateEnvironment", 0x004e7810, "thiscall", [], eax_mask=0, presets=update_environment,
          globals=update_environment_globals, callees=ENV_CALLEES, max_cases=600),
 ]
+
+
+# --- package D: the minimap (minimap.cpp) ------------------------------------
+
+def minimap_globals(rng, pool, args):
+    shifts, scales = rng.choice([((11, 5, 0), (31, 63, 31)), ((10, 5, 0), (31, 31, 31)), ((16, 8, 0), (255, 255, 255))])
+    fields = [(0x00730f58, rng.choice([0, 0, 1, 2]), 4), (0x00730f5c, rng.randrange(2), 4),
+              (0x00730f60, rng.choice([0, 1, 2, 2]), 4)]
+    fields += [(0x007dfba0 + 4 * i, v, 4) for i, v in enumerate(shifts)]
+    fields += [(0x007dfbac + 4 * i, v, 4) for i, v in enumerate(scales)]
+    return fields
+
+
+def minimap_tile_fields(rng, x, y):
+    t = tile(x & 0xFFFFFFFF, y & 0xFFFFFFFF)
+    settler = 0 if rng.random() < 0.6 else rng.randrange(1, 4000)
+    fields = [(t + 0x9, rng.getrandbits(8), 1), (t + 0xa, rng.getrandbits(8), 1),
+              (t + 0x8, 0xff if rng.random() < 0.3 else rng.randrange(20), 1), (t + 0x0, settler, 2),
+              (t + 0x6, rng.choice([0x05, 0x10, 0x25, 0x35, 0x55, 0x85, 0x95, rng.randrange(256)]), 1)]
+    if settler:
+        s = SETTLERS + settler * SETTLER_BYTES
+        fields += [(s, rng.randrange(20), 1), (s + 1, rng.choice([0x17, 0x17, 5, 8, 15, 22, 0, 1]), 1),
+                   (s + 0x14, rng.getrandbits(8), 1)]
+    return fields
+
+
+def minimap_pixel(rng, pool, args):
+    x0, y0, x1, y1 = (a - (1 << 32) if a >= 1 << 31 else a for a in args)
+    fields = [(LOCAL_PLAYER, rng.randrange(20), 4)]
+    fields += [(PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xc, rng.randrange(3), 4) for p in range(20)]
+    for x in range(x0, max(x0, x1) + 1):
+        for y in range(y0, max(y0, y1) + 1):
+            fields += minimap_tile_fields(rng, x, y)
+    return fields
+
+
+def minimap_slice(rng, pool, args):
+    size = rng.randint(64, 160)
+    return [(SIGHT_MAP, size, 4), (LOCAL_PLAYER, rng.randrange(20), 4)] + \
+           [(PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xc, rng.randrange(3), 4) for p in range(20)]
+
+
+def minimap_slice_globals(rng, pool, args):
+    return minimap_globals(rng, pool, args) + [(0x00730f28, rng.choice([16, 32, 64, rng.randint(16, 64)]), 4)]
+
+
+class _Corners:
+    """Generates (x0, y0, x0 + d, y0 + d') as four consecutive arguments."""
+    def __init__(self):
+        self.last = 0
+
+    def first(self, rng, pool):
+        self.last = rng.randrange(1, 60)
+        return self.last
+
+    def second(self, rng, pool):
+        return (self.last + rng.randint(-1, 3)) & 0xFFFFFFFF
+
+
+_cx, _cy = _Corners(), _Corners()
+
+SPECS += [
+    # Exempt: 0x4fbc79/0x4fbc8c (mode != 0, settlers option 1: a hidden type
+    # 0x17 settler of another team takes the tile's owner): dead, such a
+    # settler was skipped just before (0x4fbc33).
+    Spec("GameWorld_MinimapPixel", 0x004fb720, "thiscall", [_cx.first, _cy.first, _cx.second, _cy.second],
+         presets=minimap_pixel, globals=minimap_globals, max_cases=3000, exempt_blocks=(0x4fbc79, 0x4fbc8c)),
+    Spec("GameWorld_UpdateMinimapSlice", 0x004fb520, "thiscall", [below(64)], eax_mask=0, presets=minimap_slice,
+         globals=minimap_slice_globals, max_cases=150),
+]

@@ -583,6 +583,10 @@ instructions; most of it is Volker\GodlyEvents.cpp, the spells).
   0x7DFD84, g_strengthDivisor 0x7ACFA4, g_objectAgeStart 0x730EFC.
   Event types 5/6/7 are building/catapult/ship hits ("Gebaeude/Katapult/
   Schiff getroffen"); the landscape pass moves fish to water neighbours.
+- **Batch 3: the minimap** (minimap.cpp): UpdateMinimapSlice 0x4FB520 and
+  MinimapPixel 0x4FB720 (fog brightness, settlers, borders, footprints,
+  owner/terrain colours; two dead blocks exempt). Globals of the minimap
+  options in re/globals.csv.
 
 ### 2026-11-22 (45): package B: UpdateSoldier
 

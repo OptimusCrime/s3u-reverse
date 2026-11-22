@@ -61,6 +61,7 @@ add_library(s3re SHARED
     game/map_effect_expiry.cpp
     game/environment.cpp
     game/spell_effects.cpp
+    game/minimap.cpp
     game/map_regions.cpp
     game/map_neighbourhood.cpp
     game/map_terrain.cpp

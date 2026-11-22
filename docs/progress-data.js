@@ -4742,9 +4742,9 @@ window.PROGRESS_DATA = {"generated":"2026-11-22","statuses":["unknown","classifi
 [5223600,48,2,0,"StaticDtorReg_7ab270"],
 [5223648,32,2,0,"StaticInit_7ab260"],
 [5223680,32,2,0,"StaticDtorReg_7ab260"],
-[5223712,304,1,68,"Logic_sub_4fb520"],
+[5223712,304,4,177,"GameWorld::UpdateMinimapSlice"],
 [5224016,208,2,177,"GameWorld::BuildMinimap"],
-[5224224,2160,1,68,"Logic_sub_4fb720"],
+[5224224,2160,4,177,"GameWorld::MinimapPixel"],
 [5226384,32,2,0,"StaticInit_7ab510"],
 [5226416,48,2,0,"StaticDtorReg_7ab510"],
 [5226464,32,2,0,"StaticInit_7ab500"],
@@ -10535,6 +10535,8 @@ window.PROGRESS_DATA = {"generated":"2026-11-22","statuses":["unknown","classifi
 [5220480,0,{"replay:fun8-seed2024-input31.bin":0,"replay:scripted-seed127.bin":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},["Pathing_FindPath","Pathing_FollowEdge","Pathing_StartEdgeWalk","Pathing_TileCost","Pathing_WalkLine"]],
 [5220928,2882,{"random:384,0 seed 1234":6,"random:448,3 seed 1234":16,"random:448,3 seed 1234 skip GameWorld_Create":8,"random:512,1 seed 1234":14,"random:640,2 seed 1234":19,"replay:fun8-seed2024-input31.bin":155,"replay:scripted-seed127.bin":9,"save:slot 1.sav":427,"save:slot 2.sav":2882,"save:slot 3.sav":222},[]],
 [5220976,3438320,{"replay:fun8-seed2024-input31.bin":3438320,"replay:scripted-seed127.bin":386716,"save:slot 1.sav":896864,"save:slot 2.sav":578187,"save:slot 3.sav":897423},[]],
+[5223712,null,{},[]],
+[5224224,null,{},[]],
 [5237568,1,{"replay:scripted-seed127.bin":1},[]],
 [5237616,2531398,{"random:384,0 seed 1234":205105,"random:448,3 seed 1234":186173,"random:448,3 seed 1234 skip GameWorld_Create":1081707,"random:512,1 seed 1234":236535,"random:640,2 seed 1234":341948,"replay:fun8-seed2024-input31.bin":943697,"replay:scripted-seed127.bin":309493,"save:slot 1.sav":2531398,"save:slot 2.sav":1677799,"save:slot 3.sav":1541509},[]],
 [5237728,4,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip GameWorld_Create":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fun8-seed2024-input31.bin":0,"replay:scripted-seed127.bin":0,"save:slot 1.sav":4,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
@@ -10933,4 +10935,4 @@ window.PROGRESS_DATA = {"generated":"2026-11-22","statuses":["unknown","classifi
 ["2026-11-10","17dae2f",532,138419,498363,77867,308],
 ["2026-11-22","d98fe1c",542,143923,503867,77867,308],
 ["2026-11-22","d53275f",543,150659,510603,84923,310],
-["2026-11-22","6749ab7",544,155459,510603,92075,319]]};
+["2026-11-22","3f46c5a",544,155459,510603,92075,319]]};
