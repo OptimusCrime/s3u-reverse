@@ -66,6 +66,8 @@ Ghidra pseudocode.
 | 0x5480B0 | 262 | ExecuteSpell (dispatcher) | 18 spell handlers | |
 | 0x548340..0x54B000 | ~3,000 | spell handlers + helpers | Volker\GodlyEvents.cpp: 548340 (spells 0..3: 548380 area effect, needs 548760/548A10/548BB0/548D50), 548FB0, 549530 (reveal), 549650, 549700, 5497F0, 5498A0, 549F40, 54A370, 54A7C0, 54A540, 54A1E0 (+54AF60, 54B000), 5495D0 (EventReveal), 5492A0 (EventTreeCut), 54AA40 (EventGoodsB), 54ACD0 (EventGoodsS), 549BD0 (EventConvert), 5499B0 (EventGodlyG.., x87) | |
 
+UpdateEnvironment itself: batch 2 (verified, whole-game identical).
+
 0x61FF50 (called by 0x548380) is in the CRT range.
 
 Spells are only cast by players and computer players; whether the

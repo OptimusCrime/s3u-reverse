@@ -235,7 +235,7 @@ struct Player {
     // 0x020: idle-settler list heads per type; entries 0..4 double as the
     // building request counters (use the accessors below for those).
     std::uint16_t settler_lists[kSettlerTypes];  // 0x020
-    std::int32_t unk080;             // 0x080
+    std::uint32_t soldier_strength;  // 0x080 recomputed every step by UpdateEnvironment from goods 10 (and 28 for race 1) in the areas; read by UpdateSoldier's damage (0x50f235), so probably the soldiers' fighting strength
     std::int32_t unk084;             // 0x084
     std::int32_t unk088;             // 0x088 UI
     std::int32_t mana;               // 0x08c
@@ -450,7 +450,8 @@ struct GameWorldFields {
     std::int32_t last_search_x, last_search_y;              // 0x002d2e4 (volatile)
     std::int32_t unk2d2ec;
     std::int32_t ui_cursor_mode;                            // 0x002d2f0
-    std::int32_t environment_2d2f4[3];                      // 0x002d2f4
+    std::uint32_t landscape_x, landscape_y;                 // 0x002d2f4 cursor of UpdateEnvironment's landscape pass
+    std::uint32_t landscape_step;                           // 0x002d2fc added to landscape_x per tile
     std::uint8_t search_generation;                         // 0x002d300
     std::uint8_t draw_call_counter;                         // 0x002d301 (volatile)
     std::uint8_t pad2d302[2];
@@ -484,8 +485,8 @@ struct GameWorldFields {
     Trade trades[1000];                                     // 0x10f45e8
     std::uint32_t trade_high_water;                         // 0x110a578
     std::uint32_t counter_110a57c;                          // 0x110a57c
-    std::uint32_t tile_slice;                               // 0x110a580 0..7
-    std::uint32_t counter_110a584;                          // 0x110a584
+    std::uint32_t fog_cycle;                                // 0x110a580 0..55 (fog_of_war.cpp)
+    std::uint32_t minimap_cycle;                            // 0x110a584 0..63
     MapOffset offsets[20000];                               // 0x110a588
     PresenceBlock territory_scratch[101][101];              // 0x1158788
     std::uint16_t player_lists[kPlayers][10][100];          // 0x118a47c
@@ -567,7 +568,8 @@ static_assert(offsetof(GameWorld, wide_region_used) == 0xe125e8);
 static_assert(offsetof(GameWorld, areas) == 0xe145e8);
 static_assert(offsetof(GameWorld, trades) == 0x10f45e8);
 static_assert(offsetof(GameWorld, trade_high_water) == 0x110a578);
-static_assert(offsetof(GameWorld, tile_slice) == 0x110a580);
+static_assert(offsetof(GameWorld, fog_cycle) == 0x110a580);
+static_assert(offsetof(GameWorld, landscape_step) == 0x2d2fc);
 static_assert(offsetof(GameWorld, offsets) == 0x110a588);
 static_assert(offsetof(GameWorld, territory_scratch) == 0x1158788);
 static_assert(offsetof(GameWorld, player_lists) == 0x118a47c);

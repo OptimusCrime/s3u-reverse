@@ -1844,6 +1844,7 @@ address,name,source,ticks,calls,commit,date,note
 0x004e6cd0,GameWorld::FloodAssignMarkedTiles,save:slot 1.sav,2000,0,e6c45ea,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x004e6cd0,GameWorld::FloodAssignMarkedTiles,save:slot 2.sav,2000,0,e6c45ea,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x004e6cd0,GameWorld::FloodAssignMarkedTiles,save:slot 3.sav,2000,0,e6c45ea,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x004e7810,GameWorld::UpdateEnvironment,save:slot 1.sav,2000,2000,d98fe1c,2026-11-22,
 0x004e8ad0,GameWorld::QueueEvent,"random:384,0 seed 1234",1500,0,21f1f01,2026-11-10,
 0x004e8ad0,GameWorld::QueueEvent,"random:448,3 seed 1234",1500,0,21f1f01,2026-11-10,
 0x004e8ad0,GameWorld::QueueEvent,"random:448,3 seed 1234 skip GameWorld_Create",300,0,5536f09,2026-11-10,
@@ -2175,6 +2176,7 @@ address,name,source,ticks,calls,commit,date,note
 0x00503940,GameWorld::AddTileTraffic,save:slot 1.sav,2000,241192,e6c45ea,2026-11-22,
 0x00503940,GameWorld::AddTileTraffic,save:slot 2.sav,2000,174816,e6c45ea,2026-11-22,
 0x00503940,GameWorld::AddTileTraffic,save:slot 3.sav,2000,52329,e6c45ea,2026-11-22,
+0x00503980,GameWorld::DecayTraffic,save:slot 1.sav,2000,494000,d98fe1c,2026-11-22,
 0x00504420,GameWorld::CreatePile,"random:384,0 seed 1234",1500,47,21f1f01,2026-11-10,
 0x00504420,GameWorld::CreatePile,"random:448,3 seed 1234",1500,47,21f1f01,2026-11-10,
 0x00504420,GameWorld::CreatePile,"random:448,3 seed 1234 skip GameWorld_Create",300,46,5536f09,2026-11-10,
@@ -2799,6 +2801,8 @@ address,name,source,ticks,calls,commit,date,note
 0x00518ec0,GameWorld::ClearSightSlice,save:slot 1.sav,2000,288,e6c45ea,2026-11-22,
 0x00518ec0,GameWorld::ClearSightSlice,save:slot 2.sav,2000,288,e6c45ea,2026-11-22,
 0x00518ec0,GameWorld::ClearSightSlice,save:slot 3.sav,2000,288,e6c45ea,2026-11-22,
+0x00518f20,GameWorld::MarkRevealPointsSight,save:slot 1.sav,2000,36,d98fe1c,2026-11-22,
+0x00519010,GameWorld::UpdateFogSlice,save:slot 1.sav,2000,566,d98fe1c,2026-11-22,
 0x00519210,GameWorld::ReplaceTerrainType,"random:384,0 seed 1234",1500,0,21f1f01,2026-11-10,
 0x00519210,GameWorld::ReplaceTerrainType,"random:448,3 seed 1234",1500,0,21f1f01,2026-11-10,
 0x00519210,GameWorld::ReplaceTerrainType,"random:448,3 seed 1234 skip GameWorld_Create",300,4,5536f09,2026-11-10,
@@ -2959,6 +2963,8 @@ address,name,source,ticks,calls,commit,date,note
 0x00519a90,GameWorld::RecalculateTerritory,save:slot 1.sav,2000,0,e6c45ea,2026-11-22,
 0x00519a90,GameWorld::RecalculateTerritory,save:slot 2.sav,2000,0,e6c45ea,2026-11-22,
 0x00519a90,GameWorld::RecalculateTerritory,save:slot 3.sav,2000,0,e6c45ea,2026-11-22,
+0x00519fa0,GameWorld::MarkBuildingSight,save:slot 1.sav,2000,576,d98fe1c,2026-11-22,
+0x0051a150,GameWorld::MarkSettlerSight,save:slot 1.sav,2000,570,d98fe1c,2026-11-22,
 0x0051a2e0,GameWorld::MarkTerrainEdge,"random:384,0 seed 1234",1500,0,21f1f01,2026-11-10,
 0x0051a2e0,GameWorld::MarkTerrainEdge,"random:448,3 seed 1234",1500,0,21f1f01,2026-11-10,
 0x0051a2e0,GameWorld::MarkTerrainEdge,"random:448,3 seed 1234 skip GameWorld_Create",300,4,5536f09,2026-11-10,
@@ -3344,6 +3350,7 @@ address,name,source,ticks,calls,commit,date,note
 0x0051d5b0,GameWorld::FindFreeId256,save:slot 1.sav,2000,0,e6c45ea,2026-11-22,
 0x0051d5b0,GameWorld::FindFreeId256,save:slot 2.sav,2000,0,e6c45ea,2026-11-22,
 0x0051d5b0,GameWorld::FindFreeId256,save:slot 3.sav,2000,0,e6c45ea,2026-11-22,
+0x0051d5f0,GameWorld::SeenObjectAt,save:slot 1.sav,2000,49463,d98fe1c,2026-11-22,
 0x00523560,CLogicThread::DrawOverlayLine,"random:384,0 seed 1234",1500,0,21f1f01,2026-11-10,
 0x00523560,CLogicThread::DrawOverlayLine,"random:448,3 seed 1234",1500,0,21f1f01,2026-11-10,
 0x00523560,CLogicThread::DrawOverlayLine,"random:448,3 seed 1234 skip GameWorld_Create",300,0,5536f09,2026-11-10,
@@ -3579,6 +3586,7 @@ address,name,source,ticks,calls,commit,date,note
 0x00543fd0,MapEffect::Reset,save:slot 1.sav,2000,1828,e6c45ea,2026-11-22,
 0x00543fd0,MapEffect::Reset,save:slot 2.sav,2000,270,e6c45ea,2026-11-22,
 0x00543fd0,MapEffect::Reset,save:slot 3.sav,2000,136,e6c45ea,2026-11-22,
+0x005440c0,MapEffect::IsExpired,save:slot 1.sav,2000,5949,d98fe1c,2026-11-22,
 0x00544210,MapEffect::PositionAt,"random:384,0 seed 1234",1500,0,21f1f01,2026-11-10,
 0x00544210,MapEffect::PositionAt,"random:448,3 seed 1234",1500,0,21f1f01,2026-11-10,
 0x00544210,MapEffect::PositionAt,"random:448,3 seed 1234 skip GameWorld_Create",300,0,5536f09,2026-11-10,
@@ -3739,6 +3747,7 @@ address,name,source,ticks,calls,commit,date,note
 0x00545c80,MapEffects::RemoveMatching,save:slot 1.sav,2000,0,e6c45ea,2026-11-22,
 0x00545c80,MapEffects::RemoveMatching,save:slot 2.sav,2000,0,e6c45ea,2026-11-22,
 0x00545c80,MapEffects::RemoveMatching,save:slot 3.sav,2000,0,e6c45ea,2026-11-22,
+0x00545d40,MapEffects::ExpireSome,save:slot 1.sav,2000,2000,d98fe1c,2026-11-22,
 0x00545df0,MapEffects::LinkIntoCell,"random:384,0 seed 1234",1500,0,21f1f01,2026-11-10,
 0x00545df0,MapEffects::LinkIntoCell,"random:448,3 seed 1234",1500,0,21f1f01,2026-11-10,
 0x00545df0,MapEffects::LinkIntoCell,"random:448,3 seed 1234 skip GameWorld_Create",300,0,5536f09,2026-11-10,
@@ -3774,6 +3783,7 @@ address,name,source,ticks,calls,commit,date,note
 0x00545ee0,MapEffects::FindFreeSlot,save:slot 1.sav,2000,0,e6c45ea,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x00545ee0,MapEffects::FindFreeSlot,save:slot 2.sav,2000,0,e6c45ea,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x00545ee0,MapEffects::FindFreeSlot,save:slot 3.sav,2000,0,e6c45ea,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x005474e0,GameWorld::SpawnSpellEffects,save:slot 1.sav,2000,0,d98fe1c,2026-11-22,
 0x0054b240,GameWorld::HasManaForSpell,"random:384,0 seed 1234",1500,0,21f1f01,2026-11-10,
 0x0054b240,GameWorld::HasManaForSpell,"random:448,3 seed 1234",1500,0,21f1f01,2026-11-10,
 0x0054b240,GameWorld::HasManaForSpell,"random:448,3 seed 1234 skip GameWorld_Create",300,0,5536f09,2026-11-10,
@@ -3784,6 +3794,7 @@ address,name,source,ticks,calls,commit,date,note
 0x0054b240,GameWorld::HasManaForSpell,save:slot 1.sav,2000,0,e6c45ea,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x0054b240,GameWorld::HasManaForSpell,save:slot 2.sav,2000,0,e6c45ea,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x0054b240,GameWorld::HasManaForSpell,save:slot 3.sav,2000,0,e6c45ea,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x0054b2b0,GameWorld::PayForSpell,save:slot 1.sav,2000,0,d98fe1c,2026-11-22,
 0x0054be40,CLandscapeSurface::scalar_deleting_destructor,"random:384,0 seed 1234",1500,1,21f1f01,2026-11-10,
 0x0054be40,CLandscapeSurface::scalar_deleting_destructor,"random:448,3 seed 1234",1500,1,21f1f01,2026-11-10,
 0x0054be40,CLandscapeSurface::scalar_deleting_destructor,"random:448,3 seed 1234 skip GameWorld_Create",300,1,5536f09,2026-11-10,

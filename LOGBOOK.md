@@ -571,6 +571,18 @@ instructions; most of it is Volker\GodlyEvents.cpp, the spells).
   draw_flags bits 0..5 are the fog levels (re/structs.md).
 - `s3re_launcher --test` filters take several substrings separated by
   `|` now.
+- **Batch 2: UpdateEnvironment 0x4E7810 itself, verified** (environment.cpp;
+  in-process diff test with recording stubs for the heavy callees, mutation
+  test; emulator spec 218/218 blocks with those callees probed). Still
+  original callees, called through their addresses: the minimap slice
+  0x4FB520, the spell dispatcher 0x5480B0 and 0x548380. Whole game, all
+  identical to the original: scripted-seed127.bin (3,000 ticks) and "slot
+  1.sav" (2,000 ticks). New names: Player +0x80 `soldier_strength` (UpdateSoldier's
+  damage factor), world +0x2D2F4.. landscape cursor/step, +0x110A580/4
+  fog/minimap cycles; globals g_fastForwarding 0x7DFD30, g_revealMap
+  0x7DFD84, g_strengthDivisor 0x7ACFA4, g_objectAgeStart 0x730EFC.
+  Event types 5/6/7 are building/catapult/ship hits ("Gebaeude/Katapult/
+  Schiff getroffen"); the landscape pass moves fish to water neighbours.
 
 ### 2026-11-22 (45): package B: UpdateSoldier
 

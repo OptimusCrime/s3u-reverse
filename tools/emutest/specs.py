@@ -6574,3 +6574,159 @@ SPECS += [
                                                                           for p in EFFECT_PADDING),
          max_cases=1500, exempt_blocks=(0x50fde8,)),
 ]
+
+
+# --- package D: GameWorld::UpdateEnvironment (environment.cpp) ---------------
+#
+# Callees with their own specs that need a consistent world (or loop over
+# whole record tables) are probed; Random, RandomBelow6, IsOnMap,
+# NeighbourX/Y, TileScreenX/Y and DecayTraffic run.
+
+ENV_CALLEES = {
+    0x005052c0: (1, "thiscall", "probe"),  # DispatchPileCarrier
+    0x005474e0: (5, "thiscall", "probe"),  # SpawnSpellEffects
+    0x005480b0: (5, "thiscall", "probe"),  # ExecuteSpell (GodlyEvents dispatcher)
+    0x004e8ba0: (3, "thiscall", "probe"),  # QueuePendingEvent
+    0x004fec10: (4, "thiscall", "probe"),  # NotifyLocalPlayer
+    0x004d9250: (1, "thiscall", "probe"),  # CrushBuilding
+    0x00544f80: (5, "thiscall", "probe"),  # MapEffects::Spawn_544f80
+    0x00545070: (5, "thiscall", "probe"),  # MapEffects::Spawn_545070
+    0x004ffb40: (3, "thiscall", "probe"),  # SubtractPlayerCounter
+    0x00518ec0: (1, "thiscall", "probe"),  # ClearSightSlice
+    0x00519fa0: (1, "thiscall", "probe"),  # MarkBuildingSight
+    0x00518f20: (0, "thiscall", "probe"),  # MarkRevealPointsSight
+    0x0051a150: (1, "thiscall", "probe"),  # MarkSettlerSight
+    0x00519010: (1, "thiscall", "probe"),  # UpdateFogSlice
+    0x004fb520: (1, "thiscall", "probe"),  # minimap slice
+    0x0051b770: (2, "thiscall", "probe"),  # UnblockTile
+    0x00548380: (3, "thiscall", "probe"),  # spell on an area (GodlyEvents)
+    0x00545d40: (1, "thiscall", "probe"),  # MapEffects::ExpireSome
+    0x004ff470: (0, "thiscall", "probe"),  # ShiftStatistics
+}
+
+EFFECTS = 0x36700
+EFFECT_HIGH_WATER = 0x67440
+AREAS = 0xe145e8
+AREA_BYTES = 0x2e0
+AREA_HIGH_WATER = 0xe115dc
+LANDSCAPE_X, LANDSCAPE_Y, LANDSCAPE_STEP = 0x2d2f4, 0x2d2f8, 0x2d2fc
+ENV_OBJECTS = [0, 0x44, 0x4a, 0x52, 0x53, 0x54, 0x55, 0x5c, 0x5d, 0x5e, 0x66, 0x6e, 0x6f, 0xb8, 0xcf, 0xd0,
+               0xd7, 0xd8, 0xdf, 0xe0, 0xe7, 0xe8, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xfc, 0xfd, 0xfe]
+
+
+def env_tile(rng, x, y, trees: float):
+    t = tile(x & 0xFFFFFFFF, y & 0xFFFFFFFF)
+    obj = rng.choice([0x44, 0x4a, 0x52, 0x53]) if rng.random() < trees else rng.choice(ENV_OBJECTS)
+    return [(t + 0x7, obj, 1), (t + 0x6, rng.choice([0x16, 0x16, 0x10, 0x05, rng.randrange(256)]), 1),
+            (t + 0x11, rng.choice([0, 1, 5, 0xf, 0x10, rng.randrange(256)]), 1),
+            (t + 0x0, 0 if rng.random() < 0.5 else rng.randrange(1, 32000), 2),
+            (t + 0x14, rng.randrange(8), 2)]
+
+
+def update_environment(rng, pool, args):
+    size = rng.choice([44, 45, 64, 90, rng.randint(45, 100)])
+    fields = [(SIGHT_MAP, size, 4)]
+    # Ring table: 201 small offsets (the tree count and the fire spread use
+    # entries 0..200 and 19..60).
+    for n in range(205):
+        base = NEIGHBOUR_OFFSETS + n * 16
+        d = min(n // 6 + 1, 5)
+        fields += [(base, rng.randint(-d, d) & 0xFFFFFFFF, 4), (base + 4, rng.randint(-d, d) & 0xFFFFFFFF, 4)]
+    # The tiles the landscape pass visits, their neighbours and a few more.
+    x, y = rng.randrange(size), rng.randrange(size)
+    step = rng.randint(1, size)
+    fields += [(LANDSCAPE_X, x, 4), (LANDSCAPE_Y, y, 4), (LANDSCAPE_STEP, step, 4)]
+    trees = rng.choice([0.0, 0.1, 0.5])
+    for _ in range(size * size // 2000):
+        x += step
+        if x >= size:
+            x -= size
+            y += 1
+            if y >= size:
+                y -= size
+        for dx in range(-5, 6):
+            for dy in range(-5, 6):
+                if abs(dx) <= 1 and abs(dy) <= 1 or rng.random() < 0.3:
+                    fields += env_tile(rng, x + dx, y + dy, trees)
+    # Piles: every 64th from tick & 63.
+    tick = 220 * rng.randrange(100) if rng.random() < 0.2 else rng.getrandbits(32)
+    pile_count = rng.randrange(200)
+    fields.append((PILE_COUNT, pile_count, 4))
+    for n in range(tick & 0x3f, pile_count + 1, 0x40):
+        base = PILES + n * PILE_BYTES
+        px, py = rng.randrange(size), rng.randrange(size)
+        area = rng.randrange(1, 8)
+        good = rng.randrange(36)
+        fields += [(base, good, 1), (base + 1, rng.randrange(8), 1), (base + 2, rng.randrange(8), 1),
+                   (base + 4, 0xfe if rng.random() < 0.7 else rng.randrange(256), 1), (base + 6, px, 2),
+                   (base + 8, py, 2), (tile(px, py) + 0x14, area, 2),
+                   (AREAS + area * AREA_BYTES + 0x21a + good, rng.randrange(3), 1)]
+    # Areas 1..n with short pile lists of goods 10 and 28 (piles 1000..).
+    areas = rng.randrange(0, 8)
+    fields.append((AREA_HIGH_WATER, areas, 4))
+    list_pile = 1000
+    for a in range(1, 8):
+        base = AREAS + a * AREA_BYTES
+        fields.append((base, 0xff if rng.random() < 0.2 else rng.randrange(20), 1))
+        for good in (10, 28):
+            head = 0
+            for _ in range(rng.randrange(3)):
+                fields += [(PILES + list_pile * PILE_BYTES + 0xc, head, 2),
+                           (PILES + list_pile * PILE_BYTES + 1, rng.randrange(256), 1)]
+                head = list_pile
+                list_pile += 1
+            fields.append((base + 0xa + 2 * good, head, 2))
+    for p in range(20):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, rng.choice([0, 1, 1, 2, 3]), 4))
+    fields.append((0x1195dcc, rng.choice([0, 1]), 1))
+    # Timed events.
+    events = rng.randrange(0, 24)
+    fields.append((EFFECT_HIGH_WATER, events, 4))
+    passenger = 20000
+    for e in range(1, events + 1):
+        base = EFFECTS + e * 0x14
+        kind = rng.randrange(9)
+        unit = rng.randrange(1, 4000) if kind in (4, 5) else rng.randrange(1, 4000)
+        fields += [(base, kind, 2), (base + 2, rng.randrange(3), 2), (base + 4, unit, 2),
+                   (base + 6, rng.choice([0, 5, 100, rng.randrange(0x10000)]), 2), (base + 8, rng.getrandbits(16), 2),
+                   (base + 10, rng.getrandbits(16), 2), (base + 12, rng.getrandbits(16), 2)]
+        if kind in (5, 4):
+            b = BUILDINGS + unit * BUILDING_BYTES
+            fields += [(b + 0x38, rng.choice([0, 5, 200, rng.randrange(0x10000)]), 2)]
+        if kind in (6, 7):
+            s = SETTLERS + unit * SETTLER_BYTES
+            art = rng.choice([0x29, 0x2b, 0x2c, 0x01])
+            fields += [(s, 0xff if rng.random() < 0.15 else rng.randrange(20), 1), (s + 1, art, 1),
+                       (s + 3, rng.choice([0, 5, 200, rng.randrange(256)]), 1),
+                       (s + 4, rng.randrange(1, size - 1), 2), (s + 6, rng.randrange(1, size - 1), 2),
+                       (s + 0x12, 0 if rng.random() < 0.5 else rng.randrange(1, 4000), 2),
+                       (s + 0x17, rng.getrandbits(8), 1), (s + 0x18, rng.getrandbits(8), 1)]
+            chain = 0
+            if art == 0x2c:
+                for _ in range(rng.randrange(3)):
+                    fields += [(SETTLERS + passenger * SETTLER_BYTES + 0x10, chain, 2),
+                               (SETTLERS + passenger * SETTLER_BYTES + 0x12, rng.randrange(4000), 2)]
+                    chain = passenger
+                    passenger += 1
+            else:
+                chain = 0 if rng.random() < 0.5 else rng.randrange(1, 4000)
+            fields.append((s + 0x10, chain, 2))
+    # Reveal points.
+    reveal = rng.randrange(50)
+    fields.append((REVEAL_COUNT, reveal, 4))
+    for i in range(reveal + 1):
+        fields.append((REVEAL_POINTS + i * 16 + 0xc, rng.randint(-2, 3) & 0xFFFFFFFF, 4))
+    fields += [(0x110a580, rng.randrange(0x38), 4), (0x110a584, rng.randrange(0x41), 4)]
+    update_environment.tick = tick
+    return fields
+
+
+def update_environment_globals(rng, pool, args):
+    return [(0x007dfd48, update_environment.tick, 4), (0x007dfd30, 1 if rng.random() < 0.2 else 0, 4),
+            (0x007acfa4, rng.randrange(20), 4), (0x007deb55, 1 if rng.random() < 0.05 else 0, 1)]
+
+
+SPECS += [
+    Spec("GameWorld_UpdateEnvironment", 0x004e7810, "thiscall", [], eax_mask=0, presets=update_environment,
+         globals=update_environment_globals, callees=ENV_CALLEES, max_cases=600),
+]

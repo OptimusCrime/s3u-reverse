@@ -274,7 +274,7 @@ constexpr ByteRange kHeaderSkips[] = {
     {offsetof(GameWorld, last_search_x), offsetof(GameWorld, unk2d2ec)},
     // UI cursor mode: set by CLogicThread::ProcessEvents, read by
     // CLogicThread::PrepareDrawData.
-    {offsetof(GameWorld, ui_cursor_mode), offsetof(GameWorld, environment_2d2f4)},
+    {offsetof(GameWorld, ui_cursor_mode), offsetof(GameWorld, landscape_x)},
     // Search generation counter (GameWorld::NextSearchGeneration; UI
     // overlays bump it too) and the byte counter incremented on every call
     // of PrepareDrawData (volatile).

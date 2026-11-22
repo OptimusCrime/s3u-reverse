@@ -263,7 +263,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
         if ((s.flags & 1) != 0) {
             damage >>= 1;
         }
-        damage = (static_cast<std::uint32_t>(world->players[s.owner].unk080) * damage + 0x80) / U32(kDamageDivisor);
+        damage = (static_cast<std::uint32_t>(world->players[s.owner].soldier_strength) * damage + 0x80) / U32(kDamageDivisor);
     }
     const std::int32_t targetClass = ClassOf(world->settlers[t]);
     if (targetClass == 3 || targetClass == 0x29) {
@@ -725,7 +725,7 @@ void SetUpWorld(GameWorld* w) {
         r.presence_index = static_cast<std::int32_t>(p % 3);
         r.active = static_cast<std::int32_t>(1 + (p & 1));
         r.race = static_cast<std::int32_t>(p % 3);
-        r.unk080 = static_cast<std::int32_t>(0xe0 + (p * 37) % 0x60);
+        r.soldier_strength = static_cast<std::uint32_t>(0xe0 + (p * 37) % 0x60);
     }
     for (auto& row : w->tiles) {
         for (Tile& t : row) {

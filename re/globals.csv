@@ -1,5 +1,6 @@
 address,name,type,status,notes
 0x006970f0,g_versionNumber,uint32,identified,Game version x100 (logged as %i.%i by CConsoleThread::OnStart).
+0x00730efc,g_objectAgeStart,uint32,classified,"0xd8 in the image: UpdateEnvironment's landscape pass turns objects from this value up to 0xdf into (Random & 1) + (object + 0x4a) * 2 (an object life cycle stage). Name from that use only."
 0x00730f18,g_screenWidth,int32,classified,"Width of the game view in pixels (used by GameWorld::ScreenCenterTileX/Y with the camera position). Name from that use only."
 0x00730f1c,g_screenHeight,int32,classified,"Height of the game view in pixels (GameWorld::ScreenCenterTileX/Y)."
 0x00730f64,g_gameOutcome,int32,classified,"Set to -1 at the end of 0x4fd0d0 (a loop over the player records, purpose unknown), then to a result by the game-end check 0x511c50 (per-mission cases set 1 or 0, or a function's return value). GameWorld::IsGameOutcome1 tests for 1. Which value means won is not confirmed."
@@ -9,14 +10,17 @@ address,name,type,status,notes
 0x007a800b,g_optionPlay,uint8,identified,"Set by the -play command-line option. Copied to CNetThread+0x8a / CNetBounceThread+0x5a: add commands from Siedler3.evt (on top of the live ones)."
 0x007ace60,g_recentPositionsCursor,uint16,identified,"Cursor 0..127 into the 128-slot position list at world+0x1195dd4: the logic thread clears that slot and advances it every step (0x53de6f); GameWorld::AddToRecentPositions (0x510770) searches downwards from the slot before it. Reset by 0x4fcce3. Per step, not per tick."
 0x007ace62,g_simulationPaused,uint16,classified,"When non-zero, CLogicThread::Step skips the world updates. Name is a hypothesis (pause or not-yet-started)."
+0x007acfa4,g_strengthDivisor,uint32,classified,"Set by the map and savegame loaders (0x4fd0fb, 0x50911d); UpdateEnvironment computes Player::soldier_strength from 0x600 / (value + 4) plus goods. Probably a game setting; name from that use only."
 0x007acfd4,g_playerTallies,struct[20] (0x44 bytes),classified,"Per-player tallies, probably end-of-game statistics: +0x0 meals eaten by miners (MinerJobFood 0x4f9b80), +0x4 successful digs (MinerJobDig 0x4fa220), +0x8 points (+4 for resource 0x40 by race 1 in MinerJobDig, +2 in UpdateSettlers); +0xc is g_playerCounters7acfe0 (same records)."
 0x007acfe0,g_playerCounters7acfe0,int32[20][17],classified,"Per player (stride 0x44), element 0 += 8 by BuildingDone (0x4dbc50) when a temple-like building (types 0x29/0x2b/0x2d/0x37) is finished and the player flag bit 0 (player +0x8) is clear; also read/written by UpdatePhase2 (0x4e34a2, 0x4e35c5). Meaning unknown."
 0x007deb55,g_worldUpdateDisabled,uint8,classified,"When non-zero, GameWorld::UpdateEnvironment returns immediately and CLogicThread::Step skips its game-end check."
 0x007dfb58,g_syncRandomHistory,uint16[32],classified,CLogicThread::Step stores the RNG a-word here when the tick low byte is 0 (index (tick>>8)&31) and sends it via 0x4309c0: probably the lockstep desync check.
 0x007dfba0,g_pixelChannelShifts,uint32[3],classified,"Shift counts of the three colour channels in the screen's pixel format, followed by their scale factors at 0x7dfbac..0x7dfbb4 (Render::PackColour 0x4c7b00: (c * scale) >> 8 << shift per channel)."
 0x007dfd2c,g_stepCountdown,uint32,classified,Checked and decremented in CLogicThread::Step; when non-zero some per-phase calls (0x51f110) are skipped. Purpose unknown.
+0x007dfd30,g_fastForwarding,int32,identified,"Set by CLogicThread::Step while g_stepCountdown catches up (0x53dc80), 0 otherwise; UpdateEnvironment then skips the fog of war cycle (and resets its counter) and the minimap."
 0x007dfd44,g_logicStartState,uint32,classified,"CLogicThread::Step does one-time setup when this equals 0xFA, then sets it to 0."
 0x007dfd48,g_gameTick,uint32,identified,"Simulation tick counter; copied from CLogicThread+0x70 at the end of each CLogicThread::Step. Used throughout the world update (e.g. tick & 0x3f, tick % 220)."
+0x007dfd84,g_revealMap,int32,classified,"Non-zero while the whole map is shown: UpdateFogSlice 0x519010 then draws fog level 7 everywhere; set by the reveal spell 0x5495d0 for the local player and by CLogicThread (0x53b34e, 0x53d5fc)."
 0x007dfdb0,g_campaignMission,int32,classified,"Number of the running campaign mission, 0 outside campaigns (CrushBuilding compares it with 70 next to ""Campaign 70: ...""; MinerJobDig and UpdateSoldier weaken computer players in campaigns together with config byte +0x189)."
 0x007e2eb0,g_aiPlayerData,pointer,classified,"Working data of the computer player whose turn it is (from CComputerPlayer +0x778, set by AI::SetCurrentPlayer 0x551a30); candidate records at +0x26 + i*6 and per-type words at +0x2d2 (AI::RecordBestCandidate)."
 0x007e2eb4,g_aiPlayerSetup,pointer,classified,"0x731488 + index * 0x180 with the index from CComputerPlayer +0x770 (AI::SetCurrentPlayer): probably the player's entry of a settings table."

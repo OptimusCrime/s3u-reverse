@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1000" fill="#ffffff"/>
 <g><rect x="0" y="0" width="1220.1" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 8.2% verified (4.5% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 8.5% verified (4.9% in a whole game)</text>
 <g><title>(free functions): 2522 functions</title><rect x="2" y="19" width="753.9" height="979" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="342.3" height="141.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -5061,12 +5061,12 @@
 6736 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1006.2" y="30.5" width="71.6" height="52.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::BuildingDone @ 0x004dbc50
 5680 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1077.8" y="30.5" width="60.5" height="52.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::UpdateEnvironment @ 0x004e7810
-4800 bytes — Identified (purpose known)</title></rect>
+<rect x="1077.8" y="30.5" width="60.5" height="52.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::UpdateEnvironment @ 0x004e7810
+4800 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1138.3" y="30.5" width="41.1" height="52.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::ResetSettlerToIdle @ 0x0050cf50
 3264 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1179.5" y="30.5" width="38.1" height="52.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::SpawnSpellEffects @ 0x005474e0
-3024 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1179.5" y="30.5" width="38.1" height="52.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::SpawnSpellEffects @ 0x005474e0
+3024 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1006.2" y="82.9" width="49.6" height="35.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::CheckBuildingSite @ 0x004d99e0
 2656 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1055.8" y="82.9" width="47.5" height="35.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::RemoveBuildingGoods @ 0x004de430
@@ -5133,8 +5133,8 @@
 528 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1060.7" y="277.6" width="19" height="18.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::WearPath @ 0x0051b7f0
 528 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1079.7" y="140.7" width="18.8" height="18" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::UpdateFogSlice @ 0x00519010
-512 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1079.7" y="140.7" width="18.8" height="18" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::UpdateFogSlice @ 0x00519010
+512 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1098.5" y="140.7" width="18.8" height="18" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::PileIncAmountLeaving @ 0x005058c0
 512 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1117.3" y="140.7" width="18.2" height="18" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::NotifyLocalPlayer @ 0x004fec10
@@ -5147,8 +5147,8 @@
 448 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1185.3" y="140.7" width="16.4" height="18" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::SendNearestSettlerToBuilding @ 0x004ddd70
 448 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1201.8" y="140.7" width="15.8" height="18" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::MarkBuildingSight @ 0x00519fa0
-432 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1201.8" y="140.7" width="15.8" height="18" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::MarkBuildingSight @ 0x00519fa0
+432 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1079.7" y="158.7" width="15.8" height="18.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::IsWalkingJob @ 0x004fa6d0
 432 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1079.7" y="176.8" width="15.8" height="18.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::FindNearest_b @ 0x004ff170
@@ -5159,8 +5159,8 @@
 400 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1079.7" y="229" width="15.8" height="16.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::DestroyBuildingAt @ 0x004d97b0
 400 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1079.7" y="245.8" width="15.8" height="16.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::MarkSettlerSight @ 0x0051a150
-400 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1079.7" y="245.8" width="15.8" height="16.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::MarkSettlerSight @ 0x0051a150
+400 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1079.7" y="262.5" width="15.8" height="16.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::ScatterTileByte11 @ 0x0051ad40
 400 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1079.7" y="279.3" width="15.8" height="16.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::ScatterObjects @ 0x0051b010
@@ -5171,8 +5171,8 @@
 384 bytes — Identified (purpose known)</title></rect>
 <rect x="1127.2" y="158.7" width="15.2" height="16" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::DropInputPile @ 0x00504a00
 368 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1142.4" y="158.7" width="15.2" height="16" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::SeenObjectAt @ 0x0051d5f0
-368 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1142.4" y="158.7" width="15.2" height="16" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::SeenObjectAt @ 0x0051d5f0
+368 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1157.5" y="158.7" width="15.2" height="16" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::CreateSevenTileUnit @ 0x0050dd20
 368 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1172.7" y="158.7" width="15.2" height="16" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::JoinAreasAtTile @ 0x004e6150
@@ -5223,8 +5223,8 @@
 256 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1109.8" y="244.6" width="12.5" height="13.5" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::PileDecAmountLeaving @ 0x00505ac0
 256 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1109.8" y="258.1" width="12.5" height="12.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::MarkRevealPointsSight @ 0x00518f20
-240 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1109.8" y="258.1" width="12.5" height="12.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::MarkRevealPointsSight @ 0x00518f20
+240 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1109.8" y="270.7" width="12.5" height="12.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::SetSettlerTarget @ 0x00503610
 240 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1109.8" y="283.4" width="12.5" height="12.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::MergeTileByte10Regions @ 0x0051ca00
@@ -5295,8 +5295,8 @@
 176 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1144.9" y="212.5" width="10.5" height="10" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::RemoveBuildingFromTiles @ 0x004d9940
 160 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1155.5" y="212.5" width="10.5" height="10" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::DecayTraffic @ 0x00503980
-160 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1155.5" y="212.5" width="10.5" height="10" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::DecayTraffic @ 0x00503980
+160 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1166" y="212.5" width="10.5" height="10" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::LeaveBuildingSlot @ 0x0050cc10
 160 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1176.5" y="212.5" width="10.5" height="10" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::TakeGoodFromPile @ 0x00505820
@@ -5331,8 +5331,8 @@
 144 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1144.9" y="270.3" width="9.8" height="8.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::IsClearOfType70Nearby @ 0x00519960
 128 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1144.9" y="278.9" width="9.8" height="8.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::PayForSpell @ 0x0054b2b0
-128 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1144.9" y="278.9" width="9.8" height="8.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::PayForSpell @ 0x0054b2b0
+128 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1144.9" y="287.4" width="9.8" height="8.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::IsNeighbourhoodTerrain @ 0x0051b450
 128 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1154.8" y="231.6" width="9" height="9.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::BlockTile @ 0x0051b6f0
@@ -5881,8 +5881,8 @@
 176 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1204.3" y="592.8" width="13.3" height="8.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>MapEffects::Spawn_544e70 @ 0x00544e70
 176 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1191.1" y="601.7" width="11.7" height="10.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>MapEffects::ExpireSome @ 0x00545d40
-176 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1191.1" y="601.7" width="11.7" height="10.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>MapEffects::ExpireSome @ 0x00545d40
+176 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1202.7" y="601.7" width="7.4" height="10.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>MapEffects::SetMapSize @ 0x00544320
 112 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1210.2" y="601.7" width="7.4" height="10.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>MapEffects::Spawn_545860 @ 0x00545860
@@ -6191,8 +6191,8 @@
 96 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="925" y="842.1" width="5.3" height="9.8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>MapEffect::MapEffect @ 0x00543830
 80 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="930.3" y="842.1" width="7.5" height="5.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>MapEffect::IsExpired @ 0x005440c0
-64 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="930.3" y="842.1" width="7.5" height="5.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>MapEffect::IsExpired @ 0x005440c0
+64 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="930.3" y="847.7" width="7.5" height="4.2" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>MapEffect::SetLinks @ 0x00544290
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
