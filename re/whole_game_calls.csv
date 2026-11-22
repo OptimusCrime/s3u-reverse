@@ -2637,16 +2637,16 @@ address,name,source,ticks,calls,commit,date,note
 0x0050e320,GameWorld::SetSettlerSavedAnimation,save:slot 1.sav,2000,968,9adc76c,2026-11-22,
 0x0050e320,GameWorld::SetSettlerSavedAnimation,save:slot 2.sav,2000,641,9adc76c,2026-11-22,
 0x0050e320,GameWorld::SetSettlerSavedAnimation,save:slot 3.sav,2000,265,9adc76c,2026-11-22,
-0x0050e380,GameWorld::RestoreSettlerDirection,"random:384,0 seed 1234",2000,48,9adc76c,2026-11-22,
-0x0050e380,GameWorld::RestoreSettlerDirection,"random:448,3 seed 1234",2000,51,9adc76c,2026-11-22,
-0x0050e380,GameWorld::RestoreSettlerDirection,"random:448,3 seed 1234 skip GameWorld_Create",300,0,5536f09,2026-11-10,
-0x0050e380,GameWorld::RestoreSettlerDirection,"random:512,1 seed 1234",1500,38,21f1f01,2026-11-10,
-0x0050e380,GameWorld::RestoreSettlerDirection,"random:640,2 seed 1234",1500,38,21f1f01,2026-11-10,
-0x0050e380,GameWorld::RestoreSettlerDirection,replay:fun8-seed2024-input31.bin,5000,842,c561f41,2026-11-10,seed 2024
-0x0050e380,GameWorld::RestoreSettlerDirection,replay:scripted-seed127.bin,3000,146,8ee6e3b,2026-11-22,seed 1234
-0x0050e380,GameWorld::RestoreSettlerDirection,save:slot 1.sav,2000,971,9adc76c,2026-11-22,
-0x0050e380,GameWorld::RestoreSettlerDirection,save:slot 2.sav,2000,643,9adc76c,2026-11-22,
-0x0050e380,GameWorld::RestoreSettlerDirection,save:slot 3.sav,2000,265,9adc76c,2026-11-22,
+0x0050e380,GameWorld::RestoreSettlerAnimation,"random:384,0 seed 1234",2000,48,9adc76c,2026-11-22,
+0x0050e380,GameWorld::RestoreSettlerAnimation,"random:448,3 seed 1234",2000,51,9adc76c,2026-11-22,
+0x0050e380,GameWorld::RestoreSettlerAnimation,"random:448,3 seed 1234 skip GameWorld_Create",300,0,5536f09,2026-11-10,
+0x0050e380,GameWorld::RestoreSettlerAnimation,"random:512,1 seed 1234",1500,38,21f1f01,2026-11-10,
+0x0050e380,GameWorld::RestoreSettlerAnimation,"random:640,2 seed 1234",1500,38,21f1f01,2026-11-10,
+0x0050e380,GameWorld::RestoreSettlerAnimation,replay:fun8-seed2024-input31.bin,5000,842,c561f41,2026-11-10,seed 2024
+0x0050e380,GameWorld::RestoreSettlerAnimation,replay:scripted-seed127.bin,3000,146,8ee6e3b,2026-11-22,seed 1234
+0x0050e380,GameWorld::RestoreSettlerAnimation,save:slot 1.sav,2000,971,9adc76c,2026-11-22,
+0x0050e380,GameWorld::RestoreSettlerAnimation,save:slot 2.sav,2000,643,9adc76c,2026-11-22,
+0x0050e380,GameWorld::RestoreSettlerAnimation,save:slot 3.sav,2000,265,9adc76c,2026-11-22,
 0x0050e3b0,GameWorld::ReleaseSiteWorkers,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
 0x0050e3b0,GameWorld::ReleaseSiteWorkers,"random:448,3 seed 1234",2000,0,9adc76c,2026-11-22,
 0x0050e3b0,GameWorld::ReleaseSiteWorkers,replay:fun8-seed2024-input31.bin,3000,0,8ee6e3b,2026-11-22,seed 2024
@@ -2735,16 +2735,16 @@ address,name,source,ticks,calls,commit,date,note
 0x00510650,GameWorld::IsOtherPlayerNear,save:slot 1.sav,2000,713744,17dae2f,2026-11-22,
 0x00510650,GameWorld::IsOtherPlayerNear,save:slot 2.sav,2000,523344,17dae2f,2026-11-22,
 0x00510650,GameWorld::IsOtherPlayerNear,save:slot 3.sav,2000,353260,17dae2f,2026-11-22,
-0x00510770,GameWorld::AddToRecentPositions,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
-0x00510770,GameWorld::AddToRecentPositions,"random:448,3 seed 1234",2000,0,9adc76c,2026-11-22,
-0x00510770,GameWorld::AddToRecentPositions,"random:448,3 seed 1234 skip GameWorld_Create",300,0,5536f09,2026-11-10,
-0x00510770,GameWorld::AddToRecentPositions,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
-0x00510770,GameWorld::AddToRecentPositions,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
-0x00510770,GameWorld::AddToRecentPositions,replay:fun8-seed2024-input31.bin,3000,0,8ee6e3b,2026-11-22,seed 2024
-0x00510770,GameWorld::AddToRecentPositions,replay:scripted-seed127.bin,3000,0,8ee6e3b,2026-11-22,seed 1234
-0x00510770,GameWorld::AddToRecentPositions,save:slot 1.sav,2000,0,9adc76c,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x00510770,GameWorld::AddToRecentPositions,save:slot 2.sav,2000,0,9adc76c,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x00510770,GameWorld::AddToRecentPositions,save:slot 3.sav,2000,0,9adc76c,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x00510770,GameWorld::AddPileClaim,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
+0x00510770,GameWorld::AddPileClaim,"random:448,3 seed 1234",2000,0,9adc76c,2026-11-22,
+0x00510770,GameWorld::AddPileClaim,"random:448,3 seed 1234 skip GameWorld_Create",300,0,5536f09,2026-11-10,
+0x00510770,GameWorld::AddPileClaim,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
+0x00510770,GameWorld::AddPileClaim,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
+0x00510770,GameWorld::AddPileClaim,replay:fun8-seed2024-input31.bin,3000,0,8ee6e3b,2026-11-22,seed 2024
+0x00510770,GameWorld::AddPileClaim,replay:scripted-seed127.bin,3000,0,8ee6e3b,2026-11-22,seed 1234
+0x00510770,GameWorld::AddPileClaim,save:slot 1.sav,2000,0,9adc76c,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x00510770,GameWorld::AddPileClaim,save:slot 2.sav,2000,0,9adc76c,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x00510770,GameWorld::AddPileClaim,save:slot 3.sav,2000,0,9adc76c,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x00510800,GameWorld::CountOtherPileClaims,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
 0x00510800,GameWorld::CountOtherPileClaims,"random:448,3 seed 1234",2000,0,9adc76c,2026-11-22,
 0x00510800,GameWorld::CountOtherPileClaims,replay:fun8-seed2024-input31.bin,3000,0,8ee6e3b,2026-11-22,seed 2024

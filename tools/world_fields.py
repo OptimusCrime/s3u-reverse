@@ -87,7 +87,7 @@ REGIONS = [
     ("players", 0x11943DC, 0x148, 20),
     ("perPlayer1195d7c", 0x1195D7C, 4, 20),
     ("newGameObjective", 0x1195DCC, 0, 8),
-    ("recentPositions", 0x1195DD4, 4, 128),
+    ("pileClaims", 0x1195DD4, 4, 128),
     ("playerRaces", 0x1195FD4, 4, 20),
     ("siteCache", 0x1196024, 0x3C2, 600),
     ("footprintScratch", 0x1222ED4, 0, 0x782),

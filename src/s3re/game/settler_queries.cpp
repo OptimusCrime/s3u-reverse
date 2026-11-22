@@ -173,8 +173,8 @@ std::uint32_t __fastcall GameWorld_SetSettlerTarget(GameWorld* world, void*, std
         word = 0xffff;
     }
     record.path_mode = 1;
-    if (record.unk19 == 0) {
-        record.unk19 = 1;
+    if (record.step_time == 0) {
+        record.step_time = 1;
     }
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + (settler << 6);
 }
@@ -317,10 +317,10 @@ std::uint32_t __fastcall GameWorld_SendNearestSettlerToPile(GameWorld* world, vo
     settler.job = 0x133;
     settler.counter = 0;
     settler.good = record.good;
-    settler.unk17 = 0;
+    settler.second_unit = 0;
     if (record.amount != (reserved & 0x0f)) {
         reserved = static_cast<std::uint8_t>(reserved + 1);
-        settler.unk17 = 1;
+        settler.second_unit = 1;
     }
     settler.building = static_cast<std::uint16_t>(building);
     return ((pile + 0x14d2e2u) & 0xffffff00u) | reserved;
@@ -330,7 +330,7 @@ std::uint32_t __fastcall GameWorld_SendNearestSettlerToPile(GameWorld* world, vo
 // site, if one is close enough.
 std::uint32_t __fastcall GameWorld_SendNearestSettlerToBuilding(GameWorld* world, void*, std::uint32_t building) {
     const Building& record = world->buildings[building];
-    const std::uint32_t direction = (record.unk22 + 3u) % 6u;
+    const std::uint32_t direction = (record.dock_direction + 3u) % 6u;
     const std::uint32_t x1 = NeighbourX(record.work_x, direction);
     const std::uint32_t y1 = NeighbourY(record.work_y, direction);
     const std::uint32_t x2 = NeighbourX(x1, direction);
@@ -350,7 +350,7 @@ std::uint32_t __fastcall GameWorld_SendNearestSettlerToBuilding(GameWorld* world
     const std::uint32_t result = GameWorld_SetSettlerTarget(world, nullptr, best, x2, y2);
     Settler& settler = world->settlers[best];
     settler.job = 0x147;
-    settler.unk3c = 0;
+    settler.ship_walk = 0;
     settler.counter = 0;
     settler.building = static_cast<std::uint16_t>(building);
     return (result & 0xffff0000u) | (building & 0xffffu);
@@ -671,7 +671,7 @@ S3RE_TEST(GameWorld_SetSettlerTarget_MatchesOriginal) {
         if (ctx.rng().Chance(1, 8)) {
             x = ctx.rng().Next32();
         }
-        SetField(worlds, o->settlers[settler].unk19, ctx.rng().Below(3));
+        SetField(worlds, o->settlers[settler].step_time, ctx.rng().Below(3));
         expected = Relative(Original_GameWorld_SetSettlerTarget(worlds.original(), nullptr, settler, x, y),
                             worlds.original());
         actual = Relative(GameWorld_SetSettlerTarget(worlds.ours(), nullptr, settler, x, y), worlds.ours());
@@ -838,7 +838,7 @@ S3RE_TEST(GameWorld_SendNearestSettlerToBuilding_MatchesOriginal) {
         SetField(worlds, record.owner, player);
         SetField(worlds, record.work_x, x);
         SetField(worlds, record.work_y, y);
-        SetField(worlds, record.unk22, ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(6));
+        SetField(worlds, record.dock_direction, ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(6));
         SetUpWaitingList(ctx, worlds, o->players[player].settler_lists[kPlayerWaitingB], x, y);
         expected = RelativeIfPointer(Original_GameWorld_SendNearestSettlerToBuilding(worlds.original(), nullptr, building),
                                      worlds.original());

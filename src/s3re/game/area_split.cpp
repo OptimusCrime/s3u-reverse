@@ -138,8 +138,8 @@
 // settlers_by_type, +0x18a..+0x21a settings1..5, +0x23e settings_extra,
 // +0x241 setting_241, +0x242 counters_242, +0x245 condition_enabled, +0x278
 // counters_278; tile byte +0x10 Tile::walk_region ("byte 10"), word +0x16
-// Tile::wide_region ("word 16"); building +0x20 Building::extra_tiles,
-// +0x22 unk22, +0x30/+0x32 work_x/work_y, +0x36 unk36.
+// Tile::wide_region ("word 16"); building +0x20 Building::water.extra_tiles,
+// +0x22 dock_direction, +0x30/+0x32 work_x/work_y, +0x36 unk36.
 
 #include "game/debug_log.h"
 #include "game/replacements.h"
@@ -743,7 +743,7 @@ namespace {
 
 using layout::Building;
 
-// Building::extra_tiles (+0x20) once the extra tiles are taken.
+// Building::water.extra_tiles (+0x20) once the extra tiles are taken.
 constexpr std::uint8_t kExtraDone = 0xfe;
 constexpr std::uint8_t kShipyard = 0x20;
 constexpr std::uint8_t kType12 = 0x12;
@@ -768,9 +768,9 @@ const std::int32_t* ExtraTilesOffset(std::uint8_t type) {
 constexpr std::int32_t kExtraTiles[7][2] = {{-1, -1}, {0, -1}, {-1, 0}, {0, 0}, {1, 0}, {0, 1}, {1, 1}};
 
 // The shipyard's ship tile: two steps from the ship position (Building::work_x/work_y, +0x30/+0x32) in
-// direction (Building::unk22 + 3) % 6.
+// direction (Building::dock_direction + 3) % 6.
 void ShipTile(const Building& record, std::uint32_t& direction, std::uint32_t& x, std::uint32_t& y) {
-    direction = (record.unk22 + 3u) % 6u;
+    direction = (record.dock_direction + 3u) % 6u;
     x = NeighbourX(NeighbourX(record.work_x, direction), direction);
     y = NeighbourY(NeighbourY(record.work_y, direction), direction);
 }
@@ -782,14 +782,14 @@ void ShipTile(const Building& record, std::uint32_t& direction, std::uint32_t& x
 // ship it has built onto its ship tile (a new ship settler). Marks the building as done.
 std::uint32_t __fastcall GameWorld_TakeBuildingExtraTiles(GameWorld* world, void*, std::uint32_t building) {
     Building& record = world->buildings[building];
-    if (record.extra_tiles == kExtraDone) {
+    if (record.water.extra_tiles == kExtraDone) {
         return building;
     }
     const std::uint8_t type = record.art;
     if (const std::int32_t* offset = ExtraTilesOffset(type)) {
-        if ((record.state & 0xf0) == 0x20) {
+        if ((record.water.state & 0xf0) == 0x20) {
             if (record.unk36 <= 0x18) {
-                record.extra_tiles = kExtraDone;
+                record.water.extra_tiles = kExtraDone;
             }
             return building;
         }
@@ -807,7 +807,7 @@ std::uint32_t __fastcall GameWorld_TakeBuildingExtraTiles(GameWorld* world, void
         for (const auto& step : kExtraTiles) {
             result = GameWorld_BlockTile(world, nullptr, cx + step[0], cy + step[1]);
         }
-        record.extra_tiles = kExtraDone;
+        record.water.extra_tiles = kExtraDone;
         return result;
     }
     if (type != kShipyard || record.work_x == 0xffff) {
@@ -820,7 +820,7 @@ std::uint32_t __fastcall GameWorld_TakeBuildingExtraTiles(GameWorld* world, void
     if (TileAt(world, x, y).settler != 0) {
         return y;
     }
-    const std::uint8_t state = record.state & 0xf0;
+    const std::uint8_t state = record.water.state & 0xf0;
     std::uint32_t ship = 0;
     if (state == 0x30) {
         ship = GameWorld_CreateSettler(world, nullptr, x, y, 0x2b, record.owner);
@@ -838,9 +838,9 @@ std::uint32_t __fastcall GameWorld_TakeBuildingExtraTiles(GameWorld* world, void
                  static_cast<std::uint32_t>(settler.owner));
     settler.job = 0x145;
     settler.slot = 0;
-    settler.saved_direction = 0;
+    settler.saved_animation = 0;
     settler.direction = (direction + 2) % 6;
-    record.extra_tiles = kExtraDone;
+    record.water.extra_tiles = kExtraDone;
     return (direction + 2) / 6;
 }
 
@@ -862,7 +862,7 @@ std::uint32_t __fastcall GameWorld_ReleaseBuildingExtraTiles(GameWorld* world, v
         }
         return result;
     }
-    if (type != kShipyard || record.state == 0) {
+    if (type != kShipyard || record.water.state == 0) {
         return recordAddress;
     }
     std::uint32_t direction = 0;
@@ -1624,8 +1624,8 @@ std::uint32_t SetUpExtraTilesBuilding(test::Context& ctx, test::WorldPair& world
     worlds.Both([&](GameWorld* w) {
         record(w).art = type;
         record(w).owner = owner;
-        record(w).extra_tiles = extraTiles;
-        record(w).state = storedState;
+        record(w).water.extra_tiles = extraTiles;
+        record(w).water.state = storedState;
         record(w).unk36 = byte36;
     });
     if (const std::int32_t* offset = ExtraTilesOffset(type)) {
@@ -1646,7 +1646,7 @@ std::uint32_t SetUpExtraTilesBuilding(test::Context& ctx, test::WorldPair& world
         const auto shipY = static_cast<std::uint16_t>(ty - 2 * static_cast<std::uint32_t>(kDirectionY[d]));
         const auto occupant = static_cast<std::uint16_t>(ctx.rng().Chance(1, 4) ? 1 + ctx.rng().Below(0x8000) : 0);
         worlds.Both([&](GameWorld* w) {
-            record(w).unk22 = direction;
+            record(w).dock_direction = direction;
             record(w).work_x = shipX;
             record(w).work_y = shipY;
             w->tiles[tx][ty].settler = occupant;
@@ -1674,9 +1674,9 @@ void BlockExtraTiles(test::Context& ctx, test::WorldPair& worlds, std::uint32_t 
 
 // Wrong: never marks the building as done.
 std::uint32_t __fastcall WrongTakeBuildingExtraTiles(GameWorld* world, void* edx, std::uint32_t building) {
-    const std::uint8_t done = world->buildings[building].extra_tiles;
+    const std::uint8_t done = world->buildings[building].water.extra_tiles;
     const std::uint32_t result = GameWorld_TakeBuildingExtraTiles(world, edx, building);
-    world->buildings[building].extra_tiles = done;
+    world->buildings[building].water.extra_tiles = done;
     return result;
 }
 

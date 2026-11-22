@@ -202,8 +202,8 @@ std::uint32_t __fastcall MapEffect_Reset(MapEffect* self, void*) {
     self->start_tick = 0;
     self->duration = 0;
     self->unk06 = 0;
-    self->unk3a = 0;
-    self->unk3c = 0;
+    self->source_kind = 0;
+    self->source_id = 0;
     self->start_x = 0;
     self->start_y = 0;
     self->end_x = 0;
@@ -247,7 +247,7 @@ std::uint32_t __fastcall MapEffects_Unlink(MapEffectTable* self, void*, std::uin
 std::uint32_t __fastcall MapEffects_RemoveMatching(MapEffectTable* self, void*, std::uint32_t kind, std::uint32_t id,
                                                    std::uint32_t x, std::uint32_t y) {
     auto matches = [&](const MapEffect& r) {
-        return r.unk3a == kind && static_cast<U>(static_cast<std::int32_t>(static_cast<std::int16_t>(r.unk3c))) == id;
+        return r.source_kind == kind && static_cast<U>(static_cast<std::int32_t>(static_cast<std::int16_t>(r.source_id))) == id;
     };
     if (x != 0xffffffffu && y != 0xffffffffu) {
         const std::int32_t cell =
@@ -501,8 +501,8 @@ void Compare(test::Context& ctx, const Functions& candidate, int cases, int only
             MapEffect& r = table->records[slot];
             const bool free = slot == 0 || ctx.rng().Chance(1, 6);
             r.start_tick = free ? 0 : 1 + ctx.rng().Below(0xffff);
-            r.unk3a = static_cast<std::uint8_t>(ctx.rng().Below(3));
-            r.unk3c = static_cast<std::uint16_t>(ctx.rng().Chance(1, 4) ? 0xfffe + ctx.rng().Below(2) : ctx.rng().Below(3));
+            r.source_kind = static_cast<std::uint8_t>(ctx.rng().Below(3));
+            r.source_id = static_cast<std::uint16_t>(ctx.rng().Chance(1, 4) ? 0xfffe + ctx.rng().Below(2) : ctx.rng().Below(3));
             r.list = r.previous = r.next = 0;
             if (slot != 0 && !free) {
                 const U cell = ctx.rng().Below(8);

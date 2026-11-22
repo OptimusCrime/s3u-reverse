@@ -187,13 +187,13 @@ constexpr std::uint32_t kNoPlayer = 0xff;
 // entries (rings around it) it claims.
 std::uint32_t InfluenceEntries(const layout::Building& b) {
     std::uint32_t entries = 0;
-    if (b.art == 0xf && b.unk08 != 0 && b.buildup == 0) {
+    if (b.art == 0xf && b.garrison != 0 && b.buildup == 0) {
         entries = 0xdac;
     }
-    if (b.art == 0x10 && b.unk08 != 0 && b.buildup == 0) {
+    if (b.art == 0x10 && b.garrison != 0 && b.buildup == 0) {
         entries = 0xfa0;
     }
-    if (b.art == 0x12 && b.unk08 != 0 && b.buildup == 0) {
+    if (b.art == 0x12 && b.garrison != 0 && b.buildup == 0) {
         entries = 0x1388;
     }
     return entries;
@@ -556,9 +556,9 @@ void PlaceBuilding(test::WorldPair& worlds, std::uint32_t number, std::uint8_t t
         b.door_x = static_cast<std::uint16_t>(x + 1);
         b.door_y = static_cast<std::uint16_t>(y + 1);
         b.buildup = buildup;
-        b.unk08 = garrison;
-        b.unk19 = 0;  // no materials missing (RemoveBuildingGoods returns half)
-        b.unk1a = 0;
+        b.garrison = garrison;
+        b.site.boards_missing = 0;  // no materials missing (RemoveBuildingGoods returns half)
+        b.site.stones_missing = 0;
         const std::uint32_t* p =
             reinterpret_cast<const std::uint32_t*>(kLayouts + (type + race * 57u) * 2400u);
         while (*p++ != kMarkFootprint) {
@@ -714,7 +714,7 @@ void CompareCycle(test::Context& ctx, CycleCrushFn candidate, int cases, int& re
                 w->buildings[n].owner = kFree;
             }
             for (int p = 0; p < 4; ++p) {
-                w->players[p].presence_index = p;
+                w->players[p].team = p;
                 w->players[p].race = p & 3;
             }
             w->pending_event_index = {0, 0};
@@ -749,15 +749,15 @@ void CompareCycle(test::Context& ctx, CycleCrushFn candidate, int cases, int& re
                 layout::Building& r = w->buildings[b];
                 r.piles[0] = r.piles[1] = r.piles[2] = 0;
                 r.pile_ring = 0;
-                r.unk22 = 0xffff;
-                r.unk16 = r.unk17 = 0;
+                r.levelling_slot = 0xffff;
+                r.digger_slots = r.builder_slots = 0;
                 for (std::uint16_t& head : w->areas[TileAt(w, r.door_x, r.door_y).area].requests_by_goods) {
                     head = 0;
                 }
             }
-            w->buildings[1].unk22 = 1;  // the towers' first soldiers
-            w->buildings[2].unk22 = 4;
-            w->buildings[3].unk22 = 7;  // the site's levelling slot
+            w->buildings[1].levelling_slot = 1;  // the towers' first soldiers
+            w->buildings[2].levelling_slot = 4;
+            w->buildings[3].levelling_slot = 7;  // the site's levelling slot
         });
         // Original chain.
         stubs.SetWorld(worlds.original());

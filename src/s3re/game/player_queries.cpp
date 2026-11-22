@@ -54,11 +54,11 @@ using RaceTypeFn = std::uint32_t(__stdcall*)(std::uint32_t race, std::uint32_t t
 // player's slot and their in-game number.
 std::uint32_t __fastcall GameWorld_FindPlayerByField0C(GameWorld* world, void*,
                                                        std::uint32_t value) {
-    // Field +0xc is Player::presence_index, +0x18 Player::unk018.
+    // Field +0xc is Player::team, +0x18 Player::unk018.
     for (std::uint32_t player = 0; player < kPlayers; ++player) {
         const Player& record = world->players[player];
         if (record.active != 0 && record.unk018 == 0 &&
-            static_cast<std::uint32_t>(record.presence_index) == value) {
+            static_cast<std::uint32_t>(record.team) == value) {
             return player;
         }
     }
@@ -170,7 +170,7 @@ void CompareFind(test::Context& ctx, FindPlayerFn original, FindPlayerFn candida
             worlds.Both([&](GameWorld* w) {
                 w->players[player].active = active;
                 w->players[player].unk018 = field18;
-                w->players[player].presence_index = field0c;
+                w->players[player].team = field0c;
             });
         }
         const std::uint32_t value = ctx.rng().Chance(1, 16) ? ctx.rng().Next32() : ctx.rng().Below(6);
@@ -188,7 +188,7 @@ void CompareFind(test::Context& ctx, FindPlayerFn original, FindPlayerFn candida
 std::uint32_t __fastcall WrongFindPlayerByField0C(GameWorld* world, void*, std::uint32_t value) {
     for (std::uint32_t player = 0; player < kPlayers; ++player) {
         const Player& record = world->players[player];
-        if (record.active != 0 && static_cast<std::uint32_t>(record.presence_index) == value) {
+        if (record.active != 0 && static_cast<std::uint32_t>(record.team) == value) {
             return player;
         }
     }

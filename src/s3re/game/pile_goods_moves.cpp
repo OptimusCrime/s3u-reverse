@@ -258,10 +258,10 @@ std::uint32_t __fastcall GameWorld_StealGoodFromPile(GameWorld* world, void*, st
                 layout::Settler& settler = world->settlers[s];
                 if (settler.owner != 0xff && settler.target_x == p.x && settler.target_y == p.y &&
                     (settler.job == 0x133 || settler.job == 0x134)) {
-                    if (settler.unk17 == 0) {
+                    if (settler.second_unit == 0) {
                         GameWorld_ResetSettlerToIdle(world, nullptr, s);
                     } else {
-                        settler.unk17 = 0;
+                        settler.second_unit = 0;
                         GameWorld_PileDecAmountLeaving(world, nullptr, pile);
                     }
                     break;
@@ -639,12 +639,12 @@ void CompareSteal(test::Context& ctx, PileFn candidate, int cases) {
             const std::uint16_t job = kJobs[ctx.rng().Below(10)];
             const bool here = ctx.rng().Chance(1, 4);
             const auto owner = static_cast<std::uint8_t>(ctx.rng().Chance(1, 6) ? 0xff : ctx.rng().Below(4));
-            const auto unk17 = static_cast<std::uint8_t>(ctx.rng().Below(2));
+            const auto secondUnit = static_cast<std::uint8_t>(ctx.rng().Below(2));
             worlds.Both([&](GameWorld* w) {
                 layout::Settler& r = w->settlers[s];
                 r.job = job;
                 r.owner = owner;
-                r.unk17 = unk17;
+                r.second_unit = secondUnit;
                 if (here) {
                     r.target_x = px;
                     r.target_y = py;

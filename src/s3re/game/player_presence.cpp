@@ -48,7 +48,7 @@ std::uint32_t __fastcall GameWorld_IsOtherPlayerNear(GameWorld* world, void*, st
     const std::uint32_t x1 = x < size - radius ? x + radius : size - 1;
     const std::uint32_t y0 = y >= radius ? y - radius : 0;
     const std::uint32_t y1 = y < size - radius ? y + radius : size - 1;
-    const auto own = static_cast<std::uint32_t>(world->players[player].presence_index);
+    const auto own = static_cast<std::uint32_t>(world->players[player].team);
     // The original walks the blocks with y outermost and checks for a find
     // before each block; the scan has no side effects, so any order gives
     // the same answer.
@@ -111,7 +111,7 @@ void CompareIsOtherPlayerNear(test::Context& ctx, NearFn candidate, int cases) {
         }
         const std::uint32_t player = ctx.rng().Below(20);
         const std::uint32_t ownIndex = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(20);
-        worlds.Both([&](GameWorld* w) { w->players[player].presence_index = static_cast<std::int32_t>(ownIndex); });
+        worlds.Both([&](GameWorld* w) { w->players[player].team = static_cast<std::int32_t>(ownIndex); });
         std::uint32_t x = ctx.rng().Below(size);
         std::uint32_t y = ctx.rng().Below(size);
         if (ctx.rng().Chance(1, 16)) {

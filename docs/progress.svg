@@ -5303,7 +5303,7 @@
 160 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1170.9" y="235.4" width="10.1" height="10.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::SetBuildingFlag04 @ 0x004df730
 160 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1181.1" y="235.4" width="9.1" height="10.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::AddToRecentPositions @ 0x00510770
+<rect x="1181.1" y="235.4" width="9.1" height="10.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::AddPileClaim @ 0x00510770
 144 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1190.2" y="235.4" width="9.1" height="10.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::HasAtMostTwoType70Neighbours @ 0x005198d0
 144 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
@@ -5463,7 +5463,7 @@
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1195" y="307.2" width="5.8" height="5.5" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::PileDecAmountComing @ 0x00505bf0
 48 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1200.8" y="290.7" width="5.6" height="5.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::RestoreSettlerDirection @ 0x0050e380
+<rect x="1200.8" y="290.7" width="5.6" height="5.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::RestoreSettlerAnimation @ 0x0050e380
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1206.4" y="290.7" width="5.6" height="5.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GameWorld::SeedRandom @ 0x004feb40
 48 bytes — Verified, and identical in a whole-game check</title></rect>

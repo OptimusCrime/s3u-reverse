@@ -236,7 +236,7 @@ Goal: struct fields and typed globals that mirror the real objects.
 | 0x7a7c48 |  | game/random.cpp:168 |
 | 0x7a8010 |  | game/logic_helpers.cpp:58, game/settler_spawn.cpp:70, test/fake_graphics.h:76 |
 | 0x7a9d98 |  | game/pathing.h:98 |
-| 0x7ace60 | g_recentPositionsCursor | game/world_tables.cpp:98 |
+| 0x7ace60 | g_pileClaimsCursor | game/world_tables.cpp:98 |
 | 0x7ace64 | g_playerColourIndex | game/minimap.cpp:58, game/settler_walk.cpp:202 |
 | 0x7ace90 |  | game/minimap.cpp:59 |
 | 0x7acfa4 | g_strengthDivisor | game/environment.cpp:132 |

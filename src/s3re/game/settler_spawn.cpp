@@ -195,7 +195,7 @@ std::uint32_t __fastcall GameWorld_SetSoldierAnimationInBuilding(GameWorld* worl
 std::uint32_t __fastcall GameWorld_SetSettlerSavedAnimation(GameWorld* world, void*, std::uint32_t settler,
                                                             std::uint32_t kind) {
     Settler& s = world->settlers[settler];
-    s.saved_direction = kAnimationTable[s.race + kind * 4];
+    s.saved_animation = kAnimationTable[s.race + kind * 4];
     const std::uint32_t frames =
         GfxData_SpriteWord(RawAtAddress<void*>(kGfxData), nullptr, kAnimationTable[s.race + kind * 4]) - 1;
     s.saved_counter = static_cast<std::uint16_t>(frames);
@@ -454,7 +454,7 @@ std::uint32_t __fastcall WrongSetSoldierAnimationInBuilding(GameWorld* world, vo
     const std::uint32_t result = GameWorld_SetSoldierAnimationInBuilding(world, edx, settler);
     Settler& s = world->settlers[settler];
     if (world->buildings[s.building].race == 2) {
-        s.direction = kAnimationTable[s.race + (s.direction == 0 ? 0 : 0)];  // some other id
+        s.animation = kAnimationTable[s.race + (s.direction == 0 ? 0 : 0)];  // some other id
     }
     return result;
 }

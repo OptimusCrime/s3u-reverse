@@ -133,6 +133,8 @@ struct Pile {
 static_assert(sizeof(Pile) == 0x0e);
 
 // ---------------------------------------------------------------- Settler
+// Several bytes mean different things per settler type or job; the unions
+// name each use (re/structs.md "Settler").
 struct Settler {
     std::uint8_t owner;            // 0x00 0xff = free
     std::uint8_t art;              // 0x01 settler type
@@ -140,21 +142,38 @@ struct Settler {
     std::uint8_t health;           // 0x03
     std::uint16_t x;               // 0x04
     std::uint16_t y;               // 0x06
-    std::uint32_t direction;       // 0x08 0..5
-    std::uint16_t counter;         // 0x0c
+    union {                        // 0x08
+        std::uint32_t direction;   //   walking: facing direction 0..5 (random at creation; Pathing reads it while < 6)
+        std::uint32_t animation;   //   working: animation id, group << 16 | index (SetSettlerAnimation 0x50e2c0)
+    };
+    std::uint16_t counter;         // 0x0c frames left of the animation / ticks to the next step
     std::uint16_t job;             // 0x0e
     std::uint16_t next;            // 0x10
     std::uint16_t prev;            // 0x12
     std::uint8_t flags;            // 0x14 0x40 = in a building slot
-    std::uint8_t slot;             // 0x15 low 3 bits
-    std::uint8_t unk16;            // 0x16
-    std::uint8_t unk17;            // 0x17
-    std::uint8_t unk18;            // 0x18
-    std::uint8_t unk19;            // 0x19
-    std::uint8_t good;             // 0x1a
-    std::uint8_t unk1b;            // 0x1b
-    std::uint32_t saved_direction; // 0x1c
-    std::uint16_t saved_counter;   // 0x20
+    union {                        // 0x15
+        std::uint8_t slot;         //   low 3 bits: slot in its building (LeaveBuildingSlot)
+        std::uint8_t arrows;       //   soldier shooting from a post: arrows left (WalkSettler)
+        std::uint8_t passengers;   //   ship: settlers on board (WalkSettler boarding, UpdateEnvironment)
+    };
+    std::uint8_t frame;            // 0x16 animation frame while walking (WalkSettler: + step_time per step, modulo 12 or 36)
+    union {                        // 0x17 job data
+        std::uint8_t second_unit;  //   carrier (jobs 0x133/0x134): 1 = takes a second unit (SendNearestSettlerToPile)
+        std::uint8_t food;         //   miner: meals left (MinerJobFood, MinerJobEnter sets 10)
+        std::uint8_t cargo_amounts01;  // ship 0x2b: units of cargo goods 0 / 1 (low / high nibble; goods in saved_animation)
+    };
+    union {                        // 0x18 job data
+        std::uint8_t tool_type;    //   carrier fetching a tool (job 0x68/0x69): the type it becomes (1 digger, 2 builder, ...)
+        std::uint8_t cargo_amounts23;  // ship 0x2b: units of cargo goods 2 / 3 (goods in saved_counter)
+    };
+    std::uint8_t step_time;        // 0x19 ticks per step (terrain + type speed, WalkSettler); 0 while waiting
+    union {                        // 0x1a
+        std::uint8_t good;         //   goods type carried / fetched
+        std::uint8_t walk_state;   //   jobs 0x35/0xb0 (WalkSettler): 1 board a ship, 2 shoot from the post, 3..5 type 0x17
+    };
+    std::uint8_t unk1b;            // 0x1b no access found
+    std::uint32_t saved_animation; // 0x1c restored by RestoreSettlerAnimation; ship 0x2b: cargo goods 0 / 1 in its low bytes
+    std::uint16_t saved_counter;   // 0x20 (frames - 1); ship cargo goods 2 / 3; seven-tile units: the next part settler
     std::uint16_t building;        // 0x22
     std::uint16_t target_x;        // 0x24
     std::uint16_t target_y;        // 0x26
@@ -163,17 +182,26 @@ struct Settler {
     std::uint8_t path_mode;        // 0x2c see kPath* below; 1 with a new target
     std::uint8_t path_steps;       // 0x2d steps left along an obstacle's edge
     std::uint8_t path_direction;   // 0x2e direction 0..5 of the edge walk / blocked step
-    std::uint8_t unk2f;            // 0x2f
+    std::uint8_t unk2f;            // 0x2f no access found
     std::uint16_t path_cache[6];   // 0x30 0xffff = empty
-    std::uint8_t unk3c;            // 0x3c
+    std::uint8_t ship_walk;        // 0x3c ships: low 3 bits last direction, high 5 a count of disagreeing path searches; 0xff: type 0x2b walks like a settler
     std::uint8_t unused3d[3];      // 0x3d
 };
 static_assert(sizeof(Settler) == 0x40);
+static_assert(offsetof(Settler, animation) == 0x08);
 static_assert(offsetof(Settler, job) == 0x0e);
-static_assert(offsetof(Settler, saved_direction) == 0x1c);
+static_assert(offsetof(Settler, slot) == 0x15);
+static_assert(offsetof(Settler, passengers) == 0x15);
+static_assert(offsetof(Settler, frame) == 0x16);
+static_assert(offsetof(Settler, food) == 0x17);
+static_assert(offsetof(Settler, tool_type) == 0x18);
+static_assert(offsetof(Settler, step_time) == 0x19);
+static_assert(offsetof(Settler, walk_state) == 0x1a);
+static_assert(offsetof(Settler, saved_animation) == 0x1c);
 static_assert(offsetof(Settler, building) == 0x22);
 static_assert(offsetof(Settler, path_cache) == 0x30);
 static_assert(offsetof(Settler, path_mode) == 0x2c);
+static_assert(offsetof(Settler, ship_walk) == 0x3c);
 
 // Settler::path_mode: what Pathing::FindPath (0x4a1ee0) does next.
 constexpr std::uint8_t kPathPlanLine = 0x01;     // plan a straight leg to the target (0x4a3ab0)
@@ -184,50 +212,160 @@ constexpr std::uint8_t kPathEdgeLeft = 0x10;     // edge walk turns the other wa
 constexpr std::uint8_t kPathWaiting = 0x20;      // path_direction holds a blocked step
 
 // ---------------------------------------------------------------- Building
+// Bytes +0x19..+0x20 mean different things per kind of building; each view
+// names one kind's bytes (unnamed bit-fields: bytes that kind is not known
+// to use). Set up by AddBuildingSite 0x4dd280 (site) and BuildingDone
+// 0x4dbc50, used by UpdateEconomy's handlers (update_economy.cpp); per-kind
+// table in re/structs.md "Building".
+struct BuildingSiteBytes {         // construction site (buildup != 0)
+    std::uint8_t boards_missing;   // 0x19 boards (goods 1) not delivered yet; requested until pile 1 holds this many
+    std::uint8_t stones_missing;   // 0x1a stones (goods 2), pile 2
+    std::uint8_t diggers;          // 0x1b diggers wanted: min(8, (earth + 16) / 32 + 2)
+    std::uint8_t builders;         // 0x1c builders wanted: layout header word [0]
+    std::uint8_t workers_at_work;  // 0x1d diggers/builders holding a slot bit (-1 when one is reset); builders come early while set
+    std::uint8_t unk1e;            // 0x1e 0 for a new site, cleared by BuildingDone, read by UpdateSettlers
+    std::uint8_t materials_total;  // 0x1f boards + stones of the layout
+    std::uint8_t materials_used;   // 0x20 materials built in (SeenObjectAt: progress against materials_total)
+};
+struct BuildingProductionBytes {   // worker buildings (e.g. the mines 7, 8, 9, 0x1d, 0x25, 0x38)
+    std::uint8_t worker_inside;    // 0x19 MinerJobEnter adds 1 when the worker goes in; cleared with the worker by ResetSettlerToIdle
+    std::uint8_t digs;             // 0x1a mines: digs so far, up to 32 (MinerJobDig; cleared by MinerJobEnter)
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+};
+struct BuildingMilitaryBytes {     // towers and castle 0x0f, 0x10, 0x12; classes = settler class table S3.EXE 0x658f64
+    std::uint8_t class1_coming;    // 0x19 soldiers of class 1 on their way
+    std::uint8_t class1_wanted;    // 0x1a
+    std::uint8_t class2_coming;    // 0x1b
+    std::uint8_t class2_wanted;    // 0x1c
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t class3_coming;    // 0x1f
+    std::uint8_t class3_wanted;    // 0x20
+};
+struct BuildingWaterBytes {        // buildings at the water 0x1f, 0x2f, 0x30, 0x32 and the shipyard 0x20
+    std::uint8_t : 8;
+    std::uint8_t wanted[3];        // 0x1a input amount wanted per slot (from the state; shipyard: tables 0x659670/0x659680)
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t state;            // 0x1f high nibble: production state (0x20; shipyard 0x30 / 0x40: ship type 0x2b / 0x2c)
+    std::uint8_t extra_tiles;      // 0x20 0xff: tiles not taken yet; 0xfe (kExtraDone) once TakeBuildingExtraTiles took them; then the sum of wanted
+};
+struct BuildingTradeBytes {        // trade buildings 0x21, 0x22
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t goods_cursor;     // 0x1b next goods type offered for a free ring pile
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t call_countdown;   // 0x20 0x21: visits until it calls a settler to the door again (6)
+};
+struct BuildingTempleBytes {       // temples 0x29, 0x2b, 0x2d, 0x37 and altars 0x2a, 0x2c, 0x2e, 0x36 (probably)
+    std::uint8_t points;           // 0x19 temple: +1 per 250 visits; two make a settler of type 0x24
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t countdown;        // 0x1c visits to the next point (temple, 250) / offering (altar, 30)
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+};
+struct BuildingResidenceBytes {    // residences 0x1a, 0x1b, 0x1c
+    std::uint8_t births;           // 0x19 settlers still to come out (BuildingDone: 1, 3 or 10 units)
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+};
+struct BuildingRecruitBytes {      // 0x13 (probably the barracks): carriers turning into recruits
+    std::uint8_t recruits[3];      // 0x19 per input slot: carriers sent (settler saved_counter = slot + 1), -1 when one is reset
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+    std::uint8_t : 8;
+};
+static_assert(sizeof(BuildingSiteBytes) == 8 && sizeof(BuildingProductionBytes) == 8);
+static_assert(sizeof(BuildingMilitaryBytes) == 8 && sizeof(BuildingWaterBytes) == 8);
+static_assert(sizeof(BuildingTradeBytes) == 8 && sizeof(BuildingTempleBytes) == 8);
+static_assert(sizeof(BuildingResidenceBytes) == 8 && sizeof(BuildingRecruitBytes) == 8);
+static_assert(offsetof(BuildingMilitaryBytes, class3_coming) == 6);
+static_assert(offsetof(BuildingWaterBytes, state) == 6);
+static_assert(offsetof(BuildingTradeBytes, call_countdown) == 7);
+static_assert(offsetof(BuildingTempleBytes, countdown) == 3);
+
 struct Building {
     std::uint8_t owner;            // 0x00 0xff = free
-    std::uint8_t unk01;            // 0x01
+    std::uint8_t unk01;            // 0x01 no access found
     std::uint16_t x;               // 0x02 position (tile A)
     std::uint16_t y;               // 0x04
     std::uint8_t art;              // 0x06 building type
     std::uint8_t race;             // 0x07 the owner's race (layout tables, animations)
-    std::uint16_t unk08;           // 0x08 garrison?
+    union {                        // 0x08
+        std::uint16_t worker;      //   the worker (0 = none; UpdateEconomy requests one)
+        std::uint16_t garrison;    //   military: first soldier of the garrison chain (settlers linked by next)
+    };
     std::uint16_t door_x;          // 0x0a tile B (gives the area)
     std::uint16_t door_y;          // 0x0c
     std::uint16_t pile_ring;       // 0x0e
     std::uint16_t piles[3];        // 0x10
-    std::uint8_t unk16;            // 0x16
-    std::uint8_t unk17;            // 0x17
+    std::uint8_t digger_slots;     // 0x16 site: one bit per digger requested
+    std::uint8_t builder_slots;    // 0x17 site: one bit per builder requested
     std::uint8_t request_flags;    // 0x18
-    std::uint8_t unk19;            // 0x19
-    std::uint8_t unk1a;            // 0x1a
-    std::uint8_t unk1b[4];         // 0x1b..0x1e
-    std::uint8_t state;            // 0x1f high nibble
-    std::uint8_t extra_tiles;      // 0x20 0xfe = taken
+    union {                        // 0x19..0x20 per kind, see above
+        std::uint8_t kind_bytes[8];  // all eight (copies, tests)
+        BuildingSiteBytes site;
+        BuildingProductionBytes production;
+        BuildingMilitaryBytes military;
+        BuildingWaterBytes water;
+        BuildingTradeBytes trading;
+        BuildingTempleBytes temple;
+        BuildingResidenceBytes residence;
+        BuildingRecruitBytes recruiting;
+    };
     std::uint8_t buildup;          // 0x21 non-zero while under construction
-    std::uint16_t unk22;           // 0x22 shipyard direction / soldier
+    union {                        // 0x22
+        std::uint16_t levelling_slot;  // site: its levelling job (site_cache) slot
+        std::uint16_t guard;           // military: the soldier BuildingDone / a capture creates
+        std::uint16_t dock_direction;  // shipyard 0x20 and 0x21: direction 0..5 of the slipway / landing, 0xffff = none
+    };
     std::uint16_t input_amount[3]; // 0x24 "word 24"
     std::uint16_t input_next[3];   // 0x2a "word 2A"
     std::uint16_t work_x;          // 0x30
     std::uint16_t work_y;          // 0x32
     std::uint16_t trade;           // 0x34 Trade record number
-    std::uint8_t unk36;            // 0x36
-    std::uint8_t unk37;            // 0x37
-    std::uint16_t unk38;           // 0x38 hit points?
+    std::uint8_t unk36;            // 0x36 0 for a new site; TakeBuildingExtraTiles needs <= 0x18 in state 0x20
+    std::uint8_t unk37;            // 0x37 no access found
+    std::uint16_t hit_points;      // 0x38 100 when done (military: S3.EXE 0x659664, healed by UpdateEconomy); lowered by hits (UpdateEnvironment)
 };
 static_assert(sizeof(Building) == 0x3a);
+static_assert(offsetof(Building, worker) == 0x08);
+static_assert(offsetof(Building, digger_slots) == 0x16);
 static_assert(offsetof(Building, request_flags) == 0x18);
+static_assert(offsetof(Building, kind_bytes) == 0x19);
+static_assert(offsetof(Building, site) == 0x19);
+static_assert(offsetof(Building, water) == 0x19);
 static_assert(offsetof(Building, buildup) == 0x21);
+static_assert(offsetof(Building, guard) == 0x22);
 static_assert(offsetof(Building, input_amount) == 0x24);
 static_assert(offsetof(Building, input_next) == 0x2a);
 static_assert(offsetof(Building, trade) == 0x34);
+static_assert(offsetof(Building, hit_points) == 0x38);
 
 // ---------------------------------------------------------------- Player
 struct Player {
     std::int32_t active;             // 0x000 0 = not playing
     std::int32_t race;               // 0x004
     std::int32_t unk008;             // 0x008 (savegame version 0x89+)
-    std::int32_t presence_index;     // 0x00c
+    std::int32_t team;               // 0x00c team / alliance: fog of war, enemies and the presence maps compare it
     std::int32_t start_x;            // 0x010
     std::int32_t start_y;            // 0x014
     std::int32_t unk018;             // 0x018
@@ -236,10 +374,10 @@ struct Player {
     // building request counters (use the accessors below for those).
     std::uint16_t settler_lists[kSettlerTypes];  // 0x020
     std::uint32_t soldier_strength;  // 0x080 recomputed every step by UpdateEnvironment from goods 10 (and 28 for race 1) in the areas; read by UpdateSoldier's damage (0x50f235), so probably the soldiers' fighting strength
-    std::int32_t unk084;             // 0x084
+    std::int32_t site_stamp;         // 0x084 0xffff at start, -1 per new building site (restarts at 0xffff below 60001); stored in the site's work_y
     std::int32_t unk088;             // 0x088 UI
     std::int32_t mana;               // 0x08c
-    std::int32_t unk090;             // 0x090
+    std::int32_t mana_total;         // 0x090 mana ever gained (only added to, with mana: temples, offerings); read by commands and the UI
     std::int32_t spell_mana[8];      // 0x094
     std::int32_t unk0b4[4];          // 0x0b4
     // 0x0c4..0x0d4: recomputed by RecountPlayerPopulation (0x5104c0) in
@@ -251,9 +389,9 @@ struct Player {
     std::uint32_t surplus_carriers;  // 0x0d4 carriers beyond the limit's share (0 if within)
     std::uint32_t surplus_carriers_marked;  // 0x0d8 carriers with flag 0x80 (UpdateSettlers job 1)
     std::uint16_t goods[kGoodsTypes];  // 0x0dc
-    std::uint8_t unk124;             // 0x124
+    std::uint8_t map_revealed;       // 0x124 1 while spell 31 (SpellRevealMap) shows the map; Step ends it after 15 s
     std::uint8_t pad125[3];
-    std::int32_t unk128;             // 0x128
+    std::int32_t map_revealed_tick;  // 0x128 game tick of that spell
     std::int32_t unk12c[3];          // 0x12c
     std::uint8_t unused138[0x10];    // 0x138
 };
@@ -264,21 +402,26 @@ static_assert(offsetof(Player, spell_mana) == 0x94);
 static_assert(offsetof(Player, population) == 0xc4);
 static_assert(offsetof(Player, surplus_carriers_marked) == 0xd8);
 static_assert(offsetof(Player, goods) == 0xdc);
-static_assert(offsetof(Player, unk124) == 0x124);
+static_assert(offsetof(Player, team) == 0x0c);
+static_assert(offsetof(Player, site_stamp) == 0x84);
+static_assert(offsetof(Player, mana_total) == 0x90);
+static_assert(offsetof(Player, map_revealed) == 0x124);
+static_assert(offsetof(Player, map_revealed_tick) == 0x128);
 // Building request counters: settler_lists[0..4] = +0x20, +0x22, +0x24
 // (total), +0x26, +0x28.
 
 // ---------------------------------------------------------------- Trade
 struct Trade {  // "Trad"; our "building extra"
     std::uint8_t kind;               // 0x00 0xff = free
-    std::uint8_t unk01;              // 0x01
+    std::uint8_t mode;               // 0x01 1 at allocation; UpdateEconomy offers goods through slot list A (1) or B (2), 0 = off
     std::uint16_t route_x[4];        // 0x02 points 1..3 and the end (0xffff = unset)
     std::uint16_t route_y[4];        // 0x0a
-    std::uint8_t unk12[0x24];        // 0x12..0x35
+    std::uint8_t ordered[kGoodsTypes];  // 0x12 units wanted per goods type (offered while coming differs)
     std::uint8_t coming[kGoodsTypes];  // 0x36 units on the way per goods type
 };
 static_assert(sizeof(Trade) == 0x5a);
 static_assert(offsetof(Trade, route_y) == 0x0a);
+static_assert(offsetof(Trade, ordered) == 0x12);
 static_assert(offsetof(Trade, coming) == 0x36);
 
 // ---------------------------------------------------------------- small records
@@ -328,6 +471,14 @@ struct TilePosition {  // tile rings
 };
 static_assert(sizeof(TilePosition) == 4);
 
+// A settler's claim on a goods pile (AddPileClaim 0x510770, from
+// UpdateSettlers job 0x152; CountOtherPileClaims 0x510800 counts them).
+struct PileClaim {  // world+0x1195dd4, 128 entries
+    std::uint16_t pile;              // 0 with settler 0 = free
+    std::uint16_t settler;
+};
+static_assert(sizeof(PileClaim) == 4);
+
 struct PresenceBlock {  // 16 x 16 tiles
     std::uint8_t player[kPlayers];
 };
@@ -362,9 +513,9 @@ struct MapEffect {  // constructors 0x543830 / 0x543880 (argument a<i>)
     std::uint32_t unk34;             // 0x34 a20 (-1 default)
     std::uint8_t unk38;              // 0x38 a18 (0xff default)
     std::uint8_t unk39;              // 0x39 a19
-    std::uint8_t unk3a;              // 0x3a a4
+    std::uint8_t source_kind;        // 0x3a a4 what made it (0 = a building; MapEffects::RemoveMatching)
     std::uint8_t pad3b;              // 0x3b never written
-    std::uint16_t unk3c;             // 0x3c a5
+    std::uint16_t source_id;         // 0x3c a5 its number (CrushBuilding removes a building's effects)
     std::uint8_t pad3e[2];           // 0x3e never written
     std::uint32_t list;              // 0x40 block list (cell) it is linked into
     std::uint32_t previous;          // 0x44 previous slot in that list
@@ -382,7 +533,8 @@ static_assert(offsetof(MapEffect, unk30) == 0x30);
 static_assert(offsetof(MapEffect, unk34) == 0x34);
 static_assert(offsetof(MapEffect, unk38) == 0x38);
 static_assert(offsetof(MapEffect, pad3b) == 0x3b);
-static_assert(offsetof(MapEffect, unk3c) == 0x3c);
+static_assert(offsetof(MapEffect, source_kind) == 0x3a);
+static_assert(offsetof(MapEffect, source_id) == 0x3c);
 static_assert(offsetof(MapEffect, pad3e) == 0x3e);
 static_assert(offsetof(MapEffect, list) == 0x40);
 static_assert(offsetof(MapEffect, previous) == 0x44);
@@ -394,7 +546,7 @@ struct MapEffectTable {  // records 1..4999 (0 unused)
     std::int32_t slots_used;         // 0x668a0 highest slot handed out so far
     std::int32_t blocks_x;           // 0x668a4 blocks per row
     std::int32_t blocks_y;           // 0x668a8 blocks per column
-    std::uint32_t unk668ac;
+    std::uint32_t expire_cursor;     // 0x668ac cell ExpireSome checks next (1..blocks_x * blocks_y)
     std::int32_t block_count_16;     // 0x668b0 blocks_x * blocks_y / 16
     std::int32_t width;              // 0x668b4 map width in pixels + margin
     std::int32_t height;             // 0x668b8 map height in pixels + margin
@@ -422,14 +574,14 @@ struct GameWorldFields {
     std::uint8_t pad2d23a[0xa];
     std::int32_t chart_selection;                           // 0x002d244 (UI)
     std::int32_t objective_timeout;                         // 0x002d248
-    std::int32_t unk2d24c;
+    std::int32_t end_warning_minutes;                       // 0x002d24c 10: Step shows "Spiel endet in %u min" this long before objective_timeout
     std::uint8_t counters_disabled;                         // 0x002d250
     std::uint8_t pad2d251[3];
     std::int32_t camera_drawn_x, camera_drawn_y;            // 0x002d254 (UI)
     std::int32_t camera_x, camera_y;                        // 0x002d25c (UI)
     std::int32_t redraw;                                    // 0x002d264 (UI)
     std::int32_t ui_2d268[3];                               // 0x002d268
-    std::int32_t unk2d274;
+    std::int32_t random_map_symmetry;                       // 0x002d274 symmetry argument of the random map generator (GameWorld::Create); read by the player placement 0x5074b0
     std::int32_t minimap_ready;                             // 0x002d278
     std::int32_t refresh_ui;                                // 0x002d27c
     std::int32_t draw_flag_2d280;
@@ -444,7 +596,7 @@ struct GameWorldFields {
     std::int32_t ui_2d2cc;                                  // 0x002d2cc
     std::uint32_t map_size;                                 // 0x002d2d0
     std::int32_t local_player;                              // 0x002d2d4
-    std::int32_t unk2d2d8;
+    std::int32_t command_attempts;                          // 0x002d2d8 Step adds 4 before every ExecuteCommands attempt; the UI tests bit 0x20 (blinking)
     std::uint16_t random_state[3];                          // 0x002d2dc
     std::uint8_t pad2d2e2[2];
     std::int32_t last_search_x, last_search_y;              // 0x002d2e4 (volatile)
@@ -493,8 +645,9 @@ struct GameWorldFields {
     std::int32_t player_list_lengths[kPlayers][10];         // 0x11940bc
     Player players[kPlayers];                               // 0x11943dc
     std::int32_t per_player_1195d7c[kPlayers];              // 0x1195d7c
-    std::uint8_t new_game_objective[8];                     // 0x1195dcc
-    std::uint16_t recent_positions[128][2];                 // 0x1195dd4 {y, x}
+    std::uint8_t objectives_enabled;                        // 0x1195dcc new game objectives ("NGO") on
+    std::uint8_t objectives[7];                             // 0x1195dcd the chosen objective ids (0x4ffbc0)
+    PileClaim pile_claims[128];                             // 0x1195dd4 ring, cursor g_pileClaimsCursor
     std::int32_t player_races[kPlayers];                    // 0x1195fd4
     PlayerSiteCache site_cache[kPlayers][30];               // 0x1196024
     std::uint8_t footprint_scratch[2][31 * 31];             // 0x1222ed4
@@ -575,8 +728,12 @@ static_assert(offsetof(GameWorld, territory_scratch) == 0x1158788);
 static_assert(offsetof(GameWorld, player_lists) == 0x118a47c);
 static_assert(offsetof(GameWorld, player_list_lengths) == 0x11940bc);
 static_assert(offsetof(GameWorld, players) == 0x11943dc);
-static_assert(offsetof(GameWorld, new_game_objective) == 0x1195dcc);
-static_assert(offsetof(GameWorld, recent_positions) == 0x1195dd4);
+static_assert(offsetof(GameWorld, end_warning_minutes) == 0x2d24c);
+static_assert(offsetof(GameWorld, random_map_symmetry) == 0x2d274);
+static_assert(offsetof(GameWorld, command_attempts) == 0x2d2d8);
+static_assert(offsetof(GameWorld, objectives_enabled) == 0x1195dcc);
+static_assert(offsetof(GameWorld, objectives) == 0x1195dcd);
+static_assert(offsetof(GameWorld, pile_claims) == 0x1195dd4);
 static_assert(offsetof(GameWorld, player_races) == 0x1195fd4);
 static_assert(offsetof(GameWorld, site_cache) == 0x1196024);
 static_assert(offsetof(GameWorld, footprint_scratch) == 0x1222ed4);

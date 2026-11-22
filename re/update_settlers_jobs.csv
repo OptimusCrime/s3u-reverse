@@ -62,11 +62,11 @@ job,handler,instructions,shared_with_jobs,next_jobs,start_of_chain,chain_started
 0x8a,0x4ebac6,222,,,0x8a,0x0,0x505820,GameWorld::SubtractPlayerCounter GameWorld::PileIncAmountLeaving GameWorld::ClearSettlerJob GameWorld::SettlerStartHealth,,0
 0x69,0x4ebe0f,137,,0x3,,,0x505820,GameWorld::SubtractPlayerCounter GameWorld::SetSettlerTarget GameWorld::CountAreaSettlersOfClass0 GameWorld::CountAreaSettlersOfType,,0
 0xb,0x4ec00f,10,,0xa9,,,0x50e320,GameWorld::SetSettlerAnimation,,0
-0xa9,0x4ec031,21,,0xaa,,,0x505820,GameWorld::RestoreSettlerDirection,,0
+0xa9,0x4ec031,21,,0xaa,,,0x505820,GameWorld::RestoreSettlerAnimation,,0
 0xaa,0x4ec086,101,,0xc,,,,GameWorld::SetSettlerTarget,,0
 0x4d,0x4ec1f6,33,,0x4e,,,0x505820,GameWorld::SetSettlerTarget,,0
 0xd,0x4ec27e,10,,0x50,,,0x50e320,GameWorld::SetSettlerAnimation,,0
-0x50,0x4ec2a0,83,,0x51,,,,GameWorld::ClearBuildingFlag02 GameWorld::ClearBuildingFlag04 GameWorld::AddGoodsToPile GameWorld::RestoreSettlerDirection,,0
+0x50,0x4ec2a0,83,,0x51,,,,GameWorld::ClearBuildingFlag02 GameWorld::ClearBuildingFlag04 GameWorld::AddGoodsToPile GameWorld::RestoreSettlerAnimation,,0
 0x4f,0x4ec3fb,105,,,,,0x5046b0,GameWorld::SubtractPlayerCounter GameWorld::AddGoodsToPile GameWorld::ClearSettlerJob,,0
 0xe,0x4ec58d,75,,,0xe,0x2,,,,0
 0x51,0x4ec67f,209,,0xf 0x11,,,,GameWorld::SetSettlerTarget NeighbourX NeighbourY GameWorld::CanSettlerEnterTile GameWorld::RandomBelow6 NextDirection GameWorld::ClearSettlerJob,,0
@@ -341,7 +341,7 @@ job,handler,instructions,shared_with_jobs,next_jobs,start_of_chain,chain_started
 0x14e,0x4f776f,43,,0x14f,0x150,0x15,,GameWorld::SetSettlerAnimation GameWorld::SettlerStartHealth,,0
 0x14f,0x4f780f,11,,0x14d,0x150,0x15,,,,0
 0x151,0x4f7842,23,,0x37,,,,,,1
-0x152,0x4f78b0,108,,0x35 0x193,,,0x510800,GameWorld::AddToRecentPositions GameWorld::IsOnMap,,0
+0x152,0x4f78b0,108,,0x35 0x193,,,0x510800,GameWorld::AddPileClaim GameWorld::IsOnMap,,0
 0x193,0x4f7a84,91,,0x35,,,0x505c20,DebugLog GameWorld::AddPlayerCounter GameWorld::SubtractPlayerCounter,"Dieb[%u (%u,%u)]: StealGoodFromPile fail! | Dieb[%u (%u,%u)]: SpyTakeGood -> no pile there? so search again! ",0
 0x194,0x4f7bdf,28,,0x37,,,0x5046b0,GameWorld::SubtractPlayerCounter GameWorld::RandomBelow6,,0
 0x161,0x4f7c4b,2,,0x163,0x161,0x2d,,,,0

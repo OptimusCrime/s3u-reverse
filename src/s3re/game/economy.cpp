@@ -413,7 +413,7 @@ std::uint32_t __fastcall GameWorld_RequestSettlerForBuilding(GameWorld* world, v
     s.counter = 0;
     s.building = static_cast<std::uint16_t>(number);
     s.good = static_cast<std::uint8_t>(tool);
-    s.unk18 = static_cast<std::uint8_t>(type);
+    s.tool_type = static_cast<std::uint8_t>(type);
     return carrier;
 }
 

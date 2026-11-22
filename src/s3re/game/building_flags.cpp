@@ -82,12 +82,12 @@ void SetRequest(GameWorld* world, std::uint32_t index, std::uint8_t bit, std::si
     Building& building = world->buildings[index];
     switch (condition) {
     case Condition::TableA:  // byte +0x19 against the amount of pile +0x10
-        if (building.unk19 == world->piles[building.piles[0]].amount) {
+        if (building.site.boards_missing == world->piles[building.piles[0]].amount) {
             return;
         }
         break;
     case Condition::TableB:  // byte +0x1a against the amount of pile +0x12
-        if (building.unk1a == world->piles[building.piles[1]].amount) {
+        if (building.site.stones_missing == world->piles[building.piles[1]].amount) {
             return;
         }
         break;
@@ -203,7 +203,7 @@ void CompareBuildingFlag(test::Context& ctx, BuildingFn original, BuildingFn can
                 ctx.rng().Chance(1, 2) ? value : static_cast<std::uint8_t>(ctx.rng().Below(4));
             worlds.Both([&](GameWorld* w) {
                 building(w).piles[which] = pile;
-                (which == 0 ? building(w).unk19 : building(w).unk1a) = value;
+                (which == 0 ? building(w).site.boards_missing : building(w).site.stones_missing) = value;
                 w->piles[pile].amount = amount;
             });
         }

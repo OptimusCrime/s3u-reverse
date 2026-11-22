@@ -64,12 +64,12 @@ void* __fastcall MapEffect_DefaultConstruct(MapEffect* self, void*) {
     self->unk06 = 0;
     self->arc = 0;
     self->unk32 = 0;
-    self->unk3c = 0;
+    self->source_id = 0;
     self->unk2c = 0xffffffffu;
     self->unk34 = 0xffffffffu;
     self->unk38 = 0xff;
     self->unk39 = 0;
-    self->unk3a = 0;
+    self->source_kind = 0;
     return self;
 }
 
@@ -84,8 +84,8 @@ void* __fastcall MapEffect_Construct(MapEffect* self, void*, std::uint32_t a1, s
     self->start_tick = a1;
     self->duration = static_cast<std::int16_t>(a2);
     self->unk06 = static_cast<std::uint16_t>(a3);
-    self->unk3a = static_cast<std::uint8_t>(a4);
-    self->unk3c = static_cast<std::uint16_t>(a5);
+    self->source_kind = static_cast<std::uint8_t>(a4);
+    self->source_id = static_cast<std::uint16_t>(a5);
     self->start_x = static_cast<std::int32_t>(a6);
     self->start_y = static_cast<std::int32_t>(a7);
     self->end_x = static_cast<std::int32_t>(a8);
@@ -594,7 +594,7 @@ void CompareMake(test::Context& ctx, const MakeFunction& f, void* candidate, int
 void* __fastcall WrongMake543930(MapEffect* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
                                  std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
     MapEffect_Make_543930(self, edx, a0, a1, a2, a3, a4, a5);
-    self->unk3c ^= 1;  // the low bit of byte +0x3c
+    self->source_id ^= 1;  // the low bit of byte +0x3c
     return self;
 }
 

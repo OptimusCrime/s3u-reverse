@@ -12,7 +12,7 @@
 // ring table (world+0x110a588, MapOffset, sorted by distance) up to the
 // first entry with distance == radius, tile (x + dx, y + dy) gets
 // max(sight, radius - distance + 1) (reveal points: 0x24 - distance).
-// Teams: Player::presence_index (+0xc) of the owner must equal the local
+// Teams: Player::team (+0xc) of the owner must equal the local
 // player's.
 //
 // GameWorld::MarkRevealPointsSight (0x00518f20): () for every active reveal
@@ -22,7 +22,7 @@
 // GameWorld::MarkBuildingSight (0x00519fa0): (first) buildings first,
 //   first+16, ... <= building_high_water (unsigned) that are used, finished
 //   (buildup == 0) and of the local team: radius 0xf; type 6 0x37, types
-//   0xf / 0x10 / 0x12 with unk08 != 0 0x25 / 0x28 / 0x2b. Only if the
+//   0xf / 0x10 / 0x12 with a garrison 0x25 / 0x28 / 0x2b. Only if the
 //   building's own tile has sight < radius. Coordinates unsigned. ret 4.
 // GameWorld::MarkSettlerSight (0x0051a150): (first) the same for settlers
 //   (step 16 too): radius 0x14; type 0x17 0x1e for the local player's own,
@@ -75,11 +75,11 @@ Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
 }
 
 std::int32_t LocalTeam(GameWorld* world) {
-    return (world->players + world->local_player)->presence_index;
+    return (world->players + world->local_player)->team;
 }
 
 std::int32_t TeamOf(GameWorld* world, std::uint8_t owner) {
-    return (world->players + owner)->presence_index;
+    return (world->players + owner)->team;
 }
 
 // Building/settler variant: unsigned coordinates and values.
@@ -144,9 +144,9 @@ void __fastcall GameWorld_MarkBuildingSight(GameWorld* world, void*, std::uint32
         std::uint32_t radius = 0xf;
         switch (b.art) {
         case 0x06: radius = 0x37; break;
-        case 0x0f: if (b.unk08 != 0) radius = 0x25; break;
-        case 0x10: if (b.unk08 != 0) radius = 0x28; break;
-        case 0x12: if (b.unk08 != 0) radius = 0x2b; break;
+        case 0x0f: if (b.garrison != 0) radius = 0x25; break;
+        case 0x10: if (b.garrison != 0) radius = 0x28; break;
+        case 0x12: if (b.garrison != 0) radius = 0x2b; break;
         default: break;
         }
         if (TileAt(world, b.x, b.y).sight < radius) {
@@ -196,8 +196,8 @@ std::uint32_t __fastcall GameWorld_SeenObjectAt(GameWorld* world, void*, std::ui
         const Building& b = world->buildings[tile.object_number];
         result = static_cast<std::uint16_t>(((b.race + 0x20) << 6) + b.art);
         if (b.buildup != 0) {
-            const std::int32_t progress = (b.buildup + 50 * b.extra_tiles) * 249;
-            const std::int32_t total = b.state * 50 + 4;
+            const std::int32_t progress = (b.buildup + 50 * b.site.materials_used) * 249;
+            const std::int32_t total = b.site.materials_total * 50 + 4;
             const auto q = static_cast<std::uint16_t>(progress / total);
             if (q < 0x3c) {
                 result = 0;
@@ -318,7 +318,7 @@ void SetUpTeams(test::Context& ctx, test::WorldPair& worlds) {
     worlds.Both([&](GameWorld* w) {
         w->local_player = local;
         for (int p = 0; p < 20; ++p) {
-            w->players[p].presence_index = teams[p];
+            w->players[p].team = teams[p];
         }
     });
 }
@@ -376,7 +376,7 @@ std::uint32_t SetUpBuildings(test::Context& ctx, test::WorldPair& worlds, std::u
         const std::uint16_t y = Coordinate(ctx, size);
         const std::uint8_t art = kTypes[ctx.rng().Below(6)];
         const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? ctx.rng().Below(256) : 0);
-        const auto unk08 = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(5));
+        const auto garrison = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(5));
         worlds.Both([&](GameWorld* w) {
             Building& b = w->buildings[i];
             b.owner = owner;
@@ -384,7 +384,7 @@ std::uint32_t SetUpBuildings(test::Context& ctx, test::WorldPair& worlds, std::u
             b.y = y;
             b.art = art;
             b.buildup = buildup;
-            b.unk08 = unk08;
+            b.garrison = garrison;
         });
     }
     return ctx.rng().Chance(1, 10) ? ctx.rng().Below(high + 20) : ctx.rng().Below(16);
@@ -444,8 +444,8 @@ void SetUpProgress(test::Context& ctx, test::WorldPair& worlds) {
         const auto done = static_cast<std::uint8_t>(ctx.rng().Below(total + 1u));
         worlds.Both([&](GameWorld* w) {
             w->buildings[i].buildup = buildup;
-            w->buildings[i].state = total;
-            w->buildings[i].extra_tiles = done;
+            w->buildings[i].site.materials_total = total;
+            w->buildings[i].site.materials_used = done;
         });
     }
 }

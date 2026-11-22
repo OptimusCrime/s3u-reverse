@@ -7,7 +7,7 @@
 //   is defined (the upper bytes hold the duration or start + 15; the one
 //   caller tests AL). ret 4.
 // MapEffects::ExpireSome (0x00545d40): thiscall on the table, (tick): for
-//   block_count_16 cells (signed loop), cursor unk668ac += 1, back to 1 when
+//   block_count_16 cells (signed loop), cursor expire_cursor += 1, back to 1 when
 //   it reaches blocks_x * blocks_y + 1 (signed); every effect of that cell
 //   list that IsExpired is unlinked (Unlink 0x545e40) and reset (Reset
 //   0x543fd0). So the whole map is checked every 16 calls. UpdateEnvironment
@@ -56,12 +56,12 @@ void __fastcall MapEffects_ExpireSome(MapEffectTable* self, void*, std::uint32_t
     const auto unlink = reinterpret_cast<UnlinkFn>(kUnlink);
     const auto reset = reinterpret_cast<ResetFn>(kReset);
     for (std::int32_t n = 0; n < self->block_count_16; ++n) {
-        const std::int32_t cursor = static_cast<std::int32_t>(self->unk668ac) + 1;
-        self->unk668ac = static_cast<std::uint32_t>(cursor);
+        const std::int32_t cursor = static_cast<std::int32_t>(self->expire_cursor) + 1;
+        self->expire_cursor = static_cast<std::uint32_t>(cursor);
         if (cursor >= self->blocks_x * self->blocks_y + 1) {
-            self->unk668ac = 1;
+            self->expire_cursor = 1;
         }
-        std::uint32_t slot = self->cell_heads[self->unk668ac];
+        std::uint32_t slot = self->cell_heads[self->expire_cursor];
         while (slot != 0) {
             MapEffect& record = self->records[slot];
             if ((isExpired(&record, nullptr, tick) & 0xff) != 0) {
@@ -95,7 +95,7 @@ std::uint32_t SetUpTable(test::Context& ctx, test::WorldPair& tables) {
     const std::int32_t cells = t.blocks_x * t.blocks_y;
     t.block_count_16 = ctx.rng().Chance(1, 8) ? static_cast<std::int32_t>(ctx.rng().Below(3)) - 1
                                               : 1 + static_cast<std::int32_t>(ctx.rng().Below(cells + 3));
-    t.unk668ac = ctx.rng().Below(static_cast<std::uint32_t>(cells) + 2);
+    t.expire_cursor = ctx.rng().Below(static_cast<std::uint32_t>(cells) + 2);
     const std::uint32_t tick = 1000 + ctx.rng().Below(100);
     std::uint32_t slot = 1;
     for (std::int32_t cell = 0; cell <= cells && slot < 4900; ++cell) {
@@ -137,8 +137,8 @@ void CompareExpire(test::Context& ctx, ExpireFn candidate, int cases) {
 
 // Wrong: the cursor wraps one cell early.
 void __fastcall WrongExpireSome(MapEffectTable* self, void*, std::uint32_t tick) {
-    if (static_cast<std::int32_t>(self->unk668ac) + 1 == self->blocks_x * self->blocks_y) {
-        self->unk668ac = 0;
+    if (static_cast<std::int32_t>(self->expire_cursor) + 1 == self->blocks_x * self->blocks_y) {
+        self->expire_cursor = 0;
     }
     MapEffects_ExpireSome(self, nullptr, tick);
 }

@@ -463,20 +463,20 @@ def timers(rng, pool, args):
             for entry in range(420)]
 
 
-RECENT_POSITIONS = 0x1195dd4
+PILE_CLAIMS = 0x1195dd4
 
 
-def recent_positions(rng, pool, args):
+def pile_claim_slots(rng, pool, args):
     fields = []
     for slot in range(128):
         empty = rng.random() < 0.05
-        fields += [(RECENT_POSITIONS + slot * 4, 0 if empty else rng.randrange(8), 2),
-                   (RECENT_POSITIONS + slot * 4 + 2, 0 if empty else rng.randrange(8), 2)]
-    fields.append((RECENT_POSITIONS + rng.randrange(128) * 4, 0, 4))  # never full
+        fields += [(PILE_CLAIMS + slot * 4, 0 if empty else rng.randrange(8), 2),
+                   (PILE_CLAIMS + slot * 4 + 2, 0 if empty else rng.randrange(8), 2)]
+    fields.append((PILE_CLAIMS + rng.randrange(128) * 4, 0, 4))  # never full
     return fields
 
 
-def recent_positions_cursor(rng, pool, args):
+def pile_claims_cursor(rng, pool, args):
     return [(0x7ace60, rng.choice([0, 1, 127, rng.randrange(128)]), 2)]
 
 
@@ -1376,8 +1376,8 @@ SPECS = [
          presets=replace_tile(0x10, 1)),
     Spec("GameWorld_CountDownTimers", 0x004fee00, "thiscall", [], eax_mask=0, presets=timers,
          max_cases=200),
-    Spec("GameWorld_AddToRecentPositions", 0x00510770, "thiscall", [below(8, 0.1), below(8, 0.1)],
-         eax_mask=0, presets=recent_positions, globals=recent_positions_cursor, max_cases=800),
+    Spec("GameWorld_AddPileClaim", 0x00510770, "thiscall", [below(8, 0.1), below(8, 0.1)],
+         eax_mask=0, presets=pile_claim_slots, globals=pile_claims_cursor, max_cases=800),
     # player queries (player_queries.cpp)
     Spec("GameWorld_FindPlayerByField0C", 0x00507f10, "thiscall", [below(6, 0.1)],
          presets=players_field0c),
@@ -2000,7 +2000,7 @@ SPECS += [
          [below(384), below(384), lambda rng, pool: rng.randrange(0x50) if rng.random() < 0.8 else anything(rng, pool),
           below(20)], presets=create_settler, max_cases=300),
     Spec("GameWorld_ClearSettlerJob", 0x00510440, "thiscall", [below(LAST_SETTLER + 1)]),
-    Spec("GameWorld_RestoreSettlerDirection", 0x0050e380, "thiscall", [below(LAST_SETTLER + 1)]),
+    Spec("GameWorld_RestoreSettlerAnimation", 0x0050e380, "thiscall", [below(LAST_SETTLER + 1)]),
     Spec("GameWorld_PileIncAmountComing", 0x00505bc0, "thiscall", [below(0x10000)], presets=pile_on_map),
     Spec("GameWorld_PileDecAmountComing", 0x00505bf0, "thiscall", [below(0x10000)], presets=pile_on_map),
     Spec("GameWorld_RemovePileFromTile", 0x00504650, "thiscall", [below(0x10000)], presets=pile_on_map),
@@ -4432,8 +4432,8 @@ def pile_claims(rng, pool, args):
     settler, pile = args
     fields = []
     for slot in range(128):
-        fields += [(RECENT_POSITIONS + slot * 4, pile if rng.random() < 0.5 else rng.randrange(6), 2),
-                   (RECENT_POSITIONS + slot * 4 + 2, settler if rng.random() < 0.5 else rng.randrange(6), 2)]
+        fields += [(PILE_CLAIMS + slot * 4, pile if rng.random() < 0.5 else rng.randrange(6), 2),
+                   (PILE_CLAIMS + slot * 4 + 2, settler if rng.random() < 0.5 else rng.randrange(6), 2)]
     return fields
 
 
@@ -7242,11 +7242,19 @@ def _econ_building(rng, fields, number, phase):
                (b + 0xA, dx, 2), (b + 0xC, dy, 2),
                (b + 0x21, (rng.choice((1, 1, 2, 2, 3, rng.randrange(256)))) if site else 0, 1),
                (b + 0x18, rng.getrandbits(8), 1)]
+    # Recruiting building 0x13 (UpdateBuilding13): for three of four x
+    # positions its recruit counters +0x19..+0x1b stay below 3 and its
+    # area's counters +0x242.. are non-zero (below), so the branch that
+    # counts an area counter down after a successful request (0x4e265e,
+    # 0x4e26d7, 0x4e274a) is reached within 2,000 cases. Derived from values
+    # already drawn: the random stream, and so every other case, is unchanged.
+    recruit = art == 0x13 and x % 4 != 0
     for k in range(0x16, 0x21):
         if k != 0x18:
-            fields.append((b + k, rng.randrange(9) if rng.random() < 0.6 else
-                           rng.choice((0, 0xFF, 0xFE, 0x10, 0x11, 0x12, 0x13, 0x20, 0x21, 0x22, 0x23, 0x24, 0x30,
-                                       0x33, 0x40, 0x43, 1, 2, 0xFA)), 1))
+            v = (rng.randrange(9) if rng.random() < 0.6 else
+                 rng.choice((0, 0xFF, 0xFE, 0x10, 0x11, 0x12, 0x13, 0x20, 0x21, 0x22, 0x23, 0x24, 0x30,
+                             0x33, 0x40, 0x43, 1, 2, 0xFA)))
+            fields.append((b + k, v % 3 if recruit and k in (0x19, 0x1A, 0x1B) else v, 1))
     fields += [(b + 0x30, rng.randrange(0x50), 2), (b + 0x32, rng.getrandbits(16), 2),
                (b + 0x22, 0xFFFF if rng.random() < 0.15 else rng.randrange(6), 2)]
     # Water buildings and the shipyard: states that fix their wanted inputs.
@@ -7298,7 +7306,8 @@ def _econ_building(rng, fields, number, phase):
     a = AREAS + area * AREA_BYTES
     fields += [(tile(dx, dy) + 0x14, area, 2), (a + 0x23E, rng.randrange(120), 1), (a + 0x241, rng.randrange(2), 1)]
     for k in range(3):
-        fields.append((a + 0x242 + k, rng.choice((0, 0, 1, 2)), 1))
+        v = rng.choice((0, 0, 1, 2))
+        fields.append((a + 0x242 + k, max(v, 1) if recruit else v, 1))
 
 
 def _econ_area(rng, fields, area, first_used):

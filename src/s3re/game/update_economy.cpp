@@ -27,16 +27,13 @@
 // Every callee is called through its S3.EXE address (in the game Detours
 // sends the call to our replacement, which is counted; tests can stub them).
 //
-// Building fields as used here (re/structs.md, "Building"):
-//   +0x08 unk08: the worker (most types) or the garrison chain head
-//   (military; settlers linked by +0x10). +0x0e pile_ring: the output pile
-//   (production) or the first of six ring piles linked by pile +0xc
-//   (trade buildings 0x21/0x22). +0x10..+0x14 piles[3]: input piles.
-//   +0x16/+0x17 digger/builder slot bits, +0x1b/+0x1c digger/builder counts
-//   (sites). +0x19..+0x20 type-specific bytes (counters, countdowns, wanted
-//   amounts; named per handler). +0x18 request_flags: bit 0 "inputs wanted",
-//   bits 1/2/3/4 override the player's request counters. +0x38: hit points
-//   of military buildings (up to 250/500/1000, S3.EXE 0x659664).
+// Building fields as used here: layout::Building (re/structs.md "Building"):
+//   the worker or garrison (+0x08), pile_ring (the output pile or the first
+//   of six ring piles of trade buildings 0x21/0x22), piles[3] (inputs), the
+//   site slot bits +0x16/+0x17, request_flags (bit 0 "inputs wanted", bits
+//   1..4 override the player's request counters), the per-kind bytes
+//   +0x19..+0x20 (views site, military, water, trading, temple, residence,
+//   recruiting) and hit_points (military: up to 250/500/1000, S3.EXE 0x659664).
 //
 // Known differences (only reachable with unrealistic data):
 // - Trade buildings 0x21/0x22 build a per-goods "wanted" table of 0x24
@@ -150,14 +147,16 @@ std::uint32_t PileNextToDoor(GameWorld* w, const Building& b, std::uint32_t delt
 constexpr std::uint32_t kStepX = kTileRowBytes;
 constexpr std::uint32_t kStepY = kTileBytes;
 
-// Building bytes +0x19..+0x20 by their general names (meanings per type).
-std::uint8_t& Byte19(Building& b) { return b.unk19; }
-std::uint8_t& Byte1A(Building& b) { return b.unk1a; }
-std::uint8_t& Byte1B(Building& b) { return b.unk1b[0]; }  // sites: digger count
-std::uint8_t& Byte1C(Building& b) { return b.unk1b[1]; }  // sites: builder count
-std::uint8_t& Byte1D(Building& b) { return b.unk1b[2]; }
-std::uint8_t& Byte1F(Building& b) { return b.state; }
-std::uint8_t& Byte20(Building& b) { return b.extra_tiles; }
+// Building bytes +0x19..+0x20: the per-kind views of layout::Building
+// (site, military, water, trading, temple, residence, recruiting).
+std::uint8_t& Class1Coming(Building& b) { return b.military.class1_coming; }
+std::uint8_t& Class1Wanted(Building& b) { return b.military.class1_wanted; }
+std::uint8_t& Class2Coming(Building& b) { return b.military.class2_coming; }
+std::uint8_t& Class2Wanted(Building& b) { return b.military.class2_wanted; }
+std::uint8_t& Class3Coming(Building& b) { return b.military.class3_coming; }
+std::uint8_t& Class3Wanted(Building& b) { return b.military.class3_wanted; }
+std::uint8_t& SiteDiggers(Building& b) { return b.site.diggers; }
+std::uint8_t& SiteBuilders(Building& b) { return b.site.builders; }
 
 // --- callee wrappers ------------------------------------------------------
 
@@ -181,7 +180,7 @@ std::uint32_t Distance(GameWorld* w, std::uint32_t x0, std::uint32_t y0, std::ui
 void RequestWorker(GameWorld* w, std::uint32_t n, std::uint32_t type) {
     const std::uint32_t settler = RequestSettler(w, n, type);
     if (settler != 0) {
-        BuildingAt(w, n).unk08 = static_cast<std::uint16_t>(settler);
+        BuildingAt(w, n).worker = static_cast<std::uint16_t>(settler);
     }
 }
 
@@ -227,7 +226,7 @@ struct InputSpec {
 // The common production building: inputs while it has a worker, else a
 // worker request; then the output pile.
 void Production(GameWorld* w, std::uint32_t n, std::uint32_t workerType, std::initializer_list<InputSpec> inputs) {
-    if (BuildingAt(w, n).unk08 != 0) {
+    if (BuildingAt(w, n).worker != 0) {
         std::uint32_t slot = 0;
         for (const InputSpec& input : inputs) {
             RequestInput(w, n, slot++, input.good, input.full, input.add, input.condition);
@@ -290,15 +289,15 @@ void UpdateConstructionSite(GameWorld* w, std::uint32_t n) {
         const std::uint8_t flags = b.request_flags;
         if (((flags & 0x10) != 0 || PlayerAt(w, b.owner).settler_lists[4] == 0) && buildup == 1 &&
             (flags & 1) != 0) {
-            RequestSiteWorkers(w, n, &Building::unk16, &Byte1B, 1);
+            RequestSiteWorkers(w, n, &Building::digger_slots, &SiteDiggers, 1);
         }
     }
     {
         const std::uint8_t flags = b.request_flags;
         if (((flags & 8) != 0 || PlayerAt(w, b.owner).settler_lists[3] == 0) &&
             U(PileAt(w, b.piles[1]).amount) + U(PileAt(w, b.piles[0]).amount) != 0 &&
-            (b.buildup >= 2 || (b.work_x < 0x28 && Byte1D(b) != 0)) && (flags & 1) != 0) {
-            RequestSiteWorkers(w, n, &Building::unk17, &Byte1C, 2);
+            (b.buildup >= 2 || (b.work_x < 0x28 && b.site.workers_at_work != 0)) && (flags & 1) != 0) {
+            RequestSiteWorkers(w, n, &Building::builder_slots, &SiteBuilders, 2);
         }
     }
     if (b.buildup == 2) {
@@ -326,18 +325,18 @@ void UpdateConstructionSite(GameWorld* w, std::uint32_t n) {
             }
         }
     }
-    if ((Byte1D(b) != 0 || b.buildup >= 2) && (b.request_flags & 1) != 0) {
+    if ((b.site.workers_at_work != 0 || b.buildup >= 2) && (b.request_flags & 1) != 0) {
         const std::uint8_t flags = b.request_flags;
         const Pile& p0 = PileAt(w, b.piles[0]);
         const std::uint32_t sum0 = U(p0.amount) + U(p0.coming);
-        if (Byte19(b) != sum0 && sum0 != 8) {
+        if (b.site.boards_missing != sum0 && sum0 != 8) {
             if ((PlayerAt(w, b.owner).settler_lists[0] & 0x80) == 0 || (flags & 2) != 0) {
                 AddRequest(w, n, 1, b.work_y, 0xd);
             }
         }
         const Pile& p1 = PileAt(w, b.piles[1]);
         const std::uint32_t sum1 = U(p1.amount) + U(p1.coming);
-        if (Byte1A(b) != sum1 && sum1 != 8) {
+        if (b.site.stones_missing != sum1 && sum1 != 8) {
             if ((PlayerAt(w, b.owner).settler_lists[1] & 0x80) == 0 || (b.request_flags & 4) != 0) {
                 AddRequest(w, n, 2, b.work_y, 0x10);
             }
@@ -355,12 +354,12 @@ void UpdateMilitaryBuilding(GameWorld* w, std::uint32_t n) {
     Building& b = BuildingAt(w, n);
     for (std::uint32_t k = 0; k < 3; ++k) {
         static constexpr std::uint8_t kTypes[] = {0xf, 0x10, 0x12};
-        if (b.art == kTypes[k] && U(b.unk38) != kMilitaryMaxHitPoints[k]) {
-            ++b.unk38;
+        if (b.art == kTypes[k] && U(b.hit_points) != kMilitaryMaxHitPoints[k]) {
+            ++b.hit_points;
         }
     }
     std::uint32_t count[4] = {};
-    for (std::uint32_t s = b.unk08; s != 0; s = SettlerAt(w, s).next) {
+    for (std::uint32_t s = b.garrison; s != 0; s = SettlerAt(w, s).next) {
         const std::int32_t c = SettlerClass(SettlerAt(w, s).art);
         if (c >= 1 && c <= 3) {
             ++count[c];
@@ -379,24 +378,24 @@ void UpdateMilitaryBuilding(GameWorld* w, std::uint32_t n) {
         }
         const Settler& s = SettlerAt(w, other);
         const std::int32_t c = SettlerClass(s.art);
-        if ((c == 1 || c == 3) && PlayerAt(w, s.owner).presence_index != PlayerAt(w, b.owner).presence_index) {
+        if ((c == 1 || c == 3) && PlayerAt(w, s.owner).team != PlayerAt(w, b.owner).team) {
             enemyNear = true;
         }
     }
     if (!enemyNear) {
         std::int32_t leaving = 0;
-        if (count[1] > Byte1A(b)) {
+        if (count[1] > b.military.class1_wanted) {
             leaving = 1;
-        } else if (count[2] > Byte1C(b)) {
+        } else if (count[2] > b.military.class2_wanted) {
             leaving = 2;
-        } else if (count[3] > Byte20(b)) {
+        } else if (count[3] > b.military.class3_wanted) {
             leaving = 3;
         }
         if (leaving != 0 && DoorTile(w, b).settler == 0) {
             // Take the first soldier of that class out of the garrison chain.
-            std::uint32_t s = b.unk08;
+            std::uint32_t s = b.garrison;
             if (SettlerClass(SettlerAt(w, s).art) == leaving) {
-                b.unk08 = SettlerAt(w, s).next;
+                b.garrison = SettlerAt(w, s).next;
             } else {
                 std::uint32_t previous;
                 do {
@@ -422,9 +421,9 @@ void UpdateMilitaryBuilding(GameWorld* w, std::uint32_t n) {
         std::uint8_t& (*wanted)(Building&);
         std::uint32_t lists[3];
     };
-    static const Wanted kWanted[3] = {{&Byte19, &Byte1A, {0x23, 0x20, 5}},
-                                      {&Byte1B, &Byte1C, {0x21, 0x1e, 8}},
-                                      {&Byte1F, &Byte20, {0x22, 0x1f, 0xf}}};
+    static const Wanted kWanted[3] = {{&Class1Coming, &Class1Wanted, {0x23, 0x20, 5}},
+                                      {&Class2Coming, &Class2Wanted, {0x21, 0x1e, 8}},
+                                      {&Class3Coming, &Class3Wanted, {0x22, 0x1f, 0xf}}};
     for (std::uint32_t c = 0; c < 3; ++c) {
         const Wanted& k = kWanted[c];
         if (k.coming(b) < k.wanted(b) && count[c + 1] < U(k.wanted(b)) - U(k.coming(b))) {
@@ -441,7 +440,7 @@ void UpdateMilitaryBuilding(GameWorld* w, std::uint32_t n) {
             }
         }
     }
-    if (b.unk08 == 0 && U(Byte1B(b)) + U(Byte1F(b)) + U(Byte19(b)) == 0) {
+    if (b.garrison == 0 && U(b.military.class2_coming) + U(b.military.class3_coming) + U(b.military.class1_coming) == 0) {
         Call(kNotifyLocalPlayer, w, U(b.owner), 0x10u, U(b.x), U(b.y));
     }
 }
@@ -452,7 +451,7 @@ void UpdateMilitaryBuilding(GameWorld* w, std::uint32_t n) {
 void UpdateTileDropBuilding(GameWorld* w, std::uint32_t n, std::uint32_t condition0, std::uint32_t condition1,
                             bool sevenTiles) {
     Building& b = BuildingAt(w, n);
-    if (b.unk08 == 0) {
+    if (b.worker == 0) {
         RequestWorker(w, n, 0xb);
     } else {
         RequestInput(w, n, 0, 5, 8, 0, condition0);
@@ -508,7 +507,7 @@ void UpdateBuilding13(GameWorld* w, std::uint32_t n) {
     const std::uint32_t limit = civilians * a.settings_extra[0] / 100 + 2;
     const std::uint32_t carriers = Call(kCountAreaSettlersOfType, w, areaNumber, 0u);
     if (limit < carriers) {
-        std::uint8_t* const made[3] = {&b.unk19, &b.unk1a, &b.unk1b[0]};
+        std::uint8_t* const made[3] = {&b.recruiting.recruits[0], &b.recruiting.recruits[1], &b.recruiting.recruits[2]};
         for (std::uint32_t k = 0; k < 3; ++k) {
             if ((a.counters_242[k] != 0 || a.setting_241 != 0) && *made[k] < PileAt(w, b.piles[k]).amount) {
                 const std::uint32_t settler = RequestSettler(w, n, 0);
@@ -539,10 +538,10 @@ void UpdateBuilding13(GameWorld* w, std::uint32_t n) {
 // is within its limit and the door is free.
 void UpdateResidence(GameWorld* w, std::uint32_t n, std::uint32_t animation) {
     Building& b = BuildingAt(w, n);
-    if (Byte19(b) == 0 || DoorTile(w, b).settler != 0) {
+    if (b.residence.births == 0 || DoorTile(w, b).settler != 0) {
         return;
     }
-    --Byte19(b);
+    --b.residence.births;
     const std::uint32_t owner = b.owner;
     const Player& player = PlayerAt(w, owner);
     if (player.population > player.population_limit) {
@@ -568,34 +567,34 @@ struct WaterSpec {
 };
 
 void SetWanted(Building& b, const std::uint8_t (&want)[3]) {
-    Byte1A(b) = want[0];
-    Byte1B(b) = want[1];
-    Byte1C(b) = want[2];
+    b.water.wanted[0] = want[0];
+    b.water.wanted[1] = want[1];
+    b.water.wanted[2] = want[2];
 }
 
 void UpdateWaterBuilding(GameWorld* w, std::uint32_t n, const WaterSpec& spec) {
     Building& b = BuildingAt(w, n);
-    if (b.unk08 == 0) {
+    if (b.worker == 0) {
         RequestWorker(w, n, spec.workerType);
         return;
     }
-    if (Byte1F(b) != 0 && Byte20(b) == 0xff) {
+    if (b.water.state != 0 && b.water.extra_tiles == 0xff) {
         Call(kTakeBuildingExtraTiles, w, n);
         if (spec.log) {
-            GameDebugLog(kFormatTempleExtraTiles, U(Byte20(b)));
+            GameDebugLog(kFormatTempleExtraTiles, U(b.water.extra_tiles));
         }
-        if (Byte20(b) == 0xfe) {
-            if (Byte1F(b) == spec.stateA) {
+        if (b.water.extra_tiles == 0xfe) {
+            if (b.water.state == spec.stateA) {
                 SetWanted(b, spec.wantA);
-            } else if (spec.stateB != 0 && Byte1F(b) == spec.stateB) {
+            } else if (spec.stateB != 0 && b.water.state == spec.stateB) {
                 SetWanted(b, spec.wantB);
             }
-            Byte20(b) = static_cast<std::uint8_t>(Byte1C(b) + Byte1A(b) + Byte1B(b));
+            b.water.extra_tiles = static_cast<std::uint8_t>(b.water.wanted[2] + b.water.wanted[0] + b.water.wanted[1]);
         }
     }
-    RequestInputBelow(w, n, 0, spec.inputs[0].good, Byte1A(b), spec.inputs[0].condition);
-    RequestInputBelow(w, n, 1, spec.inputs[1].good, Byte1B(b), spec.inputs[1].condition);
-    RequestInputBelow(w, n, 2, spec.inputs[2].good, Byte1C(b), spec.inputs[2].condition);
+    RequestInputBelow(w, n, 0, spec.inputs[0].good, b.water.wanted[0], spec.inputs[0].condition);
+    RequestInputBelow(w, n, 1, spec.inputs[1].good, b.water.wanted[1], spec.inputs[1].condition);
+    RequestInputBelow(w, n, 2, spec.inputs[2].good, b.water.wanted[2], spec.inputs[2].condition);
 }
 
 // Purpose: The shipyard (0x20): like a water building, but the wanted
@@ -603,14 +602,14 @@ void UpdateWaterBuilding(GameWorld* w, std::uint32_t n, const WaterSpec& spec) {
 // (states 0x30..0x33 and 0x40..0x43).
 void UpdateShipyard(GameWorld* w, std::uint32_t n) {
     Building& b = BuildingAt(w, n);
-    if (b.unk08 == 0) {
+    if (b.worker == 0) {
         RequestWorker(w, n, 0x13);
         return;
     }
-    if (Byte1F(b) != 0 && Byte20(b) == 0xff) {
+    if (b.water.state != 0 && b.water.extra_tiles == 0xff) {
         Call(kTakeBuildingExtraTiles, w, n);
-        if (Byte20(b) == 0xfe) {
-            const std::uint8_t state = Byte1F(b);
+        if (b.water.extra_tiles == 0xfe) {
+            const std::uint8_t state = b.water.state;
             std::uintptr_t table = 0;
             if (state >= 0x30 && state <= 0x33) {
                 table = kShipyardTable30;
@@ -618,15 +617,15 @@ void UpdateShipyard(GameWorld* w, std::uint32_t n) {
                 table = kShipyardTable40;
             }
             if (table != 0) {
-                Byte1A(b) = *reinterpret_cast<const std::uint8_t*>(table + (Byte1F(b) & 0xfu) * 0x20);
-                Byte1B(b) = *reinterpret_cast<const std::uint8_t*>(table + 4 + (Byte1F(b) & 0xfu) * 0x20);
-                Byte1C(b) = *reinterpret_cast<const std::uint8_t*>(table + 8 + (Byte1F(b) & 0xfu) * 0x20);
+                b.water.wanted[0] = *reinterpret_cast<const std::uint8_t*>(table + (b.water.state & 0xfu) * 0x20);
+                b.water.wanted[1] = *reinterpret_cast<const std::uint8_t*>(table + 4 + (b.water.state & 0xfu) * 0x20);
+                b.water.wanted[2] = *reinterpret_cast<const std::uint8_t*>(table + 8 + (b.water.state & 0xfu) * 0x20);
             }
-            Byte20(b) = static_cast<std::uint8_t>(Byte1C(b) + Byte1A(b) + Byte1B(b));
+            b.water.extra_tiles = static_cast<std::uint8_t>(b.water.wanted[2] + b.water.wanted[0] + b.water.wanted[1]);
         }
     }
-    RequestInputBelow(w, n, 0, 1, Byte1A(b), 0xe);
-    RequestInputBelow(w, n, 1, 0xb, Byte1B(b), 9);
+    RequestInputBelow(w, n, 0, 1, b.water.wanted[0], 0xe);
+    RequestInputBelow(w, n, 1, 0xb, b.water.wanted[1], 9);
 }
 
 // The goods a trade building's ring of six piles (from +0xe, linked by pile
@@ -647,15 +646,15 @@ void TradeWantedSlots(GameWorld* w, Building& b, std::uint32_t (&wanted)[0x100])
         pile = p.next;
     }
     while (freePiles != 0) {
-        const std::uint8_t cursor = Byte1B(b);
+        const std::uint8_t cursor = b.trading.goods_cursor;
         if (wanted[cursor] == 0) {
             wanted[cursor] = 1;
             if (cursor >= 0x24) {
-                Byte1B(b) = 0;
+                b.trading.goods_cursor = 0;
             }
             --freePiles;
         }
-        ++Byte1B(b);
+        ++b.trading.goods_cursor;
     }
 }
 
@@ -667,24 +666,24 @@ void TradeWantedSlots(GameWorld* w, Building& b, std::uint32_t (&wanted)[0x100])
 void UpdateTradeBuilding(GameWorld* w, std::uint32_t n, bool port) {
     Building& b = BuildingAt(w, n);
     const layout::Trade& trade = *(w->trades + b.trade);
-    if (trade.route_x[3] == 0xffff || trade.unk01 == 0 || (!port && b.unk22 == 0xffff)) {
+    if (trade.route_x[3] == 0xffff || trade.mode == 0 || (!port && b.dock_direction == 0xffff)) {
         return;
     }
     std::uint32_t wanted[0x100] = {};
     TradeWantedSlots(w, b, wanted);
     for (std::uint32_t good = 1; good < 0x24; ++good) {
-        const std::uint8_t offered = trade.unk12[good];
+        const std::uint8_t offered = trade.ordered[good];
         if (wanted[good] != 0 && offered != 0 && offered != trade.coming[good]) {
-            if (trade.unk01 == 1) {
+            if (trade.mode == 1) {
                 Call(kSetAreaBuildingSlotA, w, n, good);
-            } else if (trade.unk01 == 2) {
+            } else if (trade.mode == 2) {
                 Call(kSetAreaBuildingSlotB, w, n, good);
             }
         }
     }
     if (!port) {
-        if (Byte20(b) != 0) {
-            --Byte20(b);
+        if (b.trading.call_countdown != 0) {
+            --b.trading.call_countdown;
             return;
         }
         bool goods = false;
@@ -697,7 +696,7 @@ void UpdateTradeBuilding(GameWorld* w, std::uint32_t n, bool port) {
         }
         if (goods) {
             Call(kSendNearestSettlerToBuilding, w, n);
-            Byte20(b) = 6;
+            b.trading.call_countdown = 6;
         }
         return;
     }
@@ -717,12 +716,12 @@ void UpdateTradeBuilding(GameWorld* w, std::uint32_t n, bool port) {
 // limit base.
 void UpdateTemple(GameWorld* w, std::uint32_t n) {
     Building& b = BuildingAt(w, n);
-    if (Byte1C(b) == 0) {
-        Byte1C(b) = 0xfa;
-    } else if (--Byte1C(b) == 0) {
-        ++Byte19(b);
+    if (b.temple.countdown == 0) {
+        b.temple.countdown = 0xfa;
+    } else if (--b.temple.countdown == 0) {
+        ++b.temple.points;
     }
-    if (Byte19(b) < 2 || DoorTile(w, b).settler != 0) {
+    if (b.temple.points < 2 || DoorTile(w, b).settler != 0) {
         return;
     }
     const std::uint32_t settler = Call(kCreateSettler, w, U(b.door_x), U(b.door_y), 0x24u, U(b.owner));
@@ -732,7 +731,7 @@ void UpdateTemple(GameWorld* w, std::uint32_t n) {
         Call(kSetSettlerAnimation, w, settler, 0x119u);
         ++PlayerAt(w, s.owner).population_limit_base;
     }
-    Byte19(b) = static_cast<std::uint8_t>(Byte19(b) - 2);
+    b.temple.points = static_cast<std::uint8_t>(b.temple.points - 2);
 }
 
 // Purpose: Probably an altar-like building (0x2a, 0x2c, 0x2e, 0x36): requests
@@ -742,21 +741,21 @@ void UpdateTemple(GameWorld* w, std::uint32_t n) {
 void UpdateOffering(GameWorld* w, std::uint32_t n, std::uint32_t good, bool twice) {
     Building& b = BuildingAt(w, n);
     RequestInput(w, n, 0, good, 8, 0, 0);
-    if (Byte1C(b) == 0) {
+    if (b.temple.countdown == 0) {
         if (PileAt(w, b.piles[0]).amount != 0) {
-            Byte1C(b) = 0x1e;
+            b.temple.countdown = 0x1e;
             Call(kPileIncAmountLeaving, w, U(b.piles[0]));
         }
         return;
     }
-    if (--Byte1C(b) != 0) {
+    if (--b.temple.countdown != 0) {
         return;
     }
     Call(kTakeGoodFromPile, w, U(b.piles[0]));
     Call(kSubtractPlayerCounter, w, U(b.owner), U(PileAt(w, b.piles[0]).good), 1u);
     for (int k = 0; k < (twice ? 2 : 1); ++k) {
         PlayerAt(w, b.owner).mana += static_cast<std::int32_t>(*kManaPerOffering);
-        PlayerAt(w, b.owner).unk090 += static_cast<std::int32_t>(*kManaPerOffering);
+        PlayerAt(w, b.owner).mana_total += static_cast<std::int32_t>(*kManaPerOffering);
     }
     kPlayerTallies[U(b.owner) * 17] += twice ? 2 : 1;
 }
@@ -776,7 +775,7 @@ void UpdateFinishedBuilding(GameWorld* w, std::uint32_t n) {
         case 0x03: Production(w, n, 4, {}); break;
         case 0x04: Production(w, n, 6, {{3, 8, 0, 0x12}}); break;
         case 0x05:
-            if (b.unk08 == 0) {
+            if (b.worker == 0) {
                 RequestWorker(w, n, 7);
             }
             break;
@@ -809,7 +808,7 @@ void UpdateFinishedBuilding(GameWorld* w, std::uint32_t n) {
         case 0x21: UpdateTradeBuilding(w, n, false); break;
         case 0x22: UpdateTradeBuilding(w, n, true); break;
         case 0x23:
-            if (b.unk08 == 0) {
+            if (b.worker == 0) {
                 RequestWorker(w, n, 0x15);
             }
             break;
@@ -830,14 +829,14 @@ void UpdateFinishedBuilding(GameWorld* w, std::uint32_t n) {
         case 0x31: Production(w, n, 0x1c, {{9, 8, 0, 0x18}, {0x1a, 8, 0, 0x1c}}); break;
         case 0x32: UpdateWaterBuilding(w, n, kWater32); break;
         case 0x33:
-            if (b.unk08 == 0) {
+            if (b.worker == 0) {
                 RequestWorker(w, n, 0x2d);
             }
             CollectOutput(w, n);
             break;
         case 0x34: Production(w, n, 0x2e, {{0x1a, 8, 0, 0}, {0x23, 8, 0, 0}}); break;
         case 0x35:
-            if (b.unk08 == 0) {
+            if (b.worker == 0) {
                 RequestWorker(w, n, 0x2f);
             } else {
                 RequestInput(w, n, 0, 0x1c, 8, 0, 0);
@@ -914,7 +913,7 @@ void MarkMilitaryPresence(GameWorld* w, std::uint32_t phase) {
         }
         if (Call(kIsOnMap, w, U(s.x), U(s.y)) != 0) {
             std::uint8_t* const block = w->presence_b[U(s.x) >> 4][U(s.y) >> 4].player;
-            block[PlayerAt(w, s.owner).presence_index] = 1;
+            block[PlayerAt(w, s.owner).team] = 1;
         }
     }
 }
@@ -1266,7 +1265,7 @@ void InstallEconomyStubs(test::CalleeStubs& stubs) {
     Probe<kSetSettlerAnimation, 2>(stubs);
     stubs.Install<1, kTakeBuildingExtraTiles>([](GameWorld* w, std::uint32_t, const std::uint32_t* args) {
         if ((Mix(static_cast<std::uint32_t>(kTakeBuildingExtraTiles), args) & 1) != 0) {
-            Byte20(BuildingAt(w, args[0])) = 0xfe;
+            BuildingAt(w, args[0]).water.extra_tiles = 0xfe;
         }
         return 0u;
     });
@@ -1346,7 +1345,7 @@ public:
         bytes[0x18] = static_cast<std::uint8_t>(rng().Next32());
         const auto workX = static_cast<std::uint16_t>(rng().Below(0x50));
         const auto workY = static_cast<std::uint16_t>(rng().Next32());
-        const auto unk22 = static_cast<std::uint16_t>(rng().Chance(3, 20) ? 0xffff : rng().Below(6));
+        const auto dock = static_cast<std::uint16_t>(rng().Chance(3, 20) ? 0xffff : rng().Below(6));
         // Water buildings and the shipyard: states that fix their wanted inputs.
         static constexpr std::uint8_t kStates[] = {0x10, 0x20, 0x11, 0x21, 0x12, 0x22, 0x13, 0x23,
                                                    0x30, 0x31, 0x33, 0x34, 0x40, 0x43, 0x44, 0x2f};
@@ -1372,20 +1371,16 @@ public:
             b.door_x = dx;
             b.door_y = dy;
             b.buildup = buildup;
-            b.unk16 = bytes[0x16];
-            b.unk17 = bytes[0x17];
+            b.digger_slots = bytes[0x16];
+            b.builder_slots = bytes[0x17];
             b.request_flags = bytes[0x18];
-            b.unk19 = bytes[0x19];
-            b.unk1a = bytes[0x1a];
-            for (int k = 0; k < 4; ++k) {
-                b.unk1b[k] = bytes[0x1b + k];
+            for (int k = 0; k < 8; ++k) {
+                b.kind_bytes[k] = bytes[0x19 + k];
             }
-            b.state = bytes[0x1f];
-            b.extra_tiles = bytes[0x20];
             b.work_x = workX;
             b.work_y = workY;
-            b.unk22 = unk22;
-            b.unk38 = hp;
+            b.dock_direction = dock;
+            b.hit_points = hp;
             b.piles[0] = piles[0];
             b.piles[1] = piles[1];
             b.piles[2] = piles[2];
@@ -1412,10 +1407,10 @@ public:
             Both([&](GameWorld* w) {
                 (w->buildings + n)->trade = trade;
                 layout::Trade& t = *(w->trades + trade);
-                t.unk01 = kind;
+                t.mode = kind;
                 t.route_x[3] = route;
                 for (std::uint32_t g = 1; g < 0x24; ++g) {
-                    t.unk12[g] = offered[g];
+                    t.ordered[g] = offered[g];
                     t.coming[g] = coming[g];
                 }
             });
@@ -1445,7 +1440,7 @@ public:
                 });
             }
         }
-        Both([&](GameWorld* w) { (w->buildings + n)->unk08 = worker; });
+        Both([&](GameWorld* w) { (w->buildings + n)->worker = worker; });
         // The tiles around the building (soldiers near, piles next to the door).
         for (std::int32_t ox = -4; ox <= 4; ++ox) {
             for (std::int32_t oy = -4; oy <= 4; ++oy) {
@@ -1583,7 +1578,7 @@ public:
         });
         for (std::uint32_t p = 0; p < 20; ++p) {
             const auto index = static_cast<std::int32_t>(rng().Below(20));
-            Both([&](GameWorld* w) { w->players[p].presence_index = index; });
+            Both([&](GameWorld* w) { w->players[p].team = index; });
         }
         if (phase == 0) {
             static constexpr std::int32_t kSizes[] = {0, 15, 16, 17, 33, 48, 64};

@@ -4,9 +4,9 @@
 // GameWorld::CountOtherPileClaims (0x00510800): (settler, pile) -> how many
 //   of the 128 entries at world+0x1195dd4 have word 0 == pile and word 1 !=
 //   settler (both compared as 16-bit values). The only writer of that list
-//   is GameWorld::AddToRecentPositions (0x510770), called once, by
+//   is GameWorld::AddPileClaim (0x510770; was AddToRecentPositions), called once, by
 //   UpdateSettlers job 0x152, as (settler, pile): it stores {pile,
-//   settler}. So the list holds pile claims, not positions (the logic
+//   settler} (layout::PileClaim). So the list holds pile claims, not positions (the logic
 //   thread clears one slot per step, so a claim expires after 128 steps);
 //   job 0x152 compares this count with the pile's amount. ECX = world,
 //   ret 8, EAX = the count.
@@ -32,8 +32,8 @@ std::uint32_t __fastcall GameWorld_CountOtherPileClaims(GameWorld* world, void*,
     const auto pile16 = static_cast<std::uint16_t>(pile);
     const auto settler16 = static_cast<std::uint16_t>(settler);
     std::uint32_t count = 0;
-    for (const auto& entry : world->recent_positions) {
-        if (entry[0] == pile16 && entry[1] != settler16) {
+    for (const auto& entry : world->pile_claims) {
+        if (entry.pile == pile16 && entry.settler != settler16) {
             ++count;
         }
     }
@@ -49,7 +49,7 @@ S3RE_HOOK(0x00510800, GameWorld_CountOtherPileClaims, ClaimsFn, Original_GameWor
 
 namespace {
 
-constexpr std::size_t kClaimsWorld = offsetof(GameWorld, recent_positions) + sizeof(GameWorld::recent_positions);
+constexpr std::size_t kClaimsWorld = offsetof(GameWorld, pile_claims) + sizeof(GameWorld::pile_claims);
 
 void CompareClaims(test::Context& ctx, ClaimsFn candidate, int cases) {
     test::WorldPair worlds(ctx, kClaimsWorld);
@@ -60,8 +60,8 @@ void CompareClaims(test::Context& ctx, ClaimsFn candidate, int cases) {
             const auto a = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? pile : ctx.rng().Below(6));
             const auto b = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? settler : ctx.rng().Below(6));
             worlds.Both([&](GameWorld* w) {
-                w->recent_positions[slot][0] = a;
-                w->recent_positions[slot][1] = b;
+                w->pile_claims[slot].pile = a;
+                w->pile_claims[slot].settler = b;
             });
         }
         const std::uint32_t expected = Original_GameWorld_CountOtherPileClaims(worlds.original(), nullptr, settler, pile);
@@ -76,8 +76,8 @@ void CompareClaims(test::Context& ctx, ClaimsFn candidate, int cases) {
 // Wrong: counts the settler's own claims too.
 std::uint32_t __fastcall WrongCountOtherPileClaims(GameWorld* world, void*, std::uint32_t, std::uint32_t pile) {
     std::uint32_t count = 0;
-    for (const auto& entry : world->recent_positions) {
-        count += entry[0] == static_cast<std::uint16_t>(pile) ? 1u : 0u;
+    for (const auto& entry : world->pile_claims) {
+        count += entry.pile == static_cast<std::uint16_t>(pile) ? 1u : 0u;
     }
     return count;
 }

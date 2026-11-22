@@ -197,8 +197,8 @@ void BuildingHit(GameWorld* world, const Effect& e) {
     const U number = e.params[0];
     Building& b = world->buildings[number];
     const U damage = e.params[1];
-    if (b.unk38 >= damage) {
-        b.unk38 = static_cast<std::uint16_t>(b.unk38 - damage);
+    if (b.hit_points >= damage) {
+        b.hit_points = static_cast<std::uint16_t>(b.hit_points - damage);
     } else {
         Callee<Fn4>(kNotifyLocalPlayer)(world, nullptr, b.owner, 9, b.x, b.y);
         Callee<Fn1>(kCrushBuilding)(world, nullptr, number);
@@ -261,23 +261,23 @@ void ShipHit(GameWorld* world, const Effect& e) {
                     world->settlers[world->settlers[next].prev].next = 0;
                     current = next;
                 }
-                s.slot = 0;
+                s.passengers = 0;
             }
             if (s.art == 0x2b) {
                 // Cargo: up to four (good, count) pairs, counts in nibbles
                 // of +0x17 / +0x18, goods in the low bytes of +0x1c / +0x20.
                 const auto subtract = Callee<Fn3>(kSubtractPlayerCounter);
-                if ((s.unk17 & 0x0f) != 0) {
-                    subtract(world, nullptr, s.owner, s.saved_direction & 0xff, s.unk17 & 0x0fu);
+                if ((s.cargo_amounts01 & 0x0f) != 0) {
+                    subtract(world, nullptr, s.owner, s.saved_animation & 0xff, s.cargo_amounts01 & 0x0fu);
                 }
-                if ((s.unk17 & 0xf0) != 0) {
-                    subtract(world, nullptr, s.owner, (s.saved_direction >> 8) & 0xff, static_cast<U>(s.unk17) >> 4);
+                if ((s.cargo_amounts01 & 0xf0) != 0) {
+                    subtract(world, nullptr, s.owner, (s.saved_animation >> 8) & 0xff, static_cast<U>(s.cargo_amounts01) >> 4);
                 }
-                if ((s.unk18 & 0x0f) != 0) {
-                    subtract(world, nullptr, s.owner, s.saved_counter & 0xffu, s.unk18 & 0x0fu);
+                if ((s.cargo_amounts23 & 0x0f) != 0) {
+                    subtract(world, nullptr, s.owner, s.saved_counter & 0xffu, s.cargo_amounts23 & 0x0fu);
                 }
-                if ((s.unk18 & 0xf0) != 0) {
-                    subtract(world, nullptr, s.owner, static_cast<U>(s.saved_counter) >> 8, static_cast<U>(s.unk18) >> 4);
+                if ((s.cargo_amounts23 & 0xf0) != 0) {
+                    subtract(world, nullptr, s.owner, static_cast<U>(s.saved_counter) >> 8, static_cast<U>(s.cargo_amounts23) >> 4);
                 }
             }
             Callee<Fn4>(kNotifyLocalPlayer)(world, nullptr, s.owner, 0xb, s.x, s.y);
@@ -369,7 +369,7 @@ void UpdateSoldierStrength(GameWorld* world) {
                 value = ((value - limit) >> 1) + limit;
             }
         }
-        if (world->new_game_objective[0] == 0) {
+        if (world->objectives_enabled == 0) {
             player.soldier_strength = value >> 1;
         } else {
             player.soldier_strength = ((value >> 1) * 50u) / 100u;
@@ -781,7 +781,7 @@ void SetUpEnvironment(test::Context& ctx, test::WorldPair& worlds) {
     for (U p = 0; p < layout::kPlayers; ++p) {
         w->players[p].race = static_cast<std::int32_t>(rng.Below(5));
     }
-    w->new_game_objective[0] = static_cast<std::uint8_t>(rng.Chance(1, 3) ? 1 : 0);
+    w->objectives_enabled = static_cast<std::uint8_t>(rng.Chance(1, 3) ? 1 : 0);
     // Settler links stay inside the record array (the hit events follow them).
     for (Settler& s : w->settlers) {
         s.prev = static_cast<std::uint16_t>(rng.Below(32000));

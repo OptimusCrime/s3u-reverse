@@ -229,14 +229,14 @@ void __fastcall GameWorld_ClearBuildingFootprint(GameWorld* world, void*, std::u
     }
     for (std::uint32_t i = 0; i < kGrid; ++i) {
         for (std::uint32_t j = 0; j < kGrid; ++j) {
-            const PlayerSiteCache& cache = world->site_cache[0][building.owner * kSlotsPerPlayer + building.unk22];
+            const PlayerSiteCache& cache = world->site_cache[0][building.owner * kSlotsPerPlayer + building.levelling_slot];
             if (cache.grid[j * kGrid + i] != 0) {
                 TileAt(world, building.x + j - kGridCentre, building.y + i - kGridCentre).flags &=
                     static_cast<std::uint8_t>(~kTileLevelling);
             }
         }
     }
-    world->site_cache[0][building.owner * kSlotsPerPlayer + building.unk22].valid = 0;
+    world->site_cache[0][building.owner * kSlotsPerPlayer + building.levelling_slot].valid = 0;
 }
 
 // Purpose: Blocks a tile for a building, removing its landscape object and
@@ -261,10 +261,10 @@ void __fastcall GameWorld_BlockTileAndMoveSettler(GameWorld* world, void*, std::
 // the direction.
 void __fastcall GameWorld_BlockBuildingLine(GameWorld* world, void*, std::uint32_t number) {
     Building& building = world->buildings[number];
-    if (building.buildup != 0 || building.unk22 == kNoDirection) {
+    if (building.buildup != 0 || building.dock_direction == kNoDirection) {
         return;
     }
-    const std::uint32_t direction = building.unk22;
+    const std::uint32_t direction = building.dock_direction;
     std::uint32_t x = building.work_x;
     std::uint32_t y = building.work_y;
     while (TileAt(world, x, y).terrain != kLineEndTerrain) {
@@ -272,7 +272,7 @@ void __fastcall GameWorld_BlockBuildingLine(GameWorld* world, void*, std::uint32
         x = NeighbourX(x, direction);
         y = NeighbourY(y, direction);
     }
-    building.unk22 = kNoDirection;
+    building.dock_direction = kNoDirection;
 }
 
 // Purpose: Gives up a building's input pile: carriers bringing goods to it
@@ -551,8 +551,8 @@ void __fastcall GameWorld_RemoveBuildingGoods(GameWorld* world, void*, std::uint
     std::uint32_t boards = (materials >> 8) & 0xff;
     std::uint32_t stones = materials & 0xff;
     if (b.buildup != 0) {
-        boards -= b.unk19;
-        stones -= b.unk1a;
+        boards -= b.site.boards_missing;
+        stones -= b.site.stones_missing;
     }
     DropInPortions(world, kGoodBoards, boards >> 1, b.x, b.y);
     DropInPortions(world, kGoodStones, stones >> 1, b.x, b.y);
@@ -632,7 +632,7 @@ bool HasWorker(std::uint8_t type) {
 
 // Jobs of the construction workers and helpers bound to a building.
 bool IsSiteWorker(const layout::Settler& s) {
-    const bool digOrBuild = s.unk18 == 1 || s.unk18 == 2;
+    const bool digOrBuild = s.tool_type == 1 || s.tool_type == 2;
     const bool diggerOrBuilder = s.art == 1 || s.art == 2;
     switch (s.job) {
         case 0x68: case 0x69: return digOrBuild;
@@ -660,10 +660,10 @@ void __fastcall GameWorld_ReleaseSiteWorkers(GameWorld* world, void*, std::uint3
     Building& b = world->buildings[number];
     for (std::uint32_t i = 0; i < 8; ++i) {
         const std::uint8_t bit = static_cast<std::uint8_t>(1u << i);
-        if ((b.unk16 & bit) != 0) {
+        if ((b.digger_slots & bit) != 0) {
             GameDebugLog(kDiggerMessage);
         }
-        if ((b.unk17 & bit) != 0) {
+        if ((b.builder_slots & bit) != 0) {
             GameDebugLog(kBuilderMessage);
         }
     }
@@ -679,13 +679,13 @@ void __fastcall GameWorld_ReleaseSiteWorkers(GameWorld* world, void*, std::uint3
     if (b.buildup != 0) {
         return;
     }
-    if (b.unk08 != 0 && HasWorker(b.art)) {
-        ResetSettlerToIdle(world, b.unk08);
+    if (b.worker != 0 && HasWorker(b.art)) {
+        ResetSettlerToIdle(world, b.worker);
     }
     if (!IsMilitary(b.art)) {
         return;
     }
-    std::uint32_t soldier = b.unk08;
+    std::uint32_t soldier = b.garrison;
     if (soldier != 0) {
         while (soldier != 0) {
             if (world->settlers[soldier].job == 0x8c) {
@@ -694,7 +694,7 @@ void __fastcall GameWorld_ReleaseSiteWorkers(GameWorld* world, void*, std::uint3
             ResetSettlerToIdle(world, soldier);
             soldier = world->settlers[soldier].next;
         }
-        b.unk08 = 0;
+        b.garrison = 0;
         reinterpret_cast<TileFn>(kRecalculateTerritory)(world, nullptr, b.x, b.y);
     }
     ResetSettlersWhere(world, [&](const layout::Settler& s) {
@@ -728,7 +728,7 @@ std::uint32_t __fastcall GameWorld_CrushBuilding(GameWorld* world, void*, std::u
             }
         }
     }
-    if (b.buildup == 0 && IsMilitary(b.art) && b.unk08 != 0 && world->offsets[0].distance < 15) {
+    if (b.buildup == 0 && IsMilitary(b.art) && b.garrison != 0 && world->offsets[0].distance < 15) {
         const layout::MapOffset* entry = world->offsets;
         do {
             if (protectedBuilding != 0) {
@@ -741,8 +741,8 @@ std::uint32_t __fastcall GameWorld_CrushBuilding(GameWorld* world, void*, std::u
                 const std::uint32_t settler = TileAt(world, tx, ty).settler;
                 if (settler != 0) {
                     const layout::Settler& s = world->settlers[settler];
-                    const std::int32_t theirs = (world->players + s.owner)->presence_index;
-                    const std::int32_t ours = (world->players + b.owner)->presence_index;
+                    const std::int32_t theirs = (world->players + s.owner)->team;
+                    const std::int32_t ours = (world->players + b.owner)->team;
                     const std::int32_t settlerClass = kTypeClass[s.art];
                     if (theirs != ours && settlerClass >= 1 && settlerClass <= 9) {
                         protectedBuilding = 1;
@@ -763,7 +763,7 @@ std::uint32_t __fastcall GameWorld_CrushBuilding(GameWorld* world, void*, std::u
         GameWorld_ClearBuildingFlag08(world, nullptr, number);
     }
     if (b.buildup == 0 && IsMilitary(b.art)) {
-        layout::Settler& soldier = world->settlers[b.unk22];
+        layout::Settler& soldier = world->settlers[b.guard];
         soldier.owner = kFree;
         TileAt(world, soldier.x, soldier.y).settler = 0;
     }
@@ -781,12 +781,12 @@ std::uint32_t __fastcall GameWorld_CrushBuilding(GameWorld* world, void*, std::u
     }
     const std::uint8_t type = b.art;
     if ((type == 0x20 || type == 0x1f || type == 0x2f || type == 0x30 || type == 0x32) && b.buildup == 0) {
-        const std::uint8_t state = static_cast<std::uint8_t>(b.state & 0xf0);
-        if (state != 0 && state != 0x10 && b.extra_tiles != 0xff) {
+        const std::uint8_t state = static_cast<std::uint8_t>(b.water.state & 0xf0);
+        if (state != 0 && state != 0x10 && b.water.extra_tiles != 0xff) {
             CallBuildingFn(world, kReleaseBuildingExtraTiles, number);
         }
     }
-    if ((b.art == 0x20 || b.art == 0x21) && b.unk22 != 0xffff) {
+    if ((b.art == 0x20 || b.art == 0x21) && b.dock_direction != 0xffff) {
         CallBuildingFn(world, kBlockBuildingLine, number);
     }
     {
@@ -890,7 +890,7 @@ void CompareFootprint(test::Context& ctx, BuildingFn candidate, int cases) {
             b.art = type;
             b.race = race;
             b.owner = owner;
-            b.unk22 = slot;
+            b.levelling_slot = slot;
             b.buildup = buildup;
         });
         for (std::uint32_t dx = 0; dx < 31; ++dx) {
@@ -1130,7 +1130,7 @@ void CompareBlockLine(test::Context& ctx, BuildingFn candidate, int cases) {
         worlds.Both([&](GameWorld* w) {
             Building& b = w->buildings[number];
             b.buildup = buildup;
-            b.unk22 = direction;
+            b.dock_direction = direction;
             b.work_x = wx;
             b.work_y = wy;
         });
@@ -1170,9 +1170,9 @@ void __fastcall WrongBlockTileAndMoveSettler(GameWorld* world, void* edx, std::u
 
 // Wrong: keeps the direction.
 void __fastcall WrongBlockBuildingLine(GameWorld* world, void* edx, std::uint32_t number) {
-    const std::uint16_t direction = world->buildings[number].unk22;
+    const std::uint16_t direction = world->buildings[number].dock_direction;
     GameWorld_BlockBuildingLine(world, edx, number);
-    world->buildings[number].unk22 = direction;
+    world->buildings[number].dock_direction = direction;
 }
 
 // Wrong: no "TROUBLE" log when nobody was coming.
@@ -1298,8 +1298,8 @@ void CompareRemoveGoods(test::Context& ctx, BuildingFn candidate, int cases) {
             b.y = y;
             b.door_x = static_cast<std::uint16_t>(x + 1);
             b.door_y = static_cast<std::uint16_t>(y + 2);
-            b.unk19 = missing1;
-            b.unk1a = missing2;
+            b.site.boards_missing = missing1;
+            b.site.stones_missing = missing2;
             b.pile_ring = ring;
             for (int k = 0; k < 3; ++k) {
                 b.piles[k] = piles[k];
@@ -1414,7 +1414,7 @@ std::uint16_t SetUpWorkers(test::Context& ctx, test::WorldPair& worlds, std::uin
             s.job = job;
             s.owner = owner;
             s.art = art;
-            s.unk18 = task;
+            s.tool_type = task;
             s.building = b;
             s.flags = flags;
             s.x = sx;
@@ -1466,11 +1466,11 @@ void SetUpBuilding(test::Context& ctx, test::WorldPair& worlds, std::uint32_t nu
         b.y = y;
         b.door_x = static_cast<std::uint16_t>(x + 1);
         b.door_y = static_cast<std::uint16_t>(y + 1);
-        b.unk16 = bits16;
-        b.unk17 = bits17;
-        b.state = state;
-        b.extra_tiles = extra;
-        b.unk22 = line;
+        b.digger_slots = bits16;
+        b.builder_slots = bits17;
+        b.water.state = state;
+        b.water.extra_tiles = extra;
+        b.dock_direction = line;
     });
 }
 
@@ -1519,7 +1519,7 @@ void CompareReleaseSiteWorkers(test::Context& ctx, BuildingFn candidate, int cas
         SetUpBuilding(ctx, worlds, number, type, static_cast<std::uint16_t>(30 + ctx.rng().Below(300)),
                       static_cast<std::uint16_t>(30 + ctx.rng().Below(300)));
         const std::uint16_t garrison = ctx.rng().Chance(1, 5) ? 0 : SetUpWorkers(ctx, worlds, number);
-        worlds.Both([&](GameWorld* w) { w->buildings[number].unk08 = garrison; });
+        worlds.Both([&](GameWorld* w) { w->buildings[number].garrison = garrison; });
         if (!RunCycleCase(ctx, worlds, stubs, logs, runOriginal, runOurs, false, i % 32 == 31 || i == cases - 1,
                           number)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or before): building %u type 0x%x", i, number, type);
@@ -1572,12 +1572,12 @@ void CompareCrushBuilding(test::Context& ctx, CrushFn candidate, int cases) {
         }
         worlds.Both([&](GameWorld* w) {
             w->buildings[number].owner = owner;
-            w->buildings[number].unk08 = garrison;
+            w->buildings[number].garrison = garrison;
             if (IsMilitary(type)) {
-                w->buildings[number].unk22 = soldier;
+                w->buildings[number].guard = soldier;
             }
             for (int p = 0; p < 4; ++p) {
-                w->players[p].presence_index = teams[p];
+                w->players[p].team = teams[p];
             }
             w->pending_event_index.read = 0;
             w->pending_event_index.write = 0;

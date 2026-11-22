@@ -72,7 +72,7 @@ namespace {
 
 // Tile records (re/structs.md "Tile"): +0x5, the scratch byte of the stream
 // carving, is Tile::shade. World fields: the symmetry argument is stored in
-// world->unk2d274 (re/world_layout.md: also read by the player placement
+// world->random_map_symmetry (re/world_layout.md: also read by the player placement
 // 0x5074b0), +0x2d254/+0x2d258 are camera_drawn_x/y.
 using layout::Tile;
 
@@ -98,7 +98,7 @@ std::int32_t MapSize(GameWorld* world) {
 
 // The symmetry argument of Create (world+0x2d274).
 std::uint32_t Symmetry(GameWorld* world) {
-    return static_cast<std::uint32_t>(world->unk2d274);
+    return static_cast<std::uint32_t>(world->random_map_symmetry);
 }
 
 // Tile (x, y) with the original's 32-bit arithmetic (some passes read and
@@ -1062,7 +1062,7 @@ std::uint32_t __fastcall GameWorld_Create(GameWorld* world, void*, std::uint32_t
                                           std::uint32_t symmetry) {
     GameDebugLog(kCreatingWorld);
     SeedRandomThroughGame(world, seed);
-    world->unk2d274 = static_cast<std::int32_t>(symmetry);
+    world->random_map_symmetry = static_cast<std::int32_t>(symmetry);
     world->map_size = static_cast<std::uint32_t>(mapSize);
     world->camera_drawn_x = 0;
     world->camera_drawn_y = 0;

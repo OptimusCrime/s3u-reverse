@@ -2,7 +2,7 @@
 //
 // Buildings (provisional name): records of 0x3a bytes at world+0x1499e64,
 // numbered from 1; the number of records is the uint32 at world+0x1499e60.
-// Byte +0x0 is the player, byte +0x6 the type, word +0x8 (Building::unk08)
+// Byte +0x0 is the player, byte +0x6 the type, word +0x8 (Building::worker)
 // and byte +0x21 (Building::buildup) are tested below.
 // Settlers: records of 0x40 bytes at world+0x12a5e60, numbered from 1; the
 // number of records is the uint32 at world+0x12a5e5c. Byte +0x0 is the
@@ -107,7 +107,7 @@ std::uint32_t __fastcall GameWorld_CountBuildingsWithWord8(GameWorld* world, voi
                                                            std::uint32_t player,
                                                            std::uint32_t type) {
     return CountBuildingsWhere(world, [&](const Building& b) {
-        return b.owner == player && b.art == type && b.buildup == 0 && b.unk08 != 0;
+        return b.owner == player && b.art == type && b.buildup == 0 && b.worker != 0;
     });
 }
 
@@ -202,7 +202,7 @@ void FillRecords(test::Context& ctx, test::WorldPair& worlds) {
             b.owner = bPlayer;
             b.art = bType;
             b.buildup = static_cast<std::uint8_t>(buildup);
-            b.unk08 = static_cast<std::uint16_t>(word8);
+            b.worker = static_cast<std::uint16_t>(word8);
             Settler& s = w->settlers[i];
             s.owner = sPlayer;
             s.art = sType;

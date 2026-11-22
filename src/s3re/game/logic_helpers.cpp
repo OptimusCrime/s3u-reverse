@@ -172,7 +172,7 @@ std::uint32_t __fastcall GameWorld_SetSettlerAnimation(GameWorld* world, void* /
     Settler& record = world->settlers[settler];
     const std::uint32_t entry = record.race + kind * 4;
     // The animation id goes into the dword +0x8 (Settler::direction).
-    record.direction = kAnimationTable[entry];
+    record.animation = kAnimationTable[entry];
     const std::uint32_t frames = GfxData_SpriteWord(RawAtAddress<void*>(kGfxData), nullptr, kAnimationTable[entry]) - 1;
     record.counter = static_cast<std::uint16_t>(frames);
     return frames;

@@ -180,47 +180,47 @@ std::uint32_t __fastcall GameWorld_ResetSettlerToIdle(GameWorld* world, void*, s
         const std::uint8_t art = s.art;
         if (art == 0 && (s.job == 3 || s.job == 4 || s.job == 0x8a)) {
             if (s.saved_counter == 1) {
-                --world->buildings[s.building].unk19;
+                --world->buildings[s.building].recruiting.recruits[0];
             }
             if (s.saved_counter == 2) {
-                --world->buildings[s.building].unk1a;
+                --world->buildings[s.building].recruiting.recruits[1];
             }
             if (s.saved_counter == 3) {
-                --world->buildings[s.building].unk1b[0];
+                --world->buildings[s.building].recruiting.recruits[2];
             }
         } else {
             const std::int32_t typeClass = kTypeClass[art];
             if (typeClass != 0) {
                 if (typeClass == 1) {
-                    --world->buildings[s.building].unk19;
+                    --world->buildings[s.building].military.class1_coming;
                 } else if (typeClass == 2) {
-                    --world->buildings[s.building].unk1b[0];
+                    --world->buildings[s.building].military.class2_coming;
                 } else if (typeClass == 3) {
-                    --world->buildings[s.building].state;
+                    --world->buildings[s.building].military.class3_coming;
                 }
             } else {
                 const bool carrierJob = s.job == 0x68 || s.job == 0x69;
-                if (art == 1 || (carrierJob && s.unk18 == 1)) {
-                    ClearHighestBit(world->buildings[s.building].unk16);
-                } else if (art == 2 || (carrierJob && s.unk18 == 2)) {
-                    ClearHighestBit(world->buildings[s.building].unk17);
+                if (art == 1 || (carrierJob && s.tool_type == 1)) {
+                    ClearHighestBit(world->buildings[s.building].digger_slots);
+                } else if (art == 2 || (carrierJob && s.tool_type == 2)) {
+                    ClearHighestBit(world->buildings[s.building].builder_slots);
                 } else {
-                    world->buildings[s.building].unk08 = 0;
-                    world->buildings[s.building].unk19 = 0;
+                    world->buildings[s.building].worker = 0;
+                    world->buildings[s.building].production.worker_inside = 0;
                 }
             }
         }
     }
     if (s.job >= 5 && s.job <= 9) {
         Building& b = world->buildings[s.building];
-        if (ClearHighestBit(b.unk16)) {
-            --b.unk1b[2];
+        if (ClearHighestBit(b.digger_slots)) {
+            --b.site.workers_at_work;
         }
     }
     if (OneOf(s.job, {0xe, 0xf, 0x11, 0x12})) {
         Building& b = world->buildings[s.building];
-        if (ClearHighestBit(b.unk17)) {
-            --b.unk1b[2];
+        if (ClearHighestBit(b.builder_slots)) {
+            --b.site.workers_at_work;
         }
     }
     if (OneOf(s.job, {6, 7, 9, 8, 0x11, 0x12})) {
@@ -231,7 +231,7 @@ std::uint32_t __fastcall GameWorld_ResetSettlerToIdle(GameWorld* world, void*, s
     }
     if (s.job == 0x133 || s.job == 0x134) {
         --world->piles[TileAt(world, s.target_x, s.target_y).object_number].leaving;
-        if (s.unk17 != 0) {
+        if (s.second_unit != 0) {
             --world->piles[TileAt(world, s.target_x, s.target_y).object_number].leaving;
         }
     }
@@ -360,8 +360,8 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t settle
     const auto slot = static_cast<std::uint8_t>(rng.Chance(1, 3) ? 0 : 1 + rng.Below(35));
     const auto good = static_cast<std::uint8_t>(rng.Below(36));
     const auto saved = static_cast<std::uint16_t>(rng.Below(5));
-    const auto unk17 = static_cast<std::uint8_t>(rng.Below(2));
-    const auto unk18 = static_cast<std::uint8_t>(rng.Below(4));
+    const auto secondUnit = static_cast<std::uint8_t>(rng.Below(2));
+    const auto toolType = static_cast<std::uint8_t>(rng.Below(4));
     const std::uint32_t pileWord = (job >= 0x4c && job <= 0x4f) ? 1 + rng.Below(kTestPiles) : building;
     const bool onTile = rng.Chance(3, 4);
     const auto region = static_cast<std::uint8_t>(rng.Chance(1, 8) ? 0 : 1 + rng.Below(5));
@@ -382,8 +382,8 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t settle
         s.slot = slot;
         s.good = good;
         s.saved_counter = saved;
-        s.unk17 = unk17;
-        s.unk18 = unk18;
+        s.second_unit = secondUnit;
+        s.tool_type = toolType;
         Tile& tile = w->tiles[x][y];
         tile.area = static_cast<std::uint16_t>(area);
         tile.settler = static_cast<std::uint16_t>(onTile ? settler : 1 + (settler + 7) % kTestSettlers);
@@ -475,8 +475,8 @@ std::uint32_t __fastcall WrongResetSettlerToIdle(GameWorld* world, void* edx, st
     Settler& s = world->settlers[settler];
     if (IsWorkJob(s.job) && s.art != 0 && kTypeClass[s.art] == 3) {
         Building& b = world->buildings[s.building];
-        ++b.state;
-        --b.unk1b[0];
+        ++b.military.class3_coming;
+        --b.military.class2_coming;
     }
     return GameWorld_ResetSettlerToIdle(world, edx, settler);
 }

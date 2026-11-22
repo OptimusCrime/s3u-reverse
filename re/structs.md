@@ -167,19 +167,20 @@ settler_records.cpp, settler_queries.cpp, building_tiles.cpp, counting.cpp.
 | 0x03 | u8 | health | start health per type (20 less for race 3 soldiers) | V |
 | 0x04 | u16 | x | tile | V |
 | 0x06 | u16 | y | tile | V |
-| 0x08 | u32 | direction | 0..5 (RandomBelow6 at creation and in PlaceSettlerNear; LeaveBuildingSlot sets 2); but SetSettlerAnimation (0x50E2C0) stores a graphics/animation id (group << 16 \| index, from the table at S3.EXE 0x6A8060) here and frames - 1 in +0xC, so "direction" is probably too narrow (animation/direction state?); not renamed yet | V (writes), S (name) |
-| 0x0C | u16 | counter | random 0..31 at creation, reset with a new job (animation/step counter?) | V (writes), G (meaning) |
+| 0x08 | u32 | direction / animation (union) | `direction` 0..5 while walking (RandomBelow6 at creation and in PlaceSettlerNear; LeaveBuildingSlot sets 2; WalkSettler stores each step's direction; Pathing reads it as the facing while < 6); `animation`: SetSettlerAnimation (0x50E2C0) stores a graphics/animation id (group << 16 \| index, from the table at S3.EXE 0x6A8060) here and frames - 1 in +0xC; RestoreSettlerAnimation (0x50E380, was RestoreSettlerDirection) copies +0x1C back | V |
+| 0x0C | u16 | counter | random 0..31 at creation, reset with a new job; frames - 1 of a new animation (SetSettlerAnimation), step_time - 1 per step (WalkSettler): ticks left of the current animation / step | V (writes), S (meaning) |
 | 0x0E | u16 | job | current job ("todo"; jobs 1 and 0x37 are followed by 2 and 0x35 (IsSettlerJob01Or37 0x4FA6B0, JobAfter01Or37 0x4FAA40, probably walking); e.g. 3 work, 0x4C fetch for trade, 0x133 carry to pile, 0x145 ship, 0x147 to building, 0xAD soldier in building) | V (values), S (name) |
 | 0x10 | u16 | next | list link (area/player settler lists) | V |
 | 0x12 | u16 | prev | list link | V |
 | 0x14 | u8 | flags | bit 0x40: in a building slot (LeaveBuildingSlot) | V (0x40) |
-| 0x15 | u8 | slot | low 3 bits: the settler's slot in its building; LeaveBuildingSlot clears the tile (A.x + slot + 1, A.y). WalkSettler: a shooting soldier's arrows (-1 per shot; race 3 sets 6), a ship's passenger count (+1 per boarding settler, capacity per race S3.EXE 0x659644); type 0x17 with +0x15 != 0 walks one tick slower | V |
+| 0x15 | u8 | slot / arrows / passengers (union) | `slot` low 3 bits: the settler's slot in its building; LeaveBuildingSlot clears the tile (A.x + slot + 1, A.y). `arrows`: a shooting soldier's arrows (WalkSettler, -1 per shot; race 3 sets 6). `passengers`: a ship's passenger count (+1 per boarding settler, capacity per race S3.EXE 0x659644; UpdateEnvironment frees the passengers of a sunk ship); type 0x17 with +0x15 != 0 walks one tick slower | V |
 | 0x16 | u8 | frame | animation frame while walking: WalkSettler adds +0x19 each step modulo 12 (type 0x29: 36), 0 at the target, 1 after a step if 0 | V |
-| 0x17..0x18 | u8 | | job state bytes (UpdateSettlers) | G |
-| 0x17 | u8 | | 1 when a carrier takes two units (SendNearestSettlerToPile) | V |
+| 0x17 | u8 | second_unit / food / cargo_amounts01 (union) | job data: carrier jobs 0x133/0x134: 1 when it takes a second unit (SendNearestSettlerToPile; PileGoodsMoves and ResetSettlerToIdle release it); miner: meals left (MinerJobEnter sets 10, MinerJobFood adds 10/2 (+4 computer players) per meal and uses one per dig); ship 0x2B: cargo amounts of goods slots 0 / 1 in the low / high nibble (goods in the low bytes of +0x1C; UpdateEnvironment subtracts them from the player when the ship sinks) | V |
+| 0x18 | u8 | tool_type / cargo_amounts23 (union) | carrier fetching a tool (job 0x68/0x69, economy.cpp): the settler type it becomes (1 digger, 2 builder count as site workers); ship 0x2B: amounts of cargo slots 2 / 3 (goods in +0x20) | V |
 | 0x19 | u8 | step time | set to 1 with a new target if it was 0; WalkSettler: ticks per step = terrain speed (S3.EXE 0x658c1c) + type speed (0x6591a4), counter +0xC = it - 1; 0 while waiting | V |
-| 0x1A | u8 | good | goods type being carried / fetched; for jobs 0x35/0xB0 (WalkSettler) a state: 1 look for a ship to board, 2 shoot from the post (path cache [2]/[3]), 3/4/5 for type 0x17 | V |
-| 0x1C | u32 | saved direction | restored by RestoreSettlerDirection | V |
+| 0x1A | u8 | good / walk_state (union) | goods type being carried / fetched; `walk_state` for jobs 0x35/0xB0 (WalkSettler): 1 look for a ship to board, 2 shoot from the post (path cache [2]/[3]), 3/4/5 for type 0x17 | V |
+| 0x1B | u8 | | no direct access found | |
+| 0x1C | u32 | saved animation | restored by RestoreSettlerAnimation (0x50E380); ship 0x2B: cargo goods of slots 0 / 1 in its low bytes | V |
 | 0x20 | u16 | saved counter | restored with it (accessed in the folded form `(n + 0x4A97A) << 6`); SetSettlerSavedAnimation 0x50E320 stores the frame count - 1 here. For seven-tile units (CreateSevenTileUnit 0x50DD20) it is the next part settler instead (main settler -> part 1 -> ... -> part 6) | V |
 | 0x22 | u16 | building | the settler's building / destination record | V |
 | 0x24 | u16 | target x | SetSettlerTarget | V |
@@ -189,9 +190,9 @@ settler_records.cpp, settler_queries.cpp, building_tiles.cpp, counting.cpp.
 | 0x2C | u8 | path mode | what Pathing::FindPath does next: 0x01 plan a new straight leg (SetSettlerTarget sets 1), 0x02 walk towards the waypoint (WalkLine), 0x04 blocked, look for a way around (StartEdgeWalk), 0x08 walk along the obstacle's edge (FollowEdge), 0x10 the edge walk's side, 0x20 waiting for a settler in the way (+0x2E = the blocked direction; ResolveBlocker follows such queues); 0xC1 = plan anew | V (pathing) |
 | 0x2D | u8 | path steps | steps left of an edge walk (CompareEdges sets it, FollowEdge counts down, back to mode 2 at 0) | V (pathing) |
 | 0x2E | u8 | path direction | direction 0..5 where the edge walk's search starts, or the blocked step while waiting | V (pathing) |
-| 0x2F | u8 | | not seen accessed yet | |
+| 0x2F | u8 | | no direct access found | |
 | 0x30..0x3A | u16[6] | path cache | set to 0xFFFF with a new target. WalkSettler: (0, 1) the next target, taken when the settler arrives (the rest shifts down); [4] = 0xFFFE: patrol, (0, 1) and (2, 3) swap; [4] = 0xFFFD: arrived when within [5] steps of ([2], [3]) (a soldier's post) | V |
-| 0x3C | u8 | | cleared by SendNearestSettlerToBuilding. Ships (WalkSettler): low 3 bits the last direction, upper 5 bits a count of steps where its two path searches disagreed (at 0xF8 it gives up: job 0x37); type 0x2B with 0xFF walks like a settler | V |
+| 0x3C | u8 | ship_walk | cleared by SendNearestSettlerToBuilding. Ships (WalkSettler): low 3 bits the last direction, upper 5 bits a count of steps where its two path searches disagreed (at 0xF8 it gives up: job 0x37); type 0x2B with 0xFF walks like a settler | V |
 | 0x3D..0x3F | | | not accessed | |
 
 ---
@@ -210,33 +211,47 @@ counting.cpp, area_split.cpp (Take/ReleaseBuildingExtraTiles), dump.
 | 0x04 | u16 | y | | V |
 | 0x06 | u8 | art | building type (0x0F castle in the dump at the player position; 0x0F/0x10/0x12 military; 0x1F/0x2F/0x30/0x32 at the water; 0x20 shipyard; 0x21/0x22 trade buildings) | V (field), S (values) |
 | 0x07 | u8 | race | the owner's race (AddBuildingSite 0x4DD280; indexes the layout table); read by UpdateEconomy/UpdateSettlers | V |
-| 0x08 | u16 | worker | production buildings: the worker (UpdateEconomy requests one with RequestSettlerForBuilding while 0, inputs only while set); military: head of the garrison chain (settlers linked by +0x10; UpdateEconomy counts it per class, takes a surplus soldier out); CountBuildingsWithWord8 | V (UpdateEconomy) |
+| 0x08 | u16 | worker / garrison (union) | production buildings: the worker (UpdateEconomy requests one with RequestSettlerForBuilding while 0, inputs only while set); military: head of the garrison chain (settlers linked by +0x10; UpdateEconomy counts it per class, takes a surplus soldier out); CountBuildingsWithWord8 | V (UpdateEconomy) |
 | 0x0A | u16 | door x | "tile B": the building's area is the area of this tile | V |
 | 0x0C | u16 | door y | | V |
 | 0x0E | u16 | | output pile of production buildings (UpdateEconomy sends a carrier, DispatchPileCarrier, once amount - leaving >= 5); first pile of the building's ring of six (FetchGoodsToTradeBuilding); also used as a centre while under construction (DrawWorkAreaOverlay); set by AddBuildingSite 0x4DD280: 0xFF for type 1, x for types 2, 3, 5, 0x19, 0x1E, 0x33, x + 4/5/6 (clamped to the map) for types 0xE/0x18/0x24 (with +0x14 = y, y + 8/10/12); PileNeighbourBuildingByteE 0x505FD0 reads only its low byte (`mov al, [..+0x1499E72]`), PileIncAmountLeaving 0x5058C0 the whole word | V (uses) |
 | 0x10 | u16 | pile 1 | input/construction pile numbers (BuildingPileHasGoods slot 1) | V |
 | 0x12 | u16 | pile 2 | slot 2 | V |
 | 0x14 | u16 | pile 3 | slot 3 | V |
-| 0x16, 0x17 | u8 | slot bits | construction site: digger (+0x16) / builder (+0x17) slot bits; UpdateEconomy requests a settler of type 1 / 2 for each clear bit below the count +0x1B / +0x1C and sets the bit on success | V |
+| 0x16, 0x17 | u8 | digger_slots, builder_slots | construction site: digger (+0x16) / builder (+0x17) slot bits; UpdateEconomy requests a settler of type 1 / 2 for each clear bit below the count +0x1B / +0x1C and sets the bit on success | V |
 | 0x18 | u8 | request flags | bit 0x01 enables bits 0x02/0x04/0x08/0x10 (player counters +0x20..+0x28); 1 for a new site; UpdateEconomy requests inputs only with bit 0x01; on a site bit 0x10 (diggers) / 0x08 (builders) / 0x02 / 0x04 (materials) let it request although the player's counter +0x28 / +0x26 / +0x20 / +0x22 says otherwise | V |
-| 0x19 | u8 | | compared with pile 1's amount (SetBuildingFlag02) | V (use) |
-| 0x1A | u8 | | compared with pile 2's amount (SetBuildingFlag04) | V (use) |
-| 0x1B | u8 | | new site: min(8, (earth + 16) / 32 + 2) (8-bit), probably the number of diggers; cleared by BuildingDone | V (value), G (meaning) |
-| 0x1C | u8 | | new site: header word [0] of the layout | V (value), G (meaning) |
-| 0x1D, 0x1E | u8 | | 0 for a new site; cleared by BuildingDone; +0x1D: a site with +0x30 < 0x28 and +0x1D != 0 asks for builders before levelling is done | G |
-| 0x19..0x20 (finished) | u8 | per type | UpdateEconomy (update_economy.cpp): military: soldiers coming / wanted per class (+0x19/+0x1A class 1, +0x1B/+0x1C class 2, +0x1F/+0x20 class 3); residences 0x1A..0x1C: births waiting (+0x19); temples 0x29/0x2B/0x2D/0x37: countdown +0x1C (250), points +0x19; altars 0x2A/0x2C/0x2E/0x36: countdown +0x1C (30); water buildings / shipyard: wanted input amounts +0x1A..+0x1C, total in +0x20 once the extra tiles are taken (0xFF before, 0xFE while taking); trade 0x21/0x22: goods cursor +0x1B, settler countdown +0x20 (6); barracks-like 0x13: recruits made per input slot +0x19..+0x1B | V (uses), G (meanings) |
-| 0x19, 0x1A (new site) | u8 | materials | from the layout's word [1] (high / low byte), probably boards and stones; +0x1F = their sum for a new site | V (values), S (meaning) |
-| 0x1F | u8 | state | high nibble = state (0x20 done, 0x30/0x40 shipyard states) | V (Take/ReleaseBuildingExtraTiles) |
-| 0x20 | u8 | | 0xFE once the extra tiles are taken | V |
+| 0x19..0x20 | u8[8] | per kind (union of views, layout.h `BuildingSiteBytes` ...) | see "Bytes +0x19..+0x20 per kind" below; `kind_bytes[8]` is the raw view | V |
+| 0x19..0x20 (finished) | u8 | per type (summary) | UpdateEconomy (update_economy.cpp): military: soldiers coming / wanted per class (+0x19/+0x1A class 1, +0x1B/+0x1C class 2, +0x1F/+0x20 class 3); residences 0x1A..0x1C: births waiting (+0x19); temples 0x29/0x2B/0x2D/0x37: countdown +0x1C (250), points +0x19; altars 0x2A/0x2C/0x2E/0x36: countdown +0x1C (30); water buildings / shipyard: wanted input amounts +0x1A..+0x1C, total in +0x20 once the extra tiles are taken (0xFF before, 0xFE while taking); trade 0x21/0x22: goods cursor +0x1B, settler countdown +0x20 (6); barracks-like 0x13: recruits made per input slot +0x19..+0x1B | V (uses), G (meanings) |
 | 0x21 | u8 | buildup | non-zero while a construction site (DebugLog "building[i].buildup"); 1 for a new site, 2 for a new mine (no levelling) | V |
-| 0x22 | u16 | | construction site: its levelling job slot (CheckBuildingSite); shipyard: direction of the slip (Take/ReleaseBuildingExtraTiles; BlockBuildingLine 0x4DBB90 blocks the tiles from the work tile along it up to terrain 0x30, then sets 0xFFFF); site cache slot read by ClearBuildingFootprint 0x51AAE0 while buildup is 1; military: the soldier created by BuildingDone (0x4DBFB9, folded form `(n + 0x5AEDF) * 0x3A`) | V |
+| 0x22 | u16 | levelling_slot / guard / dock_direction (union) | construction site: its levelling job slot (CheckBuildingSite); shipyard: direction of the slip (Take/ReleaseBuildingExtraTiles; BlockBuildingLine 0x4DBB90 blocks the tiles from the work tile along it up to terrain 0x30, then sets 0xFFFF); site cache slot read by ClearBuildingFootprint 0x51AAE0 while buildup is 1; military: the soldier created by BuildingDone (0x4DBFB9, folded form `(n + 0x5AEDF) * 0x3A`) | V |
 | 0x24/0x26/0x28 | u16[3] | input word 24 | requested amount per input slot; construction site: word +0x28 sums the height differences of the levelled tiles (CheckBuildingSite) | V |
 | 0x2A/0x2C/0x2E | u16[3] | input word 2A | next building in the area's request list per slot | V |
 | 0x30 | u16 | work x | construction site: the earth to move (PlanSiteLevelling's amount); = position after BuildingDone; centre of the work area; shipyard: ship position (0xFFFF = none) | V (uses), S (work area) |
 | 0x32 | u16 | work y | construction site: the player's countdown +0x84 when it was placed | V (site) |
 | 0x34 | u16 | trade | number of the building's Trade record (AllocBuildingExtra caller 0x4DBC50) | V |
-| 0x36 | u8 | | compared with 0x18 by TakeBuildingExtraTiles | V (use) |
-| 0x38 | u16 | | 100 after BuildingDone, per type for military (S3.EXE 0x659664..); probably hit points; UpdateEconomy adds 1 per visit up to 250/500/1000 (types 0xF/0x10/0x12) | G |
+| 0x36 | u8 | | 0 for a new site; TakeBuildingExtraTiles (state 0x20) marks the tiles taken only while it is <= 0x18 | V (use) |
+| 0x37 | u8 | | no direct access found | |
+| 0x38 | u16 | hit_points | 100 after BuildingDone, per type for military (S3.EXE 0x659664..); UpdateEconomy adds 1 per visit up to 250/500/1000 (types 0xF/0x10/0x12); a hit (effect type 5 "Gebäude getroffen", UpdateEnvironment) subtracts its damage and crushes the building when the damage exceeds it | V |
+
+### Bytes +0x19..+0x20 per kind
+
+The eight bytes mean different things per kind of building. `layout.h`
+gives each kind a view in an anonymous union (`b.site.diggers`,
+`b.military.class1_wanted`, ...); bytes a kind is not known to use are
+unnamed there. Sources: AddBuildingSite 0x4DD280, BuildingDone 0x4DBC50,
+UpdateEconomy (update_economy.cpp), ResetSettlerToIdle, UpdateSoldier,
+CrushBuilding, SeenObjectAt, MinerJobEnter/Dig, TakeBuildingExtraTiles.
+
+| View (kinds) | +0x19 | +0x1A | +0x1B | +0x1C | +0x1D | +0x1E | +0x1F | +0x20 | Conf. |
+|---|---|---|---|---|---|---|---|---|---|
+| `site` (buildup != 0) | boards_missing: boards (goods 1, layout word [1] high byte) not delivered yet; the site requests boards until pile 1 (amount + coming) holds this many; CrushBuilding drops half of the delivered ones | stones_missing (goods 2, low byte; pile 2) | diggers: min(8, (earth + 16) / 32 + 2) wanted | builders: layout header word [0] | workers_at_work: diggers/builders holding a slot bit (ResetSettlerToIdle -1 when it clears one); while non-zero and the earth < 0x28, builders come before the levelling is done | unk1e: 0 for a new site, cleared by BuildingDone, read by UpdateSettlers | materials_total = boards + stones | materials_used: built in (SeenObjectAt: progress (buildup + 50 * used) * 249 / (total * 50 + 4)) | V (values, uses), S (names) |
+| `production` (worker buildings; mines 7, 8, 9, 0x1D, 0x25, 0x38) | worker_inside: MinerJobEnter +1; ResetSettlerToIdle clears it with the worker | digs (mines): digs so far, up to 32 (MinerJobDig; with 16+ digs and no find in the history work_y:work_x it notifies "mine empty"); cleared by MinerJobEnter | | | | | | | V (uses), S (names) |
+| `military` (0x0F, 0x10, 0x12) | class1_coming: soldiers of class 1 on their way | class1_wanted | class2_coming | class2_wanted | | | class3_coming | class3_wanted | V |
+| `water` (0x1F, 0x2F, 0x30, 0x32; shipyard 0x20) | | wanted[0]: input amount wanted per slot, from the state (shipyard: S3.EXE 0x659670 / 0x659680) | wanted[1] | wanted[2] | | | state: high nibble the production state (0x20: TakeBuildingExtraTiles needs +0x36 <= 0x18; shipyard 0x30 / 0x40 build ship 0x2B / 0x2C) | extra_tiles: 0xFF tiles not taken yet; 0xFE (kExtraDone) taken; then the sum of wanted | V |
+| `trading` (0x21, 0x22) | | | goods_cursor: next goods type offered for a free ring pile | | | | | call_countdown (0x21): visits until it calls a settler to the door again (6) | V (uses), S (names) |
+| `temple` (temples 0x29/0x2B/0x2D/0x37, altars 0x2A/0x2C/0x2E/0x36) | points: temple +1 per 250 visits; two make a settler of type 0x24 | | | countdown: temple 250, altar 30 visits per offering | | | | | V (uses), G (kinds) |
+| `residence` (0x1A, 0x1B, 0x1C) | births: settlers still to come out (BuildingDone: 1, 3, 10 units of S3.EXE byte kResidenceUnit) | | | | | | | | V |
+| `recruiting` (0x13, probably the barracks) | recruits[0..2] (+0x19..+0x1B): carriers sent per input slot (the settler's saved_counter = slot + 1; ResetSettlerToIdle -1) | | | | | | | | V (uses), G (kind) |
 
 ---
 
@@ -251,7 +266,7 @@ building_flags.cpp, settler_queries.cpp, dump (players 0 and 1).
 | 0x000 | i32 | taking part: 0 = no; dump: 1 (local human), 2 (other player, probably computer) | V (non-zero test), G (1/2) |
 | 0x004 | i32 | race 0..3 (dump 2, 3; also 0x1195FD4) | V |
 | 0x008 | i32 | added in savegame version 0x89 (cleared for older saves); read by ExecuteCommands, BuildingDone | S |
-| 0x00C | i32 | index in the presence maps / team (FindPlayerByField0C) | S |
+| 0x00C | i32 | team: the team / alliance index (`team`, was presence_index): the fog of war shows what the local player's team sees, enemies are settlers/buildings of another team (UpdateSoldier, WalkSettler, UpdateEconomy's military check, CrushBuilding), the minimap colours by it, the presence maps are indexed by it (UpdateEconomy phases 1..16); FindPlayerByField0C | V (uses), S (name) |
 | 0x010 | i32 | start position x (= castle position in the dump) | V |
 | 0x014 | i32 | start position y | V |
 | 0x018 | i32 | 0 in ctor; player placement 0x5074B0; dump 1 | G |
@@ -259,10 +274,10 @@ building_flags.cpp, settler_queries.cpp, dump (players 0 and 1).
 | 0x020 | u16[48] | heads of idle-settler lists per settler type (lists 5, 8, 0xF, 0x1E..0x23, 0x27 (+0x6E), 0x2B (+0x76) seen); see the overlap below | V |
 | 0x020..0x028 | u16 x5 | building request counters (+0x24 total, capped at 10; +0x20/+0x22/+0x26/+0x28 per bit, bit 7 = "set once") | V |
 | 0x080 | i32 | 0x80 in ctor | G |
-| 0x084 | i32 | 0xFFFF in ctor; counts down by one per new building site (AddBuildingSite 0x4DD280), at 60000 or below it restarts at 0xFFFF; the value goes to building +0x32 | V (mechanics), G (meaning) |
+| 0x084 | i32 | site_stamp: 0xFFFF in ctor; counts down by one per new building site (AddBuildingSite 0x4DD280), at 60000 or below it restarts at 0xFFFF; the value goes to the site's work_y (+0x32), probably an order stamp | V (mechanics), G (meaning) |
 | 0x088 | i32 | UI (ProcessEvents/PrepareDrawData only) | G |
 | 0x08C | i32 | mana | V |
-| 0x090 | i32 | 0 in ctor; ExecuteCommands, UpdateEconomy, BuildingDone | G |
+| 0x090 | i32 | mana_total: 0 in ctor; only ever added to, together with the mana +0x8C (a new temple +8 in BuildingDone, each offering in UpdateEconomy); read by ExecuteCommands, PrepareDrawData, ProcessEvents (probably what unlocks spells) | V (writes), S (meaning) |
 | 0x094 | i32[8] | mana needed per spell slot (1 in ctor, then S3.EXE 0x658E64[spell of the race's slot]) | V |
 | 0x0B4..0x0C0 | i32 x4 | written by 0x508450 (per player init) | G |
 | 0x0C4 | u32 | population: civilians (settler class 0 or 10..29), recounted by RecountPlayerPopulation 0x5104C0 (UpdateEconomy); UpdateEconomy creates no new settler while it is above +0xC8 | V (count), G (use) |
@@ -272,8 +287,8 @@ building_flags.cpp, settler_queries.cpp, dump (players 0 and 1).
 | 0x0D4 | u32 | surplus carriers: carriers - ((limit << 16) / population * carriers >> 16) when population > limit, else 0 | V (formula), G (meaning) |
 | 0x0D8 | u32 | carriers marked with settler flag 0x80; UpdateSettlers job 1 marks/unmarks idle carriers until it equals +0xD4 | S |
 | 0x0DC | u16[36] | goods counters per goods type (Add/SubtractPlayerCounter, RecountPlayerGoods) | V |
-| 0x124 | u8 | 0 in ctor; OnStart, Step, 0x5495D0 | G |
-| 0x128 | i32 | 0 in ctor; Step, 0x5495D0 | G |
+| 0x124 | u8 | map_revealed: 0 in ctor; SpellRevealMap (0x5495D0, spell 31) sets 1 for the local player; Step (0x53E530) clears it and the reveal global 0x7DFD84 once (tick - +0x128) * 64 / 1000 >= 15 (15 s) | V |
+| 0x128 | i32 | map_revealed_tick: the game tick of that spell | V |
 | 0x12C..0x134 | i32 | game-end check 0x511C50, UpdateSettlers | G |
 | 0x138..0x147 | | not accessed | |
 
@@ -294,13 +309,12 @@ settler_queries.cpp.
 | Off | Size | Meaning | Conf. |
 |---|---|---|---|
 | 0x00 | u8 | the allocator's argument (0xFF = free) | V |
-| 0x01 | u8 | 1 at allocation | V |
+| 0x01 | u8 | mode: 1 at allocation; UpdateEconomy offers the wanted goods through the area's slot list A (1) or B (2), nothing when 0; set by ExecuteCommands, shown by PrepareDrawData/ProcessEvents | V (uses), S (name) |
 | 0x02, 0x04, 0x06 | u16 | route points 1..3, x (0xFFFF = unset) | V (layout), S (route) |
 | 0x08 | u16 | route end x (0xFFFF = no route) | V |
 | 0x0A, 0x0C, 0x0E | u16 | route points 1..3, y | V |
 | 0x10 | u16 | route end y | V |
-| 0x12 | u8 | read by UpdateEconomy/UpdateSettlers, PrepareDrawData | G |
-| 0x14, 0x19 | u8 | written by the game-end check 0x511C50 | G |
+| 0x12 | u8[36] | ordered: units wanted per goods type; UpdateEconomy offers a type while it is non-zero and differs from coming +0x36 (and a ring pile can take it); read by UpdateSettlers, PrepareDrawData; the game-end check 0x511C50 writes elements 2 and 7 (+0x14, +0x19) | V (layout, UpdateEconomy), S (name) |
 | 0x36 | u8[36] | units of each goods type on the way (FetchGoodsToTradeBuilding +1) | V |
 
 ---
@@ -335,8 +349,14 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   countdown (0 = unused; active entries first), x, y. CountDownTimers.
   **V** (layout).
 - **Tile ring entry** (4 bytes, 10000 at world+0xDFDC48 and +0xE07890):
-  uint16 x, uint16 y. **V**. Recent positions (world+0x1195DD4) store
-  uint16 y, x.
+  uint16 x, uint16 y. **V**.
+- **Pile claim** (4 bytes, 128 at world+0x1195DD4, `PileClaim`): uint16
+  pile, uint16 settler (both 0 = free). AddPileClaim 0x510770 (was
+  AddToRecentPositions) adds one, called only by UpdateSettlers job 0x152
+  with (settler, pile); CountOtherPileClaims 0x510800 counts a pile's
+  claims by other settlers; the logic thread clears the slot at the cursor
+  `g_pileClaimsCursor` (0x7ACE60) every step. **V** (layout), **S**
+  (meaning).
 
 ## Other small records
 
@@ -392,15 +412,19 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   start_x/y, +0x10/+0x14 end_x/y (pixels; MapEffect_PositionAt
   interpolates, MapEffects_Add files the record under the end position's
   256-pixel block), +0x28 arc (i16 hop height), +0x40 list (block),
-  +0x44 previous, +0x48 next (MapEffect_SetLinks); the rest unkXX. Never
+  +0x44 previous, +0x48 next (MapEffect_SetLinks), +0x3A source_kind and
+  +0x3C source_id (what made the effect: MapEffects::RemoveMatching
+  0x545C80 removes those of a kind and number; CrushBuilding passes kind 0
+  and the building); the rest unkXX. Never
   written by either constructor: +0x2A..+0x2B, +0x3B, +0x3E..+0x3F
   (pad fields; the make functions copy stack garbage there). The table
   (`MapEffectTable`): +0x5CC60 cell_heads[10000], +0x668A0 slots_used,
-  +0x668A4 blocks_x, +0x668A8 blocks_y, +0x668AC unknown, +0x668B0
+  +0x668A4 blocks_x, +0x668A8 blocks_y, +0x668AC expire_cursor (the cell
+  MapEffects::ExpireSome 0x545D40 checks next), +0x668B0
   block_count_16, +0x668B4 width, +0x668B8 height. **V** (layout, from
   map_effects.cpp's verified functions), **S** (names).
-- **New game objectives** (world+0x1195DCC): byte +0x0 non-zero = enabled;
-  bytes +0x1..+0x7 the seven chosen objective ids (1..34, drawn by 0x4FFBC0
+- **New game objectives** (world+0x1195DCC): byte +0x0 `objectives_enabled`
+  (non-zero = on); bytes +0x1..+0x7 `objectives`, the seven chosen objective ids (1..34, drawn by 0x4FFBC0
   with Random, distinct, never 21, 25, 27..31, 33, 34; checked by
   IsNgoObjectiveChosen 0x4FFB90). **V** (layout), **S** (meaning, from
   the "NGO" DebugLog texts).

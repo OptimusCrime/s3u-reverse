@@ -29,7 +29,7 @@ Ghidra pseudocode.
    `soldier_strength` (+0x80, read by UpdateSoldier's damage) =
    0x600 / (g_strengthDivisor + 4) + 4 * goods10 (race 1: 2 * (goods10 +
    4 * goods28)), damped above 0x100/0x140/0x180/0x1C0, halved; with
-   new_game_objective[0] set, * 50 / 100.
+   objectives_enabled set, * 50 / 100.
 5. **Reveal points**: countdowns of world+0x14D28A8 (fog_of_war.cpp).
 6. **Fog of war cycle** (56 steps, counter +0x110A580) unless 0x7DFD30
    (fast-forwarding) - done: ClearSightSlice, MarkBuildingSight,

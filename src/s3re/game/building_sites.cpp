@@ -364,17 +364,17 @@ std::uint32_t __fastcall GameWorld_AddBuildingSite(GameWorld* world, void* /*edx
     b.piles[0] = 0;
     b.piles[1] = 0;
     b.piles[2] = 0;
-    b.unk16 = 0;
-    b.unk17 = 0;
+    b.digger_slots = 0;
+    b.builder_slots = 0;
     b.request_flags = 1;
-    b.unk19 = static_cast<std::uint8_t>(static_cast<std::int32_t>(layout[1]) >> 8);  // materials
-    b.unk1a = static_cast<std::uint8_t>(layout[1]);
-    b.unk1b[0] = 0;
-    b.unk1b[1] = 0;
-    b.unk1b[2] = 0;
-    b.unk1b[3] = 0;
-    b.state = static_cast<std::uint8_t>(b.unk19 + b.unk1a);
-    b.extra_tiles = 0;
+    b.site.boards_missing = static_cast<std::uint8_t>(static_cast<std::int32_t>(layout[1]) >> 8);  // materials
+    b.site.stones_missing = static_cast<std::uint8_t>(layout[1]);
+    b.site.diggers = 0;
+    b.site.builders = 0;
+    b.site.workers_at_work = 0;
+    b.site.unk1e = 0;
+    b.site.materials_total = static_cast<std::uint8_t>(b.site.boards_missing + b.site.stones_missing);
+    b.site.materials_used = 0;
     // Words +0x24..+0x34.
     for (std::uint16_t& word : b.input_amount) {
         word = 0;
@@ -388,14 +388,14 @@ std::uint32_t __fastcall GameWorld_AddBuildingSite(GameWorld* world, void* /*edx
     b.unk36 = 0;
 
     // The player's countdown (int32 +0x84), used as uint32 like the original.
-    std::uint32_t countdown = static_cast<std::uint32_t>(playerRecord.unk084);
+    std::uint32_t countdown = static_cast<std::uint32_t>(playerRecord.site_stamp);
     countdown -= 1;
     if (countdown <= 60000) {
         countdown = 0xffff;
     }
-    playerRecord.unk084 = static_cast<std::int32_t>(countdown);
+    playerRecord.site_stamp = static_cast<std::int32_t>(countdown);
     b.work_y = static_cast<std::uint16_t>(countdown);
-    b.unk08 = 0;
+    b.worker = 0;
 
     Tile& tile = TileAt(world, x, y);
     tile.object_number = static_cast<std::uint16_t>(building);
@@ -632,7 +632,7 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
 
     const std::uint32_t* const layout = Layout(PlayerRace(world, player), type);
     Building& b = world->buildings[building];
-    b.unk1b[1] = static_cast<std::uint8_t>(layout[0]);  // +0x1c
+    b.site.builders = static_cast<std::uint8_t>(layout[0]);  // +0x1c
 
     // Footprint and border tiles get the footprint flag; per direction
     // sector the outermost tile of the first part of the footprint gets a stake.
@@ -677,10 +677,10 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
         return EarthClass(earth);
     }
 
-    b.unk22 = static_cast<std::uint16_t>(slot);
+    b.levelling_slot = static_cast<std::uint16_t>(slot);
     b.work_x = static_cast<std::uint16_t>(earth);  // a construction site: the earth to move
     const std::uint8_t work = static_cast<std::uint8_t>(static_cast<std::uint8_t>((earth + 16) >> 5) + 2);
-    b.unk1b[0] = work > 8 ? 8 : work;  // +0x1b, probably the number of diggers
+    b.site.diggers = work > 8 ? 8 : work;  // +0x1b, probably the number of diggers
 
     // The levelling job: target heights where the ground changes.
     PlayerSiteCache& cache = world->site_cache[player][slot];
@@ -880,7 +880,7 @@ SiteWorld SetUpSiteWorld(test::Context& ctx, test::WorldPair& worlds, std::uint3
     for (std::uint32_t player = 0; player < 20; ++player) {
         layout::Player& record = o->players[player];
         SetField(worlds, record.race, ctx.rng().Below(4));
-        SetField(worlds, record.unk084,
+        SetField(worlds, record.site_stamp,
                  ctx.rng().Chance(1, 4) ? 60001 + ctx.rng().Below(3) : 60000 + ctx.rng().Below(6000));
         const bool full = ctx.rng().Chance(1, 10);
         for (std::uint32_t slot = 0; slot < kSiteSlots; ++slot) {
@@ -1165,7 +1165,7 @@ std::uint32_t __fastcall WrongPlanSiteLevelling(GameWorld* world, void* edx, std
 // Wrong: the player's countdown +0x84 is not counted down.
 std::uint32_t __fastcall WrongAddBuildingSite(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
                                               std::uint32_t player, std::uint32_t type) {
-    std::int32_t& field = world->players[player].unk084;
+    std::int32_t& field = world->players[player].site_stamp;
     const std::int32_t saved = field;
     const std::uint32_t result = GameWorld_AddBuildingSite(world, edx, x, y, player, type);
     field = saved;

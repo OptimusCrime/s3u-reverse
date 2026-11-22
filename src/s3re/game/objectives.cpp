@@ -21,16 +21,16 @@ namespace s3re::game {
 
 namespace {
 
-// GameWorld::new_game_objective: [0] = enabled, [1..7] = the chosen objectives.
+// GameWorld::objectives_enabled, then GameWorld::objectives: the chosen objectives.
 constexpr std::uint32_t kNgoObjectiveCount = 7;
-static_assert(sizeof(GameWorld::new_game_objective) == 1 + kNgoObjectiveCount);
+static_assert(sizeof(GameWorld::objectives) == kNgoObjectiveCount);
 
 std::uint8_t& NgoEnabled(GameWorld* world) {
-    return world->new_game_objective[0];
+    return world->objectives_enabled;
 }
 
 std::uint8_t* NgoObjectives(GameWorld* world) {
-    return &world->new_game_objective[1];
+    return world->objectives;
 }
 
 }  // namespace
@@ -59,14 +59,14 @@ S3RE_HOOK(0x004ffb90, GameWorld_IsNgoObjectiveChosen, IsChosenFn, Original_GameW
 namespace {
 
 // 0x100 bytes past the start of the chosen objectives.
-constexpr std::size_t kTestWorld = offsetof(GameWorld, new_game_objective) + 1 + 0x100;
+constexpr std::size_t kTestWorld = offsetof(GameWorld, objectives) + 0x100;
 
 void CompareIsChosen(test::Context& ctx, IsChosenFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
         for (std::uint32_t k = 0; k < kNgoObjectiveCount + 1; ++k) {  // one byte past the list too
             const auto value = static_cast<std::uint8_t>(ctx.rng().Below(40));
-            // k == 7 is the byte after the list (the first byte of recent_positions).
+            // k == 7 is the byte after the list (the first byte of pile_claims).
             worlds.Both([&](GameWorld* w) { NgoObjectives(w)[k] = value; });
         }
         const auto enabled = static_cast<std::uint8_t>(ctx.rng().Below(2));

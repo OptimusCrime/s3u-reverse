@@ -136,7 +136,7 @@ Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
 }
 
 std::int32_t Team(GameWorld* world, std::uint32_t player) {
-    return world->players[player].presence_index;
+    return world->players[player].team;
 }
 
 std::int32_t ClassOf(const Settler& s) {
@@ -308,9 +308,9 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
         if (job == 3 || job == 4) {
             Building& b = world->buildings[v.building];
             switch (ClassOf(v)) {
-            case 1: --b.unk19; break;
-            case 2: --b.unk1b[0]; break;
-            case 3: --b.state; break;
+            case 1: --b.military.class1_coming; break;
+            case 2: --b.military.class2_coming; break;
+            case 3: --b.military.class3_coming; break;
             default: break;
             }
         }
@@ -357,7 +357,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     GameWorld_NotifyLocalPlayer(world, nullptr, v.owner, 4, v.x, v.y);
     const std::uint32_t tower = v.building;
     if (v.job == 0xae) {
-        std::uint16_t& head = world->buildings[tower].unk08;  // the garrison list
+        std::uint16_t& head = world->buildings[tower].garrison;  // the garrison list
         if (head == victim) {
             head = v.next;
         } else {
@@ -369,16 +369,16 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
         }
     }
     if (v.job == 0xad) {
-        world->buildings[tower].unk22 = 0;
+        world->buildings[tower].guard = 0;
     }
     Building& b = world->buildings[tower];
-    if (b.unk08 != 0) {
+    if (b.garrison != 0) {
         v.job = 0xaf;
         GameWorld_SetSettlerAnimation(world, nullptr, victim, 0x46);
         return;
     }
     // The tower is empty: the attacker takes it.
-    std::uint32_t left = static_cast<std::uint32_t>(b.unk19) + b.state + b.unk1b[0];
+    std::uint32_t left = static_cast<std::uint32_t>(b.military.class1_coming) + b.military.class3_coming + b.military.class2_coming;
     for (std::uint32_t i = 1; i <= world->settler_high_water; ++i) {
         const Settler& r = world->settlers[i];
         if (r.owner == 0xff || r.building != tower || kTypeClass[r.art] == 0) {
@@ -404,7 +404,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     world->settlers[guard].job = 0xad;
     world->settlers[guard].building = static_cast<std::uint16_t>(tower);
     world->settlers[guard].health = 1;
-    b.unk22 = static_cast<std::uint16_t>(guard);
+    b.guard = static_cast<std::uint16_t>(guard);
     // Re-own the building's land: the layout's second and third lists.
     const auto* item = reinterpret_cast<const std::uint32_t*>(
         kLayouts + 4 + (57 * static_cast<std::uint32_t>(b.race) + b.art) * 2400);
@@ -432,17 +432,17 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
             item += 2;
         } while (item[0] != kLayoutEnd);
     }
-    b.unk08 = static_cast<std::uint16_t>(settler);
-    b.unk19 = 0;
-    b.unk1a = 0;
-    b.unk1b[0] = 0;
-    b.unk1b[1] = 0;
-    b.state = 0;
-    b.extra_tiles = 0;
+    b.garrison = static_cast<std::uint16_t>(settler);
+    b.military.class1_coming = 0;
+    b.military.class1_wanted = 0;
+    b.military.class2_coming = 0;
+    b.military.class2_wanted = 0;
+    b.military.class3_coming = 0;
+    b.military.class3_wanted = 0;
     switch (ClassOf(s)) {
-    case 1: s.job = 0x17; b.unk1a = 1; break;
-    case 2: s.job = 0x8c; b.unk1b[1] = 1; break;
-    case 3: s.job = 0x8d; b.extra_tiles = 1; break;
+    case 1: s.job = 0x17; b.military.class1_wanted = 1; break;
+    case 2: s.job = 0x8c; b.military.class2_wanted = 1; break;
+    case 3: s.job = 0x8d; b.military.class3_wanted = 1; break;
     default: break;
     }
     TileAt(world, s.x, s.y).settler = 0;
@@ -558,7 +558,7 @@ std::uint32_t __fastcall GameWorld_UpdateSoldier(GameWorld* world, void*, std::u
         const Player& me = world->players[s.owner];
         Settler& e = world->settlers[t];
         if (me.active == 1) {
-            if (Team(world, e.owner) == me.presence_index) {
+            if (Team(world, e.owner) == me.team) {
                 continue;
             }
         } else {
@@ -566,12 +566,12 @@ std::uint32_t __fastcall GameWorld_UpdateSoldier(GameWorld* world, void*, std::u
                 continue;
             }
             const std::int32_t theirs = Team(world, e.owner);
-            if (me.presence_index == theirs) {
+            if (me.team == theirs) {
                 continue;
             }
             const std::uint8_t myLand = TileAt(world, s.x, s.y).owner;
             const std::uint8_t theirLand = TileAt(world, e.x, e.y).owner;
-            if (myLand != 0xff && theirLand != 0xff && Team(world, myLand) == me.presence_index &&
+            if (myLand != 0xff && theirLand != 0xff && Team(world, myLand) == me.team &&
                 Team(world, theirLand) == theirs) {
                 continue;  // both on their own land
             }
@@ -695,7 +695,7 @@ void SetUpWorld(GameWorld* w) {
         r.art = static_cast<std::uint8_t>(0x10 + r.art % 3);  // the three military buildings
         r.race = static_cast<std::uint8_t>(r.race % 3);
         r.owner = static_cast<std::uint8_t>(r.owner % 4);
-        r.unk08 = static_cast<std::uint16_t>(r.unk08 % kTestSettlers);
+        r.garrison = static_cast<std::uint16_t>(r.garrison % kTestSettlers);
     }
     for (auto& lengths : w->player_list_lengths) {  // RemoveSettlerFromLists walks these
         for (std::int32_t& length : lengths) {
@@ -704,7 +704,7 @@ void SetUpWorld(GameWorld* w) {
     }
     for (std::uint32_t p = 0; p < 20; ++p) {
         Player& r = w->players[p];
-        r.presence_index = static_cast<std::int32_t>(p % 3);
+        r.team = static_cast<std::int32_t>(p % 3);
         r.active = static_cast<std::int32_t>(1 + (p & 1));
         r.race = static_cast<std::int32_t>(p % 3);
         r.soldier_strength = static_cast<std::uint32_t>(0xe0 + (p * 37) % 0x60);
@@ -810,14 +810,14 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t soldie
             if (ejob == 0xae) {
                 if (empty) {  // e at the head, another soldier after it
                     r.next = static_cast<std::uint16_t>(other);
-                    b.unk08 = static_cast<std::uint16_t>(e);
+                    b.garrison = static_cast<std::uint16_t>(e);
                 } else {
                     r.next = 0;
                     w->settlers[other].next = static_cast<std::uint16_t>(e);
-                    b.unk08 = static_cast<std::uint16_t>(other);
+                    b.garrison = static_cast<std::uint16_t>(other);
                 }
             } else if (ejob == 0xad) {
-                b.unk08 = static_cast<std::uint16_t>(other);
+                b.garrison = static_cast<std::uint16_t>(other);
             }
         });
     }

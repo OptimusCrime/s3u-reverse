@@ -148,7 +148,7 @@ std::uint32_t __fastcall GameWorld_MinerJobFood(GameWorld* world, void*, std::ui
     default: break;
     }
     const std::uint32_t building = s.building;
-    if (s.unk17 == 0) {
+    if (s.food == 0) {
         for (std::uint32_t k = 0; k < 3; ++k) {
             if (k == 2) {
                 const std::uint8_t art = world->buildings[s.building].art;
@@ -165,16 +165,16 @@ std::uint32_t __fastcall GameWorld_MinerJobFood(GameWorld* world, void*, std::ui
             GameWorld_TakeGoodFromPile(world, nullptr, SlotPile(world->buildings[k == 0 ? building : s.building], slots[k]));
             const std::uint32_t taken = SlotPile(world->buildings[k == 0 ? building : s.building], slots[k]);
             GameWorld_SubtractPlayerCounter(world, nullptr, s.owner, world->piles[taken].good, 1);
-            s.unk17 = static_cast<std::uint8_t>(s.unk17 + (k == 0 ? 10 : 2));
+            s.food = static_cast<std::uint8_t>(s.food + (k == 0 ? 10 : 2));
             if (world->players[s.owner].active == 2) {
-                s.unk17 = static_cast<std::uint8_t>(s.unk17 + 4);  // computer players' miners eat more
+                s.food = static_cast<std::uint8_t>(s.food + 4);  // computer players' miners eat more
             }
             break;
         }
     }
     const layout::Building& b = world->buildings[s.building];
-    if ((b.request_flags & 1) != 0 && s.unk17 != 0 && world->piles[b.pile_ring].amount <= 7) {
-        s.unk17 = static_cast<std::uint8_t>(s.unk17 - 1);
+    if ((b.request_flags & 1) != 0 && s.food != 0 && world->piles[b.pile_ring].amount <= 7) {
+        s.food = static_cast<std::uint8_t>(s.food - 1);
         s.job = job;
         s.counter = 100;
         return 0;
@@ -225,8 +225,8 @@ std::uint32_t __fastcall GameWorld_MinerJobDig(GameWorld* world, void*, std::uin
         }
     }
     layout::Building& b = world->buildings[s.building];
-    if (b.unk1a != 0x20) {
-        ++b.unk1a;  // digs so far, up to 32
+    if (b.production.digs != 0x20) {
+        ++b.production.digs;  // digs so far, up to 32
     }
     // work_y:work_x is a 32-bit history of the last digs (1 = found).
     world->buildings[s.building].work_y = static_cast<std::uint16_t>(world->buildings[s.building].work_y << 1);
@@ -239,7 +239,7 @@ std::uint32_t __fastcall GameWorld_MinerJobDig(GameWorld* world, void*, std::uin
         s.job = static_cast<std::uint16_t>(failJob);
         GameWorld_SetSettlerAnimation(world, nullptr, settler, failAnimation);
         const layout::Building& after = world->buildings[s.building];
-        if (after.unk1a >= 0x10 && after.work_x == 0) {
+        if (after.production.digs >= 0x10 && after.work_x == 0) {
             GameWorld_NotifyLocalPlayer(world, nullptr, s.owner, 0x11, s.x, s.y);
         }
         return 0;
@@ -272,13 +272,13 @@ std::uint32_t __fastcall GameWorld_MinerJobEnter(GameWorld* world, void*, std::u
     default: break;
     }
     layout::Building& b = world->buildings[s.building];
-    b.unk19 = static_cast<std::uint8_t>(b.unk19 + 1);
-    world->buildings[s.building].unk1a = 0;
+    b.production.worker_inside = static_cast<std::uint8_t>(b.production.worker_inside + 1);
+    world->buildings[s.building].production.digs = 0;
     world->buildings[s.building].work_x = 0;
     world->buildings[s.building].work_y = 0;
     TileAtOffset(world, TileOffset(s.x, s.y)).settler = 0;
     s.counter = 0;
-    s.unk17 = 10;
+    s.food = 10;
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + settler * sizeof(layout::Settler);
 }
 
@@ -429,7 +429,7 @@ void CompareMinerJob(test::Context& ctx, SettlerFn original, SettlerFn candidate
             s.owner = owner;
             s.x = static_cast<std::uint16_t>(bx);
             s.y = static_cast<std::uint16_t>(by + 1);
-            s.unk17 = food;
+            s.food = food;
             layout::Building& b = w->buildings[building];
             b.art = art;
             b.x = static_cast<std::uint16_t>(bx);
@@ -444,7 +444,7 @@ void CompareMinerJob(test::Context& ctx, SettlerFn original, SettlerFn candidate
             const auto digs = static_cast<std::uint8_t>(ctx.rng().Below(0x22));
             worlds.Both([&](GameWorld* w) {
                 w->buildings[building].work_x = history;
-                w->buildings[building].unk1a = digs;
+                w->buildings[building].production.digs = digs;
             });
             for (std::int32_t dx = -4; dx <= 4; ++dx) {
                 for (std::int32_t dy = -3; dy <= 4; ++dy) {

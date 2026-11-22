@@ -147,23 +147,23 @@ void CreateStorePiles(GameWorld* world, std::uint32_t number, const std::int32_t
 // Temples (probably): one more priest/mana source unless the player's flag
 // bit 0 is set.
 void FinishTemple(GameWorld* world, Building& b) {
-    b.unk1b[1] = 1;
-    b.unk19 = 1;
+    b.temple.countdown = 1;
+    b.temple.points = 1;
     Player& player = world->players[b.owner];
     if ((player.unk008 & 1) != 0) {
         return;
     }
     player.mana += 8;
-    world->players[b.owner].unk090 += 8;
+    world->players[b.owner].mana_total += 8;
     RawAtAddress<std::int32_t>(kPlayerCounters + b.owner * kPlayerCountersStride * 4) += 8;
 }
 
 void ClearFlags1aTo20(Building& b) {
-    b.unk1a = 0;
-    b.unk1b[0] = 0;
-    b.unk1b[1] = 0;
-    b.state = 0;
-    b.extra_tiles = 0;
+    b.water.wanted[0] = 0;
+    b.water.wanted[1] = 0;
+    b.water.wanted[2] = 0;
+    b.water.state = 0;
+    b.water.extra_tiles = 0;
 }
 
 }  // namespace
@@ -180,18 +180,18 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
     GameWorld_QueuePendingEvent(world, nullptr, 1, number, 0);
     Building& b = world->buildings[number];
     b.buildup = 0;
-    b.unk08 = 0;
+    b.worker = 0;
     b.work_x = b.x;
     b.work_y = b.y;
-    b.unk19 = 0;
-    b.unk1a = 0;
-    b.unk1b[0] = 0;
-    b.unk1b[1] = 0;
-    b.unk1b[3] = 0;
-    b.state = 0;
-    b.extra_tiles = 0;
+    b.site.boards_missing = 0;
+    b.site.stones_missing = 0;
+    b.site.diggers = 0;
+    b.site.builders = 0;
+    b.site.unk1e = 0;  // +0x1d (workers_at_work) stays
+    b.site.materials_total = 0;
+    b.site.materials_used = 0;
     b.request_flags = 1;
-    b.unk38 = 100;
+    b.hit_points = 100;
     b.trade = 0;
     b.input_amount[2] = 0;
     const std::int32_t race = world->players[b.owner].race;
@@ -201,10 +201,10 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
     const std::uint8_t type = b.art;
     if (type == 0xf || type == 0x10 || type == 0x12) {
         const std::uint32_t index = type == 0xf ? 0 : type == 0x10 ? 1 : 2;
-        b.unk38 = static_cast<std::uint16_t>(Table(kMilitaryHitPoints)[index]);
-        b.unk1a = 1;
-        b.unk1b[1] = 0;
-        b.extra_tiles = 0;
+        b.hit_points = static_cast<std::uint16_t>(Table(kMilitaryHitPoints)[index]);
+        b.military.class1_wanted = 1;
+        b.military.class2_wanted = 0;
+        b.military.class3_wanted = 0;
         // Soldier tile offsets per type and race (races 0..3).
         static constexpr std::int32_t kSoldierTile[3][4][2] = {
             {{2, 1}, {2, 1}, {0, 1}, {2, 1}},
@@ -222,7 +222,7 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
         const std::uint32_t soldier = GameWorld_CreateSettler(world, nullptr, x, y, kSoldierType, b.owner);
         world->settlers[soldier].job = kSoldierJob;
         world->settlers[soldier].building = static_cast<std::uint16_t>(number);
-        b.unk22 = static_cast<std::uint16_t>(soldier);
+        b.guard = static_cast<std::uint16_t>(soldier);
     }
 
     // Output piles at the door, in the original's order of tests.
@@ -289,16 +289,16 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
     }
     if (b.art == 0x20) {
         ClearFlags1aTo20(b);
-        b.unk22 = 0xffff;
+        b.dock_direction = 0xffff;
     }
     if (b.art == 0x22) {
-        b.unk1b[0] = 0;
+        b.trading.goods_cursor = 0;
         CreateStorePiles(world, number, Table(kStoreTable22) + static_cast<std::uint32_t>(race) * 12);
     }
     if (b.art == 0x21) {
-        b.unk22 = 0xffff;
-        b.unk1b[0] = 0;
-        b.extra_tiles = 0;
+        b.dock_direction = 0xffff;
+        b.trading.goods_cursor = 0;
+        b.trading.call_countdown = 0;
         CreateStorePiles(world, number, Table(kStoreTable21) + static_cast<std::uint32_t>(race) * 12);
     }
     if (b.art == 1) {
@@ -311,18 +311,18 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
     }
     const std::int8_t unit = RawAtAddress<std::int8_t>(kResidenceUnit);
     if (b.art == 0x1a) {
-        b.unk19 = static_cast<std::uint8_t>(unit);
+        b.residence.births = static_cast<std::uint8_t>(unit);
     }
     if (b.art == 0x1b) {
-        b.unk19 = static_cast<std::uint8_t>(unit * 3);
+        b.residence.births = static_cast<std::uint8_t>(unit * 3);
     }
     if (b.art == 0x1c) {
-        b.unk19 = static_cast<std::uint8_t>(unit * 10);
+        b.residence.births = static_cast<std::uint8_t>(unit * 10);
     }
     static constexpr std::uint8_t kTemples[4][2] = {{0x2e, 0x2d}, {0x2c, 0x2b}, {0x2a, 0x29}, {0x36, 0x37}};
     for (const auto& t : kTemples) {
         if (b.art == t[0]) {
-            b.unk1b[1] = 0;
+            b.temple.countdown = 0;
         }
         if (b.art == t[1]) {
             FinishTemple(world, b);

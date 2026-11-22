@@ -72,7 +72,7 @@ Tile& TileAt(GameWorld* world, U offset) {
 }
 
 std::int32_t Team(GameWorld* world, U player) {
-    return (world->players + player)->presence_index;
+    return (world->players + player)->team;
 }
 
 struct Rgb {
@@ -340,7 +340,7 @@ void SetUpTiles(test::Context& ctx, test::WorldPair& worlds, U size) {
     w->map_size = size;
     w->local_player = static_cast<std::int32_t>(rng.Below(20));
     for (U p = 0; p < 21; ++p) {
-        w->players[p].presence_index = static_cast<std::int32_t>(rng.Below(3));
+        w->players[p].team = static_cast<std::int32_t>(rng.Below(3));
     }
     const U span = size + 4 < 0x300 ? size + 4 : 0x300;
     for (U x = 0; x < span; ++x) {

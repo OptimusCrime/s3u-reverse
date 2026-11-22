@@ -100,8 +100,8 @@ Initialization order (all verified by reading the code):
 | 0x11940BC | 0x11943DC | 0x320 | int32[10] | 20 players | their lengths | verified |
 | 0x11943DC | 0x1195D7C | 0x19A0 | 0x148 B | 20 | **player records** ("Play"), `Player` | verified |
 | 0x1195D7C | 0x1195DCC | 0x50 | int32 | 20 | per player, zeroed by the ctor; no other use found | guess |
-| 0x1195DCC | 0x1195DD4 | 8 | u8 + u8[7] | | **NewGameObjective**: enabled flag, then the seven chosen objective ids (IsNgoObjectiveChosen 0x4FFB90, chosen by 0x4FFBC0; see structs.md) | strong (verified layout) |
-| 0x1195DD4 | 0x1195FD4 | 0x200 | uint16 pile, settler | 128 | pile claims, our old name "recent positions" (cursor `0x7ACE60`; filled only by AddToRecentPositions(settler, pile) from UpdateSettlers job 0x152, counted by CountOtherPileClaims 0x510800; rename pending, TODO.md) | verified (layout), strong (meaning) |
+| 0x1195DCC | 0x1195DD4 | 8 | u8 + u8[7] | | **NewGameObjective**: `objectives_enabled`, then `objectives`, the seven chosen objective ids (IsNgoObjectiveChosen 0x4FFB90, chosen by 0x4FFBC0; see structs.md) | strong (verified layout) |
+| 0x1195DD4 | 0x1195FD4 | 0x200 | uint16 pile, settler | 128 | `pile_claims` (was "recent positions"; cursor `g_pileClaimsCursor` 0x7ACE60; filled only by AddPileClaim(settler, pile) 0x510770 from UpdateSettlers job 0x152, counted by CountOtherPileClaims 0x510800) | verified (layout), strong (meaning) |
 | 0x1195FD4 | 0x1196024 | 0x50 | int32 | 20 | per player; = race in the dump (2, 3); saved with players | strong |
 | 0x1196024 | 0x1222ED4 | 0x8CEB0 | 0x3C2 B | 20 x 30 | levelling jobs per player and slot: in-use byte + 31x31 planned heights (CheckBuildingSite 0x4D99E0) | verified |
 | 0x1222ED4 | 0x1223656 | 0x782 | 31x31 B | 2 | levelling scratch: planned heights, then cell states (PlanSiteLevelling 0x4da440), saved but rewritten per call | verified |
@@ -187,13 +187,13 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 | 0x2D238 | uint16 | chart maximum (0 in Init) | UI, skip | strong |
 | 0x2D244 | int32 | statistics window selection | UI, skip | strong |
 | 0x2D248 | int32 | NewGameObjectiveTimeout (minutes; 0x4FFBC0 "NGO TimeOut", game end 0x511C50) | sim | strong |
-| 0x2D24C | int32 | set by OnStart and 0x4FFBC0, read by Step | sim? | guess |
+| 0x2D24C | int32 | `end_warning_minutes`: 10 (OnStart, NGO setup 0x4FFBC0); Step (0x53E230) shows "Spiel endet in %u min" (0x730A60) with it at tick (objective_timeout - it) * 60000 / 64 | sim | strong |
 | 0x2D250 | uint8 | when set, Add/SubtractPlayerCounter do nothing | sim | verified |
 | 0x2D254, 0x2D258 | int32 | last camera position drawn (10,000,000 = force); equal to the camera in the dump | UI, skip | strong |
 | 0x2D25C, 0x2D260 | int32 | camera x, y in pixels | UI, skip, saved | verified |
 | 0x2D264 | int32 | redraw flag | UI, skip | verified |
 | 0x2D268..0x2D270 | int32 | UI (Init clears; ProcessEvents reads +0x2D268) | UI, hashed | guess |
-| 0x2D274 | int32 | map symmetry: GameWorld::Create stores its symmetry argument here (bit 0 mirror across x = y, bit 1 point symmetry; layout.h unk2d274); also read by the player placement 0x5074B0 | sim | guess |
+| 0x2D274 | int32 | `random_map_symmetry`: GameWorld::Create stores its symmetry argument here (bit 0 mirror across x = y, bit 1 point symmetry); also read by the player placement 0x5074B0 | sim | strong |
 | 0x2D278 | int32 | minimap ready (1 after ctor and load) | UI, skip | verified |
 | 0x2D27C | int32 | refresh-UI flag (ExecuteCommands) | UI, skip | verified |
 | 0x2D280 | int32 | draw hand-off flag | UI, skip | strong |
@@ -207,7 +207,7 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 | 0x2D2A4..0x2D2CC | int32 x 10 | UI fields written by ProcessEvents, read by PrepareDrawData | UI, hashed | strong |
 | 0x2D2D0 | uint32 | **map size** (square; tiles per side) | sim, saved | verified |
 | 0x2D2D4 | int32 | **local player** | sim/UI, saved | verified |
-| 0x2D2D8 | int32 | read-modify-write by Step; read by ProcessEvents/PrepareDrawData | ? | guess |
+| 0x2D2D8 | int32 | `command_attempts`: Step adds 4 before every ExecuteCommands attempt (0x53DDA5, also when the network allowance stops it); ProcessEvents reads it, PrepareDrawData tests bit 0x20 (blinking) | UI? | strong |
 | 0x2D2DC | uint16 x3 | **RNG state** a, b, c (`GameWorld::Random`) | sim, saved | verified |
 | 0x2D2E4, 0x2D2E8 | int32 | last search result position (-1 after Init) | volatile, skip | verified |
 | 0x2D2F0 | int32 | UI cursor mode (6 after Init) | UI, skip | verified |
@@ -237,7 +237,7 @@ Counts are the displacement uses `tools/world_fields.py regions` finds
   SumAreaGoods10PerPlayer; UpdateSettlers/UpdateEconomy/ExecuteCommands for
   the settings arrays.
 - **Settlers** (3844 uses, 118 functions): CreateSettler, SetSettlerTarget,
-  ClearSettlerJob, RestoreSettlerDirection, SettlerStartHealth,
+  ClearSettlerJob, RestoreSettlerAnimation, SettlerStartHealth,
   PlaceSettlerNear, RemoveSettlerFromLists, Send*ToBuilding/Pile,
   LeaveBuildingSlot, MoveSettlerToBuildingTileA/B, CountSettlers*; most uses
   are in UpdateSettlers (0x4E9670) and 0x500860 (walking), 0x50CF50

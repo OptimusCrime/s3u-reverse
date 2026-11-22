@@ -22,36 +22,19 @@ Each item: what, why, and where to start.
   evidence (e.g. `GameWorld::UpdateSettlers`,
   `Logic_sub_*` / `SaveGame_sub_*` / `AI_sub_*` survey names). Review them
   when the functions are worked on; see the naming rule in `CLAUDE.md`.
-- **Rename `Settler::direction` (+0x8).** `GameWorld::SetSettlerAnimation`
-  (0x50e2c0) stores an animation id there, so "direction" is too narrow
-  (found in the typed-access refactor, re/structs.md).
-- **Name the settler fields WalkSettler explained** (layout.h still has
-  `Settler::unk16` = animation frame, `unk19` = step time, `unk3c` =
-  ship walk counter, and `good`/`slot` double as soldier state / arrows /
-  ship passengers; see re/structs.md). Postponed to avoid conflicts with the
-  parallel round.
 - **WalkSettler whole-game evidence for shooting and boarding:** no check
   so far calls SpawnProjectile (soldiers shooting from a post) or, probably,
   boards a ship; a recorded late game with fighting and ships would cover
   them (settler_walk.cpp; LOGBOOK session 45).
-- **Name the layout.h fields the refactor left as `unk`:** e.g.
-  `GameWorld::unk2d274` (the symmetry argument of GameWorld::Create),
-  `Building::unk1b[0/1]`, and split
-  `Player`/`GameWorld::new_game_objective` into enabled + objectives.
-  Workers kept the old names to avoid merge conflicts; the meanings are in
-  the code comments and re/structs.md.
-- **Rename `GameWorld::AddToRecentPositions` (0x510770) to
-  `GameWorld::AddPileClaim`**, and the layout field `recent_positions`
-  (world+0x1195dd4) to `pile_claims` (entries {pile, settler}), the global
-  `g_recentPositionsCursor` (0x7ace60) and the emulator presets. Its only
-  caller, UpdateSettlers job 0x152, passes (settler, pile), and
-  CountOtherPileClaims (0x510800) counts the entries of one pile held by
-  other settlers (found 2026-11-10, session 43; re/world_layout.md).
 - **Name constructors** (`re/classes.json` lists the functions that store
   each vtable).
-- **Rename `Player::presence_index` (+0xc) to `team`.** It is the team /
-  alliance index: the fog of war (fog_of_war.cpp), the minimap and
-  CrushBuilding compare it between players (package D, session 45).
+- **Remaining `unk` fields of the world records** (layout.h, session 45
+  struct pass): Settler +0x1b/+0x2f, Building +0x01/+0x36/+0x37 and the
+  site byte +0x1e, Player +0x8/+0x18/+0x1c/+0x88/+0xb4..+0xc0/+0x12c,
+  the MapEffect graphics fields (+0x6, +0x18..+0x24, +0x2c..+0x39; their
+  reader is the draw code), world +0x2d2ec/+0x2d304..+0x2d310. Name them
+  when their readers (UpdateSettlers, ExecuteCommands, PrepareDrawData)
+  are reimplemented.
 
 ## Evidence and testing
 

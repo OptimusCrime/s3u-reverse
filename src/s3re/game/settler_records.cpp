@@ -27,7 +27,7 @@
 //   and puts it on the tile (x, y). ret 0x10.
 // GameWorld::ClearSettlerJob (0x00510440): (settler): words +0xe, +0xc and
 //   +0x22 = 0. EAX = world + settler * 0x40. ret 4.
-// GameWorld::RestoreSettlerDirection (0x0050e380): (settler): direction +0x8
+// GameWorld::RestoreSettlerAnimation (0x0050e380): (settler): animation +0x8
 //   = the saved +0x1c, counter +0xc = the saved +0x20. EAX = world +
 //   settler * 0x40. ret 4.
 // GameWorld::IsSettlerJob01Or37 (0x004fa6b0): (job) -> AL = 1 if job (a
@@ -121,12 +121,12 @@ std::uint32_t __fastcall GameWorld_CreateSettler(GameWorld* world, void*, std::u
     record.prev = 0;
     // Bytes +0x15..+0x1a, in this order.
     record.slot = 0;
-    record.unk16 = 0;
-    record.unk17 = 0;
-    record.unk18 = 0;
-    record.unk19 = 0;
+    record.frame = 0;
+    record.second_unit = 0;
+    record.tool_type = 0;
+    record.step_time = 0;
     record.good = 0;
-    record.saved_direction = 0;
+    record.saved_animation = 0;
     record.saved_counter = 0;
     record.building = 0;
     record.flags = 0;
@@ -146,11 +146,11 @@ std::uint32_t __fastcall GameWorld_ClearSettlerJob(GameWorld* world, void*, std:
     return WorldAddress(world) + settler * kSettlerBytes;
 }
 
-// Purpose: Gives a settler back the direction and counter it saved earlier (probably after an
+// Purpose: Gives a settler back the animation and counter it saved earlier (probably after an
 // interruption).
-std::uint32_t __fastcall GameWorld_RestoreSettlerDirection(GameWorld* world, void*, std::uint32_t settler) {
+std::uint32_t __fastcall GameWorld_RestoreSettlerAnimation(GameWorld* world, void*, std::uint32_t settler) {
     Settler& record = world->settlers[settler];
-    record.direction = record.saved_direction;
+    record.animation = record.saved_animation;
     record.counter = record.saved_counter;
     return WorldAddress(world) + settler * kSettlerBytes;
 }
@@ -161,8 +161,8 @@ S3RE_HOOK(0x0050c9e0, GameWorld_CreateSettler, CreateSettlerFn, Original_GameWor
           GameWorld_CreateSettler);
 S3RE_HOOK(0x00510440, GameWorld_ClearSettlerJob, SettlerFn, Original_GameWorld_ClearSettlerJob,
           GameWorld_ClearSettlerJob);
-S3RE_HOOK(0x0050e380, GameWorld_RestoreSettlerDirection, SettlerFn, Original_GameWorld_RestoreSettlerDirection,
-          GameWorld_RestoreSettlerDirection);
+S3RE_HOOK(0x0050e380, GameWorld_RestoreSettlerAnimation, SettlerFn, Original_GameWorld_RestoreSettlerAnimation,
+          GameWorld_RestoreSettlerAnimation);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -285,8 +285,8 @@ S3RE_TEST(GameWorld_ClearSettlerJob_MatchesOriginal) {
     CompareSettlerFn(ctx, Original_GameWorld_ClearSettlerJob, &GameWorld_ClearSettlerJob, 20000,
                      [](test::WorldPair&, std::uint32_t) {});
 }
-S3RE_TEST(GameWorld_RestoreSettlerDirection_MatchesOriginal) {
-    CompareSettlerFn(ctx, Original_GameWorld_RestoreSettlerDirection, &GameWorld_RestoreSettlerDirection, 20000,
+S3RE_TEST(GameWorld_RestoreSettlerAnimation_MatchesOriginal) {
+    CompareSettlerFn(ctx, Original_GameWorld_RestoreSettlerAnimation, &GameWorld_RestoreSettlerAnimation, 20000,
                      [](test::WorldPair&, std::uint32_t) {});
 }
 

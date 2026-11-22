@@ -183,8 +183,8 @@ U __fastcall GameWorld_SpellRevealMap(GameWorld* world, void*, U player) {
         if (reveal != 1) {
             reveal = 1;
             layout::Player& p = world->players[player];
-            p.unk124 = 1;
-            p.unk128 = *reinterpret_cast<const volatile std::int32_t*>(kGameTick);
+            p.map_revealed = 1;
+            p.map_revealed_tick = *reinterpret_cast<const volatile std::int32_t*>(kGameTick);
             DebugLog(kRevealMapText);
             Pay(world, player, 0x1f);
             return 0;

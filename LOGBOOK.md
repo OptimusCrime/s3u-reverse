@@ -598,6 +598,43 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 - savegame_start.cpp (original-mode tooling) only changed a type name;
   the compiled code is the same, so the tooling version was not bumped.
 
+### 2026-11-22 (45): struct pass S3: world records (parallel worktree)
+
+- `layout.h` world records: 52 -> 28 `unk` fields (24 named with evidence,
+  each cited in re/structs.md / re/world_layout.md). Renames only, no
+  behaviour change.
+- Settler: unions for the multi-use bytes: +0x8 `direction` /
+  `animation`, +0x15 `slot` / `arrows` / `passengers`, +0x17
+  `second_unit` / `food` / `cargo_amounts01`, +0x18 `tool_type` /
+  `cargo_amounts23`, +0x1a `good` / `walk_state`; +0x16 `frame`, +0x19
+  `step_time`, +0x1c `saved_animation`, +0x3c `ship_walk`.
+  RestoreSettlerDirection 0x50e380 -> **RestoreSettlerAnimation**.
+- Building: +0x8 `worker` / `garrison`, +0x16/+0x17 `digger_slots` /
+  `builder_slots`, +0x22 `levelling_slot` / `guard` / `dock_direction`,
+  +0x38 `hit_points`; bytes +0x19..+0x20 (incl. the old `state` and
+  `extra_tiles`) are a union of per-kind views (`site`, `production`,
+  `military`, `water`, `trading`, `temple`, `residence`, `recruiting`,
+  raw `kind_bytes`); table in re/structs.md. update_economy.cpp's Byte19..
+  accessors are gone.
+- Player: `presence_index` -> `team`, +0x84 `site_stamp`, +0x90
+  `mana_total`, +0x124/+0x128 `map_revealed` / `map_revealed_tick`
+  (Step ends the reveal after 15 s). Trade: +0x1 `mode`, +0x12
+  `ordered[36]`. MapEffect: +0x3a/+0x3c `source_kind` / `source_id`,
+  table +0x668ac `expire_cursor`. World: +0x2d24c `end_warning_minutes`
+  ("Spiel endet in %u min"), +0x2d274 `random_map_symmetry`, +0x2d2d8
+  `command_attempts`, `new_game_objective` split into
+  `objectives_enabled` + `objectives[7]`, `recent_positions` ->
+  `pile_claims` (`PileClaim {pile, settler}`), AddToRecentPositions ->
+  **AddPileClaim**, `g_recentPositionsCursor` -> `g_pileClaimsCursor`.
+- Emulator spec GameWorld_UpdateEconomy: recruiting buildings 0x13 get
+  small recruit counters and non-zero area counters for 3 of 4 x
+  positions (derived from drawn values, the random stream is unchanged),
+  so block 0x4e26d7 is covered within 2,000 cases.
+- TODO.md: the naming items done are removed; the remaining unk fields
+  are listed in one new item.
+- Checks: build; `--test` 490/490; emulator `--changed` (357 specs);
+  check_replay scripted-seed127.bin 3,000 ticks against the original.
+
 ### 2026-11-22 (45): round end (WalkSettler, UpdateSoldier, UpdateEconomy, UpdateEnvironment)
 
 - Four parallel agents (entries below): package A WalkSettler, package B

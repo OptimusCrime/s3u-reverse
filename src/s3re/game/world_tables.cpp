@@ -46,11 +46,13 @@
 //   an entry that reaches 0 is removed (the entries after it move up, the
 //   last one is cleared). Called once per UpdateEconomy. Plain ret; EAX
 //   ignored.
-// GameWorld::AddToRecentPositions (0x00510770): (x, y) 128 uint16 pairs
-//   {y, x} at world+0x1195dd4. If (x, y) is not in the list, stores it in
+// GameWorld::AddPileClaim (0x00510770; was AddToRecentPositions): (settler,
+//   pile) the 128 pile claims {pile, settler} at world+0x1195dd4
+//   (layout::PileClaim). If the claim is not in the list, stores it in
 //   the first empty slot (both words 0) searching downwards from the slot
-//   before the cursor g_recentPositionsCursor (0x7ace60, wrapping from 0 to
-//   127; loops forever if no slot is empty). The logic thread clears the
+//   before the cursor g_pileClaimsCursor (0x7ace60, wrapping from 0 to
+//   127; loops forever if no slot is empty). Only caller: UpdateSettlers
+//   job 0x152; CountOtherPileClaims 0x510800 reads the list. The logic thread clears the
 //   cursor's slot and advances it every step (0x53de6f). ret 8; EAX ignored.
 // GameWorld::ReplaceTileWord16AndQueue (0x0051c560): (x, y, expected,
 //   value) if the uint16 at tile +0x16 (zero-extended) equals `expected`
@@ -94,15 +96,15 @@ constexpr std::uint32_t kTileRingEntries = 10000;
 constexpr std::uint32_t kTimerLists = 42;
 constexpr std::uint32_t kTimersPerList = 10;
 
-constexpr std::uint32_t kRecentPositionCount = 0x80;
-constexpr std::uintptr_t kRecentPositionsCursor = 0x7ace60;  // uint16, S3.EXE global
+constexpr std::uint32_t kPileClaimCount = 0x80;
+constexpr std::uintptr_t kPileClaimsCursor = 0x7ace60;  // uint16, S3.EXE global
 
 std::uint32_t Address(const void* p) {
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p));
 }
 
-std::uint16_t RecentPositionsCursor() {
-    return *reinterpret_cast<const volatile std::uint16_t*>(kRecentPositionsCursor);
+std::uint16_t PileClaimsCursor() {
+    return *reinterpret_cast<const volatile std::uint16_t*>(kPileClaimsCursor);
 }
 
 // The tile (x, y) for 32-bit coordinates: the offset is computed in 32 bits,
@@ -152,7 +154,7 @@ std::uint32_t __fastcall GameWorld_AllocBuildingExtra(GameWorld* world, void*,
     }
     Trade& trade = world->trades[record];
     trade.kind = static_cast<std::uint8_t>(value);
-    trade.unk01 = 1;
+    trade.mode = 1;
     // The words +0x2..+0x10 in address order: route_x[0..3], route_y[0..3].
     for (std::uint16_t& word : trade.route_x) {
         word = 0xffff;
@@ -160,8 +162,8 @@ std::uint32_t __fastcall GameWorld_AllocBuildingExtra(GameWorld* world, void*,
     for (std::uint16_t& word : trade.route_y) {
         word = 0xffff;
     }
-    // Bytes +0x12..+0x59 (unk12 and coming) in one go, as the original.
-    std::memset(trade.unk12, 0, sizeof(Trade) - offsetof(Trade, unk12));
+    // Bytes +0x12..+0x59 (ordered and coming) in one go, as the original.
+    std::memset(trade.ordered, 0, sizeof(Trade) - offsetof(Trade, ordered));
     return record;
 }
 
@@ -307,25 +309,23 @@ std::uint32_t __fastcall GameWorld_CountDownTimers(GameWorld* world, void*) {
     return 0;  // the only caller ignores EAX
 }
 
-// Purpose: Remembers a position in a short list of recently used positions (probably for effects or
-// messages that should not repeat at the same place).
-std::uint32_t __fastcall GameWorld_AddToRecentPositions(GameWorld* world, void*, std::uint32_t x,
-                                                        std::uint32_t y) {
-    const auto x16 = static_cast<std::uint16_t>(x);
-    const auto y16 = static_cast<std::uint16_t>(y);
-    // Entries are {y, x}.
-    for (std::uint32_t slot = 0; slot < kRecentPositionCount; ++slot) {
-        if (world->recent_positions[slot][0] == y16 && world->recent_positions[slot][1] == x16) {
+// Purpose: Notes that a settler has claimed a goods pile (it expires after 128 steps), so other settlers
+// (UpdateSettlers job 0x152, CountOtherPileClaims) know how many units of the pile are already spoken for.
+std::uint32_t __fastcall GameWorld_AddPileClaim(GameWorld* world, void*, std::uint32_t settler, std::uint32_t pile) {
+    const auto settler16 = static_cast<std::uint16_t>(settler);
+    const auto pile16 = static_cast<std::uint16_t>(pile);
+    for (std::uint32_t slot = 0; slot < kPileClaimCount; ++slot) {
+        if (world->pile_claims[slot].pile == pile16 && world->pile_claims[slot].settler == settler16) {
             return 0;
         }
     }
-    const std::uint16_t cursor = RecentPositionsCursor();
-    std::uint32_t slot = cursor == 0 ? kRecentPositionCount - 1 : cursor - 1u;
-    while (world->recent_positions[slot][0] != 0 || world->recent_positions[slot][1] != 0) {
-        slot = slot == 0 ? kRecentPositionCount - 1 : slot - 1;
+    const std::uint16_t cursor = PileClaimsCursor();
+    std::uint32_t slot = cursor == 0 ? kPileClaimCount - 1 : cursor - 1u;
+    while (world->pile_claims[slot].pile != 0 || world->pile_claims[slot].settler != 0) {
+        slot = slot == 0 ? kPileClaimCount - 1 : slot - 1;
     }
-    world->recent_positions[slot][0] = y16;
-    world->recent_positions[slot][1] = x16;
+    world->pile_claims[slot].pile = pile16;
+    world->pile_claims[slot].settler = settler16;
     return 0;  // the only caller ignores EAX
 }
 
@@ -421,8 +421,8 @@ S3RE_HOOK(0x0051c820, GameWorld_ReplaceTileByte10AndQueue, ReplaceTileFn,
           Original_GameWorld_ReplaceTileByte10AndQueue, GameWorld_ReplaceTileByte10AndQueue);
 S3RE_HOOK(0x004fee00, GameWorld_CountDownTimers, NoArgFn, Original_GameWorld_CountDownTimers,
           GameWorld_CountDownTimers);
-S3RE_HOOK(0x00510770, GameWorld_AddToRecentPositions, PositionFn,
-          Original_GameWorld_AddToRecentPositions, GameWorld_AddToRecentPositions);
+S3RE_HOOK(0x00510770, GameWorld_AddPileClaim, PositionFn,
+          Original_GameWorld_AddPileClaim, GameWorld_AddPileClaim);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -430,8 +430,8 @@ S3RE_HOOK(0x00510770, GameWorld_AddToRecentPositions, PositionFn,
 
 namespace {
 
-// Up to the end of the recent positions (the last field these functions use).
-constexpr std::size_t kTestWorld = offsetof(GameWorld, recent_positions) + sizeof(GameWorld::recent_positions);
+// Up to the end of the pile claims (the last field these functions use).
+constexpr std::size_t kTestWorld = offsetof(GameWorld, pile_claims) + sizeof(GameWorld::pile_claims);
 
 std::uint32_t Relative(std::uint32_t value, GameWorld* world) {
     return value - Address(world);
@@ -750,32 +750,32 @@ S3RE_TEST(GameWorld_CountDownTimers_MatchesOriginal) {
     });
 }
 
-S3RE_TEST(GameWorld_AddToRecentPositions_MatchesOriginal) {
+S3RE_TEST(GameWorld_AddPileClaim_MatchesOriginal) {
     // The cursor is an S3.EXE global; the test sets it and restores it.
-    volatile std::uint16_t& cursor = *reinterpret_cast<volatile std::uint16_t*>(kRecentPositionsCursor);
+    volatile std::uint16_t& cursor = *reinterpret_cast<volatile std::uint16_t*>(kPileClaimsCursor);
     const std::uint16_t saved = cursor;
     Compare(ctx, 3000, false, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
-        cursor = static_cast<std::uint16_t>(ctx.rng().Below(kRecentPositionCount));
-        // Small coordinates so that the list contains them now and then;
+        cursor = static_cast<std::uint16_t>(ctx.rng().Below(kPileClaimCount));
+        // Small numbers so that the list contains the claim now and then;
         // keep at least one empty slot (the original would loop forever).
-        for (std::uint32_t slot = 0; slot < kRecentPositionCount; ++slot) {
+        for (std::uint32_t slot = 0; slot < kPileClaimCount; ++slot) {
             const bool empty = ctx.rng().Chance(1, 16);
             const auto first = empty ? std::uint16_t{0} : static_cast<std::uint16_t>(ctx.rng().Below(8));
             const auto second = empty ? std::uint16_t{0} : static_cast<std::uint16_t>(ctx.rng().Below(8));
             worlds.Both([&](GameWorld* w) {
-                w->recent_positions[slot][0] = first;
-                w->recent_positions[slot][1] = second;
+                w->pile_claims[slot].pile = first;
+                w->pile_claims[slot].settler = second;
             });
         }
-        const std::uint32_t emptySlot = ctx.rng().Below(kRecentPositionCount);
+        const std::uint32_t emptySlot = ctx.rng().Below(kPileClaimCount);
         worlds.Both([&](GameWorld* w) {
-            w->recent_positions[emptySlot][0] = 0;
-            w->recent_positions[emptySlot][1] = 0;
+            w->pile_claims[emptySlot].pile = 0;
+            w->pile_claims[emptySlot].settler = 0;
         });
-        const std::uint32_t x = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(8);
-        const std::uint32_t y = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(8);
-        expected = Original_GameWorld_AddToRecentPositions(worlds.original(), nullptr, x, y);
-        actual = GameWorld_AddToRecentPositions(worlds.ours(), nullptr, x, y);
+        const std::uint32_t settler = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(8);
+        const std::uint32_t pile = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(8);
+        expected = Original_GameWorld_AddPileClaim(worlds.original(), nullptr, settler, pile);
+        actual = GameWorld_AddPileClaim(worlds.ours(), nullptr, settler, pile);
     });
     cursor = saved;
 }

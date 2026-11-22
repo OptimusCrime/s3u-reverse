@@ -241,16 +241,16 @@ bool IsShipLegJob(std::uint16_t job) {
 // The step time of a settler entering `tile`; counter = time - 1.
 void SetStepTime(Settler& s, const Tile& tile) {
     if (s.art == 0x17 && s.slot != 0) {
-        s.unk19 = static_cast<std::uint8_t>(kTerrainSpeed[tile.terrain] + kTypeSpeed[0x17 * 4] + 1);
+        s.step_time = static_cast<std::uint8_t>(kTerrainSpeed[tile.terrain] + kTypeSpeed[0x17 * 4] + 1);
     } else {
-        s.unk19 = static_cast<std::uint8_t>(kTerrainSpeed[tile.terrain] + kTypeSpeed[s.art * 4u]);
+        s.step_time = static_cast<std::uint8_t>(kTerrainSpeed[tile.terrain] + kTypeSpeed[s.art * 4u]);
     }
-    s.counter = static_cast<std::uint16_t>(s.unk19 - 1u);
+    s.counter = static_cast<std::uint16_t>(s.step_time - 1u);
 }
 
 void StartFrames(Settler& s) {
-    if (s.unk16 == 0) {
-        s.unk16 = 1;
+    if (s.frame == 0) {
+        s.frame = 1;
     }
 }
 
@@ -359,8 +359,8 @@ std::uint32_t WalkSevenTileUnit(Walk& w) {
             s.direction = path & 7;
         }
         s.counter = 0;
-        s.unk16 = 0;
-        s.unk19 = 0;
+        s.frame = 0;
+        s.step_time = 0;
     }
     const std::uint32_t here = TileOffset(s.x, s.y);
     std::uint32_t part = w.n;
@@ -427,27 +427,27 @@ std::uint32_t WalkShip(Walk& w) {
     EnsureOnTile(w);
     std::uint32_t path = Call<kFindPath>(world, w.n);
     {
-        const std::uint8_t count = s.unk3c;
+        const std::uint8_t count = s.ship_walk;
         if (((count & 7) == 6 || (count & 7) == 7) && count != 0xff) {
             GameDebugLog(kWalkCountText, static_cast<std::uint32_t>(count), w.n);
-            s.unk3c = static_cast<std::uint8_t>(s.unk3c & 0xf8);
+            s.ship_walk = static_cast<std::uint8_t>(s.ship_walk & 0xf8);
         }
     }
     // +0x3c: low three bits the last direction, the rest a counter of
     // steps where the two searches disagreed.
-    auto back = [&]() { return static_cast<std::uint32_t>(((s.unk3c & 7) + 3) % 6); };
+    auto back = [&]() { return static_cast<std::uint32_t>(((s.ship_walk & 7) + 3) % 6); };
     const bool legJob = s.art != kTypeShip && IsShipLegJob(s.job);
     if (path == first) {
         if (path > 5) {
-            s.unk3c = static_cast<std::uint8_t>(s.unk3c + 8);
+            s.ship_walk = static_cast<std::uint8_t>(s.ship_walk + 8);
         } else if (!legJob) {
-            s.unk3c = static_cast<std::uint8_t>(s.unk3c & 7);
+            s.ship_walk = static_cast<std::uint8_t>(s.ship_walk & 7);
         }
     } else if (path > 5) {
-        s.unk3c = static_cast<std::uint8_t>(s.unk3c + 8);
+        s.ship_walk = static_cast<std::uint8_t>(s.ship_walk + 8);
     } else if (first > 5 && (first < 8 || first > 0xd)) {
         path = kPathNone;
-        s.unk3c = static_cast<std::uint8_t>(s.unk3c + 8);
+        s.ship_walk = static_cast<std::uint8_t>(s.ship_walk + 8);
     } else {
         const std::uint32_t c = first & 7;
         const std::uint32_t left = (c - 1) % 6;
@@ -464,25 +464,25 @@ std::uint32_t WalkShip(Walk& w) {
         }
         if (accepted) {
             if (legJob) {
-                s.unk3c = static_cast<std::uint8_t>(s.unk3c + 8);
+                s.ship_walk = static_cast<std::uint8_t>(s.ship_walk + 8);
             } else {
-                s.unk3c = static_cast<std::uint8_t>(s.unk3c & 7);
+                s.ship_walk = static_cast<std::uint8_t>(s.ship_walk & 7);
             }
         } else {
-            path = static_cast<std::uint32_t>((s.unk3c & 7) | 8);  // wait
-            s.unk3c = static_cast<std::uint8_t>(s.unk3c + 8);
+            path = static_cast<std::uint32_t>((s.ship_walk & 7) | 8);  // wait
+            s.ship_walk = static_cast<std::uint8_t>(s.ship_walk + 8);
         }
     }
     bool wait = false;
-    const std::uint8_t count = s.unk3c;
+    const std::uint8_t count = s.ship_walk;
     if (count >= 0xf8) {
         if (s.art == kTypeShip2b && IsShipLegJob(s.job)) {
-            s.unk3c = 0xff;
+            s.ship_walk = 0xff;
         } else {
-            s.unk3c = static_cast<std::uint8_t>(count & 7);
+            s.ship_walk = static_cast<std::uint8_t>(count & 7);
             w.again = 1;
             SetJob(s, 0x37);
-            s.unk16 = 0;
+            s.frame = 0;
         }
         wait = true;
     } else if (path == kPathNone) {
@@ -490,9 +490,9 @@ std::uint32_t WalkShip(Walk& w) {
     } else if ((path & 0x18) == 0) {
         const std::uint32_t d = path & 7;
         if (s.art != kTypeShip && IsShipLegJob(s.job)) {
-            s.unk3c = static_cast<std::uint8_t>((count & 0xf8) | d);
+            s.ship_walk = static_cast<std::uint8_t>((count & 0xf8) | d);
         } else {
-            s.unk3c = static_cast<std::uint8_t>(d);
+            s.ship_walk = static_cast<std::uint8_t>(d);
         }
         std::uint32_t nx = 0, ny = 0;
         Tile& next = StepTo(w, d, &nx, &ny);
@@ -514,8 +514,8 @@ std::uint32_t WalkShip(Walk& w) {
     }
     if (wait) {
         s.counter = 7;
-        s.unk16 = 0;
-        s.unk19 = 0;
+        s.frame = 0;
+        s.step_time = 0;
     }
     for (int k = 0; k < 6; ++k) {
         TileNear(world, at, kSixDx[k], kSixDy[k]).area = savedAreas[k];
@@ -560,8 +560,8 @@ std::uint32_t WalkOne(Walk& w) {
     if ((path & 8) != 0) {
         s.direction = path & 7;
         s.counter = 0;
-        s.unk16 = 0;
-        s.unk19 = 0;
+        s.frame = 0;
+        s.step_time = 0;
         return w.again;
     }
     if ((path & 0x10) == 0) {
@@ -608,7 +608,7 @@ std::uint32_t WalkStep(Walk& w) {
     if (s.art == kTypeSevenTile) {
         return WalkSevenTileUnit(w);
     }
-    if (s.art == kTypeShip || (s.art == kTypeShip2b && s.unk3c != 0xff)) {
+    if (s.art == kTypeShip || (s.art == kTypeShip2b && s.ship_walk != 0xff)) {
         return WalkShip(w);
     }
     return WalkOne(w);
@@ -642,7 +642,7 @@ bool SoldierShoot(Walk& w) {
             const std::uint32_t number = t.object_number;
             lastBuilding = number;
             const layout::Building& b = world->buildings[number];
-            if (world->players[b.owner].presence_index == me.presence_index) {
+            if (world->players[b.owner].team == me.team) {
                 continue;
             }
             if (b.art != 0xf && b.art != 0x10 && b.art != 0x12 && me.race != 3) {
@@ -675,7 +675,7 @@ bool SoldierShoot(Walk& w) {
         } else if (t.settler != 0) {
             const std::uint32_t number = t.settler;
             const Settler& o = world->settlers[number];
-            if (world->players[o.owner].presence_index == me.presence_index) {
+            if (world->players[o.owner].team == me.team) {
                 continue;
             }
             if (o.art == kTypeSevenTile) {
@@ -704,7 +704,7 @@ bool SoldierShoot(Walk& w) {
         return false;
     }
     if (me.race != 3) {
-        --s.slot;  // arrows
+        --s.arrows;
     }
     std::uint32_t delay = 0;
     auto roll = [&]() { return static_cast<std::uint32_t>(Call<kRandom>(world) & 0xffff); };
@@ -718,7 +718,7 @@ bool SoldierShoot(Walk& w) {
         delay = roll() > 0x3a98 ? ((roll() * 0x64) >> 16) + 0x64 : 0;
     }
     if (me.race == 3) {
-        delay = roll() > 0x4e20 ? world->buildings[lastBuilding].unk38 + 1u : 0;
+        delay = roll() > 0x4e20 ? world->buildings[lastBuilding].hit_points + 1u : 0;
     }
     if (delay == 0) {
         // Aim a little off.
@@ -735,7 +735,7 @@ bool SoldierShoot(Walk& w) {
     s.direction = CallStd<kDirectionFromDelta>(tx - s.x, ty - s.y) + 0x8000;
     s.job = 0x151;
     if (me.race == 3) {
-        s.slot = 6;
+        s.arrows = 6;
     }
     const std::uint32_t x = s.x, y = s.y;
     const std::uint32_t targetScreenY = Call<kTileScreenY>(world, tx, ty);
@@ -774,14 +774,14 @@ bool BoardShip(Walk& w) {
         }
         const Settler& boat = world->settlers[ship];
         if (boat.art != kTypeShip || boat.job == 0x145 ||
-            world->players[boat.owner].presence_index != world->players[s.owner].presence_index) {
+            world->players[boat.owner].team != world->players[s.owner].team) {
             continue;
         }
         const std::uint8_t water = TileAt(world, boat.x, boat.y).terrain;
         if (water != 5 && water != 6) {
             continue;
         }
-        if (static_cast<std::int32_t>(boat.slot) >= kRaceShipCapacity[world->players[boat.owner].race]) {
+        if (static_cast<std::int32_t>(boat.passengers) >= kRaceShipCapacity[world->players[boat.owner].race]) {
             continue;
         }
         std::uint32_t xs[6], ys[6];
@@ -826,11 +826,11 @@ bool BoardShip(Walk& w) {
         world->settlers[s.next].prev = s.prev;
     }
     Call<kRemoveSettlerFromLists>(world, w.n);
-    ++boat.slot;
+    ++boat.passengers;
     s.next = boat.next;
     boat.next = static_cast<std::uint16_t>(w.n);
     TileAt(world, s.x, s.y).settler = 0;
-    s.good = 0;
+    s.walk_state = 0;
     SetJob(s, 0x146);
     return true;
 }
@@ -841,7 +841,7 @@ std::uint32_t ArriveWaiting(Walk& w) {
     GameWorld* world = w.world;
     Settler& s = w.s;
     bool handled = false;
-    const std::uint8_t state = s.good;
+    const std::uint8_t state = s.walk_state;
     if (state == 5 && s.art == 0x17) {
         SetJob(s, 0x37);
         w.again = 1;
@@ -851,12 +851,12 @@ std::uint32_t ArriveWaiting(Walk& w) {
                                 static_cast<std::uint32_t>(s.path_cache[1]));
         s.counter = 0;
         s.job = 0x35;
-        s.good = 5;
+        s.walk_state = 5;
         handled = true;
     } else if (state == 3 && s.art == 0x17) {
         SetJob(s, 0x152);
         handled = true;
-    } else if (state == 2 && s.slot != 0 && s.path_cache[4] == kNearMark &&
+    } else if (state == 2 && s.arrows != 0 && s.path_cache[4] == kNearMark &&
                Call<kTileDistance>(world, s.x, s.y, s.path_cache[2], s.path_cache[3]) < s.path_cache[5]) {
         handled = SoldierShoot(w);
     } else if (state == 1) {
@@ -869,11 +869,11 @@ std::uint32_t ArriveWaiting(Walk& w) {
         if (land) {
             handled = BoardShip(w);
             if (!handled) {
-                s.good = 0;
+                s.walk_state = 0;
             }
         }
     }
-    if (s.art == 0x28 && s.saved_direction != 0xffff) {
+    if (s.art == 0x28 && s.saved_animation != 0xffff) {
         Tile& t = TileAt(world, s.x, s.y);
         const std::uint8_t flags = t.flags;
         if ((flags & 0x4d) == 0 && (t.owner == 0xff || t.owner != s.owner)) {
@@ -884,7 +884,7 @@ std::uint32_t ArriveWaiting(Walk& w) {
             t.flags = static_cast<std::uint8_t>(flags & 0xfd);
         }
     }
-    if (s.art == 0x16 && s.saved_direction != 0xffff) {
+    if (s.art == 0x16 && s.saved_animation != 0xffff) {
         const std::uint32_t at = TileOffset(s.x, s.y);
         Tile& t = TileAtOffset(world, at);
         const std::uint8_t flags = t.flags;
@@ -914,11 +914,11 @@ std::uint32_t ArriveWaiting(Walk& w) {
         }
         s.counter = 0;
         s.job = 0x35;
-        s.good = 0;
+        s.walk_state = 0;
         return w.again;
     }
     SetJob(s, 0x37);
-    s.unk16 = 0;
+    s.frame = 0;
     return 1;
 }
 
@@ -1053,14 +1053,14 @@ std::uint32_t __fastcall GameWorld_WalkSettler(GameWorld* world, void*, std::uin
     Settler& s = world->settlers[settler];
     Walk w{world, settler, s, 0};
     const std::uint32_t frames = s.art == kTypeSevenTile ? 0x24u : 0xcu;
-    s.unk16 = static_cast<std::uint8_t>((static_cast<std::uint32_t>(s.unk16) + s.unk19) % frames);
+    s.frame = static_cast<std::uint8_t>((static_cast<std::uint32_t>(s.frame) + s.step_time) % frames);
     if (s.x != s.target_x || s.y != s.target_y) {
         if (s.path_cache[4] != kNearMark ||
             Call<kTileDistance>(world, s.x, s.y, s.path_cache[2], s.path_cache[3]) >= s.path_cache[5]) {
             return WalkStep(w);
         }
     }
-    s.unk16 = 0;
+    s.frame = 0;
     return Arrive(w);
 }
 
@@ -1367,7 +1367,7 @@ WalkCase SetUpWalkCase(test::Context& ctx, test::WorldPair& worlds) {
     worlds.Both([&](GameWorld* w) {
         for (int p = 0; p < 4; ++p) {
             w->players[p].race = races[p];
-            w->players[p].presence_index = presence[p];
+            w->players[p].team = presence[p];
         }
         Settler& s = w->settlers[c.n];
         s.art = art;
@@ -1381,13 +1381,13 @@ WalkCase SetUpWalkCase(test::Context& ctx, test::WorldPair& worlds) {
         for (int k = 0; k < 6; ++k) {
             s.path_cache[k] = cache[k];
         }
-        s.good = state;
+        s.walk_state = state;
         s.slot = slot;
         s.health = health;
-        s.unk16 = frame;
-        s.unk19 = stepTime;
-        s.unk3c = walkCount;
-        s.saved_direction = savedDirection;
+        s.frame = frame;
+        s.step_time = stepTime;
+        s.ship_walk = walkCount;
+        s.saved_animation = savedDirection;
         s.path_mode = pathMode;
         if (onTile) {
             w->tiles[x][y].settler = static_cast<std::uint16_t>(c.n);
@@ -1483,7 +1483,7 @@ std::uint32_t __fastcall WrongWalkSettlerShip(GameWorld* world, void* edx, std::
                        world->settlers[settler].y != world->settlers[settler].target_y);
     const std::uint32_t result = GameWorld_WalkSettler(world, edx, settler);
     if (ship) {
-        world->settlers[settler].unk3c ^= 1;
+        world->settlers[settler].ship_walk ^= 1;
     }
     return result;
 }
