@@ -94,6 +94,11 @@ namespace {
 
 using U = std::uint32_t;
 
+// MapEffect_SetLinks: -1 keeps a link as it is.
+constexpr U kKeepLink = 0xffffffffu;
+// RemoveMatching: x or y -1 means "anywhere" (all records are searched).
+constexpr U kAnyPosition = 0xffffffffu;
+
 void* Edx(U value) {
     return reinterpret_cast<void*>(static_cast<std::uintptr_t>(value));
 }
@@ -230,12 +235,13 @@ std::uint32_t __fastcall MapEffects_Unlink(MapEffectTable* self, void*, std::uin
     const U next = record.next;
     const U list = record.list;
     if (previous != 0) {
-        MapEffect_SetLinks(&self->records[previous], nullptr, list, 0xffffffffu, next);
+        MapEffect_SetLinks(&self->records[previous], nullptr, list, kKeepLink, next);
     } else {
         self->cell_heads[list] = next;
     }
     if (record.next != 0) {
-        MapEffect_SetLinks(&self->records[record.next], nullptr, list, record.previous, 0xffffffffu);
+        // The original re-reads the record's links here.
+        MapEffect_SetLinks(&self->records[record.next], nullptr, list, record.previous, kKeepLink);
     }
     return MapEffect_SetLinks(&record, nullptr, 0, 0, 0);
 }
@@ -247,7 +253,7 @@ std::uint32_t __fastcall MapEffects_RemoveMatching(MapEffectTable* self, void*, 
     auto matches = [&](const MapEffect& r) {
         return r.source_kind == kind && static_cast<U>(static_cast<std::int32_t>(static_cast<std::int16_t>(r.source_id))) == id;
     };
-    if (x != 0xffffffffu && y != 0xffffffffu) {
+    if (x != kAnyPosition && y != kAnyPosition) {
         const std::int32_t cell =
             MapEffects_CellOfPosition(self, nullptr, static_cast<std::int32_t>(x), static_cast<std::int32_t>(y));
         U slot = self->cell_heads[cell];

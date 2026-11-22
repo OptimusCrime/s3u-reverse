@@ -10,16 +10,20 @@
 //   y, x, y, graphics, 0xff) and added to the effect table (0x5445e0). Each
 //   make function gets g_gameTick + delay as its EDX (the effect's start
 //   tick). Screen positions are TileScreenX (0x519610) / TileScreenY
-//   (0x519640) of a tile; for spells 7 and 8 some effects take the screen x
-//   of (x, y) but the screen y of an offset tile, as in the original. The
-//   effects per spell are in kSpells below (read off the push sequences).
-//   Spells 4, 6, 0x12..0x17 and 0x1a..0x1d show nothing. ret 0x14; EAX not
-//   used (the caller overwrites it).
+//   (0x519640) of a tile; for AddFish and HalveResources (spells 7 and 8)
+//   some effects take the screen x of (x, y) but the screen y of an offset
+//   tile, as in the original. The effects per spell (Spell, enums.h) are in
+//   kSpells below (read off the push sequences). Spells 4, 6 (BurnTrees),
+//   18..23 (ConvertGoods / GodlyGoods of three races) and 26..29 show
+//   nothing. Delays and the moving effects' first argument are decimal; the
+//   effect kinds and graphics ids (0xd00xx: file 0xd, image xx) stay hex.
+//   ret 0x14; EAX not used (the caller overwrites it).
 //   The records' padding bytes come from the make functions' stack
 //   temporaries, in the original as in ours (a known difference without
 //   effect; the determinism trace and the emulator spec leave them out).
 // thiscall (ECX = world).
 
+#include "game/enums.h"
 #include "game/globals.h"
 #include "game/world.h"
 #include "hooks.h"
@@ -78,24 +82,24 @@ constexpr Step Moving7(std::uint8_t delay, std::uint8_t a0, U graphics) {
     return {Make::Moving7, delay, a0, 0, 0, 0, 0, 0, 0, graphics};
 }
 
-constexpr Step kSpell0[] = {Stationary(0, 0, 0, 0x5e), Stationary(5, 0, 0, 0x4b), Moving(0, 0x24, 0, 0, 0xd003e)};
-constexpr Step kSpell3[] = {Moving(0, 0x24, 0, 0, 0xd003c), Stationary(0, 0, 0, 0x61)};
-constexpr Step kSpell5[] = {Moving7(0x46, 0x1e, 0xd003d), Stationary(0x50, 0, 0, 0x50)};
-constexpr Step kSpell7[] = {
+constexpr Step kSpell0[] = {Stationary(0, 0, 0, 0x5e), Stationary(5, 0, 0, 0x4b), Moving(0, 36, 0, 0, 0xd003e)};
+constexpr Step kSpell3[] = {Moving(0, 36, 0, 0, 0xd003c), Stationary(0, 0, 0, 0x61)};
+constexpr Step kRevealSpot[] = {Moving7(70, 30, 0xd003d), Stationary(80, 0, 0, 0x50)};
+constexpr Step kAddFish[] = {
     Stationary(0, 0, 0, 0x4f),   Stationary(3, -3, 1, 0x4f),  Stationary(10, 1, -1, 0x4f),
     Stationary(15, 5, 3, 0x4f),  Stationary(20, 4, -5, 0x4f), Stationary(6, -2, -4, 0x4f),
-    Moving(0, 0xc, 0, 0, 0xd0036),  Moving(3, 0xc, -3, 1, 0xd0036),  Moving(10, 0xc, 1, -1, 0xd0036),
-    Moving(15, 0xc, 5, 3, 0xd0036), Moving(20, 0xc, 4, -5, 0xd0036), Moving(6, 0xc, -2, -4, 0xd0036)};
-constexpr Step kSpell8[] = {
-    Stationary(0, 0, 0, 0x50),          Moving(0, 0xc, 0, 0, 0xd0037),     Moving(3, 0xc, -3, 1, 0xd0037),
-    Moving(10, 0xc, 1, -1, 0xd0037),    Moving(15, 0xc, 5, 3, 0xd0037),    MovingAtY(20, 0xc, 4, -5, 0xd0037),
-    MovingAtY(6, 0xc, -2, -4, 0xd0037)};
-constexpr Step kSpell10[] = {Moving(0, 0x28, 0, 0, 0xd0033), Stationary(0, 0, 0, 0x4b)};
-constexpr Step kSpell12[] = {Moving(0, 0x28, 0, 0, 0xd0032), Stationary(0, 0, 0, 0x4b)};
-constexpr Step kSpell24[] = {Moving(0, 0x28, 0, 0, 0xd0036), Stationary(0, 0, 0, 0x4b)};
+    Moving(0, 12, 0, 0, 0xd0036),  Moving(3, 12, -3, 1, 0xd0036),  Moving(10, 12, 1, -1, 0xd0036),
+    Moving(15, 12, 5, 3, 0xd0036), Moving(20, 12, 4, -5, 0xd0036), Moving(6, 12, -2, -4, 0xd0036)};
+constexpr Step kHalveResources[] = {
+    Stationary(0, 0, 0, 0x50),          Moving(0, 12, 0, 0, 0xd0037),     Moving(3, 12, -3, 1, 0xd0037),
+    Moving(10, 12, 1, -1, 0xd0037),     Moving(15, 12, 5, 3, 0xd0037),    MovingAtY(20, 12, 4, -5, 0xd0037),
+    MovingAtY(6, 12, -2, -4, 0xd0037)};
+constexpr Step kSpell10[] = {Moving(0, 40, 0, 0, 0xd0033), Stationary(0, 0, 0, 0x4b)};
+constexpr Step kSpell12[] = {Moving(0, 40, 0, 0, 0xd0032), Stationary(0, 0, 0, 0x4b)};
+constexpr Step kSpell24[] = {Moving(0, 40, 0, 0, 0xd0036), Stationary(0, 0, 0, 0x4b)};
 constexpr Step kKind4b[] = {Stationary(0, 0, 0, 0x4b)};
 constexpr Step kKind4bLate[] = {Stationary(5, 0, 0, 0x4b)};
-constexpr Step kSpell31[] = {Stationary(5, 0, 0, 0x4b), Moving7(10, 0x1e, 0xd003d)};
+constexpr Step kRevealMap[] = {Stationary(5, 0, 0, 0x4b), Moving7(10, 30, 0xd003d)};
 
 struct Steps {
     const Step* steps;
@@ -109,16 +113,16 @@ constexpr Steps Of(const Step (&steps)[N]) {
 
 constexpr Steps kNone = {nullptr, 0};
 
-// Per spell 0..0x1f.
-constexpr Steps kSpells[32] = {
-    Of(kSpell0),  Of(kSpell0),  Of(kSpell0),  Of(kSpell3),      // 0..3
-    kNone,        Of(kSpell5),  kNone,        Of(kSpell7),      // 4..7
-    Of(kSpell8),  Of(kSpell3),  Of(kSpell10), Of(kKind4b),      // 8..0xb
-    Of(kSpell12), Of(kKind4b),  Of(kKind4bLate), Of(kKind4b),   // 0xc..0xf
-    Of(kSpell10), Of(kSpell12), kNone,        kNone,            // 0x10..0x13
-    kNone,        kNone,        kNone,        kNone,            // 0x14..0x17
-    Of(kSpell24), Of(kSpell24), kNone,        kNone,            // 0x18..0x1b
-    kNone,        kNone,        Of(kSpell3),  Of(kSpell31),     // 0x1c..0x1f
+// Per spell 0..31 (Spell).
+constexpr Steps kSpells[kSpellCount] = {
+    Of(kSpell0),  Of(kSpell0),  Of(kSpell0),  Of(kSpell3),                  // 0..3
+    kNone,        Of(kRevealSpot), kNone,     Of(kAddFish),                 // 4..7
+    Of(kHalveResources), Of(kSpell3), Of(kSpell10), Of(kKind4b),            // 8 .. 11: 9 GrowTrees
+    Of(kSpell12), Of(kKind4b),  Of(kKind4bLate), Of(kKind4b),               // 12..15
+    Of(kSpell10), Of(kSpell12), kNone,        kNone,                        // 16..19
+    kNone,        kNone,        kNone,        kNone,                        // 20..23
+    Of(kSpell24), Of(kSpell24), kNone,        kNone,                        // 24..27
+    kNone,        kNone,        Of(kSpell3),  Of(kRevealMap),               // 28..31: 30 TreeCurse
 };
 
 }  // namespace
@@ -142,7 +146,7 @@ void __fastcall CGameData_SpawnSpellEffects(CGameData* world, void*, U, std::int
     if (y >= size) {
         y = size - 1;
     }
-    if (spell >= 32) {
+    if (spell >= kSpellCount) {
         return;
     }
     const auto screenX = reinterpret_cast<ScreenFn>(kTileScreenX);
@@ -235,10 +239,10 @@ void Compare(test::Context& ctx, SpawnSpellFn candidate, int cases) {
     g_gameTick = savedTick;
 }
 
-// Wrong: spell 8's last effect uses the screen x of its own tile.
+// Wrong: HalveResources shows AddFish's effects.
 void __fastcall WrongSpawnSpellEffects(CGameData* world, void*, U a1, std::int32_t x, std::int32_t y, U a4, U spell) {
-    if (spell == 8) {
-        CGameData_SpawnSpellEffects(world, nullptr, a1, x, y, a4, 7);
+    if (spell == Value(Spell::HalveResources)) {
+        CGameData_SpawnSpellEffects(world, nullptr, a1, x, y, a4, Value(Spell::AddFish));
         return;
     }
     CGameData_SpawnSpellEffects(world, nullptr, a1, x, y, a4, spell);

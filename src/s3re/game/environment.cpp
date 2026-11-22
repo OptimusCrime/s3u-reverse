@@ -18,31 +18,37 @@
 //      the spell itself (0x5480b0, p0..p4) and QueuePendingEvent(8, p1,
 //      p2), 3 settler flags &= p1, 4 building request_flags = (p2 & flags)
 //      | p1, 5 a building hit (hit points +0x38 -= p1, or
-//      NotifyLocalPlayer 9 + CrushBuilding), 6 a catapult hit (type 0x29:
-//      health -= p1, or the unit and its seven tiles are freed, map effects
-//      0x544f80), 7 a ship hit (0x2b / 0x2c: health or it sinks: list
-//      unlink, passengers freed (0x2c), cargo subtracted from the owner's
-//      tallies (0x2b), notifications 10 / 11, map effects 0x545070); then
-//      the type is cleared;
-//   3. Player::soldier_strength from the goods 10 (and 28 for race 1) on
-//      the piles of the player's areas, g_strengthDivisor and damping;
+//      NotifyLocalPlayer 9 + CrushBuilding), 6 a catapult hit (settler
+//      type 41, 0x29: health -= p1, or the unit and its seven tiles are
+//      freed, map effects 0x544f80), 7 a ship hit (trade ship 43 / ferry
+//      44, 0x2b / 0x2c: health or it sinks: list unlink, passengers freed
+//      (ferry), cargo subtracted from the owner's tallies (trade ship),
+//      notifications 10 / 11, map effects 0x545070); then the type is
+//      cleared;
+//   3. Player::soldier_strength from the gold (good 10) and, for the
+//      Egyptians, the gems (28) on the piles of the player's areas,
+//      g_strengthDivisor and damping;
 //   4. the reveal points' countdowns;
 //   5. the fog of war cycle and the minimap cycle (fog_of_war.cpp; both
 //      skipped while g_fastForwarding, the fog counter then reset);
 //   6. size * size / 2000 tiles of the landscape (cursor +0x2d2f4/+0x2d2f8
-//      advanced by +0x2d2fc): worked patches back to grass, the object
+//      advanced by +0x2d2fc): fields back to grass, the object
 //      life cycles (tree growth, seeding, burning and fire spreading with
 //      Random), DecayTraffic, fish moving to a random water neighbour;
 //   7. every 220 ticks ShiftStatistics, then MapEffects::ExpireSome.
-//   The comments in the code give the details. ret, EAX not used.
+//   The comments in the code give the details. Tile::object values (trees,
+//   stones, fire, ...) stay hex: their ranges follow the sprite tables and
+//   are not named yet. ret, EAX not used.
 //   Known difference: the original sums the goods into two int32[20] on
 //   its stack indexed by the area's player byte unchecked (a byte >= 20
 //   overwrites its stack); ours uses 256 entries.
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
+#include "game/enums.h"
 #include "game/globals.h"
 #include "game/texts.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -58,6 +64,20 @@ namespace s3re::game {
 
 using layout::Tile;
 
+namespace {
+
+// Terrain values (class in the high nibble, so hex).
+constexpr std::uint8_t kTerrainGrass = 0x10;
+constexpr std::uint8_t kTerrainField = 0x16;     // a farmer's, rice farmer's or winegrower's field
+constexpr std::uint8_t kTerrainWornPath = 0x1c;  // grass walked on often (AddTileTraffic)
+
+// DecayTraffic: a path whose traffic falls to 7 grows back (a footprint
+// tile keeps 8).
+constexpr std::uint8_t kPathFades = 7;
+constexpr std::uint8_t kFootprintTraffic = 8;
+
+}  // namespace
+
 using TileFn = void(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 
 // Purpose: Lets the foot traffic on a tile fade, so that paths nobody walks any more grow back into grass.
@@ -67,15 +87,16 @@ void __fastcall CGameData_DecayTraffic(CGameData* world, void*, std::uint32_t x,
     if (traffic == 0) {
         return;
     }
+    // Loses an eighth, rounded up.
     const auto decayed = static_cast<std::uint8_t>(traffic - ((traffic + 7) >> 3));
     tile.traffic = decayed;
-    if (decayed != 7) {
+    if (decayed != kPathFades) {
         return;
     }
     if ((tile.flags & layout::kTileBuildingFootprint) != 0) {
-        tile.traffic = 8;
-    } else if (tile.terrain == 0x1c) {
-        tile.terrain = 0x10;
+        tile.traffic = kFootprintTraffic;
+    } else if (tile.terrain == kTerrainWornPath) {
+        tile.terrain = kTerrainGrass;
         tile.draw_flags |= layout::kTileDrawRedraw;
     }
 }
@@ -127,8 +148,38 @@ constexpr std::uintptr_t kShiftStatistics = 0x004ff470;
 constexpr std::uintptr_t kExpireSome = 0x00545d40;
 constexpr std::uintptr_t kDebugLogFn = 0x00428720;
 
+using S = SettlerType;
 
+constexpr std::uint8_t kNobody = 0xff;  // Settler::owner of a free record, Area::player of a free area
 
+// The timed events (Effect::type).
+constexpr std::uint8_t kEventSpellEffects = 1;
+constexpr std::uint8_t kEventSpell = 2;
+constexpr std::uint8_t kEventSettlerFlags = 3;
+constexpr std::uint8_t kEventBuildingRequestFlags = 4;
+constexpr std::uint8_t kEventBuildingHit = 5;
+constexpr std::uint8_t kEventCatapultHit = 6;
+constexpr std::uint8_t kEventShipHit = 7;
+
+// QueuePendingEvent type 8: a tile (or a spell's area) changed and must be redrawn (probably).
+constexpr U kPendingTileChanged = 8;
+
+// NotifyLocalPlayer message types.
+constexpr U kNoticeBuildingDestroyed = 9;
+constexpr U kNoticeShipHit = 10;
+constexpr U kNoticeShipSunk = 11;
+
+// UpdateEnvironment's cycles.
+constexpr U kPileStride = 64;              // every 64th pile per step
+constexpr U kFogClearSteps = 8;            // ClearSightSlice 0..7
+constexpr U kFogMarkSteps = 16;            // MarkBuildingSight / MarkSettlerSight 0..15 each
+constexpr U kFogBuildingStep = kFogClearSteps;
+constexpr U kFogSettlerStep = kFogBuildingStep + kFogMarkSteps;    // 24
+constexpr U kFogUpdateStep = kFogSettlerStep + kFogMarkSteps;      // 40
+constexpr U kFogCycle = kFogUpdateStep + 16;                       // 56 (0x38)
+constexpr U kMinimapCycle = 64;
+constexpr std::int32_t kTilesPerLandscapeStep = 2000;  // map tiles / 2000 per step
+constexpr U kStatisticsInterval = 220;     // 0xdc ticks
 using Fn0 = U(__fastcall*)(CGameData* world, void* edx);
 using Fn1 = U(__fastcall*)(CGameData* world, void* edx, U);
 using Fn2 = U(__fastcall*)(CGameData* world, void* edx, U, U);
@@ -191,28 +242,28 @@ void BuildingHit(CGameData* world, const Effect& e) {
     if (b.hit_points >= damage) {
         b.hit_points = static_cast<std::uint16_t>(b.hit_points - damage);
     } else {
-        Callee<Fn4>(kNotifyLocalPlayer)(world, nullptr, b.owner, 9, b.x, b.y);
+        Callee<Fn4>(kNotifyLocalPlayer)(world, nullptr, b.owner, kNoticeBuildingDestroyed, b.x, b.y);
         Callee<Fn1>(kCrushBuilding)(world, nullptr, number);
     }
     DebugLog(texts::kBuildingHit, e.params[1]);
 }
 
-// Event type 6: a catapult (the seven-tile unit, type 0x29) hit.
+// Event type 6: a catapult (the seven-tile unit, settler type 41) hit.
 void CatapultHit(CGameData* world, const Effect& e) {
     Settler& s = world->settlers[e.params[0]];
-    if (s.art == 0x29) {
+    if (TypeOf(s) == S::Catapult) {
         const U damage = e.params[1];
         if (s.health >= damage) {
             s.health = static_cast<std::uint8_t>(s.health - damage);
         } else {
-            UnlinkSettler(world, s, 0x29);
+            UnlinkSettler(world, s, Value(S::Catapult));
             // The seven tiles of the unit: centre, (+1, 0), (0, +1), (+1, +1),
             // (-1, 0), (0, -1), (-1, -1). Their settlers are freed, then the
             // tiles' settler words cleared.
             static constexpr std::int32_t kTiles[7][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}, {-1, 0}, {0, -1}, {-1, -1}};
             for (const auto& d : kTiles) {
                 const Tile& t = TileAt(world, s.x + static_cast<U>(d[0]), s.y + static_cast<U>(d[1]));
-                world->settlers[t.settler].owner = 0xff;
+                world->settlers[t.settler].owner = kNobody;
             }
             for (const auto& d : kTiles) {
                 TileAt(world, s.x + static_cast<U>(d[0]), s.y + static_cast<U>(d[1])).settler = 0;
@@ -227,26 +278,27 @@ void CatapultHit(CGameData* world, const Effect& e) {
     DebugLog(texts::kCatapultHit, e.params[1]);
 }
 
-// Event type 7: a ship (type 0x2b, or 0x2c which carries settlers) hit.
+// Event type 7: a ship (a trade ship, or a ferry, which carries settlers) hit.
 void ShipHit(CGameData* world, const Effect& e) {
     const U number = e.params[0];
     Settler& s = world->settlers[number];
-    if ((s.art == 0x2b || s.art == 0x2c) && s.owner != 0xff) {
+    if ((TypeOf(s) == S::TradeShip || TypeOf(s) == S::Ferry) && s.owner != kNobody) {
         const U damage = e.params[1];
         if (s.health >= damage) {
             s.health = static_cast<std::uint8_t>(s.health - damage);
-            Callee<Fn4>(kNotifyLocalPlayer)(world, nullptr, s.owner, 10, s.x, s.y);
+            Callee<Fn4>(kNotifyLocalPlayer)(world, nullptr, s.owner, kNoticeShipHit, s.x, s.y);
         } else {
             DebugLog(texts::kShipSinks);
-            if (s.art != 0x2c) {
+            // A ferry is not unlinked: its next link chains its passengers.
+            if (TypeOf(s) != S::Ferry) {
                 UnlinkSettler(world, s, s.art);
             }
-            if (s.art == 0x2c) {
+            if (TypeOf(s) == S::Ferry) {
                 // The passengers' chain (next links) goes down with the ship.
                 U current = s.next;
                 while (current != 0) {
                     Settler& p = world->settlers[current];
-                    p.owner = 0xff;
+                    p.owner = kNobody;
                     p.prev = 0;
                     const U next = p.next;
                     world->settlers[world->settlers[next].prev].next = 0;
@@ -254,7 +306,7 @@ void ShipHit(CGameData* world, const Effect& e) {
                 }
                 s.passengers = 0;
             }
-            if (s.art == 0x2b) {
+            if (TypeOf(s) == S::TradeShip) {
                 // Cargo: up to four (good, count) pairs, counts in nibbles
                 // of +0x17 / +0x18, goods in the low bytes of +0x1c / +0x20.
                 const auto subtract = Callee<Fn3>(kSubtractPlayerCounter);
@@ -271,14 +323,14 @@ void ShipHit(CGameData* world, const Effect& e) {
                     subtract(world, nullptr, s.owner, static_cast<U>(s.saved_counter) >> 8, static_cast<U>(s.cargo_amounts23) >> 4);
                 }
             }
-            Callee<Fn4>(kNotifyLocalPlayer)(world, nullptr, s.owner, 0xb, s.x, s.y);
+            Callee<Fn4>(kNotifyLocalPlayer)(world, nullptr, s.owner, kNoticeShipSunk, s.x, s.y);
             const U x = s.x;
             const U y = s.y;
             const U sy = ScreenY(world, x, y);
             const U sx = ScreenX(world, x, y);
             Callee<TableFn5>(kSpawnShipHit)(&world->map_effects, nullptr, Tick(), sx, sy, x, y);
             TileAt(world, s.x, s.y).settler = 0;
-            s.owner = 0xff;
+            s.owner = kNobody;
         }
     }
     DebugLog(texts::kShipHit, e.params[1]);
@@ -297,29 +349,29 @@ void RunTimedEvents(CGameData* world) {
             continue;
         }
         switch (e.type) {
-        case 1:
+        case kEventSpellEffects:
             Callee<Fn5>(kSpawnSpellEffects)(world, nullptr, e.params[0], e.params[1], e.params[2], e.params[3],
                                         e.params[4]);
             break;
-        case 2:
+        case kEventSpell:
             Callee<Fn5>(kExecuteSpell)(world, nullptr, e.params[0], e.params[1], e.params[2], e.params[3], e.params[4]);
-            Callee<Fn3>(kQueuePendingEvent)(world, nullptr, 8, e.params[1], e.params[2]);
+            Callee<Fn3>(kQueuePendingEvent)(world, nullptr, kPendingTileChanged, e.params[1], e.params[2]);
             break;
-        case 3:
+        case kEventSettlerFlags:
             world->settlers[e.params[0]].flags &= static_cast<std::uint8_t>(e.params[1]);
             break;
-        case 4: {
+        case kEventBuildingRequestFlags: {
             std::uint8_t& flags = world->buildings[e.params[0]].request_flags;
             flags = static_cast<std::uint8_t>((e.params[2] & flags) | e.params[1]);
             break;
         }
-        case 5:
+        case kEventBuildingHit:
             BuildingHit(world, e);
             break;
-        case 6:
+        case kEventCatapultHit:
             CatapultHit(world, e);
             break;
-        case 7:
+        case kEventShipHit:
             ShipHit(world, e);
             break;
         default:
@@ -329,8 +381,15 @@ void RunTimedEvents(CGameData* world) {
     }
 }
 
-// Player::soldier_strength from the amounts of goods 10 (and 28 for race 1)
-// on the piles of each player's areas.
+// Player::soldier_strength: base 1536 / (divisor + 4), plus 4 per unit of
+// gold (Egyptians: 2 per gold and 8 per gem) on the piles of the player's
+// areas; above 256 every further 64 count half (four times); halved, and
+// with objectives enabled halved once more (* 50 / 100).
+constexpr U kStrengthBase = 0x600;  // 1536
+constexpr U kStrengthDivisorOffset = 4;
+constexpr U kStrengthDampingSteps[] = {256, 320, 384, 448};  // 0x100, 0x140, 0x180, 0x1c0
+constexpr U kObjectivesStrengthPercent = 50;
+
 void UpdateSoldierStrength(CGameData* world) {
     // The original sums into two int32[20] on its stack, indexed by the
     // area's player byte unchecked; 256 entries here (the same for players
@@ -341,21 +400,21 @@ void UpdateSoldierStrength(CGameData* world) {
     for (U n = 1; n <= areas; ++n) {
         const Area& a = world->areas[n];
         const std::uint8_t player = a.player;
-        if (player == 0xff) {
+        if (player == kNobody) {
             continue;
         }
-        for (U pile = a.piles_by_goods[10]; pile != 0; pile = world->piles[pile].next) {
+        for (U pile = a.piles_by_goods[Value(Good::Gold)]; pile != 0; pile = world->piles[pile].next) {
             sums[player] += world->piles[pile].amount;
         }
-        for (U pile = a.piles_by_goods[28]; pile != 0; pile = world->piles[pile].next) {
+        for (U pile = a.piles_by_goods[Value(Good::Gems)]; pile != 0; pile = world->piles[pile].next) {
             extra[player] += world->piles[pile].amount;
         }
     }
     for (U p = 0; p < layout::kPlayers; ++p) {
         Player& player = world->players[p];
-        const U base = 0x600u / (g_strengthDivisor + 4);
-        U value = player.race == 1 ? base + (sums[p] + extra[p] * 4) * 2 : base + sums[p] * 4;
-        for (U limit : {0x100u, 0x140u, 0x180u, 0x1c0u}) {
+        const U base = kStrengthBase / (g_strengthDivisor + kStrengthDivisorOffset);
+        U value = RaceOf(player) == Race::Egyptian ? base + (sums[p] + extra[p] * 4) * 2 : base + sums[p] * 4;
+        for (const U limit : kStrengthDampingSteps) {
             if (value > limit) {
                 value = ((value - limit) >> 1) + limit;
             }
@@ -363,7 +422,7 @@ void UpdateSoldierStrength(CGameData* world) {
         if (world->objectives_enabled == 0) {
             player.soldier_strength = value >> 1;
         } else {
-            player.soldier_strength = ((value >> 1) * 50u) / 100u;
+            player.soldier_strength = ((value >> 1) * kObjectivesStrengthPercent) / 100u;
         }
     }
 }
@@ -379,9 +438,9 @@ void UpdateLandscapeTile(CGameData* world) {
     auto object = [&]() -> std::uint8_t& { return TileAt(world, x(), y()).object; };
     const auto random = Callee<Fn0>(kRandom);
 
-    // A worked patch (terrain 0x16) without growing trees around turns back
-    // into grass.
-    if (TileAt(world, x(), y()).terrain == 0x16 && Callee<Fn2>(kIsOnMap)(world, nullptr, x(), y()) != 0) {
+    // A field (terrain 0x16) without growing objects (0x55..0x6f, the young
+    // trees of SpellGrowTrees; probably also the crops) around turns back into grass.
+    if (TileAt(world, x(), y()).terrain == kTerrainField && Callee<Fn2>(kIsOnMap)(world, nullptr, x(), y()) != 0) {
         const U cx = x();
         const U cy = y();
         static constexpr std::int32_t kAround[7][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, 1}};
@@ -394,7 +453,7 @@ void UpdateLandscapeTile(CGameData* world) {
         }
         if (clear) {
             Tile& t = TileAt(world, cx, cy);
-            t.terrain = 0x10;
+            t.terrain = kTerrainGrass;
             TileAt(world, x(), y()).draw_flags |= layout::kTileDrawRedraw;
         }
     }
@@ -468,7 +527,7 @@ void UpdateLandscapeTile(CGameData* world) {
     if (object() == 0xf6) {
         object() = 0;
         Callee<Fn2>(kUnblockTile)(world, nullptr, x(), y());
-        Callee<Fn3>(kQueuePendingEvent)(world, nullptr, 8, x(), y());
+        Callee<Fn3>(kQueuePendingEvent)(world, nullptr, kPendingTileChanged, x(), y());
     }
     if (object() >= 0xf3 && object() <= 0xf5) {
         ++object();
@@ -488,7 +547,7 @@ void UpdateLandscapeTile(CGameData* world) {
             Tile& t = TileAt(world, tx, ty);
             if (t.object >= 0x44 && t.object <= 0x53 && TileAt(world, tx + 1, ty + 1).settler == 0) {
                 t.object = 0xf3;
-                Callee<Fn3>(kQueuePendingEvent)(world, nullptr, 8, tx, ty);
+                Callee<Fn3>(kQueuePendingEvent)(world, nullptr, kPendingTileChanged, tx, ty);
             }
         }
     }
@@ -502,7 +561,7 @@ void UpdateLandscapeTile(CGameData* world) {
         const U ny = Callee<NeighbourFn>(kNeighbourY)(y(), direction);
         if (nx < world->map_size && ny < world->map_size) {
             Tile& to = TileAt(world, nx, ny);
-            if ((to.terrain & 0xf0) == 0 && to.resources != 0x0f) {
+            if ((to.terrain & kTerrainClassMask) == kTerrainClassWater && to.resources != 0x0f) {
                 ++to.resources;
                 --TileAt(world, x(), y()).resources;
             }
@@ -527,9 +586,9 @@ void __fastcall CGameData_UpdateEnvironment(CGameData* world, void*) {
         return;
     }
     // Every 64th pile: building piles whose area lets the good be moved.
-    for (U n = Tick() & 0x3f; n <= world->pile_high_water; n += 0x40) {
+    for (U n = Tick() & (kPileStride - 1); n <= world->pile_high_water; n += kPileStride) {
         const Pile& pile = world->piles[n];
-        if (pile.art != 0xfe) {
+        if (pile.art != 0xfe) {  // a building's pile
             continue;
         }
         const Area& area = world->areas[TileAt(world, pile.x, pile.y).area];
@@ -549,30 +608,30 @@ void __fastcall CGameData_UpdateEnvironment(CGameData* world, void*) {
         ++i;
     } while (i <= static_cast<U>(world->reveal_point_high_water));
     const auto fastForwarding = [] { return g_fastForwarding != 0; };
-    // Fog of war, 56 steps.
+    // Fog of war, 56 steps (unsigned compares: each range test is one compare).
     bool resetFog = true;
     if (!fastForwarding()) {
         const U step = world->fog_cycle;
-        if (step < 8) {
+        if (step < kFogClearSteps) {
             Callee<Fn1>(kClearSightSlice)(world, nullptr, step);
-        } else if (step - 8 < 16) {
-            Callee<Fn1>(kMarkBuildingSight)(world, nullptr, step - 8);
-            if (step - 8 == 0) {
+        } else if (step - kFogBuildingStep < kFogMarkSteps) {
+            Callee<Fn1>(kMarkBuildingSight)(world, nullptr, step - kFogBuildingStep);
+            if (step - kFogBuildingStep == 0) {
                 Callee<Fn0>(kMarkRevealPointsSight)(world, nullptr);
             }
-        } else if (step - 0x18 < 16) {
-            Callee<Fn1>(kMarkSettlerSight)(world, nullptr, step - 0x18);
+        } else if (step - kFogSettlerStep < kFogMarkSteps) {
+            Callee<Fn1>(kMarkSettlerSight)(world, nullptr, step - kFogSettlerStep);
         } else {
-            Callee<Fn1>(kUpdateFogSlice)(world, nullptr, step - 0x28);
+            Callee<Fn1>(kUpdateFogSlice)(world, nullptr, step - kFogUpdateStep);
         }
-        resetFog = ++world->fog_cycle == 0x38;
+        resetFog = ++world->fog_cycle == kFogCycle;
     }
     if (resetFog) {
         world->fog_cycle = 0;
     }
     // Minimap, 64 steps.
     if (!fastForwarding()) {
-        if (++world->minimap_cycle >= 0x40) {
+        if (++world->minimap_cycle >= kMinimapCycle) {
             world->minimap_cycle = 0;
         }
         Callee<Fn1>(kUpdateMinimapSlice)(world, nullptr, world->minimap_cycle);
@@ -580,7 +639,7 @@ void __fastcall CGameData_UpdateEnvironment(CGameData* world, void*) {
     // Landscape: size * size / 2000 tiles per step.
     auto tilesPerStep = [world] {
         const auto cells = static_cast<std::int32_t>(world->map_size * world->map_size);
-        return static_cast<U>(cells / 2000);
+        return static_cast<U>(cells / kTilesPerLandscapeStep);
     };
     if (tilesPerStep() != 0) {
         U done = 0;
@@ -597,7 +656,7 @@ void __fastcall CGameData_UpdateEnvironment(CGameData* world, void*) {
             ++done;
         } while (done < tilesPerStep());
     }
-    if (Tick() % 0xdc == 0) {
+    if (Tick() % kStatisticsInterval == 0) {
         Callee<Fn0>(kShiftStatistics)(world, nullptr);
     }
     Callee<TableFn1>(kExpireSome)(&world->map_effects, nullptr, Tick());
@@ -749,7 +808,7 @@ void SetUpEnvironment(test::Context& ctx, test::WorldPair& worlds) {
         pile.y = static_cast<std::uint16_t>(rng.Below(span));
         pile.next = 0;
     }
-    // Areas: settings5 values 0..2, short pile lists of goods 10 and 28.
+    // Areas: settings5 values 0..2, short pile lists of gold and gems.
     w->area_high_water = rng.Below(300);
     U nextListPile = 2000;  // distinct piles, so that no list loops
     for (U a = 0; a < 300; ++a) {
@@ -758,7 +817,7 @@ void SetUpEnvironment(test::Context& ctx, test::WorldPair& worlds) {
         for (auto& s : area.settings5) {
             s = static_cast<std::uint8_t>(rng.Below(3));
         }
-        for (U good : {10u, 28u}) {
+        for (U good : {U{Value(Good::Gold)}, U{Value(Good::Gems)}}) {
             U head = 0;
             for (U k = rng.Below(4); k > 0; --k) {
                 const U pile = nextListPile++;
@@ -792,9 +851,10 @@ void SetUpEnvironment(test::Context& ctx, test::WorldPair& worlds) {
             effect.params[k] = static_cast<std::uint16_t>(rng.Next32());
         }
         if (effect.type == 6 || effect.type == 7) {
-            // A unit on the map; ships of type 0x2c carry a chain of passengers.
+            // A unit on the map; ferries carry a chain of passengers.
             Settler& s = w->settlers[effect.params[0]];
-            static constexpr std::uint8_t kArts[] = {0x29, 0x2b, 0x2c, 0x01};
+            static constexpr std::uint8_t kArts[] = {Value(S::Catapult), Value(S::TradeShip), Value(S::Ferry),
+                                                     Value(S::Digger)};
             s.art = kArts[rng.Below(4)];
             s.owner = static_cast<std::uint8_t>(rng.Chance(1, 6) ? 0xff : rng.Below(20));
             s.x = static_cast<std::uint16_t>(1 + rng.Below(span > 3 ? span - 2 : 1));
@@ -809,7 +869,7 @@ void SetUpEnvironment(test::Context& ctx, test::WorldPair& worlds) {
                 w->settlers[p].next = static_cast<std::uint16_t>(chain);
                 chain = p;
             }
-            s.next = static_cast<std::uint16_t>(s.art == 0x2c ? chain : rng.Below(32000));
+            s.next = static_cast<std::uint16_t>(s.art == Value(S::Ferry) ? chain : rng.Below(32000));
         }
     }
     // Reveal points.
@@ -857,13 +917,13 @@ void CompareEnvironment(test::Context& ctx, UpdateFn candidate, int cases) {
     saved.Restore();
 }
 
-// Wrong: race 1's soldiers ignore good 28.
+// Wrong: the Egyptians' soldiers ignore the gems.
 void __fastcall WrongUpdateEnvironment(CGameData* world, void*) {
     std::int32_t races[layout::kPlayers];
     for (U p = 0; p < layout::kPlayers; ++p) {
         races[p] = world->players[p].race;
-        if (races[p] == 1) {
-            world->players[p].race = 0;
+        if (races[p] == Value(Race::Egyptian)) {
+            world->players[p].race = Value(Race::Roman);
         }
     }
     CGameData_UpdateEnvironment(world, nullptr);

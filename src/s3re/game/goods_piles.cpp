@@ -1,15 +1,17 @@
-// Goods piles (provisional name): 14-byte records at world+0x123885c,
-// numbered from 1; the number of records is the uint32 at world+0x1238858.
-//   uint8  +0x0: goods type (0xff = none); index into the per-player goods
-//                counters (players.cpp)
+// Goods piles: world->piles, 14-byte records at world+0x123885c, numbered
+// from 1 up to world->pile_high_water (world+0x1238858).
+//   uint8  +0x0: goods type (Good; 0xff = Good::Empty); index into the
+//                per-player goods counters (players.cpp)
 //   uint8  +0x1: amount
-//   uint8  +0x4: kind; RecountPlayerGoods counts piles with kind <= 8 or 0xfe
+//   uint8  +0x4: kind (PileKind); RecountPlayerGoods counts piles of kinds
+//                0..8 and PileKind::Dropped (0xfe)
 //   uint16 +0x6/+0x8: tile (x, y)
 // Tiles (from 0x67444, see building_tiles.cpp): uint8 +0x8 is the owning
 // player (0xff = nobody), uint16 +0x2 a building number, flag 0x20 of byte
 // +0xa set when there is one.
 // Buildings (0x3a bytes at world+0x1499e64): uint16 +0x10/+0x12/+0x14 are
-// pile numbers (three slots), byte +0xe unknown.
+// pile numbers (three slots), word +0xe (pile_ring) a pile or, for a
+// storehouse, its goods type in the low byte.
 //
 // CGameData::BuildingPileHasGoods (0x004df9b0): (building, slot) -> AL = 1
 //   if slot (low byte, 1..3) of the building holds a pile number != 0 whose
@@ -24,10 +26,12 @@
 //   tiles (pile.x + dx, pile.y + dy) for the int32 offset pairs (16-byte
 //   stride) at world+0x110a588 and returns byte +0xe of the first building
 //   found there, or 0xff. Callers only compare AL with 0xff; EAX is
-//   reproduced anyway. ret 4.
+//   reproduced anyway. TakeGoodFromPile uses the byte as the goods type an
+//   emptied storehouse pile gets back. ret 4.
 // All thiscall (ECX = world).
 
 
+#include "game/enums.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -44,9 +48,16 @@ using layout::kTileHasBuilding;
 
 namespace {
 
-constexpr std::uint32_t kNeighbourCount = 19;  // the first 19 entries of world->offsets
+constexpr std::uint32_t kNeighbourCount = 19;  // the first 19 entries of world->offsets (radius 0..2)
+constexpr std::uint32_t kPileSlots = 3;        // Building::piles, numbered 1..3 by the callers
 
-constexpr std::uint8_t kNone = 0xff;
+constexpr std::uint8_t kNoOwner = 0xff;     // Tile::owner of land nobody owns
+constexpr std::uint8_t kNoBuilding = 0xff;  // PileNeighbourBuildingByteE: no building next to the pile
+
+// Piles of kinds 0..8 (storehouse piles are kind 0) and dropped piles count
+// towards a player's goods at game start; output, order and trade piles
+// don't.
+constexpr std::uint8_t kLastCountedPileKind = 8;
 
 }  // namespace
 
@@ -60,8 +71,8 @@ using PileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint
 std::uint32_t __fastcall CGameData_BuildingPileHasGoods(CGameData* world, void*,
                                                         std::uint32_t building,
                                                         std::uint32_t slot) {
-    slot &= 0xff;
-    if (slot < 1 || slot > 3) {
+    slot &= 0xff;  // the original compares only the low byte
+    if (slot < 1 || slot > kPileSlots) {
         return 0;
     }
     const std::uint16_t pile = world->buildings[building].piles[slot - 1];
@@ -70,24 +81,25 @@ std::uint32_t __fastcall CGameData_BuildingPileHasGoods(CGameData* world, void*,
 
 namespace {
 
-std::uint32_t RecountPlayerGoods(CGameData* world, std::uint8_t maxKind) {
-    for (std::uint32_t player = 0; player < layout::kPlayers; ++player) {
+std::uint32_t RecountPlayerGoods(CGameData* world, std::uint8_t lastCountedKind) {
+    for (layout::Player& player : world->players) {
         // The original clears the 36 goods words as 18 dwords (same bytes).
-        for (std::uint16_t& goods : world->players[player].goods) {
+        for (std::uint16_t& goods : player.goods) {
             goods = 0;
         }
     }
     std::uint32_t count = world->pile_high_water;
-    for (std::uint32_t pile = 1; pile <= count; ++pile) {
-        const Pile& p = world->piles[pile];
-        const std::uint8_t kind = p.art;
-        const std::uint8_t goods = p.good;
-        if ((kind <= maxKind || kind == 0xfe) && goods != kNone) {
-            const std::uint8_t owner = world->tiles[p.x][p.y].owner;
-            if (owner != kNone) {
-                // goods <= 0xfe and owner <= 0xfe are not range-checked, as in the original.
-                std::uint16_t& counter = world->players[owner].goods[goods];
-                counter = static_cast<std::uint16_t>(counter + p.amount);
+    for (std::uint32_t number = 1; number <= count; ++number) {
+        const Pile& pile = world->piles[number];
+        const std::uint8_t kind = pile.art;
+        const std::uint8_t good = pile.good;
+        const bool counted = kind <= lastCountedKind || kind == Value(PileKind::Dropped);
+        if (counted && good != Value(Good::Empty)) {
+            const std::uint8_t owner = world->tiles[pile.x][pile.y].owner;
+            if (owner != kNoOwner) {
+                // good <= 0xfe and owner <= 0xfe are not range-checked, as in the original.
+                std::uint16_t& counter = world->players[owner].goods[good];
+                counter = static_cast<std::uint16_t>(counter + pile.amount);
             }
         }
         count = world->pile_high_water;  // re-read every step, as the original
@@ -100,11 +112,12 @@ std::uint32_t RecountPlayerGoods(CGameData* world, std::uint8_t maxKind) {
 // Purpose: Recounts from scratch how much of each kind of goods every player has, by adding up all goods
 // piles on their land. Done once at game start.
 std::uint32_t __fastcall CGameData_RecountPlayerGoods(CGameData* world, void*) {
-    return RecountPlayerGoods(world, 8);
+    return RecountPlayerGoods(world, kLastCountedPileKind);
 }
 
-// Purpose: Finds the building next to a goods pile and returns one of its fields (meaning unknown).
-// Probably tells which building a pile belongs to.
+// Purpose: Finds the building next to a goods pile and returns the low byte of its word +0xe: for a
+// storehouse, the goods type its piles hold (TakeGoodFromPile gives an emptied storehouse pile that type
+// back).
 std::uint32_t __fastcall CGameData_PileNeighbourBuildingByteE(CGameData* world, void*,
                                                               std::uint32_t pile) {
     const Pile& p = world->piles[pile];
@@ -120,11 +133,11 @@ std::uint32_t __fastcall CGameData_PileNeighbourBuildingByteE(CGameData* world, 
         }
     }
     if (building == 0) {
-        return kNone;  // the original: loop counter 0x13 | 0xff
+        return kNoBuilding;  // the original: loop counter 19 (0x13) | 0xff
     }
     // The original reads only the low byte of the word +0xe (pile_ring).
     const std::uint8_t byteE = *reinterpret_cast<const std::uint8_t*>(&world->buildings[building].pile_ring);
-    return ((building * 7) & 0xffffff00u) | byteE;
+    return ((building * 7) & 0xffffff00u) | byteE;  // upper bytes: the original's index arithmetic
 }
 
 S3RE_HOOK(0x004df9b0, CGameData_BuildingPileHasGoods, PileSlotFn,
@@ -157,12 +170,13 @@ void PlacePile(test::Context& ctx, test::WorldPair& worlds, std::uint32_t pile) 
         w->piles[pile].y = y;
     });
     if (ctx.rng().Chance(1, 4)) {
-        static constexpr std::uint8_t kKinds[] = {0, 8, 9, 0xfe, 0xfd, 0xff};
+        static constexpr std::uint8_t kKinds[] = {Value(PileKind::Storehouse), 8, 9, Value(PileKind::Dropped),
+                                                  Value(PileKind::Order), Value(PileKind::Output)};
         const std::uint8_t kind = kKinds[ctx.rng().Below(6)];
         worlds.Both([&](CGameData* w) { w->piles[pile].art = kind; });
     }
     if (ctx.rng().Chance(1, 2)) {  // a real goods type (else random, often > 36)
-        const auto goods = static_cast<std::uint8_t>(ctx.rng().Below(36));
+        const auto goods = static_cast<std::uint8_t>(ctx.rng().Below(kGoodCount));
         worlds.Both([&](CGameData* w) { w->piles[pile].good = goods; });
     }
 }

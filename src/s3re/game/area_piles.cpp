@@ -4,8 +4,12 @@
 // set, otherwise the number of the goods pile lying there (0 = none). Area
 // records (0x2e0 bytes at world+0xe145e8; +0x0 player) keep a doubly linked
 // list of piles per goods type: uint16 heads at +0xa + type*2. Piles
-// (14-byte records at world+0x123885c; +0x0 goods type, +0x1 amount) link
-// with +0xa (previous) and +0xc (next).
+// (14-byte records at world+0x123885c; +0x0 goods type, +0x1 amount, +0x4
+// kind, PileKind in enums.h) link with +0xa (previous) and +0xc (next).
+// Output piles (0xff) and dropped piles (0xfe) leave their goods list while
+// every unit on them is spoken for (amount == leaving) and come back when
+// one is free again (PileIncAmountLeaving / PileDecAmountLeaving,
+// AddGoodsToPile).
 //
 // CGameData::AddTilePileToArea (0x005051b0): (x, y): if the tile holds a
 //   pile (word +0x2 != 0 and no building flag): DebugLog("Pile %u Taken ,
@@ -16,8 +20,8 @@
 //   tail-returns it) reproduced: world + tile index * 24 when there is no
 //   pile, else area * 0x170. ret 8.
 // CGameData::AddGoodsToPile (0x00505650): (pile): one more unit on the
-//   pile: byte +0x3 (units on the way?) -= 1, amount (+0x1) += 1. Before
-//   that, a pile of kind (+0x4) 0xff whose amount equals its reserved count
+//   pile: byte +0x3 (units on the way) -= 1, amount (+0x1) += 1. Before
+//   that, an output pile (kind 0xff) whose amount equals its reserved count
 //   (+0x2) is put at the head of its area's list for its goods type (as in
 //   AddTilePileToArea; area = the area word of the pile's tile +0x6/+0x8).
 //   DebugLog("...", pile, kind, goods, x, y) (format at 0x6a6150) for kind 0
@@ -52,8 +56,9 @@
 //   area * 0x170 after a relink, else of pile * 7. ret 4.
 // CGameData::MakePileEmpty (0x00506080): (pile): the pile leaves its area's
 //   list for its goods type (unlinked as in PileIncAmountLeaving), its goods
-//   byte becomes 0xff (an allocated pile without goods) and it goes to the
-//   head of the area's list +0x8 (empty piles). EAX = pile + 0x14d2e2. ret 4.
+//   byte becomes 0xff (Good::Empty, an allocated pile without goods) and it
+//   goes to the head of the area's list +0x8 (empty piles). EAX = pile +
+//   0x14d2e2. ret 4.
 // CGameData::CreatePile (0x00504420): (x, y, goods, amount, kind): takes the
 //   first free pile record 1..0x7cfe (goods byte 0; record 0x7cff counts as
 //   "none free": EAX = 0 then, nothing changes), raises the high-water mark
@@ -70,8 +75,10 @@
 
 
 #include "game/debug_log.h"
+#include "game/enums.h"
 #include "game/replacements.h"
 #include "game/texts.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -90,7 +97,6 @@ using layout::kTileHasBuilding;
 
 namespace {
 
-
 // The original computes the area's list head as (area * 0x170 + goods) * 2
 // bytes into the area table, and returns area * 0x170 in EAX.
 constexpr std::uint32_t kAreaWords = sizeof(Area) / 2;
@@ -99,6 +105,8 @@ constexpr std::uint32_t kAreaWords = sizeof(Area) / 2;
 // table's offset in records (the original's index arithmetic).
 static_assert(offsetof(CGameData, piles) % sizeof(Pile) == 0);
 constexpr std::uint32_t kPileIndexBias = offsetof(CGameData, piles) / sizeof(Pile);
+
+constexpr std::uint8_t kPileCapacity = 8;  // more than this on one pile is logged as an error
 
 std::uint32_t Address(const void* p) {
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p));
@@ -109,6 +117,25 @@ Tile& TileOf(CGameData* world, const Pile& pile) {
     return world->tiles[pile.x][pile.y];
 }
 
+// Output and dropped piles are the ones that leave their goods list while
+// every unit on them is spoken for.
+bool LeavesListWhenReserved(const Pile& pile) {
+    return KindOf(pile) == PileKind::Output || KindOf(pile) == PileKind::Dropped;
+}
+
+// Puts `pile` at the head of the list whose head word is `head`, in the
+// original's order of writes (next, the old head's previous, previous, head).
+void PushFront(CGameData* world, std::uint32_t pile, std::uint16_t& head) {
+    Pile& p = world->piles[pile];
+    const std::uint32_t next = head;
+    p.next = static_cast<std::uint16_t>(next);
+    if (next != 0) {
+        world->piles[next].prev = static_cast<std::uint16_t>(pile);
+    }
+    p.prev = 0;
+    head = static_cast<std::uint16_t>(pile);
+}
+
 }  // namespace
 
 using TileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
@@ -116,7 +143,7 @@ using TileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint
 // Purpose: A goods pile lying on a tile becomes part of the economy: its goods count towards the tile
 // owner's stock and the pile is listed in its area, so carriers can find it.
 std::uint32_t __fastcall CGameData_AddTilePileToArea(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t index = x * 0x300 + y;
+    const std::uint32_t index = x * static_cast<std::uint32_t>(layout::kMapRowTiles) + y;
     // x, y are full dwords: the tile offset is computed in 32 bits as in the original.
     Tile& tile = TileAtOffset(world, TileOffset(x, y));
     const std::uint32_t pile = tile.object_number;
@@ -125,19 +152,12 @@ std::uint32_t __fastcall CGameData_AddTilePileToArea(CGameData* world, void*, st
     }
     const std::uint32_t area = tile.area;
     GameDebugLog(texts::kPileTaken, pile, area);
-    CGameData_AddPlayerCounter(world, nullptr, tile.owner, world->piles[pile].good, world->piles[pile].amount);
-    const std::uint32_t areaWords = area * kAreaWords;
-    std::uint16_t& head = world->areas[area].piles_by_goods[world->piles[pile].good];
-    const std::uint32_t next = head;
-    world->piles[pile].next = static_cast<std::uint16_t>(next);
-    if (next != 0) {
-        world->piles[next].prev = static_cast<std::uint16_t>(pile);
-    }
-    world->piles[pile].prev = 0;
-    // The goods byte is read again for the second head access, as in the original.
-    std::uint16_t& head2 = world->areas[area].piles_by_goods[world->piles[pile].good];
-    head2 = static_cast<std::uint16_t>(pile);
-    return areaWords;
+    const Pile& p = world->piles[pile];
+    CGameData_AddPlayerCounter(world, nullptr, tile.owner, p.good, p.amount);
+    // The original reads the goods byte again for the head's second access;
+    // nothing in between can change it, so one reference serves both.
+    PushFront(world, pile, world->areas[area].piles_by_goods[p.good]);
+    return area * kAreaWords;
 }
 
 S3RE_HOOK(0x005051b0, CGameData_AddTilePileToArea, TileFn, Original_CGameData_AddTilePileToArea,
@@ -155,34 +175,28 @@ std::uint32_t __fastcall CGameData_AddGoodsToPile(CGameData* world, void*, std::
     };
     // The original's EAX, step by step (see the doc comment).
     std::uint32_t eax = ((pile * 7u) & 0xffffff00u) | p.art;
-    if (p.art == 0 && p.coming == 0) {
+    if (KindOf(p) == PileKind::Storehouse && p.coming == 0) {
         eax = pile + kPileIndexBias;
-        log(0);
+        log(Value(PileKind::Storehouse));
     }
-    if (p.art == 0xfe) {
+    if (KindOf(p) == PileKind::Dropped) {
         eax = p.good;
-        log(0xfe);
+        log(Value(PileKind::Dropped));
     }
-    if (p.art == 0xff) {
+    if (KindOf(p) == PileKind::Output) {
         eax = (eax & 0xffffff00u) | p.leaving;
         if (p.amount == p.leaving) {
+            // Everything was spoken for, so the pile was out of its list:
+            // with the new unit it is listed again.
             const std::uint32_t area = TileOf(world, p).area;
-            const std::uint32_t areaWords = area * kAreaWords;
-            std::uint16_t& head = world->areas[area].piles_by_goods[p.good];
-            const std::uint32_t next = head;
-            p.next = static_cast<std::uint16_t>(next);
-            if (next != 0) {
-                world->piles[next].prev = static_cast<std::uint16_t>(pile);
-            }
-            p.prev = 0;
-            world->areas[area].piles_by_goods[p.good] = static_cast<std::uint16_t>(pile);
-            eax = areaWords;
+            PushFront(world, pile, world->areas[area].piles_by_goods[p.good]);
+            eax = area * kAreaWords;
         }
     }
     p.coming = static_cast<std::uint8_t>(p.coming - 1);
     p.amount = static_cast<std::uint8_t>(p.amount + 1);
     eax = (eax & 0xffffff00u) | p.amount;
-    if (p.amount >= 9) {
+    if (p.amount > kPileCapacity) {
         eax = p.art;
         log(p.art);
     }
@@ -191,38 +205,52 @@ std::uint32_t __fastcall CGameData_AddGoodsToPile(CGameData* world, void*, std::
 
 S3RE_HOOK(0x00505650, CGameData_AddGoodsToPile, PileFn, Original_CGameData_AddGoodsToPile, CGameData_AddGoodsToPile);
 
+namespace {
+
+// 0x5058c0..: PileIncAmountLeaving's error report when a pile already has
+// a full pile's worth of units leaving: the pile, and the first building
+// that refers to it. Returns the original's EAX after the report.
+std::uint32_t LogOverfullLeaving(CGameData* world, std::uint32_t pile) {
+    const Pile& p = world->piles[pile];
+    GameDebugLog(texts::kPileIncAmountLeaving, static_cast<std::uint32_t>(p.art), pile,
+                 static_cast<std::uint32_t>(p.amount), static_cast<std::uint32_t>(p.good),
+                 static_cast<std::uint32_t>(p.leaving), static_cast<std::uint32_t>(p.x),
+                 static_cast<std::uint32_t>(p.y));
+    std::uint32_t eax = p.amount;
+    const std::uint32_t count = world->building_high_water;
+    if (count < 1) {
+        return eax;
+    }
+    // The building index is kept in 16 bits (compared with the count after
+    // `& 0xffff`), as in the original.
+    std::uint32_t i = 1;
+    for (;;) {
+        const Building& building = world->buildings[i];
+        if (building.piles[0] == pile || building.piles[1] == pile || building.piles[2] == pile ||
+            building.pile_ring == pile) {
+            const Building& found = world->buildings[i & 0xffffu];
+            GameDebugLog(texts::kPileIncAmountLeavingBuilding, static_cast<std::uint32_t>(found.art),
+                         static_cast<std::uint32_t>(found.buildup));
+            return Address(world) + (i & 0xffffu) * static_cast<std::uint32_t>(sizeof(Building));
+        }
+        ++i;
+        eax = i & 0xffffu;
+        if (eax > count) {
+            return eax;
+        }
+    }
+}
+
+}  // namespace
+
 // Purpose: A carrier is coming to take one unit from a pile. Once every unit on the pile is spoken for, the
 // pile is taken out of its area's list, so no other carrier is sent for it.
 std::uint32_t __fastcall CGameData_PileIncAmountLeaving(CGameData* world, void*, std::uint32_t pile) {
     Pile& p = world->piles[pile];
     // The original's EAX, step by step.
     std::uint32_t eax = ((pile * 7u) & 0xffffff00u) | p.leaving;
-    if (p.leaving >= 8) {
-        GameDebugLog(texts::kPileIncAmountLeaving, static_cast<std::uint32_t>(p.art), pile,
-                     static_cast<std::uint32_t>(p.amount), static_cast<std::uint32_t>(p.good),
-                     static_cast<std::uint32_t>(p.leaving), static_cast<std::uint32_t>(p.x),
-                     static_cast<std::uint32_t>(p.y));
-        eax = p.amount;
-        const std::uint32_t count = world->building_high_water;
-        if (count >= 1) {
-            std::uint32_t i = 1;
-            for (;;) {
-                const Building& building = world->buildings[i];
-                if (building.piles[0] == pile || building.piles[1] == pile || building.piles[2] == pile ||
-                    building.pile_ring == pile) {
-                    const Building& found = world->buildings[i & 0xffffu];
-                    GameDebugLog(texts::kPileIncAmountLeavingBuilding, static_cast<std::uint32_t>(found.art),
-                                 static_cast<std::uint32_t>(found.buildup));
-                    eax = Address(world) + (i & 0xffffu) * static_cast<std::uint32_t>(sizeof(Building));
-                    break;
-                }
-                ++i;
-                eax = i & 0xffffu;
-                if (eax > count) {
-                    break;
-                }
-            }
-        }
+    if (p.leaving >= kPileCapacity) {
+        eax = LogOverfullLeaving(world, pile);
     }
     p.leaving = static_cast<std::uint8_t>(p.leaving + 1);
     eax = (eax & 0xffffff00u) | p.leaving;
@@ -230,9 +258,11 @@ std::uint32_t __fastcall CGameData_PileIncAmountLeaving(CGameData* world, void*,
         return eax;
     }
     eax = (eax & 0xffffff00u) | p.art;
-    if (p.art != 0xff && p.art != 0xfe) {
+    if (!LeavesListWhenReserved(p)) {
         return eax;
     }
+    // Every unit is spoken for: unlink the pile from its goods list (its
+    // own links stay).
     const std::uint32_t area = TileOf(world, p).area;
     const std::uint32_t previous = p.prev;
     const std::uint32_t next = p.next;
@@ -271,7 +301,7 @@ std::uint32_t __fastcall CGameData_PileDecAmountComing(CGameData* world, void*, 
 // cleared (probably freeing the record).
 std::uint32_t __fastcall CGameData_RemovePileFromTile(CGameData* world, void*, std::uint32_t pile) {
     TileOf(world, world->piles[pile]).object_number = 0;
-    world->piles[pile].good = 0;
+    world->piles[pile].good = Value(Good::Nothing);  // a free pile record
     return pile + kPileIndexBias;  // the original's index arithmetic
 }
 
@@ -288,17 +318,10 @@ S3RE_HOOK(0x00504650, CGameData_RemovePileFromTile, PileFn, Original_CGameData_R
 std::uint32_t __fastcall CGameData_PileDecAmountLeaving(CGameData* world, void*, std::uint32_t pile) {
     Pile& p = world->piles[pile];
     std::uint32_t upper = pile * 7u;  // the original's register before the byte loads
-    if (p.amount == p.leaving && (p.art == 0xff || p.art == 0xfe)) {
+    if (p.amount == p.leaving && LeavesListWhenReserved(p)) {
         const std::uint32_t area = TileOf(world, p).area;
         upper = area * kAreaWords;
-        std::uint16_t& head = world->areas[area].piles_by_goods[p.good];
-        const std::uint32_t next = head;
-        p.next = static_cast<std::uint16_t>(next);
-        if (next != 0) {
-            world->piles[next].prev = static_cast<std::uint16_t>(pile);
-        }
-        p.prev = 0;
-        head = static_cast<std::uint16_t>(pile);
+        PushFront(world, pile, world->areas[area].piles_by_goods[p.good]);
     }
     p.leaving = static_cast<std::uint8_t>(p.leaving - 1);
     return (upper & 0xffffff00u) | p.leaving;
@@ -309,6 +332,8 @@ std::uint32_t __fastcall CGameData_PileDecAmountLeaving(CGameData* world, void*,
 std::uint32_t __fastcall CGameData_MakePileEmpty(CGameData* world, void*, std::uint32_t pile) {
     Pile& p = world->piles[pile];
     const std::uint32_t area = TileOf(world, p).area;
+    // Unlink from the goods list; p.next is read again after the first
+    // write, as in the original.
     const std::uint32_t previous = p.prev;
     if (previous != 0) {
         world->piles[previous].next = p.next;
@@ -319,13 +344,15 @@ std::uint32_t __fastcall CGameData_MakePileEmpty(CGameData* world, void*, std::u
     if (next != 0) {
         world->piles[next].prev = p.prev;
     }
-    std::uint16_t& head = world->areas[area].pile_list;  // the list of empty piles
+    // Push onto the empty list; the original writes the goods byte between
+    // the previous link and the head.
+    std::uint16_t& head = world->areas[area].pile_list;
     p.next = head;
     if (head != 0) {
         world->piles[head].prev = static_cast<std::uint16_t>(pile);
     }
     p.prev = 0;
-    p.good = 0xff;
+    p.good = Value(Good::Empty);
     head = static_cast<std::uint16_t>(pile);
     return pile + kPileIndexBias;  // the original's index arithmetic
 }
@@ -343,9 +370,11 @@ S3RE_HOOK(0x00504420, CGameData_CreatePile, CreatePileFn, Original_CGameData_Cre
 
 namespace {
 
-constexpr std::uint32_t kPileLimit = 0x7cff;
+// Pile records 1..31998 can be used; reaching 31999 (0x7cff) means none is free.
+constexpr std::uint32_t kPileLimit = 31999;
 
-// Puts `pile` at the head of the list whose head word is `head`.
+// Puts `pile` at the head of the list whose head word is `head` (CreatePile's
+// order of writes: the head before the previous link).
 void LinkAtHead(CGameData* world, std::uint32_t pile, std::uint16_t& head) {
     const std::uint16_t first = head;
     world->piles[pile].next = first;
@@ -356,6 +385,11 @@ void LinkAtHead(CGameData* world, std::uint32_t pile, std::uint16_t& head) {
     world->piles[pile].prev = 0;
 }
 
+// CreatePile's kinds (a full dword, compared as such).
+bool IsStorageKind(std::uint32_t kind) {
+    return kind <= kLastStoragePileKind;
+}
+
 }  // namespace
 
 // Purpose: Puts a new goods pile on a tile (probably when goods are dropped
@@ -363,7 +397,7 @@ void LinkAtHead(CGameData* world, std::uint32_t pile, std::uint16_t& head) {
 std::uint32_t __fastcall CGameData_CreatePile(CGameData* world, void* /*edx*/, std::uint32_t x, std::uint32_t y,
                                               std::uint32_t goods, std::uint32_t amount, std::uint32_t kind) {
     std::uint32_t pile = 1;
-    while (world->piles[pile].good != 0 && pile != kPileLimit) {
+    while (world->piles[pile].good != Value(Good::Nothing) && pile != kPileLimit) {
         ++pile;
     }
     if (pile == kPileLimit) {
@@ -388,8 +422,8 @@ std::uint32_t __fastcall CGameData_CreatePile(CGameData* world, void* /*edx*/, s
     // arithmetic of the indexing matches the original's).
     std::uint16_t& goodsHead = world->areas[area].piles_by_goods[goods];
     if (amount == 0) {
-        if (kind <= 0x32) {
-            if (goods != 0xff) {
+        if (IsStorageKind(kind)) {
+            if (goods != Value(Good::Empty)) {
                 LinkAtHead(world, pile, goodsHead);
             } else {
                 // Same links; the original clears the previous link before
@@ -398,7 +432,8 @@ std::uint32_t __fastcall CGameData_CreatePile(CGameData* world, void* /*edx*/, s
             }
             return pile;
         }
-    } else if (kind <= 0x32 || kind == 0xfe || kind == 0xff) {
+    } else if (IsStorageKind(kind) || kind == Value(PileKind::Dropped) || kind == Value(PileKind::Output)) {
+        // Piles in water or in area 0 get no links.
         if (area != 0 && area < layout::kTileAreaWater) {
             LinkAtHead(world, pile, goodsHead);
         } else {

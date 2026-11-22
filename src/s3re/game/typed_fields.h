@@ -50,6 +50,9 @@ inline Race RaceOf(const layout::Building& building) {
 inline Good GoodOf(const layout::Pile& pile) {
     return static_cast<Good>(pile.good);
 }
+inline PileKind KindOf(const layout::Pile& pile) {
+    return static_cast<PileKind>(pile.art);
+}
 
 // ---------------------------------------------------------------- Player
 inline Race RaceOf(const layout::Player& player) {

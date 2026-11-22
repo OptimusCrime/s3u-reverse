@@ -2,15 +2,16 @@
 // UpdateEconomy).
 //
 // CGameData::CountOtherPileClaims (0x00510800): (settler, pile) -> how many
-//   of the 128 entries at world+0x1195dd4 have word 0 == pile and word 1 !=
-//   settler (both compared as 16-bit values). The only writer of that list
-//   is CGameData::AddPileClaim (0x510770; was AddToRecentPositions), called once, by
-//   UpdateSettlers job 0x152, as (settler, pile): it stores {pile,
-//   settler} (layout::PileClaim). So the list holds pile claims, not positions (the logic
-//   thread clears one slot per step, so a claim expires after 128 steps);
-//   job 0x152 compares this count with the pile's amount. ECX = world,
-//   ret 8, EAX = the count.
-// thiscall. Name ours. (0x50e200 is analysed in LOGBOOK.md, not done yet.)
+//   of the 128 entries of world->pile_claims (world+0x1195dd4) have word 0
+//   == pile and word 1 != settler (both compared as 16-bit values). The only
+//   writer of that list is CGameData::AddPileClaim (0x510770; was
+//   AddToRecentPositions), called once, by UpdateSettlers job
+//   ThiefChoosePile (338, 0x152), as (settler, pile): it stores {pile,
+//   settler} (layout::PileClaim). So the list holds the piles thieves have
+//   picked (the logic thread clears one slot per step, so a claim expires
+//   after 128 steps); the same job compares this count with the pile's
+//   amount. ECX = world, ret 8, EAX = the count.
+// thiscall. Name ours. (0x50e200 is economy.cpp's SetTowerSoldierAnimation.)
 
 #include "game/replacements.h"
 #include "game/world.h"
@@ -20,13 +21,14 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 
 namespace s3re::game {
 
 using ClaimsFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t settler, std::uint32_t pile);
 
-// Purpose: Counts how many other settlers have recently claimed a pile, so a settler (job 0x152) does
-// not head for a pile that others will already empty.
+// Purpose: Counts how many other thieves have recently picked a pile, so a thief (job ThiefChoosePile)
+// does not head for a pile that others will already empty.
 std::uint32_t __fastcall CGameData_CountOtherPileClaims(CGameData* world, void*, std::uint32_t settler,
                                                         std::uint32_t pile) {
     const auto pile16 = static_cast<std::uint16_t>(pile);
@@ -56,7 +58,7 @@ void CompareClaims(test::Context& ctx, ClaimsFn candidate, int cases) {
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t pile = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(6);
         const std::uint32_t settler = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(6);
-        for (std::uint32_t slot = 0; slot < 128; ++slot) {
+        for (std::uint32_t slot = 0; slot < std::size(worlds.original()->pile_claims); ++slot) {
             const auto a = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? pile : ctx.rng().Below(6));
             const auto b = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? settler : ctx.rng().Below(6));
             worlds.Both([&](CGameData* w) {
