@@ -7592,12 +7592,258 @@ US_PROBES[0x0051b640] = (2, "thiscall", "probe", _us_clear_owner)
 
 
 # ---- family u (units, settler_jobs_units.cpp) ----
-US_EXEMPT_U = ()
+# Scenarios per handler of 0x4e971c..0x4eb43b (and the loop's own blocks):
+# job 0 (lists), 0x8e, 0x37 (thief, ships steering, geologist / pioneer
+# searches, soldiers, crowded / blocked tiles), 0xae (enemies in reach or a
+# new guard), 0xad, 0xac (searches of the player's areas), 1 (foreign
+# ground, surplus carriers, crowded tiles, the area search), 0xb0, 0x35,
+# the walking jobs, job 4 for every type and building, 0x170, and settlers
+# the loop skips (job above 0x194).
+US_EXEMPT_U = (
+    # "Digger trouble" (0x4f922f..): DebugLog, then `jmp $` (an endless loop on
+    # purpose); our version logs and sleeps forever. Never run in a test.
+    0x004f922f, 0x004f9263,
+)
+
+US_U_SHIP_TYPES = (0x2b, 0x2c)
+US_U_ARRIVE_BUILDINGS = (7, 8, 9, 29, 37, 56, 10, 11, 12, 13, 31, 47, 48, 50, 23, 49, 1, 2, 6, 57, 60, 0xff)
+
+
+def _us_u_sector(dx, dy):
+    """A direction 0..5 for an offset (only consistency matters)."""
+    if dx == 0 and dy == 0:
+        return 0
+    if dy == 0:
+        return 0 if dx > 0 else 3
+    if dx == dy:
+        return 1 if dx > 0 else 4
+    if dx == 0:
+        return 2 if dy > 0 else 5
+    if dx > 0:
+        return 0 if dx > dy else 1
+    return 3 if dx < dy else 4
+
+
+_US_U_SECTORS: list = []
+
+
+def _us_u_sectors():
+    """MapOffset::sector for the 217 ring entries of walk_rings(9) (same order;
+    the ship steering reads entries 1..216, and the game's table only holds
+    sectors 0..5)."""
+    if not _US_U_SECTORS:
+        k = 0
+        for r in range(9):
+            for dx in range(-r, r + 1):
+                for dy in range(-r, r + 1):
+                    if hex_distance(dx, dy) == r:
+                        _US_U_SECTORS.append((NEIGHBOUR_OFFSETS + k * 16 + 12, _us_u_sector(dx, dy), 4))
+                        k += 1
+    return _US_U_SECTORS
+
+
+def _us_u_ring(x, y, radius):
+    for dx in range(-radius, radius + 1):
+        for dy in range(-radius, radius + 1):
+            if hex_distance(dx, dy) <= radius:
+                yield x + dx, y + dy, hex_distance(dx, dy)
+
+
+# The neighbours in the order the crowded-side check looks at them.
+US_U_SIDES = ((-1, 0), (-1, -1), (0, -1), (1, 0), (1, 1), (0, 1))
+
+
+def _us_u_neighbours(rng, fields, x, y, crowded):
+    """The six neighbours: no settlers, or (crowded) the first occupied one
+    in check order is a random side, later ones random."""
+    first = rng.randrange(6)
+    for k, (dx, dy) in enumerate(US_U_SIDES):
+        t = tile(x + dx, y + dy)
+        busy = crowded and (k == first or (k > first and rng.random() < 0.4))
+        fields.append((t, rng.randint(1, US_OTHERS) if busy else 0, 2))
 
 
 def _us_family_u(rng, fields, n, ctx):
-    pass
-
+    s = ctx["record"]
+    x, y = ctx["x"], ctx["y"]
+    if rng.random() < 0.1:
+        # Next to the map edge (neighbours off the map).
+        x = rng.choice((0, 383))
+        fields.append((s + 0x4, x, 2))
+    here = tile(x, y)
+    fields.append((s + 0x8, rng.choice((5, 6, rng.randrange(7))), 4))  # facing direction (5 and up wrap to 0)
+    owner = rng.randrange(4)
+    fields += walk_rings(9) + _us_u_sectors()
+    for p in range(4):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 0xc, rng.randrange(2), 4))
+    for a in range(US_AREAS):
+        fields.append((AREAS + a * AREA_BYTES, rng.choice((0xff, rng.randrange(4))), 1))
+    fields.append((s, owner, 1))
+    scenario = rng.choice(("new", "new", "fight", "idle", "idle", "idle", "idle", "idle", "idle", "guard",
+                           "guard", "heal", "seek", "seek", "seek", "nothing", "nothing", "nothing", "nothing",
+                           "nothing", "count", "unitwalk", "walk", "arrive", "arrive", "arrive", "arrive", "arrive",
+                           "arrive", "arrive", "arrive", "bee", "skip"))
+    area = rng.randint(1, US_AREAS - 1)
+    region = rng.randint(1, 3)
+    if scenario == "skip":
+        fields.append((s + 0xe, rng.choice((0x195, 0x1ff, 0xffff)), 2))
+        return
+    if scenario == "new":
+        art = rng.choice((0, 1, 3, 9, 5, 8, 0xf, 0x16, 0x28, 0x2c, 0x2b, 0x17, rng.randrange(0x30)))
+        fields += [(s + 0xe, 0, 2), (s + 0x1, art, 1), (here + 0x14, area, 2)]
+        head = 0 if rng.random() < 0.4 else rng.randint(1, US_OTHERS)
+        fields += [(PLAYER_RECORDS + owner * PLAYER_RECORD_BYTES + 0x20 + 2 * art, head, 2),
+                   (AREAS + area * AREA_BYTES + 0x12a + 2 * art, head, 2)]
+        return
+    if scenario == "fight":
+        fields.append((s + 0xe, 0x8e, 2))
+        return
+    if scenario == "heal":
+        fields += [(s + 0xe, 0xad, 2), (s + 0x3, rng.choice((0, 1, 50, 99, 100, 200)), 1)]
+        return
+    if scenario == "count":
+        fields += [(s + 0xe, 0xb0, 2), (s + 0x3c, rng.choice((0, 1, 2, 5)), 1)]
+        return
+    if scenario == "unitwalk":
+        fields += [(s + 0xe, 0x35, 2), (s + 0x1, rng.choice((5, 8, 0xf, 0, 0x2c)), 1)]
+        return
+    if scenario == "walk":
+        fields.append((s + 0xe, rng.choice([j for j in US_JOBS["u"] if j not in (0, 1, 4, 0x35, 0x37, 0x8e, 0xac,
+                                                                              0xad, 0xae, 0xb0, 0x170)]), 2))
+        return
+    if scenario == "bee":
+        fields.append((s + 0xe, 0x170, 2))
+        return
+    if scenario == "arrive":
+        art = (rng.randrange(0x30) if rng.random() < 0.6 else rng.choice((9, 0xa, 0xa, 0xa, 0xb, 0xb, 0xb, 0x1c, 0x1c))
+               if rng.random() < 0.95 else rng.randint(0x30, 0xff))
+        b = rng.randint(1, US_OTHERS)
+        fields += [(s + 0xe, 4, 2), (s + 0x1, art, 1), (s + 0x22, b, 2),
+                   (BUILDINGS + b * BUILDING_BYTES + 6, rng.choice(US_U_ARRIVE_BUILDINGS), 1),
+                   (here + 0x14, area, 2), (AREAS + area * AREA_BYTES + 0x23e, rng.randrange(120), 1)]
+        return
+    if scenario == "guard":
+        art = rng.choice((5, 0x20, 8, 0x1e, 0xf, 0x22, 0x16, 0))
+        fields += [(s + 0xe, 0xae, 2), (s + 0x1, art, 1)]
+        enemy = rng.random() < 0.6
+        for tx, ty, d in _us_u_ring(x, y, 7):
+            if d == 0:
+                continue
+            k = 0
+            if rng.random() < (0.08 if enemy else 0.02):
+                k = rng.randint(1, US_OTHERS)
+                r = SETTLERS + k * SETTLER_BYTES
+                fields += [(r, rng.randrange(4), 1), (r + 1, rng.choice((5, 0xf, 8, 0x22, 0, 0x20)), 1)]
+            fields.append((tile(tx, ty), k, 2))
+        if rng.random() < 0.5:
+            # The created guard (CreateSettler returns 0..40): its own record.
+            pass
+        return
+    if scenario == "seek":
+        civilian = rng.random() < 0.85
+        fields += [(s + 0xe, 0xac, 2), (s + 0x1, rng.choice((0, 1, 3, 9)) if civilian else 5, 1),
+                   (here + 0x10, region, 1), (here + 0x14, area, 2)]
+        mode = rng.choice(("own", "other", "none", "none_free"))
+        for tx, ty, d in _us_u_ring(x, y, 7):
+            if d == 0:
+                continue
+            t = tile(tx, ty)
+            busy = rng.random() < 0.3
+            if mode == "own":
+                a = area if rng.random() < 0.3 else rng.randint(1, US_AREAS - 1)
+            elif mode == "other":
+                a = rng.choice((area + 1, area + 2)) % US_AREAS or 1
+            else:
+                a = 0
+            fields += [(t + 0x10, region if rng.random() < 0.9 else region + 1, 1), (t + 0x14, a, 2),
+                       (t, rng.randint(1, US_OTHERS) if busy else 0, 2)]
+        fields.append((AREAS + area * AREA_BYTES, owner, 1))
+        return
+    if scenario == "nothing":
+        art = 0 if rng.random() < 0.5 else rng.choice((1, 3, 9, 0x10))
+        flags = rng.choice((0, 0x80, rng.getrandbits(8)))
+        crowd = rng.choice(("free", "free", "free", "crowded", "crowded", "blocked", "blocked_nowhere"))
+        fields += [(s + 0xe, 1, 2), (s + 0x1, art, 1), (s + 0x14, flags, 1), (here + 0x14, area, 2),
+                   (here + 0x8, owner if rng.random() < 0.6 else rng.randrange(4), 1),
+                   (here + 0xa, 0 if not crowd.startswith("blocked") else rng.choice((1, 2, 4, 8)), 1)]
+        _us_u_neighbours(rng, fields, x, y, crowd == "crowded")
+        player = PLAYER_RECORDS + owner * PLAYER_RECORD_BYTES
+        surplus = rng.randrange(4)
+        fields += [(player + 0xd4, surplus, 4), (player + 0xd8, rng.choice((surplus, surplus + 1, max(surplus - 1, 0))), 4)]
+        if crowd == "blocked_nowhere":
+            # No free tile of its area anywhere in the offset table (0x4eabbd).
+            for tx, ty, d in _us_u_ring(x, y, 9):
+                if d:
+                    fields.append((tile(tx, ty) + 0x14, (area + 1) % US_AREAS, 2))
+        if crowd == "blocked":
+            for tx, ty, d in _us_u_ring(x, y, 4):
+                if d == 0:
+                    continue
+                t = tile(tx, ty)
+                fields += [(t + 0x14, area if rng.random() < 0.2 else area + 1, 2),
+                           (t + 0xa, rng.choice((0, 0, 1)), 1), (t, rng.choice((0, 0, 1)), 2)]
+        return
+    # idle (0x37)
+    kind = rng.choice(("thief", "ship", "ship", "geologist", "geologist", "pioneer", "pioneer", "soldier",
+                       "free", "crowded", "blocked"))
+    fields.append((s + 0xe, 0x37, 2))
+    if kind == "thief":
+        fields += [(s + 0x1, 0x17, 1), (s + 0x15, rng.choice((0, 1, 3)), 1),
+                   (here + 0x8, owner if rng.random() < 0.7 else 0xff, 1)]
+        _us_u_neighbours(rng, fields, x, y, rng.random() < 0.5)
+        return
+    if kind == "ship":
+        art = rng.choice(US_U_SHIP_TYPES + (0x28, 0x16))
+        fields += [(s + 0x1, art, 1), (here + 0x6, rng.choice((5, 5, 6, 0x10)), 1), (here + 0x14, area, 2)]
+        if art in (0x28, 0x16):
+            fields += [(s + 0x1c, x, 4), (s + 0x20, y, 2), (here + 0x10, region, 1)]
+            for tx, ty, d in _us_u_ring(x, y, 3):
+                fields += [(tile(tx, ty) + 0x10, region, 1), (tile(tx, ty) + 0xa, 0, 1),
+                           (tile(tx, ty) + 0x8, (owner + 1) % 4, 1), (tile(tx, ty) + 0x6, 0x20, 1),
+                           (tile(tx, ty) + 0x7, 0, 1)]
+        ships = rng.randrange(6)
+        for k in range(1, 7):
+            fields.append((tile(x + DIR_X[k - 1], y + DIR_Y[k - 1]) + 0x6, rng.choice((5, 0x10, 0x30)), 1))
+        for _ in range(ships):
+            tx, ty = x + rng.randint(-8, 8), y + rng.randint(-8, 8)
+            if hex_distance(tx - x, ty - y) > 8 or (tx, ty) == (x, y):
+                continue
+            k = rng.randint(1, US_OTHERS)
+            t = tile(tx, ty)
+            fields += [(t, k, 2), (t + 0x14, area, 2), (t + 0x6, rng.choice((5, 6, 7, 7, 4)), 1),
+                       (SETTLERS + k * SETTLER_BYTES + 1, rng.choice(US_U_SHIP_TYPES + (0,)), 1)]
+        return
+    if kind in ("geologist", "pioneer"):
+        geologist = kind == "geologist"
+        art = 0x16 if geologist else 0x28
+        spot = rng.choice(("here", "near", "none"))
+        sx, sy = (x, y) if spot == "here" else (x + rng.randint(-3, 3), y + rng.randint(-3, 3))
+        fields += [(s + 0x1, art, 1), (s + 0x1c, 0xffff if spot == "none" else sx, 4),
+                   (s + 0x20, 0xffff if spot == "none" else sy, 2), (here + 0x10, region, 1)]
+        good = rng.random() < 0.6
+        for tx, ty, d in _us_u_ring(sx, sy, 9):
+            t = tile(tx, ty)
+            ok = good and rng.random() < 0.7
+            if geologist:
+                fields += [(t + 0x10, region if ok or rng.random() < 0.5 else region + 1, 1),
+                           (t + 0xa, 0 if ok or rng.random() < 0.5 else 1, 1),
+                           (t + 0x6, 0x20 | rng.randrange(16) if ok or rng.random() < 0.5 else 0x10, 1),
+                           (t + 0x7, 0 if ok or rng.random() < 0.5 else 3, 1)]
+            else:
+                fields += [(t + 0x10, region if ok or rng.random() < 0.5 else region + 1, 1),
+                           (t + 0xa, 0 if ok or rng.random() < 0.5 else 0x40, 1),
+                           (t + 0x8, rng.choice((0xff, (owner + 1) % 4)) if ok else owner, 1)]
+        return
+    if kind == "soldier":
+        fields.append((s + 0x1, rng.choice((5, 8, 0xf, 0x24, 0x29, 0)), 1))
+    else:
+        fields.append((s + 0x1, rng.choice((5, 8, 0xf, 0x24, 0x29, 0x25)), 1))
+    fields.append((here + 0xa, 0 if kind != "blocked" else rng.choice((1, 4)), 1))
+    _us_u_neighbours(rng, fields, x, y, kind == "crowded")
+    if kind == "blocked":
+        for tx, ty, d in _us_u_ring(x, y, 3):
+            if d:
+                fields.append((tile(tx, ty) + 0xa, rng.choice((0, 1)), 1))
 
 
 # ---- family b (building, settler_jobs_building.cpp) ----
