@@ -10,6 +10,42 @@ Each item: what, why, and where to start.
 
 ## Readability pass (docs/coding_style.md)
 
+- **SettlerJob names from UpdateSettlers (session 45)** for `enums.h` /
+  `re/enums.md`, once the readability rollout no longer changes enums.h
+  (the handler files then switch from hex job numbers to these names):
+  8/9 DiggerLower/DiggerRaise; 0x10/0x6a/0x8b Swordsman/Bowman/PikemanEnterTower;
+  0x8c BowmanInTower; 0x13..0x16 Woodcutter/Stonecutter/Sawmiller/ForesterGoIn;
+  0x18/0x19/0x1b Woodcutter/Stonecutter/ForesterSearch; 0x1a SawmillerStart;
+  0x1e/0x1f Woodcutter/StonecutterLeave; 0x20/0x21 WoodcutterAtTree/Cut;
+  0x22/0x23 StonecutterAtStone/Cut; 0x24/0x25/0x26 WoodcutterHome/PutLog/GoInAgain;
+  0x27/0x28/0x29 the same for the stonecutter; 0x2c/0x2e/0x2f
+  ForesterLeave/AtSpot/Plant; 0x31/0x32/0x33 SawmillTakeLog/BoardDone/Leave;
+  0x36 SettlerDies; 0x3e GoldBarDone, 0x41 GoldSmelterStart; 0x48
+  IronBarDone, 0x4b IronSmelterStart; 0x4d CarrierAtTradePile, 0x4f
+  CarrierAtTradeBuilding, 0x51 CarrierDone; 0x65/0x66/0x67
+  Forester/Woodcutter/StonecutterBackIn; 0x6c..0x73, 0x131 StartWork*;
+  0x74 ToolsmithStart, 0x80 ToolsmithToolDone; 0x75 WeaponSmithTakeInputs,
+  0x86 WeaponSmithFinish; 0x76 FisherSearch, 0xb3 FisherCast, 0xb7
+  FisherDeliver; 0x77/0x132 Pig/DonkeyFarmTakeInputs; 0xca/0xd0
+  Pig/DonkeyFed; 0xd2 DonkeyRelease; farmer 0x79 Search, 0x8f WalkToSow,
+  0x91 Sow, 0x92 Sown, 0x95 WalkToHarvest, 0x96 AtField, 0x97 Harvest,
+  0x9a Deliver; 0x9e/0xa2 MillerGrind; 0x7c WaterworkerSearch, 0xbd Draw,
+  0xc0 Deliver; 0x8e UnitAfterFight; 0xad GuardHeal; 0xaf
+  GarrisonSoldierDies; 0xb0 UnitWalkCountdown; 0xd5 GeologistDone;
+  rice 0xe2 Start, 0xe3 Search, 0xe4/0xea LeaveToPlant/LeaveToHarvest,
+  0xe6/0xe7 Plant/Planted, 0xeb/0xec AtField/Harvest, 0xee/0xef/0xf0
+  Arrive/Store/Enter; wine 0xf4 Search, 0xf7/0xf8 VinePlant/Planted,
+  0xfc/0xfd AtField/Harvest, 0xff/0x100/0x101/0x104
+  Arrive/EnterLoaded/Store/Enter; 0x120..0x123 Distiller/Brewer/Powder/
+  CharcoalCheck; 0x129/0x12b/0x12d WorkshopPutInput*; 0x12f PioneerDone;
+  0x138/0x139 Ballista/CannonProduction; 308 DonkeyLoad, 310 DonkeyUnload,
+  331 ShipLoad, 332 ShipUnload; 314 ShipyardUnitDone, 315 Fetch, 316/318
+  TakeBoard/TakeIron, 317/319 ToSlipway, 323 Build, 324 Home, 325
+  ShipBeingBuilt; 333 HealerWait, 334 Heal, 335/336 Done; 341
+  AlchemistStart, 346 Roll, 347..350 Store; 355 BeekeeperSearch, 358
+  PlaceHive, 363 Harvest, 367 StoreHoney; 0x170 BeekeeperStart; 382
+  MeadStart, 387 MeadStore; 0x194 ThiefReturned; 401 GongFetch (decimal
+  where given so). Provisional: check each against its handler first.
 - **Convert the remaining files** to the style guide (pilot done in
   session 45: settler_idle.cpp, update_economy.cpp, settler_walk.cpp).
   Batches by file group, see the LOGBOOK session 45 entry.
@@ -47,6 +83,20 @@ Each item: what, why, and where to start.
 
 ## Evidence and testing
 
+- **UpdateSettlers handlers with tests only (session 45).** The
+  whole-game checks (two replays, three saves, a random map) never reach
+  these UpdateSettlers jobs; check them against the user's full-game
+  recording (`check_replay.py --recording FILE --against-original`, then
+  `record_call_counts.py`). A per-job hit count needs a temporary counter
+  in update_settlers.cpp's dispatch. Jobs (hex):
+  building 0x38, 0x6a; drinks 0xe2..0x127 (rice farmer, winegrower,
+  distiller/brewer/powder maker, charcoal burner); food 0x6c..0x73,
+  0xce..0xd3, 0x131, 0x132; metal 0x32..0x34, 0x3a..0x41, 0x52..0x54,
+  0x56, 0x5c..0x5f, 0xd6..0xe1, 0x6b, 0x7d..0x82, 0xaf, 0x128..0x139,
+  0x186..0x18f; special 0x134, 0x136, 0x13a..0x14f, 0x150..0x160,
+  0x164..0x171, 0x17c..0x185, 0x190..0x194; units 0xae and the walking
+  jobs 0xe5, 0xe8, 0xed, 0xf1, 0xfe, 0x102, 0x133, 0x135, 0x140, 0x141,
+  0x147..0x14a, 0x165, 0x168; the 20 no-op jobs.
 - **Emulator memory: the CGameData_UpdateSoldier spec peaks at ~1.6 GB
   per worker** (measured 2026-11-22 with `run.py CGameData_UpdateSoldier
   --jobs 1 --memory`; WalkSettler/UpdateEconomy/UpdateEnvironment ~120 MB).

@@ -178,9 +178,11 @@ for n = 1 .. world.settlerHwm (+0x12A5E5C), re-read every iteration:
 
 - **"Run again" mechanism.** 22 handlers jump to 0x4F9214 (`again = 0;
   n--`), so the same settler is dispatched again in the same tick after
-  a job change. WalkSettler's EAX is stored in `again` (0x4EAD2F), and
-  two handlers (jobs 0x9E region 0x4F23E6 and 0x11C region 0x4F5AFA)
-  set it too. In C++: each job handler returns `Next` or `Again`, and
+  a job change. WalkSettler's EAX is stored in `again` (0x4EAD2F); that
+  is the only handler that sets it. (Correction, session 45: the writes
+  at 0x4F23E6 (job 0x9E), 0x4F5AFA (job 0x11C) and 0x4F2E00 are scratch
+  writes to frame slots, not to `again`; the reimplementation's tests
+  confirm it.) In C++: each job handler returns `Next` or `Again`, and
   the loop decrements n on `Again`. The `again` flag is reset before the
   repeat, so there is no endless loop unless a handler keeps asking.
 - **Job 0 (0x4E971C)**: new settler: counter 0, direction RandomBelow6;
