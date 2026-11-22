@@ -190,10 +190,7 @@ struct Building {
     std::uint16_t x;               // 0x02 position (tile A)
     std::uint16_t y;               // 0x04
     std::uint8_t art;              // 0x06 building type
-    union {
-        std::uint8_t race;         // 0x07 the owner's race (layout tables, animations)
-        std::uint8_t unk07;        // old name, still used by settler_spawn.cpp (TODO.md)
-    };
+    std::uint8_t race;             // 0x07 the owner's race (layout tables, animations)
     std::uint16_t unk08;           // 0x08 garrison?
     std::uint16_t door_x;          // 0x0a tile B (gives the area)
     std::uint16_t door_y;          // 0x0c
@@ -246,22 +243,13 @@ struct Player {
     std::int32_t spell_mana[8];      // 0x094
     std::int32_t unk0b4[4];          // 0x0b4
     // 0x0c4..0x0d4: recomputed by RecountPlayerPopulation (0x5104c0) in
-    // UpdatePhase2; meanings partly guesses (re/structs.md). unk0c4 is the
-    // old name, still used by settler_spawn.cpp (TODO.md).
-#pragma warning(push)
-#pragma warning(disable : 4201)  // nameless struct
-    union {
-        std::int32_t unk0c4[6];
-        struct {
-            std::uint32_t population;        // 0x0c4 civilians (settler class 0 or 10..29)
-            std::uint32_t population_limit;  // 0x0c8 limit_base + 10/30/100 per finished residence 0x1a/0x1b/0x1c
-            std::uint32_t population_limit_base;  // 0x0cc +1 per civilian created by 0x50cb20 (probably)
-            std::uint32_t carriers;          // 0x0d0 settlers of type 0
-            std::uint32_t surplus_carriers;  // 0x0d4 carriers beyond the limit's share (0 if within)
-            std::uint32_t surplus_carriers_marked;  // 0x0d8 carriers with flag 0x80 (UpdateSettlers job 1)
-        };
-    };
-#pragma warning(pop)
+    // UpdatePhase2; meanings partly guesses (re/structs.md).
+    std::uint32_t population;        // 0x0c4 civilians (settler class 0 or 10..29)
+    std::uint32_t population_limit;  // 0x0c8 limit_base + 10/30/100 per finished residence 0x1a/0x1b/0x1c
+    std::uint32_t population_limit_base;  // 0x0cc +1 per civilian created by 0x50cb20 (probably)
+    std::uint32_t carriers;          // 0x0d0 settlers of type 0
+    std::uint32_t surplus_carriers;  // 0x0d4 carriers beyond the limit's share (0 if within)
+    std::uint32_t surplus_carriers_marked;  // 0x0d8 carriers with flag 0x80 (UpdateSettlers job 1)
     std::uint16_t goods[kGoodsTypes];  // 0x0dc
     std::uint8_t unk124;             // 0x124
     std::uint8_t pad125[3];

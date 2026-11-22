@@ -6059,14 +6059,51 @@ def route_wall(rng, pool, args):
                     if (ex + DIR_X[m], ey + DIR_Y[m]) != (hx, hy):
                         fields += block(ex + DIR_X[m], ey + DIR_Y[m])
             fields += free(ex, ey)
-    fields += [(PATH_STATE + 0x84, (hx << 16) + 0x8000, 4), (PATH_STATE + 0x88, (hy << 16) + 0x8000, 4),
-               (PATH_STATE + 0x8C, d, 4), (PATH_STATE + 0x7C, (px << 16) + 0x8000, 4),
-               (PATH_STATE + 0x80, (py << 16) + 0x8000, 4)]
+    target = None
     if rng.random() < 0.3:
         # The "no angle" logs compare the target with the walkers' best
         # point: a tile near the hit point.
         k, j = rng.randrange(6), rng.randint(1, 3)
-        fields += [(PATH_STATE + 0x64, hx + j * DIR_X[k], 4), (PATH_STATE + 0x68, hy + j * DIR_Y[k], 4)]
+        target = (hx + j * DIR_X[k], hy + j * DIR_Y[k])
+    shape = rng.random()
+    if shape < 0.12:
+        # A straight corridor hit point -> P -> trace point: the right-wall
+        # walker's best point after one step is P, and the target is P when
+        # it reaches the trace point (the "no angle" comparison, 0x4a453c).
+        k = rng.randrange(6)
+        hx, hy = x + rng.choice([-9, -8, 8, 9]), y + rng.choice([-9, -8, 8, 9])
+        p1 = (hx + DIR_X[k], hy + DIR_Y[k])
+        px, py = p1[0] + DIR_X[k], p1[1] + DIR_Y[k]
+        open_tiles = {(hx, hy), p1, (px, py)}
+        walls = {(cx + DIR_X[m], cy + DIR_Y[m]) for cx, cy in ((hx, hy), p1) for m in range(6)} - open_tiles
+        target = p1
+    elif shape < 0.24:
+        # The hit point joins two dead-end corridors of different lengths:
+        # the walkers go into different ones, and when the left one comes
+        # back first (0x81) the right one comes back later ("Rightwall, No
+        # way", 0x4a44c9; target_free 0).
+        hx, hy = x + rng.choice([-9, -8, 8, 9]), y + rng.choice([-9, -8, 8, 9])
+        k1 = rng.randrange(6)
+        k2 = (k1 + rng.choice([2, 3, 4])) % 6
+        l1, l2 = rng.sample(range(1, 5), 2)
+        open_tiles = {(hx, hy)} | {(hx + i * DIR_X[k1], hy + i * DIR_Y[k1]) for i in range(1, l1 + 1)}
+        open_tiles |= {(hx + i * DIR_X[k2], hy + i * DIR_Y[k2]) for i in range(1, l2 + 1)}
+        walls = {(cx + DIR_X[m], cy + DIR_Y[m]) for cx, cy in open_tiles for m in range(6)} - open_tiles
+        px, py = x, y
+        fields.append((PATH_STATE + 0x98, 0, 1))
+    else:
+        open_tiles = walls = ()
+    for cx, cy in walls:
+        tw = tile(cx, cy)
+        fields += [(tw + 0x10, 1, 1), (tw + 0x14, 1, 2), (tw + 0x16, 1, 2)]
+    for cx, cy in open_tiles:
+        to = tile(cx, cy)
+        fields += [(to + 0x10, 0, 1), (to + 0x14, 0, 2), (to + 0x16, 0, 2), (to + 0x0, 0, 2)]
+    fields += [(PATH_STATE + 0x84, (hx << 16) + 0x8000, 4), (PATH_STATE + 0x88, (hy << 16) + 0x8000, 4),
+               (PATH_STATE + 0x8C, d, 4), (PATH_STATE + 0x7C, (px << 16) + 0x8000, 4),
+               (PATH_STATE + 0x80, (py << 16) + 0x8000, 4)]
+    if target is not None:
+        fields += [(PATH_STATE + 0x64, target[0], 4), (PATH_STATE + 0x68, target[1], 4)]
     return fields
 
 
@@ -6320,4 +6357,220 @@ SPECS += [
          [anything, spell_coordinate, spell_coordinate, anything, below(34, 0.05)], eax_mask=0,
          presets=world_effect_table, ignore_bytes=tuple(WORLD_EFFECTS + b for b in EFFECT_TABLE_PADDING),
          globals=lambda rng, pool, args: [(0x007dfd48, rng.getrandbits(32), 4)], max_cases=400),
+]
+
+
+# Package B, batch 5 (soldier.cpp: UpdateSoldier). Package C's ClearTileOwner
+# 0x51b640 and RecalculateTerritory 0x519a90 (verified on their own) are
+# probed: the original and ours call them through their addresses, and the
+# territory recount needs a consistent world. Exempt: 0x50fde8 (a tower
+# captured by a class-2 attacker, job 0x8c): dead. A capture needs a victim
+# in job 0xad/0xae, and bowmen can attack neither (0x50eced..0x50ed61) nor
+# the job-0x130 targets whose hit goes to a nearby settler (0x50ed63).
+# About 10 of 1500 cases fault in both (random ring indices of
+# PushUiFeedback / area ids of AssignTileToArea in the lazily random
+# world, and garrison walks of random 0xae jobs that never end): invalid.
+SOLDIER_PROBES = {0x0051b640: (2, "thiscall", "probe"), 0x00519a90: (2, "thiscall", "probe")}
+SOLDIER_TYPES_B = [5, 0x20, 0x23, 8, 0x1e, 0x21, 0x0f, 0x1f, 0x22]
+TARGET_TYPES_B = [5, 0x20, 8, 0x1e, 0x0f, 0x22, 0x16, 0x17, 0x25, 0x27, 0x28, 0x29, 0x2a, 1]
+TARGET_JOBS_B = [0x37, 0x8e, 0x35, 0xb0, 3, 4, 0xad, 0xae, 0xad, 0xae, 0x130, 0xd4, 0x12f, 0x135, 0x10, 0x55, 0x151]
+MAP_EFFECTS = 0x14d2bc8
+PLAYER_LIST_LENGTHS = 0x11940bc
+
+
+def soldier_offsets(rng):
+    """The offset table up to radius 20 with distances and random sectors, then a stop."""
+    fields = []
+    points = sorted(((dx, dy) for dx in range(-21, 22) for dy in range(-21, 22)), key=lambda p: (hex_distance(*p), p))
+    points = [p for p in points if hex_distance(*p) <= 20]
+    for k, (dx, dy) in enumerate(points):
+        base = NEIGHBOUR_OFFSETS + k * 16
+        fields += [(base, dx & 0xFFFFFFFF, 4), (base + 4, dy & 0xFFFFFFFF, 4),
+                   (base + 8, hex_distance(dx, dy), 4), (base + 12, rng.randrange(6), 4)]
+    fields.append((NEIGHBOUR_OFFSETS + len(points) * 16 + 8, 100, 4))
+    return fields
+
+
+SOLDIER_CLASS_TYPES = {1: [5, 0x20, 0x23], 2: [8, 0x1e, 0x21], 3: [0x0f, 0x1f, 0x22]}
+
+
+def soldier_kill_scenario(rng, soldier, x, y):
+    """One enemy within reach that dies of the hit: a worker in job 3 of a
+    building (class counters), a tower soldier in job 0xae in a garrison
+    list of 1..4 (the list walk; the tower falls when it was the last) or
+    in job 0xad of an empty tower (capture, with building soldiers in the
+    jobs the capture loop clears or keeps). Attackers of all classes,
+    with and without an idle-list predecessor."""
+    kind = rng.choice(["worker", "garrison", "tower"])
+    cls = rng.choice([1, 2, 3]) if kind == "worker" else rng.choice([1, 3])
+    record = SETTLERS + soldier * SETTLER_BYTES
+    a_owner, e_owner = rng.sample(range(4), 2)
+    fields = [(record + 0x0, a_owner, 1), (record + 0x1, rng.choice(SOLDIER_CLASS_TYPES[cls]), 1),
+              (record + 0xe, rng.choice([0x8e, 0x37, 0x35, 0x17, 0x8d]), 2),
+              (record + 0x14, rng.getrandbits(8) & 0xdf, 1),
+              (record + 0x12, 0 if rng.random() < 0.5 else rng.randrange(1, 0x400), 2),
+              (PLAYER_RECORDS + a_owner * PLAYER_RECORD_BYTES + 0xc, 0, 4),
+              (PLAYER_RECORDS + e_owner * PLAYER_RECORD_BYTES + 0xc, 1, 4)]
+    distance = rng.randint(6, 13) if cls == 2 else (1 if kind != "worker" or cls == 1 else rng.randint(1, 2))
+    if cls == 2 and rng.random() < 0.4:
+        # A bowman in a tower (job 0x8c: range 22, minimum 10; arrows from
+        # the tower slot's offset).
+        fields.append((record + 0xe, 0x8c, 2))
+        distance = rng.randint(10, 20)
+    dx, dy = rng.choice([(dx, dy) for dx in range(-20, 21) for dy in range(-20, 21) if hex_distance(dx, dy) == distance])
+    ex, ey = x + dx, y + dy
+    ids = rng.sample([i for i in range(1, 0x400) if i != soldier], 6)
+    e, nodes = ids[0], ids[1:]
+    r = SETTLERS + e * SETTLER_BYTES
+    building = rng.randrange(1, 0x40)
+    b = BUILDINGS + building * BUILDING_BYTES
+    job = {"worker": 3, "garrison": 0xae, "tower": 0xad}[kind]
+    fields += [(tile(ex, ey), e, 2), (r + 0x0, e_owner, 1), (r + 0x1, rng.choice([5, 8, 0x0f, 0x20, 0x1e, 0x1f]), 1),
+               (r + 0x2, rng.randrange(3), 1), (r + 0x3, 0, 1), (r + 0x4, ex, 2), (r + 0x6, ey, 2),
+               (r + 0xe, job, 2), (r + 0x14, rng.getrandbits(8), 1), (r + 0x22, building, 2),
+               (b + 0x0, e_owner, 1), (b + 0x2, rng.randrange(40, 340), 2), (b + 0x4, rng.randrange(40, 340), 2),
+               (b + 0x6, rng.choice([0x10, 0x11, 0x12]), 1), (b + 0x7, rng.randrange(3), 1),
+               (b + 0x19, rng.randrange(1, 4), 1), (b + 0x1b, rng.randrange(1, 4), 1), (b + 0x1f, rng.randrange(1, 4) << 4 | rng.randrange(16), 1)]
+    if kind == "garrison":
+        count = rng.randint(1, 4)
+        chain = nodes[:count - 1]
+        chain.insert(rng.randrange(count), e)
+        fields.append((b + 0x8, chain[0], 2))
+        for here, after in zip(chain, chain[1:] + [0]):
+            fields.append((SETTLERS + here * SETTLER_BYTES + 0x10, after, 2))
+    elif kind == "tower":
+        fields.append((b + 0x8, 0, 2))
+    if kind != "worker":
+        # Soldiers and workers of the tower, some in jobs the capture keeps.
+        for k in rng.sample([i for i in range(1, 40) if i not in (soldier, e)], 4):
+            q = SETTLERS + k * SETTLER_BYTES
+            fields += [(q + 0x0, rng.randrange(4), 1), (q + 0x22, building, 2), (q + 0x1, rng.choice([5, 8, 0x0f]), 1),
+                       (q + 0xe, rng.choice([3, 4, 0x10, 0x6a, 0x8b, 5, 0x8b]), 2)]
+        fields.append((SETTLER_HIGH_WATER, 40, 4))
+    return fields
+
+
+def soldier_state(rng, pool, args):
+    soldier = args[0]
+    record = SETTLERS + soldier * SETTLER_BYTES
+    x, y = rng.randrange(40, 340), rng.randrange(40, 340)
+    owner = rng.randrange(4)
+    art = rng.choice(SOLDIER_TYPES_B)
+    job = rng.choice([0x8c, 0xae, 0x8e, 0x35, 0x37, 0x17, 0x8d])
+    slot = (rng.randrange(3) << 5) | (rng.randrange(3) << 3) | rng.randrange(4)
+    fields = [(MAP_SIZE, 384, 4), (SETTLER_HIGH_WATER, rng.randrange(40), 4), (0xde7444, 3, 4),
+              (record + 0x0, owner, 1), (record + 0x1, art, 1), (record + 0x2, rng.randrange(3), 1),
+              (record + 0x4, x, 2), (record + 0x6, y, 2), (record + 0xe, job, 2),
+              (record + 0x14, rng.getrandbits(8) & (0xff if rng.random() < 0.2 else 0xdf), 1),
+              (record + 0x15, slot, 1), (record + 0x10, rng.randrange(0x400), 2),
+              (record + 0x12, 0 if rng.random() < 0.3 else rng.randrange(0x400), 2),
+              (record + 0xc, 0 if rng.random() < 0.2 else rng.getrandbits(16), 2),
+              (tile(x, y), soldier, 2), (0x32870, rng.randrange(1000), 4), (0x32874, rng.randrange(1000), 4),
+              (0x366f8, rng.randrange(1000), 4), (0x366fc, rng.randrange(1000), 4)]
+    fields += soldier_offsets(rng)
+    for p in range(20):
+        base = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        fields += [(base + 0x0, rng.choice([1, 2]), 4), (base + 0x4, rng.randrange(3), 4),
+                   (base + 0xc, rng.randrange(3), 4),
+                   (base + 0x80, rng.randrange(0x20) if rng.random() < 0.1 else rng.randrange(0xe0, 0x140), 4)]
+    for p in range(20):
+        for lst in range(10):
+            fields.append((PLAYER_LIST_LENGTHS + (p * 10 + lst) * 4, rng.randrange(4), 4))
+    # Tiles around: owners, walk regions, mostly no settler; presence blocks
+    # are lazily random (IsOtherPlayerNear mostly true).
+    for dx in range(-21, 22):
+        for dy in range(-21, 22):
+            if (dx, dy) == (0, 0):
+                continue
+            t = tile(x + dx, y + dy)
+            fields += [(t + 0x0, 0, 2), (t + 0x8, rng.choice([0, 1, 2, 3, 0xff]), 1),
+                       (t + 0x10, rng.randrange(1, 3), 1)]
+    fields += [(tile(x, y) + 0x8, rng.choice([0, 1, 2, 3, 0xff]), 1), (tile(x, y) + 0x10, rng.randrange(1, 3), 1)]
+    if rng.random() < 0.4:
+        fields += soldier_kill_scenario(rng, soldier, x, y)
+        enemies = 0
+    else:
+        enemies = rng.randrange(1, 6)
+    for i in range(enemies):
+        reach = 3 if rng.random() < 0.6 else 20
+        ex, ey = x + rng.randint(-reach, reach), y + rng.randint(-reach, reach)
+        if (ex, ey) == (x, y):
+            continue
+        e = rng.randrange(1, 0x400)
+        if e == soldier:
+            continue
+        r = SETTLERS + e * SETTLER_BYTES
+        ejob = rng.choice(TARGET_JOBS_B)
+        etype = rng.choice(TARGET_TYPES_B)
+        if rng.random() < 0.1:
+            etype, ejob = 0x27, 0x135
+        elif rng.random() < 0.1:
+            etype, ejob = rng.choice([0x16, 0x28]), rng.choice([0xd4, 0xd5, 0x12e, 0x12f, 0x35, 0xb0])
+        building = rng.randrange(1, 0x40)
+        b = BUILDINGS + building * BUILDING_BYTES
+        fields += [(tile(ex, ey), e, 2), (r + 0x0, rng.randrange(4), 1), (r + 0x1, etype, 1),
+                   (r + 0x2, rng.randrange(3), 1), (r + 0x3, rng.randrange(8) if rng.random() < 0.6 else rng.getrandbits(8), 1),
+                   (r + 0x4, ex, 2), (r + 0x6, ey, 2), (r + 0xe, ejob, 2), (r + 0x14, rng.getrandbits(8), 1),
+                   (r + 0x22, building, 2), (r + 0x10, rng.choice([0, rng.randrange(1, 0x400)]), 2),
+                   (r + 0x12, rng.choice([0, rng.randrange(1, 0x400)]), 2), (r + 0x24, ex, 2), (r + 0x26, ey, 2),
+                   (b + 0x2, rng.randrange(40, 340), 2), (b + 0x4, rng.randrange(40, 340), 2),
+                   (b + 0x6, rng.choice([0x10, 0x11, 0x12]), 1), (b + 0x7, rng.randrange(3), 1),
+                   (b + 0x0, rng.randrange(4), 1)]
+        other = 1 + (e + 1) % 0x3ff
+        # Soldiers of the building (cleared when the tower falls).
+        for k in range(1, 40):
+            if rng.random() < 0.15:
+                q = SETTLERS + k * SETTLER_BYTES
+                fields += [(q + 0x0, rng.randrange(4), 1), (q + 0x22, building, 2),
+                           (q + 0x1, rng.choice([5, 8, 0x0f, 1]), 1), (q + 0xe, rng.choice([3, 4, 0x10, 0x6a, 0x8b, 5]), 2)]
+        # A type-0x29 unit next to the soldier (FindNearbySettlerType29 for job 0x130 targets).
+        if ejob == 0x130 and rng.random() < 0.5:
+            u = 1 + (e + 7) % 0x3ff
+            ux, uy = x + rng.choice([-1, 1]), y
+            q = SETTLERS + u * SETTLER_BYTES
+            fields += [(tile(ux, uy), u, 2), (q + 0x1, 0x29, 1), (q + 0x0, rng.randrange(4), 1), (q + 0x3, 0, 1),
+                       (q + 0x4, ux, 2), (q + 0x6, uy, 2), (q + 0xe, 0x55, 2)]
+        if ejob == 0xae:
+            empty = rng.random() < 0.5
+            if empty:
+                fields += [(b + 0x8, e, 2), (r + 0x10, 0, 2)]
+            elif rng.random() < 0.5:
+                fields += [(b + 0x8, other, 2), (SETTLERS + other * SETTLER_BYTES + 0x10, e, 2)]
+            else:
+                third = 1 + (e + 2) % 0x3ff
+                fields += [(b + 0x8, other, 2), (SETTLERS + other * SETTLER_BYTES + 0x10, third, 2),
+                           (SETTLERS + third * SETTLER_BYTES + 0x10, e, 2)]
+        elif ejob == 0xad:
+            fields.append((b + 0x8, 0 if rng.random() < 0.5 else other, 2))
+    # The effect table: 20 slots in use, empty cell lists, 80 blocks per row.
+    fields += [(MAP_EFFECTS + 0x668a0, 20, 4), (MAP_EFFECTS + 0x668a4, 80, 4)]
+    fields += [(MAP_EFFECTS + EFFECT_HEADS + c * 4, 0, 4) for c in range(1400)]
+    fields += [(MAP_EFFECTS + s * 0x4c, 1, 4) for s in range(1, 21)]
+    return fields
+
+
+def soldier_globals(rng, pool, args):
+    return [(0x007a8010, WORLD_BASE + GFX_OBJECT, 4), (CAMPAIGN_MISSION, rng.choice([0, 5]), 4),
+            (0x007a7af0 + 0x189, rng.randrange(2), 1)]
+
+
+def soldier_gfx(rng, pool, args):
+    """Every animation the soldiers use, for races 0..2 (fake graphics object)."""
+    fields = []
+    for kind in list(range(0x22, 0x46)) + [0x46] + list(range(0x89, 0x9b)):
+        for race in range(3):
+            fields += gfx_sprite(animation_table()[kind * 4 + race], rng)
+    return fields
+
+
+def soldier_presets(rng, pool, args):
+    return soldier_gfx(rng, pool, args) + soldier_state(rng, pool, args)
+
+
+SPECS += [
+    Spec("GameWorld_UpdateSoldier", 0x0050e9f0, "thiscall", [between(1, 0x3ff)], presets=soldier_presets,
+         globals=soldier_globals, callees=SOLDIER_PROBES, ignore_bytes=tuple(MAP_EFFECTS + s * 0x4c + p
+                                                                          for s in range(1, 40)
+                                                                          for p in EFFECT_PADDING),
+         max_cases=1500, exempt_blocks=(0x50fde8,)),
 ]

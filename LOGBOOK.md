@@ -572,6 +572,36 @@ instructions; most of it is Volker\GodlyEvents.cpp, the spells).
 - `s3re_launcher --test` filters take several substrings separated by
   `|` now.
 
+### 2026-11-22 (45): package B: UpdateSoldier
+
+- **GameWorld::UpdateSoldier 0x50e9f0 verified** (was SaveGame_sub_50e9f0;
+  src/s3re/game/soldier.cpp, from branch wip/package-b-update-soldier,
+  cherry-picked onto main). In-process diff test (4000 cases; tower
+  captures left out, RecalculateTerritory needs a consistent world) and
+  mutation test pass. Emulator spec: new preset soldier_kill_scenario (40%
+  of cases: one enemy in reach that dies: a job-3 worker of a building
+  per class, a 0xae soldier in a garrison list of 1..4, a 0xad soldier
+  of an empty tower -> capture; tower bowmen in job 0x8c) -> 0 mismatches,
+  294/295 blocks, exempt 0x50fde8 (class-2 tower capture: dead, bowmen
+  can't attack 0xad/0xae or 0x130 targets). ~10/1500 cases fault in both
+  (random ring/area indices, endless random garrison walks): invalid.
+- Whole-game, all identical to the original: scripted-seed127.bin (5,739
+  UpdateSoldier calls) and fun8-seed2024-input31.bin (30,449), 3,000
+  ticks; "slot 1/2/3.sav", 2,000 ticks (395,139 / 271,672 / 205,630).
+  Real fights: slot 1 has 499 SpawnArrow calls (only UpdateSoldier calls
+  it; counted in one run with `--skip-hooks GameWorld_UpdateSoldier`). No
+  tower capture in any check (ClearTileOwner/RecalculateTerritory 0).
+- Pathing_FollowRightWall spec back to 116/116: two route_wall presets (a
+  straight corridor hit point -> P -> trace point with target P, for the
+  "no angle" comparison 0x4a453c; two dead-end corridors of different
+  lengths at the hit point, so the left walker comes back first and the
+  right one later, "Rightwall, No way" 0x4a44c9).
+- layout.h aliases dropped: Building::unk07 -> race, Player::unk0c4[6] ->
+  population..surplus_carriers_marked (settler_spawn.cpp, soldier.cpp);
+  settler_spawn tests pass.
+- Package B is complete (28/28). Left of the round: WalkSettler 0x500860
+  (package A).
+
 ### 2026-11-10 (44): round end of the UpdateSettlers parallel round
 
 - Main at ff0bd87 has packages A (25/26), B (27/28), C (22/22). Left:

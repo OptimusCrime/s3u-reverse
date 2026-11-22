@@ -80,6 +80,7 @@ add_library(s3re SHARED
     game/settler_queries.cpp
     game/settler_records.cpp
     game/settlers.cpp
+    game/soldier.cpp
     game/settler_spawn.cpp
     game/string_members.cpp
     game/territory.cpp

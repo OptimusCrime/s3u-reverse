@@ -27,7 +27,7 @@ Each item: what, why, and where to start.
   (found in the typed-access refactor, re/structs.md).
 - **Name the layout.h fields the refactor left as `unk`:** e.g.
   `GameWorld::unk2d274` (the symmetry argument of GameWorld::Create),
-  `Building::unk07`, `Building::unk1b[0/1]`, and split
+  `Building::unk1b[0/1]`, and split
   `Player`/`GameWorld::new_game_objective` into enabled + objectives.
   Workers kept the old names to avoid merge conflicts; the meanings are in
   the code comments and re/structs.md.
@@ -38,12 +38,6 @@ Each item: what, why, and where to start.
   caller, UpdateSettlers job 0x152, passes (settler, pile), and
   CountOtherPileClaims (0x510800) counts the entries of one pile held by
   other settlers (found 2026-11-10, session 43; re/world_layout.md).
-- **Drop the layout aliases `Building::unk07` and `Player::unk0c4[6]`**
-  (layout.h unions): package C named them `Building::race` and
-  `Player::population` .. `surplus_carriers_marked` (+0xc4..+0xd8) while
-  package B's `settler_spawn.cpp` still used the old names. Switch
-  settler_spawn.cpp to the new names (`unk0c4[2]` = `population_limit_base`)
-  and remove the unions once package B is done.
 - **Name constructors** (`re/classes.json` lists the functions that store
   each vtable).
 
@@ -134,6 +128,3 @@ Each item: what, why, and where to start.
   DirectPlay, CLM* messages): skipped since 2026-11-09 (single player
   against computer players is easier to verify; online play may not matter
   today). Revisit when the single-player game is far along.
-- Pathing_FollowRightWall emulator spec: blocks 0x4a44c9 and 0x4a453c lost
-  coverage after package A's last route_case preset change (114/116;
-  exempt or add presets).

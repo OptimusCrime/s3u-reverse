@@ -7,7 +7,7 @@
 //   flags 0x0f and owned by `player` (byte compared with the full dword)
 //   gets CreateSettler(tx, ty, type, player). For each one whose type
 //   class (S3.EXE 0x658f64) is 0 or 10..29 the player's counter +0xcc
-//   (Player::unk0c4[2]) grows by one. No limit on the walk (callers
+//   (Player::population_limit_base) grows by one. No limit on the walk (callers
 //   make sure there is room). EAX: callers don't use it. ret 0x14.
 //   Callers: UpdateSettlers, 0x506cf0.
 // GameWorld::EnterBuildingSlot (0x0050ccb0): (settler): the counterpart of
@@ -103,7 +103,7 @@ std::uint32_t __fastcall GameWorld_SpawnSettlersAround(GameWorld* world, void*, 
         --remaining;
         const std::int32_t typeClass = kTypeClass[type];
         if (typeClass == 0 || (typeClass >= 10 && typeClass <= 0x1d)) {
-            ++world->players[player].unk0c4[2];
+            ++world->players[player].population_limit_base;
         }
     }
     return 0;  // callers don't use EAX
@@ -123,7 +123,7 @@ std::uint32_t __fastcall GameWorld_EnterBuildingSlot(GameWorld* world, void*, st
         ++x;
     }
     const auto slot = static_cast<std::uint8_t>(x - building.x - 1);
-    std::uint8_t value = static_cast<std::uint8_t>((building.unk07 << 5) + slot);
+    std::uint8_t value = static_cast<std::uint8_t>((building.race << 5) + slot);
     if (building.art == 0x10) {
         value = static_cast<std::uint8_t>(value + 8);
     } else if (building.art == 0x12) {
@@ -180,10 +180,10 @@ std::uint32_t __fastcall GameWorld_SetSoldierAnimationInBuilding(GameWorld* worl
     if (building.art == 0x12) {
         kind += 0x12;
     }
-    if (building.unk07 == 1) {
+    if (building.race == 1) {
         kind += 0x1b;
     }
-    if (building.unk07 == 2) {
+    if (building.race == 2) {
         kind += 0x36;
     }
     return GameWorld_SetSettlerAnimation(world, nullptr, settler, kind);
@@ -321,9 +321,9 @@ void CompareSpawn(test::Context& ctx, SpawnFn candidate, int cases) {
 // Wrong: counts every settler type for the player's counter.
 std::uint32_t __fastcall WrongSpawnSettlersAround(GameWorld* world, void* edx, std::uint32_t count, std::uint32_t type,
                                                   std::uint32_t player, std::uint32_t x, std::uint32_t y) {
-    const std::int32_t before = world->players[player].unk0c4[2];
+    const std::uint32_t before = world->players[player].population_limit_base;
     GameWorld_SpawnSettlersAround(world, edx, count, type, player, x, y);
-    world->players[player].unk0c4[2] = before + static_cast<std::int32_t>(count);
+    world->players[player].population_limit_base = before + count;
     return 0;
 }
 
@@ -345,7 +345,7 @@ void CompareEnterSlot(test::Context& ctx, SettlerFn candidate, int cases) {
             b.x = static_cast<std::uint16_t>(bx);
             b.y = static_cast<std::uint16_t>(by);
             b.art = art;
-            b.unk07 = race;
+            b.race = race;
             for (std::uint32_t k = 1; k <= 7; ++k) {
                 w->tiles[bx + k][by].settler = static_cast<std::uint16_t>(k <= taken ? 1 + k : 0);
             }
@@ -463,7 +463,7 @@ void CompareSoldierAnimation(test::Context& ctx, SettlerFn candidate, int cases)
             s.race = settlerRace;
             s.building = static_cast<std::uint16_t>(building);
             w->buildings[building].art = art;
-            w->buildings[building].unk07 = race;
+            w->buildings[building].race = race;
         });
         // The kind the original will use, to prepare the graphics data.
         std::uint32_t kind = 0x125;
@@ -489,7 +489,7 @@ void CompareSoldierAnimation(test::Context& ctx, SettlerFn candidate, int cases)
 std::uint32_t __fastcall WrongSetSoldierAnimationInBuilding(GameWorld* world, void* edx, std::uint32_t settler) {
     const std::uint32_t result = GameWorld_SetSoldierAnimationInBuilding(world, edx, settler);
     Settler& s = world->settlers[settler];
-    if (world->buildings[s.building].unk07 == 2) {
+    if (world->buildings[s.building].race == 2) {
         s.direction = kAnimationTable[s.race + (s.direction == 0 ? 0 : 0)];  // some other id
     }
     return result;
