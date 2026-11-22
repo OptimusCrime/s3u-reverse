@@ -47,6 +47,12 @@ Each item: what, why, and where to start.
 
 ## Evidence and testing
 
+- **Emulator memory: the CGameData_UpdateSoldier spec peaks at ~1.6 GB
+  per worker** (measured 2026-11-22 with `run.py CGameData_UpdateSoldier
+  --jobs 1 --memory`; WalkSettler/UpdateEconomy/UpdateEnvironment ~120 MB).
+  With 8 workers a full suite can need ~13 GB. Find what grows (probably a
+  huge lazily-random world range or the garrison walks) and bound it;
+  update WORKER_MEMORY in run.py and CLAUDE.md's figure.
 - **In-process tests that crash on other inputs:** test inputs are seeded
   from the test name. During the GameWorld -> CGameData rename (session
   45) the new names gave new inputs, and
