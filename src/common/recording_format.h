@@ -9,7 +9,7 @@
 // Version 2 ("S3RECMD2"): the recording says which game it belongs to, so
 // that a replay can't silently run in a different game:
 //   char   magic[8]      "S3RECMD2"
-//   uint32 seed          game seed (the value given to GameWorld::SeedRandom
+//   uint32 seed          game seed (the value given to CGameData::SeedRandom
 //                        when the game started, after --seed was applied)
 //   uint32 settings      bit 0: random races include the Amazons
 //                        (g_gameSettings+0xCC); other bits 0

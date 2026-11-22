@@ -2,21 +2,21 @@
 // "UI state lives inside the world object" notes in CLAUDE.md), all called
 // from the UI code around 0x53fbb0.
 //
-// GameWorld::IsUiSelectionMode (0x005157b0): (mode) -> 1 if the UI
+// CGameData::IsUiSelectionMode (0x005157b0): (mode) -> 1 if the UI
 //   selection mode (+0x2d284) equals mode, else 0.
-// GameWorld::IsUiSelectionParam1 (0x005157f0): the same for the selection's
+// CGameData::IsUiSelectionParam1 (0x005157f0): the same for the selection's
 //   first parameter (+0x2d288).
-// GameWorld::IsUiSelectionParam2 (0x00515810): the same for the second
+// CGameData::IsUiSelectionParam2 (0x00515810): the same for the second
 //   parameter (+0x2d28c).
-// GameWorld::IsUiField298 (0x005157d0): the same for +0x2d298 (meaning
+// CGameData::IsUiField298 (0x005157d0): the same for +0x2d298 (meaning
 //   unknown; written by ProcessEvents and 0x542660/0x542990/0x542b60).
-// GameWorld::IsUiSelectionMode4Field298Is2 (0x00515830): () -> 1 if the
+// CGameData::IsUiSelectionMode4Field298Is2 (0x00515830): () -> 1 if the
 //   selection mode is 4 and +0x2d298 is 2.
-// GameWorld::IsGameOutcome1 (0x00515ad0): (unused) -> 1 if the global game
+// CGameData::IsGameOutcome1 (0x00515ad0): (unused) -> 1 if the global game
 //   outcome (0x730f64) is 1. Its stack argument is ignored.
 // All compare full 32-bit values. thiscall (ECX = world), EAX = 1 or 0.
 //
-// GameWorld::ScreenCenterTileX/Y (0x005158f0/0x00515980): the tile at the
+// CGameData::ScreenCenterTileX/Y (0x005158f0/0x00515980): the tile at the
 //   centre of the game view, from the camera position in pixels
 //   (+0x2d25c x, +0x2d260 y), the view size (globals 0x730f18 width,
 //   0x730f1c height) and the map size. Tile rows are 9 pixels high
@@ -25,7 +25,7 @@
 //   (signed, as the original's multiply-by-reciprocal code does); sums wrap
 //   at 32 bits; the `>> 1`/`>> 2` are unsigned shifts. No arguments, ret 0.
 //
-// GameWorld::ClampCamera (0x0051b4d0): keeps the camera inside the map:
+// CGameData::ClampCamera (0x0051b4d0): keeps the camera inside the map:
 //   x in [0, mapSize*24 - width + 0x167], y in [0, mapSize*9 - width +
 //   0x176] (signed compares; the y limit really uses the view width
 //   0x730f18, not the height). Only writes a coordinate that is out of
@@ -33,22 +33,22 @@
 //   which returns its EAX: mapSize*9 - width, plus 0x176 if y was clamped
 //   at the top. No arguments, ret 0.
 //
-// GameWorld::PushUiFeedback (0x004febe0): (value) appends value to the
+// CGameData::PushUiFeedback (0x004febe0): (value) appends value to the
 //   10-entry dword list at +0x1539484 (count at +0x15394ac) unless it is
 //   full. Drained by CLogicThread::PrepareDrawData. EAX = the new count, or
 //   10 when the list was full (callers don't use it, but one tail-calls).
 // CLogicThread::PushUiFeedback (0x0053f560): (value) calls
-//   GameWorld::PushUiFeedback on the logic thread's world (this+0x3a0) and
+//   CGameData::PushUiFeedback on the logic thread's world (this+0x3a0) and
 //   returns its EAX. ECX = CLogicThread. ret 4. 288 call sites in the UI
 //   code.
 //
-// GameWorld::CenterCameraOnTile (0x0051b560): (x, y) sets the camera to
+// CGameData::CenterCameraOnTile (0x0051b560): (x, y) sets the camera to
 //   x = (mapSize + 2x + 0x18 - y) * 8 - width/2 and
 //   y = y*9 + 0xc8 - height/2 - tile byte +0x4 of (x, y) (probably the
 //   tile's height in pixels), with signed halves of the view size truncated
-//   toward zero and 32-bit wrapping sums, then calls GameWorld::ClampCamera
+//   toward zero and 32-bit wrapping sums, then calls CGameData::ClampCamera
 //   and returns its EAX (one caller tail-returns it). ret 8.
-// GameWorld::CenterCameraOnLocalPlayer (0x0051b6b0): CenterCameraOnTile on
+// CGameData::CenterCameraOnLocalPlayer (0x0051b6b0): CenterCameraOnTile on
 //   the position (int32 +0x10, +0x14) of the player record of the local
 //   player (+0x2d2d4), then clears the int32 +0x2d264. EAX = the
 //   CenterCameraOnTile EAX (one caller tail-returns it). Plain ret.
@@ -72,7 +72,7 @@ namespace s3re::game {
 namespace {
 
 constexpr std::uint32_t kUiFeedbackCapacity = 10;
-static_assert(sizeof(GameWorld::ui_feedback) / sizeof(GameWorld::ui_feedback[0]) == kUiFeedbackCapacity);
+static_assert(sizeof(CGameData::ui_feedback) / sizeof(CGameData::ui_feedback[0]) == kUiFeedbackCapacity);
 
 // The UI fields are int32 in the layout; the original compares them as
 // full 32-bit values (as unsigned, which gives the same equality).
@@ -87,7 +87,7 @@ std::uint32_t DivideTruncating(std::uint32_t value, std::int32_t divisor) {
 }
 
 // Rows of 9 pixels above the camera centre, offset by 0x640 pixels.
-std::uint32_t CameraRow(GameWorld* world) {
+std::uint32_t CameraRow(CGameData* world) {
     return DivideTruncating(U32(world->camera_y) + 0x640u, 18);
 }
 
@@ -98,46 +98,46 @@ std::uint32_t ScreenRows(std::uint32_t shift) {
 
 }  // namespace
 
-using WorldValueFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t value);
-using WorldQueryFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
+using WorldValueFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t value);
+using WorldQueryFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx);
 
 // Purpose: Whether the user interface is in a given selection mode (e.g. building placement). The UI state
 // happens to live inside the world object.
-std::uint32_t __fastcall GameWorld_IsUiSelectionMode(GameWorld* world, void*, std::uint32_t mode) {
+std::uint32_t __fastcall CGameData_IsUiSelectionMode(CGameData* world, void*, std::uint32_t mode) {
     return U32(world->ui_selection_mode) == mode ? 1 : 0;
 }
 
 // Purpose: Whether a UI state field (meaning unknown) has a given value.
-std::uint32_t __fastcall GameWorld_IsUiField298(GameWorld* world, void*, std::uint32_t value) {
+std::uint32_t __fastcall CGameData_IsUiField298(CGameData* world, void*, std::uint32_t value) {
     return U32(world->ui_special_menu) == value ? 1 : 0;
 }
 
 // Purpose: Whether the first parameter of the current UI selection (e.g. which building type) has a given
 // value.
-std::uint32_t __fastcall GameWorld_IsUiSelectionParam1(GameWorld* world, void*,
+std::uint32_t __fastcall CGameData_IsUiSelectionParam1(CGameData* world, void*,
                                                        std::uint32_t value) {
     return U32(world->ui_selection_param1) == value ? 1 : 0;
 }
 
 // Purpose: Whether the second parameter of the current UI selection has a given value.
-std::uint32_t __fastcall GameWorld_IsUiSelectionParam2(GameWorld* world, void*,
+std::uint32_t __fastcall CGameData_IsUiSelectionParam2(CGameData* world, void*,
                                                        std::uint32_t value) {
     return U32(world->ui_selection_param2) == value ? 1 : 0;
 }
 
 // Purpose: Whether the UI is in selection mode 4 with a particular sub-state. A shortcut check used by the
 // UI.
-std::uint32_t __fastcall GameWorld_IsUiSelectionMode4Field298Is2(GameWorld* world, void*) {
+std::uint32_t __fastcall CGameData_IsUiSelectionMode4Field298Is2(CGameData* world, void*) {
     return (U32(world->ui_selection_mode) == 4 && U32(world->ui_special_menu) == 2) ? 1 : 0;
 }
 
 // Purpose: Whether the game has ended with outcome 1 (probably 'won'). Queried by the user interface.
-std::uint32_t __fastcall GameWorld_IsGameOutcome1(GameWorld*, void*, std::uint32_t) {
+std::uint32_t __fastcall CGameData_IsGameOutcome1(CGameData*, void*, std::uint32_t) {
     return g_gameOutcome == 1 ? 1 : 0;
 }
 
 // Purpose: Which tile is at the centre of the screen (x). Used e.g. to know where the player is looking.
-std::uint32_t __fastcall GameWorld_ScreenCenterTileX(GameWorld* world, void*) {
+std::uint32_t __fastcall CGameData_ScreenCenterTileX(CGameData* world, void*) {
     const std::uint32_t rowsBelowTop = 100u - CameraRow(world);
     const std::uint32_t skew = (world->map_size + rowsBelowTop * 2u) >> 1;
     const std::uint32_t width = g_screenWidth;
@@ -147,12 +147,12 @@ std::uint32_t __fastcall GameWorld_ScreenCenterTileX(GameWorld* world, void*) {
 }
 
 // Purpose: Which tile is at the centre of the screen (y).
-std::uint32_t __fastcall GameWorld_ScreenCenterTileY(GameWorld* world, void*) {
+std::uint32_t __fastcall CGameData_ScreenCenterTileY(CGameData* world, void*) {
     return ScreenRows(1) + CameraRow(world) * 2u - 200u;
 }
 
 // Purpose: Keeps the camera inside the map after it has been moved.
-std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void*) {
+std::uint32_t __fastcall CGameData_ClampCamera(CGameData* world, void*) {
     std::int32_t& cameraX = world->camera_x;
     std::int32_t& cameraY = world->camera_y;
     const std::uint32_t size = world->map_size;
@@ -177,7 +177,7 @@ std::uint32_t __fastcall GameWorld_ClampCamera(GameWorld* world, void*) {
 
 // Purpose: Queues a small notification from the game for the drawing/sound side (probably sounds or
 // messages for the player). The queue holds up to ten.
-std::uint32_t __fastcall GameWorld_PushUiFeedback(GameWorld* world, void*, std::uint32_t value) {
+std::uint32_t __fastcall CGameData_PushUiFeedback(CGameData* world, void*, std::uint32_t value) {
     std::uint32_t& count = world->ui_feedback_count;
     if (count == kUiFeedbackCapacity) {
         return count;
@@ -189,7 +189,7 @@ std::uint32_t __fastcall GameWorld_PushUiFeedback(GameWorld* world, void*, std::
 
 // Purpose: Moves the camera so that a tile is in the middle of the screen (e.g. when jumping to a message's
 // location).
-std::uint32_t __fastcall GameWorld_CenterCameraOnTile(GameWorld* world, void*, std::uint32_t x,
+std::uint32_t __fastcall CGameData_CenterCameraOnTile(CGameData* world, void*, std::uint32_t x,
                                                       std::uint32_t y) {
     const auto width = static_cast<std::int32_t>(g_screenWidth);
     const auto height = static_cast<std::int32_t>(g_screenHeight);
@@ -199,35 +199,35 @@ std::uint32_t __fastcall GameWorld_CenterCameraOnTile(GameWorld* world, void*, s
     const std::uint32_t height4 = TileAtOffset(world, TileOffset(x, y)).height;
     world->camera_y =
         static_cast<std::int32_t>(0u - static_cast<std::uint32_t>(height / 2) - height4 + y * 9u + 0xc8u);
-    return GameWorld_ClampCamera(world, nullptr);
+    return CGameData_ClampCamera(world, nullptr);
 }
 
 
-// Purpose: The same as GameWorld::PushUiFeedback, called from the user interface code through the logic
+// Purpose: The same as CGameData::PushUiFeedback, called from the user interface code through the logic
 // thread.
 std::uint32_t __fastcall CLogicThread_PushUiFeedback(CLogicThread* self, void*, std::uint32_t value) {
-    GameWorld* world = LogicThreadOf(self)->world;
-    return GameWorld_PushUiFeedback(world, nullptr, value);
+    CGameData* world = LogicThreadOf(self)->world;
+    return CGameData_PushUiFeedback(world, nullptr, value);
 }
 
-using PositionFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+using PositionFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 using LogicValueFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t value);
 
 // Purpose: Moves the camera to the local player's home position (probably their castle), e.g. at the start
 // of a game.
-std::uint32_t __fastcall GameWorld_CenterCameraOnLocalPlayer(GameWorld* world, void*) {
+std::uint32_t __fastcall CGameData_CenterCameraOnLocalPlayer(CGameData* world, void*) {
     // (The local player number is not range-checked.)
     const layout::Player& player = world->players[U32(world->local_player)];
     const std::uint32_t result =
-        GameWorld_CenterCameraOnTile(world, nullptr, U32(player.start_x), U32(player.start_y));
+        CGameData_CenterCameraOnTile(world, nullptr, U32(player.start_x), U32(player.start_y));
     world->redraw = 0;
     return result;
 }
 
-S3RE_HOOK(0x0051b6b0, GameWorld_CenterCameraOnLocalPlayer, WorldQueryFn, Original_GameWorld_CenterCameraOnLocalPlayer,
-          GameWorld_CenterCameraOnLocalPlayer);
-S3RE_HOOK(0x0051b560, GameWorld_CenterCameraOnTile, PositionFn, Original_GameWorld_CenterCameraOnTile,
-          GameWorld_CenterCameraOnTile);
+S3RE_HOOK(0x0051b6b0, CGameData_CenterCameraOnLocalPlayer, WorldQueryFn, Original_CGameData_CenterCameraOnLocalPlayer,
+          CGameData_CenterCameraOnLocalPlayer);
+S3RE_HOOK(0x0051b560, CGameData_CenterCameraOnTile, PositionFn, Original_CGameData_CenterCameraOnTile,
+          CGameData_CenterCameraOnTile);
 S3RE_HOOK(0x0053f560, CLogicThread_PushUiFeedback, LogicValueFn, Original_CLogicThread_PushUiFeedback,
           CLogicThread_PushUiFeedback);
 
@@ -246,27 +246,27 @@ S3RE_HOOK(0x0053f560, CLogicThread_PushUiFeedback, LogicValueFn, Original_CLogic
 // Each change sets +0x2d27c = 1 (probably "redraw the menu"). Counts and
 // types are compared as zero-extended words / bytes, the player byte with
 // the full dword +0x2d2d4. EAX = the world pointer on every path. ret 4.
-S3RE_HOOK(0x005157b0, GameWorld_IsUiSelectionMode, WorldValueFn,
-          Original_GameWorld_IsUiSelectionMode, GameWorld_IsUiSelectionMode);
-S3RE_HOOK(0x005157d0, GameWorld_IsUiField298, WorldValueFn, Original_GameWorld_IsUiField298,
-          GameWorld_IsUiField298);
-S3RE_HOOK(0x005157f0, GameWorld_IsUiSelectionParam1, WorldValueFn,
-          Original_GameWorld_IsUiSelectionParam1, GameWorld_IsUiSelectionParam1);
-S3RE_HOOK(0x00515810, GameWorld_IsUiSelectionParam2, WorldValueFn,
-          Original_GameWorld_IsUiSelectionParam2, GameWorld_IsUiSelectionParam2);
-S3RE_HOOK(0x00515830, GameWorld_IsUiSelectionMode4Field298Is2, WorldQueryFn,
-          Original_GameWorld_IsUiSelectionMode4Field298Is2,
-          GameWorld_IsUiSelectionMode4Field298Is2);
-S3RE_HOOK(0x00515ad0, GameWorld_IsGameOutcome1, WorldValueFn, Original_GameWorld_IsGameOutcome1,
-          GameWorld_IsGameOutcome1);
-S3RE_HOOK(0x005158f0, GameWorld_ScreenCenterTileX, WorldQueryFn,
-          Original_GameWorld_ScreenCenterTileX, GameWorld_ScreenCenterTileX);
-S3RE_HOOK(0x00515980, GameWorld_ScreenCenterTileY, WorldQueryFn,
-          Original_GameWorld_ScreenCenterTileY, GameWorld_ScreenCenterTileY);
-S3RE_HOOK(0x0051b4d0, GameWorld_ClampCamera, WorldQueryFn, Original_GameWorld_ClampCamera,
-          GameWorld_ClampCamera);
-S3RE_HOOK(0x004febe0, GameWorld_PushUiFeedback, WorldValueFn, Original_GameWorld_PushUiFeedback,
-          GameWorld_PushUiFeedback);
+S3RE_HOOK(0x005157b0, CGameData_IsUiSelectionMode, WorldValueFn,
+          Original_CGameData_IsUiSelectionMode, CGameData_IsUiSelectionMode);
+S3RE_HOOK(0x005157d0, CGameData_IsUiField298, WorldValueFn, Original_CGameData_IsUiField298,
+          CGameData_IsUiField298);
+S3RE_HOOK(0x005157f0, CGameData_IsUiSelectionParam1, WorldValueFn,
+          Original_CGameData_IsUiSelectionParam1, CGameData_IsUiSelectionParam1);
+S3RE_HOOK(0x00515810, CGameData_IsUiSelectionParam2, WorldValueFn,
+          Original_CGameData_IsUiSelectionParam2, CGameData_IsUiSelectionParam2);
+S3RE_HOOK(0x00515830, CGameData_IsUiSelectionMode4Field298Is2, WorldQueryFn,
+          Original_CGameData_IsUiSelectionMode4Field298Is2,
+          CGameData_IsUiSelectionMode4Field298Is2);
+S3RE_HOOK(0x00515ad0, CGameData_IsGameOutcome1, WorldValueFn, Original_CGameData_IsGameOutcome1,
+          CGameData_IsGameOutcome1);
+S3RE_HOOK(0x005158f0, CGameData_ScreenCenterTileX, WorldQueryFn,
+          Original_CGameData_ScreenCenterTileX, CGameData_ScreenCenterTileX);
+S3RE_HOOK(0x00515980, CGameData_ScreenCenterTileY, WorldQueryFn,
+          Original_CGameData_ScreenCenterTileY, CGameData_ScreenCenterTileY);
+S3RE_HOOK(0x0051b4d0, CGameData_ClampCamera, WorldQueryFn, Original_CGameData_ClampCamera,
+          CGameData_ClampCamera);
+S3RE_HOOK(0x004febe0, CGameData_PushUiFeedback, WorldValueFn, Original_CGameData_PushUiFeedback,
+          CGameData_PushUiFeedback);
 
 namespace {
 
@@ -283,7 +283,7 @@ S3RE_HOOK(0x00542990, CLogicThread_UpdateGroupMenu, GroupMenuFn, Original_CLogic
 // settlers (e.g. ships or other units with their own commands), probably
 // after the group changed or was selected.
 std::uint32_t __fastcall CLogicThread_UpdateGroupMenu(CLogicThread* self, void* /*edx*/, std::uint32_t group) {
-    GameWorld* world = LogicThreadOf(self)->world;
+    CGameData* world = LogicThreadOf(self)->world;
     // The group number is not checked (32-bit address arithmetic, as in the
     // original).
     const std::uint32_t count = GlobalSettlerGroups().counts[group];
@@ -340,10 +340,10 @@ std::uint32_t __fastcall CLogicThread_UpdateGroupMenu(CLogicThread* self, void* 
 
 namespace {
 
-constexpr std::size_t kUiWorld = offsetof(GameWorld, search_generation);  // the UI block and the map size
-constexpr std::size_t kFeedbackWorld = offsetof(GameWorld, ui_feedback_count) + 4;
-constexpr std::size_t kFeedbackBytes = sizeof(GameWorld::ui_feedback) + sizeof(GameWorld::ui_feedback_count);
-static_assert(offsetof(GameWorld, ui_feedback_count) == offsetof(GameWorld, ui_feedback) + sizeof(GameWorld::ui_feedback));
+constexpr std::size_t kUiWorld = offsetof(CGameData, search_generation);  // the UI block and the map size
+constexpr std::size_t kFeedbackWorld = offsetof(CGameData, ui_feedback_count) + 4;
+constexpr std::size_t kFeedbackBytes = sizeof(CGameData::ui_feedback) + sizeof(CGameData::ui_feedback_count);
+static_assert(offsetof(CGameData, ui_feedback_count) == offsetof(CGameData, ui_feedback) + sizeof(CGameData::ui_feedback));
 
 // Two fake logic threads, each pointing at one of the worlds.
 struct ThreadPair {
@@ -391,9 +391,9 @@ void CompareUiQuery(test::Context& ctx, WorldValueFn original, WorldValueFn cand
     GlobalOverride outcome(g_gameOutcome);
     for (int i = 0; i < cases; ++i) {
         for (const std::size_t field :
-             {offsetof(GameWorld, ui_selection_mode), offsetof(GameWorld, ui_selection_param1),
-              offsetof(GameWorld, ui_selection_param2), offsetof(GameWorld, ui_special_menu),
-              offsetof(GameWorld, camera_x), offsetof(GameWorld, camera_y), offsetof(GameWorld, map_size)}) {
+             {offsetof(CGameData, ui_selection_mode), offsetof(CGameData, ui_selection_param1),
+              offsetof(CGameData, ui_selection_param2), offsetof(CGameData, ui_special_menu),
+              offsetof(CGameData, camera_x), offsetof(CGameData, camera_y), offsetof(CGameData, map_size)}) {
             worlds.Set<std::uint32_t>(field, InterestingValue(ctx));
         }
         width.Set(ctx.rng().Chance(1, 2) ? 640 + ctx.rng().Below(1024) : ctx.rng().Next32());
@@ -412,10 +412,10 @@ void CompareUiQuery(test::Context& ctx, WorldValueFn original, WorldValueFn cand
 // Adapts a function without arguments to CompareUiQuery.
 template <WorldQueryFn* Original, WorldQueryFn Ours>
 struct IgnoreArgument {
-    static std::uint32_t __fastcall CallOriginal(GameWorld* world, void* edx, std::uint32_t) {
+    static std::uint32_t __fastcall CallOriginal(CGameData* world, void* edx, std::uint32_t) {
         return (*Original)(world, edx);
     }
-    static std::uint32_t __fastcall CallOurs(GameWorld* world, void* edx, std::uint32_t) {
+    static std::uint32_t __fastcall CallOurs(CGameData* world, void* edx, std::uint32_t) {
         return Ours(world, edx);
     }
 };
@@ -425,11 +425,11 @@ void ComparePushUiFeedback(test::Context& ctx, WorldValueFn original, WorldValue
     test::WorldPair worlds(ctx, kFeedbackWorld);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t count = ctx.rng().Below(kUiFeedbackCapacity + 1);
-        worlds.Both([&](GameWorld* w) { w->ui_feedback_count = count; });
+        worlds.Both([&](CGameData* w) { w->ui_feedback_count = count; });
         const std::uint32_t value = ctx.rng().Next32();
         const std::uint32_t expected = original(worlds.original(), nullptr, value);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, value);
-        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(GameWorld, ui_feedback), kFeedbackBytes) ||
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(CGameData, ui_feedback), kFeedbackBytes) ||
             (i % 256 == 255 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d", i);
             return;
@@ -439,18 +439,18 @@ void ComparePushUiFeedback(test::Context& ctx, WorldValueFn original, WorldValue
 }
 
 // Wrong: rounds the column down instead of toward zero.
-std::uint32_t __fastcall WrongScreenCenterTileX(GameWorld* world, void* edx) {
+std::uint32_t __fastcall WrongScreenCenterTileX(CGameData* world, void* edx) {
     const auto column = static_cast<std::int32_t>(U32(world->camera_x) - 0xd0u);
-    return GameWorld_ScreenCenterTileX(world, edx) - DivideTruncating(column, 16) +
+    return CGameData_ScreenCenterTileX(world, edx) - DivideTruncating(column, 16) +
            static_cast<std::uint32_t>(column >> 4);
 }
 
 // Wrong: uses the view height for the y limit.
-std::uint32_t __fastcall WrongClampCamera(GameWorld* world, void* edx) {
+std::uint32_t __fastcall WrongClampCamera(CGameData* world, void* edx) {
     const std::uint32_t width = g_screenWidth;
     g_screenWidth = g_screenHeight.get();
     std::int32_t x = world->camera_x;
-    const std::uint32_t result = GameWorld_ClampCamera(world, edx);
+    const std::uint32_t result = CGameData_ClampCamera(world, edx);
     g_screenWidth = width;
     world->camera_x = x;
     const std::uint32_t size = world->map_size;
@@ -467,20 +467,20 @@ std::uint32_t __fastcall WrongClampCamera(GameWorld* world, void* edx) {
 
 }  // namespace
 
-S3RE_TEST(GameWorld_CenterCameraOnTile_MatchesOriginal) {
-    test::WorldPair worlds(ctx, offsetof(GameWorld, tiles) + 400 * kTileRowBytes);
+S3RE_TEST(CGameData_CenterCameraOnTile_MatchesOriginal) {
+    test::WorldPair worlds(ctx, offsetof(CGameData, tiles) + 400 * kTileRowBytes);
     GlobalOverride width(g_screenWidth);
     GlobalOverride height(g_screenHeight);
     for (int i = 0; i < 5000; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : InterestingValue(ctx);
-        worlds.Both([&](GameWorld* w) { w->map_size = size; });
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
         width.Set(ctx.rng().Chance(3, 4) ? 640 + ctx.rng().Below(1024) : InterestingValue(ctx));
         height.Set(ctx.rng().Chance(3, 4) ? 480 + ctx.rng().Below(768) : InterestingValue(ctx));
         const std::uint32_t x = ctx.rng().Below(400);
         const std::uint32_t y = ctx.rng().Below(400);
-        const std::uint32_t expected = Original_GameWorld_CenterCameraOnTile(worlds.original(), nullptr, x, y);
-        const std::uint32_t actual = GameWorld_CenterCameraOnTile(worlds.ours(), nullptr, x, y);
-        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(GameWorld, camera_x), 8) ||
+        const std::uint32_t expected = Original_CGameData_CenterCameraOnTile(worlds.original(), nullptr, x, y);
+        const std::uint32_t actual = CGameData_CenterCameraOnTile(worlds.ours(), nullptr, x, y);
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(CGameData, camera_x), 8) ||
             (i % 512 == 511 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u)", i, x, y);
             return;
@@ -489,27 +489,27 @@ S3RE_TEST(GameWorld_CenterCameraOnTile_MatchesOriginal) {
     worlds.Checkpoint(ctx);
 }
 
-S3RE_TEST(GameWorld_CenterCameraOnLocalPlayer_MatchesOriginal) {
-    test::WorldPair worlds(ctx, offsetof(GameWorld, players) + 21 * sizeof(layout::Player));
+S3RE_TEST(CGameData_CenterCameraOnLocalPlayer_MatchesOriginal) {
+    test::WorldPair worlds(ctx, offsetof(CGameData, players) + 21 * sizeof(layout::Player));
     GlobalOverride width(g_screenWidth);
     GlobalOverride height(g_screenHeight);
     for (int i = 0; i < 3000; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : InterestingValue(ctx);
-        worlds.Both([&](GameWorld* w) { w->map_size = size; });
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
         width.Set(640 + ctx.rng().Below(1024));
         height.Set(480 + ctx.rng().Below(768));
         const std::uint32_t player = ctx.rng().Below(20);
         const auto startX = static_cast<std::int32_t>(ctx.rng().Below(384));
         const auto startY = static_cast<std::int32_t>(ctx.rng().Below(384));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->local_player = static_cast<std::int32_t>(player);
             w->players[player].start_x = startX;
             w->players[player].start_y = startY;
         });
-        const std::uint32_t expected = Original_GameWorld_CenterCameraOnLocalPlayer(worlds.original(), nullptr);
-        const std::uint32_t actual = GameWorld_CenterCameraOnLocalPlayer(worlds.ours(), nullptr);
+        const std::uint32_t expected = Original_CGameData_CenterCameraOnLocalPlayer(worlds.original(), nullptr);
+        const std::uint32_t actual = CGameData_CenterCameraOnLocalPlayer(worlds.ours(), nullptr);
         // camera_x, camera_y and redraw
-        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(GameWorld, camera_x), 12) ||
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(CGameData, camera_x), 12) ||
             (i % 512 == 511 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d", i);
             return;
@@ -523,11 +523,11 @@ S3RE_TEST(CLogicThread_PushUiFeedback_MatchesOriginal) {
     ThreadPair threads(worlds);
     for (int i = 0; i < 2000; ++i) {
         const std::uint32_t count = ctx.rng().Below(kUiFeedbackCapacity + 1);
-        worlds.Both([&](GameWorld* w) { w->ui_feedback_count = count; });
+        worlds.Both([&](CGameData* w) { w->ui_feedback_count = count; });
         const std::uint32_t value = ctx.rng().Next32();
         const std::uint32_t expected = Original_CLogicThread_PushUiFeedback(threads.original(), nullptr, value);
         const std::uint32_t actual = CLogicThread_PushUiFeedback(threads.ours(), nullptr, value);
-        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(GameWorld, ui_feedback), kFeedbackBytes)) {
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Same(ctx, offsetof(CGameData, ui_feedback), kFeedbackBytes)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d", i);
             return;
         }
@@ -535,57 +535,57 @@ S3RE_TEST(CLogicThread_PushUiFeedback_MatchesOriginal) {
     worlds.Checkpoint(ctx);
 }
 
-S3RE_TEST(GameWorld_IsUiSelectionMode_MatchesOriginal) {
-    CompareUiQuery(ctx, Original_GameWorld_IsUiSelectionMode, &GameWorld_IsUiSelectionMode, 5000);
+S3RE_TEST(CGameData_IsUiSelectionMode_MatchesOriginal) {
+    CompareUiQuery(ctx, Original_CGameData_IsUiSelectionMode, &CGameData_IsUiSelectionMode, 5000);
 }
-S3RE_TEST(GameWorld_IsUiField298_MatchesOriginal) {
-    CompareUiQuery(ctx, Original_GameWorld_IsUiField298, &GameWorld_IsUiField298, 5000);
+S3RE_TEST(CGameData_IsUiField298_MatchesOriginal) {
+    CompareUiQuery(ctx, Original_CGameData_IsUiField298, &CGameData_IsUiField298, 5000);
 }
-S3RE_TEST(GameWorld_IsUiSelectionParam1_MatchesOriginal) {
-    CompareUiQuery(ctx, Original_GameWorld_IsUiSelectionParam1, &GameWorld_IsUiSelectionParam1,
+S3RE_TEST(CGameData_IsUiSelectionParam1_MatchesOriginal) {
+    CompareUiQuery(ctx, Original_CGameData_IsUiSelectionParam1, &CGameData_IsUiSelectionParam1,
                    5000);
 }
-S3RE_TEST(GameWorld_IsUiSelectionParam2_MatchesOriginal) {
-    CompareUiQuery(ctx, Original_GameWorld_IsUiSelectionParam2, &GameWorld_IsUiSelectionParam2,
+S3RE_TEST(CGameData_IsUiSelectionParam2_MatchesOriginal) {
+    CompareUiQuery(ctx, Original_CGameData_IsUiSelectionParam2, &CGameData_IsUiSelectionParam2,
                    5000);
 }
-S3RE_TEST(GameWorld_IsUiSelectionMode4Field298Is2_MatchesOriginal) {
-    using Adapter = IgnoreArgument<&Original_GameWorld_IsUiSelectionMode4Field298Is2,
-                                   &GameWorld_IsUiSelectionMode4Field298Is2>;
+S3RE_TEST(CGameData_IsUiSelectionMode4Field298Is2_MatchesOriginal) {
+    using Adapter = IgnoreArgument<&Original_CGameData_IsUiSelectionMode4Field298Is2,
+                                   &CGameData_IsUiSelectionMode4Field298Is2>;
     CompareUiQuery(ctx, &Adapter::CallOriginal, &Adapter::CallOurs, 5000);
 }
-S3RE_TEST(GameWorld_IsGameOutcome1_MatchesOriginal) {
-    CompareUiQuery(ctx, Original_GameWorld_IsGameOutcome1, &GameWorld_IsGameOutcome1, 5000);
+S3RE_TEST(CGameData_IsGameOutcome1_MatchesOriginal) {
+    CompareUiQuery(ctx, Original_CGameData_IsGameOutcome1, &CGameData_IsGameOutcome1, 5000);
 }
-S3RE_TEST(GameWorld_ScreenCenterTileX_MatchesOriginal) {
+S3RE_TEST(CGameData_ScreenCenterTileX_MatchesOriginal) {
     using Adapter =
-        IgnoreArgument<&Original_GameWorld_ScreenCenterTileX, &GameWorld_ScreenCenterTileX>;
+        IgnoreArgument<&Original_CGameData_ScreenCenterTileX, &CGameData_ScreenCenterTileX>;
     CompareUiQuery(ctx, &Adapter::CallOriginal, &Adapter::CallOurs, 5000);
 }
-S3RE_TEST(GameWorld_ScreenCenterTileX_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_ScreenCenterTileX_ComparisonDetectsWrongImplementation) {
     using Adapter =
-        IgnoreArgument<&Original_GameWorld_ScreenCenterTileX, &WrongScreenCenterTileX>;
+        IgnoreArgument<&Original_CGameData_ScreenCenterTileX, &WrongScreenCenterTileX>;
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareUiQuery(probe, &Adapter::CallOriginal, &Adapter::CallOurs, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_ScreenCenterTileY_MatchesOriginal) {
+S3RE_TEST(CGameData_ScreenCenterTileY_MatchesOriginal) {
     using Adapter =
-        IgnoreArgument<&Original_GameWorld_ScreenCenterTileY, &GameWorld_ScreenCenterTileY>;
+        IgnoreArgument<&Original_CGameData_ScreenCenterTileY, &CGameData_ScreenCenterTileY>;
     CompareUiQuery(ctx, &Adapter::CallOriginal, &Adapter::CallOurs, 5000);
 }
-S3RE_TEST(GameWorld_ClampCamera_MatchesOriginal) {
-    using Adapter = IgnoreArgument<&Original_GameWorld_ClampCamera, &GameWorld_ClampCamera>;
+S3RE_TEST(CGameData_ClampCamera_MatchesOriginal) {
+    using Adapter = IgnoreArgument<&Original_CGameData_ClampCamera, &CGameData_ClampCamera>;
     CompareUiQuery(ctx, &Adapter::CallOriginal, &Adapter::CallOurs, 5000);
 }
-S3RE_TEST(GameWorld_ClampCamera_ComparisonDetectsWrongImplementation) {
-    using Adapter = IgnoreArgument<&Original_GameWorld_ClampCamera, &WrongClampCamera>;
+S3RE_TEST(CGameData_ClampCamera_ComparisonDetectsWrongImplementation) {
+    using Adapter = IgnoreArgument<&Original_CGameData_ClampCamera, &WrongClampCamera>;
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareUiQuery(probe, &Adapter::CallOriginal, &Adapter::CallOurs, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_PushUiFeedback_MatchesOriginal) {
-    ComparePushUiFeedback(ctx, Original_GameWorld_PushUiFeedback, &GameWorld_PushUiFeedback, 5000);
+S3RE_TEST(CGameData_PushUiFeedback_MatchesOriginal) {
+    ComparePushUiFeedback(ctx, Original_CGameData_PushUiFeedback, &CGameData_PushUiFeedback, 5000);
 }
 
 namespace {
@@ -605,7 +605,7 @@ private:
 
 void CompareGroupMenu(test::Context& ctx, GroupMenuFn candidate, int cases) {
     const SavedGroups saved;
-    test::WorldPair worlds(ctx, offsetof(GameWorld, settlers) + 0x10000 * sizeof(layout::Settler));
+    test::WorldPair worlds(ctx, offsetof(CGameData, settlers) + 0x10000 * sizeof(layout::Settler));
     ThreadPair threads(worlds);
     static constexpr std::uint8_t kTypes[] = {0x24, 0x2c, 0x2b, 0x29, 0x28, 0x16, 0x17, 0x01, 0x23};
     for (int i = 0; i < cases; ++i) {
@@ -615,14 +615,14 @@ void CompareGroupMenu(test::Context& ctx, GroupMenuFn candidate, int cases) {
         const std::uint8_t type = kTypes[ctx.rng().Below(sizeof(kTypes))];
         const bool allSame = ctx.rng().Chance(2, 3);
         const std::uint32_t localPlayer = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(4);
-        worlds.Both([&](GameWorld* w) { w->local_player = static_cast<std::int32_t>(localPlayer); });
+        worlds.Both([&](CGameData* w) { w->local_player = static_cast<std::int32_t>(localPlayer); });
         for (std::uint32_t k = 0; k < count; ++k) {
             const std::uint32_t settler = ctx.rng().Below(0x10000);
             GlobalSettlerGroups().lists[group][k] = static_cast<std::uint16_t>(settler);
             const std::uint8_t settlerType = allSame || ctx.rng().Chance(1, 2) ? type : kTypes[ctx.rng().Below(sizeof(kTypes))];
             const auto settlerOwner =
                 static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? localPlayer : ctx.rng().Below(4));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->settlers[settler].art = settlerType;
                 w->settlers[settler].owner = settlerOwner;
             });
@@ -630,17 +630,17 @@ void CompareGroupMenu(test::Context& ctx, GroupMenuFn candidate, int cases) {
         const std::uint32_t menu = ctx.rng().Chance(1, 2) ? ctx.rng().Below(8) : ctx.rng().Next32();
         const std::uint32_t refresh = ctx.rng().Next32();
         const std::uint32_t field29c = ctx.rng().Next32();
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->ui_special_menu = static_cast<std::int32_t>(menu);
             w->refresh_ui = static_cast<std::int32_t>(refresh);
             w->ui_2d29c = static_cast<std::int32_t>(field29c);
         });
         const std::uint32_t expected = Original_CLogicThread_UpdateGroupMenu(threads.original(), nullptr, group);
         const std::uint32_t actual = candidate(threads.ours(), nullptr, group);
-        const auto base = [](GameWorld* w) { return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(w)); };
+        const auto base = [](CGameData* w) { return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(w)); };
         // refresh_ui (+0x2d27c) .. ui_2d29c (+0x2d29c)
-        const std::size_t first = offsetof(GameWorld, refresh_ui);
-        const std::size_t end = offsetof(GameWorld, ui_2d29c) + 4;
+        const std::size_t first = offsetof(CGameData, refresh_ui);
+        const std::size_t end = offsetof(CGameData, ui_2d29c) + 4;
         if (!S3RE_EXPECT_EQ(expected - base(worlds.original()), actual - base(worlds.ours())) ||
             !worlds.Same(ctx, first, end - first)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: group %u, count %u, type %#x", i, group, count, type);
@@ -653,7 +653,7 @@ void CompareGroupMenu(test::Context& ctx, GroupMenuFn candidate, int cases) {
 // Wrong: type 0x17 gets menu 6 like 0x16.
 std::uint32_t __fastcall WrongGroupMenu(CLogicThread* self, void* edx, std::uint32_t group) {
     const std::uint32_t result = CLogicThread_UpdateGroupMenu(self, edx, group);
-    GameWorld* world = LogicThreadOf(self)->world;
+    CGameData* world = LogicThreadOf(self)->world;
     if (world->ui_special_menu == 7) {
         world->ui_special_menu = 6;
     }
@@ -694,7 +694,7 @@ std::uint32_t __fastcall CLogicThread_ClearPendingUiRefresh(CLogicThread* self, 
         return 0;
     }
     thread->pending_ui_refresh = 0;
-    GameWorld* world = thread->world;
+    CGameData* world = thread->world;
     world->refresh_ui = 1;
     return reinterpret_cast<std::uint32_t>(world);
 }
@@ -702,7 +702,7 @@ std::uint32_t __fastcall CLogicThread_ClearPendingUiRefresh(CLogicThread* self, 
 namespace {
 
 void CompareClearPendingUiRefresh(test::Context& ctx, LogicThreadFn candidate, int cases) {
-    test::WorldPair worlds(ctx, offsetof(GameWorld, refresh_ui) + 4);
+    test::WorldPair worlds(ctx, offsetof(CGameData, refresh_ui) + 4);
     std::uint8_t threadA[sizeof(CLogicThread)], threadB[sizeof(CLogicThread)];
     for (int i = 0; i < cases; ++i) {
         ctx.rng().Fill(threadA, sizeof(threadA));
@@ -713,14 +713,14 @@ void CompareClearPendingUiRefresh(test::Context& ctx, LogicThreadFn candidate, i
         LogicThreadOf(threadA)->world = worlds.original();
         LogicThreadOf(threadB)->world = worlds.ours();
         const std::uint32_t refresh = ctx.rng().Next32();
-        worlds.Both([&](GameWorld* w) { w->refresh_ui = static_cast<std::int32_t>(refresh); });
+        worlds.Both([&](CGameData* w) { w->refresh_ui = static_cast<std::int32_t>(refresh); });
         const std::uint32_t ra = Original_CLogicThread_ClearPendingUiRefresh(reinterpret_cast<CLogicThread*>(threadA), nullptr);
         const std::uint32_t rb = candidate(reinterpret_cast<CLogicThread*>(threadB), nullptr);
         const std::uint32_t expected = ra == reinterpret_cast<std::uint32_t>(worlds.original()) ? 1 : ra;
         const std::uint32_t actual = rb == reinterpret_cast<std::uint32_t>(worlds.ours()) ? 1 : rb;
         bool same = S3RE_EXPECT_EQ(expected, actual);
         same &= S3RE_EXPECT_MEM_EQ(threadA, threadB, offsetof(CLogicThread, world));
-        same &= worlds.SameField(ctx, [](GameWorld* w) -> auto& { return w->refresh_ui; });
+        same &= worlds.SameField(ctx, [](CGameData* w) -> auto& { return w->refresh_ui; });
         if (!same) {
             ctx.Fail(__FILE__, __LINE__, "  case %d", i);
             return;

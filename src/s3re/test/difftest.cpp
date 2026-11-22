@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace s3re::test {
@@ -33,6 +34,25 @@ std::uint64_t Fnv1a64(const char* text) {
         hash *= 0x100000001b3ull;
     }
     return hash;
+}
+
+// The name a test's inputs are derived from. Test names were renamed with
+// the class (GameWorld_X -> CGameData_X, GameWorld_Create ->
+// CGameData_GenerateRandomMap, 2026-11-22); hashing the old name keeps
+// every test on exactly the inputs it was verified with. (No test name had
+// "CGameData" before that rename.) tools/emutest/run.py seed_name does the
+// same for the emulator specs.
+std::string SeedName(const char* name) {
+    std::string result = name;
+    const std::string generate = "CGameData_GenerateRandomMap";
+    for (std::size_t at; (at = result.find(generate)) != std::string::npos;) {
+        result.replace(at, generate.size(), "GameWorld_Create");
+    }
+    const std::string cls = "CGameData";
+    for (std::size_t at; (at = result.find(cls)) != std::string::npos;) {
+        result.replace(at, cls.size(), "GameWorld");
+    }
+    return result;
 }
 
 std::uint64_t BaseSeed() {
@@ -191,7 +211,7 @@ int RunAll() {
             continue;
         }
         ++run;
-        Context ctx(test.name, Fnv1a64(test.name) ^ baseSeed);
+        Context ctx(test.name, Fnv1a64(SeedName(test.name).c_str()) ^ baseSeed);
         const DWORD start = GetTickCount();
         const DWORD exception = RunGuarded(test.fn, &ctx);
         const DWORD elapsed = GetTickCount() - start;

@@ -1,9 +1,9 @@
-# The world object (`CGameData`, our `GameWorld`): memory map
+# The world object (`CGameData`): memory map
 
 The simulation state is one object of **0x153A128 bytes (22,258,984)**.
 This file maps it from the first byte to the last. Record layouts are in
 `re/structs.md`; the C++ header is `src/s3re/game/layout.h` (in the build).
-Offsets are from the start of the object (the ECX of `GameWorld::`
+Offsets are from the start of the object (the ECX of `CGameData::`
 methods, `CLogicThread+0x3a0`).
 
 Written 2026-11-09 from: the constructor, the save/load code, the debug
@@ -56,7 +56,7 @@ Initialization order (all verified by reading the code):
 3. Map loading `0x4FD540` (map file chunks 6 = landscape, 8 = buildings,
    settlers, piles; logs "Loading map...", "Worldsize: %u") or savegame
    loading `CLogicThread::LoadGame` (0x508FA0), or map generation
-   `GameWorld::Create` (0x5166D0). `0x4FD020` (from OnStart) then resets
+   `CGameData::Create` (0x5166D0). `0x4FD020` (from OnStart) then resets
    per-game state (players' lists, spell costs, camera).
 
 ## Top-level map
@@ -193,7 +193,7 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 | 0x2D25C, 0x2D260 | int32 | camera x, y in pixels | UI, skip, saved | verified |
 | 0x2D264 | int32 | redraw flag | UI, skip | verified |
 | 0x2D268..0x2D270 | int32 | UI (Init clears; ProcessEvents reads +0x2D268) | UI, hashed | guess |
-| 0x2D274 | int32 | `random_map_symmetry`: GameWorld::Create stores its symmetry argument here (bit 0 mirror across x = y, bit 1 point symmetry); also read by the player placement 0x5074B0 | sim | strong |
+| 0x2D274 | int32 | `random_map_symmetry`: CGameData::Create stores its symmetry argument here (bit 0 mirror across x = y, bit 1 point symmetry); also read by the player placement 0x5074B0 | sim | strong |
 | 0x2D278 | int32 | minimap ready (1 after ctor and load) | UI, skip | verified |
 | 0x2D27C | int32 | refresh-UI flag (ExecuteCommands) | UI, skip | verified |
 | 0x2D280 | int32 | draw hand-off flag | UI, skip | strong |
@@ -208,7 +208,7 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 | 0x2D2D0 | uint32 | **map size** (square; tiles per side) | sim, saved | verified |
 | 0x2D2D4 | int32 | **local player** | sim/UI, saved | verified |
 | 0x2D2D8 | int32 | `command_attempts`: Step adds 4 before every ExecuteCommands attempt (0x53DDA5, also when the network allowance stops it); ProcessEvents reads it, PrepareDrawData tests bit 0x20 (blinking) | UI? | strong |
-| 0x2D2DC | uint16 x3 | **RNG state** a, b, c (`GameWorld::Random`) | sim, saved | verified |
+| 0x2D2DC | uint16 x3 | **RNG state** a, b, c (`CGameData::Random`) | sim, saved | verified |
 | 0x2D2E4, 0x2D2E8 | int32 | last search result position (-1 after Init) | volatile, skip | verified |
 | 0x2D2F0 | int32 | UI cursor mode (6 after Init) | UI, skip | verified |
 | 0x2D2F4, 0x2D2F8, 0x2D2FC | int32 | UpdateEnvironment counters (Init: 0, 0, 0xD) | sim | strong |

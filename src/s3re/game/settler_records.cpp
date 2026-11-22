@@ -12,28 +12,28 @@
 // (1..9 soldiers?, see settlers.cpp), 0x6590e4 the health a new settler
 // starts with (20 for most, 100..150 for some, 250 for ships).
 //
-// GameWorld::SettlerStartHealth (0x00510470): (settler) -> the start health
+// CGameData::SettlerStartHealth (0x00510470): (settler) -> the start health
 //   of the settler's type (+0x1); 20 less for race 3 (+0x2) when the type's
 //   class is 1..9 (signed). EAX: the table's dword - 20, else the table's
 //   word in AX with the upper half of settler << 6 (race 3: of type * 4,
 //   i.e. 0) (callers use AL/AX).
 //   ret 4.
-// GameWorld::CreateSettler (0x0050c9e0): (x, y, type, player) -> the new
+// CGameData::CreateSettler (0x0050c9e0): (x, y, type, player) -> the new
 //   settler's number, or 0 if none of 1..0x7cfe is free. Raises the
 //   high-water mark (unsigned compare), fills the record (race = low byte of
 //   the int32 at player record +0x4, world+0x11943e0 + player*0x148; health
 //   = SettlerStartHealth; direction = RandomBelow6; counter = Random & 0x1f;
 //   the other fields listed above and bytes +0x14..+0x1a, +0x2c cleared)
 //   and puts it on the tile (x, y). ret 0x10.
-// GameWorld::ClearSettlerJob (0x00510440): (settler): words +0xe, +0xc and
+// CGameData::ClearSettlerJob (0x00510440): (settler): words +0xe, +0xc and
 //   +0x22 = 0. EAX = world + settler * 0x40. ret 4.
-// GameWorld::RestoreSettlerAnimation (0x0050e380): (settler): animation +0x8
+// CGameData::RestoreSettlerAnimation (0x0050e380): (settler): animation +0x8
 //   = the saved +0x1c, counter +0xc = the saved +0x20. EAX = world +
 //   settler * 0x40. ret 4.
-// GameWorld::IsSettlerJob01Or37 (0x004fa6b0): (job) -> AL = 1 if job (a
+// CGameData::IsSettlerJob01Or37 (0x004fa6b0): (job) -> AL = 1 if job (a
 //   settler's word +0xe, full 32-bit compare) is 1 or 0x37, else 0; the
 //   upper bits of EAX are the argument's. ECX unused. ret 4.
-// GameWorld::JobAfter01Or37 (0x004faa40): (job) -> 2 for job 1, 0x35 for
+// CGameData::JobAfter01Or37 (0x004faa40): (job) -> 2 for job 1, 0x35 for
 //   job 0x37, else 0. ECX unused. ret 4. Both are used by 0x500860 (a
 //   settler update, probably movement: it calls the first and, if true,
 //   saves the position in +0x24/+0x26 and sets the job to the second);
@@ -61,18 +61,18 @@ constexpr std::uint32_t kLastSettler = layout::kMaxSettler + 1;  // 0x7cff, neve
 constexpr std::uint8_t kFreeSettler = 0xff;
 
 
-std::uint32_t WorldAddress(GameWorld* world) {
+std::uint32_t WorldAddress(CGameData* world) {
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
 }
 
 }  // namespace
 
-using SettlerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler);
-using CreateSettlerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+using SettlerFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t settler);
+using CreateSettlerFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                    std::uint32_t type, std::uint32_t player);
 
 // Purpose: The health a new settler starts with, by its type (soldiers of one race start a little weaker).
-std::uint32_t __fastcall GameWorld_SettlerStartHealth(GameWorld* world, void*, std::uint32_t settler) {
+std::uint32_t __fastcall CGameData_SettlerStartHealth(CGameData* world, void*, std::uint32_t settler) {
     const Settler& record = world->settlers[settler];
     const std::uint32_t type = record.art;
     // The upper half of EAX: what the original's register held before the word load.
@@ -90,7 +90,7 @@ std::uint32_t __fastcall GameWorld_SettlerStartHealth(GameWorld* world, void*, s
 
 // Purpose: Creates a new settler (or ship) of a type for a player on a tile: takes a free settler record,
 // fills in its starting values and puts it on the map.
-std::uint32_t __fastcall GameWorld_CreateSettler(GameWorld* world, void*, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall CGameData_CreateSettler(CGameData* world, void*, std::uint32_t x, std::uint32_t y,
                                                  std::uint32_t type, std::uint32_t player) {
     std::uint32_t settler = 1;
     while (world->settlers[settler].owner != kFreeSettler) {
@@ -111,11 +111,11 @@ std::uint32_t __fastcall GameWorld_CreateSettler(GameWorld* world, void*, std::u
     record.x = static_cast<std::uint16_t>(x);
     record.y = static_cast<std::uint16_t>(y);
     record.art = static_cast<std::uint8_t>(type);
-    record.health = static_cast<std::uint8_t>(GameWorld_SettlerStartHealth(world, nullptr, settler));
+    record.health = static_cast<std::uint8_t>(CGameData_SettlerStartHealth(world, nullptr, settler));
     record.owner = static_cast<std::uint8_t>(player);
     record.job = 0;
-    record.direction = GameWorld_RandomBelow6(world, nullptr);
-    record.counter = static_cast<std::uint16_t>(GameWorld_Random(world, nullptr) & 0x1f);
+    record.direction = CGameData_RandomBelow6(world, nullptr);
+    record.counter = static_cast<std::uint16_t>(CGameData_Random(world, nullptr) & 0x1f);
     record.next = 0;
     record.prev = 0;
     // Bytes +0x15..+0x1a, in this order.
@@ -137,7 +137,7 @@ std::uint32_t __fastcall GameWorld_CreateSettler(GameWorld* world, void*, std::u
 
 // Purpose: Clears what a settler is doing (its job, its counter and the building it belongs to), probably
 // when it becomes idle.
-std::uint32_t __fastcall GameWorld_ClearSettlerJob(GameWorld* world, void*, std::uint32_t settler) {
+std::uint32_t __fastcall CGameData_ClearSettlerJob(CGameData* world, void*, std::uint32_t settler) {
     Settler& record = world->settlers[settler];
     record.job = 0;
     record.counter = 0;
@@ -147,21 +147,21 @@ std::uint32_t __fastcall GameWorld_ClearSettlerJob(GameWorld* world, void*, std:
 
 // Purpose: Gives a settler back the animation and counter it saved earlier (probably after an
 // interruption).
-std::uint32_t __fastcall GameWorld_RestoreSettlerAnimation(GameWorld* world, void*, std::uint32_t settler) {
+std::uint32_t __fastcall CGameData_RestoreSettlerAnimation(CGameData* world, void*, std::uint32_t settler) {
     Settler& record = world->settlers[settler];
     record.animation = record.saved_animation;
     record.counter = record.saved_counter;
     return WorldAddress(world) + settler * kSettlerBytes;
 }
 
-S3RE_HOOK(0x00510470, GameWorld_SettlerStartHealth, SettlerFn, Original_GameWorld_SettlerStartHealth,
-          GameWorld_SettlerStartHealth);
-S3RE_HOOK(0x0050c9e0, GameWorld_CreateSettler, CreateSettlerFn, Original_GameWorld_CreateSettler,
-          GameWorld_CreateSettler);
-S3RE_HOOK(0x00510440, GameWorld_ClearSettlerJob, SettlerFn, Original_GameWorld_ClearSettlerJob,
-          GameWorld_ClearSettlerJob);
-S3RE_HOOK(0x0050e380, GameWorld_RestoreSettlerAnimation, SettlerFn, Original_GameWorld_RestoreSettlerAnimation,
-          GameWorld_RestoreSettlerAnimation);
+S3RE_HOOK(0x00510470, CGameData_SettlerStartHealth, SettlerFn, Original_CGameData_SettlerStartHealth,
+          CGameData_SettlerStartHealth);
+S3RE_HOOK(0x0050c9e0, CGameData_CreateSettler, CreateSettlerFn, Original_CGameData_CreateSettler,
+          CGameData_CreateSettler);
+S3RE_HOOK(0x00510440, CGameData_ClearSettlerJob, SettlerFn, Original_CGameData_ClearSettlerJob,
+          CGameData_ClearSettlerJob);
+S3RE_HOOK(0x0050e380, CGameData_RestoreSettlerAnimation, SettlerFn, Original_CGameData_RestoreSettlerAnimation,
+          CGameData_RestoreSettlerAnimation);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -169,9 +169,9 @@ S3RE_HOOK(0x0050e380, GameWorld_RestoreSettlerAnimation, SettlerFn, Original_Gam
 
 namespace {
 
-constexpr std::size_t kTestWorld = offsetof(GameWorld, settlers) + (kLastSettler + 1) * kSettlerBytes;
+constexpr std::size_t kTestWorld = offsetof(CGameData, settlers) + (kLastSettler + 1) * kSettlerBytes;
 
-std::uint32_t Relative(std::uint32_t value, GameWorld* world) {
+std::uint32_t Relative(std::uint32_t value, CGameData* world) {
     const std::uint32_t offset = value - WorldAddress(world);
     return offset < kTestWorld ? offset : value;
 }
@@ -195,16 +195,16 @@ void CompareSettlerFn(test::Context& ctx, SettlerFn original, SettlerFn candidat
 
 void SetUpHealthCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t settler) {
     const auto race = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 3 : ctx.rng().Below(256));
-    worlds.Both([&](GameWorld* w) { w->settlers[settler].race = race; });
+    worlds.Both([&](CGameData* w) { w->settlers[settler].race = race; });
     const auto type = static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? ctx.rng().Below(0x50) : ctx.rng().Below(256));
-    worlds.Both([&](GameWorld* w) { w->settlers[settler].art = type; });
+    worlds.Both([&](CGameData* w) { w->settlers[settler].art = type; });
 }
 
 // Wrong: no health malus for race 3.
-std::uint32_t __fastcall WrongSettlerStartHealth(GameWorld* world, void* edx, std::uint32_t settler) {
+std::uint32_t __fastcall WrongSettlerStartHealth(CGameData* world, void* edx, std::uint32_t settler) {
     const std::uint8_t race = world->settlers[settler].race;
     world->settlers[settler].race = 0;
-    const std::uint32_t result = GameWorld_SettlerStartHealth(world, edx, settler);
+    const std::uint32_t result = CGameData_SettlerStartHealth(world, edx, settler);
     world->settlers[settler].race = race;
     return result;
 }
@@ -220,21 +220,21 @@ void SetUpFreeSettler(test::Context& ctx, test::WorldPair& worlds) {
     for (std::uint32_t s = 1; s < first && s <= kLastSettler; ++s) {
         if (worlds.original()->settlers[s].owner == kFreeSettler) {
             const auto owner = static_cast<std::uint8_t>(ctx.rng().Below(20));
-            worlds.Both([&](GameWorld* w) { w->settlers[s].owner = owner; });
+            worlds.Both([&](CGameData* w) { w->settlers[s].owner = owner; });
         }
     }
     if (first <= kLastSettler) {
-        worlds.Both([&](GameWorld* w) { w->settlers[first].owner = kFreeSettler; });
+        worlds.Both([&](CGameData* w) { w->settlers[first].owner = kFreeSettler; });
     }
     const std::uint32_t mark = ctx.rng().Chance(1, 2) ? first - 1 + ctx.rng().Below(3) : ctx.rng().Next32();
-    worlds.Both([&](GameWorld* w) { w->settler_high_water = mark; });
+    worlds.Both([&](CGameData* w) { w->settler_high_water = mark; });
 }
 
 // Wrong: does not raise the high-water mark.
-std::uint32_t __fastcall WrongCreateSettler(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall WrongCreateSettler(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                             std::uint32_t type, std::uint32_t player) {
     const std::uint32_t mark = world->settler_high_water;
-    const std::uint32_t result = GameWorld_CreateSettler(world, edx, x, y, type, player);
+    const std::uint32_t result = CGameData_CreateSettler(world, edx, x, y, type, player);
     world->settler_high_water = mark;
     return result;
 }
@@ -249,8 +249,8 @@ void CompareCreateSettler(test::Context& ctx, CreateSettlerFn candidate, int cas
         const std::uint32_t player = ctx.rng().Below(20);
         const auto race = static_cast<std::int32_t>(
             ctx.rng().Chance(1, 2) ? 3 : ctx.rng().Chance(1, 2) ? ctx.rng().Below(4) : ctx.rng().Next32());
-        worlds.Both([&](GameWorld* w) { w->players[player].race = race; });
-        const std::uint32_t expected = Original_GameWorld_CreateSettler(worlds.original(), nullptr, x, y, type, player);
+        worlds.Both([&](CGameData* w) { w->players[player].race = race; });
+        const std::uint32_t expected = Original_CGameData_CreateSettler(worlds.original(), nullptr, x, y, type, player);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y, type, player);
         if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 32 == 31 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 31 before it): (%u, %u) type %u player %u", i, x, y,
@@ -262,30 +262,30 @@ void CompareCreateSettler(test::Context& ctx, CreateSettlerFn candidate, int cas
 
 }  // namespace
 
-S3RE_TEST(GameWorld_SettlerStartHealth_MatchesOriginal) {
-    CompareSettlerFn(ctx, Original_GameWorld_SettlerStartHealth, &GameWorld_SettlerStartHealth, 100000,
+S3RE_TEST(CGameData_SettlerStartHealth_MatchesOriginal) {
+    CompareSettlerFn(ctx, Original_CGameData_SettlerStartHealth, &CGameData_SettlerStartHealth, 100000,
                      [&](test::WorldPair& worlds, std::uint32_t settler) { SetUpHealthCase(ctx, worlds, settler); });
 }
-S3RE_TEST(GameWorld_SettlerStartHealth_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_SettlerStartHealth_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareSettlerFn(probe, Original_GameWorld_SettlerStartHealth, &WrongSettlerStartHealth, 10000,
+    CompareSettlerFn(probe, Original_CGameData_SettlerStartHealth, &WrongSettlerStartHealth, 10000,
                      [&](test::WorldPair& worlds, std::uint32_t settler) { SetUpHealthCase(probe, worlds, settler); });
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_CreateSettler_MatchesOriginal) {
-    CompareCreateSettler(ctx, &GameWorld_CreateSettler, 2000);
+S3RE_TEST(CGameData_CreateSettler_MatchesOriginal) {
+    CompareCreateSettler(ctx, &CGameData_CreateSettler, 2000);
 }
-S3RE_TEST(GameWorld_CreateSettler_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_CreateSettler_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareCreateSettler(probe, &WrongCreateSettler, 500);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_ClearSettlerJob_MatchesOriginal) {
-    CompareSettlerFn(ctx, Original_GameWorld_ClearSettlerJob, &GameWorld_ClearSettlerJob, 20000,
+S3RE_TEST(CGameData_ClearSettlerJob_MatchesOriginal) {
+    CompareSettlerFn(ctx, Original_CGameData_ClearSettlerJob, &CGameData_ClearSettlerJob, 20000,
                      [](test::WorldPair&, std::uint32_t) {});
 }
-S3RE_TEST(GameWorld_RestoreSettlerAnimation_MatchesOriginal) {
-    CompareSettlerFn(ctx, Original_GameWorld_RestoreSettlerAnimation, &GameWorld_RestoreSettlerAnimation, 20000,
+S3RE_TEST(CGameData_RestoreSettlerAnimation_MatchesOriginal) {
+    CompareSettlerFn(ctx, Original_CGameData_RestoreSettlerAnimation, &CGameData_RestoreSettlerAnimation, 20000,
                      [](test::WorldPair&, std::uint32_t) {});
 }
 
@@ -293,17 +293,17 @@ S3RE_TEST(GameWorld_RestoreSettlerAnimation_MatchesOriginal) {
 // Job helpers
 // ---------------------------------------------------------------------------
 
-using JobFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t job);
+using JobFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t job);
 
 // Purpose: Whether a settler's job is one of two (1 or 0x37) that are probably "walking somewhere" states,
 // which the settler update and the path finder treat specially.
-std::uint32_t __fastcall GameWorld_IsSettlerJob01Or37(GameWorld*, void*, std::uint32_t job) {
+std::uint32_t __fastcall CGameData_IsSettlerJob01Or37(CGameData*, void*, std::uint32_t job) {
     return (job & 0xffffff00u) | ((job == 1 || job == 0x37) ? 1u : 0u);
 }
 
 // Purpose: The job that follows job 1 (2) or job 0x37 (0x35), probably once the settler has arrived;
 // 0 for other jobs.
-std::uint32_t __fastcall GameWorld_JobAfter01Or37(GameWorld*, void*, std::uint32_t job) {
+std::uint32_t __fastcall CGameData_JobAfter01Or37(CGameData*, void*, std::uint32_t job) {
     if (job == 1) {
         return 2;
     }
@@ -313,9 +313,9 @@ std::uint32_t __fastcall GameWorld_JobAfter01Or37(GameWorld*, void*, std::uint32
     return 0;
 }
 
-S3RE_HOOK(0x004fa6b0, GameWorld_IsSettlerJob01Or37, JobFn, Original_GameWorld_IsSettlerJob01Or37,
-          GameWorld_IsSettlerJob01Or37);
-S3RE_HOOK(0x004faa40, GameWorld_JobAfter01Or37, JobFn, Original_GameWorld_JobAfter01Or37, GameWorld_JobAfter01Or37);
+S3RE_HOOK(0x004fa6b0, CGameData_IsSettlerJob01Or37, JobFn, Original_CGameData_IsSettlerJob01Or37,
+          CGameData_IsSettlerJob01Or37);
+S3RE_HOOK(0x004faa40, CGameData_JobAfter01Or37, JobFn, Original_CGameData_JobAfter01Or37, CGameData_JobAfter01Or37);
 
 namespace {
 
@@ -332,23 +332,23 @@ void CompareJobFn(test::Context& ctx, JobFn original, JobFn candidate) {
 }
 
 // Wrong: compares only the low byte.
-std::uint32_t __fastcall WrongIsSettlerJob01Or37(GameWorld*, void*, std::uint32_t job) {
+std::uint32_t __fastcall WrongIsSettlerJob01Or37(CGameData*, void*, std::uint32_t job) {
     const std::uint32_t low = job & 0xff;
     return (job & 0xffffff00u) | ((low == 1 || low == 0x37) ? 1u : 0u);
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_IsSettlerJob01Or37_MatchesOriginal) {
-    CompareJobFn(ctx, Original_GameWorld_IsSettlerJob01Or37, &GameWorld_IsSettlerJob01Or37);
+S3RE_TEST(CGameData_IsSettlerJob01Or37_MatchesOriginal) {
+    CompareJobFn(ctx, Original_CGameData_IsSettlerJob01Or37, &CGameData_IsSettlerJob01Or37);
 }
-S3RE_TEST(GameWorld_IsSettlerJob01Or37_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_IsSettlerJob01Or37_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareJobFn(probe, Original_GameWorld_IsSettlerJob01Or37, &WrongIsSettlerJob01Or37);
+    CompareJobFn(probe, Original_CGameData_IsSettlerJob01Or37, &WrongIsSettlerJob01Or37);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_JobAfter01Or37_MatchesOriginal) {
-    CompareJobFn(ctx, Original_GameWorld_JobAfter01Or37, &GameWorld_JobAfter01Or37);
+S3RE_TEST(CGameData_JobAfter01Or37_MatchesOriginal) {
+    CompareJobFn(ctx, Original_CGameData_JobAfter01Or37, &CGameData_JobAfter01Or37);
 }
 
 }  // namespace s3re::game

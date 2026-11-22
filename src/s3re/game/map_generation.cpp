@@ -1,6 +1,6 @@
-// Random scattering of map features, used by GameWorld::Create (0x5166d0)
+// Random scattering of map features, used by CGameData::Create (0x5166d0)
 // when it builds a world (each is called several times there, 0x51b010 94
-// times). All draw from GameWorld::Random, so the order of the draws below
+// times). All draw from CGameData::Random, so the order of the draws below
 // is part of the behaviour.
 //
 // Shared pieces (int32 arithmetic as in the original):
@@ -13,7 +13,7 @@
 // terrain, +0x7 an object/resource byte, +0xa flags (bit 0 = blocked), +0x11
 // another resource byte.
 //
-// GameWorld::ScatterTileByte11 (0x0051ad40): (base, density): rounds while
+// CGameData::ScatterTileByte11 (0x0051ad40): (base, density): rounds while
 //   round < (blocks*blocks*density) >> 3 (unsigned). Each round draws a
 //   centre (x = coord(mapSize), y = coord(mapSize)), a count k = (Random &
 //   0x3f) + 32 and a threshold t = (Random & 0x7fff) + 0x8000; then for the
@@ -21,20 +21,20 @@
 //   mapSize-1) whose terrain & 0xf0 is 0x20 or 0x80 and whose byte +0x11 is
 //   0 gets, if (Random & 0xffff) < t, byte +0x11 = (Random & 0xffff) % 15 +
 //   base + 1 (low byte). ret 8.
-// GameWorld::ScatterTerrainNear (0x0051aed0): (required, terrain, density):
+// CGameData::ScatterTerrainNear (0x0051aed0): (required, terrain, density):
 //   rounds while round < (blocks*blocks*density) / 8 (signed, truncated).
 //   Each round draws a centre as above, then 8 times a tile (x + (Random &
 //   0x1f) - 16, y + (Random & 0x1f) - 16): strictly inside the map, byte +0x7
-//   == 0 and GameWorld::IsNeighbourhoodTerrain(tile, required) -> terrain
+//   == 0 and CGameData::IsNeighbourhoodTerrain(tile, required) -> terrain
 //   = `terrain` (low byte). ret 0xc.
-// GameWorld::ScatterObjects (0x0051b010): (required, object, density,
+// CGameData::ScatterObjects (0x0051b010): (required, object, density,
 //   blockMode, extra): rounds while round < (blocks*blocks*density) >> 1
 //   (unsigned). Each round draws a tile (coord(mapSize-2) + 1, twice); if
-//   IsNeighbourhoodTerrain(tile, required) and GameWorld::AreOffsetTilesClear
+//   IsNeighbourhoodTerrain(tile, required) and CGameData::AreOffsetTilesClear
 //   (tile, blockMode + extra == 3 ? 19 : 7): byte +0x7 = object (low byte),
 //   and with blockMode 1 the tile, with blockMode 2 the tile and its six
 //   neighbours, get flag bit 0 of +0xa. ret 0x14.
-// GameWorld::ScatterObjectGroups (0x0051b1a0): (required, low, high,
+// CGameData::ScatterObjectGroups (0x0051b1a0): (required, low, high,
 //   density, blockMode, extra): rounds while round < (blocks*blocks*density)
 //   >> 4 (unsigned). Each round draws a centre (coord(mapSize-2) + 1, twice)
 //   and a count k = (Random & 0xf) + 4; then k times a random offset entry
@@ -69,52 +69,52 @@ std::uint32_t TileOffsetXY(std::int32_t x, std::int32_t y) {
     return TileOffset(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
 }
 
-Tile& TileAt(GameWorld* world, std::uint32_t tile) {
+Tile& TileAt(CGameData* world, std::uint32_t tile) {
     return TileAtOffset(world, tile);
 }
 
-std::int32_t MapSize(GameWorld* world) {
+std::int32_t MapSize(CGameData* world) {
     return static_cast<std::int32_t>(world->map_size);
 }
 
 // (blocks * blocks * density) as the original's 32-bit imul chain.
-std::uint32_t BlockArea(GameWorld* world, std::uint32_t density) {
+std::uint32_t BlockArea(CGameData* world, std::uint32_t density) {
     const std::int32_t blocks = MapSize(world) / 64;
     return static_cast<std::uint32_t>(blocks) * static_cast<std::uint32_t>(blocks) * density;
 }
 
-std::uint32_t Random16(GameWorld* world) {
-    return GameWorld_Random(world, nullptr) & 0xffffu;
+std::uint32_t Random16(CGameData* world) {
+    return CGameData_Random(world, nullptr) & 0xffffu;
 }
 
 // ((Random & 0xffff) * range) / 65536, signed 32-bit, truncated toward zero.
-std::int32_t RandomCoordinate(GameWorld* world, std::int32_t range) {
+std::int32_t RandomCoordinate(CGameData* world, std::int32_t range) {
     const auto product = static_cast<std::int32_t>(Random16(world) * static_cast<std::uint32_t>(range));
     return product / 65536;
 }
 
-bool StrictlyInside(GameWorld* world, std::int32_t x, std::int32_t y) {
+bool StrictlyInside(CGameData* world, std::int32_t x, std::int32_t y) {
     const std::int32_t last = MapSize(world) - 1;
     return x >= 1 && x < last && y >= 1 && y < last;
 }
 
-std::int32_t OffsetX(GameWorld* world, std::uint32_t entry) {
+std::int32_t OffsetX(CGameData* world, std::uint32_t entry) {
     return world->offsets[entry].dx;
 }
-std::int32_t OffsetY(GameWorld* world, std::uint32_t entry) {
+std::int32_t OffsetY(CGameData* world, std::uint32_t entry) {
     return world->offsets[entry].dy;
 }
 
 // The tile check shared by ScatterObjects and ScatterObjectGroups.
-bool CanPlaceObject(GameWorld* world, std::int32_t x, std::int32_t y, std::uint32_t required,
+bool CanPlaceObject(CGameData* world, std::int32_t x, std::int32_t y, std::uint32_t required,
                     std::uint32_t blockMode, std::uint32_t extra) {
     const auto ux = static_cast<std::uint32_t>(x);
     const auto uy = static_cast<std::uint32_t>(y);
-    return GameWorld_IsNeighbourhoodTerrain(world, nullptr, ux, uy, required) != 0 &&
-           GameWorld_AreOffsetTilesClear(world, nullptr, ux, uy, blockMode + extra == 3 ? 19 : 7) != 0;
+    return CGameData_IsNeighbourhoodTerrain(world, nullptr, ux, uy, required) != 0 &&
+           CGameData_AreOffsetTilesClear(world, nullptr, ux, uy, blockMode + extra == 3 ? 19 : 7) != 0;
 }
 
-void BlockTiles(GameWorld* world, std::uint32_t tile, std::uint32_t blockMode) {
+void BlockTiles(CGameData* world, std::uint32_t tile, std::uint32_t blockMode) {
     if (blockMode == 1) {
         TileAt(world, tile).flags |= kTileBlocked;
     } else if (blockMode == 2) {
@@ -126,23 +126,23 @@ void BlockTiles(GameWorld* world, std::uint32_t tile, std::uint32_t blockMode) {
 
 }  // namespace
 
-using Scatter2Fn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t a, std::uint32_t b);
-using Scatter3Fn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t a, std::uint32_t b,
+using Scatter2Fn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t a, std::uint32_t b);
+using Scatter3Fn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t a, std::uint32_t b,
                                               std::uint32_t c);
-using Scatter5Fn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t a, std::uint32_t b,
+using Scatter5Fn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t a, std::uint32_t b,
                                               std::uint32_t c, std::uint32_t d, std::uint32_t e);
-using Scatter6Fn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t a, std::uint32_t b,
+using Scatter6Fn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t a, std::uint32_t b,
                                               std::uint32_t c, std::uint32_t d, std::uint32_t e, std::uint32_t f);
 
 // Purpose: Map generation: scatters clusters of a resource value over suitable land (probably the hidden
 // resources a geologist finds: coal, iron, gold, stone).
-std::uint32_t __fastcall GameWorld_ScatterTileByte11(GameWorld* world, void*, std::uint32_t base,
+std::uint32_t __fastcall CGameData_ScatterTileByte11(CGameData* world, void*, std::uint32_t base,
                                                      std::uint32_t density) {
     for (std::uint32_t round = 0; round < BlockArea(world, density) >> 3; ++round) {
         const std::int32_t x = RandomCoordinate(world, MapSize(world));
         const std::int32_t y = RandomCoordinate(world, MapSize(world));
-        const std::uint32_t count = (GameWorld_Random(world, nullptr) & 0x3fu) + 0x20u;
-        const std::uint32_t threshold = (GameWorld_Random(world, nullptr) & 0x7fffu) + 0x8000u;
+        const std::uint32_t count = (CGameData_Random(world, nullptr) & 0x3fu) + 0x20u;
+        const std::uint32_t threshold = (CGameData_Random(world, nullptr) & 0x7fffu) + 0x8000u;
         for (std::uint32_t entry = 0; entry < count; ++entry) {
             const std::int32_t tx = OffsetX(world, entry) + x;
             const std::int32_t ty = OffsetY(world, entry) + y;
@@ -164,7 +164,7 @@ std::uint32_t __fastcall GameWorld_ScatterTileByte11(GameWorld* world, void*, st
 }
 
 // Purpose: Map generation: sprinkles patches of a terrain type into another terrain, to vary the landscape.
-std::uint32_t __fastcall GameWorld_ScatterTerrainNear(GameWorld* world, void*, std::uint32_t required,
+std::uint32_t __fastcall CGameData_ScatterTerrainNear(CGameData* world, void*, std::uint32_t required,
                                                       std::uint32_t terrain, std::uint32_t density) {
     auto rounds = [&] { return static_cast<std::int32_t>(BlockArea(world, density)) / 8; };
     if (rounds() <= 0) {
@@ -175,14 +175,14 @@ std::uint32_t __fastcall GameWorld_ScatterTerrainNear(GameWorld* world, void*, s
         const std::int32_t x = RandomCoordinate(world, MapSize(world));
         const std::int32_t y = RandomCoordinate(world, MapSize(world));
         for (int i = 0; i < 8; ++i) {
-            const std::int32_t tx = static_cast<std::int32_t>(GameWorld_Random(world, nullptr) & 0x1fu) + x - 16;
-            const std::int32_t ty = static_cast<std::int32_t>(GameWorld_Random(world, nullptr) & 0x1fu) + y - 16;
+            const std::int32_t tx = static_cast<std::int32_t>(CGameData_Random(world, nullptr) & 0x1fu) + x - 16;
+            const std::int32_t ty = static_cast<std::int32_t>(CGameData_Random(world, nullptr) & 0x1fu) + y - 16;
             if (!StrictlyInside(world, tx, ty)) {
                 continue;
             }
             const std::uint32_t tile = TileOffsetXY(tx, ty);
             if (TileAt(world, tile).object == 0 &&
-                GameWorld_IsNeighbourhoodTerrain(world, nullptr, static_cast<std::uint32_t>(tx),
+                CGameData_IsNeighbourhoodTerrain(world, nullptr, static_cast<std::uint32_t>(tx),
                                                  static_cast<std::uint32_t>(ty), required) != 0) {
                 TileAt(world, tile).terrain = static_cast<std::uint8_t>(terrain);
             }
@@ -194,7 +194,7 @@ std::uint32_t __fastcall GameWorld_ScatterTerrainNear(GameWorld* world, void*, s
 
 // Purpose: Map generation: places single objects (probably trees, stones and decorations) on random
 // suitable tiles, optionally making them block movement.
-std::uint32_t __fastcall GameWorld_ScatterObjects(GameWorld* world, void*, std::uint32_t required,
+std::uint32_t __fastcall CGameData_ScatterObjects(CGameData* world, void*, std::uint32_t required,
                                                   std::uint32_t object, std::uint32_t density,
                                                   std::uint32_t blockMode, std::uint32_t extra) {
     for (std::uint32_t round = 0; round < BlockArea(world, density) >> 1; ++round) {
@@ -212,15 +212,15 @@ std::uint32_t __fastcall GameWorld_ScatterObjects(GameWorld* world, void*, std::
 
 // Purpose: Map generation: places groups of objects around random centres (probably forests or rock
 // fields), each object picked from a range of types.
-std::uint32_t __fastcall GameWorld_ScatterObjectGroups(GameWorld* world, void*, std::uint32_t required,
+std::uint32_t __fastcall CGameData_ScatterObjectGroups(CGameData* world, void*, std::uint32_t required,
                                                        std::uint32_t low, std::uint32_t high, std::uint32_t density,
                                                        std::uint32_t blockMode, std::uint32_t extra) {
     for (std::uint32_t round = 0; round < BlockArea(world, density) >> 4; ++round) {
         const std::int32_t x = RandomCoordinate(world, MapSize(world) - 2) + 1;
         const std::int32_t y = RandomCoordinate(world, MapSize(world) - 2) + 1;
-        const std::uint32_t count = (GameWorld_Random(world, nullptr) & 0xfu) + 4u;
+        const std::uint32_t count = (CGameData_Random(world, nullptr) & 0xfu) + 4u;
         for (std::uint32_t i = 0; i < count; ++i) {
-            const std::uint32_t entry = GameWorld_Random(world, nullptr) & 0x1ffu;
+            const std::uint32_t entry = CGameData_Random(world, nullptr) & 0x1ffu;
             const std::int32_t tx = OffsetX(world, entry) + x;
             const std::int32_t ty = OffsetY(world, entry) + y;
             const std::int32_t size = MapSize(world);
@@ -239,14 +239,14 @@ std::uint32_t __fastcall GameWorld_ScatterObjectGroups(GameWorld* world, void*, 
     return 0;
 }
 
-S3RE_HOOK(0x0051ad40, GameWorld_ScatterTileByte11, Scatter2Fn, Original_GameWorld_ScatterTileByte11,
-          GameWorld_ScatterTileByte11);
-S3RE_HOOK(0x0051aed0, GameWorld_ScatterTerrainNear, Scatter3Fn, Original_GameWorld_ScatterTerrainNear,
-          GameWorld_ScatterTerrainNear);
-S3RE_HOOK(0x0051b010, GameWorld_ScatterObjects, Scatter5Fn, Original_GameWorld_ScatterObjects,
-          GameWorld_ScatterObjects);
-S3RE_HOOK(0x0051b1a0, GameWorld_ScatterObjectGroups, Scatter6Fn, Original_GameWorld_ScatterObjectGroups,
-          GameWorld_ScatterObjectGroups);
+S3RE_HOOK(0x0051ad40, CGameData_ScatterTileByte11, Scatter2Fn, Original_CGameData_ScatterTileByte11,
+          CGameData_ScatterTileByte11);
+S3RE_HOOK(0x0051aed0, CGameData_ScatterTerrainNear, Scatter3Fn, Original_CGameData_ScatterTerrainNear,
+          CGameData_ScatterTerrainNear);
+S3RE_HOOK(0x0051b010, CGameData_ScatterObjects, Scatter5Fn, Original_CGameData_ScatterObjects,
+          CGameData_ScatterObjects);
+S3RE_HOOK(0x0051b1a0, CGameData_ScatterObjectGroups, Scatter6Fn, Original_CGameData_ScatterObjectGroups,
+          CGameData_ScatterObjectGroups);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -255,15 +255,15 @@ S3RE_HOOK(0x0051b1a0, GameWorld_ScatterObjectGroups, Scatter6Fn, Original_GameWo
 namespace {
 
 constexpr std::uint32_t kTestOffsets = 512;
-constexpr std::size_t kTestWorld = offsetof(GameWorld, offsets) + kTestOffsets * sizeof(layout::MapOffset);
-constexpr std::size_t kTilesOffset = offsetof(GameWorld, tiles);
+constexpr std::size_t kTestWorld = offsetof(CGameData, offsets) + kTestOffsets * sizeof(layout::MapOffset);
+constexpr std::size_t kTilesOffset = offsetof(CGameData, tiles);
 
 // A random landscape: few terrain types (so the neighbourhood checks pass
 // often), mostly empty object and resource bytes, few blocked tiles; the
 // offset table with small offsets; a random RNG state and map size.
 void SetUpLandscape(test::Context& ctx, test::WorldPair& worlds) {
     const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : ctx.rng().Below(400);
-    worlds.Both([&](GameWorld* w) { w->map_size = size; });
+    worlds.Both([&](CGameData* w) { w->map_size = size; });
     static constexpr std::uint8_t kTerrains[] = {0x20, 0x21, 0x80, 0x10};
     const std::uint32_t limit = size < 384 ? size : 384;
     for (std::uint32_t x = 0; x < limit; ++x) {
@@ -275,7 +275,7 @@ void SetUpLandscape(test::Context& ctx, test::WorldPair& worlds) {
             const auto resources = static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? 0 : 5);
             const auto flags =
                 static_cast<std::uint8_t>(ctx.rng().Next32() & (ctx.rng().Chance(31, 32) ? 0xfe : 0xff));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 Tile& tile = w->tiles[x][y];
                 tile.terrain = terrain;
                 tile.object = object;
@@ -288,14 +288,14 @@ void SetUpLandscape(test::Context& ctx, test::WorldPair& worlds) {
         const std::int32_t reach = entry < 96 ? 5 : 12;
         const std::int32_t dx = ctx.rng().Range(-reach, reach);
         const std::int32_t dy = ctx.rng().Range(-reach, reach);
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->offsets[entry].dx = dx;
             w->offsets[entry].dy = dy;
         });
     }
     const std::uint32_t ab = ctx.rng().Next32();
     const auto c = static_cast<std::uint16_t>(ctx.rng().Next32());
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         w->random_state[0] = static_cast<std::uint16_t>(ab);
         w->random_state[1] = static_cast<std::uint16_t>(ab >> 16);
         w->random_state[2] = c;
@@ -324,10 +324,10 @@ void CompareScatter(test::Context& ctx, int cases, Call call) {
 }
 
 // Wrong: always uses the 7-entry clearance check.
-std::uint32_t __fastcall WrongScatterObjects(GameWorld* world, void* edx, std::uint32_t required,
+std::uint32_t __fastcall WrongScatterObjects(CGameData* world, void* edx, std::uint32_t required,
                                              std::uint32_t object, std::uint32_t density, std::uint32_t blockMode,
                                              std::uint32_t extra) {
-    return GameWorld_ScatterObjects(world, edx, required, object, density, blockMode,
+    return CGameData_ScatterObjects(world, edx, required, object, density, blockMode,
                                     blockMode + extra == 3 ? extra + 1 : extra);
 }
 
@@ -338,43 +338,43 @@ void CompareScatterObjects(test::Context& ctx, Scatter5Fn candidate, int cases) 
         const std::uint32_t density = Density(ctx) & 0xfff;
         const std::uint32_t blockMode = ctx.rng().Below(4);
         const std::uint32_t extra = ctx.rng().Chance(1, 2) ? 3 - blockMode : ctx.rng().Below(4);
-        Original_GameWorld_ScatterObjects(worlds.original(), nullptr, required, object, density, blockMode, extra);
+        Original_CGameData_ScatterObjects(worlds.original(), nullptr, required, object, density, blockMode, extra);
         candidate(worlds.ours(), nullptr, required, object, density, blockMode, extra);
     });
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_ScatterTileByte11_MatchesOriginal) {
+S3RE_TEST(CGameData_ScatterTileByte11_MatchesOriginal) {
     CompareScatter(ctx, 40, [&](test::WorldPair& worlds) {
         const std::uint32_t base = ctx.rng().Next32();
         const std::uint32_t density = Density(ctx) & 0xfff;
-        Original_GameWorld_ScatterTileByte11(worlds.original(), nullptr, base, density);
-        GameWorld_ScatterTileByte11(worlds.ours(), nullptr, base, density);
+        Original_CGameData_ScatterTileByte11(worlds.original(), nullptr, base, density);
+        CGameData_ScatterTileByte11(worlds.ours(), nullptr, base, density);
     });
 }
 
-S3RE_TEST(GameWorld_ScatterTerrainNear_MatchesOriginal) {
+S3RE_TEST(CGameData_ScatterTerrainNear_MatchesOriginal) {
     CompareScatter(ctx, 40, [&](test::WorldPair& worlds) {
         const std::uint32_t required = Terrain(ctx);
         const std::uint32_t terrain = ctx.rng().Next32();
         // Sometimes negative: no rounds (signed count).
         const std::uint32_t density = ctx.rng().Chance(1, 8) ? 0u - ctx.rng().Below(100) : ctx.rng().Below(40);
-        Original_GameWorld_ScatterTerrainNear(worlds.original(), nullptr, required, terrain, density);
-        GameWorld_ScatterTerrainNear(worlds.ours(), nullptr, required, terrain, density);
+        Original_CGameData_ScatterTerrainNear(worlds.original(), nullptr, required, terrain, density);
+        CGameData_ScatterTerrainNear(worlds.ours(), nullptr, required, terrain, density);
     });
 }
 
-S3RE_TEST(GameWorld_ScatterObjects_MatchesOriginal) {
-    CompareScatterObjects(ctx, &GameWorld_ScatterObjects, 40);
+S3RE_TEST(CGameData_ScatterObjects_MatchesOriginal) {
+    CompareScatterObjects(ctx, &CGameData_ScatterObjects, 40);
 }
-S3RE_TEST(GameWorld_ScatterObjects_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_ScatterObjects_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareScatterObjects(probe, &WrongScatterObjects, 20);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
-S3RE_TEST(GameWorld_ScatterObjectGroups_MatchesOriginal) {
+S3RE_TEST(CGameData_ScatterObjectGroups_MatchesOriginal) {
     CompareScatter(ctx, 40, [&](test::WorldPair& worlds) {
         const std::uint32_t required = Terrain(ctx);
         const std::uint32_t low = ctx.rng().Chance(1, 4) ? ctx.rng().Next32() : ctx.rng().Below(8);
@@ -382,31 +382,31 @@ S3RE_TEST(GameWorld_ScatterObjectGroups_MatchesOriginal) {
         const std::uint32_t density = Density(ctx) & 0xfff;
         const std::uint32_t blockMode = ctx.rng().Below(4);
         const std::uint32_t extra = ctx.rng().Chance(1, 2) ? 3 - blockMode : ctx.rng().Below(4);
-        Original_GameWorld_ScatterObjectGroups(worlds.original(), nullptr, required, low, high, density, blockMode,
+        Original_CGameData_ScatterObjectGroups(worlds.original(), nullptr, required, low, high, density, blockMode,
                                                extra);
-        GameWorld_ScatterObjectGroups(worlds.ours(), nullptr, required, low, high, density, blockMode, extra);
+        CGameData_ScatterObjectGroups(worlds.ours(), nullptr, required, low, high, density, blockMode, extra);
     });
 }
 
 // ---------------------------------------------------------------------------
-// GameWorld::ReplaceTerrainNextTo (0x00519270): (terrain, neighbour,
+// CGameData::ReplaceTerrainNextTo (0x00519270): (terrain, neighbour,
 // replacement): for x = 1 .. mapSize-2, inner y = 1 .. mapSize-2 (signed
 // compares; mapSize at world+0x2d2d0 re-read per step), a tile whose
 // terrain byte +0x6 equals `terrain` (zero-extended, 32-bit compare) and
 // that has one of the six neighbours (x+1, y), (x-1, y), (x, y-1),
 // (x, y+1), (x+1, y+1), (x-1, y-1) with terrain `neighbour` gets terrain
 // `replacement` (low byte). Works in place, so a replaced tile can make the
-// next one match. Called four times by GameWorld::Create (map generation,
+// next one match. Called four times by CGameData::Create (map generation,
 // probably to put transition terrain such as beaches along borders).
 // thiscall, ret 0xc; EAX is clobbered by every caller (void here).
 // ---------------------------------------------------------------------------
 
-using ReplaceNextToFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t terrain, std::uint32_t neighbour,
+using ReplaceNextToFn = void(__fastcall*)(CGameData* world, void* edx, std::uint32_t terrain, std::uint32_t neighbour,
                                           std::uint32_t replacement);
 
 // Purpose: Map generation: turns tiles of one terrain into another where they border a third (probably to
 // add transition terrain, e.g. shore along water).
-void __fastcall GameWorld_ReplaceTerrainNextTo(GameWorld* world, void*, std::uint32_t terrain, std::uint32_t neighbour,
+void __fastcall CGameData_ReplaceTerrainNextTo(CGameData* world, void*, std::uint32_t terrain, std::uint32_t neighbour,
                                                std::uint32_t replacement) {
     // mapSize re-read per step.
     for (std::int32_t x = 1; x < MapSize(world) - 1; ++x) {
@@ -426,31 +426,31 @@ void __fastcall GameWorld_ReplaceTerrainNextTo(GameWorld* world, void*, std::uin
     }
 }
 
-S3RE_HOOK(0x00519270, GameWorld_ReplaceTerrainNextTo, ReplaceNextToFn, Original_GameWorld_ReplaceTerrainNextTo,
-          GameWorld_ReplaceTerrainNextTo);
+S3RE_HOOK(0x00519270, CGameData_ReplaceTerrainNextTo, ReplaceNextToFn, Original_CGameData_ReplaceTerrainNextTo,
+          CGameData_ReplaceTerrainNextTo);
 
 // ---------------------------------------------------------------------------
-// GameWorld::ExpandTerrain (0x00519440): (terrain, into): one growth step:
+// CGameData::ExpandTerrain (0x00519440): (terrain, into): one growth step:
 // ReplaceTerrainNextTo(into, terrain, 0xf0), then ReplaceTerrainType(0xf0,
 // terrain). Every tile of `into` that touches `terrain` becomes `terrain`;
 // the temporary 0xf0 keeps a converted tile from spreading further in the
 // same step. EAX = ReplaceTerrainType's (mapSize - 1). thiscall, ret 8.
-// Called 29 times by GameWorld::Create (e.g. (0x40, 0x10): mountains grow
+// Called 29 times by CGameData::Create (e.g. (0x40, 0x10): mountains grow
 // into grass).
 //
-// GameWorld::MarkTerrainEdge (0x0051a2e0): (terrain): for x = 1 ..
+// CGameData::MarkTerrainEdge (0x0051a2e0): (terrain): for x = 1 ..
 // mapSize-2, inner y = 1 .. mapSize-2 (signed, mapSize re-read), a tile of
 // `terrain` (32-bit compare of the zero-extended byte) with one of its six
 // neighbours (x, y-1), (x, y+1), (x-1, y), (x+1, y), (x+1, y+1), (x-1, y-1)
 // neither `terrain` nor 0xf3 gets terrain 0xf3. In place, so a marked tile
-// no longer counts as a foreign neighbour. GameWorld::ReplaceTerrainF3
+// no longer counts as a foreign neighbour. CGameData::ReplaceTerrainF3
 // (0x51a400) later turns the marks into a border terrain. EAX = mapSize - 1.
-// thiscall, ret 4. Called 4 times by GameWorld::Create, always with 0x10.
+// thiscall, ret 4. Called 4 times by CGameData::Create, always with 0x10.
 // ---------------------------------------------------------------------------
 
-using ExpandTerrainFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t terrain,
+using ExpandTerrainFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t terrain,
                                                    std::uint32_t into);
-using MarkTerrainEdgeFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t terrain);
+using MarkTerrainEdgeFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t terrain);
 
 namespace {
 constexpr std::uint32_t kGrowthMark = 0xf0;
@@ -460,14 +460,14 @@ constexpr std::int32_t kSixNeighbours[] = {-kRow, kRow, -kColumn, kColumn, kRow 
 
 // Purpose: Map generation: lets a terrain (e.g. mountains, desert) grow by one tile into a neighbouring
 // terrain all along its border.
-std::uint32_t __fastcall GameWorld_ExpandTerrain(GameWorld* world, void*, std::uint32_t terrain, std::uint32_t into) {
-    GameWorld_ReplaceTerrainNextTo(world, nullptr, into, terrain, kGrowthMark);
-    return GameWorld_ReplaceTerrainType(world, nullptr, kGrowthMark, terrain);
+std::uint32_t __fastcall CGameData_ExpandTerrain(CGameData* world, void*, std::uint32_t terrain, std::uint32_t into) {
+    CGameData_ReplaceTerrainNextTo(world, nullptr, into, terrain, kGrowthMark);
+    return CGameData_ReplaceTerrainType(world, nullptr, kGrowthMark, terrain);
 }
 
 // Purpose: Map generation: marks the outer edge of a terrain (tiles bordering another terrain) so that a
 // later step can turn the edge into transition terrain.
-std::uint32_t __fastcall GameWorld_MarkTerrainEdge(GameWorld* world, void*, std::uint32_t terrain) {
+std::uint32_t __fastcall CGameData_MarkTerrainEdge(CGameData* world, void*, std::uint32_t terrain) {
     // mapSize re-read per step.
     for (std::int32_t x = 1; x < MapSize(world) - 1; ++x) {
         for (std::int32_t y = 1; y < MapSize(world) - 1; ++y) {
@@ -487,10 +487,10 @@ std::uint32_t __fastcall GameWorld_MarkTerrainEdge(GameWorld* world, void*, std:
     return static_cast<std::uint32_t>(MapSize(world) - 1);
 }
 
-S3RE_HOOK(0x00519440, GameWorld_ExpandTerrain, ExpandTerrainFn, Original_GameWorld_ExpandTerrain,
-          GameWorld_ExpandTerrain);
-S3RE_HOOK(0x0051a2e0, GameWorld_MarkTerrainEdge, MarkTerrainEdgeFn, Original_GameWorld_MarkTerrainEdge,
-          GameWorld_MarkTerrainEdge);
+S3RE_HOOK(0x00519440, CGameData_ExpandTerrain, ExpandTerrainFn, Original_CGameData_ExpandTerrain,
+          CGameData_ExpandTerrain);
+S3RE_HOOK(0x0051a2e0, CGameData_MarkTerrainEdge, MarkTerrainEdgeFn, Original_CGameData_MarkTerrainEdge,
+          CGameData_MarkTerrainEdge);
 
 namespace {
 
@@ -502,18 +502,18 @@ void CompareReplaceNextTo(test::Context& ctx, ReplaceNextToFn candidate, int cas
     for (int i = 0; i < cases; ++i) {
         const std::int32_t n = ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Below(8)) - 4
                                                        : static_cast<std::int32_t>(4 + ctx.rng().Below(30));
-        worlds.Both([&](GameWorld* w) { w->map_size = static_cast<std::uint32_t>(n); });
+        worlds.Both([&](CGameData* w) { w->map_size = static_cast<std::uint32_t>(n); });
         for (std::int32_t x = 0; x < 36; ++x) {
             for (std::int32_t y = 0; y < 36; ++y) {
                 const auto terrain = static_cast<std::uint8_t>(ctx.rng().Below(4));
-                worlds.Both([&](GameWorld* w) { w->tiles[x][y].terrain = terrain; });
+                worlds.Both([&](CGameData* w) { w->tiles[x][y].terrain = terrain; });
             }
         }
         auto argument = [&]() { return ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(4); };
         const std::uint32_t terrain = argument();
         const std::uint32_t neighbour = argument();
         const std::uint32_t replacement = ctx.rng().Chance(1, 4) ? ctx.rng().Next32() : ctx.rng().Below(4);
-        Original_GameWorld_ReplaceTerrainNextTo(worlds.original(), nullptr, terrain, neighbour, replacement);
+        Original_CGameData_ReplaceTerrainNextTo(worlds.original(), nullptr, terrain, neighbour, replacement);
         candidate(worlds.ours(), nullptr, terrain, neighbour, replacement);
         if (!worlds.Same(ctx, kTilesOffset, 36 * kTileRowBytes) || (i % 64 == 63 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: size %d, (%u, %u, %u)", i, n, terrain, neighbour, replacement);
@@ -523,7 +523,7 @@ void CompareReplaceNextTo(test::Context& ctx, ReplaceNextToFn candidate, int cas
 }
 
 // Wrong: decides on the terrains before any replacement (not in place).
-void __fastcall WrongReplaceTerrainNextTo(GameWorld* world, void*, std::uint32_t terrain, std::uint32_t neighbour,
+void __fastcall WrongReplaceTerrainNextTo(CGameData* world, void*, std::uint32_t terrain, std::uint32_t neighbour,
                                           std::uint32_t replacement) {
     const std::int32_t mapSize = MapSize(world);
     static std::uint8_t copy[40][40];
@@ -545,10 +545,10 @@ void __fastcall WrongReplaceTerrainNextTo(GameWorld* world, void*, std::uint32_t
 
 }  // namespace
 
-S3RE_TEST(GameWorld_ReplaceTerrainNextTo_MatchesOriginal) {
-    CompareReplaceNextTo(ctx, &GameWorld_ReplaceTerrainNextTo, 1000);
+S3RE_TEST(CGameData_ReplaceTerrainNextTo_MatchesOriginal) {
+    CompareReplaceNextTo(ctx, &CGameData_ReplaceTerrainNextTo, 1000);
 }
-S3RE_TEST(GameWorld_ReplaceTerrainNextTo_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_ReplaceTerrainNextTo_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareReplaceNextTo(probe, &WrongReplaceTerrainNextTo, 200);
     S3RE_EXPECT(probe.failures() > 0);
@@ -565,13 +565,13 @@ void CompareTerrainPass(test::Context& ctx, int cases, Call call) {
     for (int i = 0; i < cases; ++i) {
         const std::int32_t n = ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Below(8)) - 4
                                                        : static_cast<std::int32_t>(4 + ctx.rng().Below(30));
-        worlds.Both([&](GameWorld* w) { w->map_size = static_cast<std::uint32_t>(n); });
+        worlds.Both([&](CGameData* w) { w->map_size = static_cast<std::uint32_t>(n); });
         for (std::int32_t x = 0; x < 36; ++x) {
             for (std::int32_t y = 0; y < 36; ++y) {
                 const std::uint32_t pick = ctx.rng().Below(20);
                 const std::uint8_t terrain =
                     pick == 0 ? 0xf0 : pick == 1 ? 0xf3 : static_cast<std::uint8_t>(pick & 3);
-                worlds.Both([&](GameWorld* w) { w->tiles[x][y].terrain = terrain; });
+                worlds.Both([&](CGameData* w) { w->tiles[x][y].terrain = terrain; });
             }
         }
         auto argument = [&]() {
@@ -591,7 +591,7 @@ void CompareTerrainPass(test::Context& ctx, int cases, Call call) {
 
 void CompareExpandTerrain(test::Context& ctx, ExpandTerrainFn candidate, int cases) {
     CompareTerrainPass(ctx, cases, [&](test::WorldPair& worlds, std::uint32_t terrain, std::uint32_t into) {
-        const std::uint32_t expected = Original_GameWorld_ExpandTerrain(worlds.original(), nullptr, terrain, into);
+        const std::uint32_t expected = Original_CGameData_ExpandTerrain(worlds.original(), nullptr, terrain, into);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, terrain, into);
         return S3RE_EXPECT_EQ(expected, actual);
     });
@@ -599,20 +599,20 @@ void CompareExpandTerrain(test::Context& ctx, ExpandTerrainFn candidate, int cas
 
 void CompareMarkTerrainEdge(test::Context& ctx, MarkTerrainEdgeFn candidate, int cases) {
     CompareTerrainPass(ctx, cases, [&](test::WorldPair& worlds, std::uint32_t terrain, std::uint32_t) {
-        const std::uint32_t expected = Original_GameWorld_MarkTerrainEdge(worlds.original(), nullptr, terrain);
+        const std::uint32_t expected = Original_CGameData_MarkTerrainEdge(worlds.original(), nullptr, terrain);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, terrain);
         return S3RE_EXPECT_EQ(expected, actual);
     });
 }
 
 // Wrong: grows without the temporary mark, so a converted tile spreads on.
-std::uint32_t __fastcall WrongExpandTerrain(GameWorld* world, void*, std::uint32_t terrain, std::uint32_t into) {
-    GameWorld_ReplaceTerrainNextTo(world, nullptr, into, terrain, terrain);
+std::uint32_t __fastcall WrongExpandTerrain(CGameData* world, void*, std::uint32_t terrain, std::uint32_t into) {
+    CGameData_ReplaceTerrainNextTo(world, nullptr, into, terrain, terrain);
     return static_cast<std::uint32_t>(MapSize(world) - 1);
 }
 
 // Wrong: a neighbour already marked 0xf3 counts as foreign.
-std::uint32_t __fastcall WrongMarkTerrainEdge(GameWorld* world, void*, std::uint32_t terrain) {
+std::uint32_t __fastcall WrongMarkTerrainEdge(CGameData* world, void*, std::uint32_t terrain) {
     const std::int32_t mapSize = MapSize(world);
     for (std::int32_t x = 1; x < mapSize - 1; ++x) {
         for (std::int32_t y = 1; y < mapSize - 1; ++y) {
@@ -633,19 +633,19 @@ std::uint32_t __fastcall WrongMarkTerrainEdge(GameWorld* world, void*, std::uint
 
 }  // namespace
 
-S3RE_TEST(GameWorld_ExpandTerrain_MatchesOriginal) {
-    CompareExpandTerrain(ctx, &GameWorld_ExpandTerrain, 1000);
+S3RE_TEST(CGameData_ExpandTerrain_MatchesOriginal) {
+    CompareExpandTerrain(ctx, &CGameData_ExpandTerrain, 1000);
 }
-S3RE_TEST(GameWorld_ExpandTerrain_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_ExpandTerrain_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareExpandTerrain(probe, &WrongExpandTerrain, 200);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
-S3RE_TEST(GameWorld_MarkTerrainEdge_MatchesOriginal) {
-    CompareMarkTerrainEdge(ctx, &GameWorld_MarkTerrainEdge, 1000);
+S3RE_TEST(CGameData_MarkTerrainEdge_MatchesOriginal) {
+    CompareMarkTerrainEdge(ctx, &CGameData_MarkTerrainEdge, 1000);
 }
-S3RE_TEST(GameWorld_MarkTerrainEdge_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_MarkTerrainEdge_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareMarkTerrainEdge(probe, &WrongMarkTerrainEdge, 200);
     S3RE_EXPECT(probe.failures() > 0);

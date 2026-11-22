@@ -1,13 +1,13 @@
-// The per-step world maintenance GameWorld::UpdateEnvironment (0x4e7810) and
+// The per-step world maintenance CGameData::UpdateEnvironment (0x4e7810) and
 // its small helpers.
 //
-// GameWorld::DecayTraffic (0x00503980): (x, y): foot traffic (Tile +0x12)
+// CGameData::DecayTraffic (0x00503980): (x, y): foot traffic (Tile +0x12)
 //   decays: t -= (t + 7) >> 3 (byte arithmetic). On a building footprint
 //   (flags & 8) a result of 7 becomes 8; elsewhere a result of 7 on a worn
 //   path (terrain 0x1c) turns the tile back into grass (0x10) and marks it
 //   for redrawing (draw_flags | 0x80). UpdateEnvironment calls it for one
 //   tile per step (cursor world+0x2d2f4 / +0x2d2f8). ret 8, EAX not used.
-// GameWorld::UpdateEnvironment (0x004e7810): () the first world update of
+// CGameData::UpdateEnvironment (0x004e7810): () the first world update of
 //   every logic step (CLogicThread::Step). Nothing while
 //   g_worldUpdateDisabled (0x7deb55). In order:
 //   1. every 64th pile from g_gameTick & 63: a building pile (art 0xfe)
@@ -58,10 +58,10 @@ namespace s3re::game {
 
 using layout::Tile;
 
-using TileFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+using TileFn = void(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 
 // Purpose: Lets the foot traffic on a tile fade, so that paths nobody walks any more grow back into grass.
-void __fastcall GameWorld_DecayTraffic(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+void __fastcall CGameData_DecayTraffic(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     Tile& tile = TileAtOffset(world, TileOffset(x, y));
     const std::uint8_t traffic = tile.traffic;
     if (traffic == 0) {
@@ -80,10 +80,10 @@ void __fastcall GameWorld_DecayTraffic(GameWorld* world, void*, std::uint32_t x,
     }
 }
 
-S3RE_HOOK(0x00503980, GameWorld_DecayTraffic, TileFn, Original_GameWorld_DecayTraffic, GameWorld_DecayTraffic);
+S3RE_HOOK(0x00503980, CGameData_DecayTraffic, TileFn, Original_CGameData_DecayTraffic, CGameData_DecayTraffic);
 
 // ---------------------------------------------------------------------------
-// GameWorld::UpdateEnvironment
+// CGameData::UpdateEnvironment
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -129,12 +129,12 @@ constexpr std::uintptr_t kDebugLogFn = 0x00428720;
 
 
 
-using Fn0 = U(__fastcall*)(GameWorld* world, void* edx);
-using Fn1 = U(__fastcall*)(GameWorld* world, void* edx, U);
-using Fn2 = U(__fastcall*)(GameWorld* world, void* edx, U, U);
-using Fn3 = U(__fastcall*)(GameWorld* world, void* edx, U, U, U);
-using Fn4 = U(__fastcall*)(GameWorld* world, void* edx, U, U, U, U);
-using Fn5 = U(__fastcall*)(GameWorld* world, void* edx, U, U, U, U, U);
+using Fn0 = U(__fastcall*)(CGameData* world, void* edx);
+using Fn1 = U(__fastcall*)(CGameData* world, void* edx, U);
+using Fn2 = U(__fastcall*)(CGameData* world, void* edx, U, U);
+using Fn3 = U(__fastcall*)(CGameData* world, void* edx, U, U, U);
+using Fn4 = U(__fastcall*)(CGameData* world, void* edx, U, U, U, U);
+using Fn5 = U(__fastcall*)(CGameData* world, void* edx, U, U, U, U, U);
 using TableFn1 = U(__fastcall*)(layout::MapEffectTable* table, void* edx, U);
 using TableFn5 = U(__fastcall*)(layout::MapEffectTable* table, void* edx, U, U, U, U, U);
 using NeighbourFn = U(__stdcall*)(U coordinate, U direction);
@@ -148,7 +148,7 @@ U Tick() {
     return g_gameTick;
 }
 
-Tile& TileAt(GameWorld* world, U x, U y) {
+Tile& TileAt(CGameData* world, U x, U y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
@@ -164,7 +164,7 @@ void DebugLog(const GameText& format, U value) {
 
 // Removes a settler from its owner's list of its type (prev/next links;
 // the head is players[owner].settler_lists[type]).
-void UnlinkSettler(GameWorld* world, Settler& s, U type) {
+void UnlinkSettler(CGameData* world, Settler& s, U type) {
     if (s.prev != 0) {
         world->settlers[s.prev].next = s.next;
     } else {
@@ -175,16 +175,16 @@ void UnlinkSettler(GameWorld* world, Settler& s, U type) {
     }
 }
 
-U ScreenX(GameWorld* world, U x, U y) {
+U ScreenX(CGameData* world, U x, U y) {
     return Callee<Fn2>(kTileScreenX)(world, nullptr, x, y);
 }
 
-U ScreenY(GameWorld* world, U x, U y) {
+U ScreenY(CGameData* world, U x, U y) {
     return Callee<Fn2>(kTileScreenY)(world, nullptr, x, y);
 }
 
 // Event type 5: a building hit (by a catapult stone, probably).
-void BuildingHit(GameWorld* world, const Effect& e) {
+void BuildingHit(CGameData* world, const Effect& e) {
     const U number = e.params[0];
     Building& b = world->buildings[number];
     const U damage = e.params[1];
@@ -198,7 +198,7 @@ void BuildingHit(GameWorld* world, const Effect& e) {
 }
 
 // Event type 6: a catapult (the seven-tile unit, type 0x29) hit.
-void CatapultHit(GameWorld* world, const Effect& e) {
+void CatapultHit(CGameData* world, const Effect& e) {
     Settler& s = world->settlers[e.params[0]];
     if (s.art == 0x29) {
         const U damage = e.params[1];
@@ -228,7 +228,7 @@ void CatapultHit(GameWorld* world, const Effect& e) {
 }
 
 // Event type 7: a ship (type 0x2b, or 0x2c which carries settlers) hit.
-void ShipHit(GameWorld* world, const Effect& e) {
+void ShipHit(CGameData* world, const Effect& e) {
     const U number = e.params[0];
     Settler& s = world->settlers[number];
     if ((s.art == 0x2b || s.art == 0x2c) && s.owner != 0xff) {
@@ -284,7 +284,7 @@ void ShipHit(GameWorld* world, const Effect& e) {
     DebugLog(texts::kShipHit, e.params[1]);
 }
 
-void RunTimedEvents(GameWorld* world) {
+void RunTimedEvents(CGameData* world) {
     for (U i = 1; i <= world->effects_high_water; ++i) {
         Effect& e = world->effects[i];
         if (e.type == 0) {
@@ -331,7 +331,7 @@ void RunTimedEvents(GameWorld* world) {
 
 // Player::soldier_strength from the amounts of goods 10 (and 28 for race 1)
 // on the piles of each player's areas.
-void UpdateSoldierStrength(GameWorld* world) {
+void UpdateSoldierStrength(CGameData* world) {
     // The original sums into two int32[20] on its stack, indexed by the
     // area's player byte unchecked; 256 entries here (the same for players
     // 0..19).
@@ -373,7 +373,7 @@ bool IsGrowingTree(std::uint8_t object) {
 }
 
 // One tile of the landscape pass (the cursor was just advanced).
-void UpdateLandscapeTile(GameWorld* world) {
+void UpdateLandscapeTile(CGameData* world) {
     auto x = [world] { return world->landscape_x; };
     auto y = [world] { return world->landscape_y; };
     auto object = [&]() -> std::uint8_t& { return TileAt(world, x(), y()).object; };
@@ -517,12 +517,12 @@ void UpdateLandscapeTile(GameWorld* world) {
 
 }  // namespace
 
-using UpdateFn = void(__fastcall*)(GameWorld* world, void* edx);
+using UpdateFn = void(__fastcall*)(CGameData* world, void* edx);
 
 // Purpose: The first part of every simulation step: due timed events (spell effects, spells, catapult
 // and ship hits, ...), the soldiers' strength, the fog of war and minimap cycles, and the slow life of the
 // landscape (trees growing, spreading and burning, fields returning to grass, fish moving).
-void __fastcall GameWorld_UpdateEnvironment(GameWorld* world, void*) {
+void __fastcall CGameData_UpdateEnvironment(CGameData* world, void*) {
     if (g_worldUpdateDisabled != 0) {
         return;
     }
@@ -603,8 +603,8 @@ void __fastcall GameWorld_UpdateEnvironment(GameWorld* world, void*) {
     Callee<TableFn1>(kExpireSome)(&world->map_effects, nullptr, Tick());
 }
 
-S3RE_HOOK(0x004e7810, GameWorld_UpdateEnvironment, UpdateFn, Original_GameWorld_UpdateEnvironment,
-          GameWorld_UpdateEnvironment);
+S3RE_HOOK(0x004e7810, CGameData_UpdateEnvironment, UpdateFn, Original_CGameData_UpdateEnvironment,
+          CGameData_UpdateEnvironment);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -612,11 +612,11 @@ S3RE_HOOK(0x004e7810, GameWorld_UpdateEnvironment, UpdateFn, Original_GameWorld_
 
 namespace {
 
-constexpr std::size_t kTestWorld = offsetof(GameWorld, tiles) + 0x40 * kTileRowBytes;
+constexpr std::size_t kTestWorld = offsetof(CGameData, tiles) + 0x40 * kTileRowBytes;
 
 // Wrong: a footprint tile keeps 7.
-void __fastcall WrongDecayTraffic(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
-    GameWorld_DecayTraffic(world, nullptr, x, y);
+void __fastcall WrongDecayTraffic(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
+    CGameData_DecayTraffic(world, nullptr, x, y);
     Tile& tile = world->tiles[x][y];
     if (tile.traffic == 8 && (tile.flags & layout::kTileBuildingFootprint) != 0) {
         tile.traffic = 7;
@@ -631,12 +631,12 @@ void CompareDecay(test::Context& ctx, TileFn candidate, int cases) {
         const auto traffic = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 7 + ctx.rng().Below(3) : ctx.rng().Below(256));
         const auto terrain = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0x1c : ctx.rng().Below(256));
         const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32());
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->tiles[x][y].traffic = traffic;
             w->tiles[x][y].terrain = terrain;
             w->tiles[x][y].flags = flags;
         });
-        Original_GameWorld_DecayTraffic(worlds.original(), nullptr, x, y);
+        Original_CGameData_DecayTraffic(worlds.original(), nullptr, x, y);
         candidate(worlds.ours(), nullptr, x, y);
         if (!worlds.Same(ctx, TileOffset(x, y), sizeof(Tile))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u) traffic %u", i, x, y, traffic);
@@ -648,11 +648,11 @@ void CompareDecay(test::Context& ctx, TileFn candidate, int cases) {
 
 }  // namespace
 
-S3RE_TEST(GameWorld_DecayTraffic_MatchesOriginal) {
-    CompareDecay(ctx, &GameWorld_DecayTraffic, 50000);
+S3RE_TEST(CGameData_DecayTraffic_MatchesOriginal) {
+    CompareDecay(ctx, &CGameData_DecayTraffic, 50000);
 }
 
-S3RE_TEST(GameWorld_DecayTraffic_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_DecayTraffic_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareDecay(probe, &WrongDecayTraffic, 5000);
     S3RE_EXPECT(probe.failures() > 0);
@@ -664,7 +664,7 @@ S3RE_TEST(GameWorld_DecayTraffic_ComparisonDetectsWrongImplementation) {
 
 namespace {
 
-constexpr std::size_t kFullWorld = sizeof(GameWorld);
+constexpr std::size_t kFullWorld = sizeof(CGameData);
 
 // Callees whose own tests cover them and which would need a consistent
 // world: recorded instead of run (both versions must make the same calls).
@@ -706,7 +706,7 @@ struct Globals {
 // short pile lists, settlers for the hit events, reveal points, landscape.
 void SetUpEnvironment(test::Context& ctx, test::WorldPair& worlds) {
     auto& rng = ctx.rng();
-    GameWorld* w = worlds.original();
+    CGameData* w = worlds.original();
     const U size = rng.Chance(1, 8) ? rng.Below(44) : 64 + rng.Below(321);
     w->map_size = size;
     // Ring table: every distance 0..64, offsets within the ring.
@@ -838,7 +838,7 @@ void CompareEnvironment(test::Context& ctx, UpdateFn candidate, int cases) {
         SetUpEnvironment(ctx, worlds);
         logs.Take();
         stubs.SetWorld(worlds.original());
-        Original_GameWorld_UpdateEnvironment(worlds.original(), nullptr);
+        Original_CGameData_UpdateEnvironment(worlds.original(), nullptr);
         const std::vector<test::StubCall> expectedCalls = stubs.Take();
         const std::vector<DebugLogCall> expectedLogs = logs.Take();
         stubs.SetWorld(worlds.ours());
@@ -858,7 +858,7 @@ void CompareEnvironment(test::Context& ctx, UpdateFn candidate, int cases) {
 }
 
 // Wrong: race 1's soldiers ignore good 28.
-void __fastcall WrongUpdateEnvironment(GameWorld* world, void*) {
+void __fastcall WrongUpdateEnvironment(CGameData* world, void*) {
     std::int32_t races[layout::kPlayers];
     for (U p = 0; p < layout::kPlayers; ++p) {
         races[p] = world->players[p].race;
@@ -866,7 +866,7 @@ void __fastcall WrongUpdateEnvironment(GameWorld* world, void*) {
             world->players[p].race = 0;
         }
     }
-    GameWorld_UpdateEnvironment(world, nullptr);
+    CGameData_UpdateEnvironment(world, nullptr);
     for (U p = 0; p < layout::kPlayers; ++p) {
         world->players[p].race = races[p];
     }
@@ -874,11 +874,11 @@ void __fastcall WrongUpdateEnvironment(GameWorld* world, void*) {
 
 }  // namespace
 
-S3RE_TEST(GameWorld_UpdateEnvironment_MatchesOriginal) {
-    CompareEnvironment(ctx, &GameWorld_UpdateEnvironment, 150);
+S3RE_TEST(CGameData_UpdateEnvironment_MatchesOriginal) {
+    CompareEnvironment(ctx, &CGameData_UpdateEnvironment, 150);
 }
 
-S3RE_TEST(GameWorld_UpdateEnvironment_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_UpdateEnvironment_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareEnvironment(probe, &WrongUpdateEnvironment, 60);
     S3RE_EXPECT(probe.failures() > 0);

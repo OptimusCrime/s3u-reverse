@@ -14,14 +14,14 @@
 // No slot: DebugLog("TROUBLE: illegal goodcheck N at building %u %u", g,
 // type). Goods are compared as full 32-bit values.
 //
-// GameWorld::BuildingInputWord2A (0x004df150): (building, goods) -> the
+// CGameData::BuildingInputWord2A (0x004df150): (building, goods) -> the
 //   slot's word 2A, zero-extended; 0 if there is no slot. ret 8.
-// GameWorld::BuildingInputWord24 (0x004df220): the same for word 24.
+// CGameData::BuildingInputWord24 (0x004df220): the same for word 24.
 //   ret 8.
-// GameWorld::SetBuildingInputWord2A (0x004df2f0): (building, goods, value):
+// CGameData::SetBuildingInputWord2A (0x004df2f0): (building, goods, value):
 //   sets the slot's word 2A to the low word of value; nothing if no slot.
 //   EAX (one caller tail-returns it) = world + building*0x3a. ret 0xc.
-// GameWorld::SetBuildingInputWord24 (0x004df3c0): the same for word 24.
+// CGameData::SetBuildingInputWord24 (0x004df3c0): the same for word 24.
 //   ret 0xc.
 //
 // Requests: area records (0x2e0 bytes at world+0xe145e8) keep, per goods
@@ -30,14 +30,14 @@
 // the next building, word 24 holds the requested amount. The area is the
 // one of the building's tile B (+0xa/+0xc, area word at tile +0x14).
 //
-// GameWorld::AddBuildingGoodsRequest (0x004ddf30): (building, goods,
+// CGameData::AddBuildingGoodsRequest (0x004ddf30): (building, goods,
 //   amount, condition): unless condition != 0 and the area's byte +0x245 +
 //   condition is 0, or amount is 0: puts the building at the head of the
 //   area's list for the goods (SetBuildingInputWord2A(building, goods, old
 //   head); head = building) and sets the amount (SetBuildingInputWord24).
 //   EAX (some callers use AL/the value) reproduced: the area number on the
 //   early returns, else SetBuildingInputWord24's EAX. ret 0x10.
-// GameWorld::RemoveBuildingFromAreaRequests (0x004def80): (building): for
+// CGameData::RemoveBuildingFromAreaRequests (0x004def80): (building): for
 //   finished buildings of type 0x21 or 0x22, clears the 2 x 36 words at
 //   area +0x9a and +0xe2 that equal the building; for all others, unlinks
 //   the building from the area's 36 request lists (head or via the word 2A
@@ -90,7 +90,7 @@ int InputSlot(const Building& record, std::uint32_t goods) {
     return kNoSlot;
 }
 
-std::uint32_t GetWord(GameWorld* world, std::uint32_t building, std::uint32_t goods, InputWords words,
+std::uint32_t GetWord(CGameData* world, std::uint32_t building, std::uint32_t goods, InputWords words,
                       const GameText& trouble) {
     Building& record = world->buildings[building];
     const int slot = InputSlot(record, goods);
@@ -101,7 +101,7 @@ std::uint32_t GetWord(GameWorld* world, std::uint32_t building, std::uint32_t go
     return (record.*words)[slot];
 }
 
-std::uint32_t SetWord(GameWorld* world, std::uint32_t building, std::uint32_t goods, std::uint32_t value,
+std::uint32_t SetWord(CGameData* world, std::uint32_t building, std::uint32_t goods, std::uint32_t value,
                       InputWords words, const GameText& trouble) {
     Building& record = world->buildings[building];
     const int slot = InputSlot(record, goods);
@@ -117,52 +117,52 @@ std::uint32_t SetWord(GameWorld* world, std::uint32_t building, std::uint32_t go
 
 }  // namespace
 
-using GetInputFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building,
+using GetInputFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t building,
                                               std::uint32_t goods);
-using SetInputFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building,
+using SetInputFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t building,
                                               std::uint32_t goods, std::uint32_t value);
 
 // Purpose: Every building takes in up to three kinds of goods (a construction site takes building
 // materials). For one kind of goods, this reads the link to the next building in the area's 'wants
 // these goods' list.
-std::uint32_t __fastcall GameWorld_BuildingInputWord2A(GameWorld* world, void*, std::uint32_t building,
+std::uint32_t __fastcall CGameData_BuildingInputWord2A(CGameData* world, void*, std::uint32_t building,
                                                        std::uint32_t goods) {
     return GetWord(world, building, goods, kWord2A, texts::kIllegalGoodCheck1);
 }
 
 // Purpose: For one kind of goods a building takes in, reads how many it has asked for.
-std::uint32_t __fastcall GameWorld_BuildingInputWord24(GameWorld* world, void*, std::uint32_t building,
+std::uint32_t __fastcall CGameData_BuildingInputWord24(CGameData* world, void*, std::uint32_t building,
                                                        std::uint32_t goods) {
     return GetWord(world, building, goods, kWord24, texts::kIllegalGoodCheck2);
 }
 
 // Purpose: Sets the 'next building wanting these goods' link of one of a building's inputs (see
 // BuildingInputWord2A).
-std::uint32_t __fastcall GameWorld_SetBuildingInputWord2A(GameWorld* world, void*, std::uint32_t building,
+std::uint32_t __fastcall CGameData_SetBuildingInputWord2A(CGameData* world, void*, std::uint32_t building,
                                                           std::uint32_t goods, std::uint32_t value) {
     return SetWord(world, building, goods, value, kWord2A, texts::kIllegalGoodCheck3);
 }
 
 // Purpose: Sets how many of one kind of goods a building has asked for.
-std::uint32_t __fastcall GameWorld_SetBuildingInputWord24(GameWorld* world, void*, std::uint32_t building,
+std::uint32_t __fastcall CGameData_SetBuildingInputWord24(CGameData* world, void*, std::uint32_t building,
                                                           std::uint32_t goods, std::uint32_t value) {
     return SetWord(world, building, goods, value, kWord24, texts::kIllegalGoodCheck4);
 }
 
-S3RE_HOOK(0x004df150, GameWorld_BuildingInputWord2A, GetInputFn, Original_GameWorld_BuildingInputWord2A,
-          GameWorld_BuildingInputWord2A);
-S3RE_HOOK(0x004df220, GameWorld_BuildingInputWord24, GetInputFn, Original_GameWorld_BuildingInputWord24,
-          GameWorld_BuildingInputWord24);
-S3RE_HOOK(0x004df2f0, GameWorld_SetBuildingInputWord2A, SetInputFn, Original_GameWorld_SetBuildingInputWord2A,
-          GameWorld_SetBuildingInputWord2A);
-S3RE_HOOK(0x004df3c0, GameWorld_SetBuildingInputWord24, SetInputFn, Original_GameWorld_SetBuildingInputWord24,
-          GameWorld_SetBuildingInputWord24);
+S3RE_HOOK(0x004df150, CGameData_BuildingInputWord2A, GetInputFn, Original_CGameData_BuildingInputWord2A,
+          CGameData_BuildingInputWord2A);
+S3RE_HOOK(0x004df220, CGameData_BuildingInputWord24, GetInputFn, Original_CGameData_BuildingInputWord24,
+          CGameData_BuildingInputWord24);
+S3RE_HOOK(0x004df2f0, CGameData_SetBuildingInputWord2A, SetInputFn, Original_CGameData_SetBuildingInputWord2A,
+          CGameData_SetBuildingInputWord2A);
+S3RE_HOOK(0x004df3c0, CGameData_SetBuildingInputWord24, SetInputFn, Original_CGameData_SetBuildingInputWord24,
+          CGameData_SetBuildingInputWord24);
 
 namespace {
 
 // The area of the building's tile B (door_x, door_y), with the original's
 // 32-bit tile arithmetic.
-std::uint32_t BuildingArea(GameWorld* world, std::uint32_t building) {
+std::uint32_t BuildingArea(CGameData* world, std::uint32_t building) {
     const Building& record = world->buildings[building];
     const std::uint32_t x = record.door_x;
     const std::uint32_t y = record.door_y;
@@ -172,7 +172,7 @@ std::uint32_t BuildingArea(GameWorld* world, std::uint32_t building) {
 // The head of the area's request list for the goods. The original computes
 // its offset as 0xe145e8 + 0x52 + ((area * 0x170 + goods) * 2) in 32 bits;
 // indexing gives the same address for any area and goods.
-std::uint16_t& RequestHead(GameWorld* world, std::uint32_t area, std::uint32_t goods) {
+std::uint16_t& RequestHead(CGameData* world, std::uint32_t area, std::uint32_t goods) {
     return world->areas[area].requests_by_goods[goods];
 }
 
@@ -182,13 +182,13 @@ std::uint32_t Address(const void* p) {
 
 }  // namespace
 
-using AddRequestFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building,
+using AddRequestFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t building,
                                                 std::uint32_t goods, std::uint32_t amount, std::uint32_t condition);
-using RemoveRequestsFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building);
+using RemoveRequestsFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t building);
 
 // Purpose: A building asks for goods: it is added to its area's list of buildings that want that kind of
 // goods, together with the amount. Carriers serve these lists.
-std::uint32_t __fastcall GameWorld_AddBuildingGoodsRequest(GameWorld* world, void*, std::uint32_t building,
+std::uint32_t __fastcall CGameData_AddBuildingGoodsRequest(CGameData* world, void*, std::uint32_t building,
                                                            std::uint32_t goods, std::uint32_t amount,
                                                            std::uint32_t condition) {
     const std::uint32_t area = BuildingArea(world, building);
@@ -199,14 +199,14 @@ std::uint32_t __fastcall GameWorld_AddBuildingGoodsRequest(GameWorld* world, voi
         return area;
     }
     std::uint16_t& head = RequestHead(world, area, goods);
-    GameWorld_SetBuildingInputWord2A(world, nullptr, building, goods, head);
+    CGameData_SetBuildingInputWord2A(world, nullptr, building, goods, head);
     head = static_cast<std::uint16_t>(building);
-    return GameWorld_SetBuildingInputWord24(world, nullptr, building, goods, amount);
+    return CGameData_SetBuildingInputWord24(world, nullptr, building, goods, amount);
 }
 
 // Purpose: Takes a building off all of its area's 'wants goods' lists (and some special lists for two
 // building types). Used when a building no longer needs goods or is removed.
-std::uint32_t __fastcall GameWorld_RemoveBuildingFromAreaRequests(GameWorld* world, void*, std::uint32_t building) {
+std::uint32_t __fastcall CGameData_RemoveBuildingFromAreaRequests(CGameData* world, void*, std::uint32_t building) {
     const std::uint32_t area = BuildingArea(world, building);
     const Building& record = world->buildings[building];
     const std::uint8_t type = record.art;
@@ -228,17 +228,17 @@ std::uint32_t __fastcall GameWorld_RemoveBuildingFromAreaRequests(GameWorld* wor
         std::uint16_t& head = RequestHead(world, area, goods);
         std::uint32_t other = head;
         if (other == building) {
-            last = GameWorld_BuildingInputWord2A(world, nullptr, building, goods);
+            last = CGameData_BuildingInputWord2A(world, nullptr, building, goods);
             head = static_cast<std::uint16_t>(last);
         } else if (other == 0) {
             last = Address(&head);
         } else {
             do {
-                if (GameWorld_BuildingInputWord2A(world, nullptr, other, goods) == building) {
-                    GameWorld_SetBuildingInputWord2A(world, nullptr, other, goods,
-                                                     GameWorld_BuildingInputWord2A(world, nullptr, building, goods));
+                if (CGameData_BuildingInputWord2A(world, nullptr, other, goods) == building) {
+                    CGameData_SetBuildingInputWord2A(world, nullptr, other, goods,
+                                                     CGameData_BuildingInputWord2A(world, nullptr, building, goods));
                 }
-                other = GameWorld_BuildingInputWord2A(world, nullptr, other, goods);
+                other = CGameData_BuildingInputWord2A(world, nullptr, other, goods);
             } while (other != 0);
             last = 0;
         }
@@ -246,10 +246,10 @@ std::uint32_t __fastcall GameWorld_RemoveBuildingFromAreaRequests(GameWorld* wor
     return last;
 }
 
-S3RE_HOOK(0x004ddf30, GameWorld_AddBuildingGoodsRequest, AddRequestFn, Original_GameWorld_AddBuildingGoodsRequest,
-          GameWorld_AddBuildingGoodsRequest);
-S3RE_HOOK(0x004def80, GameWorld_RemoveBuildingFromAreaRequests, RemoveRequestsFn,
-          Original_GameWorld_RemoveBuildingFromAreaRequests, GameWorld_RemoveBuildingFromAreaRequests);
+S3RE_HOOK(0x004ddf30, CGameData_AddBuildingGoodsRequest, AddRequestFn, Original_CGameData_AddBuildingGoodsRequest,
+          CGameData_AddBuildingGoodsRequest);
+S3RE_HOOK(0x004def80, CGameData_RemoveBuildingFromAreaRequests, RemoveRequestsFn,
+          Original_CGameData_RemoveBuildingFromAreaRequests, CGameData_RemoveBuildingFromAreaRequests);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -258,7 +258,7 @@ S3RE_HOOK(0x004def80, GameWorld_RemoveBuildingFromAreaRequests, RemoveRequestsFn
 namespace {
 
 constexpr std::uint32_t kTestBuildings = 4096;
-constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + (kTestBuildings + 1) * sizeof(Building);
+constexpr std::size_t kTestWorld = offsetof(CGameData, buildings) + (kTestBuildings + 1) * sizeof(Building);
 
 // A building of a random type (all 0x50 types; most have no inputs), often a
 // construction site, and goods that often match one of its inputs.
@@ -266,7 +266,7 @@ std::uint32_t SetUpBuilding(test::Context& ctx, test::WorldPair& worlds, std::ui
     const std::uint32_t building = ctx.rng().Below(kTestBuildings);
     const std::uint8_t type = static_cast<std::uint8_t>(ctx.rng().Chance(1, 16) ? ctx.rng().Below(256) : ctx.rng().Below(0x50));
     const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(1, 3) ? 1 + ctx.rng().Below(255) : 0);
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         w->buildings[building].art = type;
         w->buildings[building].buildup = buildup;
     });
@@ -285,17 +285,17 @@ std::uint32_t SetUpBuilding(test::Context& ctx, test::WorldPair& worlds, std::ui
 }
 
 // Wrong: on a construction site, looks the goods up in the type table too.
-std::uint32_t __fastcall WrongBuildingInputWord2A(GameWorld* world, void* edx, std::uint32_t building,
+std::uint32_t __fastcall WrongBuildingInputWord2A(CGameData* world, void* edx, std::uint32_t building,
                                                   std::uint32_t goods) {
     Building& record = world->buildings[building];
     const std::uint8_t construction = record.buildup;
     if (construction != 0 && goods != 1 && goods != 2) {
         record.buildup = 0;
-        const std::uint32_t result = GameWorld_BuildingInputWord2A(world, edx, building, goods);
+        const std::uint32_t result = CGameData_BuildingInputWord2A(world, edx, building, goods);
         record.buildup = construction;
         return result;
     }
-    return GameWorld_BuildingInputWord2A(world, edx, building, goods);
+    return CGameData_BuildingInputWord2A(world, edx, building, goods);
 }
 
 void CompareGet(test::Context& ctx, GetInputFn original, GetInputFn candidate, int cases) {
@@ -313,7 +313,7 @@ void CompareGet(test::Context& ctx, GetInputFn original, GetInputFn candidate, i
     worlds.Checkpoint(ctx);
 }
 
-std::uint32_t Relative(std::uint32_t value, GameWorld* world) {
+std::uint32_t Relative(std::uint32_t value, CGameData* world) {
     return value - static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
 }
 
@@ -326,7 +326,7 @@ void CompareSet(test::Context& ctx, SetInputFn original, SetInputFn candidate, i
         const std::uint32_t expected = Relative(original(worlds.original(), nullptr, building, goods, value), worlds.original());
         const std::uint32_t actual = Relative(candidate(worlds.ours(), nullptr, building, goods, value), worlds.ours());
         if (!S3RE_EXPECT_EQ(expected, actual) ||
-            !worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return w->buildings[building]; }) ||
+            !worlds.SameField(ctx, [&](CGameData* w) -> auto& { return w->buildings[building]; }) ||
             ((i % 512 == 511) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: building %u, goods %u", i, building, goods);
             return;
@@ -337,22 +337,22 @@ void CompareSet(test::Context& ctx, SetInputFn original, SetInputFn candidate, i
 
 }  // namespace
 
-S3RE_TEST(GameWorld_BuildingInputWord2A_MatchesOriginal) {
-    CompareGet(ctx, Original_GameWorld_BuildingInputWord2A, &GameWorld_BuildingInputWord2A, 20000);
+S3RE_TEST(CGameData_BuildingInputWord2A_MatchesOriginal) {
+    CompareGet(ctx, Original_CGameData_BuildingInputWord2A, &CGameData_BuildingInputWord2A, 20000);
 }
-S3RE_TEST(GameWorld_BuildingInputWord2A_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_BuildingInputWord2A_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareGet(probe, Original_GameWorld_BuildingInputWord2A, &WrongBuildingInputWord2A, 5000);
+    CompareGet(probe, Original_CGameData_BuildingInputWord2A, &WrongBuildingInputWord2A, 5000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_BuildingInputWord24_MatchesOriginal) {
-    CompareGet(ctx, Original_GameWorld_BuildingInputWord24, &GameWorld_BuildingInputWord24, 20000);
+S3RE_TEST(CGameData_BuildingInputWord24_MatchesOriginal) {
+    CompareGet(ctx, Original_CGameData_BuildingInputWord24, &CGameData_BuildingInputWord24, 20000);
 }
-S3RE_TEST(GameWorld_SetBuildingInputWord2A_MatchesOriginal) {
-    CompareSet(ctx, Original_GameWorld_SetBuildingInputWord2A, &GameWorld_SetBuildingInputWord2A, 20000);
+S3RE_TEST(CGameData_SetBuildingInputWord2A_MatchesOriginal) {
+    CompareSet(ctx, Original_CGameData_SetBuildingInputWord2A, &CGameData_SetBuildingInputWord2A, 20000);
 }
-S3RE_TEST(GameWorld_SetBuildingInputWord24_MatchesOriginal) {
-    CompareSet(ctx, Original_GameWorld_SetBuildingInputWord24, &GameWorld_SetBuildingInputWord24, 20000);
+S3RE_TEST(CGameData_SetBuildingInputWord24_MatchesOriginal) {
+    CompareSet(ctx, Original_CGameData_SetBuildingInputWord24, &CGameData_SetBuildingInputWord24, 20000);
 }
 
 namespace {
@@ -372,7 +372,7 @@ void SetUpRequests(test::Context& ctx, test::WorldPair& worlds) {
         const auto area = static_cast<std::uint16_t>(ctx.rng().Below(kRequestAreas));
         const std::uint8_t type = kTypes[ctx.rng().Below(sizeof(kTypes))];
         const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? 1 : 0);
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Building& record = w->buildings[building];
             record.door_x = static_cast<std::uint16_t>(x);
             record.door_y = static_cast<std::uint16_t>(y);
@@ -392,12 +392,12 @@ void SetUpRequests(test::Context& ctx, test::WorldPair& worlds) {
                 if (slot == kNoSlot) {
                     continue;
                 }
-                worlds.Both([&](GameWorld* w) { w->buildings[building].input_next[slot] = static_cast<std::uint16_t>(head); });
+                worlds.Both([&](CGameData* w) { w->buildings[building].input_next[slot] = static_cast<std::uint16_t>(head); });
                 head = building;
             }
             const auto a = static_cast<std::uint16_t>(ctx.rng().Below(kRequestBuildings));
             const auto b = static_cast<std::uint16_t>(ctx.rng().Below(kRequestBuildings));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->areas[area].requests_by_goods[goods] = static_cast<std::uint16_t>(head);
                 w->areas[area].buildings_a[goods] = a;
                 w->areas[area].buildings_b[goods] = b;
@@ -406,24 +406,24 @@ void SetUpRequests(test::Context& ctx, test::WorldPair& worlds) {
     }
 }
 
-std::uint32_t RelativeToWorld(std::uint32_t value, GameWorld* world) {
+std::uint32_t RelativeToWorld(std::uint32_t value, CGameData* world) {
     const auto base = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
     return value >= base && value - base < kTestWorld ? value - base : value;
 }
 
 // Wrong: stops at the first match instead of walking the whole list.
-std::uint32_t __fastcall WrongRemoveBuildingFromAreaRequests(GameWorld* world, void* edx, std::uint32_t building) {
+std::uint32_t __fastcall WrongRemoveBuildingFromAreaRequests(CGameData* world, void* edx, std::uint32_t building) {
     const Building& record = world->buildings[building];
     if ((record.art == 0x22 || record.art == 0x21) && record.buildup == 0) {
-        return GameWorld_RemoveBuildingFromAreaRequests(world, edx, building);
+        return CGameData_RemoveBuildingFromAreaRequests(world, edx, building);
     }
     // Clears the building's own link first: later predecessors keep pointing at it.
     for (std::uint32_t goods = 0; goods < kGoodsTypes; ++goods) {
         if (InputSlot(record, goods) != kNoSlot) {
-            GameWorld_SetBuildingInputWord2A(world, edx, building, goods, 0);
+            CGameData_SetBuildingInputWord2A(world, edx, building, goods, 0);
         }
     }
-    return GameWorld_RemoveBuildingFromAreaRequests(world, edx, building);
+    return CGameData_RemoveBuildingFromAreaRequests(world, edx, building);
 }
 
 void CompareRemoveRequests(test::Context& ctx, RemoveRequestsFn candidate, int cases) {
@@ -434,12 +434,12 @@ void CompareRemoveRequests(test::Context& ctx, RemoveRequestsFn candidate, int c
         }
         const std::uint32_t building = 1 + ctx.rng().Below(kRequestBuildings - 1);
         const std::uint32_t expected =
-            RelativeToWorld(Original_GameWorld_RemoveBuildingFromAreaRequests(worlds.original(), nullptr, building),
+            RelativeToWorld(Original_CGameData_RemoveBuildingFromAreaRequests(worlds.original(), nullptr, building),
                             worlds.original());
         const std::uint32_t actual = RelativeToWorld(candidate(worlds.ours(), nullptr, building), worlds.ours());
         if (!S3RE_EXPECT_EQ(expected, actual) ||
-            !worlds.Same(ctx, offsetof(GameWorld, areas), kRequestAreas * sizeof(Area)) ||
-            !worlds.Same(ctx, offsetof(GameWorld, buildings), kRequestBuildings * sizeof(Building)) ||
+            !worlds.Same(ctx, offsetof(CGameData, areas), kRequestAreas * sizeof(Area)) ||
+            !worlds.Same(ctx, offsetof(CGameData, buildings), kRequestBuildings * sizeof(Building)) ||
             ((i % 16 == 15 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: building %u", i, building);
             return;
@@ -449,7 +449,7 @@ void CompareRemoveRequests(test::Context& ctx, RemoveRequestsFn candidate, int c
 
 }  // namespace
 
-S3RE_TEST(GameWorld_AddBuildingGoodsRequest_MatchesOriginal) {
+S3RE_TEST(CGameData_AddBuildingGoodsRequest_MatchesOriginal) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < 3000; ++i) {
         if (i % 64 == 0) {
@@ -461,12 +461,12 @@ S3RE_TEST(GameWorld_AddBuildingGoodsRequest_MatchesOriginal) {
         const std::uint32_t condition = ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(64);
         const std::uint32_t area = BuildingArea(worlds.original(), building);
         const auto enabled = static_cast<std::uint8_t>(ctx.rng().Below(2));
-        worlds.Both([&](GameWorld* w) { w->areas[area].condition_enabled[condition] = enabled; });
+        worlds.Both([&](CGameData* w) { w->areas[area].condition_enabled[condition] = enabled; });
         const std::uint32_t expected = RelativeToWorld(
-            Original_GameWorld_AddBuildingGoodsRequest(worlds.original(), nullptr, building, goods, amount, condition),
+            Original_CGameData_AddBuildingGoodsRequest(worlds.original(), nullptr, building, goods, amount, condition),
             worlds.original());
         const std::uint32_t actual = RelativeToWorld(
-            GameWorld_AddBuildingGoodsRequest(worlds.ours(), nullptr, building, goods, amount, condition), worlds.ours());
+            CGameData_AddBuildingGoodsRequest(worlds.ours(), nullptr, building, goods, amount, condition), worlds.ours());
         if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 64 == 63) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 63 before it)", i);
             return;
@@ -475,17 +475,17 @@ S3RE_TEST(GameWorld_AddBuildingGoodsRequest_MatchesOriginal) {
     worlds.Checkpoint(ctx);
 }
 
-S3RE_TEST(GameWorld_RemoveBuildingFromAreaRequests_MatchesOriginal) {
-    CompareRemoveRequests(ctx, &GameWorld_RemoveBuildingFromAreaRequests, 1000);
+S3RE_TEST(CGameData_RemoveBuildingFromAreaRequests_MatchesOriginal) {
+    CompareRemoveRequests(ctx, &CGameData_RemoveBuildingFromAreaRequests, 1000);
 }
-S3RE_TEST(GameWorld_RemoveBuildingFromAreaRequests_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_RemoveBuildingFromAreaRequests_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareRemoveRequests(probe, &WrongRemoveBuildingFromAreaRequests, 200);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
 // ---------------------------------------------------------------------------
-// GameWorld::GoodsRequestPriority (0x004ff380): (amount, coming) -> 64000 -
+// CGameData::GoodsRequestPriority (0x004ff380): (amount, coming) -> 64000 -
 // 8000 * amount - 4000 * coming (32-bit). Called three times by
 // UpdateEconomy with the amount (pile +0x1) and units on the way (+0x3) of a
 // building's input pile, just before AddBuildingGoodsRequest, so probably
@@ -493,17 +493,17 @@ S3RE_TEST(GameWorld_RemoveBuildingFromAreaRequests_ComparisonDetectsWrongImpleme
 // unused (overwritten). ret 8.
 // ---------------------------------------------------------------------------
 
-using PriorityFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t amount,
+using PriorityFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t amount,
                                               std::uint32_t coming);
 
 // Purpose: How urgently a building asks for more of an input good: high when its input pile is empty and
 // nothing is on the way, lower for every unit there or coming (probably the request priority).
-std::uint32_t __fastcall GameWorld_GoodsRequestPriority(GameWorld*, void*, std::uint32_t amount, std::uint32_t coming) {
+std::uint32_t __fastcall CGameData_GoodsRequestPriority(CGameData*, void*, std::uint32_t amount, std::uint32_t coming) {
     return 64000u - amount * 8000u - coming * 4000u;
 }
 
-S3RE_HOOK(0x004ff380, GameWorld_GoodsRequestPriority, PriorityFn, Original_GameWorld_GoodsRequestPriority,
-          GameWorld_GoodsRequestPriority);
+S3RE_HOOK(0x004ff380, CGameData_GoodsRequestPriority, PriorityFn, Original_CGameData_GoodsRequestPriority,
+          CGameData_GoodsRequestPriority);
 
 namespace {
 
@@ -511,7 +511,7 @@ void ComparePriority(test::Context& ctx, PriorityFn candidate) {
     for (int i = 0; i < 20000; ++i) {
         const std::uint32_t amount = i < 0x100 ? static_cast<std::uint32_t>(i) >> 4 : (ctx.rng().Chance(1, 2) ? ctx.rng().Below(256) : ctx.rng().Next32());
         const std::uint32_t coming = i < 0x100 ? static_cast<std::uint32_t>(i) & 15 : (ctx.rng().Chance(1, 2) ? ctx.rng().Below(256) : ctx.rng().Next32());
-        if (!S3RE_EXPECT_EQ(Original_GameWorld_GoodsRequestPriority(nullptr, nullptr, amount, coming),
+        if (!S3RE_EXPECT_EQ(Original_CGameData_GoodsRequestPriority(nullptr, nullptr, amount, coming),
                             candidate(nullptr, nullptr, amount, coming))) {
             ctx.Fail(__FILE__, __LINE__, "  amount 0x%x, coming 0x%x", amount, coming);
             return;
@@ -520,16 +520,16 @@ void ComparePriority(test::Context& ctx, PriorityFn candidate) {
 }
 
 // Wrong: the weights swapped.
-std::uint32_t __fastcall WrongGoodsRequestPriority(GameWorld*, void*, std::uint32_t amount, std::uint32_t coming) {
+std::uint32_t __fastcall WrongGoodsRequestPriority(CGameData*, void*, std::uint32_t amount, std::uint32_t coming) {
     return 64000u - amount * 4000u - coming * 8000u;
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_GoodsRequestPriority_MatchesOriginal) {
-    ComparePriority(ctx, &GameWorld_GoodsRequestPriority);
+S3RE_TEST(CGameData_GoodsRequestPriority_MatchesOriginal) {
+    ComparePriority(ctx, &CGameData_GoodsRequestPriority);
 }
-S3RE_TEST(GameWorld_GoodsRequestPriority_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_GoodsRequestPriority_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     ComparePriority(probe, &WrongGoodsRequestPriority);
     S3RE_EXPECT(probe.failures() > 0);

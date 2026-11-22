@@ -50,7 +50,7 @@ struct PathState {
     std::uint32_t walk_region;  // 0x54 Tile::walk_region of the start tile
     std::uint32_t area;         // 0x58 Tile::area of the start tile
     std::uint32_t wide_region;  // 0x5c Tile::wide_region of the start tile
-    // 0x60: which region a path must stay in (GameWorld::SettlerGroup):
+    // 0x60: which region a path must stay in (CGameData::SettlerGroup):
     // 1 area, 2 walk region, 3 wide region.
     std::uint32_t sector_type;
     std::int32_t target_x;    // 0x64

@@ -187,8 +187,8 @@ def building_request_state(rng, pool, args):
     return fields
 
 
-UI_FIELDS = {"GameWorld_IsUiSelectionMode": 0x2d284, "GameWorld_IsUiField298": 0x2d298,
-             "GameWorld_IsUiSelectionParam1": 0x2d288, "GameWorld_IsUiSelectionParam2": 0x2d28c}
+UI_FIELDS = {"CGameData_IsUiSelectionMode": 0x2d284, "CGameData_IsUiField298": 0x2d298,
+             "CGameData_IsUiSelectionParam1": 0x2d288, "CGameData_IsUiSelectionParam2": 0x2d28c}
 
 
 def field_equals_arg_half_the_time(offset: int) -> Callable:
@@ -1234,15 +1234,15 @@ TILE = between(2, 381)  # tiles at least 2 from the edge of a 384 map
 SPECS = [
     # search / statistics (world_search.cpp, statistics.cpp)
     Spec("TileDistance", 0x004ff320, "stdcall", [anything, anything, anything, anything]),
-    Spec("GameWorld_NextSearchGeneration", 0x004ff3f0, "thiscall", [], eax_mask=0,
+    Spec("CGameData_NextSearchGeneration", 0x004ff3f0, "thiscall", [], eax_mask=0,
          presets=small_map_and_generation),
-    Spec("GameWorld_InitStatisticsKernel", 0x004ff4c0, "thiscall", [], eax_mask=0),
-    Spec("GameWorld_ShiftStatistics", 0x004ff470, "thiscall", [], eax_mask=0,
+    Spec("CGameData_InitStatisticsKernel", 0x004ff4c0, "thiscall", [], eax_mask=0),
+    Spec("CGameData_ShiftStatistics", 0x004ff470, "thiscall", [], eax_mask=0,
          presets=one_active_player, max_cases=60),
-    Spec("GameWorld_AddStatistic", 0x004ff510, "thiscall", [below(20), below(36), anything],
+    Spec("CGameData_AddStatistic", 0x004ff510, "thiscall", [below(20), below(36), anything],
          eax_mask=0),
-    Spec("GameWorld_SeedRandom_Impl", 0x004feb40, "thiscall", [anything], eax_mask=0),
-    Spec("GameWorld_Random", 0x004feb70, "thiscall", [], eax_mask=0xFFFF),
+    Spec("CGameData_SeedRandom_Impl", 0x004feb40, "thiscall", [anything], eax_mask=0),
+    Spec("CGameData_Random", 0x004feb70, "thiscall", [], eax_mask=0xFFFF),
     # directions (map_directions.cpp)
     Spec("NeighbourX", 0x00503700, "stdcall", [anything, below(8, 0.2)]),
     Spec("NeighbourY", 0x00503730, "stdcall", [anything, below(8, 0.2)]),
@@ -1250,48 +1250,48 @@ SPECS = [
     Spec("NextDirection", 0x005038c0, "stdcall", [below(8, 0.2)]),
     Spec("DirectionFromDelta", 0x005037f0, "stdcall", [between(-20, 20), between(-20, 20)]),
     # players (players.cpp)
-    Spec("GameWorld_AddPlayerCounter", 0x004ffb00, "thiscall",
+    Spec("CGameData_AddPlayerCounter", 0x004ffb00, "thiscall",
          [one_of(*range(20), 0xFF), below(64), anything]),
-    Spec("GameWorld_SubtractPlayerCounter", 0x004ffb40, "thiscall",
+    Spec("CGameData_SubtractPlayerCounter", 0x004ffb40, "thiscall",
          [one_of(*range(20), 0xFF), below(64), anything]),
-    Spec("GameWorld_ClearPlayerListLengths", 0x0050c9c0, "thiscall", []),
+    Spec("CGameData_ClearPlayerListLengths", 0x0050c9c0, "thiscall", []),
     # settlers (settlers.cpp)
-    Spec("GameWorld_CanSettlerEnterTile", 0x00503760, "thiscall",
+    Spec("CGameData_CanSettlerEnterTile", 0x00503760, "thiscall",
          [below(384), below(384), below(20), below(48)], presets=full_map),
-    Spec("GameWorld_SettlerGroup", 0x005038e0, "thiscall", [below(4096)]),
+    Spec("CGameData_SettlerGroup", 0x005038e0, "thiscall", [below(4096)]),
     # map (map.cpp)
-    Spec("GameWorld_IsOnMap", 0x005194e0, "thiscall", [anything, anything],
+    Spec("CGameData_IsOnMap", 0x005194e0, "thiscall", [anything, anything],
          presets=map_size(between(0, 400))),
-    Spec("GameWorld_IsInsideMapBorder", 0x00519510, "thiscall", [anything, anything],
+    Spec("CGameData_IsInsideMapBorder", 0x00519510, "thiscall", [anything, anything],
          presets=map_size(between(0, 400))),
-    Spec("GameWorld_TileScreenX", 0x00519610, "thiscall", [anything, anything],
+    Spec("CGameData_TileScreenX", 0x00519610, "thiscall", [anything, anything],
          presets=map_size(anything)),
-    Spec("GameWorld_TileScreenY", 0x00519640, "thiscall", [below(384), below(384)]),
+    Spec("CGameData_TileScreenY", 0x00519640, "thiscall", [below(384), below(384)]),
     # neighbourhood (map_neighbourhood.cpp)
-    Spec("GameWorld_ReplaceTerrainType", 0x00519210, "thiscall", [below(4), anything],
+    Spec("CGameData_ReplaceTerrainType", 0x00519210, "thiscall", [below(4), anything],
          presets=map_size(between(-1, 14))),
-    Spec("GameWorld_IsNeighbourhoodByte9Clear", 0x00519860, "thiscall", [TILE, TILE]),
-    Spec("GameWorld_HasAtMostTwoType70Neighbours", 0x005198d0, "thiscall", [TILE, TILE]),
-    Spec("GameWorld_IsNeighbourhoodTerrain", 0x0051b450, "thiscall", [TILE, TILE, below(8, 0.1)],
+    Spec("CGameData_IsNeighbourhoodByte9Clear", 0x00519860, "thiscall", [TILE, TILE]),
+    Spec("CGameData_HasAtMostTwoType70Neighbours", 0x005198d0, "thiscall", [TILE, TILE]),
+    Spec("CGameData_IsNeighbourhoodTerrain", 0x0051b450, "thiscall", [TILE, TILE, below(8, 0.1)],
          presets=uniform_terrain),
-    Spec("GameWorld_AreOffsetTilesClear", 0x0051b3c0, "thiscall",
+    Spec("CGameData_AreOffsetTilesClear", 0x0051b3c0, "thiscall",
          [between(4, 379), between(4, 379), below(21)], presets=offset_tiles),
-    Spec("GameWorld_IsClearOfType70Nearby", 0x00519960, "thiscall", [TILE, TILE]),
-    Spec("GameWorld_IsFreeOfSettlerType29Nearby", 0x005199e0, "thiscall", [TILE, TILE],
+    Spec("CGameData_IsClearOfType70Nearby", 0x00519960, "thiscall", [TILE, TILE]),
+    Spec("CGameData_IsFreeOfSettlerType29Nearby", 0x005199e0, "thiscall", [TILE, TILE],
          presets=full_map),
     # counting (counting.cpp)
-    Spec("GameWorld_CountBuildings", 0x00515850, "thiscall", [below(5), below(5)],
+    Spec("CGameData_CountBuildings", 0x00515850, "thiscall", [below(5), below(5)],
          presets=record_counts),
-    Spec("GameWorld_CountBuildingsWithFlag21Clear", 0x005158a0, "thiscall", [below(5), below(5)],
+    Spec("CGameData_CountBuildingsWithFlag21Clear", 0x005158a0, "thiscall", [below(5), below(5)],
          presets=record_counts),
-    Spec("GameWorld_CountBuildingsWithWord8", 0x005159d0, "thiscall", [below(5), below(5)],
+    Spec("CGameData_CountBuildingsWithWord8", 0x005159d0, "thiscall", [below(5), below(5)],
          presets=record_counts),
-    Spec("GameWorld_CountSettlers", 0x00515a30, "thiscall", [below(5), below(5)],
+    Spec("CGameData_CountSettlers", 0x00515a30, "thiscall", [below(5), below(5)],
          presets=record_counts),
-    Spec("GameWorld_CountSettlersWithJob", 0x00515a80, "thiscall", [below(5), below(5)],
+    Spec("CGameData_CountSettlersWithJob", 0x00515a80, "thiscall", [below(5), below(5)],
          presets=record_counts),
     # building request flags (building_flags.cpp)
-    *[Spec(f"GameWorld_{kind}BuildingFlag{bit}", address, "thiscall", [between(1, 2000)],
+    *[Spec(f"CGameData_{kind}BuildingFlag{bit}", address, "thiscall", [between(1, 2000)],
            eax_mask=0, presets=building_request_state)
       for kind, bit, address in [
           ("Clear", "02", 0x004df490), ("Clear", "04", 0x004df510),
@@ -1301,122 +1301,122 @@ SPECS = [
     # UI state queries (ui_state.cpp)
     *[Spec(name, address, "thiscall", [anything],
            presets=field_equals_arg_half_the_time(UI_FIELDS[name]))
-      for name, address in [("GameWorld_IsUiSelectionMode", 0x005157b0),
-                            ("GameWorld_IsUiField298", 0x005157d0),
-                            ("GameWorld_IsUiSelectionParam1", 0x005157f0),
-                            ("GameWorld_IsUiSelectionParam2", 0x00515810)]],
-    Spec("GameWorld_IsUiSelectionMode4Field298Is2", 0x00515830, "thiscall", [],
+      for name, address in [("CGameData_IsUiSelectionMode", 0x005157b0),
+                            ("CGameData_IsUiField298", 0x005157d0),
+                            ("CGameData_IsUiSelectionParam1", 0x005157f0),
+                            ("CGameData_IsUiSelectionParam2", 0x00515810)]],
+    Spec("CGameData_IsUiSelectionMode4Field298Is2", 0x00515830, "thiscall", [],
          presets=mode4_field298),
-    Spec("GameWorld_IsGameOutcome1", 0x00515ad0, "thiscall", [anything], globals=game_outcome),
-    Spec("GameWorld_ScreenCenterTileX", 0x005158f0, "thiscall", [], globals=screen_size),
-    Spec("GameWorld_ScreenCenterTileY", 0x00515980, "thiscall", [], globals=screen_size),
-    Spec("GameWorld_ClampCamera", 0x0051b4d0, "thiscall", [], presets=camera,
+    Spec("CGameData_IsGameOutcome1", 0x00515ad0, "thiscall", [anything], globals=game_outcome),
+    Spec("CGameData_ScreenCenterTileX", 0x005158f0, "thiscall", [], globals=screen_size),
+    Spec("CGameData_ScreenCenterTileY", 0x00515980, "thiscall", [], globals=screen_size),
+    Spec("CGameData_ClampCamera", 0x0051b4d0, "thiscall", [], presets=camera,
          globals=screen_size),
-    Spec("GameWorld_PushUiFeedback", 0x004febe0, "thiscall", [anything],
+    Spec("CGameData_PushUiFeedback", 0x004febe0, "thiscall", [anything],
          presets=ui_feedback_count),
     # free ids (id_allocators.cpp)
-    Spec("GameWorld_FindFreeId256", 0x0051d5b0, "thiscall", [],
+    Spec("CGameData_FindFreeId256", 0x0051d5b0, "thiscall", [],
          presets=id_table(0xe114d8, 0xe114dc, 0x100)),
-    Spec("GameWorld_FindFreeId4096", 0x0051d570, "thiscall", [],
+    Spec("CGameData_FindFreeId4096", 0x0051d570, "thiscall", [],
          presets=id_table(0xe115e0, 0xe115e4, 0x1000), max_cases=400),
-    Spec("GameWorld_FindFreeId8192", 0x0051c040, "thiscall", [],
+    Spec("CGameData_FindFreeId8192", 0x0051c040, "thiscall", [],
          presets=id_table(0xe125e4, 0xe125e8, 0x2000), max_cases=200),
     # map areas (map_areas.cpp)
-    Spec("GameWorld_AssignTileToArea", 0x004e5450, "thiscall",
+    Spec("CGameData_AssignTileToArea", 0x004e5450, "thiscall",
          [below(384), below(384), below(AREA_LIMIT)]),
-    Spec("GameWorld_RemoveTileFromArea", 0x004e54a0, "thiscall", [below(384), below(384)],
+    Spec("CGameData_RemoveTileFromArea", 0x004e54a0, "thiscall", [below(384), below(384)],
          presets=tile_area_of_args),
-    Spec("GameWorld_SetTileAreaMarked", 0x005194b0, "thiscall",
+    Spec("CGameData_SetTileAreaMarked", 0x005194b0, "thiscall",
          [below(384, 0.05), below(384, 0.05), anything]),
-    Spec("GameWorld_SetAreaBuildingSlotA", 0x004ddfe0, "thiscall",
+    Spec("CGameData_SetAreaBuildingSlotA", 0x004ddfe0, "thiscall",
          [between(0, 2000), below(64)], presets=building_on_map),
-    Spec("GameWorld_SetAreaBuildingSlotB", 0x004de040, "thiscall",
+    Spec("CGameData_SetAreaBuildingSlotB", 0x004de040, "thiscall",
          [between(0, 2000), below(64)], presets=building_on_map),
     # map marks (map_marks.cpp)
-    Spec("GameWorld_SetDiagonalTileByteB", 0x00518d10, "thiscall", [anything], eax_mask=0,
+    Spec("CGameData_SetDiagonalTileByteB", 0x00518d10, "thiscall", [anything], eax_mask=0,
          presets=diagonal_map_size, max_cases=300),
-    Spec("GameWorld_ClearDiagonalTileByteB", 0x00518dc0, "thiscall", [anything], eax_mask=0,
+    Spec("CGameData_ClearDiagonalTileByteB", 0x00518dc0, "thiscall", [anything], eax_mask=0,
          presets=diagonal_map_size, max_cases=300),
-    Spec("GameWorld_ClearSightSlice", 0x00518ec0, "thiscall", [below(60, 0.1)],
+    Spec("CGameData_ClearSightSlice", 0x00518ec0, "thiscall", [below(60, 0.1)],
          presets=slice_map_size, max_cases=300),
     # building/settler tile references (building_tiles.cpp)
-    Spec("GameWorld_RemoveBuildingFromTiles", 0x004d9940, "thiscall", [between(0, 2000)],
+    Spec("CGameData_RemoveBuildingFromTiles", 0x004d9940, "thiscall", [between(0, 2000)],
          eax_mask=0, presets=building_arg_on_map),
-    Spec("GameWorld_LeaveBuildingSlot", 0x0050cc10, "thiscall", [between(0, 4000)],
+    Spec("CGameData_LeaveBuildingSlot", 0x0050cc10, "thiscall", [between(0, 4000)],
          presets=settler_in_building),
-    Spec("GameWorld_MoveSettlerToBuildingTileA", 0x0050de90, "thiscall", [between(0, 4000)],
+    Spec("CGameData_MoveSettlerToBuildingTileA", 0x0050de90, "thiscall", [between(0, 4000)],
          presets=settler_in_building),
-    Spec("GameWorld_MoveSettlerToBuildingTileB", 0x0050df40, "thiscall", [between(0, 4000)],
+    Spec("CGameData_MoveSettlerToBuildingTileB", 0x0050df40, "thiscall", [between(0, 4000)],
          presets=settler_in_building),
     # goods piles (goods_piles.cpp)
-    Spec("GameWorld_BuildingPileHasGoods", 0x004df9b0, "thiscall",
+    Spec("CGameData_BuildingPileHasGoods", 0x004df9b0, "thiscall",
          [between(0, 2000), below(5, 0.15)], eax_mask=0xff, presets=building_pile_slots),
-    Spec("GameWorld_RecountPlayerGoods", 0x004ffa50, "thiscall", [], presets=goods_piles,
+    Spec("CGameData_RecountPlayerGoods", 0x004ffa50, "thiscall", [], presets=goods_piles,
          max_cases=600),
-    Spec("GameWorld_PileNeighbourBuildingByteE", 0x00505fd0, "thiscall", [between(1, 3000)],
+    Spec("CGameData_PileNeighbourBuildingByteE", 0x00505fd0, "thiscall", [between(1, 3000)],
          presets=pile_neighbourhood),
     # tables, rings, timers (world_tables.cpp)
-    Spec("GameWorld_AllocBuildingExtra", 0x004df0a0, "thiscall", [anything],
+    Spec("CGameData_AllocBuildingExtra", 0x004df0a0, "thiscall", [anything],
          presets=alloc_table(0x10f45e8, 0x5a, 998, 0x110a578, 1, 0xff), max_cases=600),
-    Spec("GameWorld_AllocTable36700Record", 0x004fefd0, "thiscall", [anything] * 10,
+    Spec("CGameData_AllocTable36700Record", 0x004fefd0, "thiscall", [anything] * 10,
          presets=alloc_table(0x36700, 20, 9998, 0x67440, 2, 0), max_cases=150),
-    Spec("GameWorld_QueueEvent", 0x004e8ad0, "thiscall",
+    Spec("CGameData_QueueEvent", 0x004e8ad0, "thiscall",
          [event_type, below(4, 0.1), anything, anything], presets=event_rings),
-    Spec("GameWorld_QueueMarkedTile", 0x004e6c40, "thiscall",
+    Spec("CGameData_QueueMarkedTile", 0x004e6c40, "thiscall",
          [below(384), below(384), below(4, 0.1)], eax_mask=0, presets=marked_tile),
-    Spec("GameWorld_QueueMarkedTileTerrain5To7", 0x0051ce50, "thiscall",
+    Spec("CGameData_QueueMarkedTileTerrain5To7", 0x0051ce50, "thiscall",
          [below(384), below(384)], eax_mask=0, presets=marked_tile_terrain),
-    Spec("GameWorld_QueueMarkedTileNoOwner", 0x0051d3d0, "thiscall",
+    Spec("CGameData_QueueMarkedTileNoOwner", 0x0051d3d0, "thiscall",
          [below(384), below(384)], eax_mask=0, presets=marked_tile_terrain),
-    Spec("GameWorld_ReplaceTileWord16AndQueue", 0x0051c560, "thiscall",
+    Spec("CGameData_ReplaceTileWord16AndQueue", 0x0051c560, "thiscall",
          [below(384), below(384), below(4, 0.1), anything], eax_mask=0,
          presets=replace_tile(0x16, 2)),
-    Spec("GameWorld_ReplaceTileByte10AndQueue", 0x0051c820, "thiscall",
+    Spec("CGameData_ReplaceTileByte10AndQueue", 0x0051c820, "thiscall",
          [below(384), below(384), below(4, 0.1), anything], eax_mask=0,
          presets=replace_tile(0x10, 1)),
-    Spec("GameWorld_CountDownTimers", 0x004fee00, "thiscall", [], eax_mask=0, presets=timers,
+    Spec("CGameData_CountDownTimers", 0x004fee00, "thiscall", [], eax_mask=0, presets=timers,
          max_cases=200),
-    Spec("GameWorld_AddPileClaim", 0x00510770, "thiscall", [below(8, 0.1), below(8, 0.1)],
+    Spec("CGameData_AddPileClaim", 0x00510770, "thiscall", [below(8, 0.1), below(8, 0.1)],
          eax_mask=0, presets=pile_claim_slots, globals=pile_claims_cursor, max_cases=800),
     # player queries (player_queries.cpp)
-    Spec("GameWorld_FindPlayerByField0C", 0x00507f10, "thiscall", [below(6, 0.1)],
+    Spec("CGameData_FindPlayerByField0C", 0x00507f10, "thiscall", [below(6, 0.1)],
          presets=players_field0c),
     Spec("BuildingTypeAllowedForRace", 0x004ffd60, "stdcall", [anything, building_type],
          eax_mask=0xff),
     # flood fills (flood_fills.cpp)
-    Spec("GameWorld_FloodFillTileWord16", 0x0051c6c0, "thiscall",
+    Spec("CGameData_FloodFillTileWord16", 0x0051c6c0, "thiscall",
          [below(12), below(12), anything], presets=flood_replace(0x16, 2), max_cases=150),
-    Spec("GameWorld_FloodFillTileByte10", 0x0051c8a0, "thiscall",
+    Spec("CGameData_FloodFillTileByte10", 0x0051c8a0, "thiscall",
          [below(12), below(12), anything], presets=flood_replace(0x10, 1), max_cases=150),
-    Spec("GameWorld_FloodMarkAreaTerrain5To7", 0x0051cee0, "thiscall",
+    Spec("CGameData_FloodMarkAreaTerrain5To7", 0x0051cee0, "thiscall",
          [below(12), below(12), anything], eax_mask=0, presets=flood_marked(True), max_cases=150),
-    Spec("GameWorld_FloodSetByte10MarkedTiles", 0x0051d450, "thiscall",
+    Spec("CGameData_FloodSetByte10MarkedTiles", 0x0051d450, "thiscall",
          [below(12), below(12), anything], eax_mask=0, presets=flood_marked(False), max_cases=150),
-    Spec("GameWorld_MoveTileToAreaAndQueue", 0x004e6430, "thiscall",
+    Spec("CGameData_MoveTileToAreaAndQueue", 0x004e6430, "thiscall",
          [below(384), below(384), below(AREA_LIMIT, 0.1), below(AREA_LIMIT)],
          presets=area_of_args_matching),
     # terrain and borders (map_terrain.cpp)
-    Spec("GameWorld_ReplaceTerrainF3", 0x0051a400, "thiscall", [anything],
+    Spec("CGameData_ReplaceTerrainF3", 0x0051a400, "thiscall", [anything],
          presets=map_size(between(-1, 14))),
-    Spec("GameWorld_SpreadTerrainRandomly", 0x00519330, "thiscall",
+    Spec("CGameData_SpreadTerrainRandomly", 0x00519330, "thiscall",
          [below(4), below(4), anything, between(-5, 110)], presets=small_map_terrain,
          max_cases=600),
-    Spec("GameWorld_UpdateBorderFlagsAround", 0x0051a460, "thiscall", [below(16), below(16)],
+    Spec("CGameData_UpdateBorderFlagsAround", 0x0051a460, "thiscall", [below(16), below(16)],
          presets=territory),
     # camera, random, logic thread (ui_state.cpp, random.cpp)
-    Spec("GameWorld_CenterCameraOnTile", 0x0051b560, "thiscall", [below(384), below(384)],
+    Spec("CGameData_CenterCameraOnTile", 0x0051b560, "thiscall", [below(384), below(384)],
          presets=camera_tile, globals=screen_size),
-    Spec("GameWorld_RandomBelow6", 0x00503880, "thiscall", []),
+    Spec("CGameData_RandomBelow6", 0x00503880, "thiscall", []),
     Spec("CLogicThread_PushUiFeedback", 0x0053f560, "logicthread", [anything],
          presets=ui_feedback_count),
     # settlers (settler_queries.cpp)
-    Spec("GameWorld_SetSettlerTarget", 0x00503610, "thiscall",
+    Spec("CGameData_SetSettlerTarget", 0x00503610, "thiscall",
          [below(0x10000), below(400, 0.1), below(400, 0.1)], presets=map_size(between(0, 400))),
-    Spec("GameWorld_CountListSettlersNear", 0x0050e8f0, "thiscall",
+    Spec("CGameData_CountListSettlersNear", 0x0050e8f0, "thiscall",
          [lambda rng, pool: 0 if rng.random() < 0.1 else rng.randrange(1, 0x3000),
           below(20, 0.2), below(384), below(384), below(3, 0.1)],
          presets=settler_list),
-    Spec("GameWorld_FindNearbySettlerType29", 0x0050cdb0, "thiscall",
+    Spec("CGameData_FindNearbySettlerType29", 0x0050cdb0, "thiscall",
          [between(1, 0x2fff), below(384), below(384)], presets=settlers_around),
     # game-end counts (game_end.cpp)
     Spec("CLogicThread_CountBuildingsOfTypes15To18", 0x00514a00, "logicthread", [scratch(0)],
@@ -1428,66 +1428,66 @@ SPECS = [
     Spec("CLogicThread_SumAreaGoods10PerPlayer", 0x00514b40, "logicthread", [scratch(0)],
          presets=area_piles),
     # map generation (map_generation.cpp)
-    Spec("GameWorld_ScatterTileByte11", 0x0051ad40, "thiscall", [anything, below(41)], eax_mask=0,
+    Spec("CGameData_ScatterTileByte11", 0x0051ad40, "thiscall", [anything, below(41)], eax_mask=0,
          presets=landscape(96), max_cases=300),
-    Spec("GameWorld_ScatterTerrainNear", 0x0051aed0, "thiscall",
+    Spec("CGameData_ScatterTerrainNear", 0x0051aed0, "thiscall",
          [one_of(0x20, 0x21, 0x80), anything, between(-3, 24)], eax_mask=0,
          presets=landscape(0), max_cases=300),
-    Spec("GameWorld_ScatterObjects", 0x0051b010, "thiscall",
+    Spec("CGameData_ScatterObjects", 0x0051b010, "thiscall",
          [one_of(0x20, 0x21, 0x80), anything, below(12), block_mode_extra, block_mode_extra],
          eax_mask=0, presets=landscape(20), max_cases=300),
-    Spec("GameWorld_ScatterObjectGroups", 0x0051b1a0, "thiscall",
+    Spec("CGameData_ScatterObjectGroups", 0x0051b1a0, "thiscall",
          [one_of(0x20, 0x21, 0x80), below(8, 0.2), below(16, 0.2), below(48), block_mode_extra,
           block_mode_extra], eax_mask=0, presets=landscape(512), max_cases=300),
     # building input goods (building_goods.cpp)
-    Spec("GameWorld_BuildingInputWord2A", 0x004df150, "thiscall", [below(4096), below(36, 0.1)],
+    Spec("CGameData_BuildingInputWord2A", 0x004df150, "thiscall", [below(4096), below(36, 0.1)],
          presets=input_goods),
-    Spec("GameWorld_BuildingInputWord24", 0x004df220, "thiscall", [below(4096), below(36, 0.1)],
+    Spec("CGameData_BuildingInputWord24", 0x004df220, "thiscall", [below(4096), below(36, 0.1)],
          presets=input_goods),
-    Spec("GameWorld_SetBuildingInputWord2A", 0x004df2f0, "thiscall",
+    Spec("CGameData_SetBuildingInputWord2A", 0x004df2f0, "thiscall",
          [below(4096), below(36, 0.1), anything], presets=input_goods),
-    Spec("GameWorld_SetBuildingInputWord24", 0x004df3c0, "thiscall",
+    Spec("CGameData_SetBuildingInputWord24", 0x004df3c0, "thiscall",
          [below(4096), below(36, 0.1), anything], presets=input_goods),
     # god events, piles, presence (godly_events.cpp, area_piles.cpp, player_presence.cpp)
-    Spec("GameWorld_HasManaForSpell", 0x0054b240, "thiscall", [below(20), below(36, 0.1)],
+    Spec("CGameData_HasManaForSpell", 0x0054b240, "thiscall", [below(20), below(36, 0.1)],
          presets=mana),
-    Spec("GameWorld_AddTilePileToArea", 0x005051b0, "thiscall", [below(384), below(384)],
+    Spec("CGameData_AddTilePileToArea", 0x005051b0, "thiscall", [below(384), below(384)],
          presets=tile_pile),
-    Spec("GameWorld_IsOtherPlayerNear", 0x00510650, "thiscall",
+    Spec("CGameData_IsOtherPlayerNear", 0x00510650, "thiscall",
          [below(400), below(400), below(40), below(20)], presets=presence, max_cases=400),
     # batch 14: region merges, area flood, requests, placement, terrain passes
-    Spec("GameWorld_FloodMoveArea", 0x004e62c0, "thiscall", [below(12), below(12), between(1, 6)],
+    Spec("CGameData_FloodMoveArea", 0x004e62c0, "thiscall", [below(12), below(12), between(1, 6)],
          presets=flood_area, max_cases=150),
-    Spec("GameWorld_MergeTileWord16Regions", 0x0051c5e0, "thiscall", [between(1, 10), between(1, 10)],
+    Spec("CGameData_MergeTileWord16Regions", 0x0051c5e0, "thiscall", [between(1, 10), between(1, 10)],
          presets=merge_regions(0x16, 2, 0xe125e4, 0xe125e8, 0x2000, False), max_cases=500),
-    Spec("GameWorld_MergeTileByte10Regions", 0x0051ca00, "thiscall", [between(1, 10), between(1, 10)],
+    Spec("CGameData_MergeTileByte10Regions", 0x0051ca00, "thiscall", [between(1, 10), between(1, 10)],
          presets=merge_regions(0x10, 1, 0xe114d8, 0xe114dc, 0x100, True), max_cases=500),
-    Spec("GameWorld_AddBuildingGoodsRequest", 0x004ddf30, "thiscall",
+    Spec("CGameData_AddBuildingGoodsRequest", 0x004ddf30, "thiscall",
          [below(2000), below(36, 0.1), one_of(0, 1, 7, 0xFFFFFFFF), below(64)], presets=goods_request),
-    Spec("GameWorld_RemoveBuildingFromAreaRequests", 0x004def80, "thiscall", [between(1, 63)],
+    Spec("CGameData_RemoveBuildingFromAreaRequests", 0x004def80, "thiscall", [between(1, 63)],
          presets=request_lists, max_cases=300),
-    Spec("GameWorld_PlaceSettlerNear", 0x0050ce80, "thiscall",
+    Spec("CGameData_PlaceSettlerNear", 0x0050ce80, "thiscall",
          [below(0x3000), below(384, 0.03), below(384)], presets=place_settler, max_cases=400),
-    Spec("GameWorld_GrowTerrain", 0x00519470, "thiscall", [below(4), below(4), between(-5, 110)],
+    Spec("CGameData_GrowTerrain", 0x00519470, "thiscall", [below(4), below(4), between(-5, 110)],
          presets=small_map_terrain, max_cases=600),
-    Spec("GameWorld_UpdateAllBorderFlags", 0x0051a420, "thiscall", [], presets=small_territory,
+    Spec("CGameData_UpdateAllBorderFlags", 0x0051a420, "thiscall", [], presets=small_territory,
          max_cases=400),
-    Spec("GameWorld_CenterCameraOnLocalPlayer", 0x0051b6b0, "thiscall", [],
+    Spec("CGameData_CenterCameraOnLocalPlayer", 0x0051b6b0, "thiscall", [],
          presets=local_player_camera, globals=screen_size),
     # batch 15
-    Spec("GameWorld_AssignWord16RegionsAround", 0x0051c0f0, "thiscall", [between(3, 12), between(3, 12)],
+    Spec("CGameData_AssignWord16RegionsAround", 0x0051c0f0, "thiscall", [between(3, 12), between(3, 12)],
          presets=region_assignment, max_cases=400),
-    Spec("GameWorld_SendNearestSettlerToPile", 0x004ddbd0, "thiscall",
+    Spec("CGameData_SendNearestSettlerToPile", 0x004ddbd0, "thiscall",
          [between(1, 0x800), below(20), anything], presets=pile_and_waiting),
-    Spec("GameWorld_SendNearestSettlerToBuilding", 0x004ddd70, "thiscall", [between(1, 0x800)],
+    Spec("CGameData_SendNearestSettlerToBuilding", 0x004ddd70, "thiscall", [between(1, 0x800)],
          presets=building_and_waiting),
-    Spec("GameWorld_RemoveSettlerFromLists", 0x0050dff0, "thiscall", [between(1, 8)],
+    Spec("CGameData_RemoveSettlerFromLists", 0x0050dff0, "thiscall", [between(1, 8)],
          presets=settler_lists_world, globals=settler_lists_globals, max_cases=500),
-    Spec("GameWorld_AddGoodsToPile", 0x00505650, "thiscall", [between(1, 0xfff)], presets=pile_add),
+    Spec("CGameData_AddGoodsToPile", 0x00505650, "thiscall", [between(1, 0xfff)], presets=pile_add),
     # batch 17
-    Spec("GameWorld_PileIncAmountLeaving", 0x005058c0, "thiscall", [between(1, 0xfff)], presets=pile_leaving,
+    Spec("CGameData_PileIncAmountLeaving", 0x005058c0, "thiscall", [between(1, 0xfff)], presets=pile_leaving,
          max_cases=1000),
-    Spec("GameWorld_LogPlayerLandResources", 0x00507f60, "thiscall", [below(20)], presets=player_on_map,
+    Spec("CGameData_LogPlayerLandResources", 0x00507f60, "thiscall", [below(20)], presets=player_on_map,
          max_cases=6),
     Spec("Landscape_FindOrAddColour", 0x0054c940, "thiscall", [colour_arg], presets=colour_table,
          max_cases=500),
@@ -1495,13 +1495,13 @@ SPECS = [
          max_cases=500),
     Spec("CLogicThread_DrawWorkAreaOverlay", 0x00523840, "logicthread", [between(1, 0x100)],
          presets=work_area, max_cases=150),
-    Spec("GameWorld_SplitTileWord16Region", 0x0051c1f0, "thiscall", [below(12), below(12)], eax_mask=0,
+    Spec("CGameData_SplitTileWord16Region", 0x0051c1f0, "thiscall", [below(12), below(12)], eax_mask=0,
          presets=split_regions(0x16, 2, 0xe125e4, 0xe125e8, 0x2000, 0.1)),
-    Spec("GameWorld_SplitTileByte10Region", 0x0051caf0, "thiscall", [below(12), below(12)], eax_mask=0,
+    Spec("CGameData_SplitTileByte10Region", 0x0051caf0, "thiscall", [below(12), below(12)], eax_mask=0,
          presets=split_regions(0x10, 1, 0xe114d8, 0xe114dc, 0x100, 0.1)),
-    Spec("GameWorld_SplitWord16RegionsAround", 0x0051c080, "thiscall", [between(1, 10), between(1, 10)],
+    Spec("CGameData_SplitWord16RegionsAround", 0x0051c080, "thiscall", [between(1, 10), between(1, 10)],
          presets=split_regions(0x16, 2, 0xe125e4, 0xe125e8, 0x2000, True), max_cases=200),
-    Spec("GameWorld_SendNearestWorkerToBuilding", 0x004db500, "thiscall",
+    Spec("CGameData_SendNearestWorkerToBuilding", 0x004db500, "thiscall",
          [between(1, 0x800), below(40), lambda rng, pool: rng.choice([rng.randrange(70), rng.getrandbits(32)])],
          presets=worker_and_list, globals=worker_globals, max_cases=1000),
 ]
@@ -1812,30 +1812,30 @@ def free_tile_owner(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_UnblockTile", 0x0051b770, "thiscall", [between(3, 8), between(3, 8)], presets=unblock_tile,
+    Spec("CGameData_UnblockTile", 0x0051b770, "thiscall", [between(3, 8), between(3, 8)], presets=unblock_tile,
          max_cases=300),
-    Spec("GameWorld_SetOwnerOfFreeTile", 0x0051b5d0, "thiscall",
+    Spec("CGameData_SetOwnerOfFreeTile", 0x0051b5d0, "thiscall",
          [between(1, 8), between(1, 8), lambda rng, pool: rng.choice([0, 1, 2, 0xff, 0x100, rng.getrandbits(32)])],
          presets=free_tile_owner, max_cases=400),
-    Spec("GameWorld_MergeAreaContents", 0x004e5a20, "thiscall", two_areas(), eax_mask=0,
+    Spec("CGameData_MergeAreaContents", 0x004e5a20, "thiscall", two_areas(), eax_mask=0,
          presets=merge_area_contents, max_cases=300),
-    Spec("GameWorld_JoinAreasAtTile", 0x004e6150, "thiscall", [between(1, 8), between(1, 8)], eax_mask=0,
+    Spec("CGameData_JoinAreasAtTile", 0x004e6150, "thiscall", [between(1, 8), between(1, 8)], eax_mask=0,
          presets=join_areas, max_cases=400),
-    Spec("GameWorld_QueuePendingEvent", 0x004e8ba0, "thiscall", [pending_type, below(4, 0.1), anything],
+    Spec("CGameData_QueuePendingEvent", 0x004e8ba0, "thiscall", [pending_type, below(4, 0.1), anything],
          presets=pending_rings),
     Spec("CLogicThread_DrawBuildingRouteOverlay", 0x005236b0, "logicthread", [between(1, 0x100)], eax_mask=0,
          presets=building_route, max_cases=400),
-    Spec("GameWorld_FetchGoodsToTradeBuilding", 0x004de0a0, "thiscall",
+    Spec("CGameData_FetchGoodsToTradeBuilding", 0x004de0a0, "thiscall",
          [between(1, 0x40), between(1, 0x800), below(36)], eax_mask=0, presets=fetch_goods, max_cases=1000),
-    Spec("GameWorld_InitArea", 0x004e6510, "thiscall",
+    Spec("CGameData_InitArea", 0x004e6510, "thiscall",
          [between(1, 0xffe), lambda rng, pool: rng.choice([rng.randrange(20), rng.randrange(256)])], eax_mask=0,
          presets=init_area, max_cases=500),
-    Spec("GameWorld_AllocArea", 0x004e64c0, "thiscall", [below(20)], presets=alloc_area, max_cases=300),
-    Spec("GameWorld_MoveAreaContents", 0x004e54f0, "thiscall", two_areas(), eax_mask=0,
+    Spec("CGameData_AllocArea", 0x004e64c0, "thiscall", [below(20)], presets=alloc_area, max_cases=300),
+    Spec("CGameData_MoveAreaContents", 0x004e54f0, "thiscall", two_areas(), eax_mask=0,
          presets=move_area_contents, max_cases=300),
-    Spec("GameWorld_SplitAreaAtTile", 0x004e5d50, "thiscall", [below(10), below(10)], eax_mask=0,
+    Spec("CGameData_SplitAreaAtTile", 0x004e5d50, "thiscall", [below(10), below(10)], eax_mask=0,
          presets=split_area, max_cases=400),
-    Spec("GameWorld_BlockTile", 0x0051b6f0, "thiscall", [below(10), below(10)], presets=block_tile,
+    Spec("CGameData_BlockTile", 0x0051b6f0, "thiscall", [below(10), below(10)], presets=block_tile,
          max_cases=300),
 ]
 
@@ -1995,23 +1995,23 @@ def type12_buildings(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_SettlerStartHealth", 0x00510470, "thiscall", [below(LAST_SETTLER + 1)], presets=settler_health),
-    Spec("GameWorld_CreateSettler", 0x0050c9e0, "thiscall",
+    Spec("CGameData_SettlerStartHealth", 0x00510470, "thiscall", [below(LAST_SETTLER + 1)], presets=settler_health),
+    Spec("CGameData_CreateSettler", 0x0050c9e0, "thiscall",
          [below(384), below(384), lambda rng, pool: rng.randrange(0x50) if rng.random() < 0.8 else anything(rng, pool),
           below(20)], presets=create_settler, max_cases=300),
-    Spec("GameWorld_ClearSettlerJob", 0x00510440, "thiscall", [below(LAST_SETTLER + 1)]),
-    Spec("GameWorld_RestoreSettlerAnimation", 0x0050e380, "thiscall", [below(LAST_SETTLER + 1)]),
-    Spec("GameWorld_PileIncAmountComing", 0x00505bc0, "thiscall", [below(0x10000)], presets=pile_on_map),
-    Spec("GameWorld_PileDecAmountComing", 0x00505bf0, "thiscall", [below(0x10000)], presets=pile_on_map),
-    Spec("GameWorld_RemovePileFromTile", 0x00504650, "thiscall", [below(0x10000)], presets=pile_on_map),
-    Spec("GameWorld_ClearAreaGoodsSettings1D2", 0x004ff3c0, "thiscall", [below(0x1000)]),
-    Spec("GameWorld_FloodAssignMarkedTiles", 0x004e6cd0, "thiscall",
+    Spec("CGameData_ClearSettlerJob", 0x00510440, "thiscall", [below(LAST_SETTLER + 1)]),
+    Spec("CGameData_RestoreSettlerAnimation", 0x0050e380, "thiscall", [below(LAST_SETTLER + 1)]),
+    Spec("CGameData_PileIncAmountComing", 0x00505bc0, "thiscall", [below(0x10000)], presets=pile_on_map),
+    Spec("CGameData_PileDecAmountComing", 0x00505bf0, "thiscall", [below(0x10000)], presets=pile_on_map),
+    Spec("CGameData_RemovePileFromTile", 0x00504650, "thiscall", [below(0x10000)], presets=pile_on_map),
+    Spec("CGameData_ClearAreaGoodsSettings1D2", 0x004ff3c0, "thiscall", [below(0x1000)]),
+    Spec("CGameData_FloodAssignMarkedTiles", 0x004e6cd0, "thiscall",
          [below(12), below(12), between(1, 6), below(3)], presets=flood_assign, max_cases=150),
-    Spec("GameWorld_TakeBuildingExtraTiles", 0x004dd6f0, "thiscall", [between(1, 64)], presets=take_extra_tiles,
+    Spec("CGameData_TakeBuildingExtraTiles", 0x004dd6f0, "thiscall", [between(1, 64)], presets=take_extra_tiles,
          max_cases=300),
-    Spec("GameWorld_ReleaseBuildingExtraTiles", 0x004dda10, "thiscall", [between(1, 64)],
+    Spec("CGameData_ReleaseBuildingExtraTiles", 0x004dda10, "thiscall", [between(1, 64)],
          presets=release_extra_tiles, max_cases=300),
-    Spec("GameWorld_UnblockType12BuildingTiles", 0x004dfa60, "thiscall", [], presets=type12_buildings,
+    Spec("CGameData_UnblockType12BuildingTiles", 0x004dfa60, "thiscall", [], presets=type12_buildings,
          max_cases=200),
 ]
 
@@ -2116,19 +2116,19 @@ def shade_heights(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_IsNgoObjectiveChosen", 0x004ffb90, "thiscall", [ngo_id], eax_mask=0xFF, presets=ngo_objectives),
-    Spec("GameWorld_GoodsRequestPriority", 0x004ff380, "thiscall", [anything, anything]),
-    Spec("GameWorld_IsSettlerJob01Or37", 0x004fa6b0, "thiscall", [job_value]),
-    Spec("GameWorld_JobAfter01Or37", 0x004faa40, "thiscall", [job_value]),
-    Spec("GameWorld_CountAreaSettlersOfClass0", 0x0050e750, "thiscall", [below(4)], presets=area_settlers,
+    Spec("CGameData_IsNgoObjectiveChosen", 0x004ffb90, "thiscall", [ngo_id], eax_mask=0xFF, presets=ngo_objectives),
+    Spec("CGameData_GoodsRequestPriority", 0x004ff380, "thiscall", [anything, anything]),
+    Spec("CGameData_IsSettlerJob01Or37", 0x004fa6b0, "thiscall", [job_value]),
+    Spec("CGameData_JobAfter01Or37", 0x004faa40, "thiscall", [job_value]),
+    Spec("CGameData_CountAreaSettlersOfClass0", 0x0050e750, "thiscall", [below(4)], presets=area_settlers,
          max_cases=500),
-    Spec("GameWorld_CountAreaSettlersOfType", 0x0050e820, "thiscall", [below(4), area_settler_type],
+    Spec("CGameData_CountAreaSettlersOfType", 0x0050e820, "thiscall", [below(4), area_settler_type],
          presets=area_settlers, max_cases=500),
-    Spec("GameWorld_PileDecAmountLeaving", 0x00505ac0, "thiscall", [between(1, 0xfff)], presets=linked_pile),
-    Spec("GameWorld_MakePileEmpty", 0x00506080, "thiscall", [between(1, 0xfff)], presets=linked_pile),
-    Spec("GameWorld_ReplaceTerrainNextTo", 0x00519270, "thiscall", [terrain_value, terrain_value, anything],
+    Spec("CGameData_PileDecAmountLeaving", 0x00505ac0, "thiscall", [between(1, 0xfff)], presets=linked_pile),
+    Spec("CGameData_MakePileEmpty", 0x00506080, "thiscall", [between(1, 0xfff)], presets=linked_pile),
+    Spec("CGameData_ReplaceTerrainNextTo", 0x00519270, "thiscall", [terrain_value, terrain_value, anything],
          eax_mask=0, presets=small_terrain_map, max_cases=300),
-    Spec("GameWorld_TileShade", 0x00519720, "thiscall", [between(1, 380), between(1, 380)], presets=shade_heights),
+    Spec("CGameData_TileShade", 0x00519720, "thiscall", [between(1, 380), between(1, 380)], presets=shade_heights),
     Spec("MapEffect_DefaultConstruct", 0x00543830, "thiscall", []),
     Spec("MapEffect_Construct", 0x00543880, "thiscall", [anything] * 20),
 ]
@@ -3114,7 +3114,7 @@ SPECS += [
          globals=ai_map_sizes),
     Spec("AI_FreeTileArea", 0x0058b480, "stdcall", [between(-3, 42), between(-3, 42)],
          presets=free_tile_world, globals=ai_both_worlds),
-    Spec("GameWorld_CreatePile", 0x00504420, "thiscall",
+    Spec("CGameData_CreatePile", 0x00504420, "thiscall",
          [below(384), below(384), pile_goods, pile_amount, pile_kind], presets=create_pile_state,
          max_cases=800),
     Spec("CLogicThread_UpdateGroupMenu", 0x00542990, "logicthread", [below(10)],
@@ -3462,10 +3462,10 @@ def effect_tick(rng, pool) -> int:
 
 
 SPECS += [
-    Spec("GameWorld_WearPath", 0x0051b7f0, "thiscall", [TILE, TILE], presets=wear_path_world),
-    Spec("GameWorld_QueueMarkedTileWithRoom", 0x0051d000, "thiscall", [TILE, TILE],
+    Spec("CGameData_WearPath", 0x0051b7f0, "thiscall", [TILE, TILE], presets=wear_path_world),
+    Spec("CGameData_QueueMarkedTileWithRoom", 0x0051d000, "thiscall", [TILE, TILE],
          presets=clear_around_world),
-    Spec("GameWorld_SetSettlerAnimation", 0x0050e2c0, "thiscall", [below(0x8000), below(40)],
+    Spec("CGameData_SetSettlerAnimation", 0x0050e2c0, "thiscall", [below(0x8000), below(40)],
          presets=settler_animation_world,
          globals=lambda rng, pool, args: [(0x007a8010, WORLD_BASE + GFX_OBJECT, 4)]),
     Spec("CLogicThread_RemoveSettlerFromGroups", 0x005428e0, "fastcall",
@@ -3485,24 +3485,24 @@ SPECS += [
 # wrong memory writes and wrong conditions.
 SELF_TEST = [
     Spec("NeighbourX", 0x00503730, "stdcall", [anything, below(8)]),
-    Spec("GameWorld_CountBuildingsWithFlag21Clear", 0x00515850, "thiscall", [below(5), below(5)],
+    Spec("CGameData_CountBuildingsWithFlag21Clear", 0x00515850, "thiscall", [below(5), below(5)],
          presets=record_counts),
-    Spec("GameWorld_SetBuildingFlag04", 0x004df690, "thiscall", [between(1, 2000)], eax_mask=0,
+    Spec("CGameData_SetBuildingFlag04", 0x004df690, "thiscall", [between(1, 2000)], eax_mask=0,
          presets=building_request_state),
-    Spec("GameWorld_IsOnMap", 0x00519510, "thiscall", [anything, anything],
+    Spec("CGameData_IsOnMap", 0x00519510, "thiscall", [anything, anything],
          presets=map_size(between(0, 400))),
-    Spec("GameWorld_ClearBuildingFlag08", 0x004df490, "thiscall", [between(1, 2000)],
+    Spec("CGameData_ClearBuildingFlag08", 0x004df490, "thiscall", [between(1, 2000)],
          eax_mask=0, presets=building_request_state),
-    Spec("GameWorld_SetAreaBuildingSlotA", 0x004de040, "thiscall",
+    Spec("CGameData_SetAreaBuildingSlotA", 0x004de040, "thiscall",
          [between(0, 2000), below(64)], presets=building_on_map),
-    Spec("GameWorld_ScreenCenterTileX", 0x00515980, "thiscall", [], globals=screen_size),
-    Spec("GameWorld_FindFreeId4096", 0x0051d5b0, "thiscall", [],
+    Spec("CGameData_ScreenCenterTileX", 0x00515980, "thiscall", [], globals=screen_size),
+    Spec("CGameData_FindFreeId4096", 0x0051d5b0, "thiscall", [],
          presets=id_table(0xe114d8, 0xe114dc, 0x100)),
-    Spec("GameWorld_ClearDiagonalTileByteB", 0x00518d10, "thiscall", [anything], eax_mask=0,
+    Spec("CGameData_ClearDiagonalTileByteB", 0x00518d10, "thiscall", [anything], eax_mask=0,
          presets=diagonal_map_size, max_cases=100),
     Spec("CLogicThread_CountTilesOwnedBy", 0x00514ae0, "logicthread",
          [below(4, 0.1), below(4, 0.1), scratch(0), between(-2, 20)], presets=owned_points),
-    Spec("GameWorld_FloodFillTileByte10", 0x0051c6c0, "thiscall",
+    Spec("CGameData_FloodFillTileByte10", 0x0051c6c0, "thiscall",
          [below(12), below(12), anything], presets=flood_replace(0x16, 2), max_cases=100),
     # ~string erases first, so even on an unshared buffer it writes before freeing.
     Spec("String_TidyFree", 0x00401b60, "thiscall", [], eax_mask=0, presets=string_world),
@@ -3961,7 +3961,7 @@ def flood_roomy(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_FloodSetWord16RoomyTiles", 0x0051d2b0, "thiscall",
+    Spec("CGameData_FloodSetWord16RoomyTiles", 0x0051d2b0, "thiscall",
          [below(12), below(12), anything], eax_mask=0, presets=flood_roomy, max_cases=150,
          # A fill of the whole 101 x 101 map runs the two-step room check
          # 60,000 times; our debug build needs more than 20M instructions.
@@ -4220,17 +4220,17 @@ def add_site_state(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_PlanSiteLevelling", 0x004da440, "thiscall",
+    Spec("CGameData_PlanSiteLevelling", 0x004da440, "thiscall",
          [between(15, 120), between(15, 120), site_type, below(8), lambda rng, pool: rng.randint(0, 140)],
          presets=plan_site_state, max_cases=600),
-    Spec("GameWorld_AddBuildingSite", 0x004dd280, "thiscall",
+    Spec("CGameData_AddBuildingSite", 0x004dd280, "thiscall",
          [between(15, 120), between(15, 120), below(20), site_type], presets=add_site_state, max_cases=600),
     # Dead blocks: the size classification after the levelling is entered
     # only with an amount >= 1 (PlanSiteLevelling returns 1 for flat land and
     # mines use 1), so the compare chain's branches for 0 never run; and
     # 0x4d9ece is the path for an empty border list, which no layout in
     # S3.EXE has (checked for all 4 races x 56 types).
-    Spec("GameWorld_CheckBuildingSite", 0x004d99e0, "thiscall",
+    Spec("CGameData_CheckBuildingSite", 0x004d99e0, "thiscall",
          [between(10, 120), between(10, 120), site_type, below(8), one_of(0, 1, 1, 1, 2, 3)],
          presets=check_site_state, max_cases=2500,
          exempt_blocks=(0x4da331, 0x4da34a, 0x4da363, 0x4da37e, 0x4da39b, 0x4da3b8, 0x4da3d5, 0x4da3f2,
@@ -4315,9 +4315,9 @@ def start_attempts(rng, pool):
 
 
 SPECS += [
-    Spec("GameWorld_IsFreeCastleSite", 0x00508420, "thiscall", [below(8), between(10, 120), between(10, 120)],
+    Spec("CGameData_IsFreeCastleSite", 0x00508420, "thiscall", [below(8), between(10, 120), between(10, 120)],
          presets=castle_site_state, max_cases=600),
-    Spec("GameWorld_IsGoodStartPosition", 0x005081a0, "thiscall",
+    Spec("CGameData_IsGoodStartPosition", 0x005081a0, "thiscall",
          [below(8), between(15, 400), between(15, 400), start_attempts], presets=start_position_state,
          max_cases=250),
 ]
@@ -4388,15 +4388,15 @@ def create_world(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_ExpandTerrain", 0x00519440, "thiscall", [terrain_or_mark, terrain_or_mark],
+    Spec("CGameData_ExpandTerrain", 0x00519440, "thiscall", [terrain_or_mark, terrain_or_mark],
          presets=small_terrain_map_with_marks, max_cases=300),
-    Spec("GameWorld_MarkTerrainEdge", 0x0051a2e0, "thiscall", [terrain_or_mark],
+    Spec("CGameData_MarkTerrainEdge", 0x0051a2e0, "thiscall", [terrain_or_mark],
          presets=small_terrain_map_with_marks, max_cases=300),
-    Spec("GameWorld_BuildRegionsAndAreas", 0x0051a580, "thiscall", [], presets=region_map, max_cases=60,
+    Spec("CGameData_BuildRegionsAndAreas", 0x0051a580, "thiscall", [], presets=region_map, max_cases=60,
          max_instructions=200_000_000),
     # Whole random maps of 64 x 64 (sizes of the real game are 128..768,
     # far too slow here; the in-process tests run those).
-    Spec("GameWorld_Create", 0x005166d0, "thiscall",
+    Spec("CGameData_Create", 0x005166d0, "thiscall",
          [anything, one_of(65, 72, 80, 96, 64, 33),
           lambda rng, pool: rng.choice([0, 0, 0, 1, 2, 3, rng.getrandbits(32)])],
          presets=create_world, max_cases=10, max_instructions=3_000_000_000),
@@ -4438,11 +4438,11 @@ def pile_claims(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_UpdateShadeAround", 0x00519670, "thiscall", [between(2, 380), between(2, 380)],
+    Spec("CGameData_UpdateShadeAround", 0x00519670, "thiscall", [between(2, 380), between(2, 380)],
          eax_mask=0, presets=shade_around_heights, max_cases=1000),
-    Spec("GameWorld_SetTerrain16Patch", 0x0051ba00, "thiscall", [between(1, 380), between(1, 380)],
+    Spec("CGameData_SetTerrain16Patch", 0x0051ba00, "thiscall", [between(1, 380), between(1, 380)],
          eax_mask=0, presets=terrain16_patch, max_cases=2000),
-    Spec("GameWorld_CountOtherPileClaims", 0x00510800, "thiscall", [below(6, 0.1), below(6, 0.1)],
+    Spec("CGameData_CountOtherPileClaims", 0x00510800, "thiscall", [below(6, 0.1), below(6, 0.1)],
          presets=pile_claims, max_cases=500),
 ]
 
@@ -4546,10 +4546,10 @@ def traffic_tile(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_AddTileTraffic", 0x00503940, "thiscall", [TILE, TILE], presets=traffic_tile,
+    Spec("CGameData_AddTileTraffic", 0x00503940, "thiscall", [TILE, TILE], presets=traffic_tile,
          max_cases=2000),
-    Spec("GameWorld_IsWalkingJob", 0x004fa6d0, "thiscall", [below(0x180, 0.3)], max_cases=4000),
-    Spec("GameWorld_IsStationaryJob", 0x004fa880, "thiscall", [below(0x180, 0.3)], max_cases=4000),
+    Spec("CGameData_IsWalkingJob", 0x004fa6d0, "thiscall", [below(0x180, 0.3)], max_cases=4000),
+    Spec("CGameData_IsStationaryJob", 0x004fa880, "thiscall", [below(0x180, 0.3)], max_cases=4000),
     Spec("Pathing_TileCost", 0x004a36a0, "thiscall",
          [scratch(0), TILE, TILE, below(3), below(3), below(3)], presets=path_tile_case, max_cases=3000),
     Spec("Pathing_SectorTileCost", 0x004a3870, "thiscall", [scratch(0), TILE, TILE],
@@ -4819,32 +4819,32 @@ def slope_coordinate(rng, pool) -> int:
 
 
 SPECS += [
-    Spec("GameWorld_SetPileGood", 0x005061b0, "thiscall",
+    Spec("CGameData_SetPileGood", 0x005061b0, "thiscall",
          [between(1, 0xfff), lambda rng, pool: rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(36)],
          presets=set_pile_good_state, max_cases=2000),
-    Spec("GameWorld_DropGoodNear", 0x005046b0, "thiscall",
+    Spec("CGameData_DropGoodNear", 0x005046b0, "thiscall",
          [below(36), drop_amount, between(0, 383), between(0, 383)], eax_mask=0,
          presets=drop_good_state, max_cases=300),
-    Spec("GameWorld_NotifyLocalPlayer", 0x004fec10, "thiscall",
+    Spec("CGameData_NotifyLocalPlayer", 0x004fec10, "thiscall",
          [below(4), below(42), below(384), below(384)], eax_mask=0,
          presets=notification_state, globals=notification_level, max_cases=1500),
     Spec("GetMemberDword64", 0x0049f510, "thiscall", []),
     Spec("GetMemberByte189", 0x00414030, "thiscall", [], eax_mask=0xFF),
-    Spec("GameWorld_SpawnSettlersAround", 0x0050cb20, "thiscall",
+    Spec("CGameData_SpawnSettlersAround", 0x0050cb20, "thiscall",
          [between(1, 5), lambda rng, pool: rng.randrange(0x30) if rng.random() < 0.9 else rng.randrange(0x50),
           below(4), lambda rng, pool: rng.randrange(60) if rng.random() < 0.3 else rng.randrange(384),
           lambda rng, pool: rng.randrange(60) if rng.random() < 0.3 else rng.randrange(384)],
          eax_mask=0, presets=spawn_settlers_state, max_cases=300),
-    Spec("GameWorld_EnterBuildingSlot", 0x0050ccb0, "thiscall", [between(1, 0x7cfe)], eax_mask=0,
+    Spec("CGameData_EnterBuildingSlot", 0x0050ccb0, "thiscall", [between(1, 0x7cfe)], eax_mask=0,
          presets=enter_slot_state, max_cases=1000),
-    Spec("GameWorld_CreateSevenTileUnit", 0x0050dd20, "thiscall",
+    Spec("CGameData_CreateSevenTileUnit", 0x0050dd20, "thiscall",
          [below(0x50), below(4), between(1, 382), between(1, 382)], eax_mask=0,
          presets=seven_tile_state, max_cases=300),
-    Spec("GameWorld_SetSoldierAnimationInBuilding", 0x0050e140, "thiscall", [between(1, 0x7cfe)],
+    Spec("CGameData_SetSoldierAnimationInBuilding", 0x0050e140, "thiscall", [between(1, 0x7cfe)],
          presets=soldier_animation_state, globals=gfx_global, max_cases=1000),
-    Spec("GameWorld_SetSettlerSavedAnimation", 0x0050e320, "thiscall", [below(0x8000), below(0x180)],
+    Spec("CGameData_SetSettlerSavedAnimation", 0x0050e320, "thiscall", [below(0x8000), below(0x180)],
          presets=saved_animation_state, globals=gfx_global, max_cases=1000),
-    Spec("GameWorld_TileSlope", 0x004faa70, "thiscall", [slope_coordinate, slope_coordinate],
+    Spec("CGameData_TileSlope", 0x004faa70, "thiscall", [slope_coordinate, slope_coordinate],
          presets=slope_state, max_cases=2000),
 ]
 
@@ -4927,14 +4927,14 @@ def footprint_world(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_RecountPlayerPopulation", 0x005104c0, "thiscall", [], eax_mask=0, presets=population_world,
+    Spec("CGameData_RecountPlayerPopulation", 0x005104c0, "thiscall", [], eax_mask=0, presets=population_world,
          max_cases=400),
-    Spec("GameWorld_SetTowerSoldierAnimation", 0x0050e200, "thiscall", [between(1, 0x7cfe)], presets=tower_soldier_world,
+    Spec("CGameData_SetTowerSoldierAnimation", 0x0050e200, "thiscall", [between(1, 0x7cfe)], presets=tower_soldier_world,
          globals=lambda rng, pool, args: [(0x007a8010, WORLD_BASE + GFX_OBJECT, 4)], max_cases=1000),
     # UnblockTile (verified, own spec) is probed: on the lazily random map
     # its region floods would make the cases very slow; the calls and their
     # arguments are compared.
-    Spec("GameWorld_ClearBuildingFootprint", 0x0051aae0, "thiscall", [between(1, 0xf9f)], eax_mask=0,
+    Spec("CGameData_ClearBuildingFootprint", 0x0051aae0, "thiscall", [between(1, 0xf9f)], eax_mask=0,
          presets=footprint_world, callees={0x0051b770: (2, "thiscall", "probe")}, max_cases=400),
 ]
 
@@ -5130,7 +5130,7 @@ def miner_state(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_MinerJobEnter", 0x004f9a00, "thiscall", [below(0x7d00)], presets=miner_state, max_cases=1000),
+    Spec("CGameData_MinerJobEnter", 0x004f9a00, "thiscall", [below(0x7d00)], presets=miner_state, max_cases=1000),
 ]
 
 
@@ -5247,21 +5247,21 @@ def block_line_world(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_ResetCivilianOnTile", 0x0050e980, "thiscall", [between(10, 370), between(10, 370)], eax_mask=0,
+    Spec("CGameData_ResetCivilianOnTile", 0x0050e980, "thiscall", [between(10, 370), between(10, 370)], eax_mask=0,
          presets=owned_tile_world, callees=SETTLER_PROBES, max_cases=1000),
-    Spec("GameWorld_LosePileOnTile", 0x00504f70, "thiscall", [between(10, 370), between(10, 370)], eax_mask=0,
+    Spec("CGameData_LosePileOnTile", 0x00504f70, "thiscall", [between(10, 370), between(10, 370)], eax_mask=0,
          presets=owned_tile_world, callees=SETTLER_PROBES, max_cases=1000),
-    Spec("GameWorld_ClearTileOwner", 0x0051b640, "thiscall", [between(10, 370), between(10, 370)], eax_mask=0,
+    Spec("CGameData_ClearTileOwner", 0x0051b640, "thiscall", [between(10, 370), between(10, 370)], eax_mask=0,
          presets=owned_tile_world, callees=SETTLER_PROBES, max_cases=1000),
-    Spec("GameWorld_BlockTileAndMoveSettler", 0x004dbb10, "thiscall", [between(20, 360), between(20, 360)],
+    Spec("CGameData_BlockTileAndMoveSettler", 0x004dbb10, "thiscall", [between(20, 360), between(20, 360)],
          eax_mask=0, presets=block_tile_world, callees=SETTLER_PROBES, max_cases=600),
-    Spec("GameWorld_BlockBuildingLine", 0x004dbb90, "thiscall", [between(1, 50)], eax_mask=0,
+    Spec("CGameData_BlockBuildingLine", 0x004dbb90, "thiscall", [between(1, 50)], eax_mask=0,
          presets=block_line_world, callees=SETTLER_PROBES, max_cases=600),
-    Spec("GameWorld_DropInputPile", 0x00504a00, "thiscall", [between(1, 100)], eax_mask=0,
+    Spec("CGameData_DropInputPile", 0x00504a00, "thiscall", [between(1, 100)], eax_mask=0,
          presets=drop_pile_world, callees=SETTLER_PROBES, max_cases=600),
-    Spec("GameWorld_DropStoragePile", 0x00504b70, "thiscall", [between(1, 100)], eax_mask=0,
+    Spec("CGameData_DropStoragePile", 0x00504b70, "thiscall", [between(1, 100)], eax_mask=0,
          presets=drop_pile_world, callees=SETTLER_PROBES, max_cases=600),
-    Spec("GameWorld_DropOutputPile", 0x00504e20, "thiscall", [between(1, 100)], eax_mask=0,
+    Spec("CGameData_DropOutputPile", 0x00504e20, "thiscall", [between(1, 100)], eax_mask=0,
          presets=drop_pile_world, callees=SETTLER_PROBES, max_cases=600),
 ]
 
@@ -5370,9 +5370,9 @@ def economy_type(rng, pool):
 SPECS += [
     # 0x4db404: dead (the tool 0xc is only needed by type 1, and "no pile of
     # tool 0xc" notifies only for other types).
-    Spec("GameWorld_RequestSettlerForBuilding", 0x004dacd0, "thiscall", [between(1, 50), economy_type],
+    Spec("CGameData_RequestSettlerForBuilding", 0x004dacd0, "thiscall", [between(1, 50), economy_type],
          presets=request_world, callees=ECONOMY_PROBES, max_cases=1500, exempt_blocks=(0x4db404,)),
-    Spec("GameWorld_DispatchPileCarrier", 0x005052c0, "thiscall", [between(1, 30)], eax_mask=0,
+    Spec("CGameData_DispatchPileCarrier", 0x005052c0, "thiscall", [between(1, 30)], eax_mask=0,
          presets=dispatch_world, callees=ECONOMY_PROBES, max_cases=1500),
 ]
 
@@ -5410,7 +5410,7 @@ def building_done_world(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_BuildingDone", 0x004dbc50, "thiscall", [between(1, 50)], eax_mask=0,
+    Spec("CGameData_BuildingDone", 0x004dbc50, "thiscall", [between(1, 50)], eax_mask=0,
          presets=building_done_world, callees={0x0051b770: (2, "thiscall", "probe")}, max_cases=3000),
 ]
 
@@ -5522,9 +5522,9 @@ def take_good_state(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_ResetSettlerToIdle", 0x0050cf50, "thiscall", [between(1, 0x3000)],
+    Spec("CGameData_ResetSettlerToIdle", 0x0050cf50, "thiscall", [between(1, 0x3000)],
          presets=idle_state, max_cases=1500),
-    Spec("GameWorld_TakeGoodFromPile", 0x00505820, "thiscall", [between(1, 0xfff)], presets=take_good_state,
+    Spec("CGameData_TakeGoodFromPile", 0x00505820, "thiscall", [between(1, 0xfff)], presets=take_good_state,
          max_cases=1500),
 ]
 
@@ -5557,7 +5557,7 @@ def steal_state(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_StealGoodFromPile", 0x00505c20, "thiscall", [between(1, 0xfff)], eax_mask=0xFF,
+    Spec("CGameData_StealGoodFromPile", 0x00505c20, "thiscall", [between(1, 0xfff)], eax_mask=0xFF,
          presets=steal_state, max_cases=1500),
 ]
 
@@ -5630,9 +5630,9 @@ def miner_globals(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_MinerJobFood", 0x004f9b80, "thiscall", [between(1, 0x3000)], eax_mask=0,
+    Spec("CGameData_MinerJobFood", 0x004f9b80, "thiscall", [between(1, 0x3000)], eax_mask=0,
          presets=miner_food_state, globals=miner_globals, max_cases=1500),
-    Spec("GameWorld_MinerJobDig", 0x004fa220, "thiscall", [between(1, 0x3000)], eax_mask=0,
+    Spec("CGameData_MinerJobDig", 0x004fa220, "thiscall", [between(1, 0x3000)], eax_mask=0,
          presets=miner_dig_state, globals=miner_globals, max_cases=1500),
 ]
 
@@ -5641,7 +5641,7 @@ SPECS += [
 # cycle (CrushBuilding 0x4d9250, DestroyBuildingAt 0x4d97b0,
 # ReleaseSiteWorkers 0x50e3b0, RecalculateTerritory 0x519a90). Each spec
 # probes the other cycle functions (the recursion is tested in-process,
-# GameWorld_DestructionCycle_MatchesOriginal), package B's callees and the
+# CGameData_DestructionCycle_MatchesOriginal), package B's callees and the
 # verified callees that flood regions or need a consistent map
 # (UnblockTile, SetOwnerOfFreeTile, ClearTileOwner, the Drop*Pile functions
 # and the MapEffects calls, all with own specs); calls are compared.
@@ -5839,13 +5839,13 @@ def territory_args(rng, pool):
 
 
 SPECS += [
-    Spec("GameWorld_RemoveBuildingGoods", 0x004de430, "thiscall", [between(1, 50)], eax_mask=0,
+    Spec("CGameData_RemoveBuildingGoods", 0x004de430, "thiscall", [between(1, 50)], eax_mask=0,
          presets=remove_goods_world, max_cases=800,
          callees={**RESET, 0x005046b0: (4, "thiscall", "probe"), 0x00504a00: (1, "thiscall", "probe"),
                   0x00504b70: (1, "thiscall", "probe"), 0x00504e20: (1, "thiscall", "probe")}),
-    Spec("GameWorld_ReleaseSiteWorkers", 0x0050e3b0, "thiscall", [between(1, 50)], eax_mask=0,
+    Spec("CGameData_ReleaseSiteWorkers", 0x0050e3b0, "thiscall", [between(1, 50)], eax_mask=0,
          presets=release_workers_world, max_cases=800, callees={**RESET, 0x00519a90: (2, "thiscall", "probe")}),
-    Spec("GameWorld_CrushBuilding", 0x004d9250, "thiscall", [between(1, 50)], presets=crush_world,
+    Spec("CGameData_CrushBuilding", 0x004d9250, "thiscall", [between(1, 50)], presets=crush_world,
          globals=crush_globals, max_cases=600,
          callees={0x0050e3b0: (1, "thiscall", "probe"), 0x004de430: (1, "thiscall", "probe"),
                   0x0051aae0: (1, "thiscall", "probe"), 0x004d9940: (1, "thiscall", "probe"),
@@ -5854,10 +5854,10 @@ SPECS += [
     # 0x4d9909: the DebugLog after 9900 offset entries without finding the
     # building (an error path; it needs the whole offset table preset and a
     # map without the building).
-    Spec("GameWorld_DestroyBuildingAt", 0x004d97b0, "thiscall", [between(30, 350), between(30, 350)],
+    Spec("CGameData_DestroyBuildingAt", 0x004d97b0, "thiscall", [between(30, 350), between(30, 350)],
          presets=destroy_at_world, max_cases=500, callees={0x004d9250: (1, "thiscall", "probe")},
          exempt_blocks=(0x4d9909,)),
-    Spec("GameWorld_RecalculateTerritory", 0x00519a90, "thiscall", [territory_args, territory_args],
+    Spec("CGameData_RecalculateTerritory", 0x00519a90, "thiscall", [territory_args, territory_args],
          presets=territory_world, max_cases=25, max_instructions=400_000_000,
          callees={0x004d97b0: (2, "thiscall", "probe"), 0x0051b5d0: (3, "thiscall", "probe"),
                   0x0051b640: (2, "thiscall", "probe")}),
@@ -6316,26 +6316,26 @@ def spell_number(rng, pool):
 
 
 SPECS += [
-    Spec("GameWorld_MarkRevealPointsSight", 0x00518f20, "thiscall", [], eax_mask=0, presets=reveal_points,
+    Spec("CGameData_MarkRevealPointsSight", 0x00518f20, "thiscall", [], eax_mask=0, presets=reveal_points,
          max_cases=300),
-    Spec("GameWorld_MarkBuildingSight", 0x00519fa0, "thiscall", [below(16, 0.02)], eax_mask=0,
+    Spec("CGameData_MarkBuildingSight", 0x00519fa0, "thiscall", [below(16, 0.02)], eax_mask=0,
          presets=building_sight, max_cases=300),
-    Spec("GameWorld_MarkSettlerSight", 0x0051a150, "thiscall", [below(16, 0.02)], eax_mask=0,
+    Spec("CGameData_MarkSettlerSight", 0x0051a150, "thiscall", [below(16, 0.02)], eax_mask=0,
          presets=settler_sight, max_cases=300),
-    Spec("GameWorld_SeenObjectAt", 0x0051d5f0, "thiscall", [below(64), below(64)], eax_mask=0xffff,
+    Spec("CGameData_SeenObjectAt", 0x0051d5f0, "thiscall", [below(64), below(64)], eax_mask=0xffff,
          presets=seen_tile),
     # Exempt: 0x519186 (level 7 when 0x7dfd84 is set, re-read inside the
     # branch taken only when it was 0): dead unless another thread changes it.
-    Spec("GameWorld_UpdateFogSlice", 0x00519010, "thiscall", [below(16)], eax_mask=0, presets=fog_slice,
+    Spec("CGameData_UpdateFogSlice", 0x00519010, "thiscall", [below(16)], eax_mask=0, presets=fog_slice,
          globals=lambda rng, pool, args: [(0x007dfd84, 1 if rng.random() < 0.3 else 0, 4)], max_cases=200,
          exempt_blocks=(0x519186,)),
     Spec("MapEffect_IsExpired", 0x005440c0, "thiscall", [between(900, 1100)], eax_mask=0xff,
          presets=effect_timing),
     Spec("MapEffects_ExpireSome", 0x00545d40, "thiscall", [between(1000, 1100)], eax_mask=0,
          presets=expiring_effects, max_cases=300),
-    Spec("GameWorld_DecayTraffic", 0x00503980, "thiscall", [below(64), below(64)], eax_mask=0,
+    Spec("CGameData_DecayTraffic", 0x00503980, "thiscall", [below(64), below(64)], eax_mask=0,
          presets=traffic_tile),
-    Spec("GameWorld_PayForSpell", 0x0054b2b0, "thiscall", [below(20), spell_number], eax_mask=0,
+    Spec("CGameData_PayForSpell", 0x0054b2b0, "thiscall", [below(20), spell_number], eax_mask=0,
          presets=mana),
 ]
 
@@ -6354,7 +6354,7 @@ def spell_coordinate(rng, pool) -> int:
 
 
 SPECS += [
-    Spec("GameWorld_SpawnSpellEffects", 0x005474e0, "thiscall",
+    Spec("CGameData_SpawnSpellEffects", 0x005474e0, "thiscall",
          [anything, spell_coordinate, spell_coordinate, anything, below(34, 0.05)], eax_mask=0,
          presets=world_effect_table, ignore_bytes=tuple(WORLD_EFFECTS + b for b in EFFECT_TABLE_PADDING),
          globals=lambda rng, pool, args: [(0x007dfd48, rng.getrandbits(32), 4)], max_cases=400),
@@ -6569,7 +6569,7 @@ def soldier_presets(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_UpdateSoldier", 0x0050e9f0, "thiscall", [between(1, 0x3ff)], presets=soldier_presets,
+    Spec("CGameData_UpdateSoldier", 0x0050e9f0, "thiscall", [between(1, 0x3ff)], presets=soldier_presets,
          globals=soldier_globals, callees=SOLDIER_PROBES, ignore_bytes=tuple(MAP_EFFECTS + s * 0x4c + p
                                                                           for s in range(1, 40)
                                                                           for p in EFFECT_PADDING),
@@ -6577,7 +6577,7 @@ SPECS += [
 ]
 
 
-# --- package D: GameWorld::UpdateEnvironment (environment.cpp) ---------------
+# --- package D: CGameData::UpdateEnvironment (environment.cpp) ---------------
 #
 # Callees with their own specs that need a consistent world (or loop over
 # whole record tables) are probed; Random, RandomBelow6, IsOnMap,
@@ -6728,7 +6728,7 @@ def update_environment_globals(rng, pool, args):
 
 
 SPECS += [
-    Spec("GameWorld_UpdateEnvironment", 0x004e7810, "thiscall", [], eax_mask=0, presets=update_environment,
+    Spec("CGameData_UpdateEnvironment", 0x004e7810, "thiscall", [], eax_mask=0, presets=update_environment,
          globals=update_environment_globals, callees=ENV_CALLEES, max_cases=600),
 ]
 
@@ -6796,9 +6796,9 @@ SPECS += [
     # Exempt: 0x4fbc79/0x4fbc8c (mode != 0, settlers option 1: a hidden type
     # 0x17 settler of another team takes the tile's owner): dead, such a
     # settler was skipped just before (0x4fbc33).
-    Spec("GameWorld_MinimapPixel", 0x004fb720, "thiscall", [_cx.first, _cy.first, _cx.second, _cy.second],
+    Spec("CGameData_MinimapPixel", 0x004fb720, "thiscall", [_cx.first, _cy.first, _cx.second, _cy.second],
          presets=minimap_pixel, globals=minimap_globals, max_cases=3000, exempt_blocks=(0x4fbc79, 0x4fbc8c)),
-    Spec("GameWorld_UpdateMinimapSlice", 0x004fb520, "thiscall", [below(64)], eax_mask=0, presets=minimap_slice,
+    Spec("CGameData_UpdateMinimapSlice", 0x004fb520, "thiscall", [below(64)], eax_mask=0, presets=minimap_slice,
          globals=minimap_slice_globals, max_cases=150),
 ]
 
@@ -6852,18 +6852,18 @@ def spell_spec(name, address, **kwargs):
 
 
 SPECS += [
-    spell_spec("GameWorld_SpellRevealSpot", 0x00549530),
-    spell_spec("GameWorld_SpellBurnTrees", 0x00549650),
+    spell_spec("CGameData_SpellRevealSpot", 0x00549530),
+    spell_spec("CGameData_SpellBurnTrees", 0x00549650),
     # Exempt: 0x54978e (the signed-modulo fix-up of (Random & 0xffff) % 4):
     # dead, the value is never negative.
-    spell_spec("GameWorld_SpellAddFish", 0x00549700, exempt_blocks=(0x54978e,)),
-    spell_spec("GameWorld_SpellHalveResources", 0x005497f0),
-    spell_spec("GameWorld_SpellGrowTrees", 0x005498a0),
-    Spec("GameWorld_SpellRevealMap", 0x005495d0, "thiscall", [below(4)], eax_mask=0,
+    spell_spec("CGameData_SpellAddFish", 0x00549700, exempt_blocks=(0x54978e,)),
+    spell_spec("CGameData_SpellHalveResources", 0x005497f0),
+    spell_spec("CGameData_SpellGrowTrees", 0x005498a0),
+    Spec("CGameData_SpellRevealMap", 0x005495d0, "thiscall", [below(4)], eax_mask=0,
          presets=lambda rng, pool, args: spell_area(rng, pool, args + [0, 0]),
          globals=lambda rng, pool, args: [(0x007dfd84, rng.choice([0, 1, 1, 2]), 4)],
          callees={0x004febe0: (1, "thiscall", "probe")}, max_cases=300),
-    Spec("GameWorld_ExecuteSpell", 0x005480b0, "thiscall",
+    Spec("CGameData_ExecuteSpell", 0x005480b0, "thiscall",
          [anything, lambda rng, pool: rng.randint(-50, 800) & 0xFFFFFFFF,
           lambda rng, pool: rng.randint(-50, 800) & 0xFFFFFFFF, anything, below(34, 0.1)], eax_mask=0,
          presets=lambda rng, pool, args: [(SIGHT_MAP, rng.randint(1, 768), 4)], callees=SPELL_HANDLERS),
@@ -7106,7 +7106,7 @@ SPECS += [
     # 0x503244 (ships): dead. The step time's special case for type 0x17
     # is inlined into every step, but these paths only run for types 0x29
     # and 0x2b/0x2c.
-    Spec("GameWorld_WalkSettler", 0x00500860, "thiscall", [between(WALK_OTHERS + 1, 400)], presets=walk_state,
+    Spec("CGameData_WalkSettler", 0x00500860, "thiscall", [between(WALK_OTHERS + 1, 400)], presets=walk_state,
          globals=walk_globals, callees=WALK_PROBES, max_cases=4000,
          exempt_blocks=(0x502444, 0x50244e, 0x5030d7, 0x5030e1, 0x50323a, 0x503244)),
 ]
@@ -7404,7 +7404,7 @@ def economy_update_world(rng, pool, args):
 
 SPECS += [
     # The code ends at 0x4e492b; the switch tables follow it.
-    Spec("GameWorld_UpdateEconomy", 0x004e05e0, "thiscall", [], presets=economy_update_world,
+    Spec("CGameData_UpdateEconomy", 0x004e05e0, "thiscall", [], presets=economy_update_world,
          callees=ECONOMY_UPDATE_PROBES, max_cases=4000, cover_until=0x004e492c,
          # 0x4e45f3 (a candidate building 0): dead, the candidates are the
          # non-zero numbers of the request list. 0x4e0c63 (skip a 0x80000002

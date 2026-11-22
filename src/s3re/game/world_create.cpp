@@ -1,4 +1,4 @@
-// GameWorld::Create (0x005166d0): the random map generator.
+// CGameData::Create (0x005166d0): the random map generator.
 //
 // (seed, mapSize, symmetry), thiscall, ret 0xc. Called by
 // CLogicThread::OnStart (0x53ce35) when the map file holds a random-map
@@ -87,41 +87,41 @@ constexpr std::uint8_t kStream = 0x60;
 constexpr std::int32_t kDx[7] = {0, 1, 1, 0, -1, -1, 0};
 constexpr std::int32_t kDy[7] = {0, 0, 1, 1, 0, -1, -1};
 
-std::int32_t MapSize(GameWorld* world) {
+std::int32_t MapSize(CGameData* world) {
     return static_cast<std::int32_t>(world->map_size);
 }
 
 // The symmetry argument of Create (world+0x2d274).
-std::uint32_t Symmetry(GameWorld* world) {
+std::uint32_t Symmetry(CGameData* world) {
     return static_cast<std::uint32_t>(world->random_map_symmetry);
 }
 
 // Tile (x, y) with the original's 32-bit arithmetic (some passes read and
 // write tiles just outside the map).
-Tile& TileAt(GameWorld* world, std::int32_t x, std::int32_t y) {
+Tile& TileAt(CGameData* world, std::int32_t x, std::int32_t y) {
     return TileAtOffset(world, TileOffset(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)));
 }
 
-std::uint8_t& Height(GameWorld* world, std::int32_t x, std::int32_t y) {
+std::uint8_t& Height(CGameData* world, std::int32_t x, std::int32_t y) {
     return TileAt(world, x, y).height;
 }
-std::uint8_t& Scratch(GameWorld* world, std::int32_t x, std::int32_t y) {
+std::uint8_t& Scratch(CGameData* world, std::int32_t x, std::int32_t y) {
     return TileAt(world, x, y).shade;
 }
-std::uint8_t& Terrain(GameWorld* world, std::int32_t x, std::int32_t y) {
+std::uint8_t& Terrain(CGameData* world, std::int32_t x, std::int32_t y) {
     return TileAt(world, x, y).terrain;
 }
-std::uint8_t& Object(GameWorld* world, std::int32_t x, std::int32_t y) {
+std::uint8_t& Object(CGameData* world, std::int32_t x, std::int32_t y) {
     return TileAt(world, x, y).object;
 }
 
-std::uint32_t Random16(GameWorld* world) {
-    return GameWorld_Random(world, nullptr);
+std::uint32_t Random16(CGameData* world) {
+    return CGameData_Random(world, nullptr);
 }
 
 // lo + ((Random & 0xffff) * span) / 65536, signed 32-bit, truncated toward
 // zero; the caller stores the low byte.
-std::int32_t RandomBetween(GameWorld* world, std::int32_t lo, std::int32_t span) {
+std::int32_t RandomBetween(CGameData* world, std::int32_t lo, std::int32_t span) {
     const auto product = static_cast<std::int32_t>(Random16(world) * static_cast<std::uint32_t>(span));
     return lo + product / 65536;
 }
@@ -139,7 +139,7 @@ void ForEachTile(std::int32_t first, Last last, Visit visit) {
 
 // --- 1, 2: start ---------------------------------------------------------
 
-void ResetTiles(GameWorld* world) {
+void ResetTiles(CGameData* world) {
     ForEachTile(0, [&] { return MapSize(world); }, [&](std::int32_t x, std::int32_t y) {
         Tile& tile = TileAt(world, x, y);
         tile.height = 0;
@@ -163,7 +163,7 @@ void ResetTiles(GameWorld* world) {
 
 // --- 3..6: heights ---------------------------------------------------------
 
-void SeedCoarseHeights(GameWorld* world) {
+void SeedCoarseHeights(CGameData* world) {
     for (std::int32_t y = 64; y < MapSize(world); y += 64) {
         for (std::int32_t x = 64; x < MapSize(world); x += 64) {
             const std::int32_t size = MapSize(world);
@@ -192,7 +192,7 @@ void SeedCoarseHeights(GameWorld* world) {
 // Points on the map border get 0 (the 0 range): point 0 when y0 == 0, or for
 // steps <= 16 when x0 == 0 or x2 is the last column; point 1 symmetrically;
 // point 2 for steps <= 16 when any of its square's sides is on the border.
-void RefineStep(GameWorld* world, std::int32_t step) {
+void RefineStep(CGameData* world, std::int32_t step) {
     for (std::int32_t y0 = 0; y0 < MapSize(world); y0 += 2 * step) {
         for (std::int32_t x0 = 0; x0 < MapSize(world); x0 += 2 * step) {
             const std::int32_t x2 = x0 + 2 * step;
@@ -245,13 +245,13 @@ void RefineStep(GameWorld* world, std::int32_t step) {
     }
 }
 
-void RefineHeights(GameWorld* world) {
+void RefineHeights(CGameData* world) {
     for (std::int32_t step = 32; step >= 1; step >>= 1) {
         RefineStep(world, step);
     }
 }
 
-void LowerHeights(GameWorld* world) {
+void LowerHeights(CGameData* world) {
     ForEachTile(0, [&] { return MapSize(world); }, [&](std::int32_t x, std::int32_t y) {
         std::uint8_t& height = Height(world, x, y);
         height = height < 0x1f ? 0 : static_cast<std::uint8_t>(height - 0x1e);
@@ -259,7 +259,7 @@ void LowerHeights(GameWorld* world) {
 }
 
 // The map border must be at height 0; the original only logs violations.
-void LogBorderErrors(GameWorld* world) {
+void LogBorderErrors(CGameData* world) {
     for (std::int32_t i = 0; i < MapSize(world); ++i) {
         const std::uint8_t top = Height(world, i, 0);
         if (top != 0) {
@@ -289,7 +289,7 @@ void LogBorderErrors(GameWorld* world) {
 // direction it currently follows (1..4); a step either ends the iteration or
 // continues at once with the next state's step ("chain").
 struct RidgeWalker {
-    GameWorld* world;
+    CGameData* world;
     std::int32_t x;
     std::int32_t y;
     int state;
@@ -298,7 +298,7 @@ struct RidgeWalker {
     std::int32_t H(std::int32_t dx, std::int32_t dy) const { return Height(world, x + dx, y + dy); }
     std::uint8_t& T(std::int32_t dx, std::int32_t dy) const { return Terrain(world, x + dx, y + dy); }
     bool Room(std::int32_t dx, std::int32_t dy) const {
-        return GameWorld_HasAtMostTwoType70Neighbours(world, nullptr, static_cast<std::uint32_t>(x + dx),
+        return CGameData_HasAtMostTwoType70Neighbours(world, nullptr, static_cast<std::uint32_t>(x + dx),
                                                       static_cast<std::uint32_t>(y + dy)) != 0;
     }
 
@@ -417,7 +417,7 @@ struct RidgeWalker {
     }
 };
 
-void WalkRidge(GameWorld* world, std::int32_t x0, std::int32_t y0) {
+void WalkRidge(CGameData* world, std::int32_t x0, std::int32_t y0) {
     for (int walk = 0; walk < 2; ++walk) {
         RidgeWalker walker{world, x0, y0, 3, false};
         do {
@@ -431,14 +431,14 @@ void WalkRidge(GameWorld* world, std::int32_t x0, std::int32_t y0) {
     }
 }
 
-std::int32_t RidgeStarts(GameWorld* world) {
+std::int32_t RidgeStarts(CGameData* world) {
     return MapSize(world) * MapSize(world) / 16;
 }
 
 // mapSize^2/16 random tiles; a tile at height 31..99 that is more than 10
 // above its neighbour (x, y+1) and has no ridge near it becomes a peak: it
 // and (x, y+1) are marked and two walks start from it.
-void RaiseRidges(GameWorld* world) {
+void RaiseRidges(CGameData* world) {
     for (std::int32_t start = 0; start < RidgeStarts(world); ++start) {
         const std::int32_t x =
             static_cast<std::int32_t>(Random16(world) * static_cast<std::uint32_t>(MapSize(world)) - 2) / 65536 + 1;
@@ -446,7 +446,7 @@ void RaiseRidges(GameWorld* world) {
             static_cast<std::int32_t>(Random16(world) * static_cast<std::uint32_t>(MapSize(world) - 3)) / 65536 + 1;
         const std::uint8_t height = Height(world, x, y);
         if (height - 10 <= Height(world, x, y + 1) || height <= 0x1e || height >= 0x64 ||
-            GameWorld_IsClearOfType70Nearby(world, nullptr, static_cast<std::uint32_t>(x),
+            CGameData_IsClearOfType70Nearby(world, nullptr, static_cast<std::uint32_t>(x),
                                             static_cast<std::uint32_t>(y)) == 0) {
             continue;
         }
@@ -458,7 +458,7 @@ void RaiseRidges(GameWorld* world) {
 
 // Ridge tiles are raised by 8, low ridge tiles become ridge tiles 8 lower
 // (x, y in [1, mapSize-1)).
-void MarkRidgeHeights(GameWorld* world) {
+void MarkRidgeHeights(CGameData* world) {
     ForEachTile(1, [&] { return MapSize(world) - 1; }, [&](std::int32_t x, std::int32_t y) {
         std::uint8_t& terrain = Terrain(world, x, y);
         std::uint8_t& height = Height(world, x, y);
@@ -472,7 +472,7 @@ void MarkRidgeHeights(GameWorld* world) {
     });
 }
 
-bool IsRidge(GameWorld* world, std::int32_t x, std::int32_t y) {
+bool IsRidge(CGameData* world, std::int32_t x, std::int32_t y) {
     return Terrain(world, x, y) == kRidge;
 }
 
@@ -480,7 +480,7 @@ bool IsRidge(GameWorld* world, std::int32_t x, std::int32_t y) {
 // to (x+1, y+1) to 5, and lets (x, y) drop to at most 7 (23 where the four
 // tiles around the pair are ridge) above them. `base` is the height of
 // (x, y) before the step.
-void SmoothRidgeSlopes(GameWorld* world) {
+void SmoothRidgeSlopes(CGameData* world) {
     bool changed;
     do {
         changed = false;
@@ -512,7 +512,7 @@ void SmoothRidgeSlopes(GameWorld* world) {
 // (x+1, y) may rise at most 5 above (x, y); a neighbour more than 5 below
 // lifts (x, y) to 5 above it, except (x+1, y), which lifts itself by 5 (as
 // in the original).
-void SmoothSlopes(GameWorld* world) {
+void SmoothSlopes(CGameData* world) {
     bool changed;
     do {
         changed = false;
@@ -539,7 +539,7 @@ void SmoothSlopes(GameWorld* world) {
 // --- 8: terrain from heights ------------------------------------------------
 
 // x, y in [1, mapSize-1).
-void ClassifyTerrain(GameWorld* world) {
+void ClassifyTerrain(CGameData* world) {
     ForEachTile(1, [&] { return MapSize(world) - 1; }, [&](std::int32_t x, std::int32_t y) {
         std::uint8_t& terrain = Terrain(world, x, y);
         if (terrain == kRidge) {
@@ -556,16 +556,16 @@ void ClassifyTerrain(GameWorld* world) {
     });
 }
 
-void ClearObjectsAndScratch(GameWorld* world) {
+void ClearObjectsAndScratch(CGameData* world) {
     ForEachTile(0, [&] { return MapSize(world); }, [&](std::int32_t x, std::int32_t y) { Object(world, x, y) = 0; });
     ForEachTile(0, [&] { return MapSize(world); }, [&](std::int32_t x, std::int32_t y) { Scratch(world, x, y) = 0; });
 }
 
 // --- 10: streams -------------------------------------------------------------
 
-bool StreamCanEnter(GameWorld* world, std::int32_t x, std::int32_t y) {
+bool StreamCanEnter(CGameData* world, std::int32_t x, std::int32_t y) {
     return Terrain(world, x, y) == 0x10 &&
-           GameWorld_IsNeighbourhoodByte9Clear(world, nullptr, static_cast<std::uint32_t>(x),
+           CGameData_IsNeighbourhoodByte9Clear(world, nullptr, static_cast<std::uint32_t>(x),
                                                static_cast<std::uint32_t>(y)) != 0;
 }
 
@@ -603,7 +603,7 @@ std::int32_t CountAround(std::int32_t x, std::int32_t y, Test test) {
 //   scratch bytes; a joined stream then raises the terrain of the stream it
 //   joined (0x60 -> 0x61 -> 0x62 -> 0x63) down to that stream's source and
 //   marks the walked tiles in the object byte (1).
-void CarveStream(GameWorld* world, std::int32_t x, std::int32_t y) {
+void CarveStream(CGameData* world, std::int32_t x, std::int32_t y) {
     const std::uint8_t terrain = Terrain(world, x, y);
     if (terrain != 0 && Scratch(world, x, y) < 2) {
         return;
@@ -769,7 +769,7 @@ void CarveStream(GameWorld* world, std::int32_t x, std::int32_t y) {
 // 4*mapSize^2 probes at positions p = 0, 151, 302, ... (mod mapSize^2),
 // tile (p % mapSize, p / mapSize); probes 8 tiles or more from the border
 // start a stream with probability 2000/65536.
-void CarveStreams(GameWorld* world) {
+void CarveStreams(CGameData* world) {
     std::int32_t position = 0;
     for (std::int32_t probe = 0; probe < MapSize(world) * MapSize(world) * 4; ++probe) {
         const std::int32_t size = MapSize(world);
@@ -789,7 +789,7 @@ void CarveStreams(GameWorld* world) {
 
 // A stream tile next to anything but stream, grass (0x10), 0x30 or water
 // (0) on the map (offset table entries 1..6) turns back into grass.
-void RemoveStrayStreamTiles(GameWorld* world) {
+void RemoveStrayStreamTiles(CGameData* world) {
     ForEachTile(0, [&] { return MapSize(world); }, [&](std::int32_t x, std::int32_t y) {
         std::uint8_t& terrain = Terrain(world, x, y);
         if ((terrain & 0xf0) != kStream) {
@@ -799,7 +799,7 @@ void RemoveStrayStreamTiles(GameWorld* world) {
         for (std::uint32_t entry = 1; entry <= 6; ++entry) {
             const std::int32_t nx = x + world->offsets[entry].dx;
             const std::int32_t ny = y + world->offsets[entry].dy;
-            if (GameWorld_IsOnMap(world, nullptr, static_cast<std::uint32_t>(nx), static_cast<std::uint32_t>(ny)) ==
+            if (CGameData_IsOnMap(world, nullptr, static_cast<std::uint32_t>(nx), static_cast<std::uint32_t>(ny)) ==
                 0) {
                 continue;
             }
@@ -817,30 +817,30 @@ void RemoveStrayStreamTiles(GameWorld* world) {
 
 // --- 11, 12: fixed terrain passes and objects --------------------------------
 
-void ReplaceNextTo(GameWorld* world, std::uint32_t terrain, std::uint32_t neighbour, std::uint32_t replacement) {
-    GameWorld_ReplaceTerrainNextTo(world, nullptr, terrain, neighbour, replacement);
+void ReplaceNextTo(CGameData* world, std::uint32_t terrain, std::uint32_t neighbour, std::uint32_t replacement) {
+    CGameData_ReplaceTerrainNextTo(world, nullptr, terrain, neighbour, replacement);
 }
-void Replace(GameWorld* world, std::uint32_t from, std::uint32_t to) {
-    GameWorld_ReplaceTerrainType(world, nullptr, from, to);
+void Replace(CGameData* world, std::uint32_t from, std::uint32_t to) {
+    CGameData_ReplaceTerrainType(world, nullptr, from, to);
 }
-void Expand(GameWorld* world, std::uint32_t terrain, std::uint32_t into, int times) {
+void Expand(CGameData* world, std::uint32_t terrain, std::uint32_t into, int times) {
     for (int i = 0; i < times; ++i) {
-        GameWorld_ExpandTerrain(world, nullptr, terrain, into);
+        CGameData_ExpandTerrain(world, nullptr, terrain, into);
     }
 }
-void Sprinkle(GameWorld* world, std::uint32_t into, std::uint32_t terrain, std::uint32_t density) {
-    GameWorld_ScatterTerrainNear(world, nullptr, into, terrain, density);
+void Sprinkle(CGameData* world, std::uint32_t into, std::uint32_t terrain, std::uint32_t density) {
+    CGameData_ScatterTerrainNear(world, nullptr, into, terrain, density);
 }
-void Grow(GameWorld* world, std::uint32_t terrain, std::uint32_t into) {
+void Grow(CGameData* world, std::uint32_t terrain, std::uint32_t into) {
     for (const std::uint32_t percent : {0x50u, 0x3cu, 0x28u, 0x14u}) {
-        GameWorld_GrowTerrain(world, nullptr, terrain, into, percent);
+        CGameData_GrowTerrain(world, nullptr, terrain, into, percent);
     }
 }
 
 // Water depth rings, beaches and the four grown landscapes (0x40, 0x50,
 // 0x90, 0x18), each: edge marks, sprinkled seeds, growth steps, the edge
 // marks turned into grass, random growth, transition rings.
-void ShapeTerrain(GameWorld* world) {
+void ShapeTerrain(CGameData* world) {
     ReplaceNextTo(world, 0x00, 0x10, 0xff);
     ReplaceNextTo(world, 0x10, 0xff, 0xfe);
     Replace(world, 0xff, 0x30);
@@ -857,51 +857,51 @@ void ShapeTerrain(GameWorld* world) {
     Replace(world, 0x00, 0x07);
     Replace(world, 0xff, 0x00);
 
-    GameWorld_MarkTerrainEdge(world, nullptr, 0x10);
+    CGameData_MarkTerrainEdge(world, nullptr, 0x10);
     Sprinkle(world, 0x10, 0x40, 2);
     Expand(world, 0x40, 0x10, 5);
     Sprinkle(world, 0x10, 0x40, 1);
     Expand(world, 0x40, 0x10, 6);
-    GameWorld_ReplaceTerrainF3(world, nullptr, 0x10);
+    CGameData_ReplaceTerrainF3(world, nullptr, 0x10);
     Grow(world, 0x40, 0x10);
     ReplaceNextTo(world, 0x40, 0x10, 0x14);
     ReplaceNextTo(world, 0x40, 0x14, 0x41);
 
-    GameWorld_MarkTerrainEdge(world, nullptr, 0x10);
+    CGameData_MarkTerrainEdge(world, nullptr, 0x10);
     Sprinkle(world, 0x10, 0x50, 1);
     Expand(world, 0x50, 0x10, 2);
     Sprinkle(world, 0x10, 0x50, 1);
     Expand(world, 0x50, 0x10, 2);
     Sprinkle(world, 0x10, 0x50, 1);
     Expand(world, 0x50, 0x10, 1);
-    GameWorld_ReplaceTerrainF3(world, nullptr, 0x10);
+    CGameData_ReplaceTerrainF3(world, nullptr, 0x10);
     Grow(world, 0x50, 0x10);
     ReplaceNextTo(world, 0x50, 0x10, 0x15);
     ReplaceNextTo(world, 0x50, 0x15, 0x51);
 
-    GameWorld_MarkTerrainEdge(world, nullptr, 0x10);
+    CGameData_MarkTerrainEdge(world, nullptr, 0x10);
     Sprinkle(world, 0x10, 0x90, 1);
     Expand(world, 0x90, 0x10, 3);
     Sprinkle(world, 0x10, 0x90, 1);
     Expand(world, 0x90, 0x10, 3);
-    GameWorld_ReplaceTerrainF3(world, nullptr, 0x10);
+    CGameData_ReplaceTerrainF3(world, nullptr, 0x10);
     Grow(world, 0x90, 0x10);
     ReplaceNextTo(world, 0x90, 0x10, 0x17);
     ReplaceNextTo(world, 0x90, 0x17, 0x91);
 
-    GameWorld_MarkTerrainEdge(world, nullptr, 0x10);
+    CGameData_MarkTerrainEdge(world, nullptr, 0x10);
     Sprinkle(world, 0x10, 0x18, 3);
     Expand(world, 0x18, 0x10, 2);
     Sprinkle(world, 0x10, 0x18, 2);
     Expand(world, 0x18, 0x10, 2);
     Sprinkle(world, 0x10, 0x18, 1);
     Expand(world, 0x18, 0x10, 3);
-    GameWorld_ReplaceTerrainF3(world, nullptr, 0x10);
+    CGameData_ReplaceTerrainF3(world, nullptr, 0x10);
     Grow(world, 0x18, 0x10);
 
     const std::uint32_t symmetry = Symmetry(world);
     if (symmetry != 0) {
-        GameWorld_SetDiagonalTileByteB(world, nullptr, symmetry);
+        CGameData_SetDiagonalTileByteB(world, nullptr, symmetry);
     }
     Sprinkle(world, 0x10, 0x12, 2);
     Sprinkle(world, 0x10, 0x13, 2);
@@ -968,19 +968,19 @@ constexpr ObjectRule kObjectsAfterGroups[] = {
 // ScatterTileByte11 calls (base, density): resources 0x50.., 0x40.., ...
 constexpr std::uint16_t kResources[][2] = {{0x50, 30}, {0x40, 20}, {0x30, 60}, {0x20, 100}, {0x10, 300}};
 
-void PlaceObjects(GameWorld* world) {
+void PlaceObjects(CGameData* world) {
     for (const ObjectRule& rule : kObjectsBeforeGroups) {
-        GameWorld_ScatterObjects(world, nullptr, rule.required, rule.object, rule.density, rule.blockMode, rule.extra);
+        CGameData_ScatterObjects(world, nullptr, rule.required, rule.object, rule.density, rule.blockMode, rule.extra);
     }
     for (const GroupRule& rule : kGroups) {
-        GameWorld_ScatterObjectGroups(world, nullptr, rule.required, rule.low, rule.high, rule.density,
+        CGameData_ScatterObjectGroups(world, nullptr, rule.required, rule.low, rule.high, rule.density,
                                       rule.blockMode, rule.extra);
     }
     for (const ObjectRule& rule : kObjectsAfterGroups) {
-        GameWorld_ScatterObjects(world, nullptr, rule.required, rule.object, rule.density, rule.blockMode, rule.extra);
+        CGameData_ScatterObjects(world, nullptr, rule.required, rule.object, rule.density, rule.blockMode, rule.extra);
     }
     for (const auto& resource : kResources) {
-        GameWorld_ScatterTileByte11(world, nullptr, resource[0], resource[1]);
+        CGameData_ScatterTileByte11(world, nullptr, resource[0], resource[1]);
     }
 }
 
@@ -988,7 +988,7 @@ void PlaceObjects(GameWorld* world) {
 
 // Water tiles (terrain class 0) of [0, mapSize-1)^2: with probability
 // (Random > 40000) a random amount 0..15 (probably fish).
-void ScatterFish(GameWorld* world) {
+void ScatterFish(CGameData* world) {
     ForEachTile(0, [&] { return MapSize(world) - 1; }, [&](std::int32_t x, std::int32_t y) {
         if ((Terrain(world, x, y) & 0xf0) != 0 || Random16(world) <= 40000) {
             return;
@@ -1010,7 +1010,7 @@ void CopyTileFields(Tile& to, const Tile& from) {
 // Bit 1: tile (j, i) is copied to (n-1-i, n-1-j) for i in [0, n-1), j in
 // [0, n-1-i) (in that order, in place). Bit 0: (j, i) to (i, j) for i in
 // [1, n), j in [0, i).
-void ApplySymmetry(GameWorld* world) {
+void ApplySymmetry(CGameData* world) {
     // The original tests the low byte of the symmetry field.
     if ((static_cast<std::uint8_t>(Symmetry(world)) & 2) != 0) {
         for (std::int32_t i = 0; i < MapSize(world) - 1; ++i) {
@@ -1029,7 +1029,7 @@ void ApplySymmetry(GameWorld* world) {
     }
 }
 
-void FinishTiles(GameWorld* world) {
+void FinishTiles(CGameData* world) {
     ForEachTile(0, [&] { return MapSize(world); }, [&](std::int32_t x, std::int32_t y) {
         Tile& tile = TileAt(world, x, y);
         tile.seen_object = tile.object;
@@ -1040,20 +1040,20 @@ void FinishTiles(GameWorld* world) {
     });
 }
 
-void SeedRandomThroughGame(GameWorld* world, std::uint32_t seed) {
-    using SeedFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t seed);
+void SeedRandomThroughGame(CGameData* world, std::uint32_t seed) {
+    using SeedFn = void(__fastcall*)(CGameData* world, void* edx, std::uint32_t seed);
     reinterpret_cast<SeedFn>(0x004feb40)(world, nullptr, seed);
 }
 
 }  // namespace
 
-using CreateFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
+using CreateFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
                                             std::uint32_t symmetry);
 
 // Purpose: Generates a random map ("random world" in the game setup): heights, mountains, water, rivers,
 // landscapes, trees, stones and resources, optionally mirrored for fair multiplayer starts, then the
 // regions and areas.
-std::uint32_t __fastcall GameWorld_Create(GameWorld* world, void*, std::uint32_t seed, std::int32_t mapSize,
+std::uint32_t __fastcall CGameData_Create(CGameData* world, void*, std::uint32_t seed, std::int32_t mapSize,
                                           std::uint32_t symmetry) {
     GameDebugLog(texts::kCreatingWorld);
     SeedRandomThroughGame(world, seed);
@@ -1090,15 +1090,15 @@ std::uint32_t __fastcall GameWorld_Create(GameWorld* world, void*, std::uint32_t
     ScatterFish(world);
     const std::uint32_t symmetryAfter = Symmetry(world);
     if (symmetryAfter != 0) {
-        GameWorld_ClearDiagonalTileByteB(world, nullptr, symmetryAfter);
+        CGameData_ClearDiagonalTileByteB(world, nullptr, symmetryAfter);
     }
     ApplySymmetry(world);
     FinishTiles(world);
     LogBorderErrors(world);
-    return GameWorld_BuildRegionsAndAreas(world, nullptr);
+    return CGameData_BuildRegionsAndAreas(world, nullptr);
 }
 
-S3RE_HOOK(0x005166d0, GameWorld_Create, CreateFn, Original_GameWorld_Create, GameWorld_Create);
+S3RE_HOOK(0x005166d0, CGameData_Create, CreateFn, Original_CGameData_Create, CGameData_Create);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -1106,11 +1106,11 @@ S3RE_HOOK(0x005166d0, GameWorld_Create, CreateFn, Original_GameWorld_Create, Gam
 
 namespace {
 
-constexpr std::size_t kWorldSize = sizeof(GameWorld);
+constexpr std::size_t kWorldSize = sizeof(CGameData);
 // The three id tables with their marks (walk_region_high_water up to the
 // area records; includes area_high_water).
-constexpr std::size_t kIdTables = offsetof(GameWorld, walk_region_high_water);
-constexpr std::size_t kIdTablesEnd = offsetof(GameWorld, areas);
+constexpr std::size_t kIdTables = offsetof(CGameData, walk_region_high_water);
+constexpr std::size_t kIdTablesEnd = offsetof(CGameData, areas);
 constexpr std::uint32_t kAreaCount = 4096;
 
 // The writable sections of S3.EXE (its globals), for checking that Create
@@ -1130,8 +1130,8 @@ std::vector<std::uint8_t> SnapshotGlobals() {
     return bytes;
 }
 
-void BuildOffsetTable(GameWorld* world) {
-    using BuildFn = void(__fastcall*)(GameWorld* world, void* edx);
+void BuildOffsetTable(CGameData* world) {
+    using BuildFn = void(__fastcall*)(CGameData* world, void* edx);
     reinterpret_cast<BuildFn>(0x00516530)(world, nullptr);
 }
 
@@ -1141,7 +1141,7 @@ void BuildOffsetTable(GameWorld* world) {
 // constructor), otherwise it keeps the random fill (garbage outside the map
 // and in the tile fields Create doesn't write).
 void PrepareWorld(test::WorldPair& worlds, bool zeroed) {
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         auto* bytes = reinterpret_cast<std::uint8_t*>(w);  // raw-ok: whole test buffer
         if (zeroed) {
             std::memset(bytes, 0, kWorldSize);
@@ -1174,7 +1174,7 @@ void CompareCreate(test::Context& ctx, CreateFn candidate, const CreateCase* cas
         PrepareWorld(worlds, zeroed);
         DebugLogRecorder log;
         const std::vector<std::uint8_t> before = SnapshotGlobals();
-        const std::uint32_t expected = Original_GameWorld_Create(worlds.original(), nullptr, c.seed, c.size, c.symmetry);
+        const std::uint32_t expected = Original_CGameData_Create(worlds.original(), nullptr, c.seed, c.size, c.symmetry);
         const std::vector<DebugLogCall> expectedLog = log.Take();
         const std::vector<std::uint8_t> afterOriginal = SnapshotGlobals();
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, c.seed, c.size, c.symmetry);
@@ -1204,35 +1204,35 @@ constexpr CreateCase kOddCases[] = {
 };
 
 // Wrong: one tile's height off by one.
-std::uint32_t __fastcall WrongCreateHeight(GameWorld* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
+std::uint32_t __fastcall WrongCreateHeight(CGameData* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
                                            std::uint32_t symmetry) {
-    const std::uint32_t result = GameWorld_Create(world, edx, seed, mapSize, symmetry);
+    const std::uint32_t result = CGameData_Create(world, edx, seed, mapSize, symmetry);
     Height(world, mapSize / 2, mapSize / 3) ^= 1;
     return result;
 }
 
 // Wrong: an extra DebugLog call.
-std::uint32_t __fastcall WrongCreateLog(GameWorld* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
+std::uint32_t __fastcall WrongCreateLog(CGameData* world, void* edx, std::uint32_t seed, std::int32_t mapSize,
                                         std::uint32_t symmetry) {
     GameDebugLog(texts::kErrorTop, 0, 0, 0u);
-    return GameWorld_Create(world, edx, seed, mapSize, symmetry);
+    return CGameData_Create(world, edx, seed, mapSize, symmetry);
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_Create_MatchesOriginal) {
-    CompareCreate(ctx, &GameWorld_Create, kRealCases, static_cast<int>(std::size(kRealCases)), /*zeroed=*/true);
+S3RE_TEST(CGameData_Create_MatchesOriginal) {
+    CompareCreate(ctx, &CGameData_Create, kRealCases, static_cast<int>(std::size(kRealCases)), /*zeroed=*/true);
 }
 // Odd sizes on a zeroed world; on a world full of garbage only real sizes
 // (with odd sizes the height refinement writes past the map, and a ridge
 // walk may then wander over garbage heights out of the tile array).
-S3RE_TEST(GameWorld_Create_OddSizes_MatchesOriginal) {
-    CompareCreate(ctx, &GameWorld_Create, kOddCases, static_cast<int>(std::size(kOddCases)), /*zeroed=*/true);
+S3RE_TEST(CGameData_Create_OddSizes_MatchesOriginal) {
+    CompareCreate(ctx, &CGameData_Create, kOddCases, static_cast<int>(std::size(kOddCases)), /*zeroed=*/true);
 }
-S3RE_TEST(GameWorld_Create_GarbageWorld_MatchesOriginal) {
-    CompareCreate(ctx, &GameWorld_Create, kRealCases, 4, /*zeroed=*/false);
+S3RE_TEST(CGameData_Create_GarbageWorld_MatchesOriginal) {
+    CompareCreate(ctx, &CGameData_Create, kRealCases, 4, /*zeroed=*/false);
 }
-S3RE_TEST(GameWorld_Create_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_Create_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareCreate(probe, &WrongCreateHeight, kRealCases + 5, 1, true);
     S3RE_EXPECT(probe.failures() > 0);

@@ -14,10 +14,10 @@ names) instead of `RawAt` and per-file partial structs, named world
 record fields instead of `unkXXXX`. Worklist: `re/typed_access_todo.md`
 (regenerate with `python tools/raw_access_report.py --write`). Not all
 at once; started as three parallel packages (globals, classes, world
-records). Afterwards: the `GameWorld` -> `CGameData` rename (TODO.md).
+records). The `GameWorld` -> `CGameData` rename is done (session 45).
 
 **Simulation state (2026-11-22):** every callee of
-`GameWorld::UpdateSettlers` 0x4e9670 is verified (WalkSettler,
+`CGameData::UpdateSettlers` 0x4e9670 is verified (WalkSettler,
 UpdateSoldier done in session 45), as are `UpdateEnvironment` 0x4e7810
 (except 17 spell functions, TODO.md) and `UpdateEconomy` 0x4e05e0 (was
 UpdatePhase2). Next simulation step: UpdateSettlers itself (16,600
@@ -36,7 +36,7 @@ user may provide a late-game save file later. Order:
    PlanSiteLevelling 0x4da440 (was "EvaluateBuildingFootprint"),
    AddBuildingSite 0x4dd280, plus IsFreeCastleSite 0x508420 and
    IsGoodStartPosition 0x5081a0 (start positions).
-2. **GameWorld::Create 0x5166d0** - done in batch 29 (the random map
+2. **CGameData::Create 0x5166d0** - done in batch 29 (the random map
    generator), with ExpandTerrain 0x519440, MarkTerrainEdge 0x51a2e0 and
    BuildRegionsAndAreas 0x51a580. Create only runs for random maps, so it
    has whole-game evidence since session 40 (`--random-map`,
@@ -60,7 +60,7 @@ user may provide a late-game save file later. Order:
    **Package A (session 44): 25 of 26 done** (all of Dirk\Pathing.cpp,
    AddTileTraffic, IsWalkingJob, IsStationaryJob); **left: WalkSettler
    0x500860** (analysis in the session 44 entry).
-3. **The 27 undone callees of GameWorld::UpdateSettlers 0x4e9670** (17,525
+3. **The 27 undone callees of CGameData::UpdateSettlers 0x4e9670** (17,525
    instructions), small ones first. Decide the x87 question first (below).
    READY after batch 29 (instructions): 0x50e320 (28), 0x519670 (63),
    0x50e140 (65), 0x50ccb0 (69), 0x50cb20 (72), 0x50dd20 (111), 0x51ba00
@@ -68,7 +68,7 @@ user may provide a late-game save file later. Order:
    tables), 0x5046b0 (221). NEAR: 0x505820 (52), 0x4d97b0 (126), 0x4fec10
    (159). Big blockers: 0x500860 (3,097, walking), 0x50e9f0 (1,791),
    0x4dbc50 (1,440), 0x50cf50 (919).
-4. **GameWorld::UpdatePhase2 0x4e05e0** (4,919 instructions, 8 undone
+4. **CGameData::UpdatePhase2 0x4e05e0** (4,919 instructions, 8 undone
    callees).
 5. **UpdateSettlers itself**, split internally (e.g. per settler job) but
    hooked as one unit.
@@ -181,7 +181,7 @@ Next steps (for 2026-11-10, in this order):
    0x51d2b0, CEvaLand release, 17 small framework/container/graphics
    members; 44 in all, see the session log.) Next batch, concrete:
    - Simulation: the area set-up 0x51a580 (380 ins, READY now; called by
-     GameWorld::Create and 0x4fd540, so whole-game evidence is likely).
+     CGameData::Create and 0x4fd540, so whole-game evidence is likely).
    - MapEffects callers: 0x545730, 0x545150, 0x5453f0, 0x5458d0 use x87
      (fild/fsqrt/fmul + _ftol 0x61fe98): decide first how to replicate x87
      results exactly (probably __asm blocks; our build uses SSE2, and the
@@ -213,13 +213,13 @@ Next steps (for 2026-11-10, in this order):
 
 Done (verified: differential tests incl. mutation tests + whole-game
 replay identical to the original):
-- search/statistics: TileDistance, GameWorld::NextSearchGeneration,
+- search/statistics: TileDistance, CGameData::NextSearchGeneration,
   InitStatisticsKernel, ShiftStatistics, AddStatistic
 - directions: NeighbourX/Y, Previous/NextDirection, DirectionFromDelta
-- players: GameWorld::AddPlayerCounter, SubtractPlayerCounter,
+- players: CGameData::AddPlayerCounter, SubtractPlayerCounter,
   ClearPlayerListLengths
-- settlers: GameWorld::CanSettlerEnterTile, SettlerGroup
-- map: GameWorld::IsOnMap, IsInsideMapBorder, TileScreenX, TileScreenY
+- settlers: CGameData::CanSettlerEnterTile, SettlerGroup
+- map: CGameData::IsOnMap, IsInsideMapBorder, TileScreenX, TileScreenY
 
 Batch 8 (2026-11-07, 20 functions; in-process + emulator tests, full
 coverage; whole-game check passed, 7 of the 20 called):
@@ -281,7 +281,7 @@ Batch 13 (2026-11-08, 11 functions; in-process + emulator tests, full
 coverage; whole-game check NOT run yet):
 - map_generation.cpp: ScatterTileByte11 (0x51ad40), ScatterTerrainNear
   (0x51aed0), ScatterObjects (0x51b010), ScatterObjectGroups (0x51b1a0):
-  random scattering used by GameWorld::Create (map generation; may not
+  random scattering used by CGameData::Create (map generation; may not
   run for maps loaded from files, so whole-game evidence may be absent)
 - building_goods.cpp: BuildingInputWord2A/24 (0x4df150/0x4df220) and
   their setters (0x4df2f0/0x4df3c0): per-input-slot counters of buildings
@@ -356,7 +356,7 @@ PileIncAmountLeaving; 255 instructions), 0x51b6f0 (blocks a tile; needs
 
 Batch 18 (2026-11-08, 12 functions; in-process + emulator tests, full
 coverage; whole-game check NOT run yet):
-- area_split.cpp (new): the area life cycle. GameWorld::InitArea
+- area_split.cpp (new): the area life cycle. CGameData::InitArea
   (0x4e6510; defaults per race), AllocArea (0x4e64c0), MoveAreaContents
   (0x4e54f0), MergeAreaContents (0x4e5a20), SplitAreaAtTile (0x4e5d50;
   a border walk around the removed tile finds cut-off parts), JoinAreasAtTile
@@ -381,7 +381,7 @@ common.
 
 Batch 19 (2026-11-09, 12 functions; in-process + emulator tests, full
 coverage; whole-game check NOT run yet):
-- area_split.cpp: GameWorld::TakeBuildingExtraTiles (0x4dd6f0; blocks the
+- area_split.cpp: CGameData::TakeBuildingExtraTiles (0x4dd6f0; blocks the
   seven tiles next to building types 0x1f/0x2f/0x30/0x32 at position +
   offset from S3.EXE 0x659624, or launches a shipyard's ship: CreateSettler
   type 0x2b/0x2c, DebugLog "Schiffsproduktion"), ReleaseBuildingExtraTiles
@@ -419,7 +419,7 @@ coverage; whole-game check NOT run yet):
   - 4000 coming)
 - objectives.cpp (new): IsNgoObjectiveChosen (0x4ffb90; seven "new game
   objective" ids at world+0x1195dcd)
-- map_generation.cpp: ReplaceTerrainNextTo (0x519270, GameWorld::Create);
+- map_generation.cpp: ReplaceTerrainNextTo (0x519270, CGameData::Create);
   map_terrain.cpp: TileShade (0x519720, brightness 0..127 from the
   neighbours' heights)
 - map_effects.cpp (new): MapEffect::MapEffect default (0x543830) and
@@ -516,7 +516,7 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   network allowance stops it) was identical in those runs but is a
   candidate.
 - Tile byte 15 is a "visited" stamp shared by the simulation's searches
-  (GameWorld::NextSearchGeneration) and the UI overlays. Safe as long as
+  (CGameData::NextSearchGeneration) and the UI overlays. Safe as long as
   every search bumps the generation before marking; only spot-checked
   (0x4fd540 compares with 0 but runs only in OnStart).
 - Byte 3 of command messages varies between runs for the same command
@@ -533,13 +533,13 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 - Determinism has only been tested on one 2-player map without input.
   Test other maps, computer opponents, and longer runs.
 
-- `GameWorld::UpdatePhase2` (`0x4e05e0`): purpose unknown.
-- `GameWorld::UpdateSettlers` (`0x4e9670`): the name is provisional.
+- `CGameData::UpdatePhase2` (`0x4e05e0`): purpose unknown.
+- `CGameData::UpdateSettlers` (`0x4e9670`): the name is provisional.
 - `0x550f80` is called on 20 objects at `CLogicThread+0x350` each step.
   Per-player objects (AI?) are likely; `CComputerPlayer` exists in the RTTI.
 - `0x51f110(0)` is called between the world update phases when
   `g_stepCountdown` is 0. Unknown.
-- Where is the `GameWorld` object allocated, and how big is it exactly?
+- Where is the `CGameData` object allocated, and how big is it exactly?
 - Constructors aren't named. `re/classes.json` lists, per vtable, the
   functions that store it (`writers`); separate constructors from
   destructors and inlined code.
@@ -553,13 +553,13 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   `re/extra_functions.tsv` can't be decompiled. Use `dumpbin` (see
   `CLAUDE.md`).
 - The user hasn't yet played a game with the hooks active (currently
-  `_Eos` and `GameWorld::Random` replaced) as an integration check.
+  `_Eos` and `CGameData::Random` replaced) as an integration check.
 - **Replays need the game seed they were recorded with**, which recordings
   now store (fixed 2026-11-08, see session log). `recordings/scripted-seed127.bin` was
   recorded with game seed 1234 (check_replay's default; "127" is the
   synthetic-input seed). Replaying it with `--seed 127` gives a different
   game (player races 1/2 instead of 2/3: OnStart draws a random race with
-  GameWorld::Random() % 4) into which the recorded commands are fed, and
+  CGameData::Random() % 4) into which the recorded commands are fed, and
   the original game crashes after ~800-2,300 ticks: a recorded command
   builds building type 0x24 (an Asian-only building) for the Egyptian
   player, and drawing it looks up a shadow sprite that doesn't exist
@@ -568,6 +568,32 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-22 (45): rename GameWorld -> CGameData
+
+- The world class `GameWorld` is now `CGameData`, its RTTI name, everywhere:
+  C++ types and hook/replacement names (`CGameData_X`, `Original_CGameData_X`),
+  test names, emulator specs, inventory names (`CGameData::X`; a pure class
+  rename, so no "Was" notes), re/*.csv and re/*.md, CLAUDE.md, TODO.md and
+  the LOGBOOK above the session log (older session entries keep the old
+  name). 7,786 occurrences in 97 files.
+- Test inputs are seeded from the test/spec name, so the new names gave new
+  inputs, and `CGameData_ReleaseSiteWorkers_MatchesOriginal` crashed inside
+  the original (TODO.md, "In-process tests that crash on other inputs").
+  `SeedName` (difftest.cpp) and `seed_name` (emutest/run.py) now hash the
+  old name, so every test and spec runs on exactly the inputs it was
+  verified with.
+- No S3RE_ORIGINAL_TOOLING_VERSION bump: hook names are not part of the
+  trace-cache key (S3.EXE/input hashes, launcher arguments, trace and
+  tooling versions) and the trace hashes no names; the original-mode code
+  (determinism.cpp) only changed type names.
+- Evidence: build without warnings; `--test` 490/490; `inventory.py check`
+  clean; emulator `--self-test` 21/21, sample specs CGameData_Random*,
+  Pathing_*, CGameData_WalkSettler (428/428), CGameData_UpdateEconomy
+  (863/863) 0 mismatches; all 555 spec names resolve in s3re.map.
+- Note for the next full emulator run: `build/emutest_times.json` and
+  `build/emutest_last_full.json` are keyed by spec name, so the old entries
+  no longer match until the next full run rewrites them.
 
 ### 2026-11-22 (45): struct pass S2: classes (parallel worktree)
 

@@ -1,6 +1,6 @@
 // Soldiers fighting (UpdateSettlers callee, package B).
 //
-// GameWorld::UpdateSoldier (0x0050e9f0): (settler) -> EAX 1 if it attacked
+// CGameData::UpdateSoldier (0x0050e9f0): (settler) -> EAX 1 if it attacked
 //   this step, else 0. Only called for settler classes 1..3 (0x658f64:
 //   1 melee, 2 bowmen, 3 probably spearmen/other melee); range/minimum
 //   distance 1/1, 2/1, bowmen 13/6 (in a tower, job 0x8c: 22/10). ret 4.
@@ -73,20 +73,20 @@
 namespace s3re::game {
 
 std::uint32_t __fastcall GetMemberByte189(void* self, void* edx);
-std::uint32_t __fastcall GameWorld_SetSettlerAnimation(GameWorld* world, void* edx, std::uint32_t settler,
+std::uint32_t __fastcall CGameData_SetSettlerAnimation(CGameData* world, void* edx, std::uint32_t settler,
                                                        std::uint32_t kind);
-std::uint32_t __fastcall GameWorld_NotifyLocalPlayer(GameWorld* world, void* edx, std::uint32_t player,
+std::uint32_t __fastcall CGameData_NotifyLocalPlayer(CGameData* world, void* edx, std::uint32_t player,
                                                      std::uint32_t type, std::uint32_t x, std::uint32_t y);
-std::uint32_t __fastcall GameWorld_IsOtherPlayerNear(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall CGameData_IsOtherPlayerNear(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                      std::uint32_t radius, std::uint32_t player);
-std::uint32_t __fastcall GameWorld_TileScreenX(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
-std::uint32_t __fastcall GameWorld_TileScreenY(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
-std::uint32_t __fastcall GameWorld_QueuePendingEvent(GameWorld* world, void* edx, std::uint32_t type,
+std::uint32_t __fastcall CGameData_TileScreenX(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall CGameData_TileScreenY(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall CGameData_QueuePendingEvent(CGameData* world, void* edx, std::uint32_t type,
                                                      std::uint32_t a, std::uint32_t b);
-std::uint32_t __fastcall GameWorld_FindNearbySettlerType29(GameWorld* world, void* edx, std::uint32_t settler,
+std::uint32_t __fastcall CGameData_FindNearbySettlerType29(CGameData* world, void* edx, std::uint32_t settler,
                                                            std::uint32_t x, std::uint32_t y);
-std::uint32_t __fastcall GameWorld_ClearSettlerJob(GameWorld* world, void* edx, std::uint32_t settler);
-std::uint32_t __fastcall GameWorld_SetOwnerOfFreeTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall CGameData_ClearSettlerJob(CGameData* world, void* edx, std::uint32_t settler);
+std::uint32_t __fastcall CGameData_SetOwnerOfFreeTile(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                       std::uint32_t owner);
 std::uint32_t __stdcall NeighbourX(std::uint32_t x, std::uint32_t direction);
 std::uint32_t __stdcall NeighbourY(std::uint32_t y, std::uint32_t direction);
@@ -108,7 +108,7 @@ using layout::Tile;
 
 // Package C's functions, called through their S3.EXE addresses (Detours
 // sends the calls to C's replacements once they are hooked).
-using TileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+using TileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 const TileFn kClearTileOwner = reinterpret_cast<TileFn>(0x0051b640);
 const TileFn kRecalculateTerritory = reinterpret_cast<TileFn>(0x00519a90);
 
@@ -117,11 +117,11 @@ constexpr std::uint32_t kLayoutEnd1 = 0x80000000u, kLayoutEnd2 = 0x80000001u, kL
                         kLayoutEnd = 0x80000003u;
 
 
-Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
-std::int32_t Team(GameWorld* world, std::uint32_t player) {
+std::int32_t Team(CGameData* world, std::uint32_t player) {
     return world->players[player].team;
 }
 
@@ -150,7 +150,7 @@ bool AttackableJob(std::uint16_t job, std::int32_t attackerClass, std::int32_t d
 }
 
 // Removes a settler from its player's idle list for its type (links +0x10/+0x12).
-void UnlinkIdle(GameWorld* world, Settler& s) {
+void UnlinkIdle(CGameData* world, Settler& s) {
     if (s.prev != 0) {
         world->settlers[s.prev].next = s.next;
     } else {
@@ -163,13 +163,13 @@ void UnlinkIdle(GameWorld* world, Settler& s) {
 
 }  // namespace
 
-using SoldierFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler);
+using SoldierFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t settler);
 
 namespace {
 
 // The attacker hits target `t` (offset entry `k`); returns nothing, the
 // caller returns 1.
-void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapOffset& entry) {
+void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapOffset& entry) {
     Settler& s = world->settlers[settler];
     std::uint32_t direction = static_cast<std::uint32_t>(entry.sector) + 4;
     if (static_cast<std::int32_t>(direction) >= 6) {
@@ -184,7 +184,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     auto* const effects = &world->map_effects;
     auto melee = [&](std::uint32_t animation, std::uint32_t base, std::uint32_t strong) {
         damage = base;
-        GameWorld_SetSettlerAnimation(world, nullptr, settler, direction + animation);
+        CGameData_SetSettlerAnimation(world, nullptr, settler, direction + animation);
         if ((s.flags & 4) != 0) {
             damage = strong;
             s.counter = static_cast<std::uint16_t>((static_cast<std::uint32_t>(s.counter) * 5) / 8);
@@ -196,18 +196,18 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
         const std::uint32_t offsetX = static_cast<std::uint32_t>(g_towerSlotOffsets[index].x) - 16 * ((slot & 7) + 1);
         const std::uint32_t offsetY = static_cast<std::uint32_t>(g_towerSlotOffsets[index].y);
         const std::uint32_t ex = e.x, ey = e.y, sx = s.x, sy = s.y;
-        const std::uint32_t a7 = GameWorld_TileScreenY(world, nullptr, ex, ey) - 0x14;
-        const std::uint32_t a6 = GameWorld_TileScreenX(world, nullptr, ex, ey);
-        const std::uint32_t a3 = GameWorld_TileScreenY(world, nullptr, sx, sy) + offsetY - 0x14;
-        const std::uint32_t a2 = GameWorld_TileScreenX(world, nullptr, sx, sy) + offsetX;
+        const std::uint32_t a7 = CGameData_TileScreenY(world, nullptr, ex, ey) - 0x14;
+        const std::uint32_t a6 = CGameData_TileScreenX(world, nullptr, ex, ey);
+        const std::uint32_t a3 = CGameData_TileScreenY(world, nullptr, sx, sy) + offsetY - 0x14;
+        const std::uint32_t a2 = CGameData_TileScreenX(world, nullptr, sx, sy) + offsetX;
         MapEffects_SpawnArrow(effects, nullptr, tick, a2, a3, sx, sy, a6, a7, ex, ey);
     };
     auto arrow = [&](bool fromTarget) {
         const std::uint32_t ex = e.x, ey = e.y, sx = s.x, sy = s.y;
-        const std::uint32_t a7 = GameWorld_TileScreenY(world, nullptr, ex, ey) - 0x14;
-        const std::uint32_t a6 = GameWorld_TileScreenX(world, nullptr, ex, ey);
-        const std::uint32_t a3 = GameWorld_TileScreenY(world, nullptr, sx, sy) - 0x14;
-        const std::uint32_t a2 = GameWorld_TileScreenX(world, nullptr, sx, sy);
+        const std::uint32_t a7 = CGameData_TileScreenY(world, nullptr, ex, ey) - 0x14;
+        const std::uint32_t a6 = CGameData_TileScreenX(world, nullptr, ex, ey);
+        const std::uint32_t a3 = CGameData_TileScreenY(world, nullptr, sx, sy) - 0x14;
+        const std::uint32_t a2 = CGameData_TileScreenX(world, nullptr, sx, sy);
         // Types 0x1e and 0x21 pass the target's tile as a4/a5 (the original's pushes).
         MapEffects_SpawnArrow(effects, nullptr, tick, a2, a3, fromTarget ? ex : sx, fromTarget ? ey : sy, a6, a7, ex,
                               ey);
@@ -218,7 +218,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     case 0x23: melee(0x3a, 0x14, 0x1e); break;
     case 0x08:
         damage = 5;
-        GameWorld_SetSettlerAnimation(world, nullptr, settler, direction + 0x28);
+        CGameData_SetSettlerAnimation(world, nullptr, settler, direction + 0x28);
         if (s.job == 0x8c) {
             towerArrow();
         } else {
@@ -228,16 +228,16 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     case 0x1e:
     case 0x21:
         damage = s.art == 0x1e ? 6 : 7;
-        GameWorld_SetSettlerAnimation(world, nullptr, settler, direction + (s.art == 0x1e ? 0x34 : 0x40));
+        CGameData_SetSettlerAnimation(world, nullptr, settler, direction + (s.art == 0x1e ? 0x34 : 0x40));
         if (s.job == 0x8c) {
             towerArrow();
         } else {
             arrow(true);
         }
         break;
-    case 0x0f: damage = 4; GameWorld_SetSettlerAnimation(world, nullptr, settler, direction + 0x89); break;
-    case 0x1f: damage = 5; GameWorld_SetSettlerAnimation(world, nullptr, settler, direction + 0x8f); break;
-    case 0x22: damage = 6; GameWorld_SetSettlerAnimation(world, nullptr, settler, direction + 0x95); break;
+    case 0x0f: damage = 4; CGameData_SetSettlerAnimation(world, nullptr, settler, direction + 0x89); break;
+    case 0x1f: damage = 5; CGameData_SetSettlerAnimation(world, nullptr, settler, direction + 0x8f); break;
+    case 0x22: damage = 6; CGameData_SetSettlerAnimation(world, nullptr, settler, direction + 0x95); break;
     default: break;
     }
 
@@ -260,17 +260,17 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
         damage = (damage * 3) >> 2;
     }
     if (world->settlers[t].job == 0xad) {
-        GameWorld_QueueEvent(world, nullptr, 4, world->settlers[t].building, world->settlers[t].owner, s.owner);
+        CGameData_QueueEvent(world, nullptr, 4, world->settlers[t].building, world->settlers[t].owner, s.owner);
     }
     if (damage == 0) {
         damage = 1;
     }
     std::uint32_t victim = t;
     if (world->settlers[t].job == 0x130) {
-        GameWorld_NotifyLocalPlayer(world, nullptr, world->settlers[t].owner, 3, s.x, s.y);
-        victim = GameWorld_FindNearbySettlerType29(world, nullptr, t, s.x, s.y);
+        CGameData_NotifyLocalPlayer(world, nullptr, world->settlers[t].owner, 3, s.x, s.y);
+        victim = CGameData_FindNearbySettlerType29(world, nullptr, t, s.x, s.y);
     } else {
-        GameWorld_NotifyLocalPlayer(world, nullptr, world->settlers[t].owner, 3, world->settlers[t].x,
+        CGameData_NotifyLocalPlayer(world, nullptr, world->settlers[t].owner, 3, world->settlers[t].x,
                                     world->settlers[t].y);
     }
     Settler& v = world->settlers[victim];
@@ -317,7 +317,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
         }
         if (v.art == 0x29) {
             // A seven-tile unit: all its parts go.
-            GameWorld_RemoveSettlerFromLists(world, nullptr, victim);
+            CGameData_RemoveSettlerFromLists(world, nullptr, victim);
             static constexpr std::int32_t kParts[7][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}, {-1, 0}, {0, -1}, {-1, -1}};
             for (const auto& p : kParts) {
                 world->settlers[TileAt(world, v.x + p[0], v.y + p[1]).settler].owner = 0xff;
@@ -326,21 +326,21 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
                 TileAt(world, v.x + p[0], v.y + p[1]).settler = 0;
             }
             g_playerTallies[s.owner].unk14 += 5;
-            const std::uint32_t screenY = GameWorld_TileScreenY(world, nullptr, v.x, v.y);
-            const std::uint32_t screenX = GameWorld_TileScreenX(world, nullptr, v.x, v.y);
+            const std::uint32_t screenY = CGameData_TileScreenY(world, nullptr, v.x, v.y);
+            const std::uint32_t screenX = CGameData_TileScreenX(world, nullptr, v.x, v.y);
             MapEffects_Spawn_544f80(effects, nullptr, g_gameTick, screenX, screenY, v.x, v.y);
             return;
         }
         ++g_playerTallies[s.owner].unk14;
-        GameWorld_QueueEvent(world, nullptr, 1, victim, v.art, v.owner);
-        GameWorld_RemoveSettlerFromLists(world, nullptr, victim);
+        CGameData_QueueEvent(world, nullptr, 1, victim, v.art, v.owner);
+        CGameData_RemoveSettlerFromLists(world, nullptr, victim);
         v.job = 0x36;
-        GameWorld_SetSettlerAnimation(world, nullptr, victim, 0x46);
+        CGameData_SetSettlerAnimation(world, nullptr, victim, 0x46);
         return;
     }
 
     // A tower soldier dies.
-    GameWorld_NotifyLocalPlayer(world, nullptr, v.owner, 4, v.x, v.y);
+    CGameData_NotifyLocalPlayer(world, nullptr, v.owner, 4, v.x, v.y);
     const std::uint32_t tower = v.building;
     if (v.job == 0xae) {
         std::uint16_t& head = world->buildings[tower].garrison;  // the garrison list
@@ -360,7 +360,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     Building& b = world->buildings[tower];
     if (b.garrison != 0) {
         v.job = 0xaf;
-        GameWorld_SetSettlerAnimation(world, nullptr, victim, 0x46);
+        CGameData_SetSettlerAnimation(world, nullptr, victim, 0x46);
         return;
     }
     // The tower is empty: the attacker takes it.
@@ -371,7 +371,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
             continue;
         }
         if (r.job == 3 || r.job == 4 || r.job == 0x10 || r.job == 0x6a || r.job == 0x8b) {
-            GameWorld_ClearSettlerJob(world, nullptr, i);
+            CGameData_ClearSettlerJob(world, nullptr, i);
             --left;
         }
     }
@@ -379,14 +379,14 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
         GameDebugLog(texts::kSoldiersLeft, left);
     }
     UnlinkIdle(world, s);
-    GameWorld_RemoveSettlerFromLists(world, nullptr, settler);
+    CGameData_RemoveSettlerFromLists(world, nullptr, settler);
     GameDebugLog(texts::kWinsTower, static_cast<std::uint32_t>(s.owner), static_cast<std::uint32_t>(v.owner));
-    GameWorld_NotifyLocalPlayer(world, nullptr, s.owner, 7, s.x, s.y);
-    GameWorld_NotifyLocalPlayer(world, nullptr, v.owner, 8, v.x, v.y);
-    GameWorld_QueuePendingEvent(world, nullptr, 5, tower, b.owner);
-    GameWorld_QueueEvent(world, nullptr, 3, tower, b.owner, s.owner);
+    CGameData_NotifyLocalPlayer(world, nullptr, s.owner, 7, s.x, s.y);
+    CGameData_NotifyLocalPlayer(world, nullptr, v.owner, 8, v.x, v.y);
+    CGameData_QueuePendingEvent(world, nullptr, 5, tower, b.owner);
+    CGameData_QueueEvent(world, nullptr, 3, tower, b.owner, s.owner);
     b.owner = s.owner;
-    const std::uint32_t guard = GameWorld_CreateSettler(world, nullptr, v.x, v.y, 0x25, s.owner);
+    const std::uint32_t guard = CGameData_CreateSettler(world, nullptr, v.x, v.y, 0x25, s.owner);
     world->settlers[guard].job = 0xad;
     world->settlers[guard].building = static_cast<std::uint16_t>(tower);
     world->settlers[guard].health = 1;
@@ -400,7 +400,7 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     auto reown = [&](const std::uint32_t* pair) {
         const std::uint32_t x = world->buildings[tower].x + pair[0], y = world->buildings[tower].y + pair[1];
         kClearTileOwner(world, nullptr, x, y);
-        GameWorld_SetOwnerOfFreeTile(world, nullptr, world->buildings[tower].x + pair[0],
+        CGameData_SetOwnerOfFreeTile(world, nullptr, world->buildings[tower].x + pair[0],
                                      world->buildings[tower].y + pair[1], s.owner);
     };
     while (item[0] != kLayoutEnd2) {
@@ -436,12 +436,12 @@ void Attack(GameWorld* world, std::uint32_t settler, std::uint32_t t, const MapO
     s.next = 0;
     kRecalculateTerritory(world, nullptr, world->buildings[tower].x, world->buildings[tower].y);
     v.job = 0x36;
-    GameWorld_SetSettlerAnimation(world, nullptr, victim, 0x46);
+    CGameData_SetSettlerAnimation(world, nullptr, victim, 0x46);
 }
 
 // Whether `e` is a valid target (phase 1 and 2 differ for classes
 // 0x14..0x1d). `distance` is the offset entry's.
-bool ValidTarget(GameWorld* world, const Settler& s, Settler& e, std::int32_t distance, bool phase2) {
+bool ValidTarget(CGameData* world, const Settler& s, Settler& e, std::int32_t distance, bool phase2) {
     const std::int32_t c = ClassOf(e);
     bool ok = In(c, 1, 9);
     if (!ok && In(c, 0x14, 0x1d)) {
@@ -467,7 +467,7 @@ bool ValidTarget(GameWorld* world, const Settler& s, Settler& e, std::int32_t di
 // Purpose: One step of a soldier: attack an enemy within reach (melee or arrows; killing it, or taking
 // an enemy tower when its last defender falls), otherwise walk towards an enemy nearby. Returns 1 if
 // it attacked.
-std::uint32_t __fastcall GameWorld_UpdateSoldier(GameWorld* world, void*, std::uint32_t settler) {
+std::uint32_t __fastcall CGameData_UpdateSoldier(CGameData* world, void*, std::uint32_t settler) {
     Settler& s = world->settlers[settler];
     const std::int32_t cls = ClassOf(s);
     std::int32_t range = 0, minimum = 0;  // minimum: uninitialized in the original for other classes
@@ -489,7 +489,7 @@ std::uint32_t __fastcall GameWorld_UpdateSoldier(GameWorld* world, void*, std::u
     }
     const std::uint32_t x = s.x, y = s.y;
     const auto mapSize = static_cast<std::int32_t>(world->map_size);
-    if ((s.flags & 0x20) == 0 && GameWorld_IsOtherPlayerNear(world, nullptr, x, y, range, s.owner) != 0 &&
+    if ((s.flags & 0x20) == 0 && CGameData_IsOtherPlayerNear(world, nullptr, x, y, range, s.owner) != 0 &&
         world->offsets[1].distance <= range) {
         for (std::uint32_t k = 1; world->offsets[k].distance <= range; ++k) {
             const MapOffset& entry = world->offsets[k];
@@ -526,7 +526,7 @@ std::uint32_t __fastcall GameWorld_UpdateSoldier(GameWorld* world, void*, std::u
     if (s.job == 0xae || s.job == 0x8c || (s.flags & 0x20) != 0) {
         return 0;
     }
-    if (GameWorld_IsOtherPlayerNear(world, nullptr, x, y, 0x12, s.owner) == 0 || world->offsets[1].distance > 0x12) {
+    if (CGameData_IsOtherPlayerNear(world, nullptr, x, y, 0x12, s.owner) == 0 || world->offsets[1].distance > 0x12) {
         return 0;
     }
     for (std::uint32_t k = 1; world->offsets[k].distance <= 0x12; ++k) {
@@ -586,7 +586,7 @@ std::uint32_t __fastcall GameWorld_UpdateSoldier(GameWorld* world, void*, std::u
             if (spot.settler != 0 && ClassOf(e) != 0x28) {
                 continue;
             }
-            GameWorld_SetSettlerTarget(world, nullptr, settler, nx, ny);
+            CGameData_SetSettlerTarget(world, nullptr, settler, nx, ny);
             sent = true;
         }
         if (!sent) {
@@ -599,7 +599,7 @@ std::uint32_t __fastcall GameWorld_UpdateSoldier(GameWorld* world, void*, std::u
     return 0;
 }
 
-S3RE_HOOK(0x0050e9f0, GameWorld_UpdateSoldier, SoldierFn, Original_GameWorld_UpdateSoldier, GameWorld_UpdateSoldier);
+S3RE_HOOK(0x0050e9f0, CGameData_UpdateSoldier, SoldierFn, Original_CGameData_UpdateSoldier, CGameData_UpdateSoldier);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -634,7 +634,7 @@ constexpr std::uint16_t kTargetJobs[] = {0x37, 0x8e, 0x35, 0xb0, 3, 4, 0xad, 0xa
                                          0x130, 0xd4, 0x12f, 0x135, 0x10, 0x55, 0x151};
 constexpr std::uint16_t kSoldierJobs[] = {0x8c, 0xae, 0x8e, 0x35, 0x37, 0x17, 0x8d};
 
-void SetUpWorld(GameWorld* w) {
+void SetUpWorld(CGameData* w) {
     w->map_size = 384;
     w->settler_high_water = kTestSettlers;
     w->building_high_water = kTestBuildings;
@@ -724,7 +724,7 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t soldie
     auto& rng = ctx.rng();
     // The last case's settlers leave (their garrison lists may be gone).
     for (const std::uint32_t old : placed) {
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Settler& r = w->settlers[old];
             if (w->tiles[r.x][r.y].settler == old) {
                 w->tiles[r.x][r.y].settler = 0;
@@ -742,7 +742,7 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t soldie
     // A tower slot as EnterBuildingSlot makes it: race << 5, + 8 / 0x10 by
     // building type, + place 0..3 (indexes the tower arrow offsets).
     const auto slot = static_cast<std::uint8_t>((rng.Below(3) << 5) | (rng.Below(3) << 3) | rng.Below(4));
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         Settler& s = w->settlers[soldier];
         s.slot = slot;
         s.art = art;
@@ -774,7 +774,7 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t soldie
         const bool empty = rng.Chance(1, 2);
         placed.push_back(e);
         placed.push_back(1 + (e + 1) % (kTestSettlers - 1));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Settler& r = w->settlers[e];
             w->tiles[r.x][r.y].settler = 0;
             r.art = eart;
@@ -812,7 +812,7 @@ void Compare(test::Context& ctx, SoldierFn candidate, int cases) {
     test::FakeGraphics gfx;  // every sprite valid, for SetSettlerAnimation
     gfx.MakeEverySpriteValid(7);
     Globals globals;
-    test::WorldPair worlds(ctx, sizeof(GameWorld));
+    test::WorldPair worlds(ctx, sizeof(CGameData));
     worlds.Both(&SetUpWorld);
     DebugLogRecorder logs;
     std::vector<std::uint8_t> before(Globals::kTallyBytes), after(Globals::kTallyBytes);
@@ -824,7 +824,7 @@ void Compare(test::Context& ctx, SoldierFn candidate, int cases) {
         g_campaignMission = ctx.rng().Chance(1, 2) ? 0 : 5;
         g_config->unk189 = static_cast<std::uint8_t>(ctx.rng().Below(2));
         std::memcpy(before.data(), Globals::Tallies(), before.size());
-        const std::uint32_t expected = Original_GameWorld_UpdateSoldier(worlds.original(), nullptr, soldier);
+        const std::uint32_t expected = Original_CGameData_UpdateSoldier(worlds.original(), nullptr, soldier);
         const std::vector<DebugLogCall> expectedLogs = logs.Take();
         std::memcpy(after.data(), Globals::Tallies(), after.size());
         std::memcpy(Globals::Tallies(), before.data(), before.size());
@@ -842,25 +842,25 @@ void Compare(test::Context& ctx, SoldierFn candidate, int cases) {
 }
 
 // Wrong: bowmen in towers use the normal range.
-std::uint32_t __fastcall WrongUpdateSoldier(GameWorld* world, void* edx, std::uint32_t settler) {
+std::uint32_t __fastcall WrongUpdateSoldier(CGameData* world, void* edx, std::uint32_t settler) {
     Settler& s = world->settlers[settler];
     if (s.job == 0x8c) {
         s.job = 0x8b;
-        const std::uint32_t result = GameWorld_UpdateSoldier(world, edx, settler);
+        const std::uint32_t result = CGameData_UpdateSoldier(world, edx, settler);
         if (s.job == 0x8b) {
             s.job = 0x8c;
         }
         return result;
     }
-    return GameWorld_UpdateSoldier(world, edx, settler);
+    return CGameData_UpdateSoldier(world, edx, settler);
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_UpdateSoldier_MatchesOriginal) {
-    Compare(ctx, &GameWorld_UpdateSoldier, 4000);
+S3RE_TEST(CGameData_UpdateSoldier_MatchesOriginal) {
+    Compare(ctx, &CGameData_UpdateSoldier, 4000);
 }
-S3RE_TEST(GameWorld_UpdateSoldier_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_UpdateSoldier_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     Compare(probe, &WrongUpdateSoldier, 2000);
     S3RE_EXPECT(probe.failures() > 0);

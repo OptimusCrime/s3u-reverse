@@ -11,7 +11,7 @@
 //   x0 >= x1, y0 <  y1:  (x0 - x1) + (y1 - y0)
 //   x0 >= x1, y0 >= y1:  max(x0 - x1, y0 - y1)
 //
-// GameWorld::NextSearchGeneration (0x004ff3f0): searches mark visited tiles
+// CGameData::NextSearchGeneration (0x004ff3f0): searches mark visited tiles
 // by writing the current generation into tile byte 15 (counted from a tile
 // base of 0x67440; Tile::search_mark at the real base), so starting a search
 // is just "generation + 1" instead of clearing the whole map. When the 8-bit
@@ -55,12 +55,12 @@ std::uint32_t __stdcall TileDistance(std::uint32_t x0, std::uint32_t y0, std::ui
 
 S3RE_HOOK(0x004ff320, TileDistance, TileDistanceFn, Original_TileDistance, TileDistance);
 
-using NextSearchGenerationFn = void(__fastcall*)(GameWorld* world, void* edx);
+using NextSearchGenerationFn = void(__fastcall*)(CGameData* world, void* edx);
 
 // Purpose: Searches over the map mark the tiles they have visited. Instead of clearing all marks before
 // every search, the game uses a new mark number per search; this starts the next one, and only
 // clears the marks when the number runs out.
-void __fastcall GameWorld_NextSearchGeneration(GameWorld* world, void* /*edx*/) {
+void __fastcall CGameData_NextSearchGeneration(CGameData* world, void* /*edx*/) {
     auto& generation = world->search_generation;
     world->draw_call_counter = 0;
     ++generation;
@@ -78,8 +78,8 @@ void __fastcall GameWorld_NextSearchGeneration(GameWorld* world, void* /*edx*/) 
     generation = 1;
 }
 
-S3RE_HOOK(0x004ff3f0, GameWorld_NextSearchGeneration, NextSearchGenerationFn,
-          Original_GameWorld_NextSearchGeneration, GameWorld_NextSearchGeneration);
+S3RE_HOOK(0x004ff3f0, CGameData_NextSearchGeneration, NextSearchGenerationFn,
+          Original_CGameData_NextSearchGeneration, CGameData_NextSearchGeneration);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -140,7 +140,7 @@ namespace {
 // (at least past the generation bytes). Byte 0 of the buffer is world+0.
 std::size_t WorldBytesForMap(std::int32_t mapSize) {
     const std::size_t rows = mapSize > 0 ? static_cast<std::size_t>(mapSize) : 0;
-    return offsetof(GameWorld, tiles) + (rows + 1) * kTileRowBytes;
+    return offsetof(CGameData, tiles) + (rows + 1) * kTileRowBytes;
 }
 
 void CompareNextSearchGeneration(test::Context& ctx, NextSearchGenerationFn candidate,
@@ -157,7 +157,7 @@ void CompareNextSearchGeneration(test::Context& ctx, NextSearchGenerationFn cand
         const std::size_t size = WorldBytesForMap(mapSize);
         std::vector<std::uint8_t> a(size);
         ctx.rng().Fill(a.data(), size);
-        GameWorld* worldA = reinterpret_cast<GameWorld*>(a.data());
+        CGameData* worldA = reinterpret_cast<CGameData*>(a.data());
         // Half the cases at the wrap-around.
         worldA->search_generation = ctx.rng().Chance(1, 2) ? 0xFF
                                                            : static_cast<std::uint8_t>(
@@ -165,8 +165,8 @@ void CompareNextSearchGeneration(test::Context& ctx, NextSearchGenerationFn cand
         worldA->map_size = static_cast<std::uint32_t>(mapSize);
         std::vector<std::uint8_t> b = a;
 
-        Original_GameWorld_NextSearchGeneration(reinterpret_cast<GameWorld*>(a.data()), nullptr);
-        candidate(reinterpret_cast<GameWorld*>(b.data()), nullptr);
+        Original_CGameData_NextSearchGeneration(reinterpret_cast<CGameData*>(a.data()), nullptr);
+        candidate(reinterpret_cast<CGameData*>(b.data()), nullptr);
         if (!S3RE_EXPECT_MEM_EQ(a.data(), b.data(), size)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: mapSize %d", i, mapSize);
             return;
@@ -175,8 +175,8 @@ void CompareNextSearchGeneration(test::Context& ctx, NextSearchGenerationFn cand
 }
 
 // Wrong: after the wrap-around the generation restarts at 0 instead of 1.
-void __fastcall WrongNextSearchGeneration(GameWorld* world, void* edx) {
-    GameWorld_NextSearchGeneration(world, edx);
+void __fastcall WrongNextSearchGeneration(CGameData* world, void* edx) {
+    CGameData_NextSearchGeneration(world, edx);
     auto& generation = world->search_generation;
     if (generation == 1) {
         generation = 0;
@@ -185,11 +185,11 @@ void __fastcall WrongNextSearchGeneration(GameWorld* world, void* edx) {
 
 }  // namespace
 
-S3RE_TEST(GameWorld_NextSearchGeneration_MatchesOriginal) {
-    CompareNextSearchGeneration(ctx, &GameWorld_NextSearchGeneration, 400, 48, 2);
+S3RE_TEST(CGameData_NextSearchGeneration_MatchesOriginal) {
+    CompareNextSearchGeneration(ctx, &CGameData_NextSearchGeneration, 400, 48, 2);
 }
 
-S3RE_TEST(GameWorld_NextSearchGeneration_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_NextSearchGeneration_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareNextSearchGeneration(probe, &WrongNextSearchGeneration, 100, 8, 0);
     S3RE_EXPECT(probe.failures() > 0);

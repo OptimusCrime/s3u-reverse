@@ -1,23 +1,23 @@
 // Walking settlers (UpdateSettlers' walking jobs) and the job lists the
 // pathfinder uses.
 //
-// GameWorld::AddTileTraffic (0x00503940): (x, y): unless the tile's traffic
+// CGameData::AddTileTraffic (0x00503940): (x, y): unless the tile's traffic
 //   byte (+0x12) is 0xff it is increased by one; when it reaches 12 or more,
-//   GameWorld::WearPath (0x51b7f0) is called for the tile (which adds 9 when
+//   CGameData::WearPath (0x51b7f0) is called for the tile (which adds 9 when
 //   the tile becomes a path). thiscall, ret 8. EAX = the address of the
 //   traffic byte, or WearPath's EAX when it was called (the only caller,
 //   WalkSettler 0x500860, ignores it).
-// GameWorld::IsWalkingJob (0x004fa6d0): (job) -> AL = 1 for the 47 jobs that
+// CGameData::IsWalkingJob (0x004fa6d0): (job) -> AL = 1 for the 47 jobs that
 //   UpdateSettlers hands to WalkSettler (handler 0x4ead27 and the two jobs
 //   0x35 and 0xb0 that call it too), else 0. The upper 24 bits of EAX are
 //   those of the argument. ret 4, ECX unused. Called by 0x4a33d0.
-// GameWorld::IsStationaryJob (0x004fa880, was Logic_sub_4fa880, proposed
+// CGameData::IsStationaryJob (0x004fa880, was Logic_sub_4fa880, proposed
 //   "IsWalkingOrIdleJob"): (job) -> AL = 0 for the same 47 walking jobs and
 //   the idle jobs 1 and 0x37, AL = 1 for every other job (the settler is
 //   working at a place). Upper EAX bits as above. ret 4, ECX unused. Called
 //   by Pathing::TileCost (0x4a36a0): a tile whose settler is busy counts as
 //   blocked.
-// GameWorld::WalkSettler (0x00500860, was Logic_sub_500860): (settler) ->
+// CGameData::WalkSettler (0x00500860, was Logic_sub_500860): (settler) ->
 //   EAX = 1 when UpdateSettlers should handle the settler again at once
 //   (it stores EAX at 0x4ead2f), else 0. thiscall, ret 4. One step of a
 //   walking settler (the 47 walking jobs; jobs 0x35/0xb0 too):
@@ -108,11 +108,11 @@ bool InWalkingList(std::uint32_t job) {
 
 }  // namespace
 
-using TileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
-using JobFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t job);
+using TileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
+using JobFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t job);
 
 // Purpose: Counts a settler's step onto a tile; tiles walked on often enough become paths.
-std::uint32_t __fastcall GameWorld_AddTileTraffic(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall CGameData_AddTileTraffic(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     Tile& tile = TileAtOffset(world, TileOffset(x, y));
     const std::uint32_t address = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&tile.traffic));
     if (tile.traffic == 0xff) {
@@ -122,26 +122,26 @@ std::uint32_t __fastcall GameWorld_AddTileTraffic(GameWorld* world, void*, std::
     if (tile.traffic < 12) {
         return address;
     }
-    return GameWorld_WearPath(world, nullptr, x, y);
+    return CGameData_WearPath(world, nullptr, x, y);
 }
 
 // Purpose: Whether a job is one of the walking jobs (the settler is on its way somewhere).
-std::uint32_t __fastcall GameWorld_IsWalkingJob(GameWorld*, void*, std::uint32_t job) {
+std::uint32_t __fastcall CGameData_IsWalkingJob(CGameData*, void*, std::uint32_t job) {
     return (job & 0xffffff00u) | (InWalkingList(job) ? 1u : 0u);
 }
 
 // Purpose: Whether a settler with this job stays where it is (it is neither walking nor idle), so
 // the pathfinder treats its tile as blocked.
-std::uint32_t __fastcall GameWorld_IsStationaryJob(GameWorld*, void*, std::uint32_t job) {
+std::uint32_t __fastcall CGameData_IsStationaryJob(CGameData*, void*, std::uint32_t job) {
     const bool moving = InWalkingList(job) || job == 1 || job == 0x37;
     return (job & 0xffffff00u) | (moving ? 0u : 1u);
 }
 
-S3RE_HOOK(0x00503940, GameWorld_AddTileTraffic, TileFn, Original_GameWorld_AddTileTraffic,
-          GameWorld_AddTileTraffic);
-S3RE_HOOK(0x004fa6d0, GameWorld_IsWalkingJob, JobFn, Original_GameWorld_IsWalkingJob, GameWorld_IsWalkingJob);
-S3RE_HOOK(0x004fa880, GameWorld_IsStationaryJob, JobFn, Original_GameWorld_IsStationaryJob,
-          GameWorld_IsStationaryJob);
+S3RE_HOOK(0x00503940, CGameData_AddTileTraffic, TileFn, Original_CGameData_AddTileTraffic,
+          CGameData_AddTileTraffic);
+S3RE_HOOK(0x004fa6d0, CGameData_IsWalkingJob, JobFn, Original_CGameData_IsWalkingJob, CGameData_IsWalkingJob);
+S3RE_HOOK(0x004fa880, CGameData_IsStationaryJob, JobFn, Original_CGameData_IsStationaryJob,
+          CGameData_IsStationaryJob);
 
 // ---------------------------------------------------------------------------
 // WalkSettler
@@ -206,13 +206,13 @@ constexpr std::uint8_t kTypeSevenTile = 0x29;  // catapult-like unit on seven ti
 constexpr std::uint8_t kTypeShip = 0x2c;
 constexpr std::uint8_t kTypeShip2b = 0x2b;
 
-Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
 // The tile (dx, dy) away from the tile at `offset` (the original's
 // +-0x4800 / +-0x18 steps).
-Tile& TileNear(GameWorld* world, std::uint32_t offset, std::int32_t dx, std::int32_t dy) {
+Tile& TileNear(CGameData* world, std::uint32_t offset, std::int32_t dx, std::int32_t dy) {
     return TileAtOffset(world, offset + static_cast<std::uint32_t>(dx) * kTileRowBytes +
                                    static_cast<std::uint32_t>(dy) * kTileBytes);
 }
@@ -259,7 +259,7 @@ void PopWaypoint(Settler& s) {
 }
 
 struct Walk {
-    GameWorld* world;
+    CGameData* world;
     std::uint32_t n;
     Settler& s;
     std::uint32_t again;  // EAX
@@ -309,7 +309,7 @@ void EnsureOnTile(Walk& w) {
 
 // Type 0x29: a unit on seven tiles; its six part settlers follow it.
 std::uint32_t WalkSevenTileUnit(Walk& w) {
-    GameWorld* world = w.world;
+    CGameData* world = w.world;
     Settler& s = w.s;
     const std::uint32_t at = TileOffset(s.x, s.y);
     auto isFree = [&](std::int32_t dx, std::int32_t dy) {
@@ -360,7 +360,7 @@ std::uint32_t WalkSevenTileUnit(Walk& w) {
 
 // Ships (type 0x2c, and 0x2b while +0x3c != 0xff).
 std::uint32_t WalkShip(Walk& w) {
-    GameWorld* world = w.world;
+    CGameData* world = w.world;
     Settler& s = w.s;
     const std::uint32_t x0 = s.x, y0 = s.y;
     const std::uint32_t at = TileOffset(x0, y0);
@@ -512,7 +512,7 @@ std::uint32_t WalkShip(Walk& w) {
 
 // Every other walker.
 std::uint32_t WalkOne(Walk& w) {
-    GameWorld* world = w.world;
+    CGameData* world = w.world;
     Settler& s = w.s;
     Tile& tile = TileAt(world, s.x, s.y);
     if (tile.settler != w.n) {
@@ -584,7 +584,7 @@ std::uint32_t WalkOne(Walk& w) {
 }
 
 std::uint32_t WalkStep(Walk& w) {
-    GameWorld* world = w.world;
+    CGameData* world = w.world;
     Settler& s = w.s;
     const auto size = static_cast<std::int32_t>(world->map_size);
     if (static_cast<std::int32_t>(s.target_x) >= size || static_cast<std::int32_t>(s.target_y) >= size) {
@@ -604,7 +604,7 @@ std::uint32_t WalkStep(Walk& w) {
 // A soldier (state 2) at its post looks for something to shoot at around
 // (path_cache[2], [3]). Returns whether it shot.
 bool SoldierShoot(Walk& w) {
-    GameWorld* world = w.world;
+    CGameData* world = w.world;
     Settler& s = w.s;
     const std::uint32_t cx = s.path_cache[2], cy = s.path_cache[3];
     GameDebugLog(texts::kSearchTarget, cx, cy);
@@ -742,7 +742,7 @@ bool SoldierShoot(Walk& w) {
 // next to it: there it boards, otherwise it walks there. Returns whether
 // it found one.
 bool BoardShip(Walk& w) {
-    GameWorld* world = w.world;
+    CGameData* world = w.world;
     Settler& s = w.s;
     bool found = false;
     std::uint32_t ship = 0, bx = 0, by = 0, side = 0;
@@ -825,7 +825,7 @@ bool BoardShip(Walk& w) {
 // Jobs 0x35 and 0xb0 at their target: soldiers' states (+0x1a), then the
 // types 0x28/0x16 and the path cache.
 std::uint32_t ArriveWaiting(Walk& w) {
-    GameWorld* world = w.world;
+    CGameData* world = w.world;
     Settler& s = w.s;
     bool handled = false;
     const std::uint8_t state = s.walk_state;
@@ -911,7 +911,7 @@ std::uint32_t ArriveWaiting(Walk& w) {
 
 // Job 0xab: a soldier reaches the area it was sent to.
 std::uint32_t ArriveSoldierAtArea(Walk& w) {
-    GameWorld* world = w.world;
+    CGameData* world = w.world;
     Settler& s = w.s;
     const std::uint32_t x = s.x, y = s.y;
     const std::uint32_t area = TileAt(world, x, y).area;
@@ -1036,7 +1036,7 @@ std::uint32_t Arrive(Walk& w) {
 // waiting for or swapping with settlers in the way), or, when it has arrived, goes on with the
 // next part of its job (soldiers look for targets to shoot at, settlers board ships, ships follow
 // their waypoints).
-std::uint32_t __fastcall GameWorld_WalkSettler(GameWorld* world, void*, std::uint32_t settler) {
+std::uint32_t __fastcall CGameData_WalkSettler(CGameData* world, void*, std::uint32_t settler) {
     Settler& s = world->settlers[settler];
     Walk w{world, settler, s, 0};
     const std::uint32_t frames = s.art == kTypeSevenTile ? 0x24u : 0xcu;
@@ -1051,9 +1051,9 @@ std::uint32_t __fastcall GameWorld_WalkSettler(GameWorld* world, void*, std::uin
     return Arrive(w);
 }
 
-using WalkFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler);
+using WalkFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t settler);
 
-S3RE_HOOK(0x00500860, GameWorld_WalkSettler, WalkFn, Original_GameWorld_WalkSettler, GameWorld_WalkSettler);
+S3RE_HOOK(0x00500860, CGameData_WalkSettler, WalkFn, Original_CGameData_WalkSettler, CGameData_WalkSettler);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -1062,9 +1062,9 @@ S3RE_HOOK(0x00500860, GameWorld_WalkSettler, WalkFn, Original_GameWorld_WalkSett
 namespace {
 
 constexpr std::uint32_t kTestMapSize = 64;
-constexpr std::size_t kMapWorld = offsetof(GameWorld, tiles) + kTestMapSize * kTileRowBytes;
+constexpr std::size_t kMapWorld = offsetof(CGameData, tiles) + kTestMapSize * kTileRowBytes;
 
-std::uint32_t Relative(std::uint32_t value, GameWorld* world) {
+std::uint32_t Relative(std::uint32_t value, CGameData* world) {
     return value - static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
 }
 
@@ -1079,15 +1079,15 @@ void CompareAddTileTraffic(test::Context& ctx, TileFn candidate, int cases) {
                                      : pick < 4 ? static_cast<std::uint8_t>(0xff)
                                      : pick < 5 ? static_cast<std::uint8_t>(0xfe)
                                                 : static_cast<std::uint8_t>(ctx.rng().Below(256));
-        worlds.Both([&](GameWorld* w) { w->tiles[x][y].traffic = traffic; });
+        worlds.Both([&](CGameData* w) { w->tiles[x][y].traffic = traffic; });
         for (std::int32_t dx = -1; dx <= 1; ++dx) {
             for (std::int32_t dy = -1; dy <= 1; ++dy) {
                 const std::uint8_t terrain = kTerrains[ctx.rng().Below(7)];
-                worlds.Both([&](GameWorld* w) { w->tiles[x + dx][y + dy].terrain = terrain; });
+                worlds.Both([&](CGameData* w) { w->tiles[x + dx][y + dy].terrain = terrain; });
             }
         }
         const std::uint32_t expected =
-            Relative(Original_GameWorld_AddTileTraffic(worlds.original(), nullptr, x, y), worlds.original());
+            Relative(Original_CGameData_AddTileTraffic(worlds.original(), nullptr, x, y), worlds.original());
         const std::uint32_t actual = Relative(candidate(worlds.ours(), nullptr, x, y), worlds.ours());
         if (!S3RE_EXPECT_EQ(expected, actual) || (i % 512 == 511 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 511 before it): (%u, %u)", i, x, y);
@@ -1111,39 +1111,39 @@ void CompareJobFn(test::Context& ctx, JobFn original, JobFn candidate) {
 }
 
 // Wrong: the traffic limit is checked before the increment.
-std::uint32_t __fastcall WrongAddTileTraffic(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall WrongAddTileTraffic(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     Tile& tile = world->tiles[x][y];
     if (tile.traffic == 11) {
         ++tile.traffic;
         return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&tile.traffic));
     }
-    return GameWorld_AddTileTraffic(world, nullptr, x, y);
+    return CGameData_AddTileTraffic(world, nullptr, x, y);
 }
 
 // Wrong: forgets the idle job 0x37.
-std::uint32_t __fastcall WrongIsStationaryJob(GameWorld* world, void*, std::uint32_t job) {
-    return job == 0x37 ? 1 : GameWorld_IsStationaryJob(world, nullptr, job);
+std::uint32_t __fastcall WrongIsStationaryJob(CGameData* world, void*, std::uint32_t job) {
+    return job == 0x37 ? 1 : CGameData_IsStationaryJob(world, nullptr, job);
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_AddTileTraffic_MatchesOriginal) {
-    CompareAddTileTraffic(ctx, &GameWorld_AddTileTraffic, 20000);
+S3RE_TEST(CGameData_AddTileTraffic_MatchesOriginal) {
+    CompareAddTileTraffic(ctx, &CGameData_AddTileTraffic, 20000);
 }
-S3RE_TEST(GameWorld_AddTileTraffic_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_AddTileTraffic_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareAddTileTraffic(probe, &WrongAddTileTraffic, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_IsWalkingJob_MatchesOriginal) {
-    CompareJobFn(ctx, Original_GameWorld_IsWalkingJob, &GameWorld_IsWalkingJob);
+S3RE_TEST(CGameData_IsWalkingJob_MatchesOriginal) {
+    CompareJobFn(ctx, Original_CGameData_IsWalkingJob, &CGameData_IsWalkingJob);
 }
-S3RE_TEST(GameWorld_IsStationaryJob_MatchesOriginal) {
-    CompareJobFn(ctx, Original_GameWorld_IsStationaryJob, &GameWorld_IsStationaryJob);
+S3RE_TEST(CGameData_IsStationaryJob_MatchesOriginal) {
+    CompareJobFn(ctx, Original_CGameData_IsStationaryJob, &CGameData_IsStationaryJob);
 }
-S3RE_TEST(GameWorld_IsStationaryJob_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_IsStationaryJob_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareJobFn(probe, Original_GameWorld_IsStationaryJob, &WrongIsStationaryJob);
+    CompareJobFn(probe, Original_CGameData_IsStationaryJob, &WrongIsStationaryJob);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
@@ -1192,7 +1192,7 @@ void FillOffsetRings(test::WorldPair& worlds) {
                     static_cast<std::uint32_t>(r)) {
                     continue;
                 }
-                worlds.Both([&](GameWorld* w) {
+                worlds.Both([&](CGameData* w) {
                     w->offsets[k].dx = dx;
                     w->offsets[k].dy = dy;
                     w->offsets[k].distance = r;
@@ -1201,7 +1201,7 @@ void FillOffsetRings(test::WorldPair& worlds) {
             }
         }
     }
-    worlds.Both([&](GameWorld* w) { w->offsets[k].distance = 1000; });
+    worlds.Both([&](CGameData* w) { w->offsets[k].distance = 1000; });
 }
 
 // One-time setup: every record a walk can reach has sane numbers and
@@ -1209,7 +1209,7 @@ void FillOffsetRings(test::WorldPair& worlds) {
 void SanitizeWalkWorld(test::Context& ctx, test::WorldPair& worlds) {
     auto& rng = ctx.rng();
     FillOffsetRings(worlds);
-    worlds.Both([&](GameWorld* w) { w->map_size = kWalkMapSize; });
+    worlds.Both([&](CGameData* w) { w->map_size = kWalkMapSize; });
     for (std::uint32_t x = 0; x < 400; ++x) {
         for (std::uint32_t y = 0; y < 400; ++y) {
             const auto settler = static_cast<std::uint16_t>(rng.Chance(2, 3) ? 0 : 1 + rng.Below(kWalkSettlers));
@@ -1223,7 +1223,7 @@ void SanitizeWalkWorld(test::Context& ctx, test::WorldPair& worlds) {
             const auto owner = static_cast<std::uint8_t>(rng.Chance(1, 5) ? 0xff : rng.Below(4));
             const auto landscape = static_cast<std::uint8_t>(rng.Chance(3, 4) ? 0 : rng.Next32());
             const auto flags = static_cast<std::uint8_t>(rng.Next32() & (rng.Chance(1, 2) ? 0xff : 0xd2));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 Tile& t = w->tiles[x][y];
                 t.settler = settler;
                 t.object_number = object;
@@ -1247,7 +1247,7 @@ void SanitizeWalkWorld(test::Context& ctx, test::WorldPair& worlds) {
         const auto next = static_cast<std::uint16_t>(rng.Below(kWalkSettlers + 1));
         const auto prev = static_cast<std::uint16_t>(rng.Below(kWalkSettlers + 1));
         const auto slot = static_cast<std::uint8_t>(rng.Below(8));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Settler& s = w->settlers[n];
             s.owner = owner;
             s.race = race;
@@ -1266,7 +1266,7 @@ void SanitizeWalkWorld(test::Context& ctx, test::WorldPair& worlds) {
         const auto x = static_cast<std::uint16_t>(30 + rng.Below(320));
         const auto y = static_cast<std::uint16_t>(30 + rng.Below(320));
         const auto art = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0xf + rng.Below(4) : rng.Below(0x40));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             layout::Building& r = w->buildings[b];
             r.owner = owner;
             r.x = x;
@@ -1276,7 +1276,7 @@ void SanitizeWalkWorld(test::Context& ctx, test::WorldPair& worlds) {
     }
     for (std::uint32_t a = 0; a < 0x1000; ++a) {
         const auto player = static_cast<std::uint8_t>(rng.Below(5));
-        worlds.Both([&](GameWorld* w) { w->areas[a].player = player; });
+        worlds.Both([&](CGameData* w) { w->areas[a].player = player; });
     }
 }
 
@@ -1351,7 +1351,7 @@ WalkCase SetUpWalkCase(test::Context& ctx, test::WorldPair& worlds) {
     const auto pathMode = static_cast<std::uint8_t>(rng.Next32());
     const bool onTile = rng.Chance(7, 8);
     const auto race = static_cast<std::uint8_t>(rng.Below(4));
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         for (int p = 0; p < 4; ++p) {
             w->players[p].race = races[p];
             w->players[p].team = presence[p];
@@ -1394,18 +1394,18 @@ constexpr std::uintptr_t kStubbed[] = {kFindPath, kResetSettlerToIdle, kSpawnPro
                                        kMoveSettlerToBuildingTileA, kSetSettlerAnimation};
 
 void CompareWalkSettler(test::Context& ctx, WalkFn candidate, int cases) {
-    test::WorldPair worlds(ctx, sizeof(GameWorld));
+    test::WorldPair worlds(ctx, sizeof(CGameData));
     SanitizeWalkWorld(ctx, worlds);
     test::CalleeStubs stubs;
     WalkCase current{};
     std::uint32_t pathCalls = 0;
-    stubs.Install<1, kFindPath>([&](GameWorld*, std::uint32_t, const std::uint32_t*) {
+    stubs.Install<1, kFindPath>([&](CGameData*, std::uint32_t, const std::uint32_t*) {
         const std::uint32_t result = current.paths[pathCalls % 2];
         ++pathCalls;
         return result;
     });
     stubs.Install<1, kResetSettlerToIdle>();
-    stubs.Install<10, kSpawnProjectile>([](GameWorld*, std::uint32_t, const std::uint32_t* args) {
+    stubs.Install<10, kSpawnProjectile>([](CGameData*, std::uint32_t, const std::uint32_t* args) {
         return args[0] ^ 0x5a5a;  // a "projectile" number
     });
     stubs.Install<7, kSpawnDeathEffect>();
@@ -1426,7 +1426,7 @@ void CompareWalkSettler(test::Context& ctx, WalkFn candidate, int cases) {
         g_gameTick = tick;
         stubs.SetWorld(worlds.original());
         pathCalls = 0;
-        const std::uint32_t expected = Original_GameWorld_WalkSettler(worlds.original(), nullptr, current.n);
+        const std::uint32_t expected = Original_CGameData_WalkSettler(worlds.original(), nullptr, current.n);
         const std::vector<test::StubCall> expectedCalls = stubs.Take();
         const std::vector<DebugLogCall> expectedLogs = logs.Take();
         stubs.SetWorld(worlds.ours());
@@ -1435,7 +1435,7 @@ void CompareWalkSettler(test::Context& ctx, WalkFn candidate, int cases) {
         const std::vector<test::StubCall> actualCalls = stubs.Take();
         const std::vector<DebugLogCall> actualLogs = logs.Take();
         const bool settlerSame =
-            worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return w->settlers[current.n]; });
+            worlds.SameField(ctx, [&](CGameData* w) -> auto& { return w->settlers[current.n]; });
         if (!S3RE_EXPECT_EQ(expected, actual) || !S3RE_EXPECT(expectedCalls == actualCalls) ||
             !S3RE_EXPECT(expectedLogs == actualLogs) || !S3RE_EXPECT(settlerSame) ||
             ((i % 64 == 63 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
@@ -1446,7 +1446,7 @@ void CompareWalkSettler(test::Context& ctx, WalkFn candidate, int cases) {
             return;
         }
         // A settler that died here keeps a player for later cases.
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             if (w->settlers[current.n].owner == 0xff) {
                 w->settlers[current.n].owner = 0;
             }
@@ -1455,8 +1455,8 @@ void CompareWalkSettler(test::Context& ctx, WalkFn candidate, int cases) {
 }
 
 // Wrong: a shot faces one direction off.
-std::uint32_t __fastcall WrongWalkSettlerShot(GameWorld* world, void* edx, std::uint32_t settler) {
-    const std::uint32_t result = GameWorld_WalkSettler(world, edx, settler);
+std::uint32_t __fastcall WrongWalkSettlerShot(CGameData* world, void* edx, std::uint32_t settler) {
+    const std::uint32_t result = CGameData_WalkSettler(world, edx, settler);
     if (world->settlers[settler].job == 0x151) {
         world->settlers[settler].direction ^= 1;
     }
@@ -1464,11 +1464,11 @@ std::uint32_t __fastcall WrongWalkSettlerShot(GameWorld* world, void* edx, std::
 }
 
 // Wrong: ships count disagreements in the low bits.
-std::uint32_t __fastcall WrongWalkSettlerShip(GameWorld* world, void* edx, std::uint32_t settler) {
+std::uint32_t __fastcall WrongWalkSettlerShip(CGameData* world, void* edx, std::uint32_t settler) {
     const bool ship = world->settlers[settler].art == kTypeShip &&
                       (world->settlers[settler].x != world->settlers[settler].target_x ||
                        world->settlers[settler].y != world->settlers[settler].target_y);
-    const std::uint32_t result = GameWorld_WalkSettler(world, edx, settler);
+    const std::uint32_t result = CGameData_WalkSettler(world, edx, settler);
     if (ship) {
         world->settlers[settler].ship_walk ^= 1;
     }
@@ -1477,15 +1477,15 @@ std::uint32_t __fastcall WrongWalkSettlerShip(GameWorld* world, void* edx, std::
 
 }  // namespace
 
-S3RE_TEST(GameWorld_WalkSettler_MatchesOriginal) {
-    CompareWalkSettler(ctx, &GameWorld_WalkSettler, 40000);
+S3RE_TEST(CGameData_WalkSettler_MatchesOriginal) {
+    CompareWalkSettler(ctx, &CGameData_WalkSettler, 40000);
 }
-S3RE_TEST(GameWorld_WalkSettler_ComparisonDetectsWrongShot) {
+S3RE_TEST(CGameData_WalkSettler_ComparisonDetectsWrongShot) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareWalkSettler(probe, &WrongWalkSettlerShot, 20000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_WalkSettler_ComparisonDetectsWrongShip) {
+S3RE_TEST(CGameData_WalkSettler_ComparisonDetectsWrongShip) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareWalkSettler(probe, &WrongWalkSettlerShip, 4000);
     S3RE_EXPECT(probe.failures() > 0);

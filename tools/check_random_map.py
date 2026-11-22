@@ -9,7 +9,7 @@ Usage: python tools/check_random_map.py [--maps SIZE[,SYM][;SIZE[,SYM]...]]
 Every run starts a game on a random map without menus (s3re_launcher
 --random-map SIZE,SYM --seed N, see src/s3re/tooling/random_map_start.cpp),
 so the game's random map generator (CGameData 0x5166d0, our
-GameWorld::Create) builds the landscape; the player setup comes from --map
+CGameData::Create) builds the landscape; the player setup comes from --map
 (default Map\\MULTI\\384-2-Lakes.map: one human who does nothing, one
 computer player). Each run writes the determinism trace for N ticks.
 
@@ -28,7 +28,7 @@ build/x86/bin/<build>/random-map-check/.
 --skip-hooks NAMES (with --against-original) leaves these replacements out
 of the run with our code (s3re_launcher --skip-hooks): to find which
 replacement makes a game diverge, or to count our callees of an original
-function (e.g. --skip-hooks GameWorld_Create: the original generator then
+function (e.g. --skip-hooks CGameData_Create: the original generator then
 calls our ExpandTerrain and MarkTerrainEdge through the counting thunk).
 Such runs are recorded with the source suffix " skip NAMES".
 
@@ -157,8 +157,8 @@ def main():
                 continue
             called = sorted(n for n, c in calls.items() if c > 0)
             print(f"  replaced functions called in this game: {len(called)} of {len(calls)}")
-            for name in ("GameWorld_Create", "GameWorld_ExpandTerrain",
-                         "GameWorld_MarkTerrainEdge", "GameWorld_BuildRegionsAndAreas"):
+            for name in ("CGameData_Create", "CGameData_ExpandTerrain",
+                         "CGameData_MarkTerrainEdge", "CGameData_BuildRegionsAndAreas"):
                 if name in calls:
                     print(f"    {name}: {calls[name]}")
             first, last = trace_ticks(traces[1])

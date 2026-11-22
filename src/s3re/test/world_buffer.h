@@ -34,7 +34,7 @@ public:
 
     std::uint8_t* data() { return data_; }
     std::size_t size() const { return size_; }
-    game::GameWorld* world() { return reinterpret_cast<game::GameWorld*>(data_); }
+    game::CGameData* world() { return reinterpret_cast<game::CGameData*>(data_); }
 
 private:
     std::size_t size_;
@@ -49,8 +49,8 @@ public:
         std::memcpy(ours_.data(), original_.data(), size);
     }
 
-    game::GameWorld* original() { return original_.world(); }
-    game::GameWorld* ours() { return ours_.world(); }
+    game::CGameData* original() { return original_.world(); }
+    game::CGameData* ours() { return ours_.world(); }
     std::uint8_t* originalBytes() { return original_.data(); }
     std::uint8_t* oursBytes() { return ours_.data(); }
     std::size_t size() const { return original_.size(); }
@@ -69,7 +69,7 @@ public:
     }
 
     // Runs `f(world)` on both buffers (typed set-up of a case), e.g.
-    // worlds.Both([&](game::GameWorld* w) { w->map_size = size; });
+    // worlds.Both([&](game::CGameData* w) { w->map_size = size; });
     template <typename F>
     void Both(F f) {
         f(original());
@@ -77,7 +77,7 @@ public:
     }
 
     // Compares the field `select(world)` returns a reference to, e.g.
-    // worlds.SameField(ctx, [&](game::GameWorld* w) -> auto& { return w->tiles[x][y]; });
+    // worlds.SameField(ctx, [&](game::CGameData* w) -> auto& { return w->tiles[x][y]; });
     template <typename F>
     bool SameField(Context& ctx, F select) {
         auto& field = select(original());

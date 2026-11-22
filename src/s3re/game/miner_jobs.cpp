@@ -1,13 +1,13 @@
 // Mine and terrain helpers of the settler jobs (UpdateSettlers callees,
 // package B).
 //
-// GameWorld::TileSlope (0x004faa70): (x, y) -> the steepness at a tile:
+// CGameData::TileSlope (0x004faa70): (x, y) -> the steepness at a tile:
 //   the largest absolute height difference (tile byte +0x4) between
 //   opposite neighbours: (x+1, y) / (x-1, y), (x, y+1) / (x, y-1),
 //   (x+1, y+1) / (x-1, y-1). 0 unless 1 <= x, y < map size - 1 (unsigned;
 //   map size 0 makes the limit 0xffffffff). Callers compare it with 7
 //   (UpdateSettlers' work jobs, the AI 0x5540f0, 0x599a30). ret 8.
-// GameWorld::MinerJobEnter (0x004f9a00): (settler): a miner goes into his
+// CGameData::MinerJobEnter (0x004f9a00): (settler): a miner goes into his
 //   mine: job (+0xe) by the mine's building type: 7 -> 0x55, 8 -> 0x56,
 //   9 -> 0x57, 0x25 -> 0xd8, 0x1d and 0x38 -> 0xd9, others unchanged
 //   (jump table); the building's byte +0x19 += 1 (miners inside?), byte
@@ -15,7 +15,7 @@
 //   settler word = 0), counter +0xc = 0, byte +0x17 = 10. EAX = world +
 //   settler * 0x40 (the original's register; UpdateSettlers overwrites
 //   it). ret 4. Caller: UpdateSettlers (job of settler type 0xa).
-// GameWorld::MinerJobFood (0x004f9b80): (settler): if the miner's food
+// CGameData::MinerJobFood (0x004f9b80): (settler): if the miner's food
 //   level (byte +0x17) is 0, he eats from the mine's input slots in the
 //   mine type's order (7: 3, 2, 1; 8: 1, 3, 2; 9: 2, 1, 3; 0x25: 1, 3, 2;
 //   0x1d/0x38: 1, 2, only two tries): the first slot with goods
@@ -27,7 +27,7 @@
 //   building's output pile (+0xe) holds at most 7 units: food level -= 1,
 //   job = the dig job of the mine type (0x58/0x5c/0x60/0xda/0xde),
 //   counter 100; else counter 10. EAX unused. ret 4.
-// GameWorld::MinerJobDig (0x004fa220): (settler): one dig. A tile of the
+// CGameData::MinerJobDig (0x004fa220): (settler): one dig. A tile of the
 //   offset table entry Random() & 0x3f around the mine (building +0x2/+0x4)
 //   is on the map and holds the mine type's resource (tile +0x11 high
 //   nibble: 7 -> 0x10, 9 -> 0x20, 8 -> 0x30, 0x25 -> 0x40, 0x1d/0x38 ->
@@ -60,11 +60,11 @@
 
 namespace s3re::game {
 
-using TileSlopeFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+using TileSlopeFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 
 // Purpose: How steep the land is at a tile (largest height step across it), e.g. to decide whether a
 // tile can be worked or built on (callers accept up to 7).
-std::uint32_t __fastcall GameWorld_TileSlope(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall CGameData_TileSlope(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     const std::uint32_t limit = world->map_size - 1;
     if (x < 1 || x >= limit || y < 1 || y >= limit) {
         return 0;
@@ -86,17 +86,17 @@ std::uint32_t __fastcall GameWorld_TileSlope(GameWorld* world, void*, std::uint3
     return static_cast<std::uint32_t>(slope);
 }
 
-using SettlerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler);
+using SettlerFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t settler);
 
 std::uint32_t __fastcall GetMemberByte189(void* self, void* edx);
-std::uint32_t __fastcall GameWorld_BuildingPileHasGoods(GameWorld* world, void* edx, std::uint32_t building,
+std::uint32_t __fastcall CGameData_BuildingPileHasGoods(CGameData* world, void* edx, std::uint32_t building,
                                                         std::uint32_t slot);
-std::uint32_t __fastcall GameWorld_TakeGoodFromPile(GameWorld* world, void* edx, std::uint32_t pile);
-std::uint32_t __fastcall GameWorld_SubtractPlayerCounter(GameWorld* world, void* edx, std::uint32_t player,
+std::uint32_t __fastcall CGameData_TakeGoodFromPile(CGameData* world, void* edx, std::uint32_t pile);
+std::uint32_t __fastcall CGameData_SubtractPlayerCounter(CGameData* world, void* edx, std::uint32_t player,
                                                          std::uint32_t index, std::uint32_t amount);
-std::uint32_t __fastcall GameWorld_SetSettlerAnimation(GameWorld* world, void* edx, std::uint32_t settler,
+std::uint32_t __fastcall CGameData_SetSettlerAnimation(CGameData* world, void* edx, std::uint32_t settler,
                                                        std::uint32_t kind);
-std::uint32_t __fastcall GameWorld_NotifyLocalPlayer(GameWorld* world, void* edx, std::uint32_t player,
+std::uint32_t __fastcall CGameData_NotifyLocalPlayer(CGameData* world, void* edx, std::uint32_t player,
                                                      std::uint32_t type, std::uint32_t x, std::uint32_t y);
 
 namespace {
@@ -122,7 +122,7 @@ std::uint16_t SlotPile(const layout::Building& b, std::uint32_t slot) {
 // Purpose: A miner going down into his mine eats if he is hungry: one food from the mine's input piles
 // (the preferred food first) fills his food level (+0x17); with food left he starts the dig cycle for
 // the mine type, otherwise he waits.
-std::uint32_t __fastcall GameWorld_MinerJobFood(GameWorld* world, void*, std::uint32_t settler) {
+std::uint32_t __fastcall CGameData_MinerJobFood(CGameData* world, void*, std::uint32_t settler) {
     layout::Settler& s = world->settlers[settler];
     std::uint8_t slots[3] = {0, 0, 0};
     std::uint16_t job = 0;
@@ -144,15 +144,15 @@ std::uint32_t __fastcall GameWorld_MinerJobFood(GameWorld* world, void*, std::ui
                     break;  // these mines have only two kinds of food
                 }
             }
-            if ((GameWorld_BuildingPileHasGoods(world, nullptr, k == 0 ? building : s.building, slots[k]) & 0xff) == 0) {
+            if ((CGameData_BuildingPileHasGoods(world, nullptr, k == 0 ? building : s.building, slots[k]) & 0xff) == 0) {
                 continue;
             }
             ++Tally(s.owner).meals;
             const std::uint32_t pile = SlotPile(world->buildings[k == 0 ? building : s.building], slots[k]);
-            GameWorld_PileIncAmountLeaving(world, nullptr, pile);
-            GameWorld_TakeGoodFromPile(world, nullptr, SlotPile(world->buildings[k == 0 ? building : s.building], slots[k]));
+            CGameData_PileIncAmountLeaving(world, nullptr, pile);
+            CGameData_TakeGoodFromPile(world, nullptr, SlotPile(world->buildings[k == 0 ? building : s.building], slots[k]));
             const std::uint32_t taken = SlotPile(world->buildings[k == 0 ? building : s.building], slots[k]);
-            GameWorld_SubtractPlayerCounter(world, nullptr, s.owner, world->piles[taken].good, 1);
+            CGameData_SubtractPlayerCounter(world, nullptr, s.owner, world->piles[taken].good, 1);
             s.food = static_cast<std::uint8_t>(s.food + (k == 0 ? 10 : 2));
             if (world->players[s.owner].active == 2) {
                 s.food = static_cast<std::uint8_t>(s.food + 4);  // computer players' miners eat more
@@ -174,7 +174,7 @@ std::uint32_t __fastcall GameWorld_MinerJobFood(GameWorld* world, void*, std::ui
 // Purpose: One dig of a miner: a random tile near the mine is tried; if it holds the mine's resource,
 // a unit may be found (and taken from the tile). The last 32 results are kept in the building; when
 // the mine has been failing for long, the local player is told that it is exhausted.
-std::uint32_t __fastcall GameWorld_MinerJobDig(GameWorld* world, void*, std::uint32_t settler) {
+std::uint32_t __fastcall CGameData_MinerJobDig(CGameData* world, void*, std::uint32_t settler) {
     layout::Settler& s = world->settlers[settler];
     // Resource kind (tile +0x11 high nibble), jobs and animations after a
     // failed / successful dig. Other building types leave all but the kind
@@ -190,15 +190,15 @@ std::uint32_t __fastcall GameWorld_MinerJobDig(GameWorld* world, void*, std::uin
     default: break;
     }
     std::uint32_t found = 0;
-    const layout::MapOffset& offset = world->offsets[GameWorld_Random(world, nullptr) & 0x3f];
+    const layout::MapOffset& offset = world->offsets[CGameData_Random(world, nullptr) & 0x3f];
     const layout::Building& mine = world->buildings[s.building];
     const std::uint32_t tx = mine.x + static_cast<std::uint32_t>(offset.dx);
     const std::uint32_t ty = mine.y + static_cast<std::uint32_t>(offset.dy);
-    if (GameWorld_IsOnMap(world, nullptr, tx, ty) != 0) {
+    if (CGameData_IsOnMap(world, nullptr, tx, ty) != 0) {
         std::uint8_t& resources = TileAtOffset(world, TileOffset(tx, ty)).resources;
         if (static_cast<std::uint32_t>(resources & 0xf0) == kind) {
             const std::uint8_t before = resources;
-            if (static_cast<std::uint16_t>(GameWorld_Random(world, nullptr) & 3) <
+            if (static_cast<std::uint16_t>(CGameData_Random(world, nullptr) & 3) <
                 static_cast<std::uint16_t>(before & 0x0f)) {
                 found = 1;
                 resources = static_cast<std::uint8_t>(before - 1);
@@ -206,7 +206,7 @@ std::uint32_t __fastcall GameWorld_MinerJobDig(GameWorld* world, void*, std::uin
                     resources = 0;
                 }
                 if (CampaignMission() != 0 && (GetMemberByte189(&g_config, nullptr) & 0xff) != 0 &&
-                    world->players[s.owner].active == 2 && GameWorld_Random(world, nullptr) > 0x55f0) {
+                    world->players[s.owner].active == 2 && CGameData_Random(world, nullptr) > 0x55f0) {
                     found = 0;  // in campaigns computer players sometimes find nothing
                 }
             }
@@ -225,10 +225,10 @@ std::uint32_t __fastcall GameWorld_MinerJobDig(GameWorld* world, void*, std::uin
     if (found == 0) {
         TileAtOffset(world, TileOffset(s.x, s.y)).settler = static_cast<std::uint16_t>(settler);
         s.job = static_cast<std::uint16_t>(failJob);
-        GameWorld_SetSettlerAnimation(world, nullptr, settler, failAnimation);
+        CGameData_SetSettlerAnimation(world, nullptr, settler, failAnimation);
         const layout::Building& after = world->buildings[s.building];
         if (after.production.digs >= 0x10 && after.work_x == 0) {
-            GameWorld_NotifyLocalPlayer(world, nullptr, s.owner, 0x11, s.x, s.y);
+            CGameData_NotifyLocalPlayer(world, nullptr, s.owner, 0x11, s.x, s.y);
         }
         return 0;
     }
@@ -239,16 +239,16 @@ std::uint32_t __fastcall GameWorld_MinerJobDig(GameWorld* world, void*, std::uin
     }
     TileAtOffset(world, TileOffset(s.x, s.y)).settler = static_cast<std::uint16_t>(settler);
     s.job = static_cast<std::uint16_t>(foundJob);
-    GameWorld_SetSettlerAnimation(world, nullptr, settler, foundAnimation);
+    CGameData_SetSettlerAnimation(world, nullptr, settler, foundAnimation);
     return 0;  // UpdateSettlers overwrites EAX
 }
 
-S3RE_HOOK(0x004f9b80, GameWorld_MinerJobFood, SettlerFn, Original_GameWorld_MinerJobFood, GameWorld_MinerJobFood);
-S3RE_HOOK(0x004fa220, GameWorld_MinerJobDig, SettlerFn, Original_GameWorld_MinerJobDig, GameWorld_MinerJobDig);
+S3RE_HOOK(0x004f9b80, CGameData_MinerJobFood, SettlerFn, Original_CGameData_MinerJobFood, CGameData_MinerJobFood);
+S3RE_HOOK(0x004fa220, CGameData_MinerJobDig, SettlerFn, Original_CGameData_MinerJobDig, CGameData_MinerJobDig);
 
 // Purpose: A miner enters his mine and starts the work cycle that fits the mine type (coal, iron,
 // gold, stone, sulphur...); he disappears from the map while inside.
-std::uint32_t __fastcall GameWorld_MinerJobEnter(GameWorld* world, void*, std::uint32_t settler) {
+std::uint32_t __fastcall CGameData_MinerJobEnter(CGameData* world, void*, std::uint32_t settler) {
     layout::Settler& s = world->settlers[settler];
     switch (world->buildings[s.building].art) {
     case 0x07: s.job = 0x55; break;
@@ -270,8 +270,8 @@ std::uint32_t __fastcall GameWorld_MinerJobEnter(GameWorld* world, void*, std::u
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + settler * sizeof(layout::Settler);
 }
 
-S3RE_HOOK(0x004f9a00, GameWorld_MinerJobEnter, SettlerFn, Original_GameWorld_MinerJobEnter, GameWorld_MinerJobEnter);
-S3RE_HOOK(0x004faa70, GameWorld_TileSlope, TileSlopeFn, Original_GameWorld_TileSlope, GameWorld_TileSlope);
+S3RE_HOOK(0x004f9a00, CGameData_MinerJobEnter, SettlerFn, Original_CGameData_MinerJobEnter, CGameData_MinerJobEnter);
+S3RE_HOOK(0x004faa70, CGameData_TileSlope, TileSlopeFn, Original_CGameData_TileSlope, CGameData_TileSlope);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -279,19 +279,19 @@ S3RE_HOOK(0x004faa70, GameWorld_TileSlope, TileSlopeFn, Original_GameWorld_TileS
 
 namespace {
 
-constexpr std::size_t kTestWorld = offsetof(GameWorld, tiles) + 400 * sizeof(GameWorld::tiles[0]);
+constexpr std::size_t kTestWorld = offsetof(CGameData, tiles) + 400 * sizeof(CGameData::tiles[0]);
 
 // Wrong: leaves out the diagonal pair.
-std::uint32_t __fastcall WrongTileSlope(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall WrongTileSlope(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y) {
     if (x >= 1 && y >= 1 && x + 1 < world->map_size && y + 1 < world->map_size) {
         layout::Tile& t = world->tiles[x + 1][y + 1];
         const std::uint8_t saved = t.height;
         t.height = world->tiles[x - 1][y - 1].height;
-        const std::uint32_t result = GameWorld_TileSlope(world, edx, x, y);
+        const std::uint32_t result = CGameData_TileSlope(world, edx, x, y);
         t.height = saved;
         return result;
     }
-    return GameWorld_TileSlope(world, edx, x, y);
+    return CGameData_TileSlope(world, edx, x, y);
 }
 
 void CompareTileSlope(test::Context& ctx, TileSlopeFn candidate, int cases) {
@@ -302,17 +302,17 @@ void CompareTileSlope(test::Context& ctx, TileSlopeFn candidate, int cases) {
         const bool wild = size != 0 && ctx.rng().Chance(1, 10);
         const std::uint32_t x = wild ? ctx.rng().Next32() : ctx.rng().Below(386);
         const std::uint32_t y = wild && ctx.rng().Chance(1, 2) ? ctx.rng().Next32() : ctx.rng().Below(386);
-        worlds.Both([&](GameWorld* w) { w->map_size = size; });
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
         if (x >= 1 && x < 384 && y >= 1 && y < 384) {
             const std::uint32_t base = ctx.rng().Below(256);
             for (std::int32_t dx = -1; dx <= 1; ++dx) {
                 for (std::int32_t dy = -1; dy <= 1; ++dy) {
                     const auto h = static_cast<std::uint8_t>(base + ctx.rng().Below(20));
-                    worlds.Both([&](GameWorld* w) { w->tiles[x + dx][y + dy].height = h; });
+                    worlds.Both([&](CGameData* w) { w->tiles[x + dx][y + dy].height = h; });
                 }
             }
         }
-        const std::uint32_t expected = Original_GameWorld_TileSlope(worlds.original(), nullptr, x, y);
+        const std::uint32_t expected = Original_CGameData_TileSlope(worlds.original(), nullptr, x, y);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y);
         if (!S3RE_EXPECT_EQ(expected, actual)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u) map %u", i, x, y, size);
@@ -323,8 +323,8 @@ void CompareTileSlope(test::Context& ctx, TileSlopeFn candidate, int cases) {
 }
 
 // Wrong: type 0x38 gets job 0xd8.
-std::uint32_t __fastcall WrongMinerJobEnter(GameWorld* world, void* edx, std::uint32_t settler) {
-    const std::uint32_t result = GameWorld_MinerJobEnter(world, edx, settler);
+std::uint32_t __fastcall WrongMinerJobEnter(CGameData* world, void* edx, std::uint32_t settler) {
+    const std::uint32_t result = CGameData_MinerJobEnter(world, edx, settler);
     layout::Settler& s = world->settlers[settler];
     if (world->buildings[s.building].art == 0x38) {
         s.job = 0xd8;
@@ -333,7 +333,7 @@ std::uint32_t __fastcall WrongMinerJobEnter(GameWorld* world, void* edx, std::ui
 }
 
 void CompareMinerJobEnter(test::Context& ctx, SettlerFn candidate, int cases) {
-    test::WorldPair worlds(ctx, offsetof(GameWorld, buildings) + 0x101 * sizeof(layout::Building));
+    test::WorldPair worlds(ctx, offsetof(CGameData, buildings) + 0x101 * sizeof(layout::Building));
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t settler = ctx.rng().Below(0x7d00);
         const std::uint32_t building = ctx.rng().Below(0x100);
@@ -342,13 +342,13 @@ void CompareMinerJobEnter(test::Context& ctx, SettlerFn candidate, int cases) {
                                                           : kArts[ctx.rng().Below(10)];
         const auto x = static_cast<std::uint16_t>(ctx.rng().Below(384));
         const auto y = static_cast<std::uint16_t>(ctx.rng().Below(384));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->settlers[settler].building = static_cast<std::uint16_t>(building);
             w->settlers[settler].x = x;
             w->settlers[settler].y = y;
             w->buildings[building].art = art;
         });
-        const std::uint32_t expected = Original_GameWorld_MinerJobEnter(worlds.original(), nullptr, settler) -
+        const std::uint32_t expected = Original_CGameData_MinerJobEnter(worlds.original(), nullptr, settler) -
                                        static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(worlds.original()));
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, settler) -
                                      static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(worlds.ours()));
@@ -371,8 +371,8 @@ constexpr std::size_t kTallyBytes = 20 * sizeof(PlayerTally);
 void CompareMinerJob(test::Context& ctx, SettlerFn original, SettlerFn candidate, int cases, bool dig) {
     test::FakeGraphics gfx;  // every sprite valid, for SetSettlerAnimation
     gfx.MakeEverySpriteValid(7);
-    test::WorldPair worlds(ctx, sizeof(GameWorld));
-    worlds.Both([&](GameWorld* w) {
+    test::WorldPair worlds(ctx, sizeof(CGameData));
+    worlds.Both([&](CGameData* w) {
         w->map_size = 384;
         w->building_high_water = 0x100;
         for (std::int32_t k = 0; k < 64; ++k) {  // radius 0..4 around the mine
@@ -411,7 +411,7 @@ void CompareMinerJob(test::Context& ctx, SettlerFn original, SettlerFn candidate
         const auto food = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(20));
         mission = ctx.rng().Chance(1, 2) ? 0 : 1 + static_cast<std::int32_t>(ctx.rng().Below(20));
         configByte = static_cast<std::uint8_t>(ctx.rng().Below(2));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             layout::Settler& s = w->settlers[settler];
             s.building = static_cast<std::uint16_t>(building);
             s.owner = owner;
@@ -430,14 +430,14 @@ void CompareMinerJob(test::Context& ctx, SettlerFn original, SettlerFn candidate
             static constexpr std::uint8_t kKinds[] = {0x10, 0x20, 0x30, 0x40, 0x50};
             const std::uint16_t history = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Next32());
             const auto digs = static_cast<std::uint8_t>(ctx.rng().Below(0x22));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->buildings[building].work_x = history;
                 w->buildings[building].production.digs = digs;
             });
             for (std::int32_t dx = -4; dx <= 4; ++dx) {
                 for (std::int32_t dy = -3; dy <= 4; ++dy) {
                     const auto r = static_cast<std::uint8_t>(kKinds[ctx.rng().Below(5)] | ctx.rng().Below(16));
-                    worlds.Both([&](GameWorld* w) { w->tiles[bx + dx][by + dy].resources = r; });
+                    worlds.Both([&](CGameData* w) { w->tiles[bx + dx][by + dy].resources = r; });
                 }
             }
         } else {
@@ -446,7 +446,7 @@ void CompareMinerJob(test::Context& ctx, SettlerFn original, SettlerFn candidate
                 const auto pile = static_cast<std::uint16_t>(ctx.rng().Chance(1, 6) ? 0 : 1 + ctx.rng().Below(0x3ff));
                 const auto amount = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0 : 1 + ctx.rng().Below(3));
                 const auto kind = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0 : 0xfe);
-                worlds.Both([&](GameWorld* w) {
+                worlds.Both([&](CGameData* w) {
                     w->buildings[building].piles[k] = pile;
                     w->piles[pile].amount = amount;
                     w->piles[pile].art = kind;
@@ -456,7 +456,7 @@ void CompareMinerJob(test::Context& ctx, SettlerFn original, SettlerFn candidate
             const auto out = static_cast<std::uint16_t>(1 + ctx.rng().Below(0x3ff));
             const auto outAmount = static_cast<std::uint8_t>(5 + ctx.rng().Below(5));
             const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32());
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->buildings[building].pile_ring = out;
                 w->buildings[building].request_flags = flags;
                 w->piles[out].amount = outAmount;
@@ -480,21 +480,21 @@ void CompareMinerJob(test::Context& ctx, SettlerFn original, SettlerFn candidate
 }
 
 // Wrong: computer players' miners get no extra food.
-std::uint32_t __fastcall WrongMinerJobFood(GameWorld* world, void* edx, std::uint32_t settler) {
+std::uint32_t __fastcall WrongMinerJobFood(CGameData* world, void* edx, std::uint32_t settler) {
     layout::Settler& s = world->settlers[settler];
     std::int32_t& active = world->players[s.owner].active;
     const std::int32_t saved = active;
     active = 1;
-    const std::uint32_t result = GameWorld_MinerJobFood(world, edx, settler);
+    const std::uint32_t result = CGameData_MinerJobFood(world, edx, settler);
     active = saved;
     return result;
 }
 
 // Wrong: the dig history is not shifted when nothing is found.
-std::uint32_t __fastcall WrongMinerJobDig(GameWorld* world, void* edx, std::uint32_t settler) {
+std::uint32_t __fastcall WrongMinerJobDig(CGameData* world, void* edx, std::uint32_t settler) {
     layout::Building& b = world->buildings[world->settlers[settler].building];
     const std::uint16_t x = b.work_x, y = b.work_y;
-    const std::uint32_t result = GameWorld_MinerJobDig(world, edx, settler);
+    const std::uint32_t result = CGameData_MinerJobDig(world, edx, settler);
     if ((b.work_x & 1) == 0) {
         b.work_x = x;
         b.work_y = y;
@@ -504,36 +504,36 @@ std::uint32_t __fastcall WrongMinerJobDig(GameWorld* world, void* edx, std::uint
 
 }  // namespace
 
-S3RE_TEST(GameWorld_MinerJobFood_MatchesOriginal) {
-    CompareMinerJob(ctx, Original_GameWorld_MinerJobFood, &GameWorld_MinerJobFood, 4000, false);
+S3RE_TEST(CGameData_MinerJobFood_MatchesOriginal) {
+    CompareMinerJob(ctx, Original_CGameData_MinerJobFood, &CGameData_MinerJobFood, 4000, false);
 }
-S3RE_TEST(GameWorld_MinerJobFood_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_MinerJobFood_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareMinerJob(probe, Original_GameWorld_MinerJobFood, &WrongMinerJobFood, 2000, false);
+    CompareMinerJob(probe, Original_CGameData_MinerJobFood, &WrongMinerJobFood, 2000, false);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_MinerJobDig_MatchesOriginal) {
-    CompareMinerJob(ctx, Original_GameWorld_MinerJobDig, &GameWorld_MinerJobDig, 4000, true);
+S3RE_TEST(CGameData_MinerJobDig_MatchesOriginal) {
+    CompareMinerJob(ctx, Original_CGameData_MinerJobDig, &CGameData_MinerJobDig, 4000, true);
 }
-S3RE_TEST(GameWorld_MinerJobDig_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_MinerJobDig_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareMinerJob(probe, Original_GameWorld_MinerJobDig, &WrongMinerJobDig, 2000, true);
+    CompareMinerJob(probe, Original_CGameData_MinerJobDig, &WrongMinerJobDig, 2000, true);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
-S3RE_TEST(GameWorld_MinerJobEnter_MatchesOriginal) {
-    CompareMinerJobEnter(ctx, &GameWorld_MinerJobEnter, 20000);
+S3RE_TEST(CGameData_MinerJobEnter_MatchesOriginal) {
+    CompareMinerJobEnter(ctx, &CGameData_MinerJobEnter, 20000);
 }
-S3RE_TEST(GameWorld_MinerJobEnter_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_MinerJobEnter_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareMinerJobEnter(probe, &WrongMinerJobEnter, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
-S3RE_TEST(GameWorld_TileSlope_MatchesOriginal) {
-    CompareTileSlope(ctx, &GameWorld_TileSlope, 20000);
+S3RE_TEST(CGameData_TileSlope_MatchesOriginal) {
+    CompareTileSlope(ctx, &CGameData_TileSlope, 20000);
 }
-S3RE_TEST(GameWorld_TileSlope_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_TileSlope_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareTileSlope(probe, &WrongTileSlope, 2000);
     S3RE_EXPECT(probe.failures() > 0);

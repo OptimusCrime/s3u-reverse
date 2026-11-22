@@ -1,10 +1,10 @@
 // Land changing hands: a tile losing its owner, and what stands on it.
 //
-// GameWorld::ResetCivilianOnTile (0x0050e980): (x, y) thiscall, ret 8. If a
+// CGameData::ResetCivilianOnTile (0x0050e980): (x, y) thiscall, ret 8. If a
 //   settler stands on the tile (word +0x0), belongs to the tile's owner
 //   (+0x8) and its type has class 0 (civilians, S3.EXE 0x658f64):
 //   ResetSettlerToIdle(settler). EAX not used by callers.
-// GameWorld::LosePileOnTile (0x00504f70): (x, y) thiscall, ret 8. Only for a
+// CGameData::LosePileOnTile (0x00504f70): (x, y) thiscall, ret 8. Only for a
 //   tile in a land area (word +0x14 in 1..0x7fff) with a pile (word +0x2 not
 //   0, flag 0x20 "building" clear). A dropped pile (kind +0x4 == 0xfe): if
 //   units are leaving it (+0x2), every settler (1..high water, re-read) with
@@ -16,7 +16,7 @@
 //   ("illegal pile in changing land: ...", "(x,y) = ..."). In both cases
 //   SubtractPlayerCounter(tile owner, good, amount). The pile record and the
 //   tile's pile word stay as they are. EAX not used by callers.
-// GameWorld::ClearTileOwner (0x0051b640): (x, y) thiscall, ret 8. If the
+// CGameData::ClearTileOwner (0x0051b640): (x, y) thiscall, ret 8. If the
 //   tile has an owner (+0x8 != 0xff): ResetCivilianOnTile, LosePileOnTile,
 //   owner = 0xff, and if the tile is in a land area (1..0x7fff),
 //   SplitAreaAtTile(x, y). EAX not used by callers (the "flow" hit of
@@ -54,16 +54,16 @@ constexpr std::uint8_t kPileDropped = 0xfe;
 // Callees reached through their S3.EXE addresses (so that the tests can
 // replace them by recording stubs): ResetSettlerToIdle belongs to another
 // work package; SplitAreaAtTile (verified, area_split.cpp) floods regions.
-using SettlerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler);
-using TileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+using SettlerFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t settler);
+using TileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 constexpr std::uintptr_t kResetSettlerToIdle = 0x0050cf50;
 constexpr std::uintptr_t kSplitAreaAtTile = 0x004e5d50;
 
-void ResetSettlerToIdle(GameWorld* world, std::uint32_t settler) {
+void ResetSettlerToIdle(CGameData* world, std::uint32_t settler) {
     reinterpret_cast<SettlerFn>(kResetSettlerToIdle)(world, nullptr, settler);
 }
 
-Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
@@ -79,14 +79,14 @@ bool IsFetchingJob(std::uint16_t job) {
 
 }  // namespace
 
-std::uint32_t __fastcall GameWorld_SubtractPlayerCounter(GameWorld* world, void* edx, std::uint32_t player,
+std::uint32_t __fastcall CGameData_SubtractPlayerCounter(CGameData* world, void* edx, std::uint32_t player,
                                                          std::uint32_t index, std::uint32_t amount);
 
-using PositionFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+using PositionFn = void(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 
 // Purpose: When a tile changes hands, a civilian of the old owner standing on
 // it stops what he is doing.
-void __fastcall GameWorld_ResetCivilianOnTile(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+void __fastcall CGameData_ResetCivilianOnTile(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     const Tile& tile = TileAt(world, x, y);
     const std::uint32_t settler = tile.settler;
     if (settler == 0) {
@@ -102,7 +102,7 @@ void __fastcall GameWorld_ResetCivilianOnTile(GameWorld* world, void*, std::uint
 // Purpose: When a tile changes hands, the goods pile lying on it is lost to
 // its old owner: settlers on their way to fetch from it give up, it leaves
 // the area's goods lists and the owner's goods counter.
-void __fastcall GameWorld_LosePileOnTile(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+void __fastcall CGameData_LosePileOnTile(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     Tile& tile = TileAt(world, x, y);
     const std::uint32_t area = tile.area;
     if (!IsLandArea(static_cast<std::uint16_t>(area))) {
@@ -138,31 +138,31 @@ void __fastcall GameWorld_LosePileOnTile(GameWorld* world, void*, std::uint32_t 
                      static_cast<std::uint32_t>(pile.art), static_cast<std::uint32_t>(pile.good));
         GameDebugLog(texts::kPositionXY, static_cast<std::uint32_t>(pile.x), static_cast<std::uint32_t>(pile.y));
     }
-    GameWorld_SubtractPlayerCounter(world, nullptr, tile.owner, pile.good, pile.amount);
+    CGameData_SubtractPlayerCounter(world, nullptr, tile.owner, pile.good, pile.amount);
 }
 
 // Purpose: Takes a tile away from its owner (e.g. when territory is lost):
 // civilians on it stop, a pile on it is lost, and the economy area is split
 // if the tile connected parts of it.
-void __fastcall GameWorld_ClearTileOwner(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+void __fastcall CGameData_ClearTileOwner(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     std::uint8_t& owner = TileAt(world, x, y).owner;
     if (owner == kFree) {
         return;
     }
-    GameWorld_ResetCivilianOnTile(world, nullptr, x, y);
-    GameWorld_LosePileOnTile(world, nullptr, x, y);
+    CGameData_ResetCivilianOnTile(world, nullptr, x, y);
+    CGameData_LosePileOnTile(world, nullptr, x, y);
     owner = kFree;
     if (IsLandArea(TileAt(world, x, y).area)) {
         reinterpret_cast<TileFn>(kSplitAreaAtTile)(world, nullptr, x, y);
     }
 }
 
-S3RE_HOOK(0x0050e980, GameWorld_ResetCivilianOnTile, PositionFn, Original_GameWorld_ResetCivilianOnTile,
-          GameWorld_ResetCivilianOnTile);
-S3RE_HOOK(0x00504f70, GameWorld_LosePileOnTile, PositionFn, Original_GameWorld_LosePileOnTile,
-          GameWorld_LosePileOnTile);
-S3RE_HOOK(0x0051b640, GameWorld_ClearTileOwner, PositionFn, Original_GameWorld_ClearTileOwner,
-          GameWorld_ClearTileOwner);
+S3RE_HOOK(0x0050e980, CGameData_ResetCivilianOnTile, PositionFn, Original_CGameData_ResetCivilianOnTile,
+          CGameData_ResetCivilianOnTile);
+S3RE_HOOK(0x00504f70, CGameData_LosePileOnTile, PositionFn, Original_CGameData_LosePileOnTile,
+          CGameData_LosePileOnTile);
+S3RE_HOOK(0x0051b640, CGameData_ClearTileOwner, PositionFn, Original_CGameData_ClearTileOwner,
+          CGameData_ClearTileOwner);
 
 // --- RecalculateTerritory -----------------------------------------------------
 
@@ -174,7 +174,7 @@ namespace {
 constexpr std::uintptr_t kDestroyBuildingAt = 0x004d97b0;
 constexpr std::uintptr_t kSetOwnerOfFreeTile = 0x0051b5d0;
 constexpr std::uintptr_t kClearTileOwner = 0x0051b640;  // above
-using SetOwnerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+using SetOwnerFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                               std::uint32_t owner);
 
 constexpr std::int32_t kScratchRadius = 50;  // the scratch covers (x - 50 .. x + 50, y - 50 .. y + 50)
@@ -199,14 +199,14 @@ std::uint32_t InfluenceEntries(const layout::Building& b) {
 
 // The byte of the scratch for player byte `player` in cell (i, j) of the
 // 101 x 101 window (players are not bound-checked, as in the original).
-std::uint8_t& ScratchCell(GameWorld* world, std::int32_t i, std::int32_t j, std::uint32_t player) {
+std::uint8_t& ScratchCell(CGameData* world, std::int32_t i, std::int32_t j, std::uint32_t player) {
     std::uint8_t* base = world->territory_scratch[0][0].player;
     return base[static_cast<std::uint32_t>((i * kScratchSide + j) * static_cast<std::int32_t>(layout::kPlayers)) + player];
 }
 
 // The player with the strongest claim on a cell (first of equals), or 0xff
 // if nobody has one.
-std::uint32_t StrongestClaim(GameWorld* world, std::int32_t i, std::int32_t j) {
+std::uint32_t StrongestClaim(CGameData* world, std::int32_t i, std::int32_t j) {
     std::uint32_t best = 0;
     std::uint32_t player = kNoPlayer;
     for (std::uint32_t p = 0; p < layout::kPlayers; ++p) {
@@ -221,7 +221,7 @@ std::uint32_t StrongestClaim(GameWorld* world, std::int32_t i, std::int32_t j) {
 
 }  // namespace
 
-std::uint32_t __fastcall GameWorld_RecalculateTerritory(GameWorld* world, void*, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall CGameData_RecalculateTerritory(CGameData* world, void*, std::uint32_t x, std::uint32_t y);
 
 // Purpose: Recomputes who owns the land within 50 tiles of (x, y) after a
 // military building there changed (built, garrisoned, lost or destroyed):
@@ -229,7 +229,7 @@ std::uint32_t __fastcall GameWorld_RecalculateTerritory(GameWorld* world, void*,
 // strongest near it; free tiles go to the strongest claim, owned tiles
 // without a claim of their owner go to the strongest other claim (destroying
 // buildings standing there), and the border marks are redrawn.
-std::uint32_t __fastcall GameWorld_RecalculateTerritory(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall CGameData_RecalculateTerritory(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     world->draw_call_counter = 0;
     std::memset(world->territory_scratch, 0, sizeof(world->territory_scratch));
     const std::int32_t cx = static_cast<std::int32_t>(x);
@@ -317,15 +317,15 @@ std::uint32_t __fastcall GameWorld_RecalculateTerritory(GameWorld* world, void*,
     std::uint32_t result = 0;
     for (std::int32_t i = -51; i <= 51; ++i) {
         for (std::int32_t j = -51; j <= 51; ++j) {
-            result = GameWorld_UpdateBorderFlagsAround(world, nullptr, x + static_cast<std::uint32_t>(i),
+            result = CGameData_UpdateBorderFlagsAround(world, nullptr, x + static_cast<std::uint32_t>(i),
                                                        y + static_cast<std::uint32_t>(j));
         }
     }
     return result;
 }
 
-S3RE_HOOK(0x00519a90, GameWorld_RecalculateTerritory, TileFn, Original_GameWorld_RecalculateTerritory,
-          GameWorld_RecalculateTerritory);
+S3RE_HOOK(0x00519a90, CGameData_RecalculateTerritory, TileFn, Original_CGameData_RecalculateTerritory,
+          CGameData_RecalculateTerritory);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -333,12 +333,12 @@ S3RE_HOOK(0x00519a90, GameWorld_RecalculateTerritory, TileFn, Original_GameWorld
 
 namespace {
 
-constexpr std::size_t kTestWorld = offsetof(GameWorld, settlers) + 200 * sizeof(Settler);
+constexpr std::size_t kTestWorld = offsetof(CGameData, settlers) + 200 * sizeof(Settler);
 
 // Recording stubs for ResetSettlerToIdle (the settler's job becomes 1, so
 // that a scan doesn't find him twice) and SplitAreaAtTile (no effect).
 void InstallStubs(test::CalleeStubs& stubs) {
-    stubs.Install<1, kResetSettlerToIdle>([](GameWorld* w, std::uint32_t, const std::uint32_t* args) {
+    stubs.Install<1, kResetSettlerToIdle>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
         w->settlers[args[0] & 0xffff].job = 1;
         return 0x5a5a0001u;
     });
@@ -373,7 +373,7 @@ TileCase SetUpTile(test::Context& ctx, test::WorldPair& worlds) {
     const auto amount = static_cast<std::uint8_t>(ctx.rng().Below(9));
     const auto prev = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? 0 : 1 + ctx.rng().Below(200));
     const auto next = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? 0 : 1 + ctx.rng().Below(200));
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         w->settler_high_water = settlers;
         Tile& t = w->tiles[x][y];
         t.settler = settler;
@@ -398,7 +398,7 @@ TileCase SetUpTile(test::Context& ctx, test::WorldPair& worlds) {
         const auto tx = static_cast<std::uint16_t>(ctx.rng().Chance(2, 3) ? px : ctx.rng().Below(384));
         const auto ty = static_cast<std::uint16_t>(ctx.rng().Chance(2, 3) ? py : ctx.rng().Below(384));
         const auto sart = static_cast<std::uint8_t>(ctx.rng().Below(0x30));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Settler& s = w->settlers[n];
             s.job = job;
             s.owner = sowner;
@@ -435,18 +435,18 @@ void ComparePositionFn(test::Context& ctx, PositionFn original, PositionFn candi
 }
 
 // Wrong: also resets civilians of other owners.
-void __fastcall WrongResetCivilianOnTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
+void __fastcall WrongResetCivilianOnTile(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y) {
     Tile& tile = TileAt(world, x, y);
     const std::uint8_t saved = tile.owner;
     if (tile.settler != 0) {
         tile.owner = world->settlers[tile.settler].owner;
     }
-    GameWorld_ResetCivilianOnTile(world, edx, x, y);
+    CGameData_ResetCivilianOnTile(world, edx, x, y);
     tile.owner = saved;
 }
 
 // Wrong: ignores job 0xa9.
-void __fastcall WrongLosePileOnTile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
+void __fastcall WrongLosePileOnTile(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y) {
     std::vector<std::uint32_t> changed;
     for (std::uint32_t n = 1; n <= world->settler_high_water && n < 200; ++n) {
         if (world->settlers[n].job == 0xa9) {
@@ -454,7 +454,7 @@ void __fastcall WrongLosePileOnTile(GameWorld* world, void* edx, std::uint32_t x
             changed.push_back(n);
         }
     }
-    GameWorld_LosePileOnTile(world, edx, x, y);
+    CGameData_LosePileOnTile(world, edx, x, y);
     for (const std::uint32_t n : changed) {
         if (world->settlers[n].job == 0x3) {
             world->settlers[n].job = 0xa9;
@@ -463,9 +463,9 @@ void __fastcall WrongLosePileOnTile(GameWorld* world, void* edx, std::uint32_t x
 }
 
 // Wrong: splits the area even for water tiles.
-void __fastcall WrongClearTileOwner(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
+void __fastcall WrongClearTileOwner(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y) {
     const bool owned = TileAt(world, x, y).owner != kFree;
-    GameWorld_ClearTileOwner(world, edx, x, y);
+    CGameData_ClearTileOwner(world, edx, x, y);
     if (owned && TileAt(world, x, y).area >= layout::kTileAreaWater) {
         reinterpret_cast<TileFn>(kSplitAreaAtTile)(world, nullptr, x, y);
     }
@@ -473,28 +473,28 @@ void __fastcall WrongClearTileOwner(GameWorld* world, void* edx, std::uint32_t x
 
 }  // namespace
 
-S3RE_TEST(GameWorld_ResetCivilianOnTile_MatchesOriginal) {
-    ComparePositionFn(ctx, Original_GameWorld_ResetCivilianOnTile, &GameWorld_ResetCivilianOnTile, 3000);
+S3RE_TEST(CGameData_ResetCivilianOnTile_MatchesOriginal) {
+    ComparePositionFn(ctx, Original_CGameData_ResetCivilianOnTile, &CGameData_ResetCivilianOnTile, 3000);
 }
-S3RE_TEST(GameWorld_ResetCivilianOnTile_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_ResetCivilianOnTile_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    ComparePositionFn(probe, Original_GameWorld_ResetCivilianOnTile, &WrongResetCivilianOnTile, 3000);
+    ComparePositionFn(probe, Original_CGameData_ResetCivilianOnTile, &WrongResetCivilianOnTile, 3000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_LosePileOnTile_MatchesOriginal) {
-    ComparePositionFn(ctx, Original_GameWorld_LosePileOnTile, &GameWorld_LosePileOnTile, 3000);
+S3RE_TEST(CGameData_LosePileOnTile_MatchesOriginal) {
+    ComparePositionFn(ctx, Original_CGameData_LosePileOnTile, &CGameData_LosePileOnTile, 3000);
 }
-S3RE_TEST(GameWorld_LosePileOnTile_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_LosePileOnTile_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    ComparePositionFn(probe, Original_GameWorld_LosePileOnTile, &WrongLosePileOnTile, 3000);
+    ComparePositionFn(probe, Original_CGameData_LosePileOnTile, &WrongLosePileOnTile, 3000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_ClearTileOwner_MatchesOriginal) {
-    ComparePositionFn(ctx, Original_GameWorld_ClearTileOwner, &GameWorld_ClearTileOwner, 3000);
+S3RE_TEST(CGameData_ClearTileOwner_MatchesOriginal) {
+    ComparePositionFn(ctx, Original_CGameData_ClearTileOwner, &CGameData_ClearTileOwner, 3000);
 }
-S3RE_TEST(GameWorld_ClearTileOwner_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_ClearTileOwner_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    ComparePositionFn(probe, Original_GameWorld_ClearTileOwner, &WrongClearTileOwner, 3000);
+    ComparePositionFn(probe, Original_CGameData_ClearTileOwner, &WrongClearTileOwner, 3000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
@@ -502,16 +502,16 @@ S3RE_TEST(GameWorld_ClearTileOwner_ComparisonDetectsWrongImplementation) {
 // --- RecalculateTerritory and the destruction cycle ---------------------------
 
 // The other cycle functions (building_crush.cpp) and their trampolines.
-using CycleCrushFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building);
-using CycleBuildingFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building);
-std::uint32_t __fastcall GameWorld_CrushBuilding(GameWorld* world, void* edx, std::uint32_t building);
-extern CycleCrushFn Original_GameWorld_CrushBuilding;
-extern CycleBuildingFn Original_GameWorld_ReleaseSiteWorkers;
-extern TileFn Original_GameWorld_DestroyBuildingAt;
+using CycleCrushFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t building);
+using CycleBuildingFn = void(__fastcall*)(CGameData* world, void* edx, std::uint32_t building);
+std::uint32_t __fastcall CGameData_CrushBuilding(CGameData* world, void* edx, std::uint32_t building);
+extern CycleCrushFn Original_CGameData_CrushBuilding;
+extern CycleBuildingFn Original_CGameData_ReleaseSiteWorkers;
+extern TileFn Original_CGameData_DestroyBuildingAt;
 
 namespace {
 
-constexpr std::size_t kTerritoryWorld = offsetof(GameWorld, buildings) + 64 * sizeof(layout::Building);
+constexpr std::size_t kTerritoryWorld = offsetof(CGameData, buildings) + 64 * sizeof(layout::Building);
 constexpr std::uint32_t kMarkFootprint = 0x80000000;
 constexpr std::uint32_t kMarkFootprintEnd = 0x80000001;
 
@@ -531,7 +531,7 @@ void SetRingOffsets(test::WorldPair& worlds, std::uint32_t entries) {
             }
         }
     }
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         for (std::uint32_t k = 0; k < entries; ++k) {
             w->offsets[k] = table[k];
         }
@@ -543,7 +543,7 @@ void SetRingOffsets(test::WorldPair& worlds, std::uint32_t entries) {
 // number.
 void PlaceBuilding(test::WorldPair& worlds, std::uint32_t number, std::uint8_t type, std::uint8_t race,
                    std::uint8_t owner, std::uint16_t x, std::uint16_t y, std::uint8_t buildup, std::uint16_t garrison) {
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         layout::Building& b = w->buildings[number];
         b.art = type;
         b.race = race;
@@ -581,7 +581,7 @@ void ClearWindow(test::Context& ctx, test::WorldPair& worlds, std::int32_t x, st
             }
             const auto flags = static_cast<std::uint8_t>(ctx.rng().Below(256) & 0x56);
             const std::uint8_t o = owner(tx, ty);
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 Tile& t = w->tiles[tx][ty];
                 t.flags = flags;
                 t.owner = o;
@@ -595,7 +595,7 @@ void ClearWindow(test::Context& ctx, test::WorldPair& worlds, std::int32_t x, st
 
 void InstallTerritoryStubs(test::CalleeStubs& stubs, bool cycle) {
     InstallStubs(stubs);  // ResetSettlerToIdle, SplitAreaAtTile
-    stubs.Install<3, kSetOwnerOfFreeTile>([](GameWorld* w, std::uint32_t, const std::uint32_t* args) {
+    stubs.Install<3, kSetOwnerOfFreeTile>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
         Tile& t = TileAt(w, args[0], args[1]);
         if (t.owner == kFree) {
             t.owner = static_cast<std::uint8_t>(args[2]);
@@ -604,7 +604,7 @@ void InstallTerritoryStubs(test::CalleeStubs& stubs, bool cycle) {
     });
     if (!cycle) {
         stubs.Install<2, kDestroyBuildingAt>();
-        stubs.Install<2, kClearTileOwner>([](GameWorld* w, std::uint32_t, const std::uint32_t* args) {
+        stubs.Install<2, kClearTileOwner>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
             TileAt(w, args[0], args[1]).owner = kFree;
             return 0u;
         });
@@ -627,7 +627,7 @@ void CompareRecalculate(test::Context& ctx, TileFn candidate, int cases) {
         const std::uint32_t mapSize = ctx.rng().Chance(1, 4) ? 120 + ctx.rng().Below(200) : 384;
         const auto cx = static_cast<std::int32_t>(ctx.rng().Below(mapSize));
         const auto cy = static_cast<std::int32_t>(ctx.rng().Below(mapSize));
-        worlds.Both([&](GameWorld* w) { w->map_size = mapSize; });
+        worlds.Both([&](CGameData* w) { w->map_size = mapSize; });
         const std::int32_t split = cx + ctx.rng().Range(-30, 30);
         ClearWindow(ctx, worlds, cx, cy, 102, [&](std::int32_t tx, std::int32_t ty) -> std::uint8_t {
             if ((tx + ty) % 7 == 0) {
@@ -650,7 +650,7 @@ void CompareRecalculate(test::Context& ctx, TileFn candidate, int cases) {
                           static_cast<std::uint16_t>(ctx.rng().Chance(5, 6) ? 1 + ctx.rng().Below(100) : 0));
         }
         stubs.SetWorld(worlds.original());
-        const std::uint32_t expected = Original_GameWorld_RecalculateTerritory(worlds.original(), nullptr, cx, cy);
+        const std::uint32_t expected = Original_CGameData_RecalculateTerritory(worlds.original(), nullptr, cx, cy);
         const std::vector<test::StubCall> expectedCalls = stubs.Take();
         const std::vector<DebugLogCall> expectedLogs = logs.Take();
         stubs.SetWorld(worlds.ours());
@@ -667,10 +667,10 @@ void CompareRecalculate(test::Context& ctx, TileFn candidate, int cases) {
 }
 
 // Wrong: the claim of a building's neighbour ring (distance 1) is not full.
-std::uint32_t __fastcall WrongRecalculateTerritory(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall WrongRecalculateTerritory(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y) {
     const std::int32_t saved = world->offsets[1].distance;
     world->offsets[1].distance = 2;
-    const std::uint32_t result = GameWorld_RecalculateTerritory(world, edx, x, y);
+    const std::uint32_t result = CGameData_RecalculateTerritory(world, edx, x, y);
     world->offsets[1].distance = saved;
     return result;
 }
@@ -689,7 +689,7 @@ void CompareCycle(test::Context& ctx, CycleCrushFn candidate, int cases, int& re
     InstallTerritoryStubs(stubs, true);
     DebugLogRecorder logs;
     SetRingOffsets(worlds, 5200);
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         w->map_size = 384;
         w->settler_high_water = 60;
         w->building_high_water = 10;
@@ -705,7 +705,7 @@ void CompareCycle(test::Context& ctx, CycleCrushFn candidate, int cases, int& re
         ClearWindow(ctx, worlds, x1, y1, 110, [&](std::int32_t tx, std::int32_t) -> std::uint8_t {
             return static_cast<std::uint8_t>(tx < x0 + gap / 3 ? 0 : 1);
         });
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             for (std::uint32_t n = 1; n <= 10; ++n) {
                 w->buildings[n].owner = kFree;
             }
@@ -728,7 +728,7 @@ void CompareCycle(test::Context& ctx, CycleCrushFn candidate, int cases, int& re
             const auto job = static_cast<std::uint16_t>(n <= 6 ? 0x8c : ctx.rng().Chance(1, 2) ? 5 : 1);
             const auto building = static_cast<std::uint16_t>(n <= 3 ? 1 : n <= 6 ? 2 : ctx.rng().Chance(2, 3) ? 3 : 0);
             const auto next = static_cast<std::uint16_t>(n == 3 || n == 6 ? 0 : n < 6 ? n + 1 : 0);
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 layout::Settler& s = w->settlers[n];
                 s.owner = static_cast<std::uint8_t>(n <= 3 ? 0 : 1);
                 s.art = static_cast<std::uint8_t>(n <= 6 ? 0x20 : 1);
@@ -740,7 +740,7 @@ void CompareCycle(test::Context& ctx, CycleCrushFn candidate, int cases, int& re
                 s.y = static_cast<std::uint16_t>(ys);
             });
         }
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             for (std::uint32_t b = 1; b <= 3; ++b) {
                 layout::Building& r = w->buildings[b];
                 r.piles[0] = r.piles[1] = r.piles[2] = 0;
@@ -759,11 +759,11 @@ void CompareCycle(test::Context& ctx, CycleCrushFn candidate, int cases, int& re
         stubs.SetWorld(worlds.original());
         std::uint32_t expected = 0;
         {
-            test::ScopedJump crush(0x004d9250, reinterpret_cast<const void*>(Original_GameWorld_CrushBuilding));
-            test::ScopedJump release(0x0050e3b0, reinterpret_cast<const void*>(Original_GameWorld_ReleaseSiteWorkers));
-            test::ScopedJump destroy(0x004d97b0, reinterpret_cast<const void*>(Original_GameWorld_DestroyBuildingAt));
-            test::ScopedJump recalc(0x00519a90, reinterpret_cast<const void*>(Original_GameWorld_RecalculateTerritory));
-            expected = Original_GameWorld_CrushBuilding(worlds.original(), nullptr, 2);
+            test::ScopedJump crush(0x004d9250, reinterpret_cast<const void*>(Original_CGameData_CrushBuilding));
+            test::ScopedJump release(0x0050e3b0, reinterpret_cast<const void*>(Original_CGameData_ReleaseSiteWorkers));
+            test::ScopedJump destroy(0x004d97b0, reinterpret_cast<const void*>(Original_CGameData_DestroyBuildingAt));
+            test::ScopedJump recalc(0x00519a90, reinterpret_cast<const void*>(Original_CGameData_RecalculateTerritory));
+            expected = Original_CGameData_CrushBuilding(worlds.original(), nullptr, 2);
         }
         const std::vector<test::StubCall> expectedCalls = stubs.Take();
         const std::vector<DebugLogCall> expectedLogs = logs.Take();
@@ -785,17 +785,17 @@ void CompareCycle(test::Context& ctx, CycleCrushFn candidate, int cases, int& re
 
 }  // namespace
 
-S3RE_TEST(GameWorld_RecalculateTerritory_MatchesOriginal) {
-    CompareRecalculate(ctx, &GameWorld_RecalculateTerritory, 150);
+S3RE_TEST(CGameData_RecalculateTerritory_MatchesOriginal) {
+    CompareRecalculate(ctx, &CGameData_RecalculateTerritory, 150);
 }
-S3RE_TEST(GameWorld_RecalculateTerritory_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_RecalculateTerritory_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareRecalculate(probe, &WrongRecalculateTerritory, 40);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_DestructionCycle_MatchesOriginal) {
+S3RE_TEST(CGameData_DestructionCycle_MatchesOriginal) {
     int recursions = 0;
-    CompareCycle(ctx, &GameWorld_CrushBuilding, 40, recursions);
+    CompareCycle(ctx, &CGameData_CrushBuilding, 40, recursions);
     // Most cases must really go through the recursion.
     S3RE_EXPECT(recursions >= 20);
 }

@@ -1,4 +1,4 @@
-// Layout of the world object (CGameData, our GameWorld) and its records.
+// Layout of the world object (CGameData, the RTTI class name) and its records.
 //
 // Typed access to the original game's memory: our replacements read and
 // write world fields through these structs (world->tiles[x][y].owner,
@@ -30,8 +30,8 @@ namespace s3re::game {
 
 // Record types and constants live in the nested namespace `layout`, so they
 // don't clash with local helpers; converted files bring in the names they
-// use (`using layout::Tile;`). The world itself is s3re::game::GameWorld
-// (below), which derives from layout::GameWorldFields.
+// use (`using layout::Tile;`). The world itself is s3re::game::CGameData
+// (below), which derives from layout::CGameDataFields.
 namespace layout {
 
 #pragma pack(push, 1)
@@ -565,7 +565,7 @@ struct Ring1000Indices {
 };
 
 // ---------------------------------------------------------------- CGameData
-struct GameWorldFields {
+struct CGameDataFields {
     std::uint32_t vtable;                                   // 0x0000000 0x658c18
     std::int32_t statistics_kernel[13];                     // 0x0000004
     std::uint8_t statistics[kPlayers][kGoodsTypes][256];    // 0x0000038 ProdStatArray
@@ -581,7 +581,7 @@ struct GameWorldFields {
     std::int32_t camera_x, camera_y;                        // 0x002d25c (UI)
     std::int32_t redraw;                                    // 0x002d264 (UI)
     std::int32_t ui_2d268[3];                               // 0x002d268
-    std::int32_t random_map_symmetry;                       // 0x002d274 symmetry argument of the random map generator (GameWorld::Create); read by the player placement 0x5074b0
+    std::int32_t random_map_symmetry;                       // 0x002d274 symmetry argument of the random map generator (CGameData::Create); read by the player placement 0x5074b0
     std::int32_t minimap_ready;                             // 0x002d278
     std::int32_t refresh_ui;                                // 0x002d27c
     std::int32_t draw_flag_2d280;
@@ -672,84 +672,84 @@ struct GameWorldFields {
 
 }  // namespace layout
 
-// The world object. All fields are in layout::GameWorldFields; GameWorld
+// The world object. All fields are in layout::CGameDataFields; CGameData
 // adds nothing (same size and offsets), it only gives the type the name our
 // function signatures use.
-struct GameWorld : layout::GameWorldFields {};
+struct CGameData : layout::CGameDataFields {};
 
-static_assert(sizeof(GameWorld) == 0x153a128, "size passed to operator new in OnStart");
-static_assert(offsetof(GameWorld, statistics) == 0x38);
-static_assert(offsetof(GameWorld, chart) == 0x2d038);
-static_assert(offsetof(GameWorld, objective_timeout) == 0x2d248);
-static_assert(offsetof(GameWorld, counters_disabled) == 0x2d250);
-static_assert(offsetof(GameWorld, camera_x) == 0x2d25c);
-static_assert(offsetof(GameWorld, redraw) == 0x2d264);
-static_assert(offsetof(GameWorld, minimap_ready) == 0x2d278);
-static_assert(offsetof(GameWorld, ui_selection_mode) == 0x2d284);
-static_assert(offsetof(GameWorld, ui_special_menu) == 0x2d298);
-static_assert(offsetof(GameWorld, ui_2d29c) == 0x2d29c);
-static_assert(offsetof(GameWorld, ui_2d2a4) == 0x2d2a4);
-static_assert(offsetof(GameWorld, notification_blink) == 0x2d2c8);
-static_assert(offsetof(GameWorld, map_size) == 0x2d2d0);
-static_assert(offsetof(GameWorld, local_player) == 0x2d2d4);
-static_assert(offsetof(GameWorld, random_state) == 0x2d2dc);
-static_assert(offsetof(GameWorld, last_search_x) == 0x2d2e4);
-static_assert(offsetof(GameWorld, ui_cursor_mode) == 0x2d2f0);
-static_assert(offsetof(GameWorld, search_generation) == 0x2d300);
-static_assert(offsetof(GameWorld, unk2d304) == 0x2d304);
-static_assert(offsetof(GameWorld, ui_2d314) == 0x2d314);
-static_assert(offsetof(GameWorld, notifications) == 0x2d320);
-static_assert(offsetof(GameWorld, notification_timers) == 0x2e5e0);
-static_assert(offsetof(GameWorld, pending_events) == 0x2f990);
-static_assert(offsetof(GameWorld, pending_event_index) == 0x32870);
-static_assert(offsetof(GameWorld, events) == 0x32878);
-static_assert(offsetof(GameWorld, event_index) == 0x366f8);
-static_assert(offsetof(GameWorld, effects) == 0x36700);
-static_assert(offsetof(GameWorld, effects_high_water) == 0x67440);
-static_assert(offsetof(GameWorld, tiles) == 0x67444);
-static_assert(offsetof(GameWorld, presence_max_player) == 0xde7444);
-static_assert(offsetof(GameWorld, presence_a) == 0xde7448);
-static_assert(offsetof(GameWorld, presence_b) == 0xdf2848);
-static_assert(offsetof(GameWorld, tile_ring) == 0xdfdc48);
-static_assert(offsetof(GameWorld, tile_ring_index) == 0xe07888);
-static_assert(offsetof(GameWorld, tile_ring2) == 0xe07890);
-static_assert(offsetof(GameWorld, walk_region_high_water) == 0xe114d8);
-static_assert(offsetof(GameWorld, walk_region_used) == 0xe114dc);
-static_assert(offsetof(GameWorld, area_high_water) == 0xe115dc);
-static_assert(offsetof(GameWorld, ids4096_used) == 0xe115e4);
-static_assert(offsetof(GameWorld, wide_region_used) == 0xe125e8);
-static_assert(offsetof(GameWorld, areas) == 0xe145e8);
-static_assert(offsetof(GameWorld, trades) == 0x10f45e8);
-static_assert(offsetof(GameWorld, trade_high_water) == 0x110a578);
-static_assert(offsetof(GameWorld, fog_cycle) == 0x110a580);
-static_assert(offsetof(GameWorld, landscape_step) == 0x2d2fc);
-static_assert(offsetof(GameWorld, offsets) == 0x110a588);
-static_assert(offsetof(GameWorld, territory_scratch) == 0x1158788);
-static_assert(offsetof(GameWorld, player_lists) == 0x118a47c);
-static_assert(offsetof(GameWorld, player_list_lengths) == 0x11940bc);
-static_assert(offsetof(GameWorld, players) == 0x11943dc);
-static_assert(offsetof(GameWorld, end_warning_minutes) == 0x2d24c);
-static_assert(offsetof(GameWorld, random_map_symmetry) == 0x2d274);
-static_assert(offsetof(GameWorld, command_attempts) == 0x2d2d8);
-static_assert(offsetof(GameWorld, objectives_enabled) == 0x1195dcc);
-static_assert(offsetof(GameWorld, objectives) == 0x1195dcd);
-static_assert(offsetof(GameWorld, pile_claims) == 0x1195dd4);
-static_assert(offsetof(GameWorld, player_races) == 0x1195fd4);
-static_assert(offsetof(GameWorld, site_cache) == 0x1196024);
-static_assert(offsetof(GameWorld, footprint_scratch) == 0x1222ed4);
-static_assert(offsetof(GameWorld, minimap) == 0x1223656);
-static_assert(offsetof(GameWorld, pile_high_water) == 0x1238858);
-static_assert(offsetof(GameWorld, piles) == 0x123885c);
-static_assert(offsetof(GameWorld, settler_high_water) == 0x12a5e5c);
-static_assert(offsetof(GameWorld, settlers) == 0x12a5e60);
-static_assert(offsetof(GameWorld, building_high_water) == 0x1499e60);
-static_assert(offsetof(GameWorld, buildings) == 0x1499e64);
-static_assert(offsetof(GameWorld, reveal_points) == 0x14d28a8);
-static_assert(offsetof(GameWorld, map_effects) == 0x14d2bc8);
-static_assert(offsetof(GameWorld, ui_feedback) == 0x1539484);
-static_assert(offsetof(GameWorld, ui_feedback_count) == 0x15394ac);
-static_assert(offsetof(GameWorld, victory_conditions) == 0x15394b1);
-static_assert(offsetof(GameWorld, reciprocal) == 0x1539528);
+static_assert(sizeof(CGameData) == 0x153a128, "size passed to operator new in OnStart");
+static_assert(offsetof(CGameData, statistics) == 0x38);
+static_assert(offsetof(CGameData, chart) == 0x2d038);
+static_assert(offsetof(CGameData, objective_timeout) == 0x2d248);
+static_assert(offsetof(CGameData, counters_disabled) == 0x2d250);
+static_assert(offsetof(CGameData, camera_x) == 0x2d25c);
+static_assert(offsetof(CGameData, redraw) == 0x2d264);
+static_assert(offsetof(CGameData, minimap_ready) == 0x2d278);
+static_assert(offsetof(CGameData, ui_selection_mode) == 0x2d284);
+static_assert(offsetof(CGameData, ui_special_menu) == 0x2d298);
+static_assert(offsetof(CGameData, ui_2d29c) == 0x2d29c);
+static_assert(offsetof(CGameData, ui_2d2a4) == 0x2d2a4);
+static_assert(offsetof(CGameData, notification_blink) == 0x2d2c8);
+static_assert(offsetof(CGameData, map_size) == 0x2d2d0);
+static_assert(offsetof(CGameData, local_player) == 0x2d2d4);
+static_assert(offsetof(CGameData, random_state) == 0x2d2dc);
+static_assert(offsetof(CGameData, last_search_x) == 0x2d2e4);
+static_assert(offsetof(CGameData, ui_cursor_mode) == 0x2d2f0);
+static_assert(offsetof(CGameData, search_generation) == 0x2d300);
+static_assert(offsetof(CGameData, unk2d304) == 0x2d304);
+static_assert(offsetof(CGameData, ui_2d314) == 0x2d314);
+static_assert(offsetof(CGameData, notifications) == 0x2d320);
+static_assert(offsetof(CGameData, notification_timers) == 0x2e5e0);
+static_assert(offsetof(CGameData, pending_events) == 0x2f990);
+static_assert(offsetof(CGameData, pending_event_index) == 0x32870);
+static_assert(offsetof(CGameData, events) == 0x32878);
+static_assert(offsetof(CGameData, event_index) == 0x366f8);
+static_assert(offsetof(CGameData, effects) == 0x36700);
+static_assert(offsetof(CGameData, effects_high_water) == 0x67440);
+static_assert(offsetof(CGameData, tiles) == 0x67444);
+static_assert(offsetof(CGameData, presence_max_player) == 0xde7444);
+static_assert(offsetof(CGameData, presence_a) == 0xde7448);
+static_assert(offsetof(CGameData, presence_b) == 0xdf2848);
+static_assert(offsetof(CGameData, tile_ring) == 0xdfdc48);
+static_assert(offsetof(CGameData, tile_ring_index) == 0xe07888);
+static_assert(offsetof(CGameData, tile_ring2) == 0xe07890);
+static_assert(offsetof(CGameData, walk_region_high_water) == 0xe114d8);
+static_assert(offsetof(CGameData, walk_region_used) == 0xe114dc);
+static_assert(offsetof(CGameData, area_high_water) == 0xe115dc);
+static_assert(offsetof(CGameData, ids4096_used) == 0xe115e4);
+static_assert(offsetof(CGameData, wide_region_used) == 0xe125e8);
+static_assert(offsetof(CGameData, areas) == 0xe145e8);
+static_assert(offsetof(CGameData, trades) == 0x10f45e8);
+static_assert(offsetof(CGameData, trade_high_water) == 0x110a578);
+static_assert(offsetof(CGameData, fog_cycle) == 0x110a580);
+static_assert(offsetof(CGameData, landscape_step) == 0x2d2fc);
+static_assert(offsetof(CGameData, offsets) == 0x110a588);
+static_assert(offsetof(CGameData, territory_scratch) == 0x1158788);
+static_assert(offsetof(CGameData, player_lists) == 0x118a47c);
+static_assert(offsetof(CGameData, player_list_lengths) == 0x11940bc);
+static_assert(offsetof(CGameData, players) == 0x11943dc);
+static_assert(offsetof(CGameData, end_warning_minutes) == 0x2d24c);
+static_assert(offsetof(CGameData, random_map_symmetry) == 0x2d274);
+static_assert(offsetof(CGameData, command_attempts) == 0x2d2d8);
+static_assert(offsetof(CGameData, objectives_enabled) == 0x1195dcc);
+static_assert(offsetof(CGameData, objectives) == 0x1195dcd);
+static_assert(offsetof(CGameData, pile_claims) == 0x1195dd4);
+static_assert(offsetof(CGameData, player_races) == 0x1195fd4);
+static_assert(offsetof(CGameData, site_cache) == 0x1196024);
+static_assert(offsetof(CGameData, footprint_scratch) == 0x1222ed4);
+static_assert(offsetof(CGameData, minimap) == 0x1223656);
+static_assert(offsetof(CGameData, pile_high_water) == 0x1238858);
+static_assert(offsetof(CGameData, piles) == 0x123885c);
+static_assert(offsetof(CGameData, settler_high_water) == 0x12a5e5c);
+static_assert(offsetof(CGameData, settlers) == 0x12a5e60);
+static_assert(offsetof(CGameData, building_high_water) == 0x1499e60);
+static_assert(offsetof(CGameData, buildings) == 0x1499e64);
+static_assert(offsetof(CGameData, reveal_points) == 0x14d28a8);
+static_assert(offsetof(CGameData, map_effects) == 0x14d2bc8);
+static_assert(offsetof(CGameData, ui_feedback) == 0x1539484);
+static_assert(offsetof(CGameData, ui_feedback_count) == 0x15394ac);
+static_assert(offsetof(CGameData, victory_conditions) == 0x15394b1);
+static_assert(offsetof(CGameData, reciprocal) == 0x1539528);
 
 // ---------------------------------------------------------------- tile helpers
 // Tile (x, y) is world->tiles[x][y]. Some original functions instead carry a
@@ -763,13 +763,13 @@ constexpr std::uint32_t kTileRowBytes = layout::kMapRowTiles * sizeof(layout::Ti
 // Byte offset of tile (x, y) from the start of the world, computed in 32
 // bits like the original (wraps for out-of-range coordinates).
 inline std::uint32_t TileOffset(std::uint32_t x, std::uint32_t y) {
-    return static_cast<std::uint32_t>(offsetof(GameWorld, tiles)) + (x * layout::kMapRowTiles + y) * kTileBytes;
+    return static_cast<std::uint32_t>(offsetof(CGameData, tiles)) + (x * layout::kMapRowTiles + y) * kTileBytes;
 }
 
 // The tile record at a 32-bit byte offset from the world (TileOffset plus
 // steps). The offset need not be a real tile of the map: the original reads
 // whatever lies there.
-inline layout::Tile& TileAtOffset(GameWorld* world, std::uint32_t offset) {
+inline layout::Tile& TileAtOffset(CGameData* world, std::uint32_t offset) {
     return *reinterpret_cast<layout::Tile*>(reinterpret_cast<std::uint8_t*>(world) + offset);
 }
 

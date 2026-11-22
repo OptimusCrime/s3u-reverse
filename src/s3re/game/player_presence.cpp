@@ -6,10 +6,10 @@
 // present. The uint32 at world+0xde7444 is the highest player index the
 // scans look at. Player records (0x148 bytes at world+0x11943dc): int32
 // +0xc is the player's own index in these bytes (or a team index; see
-// GameWorld::FindPlayerByField0C).
+// CGameData::FindPlayerByField0C).
 //
-// GameWorld::IsOtherPlayerNear (0x00510650): (x, y, radius, player) -> 1 if
-//   (x, y) is on the map (GameWorld::IsOnMap) and some block overlapping
+// CGameData::IsOtherPlayerNear (0x00510650): (x, y, radius, player) -> 1 if
+//   (x, y) is on the map (CGameData::IsOnMap) and some block overlapping
 //   [x-radius, x+radius] x [y-radius, y+radius] (clamped to the map, unsigned
 //   arithmetic: x - radius only if x >= radius, x + radius only if x <
 //   mapSize - radius) has a non-zero byte for an index 0..max other than
@@ -29,18 +29,18 @@ namespace s3re::game {
 namespace {
 
 // presence_a[bx][by]: 48 blocks per row of 0x300 tiles.
-static_assert(sizeof(GameWorld::presence_a[0]) == 960);
+static_assert(sizeof(CGameData::presence_a[0]) == 960);
 
 }  // namespace
 
-using NearFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+using NearFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                           std::uint32_t radius, std::uint32_t player);
 
 // Purpose: Whether any other player is present near a tile, using a coarse map of who is where. Probably
 // used for military or territory decisions.
-std::uint32_t __fastcall GameWorld_IsOtherPlayerNear(GameWorld* world, void*, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall CGameData_IsOtherPlayerNear(CGameData* world, void*, std::uint32_t x, std::uint32_t y,
                                                      std::uint32_t radius, std::uint32_t player) {
-    if (!GameWorld_IsOnMap(world, nullptr, x, y)) {
+    if (!CGameData_IsOnMap(world, nullptr, x, y)) {
         return 0;
     }
     const std::uint32_t size = world->map_size;
@@ -67,8 +67,8 @@ std::uint32_t __fastcall GameWorld_IsOtherPlayerNear(GameWorld* world, void*, st
     return 0;
 }
 
-S3RE_HOOK(0x00510650, GameWorld_IsOtherPlayerNear, NearFn, Original_GameWorld_IsOtherPlayerNear,
-          GameWorld_IsOtherPlayerNear);
+S3RE_HOOK(0x00510650, CGameData_IsOtherPlayerNear, NearFn, Original_CGameData_IsOtherPlayerNear,
+          CGameData_IsOtherPlayerNear);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -76,18 +76,18 @@ S3RE_HOOK(0x00510650, GameWorld_IsOtherPlayerNear, NearFn, Original_GameWorld_Is
 
 namespace {
 
-constexpr std::size_t kTestWorld = offsetof(GameWorld, players) + 21 * sizeof(layout::Player);
+constexpr std::size_t kTestWorld = offsetof(CGameData, players) + 21 * sizeof(layout::Player);
 
 // Wrong: does not clamp the far edge to the map.
-std::uint32_t __fastcall WrongIsOtherPlayerNear(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall WrongIsOtherPlayerNear(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                 std::uint32_t radius, std::uint32_t player) {
     std::uint32_t& size = world->map_size;
     const std::uint32_t saved = size;
-    if (!GameWorld_IsOnMap(world, edx, x, y)) {
+    if (!CGameData_IsOnMap(world, edx, x, y)) {
         return 0;
     }
     size = saved + 32;  // the far edge may now reach blocks beyond the map
-    const std::uint32_t result = GameWorld_IsOtherPlayerNear(world, edx, x, y, radius, player);
+    const std::uint32_t result = CGameData_IsOtherPlayerNear(world, edx, x, y, radius, player);
     size = saved;
     return result;
 }
@@ -96,29 +96,29 @@ void CompareIsOtherPlayerNear(test::Context& ctx, NearFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : 16 + ctx.rng().Below(368);
-        worlds.Both([&](GameWorld* w) { w->map_size = size; });
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
         const std::uint32_t players = ctx.rng().Below(20);
-        worlds.Both([&](GameWorld* w) { w->presence_max_player = players; });
+        worlds.Both([&](CGameData* w) { w->presence_max_player = players; });
         // Sparse presence: mostly zero bytes, a few players here and there.
         const std::uint32_t density = ctx.rng().Below(64);
         for (std::uint32_t bx = 0; bx < 26; ++bx) {
             for (std::uint32_t by = 0; by < 26; ++by) {
                 for (std::uint32_t index = 0; index < 20; ++index) {
                     const auto value = static_cast<std::uint8_t>(ctx.rng().Below(1024) < density ? 1 : 0);
-                    worlds.Both([&](GameWorld* w) { w->presence_a[bx][by].player[index] = value; });
+                    worlds.Both([&](CGameData* w) { w->presence_a[bx][by].player[index] = value; });
                 }
             }
         }
         const std::uint32_t player = ctx.rng().Below(20);
         const std::uint32_t ownIndex = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(20);
-        worlds.Both([&](GameWorld* w) { w->players[player].team = static_cast<std::int32_t>(ownIndex); });
+        worlds.Both([&](CGameData* w) { w->players[player].team = static_cast<std::int32_t>(ownIndex); });
         std::uint32_t x = ctx.rng().Below(size);
         std::uint32_t y = ctx.rng().Below(size);
         if (ctx.rng().Chance(1, 16)) {
             x = size + ctx.rng().Below(10);  // off the map
         }
         const std::uint32_t radius = ctx.rng().Below(40);
-        const std::uint32_t expected = Original_GameWorld_IsOtherPlayerNear(worlds.original(), nullptr, x, y, radius, player);
+        const std::uint32_t expected = Original_CGameData_IsOtherPlayerNear(worlds.original(), nullptr, x, y, radius, player);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y, radius, player);
         if (!S3RE_EXPECT_EQ(expected, actual)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u) radius %u player %u, map %u", i, x, y, radius, player, size);
@@ -130,10 +130,10 @@ void CompareIsOtherPlayerNear(test::Context& ctx, NearFn candidate, int cases) {
 
 }  // namespace
 
-S3RE_TEST(GameWorld_IsOtherPlayerNear_MatchesOriginal) {
-    CompareIsOtherPlayerNear(ctx, &GameWorld_IsOtherPlayerNear, 3000);
+S3RE_TEST(CGameData_IsOtherPlayerNear_MatchesOriginal) {
+    CompareIsOtherPlayerNear(ctx, &CGameData_IsOtherPlayerNear, 3000);
 }
-S3RE_TEST(GameWorld_IsOtherPlayerNear_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_IsOtherPlayerNear_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareIsOtherPlayerNear(probe, &WrongIsOtherPlayerNear, 3000);
     S3RE_EXPECT(probe.failures() > 0);

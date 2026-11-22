@@ -173,18 +173,18 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
     game-end check 0x511c50, tick bookkeeping
 ```
 
-- **The world object** (`GameWorld`, our name; the original class is
-  `CGameData`, 0x153A128 bytes, vtable at +0) holds the whole simulation
+- **The world object** (`CGameData`, the original class name from RTTI;
+  0x153A128 bytes, vtable at +0) holds the whole simulation
   state. Known offsets used by our code are in `src/s3re/game/world.h`.
   The map is stored in rows of `0x300` tiles of 24 bytes; the map size is at
   `+0x2d2d0`.
 - **How a game's world is built** (`CLogicThread::OnStart` 0x53c9e0):
   a map file goes through the map loader `0x4fd540`; a map with a
   random-map chunk (chunk 5, "Erstelle Zufallswelt") through the random map
-  generator `GameWorld::Create` (`0x5166d0`, seeds the RNG itself); a
+  generator `CGameData::Create` (`0x5166d0`, seeds the RNG itself); a
   savegame through `0x508fa0`. So the recorded-game and savegame checks
   never call Create (no random-map start tooling yet); both other paths end
-  in `GameWorld::BuildRegionsAndAreas` (`0x51a580`).
+  in `CGameData::BuildRegionsAndAreas` (`0x51a580`).
 - **Field knowledge lives in the world-layout files:** `re/world_layout.md`
   (memory map of the whole object, with confidence levels), `re/structs.md`
   (field tables per record: tile, area, pile, settler, building, player...)
@@ -223,10 +223,10 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   deducing calls (it is not copyable, so a mistake fails to compile). The
   lint rejects data-address literals anywhere else; code addresses
   (function calls, hooks) stay allowed.
-- **The simulation's random number generator** is `GameWorld::Random`
+- **The simulation's random number generator** is `CGameData::Random`
   (`0x4feb70`), with its state at world `+0x2d2dc`. It's reimplemented and
   verified. Because the state lives in the world, the simulation is probably
-  deterministic. It's seeded by `GameWorld::SeedRandom` (`0x4feb40`) at
+  deterministic. It's seeded by `CGameData::SeedRandom` (`0x4feb40`) at
   game start, with a different seed each game.
 - **The simulation is deterministic** given the map, the RNG seed and (so
   far, no) player input, verified by unattended runs.
@@ -350,7 +350,7 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   except those, so the original runs there: to find which replacement makes
   a whole game diverge, or to count our callees of an original function
   (calls from our own replacements bypass the counting thunk; e.g.
-  `check_random_map.py --against-original --skip-hooks GameWorld_Create`
+  `check_random_map.py --against-original --skip-hooks CGameData_Create`
   counts ExpandTerrain and MarkTerrainEdge).
 - **Unattended determinism check:** `python tools/check_determinism.py
   [--ticks N]`. It opens the game window, so the user's screen is busy
@@ -577,7 +577,7 @@ replaying, see `src/s3re/replay/command_log.h`):
   names (RTTI) and source file names come from the binary; every function
   name was given by us from what we understood at the time, and earlier
   analysis can be wrong (e.g. `EvaluateBuildingFootprint` turned out to be
-  `PlanSiteLevelling`; `GameWorld::Create` is the random map generator).
+  `PlanSiteLevelling`; `CGameData::Create` is the random map generator).
   **Whenever a name turns out to be misleading or wrong, rename it** (also
   for verified functions, and for structs, fields and globals): update
   `re/functions.csv` (keep the old name in the notes: "Was X"), the hook and
@@ -679,7 +679,7 @@ replaying, see `src/s3re/replay/command_log.h`):
      specs the changes since REF (default: the last full clean run,
      `build/emutest_last_full.json`, written by every full run with 0
      mismatches; it lists the specs with incomplete coverage, today only
-     GameWorld_Create) can affect, and prints "N of M
+     CGameData_Create) can affect, and prints "N of M
      specs" and why (`--dry-run`: only the selection). The selection
      comes from the build: MSBuild's compiler tracking log (headers of
      each object) and s3re.map plus the DLL's code (which objects each

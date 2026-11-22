@@ -112,6 +112,14 @@ def case_count(spec: specs.Spec, cases: int) -> int:
     return cases if spec.max_cases is None else min(cases, spec.max_cases)
 
 
+def seed_name(name: str) -> str:
+    """The name a spec's inputs are derived from: the name before the
+    GameWorld -> CGameData rename (2026-11-22; GameWorld_Create became
+    CGameData_GenerateRandomMap), so every spec keeps the inputs it was
+    verified with. Same rule as SeedName in src/s3re/test/difftest.cpp."""
+    return name.replace("CGameData_GenerateRandomMap", "GameWorld_Create").replace("CGameData", "GameWorld")
+
+
 def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int,
              first: int = 0, last: int | None = None) -> dict:
     """Runs the spec's cases first..last-1 (default: all). The inputs of the
@@ -121,7 +129,7 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int,
     machine.reset()  # every spec starts from the loaded images
     original = machine.analyze(spec.original, spec.cover_until)
     ours = machine.our_function(spec.ours)
-    rng = random.Random(f"{spec.ours}:{seed}")
+    rng = random.Random(f"{seed_name(spec.ours)}:{seed}")
     pool = sorted(set(original.constants) | set(range(0, 9)) | {0xFF, 0xFFFF, 0xFFFFFFFF})
     machine.blocks = set()
     machine.virtuals = spec.virtuals or {}
@@ -489,7 +497,7 @@ def main() -> int:
     show_memory(jobs, peak)
     failed = bool(mismatches or (args.require_coverage and incomplete))
     if full_run and not mismatches:
-        # Also with incomplete coverage (GameWorld_Create is known to be
+        # Also with incomplete coverage (CGameData_Create is known to be
         # incomplete): a spec whose inputs didn't change has the same
         # coverage next time, so --changed may skip it. The incomplete ones
         # are kept in the record.

@@ -53,13 +53,13 @@ static_assert(offsetof(Area, piles_by_goods) + kGoods10 * 2 == 0x1e);
 constexpr std::uint32_t kNoPlayer = 0xff;
 constexpr std::uint32_t kPlayers = layout::kPlayers;
 
-GameWorld* WorldOf(CLogicThread* self) {
+CGameData* WorldOf(CLogicThread* self) {
     return self->world;
 }
 
 // The owner of tile (x, y) of a point; the coordinates are not checked
 // (TileOffset keeps the original's 32-bit address arithmetic).
-std::uint32_t TileOwner(GameWorld* world, const std::int32_t* point) {
+std::uint32_t TileOwner(CGameData* world, const std::int32_t* point) {
     const std::uint32_t x = static_cast<std::uint32_t>(point[0]);
     const std::uint32_t y = static_cast<std::uint32_t>(point[1]);
     return TileAtOffset(world, TileOffset(x, y)).owner;
@@ -80,7 +80,7 @@ std::uint32_t __fastcall CLogicThread_CountBuildingsOfTypes15To18(CLogicThread* 
     std::memset(out, 0, kPlayers * sizeof(std::int32_t));
     std::uint32_t last = 0;
     for (std::uint32_t building = 1; building <= WorldOf(self)->building_high_water; ++building) {
-        GameWorld* world = WorldOf(self);
+        CGameData* world = WorldOf(self);
         const Building& record = world->buildings[building];
         const std::uint32_t player = record.owner;
         last = player;
@@ -131,7 +131,7 @@ std::uint32_t __fastcall CLogicThread_SumAreaGoods10PerPlayer(CLogicThread* self
     std::memset(out, 0, kPlayers * sizeof(std::int32_t));
     std::uint32_t area = 1;
     for (; area <= WorldOf(self)->area_high_water; ++area) {
-        GameWorld* world = WorldOf(self);
+        CGameData* world = WorldOf(self);
         const Area& record = world->areas[area];
         const std::uint32_t player = record.player;
         if (player == kNoPlayer) {
@@ -161,7 +161,7 @@ S3RE_HOOK(0x00514b40, CLogicThread_SumAreaGoods10PerPlayer, CountPerPlayerFn,
 namespace {
 
 constexpr std::uint32_t kTestBuildings = 600;
-constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + (kTestBuildings + 2) * sizeof(Building);
+constexpr std::size_t kTestWorld = offsetof(CGameData, buildings) + (kTestBuildings + 2) * sizeof(Building);
 constexpr std::uint32_t kTestAreas = 200;
 constexpr std::uint32_t kTestPiles = 0x800;
 // out[] gets 256 entries plus guard space: players above 19 write past 20.
@@ -201,13 +201,13 @@ void SetUpPlayers(test::Context& ctx, test::WorldPair& worlds) {
     // Players up to 254 (building owners above 19 read past the 20 records).
     for (std::uint32_t player = 0; player < 255; ++player) {
         const auto active = static_cast<std::int32_t>(ctx.rng().Chance(1, 4) ? 0 : ctx.rng().Next32() | 1);
-        worlds.Both([&](GameWorld* w) { w->players[player].active = active; });
+        worlds.Both([&](CGameData* w) { w->players[player].active = active; });
     }
 }
 
 // Wrong: counts type 0x11 too.
 std::uint32_t __fastcall WrongCountBuildingsOfTypes15To18(CLogicThread* self, void* edx, std::int32_t* out) {
-    GameWorld* world = WorldOf(self);
+    CGameData* world = WorldOf(self);
     const std::uint32_t result = CLogicThread_CountBuildingsOfTypes15To18(self, edx, out);
     for (std::uint32_t building = 1; building <= world->building_high_water; ++building) {
         const Building& record = world->buildings[building];
@@ -224,12 +224,12 @@ void CompareBuildingCounts(test::Context& ctx, CountPerPlayerFn candidate, int c
     for (int i = 0; i < cases; ++i) {
         SetUpPlayers(ctx, f.worlds);
         const std::uint32_t count = ctx.rng().Chance(1, 16) ? 0 : ctx.rng().Below(kTestBuildings);
-        f.worlds.Both([&](GameWorld* w) { w->building_high_water = count; });
+        f.worlds.Both([&](CGameData* w) { w->building_high_water = count; });
         for (std::uint32_t building = 1; building <= count + 1; ++building) {
             const std::uint8_t owner = RandomPlayer(ctx);
             const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(2, 3) ? 0 : ctx.rng().Below(256));
             const auto type = static_cast<std::uint8_t>(0xe + ctx.rng().Below(6));
-            f.worlds.Both([&](GameWorld* w) {
+            f.worlds.Both([&](CGameData* w) {
                 Building& record = w->buildings[building];
                 record.owner = owner;
                 record.buildup = buildup;
@@ -255,7 +255,7 @@ void SetUpPoints(test::Context& ctx, test::WorldPair& worlds, std::int32_t* poin
         points[i * 2] = static_cast<std::int32_t>(x);
         points[i * 2 + 1] = static_cast<std::int32_t>(y);
         const auto owner = static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? kNoPlayer : ctx.rng().Below(4));
-        worlds.Both([&](GameWorld* w) { w->tiles[x][y].owner = owner; });
+        worlds.Both([&](CGameData* w) { w->tiles[x][y].owner = owner; });
     }
 }
 
@@ -314,23 +314,23 @@ S3RE_TEST(CLogicThread_SumAreaGoods10PerPlayer_MatchesOriginal) {
     Fixture f(ctx);
     for (int i = 0; i < 300; ++i) {
         const std::uint32_t count = ctx.rng().Chance(1, 16) ? 0 : ctx.rng().Below(kTestAreas);
-        f.worlds.Both([&](GameWorld* w) { w->area_high_water = count; });
+        f.worlds.Both([&](CGameData* w) { w->area_high_water = count; });
         // Each area gets a short chain of distinct piles (chains end at 0).
         std::uint32_t nextPile = 1;
         for (std::uint32_t area = 1; area <= count; ++area) {
             const std::uint8_t player = RandomPlayer(ctx);
-            f.worlds.Both([&](GameWorld* w) { w->areas[area].player = player; });
+            f.worlds.Both([&](CGameData* w) { w->areas[area].player = player; });
             const std::uint32_t length = ctx.rng().Below(5);
             std::uint32_t first = 0;
             for (std::uint32_t k = 0; k < length && nextPile < kTestPiles; ++k, ++nextPile) {
                 const auto amount = static_cast<std::uint8_t>(ctx.rng().Next32());
-                f.worlds.Both([&](GameWorld* w) {
+                f.worlds.Both([&](CGameData* w) {
                     w->piles[nextPile].next = static_cast<std::uint16_t>(first);
                     w->piles[nextPile].amount = amount;
                 });
                 first = nextPile;
             }
-            f.worlds.Both([&](GameWorld* w) { w->areas[area].piles_by_goods[kGoods10] = static_cast<std::uint16_t>(first); });
+            f.worlds.Both([&](CGameData* w) { w->areas[area].piles_by_goods[kGoods10] = static_cast<std::uint16_t>(first); });
         }
         f.FillOutputs(ctx);
         const std::uint32_t expected = Original_CLogicThread_SumAreaGoods10PerPlayer(f.original(), nullptr, f.outA);

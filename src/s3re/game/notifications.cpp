@@ -1,7 +1,7 @@
 // Notifications of the local player (messages such as "a building is under
 // attack", with a position the player can jump to).
 //
-// GameWorld::NotifyLocalPlayer (0x004fec10): (player, type, x, y). Only for
+// CGameData::NotifyLocalPlayer (0x004fec10): (player, type, x, y). Only for
 //   the local player (world+0x2d2d4). The kind table at S3.EXE 0x659dd0
 //   (20 bytes per type: list 1..4, level, icon/graphics id, repeat time,
 //   radius) decides: nothing happens if the type's level is below
@@ -44,12 +44,12 @@ constexpr std::uint32_t kTimersPerType = 10;
 
 }  // namespace
 
-using NotifyFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t player, std::uint32_t type,
+using NotifyFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player, std::uint32_t type,
                                             std::uint32_t x, std::uint32_t y);
 
 // Purpose: Tells the local player about an event at a place (e.g. an attack, a mine running out), unless
 // the notification level hides it or the same message came from nearby a short while ago.
-std::uint32_t __fastcall GameWorld_NotifyLocalPlayer(GameWorld* world, void*, std::uint32_t player,
+std::uint32_t __fastcall CGameData_NotifyLocalPlayer(CGameData* world, void*, std::uint32_t player,
                                                      std::uint32_t type, std::uint32_t x, std::uint32_t y) {
     if (static_cast<std::int32_t>(player) != world->local_player) {
         return 0;
@@ -84,15 +84,15 @@ std::uint32_t __fastcall GameWorld_NotifyLocalPlayer(GameWorld* world, void*, st
         switch (type) {
         case 3:
         case 20:
-            GameWorld_PushUiFeedback(world, nullptr, 0x50);
+            CGameData_PushUiFeedback(world, nullptr, 0x50);
             break;
         case 4:
         case 10:
-            GameWorld_PushUiFeedback(world, nullptr, 0x50);
-            GameWorld_PushUiFeedback(world, nullptr, 0x5a);
+            CGameData_PushUiFeedback(world, nullptr, 0x50);
+            CGameData_PushUiFeedback(world, nullptr, 0x5a);
             break;
         default:
-            GameWorld_PushUiFeedback(world, nullptr, 0x6e);
+            CGameData_PushUiFeedback(world, nullptr, 0x6e);
             break;
         }
         break;
@@ -111,8 +111,8 @@ std::uint32_t __fastcall GameWorld_NotifyLocalPlayer(GameWorld* world, void*, st
     return 0;  // callers don't use EAX
 }
 
-S3RE_HOOK(0x004fec10, GameWorld_NotifyLocalPlayer, NotifyFn, Original_GameWorld_NotifyLocalPlayer,
-          GameWorld_NotifyLocalPlayer);
+S3RE_HOOK(0x004fec10, CGameData_NotifyLocalPlayer, NotifyFn, Original_CGameData_NotifyLocalPlayer,
+          CGameData_NotifyLocalPlayer);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -123,7 +123,7 @@ namespace {
 constexpr std::uint32_t kTypes = 42;
 
 // Wrong: the timers are checked with <= radius.
-std::uint32_t __fastcall WrongNotifyLocalPlayer(GameWorld* world, void* edx, std::uint32_t player, std::uint32_t type,
+std::uint32_t __fastcall WrongNotifyLocalPlayer(CGameData* world, void* edx, std::uint32_t player, std::uint32_t type,
                                                 std::uint32_t x, std::uint32_t y) {
     const NotificationKind& kind = g_notificationKinds[type];
     if (kind.radius != 0 && static_cast<std::int32_t>(player) == world->local_player) {
@@ -134,14 +134,14 @@ std::uint32_t __fastcall WrongNotifyLocalPlayer(GameWorld* world, void* edx, std
             }
         }
     }
-    return GameWorld_NotifyLocalPlayer(world, edx, player, type, x, y);
+    return CGameData_NotifyLocalPlayer(world, edx, player, type, x, y);
 }
 
 void CompareNotify(test::Context& ctx, NotifyFn candidate, int cases) {
     std::uint32_t& setting = g_config->notification_level;
     const std::uint32_t savedSetting = setting;
     // Full-size worlds: PushUiFeedback writes world+0x1539484.
-    test::WorldPair full(ctx, sizeof(GameWorld));
+    test::WorldPair full(ctx, sizeof(CGameData));
     for (int i = 0; i < cases; ++i) {
         const auto local = static_cast<std::int32_t>(ctx.rng().Below(4));
         const std::uint32_t player = ctx.rng().Chance(4, 5) ? static_cast<std::uint32_t>(local) : ctx.rng().Below(4);
@@ -161,26 +161,26 @@ void CompareNotify(test::Context& ctx, NotifyFn candidate, int cases) {
             } else if (ctx.rng().Chance(1, 4)) {
                 t.countdown = static_cast<std::int32_t>(ctx.rng().Next32());  // after a gap
             }
-            full.Both([&](GameWorld* w) { w->notification_timers[type][k] = t; });
+            full.Both([&](CGameData* w) { w->notification_timers[type][k] = t; });
         }
         // The list: mostly full up to a point.
         if (kind.list >= 1 && kind.list <= 4) {
             const std::uint32_t used = ctx.rng().Chance(1, 8) ? kListEntries : ctx.rng().Below(10);
             for (std::uint32_t k = 0; k < kListEntries; ++k) {
                 const auto value = static_cast<std::int32_t>(k < used ? 1 + ctx.rng().Below(40) : ctx.rng().Chance(1, 3) ? 7 : 0);
-                full.Both([&](GameWorld* w) { w->notifications[kind.list - 1][k].type = value; });
+                full.Both([&](CGameData* w) { w->notifications[kind.list - 1][k].type = value; });
             }
         }
         const std::uint32_t count = ctx.rng().Below(11);
-        full.Both([&](GameWorld* w) {
+        full.Both([&](CGameData* w) {
             w->local_player = local;
             w->ui_feedback_count = count;
         });
-        Original_GameWorld_NotifyLocalPlayer(full.original(), nullptr, player, type, x, y);
+        Original_CGameData_NotifyLocalPlayer(full.original(), nullptr, player, type, x, y);
         candidate(full.ours(), nullptr, player, type, x, y);
-        const bool same = full.Same(ctx, offsetof(GameWorld, notifications),
-                                    offsetof(GameWorld, pending_events) - offsetof(GameWorld, notifications)) &&
-                          full.Same(ctx, offsetof(GameWorld, ui_feedback), offsetof(GameWorld, flag15394b0) - offsetof(GameWorld, ui_feedback));
+        const bool same = full.Same(ctx, offsetof(CGameData, notifications),
+                                    offsetof(CGameData, pending_events) - offsetof(CGameData, notifications)) &&
+                          full.Same(ctx, offsetof(CGameData, ui_feedback), offsetof(CGameData, flag15394b0) - offsetof(CGameData, ui_feedback));
         if (!same || (i % 512 == 511 && !full.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: player %u (local %d) type %u at (%u, %u), setting %u", i, player,
                      local, type, x, y, setting);
@@ -192,10 +192,10 @@ void CompareNotify(test::Context& ctx, NotifyFn candidate, int cases) {
 
 }  // namespace
 
-S3RE_TEST(GameWorld_NotifyLocalPlayer_MatchesOriginal) {
-    CompareNotify(ctx, &GameWorld_NotifyLocalPlayer, 20000);
+S3RE_TEST(CGameData_NotifyLocalPlayer_MatchesOriginal) {
+    CompareNotify(ctx, &CGameData_NotifyLocalPlayer, 20000);
 }
-S3RE_TEST(GameWorld_NotifyLocalPlayer_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_NotifyLocalPlayer_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareNotify(probe, &WrongNotifyLocalPlayer, 5000);
     S3RE_EXPECT(probe.failures() > 0);

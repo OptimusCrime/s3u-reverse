@@ -1,6 +1,6 @@
 // Queries about players.
 //
-// GameWorld::FindPlayerByField0C (0x00507f10): (value) -> the first player
+// CGameData::FindPlayerByField0C (0x00507f10): (value) -> the first player
 //   0..19 whose record (0x148 bytes at world+0x11943dc) has int32 +0x0 != 0
 //   (taking part), int32 +0x18 == 0 and int32 +0xc == value; -1 if none.
 //   thiscall, ret 4. Meaning of +0xc/+0x18 unknown; callers in 0x5074b0.
@@ -14,7 +14,7 @@
 //   the type a full int32. ECX is not used (callers load the world into it).
 //   The original only sets AL (the rest of EAX is the caller's); every
 //   caller only tests AL. ret 8.
-// GameWorld::LogPlayerLandResources (0x00507f60): (player): only a
+// CGameData::LogPlayerLandResources (0x00507f60): (player): only a
 //   DebugLog("Player %u   Land %u  Trees %u  Stone %u ..."). It looks at the
 //   19,995 tiles given by the offset table (int32 dx, dy in 16-byte entries
 //   at world+0x110a588) around the player's position (int32 +0x10/+0x14 of
@@ -48,12 +48,12 @@ constexpr std::uint32_t kPlayers = layout::kPlayers;
 
 }  // namespace
 
-using FindPlayerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t value);
+using FindPlayerFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t value);
 using RaceTypeFn = std::uint32_t(__stdcall*)(std::uint32_t race, std::uint32_t type);
 
 // Purpose: Finds the active player whose index/team field matches a value. Probably used to map between a
 // player's slot and their in-game number.
-std::uint32_t __fastcall GameWorld_FindPlayerByField0C(GameWorld* world, void*,
+std::uint32_t __fastcall CGameData_FindPlayerByField0C(CGameData* world, void*,
                                                        std::uint32_t value) {
     // Field +0xc is Player::team, +0x18 Player::unk018.
     for (std::uint32_t player = 0; player < kPlayers; ++player) {
@@ -90,11 +90,11 @@ constexpr std::uint32_t kSurveyEntries = 0x4e1b;  // entries of world->offsets
 
 }  // namespace
 
-using LogLandFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t player);
+using LogLandFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player);
 
 // Purpose: Debug output only: how much land and how many resources (trees, stone, coal, ...) lie around a
 // player's start position. Probably a leftover from tuning the maps or the computer players.
-std::uint32_t __fastcall GameWorld_LogPlayerLandResources(GameWorld* world, void*, std::uint32_t player) {
+std::uint32_t __fastcall CGameData_LogPlayerLandResources(CGameData* world, void*, std::uint32_t player) {
     const Player& record = world->players[player];  // player is not checked
     const auto px = static_cast<std::uint32_t>(record.start_x);
     const auto py = static_cast<std::uint32_t>(record.start_y);
@@ -143,10 +143,10 @@ std::uint32_t __fastcall GameWorld_LogPlayerLandResources(GameWorld* world, void
     return land >> 1;
 }
 
-S3RE_HOOK(0x00507f60, GameWorld_LogPlayerLandResources, LogLandFn, Original_GameWorld_LogPlayerLandResources,
-          GameWorld_LogPlayerLandResources);
-S3RE_HOOK(0x00507f10, GameWorld_FindPlayerByField0C, FindPlayerFn,
-          Original_GameWorld_FindPlayerByField0C, GameWorld_FindPlayerByField0C);
+S3RE_HOOK(0x00507f60, CGameData_LogPlayerLandResources, LogLandFn, Original_CGameData_LogPlayerLandResources,
+          CGameData_LogPlayerLandResources);
+S3RE_HOOK(0x00507f10, CGameData_FindPlayerByField0C, FindPlayerFn,
+          Original_CGameData_FindPlayerByField0C, CGameData_FindPlayerByField0C);
 S3RE_HOOK(0x004ffd60, BuildingTypeAllowedForRace, RaceTypeFn, Original_BuildingTypeAllowedForRace,
           BuildingTypeAllowedForRace);
 
@@ -157,7 +157,7 @@ S3RE_HOOK(0x004ffd60, BuildingTypeAllowedForRace, RaceTypeFn, Original_BuildingT
 namespace {
 
 // Up to the end of the player records.
-constexpr std::size_t kTestWorld = offsetof(GameWorld, players) + sizeof(GameWorld::players);
+constexpr std::size_t kTestWorld = offsetof(CGameData, players) + sizeof(CGameData::players);
 
 void CompareFind(test::Context& ctx, FindPlayerFn original, FindPlayerFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
@@ -167,7 +167,7 @@ void CompareFind(test::Context& ctx, FindPlayerFn original, FindPlayerFn candida
             const auto active = static_cast<std::int32_t>(ctx.rng().Chance(1, 4) ? 0 : ctx.rng().Next32() | 1);
             const auto field18 = static_cast<std::int32_t>(ctx.rng().Chance(1, 3) ? ctx.rng().Next32() | 1 : 0);
             const auto field0c = static_cast<std::int32_t>(ctx.rng().Below(6));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->players[player].active = active;
                 w->players[player].unk018 = field18;
                 w->players[player].team = field0c;
@@ -185,7 +185,7 @@ void CompareFind(test::Context& ctx, FindPlayerFn original, FindPlayerFn candida
 }
 
 // Wrong: ignores field +0x18.
-std::uint32_t __fastcall WrongFindPlayerByField0C(GameWorld* world, void*, std::uint32_t value) {
+std::uint32_t __fastcall WrongFindPlayerByField0C(CGameData* world, void*, std::uint32_t value) {
     for (std::uint32_t player = 0; player < kPlayers; ++player) {
         const Player& record = world->players[player];
         if (record.active != 0 && static_cast<std::uint32_t>(record.team) == value) {
@@ -197,12 +197,12 @@ std::uint32_t __fastcall WrongFindPlayerByField0C(GameWorld* world, void*, std::
 
 }  // namespace
 
-S3RE_TEST(GameWorld_FindPlayerByField0C_MatchesOriginal) {
-    CompareFind(ctx, Original_GameWorld_FindPlayerByField0C, &GameWorld_FindPlayerByField0C, 20000);
+S3RE_TEST(CGameData_FindPlayerByField0C_MatchesOriginal) {
+    CompareFind(ctx, Original_CGameData_FindPlayerByField0C, &CGameData_FindPlayerByField0C, 20000);
 }
-S3RE_TEST(GameWorld_FindPlayerByField0C_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_FindPlayerByField0C_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareFind(probe, Original_GameWorld_FindPlayerByField0C, &WrongFindPlayerByField0C, 2000);
+    CompareFind(probe, Original_CGameData_FindPlayerByField0C, &WrongFindPlayerByField0C, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
@@ -233,7 +233,7 @@ S3RE_TEST(BuildingTypeAllowedForRace_MatchesOriginal) {
 namespace {
 
 // Wrong: counts gems as sulfur (rewrites resource nibble 4 to 5 around the call).
-std::uint32_t __fastcall WrongLogPlayerLandResources(GameWorld* world, void* edx, std::uint32_t player) {
+std::uint32_t __fastcall WrongLogPlayerLandResources(CGameData* world, void* edx, std::uint32_t player) {
     std::vector<std::uint8_t*> changed;
     const std::uint32_t size = world->map_size;
     for (std::uint32_t x = 0; x < size; ++x) {
@@ -245,7 +245,7 @@ std::uint32_t __fastcall WrongLogPlayerLandResources(GameWorld* world, void* edx
             }
         }
     }
-    const std::uint32_t result = GameWorld_LogPlayerLandResources(world, edx, player);
+    const std::uint32_t result = CGameData_LogPlayerLandResources(world, edx, player);
     for (std::uint8_t* r : changed) {
         *r = static_cast<std::uint8_t>(*r - 0x10);
     }
@@ -253,7 +253,7 @@ std::uint32_t __fastcall WrongLogPlayerLandResources(GameWorld* world, void* edx
 }
 
 // The player records lie beyond the offset table.
-constexpr std::size_t kSurveyTestWorld = offsetof(GameWorld, players) + sizeof(GameWorld::players);
+constexpr std::size_t kSurveyTestWorld = offsetof(CGameData, players) + sizeof(CGameData::players);
 
 void CompareLandSurvey(test::Context& ctx, LogLandFn candidate, int cases) {
     test::WorldPair worlds(ctx, kSurveyTestWorld);
@@ -264,7 +264,7 @@ void CompareLandSurvey(test::Context& ctx, LogLandFn candidate, int cases) {
         const std::int32_t dx = wild ? static_cast<std::int32_t>(ctx.rng().Next32())
                                      : static_cast<std::int32_t>(ctx.rng().Below(181)) - 90;
         const std::int32_t dy = static_cast<std::int32_t>(ctx.rng().Below(181)) - 90;
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->offsets[i].dx = dx;
             w->offsets[i].dy = dy;
         });
@@ -274,13 +274,13 @@ void CompareLandSurvey(test::Context& ctx, LogLandFn candidate, int cases) {
     static constexpr std::uint8_t kObject[] = {0, 0x43, 0x44, 0x50, 0x53, 0x54, 0x72, 0x73, 0x7e, 0x7f};
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : 64 + ctx.rng().Below(320);
-        worlds.Both([&](GameWorld* w) { w->map_size = size; });
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
         for (std::uint32_t x = 0; x < size; ++x) {
             for (std::uint32_t y = 0; y < size; ++y) {
                 const std::uint8_t terrain = kTerrain[ctx.rng().Below(8)];
                 const std::uint8_t object = kObject[ctx.rng().Below(10)];
                 const auto resources = static_cast<std::uint8_t>(ctx.rng().Next32() & 0x7f);
-                worlds.Both([&](GameWorld* w) {
+                worlds.Both([&](CGameData* w) {
                     layout::Tile& tile = w->tiles[x][y];
                     tile.terrain = terrain;
                     tile.object = object;
@@ -291,11 +291,11 @@ void CompareLandSurvey(test::Context& ctx, LogLandFn candidate, int cases) {
         const std::uint32_t player = ctx.rng().Below(20);
         const auto startX = static_cast<std::int32_t>(ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(size));
         const auto startY = static_cast<std::int32_t>(ctx.rng().Below(size));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->players[player].start_x = startX;
             w->players[player].start_y = startY;
         });
-        const std::uint32_t expected = Original_GameWorld_LogPlayerLandResources(worlds.original(), nullptr, player);
+        const std::uint32_t expected = Original_CGameData_LogPlayerLandResources(worlds.original(), nullptr, player);
         const std::vector<DebugLogCall> expectedLogs = logs.Take();
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, player);
         const std::vector<DebugLogCall> actualLogs = logs.Take();
@@ -309,10 +309,10 @@ void CompareLandSurvey(test::Context& ctx, LogLandFn candidate, int cases) {
 
 }  // namespace
 
-S3RE_TEST(GameWorld_LogPlayerLandResources_MatchesOriginal) {
-    CompareLandSurvey(ctx, &GameWorld_LogPlayerLandResources, 40);
+S3RE_TEST(CGameData_LogPlayerLandResources_MatchesOriginal) {
+    CompareLandSurvey(ctx, &CGameData_LogPlayerLandResources, 40);
 }
-S3RE_TEST(GameWorld_LogPlayerLandResources_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_LogPlayerLandResources_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareLandSurvey(probe, &WrongLogPlayerLandResources, 5);
     S3RE_EXPECT(probe.failures() > 0);

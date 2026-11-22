@@ -3,10 +3,10 @@
 //
 // World byte +0x1195dcc is non-zero when they are enabled; the seven bytes
 // +0x1195dcd..+0x1195dd3 are the chosen objectives: 0x4ffbc0 draws them
-// with GameWorld::Random as 1..34 (Random % 34 + 1), skipping ids already
+// with CGameData::Random as 1..34 (Random % 34 + 1), skipping ids already
 // chosen and 21, 25, 27..31, 33, 34, 35.
 //
-// GameWorld::IsNgoObjectiveChosen (0x004ffb90): (id) -> AL = 1 if one of
+// CGameData::IsNgoObjectiveChosen (0x004ffb90): (id) -> AL = 1 if one of
 //   the seven bytes equals the low byte of `id`, else 0; the upper bits of
 //   EAX are the caller's (only AL is used). thiscall, ret 4.
 
@@ -21,25 +21,25 @@ namespace s3re::game {
 
 namespace {
 
-// GameWorld::objectives_enabled, then GameWorld::objectives: the chosen objectives.
+// CGameData::objectives_enabled, then CGameData::objectives: the chosen objectives.
 constexpr std::uint32_t kNgoObjectiveCount = 7;
-static_assert(sizeof(GameWorld::objectives) == kNgoObjectiveCount);
+static_assert(sizeof(CGameData::objectives) == kNgoObjectiveCount);
 
-std::uint8_t& NgoEnabled(GameWorld* world) {
+std::uint8_t& NgoEnabled(CGameData* world) {
     return world->objectives_enabled;
 }
 
-std::uint8_t* NgoObjectives(GameWorld* world) {
+std::uint8_t* NgoObjectives(CGameData* world) {
     return world->objectives;
 }
 
 }  // namespace
 
-using IsChosenFn = bool(__fastcall*)(GameWorld* world, void* edx, std::uint32_t id);
+using IsChosenFn = bool(__fastcall*)(CGameData* world, void* edx, std::uint32_t id);
 
 // Purpose: Whether an objective has already been chosen for this game's "new game objectives" (used while
 // drawing the seven objectives at random, so none is picked twice).
-bool __fastcall GameWorld_IsNgoObjectiveChosen(GameWorld* world, void*, std::uint32_t id) {
+bool __fastcall CGameData_IsNgoObjectiveChosen(CGameData* world, void*, std::uint32_t id) {
     const std::uint8_t* chosen = NgoObjectives(world);
     for (std::uint32_t i = 0; i < kNgoObjectiveCount; ++i) {
         if (chosen[i] == static_cast<std::uint8_t>(id)) {
@@ -49,8 +49,8 @@ bool __fastcall GameWorld_IsNgoObjectiveChosen(GameWorld* world, void*, std::uin
     return false;
 }
 
-S3RE_HOOK(0x004ffb90, GameWorld_IsNgoObjectiveChosen, IsChosenFn, Original_GameWorld_IsNgoObjectiveChosen,
-          GameWorld_IsNgoObjectiveChosen);
+S3RE_HOOK(0x004ffb90, CGameData_IsNgoObjectiveChosen, IsChosenFn, Original_CGameData_IsNgoObjectiveChosen,
+          CGameData_IsNgoObjectiveChosen);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -59,7 +59,7 @@ S3RE_HOOK(0x004ffb90, GameWorld_IsNgoObjectiveChosen, IsChosenFn, Original_GameW
 namespace {
 
 // 0x100 bytes past the start of the chosen objectives.
-constexpr std::size_t kTestWorld = offsetof(GameWorld, objectives) + 0x100;
+constexpr std::size_t kTestWorld = offsetof(CGameData, objectives) + 0x100;
 
 void CompareIsChosen(test::Context& ctx, IsChosenFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
@@ -67,12 +67,12 @@ void CompareIsChosen(test::Context& ctx, IsChosenFn candidate, int cases) {
         for (std::uint32_t k = 0; k < kNgoObjectiveCount + 1; ++k) {  // one byte past the list too
             const auto value = static_cast<std::uint8_t>(ctx.rng().Below(40));
             // k == 7 is the byte after the list (the first byte of pile_claims).
-            worlds.Both([&](GameWorld* w) { NgoObjectives(w)[k] = value; });
+            worlds.Both([&](CGameData* w) { NgoObjectives(w)[k] = value; });
         }
         const auto enabled = static_cast<std::uint8_t>(ctx.rng().Below(2));
-        worlds.Both([&](GameWorld* w) { NgoEnabled(w) = enabled; });
+        worlds.Both([&](CGameData* w) { NgoEnabled(w) = enabled; });
         const std::uint32_t id = (ctx.rng().Chance(1, 4) ? ctx.rng().Next32() & ~0xffu : 0) | ctx.rng().Below(40);
-        const bool expected = Original_GameWorld_IsNgoObjectiveChosen(worlds.original(), nullptr, id);
+        const bool expected = Original_CGameData_IsNgoObjectiveChosen(worlds.original(), nullptr, id);
         const bool actual = candidate(worlds.ours(), nullptr, id);
         if (!S3RE_EXPECT_EQ(expected, actual) || (i % 1024 == 1023 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: id 0x%x", i, id);
@@ -82,7 +82,7 @@ void CompareIsChosen(test::Context& ctx, IsChosenFn candidate, int cases) {
 }
 
 // Wrong: looks at the first six objectives only.
-bool __fastcall WrongIsNgoObjectiveChosen(GameWorld* world, void*, std::uint32_t id) {
+bool __fastcall WrongIsNgoObjectiveChosen(CGameData* world, void*, std::uint32_t id) {
     const std::uint8_t* chosen = NgoObjectives(world);
     for (std::uint32_t i = 0; i < kNgoObjectiveCount - 1; ++i) {
         if (chosen[i] == static_cast<std::uint8_t>(id)) {
@@ -94,10 +94,10 @@ bool __fastcall WrongIsNgoObjectiveChosen(GameWorld* world, void*, std::uint32_t
 
 }  // namespace
 
-S3RE_TEST(GameWorld_IsNgoObjectiveChosen_MatchesOriginal) {
-    CompareIsChosen(ctx, &GameWorld_IsNgoObjectiveChosen, 20000);
+S3RE_TEST(CGameData_IsNgoObjectiveChosen_MatchesOriginal) {
+    CompareIsChosen(ctx, &CGameData_IsNgoObjectiveChosen, 20000);
 }
-S3RE_TEST(GameWorld_IsNgoObjectiveChosen_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_IsNgoObjectiveChosen_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareIsChosen(probe, &WrongIsNgoObjectiveChosen, 2000);
     S3RE_EXPECT(probe.failures() > 0);

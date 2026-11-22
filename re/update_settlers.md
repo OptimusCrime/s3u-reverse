@@ -1,7 +1,7 @@
 # UpdateSettlers and its callees: work map
 
-Analysis for the batches that replace `GameWorld::UpdateSettlers` (0x4E9670),
-`GameWorld::UpdateEconomy` (0x4E05E0, see `re/update_economy.md`) and their
+Analysis for the batches that replace `CGameData::UpdateSettlers` (0x4E9670),
+`CGameData::UpdateEconomy` (0x4E05E0, see `re/update_economy.md`) and their
 callees. Made 2026-11-10 from `build/s3.asm`, the jump tables read from
 `S3.EXE`, `re/functions.csv` and `tools/world_fields.py`; no game runs, no
 decompiler output. Names below are proposals (ours, can be wrong), not
@@ -292,9 +292,9 @@ one settler's handler into the next one through ebx/[esp+20h].
 ```
 // settler_update.cpp: S3RE_HOOK on 0x4E9670 only
 enum class JobResult { Next, Again };
-struct SettlerContext { GameWorld& world; uint32_t number; Settler& settler;
+struct SettlerContext { CGameData& world; uint32_t number; Settler& settler;
                         uint8_t type; int32_t settlerClass; };
-void GameWorld::UpdateSettlers();          // the loop above
+void CGameData::UpdateSettlers();          // the loop above
 JobResult RunSettlerJob(SettlerContext&);  // switch over 0..0x194, same table
 ```
 
@@ -326,30 +326,30 @@ with clear evidence:
 
 | address | proposal | confidence | evidence (short) |
 |---|---|---|---|
-| 0x4E9670 | keep `GameWorld::UpdateSettlers` | high | per-settler job loop above |
-| 0x500860 | `GameWorld::WalkSettler` | high | handler of all 47 walking jobs; pathfinder; "suche Ziel bei %u %u" |
-| 0x503940 | `GameWorld::AddTileTraffic` | high | tile +0x12 += 1, WearPath at 12 |
-| 0x4FA6D0 | `GameWorld::IsWalkingJob` | high | its list = the walking jobs |
-| 0x4FA880 | `GameWorld::IsWalkingOrIdleJob` | high | same + jobs 1, 0x37 |
-| 0x4DBC50 | `GameWorld::BuildingDone` | high | "BuildingDone: Storage.ProductionPile ..." |
-| 0x4D9250 | `GameWorld::CrushBuilding` | high | "Start crushing nr. %u art %u" |
-| 0x4D97B0 | `GameWorld::DestroyBuildingAt` | high | "DestroyBuilding: Can't find building in range" |
-| 0x505C20 | `GameWorld::StealGoodFromPile` | high | its own DebugLog name |
-| 0x4FEC10 | `GameWorld::NotifyLocalPlayer` | high | re/world_layout.md notifications |
-| 0x50CCB0 | `GameWorld::EnterBuildingSlot` | high | mirror of LeaveBuildingSlot |
-| 0x519670 | `GameWorld::UpdateShadeAround` | high | tile +5 for 7 tiles |
-| 0x4FAA70 | `GameWorld::TileSlope` | high | max height difference of opposite neighbours |
-| 0x5104C0 | `GameWorld::RecountPlayerPopulation` | high | residences 0x1A/0x1B/0x1C give 10/30/100 |
-| 0x50CF50 | `GameWorld::ResetSettlerToIdle` | medium | "JobNothing/StepAside ..."; 14 callers |
-| 0x50E9F0 | `GameWorld::UpdateSoldier` | medium | classes 1..3 only; "Player %u wins tower from %u" |
-| 0x519A90 | `GameWorld::RecalculateTerritory` | medium | territory scratch, military buildings |
-| 0x505820 | `GameWorld::TakeGoodFromPile` | medium | pile amount -1 after each "take input" |
-| 0x5061B0 | `GameWorld::SetPileGood` | medium | pile +0 = good, relinks per-good list |
-| 0x4DE430 | `GameWorld::RemoveBuildingStorage` | medium | "%u Waren hierher unterwegs" |
-| 0x50E3B0 | `GameWorld::ReleaseSiteWorkers` | medium | "digger!", "builder!" |
-| 0x504F70 | `GameWorld::LosePileOnTile` | medium | "Pile %u Lost", "illegal pile in changing land" |
-| 0x50DD20 | `GameWorld::CreateSevenTileUnit` | medium | main settler + six type-0x2A parts; catapult/gong production |
-| 0x4F9A00 / 0x4F9B80 / 0x4FA220 | `GameWorld::MinerJobEnter/Food/Dig` | medium/low/medium | mine building types, tile resources +0x11 |
+| 0x4E9670 | keep `CGameData::UpdateSettlers` | high | per-settler job loop above |
+| 0x500860 | `CGameData::WalkSettler` | high | handler of all 47 walking jobs; pathfinder; "suche Ziel bei %u %u" |
+| 0x503940 | `CGameData::AddTileTraffic` | high | tile +0x12 += 1, WearPath at 12 |
+| 0x4FA6D0 | `CGameData::IsWalkingJob` | high | its list = the walking jobs |
+| 0x4FA880 | `CGameData::IsWalkingOrIdleJob` | high | same + jobs 1, 0x37 |
+| 0x4DBC50 | `CGameData::BuildingDone` | high | "BuildingDone: Storage.ProductionPile ..." |
+| 0x4D9250 | `CGameData::CrushBuilding` | high | "Start crushing nr. %u art %u" |
+| 0x4D97B0 | `CGameData::DestroyBuildingAt` | high | "DestroyBuilding: Can't find building in range" |
+| 0x505C20 | `CGameData::StealGoodFromPile` | high | its own DebugLog name |
+| 0x4FEC10 | `CGameData::NotifyLocalPlayer` | high | re/world_layout.md notifications |
+| 0x50CCB0 | `CGameData::EnterBuildingSlot` | high | mirror of LeaveBuildingSlot |
+| 0x519670 | `CGameData::UpdateShadeAround` | high | tile +5 for 7 tiles |
+| 0x4FAA70 | `CGameData::TileSlope` | high | max height difference of opposite neighbours |
+| 0x5104C0 | `CGameData::RecountPlayerPopulation` | high | residences 0x1A/0x1B/0x1C give 10/30/100 |
+| 0x50CF50 | `CGameData::ResetSettlerToIdle` | medium | "JobNothing/StepAside ..."; 14 callers |
+| 0x50E9F0 | `CGameData::UpdateSoldier` | medium | classes 1..3 only; "Player %u wins tower from %u" |
+| 0x519A90 | `CGameData::RecalculateTerritory` | medium | territory scratch, military buildings |
+| 0x505820 | `CGameData::TakeGoodFromPile` | medium | pile amount -1 after each "take input" |
+| 0x5061B0 | `CGameData::SetPileGood` | medium | pile +0 = good, relinks per-good list |
+| 0x4DE430 | `CGameData::RemoveBuildingStorage` | medium | "%u Waren hierher unterwegs" |
+| 0x50E3B0 | `CGameData::ReleaseSiteWorkers` | medium | "digger!", "builder!" |
+| 0x504F70 | `CGameData::LosePileOnTile` | medium | "Pile %u Lost", "illegal pile in changing land" |
+| 0x50DD20 | `CGameData::CreateSevenTileUnit` | medium | main settler + six type-0x2A parts; catapult/gong production |
+| 0x4F9A00 / 0x4F9B80 / 0x4FA220 | `CGameData::MinerJobEnter/Food/Dig` | medium/low/medium | mine building types, tile resources +0x11 |
 | 0x4A1EE0 | `Pathing::FindPath` | medium | entry of the Dirk\Pathing.cpp tree |
 | 0x7DFDB0 (global) | `g_campaignMission` | high | CrushBuilding compares it with 70 next to "Campaign 70: ..." |
 

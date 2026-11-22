@@ -41,7 +41,7 @@ verified ones only; later batches not included):
 
 Repeated with main a37a88b (batch 28, building sites; 453 installed):
 identical for all three saves again (201 / 180 / 200 called, 209 in all).
-Of batch 28 only `GameWorld::CheckBuildingSite` (0x4d99e0) ran: 2,690
+Of batch 28 only `CGameData::CheckBuildingSite` (0x4d99e0) ran: 2,690
 calls in slot 3, none in slots 1 and 2; PlanSiteLevelling,
 AddBuildingSite, IsFreeCastleSite and IsGoodStartPosition were not
 called. (CheckBuildingSite runs PlanSiteLevelling only for some modes;
@@ -60,10 +60,10 @@ in batch 29 they were also merged into the inventory notes:
 | Address | Function | Calls |
 |---|---|---|
 | 0x004c7b00 | Render::PackColour | 0 / 1459269 / 0 |
-| 0x004fefd0 | GameWorld::AllocTable36700Record | 116 / 28 / 24 |
-| 0x00505fd0 | GameWorld::PileNeighbourBuildingByteE | 1 / 0 / 0 |
-| 0x00506080 | GameWorld::MakePileEmpty | 1 / 0 / 0 |
-| 0x0050dff0 | GameWorld::RemoveSettlerFromLists | 13 / 0 / 0 |
+| 0x004fefd0 | CGameData::AllocTable36700Record | 116 / 28 / 24 |
+| 0x00505fd0 | CGameData::PileNeighbourBuildingByteE | 1 / 0 / 0 |
+| 0x00506080 | CGameData::MakePileEmpty | 1 / 0 / 0 |
+| 0x0050dff0 | CGameData::RemoveSettlerFromLists | 13 / 0 / 0 |
 | 0x00543a10 | MapEffect::Make_543a10 | 998 / 0 / 0 |
 | 0x00543aa0 | MapEffect::Make_543aa0 | 499 / 0 / 0 |
 | 0x00543b40 | MapEffect::Make_543b40 | 34 / 35 / 17 |

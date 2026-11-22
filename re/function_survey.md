@@ -131,9 +131,9 @@ votes only.
   object file. `re/obj_units.csv` lists the 73 units (blocks closer than
   0x400 bytes are merged, so a few units hold 2-3 small files: those with
   82-124 stubs). Evidence that the boundaries are real: units start exactly
-  at known first-of-file functions, e.g. `GameWorld::UpdateEconomy`
-  (0x4e05e0), `GameWorld::UpdateEnvironment` (0x4e7810),
-  `GameWorld::UpdateSettlers` (0x4e9670), `CGameData::CGameData`
+  at known first-of-file functions, e.g. `CGameData::UpdateEconomy`
+  (0x4e05e0), `CGameData::UpdateEnvironment` (0x4e7810),
+  `CGameData::UpdateSettlers` (0x4e9670), `CGameData::CGameData`
   (0x4fc990), `CLogicThread::ExecuteCommands` (0x535990),
   `CLogicThread::CLogicThread` (0x53c5e0), `CComputerPlayer::CComputerPlayer`
   (0x550900), and many class constructors in Dirk\\ files. `WinMain`

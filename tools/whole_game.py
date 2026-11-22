@@ -390,7 +390,7 @@ def backfill() -> int:
                 "date": dates[SAVE_BATCH28],
                 "note": "backfilled from re/savegame_checks.md (batch 28 repeat)"}
 
-    # GameWorld::SeedRandom is an S3RE_HOOK_ALWAYS hook: not counted, but it
+    # CGameData::SeedRandom is an S3RE_HOOK_ALWAYS hook: not counted, but it
     # seeds every game the launcher starts (s3re.log logs each seed).
     if rows.get(0x4feb40, {}).get("status") == "verified":
         out[(0x4feb40, "replay:scripted-seed127.bin")] = {

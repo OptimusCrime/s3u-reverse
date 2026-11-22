@@ -1,6 +1,6 @@
 // A construction site becomes a finished building.
 //
-// GameWorld::BuildingDone (0x004dbc50): (building) thiscall, ret 4. Called
+// CGameData::BuildingDone (0x004dbc50): (building) thiscall, ret 4. Called
 // by UpdateSettlers (the builder's job 0x12 when the last stage is done),
 // the map loader 0x4fd540 (buildings placed by the map) and 0x506cf0. EAX
 // not used by the callers. In order:
@@ -71,7 +71,7 @@
 
 namespace s3re::game {
 
-std::uint32_t __fastcall GameWorld_AllocBuildingExtra(GameWorld* world, void* edx, std::uint32_t value);
+std::uint32_t __fastcall CGameData_AllocBuildingExtra(CGameData* world, void* edx, std::uint32_t value);
 
 namespace {
 
@@ -88,15 +88,15 @@ constexpr std::uint32_t kSoldierType = 0x25;
 
 // UnblockTile (verified, area_split.cpp) through its S3.EXE address, so that
 // tests can replace its region floods by a recording stub.
-using TileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+using TileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 constexpr std::uintptr_t kUnblockTile = 0x0051b770;
 
-std::uint32_t PileAt(GameWorld* world, std::uint32_t x, std::uint32_t y, std::uint32_t good, std::uint32_t kind) {
-    return GameWorld_CreatePile(world, nullptr, x, y, good, 0, kind);
+std::uint32_t PileAt(CGameData* world, std::uint32_t x, std::uint32_t y, std::uint32_t good, std::uint32_t kind) {
+    return CGameData_CreatePile(world, nullptr, x, y, good, 0, kind);
 }
 
 // The output pile at the door (stored in +0xe by the callers).
-std::uint16_t DoorPile(GameWorld* world, const Building& b, std::uint32_t good) {
+std::uint16_t DoorPile(CGameData* world, const Building& b, std::uint32_t good) {
     return static_cast<std::uint16_t>(PileAt(world, b.door_x, b.door_y, good, kPileOutput));
 }
 
@@ -107,7 +107,7 @@ void WorkFromSite(Building& b) {
 }
 
 // Six store piles around the building (types 0x21/0x22), linked to it.
-void CreateStorePiles(GameWorld* world, std::uint32_t number, const std::int32_t* offsets) {
+void CreateStorePiles(CGameData* world, std::uint32_t number, const std::int32_t* offsets) {
     Building& b = world->buildings[number];
     std::uint32_t previous = 0;
     for (std::uint32_t k = 0; k < 6; ++k) {
@@ -124,12 +124,12 @@ void CreateStorePiles(GameWorld* world, std::uint32_t number, const std::int32_t
         }
         previous = pile;
     }
-    b.trade = static_cast<std::uint16_t>(GameWorld_AllocBuildingExtra(world, nullptr, b.owner));
+    b.trade = static_cast<std::uint16_t>(CGameData_AllocBuildingExtra(world, nullptr, b.owner));
 }
 
 // Temples (probably): one more priest/mana source unless the player's flag
 // bit 0 is set.
-void FinishTemple(GameWorld* world, Building& b) {
+void FinishTemple(CGameData* world, Building& b) {
     b.temple.countdown = 1;
     b.temple.points = 1;
     Player& player = world->players[b.owner];
@@ -151,16 +151,16 @@ void ClearFlags1aTo20(Building& b) {
 
 }  // namespace
 
-std::uint32_t __fastcall GameWorld_RemovePileFromTile(GameWorld* world, void* edx, std::uint32_t pile);
+std::uint32_t __fastcall CGameData_RemovePileFromTile(CGameData* world, void* edx, std::uint32_t pile);
 
-using BuildingDoneFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building);
+using BuildingDoneFn = void(__fastcall*)(CGameData* world, void* edx, std::uint32_t building);
 
 // Purpose: Turns a finished construction site into a working building: resets
 // its construction state, puts the garrison's first soldier into a military
 // building, and creates the building's goods piles (output, input and
 // storage piles, by type and race).
-void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t number) {
-    GameWorld_QueuePendingEvent(world, nullptr, 1, number, 0);
+void __fastcall CGameData_BuildingDone(CGameData* world, void*, std::uint32_t number) {
+    CGameData_QueuePendingEvent(world, nullptr, 1, number, 0);
     Building& b = world->buildings[number];
     b.buildup = 0;
     b.worker = 0;
@@ -178,8 +178,8 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
     b.trade = 0;
     b.input_amount[2] = 0;
     const std::int32_t race = world->players[b.owner].race;
-    GameWorld_RemovePileFromTile(world, nullptr, b.piles[0]);
-    GameWorld_RemovePileFromTile(world, nullptr, b.piles[1]);
+    CGameData_RemovePileFromTile(world, nullptr, b.piles[0]);
+    CGameData_RemovePileFromTile(world, nullptr, b.piles[1]);
 
     const std::uint8_t type = b.art;
     if (type == 0xf || type == 0x10 || type == 0x12) {
@@ -202,7 +202,7 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
             y = b.y + static_cast<std::uint32_t>(kSoldierTile[index][playerRace][1]);
         }
         reinterpret_cast<TileFn>(kUnblockTile)(world, nullptr, x, y);
-        const std::uint32_t soldier = GameWorld_CreateSettler(world, nullptr, x, y, kSoldierType, b.owner);
+        const std::uint32_t soldier = CGameData_CreateSettler(world, nullptr, x, y, kSoldierType, b.owner);
         world->settlers[soldier].job = kSoldierJob;
         world->settlers[soldier].building = static_cast<std::uint16_t>(number);
         b.guard = static_cast<std::uint16_t>(soldier);
@@ -345,7 +345,7 @@ void __fastcall GameWorld_BuildingDone(GameWorld* world, void*, std::uint32_t nu
     }
 }
 
-S3RE_HOOK(0x004dbc50, GameWorld_BuildingDone, BuildingDoneFn, Original_GameWorld_BuildingDone, GameWorld_BuildingDone);
+S3RE_HOOK(0x004dbc50, CGameData_BuildingDone, BuildingDoneFn, Original_CGameData_BuildingDone, CGameData_BuildingDone);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -353,7 +353,7 @@ S3RE_HOOK(0x004dbc50, GameWorld_BuildingDone, BuildingDoneFn, Original_GameWorld
 
 namespace {
 
-constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + 64 * sizeof(Building);
+constexpr std::size_t kTestWorld = offsetof(CGameData, buildings) + 64 * sizeof(Building);
 constexpr std::size_t kCountersBytes = sizeof(g_playerTallies.get());
 
 // A building 1..50 of a random type (mostly 0..0x38) of player 0..3, with
@@ -364,7 +364,7 @@ constexpr std::size_t kCountersBytes = sizeof(g_playerTallies.get());
 void CompareBuildingDone(test::Context& ctx, BuildingDoneFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     test::CalleeStubs stubs;
-    stubs.Install<2, kUnblockTile>([](GameWorld* w, std::uint32_t, const std::uint32_t* args) {
+    stubs.Install<2, kUnblockTile>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
         TileAtOffset(w, TileOffset(args[0], args[1])).flags &= 0xfe;
         return 0u;
     });
@@ -372,7 +372,7 @@ void CompareBuildingDone(test::Context& ctx, BuildingDoneFn candidate, int cases
     std::vector<std::uint8_t> saved(kCountersBytes), afterOriginal(kCountersBytes);
     void* counters = &g_playerTallies[0].unk0c;  // (to 12 bytes past the tallies, as before)
     std::memcpy(saved.data(), counters, kCountersBytes);
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         w->map_size = 384;
         w->settler_high_water = 100;
         w->pile_high_water = 300;
@@ -405,7 +405,7 @@ void CompareBuildingDone(test::Context& ctx, BuildingDoneFn candidate, int cases
         const auto write = ctx.rng().Below(1000);
         const auto px0 = static_cast<std::uint16_t>(20 + ctx.rng().Below(340));
         const auto py0 = static_cast<std::uint16_t>(20 + ctx.rng().Below(340));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Building& b = w->buildings[number];
             b.art = type;
             b.owner = owner;
@@ -432,11 +432,11 @@ void CompareBuildingDone(test::Context& ctx, BuildingDoneFn candidate, int cases
         for (std::uint32_t tx = x - 12u; tx != x + 13u; ++tx) {
             for (std::uint32_t ty = y - 12u; ty != y + 13u; ++ty) {
                 const auto area = static_cast<std::uint16_t>(1 + ctx.rng().Below(50));
-                worlds.Both([&](GameWorld* w) { w->tiles[tx][ty].area = area; });
+                worlds.Both([&](CGameData* w) { w->tiles[tx][ty].area = area; });
             }
         }
         stubs.SetWorld(worlds.original());
-        Original_GameWorld_BuildingDone(worlds.original(), nullptr, number);
+        Original_CGameData_BuildingDone(worlds.original(), nullptr, number);
         const std::vector<test::StubCall> expectedCalls = stubs.Take();
         const std::vector<DebugLogCall> expectedLogs = logs.Take();
         std::memcpy(afterOriginal.data(), counters, kCountersBytes);
@@ -457,20 +457,20 @@ void CompareBuildingDone(test::Context& ctx, BuildingDoneFn candidate, int cases
 }
 
 // Wrong: a temple always adds its mana.
-void __fastcall WrongBuildingDone(GameWorld* world, void* edx, std::uint32_t number) {
+void __fastcall WrongBuildingDone(CGameData* world, void* edx, std::uint32_t number) {
     Player& player = world->players[world->buildings[number].owner];
     const std::int32_t saved = player.unk008;
     player.unk008 &= ~1;
-    GameWorld_BuildingDone(world, edx, number);
+    CGameData_BuildingDone(world, edx, number);
     player.unk008 = saved;
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_BuildingDone_MatchesOriginal) {
-    CompareBuildingDone(ctx, &GameWorld_BuildingDone, 6000);
+S3RE_TEST(CGameData_BuildingDone_MatchesOriginal) {
+    CompareBuildingDone(ctx, &CGameData_BuildingDone, 6000);
 }
-S3RE_TEST(GameWorld_BuildingDone_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_BuildingDone_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareBuildingDone(probe, &WrongBuildingDone, 3000);
     S3RE_EXPECT(probe.failures() > 0);

@@ -20,7 +20,7 @@
 //   this+0x104 = 4, then 0x496c90(this, 1) (posts message 0x801 once).
 // - LoadSaveGame sets GameSettings+0x28 (is a savegame) and keeps the open
 //   file at +0x84; CLogicThread::OnStart (0x53c9e0) then calls the savegame
-//   loader 0x508fa0 instead of GameWorld::Create/SeedRandom, so the RNG
+//   loader 0x508fa0 instead of CGameData::Create/SeedRandom, so the RNG
 //   state comes from the file and --seed has no effect.
 //
 // The launcher passes the save as `-map`, so the menu reaches state 0x14.

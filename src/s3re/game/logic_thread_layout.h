@@ -9,7 +9,7 @@
 
 namespace s3re::game {
 
-struct GameWorld;  // layout.h
+struct CGameData;  // layout.h
 
 // The ring buffer of dwords between the logic thread and the network thread
 // (Push 0x4309c0, Pop 0x430980); its layout is not mapped (opaque).
@@ -23,7 +23,7 @@ struct CLogicThread {
     std::uint8_t unk078[0xc];
     std::uint32_t pending_ui_refresh;  // +0x084 turned into the world's refresh_ui (ui_state.cpp)
     std::uint8_t unk088[0x3a0 - 0x88];
-    GameWorld* world;          // +0x3a0 the world (CGameData)
+    CGameData* world;          // +0x3a0 the world (CGameData)
     std::uint8_t unk3a4[0x3c4 - 0x3a4];
     MessageQueue* toNet;       // +0x3c4 logic -> network (0x20 step and 0x21 command messages)
     MessageQueue* fromNet;     // +0x3c8 network -> logic (the replies)

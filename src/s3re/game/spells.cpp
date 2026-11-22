@@ -6,7 +6,7 @@
 // 100, 200, 300 in the image; re-read every step of a loop), tiles checked
 // signed against the map size.
 //
-// GameWorld::ExecuteSpell (0x005480b0): (player, x, y, a4, spell), the
+// CGameData::ExecuteSpell (0x005480b0): (player, x, y, a4, spell), the
 //   timed event of type 2 (UpdateEnvironment). x, y clamped to the map
 //   (signed); then by spell (jump table 0x5482bc): 0..3 0x548340(player, x,
 //   y, spell); 4 0x548fb0; 5 RevealSpot; 6 BurnTrees; 7 AddFish; 8
@@ -18,26 +18,26 @@
 //   0x5492a0 ("EventTreeCut..."); 31 RevealMap(player) ("EventReveal...");
 //   the DebugLog comes before the call. Other spells: nothing. ret 0x14.
 //   EAX not used (the caller overwrites it).
-// GameWorld::SpellRevealSpot (0x00549530): (player, x, y) spell 5: for the
+// CGameData::SpellRevealSpot (0x00549530): (player, x, y) spell 5: for the
 //   local player, the first free reveal point (active == 0, of 50) gets (x,
 //   y), countdown 0xfa and active 1, the high-water mark raised (signed).
 //   Paid also for other players and when all 50 are taken. ret 0xc.
-// GameWorld::SpellRevealMap (0x005495d0): (player) spell 31: for the local
+// CGameData::SpellRevealMap (0x005495d0): (player) spell 31: for the local
 //   player: if g_revealMap is not 1 yet: g_revealMap = 1, player +0x124 =
 //   1, +0x128 = g_gameTick, DebugLog("xxx GE done: optionviewall SET");
 //   else PushUiFeedback(0x36). Always paid. ret 4.
-// GameWorld::SpellBurnTrees (0x00549650): (player, x, y) spell 6: trees
+// CGameData::SpellBurnTrees (0x00549650): (player, x, y) spell 6: trees
 //   0x44..0x51 among the first 127 offsets catch fire (object 0xf3); paid
 //   if any did. ret 0xc.
-// GameWorld::SpellAddFish (0x00549700): (player, x, y) spell 7: on water
+// CGameData::SpellAddFish (0x00549700): (player, x, y) spell 7: on water
 //   tiles (terrain & 0xf0 == 0) among the first 200 offsets the resource
 //   byte += 1 + (Random() & 0xffff) % 4 (byte arithmetic), at most 0xf
 //   (results >= 0x10 become 0xf); paid if any tile was on the map and
 //   water. ret 0xc.
-// GameWorld::SpellHalveResources (0x005497f0): (player, x, y) spell 8: the
+// CGameData::SpellHalveResources (0x005497f0): (player, x, y) spell 8: the
 //   resource amount (low nibble) of the first 100 offsets' tiles is halved
 //   ((r >> 1) & 7 | r & 0xf0); paid if any tile was on the map. ret 0xc.
-// GameWorld::SpellGrowTrees (0x005498a0): (player, x, y) spell 9: growing
+// CGameData::SpellGrowTrees (0x005498a0): (player, x, y) spell 9: growing
 //   trees among the first 200 offsets advance three stages within their
 //   kind (0x55..0x5d up to 0x5d, 0x5e..0x66 up to 0x66, 0x67..0x6f up to
 //   0x6f, one after the other on the same tile); paid if any grew. ret 0xc.
@@ -91,11 +91,11 @@ constexpr std::uintptr_t kGoodsS = 0x0054acd0;
 constexpr std::uintptr_t kTreeCut = 0x005492a0;
 constexpr std::uintptr_t kRevealMapSpell = 0x005495d0;
 
-using Fn0 = U(__fastcall*)(GameWorld*, void*);
-using Fn1 = U(__fastcall*)(GameWorld*, void*, U);
-using Fn2 = U(__fastcall*)(GameWorld*, void*, U, U);
-using Fn3 = U(__fastcall*)(GameWorld*, void*, U, U, U);
-using Fn4 = U(__fastcall*)(GameWorld*, void*, U, U, U, U);
+using Fn0 = U(__fastcall*)(CGameData*, void*);
+using Fn1 = U(__fastcall*)(CGameData*, void*, U);
+using Fn2 = U(__fastcall*)(CGameData*, void*, U, U);
+using Fn3 = U(__fastcall*)(CGameData*, void*, U, U, U);
+using Fn4 = U(__fastcall*)(CGameData*, void*, U, U, U, U);
 
 template <typename F>
 F Callee(std::uintptr_t address) {
@@ -107,11 +107,11 @@ void DebugLog(const GameText& format) {
     reinterpret_cast<LogFn>(kDebugLogFn)(format.c_str());
 }
 
-bool HasMana(GameWorld* world, U player, U spell) {
+bool HasMana(CGameData* world, U player, U spell) {
     return (Callee<Fn2>(kHasManaForSpell)(world, nullptr, player, spell) & 0xff) != 0;
 }
 
-void Pay(GameWorld* world, U player, U spell) {
+void Pay(CGameData* world, U player, U spell) {
     Callee<Fn2>(kPayForSpell)(world, nullptr, player, spell);
 }
 
@@ -122,7 +122,7 @@ std::int32_t AreaSize(U index) {
 // Calls visit(tile) for the map tiles among the first AreaSize(area)
 // offsets around (x, y).
 template <typename Visit>
-void ForArea(GameWorld* world, U area, std::int32_t x, std::int32_t y, Visit visit) {
+void ForArea(CGameData* world, U area, std::int32_t x, std::int32_t y, Visit visit) {
     for (std::int32_t i = 0; i < AreaSize(area); ++i) {
         const MapOffset& o = world->offsets[i];
         const std::int32_t tx = o.dx + x;
@@ -136,12 +136,12 @@ void ForArea(GameWorld* world, U area, std::int32_t x, std::int32_t y, Visit vis
 
 }  // namespace
 
-using SpellFn = U(__fastcall*)(GameWorld* world, void* edx, U player, std::int32_t x, std::int32_t y);
-using RevealMapFn = U(__fastcall*)(GameWorld* world, void* edx, U player);
-using ExecuteFn = U(__fastcall*)(GameWorld* world, void* edx, U player, std::int32_t x, std::int32_t y, U a4, U spell);
+using SpellFn = U(__fastcall*)(CGameData* world, void* edx, U player, std::int32_t x, std::int32_t y);
+using RevealMapFn = U(__fastcall*)(CGameData* world, void* edx, U player);
+using ExecuteFn = U(__fastcall*)(CGameData* world, void* edx, U player, std::int32_t x, std::int32_t y, U a4, U spell);
 
 // Purpose: Spell 5: lets the casting (local) player see a spot of the map for a while.
-U __fastcall GameWorld_SpellRevealSpot(GameWorld* world, void*, U player, std::int32_t x, std::int32_t y) {
+U __fastcall CGameData_SpellRevealSpot(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
     if (!HasMana(world, player, 5)) {
         return 0;
     }
@@ -167,7 +167,7 @@ U __fastcall GameWorld_SpellRevealSpot(GameWorld* world, void*, U player, std::i
 }
 
 // Purpose: Spell 31: shows the local player the whole map.
-U __fastcall GameWorld_SpellRevealMap(GameWorld* world, void*, U player) {
+U __fastcall CGameData_SpellRevealMap(CGameData* world, void*, U player) {
     if (!HasMana(world, player, 0x1f)) {
         return 0;
     }
@@ -189,7 +189,7 @@ U __fastcall GameWorld_SpellRevealMap(GameWorld* world, void*, U player) {
 }
 
 // Purpose: Spell 6: sets the trees around a spot on fire.
-U __fastcall GameWorld_SpellBurnTrees(GameWorld* world, void*, U player, std::int32_t x, std::int32_t y) {
+U __fastcall CGameData_SpellBurnTrees(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
     if (!HasMana(world, player, 6)) {
         return 0;
     }
@@ -207,7 +207,7 @@ U __fastcall GameWorld_SpellBurnTrees(GameWorld* world, void*, U player, std::in
 }
 
 // Purpose: Spell 7: fills the waters around a spot with fish.
-U __fastcall GameWorld_SpellAddFish(GameWorld* world, void*, U player, std::int32_t x, std::int32_t y) {
+U __fastcall CGameData_SpellAddFish(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
     if (!HasMana(world, player, 7)) {
         return 0;
     }
@@ -231,7 +231,7 @@ U __fastcall GameWorld_SpellAddFish(GameWorld* world, void*, U player, std::int3
 }
 
 // Purpose: Spell 8: halves the resources (ore, fish) around a spot, probably to harm an enemy.
-U __fastcall GameWorld_SpellHalveResources(GameWorld* world, void*, U player, std::int32_t x, std::int32_t y) {
+U __fastcall CGameData_SpellHalveResources(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
     if (!HasMana(world, player, 8)) {
         return 0;
     }
@@ -248,7 +248,7 @@ U __fastcall GameWorld_SpellHalveResources(GameWorld* world, void*, U player, st
 }
 
 // Purpose: Spell 9: makes the young trees around a spot grow faster.
-U __fastcall GameWorld_SpellGrowTrees(GameWorld* world, void*, U player, std::int32_t x, std::int32_t y) {
+U __fastcall CGameData_SpellGrowTrees(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
     if (!HasMana(world, player, 9)) {
         return 0;
     }
@@ -271,7 +271,7 @@ U __fastcall GameWorld_SpellGrowTrees(GameWorld* world, void*, U player, std::in
 }
 
 // Purpose: Carries out a spell when its cast time has come: picks the spell's effect by its number.
-U __fastcall GameWorld_ExecuteSpell(GameWorld* world, void*, U player, std::int32_t x, std::int32_t y, U a4, U spell) {
+U __fastcall CGameData_ExecuteSpell(CGameData* world, void*, U player, std::int32_t x, std::int32_t y, U a4, U spell) {
     const auto size = static_cast<std::int32_t>(world->map_size);
     if (x < 0) {
         x = 0;
@@ -335,18 +335,18 @@ U __fastcall GameWorld_ExecuteSpell(GameWorld* world, void*, U player, std::int3
     }
 }
 
-S3RE_HOOK(0x005480b0, GameWorld_ExecuteSpell, ExecuteFn, Original_GameWorld_ExecuteSpell, GameWorld_ExecuteSpell);
-S3RE_HOOK(0x00549530, GameWorld_SpellRevealSpot, SpellFn, Original_GameWorld_SpellRevealSpot,
-          GameWorld_SpellRevealSpot);
-S3RE_HOOK(0x005495d0, GameWorld_SpellRevealMap, RevealMapFn, Original_GameWorld_SpellRevealMap,
-          GameWorld_SpellRevealMap);
-S3RE_HOOK(0x00549650, GameWorld_SpellBurnTrees, SpellFn, Original_GameWorld_SpellBurnTrees,
-          GameWorld_SpellBurnTrees);
-S3RE_HOOK(0x00549700, GameWorld_SpellAddFish, SpellFn, Original_GameWorld_SpellAddFish, GameWorld_SpellAddFish);
-S3RE_HOOK(0x005497f0, GameWorld_SpellHalveResources, SpellFn, Original_GameWorld_SpellHalveResources,
-          GameWorld_SpellHalveResources);
-S3RE_HOOK(0x005498a0, GameWorld_SpellGrowTrees, SpellFn, Original_GameWorld_SpellGrowTrees,
-          GameWorld_SpellGrowTrees);
+S3RE_HOOK(0x005480b0, CGameData_ExecuteSpell, ExecuteFn, Original_CGameData_ExecuteSpell, CGameData_ExecuteSpell);
+S3RE_HOOK(0x00549530, CGameData_SpellRevealSpot, SpellFn, Original_CGameData_SpellRevealSpot,
+          CGameData_SpellRevealSpot);
+S3RE_HOOK(0x005495d0, CGameData_SpellRevealMap, RevealMapFn, Original_CGameData_SpellRevealMap,
+          CGameData_SpellRevealMap);
+S3RE_HOOK(0x00549650, CGameData_SpellBurnTrees, SpellFn, Original_CGameData_SpellBurnTrees,
+          CGameData_SpellBurnTrees);
+S3RE_HOOK(0x00549700, CGameData_SpellAddFish, SpellFn, Original_CGameData_SpellAddFish, CGameData_SpellAddFish);
+S3RE_HOOK(0x005497f0, CGameData_SpellHalveResources, SpellFn, Original_CGameData_SpellHalveResources,
+          CGameData_SpellHalveResources);
+S3RE_HOOK(0x005498a0, CGameData_SpellGrowTrees, SpellFn, Original_CGameData_SpellGrowTrees,
+          CGameData_SpellGrowTrees);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -354,13 +354,13 @@ S3RE_HOOK(0x005498a0, GameWorld_SpellGrowTrees, SpellFn, Original_GameWorld_Spel
 
 namespace {
 
-constexpr std::size_t kWorld = sizeof(GameWorld);
+constexpr std::size_t kWorld = sizeof(CGameData);
 
 // A map with a ring table of 300 small offsets, interesting objects,
 // terrain and resources, and players with enough mana now and then.
 void SetUpSpellWorld(test::Context& ctx, test::WorldPair& worlds) {
     auto& rng = ctx.rng();
-    GameWorld* w = worlds.original();
+    CGameData* w = worlds.original();
     const U size = 32 + rng.Below(97);
     w->map_size = size;
     for (U n = 0; n < 320; ++n) {
@@ -436,7 +436,7 @@ void CompareRevealMap(test::Context& ctx, RevealMapFn candidate, int cases) {
         const std::int32_t reveal = ctx.rng().Chance(1, 2) ? 1 : static_cast<std::int32_t>(ctx.rng().Below(3)) - 1;
         g_revealMap = reveal;
         stubs.SetWorld(worlds.original());
-        Original_GameWorld_SpellRevealMap(worlds.original(), nullptr, player);
+        Original_CGameData_SpellRevealMap(worlds.original(), nullptr, player);
         const std::int32_t expectedReveal = g_revealMap;
         const auto expectedCalls = stubs.Take();
         const auto expectedLogs = logs.Take();
@@ -475,20 +475,20 @@ void InstallHandlerStubs(test::CalleeStubs& stubs) {
 }
 
 void CompareExecute(test::Context& ctx, ExecuteFn candidate, int cases) {
-    test::WorldPair worlds(ctx, offsetof(GameWorld, map_size) + 4);
+    test::WorldPair worlds(ctx, offsetof(CGameData, map_size) + 4);
     test::CalleeStubs stubs;
     InstallHandlerStubs(stubs);
     DebugLogRecorder logs;
     for (int i = 0; i < cases; ++i) {
         const U size = 1 + ctx.rng().Below(768);
-        worlds.Both([&](GameWorld* w) { w->map_size = size; });
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
         const U player = ctx.rng().Next32();
         const std::int32_t x = ctx.rng().Range(-50, static_cast<std::int32_t>(size) + 50);
         const std::int32_t y = ctx.rng().Range(-50, static_cast<std::int32_t>(size) + 50);
         const U a4 = ctx.rng().Next32();
         const U spell = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(34);
         stubs.SetWorld(worlds.original());
-        Original_GameWorld_ExecuteSpell(worlds.original(), nullptr, player, x, y, a4, spell);
+        Original_CGameData_ExecuteSpell(worlds.original(), nullptr, player, x, y, a4, spell);
         const auto expectedCalls = stubs.Take();
         const auto expectedLogs = logs.Take();
         stubs.SetWorld(worlds.ours());
@@ -501,14 +501,14 @@ void CompareExecute(test::Context& ctx, ExecuteFn candidate, int cases) {
 }
 
 // Wrong: the tree growth of one kind stops one stage early.
-U __fastcall WrongSpellGrowTrees(GameWorld* world, void*, U player, std::int32_t x, std::int32_t y) {
+U __fastcall WrongSpellGrowTrees(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
     std::vector<std::uint8_t> before;
     for (U tx = 0; tx < world->map_size; ++tx) {
         for (U ty = 0; ty < world->map_size; ++ty) {
             before.push_back(world->tiles[tx][ty].object);
         }
     }
-    GameWorld_SpellGrowTrees(world, nullptr, player, x, y);
+    CGameData_SpellGrowTrees(world, nullptr, player, x, y);
     std::size_t n = 0;
     for (U tx = 0; tx < world->map_size; ++tx) {
         for (U ty = 0; ty < world->map_size; ++ty, ++n) {
@@ -522,40 +522,40 @@ U __fastcall WrongSpellGrowTrees(GameWorld* world, void*, U player, std::int32_t
 }
 
 // Wrong: spells 13 and 14 are swapped.
-U __fastcall WrongExecuteSpell(GameWorld* world, void*, U player, std::int32_t x, std::int32_t y, U a4, U spell) {
+U __fastcall WrongExecuteSpell(CGameData* world, void*, U player, std::int32_t x, std::int32_t y, U a4, U spell) {
     const U swapped = spell == 13 ? 14 : spell == 14 ? 13 : spell;
-    return GameWorld_ExecuteSpell(world, nullptr, player, x, y, a4, swapped);
+    return CGameData_ExecuteSpell(world, nullptr, player, x, y, a4, swapped);
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_SpellRevealSpot_MatchesOriginal) {
-    CompareSpell(ctx, Original_GameWorld_SpellRevealSpot, &GameWorld_SpellRevealSpot, 200);
+S3RE_TEST(CGameData_SpellRevealSpot_MatchesOriginal) {
+    CompareSpell(ctx, Original_CGameData_SpellRevealSpot, &CGameData_SpellRevealSpot, 200);
 }
-S3RE_TEST(GameWorld_SpellBurnTrees_MatchesOriginal) {
-    CompareSpell(ctx, Original_GameWorld_SpellBurnTrees, &GameWorld_SpellBurnTrees, 200);
+S3RE_TEST(CGameData_SpellBurnTrees_MatchesOriginal) {
+    CompareSpell(ctx, Original_CGameData_SpellBurnTrees, &CGameData_SpellBurnTrees, 200);
 }
-S3RE_TEST(GameWorld_SpellAddFish_MatchesOriginal) {
-    CompareSpell(ctx, Original_GameWorld_SpellAddFish, &GameWorld_SpellAddFish, 200);
+S3RE_TEST(CGameData_SpellAddFish_MatchesOriginal) {
+    CompareSpell(ctx, Original_CGameData_SpellAddFish, &CGameData_SpellAddFish, 200);
 }
-S3RE_TEST(GameWorld_SpellHalveResources_MatchesOriginal) {
-    CompareSpell(ctx, Original_GameWorld_SpellHalveResources, &GameWorld_SpellHalveResources, 200);
+S3RE_TEST(CGameData_SpellHalveResources_MatchesOriginal) {
+    CompareSpell(ctx, Original_CGameData_SpellHalveResources, &CGameData_SpellHalveResources, 200);
 }
-S3RE_TEST(GameWorld_SpellGrowTrees_MatchesOriginal) {
-    CompareSpell(ctx, Original_GameWorld_SpellGrowTrees, &GameWorld_SpellGrowTrees, 200);
+S3RE_TEST(CGameData_SpellGrowTrees_MatchesOriginal) {
+    CompareSpell(ctx, Original_CGameData_SpellGrowTrees, &CGameData_SpellGrowTrees, 200);
 }
-S3RE_TEST(GameWorld_SpellGrowTrees_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_SpellGrowTrees_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareSpell(probe, Original_GameWorld_SpellGrowTrees, &WrongSpellGrowTrees, 500);
+    CompareSpell(probe, Original_CGameData_SpellGrowTrees, &WrongSpellGrowTrees, 500);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_SpellRevealMap_MatchesOriginal) {
-    CompareRevealMap(ctx, &GameWorld_SpellRevealMap, 200);
+S3RE_TEST(CGameData_SpellRevealMap_MatchesOriginal) {
+    CompareRevealMap(ctx, &CGameData_SpellRevealMap, 200);
 }
-S3RE_TEST(GameWorld_ExecuteSpell_MatchesOriginal) {
-    CompareExecute(ctx, &GameWorld_ExecuteSpell, 20000);
+S3RE_TEST(CGameData_ExecuteSpell_MatchesOriginal) {
+    CompareExecute(ctx, &CGameData_ExecuteSpell, 20000);
 }
-S3RE_TEST(GameWorld_ExecuteSpell_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_ExecuteSpell_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareExecute(probe, &WrongExecuteSpell, 2000);
     S3RE_EXPECT(probe.failures() > 0);

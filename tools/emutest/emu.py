@@ -5,7 +5,7 @@ Unicorn x86 emulator and calls an original function and its replacement on
 identical arguments, registers and memory. See tools/emutest/run.py for what
 is compared.
 
-Memory model. The world object (ECX of the GameWorld methods) is mapped at
+Memory model. The world object (ECX of the CGameData methods) is mapped at
 WORLD_BASE. Its contents are random but lazy: the first time a byte is read
 or written it is materialized from a deterministic function of (case seed,
 address), so both functions see the same random world without any setup,
@@ -460,7 +460,7 @@ class Emulator:
 
     def our_function(self, name: str) -> int:
         """Address of our replacement `name` (its C++ name, e.g.
-        GameWorld_AddStatistic), not of its counting thunk."""
+        CGameData_AddStatistic), not of its counting thunk."""
         return find_our_function(self.symbols, name)
 
     def analyze(self, start: int, end: int | None = None) -> Function:

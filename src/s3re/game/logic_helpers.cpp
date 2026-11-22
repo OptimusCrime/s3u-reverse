@@ -1,7 +1,7 @@
 // Simulation helpers of batch 25 (Volker\*.cpp, unnamed files), all
 // thiscall on the world unless noted.
 //
-// GameWorld_WearPath (0x0051b7f0): (x, y), ret 8. Called when a tile's
+// CGameData_WearPath (0x0051b7f0): (x, y), ret 8. Called when a tile's
 //   traffic counter (+0x12) reaches 12 (0x503940, from the walking code).
 //   If the terrain byte (+6) of tile (x, y) is grass (0x10) or one of 0x12,
 //   0x13, 0x18 (probably grass variants), walks its six neighbours in the
@@ -11,14 +11,14 @@
 //   set) and passes; any other stops the walk (changes already made stay).
 //   If all six pass, the tile becomes a worn path (0x1c, redraw bit) and
 //   its traffic +0x12 grows by 9. EAX = the address of the tile.
-// GameWorld_QueueMarkedTileWithRoom (0x0051d000): (x, y), ret 8. A
+// CGameData_QueueMarkedTileWithRoom (0x0051d000): (x, y), ret 8. A
 //   flood-fill step like QueueMarkedTileNoOwner (world_tables.cpp): the tile
 //   is queued on the tile ring (and its mark 0x10 of byte +0xa cleared) only
 //   if it is marked, not blocked (bit 0 of +0xa), none of the 18 tiles
 //   within two steps is blocked, and neither it nor any of them has terrain
 //   of class 0x2_ (byte +6 & 0xf0 == 0x20; class not identified). EAX: the
 //   new ring index (10000 when it wrapped), else the tile's address.
-// GameWorld_SetSettlerAnimation (0x0050e2c0): (settler, kind), ret 8:
+// CGameData_SetSettlerAnimation (0x0050e2c0): (settler, kind), ret 8:
 //   id = table 0x6a8060[kind * 4 + race] (race = settler byte +2); settler
 //   dword +8 (Settler::direction) = id, word +0xc = GfxData_SpriteWord(id) - 1 on the graphics
 //   object [0x7a8010] (probably the number of frames - 1). EAX = that
@@ -70,7 +70,7 @@ constexpr std::int32_t kRadius2[18] = {0x300,  -0x300, 1,      -1,     0x301,  -
 
 // The tile `delta` tile indices from the tile at byte offset `centre` (32-bit
 // wrap-around, may lie outside the map like in the original).
-Tile& TileNear(GameWorld* world, std::uint32_t centre, std::int32_t delta) {
+Tile& TileNear(CGameData* world, std::uint32_t centre, std::int32_t delta) {
     return TileAtOffset(world, centre + static_cast<std::uint32_t>(delta * static_cast<std::int32_t>(kTileBytes)));
 }
 
@@ -78,26 +78,26 @@ Tile& TileNear(GameWorld* world, std::uint32_t centre, std::int32_t delta) {
 
 std::uint32_t __fastcall GfxData_SpriteWord(void* self, void* edx, std::uint32_t id);
 
-using PositionFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
-using SettlerAnimationFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler,
+using PositionFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
+using SettlerAnimationFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t settler,
                                                       std::uint32_t kind);
 using RemoveFromGroupsFn = void(__fastcall*)(void* self, void* edx, std::uint32_t settler, std::uint32_t group);
 
-std::uint32_t __fastcall GameWorld_WearPath(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
-std::uint32_t __fastcall GameWorld_QueueMarkedTileWithRoom(GameWorld* world, void* edx, std::uint32_t x,
+std::uint32_t __fastcall CGameData_WearPath(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall CGameData_QueueMarkedTileWithRoom(CGameData* world, void* edx, std::uint32_t x,
                                                                   std::uint32_t y);
-std::uint32_t __fastcall GameWorld_SetSettlerAnimation(GameWorld* world, void* edx, std::uint32_t settler,
+std::uint32_t __fastcall CGameData_SetSettlerAnimation(CGameData* world, void* edx, std::uint32_t settler,
                                                        std::uint32_t kind);
 void __fastcall CLogicThread_RemoveSettlerFromGroups(void* self, void* edx, std::uint32_t settler,
                                                      std::uint32_t group);
 
-S3RE_HOOK(0x0051b7f0, GameWorld_WearPath, PositionFn, Original_GameWorld_WearPath,
-          GameWorld_WearPath);
+S3RE_HOOK(0x0051b7f0, CGameData_WearPath, PositionFn, Original_CGameData_WearPath,
+          CGameData_WearPath);
 
 // Purpose: Turns a much-walked grass tile into a worn path (terrain 0x1c,
 // which decays back to grass in UpdateEnvironment) if its neighbours are
 // grass or path, smoothing grass variants around it.
-std::uint32_t __fastcall GameWorld_WearPath(GameWorld* world, void* /*edx*/, std::uint32_t x,
+std::uint32_t __fastcall CGameData_WearPath(CGameData* world, void* /*edx*/, std::uint32_t x,
                                                      std::uint32_t y) {
     const std::uint32_t centre = TileOffset(x, y);
     Tile& tile = TileAtOffset(world, centre);
@@ -123,13 +123,13 @@ std::uint32_t __fastcall GameWorld_WearPath(GameWorld* world, void* /*edx*/, std
     return result;
 }
 
-S3RE_HOOK(0x0051d000, GameWorld_QueueMarkedTileWithRoom, PositionFn,
-          Original_GameWorld_QueueMarkedTileWithRoom, GameWorld_QueueMarkedTileWithRoom);
+S3RE_HOOK(0x0051d000, CGameData_QueueMarkedTileWithRoom, PositionFn,
+          Original_CGameData_QueueMarkedTileWithRoom, CGameData_QueueMarkedTileWithRoom);
 
 // Purpose: One step of a flood fill over marked tiles that only spreads to
 // places with room: no blocked tile and no terrain of class 0x2_ within two
 // steps (probably to find space for something large).
-std::uint32_t __fastcall GameWorld_QueueMarkedTileWithRoom(GameWorld* world, void* /*edx*/, std::uint32_t x,
+std::uint32_t __fastcall CGameData_QueueMarkedTileWithRoom(CGameData* world, void* /*edx*/, std::uint32_t x,
                                                                   std::uint32_t y) {
     const std::uint32_t centre = TileOffset(x, y);
     Tile& tile = TileAtOffset(world, centre);
@@ -160,12 +160,12 @@ std::uint32_t __fastcall GameWorld_QueueMarkedTileWithRoom(GameWorld* world, voi
     return next;
 }
 
-S3RE_HOOK(0x0050e2c0, GameWorld_SetSettlerAnimation, SettlerAnimationFn, Original_GameWorld_SetSettlerAnimation,
-          GameWorld_SetSettlerAnimation);
+S3RE_HOOK(0x0050e2c0, CGameData_SetSettlerAnimation, SettlerAnimationFn, Original_CGameData_SetSettlerAnimation,
+          CGameData_SetSettlerAnimation);
 
 // Purpose: Gives a settler the animation of a kind of activity for its race
 // (graphics id and frame count, probably walking, carrying, working...).
-std::uint32_t __fastcall GameWorld_SetSettlerAnimation(GameWorld* world, void* /*edx*/, std::uint32_t settler,
+std::uint32_t __fastcall CGameData_SetSettlerAnimation(CGameData* world, void* /*edx*/, std::uint32_t settler,
                                                        std::uint32_t kind) {
     Settler& record = world->settlers[settler];
     const std::uint32_t entry = record.race + kind * 4;
@@ -212,7 +212,7 @@ void __fastcall CLogicThread_RemoveSettlerFromGroups(void* /*self*/, void* /*edx
 
 namespace {
 
-constexpr std::size_t kTestWorld = sizeof(GameWorld);
+constexpr std::size_t kTestWorld = sizeof(CGameData);
 
 // Random terrain bytes / flags around (x, y) from small sets, so all paths
 // are reached.
@@ -225,13 +225,13 @@ void SetUpTiles(test::Context& ctx, test::WorldPair& worlds, std::uint32_t x, st
         if (objects) {
             const std::uint8_t terrain =
                 ctx.rng().Chance(1, 3) && k >= 0 ? (k < 6 ? 0x1c : 0) : kObjects[ctx.rng().Below(rare ? 11 : 7)];
-            worlds.Both([&](GameWorld* w) { TileNear(w, centre, delta).terrain = terrain; });
+            worlds.Both([&](CGameData* w) { TileNear(w, centre, delta).terrain = terrain; });
         } else {
             const auto terrain = static_cast<std::uint8_t>(rare ? 0x20 + ctx.rng().Below(16) : ctx.rng().Below(0x20));
             const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32());
             const auto tileFlags = static_cast<std::uint8_t>(
                 k < 0 ? (ctx.rng().Chance(1, 4) ? flags : (flags | 0x10) & ~1) : (rare ? flags | 1 : flags & ~1));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 TileNear(w, centre, delta).terrain = terrain;
                 TileNear(w, centre, delta).flags = tileFlags;
             });
@@ -259,7 +259,7 @@ void ComparePosition(test::Context& ctx, Fn original, Fn candidate, bool objects
         const std::uint32_t y = 2 + ctx.rng().Below(380);
         SetUpTiles(ctx, worlds, x, y, objects);
         const std::uint32_t index = ctx.rng().Chance(1, 8) ? kTileRingEntries - 1 : ctx.rng().Below(kTileRingEntries);
-        worlds.Both([&](GameWorld* w) { w->tile_ring_index.write = index; });
+        worlds.Both([&](CGameData* w) { w->tile_ring_index.write = index; });
         expected = original(worlds.original(), nullptr, x, y) - (objects ? reinterpret_cast<std::uint32_t>(worlds.original()) : 0);
         actual = candidate(worlds.ours(), nullptr, x, y) - (objects ? reinterpret_cast<std::uint32_t>(worlds.ours()) : 0);
         if (!objects && expected > kTileRingEntries) {  // a tile address: relative to the world
@@ -270,10 +270,10 @@ void ComparePosition(test::Context& ctx, Fn original, Fn candidate, bool objects
 }
 
 // Wrong: the conversion forgets the redraw bit.
-std::uint32_t __fastcall WrongWearPath(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall WrongWearPath(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y) {
     Tile& tile = TileAtOffset(world, TileOffset(x, y));
     const std::uint8_t saved = tile.draw_flags;
-    const std::uint32_t result = GameWorld_WearPath(world, edx, x, y);
+    const std::uint32_t result = CGameData_WearPath(world, edx, x, y);
     if (tile.terrain == 0x1c) {
         tile.draw_flags = saved;
     }
@@ -286,20 +286,20 @@ void CompareSetSettlerAnimation(test::Context& ctx, SettlerAnimationFn candidate
         const std::uint32_t settler = ctx.rng().Below(0x8000);
         const std::uint32_t race = ctx.rng().Below(4);
         const std::uint32_t kind = ctx.rng().Below(40);
-        worlds.Both([&](GameWorld* w) { w->settlers[settler].race = static_cast<std::uint8_t>(race); });
+        worlds.Both([&](CGameData* w) { w->settlers[settler].race = static_cast<std::uint8_t>(race); });
         if (!gfx.PrepareSprite(ctx, g_settlerAnimations[kind * 4 + race])) {
             expected = actual = 0;
             return;  // not a graphics id (the table holds other data there)
         }
-        expected = Original_GameWorld_SetSettlerAnimation(worlds.original(), nullptr, settler, kind);
+        expected = Original_CGameData_SetSettlerAnimation(worlds.original(), nullptr, settler, kind);
         actual = candidate(worlds.ours(), nullptr, settler, kind);
     });
 }
 
 // Wrong: stores the frame count without the -1.
-std::uint32_t __fastcall WrongSetSettlerAnimation(GameWorld* world, void* edx, std::uint32_t settler,
+std::uint32_t __fastcall WrongSetSettlerAnimation(CGameData* world, void* edx, std::uint32_t settler,
                                                   std::uint32_t kind) {
-    const std::uint32_t result = GameWorld_SetSettlerAnimation(world, edx, settler, kind);
+    const std::uint32_t result = CGameData_SetSettlerAnimation(world, edx, settler, kind);
     ++world->settlers[settler].counter;
     return result;
 }
@@ -344,34 +344,34 @@ void __fastcall WrongRemoveFromGroups(void* self, void* edx, std::uint32_t settl
 
 }  // namespace
 
-S3RE_TEST(GameWorld_WearPath_MatchesOriginal) {
-    ComparePosition<PositionFn>(ctx, Original_GameWorld_WearPath, &GameWorld_WearPath, true, 5000);
+S3RE_TEST(CGameData_WearPath_MatchesOriginal) {
+    ComparePosition<PositionFn>(ctx, Original_CGameData_WearPath, &CGameData_WearPath, true, 5000);
 }
 
-S3RE_TEST(GameWorld_WearPath_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_WearPath_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    ComparePosition<PositionFn>(probe, Original_GameWorld_WearPath, &WrongWearPath, true, 2000);
+    ComparePosition<PositionFn>(probe, Original_CGameData_WearPath, &WrongWearPath, true, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
-S3RE_TEST(GameWorld_QueueMarkedTileWithRoom_MatchesOriginal) {
-    ComparePosition<PositionFn>(ctx, Original_GameWorld_QueueMarkedTileWithRoom,
-                                &GameWorld_QueueMarkedTileWithRoom, false, 5000);
+S3RE_TEST(CGameData_QueueMarkedTileWithRoom_MatchesOriginal) {
+    ComparePosition<PositionFn>(ctx, Original_CGameData_QueueMarkedTileWithRoom,
+                                &CGameData_QueueMarkedTileWithRoom, false, 5000);
 }
 
-S3RE_TEST(GameWorld_QueueMarkedTileWithRoom_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_QueueMarkedTileWithRoom_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     // Wrong pairing: the "no owner" queue step has no neighbourhood checks.
-    ComparePosition<PositionFn>(probe, Original_GameWorld_QueueMarkedTileWithRoom,
+    ComparePosition<PositionFn>(probe, Original_CGameData_QueueMarkedTileWithRoom,
                                 reinterpret_cast<PositionFn>(0x0051d3d0), false, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
-S3RE_TEST(GameWorld_SetSettlerAnimation_MatchesOriginal) {
-    CompareSetSettlerAnimation(ctx, &GameWorld_SetSettlerAnimation, 5000);
+S3RE_TEST(CGameData_SetSettlerAnimation_MatchesOriginal) {
+    CompareSetSettlerAnimation(ctx, &CGameData_SetSettlerAnimation, 5000);
 }
 
-S3RE_TEST(GameWorld_SetSettlerAnimation_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_SetSettlerAnimation_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareSetSettlerAnimation(probe, &WrongSetSettlerAnimation, 2000);
     S3RE_EXPECT(probe.failures() > 0);

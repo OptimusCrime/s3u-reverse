@@ -7,15 +7,15 @@
 // (14-byte records at world+0x123885c; +0x0 goods type, +0x1 amount) link
 // with +0xa (previous) and +0xc (next).
 //
-// GameWorld::AddTilePileToArea (0x005051b0): (x, y): if the tile holds a
+// CGameData::AddTilePileToArea (0x005051b0): (x, y): if the tile holds a
 //   pile (word +0x2 != 0 and no building flag): DebugLog("Pile %u Taken ,
 //   eco %u", pile, area), adds the pile's amount to the goods counter of
-//   the tile owner (GameWorld::AddPlayerCounter(owner, type, amount)), and
+//   the tile owner (CGameData::AddPlayerCounter(owner, type, amount)), and
 //   puts the pile at the head of its area's list for its goods type (area =
 //   the tile's area word +0x14, used as is). EAX (the only caller
 //   tail-returns it) reproduced: world + tile index * 24 when there is no
 //   pile, else area * 0x170. ret 8.
-// GameWorld::AddGoodsToPile (0x00505650): (pile): one more unit on the
+// CGameData::AddGoodsToPile (0x00505650): (pile): one more unit on the
 //   pile: byte +0x3 (units on the way?) -= 1, amount (+0x1) += 1. Before
 //   that, a pile of kind (+0x4) 0xff whose amount equals its reserved count
 //   (+0x2) is put at the head of its area's list for its goods type (as in
@@ -24,7 +24,7 @@
 //   with byte +0x3 == 0, for kind 0xfe, and when the amount reaches 9 or
 //   more. EAX (callers ignore it; one tail-returns it) reproduced from the
 //   original's register use. ret 4.
-// GameWorld::PileIncAmountLeaving (0x005058c0) (name from its DebugLog
+// CGameData::PileIncAmountLeaving (0x005058c0) (name from its DebugLog
 //   text): (pile): one more unit is to leave the pile: byte +0x2 (units
 //   leaving) += 1. If it was 8 or more before: DebugLog("PileIncAmountLeaving:
 //   art ...", kind, pile, amount, goods, leaving, x, y) and, for the first
@@ -37,24 +37,24 @@
 //   list for its goods type (area = the area word of the pile's tile); its
 //   own links stay. EAX (callers ignore it or tail-return it; some only
 //   overwrite AL) reproduced. ret 4.
-// GameWorld::PileIncAmountComing (0x00505bc0) / PileDecAmountComing
+// CGameData::PileIncAmountComing (0x00505bc0) / PileDecAmountComing
 //   (0x00505bf0): (pile): byte +0x3 (units on the way) += 1 / -= 1. EAX =
 //   the byte's address. ret 4.
-// GameWorld::RemovePileFromTile (0x00504650): (pile): the pile word +0x2 of
+// CGameData::RemovePileFromTile (0x00504650): (pile): the pile word +0x2 of
 //   the tile at (+0x6, +0x8) = 0 and the goods byte +0x0 = 0. EAX = pile +
 //   0x14d2e2 (the original's index arithmetic). ret 4.
-// GameWorld::PileDecAmountLeaving (0x00505ac0): (pile): the counterpart of
+// CGameData::PileDecAmountLeaving (0x00505ac0): (pile): the counterpart of
 //   PileIncAmountLeaving: byte +0x2 (units leaving) -= 1. Before that, if
 //   all units were leaving (amount +0x1 == leaving) and the kind (+0x4) is
 //   0xff or 0xfe, the pile goes back to the head of its area's list for its
 //   goods type (area = the area word of the pile's tile). EAX (callers only
 //   overwrite AX) reproduced: the new leaving byte in AL, the upper bits of
 //   area * 0x170 after a relink, else of pile * 7. ret 4.
-// GameWorld::MakePileEmpty (0x00506080): (pile): the pile leaves its area's
+// CGameData::MakePileEmpty (0x00506080): (pile): the pile leaves its area's
 //   list for its goods type (unlinked as in PileIncAmountLeaving), its goods
 //   byte becomes 0xff (an allocated pile without goods) and it goes to the
 //   head of the area's list +0x8 (empty piles). EAX = pile + 0x14d2e2. ret 4.
-// GameWorld::CreatePile (0x00504420): (x, y, goods, amount, kind): takes the
+// CGameData::CreatePile (0x00504420): (x, y, goods, amount, kind): takes the
 //   first free pile record 1..0x7cfe (goods byte 0; record 0x7cff counts as
 //   "none free": EAX = 0 then, nothing changes), raises the high-water mark
 //   (dword world+0x1238858) if needed, fills goods, amount, kind, x, y with
@@ -97,25 +97,25 @@ constexpr std::uint32_t kAreaWords = sizeof(Area) / 2;
 
 // RemovePileFromTile and MakePileEmpty return pile + 0x14d2e2: the pile
 // table's offset in records (the original's index arithmetic).
-static_assert(offsetof(GameWorld, piles) % sizeof(Pile) == 0);
-constexpr std::uint32_t kPileIndexBias = offsetof(GameWorld, piles) / sizeof(Pile);
+static_assert(offsetof(CGameData, piles) % sizeof(Pile) == 0);
+constexpr std::uint32_t kPileIndexBias = offsetof(CGameData, piles) / sizeof(Pile);
 
 std::uint32_t Address(const void* p) {
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p));
 }
 
 // The tile a pile lies on (its x/y words, so always a real tile index).
-Tile& TileOf(GameWorld* world, const Pile& pile) {
+Tile& TileOf(CGameData* world, const Pile& pile) {
     return world->tiles[pile.x][pile.y];
 }
 
 }  // namespace
 
-using TileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+using TileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 
 // Purpose: A goods pile lying on a tile becomes part of the economy: its goods count towards the tile
 // owner's stock and the pile is listed in its area, so carriers can find it.
-std::uint32_t __fastcall GameWorld_AddTilePileToArea(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall CGameData_AddTilePileToArea(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     const std::uint32_t index = x * 0x300 + y;
     // x, y are full dwords: the tile offset is computed in 32 bits as in the original.
     Tile& tile = TileAtOffset(world, TileOffset(x, y));
@@ -125,7 +125,7 @@ std::uint32_t __fastcall GameWorld_AddTilePileToArea(GameWorld* world, void*, st
     }
     const std::uint32_t area = tile.area;
     GameDebugLog(texts::kPileTaken, pile, area);
-    GameWorld_AddPlayerCounter(world, nullptr, tile.owner, world->piles[pile].good, world->piles[pile].amount);
+    CGameData_AddPlayerCounter(world, nullptr, tile.owner, world->piles[pile].good, world->piles[pile].amount);
     const std::uint32_t areaWords = area * kAreaWords;
     std::uint16_t& head = world->areas[area].piles_by_goods[world->piles[pile].good];
     const std::uint32_t next = head;
@@ -140,14 +140,14 @@ std::uint32_t __fastcall GameWorld_AddTilePileToArea(GameWorld* world, void*, st
     return areaWords;
 }
 
-S3RE_HOOK(0x005051b0, GameWorld_AddTilePileToArea, TileFn, Original_GameWorld_AddTilePileToArea,
-          GameWorld_AddTilePileToArea);
+S3RE_HOOK(0x005051b0, CGameData_AddTilePileToArea, TileFn, Original_CGameData_AddTilePileToArea,
+          CGameData_AddTilePileToArea);
 
-using PileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t pile);
+using PileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t pile);
 
 // Purpose: One more unit of goods arrives on a pile. If the pile has become available for collection, it is
 // listed in its area so carriers can find it.
-std::uint32_t __fastcall GameWorld_AddGoodsToPile(GameWorld* world, void*, std::uint32_t pile) {
+std::uint32_t __fastcall CGameData_AddGoodsToPile(CGameData* world, void*, std::uint32_t pile) {
     Pile& p = world->piles[pile];
     auto log = [&](std::uint32_t kind) {
         GameDebugLog(texts::kPileDetails, pile, kind, static_cast<std::uint32_t>(p.good), static_cast<std::uint32_t>(p.x),
@@ -189,11 +189,11 @@ std::uint32_t __fastcall GameWorld_AddGoodsToPile(GameWorld* world, void*, std::
     return eax;
 }
 
-S3RE_HOOK(0x00505650, GameWorld_AddGoodsToPile, PileFn, Original_GameWorld_AddGoodsToPile, GameWorld_AddGoodsToPile);
+S3RE_HOOK(0x00505650, CGameData_AddGoodsToPile, PileFn, Original_CGameData_AddGoodsToPile, CGameData_AddGoodsToPile);
 
 // Purpose: A carrier is coming to take one unit from a pile. Once every unit on the pile is spoken for, the
 // pile is taken out of its area's list, so no other carrier is sent for it.
-std::uint32_t __fastcall GameWorld_PileIncAmountLeaving(GameWorld* world, void*, std::uint32_t pile) {
+std::uint32_t __fastcall CGameData_PileIncAmountLeaving(CGameData* world, void*, std::uint32_t pile) {
     Pile& p = world->piles[pile];
     // The original's EAX, step by step.
     std::uint32_t eax = ((pile * 7u) & 0xffffff00u) | p.leaving;
@@ -250,18 +250,18 @@ std::uint32_t __fastcall GameWorld_PileIncAmountLeaving(GameWorld* world, void*,
     return eax;
 }
 
-S3RE_HOOK(0x005058c0, GameWorld_PileIncAmountLeaving, PileFn, Original_GameWorld_PileIncAmountLeaving,
-          GameWorld_PileIncAmountLeaving);
+S3RE_HOOK(0x005058c0, CGameData_PileIncAmountLeaving, PileFn, Original_CGameData_PileIncAmountLeaving,
+          CGameData_PileIncAmountLeaving);
 
 // Purpose: One more unit of goods is on its way to a pile (counted in byte +0x3).
-std::uint32_t __fastcall GameWorld_PileIncAmountComing(GameWorld* world, void*, std::uint32_t pile) {
+std::uint32_t __fastcall CGameData_PileIncAmountComing(CGameData* world, void*, std::uint32_t pile) {
     std::uint8_t& coming = world->piles[pile].coming;
     coming = static_cast<std::uint8_t>(coming + 1);
     return Address(&coming);
 }
 
 // Purpose: One unit less is on its way to a pile (probably when a delivery is cancelled).
-std::uint32_t __fastcall GameWorld_PileDecAmountComing(GameWorld* world, void*, std::uint32_t pile) {
+std::uint32_t __fastcall CGameData_PileDecAmountComing(CGameData* world, void*, std::uint32_t pile) {
     std::uint8_t& coming = world->piles[pile].coming;
     coming = static_cast<std::uint8_t>(coming - 1);
     return Address(&coming);
@@ -269,23 +269,23 @@ std::uint32_t __fastcall GameWorld_PileDecAmountComing(GameWorld* world, void*, 
 
 // Purpose: Removes a goods pile from the map: its tile no longer holds it and the record's goods byte is
 // cleared (probably freeing the record).
-std::uint32_t __fastcall GameWorld_RemovePileFromTile(GameWorld* world, void*, std::uint32_t pile) {
+std::uint32_t __fastcall CGameData_RemovePileFromTile(CGameData* world, void*, std::uint32_t pile) {
     TileOf(world, world->piles[pile]).object_number = 0;
     world->piles[pile].good = 0;
     return pile + kPileIndexBias;  // the original's index arithmetic
 }
 
-S3RE_HOOK(0x00505bc0, GameWorld_PileIncAmountComing, PileFn, Original_GameWorld_PileIncAmountComing,
-          GameWorld_PileIncAmountComing);
-S3RE_HOOK(0x00505bf0, GameWorld_PileDecAmountComing, PileFn, Original_GameWorld_PileDecAmountComing,
-          GameWorld_PileDecAmountComing);
-S3RE_HOOK(0x00504650, GameWorld_RemovePileFromTile, PileFn, Original_GameWorld_RemovePileFromTile,
-          GameWorld_RemovePileFromTile);
+S3RE_HOOK(0x00505bc0, CGameData_PileIncAmountComing, PileFn, Original_CGameData_PileIncAmountComing,
+          CGameData_PileIncAmountComing);
+S3RE_HOOK(0x00505bf0, CGameData_PileDecAmountComing, PileFn, Original_CGameData_PileDecAmountComing,
+          CGameData_PileDecAmountComing);
+S3RE_HOOK(0x00504650, CGameData_RemovePileFromTile, PileFn, Original_CGameData_RemovePileFromTile,
+          CGameData_RemovePileFromTile);
 
 // Purpose: A carrier that was to take a unit from a pile won't (or has taken it): one unit less is leaving.
 // If the pile had been taken out of its area's list because everything on it was spoken for, it is listed
 // again, so carriers can be sent for it.
-std::uint32_t __fastcall GameWorld_PileDecAmountLeaving(GameWorld* world, void*, std::uint32_t pile) {
+std::uint32_t __fastcall CGameData_PileDecAmountLeaving(CGameData* world, void*, std::uint32_t pile) {
     Pile& p = world->piles[pile];
     std::uint32_t upper = pile * 7u;  // the original's register before the byte loads
     if (p.amount == p.leaving && (p.art == 0xff || p.art == 0xfe)) {
@@ -306,7 +306,7 @@ std::uint32_t __fastcall GameWorld_PileDecAmountLeaving(GameWorld* world, void*,
 
 // Purpose: A pile has no goods left (probably a building's pile slot that was emptied): it leaves its
 // area's list for its goods type and is kept, marked empty, in the area's list of empty piles.
-std::uint32_t __fastcall GameWorld_MakePileEmpty(GameWorld* world, void*, std::uint32_t pile) {
+std::uint32_t __fastcall CGameData_MakePileEmpty(CGameData* world, void*, std::uint32_t pile) {
     Pile& p = world->piles[pile];
     const std::uint32_t area = TileOf(world, p).area;
     const std::uint32_t previous = p.prev;
@@ -330,23 +330,23 @@ std::uint32_t __fastcall GameWorld_MakePileEmpty(GameWorld* world, void*, std::u
     return pile + kPileIndexBias;  // the original's index arithmetic
 }
 
-S3RE_HOOK(0x00505ac0, GameWorld_PileDecAmountLeaving, PileFn, Original_GameWorld_PileDecAmountLeaving,
-          GameWorld_PileDecAmountLeaving);
-S3RE_HOOK(0x00506080, GameWorld_MakePileEmpty, PileFn, Original_GameWorld_MakePileEmpty, GameWorld_MakePileEmpty);
+S3RE_HOOK(0x00505ac0, CGameData_PileDecAmountLeaving, PileFn, Original_CGameData_PileDecAmountLeaving,
+          CGameData_PileDecAmountLeaving);
+S3RE_HOOK(0x00506080, CGameData_MakePileEmpty, PileFn, Original_CGameData_MakePileEmpty, CGameData_MakePileEmpty);
 
-using CreatePileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+using CreatePileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                 std::uint32_t goods, std::uint32_t amount, std::uint32_t kind);
-std::uint32_t __fastcall GameWorld_CreatePile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall CGameData_CreatePile(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                               std::uint32_t goods, std::uint32_t amount, std::uint32_t kind);
 
-S3RE_HOOK(0x00504420, GameWorld_CreatePile, CreatePileFn, Original_GameWorld_CreatePile, GameWorld_CreatePile);
+S3RE_HOOK(0x00504420, CGameData_CreatePile, CreatePileFn, Original_CGameData_CreatePile, CGameData_CreatePile);
 
 namespace {
 
 constexpr std::uint32_t kPileLimit = 0x7cff;
 
 // Puts `pile` at the head of the list whose head word is `head`.
-void LinkAtHead(GameWorld* world, std::uint32_t pile, std::uint16_t& head) {
+void LinkAtHead(CGameData* world, std::uint32_t pile, std::uint16_t& head) {
     const std::uint16_t first = head;
     world->piles[pile].next = first;
     if (first != 0) {
@@ -360,7 +360,7 @@ void LinkAtHead(GameWorld* world, std::uint32_t pile, std::uint16_t& head) {
 
 // Purpose: Puts a new goods pile on a tile (probably when goods are dropped
 // or produced) and adds it to its area's pile list for its goods type.
-std::uint32_t __fastcall GameWorld_CreatePile(GameWorld* world, void* /*edx*/, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall CGameData_CreatePile(CGameData* world, void* /*edx*/, std::uint32_t x, std::uint32_t y,
                                               std::uint32_t goods, std::uint32_t amount, std::uint32_t kind) {
     std::uint32_t pile = 1;
     while (world->piles[pile].good != 0 && pile != kPileLimit) {
@@ -420,16 +420,16 @@ namespace {
 
 constexpr std::uint32_t kTestPiles = 0x1000;
 constexpr std::uint32_t kTestAreas = 0x400;
-constexpr std::size_t kTestWorld = offsetof(GameWorld, piles) + (kTestPiles + 1) * sizeof(Pile);
+constexpr std::size_t kTestWorld = offsetof(CGameData, piles) + (kTestPiles + 1) * sizeof(Pile);
 
-std::uint32_t Relative(std::uint32_t value, GameWorld* world, std::uint32_t areaWords) {
+std::uint32_t Relative(std::uint32_t value, CGameData* world, std::uint32_t areaWords) {
     // Either a pointer into the world or area * 0x170.
     return value == areaWords ? value : value - Address(world);
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_AddTilePileToArea_MatchesOriginal) {
+S3RE_TEST(CGameData_AddTilePileToArea_MatchesOriginal) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < 20000; ++i) {
         const std::uint32_t x = ctx.rng().Below(384);
@@ -438,7 +438,7 @@ S3RE_TEST(GameWorld_AddTilePileToArea_MatchesOriginal) {
         const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32() & (ctx.rng().Chance(1, 6) ? 0xff : ~0x20));
         const std::uint32_t area = ctx.rng().Below(kTestAreas);
         const auto owner = static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? 0xff : ctx.rng().Below(20));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Tile& tile = w->tiles[x][y];
             tile.object_number = static_cast<std::uint16_t>(pile);
             tile.flags = flags;
@@ -449,15 +449,15 @@ S3RE_TEST(GameWorld_AddTilePileToArea_MatchesOriginal) {
             const auto goods = static_cast<std::uint8_t>(ctx.rng().Below(36));
             // The current head: often empty, else another pile.
             const auto head = static_cast<std::uint16_t>(ctx.rng().Chance(1, 3) ? 0 : 1 + ctx.rng().Below(kTestPiles));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->piles[pile].good = goods;
                 w->areas[area].piles_by_goods[goods] = head;
             });
         }
         const std::uint32_t areaWords = area * kAreaWords;
         const std::uint32_t expected =
-            Relative(Original_GameWorld_AddTilePileToArea(worlds.original(), nullptr, x, y), worlds.original(), areaWords);
-        const std::uint32_t actual = Relative(GameWorld_AddTilePileToArea(worlds.ours(), nullptr, x, y), worlds.ours(), areaWords);
+            Relative(Original_CGameData_AddTilePileToArea(worlds.original(), nullptr, x, y), worlds.original(), areaWords);
+        const std::uint32_t actual = Relative(CGameData_AddTilePileToArea(worlds.ours(), nullptr, x, y), worlds.ours(), areaWords);
         if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 256 == 255) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 255 before it): (%u, %u), pile %u", i, x, y, pile);
             return;
@@ -466,7 +466,7 @@ S3RE_TEST(GameWorld_AddTilePileToArea_MatchesOriginal) {
     worlds.Checkpoint(ctx);
 }
 
-S3RE_TEST(GameWorld_AddGoodsToPile_MatchesOriginal) {
+S3RE_TEST(CGameData_AddGoodsToPile_MatchesOriginal) {
     test::WorldPair worlds(ctx, kTestWorld);
     for (int i = 0; i < 20000; ++i) {
         const std::uint32_t pile = 1 + ctx.rng().Below(kTestPiles);
@@ -480,7 +480,7 @@ S3RE_TEST(GameWorld_AddGoodsToPile_MatchesOriginal) {
         const std::uint32_t y = ctx.rng().Below(384);
         const std::uint32_t area = ctx.rng().Below(kTestAreas);
         const auto head = static_cast<std::uint16_t>(ctx.rng().Chance(1, 3) ? 0 : 1 + ctx.rng().Below(kTestPiles));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Pile& p = w->piles[pile];
             p.art = kind;
             p.amount = amount;
@@ -492,8 +492,8 @@ S3RE_TEST(GameWorld_AddGoodsToPile_MatchesOriginal) {
             w->tiles[x][y].area = static_cast<std::uint16_t>(area);
             w->areas[area].piles_by_goods[goods] = head;
         });
-        const std::uint32_t expected = Original_GameWorld_AddGoodsToPile(worlds.original(), nullptr, pile);
-        const std::uint32_t actual = GameWorld_AddGoodsToPile(worlds.ours(), nullptr, pile);
+        const std::uint32_t expected = Original_CGameData_AddGoodsToPile(worlds.original(), nullptr, pile);
+        const std::uint32_t actual = CGameData_AddGoodsToPile(worlds.ours(), nullptr, pile);
         if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 256 == 255) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 255 before it): pile %u", i, pile);
             return;
@@ -505,15 +505,15 @@ S3RE_TEST(GameWorld_AddGoodsToPile_MatchesOriginal) {
 namespace {
 
 constexpr std::uint32_t kTestBuildings = 0x200;
-constexpr std::size_t kLeavingTestWorld = offsetof(GameWorld, buildings) + (kTestBuildings + 1) * sizeof(Building);
+constexpr std::size_t kLeavingTestWorld = offsetof(CGameData, buildings) + (kTestBuildings + 1) * sizeof(Building);
 
-using PileTestFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t pile);
+using PileTestFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t pile);
 
 // Wrong: unlinks piles of every kind.
-std::uint32_t __fastcall WrongPileIncAmountLeaving(GameWorld* world, void* edx, std::uint32_t pile) {
+std::uint32_t __fastcall WrongPileIncAmountLeaving(CGameData* world, void* edx, std::uint32_t pile) {
     const std::uint8_t kind = world->piles[pile].art;
     world->piles[pile].art = 0xff;
-    const std::uint32_t result = GameWorld_PileIncAmountLeaving(world, edx, pile);
+    const std::uint32_t result = CGameData_PileIncAmountLeaving(world, edx, pile);
     world->piles[pile].art = kind;
     return result;
 }
@@ -534,7 +534,7 @@ void ComparePileLeaving(test::Context& ctx, PileTestFn candidate, int cases) {
         const std::uint32_t area = ctx.rng().Below(kTestAreas);
         const auto previous = static_cast<std::uint16_t>(ctx.rng().Chance(1, 3) ? 0 : 1 + ctx.rng().Below(kTestPiles));
         const auto next = static_cast<std::uint16_t>(ctx.rng().Chance(1, 3) ? 0 : 1 + ctx.rng().Below(kTestPiles));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Pile& p = w->piles[pile];
             p.art = kind;
             p.leaving = leaving;
@@ -549,17 +549,17 @@ void ComparePileLeaving(test::Context& ctx, PileTestFn candidate, int cases) {
         // Buildings: a small count; sometimes one of them refers to the pile
         // (in one of its words piles[0..2], pile_ring).
         const std::uint32_t count = ctx.rng().Chance(1, 8) ? 0 : ctx.rng().Below(kTestBuildings);
-        worlds.Both([&](GameWorld* w) { w->building_high_water = count; });
+        worlds.Both([&](CGameData* w) { w->building_high_water = count; });
         if (count != 0 && ctx.rng().Chance(1, 2)) {
             const std::uint32_t b = 1 + ctx.rng().Below(count);
             const std::uint32_t which = ctx.rng().Below(4);
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 Building& building = w->buildings[b];
                 std::uint16_t& word = which < 3 ? building.piles[which] : building.pile_ring;
                 word = static_cast<std::uint16_t>(pile);
             });
         }
-        const std::uint32_t expected = Original_GameWorld_PileIncAmountLeaving(worlds.original(), nullptr, pile);
+        const std::uint32_t expected = Original_CGameData_PileIncAmountLeaving(worlds.original(), nullptr, pile);
         const std::vector<DebugLogCall> expectedLogs = logs.Take();
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, pile);
         const std::vector<DebugLogCall> actualLogs = logs.Take();
@@ -580,10 +580,10 @@ void ComparePileLeaving(test::Context& ctx, PileTestFn candidate, int cases) {
 
 }  // namespace
 
-S3RE_TEST(GameWorld_PileIncAmountLeaving_MatchesOriginal) {
-    ComparePileLeaving(ctx, &GameWorld_PileIncAmountLeaving, 20000);
+S3RE_TEST(CGameData_PileIncAmountLeaving_MatchesOriginal) {
+    ComparePileLeaving(ctx, &CGameData_PileIncAmountLeaving, 20000);
 }
-S3RE_TEST(GameWorld_PileIncAmountLeaving_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_PileIncAmountLeaving_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     ComparePileLeaving(probe, &WrongPileIncAmountLeaving, 2000);
     S3RE_EXPECT(probe.failures() > 0);
@@ -599,13 +599,13 @@ void ComparePileFn(test::Context& ctx, PileTestFn original, PileTestFn candidate
         const std::uint32_t pile = ctx.rng().Below(kTestPiles + 1);
         const auto x = static_cast<std::uint16_t>(ctx.rng().Below(384));
         const auto y = static_cast<std::uint16_t>(ctx.rng().Below(384));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->piles[pile].x = x;
             w->piles[pile].y = y;
         });
         if (ctx.rng().Chance(1, 8)) {
             const auto coming = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0 : 0xff);
-            worlds.Both([&](GameWorld* w) { w->piles[pile].coming = coming; });
+            worlds.Both([&](CGameData* w) { w->piles[pile].coming = coming; });
         }
         std::uint32_t expected = original(worlds.original(), nullptr, pile);
         std::uint32_t actual = candidate(worlds.ours(), nullptr, pile);
@@ -622,20 +622,20 @@ void ComparePileFn(test::Context& ctx, PileTestFn original, PileTestFn candidate
 
 }  // namespace
 
-S3RE_TEST(GameWorld_PileIncAmountComing_MatchesOriginal) {
-    ComparePileFn(ctx, Original_GameWorld_PileIncAmountComing, &GameWorld_PileIncAmountComing, 20000);
+S3RE_TEST(CGameData_PileIncAmountComing_MatchesOriginal) {
+    ComparePileFn(ctx, Original_CGameData_PileIncAmountComing, &CGameData_PileIncAmountComing, 20000);
 }
-S3RE_TEST(GameWorld_PileIncAmountComing_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_PileIncAmountComing_ComparisonDetectsWrongImplementation) {
     // Swapping increment and decrement must be caught.
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    ComparePileFn(probe, Original_GameWorld_PileIncAmountComing, &GameWorld_PileDecAmountComing, 2000);
+    ComparePileFn(probe, Original_CGameData_PileIncAmountComing, &CGameData_PileDecAmountComing, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_PileDecAmountComing_MatchesOriginal) {
-    ComparePileFn(ctx, Original_GameWorld_PileDecAmountComing, &GameWorld_PileDecAmountComing, 20000);
+S3RE_TEST(CGameData_PileDecAmountComing_MatchesOriginal) {
+    ComparePileFn(ctx, Original_CGameData_PileDecAmountComing, &CGameData_PileDecAmountComing, 20000);
 }
-S3RE_TEST(GameWorld_RemovePileFromTile_MatchesOriginal) {
-    ComparePileFn(ctx, Original_GameWorld_RemovePileFromTile, &GameWorld_RemovePileFromTile, 20000);
+S3RE_TEST(CGameData_RemovePileFromTile_MatchesOriginal) {
+    ComparePileFn(ctx, Original_CGameData_RemovePileFromTile, &CGameData_RemovePileFromTile, 20000);
 }
 
 namespace {
@@ -659,7 +659,7 @@ void SetUpLinkedPile(test::Context& ctx, test::WorldPair& worlds, std::uint32_t 
     const std::uint16_t next = link();
     const std::uint16_t goodsHead = link();
     const std::uint16_t emptyHead = link();
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         Pile& p = w->piles[pile];
         p.art = kind;
         p.leaving = leaving;
@@ -694,21 +694,21 @@ void CompareLinkedPileFn(test::Context& ctx, PileTestFn original, PileTestFn can
 }
 
 // Wrong: relinks piles of every kind.
-std::uint32_t __fastcall WrongPileDecAmountLeaving(GameWorld* world, void* edx, std::uint32_t pile) {
+std::uint32_t __fastcall WrongPileDecAmountLeaving(CGameData* world, void* edx, std::uint32_t pile) {
     std::uint8_t& kind = world->piles[pile].art;
     const std::uint8_t saved = kind;
     kind = 0xff;
-    const std::uint32_t result = GameWorld_PileDecAmountLeaving(world, edx, pile);
+    const std::uint32_t result = CGameData_PileDecAmountLeaving(world, edx, pile);
     kind = saved;
     return result;
 }
 
 // Wrong: does not set the previous link of the old head of the empty list.
-std::uint32_t __fastcall WrongMakePileEmpty(GameWorld* world, void* edx, std::uint32_t pile) {
+std::uint32_t __fastcall WrongMakePileEmpty(CGameData* world, void* edx, std::uint32_t pile) {
     const std::uint32_t area = TileOf(world, world->piles[pile]).area;
     const std::uint32_t head = world->areas[area].pile_list;
     const std::uint16_t saved = world->piles[head].prev;
-    const std::uint32_t result = GameWorld_MakePileEmpty(world, edx, pile);
+    const std::uint32_t result = CGameData_MakePileEmpty(world, edx, pile);
     if (head != pile) {
         world->piles[head].prev = saved;
     }
@@ -717,20 +717,20 @@ std::uint32_t __fastcall WrongMakePileEmpty(GameWorld* world, void* edx, std::ui
 
 }  // namespace
 
-S3RE_TEST(GameWorld_PileDecAmountLeaving_MatchesOriginal) {
-    CompareLinkedPileFn(ctx, Original_GameWorld_PileDecAmountLeaving, &GameWorld_PileDecAmountLeaving, 20000);
+S3RE_TEST(CGameData_PileDecAmountLeaving_MatchesOriginal) {
+    CompareLinkedPileFn(ctx, Original_CGameData_PileDecAmountLeaving, &CGameData_PileDecAmountLeaving, 20000);
 }
-S3RE_TEST(GameWorld_PileDecAmountLeaving_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_PileDecAmountLeaving_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareLinkedPileFn(probe, Original_GameWorld_PileDecAmountLeaving, &WrongPileDecAmountLeaving, 2000);
+    CompareLinkedPileFn(probe, Original_CGameData_PileDecAmountLeaving, &WrongPileDecAmountLeaving, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_MakePileEmpty_MatchesOriginal) {
-    CompareLinkedPileFn(ctx, Original_GameWorld_MakePileEmpty, &GameWorld_MakePileEmpty, 20000);
+S3RE_TEST(CGameData_MakePileEmpty_MatchesOriginal) {
+    CompareLinkedPileFn(ctx, Original_CGameData_MakePileEmpty, &CGameData_MakePileEmpty, 20000);
 }
-S3RE_TEST(GameWorld_MakePileEmpty_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_MakePileEmpty_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareLinkedPileFn(probe, Original_GameWorld_MakePileEmpty, &WrongMakePileEmpty, 2000);
+    CompareLinkedPileFn(probe, Original_CGameData_MakePileEmpty, &WrongMakePileEmpty, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
@@ -739,23 +739,23 @@ namespace {
 // The pile records searched by CreatePile (1..0x7cff) must exist in the test
 // world; all of them are kept in use (goods byte != 0) except the one a case
 // frees, so the search ends there (or finds none).
-constexpr std::size_t kCreateWorld = offsetof(GameWorld, piles) + (kPileLimit + 1) * sizeof(Pile);
+constexpr std::size_t kCreateWorld = offsetof(CGameData, piles) + (kPileLimit + 1) * sizeof(Pile);
 
 void CompareCreatePile(test::Context& ctx, CreatePileFn candidate, int cases) {
     test::WorldPair worlds(ctx, kCreateWorld);
     for (std::uint32_t pile = 1; pile <= kPileLimit; ++pile) {
         const auto goods = static_cast<std::uint8_t>(1 + ctx.rng().Below(255));
-        worlds.Both([&](GameWorld* w) { w->piles[pile].good = goods; });
+        worlds.Both([&](CGameData* w) { w->piles[pile].good = goods; });
     }
     static constexpr std::uint32_t kKinds[] = {0, 1, 0x32, 0x33, 0xfd, 0xfe, 0xff, 0x100, 7};
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t free = ctx.rng().Chance(1, 20) ? 0 : ctx.rng().Chance(1, 20) ? kPileLimit
                                                                                          : 1 + ctx.rng().Below(kPileLimit);
         if (free != 0) {
-            worlds.Both([&](GameWorld* w) { w->piles[free].good = 0; });
+            worlds.Both([&](CGameData* w) { w->piles[free].good = 0; });
         }
         const std::uint32_t highWater = ctx.rng().Below(0x8000);
-        worlds.Both([&](GameWorld* w) { w->pile_high_water = highWater; });
+        worlds.Both([&](CGameData* w) { w->pile_high_water = highWater; });
         const std::uint32_t x = ctx.rng().Below(384);
         const std::uint32_t y = ctx.rng().Below(384);
         const std::uint32_t amount = ctx.rng().Chance(1, 2) ? 0 : (ctx.rng().Chance(1, 8) ? 0x100 : 1 + ctx.rng().Below(8));
@@ -764,7 +764,7 @@ void CompareCreatePile(test::Context& ctx, CreatePileFn candidate, int cases) {
         const std::uint32_t area = ctx.rng().Chance(1, 10)
                                        ? (amount == 0 || ctx.rng().Chance(1, 2) ? 0 : 0x8000 + ctx.rng().Below(0x8000))
                                        : ctx.rng().Below(kTestAreas);
-        worlds.Both([&](GameWorld* w) { w->tiles[x][y].area = static_cast<std::uint16_t>(area); });
+        worlds.Both([&](CGameData* w) { w->tiles[x][y].area = static_cast<std::uint16_t>(area); });
         const std::uint32_t goods = ctx.rng().Chance(1, 5) ? 0xff : ctx.rng().Below(36);
         const std::uint32_t kind = kKinds[ctx.rng().Below(sizeof(kKinds) / sizeof(kKinds[0]))];
         // The heads the pile may go to: empty or another pile.
@@ -772,12 +772,12 @@ void CompareCreatePile(test::Context& ctx, CreatePileFn candidate, int cases) {
         if (area < kTestAreas) {
             const std::uint16_t goodsHead = link();
             const std::uint16_t emptyHead = link();
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->areas[area].piles_by_goods[goods] = goodsHead;  // goods 0xff: past the array, as in the original
                 w->areas[area].pile_list = emptyHead;
             });
         }
-        const std::uint32_t expected = Original_GameWorld_CreatePile(worlds.original(), nullptr, x, y, goods, amount, kind);
+        const std::uint32_t expected = Original_CGameData_CreatePile(worlds.original(), nullptr, x, y, goods, amount, kind);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y, goods, amount, kind);
         if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 64 == 63 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 63 before it): free %u, goods %u, amount %u, kind %u, area %u",
@@ -786,26 +786,26 @@ void CompareCreatePile(test::Context& ctx, CreatePileFn candidate, int cases) {
         }
         // Keep every record in use again.
         if (free != 0) {
-            worlds.Both([&](GameWorld* w) { w->piles[free].good = 1; });
+            worlds.Both([&](CGameData* w) { w->piles[free].good = 1; });
         }
     }
 }
 
 // Wrong: the high-water mark is never raised.
-std::uint32_t __fastcall WrongCreatePile(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall WrongCreatePile(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                          std::uint32_t goods, std::uint32_t amount, std::uint32_t kind) {
     const std::uint32_t saved = world->pile_high_water;
-    const std::uint32_t result = GameWorld_CreatePile(world, edx, x, y, goods, amount, kind);
+    const std::uint32_t result = CGameData_CreatePile(world, edx, x, y, goods, amount, kind);
     world->pile_high_water = saved;
     return result;
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_CreatePile_MatchesOriginal) {
-    CompareCreatePile(ctx, &GameWorld_CreatePile, 6000);
+S3RE_TEST(CGameData_CreatePile_MatchesOriginal) {
+    CompareCreatePile(ctx, &CGameData_CreatePile, 6000);
 }
-S3RE_TEST(GameWorld_CreatePile_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_CreatePile_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareCreatePile(probe, &WrongCreatePile, 3000);
     S3RE_EXPECT(probe.failures() > 0);

@@ -1,13 +1,13 @@
 // Terrain changes made by settler jobs (UpdateSettlers callees).
 //
-// GameWorld::UpdateShadeAround (0x00519670): (x, y): tile byte +0x5
-//   (shade) = GameWorld::TileShade for the tile and its six neighbours, in
+// CGameData::UpdateShadeAround (0x00519670): (x, y): tile byte +0x5
+//   (shade) = CGameData::TileShade for the tile and its six neighbours, in
 //   the order (x, y), (x-1, y), (x+1, y), (x, y-1), (x, y+1), (x-1, y-1),
 //   (x+1, y+1), each computed after the previous one is stored. No map
 //   check (the original's 32-bit tile arithmetic). Called after a tile's
 //   height changes (diggers levelling a site: UpdateSettlers jobs 5/7/8/9;
 //   0x506cf0). ret 8; EAX = the last TileShade's (callers ignore it).
-// GameWorld::SetTerrain16Patch (0x0051ba00): (x, y): only if the tile's
+// CGameData::SetTerrain16Patch (0x0051ba00): (x, y): only if the tile's
 //   terrain (+0x6) is 0x10, 0x12, 0x13, 0x18 or 0x1c (grass and its
 //   variants; 0x1c a worn path): the six neighbours are checked in the
 //   order (x+1, y), (x-1, y), (x, y+1), (x, y-1), (x+1, y+1), (x-1, y-1).
@@ -43,11 +43,11 @@ constexpr std::uint32_t kStepY = kTileBytes;
 
 }  // namespace
 
-using TileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+using TileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 
 // Purpose: Recomputes how light the tile and its six neighbours are drawn after the tile's height
 // changed (e.g. while diggers level a building site).
-std::uint32_t __fastcall GameWorld_UpdateShadeAround(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall CGameData_UpdateShadeAround(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     struct Step {
         std::int32_t dx, dy;
     };
@@ -56,7 +56,7 @@ std::uint32_t __fastcall GameWorld_UpdateShadeAround(GameWorld* world, void*, st
     for (const Step& step : kOrder) {
         const std::uint32_t tx = x + static_cast<std::uint32_t>(step.dx);
         const std::uint32_t ty = y + static_cast<std::uint32_t>(step.dy);
-        shade = GameWorld_TileShade(world, nullptr, tx, ty);
+        shade = CGameData_TileShade(world, nullptr, tx, ty);
         TileAtOffset(world, TileOffset(tx, ty)).shade = static_cast<std::uint8_t>(shade);
     }
     return shade;
@@ -72,9 +72,9 @@ bool IsGrassVariant(std::uint8_t terrain) {
 
 // Purpose: Turns a grass tile whose surroundings are all grass into a special patch of land (terrain
 // 0x16, probably a field or bed a worker prepares), making the grass variants around it plain grass.
-std::uint32_t __fastcall GameWorld_SetTerrain16Patch(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall CGameData_SetTerrain16Patch(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     const std::uint32_t tile = TileOffset(x, y);
-    const std::uint32_t result = tile - static_cast<std::uint32_t>(offsetof(GameWorld, tiles)) +
+    const std::uint32_t result = tile - static_cast<std::uint32_t>(offsetof(CGameData, tiles)) +
                                  static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
     Tile& centre = TileAtOffset(world, tile);
     if (centre.terrain != 0x10 && !IsGrassVariant(centre.terrain)) {
@@ -102,10 +102,10 @@ std::uint32_t __fastcall GameWorld_SetTerrain16Patch(GameWorld* world, void*, st
     return result;
 }
 
-S3RE_HOOK(0x00519670, GameWorld_UpdateShadeAround, TileFn, Original_GameWorld_UpdateShadeAround,
-          GameWorld_UpdateShadeAround);
-S3RE_HOOK(0x0051ba00, GameWorld_SetTerrain16Patch, TileFn, Original_GameWorld_SetTerrain16Patch,
-          GameWorld_SetTerrain16Patch);
+S3RE_HOOK(0x00519670, CGameData_UpdateShadeAround, TileFn, Original_CGameData_UpdateShadeAround,
+          CGameData_UpdateShadeAround);
+S3RE_HOOK(0x0051ba00, CGameData_SetTerrain16Patch, TileFn, Original_CGameData_SetTerrain16Patch,
+          CGameData_SetTerrain16Patch);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -113,9 +113,9 @@ S3RE_HOOK(0x0051ba00, GameWorld_SetTerrain16Patch, TileFn, Original_GameWorld_Se
 
 namespace {
 
-constexpr std::size_t kTestWorld = offsetof(GameWorld, tiles) + 40 * sizeof(GameWorld::tiles[0]);
+constexpr std::size_t kTestWorld = offsetof(CGameData, tiles) + 40 * sizeof(CGameData::tiles[0]);
 
-std::uint32_t Relative(std::uint32_t value, GameWorld* world) {
+std::uint32_t Relative(std::uint32_t value, CGameData* world) {
     return value - static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
 }
 
@@ -134,7 +134,7 @@ void CompareTileFn(test::Context& ctx, TileFn original, TileFn candidate, int ca
                 const auto h = static_cast<std::uint8_t>(base + ctx.rng().Below(25));
                 const auto terrain = (likely && !ctx.rng().Chance(1, 30)) ? kTerrains[ctx.rng().Below(6)]
                                                                          : static_cast<std::uint8_t>(ctx.rng().Below(256));
-                worlds.Both([&](GameWorld* w) {
+                worlds.Both([&](CGameData* w) {
                     w->tiles[x + dx - 2][y + dy - 2].height = h;
                     w->tiles[x + dx - 2][y + dy - 2].terrain = terrain;
                 });
@@ -155,16 +155,16 @@ void CompareTileFn(test::Context& ctx, TileFn original, TileFn candidate, int ca
 }
 
 // Wrong: leaves out the last neighbour (x+1, y+1).
-std::uint32_t __fastcall WrongUpdateShadeAround(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall WrongUpdateShadeAround(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     const std::uint8_t saved = world->tiles[x + 1][y + 1].shade;
-    const std::uint32_t result = GameWorld_UpdateShadeAround(world, nullptr, x, y);
+    const std::uint32_t result = CGameData_UpdateShadeAround(world, nullptr, x, y);
     world->tiles[x + 1][y + 1].shade = saved;
     return result;
 }
 
 // Wrong: the centre tile becomes grass (the CSV's first guess).
-std::uint32_t __fastcall WrongSetTerrain16Patch(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t result = GameWorld_SetTerrain16Patch(world, nullptr, x, y);
+std::uint32_t __fastcall WrongSetTerrain16Patch(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
+    const std::uint32_t result = CGameData_SetTerrain16Patch(world, nullptr, x, y);
     if (world->tiles[x][y].terrain == 0x16) {
         world->tiles[x][y].terrain = 0x10;
     }
@@ -173,20 +173,20 @@ std::uint32_t __fastcall WrongSetTerrain16Patch(GameWorld* world, void*, std::ui
 
 }  // namespace
 
-S3RE_TEST(GameWorld_UpdateShadeAround_MatchesOriginal) {
-    CompareTileFn(ctx, Original_GameWorld_UpdateShadeAround, &GameWorld_UpdateShadeAround, 20000, false);
+S3RE_TEST(CGameData_UpdateShadeAround_MatchesOriginal) {
+    CompareTileFn(ctx, Original_CGameData_UpdateShadeAround, &CGameData_UpdateShadeAround, 20000, false);
 }
-S3RE_TEST(GameWorld_UpdateShadeAround_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_UpdateShadeAround_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareTileFn(probe, Original_GameWorld_UpdateShadeAround, &WrongUpdateShadeAround, 2000, false);
+    CompareTileFn(probe, Original_CGameData_UpdateShadeAround, &WrongUpdateShadeAround, 2000, false);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_SetTerrain16Patch_MatchesOriginal) {
-    CompareTileFn(ctx, Original_GameWorld_SetTerrain16Patch, &GameWorld_SetTerrain16Patch, 20000, true);
+S3RE_TEST(CGameData_SetTerrain16Patch_MatchesOriginal) {
+    CompareTileFn(ctx, Original_CGameData_SetTerrain16Patch, &CGameData_SetTerrain16Patch, 20000, true);
 }
-S3RE_TEST(GameWorld_SetTerrain16Patch_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_SetTerrain16Patch_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareTileFn(probe, Original_GameWorld_SetTerrain16Patch, &WrongSetTerrain16Patch, 20000, true);
+    CompareTileFn(probe, Original_CGameData_SetTerrain16Patch, &WrongSetTerrain16Patch, 20000, true);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

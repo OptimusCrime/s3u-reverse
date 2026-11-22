@@ -16,7 +16,7 @@ namespace s3re::game {
 
 struct GameSettings {
     std::uint8_t unk000[0x88];
-    std::uint16_t seed;          // +0x88 the game's random seed (GameWorld::SeedRandom; re/globals.csv)
+    std::uint16_t seed;          // +0x88 the game's random seed (CGameData::SeedRandom; re/globals.csv)
     std::uint8_t unk08a[0xb0 - 0x8a];
     std::uint32_t valuesB0[4];   // +0xb0 four values copied as one (GameParams_CopyRectB0 0x437400;
                                  //       read by CNetSession and the savegame code; probably a rectangle)

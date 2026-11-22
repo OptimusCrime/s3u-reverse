@@ -13,13 +13,13 @@
 // zero-extended fields. All: thiscall (ECX = world), two stack arguments,
 // ret 8, EAX = the count.
 //
-// GameWorld::CountBuildings (0x00515850): (player, type).
-// GameWorld::CountBuildingsWithFlag21Clear (0x005158a0): (player, type) and
+// CGameData::CountBuildings (0x00515850): (player, type).
+// CGameData::CountBuildingsWithFlag21Clear (0x005158a0): (player, type) and
 //   byte +0x21 == 0.
-// GameWorld::CountBuildingsWithWord8 (0x005159d0): (player, type), byte
+// CGameData::CountBuildingsWithWord8 (0x005159d0): (player, type), byte
 //   +0x21 == 0 and word +0x8 != 0.
-// GameWorld::CountSettlers (0x00515a30): (player, type).
-// GameWorld::CountSettlersWithJob (0x00515a80): (player, job word +0xe).
+// CGameData::CountSettlers (0x00515a30): (player, type).
+// CGameData::CountSettlersWithJob (0x00515a80): (player, job word +0xe).
 //
 // Settlers standing in an area (area records: 0x2e0 bytes at
 // world+0xe145e8, byte +0x0 the player, 0xff = free). Both walk settlers
@@ -28,10 +28,10 @@
 // settler) whose area word (+0x14) equals the area (zero-extended, 32-bit
 // compare). 0 when the area is free. Tiles at world+0x67444 + (x*0x300 +
 // y)*24, settler position +0x4/+0x6.
-// GameWorld::CountAreaSettlersOfClass0 (0x0050e750): (area): settlers whose
+// CGameData::CountAreaSettlersOfClass0 (0x0050e750): (area): settlers whose
 //   type's class (S3.EXE table 0x658f64) is 0 (the civilians, see
 //   settlers.cpp). ret 4.
-// GameWorld::CountAreaSettlersOfType (0x0050e820): (area, type): settlers of
+// CGameData::CountAreaSettlersOfType (0x0050e820): (area, type): settlers of
 //   one type (byte +0x1, zero-extended compare). ret 8.
 
 #include "game/tables.h"
@@ -56,7 +56,7 @@ constexpr std::uint8_t kFreeArea = 0xff;
 
 // Counts buildings 1..count for which `match(record)` holds.
 template <typename Match>
-std::uint32_t CountBuildingsWhere(GameWorld* world, Match match) {
+std::uint32_t CountBuildingsWhere(CGameData* world, Match match) {
     const std::uint32_t count = world->building_high_water;
     std::uint32_t found = 0;
     for (std::uint32_t i = 1; i <= count && i != 0; ++i) {
@@ -66,7 +66,7 @@ std::uint32_t CountBuildingsWhere(GameWorld* world, Match match) {
 }
 
 template <typename Match>
-std::uint32_t CountSettlersWhere(GameWorld* world, Match match) {
+std::uint32_t CountSettlersWhere(CGameData* world, Match match) {
     const std::uint32_t count = world->settler_high_water;
     std::uint32_t found = 0;
     for (std::uint32_t i = 1; i <= count && i != 0; ++i) {
@@ -76,23 +76,23 @@ std::uint32_t CountSettlersWhere(GameWorld* world, Match match) {
 }
 
 // The tile a settler stands on, with the original's 32-bit arithmetic.
-const Tile& SettlerTile(GameWorld* world, const Settler& s) {
+const Tile& SettlerTile(CGameData* world, const Settler& s) {
     return TileAtOffset(world, TileOffset(s.x, s.y));
 }
 
 }  // namespace
 
-using CountFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t player,
+using CountFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player,
                                            std::uint32_t value);
 
 // Purpose: Counts a player's buildings of one type. Used by mission goals and the AI.
-std::uint32_t __fastcall GameWorld_CountBuildings(GameWorld* world, void* /*edx*/,
+std::uint32_t __fastcall CGameData_CountBuildings(CGameData* world, void* /*edx*/,
                                                   std::uint32_t player, std::uint32_t type) {
     return CountBuildingsWhere(world, [&](const Building& b) { return b.owner == player && b.art == type; });
 }
 
 // Purpose: Counts a player's finished (not under construction) buildings of one type.
-std::uint32_t __fastcall GameWorld_CountBuildingsWithFlag21Clear(GameWorld* world, void* /*edx*/,
+std::uint32_t __fastcall CGameData_CountBuildingsWithFlag21Clear(CGameData* world, void* /*edx*/,
                                                                  std::uint32_t player,
                                                                  std::uint32_t type) {
     return CountBuildingsWhere(world, [&](const Building& b) {
@@ -102,7 +102,7 @@ std::uint32_t __fastcall GameWorld_CountBuildingsWithFlag21Clear(GameWorld* worl
 
 // Purpose: Counts a player's finished buildings of one type that have a certain field set (meaning unknown;
 // probably 'occupied/working').
-std::uint32_t __fastcall GameWorld_CountBuildingsWithWord8(GameWorld* world, void* /*edx*/,
+std::uint32_t __fastcall CGameData_CountBuildingsWithWord8(CGameData* world, void* /*edx*/,
                                                            std::uint32_t player,
                                                            std::uint32_t type) {
     return CountBuildingsWhere(world, [&](const Building& b) {
@@ -111,35 +111,35 @@ std::uint32_t __fastcall GameWorld_CountBuildingsWithWord8(GameWorld* world, voi
 }
 
 // Purpose: Counts a player's settlers of one type. Used by mission goals and the AI.
-std::uint32_t __fastcall GameWorld_CountSettlers(GameWorld* world, void* /*edx*/,
+std::uint32_t __fastcall CGameData_CountSettlers(CGameData* world, void* /*edx*/,
                                                  std::uint32_t player, std::uint32_t type) {
     return CountSettlersWhere(world, [&](const Settler& s) { return s.owner == player && s.art == type; });
 }
 
 // Purpose: Counts a player's settlers that currently do one job.
-std::uint32_t __fastcall GameWorld_CountSettlersWithJob(GameWorld* world, void* /*edx*/,
+std::uint32_t __fastcall CGameData_CountSettlersWithJob(CGameData* world, void* /*edx*/,
                                                         std::uint32_t player, std::uint32_t job) {
     return CountSettlersWhere(world, [&](const Settler& s) { return s.owner == player && s.job == job; });
 }
 
-S3RE_HOOK(0x00515850, GameWorld_CountBuildings, CountFn, Original_GameWorld_CountBuildings,
-          GameWorld_CountBuildings);
-S3RE_HOOK(0x005158a0, GameWorld_CountBuildingsWithFlag21Clear, CountFn,
-          Original_GameWorld_CountBuildingsWithFlag21Clear,
-          GameWorld_CountBuildingsWithFlag21Clear);
-S3RE_HOOK(0x005159d0, GameWorld_CountBuildingsWithWord8, CountFn,
-          Original_GameWorld_CountBuildingsWithWord8, GameWorld_CountBuildingsWithWord8);
-S3RE_HOOK(0x00515a30, GameWorld_CountSettlers, CountFn, Original_GameWorld_CountSettlers,
-          GameWorld_CountSettlers);
-S3RE_HOOK(0x00515a80, GameWorld_CountSettlersWithJob, CountFn,
-          Original_GameWorld_CountSettlersWithJob, GameWorld_CountSettlersWithJob);
+S3RE_HOOK(0x00515850, CGameData_CountBuildings, CountFn, Original_CGameData_CountBuildings,
+          CGameData_CountBuildings);
+S3RE_HOOK(0x005158a0, CGameData_CountBuildingsWithFlag21Clear, CountFn,
+          Original_CGameData_CountBuildingsWithFlag21Clear,
+          CGameData_CountBuildingsWithFlag21Clear);
+S3RE_HOOK(0x005159d0, CGameData_CountBuildingsWithWord8, CountFn,
+          Original_CGameData_CountBuildingsWithWord8, CGameData_CountBuildingsWithWord8);
+S3RE_HOOK(0x00515a30, CGameData_CountSettlers, CountFn, Original_CGameData_CountSettlers,
+          CGameData_CountSettlers);
+S3RE_HOOK(0x00515a80, CGameData_CountSettlersWithJob, CountFn,
+          Original_CGameData_CountSettlersWithJob, CGameData_CountSettlersWithJob);
 
 namespace {
 
 // Counts the settlers of the area's player that stand on their own tile in
 // the area and for which `match(record)` holds.
 template <typename Match>
-std::uint32_t CountAreaSettlersWhere(GameWorld* world, std::uint32_t area, Match match) {
+std::uint32_t CountAreaSettlersWhere(CGameData* world, std::uint32_t area, Match match) {
     const std::uint32_t player = world->areas[area].player;
     if (player == kFreeArea) {
         return 0;
@@ -156,25 +156,25 @@ std::uint32_t CountAreaSettlersWhere(GameWorld* world, std::uint32_t area, Match
 
 }  // namespace
 
-using CountAreaFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t area);
+using CountAreaFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t area);
 
 // Purpose: How many civilian settlers (not soldiers or special units) of an area's player stand inside
 // the area; probably used by the economy to see how many workers/carriers an area has.
-std::uint32_t __fastcall GameWorld_CountAreaSettlersOfClass0(GameWorld* world, void* /*edx*/, std::uint32_t area) {
+std::uint32_t __fastcall CGameData_CountAreaSettlersOfClass0(CGameData* world, void* /*edx*/, std::uint32_t area) {
     return CountAreaSettlersWhere(world, area,
                                   [](const Settler& s) { return g_settlerTypeClass[s.art] == 0; });
 }
 
 // Purpose: How many settlers of one type (e.g. carriers) of an area's player stand inside the area.
-std::uint32_t __fastcall GameWorld_CountAreaSettlersOfType(GameWorld* world, void* /*edx*/, std::uint32_t area,
+std::uint32_t __fastcall CGameData_CountAreaSettlersOfType(CGameData* world, void* /*edx*/, std::uint32_t area,
                                                            std::uint32_t type) {
     return CountAreaSettlersWhere(world, area, [&](const Settler& s) { return s.art == type; });
 }
 
-S3RE_HOOK(0x0050e750, GameWorld_CountAreaSettlersOfClass0, CountAreaFn,
-          Original_GameWorld_CountAreaSettlersOfClass0, GameWorld_CountAreaSettlersOfClass0);
-S3RE_HOOK(0x0050e820, GameWorld_CountAreaSettlersOfType, CountFn, Original_GameWorld_CountAreaSettlersOfType,
-          GameWorld_CountAreaSettlersOfType);
+S3RE_HOOK(0x0050e750, CGameData_CountAreaSettlersOfClass0, CountAreaFn,
+          Original_CGameData_CountAreaSettlersOfClass0, CGameData_CountAreaSettlersOfClass0);
+S3RE_HOOK(0x0050e820, CGameData_CountAreaSettlersOfType, CountFn, Original_CGameData_CountAreaSettlersOfType,
+          CGameData_CountAreaSettlersOfType);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -183,8 +183,8 @@ S3RE_HOOK(0x0050e820, GameWorld_CountAreaSettlersOfType, CountFn, Original_GameW
 namespace {
 
 constexpr std::uint32_t kMaxRecords = 3000;
-constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + (kMaxRecords + 2) * sizeof(Building);
-static_assert(offsetof(GameWorld, settlers) + (kMaxRecords + 2) * sizeof(Settler) < kTestWorld);
+constexpr std::size_t kTestWorld = offsetof(CGameData, buildings) + (kMaxRecords + 2) * sizeof(Building);
+static_assert(offsetof(CGameData, settlers) + (kMaxRecords + 2) * sizeof(Settler) < kTestWorld);
 
 // Fills the records with few distinct values so that matches are common.
 void FillRecords(test::Context& ctx, test::WorldPair& worlds) {
@@ -196,7 +196,7 @@ void FillRecords(test::Context& ctx, test::WorldPair& worlds) {
         const auto sPlayer = static_cast<std::uint8_t>(ctx.rng().Below(4));
         const auto sType = static_cast<std::uint8_t>(ctx.rng().Below(4));
         const auto job = static_cast<std::uint16_t>(ctx.rng().Below(4));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Building& b = w->buildings[i];
             b.owner = bPlayer;
             b.art = bType;
@@ -215,7 +215,7 @@ void CompareCount(test::Context& ctx, CountFn original, CountFn candidate, int c
     FillRecords(ctx, worlds);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t count = i < 4 ? static_cast<std::uint32_t>(i) : ctx.rng().Below(kMaxRecords + 1);
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->building_high_water = count;
             w->settler_high_water = count;
         });
@@ -241,7 +241,7 @@ void CompareCount(test::Context& ctx, CountFn original, CountFn candidate, int c
 }
 
 // Wrong: counts records 0..count-1 instead of 1..count.
-std::uint32_t __fastcall WrongCountSettlers(GameWorld* world, void* /*edx*/, std::uint32_t player,
+std::uint32_t __fastcall WrongCountSettlers(CGameData* world, void* /*edx*/, std::uint32_t player,
                                             std::uint32_t type) {
     const std::uint32_t count = world->settler_high_water;
     std::uint32_t found = 0;
@@ -253,46 +253,46 @@ std::uint32_t __fastcall WrongCountSettlers(GameWorld* world, void* /*edx*/, std
 }
 
 // Wrong: ignores the word +0x8 condition.
-std::uint32_t __fastcall WrongCountBuildingsWithWord8(GameWorld* world, void* edx,
+std::uint32_t __fastcall WrongCountBuildingsWithWord8(CGameData* world, void* edx,
                                                       std::uint32_t player, std::uint32_t type) {
-    return GameWorld_CountBuildingsWithFlag21Clear(world, edx, player, type);
+    return CGameData_CountBuildingsWithFlag21Clear(world, edx, player, type);
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_CountBuildings_MatchesOriginal) {
-    CompareCount(ctx, Original_GameWorld_CountBuildings, &GameWorld_CountBuildings, 3000);
+S3RE_TEST(CGameData_CountBuildings_MatchesOriginal) {
+    CompareCount(ctx, Original_CGameData_CountBuildings, &CGameData_CountBuildings, 3000);
 }
 
-S3RE_TEST(GameWorld_CountBuildingsWithFlag21Clear_MatchesOriginal) {
-    CompareCount(ctx, Original_GameWorld_CountBuildingsWithFlag21Clear,
-                 &GameWorld_CountBuildingsWithFlag21Clear, 3000);
+S3RE_TEST(CGameData_CountBuildingsWithFlag21Clear_MatchesOriginal) {
+    CompareCount(ctx, Original_CGameData_CountBuildingsWithFlag21Clear,
+                 &CGameData_CountBuildingsWithFlag21Clear, 3000);
 }
 
-S3RE_TEST(GameWorld_CountBuildingsWithWord8_MatchesOriginal) {
-    CompareCount(ctx, Original_GameWorld_CountBuildingsWithWord8, &GameWorld_CountBuildingsWithWord8,
+S3RE_TEST(CGameData_CountBuildingsWithWord8_MatchesOriginal) {
+    CompareCount(ctx, Original_CGameData_CountBuildingsWithWord8, &CGameData_CountBuildingsWithWord8,
                  3000);
 }
 
-S3RE_TEST(GameWorld_CountBuildingsWithWord8_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_CountBuildingsWithWord8_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareCount(probe, Original_GameWorld_CountBuildingsWithWord8, &WrongCountBuildingsWithWord8,
+    CompareCount(probe, Original_CGameData_CountBuildingsWithWord8, &WrongCountBuildingsWithWord8,
                  300);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
-S3RE_TEST(GameWorld_CountSettlers_MatchesOriginal) {
-    CompareCount(ctx, Original_GameWorld_CountSettlers, &GameWorld_CountSettlers, 3000);
+S3RE_TEST(CGameData_CountSettlers_MatchesOriginal) {
+    CompareCount(ctx, Original_CGameData_CountSettlers, &CGameData_CountSettlers, 3000);
 }
 
-S3RE_TEST(GameWorld_CountSettlers_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_CountSettlers_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareCount(probe, Original_GameWorld_CountSettlers, &WrongCountSettlers, 300);
+    CompareCount(probe, Original_CGameData_CountSettlers, &WrongCountSettlers, 300);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
-S3RE_TEST(GameWorld_CountSettlersWithJob_MatchesOriginal) {
-    CompareCount(ctx, Original_GameWorld_CountSettlersWithJob, &GameWorld_CountSettlersWithJob,
+S3RE_TEST(CGameData_CountSettlersWithJob_MatchesOriginal) {
+    CompareCount(ctx, Original_CGameData_CountSettlersWithJob, &CGameData_CountSettlersWithJob,
                  3000);
 }
 
@@ -309,7 +309,7 @@ void FillAreaSettlers(test::Context& ctx, test::WorldPair& worlds) {
         for (std::uint32_t y = 0; y < kTestSpan; ++y) {
             const auto area =
                 static_cast<std::uint16_t>(ctx.rng().Chance(1, 16) ? ctx.rng().Next32() : ctx.rng().Below(kTestAreas));
-            worlds.Both([&](GameWorld* w) { w->tiles[x][y].area = area; });
+            worlds.Both([&](CGameData* w) { w->tiles[x][y].area = area; });
         }
     }
     for (std::uint32_t i = 0; i <= kMaxRecords + 1; ++i) {
@@ -319,7 +319,7 @@ void FillAreaSettlers(test::Context& ctx, test::WorldPair& worlds) {
         const std::uint32_t x = ctx.rng().Below(kTestSpan);
         const std::uint32_t y = ctx.rng().Below(kTestSpan);
         const bool own = ctx.rng().Chance(2, 3);
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Settler& s = w->settlers[i];
             s.owner = player;
             s.art = type;
@@ -338,10 +338,10 @@ void CompareAreaCount(test::Context& ctx, int cases, Call call) {
     FillAreaSettlers(ctx, worlds);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t count = i < 4 ? static_cast<std::uint32_t>(i) : ctx.rng().Below(kMaxRecords + 1);
-        worlds.Both([&](GameWorld* w) { w->settler_high_water = count; });
+        worlds.Both([&](CGameData* w) { w->settler_high_water = count; });
         const std::uint32_t area = ctx.rng().Below(kTestAreas + 1);
         const auto areaPlayer = static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? kFreeArea : ctx.rng().Below(4));
-        worlds.Both([&](GameWorld* w) { w->areas[area].player = areaPlayer; });
+        worlds.Both([&](CGameData* w) { w->areas[area].player = areaPlayer; });
         std::uint32_t type = ctx.rng().Below(0x30);
         if (ctx.rng().Chance(1, 8)) {
             type |= 0x100;  // matches only in the low byte: must not count
@@ -358,7 +358,7 @@ void CompareAreaCount(test::Context& ctx, int cases, Call call) {
 }
 
 // Wrong: does not check that the settler stands on its own tile.
-std::uint32_t __fastcall WrongCountAreaSettlersOfType(GameWorld* world, void*, std::uint32_t area, std::uint32_t type) {
+std::uint32_t __fastcall WrongCountAreaSettlersOfType(CGameData* world, void*, std::uint32_t area, std::uint32_t type) {
     const std::uint32_t player = world->areas[area].player;
     if (player == kFreeArea) {
         return 0;
@@ -370,24 +370,24 @@ std::uint32_t __fastcall WrongCountAreaSettlersOfType(GameWorld* world, void*, s
 
 }  // namespace
 
-S3RE_TEST(GameWorld_CountAreaSettlersOfClass0_MatchesOriginal) {
+S3RE_TEST(CGameData_CountAreaSettlersOfClass0_MatchesOriginal) {
     CompareAreaCount(ctx, 3000, [](test::WorldPair& w, std::uint32_t area, std::uint32_t, std::uint32_t& e, std::uint32_t& a) {
-        e = Original_GameWorld_CountAreaSettlersOfClass0(w.original(), nullptr, area);
-        a = GameWorld_CountAreaSettlersOfClass0(w.ours(), nullptr, area);
+        e = Original_CGameData_CountAreaSettlersOfClass0(w.original(), nullptr, area);
+        a = CGameData_CountAreaSettlersOfClass0(w.ours(), nullptr, area);
     });
 }
-S3RE_TEST(GameWorld_CountAreaSettlersOfType_MatchesOriginal) {
+S3RE_TEST(CGameData_CountAreaSettlersOfType_MatchesOriginal) {
     CompareAreaCount(ctx, 3000, [](test::WorldPair& w, std::uint32_t area, std::uint32_t type, std::uint32_t& e,
                                    std::uint32_t& a) {
-        e = Original_GameWorld_CountAreaSettlersOfType(w.original(), nullptr, area, type);
-        a = GameWorld_CountAreaSettlersOfType(w.ours(), nullptr, area, type);
+        e = Original_CGameData_CountAreaSettlersOfType(w.original(), nullptr, area, type);
+        a = CGameData_CountAreaSettlersOfType(w.ours(), nullptr, area, type);
     });
 }
-S3RE_TEST(GameWorld_CountAreaSettlersOfType_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_CountAreaSettlersOfType_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareAreaCount(probe, 300, [](test::WorldPair& w, std::uint32_t area, std::uint32_t type, std::uint32_t& e,
                                     std::uint32_t& a) {
-        e = Original_GameWorld_CountAreaSettlersOfType(w.original(), nullptr, area, type);
+        e = Original_CGameData_CountAreaSettlersOfType(w.original(), nullptr, area, type);
         a = WrongCountAreaSettlersOfType(w.ours(), nullptr, area, type);
     });
     S3RE_EXPECT(probe.failures() > 0);

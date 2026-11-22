@@ -169,7 +169,7 @@ S3RE_HOOK(0x0058e1c0, AI_BuildingIfUsed_58e1c0, BuildingIfUsedFn, Original_AI_Bu
 // Purpose: The record of a building for the computer players, or null for
 // an id past the building count or an unused slot.
 void* __fastcall AI_BuildingIfUsed_58e1c0(std::uint32_t id) {
-    GameWorld* world = g_aiWorld.get();
+    CGameData* world = g_aiWorld.get();
     id &= 0xffff;
     if (id > world->building_high_water) {
         return nullptr;
@@ -214,7 +214,7 @@ AiSmallFunctions OurAiSmall() {
 
 constexpr std::size_t kObjectBytes = 0x300;
 constexpr std::size_t kMaxBuildings = 2100;
-constexpr std::size_t kWorldBytes = offsetof(GameWorld, buildings) + (kMaxBuildings + 1) * sizeof(layout::Building);
+constexpr std::size_t kWorldBytes = offsetof(CGameData, buildings) + (kMaxBuildings + 1) * sizeof(layout::Building);
 static_assert(kObjectBytes >= sizeof(AiList50Owner) && kObjectBytes >= sizeof(AiLandEvaluation));
 
 void CompareObjects(test::Context& ctx, const AiSmallFunctions& candidate, int cases) {
@@ -279,7 +279,7 @@ void CompareObjects(test::Context& ctx, const AiSmallFunctions& candidate, int c
 void CompareWorld(test::Context& ctx, const AiSmallFunctions& candidate, int cases) {
     const AiSmallFunctions original = OriginalAiSmall();
     test::WorldPair worlds(ctx, kWorldBytes);
-    GameWorld* const savedWorld = g_aiWorld;
+    CGameData* const savedWorld = g_aiWorld;
     const std::uint16_t savedSizeX = g_aiMapSizeX, savedSizeY = g_aiMapSizeY;
     for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(3));
@@ -288,7 +288,7 @@ void CompareWorld(test::Context& ctx, const AiSmallFunctions& candidate, int cas
         g_aiMapSizeX = sizeX;
         g_aiMapSizeY = sizeY;
         const std::uint32_t count = ctx.rng().Below(kMaxBuildings - 50);
-        worlds.Both([&](GameWorld* w) { w->building_high_water = count; });
+        worlds.Both([&](CGameData* w) { w->building_high_water = count; });
         std::uint32_t ra = 0, rb = 0;
         if (op == 0) {
             const std::uint16_t x = static_cast<std::uint16_t>(ctx.rng().Below(sizeX + 8u));
@@ -317,7 +317,7 @@ void CompareWorld(test::Context& ctx, const AiSmallFunctions& candidate, int cas
         } else {
             const std::uint32_t id = ctx.rng().Chance(1, 16) ? ctx.rng().Next32() : ctx.rng().Below(kMaxBuildings);
             if ((id & 0xffff) <= kMaxBuildings && ctx.rng().Chance(1, 3)) {
-                worlds.Both([&](GameWorld* w) { w->buildings[id & 0xffff].owner = 0xff; });
+                worlds.Both([&](CGameData* w) { w->buildings[id & 0xffff].owner = 0xff; });
             }
             g_aiWorld = worlds.original();
             void* pa = original.buildingIfUsed(id);

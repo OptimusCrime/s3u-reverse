@@ -1,8 +1,8 @@
 // Building the region and area numbers of a fresh map.
 //
-// GameWorld::BuildRegionsAndAreas (0x0051a580): (), thiscall, ret 0; EAX =
-// mapSize (the last value the loops leave in EAX; GameWorld::Create returns
-// it, nobody reads it). Called at the end of GameWorld::Create (random maps)
+// CGameData::BuildRegionsAndAreas (0x0051a580): (), thiscall, ret 0; EAX =
+// mapSize (the last value the loops leave in EAX; CGameData::Create returns
+// it, nobody reads it). Called at the end of CGameData::Create (random maps)
 // and by the map loader 0x4fd540. Five passes over the map, each over
 // tile (x, y) at world+0x67444 + (x*0x300 + y)*24 with x and y in
 // [0, mapSize) (unsigned compares, mapSize at +0x2d2d0 re-read per step);
@@ -15,7 +15,7 @@
 //   3. every tile is marked again; a tile with terrain (+0x6) <= 7 (water)
 //      and object (+0x7) 0x0d..0x10 sets flag 0x80 on the 61 tiles of the
 //      offset table's entries 0..60 (world+0x110a588, int32 dx, dy; 16-byte
-//      stride) that are on the map (GameWorld::IsOnMap). In this pass the
+//      stride) that are on the map (CGameData::IsOnMap). In this pass the
 //      outer loop is y too, the inner x.
 //   4. a marked, unblocked tile with an owner (+0x8 != 0xff) starts a new
 //      economy area: AllocArea(owner), the start's mark cleared,
@@ -58,22 +58,22 @@ constexpr std::uint32_t kWaterMarkEntries = 61;
 constexpr std::int32_t kRow = static_cast<std::int32_t>(kTileRowBytes);  // x + 1
 constexpr std::int32_t kColumn = static_cast<std::int32_t>(kTileBytes);   // y + 1
 
-Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
-std::uint32_t MapSize(GameWorld* world) {
+std::uint32_t MapSize(CGameData* world) {
     return world->map_size;
 }
 
-std::uint8_t& Flags(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+std::uint8_t& Flags(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAt(world, x, y).flags;
 }
 
 // Calls visit(x, y) for every map tile, y outer and x inner, with mapSize
 // re-read after each tile (the flood fills don't change it).
 template <typename Visit>
-void ForEachTile(GameWorld* world, Visit visit) {
+void ForEachTile(CGameData* world, Visit visit) {
     for (std::uint32_t y = 0; y < MapSize(world); ++y) {
         for (std::uint32_t x = 0; x < MapSize(world); ++x) {
             visit(x, y);
@@ -81,7 +81,7 @@ void ForEachTile(GameWorld* world, Visit visit) {
     }
 }
 
-void MarkAllTiles(GameWorld* world) {
+void MarkAllTiles(CGameData* world) {
     ForEachTile(world, [&](std::uint32_t x, std::uint32_t y) { Flags(world, x, y) |= kFlagMark; });
 }
 
@@ -91,7 +91,7 @@ bool IsMarkedAndFree(std::uint8_t flags) {
 
 // Pass 3's object test: water tiles carrying objects 0x0d..0x10 (probably
 // harbour or ship-related objects) mark their surroundings.
-void MarkSurroundingsOfWaterObjects(GameWorld* world) {
+void MarkSurroundingsOfWaterObjects(CGameData* world) {
     ForEachTile(world, [&](std::uint32_t x, std::uint32_t y) {
         Tile& tile = TileAt(world, x, y);
         tile.flags |= kFlagMark;
@@ -102,7 +102,7 @@ void MarkSurroundingsOfWaterObjects(GameWorld* world) {
         for (std::uint32_t entry = 0; entry < kWaterMarkEntries; ++entry) {
             const std::uint32_t nx = x + static_cast<std::uint32_t>(world->offsets[entry].dx);
             const std::uint32_t ny = y + static_cast<std::uint32_t>(world->offsets[entry].dy);
-            if (GameWorld_IsOnMap(world, nullptr, nx, ny) != 0) {
+            if (CGameData_IsOnMap(world, nullptr, nx, ny) != 0) {
                 Flags(world, nx, ny) |= kFlagNearHarbourWater;
             }
         }
@@ -120,7 +120,7 @@ constexpr std::int32_t kTwoRings[] = {
 
 // `tile` is a tile's 32-bit byte offset from the world (TileOffset); the
 // ring tiles of edge tiles lie before or after the map.
-bool HasRoomAround(GameWorld* world, std::uint32_t tile) {
+bool HasRoomAround(CGameData* world, std::uint32_t tile) {
     if ((TileAtOffset(world, tile).terrain & 0xf0) == 0x20) {
         return false;
     }
@@ -135,22 +135,22 @@ bool HasRoomAround(GameWorld* world, std::uint32_t tile) {
 
 }  // namespace
 
-using BuildRegionsFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
+using BuildRegionsFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx);
 
 // Purpose: After a map was loaded or generated, numbers its connected walkable regions, splits the
 // players' land into economy areas, numbers the lakes and seas, and numbers the wide open regions used by
 // path finding.
-std::uint32_t __fastcall GameWorld_BuildRegionsAndAreas(GameWorld* world, void*) {
+std::uint32_t __fastcall CGameData_BuildRegionsAndAreas(CGameData* world, void*) {
     MarkAllTiles(world);
     ForEachTile(world, [&](std::uint32_t x, std::uint32_t y) {
         std::uint8_t& flags = Flags(world, x, y);
         if (!IsMarkedAndFree(flags)) {
             return;
         }
-        const std::uint32_t id = GameWorld_FindFreeId256(world, nullptr);
+        const std::uint32_t id = CGameData_FindFreeId256(world, nullptr);
         world->walk_region_used[id] = 1;
         flags &= static_cast<std::uint8_t>(~kFlagMark);
-        GameWorld_FloodSetByte10MarkedTiles(world, nullptr, x, y, id);
+        CGameData_FloodSetByte10MarkedTiles(world, nullptr, x, y, id);
     });
 
     MarkSurroundingsOfWaterObjects(world);
@@ -160,16 +160,16 @@ std::uint32_t __fastcall GameWorld_BuildRegionsAndAreas(GameWorld* world, void*)
         std::uint8_t& flags = tile.flags;
         const std::uint8_t owner = tile.owner;
         if (IsMarkedAndFree(flags) && owner != kNoOwner) {
-            const std::uint32_t area = GameWorld_AllocArea(world, nullptr, owner);
+            const std::uint32_t area = CGameData_AllocArea(world, nullptr, owner);
             flags &= static_cast<std::uint8_t>(~kFlagMark);
-            GameWorld_FloodAssignMarkedTiles(world, nullptr, x, y, area, owner);
+            CGameData_FloodAssignMarkedTiles(world, nullptr, x, y, area, owner);
         }
         const std::uint8_t terrain = tile.terrain;
         if ((flags & kFlagMark) != 0 && terrain >= 5 && terrain <= 7 && (flags & kFlagNearHarbourWater) == 0) {
-            const std::uint32_t id = GameWorld_FindFreeId4096(world, nullptr);
+            const std::uint32_t id = CGameData_FindFreeId4096(world, nullptr);
             world->ids4096_used[id] = 1;
             flags &= static_cast<std::uint8_t>(~kFlagMark);
-            GameWorld_FloodMarkAreaTerrain5To7(world, nullptr, x, y, id);
+            CGameData_FloodMarkAreaTerrain5To7(world, nullptr, x, y, id);
         }
     });
 
@@ -180,16 +180,16 @@ std::uint32_t __fastcall GameWorld_BuildRegionsAndAreas(GameWorld* world, void*)
         if (!IsMarkedAndFree(flags) || !HasRoomAround(world, tile)) {
             return;
         }
-        const std::uint32_t id = GameWorld_FindFreeId8192(world, nullptr);
+        const std::uint32_t id = CGameData_FindFreeId8192(world, nullptr);
         world->wide_region_used[id] = 1;
         flags &= static_cast<std::uint8_t>(~kFlagMark);
-        GameWorld_FloodSetWord16RoomyTiles(world, nullptr, x, y, id);
+        CGameData_FloodSetWord16RoomyTiles(world, nullptr, x, y, id);
     });
     return MapSize(world);
 }
 
-S3RE_HOOK(0x0051a580, GameWorld_BuildRegionsAndAreas, BuildRegionsFn, Original_GameWorld_BuildRegionsAndAreas,
-          GameWorld_BuildRegionsAndAreas);
+S3RE_HOOK(0x0051a580, CGameData_BuildRegionsAndAreas, BuildRegionsFn, Original_CGameData_BuildRegionsAndAreas,
+          CGameData_BuildRegionsAndAreas);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -197,17 +197,17 @@ S3RE_HOOK(0x0051a580, GameWorld_BuildRegionsAndAreas, BuildRegionsFn, Original_G
 
 namespace {
 
-constexpr std::size_t kWorldSize = sizeof(GameWorld);
+constexpr std::size_t kWorldSize = sizeof(CGameData);
 // The three id tables with their marks (walk_region_high_water up to the
 // area records; includes area_high_water).
-constexpr std::size_t kIdTables = offsetof(GameWorld, walk_region_high_water);
-constexpr std::size_t kIdTablesEnd = offsetof(GameWorld, areas);
+constexpr std::size_t kIdTables = offsetof(CGameData, walk_region_high_water);
+constexpr std::size_t kIdTablesEnd = offsetof(CGameData, areas);
 constexpr std::uint32_t kAreaCount = 4096;
 
 // Builds the offset table with the game's own builder (0x516530, run by the
 // world constructor).
-void BuildOffsetTable(GameWorld* world) {
-    using BuildFn = void(__fastcall*)(GameWorld* world, void* edx);
+void BuildOffsetTable(CGameData* world) {
+    using BuildFn = void(__fastcall*)(CGameData* world, void* edx);
     reinterpret_cast<BuildFn>(0x00516530)(world, nullptr);
 }
 
@@ -221,7 +221,7 @@ void Zero(test::WorldPair& worlds, std::size_t offset, std::size_t size) {
 // free, races 0..3. Everything else keeps the random fill.
 void SetUpRegionMap(test::Context& ctx, test::WorldPair& worlds) {
     const std::uint32_t size = ctx.rng().Chance(1, 2) ? 64 + 64 * ctx.rng().Below(6) : 8 + ctx.rng().Below(120);
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         w->map_size = size;
         w->tile_ring_index = {};      // tile ring read/write index
         w->pending_event_index = {};  // pending-event ring read/write index
@@ -230,11 +230,11 @@ void SetUpRegionMap(test::Context& ctx, test::WorldPair& worlds) {
     Zero(worlds, kIdTables, kIdTablesEnd - kIdTables);
     for (std::uint32_t area = 0; area < kAreaCount; ++area) {
         const auto player = static_cast<std::uint8_t>(ctx.rng().Chance(1, 20) ? 0 : kNoOwner);
-        worlds.Both([&](GameWorld* w) { w->areas[area].player = player; });
+        worlds.Both([&](CGameData* w) { w->areas[area].player = player; });
     }
     for (std::uint32_t player = 0; player < 20; ++player) {
         const auto race = static_cast<std::int32_t>(ctx.rng().Below(5));
-        worlds.Both([&](GameWorld* w) { w->players[player].race = race; });
+        worlds.Both([&](CGameData* w) { w->players[player].race = race; });
     }
     const std::uint32_t owners = ctx.rng().Below(5);
     const std::uint32_t limit = size < 0x300 ? size : 0x300;
@@ -256,7 +256,7 @@ void SetUpRegionMap(test::Context& ctx, test::WorldPair& worlds) {
             if (water || ctx.rng().Chance(1, 15)) {
                 flags |= kFlagBlocked;
             }
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 Tile& tile = w->tiles[x][y];
                 tile.terrain = terrain;
                 tile.object = object;
@@ -276,7 +276,7 @@ void CompareBuildRegions(test::Context& ctx, BuildRegionsFn candidate, int cases
     BuildOffsetTable(worlds.ours());
     for (int i = 0; i < cases; ++i) {
         SetUpRegionMap(ctx, worlds);
-        const std::uint32_t expected = Original_GameWorld_BuildRegionsAndAreas(worlds.original(), nullptr);
+        const std::uint32_t expected = Original_CGameData_BuildRegionsAndAreas(worlds.original(), nullptr);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr);
         if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Checkpoint(ctx)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: map %u", i, MapSize(worlds.original()));
@@ -286,22 +286,22 @@ void CompareBuildRegions(test::Context& ctx, BuildRegionsFn candidate, int cases
 }
 
 // Wrong: water bodies ignore flag 0x80 (the surroundings of harbour objects).
-std::uint32_t __fastcall WrongBuildRegions(GameWorld* world, void*) {
+std::uint32_t __fastcall WrongBuildRegions(CGameData* world, void*) {
     ForEachTile(world, [&](std::uint32_t x, std::uint32_t y) {
         Tile& tile = TileAt(world, x, y);
         if (tile.terrain <= 7 && tile.object >= 0x0d && tile.object <= 0x10) {
             tile.object = 0;
         }
     });
-    return GameWorld_BuildRegionsAndAreas(world, nullptr);
+    return CGameData_BuildRegionsAndAreas(world, nullptr);
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_BuildRegionsAndAreas_MatchesOriginal) {
-    CompareBuildRegions(ctx, &GameWorld_BuildRegionsAndAreas, 12);
+S3RE_TEST(CGameData_BuildRegionsAndAreas_MatchesOriginal) {
+    CompareBuildRegions(ctx, &CGameData_BuildRegionsAndAreas, 12);
 }
-S3RE_TEST(GameWorld_BuildRegionsAndAreas_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_BuildRegionsAndAreas_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareBuildRegions(probe, &WrongBuildRegions, 6);
     S3RE_EXPECT(probe.failures() > 0);

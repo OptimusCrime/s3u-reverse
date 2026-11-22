@@ -1,7 +1,7 @@
-// Callees of GameWorld::UpdateEconomy (0x4e05e0): population counts and
+// Callees of CGameData::UpdateEconomy (0x4e05e0): population counts and
 // helpers of the economy step.
 //
-// GameWorld::RecountPlayerPopulation (0x005104c0): () thiscall, ret. For
+// CGameData::RecountPlayerPopulation (0x005104c0): () thiscall, ret. For
 //   each of the 20 players: population (+0xc4) = 0, population_limit
 //   (+0xc8) = population_limit_base (+0xcc), carriers (+0xd0) = 0,
 //   surplus_carriers (+0xd4) = 0. Then for settlers 1..high water (re-read
@@ -15,14 +15,14 @@
 //   unsigned, truncating), else 0. The owner indexes the player records
 //   without a bound check, as in the original. EAX: not used by the only
 //   caller (UpdateEconomy).
-// GameWorld::SetTowerSoldierAnimation (0x0050e200): (settler) thiscall,
+// CGameData::SetTowerSoldierAnimation (0x0050e200): (settler) thiscall,
 //   ret 4. Animation kind 0x176, or 0x177..0x17e for settler types 0x20,
 //   0x23, 8, 0x1e, 0x21, 0xf, 0x1f, 0x22 (the soldier types); + 9 if the
 //   settler's building (+0x22) has type 0x10, + 0x12 for type 0x12; + 0x1b
 //   / + 0x36 for the building's race 1 / 2. Then SetSettlerAnimation(settler,
 //   kind); EAX = its result (the one caller overwrites AL at once). Called by
 //   UpdateEconomy when a soldier enters a military building.
-// GameWorld::RequestSettlerForBuilding (0x004dacd0): (building, type)
+// CGameData::RequestSettlerForBuilding (0x004dacd0): (building, type)
 //   thiscall, ret 8; EAX = the settler sent, or 0 (25 call sites in
 //   UpdateEconomy test it). Area = the area of the building's door tile
 //   (+0xa/+0xc). 1) The nearest (TileDistance from the building's position
@@ -48,7 +48,7 @@
 //   source (no flag 0x80): PileIncAmountLeaving(source), unlinked,
 //   SetSettlerTarget(source), job 0x68, counter 0, building = it, good +0x1a
 //   = tool, +0x18 = type.
-// GameWorld::DispatchPileCarrier (0x005052c0): (pile) thiscall, ret 4. Area
+// CGameData::DispatchPileCarrier (0x005052c0): (pile) thiscall, ret 4. Area
 //   = the area of the pile's tile. Only if the area's settings5[good] (+0x21a)
 //   is set and its idle carrier list has at least four settlers. Target: the
 //   pile in the area's list of the good with kind <= 0x32 (building piles),
@@ -86,22 +86,22 @@ using layout::Settler;
 constexpr std::uint8_t kFree = 0xff;
 
 // The player record of an owner byte (no bound check, like the original).
-Player& PlayerOf(GameWorld* world, std::uint8_t owner) {
+Player& PlayerOf(CGameData* world, std::uint8_t owner) {
     return *(world->players + owner);
 }
 
 }  // namespace
 
-std::uint32_t __fastcall GameWorld_SetSettlerAnimation(GameWorld* world, void* edx, std::uint32_t settler,
+std::uint32_t __fastcall CGameData_SetSettlerAnimation(CGameData* world, void* edx, std::uint32_t settler,
                                                        std::uint32_t kind);
 
-using RecountFn = void(__fastcall*)(GameWorld* world, void* edx);
-using SettlerFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t settler);
+using RecountFn = void(__fastcall*)(CGameData* world, void* edx);
+using SettlerFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t settler);
 
 // Purpose: Recounts each player's population (civilians and carriers) and the
 // housing limit from the finished residences, and how many carriers are
 // beyond that limit.
-void __fastcall GameWorld_RecountPlayerPopulation(GameWorld* world, void*) {
+void __fastcall CGameData_RecountPlayerPopulation(CGameData* world, void*) {
     for (Player& player : world->players) {
         player.population = 0;
         player.population_limit = player.population_limit_base;
@@ -150,7 +150,7 @@ void __fastcall GameWorld_RecountPlayerPopulation(GameWorld* world, void*) {
 
 // Purpose: Gives a soldier who has just entered a military building the
 // animation for his type, the building's type and the building's race.
-std::uint32_t __fastcall GameWorld_SetTowerSoldierAnimation(GameWorld* world, void*, std::uint32_t settler) {
+std::uint32_t __fastcall CGameData_SetTowerSoldierAnimation(CGameData* world, void*, std::uint32_t settler) {
     std::uint32_t kind = 0x176;
     switch (world->settlers[settler].art) {
         case 0x20: kind = 0x177; break;
@@ -176,13 +176,13 @@ std::uint32_t __fastcall GameWorld_SetTowerSoldierAnimation(GameWorld* world, vo
     if (building.race == 2) {
         kind += 0x36;
     }
-    return GameWorld_SetSettlerAnimation(world, nullptr, settler, kind);
+    return CGameData_SetSettlerAnimation(world, nullptr, settler, kind);
 }
 
-S3RE_HOOK(0x005104c0, GameWorld_RecountPlayerPopulation, RecountFn, Original_GameWorld_RecountPlayerPopulation,
-          GameWorld_RecountPlayerPopulation);
-S3RE_HOOK(0x0050e200, GameWorld_SetTowerSoldierAnimation, SettlerFn, Original_GameWorld_SetTowerSoldierAnimation,
-          GameWorld_SetTowerSoldierAnimation);
+S3RE_HOOK(0x005104c0, CGameData_RecountPlayerPopulation, RecountFn, Original_CGameData_RecountPlayerPopulation,
+          CGameData_RecountPlayerPopulation);
+S3RE_HOOK(0x0050e200, CGameData_SetTowerSoldierAnimation, SettlerFn, Original_CGameData_SetTowerSoldierAnimation,
+          CGameData_SetTowerSoldierAnimation);
 
 // ---------------------------------------------------------------------------
 // Workers and carriers for buildings and piles
@@ -203,17 +203,17 @@ constexpr std::uint32_t kNoTool = 0;
 
 // NotifyLocalPlayer and SetPileGood (package B, verified) through their
 // S3.EXE addresses.
-using NotifyFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t player, std::uint32_t kind,
+using NotifyFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player, std::uint32_t kind,
                                             std::uint32_t x, std::uint32_t y);
-using SetPileGoodFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t pile, std::uint32_t good);
+using SetPileGoodFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t pile, std::uint32_t good);
 constexpr std::uintptr_t kNotifyLocalPlayer = 0x004fec10;
 constexpr std::uintptr_t kSetPileGood = 0x005061b0;
 
-void Notify(GameWorld* world, std::uint32_t player, std::uint32_t kind, std::uint32_t x, std::uint32_t y) {
+void Notify(CGameData* world, std::uint32_t player, std::uint32_t kind, std::uint32_t x, std::uint32_t y) {
     reinterpret_cast<NotifyFn>(kNotifyLocalPlayer)(world, nullptr, player, kind, x, y);
 }
 
-layout::Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+layout::Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
@@ -222,7 +222,7 @@ layout::Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
 // surplus flag are skipped if `skipSurplus`. `x`/`y` are re-read per
 // settler through the callbacks, as the original reads them from memory.
 template <typename X, typename Y>
-std::uint32_t NearestInList(GameWorld* world, std::uint32_t head, bool skipSurplus, X x, Y y) {
+std::uint32_t NearestInList(CGameData* world, std::uint32_t head, bool skipSurplus, X x, Y y) {
     std::uint32_t best = 0xffffffffu;
     std::uint32_t found = 0;
     for (std::uint32_t n = head; n != 0; n = world->settlers[n].next) {
@@ -240,7 +240,7 @@ std::uint32_t NearestInList(GameWorld* world, std::uint32_t head, bool skipSurpl
 }
 
 // Takes settler n out of the doubly linked list whose head is `head`.
-void UnlinkSettler(GameWorld* world, std::uint16_t& head, std::uint32_t n) {
+void UnlinkSettler(CGameData* world, std::uint16_t& head, std::uint32_t n) {
     Settler& s = world->settlers[n];
     if (s.prev != 0) {
         world->settlers[s.prev].next = s.next;
@@ -299,20 +299,20 @@ std::uint32_t MissingToolNotification(std::uint32_t tool) {
 
 }  // namespace
 
-std::uint32_t __fastcall GameWorld_CountAreaSettlersOfClass0(GameWorld* world, void* edx, std::uint32_t area);
-std::uint32_t __fastcall GameWorld_CountAreaSettlersOfType(GameWorld* world, void* edx, std::uint32_t area,
+std::uint32_t __fastcall CGameData_CountAreaSettlersOfClass0(CGameData* world, void* edx, std::uint32_t area);
+std::uint32_t __fastcall CGameData_CountAreaSettlersOfType(CGameData* world, void* edx, std::uint32_t area,
                                                            std::uint32_t type);
-std::uint32_t __fastcall GameWorld_PileIncAmountComing(GameWorld* world, void* edx, std::uint32_t pile);
+std::uint32_t __fastcall CGameData_PileIncAmountComing(CGameData* world, void* edx, std::uint32_t pile);
 
-using RequestFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t building, std::uint32_t type);
-using PileFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t pile);
+using RequestFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t building, std::uint32_t type);
+using PileFn = void(__fastcall*)(CGameData* world, void* edx, std::uint32_t pile);
 
 // Purpose: Finds a worker of a type for a building: the nearest idle one of
 // that type in the building's economy area, else a carrier who becomes one
 // (directly, or after fetching the tool the job needs), if enough carriers
 // are left. Notifies the player when carriers or a tool are missing.
 // Returns the settler, or 0.
-std::uint32_t __fastcall GameWorld_RequestSettlerForBuilding(GameWorld* world, void*, std::uint32_t number,
+std::uint32_t __fastcall CGameData_RequestSettlerForBuilding(CGameData* world, void*, std::uint32_t number,
                                                              std::uint32_t type) {
     Building& b = world->buildings[number];
     const std::uint32_t areaNumber = TileAt(world, b.door_x, b.door_y).area;
@@ -325,15 +325,15 @@ std::uint32_t __fastcall GameWorld_RequestSettlerForBuilding(GameWorld* world, v
     if (worker != 0) {
         Settler& s = world->settlers[worker];
         UnlinkSettler(world, idle, worker);
-        GameWorld_SetSettlerTarget(world, nullptr, worker, b.door_x, b.door_y);
+        CGameData_SetSettlerTarget(world, nullptr, worker, b.door_x, b.door_y);
         s.job = kJobGoToBuilding;
         s.counter = 0;
         s.building = static_cast<std::uint16_t>(number);
         return worker;
     }
 
-    const std::uint32_t civilians = GameWorld_CountAreaSettlersOfClass0(world, nullptr, areaNumber);
-    const std::uint32_t carriers = GameWorld_CountAreaSettlersOfType(world, nullptr, areaNumber, 0);
+    const std::uint32_t civilians = CGameData_CountAreaSettlersOfClass0(world, nullptr, areaNumber);
+    const std::uint32_t carriers = CGameData_CountAreaSettlersOfType(world, nullptr, areaNumber, 0);
     if (area.settings_extra[0] * civilians / 100 >= carriers) {
         // Not enough carriers to spare one.
         if (type != 1 && type != 2) {
@@ -343,7 +343,7 @@ std::uint32_t __fastcall GameWorld_RequestSettlerForBuilding(GameWorld* world, v
     }
     std::uint32_t tool = 0;
     if (type == 1 || type == 2) {
-        const std::uint32_t count = GameWorld_CountAreaSettlersOfType(world, nullptr, areaNumber, type);
+        const std::uint32_t count = CGameData_CountAreaSettlersOfType(world, nullptr, areaNumber, type);
         if (area.settings_extra[type] * civilians / 100 <= count) {
             return 0;
         }
@@ -364,7 +364,7 @@ std::uint32_t __fastcall GameWorld_RequestSettlerForBuilding(GameWorld* world, v
         Settler& s = world->settlers[carrier];
         UnlinkSettler(world, carrierList, carrier);
         s.building = static_cast<std::uint16_t>(number);
-        GameWorld_SetSettlerTarget(world, nullptr, carrier, b.door_x, b.door_y);
+        CGameData_SetSettlerTarget(world, nullptr, carrier, b.door_x, b.door_y);
         s.job = kJobGoToBuilding;
         s.counter = 0;
         s.art = static_cast<std::uint8_t>(type);
@@ -406,10 +406,10 @@ std::uint32_t __fastcall GameWorld_RequestSettlerForBuilding(GameWorld* world, v
     if (carrier == 0) {
         return 0;
     }
-    GameWorld_PileIncAmountLeaving(world, nullptr, source);
+    CGameData_PileIncAmountLeaving(world, nullptr, source);
     Settler& s = world->settlers[carrier];
     UnlinkSettler(world, carrierList, carrier);
-    GameWorld_SetSettlerTarget(world, nullptr, carrier, pile.x, pile.y);
+    CGameData_SetSettlerTarget(world, nullptr, carrier, pile.x, pile.y);
     s.job = kJobFetchTool;
     s.counter = 0;
     s.building = static_cast<std::uint16_t>(number);
@@ -423,7 +423,7 @@ std::uint32_t __fastcall GameWorld_RequestSettlerForBuilding(GameWorld* world, v
 // that wants that good and has room (fuller ones count as farther), or an
 // empty pile place (counted three times as far). Only if the area allows
 // moving that good and keeps at least four idle carriers.
-void __fastcall GameWorld_DispatchPileCarrier(GameWorld* world, void*, std::uint32_t number) {
+void __fastcall CGameData_DispatchPileCarrier(CGameData* world, void*, std::uint32_t number) {
     Pile& pile = world->piles[number];
     const std::uint32_t areaNumber = TileAt(world, pile.x, pile.y).area;
     Area& area = world->areas[areaNumber];
@@ -472,8 +472,8 @@ void __fastcall GameWorld_DispatchPileCarrier(GameWorld* world, void*, std::uint
     if (carrier == 0) {
         return;
     }
-    GameWorld_PileIncAmountLeaving(world, nullptr, number);
-    GameWorld_PileIncAmountComing(world, nullptr, target);
+    CGameData_PileIncAmountLeaving(world, nullptr, number);
+    CGameData_PileIncAmountComing(world, nullptr, target);
     if (world->piles[target].good != pile.good) {
         // The original loads only CL with the good, so the upper three bytes
         // of the argument are whatever PileIncAmountComing left in ECX;
@@ -482,17 +482,17 @@ void __fastcall GameWorld_DispatchPileCarrier(GameWorld* world, void*, std::uint
     }
     Settler& s = world->settlers[carrier];
     UnlinkSettler(world, carrierList, carrier);
-    GameWorld_SetSettlerTarget(world, nullptr, carrier, pile.x, pile.y);
+    CGameData_SetSettlerTarget(world, nullptr, carrier, pile.x, pile.y);
     s.job = kJobFetchGood;
     s.counter = 0;
     s.building = static_cast<std::uint16_t>(target);
     s.good = pile.good;
 }
 
-S3RE_HOOK(0x004dacd0, GameWorld_RequestSettlerForBuilding, RequestFn, Original_GameWorld_RequestSettlerForBuilding,
-          GameWorld_RequestSettlerForBuilding);
-S3RE_HOOK(0x005052c0, GameWorld_DispatchPileCarrier, PileFn, Original_GameWorld_DispatchPileCarrier,
-          GameWorld_DispatchPileCarrier);
+S3RE_HOOK(0x004dacd0, CGameData_RequestSettlerForBuilding, RequestFn, Original_CGameData_RequestSettlerForBuilding,
+          CGameData_RequestSettlerForBuilding);
+S3RE_HOOK(0x005052c0, CGameData_DispatchPileCarrier, PileFn, Original_CGameData_DispatchPileCarrier,
+          CGameData_DispatchPileCarrier);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -500,7 +500,7 @@ S3RE_HOOK(0x005052c0, GameWorld_DispatchPileCarrier, PileFn, Original_GameWorld_
 
 namespace {
 
-constexpr std::size_t kPopulationWorld = offsetof(GameWorld, buildings) + 400 * sizeof(Building);
+constexpr std::size_t kPopulationWorld = offsetof(CGameData, buildings) + 400 * sizeof(Building);
 
 void ComparePopulation(test::Context& ctx, RecountFn candidate, int cases) {
     test::WorldPair worlds(ctx, kPopulationWorld);
@@ -516,12 +516,12 @@ void ComparePopulation(test::Context& ctx, RecountFn candidate, int cases) {
             return static_cast<std::uint8_t>(wildOwners && ctx.rng().Chance(1, 20) ? ctx.rng().Below(255)
                                                                                     : ctx.rng().Below(20));
         };
-        worlds.Both([&](GameWorld* w) { w->settler_high_water = settlers; });
-        worlds.Both([&](GameWorld* w) { w->building_high_water = buildings; });
+        worlds.Both([&](CGameData* w) { w->settler_high_water = settlers; });
+        worlds.Both([&](CGameData* w) { w->building_high_water = buildings; });
         for (std::uint32_t n = 1; n <= settlers; ++n) {
             const std::uint8_t o = owner();
             const auto art = static_cast<std::uint8_t>(ctx.rng().Chance(1, 3) ? 0 : ctx.rng().Below(0x30));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->settlers[n].owner = o;
                 w->settlers[n].art = art;
             });
@@ -531,7 +531,7 @@ void ComparePopulation(test::Context& ctx, RecountFn candidate, int cases) {
             const auto art = ctx.rng().Chance(1, 2) ? kResidences[ctx.rng().Below(3)]
                                                     : static_cast<std::uint8_t>(ctx.rng().Below(0x39));
             const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? 0 : ctx.rng().Below(256));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->buildings[n].owner = o;
                 w->buildings[n].art = art;
                 w->buildings[n].buildup = buildup;
@@ -539,9 +539,9 @@ void ComparePopulation(test::Context& ctx, RecountFn candidate, int cases) {
         }
         for (std::uint32_t p = 0; p < 20; ++p) {
             const std::uint32_t base = ctx.rng().Chance(1, 4) ? ctx.rng().Next32() : ctx.rng().Below(200);
-            worlds.Both([&](GameWorld* w) { w->players[p].population_limit_base = base; });
+            worlds.Both([&](CGameData* w) { w->players[p].population_limit_base = base; });
         }
-        Original_GameWorld_RecountPlayerPopulation(worlds.original(), nullptr);
+        Original_CGameData_RecountPlayerPopulation(worlds.original(), nullptr);
         candidate(worlds.ours(), nullptr);
         if (!worlds.Checkpoint(ctx)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d", i);
@@ -551,8 +551,8 @@ void ComparePopulation(test::Context& ctx, RecountFn candidate, int cases) {
 }
 
 // Wrong: rounds the share up instead of truncating.
-void __fastcall WrongRecountPlayerPopulation(GameWorld* world, void* edx) {
-    GameWorld_RecountPlayerPopulation(world, edx);
+void __fastcall WrongRecountPlayerPopulation(CGameData* world, void* edx) {
+    CGameData_RecountPlayerPopulation(world, edx);
     for (Player& player : world->players) {
         if (player.surplus_carriers != 0) {
             --player.surplus_carriers;
@@ -570,7 +570,7 @@ void CompareTowerAnimation(test::Context& ctx, SettlerFn candidate, int cases) {
         gfx.table().sprites[k] = reinterpret_cast<std::uint32_t>(frames.data() + ctx.rng().Below(0x1f00));
     }
 
-    test::WorldPair worlds(ctx, offsetof(GameWorld, buildings) + 0x200 * sizeof(Building));
+    test::WorldPair worlds(ctx, offsetof(CGameData, buildings) + 0x200 * sizeof(Building));
     static constexpr std::uint8_t kSoldiers[] = {0x20, 0x23, 8, 0x1e, 0x21, 0xf, 0x1f, 0x22};
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t settler = 1 + ctx.rng().Below(0x7cfe);
@@ -583,17 +583,17 @@ void CompareTowerAnimation(test::Context& ctx, SettlerFn candidate, int cases) {
                                                         : static_cast<std::uint8_t>(ctx.rng().Below(256));
         const auto buildingRace = static_cast<std::uint8_t>(ctx.rng().Chance(9, 10) ? ctx.rng().Below(4)
                                                                                    : ctx.rng().Below(256));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->settlers[settler].art = art;
             w->settlers[settler].race = race;
             w->settlers[settler].building = building;
             w->buildings[building].art = type;
             w->buildings[building].race = buildingRace;
         });
-        const std::uint32_t expected = Original_GameWorld_SetTowerSoldierAnimation(worlds.original(), nullptr, settler);
+        const std::uint32_t expected = Original_CGameData_SetTowerSoldierAnimation(worlds.original(), nullptr, settler);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, settler);
         if (!S3RE_EXPECT_EQ(expected, actual) ||
-            !worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return w->settlers[settler]; }) ||
+            !worlds.SameField(ctx, [&](CGameData* w) -> auto& { return w->settlers[settler]; }) ||
             (i % 256 == 255 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: settler %u art %u building type %u race %u", i, settler, art,
                      type, buildingRace);
@@ -604,31 +604,31 @@ void CompareTowerAnimation(test::Context& ctx, SettlerFn candidate, int cases) {
 }
 
 // Wrong: ignores the building's race 2.
-std::uint32_t __fastcall WrongTowerSoldierAnimation(GameWorld* world, void* edx, std::uint32_t settler) {
+std::uint32_t __fastcall WrongTowerSoldierAnimation(CGameData* world, void* edx, std::uint32_t settler) {
     Building& building = world->buildings[world->settlers[settler].building];
     const std::uint8_t race = building.race;
     if (race == 2) {
         building.race = 0;
     }
-    const std::uint32_t result = GameWorld_SetTowerSoldierAnimation(world, edx, settler);
+    const std::uint32_t result = CGameData_SetTowerSoldierAnimation(world, edx, settler);
     building.race = race;
     return result;
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_RecountPlayerPopulation_MatchesOriginal) {
-    ComparePopulation(ctx, &GameWorld_RecountPlayerPopulation, 300);
+S3RE_TEST(CGameData_RecountPlayerPopulation_MatchesOriginal) {
+    ComparePopulation(ctx, &CGameData_RecountPlayerPopulation, 300);
 }
-S3RE_TEST(GameWorld_RecountPlayerPopulation_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_RecountPlayerPopulation_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     ComparePopulation(probe, &WrongRecountPlayerPopulation, 50);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_SetTowerSoldierAnimation_MatchesOriginal) {
-    CompareTowerAnimation(ctx, &GameWorld_SetTowerSoldierAnimation, 20000);
+S3RE_TEST(CGameData_SetTowerSoldierAnimation_MatchesOriginal) {
+    CompareTowerAnimation(ctx, &CGameData_SetTowerSoldierAnimation, 20000);
 }
-S3RE_TEST(GameWorld_SetTowerSoldierAnimation_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_SetTowerSoldierAnimation_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareTowerAnimation(probe, &WrongTowerSoldierAnimation, 5000);
     S3RE_EXPECT(probe.failures() > 0);
@@ -639,7 +639,7 @@ S3RE_TEST(GameWorld_SetTowerSoldierAnimation_ComparisonDetectsWrongImplementatio
 
 namespace {
 
-constexpr std::size_t kEconomyWorld = offsetof(GameWorld, buildings) + 64 * sizeof(Building);
+constexpr std::size_t kEconomyWorld = offsetof(CGameData, buildings) + 64 * sizeof(Building);
 constexpr std::uint32_t kEconomySettlers = 60;
 constexpr std::uint32_t kEconomyPiles = 60;
 
@@ -688,7 +688,7 @@ EconomyCase SetUpEconomy(test::Context& ctx, test::WorldPair& worlds) {
         const auto x = nearby(), y = nearby();
         const auto owner = static_cast<std::uint8_t>(ctx.rng().Below(3));
         const auto art = static_cast<std::uint8_t>(which == 1 ? 0 : which == 2 ? c.type : ctx.rng().Below(0x30));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Settler& s = w->settlers[n];
             s.flags = flags;
             s.x = x;
@@ -722,7 +722,7 @@ EconomyCase SetUpEconomy(test::Context& ctx, test::WorldPair& worlds) {
         const std::uint8_t art = kArts[ctx.rng().Below(sizeof(kArts))];
         const std::uint8_t good = ctx.rng().Chance(4, 5) ? kGoods[g] : static_cast<std::uint8_t>(ctx.rng().Below(36));
         const auto x = nearby(), y = nearby();
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Pile& p = w->piles[q];
             p.amount = amount;
             p.leaving = leaving;
@@ -742,7 +742,7 @@ EconomyCase SetUpEconomy(test::Context& ctx, test::WorldPair& worlds) {
         e = static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? ctx.rng().Below(256) : ctx.rng().Below(60));
     }
     const auto allowed = static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? 0 : 1 + ctx.rng().Below(255));
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         w->settler_high_water = kEconomySettlers;
         w->building_high_water = 50;
         w->pile_high_water = kEconomyPiles;
@@ -775,7 +775,7 @@ EconomyCase SetUpEconomy(test::Context& ctx, test::WorldPair& worlds) {
 template <typename Run>
 void CompareEconomy(test::Context& ctx, int cases, Run run) {
     test::WorldPair worlds(ctx, kEconomyWorld);
-    worlds.Both([&](GameWorld* w) { w->map_size = 384; });
+    worlds.Both([&](CGameData* w) { w->map_size = 384; });
     for (int i = 0; i < cases; ++i) {
         const EconomyCase c = SetUpEconomy(ctx, worlds);
         std::uint32_t expected = 0, actual = 0;
@@ -791,20 +791,20 @@ void CompareEconomy(test::Context& ctx, int cases, Run run) {
 void CompareRequest(test::Context& ctx, RequestFn candidate, int cases) {
     CompareEconomy(ctx, cases, [&](test::WorldPair& worlds, const EconomyCase& c, std::uint32_t& expected,
                                    std::uint32_t& actual) {
-        expected = Original_GameWorld_RequestSettlerForBuilding(worlds.original(), nullptr, c.building, c.type);
+        expected = Original_CGameData_RequestSettlerForBuilding(worlds.original(), nullptr, c.building, c.type);
         actual = candidate(worlds.ours(), nullptr, c.building, c.type);
     });
 }
 
 void CompareDispatch(test::Context& ctx, PileFn candidate, int cases) {
     CompareEconomy(ctx, cases, [&](test::WorldPair& worlds, const EconomyCase& c, std::uint32_t&, std::uint32_t&) {
-        Original_GameWorld_DispatchPileCarrier(worlds.original(), nullptr, c.pile);
+        Original_CGameData_DispatchPileCarrier(worlds.original(), nullptr, c.pile);
         candidate(worlds.ours(), nullptr, c.pile);
     });
 }
 
 // Wrong: surplus carriers may become workers too.
-std::uint32_t __fastcall WrongRequestSettlerForBuilding(GameWorld* world, void* edx, std::uint32_t number,
+std::uint32_t __fastcall WrongRequestSettlerForBuilding(CGameData* world, void* edx, std::uint32_t number,
                                                         std::uint32_t type) {
     std::vector<std::uint32_t> flagged;
     for (std::uint32_t n = 1; n <= kEconomySettlers; ++n) {
@@ -813,7 +813,7 @@ std::uint32_t __fastcall WrongRequestSettlerForBuilding(GameWorld* world, void* 
             flagged.push_back(n);
         }
     }
-    const std::uint32_t result = GameWorld_RequestSettlerForBuilding(world, edx, number, type);
+    const std::uint32_t result = CGameData_RequestSettlerForBuilding(world, edx, number, type);
     for (const std::uint32_t n : flagged) {
         world->settlers[n].flags |= kSettlerFlagSurplus;
     }
@@ -821,30 +821,30 @@ std::uint32_t __fastcall WrongRequestSettlerForBuilding(GameWorld* world, void* 
 }
 
 // Wrong: ignores the area's setting that forbids moving the good.
-void __fastcall WrongDispatchPileCarrier(GameWorld* world, void* edx, std::uint32_t number) {
+void __fastcall WrongDispatchPileCarrier(CGameData* world, void* edx, std::uint32_t number) {
     Pile& pile = world->piles[number];
     Area& area = world->areas[TileAt(world, pile.x, pile.y).area];
     std::uint8_t& allowed = area.settings5[pile.good];
     const std::uint8_t saved = allowed;
     allowed = 1;
-    GameWorld_DispatchPileCarrier(world, edx, number);
+    CGameData_DispatchPileCarrier(world, edx, number);
     allowed = saved;
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_RequestSettlerForBuilding_MatchesOriginal) {
-    CompareRequest(ctx, &GameWorld_RequestSettlerForBuilding, 3000);
+S3RE_TEST(CGameData_RequestSettlerForBuilding_MatchesOriginal) {
+    CompareRequest(ctx, &CGameData_RequestSettlerForBuilding, 3000);
 }
-S3RE_TEST(GameWorld_RequestSettlerForBuilding_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_RequestSettlerForBuilding_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareRequest(probe, &WrongRequestSettlerForBuilding, 1000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_DispatchPileCarrier_MatchesOriginal) {
-    CompareDispatch(ctx, &GameWorld_DispatchPileCarrier, 3000);
+S3RE_TEST(CGameData_DispatchPileCarrier_MatchesOriginal) {
+    CompareDispatch(ctx, &CGameData_DispatchPileCarrier, 3000);
 }
-S3RE_TEST(GameWorld_DispatchPileCarrier_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_DispatchPileCarrier_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareDispatch(probe, &WrongDispatchPileCarrier, 1000);
     S3RE_EXPECT(probe.failures() > 0);

@@ -15,15 +15,15 @@
 //   +0x14 flags, uint8 +0x15 (low 3 bits: an x offset), uint16 +0x22 the
 //   settler's building.
 //
-// GameWorld::RemoveBuildingFromTiles (0x004d9940): (building) clears the
+// CGameData::RemoveBuildingFromTiles (0x004d9940): (building) clears the
 //   building number at tile A, byte +0x7 at tile B and flag 0x20 at tile A,
 //   and marks the record unused (player = 0xff). ret 4; callers ignore EAX.
-// GameWorld::LeaveBuildingSlot (0x0050cc10): (settler) if settler flag 0x40
+// CGameData::LeaveBuildingSlot (0x0050cc10): (settler) if settler flag 0x40
 //   is set: clears the settler number at (A.x + (byte 0x11 & 7) + 1, A.y) of
 //   its building, clears the flag, moves the settler to tile B of the
 //   building and sets its state to 2. EAX = world + settler * 0x40 (one
 //   caller keeps the upper half). ret 4.
-// GameWorld::MoveSettlerToBuildingTileA (0x0050de90) / ...TileB (0x0050df40):
+// CGameData::MoveSettlerToBuildingTileA (0x0050de90) / ...TileB (0x0050df40):
 //   (settler) moves the settler number from its tile to tile A / B of its
 //   building and updates its position. EAX = new tile index * 3 (callers
 //   ignore it). ret 4.
@@ -54,7 +54,7 @@ std::uint32_t TileIndex(std::uint32_t x, std::uint32_t y) {
     return x * 0x300 + y;
 }
 // Tile (x, y) with the original's 32-bit arithmetic.
-Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
@@ -66,25 +66,25 @@ struct BuildingTile {
 constexpr BuildingTile kTileA = {&Building::x, &Building::y};
 constexpr BuildingTile kTileB = {&Building::door_x, &Building::door_y};
 
-std::uint32_t MoveSettlerToBuildingTile(GameWorld* world, std::uint32_t settler, BuildingTile tile) {
+std::uint32_t MoveSettlerToBuildingTile(CGameData* world, std::uint32_t settler, BuildingTile tile) {
     Settler& s = world->settlers[settler];
     TileAt(world, s.x, s.y).settler = 0;
     s.x = world->buildings[s.building].*tile.x;
     const std::uint16_t y = world->buildings[s.building].*tile.y;  // re-reads the building number
     s.y = y;
     const std::uint32_t index = TileIndex(s.x, y);
-    TileAtOffset(world, static_cast<std::uint32_t>(offsetof(GameWorld, tiles)) + index * kTileBytes).settler =
+    TileAtOffset(world, static_cast<std::uint32_t>(offsetof(CGameData, tiles)) + index * kTileBytes).settler =
         static_cast<std::uint16_t>(settler);
     return index * 3;
 }
 
 }  // namespace
 
-using IndexFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t index);
+using IndexFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t index);
 
 // Purpose: Removes a building from the map: its tiles no longer point to it and it no longer belongs to a
 // player. Used when a building is destroyed or torn down.
-std::uint32_t __fastcall GameWorld_RemoveBuildingFromTiles(GameWorld* world, void*,
+std::uint32_t __fastcall CGameData_RemoveBuildingFromTiles(CGameData* world, void*,
                                                            std::uint32_t building) {
     Building& b = world->buildings[building];
     TileAt(world, b.x, b.y).object_number = 0;
@@ -96,7 +96,7 @@ std::uint32_t __fastcall GameWorld_RemoveBuildingFromTiles(GameWorld* world, voi
 
 // Purpose: A settler that was inside a building (in one of its slots) leaves it and appears on the
 // building's exit tile.
-std::uint32_t __fastcall GameWorld_LeaveBuildingSlot(GameWorld* world, void*,
+std::uint32_t __fastcall CGameData_LeaveBuildingSlot(CGameData* world, void*,
                                                      std::uint32_t settler) {
     const std::uint32_t result = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) +
                                  settler * static_cast<std::uint32_t>(sizeof(Settler));
@@ -116,25 +116,25 @@ std::uint32_t __fastcall GameWorld_LeaveBuildingSlot(GameWorld* world, void*,
 
 // Purpose: Moves a settler onto the first of the two special tiles of its building (probably the building's
 // main tile, where work happens).
-std::uint32_t __fastcall GameWorld_MoveSettlerToBuildingTileA(GameWorld* world, void*,
+std::uint32_t __fastcall CGameData_MoveSettlerToBuildingTileA(CGameData* world, void*,
                                                               std::uint32_t settler) {
     return MoveSettlerToBuildingTile(world, settler, kTileA);
 }
 
 // Purpose: Moves a settler onto the second special tile of its building (probably the door/flag tile).
-std::uint32_t __fastcall GameWorld_MoveSettlerToBuildingTileB(GameWorld* world, void*,
+std::uint32_t __fastcall CGameData_MoveSettlerToBuildingTileB(CGameData* world, void*,
                                                               std::uint32_t settler) {
     return MoveSettlerToBuildingTile(world, settler, kTileB);
 }
 
-S3RE_HOOK(0x004d9940, GameWorld_RemoveBuildingFromTiles, IndexFn,
-          Original_GameWorld_RemoveBuildingFromTiles, GameWorld_RemoveBuildingFromTiles);
-S3RE_HOOK(0x0050cc10, GameWorld_LeaveBuildingSlot, IndexFn, Original_GameWorld_LeaveBuildingSlot,
-          GameWorld_LeaveBuildingSlot);
-S3RE_HOOK(0x0050de90, GameWorld_MoveSettlerToBuildingTileA, IndexFn,
-          Original_GameWorld_MoveSettlerToBuildingTileA, GameWorld_MoveSettlerToBuildingTileA);
-S3RE_HOOK(0x0050df40, GameWorld_MoveSettlerToBuildingTileB, IndexFn,
-          Original_GameWorld_MoveSettlerToBuildingTileB, GameWorld_MoveSettlerToBuildingTileB);
+S3RE_HOOK(0x004d9940, CGameData_RemoveBuildingFromTiles, IndexFn,
+          Original_CGameData_RemoveBuildingFromTiles, CGameData_RemoveBuildingFromTiles);
+S3RE_HOOK(0x0050cc10, CGameData_LeaveBuildingSlot, IndexFn, Original_CGameData_LeaveBuildingSlot,
+          CGameData_LeaveBuildingSlot);
+S3RE_HOOK(0x0050de90, CGameData_MoveSettlerToBuildingTileA, IndexFn,
+          Original_CGameData_MoveSettlerToBuildingTileA, CGameData_MoveSettlerToBuildingTileA);
+S3RE_HOOK(0x0050df40, CGameData_MoveSettlerToBuildingTileB, IndexFn,
+          Original_CGameData_MoveSettlerToBuildingTileB, CGameData_MoveSettlerToBuildingTileB);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -144,7 +144,7 @@ namespace {
 
 constexpr std::uint32_t kTestBuildings = 2000;
 constexpr std::uint32_t kTestSettlers = 4000;
-constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + (kTestBuildings + 1) * sizeof(Building);
+constexpr std::size_t kTestWorld = offsetof(CGameData, buildings) + (kTestBuildings + 1) * sizeof(Building);
 
 // Puts the settler's position, its building and that building's tiles on the
 // map (x < 392 even with the slot offset), so every access stays inside the
@@ -154,7 +154,7 @@ void PrepareCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t sett
     auto coordinate = [&] { return static_cast<std::uint16_t>(ctx.rng().Below(384)); };
     const std::uint16_t sx = coordinate();
     const std::uint16_t sy = coordinate();
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         w->settlers[settler].x = sx;
         w->settlers[settler].y = sy;
         w->settlers[settler].building = static_cast<std::uint16_t>(building);
@@ -162,20 +162,20 @@ void PrepareCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t sett
     for (const BuildingTile tile : {kTileA, kTileB}) {
         const std::uint16_t bx = coordinate();
         const std::uint16_t by = coordinate();
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->buildings[building].*tile.x = bx;
             w->buildings[building].*tile.y = by;
         });
     }
     if (ctx.rng().Chance(1, 8)) {  // same tile for A and B
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->buildings[building].door_x = w->buildings[building].x;
             w->buildings[building].door_y = w->buildings[building].y;
         });
     }
 }
 
-std::uint32_t Relative(std::uint32_t value, GameWorld* world, bool isAddress) {
+std::uint32_t Relative(std::uint32_t value, CGameData* world, bool isAddress) {
     return isAddress ? value - static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world))
                      : value;
 }
@@ -203,39 +203,39 @@ void Compare(test::Context& ctx, IndexFn original, IndexFn candidate, Arg arg, b
 }
 
 // Wrong: leaves flag 0x20 of the tile set.
-std::uint32_t __fastcall WrongRemoveBuildingFromTiles(GameWorld* world, void*,
+std::uint32_t __fastcall WrongRemoveBuildingFromTiles(CGameData* world, void*,
                                                       std::uint32_t building) {
     const Building& b = world->buildings[building];
     std::uint8_t& flags = TileAt(world, b.x, b.y).flags;
     const std::uint8_t keep = flags;
-    GameWorld_RemoveBuildingFromTiles(world, nullptr, building);
+    CGameData_RemoveBuildingFromTiles(world, nullptr, building);
     flags = keep;
     return 0;
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_RemoveBuildingFromTiles_MatchesOriginal) {
-    Compare(ctx, Original_GameWorld_RemoveBuildingFromTiles, &GameWorld_RemoveBuildingFromTiles,
+S3RE_TEST(CGameData_RemoveBuildingFromTiles_MatchesOriginal) {
+    Compare(ctx, Original_CGameData_RemoveBuildingFromTiles, &CGameData_RemoveBuildingFromTiles,
             Arg::Building, false, false, 120);
 }
-S3RE_TEST(GameWorld_RemoveBuildingFromTiles_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_RemoveBuildingFromTiles_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    Compare(probe, Original_GameWorld_RemoveBuildingFromTiles, &WrongRemoveBuildingFromTiles,
+    Compare(probe, Original_CGameData_RemoveBuildingFromTiles, &WrongRemoveBuildingFromTiles,
             Arg::Building, false, false, 100);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_LeaveBuildingSlot_MatchesOriginal) {
-    Compare(ctx, Original_GameWorld_LeaveBuildingSlot, &GameWorld_LeaveBuildingSlot, Arg::Settler,
+S3RE_TEST(CGameData_LeaveBuildingSlot_MatchesOriginal) {
+    Compare(ctx, Original_CGameData_LeaveBuildingSlot, &CGameData_LeaveBuildingSlot, Arg::Settler,
             true, true, 120);
 }
-S3RE_TEST(GameWorld_MoveSettlerToBuildingTileA_MatchesOriginal) {
-    Compare(ctx, Original_GameWorld_MoveSettlerToBuildingTileA,
-            &GameWorld_MoveSettlerToBuildingTileA, Arg::Settler, false, true, 120);
+S3RE_TEST(CGameData_MoveSettlerToBuildingTileA_MatchesOriginal) {
+    Compare(ctx, Original_CGameData_MoveSettlerToBuildingTileA,
+            &CGameData_MoveSettlerToBuildingTileA, Arg::Settler, false, true, 120);
 }
-S3RE_TEST(GameWorld_MoveSettlerToBuildingTileB_MatchesOriginal) {
-    Compare(ctx, Original_GameWorld_MoveSettlerToBuildingTileB,
-            &GameWorld_MoveSettlerToBuildingTileB, Arg::Settler, false, true, 120);
+S3RE_TEST(CGameData_MoveSettlerToBuildingTileB_MatchesOriginal) {
+    Compare(ctx, Original_CGameData_MoveSettlerToBuildingTileB,
+            &CGameData_MoveSettlerToBuildingTileB, Arg::Settler, false, true, 120);
 }
 
 }  // namespace s3re::game

@@ -42,7 +42,7 @@ struct StubCall {
 };
 
 // (world, ECX, arguments) -> EAX.
-using StubEffect = std::function<std::uint32_t(game::GameWorld* world, std::uint32_t self, const std::uint32_t* args)>;
+using StubEffect = std::function<std::uint32_t(game::CGameData* world, std::uint32_t self, const std::uint32_t* args)>;
 
 class CalleeStubs {
 public:
@@ -73,7 +73,7 @@ public:
 
     // The world the next calls run on (ECX is recorded relative to it, and
     // effects get it).
-    void SetWorld(game::GameWorld* world) { world_ = world; }
+    void SetWorld(game::CGameData* world) { world_ = world; }
     std::vector<StubCall>& calls() { return calls_; }
     // Moves the recorded calls out (and clears the log).
     std::vector<StubCall> Take() {
@@ -136,7 +136,7 @@ private:
 
     std::vector<Patch> patches_;
     std::vector<StubCall> calls_;
-    game::GameWorld* world_ = nullptr;
+    game::CGameData* world_ = nullptr;
 };
 
 // Sends calls of the function at `address` to `target` while it lives (a

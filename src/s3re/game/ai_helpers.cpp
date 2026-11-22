@@ -206,7 +206,7 @@ S3RE_HOOK(0x0059dc10, AI_AreaGoodsAmount, AreaGoodsAmountFn, Original_AI_AreaGoo
 // Purpose: How many units of a goods type lie on the piles of an economy
 // area, as the computer players see it.
 std::uint32_t __fastcall AI_AreaGoodsAmount(const std::uint8_t* goods, const std::uint16_t* area) {
-    GameWorld* world = g_aiWorld.get();
+    CGameData* world = g_aiWorld.get();
     // Neither the area (word) nor the goods type (byte) is range-checked:
     // indexes past the arrays read what lies there, as the original does.
     std::uint16_t pile = world->areas[*area].piles_by_goods[*goods];
@@ -225,7 +225,7 @@ S3RE_HOOK(0x0058e170, AI_GetBuilding, GetBuildingFn, Original_AI_GetBuilding, AI
 // null (with an error flag for a bad number) if there is no such building.
 void* __fastcall AI_GetBuilding(std::uint32_t id, std::uint32_t* error) {
     *error = 0;
-    GameWorld* world = g_aiWorld.get();
+    CGameData* world = g_aiWorld.get();
     const std::uint32_t index = id & 0xffff;
     if (index > world->building_high_water) {
         *error = 1;
@@ -308,7 +308,7 @@ S3RE_HOOK(0x00599610, AI_BuildingArea, BuildingAreaFn, Original_AI_BuildingArea,
 // Purpose: The economy area a building stands in, for the computer players
 // (0xffff for a position off the map).
 std::uint32_t __fastcall AI_BuildingArea(const std::uint16_t* building) {
-    GameWorld* world = g_aiWorld.get();
+    CGameData* world = g_aiWorld.get();
     const std::uint32_t id = *building;
     const layout::Building& record = world->buildings[id];
     const std::uint16_t x = record.door_x;
@@ -320,7 +320,7 @@ std::uint32_t __fastcall AI_BuildingArea(const std::uint16_t* building) {
     // tile's area word (0x44d9 * 24 = tiles + Tile::area); the upper half of
     // EAX keeps that index's.
     const std::uint32_t index = x * 0x300u + y + 0x44d9u;
-    static_assert(0x44d9 * kTileBytes == offsetof(GameWorld, tiles) + offsetof(layout::Tile, area), "tile area word");
+    static_assert(0x44d9 * kTileBytes == offsetof(CGameData, tiles) + offsetof(layout::Tile, area), "tile area word");
     return (index & 0xffff0000u) | TileAtOffset(world, TileOffset(x, y)).area;
 }
 
@@ -332,7 +332,7 @@ std::uint32_t __stdcall AI_FreeTileArea(std::int32_t x, std::int32_t y) {
     if (!AI_IsOnMap(x) || !AI_IsOnMap(y)) {
         return 0xffffffffu;
     }
-    GameWorld* world = g_aiMapWorld;
+    CGameData* world = g_aiMapWorld;
     // At x = map size the tile is the one just past the row (32-bit offset
     // arithmetic, as the original reads it).
     auto tile = [&](std::int32_t tx) -> layout::Tile& {
@@ -440,7 +440,7 @@ std::uint32_t __fastcall AI_AreaAlongRow(std::uint32_t x, std::uint32_t y) {
     if (static_cast<std::uint16_t>(x) >= sizeX || static_cast<std::uint16_t>(y) >= g_aiMapSizeY) {
         return 0xffff;
     }
-    GameWorld* world = g_aiWorld.get();
+    CGameData* world = g_aiWorld.get();
     y &= 0xffff;
     // The original's register holds (tile index + 0x44d9) * 3; times 8 it is
     // the offset of the tile's area word (see AI_BuildingArea).
@@ -637,7 +637,7 @@ std::uint32_t PointerBits(const void* p) {
 }
 
 struct SavedGlobals {
-    GameWorld* world = g_aiWorld;
+    CGameData* world = g_aiWorld;
     ComputerPlayer* player = g_aiPlayer;
     AiPlayerSetup* setup = g_aiPlayerSetup;
     AiPlayerData* data = g_aiPlayerData;
@@ -666,10 +666,10 @@ void BuildPileList(test::Context& ctx, test::WorldPair& worlds, std::uint32_t ar
     const std::uint32_t stride = 1 + ctx.rng().Below(1000);
     for (int k = 0; k < length; ++k) {
         const auto pile = static_cast<std::uint16_t>(start + static_cast<std::uint32_t>(k) * stride);
-        worlds.Both([&](GameWorld* w) { w->piles[pile].next = next; });
+        worlds.Both([&](CGameData* w) { w->piles[pile].next = next; });
         next = pile;
     }
-    worlds.Both([&](GameWorld* w) { w->areas[area].piles_by_goods[goods] = next; });
+    worlds.Both([&](CGameData* w) { w->areas[area].piles_by_goods[goods] = next; });
 }
 
 void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
@@ -677,7 +677,7 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
     SavedGlobals saved;
     struct Restore {
         std::uint16_t sizeX = g_aiMapSizeX, sizeY = g_aiMapSizeY;
-        GameWorld* world = g_aiMapWorld;
+        CGameData* world = g_aiMapWorld;
         ~Restore() {
             g_aiMapSizeX = sizeX;
             g_aiMapSizeY = sizeY;
@@ -734,7 +734,7 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
             }
             case 3: {
                 const std::int32_t size = ctx.rng().Range(-4, 1024);
-                worlds.Both([&](GameWorld* w) { w->map_size = static_cast<std::uint32_t>(size); });
+                worlds.Both([&](CGameData* w) { w->map_size = static_cast<std::uint32_t>(size); });
                 const std::int32_t v = ctx.rng().Chance(1, 8) ? static_cast<std::int32_t>(ctx.rng().Next32())
                                                               : ctx.rng().Range(-3, 1030);
                 useWorld(false);
@@ -746,7 +746,7 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
             }
             case 4: {
                 const std::int32_t size = ctx.rng().Range(-4, 1024);
-                worlds.Both([&](GameWorld* w) { w->map_size = static_cast<std::uint32_t>(size); });
+                worlds.Both([&](CGameData* w) { w->map_size = static_cast<std::uint32_t>(size); });
                 std::int32_t xa = ctx.rng().Range(-50, 1100), ya = ctx.rng().Range(-50, 1100);
                 if (ctx.rng().Chance(1, 8)) {
                     xa = static_cast<std::int32_t>(ctx.rng().Next32());
@@ -774,10 +774,10 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
             }
             case 6: {
                 const std::uint32_t count = ctx.rng().Below(3000);
-                worlds.Both([&](GameWorld* w) { w->building_high_water = count; });
+                worlds.Both([&](CGameData* w) { w->building_high_water = count; });
                 const std::uint32_t id = (ctx.rng().Next32() & 0xffff0000u) | ctx.rng().Below(3200);
                 if (ctx.rng().Chance(1, 3)) {
-                    worlds.Both([&](GameWorld* w) { w->buildings[id & 0xffff].owner = 0xff; });
+                    worlds.Both([&](CGameData* w) { w->buildings[id & 0xffff].owner = 0xff; });
                 }
                 std::uint32_t ea = 7, eb = 7;
                 useWorld(false);
@@ -851,7 +851,7 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
                 };
                 const std::uint16_t doorX = coordinate();
                 const std::uint16_t doorY = coordinate();
-                worlds.Both([&](GameWorld* w) {
+                worlds.Both([&](CGameData* w) {
                     w->buildings[id].door_x = doorX;
                     w->buildings[id].door_y = doorY;
                 });
@@ -866,7 +866,7 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
             }
             case 13: {
                 const std::int32_t size = ctx.rng().Range(1, 400);
-                worlds.Both([&](GameWorld* w) { w->map_size = static_cast<std::uint32_t>(size); });
+                worlds.Both([&](CGameData* w) { w->map_size = static_cast<std::uint32_t>(size); });
                 const std::int32_t x = ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Next32())
                                                                : ctx.rng().Range(-2, size + 1);
                 const std::int32_t y = ctx.rng().Chance(1, 10) ? static_cast<std::int32_t>(ctx.rng().Next32())
@@ -878,7 +878,7 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
                         const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32());
                         const auto value = static_cast<std::uint8_t>(k < run ? flags | layout::kTileBlocked
                                                                              : flags & ~layout::kTileBlocked);
-                        worlds.Both([&](GameWorld* w) { w->tiles[x + k][y].flags = value; });
+                        worlds.Both([&](CGameData* w) { w->tiles[x + k][y].flags = value; });
                     }
                 }
                 useWorld(false);
@@ -987,7 +987,7 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
         switch (op) {
             case 0: {
                 const std::uint32_t count = ctx.rng().Below(60);
-                worlds.Both([&](GameWorld* w) { w->building_high_water = count; });
+                worlds.Both([&](CGameData* w) { w->building_high_water = count; });
                 args[0] = (args[0] & 0xffffff00u) | ctx.rng().Below(3);
                 args[1] = (args[1] & 0xffffff00u) | ctx.rng().Below(3);
                 args[2] = ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(4);
@@ -999,7 +999,7 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
                     const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(1, 4));
                     const auto x = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? 500 : ctx.rng().Below(400));
                     const auto y = static_cast<std::uint16_t>(ctx.rng().Below(400));
-                    worlds.Both([&](GameWorld* w) {
+                    worlds.Both([&](CGameData* w) {
                         layout::Building& record = w->buildings[id];
                         record.owner = owner;
                         record.art = art;
@@ -1009,7 +1009,7 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
                     });
                     if (x < 400) {
                         const auto area = static_cast<std::uint16_t>(ctx.rng().Below(4));
-                        worlds.Both([&](GameWorld* w) { w->tiles[x][y].area = area; });
+                        worlds.Both([&](CGameData* w) { w->tiles[x][y].area = area; });
                     }
                 }
                 break;
@@ -1025,7 +1025,7 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
                     const std::uint32_t tx = (x + k) & 0xffff;
                     if (tx < 0x300 && (y & 0xffff) < 0x300) {
                         const auto area = static_cast<std::uint16_t>(ctx.rng().Chance(3, 4) ? 0 : ctx.rng().Next32());
-                        worlds.Both([&](GameWorld* w) { w->tiles[tx][y & 0xffff].area = area; });
+                        worlds.Both([&](CGameData* w) { w->tiles[tx][y & 0xffff].area = area; });
                     }
                 }
                 break;

@@ -1,52 +1,52 @@
 // Small tables, rings and timers in the world object (all names provisional:
 // what the entries mean is not known yet).
 //
-// GameWorld::AllocBuildingExtra (0x004df0a0): (value) takes the first free
+// CGameData::AllocBuildingExtra (0x004df0a0): (value) takes the first free
 //   record 1..998 of the 0x5a-byte records at world+0x10f45e8 (free: byte
 //   +0x0 == 0xff), raises the high-water mark (uint32 world+0x110a578) and
 //   initializes it: +0x0 = value (low byte), +0x1 = 1, uint16 +0x2..+0x10 =
 //   0xffff, bytes +0x12..+0x59 = 0. Returns its number, 0 if none is free
 //   (record 999 is never used). Only 0x4dbc50 calls it and stores the
 //   number at building +0x34. ret 4.
-// GameWorld::AllocTable36700Record (0x004fefd0): (ten uint16 values) takes
+// CGameData::AllocTable36700Record (0x004fefd0): (ten uint16 values) takes
 //   the first free record 1..9998 of the 20-byte records at world+0x36700
 //   (free: uint16 +0x0 == 0), raises the high-water mark (uint32 at
 //   world+0x67440, right before the tile records) and stores the ten values.
 //   EAX = world + 20 * record, or world + 0x36700 + 20 * 9999 when full.
 //   ret 0x28.
-// GameWorld::QueueEvent (0x004e8ad0): (type, a, b, c) appends {type, a, b,
+// CGameData::QueueEvent (0x004e8ad0): (type, a, b, c) appends {type, a, b,
 //   c} (int32 each) to the 1000-entry ring at world+0x32878 (write index
 //   world+0x366fc). For type 6 it first scans the 12-byte ring at
 //   world+0x2f990 (read/write indices world+0x32870/+0x32874) and appends
 //   nothing if it holds an entry {6, a, ..}. EAX = the new write index
 //   before wrapping (1..1000), or, when skipped, the index after the
 //   duplicate (wrapped; one caller passes EAX on). ret 0x10.
-// GameWorld::QueuePendingEvent (0x004e8ba0): (type, a, b) appends {type,
+// CGameData::QueuePendingEvent (0x004e8ba0): (type, a, b) appends {type,
 //   a, b} (int32 each) to the 12-byte ring at world+0x2f990 (the ring that
 //   QueueEvent checks; read/write indices world+0x32870/+0x32874; no
 //   full check). For type 4 it first scans the ring from read to write and
 //   appends nothing if it holds an entry {4, a, ..}. EAX as in QueueEvent:
 //   the new write index before wrapping (1..1000), or, when skipped, the
 //   index after the duplicate (wrapped). ret 0xc; callers ignore EAX.
-// GameWorld::QueueMarkedTile (0x004e6c40): (x, y, player) if the tile has
+// CGameData::QueueMarkedTile (0x004e6c40): (x, y, player) if the tile has
 //   flag 0x10 and not flag 0x1 in byte +0xa and is owned by `player` (byte
 //   +0x8, compared as int32): clears flag 0x10 and appends (x, y) as uint16
 //   pairs to the 10000-entry ring at world+0xdfdc48 (index world+0xe0788c).
 //   ret 0xc; callers ignore EAX.
-// GameWorld::QueueMarkedTileTerrain5To7 (0x0051ce50): (x, y) the same
+// CGameData::QueueMarkedTileTerrain5To7 (0x0051ce50): (x, y) the same
 //   without the owner check, but only if byte +0x6 (the terrain byte at
 //   world+0x6744a) is 5, 6 or 7 and flag 0x80 of byte +0xa is clear (flag
 //   0x1 is not tested). ret 8; EAX ignored (callers: 0x51cee0).
-// GameWorld::QueueMarkedTileNoOwner (0x0051d3d0): (x, y) like
+// CGameData::QueueMarkedTileNoOwner (0x0051d3d0): (x, y) like
 //   QueueMarkedTile without the owner check. ret 8; EAX ignored (callers:
 //   0x51d450).
-// GameWorld::CountDownTimers (0x004fee00): 42 lists of 10 entries of 12
+// CGameData::CountDownTimers (0x004fee00): 42 lists of 10 entries of 12
 //   bytes at world+0x2e5e0; an entry is active while its int32 +0x0 is not
 //   0, and the active entries come first. Decrements every active entry;
 //   an entry that reaches 0 is removed (the entries after it move up, the
 //   last one is cleared). Called once per UpdateEconomy. Plain ret; EAX
 //   ignored.
-// GameWorld::AddPileClaim (0x00510770; was AddToRecentPositions): (settler,
+// CGameData::AddPileClaim (0x00510770; was AddToRecentPositions): (settler,
 //   pile) the 128 pile claims {pile, settler} at world+0x1195dd4
 //   (layout::PileClaim). If the claim is not in the list, stores it in
 //   the first empty slot (both words 0) searching downwards from the slot
@@ -54,12 +54,12 @@
 //   127; loops forever if no slot is empty). Only caller: UpdateSettlers
 //   job 0x152; CountOtherPileClaims 0x510800 reads the list. The logic thread clears the
 //   cursor's slot and advances it every step (0x53de6f). ret 8; EAX ignored.
-// GameWorld::ReplaceTileWord16AndQueue (0x0051c560): (x, y, expected,
+// CGameData::ReplaceTileWord16AndQueue (0x0051c560): (x, y, expected,
 //   value) if the uint16 at tile +0x16 (zero-extended) equals `expected`
 //   (int32): sets it to `value` (low word) and appends (x, y) to the tile
 //   ring (no flag change, no ring-full check). One step of the flood fill
 //   0x51c6c0, which uses the tile ring as its queue. ret 0x10; EAX ignored.
-// GameWorld::ReplaceTileByte10AndQueue (0x0051c820): the same for the byte
+// CGameData::ReplaceTileByte10AndQueue (0x0051c820): the same for the byte
 //   at tile +0x10 (`value` low byte). Step of the flood fill 0x51c8a0.
 //   ret 0x10; EAX ignored.
 // All thiscall (ECX = world).
@@ -109,35 +109,35 @@ std::uint16_t PileClaimsCursor() {
 
 // The tile (x, y) for 32-bit coordinates: the offset is computed in 32 bits,
 // as in the original (no range check).
-Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
 }  // namespace
 
-using ValueFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t value);
-using Alloc36700Fn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t a0,
+using ValueFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t value);
+using Alloc36700Fn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t a0,
                                                 std::uint32_t a1, std::uint32_t a2,
                                                 std::uint32_t a3, std::uint32_t a4,
                                                 std::uint32_t a5, std::uint32_t a6,
                                                 std::uint32_t a7, std::uint32_t a8,
                                                 std::uint32_t a9);
-using QueueEventFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t type,
+using QueueEventFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t type,
                                                 std::uint32_t a, std::uint32_t b, std::uint32_t c);
-using QueuePendingEventFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t type,
+using QueuePendingEventFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t type,
                                                        std::uint32_t a, std::uint32_t b);
-using QueueTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
+using QueueTileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x,
                                                std::uint32_t y, std::uint32_t player);
-using NoArgFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
-using PositionFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
+using NoArgFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx);
+using PositionFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x,
                                               std::uint32_t y);
-using ReplaceTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
+using ReplaceTileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x,
                                                  std::uint32_t y, std::uint32_t expected,
                                                  std::uint32_t value);
 
 // Purpose: Finds a free record in a table of extra data that some buildings need (probably for production
 // or storage details) and initialises it.
-std::uint32_t __fastcall GameWorld_AllocBuildingExtra(GameWorld* world, void*,
+std::uint32_t __fastcall CGameData_AllocBuildingExtra(CGameData* world, void*,
                                                       std::uint32_t value) {
     std::uint32_t record = 1;
     while (world->trades[record].kind != 0xff) {
@@ -169,7 +169,7 @@ std::uint32_t __fastcall GameWorld_AllocBuildingExtra(GameWorld* world, void*,
 
 // Purpose: Finds a free record in a table of small 20-byte records (purpose unknown) and stores ten values
 // in it.
-std::uint32_t __fastcall GameWorld_AllocTable36700Record(GameWorld* world, void*, std::uint32_t a0,
+std::uint32_t __fastcall CGameData_AllocTable36700Record(CGameData* world, void*, std::uint32_t a0,
                                                          std::uint32_t a1, std::uint32_t a2,
                                                          std::uint32_t a3, std::uint32_t a4,
                                                          std::uint32_t a5, std::uint32_t a6,
@@ -199,7 +199,7 @@ std::uint32_t __fastcall GameWorld_AllocTable36700Record(GameWorld* world, void*
 // Purpose: Adds an event to the world's event queue (e.g. 'settler changed', 'building finished'), from
 // which other parts of the game (probably the UI, sound and messages) learn what happened. Some
 // duplicate events are skipped.
-std::uint32_t __fastcall GameWorld_QueueEvent(GameWorld* world, void*, std::uint32_t type,
+std::uint32_t __fastcall CGameData_QueueEvent(CGameData* world, void*, std::uint32_t type,
                                               std::uint32_t a, std::uint32_t b, std::uint32_t c) {
     if (type == kDedupedType) {
         std::uint32_t read = world->pending_event_index.read;
@@ -232,7 +232,7 @@ std::uint32_t __fastcall GameWorld_QueueEvent(GameWorld* world, void*, std::uint
 namespace {
 
 // Appends (x, y) to the tile ring and clears flag 0x10 of the tile.
-void PushMarkedTile(GameWorld* world, Tile& tile, std::uint32_t x, std::uint32_t y) {
+void PushMarkedTile(CGameData* world, Tile& tile, std::uint32_t x, std::uint32_t y) {
     world->tile_ring[world->tile_ring_index.write].x = static_cast<std::uint16_t>(x);
     world->tile_ring[world->tile_ring_index.write].y = static_cast<std::uint16_t>(y);
     tile.flags &= 0xef;
@@ -244,7 +244,7 @@ void PushMarkedTile(GameWorld* world, Tile& tile, std::uint32_t x, std::uint32_t
 
 // Purpose: One step of a flood fill over a player's marked tiles: queues a neighbour if it is marked and
 // belongs to that player, and unmarks it so it is visited only once.
-std::uint32_t __fastcall GameWorld_QueueMarkedTile(GameWorld* world, void*, std::uint32_t x,
+std::uint32_t __fastcall CGameData_QueueMarkedTile(CGameData* world, void*, std::uint32_t x,
                                                    std::uint32_t y, std::uint32_t player) {
     Tile& tile = TileAt(world, x, y);
     const std::uint8_t flags = tile.flags;
@@ -257,7 +257,7 @@ std::uint32_t __fastcall GameWorld_QueueMarkedTile(GameWorld* world, void*, std:
 
 // Purpose: Like QueueMarkedTile, for marked tiles of three particular terrain types (probably water or
 // other non-land terrain).
-std::uint32_t __fastcall GameWorld_QueueMarkedTileTerrain5To7(GameWorld* world, void*,
+std::uint32_t __fastcall CGameData_QueueMarkedTileTerrain5To7(CGameData* world, void*,
                                                               std::uint32_t x, std::uint32_t y) {
     Tile& tile = TileAt(world, x, y);
     const std::uint8_t flags = tile.flags;
@@ -270,7 +270,7 @@ std::uint32_t __fastcall GameWorld_QueueMarkedTileTerrain5To7(GameWorld* world, 
 }
 
 // Purpose: Like QueueMarkedTile, without the owner check.
-std::uint32_t __fastcall GameWorld_QueueMarkedTileNoOwner(GameWorld* world, void*, std::uint32_t x,
+std::uint32_t __fastcall CGameData_QueueMarkedTileNoOwner(CGameData* world, void*, std::uint32_t x,
                                                           std::uint32_t y) {
     Tile& tile = TileAt(world, x, y);
     const std::uint8_t flags = tile.flags;
@@ -283,7 +283,7 @@ std::uint32_t __fastcall GameWorld_QueueMarkedTileNoOwner(GameWorld* world, void
 
 // Purpose: Counts down the world's timers by one; timers that run out are removed. Called once per
 // simulation update; probably drives delayed actions.
-std::uint32_t __fastcall GameWorld_CountDownTimers(GameWorld* world, void*) {
+std::uint32_t __fastcall CGameData_CountDownTimers(CGameData* world, void*) {
     for (std::uint32_t list = 0; list < kTimerLists; ++list) {
         NotificationTimer* const timers = world->notification_timers[list];
         for (std::uint32_t i = 0; i < kTimersPerList; ++i) {
@@ -311,7 +311,7 @@ std::uint32_t __fastcall GameWorld_CountDownTimers(GameWorld* world, void*) {
 
 // Purpose: Notes that a settler has claimed a goods pile (it expires after 128 steps), so other settlers
 // (UpdateSettlers job 0x152, CountOtherPileClaims) know how many units of the pile are already spoken for.
-std::uint32_t __fastcall GameWorld_AddPileClaim(GameWorld* world, void*, std::uint32_t settler, std::uint32_t pile) {
+std::uint32_t __fastcall CGameData_AddPileClaim(CGameData* world, void*, std::uint32_t settler, std::uint32_t pile) {
     const auto settler16 = static_cast<std::uint16_t>(settler);
     const auto pile16 = static_cast<std::uint16_t>(pile);
     for (std::uint32_t slot = 0; slot < kPileClaimCount; ++slot) {
@@ -332,7 +332,7 @@ std::uint32_t __fastcall GameWorld_AddPileClaim(GameWorld* world, void*, std::ui
 namespace {
 
 // Appends (x, y) to the tile ring (without touching the tile flags).
-void PushTile(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+void PushTile(CGameData* world, std::uint32_t x, std::uint32_t y) {
     std::uint32_t& index = world->tile_ring_index.write;
     world->tile_ring[index].x = static_cast<std::uint16_t>(x);
     world->tile_ring[index].y = static_cast<std::uint16_t>(y);
@@ -343,7 +343,7 @@ void PushTile(GameWorld* world, std::uint32_t x, std::uint32_t y) {
 
 // Purpose: One step of a flood fill: if a tile still has the old region number, give it the new one and
 // remember it so its neighbours get checked next.
-std::uint32_t __fastcall GameWorld_ReplaceTileWord16AndQueue(GameWorld* world, void*, std::uint32_t x,
+std::uint32_t __fastcall CGameData_ReplaceTileWord16AndQueue(CGameData* world, void*, std::uint32_t x,
                                                              std::uint32_t y, std::uint32_t expected,
                                                              std::uint32_t value) {
     std::uint16_t& field = TileAt(world, x, y).wide_region;
@@ -355,7 +355,7 @@ std::uint32_t __fastcall GameWorld_ReplaceTileWord16AndQueue(GameWorld* world, v
 }
 
 // Purpose: Like ReplaceTileWord16AndQueue, for the other kind of region number stored in each tile.
-std::uint32_t __fastcall GameWorld_ReplaceTileByte10AndQueue(GameWorld* world, void*, std::uint32_t x,
+std::uint32_t __fastcall CGameData_ReplaceTileByte10AndQueue(CGameData* world, void*, std::uint32_t x,
                                                              std::uint32_t y, std::uint32_t expected,
                                                              std::uint32_t value) {
     std::uint8_t& field = TileAt(world, x, y).walk_region;
@@ -369,7 +369,7 @@ std::uint32_t __fastcall GameWorld_ReplaceTileByte10AndQueue(GameWorld* world, v
 // Purpose: Adds an entry to the world's second, smaller event queue (the one QueueEvent checks for
 // duplicates; probably events still to be handled, e.g. for areas); an entry of type 4 for the same
 // thing that is already queued is not added again.
-std::uint32_t __fastcall GameWorld_QueuePendingEvent(GameWorld* world, void*, std::uint32_t type,
+std::uint32_t __fastcall CGameData_QueuePendingEvent(CGameData* world, void*, std::uint32_t type,
                                                      std::uint32_t a, std::uint32_t b) {
     if (type == kDedupedPendingType) {
         std::uint32_t read = world->pending_event_index.read;
@@ -401,28 +401,28 @@ std::uint32_t __fastcall GameWorld_QueuePendingEvent(GameWorld* world, void*, st
     return next;
 }
 
-S3RE_HOOK(0x004df0a0, GameWorld_AllocBuildingExtra, ValueFn, Original_GameWorld_AllocBuildingExtra,
-          GameWorld_AllocBuildingExtra);
-S3RE_HOOK(0x004fefd0, GameWorld_AllocTable36700Record, Alloc36700Fn,
-          Original_GameWorld_AllocTable36700Record, GameWorld_AllocTable36700Record);
-S3RE_HOOK(0x004e8ad0, GameWorld_QueueEvent, QueueEventFn, Original_GameWorld_QueueEvent,
-          GameWorld_QueueEvent);
-S3RE_HOOK(0x004e8ba0, GameWorld_QueuePendingEvent, QueuePendingEventFn, Original_GameWorld_QueuePendingEvent,
-          GameWorld_QueuePendingEvent);
-S3RE_HOOK(0x004e6c40, GameWorld_QueueMarkedTile, QueueTileFn, Original_GameWorld_QueueMarkedTile,
-          GameWorld_QueueMarkedTile);
-S3RE_HOOK(0x0051ce50, GameWorld_QueueMarkedTileTerrain5To7, PositionFn,
-          Original_GameWorld_QueueMarkedTileTerrain5To7, GameWorld_QueueMarkedTileTerrain5To7);
-S3RE_HOOK(0x0051d3d0, GameWorld_QueueMarkedTileNoOwner, PositionFn,
-          Original_GameWorld_QueueMarkedTileNoOwner, GameWorld_QueueMarkedTileNoOwner);
-S3RE_HOOK(0x0051c560, GameWorld_ReplaceTileWord16AndQueue, ReplaceTileFn,
-          Original_GameWorld_ReplaceTileWord16AndQueue, GameWorld_ReplaceTileWord16AndQueue);
-S3RE_HOOK(0x0051c820, GameWorld_ReplaceTileByte10AndQueue, ReplaceTileFn,
-          Original_GameWorld_ReplaceTileByte10AndQueue, GameWorld_ReplaceTileByte10AndQueue);
-S3RE_HOOK(0x004fee00, GameWorld_CountDownTimers, NoArgFn, Original_GameWorld_CountDownTimers,
-          GameWorld_CountDownTimers);
-S3RE_HOOK(0x00510770, GameWorld_AddPileClaim, PositionFn,
-          Original_GameWorld_AddPileClaim, GameWorld_AddPileClaim);
+S3RE_HOOK(0x004df0a0, CGameData_AllocBuildingExtra, ValueFn, Original_CGameData_AllocBuildingExtra,
+          CGameData_AllocBuildingExtra);
+S3RE_HOOK(0x004fefd0, CGameData_AllocTable36700Record, Alloc36700Fn,
+          Original_CGameData_AllocTable36700Record, CGameData_AllocTable36700Record);
+S3RE_HOOK(0x004e8ad0, CGameData_QueueEvent, QueueEventFn, Original_CGameData_QueueEvent,
+          CGameData_QueueEvent);
+S3RE_HOOK(0x004e8ba0, CGameData_QueuePendingEvent, QueuePendingEventFn, Original_CGameData_QueuePendingEvent,
+          CGameData_QueuePendingEvent);
+S3RE_HOOK(0x004e6c40, CGameData_QueueMarkedTile, QueueTileFn, Original_CGameData_QueueMarkedTile,
+          CGameData_QueueMarkedTile);
+S3RE_HOOK(0x0051ce50, CGameData_QueueMarkedTileTerrain5To7, PositionFn,
+          Original_CGameData_QueueMarkedTileTerrain5To7, CGameData_QueueMarkedTileTerrain5To7);
+S3RE_HOOK(0x0051d3d0, CGameData_QueueMarkedTileNoOwner, PositionFn,
+          Original_CGameData_QueueMarkedTileNoOwner, CGameData_QueueMarkedTileNoOwner);
+S3RE_HOOK(0x0051c560, CGameData_ReplaceTileWord16AndQueue, ReplaceTileFn,
+          Original_CGameData_ReplaceTileWord16AndQueue, CGameData_ReplaceTileWord16AndQueue);
+S3RE_HOOK(0x0051c820, CGameData_ReplaceTileByte10AndQueue, ReplaceTileFn,
+          Original_CGameData_ReplaceTileByte10AndQueue, CGameData_ReplaceTileByte10AndQueue);
+S3RE_HOOK(0x004fee00, CGameData_CountDownTimers, NoArgFn, Original_CGameData_CountDownTimers,
+          CGameData_CountDownTimers);
+S3RE_HOOK(0x00510770, CGameData_AddPileClaim, PositionFn,
+          Original_CGameData_AddPileClaim, CGameData_AddPileClaim);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -431,9 +431,9 @@ S3RE_HOOK(0x00510770, GameWorld_AddPileClaim, PositionFn,
 namespace {
 
 // Up to the end of the pile claims (the last field these functions use).
-constexpr std::size_t kTestWorld = offsetof(GameWorld, pile_claims) + sizeof(GameWorld::pile_claims);
+constexpr std::size_t kTestWorld = offsetof(CGameData, pile_claims) + sizeof(CGameData::pile_claims);
 
-std::uint32_t Relative(std::uint32_t value, GameWorld* world) {
+std::uint32_t Relative(std::uint32_t value, CGameData* world) {
     return value - Address(world);
 }
 
@@ -467,11 +467,11 @@ void FillTable(test::Context& ctx, test::WorldPair& worlds, std::uint32_t limit,
     for (std::uint32_t record = 1; record <= limit; ++record) {
         const bool isFree = record == freeA || record == freeB;
         const std::uint32_t value = isFree ? freeValue : (usedValue == 0 ? 1 + ctx.rng().Below(0xfe) : usedValue);
-        worlds.Both([&](GameWorld* w) { setFirst(w, record, value); });
+        worlds.Both([&](CGameData* w) { setFirst(w, record, value); });
     }
     if (ctx.rng().Chance(1, 2)) {
         const std::uint32_t mark = ctx.rng().Below(limit + 2);
-        worlds.Both([&](GameWorld* w) { highWater(w) = mark; });
+        worlds.Both([&](CGameData* w) { highWater(w) = mark; });
     }
 }
 
@@ -479,7 +479,7 @@ void SetUpRings(test::Context& ctx, test::WorldPair& worlds) {
     const std::uint32_t read = ctx.rng().Below(kRingEntries);
     const std::uint32_t write = ctx.rng().Chance(1, 8) ? read : ctx.rng().Below(kRingEntries);
     const std::uint32_t eventWrite = ctx.rng().Chance(1, 8) ? kRingEntries - 1 : ctx.rng().Below(kRingEntries);
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         w->pending_event_index.read = read;
         w->pending_event_index.write = write;
         w->event_index.write = eventWrite;
@@ -488,7 +488,7 @@ void SetUpRings(test::Context& ctx, test::WorldPair& worlds) {
     for (int k = 0; k < 4; ++k) {
         const std::uint32_t entry = ctx.rng().Below(kRingEntries);
         const auto a = static_cast<std::int32_t>(ctx.rng().Below(4));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->pending_events[entry].type = kDedupedType;
             w->pending_events[entry].a = a;
         });
@@ -496,15 +496,15 @@ void SetUpRings(test::Context& ctx, test::WorldPair& worlds) {
 }
 
 // Wrong: skips the duplicate check.
-std::uint32_t __fastcall WrongQueueEvent(GameWorld* world, void*, std::uint32_t type,
+std::uint32_t __fastcall WrongQueueEvent(CGameData* world, void*, std::uint32_t type,
                                          std::uint32_t a, std::uint32_t b, std::uint32_t c) {
     if (type == kDedupedType) {
         type = 7;
-        const std::uint32_t result = GameWorld_QueueEvent(world, nullptr, type, a, b, c);
+        const std::uint32_t result = CGameData_QueueEvent(world, nullptr, type, a, b, c);
         world->events[(world->event_index.write + kRingEntries - 1) % kRingEntries].type = kDedupedType;
         return result;
     }
-    return GameWorld_QueueEvent(world, nullptr, type, a, b, c);
+    return CGameData_QueueEvent(world, nullptr, type, a, b, c);
 }
 
 void CompareQueueEvent(test::Context& ctx, QueueEventFn original, QueueEventFn candidate, int cases) {
@@ -521,64 +521,64 @@ void CompareQueueEvent(test::Context& ctx, QueueEventFn original, QueueEventFn c
 
 }  // namespace
 
-S3RE_TEST(GameWorld_AllocBuildingExtra_MatchesOriginal) {
+S3RE_TEST(CGameData_AllocBuildingExtra_MatchesOriginal) {
     Compare(ctx, 200, true, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         FillTable(
             ctx, worlds, kBuildingExtraLimit, 0, 0xff,
-            [](GameWorld* w, std::uint32_t record, std::uint32_t value) {
+            [](CGameData* w, std::uint32_t record, std::uint32_t value) {
                 w->trades[record].kind = static_cast<std::uint8_t>(value);
             },
-            [](GameWorld* w) -> std::uint32_t& { return w->trade_high_water; });
+            [](CGameData* w) -> std::uint32_t& { return w->trade_high_water; });
         const std::uint32_t value = ctx.rng().Next32();
-        expected = Original_GameWorld_AllocBuildingExtra(worlds.original(), nullptr, value);
-        actual = GameWorld_AllocBuildingExtra(worlds.ours(), nullptr, value);
+        expected = Original_CGameData_AllocBuildingExtra(worlds.original(), nullptr, value);
+        actual = CGameData_AllocBuildingExtra(worlds.ours(), nullptr, value);
     });
 }
 
-S3RE_TEST(GameWorld_AllocTable36700Record_MatchesOriginal) {
+S3RE_TEST(CGameData_AllocTable36700Record_MatchesOriginal) {
     Compare(ctx, 100, true, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         FillTable(
             ctx, worlds, kTable36700Limit, 0, 0,
-            [](GameWorld* w, std::uint32_t record, std::uint32_t value) {
+            [](CGameData* w, std::uint32_t record, std::uint32_t value) {
                 w->effects[record].type = static_cast<std::uint16_t>(value);
             },
-            [](GameWorld* w) -> std::uint32_t& { return w->effects_high_water; });
+            [](CGameData* w) -> std::uint32_t& { return w->effects_high_water; });
         std::uint32_t v[10];
         for (auto& value : v) {
             value = ctx.rng().Next32();
         }
-        expected = Relative(Original_GameWorld_AllocTable36700Record(worlds.original(), nullptr, v[0], v[1], v[2],
+        expected = Relative(Original_CGameData_AllocTable36700Record(worlds.original(), nullptr, v[0], v[1], v[2],
                                                                      v[3], v[4], v[5], v[6], v[7], v[8], v[9]),
                             worlds.original());
-        actual = Relative(GameWorld_AllocTable36700Record(worlds.ours(), nullptr, v[0], v[1], v[2], v[3], v[4],
+        actual = Relative(CGameData_AllocTable36700Record(worlds.ours(), nullptr, v[0], v[1], v[2], v[3], v[4],
                                                           v[5], v[6], v[7], v[8], v[9]),
                           worlds.ours());
     });
 }
 
-S3RE_TEST(GameWorld_QueueEvent_MatchesOriginal) {
-    CompareQueueEvent(ctx, Original_GameWorld_QueueEvent, &GameWorld_QueueEvent, 2000);
+S3RE_TEST(CGameData_QueueEvent_MatchesOriginal) {
+    CompareQueueEvent(ctx, Original_CGameData_QueueEvent, &CGameData_QueueEvent, 2000);
 }
-S3RE_TEST(GameWorld_QueueEvent_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_QueueEvent_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareQueueEvent(probe, Original_GameWorld_QueueEvent, &WrongQueueEvent, 500);
+    CompareQueueEvent(probe, Original_CGameData_QueueEvent, &WrongQueueEvent, 500);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
 namespace {
 
 // Wrong: checks for duplicates of type 6 instead of 4.
-std::uint32_t __fastcall WrongQueuePendingEvent(GameWorld* world, void* edx, std::uint32_t type, std::uint32_t a,
+std::uint32_t __fastcall WrongQueuePendingEvent(CGameData* world, void* edx, std::uint32_t type, std::uint32_t a,
                                                 std::uint32_t b) {
     if (type == kDedupedPendingType || type == kDedupedType) {
         const std::uint32_t write = world->pending_event_index.write;
-        const std::uint32_t result = GameWorld_QueuePendingEvent(world, edx, type ^ 4 ^ 6, a, b);
+        const std::uint32_t result = CGameData_QueuePendingEvent(world, edx, type ^ 4 ^ 6, a, b);
         if (world->pending_event_index.write != write) {
             world->pending_events[write].type = static_cast<std::int32_t>(type);
         }
         return result;
     }
-    return GameWorld_QueuePendingEvent(world, edx, type, a, b);
+    return CGameData_QueuePendingEvent(world, edx, type, a, b);
 }
 
 void CompareQueuePendingEvent(test::Context& ctx, QueuePendingEventFn candidate, int cases) {
@@ -587,66 +587,66 @@ void CompareQueuePendingEvent(test::Context& ctx, QueuePendingEventFn candidate,
         for (int k = 0; k < 4; ++k) {
             const std::uint32_t entry = ctx.rng().Below(kRingEntries);
             const auto a = static_cast<std::int32_t>(ctx.rng().Below(4));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->pending_events[entry].type = kDedupedPendingType;
                 w->pending_events[entry].a = a;
             });
         }
         if (ctx.rng().Chance(1, 8)) {
-            worlds.Both([&](GameWorld* w) { w->pending_event_index.write = kRingEntries - 1; });
+            worlds.Both([&](CGameData* w) { w->pending_event_index.write = kRingEntries - 1; });
         }
         const std::uint32_t type = ctx.rng().Chance(1, 2) ? kDedupedPendingType
                                    : ctx.rng().Chance(1, 3) ? kDedupedType
                                                             : ctx.rng().Below(10);
         const std::uint32_t a = ctx.rng().Below(4);
         const std::uint32_t b = ctx.rng().Next32();
-        expected = Original_GameWorld_QueuePendingEvent(worlds.original(), nullptr, type, a, b);
+        expected = Original_CGameData_QueuePendingEvent(worlds.original(), nullptr, type, a, b);
         actual = candidate(worlds.ours(), nullptr, type, a, b);
     });
 }
 
 void SetTileRingWrite(test::Context& ctx, test::WorldPair& worlds) {
     const std::uint32_t write = ctx.rng().Chance(1, 8) ? kTileRingEntries - 1 : ctx.rng().Below(kTileRingEntries);
-    worlds.Both([&](GameWorld* w) { w->tile_ring_index.write = write; });
+    worlds.Both([&](CGameData* w) { w->tile_ring_index.write = write; });
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_QueuePendingEvent_MatchesOriginal) {
-    CompareQueuePendingEvent(ctx, &GameWorld_QueuePendingEvent, 2000);
+S3RE_TEST(CGameData_QueuePendingEvent_MatchesOriginal) {
+    CompareQueuePendingEvent(ctx, &CGameData_QueuePendingEvent, 2000);
 }
-S3RE_TEST(GameWorld_QueuePendingEvent_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_QueuePendingEvent_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareQueuePendingEvent(probe, &WrongQueuePendingEvent, 500);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
-S3RE_TEST(GameWorld_QueueMarkedTile_MatchesOriginal) {
+S3RE_TEST(CGameData_QueueMarkedTile_MatchesOriginal) {
     Compare(ctx, 2000, false, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         const std::uint32_t x = ctx.rng().Below(384);
         const std::uint32_t y = ctx.rng().Below(384);
         const std::uint32_t player = ctx.rng().Chance(1, 16) ? ctx.rng().Next32() : ctx.rng().Below(4);
         const auto owner = static_cast<std::uint8_t>(ctx.rng().Below(4));
-        worlds.Both([&](GameWorld* w) { w->tiles[x][y].owner = owner; });
+        worlds.Both([&](CGameData* w) { w->tiles[x][y].owner = owner; });
         SetTileRingWrite(ctx, worlds);
-        expected = Original_GameWorld_QueueMarkedTile(worlds.original(), nullptr, x, y, player);
-        actual = GameWorld_QueueMarkedTile(worlds.ours(), nullptr, x, y, player);
+        expected = Original_CGameData_QueueMarkedTile(worlds.original(), nullptr, x, y, player);
+        actual = CGameData_QueueMarkedTile(worlds.ours(), nullptr, x, y, player);
     });
 }
 
 namespace {
 
 // Wrong: accepts terrain 4 too.
-std::uint32_t __fastcall WrongQueueMarkedTileTerrain5To7(GameWorld* world, void* edx,
+std::uint32_t __fastcall WrongQueueMarkedTileTerrain5To7(CGameData* world, void* edx,
                                                          std::uint32_t x, std::uint32_t y) {
     std::uint8_t& terrain = TileAt(world, x, y).terrain;
     if (terrain == 4) {
         terrain = 5;
-        GameWorld_QueueMarkedTileTerrain5To7(world, edx, x, y);
+        CGameData_QueueMarkedTileTerrain5To7(world, edx, x, y);
         terrain = 4;
         return 0;
     }
-    return GameWorld_QueueMarkedTileTerrain5To7(world, edx, x, y);
+    return CGameData_QueueMarkedTileTerrain5To7(world, edx, x, y);
 }
 
 template <typename Fn>
@@ -656,7 +656,7 @@ void CompareQueueTile(test::Context& ctx, Fn original, Fn candidate, int cases) 
         const std::uint32_t y = ctx.rng().Below(384);
         const auto terrain =
             static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : 3 + ctx.rng().Below(6));
-        worlds.Both([&](GameWorld* w) { w->tiles[x][y].terrain = terrain; });
+        worlds.Both([&](CGameData* w) { w->tiles[x][y].terrain = terrain; });
         SetTileRingWrite(ctx, worlds);
         expected = original(worlds.original(), nullptr, x, y);
         actual = candidate(worlds.ours(), nullptr, x, y);
@@ -665,29 +665,29 @@ void CompareQueueTile(test::Context& ctx, Fn original, Fn candidate, int cases) 
 
 }  // namespace
 
-S3RE_TEST(GameWorld_QueueMarkedTileTerrain5To7_MatchesOriginal) {
-    CompareQueueTile(ctx, Original_GameWorld_QueueMarkedTileTerrain5To7,
-                     &GameWorld_QueueMarkedTileTerrain5To7, 2000);
+S3RE_TEST(CGameData_QueueMarkedTileTerrain5To7_MatchesOriginal) {
+    CompareQueueTile(ctx, Original_CGameData_QueueMarkedTileTerrain5To7,
+                     &CGameData_QueueMarkedTileTerrain5To7, 2000);
 }
-S3RE_TEST(GameWorld_QueueMarkedTileTerrain5To7_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_QueueMarkedTileTerrain5To7_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareQueueTile(probe, Original_GameWorld_QueueMarkedTileTerrain5To7,
+    CompareQueueTile(probe, Original_CGameData_QueueMarkedTileTerrain5To7,
                      &WrongQueueMarkedTileTerrain5To7, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_QueueMarkedTileNoOwner_MatchesOriginal) {
-    CompareQueueTile(ctx, Original_GameWorld_QueueMarkedTileNoOwner,
-                     &GameWorld_QueueMarkedTileNoOwner, 2000);
+S3RE_TEST(CGameData_QueueMarkedTileNoOwner_MatchesOriginal) {
+    CompareQueueTile(ctx, Original_CGameData_QueueMarkedTileNoOwner,
+                     &CGameData_QueueMarkedTileNoOwner, 2000);
 }
 
 namespace {
 
 // Wrong: compares only the low byte of `expected` with a small word.
-std::uint32_t __fastcall WrongReplaceTileWord16AndQueue(GameWorld* world, void* edx, std::uint32_t x,
+std::uint32_t __fastcall WrongReplaceTileWord16AndQueue(CGameData* world, void* edx, std::uint32_t x,
                                                         std::uint32_t y, std::uint32_t expected,
                                                         std::uint32_t value) {
     const std::uint16_t field = TileAt(world, x, y).wide_region;
-    return GameWorld_ReplaceTileWord16AndQueue(world, edx, x, y, field <= 0xff ? expected & 0xff : expected,
+    return CGameData_ReplaceTileWord16AndQueue(world, edx, x, y, field <= 0xff ? expected & 0xff : expected,
                                                value);
 }
 
@@ -698,7 +698,7 @@ void CompareReplaceTile(test::Context& ctx, ReplaceTileFn original, ReplaceTileF
         const std::uint32_t x = ctx.rng().Below(384);
         const std::uint32_t y = ctx.rng().Below(384);
         const std::uint32_t current = ctx.rng().Below(4);
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             if (wideRegion) {
                 w->tiles[x][y].wide_region = static_cast<std::uint16_t>(current);
             } else {
@@ -719,38 +719,38 @@ void CompareReplaceTile(test::Context& ctx, ReplaceTileFn original, ReplaceTileF
 
 }  // namespace
 
-S3RE_TEST(GameWorld_ReplaceTileWord16AndQueue_MatchesOriginal) {
-    CompareReplaceTile(ctx, Original_GameWorld_ReplaceTileWord16AndQueue,
-                       &GameWorld_ReplaceTileWord16AndQueue, true, 2000);
+S3RE_TEST(CGameData_ReplaceTileWord16AndQueue_MatchesOriginal) {
+    CompareReplaceTile(ctx, Original_CGameData_ReplaceTileWord16AndQueue,
+                       &CGameData_ReplaceTileWord16AndQueue, true, 2000);
 }
-S3RE_TEST(GameWorld_ReplaceTileWord16AndQueue_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_ReplaceTileWord16AndQueue_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareReplaceTile(probe, Original_GameWorld_ReplaceTileWord16AndQueue, &WrongReplaceTileWord16AndQueue,
+    CompareReplaceTile(probe, Original_CGameData_ReplaceTileWord16AndQueue, &WrongReplaceTileWord16AndQueue,
                        true, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_ReplaceTileByte10AndQueue_MatchesOriginal) {
-    CompareReplaceTile(ctx, Original_GameWorld_ReplaceTileByte10AndQueue,
-                       &GameWorld_ReplaceTileByte10AndQueue, false, 2000);
+S3RE_TEST(CGameData_ReplaceTileByte10AndQueue_MatchesOriginal) {
+    CompareReplaceTile(ctx, Original_CGameData_ReplaceTileByte10AndQueue,
+                       &CGameData_ReplaceTileByte10AndQueue, false, 2000);
 }
 
-S3RE_TEST(GameWorld_CountDownTimers_MatchesOriginal) {
+S3RE_TEST(CGameData_CountDownTimers_MatchesOriginal) {
     Compare(ctx, 300, false, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         // Small timer values (many expire) with a zero somewhere in most lists.
         for (std::uint32_t entry = 0; entry < kTimerLists * kTimersPerList; ++entry) {
             if (ctx.rng().Chance(1, 2)) {
                 const auto countdown = static_cast<std::int32_t>(ctx.rng().Below(4));
-                worlds.Both([&](GameWorld* w) {
+                worlds.Both([&](CGameData* w) {
                     w->notification_timers[entry / kTimersPerList][entry % kTimersPerList].countdown = countdown;
                 });
             }
         }
-        expected = Original_GameWorld_CountDownTimers(worlds.original(), nullptr);
-        actual = GameWorld_CountDownTimers(worlds.ours(), nullptr);
+        expected = Original_CGameData_CountDownTimers(worlds.original(), nullptr);
+        actual = CGameData_CountDownTimers(worlds.ours(), nullptr);
     });
 }
 
-S3RE_TEST(GameWorld_AddPileClaim_MatchesOriginal) {
+S3RE_TEST(CGameData_AddPileClaim_MatchesOriginal) {
     // The cursor is an S3.EXE global; the test sets it and restores it.
     std::uint16_t& cursor = g_pileClaimsCursor;
     const std::uint16_t saved = cursor;
@@ -762,20 +762,20 @@ S3RE_TEST(GameWorld_AddPileClaim_MatchesOriginal) {
             const bool empty = ctx.rng().Chance(1, 16);
             const auto first = empty ? std::uint16_t{0} : static_cast<std::uint16_t>(ctx.rng().Below(8));
             const auto second = empty ? std::uint16_t{0} : static_cast<std::uint16_t>(ctx.rng().Below(8));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->pile_claims[slot].pile = first;
                 w->pile_claims[slot].settler = second;
             });
         }
         const std::uint32_t emptySlot = ctx.rng().Below(kPileClaimCount);
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->pile_claims[emptySlot].pile = 0;
             w->pile_claims[emptySlot].settler = 0;
         });
         const std::uint32_t settler = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(8);
         const std::uint32_t pile = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(8);
-        expected = Original_GameWorld_AddPileClaim(worlds.original(), nullptr, settler, pile);
-        actual = GameWorld_AddPileClaim(worlds.ours(), nullptr, settler, pile);
+        expected = Original_CGameData_AddPileClaim(worlds.original(), nullptr, settler, pile);
+        actual = CGameData_AddPileClaim(worlds.ours(), nullptr, settler, pile);
     });
     cursor = saved;
 }

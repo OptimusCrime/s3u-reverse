@@ -15,13 +15,13 @@
 // Buildings: 0x3a-byte records at world+0x1499e64 (see counting.cpp);
 //   uint16 +0xa and +0xc are the building's tile (Building::door_x/door_y).
 //
-// GameWorld::AssignTileToArea (0x004e5450): (x, y, area): count of `area`
+// CGameData::AssignTileToArea (0x004e5450): (x, y, area): count of `area`
 //   += 1, then tile area word = area. EAX = area. ret 0xc.
-// GameWorld::RemoveTileFromArea (0x004e54a0): (x, y): count of the tile's
+// CGameData::RemoveTileFromArea (0x004e54a0): (x, y): count of the tile's
 //   area -= 1, then tile area word = 0. EAX = address of that count. ret 8.
-// GameWorld::SetTileAreaMarked (0x005194b0): (x, y, value): tile area word =
+// CGameData::SetTileAreaMarked (0x005194b0): (x, y, value): tile area word =
 //   value + 0x8000. EAX = (x * 0x300 + y + 0x44d9) * 3. ret 0xc.
-// GameWorld::SetAreaBuildingSlotA (0x004ddfe0) / SetAreaBuildingSlotB
+// CGameData::SetAreaBuildingSlotA (0x004ddfe0) / SetAreaBuildingSlotB
 //   (0x004de040): (building, slot): in the area record of the building's
 //   tile, slot `slot` of list A (+0x96) / B (+0xde) = building. EAX = slot.
 //   ret 8.
@@ -45,8 +45,8 @@ using layout::Area;
 // original computes its address as (x * 0x300 + y + 0x44d9) * 24 in 32 bits;
 // the index in 24-byte units is also SetTileAreaMarked's return value.
 constexpr std::uint32_t kTileAreaIndexBias =
-    (offsetof(GameWorld, tiles) + offsetof(layout::Tile, area)) / kTileBytes;
-static_assert((offsetof(GameWorld, tiles) + offsetof(layout::Tile, area)) % kTileBytes == 0);
+    (offsetof(CGameData, tiles) + offsetof(layout::Tile, area)) / kTileBytes;
+static_assert((offsetof(CGameData, tiles) + offsetof(layout::Tile, area)) % kTileBytes == 0);
 static_assert(kTileAreaIndexBias == 0x44d9);
 
 // Index of the tile area word in 24-byte units (32-bit wrap, as the original).
@@ -54,19 +54,19 @@ std::uint32_t TileAreaIndex(std::uint32_t x, std::uint32_t y) {
     return x * layout::kMapRowTiles + y + kTileAreaIndexBias;
 }
 
-std::uint16_t& TileArea(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+std::uint16_t& TileArea(CGameData* world, std::uint32_t x, std::uint32_t y) {
     // TileOffset wraps at 2^32 like the original's index arithmetic.
     return TileAtOffset(world, TileOffset(x, y)).area;
 }
 
-std::uint32_t& AreaTileCount(GameWorld* world, std::uint32_t area) {
+std::uint32_t& AreaTileCount(CGameData* world, std::uint32_t area) {
     return world->areas[area].tile_count;
 }
 
 // Area::buildings_a or Area::buildings_b.
 using AreaBuildingList = std::uint16_t (Area::*)[layout::kGoodsTypes];
 
-std::uint32_t SetAreaBuildingSlot(GameWorld* world, std::uint32_t building, std::uint32_t slot,
+std::uint32_t SetAreaBuildingSlot(CGameData* world, std::uint32_t building, std::uint32_t slot,
                                   AreaBuildingList list) {
     const layout::Building& record = world->buildings[building];
     const std::uint32_t area = TileArea(world, record.door_x, record.door_y);
@@ -78,16 +78,16 @@ std::uint32_t SetAreaBuildingSlot(GameWorld* world, std::uint32_t building, std:
 
 }  // namespace
 
-using AssignTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
+using AssignTileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x,
                                                 std::uint32_t y, std::uint32_t area);
-using RemoveTileFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
+using RemoveTileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x,
                                                 std::uint32_t y);
-using BuildingSlotFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx,
+using BuildingSlotFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx,
                                                   std::uint32_t building, std::uint32_t slot);
 
 // Purpose: Makes a tile part of an area. The map is divided into areas (probably the regions of connected
 // land that make up a player's economy) and each area counts its tiles.
-std::uint32_t __fastcall GameWorld_AssignTileToArea(GameWorld* world, void*, std::uint32_t x,
+std::uint32_t __fastcall CGameData_AssignTileToArea(CGameData* world, void*, std::uint32_t x,
                                                     std::uint32_t y, std::uint32_t area) {
     std::uint32_t& count = AreaTileCount(world, area);
     count = count + 1;
@@ -96,7 +96,7 @@ std::uint32_t __fastcall GameWorld_AssignTileToArea(GameWorld* world, void*, std
 }
 
 // Purpose: Takes a tile out of its area (the opposite of AssignTileToArea).
-std::uint32_t __fastcall GameWorld_RemoveTileFromArea(GameWorld* world, void*, std::uint32_t x,
+std::uint32_t __fastcall CGameData_RemoveTileFromArea(CGameData* world, void*, std::uint32_t x,
                                                       std::uint32_t y) {
     std::uint16_t& tileArea = TileArea(world, x, y);
     std::uint32_t& count = AreaTileCount(world, tileArea);
@@ -106,7 +106,7 @@ std::uint32_t __fastcall GameWorld_RemoveTileFromArea(GameWorld* world, void*, s
 }
 
 // Purpose: Writes a temporary marked area number into a tile, used while the game recomputes areas.
-std::uint32_t __fastcall GameWorld_SetTileAreaMarked(GameWorld* world, void*, std::uint32_t x,
+std::uint32_t __fastcall CGameData_SetTileAreaMarked(CGameData* world, void*, std::uint32_t x,
                                                      std::uint32_t y, std::uint32_t value) {
     TileArea(world, x, y) = static_cast<std::uint16_t>(value + layout::kTileAreaWater);
     return TileAreaIndex(x, y) * 3u;
@@ -114,29 +114,29 @@ std::uint32_t __fastcall GameWorld_SetTileAreaMarked(GameWorld* world, void*, st
 
 // Purpose: Registers a building in one of its area's building lists (list A). Areas keep track of their
 // buildings, probably so carriers and builders can find work nearby.
-std::uint32_t __fastcall GameWorld_SetAreaBuildingSlotA(GameWorld* world, void*,
+std::uint32_t __fastcall CGameData_SetAreaBuildingSlotA(CGameData* world, void*,
                                                         std::uint32_t building,
                                                         std::uint32_t slot) {
     return SetAreaBuildingSlot(world, building, slot, &Area::buildings_a);
 }
 
 // Purpose: Like SetAreaBuildingSlotA, for the area's second building list.
-std::uint32_t __fastcall GameWorld_SetAreaBuildingSlotB(GameWorld* world, void*,
+std::uint32_t __fastcall CGameData_SetAreaBuildingSlotB(CGameData* world, void*,
                                                         std::uint32_t building,
                                                         std::uint32_t slot) {
     return SetAreaBuildingSlot(world, building, slot, &Area::buildings_b);
 }
 
-S3RE_HOOK(0x004e5450, GameWorld_AssignTileToArea, AssignTileFn,
-          Original_GameWorld_AssignTileToArea, GameWorld_AssignTileToArea);
-S3RE_HOOK(0x004e54a0, GameWorld_RemoveTileFromArea, RemoveTileFn,
-          Original_GameWorld_RemoveTileFromArea, GameWorld_RemoveTileFromArea);
-S3RE_HOOK(0x005194b0, GameWorld_SetTileAreaMarked, AssignTileFn,
-          Original_GameWorld_SetTileAreaMarked, GameWorld_SetTileAreaMarked);
-S3RE_HOOK(0x004ddfe0, GameWorld_SetAreaBuildingSlotA, BuildingSlotFn,
-          Original_GameWorld_SetAreaBuildingSlotA, GameWorld_SetAreaBuildingSlotA);
-S3RE_HOOK(0x004de040, GameWorld_SetAreaBuildingSlotB, BuildingSlotFn,
-          Original_GameWorld_SetAreaBuildingSlotB, GameWorld_SetAreaBuildingSlotB);
+S3RE_HOOK(0x004e5450, CGameData_AssignTileToArea, AssignTileFn,
+          Original_CGameData_AssignTileToArea, CGameData_AssignTileToArea);
+S3RE_HOOK(0x004e54a0, CGameData_RemoveTileFromArea, RemoveTileFn,
+          Original_CGameData_RemoveTileFromArea, CGameData_RemoveTileFromArea);
+S3RE_HOOK(0x005194b0, CGameData_SetTileAreaMarked, AssignTileFn,
+          Original_CGameData_SetTileAreaMarked, CGameData_SetTileAreaMarked);
+S3RE_HOOK(0x004ddfe0, CGameData_SetAreaBuildingSlotA, BuildingSlotFn,
+          Original_CGameData_SetAreaBuildingSlotA, CGameData_SetAreaBuildingSlotA);
+S3RE_HOOK(0x004de040, CGameData_SetAreaBuildingSlotB, BuildingSlotFn,
+          Original_CGameData_SetAreaBuildingSlotB, CGameData_SetAreaBuildingSlotB);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -149,13 +149,13 @@ constexpr std::uint32_t kTestAreas = 0x800;  // area numbers stay inside the tes
 constexpr std::uint32_t kTestBuildings = 2000;
 // Up to the tile count of area kTestAreas (the old kAreaRecords bound).
 constexpr std::size_t kMapWorld =
-    offsetof(GameWorld, areas) + kTestAreas * sizeof(Area) + offsetof(Area, tile_count);
+    offsetof(CGameData, areas) + kTestAreas * sizeof(Area) + offsetof(Area, tile_count);
 constexpr std::size_t kBuildingWorld =
-    offsetof(GameWorld, buildings) + (kTestBuildings + 1) * sizeof(layout::Building);
+    offsetof(CGameData, buildings) + (kTestBuildings + 1) * sizeof(layout::Building);
 
 // Ours and the original return a world address in RemoveTileFromArea; make
 // it relative to the world so the two buffers compare equal.
-std::uint32_t Relative(std::uint32_t result, GameWorld* world, bool isAddress) {
+std::uint32_t Relative(std::uint32_t result, CGameData* world, bool isAddress) {
     return isAddress ? result - static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world))
                      : result;
 }
@@ -173,7 +173,7 @@ void CompareTileOp(test::Context& ctx, TileOp op, AssignTileFn originalAssign,
         // Assign indexes the area records with the full 32-bit argument, so
         // it must be a valid area number.
         const std::uint32_t value = op == TileOp::Mark ? ctx.rng().Next32() : area;
-        worlds.Both([&](GameWorld* w) { w->tiles[x][y].area = static_cast<std::uint16_t>(area); });
+        worlds.Both([&](CGameData* w) { w->tiles[x][y].area = static_cast<std::uint16_t>(area); });
         std::uint32_t expected;
         std::uint32_t actual;
         if (op == TileOp::Remove) {
@@ -185,8 +185,8 @@ void CompareTileOp(test::Context& ctx, TileOp op, AssignTileFn originalAssign,
             actual = candidateAssign(worlds.ours(), nullptr, x, y, value);
         }
         if (!S3RE_EXPECT_EQ(expected, actual) ||
-            !worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return w->tiles[x][y].area; }) ||
-            !worlds.SameField(ctx, [&](GameWorld* w) -> auto& { return w->areas[area].tile_count; }) ||
+            !worlds.SameField(ctx, [&](CGameData* w) -> auto& { return w->tiles[x][y].area; }) ||
+            !worlds.SameField(ctx, [&](CGameData* w) -> auto& { return w->areas[area].tile_count; }) ||
             (i % 128 == 127 && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u), area %u, value %#x", i, x, y, area,
                      value);
@@ -205,7 +205,7 @@ void CompareBuildingSlot(test::Context& ctx, BuildingSlotFn original, BuildingSl
         const auto x = static_cast<std::uint16_t>(ctx.rng().Below(kTestMapSize));
         const auto y = static_cast<std::uint16_t>(ctx.rng().Below(kTestMapSize));
         const auto area = static_cast<std::uint16_t>(ctx.rng().Below(kTestAreas));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->buildings[building].door_x = x;
             w->buildings[building].door_y = y;
             w->tiles[x][y].area = area;
@@ -215,7 +215,7 @@ void CompareBuildingSlot(test::Context& ctx, BuildingSlotFn original, BuildingSl
         // From the area's tile count, the whole record plus the 64 slots'
         // reach (slot < 64 runs past the record).
         const std::size_t window =
-            worlds.OffsetOf([&](GameWorld* w) -> auto& { return w->areas[area].tile_count; });
+            worlds.OffsetOf([&](CGameData* w) -> auto& { return w->areas[area].tile_count; });
         if (!S3RE_EXPECT_EQ(expected, actual) ||
             !worlds.Same(ctx, window, sizeof(Area) + 0x40) ||
             (i % 128 == 127 && !worlds.Checkpoint(ctx))) {
@@ -228,36 +228,36 @@ void CompareBuildingSlot(test::Context& ctx, BuildingSlotFn original, BuildingSl
 }
 
 // Wrong: stores the slot into list A instead of list B.
-std::uint32_t __fastcall WrongSetAreaBuildingSlotB(GameWorld* world, void*, std::uint32_t building,
+std::uint32_t __fastcall WrongSetAreaBuildingSlotB(CGameData* world, void*, std::uint32_t building,
                                                    std::uint32_t slot) {
     return SetAreaBuildingSlot(world, building, slot, &Area::buildings_a);
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_AssignTileToArea_MatchesOriginal) {
-    CompareTileOp(ctx, TileOp::Assign, Original_GameWorld_AssignTileToArea,
-                  &GameWorld_AssignTileToArea, nullptr, nullptr, 20000);
+S3RE_TEST(CGameData_AssignTileToArea_MatchesOriginal) {
+    CompareTileOp(ctx, TileOp::Assign, Original_CGameData_AssignTileToArea,
+                  &CGameData_AssignTileToArea, nullptr, nullptr, 20000);
 }
-S3RE_TEST(GameWorld_RemoveTileFromArea_MatchesOriginal) {
-    CompareTileOp(ctx, TileOp::Remove, nullptr, nullptr, Original_GameWorld_RemoveTileFromArea,
-                  &GameWorld_RemoveTileFromArea, 20000);
+S3RE_TEST(CGameData_RemoveTileFromArea_MatchesOriginal) {
+    CompareTileOp(ctx, TileOp::Remove, nullptr, nullptr, Original_CGameData_RemoveTileFromArea,
+                  &CGameData_RemoveTileFromArea, 20000);
 }
-S3RE_TEST(GameWorld_SetTileAreaMarked_MatchesOriginal) {
-    CompareTileOp(ctx, TileOp::Mark, Original_GameWorld_SetTileAreaMarked,
-                  &GameWorld_SetTileAreaMarked, nullptr, nullptr, 20000);
+S3RE_TEST(CGameData_SetTileAreaMarked_MatchesOriginal) {
+    CompareTileOp(ctx, TileOp::Mark, Original_CGameData_SetTileAreaMarked,
+                  &CGameData_SetTileAreaMarked, nullptr, nullptr, 20000);
 }
-S3RE_TEST(GameWorld_SetAreaBuildingSlotA_MatchesOriginal) {
-    CompareBuildingSlot(ctx, Original_GameWorld_SetAreaBuildingSlotA,
-                        &GameWorld_SetAreaBuildingSlotA, 20000);
+S3RE_TEST(CGameData_SetAreaBuildingSlotA_MatchesOriginal) {
+    CompareBuildingSlot(ctx, Original_CGameData_SetAreaBuildingSlotA,
+                        &CGameData_SetAreaBuildingSlotA, 20000);
 }
-S3RE_TEST(GameWorld_SetAreaBuildingSlotB_MatchesOriginal) {
-    CompareBuildingSlot(ctx, Original_GameWorld_SetAreaBuildingSlotB,
-                        &GameWorld_SetAreaBuildingSlotB, 20000);
+S3RE_TEST(CGameData_SetAreaBuildingSlotB_MatchesOriginal) {
+    CompareBuildingSlot(ctx, Original_CGameData_SetAreaBuildingSlotB,
+                        &CGameData_SetAreaBuildingSlotB, 20000);
 }
-S3RE_TEST(GameWorld_SetAreaBuildingSlotB_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_SetAreaBuildingSlotB_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareBuildingSlot(probe, Original_GameWorld_SetAreaBuildingSlotB, &WrongSetAreaBuildingSlotB,
+    CompareBuildingSlot(probe, Original_CGameData_SetAreaBuildingSlotB, &WrongSetAreaBuildingSlotB,
                         2000);
     S3RE_EXPECT(probe.failures() > 0);
 }

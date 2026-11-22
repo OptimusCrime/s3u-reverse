@@ -1,4 +1,4 @@
-// GameWorld::UpdateEconomy (0x004e05e0; was "UpdatePhase2"): the second
+// CGameData::UpdateEconomy (0x004e05e0; was "UpdatePhase2"): the second
 // world update of every logic step (CLogicThread::Step, between
 // UpdateEnvironment and UpdateSettlers). () thiscall, ret; EAX = the phase
 // counter + 1 before it wraps (the caller ignores it; reproduced anyway).
@@ -117,23 +117,23 @@ constexpr std::uint32_t kLastBuildingPhase = 16;
 constexpr std::uint32_t kDistributionPhase = 17;
 
 template <typename... A>
-std::uint32_t Call(std::uintptr_t address, GameWorld* world, A... args) {
-    using Fn = std::uint32_t(__fastcall*)(GameWorld*, void*, A...);
+std::uint32_t Call(std::uintptr_t address, CGameData* world, A... args) {
+    using Fn = std::uint32_t(__fastcall*)(CGameData*, void*, A...);
     return reinterpret_cast<Fn>(address)(world, nullptr, args...);
 }
 
 std::uint32_t U(std::uint32_t v) { return v; }
 
-Building& BuildingAt(GameWorld* w, std::uint32_t n) { return *(w->buildings + n); }
-Settler& SettlerAt(GameWorld* w, std::uint32_t n) { return *(w->settlers + n); }
-Pile& PileAt(GameWorld* w, std::uint32_t n) { return *(w->piles + n); }
-Player& PlayerAt(GameWorld* w, std::uint32_t n) { return *(w->players + n); }
-Area& AreaAt(GameWorld* w, std::uint32_t n) { return *(w->areas + n); }
+Building& BuildingAt(CGameData* w, std::uint32_t n) { return *(w->buildings + n); }
+Settler& SettlerAt(CGameData* w, std::uint32_t n) { return *(w->settlers + n); }
+Pile& PileAt(CGameData* w, std::uint32_t n) { return *(w->piles + n); }
+Player& PlayerAt(CGameData* w, std::uint32_t n) { return *(w->players + n); }
+Area& AreaAt(CGameData* w, std::uint32_t n) { return *(w->areas + n); }
 std::int32_t SettlerClass(std::uint32_t type) { return g_settlerTypeClass[type]; }
-Tile& TileAt(GameWorld* w, std::uint32_t x, std::uint32_t y) { return TileAtOffset(w, TileOffset(x, y)); }
-Tile& DoorTile(GameWorld* w, const Building& b) { return TileAt(w, b.door_x, b.door_y); }
+Tile& TileAt(CGameData* w, std::uint32_t x, std::uint32_t y) { return TileAtOffset(w, TileOffset(x, y)); }
+Tile& DoorTile(CGameData* w, const Building& b) { return TileAt(w, b.door_x, b.door_y); }
 // The pile on the tile `delta` bytes from the door tile (tile word +0x2).
-std::uint32_t PileNextToDoor(GameWorld* w, const Building& b, std::uint32_t delta) {
+std::uint32_t PileNextToDoor(CGameData* w, const Building& b, std::uint32_t delta) {
     return TileAtOffset(w, TileOffset(b.door_x, b.door_y) + delta).object_number;
 }
 constexpr std::uint32_t kStepX = kTileRowBytes;
@@ -152,24 +152,24 @@ std::uint8_t& SiteBuilders(Building& b) { return b.site.builders; }
 
 // --- callee wrappers ------------------------------------------------------
 
-std::uint32_t RequestSettler(GameWorld* w, std::uint32_t n, std::uint32_t type) {
+std::uint32_t RequestSettler(CGameData* w, std::uint32_t n, std::uint32_t type) {
     return Call(kRequestSettlerForBuilding, w, n, type);
 }
-std::uint32_t Priority(GameWorld* w, std::uint32_t amount, std::uint32_t coming) {
+std::uint32_t Priority(CGameData* w, std::uint32_t amount, std::uint32_t coming) {
     return Call(kGoodsRequestPriority, w, amount, coming);
 }
-void AddRequest(GameWorld* w, std::uint32_t n, std::uint32_t good, std::uint32_t amount, std::uint32_t condition) {
+void AddRequest(CGameData* w, std::uint32_t n, std::uint32_t good, std::uint32_t amount, std::uint32_t condition) {
     Call(kAddBuildingGoodsRequest, w, n, good, amount, condition);
 }
-void Dispatch(GameWorld* w, std::uint32_t pile) { Call(kDispatchPileCarrier, w, pile); }
-std::uint32_t Distance(GameWorld* w, std::uint32_t x0, std::uint32_t y0, std::uint32_t x1, std::uint32_t y1) {
+void Dispatch(CGameData* w, std::uint32_t pile) { Call(kDispatchPileCarrier, w, pile); }
+std::uint32_t Distance(CGameData* w, std::uint32_t x0, std::uint32_t y0, std::uint32_t x1, std::uint32_t y1) {
     return Call(kTileDistance, w, x0, y0, x1, y1);
 }
 
 // --- shared building parts -------------------------------------------------
 
 // No worker yet: ask for one of `type`; he becomes the building's worker.
-void RequestWorker(GameWorld* w, std::uint32_t n, std::uint32_t type) {
+void RequestWorker(CGameData* w, std::uint32_t n, std::uint32_t type) {
     const std::uint32_t settler = RequestSettler(w, n, type);
     if (settler != 0) {
         BuildingAt(w, n).worker = static_cast<std::uint16_t>(settler);
@@ -178,7 +178,7 @@ void RequestWorker(GameWorld* w, std::uint32_t n, std::uint32_t type) {
 
 // Input slot `slot` wants goods `good` while amount + coming != `full` and
 // the building's input flag is set; the priority counts the amount + `add`.
-void RequestInput(GameWorld* w, std::uint32_t n, std::uint32_t slot, std::uint32_t good, std::uint32_t full,
+void RequestInput(CGameData* w, std::uint32_t n, std::uint32_t slot, std::uint32_t good, std::uint32_t full,
                   std::uint32_t add, std::uint32_t condition) {
     Building& b = BuildingAt(w, n);
     const Pile& p = PileAt(w, b.piles[slot]);
@@ -191,7 +191,7 @@ void RequestInput(GameWorld* w, std::uint32_t n, std::uint32_t slot, std::uint32
 
 // Input slot `slot` (water buildings, shipyard) wants goods while amount +
 // coming is below the building's wanted amount `limit` (and not 8).
-void RequestInputBelow(GameWorld* w, std::uint32_t n, std::uint32_t slot, std::uint32_t good, std::uint32_t limit,
+void RequestInputBelow(CGameData* w, std::uint32_t n, std::uint32_t slot, std::uint32_t good, std::uint32_t limit,
                        std::uint32_t condition) {
     const Pile& p = PileAt(w, BuildingAt(w, n).piles[slot]);
     const std::uint32_t amount = p.amount;
@@ -203,7 +203,7 @@ void RequestInputBelow(GameWorld* w, std::uint32_t n, std::uint32_t slot, std::u
 }
 
 // The output pile (+0xe) gets a carrier once five or more units wait in it.
-void CollectOutput(GameWorld* w, std::uint32_t n) {
+void CollectOutput(CGameData* w, std::uint32_t n) {
     const std::uint32_t pile = BuildingAt(w, n).pile_ring;
     const Pile& p = PileAt(w, pile);
     if (static_cast<std::int32_t>(U(p.amount) - U(p.leaving)) >= 5) {
@@ -217,7 +217,7 @@ struct InputSpec {
 
 // The common production building: inputs while it has a worker, else a
 // worker request; then the output pile.
-void Production(GameWorld* w, std::uint32_t n, std::uint32_t workerType, std::initializer_list<InputSpec> inputs) {
+void Production(CGameData* w, std::uint32_t n, std::uint32_t workerType, std::initializer_list<InputSpec> inputs) {
     if (BuildingAt(w, n).worker != 0) {
         std::uint32_t slot = 0;
         for (const InputSpec& input : inputs) {
@@ -233,7 +233,7 @@ void Production(GameWorld* w, std::uint32_t n, std::uint32_t workerType, std::in
 
 // The site's slot bits `bits` (+0x16 diggers / +0x17 builders): for every
 // slot below `count` whose bit is clear, a settler of `type` is requested.
-void RequestSiteWorkers(GameWorld* w, std::uint32_t n, std::uint8_t Building::*bits, std::uint8_t& (*count)(Building&),
+void RequestSiteWorkers(CGameData* w, std::uint32_t n, std::uint8_t Building::*bits, std::uint8_t& (*count)(Building&),
                         std::uint32_t type) {
     Building& b = BuildingAt(w, n);
     for (std::uint32_t k = 0; k < 8; ++k) {
@@ -273,7 +273,7 @@ constexpr std::int32_t kEndClearList = static_cast<std::int32_t>(0x80000003u);
 // levelled and for builders once it has material, finishes the levelling
 // when no ship blocks the footprint (blocking the tiles and clearing their
 // objects), and requests the two building materials.
-void UpdateConstructionSite(GameWorld* w, std::uint32_t n) {
+void UpdateConstructionSite(CGameData* w, std::uint32_t n) {
     Building& b = BuildingAt(w, n);
     {
         const std::uint8_t buildup = b.buildup;
@@ -341,7 +341,7 @@ void UpdateConstructionSite(GameWorld* w, std::uint32_t n) {
 // soldier of a class leave when no enemy soldier is near, asks for soldiers
 // of the three classes it lacks (nearest first, within 20, 40, 80 tiles) and
 // warns its player when it is empty.
-void UpdateMilitaryBuilding(GameWorld* w, std::uint32_t n) {
+void UpdateMilitaryBuilding(CGameData* w, std::uint32_t n) {
     Building& b = BuildingAt(w, n);
     for (std::uint32_t k = 0; k < 3; ++k) {
         static constexpr std::uint8_t kTypes[] = {0xf, 0x10, 0x12};
@@ -439,7 +439,7 @@ void UpdateMilitaryBuilding(GameWorld* w, std::uint32_t n) {
 // Purpose: Probably the stonecutter-like building 0xc / 0xd, whose worker
 // drops goods on the tiles around the door: requests its two inputs and
 // sends carriers to those piles once five units wait there.
-void UpdateTileDropBuilding(GameWorld* w, std::uint32_t n, std::uint32_t condition0, std::uint32_t condition1,
+void UpdateTileDropBuilding(CGameData* w, std::uint32_t n, std::uint32_t condition0, std::uint32_t condition1,
                             bool sevenTiles) {
     Building& b = BuildingAt(w, n);
     if (b.worker == 0) {
@@ -490,7 +490,7 @@ void UpdateTileDropBuilding(GameWorld* w, std::uint32_t n, std::uint32_t conditi
 // into recruits (one per input unit, limited by the area's recruit
 // counters) while the area keeps enough carriers, and requests its three
 // inputs (goods 0x12..0x14).
-void UpdateBuilding13(GameWorld* w, std::uint32_t n) {
+void UpdateBuilding13(CGameData* w, std::uint32_t n) {
     Building& b = BuildingAt(w, n);
     const std::uint32_t areaNumber = DoorTile(w, b).area;
     Area& a = AreaAt(w, areaNumber);
@@ -527,7 +527,7 @@ void UpdateBuilding13(GameWorld* w, std::uint32_t n) {
 // Purpose: A residence (0x1a/0x1b/0x1c): sends out one new settler (a
 // carrier, job 100) per counted birth (+0x19) while the player's population
 // is within its limit and the door is free.
-void UpdateResidence(GameWorld* w, std::uint32_t n, std::uint32_t animation) {
+void UpdateResidence(CGameData* w, std::uint32_t n, std::uint32_t animation) {
     Building& b = BuildingAt(w, n);
     if (b.residence.births == 0 || DoorTile(w, b).settler != 0) {
         return;
@@ -563,7 +563,7 @@ void SetWanted(Building& b, const std::uint8_t (&want)[3]) {
     b.water.wanted[2] = want[2];
 }
 
-void UpdateWaterBuilding(GameWorld* w, std::uint32_t n, const WaterSpec& spec) {
+void UpdateWaterBuilding(CGameData* w, std::uint32_t n, const WaterSpec& spec) {
     Building& b = BuildingAt(w, n);
     if (b.worker == 0) {
         RequestWorker(w, n, spec.workerType);
@@ -591,7 +591,7 @@ void UpdateWaterBuilding(GameWorld* w, std::uint32_t n, const WaterSpec& spec) {
 // Purpose: The shipyard (0x20): like a water building, but the wanted
 // amounts of its two inputs come from tables by the ship being built
 // (states 0x30..0x33 and 0x40..0x43).
-void UpdateShipyard(GameWorld* w, std::uint32_t n) {
+void UpdateShipyard(CGameData* w, std::uint32_t n) {
     Building& b = BuildingAt(w, n);
     if (b.worker == 0) {
         RequestWorker(w, n, 0x13);
@@ -625,7 +625,7 @@ void UpdateShipyard(GameWorld* w, std::uint32_t n) {
 // (good 0xff) claims the next goods type at the cursor +0x1b (wrapping after
 // 0x23) that nothing claims yet. `wanted` has 0x100 entries: the original's
 // table has 0x24 and reads stale stack beyond (see the header).
-void TradeWantedSlots(GameWorld* w, Building& b, std::uint32_t (&wanted)[0x100]) {
+void TradeWantedSlots(CGameData* w, Building& b, std::uint32_t (&wanted)[0x100]) {
     std::uint32_t freePiles = 0;
     std::uint32_t pile = b.pile_ring;
     for (std::uint32_t k = 0; k < 6; ++k) {
@@ -655,7 +655,7 @@ void TradeWantedSlots(GameWorld* w, Building& b, std::uint32_t (&wanted)[0x100])
 // trade record's kind), then 0x21 calls a settler to the door every 7th
 // visit when a ring pile holds goods, 0x22 sends settlers to fetch the goods
 // of its ring piles.
-void UpdateTradeBuilding(GameWorld* w, std::uint32_t n, bool port) {
+void UpdateTradeBuilding(CGameData* w, std::uint32_t n, bool port) {
     Building& b = BuildingAt(w, n);
     const layout::Trade& trade = *(w->trades + b.trade);
     if (trade.route_x[3] == 0xffff || trade.mode == 0 || (!port && b.dock_direction == 0xffff)) {
@@ -706,7 +706,7 @@ void UpdateTradeBuilding(GameWorld* w, std::uint32_t n, bool port) {
 // 250 visits one point (+0x19); with two points and a free door it creates
 // a settler of type 0x24 (job 100), which raises the player's population
 // limit base.
-void UpdateTemple(GameWorld* w, std::uint32_t n) {
+void UpdateTemple(CGameData* w, std::uint32_t n) {
     Building& b = BuildingAt(w, n);
     if (b.temple.countdown == 0) {
         b.temple.countdown = 0xfa;
@@ -730,7 +730,7 @@ void UpdateTemple(GameWorld* w, std::uint32_t n) {
 // one goods type; every 30 visits one unit of its input pile is consumed
 // (taken from the pile and the player's goods count) and turns into mana
 // (twice for 0x2e).
-void UpdateOffering(GameWorld* w, std::uint32_t n, std::uint32_t good, bool twice) {
+void UpdateOffering(CGameData* w, std::uint32_t n, std::uint32_t good, bool twice) {
     Building& b = BuildingAt(w, n);
     RequestInput(w, n, 0, good, 8, 0, 0);
     if (b.temple.countdown == 0) {
@@ -760,7 +760,7 @@ const WaterSpec kWater32 = {0xb, 0x13, {8, 4, 6}, 0, {0, 0, 0}, {{1, 0, 0, 0x2e}
 // Purpose: The per-type economy work of a finished building (jump table
 // 0x4e495c): worker and input requests, output collection and the special
 // buildings above.
-void UpdateFinishedBuilding(GameWorld* w, std::uint32_t n) {
+void UpdateFinishedBuilding(CGameData* w, std::uint32_t n) {
     Building& b = BuildingAt(w, n);
     switch (b.art) {
         case 0x02: Production(w, n, 3, {}); break;
@@ -857,7 +857,7 @@ void UpdateFinishedBuilding(GameWorld* w, std::uint32_t n) {
 }
 
 // Purpose: Phase 0: starts a new cycle of the economy update.
-void StartEconomyCycle(GameWorld* w) {
+void StartEconomyCycle(CGameData* w) {
     Call(kCountDownTimers, w);
     Call(kRecountPlayerPopulation, w);
     for (std::uint32_t a = 1; a <= w->area_high_water; ++a) {
@@ -897,7 +897,7 @@ bool MarksPresence(std::uint32_t type) {
 
 // Purpose: Phases 1..16: marks the military presence of one sixteenth of the
 // settlers.
-void MarkMilitaryPresence(GameWorld* w, std::uint32_t phase) {
+void MarkMilitaryPresence(CGameData* w, std::uint32_t phase) {
     for (std::uint32_t n = phase; n <= w->settler_high_water; n += 16) {
         const Settler& s = SettlerAt(w, n);
         if (s.owner == kFree || !MarksPresence(s.art)) {
@@ -939,7 +939,7 @@ std::uint32_t ConsumersOf(std::uint32_t good, std::uint32_t (&types)[7]) {
 
 // Whether request-list building q is of a consumer's building type:
 // construction sites (0) or finished buildings of that type.
-bool IsConsumerBuilding(GameWorld* w, std::uint32_t q, std::uint32_t buildingType) {
+bool IsConsumerBuilding(CGameData* w, std::uint32_t q, std::uint32_t buildingType) {
     const Building& b = BuildingAt(w, q);
     if (buildingType == 0) {
         return b.buildup != 0;
@@ -948,7 +948,7 @@ bool IsConsumerBuilding(GameWorld* w, std::uint32_t q, std::uint32_t buildingTyp
 }
 
 // The same for the chosen consumer, where 0xffffffff (none chosen) takes all.
-bool FitsConsumer(GameWorld* w, std::uint32_t q, std::uint32_t requirement) {
+bool FitsConsumer(CGameData* w, std::uint32_t q, std::uint32_t requirement) {
     return requirement == 0xffffffffu || IsConsumerBuilding(w, q, requirement);
 }
 
@@ -959,7 +959,7 @@ constexpr std::uint32_t kMaxCandidates = 100;
 // +0x245) is lowest and that has a waiting building, then sends a carrier
 // with one unit from the best pile to the requesting building that profits
 // most (requested amount / distance). Goods 5 get a second delivery.
-void DistributeGoods(GameWorld* w, std::uint32_t areaNumber, std::uint32_t good) {
+void DistributeGoods(CGameData* w, std::uint32_t areaNumber, std::uint32_t good) {
     Area& area = AreaAt(w, areaNumber);
     std::uint32_t types[7];
     const std::uint32_t typeCount = ConsumersOf(good, types);
@@ -1117,7 +1117,7 @@ void DistributeGoods(GameWorld* w, std::uint32_t areaNumber, std::uint32_t good)
 
 // Purpose: Phase 17: goods distribution in every area (trade buildings,
 // then the goods by the area's priority ranks +0x1f6).
-void DistributeAreaGoods(GameWorld* w) {
+void DistributeAreaGoods(CGameData* w) {
     std::uint32_t maxRank = 0;  // see the header: stale in the original for races above 3
     for (std::uint32_t a = 1; a <= w->area_high_water; ++a) {
         Area& area = AreaAt(w, a);
@@ -1158,14 +1158,14 @@ void DistributeAreaGoods(GameWorld* w) {
 
 }  // namespace
 
-using UpdateEconomyFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx);
+using UpdateEconomyFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx);
 
 // Purpose: The economy update of a logic step, one of 18 time slices: phase
 // 0 starts a cycle (timers, population, request lists, military presence),
 // phases 1..16 each handle a sixteenth of the settlers (military presence)
 // and of the buildings (workers, goods requests, output), phase 17
 // distributes goods in every area.
-std::uint32_t __fastcall GameWorld_UpdateEconomy(GameWorld* world, void*) {
+std::uint32_t __fastcall CGameData_UpdateEconomy(CGameData* world, void*) {
     if (world->counter_110a57c == 0) {
         StartEconomyCycle(world);
     }
@@ -1197,8 +1197,8 @@ std::uint32_t __fastcall GameWorld_UpdateEconomy(GameWorld* world, void*) {
     return next;
 }
 
-S3RE_HOOK(0x004e05e0, GameWorld_UpdateEconomy, UpdateEconomyFn, Original_GameWorld_UpdateEconomy,
-          GameWorld_UpdateEconomy);
+S3RE_HOOK(0x004e05e0, CGameData_UpdateEconomy, UpdateEconomyFn, Original_CGameData_UpdateEconomy,
+          CGameData_UpdateEconomy);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -1214,7 +1214,7 @@ S3RE_HOOK(0x004e05e0, GameWorld_UpdateEconomy, UpdateEconomyFn, Original_GameWor
 
 namespace {
 
-constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + 128 * sizeof(Building);
+constexpr std::size_t kTestWorld = offsetof(CGameData, buildings) + 128 * sizeof(Building);
 constexpr std::uint32_t kTestRecords = 60;
 
 std::uint32_t g_stubSequence = 0;
@@ -1235,7 +1235,7 @@ std::uint32_t SmallOrZero(std::uint32_t h, std::uint32_t n, std::uint32_t zero) 
 
 template <std::uintptr_t Address, int N>
 void Probe(test::CalleeStubs& stubs, std::uint32_t (*value)(std::uint32_t h) = nullptr) {
-    stubs.Install<N, Address>([value](GameWorld*, std::uint32_t, const std::uint32_t* args) {
+    stubs.Install<N, Address>([value](CGameData*, std::uint32_t, const std::uint32_t* args) {
         const std::uint32_t h = Mix(static_cast<std::uint32_t>(Address), args);
         return value != nullptr ? value(h) : h & 1;
     });
@@ -1255,7 +1255,7 @@ void InstallEconomyStubs(test::CalleeStubs& stubs) {
     Probe<kCountAreaSettlersOfType, 2>(stubs, [](std::uint32_t h) { return h % 40; });
     Probe<kCreateSettler, 4>(stubs, [](std::uint32_t h) { return SmallOrZero(h, 60, 80); });
     Probe<kSetSettlerAnimation, 2>(stubs);
-    stubs.Install<1, kTakeBuildingExtraTiles>([](GameWorld* w, std::uint32_t, const std::uint32_t* args) {
+    stubs.Install<1, kTakeBuildingExtraTiles>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
         if ((Mix(static_cast<std::uint32_t>(kTakeBuildingExtraTiles), args) & 1) != 0) {
             BuildingAt(w, args[0]).water.extra_tiles = 0xfe;
         }
@@ -1265,7 +1265,7 @@ void InstallEconomyStubs(test::CalleeStubs& stubs) {
     Probe<kSetAreaBuildingSlotB, 2>(stubs);
     Probe<kSendNearestSettlerToBuilding, 1>(stubs);
     Probe<kSendNearestSettlerToPile, 3>(stubs);
-    stubs.Install<1, kTakeGoodFromPile>([](GameWorld* w, std::uint32_t, const std::uint32_t* args) {
+    stubs.Install<1, kTakeGoodFromPile>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
         const std::uint32_t h = Mix(static_cast<std::uint32_t>(kTakeGoodFromPile), args);
         if ((h & 1) != 0) {
             PileAt(w, args[0] & 0xffff).good = static_cast<std::uint8_t>((h >> 8) % 36);
@@ -1275,7 +1275,7 @@ void InstallEconomyStubs(test::CalleeStubs& stubs) {
     Probe<kSubtractPlayerCounter, 3>(stubs);
     Probe<kPileIncAmountLeaving, 1>(stubs);
     Probe<kPileIncAmountComing, 1>(stubs);
-    stubs.Install<1, kDispatchPileCarrier>([](GameWorld* w, std::uint32_t, const std::uint32_t* args) {
+    stubs.Install<1, kDispatchPileCarrier>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
         if ((Mix(static_cast<std::uint32_t>(kDispatchPileCarrier), args) & 1) != 0) {
             ++PileAt(w, args[0] & 0xffff).leaving;
         }
@@ -1302,7 +1302,7 @@ public:
                                                        : rng().Chance(4, 5) ? rng().Below(amount + 1u)
                                                                             : rng().Below(256));
         const auto coming = static_cast<std::uint8_t>(rng().Chance(9, 10) ? rng().Below(9u - amount) : rng().Below(9));
-        Both([&](GameWorld* w) {
+        Both([&](CGameData* w) {
             layout::Pile& p = *(w->piles + n);
             p.good = g;
             p.amount = amount;
@@ -1353,7 +1353,7 @@ public:
             Pile(p);
         }
         std::uint16_t worker = static_cast<std::uint16_t>(rng().Chance(7, 20) ? 0 : 1 + rng().Below(kTestRecords));
-        Both([&](GameWorld* w) {
+        Both([&](CGameData* w) {
             layout::Building& b = *(w->buildings + n);
             b.owner = owner;
             b.x = x;
@@ -1385,7 +1385,7 @@ public:
             }
             for (int k = 0; k < 6; ++k) {
                 Pile(ring[k], rng().Chance(7, 20) ? 0xff : static_cast<int>(1 + rng().Below(35)));
-                Both([&](GameWorld* w) { (w->piles + ring[k])->next = ring[(k + 1) % 6]; });
+                Both([&](CGameData* w) { (w->piles + ring[k])->next = ring[(k + 1) % 6]; });
             }
             const auto trade = static_cast<std::uint16_t>(1 + rng().Below(20));
             static constexpr std::uint8_t kKinds[] = {0, 1, 2, 2, 1, 3};
@@ -1396,7 +1396,7 @@ public:
                 offered[g] = static_cast<std::uint8_t>(rng().Chance(3, 10) ? 0 : rng().Below(4));
                 coming[g] = static_cast<std::uint8_t>(rng().Chance(3, 10) ? offered[g] : rng().Below(4));
             }
-            Both([&](GameWorld* w) {
+            Both([&](CGameData* w) {
                 (w->buildings + n)->trade = trade;
                 layout::Trade& t = *(w->trades + trade);
                 t.mode = kind;
@@ -1426,19 +1426,19 @@ public:
             for (std::size_t k = 0; k < members.size(); ++k) {
                 const auto type = static_cast<std::uint8_t>(rng().Chance(17, 20) ? kSoldiers[rng().Below(9)] : rng().Below(0x30));
                 const std::uint16_t next = k + 1 < members.size() ? members[k + 1] : 0;
-                Both([&](GameWorld* w) {
+                Both([&](CGameData* w) {
                     (w->settlers + members[k])->art = type;
                     (w->settlers + members[k])->next = next;
                 });
             }
         }
-        Both([&](GameWorld* w) { (w->buildings + n)->worker = worker; });
+        Both([&](CGameData* w) { (w->buildings + n)->worker = worker; });
         // The tiles around the building (soldiers near, piles next to the door).
         for (std::int32_t ox = -4; ox <= 4; ++ox) {
             for (std::int32_t oy = -4; oy <= 4; ++oy) {
                 const auto s = static_cast<std::uint16_t>(rng().Chance(1, 2) ? 0 : 1 + rng().Below(kTestRecords));
                 const auto pile = static_cast<std::uint16_t>(rng().Chance(1, 5) ? 0 : 1 + rng().Below(300));
-                Both([&](GameWorld* w) {
+                Both([&](CGameData* w) {
                     w->tiles[x + ox][y + oy].settler = s;
                     w->tiles[dx + ox][dy + oy].object_number = pile;
                 });
@@ -1456,7 +1456,7 @@ public:
             static constexpr std::uint8_t kCounters[] = {0, 0, 1, 2};
             c = kCounters[rng().Below(4)];
         }
-        Both([&](GameWorld* w) {
+        Both([&](CGameData* w) {
             w->tiles[dx][dy].settler = doorSettler;
             w->tiles[dx][dy].area = area;
             layout::Area& a = *(w->areas + area);
@@ -1477,7 +1477,7 @@ public:
         if (player != 0xff) {
             firstUsed = false;
         }
-        Both([&](GameWorld* w) { (w->areas + area)->player = player; });
+        Both([&](CGameData* w) { (w->areas + area)->player = player; });
         std::uint8_t ranks[36];
         for (std::uint32_t g = 1; g < 36; ++g) {
             ranks[g] = static_cast<std::uint8_t>(g);
@@ -1504,7 +1504,7 @@ public:
                 static constexpr std::uint8_t kArts[] = {0, 0xfe, 0xfd, 1};
                 const std::uint8_t art = rng().Chance(1, 2) ? 0xff : kArts[rng().Below(4)];
                 Pile(members[k], static_cast<int>(g));
-                Both([&](GameWorld* w) {
+                Both([&](CGameData* w) {
                     layout::Pile& p = *(w->piles + members[k]);
                     p.x = px;
                     p.y = 200;
@@ -1513,10 +1513,10 @@ public:
             }
             for (std::uint32_t k = 0; k < count; ++k) {
                 const std::uint16_t next = k + 1 < count ? members[k + 1] : 0;
-                Both([&](GameWorld* w) { (w->piles + members[k])->next = next; });
+                Both([&](CGameData* w) { (w->piles + members[k])->next = next; });
             }
             const std::uint16_t head = count != 0 ? members[0] : 0;
-            Both([&](GameWorld* w) {
+            Both([&](CGameData* w) {
                 layout::Area& ar = *(w->areas + area);
                 ar.settings4[g] = ranks[g];
                 ar.buildings_b[g] = b;
@@ -1528,7 +1528,7 @@ public:
         for (std::uint32_t t = 0; t < 0x33; ++t) {
             const auto weight = static_cast<std::uint8_t>(rng().Chance(1, 5) ? 0 : 1 + rng().Below(255));
             const auto counter = static_cast<std::uint16_t>(rng().Below(300));
-            Both([&](GameWorld* w) {
+            Both([&](CGameData* w) {
                 (w->areas + area)->condition_enabled[t] = weight;
                 (w->areas + area)->counters_278[t] = counter;
             });
@@ -1542,7 +1542,7 @@ public:
             const auto flags = static_cast<std::uint8_t>(rng().Chance(1, 5) ? 0x80 : rng().Below(0x80));
             const auto sx = static_cast<std::uint16_t>(150 + rng().Below(100));
             const auto sy = static_cast<std::uint16_t>(150 + rng().Below(100));
-            Both([&](GameWorld* w) {
+            Both([&](CGameData* w) {
                 layout::Settler& s = *(w->settlers + list[k]);
                 s.prev = k == 0 ? 0 : list[k - 1];
                 s.next = k + 1 < carriers ? list[k + 1] : 0;
@@ -1551,7 +1551,7 @@ public:
                 s.y = sy;
             });
         }
-        Both([&](GameWorld* w) { (w->areas + area)->settlers_by_type[0] = carriers != 0 ? list[0] : 0; });
+        Both([&](CGameData* w) { (w->areas + area)->settlers_by_type[0] = carriers != 0 ? list[0] : 0; });
     }
 
     // One case; returns the phase.
@@ -1560,7 +1560,7 @@ public:
         const std::uint32_t phase = r < 12 ? 0 : r < 35 ? 17 : 1 + rng().Below(16);
         static constexpr std::uint32_t kMaxPlayers[] = {0, 1, 3, 19};
         const std::uint32_t maxPlayer = kMaxPlayers[rng().Below(4)];
-        Both([&](GameWorld* w) {
+        Both([&](CGameData* w) {
             w->counter_110a57c = phase;
             w->map_size = 384;
             w->presence_max_player = maxPlayer;
@@ -1570,7 +1570,7 @@ public:
         });
         for (std::uint32_t p = 0; p < 20; ++p) {
             const auto index = static_cast<std::int32_t>(rng().Below(20));
-            Both([&](GameWorld* w) { w->players[p].team = index; });
+            Both([&](CGameData* w) { w->players[p].team = index; });
         }
         if (phase == 0) {
             static constexpr std::int32_t kSizes[] = {0, 15, 16, 17, 33, 48, 64};
@@ -1578,7 +1578,7 @@ public:
             const std::uint32_t areas = rng().Below(6);
             const std::uint32_t settlers = rng().Below(40);
             const std::uint32_t buildings = rng().Below(40);
-            Both([&](GameWorld* w) {
+            Both([&](CGameData* w) {
                 w->map_size = static_cast<std::uint32_t>(size);
                 w->area_high_water = areas;
                 w->settler_high_water = settlers;
@@ -1586,10 +1586,10 @@ public:
             });
         } else if (phase == 17) {
             const std::uint32_t areas = rng().Below(5);
-            Both([&](GameWorld* w) { w->area_high_water = areas; });
+            Both([&](CGameData* w) { w->area_high_water = areas; });
             for (std::uint32_t p = 0; p < 20; ++p) {
                 const auto race = static_cast<std::int32_t>(p == 19 && rng().Chance(1, 2) ? 4 + rng().Below(4) : rng().Below(4));
-                Both([&](GameWorld* w) { w->players[p].race = race; });
+                Both([&](CGameData* w) { w->players[p].race = race; });
             }
             bool firstUsed = true;
             for (std::uint32_t a = 1; a <= areas; ++a) {
@@ -1605,7 +1605,7 @@ public:
                 for (std::uint8_t& g : goods) {
                     g = static_cast<std::uint8_t>(1 + rng().Below(35));
                 }
-                Both([&](GameWorld* w) {
+                Both([&](CGameData* w) {
                     layout::Building& b = *(w->buildings + n);
                     b.x = 200;
                     b.y = 200;
@@ -1620,7 +1620,7 @@ public:
         } else {
             const std::uint32_t settlers = rng().Chance(9, 10) ? phase + 16 * rng().Below(4) + rng().Below(16) : rng().Below(phase);
             const std::uint32_t buildings = rng().Chance(9, 10) ? phase + 16 * rng().Below(6) + rng().Below(16) : rng().Below(phase);
-            Both([&](GameWorld* w) {
+            Both([&](CGameData* w) {
                 w->settler_high_water = settlers;
                 w->building_high_water = buildings;
             });
@@ -1631,7 +1631,7 @@ public:
                 const auto art = static_cast<std::uint8_t>(rng().Chance(7, 10) ? kPresence[rng().Below(18)] : rng().Below(0x30));
                 const auto x = static_cast<std::uint16_t>(rng().Below(400));
                 const auto y = static_cast<std::uint16_t>(rng().Below(400));
-                Both([&](GameWorld* w) {
+                Both([&](CGameData* w) {
                     layout::Settler& s = *(w->settlers + n);
                     s.owner = owner;
                     s.art = art;
@@ -1644,7 +1644,7 @@ public:
                 const std::int32_t dx = rng().Range(-3, 3);
                 const std::int32_t dy = rng().Range(-3, 3);
                 const std::int32_t distance = k < rings ? rng().Range(-2, 9) : rng().Range(10, 20);
-                Both([&](GameWorld* w) {
+                Both([&](CGameData* w) {
                     w->offsets[k].dx = dx;
                     w->offsets[k].dy = dy;
                     w->offsets[k].distance = distance;
@@ -1678,7 +1678,7 @@ void CompareUpdateEconomy(test::Context& ctx, UpdateEconomyFn candidate, int cas
         const std::vector<std::int32_t> before(kTallies, kTallies + kTallyCount);
         stubs.SetWorld(worlds.original());
         g_stubSequence = 0;
-        const std::uint32_t expected = Original_GameWorld_UpdateEconomy(worlds.original(), nullptr);
+        const std::uint32_t expected = Original_CGameData_UpdateEconomy(worlds.original(), nullptr);
         const std::vector<test::StubCall> expectedCalls = stubs.Take();
         const std::vector<DebugLogCall> expectedLogs = logs.Take();
         const std::vector<std::int32_t> expectedTallies(kTallies, kTallies + kTallyCount);
@@ -1693,7 +1693,7 @@ void CompareUpdateEconomy(test::Context& ctx, UpdateEconomyFn candidate, int cas
         if (!S3RE_EXPECT_EQ(expected, actual) || !S3RE_EXPECT(expectedCalls.size() == actualCalls.size()) ||
             !S3RE_EXPECT(expectedCalls == actualCalls) || !S3RE_EXPECT(expectedLogs == actualLogs) ||
             !S3RE_EXPECT(expectedTallies == actualTallies) ||
-            !worlds.SameField(ctx, [](GameWorld* w) -> auto& { return w->counter_110a57c; }) ||
+            !worlds.SameField(ctx, [](CGameData* w) -> auto& { return w->counter_110a57c; }) ||
             (checkpoint && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 15 before it): phase %u, %u/%u stub calls", i,
                      phase, static_cast<unsigned>(expectedCalls.size()), static_cast<unsigned>(actualCalls.size()));
@@ -1704,13 +1704,13 @@ void CompareUpdateEconomy(test::Context& ctx, UpdateEconomyFn candidate, int cas
 }
 
 // Wrong: every building counts as wanting inputs (request flag bit 0).
-std::uint32_t __fastcall WrongUpdateEconomy(GameWorld* world, void* edx) {
+std::uint32_t __fastcall WrongUpdateEconomy(CGameData* world, void* edx) {
     std::vector<std::uint8_t> flags;
     for (std::uint32_t n = 0; n < 64; ++n) {
         flags.push_back(world->buildings[n].request_flags);
         world->buildings[n].request_flags |= 1;
     }
-    const std::uint32_t result = GameWorld_UpdateEconomy(world, edx);
+    const std::uint32_t result = CGameData_UpdateEconomy(world, edx);
     for (std::uint32_t n = 0; n < 64; ++n) {
         world->buildings[n].request_flags = flags[n];
     }
@@ -1719,11 +1719,11 @@ std::uint32_t __fastcall WrongUpdateEconomy(GameWorld* world, void* edx) {
 
 }  // namespace
 
-S3RE_TEST(GameWorld_UpdateEconomy_MatchesOriginal) {
-    CompareUpdateEconomy(ctx, &GameWorld_UpdateEconomy, 4000);
+S3RE_TEST(CGameData_UpdateEconomy_MatchesOriginal) {
+    CompareUpdateEconomy(ctx, &CGameData_UpdateEconomy, 4000);
 }
 
-S3RE_TEST(GameWorld_UpdateEconomy_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_UpdateEconomy_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareUpdateEconomy(probe, &WrongUpdateEconomy, 400);
     S3RE_EXPECT(probe.failures() > 0);

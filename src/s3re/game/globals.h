@@ -20,7 +20,7 @@
 namespace s3re::game {
 
 struct GameSettings;  // game_settings_layout.h
-struct GameWorld;
+struct CGameData;
 struct SettlerGroups;
 
 namespace ai {
@@ -156,7 +156,7 @@ inline constexpr GameGlobal<std::uint8_t[]> g_creditsDefaultStyle{0x69fff0};
 // ------------------------------------------------------------ computer players
 // The AI code reaches the game through globals set before each player's
 // turn (AI_SetCurrentPlayer 0x551a30 and 0x551b80).
-inline constexpr GameGlobal<GameWorld*> g_aiWorld{0x7e3408};
+inline constexpr GameGlobal<CGameData*> g_aiWorld{0x7e3408};
 inline constexpr GameGlobal<ai::ComputerPlayer*> g_aiPlayer{0x7e3130};
 inline constexpr GameGlobal<std::uint8_t> g_aiPlayerNumber{0x7e2eb8};
 inline constexpr GameGlobal<ai::AiPlayerSetup*> g_aiPlayerSetup{0x7e2eb4};
@@ -167,7 +167,7 @@ inline constexpr GameGlobal<ai::AiPlayerSetup[]> g_aiPlayerSetups{0x731488};
 inline constexpr GameGlobal<std::uint16_t> g_aiMapSizeY{0x7e3412};
 inline constexpr GameGlobal<std::uint16_t> g_aiMapSizeX{0x7e3414};
 // A second copy of the AI's world pointer (0x58fa7b).
-inline constexpr GameGlobal<GameWorld*> g_aiMapWorld{0x7e7b60};
+inline constexpr GameGlobal<CGameData*> g_aiMapWorld{0x7e7b60};
 // The shared land evaluation object: reference count and instance.
 inline constexpr GameGlobal<std::uint32_t> g_aiEvaLandRefCount{0x7e0568};
 inline constexpr GameGlobal<ai::AiLandEvaluation*> g_aiEvaLand{0x7e056c};

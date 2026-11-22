@@ -17,16 +17,16 @@ namespace {
 
 constexpr std::uint32_t kHashInterval = 32;               // ticks between region hashes
 
-using s3re::game::GameWorld;
+using s3re::game::CGameData;
 using s3re::game::layout::Tile;
 
 // The three hashed regions (trace v5, game/layout.h): the header is
 // everything before the tile array, the map is the first mapSize tiles of
 // the first mapSize rows, and the rest runs from the end of the tile array
 // to the end of the world object (reads are clamped to committed memory).
-constexpr std::size_t kTilesBegin = offsetof(GameWorld, tiles);
-constexpr std::size_t kTilesEnd = kTilesBegin + sizeof(GameWorld::tiles);
-constexpr std::size_t kWorldBytes = sizeof(GameWorld);
+constexpr std::size_t kTilesBegin = offsetof(CGameData, tiles);
+constexpr std::size_t kTilesEnd = kTilesBegin + sizeof(CGameData::tiles);
+constexpr std::size_t kWorldBytes = sizeof(CGameData);
 constexpr std::size_t kMapRowTiles = s3re::game::layout::kMapRowTiles;
 constexpr std::size_t kTileBytes = sizeof(Tile);
 constexpr std::size_t kMapRowBytes = kMapRowTiles * kTileBytes;
@@ -239,27 +239,27 @@ constexpr ByteRange kHeaderSkips[] = {
     // Then the window's selection (+0x2d244): set by ProcessEvents, read
     // only by PrepareDrawData to choose what to chart. (Up to trace v4 this
     // range started at 0x2d02c and also hid the last 12 statistics bytes.)
-    {offsetof(GameWorld, chart), offsetof(GameWorld, objective_timeout)},
+    {offsetof(CGameData, chart), offsetof(CGameData, objective_timeout)},
     // Camera position (x, y) and a second (target?) pair, in pixels. Moved
     // by the UI (and by command 2, which the game's movie recorder uses);
     // 0x5158f0/0x515980 turn it into the tile at the screen centre.
     // Then a "redraw" flag (+0x2d264): set by the UI, the simulation and
     // Step, read only by PrepareDrawData, which hands it to the draw thread
     // and resets it (0x51f566/0x51f5d8), a timing-dependent number of times.
-    {offsetof(GameWorld, camera_drawn_x), offsetof(GameWorld, ui_2d268)},
+    {offsetof(CGameData, camera_drawn_x), offsetof(CGameData, ui_2d268)},
     // Draw hand-off flags, also reset by PrepareDrawData: minimap ready
-    // (+0x2d278, set by GameWorld::BuildMinimap) and +0x2d280. Between them
+    // (+0x2d278, set by CGameData::BuildMinimap) and +0x2d280. Between them
     // the "refresh the UI" flag (+0x2d27c): set by ExecuteCommands when a
     // command touches what the local player's open menu shows (0x53709f).
-    {offsetof(GameWorld, minimap_ready), offsetof(GameWorld, ui_selection_mode)},
+    {offsetof(CGameData, minimap_ready), offsetof(CGameData, ui_selection_mode)},
     // UI selection mode and two parameters; set by the UI, the command
     // executor only reads them to refresh overlays. Then the sub-page of UI
     // menu 2 (+0x2d290), read by ExecuteCommands only to decide whether to
     // set the refresh flag.
-    {offsetof(GameWorld, ui_selection_mode), offsetof(GameWorld, ui_2d290) + 4},
+    {offsetof(CGameData, ui_selection_mode), offsetof(CGameData, ui_2d290) + 4},
     // UI menu sub-page; set by ProcessEvents, read by ExecuteCommands only
     // to decide whether to set the refresh flag above.
-    {offsetof(GameWorld, ui_2d2a0), offsetof(GameWorld, ui_2d2a4)},
+    {offsetof(CGameData, ui_2d2a0), offsetof(CGameData, ui_2d2a4)},
     // Notification blink bits for the draw thread: PrepareDrawData (0x51f110)
     // copies the old value into the draw data, resets it and sets bits 1/2/
     // 4/8 for the pending notifications (+0x2d320, +0x2d7d0, +0x2dc80,
@@ -268,17 +268,17 @@ constexpr ByteRange kHeaderSkips[] = {
     // 0x4fce90. PrepareDrawData runs a timing-dependent number of times, so
     // the value differs between normal speed and --fast (found 2026-11-10,
     // savegame "slot 1.sav", header dumps).
-    {offsetof(GameWorld, notification_blink), offsetof(GameWorld, ui_2d2cc)},
+    {offsetof(CGameData, notification_blink), offsetof(CGameData, ui_2d2cc)},
     // Last search result position (x, y), written by 0x4ff0a0/0x4ff170,
     // called from 0x524fa0 on every step (volatile).
-    {offsetof(GameWorld, last_search_x), offsetof(GameWorld, unk2d2ec)},
+    {offsetof(CGameData, last_search_x), offsetof(CGameData, unk2d2ec)},
     // UI cursor mode: set by CLogicThread::ProcessEvents, read by
     // CLogicThread::PrepareDrawData.
-    {offsetof(GameWorld, ui_cursor_mode), offsetof(GameWorld, landscape_x)},
-    // Search generation counter (GameWorld::NextSearchGeneration; UI
+    {offsetof(CGameData, ui_cursor_mode), offsetof(CGameData, landscape_x)},
+    // Search generation counter (CGameData::NextSearchGeneration; UI
     // overlays bump it too) and the byte counter incremented on every call
     // of PrepareDrawData (volatile).
-    {offsetof(GameWorld, search_generation), offsetof(GameWorld, pad2d302)},
+    {offsetof(CGameData, search_generation), offsetof(CGameData, pad2d302)},
 };
 static_assert(kHeaderSkips[0].begin == 0x2d038 && kHeaderSkips[1].begin == 0x2d254 &&
               kHeaderSkips[3].end == 0x2d294 && kHeaderSkips[4].begin == 0x2d2a0 &&
@@ -290,8 +290,8 @@ constexpr ByteRange kRestSkips[] = {
     // Scratch grids (2 x 31x31 bytes) of the building footprint check
     // 0x4da440 (via 0x4d99e0), which the UI's placement preview, the command
     // executor and the computer player all call; fully rewritten per call.
-    {offsetof(GameWorld, footprint_scratch), offsetof(GameWorld, minimap)},
-    {offsetof(GameWorld, ui_feedback), offsetof(GameWorld, flag15394b0)},
+    {offsetof(CGameData, footprint_scratch), offsetof(CGameData, minimap)},
+    {offsetof(CGameData, ui_feedback), offsetof(CGameData, flag15394b0)},
 };
 // The 5000 MapEffect records (0x4C bytes) of the member at +0x14D2BC8
 // (re/structs.md): their alignment padding (+0x2A..+0x2B, +0x3B,
@@ -299,7 +299,7 @@ constexpr ByteRange kRestSkips[] = {
 // from uninitialized stack memory when a record is added (0x5445E0). It
 // differed between two runs loaded from the same savegame (2026-11-09,
 // tools/check_save.py), so it is left out of the rest hash.
-constexpr std::size_t kMapEffectsBegin = offsetof(GameWorld, map_effects);
+constexpr std::size_t kMapEffectsBegin = offsetof(CGameData, map_effects);
 constexpr std::size_t kMapEffectBytes = sizeof(s3re::game::layout::MapEffect);
 constexpr std::size_t kMapEffectCount =
     sizeof(s3re::game::layout::MapEffectTable::records) / kMapEffectBytes;
@@ -414,7 +414,7 @@ void OnLogicStep(const void* logicThread) {
     }
 
     const std::uint32_t tick = game::g_gameTick;
-    const auto* fields = reinterpret_cast<const GameWorld*>(world);
+    const auto* fields = reinterpret_cast<const CGameData*>(world);
     std::uint16_t random[3];
     std::memcpy(random, fields->random_state, sizeof(random));
     const std::uint32_t mapSize = fields->map_size;

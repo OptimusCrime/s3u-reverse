@@ -1,7 +1,7 @@
 // The minimap (world+0x1223656, g_minimapWidth x g_minimapWidth 16-bit
 // pixels), recomputed one interleaved 1/64 per step by UpdateEnvironment.
 //
-// GameWorld::UpdateMinimapSlice (0x004fb520): (slice 0..63) marks the
+// CGameData::UpdateMinimapSlice (0x004fb520): (slice 0..63) marks the
 //   slice in g_minimapSliceDirty (0x7ad4f8, int32[64]) and recomputes the
 //   pixels (column c, row r) with r = row0 + 8k, c = col0 + 8j below the
 //   width W (0x730f28, re-read after every pixel), where row0/col0 are the
@@ -11,7 +11,7 @@
 //   (c * scale + scale - 256) >> 8, (r * scale + scale - 256) >> 8): the
 //   tile rectangle the pixel covers. minimap[W * r + c] = AX. ret 4, EAX
 //   not used.
-// GameWorld::MinimapPixel (0x004fb720): (x0, y0, x1, y1) -> the pixel
+// CGameData::MinimapPixel (0x004fb720): (x0, y0, x1, y1) -> the pixel
 //   colour packed in the screen's format (g_pixelChannelShifts 0x7dfba0,
 //   scales 0x7dfbac..: ((scale * c) >> 8) << shift per channel). The tile
 //   (x0, y0) gives the brightness from its fog level (draw_flags & 7):
@@ -54,11 +54,11 @@ using U = std::uint32_t;
 
 constexpr std::uintptr_t kMinimapPixel = 0x004fb720;
 
-Tile& TileAt(GameWorld* world, U offset) {
+Tile& TileAt(CGameData* world, U offset) {
     return TileAtOffset(world, offset);
 }
 
-std::int32_t Team(GameWorld* world, U player) {
+std::int32_t Team(CGameData* world, U player) {
     return (world->players + player)->team;
 }
 
@@ -81,13 +81,13 @@ U Pack(U esi, U edi, U ebx) {
 
 }  // namespace
 
-using PixelFn = U(__fastcall*)(GameWorld* world, void* edx, std::int32_t x0, std::int32_t y0, std::int32_t x1,
+using PixelFn = U(__fastcall*)(CGameData* world, void* edx, std::int32_t x0, std::int32_t y0, std::int32_t x1,
                                std::int32_t y1);
-using SliceFn = void(__fastcall*)(GameWorld* world, void* edx, U slice);
+using SliceFn = void(__fastcall*)(CGameData* world, void* edx, U slice);
 
 // Purpose: The colour of one minimap pixel: territory or terrain colour of the land it covers, darkened by
 // the fog of war, with settlers, borders and buildings marked depending on the minimap options.
-U __fastcall GameWorld_MinimapPixel(GameWorld* world, void*, std::int32_t x0, std::int32_t y0, std::int32_t x1,
+U __fastcall CGameData_MinimapPixel(CGameData* world, void*, std::int32_t x0, std::int32_t y0, std::int32_t x1,
                                     std::int32_t y1) {
     U esi = 0;
     U edi = 0;
@@ -252,7 +252,7 @@ U __fastcall GameWorld_MinimapPixel(GameWorld* world, void*, std::int32_t x0, st
 }
 
 // Purpose: Redraws one sixty-fourth of the minimap (spread evenly over it) from the current map state.
-void __fastcall GameWorld_UpdateMinimapSlice(GameWorld* world, void*, U slice) {
+void __fastcall CGameData_UpdateMinimapSlice(CGameData* world, void*, U slice) {
     const auto pixel = reinterpret_cast<PixelFn>(kMinimapPixel);
     auto width = [] { return static_cast<U>(g_minimapWidth); };
     const U scale = static_cast<U>(static_cast<std::int32_t>(world->map_size << 8) / static_cast<std::int32_t>(width()));
@@ -271,9 +271,9 @@ void __fastcall GameWorld_UpdateMinimapSlice(GameWorld* world, void*, U slice) {
     }
 }
 
-S3RE_HOOK(0x004fb720, GameWorld_MinimapPixel, PixelFn, Original_GameWorld_MinimapPixel, GameWorld_MinimapPixel);
-S3RE_HOOK(0x004fb520, GameWorld_UpdateMinimapSlice, SliceFn, Original_GameWorld_UpdateMinimapSlice,
-          GameWorld_UpdateMinimapSlice);
+S3RE_HOOK(0x004fb720, CGameData_MinimapPixel, PixelFn, Original_CGameData_MinimapPixel, CGameData_MinimapPixel);
+S3RE_HOOK(0x004fb520, CGameData_UpdateMinimapSlice, SliceFn, Original_CGameData_UpdateMinimapSlice,
+          CGameData_UpdateMinimapSlice);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -281,7 +281,7 @@ S3RE_HOOK(0x004fb520, GameWorld_UpdateMinimapSlice, SliceFn, Original_GameWorld_
 
 namespace {
 
-constexpr std::size_t kWorld = sizeof(GameWorld);
+constexpr std::size_t kWorld = sizeof(CGameData);
 
 struct SavedGlobals {
     std::int32_t width, mode, buildings, settlers;
@@ -323,7 +323,7 @@ void RandomGlobals(test::Context& ctx) {
 // settlers (numbers inside the record array) and terrain classes.
 void SetUpTiles(test::Context& ctx, test::WorldPair& worlds, U size) {
     auto& rng = ctx.rng();
-    GameWorld* w = worlds.original();
+    CGameData* w = worlds.original();
     w->map_size = size;
     w->local_player = static_cast<std::int32_t>(rng.Below(20));
     for (U p = 0; p < 21; ++p) {
@@ -360,7 +360,7 @@ void ComparePixels(test::Context& ctx, PixelFn candidate, int cases) {
         const auto y0 = static_cast<std::int32_t>(ctx.rng().Below(size));
         const std::int32_t x1 = x0 + ctx.rng().Range(-1, 3);
         const std::int32_t y1 = y0 + ctx.rng().Range(-1, 3);
-        const U expected = Original_GameWorld_MinimapPixel(worlds.original(), nullptr, x0, y0, x1, y1);
+        const U expected = Original_CGameData_MinimapPixel(worlds.original(), nullptr, x0, y0, x1, y1);
         const U actual = candidate(worlds.ours(), nullptr, x0, y0, x1, y1);
         if (!S3RE_EXPECT_EQ(expected, actual)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%d, %d)..(%d, %d) mode %d", i, x0, y0, x1, y1,
@@ -384,7 +384,7 @@ void CompareSlices(test::Context& ctx, SliceFn candidate, int cases) {
         g_minimapWidth = static_cast<std::int32_t>(16 + ctx.rng().Below(widest - 15));
         const U slice = ctx.rng().Below(64);
         std::memset(&g_minimapSliceDirty, 0, 256);
-        Original_GameWorld_UpdateMinimapSlice(worlds.original(), nullptr, slice);
+        Original_CGameData_UpdateMinimapSlice(worlds.original(), nullptr, slice);
         std::int32_t dirty[64];
         std::memcpy(dirty, &g_minimapSliceDirty, sizeof(dirty));
         std::memset(&g_minimapSliceDirty, 0, 256);
@@ -398,34 +398,34 @@ void CompareSlices(test::Context& ctx, SliceFn candidate, int cases) {
 }
 
 // Wrong: border tiles of the team get the local player's colour.
-U __fastcall WrongMinimapPixel(GameWorld* world, void*, std::int32_t x0, std::int32_t y0, std::int32_t x1,
+U __fastcall WrongMinimapPixel(CGameData* world, void*, std::int32_t x0, std::int32_t y0, std::int32_t x1,
                                std::int32_t y1) {
-    const U value = GameWorld_MinimapPixel(world, nullptr, x0, y0, x1, y1);
+    const U value = CGameData_MinimapPixel(world, nullptr, x0, y0, x1, y1);
     return value == Pack(0, 0x8c, 0x8c) ? Pack(0xa0, 0xa0, 0xa0) : value;
 }
 
 // Wrong: the slice order skips the top bit.
-void __fastcall WrongUpdateMinimapSlice(GameWorld* world, void*, U slice) {
-    GameWorld_UpdateMinimapSlice(world, nullptr, slice & 31);
+void __fastcall WrongUpdateMinimapSlice(CGameData* world, void*, U slice) {
+    CGameData_UpdateMinimapSlice(world, nullptr, slice & 31);
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_MinimapPixel_MatchesOriginal) {
-    ComparePixels(ctx, &GameWorld_MinimapPixel, 40000);
+S3RE_TEST(CGameData_MinimapPixel_MatchesOriginal) {
+    ComparePixels(ctx, &CGameData_MinimapPixel, 40000);
 }
 
-S3RE_TEST(GameWorld_MinimapPixel_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_MinimapPixel_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     ComparePixels(probe, &WrongMinimapPixel, 40000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
-S3RE_TEST(GameWorld_UpdateMinimapSlice_MatchesOriginal) {
-    CompareSlices(ctx, &GameWorld_UpdateMinimapSlice, 30);
+S3RE_TEST(CGameData_UpdateMinimapSlice_MatchesOriginal) {
+    CompareSlices(ctx, &CGameData_UpdateMinimapSlice, 30);
 }
 
-S3RE_TEST(GameWorld_UpdateMinimapSlice_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_UpdateMinimapSlice_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareSlices(probe, &WrongUpdateMinimapSlice, 30);
     S3RE_EXPECT(probe.failures() > 0);

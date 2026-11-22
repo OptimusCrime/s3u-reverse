@@ -18,7 +18,7 @@ So presence map A always holds the military presence of the last full
 cycle (read by IsOtherPlayerNear), and every building and settler is
 visited once per 16 calls.
 
-**Name: `GameWorld::UpdateEconomy`** (was "UpdatePhase2", which only said
+**Name: `CGameData::UpdateEconomy`** (was "UpdatePhase2", which only said
 where it is called; renamed 2026-11-22 when it was reimplemented in
 `src/s3re/game/update_economy.cpp`, whose header and handler comments are
 the exact description): goods requests, worker requests, population counts
@@ -71,17 +71,17 @@ For a used building (+0 != 0xFF):
 
 | address | proposal | ins | notes |
 |---|---|---|---|
-| 0x4DACD0 | `GameWorld::RequestSettlerForBuilding` (building, type) -> EAX | 589 | 25 call sites, EAX read at all; writes settler type/job/building and the area lists +0x12A; calls NotifyLocalPlayer |
-| 0x5052C0 | `GameWorld::SendCarriersToPile` (pile) | 250 | also UpdateEnvironment; calls SetPileGood 0x5061B0 (package B) |
-| 0x5104C0 | `GameWorld::RecountPlayerPopulation` | 124 | phase 0 only |
-| 0x50E200 | `GameWorld::SetSoldierAnimationInBuilding2` | 65 | military buildings |
-| 0x4FEC10 | `GameWorld::NotifyLocalPlayer` | 159 | package B |
-| 0x505820 | `GameWorld::TakeGoodFromPile` | 52 | package B |
+| 0x4DACD0 | `CGameData::RequestSettlerForBuilding` (building, type) -> EAX | 589 | 25 call sites, EAX read at all; writes settler type/job/building and the area lists +0x12A; calls NotifyLocalPlayer |
+| 0x5052C0 | `CGameData::SendCarriersToPile` (pile) | 250 | also UpdateEnvironment; calls SetPileGood 0x5061B0 (package B) |
+| 0x5104C0 | `CGameData::RecountPlayerPopulation` | 124 | phase 0 only |
+| 0x50E200 | `CGameData::SetSoldierAnimationInBuilding2` | 65 | military buildings |
+| 0x4FEC10 | `CGameData::NotifyLocalPlayer` | 159 | package B |
+| 0x505820 | `CGameData::TakeGoodFromPile` | 52 | package B |
 
 ## Proposed C++ split (hooked as one unit, after its callees)
 
 ```
-void GameWorld::UpdateEconomy() {          // 0x4E05E0
+void CGameData::UpdateEconomy() {          // 0x4E05E0
     uint32_t phase = economyPhase;          // +0x110A57C
     if (phase == 0) StartEconomyCycle();    // timers, population, area counters, presence swap
     if (1 <= phase && phase <= 16) {

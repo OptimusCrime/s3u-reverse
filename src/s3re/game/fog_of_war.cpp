@@ -15,20 +15,20 @@
 // Teams: Player::team (+0xc) of the owner must equal the local
 // player's.
 //
-// GameWorld::MarkRevealPointsSight (0x00518f20): () for every active reveal
+// CGameData::MarkRevealPointsSight (0x00518f20): () for every active reveal
 //   point 0..reveal_point_high_water (signed) whose own tile has sight <
 //   0x23: radius 0x23 around (x, y) with value 0x24 - distance, coordinates
 //   checked signed against the map size, value compared signed. ret.
-// GameWorld::MarkBuildingSight (0x00519fa0): (first) buildings first,
+// CGameData::MarkBuildingSight (0x00519fa0): (first) buildings first,
 //   first+16, ... <= building_high_water (unsigned) that are used, finished
 //   (buildup == 0) and of the local team: radius 0xf; type 6 0x37, types
 //   0xf / 0x10 / 0x12 with a garrison 0x25 / 0x28 / 0x2b. Only if the
 //   building's own tile has sight < radius. Coordinates unsigned. ret 4.
-// GameWorld::MarkSettlerSight (0x0051a150): (first) the same for settlers
+// CGameData::MarkSettlerSight (0x0051a150): (first) the same for settlers
 //   (step 16 too): radius 0x14; type 0x17 0x1e for the local player's own,
 //   skipped for others of the team; 0x27 10; 0x29 / 0x2b / 0x2c 0x1e; 0x25
 //   and 0x2a never. Only if the own tile has sight < radius - 3. ret 4.
-// GameWorld::UpdateFogSlice (0x00519010): (slice 0..15) for every x and y
+// CGameData::UpdateFogSlice (0x00519010): (slice 0..15) for every x and y
 //   in [slice * s, (slice + 1) * s), s = map size / 16 (signed division,
 //   re-read every step): level = min(sight, 7), or 2 for sight 0/1 when
 //   draw_flags & 0x36; with 0x7dfd84 (whole map revealed) always 7. For
@@ -36,7 +36,7 @@
 //   (+0xe) = SeenObjectAt(x, y) (what the team saw last). draw_flags:
 //   bits 3..5 = level; if it changed, bits 0..2 = the old level and 0x80
 //   (redraw), else bits 0..2 = level. ret 4. EAX not used.
-// GameWorld::SeenObjectAt (0x0051d5f0): (x, y) -> AX: a building (flag 0x20,
+// CGameData::SeenObjectAt (0x0051d5f0): (x, y) -> AX: a building (flag 0x20,
 //   object_number): (race + 0x20) << 6 + type, with bits 0x100/0x200/0x300
 //   for construction progress ((buildup + 50 * b+0x20) * 249 / (50 * b+0x1f
 //   + 4): < 60 -> 0, < 120 -> 0x100, 121..179 -> 0x200, 181..250 -> 0x300,
@@ -67,20 +67,20 @@ using layout::Tile;
 
 constexpr std::uintptr_t kSeenObjectAt = 0x0051d5f0;
 
-Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
-std::int32_t LocalTeam(GameWorld* world) {
+std::int32_t LocalTeam(CGameData* world) {
     return (world->players + world->local_player)->team;
 }
 
-std::int32_t TeamOf(GameWorld* world, std::uint8_t owner) {
+std::int32_t TeamOf(CGameData* world, std::uint8_t owner) {
     return (world->players + owner)->team;
 }
 
 // Building/settler variant: unsigned coordinates and values.
-void MarkSightAround(GameWorld* world, std::uint32_t x, std::uint32_t y, std::uint32_t radius) {
+void MarkSightAround(CGameData* world, std::uint32_t x, std::uint32_t y, std::uint32_t radius) {
     for (const MapOffset* o = world->offsets; static_cast<std::uint32_t>(o->distance) != radius; ++o) {
         const std::uint32_t value = radius - static_cast<std::uint32_t>(o->distance) + 1;
         const std::uint32_t tx = static_cast<std::uint32_t>(o->dx) + x;
@@ -96,13 +96,13 @@ void MarkSightAround(GameWorld* world, std::uint32_t x, std::uint32_t y, std::ui
 
 }  // namespace
 
-using VoidFn = void(__fastcall*)(GameWorld* world, void* edx);
-using FirstFn = void(__fastcall*)(GameWorld* world, void* edx, std::uint32_t first);
-using SeenFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y);
+using VoidFn = void(__fastcall*)(CGameData* world, void* edx);
+using FirstFn = void(__fastcall*)(CGameData* world, void* edx, std::uint32_t first);
+using SeenFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 
 // Purpose: Lets the local team see around the revealed spots (probably from a spell) during the fog of war
 // cycle.
-void __fastcall GameWorld_MarkRevealPointsSight(GameWorld* world, void*) {
+void __fastcall CGameData_MarkRevealPointsSight(CGameData* world, void*) {
     constexpr std::int32_t kRadius = 0x23;
     for (std::int32_t i = 0; i <= world->reveal_point_high_water; ++i) {
         const layout::RevealPoint& point = world->reveal_points[i];
@@ -131,7 +131,7 @@ void __fastcall GameWorld_MarkRevealPointsSight(GameWorld* world, void*) {
 
 // Purpose: Fog of war: the local team sees the land around its finished buildings (towers and a few others
 // see farther); one sixteenth of the buildings per call.
-void __fastcall GameWorld_MarkBuildingSight(GameWorld* world, void*, std::uint32_t first) {
+void __fastcall CGameData_MarkBuildingSight(CGameData* world, void*, std::uint32_t first) {
     const std::int32_t team = LocalTeam(world);
     for (std::uint32_t i = first; i <= world->building_high_water; i += 16) {
         const Building& b = world->buildings[i];
@@ -154,7 +154,7 @@ void __fastcall GameWorld_MarkBuildingSight(GameWorld* world, void*, std::uint32
 
 // Purpose: Fog of war: the local team sees the land around its settlers (some unit types see farther, some
 // not at all); one sixteenth of the settlers per call.
-void __fastcall GameWorld_MarkSettlerSight(GameWorld* world, void*, std::uint32_t first) {
+void __fastcall CGameData_MarkSettlerSight(CGameData* world, void*, std::uint32_t first) {
     const std::int32_t team = LocalTeam(world);
     for (std::uint32_t i = first; i <= world->settler_high_water; i += 16) {
         const Settler& s = world->settlers[i];
@@ -186,7 +186,7 @@ void __fastcall GameWorld_MarkSettlerSight(GameWorld* world, void*, std::uint32_
 
 // Purpose: What the local team remembers seeing on a tile (a building with its construction stage, a pile, or
 // a landscape object), stored for drawing the tile under the fog of war.
-std::uint32_t __fastcall GameWorld_SeenObjectAt(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall CGameData_SeenObjectAt(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     const Tile& tile = TileAt(world, x, y);
     std::uint16_t result = 0;
     if (tile.object_number != 0 && (tile.flags & layout::kTileHasBuilding) != 0) {
@@ -222,7 +222,7 @@ std::uint32_t __fastcall GameWorld_SeenObjectAt(GameWorld* world, void*, std::ui
 
 // Purpose: Fog of war: turns the local team's current sight of a sixteenth of the map into the fog level that
 // is drawn, remembering what was last seen on tiles that fall back into the fog.
-void __fastcall GameWorld_UpdateFogSlice(GameWorld* world, void*, std::uint32_t slice) {
+void __fastcall CGameData_UpdateFogSlice(CGameData* world, void*, std::uint32_t slice) {
     const auto seenObjectAt = reinterpret_cast<SeenFn>(kSeenObjectAt);
     const bool revealed = g_revealMap != 0;
     auto rows = [world]() { return static_cast<std::uint32_t>(static_cast<std::int32_t>(world->map_size) / 16); };
@@ -258,15 +258,15 @@ void __fastcall GameWorld_UpdateFogSlice(GameWorld* world, void*, std::uint32_t 
     }
 }
 
-S3RE_HOOK(0x00518f20, GameWorld_MarkRevealPointsSight, VoidFn, Original_GameWorld_MarkRevealPointsSight,
-          GameWorld_MarkRevealPointsSight);
-S3RE_HOOK(0x00519fa0, GameWorld_MarkBuildingSight, FirstFn, Original_GameWorld_MarkBuildingSight,
-          GameWorld_MarkBuildingSight);
-S3RE_HOOK(0x0051a150, GameWorld_MarkSettlerSight, FirstFn, Original_GameWorld_MarkSettlerSight,
-          GameWorld_MarkSettlerSight);
-S3RE_HOOK(0x0051d5f0, GameWorld_SeenObjectAt, SeenFn, Original_GameWorld_SeenObjectAt, GameWorld_SeenObjectAt);
-S3RE_HOOK(0x00519010, GameWorld_UpdateFogSlice, FirstFn, Original_GameWorld_UpdateFogSlice,
-          GameWorld_UpdateFogSlice);
+S3RE_HOOK(0x00518f20, CGameData_MarkRevealPointsSight, VoidFn, Original_CGameData_MarkRevealPointsSight,
+          CGameData_MarkRevealPointsSight);
+S3RE_HOOK(0x00519fa0, CGameData_MarkBuildingSight, FirstFn, Original_CGameData_MarkBuildingSight,
+          CGameData_MarkBuildingSight);
+S3RE_HOOK(0x0051a150, CGameData_MarkSettlerSight, FirstFn, Original_CGameData_MarkSettlerSight,
+          CGameData_MarkSettlerSight);
+S3RE_HOOK(0x0051d5f0, CGameData_SeenObjectAt, SeenFn, Original_CGameData_SeenObjectAt, CGameData_SeenObjectAt);
+S3RE_HOOK(0x00519010, CGameData_UpdateFogSlice, FirstFn, Original_CGameData_UpdateFogSlice,
+          CGameData_UpdateFogSlice);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -274,7 +274,7 @@ S3RE_HOOK(0x00519010, GameWorld_UpdateFogSlice, FirstFn, Original_GameWorld_Upda
 
 namespace {
 
-constexpr std::size_t kWorld = sizeof(GameWorld);
+constexpr std::size_t kWorld = sizeof(CGameData);
 
 // A ring table like the game's: every distance 0..64 appears (the loops stop
 // at the first entry with distance == radius), offsets within the ring.
@@ -290,7 +290,7 @@ void SetUpOffsets(test::Context& ctx, test::WorldPair& worlds) {
             table[n].sector = static_cast<std::int32_t>(ctx.rng().Below(6));
         }
     }
-    worlds.Both([&](GameWorld* w) { std::memcpy(w->offsets, table.data(), n * sizeof(MapOffset)); });
+    worlds.Both([&](CGameData* w) { std::memcpy(w->offsets, table.data(), n * sizeof(MapOffset)); });
 }
 
 std::uint32_t TestMapSize(test::Context& ctx) {
@@ -312,7 +312,7 @@ void SetUpTeams(test::Context& ctx, test::WorldPair& worlds) {
     for (auto& t : teams) {
         t = static_cast<std::int32_t>(ctx.rng().Below(3));
     }
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         w->local_player = local;
         for (int p = 0; p < 20; ++p) {
             w->players[p].team = teams[p];
@@ -325,7 +325,7 @@ void RandomSight(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size
     for (std::uint32_t x = 0; x < size + 4; ++x) {
         for (std::uint32_t y = 0; y < size + 4; ++y) {
             const auto value = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(0x40));
-            worlds.Both([&](GameWorld* w) { w->tiles[x][y].sight = value; });
+            worlds.Both([&](CGameData* w) { w->tiles[x][y].sight = value; });
         }
     }
 }
@@ -336,7 +336,7 @@ void Compare(test::Context& ctx, int cases, Setup setup, Call call) {
     SetUpOffsets(ctx, worlds);
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = TestMapSize(ctx);
-        worlds.Both([&](GameWorld* w) { w->map_size = size; });
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
         SetUpTeams(ctx, worlds);
         RandomSight(ctx, worlds, size);
         const std::uint32_t arg = setup(worlds, size);
@@ -349,12 +349,12 @@ void Compare(test::Context& ctx, int cases, Setup setup, Call call) {
 
 std::uint32_t SetUpRevealPoints(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size) {
     const std::int32_t high = static_cast<std::int32_t>(ctx.rng().Below(52)) - 2;
-    worlds.Both([&](GameWorld* w) { w->reveal_point_high_water = high; });
+    worlds.Both([&](CGameData* w) { w->reveal_point_high_water = high; });
     for (std::int32_t i = 0; i < 50; ++i) {
         const auto active = static_cast<std::uint8_t>(ctx.rng().Chance(1, 3) ? 0 : 1 + ctx.rng().Below(255));
         const std::int32_t x = ctx.rng().Range(-2, static_cast<std::int32_t>(size) + 2);
         const std::int32_t y = ctx.rng().Range(-2, static_cast<std::int32_t>(size) + 2);
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->reveal_points[i].active = active;
             w->reveal_points[i].x = x;
             w->reveal_points[i].y = y;
@@ -365,7 +365,7 @@ std::uint32_t SetUpRevealPoints(test::Context& ctx, test::WorldPair& worlds, std
 
 std::uint32_t SetUpBuildings(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size) {
     const std::uint32_t high = ctx.rng().Below(600);
-    worlds.Both([&](GameWorld* w) { w->building_high_water = high; });
+    worlds.Both([&](CGameData* w) { w->building_high_water = high; });
     static constexpr std::uint8_t kTypes[] = {6, 0xf, 0x10, 0x12, 1, 0x20};
     for (std::uint32_t i = 0; i <= high; ++i) {
         const std::uint8_t owner = Owner(ctx);
@@ -374,7 +374,7 @@ std::uint32_t SetUpBuildings(test::Context& ctx, test::WorldPair& worlds, std::u
         const std::uint8_t art = kTypes[ctx.rng().Below(6)];
         const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? ctx.rng().Below(256) : 0);
         const auto garrison = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(5));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Building& b = w->buildings[i];
             b.owner = owner;
             b.x = x;
@@ -389,14 +389,14 @@ std::uint32_t SetUpBuildings(test::Context& ctx, test::WorldPair& worlds, std::u
 
 std::uint32_t SetUpSettlers(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size) {
     const std::uint32_t high = ctx.rng().Below(2000);
-    worlds.Both([&](GameWorld* w) { w->settler_high_water = high; });
+    worlds.Both([&](CGameData* w) { w->settler_high_water = high; });
     static constexpr std::uint8_t kTypes[] = {0x17, 0x25, 0x27, 0x29, 0x2a, 0x2b, 0x2c, 1, 0x10, 0x30};
     for (std::uint32_t i = 0; i <= high; ++i) {
         const std::uint8_t owner = Owner(ctx);
         const std::uint16_t x = Coordinate(ctx, size);
         const std::uint16_t y = Coordinate(ctx, size);
         const std::uint8_t art = kTypes[ctx.rng().Below(10)];
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             Settler& s = w->settlers[i];
             s.owner = owner;
             s.x = x;
@@ -423,7 +423,7 @@ void SetUpSeenTiles(test::Context& ctx, test::WorldPair& worlds, std::uint32_t s
             }
             const auto terrain = static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? 0x1c : ctx.rng().Below(256));
             const auto object = static_cast<std::uint8_t>(ctx.rng().Chance(1, 3) ? 0 : ctx.rng().Below(256));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 Tile& t = w->tiles[x][y];
                 t.object_number = number;
                 t.flags = flags;
@@ -439,7 +439,7 @@ void SetUpProgress(test::Context& ctx, test::WorldPair& worlds) {
         const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? 0 : ctx.rng().Below(256));
         const auto total = static_cast<std::uint8_t>(ctx.rng().Below(8));
         const auto done = static_cast<std::uint8_t>(ctx.rng().Below(total + 1u));
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->buildings[i].buildup = buildup;
             w->buildings[i].site.materials_total = total;
             w->buildings[i].site.materials_used = done;
@@ -447,21 +447,21 @@ void SetUpProgress(test::Context& ctx, test::WorldPair& worlds) {
     }
 }
 
-void __fastcall WrongMarkBuildingSight(GameWorld* world, void*, std::uint32_t first) {
+void __fastcall WrongMarkBuildingSight(CGameData* world, void*, std::uint32_t first) {
     // Wrong: towers of type 0x10 see as far as type 0xf.
     for (std::uint32_t i = first; i <= world->building_high_water; i += 16) {
         if (world->buildings[i].art == 0x10) {
             world->buildings[i].art = 0xf;
-            GameWorld_MarkBuildingSight(world, nullptr, i);
+            CGameData_MarkBuildingSight(world, nullptr, i);
             world->buildings[i].art = 0x10;
         }
     }
-    GameWorld_MarkBuildingSight(world, nullptr, first);
+    CGameData_MarkBuildingSight(world, nullptr, first);
 }
 
-std::uint32_t __fastcall WrongSeenObjectAt(GameWorld* world, void*, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall WrongSeenObjectAt(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     // Wrong: no worn-path bit.
-    return GameWorld_SeenObjectAt(world, nullptr, x, y) & ~0x400u;
+    return CGameData_SeenObjectAt(world, nullptr, x, y) & ~0x400u;
 }
 
 void FogCompare(test::Context& ctx, FirstFn original, FirstFn candidate, int cases) {
@@ -472,7 +472,7 @@ void FogCompare(test::Context& ctx, FirstFn original, FirstFn candidate, int cas
             for (std::uint32_t x = 0; x < size; ++x) {
                 for (std::uint32_t y = 0; y < size; ++y) {
                     const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32());
-                    worlds.Both([&](GameWorld* w) { w->tiles[x][y].draw_flags = flags; });
+                    worlds.Both([&](CGameData* w) { w->tiles[x][y].draw_flags = flags; });
                 }
             }
             const std::int32_t revealed = ctx.rng().Chance(1, 4) ? 1 : 0;
@@ -487,58 +487,58 @@ void FogCompare(test::Context& ctx, FirstFn original, FirstFn candidate, int cas
     g_revealMap = 0;
 }
 
-void __fastcall WrongUpdateFogSlice(GameWorld* world, void*, std::uint32_t slice) {
+void __fastcall WrongUpdateFogSlice(CGameData* world, void*, std::uint32_t slice) {
     // Wrong: the first tile of the slice loses its redraw bit.
-    GameWorld_UpdateFogSlice(world, nullptr, slice);
+    CGameData_UpdateFogSlice(world, nullptr, slice);
     const std::uint32_t y = static_cast<std::uint32_t>(static_cast<std::int32_t>(world->map_size) / 16) * slice;
     world->tiles[0][y].draw_flags &= 0x7f;
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_MarkRevealPointsSight_MatchesOriginal) {
+S3RE_TEST(CGameData_MarkRevealPointsSight_MatchesOriginal) {
     Compare(
         ctx, 60, [&](test::WorldPair& worlds, std::uint32_t size) { return SetUpRevealPoints(ctx, worlds, size); },
         [&](test::WorldPair& worlds, std::uint32_t) {
-            Original_GameWorld_MarkRevealPointsSight(worlds.original(), nullptr);
-            GameWorld_MarkRevealPointsSight(worlds.ours(), nullptr);
+            Original_CGameData_MarkRevealPointsSight(worlds.original(), nullptr);
+            CGameData_MarkRevealPointsSight(worlds.ours(), nullptr);
             return true;
         });
 }
 
-S3RE_TEST(GameWorld_MarkBuildingSight_MatchesOriginal) {
+S3RE_TEST(CGameData_MarkBuildingSight_MatchesOriginal) {
     Compare(
         ctx, 60, [&](test::WorldPair& worlds, std::uint32_t size) { return SetUpBuildings(ctx, worlds, size); },
         [&](test::WorldPair& worlds, std::uint32_t first) {
-            Original_GameWorld_MarkBuildingSight(worlds.original(), nullptr, first);
-            GameWorld_MarkBuildingSight(worlds.ours(), nullptr, first);
+            Original_CGameData_MarkBuildingSight(worlds.original(), nullptr, first);
+            CGameData_MarkBuildingSight(worlds.ours(), nullptr, first);
             return true;
         });
 }
 
-S3RE_TEST(GameWorld_MarkBuildingSight_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_MarkBuildingSight_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     Compare(
         probe, 30, [&](test::WorldPair& worlds, std::uint32_t size) { return SetUpBuildings(probe, worlds, size); },
         [&](test::WorldPair& worlds, std::uint32_t first) {
-            Original_GameWorld_MarkBuildingSight(worlds.original(), nullptr, first);
+            Original_CGameData_MarkBuildingSight(worlds.original(), nullptr, first);
             WrongMarkBuildingSight(worlds.ours(), nullptr, first);
             return true;
         });
     S3RE_EXPECT(probe.failures() > 0);
 }
 
-S3RE_TEST(GameWorld_MarkSettlerSight_MatchesOriginal) {
+S3RE_TEST(CGameData_MarkSettlerSight_MatchesOriginal) {
     Compare(
         ctx, 60, [&](test::WorldPair& worlds, std::uint32_t size) { return SetUpSettlers(ctx, worlds, size); },
         [&](test::WorldPair& worlds, std::uint32_t first) {
-            Original_GameWorld_MarkSettlerSight(worlds.original(), nullptr, first);
-            GameWorld_MarkSettlerSight(worlds.ours(), nullptr, first);
+            Original_CGameData_MarkSettlerSight(worlds.original(), nullptr, first);
+            CGameData_MarkSettlerSight(worlds.ours(), nullptr, first);
             return true;
         });
 }
 
-S3RE_TEST(GameWorld_SeenObjectAt_MatchesOriginal) {
+S3RE_TEST(CGameData_SeenObjectAt_MatchesOriginal) {
     Compare(
         ctx, 20,
         [&](test::WorldPair& worlds, std::uint32_t size) {
@@ -550,8 +550,8 @@ S3RE_TEST(GameWorld_SeenObjectAt_MatchesOriginal) {
             const std::uint32_t size = worlds.original()->map_size;
             for (std::uint32_t x = 0; x < size; ++x) {
                 for (std::uint32_t y = 0; y < size; ++y) {
-                    const std::uint32_t expected = Original_GameWorld_SeenObjectAt(worlds.original(), nullptr, x, y);
-                    const std::uint32_t actual = GameWorld_SeenObjectAt(worlds.ours(), nullptr, x, y);
+                    const std::uint32_t expected = Original_CGameData_SeenObjectAt(worlds.original(), nullptr, x, y);
+                    const std::uint32_t actual = CGameData_SeenObjectAt(worlds.ours(), nullptr, x, y);
                     if (!S3RE_EXPECT_EQ(expected & 0xffff, actual & 0xffff)) {
                         ctx.Fail(__FILE__, __LINE__, "  tile (%u, %u)", x, y);
                         return false;
@@ -562,29 +562,29 @@ S3RE_TEST(GameWorld_SeenObjectAt_MatchesOriginal) {
         });
 }
 
-S3RE_TEST(GameWorld_SeenObjectAt_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_SeenObjectAt_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     test::WorldPair worlds(probe, kWorld);
-    worlds.Both([&](GameWorld* w) { w->map_size = 64; });
+    worlds.Both([&](CGameData* w) { w->map_size = 64; });
     SetUpSeenTiles(probe, worlds, 64);
     SetUpProgress(probe, worlds);
     bool differs = false;
     for (std::uint32_t x = 0; x < 64 && !differs; ++x) {
         for (std::uint32_t y = 0; y < 64 && !differs; ++y) {
-            differs = (Original_GameWorld_SeenObjectAt(worlds.original(), nullptr, x, y) & 0xffff) !=
+            differs = (Original_CGameData_SeenObjectAt(worlds.original(), nullptr, x, y) & 0xffff) !=
                       (WrongSeenObjectAt(worlds.ours(), nullptr, x, y) & 0xffff);
         }
     }
     S3RE_EXPECT(differs);
 }
 
-S3RE_TEST(GameWorld_UpdateFogSlice_MatchesOriginal) {
-    FogCompare(ctx, Original_GameWorld_UpdateFogSlice, &GameWorld_UpdateFogSlice, 40);
+S3RE_TEST(CGameData_UpdateFogSlice_MatchesOriginal) {
+    FogCompare(ctx, Original_CGameData_UpdateFogSlice, &CGameData_UpdateFogSlice, 40);
 }
 
-S3RE_TEST(GameWorld_UpdateFogSlice_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_UpdateFogSlice_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    FogCompare(probe, Original_GameWorld_UpdateFogSlice, &WrongUpdateFogSlice, 60);
+    FogCompare(probe, Original_CGameData_UpdateFogSlice, &WrongUpdateFogSlice, 60);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

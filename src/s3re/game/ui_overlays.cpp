@@ -2,7 +2,7 @@
 // code shows (for example the working area of a selected building). They
 // take the logic thread in ECX and reach the world through this+0x3a0. A
 // mark is the current search generation in tile byte +0xb (so a new
-// generation clears all marks at once, see GameWorld::NextSearchGeneration)
+// generation clears all marks at once, see CGameData::NextSearchGeneration)
 // plus a value in tile byte +0xc.
 //
 // CLogicThread::DrawOverlayLine (0x00523560): (x0, y0, x1, y1, value):
@@ -32,7 +32,7 @@
 //   new search generation and draws up to four DrawOverlayLine segments
 //   (values 1..4) through the points of the building's extra record (uint16
 //   +0x34 = record number; 0x5a-byte records at world+0x10f45e8, see
-//   GameWorld::AllocBuildingExtra): points 1..3 x at +0x2/+0x4/+0x6, y at
+//   CGameData::AllocBuildingExtra): points 1..3 x at +0x2/+0x4/+0x6, y at
 //   +0xa/+0xc/+0xe, 0xffff = not set (skipped); the end point x +0x8, y
 //   +0x10 (nothing is drawn if its x is 0xffff). The line starts at the
 //   building's word pair +0x2/+0x4 for type (+0x6) 0x22, +0x30/+0x32 for
@@ -61,16 +61,16 @@ using layout::Tile;
 
 constexpr std::uint16_t kNoPoint = 0xffff;
 
-GameWorld* WorldOf(CLogicThread* self) {
+CGameData* WorldOf(CLogicThread* self) {
     return LogicThreadOf(self)->world;
 }
 
 // Tile (x, y), addressed in 32 bits like the original (any x and y).
-Tile& OverlayTile(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+Tile& OverlayTile(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
-void MarkOverlayTile(GameWorld* world, Tile& tile, std::uint32_t value) {
+void MarkOverlayTile(CGameData* world, Tile& tile, std::uint32_t value) {
     tile.search_mark = world->search_generation;
     tile.overlay_value = static_cast<std::uint8_t>(value);
 }
@@ -102,7 +102,7 @@ using RouteFn = void(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t b
 // shows, e.g. probably a connection between two places).
 std::uint32_t __fastcall CLogicThread_DrawOverlayLine(CLogicThread* self, void*, std::uint32_t x0, std::uint32_t y0,
                                                       std::uint32_t x1, std::uint32_t y1, std::uint32_t value) {
-    GameWorld* world = WorldOf(self);
+    CGameData* world = WorldOf(self);
     MarkOverlayTile(world, OverlayTile(world, x0, y0), value);
     MarkOverlayTile(world, OverlayTile(world, x1, y1), value);
     const std::uint32_t steps = TileDistance(x0, y0, x1, y1);
@@ -131,8 +131,8 @@ std::uint32_t __fastcall CLogicThread_DrawOverlayLine(CLogicThread* self, void*,
 // Purpose: Display only: when a building is selected, marks four rings around it showing how far its
 // workers go (e.g. woodcutter, fisher, hunter); only tiles in the building's own area are marked.
 std::uint32_t __fastcall CLogicThread_DrawWorkAreaOverlay(CLogicThread* self, void*, std::uint32_t building) {
-    GameWorld* world = WorldOf(self);
-    GameWorld_NextSearchGeneration(world, nullptr);
+    CGameData* world = WorldOf(self);
+    CGameData_NextSearchGeneration(world, nullptr);
     const auto result = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
     const layout::Building& record = world->buildings[building];
     const std::uint32_t entry = WorkAreaEntry(record.art);
@@ -185,7 +185,7 @@ std::uint32_t __fastcall CLogicThread_DrawWorkAreaOverlay(CLogicThread* self, vo
 // Purpose: Display only: when a trading building (probably market or port) is selected, draws its route
 // as lines on the map: from the building through up to three waypoints to the destination.
 void __fastcall CLogicThread_DrawBuildingRouteOverlay(CLogicThread* self, void*, std::uint32_t building) {
-    GameWorld* world = WorldOf(self);
+    CGameData* world = WorldOf(self);
     const layout::Building& record = world->buildings[building];
     const std::uint8_t type = record.art;
     std::uint32_t x = building;
@@ -198,7 +198,7 @@ void __fastcall CLogicThread_DrawBuildingRouteOverlay(CLogicThread* self, void*,
         y = record.work_y;
     }
     const layout::Trade& extra = world->trades[record.trade];
-    GameWorld_NextSearchGeneration(world, nullptr);
+    CGameData_NextSearchGeneration(world, nullptr);
     if (extra.route_x[3] == kNoPoint) {
         return;
     }
@@ -229,10 +229,10 @@ S3RE_HOOK(0x005236b0, CLogicThread_DrawBuildingRouteOverlay, RouteFn, Original_C
 namespace {
 
 constexpr std::uint32_t kTestBuildings = 0x100;
-constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + (kTestBuildings + 1) * sizeof(layout::Building);
+constexpr std::size_t kTestWorld = offsetof(CGameData, buildings) + (kTestBuildings + 1) * sizeof(layout::Building);
 constexpr std::uint32_t kTableEntries = 3200;
 constexpr std::uint32_t kTestExtras = 64;
-static_assert(offsetof(GameWorld, trades) + (kTestExtras + 1) * sizeof(layout::Trade) < kTestWorld,
+static_assert(offsetof(CGameData, trades) + (kTestExtras + 1) * sizeof(layout::Trade) < kTestWorld,
               "extras inside the test world");
 
 // Two fake logic threads, each pointing at one of the worlds.
@@ -262,7 +262,7 @@ void CompareLine(test::Context& ctx, LineFn candidate, int cases) {
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = ctx.rng().Chance(1, 2) ? 384 : 1 + ctx.rng().Below(384);
         const std::uint32_t mapSize = ctx.rng().Chance(1, 50) ? ctx.rng().Next32() : size;
-        worlds.Both([&](GameWorld* w) { w->map_size = mapSize; });
+        worlds.Both([&](CGameData* w) { w->map_size = mapSize; });
         // End points on the map (they are marked without a check), the line
         // sometimes leaving a smaller map; rarely a pair so far apart that
         // the distance is negative as an int32 (nothing but the end tiles).
@@ -295,7 +295,7 @@ void CompareLine(test::Context& ctx, LineFn candidate, int cases) {
 // Wrong: the rings are numbered from 0.
 std::uint32_t __fastcall WrongDrawWorkAreaOverlay(CLogicThread* self, void* edx, std::uint32_t building) {
     const std::uint32_t result = CLogicThread_DrawWorkAreaOverlay(self, edx, building);
-    GameWorld* world = WorldOf(self);
+    CGameData* world = WorldOf(self);
     const std::uint32_t size = world->map_size;
     for (std::uint32_t x = 0; x < size; ++x) {
         for (std::uint32_t y = 0; y < size; ++y) {
@@ -319,7 +319,7 @@ void CompareWorkArea(test::Context& ctx, WorkAreaFn candidate, int cases) {
         const std::int32_t reach = 1 + static_cast<std::int32_t>(i / 60);
         const std::int32_t dx = ctx.rng().Range(-reach, reach);
         const std::int32_t dy = ctx.rng().Range(-reach, reach);
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             w->offsets[i].dx = dx;
             w->offsets[i].dy = dy;
             w->offsets[i].distance = static_cast<std::int32_t>(v);
@@ -329,15 +329,15 @@ void CompareWorkArea(test::Context& ctx, WorkAreaFn candidate, int cases) {
     for (std::uint32_t x = 0; x < 384; ++x) {
         for (std::uint32_t y = 0; y < 384; ++y) {
             const auto area = static_cast<std::uint16_t>(((x / 8) * 7 + (y / 8) * 3) % 3);
-            worlds.Both([&](GameWorld* w) { w->tiles[x][y].area = area; });
+            worlds.Both([&](CGameData* w) { w->tiles[x][y].area = area; });
         }
     }
     static constexpr std::uint8_t kTypes[] = {2, 3, 5, 0xe, 0x18, 0x19, 0x1e, 0x24, 0x33, 0, 1, 0x30, 0xff};
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = ctx.rng().Chance(2, 3) ? 384 : 1 + ctx.rng().Below(384);
-        worlds.Both([&](GameWorld* w) { w->map_size = size; });
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
         const auto generation = static_cast<std::uint8_t>(ctx.rng().Chance(1, 20) ? 0xff : ctx.rng().Below(255));
-        worlds.Both([&](GameWorld* w) { w->search_generation = generation; });
+        worlds.Both([&](CGameData* w) { w->search_generation = generation; });
         const std::uint32_t building = 1 + ctx.rng().Below(kTestBuildings);
         const std::uint8_t type = kTypes[ctx.rng().Below(sizeof(kTypes))];
         const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Next32());
@@ -345,7 +345,7 @@ void CompareWorkArea(test::Context& ctx, WorkAreaFn candidate, int cases) {
         for (std::uint16_t& word : words) {
             word = static_cast<std::uint16_t>(ctx.rng().Below(384));
         }
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             layout::Building& record = w->buildings[building];
             record.art = type;
             record.buildup = buildup;
@@ -370,7 +370,7 @@ void CompareWorkArea(test::Context& ctx, WorkAreaFn candidate, int cases) {
 
 // Wrong: skips the second waypoint.
 void __fastcall WrongDrawBuildingRouteOverlay(CLogicThread* self, void* edx, std::uint32_t building) {
-    GameWorld* world = WorldOf(self);
+    CGameData* world = WorldOf(self);
     layout::Trade& extra = world->trades[world->buildings[building].trade];
     const std::uint16_t saved = extra.route_x[1];
     extra.route_x[1] = kNoPoint;
@@ -384,9 +384,9 @@ void CompareRoute(test::Context& ctx, RouteFn candidate, int cases) {
     static constexpr std::uint8_t kTypes[] = {0x21, 0x22, 0x21, 0x22, 0x21, 0x22, 0, 0x20, 0xff};
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t size = ctx.rng().Chance(2, 3) ? 384 : 1 + ctx.rng().Below(384);
-        worlds.Both([&](GameWorld* w) { w->map_size = size; });
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
         const auto generation = static_cast<std::uint8_t>(ctx.rng().Chance(1, 20) ? 0xff : ctx.rng().Below(255));
-        worlds.Both([&](GameWorld* w) { w->search_generation = generation; });
+        worlds.Both([&](CGameData* w) { w->search_generation = generation; });
         const std::uint32_t building = 1 + ctx.rng().Below(kTestBuildings);
         const std::uint8_t type = kTypes[ctx.rng().Below(sizeof(kTypes))];
         std::uint16_t words[4];  // x, y, work_x, work_y
@@ -394,7 +394,7 @@ void CompareRoute(test::Context& ctx, RouteFn candidate, int cases) {
             word = static_cast<std::uint16_t>(ctx.rng().Below(384));
         }
         const std::uint32_t number = 1 + ctx.rng().Below(kTestExtras);
-        worlds.Both([&](GameWorld* w) {
+        worlds.Both([&](CGameData* w) {
             layout::Building& record = w->buildings[building];
             record.art = type;
             record.x = words[0];
@@ -407,7 +407,7 @@ void CompareRoute(test::Context& ctx, RouteFn candidate, int cases) {
             const bool unset = ctx.rng().Chance(1, point == 3 ? 10 : 3);
             const std::uint16_t px = unset ? kNoPoint : static_cast<std::uint16_t>(ctx.rng().Below(384));
             const auto py = static_cast<std::uint16_t>(ctx.rng().Below(384));
-            worlds.Both([&](GameWorld* w) {
+            worlds.Both([&](CGameData* w) {
                 w->trades[number].route_x[point] = px;
                 w->trades[number].route_y[point] = py;
             });

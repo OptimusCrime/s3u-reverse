@@ -32,7 +32,7 @@ struct ComputerPlayer {
     std::uint8_t unk000[0x272];
     std::uint8_t player_number;   // 0x272
     std::uint8_t unk273[0x75c - 0x273];
-    std::uint32_t world;          // 0x75c GameWorld*
+    std::uint32_t world;          // 0x75c CGameData*
     std::uint8_t unk760[0x10];
     std::uint32_t setup_index;    // 0x770 index into g_aiPlayerSetups
     std::uint32_t unk774;

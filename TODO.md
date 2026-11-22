@@ -10,16 +10,12 @@ Each item: what, why, and where to start.
 
 ## Naming
 
-- **Rename `GameWorld::Create` (0x5166d0) to `CGameData::GenerateRandomMap`.**
+- **Rename `CGameData::Create` (0x5166d0) to `CGameData::GenerateRandomMap`.**
   It is the random map generator ("Erstelle Zufallswelt"), not a general
   world constructor; file maps use 0x4fd540, savegames 0x508fa0.
   Postponed until the struct refactor (batch 2b) has landed.
-- **Rename the `GameWorld` class to `CGameData` everywhere** (code,
-  inventory names, docs, test names). `CGameData` is the real class name
-  from RTTI. Large mechanical change; do it in one dedicated commit after
-  the struct refactor.
 - **Audit provisional names.** Many names were given early from partial
-  evidence (e.g. `GameWorld::UpdateSettlers`,
+  evidence (e.g. `CGameData::UpdateSettlers`,
   `Logic_sub_*` / `SaveGame_sub_*` / `AI_sub_*` survey names). Review them
   when the functions are worked on; see the naming rule in `CLAUDE.md`.
 - **WalkSettler whole-game evidence for shooting and boarding:** no check
@@ -38,20 +34,33 @@ Each item: what, why, and where to start.
 
 ## Evidence and testing
 
+- **In-process tests that crash on other inputs:** test inputs are seeded
+  from the test name. During the GameWorld -> CGameData rename (session
+  45) the new names gave new inputs, and
+  `CGameData_ReleaseSiteWorkers_MatchesOriginal` crashed inside the
+  original (access violation at S3.EXE+0x10e443, address 0x0548B002); the
+  crash left CalleeStubs patches installed, so later stub tests
+  (MinerJobFood, StealGoodFromPile) crashed too. The rename now hashes the
+  old names (`SeedName` in difftest.cpp, `seed_name` in emutest/run.py),
+  so inputs are unchanged. To do: make that test's input generator
+  produce only states the original can handle (try `S3RE_TEST_SEED`
+  values), and have a crashing test's CalleeStubs restore its patches
+  (the SEH guard skips the destructor).
+
 - **Record/replay of random-map games:** `--random-map` can't be combined
   with the command recorder, because recordings store only a map file
   name. Add the random-map parameters to the recording format (version 3)
   so synthetic-input games on random maps can be replayed.
-- **Emulator coverage of `GameWorld::Create`:** 338/415 blocks; the rest
+- **Emulator coverage of `CGameData::Create`:** 338/415 blocks; the rest
   needs maps of 130+ tiles, too slow in the emulator (a 320-tile case ran
   for over an hour). Options: a release build of s3re.dll for the emulator,
   a faster emulator path, or accept the in-process whole-world comparison.
   The plain Release build doesn't work for the emulator yet (2026-11-10):
-  `run.py --build Release` stops with "GameWorld_CenterCameraOnLocalPlayer:
+  `run.py --build Release` stops with "CGameData_CenterCameraOnLocalPlayer:
   0 matching symbols in s3re.map", because the linker folds identical
   functions (/OPT:ICF) and keeps only one name. A separate emulator
   configuration with `/OPT:NOICF` (maybe `/Ob1`) would be needed; then
-  compare its full run with Debug's and time GameWorld_Create.
+  compare its full run with Debug's and time CGameData_Create.
 - **Full serial emulator run as a cross-check of `--jobs`:** the parallel
   runs (3 schedules: specs.py order, longest first, slow specs split into
   parts) gave identical output; the `--jobs 1` run was stopped after its
@@ -84,7 +93,7 @@ Each item: what, why, and where to start.
 
 ## Spells left of UpdateEnvironment's call tree (package D, session 45)
 
-The dispatcher GameWorld::ExecuteSpell 0x5480B0 and spells 5..9 and 31 are
+The dispatcher CGameData::ExecuteSpell 0x5480B0 and spells 5..9 and 31 are
 verified (spells.cpp); the other handlers of Volker\GodlyEvents.cpp are
 still original code, called by address (plan and sizes in
 `re/update_environment.md`): 0x548340 (spells 0..3, with 0x548380 area

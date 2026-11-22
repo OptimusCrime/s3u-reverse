@@ -21,7 +21,7 @@
 //                keep their height
 //   0x80000003   end
 //
-// GameWorld::CheckBuildingSite (0x004d99e0): (x, y, type, player, mode):
+// CGameData::CheckBuildingSite (0x004d99e0): (x, y, type, player, mode):
 //   mode 0 only checks, mode 1 also places the construction site; mode + 2
 //   does the same for unowned land (the tiles must belong to nobody, 0xff,
 //   instead of the player; used for the start castle). Returns 0 if the
@@ -48,7 +48,7 @@
 //   cache slot is marked used and receives the 31x31 target heights (0 where
 //   the height stays); tiles whose height changes get flag 0x04 ("being
 //   levelled") and building word +0x28 sums |height - target|. ret 0x14.
-// GameWorld::PlanSiteLevelling (0x004da440): (x, y, type, player, height)
+// CGameData::PlanSiteLevelling (0x004da440): (x, y, type, player, height)
 //   plans the levelling in a 31x31 window centred on (x, y): grid H
 //   (world+0x1222ed4, cell [i][j] = i * 31 + j for tile (x-15+i, y-15+j))
 //   gets the current heights, grid S (world+0x1223295) a state per cell:
@@ -65,7 +65,7 @@
 //   |planned - current| over the inner cells, or 1 if that is 0. The grids
 //   stay as computed (CheckBuildingSite copies H when it places a site).
 //   ret 0x14.
-// GameWorld::AddBuildingSite (0x004dd280): (x, y, player, type): takes the
+// CGameData::AddBuildingSite (0x004dd280): (x, y, player, type): takes the
 //   first free building record 1..0xf9e (owner byte 0xff; 0xf9f counts as
 //   "none": EAX = 0), raises the high-water mark (world+0x1499e60), and
 //   fills it as a construction site: owner, x, y, type, race, buildup 1,
@@ -79,10 +79,10 @@
 //   0xff for type 1; the position for types 2, 3, 5, 0x19, 0x1e, 0x33; the
 //   position + (4, 8) / (5, 10) / (6, 12) clamped to the map for types 0xe /
 //   0x18 / 0x24. EAX = the building. ret 0x10.
-// GameWorld::IsFreeCastleSite (0x00508420): (player, x, y): 1 if
+// CGameData::IsFreeCastleSite (0x00508420): (player, x, y): 1 if
 //   CheckBuildingSite(x, y, castle 0xf, player, mode 2) is non-zero, else 0.
 //   ret 0xc.
-// GameWorld::IsGoodStartPosition (0x005081a0): (player, x, y, attempts):
+// CGameData::IsGoodStartPosition (0x005081a0): (player, x, y, attempts):
 //   0 unless a castle fits (as above); then counts over the offset table
 //   (world+0x110a588) around (x, y), tiles off the map skipped: within the
 //   first 3000 entries grass (ground class 0x10), trees (objects
@@ -127,7 +127,7 @@ constexpr std::uint8_t kFlagBuilding = layout::kTileHasBuilding;
 
 constexpr std::uint32_t kSiteSlots = 30;
 
-// The levelling window: two 31 x 31 byte grids in GameWorld::footprint_scratch
+// The levelling window: two 31 x 31 byte grids in CGameData::footprint_scratch
 // (heights at world+0x1222ed4, states at world+0x1223295).
 constexpr std::int32_t kGrid = 31;
 constexpr std::int32_t kGridCentre = 15;
@@ -149,11 +149,11 @@ constexpr std::uint32_t kModeCheckUnowned = 2;
 enum class SiteGroup { kPlain, kRace1, kRace2, kMine };
 
 // Tile (x, y); the index wraps in 32 bits like the original's.
-Tile& TileAt(GameWorld* world, std::uint32_t x, std::uint32_t y) {
+Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
-std::uint32_t PlayerRace(GameWorld* world, std::uint32_t player) {
+std::uint32_t PlayerRace(CGameData* world, std::uint32_t player) {
     return static_cast<std::uint32_t>(world->players[player].race);
 }
 
@@ -175,16 +175,16 @@ bool IsMine(std::uint32_t type) {
 // The levelling window: cell [i][j] (index i * 31 + j) is tile
 // (x - 15 + i, y - 15 + j). The index may lie outside 0..960 for odd
 // layouts; the original's address arithmetic is the same.
-std::uint8_t& HeightCell(GameWorld* world, std::int32_t cell) {
+std::uint8_t& HeightCell(CGameData* world, std::int32_t cell) {
     return world->footprint_scratch[0][cell];
 }
-std::uint8_t& StateCell(GameWorld* world, std::int32_t cell) {
+std::uint8_t& StateCell(CGameData* world, std::int32_t cell) {
     return world->footprint_scratch[1][cell];
 }
-std::uint8_t& HeightCell(GameWorld* world, std::int32_t i, std::int32_t j) {
+std::uint8_t& HeightCell(CGameData* world, std::int32_t i, std::int32_t j) {
     return HeightCell(world, i * kGrid + j);
 }
-std::uint8_t& StateCell(GameWorld* world, std::int32_t i, std::int32_t j) {
+std::uint8_t& StateCell(CGameData* world, std::int32_t i, std::int32_t j) {
     return StateCell(world, i * kGrid + j);
 }
 
@@ -196,7 +196,7 @@ constexpr std::uint8_t kCellFixed = 100;
 // One neighbour of a cell at height `h` must lie within [h - maxBelow,
 // h + maxAbove]. A free neighbour is moved to the limit and propagates in
 // the next round; a pending, changed or fixed one fails the plan.
-void PullNeighbour(GameWorld* world, std::int32_t i, std::int32_t j, std::int32_t h, std::int32_t maxBelow,
+void PullNeighbour(CGameData* world, std::int32_t i, std::int32_t j, std::int32_t h, std::int32_t maxBelow,
                    std::int32_t maxAbove, bool& changed, bool& failed) {
     std::uint8_t& height = HeightCell(world, i, j);
     std::uint8_t& state = StateCell(world, i, j);
@@ -219,34 +219,34 @@ void PullNeighbour(GameWorld* world, std::int32_t i, std::int32_t j, std::int32_
 
 }  // namespace
 
-using CheckBuildingSiteFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
+using CheckBuildingSiteFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x,
                                                        std::uint32_t y, std::uint32_t type, std::uint32_t player,
                                                        std::uint32_t mode);
-using PlanSiteLevellingFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x,
+using PlanSiteLevellingFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x,
                                                        std::uint32_t y, std::uint32_t type, std::uint32_t player,
                                                        std::uint32_t height);
-using AddBuildingSiteFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+using AddBuildingSiteFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                      std::uint32_t player, std::uint32_t type);
 
-std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall CGameData_CheckBuildingSite(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                      std::uint32_t type, std::uint32_t player, std::uint32_t mode);
-std::uint32_t __fastcall GameWorld_PlanSiteLevelling(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall CGameData_PlanSiteLevelling(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                      std::uint32_t type, std::uint32_t player, std::uint32_t height);
-std::uint32_t __fastcall GameWorld_AddBuildingSite(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall CGameData_AddBuildingSite(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                    std::uint32_t player, std::uint32_t type);
 
-S3RE_HOOK(0x004d99e0, GameWorld_CheckBuildingSite, CheckBuildingSiteFn, Original_GameWorld_CheckBuildingSite,
-          GameWorld_CheckBuildingSite);
-S3RE_HOOK(0x004da440, GameWorld_PlanSiteLevelling, PlanSiteLevellingFn, Original_GameWorld_PlanSiteLevelling,
-          GameWorld_PlanSiteLevelling);
-S3RE_HOOK(0x004dd280, GameWorld_AddBuildingSite, AddBuildingSiteFn, Original_GameWorld_AddBuildingSite,
-          GameWorld_AddBuildingSite);
+S3RE_HOOK(0x004d99e0, CGameData_CheckBuildingSite, CheckBuildingSiteFn, Original_CGameData_CheckBuildingSite,
+          CGameData_CheckBuildingSite);
+S3RE_HOOK(0x004da440, CGameData_PlanSiteLevelling, PlanSiteLevellingFn, Original_CGameData_PlanSiteLevelling,
+          CGameData_PlanSiteLevelling);
+S3RE_HOOK(0x004dd280, CGameData_AddBuildingSite, AddBuildingSiteFn, Original_CGameData_AddBuildingSite,
+          CGameData_AddBuildingSite);
 
 // Purpose: Works out how the ground around a planned building has to be
 // levelled: the building's tiles get one height and the slopes around them
 // are evened out; returns how much earth that moves (0 if impossible).
 // Used for the placement preview and when a building site is placed.
-std::uint32_t __fastcall GameWorld_PlanSiteLevelling(GameWorld* world, void* /*edx*/, std::uint32_t x,
+std::uint32_t __fastcall CGameData_PlanSiteLevelling(CGameData* world, void* /*edx*/, std::uint32_t x,
                                                      std::uint32_t y, std::uint32_t type, std::uint32_t player,
                                                      std::uint32_t height) {
     std::memset(&StateCell(world, 0, 0), kCellFree, kGrid * kGrid);
@@ -334,7 +334,7 @@ std::uint32_t __fastcall GameWorld_PlanSiteLevelling(GameWorld* world, void* /*e
 // Purpose: Creates the record of a new construction site (a building with
 // buildup 1) at (x, y) for a player, with its two empty material piles
 // next to the door. Returns the building number, 0 if all are in use.
-std::uint32_t __fastcall GameWorld_AddBuildingSite(GameWorld* world, void* /*edx*/, std::uint32_t x,
+std::uint32_t __fastcall CGameData_AddBuildingSite(CGameData* world, void* /*edx*/, std::uint32_t x,
                                                    std::uint32_t y, std::uint32_t player, std::uint32_t type) {
     std::uint32_t building = 1;
     while (world->buildings[building].owner != 0xff && building != kBuildingLimit) {
@@ -417,8 +417,8 @@ std::uint32_t __fastcall GameWorld_AddBuildingSite(GameWorld* world, void* /*edx
     }
 
     // Empty construction piles left and right of the door.
-    b.piles[0] = static_cast<std::uint16_t>(GameWorld_CreatePile(world, nullptr, doorX - 1u, doorY, 1, 0, 0xfd));
-    b.piles[1] = static_cast<std::uint16_t>(GameWorld_CreatePile(world, nullptr, doorX + 1u, doorY, 2, 0, 0xfd));
+    b.piles[0] = static_cast<std::uint16_t>(CGameData_CreatePile(world, nullptr, doorX - 1u, doorY, 1, 0, 0xfd));
+    b.piles[1] = static_cast<std::uint16_t>(CGameData_CreatePile(world, nullptr, doorX + 1u, doorY, 2, 0, 0xfd));
 
     // Work centre: words +0x0e (x) and +0x14 (y) of a construction site.
     if (type == 1) {
@@ -519,7 +519,7 @@ struct Stake {
 // and how much levelling it needs (the size of the placement-preview
 // marks); with mode 1 it also places the construction site. Used by the
 // placement preview, the build command and the computer players.
-std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*edx*/, std::uint32_t x,
+std::uint32_t __fastcall CGameData_CheckBuildingSite(CGameData* world, void* /*edx*/, std::uint32_t x,
                                                      std::uint32_t y, std::uint32_t type, std::uint32_t player,
                                                      std::uint32_t mode) {
     std::uint32_t owner = player;
@@ -568,7 +568,7 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
         const std::int32_t dy = static_cast<std::int32_t>(p[1]);
         const std::uint32_t tx = x + dx;
         const std::uint32_t ty = y + dy;
-        if (GameWorld_IsOnMap(world, nullptr, tx, ty) == 0) {
+        if (CGameData_IsOnMap(world, nullptr, tx, ty) == 0) {
             GameDebugLog(texts::kIllegalBuildingOffset, x, y, dx, dy);
         }
         if (!TileSuitsSite(TileAt(world, tx, ty), owner, area, group, false, false)) {
@@ -604,7 +604,7 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
     std::uint32_t earth = 1;  // mines are not levelled
     if (group != SiteGroup::kMine) {
         const std::uint32_t meanHeight = (tileCount / 2 + heightSum) / tileCount;
-        earth = GameWorld_PlanSiteLevelling(world, nullptr, x, y, type, player, meanHeight);
+        earth = CGameData_PlanSiteLevelling(world, nullptr, x, y, type, player, meanHeight);
         if (earth == 0) {
             return 0;
         }
@@ -623,11 +623,11 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
             return 0;
         }
     }
-    const std::uint32_t building = GameWorld_AddBuildingSite(world, nullptr, x, y, player, type);
+    const std::uint32_t building = CGameData_AddBuildingSite(world, nullptr, x, y, player, type);
     if (building == 0) {
         return 0;
     }
-    GameWorld_QueuePendingEvent(world, nullptr, 2, building, 0);
+    CGameData_QueuePendingEvent(world, nullptr, 2, building, 0);
 
     const std::uint32_t* const layout = Layout(PlayerRace(world, player), type);
     Building& b = world->buildings[building];
@@ -707,34 +707,34 @@ std::uint32_t __fastcall GameWorld_CheckBuildingSite(GameWorld* world, void* /*e
 }
 
 
-using CastleSiteFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t player, std::uint32_t x,
+using CastleSiteFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player, std::uint32_t x,
                                                 std::uint32_t y);
-using StartPositionFn = std::uint32_t(__fastcall*)(GameWorld* world, void* edx, std::uint32_t player,
+using StartPositionFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player,
                                                    std::uint32_t x, std::uint32_t y, std::uint32_t attempts);
-std::uint32_t __fastcall GameWorld_IsFreeCastleSite(GameWorld* world, void* edx, std::uint32_t player,
+std::uint32_t __fastcall CGameData_IsFreeCastleSite(CGameData* world, void* edx, std::uint32_t player,
                                                     std::uint32_t x, std::uint32_t y);
-std::uint32_t __fastcall GameWorld_IsGoodStartPosition(GameWorld* world, void* edx, std::uint32_t player,
+std::uint32_t __fastcall CGameData_IsGoodStartPosition(CGameData* world, void* edx, std::uint32_t player,
                                                        std::uint32_t x, std::uint32_t y, std::uint32_t attempts);
 
-S3RE_HOOK(0x00508420, GameWorld_IsFreeCastleSite, CastleSiteFn, Original_GameWorld_IsFreeCastleSite,
-          GameWorld_IsFreeCastleSite);
-S3RE_HOOK(0x005081a0, GameWorld_IsGoodStartPosition, StartPositionFn, Original_GameWorld_IsGoodStartPosition,
-          GameWorld_IsGoodStartPosition);
+S3RE_HOOK(0x00508420, CGameData_IsFreeCastleSite, CastleSiteFn, Original_CGameData_IsFreeCastleSite,
+          CGameData_IsFreeCastleSite);
+S3RE_HOOK(0x005081a0, CGameData_IsGoodStartPosition, StartPositionFn, Original_CGameData_IsGoodStartPosition,
+          CGameData_IsGoodStartPosition);
 
 // Purpose: Whether a player's castle could stand at (x, y) on land nobody
 // owns yet; used when the start positions are chosen (0x5074b0).
-std::uint32_t __fastcall GameWorld_IsFreeCastleSite(GameWorld* world, void* /*edx*/, std::uint32_t player,
+std::uint32_t __fastcall CGameData_IsFreeCastleSite(CGameData* world, void* /*edx*/, std::uint32_t player,
                                                     std::uint32_t x, std::uint32_t y) {
-    return GameWorld_CheckBuildingSite(world, nullptr, x, y, kCastleType, player, kModeCheckUnowned) != 0 ? 1 : 0;
+    return CGameData_CheckBuildingSite(world, nullptr, x, y, kCastleType, player, kModeCheckUnowned) != 0 ? 1 : 0;
 }
 
 // Purpose: Whether (x, y) is a good random start position for a player
 // (0x5074b0, "AddPlayerTowns"): a castle must fit on unowned land and the
 // surroundings must offer enough free land, grass, trees, stone and
 // resources; the demands drop as the number of attempts grows.
-std::uint32_t __fastcall GameWorld_IsGoodStartPosition(GameWorld* world, void* /*edx*/, std::uint32_t player,
+std::uint32_t __fastcall CGameData_IsGoodStartPosition(CGameData* world, void* /*edx*/, std::uint32_t player,
                                                        std::uint32_t x, std::uint32_t y, std::uint32_t attempts) {
-    if (GameWorld_CheckBuildingSite(world, nullptr, x, y, kCastleType, player, kModeCheckUnowned) == 0) {
+    if (CGameData_CheckBuildingSite(world, nullptr, x, y, kCastleType, player, kModeCheckUnowned) == 0) {
         return 0;
     }
     // Land within the first 3000 offsets (about 31 tiles), resources within 9995.
@@ -813,7 +813,7 @@ std::uint32_t __fastcall GameWorld_IsGoodStartPosition(GameWorld* world, void* /
 
 namespace {
 
-constexpr std::size_t kTestWorld = offsetof(GameWorld, buildings) + (kBuildingLimit + 1) * sizeof(Building);
+constexpr std::size_t kTestWorld = offsetof(CGameData, buildings) + (kBuildingLimit + 1) * sizeof(Building);
 constexpr std::uint32_t kTestPlayers = 8;
 constexpr std::uint32_t kOwningPlayers = 4;
 
@@ -842,7 +842,7 @@ std::int32_t HexDistance(std::int32_t dx, std::int32_t dy) {
 // reads 9995) ordered by ring (as built by 0x516530), each with
 // a direction sector 0..5 from its angle on the hexagonal grid.
 void SetUpOffsetTable(test::WorldPair& worlds) {
-    GameWorld* o = worlds.original();
+    CGameData* o = worlds.original();
     std::uint32_t entry = 0;
     for (std::int32_t ring = 0; ring <= 58; ++ring) {
         for (std::int32_t dx = -ring; dx <= ring; ++dx) {
@@ -871,7 +871,7 @@ void SetUpOffsetTable(test::WorldPair& worlds) {
 SiteWorld SetUpSiteWorld(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size, std::uint32_t noise) {
     SiteWorld site{};
     site.size = size;
-    GameWorld* o = worlds.original();
+    CGameData* o = worlds.original();
     SetField(worlds, o->map_size, size);
     SetField(worlds, o->pending_event_index.read, ctx.rng().Below(1000));
     SetField(worlds, o->pending_event_index.write, ctx.rng().Below(1000));
@@ -1056,7 +1056,7 @@ void CompareCheckBuildingSite(test::Context& ctx, CheckBuildingSiteFn candidate,
                 }
             }
             const std::uint32_t expected =
-                Original_GameWorld_CheckBuildingSite(worlds.original(), nullptr, x, y, type, player, mode);
+                Original_CGameData_CheckBuildingSite(worlds.original(), nullptr, x, y, type, player, mode);
             const auto expectedLogs = recorder.Take();
             const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y, type, player, mode);
             const auto actualLogs = recorder.Take();
@@ -1086,7 +1086,7 @@ void ComparePlanSiteLevelling(test::Context& ctx, PlanSiteLevellingFn candidate,
             if (x < 15) x = 15;
             if (y < 15) y = 15;
             const std::uint32_t type = RandomBuildingType(ctx);
-            GameWorld* o = worlds.original();
+            CGameData* o = worlds.original();
             const std::int32_t here = TileAt(o, x, y).height;
             const std::uint32_t height = ctx.rng().Chance(1, 10)
                                              ? ctx.rng().Below(256)
@@ -1102,13 +1102,13 @@ void ComparePlanSiteLevelling(test::Context& ctx, PlanSiteLevellingFn candidate,
                 }
             }
             const std::uint32_t expected =
-                Original_GameWorld_PlanSiteLevelling(worlds.original(), nullptr, x, y, type, player, height);
+                Original_CGameData_PlanSiteLevelling(worlds.original(), nullptr, x, y, type, player, height);
             const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y, type, player, height);
             if (outcomes != nullptr) {
                 ++outcomes[expected == 0 ? 0 : expected == 1 ? 1 : 2];
             }
             if (!S3RE_EXPECT_EQ(expected, actual) ||
-                !worlds.SameField(ctx, [](GameWorld* w) -> auto& { return w->footprint_scratch; }) ||
+                !worlds.SameField(ctx, [](CGameData* w) -> auto& { return w->footprint_scratch; }) ||
                 ((i % 64 == 63 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
                 ctx.Fail(__FILE__, __LINE__, "  world %d case %d: (%u, %u) type %u player %u height %u", w, i, x, y,
                          type, player, height);
@@ -1130,7 +1130,7 @@ void CompareAddBuildingSite(test::Context& ctx, AddBuildingSiteFn candidate, int
             player = ctx.rng().Below(20);
         }
         const std::uint32_t type = ctx.rng().Chance(1, 3) ? RandomBuildingType(ctx) : 1 + ctx.rng().Below(56);
-        GameWorld* o = worlds.original();
+        CGameData* o = worlds.original();
         if (ctx.rng().Chance(1, 8)) {
             SetField(worlds, o->building_high_water, ctx.rng().Below(kBuildingLimit + 10));
         }
@@ -1145,7 +1145,7 @@ void CompareAddBuildingSite(test::Context& ctx, AddBuildingSiteFn candidate, int
             }
         }
         const std::uint32_t expected =
-            Original_GameWorld_AddBuildingSite(worlds.original(), nullptr, x, y, player, type);
+            Original_CGameData_AddBuildingSite(worlds.original(), nullptr, x, y, player, type);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y, player, type);
         if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 32 == 31 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 31 before it): (%u, %u) player %u type %u", i, x, y,
@@ -1156,26 +1156,26 @@ void CompareAddBuildingSite(test::Context& ctx, AddBuildingSiteFn candidate, int
 }
 
 // Wrong: odd target heights are rounded up by one.
-std::uint32_t __fastcall WrongPlanSiteLevelling(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall WrongPlanSiteLevelling(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                 std::uint32_t type, std::uint32_t player, std::uint32_t height) {
-    return GameWorld_PlanSiteLevelling(world, edx, x, y, type, player, height + (height & 1));
+    return CGameData_PlanSiteLevelling(world, edx, x, y, type, player, height + (height & 1));
 }
 
 // Wrong: the player's countdown +0x84 is not counted down.
-std::uint32_t __fastcall WrongAddBuildingSite(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall WrongAddBuildingSite(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                               std::uint32_t player, std::uint32_t type) {
     std::int32_t& field = world->players[player].site_stamp;
     const std::int32_t saved = field;
-    const std::uint32_t result = GameWorld_AddBuildingSite(world, edx, x, y, player, type);
+    const std::uint32_t result = CGameData_AddBuildingSite(world, edx, x, y, player, type);
     field = saved;
     return result;
 }
 
 // Wrong: a placed site's own tile does not get the footprint flag.
-std::uint32_t __fastcall WrongCheckBuildingSite(GameWorld* world, void* edx, std::uint32_t x, std::uint32_t y,
+std::uint32_t __fastcall WrongCheckBuildingSite(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
                                                 std::uint32_t type, std::uint32_t player, std::uint32_t mode) {
     const std::uint8_t saved = TileAt(world, x, y).flags;
-    const std::uint32_t result = GameWorld_CheckBuildingSite(world, edx, x, y, type, player, mode);
+    const std::uint32_t result = CGameData_CheckBuildingSite(world, edx, x, y, type, player, mode);
     if ((mode & 1) != 0 && result != 0) {
         std::uint8_t& flags = TileAt(world, x, y).flags;
         flags = static_cast<std::uint8_t>((flags & ~kFlagFootprint) | (saved & kFlagFootprint));
@@ -1185,28 +1185,28 @@ std::uint32_t __fastcall WrongCheckBuildingSite(GameWorld* world, void* edx, std
 
 }  // namespace
 
-S3RE_TEST(GameWorld_PlanSiteLevelling_MatchesOriginal) {
+S3RE_TEST(CGameData_PlanSiteLevelling_MatchesOriginal) {
     std::uint32_t outcomes[3] = {};
-    ComparePlanSiteLevelling(ctx, &GameWorld_PlanSiteLevelling, 6, 1500, outcomes);
+    ComparePlanSiteLevelling(ctx, &CGameData_PlanSiteLevelling, 6, 1500, outcomes);
     log::Write("%s: " "plans: %u failed, %u flat, %u levelled", ctx.name(), outcomes[0], outcomes[1], outcomes[2]);
     S3RE_EXPECT(outcomes[0] > 100 && outcomes[1] > 20 && outcomes[2] > 500);
 }
-S3RE_TEST(GameWorld_PlanSiteLevelling_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_PlanSiteLevelling_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     ComparePlanSiteLevelling(probe, &WrongPlanSiteLevelling, 1, 500, nullptr);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_AddBuildingSite_MatchesOriginal) {
-    CompareAddBuildingSite(ctx, &GameWorld_AddBuildingSite, 3000);
+S3RE_TEST(CGameData_AddBuildingSite_MatchesOriginal) {
+    CompareAddBuildingSite(ctx, &CGameData_AddBuildingSite, 3000);
 }
-S3RE_TEST(GameWorld_AddBuildingSite_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_AddBuildingSite_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareAddBuildingSite(probe, &WrongAddBuildingSite, 200);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_CheckBuildingSite_MatchesOriginal) {
+S3RE_TEST(CGameData_CheckBuildingSite_MatchesOriginal) {
     std::uint32_t outcomes[24] = {};
-    CompareCheckBuildingSite(ctx, &GameWorld_CheckBuildingSite, 10, 1500, outcomes);
+    CompareCheckBuildingSite(ctx, &CGameData_CheckBuildingSite, 10, 1500, outcomes);
     // Placed sites and several size classes must occur.
     std::uint32_t placed = 0;
     std::uint32_t classes = 0;
@@ -1218,7 +1218,7 @@ S3RE_TEST(GameWorld_CheckBuildingSite_MatchesOriginal) {
     S3RE_EXPECT(placed > 100);
     S3RE_EXPECT(classes >= 6);
 }
-S3RE_TEST(GameWorld_CheckBuildingSite_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_CheckBuildingSite_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareCheckBuildingSite(probe, &WrongCheckBuildingSite, 1, 1500, nullptr);
     S3RE_EXPECT(probe.failures() > 0);
@@ -1237,7 +1237,7 @@ void CompareIsFreeCastleSite(test::Context& ctx, CastleSiteFn candidate, int cas
             x = ctx.rng().Below(site.size);
             y = ctx.rng().Below(site.size);
         }
-        const std::uint32_t expected = Original_GameWorld_IsFreeCastleSite(worlds.original(), nullptr, player, x, y);
+        const std::uint32_t expected = Original_CGameData_IsFreeCastleSite(worlds.original(), nullptr, player, x, y);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, player, x, y);
         if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 64 == 63 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: player %u (%u, %u)", i, player, x, y);
@@ -1266,7 +1266,7 @@ void SetUpStartRegion(test::Context& ctx, test::WorldPair& worlds, std::uint32_t
     const double sulfur = ideal ? 0.0012 : uniform(0, 0.001);
     const double gems = ideal ? 0.0012 : uniform(0, 0.001);
     const std::uint8_t base = static_cast<std::uint8_t>(20 + ctx.rng().Below(40));
-    GameWorld* o = worlds.original();
+    CGameData* o = worlds.original();
     for (std::uint32_t k = 0; k < 9995; ++k) {
         const std::int32_t dx = o->offsets[k].dx;
         const std::int32_t dy = o->offsets[k].dy;
@@ -1334,7 +1334,7 @@ void CompareIsGoodStartPosition(test::Context& ctx, StartPositionFn candidate, i
         const std::uint32_t attempts = ctx.rng().Chance(1, 4) ? kAttempts[tier * 2 + ctx.rng().Below(2)]
                                                               : kAttempts[tier * 2] + ctx.rng().Below(100);
         const std::uint32_t expected =
-            Original_GameWorld_IsGoodStartPosition(worlds.original(), nullptr, player, x, y, attempts);
+            Original_CGameData_IsGoodStartPosition(worlds.original(), nullptr, player, x, y, attempts);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, player, x, y, attempts);
         if (outcomes != nullptr && expected <= 1) {
             ++outcomes[tier][expected];
@@ -1347,18 +1347,18 @@ void CompareIsGoodStartPosition(test::Context& ctx, StartPositionFn candidate, i
 }
 
 // Wrong: a castle on the player's own land counts as free.
-std::uint32_t __fastcall WrongIsFreeCastleSite(GameWorld* world, void* /*edx*/, std::uint32_t player, std::uint32_t x,
+std::uint32_t __fastcall WrongIsFreeCastleSite(CGameData* world, void* /*edx*/, std::uint32_t player, std::uint32_t x,
                                                std::uint32_t y) {
-    return GameWorld_CheckBuildingSite(world, nullptr, x, y, kCastleType, player, 0) != 0 ? 1 : 0;
+    return CGameData_CheckBuildingSite(world, nullptr, x, y, kCastleType, player, 0) != 0 ? 1 : 0;
 }
 
 // Wrong: in the third tier (60000..99999 attempts) every third refused
 // position that the last tier would take is accepted.
-std::uint32_t __fastcall WrongIsGoodStartPosition(GameWorld* world, void* edx, std::uint32_t player, std::uint32_t x,
+std::uint32_t __fastcall WrongIsGoodStartPosition(CGameData* world, void* edx, std::uint32_t player, std::uint32_t x,
                                                   std::uint32_t y, std::uint32_t attempts) {
-    const std::uint32_t result = GameWorld_IsGoodStartPosition(world, edx, player, x, y, attempts);
+    const std::uint32_t result = CGameData_IsGoodStartPosition(world, edx, player, x, y, attempts);
     if (result == 0 && attempts >= 60000 && attempts < 100000 &&
-        GameWorld_IsGoodStartPosition(world, edx, player, x, y, 100000) == 1) {
+        CGameData_IsGoodStartPosition(world, edx, player, x, y, 100000) == 1) {
         return attempts % 3 == 0 ? 1 : 0;
     }
     return result;
@@ -1366,17 +1366,17 @@ std::uint32_t __fastcall WrongIsGoodStartPosition(GameWorld* world, void* edx, s
 
 }  // namespace
 
-S3RE_TEST(GameWorld_IsFreeCastleSite_MatchesOriginal) {
-    CompareIsFreeCastleSite(ctx, &GameWorld_IsFreeCastleSite, 2000);
+S3RE_TEST(CGameData_IsFreeCastleSite_MatchesOriginal) {
+    CompareIsFreeCastleSite(ctx, &CGameData_IsFreeCastleSite, 2000);
 }
-S3RE_TEST(GameWorld_IsFreeCastleSite_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_IsFreeCastleSite_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareIsFreeCastleSite(probe, &WrongIsFreeCastleSite, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(GameWorld_IsGoodStartPosition_MatchesOriginal) {
+S3RE_TEST(CGameData_IsGoodStartPosition_MatchesOriginal) {
     std::uint32_t outcomes[4][2] = {};
-    CompareIsGoodStartPosition(ctx, &GameWorld_IsGoodStartPosition, 600, outcomes);
+    CompareIsGoodStartPosition(ctx, &CGameData_IsGoodStartPosition, 600, outcomes);
     log::Write("%s: accepted/refused per tier: %u/%u %u/%u %u/%u %u/%u", ctx.name(), outcomes[0][1], outcomes[0][0],
                outcomes[1][1], outcomes[1][0], outcomes[2][1], outcomes[2][0], outcomes[3][1], outcomes[3][0]);
     // Each of the first three tiers must both accept and refuse.
@@ -1384,7 +1384,7 @@ S3RE_TEST(GameWorld_IsGoodStartPosition_MatchesOriginal) {
         S3RE_EXPECT(outcomes[tier][0] > 5 && outcomes[tier][1] > 5);
     }
 }
-S3RE_TEST(GameWorld_IsGoodStartPosition_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_IsGoodStartPosition_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareIsGoodStartPosition(probe, &WrongIsGoodStartPosition, 300, nullptr);
     S3RE_EXPECT(probe.failures() > 0);

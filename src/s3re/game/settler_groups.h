@@ -2,7 +2,7 @@
 
 // The ten settler groups in S3.EXE's data (not in the world): uint16 counts
 // at 0x7ad620 and lists of 100 settler numbers each at 0x7ad634 (probably
-// the player's selection groups). Used by GameWorld::RemoveSettlerFromLists
+// the player's selection groups). Used by CGameData::RemoveSettlerFromLists
 // (settler_queries.cpp) and CLogicThread::RemoveSettlerFromGroups
 // (logic_helpers.cpp).
 

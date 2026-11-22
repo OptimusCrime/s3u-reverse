@@ -1,4 +1,4 @@
-# GameWorld::UpdateEnvironment (0x4E7810) and its call tree
+# CGameData::UpdateEnvironment (0x4E7810) and its call tree
 
 Package D of session 45 (2026-11-22). UpdateEnvironment is the first
 world update of every logic step (CLogicThread::Step 0x53DB30). 1,345

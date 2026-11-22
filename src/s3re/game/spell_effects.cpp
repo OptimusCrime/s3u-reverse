@@ -1,6 +1,6 @@
 // The map effects shown for a cast spell.
 //
-// GameWorld::SpawnSpellEffects (0x005474e0): (a1, x, y, a4, spell), a1 and
+// CGameData::SpawnSpellEffects (0x005474e0): (a1, x, y, a4, spell), a1 and
 //   a4 unused. Runs when a timed event of type 1 (the Effect table at
 //   world+0x36700, see UpdateEnvironment) comes due. x and y are clamped to
 //   0..size-1 (signed). Then, per spell (jump table 0x548044 / index bytes
@@ -49,7 +49,7 @@ using Make3Fn = void*(__fastcall*)(MapEffect* self, void* edx, U, U, U);
 using Make6Fn = void*(__fastcall*)(MapEffect* self, void* edx, U, U, U, U, U, U);
 using Make7Fn = void*(__fastcall*)(MapEffect* self, void* edx, U, U, U, U, U, U, U);
 using AddFn = U(__fastcall*)(MapEffectTable* self, void* edx, const MapEffect* effect);
-using ScreenFn = U(__fastcall*)(GameWorld* world, void* edx, U x, U y);
+using ScreenFn = U(__fastcall*)(CGameData* world, void* edx, U x, U y);
 
 enum class Make : std::uint8_t { Stationary, Moving, Moving7 };
 
@@ -123,12 +123,12 @@ constexpr Steps kSpells[32] = {
 
 }  // namespace
 
-using SpawnSpellFn = void(__fastcall*)(GameWorld* world, void* edx, U a1, std::int32_t x, std::int32_t y, U a4,
+using SpawnSpellFn = void(__fastcall*)(CGameData* world, void* edx, U a1, std::int32_t x, std::int32_t y, U a4,
                                        U spell);
 
 // Purpose: Shows the visual effects of a spell that was cast at a spot (flashes, sparkles, rising
 // lights and the like, different per spell).
-void __fastcall GameWorld_SpawnSpellEffects(GameWorld* world, void*, U, std::int32_t x, std::int32_t y, U, U spell) {
+void __fastcall CGameData_SpawnSpellEffects(CGameData* world, void*, U, std::int32_t x, std::int32_t y, U, U spell) {
     const auto size = static_cast<std::int32_t>(world->map_size);
     if (x < 0) {
         x = 0;
@@ -173,8 +173,8 @@ void __fastcall GameWorld_SpawnSpellEffects(GameWorld* world, void*, U, std::int
     }
 }
 
-S3RE_HOOK(0x005474e0, GameWorld_SpawnSpellEffects, SpawnSpellFn, Original_GameWorld_SpawnSpellEffects,
-          GameWorld_SpawnSpellEffects);
+S3RE_HOOK(0x005474e0, CGameData_SpawnSpellEffects, SpawnSpellFn, Original_CGameData_SpawnSpellEffects,
+          CGameData_SpawnSpellEffects);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -182,12 +182,12 @@ S3RE_HOOK(0x005474e0, GameWorld_SpawnSpellEffects, SpawnSpellFn, Original_GameWo
 
 namespace {
 
-constexpr std::size_t kWorld = sizeof(GameWorld);
+constexpr std::size_t kWorld = sizeof(CGameData);
 
 // Bytes of the effect table to compare: everything but the records'
 // padding (stack leftovers of the make functions' temporaries).
 bool SameEffects(test::Context& ctx, test::WorldPair& worlds) {
-    const std::size_t base = offsetof(GameWorld, map_effects);
+    const std::size_t base = offsetof(CGameData, map_effects);
     for (std::size_t slot = 0; slot < 5000; ++slot) {
         for (std::size_t pad : {std::size_t{0x2a}, std::size_t{0x2b}, std::size_t{0x3b}, std::size_t{0x3e},
                                 std::size_t{0x3f}}) {
@@ -199,16 +199,16 @@ bool SameEffects(test::Context& ctx, test::WorldPair& worlds) {
 }
 
 void SetUpEffectTable(test::Context& ctx, test::WorldPair& worlds) {
-    worlds.Both([&](GameWorld* w) {
+    worlds.Both([&](CGameData* w) {
         std::memset(&w->map_effects, 0, sizeof(w->map_effects));
         w->map_effects.blocks_x = 30;
         w->map_effects.blocks_y = 30;
     });
     const auto used = static_cast<std::int32_t>(ctx.rng().Below(60));
-    worlds.Both([&](GameWorld* w) { w->map_effects.slots_used = used; });
+    worlds.Both([&](CGameData* w) { w->map_effects.slots_used = used; });
     for (std::int32_t slot = 1; slot <= used; ++slot) {
         const U start = ctx.rng().Chance(1, 4) ? 0 : 1 + ctx.rng().Below(1000);
-        worlds.Both([&](GameWorld* w) { w->map_effects.records[slot].start_tick = start; });
+        worlds.Both([&](CGameData* w) { w->map_effects.records[slot].start_tick = start; });
     }
 }
 
@@ -217,7 +217,7 @@ void Compare(test::Context& ctx, SpawnSpellFn candidate, int cases) {
     const U savedTick = g_gameTick;
     for (int i = 0; i < cases; ++i) {
         const U size = 32 + ctx.rng().Below(353);
-        worlds.Both([&](GameWorld* w) { w->map_size = size; });
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
         SetUpEffectTable(ctx, worlds);
         g_gameTick = ctx.rng().Next32();
         const auto x = static_cast<std::int32_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(size + 4));
@@ -225,7 +225,7 @@ void Compare(test::Context& ctx, SpawnSpellFn candidate, int cases) {
         const U spell = ctx.rng().Chance(1, 16) ? ctx.rng().Next32() : ctx.rng().Below(34);
         const U a1 = ctx.rng().Next32();
         const U a4 = ctx.rng().Next32();
-        Original_GameWorld_SpawnSpellEffects(worlds.original(), nullptr, a1, x, y, a4, spell);
+        Original_CGameData_SpawnSpellEffects(worlds.original(), nullptr, a1, x, y, a4, spell);
         candidate(worlds.ours(), nullptr, a1, x, y, a4, spell);
         if (!SameEffects(ctx, worlds)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%d, %d) spell %u", i, x, y, spell);
@@ -236,21 +236,21 @@ void Compare(test::Context& ctx, SpawnSpellFn candidate, int cases) {
 }
 
 // Wrong: spell 8's last effect uses the screen x of its own tile.
-void __fastcall WrongSpawnSpellEffects(GameWorld* world, void*, U a1, std::int32_t x, std::int32_t y, U a4, U spell) {
+void __fastcall WrongSpawnSpellEffects(CGameData* world, void*, U a1, std::int32_t x, std::int32_t y, U a4, U spell) {
     if (spell == 8) {
-        GameWorld_SpawnSpellEffects(world, nullptr, a1, x, y, a4, 7);
+        CGameData_SpawnSpellEffects(world, nullptr, a1, x, y, a4, 7);
         return;
     }
-    GameWorld_SpawnSpellEffects(world, nullptr, a1, x, y, a4, spell);
+    CGameData_SpawnSpellEffects(world, nullptr, a1, x, y, a4, spell);
 }
 
 }  // namespace
 
-S3RE_TEST(GameWorld_SpawnSpellEffects_MatchesOriginal) {
-    Compare(ctx, &GameWorld_SpawnSpellEffects, 400);
+S3RE_TEST(CGameData_SpawnSpellEffects_MatchesOriginal) {
+    Compare(ctx, &CGameData_SpawnSpellEffects, 400);
 }
 
-S3RE_TEST(GameWorld_SpawnSpellEffects_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_SpawnSpellEffects_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     Compare(probe, &WrongSpawnSpellEffects, 400);
     S3RE_EXPECT(probe.failures() > 0);
