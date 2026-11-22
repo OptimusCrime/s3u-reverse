@@ -49,6 +49,7 @@
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
+#include "test/fake_graphics.h"
 #include "test/world_buffer.h"
 
 #include <cstddef>
@@ -377,31 +378,11 @@ namespace {
 
 constexpr std::size_t kTallyBytes = 20 * sizeof(PlayerTally);
 
-// A graphics object (the pointer at 0x7a8010) on which every sprite id of
-// groups 0..0xaf is valid, for SetSettlerAnimation: GfxData_SpriteWord reads
-// [[this+0xb24+group*4] + 8 + index*4] + [this+0x264+group*4].
-struct AnyGfx {
-    std::vector<std::uint32_t> object = std::vector<std::uint32_t>(0x1000 / 4);
-    std::vector<std::uint32_t> table = std::vector<std::uint32_t>(2 + 0x4000);
-    std::vector<std::uint8_t> sprite = std::vector<std::uint8_t>(0x100, 7);
-    std::uint32_t saved = *reinterpret_cast<std::uint32_t*>(0x007a8010);
-    AnyGfx() {
-        for (std::uint32_t g = 0; g < 0xb0; ++g) {
-            object[0x264 / 4 + g] = 0;
-            object[0xb24 / 4 + g] = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(table.data()));
-        }
-        for (std::uint32_t k = 2; k < table.size(); ++k) {
-            table[k] = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(sprite.data()));
-        }
-        *reinterpret_cast<void**>(0x007a8010) = object.data();
-    }
-    ~AnyGfx() { *reinterpret_cast<std::uint32_t*>(0x007a8010) = saved; }
-};
-
 // Runs both on full worlds with mines: compares the worlds, the tallies
 // (S3.EXE data, restored between the runs) and the DebugLog-free result.
 void CompareMinerJob(test::Context& ctx, SettlerFn original, SettlerFn candidate, int cases, bool dig) {
-    AnyGfx gfx;
+    test::FakeGraphics gfx;  // every sprite valid, for SetSettlerAnimation
+    gfx.MakeEverySpriteValid(7);
     test::WorldPair worlds(ctx, sizeof(GameWorld));
     worlds.Both([&](GameWorld* w) {
         w->map_size = 384;

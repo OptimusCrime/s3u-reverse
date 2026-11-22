@@ -44,6 +44,7 @@
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
+#include "test/fake_graphics.h"
 #include "test/world_buffer.h"
 
 #include <cstddef>
@@ -386,50 +387,13 @@ std::uint32_t __fastcall WrongCreateSevenTileUnit(GameWorld* world, void* edx, s
     return 0;
 }
 
-// The fields of the graphics object GfxData_SpriteWord reads (as in
-// logic_helpers.cpp): [[this+0xb24+group*4] + 8 + index*4] + [this+0x264+group*4].
-#pragma pack(push, 1)
-struct GfxDataFields {
-    std::uint8_t pad000[0x264];
-    std::uint32_t group_bias[0xb0];    // 0x264
-    std::uint8_t pad524[0x600];
-    std::uint32_t group_tables[0xb0];  // 0xb24
-};
-struct GfxGroupTable {
-    std::uint32_t unk0[2];
-    std::uint32_t sprites[0x4000];     // +8
-};
-#pragma pack(pop)
-
-struct FakeGfx {
-    std::vector<std::uint8_t> object = std::vector<std::uint8_t>(0x1000);
-    std::vector<std::uint8_t> data = std::vector<std::uint8_t>(0x80000);
-    std::uint32_t saved = RawAtAddress<std::uint32_t>(kGfxData);
-    FakeGfx() { RawAtAddress<void*>(kGfxData) = object.data(); }
-    ~FakeGfx() { RawAtAddress<std::uint32_t>(kGfxData) = saved; }
-    // Makes `id` a valid sprite; false if it isn't a graphics id.
-    bool Prepare(test::Context& ctx, std::uint32_t id) {
-        const std::uint32_t group = id >> 16, index = id & 0xffff;
-        if (group >= 0xb0 || index >= 0x4000) {
-            return false;
-        }
-        ctx.rng().Fill(object.data(), object.size());
-        auto& fields = *reinterpret_cast<GfxDataFields*>(object.data());
-        auto& table = *reinterpret_cast<GfxGroupTable*>(data.data());
-        fields.group_tables[group] = reinterpret_cast<std::uint32_t>(data.data());
-        fields.group_bias[group] = 0;
-        table.sprites[index] = reinterpret_cast<std::uint32_t>(data.data() + 0x40000 + ctx.rng().Below(0x1000));
-        return true;
-    }
-};
-
 void CompareSavedAnimation(test::Context& ctx, SettlerKindFn candidate, int cases) {
-    FakeGfx gfx;
+    test::FakeGraphics gfx;
     Compare(ctx, cases, 64, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         const std::uint32_t settler = ctx.rng().Below(0x7d00);
         const std::uint32_t race = ctx.rng().Below(4);
         const std::uint32_t kind = ctx.rng().Below(0x180);
-        if (!gfx.Prepare(ctx, kAnimationTable[kind * 4 + race])) {
+        if (!gfx.PrepareSprite(ctx, kAnimationTable[kind * 4 + race])) {
             return;
         }
         worlds.Both([&](GameWorld* w) { w->settlers[settler].race = static_cast<std::uint8_t>(race); });
@@ -447,7 +411,7 @@ std::uint32_t __fastcall WrongSetSettlerSavedAnimation(GameWorld* world, void* e
 }
 
 void CompareSoldierAnimation(test::Context& ctx, SettlerFn candidate, int cases) {
-    FakeGfx gfx;
+    test::FakeGraphics gfx;
     Compare(ctx, cases, 64, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         const std::uint32_t settler = 1 + ctx.rng().Below(kTestSettlers);
         const std::uint32_t building = 1 + ctx.rng().Below(kTestBuildings);
@@ -475,7 +439,7 @@ void CompareSoldierAnimation(test::Context& ctx, SettlerFn candidate, int cases)
         }
         kind += art == 0x10 ? 9 : art == 0x12 ? 0x12 : 0;
         kind += race == 1 ? 0x1b : race == 2 ? 0x36 : 0;
-        if (!gfx.Prepare(ctx, kAnimationTable[kind * 4 + settlerRace])) {
+        if (!gfx.PrepareSprite(ctx, kAnimationTable[kind * 4 + settlerRace])) {
             return;
         }
         expected = Original_GameWorld_SetSoldierAnimationInBuilding(worlds.original(), nullptr, settler);

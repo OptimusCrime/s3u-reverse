@@ -5,9 +5,9 @@ hand. Every place in `src/s3re` that still reads game memory through a raw
 offset (`RawAt`) or a raw data address of S3.EXE outside `game/globals.h`.
 Goal: struct fields and typed globals that mirror the real objects.
 
-- RawAt (unmapped object fields): 21
-- Data addresses outside globals.h: 255 uses of 190 addresses
-- Marked `raw-ok` (justified): 0
+- RawAt (unmapped object fields): 0
+- Data addresses outside globals.h: 250 uses of 190 addresses
+- Marked `raw-ok` (justified): 2
 - Code addresses (calls of original functions, allowed): 203
 
 ## Per file
@@ -17,7 +17,6 @@ Goal: struct fields and typed globals that mirror the real objects.
 | `crash_log.cpp` | 0 | 1 |
 | `debug_log.cpp` | 0 | 2 |
 | `game/ai_evaland.cpp` | 0 | 1 |
-| `game/ai_helpers.cpp` | 1 | 0 |
 | `game/ai_layout.h` | 0 | 13 |
 | `game/area_piles.cpp` | 0 | 4 |
 | `game/area_split.cpp` | 0 | 6 |
@@ -26,24 +25,22 @@ Goal: struct fields and typed globals that mirror the real objects.
 | `game/building_goods.cpp` | 0 | 5 |
 | `game/building_sites.cpp` | 0 | 2 |
 | `game/counting.cpp` | 0 | 1 |
-| `game/directx_surface.cpp` | 2 | 5 |
-| `game/economy.cpp` | 0 | 2 |
+| `game/directx_surface.cpp` | 0 | 5 |
+| `game/economy.cpp` | 0 | 1 |
 | `game/environment.cpp` | 0 | 9 |
 | `game/fog_of_war.cpp` | 0 | 1 |
 | `game/framework_helpers.cpp` | 0 | 2 |
-| `game/framework_small.cpp` | 1 | 1 |
+| `game/framework_small.cpp` | 0 | 1 |
 | `game/godly_events.cpp` | 0 | 2 |
-| `game/goods_piles.cpp` | 1 | 0 |
-| `game/graphics_helpers.cpp` | 4 | 8 |
+| `game/graphics_helpers.cpp` | 0 | 8 |
 | `game/landscape_colours.cpp` | 0 | 1 |
 | `game/lobby_memory_block.cpp` | 0 | 4 |
 | `game/logic_helpers.cpp` | 0 | 2 |
 | `game/logic_thread.cpp` | 0 | 1 |
 | `game/map_effect_spawns.cpp` | 0 | 3 |
 | `game/map_effects.cpp` | 0 | 3 |
-| `game/miner_jobs.cpp` | 0 | 8 |
+| `game/miner_jobs.cpp` | 0 | 5 |
 | `game/minimap.cpp` | 0 | 10 |
-| `game/misc_helpers.cpp` | 3 | 0 |
 | `game/net_thread.cpp` | 0 | 1 |
 | `game/notifications.cpp` | 0 | 3 |
 | `game/pathing.cpp` | 0 | 17 |
@@ -52,17 +49,17 @@ Goal: struct fields and typed globals that mirror the real objects.
 | `game/player_queries.cpp` | 0 | 1 |
 | `game/random.cpp` | 0 | 2 |
 | `game/savegame_start.cpp` | 0 | 2 |
-| `game/screen_element.cpp` | 7 | 2 |
+| `game/screen_element.cpp` | 0 | 2 |
 | `game/settler_groups.h` | 0 | 1 |
 | `game/settler_idle.cpp` | 0 | 4 |
 | `game/settler_records.cpp` | 0 | 2 |
 | `game/settler_spawn.cpp` | 0 | 3 |
 | `game/settler_walk.cpp` | 0 | 15 |
 | `game/settlers.cpp` | 0 | 1 |
-| `game/soldier.cpp` | 0 | 15 |
+| `game/soldier.cpp` | 0 | 13 |
 | `game/spell_effects.cpp` | 0 | 1 |
 | `game/spells.cpp` | 0 | 10 |
-| `game/string_members.cpp` | 2 | 2 |
+| `game/string_members.cpp` | 0 | 2 |
 | `game/territory.cpp` | 0 | 5 |
 | `game/update_economy.cpp` | 0 | 10 |
 | `game/win32_errors.cpp` | 0 | 9 |
@@ -73,6 +70,7 @@ Goal: struct fields and typed globals that mirror the real objects.
 | `msvc6/exceptions.cpp` | 0 | 2 |
 | `msvc6/string.cpp` | 0 | 3 |
 | `replay/command_log.cpp` | 0 | 1 |
+| `test/fake_graphics.h` | 0 | 1 |
 | `trace/determinism.cpp` | 0 | 1 |
 
 ## Data addresses
@@ -80,9 +78,9 @@ Goal: struct fields and typed globals that mirror the real objects.
 | address | name in re/globals.csv | used at |
 |---|---|---|
 | 0x63a000 |  | crash_log.cpp:26, debug_log.cpp:37, debug_log.cpp:38 |
-| 0x6550dc |  | game/directx_surface.cpp:61 |
+| 0x6550dc |  | game/directx_surface.cpp:62 |
 | 0x655180 |  | game/framework_helpers.cpp:134 |
-| 0x655358 |  | game/screen_element.cpp:925, game/screen_element.cpp:1617 |
+| 0x655358 |  | game/screen_element.cpp:927, game/screen_element.cpp:1622 |
 | 0x655390 |  | game/win32_exceptions.cpp:77, msvc6/string.cpp:57 |
 | 0x6553a0 |  | msvc6/exceptions.cpp:206, msvc6/exceptions.cpp:207, msvc6/string.cpp:61 |
 | 0x65857c |  | game/pathing.cpp:98 |
@@ -92,7 +90,7 @@ Goal: struct fields and typed globals that mirror the real objects.
 | 0x65870c |  | game/pathing.cpp:1223 |
 | 0x658c1c |  | game/settler_walk.cpp:197 |
 | 0x658d64 |  | game/godly_events.cpp:40 |
-| 0x658f64 |  | game/building_crush.cpp:603, game/counting.cpp:56, game/economy.cpp:82, game/minimap.cpp:62, game/settler_idle.cpp:80, game/settler_records.cpp:62 ... |
+| 0x658f64 |  | game/building_crush.cpp:603, game/counting.cpp:56, game/economy.cpp:83, game/minimap.cpp:62, game/settler_idle.cpp:80, game/settler_records.cpp:62 ... |
 | 0x659024 |  | game/pathing.cpp:1305 |
 | 0x6590e4 |  | game/settler_records.cpp:63 |
 | 0x6591a4 |  | game/settler_walk.cpp:198 |
@@ -107,7 +105,7 @@ Goal: struct fields and typed globals that mirror the real objects.
 | 0x659664 |  | game/building_done.cpp:83, game/update_economy.cpp:115 |
 | 0x659670 |  | game/update_economy.cpp:120 |
 | 0x659680 |  | game/update_economy.cpp:121 |
-| 0x659738 |  | game/soldier.cpp:116 |
+| 0x659738 |  | game/soldier.cpp:117 |
 | 0x659dc0 |  | game/settler_walk.cpp:200 |
 | 0x659dd0 |  | game/notifications.cpp:50 |
 | 0x65a19c |  | game/map_effects.cpp:946 |
@@ -116,9 +114,9 @@ Goal: struct fields and typed globals that mirror the real objects.
 | 0x65a1c8 |  | game/map_effect_spawns.cpp:187 |
 | 0x65a1d0 |  | game/map_effect_spawns.cpp:188 |
 | 0x65a1f0 |  | game/spells.cpp:72 |
-| 0x65c0b8 |  | game/string_members.cpp:351 |
-| 0x66a698 |  | game/directx_surface.cpp:60 |
-| 0x681e60 |  | game/directx_surface.cpp:66 |
+| 0x65c0b8 |  | game/string_members.cpp:411 |
+| 0x66a698 |  | game/directx_surface.cpp:61 |
+| 0x681e60 |  | game/directx_surface.cpp:67 |
 | 0x682f58 |  | game/win32_errors.cpp:96 |
 | 0x68bfd0 |  | game/win32_exceptions.cpp:68 |
 | 0x68edf0 |  | game/win32_errors.cpp:95 |
@@ -185,19 +183,19 @@ Goal: struct fields and typed globals that mirror the real objects.
 | 0x6a6784 |  | game/settler_idle.cpp:81 |
 | 0x6a67c8 |  | game/building_crush.cpp:600 |
 | 0x6a67d4 |  | game/building_crush.cpp:599 |
-| 0x6a67dc |  | game/soldier.cpp:120 |
-| 0x6a67fc |  | game/soldier.cpp:119 |
+| 0x6a67dc |  | game/soldier.cpp:121 |
+| 0x6a67fc |  | game/soldier.cpp:120 |
 | 0x6a6824 |  | game/building_done.cpp:86, game/building_goods.cpp:69 |
 | 0x6a6ad0 |  | game/building_done.cpp:87 |
-| 0x6a8060 |  | game/logic_helpers.cpp:55, game/settler_spawn.cpp:68 |
-| 0x6aa170 |  | game/building_crush.cpp:103, game/building_sites.cpp:135, game/soldier.cpp:117, game/territory.cpp:517, game/update_economy.cpp:119 |
+| 0x6a8060 |  | game/logic_helpers.cpp:56, game/settler_spawn.cpp:69 |
+| 0x6aa170 |  | game/building_crush.cpp:103, game/building_sites.cpp:135, game/soldier.cpp:118, game/territory.cpp:517, game/update_economy.cpp:119 |
 | 0x72fea0 |  | game/world_create.cpp:88 |
 | 0x72feb8 |  | game/world_create.cpp:87 |
 | 0x72fecc |  | game/world_create.cpp:86 |
 | 0x72fee4 |  | game/world_create.cpp:85 |
 | 0x72fef8 |  | game/world_create.cpp:84 |
 | 0x730ed4 |  | game/map_effects.cpp:775 |
-| 0x730eec |  | game/soldier.cpp:115 |
+| 0x730eec |  | game/soldier.cpp:116 |
 | 0x730ef0 |  | game/building_done.cpp:88 |
 | 0x730ef4 |  | game/update_economy.cpp:116 |
 | 0x730efc | g_objectAgeStart | game/environment.cpp:133 |
@@ -217,11 +215,11 @@ Goal: struct fields and typed globals that mirror the real objects.
 | 0x731028 |  | game/spells.cpp:99 |
 | 0x7310c0 |  | game/spells.cpp:73 |
 | 0x7311d0 |  | game/godly_events.cpp:41 |
-| 0x731278 |  | game/landscape_colours.cpp:37 |
+| 0x731278 |  | game/landscape_colours.cpp:31 |
 | 0x731488 |  | game/ai_layout.h:23 |
 | 0x7329d0 |  | game/ai_layout.h:25 |
-| 0x7a01e0 |  | game/directx_surface.cpp:62 |
-| 0x7a01f0 |  | game/directx_surface.cpp:63 |
+| 0x7a01e0 |  | game/directx_surface.cpp:63 |
+| 0x7a01f0 |  | game/directx_surface.cpp:64 |
 | 0x7a2a34 |  | game/win32_errors.cpp:86, game/win32_exceptions.cpp:65 |
 | 0x7a2a3c |  | game/win32_errors.cpp:87, game/win32_exceptions.cpp:64 |
 | 0x7a2e9c |  | game/framework_small.cpp:81 |
@@ -231,18 +229,18 @@ Goal: struct fields and typed globals that mirror the real objects.
 | 0x7a3570 |  | game/lobby_memory_block.cpp:70 |
 | 0x7a4694 |  | game/win32_errors.cpp:89 |
 | 0x7a4758 |  | game/win32_errors.cpp:88 |
-| 0x7a7868 |  | game/framework_helpers.cpp:133, game/string_members.cpp:333, game/win32_errors.cpp:91, msvc6/string.cpp:458 |
-| 0x7a7a18 | g_gameSettings | game/savegame_start.cpp:78 |
+| 0x7a7868 |  | game/framework_helpers.cpp:133, game/string_members.cpp:393, game/win32_errors.cpp:91, msvc6/string.cpp:458 |
+| 0x7a7a18 | g_gameSettings | game/savegame_start.cpp:64 |
 | 0x7a7ae4 |  | game/random.cpp:167, replay/command_log.cpp:41 |
-| 0x7a7af0 |  | game/miner_jobs.cpp:124, game/miner_jobs.cpp:428, game/notifications.cpp:51, game/notifications.cpp:152, game/savegame_start.cpp:79, game/soldier.cpp:112 ... |
+| 0x7a7af0 |  | game/miner_jobs.cpp:125, game/miner_jobs.cpp:409, game/notifications.cpp:51, game/notifications.cpp:152, game/savegame_start.cpp:65, game/soldier.cpp:113 ... |
 | 0x7a7c48 |  | game/random.cpp:168 |
-| 0x7a8010 |  | game/economy.cpp:573, game/logic_helpers.cpp:57, game/miner_jobs.cpp:387, game/miner_jobs.cpp:396, game/miner_jobs.cpp:398, game/settler_spawn.cpp:69 ... |
+| 0x7a8010 |  | game/logic_helpers.cpp:58, game/settler_spawn.cpp:70, test/fake_graphics.h:76 |
 | 0x7a9d98 |  | game/pathing.h:98 |
 | 0x7ace60 | g_recentPositionsCursor | game/world_tables.cpp:98 |
 | 0x7ace64 | g_playerColourIndex | game/minimap.cpp:58, game/settler_walk.cpp:202 |
 | 0x7ace90 |  | game/minimap.cpp:59 |
 | 0x7acfa4 | g_strengthDivisor | game/environment.cpp:132 |
-| 0x7acfd4 | g_playerTallies | game/miner_jobs.cpp:116, game/soldier.cpp:118 |
+| 0x7acfd4 | g_playerTallies | game/miner_jobs.cpp:117, game/soldier.cpp:119 |
 | 0x7acfe0 | g_playerCounters7acfe0 | game/building_done.cpp:93, game/update_economy.cpp:123 |
 | 0x7ad4f8 | g_minimapSliceDirty | game/minimap.cpp:57 |
 | 0x7ad620 |  | game/settler_groups.h:26 |
@@ -254,9 +252,9 @@ Goal: struct fields and typed globals that mirror the real objects.
 | 0x7dfbb0 |  | game/graphics_helpers.cpp:93 |
 | 0x7dfbb4 |  | game/graphics_helpers.cpp:94 |
 | 0x7dfd30 | g_fastForwarding | game/environment.cpp:131 |
-| 0x7dfd48 | g_gameTick | game/building_crush.cpp:589, game/environment.cpp:130, game/logic_thread.cpp:40, game/net_thread.cpp:49, game/settler_walk.cpp:203, game/soldier.cpp:113 ... |
+| 0x7dfd48 | g_gameTick | game/building_crush.cpp:589, game/environment.cpp:130, game/logic_thread.cpp:40, game/net_thread.cpp:49, game/settler_walk.cpp:203, game/soldier.cpp:114 ... |
 | 0x7dfd84 | g_revealMap | game/fog_of_war.cpp:70, game/spells.cpp:71 |
-| 0x7dfdb0 | g_campaignMission | game/building_crush.cpp:588, game/miner_jobs.cpp:121, game/miner_jobs.cpp:427, game/soldier.cpp:114 |
+| 0x7dfdb0 | g_campaignMission | game/building_crush.cpp:588, game/miner_jobs.cpp:122, game/miner_jobs.cpp:408, game/soldier.cpp:115 |
 | 0x7e0568 |  | game/ai_layout.h:31 |
 | 0x7e056c |  | game/ai_layout.h:32 |
 | 0x7e2eb0 | g_aiPlayerData | game/ai_layout.h:22 |
@@ -272,24 +270,3 @@ Goal: struct fields and typed globals that mirror the real objects.
 
 ## RawAt uses
 
-- `game/ai_helpers.cpp:303`: `RawAt<std::uint16_t>(self, 4) = static_cast<std::uint16_t>(value);`
-- `game/directx_surface.cpp:239`: `log.words.push_back(RawAt<std::uint32_t>(fx, 0));`
-- `game/directx_surface.cpp:240`: `log.words.push_back(RawAt<std::uint32_t>(fx, 0x50));`
-- `game/framework_small.cpp:329`: `return RawAt<std::uint32_t>(self, 4) != 0 ? 1 : 0;`
-- `game/goods_piles.cpp:79`: `RawAt<std::uint32_t>(world->players[player].goods, i * 4) = 0;`
-- `game/graphics_helpers.cpp:216`: `const std::uint32_t index = RawAt<std::uint16_t>(table, 8) * variant + (id & 0xffff);`
-- `game/graphics_helpers.cpp:217`: `return RawAt<std::uint32_t>(table, 0xc + index * 4) + gfx->groupBase[group];`
-- `game/graphics_helpers.cpp:289`: `RawAt<std::uint32_t>(data, 8 + index * 4) =  // the sprite table's entries start at +8`
-- `game/graphics_helpers.cpp:372`: `RawAt<std::uint16_t>(table, 8) = static_cast<std::uint16_t>(frames);  // frames per variant`
-- `game/misc_helpers.cpp:55`: `out[k] = RawAt<std::uint32_t>(self, 0xb0 + 4 * k);`
-- `game/misc_helpers.cpp:75`: `const std::uint32_t mine = RawAt<std::uint32_t>(self, 4);`
-- `game/misc_helpers.cpp:76`: `const bool same = mine == RawAt<std::uint32_t>(other, 4);`
-- `game/screen_element.cpp:85`: `return VirtualBase(RawAt<const std::int32_t*>(parent, 4));`
-- `game/screen_element.cpp:1468`: `case 16: return ptr(f.intersect(element, nullptr, &RawAt<RECT>(buffer, 0x40), &in.rects[0], &in.rects[1]));  /`
-- `game/screen_element.cpp:1527`: `RawAt<void*>(buffer, kParent) = vtable;`
-- `game/screen_element.cpp:1528`: `RawAt<const void*>(buffer, kParentVbptr) = kParentVbtable;`
-- `game/screen_element.cpp:1713`: `RawAt<std::uint32_t>(fx, 0), RawAt<std::uint32_t>(fx, 0x50)});`
-- `game/screen_element.cpp:1733`: `RawAt<void*>(b, 0x308) = b + 0x340;`
-- `game/screen_element.cpp:1734`: `RawAt<void*>(b, 0x340) = g_fillComVtable;`
-- `game/string_members.cpp:52`: `return &RawAt<String>(object, offset);`
-- `game/string_members.cpp:56`: `return &RawAt<String>(object, offset);`

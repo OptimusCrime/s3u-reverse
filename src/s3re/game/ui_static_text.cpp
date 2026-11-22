@@ -32,12 +32,12 @@ void* __fastcall CStaticControl_Construct(void* self, void* edx, const RECT* rec
 namespace {
 
 using msvc6::String;
-using ui::StaticText;
+using ui::CStaticText;
 
 constexpr std::uint32_t kCStaticTextVtable = 0x0065615c;
 
-StaticText* TextOf(void* self) {
-    return static_cast<StaticText*>(self);
+CStaticText* TextOf(void* self) {
+    return static_cast<CStaticText*>(self);
 }
 
 }  // namespace
@@ -57,7 +57,7 @@ S3RE_HOOK(0x0041c3e0, CStaticText_Construct, StaticTextCtorFn, Original_CStaticT
 void* __fastcall CStaticText_Construct(void* self, void* /*edx*/, const RECT* rect, const String* text,
                                        std::uint32_t font) {
     CStaticControl_Construct(self, nullptr, rect);
-    StaticText* label = TextOf(self);
+    CStaticText* label = TextOf(self);
     label->unk20 = 0;
     const auto allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(rect));
     msvc6::String_FromSubstr(&label->text, nullptr, text, 0, msvc6::detail::Npos(), &allocator);
@@ -112,7 +112,7 @@ String MakeText(std::uint32_t length, std::uint8_t count, const char* text, bool
 }
 
 void CompareStaticText(test::Context& ctx, StaticTextCtorFn ctor, SetStyleFn setStyle, int cases) {
-    constexpr std::size_t kGuard = 8, kObject = sizeof(StaticText);
+    constexpr std::size_t kGuard = 8, kObject = sizeof(CStaticText);
     std::uint8_t a[kGuard * 2 + kObject], b[sizeof(a)];
     char text[64];
     RECT rects[4];

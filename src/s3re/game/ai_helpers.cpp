@@ -61,7 +61,6 @@
 
 #include "game/ai_layout.h"
 #include "game/layout.h"
-#include "game/raw.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
@@ -296,11 +295,10 @@ void __fastcall AI_CopySixBytes(void* dst, const void* src) {
 
 S3RE_HOOK(0x0055ca60, AI_SetWord4, SetWord4Fn, Original_AI_SetWord4, AI_SetWord4);
 
-// Purpose: Sets a 16-bit field of a computer player's record (meaning not
-// known yet).
+// Purpose: Sets the tag of a computer player's record (probably its kind;
+// called by the records' constructors).
 std::uint16_t __fastcall AI_SetWord4(void* self, void* /*edx*/, std::uint32_t value) {
-    // The only known field of this record (layout otherwise unknown).
-    RawAt<std::uint16_t>(self, 4) = static_cast<std::uint16_t>(value);
+    static_cast<AiTaggedRecord*>(self)->tag = static_cast<std::uint16_t>(value);
     return static_cast<std::uint16_t>(value);
 }
 

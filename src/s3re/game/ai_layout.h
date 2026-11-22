@@ -198,6 +198,17 @@ inline AiVector* AgentVectors() {
     return reinterpret_cast<AiVector*>(kAgentVectors);
 }
 
+// ---------------------------------------------------------------- tagged record
+// The objects AI_SetWord4 (0x55ca60) starts: their constructors (e.g.
+// 0x55ebe0 in Rainer\Cevaland.cpp, 0x560dd0) pass a constant tag (4, 7,
+// 0xa...) and then clear their own fields from +8. No vtable is stored, and
+// the class is not identified; the tag is probably the record's kind.
+struct AiTaggedRecord {
+    std::uint32_t unk00;  // +0
+    std::uint16_t tag;    // +4
+};
+static_assert(offsetof(AiTaggedRecord, tag) == 4);
+
 #pragma pack(pop)
 
 }  // namespace s3re::game::ai

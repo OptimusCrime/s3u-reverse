@@ -18,7 +18,8 @@
 //   register). Probably a memory callback of the PNG/zlib code in
 //   Picture (free(opaque, address) shape).
 
-#include "game/raw.h"
+#include "game/framework_layout.h"
+#include "game/game_settings_layout.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -49,10 +50,10 @@ S3RE_HOOK(0x00437400, GameParams_CopyRectB0, CopyRectFn, Original_GameParams_Cop
 // Purpose: Returns a copy of four values stored at +0xb0 of a settings-like
 // object (probably a rectangle), used by the network session and savegames.
 void* __fastcall GameParams_CopyRectB0(void* self, void* /*edx*/, std::uint32_t* out) {
-    // Four dwords at +0xb0 of an unidentified settings object (the only
-    // fields of it we use).
+    // Called on g_gameSettings (0x7a7a18).
+    const GameSettings* const settings = static_cast<const GameSettings*>(self);
     for (std::size_t k = 0; k < 4; ++k) {
-        out[k] = RawAt<std::uint32_t>(self, 0xb0 + 4 * k);
+        out[k] = settings->valuesB0[k];
     }
     return out;
 }
@@ -71,9 +72,8 @@ S3RE_HOOK(0x00606ac0, Lobby_EqualField4, EqualFn, Original_Lobby_EqualField4, Lo
 // Purpose: Whether two lobby objects have the same id (the dword at +4);
 // probably an operator== of the online protocol code.
 std::uint32_t __fastcall Lobby_EqualField4(const void* self, void* /*edx*/, const void* other) {
-    // The id dword at +4 of an unidentified lobby class (its only known field).
-    const std::uint32_t mine = RawAt<std::uint32_t>(self, 4);
-    const bool same = mine == RawAt<std::uint32_t>(other, 4);
+    const std::uint32_t mine = static_cast<const framework::LobbyIdObject*>(self)->id;
+    const bool same = mine == static_cast<const framework::LobbyIdObject*>(other)->id;
     return (mine & 0xffffff00u) | (same ? 1u : 0u);
 }
 

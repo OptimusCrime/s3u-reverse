@@ -117,6 +117,13 @@ static_assert(offsetof(CAssertmentFailed, expression) == 0x18);
 // DirectX wrappers (DirectX\*.cpp)
 // ---------------------------------------------------------------------------
 
+// Any COM object (e.g. an IDirectDrawSurface) as raw memory: its first
+// dword points at its method table. Used to build fake interfaces in tests.
+struct ComObject {
+    void* const* vtable;  // +0x00
+};
+static_assert(sizeof(ComObject) == 4);
+
 // DirectX::CSimpleSurface.
 struct CSimpleSurface {
     std::uint32_t vtable;    // +0x00
@@ -140,19 +147,26 @@ static_assert(offsetof(CSurface, unk14) == 0x14);
 static_assert(offsetof(CSurface, unk18) == 0x18);
 static_assert(offsetof(CSurface, unk48) == 0x48);
 
-// CLandscapeSurface (the map's terrain surface), derived from CSurface.
+// CLandscapeSurface (the map's terrain surface, Volker\landscape.cpp), derived
+// from DirectX::COffscreenSurface -> CSurface; 0xa8 bytes (operator new at
+// 0x42efb0). Constructor 0x54bd30: +0x90 = its argument (CDrawer's
+// CGraphicsData), the four tables allocated (sizes below).
 struct CLandscapeSurface {
     CSurface surface;  // +0x00
-    std::uint8_t unk4c[0x94 - 0x4c];
-    void* table94;     // +0x94 probably shading tables (freed by the destructor)
+    std::uint8_t unk4c[0x90 - 0x4c];
+    void* graphics;    // +0x90 the CGraphicsData (game/gfx_layout.h)
+    void* table94;     // +0x94 new(0x364) (freed by the destructor)
     void* unk98;       // +0x98 (not freed by the destructor)
-    void* table9c;     // +0x9c
-    void* tableA0;     // +0xa0
-    void* tableA4;     // +0xa4
+    void* table9c;     // +0x9c new(1,000,000)
+    void* colours;     // +0xa0 new(0x202): uint16 colour slots 0..256 (Landscape_FindOrAddColour)
+    void* tableA4;     // +0xa4 new(0x10000)
 };
+static_assert(offsetof(CLandscapeSurface, graphics) == 0x90);
 static_assert(offsetof(CLandscapeSurface, table94) == 0x94);
 static_assert(offsetof(CLandscapeSurface, table9c) == 0x9c);
+static_assert(offsetof(CLandscapeSurface, colours) == 0xa0);
 static_assert(offsetof(CLandscapeSurface, tableA4) == 0xa4);
+static_assert(sizeof(CLandscapeSurface) == 0xa8);
 
 // DirectX::CDirectSoundBuffer.
 struct CDirectSoundBuffer {
@@ -220,6 +234,20 @@ struct CPlayerIndex {
     std::uint32_t unk08;   // +0x08
 };
 
+// An unidentified lobby class (Dirk\lobbyclient.cpp, Dirk\protocol.cpp)
+// with an id at +4: Lobby_EqualField4 (0x606ac0) compares two ids,
+// Lobby_HasField4 (0x5da3a0) tests for one, and its assignment 0x5db590
+// copies the id, two strings, a byte +0x28, a dword +0x2c and a container
+// at +0x9c (0x451120 calls all three on the same object).
+struct LobbyIdObject {
+    std::uint32_t unk00;   // +0x00 probably the vtable
+    std::uint32_t id;      // +0x04
+    msvc6::String unk08;   // +0x08
+    msvc6::String unk18;   // +0x18
+};
+static_assert(offsetof(LobbyIdObject, id) == 0x04);
+static_assert(offsetof(LobbyIdObject, unk18) == 0x18);
+
 // ---------------------------------------------------------------------------
 // Strings of 16-bit characters (the UI's wide string; same shape as
 // msvc6::String)
@@ -234,34 +262,6 @@ struct WideString {
 };
 static_assert(sizeof(WideString) == 0x10);
 static_assert(offsetof(WideString, ptr) == 0x04);
-
-// ---------------------------------------------------------------------------
-// Graphics data (Dirk\graphicsdata.cpp)
-// ---------------------------------------------------------------------------
-
-// The loaded graphics: per-group tables, indexed by the group number
-// (group << 16 | frame ids). The group arrays hold 70 entries each as far
-// as their neighbours show; the original doesn't check the group, so code
-// indexes them with any group (same address arithmetic).
-constexpr std::size_t kGfxGroups = 70;
-
-struct GfxData {
-    std::uint8_t unk000[0x264];
-    std::uint32_t groupBase[kGfxGroups];        // +0x264 the group's base offset
-    std::uint32_t frameTables[kGfxGroups];      // +0x37c frame-offset tables (word +8: frames per variant)
-    std::uint32_t animationTables[kGfxGroups];  // +0x494 animation tables (word +6: count)
-    std::uint32_t frameTables5ac[kGfxGroups];   // +0x5ac frame tables used by FramePointer
-    std::uint8_t unk6c4[0xb24 - 0x6c4];
-    std::uint32_t spriteTables[kGfxGroups];     // +0xb24 sprite header tables
-    std::uint32_t unkc3c;                       // +0xc3c
-    std::uint32_t currentVariant;               // +0xc40
-};
-static_assert(offsetof(GfxData, groupBase) == 0x264);
-static_assert(offsetof(GfxData, frameTables) == 0x37c);
-static_assert(offsetof(GfxData, animationTables) == 0x494);
-static_assert(offsetof(GfxData, frameTables5ac) == 0x5ac);
-static_assert(offsetof(GfxData, spriteTables) == 0xb24);
-static_assert(offsetof(GfxData, currentVariant) == 0xc40);
 
 #pragma pack(pop)
 

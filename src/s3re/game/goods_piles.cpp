@@ -28,7 +28,6 @@
 // All thiscall (ECX = world).
 
 
-#include "game/raw.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -45,7 +44,6 @@ using layout::kTileHasBuilding;
 
 namespace {
 
-constexpr std::uint32_t kGoodsCounterDwords = sizeof(layout::Player::goods) / 4;  // 36 uint16 cleared as 18 dwords
 constexpr std::uint32_t kNeighbourCount = 19;  // the first 19 entries of world->offsets
 
 constexpr std::uint8_t kNone = 0xff;
@@ -74,9 +72,9 @@ namespace {
 
 std::uint32_t RecountPlayerGoods(GameWorld* world, std::uint8_t maxKind) {
     for (std::uint32_t player = 0; player < layout::kPlayers; ++player) {
-        for (std::uint32_t i = 0; i < kGoodsCounterDwords; ++i) {
-            // The original clears the 36 goods words as 18 dwords.
-            RawAt<std::uint32_t>(world->players[player].goods, i * 4) = 0;
+        // The original clears the 36 goods words as 18 dwords (same bytes).
+        for (std::uint16_t& goods : world->players[player].goods) {
+            goods = 0;
         }
     }
     std::uint32_t count = world->pile_high_water;

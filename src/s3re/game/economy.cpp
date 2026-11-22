@@ -65,6 +65,7 @@
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
+#include "test/fake_graphics.h"
 #include "test/world_buffer.h"
 
 #include <cstddef>
@@ -558,37 +559,15 @@ void __fastcall WrongRecountPlayerPopulation(GameWorld* world, void* edx) {
     }
 }
 
-// The graphics object fields GfxData_SpriteWord reads (see logic_helpers.cpp):
-// [[this+0xb24+group*4] + 8 + index*4] + [this+0x264+group*4].
-#pragma pack(push, 1)
-struct GfxFields {
-    std::uint8_t pad000[0x264];
-    std::uint32_t group_bias[0xb0];    // 0x264
-    std::uint8_t pad524[0x600];
-    std::uint32_t group_tables[0xb0];  // 0xb24
-};
-#pragma pack(pop)
-static_assert(offsetof(GfxFields, group_tables) == 0xb24);
-
-constexpr std::uintptr_t kGfxData = 0x007a8010;
-
 void CompareTowerAnimation(test::Context& ctx, SettlerFn candidate, int cases) {
     // Every group's sprite table points at the same random sprite pointers.
-    std::vector<std::uint8_t> object(0x1000);
-    std::vector<std::uint32_t> sprites(2 + 0x4000);
+    test::FakeGraphics gfx;
     std::vector<std::uint8_t> frames(0x2000);
     ctx.rng().Fill(frames.data(), frames.size());
-    auto& gfx = *reinterpret_cast<GfxFields*>(object.data());
-    for (std::uint32_t g = 0; g < 0xb0; ++g) {
-        gfx.group_tables[g] = reinterpret_cast<std::uint32_t>(sprites.data());
-        gfx.group_bias[g] = 0;
+    gfx.ShareTable();
+    for (std::uint32_t k = 0; k < test::FakeGraphics::kSprites; ++k) {
+        gfx.table().sprites[k] = reinterpret_cast<std::uint32_t>(frames.data() + ctx.rng().Below(0x1f00));
     }
-    for (std::uint32_t k = 2; k < sprites.size(); ++k) {
-        sprites[k] = reinterpret_cast<std::uint32_t>(frames.data() + ctx.rng().Below(0x1f00));
-    }
-    std::uint32_t& global = *reinterpret_cast<std::uint32_t*>(kGfxData);
-    const std::uint32_t saved = global;
-    global = reinterpret_cast<std::uint32_t>(object.data());
 
     test::WorldPair worlds(ctx, offsetof(GameWorld, buildings) + 0x200 * sizeof(Building));
     static constexpr std::uint8_t kSoldiers[] = {0x20, 0x23, 8, 0x1e, 0x21, 0xf, 0x1f, 0x22};
@@ -621,7 +600,6 @@ void CompareTowerAnimation(test::Context& ctx, SettlerFn candidate, int cases) {
         }
     }
     S3RE_EXPECT(worlds.Checkpoint(ctx));
-    global = saved;
 }
 
 // Wrong: ignores the building's race 2.

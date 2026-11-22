@@ -407,3 +407,97 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
 - **Table at world+0x14D28A8** (16 bytes x 50, mark +0x14D28A4): byte
   +0x0, dword +0x4, dword +0xC written by 0x549530 (Volker area near
   GodlyEvents); UpdateEnvironment and 0x518F20 read it. **G**.
+
+---
+
+# Classes outside the world
+
+Layouts of the other objects our code touches, by class (RTTI names where
+the binary has them). The C++ structs are the source of truth for offsets
+(every field `static_assert`ed); this lists what is known and the evidence.
+Headers: `src/s3re/game/gfx_layout.h`, `framework_layout.h`,
+`screen_element_layout.h`, `menus_layout.h`, `game_settings_layout.h`,
+`ai_layout.h`, `logic_thread_layout.h`.
+
+## CGraphicsData (0xC44 bytes; pointer at 0x7A8010)
+
+Dirk\graphicsdata.cpp; base Win32::CObject, vtable 0x65D3E4. Constructor
+0x5F67C0 (operator new 0xC44 at 0x4932FE and in CDrawer's constructor),
+destructor 0x5F68B0, Close 0x5FA690. Every per-group array has 70 entries
+(the loops count 0x46; arrays 0x118 bytes apart); the original never
+checks the group, and tests use groups up to 0xAF. **V** (layout).
+
+| offset | field | evidence |
+|---|---|---|
+| +0x000 | vtable | constructor |
+| +0x024 | std::string (probably the GFX file or folder name) | constructor/destructor **S** |
+| +0x034 | dword[70], not cleared by Close | **G** |
+| +0x14C | Win32::CFileMapping*[70] (new 0x2C, ctor 0x61A3A0) | constructor, Close **V** |
+| +0x264 | views[70]: each group's mapped view; table offsets are relative to it | Close (UnmapView 0x61AA40), GfxData_* **V** |
+| +0x37C | frameTables[70] (FrameTable: word +8 frames per variant, dword offsets from +0xC) | GfxData_FrameOffset **V** |
+| +0x494 | animationTables[70] (OffsetTable: word +6 count, dword offsets from +8) | GfxData_AnimationPointer **V** |
+| +0x5AC | frameTables5ac[70] (OffsetTable, count not checked) | GfxData_FramePointer **V** |
+| +0x6C4, +0x7DC, +0x8F4, +0xA0C | four more table arrays, zeroed by Close | **S** |
+| +0xB24 | spriteTables[70] (SpriteTable: dword entries from +8, relative to the view) | GfxData_SpriteWord **V** |
+| +0xC3C | dword, zeroed by constructor and Close | |
+| +0xC40 | currentVariant (used for variant -1) | GfxData_FrameOffset **V** |
+
+Tests: `src/s3re/test/fake_graphics.h` (FakeGraphics) installs a fake
+object for the simulation tests that read animation lengths.
+
+## CLandscapeSurface (0xA8 bytes)
+
+Volker\landscape.cpp; DirectX::COffscreenSurface -> CSurface ->
+CSimpleSurface. Constructor 0x54BD30 (operator new 0xA8 at 0x42EFB0).
++0x90 the CGraphicsData (constructor argument); +0x94 new(0x364), +0x9C
+new(1,000,000), +0xA0 colours (new(0x202): uint16 slots 0..256,
+Landscape_FindOrAddColour), +0xA4 new(0x10000); the destructor frees all
+four, not +0x98. **V** (layout, constructor), **S** (colours).
+
+## UI: CScreenElement, CScreenGroup, CScreen, CControl, CStaticText
+
+Dirk\dialog.cpp. CScreenElement (0x20 bytes, vtable 0x655A68, constructor
+0x415610): +0x04 background colour (0x1111), +0x08 RECT, +0x18 parent (a
+CScreenGroup (sub)object), +0x1C has_focus, +0x1D mouse_inside, +0x1E
+needs_redraw, +0x1F probably "transparent". CScreenGroup, CControl and
+CScreen derive *virtually* from CScreenElement (RTTI), so each starts with
+its own vtable (+0) and a vbtable pointer (+4), and the CScreenElement part
+follows its own fields: CScreenGroup 0x80 bytes (vtable 0x655B70,
+children Watcom vector +0x0C, focus +0x28, captured +0x30, three Watcom
+containers +0x34/+0x4C/+0x64, vtordisp +0x7C; constructor around
+0x416CA0), CScreen = CScreenGroup + 0x18 bytes (element at +0x98),
+CControl 0x3C bytes (vtable 0x655D28, tooltip fields +0x08..+0x34,
+vtordisp +0x38; constructor around 0x418000). Their methods get the
+CScreenElement part as `this`. CStaticText (0x44 bytes): text +0x28,
+font +0x3C, style +0x40. **V** (verified replacements in
+screen_element.cpp, ui_static_text.cpp; constructors).
+
+## Menus::CDrawThread
+
+RTTI: DirectX::CGameDrawThread part at +0 (0x54 bytes), CScreen at
++0x54, CScreen's virtual base CScreenElement at +0x150 (vtable 0x6583D8
+stored through the vbtable at +0x58). Own fields: +0x104 menu state (0x14
+start the startup map, 4 start the game), +0x134 byte, +0x144 (-1 when a
+loaded game starts). **S** (savegame_start.cpp).
+
+## GameSettings (g_gameSettings, 0x7A7A18; no RTTI)
+
++0x88 word: the game seed; +0xB0 four dwords copied together
+(GameParams_CopyRectB0 0x437400; CNetSession and savegame code); +0xCC
+byte: random races include the Amazons. **V** (layout of these fields).
+
+## Smaller objects
+
+- **LobbyIdObject** (unidentified lobby class, Dirk\lobbyclient.cpp /
+  protocol.cpp): +0x04 id (Lobby_EqualField4 0x606AC0, Lobby_HasField4
+  0x5DA3A0), strings at +0x08 and +0x18, byte +0x28, dword +0x2C,
+  container +0x9C (its assignment 0x5DB590). **S**.
+- **AiTaggedRecord** (computer players; AI_SetWord4 0x55CA60): word +0x04
+  tag passed by the constructors (4, 7, 0xA...); no vtable. **G** (meaning).
+- **WCSkipListDictKeyVal<unsigned int / int, String>** (Watcom): key +0,
+  string +4 (destructors 0x459440, 0x49A070; 0x4581A0, 0x499470 same
+  shape). **S**.
+- **SessionDesc** (DirectX\netsession.cpp): DPSESSIONDESC2 copy, name
+  string at +0x50 (0x45F060 probably its destructor). **S**.
+- **DDBLTFX** (DirectDraw): the SDK struct (`<ddraw.h>`), 0x64 bytes,
+  dwFillColor at +0x50, as CScreenElement_FillBackground builds it.

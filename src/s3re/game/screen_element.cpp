@@ -33,6 +33,7 @@
 // this-0x78. The 0x429xxx functions are this-adjusting entry points of
 // derived classes that forward to them.
 
+#include "game/framework_layout.h"
 #include "game/raw.h"
 #include "game/screen_element_layout.h"
 #include "hooks.h"
@@ -40,6 +41,7 @@
 #include "watcom/ptr_vector.h"
 
 #include <windows.h>
+#include <ddraw.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -52,11 +54,11 @@
 namespace s3re::game {
 
 using ui::ControlOf;
-using ui::ControlPart;
+using ui::CControl;
 using ui::ElementOf;
 using ui::GroupOf;
-using ui::ScreenElement;
-using ui::ScreenGroupPart;
+using ui::CScreenElement;
+using ui::CScreenGroup;
 
 namespace {
 
@@ -79,10 +81,10 @@ void* VirtualBase(const std::int32_t* const& vbptr) {
     return at + vbptr[1];
 }
 
-// The parent's CScreenElement part. The parent's layout is not mapped
-// beyond its vbtable pointer at +4.
+// The parent's CScreenElement part (the parent is a CScreenGroup
+// (sub)object).
 void* ParentBase(void* parent) {
-    return VirtualBase(RawAt<const std::int32_t*>(parent, 4));
+    return VirtualBase(static_cast<CScreenGroup*>(parent)->vbptr);
 }
 
 // A group's CScreenElement virtual base.
@@ -91,7 +93,7 @@ void* GroupBase(void* group) {
 }
 
 // The control part of a CGroupControl (given its group part's "this").
-ControlPart* GroupControlOf(void* group) {
+CControl* GroupControlOf(void* group) {
     return ControlOf(Offset(group, -kGroupControlControl));
 }
 
@@ -214,7 +216,7 @@ std::uint32_t __fastcall DirectX_CSurface_DDBlt(void* self, void* edx, const REC
 namespace {
 
 void InitScreenElement(void* self) {
-    ScreenElement* element = ElementOf(self);
+    CScreenElement* element = ElementOf(self);
     element->background = 0x1111;
     element->parent = 0;
     element->has_focus = 0;
@@ -937,7 +939,7 @@ S3RE_HOOK(0x004187b0, CControl_DeleteTooltip, VoidNoArgFn, Original_CControl_Del
 // Purpose: Closes a control's tooltip, if one is open. ECX is the control
 // itself here.
 void __fastcall CControl_DeleteTooltip(void* control, void* /*edx*/) {
-    auto* part = static_cast<ControlPart*>(control);
+    auto* part = static_cast<CControl*>(control);
     void* tooltip = reinterpret_cast<void*>(part->tooltip);
     if (tooltip == nullptr) {
         return;
@@ -962,7 +964,7 @@ S3RE_HOOK(0x00418430, CControl_OnMouseMove, MessageFn, Original_CControl_OnMouse
 // mouse has moved more than 50 pixels from where it opened. Only AL (0) is
 // defined in EAX.
 std::uint32_t __fastcall CControl_OnMouseMove(void* self, void* /*edx*/, Message message) {
-    ControlPart* control = ControlOf(self);
+    CControl* control = ControlOf(self);
     control->last_move_time = (*reinterpret_cast<TimeGetTimeFn*>(kTimeGetTimeImport))();
     const std::uint32_t x = message.x;
     const std::uint32_t y = message.y;
@@ -1084,10 +1086,11 @@ std::uint32_t __fastcall CScreenElement_FillBackground(void* self, void* /*edx*/
     if (transparent != 0) {
         return transparent;
     }
-    std::uint32_t fx[25] = {};  // DDBLTFX: the original leaves all but these two fields uninitialized
-    fx[0] = sizeof(fx);
-    fx[0x50 / 4] = ElementOf(self)->background;  // dwFillColor
-    return DirectX_CSurface_DDBlt(surface, nullptr, rect, nullptr, nullptr, 0x400 /* DDBLT_COLORFILL */, fx);
+    static_assert(sizeof(DDBLTFX) == 0x64 && offsetof(DDBLTFX, dwFillColor) == 0x50);  // as the original builds it
+    DDBLTFX fx = {};  // the original leaves all but these two fields uninitialized
+    fx.dwSize = sizeof(fx);
+    fx.dwFillColor = ElementOf(self)->background;
+    return DirectX_CSurface_DDBlt(surface, nullptr, rect, nullptr, nullptr, DDBLT_COLORFILL, &fx);
 }
 
 S3RE_HOOK(0x00417460, CScreenGroup_FillBackground, FillFn, Original_CScreenGroup_FillBackground,
@@ -1285,9 +1288,9 @@ constexpr std::size_t kChild = 0x380;
 constexpr std::size_t kEnableThis = 0x400;
 // Where the vbtable pointers lie in the buffer, and the vbtables leading
 // from them to the element.
-constexpr std::size_t kParentVbptr = kParent + 4;
-constexpr std::size_t kGroupVbptr = kGroup - ui::kGroupThis + offsetof(ScreenGroupPart, vbptr);
-constexpr std::size_t kEnableVbptr = kEnableThis - kGroupControlControl - ui::kControlThis + offsetof(ControlPart, vbptr);
+constexpr std::size_t kFreeRect = 0x40;  // a free spot for an output RECT
+constexpr std::size_t kGroupVbptr = kGroup - ui::kGroupThis + offsetof(CScreenGroup, vbptr);
+constexpr std::size_t kEnableVbptr = kEnableThis - kGroupControlControl - ui::kControlThis + offsetof(CControl, vbptr);
 static_assert(kGroupVbptr == 0x284 && kEnableVbptr == 0x34c);
 const std::int32_t kParentVbtable[2] = {0, 0x20};  // the parent's element part at kParent + 0x24
 const std::int32_t kGroupVbtable[2] = {0, static_cast<std::int32_t>(kElement) - static_cast<std::int32_t>(kGroupVbptr)};
@@ -1301,7 +1304,7 @@ constexpr std::size_t kChildren = 0x800;
 constexpr std::size_t kChildData = 0x980;
 constexpr std::size_t kControl = 0x600;
 constexpr std::size_t kGroupControl = kGroup - kGroupControlControl;
-constexpr std::size_t kControlVbptrDistance = ui::kControlThis - offsetof(ControlPart, vbptr);  // 0x38
+constexpr std::size_t kControlVbptrDistance = ui::kControlThis - offsetof(CControl, vbptr);  // 0x38
 const std::int32_t kControlVbtable[2] = {
     0, static_cast<std::int32_t>(kElement) - static_cast<std::int32_t>(kControl - kControlVbptrDistance)};
 const std::int32_t kGroupControlVbtable[2] = {
@@ -1465,7 +1468,7 @@ std::uint32_t RunOperation(const Functions& f, int op, std::uint8_t* buffer, Inp
         case 13: return f.dispatch(element, nullptr, in.message);
         case 14: return f.drawClipped(element, nullptr, in.a, &in.rects[1]);
         case 15: return f.drawRect(element, nullptr, in.a, &in.rects[1], in.b);
-        case 16: return ptr(f.intersect(element, nullptr, &RawAt<RECT>(buffer, 0x40), &in.rects[0], &in.rects[1]));  // a free spot
+        case 16: return ptr(f.intersect(element, nullptr, reinterpret_cast<RECT*>(buffer + kFreeRect), &in.rects[0], &in.rects[1]));
         case 17: return f.setFocus(element, nullptr, in.a);
         case 18: return f.killFocus(element, nullptr) & 0xff;
         case 19: return f.invalidate(element, nullptr);
@@ -1518,20 +1521,22 @@ void SetUpBuffer(test::Context& ctx, std::uint8_t* buffer) {
             *coordinate = ctx.rng().Range(-8, 40);
         }
     };
-    ScreenElement* element = ElementOf(buffer + kElement);
+    CScreenElement* element = ElementOf(buffer + kElement);
     randomRect(element->rect);
     void* vtable = const_cast<void**>(FakeVtable().data());
     const auto vtableWord = reinterpret_cast<std::uint32_t>(vtable);
     element->vtable = vtableWord;
-    // The fake parent: vtable, vbtable pointer at +4, element part at +0x24.
-    RawAt<void*>(buffer, kParent) = vtable;
-    RawAt<const void*>(buffer, kParentVbptr) = kParentVbtable;
+    // The fake parent: a CScreenGroup (vtable, vbtable pointer), element
+    // part at +0x24.
+    auto* const parent = reinterpret_cast<CScreenGroup*>(buffer + kParent);
+    parent->vtable = vtableWord;
+    parent->vbptr = kParentVbtable;
     ElementOf(buffer + kParent + 0x24)->vtable = vtableWord;
     ElementOf(buffer + kChild)->vtable = vtableWord;
     element->parent = ctx.rng().Chance(1, 3) ? 0 : reinterpret_cast<std::uint32_t>(buffer + kParent);
     element->has_focus = static_cast<std::uint8_t>(ctx.rng().Below(2));
     element->mouse_inside = static_cast<std::uint8_t>(ctx.rng().Below(3));
-    ScreenGroupPart* group = GroupOf(buffer + kGroup);
+    CScreenGroup* group = GroupOf(buffer + kGroup);
     group->vbptr = kGroupVbtable;
     group->focus = ctx.rng().Chance(1, 3) ? 0 : reinterpret_cast<std::uint32_t>(buffer + kChild);
     group->only_inside = static_cast<std::uint8_t>(ctx.rng().Below(2));
@@ -1550,7 +1555,7 @@ void SetUpBuffer(test::Context& ctx, std::uint8_t* buffer) {
     for (std::size_t k = 0; k < 4; ++k) {
         std::uint8_t* childBytes = buffer + kChildren + 0x40 * k;
         group->children.data[k] = reinterpret_cast<std::uint32_t>(childBytes);
-        ScreenElement* child = ElementOf(childBytes);
+        CScreenElement* child = ElementOf(childBytes);
         child->vtable = vtableWord;
         child->parent = ctx.rng().Chance(1, 2) ? 0 : reinterpret_cast<std::uint32_t>(buffer + kParent);
         child->has_focus = static_cast<std::uint8_t>(ctx.rng().Below(2));
@@ -1566,7 +1571,7 @@ void SetUpBuffer(test::Context& ctx, std::uint8_t* buffer) {
     }
     // The CControl parts.
     for (const auto& [control, vbtable] : {std::pair{kControl, kControlVbtable}, std::pair{kGroupControl, kGroupControlVbtable}}) {
-        ControlPart* part = ControlOf(buffer + control);
+        CControl* part = ControlOf(buffer + control);
         part->vbptr = vbtable;
         part->tooltip = ctx.rng().Chance(1, 3) ? 0 : reinterpret_cast<std::uint32_t>(buffer + kChild);
         for (std::uint32_t* field : {&part->tooltip_x, &part->tooltip_y}) {
@@ -1708,9 +1713,9 @@ std::int32_t __stdcall RecordingBlt(void* surface, const RECT* dst, void* src, c
     const auto rel = [](const void* p) {
         return p == nullptr ? 0xffffffffu : static_cast<std::uint32_t>(static_cast<const std::uint8_t*>(p) - g_fillBase);
     };
-    // DDBLTFX: dwSize (+0) and dwFillColor (+0x50).
+    const auto* const blt = static_cast<const DDBLTFX*>(fx);
     g_fillLog->insert(g_fillLog->end(), {rel(surface), rel(dst), rel(src), rel(srcRect), flags,
-                                         RawAt<std::uint32_t>(fx, 0), RawAt<std::uint32_t>(fx, 0x50)});
+                                         blt->dwSize, blt->dwFillColor});
     return 0;
 }
 
@@ -1721,7 +1726,7 @@ void CompareFill(test::Context& ctx, FillFn candidate, FillFn original, int whic
         slot = reinterpret_cast<void*>(&RecordingBlt);
     }
     static const std::int32_t kVbtable[2] = {0, 0x100 - 0x184};  // group 0x200: vbptr 0x184 -> element 0x100
-    static_assert(0x200 - ui::kGroupThis + offsetof(ScreenGroupPart, vbptr) == 0x184);
+    static_assert(0x200 - ui::kGroupThis + offsetof(CScreenGroup, vbptr) == 0x184);
     std::vector<std::uint8_t> buffer(0x400);
     for (int i = 0; i < cases; ++i) {
         ctx.rng().Fill(buffer.data(), buffer.size());
@@ -1730,8 +1735,8 @@ void CompareFill(test::Context& ctx, FillFn candidate, FillFn original, int whic
         GroupOf(b + 0x200)->vbptr = kVbtable;
         // The fake CSurface at 0x300: its DirectDraw surface (+8) at 0x340,
         // whose first dword is its COM vtable.
-        RawAt<void*>(b, 0x308) = b + 0x340;
-        RawAt<void*>(b, 0x340) = g_fillComVtable;
+        reinterpret_cast<framework::CSimpleSurface*>(b + 0x300)->surface = b + 0x340;
+        reinterpret_cast<framework::ComObject*>(b + 0x340)->vtable = g_fillComVtable;
         void* self = which == 0 ? b + 0x100 : b + 0x200;
         const RECT* rect = ctx.rng().Chance(1, 4) ? nullptr : reinterpret_cast<const RECT*>(b + 0x380);
         const std::vector<std::uint8_t> snapshot = buffer;

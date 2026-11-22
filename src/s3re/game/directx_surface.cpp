@@ -42,6 +42,7 @@
 #include "test/difftest.h"
 
 #include <windows.h>
+#include <ddraw.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -235,9 +236,9 @@ std::int32_t __stdcall FakeBlt(void* surface, const RECT* dst, void* src, const 
     log.words.insert(log.words.end(), {0xb17u, Relative(surface), Relative(dst), Relative(src), Relative(srcRect),
                                        flags, Relative(fx)});
     if (fx != nullptr) {
-        // DDBLTFX (ddraw.h, not included): dwSize at +0, dwFillColor at +0x50.
-        log.words.push_back(RawAt<std::uint32_t>(fx, 0));
-        log.words.push_back(RawAt<std::uint32_t>(fx, 0x50));
+        const auto* const blt = static_cast<const DDBLTFX*>(fx);
+        log.words.push_back(blt->dwSize);
+        log.words.push_back(blt->dwFillColor);
     }
     return log.next < log.results.size() ? log.results[log.next++] : 0;
 }
@@ -548,7 +549,7 @@ std::uint32_t __fastcall CLandscapeSurface_Destroy(void* self, void* /*edx*/) {
     landscape->surface.simple.vtable = kCLandscapeSurfaceVtable;
     GameDelete(landscape->table94);
     GameDelete(landscape->table9c);
-    GameDelete(landscape->tableA0);
+    GameDelete(landscape->colours);
     GameDelete(landscape->tableA4);
     return DirectX_CSurface_Destroy(self, nullptr);
 }
@@ -637,7 +638,7 @@ void CompareDestroy(test::Context& ctx, const DestroyFunctions& candidate, int c
             *reinterpret_cast<void**>(iface[side]) = g_releaseVtable;  // fake COM object: vtable at +0
             CLandscapeSurface* const object = AsLandscape(objects[side]);
             object->surface.simple.createdInterface = noInterface ? nullptr : iface[side];
-            for (void** table : {&object->table94, &object->table9c, &object->tableA0, &object->tableA4}) {
+            for (void** table : {&object->table94, &object->table9c, &object->colours, &object->tableA4}) {
                 *table = nullBlocks ? nullptr : GameNewBlock(16);
             }
         }
@@ -659,7 +660,7 @@ void CompareDestroy(test::Context& ctx, const DestroyFunctions& candidate, int c
             for (int side = 0; side < 2; ++side) {
                 CLandscapeSurface* const object = AsLandscape(objects[side]);
                 object->surface.simple.createdInterface = nullptr;  // interface pointers differ per side
-                for (void** table : {&object->table94, &object->table9c, &object->tableA0, &object->tableA4}) {
+                for (void** table : {&object->table94, &object->table9c, &object->colours, &object->tableA4}) {
                     *table = nullptr;  // blocks differ per side
                 }
             }

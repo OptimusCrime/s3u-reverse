@@ -30,6 +30,7 @@
 // as vf13 does after starting a map), and lets the original vf13 run on in
 // state 4. If the load fails, the game is ended (exit code 4).
 
+#include "game/menus_layout.h"
 #include "hooks.h"
 #include "log.h"
 #include "msvc6/string.h"
@@ -43,30 +44,15 @@
 
 namespace s3re::game {
 
-// Menus::CDrawThread: only the fields used here.
-#pragma pack(push, 1)
-struct CMenuDrawThread {
-    std::uint8_t unk000[0x104];
-    std::uint32_t menuState;     // +0x104 0x14: start the startup map, 4: start the game
-    std::uint8_t unk108[0x134 - 0x108];
-    std::uint8_t unk134;         // +0x134 0 when vf13 is about to start the startup map (checked by our hook)
-    std::uint8_t unk135[0x144 - 0x135];
-    std::int32_t unk144;         // +0x144 set to -1 when a loaded game starts
-};
-#pragma pack(pop)
-static_assert(offsetof(CMenuDrawThread, menuState) == 0x104);
-static_assert(offsetof(CMenuDrawThread, unk134) == 0x134);
-static_assert(offsetof(CMenuDrawThread, unk144) == 0x144);
-
 namespace {
 
-using DrawThreadUpdateFn = std::uint32_t(__fastcall*)(CMenuDrawThread* self, void* edx, int arg);
+using DrawThreadUpdateFn = std::uint32_t(__fastcall*)(menus::CDrawThread* self, void* edx, int arg);
 using LoadSaveGameFn = int(__fastcall*)(void* settings, void* edx, const msvc6::String* path,
                                         int multiplayer);
-using DrawThreadPostFn = void(__fastcall*)(CMenuDrawThread* self, void* edx, int arg);
+using DrawThreadPostFn = void(__fastcall*)(menus::CDrawThread* self, void* edx, int arg);
 using ClearStartupMapFn = void(__fastcall*)(void* config, void* edx);
 
-std::uint32_t __fastcall Hooked_MenuDrawThread_Update(CMenuDrawThread* self, void* edx, int arg);
+std::uint32_t __fastcall Hooked_MenuDrawThread_Update(menus::CDrawThread* self, void* edx, int arg);
 
 S3RE_PASSTHROUGH(0x00493880, MenuDrawThread_Update, DrawThreadUpdateFn,
                  Original_MenuDrawThread_Update, Hooked_MenuDrawThread_Update);
@@ -89,7 +75,7 @@ std::string SaveToLoad() {
 
 bool g_handled = false;  // only touched by the menu thread
 
-void LoadSave(CMenuDrawThread* self, const std::string& path) {
+void LoadSave(menus::CDrawThread* self, const std::string& path) {
     msvc6::String name{};
     msvc6::Original_String_Tidy(&name, nullptr, 0);
     msvc6::Original_String_AssignChars(&name, nullptr, path.c_str(),
@@ -109,7 +95,7 @@ void LoadSave(CMenuDrawThread* self, const std::string& path) {
     Config_ClearStartupMap(kConfig, nullptr);
 }
 
-std::uint32_t __fastcall Hooked_MenuDrawThread_Update(CMenuDrawThread* self, void* edx, int arg) {
+std::uint32_t __fastcall Hooked_MenuDrawThread_Update(menus::CDrawThread* self, void* edx, int arg) {
     if (!g_handled && self->menuState == kMenuStartupMap && self->unk134 == 0) {
         g_handled = true;
         const std::string path = SaveToLoad();

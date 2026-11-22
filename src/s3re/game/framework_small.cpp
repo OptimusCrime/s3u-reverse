@@ -48,7 +48,7 @@
 
 #include "game/debug_log.h"
 #include "game/framework_layout.h"
-#include "game/raw.h"
+#include "game/gfx_layout.h"
 #include "hooks.h"
 #include "test/difftest.h"
 
@@ -84,7 +84,6 @@ using framework::CLMMessageBlock;
 using framework::CRegistryKey;
 using framework::CWaitable;
 using framework::CWin32Handle;
-using framework::GfxData;
 using framework::WideString;
 
 template <typename T>
@@ -325,8 +324,7 @@ S3RE_HOOK(0x005da3a0, Lobby_HasField4_5da3a0, ThisFn, Original_Lobby_HasField4_5
 // Purpose: Whether a lobby object's pointer at +4 is set (meaning not
 // identified).
 std::uint32_t __fastcall Lobby_HasField4_5da3a0(void* self, void* /*edx*/) {
-    // The dword at +4 of an unidentified lobby object (its only known field).
-    return RawAt<std::uint32_t>(self, 4) != 0 ? 1 : 0;
+    return As<framework::LobbyIdObject>(self)->id != 0 ? 1 : 0;
 }
 
 S3RE_HOOK(0x00418fb0, UI_CopyWords_418fb0, CopyWordsFn, Original_UI_CopyWords_418fb0, UI_CopyWords_418fb0);
@@ -358,10 +356,9 @@ S3RE_HOOK(0x005fac70, GfxData_FramePointer_5fac70, This2Fn, Original_GfxData_Fra
 std::uint32_t __fastcall GfxData_FramePointer_5fac70(void* self, void* /*edx*/, std::uint32_t out, std::uint32_t id) {
     const std::uint32_t group = id >> 16;
     const std::uint32_t frame = id & 0xffff;
-    GfxData* const gfx = As<GfxData>(self);
-    const std::uint32_t table = gfx->frameTables5ac[group];
-    const std::uint32_t offset = *reinterpret_cast<const std::uint32_t*>(table + frame * 4 + 8);
-    *reinterpret_cast<std::uint32_t*>(out) = offset + gfx->groupBase[group];
+    const gfx::CGraphicsData* const gfx = As<gfx::CGraphicsData>(self);
+    const std::uint32_t offset = gfx->frameTables5ac[group]->offsets[frame];
+    *reinterpret_cast<std::uint32_t*>(out) = offset + gfx->views[group];
     return out;
 }
 
@@ -374,14 +371,13 @@ std::uint32_t __fastcall GfxData_AnimationPointer_5faaf0(void* self, void* /*edx
                                                          std::uint32_t id) {
     const std::uint32_t group = id >> 16;
     const std::uint32_t frame = id & 0xffff;
-    GfxData* const gfx = As<GfxData>(self);
-    const std::uint32_t table = gfx->animationTables[group];
-    if (frame >= *reinterpret_cast<const std::uint16_t*>(table + 6)) {
+    const gfx::CGraphicsData* const gfx = As<gfx::CGraphicsData>(self);
+    if (frame >= gfx->animationTables[group]->count) {
         GameDebugLog(kAnimationNotFound, group, frame);
     }
-    const std::uint32_t offset =
-        *reinterpret_cast<const std::uint32_t*>(gfx->animationTables[group] + frame * 4 + 8);
-    *reinterpret_cast<std::uint32_t*>(out) = offset + gfx->groupBase[group];
+    // Read again after the call, as the original does.
+    const std::uint32_t offset = gfx->animationTables[group]->offsets[frame];
+    *reinterpret_cast<std::uint32_t*>(out) = offset + gfx->views[group];
     return out;
 }
 
@@ -628,8 +624,8 @@ void CompareSmall(test::Context& ctx, const Functions& candidate, int cases) {
                 ctx.rng().Fill(tableA, sizeof(tableA));
                 const std::uint32_t group = ctx.rng().Below(4);
                 const std::uint32_t frame = ctx.rng().Below(6);
-                const std::size_t tableField = op == 12 ? offsetof(GfxData, frameTables5ac)
-                                                        : offsetof(GfxData, animationTables);
+                const std::size_t tableField = op == 12 ? offsetof(gfx::CGraphicsData, frameTables5ac)
+                                                        : offsetof(gfx::CGraphicsData, animationTables);
                 std::memcpy(gfxB, gfxA, sizeof(gfxA));
                 std::memcpy(tableB, tableA, sizeof(tableA));
                 const std::uint32_t ta = Address(tableA), tb = Address(tableB);

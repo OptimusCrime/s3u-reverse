@@ -59,6 +59,7 @@
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
+#include "test/fake_graphics.h"
 #include "test/world_buffer.h"
 
 #include <cstddef>
@@ -624,25 +625,6 @@ namespace {
 constexpr std::uint32_t kTestSettlers = 0x400;
 constexpr std::uint32_t kTestBuildings = 0x40;
 
-// A graphics object on which every sprite of groups 0..0xaf is valid (for
-// SetSettlerAnimation).
-struct AnyGfx {
-    std::vector<std::uint32_t> object = std::vector<std::uint32_t>(0x1000 / 4);
-    std::vector<std::uint32_t> table = std::vector<std::uint32_t>(2 + 0x4000);
-    std::vector<std::uint8_t> sprite = std::vector<std::uint8_t>(0x100, 7);
-    std::uint32_t saved = U32(0x007a8010);
-    AnyGfx() {
-        for (std::uint32_t g = 0; g < 0xb0; ++g) {
-            object[0xb24 / 4 + g] = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(table.data()));
-        }
-        for (std::uint32_t k = 2; k < table.size(); ++k) {
-            table[k] = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(sprite.data()));
-        }
-        *reinterpret_cast<void**>(0x007a8010) = object.data();
-    }
-    ~AnyGfx() { *reinterpret_cast<std::uint32_t*>(0x007a8010) = saved; }
-};
-
 // S3.EXE data the function writes (tallies) or reads (campaign mission,
 // config byte): saved, set per case, compared and restored.
 struct Globals {
@@ -842,7 +824,8 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t soldie
 }
 
 void Compare(test::Context& ctx, SoldierFn candidate, int cases) {
-    AnyGfx gfx;
+    test::FakeGraphics gfx;  // every sprite valid, for SetSettlerAnimation
+    gfx.MakeEverySpriteValid(7);
     Globals globals;
     test::WorldPair worlds(ctx, sizeof(GameWorld));
     worlds.Both(&SetUpWorld);

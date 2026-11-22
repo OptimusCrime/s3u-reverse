@@ -136,12 +136,29 @@ whole-game evidence.
 
 ## Typed access leftovers
 
-- A few `RawAt`/`RawAtAddress` uses remain, each with a comment, for
-  objects whose layout isn't mapped yet (GfxData frame tables in
-  graphics_helpers.cpp, screen_element.cpp's parent vbtable pointer and
-  dialog globals, single fields of unidentified lobby/AI objects, the
-  single-string classes in string_members.cpp). Give them packed structs
-  once more of their fields are known (`grep -rn RawAt src`).
+- **Class layouts left after struct pass S2 (session 45).** The object
+  `RawAt`s are gone (two test-only ones in string_members.cpp are marked
+  `raw-ok`). Left, by value:
+  - Rename the `GfxData_*` functions to `CGraphicsData::*` (the class is
+    identified, game/gfx_layout.h): inventory, hooks, tests,
+    `whole_game.py fix-names`.
+  - `DrawTarget` (graphics_helpers.cpp; Render_PutPixel16 / Entry204:
+    pitch +0x90, pixel buffer +0xa4, table +0x204; Volker\DrawBuilding.cpp):
+    class not identified (not CLandscapeSurface, which is 0xa8 bytes).
+  - `CLogicThread` (logic_thread_layout.h): mirror its RTTI bases
+    (DirectX::CGameThread -> Win32::CThread) once their sizes are known;
+    tooling/fast.cpp still uses raw offsets +0x3bc (timer) and +0x3dc
+    (wait set) - original-mode tooling, so bump
+    `S3RE_ORIGINAL_TOOLING_VERSION` if it changes.
+  - Per-file partial structs of not yet identified classes:
+    framework_helpers.cpp (OwningPointer, DwordPair, CreditsTextStyle,
+    LobbyRecord5ebfb0, NetHelpRecord), framework_small.cpp (IsvList,
+    IntVector: move to watcom/ headers as WCIsvSList / WCValVector
+    layouts), id_allocators.cpp (IdTable), folded_getters.cpp, and the
+    single-string classes of string_members.cpp (named after their
+    functions; identify the classes, mostly lobby code).
+  - Constructors of CScreenGroup (~0x416ca0) and CControl (~0x418000) are
+    known now; their remaining unk fields can be named from them.
 - `MessageQueue` (logic_thread_layout.h) is opaque; map its ring-buffer
   fields when the net/bounce thread code is reimplemented.
 

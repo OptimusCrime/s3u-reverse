@@ -45,18 +45,76 @@ namespace {
 using framework::CRegistryValueInfo;
 using framework::SessionDesc;
 
-// The string member at `offset` of an object whose class is not identified
-// (only that member is known, so it stays a raw offset; see the header).
-// The tests also use it for their generic per-offset comparisons.
+// The string member at `offset` of a test buffer, for the tests' generic
+// per-offset comparisons (each function's own struct is below).
 String* StringAt(void* object, std::uint32_t offset) {
-    return &RawAt<String>(object, offset);
+    return &RawAt<String>(object, offset);  // raw-ok: test buffers compared per member offset
 }
 
 const String* StringAt(const void* object, std::uint32_t offset) {
-    return &RawAt<String>(object, offset);
+    return &RawAt<String>(object, offset);  // raw-ok: test buffers compared per member offset
 }
 
 #pragma pack(push, 1)
+// Classes known only through one or two functions here (not identified;
+// named after their source file and the function's address). Only the
+// string member is known.
+
+// Dirk\ConsoleInit.cpp: destructor 0x411980; SetText 0x412130 sets the same
+// member (same file; probably the same class, a UI text).
+struct ConsoleText411980 {
+    std::uint8_t unk00[0x14];
+    String text;  // +0x14
+};
+static_assert(offsetof(ConsoleText411980, text) == 0x14);
+
+// Dirk\LobbyDialogs.cpp: destructor 0x441740.
+struct LobbyDialogs441740 {
+    std::uint8_t unk00[0x08];
+    String text;  // +0x08
+};
+static_assert(offsetof(LobbyDialogs441740, text) == 0x08);
+
+// Unnamed file after Dirk\LobbyDialogs.cpp: destructor 0x450ae0.
+struct Lobby450ae0 {
+    std::uint8_t unk00[0x14];
+    String text;  // +0x14
+};
+static_assert(offsetof(Lobby450ae0, text) == 0x14);
+
+// Dirk\LobbyManager.cpp: destructor 0x455170.
+struct LobbyManager455170 {
+    std::uint8_t unk00[0x14];
+    String text;  // +0x14
+};
+static_assert(offsetof(LobbyManager455170, text) == 0x14);
+
+// A Watcom dictionary entry WCSkipListDictKeyVal<unsigned int, String> or
+// <int, String>: 0x459440 and 0x49a070 are called by the skip lists'
+// element destructors (WCSkipListBase<...>::vf04 0x458ff0 / 0x499d60);
+// 0x4581a0 (Dirk\LobbyManager.cpp) and 0x499470 (Dirk\netdialogs.cpp)
+// destroy the same shape, probably for the same templates.
+struct DictKeyValString {
+    std::uint32_t key;  // +0x00
+    String value;       // +0x04
+};
+static_assert(offsetof(DictKeyValString, value) == 0x04);
+
+// Dirk\Lobby.cpp: destructor 0x5e1b10 (destroys +0x10, then +0).
+struct LobbyStringPair5e1b10 {
+    String first;   // +0x00
+    String second;  // +0x10
+};
+static_assert(offsetof(LobbyStringPair5e1b10, second) == 0x10);
+
+// Dirk\dialog.cpp: SetText 0x4181f0 (called by CLobbyDialog's constructor
+// for several of its members).
+struct DialogText4181f0 {
+    std::uint8_t unk00[0x10];
+    String text;  // +0x10
+};
+static_assert(offsetof(DialogText4181f0, text) == 0x10);
+
 // Two dwords and a string (0x4499e0).
 struct TwoDwordsAndString {
     std::uint32_t first;   // +0x00
@@ -154,7 +212,7 @@ S3RE_HOOK(0x00411980, DestroyStringMember14_411980, DestroyFn, Original_DestroyS
 // Purpose: Destructor of a game object whose only member that needs cleaning
 // up is a string at +0x14 (also run by exception cleanup).
 void __fastcall DestroyStringMember14_411980(void* self, void* /*edx*/) {
-    msvc6::String_Destroy(StringAt(self, 0x14), nullptr);
+    msvc6::String_Destroy(&As<ConsoleText411980>(self)->text, nullptr);
 }
 
 S3RE_HOOK(0x00441740, DestroyStringMember08_441740, DestroyFn, Original_DestroyStringMember08_441740, DestroyStringMember08_441740);
@@ -162,7 +220,7 @@ S3RE_HOOK(0x00441740, DestroyStringMember08_441740, DestroyFn, Original_DestroyS
 // Purpose: Destructor of a game object whose only member that needs cleaning
 // up is a string at +0x08 (also run by exception cleanup).
 void __fastcall DestroyStringMember08_441740(void* self, void* /*edx*/) {
-    msvc6::String_Destroy(StringAt(self, 0x08), nullptr);
+    msvc6::String_Destroy(&As<LobbyDialogs441740>(self)->text, nullptr);
 }
 
 S3RE_HOOK(0x00450ae0, DestroyStringMember14_450ae0, DestroyFn, Original_DestroyStringMember14_450ae0, DestroyStringMember14_450ae0);
@@ -170,7 +228,7 @@ S3RE_HOOK(0x00450ae0, DestroyStringMember14_450ae0, DestroyFn, Original_DestroyS
 // Purpose: Destructor of a game object whose only member that needs cleaning
 // up is a string at +0x14 (also run by exception cleanup).
 void __fastcall DestroyStringMember14_450ae0(void* self, void* /*edx*/) {
-    msvc6::String_Destroy(StringAt(self, 0x14), nullptr);
+    msvc6::String_Destroy(&As<Lobby450ae0>(self)->text, nullptr);
 }
 
 S3RE_HOOK(0x00455170, DestroyStringMember14_455170, DestroyFn, Original_DestroyStringMember14_455170, DestroyStringMember14_455170);
@@ -178,7 +236,7 @@ S3RE_HOOK(0x00455170, DestroyStringMember14_455170, DestroyFn, Original_DestroyS
 // Purpose: Destructor of a game object whose only member that needs cleaning
 // up is a string at +0x14 (also run by exception cleanup).
 void __fastcall DestroyStringMember14_455170(void* self, void* /*edx*/) {
-    msvc6::String_Destroy(StringAt(self, 0x14), nullptr);
+    msvc6::String_Destroy(&As<LobbyManager455170>(self)->text, nullptr);
 }
 
 S3RE_HOOK(0x004581a0, DestroyStringMember04_4581a0, DestroyFn, Original_DestroyStringMember04_4581a0, DestroyStringMember04_4581a0);
@@ -186,7 +244,7 @@ S3RE_HOOK(0x004581a0, DestroyStringMember04_4581a0, DestroyFn, Original_DestroyS
 // Purpose: Destructor of a game object whose only member that needs cleaning
 // up is a string at +0x04 (also run by exception cleanup).
 void __fastcall DestroyStringMember04_4581a0(void* self, void* /*edx*/) {
-    msvc6::String_Destroy(StringAt(self, 0x04), nullptr);
+    msvc6::String_Destroy(&As<DictKeyValString>(self)->value, nullptr);
 }
 
 S3RE_HOOK(0x00459440, DestroyStringMember04_459440, DestroyFn, Original_DestroyStringMember04_459440, DestroyStringMember04_459440);
@@ -194,15 +252,17 @@ S3RE_HOOK(0x00459440, DestroyStringMember04_459440, DestroyFn, Original_DestroyS
 // Purpose: Destructor of a game object whose only member that needs cleaning
 // up is a string at +0x04 (also run by exception cleanup).
 void __fastcall DestroyStringMember04_459440(void* self, void* /*edx*/) {
-    msvc6::String_Destroy(StringAt(self, 0x04), nullptr);
+    msvc6::String_Destroy(&As<DictKeyValString>(self)->value, nullptr);
 }
 
 S3RE_HOOK(0x0045f060, DestroyStringMember50_45f060, DestroyFn, Original_DestroyStringMember50_45f060, DestroyStringMember50_45f060);
 
 // Purpose: Destructor of a game object whose only member that needs cleaning
-// up is a string at +0x50 (also run by exception cleanup).
+// up is a string at +0x50 (also run by exception cleanup); probably the
+// session description (SessionDesc, whose only class-type member is its
+// name at +0x50; Dirk\MenuNetThread.cpp handles network sessions).
 void __fastcall DestroyStringMember50_45f060(void* self, void* /*edx*/) {
-    msvc6::String_Destroy(StringAt(self, 0x50), nullptr);
+    msvc6::String_Destroy(&As<SessionDesc>(self)->name, nullptr);
 }
 
 S3RE_HOOK(0x00499470, DestroyStringMember04_499470, DestroyFn, Original_DestroyStringMember04_499470, DestroyStringMember04_499470);
@@ -210,7 +270,7 @@ S3RE_HOOK(0x00499470, DestroyStringMember04_499470, DestroyFn, Original_DestroyS
 // Purpose: Destructor of a game object whose only member that needs cleaning
 // up is a string at +0x04 (also run by exception cleanup).
 void __fastcall DestroyStringMember04_499470(void* self, void* /*edx*/) {
-    msvc6::String_Destroy(StringAt(self, 0x04), nullptr);
+    msvc6::String_Destroy(&As<DictKeyValString>(self)->value, nullptr);
 }
 
 S3RE_HOOK(0x0049a070, DestroyStringMember04_49a070, DestroyFn, Original_DestroyStringMember04_49a070, DestroyStringMember04_49a070);
@@ -218,7 +278,7 @@ S3RE_HOOK(0x0049a070, DestroyStringMember04_49a070, DestroyFn, Original_DestroyS
 // Purpose: Destructor of a game object whose only member that needs cleaning
 // up is a string at +0x04 (also run by exception cleanup).
 void __fastcall DestroyStringMember04_49a070(void* self, void* /*edx*/) {
-    msvc6::String_Destroy(StringAt(self, 0x04), nullptr);
+    msvc6::String_Destroy(&As<DictKeyValString>(self)->value, nullptr);
 }
 
 S3RE_HOOK(0x005e1b10, DestroyStringMembers10And00_5e1b10, DestroyFn,
@@ -226,8 +286,8 @@ S3RE_HOOK(0x005e1b10, DestroyStringMembers10And00_5e1b10, DestroyFn,
 
 // Purpose: Destructor of a lobby object with two strings (at +0x10, then +0).
 void __fastcall DestroyStringMembers10And00_5e1b10(void* self, void* /*edx*/) {
-    msvc6::String_Destroy(StringAt(self, 0x10), nullptr);
-    msvc6::String_Destroy(StringAt(self, 0x00), nullptr);
+    msvc6::String_Destroy(&As<LobbyStringPair5e1b10>(self)->second, nullptr);
+    msvc6::String_Destroy(&As<LobbyStringPair5e1b10>(self)->first, nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +300,7 @@ S3RE_HOOK(0x00412130, SetStringMember14_412130, SetStringFn, Original_SetStringM
 // Purpose: Sets a UI object's text (string member at +0x14); probably a
 // SetText method.
 void __fastcall SetStringMember14_412130(void* self, void* /*edx*/, const String* x) {
-    msvc6::String_AssignSubstr(StringAt(self, 0x14), nullptr, x, 0, sd::Npos());
+    msvc6::String_AssignSubstr(&As<ConsoleText411980>(self)->text, nullptr, x, 0, sd::Npos());
 }
 
 S3RE_HOOK(0x004181f0, SetStringMember10_4181f0, SetStringFn, Original_SetStringMember10_4181f0,
@@ -248,7 +308,7 @@ S3RE_HOOK(0x004181f0, SetStringMember10_4181f0, SetStringFn, Original_SetStringM
 
 // Purpose: Sets a UI object's text (string member at +0x10).
 void __fastcall SetStringMember10_4181f0(void* self, void* /*edx*/, const String* x) {
-    msvc6::String_AssignSubstr(StringAt(self, 0x10), nullptr, x, 0, sd::Npos());
+    msvc6::String_AssignSubstr(&As<DialogText4181f0>(self)->text, nullptr, x, 0, sd::Npos());
 }
 
 // ---------------------------------------------------------------------------

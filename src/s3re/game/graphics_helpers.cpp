@@ -23,7 +23,7 @@
 // +0x10 = -1; EAX = this. ret. 100 of them are built at +0xc690c of the
 // object constructed by 0x523480.
 
-#include "game/framework_layout.h"
+#include "game/gfx_layout.h"
 #include "game/raw.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -37,7 +37,7 @@ namespace s3re::game {
 
 namespace {
 
-using framework::GfxData;
+using gfx::CGraphicsData;
 
 template <typename T>
 T* As(void* self) {
@@ -125,11 +125,11 @@ S3RE_HOOK(0x005fad20, GfxData_SpriteWord, SpriteWordFn, Original_GfxData_SpriteW
 std::uint32_t __fastcall GfxData_SpriteWord(void* self, void* /*edx*/, std::uint32_t id) {
     const std::uint32_t group = id >> 16;
     const std::uint32_t index = id & 0xffff;
-    GfxData* const gfx = As<GfxData>(self);
-    const std::uint32_t table = gfx->spriteTables[group];
-    const std::uint32_t offset = gfx->groupBase[group];
-    const std::uint32_t entry = RawAtAddress<std::uint32_t>(table + 8 + index * 4);
-    return (offset & 0xffff0000u) | RawAtAddress<std::uint16_t>(entry + offset);
+    const CGraphicsData* const gfx = As<CGraphicsData>(self);
+    const std::uint32_t view = gfx->views[group];
+    const std::uint32_t entry = gfx->spriteTables[group]->sprites[index];
+    // 32-bit address arithmetic (entry + view), as the original.
+    return (view & 0xffff0000u) | *reinterpret_cast<const std::uint16_t*>(entry + view);
 }
 
 S3RE_HOOK(0x005fc540, GfxData_SetDword, SetDwordFn, Original_GfxData_SetDword, GfxData_SetDword);
@@ -206,15 +206,13 @@ S3RE_HOOK(0x005faaa0, GfxData_FrameOffset, FrameOffsetFn, Original_GfxData_Frame
 // variant (e.g. a player colour or direction) or the current one.
 std::uint32_t __fastcall GfxData_FrameOffset(void* self, void* /*edx*/, std::uint32_t id, std::uint32_t variant) {
     const std::uint32_t group = id >> 16;
-    GfxData* const gfx = As<GfxData>(self);
+    const CGraphicsData* const gfx = As<CGraphicsData>(self);
     if (variant == 0xffffffffu) {
         variant = gfx->currentVariant;
     }
-    // The frame table (layout not mapped): word +8 frames per variant, dword
-    // offsets from +0xc.
-    auto* table = reinterpret_cast<std::uint8_t*>(gfx->frameTables[group]);
-    const std::uint32_t index = RawAt<std::uint16_t>(table, 8) * variant + (id & 0xffff);
-    return RawAt<std::uint32_t>(table, 0xc + index * 4) + gfx->groupBase[group];
+    const gfx::FrameTable* const table = gfx->frameTables[group];
+    const std::uint32_t index = table->framesPerVariant * variant + (id & 0xffff);
+    return table->offsets[index] + gfx->views[group];
 }
 
 S3RE_HOOK(0x004c7ac0, Render_PutPixel16, PutPixelFn, Original_Render_PutPixel16, Render_PutPixel16);
@@ -280,14 +278,14 @@ void CompareGraphics(test::Context& ctx, const GraphicsFunctions& candidate, int
             ctx.rng().Fill(data, sizeof(data));
             const std::uint32_t group = ctx.rng().Below(0xb0);
             const std::uint32_t index = ctx.rng().Below(0x100);
-            static_assert(sizeof(object) >= sizeof(GfxData));
-            As<GfxData>(object)->spriteTables[group] = reinterpret_cast<std::uint32_t>(data);
+            static_assert(sizeof(object) >= offsetof(CGraphicsData, spriteTables) + 0xb0 * 4);
+            auto* const table = reinterpret_cast<gfx::SpriteTable*>(data);
+            As<CGraphicsData>(object)->spriteTables[group] = table;
             // Any offset (its upper half shows in EAX); the entry points so
             // that entry + offset lands in the buffer.
             const std::uint32_t offset = ctx.rng().Next32();
-            As<GfxData>(object)->groupBase[group] = offset;
-            RawAt<std::uint32_t>(data, 8 + index * 4) =  // the sprite table's entries start at +8
-                reinterpret_cast<std::uint32_t>(data) + 0x1000 + ctx.rng().Below(0x1000) - offset;
+            As<CGraphicsData>(object)->views[group] = offset;
+            table->sprites[index] = reinterpret_cast<std::uint32_t>(data) + 0x1000 + ctx.rng().Below(0x1000) - offset;
             same &= S3RE_EXPECT_EQ(original.spriteWord(object, nullptr, group << 16 | index),
                                    candidate.spriteWord(object, nullptr, group << 16 | index));
         } else {
@@ -364,12 +362,12 @@ void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate,
             const std::uint32_t frames = ctx.rng().Below(8);
             const std::uint32_t frame = ctx.rng().Below(8);
             std::uint32_t variant = ctx.rng().Chance(1, 3) ? 0xffffffffu : ctx.rng().Below(4);
-            As<GfxData>(a)->currentVariant = ctx.rng().Below(4);
+            As<CGraphicsData>(a)->currentVariant = ctx.rng().Below(4);
             std::memcpy(b, a, sizeof(a));
             for (std::uint8_t* side : std::initializer_list<std::uint8_t*>{a, b}) {
-                std::uint8_t* table = side + 0x1000 + group * 0x40;
-                As<GfxData>(side)->frameTables[group] = reinterpret_cast<std::uint32_t>(table);
-                RawAt<std::uint16_t>(table, 8) = static_cast<std::uint16_t>(frames);  // frames per variant
+                auto* const table = reinterpret_cast<gfx::FrameTable*>(side + 0x1000 + group * 0x40);
+                As<CGraphicsData>(side)->frameTables[group] = table;
+                table->framesPerVariant = static_cast<std::uint16_t>(frames);
             }
             ra = original.frameOffset(a, nullptr, group << 16 | frame, variant);
             rb = candidate.frameOffset(b, nullptr, group << 16 | frame, variant);
@@ -396,8 +394,9 @@ void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate,
         As<DrawTarget>(b)->pixels = As<DrawTarget>(a)->pixels;
         As<DrawTarget>(b)->table204 = As<DrawTarget>(a)->table204;
         for (std::uint32_t group = 0; group < 0xb0; ++group) {  // past the 70 groups, like the cases above
-            if (As<GfxData>(a)->frameTables[group] == reinterpret_cast<std::uint32_t>(a + 0x1000 + group * 0x40)) {
-                As<GfxData>(b)->frameTables[group] = As<GfxData>(a)->frameTables[group];
+            if (As<CGraphicsData>(a)->frameTables[group] ==
+                reinterpret_cast<const gfx::FrameTable*>(a + 0x1000 + group * 0x40)) {
+                As<CGraphicsData>(b)->frameTables[group] = As<CGraphicsData>(a)->frameTables[group];
             }
         }
         bool same = S3RE_EXPECT_EQ(ra, rb);
