@@ -7611,10 +7611,76 @@ def _us_family_b(rng, fields, n, ctx):
 
 # ---- family m (metal, settler_jobs_metal.cpp) ----
 US_EXEMPT_M = ()
+US_M_TOOLS = (16, 12, 13, 14, 15, 17, 32)  # goods of the toolsmith's seven piles (all of them get set)
+US_M_TOOL_TILES = ((0, 0), (-1, 0), (1, 0), (-1, -1), (1, 1), (0, -1), (0, 1))
+US_M_RARE_JOBS = (0x80, 0x80, 0x80, 0x74, 0x74, 0xaf, 0xaf, 0x36, 0x129, 0x12b, 0x12d, 0x137, 0x138, 0x139)
+
+
+def _us_m_toolsmith(rng, fields, b):
+    """The door of building b: seven tool piles with few units, an area
+    whose tool orders (settings1), shares (settings2) and made counts
+    (settings3) reach every branch of the start and the share choice."""
+    r = BUILDINGS + b * BUILDING_BYTES
+    dx, dy = rng.randint(60, 320), rng.randint(60, 320)
+    fields += [(r + 0xa, dx, 2), (r + 0xc, dy, 2)]
+    full = rng.random() < 0.15
+    for k, (ox, oy) in enumerate(US_M_TOOL_TILES):
+        p = rng.randint(1, US_PILES)
+        fields += [(tile(dx + ox, dy + oy) + 2, p, 2),
+                   (PILES + p * PILE_BYTES + 1, rng.randint(2, 8) if full else rng.choice((0, 0, 0, 1)), 1)]
+    area = rng.randint(1, US_AREAS - 1)
+    fields.append((tile(dx, dy) + 0x14, area, 2))
+    a = AREAS + area * AREA_BYTES
+    pick = rng.random()
+    # 20%: one tool is the share rule's choice and its made count is 0xff
+    # (share 255: (0xff * 256 + 128) / 255 = 256; the others 640 and more).
+    chosen = rng.choice(US_M_TOOLS) if rng.random() < 0.2 else None
+    for g in US_M_TOOLS:
+        ordered = 0 if pick < 0.7 or chosen else rng.choice((0, 0, 0, 1, 2))
+        share = 0 if rng.random() < (0.9 if pick < 0.1 else 0.3) else rng.randint(1, 6)
+        made = rng.choice((0, 1, 2, 5, 9, 0xFF, rng.getrandbits(8)))
+        if chosen is not None:
+            share, made = (255, 0xFF) if g == chosen else (1, 5)
+        fields += [(a + 0x18a + g, ordered, 1), (a + 0x1ae + g, share, 1), (a + 0x1d2 + g, made, 1)]
+
+
+def _us_m_garrison(rng, fields, b, n):
+    """A garrison list (Building::worker, linked by next, increasing
+    numbers, ending in 0) of soldiers of all classes and some others."""
+    members = sorted(rng.sample(range(10, US_OTHERS + 1), rng.randrange(5)))
+    fields.append((BUILDINGS + b * BUILDING_BYTES + 8, members[0] if members else 0, 2))
+    for k, s in enumerate(members):
+        r = SETTLERS + s * SETTLER_BYTES
+        fields += [(r + 1, rng.choice((5, 0x20, 0x23, 8, 0x1e, 0x21, 0xf, 0x1f, 0x22, 0, 0x17)), 1),
+                   (r + 0x10, members[k + 1] if k + 1 < len(members) else 0, 2)]
 
 
 def _us_family_m(rng, fields, n, ctx):
-    pass
+    s = ctx["record"]
+    x, y = ctx["x"], ctx["y"]
+    job = ctx["job"]
+    if rng.random() < 0.5:
+        job = rng.choice(US_M_RARE_JOBS)
+        fields.append((s + 0xe, job, 2))
+    b = rng.randint(1, US_OTHERS)
+    r = BUILDINGS + b * BUILDING_BYTES
+    fields += [(s + 0x22, b, 2), (r + 0x18, rng.getrandbits(8) | (1 if rng.random() < 0.8 else 0), 1)]
+    if rng.random() < 0.6:
+        fields.append((tile(x, y), n, 2))  # the settler stands on its own tile
+    if job in (0x74, 0x80) or rng.random() < 0.1:
+        fields.append((s + 0x1, 0xb, 1))
+        _us_m_toolsmith(rng, fields, b)
+    elif job == 0xaf:
+        _us_m_garrison(rng, fields, b, n)
+    elif job == 0x36:
+        fields += [(s + 0x1, 0x17 if rng.random() < 0.5 else rng.randrange(0x30), 1),
+                   (s + 0x15, rng.choice((0, rng.randint(1, 35))), 1)]
+    elif job in (0x129, 0x12b, 0x12d, 0x137, 0x138, 0x139):
+        k = (0x129, 0x12b, 0x12d, 0x137, 0x138, 0x139).index(job) % 3
+        fields += [(r + 0x20, rng.choice((0, 0, 1, 2, 0xfa, 0xfb, rng.getrandbits(8))), 1),
+                   (r + 0x1f, rng.choice((0x10 + k, 0x20 + k, 0x10 + k, 0x20 + k, 0, rng.getrandbits(8))), 1)]
+        for w in range(3):
+            fields.append((r + 0x1a + w, rng.choice((0, 0, 1, 3)), 1))
 
 
 
