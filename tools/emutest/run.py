@@ -109,6 +109,7 @@ def first_difference(original: emu.Outcome, ours: emu.Outcome, mask: int,
 
 
 def case_count(spec: specs.Spec, cases: int) -> int:
+    cases *= spec.case_scale
     return cases if spec.max_cases is None else min(cases, spec.max_cases)
 
 

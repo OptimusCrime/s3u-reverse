@@ -73,6 +73,10 @@ class Spec:
     presets: Callable | None = None
     # Upper limit on cases (for functions that are slow to emulate).
     max_cases: int | None = None
+    # Runs this many times --cases (before max_cases): for specs whose cases
+    # are spread over many independent paths (CGameData_UpdateSettlers: one
+    # job family per case), so the default run reaches every block.
+    case_scale: int = 1
     # (rng, pool, args) -> [(absolute address in S3.EXE, value, size)]: globals
     # set for the case (otherwise they keep their values from the image).
     globals: Callable | None = None
@@ -8025,7 +8029,7 @@ def _us_family_b(rng, fields, n, ctx):
         fields.append((cache + k, int.from_bytes(chunk, "little"), len(chunk)))
     # Digger / builder slot bits: one bit (the bit scans 0x4eb725.., 0x4ec62a..).
     fields += [(b + 0x16, 1 << rng.randrange(8) if rng.random() < 0.8 else rng.getrandbits(8), 1),
-               (b + 0x17, 1 << rng.randrange(8) if rng.random() < 0.8 else rng.getrandbits(8), 1)]
+               (b + 0x17, 1 << rng.choice((0, 0, 0, 1, 2, 3, 4, 5, 6, 7)) if rng.random() < 0.8 else rng.getrandbits(8), 1)]
     # Soldier levels per weapon kind (player +0xb8..+0xc0): 0..3.
     for p in range(4):
         for k in range(3):
@@ -8119,7 +8123,8 @@ def _us_m_toolsmith(rng, fields, b):
     chosen = rng.choice(US_M_TOOLS) if rng.random() < 0.2 else None
     for g in US_M_TOOLS:
         ordered = 0 if pick < 0.7 or chosen else rng.choice((0, 0, 0, 1, 2))
-        share = 0 if rng.random() < (0.9 if pick < 0.1 else 0.3) else rng.randint(1, 6)
+        # pick < 0.05: no shares at all (the waits at 0x4ef394 / 0x4efc92).
+        share = 0 if pick < 0.05 or rng.random() < (0.9 if pick < 0.1 else 0.3) else rng.randint(1, 6)
         made = rng.choice((0, 1, 2, 5, 9, 0xFF, rng.getrandbits(8)))
         if chosen is not None:
             share, made = (255, 0xFF) if g == chosen else (1, 5)
@@ -8211,8 +8216,9 @@ def _us_family_f(rng, fields, n, ctx):
     if rng.random() < 0.3:
         # The rarer paths: weapon smith start / finish (0x75, 0x86), sowing
         # (0x91), harvesting (0x96), the fisher's and the waterworker's
-        # searches (0x76, 0x7c).
-        fields.append((s + 0xE, rng.choice((0x75, 0x86, 0x86, 0x91, 0x96, 0x76, 0x7C, 0x7C)), 2))
+        # searches (0x76, 0x7c), the pig farm's inputs (0x77; its +0x1d == 5
+        # branch 0x4f121f is rare in the mixed run).
+        fields.append((s + 0xE, rng.choice((0x75, 0x86, 0x86, 0x91, 0x96, 0x76, 0x7C, 0x7C, 0x77)), 2))
     nxt = rng.randrange(40)
     if rng.random() < 0.1:
         # A search cursor just before its wrap at 2000, with a sane offset
@@ -8660,8 +8666,11 @@ def update_settlers_globals(rng, pool, args):
 
 
 SPECS += [
-    # The code ends at 0x4f926d; the jump tables follow it.
+    # The code ends at 0x4f926d; the jump tables follow it. Each case
+    # exercises one job family (six families and the loop), so the default
+    # run is 12 x 2000 = 24,000 cases: two 12,000-case runs with different
+    # draws each left 5..7 rare blocks uncovered, disjoint between them.
     Spec("CGameData_UpdateSettlers", 0x004e9670, "thiscall", [], presets=update_settlers_world,
-         globals=update_settlers_globals, callees=US_PROBES, max_cases=12000, cover_until=0x004f926d,
+         globals=update_settlers_globals, callees=US_PROBES, case_scale=12, cover_until=0x004f926d,
          exempt_blocks=US_EXEMPT),
 ]

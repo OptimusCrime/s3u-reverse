@@ -670,7 +670,8 @@ replaying, see `src/s3re/replay/command_log.h`):
    lets a probed virtual call change memory (e.g. a child that shrinks its
    parent's list), `Spec.new_fails` makes operator new return null in some
    cases, `Spec.max_instructions` raises the per-call limit (20M) for
-   inputs our debug build needs more for, and `Spec.ignore_bytes` leaves out output bytes that provably hold
+   inputs our debug build needs more for, `Spec.case_scale` runs N times
+   `--cases` (UpdateSettlers: 12, one job family per case), and `Spec.ignore_bytes` leaves out output bytes that provably hold
    each function's own stack leftovers (padding of a copied stack
    temporary; say why at the spec and add a self-test pairing that differs
    next to them). timeGetTime and Sleep are probed too (read timeGetTime

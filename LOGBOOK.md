@@ -26,9 +26,9 @@ records). The `GameWorld` -> `CGameData` rename is done (session 45).
 `CGameData::UpdateSettlers` 0x4e9670 is verified (WalkSettler,
 UpdateSoldier done in session 45), as are `UpdateEnvironment` 0x4e7810
 (except 17 spell functions, TODO.md) and `UpdateEconomy` 0x4e05e0 (was
-UpdatePhase2). Next simulation step: UpdateSettlers itself (16,600
-instructions, hooked as one unit, split per job internally; see
-re/update_settlers.md and re/update_settlers_jobs.csv). The user will
+UpdatePhase2). UpdateSettlers itself is verified and hooked too (session
+45 entry "UpdateSettlers"), so CLogicThread::Step's three world updates
+are all ours; the jobs only tests reach are listed in TODO.md. The user will
 later record a full game from start to finish for the late-game paths
 (spells, ships, tower captures, shooting soldiers, late building types):
 the tool is ready, `python tools/play_game.py` (docs/recording_a_game.md;
@@ -580,6 +580,51 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-22 (45): UpdateSettlers
+
+- **`CGameData::UpdateSettlers` 0x4e9670 verified and hooked
+  (`S3RE_HOOK`)**, as one unit: `update_settlers.cpp` (loop over settlers
+  1..high water, counter countdown, waiting soldiers, dispatch by job via
+  the handler's code range), `settler_jobs.h`, six handler files
+  `settler_jobs_{units,building,metal,food,drinks,special}.cpp` (by code
+  range of the original's handlers) and `settler_jobs_test.h` (shared
+  harness: random settlers of one family, callees stubbed, settlers,
+  buildings, piles, areas, players and call lists compared per case).
+  Built by six parallel family forks, then six coverage forks.
+- **Evidence:** 16 in-process tests (MatchesOriginal per family and the
+  loop, 4,000 cases each, plus 10 mutation tests); `--test` 510/510.
+  Emulator spec `CGameData_UpdateSettlers` (per-family presets, 60
+  probed callees, probe effects such as ClearSettlerJob ending the job):
+  24,000 cases (new `Spec.case_scale = 12`: one family per case, two
+  12,000-case runs each left 5..7 rare blocks uncovered), 0 mismatches,
+  2,236/2,236 blocks, exempt 0x4f3c25 (dead) and 0x4f922f/0x4f9263
+  ("Digger trouble": DebugLog + a deliberate endless loop; ours sleeps).
+  Full suite (all 556 specs, CMake and run.py changed): 0 mismatches,
+  only GenerateRandomMap incomplete (known); self-test 21/21. Whole game,
+  all identical to the original, UpdateSettlers called every step:
+  replays scripted-seed127 and fun8-seed2024-input31 (3,000 ticks),
+  slots 1..3 (2,000 ticks), random map 448,3 (2,000 ticks); call counts
+  recorded.
+- **Known differences (unrealistic data only):** ship steering with an
+  offset-table sector outside 0..5 (the original writes into a stack
+  array indexed by it, ours skips); job 331 (ship loading) for races > 3
+  reads a frame-slot leftover. Unbounded searches kept as in the original
+  (jobs 0x37, 0xac, fisher 0xb3); the drinks job 0xf7 falls into code in
+  the food range (copied).
+- **Corrections to re/update_settlers.md:** only the walking handler sets
+  the again flag; the writes at 0x4f23e6, 0x4f5afa and 0x4f2e00 are
+  frame-slot scratch writes. Handlers use frame slots 0x14/0x20/0x30 and
+  low bytes of 0x44/0x58/0x5c as scratch; no value leaks between settlers
+  except the job 331 case above.
+- **Field facts** in re/structs.md (Player +0xb8..+0xc0 soldier levels,
+  +0x12c/+0x130 deaths; workshop/shipyard bytes +0x19/+0x1f/+0x20; pile
+  +0xa of building piles; field objects). Globals: 0x7dfd6c = the site
+  the UI shows; 0x659654 = ship cargo slots per race; dword
+  0x7acfd0 + owner * 0x44 counts job 0x12 settlers.
+- **Job names** proposed by the forks are in TODO.md (the readability
+  rollout still changes enums.h); also there: the jobs only tests reach,
+  to check against the user's full-game recording.
 
 ### 2026-11-22 (45): text recordings v4 (parallel worktree)
 
