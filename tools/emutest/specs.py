@@ -7417,3 +7417,172 @@ SPECS += [
          # 32-bit wrap of the tile offset).
          exempt_blocks=(0x004e0c63, 0x004e45f3)),
 ]
+
+
+# UpdateSettlers 0x4e9670 (update_settlers.cpp, settler_jobs_*.cpp): one
+# call per case on settlers 1..1-3 with jobs of one handler family (the
+# letters of US_FAMILY, the same table as kJobFamily). Every callee with
+# effects is probed (calls and arguments compared), with return values as
+# the in-process harness's StubReturn (settler_jobs_test.h); the cheap
+# queries run (Random, RandomBelow6, NeighbourX/Y, Next/PreviousDirection,
+# TileDistance, IsOnMap, TileScreenX/Y, SettlerStartHealth, NoOp_ret4).
+# Settlers, buildings and piles 1..US_OTHERS have coordinates on the map;
+# the tiles around them hold small settler/object numbers and areas.
+US_FAMILY = ("uuuuububbbububbububbbbbsbbbbuubb" "bbbbbbbbbbuububbummmmumub-mmmmmm"
+             "mmb-mmmmmmmmububbbmmmmmmmmmmmmmm" "mmmmmbbbubbmffffffffmffffffffmmm"
+             "mmmffffff-bbbsufuffuffffufffufff" "fffffffffbbuuuumufuffufffffuufff"
+             "ffffffffffffffffffffddmmmmmmmmmm" "mmddduddudddduddduddddudduddddud"
+             "dduddd-dddddd-dddddd-dddddd-dddd" "ddddddddmmmmmmddsffususmmmssssss"
+             "uusssssuuuusssssssss-sssssssssss" "ss-ssussusussussus----------s-ss"
+             "ssssssmmmmmmmmmmsssss")
+assert len(US_FAMILY) == 0x195
+US_JOBS = {f: [j for j, c in enumerate(US_FAMILY) if c == f] for f in sorted(set(US_FAMILY))}
+US_OTHERS = 40   # settlers, buildings 1..40
+US_PILES = 80    # piles 1..80
+US_AREAS = 64
+
+
+def _us_walk(h):
+    return 1 if (h & 3) == 0 else 0
+
+
+US_PROBES = {
+    0x004d97b0: (2, "thiscall", "probe"),   # DestroyBuildingAt
+    0x004dbc50: (1, "thiscall", "probe"),   # BuildingDone
+    0x004dda10: (1, "thiscall", "probe"),   # ReleaseBuildingExtraTiles
+    0x004df490: (1, "thiscall", "probe"),   # ClearBuildingFlag02
+    0x004df510: (1, "thiscall", "probe"),   # ClearBuildingFlag04
+    0x004df590: (1, "thiscall", "probe"),   # ClearBuildingFlag08
+    0x004df610: (1, "thiscall", "probe"),   # ClearBuildingFlag10
+    0x004df9b0: (2, "thiscall", lambda h: h & 1),  # BuildingPileHasGoods
+    0x004e8ba0: (3, "thiscall", "probe"),   # QueuePendingEvent
+    0x004f9a00: (1, "thiscall", lambda h: h & 1),  # MinerJobEnter
+    0x004f9b80: (1, "thiscall", lambda h: h & 1),  # MinerJobFood
+    0x004fa220: (1, "thiscall", lambda h: h & 1),  # MinerJobDig
+    0x004faa70: (2, "thiscall", lambda h: h % 12),  # TileSlope
+    0x004fec10: (4, "thiscall", "probe"),   # NotifyLocalPlayer
+    0x004fefd0: (10, "thiscall", "probe"),  # AllocTable36700Record
+    0x004ff3c0: (1, "thiscall", "probe"),   # ClearAreaGoodsSettings1D2
+    0x004ff510: (3, "thiscall", "probe"),   # AddStatistic
+    0x004ffb00: (3, "thiscall", "probe"),   # AddPlayerCounter
+    0x004ffb40: (3, "thiscall", "probe"),   # SubtractPlayerCounter
+    0x00500860: (1, "thiscall", _us_walk),  # WalkSettler: run again now and then
+    0x00503610: (3, "thiscall", "probe"),   # SetSettlerTarget
+    0x00503760: (4, "thiscall", lambda h: h & 1),  # CanSettlerEnterTile
+    0x005046b0: (4, "thiscall", "probe"),   # DropGoodNear
+    0x00505650: (1, "thiscall", "probe"),   # AddGoodsToPile
+    0x00505820: (1, "thiscall", "probe"),   # TakeGoodFromPile
+    0x005058c0: (1, "thiscall", "probe"),   # PileIncAmountLeaving
+    0x00505bc0: (1, "thiscall", "probe"),   # PileIncAmountComing
+    0x00505c20: (1, "thiscall", lambda h: h & 1),  # StealGoodFromPile
+    0x0050c9e0: (4, "thiscall", _small(US_OTHERS, 0.25)),  # CreateSettler
+    0x0050cb20: (5, "thiscall", "probe"),   # SpawnSettlersAround
+    0x0050cc10: (1, "thiscall", "probe"),   # LeaveBuildingSlot
+    0x0050ccb0: (1, "thiscall", "probe"),   # EnterBuildingSlot
+    0x0050cf50: (1, "thiscall", "probe"),   # ResetSettlerToIdle
+    0x0050dd20: (4, "thiscall", _small(US_OTHERS, 0.25)),  # CreateSevenTileUnit
+    0x0050de90: (1, "thiscall", "probe"),   # MoveSettlerToBuildingTileA
+    0x0050df40: (1, "thiscall", "probe"),   # MoveSettlerToBuildingTileB
+    0x0050e140: (1, "thiscall", "probe"),   # SetSoldierAnimationInBuilding
+    0x0050e2c0: (2, "thiscall", "probe"),   # SetSettlerAnimation (needs the graphics object)
+    0x0050e320: (2, "thiscall", "probe"),   # SetSettlerSavedAnimation (graphics object)
+    0x0050e380: (1, "thiscall", "probe"),   # RestoreSettlerAnimation
+    0x0050e750: (1, "thiscall", lambda h: h % 8),  # CountAreaSettlersOfClass0
+    0x0050e820: (2, "thiscall", lambda h: h % 8),  # CountAreaSettlersOfType
+    0x0050e9f0: (1, "thiscall", lambda h: h & 1),  # UpdateSoldier
+    0x00510440: (1, "thiscall", "probe"),   # ClearSettlerJob
+    0x00510770: (2, "thiscall", "probe"),   # AddPileClaim
+    0x00510800: (2, "thiscall", lambda h: h & 1),  # CountOtherPileClaims
+    0x005199e0: (2, "thiscall", lambda h: h & 1),  # IsFreeOfSettlerType29Nearby
+    0x00519670: (2, "thiscall", "probe"),   # UpdateShadeAround
+    0x00519a90: (2, "thiscall", "probe"),   # RecalculateTerritory
+    0x0051a460: (2, "thiscall", "probe"),   # UpdateBorderFlagsAround
+    0x0051b5d0: (3, "thiscall", "probe"),   # SetOwnerOfFreeTile
+    0x0051b640: (2, "thiscall", "probe"),   # ClearTileOwner
+    0x0051b6f0: (2, "thiscall", "probe"),   # BlockTile
+    0x0051b770: (2, "thiscall", "probe"),   # UnblockTile
+    0x0051b7f0: (2, "thiscall", "probe"),   # WearPath
+    0x0051ba00: (2, "thiscall", "probe"),   # SetTerrain16Patch
+    0x00544630: (8, "thiscall", "probe"),   # MapEffects::Spawn_544630
+    0x005449f0: (8, "thiscall", "probe"),   # MapEffects::Spawn_5449f0
+    0x00544dc0: (7, "thiscall", "probe"),   # MapEffects::Spawn_544dc0
+    0x00545120: (5, "thiscall", "probe"),   # MapEffects::Spawn_545120
+}
+
+
+def _us_tiles(rng, fields, x, y, radius=1):
+    """Small settler / object numbers and areas around (x, y)."""
+    for dx in range(-radius, radius + 1):
+        for dy in range(-radius, radius + 1):
+            if hex_distance(dx, dy) > radius:
+                continue
+            t = tile(x + dx, y + dy)
+            fields += [(t, 0 if rng.random() < 0.6 else rng.randint(1, US_OTHERS), 2),
+                       (t + 0x2, rng.randrange(US_OTHERS + 1), 2),
+                       (t + 0x14, rng.randrange(US_AREAS), 2)]
+
+
+def _us_settler(rng, fields, n, family):
+    s = SETTLERS + n * SETTLER_BYTES
+    x, y = rng.randint(40, 340), rng.randint(40, 340)
+    job = rng.choice(US_JOBS[family])
+    art = rng.randrange(0x30)
+    fields += [(s, 0xFF if rng.random() < 0.05 else rng.randrange(4), 1), (s + 0x1, art, 1),
+               (s + 0x2, rng.randrange(4), 1), (s + 0x4, x, 2), (s + 0x6, y, 2),
+               (s + 0xc, 0 if rng.random() < 0.9 else rng.randint(1, 3), 2), (s + 0xe, job, 2),
+               (s + 0x10, rng.randrange(US_OTHERS + 1), 2), (s + 0x12, rng.randrange(US_OTHERS + 1), 2),
+               (s + 0x14, (0x80 | rng.getrandbits(8)) if rng.random() < 0.1 else rng.getrandbits(7), 1),
+               (s + 0x20, rng.randrange(US_OTHERS + 1), 2), (s + 0x22, rng.randrange(US_OTHERS + 1), 2),
+               (s + 0x24, x + rng.randint(-10, 10), 2), (s + 0x26, y + rng.randint(-10, 10), 2),
+               (s + 0x28, x + rng.randint(-10, 10), 2), (s + 0x2a, y + rng.randint(-10, 10), 2)]
+    _us_tiles(rng, fields, x, y)
+
+
+def _us_building(rng, fields, b):
+    r = BUILDINGS + b * BUILDING_BYTES
+    x, y = rng.randint(40, 340), rng.randint(40, 340)
+    dx, dy = x + rng.randint(-2, 2), y + rng.randint(-2, 2)
+    fields += [(r, 0xFF if rng.random() < 0.05 else rng.randrange(4), 1), (r + 0x2, x, 2), (r + 0x4, y, 2),
+               (r + 0x6, rng.randint(1, 0x38), 1), (r + 0x7, rng.randrange(4), 1),
+               (r + 0x8, rng.randrange(US_OTHERS + 1), 2), (r + 0xa, dx, 2), (r + 0xc, dy, 2),
+               (r + 0xe, rng.randint(1, US_PILES), 2), (r + 0x10, rng.randint(1, US_PILES), 2),
+               (r + 0x12, rng.randint(1, US_PILES), 2), (r + 0x14, rng.randint(1, US_PILES), 2),
+               (r + 0x30, x + rng.randint(-5, 5), 2), (r + 0x32, y + rng.randint(-5, 5), 2),
+               (r + 0x34, rng.randint(1, 20), 2)]
+    _us_tiles(rng, fields, dx, dy)
+
+
+def _us_pile(rng, fields, p):
+    r = PILES + p * PILE_BYTES
+    fields += [(r, rng.choice((0, 0xFF, rng.randint(1, 35))), 1), (r + 1, rng.randrange(9), 1),
+               (r + 6, rng.randint(40, 340), 2), (r + 8, rng.randint(40, 340), 2),
+               (r + 0xa, rng.randrange(US_PILES + 1), 2), (r + 0xc, rng.randrange(US_PILES + 1), 2)]
+
+
+def update_settlers_world(rng, pool, args):
+    family = rng.choice("uuubbbmmmfffdddsss-")
+    count = rng.randint(1, 3)
+    fields = [(MAP_SIZE, 384, 4), (SETTLER_COUNT, count, 4)]
+    for p in range(4):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, rng.randrange(4), 4))
+    for b in range(1, US_OTHERS + 1):
+        _us_building(rng, fields, b)
+    for p in range(1, US_PILES + 1):
+        _us_pile(rng, fields, p)
+    for k in range(count + 1, US_OTHERS + 1):
+        s = SETTLERS + k * SETTLER_BYTES
+        fields += [(s + 0x4, rng.randint(40, 340), 2), (s + 0x6, rng.randint(40, 340), 2),
+                   (s + 0x22, rng.randrange(US_OTHERS + 1), 2)]
+    for n in range(1, count + 1):
+        _us_settler(rng, fields, n, family)
+    return fields
+
+
+def update_settlers_globals(rng, pool, args):
+    return [(0x7dfd48, rng.getrandbits(32), 4)]  # g_gameTick
+
+
+SPECS += [
+    Spec("CGameData_UpdateSettlers", 0x004e9670, "thiscall", [], presets=update_settlers_world,
+         globals=update_settlers_globals, callees=US_PROBES, max_cases=4000, cover_until=0x004f926d),
+]
