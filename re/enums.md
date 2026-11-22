@@ -230,7 +230,7 @@ More checks:
 | 9 | Grain | high | mill, farms, brewery input |
 | 10 | Gold | medium | soldier strength; gong input |
 | 11 | Iron | high | smiths, workshops |
-| 12..17 | Shovel, Hammer, Axe, Pickaxe, Saw, FishingRod | list | tools (tool smith) |
+| 12..17 | Shovel, Hammer, Axe, Pickaxe, Saw, FishingRod | high | tools (tool smith); RequestSettlerForBuilding 0x4dacd0: the tool a carrier fetches to become a worker: digger shovel, builder/smith/shipyard worker hammer, woodcutter/butcher axe, stonecutter/miner pickaxe, sawmiller saw, fisher rod; notifications 24..30 for a missing tool in this order |
 | 18, 19, 20 | Sword, Bow, Spear | high | barracks inputs, one per soldier kind |
 | 21 | Wine | high | Roman offering |
 | 22 | Flour | high | bakery input |
@@ -243,11 +243,25 @@ More checks:
 | 29 | Beer | medium | Egyptian offering (list: "keg") |
 | 30 | Gunpowder | high | cannon workshop |
 | 31 | Good31 | placeholder | |
-| 32 | Scythe | list | |
+| 32 | Scythe | high | the farmer's tool (RequestSettlerForBuilding), notification 30 |
 | 33 | RiceLiquor | high | Asian offering |
 | 34 | Mead | high | Amazon offering |
 | 35 | Honey | high | meadery input, Amazon mine food |
 | 255 | Empty | high | building pile without a goods type |
+
+## Pile kinds (`PileKind`, uint8; Pile::art)
+
+Who a goods pile belongs to. Added in the readability rollout (group 3).
+
+| value | name | confidence | evidence |
+|---|---|---|---|
+| 0 | Storehouse | high | BuildingDone creates a storehouse's six piles with kind 0 ("Storage.ProductionPile"); TakeGoodFromPile gives an emptied kind-0 pile back the goods type stored in its building's byte +0xe; DispatchPileCarrier carries goods to kinds 0..50 |
+| 1..50 | (kLastStoragePileKind = 50) | medium | CreatePile (0x504420), StealGoodFromPile (0x505c20) and DispatchPileCarrier (0x5052c0) treat kinds up to 0x32 like 0; RecountPlayerGoods counts kinds 0..8; no creator of 1..50 known |
+| 252 | TradeRing | high | BuildingDone: six piles of a marketplace/harbour (tables 0x6594a4, 0x659564), linked in a ring; `leaving` counts arrivals in its high nibble |
+| 253 | Order | high | a building's input piles and a site's boards/stones (BuildingDone step 4, building_sites); StealGoodFromPile's DebugLog "OrderPile nix mehr frei!" |
+| 254 | Dropped | high | DropGoodNear, CrushBuilding: goods put on the ground; removed when empty (TakeGoodFromPile) |
+| 255 | Output | high | BuildingDone: CreatePile(door, good, 0, 0xff) for a producer's output pile (stored in +0xe); leaves its goods list while all units are reserved |
+
 
 ## Spells (`Spell`, uint32; the spell argument of ExecuteSpell)
 

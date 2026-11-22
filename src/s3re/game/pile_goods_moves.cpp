@@ -1,5 +1,8 @@
 // Goods piles changed by settler jobs (UpdateSettlers callees, package B).
 //
+// Pile kinds (Pile::art, PileKind in enums.h): 0 storehouse, 0xfc trade
+// ring, 0xfd order (a building's input), 0xfe dropped, 0xff output.
+//
 // CGameData::SetPileGood (0x005061b0): (pile, good): the pile (an empty
 //   pile record, kept in its area's list of empty piles +0x8) leaves that
 //   list, gets the goods type `good` (byte +0x0) and goes to the head of
@@ -26,18 +29,32 @@
 //   (AddPlayerCounter). Units that find no place within 10,000 entries are
 //   lost. EAX: callers don't use it. ret 0x10.
 // CGameData::TakeGoodFromPile (0x00505820): (pile): one reserved unit is
-//   taken: leaving (+0x2) and amount (+0x1) -= 1. A building pile (kind 0)
+//   taken: leaving (+0x2) and amount (+0x1) -= 1. A storehouse pile (kind 0)
 //   that is now empty with nothing coming becomes an empty pile
-//   (MakePileEmpty) and gets back the goods type of its building
+//   (MakePileEmpty) and gets back the goods type of its storehouse
 //   (PileNeighbourBuildingByteE, SetPileGood; not if that is 0xff); an
 //   empty dropped pile (kind 0xfe) is removed from its tile
 //   (RemovePileFromTile). EAX = the last callee's, else world + pile * 14
 //   (callers use AL at most). ret 4.
+// CGameData::StealGoodFromPile (0x00505c20): (pile): a thief takes one unit
+//   (PileIncAmountLeaving, TakeGoodFromPile). Nothing on the pile: AL = 0.
+//   Per kind, when no unit is free (amount - leaving <= 0): storehouse
+//   kinds (0..0x32) and output piles cancel the first settler fetching
+//   from the pile's tile (jobs CarrierWalkToPile, CarrierAtPile,
+//   CarrierPickUp, 76, 77, CarrierWalkToTool, CarrierTakeTool; with nothing
+//   leaving: AL = 1 for kinds 0..0x32, 0 for output piles, and nothing is
+//   taken); trade ring piles (only the low nibble of leaving counts) cancel
+//   the first carrier with job 307/308 there, or take back his second unit
+//   (PileDecAmountLeaving); order piles refuse (DebugLog "OrderPile nix mehr
+//   frei!", AL = 0); dropped piles cancel a fetcher if units are leaving.
+//   Kinds 0x33..0xfb: AL = 1, nothing happens. ret 4.
 // All thiscall (ECX = world).
 
 #include "game/debug_log.h"
+#include "game/enums.h"
 #include "game/replacements.h"
 #include "game/texts.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -54,19 +71,43 @@ namespace {
 using layout::Area;
 using layout::MapOffset;
 using layout::Pile;
+using layout::Settler;
 using layout::Tile;
+
+using Job = SettlerJob;
 
 // area * 0x170: the original's word index of an area record.
 constexpr std::uint32_t kAreaWords = sizeof(Area) / 2;
 
-constexpr std::uint8_t kDroppedPile = 0xfe;  // Pile::art of goods lying on the ground
-constexpr std::uint8_t kPileFull = 8;
-constexpr std::uint32_t kOffsetEntries = 10000;
-constexpr std::uint32_t kNewPileLag = 37;  // entries of radius 0..3
+constexpr std::uint8_t kPileFull = 8;            // units a dropped pile holds
+constexpr std::uint32_t kOffsetEntries = 10000;  // DropGoodNear's search radius, in offset-table entries
+constexpr std::uint32_t kNewPileLag = 37;        // entries of radius 0..3
+constexpr std::uint8_t kFreeSettler = 0xff;      // Settler::owner of a free record
+
+// Tile flags 0x01..0x08 (blocked, claimed, 0x04, building footprint): no
+// new dropped pile goes there.
+constexpr std::uint8_t kTileFlagsNoNewPile = 0x0f;
+
+// A trade ring pile's `leaving` byte counts units leaving in the low nibble
+// (the high one counts arrivals, see settler_idle.cpp).
+constexpr std::uint8_t kTradeRingLeavingMask = 0x0f;
 
 // The tile a pile lies on (32-bit arithmetic of the original).
 Tile& PileTile(CGameData* world, const Pile& pile) {
     return TileAtOffset(world, TileOffset(pile.x, pile.y));
+}
+
+// Puts `pile` at the head of the list whose head word is `head` (next, the
+// old head's previous, previous, head: the original's order).
+void PushFront(CGameData* world, std::uint32_t pile, std::uint16_t& head) {
+    Pile& p = world->piles[pile];
+    const std::uint16_t first = head;
+    p.next = first;
+    if (first != 0) {
+        world->piles[first].prev = static_cast<std::uint16_t>(pile);
+    }
+    p.prev = 0;
+    head = static_cast<std::uint16_t>(pile);
 }
 
 }  // namespace
@@ -81,6 +122,8 @@ std::uint32_t __fastcall CGameData_SetPileGood(CGameData* world, void*, std::uin
     Pile& p = world->piles[pile];
     const std::uint32_t area = PileTile(world, p).area;
     Area& record = world->areas[area];
+    // Leave the empty list (a pile without a previous link is taken to be
+    // its head, whatever its goods type).
     if (p.prev != 0) {
         world->piles[p.prev].next = p.next;
     } else {
@@ -90,6 +133,8 @@ std::uint32_t __fastcall CGameData_SetPileGood(CGameData* world, void*, std::uin
         world->piles[p.next].prev = p.prev;
     }
     p.good = static_cast<std::uint8_t>(good);
+    // The original reads the head through the argument's low byte and writes
+    // it through the stored goods byte (the same index).
     const std::uint16_t head = record.piles_by_goods[good & 0xff];
     p.next = head;
     if (head != 0) {
@@ -99,6 +144,63 @@ std::uint32_t __fastcall CGameData_SetPileGood(CGameData* world, void*, std::uin
     record.piles_by_goods[p.good] = static_cast<std::uint16_t>(pile);
     return area * kAreaWords + p.good;
 }
+
+namespace {
+
+// 0x5046b0, part (1): adds units to the dropped pile on (tx, ty), if it is
+// one of the goods type with room. Returns the units left.
+std::uint32_t AddToDroppedPile(CGameData* world, std::uint32_t good, std::uint32_t remaining, std::uint32_t tx,
+                               std::uint32_t ty) {
+    const Tile& tile = TileAtOffset(world, TileOffset(tx, ty));
+    const std::uint32_t pile = tile.object_number;
+    if (pile == 0 || (tile.flags & layout::kTileHasBuilding) != 0) {
+        return remaining;
+    }
+    Pile& p = world->piles[pile];
+    if (p.good != good || KindOf(p) != PileKind::Dropped || p.amount >= kPileFull) {
+        return remaining;
+    }
+    if (p.amount == p.leaving) {
+        // All units were spoken for, so the pile was out of its goods list:
+        // list it again.
+        PushFront(world, pile, world->areas[PileTile(world, p).area].piles_by_goods[p.good]);
+    }
+    const std::uint32_t had = p.amount;
+    if (had + remaining <= kPileFull) {
+        p.amount = static_cast<std::uint8_t>(p.amount + remaining);
+        CGameData_AddPlayerCounter(world, nullptr, PileTile(world, p).owner, good, remaining);
+        return 0;
+    }
+    CGameData_AddPlayerCounter(world, nullptr, PileTile(world, p).owner, good, kPileFull - had);
+    const std::uint32_t now = p.amount;  // read again after the call, as the original
+    p.amount = kPileFull;
+    return remaining + now - kPileFull;
+}
+
+// 0x5046b0, part (2): whether a new dropped pile may go on the tile at
+// (nx, ny): on the map, free of flags 0x0f, settlers, piles and buildings,
+// with a walk region, and no pile or building on its six neighbours.
+bool CanPlaceNewPile(CGameData* world, std::uint32_t nx, std::uint32_t ny) {
+    if (CGameData_IsOnMap(world, nullptr, nx, ny) == 0) {
+        return false;
+    }
+    const std::uint32_t at = TileOffset(nx, ny);
+    const Tile& tile = TileAtOffset(world, at);
+    if ((tile.flags & kTileFlagsNoNewPile) != 0 || tile.settler != 0 || tile.walk_region == 0 ||
+        tile.object_number != 0) {
+        return false;
+    }
+    static constexpr std::uint32_t kNeighbours[] = {kTileRowBytes, 0u - kTileRowBytes, kTileBytes, 0u - kTileBytes,
+                                                    kTileRowBytes + kTileBytes, 0u - kTileRowBytes - kTileBytes};
+    for (const std::uint32_t step : kNeighbours) {
+        if (TileAtOffset(world, at + step).object_number != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
 
 // Purpose: Puts goods on the ground near a place (e.g. what a settler carried when it lost its job, or
 // what is left of a destroyed building): first onto nearby dropped piles of the same goods, then as new
@@ -111,64 +213,21 @@ std::uint32_t __fastcall CGameData_DropGoodNear(CGameData* world, void*, std::ui
         const std::uint32_t tx = static_cast<std::uint32_t>(offset.dx) + x;
         const std::uint32_t ty = static_cast<std::uint32_t>(offset.dy) + y;
         if (CGameData_IsOnMap(world, nullptr, tx, ty) != 0) {
-            const Tile& tile = TileAtOffset(world, TileOffset(tx, ty));
-            const std::uint32_t pile = tile.object_number;
-            if (pile != 0 && (tile.flags & layout::kTileHasBuilding) == 0) {
-                Pile& p = world->piles[pile];
-                if (p.good == good && p.art == kDroppedPile && p.amount < kPileFull) {
-                    if (p.amount == p.leaving) {
-                        // All units were spoken for, so the pile was out of
-                        // its goods list: list it again.
-                        Area& record = world->areas[PileTile(world, p).area];
-                        const std::uint16_t head = record.piles_by_goods[p.good];
-                        p.next = head;
-                        if (head != 0) {
-                            world->piles[head].prev = static_cast<std::uint16_t>(pile);
-                        }
-                        p.prev = 0;
-                        record.piles_by_goods[p.good] = static_cast<std::uint16_t>(pile);
-                    }
-                    const std::uint32_t had = p.amount;
-                    if (had + remaining <= kPileFull) {
-                        p.amount = static_cast<std::uint8_t>(p.amount + remaining);
-                        CGameData_AddPlayerCounter(world, nullptr, PileTile(world, p).owner, good, remaining);
-                        remaining = 0;
-                    } else {
-                        CGameData_AddPlayerCounter(world, nullptr, PileTile(world, p).owner, good, kPileFull - had);
-                        const std::uint32_t now = p.amount;
-                        p.amount = kPileFull;
-                        remaining = remaining + now - kPileFull;
-                    }
-                }
-            }
+            remaining = AddToDroppedPile(world, good, remaining, tx, ty);
         }
+        // New piles trail the search by 37 entries, so nearby piles are
+        // filled first.
         if (remaining == 0 || i < kNewPileLag) {
             continue;
         }
         const MapOffset& back = world->offsets[i - kNewPileLag];
         const std::uint32_t nx = static_cast<std::uint32_t>(back.dx) + x;
         const std::uint32_t ny = static_cast<std::uint32_t>(back.dy) + y;
-        if (CGameData_IsOnMap(world, nullptr, nx, ny) == 0) {
+        if (!CanPlaceNewPile(world, nx, ny)) {
             continue;
         }
-        const std::uint32_t at = TileOffset(nx, ny);
-        const Tile& tile = TileAtOffset(world, at);
-        if ((tile.flags & 0x0f) != 0 || tile.settler != 0 || tile.walk_region == 0 || tile.object_number != 0) {
-            continue;
-        }
-        static constexpr std::uint32_t kNeighbours[] = {kTileRowBytes, 0u - kTileRowBytes, kTileBytes, 0u - kTileBytes,
-                                                        kTileRowBytes + kTileBytes, 0u - kTileRowBytes - kTileBytes};
-        bool free = true;
-        for (const std::uint32_t step : kNeighbours) {
-            if (TileAtOffset(world, at + step).object_number != 0) {
-                free = false;
-                break;
-            }
-        }
-        if (!free) {
-            continue;
-        }
-        const std::uint32_t created = CGameData_CreatePile(world, nullptr, nx, ny, good, remaining, kDroppedPile);
+        const std::uint32_t created =
+            CGameData_CreatePile(world, nullptr, nx, ny, good, remaining, Value(PileKind::Dropped));
         CGameData_AddPlayerCounter(world, nullptr, PileTile(world, world->piles[created]).owner, good, remaining);
         remaining = 0;
     }
@@ -181,28 +240,28 @@ std::uint32_t __fastcall CGameData_RemovePileFromTile(CGameData* world, void* ed
 
 using PileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t pile);
 
-// Purpose: A settler takes one unit from a pile it had reserved: the pile shrinks; an empty building
-// pile slot is kept (and gets its building's goods type back), an empty pile on the ground goes away.
+// Purpose: A settler takes one unit from a pile it had reserved: the pile shrinks; an empty storehouse
+// pile is kept (and gets its storehouse's goods type back), an empty pile on the ground goes away.
 std::uint32_t __fastcall CGameData_TakeGoodFromPile(CGameData* world, void*, std::uint32_t pile) {
     Pile& p = world->piles[pile];
     p.leaving = static_cast<std::uint8_t>(p.leaving - 1);
     p.amount = static_cast<std::uint8_t>(p.amount - 1);
     const std::uint32_t record = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) +
                                  pile * static_cast<std::uint32_t>(sizeof(Pile));
-    if (p.art == 0) {
+    if (KindOf(p) == PileKind::Storehouse) {
         if (p.amount != 0 || p.coming != 0) {
             return record;
         }
         const std::uint32_t goods = CGameData_PileNeighbourBuildingByteE(world, nullptr, pile);
         // The original keeps the goods byte in the low byte of its argument slot.
         const std::uint32_t argument = (pile & 0xffffff00u) | (goods & 0xff);
-        if ((goods & 0xff) == 0xff) {
+        if ((goods & 0xff) == Value(Good::Empty)) {
             return CGameData_MakePileEmpty(world, nullptr, pile);
         }
         CGameData_MakePileEmpty(world, nullptr, pile);
         return CGameData_SetPileGood(world, nullptr, pile, argument);
     }
-    if (p.amount != 0 || p.art != kDroppedPile) {
+    if (p.amount != 0 || KindOf(p) != PileKind::Dropped) {
         return record;
     }
     return CGameData_RemovePileFromTile(world, nullptr, pile);
@@ -213,18 +272,42 @@ std::uint32_t __fastcall CGameData_PileDecAmountLeaving(CGameData* world, void* 
 
 namespace {
 
+// The jobs of a settler on its way to fetch from a pile (or at it).
+bool IsFetchJob(Job job) {
+    return job == Job::CarrierWalkToPile || job == Job::CarrierAtPile || job == Job::CarrierPickUp ||
+           job == Job::Job76 || job == Job::Job77 || job == Job::CarrierWalkToTool || job == Job::CarrierTakeTool;
+}
 
-bool IsFetchJob(std::uint16_t job) {
-    return job == 0xa || job == 0xb || job == 0xa9 || job == 0x4c || job == 0x4d || job == 0x68 || job == 0x69;
+bool TargetsPile(const Settler& settler, const Pile& pile) {
+    return settler.target_x == pile.x && settler.target_y == pile.y;
 }
 
 // Cancels the first settler (1..high-water mark) on its way to fetch from
 // the pile's tile (a job of IsFetchJob, target = the pile's position).
 void CancelFirstFetcher(CGameData* world, const Pile& p) {
     for (std::uint32_t s = 1; s <= world->settler_high_water; ++s) {
-        const layout::Settler& settler = world->settlers[s];
-        if (settler.owner != 0xff && IsFetchJob(settler.job) && settler.target_x == p.x && settler.target_y == p.y) {
+        const Settler& settler = world->settlers[s];
+        if (settler.owner != kFreeSettler && IsFetchJob(JobOf(settler)) && TargetsPile(settler, p)) {
             CGameData_ResetSettlerToIdle(world, nullptr, s);
+            return;
+        }
+    }
+}
+
+// A trade ring pile: the first carrier fetching there (jobs 307/308) is
+// sent back idle, or gives up the second unit he meant to take.
+void CancelFirstTradeRingFetcher(CGameData* world, std::uint32_t pile) {
+    const Pile& p = world->piles[pile];
+    for (std::uint32_t s = 1; s <= world->settler_high_water; ++s) {
+        Settler& settler = world->settlers[s];
+        if (settler.owner != kFreeSettler && TargetsPile(settler, p) &&
+            (JobOf(settler) == Job::Job307 || JobOf(settler) == Job::Job308)) {
+            if (settler.second_unit == 0) {
+                CGameData_ResetSettlerToIdle(world, nullptr, s);
+            } else {
+                settler.second_unit = 0;
+                CGameData_PileDecAmountLeaving(world, nullptr, pile);
+            }
             return;
         }
     }
@@ -233,52 +316,41 @@ void CancelFirstFetcher(CGameData* world, const Pile& p) {
 }  // namespace
 
 // Purpose: A thief takes one unit from a pile. If every unit is already promised to a carrier, the
-// first carrier on its way there is sent back idle; a building's order pile (kind 0xfd) that is fully
-// promised can't be robbed. Returns whether the theft worked (AL).
+// first carrier on its way there is sent back idle; a building's order pile that is fully promised
+// can't be robbed. Returns whether the theft worked (AL).
 std::uint32_t __fastcall CGameData_StealGoodFromPile(CGameData* world, void*, std::uint32_t pile) {
     Pile& p = world->piles[pile];
     if (p.amount == 0) {
         return (pile * 7u) & 0xffffff00u;  // the original's EAX: AL = 0
     }
     const std::int32_t free = static_cast<std::int32_t>(p.amount) - static_cast<std::int32_t>(p.leaving);
-    if (p.art <= 0x32 || p.art == 0xff) {
+    const PileKind kind = KindOf(p);
+    if (p.art <= kLastStoragePileKind || kind == PileKind::Output) {
         if (free <= 0) {
             if (p.leaving == 0) {
-                return p.art == 0xff ? 0 : 1;
+                return kind == PileKind::Output ? 0 : 1;
             }
             CancelFirstFetcher(world, p);
         }
-    } else if (p.art == 0xfc) {
-        const std::uint32_t leaving = p.leaving & 0x0f;  // the low nibble (the high one counts arrivals)
+    } else if (kind == PileKind::TradeRing) {
+        const std::uint32_t leaving = p.leaving & kTradeRingLeavingMask;
         if (static_cast<std::int32_t>(p.amount) - static_cast<std::int32_t>(leaving) <= 0) {
             if (leaving == 0) {
                 return 0;
             }
-            for (std::uint32_t s = 1; s <= world->settler_high_water; ++s) {
-                layout::Settler& settler = world->settlers[s];
-                if (settler.owner != 0xff && settler.target_x == p.x && settler.target_y == p.y &&
-                    (settler.job == 0x133 || settler.job == 0x134)) {
-                    if (settler.second_unit == 0) {
-                        CGameData_ResetSettlerToIdle(world, nullptr, s);
-                    } else {
-                        settler.second_unit = 0;
-                        CGameData_PileDecAmountLeaving(world, nullptr, pile);
-                    }
-                    break;
-                }
-            }
+            CancelFirstTradeRingFetcher(world, pile);
         }
-    } else if (p.art == 0xfd) {
+    } else if (kind == PileKind::Order) {
         if (free <= 0) {
             GameDebugLog(texts::kOrderPileFull);
             return 0;
         }
-    } else if (p.art == kDroppedPile) {
+    } else if (kind == PileKind::Dropped) {
         if (free <= 0 && p.leaving != 0) {
             CancelFirstFetcher(world, p);
         }
     } else {
-        return 1;  // kinds 0x33..0xfb: nothing happens
+        return 1;  // kinds 51..251 (0x33..0xfb): nothing happens
     }
     CGameData_PileIncAmountLeaving(world, nullptr, pile);
     CGameData_TakeGoodFromPile(world, nullptr, pile);
@@ -371,14 +443,14 @@ std::uint32_t __fastcall WrongDropGoodNear(CGameData* world, void* edx, std::uin
     std::uint8_t saved[kTestPiles + 1];
     for (std::uint32_t p = 0; p <= kTestPiles; ++p) {
         saved[p] = world->piles[p].art;
-        if (world->piles[p].amount == world->piles[p].leaving && saved[p] == kDroppedPile) {
+        if (world->piles[p].amount == world->piles[p].leaving && saved[p] == Value(PileKind::Dropped)) {
             world->piles[p].art = 0;
         }
     }
     const std::uint32_t result = CGameData_DropGoodNear(world, edx, good, amount, x, y);
     for (std::uint32_t p = 0; p <= kTestPiles; ++p) {
-        if (world->piles[p].art == 0 && saved[p] == kDroppedPile) {
-            world->piles[p].art = kDroppedPile;
+        if (world->piles[p].art == 0 && saved[p] == Value(PileKind::Dropped)) {
+            world->piles[p].art = Value(PileKind::Dropped);
         }
     }
     return result;
@@ -440,7 +512,7 @@ void SetUpDrop(test::Context& ctx, test::WorldPair& worlds, std::uint32_t x, std
                 const auto amount = static_cast<std::uint8_t>(ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(9));
                 const auto leaving = static_cast<std::uint8_t>(ctx.rng().Chance(1, 3) ? amount : ctx.rng().Below(9));
                 const auto pileGood = static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? good : ctx.rng().Below(36));
-                const auto art = static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? kDroppedPile : ctx.rng().Next32());
+                const auto art = static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? Value(PileKind::Dropped) : ctx.rng().Next32());
                 const std::uint16_t previous = RandomLink(ctx), next = RandomLink(ctx), head = RandomLink(ctx);
                 worlds.Both([&](CGameData* w) {
                     Pile& p = w->piles[pile];
@@ -509,7 +581,7 @@ namespace {
 // Wrong: a dropped pile is not removed when it becomes empty.
 std::uint32_t __fastcall WrongTakeGoodFromPile(CGameData* world, void* edx, std::uint32_t pile) {
     Pile& p = world->piles[pile];
-    if (p.art == kDroppedPile && p.amount == 1) {
+    if (p.art == Value(PileKind::Dropped) && p.amount == 1) {
         p.leaving = static_cast<std::uint8_t>(p.leaving - 1);
         p.amount = 0;
         return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world)) + pile * 14;
@@ -534,7 +606,7 @@ void CompareTakeGood(test::Context& ctx, PileFn candidate, int cases) {
     });
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t pile = 1 + ctx.rng().Below(kTestPiles);
-        static constexpr std::uint8_t kKinds[] = {0, 0, 0, kDroppedPile, kDroppedPile, 0xff, 7};
+        static constexpr std::uint8_t kKinds[] = {0, 0, 0, Value(PileKind::Dropped), Value(PileKind::Dropped), 0xff, 7};
         const std::uint8_t kind = kKinds[ctx.rng().Below(sizeof(kKinds))];
         const auto amount = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 1 : ctx.rng().Below(5));
         const auto coming = static_cast<std::uint8_t>(ctx.rng().Chance(2, 3) ? 0 : ctx.rng().Below(4));
@@ -577,7 +649,7 @@ namespace {
 // Wrong: a fully promised dropped pile cancels no carrier.
 std::uint32_t __fastcall WrongStealGoodFromPile(CGameData* world, void* edx, std::uint32_t pile) {
     Pile& p = world->piles[pile];
-    if (p.art == kDroppedPile && p.amount <= p.leaving && p.leaving != 0 && p.amount != 0) {
+    if (p.art == Value(PileKind::Dropped) && p.amount <= p.leaving && p.leaving != 0 && p.amount != 0) {
         CGameData_PileIncAmountLeaving(world, nullptr, pile);
         CGameData_TakeGoodFromPile(world, nullptr, pile);
         return 1;

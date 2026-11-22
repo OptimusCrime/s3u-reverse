@@ -1,40 +1,39 @@
 // Counting functions over the building and settler records.
 //
-// Buildings (provisional name): records of 0x3a bytes at world+0x1499e64,
-// numbered from 1; the number of records is the uint32 at world+0x1499e60.
-// Byte +0x0 is the player, byte +0x6 the type, word +0x8 (Building::worker)
-// and byte +0x21 (Building::buildup) are tested below.
-// Settlers: records of 0x40 bytes at world+0x12a5e60, numbered from 1; the
-// number of records is the uint32 at world+0x12a5e5c. Byte +0x0 is the
-// player, byte +0x1 the type, word +0xe probably the job.
+// Buildings: world->buildings (0x3a-byte records at world+0x1499e64),
+// numbered from 1 up to world->building_high_water (world+0x1499e60).
+// Tested: owner +0x0, type +0x6, worker +0x8, buildup +0x21 (0 = finished).
+// Settlers: world->settlers (0x40-byte records at world+0x12a5e60),
+// numbered from 1 up to world->settler_high_water (world+0x12a5e5c).
+// Tested: owner +0x0, type +0x1, job +0xe.
 //
-// Each function walks records 1..count and returns how many match; player
-// and type arguments are compared as full 32-bit values with the
-// zero-extended fields. All: thiscall (ECX = world), two stack arguments,
-// ret 8, EAX = the count.
+// Each function walks records 1..count and returns how many match; player,
+// type and job arguments are compared as full 32-bit values with the
+// zero-extended fields (so they stay plain dwords here, not enums). All:
+// thiscall (ECX = world), two stack arguments, ret 8, EAX = the count.
 //
 // CGameData::CountBuildings (0x00515850): (player, type).
 // CGameData::CountBuildingsWithFlag21Clear (0x005158a0): (player, type) and
-//   byte +0x21 == 0.
-// CGameData::CountBuildingsWithWord8 (0x005159d0): (player, type), byte
-//   +0x21 == 0 and word +0x8 != 0.
+//   buildup +0x21 == 0 (finished buildings).
+// CGameData::CountBuildingsWithWord8 (0x005159d0): (player, type), buildup
+//   +0x21 == 0 and worker +0x8 != 0.
 // CGameData::CountSettlers (0x00515a30): (player, type).
-// CGameData::CountSettlersWithJob (0x00515a80): (player, job word +0xe).
+// CGameData::CountSettlersWithJob (0x00515a80): (player, job +0xe).
 //
-// Settlers standing in an area (area records: 0x2e0 bytes at
-// world+0xe145e8, byte +0x0 the player, 0xff = free). Both walk settlers
-// 1..count (count re-read or not; nothing is written) and count those of
-// the area's player that stand on their own tile (tile word +0x0 == the
-// settler) whose area word (+0x14) equals the area (zero-extended, 32-bit
-// compare). 0 when the area is free. Tiles at world+0x67444 + (x*0x300 +
-// y)*24, settler position +0x4/+0x6.
+// Settlers standing in an area (world->areas, 0x2e0 bytes at world+0xe145e8;
+// player +0x0, 0xff = free). Both walk settlers 1..count (count re-read or
+// not; nothing is written) and count those of the area's player that stand
+// on their own tile (tile settler word +0x0 == the settler) whose area word
+// (+0x14) equals the area (zero-extended, 32-bit compare). 0 when the area
+// is free. Settler position +0x4/+0x6.
 // CGameData::CountAreaSettlersOfClass0 (0x0050e750): (area): settlers whose
-//   type's class (S3.EXE table 0x658f64) is 0 (the civilians, see
-//   settlers.cpp). ret 4.
+//   type's class (S3.EXE table 0x658f64) is SettlerClass::Civilian (0).
+//   ret 4.
 // CGameData::CountAreaSettlersOfType (0x0050e820): (area, type): settlers of
 //   one type (byte +0x1, zero-extended compare). ret 8.
 
-#include "game/tables.h"
+#include "game/enums.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -51,8 +50,7 @@ using layout::Building;
 using layout::Settler;
 using layout::Tile;
 
-constexpr std::uint8_t kFreeArea = 0xff;
-
+constexpr std::uint8_t kFreeArea = 0xff;  // Area::player of an unused area record
 
 // Counts buildings 1..count for which `match(record)` holds.
 template <typename Match>
@@ -76,8 +74,8 @@ std::uint32_t CountSettlersWhere(CGameData* world, Match match) {
 }
 
 // The tile a settler stands on, with the original's 32-bit arithmetic.
-const Tile& SettlerTile(CGameData* world, const Settler& s) {
-    return TileAtOffset(world, TileOffset(s.x, s.y));
+const Tile& SettlerTile(CGameData* world, const Settler& settler) {
+    return TileAtOffset(world, TileOffset(settler.x, settler.y));
 }
 
 }  // namespace
@@ -162,7 +160,7 @@ using CountAreaFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std:
 // the area; probably used by the economy to see how many workers/carriers an area has.
 std::uint32_t __fastcall CGameData_CountAreaSettlersOfClass0(CGameData* world, void* /*edx*/, std::uint32_t area) {
     return CountAreaSettlersWhere(world, area,
-                                  [](const Settler& s) { return g_settlerTypeClass[s.art] == 0; });
+                                  [](const Settler& s) { return ClassOf(s) == SettlerClass::Civilian; });
 }
 
 // Purpose: How many settlers of one type (e.g. carriers) of an area's player stand inside the area.
@@ -301,7 +299,7 @@ namespace {
 constexpr std::uint32_t kTestAreas = 4;
 constexpr std::uint32_t kTestSpan = 12;  // settlers stand on tiles 0..11 x 0..11
 
-// Settlers 0..kMaxRecords+1 of players 0..3 with real types (0..0x2f,
+// Settlers 0..kMaxRecords+1 of players 0..3 with real types (0..47,
 // sometimes others), standing on tiles near (0, 0), many of them on "their
 // own" tile; tile areas and area players 0..3 (sometimes free).
 void FillAreaSettlers(test::Context& ctx, test::WorldPair& worlds) {
@@ -315,7 +313,7 @@ void FillAreaSettlers(test::Context& ctx, test::WorldPair& worlds) {
     for (std::uint32_t i = 0; i <= kMaxRecords + 1; ++i) {
         const auto player = static_cast<std::uint8_t>(ctx.rng().Below(4));
         const auto type =
-            static_cast<std::uint8_t>(ctx.rng().Chance(1, 10) ? ctx.rng().Below(256) : ctx.rng().Below(0x30));
+            static_cast<std::uint8_t>(ctx.rng().Chance(1, 10) ? ctx.rng().Below(256) : ctx.rng().Below(kSettlerTypeCount));
         const std::uint32_t x = ctx.rng().Below(kTestSpan);
         const std::uint32_t y = ctx.rng().Below(kTestSpan);
         const bool own = ctx.rng().Chance(2, 3);
@@ -342,7 +340,7 @@ void CompareAreaCount(test::Context& ctx, int cases, Call call) {
         const std::uint32_t area = ctx.rng().Below(kTestAreas + 1);
         const auto areaPlayer = static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? kFreeArea : ctx.rng().Below(4));
         worlds.Both([&](CGameData* w) { w->areas[area].player = areaPlayer; });
-        std::uint32_t type = ctx.rng().Below(0x30);
+        std::uint32_t type = ctx.rng().Below(kSettlerTypeCount);
         if (ctx.rng().Chance(1, 8)) {
             type |= 0x100;  // matches only in the low byte: must not count
         }

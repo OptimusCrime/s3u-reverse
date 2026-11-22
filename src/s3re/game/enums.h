@@ -229,6 +229,22 @@ enum class Good : std::uint8_t {
 };
 constexpr std::uint32_t kGoodCount = 36;
 
+// ---------------------------------------------------------------- PileKind
+// Pile::art: what a goods pile belongs to. The CreatePile calls of
+// BuildingDone, CrushBuilding and DropGoodNear and the DebugLog text of
+// StealGoodFromPile ("OrderPile") give the names (re/enums.md).
+enum class PileKind : std::uint8_t {
+    Storehouse = 0,   // the six piles of a storehouse; kinds up to kLastStoragePileKind act alike
+    TradeRing = 252,  // 0xfc: the six piles of a marketplace or harbour
+    Order = 253,      // 0xfd: a building's input pile, a site's boards and stones ("OrderPile")
+    Dropped = 254,    // 0xfe: goods lying on the ground
+    Output = 255,     // 0xff: a building's output pile at its door
+};
+// CreatePile, StealGoodFromPile and DispatchPileCarrier treat every kind up
+// to 50 (0x32) like a storehouse pile; only 0 is known to be created.
+constexpr std::uint8_t kLastStoragePileKind = 50;
+
+
 // ---------------------------------------------------------------- Spell
 // The spells ("god events", Volker\GodlyEvents.cpp): the spell argument of
 // ExecuteSpell (0x5480b0, a dword), HasManaForSpell and PayForSpell. Each
