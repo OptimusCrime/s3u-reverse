@@ -36,6 +36,7 @@
 //   mapSize (two callers tail-return it). Plain ret.
 // All thiscall (ECX = world).
 
+#include "game/enums.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
@@ -53,6 +54,22 @@ using layout::Tile;
 constexpr std::uint8_t kBorderFlag = layout::kTileDrawBorder;
 constexpr std::uint32_t kNoOwner = 0xff;
 constexpr std::uint32_t kAroundEntries = 7;  // world->offsets[0..6]
+
+// Marker terrain values of the map generator (not real terrains; marker
+// bytes, so hex): 0xf3 a placeholder the generator replaces at the end,
+// 0xf0 the tiles GrowTerrain has just converted.
+constexpr std::uint32_t kPlaceholderTerrain = 0xf3;
+constexpr std::uint32_t kGrowMarkerTerrain = 0xf0;
+
+// Land a player can own: terrain class (high nibble) not water.
+bool IsLand(std::uint32_t terrain) {
+    return (terrain & kTerrainClassMask) != kTerrainClassWater;
+}
+
+// SpreadTerrainRandomly's chance: (Random() & 0xffff) * 100 >> 16 is 0..99.
+constexpr std::uint32_t kRandomLowBits = 0xffff;
+constexpr std::uint32_t kPercent = 100;
+constexpr std::uint32_t kRandomLowBitsShift = 16;
 
 // Tiles are carried as 32-bit byte offsets from the world (TileOffset) and
 // stepped to their neighbours like in the original.
@@ -78,7 +95,7 @@ using AroundFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::ui
 
 // Purpose: Map generation: turns the placeholder terrain 0xf3 into a real terrain type.
 std::uint32_t __fastcall CGameData_ReplaceTerrainF3(CGameData* world, void*, std::uint32_t newType) {
-    return CGameData_ReplaceTerrainType(world, nullptr, 0xf3, newType);
+    return CGameData_ReplaceTerrainType(world, nullptr, kPlaceholderTerrain, newType);
 }
 
 // Purpose: Map generation: tiles of one terrain next to another terrain randomly change, so terrain edges
@@ -100,7 +117,9 @@ std::uint32_t __fastcall CGameData_SpreadTerrainRandomly(CGameData* world, void*
             if (!nearby) {
                 continue;
             }
-            const std::int32_t roll = static_cast<std::int32_t>((CGameData_Random(world, nullptr) & 0xffffu) * 100u) >> 16;
+            const std::int32_t roll =
+                static_cast<std::int32_t>((CGameData_Random(world, nullptr) & kRandomLowBits) * kPercent) >>
+                kRandomLowBitsShift;
             if (roll < static_cast<std::int32_t>(percent)) {
                 TileAtOffset(world, tile).terrain = static_cast<std::uint8_t>(to);
             }
@@ -124,11 +143,10 @@ std::uint32_t __fastcall CGameData_UpdateBorderFlagsAround(CGameData* world, voi
         const std::uint32_t tile = TileOffset(tx, ty);
         const std::uint32_t owner = TileAtOffset(world, tile).owner;
         bool border = false;
-        if ((Terrain(world, tile) & 0xf0) != 0 && owner != kNoOwner) {
+        if (IsLand(Terrain(world, tile)) && owner != kNoOwner) {
             for (const std::int32_t step : kNeighbours) {
                 const std::uint32_t neighbour = tile + step;
-                if (TileAtOffset(world, neighbour).owner != owner &&
-                    (Terrain(world, neighbour) & 0xf0) != 0) {
+                if (TileAtOffset(world, neighbour).owner != owner && IsLand(Terrain(world, neighbour))) {
                     border = true;
                     break;
                 }
@@ -155,8 +173,8 @@ using NoArgsFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx);
 // temporary marker, so new tiles don't keep growing in the same pass).
 std::uint32_t __fastcall CGameData_GrowTerrain(CGameData* world, void*, std::uint32_t from, std::uint32_t into,
                                                std::uint32_t percent) {
-    CGameData_SpreadTerrainRandomly(world, nullptr, from, into, 0xf0, percent);
-    return CGameData_ReplaceTerrainType(world, nullptr, 0xf0, into);
+    CGameData_SpreadTerrainRandomly(world, nullptr, from, into, kGrowMarkerTerrain, percent);
+    return CGameData_ReplaceTerrainType(world, nullptr, kGrowMarkerTerrain, into);
 }
 
 // Purpose: Recomputes the territory border marks of the whole map (e.g. at game start or after big
@@ -234,7 +252,7 @@ std::uint32_t __fastcall WrongUpdateBorderFlagsAround(CGameData* world, void*, s
         const std::uint32_t tile = TileOffset(tx, ty);
         const std::uint32_t owner = TileAtOffset(world, tile).owner;
         bool border = false;
-        if ((Terrain(world, tile) & 0xf0) != 0 && owner != kNoOwner) {
+        if (IsLand(Terrain(world, tile)) && owner != kNoOwner) {
             for (const std::int32_t step : kNeighbours) {
                 border = border || TileAtOffset(world, tile + step).owner != owner;
             }
@@ -321,7 +339,7 @@ S3RE_TEST(CGameData_ReplaceTerrainF3_MatchesOriginal) {
         for (std::uint32_t x = 0; x < 64; ++x) {
             for (std::uint32_t y = 0; y < 64; ++y) {
                 if (ctx.rng().Chance(1, 3)) {
-                    worlds.Both([&](CGameData* w) { TileAt(w, x, y).terrain = 0xf3; });
+                    worlds.Both([&](CGameData* w) { TileAt(w, x, y).terrain = kPlaceholderTerrain; });
                 }
             }
         }

@@ -4,8 +4,9 @@
 // (x+1, y+1), (x, y+1), (x-1, y), (x-1, y-1), (x, y-1). In the tile array a
 // step in x is 0x4800 bytes, in y 0x18 bytes. Tile byte +0xa is a terrain
 // (or ground) type; 0x70 and 0xf0 are tested together below (0xf0 = 0x70
-// with the top bit set), probably water. Tile byte +0x9 and the meaning of
-// settler type 0x29 are not known; names are provisional.
+// with the top bit set), probably water. Tile byte +0x9 is not known; names
+// are provisional. Settler type 41 (0x29) is the catapult (SettlerType), so
+// "SettlerType29" in the names means catapult.
 //
 // CGameData::ReplaceTerrainType (0x00519210): (old, new) sets byte +0xa to
 // `new` on every tile with x and y in [1, mapSize - 2] whose byte +0xa equals
@@ -21,7 +22,7 @@
 // CGameData::IsFreeOfSettlerType29Nearby (0x005199e0): (x, y) -> 0 if the
 // tile has an occupant (word +0x4); else 0 if any of 18 offsets from the
 // table at world+0x110a598 (int32 dx, dy; 16-byte entries) lands on the map
-// on a tile whose occupant is a settler of type 0x29; else 1.
+// on a tile whose occupant is a catapult (settler type 41, 0x29); else 1.
 // All five: thiscall (ECX = world), ret 8.
 //
 // CGameData::IsNeighbourhoodTerrain (0x0051b450): (x, y, terrain) -> 1 if
@@ -41,6 +42,7 @@
 // Tile::flags (bit 0x1 = kTileBlocked). The offset tables are
 // world->offsets[] (0x110a588 = offsets[0], 0x110a598 = offsets[1]).
 
+#include "game/enums.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -62,7 +64,7 @@ constexpr std::uint8_t kTerrainF0 = 0xf0;
 constexpr int kNearbyOffsetFirst = 1;
 constexpr int kNearbyOffsetCount = 18;
 
-constexpr std::uint8_t kSettlerType29 = 0x29;
+constexpr std::uint8_t kCatapult = Value(SettlerType::Catapult);
 
 // Tile (x, y), with the original's 32-bit arithmetic (neighbours of edge
 // tiles lie outside the map).
@@ -147,8 +149,8 @@ std::uint32_t __fastcall CGameData_IsClearOfType70Nearby(CGameData* world, void*
     return 1;
 }
 
-// Purpose: Whether a tile and the tiles around it are free of a particular kind of settler (type 0x29,
-// unknown). Probably a placement check.
+// Purpose: Whether a tile is free and no catapult stands on the tiles around it (a catapult covers seven
+// tiles). Used before taking the seven extra tiles of a war machine workshop.
 std::uint32_t __fastcall CGameData_IsFreeOfSettlerType29Nearby(CGameData* world, void* /*edx*/,
                                                                std::uint32_t x, std::uint32_t y) {
     if (TileOccupant(world, x, y) != 0) {
@@ -164,7 +166,7 @@ std::uint32_t __fastcall CGameData_IsFreeOfSettlerType29Nearby(CGameData* world,
             continue;
         }
         const std::uint16_t occupant = TileOccupant(world, nx, ny);
-        if (occupant != 0 && world->settlers[occupant].art == kSettlerType29) {
+        if (occupant != 0 && world->settlers[occupant].art == kCatapult) {
             result = 0;
         }
     }
@@ -258,7 +260,7 @@ void RandomizeAround(test::Context& ctx, test::WorldPair& worlds, std::uint32_t 
             SetTileField(worlds, tx, ty, &Tile::settler, occupant);
             if (occupant != 0) {
                 const std::uint8_t art = ctx.rng().Chance(1, 3)
-                                             ? kSettlerType29
+                                             ? kCatapult
                                              : static_cast<std::uint8_t>(ctx.rng().Below(64));
                 worlds.Both([&](CGameData* w) { w->settlers[occupant].art = art; });
             }

@@ -44,6 +44,7 @@
 //   (unsigned shift, low byte) and the same blocking. ret 0x18.
 // All thiscall (ECX = world); callers ignore EAX.
 
+#include "game/enums.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
@@ -64,6 +65,14 @@ using layout::Tile;
 // stepped to their neighbours like in the original.
 constexpr std::int32_t kRow = static_cast<std::int32_t>(kTileRowBytes);  // x + 1
 constexpr std::int32_t kColumn = static_cast<std::int32_t>(kTileBytes);   // y + 1
+
+// ScatterTileByte11: resources go into mountains and terrain class 0x80
+// (unknown); each cluster covers 32..95 offset entries and fills a tile with
+// a chance of (32768..65535) / 65536.
+constexpr std::uint8_t kTerrainClass80 = 0x80;
+constexpr std::uint32_t kMinClusterEntries = 32;
+constexpr std::uint32_t kMinFillThreshold = 32768;
+constexpr std::uint32_t kResourceAmounts = 15;  // amount 1..15 in the low nibble
 
 std::uint32_t TileOffsetXY(std::int32_t x, std::int32_t y) {
     return TileOffset(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
@@ -141,8 +150,8 @@ std::uint32_t __fastcall CGameData_ScatterTileByte11(CGameData* world, void*, st
     for (std::uint32_t round = 0; round < BlockArea(world, density) >> 3; ++round) {
         const std::int32_t x = RandomCoordinate(world, MapSize(world));
         const std::int32_t y = RandomCoordinate(world, MapSize(world));
-        const std::uint32_t count = (CGameData_Random(world, nullptr) & 0x3fu) + 0x20u;
-        const std::uint32_t threshold = (CGameData_Random(world, nullptr) & 0x7fffu) + 0x8000u;
+        const std::uint32_t count = (CGameData_Random(world, nullptr) & 0x3fu) + kMinClusterEntries;
+        const std::uint32_t threshold = (CGameData_Random(world, nullptr) & 0x7fffu) + kMinFillThreshold;
         for (std::uint32_t entry = 0; entry < count; ++entry) {
             const std::int32_t tx = OffsetX(world, entry) + x;
             const std::int32_t ty = OffsetY(world, entry) + y;
@@ -150,13 +159,14 @@ std::uint32_t __fastcall CGameData_ScatterTileByte11(CGameData* world, void*, st
                 continue;
             }
             const std::uint32_t tile = TileOffsetXY(tx, ty);
-            const std::uint8_t kind = TileAt(world, tile).terrain & 0xf0;
-            if ((kind != 0x20 && kind != 0x80) || TileAt(world, tile).resources != 0) {
+            const std::uint8_t terrainClass = TileAt(world, tile).terrain & kTerrainClassMask;
+            if ((terrainClass != kTerrainClassMountain && terrainClass != kTerrainClass80) ||
+                TileAt(world, tile).resources != 0) {
                 continue;
             }
             if (Random16(world) < threshold) {
                 TileAt(world, tile).resources =
-                    static_cast<std::uint8_t>(Random16(world) % 15 + base + 1);
+                    static_cast<std::uint8_t>(Random16(world) % kResourceAmounts + base + 1);
             }
         }
     }

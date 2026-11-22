@@ -15,11 +15,12 @@
 //   0x12/0x13/0x18/0x1c becomes 0x10 (redraw bit 0x80 of +0x9 set); any
 //   other terrain stops the function at once (neighbours changed before it
 //   stay changed). If all six were accepted, the tile itself becomes
-//   terrain 0x16 (redraw bit set). Called by UpdateSettlers jobs 0x91,
-//   0xe6 and 0xf7 (work chains of settler types 0x10, 0x26 and 0x1d), so
-//   0x16 is probably a worked patch of land such as a field or a planted
-//   bed; the CSV's proposal "RestoreGrassAt" was wrong (the tile itself
-//   does not become grass). ret 8; EAX = world + (x * 0x300 + y) * 24
+//   terrain 0x16 (redraw bit set). Called by UpdateSettlers jobs 145, 230
+//   and 247 (0x91, 0xe6, 0xf7: work chains of the farmer, the rice farmer
+//   and the winegrower, settler types 16, 38 and 29), so 0x16 is a field
+//   (grain, rice or vines); the CSV's proposal "RestoreGrassAt" was wrong
+//   (the tile itself does not become grass). Terrain values have a class in
+//   the high nibble and stay hex. ret 8; EAX = world + (x * 0x300 + y) * 24
 //   (callers ignore it).
 // Both thiscall (ECX = world).
 
@@ -31,6 +32,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 
 namespace s3re::game {
 
@@ -40,6 +42,9 @@ using layout::Tile;
 
 constexpr std::uint32_t kStepX = kTileRowBytes;
 constexpr std::uint32_t kStepY = kTileBytes;
+
+constexpr std::uint8_t kTerrainGrass = 0x10;
+constexpr std::uint8_t kTerrainField = 0x16;  // a farmer's, rice farmer's or winegrower's field
 
 }  // namespace
 
@@ -70,34 +75,34 @@ bool IsGrassVariant(std::uint8_t terrain) {
 
 }  // namespace
 
-// Purpose: Turns a grass tile whose surroundings are all grass into a special patch of land (terrain
-// 0x16, probably a field or bed a worker prepares), making the grass variants around it plain grass.
+// Purpose: A farmer, rice farmer or winegrower turns a grass tile whose surroundings are all grass into a
+// field (terrain 0x16), making the grass variants around it plain grass.
 std::uint32_t __fastcall CGameData_SetTerrain16Patch(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     const std::uint32_t tile = TileOffset(x, y);
     const std::uint32_t result = tile - static_cast<std::uint32_t>(offsetof(CGameData, tiles)) +
                                  static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
     Tile& centre = TileAtOffset(world, tile);
-    if (centre.terrain != 0x10 && !IsGrassVariant(centre.terrain)) {
+    if (centre.terrain != kTerrainGrass && !IsGrassVariant(centre.terrain)) {
         return result;
     }
     static constexpr std::uint32_t kNeighbours[] = {kStepX, 0u - kStepX, kStepY, 0u - kStepY,
                                                     kStepX + kStepY, 0u - kStepX - kStepY};
     std::uint32_t accepted = 0;
-    for (std::uint32_t k = 1; k <= 6; ++k) {
+    for (std::uint32_t k = 1; k <= std::size(kNeighbours); ++k) {
         Tile& neighbour = TileAtOffset(world, tile + kNeighbours[k - 1]);
         const std::uint8_t terrain = neighbour.terrain;
-        if (terrain == 0x10 || terrain == 0x16) {
+        if (terrain == kTerrainGrass || terrain == kTerrainField) {
             accepted = k;
         }
         if (IsGrassVariant(terrain)) {
-            neighbour.terrain = 0x10;
+            neighbour.terrain = kTerrainGrass;
             neighbour.draw_flags |= layout::kTileDrawRedraw;
             accepted = k;
         } else if (accepted != k) {
             return result;
         }
     }
-    centre.terrain = 0x16;
+    centre.terrain = kTerrainField;
     centre.draw_flags |= layout::kTileDrawRedraw;
     return result;
 }
@@ -123,7 +128,7 @@ std::uint32_t Relative(std::uint32_t value, CGameData* world) {
 // terrains mostly from the accepted set (SetTerrain16Patch).
 void CompareTileFn(test::Context& ctx, TileFn original, TileFn candidate, int cases, bool relativeEax) {
     test::WorldPair worlds(ctx, kTestWorld);
-    static constexpr std::uint8_t kTerrains[] = {0x10, 0x16, 0x12, 0x13, 0x18, 0x1c};
+    static constexpr std::uint8_t kTerrains[] = {kTerrainGrass, kTerrainField, 0x12, 0x13, 0x18, 0x1c};
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t x = 2 + ctx.rng().Below(30);
         const std::uint32_t y = 2 + ctx.rng().Below(30);
@@ -165,8 +170,8 @@ std::uint32_t __fastcall WrongUpdateShadeAround(CGameData* world, void*, std::ui
 // Wrong: the centre tile becomes grass (the CSV's first guess).
 std::uint32_t __fastcall WrongSetTerrain16Patch(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     const std::uint32_t result = CGameData_SetTerrain16Patch(world, nullptr, x, y);
-    if (world->tiles[x][y].terrain == 0x16) {
-        world->tiles[x][y].terrain = 0x10;
+    if (world->tiles[x][y].terrain == kTerrainField) {
+        world->tiles[x][y].terrain = kTerrainGrass;
     }
     return result;
 }

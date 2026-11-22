@@ -102,11 +102,13 @@
 // taken, uint16 +0x22 direction, uint16 +0x30/+0x32 a shipyard's ship
 // position, +0x36 a byte):
 // CGameData::TakeBuildingExtraTiles (0x004dd6f0): (building): nothing if
-//   +0x20 is 0xfe. Types 0x1f, 0x2f, 0x30, 0x32 (probably buildings at the
-//   water): state 0x20 only marks the building done if +0x36 <= 0x18;
+//   +0x20 is 0xfe. The war machine workshops (catapult 31, ballista 47,
+//   cannon 48) and the large gong (50) (0x1f, 0x2f, 0x30, 0x32; the seven
+//   tiles are where the seven-tile machine they make stands): state 0x20
+//   only marks the building done if +0x36 <= 24 (0x18);
 //   otherwise the centre is the position plus the type's offset (int32 dx,
 //   dy at S3.EXE 0x659624 + 8 * k: (-2, 4), (-2, 6), (-2, 4), (-1, 7)),
-//   DebugLog("centerx,centery = %u,%u") for type 0x32, and if the seven
+//   DebugLog("centerx,centery = %u,%u") for the gong, and if the seven
 //   tiles (cx-1, cy-1), (cx, cy-1), (cx-1, cy), (cx, cy), (cx+1, cy),
 //   (cx, cy+1), (cx+1, cy+1) are all CGameData::IsFreeOfSettlerType29Nearby
 //   they are blocked (BlockTile, same order) and the building is done; EAX
@@ -114,10 +116,11 @@
 //   with a ship position (+0x30 != 0xffff): the ship tile is two steps
 //   (NeighbourX/Y) from it in direction d = (+0x22 + 3) % 6; if it has no
 //   occupant, state 0x30 / 0x40 creates a ship (CGameData::CreateSettler of
-//   type 0x2b / 0x2c for the building's player; any other state uses the
-//   number +0x32 instead, a stale register in the original), then
-//   DebugLog("Schiffsproduktion %u owner %u", type, player), ship job +0xe
-//   = 0x145, +0x15 = 0, +0x1c = 0, direction +0x8 = (d + 2) % 6, building
+//   a trade ship (43, 0x2b) / a ferry (44, 0x2c) for the building's player;
+//   any other state uses the number +0x32 instead, a stale register in the
+//   original), then DebugLog("Schiffsproduktion %u owner %u", type,
+//   player), ship job +0xe = Job325 (0x145), +0x15 = 0, +0x1c = 0,
+//   direction +0x8 = (d + 2) % 6, building
 //   done; EAX (d + 2) / 6, 0 if no ship, the ship tile's y if occupied.
 //   Other types: EAX = building. ret 4.
 // CGameData::ReleaseBuildingExtraTiles (0x004dda10): (building): the
@@ -128,9 +131,10 @@
 //   the tile's address); it does not check for an unset ship position.
 //   Otherwise EAX = world + building * 0x3a. ret 4.
 // CGameData::UnblockType12BuildingTiles (0x004dfa60): (): for buildings
-//   1..count (count re-read each time) of type 0x12: owner's race (int32 at
-//   player record +0x4) 0: UnblockTile(x-2, y+3) if that tile is blocked;
-//   race 1: the same for (x, y+7), then (x, y+6). EAX = the count. ret 0.
+//   1..count (count re-read each time) of type 18 (0x12, the castle):
+//   owner's race (int32 at player record +0x4) Roman: UnblockTile(x-2, y+3)
+//   if that tile is blocked; Egyptian: the same for (x, y+7), then (x, y+6).
+//   EAX = the count. ret 0.
 // All thiscall (ECX = world).
 //
 // Field names (layout.h): area +0x8 Area::pile_list, +0xa piles_by_goods,
@@ -142,9 +146,11 @@
 // +0x22 dock_direction, +0x30/+0x32 work_x/work_y, +0x36 unk36.
 
 #include "game/debug_log.h"
+#include "game/enums.h"
 #include "game/replacements.h"
 #include "game/tables.h"
 #include "game/texts.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -175,6 +181,7 @@ constexpr std::uint32_t kTileAreaWordBytes =
 static_assert(kTileAreaWordBytes % 8 == 0 && kTileAreaWordBytes / 8 == 0xce8b);
 
 constexpr std::uint8_t kFreeArea = 0xff;
+constexpr std::uint8_t kNoOwner = 0xff;  // Tile::owner
 constexpr std::uint32_t kLastArea = 0xfff;  // never handed out
 constexpr std::uint32_t kGoodsTypes = layout::kGoodsTypes;
 constexpr std::uint32_t kAreaSettlerListCount = layout::kSettlerTypes;
@@ -182,7 +189,7 @@ constexpr std::uint32_t kAreaCount51 = 51;
 static_assert(sizeof(Area::condition_enabled) == kAreaCount51);
 static_assert(sizeof(Area::counters_278) == kAreaCount51 * 2);
 
-constexpr std::uint32_t kDirections = 6;
+constexpr std::uint32_t kDirections = kDirectionCount;
 
 constexpr std::uint32_t kPendingAreaEvent = 4;
 constexpr std::uint32_t kAreaEvent = 6;
@@ -208,7 +215,11 @@ constexpr AreaByteArray kGoodsArraysInitOrder[] = {kSettings1, kSettings4, kSett
 // ... and in the order MoveAreaContents copies them.
 constexpr AreaByteArray kGoodsArraysCopyOrder[] = {kSettings1, kSettings2, kSettings3, kSettings4, kSettings5};
 
-// One byte store of InitArea: AreaBytes(array)[index] = value.
+// InitArea's fixed defaults (Area::settings_extra, +0x23e..+0x240).
+constexpr std::uint8_t kSettingsExtraDefaults[3] = {20, 25, 25};
+
+// One byte store of InitArea: AreaBytes(array)[index] = value (values in
+// decimal; their meaning is not known yet).
 struct ByteStore {
     AreaByteArray array;
     std::uint8_t index;
@@ -217,78 +228,78 @@ struct ByteStore {
 
 // InitArea's defaults for every race (after the clearing loops).
 constexpr ByteStore kAreaDefaults[] = {
-    {kConditions, 1, 0x10}, {kConditions, 2, 0x10}, {kConditions, 3, 0xc}, {kConditions, 4, 0x6},
-    {kConditions, 7, 0x10}, {kConditions, 8, 0x10}, {kConditions, 9, 0x8}, {kConditions, 13, 0x10},
-    {kConditions, 14, 0x8}, {kConditions, 16, 0x10}, {kConditions, 18, 0x10}, {kConditions, 22, 0x10},
-    {kConditions, 23, 0x10}, {kConditions, 24, 0x8}, {kConditions, 26, 0x10}, {kConditions, 27, 0x10},
-    {kConditions, 28, 0x8}, {kConditions, 30, 0x10}, {kConditions, 31, 0x0}, {kConditions, 32, 0x0},
-    {kConditions, 35, 0x10}, {kConditions, 36, 0x0}, {kConditions, 37, 0x0}, {kConditions, 39, 0x10},
-    {kConditions, 40, 0x0}, {kConditions, 41, 0x0}, {kConditions, 46, 0x0}, {kConditions, 47, 0x0},
-    {kConditions, 48, 0x0}, {kConditions, 49, 0x0}, {kConditions, 50, 0x0}, {kSettings2, 18, 0x10},
-    {kSettings2, 19, 0xc}, {kSettings2, 20, 0x8}, {kSettings5, 13, 0x1}, {kSettings5, 12, 0x1},
-    {kSettings5, 14, 0x1}, {kSettings5, 15, 0x1}, {kSettings5, 16, 0x1}, {kSettings5, 32, 0x1},
-    {kSettings5, 17, 0x1}, {kSettings5, 18, 0x1}, {kSettings5, 19, 0x1}, {kSettings5, 20, 0x1},
-    {kSettings5, 10, 0x1},
+    {kConditions, 1, 16}, {kConditions, 2, 16}, {kConditions, 3, 12}, {kConditions, 4, 6},
+    {kConditions, 7, 16}, {kConditions, 8, 16}, {kConditions, 9, 8}, {kConditions, 13, 16},
+    {kConditions, 14, 8}, {kConditions, 16, 16}, {kConditions, 18, 16}, {kConditions, 22, 16},
+    {kConditions, 23, 16}, {kConditions, 24, 8}, {kConditions, 26, 16}, {kConditions, 27, 16},
+    {kConditions, 28, 8}, {kConditions, 30, 16}, {kConditions, 31, 0}, {kConditions, 32, 0},
+    {kConditions, 35, 16}, {kConditions, 36, 0}, {kConditions, 37, 0}, {kConditions, 39, 16},
+    {kConditions, 40, 0}, {kConditions, 41, 0}, {kConditions, 46, 0}, {kConditions, 47, 0},
+    {kConditions, 48, 0}, {kConditions, 49, 0}, {kConditions, 50, 0}, {kSettings2, 18, 16},
+    {kSettings2, 19, 12}, {kSettings2, 20, 8}, {kSettings5, 13, 1}, {kSettings5, 12, 1},
+    {kSettings5, 14, 1}, {kSettings5, 15, 1}, {kSettings5, 16, 1}, {kSettings5, 32, 1},
+    {kSettings5, 17, 1}, {kSettings5, 18, 1}, {kSettings5, 19, 1}, {kSettings5, 20, 1},
+    {kSettings5, 10, 1},
 };
 
 constexpr ByteStore kRace0Defaults[] = {
-    {kConditions, 5, 0x0}, {kConditions, 6, 0x0}, {kConditions, 10, 0x8}, {kConditions, 11, 0x0},
-    {kConditions, 12, 0x0}, {kConditions, 43, 0x8}, {kConditions, 44, 0x0}, {kConditions, 45, 0x0},
-    {kConditions, 15, 0x4}, {kConditions, 17, 0x8}, {kConditions, 19, 0x0}, {kConditions, 20, 0x0},
-    {kConditions, 21, 0x0}, {kConditions, 25, 0x0}, {kConditions, 29, 0x0}, {kConditions, 33, 0x0},
-    {kConditions, 34, 0x0}, {kConditions, 38, 0x0}, {kConditions, 42, 0x0}, {kSettings4, 1, 0x1},
-    {kSettings4, 2, 0x2}, {kSettings4, 3, 0x3}, {kSettings4, 4, 0x7}, {kSettings4, 5, 0x6}, {kSettings4, 6, 0x18},
-    {kSettings4, 7, 0x5}, {kSettings4, 8, 0x8}, {kSettings4, 9, 0xb}, {kSettings4, 10, 0x19}, {kSettings4, 11, 0x4},
-    {kSettings4, 12, 0x11}, {kSettings4, 13, 0x12}, {kSettings4, 14, 0x13}, {kSettings4, 15, 0x14},
-    {kSettings4, 16, 0x15}, {kSettings4, 17, 0x16}, {kSettings4, 18, 0xe}, {kSettings4, 19, 0xf},
-    {kSettings4, 20, 0x10}, {kSettings4, 22, 0xa}, {kSettings4, 23, 0xc}, {kSettings4, 24, 0x9},
-    {kSettings4, 26, 0xd}, {kSettings4, 32, 0x17}, {kSettings4, 21, 0x1a},
+    {kConditions, 5, 0}, {kConditions, 6, 0}, {kConditions, 10, 8}, {kConditions, 11, 0},
+    {kConditions, 12, 0}, {kConditions, 43, 8}, {kConditions, 44, 0}, {kConditions, 45, 0},
+    {kConditions, 15, 4}, {kConditions, 17, 8}, {kConditions, 19, 0}, {kConditions, 20, 0},
+    {kConditions, 21, 0}, {kConditions, 25, 0}, {kConditions, 29, 0}, {kConditions, 33, 0},
+    {kConditions, 34, 0}, {kConditions, 38, 0}, {kConditions, 42, 0}, {kSettings4, 1, 1},
+    {kSettings4, 2, 2}, {kSettings4, 3, 3}, {kSettings4, 4, 7}, {kSettings4, 5, 6}, {kSettings4, 6, 24},
+    {kSettings4, 7, 5}, {kSettings4, 8, 8}, {kSettings4, 9, 11}, {kSettings4, 10, 25}, {kSettings4, 11, 4},
+    {kSettings4, 12, 17}, {kSettings4, 13, 18}, {kSettings4, 14, 19}, {kSettings4, 15, 20},
+    {kSettings4, 16, 21}, {kSettings4, 17, 22}, {kSettings4, 18, 14}, {kSettings4, 19, 15},
+    {kSettings4, 20, 16}, {kSettings4, 22, 10}, {kSettings4, 23, 12}, {kSettings4, 24, 9},
+    {kSettings4, 26, 13}, {kSettings4, 32, 23}, {kSettings4, 21, 26},
 };
 
 constexpr ByteStore kRace1Defaults[] = {
-    {kConditions, 5, 0x0}, {kConditions, 6, 0x0}, {kConditions, 10, 0x0}, {kConditions, 11, 0x8},
-    {kConditions, 12, 0x0}, {kConditions, 43, 0x0}, {kConditions, 44, 0x8}, {kConditions, 45, 0x0},
-    {kConditions, 15, 0x0}, {kConditions, 17, 0x0}, {kConditions, 19, 0x4}, {kConditions, 20, 0x0},
-    {kConditions, 21, 0x0}, {kConditions, 25, 0x8}, {kConditions, 29, 0x8}, {kConditions, 33, 0x0},
-    {kConditions, 34, 0x0}, {kConditions, 38, 0x0}, {kConditions, 42, 0x10}, {kSettings4, 1, 0x1},
-    {kSettings4, 2, 0x2}, {kSettings4, 3, 0x3}, {kSettings4, 4, 0x7}, {kSettings4, 5, 0x6}, {kSettings4, 6, 0x18},
-    {kSettings4, 7, 0x5}, {kSettings4, 8, 0x8}, {kSettings4, 9, 0xb}, {kSettings4, 10, 0x19}, {kSettings4, 11, 0x4},
-    {kSettings4, 12, 0x11}, {kSettings4, 13, 0x12}, {kSettings4, 14, 0x13}, {kSettings4, 15, 0x14},
-    {kSettings4, 16, 0x15}, {kSettings4, 17, 0x16}, {kSettings4, 18, 0xe}, {kSettings4, 19, 0xf},
-    {kSettings4, 20, 0x10}, {kSettings4, 22, 0xa}, {kSettings4, 23, 0xc}, {kSettings4, 24, 0x9},
-    {kSettings4, 26, 0xd}, {kSettings4, 32, 0x17}, {kSettings4, 29, 0x1a}, {kSettings4, 28, 0x1b},
-    {kSettings5, 28, 0x1},
+    {kConditions, 5, 0}, {kConditions, 6, 0}, {kConditions, 10, 0}, {kConditions, 11, 8},
+    {kConditions, 12, 0}, {kConditions, 43, 0}, {kConditions, 44, 8}, {kConditions, 45, 0},
+    {kConditions, 15, 0}, {kConditions, 17, 0}, {kConditions, 19, 4}, {kConditions, 20, 0},
+    {kConditions, 21, 0}, {kConditions, 25, 8}, {kConditions, 29, 8}, {kConditions, 33, 0},
+    {kConditions, 34, 0}, {kConditions, 38, 0}, {kConditions, 42, 16}, {kSettings4, 1, 1},
+    {kSettings4, 2, 2}, {kSettings4, 3, 3}, {kSettings4, 4, 7}, {kSettings4, 5, 6}, {kSettings4, 6, 24},
+    {kSettings4, 7, 5}, {kSettings4, 8, 8}, {kSettings4, 9, 11}, {kSettings4, 10, 25}, {kSettings4, 11, 4},
+    {kSettings4, 12, 17}, {kSettings4, 13, 18}, {kSettings4, 14, 19}, {kSettings4, 15, 20},
+    {kSettings4, 16, 21}, {kSettings4, 17, 22}, {kSettings4, 18, 14}, {kSettings4, 19, 15},
+    {kSettings4, 20, 16}, {kSettings4, 22, 10}, {kSettings4, 23, 12}, {kSettings4, 24, 9},
+    {kSettings4, 26, 13}, {kSettings4, 32, 23}, {kSettings4, 29, 26}, {kSettings4, 28, 27},
+    {kSettings5, 28, 1},
 };
 
 constexpr ByteStore kRace2Defaults[] = {
-    {kConditions, 5, 0x8}, {kConditions, 6, 0x4}, {kConditions, 10, 0x0}, {kConditions, 11, 0x0},
-    {kConditions, 12, 0x8}, {kConditions, 43, 0x0}, {kConditions, 44, 0x0}, {kConditions, 45, 0x8},
-    {kConditions, 15, 0x0}, {kConditions, 17, 0x0}, {kConditions, 19, 0x0}, {kConditions, 20, 0x10},
-    {kConditions, 21, 0x10}, {kConditions, 25, 0x0}, {kConditions, 29, 0x0}, {kConditions, 33, 0x0},
-    {kConditions, 34, 0x0}, {kConditions, 38, 0x0}, {kConditions, 42, 0x0}, {kSettings4, 1, 0x1},
-    {kSettings4, 2, 0x2}, {kSettings4, 3, 0x3}, {kSettings4, 4, 0x7}, {kSettings4, 5, 0x6}, {kSettings4, 6, 0x18},
-    {kSettings4, 7, 0x5}, {kSettings4, 8, 0x8}, {kSettings4, 9, 0xb}, {kSettings4, 10, 0x19}, {kSettings4, 11, 0x4},
-    {kSettings4, 12, 0x11}, {kSettings4, 13, 0x12}, {kSettings4, 14, 0x13}, {kSettings4, 15, 0x14},
-    {kSettings4, 16, 0x15}, {kSettings4, 17, 0x16}, {kSettings4, 18, 0xe}, {kSettings4, 19, 0xf},
-    {kSettings4, 20, 0x10}, {kSettings4, 22, 0xa}, {kSettings4, 23, 0xc}, {kSettings4, 24, 0x9},
-    {kSettings4, 26, 0xd}, {kSettings4, 32, 0x17}, {kSettings4, 33, 0x1a}, {kSettings4, 30, 0x1c},
-    {kSettings4, 27, 0x1b}, {kSettings4, 25, 0x1d},
+    {kConditions, 5, 8}, {kConditions, 6, 4}, {kConditions, 10, 0}, {kConditions, 11, 0},
+    {kConditions, 12, 8}, {kConditions, 43, 0}, {kConditions, 44, 0}, {kConditions, 45, 8},
+    {kConditions, 15, 0}, {kConditions, 17, 0}, {kConditions, 19, 0}, {kConditions, 20, 16},
+    {kConditions, 21, 16}, {kConditions, 25, 0}, {kConditions, 29, 0}, {kConditions, 33, 0},
+    {kConditions, 34, 0}, {kConditions, 38, 0}, {kConditions, 42, 0}, {kSettings4, 1, 1},
+    {kSettings4, 2, 2}, {kSettings4, 3, 3}, {kSettings4, 4, 7}, {kSettings4, 5, 6}, {kSettings4, 6, 24},
+    {kSettings4, 7, 5}, {kSettings4, 8, 8}, {kSettings4, 9, 11}, {kSettings4, 10, 25}, {kSettings4, 11, 4},
+    {kSettings4, 12, 17}, {kSettings4, 13, 18}, {kSettings4, 14, 19}, {kSettings4, 15, 20},
+    {kSettings4, 16, 21}, {kSettings4, 17, 22}, {kSettings4, 18, 14}, {kSettings4, 19, 15},
+    {kSettings4, 20, 16}, {kSettings4, 22, 10}, {kSettings4, 23, 12}, {kSettings4, 24, 9},
+    {kSettings4, 26, 13}, {kSettings4, 32, 23}, {kSettings4, 33, 26}, {kSettings4, 30, 28},
+    {kSettings4, 27, 27}, {kSettings4, 25, 29},
 };
 
 constexpr ByteStore kRace3Defaults[] = {
-    {kConditions, 5, 0x0}, {kConditions, 6, 0x0}, {kConditions, 10, 0x0}, {kConditions, 11, 0x0},
-    {kConditions, 12, 0x0}, {kConditions, 43, 0x0}, {kConditions, 44, 0x0}, {kConditions, 45, 0x0},
-    {kConditions, 15, 0x0}, {kConditions, 17, 0x0}, {kConditions, 19, 0x0}, {kConditions, 20, 0x0},
-    {kConditions, 21, 0x0}, {kConditions, 25, 0x0}, {kConditions, 29, 0x0}, {kConditions, 33, 0x0},
-    {kConditions, 34, 0x0}, {kConditions, 38, 0x0}, {kConditions, 42, 0x8}, {kConditions, 46, 0x8},
-    {kConditions, 47, 0x8}, {kConditions, 48, 0x8}, {kConditions, 49, 0x8}, {kConditions, 50, 0x8},
-    {kSettings4, 1, 0x1}, {kSettings4, 2, 0x2}, {kSettings4, 3, 0x3}, {kSettings4, 4, 0x7}, {kSettings4, 5, 0x6},
-    {kSettings4, 6, 0x18}, {kSettings4, 7, 0x5}, {kSettings4, 8, 0x8}, {kSettings4, 9, 0xb}, {kSettings4, 10, 0x19},
-    {kSettings4, 11, 0x4}, {kSettings4, 12, 0x11}, {kSettings4, 13, 0x12}, {kSettings4, 14, 0x13},
-    {kSettings4, 15, 0x14}, {kSettings4, 16, 0x15}, {kSettings4, 17, 0x16}, {kSettings4, 18, 0xe},
-    {kSettings4, 19, 0xf}, {kSettings4, 20, 0x10}, {kSettings4, 22, 0xa}, {kSettings4, 23, 0xc},
-    {kSettings4, 24, 0x9}, {kSettings4, 26, 0xd}, {kSettings4, 32, 0x17}, {kSettings4, 34, 0x1a},
-    {kSettings4, 35, 0x1b}, {kSettings4, 28, 0x1c}, {kSettings4, 25, 0x1d},
+    {kConditions, 5, 0}, {kConditions, 6, 0}, {kConditions, 10, 0}, {kConditions, 11, 0},
+    {kConditions, 12, 0}, {kConditions, 43, 0}, {kConditions, 44, 0}, {kConditions, 45, 0},
+    {kConditions, 15, 0}, {kConditions, 17, 0}, {kConditions, 19, 0}, {kConditions, 20, 0},
+    {kConditions, 21, 0}, {kConditions, 25, 0}, {kConditions, 29, 0}, {kConditions, 33, 0},
+    {kConditions, 34, 0}, {kConditions, 38, 0}, {kConditions, 42, 8}, {kConditions, 46, 8},
+    {kConditions, 47, 8}, {kConditions, 48, 8}, {kConditions, 49, 8}, {kConditions, 50, 8},
+    {kSettings4, 1, 1}, {kSettings4, 2, 2}, {kSettings4, 3, 3}, {kSettings4, 4, 7}, {kSettings4, 5, 6},
+    {kSettings4, 6, 24}, {kSettings4, 7, 5}, {kSettings4, 8, 8}, {kSettings4, 9, 11}, {kSettings4, 10, 25},
+    {kSettings4, 11, 4}, {kSettings4, 12, 17}, {kSettings4, 13, 18}, {kSettings4, 14, 19},
+    {kSettings4, 15, 20}, {kSettings4, 16, 21}, {kSettings4, 17, 22}, {kSettings4, 18, 14},
+    {kSettings4, 19, 15}, {kSettings4, 20, 16}, {kSettings4, 22, 10}, {kSettings4, 23, 12},
+    {kSettings4, 24, 9}, {kSettings4, 26, 13}, {kSettings4, 32, 23}, {kSettings4, 34, 26},
+    {kSettings4, 35, 27}, {kSettings4, 28, 28}, {kSettings4, 25, 29},
 };
 
 // Tile (x, y), with the original's 32-bit address arithmetic (x and y may
@@ -404,9 +415,9 @@ void __fastcall CGameData_InitArea(CGameData* world, void*, std::uint32_t area, 
     r.player = static_cast<std::uint8_t>(player);
     r.tile_count = 0;
     r.pile_list = 0;
-    r.settings_extra[0] = 0x14;
-    r.settings_extra[1] = 0x19;
-    r.settings_extra[2] = 0x19;
+    r.settings_extra[0] = kSettingsExtraDefaults[0];
+    r.settings_extra[1] = kSettingsExtraDefaults[1];
+    r.settings_extra[2] = kSettingsExtraDefaults[2];
     r.setting_241 = 1;
     r.counters_242[0] = 0;
     r.counters_242[1] = 0;
@@ -429,17 +440,17 @@ void __fastcall CGameData_InitArea(CGameData* world, void*, std::uint32_t area, 
     }
     StoreAll(r, kAreaDefaults);
     // The race (player record +0x4) is read again for each check.
-    const std::int32_t& race = world->players[player].race;
-    if (race == 0) {
+    const layout::Player& owner = world->players[player];
+    if (RaceOf(owner) == Race::Roman) {
         StoreAll(r, kRace0Defaults);
     }
-    if (race == 1) {
+    if (RaceOf(owner) == Race::Egyptian) {
         StoreAll(r, kRace1Defaults);
     }
-    if (race == 2) {
+    if (RaceOf(owner) == Race::Asian) {
         StoreAll(r, kRace2Defaults);
     }
-    if (race == 3) {
+    if (RaceOf(owner) == Race::Amazon) {
         StoreAll(r, kRace3Defaults);
     }
 }
@@ -709,7 +720,7 @@ std::uint32_t __fastcall CGameData_UnblockTile(CGameData* world, void*, std::uin
     if (tile.walk_region == 0) {
         CGameData_MergeTileByte10Regions(world, nullptr, x, y);
     }
-    if (tile.area == 0 && tile.owner != 0xff) {
+    if (tile.area == 0 && tile.owner != kNoOwner) {
         CGameData_JoinAreasAtTile(world, nullptr, x, y);
     }
     return CGameData_AssignWord16RegionsAround(world, nullptr, x, y);
@@ -721,12 +732,13 @@ std::uint32_t __fastcall CGameData_SetOwnerOfFreeTile(CGameData* world, void*, s
                                                       std::uint32_t owner) {
     const std::uint32_t index = x * layout::kMapRowTiles + y;
     Tile& tile = TileAt(world, x, y);
-    if (tile.owner != 0xff) {
+    if (tile.owner != kNoOwner) {
         return index;
     }
     tile.owner = static_cast<std::uint8_t>(owner);
     const std::uint32_t areaIndex = index * 3 + kTileAreaWordBytes / 8;  // * 8 = the tile's area word
-    if (tile.area != 0 || (tile.flags & kTileBlocked) != 0 || owner == 0xff) {
+    // The original compares all 32 bits of the argument here.
+    if (tile.area != 0 || (tile.flags & kTileBlocked) != 0 || owner == kNoOwner) {
         return areaIndex;
     }
     CGameData_JoinAreasAtTile(world, nullptr, x, y);
@@ -745,21 +757,32 @@ namespace {
 
 using layout::Building;
 
+using B = BuildingType;
+
 // Building::water.extra_tiles (+0x20) once the extra tiles are taken.
 constexpr std::uint8_t kExtraDone = 0xfe;
-constexpr std::uint8_t kShipyard = 0x20;
-constexpr std::uint8_t kType12 = 0x12;
+constexpr std::uint8_t kShipyard = Value(B::Shipyard);
+constexpr std::uint8_t kCastle = Value(B::Castle);
 
+// Building::water.state: the high nibble is the state.
+constexpr std::uint8_t kStateMask = 0xf0;
+constexpr std::uint8_t kStateMachineWaiting = 0x20;  // done only once unk36 <= 24
+constexpr std::uint8_t kStateTradeShip = 0x30;       // the shipyard launches a trade ship
+constexpr std::uint8_t kStateFerry = 0x40;           // ... or a ferry
+constexpr std::uint8_t kMaxUnk36ForDone = 24;        // 0x18
+constexpr std::uint16_t kNoShipPosition = 0xffff;    // Building::work_x unset
+constexpr std::uint8_t kGone = 0xff;                 // Settler::owner of a removed settler
 
 // The offset (int32 dx, dy in S3.EXE's data) from a building's position to
 // the centre of its seven extra tiles, for the four building types that
-// have them; nullptr for other types.
+// have them (the war machine workshops and the large gong: the seven tiles
+// where the machine they make stands); nullptr for other types.
 const std::int32_t* ExtraTilesOffset(std::uint8_t type) {
     switch (type) {
-        case 0x1f: return g_extraTilesCentre[0];
-        case 0x2f: return g_extraTilesCentre[1];
-        case 0x30: return g_extraTilesCentre[2];
-        case 0x32: return g_extraTilesCentre[3];
+        case Value(B::CatapultWorkshop): return g_extraTilesCentre[0];
+        case Value(B::BallistaWorkshop): return g_extraTilesCentre[1];
+        case Value(B::CannonWorkshop): return g_extraTilesCentre[2];
+        case Value(B::LargeGong): return g_extraTilesCentre[3];
         default: return nullptr;
     }
 }
@@ -770,16 +793,16 @@ constexpr std::int32_t kExtraTiles[7][2] = {{-1, -1}, {0, -1}, {-1, 0}, {0, 0}, 
 // The shipyard's ship tile: two steps from the ship position (Building::work_x/work_y, +0x30/+0x32) in
 // direction (Building::dock_direction + 3) % 6.
 void ShipTile(const Building& record, std::uint32_t& direction, std::uint32_t& x, std::uint32_t& y) {
-    direction = (record.dock_direction + 3u) % 6u;
+    direction = (record.dock_direction + kDirectionCount / 2) % kDirectionCount;  // the opposite direction
     x = NeighbourX(NeighbourX(record.work_x, direction), direction);
     y = NeighbourY(NeighbourY(record.work_y, direction), direction);
 }
 
 }  // namespace
 
-// Purpose: Takes the extra tiles a building needs beyond its site: blocks the seven tiles next to some
-// building types (probably harbours and other buildings at the water), or, for a shipyard, launches the
-// ship it has built onto its ship tile (a new ship settler). Marks the building as done.
+// Purpose: Takes the extra tiles a building needs beyond its site: blocks the seven tiles next to the war
+// machine workshops and the large gong (where the machine they make stands), or, for a shipyard, launches
+// the ship it has built onto its ship tile (a new ship settler). Marks the building as done.
 std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void*, std::uint32_t building) {
     Building& record = world->buildings[building];
     if (record.water.extra_tiles == kExtraDone) {
@@ -787,15 +810,15 @@ std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void
     }
     const std::uint8_t type = record.art;
     if (const std::int32_t* offset = ExtraTilesOffset(type)) {
-        if ((record.water.state & 0xf0) == 0x20) {
-            if (record.unk36 <= 0x18) {
+        if ((record.water.state & kStateMask) == kStateMachineWaiting) {
+            if (record.unk36 <= kMaxUnk36ForDone) {
                 record.water.extra_tiles = kExtraDone;
             }
             return building;
         }
         const std::uint32_t cx = record.x + static_cast<std::uint32_t>(offset[0]);
         const std::uint32_t cy = record.y + static_cast<std::uint32_t>(offset[1]);
-        if (type == 0x32) {
+        if (type == Value(B::LargeGong)) {
             GameDebugLog(texts::kCentreXY, cx, cy);
         }
         for (const auto& step : kExtraTiles) {
@@ -810,7 +833,7 @@ std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void
         record.water.extra_tiles = kExtraDone;
         return result;
     }
-    if (type != kShipyard || record.work_x == 0xffff) {
+    if (type != kShipyard || record.work_x == kNoShipPosition) {
         return building;
     }
     std::uint32_t direction = 0;
@@ -820,12 +843,12 @@ std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void
     if (TileAt(world, x, y).settler != 0) {
         return y;
     }
-    const std::uint8_t state = record.water.state & 0xf0;
+    const std::uint8_t state = record.water.state & kStateMask;
     std::uint32_t ship = 0;
-    if (state == 0x30) {
-        ship = CGameData_CreateSettler(world, nullptr, x, y, 0x2b, record.owner);
-    } else if (state == 0x40) {
-        ship = CGameData_CreateSettler(world, nullptr, x, y, 0x2c, record.owner);
+    if (state == kStateTradeShip) {
+        ship = CGameData_CreateSettler(world, nullptr, x, y, Value(SettlerType::TradeShip), record.owner);
+    } else if (state == kStateFerry) {
+        ship = CGameData_CreateSettler(world, nullptr, x, y, Value(SettlerType::Ferry), record.owner);
     } else {
         ship = record.work_y;  // as the original (a stale register)
     }
@@ -836,12 +859,12 @@ std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void
     Settler& settler = world->settlers[ship];
     GameDebugLog(texts::kShipProduction, static_cast<std::uint32_t>(settler.art),
                  static_cast<std::uint32_t>(settler.owner));
-    settler.job = 0x145;
+    SetJob(settler, SettlerJob::Job325);
     settler.slot = 0;
     settler.saved_animation = 0;
-    settler.direction = (direction + 2) % 6;
+    settler.direction = (direction + 2) % kDirectionCount;
     record.water.extra_tiles = kExtraDone;
-    return (direction + 2) / 6;
+    return (direction + 2) / kDirectionCount;  // the original's EAX after the division
 }
 
 // Purpose: The opposite of TakeBuildingExtraTiles, probably when such a building is removed: frees the
@@ -870,32 +893,32 @@ std::uint32_t __fastcall CGameData_ReleaseBuildingExtraTiles(CGameData* world, v
     std::uint32_t y = 0;
     ShipTile(record, direction, x, y);
     Tile& tile = TileAt(world, x, y);
-    world->settlers[tile.settler].owner = 0xff;
+    world->settlers[tile.settler].owner = kGone;
     tile.settler = 0;
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&tile));
 }
 
-// Purpose: For every building of type 0x12, unblocks one or two tiles at a fixed place next to it that
-// depends on the owner's race (race 0: (x-2, y+3); race 1: (x, y+7) and (x, y+6)). Probably repairs tiles
-// after a savegame is loaded.
+// Purpose: For every castle (type 18, 0x12), unblocks one or two tiles at a fixed place next to it that
+// depends on the owner's race (Romans: (x-2, y+3); Egyptians: (x, y+7) and (x, y+6)). Probably repairs
+// tiles after a savegame is loaded.
 std::uint32_t __fastcall CGameData_UnblockType12BuildingTiles(CGameData* world, void*) {
     std::uint32_t count = world->building_high_water;
     for (std::uint32_t building = 1; building <= count; ++building) {
         const Building& record = world->buildings[building];
-        if (record.art == kType12) {
+        if (record.art == kCastle) {
             const std::uint32_t player = record.owner;
-            const std::int32_t race = world->players[player].race;
+            const Race race = RaceOf(world->players[player]);
             const std::uint32_t x = record.x;
             const std::uint32_t y = record.y;
-            if (race == 0) {
+            if (race == Race::Roman) {
                 if ((TileFlags(world, x - 2, y + 3) & kTileBlocked) != 0) {
                     CGameData_UnblockTile(world, nullptr, x - 2, y + 3);
                 }
-            } else if (race == 1) {
+            } else if (race == Race::Egyptian) {
                 if ((TileFlags(world, x, y + 7) & kTileBlocked) != 0) {
                     CGameData_UnblockTile(world, nullptr, x, y + 7);
                 }
-                const std::uint32_t x2 = record.x;
+                const std::uint32_t x2 = record.x;  // the original reads the position again
                 const std::uint32_t y2 = record.y;
                 if ((TileFlags(world, x2, y2 + 6) & kTileBlocked) != 0) {
                     CGameData_UnblockTile(world, nullptr, x2, y2 + 6);
@@ -1127,10 +1150,10 @@ void SetUpWord16Regions(test::Context& ctx, test::WorldPair& worlds, std::uint32
     });
 }
 
-// Wrong: race 1 gets race 0's defaults.
+// Wrong: Egyptians get the Romans' defaults.
 void __fastcall WrongInitArea(CGameData* world, void* edx, std::uint32_t area, std::uint32_t player) {
     CGameData_InitArea(world, edx, area, player);
-    if (world->players[player].race == 1) {
+    if (RaceOf(world->players[player]) == Race::Egyptian) {
         StoreAll(world->areas[area], kRace0Defaults);
     }
 }
@@ -1581,7 +1604,7 @@ constexpr std::int32_t kDirectionY[6] = {0, 1, 1, 0, -1, -1};
 // areas, owners), word-16 regions labelled per connected stretch, one
 // byte-10 region over the whole map (connected, so a call may split it
 // several times), and few occupants (tile word +0x0; their settlers often
-// of type 0x29). Returns the number of owners.
+// catapults). Returns the number of owners.
 std::uint32_t SetUpExtraTilesMap(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size) {
     const std::uint32_t owners = SetUpJoinMap(ctx, worlds, size);
     SetUpWord16Regions(ctx, worlds, size);
@@ -1595,7 +1618,8 @@ std::uint32_t SetUpExtraTilesMap(test::Context& ctx, test::WorldPair& worlds, st
                 tile.settler = static_cast<std::uint16_t>(occupant);
             });
             if (occupant != 0) {
-                const auto art = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0x29 : ctx.rng().Below(0x50));
+                const auto art = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? Value(SettlerType::Catapult)
+                                                                                 : ctx.rng().Below(0x50));
                 worlds.Both([&](CGameData* w) { w->settlers[occupant].art = art; });
             }
         }
@@ -1611,7 +1635,10 @@ std::uint32_t SetUpExtraTilesMap(test::Context& ctx, test::WorldPair& worlds, st
 std::uint32_t SetUpExtraTilesBuilding(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size, bool unset) {
     const std::uint32_t building = 1 + ctx.rng().Below(kTestBuildings);
     auto record = [&](CGameData* w) -> Building& { return w->buildings[building]; };
-    static constexpr std::uint8_t kTypes[] = {0x1f, 0x2f, 0x30, 0x32, 0x20, 0x20, 0x20, 0x12};
+    static constexpr std::uint8_t kTypes[] = {Value(B::CatapultWorkshop), Value(B::BallistaWorkshop),
+                                              Value(B::CannonWorkshop),   Value(B::LargeGong),
+                                              kShipyard,                  kShipyard,
+                                              kShipyard,                  kCastle};
     const std::uint8_t type =
         ctx.rng().Chance(1, 10) ? static_cast<std::uint8_t>(ctx.rng().Below(256)) : kTypes[ctx.rng().Below(sizeof(kTypes))];
     const auto owner = static_cast<std::uint8_t>(ctx.rng().Below(20));
@@ -1680,12 +1707,12 @@ std::uint32_t __fastcall WrongTakeBuildingExtraTiles(CGameData* world, void* edx
     return result;
 }
 
-// Wrong: type 0x2f has no extra tiles.
+// Wrong: the ballista workshop has no extra tiles.
 std::uint32_t __fastcall WrongReleaseBuildingExtraTiles(CGameData* world, void* edx, std::uint32_t building) {
     std::uint8_t& type = world->buildings[building].art;
     const std::uint8_t saved = type;
-    if (type == 0x2f) {
-        type = 0x2e;
+    if (type == Value(B::BallistaWorkshop)) {
+        type = Value(B::SmallPagoda);
     }
     const std::uint32_t result = CGameData_ReleaseBuildingExtraTiles(world, edx, building);
     type = saved;
@@ -1722,13 +1749,13 @@ void CompareExtraTiles(test::Context& ctx, Fn original, Fn candidate, int cases,
     S3RE_EXPECT(release || logged > 0);
 }
 
-// Wrong: race 1 unblocks race 0's tile.
+// Wrong: Egyptians unblock the Romans' tile.
 std::uint32_t __fastcall WrongUnblockType12BuildingTiles(CGameData* world, void* edx) {
     for (std::uint32_t building = 1; building <= world->building_high_water; ++building) {
         const Building& record = world->buildings[building];
-        if (record.art == kType12) {
-            const std::int32_t race = world->players[record.owner].race;
-            if (race == 0 || race == 1) {
+        if (record.art == kCastle) {
+            const Race race = RaceOf(world->players[record.owner]);
+            if (race == Race::Roman || race == Race::Egyptian) {
                 CGameData_UnblockTile(world, edx, record.x - 2u, record.y + 3u);
             }
         }
@@ -1746,7 +1773,7 @@ void CompareUnblockType12(test::Context& ctx, WorldFn candidate, int cases) {
         const std::uint32_t count = ctx.rng().Chance(1, 10) ? 0 : 1 + ctx.rng().Below(5);
         worlds.Both([&](CGameData* w) { w->building_high_water = count; });
         for (std::uint32_t building = 1; building <= count; ++building) {
-            const auto type = static_cast<std::uint8_t>(ctx.rng().Chance(2, 3) ? kType12 : ctx.rng().Below(0x40));
+            const auto type = static_cast<std::uint8_t>(ctx.rng().Chance(2, 3) ? kCastle : ctx.rng().Below(0x40));
             const std::uint32_t player = ctx.rng().Below(20);
             const auto race =
                 static_cast<std::int32_t>(ctx.rng().Chance(1, 6) ? ctx.rng().Below(4) : ctx.rng().Below(2));

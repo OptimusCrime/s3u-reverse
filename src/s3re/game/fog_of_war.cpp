@@ -17,17 +17,20 @@
 //
 // CGameData::MarkRevealPointsSight (0x00518f20): () for every active reveal
 //   point 0..reveal_point_high_water (signed) whose own tile has sight <
-//   0x23: radius 0x23 around (x, y) with value 0x24 - distance, coordinates
+//   35: radius 35 (0x23) around (x, y) with value 36 - distance, coordinates
 //   checked signed against the map size, value compared signed. ret.
 // CGameData::MarkBuildingSight (0x00519fa0): (first) buildings first,
 //   first+16, ... <= building_high_water (unsigned) that are used, finished
-//   (buildup == 0) and of the local team: radius 0xf; type 6 0x37, types
-//   0xf / 0x10 / 0x12 with a garrison 0x25 / 0x28 / 0x2b. Only if the
-//   building's own tile has sight < radius. Coordinates unsigned. ret 4.
+//   (buildup == 0) and of the local team: radius 15; the lookout tower
+//   (type 6) 55, the small tower / large tower / castle (15, 16, 18) with a
+//   garrison 37 / 40 / 43. Only if the building's own tile has sight <
+//   radius. Coordinates unsigned. ret 4.
 // CGameData::MarkSettlerSight (0x0051a150): (first) the same for settlers
-//   (step 16 too): radius 0x14; type 0x17 0x1e for the local player's own,
-//   skipped for others of the team; 0x27 10; 0x29 / 0x2b / 0x2c 0x1e; 0x25
-//   and 0x2a never. Only if the own tile has sight < radius - 3. ret 4.
+//   (step 16 too): radius 20; a thief (type 23) 30 for the local player's
+//   own, skipped for others of the team (thieves stay unseen by allies);
+//   donkeys (39) 10; catapults, trade ships and ferries (41, 43, 44) 30;
+//   types 37 and 42 (a building's guard, the parts of a seven-tile unit)
+//   never. Only if the own tile has sight < radius - 3. ret 4.
 // CGameData::UpdateFogSlice (0x00519010): (slice 0..15) for every x and y
 //   in [slice * s, (slice + 1) * s), s = map size / 16 (signed division,
 //   re-read every step): level = min(sight, 7), or 2 for sight 0/1 when
@@ -41,11 +44,14 @@
 //   for construction progress ((buildup + 50 * b+0x20) * 249 / (50 * b+0x1f
 //   + 4): < 60 -> 0, < 120 -> 0x100, 121..179 -> 0x200, 181..250 -> 0x300,
 //   otherwise none); a pile: 0 if empty, else (amount + 0x40) << 6 + good;
-//   no number: object + 0x1800 or 0; | 0x400 on terrain 0x1c. Only AX is
+//   no number: object + 0x1800 or 0; | 0x400 on terrain 0x1c (a worn
+//   path). Only AX is
 //   defined (both callers store AX). ret 8.
 // All thiscall (ECX = world).
 
+#include "game/enums.h"
 #include "game/globals.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -66,6 +72,38 @@ using layout::Settler;
 using layout::Tile;
 
 constexpr std::uintptr_t kSeenObjectAt = 0x0051d5f0;
+
+using B = BuildingType;
+using S = SettlerType;
+
+constexpr std::uint8_t kNobody = 0xff;  // Building::owner / Settler::owner of a free record
+
+// Sight radii (in rings of the offset table).
+constexpr std::int32_t kRevealPointRadius = 35;  // 0x23; value 36 - distance
+constexpr std::uint32_t kBuildingSight = 15;
+constexpr std::uint32_t kLookoutTowerSight = 55;
+constexpr std::uint32_t kSmallTowerSight = 37;
+constexpr std::uint32_t kLargeTowerSight = 40;
+constexpr std::uint32_t kCastleSight = 43;
+constexpr std::uint32_t kSettlerSight = 20;
+constexpr std::uint32_t kFarSight = 30;     // own thieves, catapults, ships
+constexpr std::uint32_t kDonkeySight = 10;
+constexpr std::uint32_t kSettlerSightSlack = 3;  // marked again only below radius - 3
+
+// MarkBuildingSight / MarkSettlerSight handle every 16th record per call.
+constexpr std::uint32_t kRecordStride = 16;
+
+// UpdateFogSlice: the map is done in 16 slices; fog levels 0..7.
+constexpr std::int32_t kFogSlices = 16;
+constexpr std::uint32_t kMaxFogLevel = 7;
+constexpr std::uint32_t kDimFogLevel = 2;  // at most this: the remembered picture is drawn
+
+// SeenObjectAt: construction stage of a building, from its progress 0..249.
+constexpr std::uint16_t kStageFirst = 60;
+constexpr std::uint16_t kStageSecond = 120;
+constexpr std::uint16_t kStageThird = 180;
+constexpr std::uint16_t kStageLast = 250;
+constexpr std::uint8_t kTerrainWornPath = 0x1c;
 
 Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
@@ -103,7 +141,7 @@ using SeenFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint
 // Purpose: Lets the local team see around the revealed spots (probably from a spell) during the fog of war
 // cycle.
 void __fastcall CGameData_MarkRevealPointsSight(CGameData* world, void*) {
-    constexpr std::int32_t kRadius = 0x23;
+    constexpr std::int32_t kRadius = kRevealPointRadius;
     for (std::int32_t i = 0; i <= world->reveal_point_high_water; ++i) {
         const layout::RevealPoint& point = world->reveal_points[i];
         if (point.active == 0) {
@@ -115,7 +153,7 @@ void __fastcall CGameData_MarkRevealPointsSight(CGameData* world, void*) {
             continue;
         }
         for (const MapOffset* o = world->offsets; o->distance != kRadius; ++o) {
-            const std::int32_t value = 0x24 - o->distance;
+            const std::int32_t value = kRadius + 1 - o->distance;
             const std::int32_t tx = o->dx + x;
             const std::int32_t ty = o->dy + y;
             const auto size = static_cast<std::int32_t>(world->map_size);
@@ -133,21 +171,22 @@ void __fastcall CGameData_MarkRevealPointsSight(CGameData* world, void*) {
 // see farther); one sixteenth of the buildings per call.
 void __fastcall CGameData_MarkBuildingSight(CGameData* world, void*, std::uint32_t first) {
     const std::int32_t team = LocalTeam(world);
-    for (std::uint32_t i = first; i <= world->building_high_water; i += 16) {
-        const Building& b = world->buildings[i];
-        if (b.owner == 0xff || b.buildup != 0 || TeamOf(world, b.owner) != team) {
+    for (std::uint32_t i = first; i <= world->building_high_water; i += kRecordStride) {
+        const Building& building = world->buildings[i];
+        if (building.owner == kNobody || building.buildup != 0 || TeamOf(world, building.owner) != team) {
             continue;
         }
-        std::uint32_t radius = 0xf;
-        switch (b.art) {
-        case 0x06: radius = 0x37; break;
-        case 0x0f: if (b.garrison != 0) radius = 0x25; break;
-        case 0x10: if (b.garrison != 0) radius = 0x28; break;
-        case 0x12: if (b.garrison != 0) radius = 0x2b; break;
+        const bool garrisoned = building.garrison != 0;
+        std::uint32_t radius = kBuildingSight;
+        switch (TypeOf(building)) {
+        case B::LookoutTower: radius = kLookoutTowerSight; break;
+        case B::SmallTower: if (garrisoned) radius = kSmallTowerSight; break;
+        case B::LargeTower: if (garrisoned) radius = kLargeTowerSight; break;
+        case B::Castle: if (garrisoned) radius = kCastleSight; break;
         default: break;
         }
-        if (TileAt(world, b.x, b.y).sight < radius) {
-            MarkSightAround(world, b.x, b.y, radius);
+        if (TileAt(world, building.x, building.y).sight < radius) {
+            MarkSightAround(world, building.x, building.y, radius);
         }
     }
 }
@@ -156,30 +195,31 @@ void __fastcall CGameData_MarkBuildingSight(CGameData* world, void*, std::uint32
 // not at all); one sixteenth of the settlers per call.
 void __fastcall CGameData_MarkSettlerSight(CGameData* world, void*, std::uint32_t first) {
     const std::int32_t team = LocalTeam(world);
-    for (std::uint32_t i = first; i <= world->settler_high_water; i += 16) {
-        const Settler& s = world->settlers[i];
-        if (s.owner == 0xff || TeamOf(world, s.owner) != team) {
+    for (std::uint32_t i = first; i <= world->settler_high_water; i += kRecordStride) {
+        const Settler& settler = world->settlers[i];
+        if (settler.owner == kNobody || TeamOf(world, settler.owner) != team) {
             continue;
         }
-        std::uint32_t radius = 0x14;
-        switch (s.art) {
-        case 0x17:
-            if (s.owner != static_cast<std::uint32_t>(world->local_player)) {
+        std::uint32_t radius = kSettlerSight;
+        switch (TypeOf(settler)) {
+        case S::Thief:
+            // Allies don't see through another player's thief.
+            if (settler.owner != static_cast<std::uint32_t>(world->local_player)) {
                 continue;
             }
-            radius = 0x1e;
+            radius = kFarSight;
             break;
-        case 0x25:
-        case 0x2a:
+        case S::Type37:
+        case S::Type42:
             continue;
-        case 0x27: radius = 10; break;
-        case 0x29:
-        case 0x2b:
-        case 0x2c: radius = 0x1e; break;
+        case S::Donkey: radius = kDonkeySight; break;
+        case S::Catapult:
+        case S::TradeShip:
+        case S::Ferry: radius = kFarSight; break;
         default: break;
         }
-        if (TileAt(world, s.x, s.y).sight < radius - 3) {
-            MarkSightAround(world, s.x, s.y, radius);
+        if (TileAt(world, settler.x, settler.y).sight < radius - kSettlerSightSlack) {
+            MarkSightAround(world, settler.x, settler.y, radius);
         }
     }
 }
@@ -195,14 +235,15 @@ std::uint32_t __fastcall CGameData_SeenObjectAt(CGameData* world, void*, std::ui
         if (b.buildup != 0) {
             const std::int32_t progress = (b.buildup + 50 * b.site.materials_used) * 249;
             const std::int32_t total = b.site.materials_total * 50 + 4;
-            const auto q = static_cast<std::uint16_t>(progress / total);
-            if (q < 0x3c) {
+            const auto stage = static_cast<std::uint16_t>(progress / total);
+            // The gaps at exactly 120 and 180 (no stage bits) are the original's.
+            if (stage < kStageFirst) {
                 result = 0;
-            } else if (q < 0x78) {
+            } else if (stage < kStageSecond) {
                 result |= 0x100;
-            } else if (q >= 0x79 && q < 0xb4) {
+            } else if (stage > kStageSecond && stage < kStageThird) {
                 result |= 0x200;
-            } else if (q >= 0xb5 && q <= 0xfa) {
+            } else if (stage > kStageThird && stage <= kStageLast) {
                 result |= 0x300;
             }
         }
@@ -214,7 +255,7 @@ std::uint32_t __fastcall CGameData_SeenObjectAt(CGameData* world, void*, std::ui
     } else if (tile.object != 0) {
         result = static_cast<std::uint16_t>(tile.object + 0x1800);
     }
-    if (tile.terrain == 0x1c) {
+    if (tile.terrain == kTerrainWornPath) {
         result |= 0x400;
     }
     return result;
@@ -225,24 +266,25 @@ std::uint32_t __fastcall CGameData_SeenObjectAt(CGameData* world, void*, std::ui
 void __fastcall CGameData_UpdateFogSlice(CGameData* world, void*, std::uint32_t slice) {
     const auto seenObjectAt = reinterpret_cast<SeenFn>(kSeenObjectAt);
     const bool revealed = g_revealMap != 0;
-    auto rows = [world]() { return static_cast<std::uint32_t>(static_cast<std::int32_t>(world->map_size) / 16); };
+    auto rows = [world]() { return static_cast<std::uint32_t>(static_cast<std::int32_t>(world->map_size) / kFogSlices); };
     for (std::uint32_t x = 0; x < world->map_size; ++x) {
         for (std::uint32_t y = rows() * slice; y < rows() * (slice + 1); ++y) {
             Tile& tile = TileAt(world, x, y);
             std::uint32_t level = tile.sight;
+            // draw_flags bits 3..5 (0x38) hold the previous level; 0x18 = level 3.
             if (revealed) {
-                if (level <= 2 && (tile.draw_flags & 0x38) >= 0x18) {
+                if (level <= kDimFogLevel && (tile.draw_flags & 0x38) >= 0x18) {
                     tile.seen_object = static_cast<std::uint16_t>(seenObjectAt(world, nullptr, x, y));
                 }
-                level = 7;
-            } else if (level > 7) {
-                level = 7;
-            } else if (level <= 2) {
+                level = kMaxFogLevel;
+            } else if (level > kMaxFogLevel) {
+                level = kMaxFogLevel;
+            } else if (level <= kDimFogLevel) {
                 if ((tile.draw_flags & 0x38) >= 0x18) {
                     tile.seen_object = static_cast<std::uint16_t>(seenObjectAt(world, nullptr, x, y));
                 }
-                if (level < 2 && (tile.draw_flags & 0x36) != 0) {
-                    level = 2;
+                if (level < kDimFogLevel && (tile.draw_flags & 0x36) != 0) {
+                    level = kDimFogLevel;
                 }
                 // The original re-reads 0x7dfd84 here (7 if set): unreachable
                 // while no other thread changes it.
@@ -366,7 +408,8 @@ std::uint32_t SetUpRevealPoints(test::Context& ctx, test::WorldPair& worlds, std
 std::uint32_t SetUpBuildings(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size) {
     const std::uint32_t high = ctx.rng().Below(600);
     worlds.Both([&](CGameData* w) { w->building_high_water = high; });
-    static constexpr std::uint8_t kTypes[] = {6, 0xf, 0x10, 0x12, 1, 0x20};
+    static constexpr std::uint8_t kTypes[] = {Value(B::LookoutTower), Value(B::SmallTower), Value(B::LargeTower),
+                                              Value(B::Castle),       Value(B::Storehouse), Value(B::Shipyard)};
     for (std::uint32_t i = 0; i <= high; ++i) {
         const std::uint8_t owner = Owner(ctx);
         const std::uint16_t x = Coordinate(ctx, size);
@@ -390,7 +433,10 @@ std::uint32_t SetUpBuildings(test::Context& ctx, test::WorldPair& worlds, std::u
 std::uint32_t SetUpSettlers(test::Context& ctx, test::WorldPair& worlds, std::uint32_t size) {
     const std::uint32_t high = ctx.rng().Below(2000);
     worlds.Both([&](CGameData* w) { w->settler_high_water = high; });
-    static constexpr std::uint8_t kTypes[] = {0x17, 0x25, 0x27, 0x29, 0x2a, 0x2b, 0x2c, 1, 0x10, 0x30};
+    static constexpr std::uint8_t kTypes[] = {Value(S::Thief),     Value(S::Type37),    Value(S::Donkey),
+                                              Value(S::Catapult),  Value(S::Type42),    Value(S::TradeShip),
+                                              Value(S::Ferry),     Value(S::Digger),    Value(S::Farmer),
+                                              48 /* past the last type */};
     for (std::uint32_t i = 0; i <= high; ++i) {
         const std::uint8_t owner = Owner(ctx);
         const std::uint16_t x = Coordinate(ctx, size);
@@ -421,7 +467,8 @@ void SetUpSeenTiles(test::Context& ctx, test::WorldPair& worlds, std::uint32_t s
                 number = static_cast<std::uint16_t>(1 + ctx.rng().Below(31999));
                 flags &= static_cast<std::uint8_t>(~layout::kTileHasBuilding);
             }
-            const auto terrain = static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? 0x1c : ctx.rng().Below(256));
+            const auto terrain =
+                static_cast<std::uint8_t>(ctx.rng().Chance(1, 4) ? kTerrainWornPath : ctx.rng().Below(256));
             const auto object = static_cast<std::uint8_t>(ctx.rng().Chance(1, 3) ? 0 : ctx.rng().Below(256));
             worlds.Both([&](CGameData* w) {
                 Tile& t = w->tiles[x][y];
@@ -448,12 +495,12 @@ void SetUpProgress(test::Context& ctx, test::WorldPair& worlds) {
 }
 
 void __fastcall WrongMarkBuildingSight(CGameData* world, void*, std::uint32_t first) {
-    // Wrong: towers of type 0x10 see as far as type 0xf.
+    // Wrong: large towers see as far as small towers.
     for (std::uint32_t i = first; i <= world->building_high_water; i += 16) {
-        if (world->buildings[i].art == 0x10) {
-            world->buildings[i].art = 0xf;
+        if (world->buildings[i].art == Value(B::LargeTower)) {
+            world->buildings[i].art = Value(B::SmallTower);
             CGameData_MarkBuildingSight(world, nullptr, i);
-            world->buildings[i].art = 0x10;
+            world->buildings[i].art = Value(B::LargeTower);
         }
     }
     CGameData_MarkBuildingSight(world, nullptr, first);

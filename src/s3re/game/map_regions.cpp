@@ -32,6 +32,7 @@
 //      read even for x or y near 0 (two tiles before the map: other world
 //      fields), like the original.
 
+#include "game/enums.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
@@ -54,6 +55,10 @@ constexpr std::uint8_t kFlagNearHarbourWater = layout::kTileFlag80;
 constexpr std::uint8_t kNoOwner = 0xff;
 // Entries 0..60 of the offset table world->offsets (re/structs.md "MapOffset").
 constexpr std::uint32_t kWaterMarkEntries = 61;
+// Pass 3: water (terrain 0..7) carrying one of the objects 13..16 (0x0d..0x10).
+constexpr std::uint8_t kLastWaterTerrain = 7;
+constexpr std::uint8_t kFirstWaterObject = 13;
+constexpr std::uint8_t kLastWaterObject = 16;
 
 constexpr std::int32_t kRow = static_cast<std::int32_t>(kTileRowBytes);  // x + 1
 constexpr std::int32_t kColumn = static_cast<std::int32_t>(kTileBytes);   // y + 1
@@ -89,14 +94,14 @@ bool IsMarkedAndFree(std::uint8_t flags) {
     return (flags & kFlagMark) != 0 && (flags & kFlagBlocked) == 0;
 }
 
-// Pass 3's object test: water tiles carrying objects 0x0d..0x10 (probably
-// harbour or ship-related objects) mark their surroundings.
+// Pass 3's object test: water tiles carrying objects 13..16 (0x0d..0x10;
+// probably harbour or ship-related objects) mark their surroundings.
 void MarkSurroundingsOfWaterObjects(CGameData* world) {
     ForEachTile(world, [&](std::uint32_t x, std::uint32_t y) {
         Tile& tile = TileAt(world, x, y);
         tile.flags |= kFlagMark;
         const std::uint8_t object = tile.object;
-        if (tile.terrain > 7 || object < 0x0d || object > 0x10) {
+        if (tile.terrain > kLastWaterTerrain || object < kFirstWaterObject || object > kLastWaterObject) {
             return;
         }
         for (std::uint32_t entry = 0; entry < kWaterMarkEntries; ++entry) {
@@ -121,12 +126,12 @@ constexpr std::int32_t kTwoRings[] = {
 // `tile` is a tile's 32-bit byte offset from the world (TileOffset); the
 // ring tiles of edge tiles lie before or after the map.
 bool HasRoomAround(CGameData* world, std::uint32_t tile) {
-    if ((TileAtOffset(world, tile).terrain & 0xf0) == 0x20) {
+    if ((TileAtOffset(world, tile).terrain & kTerrainClassMask) == kTerrainClassMountain) {
         return false;
     }
     for (const std::int32_t step : kTwoRings) {
         const Tile& other = TileAtOffset(world, tile + static_cast<std::uint32_t>(step));
-        if ((other.flags & kFlagBlocked) != 0 || (other.terrain & 0xf0) == 0x20) {
+        if ((other.flags & kFlagBlocked) != 0 || (other.terrain & kTerrainClassMask) == kTerrainClassMountain) {
             return false;
         }
     }
@@ -289,7 +294,7 @@ void CompareBuildRegions(test::Context& ctx, BuildRegionsFn candidate, int cases
 std::uint32_t __fastcall WrongBuildRegions(CGameData* world, void*) {
     ForEachTile(world, [&](std::uint32_t x, std::uint32_t y) {
         Tile& tile = TileAt(world, x, y);
-        if (tile.terrain <= 7 && tile.object >= 0x0d && tile.object <= 0x10) {
+        if (tile.terrain <= kLastWaterTerrain && tile.object >= kFirstWaterObject && tile.object <= kLastWaterObject) {
             tile.object = 0;
         }
     });

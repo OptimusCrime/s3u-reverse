@@ -78,7 +78,7 @@
 //   offset table entries 0..18 (the tile and two rings), a tile on the map
 //   (unsigned compares) without a region id (word +0x16 == 0) whose own 19
 //   offset tiles on the map are all unblocked (flag bit 0 of +0xa) and not
-//   of terrain kind 0x20 (terrain & 0xf0) gets a region through
+//   of terrain class 0x20 (mountain; terrain & 0xf0) gets a region through
 //   CGameData::MergeTileWord16Regions. EAX (one caller tail-returns it) =
 //   world + 0x110a6bc (the loop's table pointer). ret 8.
 // CGameData::SplitTileWord16Region (0x0051c1f0): (x, y): the tile leaves
@@ -108,6 +108,7 @@
 //   ret 8.
 // All thiscall (ECX = world).
 
+#include "game/enums.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
@@ -129,6 +130,17 @@ namespace {
 using layout::kTileBlocked;
 constexpr std::uint32_t kTileRingEntries = 10000;
 static_assert(sizeof(CGameData::tile_ring) / sizeof(layout::TilePosition) == kTileRingEntries);
+
+// Offset table entries 1..6 are the six neighbours of a tile, 0..18 the tile
+// and the two rings around it.
+constexpr std::uint32_t kFirstNeighbourEntry = 1;
+constexpr std::uint32_t kLastNeighbourEntry = 6;
+constexpr std::uint32_t kTwoRingEntries = 19;
+constexpr std::uint32_t kLastDirection = kDirectionCount - 1;
+
+// The id tables (walk_region_used, wide_region_used): 1 = id in use.
+constexpr std::uint8_t kIdFree = 0;
+constexpr std::uint8_t kIdInUse = 1;
 
 // Tile (x, y) with the original's 32-bit arithmetic (neighbours from the
 // offset table and test frames off the map wrap).
@@ -361,7 +373,7 @@ std::uint32_t OffsetNeighbourY(CGameData* world, std::uint32_t y, std::uint32_t 
 std::uint32_t __fastcall CGameData_MergeTileWord16Regions(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     std::uint32_t count = 0;
     std::uint32_t first = 0;
-    for (std::uint32_t k = 1; k <= 6; ++k) {
+    for (std::uint32_t k = kFirstNeighbourEntry; k <= kLastNeighbourEntry; ++k) {
         const std::uint32_t nx = OffsetNeighbourX(world, x, k);
         const std::uint32_t ny = OffsetNeighbourY(world, y, k);
         const std::uint32_t id = TileAt(world, nx, ny).wide_region;
@@ -372,7 +384,7 @@ std::uint32_t __fastcall CGameData_MergeTileWord16Regions(CGameData* world, void
             first = id;
             TileAt(world, x, y).wide_region = static_cast<std::uint16_t>(id);
         } else if (id != first) {
-            world->wide_region_used[id] = 0;
+            world->wide_region_used[id] = kIdFree;
             CGameData_FloodFillTileWord16(world, nullptr, nx, ny, first);
         }
     }
@@ -380,7 +392,7 @@ std::uint32_t __fastcall CGameData_MergeTileWord16Regions(CGameData* world, void
         return 0;
     }
     const std::uint32_t id = CGameData_FindFreeId8192(world, nullptr);
-    world->wide_region_used[id] = 1;
+    world->wide_region_used[id] = kIdInUse;
     TileAt(world, x, y).wide_region = static_cast<std::uint16_t>(id);
     return id;
 }
@@ -389,7 +401,7 @@ std::uint32_t __fastcall CGameData_MergeTileWord16Regions(CGameData* world, void
 std::uint32_t __fastcall CGameData_MergeTileByte10Regions(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     std::uint32_t count = 0;
     std::uint32_t first = 0;
-    for (std::uint32_t k = 1; k <= 6; ++k) {
+    for (std::uint32_t k = kFirstNeighbourEntry; k <= kLastNeighbourEntry; ++k) {
         const std::uint32_t nx = OffsetNeighbourX(world, x, k);
         const std::uint32_t ny = OffsetNeighbourY(world, y, k);
         const layout::Tile& tile = TileAt(world, nx, ny);
@@ -401,7 +413,7 @@ std::uint32_t __fastcall CGameData_MergeTileByte10Regions(CGameData* world, void
             first = id;
             TileAt(world, x, y).walk_region = static_cast<std::uint8_t>(id);
         } else if (id != first) {
-            world->walk_region_used[id] = 0;
+            world->walk_region_used[id] = kIdFree;
             CGameData_FloodFillTileByte10(world, nullptr, nx, ny, first);
         }
     }
@@ -409,7 +421,7 @@ std::uint32_t __fastcall CGameData_MergeTileByte10Regions(CGameData* world, void
         return count;  // unlike MergeTileWord16Regions, which returns 0 here
     }
     const std::uint32_t id = CGameData_FindFreeId256(world, nullptr);
-    world->walk_region_used[id] = 1;
+    world->walk_region_used[id] = kIdInUse;
     TileAt(world, x, y).walk_region = static_cast<std::uint8_t>(id);
     return id;
 }
@@ -425,10 +437,10 @@ S3RE_HOOK(0x0051ca00, CGameData_MergeTileByte10Regions, MergeFn, Original_CGameD
           CGameData_MergeTileByte10Regions);
 
 // Purpose: After something changed near a tile, gives region numbers to the nearby tiles that should have
-// one now (not blocked, not water-like terrain) but don't yet.
+// one now (no blocked tile or mountain within two steps) but don't yet.
 std::uint32_t __fastcall CGameData_AssignWord16RegionsAround(CGameData* world, void*, std::uint32_t x,
                                                               std::uint32_t y) {
-    constexpr std::uint32_t kEntries = 19;
+    constexpr std::uint32_t kEntries = kTwoRingEntries;
     for (std::uint32_t k = 0; k < kEntries; ++k) {
         const std::uint32_t size = MapSize(world);
         const std::uint32_t nx = OffsetNeighbourX(world, x, k);
@@ -444,7 +456,7 @@ std::uint32_t __fastcall CGameData_AssignWord16RegionsAround(CGameData* world, v
                 continue;
             }
             const layout::Tile& tile = TileAt(world, mx, my);
-            if ((tile.flags & kTileBlocked) != 0 || (tile.terrain & 0xf0) == 0x20) {
+            if ((tile.flags & kTileBlocked) != 0 || (tile.terrain & kTerrainClassMask) == kTerrainClassMountain) {
                 clear = false;
             }
         }
@@ -497,13 +509,13 @@ void SplitTileRegion(CGameData* world, std::uint32_t x, std::uint32_t y) {
     const std::uint32_t old = id(x, y);
     Regions::Field(TileAt(world, x, y)) = 0;
     std::uint32_t same = 0;
-    for (std::uint32_t k = 1; k <= 6; ++k) {
+    for (std::uint32_t k = kFirstNeighbourEntry; k <= kLastNeighbourEntry; ++k) {
         if (id(OffsetNeighbourX(world, x, k), OffsetNeighbourY(world, y, k)) == old) {
             ++same;
         }
     }
     if (same == 0) {
-        Regions::Ids(world)[old] = 0;
+        Regions::Ids(world)[old] = kIdFree;
         return;
     }
     if (same < 2 || same > 4) {
@@ -511,7 +523,7 @@ void SplitTileRegion(CGameData* world, std::uint32_t x, std::uint32_t y) {
     }
     // Flag the neighbours in the region; remember the last one.
     std::uint32_t last = 0;
-    for (std::uint32_t d = 0; d < 6; ++d) {
+    for (std::uint32_t d = 0; d < kDirectionCount; ++d) {
         const std::uint32_t nx = NeighbourX(x, d);
         const std::uint32_t ny = NeighbourY(y, d);
         if (!onMap(nx, ny)) {
@@ -526,7 +538,9 @@ void SplitTileRegion(CGameData* world, std::uint32_t x, std::uint32_t y) {
     }
     const std::uint32_t sx = NeighbourX(x, last);
     const std::uint32_t sy = NeighbourY(y, last);
-    std::uint32_t direction = last + 3 >= 6 ? last - 3 : last + 3;  // facing the tile
+    // Facing the tile: the opposite direction.
+    constexpr std::uint32_t kHalfTurn = kDirectionCount / 2;
+    std::uint32_t direction = last + kHalfTurn >= kDirectionCount ? last - kHalfTurn : last + kHalfTurn;
     flags(sx, sy) = static_cast<std::uint8_t>(flags(sx, sy) & ~kTileSplitMark);
     std::uint32_t cx = sx;
     std::uint32_t cy = sy;
@@ -548,20 +562,20 @@ void SplitTileRegion(CGameData* world, std::uint32_t x, std::uint32_t y) {
                     started = true;
                     firstDirection = direction;
                 }
-                direction = direction == 0 ? 5 : direction - 1;
+                direction = direction == 0 ? kLastDirection : direction - 1;
                 flags(nx, ny) = static_cast<std::uint8_t>(flags(nx, ny) & ~kTileSplitMark);
                 break;
             }
-            if (tries == 6 && !started) {
+            if (tries == kDirectionCount && !started) {
                 split = true;
             }
-            direction = direction == 5 ? 0 : direction + 1;
-            if (tries == 6) {
+            direction = direction == kLastDirection ? 0 : direction + 1;
+            if (tries == kDirectionCount) {
                 break;
             }
         }
         bool flagged = false;
-        for (std::uint32_t d = 0; d < 6 && !flagged; ++d) {
+        for (std::uint32_t d = 0; d < kDirectionCount && !flagged; ++d) {
             flagged = (flags(NeighbourX(x, d), NeighbourY(y, d)) & kTileSplitMark) != 0;
         }
         if (!flagged) {
@@ -571,12 +585,12 @@ void SplitTileRegion(CGameData* world, std::uint32_t x, std::uint32_t y) {
             break;
         }
     }
-    for (std::uint32_t d = 0; d < 6; ++d) {
+    for (std::uint32_t d = 0; d < kDirectionCount; ++d) {
         const std::uint32_t nx = NeighbourX(x, d);
         const std::uint32_t ny = NeighbourY(y, d);
         if (id(nx, ny) == old && (flags(nx, ny) & kTileSplitMark) != 0) {
             const std::uint32_t newId = Regions::NewId(world);
-            Regions::Ids(world)[newId] = 1;
+            Regions::Ids(world)[newId] = kIdInUse;
             Regions::Fill(world, nx, ny, newId);
         }
     }
@@ -844,7 +858,7 @@ void SetUpRoomyFill(test::Context& ctx, test::WorldPair& worlds, std::uint32_t s
         }
         worlds.Both([&](CGameData* w) { TileAt(w, tx, ty).flags = flags; });
         std::uint8_t terrain = static_cast<std::uint8_t>(ctx.rng().Next32());
-        if ((terrain & 0xf0) == 0x20 && !ctx.rng().Chance(1, 20)) {
+        if ((terrain & kTerrainClassMask) == kTerrainClassMountain && !ctx.rng().Chance(1, 20)) {
             terrain ^= 0x40;
         }
         worlds.Both([&](CGameData* w) { TileAt(w, tx, ty).terrain = terrain; });
@@ -1184,7 +1198,7 @@ void __fastcall WrongSplitTileWord16Region(CGameData* world, void*, std::uint32_
     const std::uint32_t old = TileAt(world, x, y).wide_region;
     TileAt(world, x, y).wide_region = 0;
     std::uint32_t same = 0;
-    for (std::uint32_t k = 1; k <= 6; ++k) {
+    for (std::uint32_t k = kFirstNeighbourEntry; k <= kLastNeighbourEntry; ++k) {
         if (TileAt(world, OffsetNeighbourX(world, x, k), OffsetNeighbourY(world, y, k)).wide_region == old) {
             ++same;
         }

@@ -2,14 +2,15 @@
 //
 // CGameData::ResetCivilianOnTile (0x0050e980): (x, y) thiscall, ret 8. If a
 //   settler stands on the tile (word +0x0), belongs to the tile's owner
-//   (+0x8) and its type has class 0 (civilians, S3.EXE 0x658f64):
+//   (+0x8) and its type has class Civilian (0, S3.EXE 0x658f64):
 //   ResetSettlerToIdle(settler). EAX not used by callers.
 // CGameData::LosePileOnTile (0x00504f70): (x, y) thiscall, ret 8. Only for a
 //   tile in a land area (word +0x14 in 1..0x7fff) with a pile (word +0x2 not
 //   0, flag 0x20 "building" clear). A dropped pile (kind +0x4 == 0xfe): if
 //   units are leaving it (+0x2), every settler (1..high water, re-read) with
-//   an owner and one of the fetching jobs 0xa, 0xb, 0xa9, 0x4c, 0x4d, 0x68,
-//   0x69 whose target (+0x24/+0x26) is the pile's position gets
+//   an owner and one of the fetching jobs 10, 11, 169, 76, 77, 104, 105
+//   (0xa, 0xb, 0xa9, 0x4c, 0x4d, 0x68, 0x69; IsFetchingJob below) whose
+//   target (+0x24/+0x26) is the pile's position gets
 //   ResetSettlerToIdle; DebugLog "Pile %u Lost, eco %u"; the pile is
 //   unlinked from its area's list for its goods type (prev +0xa / next +0xc,
 //   head areas[area].piles_by_goods[good]). Any other kind is only logged
@@ -24,9 +25,11 @@
 // All tile positions use the original's 32-bit tile arithmetic.
 
 #include "game/debug_log.h"
+#include "game/enums.h"
 #include "game/replacements.h"
 #include "game/tables.h"
 #include "game/texts.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -45,11 +48,10 @@ namespace {
 using layout::Pile;
 using layout::Settler;
 using layout::Tile;
+using Job = SettlerJob;
 
-
-constexpr std::uint8_t kFree = 0xff;
-constexpr std::uint8_t kPileDropped = 0xfe;
-
+constexpr std::uint8_t kFree = 0xff;         // Tile::owner / Settler::owner of nobody
+constexpr std::uint8_t kPileDropped = 0xfe;  // Pile::art of a pile lying on the ground
 
 // Callees reached through their S3.EXE addresses (so that the tests can
 // replace them by recording stubs): ResetSettlerToIdle belongs to another
@@ -74,7 +76,13 @@ bool IsLandArea(std::uint16_t area) {
 // The jobs of settlers on their way to take goods from a pile (carriers and
 // workers; the pile is their target position).
 bool IsFetchingJob(std::uint16_t job) {
-    return job == 0x0a || job == 0x0b || job == 0xa9 || job == 0x4c || job == 0x4d || job == 0x68 || job == 0x69;
+    for (const Job fetching : {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::Job76,
+                               Job::Job77, Job::CarrierWalkToTool, Job::CarrierTakeTool}) {
+        if (job == Value(fetching)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace
@@ -93,7 +101,7 @@ void __fastcall CGameData_ResetCivilianOnTile(CGameData* world, void*, std::uint
         return;
     }
     const Settler& record = world->settlers[settler];
-    if (record.owner != tile.owner || g_settlerTypeClass[record.art] != 0) {
+    if (record.owner != tile.owner || ClassOf(record) != SettlerClass::Civilian) {
         return;
     }
     ResetSettlerToIdle(world, settler);
@@ -178,23 +186,34 @@ using SetOwnerFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::
                                               std::uint32_t owner);
 
 constexpr std::int32_t kScratchRadius = 50;  // the scratch covers (x - 50 .. x + 50, y - 50 .. y + 50)
-constexpr std::int32_t kScratchSide = 101;
+constexpr std::int32_t kScratchSide = 2 * kScratchRadius + 1;
+constexpr std::int32_t kScratchLast = kScratchSide - 1;
+constexpr std::int32_t kBuildingSearchRadius = 100;  // buildings whose claims can reach the window
+constexpr std::int32_t kBorderRadius = kScratchRadius + 1;
 constexpr std::uint32_t kNoPlayer = 0xff;
 
-// Influence of a garrisoned military building: number of offset-table
-// entries (rings around it) it claims.
-std::uint32_t InfluenceEntries(const layout::Building& b) {
-    std::uint32_t entries = 0;
-    if (b.art == 0xf && b.garrison != 0 && b.buildup == 0) {
-        entries = 0xdac;
+// A claim: 255 on the building's tile and its neighbours, else 50 - distance
+// added to what is there, capped at 254.
+constexpr std::uint8_t kFullClaim = 255;
+constexpr std::int32_t kMaxAddedClaim = 254;
+constexpr std::int32_t kClaimStrength = 50;
+
+// Influence of a garrisoned, finished military building: the number of
+// offset-table entries (rings around it) it claims.
+constexpr std::uint32_t kSmallTowerEntries = 3500;  // 0xdac
+constexpr std::uint32_t kLargeTowerEntries = 4000;  // 0xfa0
+constexpr std::uint32_t kCastleEntries = 5000;      // 0x1388
+
+std::uint32_t InfluenceEntries(const layout::Building& building) {
+    if (building.garrison == 0 || building.buildup != 0) {
+        return 0;
     }
-    if (b.art == 0x10 && b.garrison != 0 && b.buildup == 0) {
-        entries = 0xfa0;
+    switch (TypeOf(building)) {
+    case BuildingType::SmallTower: return kSmallTowerEntries;
+    case BuildingType::LargeTower: return kLargeTowerEntries;
+    case BuildingType::Castle: return kCastleEntries;
+    default: return 0;
     }
-    if (b.art == 0x12 && b.garrison != 0 && b.buildup == 0) {
-        entries = 0x1388;
-    }
-    return entries;
 }
 
 // The byte of the scratch for player byte `player` in cell (i, j) of the
@@ -237,8 +256,8 @@ std::uint32_t __fastcall CGameData_RecalculateTerritory(CGameData* world, void*,
     const std::int32_t mapSize = static_cast<std::int32_t>(world->map_size);
 
     // 1. Claims of the military buildings within 100 tiles.
-    for (std::int32_t i = -100; i <= 100; ++i) {
-        for (std::int32_t j = -100; j <= 100; ++j) {
+    for (std::int32_t i = -kBuildingSearchRadius; i <= kBuildingSearchRadius; ++i) {
+        for (std::int32_t j = -kBuildingSearchRadius; j <= kBuildingSearchRadius; ++j) {
             const std::int32_t tx = cx + i;
             const std::int32_t ty = cy + j;
             if (tx < 0 || tx >= mapSize || ty < 0 || ty >= mapSize) {
@@ -248,23 +267,23 @@ std::uint32_t __fastcall CGameData_RecalculateTerritory(CGameData* world, void*,
             if (tile.object_number == 0 || (tile.flags & layout::kTileHasBuilding) == 0) {
                 continue;
             }
-            const layout::Building& b = world->buildings[tile.object_number];
-            const std::uint32_t entries = InfluenceEntries(b);
-            const std::uint32_t owner = b.owner;
+            const layout::Building& building = world->buildings[tile.object_number];
+            const std::uint32_t entries = InfluenceEntries(building);
+            const std::uint32_t owner = building.owner;
             for (std::uint32_t k = 0; k < entries; ++k) {
                 const layout::MapOffset& offset = world->offsets[k];
                 const std::int32_t ci = offset.dx + i + kScratchRadius;
                 const std::int32_t cj = offset.dy + j + kScratchRadius;
-                if (ci < 0 || ci > 100 || cj < 0 || cj > 100) {
+                if (ci < 0 || ci > kScratchLast || cj < 0 || cj > kScratchLast) {
                     continue;
                 }
                 std::uint8_t& cell = ScratchCell(world, ci, cj, owner);
                 if (offset.distance <= 1) {
-                    cell = 0xff;
+                    cell = kFullClaim;
                 } else {
-                    std::int32_t value = static_cast<std::int32_t>(cell) - offset.distance + 50;
-                    if (value > 0xfe) {
-                        value = 0xfe;
+                    std::int32_t value = static_cast<std::int32_t>(cell) - offset.distance + kClaimStrength;
+                    if (value > kMaxAddedClaim) {
+                        value = kMaxAddedClaim;
                     }
                     cell = static_cast<std::uint8_t>(value);
                 }
@@ -315,8 +334,8 @@ std::uint32_t __fastcall CGameData_RecalculateTerritory(CGameData* world, void*,
 
     // 3. Border marks.
     std::uint32_t result = 0;
-    for (std::int32_t i = -51; i <= 51; ++i) {
-        for (std::int32_t j = -51; j <= 51; ++j) {
+    for (std::int32_t i = -kBorderRadius; i <= kBorderRadius; ++i) {
+        for (std::int32_t j = -kBorderRadius; j <= kBorderRadius; ++j) {
             result = CGameData_UpdateBorderFlagsAround(world, nullptr, x + static_cast<std::uint32_t>(i),
                                                        y + static_cast<std::uint32_t>(j));
         }
@@ -335,11 +354,11 @@ namespace {
 
 constexpr std::size_t kTestWorld = offsetof(CGameData, settlers) + 200 * sizeof(Settler);
 
-// Recording stubs for ResetSettlerToIdle (the settler's job becomes 1, so
-// that a scan doesn't find him twice) and SplitAreaAtTile (no effect).
+// Recording stubs for ResetSettlerToIdle (the settler's job becomes Nothing,
+// so that a scan doesn't find him twice) and SplitAreaAtTile (no effect).
 void InstallStubs(test::CalleeStubs& stubs) {
     stubs.Install<1, kResetSettlerToIdle>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
-        w->settlers[args[0] & 0xffff].job = 1;
+        SetJob(w->settlers[args[0] & 0xffff], Job::Nothing);
         return 0x5a5a0001u;
     });
     stubs.Install<2, kSplitAreaAtTile>();
@@ -392,7 +411,11 @@ TileCase SetUpTile(test::Context& ctx, test::WorldPair& worlds) {
         p.next = next;
     });
     for (std::uint32_t n = 1; n <= 150; ++n) {
-        static constexpr std::uint16_t kJobs[] = {0x0a, 0x0b, 0xa9, 0x4c, 0x4d, 0x68, 0x69, 0x4e, 0x1, 0x37};
+        static constexpr std::uint16_t kJobs[] = {
+            Value(Job::CarrierWalkToPile), Value(Job::CarrierAtPile), Value(Job::CarrierPickUp),
+            Value(Job::Job76),             Value(Job::Job77),         Value(Job::CarrierWalkToTool),
+            Value(Job::CarrierTakeTool),   Value(Job::Job78),         Value(Job::Nothing),
+            Value(Job::UnitIdle)};
         const auto job = ctx.rng().Chance(3, 4) ? kJobs[ctx.rng().Below(10)] : static_cast<std::uint16_t>(ctx.rng().Below(0x195));
         const auto sowner = static_cast<std::uint8_t>(ctx.rng().Chance(1, 6) ? kFree : ctx.rng().Chance(1, 2) ? owner : ctx.rng().Below(8));
         const auto tx = static_cast<std::uint16_t>(ctx.rng().Chance(2, 3) ? px : ctx.rng().Below(384));
@@ -445,19 +468,19 @@ void __fastcall WrongResetCivilianOnTile(CGameData* world, void* edx, std::uint3
     tile.owner = saved;
 }
 
-// Wrong: ignores job 0xa9.
+// Wrong: ignores job CarrierPickUp.
 void __fastcall WrongLosePileOnTile(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y) {
     std::vector<std::uint32_t> changed;
     for (std::uint32_t n = 1; n <= world->settler_high_water && n < 200; ++n) {
-        if (world->settlers[n].job == 0xa9) {
-            world->settlers[n].job = 0x3;
+        if (JobOf(world->settlers[n]) == Job::CarrierPickUp) {
+            SetJob(world->settlers[n], Job::WalkToWork);
             changed.push_back(n);
         }
     }
     CGameData_LosePileOnTile(world, edx, x, y);
     for (const std::uint32_t n : changed) {
-        if (world->settlers[n].job == 0x3) {
-            world->settlers[n].job = 0xa9;
+        if (JobOf(world->settlers[n]) == Job::WalkToWork) {
+            SetJob(world->settlers[n], Job::CarrierPickUp);
         }
     }
 }
@@ -637,7 +660,9 @@ void CompareRecalculate(test::Context& ctx, TileFn candidate, int cases) {
         });
         const std::uint32_t count = ctx.rng().Below(7);
         for (std::uint32_t k = 0; k < count; ++k) {
-            static constexpr std::uint8_t kTypes[] = {0xf, 0x10, 0x12, 0x12, 3};
+            static constexpr std::uint8_t kTypes[] = {Value(BuildingType::SmallTower), Value(BuildingType::LargeTower),
+                                                      Value(BuildingType::Castle), Value(BuildingType::Castle),
+                                                      Value(BuildingType::Stonecutter)};
             const std::uint8_t type = kTypes[ctx.rng().Below(5)];
             const auto bx = static_cast<std::int32_t>(cx + ctx.rng().Range(-95, 95));
             const auto by = static_cast<std::int32_t>(cy + ctx.rng().Range(-95, 95));
@@ -716,22 +741,27 @@ void CompareCycle(test::Context& ctx, CycleCrushFn candidate, int cases, int& re
             w->pending_event_index = {0, 0};
             w->event_index = {0, 0};
         });
-        static constexpr std::uint8_t kSiteTypes[] = {3, 4, 0x1a, 0x13, 7, 0x22};
+        static constexpr std::uint8_t kSiteTypes[] = {
+            Value(BuildingType::Stonecutter), Value(BuildingType::Sawmill),  Value(BuildingType::SmallResidence),
+            Value(BuildingType::Barracks),    Value(BuildingType::CoalMine), Value(BuildingType::Marketplace)};
         const std::uint8_t siteType = kSiteTypes[ctx.rng().Below(6)];
         // Garrisons: soldiers 1..3 (T0), 4..6 (T1) chained by next.
-        PlaceBuilding(worlds, 1, 0x12, 0, 0, static_cast<std::uint16_t>(x0), static_cast<std::uint16_t>(y0), 0, 1);
-        PlaceBuilding(worlds, 2, static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0x10 : 0xf), 1, 1,
+        PlaceBuilding(worlds, 1, Value(BuildingType::Castle), 0, 0, static_cast<std::uint16_t>(x0), static_cast<std::uint16_t>(y0), 0, 1);
+        PlaceBuilding(worlds, 2,
+                      ctx.rng().Chance(1, 2) ? Value(BuildingType::LargeTower) : Value(BuildingType::SmallTower), 1, 1,
                       static_cast<std::uint16_t>(x1), static_cast<std::uint16_t>(y1), 0, 4);
         PlaceBuilding(worlds, 3, siteType, 1, 1, static_cast<std::uint16_t>(xs), static_cast<std::uint16_t>(ys),
                       static_cast<std::uint8_t>(1 + ctx.rng().Below(3)), 0);
         for (std::uint32_t n = 1; n <= 60; ++n) {
-            const auto job = static_cast<std::uint16_t>(n <= 6 ? 0x8c : ctx.rng().Chance(1, 2) ? 5 : 1);
+            const auto job = static_cast<std::uint16_t>(n <= 6                   ? Value(Job::Job140)
+                                                        : ctx.rng().Chance(1, 2) ? Value(Job::DiggerDig)
+                                                                                 : Value(Job::Nothing));
             const auto building = static_cast<std::uint16_t>(n <= 3 ? 1 : n <= 6 ? 2 : ctx.rng().Chance(2, 3) ? 3 : 0);
             const auto next = static_cast<std::uint16_t>(n == 3 || n == 6 ? 0 : n < 6 ? n + 1 : 0);
             worlds.Both([&](CGameData* w) {
                 layout::Settler& s = w->settlers[n];
                 s.owner = static_cast<std::uint8_t>(n <= 3 ? 0 : 1);
-                s.art = static_cast<std::uint8_t>(n <= 6 ? 0x20 : 1);
+                s.art = n <= 6 ? Value(SettlerType::Swordsman2) : Value(SettlerType::Digger);
                 s.job = job;
                 s.building = building;
                 s.next = next;
