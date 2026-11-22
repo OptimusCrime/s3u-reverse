@@ -51,7 +51,6 @@ using Job = SettlerJob;
 enum class JobResult {
     Next,   // on to the next settler (0x4f9202)
     Again,  // run the same settler again this step (0x4f9214, or the again flag [esp+50h] set)
-    NotImplemented,  // development only: the handler is not written yet (removed once all are)
 };
 
 // Stack slots of the original's frame that keep their value from one

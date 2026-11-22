@@ -919,7 +919,7 @@ JobResult RunDrinkJobs(SettlerContext& ctx) {
     case Job::Job294: return WorkshopTake(ctx, 0, G::Board, Job::Job295, 0x10e);
     case Job::Job295: return CharcoalProduce(ctx);
     case Job::Job286: return WorkshopWait(ctx, kCharcoalCheck);
-    default: return JobResult::NotImplemented;
+    default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
 

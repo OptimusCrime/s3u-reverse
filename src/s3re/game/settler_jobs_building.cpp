@@ -1244,7 +1244,7 @@ JobResult RunBuildingJobs(SettlerContext& ctx) {
     case J::Job46: return ForesterAtSpot(ctx);
     case J::Job47: return ForesterPlant(ctx);
     case J::Job26: return SawmillStart(ctx);
-    default: return JobResult::NotImplemented;
+    default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
 

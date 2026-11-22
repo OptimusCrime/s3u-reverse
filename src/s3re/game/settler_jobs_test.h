@@ -22,10 +22,6 @@
 // value comes from a hash of the callee, its arguments and its position in
 // the call sequence (StubReturn; a family can override it). The stubs have
 // no side effects unless a family's override adds them.
-//
-// While some handlers are missing, a case whose settlers reach one
-// (JobResult::NotImplemented, also after a job change) is not compared: the
-// original's world is copied over ours and the case counts as skipped.
 
 #include "game/settler_jobs.h"
 #include "test/difftest.h"

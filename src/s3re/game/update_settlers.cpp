@@ -19,6 +19,7 @@
 
 #include "game/settler_jobs.h"
 #include "game/settler_jobs_test.h"
+#include "hooks.h"
 #include "test/callee_stub.h"
 
 #include <cstring>
@@ -66,9 +67,7 @@ JobResult RunJob(SettlerContext& ctx) {
     }
 }
 
-// Development only: set when a settler reached a handler that is not
-// written yet (the test harness then skips the case).
-bool g_reachedMissingHandler = false;
+
 
 }  // namespace
 
@@ -99,10 +98,6 @@ std::uint32_t __fastcall CGameData_UpdateSettlers(CGameData* world, void*) {
         }
         SettlerContext ctx{world, n, settler, job, type, typeClass, frame};
         const JobResult result = RunJob(ctx);
-        if (result == JobResult::NotImplemented) {
-            g_reachedMissingHandler = true;
-            return world->settler_high_water;
-        }
         if (result == JobResult::Again) {
             --n;  // 0x4f9214
         }
@@ -110,9 +105,8 @@ std::uint32_t __fastcall CGameData_UpdateSettlers(CGameData* world, void*) {
     return world->settler_high_water;
 }
 
-// Not hooked until every handler exists (development): the original is
-// called at its address.
-UpdateSettlersFn Original_CGameData_UpdateSettlers = reinterpret_cast<UpdateSettlersFn>(0x004e9670);
+S3RE_HOOK(0x004e9670, CGameData_UpdateSettlers, UpdateSettlersFn, Original_CGameData_UpdateSettlers,
+          CGameData_UpdateSettlers);
 
 // ---------------------------------------------------------------------------
 // Test harness (settler_jobs_test.h)
@@ -361,7 +355,6 @@ void CompareUpdateSettlers(test::Context& ctx, UpdateSettlersFn candidate, const
     DebugLogRecorder logs;
     CaseSetup setup(ctx, worlds);
     int compared = 0;
-    int skipped = 0;
     for (int i = 0; i < cases; ++i) {
         const auto high = static_cast<std::uint32_t>(1 + ctx.rng().Below(kMaxCaseSettlers));
         setup.Both([&](CGameData* w) { w->settler_high_water = high; });
@@ -383,18 +376,11 @@ void CompareUpdateSettlers(test::Context& ctx, UpdateSettlersFn candidate, const
         g_gameTick = tick;
         stubs.SetWorld(worlds.ours());
         g_stubSequence = 0;
-        g_reachedMissingHandler = false;
         const std::uint32_t actual = candidate(worlds.ours(), nullptr);
         const std::vector<test::StubCall> actualCalls = stubs.Take();
         const std::vector<DebugLogCall> actualLogs = logs.Take();
         const std::vector<std::uint8_t> actualTallies(tallyBytes, tallyBytes + kTallyBytes);
 
-        if (g_reachedMissingHandler) {
-            std::memcpy(worlds.oursBytes(), worlds.originalBytes(), worlds.size());
-            std::memcpy(tallyBytes, expectedTallies.data(), kTallyBytes);
-            ++skipped;
-            continue;
-        }
         ++compared;
         const bool checkpoint = compared % 32 == 0 || i == cases - 1;
         std::size_t firstCall = 0;
@@ -406,6 +392,7 @@ void CompareUpdateSettlers(test::Context& ctx, UpdateSettlersFn candidate, const
             !S3RE_EXPECT(expectedCalls == actualCalls) || !S3RE_EXPECT(expectedLogs == actualLogs) ||
             !S3RE_EXPECT(expectedTallies == actualTallies) ||
             !worlds.Same(ctx, offsetof(CGameData, settlers), sizeof(Settler) * (kSettlers + 1)) ||
+            !worlds.SameField(ctx, [](CGameData* w) -> auto& { return w->players; }) ||
             !worlds.SameField(ctx, [](CGameData* w) -> auto& { return w->random_state; }) ||
             (checkpoint && !worlds.Checkpoint(ctx))) {
             const Settler& s = SettlerAt(worlds.original(), 1);
@@ -423,7 +410,7 @@ void CompareUpdateSettlers(test::Context& ctx, UpdateSettlersFn candidate, const
     std::memcpy(tallyBytes, savedTallies.data(), kTallyBytes);
     g_gameTick = savedTick;
     if (!S3RE_EXPECT(compared >= family.minCompared)) {
-        ctx.Fail(__FILE__, __LINE__, "  only %d cases compared, %d skipped (missing handlers)", compared, skipped);
+        ctx.Fail(__FILE__, __LINE__, "  only %d cases compared", compared);
     }
 }
 

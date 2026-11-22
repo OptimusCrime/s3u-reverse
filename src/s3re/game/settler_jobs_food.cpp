@@ -306,7 +306,7 @@ JobResult RunWeaponSmith(SettlerContext& ctx, Job job) {
     }
     case Job::Job134: return WeaponSmithFinish(ctx);
     case Job::Job135: return Restart(ctx, Job::Job117);  // 0x87 (0x4f108b)
-    default: return JobResult::NotImplemented;
+    default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
 
@@ -378,7 +378,7 @@ JobResult RunAnimalFarms(SettlerContext& ctx, Job job) {
         return Switch(ctx, Job::Job211, 211);
     }
     case Job::Job211: return Restart(ctx, Job::Job306);  // 0xd3 (0x4f177a)
-    default: return JobResult::NotImplemented;
+    default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
 
@@ -482,7 +482,7 @@ JobResult RunMills(SettlerContext& ctx, Job job) {
     case Job::Job165: return Switch(ctx, Job::Job166, 169);  // 0xa5 (0x4f295a)
     case Job::Job166: return ProduceAndContinue(ctx, Good::Bread, 2, Job::Job168, 171, Job::Job167, 170);
     case Job::Job167: return Restart(ctx, Job::Job123);  // 0xa7 (0x4f2acc)
-    default: return JobResult::NotImplemented;
+    default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
 
@@ -672,7 +672,7 @@ JobResult RunFarmer(SettlerContext& ctx, Job job) {
         Switch(ctx, Job::Job155, 173);
         ctx.settler.slot = 0;
         return JobResult::Next;
-    default: return JobResult::NotImplemented;
+    default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
 
@@ -789,7 +789,7 @@ JobResult RunFisher(SettlerContext& ctx, Job job) {
         ctx.settler.slot = 0;
         return JobResult::Next;
     case Job::Job185: return RestartNow(ctx, Job::Job118);  // 0xb9 (0x4f2f92)
-    default: return JobResult::NotImplemented;
+    default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
 
@@ -861,7 +861,7 @@ JobResult RunWaterworker(SettlerContext& ctx, Job job) {
         ctx.settler.slot = 0;
         return JobResult::Next;
     case Job::Job194: return RestartNow(ctx, Job::Job124);  // 0xc2 (0x4f334c)
-    default: return JobResult::NotImplemented;
+    default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
 
@@ -894,7 +894,7 @@ JobResult RunFoodJobs(SettlerContext& ctx) {
     case Job::Job115: case Job::Job124: case Job::Job186: case Job::Job189: case Job::Job190: case Job::Job191:
     case Job::Job192: case Job::Job193: case Job::Job194:
         return RunWaterworker(ctx, job);
-    default: return JobResult::NotImplemented;
+    default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
 

@@ -645,7 +645,7 @@ JobResult RunMetalJobs(SettlerContext& ctx) {
     case Job::Job300: return StartFirstRound(ctx, Job::Job301);  // 0x4f05b2
     case Job::Job301: return WorkshopPutInput(ctx, kWorkshops[2]);
     case Job::Job313: return WorkshopCheck(ctx, 2);
-    default: return JobResult::NotImplemented;  // not a job of this family
+    default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
 

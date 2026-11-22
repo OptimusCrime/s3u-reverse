@@ -27,12 +27,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace s3re::game::settler_jobs {
-
-// Tests only: a deliberately wrong threshold in the alchemist's roll
-// (mutation test).
-bool g_wrongYield = false;
 
 namespace {
 
@@ -1008,7 +1005,7 @@ JobResult AnimateStep(SettlerContext& ctx, Job next, std::uint32_t animation) {
 // (+0x18) come out, each 0..3 (20% 0, 50% 1, 20% 2, 10% 3), capped by the
 // room in the door piles (8 units).
 std::uint32_t RollYield(std::uint32_t roll) {
-    if (roll <= (g_wrongYield ? 0x4000u : 0x3333u)) {
+    if (roll <= 0x3333) {
         return 0;
     }
     if (roll <= 0xb333) {
@@ -1308,7 +1305,7 @@ JobResult RunSpecialJobs(SettlerContext& ctx) {
     case Job::Job400: SetJob(s, Job::Job401); return CountUpAndLeaveTile(ctx);  // 0x4f8f3b
     case Job::Job401: return GongFetch(ctx);
     case Job::GongProduction: return GongProduction(ctx);
-    default: return JobResult::NotImplemented;
+    default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
 
@@ -1564,6 +1561,21 @@ FamilyTest SpecialFamily() {
     return family;
 }
 
+// Wrong: the alchemist's iron yield (+0x17) is one off after its roll.
+std::uint32_t __fastcall WrongUpdateSettlersYield(CGameData* world, void* edx) {
+    std::vector<std::uint32_t> rolling;
+    for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
+        if (JobOf(world->settlers[n]) == Job::Job346) {
+            rolling.push_back(n);
+        }
+    }
+    const std::uint32_t result = CGameData_UpdateSettlers(world, edx);
+    for (const std::uint32_t n : rolling) {
+        world->settlers[n].food ^= 1;
+    }
+    return result;
+}
+
 }  // namespace
 
 S3RE_TEST(CGameData_UpdateSettlers_Special_MatchesOriginal) {
@@ -1572,11 +1584,9 @@ S3RE_TEST(CGameData_UpdateSettlers_Special_MatchesOriginal) {
 
 S3RE_TEST(CGameData_UpdateSettlers_Special_ComparisonDetectsWrongYield) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    settler_jobs::g_wrongYield = true;
     FamilyTest family = SpecialFamily();
     family.minCompared = 0;
-    settler_jobs::testing::CompareUpdateSettlers(probe, &CGameData_UpdateSettlers, family, 4000);
-    settler_jobs::g_wrongYield = false;
+    settler_jobs::testing::CompareUpdateSettlers(probe, &WrongUpdateSettlersYield, family, 4000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
