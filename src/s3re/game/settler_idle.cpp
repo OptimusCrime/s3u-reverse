@@ -1,54 +1,33 @@
 // Taking a settler off its job (UpdateSettlers callees, package B).
 //
-// CGameData::ResetSettlerToIdle (0x0050cf50): (settler): undoes whatever
-//   the settler's current job (+0xe) had reserved, in this order:
-//   1. jobs 0x37, 0x35, 0xb0, 0x8e (waiting jobs): the settler leaves its
-//      player's idle list for its type (links +0x10 next / +0x12 previous,
-//      heads Player::settler_lists).
-//   2. types 0x28 and 0x16: jobs 0x35/0xb0 clear tile flag 0x2 at the
-//      target (+0x24/+0x26); jobs 0xd4/0xd5/0x12e/0x12f at its own tile.
-//   3. jobs 1, 2: the settler leaves its area's list for its type
-//      (Area::settlers_by_type; area = the area word of its tile); area 0
-//      logs "JobNothing/StepAside auf economysector 0 ..." and the tile.
-//   4. jobs 0x68, 0x69: PileDecAmountLeaving(pile at the target).
-//   5. the work jobs listed in kWorkJobs: the building (+0x22) loses the
-//      worker: type 0 in jobs 3/4/0x8a by word +0x20 (1: byte +0x19, 2:
-//      +0x1a, 3: +0x1b -= 1); otherwise by the type's class (0x658f64;
-//      1: +0x19, 2: +0x1b, 3: +0x1f -= 1); class 0: type 1 (or jobs
-//      0x68/0x69 with byte +0x18 == 1) clears the highest set bit of
-//      building byte +0x16, type 2 (or byte +0x18 == 2) of +0x17, others
-//      clear building word +0x8 and byte +0x19.
-//   6. jobs 5..9: clears the highest set bit of building byte +0x16 and,
-//      if there was one, building byte +0x1d -= 1; 7. jobs 0xe, 0xf, 0x11,
-//      0x12: the same with +0x17.
-//   8. jobs 6..9, 0x11, 0x12: tile flag 0x2 at the target cleared.
-//   9. jobs 0x133, 0x134: the target tile's pile: leaving -= 1, twice if
-//      settler byte +0x17 != 0.
-//   10. jobs 0xa, 0xb, 0xa9, 0x4c, 0x4d: PileDecAmountLeaving(target pile).
-//   11. jobs 0x4c..0x4f: a carried good (+0x15) is dropped (DropGoodNear,
-//      SubtractPlayerCounter); then the pile in word +0x22: kind 0xfc:
-//      leaving byte += 0xf0; else PileDecAmountComing and, if it is now
-//      empty with nothing coming, MakePileEmpty (and SetPileGood with
-//      PileNeighbourBuildingByteE's goods unless that is 0xff).
-//   12. jobs 0xa, 0xb, 0xa9, 0xaa, 0xc, 0xd, 0x50: the building's input
-//      pile for the good (+0x1a for jobs 0xa/0xb/0xa9, else +0x15) gets
-//      PileDecAmountComing (under construction: good 1 -> pile 0, 2 ->
-//      pile 1; otherwise the first of its three piles with that goods
-//      type).
-//   13. jobs 0xaa, 0xc, 0xd, 0x50: the carried good is dropped and +0x15
-//      cleared.
-//   14. if the settler's tile has another settler word: PlaceSettlerNear.
-//   15. a tile without walk region logs "Siedler steht auf sector 0 ...".
-//   16. job = 0xac (idle), +0x15 = 0, +0x22 = 0, counter = 0; a dword +0x8
-//      above 5 becomes RandomBelow6().
-//   EAX = dword +0x8 (callers use AL at most). ret 4. 14 callers (walking,
-//   building removal, ExecuteCommands, ...).
-// thiscall (ECX = world).
+// CGameData::ResetSettlerToIdle (0x0050cf50): (settler) -> EAX = the
+// settler's direction dword (+0x8; callers use AL at most). thiscall
+// (ECX = world), ret 4. 14 callers (walking, building removal,
+// ExecuteCommands, ...). It undoes whatever the settler's job (+0xe) had
+// reserved, in this order (each step is one block of the function below):
+//   1. waiting units leave their player's idle list for their type;
+//   2. pioneers and geologists free the tile they meant to work on;
+//   3. idle civilians leave their area's list (area 0 is logged);
+//   4. a carrier fetching a tool gives back the tool pile's unit;
+//   5. a worker gives back its place in its building (soldier counts,
+//      digger and builder slot bits, the worker field);
+//   6./7. diggers and builders give back their site slot;
+//   8. diggers and builders free their target tile;
+//   9. jobs 307/308 (0x133/0x134) give back one or two units of the pile;
+//   10. carriers on the way to a pile give back its unit;
+//   11. jobs 76..79 (0x4c..0x4f) drop their good and release their pile;
+//   12./13. carriers on the way to a building release the building's input
+//      pile and drop what they carry;
+//   14. the settler is put back on its tile (PlaceSettlerNear) if needed;
+//   15. a tile without walk region is logged;
+//   16. the job becomes SeekOwnArea (172, 0xac), with a valid direction.
 
 #include "game/debug_log.h"
+#include "game/enums.h"
 #include "game/replacements.h"
 #include "game/tables.h"
 #include "game/texts.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -56,6 +35,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <vector>
 
 namespace s3re::game {
@@ -79,56 +59,176 @@ using layout::Pile;
 using layout::Settler;
 using layout::Tile;
 
+using Job = SettlerJob;
 
-constexpr std::uint16_t kWorkJobs[] = {
-    3,    4,    0x8a, 0x68, 0x69, 0x1c, 0x1d, 0x20, 0x21, 0x22, 0x23, 0x2a, 0x2b, 0x2d, 0x2e, 0x2f, 0x30,
-    0x90, 0x91, 0x92, 0x93, 0x96, 0x97, 0x98, 0x9c, 0xb5, 0xb2, 0xbb, 0xbc, 0xe5, 0xe6, 0xe7, 0xe8, 0xeb,
-    0xec, 0xed, 0xf1, 0xf6, 0xf7, 0xf8, 0xf9, 0xfc, 0xfd, 0xfe, 0x102, 0x165, 0x168};
+// Tile flag 0x02: probably "a settler is on its way to work here": set by
+// UpdateSettlers, cleared here for diggers, builders, pioneers and
+// geologists that give up their target.
+constexpr std::uint8_t kTileClaimed = layout::kTileFlag02;
 
-bool IsWorkJob(std::uint16_t job) {
-    for (const std::uint16_t j : kWorkJobs) {
-        if (j == job) {
+// Pile kind 0xfc: probably a trade building's ring pile, whose `leaving`
+// byte counts units coming in its high nibble (as UpdateEconomy reads it).
+constexpr std::uint8_t kPileKindTradeRing = 0xfc;
+constexpr std::uint8_t kLeavingHighNibbleMinusOne = 0xf0;  // + 0xf0 = - 0x10 in a byte
+
+// The jobs in which a settler holds a place in its building (step 5).
+constexpr Job kWorkJobs[] = {
+    Job::WalkToWork, Job::ArriveAtWork, Job::RecruitAtBarracks, Job::CarrierWalkToTool, Job::CarrierTakeTool,
+    Job::Job28,  Job::Job29,  Job::Job32,  Job::Job33,  Job::Job34,  Job::Job35,  Job::Job42,  Job::Job43,
+    Job::Job45,  Job::Job46,  Job::Job47,  Job::Job48,  Job::Job144, Job::Job145, Job::Job146, Job::Job147,
+    Job::Job150, Job::Job151, Job::Job152, Job::Job156, Job::Job181, Job::Job178, Job::Job187, Job::Job188,
+    Job::Job229, Job::Job230, Job::Job231, Job::Job232, Job::Job235, Job::Job236, Job::Job237, Job::Job241,
+    Job::Job246, Job::Job247, Job::Job248, Job::Job249, Job::Job252, Job::Job253, Job::Job254, Job::Job258,
+    Job::Job357, Job::Job360};
+
+bool IsOneOf(Job job, std::initializer_list<Job> jobs) {
+    for (const Job candidate : jobs) {
+        if (candidate == job) {
             return true;
         }
     }
     return false;
 }
 
-bool OneOf(std::uint16_t job, std::initializer_list<std::uint16_t> jobs) {
-    for (const std::uint16_t j : jobs) {
-        if (j == job) {
+bool IsWorkJob(Job job) {
+    for (const Job candidate : kWorkJobs) {
+        if (candidate == job) {
             return true;
         }
     }
     return false;
 }
 
-// Clears the highest set bit of `byte` (the original's chain of tests);
+// The good a carrier has in its hands is kept in byte +0x15 (the `slot`
+// byte of other jobs).
+std::uint8_t& CarriedGood(Settler& settler) {
+    return settler.slot;
+}
+
+// Clears the highest set bit of `bits` (the original's chain of tests);
 // false if none was set.
-bool ClearHighestBit(std::uint8_t& byte) {
+bool ClearHighestBit(std::uint8_t& bits) {
     for (std::uint32_t bit = 0x80; bit != 0; bit >>= 1) {
-        if ((byte & bit) != 0) {
-            byte = static_cast<std::uint8_t>(byte - bit);
+        if ((bits & bit) != 0) {
+            bits = static_cast<std::uint8_t>(bits - bit);
             return true;
         }
     }
     return false;
+}
+
+void Unclaim(Tile& tile) {
+    tile.flags = static_cast<std::uint8_t>(tile.flags & ~kTileClaimed);
 }
 
 Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));
 }
 
+Tile& TargetTile(CGameData* world, const Settler& settler) {
+    return TileAt(world, settler.target_x, settler.target_y);
+}
+
 // Removes the settler from a doubly linked settler list whose head is `head`.
-void Unlink(CGameData* world, Settler& s, std::uint16_t& head) {
-    if (s.prev != 0) {
-        world->settlers[s.prev].next = s.next;
+void Unlink(CGameData* world, Settler& settler, std::uint16_t& head) {
+    if (settler.prev != 0) {
+        world->settlers[settler.prev].next = settler.next;
     } else {
-        head = s.next;
+        head = settler.next;
     }
-    if (s.next != 0) {
-        world->settlers[s.next].prev = s.prev;
+    if (settler.next != 0) {
+        world->settlers[settler.next].prev = settler.prev;
     }
+}
+
+// Step 5: the worker gives back its place in building `settler.building`.
+void LeaveWorkplace(CGameData* world, Settler& settler) {
+    Building& building = world->buildings[settler.building];
+    const SettlerType type = TypeOf(settler);
+    const Job job = JobOf(settler);
+    if (type == SettlerType::Carrier && IsOneOf(job, {Job::WalkToWork, Job::ArriveAtWork, Job::RecruitAtBarracks})) {
+        // A carrier on its way to become a recruit: saved_counter is the
+        // barracks' input slot + 1. Three separate tests, as in the original.
+        if (settler.saved_counter == 1) {
+            --building.recruiting.recruits[0];
+        }
+        if (settler.saved_counter == 2) {
+            --building.recruiting.recruits[1];
+        }
+        if (settler.saved_counter == 3) {
+            --building.recruiting.recruits[2];
+        }
+        return;
+    }
+    switch (ClassOf(type)) {
+    case SettlerClass::Swordsman: --building.military.class1_coming; return;
+    case SettlerClass::Bowman: --building.military.class2_coming; return;
+    case SettlerClass::Pikeman: --building.military.class3_coming; return;
+    case SettlerClass::Civilian: break;
+    default: return;  // other units hold no place
+    }
+    // A carrier fetching a tool already counts as the worker it becomes.
+    const bool fetchingTool = job == Job::CarrierWalkToTool || job == Job::CarrierTakeTool;
+    if (type == SettlerType::Digger || (fetchingTool && settler.tool_type == Value(SettlerType::Digger))) {
+        ClearHighestBit(building.digger_slots);
+    } else if (type == SettlerType::Builder || (fetchingTool && settler.tool_type == Value(SettlerType::Builder))) {
+        ClearHighestBit(building.builder_slots);
+    } else {
+        building.worker = 0;
+        building.production.worker_inside = 0;
+    }
+}
+
+// Step 11: jobs 76..79 drop their good and release the pile in word +0x22.
+// `savedGoods` is the original's frame dword for the pile's goods byte.
+void ReleasePileOfJobs76To79(CGameData* world, Settler& settler, std::uint32_t& savedGoods) {
+    if (CarriedGood(settler) != Value(Good::Nothing)) {
+        CGameData_DropGoodNear(world, nullptr, CarriedGood(settler), 1, settler.x, settler.y);
+        CGameData_SubtractPlayerCounter(world, nullptr, settler.owner, CarriedGood(settler), 1);
+    }
+    const std::uint32_t pileNumber = settler.building;  // word +0x22 holds a pile in these jobs
+    Pile& pile = world->piles[pileNumber];
+    if (pile.art == kPileKindTradeRing) {
+        pile.leaving = static_cast<std::uint8_t>(pile.leaving + kLeavingHighNibbleMinusOne);
+        return;
+    }
+    CGameData_PileDecAmountComing(world, nullptr, pileNumber);
+    if (pile.amount != 0 || pile.coming != 0) {
+        return;
+    }
+    // The pile is empty and nothing comes: it is freed, then gets the goods
+    // type of its building's pile again (unless that has none).
+    const std::uint32_t buildingGood = CGameData_PileNeighbourBuildingByteE(world, nullptr, pileNumber);
+    savedGoods = (savedGoods & 0xffffff00u) | (buildingGood & 0xff);
+    CGameData_MakePileEmpty(world, nullptr, pileNumber);
+    if ((buildingGood & 0xff) != Value(Good::Empty)) {
+        CGameData_SetPileGood(world, nullptr, pileNumber, savedGoods);
+    }
+}
+
+// Step 12: the building's input pile for `good` expects one unit less.
+void CancelDelivery(CGameData* world, const Building& building, std::uint32_t good) {
+    if (building.buildup != 0) {
+        // A construction site: boards go to pile 0, stones to pile 1.
+        if (good == Value(Good::Board)) {
+            CGameData_PileDecAmountComing(world, nullptr, building.piles[0]);
+        } else if (good == Value(Good::Stone)) {
+            CGameData_PileDecAmountComing(world, nullptr, building.piles[1]);
+        }
+        return;
+    }
+    for (const std::uint16_t pile : building.piles) {
+        if (world->piles[pile].good == good) {
+            CGameData_PileDecAmountComing(world, nullptr, pile);
+            return;
+        }
+    }
+}
+
+void LogTile(const Tile& tile, std::uint32_t owner) {
+    GameDebugLog(texts::kTileOwnerDetails, owner, static_cast<std::uint32_t>(tile.owner),
+                 static_cast<std::uint32_t>(tile.object), static_cast<std::uint32_t>(tile.area),
+                 static_cast<std::uint32_t>(tile.terrain));
 }
 
 }  // namespace
@@ -138,170 +238,123 @@ using SettlerFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::u
 // Purpose: Takes a settler off its current job (e.g. when its building is destroyed or the player
 // changes something): reservations of piles and building slots are given back, carried goods are
 // dropped, and the settler becomes idle.
-std::uint32_t __fastcall CGameData_ResetSettlerToIdle(CGameData* world, void*, std::uint32_t settler) {
-    Settler& s = world->settlers[settler];
+std::uint32_t __fastcall CGameData_ResetSettlerToIdle(CGameData* world, void*, std::uint32_t settlerNumber) {
+    Settler& settler = world->settlers[settlerNumber];
     // The original keeps one dword of its frame for the goods byte of
     // step 11; its upper bytes are ECX's (the world pointer) at entry.
     std::uint32_t savedGoods = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
 
-    if (OneOf(s.job, {0x37, 0x35, 0xb0, 0x8e})) {
-        // The list head: player record word +0x20 + type * 2 (for owner 0xff
-        // past the players, as in the original's arithmetic).
-        Unlink(world, s, world->players[s.owner].settler_lists[s.art]);
+    // 1. Units waiting in their player's idle list (head per settler type;
+    // for owner 0xff past the players, as the original's arithmetic does).
+    if (IsOneOf(JobOf(settler), {Job::UnitIdle, Job::UnitWalk, Job::Job176, Job::Job142})) {
+        Unlink(world, settler, world->players[settler.owner].settler_lists[settler.art]);
     }
-    if (s.art == 0x28 || s.art == 0x16) {
-        if (s.job == 0x35 || s.job == 0xb0) {
-            TileAt(world, s.target_x, s.target_y).flags &= 0xfd;
+    // 2. Pioneers and geologists.
+    if (TypeOf(settler) == SettlerType::Pioneer || TypeOf(settler) == SettlerType::Geologist) {
+        if (JobOf(settler) == Job::UnitWalk || JobOf(settler) == Job::Job176) {
+            Unclaim(TargetTile(world, settler));
         }
-        if (OneOf(s.job, {0xd4, 0xd5, 0x12e, 0x12f})) {
-            TileAt(world, s.x, s.y).flags &= 0xfd;
+        if (IsOneOf(JobOf(settler), {Job::GeologistWork, Job::Job213, Job::PioneerWork, Job::Job303})) {
+            Unclaim(TileAt(world, settler.x, settler.y));
         }
     }
-    if (s.job == 1 || s.job == 2) {
-        const std::uint32_t area = TileAt(world, s.x, s.y).area;
+    // 3. Idle civilians are listed in their area (by settler type).
+    if (JobOf(settler) == Job::Nothing || JobOf(settler) == Job::StepAside) {
+        const std::uint32_t area = TileAt(world, settler.x, settler.y).area;
         if (area == 0) {
-            GameDebugLog(texts::kStepAsideOnSectorZero, static_cast<std::uint32_t>(s.art), static_cast<std::uint32_t>(s.x),
-                         static_cast<std::uint32_t>(s.y));
-            const Tile& tile = TileAt(world, s.x, s.y);
-            const std::uint32_t owner = s.owner;
-            // Argument order as the original pushes them.
+            GameDebugLog(texts::kStepAsideOnSectorZero, static_cast<std::uint32_t>(settler.art),
+                         static_cast<std::uint32_t>(settler.x), static_cast<std::uint32_t>(settler.y));
+            const Tile& tile = TileAt(world, settler.x, settler.y);
+            const std::uint32_t owner = settler.owner;
+            // The original pushes the owner between all arguments here.
             GameDebugLog(texts::kTileOwnerDetails, owner, static_cast<std::uint32_t>(tile.owner), owner,
                          static_cast<std::uint32_t>(tile.object), owner, static_cast<std::uint32_t>(tile.area), owner,
                          static_cast<std::uint32_t>(tile.terrain));
         }
-        Unlink(world, s, world->areas[area].settlers_by_type[s.art]);
+        Unlink(world, settler, world->areas[area].settlers_by_type[settler.art]);
     }
-    if (s.job == 0x68 || s.job == 0x69) {
-        CGameData_PileDecAmountLeaving(world, nullptr, TileAt(world, s.target_x, s.target_y).object_number);
+    // 4.
+    if (JobOf(settler) == Job::CarrierWalkToTool || JobOf(settler) == Job::CarrierTakeTool) {
+        CGameData_PileDecAmountLeaving(world, nullptr, TargetTile(world, settler).object_number);
     }
-    if (IsWorkJob(s.job)) {
-        const std::uint8_t art = s.art;
-        if (art == 0 && (s.job == 3 || s.job == 4 || s.job == 0x8a)) {
-            if (s.saved_counter == 1) {
-                --world->buildings[s.building].recruiting.recruits[0];
-            }
-            if (s.saved_counter == 2) {
-                --world->buildings[s.building].recruiting.recruits[1];
-            }
-            if (s.saved_counter == 3) {
-                --world->buildings[s.building].recruiting.recruits[2];
-            }
-        } else {
-            const std::int32_t typeClass = g_settlerTypeClass[art];
-            if (typeClass != 0) {
-                if (typeClass == 1) {
-                    --world->buildings[s.building].military.class1_coming;
-                } else if (typeClass == 2) {
-                    --world->buildings[s.building].military.class2_coming;
-                } else if (typeClass == 3) {
-                    --world->buildings[s.building].military.class3_coming;
-                }
-            } else {
-                const bool carrierJob = s.job == 0x68 || s.job == 0x69;
-                if (art == 1 || (carrierJob && s.tool_type == 1)) {
-                    ClearHighestBit(world->buildings[s.building].digger_slots);
-                } else if (art == 2 || (carrierJob && s.tool_type == 2)) {
-                    ClearHighestBit(world->buildings[s.building].builder_slots);
-                } else {
-                    world->buildings[s.building].worker = 0;
-                    world->buildings[s.building].production.worker_inside = 0;
-                }
-            }
+    // 5.
+    if (IsWorkJob(JobOf(settler))) {
+        LeaveWorkplace(world, settler);
+    }
+    // 6. Diggers (jobs 5..9).
+    if (IsOneOf(JobOf(settler), {Job::DiggerDig, Job::DiggerWalkToSpot, Job::DiggerLevel, Job::Job8, Job::Job9})) {
+        Building& site = world->buildings[settler.building];
+        if (ClearHighestBit(site.digger_slots)) {
+            --site.site.workers_at_work;
         }
     }
-    if (s.job >= 5 && s.job <= 9) {
-        Building& b = world->buildings[s.building];
-        if (ClearHighestBit(b.digger_slots)) {
-            --b.site.workers_at_work;
+    // 7. Builders (jobs 14, 15, 17, 18).
+    if (IsOneOf(JobOf(settler), {Job::BuilderStart, Job::Job15, Job::Job17, Job::BuilderBuild})) {
+        Building& site = world->buildings[settler.building];
+        if (ClearHighestBit(site.builder_slots)) {
+            --site.site.workers_at_work;
         }
     }
-    if (OneOf(s.job, {0xe, 0xf, 0x11, 0x12})) {
-        Building& b = world->buildings[s.building];
-        if (ClearHighestBit(b.builder_slots)) {
-            --b.site.workers_at_work;
+    // 8.
+    if (IsOneOf(JobOf(settler), {Job::DiggerWalkToSpot, Job::DiggerLevel, Job::Job9, Job::Job8, Job::Job17,
+                                 Job::BuilderBuild})) {
+        Tile& target = TargetTile(world, settler);
+        if ((target.flags & kTileClaimed) != 0) {
+            Unclaim(target);
         }
     }
-    if (OneOf(s.job, {6, 7, 9, 8, 0x11, 0x12})) {
-        Tile& target = TileAt(world, s.target_x, s.target_y);
-        if ((target.flags & 2) != 0) {
-            target.flags &= 0xfd;
+    // 9. One unit, or two with second_unit, of the target pile were taken.
+    if (JobOf(settler) == Job::Job307 || JobOf(settler) == Job::Job308) {
+        --world->piles[TargetTile(world, settler).object_number].leaving;
+        if (settler.second_unit != 0) {
+            --world->piles[TargetTile(world, settler).object_number].leaving;
         }
     }
-    if (s.job == 0x133 || s.job == 0x134) {
-        --world->piles[TileAt(world, s.target_x, s.target_y).object_number].leaving;
-        if (s.second_unit != 0) {
-            --world->piles[TileAt(world, s.target_x, s.target_y).object_number].leaving;
-        }
+    // 10.
+    if (IsOneOf(JobOf(settler), {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::Job76,
+                                 Job::Job77})) {
+        CGameData_PileDecAmountLeaving(world, nullptr, TargetTile(world, settler).object_number);
     }
-    if (OneOf(s.job, {0xa, 0xb, 0xa9, 0x4c, 0x4d})) {
-        CGameData_PileDecAmountLeaving(world, nullptr, TileAt(world, s.target_x, s.target_y).object_number);
+    // 11.
+    if (IsOneOf(JobOf(settler), {Job::Job76, Job::Job77, Job::Job78, Job::Job79})) {
+        ReleasePileOfJobs76To79(world, settler, savedGoods);
     }
-    if (OneOf(s.job, {0x4c, 0x4d, 0x4e, 0x4f})) {
-        if (s.slot != 0) {
-            CGameData_DropGoodNear(world, nullptr, s.slot, 1, s.x, s.y);
-            CGameData_SubtractPlayerCounter(world, nullptr, s.owner, s.slot, 1);
-        }
-        const std::uint32_t pile = s.building;  // word +0x22 holds a pile in these jobs
-        Pile& p = world->piles[pile];
-        if (p.art == 0xfc) {
-            p.leaving = static_cast<std::uint8_t>(p.leaving + 0xf0);
-        } else {
-            CGameData_PileDecAmountComing(world, nullptr, pile);
-            if (p.amount == 0 && p.coming == 0) {
-                const std::uint32_t goods = CGameData_PileNeighbourBuildingByteE(world, nullptr, pile);
-                savedGoods = (savedGoods & 0xffffff00u) | (goods & 0xff);
-                CGameData_MakePileEmpty(world, nullptr, pile);
-                if ((goods & 0xff) != 0xff) {
-                    CGameData_SetPileGood(world, nullptr, pile, savedGoods);
-                }
-            }
-        }
+    // 12. Before the pick-up the good is the ordered one (+0x1a), after it
+    // the carried one (+0x15).
+    if (IsOneOf(JobOf(settler), {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp,
+                                 Job::CarrierLeavePile, Job::CarrierWalkToBuilding, Job::CarrierAtBuilding,
+                                 Job::CarrierDeliver})) {
+        const bool pickedUp = !IsOneOf(JobOf(settler), {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp});
+        const std::uint32_t good = pickedUp ? CarriedGood(settler) : settler.good;
+        CancelDelivery(world, world->buildings[settler.building], good);
     }
-    if (OneOf(s.job, {0xa, 0xb, 0xa9, 0xaa, 0xc, 0xd, 0x50})) {
-        std::uint32_t good = s.slot;
-        if (s.job == 0xa || s.job == 0xb || s.job == 0xa9) {
-            good = s.good;
-        }
-        const Building& b = world->buildings[s.building];
-        if (b.buildup != 0) {
-            if (good == 1) {
-                CGameData_PileDecAmountComing(world, nullptr, b.piles[0]);
-            } else if (good == 2) {
-                CGameData_PileDecAmountComing(world, nullptr, b.piles[1]);
-            }
-        } else {
-            for (const std::uint16_t pile : b.piles) {
-                if (world->piles[pile].good == good) {
-                    CGameData_PileDecAmountComing(world, nullptr, pile);
-                    break;
-                }
-            }
-        }
+    // 13.
+    if (IsOneOf(JobOf(settler), {Job::CarrierLeavePile, Job::CarrierWalkToBuilding, Job::CarrierAtBuilding,
+                                 Job::CarrierDeliver})) {
+        CGameData_DropGoodNear(world, nullptr, CarriedGood(settler), 1, settler.x, settler.y);
+        CGameData_SubtractPlayerCounter(world, nullptr, settler.owner, CarriedGood(settler), 1);
+        CarriedGood(settler) = Value(Good::Nothing);
     }
-    if (OneOf(s.job, {0xaa, 0xc, 0xd, 0x50})) {
-        CGameData_DropGoodNear(world, nullptr, s.slot, 1, s.x, s.y);
-        CGameData_SubtractPlayerCounter(world, nullptr, s.owner, s.slot, 1);
-        s.slot = 0;
+    // 14.
+    if (TileAt(world, settler.x, settler.y).settler != settlerNumber) {
+        CGameData_PlaceSettlerNear(world, nullptr, settlerNumber, settler.x, settler.y);
     }
-    if (TileAt(world, s.x, s.y).settler != settler) {
-        CGameData_PlaceSettlerNear(world, nullptr, settler, s.x, s.y);
+    // 15.
+    if (TileAt(world, settler.x, settler.y).walk_region == 0) {
+        GameDebugLog(texts::kSettlerOnSectorZero, static_cast<std::uint32_t>(settler.art),
+                     static_cast<std::uint32_t>(settler.x), static_cast<std::uint32_t>(settler.y),
+                     static_cast<std::uint32_t>(settler.job));
+        LogTile(TileAt(world, settler.x, settler.y), settler.owner);
     }
-    if (TileAt(world, s.x, s.y).walk_region == 0) {
-        GameDebugLog(texts::kSettlerOnSectorZero, static_cast<std::uint32_t>(s.art), static_cast<std::uint32_t>(s.x),
-                     static_cast<std::uint32_t>(s.y), static_cast<std::uint32_t>(s.job));
-        const Tile& tile = TileAt(world, s.x, s.y);
-        GameDebugLog(texts::kTileOwnerDetails, static_cast<std::uint32_t>(s.owner), static_cast<std::uint32_t>(tile.owner),
-                     static_cast<std::uint32_t>(tile.object), static_cast<std::uint32_t>(tile.area),
-                     static_cast<std::uint32_t>(tile.terrain));
+    // 16.
+    SetJob(settler, Job::SeekOwnArea);
+    settler.slot = 0;
+    settler.building = 0;
+    settler.counter = 0;
+    if (settler.direction >= kDirectionCount) {
+        settler.direction = CGameData_RandomBelow6(world, nullptr);
     }
-    s.job = 0xac;
-    s.slot = 0;
-    s.building = 0;
-    s.counter = 0;
-    if (s.direction > 5) {
-        s.direction = CGameData_RandomBelow6(world, nullptr);
-    }
-    return s.direction;
+    return settler.direction;
 }
 
 S3RE_HOOK(0x0050cf50, CGameData_ResetSettlerToIdle, SettlerFn, Original_CGameData_ResetSettlerToIdle,
@@ -313,18 +366,20 @@ S3RE_HOOK(0x0050cf50, CGameData_ResetSettlerToIdle, SettlerFn, Original_CGameDat
 
 namespace {
 
-constexpr std::uint32_t kTestSettlers = 0x400;
-constexpr std::uint32_t kTestBuildings = 0x100;
-constexpr std::uint32_t kTestPiles = 0x400;
+constexpr std::uint32_t kTestSettlers = 1024;
+constexpr std::uint32_t kTestBuildings = 256;
+constexpr std::uint32_t kTestPiles = 1024;
+constexpr std::uint32_t kTestMapSize = 384;
+constexpr std::uint32_t kOffsetEntries = 10000;
 
 // The game's offset table (DropGoodNear, PlaceSettlerNear walk it).
 void FillOffsetSpiral(test::WorldPair& worlds) {
     std::uint32_t k = 0;
-    for (std::int32_t r = 0; k < 10000; ++r) {
-        for (std::int32_t dx = -r; dx <= r && k < 10000; ++dx) {
-            for (std::int32_t dy = -r; dy <= r && k < 10000; ++dy) {
+    for (std::int32_t ring = 0; k < kOffsetEntries; ++ring) {
+        for (std::int32_t dx = -ring; dx <= ring && k < kOffsetEntries; ++dx) {
+            for (std::int32_t dy = -ring; dy <= ring && k < kOffsetEntries; ++dy) {
                 if (TileDistance(0, 0, static_cast<std::uint32_t>(dx), static_cast<std::uint32_t>(dy)) ==
-                    static_cast<std::uint32_t>(r)) {
+                    static_cast<std::uint32_t>(ring)) {
                     worlds.Both([&](CGameData* w) {
                         w->offsets[k].dx = dx;
                         w->offsets[k].dy = dy;
@@ -337,37 +392,49 @@ void FillOffsetSpiral(test::WorldPair& worlds) {
 }
 
 // Jobs that reach every step (and some others).
-constexpr std::uint16_t kTestJobs[] = {
-    0x37, 0x35, 0xb0, 0x8e, 0xd4, 0xd5, 0x12e, 0x12f, 1,    2,    0x68, 0x69, 3,    4,    0x8a,
-    0x1c, 0x2a, 0xe5, 0x168, 5,   6,    7,    8,     9,    0xe,  0xf,  0x11, 0x12, 0x133, 0x134,
-    0xa,  0xb,  0xa9, 0x4c, 0x4d, 0x4e, 0x4f, 0xaa,  0xc,  0xd,  0x50, 0xac, 0x100, 0x55};
-constexpr std::uint8_t kTestTypes[] = {0, 1, 2, 0x16, 0x28, 0x0f, 0x20, 0x08, 0x1e, 0x05, 0x0a, 0x30};
+constexpr Job kTestJobs[] = {
+    Job::UnitIdle, Job::UnitWalk, Job::Job176, Job::Job142, Job::GeologistWork, Job::Job213, Job::PioneerWork,
+    Job::Job303, Job::Nothing, Job::StepAside, Job::CarrierWalkToTool, Job::CarrierTakeTool, Job::WalkToWork,
+    Job::ArriveAtWork, Job::RecruitAtBarracks, Job::Job28, Job::Job42, Job::Job229, Job::Job360, Job::DiggerDig,
+    Job::DiggerWalkToSpot, Job::DiggerLevel, Job::Job8, Job::Job9, Job::BuilderStart, Job::Job15, Job::Job17,
+    Job::BuilderBuild, Job::Job307, Job::Job308, Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp,
+    Job::Job76, Job::Job77, Job::Job78, Job::Job79, Job::CarrierLeavePile, Job::CarrierWalkToBuilding,
+    Job::CarrierAtBuilding, Job::CarrierDeliver, Job::SeekOwnArea, Job::Job256, Job::Job85};
+constexpr SettlerType kTestTypes[] = {
+    SettlerType::Carrier,   SettlerType::Digger,   SettlerType::Builder,     SettlerType::Geologist,
+    SettlerType::Pioneer,   SettlerType::Pikeman1, SettlerType::Swordsman2,  SettlerType::Bowman1,
+    SettlerType::Bowman2,   SettlerType::Swordsman1, SettlerType::Miner,
+    static_cast<SettlerType>(kSettlerTypeCount)};  // one past the last type: the tables are read past their end
+
+bool CarriesPileOfJobs76To79(Job job) {
+    return IsOneOf(job, {Job::Job76, Job::Job77, Job::Job78, Job::Job79});
+}
 
 void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t settler) {
     auto& rng = ctx.rng();
-    const std::uint16_t job = kTestJobs[rng.Below(sizeof(kTestJobs) / sizeof(kTestJobs[0]))];
-    const std::uint8_t art = kTestTypes[rng.Below(sizeof(kTestTypes))];
+    const Job job = kTestJobs[rng.Below(sizeof(kTestJobs) / sizeof(kTestJobs[0]))];
+    const SettlerType type = kTestTypes[rng.Below(sizeof(kTestTypes))];
     const auto owner = static_cast<std::uint8_t>(rng.Below(4));
     const std::uint32_t x = 10 + rng.Below(360), y = 10 + rng.Below(360);
     const std::uint32_t tx = x + rng.Below(5) - 2, ty = y + rng.Below(5) - 2;
     const std::uint32_t building = 1 + rng.Below(kTestBuildings);
-    const std::uint32_t area = rng.Chance(1, 8) ? 0 : 1 + rng.Below(0x100);
+    const std::uint32_t area = rng.Chance(1, 8) ? 0 : 1 + rng.Below(256);
     auto link = [&]() { return static_cast<std::uint16_t>(rng.Chance(1, 3) ? 0 : 1 + rng.Below(kTestSettlers)); };
     const std::uint16_t next = link(), prev = link();
-    const auto direction = rng.Chance(1, 4) ? rng.Next32() : rng.Below(6);
+    const auto direction = rng.Chance(1, 4) ? rng.Next32() : rng.Below(kDirectionCount);
     const auto slot = static_cast<std::uint8_t>(rng.Chance(1, 3) ? 0 : 1 + rng.Below(35));
-    const auto good = static_cast<std::uint8_t>(rng.Below(36));
+    const auto good = static_cast<std::uint8_t>(rng.Below(kGoodCount));
     const auto saved = static_cast<std::uint16_t>(rng.Below(5));
     const auto secondUnit = static_cast<std::uint8_t>(rng.Below(2));
     const auto toolType = static_cast<std::uint8_t>(rng.Below(4));
-    const std::uint32_t pileWord = (job >= 0x4c && job <= 0x4f) ? 1 + rng.Below(kTestPiles) : building;
+    const std::uint32_t pileWord = CarriesPileOfJobs76To79(job) ? 1 + rng.Below(kTestPiles) : building;
     const bool onTile = rng.Chance(3, 4);
     const auto region = static_cast<std::uint8_t>(rng.Chance(1, 8) ? 0 : 1 + rng.Below(5));
     const auto targetPile = static_cast<std::uint16_t>(1 + rng.Below(kTestPiles));
     worlds.Both([&](CGameData* w) {
         Settler& s = w->settlers[settler];
-        s.job = job;
-        s.art = art;
+        SetJob(s, job);
+        s.art = Value(type);
         s.owner = owner;
         s.x = static_cast<std::uint16_t>(x);
         s.y = static_cast<std::uint16_t>(y);
@@ -391,7 +458,8 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t settle
     // The building's piles: goods types around the settler's.
     for (std::uint32_t k = 0; k < 3; ++k) {
         const auto pile = static_cast<std::uint16_t>(1 + rng.Below(kTestPiles));
-        const auto pileGood = static_cast<std::uint8_t>(rng.Chance(1, 3) ? (rng.Chance(1, 2) ? slot : good) : rng.Below(36));
+        const auto pileGood =
+            static_cast<std::uint8_t>(rng.Chance(1, 3) ? (rng.Chance(1, 2) ? slot : good) : rng.Below(kGoodCount));
         const auto buildup = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0 : 1 + rng.Below(3));
         worlds.Both([&](CGameData* w) {
             w->buildings[building].piles[k] = pile;
@@ -399,15 +467,15 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t settle
             w->buildings[building].buildup = buildup;
         });
     }
-    if (job >= 0x4c && job <= 0x4f) {
-        const auto art2 = static_cast<std::uint8_t>(rng.Chance(1, 4) ? 0xfc : rng.Next32());
+    if (CarriesPileOfJobs76To79(job)) {
+        const auto kind = static_cast<std::uint8_t>(rng.Chance(1, 4) ? kPileKindTradeRing : rng.Next32());
         const auto amount = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0 : rng.Below(5));
         const auto coming = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 1 : rng.Below(5));
         const auto px = static_cast<std::uint16_t>(10 + rng.Below(360));
         const auto py = static_cast<std::uint16_t>(10 + rng.Below(360));
         worlds.Both([&](CGameData* w) {
             Pile& p = w->piles[pileWord];
-            p.art = art2;
+            p.art = kind;
             p.amount = amount;
             p.coming = coming;
             p.x = px;
@@ -421,31 +489,31 @@ void Compare(test::Context& ctx, SettlerFn candidate, int cases) {
     test::WorldPair worlds(ctx, sizeof(CGameData));
     FillOffsetSpiral(worlds);
     worlds.Both([&](CGameData* w) {
-        w->map_size = 384;
+        w->map_size = kTestMapSize;
         // Pile records with coordinates on the map, linked within the test
         // range; buildings piles on the map too.
-        for (std::uint32_t p = 0; p < 0x7d00; ++p) {
+        for (std::uint32_t p = 0; p < 32000; ++p) {
             Pile& pile = w->piles[p];
-            pile.x = static_cast<std::uint16_t>(pile.x % 384);
-            pile.y = static_cast<std::uint16_t>(pile.y % 384);
+            pile.x = static_cast<std::uint16_t>(pile.x % kTestMapSize);
+            pile.y = static_cast<std::uint16_t>(pile.y % kTestMapSize);
             pile.prev = static_cast<std::uint16_t>(pile.prev % kTestPiles);
             pile.next = static_cast<std::uint16_t>(pile.next % kTestPiles);
             if (p > kTestPiles) {
-                pile.good = 1;  // CreatePile finds free records below
+                pile.good = Value(Good::Board);  // CreatePile finds free records below
             }
         }
-        for (std::uint32_t s = 0; s < 0x7d00; ++s) {
+        for (std::uint32_t s = 0; s < 32000; ++s) {
             Settler& r = w->settlers[s];
-            r.x = static_cast<std::uint16_t>(r.x % 384);
-            r.y = static_cast<std::uint16_t>(r.y % 384);
-            r.target_x = static_cast<std::uint16_t>(r.target_x % 384);
-            r.target_y = static_cast<std::uint16_t>(r.target_y % 384);
+            r.x = static_cast<std::uint16_t>(r.x % kTestMapSize);
+            r.y = static_cast<std::uint16_t>(r.y % kTestMapSize);
+            r.target_x = static_cast<std::uint16_t>(r.target_x % kTestMapSize);
+            r.target_y = static_cast<std::uint16_t>(r.target_y % kTestMapSize);
             r.building = static_cast<std::uint16_t>(r.building % kTestBuildings);
         }
         for (auto& row : w->tiles) {
             for (Tile& tile : row) {
                 tile.object_number = static_cast<std::uint16_t>(tile.object_number % kTestPiles);
-                tile.area = static_cast<std::uint16_t>(tile.area % 0x200);
+                tile.area = static_cast<std::uint16_t>(tile.area % 512);
             }
         }
     });
@@ -468,15 +536,16 @@ void Compare(test::Context& ctx, SettlerFn candidate, int cases) {
     S3RE_EXPECT(logged > 0);
 }
 
-// Wrong: the class-3 soldiers give back building byte +0x1b instead of +0x1f.
-std::uint32_t __fastcall WrongResetSettlerToIdle(CGameData* world, void* edx, std::uint32_t settler) {
-    Settler& s = world->settlers[settler];
-    if (IsWorkJob(s.job) && s.art != 0 && g_settlerTypeClass[s.art] == 3) {
-        Building& b = world->buildings[s.building];
-        ++b.military.class3_coming;
-        --b.military.class2_coming;
+// Wrong: the pikemen (class 3) give back the bowmen's count instead of their own.
+std::uint32_t __fastcall WrongResetSettlerToIdle(CGameData* world, void* edx, std::uint32_t settlerNumber) {
+    const Settler& settler = world->settlers[settlerNumber];
+    if (IsWorkJob(JobOf(settler)) && TypeOf(settler) != SettlerType::Carrier &&
+        ClassOf(settler) == SettlerClass::Pikeman) {
+        Building& building = world->buildings[settler.building];
+        ++building.military.class3_coming;
+        --building.military.class2_coming;
     }
-    return CGameData_ResetSettlerToIdle(world, edx, settler);
+    return CGameData_ResetSettlerToIdle(world, edx, settlerNumber);
 }
 
 }  // namespace

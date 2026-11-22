@@ -89,6 +89,23 @@ static_assert(offsetof(PathState, target_free) == 0x98);
 
 }  // namespace layout
 
+// Pathing::FindPath's result (0x4a1ee0, read by WalkSettler 0x500860): the
+// direction 0..5 in the low three bits, plus what to do with it; 0xff when
+// the target cannot be reached. A result without the wait and swap bits is
+// a step (also 0x20 | direction, which some helpers return when every way
+// is blocked: WalkSettler steps anyway, as the original does).
+constexpr std::uint32_t kPathDirectionBits = 0x07;
+constexpr std::uint32_t kPathWait = 0x08;   // wait, facing the direction
+constexpr std::uint32_t kPathSwap = 0x10;   // swap places with the settler in the way
+constexpr std::uint32_t kPathNoWay = 0xff;
+
+inline std::uint32_t PathDirection(std::uint32_t result) {
+    return result & kPathDirectionBits;
+}
+inline bool IsPlainStep(std::uint32_t result) {
+    return (result & (kPathWait | kPathSwap)) == 0;
+}
+
 // The pathfinder's progress marker (g_pathPhase, game/globals.h): (sector type << 8) |
 // phase | (area << 16), set by every pathing helper on entry and exit (1 =
 // back in FindPath), 0 when FindPath returns. Only read by DebugLog calls in

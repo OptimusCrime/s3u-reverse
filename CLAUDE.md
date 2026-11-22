@@ -146,6 +146,12 @@ C++ code.
   - `re/functions.csv`: the function inventory (source of truth for names,
     status and verification). `re/ghidra_functions.tsv`: Ghidra's function
     list (the baseline). `tools/inventory.py`: check, stats and names.
+- **Coding style:** `docs/coding_style.md` (the user's decisions,
+  2026-11-22): readable idiomatic C++ with identical behaviour, named
+  values instead of magic numbers (shared enums in
+  `src/s3re/game/enums.h`, evidence in `re/enums.md`; typed access to the
+  category fields through `game/typed_fields.h`), decimal except
+  addresses/offsets/masks, comments tracing back to original addresses.
 
 ## Runtime structure
 
@@ -603,7 +609,10 @@ replaying, see `src/s3re/replay/command_log.h`):
    EDX parameter (see `hooks.h`). Check whether callers use EAX after the
    call before declaring a function `void`. A replacement that also provides
    tooling (like `--seed`) uses `S3RE_HOOK_ALWAYS` and calls the original
-   itself in original mode.
+   itself in original mode. Follow `docs/coding_style.md`: enums from
+   `game/enums.h` for jobs, types, goods and races (via
+   `game/typed_fields.h`), named constants, decimal literals, helpers named
+   after what each block of the original does, comments with addresses.
 3. Write differential tests with `S3RE_TEST` in the same file. Run the
    original (through the `Original_*` trampoline) and our version on identical
    random inputs and starting state, then compare return values and all

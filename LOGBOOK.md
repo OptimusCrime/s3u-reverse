@@ -7,6 +7,12 @@ progress.
 
 ## Current focus
 
+**Readability pass (user decision 2026-11-22, session 45).** Convert the
+code to `docs/coding_style.md` (enums from `game/enums.h`, named
+constants, decimal literals, readable helpers), behaviour unchanged.
+Pilot done (enums.h, re/enums.md, three files); the rest goes in
+parallel batches by file group (session 45 entry, TODO.md).
+
 **Struct pass (user request 2026-11-22, session 45).** Replace the
 "address hacks" with typed structures that mirror the real objects:
 typed globals instead of raw data addresses, real class layouts (RTTI
@@ -568,6 +574,62 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-22 (45): readability pilot: enums.h (parallel worktree)
+
+- **Style guide** `docs/coding_style.md` (the user's decisions) committed,
+  with a pointer in CLAUDE.md (code layout and workflow step 2), and
+  extended by the pilot: enum vs constexpr rules, placeholder names,
+  "never narrow a wider value into an enum", typed fields, a before/after
+  example and the lessons below.
+- **`src/s3re/game/enums.h`**: `Race` (int32, 4), `SettlerType` (48, 3
+  placeholders), `SettlerClass` (14 values of the class table), `BuildingType`
+  (57, all named), `Good` (36 + Empty 255, 1 placeholder), `SettlerJob`
+  (405 values 0..0x194, 40 named, 365 placeholders `JobNNN` with hex value,
+  walking/no-op and handler address in the comment), terrain classes, the
+  direction count, and `Value(e)`. Evidence and confidence per value in
+  **`re/enums.md`**. The numbering agrees with the public jsettlers lists
+  (hints only); every building's worker and input goods in UpdateEconomy,
+  the class/health tables and the temples' drinks confirm it.
+- **Corrections found by naming:** 0x21 is the harbour and 0x22 the
+  marketplace (were "market-like"/"port-like" the other way round); the
+  "water buildings" 0x1f/0x2f/0x30/0x32 are the catapult, ballista and
+  cannon workshops and the large gong; 0xc/0xd are the tool and weapon
+  smiths, 0x13 the barracks. `BuildingTypeAllowedForRace` does not fit the
+  numbering (TODO.md).
+- **Typed fields: accessors for now** (`game/typed_fields.h`: `JobOf`,
+  `SetJob`, `TypeOf`, `GoodOf`, `RaceOf`, `ClassOf`), because changing the
+  field types would touch ~30 files at once and every layout.h change
+  selects all emulator specs. The field types change once all users are
+  converted (TODO.md).
+- **Pilot files converted** (behaviour unchanged): `settler_idle.cpp`
+  (ResetSettlerToIdle: helpers per block, all job/type comparisons named),
+  `update_economy.cpp` (all building types, workers, goods and consumer
+  slots named; helpers for sites, soldiers, smiths, barracks, workshops,
+  distribution), `settler_walk.cpp` (WalkSettler: job switch, walk
+  states, ship decision split out, FindPath result constants
+  `kPathWait`/`kPathSwap`/`kPathNoWay` in pathing.h). Tests converted too,
+  with unchanged values and random draws.
+- Evidence: build without warnings; `--test` 490/490; `inventory.py check`
+  clean; emulator `--changed` (42 specs) 0 mismatches, full coverage except
+  GenerateRandomMap (known) and WalkSettler in the parallel run (348/428,
+  24 invalid: the stale translated-block cache fixed in the entry below,
+  not our code); WalkSettler alone with its 4,000 cases: 428/428, 0
+  invalid, 0 mismatches. Whole game: `check_replay.py --recording
+  fun8-seed2024-input31.bin --against-original --ticks 3000` identical
+  (226 of 554 replacements called).
+- **Next:** the remaining files in parallel batches by file group (one
+  worktree each; a batch that changes a shared header such as layout.h
+  or enums.h goes last or alone): (1) settlers: settler_records,
+  settler_queries, settler_spawn, soldier, miner_jobs, settlers.cpp;
+  (2) buildings: building_done, building_crush, building_goods,
+  building_sites, building_tiles, building_flags; (3) piles and areas:
+  area_piles, pile_goods_moves, goods_piles, economy, economy_helpers,
+  counting; (4) map: territory, area_split, map_*.cpp, flood fills,
+  fog_of_war, terrain_updates; (5) environment and spells: environment,
+  spells, spell_effects, godly_events, map_effect_*; (6) pathing.cpp alone
+  (2,247 lines). Then UI/framework/AI files, and last the typed field
+  types in layout.h.
 
 ### 2026-11-22 (45): emulator: split parts exact
 

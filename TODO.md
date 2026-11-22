@@ -8,6 +8,23 @@ it when it's done (mention it in the LOGBOOK session entry).
 
 Each item: what, why, and where to start.
 
+## Readability pass (docs/coding_style.md)
+
+- **Convert the remaining files** to the style guide (pilot done in
+  session 45: settler_idle.cpp, update_economy.cpp, settler_walk.cpp).
+  Batches by file group, see the LOGBOOK session 45 entry.
+- **Typed fields:** once every user of `Settler::job`, `Settler::art`,
+  `Building::art`, `Pile::good` or the race fields is converted, give the
+  field its enum type in `layout.h` and drop its accessor from
+  `game/typed_fields.h`.
+- **Rename `BuildingWaterBytes`** (layout.h, re/structs.md) to a workshop
+  name: its buildings 0x1f/0x2f/0x30/0x32 are the catapult, ballista and
+  cannon workshops and the large gong (re/enums.md).
+- **BuildingTypeAllowedForRace** (player_queries.cpp) does not fit the
+  building numbering of enums.h; find what its argument really is.
+- **Lint** for hex literals in comparisons and magic numbers in
+  job/type/goods comparisons (coding_style.md "Checks").
+
 ## Naming
 
 - **Audit provisional names.** Many names were given early from partial
