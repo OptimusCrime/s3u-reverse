@@ -3,9 +3,9 @@
 // Building records: 0x3a bytes at world+0x1499e64 (+0x6 type, +0x21 a byte
 // that is non-zero while the building is a construction site). A finished
 // building takes up to three input goods, listed per building type in the
-// table at 0x006a6824 in S3.EXE's data (3 int32 per type, e.g. type 0x1f:
-// goods 1, 11, 2); a construction site takes goods 1 and 2 (probably
-// boards and stones). Each input slot has two uint16 counters: +0x24/+0x26/
+// table at 0x006a6824 in S3.EXE's data (3 int32 per type, e.g. type 31,
+// the catapult workshop: goods 1, 11, 2); a construction site takes goods 1
+// and 2 (boards and stones). Each input slot has two uint16 counters: +0x24/+0x26/
 // +0x28 ("word 24") and +0x2a/+0x2c/+0x2e ("word 2A"); their meaning is not
 // settled (stock and requested amount are likely).
 //
@@ -38,7 +38,7 @@
 //   EAX (some callers use AL/the value) reproduced: the area number on the
 //   early returns, else SetBuildingInputWord24's EAX. ret 0x10.
 // CGameData::RemoveBuildingFromAreaRequests (0x004def80): (building): for
-//   finished buildings of type 0x21 or 0x22, clears the 2 x 36 words at
+//   finished harbours (0x21) and marketplaces (0x22), clears the 2 x 36 words at
 //   area +0x9a and +0xe2 that equal the building; for all others, unlinks
 //   the building from the area's 36 request lists (head or via the word 2A
 //   of its predecessor, BuildingInputWord2A/SetBuildingInputWord2A; the
@@ -50,6 +50,7 @@
 #include "game/replacements.h"
 #include "game/tables.h"
 #include "game/texts.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -67,9 +68,10 @@ using layout::Area;
 using layout::Building;
 using layout::kGoodsTypes;
 
-
-
 constexpr int kNoSlot = -1;
+constexpr int kInputSlots = 3;
+constexpr std::uint32_t kBoards = Value(Good::Board);
+constexpr std::uint32_t kStones = Value(Good::Stone);
 
 // One of the two per-slot word arrays: "word 24" (input_amount) or "word 2A"
 // (input_next).
@@ -77,12 +79,14 @@ using InputWords = std::uint16_t (Building::*)[3];
 constexpr InputWords kWord24 = &Building::input_amount;
 constexpr InputWords kWord2A = &Building::input_next;
 
+// The input slot of `goods` (compared as 32-bit values): a construction site takes boards in slot 0 and
+// stones in slot 1; a finished building the goods of its type's table (S3.EXE 0x6a6824), first match.
 int InputSlot(const Building& record, std::uint32_t goods) {
     if (record.buildup != 0) {
-        return goods == 1 ? 0 : goods == 2 ? 1 : kNoSlot;
+        return goods == kBoards ? 0 : goods == kStones ? 1 : kNoSlot;
     }
     const std::int32_t* inputs = g_buildingInputGoods[record.art];
-    for (int slot = 0; slot < 3; ++slot) {
+    for (int slot = 0; slot < kInputSlots; ++slot) {
         if (goods == static_cast<std::uint32_t>(inputs[slot])) {
             return slot;
         }
@@ -204,13 +208,13 @@ std::uint32_t __fastcall CGameData_AddBuildingGoodsRequest(CGameData* world, voi
     return CGameData_SetBuildingInputWord24(world, nullptr, building, goods, amount);
 }
 
-// Purpose: Takes a building off all of its area's 'wants goods' lists (and some special lists for two
-// building types). Used when a building no longer needs goods or is removed.
+// Purpose: Takes a building off all of its area's 'wants goods' lists (a finished harbour or marketplace
+// off the area's two trade lists instead). Used when a building no longer needs goods or is removed.
 std::uint32_t __fastcall CGameData_RemoveBuildingFromAreaRequests(CGameData* world, void*, std::uint32_t building) {
     const std::uint32_t area = BuildingArea(world, building);
     const Building& record = world->buildings[building];
-    const std::uint8_t type = record.art;
-    if ((type == 0x22 || type == 0x21) && record.buildup == 0) {
+    const BuildingType type = TypeOf(record);
+    if ((type == BuildingType::Marketplace || type == BuildingType::Harbour) && record.buildup == 0) {
         Area& areaRecord = world->areas[area];
         for (std::uint32_t k = 0; k < kGoodsTypes; ++k) {
             for (std::uint16_t* words : {areaRecord.buildings_a, areaRecord.buildings_b}) {
@@ -414,7 +418,8 @@ std::uint32_t RelativeToWorld(std::uint32_t value, CGameData* world) {
 // Wrong: stops at the first match instead of walking the whole list.
 std::uint32_t __fastcall WrongRemoveBuildingFromAreaRequests(CGameData* world, void* edx, std::uint32_t building) {
     const Building& record = world->buildings[building];
-    if ((record.art == 0x22 || record.art == 0x21) && record.buildup == 0) {
+    if ((TypeOf(record) == BuildingType::Marketplace || TypeOf(record) == BuildingType::Harbour) &&
+        record.buildup == 0) {
         return CGameData_RemoveBuildingFromAreaRequests(world, edx, building);
     }
     // Clears the building's own link first: later predecessors keep pointing at it.
@@ -499,7 +504,10 @@ using PriorityFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::
 // Purpose: How urgently a building asks for more of an input good: high when its input pile is empty and
 // nothing is on the way, lower for every unit there or coming (probably the request priority).
 std::uint32_t __fastcall CGameData_GoodsRequestPriority(CGameData*, void*, std::uint32_t amount, std::uint32_t coming) {
-    return 64000u - amount * 8000u - coming * 4000u;
+    constexpr std::uint32_t kEmptyPriority = 64000;
+    constexpr std::uint32_t kPerUnitThere = 8000;
+    constexpr std::uint32_t kPerUnitComing = 4000;
+    return kEmptyPriority - amount * kPerUnitThere - coming * kPerUnitComing;  // 32-bit wrap as in the original
 }
 
 S3RE_HOOK(0x004ff380, CGameData_GoodsRequestPriority, PriorityFn, Original_CGameData_GoodsRequestPriority,

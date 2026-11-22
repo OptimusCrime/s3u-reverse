@@ -53,11 +53,12 @@
 // Coordinates are computed in 32 bits (word + offset) as in the original.
 
 #include "game/debug_log.h"
+#include "game/enums.h"
 #include "game/globals.h"
-#include "game/raw.h"
 #include "game/replacements.h"
 #include "game/tables.h"
 #include "game/texts.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -78,13 +79,27 @@ namespace {
 using layout::Building;
 using layout::Player;
 
+using B = BuildingType;
+using G = Good;
 
+// Pile kinds (CreatePile's last argument).
+constexpr std::uint8_t kPileOutput = 0xff;  // a building's output pile at the door
+constexpr std::uint8_t kPileStore = 0xfc;   // the ring of six piles of a harbour or marketplace
+constexpr std::uint8_t kPileInput = 0xfd;   // an input pile from the type's table
+constexpr std::uint32_t kStorePiles = 6;
+constexpr std::uint16_t kNoDirection = 0xffff;  // Building::dock_direction not chosen yet
 
-constexpr std::uint8_t kPileOutput = 0xff;
-constexpr std::uint8_t kPileStore = 0xfc;
-constexpr std::uint8_t kPileInput = 0xfd;
-constexpr std::uint16_t kSoldierJob = 0xad;
-constexpr std::uint32_t kSoldierType = 0x25;
+// The settler a finished military building gets (type 37 = 0x25, job 173 = 0xad, both placeholders;
+// Building::guard keeps it).
+constexpr SettlerType kGuardType = SettlerType::Type37;
+constexpr SettlerJob kGuardJob = SettlerJob::Job173;
+
+constexpr std::uint16_t kStartHitPoints = 100;
+constexpr std::int32_t kTempleMana = 8;
+constexpr std::int32_t kPlayerFlagNoTempleMana = 1;  // Player::unk008 bit 0
+
+// The pending event BuildingDone queues first (QueuePendingEvent(1, building, 0)).
+constexpr std::uint32_t kEventBuildingDone = 1;
 
 // UnblockTile (verified, area_split.cpp) through its S3.EXE address, so that
 // tests can replace its region floods by a recording stub.
@@ -95,58 +110,254 @@ std::uint32_t PileAt(CGameData* world, std::uint32_t x, std::uint32_t y, std::ui
     return CGameData_CreatePile(world, nullptr, x, y, good, 0, kind);
 }
 
+std::uint32_t PileAt(CGameData* world, std::uint32_t x, std::uint32_t y, Good good, std::uint32_t kind) {
+    return PileAt(world, x, y, static_cast<std::uint32_t>(Value(good)), kind);
+}
+
 // The output pile at the door (stored in +0xe by the callers).
-std::uint16_t DoorPile(CGameData* world, const Building& b, std::uint32_t good) {
-    return static_cast<std::uint16_t>(PileAt(world, b.door_x, b.door_y, good, kPileOutput));
+std::uint16_t DoorPile(CGameData* world, const Building& building, std::uint32_t good) {
+    return static_cast<std::uint16_t>(PileAt(world, building.door_x, building.door_y, good, kPileOutput));
+}
+
+std::uint16_t DoorPile(CGameData* world, const Building& building, Good good) {
+    return DoorPile(world, building, static_cast<std::uint32_t>(Value(good)));
+}
+
+// An output pile next to the door, not stored in the building.
+void PileNextToDoor(CGameData* world, const Building& building, std::int32_t dx, std::int32_t dy, Good good) {
+    PileAt(world, building.door_x + static_cast<std::uint32_t>(dx), building.door_y + static_cast<std::uint32_t>(dy),
+           good, kPileOutput);
 }
 
 // The work tile becomes the position kept in +0xe/+0x14 during construction.
-void WorkFromSite(Building& b) {
-    b.work_x = b.pile_ring;
-    b.work_y = b.piles[2];
+void WorkFromSite(Building& building) {
+    building.work_x = building.pile_ring;
+    building.work_y = building.piles[2];
 }
 
-// Six store piles around the building (types 0x21/0x22), linked to it.
-void CreateStorePiles(CGameData* world, std::uint32_t number, const std::int32_t* offsets) {
-    Building& b = world->buildings[number];
+// Step 1 (after the pending event): the construction state is reset.
+void ResetSite(Building& building) {
+    building.buildup = 0;
+    building.worker = 0;
+    building.work_x = building.x;
+    building.work_y = building.y;
+    building.site.boards_missing = 0;
+    building.site.stones_missing = 0;
+    building.site.diggers = 0;
+    building.site.builders = 0;
+    building.site.unk1e = 0;  // +0x1d (workers_at_work) stays
+    building.site.materials_total = 0;
+    building.site.materials_used = 0;
+    building.request_flags = 1;
+    building.hit_points = kStartHitPoints;
+    building.trade = 0;
+    building.input_amount[2] = 0;
+}
+
+// Step 2: towers and castle get their hit points and their guard settler on a tile that depends on type
+// and race. For a race above 3 the original reads its argument slot (overwritten by the building number by
+// then) as both coordinates; ours uses the building number on purpose.
+void FinishMilitaryBuilding(CGameData* world, std::uint32_t buildingId, Building& building, std::uint32_t kind) {
+    building.hit_points = static_cast<std::uint16_t>(g_militaryHitPoints[kind]);
+    building.military.class1_wanted = 1;
+    building.military.class2_wanted = 0;
+    building.military.class3_wanted = 0;
+    // Guard tile offsets per kind (small tower, large tower, castle) and race (Roman, Egyptian, Asian, Amazon).
+    static constexpr std::int32_t kGuardTile[3][kRaces][2] = {
+        {{2, 1}, {2, 1}, {0, 1}, {2, 1}},
+        {{-1, 2}, {-1, 2}, {0, 1}, {0, 2}},
+        {{-1, 3}, {1, 6}, {0, 3}, {0, 4}},
+    };
+    const std::int32_t race = world->players[building.owner].race;
+    std::uint32_t x = buildingId;
+    std::uint32_t y = buildingId;
+    if (race >= 0 && race < kRaces) {
+        x = building.x + static_cast<std::uint32_t>(kGuardTile[kind][race][0]);
+        y = building.y + static_cast<std::uint32_t>(kGuardTile[kind][race][1]);
+    }
+    reinterpret_cast<TileFn>(kUnblockTile)(world, nullptr, x, y);
+    const std::uint32_t guard = CGameData_CreateSettler(world, nullptr, x, y, Value(kGuardType), building.owner);
+    world->settlers[guard].job = Value(kGuardJob);
+    world->settlers[guard].building = static_cast<std::uint16_t>(buildingId);
+    building.guard = static_cast<std::uint16_t>(guard);
+}
+
+// Six store piles around the building (harbour and marketplace), linked to it.
+void CreateStorePiles(CGameData* world, std::uint32_t buildingId, const std::int32_t* offsets) {
+    Building& building = world->buildings[buildingId];
     std::uint32_t previous = 0;
-    for (std::uint32_t k = 0; k < 6; ++k) {
-        const std::uint32_t pile = PileAt(world, b.x + static_cast<std::uint32_t>(offsets[2 * k]),
-                                          b.y + static_cast<std::uint32_t>(offsets[2 * k + 1]), 0xff, kPileStore);
-        world->piles[pile].prev = static_cast<std::uint16_t>(number);
+    for (std::uint32_t k = 0; k < kStorePiles; ++k) {
+        const std::uint32_t pile =
+            PileAt(world, building.x + static_cast<std::uint32_t>(offsets[2 * k]),
+                   building.y + static_cast<std::uint32_t>(offsets[2 * k + 1]), Good::Empty, kPileStore);
+        world->piles[pile].prev = static_cast<std::uint16_t>(buildingId);
         if (k == 0) {
-            b.pile_ring = static_cast<std::uint16_t>(pile);
+            building.pile_ring = static_cast<std::uint16_t>(pile);
         } else {
             world->piles[previous].next = static_cast<std::uint16_t>(pile);
         }
-        if (k == 5) {
+        if (k == kStorePiles - 1) {
             world->piles[pile].next = 0;
         }
         previous = pile;
     }
-    b.trade = static_cast<std::uint16_t>(CGameData_AllocBuildingExtra(world, nullptr, b.owner));
+    building.trade = static_cast<std::uint16_t>(CGameData_AllocBuildingExtra(world, nullptr, building.owner));
 }
 
-// Temples (probably): one more priest/mana source unless the player's flag
-// bit 0 is set.
-void FinishTemple(CGameData* world, Building& b) {
-    b.temple.countdown = 1;
-    b.temple.points = 1;
-    Player& player = world->players[b.owner];
-    if ((player.unk008 & 1) != 0) {
+// A large temple adds mana unless the player's flag bit 0 is set.
+void FinishLargeTemple(CGameData* world, Building& building) {
+    building.temple.countdown = 1;
+    building.temple.points = 1;
+    Player& player = world->players[building.owner];
+    if ((player.unk008 & kPlayerFlagNoTempleMana) != 0) {
         return;
     }
-    player.mana += 8;
-    world->players[b.owner].mana_total += 8;
-    g_playerTallies[b.owner].unk0c += 8;
+    player.mana += kTempleMana;
+    world->players[building.owner].mana_total += kTempleMana;
+    g_playerTallies[building.owner].unk0c += kTempleMana;
 }
 
-void ClearFlags1aTo20(Building& b) {
-    b.water.wanted[0] = 0;
-    b.water.wanted[1] = 0;
-    b.water.wanted[2] = 0;
-    b.water.state = 0;
-    b.water.extra_tiles = 0;
+// The war machine workshops and the large gong (BuildingWaterBytes, bytes +0x1a..+0x20).
+void ClearWorkshopBytes(Building& building) {
+    building.water.wanted[0] = 0;
+    building.water.wanted[1] = 0;
+    building.water.wanted[2] = 0;
+    building.water.state = 0;
+    building.water.extra_tiles = 0;
+}
+
+// Step 3: the type's own piles and fields. The original tests the types one after another; each type
+// matches exactly one test and nothing in between changes the type, so a switch does the same.
+void FinishByType(CGameData* world, std::uint32_t buildingId, Building& building, std::int32_t race) {
+    switch (TypeOf(building)) {
+    // Producers whose work tile is the position kept during construction.
+    case B::Stonecutter: WorkFromSite(building); building.pile_ring = DoorPile(world, building, G::Stone); break;
+    case B::Woodcutter: WorkFromSite(building); building.pile_ring = DoorPile(world, building, G::Log); break;
+    case B::Forester: WorkFromSite(building); break;
+    case B::Fishery: WorkFromSite(building); building.pile_ring = DoorPile(world, building, G::Fish); break;
+    case B::Farm: WorkFromSite(building); building.pile_ring = DoorPile(world, building, G::Grain); break;
+    case B::Waterworks: WorkFromSite(building); building.pile_ring = DoorPile(world, building, G::Water); break;
+    case B::Vineyard: WorkFromSite(building); building.pile_ring = DoorPile(world, building, G::Wine); break;
+    case B::RiceFarm: WorkFromSite(building); building.pile_ring = DoorPile(world, building, G::Rice); break;
+    case B::Apiary: WorkFromSite(building); building.pile_ring = DoorPile(world, building, G::Honey); break;
+
+    // One output pile at the door.
+    case B::Sawmill: building.pile_ring = DoorPile(world, building, G::Board); break;
+    case B::CoalMine: building.pile_ring = DoorPile(world, building, G::Coal); break;
+    case B::GoldMine: building.pile_ring = DoorPile(world, building, G::GoldOre); break;
+    case B::IronMine: building.pile_ring = DoorPile(world, building, G::IronOre); break;
+    case B::GemMine: building.pile_ring = DoorPile(world, building, G::Gems); break;
+    case B::SulfurMine:
+    case B::AmazonSulfurMine: building.pile_ring = DoorPile(world, building, G::Sulfur); break;
+    case B::GoldSmelter: building.pile_ring = DoorPile(world, building, G::Gold); break;
+    // The iron smelter's good comes from a global (S3.EXE 0x730ef0, 11 = iron).
+    case B::IronSmelter:
+        building.pile_ring = DoorPile(world, building, static_cast<std::uint32_t>(g_goodType0B));
+        break;
+    case B::PigFarm: building.pile_ring = DoorPile(world, building, G::Pig); break;
+    case B::Slaughterhouse: building.pile_ring = DoorPile(world, building, G::Meat); break;
+    case B::Mill: building.pile_ring = DoorPile(world, building, G::Flour); break;
+    case B::Bakery: building.pile_ring = DoorPile(world, building, G::Bread); break;
+    case B::Distillery: building.pile_ring = DoorPile(world, building, G::RiceLiquor); break;
+    case B::Brewery: building.pile_ring = DoorPile(world, building, G::Beer); break;
+    case B::CharcoalBurner: building.pile_ring = DoorPile(world, building, G::Coal); break;
+    case B::PowderMaker: building.pile_ring = DoorPile(world, building, G::Gunpowder); break;
+    case B::Meadery: building.pile_ring = DoorPile(world, building, G::Mead); break;
+
+    // Several output piles around the door, not stored in the building.
+    case B::Toolsmith:
+        PileNextToDoor(world, building, 0, 0, G::Hammer);
+        PileNextToDoor(world, building, -1, 0, G::Shovel);
+        PileNextToDoor(world, building, 1, 0, G::Axe);
+        PileNextToDoor(world, building, -1, -1, G::Pickaxe);
+        PileNextToDoor(world, building, 1, 1, G::Saw);
+        PileNextToDoor(world, building, 0, -1, G::FishingRod);
+        PileNextToDoor(world, building, 0, 1, G::Scythe);
+        break;
+    case B::Weaponsmith:
+        PileNextToDoor(world, building, 0, 0, G::Sword);
+        PileNextToDoor(world, building, -1, 0, G::Bow);
+        PileNextToDoor(world, building, 1, 0, G::Spear);
+        break;
+    case B::Laboratory:
+        PileNextToDoor(world, building, -1, 0, G::Iron);
+        PileNextToDoor(world, building, 1, 0, G::Gold);
+        break;
+
+    case B::CatapultWorkshop:
+    case B::BallistaWorkshop:
+    case B::CannonWorkshop:
+    case B::LargeGong: ClearWorkshopBytes(building); break;
+    case B::Shipyard:
+        ClearWorkshopBytes(building);
+        building.dock_direction = kNoDirection;
+        break;
+
+    // Trade buildings: a ring of six store piles from the race's table (S3.EXE 0x6594a4, 0x659564).
+    case B::Marketplace:
+        building.trading.goods_cursor = 0;
+        CreateStorePiles(world, buildingId,
+                         &g_storePileOffsets22[0][0][0] + static_cast<std::uint32_t>(race) * kStorePiles * 2);
+        break;
+    case B::Harbour:
+        building.dock_direction = kNoDirection;
+        building.trading.goods_cursor = 0;
+        building.trading.call_countdown = 0;
+        CreateStorePiles(world, buildingId,
+                         &g_storePileOffsets21[0][0][0] + static_cast<std::uint32_t>(race) * kStorePiles * 2);
+        break;
+
+    // The storehouse: six piles of its production good around it.
+    case B::Storehouse: {
+        GameDebugLog(texts::kBuildingDoneProductionPile, static_cast<std::uint32_t>(building.pile_ring));
+        static constexpr std::int32_t kAround[kStorePiles][2] = {{-2, 0}, {2, 0}, {-2, -2}, {2, 2}, {0, -2}, {0, 2}};
+        for (const auto& d : kAround) {
+            PileAt(world, building.x + static_cast<std::uint32_t>(d[0]), building.y + static_cast<std::uint32_t>(d[1]),
+                   building.pile_ring, 0);
+        }
+        break;
+    }
+
+    // Residences: births = the global unit (S3.EXE 0x730f00, 10) times 1, 3 or 10, in a byte.
+    case B::SmallResidence: building.residence.births = static_cast<std::uint8_t>(g_residenceUnit); break;
+    case B::MediumResidence: building.residence.births = static_cast<std::uint8_t>(g_residenceUnit * 3); break;
+    case B::LargeResidence: building.residence.births = static_cast<std::uint8_t>(g_residenceUnit * 10); break;
+
+    case B::SmallPagoda:
+    case B::SmallTemple:
+    case B::Sphinx:
+    case B::AmazonSmallTemple: building.temple.countdown = 0; break;
+    case B::LargePagoda:
+    case B::LargeTemple:
+    case B::Pyramid:
+    case B::AmazonLargeTemple: FinishLargeTemple(world, building); break;
+
+    default: break;
+    }
+}
+
+// Step 4: the input piles from the type's table (S3.EXE 0x6a6824 goods, 0x6a6ad0 offsets per race and type).
+void CreateInputPiles(CGameData* world, Building& building) {
+    building.piles[0] = 0;
+    building.piles[1] = 0;
+    building.piles[2] = 0;
+    for (std::uint32_t k = 0; k <= 2; ++k) {
+        const std::int32_t good = g_buildingInputGoods[building.art][k];
+        if (good == 0) {
+            continue;
+        }
+        GameDebugLog(texts::kPileFoundAtBuilding, k + 1, static_cast<std::uint32_t>(good));
+        // The race is read from the player again.
+        const std::uint32_t race = static_cast<std::uint32_t>(world->players[building.owner].race);
+        const std::uint32_t entry = (race * kBuildingTypeCount + building.art) * 3 + k;
+        const std::int32_t* offset = g_buildingInputOffsets[entry];
+        const std::uint32_t pile = PileAt(world, building.x + static_cast<std::uint32_t>(offset[0]),
+                                          building.y + static_cast<std::uint32_t>(offset[1]),
+                                          static_cast<std::uint32_t>(good), kPileInput);
+        building.piles[k] = static_cast<std::uint16_t>(pile);
+        GameDebugLog(texts::kAddBuilding, pile, static_cast<std::uint32_t>(building.piles[0]),
+                     static_cast<std::uint32_t>(building.piles[1]), static_cast<std::uint32_t>(building.piles[2]));
+    }
 }
 
 }  // namespace
@@ -158,191 +369,23 @@ using BuildingDoneFn = void(__fastcall*)(CGameData* world, void* edx, std::uint3
 // Purpose: Turns a finished construction site into a working building: resets
 // its construction state, puts the garrison's first soldier into a military
 // building, and creates the building's goods piles (output, input and
-// storage piles, by type and race).
-void __fastcall CGameData_BuildingDone(CGameData* world, void*, std::uint32_t number) {
-    CGameData_QueuePendingEvent(world, nullptr, 1, number, 0);
-    Building& b = world->buildings[number];
-    b.buildup = 0;
-    b.worker = 0;
-    b.work_x = b.x;
-    b.work_y = b.y;
-    b.site.boards_missing = 0;
-    b.site.stones_missing = 0;
-    b.site.diggers = 0;
-    b.site.builders = 0;
-    b.site.unk1e = 0;  // +0x1d (workers_at_work) stays
-    b.site.materials_total = 0;
-    b.site.materials_used = 0;
-    b.request_flags = 1;
-    b.hit_points = 100;
-    b.trade = 0;
-    b.input_amount[2] = 0;
-    const std::int32_t race = world->players[b.owner].race;
-    CGameData_RemovePileFromTile(world, nullptr, b.piles[0]);
-    CGameData_RemovePileFromTile(world, nullptr, b.piles[1]);
+// storage piles, by type and race). CGameData::BuildingDone (0x4dbc50).
+void __fastcall CGameData_BuildingDone(CGameData* world, void*, std::uint32_t buildingId) {
+    CGameData_QueuePendingEvent(world, nullptr, kEventBuildingDone, buildingId, 0);
+    Building& building = world->buildings[buildingId];
+    ResetSite(building);
+    const std::int32_t race = world->players[building.owner].race;
+    CGameData_RemovePileFromTile(world, nullptr, building.piles[0]);  // the site's material piles
+    CGameData_RemovePileFromTile(world, nullptr, building.piles[1]);
 
-    const std::uint8_t type = b.art;
-    if (type == 0xf || type == 0x10 || type == 0x12) {
-        const std::uint32_t index = type == 0xf ? 0 : type == 0x10 ? 1 : 2;
-        b.hit_points = static_cast<std::uint16_t>(g_militaryHitPoints[index]);
-        b.military.class1_wanted = 1;
-        b.military.class2_wanted = 0;
-        b.military.class3_wanted = 0;
-        // Soldier tile offsets per type and race (races 0..3).
-        static constexpr std::int32_t kSoldierTile[3][4][2] = {
-            {{2, 1}, {2, 1}, {0, 1}, {2, 1}},
-            {{-1, 2}, {-1, 2}, {0, 1}, {0, 2}},
-            {{-1, 3}, {1, 6}, {0, 3}, {0, 4}},
-        };
-        const std::int32_t playerRace = world->players[b.owner].race;
-        std::uint32_t x = number;
-        std::uint32_t y = number;
-        if (playerRace >= 0 && playerRace <= 3) {
-            x = b.x + static_cast<std::uint32_t>(kSoldierTile[index][playerRace][0]);
-            y = b.y + static_cast<std::uint32_t>(kSoldierTile[index][playerRace][1]);
-        }
-        reinterpret_cast<TileFn>(kUnblockTile)(world, nullptr, x, y);
-        const std::uint32_t soldier = CGameData_CreateSettler(world, nullptr, x, y, kSoldierType, b.owner);
-        world->settlers[soldier].job = kSoldierJob;
-        world->settlers[soldier].building = static_cast<std::uint16_t>(number);
-        b.guard = static_cast<std::uint16_t>(soldier);
+    switch (TypeOf(building)) {
+    case B::SmallTower: FinishMilitaryBuilding(world, buildingId, building, 0); break;
+    case B::LargeTower: FinishMilitaryBuilding(world, buildingId, building, 1); break;
+    case B::Castle: FinishMilitaryBuilding(world, buildingId, building, 2); break;
+    default: break;
     }
-
-    // Output piles at the door, in the original's order of tests.
-    struct DoorOutput {
-        std::uint8_t type;
-        std::uint8_t good;
-        bool work;  // the work tile comes from the site's stored position first
-    };
-    static constexpr DoorOutput kFirst[] = {{3, 2, true}, {2, 3, true}};
-    for (const DoorOutput& o : kFirst) {
-        if (b.art == o.type) {
-            WorkFromSite(b);
-            b.pile_ring = DoorPile(world, b, o.good);
-        }
-    }
-    if (b.art == 5) {
-        WorkFromSite(b);
-    }
-    static constexpr DoorOutput kSecond[] = {{4, 1, false}, {7, 5, false}, {8, 6, false}, {9, 7, false},
-                                             {0x25, 0x1c, false}};
-    for (const DoorOutput& o : kSecond) {
-        if (b.art == o.type) {
-            b.pile_ring = DoorPile(world, b, o.good);
-        }
-    }
-    if (b.art == 0x1d || b.art == 0x38) {
-        b.pile_ring = DoorPile(world, b, 0x19);
-    }
-    if (b.art == 0xa) {
-        b.pile_ring = DoorPile(world, b, 0xa);
-    }
-    if (b.art == 0xb) {
-        b.pile_ring = DoorPile(world, b, static_cast<std::uint32_t>(g_goodType0B));
-    }
-    if (b.art == 0xc) {
-        PileAt(world, b.door_x, b.door_y, 0xd, kPileOutput);
-        PileAt(world, b.door_x - 1, b.door_y, 0xc, kPileOutput);
-        PileAt(world, b.door_x + 1, b.door_y, 0xe, kPileOutput);
-        PileAt(world, b.door_x - 1, b.door_y - 1, 0xf, kPileOutput);
-        PileAt(world, b.door_x + 1, b.door_y + 1, 0x10, kPileOutput);
-        PileAt(world, b.door_x, b.door_y - 1, 0x11, kPileOutput);
-        PileAt(world, b.door_x, b.door_y + 1, 0x20, kPileOutput);
-    }
-    if (b.art == 0xd) {
-        PileAt(world, b.door_x, b.door_y, 0x12, kPileOutput);
-        PileAt(world, b.door_x - 1, b.door_y, 0x13, kPileOutput);
-        PileAt(world, b.door_x + 1, b.door_y, 0x14, kPileOutput);
-    }
-    static constexpr DoorOutput kThird[] = {
-        {0x19, 8, true},     {0x17, 0x17, false}, {0x15, 0x18, false}, {0x18, 9, true},   {0x11, 0x16, false},
-        {0x14, 4, false},    {0x1e, 0x1a, true},  {0xe, 0x15, true},   {0x16, 0x21, false}, {0x24, 0x1b, true},
-        {0x26, 0x1d, false}, {0x27, 5, false},    {0x28, 0x1e, false},
-    };
-    for (const DoorOutput& o : kThird) {
-        if (b.art == o.type) {
-            if (o.work) {
-                WorkFromSite(b);
-            }
-            b.pile_ring = DoorPile(world, b, o.good);
-        }
-    }
-    if (b.art == 0x1f || b.art == 0x2f || b.art == 0x30 || b.art == 0x32) {
-        ClearFlags1aTo20(b);
-    }
-    if (b.art == 0x20) {
-        ClearFlags1aTo20(b);
-        b.dock_direction = 0xffff;
-    }
-    if (b.art == 0x22) {
-        b.trading.goods_cursor = 0;
-        CreateStorePiles(world, number, &g_storePileOffsets22[0][0][0] + static_cast<std::uint32_t>(race) * 12);
-    }
-    if (b.art == 0x21) {
-        b.dock_direction = 0xffff;
-        b.trading.goods_cursor = 0;
-        b.trading.call_countdown = 0;
-        CreateStorePiles(world, number, &g_storePileOffsets21[0][0][0] + static_cast<std::uint32_t>(race) * 12);
-    }
-    if (b.art == 1) {
-        GameDebugLog(texts::kBuildingDoneProductionPile, static_cast<std::uint32_t>(b.pile_ring));
-        static constexpr std::int32_t kAround[6][2] = {{-2, 0}, {2, 0}, {-2, -2}, {2, 2}, {0, -2}, {0, 2}};
-        for (const auto& d : kAround) {
-            PileAt(world, b.x + static_cast<std::uint32_t>(d[0]), b.y + static_cast<std::uint32_t>(d[1]), b.pile_ring,
-                   0);
-        }
-    }
-    const std::int8_t unit = g_residenceUnit;
-    if (b.art == 0x1a) {
-        b.residence.births = static_cast<std::uint8_t>(unit);
-    }
-    if (b.art == 0x1b) {
-        b.residence.births = static_cast<std::uint8_t>(unit * 3);
-    }
-    if (b.art == 0x1c) {
-        b.residence.births = static_cast<std::uint8_t>(unit * 10);
-    }
-    static constexpr std::uint8_t kTemples[4][2] = {{0x2e, 0x2d}, {0x2c, 0x2b}, {0x2a, 0x29}, {0x36, 0x37}};
-    for (const auto& t : kTemples) {
-        if (b.art == t[0]) {
-            b.temple.countdown = 0;
-        }
-        if (b.art == t[1]) {
-            FinishTemple(world, b);
-        }
-    }
-    if (b.art == 0x33) {
-        WorkFromSite(b);
-        b.pile_ring = DoorPile(world, b, 0x23);
-    }
-    if (b.art == 0x34) {
-        b.pile_ring = DoorPile(world, b, 0x22);
-    }
-    if (b.art == 0x35) {
-        PileAt(world, b.door_x - 1, b.door_y, 0xb, kPileOutput);
-        PileAt(world, b.door_x + 1, b.door_y, 0xa, kPileOutput);
-    }
-
-    // Input piles from the type's table.
-    b.piles[0] = 0;
-    b.piles[1] = 0;
-    b.piles[2] = 0;
-    for (std::uint32_t k = 0; k <= 2; ++k) {
-        const std::int32_t good = g_buildingInputGoods[b.art][k];
-        if (good == 0) {
-            continue;
-        }
-        GameDebugLog(texts::kPileFoundAtBuilding, k + 1, static_cast<std::uint32_t>(good));
-        const std::uint32_t entry =
-            (static_cast<std::uint32_t>(world->players[b.owner].race) * 57 + b.art) * 3 + k;
-        const std::int32_t* offset = g_buildingInputOffsets[entry];
-        const std::uint32_t pile = PileAt(world, b.x + static_cast<std::uint32_t>(offset[0]),
-                                          b.y + static_cast<std::uint32_t>(offset[1]),
-                                          static_cast<std::uint32_t>(good), kPileInput);
-        b.piles[k] = static_cast<std::uint16_t>(pile);
-        GameDebugLog(texts::kAddBuilding, pile, static_cast<std::uint32_t>(b.piles[0]),
-                     static_cast<std::uint32_t>(b.piles[1]), static_cast<std::uint32_t>(b.piles[2]));
-    }
+    FinishByType(world, buildingId, building, race);
+    CreateInputPiles(world, building);
 }
 
 S3RE_HOOK(0x004dbc50, CGameData_BuildingDone, BuildingDoneFn, Original_CGameData_BuildingDone, CGameData_BuildingDone);
@@ -456,7 +499,7 @@ void CompareBuildingDone(test::Context& ctx, BuildingDoneFn candidate, int cases
     }
 }
 
-// Wrong: a temple always adds its mana.
+// Wrong: a large temple always adds its mana.
 void __fastcall WrongBuildingDone(CGameData* world, void* edx, std::uint32_t number) {
     Player& player = world->players[world->buildings[number].owner];
     const std::int32_t saved = player.unk008;
