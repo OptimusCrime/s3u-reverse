@@ -658,8 +658,13 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   any data-address literal outside those headers (3 `raw-ok`: section
   bounds in crash_log.cpp/debug_log.cpp). `raw_access_report.py` counts
   every literal; worklist: 0 data addresses left, 21 RawAt (S2).
-- Verification: see the commit message (build clean, `--test`, emulator,
-  whole-game replay).
+- Verification: build clean (/W4, no warnings); `s3re_launcher --test`
+  490/490; emulator `--changed` (selected all 555 specs, --jobs 3): 0
+  mismatches; incomplete coverage GameWorld_Create and UpdateEconomy
+  (as before) and WalkSettler 348/428 in the parallel run (1976 valid
+  cases of a split run), 428/428 when rerun alone; check_replay
+  fun8-seed2024-input31.bin --against-original 3,000 ticks: identical.
+  Tooling version not bumped (original-mode code changed only in form).
 
 ### 2026-11-22 (45): round end (WalkSettler, UpdateSoldier, UpdateEconomy, UpdateEnvironment)
 
