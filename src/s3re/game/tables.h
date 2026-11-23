@@ -164,6 +164,11 @@ inline constexpr GameGlobal<const NotificationKind[]> g_notificationKinds{0x659d
 // ------------------------------------------------------------ computer players
 // Default per-candidate value (AI_RecordBestCandidate).
 inline constexpr GameGlobal<const std::uint16_t[]> g_aiCandidateDefaults{0x7329d0};
+// Per building type (58 words, 0 for type 0 and past the last): the cap
+// and the step by which CComputerPlayer::RaiseBuildPriorities (0x551b10)
+// raises a non-zero build priority (AiPlayerData::best[type].score).
+inline constexpr GameGlobal<const std::uint16_t[58]> g_aiBuildPriorityCaps{0x7328e8};
+inline constexpr GameGlobal<const std::uint16_t[58]> g_aiBuildPrioritySteps{0x73295c};
 
 // ------------------------------------------------------------ library data
 // std::string::npos of S3.EXE's statically linked library (read at run

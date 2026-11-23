@@ -546,9 +546,9 @@ std::uint32_t __fastcall AI_ResetAgentData(void* self, void* /*edx*/) {
     for (std::uint32_t& value : data->dwords18e4) {
         value = 0;
     }
-    std::memset(data->dwords714, 0, sizeof(data->dwords714));
-    data->unk001 = 0;
-    std::memset(data->dwords444, 0, sizeof(data->dwords444));
+    std::memset(data->buildings, 0, sizeof(data->buildings));
+    data->buildings_counted = 0;
+    std::memset(data->soldiers, 0, sizeof(data->soldiers));
     for (std::uint32_t* array : {data->dwords3a4, data->dwords354, data->dwords2b4, data->dwords304, data->dwords3f4}) {
         std::memset(array, 0, sizeof(data->dwords3a4));
     }
@@ -558,9 +558,9 @@ std::uint32_t __fastcall AI_ResetAgentData(void* self, void* /*edx*/) {
     }
     data->unk000 = 0;
     data->unk002 = 0;
-    data->unk2ac = 0;
+    data->team_strength_valid = 0;
     for (std::size_t k = 0; k < 20; ++k) {
-        data->dwords25c[k] = 0;
+        data->team_strength[k] = 0;
         data->dwords2b4[k] = 0;
         data->dwords304[k] = 0;
         data->dwords354[k] = 0;

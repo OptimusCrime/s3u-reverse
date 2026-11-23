@@ -3980,6 +3980,199 @@ SPECS += [
     Spec("CLogicThread_ClearPendingUiRefresh", 0x0053f530, "logicthread", [], presets=ui_refresh),
 ]
 
+
+# -- computer players, batch 1 (session 47): CComputerPlayer, BLACK_BOARD_AGENT,
+# the census (ai_computer_player.cpp, ai_census.cpp) -------------------------
+
+AI_PLAYER = 0x007E3130  # g_aiPlayer
+AGENT_POOL = SCRATCH  # ten agents of 0x20 bytes (ids 0..9)
+AGENT_POOL_SIZE = 10
+AI_DATA_NODE = SCRATCH + SCRATCH_SLOT_BYTES  # an AiPlayerData node
+AI_SECOND_PLAYER = SCRATCH + 2 * SCRATCH_SLOT_BYTES  # g_aiPlayer for FindChildOfType
+
+
+def agent_pool(rng, table):
+    """Agents 0..9 in the pool, their pointers in the agent table at
+    `table` (world offset); children chains only go to higher ids."""
+    fields = []
+    for agent_id in range(AGENT_POOL_SIZE):
+        agent = AGENT_POOL + agent_id * 0x20
+        fields.append((table + 4 * agent_id, WORLD_BASE + agent, 4))
+        later = AGENT_POOL_SIZE - agent_id - 1
+        sibling = 0xFFFF if later == 0 or rng.random() < 0.25 else agent_id + 1 + rng.randrange(later)
+        fields += [(agent + 4, rng.randrange(8) if rng.random() < 0.6 else rng.getrandbits(16), 2),
+                   (agent + 6, rng.randrange(4) if rng.random() < 0.8 else rng.getrandbits(16), 2),
+                   (agent + 8, agent_id if rng.random() < 0.5 else rng.randrange(AGENT_POOL_SIZE), 2),
+                   (agent + 0x12, sibling, 2),
+                   (agent + 0x14, 0xFFFF if rng.random() < 0.25 else rng.randrange(AGENT_POOL_SIZE), 2)]
+    return fields
+
+
+def computer_player(rng, pool, args):
+    """A CComputerPlayer at the world base: its four id lists (small ids,
+    a free tail, sometimes full), agents 0..9, an AiPlayerData node."""
+    fields = []
+    for offset, slots in ((0x4, 100), (0xCE, 50), (0x134, 100), (0x200, 50)):
+        used = slots if rng.random() < 0.15 else rng.randrange(slots)
+        fields += [(offset + 2 * k, rng.randrange(12) if k < used else 0xFFFF, 2) for k in range(slots)]
+    fields += agent_pool(rng, 0x280)
+    fields.append((0x778, WORLD_BASE + AI_DATA_NODE, 4))
+    for building_type in range(57):
+        r = rng.random()
+        priority = 0 if r < 0.3 else rng.randrange(1000) if r < 0.5 else rng.getrandbits(16)
+        fields.append((AI_DATA_NODE + 0x26 + 6 * building_type, priority, 2))
+    return fields
+
+
+def pool_agent(rng, pool):
+    return WORLD_BASE + AGENT_POOL + rng.randrange(AGENT_POOL_SIZE) * 0x20
+
+
+def agent_with_children(rng, pool, args):
+    """The agent at the world base and its children in the pool of the
+    player g_aiPlayer points at."""
+    return agent_pool(rng, AI_SECOND_PLAYER + 0x280) + [
+        (0x14, 0xFFFF if rng.random() < 0.2 else rng.randrange(AGENT_POOL_SIZE), 2)]
+
+
+def ai_second_player(rng, pool, args):
+    return [(AI_PLAYER, WORLD_BASE + AI_SECOND_PLAYER, 4)]
+
+
+def flag_bits(rng, pool):
+    return 1 << rng.randrange(4) if rng.random() < 0.6 else rng.getrandbits(32)
+
+
+AI_BUILDINGS = 0x1499E64
+AI_PLAYERS = 0x11943DC
+
+
+def ai_map_world(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_WORLD, WORLD_BASE, 4)]
+
+
+def census_buildings(rng, pool, args):
+    """Up to 40 buildings: owners mostly < 20, types mostly < 57, mostly
+    finished; sometimes no buildings or a count of 0xffffffff."""
+    r = rng.random()
+    count = 0 if r < 0.05 else 0xFFFFFFFF if r < 0.08 else rng.randrange(40)
+    fields = [(0x1499E60, count, 4)]
+    for building_id in range(1, 41):
+        b = AI_BUILDINGS + building_id * 0x3A
+        fields += [(b, rng.randrange(20) if rng.random() < 0.85 else rng.getrandbits(8), 1),
+                   (b + 6, rng.randrange(57) if rng.random() < 0.9 else rng.getrandbits(8), 1),
+                   (b + 0x21, 0 if rng.random() < 0.75 else rng.getrandbits(8), 1)]
+    return fields
+
+
+def census_players(rng, pool, args):
+    """Players taking part or not, in a few teams; small census counts."""
+    fields = []
+    for p in range(20):
+        record = AI_PLAYERS + p * 0x148
+        fields += [(record, 0 if rng.random() < 0.3 else rng.randrange(1, 3), 4),
+                   (record + 0xC, rng.randrange(4), 4)]
+        fields += [(0x444 + (p * 9 + k) * 4, rng.randrange(50), 4) for k in range(9)]
+        fields += [(0x714 + (p * 57 + t) * 4, rng.randrange(10), 4) for t in (15, 16, 18)]
+    return fields
+
+
+def start_position(rng, pool, args):
+    """A small map; the player's start position (sometimes off the map)
+    with a run of blocked tiles to its right, often to the edge."""
+    size = rng.randint(1, 40)
+    record = AI_PLAYERS + args[0] * 0x148
+    def coordinate():
+        return rng.randint(-3, size + 2) & 0xFFFFFFFF if rng.random() < 0.15 else rng.randrange(size)
+    x, y = coordinate(), coordinate()
+    fields = [(MAP_SIZE, size, 4), (record + 0x10, x, 4), (record + 0x14, y, 4)]
+    if x < size and y < size:
+        run = rng.randint(0, size - x + 1)
+        for k in range(run + 1):
+            if x + k >= size:
+                break
+            t = TILES + ((x + k) * 0x300 + y) * 24
+            flags = rng.getrandbits(8)
+            fields += [(t + 0xA, flags | 1 if k < run else flags & ~1, 1), (t + 0x10, rng.getrandbits(8), 1)]
+    return fields
+
+
+def ptr_vector(rng, pool, args):
+    first = 0 if rng.random() < 0.2 else WORLD_BASE + SCRATCH + 4 * rng.randrange(16)
+    last = first + 4 * rng.randrange(20) if rng.random() < 0.8 else rng.getrandbits(32)
+    return [(4, first, 4), (8, last & 0xFFFFFFFF, 4)]
+
+
+class CopyRange:
+    """Arguments of AI_UninitializedCopyPtrs: (first, last, dest). A null
+    destination only comes with a range of at most one element (the
+    original then writes to address 4 onwards)."""
+
+    def __init__(self):
+        self.count = 0
+
+    def first(self, rng, pool):
+        return WORLD_BASE + SCRATCH
+
+    def last(self, rng, pool):
+        self.count = rng.randrange(20)
+        return WORLD_BASE + SCRATCH + 4 * self.count
+
+    def dest(self, rng, pool):
+        if self.count <= 1 and rng.random() < 0.5:
+            return 0
+        return WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES + 4 * rng.randrange(4)
+
+
+COPY_RANGE = CopyRange()
+
+
+def grid_world_or_empty(rng, pool, args):
+    return [(0x140, rng.randint(0, 6), 4), (0x144, rng.randint(0, 6), 4), (0x158, WORLD_BASE + GRID_CELLS, 4)]
+
+
+SPECS += [
+    Spec("CComputerPlayer_AddRootAgent", 0x005517f0, "thiscall", [id_with_noise(12)], presets=computer_player),
+    Spec("CComputerPlayer_RemoveRootAgent", 0x00551820, "thiscall", [id_with_noise(12)], presets=computer_player),
+    Spec("CComputerPlayer_AddPendingAgent", 0x00551850, "thiscall", [id_with_noise(12)], presets=computer_player),
+    Spec("CComputerPlayer_RemovePendingAgent", 0x00551880, "thiscall", [id_with_noise(12)],
+         presets=computer_player),
+    Spec("CComputerPlayer_AddActiveAgent", 0x005518b0, "thiscall", [id_with_noise(12)], presets=computer_player),
+    Spec("CComputerPlayer_RemoveActiveAgent", 0x005518e0, "thiscall", [id_with_noise(12)],
+         presets=computer_player),
+    Spec("CComputerPlayer_RemoveFromList200", 0x00551940, "thiscall", [id_with_noise(12)],
+         presets=computer_player),
+    Spec("CComputerPlayer_ActivateAgent", 0x005515e0, "thiscall", [id_with_noise(AGENT_POOL_SIZE)],
+         presets=computer_player),
+    # EDX's upper half goes into the pushed id (mov dx).
+    Spec("CComputerPlayer_ActivateAgentOf", 0x005515c0, "thiscall", [pool_agent], presets=computer_player),
+    Spec("CComputerPlayer_DeactivateAgent", 0x00551630, "thiscall", [id_with_noise(AGENT_POOL_SIZE)],
+         presets=computer_player),
+    Spec("CComputerPlayer_DeactivateAgentOf", 0x00551610, "thiscall", [pool_agent], presets=computer_player),
+    Spec("CComputerPlayer_RaiseBuildPriorities", 0x00551b10, "thiscall", [], eax_mask=0,
+         presets=computer_player),
+    Spec("BLACK_BOARD_AGENT_ResetLinks", 0x00582400, "thiscall", []),
+    Spec("BLACK_BOARD_AGENT_Init", 0x005823e0, "thiscall", [anything]),
+    # AX only: the upper half of EAX is the caller's.
+    Spec("BLACK_BOARD_AGENT_MarkDispatched", 0x00582430, "thiscall", [], eax_mask=0xFFFF),
+    Spec("BLACK_BOARD_AGENT_SetFlags", 0x00582440, "thiscall", [flag_bits], eax_mask=0xFFFF),
+    Spec("BLACK_BOARD_AGENT_ClearFlags", 0x00582450, "thiscall", [flag_bits]),
+    Spec("BLACK_BOARD_AGENT_HasFlags", 0x00582460, "thiscall", [flag_bits]),
+    Spec("BLACK_BOARD_AGENT_FindChildOfType", 0x005824d0, "thiscall", [id_with_noise(5)],
+         presets=agent_with_children, globals=ai_second_player),
+    Spec("AI_Census_Construct", 0x0055b6b0, "thiscall", [], globals=ai_vectors, max_cases=200),
+    Spec("AI_Census_CountBuildings", 0x0055be00, "thiscall", [], presets=census_buildings,
+         globals=ai_map_world, max_cases=400),
+    Spec("AI_Census_ComputeTeamStrength", 0x0055bea0, "thiscall", [], presets=census_players,
+         globals=ai_map_world, max_cases=400),
+    Spec("AI_StartPositionWalkRegion", 0x0055b6e0, "stdcall", [below(20)], presets=start_position,
+         globals=ai_map_world),
+    Spec("AI_PtrVector_Size", 0x0055bfc0, "thiscall", [], presets=ptr_vector),
+    Spec("AI_UninitializedCopyPtrs", 0x0055bff0, "stdcall", [COPY_RANGE.first, COPY_RANGE.last, COPY_RANGE.dest]),
+    Spec("AI_EvaLand_SumAllCells", 0x005546c0, "thiscall", [], presets=grid_world_or_empty, max_cases=500),
+    Spec("AI_Record7_Construct", 0x0055ebe0, "thiscall", []),
+]
+
 # -- batch 26: exception classes (win32_exceptions.cpp) -----------------------
 #
 # The constructors build the object at world offset 0 (its message string

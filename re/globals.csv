@@ -222,3 +222,5 @@ address,name,type,status,notes
 0x007e3414,g_aiMapSizeX,uint16_t,classified,"The map size as the AI sees it (copied from the world by 0x551b80). Declared in src/s3re/game/globals.h; used by ai_helpers.cpp, ai_small_helpers.cpp."
 0x007e7a24,g_aiAgentVectors,ai::AiVector[20],classified,"20 vectors emptied by AI_ResetAgentData. Declared in src/s3re/game/globals.h; used by ai_helpers.cpp, ai_layout.h."
 0x007e7b60,g_aiMapWorld,CGameData*,classified,A second copy of the AI's world pointer (0x58fa7b). Declared in src/s3re/game/globals.h; used by ai_helpers.cpp.
+0x007328e8,g_aiBuildPriorityCaps,const uint16_t[58],classified,"Per building type: the cap of a computer player's build priority (60000/65000/... ; 0 for type 0). CComputerPlayer::RaiseBuildPriorities 0x551b10. Declared in src/s3re/game/tables.h; used by ai_computer_player.cpp."
+0x0073295c,g_aiBuildPrioritySteps,const uint16_t[58],classified,"Per building type: the step by which a computer player's non-zero build priority grows (100..500). CComputerPlayer::RaiseBuildPriorities 0x551b10. Declared in src/s3re/game/tables.h; used by ai_computer_player.cpp."
