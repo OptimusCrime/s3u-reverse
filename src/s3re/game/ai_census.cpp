@@ -33,8 +33,6 @@
 // AI_EvaLand_SumAllCells (0x005546c0): () AI_GridSumAround(x, y) for every
 //   cell of the land evaluation grid, rows (y) outside, the sizes re-read
 //   after each call. EAX = the grid height.
-// AI_Record7_Construct (0x0055ebe0): () AI_SetWord4(7) (the record's tag),
-//   +8 and +0xc = 0. EAX = 0. Called by 0x56f6d0, which builds the agents.
 
 #include "game/ai_layout.h"
 #include "game/enums.h"
@@ -55,7 +53,6 @@ namespace s3re::game {
 bool __fastcall AI_IsOnMap(std::int32_t v);
 std::uint32_t __fastcall AI_GridSumAround(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall AI_ResetAgentData(void* self, void* edx);
-std::uint16_t __fastcall AI_SetWord4(void* self, void* edx, std::uint32_t value);
 
 using namespace ai;
 using layout::kPlayers;
@@ -66,17 +63,6 @@ namespace {
 // highest level of each weapon) counts twice; soldiers weigh 8, towers 16.
 constexpr std::uint32_t kSoldierWeight = 8;
 constexpr std::uint32_t kTowerWeight = 16;
-constexpr std::uint16_t kRecord7Tag = 7;
-
-// The record 0x55ebe0 constructs (class unknown).
-struct AiRecord7 {
-    AiTaggedRecord header;  // +0, tag at +4
-    std::uint16_t unk06;
-    std::uint32_t unk08;    // +8
-    std::uint32_t unk0c;    // +0xc
-};
-static_assert(offsetof(AiRecord7, unk08) == 8);
-static_assert(offsetof(AiRecord7, unk0c) == 0xc);
 
 // An MSVC 6 std::vector (allocator byte at +0).
 struct PtrVector {
@@ -103,7 +89,6 @@ std::uint32_t __fastcall AI_PtrVector_Size(void* self, void* edx);
 std::uint32_t __stdcall AI_UninitializedCopyPtrs(const std::uint32_t* first, const std::uint32_t* last,
                                                  std::uint32_t* dest);
 std::uint32_t __fastcall AI_EvaLand_SumAllCells(void* self, void* edx);
-std::uint32_t __fastcall AI_Record7_Construct(void* self, void* edx);
 
 S3RE_HOOK(0x0055b6b0, AI_Census_Construct, ThisFn, Original_AI_Census_Construct, AI_Census_Construct);
 
@@ -235,18 +220,6 @@ std::uint32_t __fastcall AI_EvaLand_SumAllCells(void* self, void* /*edx*/) {
     return evaluation->height;
 }
 
-S3RE_HOOK(0x0055ebe0, AI_Record7_Construct, ThisFn, Original_AI_Record7_Construct, AI_Record7_Construct);
-
-// Purpose: Constructor of a record of kind 7 that one of the computer
-// players' agents holds (class unknown).
-std::uint32_t __fastcall AI_Record7_Construct(void* self, void* /*edx*/) {
-    AI_SetWord4(self, nullptr, kRecord7Tag);
-    auto* record = static_cast<AiRecord7*>(self);
-    record->unk08 = 0;
-    record->unk0c = 0;
-    return 0;
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -267,20 +240,19 @@ struct CensusFunctions {
     ThisFn vectorSize;
     CopyFn copy;
     ThisFn sumAllCells;
-    ThisFn record7;
 };
 
 CensusFunctions OriginalCensus() {
     return {Original_AI_Census_Construct, Original_AI_Census_CountBuildings,
             Original_AI_Census_ComputeTeamStrength, Original_AI_StartPositionWalkRegion,
             Original_AI_PtrVector_Size, Original_AI_UninitializedCopyPtrs,
-            Original_AI_EvaLand_SumAllCells, Original_AI_Record7_Construct};
+            Original_AI_EvaLand_SumAllCells};
 }
 
 CensusFunctions OurCensus() {
     return {&AI_Census_Construct, &AI_Census_CountBuildings, &AI_Census_ComputeTeamStrength,
             &AI_StartPositionWalkRegion, &AI_PtrVector_Size, &AI_UninitializedCopyPtrs,
-            &AI_EvaLand_SumAllCells, &AI_Record7_Construct};
+            &AI_EvaLand_SumAllCells};
 }
 
 constexpr std::size_t kCensusBytes = 0x2000;  // 0x1ad8 + slack (index up to 19 * 57 + 255)
@@ -346,7 +318,7 @@ void CompareCensus(test::Context& ctx, const CensusFunctions& candidate, int cas
     std::vector<std::uint8_t> savedVectors(kVectorsBytes), vectorsA(kVectorsBytes), vectorsB(kVectorsBytes);
     std::memcpy(savedVectors.data(), VectorsLow(), kVectorsBytes);
     std::vector<std::uint8_t> a(kCensusBytes), b(kCensusBytes);
-    constexpr int kOps = 8;
+    constexpr int kOps = 7;
     for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(kOps));
         if (i % 200 == 0) {
@@ -419,10 +391,8 @@ void CompareCensus(test::Context& ctx, const CensusFunctions& candidate, int cas
                                reinterpret_cast<std::uint32_t*>(p + lastOffset), dest);
                     return nullDest ? r : r - base;
                 }
-                case 6:
-                    return f.sumAllCells(p, nullptr);
                 default:
-                    return f.record7(p, nullptr);
+                    return f.sumAllCells(p, nullptr);
             }
         };
         if (op == 5 && nullDest && lastOffset != firstOffset) {
@@ -495,6 +465,12 @@ std::uint32_t __stdcall WrongWalkRegion(std::uint32_t player) {
     return g_aiMapWorld.get()->tiles[record.start_x][record.start_y].walk_region;
 }
 
+std::uint32_t __fastcall WrongVectorSize(void* self, void* /*edx*/) {
+    // Wrong: no null check (a null first gives last >> 2).
+    const auto* vector = static_cast<const PtrVector*>(self);
+    return static_cast<std::uint32_t>((vector->last - vector->first) >> 2);
+}
+
 }  // namespace
 
 S3RE_TEST(AiCensus_MatchOriginal) {
@@ -512,7 +488,7 @@ S3RE_TEST(AiCensus_ComparisonDetectsWrongImplementation) {
     probe([](CensusFunctions& f) { f.countBuildings = &WrongCountBuildings; });
     probe([](CensusFunctions& f) { f.teamStrength = &WrongTeamStrength; });
     probe([](CensusFunctions& f) { f.walkRegion = &WrongWalkRegion; });
-    probe([](CensusFunctions& f) { f.record7 = f.construct; });
+    probe([](CensusFunctions& f) { f.vectorSize = &WrongVectorSize; });
 }
 
 }  // namespace s3re::game
