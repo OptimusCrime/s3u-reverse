@@ -127,6 +127,13 @@ class Spec:
     # Instruction limit per call instead of emu.MAX_INSTRUCTIONS (for
     # functions whose debug-build replacement needs more on big inputs).
     max_instructions: int | None = None
+    # Quick runs (run.py --changed without --full): at most this many cases,
+    # for specs too slow for per-batch runs whose main evidence is elsewhere
+    # (say where at the spec). --full runs all.
+    quick_cases: int | None = None
+    # Peak memory of a worker running this spec, in MB, when far above the
+    # usual (run.py WORKER_MEMORY_MB); lowers the default worker count.
+    memory_mb: int | None = None
 
 
 MAP_SIZE = 0x2d2d0
@@ -4399,11 +4406,14 @@ SPECS += [
     Spec("CGameData_BuildRegionsAndAreas", 0x0051a580, "thiscall", [], presets=region_map, max_cases=60,
          max_instructions=200_000_000),
     # Whole random maps of 64 x 64 (sizes of the real game are 128..768,
-    # far too slow here; the in-process tests run those).
+    # far too slow here; the in-process tests run those). About 100 s per
+    # case, so quick runs do one case only: the main evidence is the
+    # in-process whole-world comparison (world_create.cpp tests) and the
+    # random-map whole-game checks (check_random_map.py); --full runs all 10.
     Spec("CGameData_GenerateRandomMap", 0x005166d0, "thiscall",
          [anything, one_of(65, 72, 80, 96, 64, 33),
           lambda rng, pool: rng.choice([0, 0, 0, 1, 2, 3, rng.getrandbits(32)])],
-         presets=create_world, max_cases=10, max_instructions=3_000_000_000),
+         presets=create_world, max_cases=10, max_instructions=3_000_000_000, quick_cases=1),
 ]
 
 
@@ -6577,7 +6587,7 @@ SPECS += [
          globals=soldier_globals, callees=SOLDIER_PROBES, ignore_bytes=tuple(MAP_EFFECTS + s * 0x4c + p
                                                                           for s in range(1, 40)
                                                                           for p in EFFECT_PADDING),
-         max_cases=1500, exempt_blocks=(0x50fde8,)),
+         max_cases=1500, exempt_blocks=(0x50fde8,), memory_mb=1600),  # ~1.6 GB per worker
 ]
 
 

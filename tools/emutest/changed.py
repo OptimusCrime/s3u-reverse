@@ -1,6 +1,23 @@
 """Which emulator specs a change can affect (run.py --changed).
 
-A spec is selected when
+Default (since 2026-11-23): selection by compiled code. A spec is selected
+unless a pass is recorded for its current
+  - code fingerprint: our replacement's compiled code in s3re.dll and that
+    of every s3re.dll function and datum it reaches, with addresses
+    normalized to symbol names (CodeFingerprints), so a header change that
+    doesn't change the code (a new enum, a comment, moved lines) selects
+    nothing, and a changed callee selects its callers' specs;
+  - specs.py fingerprint: its entry and the helpers it uses (spec_units);
+  - harness fingerprint: emu.py, tools/requirements.txt, the function lists
+    in re/, and the case-running functions of run.py (RESULT_FUNCTIONS).
+Passes are recorded by run.py for every spec that ran with the standard
+inputs (2000 cases, seed 1) with no mismatch and full coverage (or all its
+cases run), in quick or full mode, in build/emutest_passes.json of the main
+checkout, shared by all worktrees. A harness fingerprint that hasn't passed
+the self-test yet also runs the self-test.
+
+The older selection by source files (--since REF, or --changed
+--by-headers) is kept below: a spec is selected when
   - a source file that one of the objects behind its replacement was
     compiled from changed (the .cpp or any header it includes), or
   - its definition in specs.py changed (the Spec(...) entry or any top-level
@@ -272,6 +289,137 @@ class DllReferences:
         return objects
 
 
+class CodeFingerprints(DllReferences):
+    """Fingerprints of the compiled code behind each replacement.
+
+    A symbol's normalized form is its bytes (code: up to the next symbol,
+    without the int 3 padding) with every address that depends on where the
+    linker put things replaced by the name of the symbol it points into
+    (plus the offset): the 32-bit values at the DLL's base relocations
+    (absolute addresses in code and data, jump tables included) and the
+    targets of relative calls and jumps that leave the symbol (followed
+    through incremental-linking thunks). So moving a function, or a callee
+    moving, doesn't change anything; changing an instruction, a constant, a
+    string or a table does.
+
+    A replacement's fingerprint hashes the normalized forms of every symbol
+    of our own objects it can reach (calls, jumps, data references and the
+    pointers in that data, transitively, as in DllReferences); library code
+    (the C runtime) counts by name only."""
+
+    def __init__(self, dll_path: str, map_path: str):
+        super().__init__(dll_path, map_path)
+        pe = pefile.PE(dll_path, fast_load=True)
+        pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_BASERELOC"]])
+        self.relocations: list[int] = sorted(
+            self.base + entry.rva
+            for block in getattr(pe, "DIRECTORY_ENTRY_BASERELOC", [])
+            for entry in block.entries if entry.type == 3)  # IMAGE_REL_BASED_HIGHLOW
+        self._digest: dict[int, tuple[str, set[int]]] = {}
+        self._fingerprint: dict[int, str] = {}
+
+    def _name(self, value: int, symbol: int) -> tuple[str, int | None]:
+        """How an address in `symbol`'s bytes is written in the normalized
+        form, and the symbol it refers to (None: same symbol / outside)."""
+        if not self._in_image(value):
+            return f"abs:{value:#x}", None
+        target_value = value
+        if value not in self.symbols and self._in_text(value) and self.image[value - self.base] == 0xE9:
+            target_value = (value + 5 + int.from_bytes(self.image[value - self.base + 1:value - self.base + 5],
+                                                       "little", signed=True)) & 0xFFFFFFFF
+        target = self.symbol_at(target_value)
+        if target is None:
+            return f"abs:{value:#x}", None
+        if target == symbol:
+            return f"self+{target_value - target:#x}", None
+        return f"{self.symbols[target][0]}+{target_value - target:#x}", target
+
+    def digest(self, symbol: int) -> tuple[str, set[int]]:
+        """(hash of the normalized form, symbols it refers to)."""
+        if symbol in self._digest:
+            return self._digest[symbol]
+        code = self._bytes(symbol)
+        is_code = symbol in self.functions or self._in_text(symbol)
+        if is_code:
+            code = code.rstrip(b"\xcc")
+        end = symbol + len(code)
+        patches: dict[int, tuple[int, str]] = {}  # offset -> (length, replacement)
+        refs: set[int] = set()
+        low = bisect.bisect_left(self.relocations, symbol)
+        high = bisect.bisect_left(self.relocations, end)
+        relocated = set()
+        for address in self.relocations[low:high]:
+            if address + 4 > end:
+                continue
+            value = int.from_bytes(code[address - symbol:address - symbol + 4], "little")
+            name, target = self._name(value, symbol)
+            patches[address - symbol] = (4, name)
+            relocated.update(range(address, address + 4))
+            if target is not None:
+                refs.add(target)
+        if is_code:
+            for ins in self.disassembler.disasm(code, symbol):
+                if not (ins.group(capstone.CS_GRP_JUMP) or ins.group(capstone.CS_GRP_CALL)):
+                    continue
+                if any(a in relocated for a in range(ins.address, ins.address + ins.size)):
+                    continue
+                op = ins.operands[0] if ins.operands else None
+                if op is None or op.type != capstone.x86.X86_OP_IMM:
+                    continue
+                destination = op.imm & 0xFFFFFFFF
+                if symbol <= destination < end:
+                    continue  # a branch inside the function: position-independent
+                size = 1 if ins.bytes[0] in (0xEB,) or 0x70 <= ins.bytes[0] <= 0x7F or \
+                    ins.bytes[0] in (0xE0, 0xE1, 0xE2, 0xE3) else 4
+                name, target = self._name(destination, symbol)
+                patches[ins.address + ins.size - size - symbol] = (size, name)
+                if target is not None:
+                    refs.add(target)
+        digest = hashlib.sha1()
+        digest.update(b"code" if is_code else b"data")
+        position = 0
+        for offset in sorted(patches):
+            length, name = patches[offset]
+            if offset < position:
+                continue
+            digest.update(code[position:offset])
+            digest.update(b"\0<" + name.encode() + b">\0")
+            position = offset + length
+        digest.update(code[position:])
+        self._digest[symbol] = (digest.hexdigest(), refs)
+        return self._digest[symbol]
+
+    @staticmethod
+    def own(obj: str) -> bool:
+        """Our object files; library members are written "lib:member.obj"."""
+        return obj.endswith(".obj") and ":" not in obj
+
+    def fingerprint(self, start: int) -> str:
+        """Fingerprint of the function at `start` and everything of ours it
+        reaches."""
+        start_symbol = self.symbol_at(start)
+        if start_symbol in self._fingerprint:
+            return self._fingerprint[start_symbol]
+        todo = [start_symbol]
+        seen = {start_symbol}
+        parts = []
+        while todo:
+            symbol = todo.pop()
+            name = self.symbols[symbol][0]
+            if not self.own(self.object_of(symbol)):
+                parts.append(f"{name} lib")
+                continue
+            digest, refs = self.digest(symbol)
+            parts.append(f"{name} {digest}")
+            for target in refs:
+                if target not in seen:
+                    seen.add(target)
+                    todo.append(target)
+        result = hashlib.sha1("\n".join(sorted(parts)).encode()).hexdigest()
+        self._fingerprint[start_symbol] = result
+        return result
+
+
 def object_sources(bin_dir: str) -> dict[str, set[str]]:
     """Object file name (lower case) -> the repository files (relative, with
     /, lower case) it was compiled from, headers included."""
@@ -287,7 +435,7 @@ def object_sources(bin_dir: str) -> dict[str, set[str]]:
     for log in logs:
         current = None
         for line in open(log, encoding="utf-16", errors="replace").read().splitlines():
-            line = line.strip().lstrip("﻿")
+            line = line.strip().lstrip("ï»¿")
             if not line:
                 continue
             if line.startswith("^"):
@@ -324,6 +472,137 @@ def record_full_pass(build: str, incomplete: list[str]) -> None:
     except (OSError, subprocess.CalledProcessError):
         pass
 
+
+# -- selection by compiled code (the default of --changed) -----------------------
+
+# Files whose contents decide what a spec's result is, besides the spec and
+# our code: a change selects every spec (and the self-test). Of run.py only
+# the functions that run cases and compare them count (RESULT_FUNCTIONS), so
+# command-line or report changes don't.
+RESULT_FILES = ("tools/emutest/emu.py", "tools/requirements.txt", "re/ghidra_functions.tsv",
+                "re/extra_functions.tsv")
+RESULT_FUNCTIONS = ("first_difference", "case_count", "quick_case_count", "seed_name", "run_spec",
+                    "QUICK_FRACTION")
+PASSES_KEPT = 8  # passing fingerprints kept per spec (worktrees on different code)
+
+
+def passes_path() -> str:
+    """The pass store is shared by all worktrees of the repository: it lives
+    in the main checkout's build/ (fingerprints are content hashes, so a
+    pass recorded anywhere is valid everywhere)."""
+    try:
+        common = _git("rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+        main = os.path.dirname(common) if os.path.basename(common) == ".git" else ROOT
+    except (OSError, subprocess.CalledProcessError):
+        main = ROOT
+    return os.path.normpath(os.path.join(main, "build", "emutest_passes.json"))
+
+
+def harness_fingerprint() -> str:
+    digest = hashlib.sha1()
+    for path in RESULT_FILES:
+        try:
+            digest.update(path.encode() + b"\0" + open(os.path.join(ROOT, path), "rb").read()
+                          .replace(b"\r\n", b"\n"))
+        except OSError:
+            digest.update(path.encode() + b"\0missing")
+    tree = ast.parse(open(os.path.join(ROOT, "tools/emutest/run.py"), encoding="utf-8").read())
+    for statement in tree.body:
+        names = [statement.name] if isinstance(statement, ast.FunctionDef) else             [t.id for t in getattr(statement, "targets", []) if isinstance(t, ast.Name)]
+        if any(name in RESULT_FUNCTIONS for name in names):
+            digest.update(ast.unparse(statement).encode())
+    return digest.hexdigest()
+
+
+def spec_fingerprints(specs_module) -> dict[str, str]:
+    """spec key (ours@original) -> fingerprint of its entry in specs.py
+    (spec_units: the entry and the helpers it uses, without comments)."""
+    namespace = vars(specs_module)
+    result = {}
+    current = open(os.path.join(ROOT, SPECS_PATH), encoding="utf-8").read()
+    for element, fingerprint in spec_units(current):
+        value = element.value if isinstance(element, ast.Starred) else element
+        produced = eval(compile(ast.Expression(value), SPECS_PATH, "eval"), namespace)  # noqa: S307
+        for spec in (list(produced) if isinstance(element, ast.Starred) else [produced]):
+            result[f"{spec.ours}@{spec.original:#x}"] = fingerprint
+    return result
+
+
+def load_passes() -> dict:
+    try:
+        return json.load(open(passes_path(), encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def record_passes(entries: dict[str, dict], self_test_harness: str | None = None) -> None:
+    """Adds passing results {spec key: {"key": pass key, ...details}} (and a
+    passed self-test for a harness fingerprint) to the shared store. Merged
+    with what is on disk right before the write, then replaced atomically,
+    so parallel runs at worst lose an entry (which only means a rerun)."""
+    if not entries and not self_test_harness:
+        return
+    path = passes_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        data = load_passes()
+        specs_part = data.setdefault("specs", {})
+        for spec_key, entry in entries.items():
+            kept = [e for e in specs_part.get(spec_key, []) if e.get("key") != entry["key"]]
+            specs_part[spec_key] = ([entry] + kept)[:PASSES_KEPT]
+        if self_test_harness:
+            tests = [h for h in data.get("self_test", []) if h != self_test_harness]
+            data["self_test"] = ([self_test_harness] + tests)[:PASSES_KEPT]
+        temporary = f"{path}.{os.getpid()}.tmp"
+        with open(temporary, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=0, sort_keys=True)
+        os.replace(temporary, path)
+    except OSError:
+        pass
+
+
+def pass_key(code: str, spec: str, harness: str) -> str:
+    return hashlib.sha1(f"{code}\n{spec}\n{harness}".encode()).hexdigest()
+
+
+def select_by_code(specs_module, machine_symbols, bin_dir: str):
+    """Returns (names, harness_changed, description, keys): the specs
+    without a recorded pass for their current (compiled code, specs.py
+    entry, harness) fingerprints, and keys = {spec key: {"key": pass key, "code", "spec",
+    "harness": the fingerprints}} for recording the passes of this run."""
+    fingerprints = CodeFingerprints(os.path.join(bin_dir, "s3re.dll"), os.path.join(bin_dir, "s3re.map"))
+    entries = spec_fingerprints(specs_module)
+    harness = harness_fingerprint()
+    store = load_passes()
+    passed = store.get("specs", {})
+    keys: dict[str, dict] = {}
+    names: set[str] = set()
+    why = {"never passed": 0, "code": 0, "spec": 0, "harness": 0}
+    for spec in specs_module.SPECS:
+        spec_key = f"{spec.ours}@{spec.original:#x}"
+        code = fingerprints.fingerprint(machine_symbols(spec.ours))
+        key = pass_key(code, entries.get(spec_key, "?"), harness)
+        keys[spec_key] = {"key": key, "code": code, "spec": entries.get(spec_key), "harness": harness}
+        history = passed.get(spec_key, [])
+        if any(e.get("key") == key for e in history):
+            continue
+        names.add(spec.ours)
+        if not history:
+            why["never passed"] += 1
+        elif history[0].get("harness") != harness:
+            why["harness"] += 1
+        elif history[0].get("spec") != entries.get(spec_key):
+            why["spec"] += 1
+        else:
+            why["code"] += 1
+    harness_changed = harness not in store.get("self_test", [])
+    reasons = ", ".join(f"{n} {k}" for k, n in why.items() if n) or "nothing changed"
+    description = (f"by compiled code (passes in {passes_path()}): {reasons}"
+                   + ("; harness not self-tested yet" if harness_changed else ""))
+    return names, harness_changed, description, keys
+
+
+# -- selection by source files (--since REF / --by-headers) ----------------------
 
 def select(specs_module, machine_symbols, bin_dir: str, since: str | None):
     """Returns (names or None for all specs, harness_changed, description).

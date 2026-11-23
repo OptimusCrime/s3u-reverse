@@ -2,7 +2,16 @@
 """Emulator differential tests: our replacements against the original code.
 
 Usage: python tools/emutest/run.py [filter] [--cases N] [--seed N] [--build Debug]
-                                   [--bin-dir DIR] [--jobs N]
+                                   [--bin-dir DIR] [--jobs N] [--changed] [--full]
+                                   [--quick] [--budget S]
+
+Per batch: `run.py --changed --require-coverage` runs only the specs without
+a recorded pass for their current compiled code (tools/emutest/changed.py),
+in quick mode: a spec stops once every block is covered and a quarter of its
+cases ran, no new case starts after --budget seconds (60; "budget" in the
+report; a warning, and no recorded pass, if coverage is incomplete then),
+and Spec.quick_cases caps the slowest specs. --full runs every case without
+a budget (round ends, milestones).
 
 For every spec in tools/emutest/specs.py (or those whose name contains
 `filter`), runs N cases. Each case calls the original function from S3.EXE
@@ -28,8 +37,9 @@ It reports the basic-block coverage of each original function; functions
 with uncovered blocks are listed. Exit code 0 only if there were no
 mismatches (and, with --require-coverage, full coverage).
 
-Specs run in parallel worker processes (--jobs, default: half the cores
-minus 2, fewer if memory is short, or S3RE_EMU_JOBS; workers run at
+Specs run in parallel worker processes (--jobs, default: the free logical
+cores minus 2, fewer if 80 % of the free memory doesn't hold WORKER_MEMORY_MB
+per worker plus the Spec.memory_mb extras, or S3RE_EMU_JOBS; workers run at
 below-normal priority). Each worker has its own emulator
 and resets it before every spec (emu.Emulator.reset), so the results don't
 depend on the number of workers or on the order; the output is printed in
@@ -108,6 +118,13 @@ def first_difference(original: emu.Outcome, ours: emu.Outcome, mask: int,
     return None
 
 
+# Quick runs (the default of --changed): a spec stops once every block is
+# covered and at least this fraction of its cases ran.
+QUICK_FRACTION = 0.25
+# Quick runs: seconds per spec after which no further case starts.
+DEFAULT_BUDGET = 60.0
+
+
 def case_count(spec: specs.Spec, cases: int) -> int:
     cases *= spec.case_scale
     return cases if spec.max_cases is None else min(cases, spec.max_cases)
@@ -121,15 +138,29 @@ def seed_name(name: str) -> str:
     return name.replace("CGameData_GenerateRandomMap", "GameWorld_Create").replace("CGameData", "GameWorld")
 
 
+def quick_case_count(spec: specs.Spec, cases: int) -> int:
+    """Cases of a quick run: Spec.quick_cases if the spec has it (specs too
+    slow for per-batch runs, whose main evidence is elsewhere), else all."""
+    n = case_count(spec, cases)
+    return n if spec.quick_cases is None else min(n, spec.quick_cases)
+
+
 def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int,
-             first: int = 0, last: int | None = None) -> dict:
+             first: int = 0, last: int | None = None, quick: bool = False,
+             budget: float | None = None) -> dict:
     """Runs the spec's cases first..last-1 (default: all). The inputs of the
     skipped cases before `first` are still drawn (and their globals
     written), so case k gets the same inputs and state as in a run of all
     cases; merge_chunks combines the parts of a spec run in pieces. This
     relies on no case depending on how earlier cases or specs ran: their
     writes are undone, and Emulator.call/reset/write_image reset the CPU
-    state and the translated-code cache (independence_check tests it)."""
+    state and the translated-code cache (independence_check tests it).
+
+    quick: stop as soon as every block is covered and at least
+    QUICK_FRACTION of the cases ran (cases are independent, so the cases
+    that ran are exactly those of a full run's start); result["stopped"] =
+    "covered". budget: seconds after which no further case starts
+    (result["stopped"] = "budget")."""
     machine.reset()  # every spec starts from the loaded images
     original = machine.analyze(spec.original, spec.cover_until)
     ours = machine.our_function(spec.ours)
@@ -140,10 +171,24 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int,
     machine.virtual_effects = spec.virtual_effects or {}
     machine.set_callees(spec.callees or {})
     ignored = frozenset(emu.WORLD_BASE + offset for offset in spec.ignore_bytes)
-    result = {"cases": 0, "invalid": 0, "mismatch": None, "mismatch_case": None}
-    cases = case_count(spec, cases)
+    result = {"cases": 0, "invalid": 0, "mismatch": None, "mismatch_case": None, "stopped": None}
+    cases = quick_case_count(spec, cases) if quick else case_count(spec, cases)
     last = cases if last is None else min(last, cases)
+    leaders = [a for a in original.leaders if a not in spec.exempt_blocks]
+    remaining = set(leaders)  # blocks not yet covered (quick mode)
+    quick_min = max(1, math.ceil(cases * QUICK_FRACTION))
+    started = time.time()
     for case in range(last):
+        if case > first:
+            ran = case - first
+            if budget is not None and time.time() - started > budget:
+                result["stopped"] = "budget"
+                break
+            if quick and ran >= quick_min and (ran == quick_min or ran % 16 == 0):
+                remaining -= machine.covered(sorted(remaining))
+                if not remaining:
+                    result["stopped"] = "covered"
+                    break
         args = [generate(rng, pool) for generate in spec.args]
         presets = {}
         if spec.presets:
@@ -196,7 +241,8 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int,
                                   f"[{', '.join(f'{x:#x}' for x in args)}]: {problem}")
             result["mismatch_case"] = case
             break
-    leaders = [a for a in original.leaders if a not in spec.exempt_blocks]
+    result["ran_all"] = result["stopped"] is None and result["mismatch"] is None
+    result["planned"] = last - first
     covered = machine.covered(leaders)
     result["blocks"] = len(leaders)
     result["covered"] = len(covered)
@@ -209,7 +255,7 @@ def merge_chunks(parts: list[dict]) -> dict:
     """The result of a whole spec from its parts (in case order), as a run
     of all cases would report it: counts and coverage up to the first
     mismatch."""
-    merged = {"cases": 0, "invalid": 0, "mismatch": None, "mismatch_case": None}
+    merged = {"cases": 0, "invalid": 0, "mismatch": None, "mismatch_case": None, "stopped": None}
     covered: set[int] = set()
     for part in parts:
         merged["cases"] += part["cases"]
@@ -223,6 +269,8 @@ def merge_chunks(parts: list[dict]) -> dict:
     merged["covered"] = len(covered)
     merged["uncovered"] = sorted(leaders - covered)
     merged["covered_set"] = sorted(covered)
+    merged["ran_all"] = merged["mismatch"] is None and all(p["ran_all"] for p in parts)
+    merged["planned"] = sum(p["planned"] for p in parts)
     return merged
 
 
@@ -268,9 +316,10 @@ def independence_check(bin_dir: str) -> bool:
 
 
 TIMES_PATH = os.path.join(ROOT, "build", "emutest_times.json")
-# Peak memory (private bytes) of one worker over a full run, measured
-# 2026-11-10; caps the default --jobs on machines with little free memory.
-WORKER_MEMORY = 600 * 2**20
+# Peak memory (private bytes) of one worker running ordinary specs, in MB
+# (a worker peaked at ~380 MB over a whole run, 2026-11-10); specs far above
+# it say so with Spec.memory_mb (CGameData_UpdateSoldier ~1.6 GB).
+WORKER_MEMORY_MB = 400
 
 
 def spec_key(spec: specs.Spec) -> str:
@@ -331,18 +380,45 @@ def peak_memory() -> int:
     return counters.PeakPagefileUsage
 
 
-def default_jobs() -> int:
-    # Half the cores at most (the user's machine became unresponsive with 18
-    # workers while other agents were also running), overridable with the
-    # environment variable S3RE_EMU_JOBS.
+def free_cores(sample: float = 0.5) -> float:
+    """Logical cores not busy right now (Windows: from GetSystemTimes over
+    `sample` seconds; elsewhere all cores)."""
+    cores = os.cpu_count() or 1
+    if os.name != "nt":
+        return float(cores)
+
+    def times():
+        idle, kernel, user = (ctypes.c_ulonglong() for _ in range(3))
+        ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user))
+        return idle.value, kernel.value + user.value  # kernel time includes idle time
+    idle0, total0 = times()
+    time.sleep(sample)
+    idle1, total1 = times()
+    if total1 <= total0:
+        return float(cores)
+    return cores * (idle1 - idle0) / (total1 - total0)
+
+
+def default_jobs(selected: list[specs.Spec]) -> tuple[int, str]:
+    """Worker processes for these specs, and why: the free logical cores
+    minus 2, and no more than fit in 80 % of the free memory, counting
+    WORKER_MEMORY_MB per worker plus the extra of each spec with a larger
+    Spec.memory_mb (a worker keeps its peak after such a spec). The
+    environment variable S3RE_EMU_JOBS (or --jobs) overrides it."""
     override = os.environ.get("S3RE_EMU_JOBS")
     if override:
-        return max(1, int(override))
-    jobs = max(1, (os.cpu_count() or 1) // 2 - 2)
+        return max(1, int(override)), "S3RE_EMU_JOBS"
+    cores = free_cores()
+    jobs = max(1, int(cores) - 2)
+    why = f"{cores:.1f} free cores"
     memory = available_memory()
     if memory is not None:
-        jobs = min(jobs, max(1, int(memory * 0.8) // WORKER_MEMORY))
-    return jobs
+        extra = sum(max(0, (spec.memory_mb or 0) - WORKER_MEMORY_MB) for spec in selected) * 2**20
+        fit = max(1, int((memory * 0.8 - extra) // (WORKER_MEMORY_MB * 2**20)))
+        why += f", {memory / 2**30:.1f} GB free memory"
+        if fit < jobs:
+            jobs, why = fit, why + " (memory-bound)"
+    return jobs, why
 
 
 # -- workers (one emulator per process) --------------------------------------
@@ -366,22 +442,25 @@ def _worker_run(task: tuple) -> tuple[int, int, dict, float, int]:
     """(self-test?, spec index, cases, seed, part, first case, end case) ->
     (index, part, result, seconds, peak memory). Specs hold lambdas, so
     workers get indices into specs.py."""
-    self_test, index, cases, seed, part, first, last = task
+    self_test, index, cases, seed, part, first, last, quick, budget = task
     spec = (specs.SELF_TEST if self_test else specs.SPECS)[index]
     started = time.time()
-    result = run_spec(_machine, spec, cases, seed, first, last)
+    result = run_spec(_machine, spec, cases, seed, first, last, quick, budget)
     return index, part, result, time.time() - started, peak_memory()
 
 
 def run_all(selected: list[tuple[int, specs.Spec]], self_test: bool, cases: int, seed: int,
-            bin_dir: str, jobs: int, report) -> int:
+            bin_dir: str, jobs: int, report, quick: bool = False,
+            budget: float | None = None) -> int:
     """Runs the specs (in `jobs` worker processes if more than 1) and calls
     report(spec, result, seconds) for each, in the order of `selected`, as
     soon as it and all before it are done. Returns a worker's peak memory.
 
     Specs that took long in earlier runs are split into parts (ranges of
     cases, see run_spec) that run in parallel, so one slow spec doesn't set
-    the wall time; merge_chunks puts them together again."""
+    the wall time; merge_chunks puts them together again. Quick runs
+    (`quick`, `budget`, see run_spec) don't split: a part can't know when
+    the whole spec is covered, and the budget bounds a spec anyway."""
     times = load_times()
     # Longest first; specs without a time count as slow, so new ones start early.
     order = sorted(selected, key=lambda item: -times.get(spec_key(item[1]), 1e9)) \
@@ -391,13 +470,14 @@ def run_all(selected: list[tuple[int, specs.Spec]], self_test: bool, cases: int,
     tasks = []
     parts_of: dict[int, int] = {}
     for index, spec in order:
-        n = case_count(spec, cases)
+        n = quick_case_count(spec, cases) if quick else case_count(spec, cases)
         parts = 1
-        if jobs > 1 and spec_key(spec) in times:
+        if jobs > 1 and spec_key(spec) in times and not quick and budget is None:
             parts = max(1, min(n, math.ceil(times[spec_key(spec)] / target)))
         parts_of[index] = parts
         bounds = [n * k // parts for k in range(parts + 1)]
-        tasks += [(self_test, index, cases, seed, k, bounds[k], bounds[k + 1]) for k in range(parts)]
+        tasks += [(self_test, index, cases, seed, k, bounds[k], bounds[k + 1], quick, budget)
+                  for k in range(parts)]
     by_index = dict(selected)
     pending = [index for index, _ in selected]
     pieces: dict[int, dict[int, tuple[dict, float]]] = {}
@@ -415,8 +495,8 @@ def run_all(selected: list[tuple[int, specs.Spec]], self_test: bool, cases: int,
         seconds = sum(s for _, s in ordered)
         done[index] = (ordered[0][0] if len(ordered) == 1 else merge_chunks([r for r, _ in ordered]),
                        seconds)
-        if not self_test:
-            times[spec_key(by_index[index])] = round(seconds, 2)
+        if not self_test and done[index][0]["ran_all"]:
+            times[spec_key(by_index[index])] = round(seconds, 2)  # the time of all cases
         while pending and pending[0] in done:
             first = pending.pop(0)
             report(by_index[first], *done.pop(first))
@@ -459,26 +539,56 @@ def main() -> int:
                              "(each must be caught) and the check that a spec split into "
                              "parts gives the result of a whole run")
     parser.add_argument("--changed", action="store_true",
-                        help="only the specs the changes since the last full clean run "
-                             "(or --since REF) can affect; see tools/emutest/changed.py")
+                        help="only the specs without a recorded pass for their current compiled "
+                             "code, specs.py entry and harness (see tools/emutest/changed.py); "
+                             "runs in quick mode unless --full")
     parser.add_argument("--since", metavar="REF",
-                        help="with --changed: compare with this git commit instead")
+                        help="select by changed source files since this commit instead "
+                             "(the older, header-based selection)")
+    parser.add_argument("--by-headers", action="store_true",
+                        help="with --changed: the header-based selection since the last full "
+                             "clean run (as before 2026-11-23)")
     parser.add_argument("--dry-run", action="store_true",
                         help="with --changed: print the selection, don't run it")
+    parser.add_argument("--full", action="store_true",
+                        help="every case of every selected spec, no time budget (round ends, "
+                             "milestones)")
+    parser.add_argument("--quick", action="store_true",
+                        help="quick mode without --changed: stop a spec once it is fully covered "
+                             f"and {QUICK_FRACTION:.0%} of its cases ran, with a time budget")
+    parser.add_argument("--budget", type=float, default=DEFAULT_BUDGET,
+                        help=f"quick mode: seconds per spec after which no further case starts "
+                             f"(default {DEFAULT_BUDGET:.0f}; 0: none)")
     args = parser.parse_args()
 
     bin_dir = args.bin_dir or os.path.join(ROOT, "build", "x86", "bin", args.build)
     started = time.time()
-    jobs_wanted = args.jobs if args.jobs is not None else default_jobs()
+    by_code = args.changed and not args.since and not args.by_headers
+    quick = (args.changed or args.quick) and not args.full
+    budget = args.budget if quick and args.budget > 0 else None
+    standard_inputs = args.cases >= 2000 and args.seed == 1  # what a recorded pass means
+    symbols = emu.read_dll_symbols(os.path.join(bin_dir, "s3re.map"))
+
+    def machine_symbol(name):
+        return emu.find_our_function(symbols, name)
 
     def show_memory(jobs, peak):
         if args.memory:
             print(f"{jobs} worker(s), peak memory of a worker {peak / 2**20:.0f} MB, "
                   f"{time.time() - started:.0f}s wall time")
 
+    def jobs_for(chosen: list[specs.Spec]) -> int:
+        if args.jobs is not None:
+            jobs, why = args.jobs, "--jobs"
+        else:
+            jobs, why = default_jobs(chosen)
+        jobs = max(1, min(jobs, len(chosen)))
+        print(f"{jobs} worker(s) ({why})", flush=True)
+        return jobs
+
     def self_test() -> bool:
         selected = list(enumerate(specs.SELF_TEST))
-        jobs = max(1, min(jobs_wanted, len(selected)))
+        jobs = jobs_for([spec for _, spec in selected])
         caught = 0
 
         def report(spec, r, seconds):
@@ -491,7 +601,11 @@ def main() -> int:
         print(f"self-test: {caught} of {len(specs.SELF_TEST)} wrong pairings caught")
         show_memory(jobs, peak)
         independent = independence_check(bin_dir)
-        return caught == len(specs.SELF_TEST) and independent
+        passed = caught == len(specs.SELF_TEST) and independent
+        if passed:
+            import changed
+            changed.record_passes({}, changed.harness_fingerprint())
+        return passed
 
     if args.self_test:
         return 0 if self_test() else 1
@@ -499,31 +613,48 @@ def main() -> int:
     selected = [(i, s) for i, s in enumerate(specs.SPECS)
                 if args.filter.lower() in s.ours.lower()]
     harness_changed = False
-    if args.changed or args.since:
+    keys: dict[str, dict] = {}
+    if by_code:
+        import changed
+        names, harness_changed, why, keys = changed.select_by_code(specs, machine_symbol, bin_dir)
+        total = len(selected)
+        selected = [(i, s) for i, s in selected if s.ours in names]
+        print(f"{len(selected)} of {total} specs: {why}", flush=True)
+    elif args.changed or args.since:
         import changed  # only needed here
-        symbols = emu.read_dll_symbols(os.path.join(bin_dir, "s3re.map"))
-        names, harness_changed, why = changed.select(
-            specs, lambda name: emu.find_our_function(symbols, name), bin_dir, args.since)
+        names, harness_changed, why = changed.select(specs, machine_symbol, bin_dir, args.since)
         total = len(selected)
         if names is not None:
             selected = [(i, s) for i, s in selected if s.ours in names]
         print(f"{len(selected)} of {total} specs: {why}", flush=True)
-        if args.dry_run:
-            for _, spec in selected:
-                print(f"  {spec.ours}")
-            return 0
+    if args.dry_run and (args.changed or args.since):
+        for _, spec in selected:
+            print(f"  {spec.ours}")
+        return 0
+    if not keys and standard_inputs and selected:
+        import changed
+        try:
+            keys = changed.select_by_code(specs, machine_symbol, bin_dir)[3]
+        except (KeyError, OSError) as error:
+            print(f"(passes not recorded: {error})", flush=True)
     # A full run (every spec, default cases and seed) becomes the new
-    # reference for --changed when it passes cleanly.
-    full_run = len(selected) == len(specs.SPECS) and args.cases >= 2000 and args.seed == 1 \
+    # reference for the header-based selection when it passes cleanly.
+    full_run = len(selected) == len(specs.SPECS) and standard_inputs and not quick \
         and args.build == "Debug"
-    jobs = max(1, min(jobs_wanted, len(selected)))
+    jobs = jobs_for([spec for _, spec in selected]) if selected else 1
+    if quick:
+        print(f"quick mode: a spec stops once fully covered after {QUICK_FRACTION:.0%} of its "
+              f"cases, budget {budget or 0:.0f}s per spec (--full runs everything)", flush=True)
 
     mismatches = 0
     incomplete = 0
     incomplete_names: list[str] = []
+    over_budget: list[str] = []
+    passes: dict[str, dict] = {}
+    run_commit = None
 
     def report(spec, r, seconds):
-        nonlocal mismatches, incomplete
+        nonlocal mismatches, incomplete, run_commit
         status = "MISMATCH" if r["mismatch"] else "ok"
         coverage = f"{r['covered']}/{r['blocks']} blocks"
         if r["uncovered"]:
@@ -532,22 +663,52 @@ def main() -> int:
                         (" ..." if len(r["uncovered"]) > len(shown) else "") + ")"
             incomplete += 1
             incomplete_names.append(spec.ours)
+        stopped = ""
+        if r["stopped"] == "covered":
+            stopped = f" (quick: {r['cases'] + r['invalid']} of {r['planned']} cases)"
+        elif r["stopped"] == "budget":
+            stopped = f" (budget: {r['cases'] + r['invalid']} of {r['planned']} cases)"
+            status = "budget" if not r["mismatch"] else status
+            if r["uncovered"] and not r["mismatch"]:
+                over_budget.append(spec.ours)
         print(f"{status:8} {spec.ours:45} {r['cases']:6} cases, {r['invalid']:4} invalid, "
-              f"{coverage}  [{seconds:.1f}s]", flush=True)
+              f"{coverage}{stopped}  [{seconds:.1f}s]", flush=True)
         if r["mismatch"]:
             print(f"         {r['mismatch']}", flush=True)
             mismatches += 1
+        # A pass: no mismatch, and every block covered or every case run
+        # (then the coverage is what a rerun would give too).
+        key = keys.get(spec_key(spec))
+        if key and standard_inputs and not r["mismatch"] and (not r["uncovered"] or r["ran_all"]):
+            if run_commit is None:
+                import changed
+                run_commit = changed.head_commit()
+            passes[spec_key(spec)] = {
+                **key, "mode": "quick" if quick else "full", "cases": r["cases"],
+                "covered": r["covered"], "blocks": r["blocks"], "commit": run_commit,
+                "time": time.strftime("%Y-%m-%dT%H:%M:%S")}
 
-    peak = run_all(selected, False, args.cases, args.seed, bin_dir, jobs, report) if selected else 0
+    try:
+        peak = run_all(selected, False, args.cases, args.seed, bin_dir, jobs, report,
+                       quick, budget) if selected else 0
+    finally:
+        if passes:
+            import changed
+            changed.record_passes(passes)
     print(f"{len(selected)} function(s): {mismatches} mismatch(es), "
           f"{incomplete} with incomplete coverage")
+    if over_budget:
+        print(f"WARNING: {len(over_budget)} spec(s) hit the time budget before full coverage "
+              f"(not recorded as passed; run them with --full): {', '.join(over_budget)}")
     show_memory(jobs, peak)
-    failed = bool(mismatches or (args.require_coverage and incomplete))
+    over = set(over_budget)
+    failed = bool(mismatches or (args.require_coverage
+                                 and any(name not in over for name in incomplete_names)))
     if full_run and not mismatches:
         # Also with incomplete coverage (CGameData_GenerateRandomMap is known to be
         # incomplete): a spec whose inputs didn't change has the same
-        # coverage next time, so --changed may skip it. The incomplete ones
-        # are kept in the record.
+        # coverage next time, so the header-based selection may skip it.
+        # The incomplete ones are kept in the record.
         import changed
         changed.record_full_pass(args.bin_dir or args.build, incomplete_names)
     if harness_changed:

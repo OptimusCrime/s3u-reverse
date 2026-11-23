@@ -115,9 +115,10 @@ Each item: what, why, and where to start.
 - **Emulator memory: the CGameData_UpdateSoldier spec peaks at ~1.6 GB
   per worker** (measured 2026-11-22 with `run.py CGameData_UpdateSoldier
   --jobs 1 --memory`; WalkSettler/UpdateEconomy/UpdateEnvironment ~120 MB).
-  With 8 workers a full suite can need ~13 GB. Find what grows (probably a
-  huge lazily-random world range or the garrison walks) and bound it;
-  update WORKER_MEMORY in run.py and CLAUDE.md's figure.
+  The default worker count now counts it (`Spec.memory_mb=1600`, 400 MB
+  for the others, session 45 tooling). Still to do: find what grows
+  (probably a huge lazily-random world range or the garrison walks) and
+  bound it; then drop `memory_mb` and update CLAUDE.md's figure.
 - **In-process tests that crash on other inputs:** test inputs are seeded
   from the test name. During the GameWorld -> CGameData rename (session
   45) the new names gave new inputs, and
@@ -141,6 +142,18 @@ Each item: what, why, and where to start.
   functions (/OPT:ICF) and keeps only one name. A separate emulator
   configuration with `/OPT:NOICF` (maybe `/Ob1`) would be needed; then
   compare its full run with Debug's and time CGameData_GenerateRandomMap.
+- **Specs over the quick-mode budget (60 s) before full coverage:** they
+  get no recorded pass from quick runs, so `--changed` reselects them
+  until a `--full` run passes. Seen in the first quick run (2026-11-23):
+  see LOGBOOK session 45 "faster verification tooling". Options: better
+  presets that reach the rare blocks early (then quick mode stops
+  early), or `Spec.quick_cases` with the evidence named at the spec.
+- **Split `game/enums.h` by category** (user request, 2026-11-23; not
+  done in the tooling session): one header per category under
+  `game/enums/` (jobs, settler types, buildings, goods, races, spells,
+  piles, ...), `enums.h` kept as an umbrella include for now, each file
+  including only what it uses. With the emulator selecting by compiled
+  code this mainly helps build times.
 - **Full serial emulator run as a cross-check of `--jobs`:** the parallel
   runs (3 schedules: specs.py order, longest first, slow specs split into
   parts) gave identical output; the `--jobs 1` run was stopped after its

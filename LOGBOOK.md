@@ -581,6 +581,36 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-23 (45): faster verification tooling
+
+- **`run.py --changed` selects by compiled code** (`changed.py`
+  `CodeFingerprints`, `select_by_code`): per spec a fingerprint of our
+  replacement's code in s3re.dll plus everything of ours it reaches
+  (relocated addresses and call targets normalized to symbol names), its
+  specs.py entry and the harness; passes go to the main checkout's
+  `build/emutest_passes.json`, shared by worktrees. Measured: a new enum
+  in enums.h selects 0 specs (header-based: everything that includes
+  it); a changed `CGameData_Random` selects 26 (Random and its callers);
+  readability commit 571aab8 15 specs (header-based 92), fb7e93c 41
+  (82). The header-based selection stays as `--since REF` /
+  `--by-headers`.
+- **Quick mode** (default of `--changed`): stop a spec at full coverage
+  after 25 % of its cases, 60 s budget per spec, no splitting;
+  `Spec.quick_cases` (GenerateRandomMap: 1 case). `--full` runs all.
+  First quick run of all 556 specs (12 workers): 227 s wall, 0
+  mismatches; 9 specs hit the budget before full coverage and stay
+  selected until a `--full` run passes (DrawWorkAreaOverlay,
+  CheckBuildingSite, RecalculateTerritory, FollowRightWall, PlanLine,
+  FindPath, UpdateSoldier, UpdateEconomy, UpdateSettlers).
+- **Worker count from the machine:** free logical cores (measured) minus
+  2, capped by free memory with 400 MB per worker plus `Spec.memory_mb`
+  extras (UpdateSoldier 1,600).
+- **Optimized build for the emulator:** non-Debug configurations link
+  with /OPT:NOICF /OPT:NOREF, so `run.py --build Release` finds every
+  replacement; Pathing_FindPath 100 cases: Debug 100 s, Release 19 s.
+- Not done: splitting enums.h (TODO.md); the full Debug `--full` suite
+  wasn't rerun.
+
 ### 2026-11-22 (45): UpdateSettlers
 
 - **`CGameData::UpdateSettlers` 0x4e9670 verified and hooked

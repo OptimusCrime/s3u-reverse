@@ -695,13 +695,16 @@ replaying, see `src/s3re/replay/command_log.h`):
    operator new/delete/memmove (0x61efb9/0x61e4ef/0x61e860) where the
    original does.
    - **Parallel runs:** specs run in `--jobs N` worker processes
-     (default: half the cores minus 2, i.e. 8 on the dev machine, capped
-     by free memory at ~600 MB per worker, or `S3RE_EMU_JOBS`; workers
-     run at below-normal priority; `--jobs 1` runs in one process). The
-     user's machine became unresponsive with 18 workers while other agents
-     were busy: don't raise the default, and when several agents work in
-     parallel, only one of them runs a full suite at a time (per batch use
-     `--changed`). Every spec starts from a
+     (default, 2026-11-23: the free logical cores minus 2, measured over
+     0.5 s, so cores busy with other agents' work count as taken; capped
+     so that 80 % of the free memory holds 400 MB per worker plus the
+     extra of each selected spec with `Spec.memory_mb`, e.g.
+     CGameData_UpdateSoldier 1,600; or `S3RE_EMU_JOBS`; workers run at
+     below-normal priority; `--jobs 1` runs in one process; the run
+     prints the count and why). The user's machine became unresponsive
+     with 18 workers while other agents were busy: when several agents
+     work in parallel, only one of them runs a full suite at a time (per
+     batch use `--changed`). Every spec starts from a
      fresh emulator state (`Emulator.reset`: images as loaded, stack
      zeroed, no world bytes, Unicorn's translated-code cache flushed),
      and every call starts with an empty x87 stack and fixed flags, so
@@ -720,24 +723,47 @@ replaying, see `src/s3re/replay/command_log.h`):
      takes over an hour); a worker peaks at ~380 MB. `--memory` prints
      workers, peak memory and wall time. `--bin-dir DIR` tests the DLL in another
      build directory (e.g. the main checkout's).
-   - **Selective runs:** `run.py --changed [--since REF]` runs only the
-     specs the changes since REF (default: the last full clean run,
-     `build/emutest_last_full.json`, written by every full run with 0
-     mismatches; it lists the specs with incomplete coverage, today only
-     CGameData_GenerateRandomMap) can affect, and prints "N of M
-     specs" and why (`--dry-run`: only the selection). The selection
-     comes from the build: MSBuild's compiler tracking log (headers of
-     each object) and s3re.map plus the DLL's code (which objects each
-     replacement reaches through calls and data references), and from
-     specs.py (entries whose code or helpers changed, comments don't
-     count). A change to the harness, `tools/requirements.txt`, the
-     CMake files or `re/*_functions.tsv` selects everything and runs
-     the self-test too. Details: `tools/emutest/changed.py`.
-   - **Policy:** per batch, `run.py --changed --require-coverage` (it
-     includes the batch's new specs); the full suite (parallel) at the
-     end of each parallel round of agents and before milestones, and
-     whenever `--changed` selects more than about half of the specs
-     anyway. Run `--self-test` when the harness changed.
+   - **Selective runs (by compiled code, 2026-11-23):** `run.py
+     --changed` runs only the specs without a recorded pass for their
+     current fingerprints: the compiled code of the replacement in
+     s3re.dll plus everything of ours it reaches (calls, data, pointers
+     in data; addresses normalized to symbol names, so moved code
+     doesn't count), its specs.py entry (with the helpers it uses;
+     comments don't count) and the harness (emu.py, requirements, the
+     `re/*_functions.tsv` lists, the case-running functions of run.py).
+     So a header change that doesn't change code (a new enum, comments,
+     moved lines) selects nothing, and a changed callee selects the
+     specs of everything that reaches it. Every run with the standard
+     inputs (2000 cases, seed 1; any filter, quick or full) records its
+     passes (0 mismatches and full coverage, or all its cases run) in
+     `build/emutest_passes.json` of the **main checkout**, shared by
+     all worktrees (a fresh worktree reuses them); a harness that hasn't
+     passed `--self-test` yet runs the self-test too. `--dry-run`
+     prints the selection. Measured: a new enum in enums.h selects 0
+     specs (by headers: all); readability commit 571aab8 15 specs (by
+     headers 92), fb7e93c 41 (82). The older header-based selection
+     stays available: `--since REF` or `--changed --by-headers` (tracking
+     logs + `build/emutest_last_full.json`, written by full runs with 0
+     mismatches). Details: `tools/emutest/changed.py`.
+   - **Quick mode** (the default of `--changed`; `--quick` elsewhere):
+     a spec stops once every block is covered and at least 25 % of its
+     cases ran (the cases that ran are exactly the first ones of a full
+     run, so a quick pass is "0 mismatches + full coverage" too); no new
+     case starts after `--budget` seconds (default 60): reported as
+     "budget", fine with full coverage, otherwise a warning listing the
+     specs and no recorded pass. Quick runs don't split specs into parts.
+     `Spec.quick_cases` caps very slow specs whose main evidence is
+     elsewhere (CGameData_GenerateRandomMap: 1 case of ~100 s; its
+     evidence is the in-process whole-world tests and the random-map
+     whole-game checks). `--full` runs every case without budget.
+   - **Policy:** small and medium functions get full emulator evidence;
+     large ones (GenerateRandomMap, UpdateSettlers, UpdateSoldier) get
+     bounded emulator runs per batch and rely on the in-process tests
+     and the whole-game replays. Per batch: `run.py --changed
+     --require-coverage` (quick mode; it includes the batch's new
+     specs). At the end of each parallel round of agents and before
+     milestones: the full suite with `--full`. Run `--self-test` when
+     the harness changed (`--changed` does it by itself then).
 5. Build, then run `s3re_launcher --test [filter]` (substrings, several
    separated by `|`, e.g. `"Fog|Sight"`). This runs the tests inside
    the real `S3.EXE` without opening the game window. The exit code is 0 only
