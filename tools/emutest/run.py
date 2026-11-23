@@ -337,7 +337,8 @@ def independence_check(bin_dir: str) -> bool:
 TIMES_PATH = os.path.join(ROOT, "build", "emutest_times.json")
 # Peak memory (private bytes) of one worker running ordinary specs, in MB
 # (a worker peaked at ~380 MB over a whole run, 2026-11-10); specs far above
-# it say so with Spec.memory_mb (CGameData_UpdateSoldier ~1.6 GB).
+# it say so with Spec.memory_mb. (A runaway case that faults after the
+# instruction limit is the usual cause: every byte it writes is tracked.)
 WORKER_MEMORY_MB = 400
 
 
@@ -582,7 +583,7 @@ def main() -> int:
                              "milestones)")
     parser.add_argument("--quick", action="store_true",
                         help="quick mode without --changed: stop a spec once it is fully covered "
-                             f"and {QUICK_FRACTION:.0%} of its cases ran, with a time budget")
+                             f"and {QUICK_FRACTION * 100:.0f} %% of its cases ran, with a time budget")
     parser.add_argument("--budget", type=float, default=DEFAULT_BUDGET,
                         help=f"quick mode: seconds per spec after which no further case starts "
                              f"(default {DEFAULT_BUDGET:.0f}; 0: none)")

@@ -702,8 +702,12 @@ replaying, see `src/s3re/replay/command_log.h`):
      (default, 2026-11-23: the free logical cores minus 2, measured over
      0.5 s, so cores busy with other agents' work count as taken; capped
      so that 80 % of the free memory holds 400 MB per worker plus the
-     extra of each selected spec with `Spec.memory_mb`, e.g.
-     CGameData_UpdateSoldier 1,600; or `S3RE_EMU_JOBS`; workers run at
+     extra of each selected spec with `Spec.memory_mb` (none needs it
+     since 2026-11-23: UpdateSoldier's 2.6 GB came from one invalid case
+     whose runaway loop wrote 8M world bytes in 20M instructions, each
+     tracked in Python dicts; its `max_instructions=1_000_000` bounds it
+     to ~250 MB with identical results; look for such a case first); or
+     `S3RE_EMU_JOBS`; workers run at
      below-normal priority; `--jobs 1` runs in one process; the run
      prints the count and why). The user's machine became unresponsive
      with 18 workers while other agents were busy: when several agents

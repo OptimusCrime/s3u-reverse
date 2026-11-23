@@ -144,13 +144,19 @@ Each item: what, why, and where to start.
   0x164..0x171, 0x17c..0x185, 0x190..0x194; units 0xae and the walking
   jobs 0xe5, 0xe8, 0xed, 0xf1, 0xfe, 0x102, 0x133, 0x135, 0x140, 0x141,
   0x147..0x14a, 0x165, 0x168; the 20 no-op jobs.
-- **Emulator memory: the CGameData_UpdateSoldier spec peaks at ~1.6 GB
-  per worker** (measured 2026-11-22 with `run.py CGameData_UpdateSoldier
-  --jobs 1 --memory`; WalkSettler/UpdateEconomy/UpdateEnvironment ~120 MB).
-  The default worker count now counts it (`Spec.memory_mb=1600`, 400 MB
-  for the others, session 45 tooling). Still to do: find what grows
-  (probably a huge lazily-random world range or the garrison walks) and
-  bound it; then drop `memory_mb` and update CLAUDE.md's figure.
+- **In-process tests that crash on other inputs:** test inputs are seeded
+  from the test name. During the GameWorld -> CGameData rename (session
+  45) the new names gave new inputs, and
+  `CGameData_ReleaseSiteWorkers_MatchesOriginal` crashed inside the
+  original (access violation at S3.EXE+0x10e443, address 0x0548B002); the
+  crash left CalleeStubs patches installed, so later stub tests
+  (MinerJobFood, StealGoodFromPile) crashed too. The rename now hashes the
+  old names (`SeedName` in difftest.cpp, `seed_name` in emutest/run.py),
+  so inputs are unchanged. To do: make that test's input generator
+  produce only states the original can handle (try `S3RE_TEST_SEED`
+  values), and have a crashing test's CalleeStubs restore its patches
+  (the SEH guard skips the destructor).
+
 - **Emulator coverage of `CGameData::GenerateRandomMap`:** 338/415 blocks
   in full Debug runs (1 quick case per batch since 2026-11-23); the rest
   needs maps of 130+ tiles. Its real evidence is the in-process

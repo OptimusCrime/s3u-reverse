@@ -6947,6 +6947,14 @@ SPECS += [
 # About 10 of 1500 cases fault in both (random ring indices of
 # PushUiFeedback / area ids of AssignTileToArea in the lazily random
 # world, and garrison walks of random 0xae jobs that never end): invalid.
+# max_instructions: one of them (case 409) removes a settler whose lazily
+# random owner byte is >= 20, so RemoveSettlerFromLists (0x50dff0) shifts a
+# "player list" of random length; in 20M instructions it wrote 8M bytes and
+# the worker peaked at 2.6 GB. Every valid case needs fewer than 200,000
+# instructions (Release and Debug give the same 1490 cases / 10 invalid /
+# full coverage at 200,000 and 1,000,000 as at 20M); 1M leaves a margin
+# and bounds the worker at ~250 MB. (Presetting those list lengths isn't an
+# option: players 20.. alias the player records.)
 SOLDIER_PROBES = {0x0051b640: (2, "thiscall", "probe"), 0x00519a90: (2, "thiscall", "probe")}
 SOLDIER_TYPES_B = [5, 0x20, 0x23, 8, 0x1e, 0x21, 0x0f, 0x1f, 0x22]
 TARGET_TYPES_B = [5, 0x20, 8, 0x1e, 0x0f, 0x22, 0x16, 0x17, 0x25, 0x27, 0x28, 0x29, 0x2a, 1]
@@ -7149,7 +7157,7 @@ SPECS += [
          globals=soldier_globals, callees=SOLDIER_PROBES, ignore_bytes=tuple(MAP_EFFECTS + s * 0x4c + p
                                                                           for s in range(1, 40)
                                                                           for p in EFFECT_PADDING),
-         max_cases=1500, exempt_blocks=(0x50fde8,), memory_mb=1600),  # ~1.6 GB per worker
+         max_cases=1500, exempt_blocks=(0x50fde8,), max_instructions=1_000_000),
 ]
 
 
