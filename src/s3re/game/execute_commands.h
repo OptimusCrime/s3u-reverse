@@ -42,6 +42,19 @@ struct FrameLocals {
     // The type 5 message the PlayerLost network message (3) pushes ([ebp-0x60]):
     // {5, player, 8, 0, 0}, byte 1 set per use.
     std::uint8_t kill_message[8];
+    // The 0x21 replies to the network ([ebp-0x424]): {0x21, id, 8, ?, player,
+    // ?, ?, ?} (commands 0xf7, 0xfa; network messages 3 and 5). Bytes 3 and
+    // 5..7 are never written: in the original they are uninitialized stack
+    // (not reproducible; ours are 0). Not read by the logic of any machine as
+    // far as known (the commands read byte 4).
+    std::uint8_t reply_message[8];
+    // ChangeGarrison (0x0c, execute_commands_areas.cpp): the garrison sizes
+    // of the last tower or castle it saw ([ebp-0x54] soldiers, [ebp-0x84]
+    // bowmen). For another building of the player the original reuses them
+    // (from an earlier 0x0c message of the same call, else whatever its stack
+    // held: not reproducible; ours start at 0).
+    std::uint32_t garrison_soldiers;
+    std::uint32_t garrison_bowmen;
 };
 
 // What a handler works with.
@@ -164,7 +177,7 @@ void SaveRequest(Run& run);            // 0xf7
 void SaveDone(Run& run);               // 0xf8
 void SaveFailed(Run& run);             // 0xf9
 void SaveAllowed(Run& run);            // 0xfa
-void CheckVersion(Run& run);           // 0xfb
+void SyncRandomCheck(Run& run);           // 0xfb
 void PlayerLost(Run& run);             // 0xfc
 void PlayerWon(Run& run);              // 0xfd
 void DropPlayer(Run& run);             // 0xfe

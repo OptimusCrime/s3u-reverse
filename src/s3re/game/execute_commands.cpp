@@ -32,6 +32,7 @@
 #include "game/tables.h"
 #include "game/texts.h"
 #include "game/typed_fields.h"
+#include "game/vtables.h"
 #include "hooks.h"
 
 #include <windows.h>
@@ -56,7 +57,7 @@ constexpr std::uint8_t kSettlerNoFight = layout::kSettlerNoFight;
 constexpr std::int32_t kMenuSelection = 1;  // placing a building (with selection parameters)
 constexpr std::int32_t kMenuAreas = 2;      // area settings; ui_2d290[0] is its page
 constexpr std::int32_t kMenuPlayer = 3;     // player settings; ui_2d2a0 is its page
-constexpr std::int32_t kMenuBuilding = 4;   // the selected building (g_global7dfd6c)
+constexpr std::int32_t kMenuBuilding = 4;   // the selected building (g_selectedBuilding)
 constexpr std::int32_t kPageGoodsSettings = 2;
 constexpr std::int32_t kPageConditions = 3;
 constexpr std::int32_t kPageSoldiers = 3;
@@ -117,7 +118,7 @@ void PushToNet(CLogicThread* thread, const void* message, std::uint32_t dwordCou
 
 void RefreshIfBuildingShown(Run& run, std::uint32_t building) {
     // 0x537084
-    if (static_cast<std::uint32_t>(g_global7dfd6c) == building && run.world()->ui_selection_mode == kMenuBuilding) {
+    if (static_cast<std::uint32_t>(g_selectedBuilding) == building && run.world()->ui_selection_mode == kMenuBuilding) {
         run.world()->refresh_ui = 1;
     }
 }
@@ -269,7 +270,7 @@ void SetWorkArea(Run& run) {
     if (const std::uint16_t worker = building.worker; worker != 0) {
         SettlerAt(world, worker).next = 0;  // 0x53724e
     }
-    if (static_cast<std::uint32_t>(g_global7dfd6c) == number && world->ui_selection_mode == kMenuBuilding) {
+    if (static_cast<std::uint32_t>(g_selectedBuilding) == number && world->ui_selection_mode == kMenuBuilding) {
         CallThread<callee::kDrawWorkAreaOverlay>(run.thread, number);
         run.world()->refresh_ui = 1;
     }
@@ -469,7 +470,7 @@ void UnloadShip(Run& run) {
 // ------------------------------------------------------------ 0x18 PromoteSoldiers (0x538fed)
 // Payload: player, kind (1 swords, 2 bows, 3 pikes; + 0x80: the mana is set
 // to the cost first). A level is bought for the player's promotion cost
-// (Player +0xb4) from mana_total; level 1 -> 2 needs both other kinds at
+// (Player +0xb4, promotion_cost) from mana_total; level 1 -> 2 needs both other kinds at
 // level 1 or more, higher levels can't be bought here.
 void PromoteSoldiers(Run& run) {
     const std::uint32_t player = run.Byte(0);
@@ -477,19 +478,19 @@ void PromoteSoldiers(Run& run) {
     if (kind >= kPromoteFree) {
         kind -= kPromoteFree;
         Player& p = PlayerAt(run.world(), player);
-        p.mana_total = p.unk0b4[0];
+        p.mana_total = p.promotion_cost;
     }
     if (kind >= 1 && kind <= 3) {
         Player& p = PlayerAt(run.world(), player);
-        std::int32_t* levels = &p.unk0b4[1];
+        std::int32_t* levels = p.soldier_levels;
         std::int32_t& level = levels[kind - 1];
         const std::int32_t other1 = levels[kind == 1 ? 1 : 0];  // 0x53906b / 0x5390d0 / 0x53912a
         const std::int32_t other2 = levels[kind == 3 ? 1 : 2];
-        const bool affordable = static_cast<std::uint32_t>(p.mana_total) >= static_cast<std::uint32_t>(p.unk0b4[0]);
+        const bool affordable = static_cast<std::uint32_t>(p.mana_total) >= static_cast<std::uint32_t>(p.promotion_cost);
         const bool allowed = level == 0 || (level == 1 && other1 != 0 && other2 != 0);
         if (affordable && allowed) {
             ++level;
-            p.mana_total -= p.unk0b4[0];
+            p.mana_total -= p.promotion_cost;
             Call<callee::kSetPromotionCost>(run.world(), player);
         }
     }
@@ -700,7 +701,7 @@ void ExecuteCommand(Run& run) {
     case CommandId::SaveDone: SaveDone(run); return;
     case CommandId::SaveFailed: SaveFailed(run); return;
     case CommandId::SaveAllowed: SaveAllowed(run); return;
-    case CommandId::CheckVersion: CheckVersion(run); return;
+    case CommandId::SyncRandomCheck: SyncRandomCheck(run); return;
     case CommandId::PlayerLost: PlayerLost(run); return;
     case CommandId::PlayerWon: PlayerWon(run); return;
     case CommandId::DropPlayer: DropPlayer(run); return;
@@ -752,7 +753,7 @@ void ExecuteMessages(CLogicThread* thread, FrameLocals& frame, std::uint32_t& st
 // type's catchable types.
 constexpr DWORD kCxxExceptionCode = 0xe06d7363;
 constexpr ULONG_PTR kCxxMagic = 0x19930520;
-constexpr std::uintptr_t kTimeoutPointerType = 0x698e98;
+constexpr std::uintptr_t kTimeoutPointerType = type_descriptor::kCTimeoutPointer;
 constexpr char kTimeoutPointerName[] = ".PAVCTimeout@Win32@@";
 
 #pragma pack(push, 4)
@@ -842,6 +843,9 @@ std::uint32_t __fastcall CLogicThread_ExecuteCommands(CLogicThread* self, void*)
     std::memcpy(frame.step_message, kStepMessage, sizeof(kStepMessage));
     std::memcpy(frame.kill_message, kKillMessage, sizeof(kKillMessage));
     std::memset(frame.message.bytes, 0, sizeof(frame.message.bytes));
+    std::memset(frame.reply_message, 0, sizeof(frame.reply_message));
+    frame.garrison_soldiers = 0;
+    frame.garrison_bowmen = 0;
     std::uint32_t stepped = 0;
     commands::CaughtTimeout caught;
     if (commands::ExecuteMessagesGuarded(self, &frame, &stepped, &caught) && caught.object != nullptr) {
@@ -879,11 +883,11 @@ constexpr std::uint32_t kTestMapSize = 384;
 // Saves and restores the S3.EXE globals the tests change.
 struct SavedGlobals {
     std::int32_t mission = g_campaignMission;
-    std::int32_t selected = g_global7dfd6c;
+    std::int32_t selected = g_selectedBuilding;
     std::int32_t reveal = g_revealMap;
     ~SavedGlobals() {
         g_campaignMission = mission;
-        g_global7dfd6c = selected;
+        g_selectedBuilding = selected;
         g_revealMap = reveal;
     }
 };
@@ -915,7 +919,7 @@ void InstallWorldStubs(test::CalleeStubs& stubs) {
     stubs.Install<1, callee::kBlockBuildingLine>();
     stubs.Install<3, callee::kPlaceDockLine>();
     stubs.Install<1, callee::kSetPromotionCost>([](CGameData* w, std::uint32_t, const std::uint32_t* a) {
-        w->players[a[0] % 20].unk0b4[0] = static_cast<std::int32_t>(a[0] * 10 + 20);  // the next cost
+        w->players[a[0] % 20].promotion_cost = static_cast<std::int32_t>(a[0] * 10 + 20);  // the next cost
         return 0u;
     });
     stubs.Install<10, callee::kAllocTable36700Record>();
@@ -1039,7 +1043,7 @@ void RandomizeUi(test::Context& ctx, Bench& bench) {
         w->ui_selection_param2 = param2;
         w->refresh_ui = 0;
     });
-    g_global7dfd6c = static_cast<std::int32_t>(rng.Below(kTestBuildings + 2));
+    g_selectedBuilding = static_cast<std::int32_t>(rng.Below(kTestBuildings + 2));
     g_campaignMission = rng.Chance(1, 4) ? kMissionWithoutGarrison : static_cast<std::int32_t>(rng.Below(3));
     g_revealMap = 0;
 }
@@ -1057,10 +1061,10 @@ void RandomizePlayers(test::Context& ctx, Bench& bench) {
         bench.worlds.Both([&](CGameData* w) {
             Player& player = w->players[p];
             player.mana_total = manaTotal;
-            player.unk0b4[0] = cost;
-            player.unk0b4[1] = l1;
-            player.unk0b4[2] = l2;
-            player.unk0b4[3] = l3;
+            player.promotion_cost = cost;
+            player.soldier_levels[0] = l1;
+            player.soldier_levels[1] = l2;
+            player.soldier_levels[2] = l3;
             player.settler_lists[2] = requests;
         });
     }

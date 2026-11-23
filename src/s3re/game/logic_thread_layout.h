@@ -31,7 +31,9 @@ struct MessageQueue {
 };
 
 struct CLogicThread {
-    std::uint8_t unk000[0x74];
+    std::uint8_t unk000[0x4c];
+    std::uint32_t group_selection_changed;  // +0x04c set to 1 by ExecuteCommands 0x10 when the local player's carriers became units (new group 0)
+    std::uint8_t unk050[0x24];
     std::uint32_t unk074;              // +0x074 cleared by ClearPendingUiRefresh (ui_state.cpp)
     std::uint8_t unk078[0xc];
     std::uint32_t pending_ui_refresh;  // +0x084 turned into the world's refresh_ui (ui_state.cpp)
@@ -53,13 +55,14 @@ struct CLogicThread {
     MessageQueue* toNet;       // +0x3c4 logic -> network (0x20 step and 0x21 command messages)
     MessageQueue* fromNet;     // +0x3c8 network -> logic (the replies)
     std::uint8_t unk3cc[0x675 - 0x3cc];
-    std::uint8_t version_mismatch;  // +0x675 set by ExecuteCommands 0xfb when another player's data words differ
+    std::uint8_t desync_detected;  // +0x675 set by ExecuteCommands 0xfb when another player's RNG history word (0x7dfb58) differs ("Desync!")
     std::uint8_t unk676[2];
 };
 
 #pragma pack(pop)
 
 static_assert(sizeof(void*) == 4, "32-bit build only");
+static_assert(offsetof(CLogicThread, group_selection_changed) == 0x4c);
 static_assert(offsetof(CLogicThread, unk074) == 0x74);
 static_assert(offsetof(CLogicThread, pending_ui_refresh) == 0x84);
 static_assert(offsetof(CLogicThread, save_request_tick) == 0x224);
@@ -68,7 +71,7 @@ static_assert(offsetof(CLogicThread, last_game_end_check) == 0x24c);
 static_assert(offsetof(CLogicThread, computer_players) == 0x350);
 static_assert(offsetof(CLogicThread, step) == 0x3b0);
 static_assert(offsetof(CLogicThread, granted_step) == 0x3b4);
-static_assert(offsetof(CLogicThread, version_mismatch) == 0x675);
+static_assert(offsetof(CLogicThread, desync_detected) == 0x675);
 static_assert(offsetof(MessageQueue, buffer) == 0x14);
 static_assert(offsetof(MessageQueue, lock) == 0x2c);
 static_assert(sizeof(MessageQueue) == 0x34);

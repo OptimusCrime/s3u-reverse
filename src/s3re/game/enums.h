@@ -789,7 +789,7 @@ enum class CommandId : std::uint8_t {
     SaveDone = 248,             // 0xf8: SaveGameCommit when all players saved
     SaveFailed = 249,           // 0xf9: SaveGameRollBack
     SaveAllowed = 250,          // 0xfa: save request within the tick limit
-    CheckVersion = 251,         // 0xfb: compares a word table (0x7dfb58) per player (sent at game start)
+    SyncRandomCheck = 251,      // 0xfb: another player's RNG history word (g_syncRandomHistory 0x7dfb58) differs: "Desync!" (was CheckVersion)
     PlayerLost = 252,           // 0xfc: the player lost (military buildings crushed)
     PlayerWon = 253,            // 0xfd
     DropPlayer = 254,           // 0xfe: "LOGIC: Dropped player", a computer takes over ("Neuer Computer")

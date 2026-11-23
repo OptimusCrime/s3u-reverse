@@ -604,6 +604,49 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-23 (47): ExecuteCommands (parallel worktree)
+
+- **CLogicThread::ExecuteCommands 0x535990 reimplemented and verified**
+  (one `S3RE_HOOK`; plan and status in `re/execute_commands.md`). Our
+  version is split into readable handlers: `execute_commands.cpp` (frame:
+  wait/pop, dispatch by NetMessage / CommandId, step grant, step message,
+  the catch of `Win32::CTimeout*` done with SEH by its throw info; the
+  simple world commands, CastSpell, the ship commands), `_units.cpp`
+  (MoveUnits), `_trade.cpp` (0x12, 0x13), `_areas.cpp` (0x0a, 0x0b, 0x0c,
+  0x10), `_net.cpp` (0x06, 0xf2, 0xf4, 0xf7..0xff, messages 3..0x22). The
+  four non-frame parts were written by forked agents in parallel.
+- **Evidence.** In-process: 10 tests (`--test "ExecuteCommands"`), per part
+  a match test of 3000..4000 cases (the whole original through the
+  trampoline against ours; bench `execute_commands_test.h`: thread,
+  MessageQueues and rings after the world, the game's Pop/Push, stubbed
+  callees, CTimeout thrown through the game's `_CxxThrowException`) and a
+  wrong-implementation test. Full in-process suite 571/571. Emulator: spec
+  `CLogicThread_ExecuteCommands` (case_scale 16; `S3RE_EC_ONLY` limits the
+  ids for work on one part), --full: 31,991 cases, 0 mismatches, 985/985 blocks (exempt: the CTimeout catch, three dead blocks, nine dead refcount branches of inlined std::string code).
+- **Known differences** (not reproducible, at the code and in the
+  inventory row): uninitialized bytes of the 0x21 replies, the 0x0c
+  garrison sizes for a non-military building, SetSettlerGroup counts
+  beyond the message, MoveUnits ship tiles beyond 1024.
+- **Names:** `g_global7dfd6c` -> `g_selectedBuilding`; Player +0xb4
+  `promotion_cost`, +0xb8 `soldier_levels[3]`; CommandId 0xfb
+  `CheckVersion` -> `SyncRandomCheck` (an RNG-history desync check);
+  CLogicThread fields +0x4c, +0x224..+0x22c, +0x235, +0x350, +0x3b0,
+  +0x3b4, +0x675 and the MessageQueue layout (`logic_thread_layout.h`,
+  structs.md); new globals/tables (g_syncChecksums, g_lastSaveTick, g_app,
+  g_settlerGroupChanged, g_currentSettlerGroup, g_spellCastRange,
+  g_tradeMenuGoods, g_raceAttackValue659db0, ...; globals.csv). 0x53ba50 is
+  GetApp (its "trivial ret" row was wrong: trivial.py read misaligned
+  disassembly, TODO.md); 0x53b839 is ExecuteCommands' epilogue + jump
+  tables, not a function.
+- **Tooling note:** builds piped into `Select-Object -First N` left hung
+  `cl.exe` processes (the pipe stops being read) that kept
+  `src/s3re/game/texts.h` and `godly_events.cpp` locked; the build here
+  used a shadow copy of texts.h (scratchpad) and the commit carries the
+  corrected texts.h. Build with output redirected to a file, never piped
+  into `-First`. `CalleeStubs` now allows callees with 0 arguments.
+- **Not done:** whole-game check (main agent, round end); the godly_events.cpp
+  comment rename (TODO.md).
+
 ### 2026-11-23 (46): round end (spells, game-end check, ExecuteCommands callees, renames)
 
 - Five parallel agents (entries below): spells S1 (spells 0..4, 30;

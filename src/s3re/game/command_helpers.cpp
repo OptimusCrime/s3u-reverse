@@ -197,12 +197,12 @@ std::int32_t __fastcall CGameData_SetPromotionCost(CGameData* world, void*, std:
     static constexpr std::int32_t kCostByPromotions[] = {10, 20, 30, 50, 60, 30};
     constexpr std::int32_t kNoMorePromotions = -1;
     Player& record = world->players[player];
-    // Player::unk0b4[1..3]: the soldier levels (swords, bows, pikes); [0]: the price.
-    const auto promotions = static_cast<std::int32_t>(static_cast<std::uint32_t>(record.unk0b4[3]) +
-                                                      static_cast<std::uint32_t>(record.unk0b4[1]) +
-                                                      static_cast<std::uint32_t>(record.unk0b4[2]));
+    // The soldier levels (swords, bows, pikes) and the price.
+    const auto promotions = static_cast<std::int32_t>(static_cast<std::uint32_t>(record.soldier_levels[2]) +
+                                                      static_cast<std::uint32_t>(record.soldier_levels[0]) +
+                                                      static_cast<std::uint32_t>(record.soldier_levels[1]));
     const bool listed = promotions >= 0 && promotions < static_cast<std::int32_t>(std::size(kCostByPromotions));
-    record.unk0b4[0] = listed ? kCostByPromotions[promotions] : kNoMorePromotions;
+    record.promotion_cost = listed ? kCostByPromotions[promotions] : kNoMorePromotions;
     return promotions;
 }
 
@@ -659,7 +659,7 @@ S3RE_TEST(CGameData_SetPromotionCost_MatchesOriginal) {
         for (int k = 1; k <= 3; ++k) {
             const auto level = static_cast<std::int32_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32()
                                                                                   : ctx.rng().Below(5) - 1);
-            worlds.Both([&](CGameData* w) { w->players[player].unk0b4[k] = level; });
+            worlds.Both([&](CGameData* w) { w->players[player].soldier_levels[k - 1] = level; });
         }
         const auto expected = static_cast<std::int32_t>(
             Original_CGameData_SetPromotionCost(worlds.original(), nullptr, player));

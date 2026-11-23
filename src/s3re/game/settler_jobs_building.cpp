@@ -322,7 +322,7 @@ JobResult RecruitAtBarracks(SettlerContext& ctx) {
                                           {T::Pikeman1, T::Pikeman2, T::Pikeman3}};
     const std::uint32_t kind = settler.saved_counter;
     if (kind >= 1 && kind <= 3) {
-        const std::int32_t level = player.unk0b4[kind];  // +0xb8 / +0xbc / +0xc0: the player's level per kind
+        const std::int32_t level = player.soldier_levels[kind - 1];  // +0xb8 / +0xbc / +0xc0
         if (level >= 0 && level <= 2) {
             settler.art = Value(kSoldiers[kind - 1][level]);
         }
@@ -494,7 +494,7 @@ JobResult CarrierDeliver(SettlerContext& ctx) {
                 cleared = true;
             }
         }
-        if (cleared && static_cast<std::uint32_t>(g_global7dfd6c) == b) {
+        if (cleared && static_cast<std::uint32_t>(g_selectedBuilding) == b) {
             world->refresh_ui = 1;
         }
     } else {
@@ -1339,7 +1339,7 @@ void CustomizeBuilding(CaseSetup& setup, std::uint32_t n) {
         using namespace settler_jobs;
         Settler& s = SettlerAt(w, n);
         if (shownSite) {
-            s.building = 7;  // the site the UI shows (g_global7dfd6c in the test)
+            s.building = 7;  // the site the UI shows (g_selectedBuilding in the test)
         }
         Building& b = BuildingAt(w, s.building);
         b.x = bx;
@@ -1519,10 +1519,10 @@ std::uint32_t __fastcall WrongSearchCursor(CGameData* world, void* edx) {
 
 S3RE_TEST(CGameData_UpdateSettlers_Building_MatchesOriginal) {
     // The site whose material counts the UI shows (job 0x50 refreshes it).
-    const std::int32_t savedShown = g_global7dfd6c;
-    g_global7dfd6c = 7;
+    const std::int32_t savedShown = g_selectedBuilding;
+    g_selectedBuilding = 7;
     settler_jobs::testing::CompareUpdateSettlers(ctx, &CGameData_UpdateSettlers, BuildingFamily(), 4000);
-    g_global7dfd6c = savedShown;
+    g_selectedBuilding = savedShown;
 }
 
 S3RE_TEST(CGameData_UpdateSettlers_Building_ComparisonDetectsWrongDigger) {

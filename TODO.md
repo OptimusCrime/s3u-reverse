@@ -82,7 +82,7 @@ Each item: what, why, and where to start.
   each vtable).
 - **Remaining `unk` fields of the world records** (layout.h, session 45
   struct pass): Settler +0x1b/+0x2f, Building +0x01/+0x36/+0x37 and the
-  site byte +0x1e, Player +0x8/+0x18/+0x1c/+0x88/+0xb4..+0xc0/+0x12c,
+  site byte +0x1e, Player +0x8 (bit 0: big temple destroyed)/+0x18/+0x1c (network id)/+0x88/+0x12c,
   the MapEffect graphics fields (+0x6, +0x18..+0x24, +0x2c..+0x39; their
   reader is the draw code), world +0x2d2ec/+0x2d304..+0x2d310. Name them
   when their readers (UpdateSettlers, ExecuteCommands, PrepareDrawData)
@@ -90,13 +90,20 @@ Each item: what, why, and where to start.
 
 ## Evidence and testing
 
-- **ExecuteCommands 0x535990 itself (session 46).** Analysis, command
-  ids and the order of work are in `re/execute_commands.md`; all its
-  simulation callees are verified (command_helpers.cpp). Write it as one
-  unit (frame + one helper per command, MoveUnits in its own file), with
-  in-process tests on a fake CLogicThread with pre-filled queues and
-  "logicthread" emulator specs per command group; the UI/lobby/savegame
-  callees listed there stay original.
+- **ExecuteCommands whole-game evidence (session 47).** Reimplemented and
+  verified (in-process + emulator); the recordings contain ids 0x01, 0x03,
+  0x04, 0x05, 0x09, 0x0b, 0x0c, 0x0f, 0x10, 0x11, 0xfb. Run the round-end
+  replays/saves against the original and record the call count; the
+  multiplayer/UI paths (0x06 text, 0xf4, 0xf7..0xff, messages 3..0x22)
+  have tests only.
+- **trivial.py reads misaligned dumpbin output (session 47).** 0x53ba50
+  (`mov eax, [0x7e9168]; ret`) was marked "Trivial ... (ret)" because the
+  jump tables before it desync build/s3.asm. Make `trivial.py` check that
+  the listing has an instruction exactly at the start (or decode the bytes
+  itself), then rerun `trivial.py check` for other false positives.
+- **godly_events.cpp comments (session 47):** lines 62 and 89 still say
+  `Player::unk0b4[0]`; it is now `Player::promotion_cost` (the file was
+  locked by a hung compiler when the rename ran).
 - **UpdateSettlers handlers with tests only (session 45).** The
   whole-game checks (two replays, three saves, a random map) never reach
   these UpdateSettlers jobs; check them against the user's full-game

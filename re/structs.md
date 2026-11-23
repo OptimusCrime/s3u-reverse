@@ -265,12 +265,12 @@ building_flags.cpp, settler_queries.cpp, dump (players 0 and 1).
 |---|---|---|---|
 | 0x000 | i32 | taking part: 0 = no; dump: 1 (local human), 2 (other player, probably computer) | V (non-zero test), G (1/2) |
 | 0x004 | i32 | race 0..3 (dump 2, 3; also 0x1195FD4) | V |
-| 0x008 | i32 | added in savegame version 0x89 (cleared for older saves); read by ExecuteCommands, BuildingDone | S |
+| 0x008 | i32 | added in savegame version 0x89 (cleared for older saves); bit 0: set by command 0x06 when a finished big temple (0x29/0x2B/0x2D/0x37) of the player is destroyed; BuildingDone then gives no temple mana (probably) | S |
 | 0x00C | i32 | team: the team / alliance index (`team`, was presence_index): the fog of war shows what the local player's team sees, enemies are settlers/buildings of another team (UpdateSoldier, WalkSettler, UpdateEconomy's military check, CrushBuilding), the minimap colours by it, the presence maps are indexed by it (UpdateEconomy phases 1..16); FindPlayerByField0C | V (uses), S (name) |
 | 0x010 | i32 | start position x (= castle position in the dump) | V |
 | 0x014 | i32 | start position y | V |
 | 0x018 | i32 | 0 in ctor; player placement 0x5074B0; dump 1 | G |
-| 0x01C | i32 | -1 in ctor; dump: 0 for player 0, -1 for player 1 (controller / net id?) | G |
+| 0x01C | i32 | -1 in ctor; dump: 0 for player 0, -1 for player 1; the player's network id: ExecuteCommands finds the player of network messages 3/5/6/8/0x22 by it and puts it in the kill message of 0xfe | S |
 | 0x020 | u16[48] | heads of idle-settler lists per settler type (lists 5, 8, 0xF, 0x1E..0x23, 0x27 (+0x6E), 0x2B (+0x76) seen); see the overlap below | V |
 | 0x020..0x028 | u16 x5 | building request counters (+0x24 total, capped at 10; +0x20/+0x22/+0x26/+0x28 per bit, bit 7 = "set once") | V |
 | 0x080 | i32 | 0x80 in ctor | G |
@@ -279,7 +279,8 @@ building_flags.cpp, settler_queries.cpp, dump (players 0 and 1).
 | 0x08C | i32 | mana | V |
 | 0x090 | i32 | mana_total: 0 in ctor; only ever added to, together with the mana +0x8C (a new temple +8 in BuildingDone, each offering in UpdateEconomy); read by ExecuteCommands, PrepareDrawData, ProcessEvents; command 0x18 (PromoteSoldiers) pays promotions from it (+0xB4), and with flag 0x80 first sets it to that cost (a cheat or test path) | V (writes), S (meaning) |
 | 0x094 | i32[8] | mana needed per spell slot (1 in ctor, then S3.EXE 0x658E64[spell of the race's slot]) | V |
-| 0x0B4..0x0C0 | i32 x4 | +0xB4: mana cost of the next soldier promotion, set by SetPromotionCost 0x508450 from the sum of the three levels (10, 20, 30, 50, 60, 30, then -1); command 0x18 (PromoteSoldiers) raises a level when +0x90 >= the cost and takes the cost from +0x90; +0xB8..+0xC0: the soldier level per weapon kind (swordsmen, bowmen, pikemen), read by UpdateSettlers when a soldier enters a tower (jobs 0x10/0x6A/0x8B, session 45) | G (S for +0xB8..+0xC0) |
+| 0x0B4 | i32 | promotion_cost: mana cost of the next soldier promotion, set by SetPromotionCost 0x508450 from the sum of the three levels (10, 20, 30, 50, 60, 30, then -1); command 0x18 (PromoteSoldiers) raises a level when +0x90 >= the cost (unsigned) and takes the cost from +0x90 | V |
+| 0x0B8..0x0C0 | i32[3] | soldier_levels: level 0..2 per weapon kind (swordsmen, bowmen, pikemen); command 0x18 raises 0 -> 1 always, 1 -> 2 only when both other kinds are at 1 or more; UpdateSettlers gives new soldiers the type of their level (jobs 0x10/0x6A/0x8B) | V |
 | 0x0C4 | u32 | population: civilians (settler class 0 or 10..29), recounted by RecountPlayerPopulation 0x5104C0 (UpdateEconomy); UpdateEconomy creates no new settler while it is above +0xC8 | V (count), G (use) |
 | 0x0C8 | u32 | population limit: +0xCC + 10/30/100 per finished building of type 0x1A/0x1B/0x1C (residences, probably) | V (formula), G (meaning) |
 | 0x0CC | u32 | base of the limit; +1 per civilian (type class 0 or 10..29) created by SpawnSettlersAround 0x50CB20 and in UpdateEconomy 0x4E36B7 | S |
@@ -455,6 +456,23 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   +0x0, dword +0x4, dword +0xC written by 0x549530 (Volker area near
   GodlyEvents); UpdateEnvironment and 0x518F20 read it. **G**.
 
+- **Found by ExecuteCommands (session 47, `re/execute_commands.md`):**
+  Settler +0x1C (dword) / +0x20 (word) of geologists (22) and pioneers (40):
+  their work tile (0xFFFF = none), reserved by tile flag 0x02; Settler
+  `path_cache` holds up to three waypoints (MoveUnits 0x0d), 0xFFFE in [4]
+  and [5] marks a patrol, 0xFFFD in [4] an attack target with a race value
+  in [5]; Settler +0x3C of non-ships: 0 (command 0x0f) or 40 (attack-move);
+  walk_state 3: a thief's patrol. Area +0x1F6 (settings4) = transport place
+  per good, +0x21A (settings5) = transport flag per good, +0x23E..+0x240
+  tool shares (steps of 5, sum <= 95), +0x242..+0x244 percentages, +0x241 a
+  setting (command 0x0b). Building +0x1A / +0x1C / +0x20 of towers and the
+  castle: wanted swordsmen / bowmen / pikemen (command 0x0c). A storehouse's
+  +0x0E: the good its six piles take (command 0x1c). Workshops' +0x36: war
+  machines waiting, loaded into ships (command 0x19). World +0x2D298
+  (ui_special_menu) is the building menu's page: 4..13 trade, 14..16
+  workshop. Player +0x00 == 2: a dropped player a computer took over. **V**
+  (accesses), **S** (meanings).
+
 ---
 
 # Classes outside the world
@@ -532,6 +550,23 @@ loaded game starts). **S** (savegame_start.cpp).
 +0x88 word: the game seed; +0xB0 four dwords copied together
 (GameParams_CopyRectB0 0x437400; CNetSession and savegame code); +0xCC
 byte: random races include the Amazons. **V** (layout of these fields).
+
+## CLogicThread (fields ExecuteCommands uses; `logic_thread_layout.h`)
+
+| Off | Meaning | Conf. |
+|---|---|---|
+| 0x04C | set to 1 by ExecuteCommands 0x10 when the local player's settler group 0 changed (`group_selection_changed`) | S |
+| 0x224 | save_request_tick: game tick of the last multiplayer save request (0xf7 sets, 0xf9 clears; 0xfa allows a new request 937 ticks later) | V |
+| 0x228 / 0x22C | save_failures / save_acks of the running multiplayer save (0xf7 clears, 0xf9 / 0xf8 count) | V |
+| 0x235 | u8[20] per player, cleared by 0xf2 / 0xfe / 0xff (then 0x5411B0) | V (writes), G (meaning) |
+| 0x350 | CComputerPlayer*[20]: 0xfe / 0xff create one (new 0x780, ctor 0x550900) for a dropped player | V |
+| 0x3A0 | the world | V |
+| 0x3B0 | step: the lockstep step the logic runs next (0 before the first) | V |
+| 0x3B4 | granted_step: the last StepGrant | V |
+| 0x3C4 / 0x3C8 | MessageQueue* logic -> network / network -> logic | V |
+| 0x675 | desync_detected: set by 0xfb (SyncRandomCheck) | V |
+
+**MessageQueue** (ring of dwords, Pop 0x430980 / Push 0x4309C0): +0x00 vtable (slot 3: Wait(timeout, flag), throws Win32::CTimeout*), +0x14 buffer, +0x18 capacity (power of two), +0x1C read, +0x20 write, +0x24 count, +0x28 event object (+8 = HANDLE, SetEvent on Push), +0x2C CRITICAL_SECTION*, +0x30 peak count. **V**.
 
 ## Smaller objects
 

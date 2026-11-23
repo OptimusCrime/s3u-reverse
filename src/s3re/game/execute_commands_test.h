@@ -26,6 +26,7 @@
 #include "game/debug_log.h"
 #include "game/execute_commands.h"
 #include "game/logic_thread_layout.h"
+#include "game/vtables.h"
 #include "game/world.h"
 #include "test/callee_stub.h"
 #include "test/difftest.h"
@@ -36,7 +37,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <initializer_list>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace s3re::game {
@@ -99,7 +103,7 @@ inline std::uint32_t __fastcall FakeWait(MessageQueue* queue, void*, std::uint32
         static FakeTimeout* thrown;
         thrown = &object;
         constexpr std::uintptr_t kCxxThrowException = 0x0061f027;
-        constexpr std::uintptr_t kTimeoutPointerThrowInfo = 0x00674f38;  // throw info of Win32::CTimeout*
+        constexpr std::uintptr_t kTimeoutPointerThrowInfo = throw_info::kCTimeoutPointer;
         using ThrowFn = void(__stdcall*)(void* object, const void* info);
         reinterpret_cast<ThrowFn>(kCxxThrowException)(&thrown, reinterpret_cast<const void*>(kTimeoutPointerThrowInfo));
     }
@@ -174,6 +178,7 @@ struct Outcome {
     std::vector<WaitCall> waits;
     std::uint32_t deletedTimeouts = 0;
     std::uint32_t deleteFlags = 0;
+    std::string sideLog;  // Bench::afterSide
 };
 
 class Bench {
@@ -182,12 +187,20 @@ public:
 
     test::WorldPair worlds;
     test::CalleeStubs stubs;
+    // S3.EXE globals the commands change (address, size): saved before the
+    // original runs, restored before ours runs, and compared afterwards.
+    std::vector<std::pair<std::uintptr_t, std::size_t>> globalRegions;
+    // Called before each side runs (with that side's world), e.g. to clear a
+    // test's own call log; and after each side, to collect that log into a
+    // string that is compared.
+    std::function<void(CGameData*)> beforeSide;
+    std::function<std::string(CGameData*)> afterSide;
 
     CLogicThread* Thread(CGameData* world) {
-        return reinterpret_cast<CLogicThread*>(reinterpret_cast<std::uint8_t*>(world) + kThreadOffset);
+        return reinterpret_cast<CLogicThread*>(reinterpret_cast<std::uint8_t*>(world) + kThreadOffset);  // raw-ok: the bench's objects after the world
     }
     MessageQueue* Queue(CGameData* world, std::size_t offset) {
-        return reinterpret_cast<MessageQueue*>(reinterpret_cast<std::uint8_t*>(world) + offset);
+        return reinterpret_cast<MessageQueue*>(reinterpret_cast<std::uint8_t*>(world) + offset);  // raw-ok: the bench's objects after the world
     }
 
     // Sets the thread's step (+0x3b0) on both sides.
@@ -201,9 +214,18 @@ public:
     bool Run(test::Context& ctx, int caseIndex, const MessageBuilder& messages, int throwAtWait = -1,
              ExecuteCommandsFn candidate = &CLogicThread_ExecuteCommands, int checkpoint = 16) {
         worlds.Both([&](CGameData* w) { Prepare(w, messages); });
+        const std::vector<std::vector<std::uint8_t>> before = SaveGlobals();
         Outcome expected = RunSide(worlds.original(), Original_CLogicThread_ExecuteCommands, throwAtWait);
+        const std::vector<std::vector<std::uint8_t>> globalsA = SaveGlobals();
+        RestoreGlobals(before);
         Outcome actual = RunSide(worlds.ours(), candidate, throwAtWait);
         bool same = true;
+        same &= Report(ctx, caseIndex, "globals", globalsA == SaveGlobals());
+        same &= Report(ctx, caseIndex, "test log", expected.sideLog == actual.sideLog);
+        if (expected.sideLog != actual.sideLog) {
+            ctx.Fail(__FILE__, __LINE__, "  original: %s", expected.sideLog.c_str());
+            ctx.Fail(__FILE__, __LINE__, "  ours:     %s", actual.sideLog.c_str());
+        }
         same &= Report(ctx, caseIndex, "EAX", expected.eax == actual.eax);
         same &= Report(ctx, caseIndex, "stub calls", expected.calls == actual.calls);
         same &= Report(ctx, caseIndex, "DebugLog calls", expected.logs == actual.logs);
@@ -239,8 +261,8 @@ private:
         thread->world = world;
         thread->fromNet = Queue(world, kFromNetOffset);
         thread->toNet = Queue(world, kToNetOffset);
-        auto* fromRing = reinterpret_cast<std::uint32_t*>(reinterpret_cast<std::uint8_t*>(world) + kFromRingOffset);
-        auto* toRing = reinterpret_cast<std::uint32_t*>(reinterpret_cast<std::uint8_t*>(world) + kToRingOffset);
+        auto* fromRing = reinterpret_cast<std::uint32_t*>(reinterpret_cast<std::uint8_t*>(world) + kFromRingOffset);  // raw-ok: the bench's objects after the world
+        auto* toRing = reinterpret_cast<std::uint32_t*>(reinterpret_cast<std::uint8_t*>(world) + kToRingOffset);  // raw-ok: the bench's objects after the world
         std::memset(fromRing, 0, kRingDwords * 4);
         std::memset(toRing, 0, kRingDwords * 4);
         const std::vector<std::uint32_t>& dwords = messages.dwords();
@@ -262,6 +284,41 @@ private:
         queue->peak = 0;
     }
 
+    std::vector<std::vector<std::uint8_t>> SaveGlobals() const {
+        std::vector<std::vector<std::uint8_t>> saved;
+        for (const auto& region : globalRegions) {
+            const auto* bytes = reinterpret_cast<const std::uint8_t*>(region.first);
+            saved.emplace_back(bytes, bytes + region.second);
+        }
+        return saved;
+    }
+    void RestoreGlobals(const std::vector<std::vector<std::uint8_t>>& saved) const {
+        for (std::size_t i = 0; i < saved.size(); ++i) {
+            std::memcpy(reinterpret_cast<void*>(globalRegions[i].first), saved[i].data(), saved[i].size());
+        }
+    }
+
+    // The 0x21 replies ExecuteCommands pushes for the network ({0x21, id, 8,
+    // ?, player, ?, ?, ?}: commands 0xf7, 0xfa, network messages 3 and 5)
+    // leave bytes 3 and 5..7 as the original's uninitialized stack
+    // ([ebp-0x424]); they are zeroed on both sides before the rings are
+    // compared.
+    static void MaskReplyBytes(CGameData* world) {
+        auto* ring = reinterpret_cast<std::uint8_t*>(world) + kToRingOffset;  // raw-ok: the bench's objects after the world
+        const auto* queue =
+            reinterpret_cast<const MessageQueue*>(reinterpret_cast<std::uint8_t*>(world) + kToNetOffset);  // raw-ok: the bench's objects after the world
+        std::uint32_t at = 0;
+        while (at < queue->write && at < kRingDwords) {
+            std::uint8_t* message = ring + at * 4;
+            const std::uint32_t dwords = message[2] >> 2;
+            if (message[0] == Value(NetMessage::CommandRequest) && message[2] == 8) {
+                message[3] = 0;
+                message[5] = message[6] = message[7] = 0;
+            }
+            at += dwords == 0 ? 1 : dwords;
+        }
+    }
+
     Outcome RunSide(CGameData* world, ExecuteCommandsFn function, int throwAtWait) {
         FakeState& state = Fakes();
         state.world = world;
@@ -270,6 +327,9 @@ private:
         state.deletedTimeouts = 0;
         state.deleteFlags = 0;
         stubs.SetWorld(world);
+        if (beforeSide) {
+            beforeSide(world);
+        }
         Outcome out;
         {
             DebugLogRecorder recorder;
@@ -281,6 +341,10 @@ private:
         out.deletedTimeouts = state.deletedTimeouts;
         out.deleteFlags = state.deleteFlags;
         state.throwAtWait = -1;
+        if (afterSide) {
+            out.sideLog = afterSide(world);
+        }
+        MaskReplyBytes(world);
         return out;
     }
 
