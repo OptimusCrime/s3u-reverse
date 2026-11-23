@@ -22,7 +22,7 @@
 //   id = table 0x6a8060[kind * 4 + race] (race = settler byte +2); settler
 //   dword +8 (Settler::direction) = id, word +0xc = CGraphicsData_FrameCount(id) - 1 on the graphics
 //   object [0x7a8010] (probably the number of frames - 1). EAX = that
-//   SpriteWord result - 1 (the whole register).
+//   FrameCount result - 1 (the whole register).
 // CLogicThread_RemoveSettlerFromGroups (0x005428e0): (settler, group), ret 8;
 //   ECX not used. Unless `group` is 0, removes `settler` from the ten
 //   settler groups in S3.EXE's data (counts 0x7ad620, lists of 100 words at

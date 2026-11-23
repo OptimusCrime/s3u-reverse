@@ -142,7 +142,7 @@
 // settlers_by_type, +0x18a..+0x21a settings1..5, +0x23e settings_extra,
 // +0x241 setting_241, +0x242 counters_242, +0x245 condition_enabled, +0x278
 // counters_278; tile byte +0x10 Tile::walk_region ("byte 10"), word +0x16
-// Tile::wide_region ("word 16"); building +0x20 Building::water.extra_tiles,
+// Tile::wide_region ("word 16"); building +0x20 Building::workshop.extra_tiles,
 // +0x22 dock_direction, +0x30/+0x32 work_x/work_y, +0x36 unk36.
 
 #include "game/debug_log.h"
@@ -759,12 +759,12 @@ using layout::Building;
 
 using B = BuildingType;
 
-// Building::water.extra_tiles (+0x20) once the extra tiles are taken.
+// Building::workshop.extra_tiles (+0x20) once the extra tiles are taken.
 constexpr std::uint8_t kExtraDone = 0xfe;
 constexpr std::uint8_t kShipyard = Value(B::Shipyard);
 constexpr std::uint8_t kCastle = Value(B::Castle);
 
-// Building::water.state: the high nibble is the state.
+// Building::workshop.state: the high nibble is the state.
 constexpr std::uint8_t kStateMask = 0xf0;
 constexpr std::uint8_t kStateMachineWaiting = 0x20;  // done only once unk36 <= 24
 constexpr std::uint8_t kStateTradeShip = 0x30;       // the shipyard launches a trade ship

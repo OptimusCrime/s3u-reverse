@@ -12,7 +12,7 @@
 //   tile rectangle the pixel covers. minimap[W * r + c] = AX. ret 4, EAX
 //   not used.
 // CGameData::MinimapPixel (0x004fb720): (x0, y0, x1, y1) -> the pixel
-//   colour packed in the screen's format (g_pixelChannelShifts 0x7dfba0,
+//   colour packed in the screen's format (g_pixelFormat 0x7dfba0,
 //   scales 0x7dfbac..: ((scale * c) >> 8) << shift per channel). The tile
 //   (x0, y0) gives the brightness from its fog level (draw_flags & 7):
 //   mode 0x730f58 == 0: level * 256 / 7 (signed); otherwise ((shade + 100)

@@ -40,7 +40,7 @@
 // CGameData::SetSettlerSavedAnimation (0x0050e320): (settler, kind): like
 //   SetSettlerAnimation, but into the saved pair: dword +0x1c = animation
 //   id 0x6a8060[kind * 4 + race], word +0x20 = CGraphicsData_FrameCount(id) - 1
-//   on the graphics object [0x7a8010]. EAX = SpriteWord - 1. ret 8.
+//   on the graphics object [0x7a8010]. EAX = FrameCount - 1. ret 8.
 // All thiscall (ECX = world).
 
 #include "game/enums.h"

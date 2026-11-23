@@ -130,9 +130,6 @@ Each item: what, why, and where to start.
   replays/saves against the original and record the call count; the
   multiplayer/UI paths (0x06 text, 0xf4, 0xf7..0xff, messages 3..0x22)
   have tests only.
-- **godly_events.cpp comments (session 47):** lines 62 and 89 still say
-  `Player::unk0b4[0]`; it is now `Player::promotion_cost` (the file was
-  locked by a hung compiler when the rename ran).
 - **UpdateSettlers handlers with tests only (session 45).** The
   whole-game checks (two replays, three saves, a random map) never reach
   these UpdateSettlers jobs; check them against the user's full-game

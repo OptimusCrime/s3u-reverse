@@ -30,7 +30,7 @@
 // Pathing::DirectionOfStep (0x004a4b00): (dx, dy) ret 8, ECX unused: the
 //   direction of a unit step (each -1..1): (dy != 0) + (dx == 0 ? 1 + (dy ==
 //   -1 ? 3 : 0) : dx == -1 ? 3 : 0). No check of the input.
-// Pathing::DistanceAlong (0x004a4860, the CSV's "AreaDirection"): (state, a,
+// Pathing::DistanceAlong (0x004a4860, was "AreaDirection"): (state, a,
 //   b) ret 0xc, ECX unused: by state.sextant (jump table 0x4a48d0): 0, 1:
 //   max(a, b); 2: b - a; 3, 4: max(-a, -b); 5: a - b. Other values:
 //   assertion "Invalid area", line 0x716 (EAX would be a).

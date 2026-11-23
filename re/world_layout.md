@@ -234,7 +234,7 @@ Counts are the displacement uses `tools/world_fields.py regions` finds
   AddTilePileToArea, AddGoodsToPile, PileIncAmountLeaving,
   AddBuildingGoodsRequest, RemoveBuildingFromAreaRequests,
   SetAreaBuildingSlotA/B, FetchGoodsToTradeBuilding, ClearAreaGoodsSettings1D2,
-  SumAreaGoods10PerPlayer; UpdateSettlers/UpdateEconomy/ExecuteCommands for
+  SumGoldPerPlayer; UpdateSettlers/UpdateEconomy/ExecuteCommands for
   the settings arrays.
 - **Settlers** (3844 uses, 118 functions): CreateSettler, SetSettlerTarget,
   ClearSettlerJob, RestoreSettlerAnimation, SettlerStartHealth,
