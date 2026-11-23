@@ -157,6 +157,10 @@ void LogSetup(const char* what, const recording::GameSetup& setup) {
                  "human race %u, computer players %u",
                  what, setup.size, setup.symmetry, setup.field0c, setup.mapSeed, setup.goods,
                  setup.race, setup.computers);
+    } else if (setup.IsMapOptions()) {
+        S3RE_LOG("%s: the -map file's map with start goods %u, human race %u, computer "
+                 "players %u",
+                 what, setup.goods, setup.race, setup.computers);
     }
 }
 

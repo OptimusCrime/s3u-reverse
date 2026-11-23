@@ -4,6 +4,12 @@
 Usage: python tools/play_game.py [--size 768] [--symmetry 0] [--computers 2]
                                  [--goods high] [--race RACE] [--seed N]
                                  [--name NAME] [--ours] [--build Debug]
+       python tools/play_game.py --map M704-2-Longrun [--race RACE]
+                                 [--goods high] [--computers N] [--seed N]
+
+With --map NAME (a map of the game, e.g. M704-2-Longrun, or a path) the game is played
+on that map instead, with its own start positions and player setup (unless
+--computers is given); --race and --goods work the same.
 
 Starts S3.EXE through s3re_launcher on a new random map, without menus:
 you against --computers computer players (each in a party of its own),
@@ -46,12 +52,44 @@ import command_log  # noqa: E402
 import game_lock  # noqa: E402
 
 
+GAME_DIR = os.path.join(ROOT, "Settlers3Ultimate")
+
+
+def find_map(name):
+    """The -map argument (relative to the game folder, backslashes) for a map
+    name such as "M704-2-Longrun" (searched in Map\\*\\, case-insensitive,
+    ".map" optional) or a path relative to the game folder. None (after
+    printing why) if there is no such map or the name is ambiguous."""
+    if os.path.isfile(os.path.join(GAME_DIR, name)):
+        return name.replace("/", "\\")
+    wanted = name.lower()
+    if not wanted.endswith(".map"):
+        wanted += ".map"
+    found = []
+    for folder in sorted(os.listdir(os.path.join(GAME_DIR, "Map"))):
+        path = os.path.join(GAME_DIR, "Map", folder)
+        if os.path.isdir(path):
+            found += [f"Map\\{folder}\\{entry}" for entry in sorted(os.listdir(path))
+                      if entry.lower() == wanted]
+    if len(found) == 1:
+        return found[0]
+    if found:
+        print(f"map name {name!r} is ambiguous: {', '.join(found)}; give the path")
+    else:
+        print(f"no map named {name!r} in Settlers3Ultimate\\Map\\*\\ "
+              "(file names without .map, e.g. M704-2-Longrun)")
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--size", type=int, default=768,
                         help="map size, a multiple of 64 (the dialog offers 384..768; default 768)")
     parser.add_argument("--symmetry", type=int, default=0, help="symmetry bits 0..3 (default 0)")
-    parser.add_argument("--computers", type=int, default=2,
+    parser.add_argument("--map", help="play this map instead of a random map: a name "
+                        "(e.g. M704-2-Longrun, looked up in the game's Map folders) or a "
+                        "path relative to the game folder")
+    parser.add_argument("--computers", type=int, default=None,
                         help="computer opponents (default 2)")
     parser.add_argument("--goods", default="high", choices=("low", "medium", "high"),
                         help="start goods (default high)")
@@ -88,13 +126,25 @@ def main():
         print(f"{recording} exists already; choose another --name")
         return 2
 
-    command = [launcher, "--random-map", f"{args.size},{args.symmetry}",
-               "--goods", args.goods, "--computers", str(args.computers),
+    map_file = None
+    if args.map:
+        map_file = find_map(args.map)
+        if map_file is None:
+            return 2
+        print(f"Map: {map_file}", flush=True)
+        where = []
+        computers = [] if args.computers is None else ["--computers", str(args.computers)]
+    else:
+        where = ["--random-map", f"{args.size},{args.symmetry}"]
+        computers = ["--computers", str(2 if args.computers is None else args.computers)]
+    command = [launcher, *where,
+               "--goods", args.goods, *computers,
                *(["--race", args.race] if args.race else []),
                "--seed", str(seed), "--record-commands", recording, "--trace-determinism",
                *([] if args.ours else ["--original"]),
                *(["--exit-after-ticks", str(args.exit_after_ticks)]
-                 if args.exit_after_ticks else [])]
+                 if args.exit_after_ticks else []),
+               *(["--", "-map", map_file] if map_file else [])]
     print("Starting:", " ".join(command), flush=True)
     print(f"Recording to {recording}", flush=True)
     print("Quit through the game's menu or close the window when you are done. "

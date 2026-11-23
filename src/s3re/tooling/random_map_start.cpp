@@ -2,7 +2,9 @@
 // SIZE[,SYMMETRY[,FIELD0C]] [--goods G] [--computers N] [--race R]`,
 // S3RE_RANDOM_MAP), for whole-game checks of the random map generator
 // CGameData 0x5166d0 (CGameData::GenerateRandomMap) and for recording whole
-// games played by a person (docs/recording_a_game.md).
+// games played by a person (docs/recording_a_game.md). Also applies --goods,
+// --computers and --race to a -map file's own map (kSetupMapOptions,
+// 2026-11-24: the launcher passes flags 2; the map file is kept).
 //
 // Tooling, not a reimplementation. How the game starts a random map:
 //
@@ -173,9 +175,11 @@ struct MapInfoChunk {  // chunk 1
 static_assert(sizeof(RandomMapChunk) == 0x18);
 static_assert(sizeof(MapInfoChunk) == 0x20);
 
-// S3RE_RANDOM_MAP = "size,symmetry,field0c,seed,goods,race,computers" (the
-// launcher fills in all seven; goods 0 = the map's, race 0xff = random,
-// computers 0 = the -map file's player setup).
+// S3RE_RANDOM_MAP = "size,symmetry,field0c,seed,goods,race,computers,flags"
+// (the launcher fills in all eight; goods 0 = the map's, race 0xff = random,
+// computers 0 = the -map file's player setup; flags kSetupRandomMap, or
+// kSetupMapOptions for options on the -map file's own map; without flags: a
+// random map).
 recording::GameSetup ReadParams() {
     recording::GameSetup params;
     char text[160] = {};
@@ -183,7 +187,8 @@ recording::GameSetup ReadParams() {
     if (length == 0 || length >= sizeof(text)) {
         return params;
     }
-    std::uint32_t values[7] = {0, 0, 0, 0, 0, recording::kRandomRace, 0};
+    std::uint32_t values[8] = {0, 0, 0, 0, 0, recording::kRandomRace, 0,
+                               recording::kSetupRandomMap};
     const char* cursor = text;
     for (std::uint32_t& value : values) {
         char* end = nullptr;
@@ -193,7 +198,8 @@ recording::GameSetup ReadParams() {
         }
         cursor = end + 1;
     }
-    params.flags = recording::kSetupRandomMap;
+    params.flags = values[7] == recording::kSetupMapOptions ? recording::kSetupMapOptions
+                                                            : recording::kSetupRandomMap;
     params.size = values[0];
     params.symmetry = values[1];
     params.field0c = values[2];
@@ -307,18 +313,22 @@ void __fastcall Hooked_GameSettings_NewGame(CGameSettings* self, void* edx, std:
         reinterpret_cast<std::uintptr_t>(_ReturnAddress()) == kStartupMapCallReturn) {
         g_handled = true;
         params = ReadParams();
-        if (params.IsRandomMap()) {
-            CMapFile* random = MakeRandomMapFile(params);
-            if (random == nullptr) {
-                S3RE_LOG("random-map: out of memory; ending the game");
-                TerminateProcess(GetCurrentProcess(), 4);
-                return;
+        if (params.Applies()) {
+            if (params.IsRandomMap()) {
+                CMapFile* random = MakeRandomMapFile(params);
+                if (random == nullptr) {
+                    S3RE_LOG("random-map: out of memory; ending the game");
+                    TerminateProcess(GetCurrentProcess(), 4);
+                    return;
+                }
+                S3RE_LOG("random-map: size %u, symmetry %u, field0c %u, seed %u", params.size,
+                         params.symmetry, params.field0c, params.mapSeed);
+                // The -map file stays allocated (the menu thread still reads its
+                // chunk 0x40 after this call); it is not freed, a small leak.
+                mapFile = random;
+            } else {
+                S3RE_LOG("map-options: the -map file's own map with the options below");
             }
-            S3RE_LOG("random-map: size %u, symmetry %u, field0c %u, seed %u", params.size,
-                     params.symmetry, params.field0c, params.mapSeed);
-            // The -map file stays allocated (the menu thread still reads its
-            // chunk 0x40 after this call); it is not freed, a small leak.
-            mapFile = random;
             if (params.goods != 0) {
                 startGoods = params.goods;
             }

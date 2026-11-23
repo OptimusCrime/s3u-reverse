@@ -32,7 +32,9 @@
 //     map PATH     required. The rest of the line (trimmed): the -map argument
 //                  as given to S3.EXE (relative to the game directory); empty
 //                  ("map" alone) if the game was started without -map.
-//     setup K=V... optional. The game setup of a --random-map game (the
+//     setup K=V... optional. The game setup of a --random-map game, or the
+//                  --goods/--race/--computers options applied to a -map file
+//                  (flags 2, 2026-11-24) (the
 //                  GameSetup fields below, as in version 3; all 8 keys, each
 //                  once, decimal: flags size symmetry field0c map-seed goods
 //                  race computers). Written by every v4 recorder; a file
@@ -99,12 +101,16 @@ constexpr char kMagicV3[8] = {'S', '3', 'R', 'E', 'C', 'M', 'D', '3'};
 constexpr char kTextMagic[] = "s3re-recording 4";
 constexpr std::uint32_t kSettingAmazons = 1;
 constexpr std::uint32_t kSetupRandomMap = 1;
+// --goods/--race/--computers applied to the -map file's own map (size,
+// symmetry, field0c and mapSeed are 0). Readers older than 2026-11-24 see a
+// setup that isn't a random map and only compare it.
+constexpr std::uint32_t kSetupMapOptions = 2;
 constexpr std::uint32_t kRandomRace = 0xFF;
 constexpr std::uint32_t kMaxCommandDwords = 64;
 
 // How a game was set up beyond its map file (version 3 and 4).
 struct GameSetup {
-    std::uint32_t flags = 0;  // kSetupRandomMap
+    std::uint32_t flags = 0;  // kSetupRandomMap or kSetupMapOptions
     std::uint32_t size = 0;
     std::uint32_t symmetry = 0;
     std::uint32_t field0c = 0;
@@ -114,6 +120,9 @@ struct GameSetup {
     std::uint32_t computers = 0;
 
     bool IsRandomMap() const { return (flags & kSetupRandomMap) != 0; }
+    bool IsMapOptions() const { return (flags & kSetupMapOptions) != 0; }
+    // Anything for the DLL to apply at the -map start.
+    bool Applies() const { return IsRandomMap() || IsMapOptions(); }
     bool operator==(const GameSetup& other) const {
         return flags == other.flags && size == other.size && symmetry == other.symmetry &&
                field0c == other.field0c && mapSeed == other.mapSeed && goods == other.goods &&

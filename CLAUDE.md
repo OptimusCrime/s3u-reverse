@@ -397,7 +397,10 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
 - **Recording a whole game played by the user:** `python
   tools/play_game.py` (defaults: 768 random map, 2 computer players, high
   goods, random seed, `--original`, normal speed, trace on; takes the game
-  lock for the session) writes `recordings/NAME.s3rec` (+ `.s3rec.tsv`
+  lock for the session; `--map NAME` plays a map of the game instead, e.g.
+  `--map M704-2-Longrun`: the launcher's `--race`/`--goods`/`--computers`
+  also work with `-- -map FILE`, stored as recording setup flags 2,
+  `kSetupMapOptions`) writes `recordings/NAME.s3rec` (+ `.s3rec.tsv`
   trace and `.log`, both gitignored). User guide: `docs/recording_a_game.md`.
   Commands are flushed per command; quitting or closing the window ends the
   recording. F12 (the game's fast-forward, `g_stepCountdown` += 882) is a

@@ -87,6 +87,11 @@
 //                             the map's start positions minus one)
 //   --race <race>             your race (roman, egyptian, asian, amazon);
 //                             default random (drawn by the game)
+// The same three options also work on a map file without --random-map
+// (`-- -map Map\MULTI\M448-6-Coastal.map --race roman`): the map stays,
+// the options are applied as above and stored in a recording (setup flags 2);
+// --computers then replaces the file's player setup (at most its start
+// positions minus one; the launcher can't check that).
 // The game has no difficulty setting for computer players
 // (re/game_setup.md).
 //
@@ -352,12 +357,21 @@ const wchar_t* RaceName(std::uint32_t race) {
     return race < 4 ? kRaceNames[race] : L"random";
 }
 
+int ParseGameOptions(const std::wstring& goods, const std::wstring& computers,
+                     const std::wstring& race, std::uint32_t mapSize,
+                     s3re::recording::GameSetup& setup);
+
 // Parses --random-map <size>[,<symmetry>[,<field0c>]] and the options that
 // go with it into `setup` (mapSeed is filled in later). Returns 0 or an exit
 // code.
 int ParseGameSetup(const std::wstring& randomMap, const std::wstring& goods,
                    const std::wstring& computers, const std::wstring& race,
                    s3re::recording::GameSetup& setup) {
+    if (randomMap.empty()) {
+        // --goods/--race/--computers on the -map file's own map.
+        setup.flags = s3re::recording::kSetupMapOptions;
+        return ParseGameOptions(goods, computers, race, 0, setup);
+    }
     unsigned long values[3] = {0, 0, 0};
     const wchar_t* cursor = randomMap.c_str();
     for (int count = 0;; ++count) {
@@ -384,6 +398,18 @@ int ParseGameSetup(const std::wstring& randomMap, const std::wstring& goods,
     setup.size = values[0];
     setup.symmetry = values[1];
     setup.field0c = values[2];
+    return ParseGameOptions(goods, computers, race, setup.size, setup);
+}
+
+// --goods, --race and --computers into `setup`. `mapSize` is the random map's
+// size (its start positions limit --computers), or 0 for a -map file, whose
+// own start positions the launcher doesn't read: at most 19 computers (the
+// game's 20 players), and too many for the map is the user's mistake (the map
+// file's player setup is then replaced by more parties than it has starts).
+// Returns 0 or an exit code.
+int ParseGameOptions(const std::wstring& goods, const std::wstring& computers,
+                     const std::wstring& race, std::uint32_t mapSize,
+                     s3re::recording::GameSetup& setup) {
     if (!goods.empty()) {
         setup.goods = 0;
         for (std::uint32_t i = 1; i < 4; ++i) {
@@ -408,9 +434,12 @@ int ParseGameSetup(const std::wstring& randomMap, const std::wstring& goods,
     }
     if (!computers.empty()) {
         // The map dialog's number of start positions (random_map_start.cpp).
-        const std::uint32_t distance = setup.size - 32;
-        std::uint32_t positions = ((distance * distance) >> 14) + 1;
-        positions = positions < 20 ? positions : 20;
+        std::uint32_t positions = 20;
+        if (mapSize != 0) {
+            const std::uint32_t distance = mapSize - 32;
+            positions = ((distance * distance) >> 14) + 1;
+            positions = positions < 20 ? positions : 20;
+        }
         wchar_t* end = nullptr;
         const unsigned long count = wcstoul(computers.c_str(), &end, 10);
         if (end == computers.c_str() || *end != L'\0' || count < 1 || count + 1 > positions) {
@@ -534,12 +563,20 @@ int wmain(int argc, wchar_t** argv) {
         if (const int error = ApplyRecording(replayCommands, seed, gameArgs, setup)) {
             return error;
         }
-    } else if (!randomMap.empty()) {
+    } else if (!randomMap.empty() || !goods.empty() || !computers.empty() || !race.empty()) {
+        if (randomMap.empty()) {
+            bool hasMap = false;
+            for (const std::wstring& arg : gameArgs) {
+                hasMap = hasMap || _wcsicmp(arg.c_str(), L"-map") == 0;
+            }
+            if (!hasMap) {
+                return Fail(L"--goods, --computers and --race need --random-map or "
+                            L"-- -map <file>%s");
+            }
+        }
         if (const int error = ParseGameSetup(randomMap, goods, computers, race, setup)) {
             return error;
         }
-    } else if (!goods.empty() || !computers.empty() || !race.empty()) {
-        return Fail(L"--goods, --computers and --race need --random-map%s");
     }
     if (setup.IsRandomMap() && seed.empty()) {
         // The random map is generated from the seed, and a recording can only
@@ -593,6 +630,21 @@ int wmain(int argc, wchar_t** argv) {
     }
 
     std::wstring randomMapParams;
+    if (setup.IsMapOptions()) {
+        if (!loadSave.empty()) {
+            return Fail(L"--goods, --computers and --race can't be combined with --load-save%s");
+        }
+        // "size,symmetry,field0c,seed,goods,race,computers,flags" (random_map_start.cpp).
+        randomMapParams = L"0,0,0,0," + std::to_wstring(setup.goods) + L"," +
+                          std::to_wstring(setup.race) + L"," +
+                          std::to_wstring(setup.computers) + L"," +
+                          std::to_wstring(setup.flags);
+        wprintf(L"Map file options: start goods %s, your race %s, %s\n",
+                GoodsName(setup.goods), RaceName(setup.race),
+                setup.computers == 0
+                    ? L"players from the -map file"
+                    : (std::to_wstring(setup.computers) + L" computer opponent(s)").c_str());
+    }
     if (setup.IsRandomMap()) {
         if (!loadSave.empty()) {
             return Fail(L"--random-map can't be combined with --load-save%s");
@@ -602,7 +654,8 @@ int wmain(int argc, wchar_t** argv) {
                           L"," + std::to_wstring(setup.field0c) + L"," +
                           std::to_wstring(setup.mapSeed) + L"," + std::to_wstring(setup.goods) +
                           L"," + std::to_wstring(setup.race) + L"," +
-                          std::to_wstring(setup.computers);
+                          std::to_wstring(setup.computers) + L"," +
+                          std::to_wstring(setup.flags);
         bool hasMap = false;
         for (const std::wstring& arg : gameArgs) {
             hasMap = hasMap || _wcsicmp(arg.c_str(), L"-map") == 0;

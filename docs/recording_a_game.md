@@ -38,6 +38,18 @@ That starts, without menus:
   used, so a bug in them can't spoil a long game,
 - normal game speed.
 
+To play one of the game's own maps instead of a random one, give its name
+(the file name in `Settlers3Ultimate\Map\*\`, without `.map`):
+
+```
+python tools/play_game.py --map M704-2-Longrun --race roman
+```
+
+The map keeps its own start positions and players (you and computer
+players on the other starts); `--race` and `--goods` work as for random
+maps, `--computers N` replaces the map's players (at most its start
+positions minus one).
+
 Options: `--size 640`, `--computers 3`, `--goods medium`, `--race asian`,
 `--seed 1234`, `--name mygame`. `python tools/play_game.py --help` lists
 them.
