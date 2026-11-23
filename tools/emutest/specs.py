@@ -13,6 +13,7 @@ constants found in the original function's code.
 
 from __future__ import annotations
 
+import os
 import struct
 from dataclasses import dataclass
 from typing import Callable
@@ -8768,7 +8769,7 @@ def _us_family_b(rng, fields, n, ctx):
         fields += [(t, 0, 2), (t + 0x2, 0, 2), (t + 0x7, 0, 1), (t + 0x6, rng.choice((0x10, 0x11, 0x1c)), 1),
                    (t + 0x14, door_area, 2), (b + 0xa, bx + 1, 2), (b + 0xc, by + 1, 2),
                    (tile(bx + 1, by + 1) + 0x14, door_area, 2)]
-    if job == 0x50 and rng.random() < 0.5:  # the site the UI shows (g_global7dfd6c, 0 in the image)
+    if job == 0x50 and rng.random() < 0.5:  # the site the UI shows (g_selectedBuilding, 0 in the image)
         fields.append((s + 0x22, 0, 2))
     if job == 0x18 and 0.4 <= search_mode < 0.9:
         # A tree at the first place the woodcutter looks (0x4ed14d: found at once).
@@ -9658,3 +9659,827 @@ SPECS += [
     Spec("CGameData_ResetAreaConditionCounters", 0x0051bc20, "thiscall", [below(64), condition_kind],
          case_scale=2),
 ]
+
+
+# -- CLogicThread::ExecuteCommands 0x535990 (execute_commands*.cpp) ---------
+#
+# One spec for the whole function. The fake CLogicThread (LOGIC_THREAD) gets
+# a step (+0x3b0) and its two MessageQueues: network -> logic (+0x3c8,
+# vtable = emu.FAKE_VTABLE: slot 3 is the wait, probed) holding the case's
+# messages, logic -> network (+0x3c4) collecting the pushes. The game's own
+# MessageQueue::Pop (0x430980) and Push (0x4309c0) run on them; their
+# critical section wrappers (0x60d670 / 0x60d680) are probed, and Push's
+# SetEvent call (0x430b5e, `call [SetEvent]`) is replaced by `pop ecx; mov
+# eax, 1` for the case (the event handle is pushed, SetEvent would succeed).
+# Every case ends with a StepGrant, so the loop ends.
+#
+# Messages come from EC_COMMANDS: command id -> generator(rng, fields) that
+# returns the payload bytes and appends the world fields the command needs
+# to `fields`. Each part of the function adds its commands there.
+
+EC_TO_NET = LOGIC_THREAD + 0x1000
+EC_FROM_NET = LOGIC_THREAD + 0x1040
+EC_EVENT = LOGIC_THREAD + 0x1080
+EC_FROM_RING = LOGIC_THREAD + 0x2000
+EC_TO_RING = LOGIC_THREAD + 0x3000
+EC_RING_DWORDS = 1024
+EC_STEP = 0x3b0
+EC_SET_EVENT_CALL = 0x00430b5e
+EC_SET_EVENT_STUB = int.from_bytes(b"\x59\xb8\x01\x00\x00\x00", "little")  # pop ecx; mov eax, 1
+EC_BUILDINGS = 40
+EC_SETTLERS = 120
+EC_MAP = 384
+REFRESH_UI = 0x2d27c
+UI_SELECTION_MODE = 0x2d284
+UI_PAGE_290 = 0x2d290
+UI_PAGE_2A0 = 0x2d2a0
+CAMPAIGN_MISSION = 0x7dfdb0
+SELECTED_BUILDING = 0x7dfd6c  # g_selectedBuilding
+REVEAL_MAP = 0x7dfd84
+PLAYER_LISTS = 0x118a47c
+PLAYER_LIST_LENGTHS = 0x11940bc
+
+EC_COMMANDS: dict = {}
+EC_WEIGHTS: dict = {0x12: 6}  # SetTradeRoute: eleven kinds
+
+
+def ec_hi(v: int) -> int:
+    return (v >> 8) & 0xFF
+
+
+def ec_lo(v: int) -> int:
+    return v & 0xFF
+
+
+def ec_player(rng) -> int:
+    return rng.randrange(20) if rng.random() < 0.1 else rng.randrange(4)
+
+
+def ec_building(rng, fields: list, n: int | None = None) -> int:
+    """A building 0..40 with fields the commands look at (on the map, owner 0..3)."""
+    n = rng.randrange(EC_BUILDINGS + 1) if n is None else n
+    b = BUILDINGS + n * BUILDING_BYTES
+    types = (1, 2, 3, 5, 14, 15, 16, 18, 24, 25, 30, 31, 32, 33, 36, 47, 48, 50, 51, 4, 7)
+    fields += [(b + 0x00, 0xFF if rng.random() < 0.15 else rng.randrange(4), 1),
+               (b + 0x02, rng.randrange(2, EC_MAP - 2), 2), (b + 0x04, rng.randrange(2, EC_MAP - 2), 2),
+               (b + 0x06, rng.choice(types), 1),
+               (b + 0x08, 0 if rng.random() < 0.4 else rng.randrange(EC_SETTLERS), 2),
+               (b + 0x0a, rng.randrange(EC_MAP), 2), (b + 0x0c, rng.randrange(EC_MAP), 2),
+               (b + 0x1f, 0 if rng.random() < 0.5 else rng.randrange(256), 1),
+               (b + 0x21, 0 if rng.random() < 0.5 else rng.randrange(256), 1),
+               (b + 0x36, rng.randrange(5), 1)]
+    return n
+
+
+def ec_settler(rng, fields: list, n: int | None = None) -> int:
+    n = rng.randrange(1, EC_SETTLERS + 1) if n is None else n
+    s = SETTLERS + n * SETTLER_BYTES
+    fields += [(s + 0x00, 0xFF if rng.random() < 0.15 else rng.randrange(4), 1),
+               (s + 0x01, rng.choice((0, 1, 5, 8, 15, 32, 13, 36, 36, 44, 44, 43, 22, 40)), 1),
+               (s + 0x04, rng.randrange(10, EC_MAP - 10), 2), (s + 0x06, rng.randrange(10, EC_MAP - 10), 2),
+               (s + 0x0e, rng.choice((0x37, 0x35, 0xb0, 0, 1, 0x36)), 2),
+               (s + 0x10, rng.randrange(EC_SETTLERS), 2), (s + 0x15, rng.randrange(8), 1)]
+    return n
+
+
+def ec_tile(x: int, y: int) -> int:
+    return TILES + (x * 0x300 + y) * 0x18
+
+
+def ec_area(rng, fields: list) -> int:
+    n = rng.randrange(16)
+    fields.append((AREAS + n * AREA_BYTES, 0xFF if rng.random() < 0.2 else rng.randrange(4), 1))
+    return n
+
+
+def ec_place_building(rng, fields):
+    x, y, player = rng.randrange(EC_MAP), rng.randrange(EC_MAP), ec_player(rng)
+    for n in range(1, EC_BUILDINGS + 1):
+        if rng.random() < 0.3:
+            b = BUILDINGS + n * BUILDING_BYTES
+            fields += [(b, player if rng.random() < 0.7 else rng.randrange(4), 1),
+                       (b + 0x06, rng.choice((15, 16, 18, 2)), 1),
+                       (b + 0x08, 0 if rng.random() < 0.3 else rng.randrange(1, 100), 2),
+                       (b + 0x21, 0 if rng.random() < 0.7 else 1, 1)]
+    return [ec_hi(x), ec_lo(x), ec_hi(y), ec_lo(y), 0, rng.randrange(60), player]
+
+
+def ec_scroll(rng, fields):
+    return [rng.randrange(256) for _ in range(8)]
+
+
+def ec_settler_group(rng, fields):
+    player = rng.randrange(4)
+    count = 0 if rng.random() < 0.2 else rng.randrange(30)
+    payload = [player, rng.randrange(30 if rng.random() < 0.25 else 10), ec_hi(count), ec_lo(count)]
+    for _ in range(count):
+        s = rng.randrange(EC_SETTLERS)
+        payload += [ec_hi(s), ec_lo(s)]
+    return payload
+
+
+def ec_building_working(rng, fields):
+    n = ec_building(rng, fields)
+    return [ec_hi(n), ec_lo(n), 0 if rng.random() < 0.5 else rng.randrange(3), ec_player(rng)]
+
+
+def ec_work_area(rng, fields):
+    n = ec_building(rng, fields, rng.randrange(1, 4) if rng.random() < 0.5 else None)
+    b = BUILDINGS + n * BUILDING_BYTES
+    x, y = rng.randrange(EC_MAP), rng.randrange(EC_MAP)
+    if rng.random() < 0.7:  # near the building, in the same area as its door
+        bx, by = rng.randrange(40, EC_MAP - 40), rng.randrange(40, EC_MAP - 40)
+        x, y = bx + rng.randrange(-30, 30), by + rng.randrange(-30, 30)
+        dx, dy = rng.randrange(EC_MAP), rng.randrange(EC_MAP)
+        area = rng.randrange(3)
+        fields += [(b + 0x02, bx, 2), (b + 0x04, by, 2), (b + 0x0a, dx, 2), (b + 0x0c, dy, 2),
+                   (b + 0x06, rng.choice((2, 30, 14, 25, 36, 24, 5, 3, 51, 4)), 1),
+                   (ec_tile(dx, dy) + 0x14, area, 2),
+                   (ec_tile(x, y) + 0x14, area if rng.random() < 0.8 else area + 1, 2)]
+    return [ec_hi(x), ec_lo(x), ec_hi(y), ec_lo(y), ec_hi(n), ec_lo(n), ec_player(rng)]
+
+
+def ec_area_setting(kinds: int):
+    def generate(rng, fields):
+        area = ec_area(rng, fields)
+        return [rng.randrange(256) if rng.random() < 0.1 else rng.randrange(kinds),
+                rng.randrange(256) if rng.random() < 0.2 else rng.randrange(2), ec_player(rng),
+                ec_hi(area), ec_lo(area)]
+    return generate
+
+
+def ec_goods_priority(rng, fields):
+    area = ec_area(rng, fields)
+    good = rng.randrange(36)
+    fields.append((AREAS + area * AREA_BYTES + 0x18a + good, rng.choice((0, 20, 5, 21, 255)), 1))
+    return [good, rng.randrange(2), ec_player(rng), ec_hi(area), ec_lo(area)]
+
+
+def ec_dock(rng, fields):
+    n = ec_building(rng, fields)
+    b = BUILDINGS + n * BUILDING_BYTES
+    if rng.random() < 0.6:
+        fields += [(b + 0x06, rng.choice((32, 33)), 1), (b + 0x21, 0, 1), (b + 0x1f, 0, 1)]
+    x, y = rng.randrange(EC_MAP), rng.randrange(EC_MAP)
+    return [ec_hi(x), ec_lo(x), ec_hi(y), ec_lo(y), ec_hi(n), ec_lo(n), ec_player(rng)]
+
+
+def ec_cast_spell(rng, fields):
+    player = ec_player(rng)
+    s = ec_settler(rng, fields)
+    sx, sy = rng.randrange(20, EC_MAP - 20), rng.randrange(20, EC_MAP - 20)
+    fields += [(SETTLERS + s * SETTLER_BYTES, player if rng.random() < 0.8 else 5, 1),
+               (SETTLERS + s * SETTLER_BYTES + 1, 36 if rng.random() < 0.8 else 44, 1),
+               (SETTLERS + s * SETTLER_BYTES + 4, sx, 2), (SETTLERS + s * SETTLER_BYTES + 6, sy, 2)]
+    p = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+    slot = rng.randrange(8)
+    fields += [(p + 4, rng.randrange(4), 4), (p + 0x8c, rng.randrange(100), 4),
+               (p + 0x94 + slot * 4, rng.randrange(100), 4)]
+    x, y = sx + rng.randrange(-25, 25), sy + rng.randrange(-25, 25)
+    return [player, slot, ec_hi(x), ec_lo(x), ec_hi(y), ec_lo(y), ec_hi(s), ec_lo(s)]
+
+
+def ec_ship(load: bool):
+    def generate(rng, fields):
+        player = ec_player(rng)
+        s = ec_settler(rng, fields)
+        base = SETTLERS + s * SETTLER_BYTES
+        x, y = rng.randrange(20, EC_MAP - 20), rng.randrange(20, EC_MAP - 20)
+        fields += [(base, player if rng.random() < 0.8 else 7, 1), (base + 4, x, 2), (base + 6, y, 2),
+                   (base + 0x01, 44 if rng.random() < 0.8 else 43, 1), (base + 0x15, rng.randrange(7), 1)]
+        if load:
+            # Workshops around the ship, the offset table with growing distances.
+            for k in range(60):
+                dx, dy = rng.randrange(-5, 6), rng.randrange(-5, 6)
+                fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                           (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4),
+                           (NEIGHBOUR_OFFSETS + k * 16 + 8, k // 4 if rng.random() < 0.97 else -1 & 0xFFFFFFFF, 4)]
+                t = ec_tile(x + dx, y + dy)
+                n = rng.randrange(1, EC_BUILDINGS + 1)
+                fields += [(t + 0x0a, 0x20 if rng.random() < 0.7 else 0, 1),
+                           (t + 0x02, n if rng.random() < 0.9 else 0, 2)]
+                if rng.random() < 0.5:
+                    b = BUILDINGS + n * BUILDING_BYTES
+                    fields += [(b, player, 1), (b + 0x06, rng.choice((31, 47, 48, 50, 33)), 1),
+                               (b + 0x36, rng.randrange(4), 1)]
+        else:
+            fields.append((ec_tile(x, y) + 6, rng.choice((5, 6, 6, 48)), 1))
+            fields.append((MAP_SIZE, EC_MAP, 4))
+            for d in range(6):  # some shore along the six directions
+                for k in range(1, 9):
+                    if rng.random() < 0.08:
+                        fields.append((ec_tile(x + k * (d % 3 - 1), y + k * (d % 2)) + 6, 48, 1))
+            chain = s
+            for _ in range(8):  # the passengers' chain (valid settlers)
+                nxt = rng.randrange(1, EC_SETTLERS)
+                fields.append((SETTLERS + chain * SETTLER_BYTES + 0x10, nxt, 2))
+                chain = nxt
+        return [player, ec_hi(s), ec_lo(s)]
+    return generate
+
+
+def ec_promote(rng, fields):
+    player = ec_player(rng)
+    p = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+    fields += [(p + 0x90, rng.randrange(120), 4), (p + 0xb4, rng.randrange(80), 4)]
+    fields += [(p + 0xb8 + 4 * k, rng.choice((0, 0, 1, 1, 2)), 4) for k in range(3)]
+    return [player, rng.choice((1, 2, 3, 0, 4, 0x81, 0x82, 0x83, 0x80, 0xFF))]
+
+
+def ec_hold_position(rng, fields):
+    player, group = rng.randrange(4), rng.randrange(10)
+    index = player * 10 + group
+    length = rng.randrange(8) if rng.random() < 0.9 else 0
+    fields.append((PLAYER_LIST_LENGTHS + index * 4, length, 4))
+    for i in range(length):
+        s = ec_settler(rng, fields)
+        fields.append((PLAYER_LISTS + (index * 100 + i) * 2, s, 2))
+    return [player, group]
+
+
+def ec_storehouse(rng, fields):
+    n = ec_building(rng, fields)
+    if rng.random() < 0.6:
+        fields.append((BUILDINGS + n * BUILDING_BYTES + 6, 1, 1))
+    return [ec_hi(n), ec_lo(n), ec_player(rng), rng.randrange(40)]
+
+
+def ec_site_priority(rng, fields):
+    n = ec_building(rng, fields)
+    return [ec_hi(n), ec_lo(n), ec_player(rng)]
+
+
+EC_COMMANDS.update({
+    0x01: ec_place_building, 0x02: ec_scroll, 0x03: ec_settler_group, 0x04: ec_building_working,
+    0x05: ec_work_area, 0x07: ec_goods_priority, 0x08: ec_area_setting(36), 0x11: ec_area_setting(51),
+    0x14: ec_dock, 0x15: ec_cast_spell, 0x16: ec_ship(False), 0x17: ec_dock, 0x18: ec_promote,
+    0x19: ec_ship(True), 0x1b: ec_hold_position, 0x1c: ec_storehouse, 0xf1: lambda rng, fields: [],
+    0xf5: ec_site_priority, 0xf6: ec_site_priority,
+    # Ids without a handler.
+    0x00: lambda rng, fields: [rng.randrange(256)], 0x1a: lambda rng, fields: [rng.randrange(256)],
+    0xf3: lambda rng, fields: [rng.randrange(256)], 0x80: lambda rng, fields: [rng.randrange(256)],
+})
+
+# Network message types other than Command (1) and StepGrant (2): type ->
+# generator(rng, fields) returning (byte 1, payload). Types without a
+# handler are logged as invalid.
+EC_NET_MESSAGES: dict = {
+    t: (lambda rng, fields: (rng.randrange(256), [rng.randrange(256)])) for t in (0, 7, 9, 0x20, 0x21, 0x23, 0xFF)
+}
+
+
+def ec_choices() -> tuple:
+    """The command ids and network message types to generate. The
+    environment variable S3RE_EC_ONLY (e.g. "c9,cd,n3": c = command id, n =
+    message type, hex) restricts them, for work on one part of the function."""
+    only = os.environ.get("S3RE_EC_ONLY")
+    commands, net_types = sorted(EC_COMMANDS), sorted(EC_NET_MESSAGES)
+    # Commands with many paths come up more often (EC_WEIGHTS: id -> copies).
+    commands = [c for c in commands for _ in range(EC_WEIGHTS.get(c, 1))]
+    if only:
+        wanted = [item.strip().lower() for item in only.split(",") if item.strip()]
+        commands = [c for c in commands if f"c{c:x}" in wanted]
+        net_types = [t for t in net_types if f"n{t:x}" in wanted]
+    return commands, net_types
+
+
+def ec_message(type_: int, byte1: int, payload: list) -> list:
+    data = [type_, byte1, 0, 0] + list(payload)
+    while len(data) % 4:
+        data.append(0)
+    data[2] = len(data)
+    return [int.from_bytes(bytes(data[i:i + 4]), "little") for i in range(0, len(data), 4)]
+
+
+def ec_queue(offset: int, ring: int, count: int) -> list:
+    return [(offset, FAKE_VTABLE, 4), (offset + 0x14, WORLD_BASE + ring, 4),
+            (offset + 0x18, EC_RING_DWORDS, 4), (offset + 0x1c, 0, 4), (offset + 0x20, count, 4),
+            (offset + 0x24, count, 4), (offset + 0x28, WORLD_BASE + EC_EVENT, 4),
+            (offset + 0x2c, WORLD_BASE + EC_EVENT + 0x20, 4), (offset + 0x30, 0, 4)]
+
+
+def execute_commands_world(rng, pool, args):
+    fields = [(BUILDING_COUNT, rng.randrange(EC_BUILDINGS + 1), 4), (MAP_SIZE, EC_MAP, 4),
+              (LOCAL_PLAYER, rng.randrange(4), 4), (UI_SELECTION_MODE, rng.choice((0, 1, 2, 3, 4, 4, 5)), 4),
+              (UI_PAGE_290, rng.randrange(5), 4), (UI_PAGE_2A0, rng.randrange(5), 4),
+              (0x2d288, rng.randrange(2), 4), (0x2d28c, rng.randrange(2), 4), (REFRESH_UI, 0, 4)]
+    step = 0 if rng.random() < 0.08 else rng.randrange(1, 1000)
+    fields.append((LOGIC_THREAD + EC_STEP, step, 4))
+    dwords: list = []
+    commands, net_types = ec_choices()
+    for _ in range(rng.randrange(5)):
+        if net_types and (rng.random() < 0.1 or not commands):
+            type_ = rng.choice(net_types)
+            byte1, payload = EC_NET_MESSAGES[type_](rng, fields)
+            dwords += ec_message(type_, byte1, payload)
+        elif commands:
+            command = rng.choice(commands)
+            dwords += ec_message(1, command, EC_COMMANDS[command](rng, fields))
+    dwords += [2 | 8 << 16, (step + rng.randrange(-2, 6)) & 0xFFFFFFFF]  # StepGrant
+    fields += [(EC_FROM_RING + 4 * i, d, 4) for i, d in enumerate(dwords)]
+    fields += [(LOGIC_THREAD + 0x3c4, WORLD_BASE + EC_TO_NET, 4), (LOGIC_THREAD + 0x3c8, WORLD_BASE + EC_FROM_NET, 4)]
+    fields += ec_queue(EC_FROM_NET, EC_FROM_RING, len(dwords)) + ec_queue(EC_TO_NET, EC_TO_RING, 0)
+    return fields
+
+
+def execute_commands_globals(rng, pool, args):
+    fields = [(CAMPAIGN_MISSION, 66 if rng.random() < 0.25 else rng.randrange(3), 4),
+              (SELECTED_BUILDING, rng.randrange(1, 4) if rng.random() < 0.5 else rng.randrange(EC_BUILDINGS + 2), 4),
+              (REVEAL_MAP, 0, 4), (EC_SET_EVENT_CALL, EC_SET_EVENT_STUB, 6)]
+    for extra in EC_GLOBALS_EXTRA:
+        fields += extra(rng, pool, args)
+    return fields
+
+
+# Callees probed: the simulation functions the commands call (verified on
+# their own; recorded with their arguments). NeighbourX/Y, TileDistance and
+# IsOnMap run (pure functions of their arguments and the map size).
+EC_CALLEES = {
+    0x0060d670: (0, "thiscall", "probe"), 0x0060d680: (0, "thiscall", "probe"),  # Enter/LeaveCriticalSection
+    0x004d99e0: (5, "thiscall", "probe"), 0x004ff3f0: (0, "thiscall", "probe"), 0x0051b4d0: (0, "thiscall", "probe"),
+    0x004dfb40: (2, "thiscall", "probe"), 0x004df490: (1, "thiscall", "probe"), 0x004df510: (1, "thiscall", "probe"),
+    0x004df590: (1, "thiscall", "probe"), 0x004df610: (1, "thiscall", "probe"), 0x004df690: (1, "thiscall", "probe"),
+    0x004df730: (1, "thiscall", "probe"), 0x004df7d0: (1, "thiscall", "probe"), 0x004df850: (1, "thiscall", "probe"),
+    0x004dee20: (1, "thiscall", "probe"), 0x004deec0: (1, "thiscall", "probe"), 0x004df8e0: (1, "thiscall", "probe"),
+    0x00523840: (1, "thiscall", "probe"), 0x004ff3c0: (1, "thiscall", "probe"), 0x0051bc20: (2, "thiscall", "probe"),
+    0x004dbb90: (1, "thiscall", "probe"), 0x004db710: (3, "thiscall", "probe"), 0x00508450: (1, "thiscall", "probe"),
+    0x004fefd0: (10, "thiscall", "probe"), 0x0050ce80: (3, "thiscall", "probe"),
+}
+
+# Blocks only reachable through a C++ exception: the catch of Win32::CTimeout*
+# (0x53b823; the probed wait never throws; in-process tests throw one).
+# Dead: 0x53b81e, the `jmp` after the loop's `xor eax, eax; test eax, eax; je`.
+EC_EXEMPT = [0x0053b823, 0x0053b82d, 0x0053b833, 0x0053b81e]
+# Virtual calls (slot offset -> as Spec.virtuals); slot 0xc is the queue's wait.
+EC_VIRTUALS = {0xc: 2}
+# More S3.EXE globals per case: functions (rng, pool, args) -> [(address, value, size)].
+EC_GLOBALS_EXTRA: list = []
+
+SPECS += [
+    Spec("CLogicThread_ExecuteCommands", 0x00535990, "logicthread", [], presets=execute_commands_world,
+         globals=execute_commands_globals, virtuals=EC_VIRTUALS, callees=EC_CALLEES, exempt_blocks=EC_EXEMPT,
+         # The epilogue (0x53b839, where the catch continues) is a separate
+         # start in the function list; the jump tables follow at 0x53b850.
+         cover_until=0x0053b850,
+         # About 45 command ids and message types share the cases.
+         case_scale=16),
+]
+
+
+# -- ExecuteCommands: SetTradeRoute 0x12, SetWorkshopProduction 0x13 (execute_commands_trade.cpp)
+#
+# Harbours (33) and marketplaces (34) with a Trade record 0..31 whose door,
+# work tile and route tiles share walk regions / areas often; workshops (31,
+# 47, 48, 50) and shipyards (32) idle or running. NeighbourX/Y run (pure).
+# The UI's special menu (+0x2d298) is often on the trade (4..13) or
+# workshop (14..16) pages.
+
+EC_TRADE_RECORDS = 32
+UI_SPECIAL_MENU = 0x2d298
+
+
+def ec_trade_tile_box(fields: list, x: int, y: int, region: int, area: int, radius: int) -> None:
+    for tx in range(x - radius, x + radius + 1):
+        for ty in range(y - radius, y + radius + 1):
+            if 0 <= tx < EC_MAP and 0 <= ty < EC_MAP:
+                fields += [(ec_tile(tx, ty) + 0x10, region, 1), (ec_tile(tx, ty) + 0x14, area, 2)]
+
+
+def ec_trade_building(rng, fields: list, types: tuple) -> int:
+    n = rng.randrange(1, 4) if rng.random() < 0.5 else rng.randrange(EC_BUILDINGS + 1)
+    b = BUILDINGS + n * BUILDING_BYTES
+    fields += [(b + 0x06, rng.choice(types), 1), (b + 0x00, rng.randrange(4) if rng.random() < 0.9 else 0xFF, 1),
+               (b + 0x21, 0 if rng.random() < 0.85 else rng.randrange(1, 256), 1)]
+    fields.append((UI_SPECIAL_MENU, rng.randrange(18) if rng.random() < 0.8 else rng.getrandbits(32), 4))
+    return n
+
+
+def ec_trade_route(rng, fields):
+    n = ec_trade_building(rng, fields, (33, 33, 34, 34, 32, 2))
+    b = BUILDINGS + n * BUILDING_BYTES
+    trade = rng.randrange(EC_TRADE_RECORDS)
+    region, area = rng.randrange(1, 3), rng.randrange(3)
+    door = (rng.randrange(10, EC_MAP - 10), rng.randrange(10, EC_MAP - 10))
+    work = (rng.randrange(10, EC_MAP - 10), rng.randrange(10, EC_MAP - 10))
+    x, y = rng.randrange(10, EC_MAP - 10), rng.randrange(10, EC_MAP - 10)
+    fields += [(b + 0x34, trade, 2), (b + 0x0a, door[0], 2), (b + 0x0c, door[1], 2),
+               (b + 0x30, work[0], 2), (b + 0x32, work[1], 2),
+               (b + 0x22, 0xFFFF if rng.random() < 0.15 else rng.randrange(6), 2)]
+    same = rng.random() < 0.7
+    ec_trade_tile_box(fields, door[0], door[1], region, area, 0)
+    ec_trade_tile_box(fields, work[0], work[1], region, area, 3)  # the water two steps from the work tile
+    ec_trade_tile_box(fields, x, y, region if same else region + 1, area if same else area + 1,
+                      1 if rng.random() < 0.5 else 0)
+    if rng.random() < 0.1:
+        fields.append((ec_tile(x, y) + 0x10, 0, 1))  # no walk region (kind 7, harbour)
+    t = BUILDING_EXTRAS + trade * BUILDING_EXTRA_BYTES
+    for point in range(4):
+        if rng.random() < 0.5:  # the same tile, the same column, or anywhere
+            px, py = rng.choice(((x, y), (x, y + 1), (rng.randrange(EC_MAP), rng.randrange(EC_MAP))))
+            fields += [(t + 2 + 2 * point, px, 2), (t + 0x0a + 2 * point, py, 2)]
+    for k in range(40):  # the offset table: growing distances (kind 7, harbour)
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, rng.randrange(-4, 5) & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, rng.randrange(-4, 5) & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 8, k // 2, 4)]
+    kind = rng.randrange(13) if rng.random() < 0.9 else rng.randrange(256)
+    if 8 <= kind <= 11:
+        line = rng.randrange(34) if rng.random() < 0.9 else rng.randrange(40)
+        if rng.random() < 0.5:
+            fields.append((t + 0x12 + rng.randrange(36), rng.choice((0, 50, 99, 100, 255)), 1))
+        return [ec_player(rng), kind, ec_hi(n), ec_lo(n), line, rng.choice((0, 1, 10, 60, 100, 255)), 0, 0]
+    return [ec_player(rng), kind, ec_hi(n), ec_lo(n), ec_hi(x), ec_lo(x), ec_hi(y), ec_lo(y)]
+
+
+def ec_workshop_production(rng, fields):
+    n = ec_trade_building(rng, fields, (31, 47, 48, 50, 32, 32, 33))
+    b = BUILDINGS + n * BUILDING_BYTES
+    player = ec_player(rng)
+    race = rng.randrange(4)
+    fields += [(PLAYER_RECORDS + player * PLAYER_RECORD_BYTES + 4, race, 4),
+               (b + 0x00, player if rng.random() < 0.8 else rng.randrange(4), 1),
+               (b + 0x1f, rng.choice((0, 0, 0x10, 0x21, 0x32, 0x40, 0x03)), 1),
+               (b + 0x20, 0xFF if rng.random() < 0.5 else rng.randrange(256), 1),
+               (b + 0x22, 0xFFFF if rng.random() < 0.2 else rng.randrange(6), 2)]
+    value = 0 if rng.random() < 0.3 else (rng.choice((0x10, 0x20, 0x30, 0x40, 0x50, 0)) |
+                                          (race if rng.random() < 0.8 else rng.randrange(16)))
+    return [player, value, ec_hi(n), ec_lo(n)]
+
+
+EC_COMMANDS.update({0x12: ec_trade_route, 0x13: ec_workshop_production})
+EC_CALLEES.update({
+    0x005236b0: (1, "thiscall", "probe"),  # CLogicThread::DrawBuildingRouteOverlay (verified)
+    0x004dda10: (1, "thiscall", "probe"),  # CGameData::ReleaseBuildingExtraTiles (verified)
+})
+
+
+# -- ExecuteCommands: area settings, garrison, carriers (execute_commands_areas.cpp)
+# Commands 0x0a ChangeTransportOrder, 0x0b ChangeToolSettings, 0x0c
+# ChangeGarrison, 0x10 ConvertCarriers.
+
+EC_SETTLER_GROUP_COUNTS = 0x7ad620  # g_settlerGroups.counts
+EC_CURRENT_SETTLER_GROUP = 0x7dfd68  # g_currentSettlerGroup
+
+
+def ec_owned_area(rng, fields: list, player: int) -> int:
+    n = rng.randrange(16)
+    owner = player if rng.random() < 0.85 else rng.choice((0xFF, (player + 1) % 4))
+    fields.append((AREAS + n * AREA_BYTES, owner, 1))
+    return n
+
+
+def ec_transport_order(rng, fields):
+    player = rng.randrange(4)
+    area = ec_owned_area(rng, fields, player)
+    base = AREAS + area * AREA_BYTES
+    order = list(range(1, 37))
+    rng.shuffle(order)
+    for g in range(36):
+        value = order[g] if rng.random() < 0.9 else rng.choice((0, 255, order[g]))
+        fields += [(base + 0x1f6 + g, value, 1), (base + 0x21a + g, rng.randrange(3), 1)]
+    fields.append((PLAYER_RECORDS + player * PLAYER_RECORD_BYTES + 4, rng.randrange(5), 4))
+    if rng.random() < 0.5:  # the local player looks at the transport page
+        fields += [(LOCAL_PLAYER, player, 4), (UI_SELECTION_MODE, 2, 4), (UI_PAGE_290, rng.choice((4, 4, 3)), 4)]
+    good =rng.randrange(256) if rng.random() < 0.05 else rng.randrange(36)
+    return [good, rng.randrange(8), player, ec_hi(area), ec_lo(area)]
+
+
+def ec_tool_settings(rng, fields):
+    player = rng.randrange(4)
+    area = ec_owned_area(rng, fields, player)
+    base = AREAS + area * AREA_BYTES
+    fields += [(base + 0x23e + k, 5 * rng.randrange(15), 1) for k in range(3)]
+    fields += [(base + 0x242 + k, rng.randrange(101), 1) for k in range(3)]
+    if rng.random() < 0.5:  # the local player looks at the player menu
+        fields += [(LOCAL_PLAYER, player, 4), (UI_SELECTION_MODE, 3, 4), (UI_PAGE_2A0, rng.choice((2, 3, 1)), 4)]
+    value =0 if rng.random() < 0.35 else rng.randrange(30 if rng.random() < 0.5 else 256)
+    return [rng.randrange(12), value, player, ec_hi(area), ec_lo(area)]
+
+
+EC_SOLDIER_TYPES = (5, 32, 35, 8, 30, 33, 15, 31, 34, 0, 40)
+
+
+def ec_garrison(rng, fields):
+    player = rng.randrange(4)
+    n = rng.randrange(1, EC_BUILDINGS + 1)
+    b = BUILDINGS + n * BUILDING_BYTES
+    if rng.random() < 0.85:  # a tower or castle of the player
+        kind = rng.choice((15, 16, 18))
+        size = {15: 1, 16: 3, 18: 6}[kind]
+        swords = rng.randrange(size + 1)
+        pikes = rng.randrange(size - swords + 1)
+        fields += [(b, player, 1), (b + 6, kind, 1), (b + 0x1a, swords, 1), (b + 0x20, pikes, 1),
+                   (b + 0x1c, rng.randrange(5), 1)]
+        # The garrison chain (settlers 100..106; an unknown type continues with settler 0's next).
+        length = rng.randrange(7)
+        fields.append((b + 8, 100 if length else 0, 2))
+        for k in range(length):
+            s = SETTLERS + (100 + k) * SETTLER_BYTES
+            fields += [(s + 1, rng.choice(EC_SOLDIER_TYPES), 1), (s + 0x10, 0 if k + 1 == length else 101 + k, 2)]
+        fields += [(SETTLERS + 0x10, 0 if rng.random() < 0.5 else 110, 2), (SETTLERS + 110 * SETTLER_BYTES + 1, 5, 1),
+                   (SETTLERS + 110 * SETTLER_BYTES + 0x10, 0, 2)]
+    else:  # another player's building (the original keeps the sizes of an earlier command for the player's own)
+        fields.append((b, (player + 1) % 4, 1))
+    return [ec_hi(n), ec_lo(n), player, rng.randrange(10)]
+
+
+def ec_convert_carriers(rng, fields):
+    player = rng.randrange(4)
+    kind = rng.randrange(6)
+    x, y = rng.randrange(40, EC_MAP - 40), rng.randrange(40, EC_MAP - 40)
+    for i in range(3000):
+        dx, dy = (rng.randrange(-6, 7), rng.randrange(-6, 7)) if i < 40 else (0, 0)
+        fields += [(NEIGHBOUR_OFFSETS + i * 16, dx & 0xFFFFFFFF, 4), (NEIGHBOUR_OFFSETS + i * 16 + 4, dy & 0xFFFFFFFF, 4)]
+        if i < 40:
+            t = ec_tile(x + dx, y + dy)
+            s = rng.randrange(1, EC_SETTLERS)
+            base = SETTLERS + s * SETTLER_BYTES
+            fields += [(t, s if rng.random() < 0.8 else 0, 2), (t + 8, player if rng.random() < 0.85 else 0xFF, 1),
+                       (base, player if rng.random() < 0.85 else 0xFF, 1),
+                       (base + 1, rng.choice((0, 0, 40, 40, 22)), 1),
+                       (base + 0x0e, rng.choice((1, 2, 0x37, 0x35, 3)), 2)]
+    fields.append((ec_tile(x, y), 0, 2))  # offsets 40..2999 all look at (x, y): empty
+    return [kind, player, ec_hi(x), ec_lo(x), ec_hi(y), ec_lo(y), rng.randrange(40 if rng.random() < 0.3 else 6)]
+
+
+def ec_group_globals(rng, pool, args):
+    return [(EC_SETTLER_GROUP_COUNTS, rng.randrange(50), 2), (EC_CURRENT_SETTLER_GROUP, rng.randrange(10), 4)]
+
+
+EC_COMMANDS.update({0x0a: ec_transport_order, 0x0b: ec_tool_settings, 0x0c: ec_garrison, 0x10: ec_convert_carriers})
+EC_CALLEES.update({
+    0x0050cf50: (1, "thiscall", "probe"),  # ResetSettlerToIdle
+    0x005428e0: (2, "thiscall", "probe"),  # CLogicThread::RemoveSettlerFromGroups
+    0x00542990: (1, "thiscall", "probe"),  # CLogicThread::UpdateGroupMenu
+})
+EC_GLOBALS_EXTRA.append(ec_group_globals)
+
+
+# -- ExecuteCommands: MoveUnits 0x09, 0x0d, 0x0e, 0x0f (execute_commands_units.cpp) --
+#
+# A group of up to 12 units of the player around a target; the tiles around
+# the target hold enemy buildings / units for the attack search, the offset
+# table has growing distances and small steps. SetSettlerTarget (0x503610)
+# is probed; TileDistance runs.
+
+EC_UNIT_TYPES = (5, 8, 15, 30, 31, 32, 33, 34, 35, 22, 23, 36, 40, 41, 41, 41, 43, 44, 44, 0, 42)
+EC_UNIT_JOBS = (212, 213, 302, 303, 55, 53, 142, 176, 0)
+
+
+def ec_move_units(rng, fields):
+    player, group = rng.randrange(4), rng.randrange(10)
+    index = player * 10 + group
+    x, y = rng.randrange(30, EC_MAP - 30), rng.randrange(30, EC_MAP - 30)
+    if rng.random() < 0.05:
+        x = rng.randrange(EC_MAP + 40)
+    elif rng.random() < 0.1:  # next to the map's last row: offsets reach past it
+        y = EC_MAP - rng.randrange(1, 4)
+    fields.append((SETTLER_COUNT, EC_SETTLERS, 4))
+    for p in range(20):
+        base = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        fields += [(base, 2 if rng.random() < 0.25 else 1, 4), (base + 4, rng.randrange(4), 4),
+                   (base + 0x0c, rng.randrange(3), 4)]
+    for k in range(400):
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, rng.randrange(-8, 9) & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, rng.randrange(-8, 9) & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 8, k // 6, 4)]
+    # Tiles around the target: some settlers and buildings, terrain, regions.
+    for dx in range(-24, 25):
+        for dy in range(-24, 25):
+            tx, ty = x + dx, y + dy
+            if not (0 <= tx < EC_MAP and 0 <= ty < EC_MAP):
+                continue
+            t = ec_tile(tx, ty)
+            fields += [(t, rng.randrange(1, EC_SETTLERS + 1) if rng.random() < 0.1 else 0, 2),
+                       (t + 0x02, rng.randrange(1, EC_BUILDINGS + 1), 2),
+                       (t + 0x06, rng.choice((5, 5, 6, 16, 32, 48, 0x11)), 1),
+                       (t + 0x0a, 0x20 if rng.random() < 0.05 else 0, 1),
+                       (t + 0x10, rng.randrange(2), 1), (t + 0x14, rng.randrange(2), 2),
+                       (t + 0x16, rng.randrange(2), 2)]
+    for n in range(1, EC_BUILDINGS + 1):
+        b = BUILDINGS + n * BUILDING_BYTES
+        fields += [(b, rng.randrange(5), 1), (b + 0x06, rng.choice((15, 16, 18, 2, 33)), 1),
+                   (b + 0x02, rng.randrange(EC_MAP), 2), (b + 0x04, rng.randrange(EC_MAP), 2)]
+    catapults = rng.random() < 0.3
+    for n in range(1, EC_SETTLERS + 1):
+        s = SETTLERS + n * SETTLER_BYTES
+        fields += [(s, rng.randrange(5), 1), (s + 0x01, rng.choice(EC_UNIT_TYPES), 1),
+                   (s + 0x04, rng.randrange(EC_MAP), 2), (s + 0x06, rng.randrange(EC_MAP), 2),
+                   (s + 0x0e, rng.choice(EC_UNIT_JOBS), 2),
+                   (s + 0x1a, 0 if rng.random() < 0.7 else 1, 1),
+                   (s + 0x1c, 0xFFFF if rng.random() < 0.5 else rng.randrange(EC_MAP), 4),
+                   (s + 0x24, rng.randrange(EC_MAP), 2), (s + 0x26, rng.randrange(EC_MAP), 2)]
+        fields += [(s + 0x30 + 2 * c, 0xFFFF if rng.random() < 0.5 else rng.randrange(EC_MAP), 2)
+                   for c in range(6)]
+    # The unit's own tiles must be on the map: their regions are compared.
+    length = 0 if rng.random() < 0.1 else rng.randrange(13)
+    fields.append((PLAYER_LIST_LENGTHS + index * 4, length, 4))
+    for i in range(length):
+        n = rng.randrange(1, EC_SETTLERS + 1) if rng.random() < 0.95 else EC_SETTLERS + 1 + rng.randrange(4)
+        fields.append((PLAYER_LISTS + (index * 100 + i) * 2, n, 2))
+        if n <= EC_SETTLERS:
+            s = SETTLERS + n * SETTLER_BYTES
+            fields += [(s, player if rng.random() < 0.9 else rng.randrange(4), 1),
+                       (s + 0x01, 41 if catapults and rng.random() < 0.94 else rng.choice(EC_UNIT_TYPES), 1),
+                       (s + 0x04, x + rng.randrange(-20, 21), 2), (s + 0x06, y + rng.randrange(-20, 21), 2)]
+    return [player, group, ec_hi(x), ec_lo(x), ec_hi(y), ec_lo(y)]
+
+
+EC_COMMANDS.update({0x09: ec_move_units, 0x0d: ec_move_units, 0x0e: ec_move_units, 0x0f: ec_move_units})
+EC_CALLEES.update({0x00503610: (3, "thiscall", "probe")})  # SetSettlerTarget
+# 0x536faa: the clamp of the offset index to 9900, dead (the loop stops at 5000).
+EC_EXEMPT.extend([0x00536faa])
+
+
+# -- ExecuteCommands: DestroyBuilding, multiplayer / UI commands, network
+# messages (execute_commands_net.cpp) ------------------------------------------
+#
+# The texts run as they are: sprintf, std::string, the wide-string helpers
+# and the UI's message list (0x51e440, writing the thread's list at +0x414,
+# 8 entries here, emptied per case). Probed: the graphics text lookup
+# (0x5faaa0, returns the narrow text "Desync!" 0x73021c, which has no
+# conversions), CrushBuilding, the game-over / player-list helpers, the
+# multiplayer save functions, the world dump, CComputerPlayer's constructor
+# (sometimes 0, to reach the assertion, which is probed too), and the window
+# message of FilmEnd. Checksums and stamps of SyncCheck are chosen together
+# with S3.EXE's checksum table (EC_NET_PENDING_GLOBALS, set by the message
+# generators and written by the globals function of the same case).
+
+EC_NET_PENDING_GLOBALS: list = []
+EC_SYNC_CHECKSUMS = 0x7deb58  # g_syncChecksums[20][8]
+EC_SIMULATION_PAUSED = 0x7ace62
+EC_SYNC_RANDOM_HISTORY = 0x7dfb58
+EC_GAME_TICK = 0x7dfd48
+EC_UI_LIST = 0x414          # CLogicThread: the UI message list (0x1c per entry)
+EC_UI_LIST_COUNT = 0x644
+EC_UI_LIST_INDEX = 0x648
+
+
+EC_PLAYER_SETUP = SCRATCH + 5 * SCRATCH_SLOT_BYTES  # what the probed 0x4351e0 returns
+
+
+def ec_net_state(rng, fields: list) -> int:
+    """Players, objectives, save state, the thread's UI message list, the
+    UI feedback ring (PushUiFeedback) and the player setup object 0x5db260
+    copies the (empty) name from. Returns the number of active players."""
+    fields += [(0x15394ac, rng.randrange(10), 4), (EC_PLAYER_SETUP + 0x18, 0, 4), (EC_PLAYER_SETUP + 0x1c, 0, 4), (EC_PLAYER_SETUP + 0x20, 0, 4),
+               (EC_PLAYER_SETUP + 0x24, 0, 4)]
+    fields += [(LOGIC_THREAD + EC_UI_LIST_COUNT, 8, 4), (LOGIC_THREAD + EC_UI_LIST_INDEX, rng.randrange(8), 4)]
+    for k in range(8):
+        entry = LOGIC_THREAD + EC_UI_LIST + k * 0x1c
+        fields += [(entry + 4, 0, 4), (entry + 8, 0, 4), (entry + 0xc, 0, 4)]
+    active = 0
+    for p in range(20):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        state = 1 if rng.random() < 0.6 else rng.randrange(3)
+        active += state == 1
+        fields += [(record, state, 4),
+                   (record + 0x1c, (p + 3) % 20 if rng.random() < 0.8 else rng.randrange(20), 4)]
+    fields += [(0x1195dcc, rng.randrange(2), 1), (0x2d250, rng.randrange(2), 1), (0x15394b0, rng.randrange(2), 1),
+               (LOGIC_THREAD + 0x224, 0 if rng.random() < 0.3 else rng.randrange(4000, 6000), 4),
+               (LOGIC_THREAD + 0x228, rng.randrange(3), 4), (LOGIC_THREAD + 0x22c, rng.randrange(6), 4),
+               (0xe115dc, rng.randrange(1, 60), 4), (0x110a578, rng.randrange(1, 60), 4),
+               (0x1238858, rng.randrange(1, 60), 4), (SETTLER_COUNT, rng.randrange(1, 60), 4)]
+    return active
+
+
+def ec_net_player(rng) -> int:
+    return rng.randrange(20) if rng.random() < 0.15 else rng.randrange(4)
+
+
+def ec_net_simple(rng, fields):
+    ec_net_state(rng, fields)
+    return [ec_net_player(rng)]
+
+
+def ec_save_done(rng, fields):
+    active = ec_net_state(rng, fields)
+    if rng.random() < 0.6:  # the last missing acknowledgement
+        fields.append((LOGIC_THREAD + 0x22c, active - 1, 4))
+    return [ec_net_player(rng)]
+
+
+def ec_destroy_building(rng, fields):
+    ec_net_state(rng, fields)
+    n = ec_building(rng, fields)
+    b = BUILDINGS + n * BUILDING_BYTES
+    fields.append((b + 6, rng.choice((41, 43, 45, 55, 15, 2)), 1))
+    return [ec_hi(n), ec_lo(n), ec_net_player(rng)]
+
+
+def ec_player_lost(rng, fields):
+    ec_net_state(rng, fields)
+    player = ec_net_player(rng)
+    for n in range(1, EC_BUILDINGS + 1):
+        b = BUILDINGS + n * BUILDING_BYTES
+        fields += [(b, player if rng.random() < 0.5 else rng.randrange(4), 1), (b + 6, rng.choice((15, 16, 18, 2)), 1)]
+    return [player]
+
+
+def ec_sync_check(rng, fields):
+    ec_net_state(rng, fields)
+    player = rng.randrange(4)
+    table = [rng.randrange(4) for _ in range(7)]
+    stamp_now = rng.choice((0, 5, 6))
+    for k, value in enumerate(table):
+        EC_NET_PENDING_GLOBALS.append((EC_SYNC_CHECKSUMS + (player * 8 + k) * 4, value, 4))
+    EC_NET_PENDING_GLOBALS.append((EC_SYNC_CHECKSUMS + (player * 8 + 7) * 4, stamp_now, 4))
+    EC_NET_PENDING_GLOBALS.append((EC_SIMULATION_PAUSED, 0 if rng.random() < 0.8 else 1, 2))
+    payload = [player, rng.randrange(256)]
+    for k in range(7):
+        value = table[k] if rng.random() < 0.7 else rng.randrange(4)
+        payload += list(value.to_bytes(4, "big"))
+    stamp = rng.choice((stamp_now, stamp_now, stamp_now + 1, max(stamp_now - 1, 0), 0))
+    return payload + list(stamp.to_bytes(4, "big"))
+
+
+def ec_check_version(rng, fields):
+    ec_net_state(rng, fields)
+    index = rng.randrange(32)
+    word = rng.randrange(4)
+    EC_NET_PENDING_GLOBALS.append((EC_SYNC_RANDOM_HISTORY + index * 2, rng.randrange(4), 2))
+    return [ec_hi(index), ec_lo(index), ec_hi(word), ec_lo(word), ec_net_player(rng)]
+
+
+def ec_net_message(type_: int):
+    def generate(rng, fields):
+        ec_net_state(rng, fields)
+        net_id = rng.randrange(22)
+        if type_ in (3, 5):
+            return net_id, []
+        if type_ == 4:
+            return 0, []
+        if type_ == 6:  # a wide text at message byte 12
+            return 0, [net_id, 1, 2, 3, 4, 5, 6, 7, ord("H"), 0, ord("i"), 0, 0, 0]
+        if type_ == 8:
+            return 0, [net_id, rng.randrange(256)]
+        payload = [0] * (6 + 4 * 20 + 2)  # 0x22: lag words at message bytes 6 and 10 + 4 * id
+        for at in range(2, len(payload) - 1, 4):
+            lag = rng.choice((0, 4000, 5000, 5001, 60000))
+            payload[at], payload[at + 1] = lag & 0xFF, lag >> 8
+        return 0, payload
+    return generate
+
+
+def ec_net_globals(rng, pool, args):
+    fields = [(EC_GAME_TICK, rng.randrange(5000, 10000), 4)] + EC_NET_PENDING_GLOBALS
+    EC_NET_PENDING_GLOBALS.clear()
+    return fields
+
+
+EC_COMMANDS.update({
+    0x06: ec_destroy_building, 0xf2: ec_net_simple, 0xf4: ec_sync_check, 0xf7: ec_net_simple,
+    0xf8: ec_save_done, 0xf9: ec_net_simple, 0xfa: ec_net_simple, 0xfb: ec_check_version,
+    0xfc: ec_player_lost, 0xfd: ec_net_simple, 0xfe: ec_net_simple, 0xff: ec_net_simple,
+})
+EC_NET_MESSAGES.update({t: ec_net_message(t) for t in (3, 4, 5, 6, 8, 0x22)})
+EC_GLOBALS_EXTRA.append(ec_net_globals)
+EC_CALLEES.update({
+    0x005faaa0: (2, "thiscall", lambda h: 0x0073021c),   # CGraphicsData text lookup -> "Desync!"
+    0x004d9250: (1, "thiscall", "probe"),                # CrushBuilding (verified)
+    0x00540500: (1, "thiscall", "probe"), 0x005411b0: (0, "thiscall", "probe"),  # UI / players (not ours)
+    0x0050ac40: (2, "thiscall", "probe"), 0x0050af70: (0, "thiscall", "probe"),  # multiplayer save
+    0x0050b3c0: (0, "thiscall", "probe"),
+    0x004ff6d0: (3, "thiscall", "probe"),                # desync dump file
+    0x00550900: (4, "thiscall", lambda h: 0 if h % 8 == 0 else 0x5000 + (h >> 8) % 20),  # CComputerPlayer
+    0x00610960: (1, "stdcall", "probe"),                 # Win32::ThrowOutOfMemory (fastcall text, file; line)
+    0x0060f480: (3, "thiscall", "probe"),                # post a window message (FilmEnd)
+    # The game setup's player (lobby code with vectors that reallocate): a fake object.
+    0x004351e0: (1, "thiscall", lambda h: WORLD_BASE + EC_PLAYER_SETUP),
+})
+# Dead: the other branches of the std::string code the original inlines in
+# 0x06 and 0xf7 (string(buffer) through two temporaries that share one
+# buffer, then its destructor). The temporaries are released while the
+# result still shares the buffer (count > 0), so their `delete` branches
+# (0x53746a, 0x5374a3, 0x53a8e1, 0x53a91a) never run; when the result is
+# destroyed its count is 0, so the unsharing (0x53750b, 0x53750f) and the
+# count decrement (0x53758d, 0x537591) don't run either, and _Grow(0) in its
+# erase returns false (0x537570).
+EC_EXEMPT.extend([0x0053746a, 0x005374a3, 0x0053750b, 0x0053750f, 0x00537570, 0x0053758d, 0x00537591,
+                  0x0053a8e1, 0x0053a91a])
+_ec_spec = next(s for s in SPECS if s.ours == "CLogicThread_ExecuteCommands")
+_ec_spec.new_fails = 0.15        # only the computer player's block (0x780 bytes) fails: 0x53afba, 0x53b201
+_ec_spec.new_fails_size = 0x780
+
+# The texts' CRT functions (sprintf, mbstowcs in 0x60b840, their locale
+# locks) call InterlockedIncrement / InterlockedDecrement and
+# Enter/LeaveCriticalSection, which the emulator doesn't implement: for the
+# case, those import slots point at single-threaded equivalents in three
+# padding gaps of S3.EXE (0x624aa1, 0x627ec2: `mov ecx, [esp+4]; inc/dec
+# dword [ecx]; mov eax, [ecx]; ret 4`; 0x62c181: `ret 4`), and the CRT's
+# _lock / _unlock (0x624a2b / 0x624a8c, cdecl) return at once (the first
+# _lock of a lock number would allocate its critical section with HeapReAlloc).
+EC_INTERLOCKED_INCREMENT = 0x00624aa1
+EC_INTERLOCKED_DECREMENT = 0x00627ec2
+EC_LOCK_NOTHING = 0x0062c181
+
+
+def ec_interlocked_stubs(rng, pool, args):
+    return [(EC_INTERLOCKED_INCREMENT, int.from_bytes(bytes.fromhex("8b4c2404ff018b01c20400"), "little"), 11),
+            (EC_INTERLOCKED_DECREMENT, int.from_bytes(bytes.fromhex("8b4c2404ff098b01c20400"), "little"), 11),
+            (EC_LOCK_NOTHING, int.from_bytes(bytes.fromhex("c20400"), "little"), 3),
+            (0x00655244, EC_INTERLOCKED_INCREMENT, 4), (0x00655240, EC_INTERLOCKED_DECREMENT, 4),
+            (0x006550fc, EC_LOCK_NOTHING, 4), (0x00655128, EC_LOCK_NOTHING, 4),  # import slots
+            (0x00624a2b, 0xc3, 1), (0x00624a8c, 0xc3, 1)]  # _lock, _unlock: ret
+
+
+EC_GLOBALS_EXTRA.append(ec_interlocked_stubs)

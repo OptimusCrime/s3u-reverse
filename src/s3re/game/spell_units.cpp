@@ -575,7 +575,7 @@ void SetUpUnitWorld(test::Context& ctx, test::WorldPair& worlds) {
         for (std::int32_t& m : player.spell_mana) {
             m = static_cast<std::int32_t>(rng.Below(60));
         }
-        player.unk0b4[0] = static_cast<std::int32_t>(rng.Below(60));  // read for spells not in the race's list
+        player.promotion_cost = static_cast<std::int32_t>(rng.Below(60));  // read for spells not in the race's list
     }
     std::memset(w->effects, 0, sizeof(w->effects));
     std::memset(&w->map_effects, 0, sizeof(w->map_effects));

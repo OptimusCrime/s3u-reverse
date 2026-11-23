@@ -718,6 +718,9 @@ enum class NetMessage : std::uint8_t {
     InGameChat = 6,        // "Message InGameChat"
     ChecksumFailure = 8,   // "Message ChecksumFailure"
     LagReport = 34,        // 0x22: per-player words compared with 5000 (lag warnings, probably)
+    // Logic -> network (CLogicThread+0x3c4):
+    StepRequest = 32,      // 0x20 {0x20, 0, 8, 0, step}: pushed by every ExecuteCommands call
+    CommandRequest = 33,   // 0x21: a command (byte 1 = CommandId), sent back as Command in step order
 };
 
 // Byte 1 of a Command message (and of the 0x21 messages the logic pushes):
@@ -762,7 +765,7 @@ enum class CommandId : std::uint8_t {
     SaveDone = 248,             // 0xf8: SaveGameCommit when all players saved
     SaveFailed = 249,           // 0xf9: SaveGameRollBack
     SaveAllowed = 250,          // 0xfa: save request within the tick limit
-    CheckVersion = 251,         // 0xfb: compares a word table (0x7dfb58) per player (sent at game start)
+    SyncRandomCheck = 251,      // 0xfb: another player's RNG history word (g_syncRandomHistory 0x7dfb58) differs: "Desync!" (was CheckVersion)
     PlayerLost = 252,           // 0xfc: the player lost (military buildings crushed)
     PlayerWon = 253,            // 0xfd
     DropPlayer = 254,           // 0xfe: "LOGIC: Dropped player", a computer takes over ("Neuer Computer")

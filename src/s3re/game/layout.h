@@ -391,7 +391,8 @@ struct Player {
     std::int32_t mana;               // 0x08c
     std::int32_t mana_total;         // 0x090 added to with mana (temples, offerings); promotions (command 0x18) are paid from it; read by commands and the UI
     std::int32_t spell_mana[8];      // 0x094
-    std::int32_t unk0b4[4];          // 0x0b4 [0] mana cost of the next soldier promotion (SetPromotionCost 0x508450); [1..3] soldier level per kind (swords, bows, pikes; command 0x18)
+    std::int32_t promotion_cost;     // 0x0b4 mana cost of the next soldier promotion (SetPromotionCost 0x508450; paid from mana_total by command 0x18)
+    std::int32_t soldier_levels[3];  // 0x0b8 soldier level 0..2 per kind (swords, bows, pikes; command 0x18 raises them, new soldiers take them)
     // 0x0c4..0x0d4: recomputed by RecountPlayerPopulation (0x5104c0) in
     // UpdateEconomy; meanings partly guesses (re/structs.md).
     std::uint32_t population;        // 0x0c4 civilians (settler class 0 or 10..29)
@@ -419,6 +420,8 @@ static_assert(offsetof(Player, goods) == 0xdc);
 static_assert(offsetof(Player, team) == 0x0c);
 static_assert(offsetof(Player, site_stamp) == 0x84);
 static_assert(offsetof(Player, mana_total) == 0x90);
+static_assert(offsetof(Player, promotion_cost) == 0xb4);
+static_assert(offsetof(Player, soldier_levels) == 0xb8);
 static_assert(offsetof(Player, map_revealed) == 0x124);
 static_assert(offsetof(Player, map_revealed_tick) == 0x128);
 // Building request counters: settler_lists[0..4] = +0x20, +0x22, +0x24

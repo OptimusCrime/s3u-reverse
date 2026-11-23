@@ -40,6 +40,11 @@ add_library(s3re SHARED
     game/counting.cpp
     game/directx_surface.cpp
     game/economy.cpp
+    game/execute_commands.cpp
+    game/execute_commands_areas.cpp
+    game/execute_commands_net.cpp
+    game/execute_commands_trade.cpp
+    game/execute_commands_units.cpp
     game/economy_helpers.cpp
     game/flood_fills.cpp
     game/folded_getters.cpp

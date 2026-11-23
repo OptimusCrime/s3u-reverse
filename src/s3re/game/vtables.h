@@ -76,6 +76,12 @@ inline constexpr std::uintptr_t kCOutOfMemory = 0x682f58;
 inline constexpr std::uintptr_t kCDataError = 0x68bfd0;
 inline constexpr std::uintptr_t kDirectDrawException = 0x66a698;
 inline constexpr std::uintptr_t kDirectPlayException = 0x681e60;
+inline constexpr std::uintptr_t kCTimeoutPointer = 0x674f38;  // Win32::CTimeout* (thrown by the queue waits)
 }  // namespace throw_info
+
+// Type descriptors (catch types).
+namespace type_descriptor {
+inline constexpr std::uintptr_t kCTimeoutPointer = 0x698e98;  // ".PAVCTimeout@Win32@@" (ExecuteCommands' catch)
+}  // namespace type_descriptor
 
 }  // namespace s3re::game

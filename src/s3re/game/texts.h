@@ -134,5 +134,43 @@ inline constexpr GameText kErrorTop{0x72fee4};          // "Error top %u %u %u"
 inline constexpr GameText kErrorBottom{0x72fecc};       // "Error bottom %u %u %u"
 inline constexpr GameText kErrorLeft{0x72feb8};         // "Error left %u %u %u"
 inline constexpr GameText kErrorRight{0x72fea0};        // "Error right %u %u %u"
+// CLogicThread::ExecuteCommands (Volker\LogicHandleNet.cpp)
+inline constexpr GameText kInvalidNetMessage{0x7300fc};  // "Ung\xfcltige Netznachricht: Type: %u" ("invalid network message")
+inline constexpr GameText kGodlyEventRange{0x730514};    // "GodlyEvent (ID#)%u GodRange: %u"
+inline constexpr GameText kGodlyEventHappened{0x7304cc};  // "Godly Event (ID#)%u happened at %u,%u from priest at %u,%u godrange: %u"
+// Formats of the network messages 3..8 (execute_commands_net.cpp)
+inline constexpr GameText kMessagePlayerLost{0x730188};      // "Message PlayerLost"
+inline constexpr GameText kKillBecauseOfLag{0x730170};       // "LOGIC: Kill wegen lag" ("kill because of lag")
+inline constexpr GameText kMessageKillPlayer{0x73015c};      // "Message KillPlayer"
+inline constexpr GameText kMessageFilmEnd{0x73014c};         // "Message FilmEnd"
+inline constexpr GameText kMessageInGameChat{0x730138};      // "Message InGameChat"
+inline constexpr GameText kMessageChecksumFailure{0x730120};  // "Message ChecksumFailure"
+// MoveUnits (execute_commands_units.cpp)
+inline constexpr GameText kGongAttack{0x730534};         // "GongAttack = true"
 
+// ExecuteCommands: SyncCheck, the multiplayer save, computer players (execute_commands_net.cpp)
+inline constexpr GameText kCheckSumPlayer{0x730498};  // "CheckSum player %u = %u - CheckBuffer[%u][%u] = %u"
+inline constexpr GameText kDesyncWorld{0x73046c};     // "Desync World!"
+inline constexpr GameText kDesyncEconomy{0x73043c};   // "Desync Economy!"
+inline constexpr GameText kDesyncTrade{0x730410};     // "Desync Trade!"
+inline constexpr GameText kDesyncPile{0x7303e4};      // "Desync Pile!"
+inline constexpr GameText kDesyncSettler{0x7303b4};   // "Desync Settler!"
+inline constexpr GameText kDesyncBuildings{0x73037c};  // "Desync Buildings!"
+inline constexpr GameText kDesync{0x73021c};          // "Desync!"
+inline constexpr GameText kStartingMultiplayerSave{0x730360};  // "Starting multiplayersave"
+inline constexpr GameText kMultiplayerSaveOk{0x73032c};        // "Multiplayersave was ok! Calling SaveGameCommit()"
+inline constexpr GameText kMultiplayerSaveFailed{0x73027c};    // "Multiplayersave failed Calling SaveGameRollBack()"
+inline constexpr GameText kDroppedPlayer{0x730200};   // "LOGIC: Dropped player %i %i"
+inline constexpr GameText kNewComputer{0x7301e0};     // "Neuer Computer %u bei step %u" ("new computer %u at step %u")
+inline constexpr GameText kComputerAssert{0x73019c};  // "lpComputer [r->data [0]]" (assertion text)
+inline constexpr GameText kLogicHandleNetFile{0x7301b8};  // "E:\Siedler3\Volker\LogicHandleNet.cpp"
+// Wide (UTF-16) texts the logic shows (0x53ba60 builds a wide string from them).
+inline constexpr GameText kWideDesyncWorld{0x73047c};      // L"DESYNC World!"
+inline constexpr GameText kWideDesyncEconomy{0x73044c};    // L"DESYNC Economy!"
+inline constexpr GameText kWideDesyncTrade{0x730420};      // L"DESYNC Trade!"
+inline constexpr GameText kWideDesyncPile{0x7303f4};       // L"DESYNC Pile!"
+inline constexpr GameText kWideDesyncSettler{0x7303c4};    // L"DESYNC Settler!"
+inline constexpr GameText kWideDesyncBuildings{0x730390};  // L"DESYNC Buildings!"
+inline constexpr GameText kWideSaveError{0x7302b0};   // L"Error while saving! Check the file attributes and disk space!"
+inline constexpr GameText kWideCannotDeleteTemp{0x730224};  // L"Cannot delete the file Save\Multi\Temp.mps!"
 }  // namespace s3re::game::texts

@@ -96,6 +96,24 @@ inline constexpr GameGlobal<std::int32_t> g_fastForwarding{0x7dfd30};
 inline constexpr GameGlobal<std::int32_t> g_revealMap{0x7dfd84};
 // Number of the running campaign mission, 0 outside campaigns.
 inline constexpr GameGlobal<std::int32_t> g_campaignMission{0x7dfdb0};
+// Non-zero: CLogicThread::Step skips the world updates; ExecuteCommands
+// (0xf4 SyncCheck) counts it up after a checksum mismatch, so a desync
+// stops the simulation.
+inline constexpr GameGlobal<std::uint16_t> g_simulationPaused{0x7ace62};
+// Lockstep checks (ExecuteCommands 0xf4): per player seven checksum words
+// (world, economy, trade, -, pile, settler, buildings) and, at [7], the
+// step stamp they belong to.
+inline constexpr GameGlobal<std::uint32_t[20][8]> g_syncChecksums{0x7deb58};
+// RNG a-words of past ticks (CLogicThread::Step stores one every 256
+// ticks); ExecuteCommands 0xfb compares another player's word with it.
+inline constexpr GameGlobal<std::uint16_t[]> g_syncRandomHistory{0x7dfb58};
+// Set to 0 by ExecuteCommands 0xf8 after a committed multiplayer save
+// (meaning unknown).
+inline constexpr GameGlobal<std::int32_t> g_global7deb50{0x7deb50};
+// Game tick of the last committed multiplayer save (ExecuteCommands 0xf8).
+inline constexpr GameGlobal<std::uint32_t> g_lastSaveTick{0x7dfd50};
+// The application object (DirectX::CGameApp; returned by 0x53ba50).
+inline constexpr GameGlobal<std::uint8_t*> g_app{0x7e9168};
 // Outcome of the current game: -1 while undecided, then set by the game-end
 // check 0x511c50 (1 or 0 by the mission's goals).
 inline constexpr GameGlobal<std::int32_t> g_gameOutcome{0x730f64};
@@ -105,9 +123,11 @@ inline constexpr GameGlobal<std::uint32_t> g_strengthDivisor{0x7acfa4};
 inline constexpr GameGlobal<std::uint32_t> g_objectAgeStart{0x730efc};
 // Divisor of soldier damage (256 in the image), UpdateSoldier.
 inline constexpr GameGlobal<std::uint32_t> g_damageDivisor{0x730eec};
-// Read by UpdateSettlers (job 0x50, compared with a settler field) and
-// 0x4a99e8, 0x520415..; meaning still to be named.
-inline constexpr GameGlobal<std::int32_t> g_global7dfd6c{0x7dfd6c};
+// The building whose menu the UI shows (ExecuteCommands refreshes the
+// building menu, 4, when a command changes it; DestroyBuilding clears it);
+// also read by UpdateSettlers (job 0x50) and 0x4a99e8, 0x520415. Was
+// g_global7dfd6c.
+inline constexpr GameGlobal<std::int32_t> g_selectedBuilding{0x7dfd6c};
 // A byte in .data read by UpdateSettlers (carrier job 0x4f) and 0x42f7a1;
 // meaning still to be named.
 inline constexpr GameGlobal<const std::uint8_t> g_byte730ef8{0x730ef8};
@@ -117,6 +137,13 @@ inline constexpr GameGlobal<PlayerTally[20]> g_playerTallies{0x7acfd4};
 inline constexpr GameGlobal<std::uint16_t> g_pileClaimsCursor{0x7ace60};
 // The ten settler groups (probably the player's selection groups).
 inline constexpr GameGlobal<SettlerGroups> g_settlerGroups{0x7ad620};
+// Per settler group: set to 1 when the group's list changed (ProcessEvents
+// 0x5257f3 and ExecuteCommands 0x10 set it, the group UI 0x52ecd0 reads and
+// clears it).
+inline constexpr GameGlobal<std::int32_t[10]> g_settlerGroupChanged{0x7ad5f8};
+// The settler group the UI shows (index into g_settlerGroups); ExecuteCommands
+// 0x10 sets it to 0 when the local player's carriers become units.
+inline constexpr GameGlobal<std::int32_t> g_currentSettlerGroup{0x7dfd68};
 // The pathfinder's progress marker (pathing.h, PathPhase).
 inline constexpr GameGlobal<volatile std::uint32_t> g_pathPhase{0x7a9d98};
 

@@ -76,11 +76,18 @@ inline constexpr GameGlobal<const std::uint32_t[]> g_settlerAnimations{0x6a8060}
 // ------------------------------------------------------------ races
 // Per race the eight spells it can cast.
 inline constexpr GameGlobal<const std::uint32_t[][8]> g_raceSpells{0x658d64};
+// Per spell (the numbers of g_raceSpells) the range in tiles around the
+// priest (ExecuteCommands 0x15: TileDistance - 2 must be below it).
+inline constexpr GameGlobal<const std::uint32_t[]> g_spellCastRange{0x658de4};
 // Per race the number of settlers a ship carries.
 inline constexpr GameGlobal<const std::int32_t[4]> g_raceShipCapacity{0x659644};
 // Per race the length of the shooting animation (the original reads the
 // low word).
 inline constexpr GameGlobal<const std::int32_t[4]> g_raceShotTime{0x659dc0};
+// Per race (28, 32, 36, 17): ExecuteCommands' MoveUnits stores its low word
+// in path_cache[5] of a catapult sent to attack (mode 5, after the 0xfffd
+// marker in path_cache[4]); meaning to be named.
+inline constexpr GameGlobal<const std::int32_t[4]> g_raceAttackValue659db0{0x659db0};
 
 // ------------------------------------------------------------ buildings
 // Building layouts: per (race * 57 + type) 2400 bytes of uint32 lists
@@ -103,6 +110,9 @@ inline constexpr GameGlobal<const std::int32_t[3]> g_militaryHitPoints{0x659664}
 inline constexpr GameGlobal<const ShipyardInputs[4][2]> g_shipyardInputs{0x659670};
 // Per tower slot index the pixel offset of the soldier.
 inline constexpr GameGlobal<const TowerSlotOffset[]> g_towerSlotOffsets{0x659738};
+// The goods type of each line of the trade menu (ExecuteCommands 0x12,
+// kinds 8..11: the orders of a harbour or marketplace; 34 entries).
+inline constexpr GameGlobal<const std::int32_t[]> g_tradeMenuGoods{0x659414};
 // The building type whose goods a consumer type wants (UpdateEconomy).
 inline constexpr GameGlobal<const std::uint32_t[]> g_consumerBuildingType{0x659264};
 // Single constants in .data: the output good of building type 0xb (11),

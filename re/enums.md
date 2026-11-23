@@ -770,7 +770,7 @@ id: `re/execute_commands.md`.
 | 0xf8 | SaveDone | high | "Multiplayersave was ok! Calling SaveGameCommit()" |
 | 0xf9 | SaveFailed | high | "Multiplayersave failed Calling SaveGameRollBack()" |
 | 0xfa | SaveAllowed | low | tick limit, pushes 0xf7 for the local player |
-| 0xfb | CheckVersion | low | word table 0x7dfb58 compared per player; every recording sends it at step 1 |
+| 0xfb | SyncRandomCheck | medium | (was CheckVersion) another player's RNG history word (g_syncRandomHistory 0x7dfb58, stored by Step every 256 ticks) differs: text 0x80129, "Desync!", CLogicThread +0x675 = 1; every recording sends it at step 1 |
 | 0xfc | PlayerLost | medium | Step sends it when g_gameOutcome is 0 (CheckGameEnd); crushes the military buildings |
 | 0xfd | PlayerWon | medium | Step sends it when g_gameOutcome is 1 |
 | 0xfe | DropPlayer | high | "LOGIC: Dropped player %i %i", "Neuer Computer %u bei step %u" |

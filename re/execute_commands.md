@@ -5,6 +5,92 @@ simulation: "Commands and lockstep" in `CLAUDE.md`; the recorder:
 `src/s3re/replay/command_log.h`. Enums: `NetMessage` and `CommandId` in
 `src/s3re/game/enums.h` (evidence in `re/enums.md`).
 
+## Status (session 47): reimplemented and verified
+
+ExecuteCommands is reimplemented as one hook (`S3RE_HOOK`, verified):
+
+| File | Part |
+|---|---|
+| `execute_commands.cpp` | frame (wait/pop, dispatch, step grant, step message, the CTimeout catch), 0x01..0x05, 0x07, 0x08, 0x11, 0x14..0x19, 0x1b, 0x1c, 0xf1, 0xf5, 0xf6 |
+| `execute_commands_units.cpp` | MoveUnits 0x09 / 0x0d / 0x0e / 0x0f |
+| `execute_commands_trade.cpp` | SetTradeRoute 0x12, SetWorkshopProduction 0x13 |
+| `execute_commands_areas.cpp` | 0x0a, 0x0b, 0x0c, 0x10 |
+| `execute_commands_net.cpp` | 0x06, 0xf2, 0xf4, 0xf7..0xff, network messages 3, 4, 5, 6, 8, 0x22 |
+| `execute_commands.h` | `Run`, `FrameLocals` (locals that persist across messages), callee addresses |
+| `execute_commands_test.h` | the test bench (both sides run the whole function) |
+
+**Evidence.** In-process (`--test "ExecuteCommands"`, 10 tests): per part a
+`..._MatchesOriginal` test (3000..4000 cases of 1..4 messages plus a grant;
+the whole original through the trampoline against ours on two world-sized
+buffers; the thread, both MessageQueues and their rings sit after the world
+at the same offsets; the game's own Pop/Push run; simulation callees are
+recorded stubs, UI/lobby/save callees recorders of their string contents;
+the queue's wait sometimes throws a real `Win32::CTimeout*` through the
+game's `_CxxThrowException`) and a `..._ComparisonDetectsWrongImplementation`
+test. Emulator: one spec `CLogicThread_ExecuteCommands` (logicthread; the
+queues in the fake thread's area, Pop/Push run, the critical section
+wrappers probed, Push's SetEvent call patched per case;
+`S3RE_EC_ONLY=c9,n3,...` restricts the generated ids for work on one part).
+Exempt: the CTimeout catch (0x53b823.., exception only), the dead `jmp`
+0x53b81e, MoveUnits' dead clamp 0x536faa, nine refcount branches of
+inlined std::string code in 0x06 / 0xf7 (dead).
+
+**Known differences (not reproducible, documented at the code):** bytes 3
+and 5..7 of the 0x21 replies are uninitialized stack in the original (ours
+0; the bench masks them); the garrison sizes 0x0c uses for a building that
+is not a tower or castle come from an earlier 0x0c in the same call or the
+stack (ours 0, `FrameLocals`); SetSettlerGroup with a count beyond the
+message reads the original's stack (ours 0); MoveUnits' ship-tile list
+grows on the original's stack without limit (ours stops at 1024).
+
+**What the commands do** (beyond the table above):
+- 0x0a ChangeTransportOrder (good, op, player, area): op 1/2 transport flag
+  on/off (Area +0x21a), Area +0x1f6 = the good's place in the order: op 3
+  top, 4 up, 5 down, 6 to the race's last place (26 Roman, 27 Egyptian, 29
+  Asian/Amazon).
+- 0x0b ChangeToolSettings (kind, value, player, area): kinds 1..3 the shares
+  +0x23e..+0x240 in steps of 5 (sum <= 95), 4..6 / 7..9 the percentages
+  +0x242..+0x244 up / down (0..100), 10 sets +0x241.
+- 0x0c ChangeGarrison (building, player, op): wanted swordsmen / bowmen /
+  pikemen (Building +0x1a / +0x1c / +0x20); sizes small tower 1 (bowmen 2),
+  large 3 (3), castle 6 (4); op 1 spread, 2..4 one more, 5 one of the first
+  class present, 6..8 one less. A settler of another type in the garrison
+  chain continues the count from settler 0's next (quirk).
+- 0x10 ConvertCarriers (kind, player, x, y, count): up to 3000 offsets around
+  the tile; kind 1 geologist (22), 2 thief (23), 3 pioneer (40), 4 pioneers
+  back to carriers. The local player's new units become settler group 0.
+- 0x12 SetTradeRoute (player, kind, building, ...): finished harbour /
+  marketplace, no owner check; kind 2 trade mode (Trade +0x01), 3 clear the
+  route, 4..6 route points, 7 end point (harbour: the first tile in the
+  water area of its landing), 8..11 orders of trade-menu line (table
+  0x659414): 100 / 0 / + / -.
+- 0x13 SetWorkshopProduction (player, value, building): war machine
+  workshops (owner checked) start (state = race + 0x10/0x20) or stop
+  (ReleaseBuildingExtraTiles); a shipyard (no owner check) builds ship kind
+  0x30 / 0x40 or stops.
+- 0x09/0x0d/0x0e/0x0f MoveUnits (player, group, x, y): mode 0 move, 1
+  waypoint (path_cache), 2 patrol (path_cache = own position, tile, 0xfffe,
+  0xfffe), 3 attack-move (job 176, +0x3c = 0). A 0x09 with a group of only
+  catapults (type 41) searches enemy towers/castles, buildings (Amazon
+  "GongAttack") or catapults/ships within distance 5: mode 5 (path_cache
+  0xfffd, g_raceAttackValue659db0[race]); else mode 4 (attack-move, +0x3c =
+  40) unless an enemy fighter is within 6. Each unit takes the next
+  MapOffset tile reachable for it (walk region; ships: sea area, ferries 9
+  apart).
+- 0x06 DestroyBuilding: a finished big temple sets Player +0x08 bit 0;
+  CrushBuilding; a failure shows text 0x8018e to the local player.
+- 0xf4 SyncCheck: seven checksums and a stamp per player in g_syncChecksums
+  (0x7deb58); a mismatch logs "Desync x!", dumps (0x4ff6d0) and counts up
+  g_simulationPaused, which stops the simulation.
+- 0xfb is a desync check of the RNG history (renamed SyncRandomCheck).
+- 0xf7..0xfa: multiplayer save (start 0x50ac40, commit 0x50af70, rollback
+  0x50b3c0) with acks/failures in CLogicThread +0x22c/+0x228.
+- 0xfe/0xff: an active player becomes 2 (dropped); without objectives a
+  CComputerPlayer takes over (CLogicThread +0x350).
+- Messages 3/5 kill a player found by its network id (Player +0x1c), 4 ends
+  a film (posts 0x12 to g_app+0xc), 6 shows chat, 8 a checksum failure,
+  0x22 lag warnings (words above 5000).
+
 ## Shape
 
 One function of about 24 KB (0x535990..0x53b839; disassembly 5,900
@@ -76,7 +162,7 @@ id occurs in `recordings/*.s3rec` (fun8 / random768 / scripted).
 | 0xf8 | SaveDone | 0x53a97e | counts acks; all: SaveGameCommit (0x50af70) | not ours | - |
 | 0xf9 | SaveFailed | 0x53aaa1 | SaveGameRollBack (0x50b3c0), text | not ours | - |
 | 0xfa | SaveAllowed | 0x53abb3 | tick limit (0x3a9 ticks after this+0x224): the local player pushes 0x21 0xf7, text | not ours | - |
-| 0xfb | CheckVersion | 0x53aca5 | another player's word differs from table 0x7dfb58: text, this+0x675 = 1 (probably a version/data check) | UI text | 20 / 6 / 12 |
+| 0xfb | SyncRandomCheck (was CheckVersion) | 0x53aca5 | another player's word differs from table 0x7dfb58: text, this+0x675 = 1 (probably a version/data check) | UI text | 20 / 6 / 12 |
 | 0xfc | PlayerLost | 0x53ad95 | text for another player (0x4351e0, Lobby 0x5db260), 0x540500; without objectives: CrushBuilding on the player's military buildings | CrushBuilding (verified), 0x540500 | - |
 | 0xfd | PlayerWon | 0x53aef0 | 0x540500 | not ours | - |
 | 0xfe | DropPlayer | 0x53aefe | an active player (Player +0 == 1) becomes 2; without objectives a CComputerPlayer (new 0x780, 0x550900) at this+0x350[player]; text; 0x5411b0 | not ours | - |
@@ -114,7 +200,7 @@ setup / lobby), 0x4ff6d0 (desync dump file), 0x50ac40 / 0x50af70 /
 constructor), 0x60b840 (std::string helper), 0x60f480 (post a window
 message), 0x61f27e (sprintf), operator new/delete, memmove.
 
-## Order for the rest (bottom-up)
+## Order for the rest (bottom-up; done in session 47)
 
 ExecuteCommands is hooked as one unit, so it can only be switched once all
 of it is written. Proposed split of our version (one file
