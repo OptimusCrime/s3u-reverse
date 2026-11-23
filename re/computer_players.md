@@ -169,6 +169,19 @@ AI's map size; `AI::TerritoryRadius` (the distance of the 3500th / 4000th
 construction sites and of settlers of a type in an area; and
 `AI::TeamHasActivePlayer`.
 
+Batch 3 (`ai_site_queries.cpp`, V): `AI::HasSiteNoteInArea` (a build
+order of this type or a ground request of another type already planned
+in the area; note subclass fields +0x1c type, +0x1e/+0x20 position),
+`AI::HasBuildingNear` / `CountBuildingsNear` (TileDistance),
+`AI::NextGarrisonedMilitaryBuilding` (round robin), `AI::CheckBasicEconomy`
+(AiPlayerData +0xc: sawmill, woodcutter, small tower plus the race's
+stonecutter / forester), and two CompMapWorkerAgent globals:
+`g_aiArmyState` 0x7e58c8 (reset by 0x593f50) and `g_aiGroupOrders`
+0x7e37d0 (set up by 0x591e00), with per player and unit group arrays
+(index player * 10 + group, the world's 10 settler lists per player)
+cleared by `AI::ResetUnitGroup` 0x5930f0. What the arrays mean is still
+a guess (G: the computer players' unit groups and armies).
+
 ## How decisions reach the simulation
 
 The AI never writes the world directly as far as seen (R: the writes of

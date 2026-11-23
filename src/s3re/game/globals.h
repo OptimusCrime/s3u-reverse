@@ -24,6 +24,8 @@ struct CGameData;
 struct SettlerGroups;
 
 namespace ai {
+struct AiArmyState;
+struct AiGroupOrders;
 struct AiLandEvaluation;
 struct AiPlayerData;
 struct AiPlayerSetup;
@@ -216,6 +218,11 @@ inline constexpr GameGlobal<ai::AiVector[20]> g_aiAgentVectors{0x7e7a24};
 // (stages[s + 1] - stages[s])). Stored in reverse: stage s at [3 - s].
 inline constexpr GameGlobal<float[4]> g_aiWantedWeaponsmithSlopes{0x7e1290};
 inline constexpr GameGlobal<float[4]> g_aiWantedGoldMineSlopes{0x7e12b0};
+// Rainer\CompMapWorkerAgent.cpp's global objects (ai_layout.h) and a
+// per-player array cleared with the army state (0x593f50; meaning unknown).
+inline constexpr GameGlobal<ai::AiGroupOrders> g_aiGroupOrders{0x7e37d0};
+inline constexpr GameGlobal<ai::AiArmyState> g_aiArmyState{0x7e58c8};
+inline constexpr GameGlobal<std::uint32_t[20]> g_aiPerPlayer7e79d0{0x7e79d0};
 
 // ------------------------------------------------------------ imports
 // S3.EXE's import address table slots (called through by the original;

@@ -10732,3 +10732,79 @@ SPECS += [
     Spec("AI_TeamHasActivePlayer", 0x00593140, "stdcall", [below(20)], presets=ai_query_teams,
          globals=ai_map_world),
 ]
+
+# -- computer players A2, batch 3: site queries (ai_site_queries.cpp) --------
+
+AI_NOTES_PLAYER = SCRATCH + 2 * SCRATCH_SLOT_BYTES   # a ComputerPlayer (0x780 bytes)
+AI_SITE_NOTES = SCRATCH + 3 * SCRATCH_SLOT_BYTES     # 300 notes of 0x24 bytes
+
+
+def site_notes(rng, pool, args):
+    """g_aiPlayer's 300 note pointers (a third null) to notes of types 0..5
+    with a building type 0..3 and a position, and the tile areas there."""
+    fields = [(SCRATCH, rng.randrange(4), 2), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(300), 2)]
+    for n in range(300):
+        note = AI_SITE_NOTES + n * 0x24
+        pointer = 0 if rng.random() < 0.33 else WORLD_BASE + note
+        x, y = rng.randrange(410), rng.randrange(400)
+        fields += [(AI_NOTES_PLAYER + 0x280 + 4 * n, pointer, 4), (note + 6, rng.randrange(6), 2),
+                   (note + 0x1C, rng.randrange(4), 2), (note + 0x1E, x, 2), (note + 0x20, y, 2)]
+        if x < 400:
+            fields.append((TILES + (x * 0x300 + y) * 24 + 0x14, 0 if rng.random() < 0.5 else rng.randrange(300), 2))
+    return fields
+
+
+def site_notes_globals(rng, pool, args):
+    return ai_world_400(rng, pool, args) + [(AI_PLAYER, WORLD_BASE + AI_NOTES_PLAYER, 4)]
+
+
+def near_buildings(rng, pool, args):
+    """Up to 40 buildings of players 0..2 near the origin; some military
+    with a garrison."""
+    count = rng.randrange(40)
+    fields = [(BUILDING_COUNT, count, 4)]
+    for building in range(1, count + 2):
+        record = BUILDINGS + building * BUILDING_BYTES
+        fields += [(record, 0xFF if rng.random() < 0.15 else rng.randrange(3), 1),
+                   (record + 2, rng.randrange(60), 2), (record + 4, rng.randrange(60), 2),
+                   (record + 6, rng.choice((2, 3, 15, 16, 18, 24)), 1),
+                   (record + 8, 0 if rng.random() < 0.5 else rng.randint(1, 100), 2)]
+    return fields
+
+
+def near_type(rng, pool):
+    return rng.choice((0xFFFF, 15, 2, 18)) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+def with_noise(generator):
+    def generate(rng, pool):
+        return generator(rng, pool) | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+    return generate
+
+
+def basic_economy(rng, pool, args):
+    player = rng.randrange(20)
+    race = rng.randrange(5) if rng.random() < 0.9 else rng.getrandbits(32)
+    fields = [(SCRATCH, player, 2), (AI_PLAYERS + player * 0x148 + 4, race, 4)]
+    data = SCRATCH + SCRATCH_SLOT_BYTES
+    fields += [(data + 0x344 + 2 * t, 0 if rng.random() < 0.2 else 1, 2) for t in range(57)]
+    return fields
+
+
+SPECS += [
+    Spec("AI_HasSiteNoteInArea", 0x00571d00, "fastcall", [scratch(0), scratch(1)], presets=site_notes,
+         globals=site_notes_globals, max_cases=300),
+    Spec("AI_HasBuildingNear", 0x00571d90, "fastcall",
+         [near_type, with_noise(below(60)), with_noise(below(60)), with_noise(below(40)), below(3)],
+         presets=near_buildings, globals=ai_world, max_cases=600),
+    Spec("AI_CountBuildingsNear", 0x00571e30, "fastcall",
+         [near_type, with_noise(below(60)), with_noise(below(60)), with_noise(below(40)), below(3)],
+         presets=near_buildings, globals=ai_world, max_cases=600),
+    Spec("AI_NextGarrisonedMilitaryBuilding", 0x00571ee0, "fastcall",
+         [lambda rng, pool: 0xFFFF if rng.random() < 0.1 else rng.randrange(45), with_noise(below(3))],
+         presets=near_buildings, globals=ai_world, max_cases=600),
+    Spec("AI_CheckBasicEconomy", 0x005720c0, "fastcall", [scratch(0), anything, scratch(1)],
+         presets=basic_economy, globals=ai_world),
+    Spec("AI_ResetUnitGroup", 0x005930f0, "stdcall", [below(20), below(10)]),
+    Spec("AI_ArmyState_Reset", 0x00593f50, "thiscall", []),
+]

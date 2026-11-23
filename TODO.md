@@ -83,11 +83,15 @@ Each item: what, why, and where to start.
   tools/frontier.py --range 54cbd0 59fcd0`). Done in session 48: the 25
   T_ECONOMY_AGENT conditions 0x568250..0x569d20 and the map queries
   0x599510..0x5999e0, 0x58ecb0, 0x58ed30, 0x58ed70, 0x59dbb0, 0x59dc70,
-  0x593140. Left: 0x5930f0 and 0x593f50 / 0x591e00 (the CompMapWorkerAgent
-  globals 0x7e37d0 and 0x7e58c8: per player and unit group state; name
-  them as structs first), 0x5720c0, 0x571d00..0x572420, the larger
-  economy conditions 0x567e00, 0x568420, 0x568bc0, 0x568d80, 0x568f40 and
-  the snapshot 0x567910 (needs 0x59dcc0).
+  0x593140, and the site queries 0x571d00..0x5720c0, 0x5930f0, 0x593f50.
+  Left: 0x591e00 (sets up g_aiGroupOrders, vectors at 0x7e3690), 0x572420
+  (fills AiPlayerData::building_counts), the larger economy conditions
+  0x567e00, 0x568420, 0x568bc0, 0x568d80, 0x568f40, the snapshot 0x567910
+  (needs 0x59dcc0), and the other small READY ones of the frontier (e.g.
+  0x597110..0x597260, 0x59cf20, 0x58f8c0, 0x58f940, 0x57ab20, 0x578760).
+  The ~60 identical 104-instruction SEH functions on the READY list are
+  probably static std::string-array initializers (check before counting
+  them as work).
 - **Package A3: CComputerPlayer's note tree**: DeleteNote 0x551330,
   0x551270, 0x551400, 0x551490, dispatch 0x551510, 0x5514c0, 0x551590,
   0x5516e0, 0x551670, the destructor 0x5509d0 / 0x550f30, 0x551a70, the

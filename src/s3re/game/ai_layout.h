@@ -148,7 +148,9 @@ struct AiCandidate {
 static_assert(sizeof(AiCandidate) == 6);
 
 struct AiPlayerData {
-    std::uint8_t unk000[0x26];
+    std::uint8_t unk000[0xc];
+    std::uint32_t basic_economy;          // 0x00c 1 once a sawmill, woodcutter, small tower and the race's basics (stonecutter, forester) stand (AI::CheckBasicEconomy 0x5720c0)
+    std::uint8_t unk010[0x16];
     // Indexes 0..56 are building types: best[type].score is the build
     // priority that 0x551b10 raises by g_aiBuildPrioritySteps[type] up to
     // g_aiBuildPriorityCaps[type] (only while non-zero); candidate_values
@@ -165,6 +167,7 @@ struct AiPlayerData {
     std::uint8_t unk3ef[0x550 - 0x3ef];
     std::uint32_t unk550;                                 // 0x550 the fishery condition 0x5693c0 needs it non-zero (probably "has fishing water")
 };
+static_assert(offsetof(AiPlayerData, basic_economy) == 0xc);
 static_assert(offsetof(AiPlayerData, best) == 0x26);
 static_assert(offsetof(AiPlayerData, candidate_values) == 0x2d2);
 static_assert(offsetof(AiPlayerData, building_counts) == 0x344);
@@ -261,6 +264,60 @@ static_assert(offsetof(EconomyAgent, donkey_farms) == 0x80);
 static_assert(offsetof(EconomyAgent, hospitals) == 0x90);
 static_assert(offsetof(EconomyAgent, laboratories) == 0x9e);
 static_assert(sizeof(EconomyAgent) == 0xa0);
+
+// ---------------------------------------------------------------- CompMapWorkerAgent globals
+// Two global objects of Rainer\CompMapWorkerAgent.cpp (computer players
+// A2, session 48; meanings mostly unknown, G: the computer players' unit
+// groups and armies). Many arrays are per player and per unit group (the
+// world's 10 settler lists per player, CGameData::player_lists), indexed
+// player * 10 + group.
+constexpr std::size_t kUnitGroups = 10;
+
+struct AiGroupTarget {
+    std::uint16_t x;   // +0 (probably; 0x590649 / 0x593180)
+    std::uint16_t y;   // +2
+    std::uint16_t unk4;  // +4 (0x590c80 tests it)
+};
+static_assert(sizeof(AiGroupTarget) == 6);
+
+// g_aiGroupOrders (0x7e37d0), set up by 0x591e00.
+struct AiGroupOrders {
+    std::uint8_t unk000[0x320];
+    std::uint8_t group_flags[layout::kPlayers][kUnitGroups];      // 0x320 (byte; 0x590c80 tests it)
+    AiGroupTarget group_targets[layout::kPlayers][kUnitGroups];   // 0x3e8
+};
+static_assert(offsetof(AiGroupOrders, group_flags) == 0x320);
+static_assert(offsetof(AiGroupOrders, group_targets) == 0x3e8);
+static_assert(sizeof(AiGroupOrders) == 0x898);
+
+// g_aiArmyState (0x7e58c8), reset by 0x593f50.
+struct AiArmyState {
+    std::uint32_t per_player000[layout::kPlayers];               // 0x000 25 * player after the reset
+    std::uint32_t per_player050[layout::kPlayers];               // 0x050
+    std::uint32_t per_player0a0[layout::kPlayers];               // 0x0a0
+    std::uint32_t per_player0f0[layout::kPlayers];               // 0x0f0
+    std::uint32_t per_player140[layout::kPlayers];               // 0x140
+    std::uint32_t unk190;                                // 0x190
+    std::uint32_t group_values[layout::kPlayers][kUnitGroups];   // 0x194 groups 1..9: 10 + 2 * group after the reset
+    std::uint32_t per_player4b4[layout::kPlayers];               // 0x4b4 2000000 after the reset
+    std::uint32_t unk504;                                // 0x504 300 after the reset
+    std::uint32_t unk508;                                // 0x508 0
+    std::uint32_t unk50c;                                // 0x50c 500
+    std::uint32_t unk510[3];                             // 0x510 2000000
+    std::uint8_t unk51c[0x630 - 0x51c];
+    std::uint8_t use_player_population;                  // 0x630 the economy agent's population source (0x567910)
+    std::uint8_t unk631[3];
+    std::uint16_t group_words[layout::kPlayers][kUnitGroups];    // 0x634
+    std::uint8_t group_bytes[layout::kPlayers][kUnitGroups];     // 0x7c4
+};
+static_assert(offsetof(AiArmyState, unk190) == 0x190);
+static_assert(offsetof(AiArmyState, group_values) == 0x194);
+static_assert(offsetof(AiArmyState, per_player4b4) == 0x4b4);
+static_assert(offsetof(AiArmyState, unk504) == 0x504);
+static_assert(offsetof(AiArmyState, unk510) == 0x510);
+static_assert(offsetof(AiArmyState, use_player_population) == 0x630);
+static_assert(offsetof(AiArmyState, group_words) == 0x634);
+static_assert(offsetof(AiArmyState, group_bytes) == 0x7c4);
 
 // ---------------------------------------------------------------- agent data
 // The computer players' census of the world (AI_ResetAgentData clears it,

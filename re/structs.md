@@ -620,8 +620,16 @@ layouts in `src/s3re/game/ai_layout.h`.
   node's buildings per type (57 words; filled by 0x572420, copied by the
   economy agent); +0x3B6 a byte per type, non-zero: the economy agent
   skips the type (cleared by 0x565630, 0x573890); +0x550 dword the
-  fishery condition needs non-zero (probably "has fishing water"). **V**
-  (the conditions), **R** (writers).
+  fishery condition needs non-zero (probably "has fishing water"); +0xC
+  dword basic_economy (AI::CheckBasicEconomy 0x5720C0). **V** (the
+  conditions), **R** (writers).
+- **CompMapWorkerAgent globals** (ai_layout.h): AiArmyState at 0x7E58C8
+  (+0x000..+0x140 five per-player dword arrays, +0x194 dwords and +0x634
+  words and +0x7C4 bytes per player and unit group, +0x4B4 per player
+  2000000 after the reset, +0x504 / +0x50C / +0x510.. scalars, +0x630 the
+  economy agent's population source flag); AiGroupOrders at 0x7E37D0
+  (+0x320 a byte and +0x3E8 a 3-word target per player and unit group).
+  **V** (0x593F50, 0x5930F0), meanings **G**.
 - **T_ECONOMY_AGENT** (EconomyAgent, 0xA0 bytes; kind 8): +8 race
   (Player::race), +0xC the node's area, +0x10 run counter, +0x2C the last
   have * 100 / wanted ratio, +0x30 the forester condition's priority,
