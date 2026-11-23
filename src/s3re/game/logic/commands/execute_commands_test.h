@@ -31,6 +31,7 @@
 #include "test/callee_stub.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
+#include "game/enums/commands.h"
 
 #include <windows.h>
 

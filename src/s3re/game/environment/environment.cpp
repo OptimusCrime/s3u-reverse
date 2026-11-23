@@ -45,7 +45,10 @@
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/goods.h"
+#include "game/enums/terrain.h"
 #include "game/globals.h"
 #include "game/texts.h"
 #include "game/typed_fields.h"

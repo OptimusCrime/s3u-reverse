@@ -36,7 +36,7 @@
 //   mapSize (two callers tail-return it). Plain ret.
 // All thiscall (ECX = world).
 
-#include "game/enums.h"
+#include "game/enums/terrain.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"

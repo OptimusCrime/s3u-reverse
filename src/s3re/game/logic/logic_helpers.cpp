@@ -30,7 +30,8 @@
 //   that moved into the slot is not checked (the index still advances), as
 //   in the original. EAX not used by callers.
 
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/terrain.h"
 #include "game/globals.h"
 #include "game/raw.h"
 #include "game/settlers/settler_groups.h"

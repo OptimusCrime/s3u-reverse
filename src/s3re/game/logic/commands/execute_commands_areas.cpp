@@ -30,6 +30,11 @@
 #include "game/settlers/settler_groups.h"
 #include "game/typed_fields.h"
 #include "hooks.h"
+#include "game/enums/races.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/job_ids.h"
+#include "game/enums/commands.h"
 
 #include <cstdint>
 

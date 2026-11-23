@@ -1,6 +1,11 @@
 # Category values: settler jobs and types, buildings, goods, races
 
-The named values of `src/s3re/game/enums.h`, with the evidence for each
+The named values of `src/s3re/game/enums/` (one header per category,
+split from `game/enums.h` on 2026-11-23: `races.h`, `settler_types.h`
+(SettlerType, SettlerClass), `buildings.h`, `goods.h`, `piles.h`,
+`spells.h`, `job_ids.h` (SettlerJob), `commands.h` (NetMessage,
+CommandId), `terrain.h`, `directions.h`; `game/enums.h` includes them
+all), with the evidence for each
 name and how sure we are. Made in session 45 (2026-11-22, readability
 pilot). Values are decimal, with hex where the disassembly shows it.
 

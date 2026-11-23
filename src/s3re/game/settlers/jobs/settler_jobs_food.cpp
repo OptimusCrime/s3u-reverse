@@ -29,6 +29,10 @@
 
 #include "game/settlers/jobs/settler_jobs.h"
 #include "game/settlers/jobs/settler_jobs_test.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/goods.h"
+#include "game/enums/job_ids.h"
+#include "game/enums/terrain.h"
 
 #include <vector>
 

@@ -19,6 +19,8 @@
 #include "game/texts.h"
 #include "game/typed_fields.h"
 #include "msvc6/string.h"
+#include "game/enums/buildings.h"
+#include "game/enums/commands.h"
 
 #include <cstring>
 

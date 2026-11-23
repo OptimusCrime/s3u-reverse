@@ -29,6 +29,11 @@
 #include "game/tables.h"
 #include "game/texts.h"
 #include "game/typed_fields.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/job_ids.h"
+#include "game/enums/commands.h"
+#include "game/enums/terrain.h"
 
 #include <cstdint>
 

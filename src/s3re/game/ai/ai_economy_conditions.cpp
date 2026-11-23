@@ -70,7 +70,10 @@
 //              35000.
 
 #include "game/ai/ai_layout.h"
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/buildings.h"
+#include "game/enums/goods.h"
+#include "game/enums/piles.h"
 #include "game/globals.h"
 #include "game/layout.h"
 #include "game/tables.h"

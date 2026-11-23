@@ -19,7 +19,8 @@
 // 0xab/0xac), else 1; 2 for all other classes. thiscall, ret 4; EAX is the
 // result.
 
-#include "game/enums.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/job_ids.h"
 #include "game/tables.h"
 #include "game/typed_fields.h"
 #include "game/world.h"

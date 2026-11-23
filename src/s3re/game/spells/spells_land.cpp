@@ -62,7 +62,8 @@
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/spells.h"
+#include "game/enums/terrain.h"
 #include "game/globals.h"
 #include "game/tables.h"
 #include "game/texts.h"

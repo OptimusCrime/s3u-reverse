@@ -98,7 +98,12 @@
 //   5, 15, 20, 10; otherwise anything. EAX 1 or 0. ret 0x10.
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/buildings.h"
+#include "game/enums/goods.h"
+#include "game/enums/piles.h"
+#include "game/enums/terrain.h"
+#include "game/enums/directions.h"
 #include "game/raw.h"
 #include "game/replacements.h"
 #include "game/tables.h"

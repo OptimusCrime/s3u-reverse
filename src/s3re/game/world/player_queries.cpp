@@ -31,7 +31,8 @@
 //   thiscall, ret 4.
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/terrain.h"
 #include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"

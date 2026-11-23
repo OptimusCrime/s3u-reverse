@@ -58,7 +58,7 @@
 //              included), else 0 (g_aiMapWorld).
 
 #include "game/ai/ai_layout.h"
-#include "game/enums.h"
+#include "game/enums/buildings.h"
 #include "game/globals.h"
 #include "game/layout.h"
 #include "hooks.h"

@@ -32,7 +32,7 @@
 // CGameData::CountAreaSettlersOfType (0x0050e820): (area, type): settlers of
 //   one type (byte +0x1, zero-extended compare). ret 8.
 
-#include "game/enums.h"
+#include "game/enums/settler_types.h"
 #include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"

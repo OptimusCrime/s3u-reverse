@@ -81,7 +81,12 @@
 //   the CSV's proposal.)
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/goods.h"
+#include "game/enums/piles.h"
+#include "game/enums/job_ids.h"
+#include "game/enums/terrain.h"
 #include "game/globals.h"
 #include "game/replacements.h"
 #include "game/tables.h"

@@ -107,7 +107,11 @@
 //   ret 0xc.
 // All thiscall (ECX = world).
 
-#include "game/enums.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/goods.h"
+#include "game/enums/piles.h"
+#include "game/enums/job_ids.h"
+#include "game/enums/directions.h"
 #include "game/raw.h"
 #include "game/replacements.h"
 #include "game/settlers/settler_groups.h"

@@ -25,7 +25,10 @@
 // All tile positions use the original's 32-bit tile arithmetic.
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/piles.h"
+#include "game/enums/job_ids.h"
 #include "game/replacements.h"
 #include "game/tables.h"
 #include "game/texts.h"

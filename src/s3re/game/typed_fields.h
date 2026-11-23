@@ -10,7 +10,12 @@
 // The conversions are exact: each enum has the field's width, or is wider
 // (Race: int32 for the uint8 fields of settlers and buildings).
 
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/goods.h"
+#include "game/enums/piles.h"
+#include "game/enums/job_ids.h"
 #include "game/layout.h"
 #include "game/tables.h"
 

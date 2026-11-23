@@ -35,6 +35,9 @@
 #include "game/settlers/jobs/settler_jobs.h"
 #include "game/settlers/jobs/settler_jobs_test.h"
 #include "test/callee_stub.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/terrain.h"
 
 #include <cstdint>
 

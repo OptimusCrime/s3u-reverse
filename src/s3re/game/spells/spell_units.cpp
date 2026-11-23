@@ -56,7 +56,10 @@
 // caller overwrites it).
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/spells.h"
+#include "game/enums/job_ids.h"
 #include "game/globals.h"
 #include "game/tables.h"
 #include "game/texts.h"

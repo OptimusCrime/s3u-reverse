@@ -84,7 +84,7 @@
 //     the low word; EAX = it, or 0.
 
 #include "game/ai/ai_layout.h"
-#include "game/enums.h"
+#include "game/enums/buildings.h"
 #include "game/globals.h"
 #include "game/tables.h"
 #include "game/vtables.h"

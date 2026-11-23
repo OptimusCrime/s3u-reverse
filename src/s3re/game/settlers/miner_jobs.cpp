@@ -52,7 +52,9 @@
 //   stack (not reproduced; only mines call it). EAX unused. ret 4.
 // thiscall (ECX = world).
 
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/buildings.h"
+#include "game/enums/job_ids.h"
 #include "game/globals.h"
 #include "game/replacements.h"
 #include "game/typed_fields.h"

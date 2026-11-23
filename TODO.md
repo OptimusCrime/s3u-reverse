@@ -10,8 +10,9 @@ Each item: what, why, and where to start.
 
 ## Readability pass (docs/coding_style.md)
 
-- **SettlerJob names from UpdateSettlers (session 45)** for `enums.h` /
-  `re/enums.md`, once the readability rollout no longer changes enums.h
+- **SettlerJob names from UpdateSettlers (session 45)** for
+  `game/enums/job_ids.h` / `re/enums.md`, once the readability rollout no
+  longer changes the job enum
   (the handler files then switch from hex job numbers to these names):
   8/9 DiggerLower/DiggerRaise; 0x10/0x6a/0x8b Swordsman/Bowman/PikemanEnterTower;
   0x8c BowmanInTower; 0x13..0x16 Woodcutter/Stonecutter/Sawmiller/ForesterGoIn;
@@ -60,15 +61,15 @@ Each item: what, why, and where to start.
   player_queries.cpp, environment.cpp, terrain_updates.cpp, spells_land.cpp,
   settler_jobs_food.cpp and logic_helpers.cpp each define their own
   `kTerrainGrass`/`kTerrainClassGrass`, `kTerrainWornPath`,
-  `kObjectFirstTree`..., `kResourceCoal`...; move them to one header when
-  enums.h is split (Tile::terrain/object/resources, with re/enums.md
-  evidence).
+  `kObjectFirstTree`..., `kResourceCoal`...; move them to
+  `game/enums/terrain.h` (and new `objects.h`/`resources.h` headers there;
+  Tile::terrain/object/resources, with re/enums.md evidence).
 - **Typed fields:** once every user of `Settler::job`, `Settler::art`,
   `Building::art`, `Pile::good` or the race fields is converted, give the
   field its enum type in `layout.h` and drop its accessor from
   `game/typed_fields.h`.
 - **BuildingTypeAllowedForRace** (player_queries.cpp) does not fit the
-  building numbering of enums.h; find what its argument really is (the
+  building numbering of game/enums/buildings.h; find what its argument really is (the
   type numbers stay decimal numbers there until then).
 - **Map effect record fields** (layout.h `MapEffect`): +0x06, +0x2c
   (probably a graphics id), +0x32, +0x34 (the value the "stationary"
@@ -186,12 +187,6 @@ Each item: what, why, and where to start.
   see LOGBOOK session 45 "faster verification tooling". Options: better
   presets that reach the rare blocks early (then quick mode stops
   early), or `Spec.quick_cases` with the evidence named at the spec.
-- **Split `game/enums.h` by category** (user request, 2026-11-23; not
-  done in the tooling session): one header per category under
-  `game/enums/` (jobs, settler types, buildings, goods, races, spells,
-  piles, ...), `enums.h` kept as an umbrella include for now, each file
-  including only what it uses. With the emulator selecting by compiled
-  code this mainly helps build times.
 - **Full serial emulator run as a cross-check of `--jobs`:** the parallel
   runs (3 schedules: specs.py order, longest first, slow specs split into
   parts) gave identical output; the `--jobs 1` run was stopped after its

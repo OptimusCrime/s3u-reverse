@@ -27,7 +27,7 @@
 // owner in AL, EBX = the frame slot [esp+20h] (see FrameSlots).
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/job_ids.h"
 #include "game/globals.h"
 #include "game/layout.h"
 #include "game/tables.h"

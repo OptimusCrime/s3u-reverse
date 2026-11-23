@@ -23,7 +23,11 @@
 //   16. the job becomes SeekOwnArea (172, 0xac), with a valid direction.
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/goods.h"
+#include "game/enums/piles.h"
+#include "game/enums/job_ids.h"
+#include "game/enums/directions.h"
 #include "game/replacements.h"
 #include "game/tables.h"
 #include "game/texts.h"

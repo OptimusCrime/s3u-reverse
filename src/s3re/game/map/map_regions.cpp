@@ -32,7 +32,7 @@
 //      read even for x or y near 0 (two tiles before the map: other world
 //      fields), like the original.
 
-#include "game/enums.h"
+#include "game/enums/terrain.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"

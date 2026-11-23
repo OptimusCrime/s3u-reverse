@@ -146,7 +146,11 @@
 // +0x22 dock_direction, +0x30/+0x32 work_x/work_y, +0x36 unk36.
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/job_ids.h"
+#include "game/enums/directions.h"
 #include "game/replacements.h"
 #include "game/tables.h"
 #include "game/texts.h"

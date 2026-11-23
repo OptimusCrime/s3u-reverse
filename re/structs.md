@@ -144,7 +144,7 @@ goods_piles.cpp, the DebugLog `PileIncAmountLeaving: art = %u - pilno =
 | 0x1 | u8 | amount | units on the pile (up to 8; DebugLog when >= 9) | V |
 | 0x2 | u8 | leaving | units reserved to leave (PileIncAmountLeaving / PileDecAmountLeaving 0x505AC0: a pile whose units are all reserved leaves its area's goods list and comes back when one is released); building output piles use the high nibble for units on the way (FetchGoodsToTradeBuilding `+= 0x10`) | V |
 | 0x3 | u8 | coming | units on the way to the pile (PileInc/DecAmountComing, AddGoodsToPile -1) | V |
-| 0x4 | u8 | art (kind) | `PileKind` (enums.h, re/enums.md): 0 storehouse (kinds up to 0x32 act alike), 0xFC trade ring, 0xFD order (building input, site materials), 0xFE dropped on the ground, 0xFF a building's output pile; <= 8 and 0xFE counted by RecountPlayerGoods | V |
+| 0x4 | u8 | art (kind) | `PileKind` (game/enums/piles.h, re/enums.md): 0 storehouse (kinds up to 0x32 act alike), 0xFC trade ring, 0xFD order (building input, site materials), 0xFE dropped on the ground, 0xFF a building's output pile; <= 8 and 0xFE counted by RecountPlayerGoods | V |
 | 0x5 | u8 | | always 0 in the dump, never accessed | S (padding) |
 | 0x6 | u16 | x | tile | V |
 | 0x8 | u16 | y | tile | V |

@@ -51,7 +51,8 @@
 //
 // Callees go through their S3.EXE addresses (all verified replacements).
 
-#include "game/enums.h"
+#include "game/enums/job_ids.h"
+#include "game/enums/terrain.h"
 #include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"

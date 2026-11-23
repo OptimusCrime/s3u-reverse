@@ -144,7 +144,8 @@ C++ code.
     `tools/move_sources.py`). The shared headers stay in `game/` itself
     (`world.h`, `layout.h`, `globals.h`, `global_access.h`, `tables.h`,
     `texts.h`, `vtables.h`, `raw.h`, `typed_fields.h`, `replacements.h`,
-    `debug_log.h`, `enums.h`); everything else is in subsystem folders:
+    `debug_log.h`, and `enums.h`, an umbrella over the category headers
+    in `game/enums/`); everything else is in subsystem folders:
     - simulation (portable): `world/` (CGameData basics: RNG, players,
       statistics, counters, id allocators, tables, notifications), `map/`
       (tiles, directions, areas and regions, territory, flood fills, fog
@@ -180,7 +181,11 @@ C++ code.
 - **Coding style:** `docs/coding_style.md` (the user's decisions,
   2026-11-22): readable idiomatic C++ with identical behaviour, named
   values instead of magic numbers (shared enums in
-  `src/s3re/game/enums.h`, evidence in `re/enums.md`; typed access to the
+  `src/s3re/game/enums/`, one header per category: `races.h`,
+  `settler_types.h`, `buildings.h`, `goods.h`, `piles.h`, `spells.h`,
+  `job_ids.h`, `commands.h`, `terrain.h`, `directions.h`, `value.h`;
+  include the ones you use, `game/enums.h` includes all; evidence in
+  `re/enums.md`; typed access to the
   category fields through `game/typed_fields.h`), decimal except
   addresses/offsets/masks, comments tracing back to original addresses.
 
@@ -681,7 +686,7 @@ replaying, see `src/s3re/tooling/replay/command_log.h`):
    call before declaring a function `void`. A replacement that also provides
    tooling (like `--seed`) uses `S3RE_HOOK_ALWAYS` and calls the original
    itself in original mode. Follow `docs/coding_style.md`: enums from
-   `game/enums.h` for jobs, types, goods and races (via
+   `game/enums/` for jobs, types, goods and races (via
    `game/typed_fields.h`), named constants, decimal literals, helpers named
    after what each block of the original does, comments with addresses.
 3. Write differential tests with `S3RE_TEST` in the same file. Run the

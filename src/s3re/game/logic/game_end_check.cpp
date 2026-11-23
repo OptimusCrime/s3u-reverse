@@ -27,7 +27,9 @@
 // SumGoldPerPlayer are written for every owner byte (the original has room
 // for 20, real games have owners < 20).
 
-#include "game/enums.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/goods.h"
 #include "game/globals.h"
 #include "game/logic/logic_thread_layout.h"
 #include "game/replacements.h"

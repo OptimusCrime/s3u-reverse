@@ -48,7 +48,9 @@
 // thiscall (ECX = world). EAX is not used by the callers.
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/goods.h"
+#include "game/enums/spells.h"
 #include "game/globals.h"
 #include "game/tables.h"
 #include "game/texts.h"

@@ -70,7 +70,8 @@
 #include "game/pathing/pathing.h"
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/terrain.h"
+#include "game/enums/directions.h"
 #include "game/globals.h"
 #include "game/replacements.h"
 #include "game/tables.h"

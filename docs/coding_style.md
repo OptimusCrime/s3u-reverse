@@ -59,7 +59,10 @@ Readable code must still lead back to the binary:
 - Enums are `enum class Name : std::uint8_t` (or the field's width), so a
   struct field can use the enum type without changing the layout
   (`static_assert(sizeof(...))` stays). Shared enums live in
-  `src/s3re/game/enums.h` (one place; each enumerator with its value).
+  `src/s3re/game/enums/`, one header per category (`job_ids.h`,
+  `buildings.h`, `goods.h`, ...; each enumerator with its value); a file
+  includes the headers it uses, `game/enums.h` includes them all. A new
+  category gets its own header there (and a line in `game/enums.h`).
 - Names come from evidence: the game's own strings (German DebugLog
   texts, data files, the manual), RTTI, or what the code does. A value
   whose meaning isn't known yet is still named, as a placeholder with its
@@ -71,7 +74,7 @@ Readable code must still lead back to the binary:
   they are combined and masked. *Limits and tunables* (a pile holds 8, a
   carrier is sent at 5, 18 phases) are `constexpr` constants. Constants
   used by one file stay in that file's anonymous namespace; move them to a
-  header (`enums.h`, `layout.h`, `pathing.h`) once a second file needs
+  header (`game/enums/*.h`, `layout.h`, `pathing.h`) once a second file needs
   them.
 - **Placeholders** are the category's word plus the decimal value:
   `SettlerJob::Job309`, `SettlerType::Type20`, `Good::Good31`,
@@ -83,7 +86,7 @@ Readable code must still lead back to the binary:
   Never narrow a wider value into an enum: switch on the integer with
   `case Value(Good::Coal):` instead (UpdateEconomy's `ConsumersOf` gets
   goods numbers above 255).
-- `Value(e)` (enums.h) gives the underlying integer, for table indexes,
+- `Value(e)` (`game/enums/value.h`, included by every enum header) gives the underlying integer, for table indexes,
   arguments of original functions and comparisons with dword arguments
   (`job == Value(SettlerJob::UnitIdle)` when the original compares all
   32 bits).

@@ -44,7 +44,7 @@
 //   (unsigned shift, low byte) and the same blocking. ret 0x18.
 // All thiscall (ECX = world); callers ignore EAX.
 
-#include "game/enums.h"
+#include "game/enums/terrain.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"

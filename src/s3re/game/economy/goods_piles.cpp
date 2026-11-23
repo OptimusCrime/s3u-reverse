@@ -31,7 +31,8 @@
 // All thiscall (ECX = world).
 
 
-#include "game/enums.h"
+#include "game/enums/goods.h"
+#include "game/enums/piles.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"

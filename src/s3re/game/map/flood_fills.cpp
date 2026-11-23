@@ -108,7 +108,8 @@
 //   ret 8.
 // All thiscall (ECX = world).
 
-#include "game/enums.h"
+#include "game/enums/terrain.h"
+#include "game/enums/directions.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"

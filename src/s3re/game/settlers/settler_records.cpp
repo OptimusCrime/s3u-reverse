@@ -41,7 +41,8 @@
 //   0x4a33d0 (Dirk\Pathing.cpp) calls the first on a tile's settler.
 // All thiscall (ECX = world). Names provisional.
 
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/job_ids.h"
 #include "game/replacements.h"
 #include "game/tables.h"
 #include "game/typed_fields.h"

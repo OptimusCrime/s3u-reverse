@@ -42,6 +42,9 @@
 #include "game/globals.h"
 #include "game/tables.h"
 #include "game/typed_fields.h"
+#include "game/enums/buildings.h"
+#include "game/enums/commands.h"
+#include "game/enums/directions.h"
 
 namespace s3re::game::commands {
 

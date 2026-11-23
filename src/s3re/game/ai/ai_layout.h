@@ -5,7 +5,7 @@
 // Only the fields our replacements touch are named; the rest is padding
 // (unkXX) whose meaning is unknown. Offsets are checked by static_asserts.
 
-#include "game/enums.h"
+#include "game/enums/buildings.h"
 #include "game/layout.h"
 
 #include <cstddef>

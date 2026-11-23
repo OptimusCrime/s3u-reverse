@@ -23,7 +23,7 @@
 //   effect; the determinism trace and the emulator spec leave them out).
 // thiscall (ECX = world).
 
-#include "game/enums.h"
+#include "game/enums/spells.h"
 #include "game/globals.h"
 #include "game/world.h"
 #include "hooks.h"

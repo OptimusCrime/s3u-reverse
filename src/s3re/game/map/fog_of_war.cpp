@@ -49,7 +49,9 @@
 //   defined (both callers store AX). ret 8.
 // All thiscall (ECX = world).
 
-#include "game/enums.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/terrain.h"
 #include "game/globals.h"
 #include "game/typed_fields.h"
 #include "game/world.h"

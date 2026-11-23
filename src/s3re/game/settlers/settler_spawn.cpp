@@ -43,7 +43,10 @@
 //   on the graphics object [0x7a8010]. EAX = FrameCount - 1. ret 8.
 // All thiscall (ECX = world).
 
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/job_ids.h"
 #include "game/globals.h"
 #include "game/raw.h"
 #include "game/replacements.h"

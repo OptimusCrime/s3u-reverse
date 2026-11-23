@@ -3,7 +3,7 @@
 Written 2026-11-23 (session 46, parallel worktree). How commands reach the
 simulation: "Commands and lockstep" in `CLAUDE.md`; the recorder:
 `src/s3re/tooling/replay/command_log.h`. Enums: `NetMessage` and `CommandId` in
-`src/s3re/game/enums.h` (evidence in `re/enums.md`).
+`src/s3re/game/enums/commands.h` (evidence in `re/enums.md`).
 
 ## Status (session 47): reimplemented and verified
 

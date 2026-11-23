@@ -53,7 +53,12 @@
 // Coordinates are computed in 32 bits (word + offset) as in the original.
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/goods.h"
+#include "game/enums/piles.h"
+#include "game/enums/job_ids.h"
 #include "game/globals.h"
 #include "game/replacements.h"
 #include "game/tables.h"

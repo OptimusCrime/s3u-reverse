@@ -37,7 +37,8 @@
 //              2000000) and g_aiPerPlayer7e79d0 = 0. EAX = this.
 
 #include "game/ai/ai_layout.h"
-#include "game/enums.h"
+#include "game/enums/races.h"
+#include "game/enums/buildings.h"
 #include "game/globals.h"
 #include "game/layout.h"
 #include "hooks.h"

@@ -34,6 +34,12 @@
 #include "game/typed_fields.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/buildings.h"
+#include "game/enums/job_ids.h"
+#include "game/enums/commands.h"
+#include "game/enums/terrain.h"
+#include "game/enums/directions.h"
 
 #include <windows.h>
 

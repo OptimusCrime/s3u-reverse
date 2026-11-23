@@ -75,7 +75,8 @@
 
 
 #include "game/debug_log.h"
-#include "game/enums.h"
+#include "game/enums/goods.h"
+#include "game/enums/piles.h"
 #include "game/replacements.h"
 #include "game/texts.h"
 #include "game/typed_fields.h"

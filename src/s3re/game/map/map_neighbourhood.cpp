@@ -42,7 +42,8 @@
 // Tile::flags (bit 0x1 = kTileBlocked). The offset tables are
 // world->offsets[] (0x110a588 = offsets[0], 0x110a598 = offsets[1]).
 
-#include "game/enums.h"
+#include "game/enums/settler_types.h"
+#include "game/enums/terrain.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
