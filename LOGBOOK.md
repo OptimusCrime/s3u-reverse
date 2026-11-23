@@ -7,23 +7,30 @@ progress.
 
 ## Current focus
 
-**Next session (written 2026-11-23, end of session 47):**
-1. **The user's full-game recording** (they play with `python tools/play_game.py`;
-   it lands in `recordings/`): commit it with a line in recordings/README.md,
-   `check_replay.py --recording NAME --against-original --ticks N`,
-   `record_call_counts.py --recording NAME --seed S --ticks N` (right after
-   its check_replay: it reads the last s3re.log), then check the test-only
-   jobs and paths listed in TODO.md (UpdateSettlers jobs, spells, ships,
-   tower captures, shooting soldiers, late building types, command ids no
-   recording has yet) against it.
-2. **Computer players, next batches** (plan in `re/computer_players.md`,
-   TODO.md "Computer players"): A2 small READY helpers, A3 the note tree,
-   A4 the command senders (0x590990 unblocks 10), A5 land evaluation, A6
-   the agents' run functions, then 0x550f80. ~500 functions in all.
-3. **Then** ProcessEvents 0x524fa0 (UI events, ~65 KB), the file formats
-   (maps, savegames, graphics). Cleanup alongside (TODO.md "Readability
-   pass": map_effect_spawns.cpp, AI/UI/framework files, shared
-   terrain/object constants, job/landscape/spell names, enums.h split).
+**Next (written 2026-11-23, session 48; the user's order):**
+1. **The source tree move** (`docs/source_layout_plan.md`): waiting for
+   the user's answers to the plan's open questions (subsystem folders,
+   folder names, trace/replay under tooling, job enum header name,
+   `source_file` column, timing). Do it when no worktree is open, as one
+   script-driven commit.
+2. **Split `enums.h`** into `game/enums/` (after the move), then the
+   readability pass where the style guide is still missing (TODO.md
+   "Readability pass": map_effect_spawns.cpp, AI/UI/framework files,
+   shared terrain/object constants, SettlerJob names).
+3. **Computer players, continued** (TODO.md "Computer players"): A2
+   leftovers (0x591e00, 0x572420, the larger economy conditions, the
+   snapshot 0x567910), the DoomNote renames, A4 command senders, A5
+   Cevaland, A6 the agents' run functions, then 0x550a30 / 0x550f80.
+4. **File formats** (savegame loader 0x508fa0 first, then maps, graphics).
+5. **Postponed:** the user plays a full game with `python
+   tools/play_game.py`; when the recording arrives, commit it, run
+   `check_replay.py --against-original` and `record_call_counts.py`, and
+   check the test-only paths in TODO.md. The user asked to skip extra
+   synthetic whole-game runs until then.
+
+**Done in session 48:** computer players A2 (46) and A3 (30), backlog
+cleanups (trivial.py from bytes, crash-safe test stubs, UpdateSoldier spec
+memory), the source layout plan. Round end: see its entry.
 
 **Done in session 47:** `CLogicThread::ExecuteCommands` 0x535990 verified
 (all commands, one hook); computer players batch 1 (37 functions, AI
@@ -608,6 +615,26 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-23 (48): round end (computer players A2 + A3, backlog cleanups, layout plan)
+
+- Four parallel agents (entries below): computer players A2 (46
+  functions) and A3 (30), backlog cleanups (4 items), the source layout
+  plan (`docs/source_layout_plan.md`). The computer sleeping mid-round
+  didn't break anything; all agents resumed.
+- Merged main: Debug and Release build; in-process suite 587/587;
+  `run.py --changed --require-coverage` 12 specs (the agents' passes were
+  already recorded in main's passes file), 0 mismatches, full coverage.
+- Whole game, all identical to the original: scripted-seed127 (3,000
+  ticks), fun8-seed2024-input31 (5,000), random768-seed4321-input7
+  (1,500), call counts recorded; slots 1-3 (2,000 ticks); random maps
+  384,0 and 448,3 (2,000 ticks). Of the 76 new functions 61 are seen; the
+  other 15 run directly inside our own AI replacements (destructor chain,
+  note tree) and are uncounted. Totals: 703 verified, 417 seen in a
+  whole game, 286 tests only.
+- No full emulator suite this round (only the `--changed` runs); the
+  next round end should run `--full` (TODO: 5 slow specs without a
+  recorded pass).
 
 ### 2026-11-23 (48): computer players A2 (parallel worktree)
 
