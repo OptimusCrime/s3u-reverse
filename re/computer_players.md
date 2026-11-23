@@ -46,8 +46,10 @@ kind (`AI::SetWord4`). Slot 8 (+0x20) is each agent's "run" (R):
 
 | Kind | Class | vtable | Constructor | Slot 8 (run) | Subtree |
 |---|---|---|---|---|---|
-| 0 | `LOCAL_WARE_REQUEST_AGENT` | 0x65a7f0 | 0x57ab50 | 0x59f200 (NoOp) | |
-| 1, 2, 4 | `HOUSE_REQUEST_AGENT`, `HOUSE_GROUND_REQUEST_AGENT`, `T_DO_BUILD_HOUSE_AGENT` (which is which: to confirm in 0x56f6d0's jump table) | 0x65a780 / 0x65a7b8 / 0x65a710 | | NoOp | |
+| 0 | `LOCAL_WARE_REQUEST_AGENT` | 0x65a7f0 | 0x57ab50 (V) | 0x59f200 (NoOp) | |
+| 1 | `HOUSE_GROUND_REQUEST_AGENT` | 0x65a7b8 | 0x5764f0 (V) | NoOp | |
+| 2 | `HOUSE_REQUEST_AGENT` | 0x65a780 | 0x5787a0 (V) | NoOp | |
+| 4 | `T_DO_BUILD_HOUSE_AGENT` | 0x65a710 | 0x5654b0 (V) | NoOp | |
 | 3 | `GLOBAL_EXPAND_EMPIRE_AGENT` | 0x65a748 | 0x56cd00 (V) | 0x56cd20 | 29 fns, 1.4k ins |
 | 5 | `COMPUTER_PLAYER_AGENT` | 0x65a6d8 | 0x584680 (V) | 0x5846a0 | 2 fns |
 | 6 | `T_MAP_WORKER_AGENT` | 0x65a6a0 | 0x57cda0 (V) | 0x57cde0 | 56 fns, 7.3k ins |
@@ -73,6 +75,16 @@ callbacks 0x582480 / 0x582510 call. The slots the CComputerPlayer calls
 | 7, 8 | RunAgents 0x551590 | () | slot 8 (its own work) when slot 7 says so |
 | 9 | ReportToRequester 0x582480 | (parent note, note, result, value) | a note the agent made reports back (result 0 / 100 at the callers) |
 | 10 | CancelAtHandler 0x582510 | (note) | a note the agent took is withdrawn (G) |
+
+Kinds 1, 2, 4 from the factory's jump table 0x56fa68 (session 48; enum
+`ai::AgentKind`). Each request agent handles the notes of the type with
+its number (`ai::NoteType`: 0 local ware request, 1 house ground
+request, 2 house request, 4 "do build house"): GLOBAL_EXPAND_EMPIRE
+(0x56cd90) and T_MAP_WORKER (0x57ce90) make T_DO_BUILD_HOUSE_NOTEs
+(building type, x, y, value; e.g. a small tower); T_DO_BUILD_HOUSE_AGENT's
+slot 3 turns one into a HOUSE_REQUEST_NOTE below it; HOUSE_REQUEST_AGENT's
+slot 3 makes a HOUSE_GROUND_REQUEST_NOTE (0x4c bytes) and a
+LOCAL_WARE_REQUEST_NOTE below that (G from the vtables they store).
 
 **Notes**: `BLACK_BOARD_NOTE` and `HOUSE_REQUEST_NOTE` (0x65a558),
 `HOUSE_GROUND_REQUEST_NOTE` (0x65a598), `LOCAL_WARE_REQUEST_NOTE`
@@ -268,7 +280,7 @@ Frontier after batch 1 (`python tools/frontier.py --range 54cbd0 59fcd0`):
    in all of them); `--skip-hooks` can isolate an AI replacement when a
    replay diverges.
 
-Open questions: kinds 1, 2, 4 of the factory; who makes the
+Open questions: who makes the
 AiPlayerData nodes (one per economy area, see step 4 of 0x550f80) and
 when; what
 0x4318a0's flag is in multiplayer (G: only the host runs the AI).

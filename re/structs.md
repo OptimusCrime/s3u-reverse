@@ -617,6 +617,11 @@ layouts in `src/s3re/game/ai_layout.h`.
   +0x18 handler: kind of the agent that took it (written by the agents'
   slot 3 with flag 2; CancelAtHandler 0x582510 calls its slot 10). **V**
   (0x582400..0x5824D0, package A3), flag 2 and +0x18's writer **R**.
+- **Request notes** (HOUSE_REQUEST_NOTE, LOCAL_WARE_REQUEST_NOTE,
+  T_DO_BUILD_HOUSE_NOTE; `RequestNote` in ai_layout.h): +0x1C building
+  type, +0x1E x, +0x20 y, +0x22 a value (32 for the expansion's small
+  towers), +0x24 / +0x26 cleared (not by the local ware note's init).
+  **V** (layout, inits 0x57ab20 / 0x578760 / 0x565470), meanings **G**.
 - **BLACK_BOARD_AGENT** as the CComputerPlayer uses it: +0 vtable, +4 kind
   (index in agents[]). Virtual slots called: 0 scalar deleting
   destructor, 2 note types it handles (into a word buffer, AX = count), 3

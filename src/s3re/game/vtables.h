@@ -48,6 +48,8 @@ inline constexpr std::uint32_t kCPlayerIndex = 0x65d5ec;    // Lobby::priv::CPla
 inline constexpr std::uint32_t kCDataError = 0x65d4b8;      // Lobby::priv::CDataError
 // Computer players (Rainer\*)
 inline constexpr std::uint32_t kCComputerPlayer = 0x65a530;  // CComputerPlayer
+inline constexpr std::uint32_t kBlackBoardNote = 0x65a56c;    // BLACK_BOARD_NOTE
+inline constexpr std::uint32_t kDoBuildHouseNote = 0x65a584;  // T_DO_BUILD_HOUSE_NOTE
 // Watcom container library
 inline constexpr std::uint32_t kWCExcept = 0x655438;                    // WCExcept (base of the containers)
 inline constexpr std::uint32_t kWCIsvListBase = 0x655fa4;               // WCIsvListBase

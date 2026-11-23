@@ -90,6 +90,33 @@ constexpr std::size_t kRun = 8;           // () the agent's own work
 constexpr std::size_t kNoteReported = 9;  // (parent note, note, result, value) a note made by it reports back (0x582480)
 constexpr std::size_t kCancelNote = 10;   // (note) G: a note it took is withdrawn (0x582510)
 }  // namespace agent_slot
+// The agent kinds (ComputerPlayer::agents index, word +4), from the
+// factory AI::CreateAgent 0x56f6d0 (jump table 0x56fa68; each constructor
+// passes its kind to AI_SetWord4).
+enum class AgentKind : std::uint16_t {
+    LocalWareRequest = 0,     // LOCAL_WARE_REQUEST_AGENT, 0x57ab50
+    HouseGroundRequest = 1,   // HOUSE_GROUND_REQUEST_AGENT, 0x5764f0
+    HouseRequest = 2,         // HOUSE_REQUEST_AGENT, 0x5787a0
+    GlobalExpandEmpire = 3,   // GLOBAL_EXPAND_EMPIRE_AGENT, 0x56cd00
+    DoBuildHouse = 4,         // T_DO_BUILD_HOUSE_AGENT, 0x5654b0
+    ComputerPlayer = 5,       // COMPUTER_PLAYER_AGENT, 0x584680
+    MapWorker = 6,            // T_MAP_WORKER_AGENT, 0x57cda0
+    Attack = 7,               // T_ATTACK_AGENT, 0x55ebe0
+    Economy = 8,              // T_ECONOMY_AGENT, 0x567850
+    Safety = 9,               // T_SAFETY_AGENT, 0x586830
+    CentrumCheck = 10,        // CCentrumCheckAgent, 0x560dd0
+};
+
+// The note types (BlackBoardNote::type): each is handled by the request
+// agent of the same number (handlers[type] = kind; 0x576500, the
+// HOUSE_GROUND_REQUEST_AGENT's slot 2, lists type 1).
+enum class NoteType : std::uint16_t {
+    LocalWareRequest = 0,    // LOCAL_WARE_REQUEST_NOTE (init 0x57ab20)
+    HouseGroundRequest = 1,  // HOUSE_GROUND_REQUEST_NOTE (G: its init is not found yet)
+    HouseRequest = 2,        // HOUSE_REQUEST_NOTE (init 0x578760)
+    DoBuildHouse = 4,        // T_DO_BUILD_HOUSE_NOTE (init 0x565470)
+};
+
 constexpr std::uint16_t kAgentDone = 100;  // AX of kTakeNote / kWorkOnNote that ends the handler loop (one handler per type anyway)
 constexpr std::uint16_t kNoAgent = 0xffff;
 
@@ -98,6 +125,25 @@ struct BlackBoardAgent {
     std::uint16_t kind;         // 0x04
 };
 static_assert(offsetof(BlackBoardAgent, kind) == 4);
+
+// The request notes' own fields, from their init functions (0x57ab20,
+// 0x578760, 0x565470); meanings G: a T_DO_BUILD_HOUSE_NOTE is made with
+// (building type, x, y, value) (0x56d510: type 15, small tower, value 32),
+// its HOUSE_REQUEST_NOTE gets the same four (0x56551c), a
+// LOCAL_WARE_REQUEST_NOTE the first three (0x5788aa).
+struct RequestNote {
+    BlackBoardNote base;          // 0x00
+    std::uint16_t unk1a;
+    std::uint16_t building_type;  // 0x1c (G)
+    std::uint16_t x;              // 0x1e (G)
+    std::uint16_t y;              // 0x20 (G)
+    std::uint16_t value22;        // 0x22 not in LOCAL_WARE_REQUEST_NOTE's init
+    std::uint16_t unk24;          // 0x24 0 after the init (not LOCAL_WARE_REQUEST_NOTE's)
+    std::uint16_t unk26;          // 0x26 the same
+};
+static_assert(offsetof(RequestNote, building_type) == 0x1c);
+static_assert(offsetof(RequestNote, value22) == 0x22);
+static_assert(offsetof(RequestNote, unk26) == 0x26);
 
 // ---------------------------------------------------------------- CComputerPlayer
 // One per computer player (20 pointers at CLogicThread+0x350; constructor

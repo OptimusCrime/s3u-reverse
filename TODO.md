@@ -101,8 +101,7 @@ Each item: what, why, and where to start.
 - **Package A5: Cevaland** (land evaluation) and **A6: the agents' run
   functions** (slot 8), smallest first; then 0x550f80 and the
   constructor 0x550900 / 0x550a30.
-- **Open:** which classes kinds 1, 2, 4 of AI::CreateAgent make (read its
-  jump table 0x56fa68); who creates the AiPlayerData nodes (one per
+- **Open:** who creates the AiPlayerData nodes (one per
   economy area; list +0x200 is the deletion queue, session 48); `AiList50Owner` in
   ai_layout.h is the same object as ComputerPlayer (merge them when
   ai_helpers.cpp is next touched); a world-field list of the AI range with

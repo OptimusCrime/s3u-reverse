@@ -4474,6 +4474,27 @@ SPECS += [
               globals=note_player_global),
 ]
 
+# -- package A3 batch 2: the request agents' constructors, the request notes'
+# set-up and destruction (ai_request_notes.cpp); the object at the world
+# base. The agent constructors' EAX is not used (the factory returns the
+# object; its upper half is the caller's). Bit 0 of a deleting destructor's
+# flags frees the object (the emulator's operator delete, compared).
+
+SPECS += [
+    Spec("LOCAL_WARE_REQUEST_AGENT_Construct", 0x0057ab50, "thiscall", [], eax_mask=0),
+    Spec("HOUSE_GROUND_REQUEST_AGENT_Construct", 0x005764f0, "thiscall", [], eax_mask=0),
+    Spec("HOUSE_REQUEST_AGENT_Construct", 0x005787a0, "thiscall", [], eax_mask=0),
+    Spec("T_DO_BUILD_HOUSE_AGENT_Construct", 0x005654b0, "thiscall", [], eax_mask=0),
+    Spec("LOCAL_WARE_REQUEST_NOTE_Init", 0x0057ab20, "thiscall", [anything, anything, anything]),
+    Spec("HOUSE_REQUEST_NOTE_Init", 0x00578760, "thiscall", [anything, anything, anything, anything]),
+    Spec("T_DO_BUILD_HOUSE_NOTE_Init", 0x00565470, "thiscall", [anything, anything, anything, anything]),
+    Spec("T_DO_BUILD_HOUSE_NOTE_Construct", 0x005801c0, "thiscall", [anything, anything, anything, anything]),
+    Spec("BLACK_BOARD_NOTE_Construct", 0x005801b0, "thiscall", []),
+    Spec("BLACK_BOARD_NOTE_Destroy", 0x00565590, "thiscall", [], eax_mask=0),
+    Spec("BLACK_BOARD_NOTE_DeletingDestroy", 0x005655a0, "thiscall", [anything]),
+    Spec("RequestNote_DeletingDestroy", 0x0056f6b0, "thiscall", [anything]),
+]
+
 
 # -- batch 26: exception classes (win32_exceptions.cpp) -----------------------
 #
