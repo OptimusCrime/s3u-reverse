@@ -27,6 +27,9 @@ Usage:
   python tools/source_files.py strings [FILTER]     strings stored after each
                                                     path (clues to the content)
   python tools/source_files.py which ADDR [ADDR...] which file an address is in
+  python tools/source_files.py apply                fill the source_file column of
+                                                    re/functions.csv (rerun after scan;
+                                                    inventory.py check verifies it)
 Options: --asm PATH, --exe PATH
 """
 
@@ -266,6 +269,72 @@ def load_ranges():
              f"{r['folder']}/{r['file']}") for r in rows]
 
 
+# Categories of library code: no original game source file.
+LIBRARY_CATEGORIES = {"crt", "stl", "mfc", "watcom", "compiler"}
+INVENTORY = os.path.join(ROOT, "re", "functions.csv")
+
+
+def source_file_of(func, ranges):
+    """The source_file column for a function start (see apply)."""
+    inside = [n for lo, hi, n in ranges if lo <= func <= hi]
+    if inside:
+        return inside[0]
+    before = [n for lo, hi, n in ranges if hi < func]
+    after = [n for lo, hi, n in ranges if lo > func]
+    first = before[-1].rpartition("/")[2] if before else "start"
+    last = after[0].rpartition("/")[2] if after else "end"
+    return f"unnamed: {first}..{last}"
+
+
+def expected_column(row, ranges):
+    address = int(row["address"], 16)
+    if row["category"] in LIBRARY_CATEGORIES or address >= CRT_START:
+        return ""
+    return source_file_of(address, ranges)
+
+
+def read_inventory():
+    with open(INVENTORY, encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        return list(reader.fieldnames or []), list(reader)
+
+
+def check_errors():
+    """Errors for inventory.py check: the column must equal what apply writes."""
+    fields, rows = read_inventory()
+    if "source_file" not in fields:
+        return ["functions.csv has no source_file column (python tools/source_files.py apply)"]
+    ranges = load_ranges()
+    wrong = [r for r in rows if r["source_file"] != expected_column(r, ranges)]
+    if not wrong:
+        return []
+    first = wrong[0]
+    return [f"functions.csv: source_file out of date in {len(wrong)} row(s), e.g. "
+            f"{first['address']} '{first['source_file']}' instead of "
+            f"'{expected_column(first, ranges)}' (python tools/source_files.py apply)"]
+
+
+def apply(args):
+    fields, rows = read_inventory()
+    if "source_file" not in fields:
+        fields.insert(fields.index("notes"), "source_file")
+    ranges = load_ranges()
+    changed = 0
+    for row in rows:
+        value = expected_column(row, ranges)
+        if row.get("source_file") != value:
+            row["source_file"] = value
+            changed += 1
+    with open(INVENTORY, "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields, lineterminator="\n")
+        w.writeheader()
+        w.writerows(rows)
+    named = sum(1 for r in rows if r["source_file"] and not r["source_file"].startswith("unnamed"))
+    unnamed = sum(1 for r in rows if r["source_file"].startswith("unnamed"))
+    print(f"source_file: {changed} row(s) changed; {named} in a named file, "
+          f"{unnamed} in unnamed files, {len(rows) - named - unnamed} library/CRT (empty)")
+
+
 def which(args):
     ranges = load_ranges()
     starts = load_function_starts()
@@ -317,6 +386,7 @@ def main():
                    default="after", help="which path data belongs to (after: best fit)")
     s.add_argument("--all-data", action="store_true",
                    help="count references to any data, not only strings")
+    sub.add_parser("apply")
     w = sub.add_parser("which")
     w.add_argument("addresses", nargs="+")
     t = sub.add_parser("strings")
@@ -324,7 +394,7 @@ def main():
     t.add_argument("--window", type=lambda x: int(x, 0), default=0x3000)
     t.add_argument("--limit", type=int, default=25)
     args = p.parse_args()
-    {"scan": scan, "which": which, "strings": show_strings}[args.cmd](args)
+    {"scan": scan, "which": which, "strings": show_strings, "apply": apply}[args.cmd](args)
 
 
 if __name__ == "__main__":

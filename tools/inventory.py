@@ -41,6 +41,20 @@ Columns of re/functions.csv:
                       reimplemented)
   verified_by  Space-separated S3RE_TEST names. Required when verified;
                optional (partial evidence) when reimplemented.
+  source_file  Generated, never edited by hand: the original source file the
+               function lies in, from the code ranges of re/source_files.csv
+               (python tools/source_files.py apply, rerun after `scan`).
+                 Volker/GodlyEvents.cpp   inside that file's range
+                 unnamed: A.cpp..B.cpp    between the ranges of two named
+                                          files (start/end at the edges)
+                 (empty)                  library code (category crt, stl,
+                                          mfc, watcom, compiler) or the CRT
+                                          (from 0x61e4ef)
+               The ranges are estimates (re/source_files.md, "Limits"): a
+               range runs from the first to the last function that voted
+               for the file, so the real file can be larger, unnamed files
+               can sit inside a range, and ranges of one or two functions
+               are weak evidence. `check` verifies the column is in sync.
   notes        Free text.
 """
 
@@ -57,7 +71,8 @@ BASELINE = ROOT / "re" / "ghidra_functions.tsv"
 EXTRA_FUNCTIONS = ROOT / "re" / "extra_functions.tsv"
 SOURCE_DIR = ROOT / "src"
 
-COLUMNS = ["address", "name", "category", "status", "hook", "verified_by", "notes"]
+COLUMNS = ["address", "name", "category", "status", "hook", "verified_by", "source_file",
+           "notes"]
 CATEGORIES = ("game", "crt", "stl", "mfc", "watcom", "compiler")
 STATUSES = ("classified", "identified", "reimplemented", "verified")
 HOOKS = ("none", "passthrough", "replaced", "unverified")
@@ -179,6 +194,9 @@ def check() -> int:
 
     import whole_game  # here: progress.py imports this module the other way round
     errors.extend(whole_game.check_errors())
+
+    import source_files  # the generated source_file column
+    errors.extend(source_files.check_errors())
 
     import typed_access_lint  # no raw world offsets in src/ (CLAUDE.md)
     errors.extend(typed_access_lint.findings())

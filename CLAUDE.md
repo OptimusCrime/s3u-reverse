@@ -559,6 +559,13 @@ replaying, see `src/s3re/tooling/replay/command_log.h`):
   makes 9,837 known functions.
 - `re/functions.csv` holds one row per function we have identified. The
   columns are documented in `tools/inventory.py`. Names use `Class::Method`.
+  The `source_file` column is generated (never edited by hand) by `python
+  tools/source_files.py apply` from `re/source_files.csv`: the original
+  file (`Volker/GodlyEvents.cpp`), `unnamed: A.cpp..B.cpp` between two
+  named ranges, or empty for library code and the CRT. `inventory.py
+  check` fails when it is out of date: rerun `apply` after `source_files.py
+  scan` and after tools that add rows (`rtti.py apply`, `merge_survey.py`).
+  The ranges are estimates (`re/source_files.md`, "Limits").
 - Ghidra names made through REA are lost when the session closes. At the
   start of a session, re-apply them from `python tools/inventory.py names`
   with `set_addresses_names`.
@@ -602,8 +609,9 @@ replaying, see `src/s3re/tooling/replay/command_log.h`):
 - Only files with that assert macro left a path. Most of the simulation
   (`0x4c85a0`–`0x509980`, between DrawBuilding.cpp and GameDataSave.cpp)
   is in unnamed files. The German strings are Latin-1.
-- Our source tree is not reorganized after this yet; that is planned
-  separately (see `LOGBOOK.md`).
+- Our source tree follows subsystems, not these files (decided
+  2026-11-23, `docs/source_layout_plan.md`); the original file of each
+  function is the `source_file` column of `re/functions.csv`.
 
 ## Class structure (RTTI)
 

@@ -10,6 +10,15 @@ example `E:\Siedler3\Volker\LogicHandleNet.cpp`. These are leftovers of
 assert-style macros (`__FILE__`); no code references them. Their *positions*
 still tell us where the original source files are in the binary.
 
+The result per function is the generated `source_file` column of
+`re/functions.csv` (`python tools/source_files.py apply`, checked by
+`tools/inventory.py check`): a named file when the function lies inside
+its range, `unnamed: A.cpp..B.cpp` when it lies between two ranges, empty
+for library code. It carries the confidence of the ranges (see "Limits"
+below): a function inside a range with many votes is very likely in that
+file; near a range's ends or in a range of one or two functions it is a
+guess.
+
 ## How the code is mapped to files
 
 The MSVC linker puts each `.obj` file's initialized data (in this build the
