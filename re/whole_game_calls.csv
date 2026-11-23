@@ -4952,14 +4952,14 @@ address,name,source,ticks,calls,commit,date,note
 0x00551910,AI::List32Add,save:slot 1.sav,2000,0,bde052e,2026-11-23,
 0x00551910,AI::List32Add,save:slot 2.sav,2000,0,bde052e,2026-11-23,
 0x00551910,AI::List32Add,save:slot 3.sav,2000,0,bde052e,2026-11-23,
-0x00551940,CComputerPlayer::RemoveFromList200,"random:384,0 seed 1234",2000,7,bde052e,2026-11-23,
-0x00551940,CComputerPlayer::RemoveFromList200,"random:448,3 seed 1234",2000,6,bde052e,2026-11-23,
-0x00551940,CComputerPlayer::RemoveFromList200,replay:fun8-seed2024-input31,3000,67,bde052e,2026-11-23,seed 2024
-0x00551940,CComputerPlayer::RemoveFromList200,replay:random768-seed4321-input7,3000,38,bde052e,2026-11-23,seed 4321
-0x00551940,CComputerPlayer::RemoveFromList200,replay:scripted-seed127,3000,9,bde052e,2026-11-23,seed 1234
-0x00551940,CComputerPlayer::RemoveFromList200,save:slot 1.sav,2000,0,bde052e,2026-11-23,
-0x00551940,CComputerPlayer::RemoveFromList200,save:slot 2.sav,2000,0,bde052e,2026-11-23,
-0x00551940,CComputerPlayer::RemoveFromList200,save:slot 3.sav,2000,1,bde052e,2026-11-23,
+0x00551940,CComputerPlayer::RemoveDoomedNote,"random:384,0 seed 1234",2000,7,bde052e,2026-11-23,
+0x00551940,CComputerPlayer::RemoveDoomedNote,"random:448,3 seed 1234",2000,6,bde052e,2026-11-23,
+0x00551940,CComputerPlayer::RemoveDoomedNote,replay:fun8-seed2024-input31,3000,67,bde052e,2026-11-23,seed 2024
+0x00551940,CComputerPlayer::RemoveDoomedNote,replay:random768-seed4321-input7,3000,38,bde052e,2026-11-23,seed 4321
+0x00551940,CComputerPlayer::RemoveDoomedNote,replay:scripted-seed127,3000,9,bde052e,2026-11-23,seed 1234
+0x00551940,CComputerPlayer::RemoveDoomedNote,save:slot 1.sav,2000,0,bde052e,2026-11-23,
+0x00551940,CComputerPlayer::RemoveDoomedNote,save:slot 2.sav,2000,0,bde052e,2026-11-23,
+0x00551940,CComputerPlayer::RemoveDoomedNote,save:slot 3.sav,2000,1,bde052e,2026-11-23,
 0x00551970,AI::WordListInsert,"random:384,0 seed 1234",2000,56,57b8acf,2026-11-23,
 0x00551970,AI::WordListInsert,"random:448,3 seed 1234",2000,48,57b8acf,2026-11-23,
 0x00551970,AI::WordListInsert,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,32,5536f09,2026-11-10,

@@ -49,6 +49,7 @@ static_assert(sizeof(AiPlayerSetup) == 0x180);
 constexpr std::size_t kMaxNotes = 300;
 constexpr std::uint16_t kNoNote = 0xffff;
 constexpr std::uint16_t kNoteDispatched = 0x0001;  // set before the note goes to its handler (0x551510)
+constexpr std::uint16_t kNoteTaken = 0x0002;       // set by the agent that takes it, with BlackBoardNote::handler (slot 3: 0x5654d0, 0x5787c0)
 constexpr std::uint16_t kNoteActive = 0x0004;      // in ComputerPlayer::active_notes (0x5515e0 / 0x551630)
 
 struct BlackBoardNote {
@@ -61,15 +62,42 @@ struct BlackBoardNote {
     std::uint16_t parent;         // 0x10 id or kNoNote (then it is a root note)
     std::uint16_t next_sibling;   // 0x12
     std::uint16_t first_child;    // 0x14
-    std::uint16_t agent16;        // 0x16 agent kind (ComputerPlayer::agents) 0x582480 calls slot 9 of
-    std::uint16_t agent18;        // 0x18 agent kind 0x582510 calls slot 10 of
+    std::uint16_t requester;      // 0x16 kind of the agent that made the note (0x551270), or kNoAgent; 0x582480 reports to its slot 9
+    std::uint16_t handler;        // 0x18 kind of the agent that took the note (its slot 3); 0x582510 calls its slot 10
 };
 static_assert(offsetof(BlackBoardNote, flags) == 0x04);
 static_assert(offsetof(BlackBoardNote, id) == 0x08);
 static_assert(offsetof(BlackBoardNote, parent) == 0x10);
 static_assert(offsetof(BlackBoardNote, first_child) == 0x14);
-static_assert(offsetof(BlackBoardNote, agent18) == 0x18);
+static_assert(offsetof(BlackBoardNote, requester) == 0x16);
+static_assert(offsetof(BlackBoardNote, handler) == 0x18);
 static_assert(sizeof(BlackBoardNote) == 0x1a);
+
+// ---------------------------------------------------------------- BLACK_BOARD_AGENT
+// An agent as the CComputerPlayer sees it: a vtable and its kind (+4, set
+// by AI_SetWord4; the index in ComputerPlayer::agents). The virtual slots
+// the CComputerPlayer calls (package A3, ai_computer_player.cpp; all
+// thiscall, callee pops) and what they are for (R from the callers, G where
+// marked):
+namespace agent_slot {
+constexpr std::size_t kDeletingDestructor = 0;  // (flags) also slot 0 of the notes
+constexpr std::size_t kNoteTypes = 2;     // (u16* types) writes the note types it handles; AX = their count (0x551400; 0x576500 writes 1 type)
+constexpr std::size_t kTakeNote = 3;      // (note) a new note of a type it handles (0x551510)
+constexpr std::size_t kWorkOnNote = 4;    // (note) an active note of its type, when not busy (0x5516e0)
+constexpr std::size_t kBusy = 5;          // () non-zero: kWorkOnNote is skipped this time
+constexpr std::size_t kWantsToRun = 7;    // () non-zero: kRun is called (0x551590)
+constexpr std::size_t kRun = 8;           // () the agent's own work
+constexpr std::size_t kNoteReported = 9;  // (parent note, note, result, value) a note made by it reports back (0x582480)
+constexpr std::size_t kCancelNote = 10;   // (note) G: a note it took is withdrawn (0x582510)
+}  // namespace agent_slot
+constexpr std::uint16_t kAgentDone = 100;  // AX of kTakeNote / kWorkOnNote that ends the handler loop (one handler per type anyway)
+constexpr std::uint16_t kNoAgent = 0xffff;
+
+struct BlackBoardAgent {
+    const void* const* vtable;  // 0x00
+    std::uint16_t kind;         // 0x04
+};
+static_assert(offsetof(BlackBoardAgent, kind) == 4);
 
 // ---------------------------------------------------------------- CComputerPlayer
 // One per computer player (20 pointers at CLogicThread+0x350; constructor
@@ -79,7 +107,7 @@ static_assert(sizeof(BlackBoardNote) == 0x1a);
 constexpr std::size_t kRootNoteSlots = 100;
 constexpr std::size_t kPendingNoteSlots = 50;
 constexpr std::size_t kActiveNoteSlots = 100;
-constexpr std::size_t kList200Slots = 50;
+constexpr std::size_t kDoomedNoteSlots = 50;
 constexpr std::size_t kAgentKinds = 11;
 
 struct ComputerPlayer {
@@ -90,10 +118,10 @@ struct ComputerPlayer {
     std::uint16_t pending_note_count;                  // 0x132
     std::uint16_t active_notes[kActiveNoteSlots];      // 0x134 notes with kNoteActive
     std::uint16_t active_note_count;                   // 0x1fc
-    std::uint16_t unk1fe;
-    std::uint16_t list200[kList200Slots];              // 0x200 (AI_List32Add; meaning unknown)
-    std::uint16_t list200_count;                       // 0x264
-    std::uint16_t handlers[6];                         // 0x266 per note type: agent kind, 0xffff = none (0x551510)
+    std::uint16_t active_cursor;                       // 0x1fe next index into active_notes (0x551670, round robin)
+    std::uint16_t doomed_notes[kDoomedNoteSlots];      // 0x200 notes to delete after the next active note's turn (AI_List32Add; 0x551790)
+    std::uint16_t doomed_note_count;                   // 0x264
+    std::uint16_t handlers[6];                         // 0x266 per note type: the kind of the agent that handles it, kNoAgent = none (0x551400, 0x551510)
     std::uint8_t player_number;                        // 0x272
     std::uint8_t unk273;
     std::uint16_t timer274;                            // 0x274 the three step counters of 0x550f80
@@ -103,7 +131,7 @@ struct ComputerPlayer {
     std::uint16_t timer27c;                            // 0x27c
     std::uint16_t unk27e;
     BlackBoardNote* notes[kMaxNotes];                  // 0x280 by id
-    std::uint32_t agents[kAgentKinds];                 // 0x730 BLACK_BOARD_AGENT* by kind; 0x550f80 runs slot 8 of [7] (probably T_ATTACK_AGENT) when the player has no nodes
+    BlackBoardAgent* agents[kAgentKinds];              // 0x730 by kind (0x551400 adds, 0x551490 deletes); 0x550f80 runs slot 8 of [7] (probably T_ATTACK_AGENT) when the player has no nodes
     std::uint32_t world;                               // 0x75c CGameData*
     std::uint32_t message_queue;                       // 0x760 the logic->net MessageQueue (commands are pushed there)
     std::uint32_t steps;                               // 0x764 +1 per 0x550f80
@@ -113,7 +141,7 @@ struct ComputerPlayer {
     std::uint32_t setup_index;                         // 0x770 index into g_aiPlayerSetups
     std::uint32_t settlement_lists;                    // 0x774 12-byte entries per player: [+4] list of AiPlayerData nodes, [+8] their count
     std::uint32_t data;                                // 0x778 AiPlayerData* (the current node of that list)
-    std::uint32_t data_key;                            // 0x77c word +8 of the current node
+    std::uint32_t area;                                // 0x77c the current node's economy area (node word +8; a tile area id, 0x551a70)
 };
 static_assert(offsetof(ComputerPlayer, root_notes) == 0x004);
 static_assert(offsetof(ComputerPlayer, root_note_count) == 0x0cc);
@@ -121,8 +149,9 @@ static_assert(offsetof(ComputerPlayer, pending_notes) == 0x0ce);
 static_assert(offsetof(ComputerPlayer, pending_note_count) == 0x132);
 static_assert(offsetof(ComputerPlayer, active_notes) == 0x134);
 static_assert(offsetof(ComputerPlayer, active_note_count) == 0x1fc);
-static_assert(offsetof(ComputerPlayer, list200) == 0x200);
-static_assert(offsetof(ComputerPlayer, list200_count) == 0x264);
+static_assert(offsetof(ComputerPlayer, active_cursor) == 0x1fe);
+static_assert(offsetof(ComputerPlayer, doomed_notes) == 0x200);
+static_assert(offsetof(ComputerPlayer, doomed_note_count) == 0x264);
 static_assert(offsetof(ComputerPlayer, handlers) == 0x266);
 static_assert(offsetof(ComputerPlayer, player_number) == 0x272);
 static_assert(offsetof(ComputerPlayer, timer27c) == 0x27c);
@@ -148,15 +177,24 @@ struct AiCandidate {
 static_assert(sizeof(AiCandidate) == 6);
 
 struct AiPlayerData {
-    std::uint8_t unk000[0x26];
+    std::uint8_t unk000[0x10];
+    // G: the economy lacks wood / stone; 0x551a70 then only starts a
+    // woodcutter, sawmill, forester (wood) / a stonecutter (stone) or a
+    // small tower.
+    std::uint32_t short_of_wood;          // 0x010
+    std::uint32_t short_of_stone;         // 0x014
+    std::uint8_t unk018[0x0e];
     // Indexes 0..56 are building types: best[type].score is the build
     // priority that 0x551b10 raises by g_aiBuildPrioritySteps[type] up to
     // g_aiBuildPriorityCaps[type] (only while non-zero); candidate_values
     // are per-type countdowns (0x550f80 lowers 57 of them by one per step
-    // in every node of the list). The rest of best[] is not known.
+    // in every node of the list). best[57 + type] holds the candidate last
+    // handed on for building (0x58ecb0 moves best[type] there and clears it).
     AiCandidate best[114];                // 0x026
     std::uint16_t candidate_values[1];    // 0x2d2 (count unknown, at least 57)
 };
+static_assert(offsetof(AiPlayerData, short_of_wood) == 0x10);
+static_assert(offsetof(AiPlayerData, short_of_stone) == 0x14);
 static_assert(offsetof(AiPlayerData, best) == 0x26);
 static_assert(offsetof(AiPlayerData, candidate_values) == 0x2d2);
 

@@ -46,6 +46,8 @@ inline constexpr std::uint32_t kCLMMessageBlock = 0x65d4fc;  // Lobby::CLMMessag
 inline constexpr std::uint32_t kCLMGeneric = 0x65d52c;      // Lobby::CLMGeneric
 inline constexpr std::uint32_t kCPlayerIndex = 0x65d5ec;    // Lobby::priv::CPlayerIndex
 inline constexpr std::uint32_t kCDataError = 0x65d4b8;      // Lobby::priv::CDataError
+// Computer players (Rainer\*)
+inline constexpr std::uint32_t kCComputerPlayer = 0x65a530;  // CComputerPlayer
 // Watcom container library
 inline constexpr std::uint32_t kWCExcept = 0x655438;                    // WCExcept (base of the containers)
 inline constexpr std::uint32_t kWCIsvListBase = 0x655fa4;               // WCIsvListBase

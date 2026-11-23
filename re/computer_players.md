@@ -57,9 +57,22 @@ kind (`AI::SetWord4`). Slot 8 (+0x20) is each agent's "run" (R):
 | 10 | `CCentrumCheckAgent` | 0x65a5c0 | 0x560dd0 (V) | 0x560e00 | 48 fns, 4.3k ins |
 
 The request agents (kinds 0, 1, 2, 4) instead have their own slots 2, 3,
-4, 9, 10: slot 3 handles a new note (0x5654d0, 0x5787c0, 0x576510),
-slots 9/10 are the note callbacks 0x582480 / 0x582510 call (G: "child
-note finished" / "note removed").
+4, 9, 10: slot 2 lists the note types the agent handles (0x576500 writes
+one), slot 3 takes a new note (0x5654d0, 0x5787c0, 0x576510: they set
+note flag 2 and note +0x18 to their kind), slots 9/10 are the note
+callbacks 0x582480 / 0x582510 call. The slots the CComputerPlayer calls
+(V, package A3; `agent_slot` in ai_layout.h):
+
+| Slot | Called by | Arguments | Use |
+|---|---|---|---|
+| 0 | DeleteNote 0x551330, DeleteAgent 0x551490 | (1) | scalar deleting destructor (notes too) |
+| 2 | AddAgent 0x551400 | (u16* types) | the note types it handles; AX = count |
+| 3 | DispatchNote 0x551510 | (note) | take a new note of its type |
+| 4 | WorkOnNote 0x5516e0 | (note) | work on an active note (skipped while slot 5 is non-zero) |
+| 5 | WorkOnNote | () | busy |
+| 7, 8 | RunAgents 0x551590 | () | slot 8 (its own work) when slot 7 says so |
+| 9 | ReportToRequester 0x582480 | (parent note, note, result, value) | a note the agent made reports back (result 0 / 100 at the callers) |
+| 10 | CancelAtHandler 0x582510 | (note) | a note the agent took is withdrawn (G) |
 
 **Notes**: `BLACK_BOARD_NOTE` and `HOUSE_REQUEST_NOTE` (0x65a558),
 `HOUSE_GROUND_REQUEST_NOTE` (0x65a598), `LOCAL_WARE_REQUEST_NOTE`
@@ -73,8 +86,44 @@ below it), +0x16 / +0x18 agent kinds for the callbacks.
 
 `CComputerPlayer` keeps four id lists (V): root notes (+0x004, 100),
 pending notes (+0x0ce, 50; new notes, handed to their handler by
-0x5514c0 on the next step), active notes (+0x134, 100) and a fourth list
-(+0x200, 50, `AI::List32Add`; meaning unknown).
+0x5514c0 on the next step), active notes (+0x134, 100; worked on round
+robin with the cursor +0x1fe) and the notes to delete ("doomed", +0x200,
+50; `AI::List32Add`, e.g. through 0x551760 from the agents' slot 3;
+deleted by 0x551790 after each active note's turn).
+
+**The note life cycle** (V, package A3, `ai_computer_player.cpp`):
+
+1. An agent makes a note (a derived note's constructor) and calls
+   `AddNoteUnder` 0x551230 (note, parent note or none, itself) ->
+   `AddNote` 0x551270: the first free id of 300 (all taken: nothing
+   happens), below the parent as its first child or a root note, the
+   requester (+0x16) is the agent's kind, flags 0, and the id goes on the
+   pending list.
+2. Next step, `UpdateBlackboard` 0x5517d0 (from 0x550f80): `RunAgents`
+   0x551590 (each agent's slot 8 if its slot 7 says so), then
+   `DispatchPendingNotes` 0x5514c0 -> `DispatchNote` 0x551510: the
+   handler of the note's type (`handlers[type]`, filled by `AddAgent`
+   0x551400 from each agent's slot 2, first come first served) gets it
+   through slot 3 (flag 1 dispatched); a type nobody handles is deleted at
+   once. Then `WorkOnNextActiveNote` 0x551670 -> `WorkOnNote` 0x5516e0:
+   one active note per step gets a turn at its handler (slot 4, unless
+   slot 5 says busy), then `DeleteDoomedNotes` 0x551790.
+3. Notes report to their requester (`ReportToRequester` 0x582480, slot 9)
+   and are withdrawn from their handler (`CancelAtHandler` 0x582510, slot
+   10) by the agents' code.
+4. `DeleteNote` 0x551330 deletes a note with its whole subtree (unlink,
+   children first, off the pending and active lists, slot 0).
+   `Shutdown` 0x550f30 (from the destructor 0x5509d0) deletes every root
+   note's tree and every agent (`DeleteAgent` 0x551490) and releases the
+   shared CEvaLand.
+
+`StartBestBuilding` 0x551a70 (0x550f80 step 7): while the current area
+(node key) has fewer than 4 of the player's construction sites (0x59dbb0),
+the building type with the highest priority (`best[type].score`, first
+of equals, the search stops at 65000) is handed on with 0x58ecb0 (moves
+`best[type]` to `best[57 + type]`); when AiPlayerData +0x14 is set only a
+stonecutter or small tower, when +0x10 is set only a woodcutter, sawmill,
+forester or small tower (G: short of stone / wood).
 
 ## The per-step entry 0x550f80
 
@@ -92,19 +141,20 @@ same step:
 3. If the player has no nodes (`settlement_lists[p].count` == 0): only
    `agents[7]` slot 8 runs (probably T_ATTACK_AGENT: a player without land
    can only fight).
-4. Pick the current node (`data` +0x778 / `data_key` +0x77c): the next
+4. Pick the current node (`data` +0x778 / `area` +0x77c): the next
    node of the list, round robin (or the first one after a reset flag at
-   +0xf0 + 12 * p of the node lists, which it clears). The nodes (`AiPlayerData`) are probably one per settlement
-   / economy area (G; word +8 is its key, passed to 0x59dbb0 with the
-   player).
+   +0xf0 + 12 * p of the node lists, which it clears). The nodes
+   (`AiPlayerData`) are one per economy area of the player (R: word +8 is
+   the area id; StartBestBuilding passes it to 0x59dbb0, which compares
+   it with the tile area (`Tile::area`, +0x14) of the player's buildings'
+   door tiles through AI::BuildingArea 0x599610).
 5. `AI::SetCurrentPlayer` (globals g_aiPlayer, g_aiPlayerNumber,
    g_aiPlayerSetup, g_aiPlayerData).
 6. Every 71 steps (`timer278`): `0x59bc20`, `0x59c0f0` (CompMapWorkerAgent
    area) and return.
-7. Otherwise: `0x5517d0` (notes: 0x551590, 0x5514c0 hands pending notes
-   to their handler agent's slot 3, 0x551670), `0x551a70` (when fewer
-   than 4 of something in the area (0x59dbb0): picks the highest build
-   priority and may call 0x58ecb0).
+7. Otherwise: `UpdateBlackboard` 0x5517d0 (RunAgents, DispatchPendingNotes,
+   WorkOnNextActiveNote; see the note life cycle above) and
+   `StartBestBuilding` 0x551a70.
 8. Every 841 steps (`timer27c`): `0x59bf70`, `0x5724e0`, `0x5720c0`.
 9. `CComputerPlayer::RaiseBuildPriorities` (V) and `++data->+0x20`.
 
@@ -199,12 +249,9 @@ Frontier after batch 1 (`python tools/frontier.py --range 54cbd0 59fcd0`):
    (map/tile queries of CompMapWorkerAgent), `0x58ed30`, `0x58ed70`,
    `0x58ecb0`, `0x59dbb0`, `0x59dc70`, `0x5930f0`, `0x593140`, `0x593f50`,
    `0x5720c0`, `0x571d00..0x572420`, `0x597110..0x597260`.
-2. **A3: CComputerPlayer core**: the note tree (`0x551330` DeleteNote,
-   `0x551270`, `0x551400`, `0x551490`, `0x551510` dispatch, `0x5514c0`,
-   `0x551590`, `0x5516e0`, `0x551670`), destructor `0x5509d0` /
-   `0x550f30` (needs Cevaland `0x553dc0`, verified), `0x551a70`. They make
-   virtual calls (agents' slots 3, 9, 10, notes' destructors): use
-   `Spec.virtuals` / FAKE_VTABLE.
+2. **A3: CComputerPlayer core**: done (session 48): the note tree, the
+   agents, the destructor, StartBestBuilding and the note callbacks (18
+   functions, see the note life cycle).
 3. **A4: command senders** `0x58e220..0x58ec33`, `0x590990..0x590d86`
    (need `MessageQueue::Push` and `0x4318a0`; Push is a pass-through hook
    of the recorder, so the emulator must probe it as a callee).
@@ -221,6 +268,7 @@ Frontier after batch 1 (`python tools/frontier.py --range 54cbd0 59fcd0`):
    in all of them); `--skip-hooks` can isolate an AI replacement when a
    replay diverges.
 
-Open questions: kinds 1, 2, 4 of the factory; the meaning of list200
-(+0x200) and of the nodes (`AiPlayerData`, per settlement?); what
+Open questions: kinds 1, 2, 4 of the factory; who makes the
+AiPlayerData nodes (one per economy area, see step 4 of 0x550f80) and
+when; what
 0x4318a0's flag is in multiplayer (G: only the host runs the AI).
