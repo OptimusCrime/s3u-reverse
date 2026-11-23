@@ -286,8 +286,8 @@ Each race has eight spells (int32[4][8] at 0x658d64, the slots of
 
 | value | name | confidence | evidence |
 |---|---|---|---|
-| 0..3 | Spell0..Spell3 | placeholder | handler 0x548340 (spell passed on) |
-| 4 | Spell4 | placeholder | handler 0x548fb0 |
+| 0..3 | Spell0..Spell3 | placeholder | handler 0x548340 SpellTransformLand (spell passed on as the transform kind): by the terrain chains of NextTransformTerrain probably 0 dry swamp (0x50 -> grass 0x10), 1 melt snow (0x80 -> 0x20), 2 grass -> desert (0x40), 3 green the desert |
+| 4 | Spell4 | placeholder | handler 0x548fb0 SpellCreateStones: stones (objects 0x73..0x7d) on free land |
 | 5 | RevealSpot | high | SpellRevealSpot: a reveal point for 250 ticks |
 | 6 | BurnTrees | high | SpellBurnTrees: trees catch fire |
 | 7 | AddFish | high | SpellAddFish: fish in water tiles |

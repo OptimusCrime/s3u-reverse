@@ -8684,3 +8684,163 @@ SPECS += [
          globals=update_settlers_globals, callees=US_PROBES, case_scale=12, cover_until=0x004f926d,
          exempt_blocks=US_EXEMPT),
 ]
+
+
+# --- session 46, package S1: the land spells (spells_land.cpp) ----------------
+# IsTransformableTerrain, NextTransformTerrain and CanTerrainsBorder are pure
+# tables (NextTransformTerrain reads the grid's kind and ends kinds 0 and 1
+# in the assertion ThrowAssertmentFailed, which runs as S3.EXE code here and
+# ends the case as a throw). SpreadTerrainTransform gets a grid in the
+# scratch area (0x2018 bytes from SCRATCH) and the world's tile ring; its
+# callees run as S3.EXE code. TransformTerrainAround: a 32 x 32 grid of
+# terrain patches around (x, y); UnblockTile and WearPath (verified on
+# their own) are probed: on a lazily random world their region flood fills
+# are meaningless. SpellTransformLand probes TransformTerrainAround (its own
+# spec). The stone and tree spells probe BlockTile (as above) and the CRT's
+# rand() 0x61f802 (its per-thread data comes through TlsGetValue, which the
+# emulator doesn't provide; the probe's random values also reach the
+# signed-remainder fix-up of rand() % 8).
+LAND_TERRAINS = [0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x1c, 0x20, 0x21, 0x22, 0x23, 0x30,
+                 0x40, 0x41, 0x50, 0x51, 0x60, 0x61, 0x62, 0x63, 0x70, 0x71, 0x80, 0x81, 0x90, 0x91, 0x00, 0x05,
+                 0x1f]
+TRANSFORM_KINDS = [0, 1, 2, 3, 32]
+# IsTransformableTerrain's terrains per kind.
+TRANSFORM_SOURCES = {0: (0x50, 0x51, 0x15), 1: (0x80, 0x81, 0x23), 2: (0x10, 0x12, 0x13, 0x41, 0x14, 0x18, 0x1c, 0x16),
+                     3: (0x40, 0x41, 0x14), 32: (0x10, 0x12, 0x13, 0x18, 0x17, 0x91)}
+TERRAIN_GRID = SCRATCH  # TerrainGrid: kind, x0, y0, cx, cy, side, can_change[64][64], terrain[64][64]
+TILE_RING_INDEX = 0xe07888
+
+
+def land_terrain(rng) -> int:
+    return rng.randrange(256) if rng.random() < 0.1 else rng.choice(LAND_TERRAINS)
+
+
+def land_kind(rng, pool) -> int:
+    if rng.random() < 0.1:
+        return anything(rng, pool)
+    return rng.choice(TRANSFORM_KINDS + [4, 30]) if rng.random() < 0.6 else rng.randrange(40)
+
+
+def land_value(rng, pool) -> int:
+    r = rng.random()
+    if r < 0.6:
+        return rng.choice(LAND_TERRAINS)
+    if r < 0.75:
+        return 0xFF
+    return rng.randrange(256) if r < 0.9 else anything(rng, pool)
+
+
+def terrain_grid(rng, pool, args):
+    """A grid of a kind with patches of terrain; marks 0 on the border. args:
+    (grid, gx, gy) with an interior start."""
+    gx, gy = args[1], args[2]
+    side = 32 if rng.random() < 0.7 else rng.randint(max(gx, gy) + 2, 64)
+    kind = rng.choice(TRANSFORM_KINDS) if rng.random() < 0.9 else rng.randrange(40)
+    fields = [(TERRAIN_GRID, kind, 4), (TERRAIN_GRID + 0x14, side, 4)]
+    base = land_terrain(rng)
+    mix = rng.randrange(4)
+    follow = rng.random() < 0.75
+    sources = TRANSFORM_SOURCES.get(kind, ())
+    for x in range(side):
+        terrain, marks = [], []
+        for y in range(64):
+            t = land_terrain(rng) if rng.randrange(4) < mix else base
+            terrain.append(t)
+            border = x in (0, side - 1) or y in (0, side - 1) or y >= side
+            mark = (1 if t in sources else 0) if follow else (rng.randrange(4) if rng.random() < 0.25 else 1)
+            marks.append(0 if border else mark)
+        for y in range(0, 64, 4):
+            fields.append((TERRAIN_GRID + 0x18 + x * 64 + y, int.from_bytes(bytes(marks[y:y + 4]), "little"), 4))
+            fields.append((TERRAIN_GRID + 0x1018 + x * 64 + y, int.from_bytes(bytes(terrain[y:y + 4]), "little"), 4))
+    return fields
+
+
+def land_tile_fields(rng, fields, x, y, terrain, busy):
+    """Tile (x, y): settler/building words, terrain and object, flags."""
+    t = tile(x, y)
+    obj = rng.randrange(256) if rng.randrange(1000) < busy else 0
+    words = (rng.getrandbits(16) if rng.randrange(1000) < busy // 4 else 0) | \
+        ((rng.getrandbits(16) if rng.randrange(1000) < busy // 4 else 0) << 16)
+    fields.append((t, words, 4))
+    fields.append((t + 4, rng.getrandbits(16) | terrain << 16 | obj << 24, 4))
+    flags = rng.randrange(256) if rng.randrange(1000) < busy else 0
+    fields.append((t + 8, rng.getrandbits(16) | flags << 16 | rng.getrandbits(8) << 24, 4))
+
+
+def signed(value: int) -> int:
+    return value - (1 << 32) if value >= 1 << 31 else value
+
+
+def land_world(ring: int, spread: int, transform: bool):
+    """A map with terrain patches and mostly empty land (or busy land) around
+    (args[1], args[2]), `ring` ring offsets of at most `spread` tiles, the
+    players' mana (spells: args[0] is the player) and the effect table."""
+    def preset(rng, pool, args):
+        fields = world_effect_table(rng, pool, args)
+        size = rng.randint(40, 130) if rng.random() < 0.85 else rng.randint(20, 37)
+        fields.append((SIGHT_MAP, size, 4))
+        if not transform:
+            record = PLAYER_RECORDS + (args[0] & 3) * PLAYER_RECORD_BYTES
+            fields += [(record + 0x4, rng.randrange(4), 4), (record + 0x8c, rng.randrange(100), 4)]
+            fields += [(record + 0x94 + slot * 4, rng.randrange(60), 4) for slot in range(9)]
+        for n in range(ring):
+            d = min(1 + n // 12, spread)
+            fields += [(NEIGHBOUR_OFFSETS + n * 16, rng.randint(-d, d) & 0xFFFFFFFF, 4),
+                       (NEIGHBOUR_OFFSETS + n * 16 + 4, rng.randint(-d, d) & 0xFFFFFFFF, 4)]
+        x, y = signed(args[1]), signed(args[2])
+        if transform:
+            side, half = 32, 16
+            x0 = min(max(x - half, 0), size - side)
+            y0 = min(max(y - half, 0), size - side)
+            xs, ys = range(x0 - 1, x0 + side + 1), range(y0 - 1, y0 + side + 1)
+        else:
+            reach = spread + 3
+            xs = range(max(x - reach, -2), min(x + reach, size + 2) + 1)
+            ys = range(max(y - reach, -2), min(y + reach, size + 2) + 1)
+        base = land_terrain(rng)
+        if transform and args[0] in TRANSFORM_SOURCES and rng.random() < 0.6:
+            base = rng.choice(TRANSFORM_SOURCES[args[0]])  # land the kind can change
+        mix = rng.randrange(5)
+        busy = rng.randint(1, 20) if rng.random() < 0.5 else rng.randint(100, 500)
+        for tx in xs:
+            for ty in ys:
+                land_tile_fields(rng, fields, tx, ty, land_terrain(rng) if rng.randrange(6) < mix else base, busy)
+        return fields
+    return preset
+
+
+def land_coordinate(rng, pool) -> int:
+    return rng.randint(-10, 140) & 0xFFFFFFFF if rng.random() < 0.15 else rng.randint(5, 60)
+
+
+LAND_PROBES = {0x0051b770: (2, "thiscall", "probe"), 0x0051b7f0: (2, "thiscall", "probe")}
+LAND_SPELL_PROBES = {0x0051b6f0: (2, "thiscall", "probe"), 0x0061f802: (0, "cdecl", "probe")}
+LAND_TICK = lambda rng, pool, args: [(0x007dfd48, rng.getrandbits(32), 4)]  # noqa: E731 g_gameTick
+
+SPECS += [
+    Spec("CGameData_IsTransformableTerrain", 0x00548a10, "thiscall", [land_kind, land_value], eax_mask=0xFF),
+    # The pure tables need more cases for every (kind or terrain, terrain)
+    # pair that ends in its own block (cheap: about 2 s).
+    Spec("CGameData_NextTransformTerrain", 0x00548bb0, "thiscall", [scratch(0), land_value, anything],
+         eax_mask=0xFF, presets=lambda rng, pool, args: [(TERRAIN_GRID, land_kind(rng, pool), 4)], case_scale=5),
+    Spec("CGameData_CanTerrainsBorder", 0x00548d50, "thiscall", [anything, land_value, land_value], eax_mask=0xFF,
+         case_scale=10),
+    # Exempt: 0x548989 and 0x5489bb (the tile ring's write and read index
+    # wrapping at 10000): dead, every fill starts at 0 / 1 and queues each
+    # cell of the grid (at most 64 x 64 = 4096) at most once.
+    Spec("CGameData_SpreadTerrainTransform", 0x00548760, "thiscall",
+         [scratch(0), between(1, 30), between(1, 30)], eax_mask=0, presets=terrain_grid, max_cases=600,
+         exempt_blocks=(0x548989, 0x5489bb)),
+    Spec("CGameData_TransformTerrainAround", 0x00548380, "thiscall",
+         [one_of(*TRANSFORM_KINDS), land_coordinate, land_coordinate], eax_mask=0xFF,
+         presets=land_world(210, 16, True), callees=LAND_PROBES, max_cases=300),
+    Spec("CGameData_SpellTransformLand", 0x00548340, "thiscall",
+         [below(4), land_coordinate, land_coordinate, below(4)], eax_mask=0,
+         presets=land_world(0, 1, False), callees={0x00548380: (3, "thiscall", "probe")}, max_cases=300),
+    Spec("CGameData_SpellCreateStones", 0x00548fb0, "thiscall", [below(4), land_coordinate, land_coordinate],
+         eax_mask=0, presets=land_world(500, 20, False), callees=LAND_SPELL_PROBES, globals=LAND_TICK,
+         ignore_bytes=tuple(WORLD_EFFECTS + b for b in EFFECT_TABLE_PADDING), max_cases=300),
+    Spec("CGameData_SpellTreeCurse", 0x005492a0, "thiscall", [below(4), land_coordinate, land_coordinate],
+         eax_mask=0, presets=land_world(1000, 20, False), callees=LAND_SPELL_PROBES, globals=LAND_TICK,
+         ignore_bytes=tuple(WORLD_EFFECTS + b for b in EFFECT_TABLE_PADDING), max_cases=300),
+]

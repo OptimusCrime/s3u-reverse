@@ -32,7 +32,8 @@ address,name,type,status,notes
 0x0065a1c0,g_flightFactor05,const double,classified,Flight-time factors of projectiles (sqrt(distance) * factor). Declared in src/s3re/game/tables.h; used by map_effect_spawns.cpp.
 0x0065a1c8,g_flightFactor2,const double,classified,Flight-time factors of projectiles (sqrt(distance) * factor). Declared in src/s3re/game/tables.h; used by map_effect_spawns.cpp.
 0x0065a1d0,g_flightFactor0,const double,classified,Flight-time factors of projectiles (sqrt(distance) * factor). Declared in src/s3re/game/tables.h; used by map_effect_spawns.cpp.
-0x0065a1f0,g_spellAreaSizes,const int32_t[],classified,Per spell area index its size. Declared in src/s3re/game/tables.h; used by spells.cpp.
+0x0065a1d8,g_spellRingCounts,const int32_t[],identified,"Per spell 0..31 the number of ring offsets its area covers (spell 4: 500, 6: 127, TreeCurse 30: 1000), at 32 the burning tree's terrain transform (7); read again every loop step (not const in the source). Was g_spellAreaSizes at 0x65a1f0 (= index 6). Declared in src/s3re/game/tables.h; used by spells.cpp, spells_land.cpp."
+0x0065a25c,g_spellGridSides,const int32_t[],identified,"Per transform kind 0..32 the side of TransformTerrainAround's grid (32 for spells 0..3 and kind 32). Declared in src/s3re/game/tables.h; used by spells_land.cpp."
 0x0065c0b8,g_guidNull,const uint32_t[4],classified,GUID_NULL (16 zero bytes). Declared in src/s3re/game/tables.h; used by string_members.cpp.
 0x006970f0,g_versionNumber,uint32,identified,Game version x100 (logged as %i.%i by CConsoleThread::OnStart).
 0x006974a4,texts::kFullStop,char[],identified,"String ""."" Declared in src/s3re/game/texts.h; used by win32_errors.cpp."
@@ -141,6 +142,10 @@ address,name,type,status,notes
 0x00730fe0,texts::kExecuteGoodsBan,char[],identified,"String ""xxx about to execute EventGoodsBan"" Declared in src/s3re/game/texts.h; used by spells.cpp."
 0x00731004,texts::kExecuteTreeCurse,char[],identified,"String ""xxx about to execute EventTreeCurse"" Declared in src/s3re/game/texts.h; used by spells.cpp."
 0x00731028,texts::kExecuteRevealMap,char[],identified,"String ""xxx about to execute EventRevealMap"" Declared in src/s3re/game/texts.h; used by spells.cpp."
+0x0073104c,texts::kHelp,char[],identified,"String ""HILFE"" (help): the expression of NextTransformTerrain's assertion. Declared in src/s3re/game/texts.h; used by spells_land.cpp."
+0x00731054,texts::kGodlyEventsFile,char[],identified,"String ""E:\Siedler3\Volker\GodlyEvents.cpp"" (assertion file). Declared in src/s3re/game/texts.h; used by spells_land.cpp."
+0x00731078,texts::kTreeCurseTreesSet,char[],identified,"String ""xxx GE: TreeCurse: trees set: %u"" Declared in src/s3re/game/texts.h; used by spells_land.cpp."
+0x0073109c,texts::kTreeCurseOffsets,char[],identified,"String ""xxx GE: TreeCurse iEventOffset: %u"" Declared in src/s3re/game/texts.h; used by spells_land.cpp."
 0x007310c0,texts::kRevealMapDone,char[],identified,"String ""xxx GE done: optionviewall SET"" Declared in src/s3re/game/texts.h; used by spells.cpp."
 0x007311d0,texts::kManaNeeded,char[],identified,"String ""xxx Godevent mana needed: %u at slot: %u"" Declared in src/s3re/game/texts.h; used by godly_events.cpp."
 0x00731278,texts::kTooManyColours,char[],identified,"String ""Error ! zu viele Farben"" Declared in src/s3re/game/texts.h; used by landscape_colours.cpp."
