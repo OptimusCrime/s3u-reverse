@@ -10597,3 +10597,138 @@ SPECS += [
     economy_condition("T_ECONOMY_AGENT_ConsiderDrinkBuilding", 0x00569d20),
 ]
 
+# -- computer players A2: map queries (ai_map_queries.cpp) ------------------
+#
+# Coordinates are words at scratch 0 (x) and scratch 1 (y), near and past
+# the edges of a random AI map size; the tile's fields are pinned. Off the
+# map the original leaves its caller's EAX upper half (AX compared only).
+
+
+def ai_query_map(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_WORLD, WORLD_BASE, 4), (AI_PLAYER_DATA, WORLD_BASE + SCRATCH, 4),
+            (AI_MAP_SIZES, rng.randint(1, 0x2FF), 2), (AI_MAP_SIZES + 2, rng.randint(1, 0x2FF), 2)]
+
+
+def query_coordinate(rng):
+    r = rng.random()
+    if r < 0.15:
+        return rng.randint(0x2F0, 0x2FF)
+    if r < 0.2:
+        return rng.getrandbits(16)
+    return rng.randrange(0x2F0)
+
+
+def query_tile(rng, x, y):
+    t = TILES + (x * 0x300 + y) * 24
+    obj = rng.choice((0x43, 0x44, 0x53, 0x54, 0x72, 0x73, 0x7E, 0x7F, 0)) if rng.random() < 0.5 else rng.getrandbits(8)
+    return [(t + 2, 0 if rng.random() < 0.25 else rng.getrandbits(16), 2), (t + 7, obj, 1),
+            (t + 0xA, rng.getrandbits(8), 1), (t + 0x11, rng.getrandbits(8), 1)]
+
+
+def ai_query_coords(rng, pool, args):
+    """x, y at scratch 0 / 1 and the tile there (only tiles inside the
+    0x300 x 0x300 array)."""
+    x, y = query_coordinate(rng), query_coordinate(rng)
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2)]
+    if x < 0x300 and y < 0x300:
+        fields += query_tile(rng, x, y)
+    return fields
+
+
+def ai_query_tile_any(rng, pool, args):
+    """For the queries without a bounds check: x, y inside the tile array."""
+    x, y = rng.randrange(0x300), rng.randrange(0x300)
+    return [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2)] + query_tile(rng, x, y)
+
+
+def ai_query_record(rng, pool, args):
+    """A building record at scratch 0 (door x / y at +0xa / +0xc)."""
+    x, y = query_coordinate(rng), query_coordinate(rng)
+    return [(SCRATCH + 0xA, x, 2), (SCRATCH + 0xC, y, 2)]
+
+
+class WalkRow:
+    """x, y values for AI_WalkRegionAlongRow (upper halves sometimes set)
+    and walk regions along the row, mostly 0."""
+
+    def __init__(self):
+        self.xy = (0, 0)
+
+    def x(self, rng, pool):
+        self.xy = (query_coordinate(rng), query_coordinate(rng))
+        return self.xy[0] | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+    def y(self, rng, pool):
+        return self.xy[1] | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+    def presets(self, rng, pool, args):
+        x, y = args[0] & 0xFFFF, args[1] & 0xFFFF
+        fields = []
+        for k in range(20):
+            if x + k < 0x300 and y < 0x300:
+                fields.append((TILES + ((x + k) * 0x300 + y) * 24 + 0x10, 0 if rng.random() < 0.8 else rng.getrandbits(8), 1))
+        return fields
+
+
+WALK_ROW = WalkRow()
+
+
+def ai_query_sites(rng, pool, args):
+    fields = count_buildings_world(rng, pool, args)
+    return fields + [(SCRATCH, rng.randrange(3), 1), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(4), 2)]
+
+
+def ai_query_settlers(rng, pool, args):
+    """A settler list of up to 9 in the area's list for the type."""
+    settler_type, area = rng.randrange(48), rng.randrange(4096)
+    fields = [(SCRATCH, settler_type, 1), (SCRATCH + SCRATCH_SLOT_BYTES, area, 2)]
+    start, head = rng.randint(1, 20000), 0
+    for k in range(rng.randrange(10)):
+        settler = start + 7 * k
+        fields.append((SETTLERS + settler * 0x40 + 0x10, head, 2))
+        head = settler
+    return fields + [(AI_AREAS + area * 0x2E0 + 0x12A + settler_type * 2, head, 2)]
+
+
+def ai_query_teams(rng, pool, args):
+    fields = []
+    for p in range(20):
+        record = AI_PLAYERS + p * 0x148
+        active = 1 if rng.random() < 0.5 else rng.choice((0, 2, rng.getrandbits(32)))
+        fields += [(record, active, 4), (record + 0xC, rng.randrange(4), 4)]
+    return fields
+
+
+def tower_type(rng, pool):
+    return rng.choice((14, 15, 16, 17, 18, 19, 0)) if rng.random() < 0.7 else rng.getrandbits(16)
+
+
+SPECS += [
+    Spec("AI_BuildingAt", 0x00599510, "fastcall", [scratch(0), scratch(1)], eax_mask=0xFFFF,
+         presets=ai_query_coords, globals=ai_query_map),
+    Spec("AI_AreaAt", 0x005995c0, "fastcall", [scratch(0), scratch(1)], eax_mask=0xFFFF,
+         presets=ai_query_coords, globals=ai_query_map),
+    Spec("AI_BuildingRecordArea", 0x00599670, "fastcall", [scratch(0)], eax_mask=0xFFFF,
+         presets=ai_query_record, globals=ai_query_map),
+    Spec("AI_WalkRegionAlongRow", 0x00599870, "fastcall", [WALK_ROW.x, WALK_ROW.y], eax_mask=0xFFFF,
+         presets=WALK_ROW.presets, globals=ai_query_map),
+    Spec("AI_StoneAmountAt", 0x00599910, "fastcall", [scratch(0), scratch(1)], presets=ai_query_tile_any,
+         globals=ai_query_map),
+    Spec("AI_IsTreeAt", 0x00599950, "fastcall", [scratch(0), scratch(1)], presets=ai_query_tile_any,
+         globals=ai_query_map),
+    Spec("AI_ResourceAmountAt", 0x00599990, "fastcall", [scratch(0), scratch(1)], eax_mask=0xFFFF,
+         presets=ai_query_coords, globals=ai_query_map),
+    Spec("AI_ResourceKindAt", 0x005999e0, "fastcall", [scratch(0), scratch(1)], eax_mask=0xFFFF,
+         presets=ai_query_coords, globals=ai_query_map),
+    Spec("AI_TerritoryRadius", 0x0058ed30, "fastcall", [scratch(0)], globals=ai_query_map,
+         presets=lambda rng, pool, args: [(SCRATCH, tower_type(rng, pool), 2)]),
+    # AL only: the rest of EAX is the caller's.
+    Spec("AI_SiteKindOf", 0x0058ed70, "fastcall", [small_with_noise(0, 40)], eax_mask=0xFF),
+    Spec("AI_TakeBestCandidate", 0x0058ecb0, "fastcall", [id_with_noise(0x60)], globals=ai_query_map),
+    Spec("AI_CountSitesInArea", 0x0059dbb0, "fastcall", [scratch(0), scratch(1)], presets=ai_query_sites,
+         globals=ai_world_400, max_cases=600),
+    Spec("AI_CountAreaSettlersOfType", 0x0059dc70, "fastcall", [scratch(0), scratch(1)],
+         presets=ai_query_settlers, globals=ai_world),
+    Spec("AI_TeamHasActivePlayer", 0x00593140, "stdcall", [below(20)], presets=ai_query_teams,
+         globals=ai_map_world),
+]

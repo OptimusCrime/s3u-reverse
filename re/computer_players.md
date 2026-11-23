@@ -127,6 +127,48 @@ fields). RaiseBuildPriorities then lets each wanted type grow by
 player's team (`ComputeTeamStrength` 0x55bea0: 8 per soldier, kinds 2/5/8
 double, 16 per small/large tower, 32 per castle; summed over the team).
 
+## The economy agent (session 48, A2)
+
+`T_ECONOMY_AGENT` (kind 8) run 0x567890: copies the current node's key
+(area) and the player's race into the agent, takes a snapshot of the area
+(0x567910: population = settlers of class 0 or a per-player global when
+the byte 0x7e5ef8 is set; carriers; logs, boards, stones, coal, iron,
+sulfur in stock; the node's buildings per type from
+`AiPlayerData::building_counts`), then 0x56a1a0 runs one condition per
+building type, skipping a type while its countdown runs or its
+`type_blocked` byte is set; every player + 14 runs it also runs 0x56a000,
+0x56a0f0, 0x56a840, 0x56aa60 (V for the conditions, R for the rest).
+
+The conditions (0x568250..0x569d20, `ai_economy_conditions.cpp`, V) ask
+for a building type with `AI::RecordBestCandidate` (priority, position
+-1/-1). They encode the economy's build order: a sawmill per three
+woodcutters, foresters by the woodcutter surplus, farms per three mines,
+fisheries per two mines, mills / pig farms by the grain left over,
+bakeries two per mill, slaughterhouses per two pig farms, waterworks per
+two water users, a toolsmith once coal and iron are there, barracks per
+three weaponsmiths, the race's drink building, small and large temple by
+population, and gold mines and weaponsmiths by a "wanted for the
+population" curve: population stages 0 / 40 / 100 / 500 / 2000 settlers
+(`g_aiPopulationStages`), a wanted count per stage start
+(`g_aiWantedGoldMines` 0, 2, 3, 5, 7; `g_aiWantedWeaponsmiths` 0..4) and
+per-stage float slopes computed by static initializers; the priority
+falls as have * 100 / wanted rises past 10 / 30 / 50 / 70 / 100. Still
+open in this family: 0x567e00, 0x568420, 0x568890 (Random), 0x568bc0,
+0x568d80, 0x568f40 (larger conditions with float curves per race) and
+0x567910 itself.
+
+## Map queries (session 48, A2)
+
+Small queries of CompMapWorkerAgent / CompHouseReq (`ai_map_queries.cpp`,
+V): the building, area, walk region (searching up to 16 tiles in +x),
+stones (0x7f - object), tree and resource nibbles of a tile against the
+AI's map size; `AI::TerritoryRadius` (the distance of the 3500th / 4000th
+/ 5000th nearest map offset for small tower / large tower / castle);
+`AI::SiteKindOf` (2 storehouse, 3 military, 4 mine, 5 field, 1 other);
+`AI::TakeBestCandidate` (moves best[type] to best[57 + type]); counts of
+construction sites and of settlers of a type in an area; and
+`AI::TeamHasActivePlayer`.
+
 ## How decisions reach the simulation
 
 The AI never writes the world directly as far as seen (R: the writes of

@@ -614,7 +614,24 @@ layouts in `src/s3re/game/ai_layout.h`.
   priority, x, y (AI::RecordBestCandidate; CComputerPlayer::
   RaiseBuildPriorities raises the priority by the tables 0x73295C up to
   0x7328E8); +0x2D2 per-type countdowns (reset to 0x7329D0[type], lowered
-  every 15 steps); +0x20 dword counted up per step. **V**.
+  every 15 steps); +0x20 dword counted up per step. **V**. Session 48
+  (A2): +0x26 + 6 * (57 + type) the candidate taken for building
+  (AI::TakeBestCandidate 0x58ECB0 moves best[type] there); +0x344 the
+  node's buildings per type (57 words; filled by 0x572420, copied by the
+  economy agent); +0x3B6 a byte per type, non-zero: the economy agent
+  skips the type (cleared by 0x565630, 0x573890); +0x550 dword the
+  fishery condition needs non-zero (probably "has fishing water"). **V**
+  (the conditions), **R** (writers).
+- **T_ECONOMY_AGENT** (EconomyAgent, 0xA0 bytes; kind 8): +8 race
+  (Player::race), +0xC the node's area, +0x10 run counter, +0x2C the last
+  have * 100 / wanted ratio, +0x30 the forester condition's priority,
+  +0x34 population stage 0..3, +0x3E population (settlers of class 0 in
+  the area), +0x40 carriers in the area, +0x42.. goods in stock (logs,
+  boards, coal, iron, ?, gold ore, sulfur, stones), +0x52..+0x9E the
+  node's buildings per type (one word per type the agent plans; the
+  race-specific words hold the race's own building). Snapshot by 0x567910;
+  read by the 25 conditions 0x568250..0x569D20. **V** (conditions), **R**
+  (0x567910).
 - **AI census** (AiAgentData, 0x1AD8 bytes; constructor 0x55B6B0): +1
   buildings counted, +2 set by the count, +0x25C team strength per
   player (20 dwords), +0x2AC its valid flag, +0x444 soldiers per player
