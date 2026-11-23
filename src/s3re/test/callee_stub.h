@@ -14,7 +14,7 @@
 // also change the world, e.g. set a settler's job, so that both versions
 // see the same side effects). Tests compare the two call logs.
 //
-// Only for thiscall callees with 1..10 stack arguments (ret 4*N). The tests
+// Only for thiscall callees with 0..10 stack arguments (ret 4*N). The tests
 // run before the game starts, so no other thread calls the patched code.
 
 #include "game/world.h"
@@ -60,7 +60,7 @@ public:
     // recording stub; `effect` (optional) gives EAX and side effects.
     template <int N, std::uintptr_t Address>
     void Install(StubEffect effect = nullptr) {
-        static_assert(N >= 1 && N <= kMaxStubArgs);
+        static_assert(N >= 0 && N <= kMaxStubArgs);
         Patch patch{Address, {}, std::move(effect)};
         std::memcpy(patch.saved, reinterpret_cast<const void*>(Address), 5);
         void* target = StubFor<Address>(std::make_index_sequence<N>{});
@@ -126,7 +126,7 @@ private:
     using Dword = std::uint32_t;
     template <std::uintptr_t Address, std::size_t... I>
     static std::uint32_t __fastcall Stub(void* self, void*, Dword<I>... args) {
-        const std::uint32_t values[] = {args...};
+        const std::uint32_t values[sizeof...(I) + 1] = {args..., 0};
         return Record(Address, self, values, sizeof...(I));
     }
     template <std::uintptr_t Address, std::size_t... I>

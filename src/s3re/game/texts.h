@@ -134,5 +134,16 @@ inline constexpr GameText kErrorTop{0x72fee4};          // "Error top %u %u %u"
 inline constexpr GameText kErrorBottom{0x72fecc};       // "Error bottom %u %u %u"
 inline constexpr GameText kErrorLeft{0x72feb8};         // "Error left %u %u %u"
 inline constexpr GameText kErrorRight{0x72fea0};        // "Error right %u %u %u"
+// CLogicThread::ExecuteCommands (Volker\LogicHandleNet.cpp)
+inline constexpr GameText kInvalidNetMessage{0x7300fc};  // "Ung\xfcltige Netznachricht: Type: %u" ("invalid network message")
+inline constexpr GameText kGodlyEventRange{0x730514};    // "GodlyEvent (ID#)%u GodRange: %u"
+inline constexpr GameText kGodlyEventHappened{0x7304cc};  // "Godly Event (ID#)%u happened at %u,%u from priest at %u,%u godrange: %u"
+// Formats of the network messages 3..8 (execute_commands_net.cpp)
+inline constexpr GameText kMessagePlayerLost{0x730188};      // "Message PlayerLost"
+inline constexpr GameText kKillBecauseOfLag{0x730170};       // "LOGIC: Kill wegen lag" ("kill because of lag")
+inline constexpr GameText kMessageKillPlayer{0x73015c};      // "Message KillPlayer"
+inline constexpr GameText kMessageFilmEnd{0x73014c};         // "Message FilmEnd"
+inline constexpr GameText kMessageInGameChat{0x730138};      // "Message InGameChat"
+inline constexpr GameText kMessageChecksumFailure{0x730120};  // "Message ChecksumFailure"
 
 }  // namespace s3re::game::texts

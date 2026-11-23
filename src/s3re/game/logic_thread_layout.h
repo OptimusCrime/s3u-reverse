@@ -11,24 +11,50 @@ namespace s3re::game {
 
 struct CGameData;  // layout.h
 
-// The ring buffer of dwords between the logic thread and the network thread
-// (Push 0x4309c0, Pop 0x430980); its layout is not mapped (opaque).
-struct MessageQueue;
-
 #pragma pack(push, 1)
+
+// The ring buffer of dwords between the logic thread and the network thread
+// (Push 0x4309c0, Pop 0x430980). Only the fields those two functions and
+// ExecuteCommands use; the object is a Win32 waitable (vtable slot 3 waits
+// for a message).
+struct MessageQueue {
+    void* const* vtable;       // +0x00 slot 3 (+0x0c): Wait(timeout ms, flag), throws Win32::CTimeout* when nothing came
+    std::uint8_t unk04[0x10];
+    std::uint32_t* buffer;     // +0x14 the ring of dwords
+    std::uint32_t capacity;    // +0x18 a power of two (indexes wrap with capacity - 1)
+    std::uint32_t read;        // +0x1c index of the next dword Pop returns
+    std::uint32_t write;       // +0x20 index of the next dword Push writes
+    std::int32_t count;        // +0x24 dwords in the ring
+    void* event;               // +0x28 an object whose +8 is the event HANDLE Push signals (SetEvent)
+    void* lock;                // +0x2c the CRITICAL_SECTION of both ends
+    std::int32_t peak;         // +0x30 largest count so far (Push)
+};
 
 struct CLogicThread {
     std::uint8_t unk000[0x74];
     std::uint32_t unk074;              // +0x074 cleared by ClearPendingUiRefresh (ui_state.cpp)
     std::uint8_t unk078[0xc];
     std::uint32_t pending_ui_refresh;  // +0x084 turned into the world's refresh_ui (ui_state.cpp)
-    std::uint8_t unk088[0x24c - 0x88];
+    std::uint8_t unk088[0x224 - 0x88];
+    std::uint32_t save_request_tick;    // +0x224 ExecuteCommands 0xf7/0xfa: game tick of the last multiplayer save request (0 = none)
+    std::uint32_t save_failures;        // +0x228 ExecuteCommands 0xf7/0xf9 (multiplayer save)
+    std::uint32_t save_acks;            // +0x22c ExecuteCommands 0xf7/0xf8: players that saved
+    std::uint8_t unk230[5];
+    std::uint8_t player_flags[20];      // +0x235 per player, cleared by ExecuteCommands 0xf2/0xfe/0xff
+    std::uint8_t unk249[3];
     std::uint32_t last_game_end_check;  // +0x24c game tick of the last CheckGameEnd evaluation (every 50 ticks)
-    std::uint8_t unk250[0x3a0 - 0x250];
+    std::uint8_t unk250[0x350 - 0x250];
+    std::uint32_t computer_players[20];  // +0x350 CComputerPlayer* per player (0 = none); ExecuteCommands 0xfe/0xff create one
     CGameData* world;          // +0x3a0 the world (CGameData)
-    std::uint8_t unk3a4[0x3c4 - 0x3a4];
+    std::uint8_t unk3a4[0x3b0 - 0x3a4];
+    std::uint32_t step;        // +0x3b0 the lockstep step the logic runs next (0 before the first)
+    std::uint32_t granted_step;  // +0x3b4 the last step the network allowed (StepGrant message)
+    std::uint8_t unk3b8[0x3c4 - 0x3b8];
     MessageQueue* toNet;       // +0x3c4 logic -> network (0x20 step and 0x21 command messages)
     MessageQueue* fromNet;     // +0x3c8 network -> logic (the replies)
+    std::uint8_t unk3cc[0x675 - 0x3cc];
+    std::uint8_t version_mismatch;  // +0x675 set by ExecuteCommands 0xfb when another player's data words differ
+    std::uint8_t unk676[2];
 };
 
 #pragma pack(pop)
@@ -36,7 +62,16 @@ struct CLogicThread {
 static_assert(sizeof(void*) == 4, "32-bit build only");
 static_assert(offsetof(CLogicThread, unk074) == 0x74);
 static_assert(offsetof(CLogicThread, pending_ui_refresh) == 0x84);
+static_assert(offsetof(CLogicThread, save_request_tick) == 0x224);
+static_assert(offsetof(CLogicThread, player_flags) == 0x235);
 static_assert(offsetof(CLogicThread, last_game_end_check) == 0x24c);
+static_assert(offsetof(CLogicThread, computer_players) == 0x350);
+static_assert(offsetof(CLogicThread, step) == 0x3b0);
+static_assert(offsetof(CLogicThread, granted_step) == 0x3b4);
+static_assert(offsetof(CLogicThread, version_mismatch) == 0x675);
+static_assert(offsetof(MessageQueue, buffer) == 0x14);
+static_assert(offsetof(MessageQueue, lock) == 0x2c);
+static_assert(sizeof(MessageQueue) == 0x34);
 static_assert(offsetof(CLogicThread, world) == 0x3a0);
 static_assert(offsetof(CLogicThread, toNet) == 0x3c4);
 static_assert(offsetof(CLogicThread, fromNet) == 0x3c8);

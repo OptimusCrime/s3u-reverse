@@ -76,6 +76,9 @@ inline constexpr GameGlobal<const std::uint32_t[]> g_settlerAnimations{0x6a8060}
 // ------------------------------------------------------------ races
 // Per race the eight spells it can cast.
 inline constexpr GameGlobal<const std::uint32_t[][8]> g_raceSpells{0x658d64};
+// Per spell (the numbers of g_raceSpells) the range in tiles around the
+// priest (ExecuteCommands 0x15: TileDistance - 2 must be below it).
+inline constexpr GameGlobal<const std::uint32_t[]> g_spellCastRange{0x658de4};
 // Per race the number of settlers a ship carries.
 inline constexpr GameGlobal<const std::int32_t[4]> g_raceShipCapacity{0x659644};
 // Per race the length of the shooting animation (the original reads the
