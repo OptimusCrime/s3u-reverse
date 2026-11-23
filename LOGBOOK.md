@@ -7,20 +7,30 @@ progress.
 
 ## Current focus
 
-**Readability pass (user decision 2026-11-22, session 45).** Convert the
-code to `docs/coding_style.md` (enums from `game/enums.h`, named
-constants, decimal literals, readable helpers), behaviour unchanged.
-Pilot done (enums.h, re/enums.md, three files); the rest goes in
-parallel batches by file group (session 45 entry, TODO.md).
+**Next session (written 2026-11-23, end of session 45):**
+1. **The user's full-game recording** (they play with `python tools/play_game.py`;
+   it lands in `recordings/`): commit it with a line in recordings/README.md,
+   `check_replay.py --recording NAME --against-original --ticks N`,
+   `record_call_counts.py --recording NAME`, then check the test-only jobs
+   and paths listed in TODO.md (UpdateSettlers jobs, spells, ships, tower
+   captures, shooting soldiers, late building types) against it.
+2. **Make the Release build run.py's default** (TODO.md; its full suite is
+   clean) and record passes for the 9 over-budget specs.
+3. **Next simulation work** (proposed, user to confirm): command handling
+   `CLogicThread::ExecuteCommands` 0x535990 (player input), the
+   per-player objects 0x550f80 (computer players), the 17 spell functions
+   left of UpdateEnvironment, the game-end check 0x511c50; later the file
+   formats (maps, savegames, graphics).
 
-**Struct pass (user request 2026-11-22, session 45).** Replace the
-"address hacks" with typed structures that mirror the real objects:
-typed globals instead of raw data addresses, real class layouts (RTTI
-names) instead of `RawAt` and per-file partial structs, named world
-record fields instead of `unkXXXX`. Worklist: `re/typed_access_todo.md`
-(regenerate with `python tools/raw_access_report.py --write`). Not all
-at once; started as three parallel packages (globals, classes, world
-records). The `GameWorld` -> `CGameData` rename is done (session 45).
+**Done in session 45** (details in the session entries): struct pass
+(typed globals, real class layouts, named world fields; worklist
+`re/typed_access_todo.md`, now 0 raw offsets/addresses); `GameWorld` ->
+`CGameData`; readability pass of all simulation files
+(`docs/coding_style.md`, `game/enums.h`; left: pathing.cpp, UI/framework/AI
+files, map_effects.cpp, the typed-field switch, see TODO.md); text
+recordings v4; play-and-record tool; faster verification tooling
+(selection by compiled code, quick mode, Release build for the emulator).
+New code follows docs/coding_style.md. Emulator policy: CLAUDE.md.
 
 **Simulation state (2026-11-22):** every callee of
 `CGameData::UpdateSettlers` 0x4e9670 is verified (WalkSettler,
