@@ -90,6 +90,13 @@ Each item: what, why, and where to start.
 
 ## Evidence and testing
 
+- **ExecuteCommands 0x535990 itself (session 46).** Analysis, command
+  ids and the order of work are in `re/execute_commands.md`; all its
+  simulation callees are verified (command_helpers.cpp). Write it as one
+  unit (frame + one helper per command, MoveUnits in its own file), with
+  in-process tests on a fake CLogicThread with pre-filled queues and
+  "logicthread" emulator specs per command group; the UI/lobby/savegame
+  callees listed there stay original.
 - **UpdateSettlers handlers with tests only (session 45).** The
   whole-game checks (two replays, three saves, a random map) never reach
   these UpdateSettlers jobs; check them against the user's full-game

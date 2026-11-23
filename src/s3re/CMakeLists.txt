@@ -31,6 +31,7 @@ add_library(s3re SHARED
     game/building_done.cpp
     game/building_flags.cpp
     game/building_sites.cpp
+    game/command_helpers.cpp
     game/building_goods.cpp
     game/building_tiles.cpp
     game/counting.cpp

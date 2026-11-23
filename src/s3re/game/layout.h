@@ -389,9 +389,9 @@ struct Player {
     std::int32_t site_stamp;         // 0x084 0xffff at start, -1 per new building site (restarts at 0xffff below 60001); stored in the site's work_y
     std::int32_t unk088;             // 0x088 UI
     std::int32_t mana;               // 0x08c
-    std::int32_t mana_total;         // 0x090 mana ever gained (only added to, with mana: temples, offerings); read by commands and the UI
+    std::int32_t mana_total;         // 0x090 added to with mana (temples, offerings); promotions (command 0x18) are paid from it; read by commands and the UI
     std::int32_t spell_mana[8];      // 0x094
-    std::int32_t unk0b4[4];          // 0x0b4
+    std::int32_t unk0b4[4];          // 0x0b4 [0] mana cost of the next soldier promotion (SetPromotionCost 0x508450); [1..3] soldier level per kind (swords, bows, pikes; command 0x18)
     // 0x0c4..0x0d4: recomputed by RecountPlayerPopulation (0x5104c0) in
     // UpdateEconomy; meanings partly guesses (re/structs.md).
     std::uint32_t population;        // 0x0c4 civilians (settler class 0 or 10..29)
