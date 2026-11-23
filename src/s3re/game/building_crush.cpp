@@ -178,7 +178,6 @@ void TakeGoodFromPile(CGameData* world, std::uint32_t pile) {
 }
 
 constexpr std::uint8_t kFree = 0xff;         // Settler::owner / Building::owner of an unused record
-constexpr std::uint8_t kPileDropped = 0xfe;  // pile kind: goods left on the ground
 constexpr std::uint8_t kGoodNone = Value(Good::Empty);
 constexpr std::uint8_t kLineEndTerrain = kTerrainShore;  // a building's line ends at the shore (0x30)
 constexpr std::uint16_t kNoDirection = 0xffff;
@@ -326,11 +325,11 @@ void __fastcall CGameData_DropInputPile(CGameData* world, void*, std::uint32_t n
     const std::uint32_t y = pile.y;
     const std::uint32_t good = pile.good;
     const std::uint32_t amount = pile.amount;
-    pile.art = kPileDropped;
+    pile.art = Value(PileKind::Dropped);
     pile.amount = 0;
     CGameData_RemovePileFromTile(world, nullptr, number);
     if (amount != 0) {
-        CGameData_CreatePile(world, nullptr, x, y, good, amount, kPileDropped);
+        CGameData_CreatePile(world, nullptr, x, y, good, amount, Value(PileKind::Dropped));
     }
 }
 
@@ -379,10 +378,10 @@ void __fastcall CGameData_DropStoragePile(CGameData* world, void*, std::uint32_t
             world->piles[pile.next].prev = pile.prev;
         }
     }
-    pile.art = kPileDropped;
+    pile.art = Value(PileKind::Dropped);
     CGameData_RemovePileFromTile(world, nullptr, number);
     if (amount != 0) {
-        CGameData_CreatePile(world, nullptr, x, y, good, amount, kPileDropped);
+        CGameData_CreatePile(world, nullptr, x, y, good, amount, Value(PileKind::Dropped));
     }
 }
 
@@ -407,7 +406,7 @@ void __fastcall CGameData_DropOutputPile(CGameData* world, void*, std::uint32_t 
         TakeGoodFromPile(world, number);
     }
     CGameData_RemovePileFromTile(world, nullptr, number);
-    CGameData_CreatePile(world, nullptr, x, y, good, amount, kPileDropped);
+    CGameData_CreatePile(world, nullptr, x, y, good, amount, Value(PileKind::Dropped));
 }
 
 S3RE_HOOK(0x0051aae0, CGameData_ClearBuildingFootprint, BuildingFn, Original_CGameData_ClearBuildingFootprint,

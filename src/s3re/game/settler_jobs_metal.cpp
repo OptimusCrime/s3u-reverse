@@ -583,35 +583,35 @@ JobResult RunMetalJobs(SettlerContext& ctx) {
     case Job::MinerEnterSulfurMine:  // 0x4eeafd
         Call<kMinerJobEnter>(ctx.world, ctx.number);
         return JobResult::Next;
-    case Job::Job85:
-    case Job::Job86:
-    case Job::Job87:
-    case Job::Job216:
-    case Job::Job217:  // 0x4eeb0a
+    case Job::MinerEatCoalMine:
+    case Job::MinerEatGoldMine:
+    case Job::MinerEatIronMine:
+    case Job::MinerEatGemMine:
+    case Job::MinerEatSulfurMine:  // 0x4eeb0a
         Call<kMinerJobFood>(ctx.world, ctx.number);
         return JobResult::Next;
-    case Job::Job88:
-    case Job::Job92:
-    case Job::Job96:
-    case Job::Job218:
-    case Job::Job222:  // 0x4eeb31
+    case Job::MinerDigCoalMine:
+    case Job::MinerDigGoldMine:
+    case Job::MinerDigIronMine:
+    case Job::MinerDigGemMine:
+    case Job::MinerDigSulfurMine:  // 0x4eeb31
         Call<kMinerJobDig>(ctx.world, ctx.number);
         return JobResult::Next;
-    case Job::Job89:
-    case Job::Job91: return LeaveWorkTile(ctx, Job::Job85);  // 0x4eeb3e
-    case Job::Job90: return MineProductDone(ctx, G::Coal, Job::Job91, 96);
-    case Job::Job93:
-    case Job::Job95: return LeaveWorkTile(ctx, Job::Job86);  // 0x4eebff
-    case Job::Job94: return MineProductDone(ctx, G::GoldOre, Job::Job95, 99);
-    case Job::Job97:
-    case Job::Job99: return LeaveWorkTile(ctx, Job::Job87);  // 0x4eecc0
-    case Job::Job98: return MineProductDone(ctx, G::IronOre, Job::Job99, 102);
-    case Job::Job219:
-    case Job::Job221: return LeaveWorkTile(ctx, Job::Job216);  // 0x4eed81
-    case Job::Job220: return MineProductDone(ctx, G::Gems, Job::Job221, 218);
-    case Job::Job223:
-    case Job::Job225: return LeaveWorkTile(ctx, Job::Job217);  // 0x4eee45
-    case Job::Job224: return MineProductDone(ctx, G::Sulfur, Job::Job225, 221);
+    case Job::MinerFoundNothingCoalMine:
+    case Job::Job91: return LeaveWorkTile(ctx, Job::MinerEatCoalMine);  // 0x4eeb3e
+    case Job::MinerFoundCoalMine: return MineProductDone(ctx, G::Coal, Job::Job91, 96);
+    case Job::MinerFoundNothingGoldMine:
+    case Job::Job95: return LeaveWorkTile(ctx, Job::MinerEatGoldMine);  // 0x4eebff
+    case Job::MinerFoundGoldMine: return MineProductDone(ctx, G::GoldOre, Job::Job95, 99);
+    case Job::MinerFoundNothingIronMine:
+    case Job::Job99: return LeaveWorkTile(ctx, Job::MinerEatIronMine);  // 0x4eecc0
+    case Job::MinerFoundIronMine: return MineProductDone(ctx, G::IronOre, Job::Job99, 102);
+    case Job::MinerFoundNothingGemMine:
+    case Job::Job221: return LeaveWorkTile(ctx, Job::MinerEatGemMine);  // 0x4eed81
+    case Job::MinerFoundGemMine: return MineProductDone(ctx, G::Gems, Job::Job221, 218);
+    case Job::MinerFoundNothingSulfurMine:
+    case Job::Job225: return LeaveWorkTile(ctx, Job::MinerEatSulfurMine);  // 0x4eee45
+    case Job::MinerFoundSulfurMine: return MineProductDone(ctx, G::Sulfur, Job::Job225, 221);
     // 0x4eeb17, 0x4eeb24: jobs 0x186..0x18f call an empty function.
     case Job::Job390:
     case Job::Job391:
@@ -670,12 +670,12 @@ constexpr Job kMetalJobs[] = {
     Job::Job49, Job::Job50, Job::Job51, Job::Job52, Job::Job54, Job::Job58, Job::Job59, Job::Job60,
     Job::Job61, Job::Job62, Job::Job63, Job::Job64, Job::Job65, Job::Job68, Job::Job69, Job::Job70,
     Job::Job71, Job::Job72, Job::Job73, Job::Job74, Job::Job75, Job::MinerEnterCoalMine,
-    Job::MinerEnterGoldMine, Job::MinerEnterIronMine, Job::Job85, Job::Job86, Job::Job87, Job::Job88,
-    Job::Job89, Job::Job90, Job::Job91, Job::Job92, Job::Job93, Job::Job94, Job::Job95, Job::Job96,
-    Job::Job97, Job::Job98, Job::Job99, Job::LeaveHouse, Job::Job107, Job::Job116, Job::Job125, Job::Job126,
+    Job::MinerEnterGoldMine, Job::MinerEnterIronMine, Job::MinerEatCoalMine, Job::MinerEatGoldMine, Job::MinerEatIronMine, Job::MinerDigCoalMine,
+    Job::MinerFoundNothingCoalMine, Job::MinerFoundCoalMine, Job::Job91, Job::MinerDigGoldMine, Job::MinerFoundNothingGoldMine, Job::MinerFoundGoldMine, Job::Job95, Job::MinerDigIronMine,
+    Job::MinerFoundNothingIronMine, Job::MinerFoundIronMine, Job::Job99, Job::LeaveHouse, Job::Job107, Job::Job116, Job::Job125, Job::Job126,
     Job::Job127, Job::Job128, Job::Job129, Job::Job130, Job::Job175, Job::MinerEnterGemMine,
-    Job::MinerEnterSulfurMine, Job::Job216, Job::Job217, Job::Job218, Job::Job219, Job::Job220, Job::Job221,
-    Job::Job222, Job::Job223, Job::Job224, Job::Job225, Job::Job296, Job::Job297, Job::Job298, Job::Job299,
+    Job::MinerEnterSulfurMine, Job::MinerEatGemMine, Job::MinerEatSulfurMine, Job::MinerDigGemMine, Job::MinerFoundNothingGemMine, Job::MinerFoundGemMine, Job::Job221,
+    Job::MinerDigSulfurMine, Job::MinerFoundNothingSulfurMine, Job::MinerFoundSulfurMine, Job::Job225, Job::Job296, Job::Job297, Job::Job298, Job::Job299,
     Job::Job300, Job::Job301, Job::CatapultProduction, Job::Job312, Job::Job313, Job::Job390, Job::Job391,
     Job::Job392, Job::Job393, Job::Job394, Job::Job395, Job::Job396, Job::Job397, Job::Job398, Job::Job399};
 static_assert(sizeof(kMetalJobs) / sizeof(kMetalJobs[0]) == 80);

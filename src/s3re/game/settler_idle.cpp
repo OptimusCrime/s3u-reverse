@@ -66,9 +66,8 @@ using Job = SettlerJob;
 // geologists that give up their target.
 constexpr std::uint8_t kTileClaimed = layout::kTileFlag02;
 
-// Pile kind 0xfc: probably a trade building's ring pile, whose `leaving`
-// byte counts units coming in its high nibble (as UpdateEconomy reads it).
-constexpr std::uint8_t kPileKindTradeRing = 0xfc;
+// A trade building's ring pile (PileKind::TradeRing) counts the units
+// coming in the high nibble of its `leaving` byte (as UpdateEconomy reads it).
 constexpr std::uint8_t kLeavingHighNibbleMinusOne = 0xf0;  // + 0xf0 = - 0x10 in a byte
 
 // The jobs in which a settler holds a place in its building (step 5).
@@ -188,7 +187,7 @@ void ReleasePileOfJobs76To79(CGameData* world, Settler& settler, std::uint32_t& 
     }
     const std::uint32_t pileNumber = settler.building;  // word +0x22 holds a pile in these jobs
     Pile& pile = world->piles[pileNumber];
-    if (pile.art == kPileKindTradeRing) {
+    if (KindOf(pile) == PileKind::TradeRing) {
         pile.leaving = static_cast<std::uint8_t>(pile.leaving + kLeavingHighNibbleMinusOne);
         return;
     }
@@ -468,7 +467,7 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t settle
         });
     }
     if (CarriesPileOfJobs76To79(job)) {
-        const auto kind = static_cast<std::uint8_t>(rng.Chance(1, 4) ? kPileKindTradeRing : rng.Next32());
+        const auto kind = static_cast<std::uint8_t>(rng.Chance(1, 4) ? Value(PileKind::TradeRing) : rng.Next32());
         const auto amount = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0 : rng.Below(5));
         const auto coming = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 1 : rng.Below(5));
         const auto px = static_cast<std::uint16_t>(10 + rng.Below(360));

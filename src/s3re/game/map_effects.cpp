@@ -40,6 +40,17 @@ namespace s3re::game {
 using layout::MapEffect;
 using layout::MapEffectTable;
 
+namespace {
+
+// The defaults of the record fields the constructors fill with -1 / 0xff
+// (meaning unknown, probably "none").
+constexpr std::uint32_t kUnset32 = 0xffffffffu;
+constexpr std::uint8_t kUnset8 = 0xff;
+// MapEffect_SetLinks: -1 keeps a link as it is.
+constexpr std::uint32_t kKeepLink = 0xffffffffu;
+
+}  // namespace
+
 using DefaultEffectFn = void*(__fastcall*)(MapEffect* self, void* edx);
 using EffectFn = void*(__fastcall*)(MapEffect* self, void* edx, std::uint32_t a1, std::uint32_t a2, std::uint32_t a3,
                                     std::uint32_t a4, std::uint32_t a5, std::uint32_t a6, std::uint32_t a7,
@@ -67,9 +78,9 @@ void* __fastcall MapEffect_DefaultConstruct(MapEffect* self, void*) {
     self->arc = 0;
     self->unk32 = 0;
     self->source_id = 0;
-    self->unk2c = 0xffffffffu;
-    self->unk34 = 0xffffffffu;
-    self->unk38 = 0xff;
+    self->unk2c = kUnset32;
+    self->unk34 = kUnset32;
+    self->unk38 = kUnset8;
     self->unk39 = 0;
     self->source_kind = 0;
     return self;
@@ -126,10 +137,10 @@ using SetLinksFn = std::uint32_t(__fastcall*)(MapEffect* self, void* edx, std::u
 std::uint32_t __fastcall MapEffect_SetLinks(MapEffect* self, void*, std::uint32_t list, std::uint32_t previous,
                                             std::uint32_t next) {
     self->list = list;
-    if (previous != 0xffffffffu) {
+    if (previous != kKeepLink) {
         self->previous = previous;
     }
-    if (next != 0xffffffffu) {
+    if (next != kKeepLink) {
         self->next = next;
     }
     return next;
@@ -189,7 +200,7 @@ void* MakeEffect(MapEffect* self, std::uint32_t a1, std::uint32_t a2, std::uint3
 void* __fastcall MapEffect_Make_543930(MapEffect* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
                                        std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
     return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a0, 0u, 0u, a1, a2, a1, a2, 0u, a3, a4, a3, a4,
-                      a5, 0u, a0, 0xffu, 0u, 0xffffffffu);
+                      a5, 0u, a0, kUnset8, 0u, kUnset32);
 }
 
 S3RE_HOOK(0x00543930, MapEffect_Make_543930, Make6Fn, Original_MapEffect_Make_543930, MapEffect_Make_543930);
@@ -199,7 +210,7 @@ S3RE_HOOK(0x00543930, MapEffect_Make_543930, Make6Fn, Original_MapEffect_Make_54
 void* __fastcall MapEffect_Make_5439a0(MapEffect* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
                                        std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6) {
     return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a0, 0u, 0u, a1, a2, a1, a2, 0u, a3, a4, a3, a4,
-                      a5, 0u, a0, a6, 0u, 0xffffffffu);
+                      a5, 0u, a0, a6, 0u, kUnset32);
 }
 
 S3RE_HOOK(0x005439a0, MapEffect_Make_5439a0, Make7Fn, Original_MapEffect_Make_5439a0, MapEffect_Make_5439a0);
@@ -210,7 +221,7 @@ void* __fastcall MapEffect_Make_543a10(MapEffect* self, void* edx, std::uint32_t
                                        std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
                                        std::uint32_t a7, std::uint32_t a8, std::uint32_t a9) {
     return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a9, 0u, 0u, a1, a2, a3, a4, 0u, a5, a6, a5, a6,
-                      a7, a8, a9, 0xffu, 0u, 0xffffffffu);
+                      a7, a8, a9, kUnset8, 0u, kUnset32);
 }
 
 S3RE_HOOK(0x00543a10, MapEffect_Make_543a10, Make10Fn, Original_MapEffect_Make_543a10, MapEffect_Make_543a10);
@@ -222,7 +233,7 @@ void* __fastcall MapEffect_Make_543aa0(MapEffect* self, void* edx, std::uint32_t
                                        std::uint32_t a7, std::uint32_t a8, std::uint32_t a9, std::uint32_t a10,
                                        std::uint32_t a11, std::uint32_t a12) {
     return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a12, 0u, 0u, a1, a2, a3, a4, a5, a6, a7, a8, a9,
-                      a10, a11, a12, 0xffu, 0u, 0xffffffffu);
+                      a10, a11, a12, kUnset8, 0u, kUnset32);
 }
 
 S3RE_HOOK(0x00543aa0, MapEffect_Make_543aa0, Make13Fn, Original_MapEffect_Make_543aa0, MapEffect_Make_543aa0);
@@ -233,7 +244,7 @@ void* __fastcall MapEffect_Make_543b40(MapEffect* self, void* edx, std::uint32_t
                                        std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
                                        std::uint32_t a7) {
     return MakeEffect(self, a1, a2, a2, reinterpret_cast<std::uint32_t>(edx), a0, a3, a4, a3, a4, 0u, a5, a6, a5, a6,
-                      a7, 0u, a2, 0xffu, 0u, 0xffffffffu);
+                      a7, 0u, a2, kUnset8, 0u, kUnset32);
 }
 
 S3RE_HOOK(0x00543b40, MapEffect_Make_543b40, Make8Fn, Original_MapEffect_Make_543b40, MapEffect_Make_543b40);
@@ -244,7 +255,7 @@ void* __fastcall MapEffect_Make_543bc0(MapEffect* self, void* edx, std::uint32_t
                                        std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
                                        std::uint32_t a7, std::uint32_t a8, std::uint32_t a9) {
     return MakeEffect(self, a1, a2, a9, reinterpret_cast<std::uint32_t>(edx), a0, a3, a4, a3, a4, 0u, a5, a6, a5, a6,
-                      a7, a8, a9, 0xffu, 0u, 0xffffffffu);
+                      a7, a8, a9, kUnset8, 0u, kUnset32);
 }
 
 S3RE_HOOK(0x00543bc0, MapEffect_Make_543bc0, Make10Fn, Original_MapEffect_Make_543bc0, MapEffect_Make_543bc0);
@@ -256,7 +267,7 @@ void* __fastcall MapEffect_Make_543c40(MapEffect* self, void* edx, std::uint32_t
                                        std::uint32_t a7, std::uint32_t a8, std::uint32_t a9, std::uint32_t a10,
                                        std::uint32_t a11) {
     return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a11, 0u, 0u, a1, a2, a3, a4, a5, a6, a7, a8, a9,
-                      a10, 0u, a11, 0xffu, 0u, 0xffffffffu);
+                      a10, 0u, a11, kUnset8, 0u, kUnset32);
 }
 
 S3RE_HOOK(0x00543c40, MapEffect_Make_543c40, Make12Fn, Original_MapEffect_Make_543c40, MapEffect_Make_543c40);
@@ -267,7 +278,7 @@ void* __fastcall MapEffect_Make_543ce0(MapEffect* self, void* edx, std::uint32_t
                                        std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
                                        std::uint32_t a7, std::uint32_t a8) {
     return MakeEffect(self, a1, a2, a8, reinterpret_cast<std::uint32_t>(edx), a0, a3, a4, a3, a4, 0u, a5, a6, a5, a6,
-                      a7, 0u, a8, 0xffu, 0u, 0xffffffffu);
+                      a7, 0u, a8, kUnset8, 0u, kUnset32);
 }
 
 S3RE_HOOK(0x00543ce0, MapEffect_Make_543ce0, Make9Fn, Original_MapEffect_Make_543ce0, MapEffect_Make_543ce0);
@@ -278,7 +289,7 @@ void* __fastcall MapEffect_Make_543d60(MapEffect* self, void* edx, std::uint32_t
                                        std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
                                        std::uint32_t a7, std::uint32_t a8, std::uint32_t a9) {
     return MakeEffect(self, a1, a2, a3, reinterpret_cast<std::uint32_t>(edx), a0, a4, a5, a4, a5, 0u, a6, a7, a6, a7,
-                      a8, 0u, a9, 0xffu, 0u, 0xffffffffu);
+                      a8, 0u, a9, kUnset8, 0u, kUnset32);
 }
 
 S3RE_HOOK(0x00543d60, MapEffect_Make_543d60, Make10Fn, Original_MapEffect_Make_543d60, MapEffect_Make_543d60);
@@ -289,7 +300,7 @@ void* __fastcall MapEffect_Make_543df0(MapEffect* self, void* edx, std::uint32_t
                                        std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
                                        std::uint32_t a7, std::uint32_t a8, std::uint32_t a9, std::uint32_t a10) {
     return MakeEffect(self, a1, a2, a3, reinterpret_cast<std::uint32_t>(edx), a0, a4, a5, a4, a5, 0u, a6, a7, a6, a7,
-                      a8, a9, a10, 0xffu, 0u, 0xffffffffu);
+                      a8, a9, a10, kUnset8, 0u, kUnset32);
 }
 
 S3RE_HOOK(0x00543df0, MapEffect_Make_543df0, Make11Fn, Original_MapEffect_Make_543df0, MapEffect_Make_543df0);
@@ -299,7 +310,7 @@ S3RE_HOOK(0x00543df0, MapEffect_Make_543df0, Make11Fn, Original_MapEffect_Make_5
 void* __fastcall MapEffect_Make_543e80(MapEffect* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2,
                                        std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6) {
     return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a0, 0u, 0u, a1, a2, a1, a2, 0u, a3, a4, a3, a4,
-                      a5, 0u, a0, 0xffu, a6, 0xffffffffu);
+                      a5, 0u, a0, kUnset8, a6, kUnset32);
 }
 
 S3RE_HOOK(0x00543e80, MapEffect_Make_543e80, Make7Fn, Original_MapEffect_Make_543e80, MapEffect_Make_543e80);
@@ -310,7 +321,7 @@ void* __fastcall MapEffect_Make_543ef0(MapEffect* self, void* edx, std::uint32_t
                                        std::uint32_t a3, std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
                                        std::uint32_t a7) {
     return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), a0, a1, 0u, 0u, a2, a3, a2, a3, 0u, a4, a5, a4, a5,
-                      a6, 0u, a7, 0xffu, 0u, 0xffffffffu);
+                      a6, 0u, a7, kUnset8, 0u, kUnset32);
 }
 
 S3RE_HOOK(0x00543ef0, MapEffect_Make_543ef0, Make8Fn, Original_MapEffect_Make_543ef0, MapEffect_Make_543ef0);
@@ -318,8 +329,8 @@ S3RE_HOOK(0x00543ef0, MapEffect_Make_543ef0, Make8Fn, Original_MapEffect_Make_54
 // Purpose: Builds a map effect record of one kind (probably one kind of
 // visual effect; meaning of the fixed values unknown) in place.
 void* __fastcall MapEffect_Make_543f70(MapEffect* self, void* edx, std::uint32_t a0, std::uint32_t a1, std::uint32_t a2) {
-    return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), 0xffffffffu, 1u, 0u, 0u, a0, a1, a0, a1, 0u, 0u, 0u,
-                      0u, 0u, 0xffffffffu, 0u, 0u, 0xffu, 0u, a2);
+    return MakeEffect(self, reinterpret_cast<std::uint32_t>(edx), kUnset32, 1u, 0u, 0u, a0, a1, a0, a1, 0u, 0u, 0u,
+                      0u, 0u, kUnset32, 0u, 0u, kUnset8, 0u, a2);
 }
 
 S3RE_HOOK(0x00543f70, MapEffect_Make_543f70, Make3Fn, Original_MapEffect_Make_543f70, MapEffect_Make_543f70);
@@ -348,6 +359,18 @@ void __fastcall MapEffect_PositionAt(MapEffect* self, void* edx, std::int32_t ti
 std::int32_t __fastcall MapEffects_SetMapSize(MapEffectTable* self, void* edx, std::int32_t a, std::int32_t b);
 
 namespace {
+
+// The effect table's grid: blocks of 256 x 256 pixels, each with a list of
+// the effects that end in it.
+constexpr std::int32_t kBlockPixels = 256;
+constexpr std::uint32_t kTileWidthPixels = 24;
+constexpr std::uint32_t kTileHeightPixels = 9;
+
+// The number of blocks that cover `pixels` (> 0): (pixels - 1) / 256 + 1,
+// signed like the original.
+std::int32_t BlocksFor(std::int32_t pixels) {
+    return static_cast<std::int32_t>(static_cast<std::uint32_t>(pixels) - 1) / kBlockPixels + 1;
+}
 
 // (a * b) / c with the 32-bit wrap-around of imul and a signed idiv.
 std::int32_t MulDiv32(std::int32_t a, std::int32_t b, std::int32_t c) {
@@ -396,16 +419,20 @@ S3RE_HOOK(0x00544320, MapEffects_SetMapSize, SetMapSizeFn, Original_MapEffects_S
 
 // Purpose: Sets up the map effect table's grid of 256-pixel blocks for the
 // map size at the start of a game (probably to find the effects to draw).
+// `a` is the map size in tiles, `b` a margin (200 at the only call).
 std::int32_t __fastcall MapEffects_SetMapSize(MapEffectTable* self, void* /*edx*/, std::int32_t a, std::int32_t b) {
     const auto ua = static_cast<std::uint32_t>(a), ub = static_cast<std::uint32_t>(b);
-    const auto width = static_cast<std::int32_t>(2 * (ub + 12 * ua));
-    const auto height = static_cast<std::int32_t>(9 * ua + 2 * ub);
+    // Probably the map's size in pixels (24 per tile across, 9 down) plus
+    // twice the margin; 32-bit wrap-around as in the original.
+    const auto width = static_cast<std::int32_t>(kTileWidthPixels * ua + 2 * ub);
+    const auto height = static_cast<std::int32_t>(kTileHeightPixels * ua + 2 * ub);
     self->width = width;
     self->height = height;
-    const std::int32_t blocksX = static_cast<std::int32_t>(static_cast<std::uint32_t>(width) - 1) / 256 + 1;
+    const std::int32_t blocksX = BlocksFor(width);
     self->blocks_x = blocksX;
-    const std::int32_t blocksY = static_cast<std::int32_t>(static_cast<std::uint32_t>(height) - 1) / 256 + 1;
+    const std::int32_t blocksY = BlocksFor(height);
     self->blocks_y = blocksY;
+    // Meaning of the sixteenth unknown.
     const std::int32_t cells = static_cast<std::int32_t>(static_cast<std::uint32_t>(blocksY) * static_cast<std::uint32_t>(blocksX)) / 16;
     self->block_count_16 = cells;
     return cells;
@@ -788,9 +815,9 @@ S3RE_HOOK(0x00545ee0, MapEffects_FindFreeSlot, FindFreeSlotFn, Original_MapEffec
 // first); 0 when all 4999 are taken.
 std::uint32_t __fastcall MapEffects_FindFreeSlot(MapEffectTable* self, void* /*edx*/) {
     const std::int32_t used = self->slots_used;
-    std::int32_t slot = 1;
+    std::int32_t slot = 1;  // slot 0 is never used
     for (; slot <= used; ++slot) {
-        if (self->records[slot].start_tick == 0) {
+        if (self->records[slot].start_tick == 0) {  // a free record
             return static_cast<std::uint32_t>(slot);
         }
     }
@@ -810,8 +837,9 @@ S3RE_HOOK(0x00545eb0, MapEffects_CellOfPosition, CellOfPositionFn, Original_MapE
 // falls into; each block keeps a list of the effects in it (probably so the
 // drawing only visits the effects on screen).
 std::int32_t __fastcall MapEffects_CellOfPosition(MapEffectTable* self, void* /*edx*/, std::int32_t x, std::int32_t y) {
-    const std::uint32_t row = static_cast<std::uint32_t>(y / 256) * static_cast<std::uint32_t>(self->blocks_x);
-    return static_cast<std::int32_t>(row + static_cast<std::uint32_t>(x / 256) + 1);
+    // Cells count from 1 (cell 0 is not used).
+    const std::uint32_t row = static_cast<std::uint32_t>(y / kBlockPixels) * static_cast<std::uint32_t>(self->blocks_x);
+    return static_cast<std::int32_t>(row + static_cast<std::uint32_t>(x / kBlockPixels) + 1);
 }
 
 S3RE_HOOK(0x00545df0, MapEffects_LinkIntoCell, LinkIntoCellFn, Original_MapEffects_LinkIntoCell,
@@ -825,7 +853,7 @@ std::uint32_t __fastcall MapEffects_LinkIntoCell(MapEffectTable* self, void* /*e
     MapEffect_SetLinks(record, nullptr, cell, 0, self->cell_heads[cell]);
     std::uint32_t result = record->next;
     if (result != 0) {
-        result = MapEffect_SetLinks(&self->records[result], nullptr, cell, slot, 0xffffffffu);
+        result = MapEffect_SetLinks(&self->records[result], nullptr, cell, slot, kKeepLink);
     }
     self->cell_heads[cell] = slot;
     return result;
@@ -869,31 +897,36 @@ std::uint32_t __fastcall MapEffects_Spawn_545860(MapEffectTable* self, void* edx
 
 S3RE_HOOK(0x005450d0, MapEffects_Spawn_5450d0, Spawn5Fn, Original_MapEffects_Spawn_5450d0, MapEffects_Spawn_5450d0);
 
-// Purpose: Adds one map effect of a fixed kind (type 0x23, graphics
+// Purpose: Adds one map effect of a fixed kind (35 ticks, graphics
 // 0x30001; meaning unknown).
 std::uint32_t __fastcall MapEffects_Spawn_5450d0(MapEffectTable* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
                                                  std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
     MapEffect effect;
-    MapEffect_Make_543ef0(&effect, Edx(a1), 0x23, 0xa, a2, a3, a4, a5, 0x30001, 2);
+    MapEffect_Make_543ef0(&effect, Edx(a1), /*duration*/ 35, /*+0x06*/ 10, a2, a3, a4, a5, /*+0x2c*/ 0x30001,
+                          /*+0x32*/ 2);
     return MapEffects_Add(self, nullptr, &effect);
 }
 
 S3RE_HOOK(0x00545120, MapEffects_Spawn_545120, Spawn5Fn, Original_MapEffects_Spawn_545120, MapEffects_Spawn_545120);
 
-// Purpose: Adds one stationary map effect of kind 0x18 at a position.
+// Purpose: Adds one stationary map effect with the value 24 (0x18; record
+// +0x34, meaning unknown) at a position.
 std::uint32_t __fastcall MapEffects_Spawn_545120(MapEffectTable* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
                                                  std::uint32_t a3, std::uint32_t, std::uint32_t) {
     MapEffect effect;
-    MapEffect_Make_543f70(&effect, Edx(a1), a2, a3, 0x18);
+    MapEffect_Make_543f70(&effect, Edx(a1), a2, a3, /*+0x34*/ 24);
     return MapEffects_Add(self, nullptr, &effect);
 }
 
 namespace {
 
+// 0x544f20 / 0x545070: a 16-tick flight from (a2, a3) to (a4, a5 + 5)
+// and a stationary effect at the start; they differ only in the latter's
+// value `kind` (record +0x34).
 std::uint32_t SpawnPair(MapEffectTable* self, std::uint32_t a1, std::uint32_t a2, std::uint32_t a3, std::uint32_t a4,
                         std::uint32_t a5, std::uint32_t kind) {
     MapEffect effect;
-    MapEffect_Make_543930(&effect, Edx(a1), 0x10, a2, a3, a4, a5 + 5, 0xd0026);
+    MapEffect_Make_543930(&effect, Edx(a1), /*duration*/ 16, a2, a3, a4, a5 + 5, /*+0x2c*/ 0xd0026);
     MapEffects_Add(self, nullptr, &effect);
     MapEffect_Make_543f70(&effect, Edx(a1), a2, a3, kind);
     return MapEffects_Add(self, nullptr, &effect);
@@ -903,36 +936,43 @@ std::uint32_t SpawnPair(MapEffectTable* self, std::uint32_t a1, std::uint32_t a2
 
 S3RE_HOOK(0x00544f20, MapEffects_Spawn_544f20, Spawn5Fn, Original_MapEffects_Spawn_544f20, MapEffects_Spawn_544f20);
 
-// Purpose: Adds a moving effect (graphics 0xd0026) plus a stationary one of
-// kind 0x5d at the start (probably a projectile and its launch effect).
+// Purpose: Adds a moving effect (graphics 0xd0026) plus a stationary one
+// with the value 93 (0x5d) at the start (probably a projectile and its
+// launch effect).
 std::uint32_t __fastcall MapEffects_Spawn_544f20(MapEffectTable* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
                                                  std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
-    return SpawnPair(self, a1, a2, a3, a4, a5, 0x5d);
+    return SpawnPair(self, a1, a2, a3, a4, a5, 93);
 }
 
 S3RE_HOOK(0x00545070, MapEffects_Spawn_545070, Spawn5Fn, Original_MapEffects_Spawn_545070, MapEffects_Spawn_545070);
 
-// Purpose: The same pair of effects as 0x544f20 with kind 0x63 for the
-// stationary one.
+// Purpose: The same pair of effects as 0x544f20 with the value 99 (0x63)
+// for the stationary one.
 std::uint32_t __fastcall MapEffects_Spawn_545070(MapEffectTable* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
                                                  std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
-    return SpawnPair(self, a1, a2, a3, a4, a5, 0x63);
+    return SpawnPair(self, a1, a2, a3, a4, a5, 99);
 }
 
 S3RE_HOOK(0x00544f80, MapEffects_Spawn_544f80, Spawn5Fn, Original_MapEffects_Spawn_544f80, MapEffects_Spawn_544f80);
 
 // Purpose: Adds four staggered effects (graphics 0xd0031) around a position
-// plus a stationary one of kind 0x5d (probably a burst of sparks or smoke).
+// plus a stationary one with the value 93 (0x5d) (probably a burst of
+// sparks or smoke).
 std::uint32_t __fastcall MapEffects_Spawn_544f80(MapEffectTable* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
                                                  std::uint32_t a3, std::uint32_t a4, std::uint32_t a5) {
-    static constexpr std::uint32_t kSteps[4][3] = {
-        {0, 10, 0xfffffffbu}, {7, 0xfffffffeu, 20}, {1, 0, 0}, {5, 20, 5}};
+    struct Burst {
+        std::uint32_t delay;  // ticks after a1
+        std::int32_t dx, dy;  // pixels from (a2, a3)
+    };
+    static constexpr Burst kBursts[4] = {{0, 10, -5}, {7, -2, 20}, {1, 0, 0}, {5, 20, 5}};
     MapEffect effect;
-    for (const auto& step : kSteps) {
-        MapEffect_Make_543930(&effect, Edx(a1 + step[0]), 9, a2 + step[1], a3 + step[2], a4, a5, 0xd0031);
+    for (const Burst& burst : kBursts) {
+        MapEffect_Make_543930(&effect, Edx(a1 + burst.delay), /*duration*/ 9,
+                              a2 + static_cast<std::uint32_t>(burst.dx), a3 + static_cast<std::uint32_t>(burst.dy),
+                              a4, a5, /*+0x2c*/ 0xd0031);
         MapEffects_Add(self, nullptr, &effect);
     }
-    MapEffect_Make_543f70(&effect, Edx(a1), a2, a3, 0x5d);
+    MapEffect_Make_543f70(&effect, Edx(a1), a2, a3, /*+0x34*/ 93);
     return MapEffects_Add(self, nullptr, &effect);
 }
 
@@ -947,39 +987,44 @@ std::uint32_t __fastcall MapEffects_Spawn_544dc0(MapEffectTable* self, void* /*e
     const std::uint32_t* offsets0 = g_spawnOffsetsX;
     const std::uint32_t* offsets1 = g_spawnOffsetsY;
     MapEffect effect;
-    MapEffect_Make_543ce0(&effect, nullptr, a3, offsets0[a2] + a1, offsets1[a2], a4, a5, a6, a7, kGraphics[a2], 0xc);
+    MapEffect_Make_543ce0(&effect, nullptr, a3, offsets0[a2] + a1, offsets1[a2], a4, a5, a6, a7, kGraphics[a2],
+                          /*+0x32*/ 12);
     return MapEffects_Add(self, nullptr, &effect);
 }
 
 S3RE_HOOK(0x00544e70, MapEffects_Spawn_544e70, Spawn7Fn, Original_MapEffects_Spawn_544e70, MapEffects_Spawn_544e70);
 
-// Purpose: Adds a moving effect of kind 0x16 and a stationary one; variant
-// 3 uses other graphics (0x2a0012, kind 0x71) than the rest (0xc0012, 0x23).
+// Purpose: Adds a moving effect of 22 ticks and a stationary one; variant
+// 3 (probably the Amazons) uses other graphics (0x2a0012, value 113) than
+// the rest (0xc0012, 35).
 std::uint32_t __fastcall MapEffects_Spawn_544e70(MapEffectTable* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
                                                  std::uint32_t a3, std::uint32_t a4, std::uint32_t a5,
                                                  std::uint32_t a6, std::uint32_t a7) {
     const bool three = static_cast<std::uint8_t>(a7) == 3;
     MapEffect effect;
-    MapEffect_Make_5439a0(&effect, Edx(a1), 0x16, a2, a3, a4, a5, three ? 0x2a0012u : 0xc0012u, a6);
+    MapEffect_Make_5439a0(&effect, Edx(a1), /*duration*/ 22, a2, a3, a4, a5,
+                          /*+0x2c*/ three ? 0x2a0012u : 0xc0012u, a6);
     MapEffects_Add(self, nullptr, &effect);
-    MapEffect_Make_543f70(&effect, Edx(a1), a2, a3, three ? 0x71u : 0x23u);
+    MapEffect_Make_543f70(&effect, Edx(a1), a2, a3, /*+0x34*/ three ? 113u : 35u);
     return MapEffects_Add(self, nullptr, &effect);
 }
 
 S3RE_HOOK(0x00545860, MapEffects_Spawn_545860, Spawn9Fn, Original_MapEffects_Spawn_545860, MapEffects_Spawn_545860);
 
-// Purpose: Adds three stationary effects of kind 0x70 at one position,
-// starting 0x14 ticks apart (probably a repeating animation). Returns 0x3c
-// (probably the total duration).
+// Purpose: Adds three stationary effects with the value 112 (0x70) at one
+// position, starting 20 ticks apart (probably a repeating animation).
+// Returns 60 (probably the total duration).
 std::uint32_t __fastcall MapEffects_Spawn_545860(MapEffectTable* self, void* /*edx*/, std::uint32_t a1, std::uint32_t a2,
                                                  std::uint32_t a3, std::uint32_t, std::uint32_t, std::uint32_t,
                                                  std::uint32_t, std::uint32_t, std::uint32_t) {
+    constexpr std::uint32_t kRepeats = 3;
+    constexpr std::uint32_t kInterval = 20;  // ticks
     MapEffect effect;
-    for (std::uint32_t n = 0; n < 3; ++n) {
-        MapEffect_Make_543f70(&effect, Edx(a1 + 0x14 * n), a2, a3, 0x70);
+    for (std::uint32_t n = 0; n < kRepeats; ++n) {
+        MapEffect_Make_543f70(&effect, Edx(a1 + kInterval * n), a2, a3, /*+0x34*/ 112);
         MapEffects_Add(self, nullptr, &effect);
     }
-    return 0x3c;
+    return kRepeats * kInterval;
 }
 
 namespace {

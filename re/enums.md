@@ -272,7 +272,7 @@ Who a goods pile belongs to. Added in the readability rollout (group 3).
 | 252 | TradeRing | high | BuildingDone: six piles of a marketplace/harbour (tables 0x6594a4, 0x659564), linked in a ring; `leaving` counts arrivals in its high nibble |
 | 253 | Order | high | a building's input piles and a site's boards/stones (BuildingDone step 4, building_sites); StealGoodFromPile's DebugLog "OrderPile nix mehr frei!" |
 | 254 | Dropped | high | DropGoodNear, CrushBuilding: goods put on the ground; removed when empty (TakeGoodFromPile) |
-| 255 | Output | high | BuildingDone: CreatePile(door, good, 0, 0xff) for a producer's output pile (stored in +0xe); leaves its goods list while all units are reserved |
+| 255 | Output | high | BuildingDone: CreatePile(door, good, 0, 0xff) for a producer's output pile (stored in +0xe); leaves its goods list while all units are reserved; UpdateEconomy's source search and FetchGoodsToTradeBuilding score these piles by distance only (were "free-standing"/"plain" piles there) |
 
 
 ## Spells (`Spell`, uint32; the spell argument of ExecuteSpell)

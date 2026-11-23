@@ -51,7 +51,6 @@ using layout::Tile;
 using Job = SettlerJob;
 
 constexpr std::uint8_t kFree = 0xff;         // Tile::owner / Settler::owner of nobody
-constexpr std::uint8_t kPileDropped = 0xfe;  // Pile::art of a pile lying on the ground
 
 // Callees reached through their S3.EXE addresses (so that the tests can
 // replace them by recording stubs): ResetSettlerToIdle belongs to another
@@ -121,7 +120,7 @@ void __fastcall CGameData_LosePileOnTile(CGameData* world, void*, std::uint32_t 
     }
     const std::uint32_t number = tile.object_number;
     Pile& pile = world->piles[number];
-    if (pile.art == kPileDropped) {
+    if (KindOf(pile) == PileKind::Dropped) {
         if (pile.leaving != 0) {
             for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
                 const Settler& settler = world->settlers[n];
@@ -386,7 +385,7 @@ TileCase SetUpTile(test::Context& ctx, test::WorldPair& worlds) {
     const auto flags = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? ctx.rng().Next32() & ~0x20u : ctx.rng().Next32());
     const auto px = static_cast<std::uint16_t>(ctx.rng().Chance(4, 5) ? x : ctx.rng().Below(384));
     const auto py = static_cast<std::uint16_t>(ctx.rng().Chance(4, 5) ? y : ctx.rng().Below(384));
-    const auto art = static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? kPileDropped : ctx.rng().Below(256));
+    const auto art = static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? Value(PileKind::Dropped) : ctx.rng().Below(256));
     const auto leaving = static_cast<std::uint8_t>(ctx.rng().Chance(1, 3) ? 0 : ctx.rng().Below(9));
     const auto good = static_cast<std::uint8_t>(ctx.rng().Below(36));
     const auto amount = static_cast<std::uint8_t>(ctx.rng().Below(9));

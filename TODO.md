@@ -49,22 +49,31 @@ Each item: what, why, and where to start.
 - **Convert the remaining files** to the style guide (pilot done in
   session 45: settler_idle.cpp, update_economy.cpp, settler_walk.cpp;
   rollout groups 1..5 done (settlers, buildings, piles/areas, map,
-  environment/spells), see LOGBOOK "readability rollout"). Still to do: map_effects.cpp (light touch only
-  so far: map_effect_spawns.cpp), the AI, UI and framework files, and the
-  rest of logic_helpers.cpp / player_queries.cpp.
+  environment/spells), see LOGBOOK "readability rollout"; map_effects,
+  pathing, logic_helpers, player_queries in session 47). Still to do:
+  map_effect_spawns.cpp (light touch only: its effect tables are still
+  hex), the AI, UI and framework files.
 - **Tile::object enum:** the landscape object values (trees 0x44..0x52,
   young trees 0x55..0x6f, fire 0xf3..0xf6, ...) stay hex in
   environment.cpp, spells.cpp and map_generation.cpp until they have names.
-- **Drop the miner job aliases** (`SettlerJob::Job85` ... `Job224` in
-  enums.h) once UpdateSettlers' files use the MinerEat/Dig/... names.
-- **Unify pile kinds:** building_crush.cpp / building_done.cpp still have
-  their own pile-kind constants; use `PileKind` (enums.h).
+- **Shared terrain, object and resource constants:** building_sites.cpp,
+  player_queries.cpp, environment.cpp, terrain_updates.cpp, spells_land.cpp,
+  settler_jobs_food.cpp and logic_helpers.cpp each define their own
+  `kTerrainGrass`/`kTerrainClassGrass`, `kTerrainWornPath`,
+  `kObjectFirstTree`..., `kResourceCoal`...; move them to one header when
+  enums.h is split (Tile::terrain/object/resources, with re/enums.md
+  evidence).
 - **Typed fields:** once every user of `Settler::job`, `Settler::art`,
   `Building::art`, `Pile::good` or the race fields is converted, give the
   field its enum type in `layout.h` and drop its accessor from
   `game/typed_fields.h`.
 - **BuildingTypeAllowedForRace** (player_queries.cpp) does not fit the
-  building numbering of enums.h; find what its argument really is.
+  building numbering of enums.h; find what its argument really is (the
+  type numbers stay decimal numbers there until then).
+- **Map effect record fields** (layout.h `MapEffect`): +0x06, +0x2c
+  (probably a graphics id), +0x32, +0x34 (the value the "stationary"
+  make function 0x543f70 sets) are still `unkNN`; the spawn functions in
+  map_effects.cpp name the arguments by offset only.
 - **Lint** for hex literals in comparisons and magic numbers in
   job/type/goods comparisons (coding_style.md "Checks").
 

@@ -3,21 +3,21 @@
 //
 // CGameData_WearPath (0x0051b7f0): (x, y), ret 8. Called when a tile's
 //   traffic counter (+0x12) reaches 12 (0x503940, from the walking code).
-//   If the terrain byte (+6) of tile (x, y) is grass (0x10) or one of 0x12,
-//   0x13, 0x18 (probably grass variants), walks its six neighbours in the
-//   order (x+1,y), (x-1,y), (x,y+1), (x,y-1), (x+1,y+1), (x-1,y-1): a
-//   neighbour with terrain 0x10 or 0x1c (worn path) passes; one with
-//   0x12/0x13/0x18 is turned into plain grass 0x10 (redraw bit 0x80 of +9
+//   If the terrain byte (+6) of tile (x, y) is grass (16, 0x10) or one of
+//   18, 19, 24 (0x12, 0x13, 0x18; probably grass variants), walks its six
+//   neighbours in the order (x+1,y), (x-1,y), (x,y+1), (x,y-1), (x+1,y+1),
+//   (x-1,y-1): a neighbour with grass or a worn path (28, 0x1c) passes; one
+//   with a grass variant is turned into plain grass (redraw bit 0x80 of +9
 //   set) and passes; any other stops the walk (changes already made stay).
-//   If all six pass, the tile becomes a worn path (0x1c, redraw bit) and
-//   its traffic +0x12 grows by 9. EAX = the address of the tile.
+//   If all six pass, the tile becomes a worn path (redraw bit) and its
+//   traffic +0x12 grows by 9. EAX = the address of the tile.
 // CGameData_QueueMarkedTileWithRoom (0x0051d000): (x, y), ret 8. A
 //   flood-fill step like QueueMarkedTileNoOwner (world_tables.cpp): the tile
 //   is queued on the tile ring (and its mark 0x10 of byte +0xa cleared) only
 //   if it is marked, not blocked (bit 0 of +0xa), none of the 18 tiles
 //   within two steps is blocked, and neither it nor any of them has terrain
-//   of class 0x2_ (byte +6 & 0xf0 == 0x20; class not identified). EAX: the
-//   new ring index (10000 when it wrapped), else the tile's address.
+//   of the mountain class 0x2_ (byte +6 & 0xf0 == 0x20). EAX: the new ring
+//   index (10000 when it wrapped), else the tile's address.
 // CGameData_SetSettlerAnimation (0x0050e2c0): (settler, kind), ret 8:
 //   id = table 0x6a8060[kind * 4 + race] (race = settler byte +2); settler
 //   dword +8 (Settler::direction) = id, word +0xc = CGraphicsData_FrameCount(id) - 1 on the graphics
@@ -30,6 +30,7 @@
 //   that moved into the slot is not checked (the index still advances), as
 //   in the original. EAX not used by callers.
 
+#include "game/enums.h"
 #include "game/globals.h"
 #include "game/raw.h"
 #include "game/settler_groups.h"
@@ -54,6 +55,23 @@ using layout::Tile;
 
 constexpr std::uint32_t kTileRingEntries = 10000;
 constexpr std::uint32_t kGroups = SettlerGroups::kGroups;
+
+// Tile::terrain values of WearPath (the same values as environment.cpp's).
+constexpr std::uint8_t kTerrainGrass = 0x10;
+constexpr std::uint8_t kTerrainGrass18 = 0x12;  // probably grass variants: worn paths smooth them to grass
+constexpr std::uint8_t kTerrainGrass19 = 0x13;
+constexpr std::uint8_t kTerrainGrass24 = 0x18;
+constexpr std::uint8_t kTerrainWornPath = 0x1c;  // decays back to grass (UpdateEnvironment)
+// A new worn path's traffic counter grows by this (it was 12 when WearPath was called).
+constexpr std::uint8_t kWornPathTraffic = 9;
+
+bool IsGrassVariant(std::uint8_t terrain) {
+    return terrain == kTerrainGrass18 || terrain == kTerrainGrass19 || terrain == kTerrainGrass24;
+}
+
+bool IsMountain(std::uint8_t terrain) {
+    return (terrain & kTerrainClassMask) == kTerrainClassMountain;
+}
 
 // Byte distance (x * 0x300 + y) * 24 of tile (x, y) from the first tile,
 // 32-bit like the original. The functions return world + this (not the
@@ -94,32 +112,33 @@ void __fastcall CLogicThread_RemoveSettlerFromGroups(void* self, void* edx, std:
 S3RE_HOOK(0x0051b7f0, CGameData_WearPath, PositionFn, Original_CGameData_WearPath,
           CGameData_WearPath);
 
-// Purpose: Turns a much-walked grass tile into a worn path (terrain 0x1c,
-// which decays back to grass in UpdateEnvironment) if its neighbours are
-// grass or path, smoothing grass variants around it.
+// Purpose: Turns a much-walked grass tile into a worn path (which decays
+// back to grass in UpdateEnvironment) if its neighbours are grass or path,
+// smoothing grass variants around it.
 std::uint32_t __fastcall CGameData_WearPath(CGameData* world, void* /*edx*/, std::uint32_t x,
                                                      std::uint32_t y) {
     const std::uint32_t centre = TileOffset(x, y);
     Tile& tile = TileAtOffset(world, centre);
-    const auto isSmall = [](std::uint8_t terrain) { return terrain == 0x12 || terrain == 0x13 || terrain == 0x18; };
     const std::uint8_t terrain = tile.terrain;
     const std::uint32_t result = reinterpret_cast<std::uint32_t>(world) + TileIndexBytes(x, y);
-    if (terrain != 0x10 && !isSmall(terrain)) {
+    if (terrain != kTerrainGrass && !IsGrassVariant(terrain)) {
         return result;
     }
+    // The six neighbours: variants become grass, anything but grass or path
+    // stops the walk (the changes made so far stay).
     for (const std::int32_t delta : kRing6) {
         Tile& neighbour = TileNear(world, centre, delta);
         const std::uint8_t value = neighbour.terrain;
-        if (isSmall(value)) {
-            neighbour.terrain = 0x10;
+        if (IsGrassVariant(value)) {
+            neighbour.terrain = kTerrainGrass;
             neighbour.draw_flags |= layout::kTileDrawRedraw;
-        } else if (value != 0x10 && value != 0x1c) {
+        } else if (value != kTerrainGrass && value != kTerrainWornPath) {
             return result;
         }
     }
-    tile.terrain = 0x1c;
+    tile.terrain = kTerrainWornPath;
     tile.draw_flags |= layout::kTileDrawRedraw;
-    tile.traffic = static_cast<std::uint8_t>(tile.traffic + 9);
+    tile.traffic = static_cast<std::uint8_t>(tile.traffic + kWornPathTraffic);
     return result;
 }
 
@@ -127,8 +146,8 @@ S3RE_HOOK(0x0051d000, CGameData_QueueMarkedTileWithRoom, PositionFn,
           Original_CGameData_QueueMarkedTileWithRoom, CGameData_QueueMarkedTileWithRoom);
 
 // Purpose: One step of a flood fill over marked tiles that only spreads to
-// places with room: no blocked tile and no terrain of class 0x2_ within two
-// steps (probably to find space for something large).
+// places with room: no blocked tile and no mountain within two steps
+// (probably to find space for something large).
 std::uint32_t __fastcall CGameData_QueueMarkedTileWithRoom(CGameData* world, void* /*edx*/, std::uint32_t x,
                                                                   std::uint32_t y) {
     const std::uint32_t centre = TileOffset(x, y);
@@ -143,18 +162,18 @@ std::uint32_t __fastcall CGameData_QueueMarkedTileWithRoom(CGameData* world, voi
             return result;
         }
     }
-    if ((tile.terrain & 0xf0) == 0x20) {
+    if (IsMountain(tile.terrain)) {
         return result;
     }
     for (const std::int32_t delta : kRadius2) {
-        if ((TileNear(world, centre, delta).terrain & 0xf0) == 0x20) {
+        if (IsMountain(TileNear(world, centre, delta).terrain)) {
             return result;
         }
     }
     std::uint32_t& index = world->tile_ring_index.write;
     world->tile_ring[index].x = static_cast<std::uint16_t>(x);
     world->tile_ring[index].y = static_cast<std::uint16_t>(y);
-    tile.flags &= 0xef;
+    tile.flags &= static_cast<std::uint8_t>(~layout::kTileFloodMark);
     const std::uint32_t next = index + 1;
     index = next == kTileRingEntries ? 0 : next;
     return next;
@@ -168,7 +187,7 @@ S3RE_HOOK(0x0050e2c0, CGameData_SetSettlerAnimation, SettlerAnimationFn, Origina
 std::uint32_t __fastcall CGameData_SetSettlerAnimation(CGameData* world, void* /*edx*/, std::uint32_t settler,
                                                        std::uint32_t kind) {
     Settler& record = world->settlers[settler];
-    const std::uint32_t entry = record.race + kind * 4;
+    const std::uint32_t entry = record.race + kind * kRaces;  // one id per kind and race
     // The animation id goes into the dword +0x8 (Settler::direction).
     record.animation = g_settlerAnimations[entry];
     const std::uint32_t frames = CGraphicsData_FrameCount(g_gfxData.get(), nullptr, g_settlerAnimations[entry]) - 1;
@@ -316,7 +335,7 @@ void CompareRemoveFromGroups(test::Context& ctx, RemoveFromGroupsFn candidate, i
         for (std::uint32_t g = 0; g < kGroups; ++g) {
             const auto count = static_cast<std::uint16_t>(ctx.rng().Chance(1, 4) ? 0 : ctx.rng().Below(101));
             groups.counts[g] = count;
-            for (std::uint32_t k = 0; k < 100; ++k) {
+            for (std::uint32_t k = 0; k < SettlerGroups::kWords; ++k) {
                 groups.lists[g][k] = static_cast<std::uint16_t>(ctx.rng().Below(6));
             }
         }

@@ -700,30 +700,6 @@ enum class SettlerJob : std::uint16_t {
     GongProduction = 402,  // 0x192 handler 0x4f9122
     ThiefSteal = 403,  // 0x193 handler 0x4f7a84
     Job404 = 404,  // 0x194 handler 0x4f7bdf
-
-    // Old placeholder names of the miner jobs (renamed in the readability
-    // rollout), kept as aliases until the code using them is converted.
-    // Never use both names of one value as case labels of one switch.
-    Job85 = MinerEatCoalMine,
-    Job86 = MinerEatGoldMine,
-    Job87 = MinerEatIronMine,
-    Job88 = MinerDigCoalMine,
-    Job89 = MinerFoundNothingCoalMine,
-    Job90 = MinerFoundCoalMine,
-    Job92 = MinerDigGoldMine,
-    Job93 = MinerFoundNothingGoldMine,
-    Job94 = MinerFoundGoldMine,
-    Job96 = MinerDigIronMine,
-    Job97 = MinerFoundNothingIronMine,
-    Job98 = MinerFoundIronMine,
-    Job216 = MinerEatGemMine,
-    Job217 = MinerEatSulfurMine,
-    Job218 = MinerDigGemMine,
-    Job219 = MinerFoundNothingGemMine,
-    Job220 = MinerFoundGemMine,
-    Job222 = MinerDigSulfurMine,
-    Job223 = MinerFoundNothingSulfurMine,
-    Job224 = MinerFoundSulfurMine,
 };
 constexpr std::uint32_t kSettlerJobCount = 405;
 

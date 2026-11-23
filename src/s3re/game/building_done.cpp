@@ -82,10 +82,7 @@ using layout::Player;
 using B = BuildingType;
 using G = Good;
 
-// Pile kinds (CreatePile's last argument).
-constexpr std::uint8_t kPileOutput = 0xff;  // a building's output pile at the door
-constexpr std::uint8_t kPileStore = 0xfc;   // the ring of six piles of a harbour or marketplace
-constexpr std::uint8_t kPileInput = 0xfd;   // an input pile from the type's table
+// The trade piles of a harbour or marketplace.
 constexpr std::uint32_t kStorePiles = 6;
 constexpr std::uint16_t kNoDirection = 0xffff;  // Building::dock_direction not chosen yet
 
@@ -106,17 +103,17 @@ constexpr std::uint32_t kEventBuildingDone = 1;
 using TileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 constexpr std::uintptr_t kUnblockTile = 0x0051b770;
 
-std::uint32_t PileAt(CGameData* world, std::uint32_t x, std::uint32_t y, std::uint32_t good, std::uint32_t kind) {
-    return CGameData_CreatePile(world, nullptr, x, y, good, 0, kind);
+std::uint32_t PileAt(CGameData* world, std::uint32_t x, std::uint32_t y, std::uint32_t good, PileKind kind) {
+    return CGameData_CreatePile(world, nullptr, x, y, good, 0, Value(kind));
 }
 
-std::uint32_t PileAt(CGameData* world, std::uint32_t x, std::uint32_t y, Good good, std::uint32_t kind) {
+std::uint32_t PileAt(CGameData* world, std::uint32_t x, std::uint32_t y, Good good, PileKind kind) {
     return PileAt(world, x, y, static_cast<std::uint32_t>(Value(good)), kind);
 }
 
 // The output pile at the door (stored in +0xe by the callers).
 std::uint16_t DoorPile(CGameData* world, const Building& building, std::uint32_t good) {
-    return static_cast<std::uint16_t>(PileAt(world, building.door_x, building.door_y, good, kPileOutput));
+    return static_cast<std::uint16_t>(PileAt(world, building.door_x, building.door_y, good, PileKind::Output));
 }
 
 std::uint16_t DoorPile(CGameData* world, const Building& building, Good good) {
@@ -126,7 +123,7 @@ std::uint16_t DoorPile(CGameData* world, const Building& building, Good good) {
 // An output pile next to the door, not stored in the building.
 void PileNextToDoor(CGameData* world, const Building& building, std::int32_t dx, std::int32_t dy, Good good) {
     PileAt(world, building.door_x + static_cast<std::uint32_t>(dx), building.door_y + static_cast<std::uint32_t>(dy),
-           good, kPileOutput);
+           good, PileKind::Output);
 }
 
 // The work tile becomes the position kept in +0xe/+0x14 during construction.
@@ -189,7 +186,7 @@ void CreateStorePiles(CGameData* world, std::uint32_t buildingId, const std::int
     for (std::uint32_t k = 0; k < kStorePiles; ++k) {
         const std::uint32_t pile =
             PileAt(world, building.x + static_cast<std::uint32_t>(offsets[2 * k]),
-                   building.y + static_cast<std::uint32_t>(offsets[2 * k + 1]), Good::Empty, kPileStore);
+                   building.y + static_cast<std::uint32_t>(offsets[2 * k + 1]), Good::Empty, PileKind::TradeRing);
         world->piles[pile].prev = static_cast<std::uint16_t>(buildingId);
         if (k == 0) {
             building.pile_ring = static_cast<std::uint16_t>(pile);
@@ -313,7 +310,7 @@ void FinishByType(CGameData* world, std::uint32_t buildingId, Building& building
         static constexpr std::int32_t kAround[kStorePiles][2] = {{-2, 0}, {2, 0}, {-2, -2}, {2, 2}, {0, -2}, {0, 2}};
         for (const auto& d : kAround) {
             PileAt(world, building.x + static_cast<std::uint32_t>(d[0]), building.y + static_cast<std::uint32_t>(d[1]),
-                   building.pile_ring, 0);
+                   building.pile_ring, PileKind::Storehouse);
         }
         break;
     }
@@ -353,7 +350,7 @@ void CreateInputPiles(CGameData* world, Building& building) {
         const std::int32_t* offset = g_buildingInputOffsets[entry];
         const std::uint32_t pile = PileAt(world, building.x + static_cast<std::uint32_t>(offset[0]),
                                           building.y + static_cast<std::uint32_t>(offset[1]),
-                                          static_cast<std::uint32_t>(good), kPileInput);
+                                          static_cast<std::uint32_t>(good), PileKind::Order);
         building.piles[k] = static_cast<std::uint16_t>(pile);
         GameDebugLog(texts::kAddBuilding, pile, static_cast<std::uint32_t>(building.piles[0]),
                      static_cast<std::uint32_t>(building.piles[1]), static_cast<std::uint32_t>(building.piles[2]));
