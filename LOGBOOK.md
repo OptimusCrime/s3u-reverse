@@ -8,15 +8,17 @@ progress.
 ## Current focus
 
 **Next (written 2026-11-23, session 48; the user's order):**
-1. **The source tree move** (`docs/source_layout_plan.md`): waiting for
-   the user's answers to the plan's open questions (subsystem folders,
-   folder names, trace/replay under tooling, job enum header name,
-   `source_file` column, timing). Do it when no worktree is open, as one
-   script-driven commit.
-2. **Split `enums.h`** into `game/enums/` (after the move), then the
-   readability pass where the style guide is still missing (TODO.md
+1. **Readability pass** where the style guide is still missing (TODO.md
    "Readability pass": map_effect_spawns.cpp, AI/UI/framework files,
-   shared terrain/object constants, SettlerJob names).
+   shared terrain/object constants into `game/enums/`, SettlerJob names
+   in `game/enums/job_ids.h`). The source tree move and the enums split
+   are done (session 48, see its entry); optional follow-ups of the plan
+   (renames that read better, splitting the catch-all files
+   `framework_small.cpp`/`misc_helpers.cpp`/`logic_helpers.cpp`/
+   `ai_*helpers.cpp`, a CMake library for the simulation) are in
+   `docs/source_layout_plan.md` section 5, step 6.
+2. (Done in session 48: the source tree move into subsystem folders, the
+   generated `source_file` column, `game/enums/`.)
 3. **Computer players, continued** (TODO.md "Computer players"): A2
    leftovers (0x591e00, 0x572420, the larger economy conditions, the
    snapshot 0x567910), the DoomNote renames, A4 command senders, A5
@@ -30,7 +32,8 @@ progress.
 
 **Done in session 48:** computer players A2 (46) and A3 (30), backlog
 cleanups (trivial.py from bytes, crash-safe test stubs, UpdateSoldier spec
-memory), the source layout plan. Round end: see its entry.
+memory), the source layout plan, and then the source tree move, the
+`source_file` column and the enums split. Round end: see its entry.
 
 **Done in session 47:** `CLogicThread::ExecuteCommands` 0x535990 verified
 (all commands, one hook); computer players batch 1 (37 functions, AI
@@ -615,6 +618,52 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-23 (48): source tree move, source_file column, enums split
+
+The user answered the six questions of `docs/source_layout_plan.md` "as
+recommended" (subsystem folders, the proposed names, trace/replay under
+tooling, `game/enums/job_ids.h`, the `source_file` column, now). Three
+commits, each verified and pushed:
+
+1. **The move** (2d0d075): `tools/move_sources.py` (the record; mapping
+   from the plan's appendix plus the four A2/A3 AI files, which go to
+   `game/ai/`) moved 122 files with `git mv` into `game/{world, map,
+   mapgen, environment, economy, buildings, settlers, settlers/jobs,
+   pathing, spells, logic, logic/commands, ai, ui, graphics, net,
+   framework}/` and `tooling/{trace,replay}/` (savegame_start.cpp to
+   `tooling/`), rewrote the includes, the grouped CMake source list and
+   the `src/s3re/...` / `game/...` paths in CLAUDE.md, re/, tools/ and
+   src comments (LOGBOOK and the plan's appendix untouched; a bare
+   `trace/` or `replay/` without `src/s3re/` is not rewritten;
+   `re/update_settlers_jobs.csv` is Latin-1 and has no paths, so it is
+   skipped). A second run finds nothing to do. Evidence: Debug and
+   Release build, inventory check 0 errors, in-process tests 587/587,
+   emulator: `--changed` selected 142 of 703 specs (not "most": the
+   anonymous-namespace symbols changed less than the plan feared), 6 of
+   them hit the quick budget, so the full suite ran: 703 specs, 0
+   mismatches, only GenerateRandomMap 338/415 blocks (known). frontier,
+   whole_game summary, progress, asm_tools run. CLAUDE.md "Code layout"
+   describes the tree and its rules.
+2. **`source_file` column** (e3681df): `tools/source_files.py apply`
+   fills it from `re/source_files.csv` (2,769 rows in a named file, 1,032
+   `unnamed: A.cpp..B.cpp`, 6,037 library/CRT empty); `inventory.py`
+   documents it and `check` fails when it is out of date (tested with a
+   changed value). Rerun `apply` after `scan`, `rtti.py apply` or
+   `merge_survey.py` (new rows start empty).
+3. **enums split** (edd82c9): `game/enums/{value, races, settler_types, buildings,
+   goods, piles, spells, job_ids, commands, terrain, directions}.h`;
+   `game/enums.h` is the umbrella (nothing includes it any more). The 45
+   includers now include only the category headers they use (chosen by
+   a script from the identifiers in their code; files that got the enums
+   through `execute_commands.h` or `settler_jobs.h` include them
+   directly). Every category header includes `value.h`. Evidence: Debug
+   and Release build (0 warnings), `run.py --changed --dry-run` selects
+   0 specs, in-process tests 587/587, inventory check 0 errors.
+   re/enums.md, CLAUDE.md, coding_style.md, TODO.md updated; the TODO
+   item is removed.
+
+Next: the readability pass (Current focus 1).
 
 ### 2026-11-23 (48): round end (computer players A2 + A3, backlog cleanups, layout plan)
 
