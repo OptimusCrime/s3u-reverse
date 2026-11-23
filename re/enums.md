@@ -107,6 +107,15 @@ More checks:
   makes (jobs 145, 230, 247 of the farmer, rice farmer and winegrower), is a
   **field**, and UpdateEnvironment turns a field without growing objects (0x55..0x6f) around back
   into grass. The function names are kept for now (TODO.md).
+- **The "waiting lists" of SendNearestSettlerToPile/-ToBuilding**
+  (settler_queries.cpp, player record +0x6e/+0x76) are the idle lists of
+  settler types 39 and 43 (`Player::settler_lists` is indexed by type):
+  the first sends a **donkey** to a pile (one or two units: job 307, the
+  `second_unit` byte), the second a **trade ship** to the water in front of
+  a harbour (job 327). They were thought to be carriers and builders.
+- **The miner jobs** (session 45 rollout): each mine type has four jobs,
+  eat (85/86/87/216/217), dig (88/92/96/218/222), found nothing
+  (89/93/97/219/223) and found (90/94/98/220/224), named per mine.
 
 ## Open questions
 
@@ -166,12 +175,12 @@ More checks:
 | 34 | 0x22 | Pikeman3 | 3 | high | class 3, health 150 |
 | 35 | 0x23 | Swordsman3 | 1 | high | class 1, health 150 |
 | 36 | 0x24 | Mage | 22 | medium | list; made by the big temples |
-| 37 | 0x25 | Type37 | 99 | placeholder | |
+| 37 | 0x25 | Type37 | 99 | placeholder | a military building's guard: UpdateSoldier creates one (job 173, health 1) as Building::guard of a captured tower; a valid target (class 99) |
 | 38 | 0x26 | RiceFarmer | 0 | high | building 36 |
 | 39 | 0x27 | Donkey | 30 | medium | list |
 | 40 | 0x28 | Pioneer | 21 | medium | list; claims tiles (job PioneerWork, SetOwnerOfFreeTile) |
 | 41 | 0x29 | Catapult | 40 | high | seven tiles, health 250, "Angriff Katapult" |
-| 42 | 0x2a | Type42 | 41 | placeholder | health 0 |
+| 42 | 0x2a | Type42 | 41 | placeholder | health 0; the six parts of a seven-tile unit (CreateSevenTileUnit, job 304); hits on a part go to the catapult nearby (UpdateSoldier) |
 | 43 | 0x2b | TradeShip | 50 | high | cargo, "Schiff laedt ab" |
 | 44 | 0x2c | Ferry | 51 | high | passengers (BoardShip) |
 | 45 | 0x2d | Beekeeper | 0 | high | building 51 |
@@ -325,7 +334,7 @@ loop end. Handlers and job chains: `re/update_settlers_jobs.csv` and
 | 20 | 0x14 | Job20 | placeholder | handler 0x4ecea1 |  |
 | 21 | 0x15 | Job21 | placeholder | handler 0x4ecf3c |  |
 | 22 | 0x16 | Job22 | placeholder | handler 0x4ecf66 |  |
-| 23 | 0x17 | Job23 | placeholder | handler 0x4f8b7c |  |
+| 23 | 0x17 | Job23 | placeholder | handler 0x4f8b7c | a swordsman that captured a tower (UpdateSoldier) |
 | 24 | 0x18 | Job24 | placeholder | handler 0x4ecf82 |  |
 | 25 | 0x19 | Job25 | placeholder | handler 0x4ed213 |  |
 | 26 | 0x1a | Job26 | placeholder | handler 0x4edffb |  |
@@ -356,7 +365,7 @@ loop end. Handlers and job chains: `re/update_settlers_jobs.csv` and
 | 51 | 0x33 | Job51 | placeholder | handler 0x4ee21f |  |
 | 52 | 0x34 | Job52 | placeholder | handler 0x4ee0c1 |  |
 | 53 | 0x35 | UnitWalk | medium | walking, handler 0x4eacfc | walking job of units in the player's idle lists (JobAfter01Or37: 0x37 -> 0x35, like 1 -> 2); on arrival the walk states of +0x1a (board a ship, shoot, thief) |
-| 54 | 0x36 | Job54 | placeholder | handler 0x4eef33 |  |
+| 54 | 0x36 | Job54 | placeholder | handler 0x4eef33 | killed by a soldier (UpdateSoldier, with animation 70) |
 | 55 | 0x37 | UnitIdle | high | handler 0x4e98be | idle soldier or special unit (class != 0); job 0 sets it, it wanders (handler 0x4e98be) |
 | 56 | 0x38 | Job56 | placeholder | handler 0x4ecf4a |  |
 | 57 | 0x39 | Job57 | placeholder | no-op |  |
@@ -378,7 +387,7 @@ loop end. Handlers and job chains: `re/update_settlers_jobs.csv` and
 | 73 | 0x49 | Job73 | placeholder | handler 0x4eeaca |  |
 | 74 | 0x4a | Job74 | placeholder | handler 0x4ee7d3 |  |
 | 75 | 0x4b | Job75 | placeholder | handler 0x4ee6cb |  |
-| 76 | 0x4c | Job76 | placeholder | walking, handler 0x4ead27 |  |
+| 76 | 0x4c | Job76 | placeholder | walking, handler 0x4ead27 | carrier fetching goods for a marketplace/harbour (FetchGoodsToTradeBuilding) |
 | 77 | 0x4d | Job77 | placeholder | handler 0x4ec1f6 |  |
 | 78 | 0x4e | Job78 | placeholder | walking, handler 0x4ead27 |  |
 | 79 | 0x4f | Job79 | placeholder | handler 0x4ec3fb |  |
@@ -387,20 +396,20 @@ loop end. Handlers and job chains: `re/update_settlers_jobs.csv` and
 | 82 | 0x52 | MinerEnterCoalMine | medium | handler 0x4eeafd | job 4, type 10 (miner), building type 7 (coal mine); MinerJobEnter |
 | 83 | 0x53 | MinerEnterGoldMine | medium | handler 0x4eeafd | job 4, type 10, building type 8 (gold mine) |
 | 84 | 0x54 | MinerEnterIronMine | medium | handler 0x4eeafd | job 4, type 10, building type 9 (iron mine) |
-| 85 | 0x55 | Job85 | placeholder | handler 0x4eeb0a |  |
-| 86 | 0x56 | Job86 | placeholder | handler 0x4eeb0a |  |
-| 87 | 0x57 | Job87 | placeholder | handler 0x4eeb0a |  |
-| 88 | 0x58 | Job88 | placeholder | handler 0x4eeb31 |  |
-| 89 | 0x59 | Job89 | placeholder | handler 0x4eeb3e |  |
-| 90 | 0x5a | Job90 | placeholder | handler 0x4eeb71 |  |
+| 85 | 0x55 | MinerEatCoalMine | medium | handler 0x4eeb0a | set by MinerJobEnter 0x4f9a00 for building type 7 (coal mine); its handler calls MinerJobFood 0x4f9b80 |
+| 86 | 0x56 | MinerEatGoldMine | medium | handler 0x4eeb0a | set by MinerJobEnter 0x4f9a00 for building type 8 (gold mine); its handler calls MinerJobFood 0x4f9b80 |
+| 87 | 0x57 | MinerEatIronMine | medium | handler 0x4eeb0a | set by MinerJobEnter 0x4f9a00 for building type 9 (iron mine); its handler calls MinerJobFood 0x4f9b80 |
+| 88 | 0x58 | MinerDigCoalMine | medium | handler 0x4eeb31 | set by MinerJobFood for building type 7 (coal mine); its handler calls MinerJobDig 0x4fa220 |
+| 89 | 0x59 | MinerFoundNothingCoalMine | medium | handler 0x4eeb3e | MinerJobDig's job after a failed dig, building type 7 (coal mine); next job: MinerEatCoalMine |
+| 90 | 0x5a | MinerFoundCoalMine | medium | handler 0x4eeb71 | MinerJobDig's job after a find, building type 7 (coal mine); its handler adds the good to the output pile |
 | 91 | 0x5b | Job91 | placeholder | handler 0x4eeb3e |  |
-| 92 | 0x5c | Job92 | placeholder | handler 0x4eeb31 |  |
-| 93 | 0x5d | Job93 | placeholder | handler 0x4eebff |  |
-| 94 | 0x5e | Job94 | placeholder | handler 0x4eec32 |  |
+| 92 | 0x5c | MinerDigGoldMine | medium | handler 0x4eeb31 | set by MinerJobFood for building type 8 (gold mine); its handler calls MinerJobDig 0x4fa220 |
+| 93 | 0x5d | MinerFoundNothingGoldMine | medium | handler 0x4eebff | MinerJobDig's job after a failed dig, building type 8 (gold mine); next job: MinerEatGoldMine |
+| 94 | 0x5e | MinerFoundGoldMine | medium | handler 0x4eec32 | MinerJobDig's job after a find, building type 8 (gold mine); its handler adds the good to the output pile |
 | 95 | 0x5f | Job95 | placeholder | handler 0x4eebff |  |
-| 96 | 0x60 | Job96 | placeholder | handler 0x4eeb31 |  |
-| 97 | 0x61 | Job97 | placeholder | handler 0x4eecc0 |  |
-| 98 | 0x62 | Job98 | placeholder | handler 0x4eecf3 |  |
+| 96 | 0x60 | MinerDigIronMine | medium | handler 0x4eeb31 | set by MinerJobFood for building type 9 (iron mine); its handler calls MinerJobDig 0x4fa220 |
+| 97 | 0x61 | MinerFoundNothingIronMine | medium | handler 0x4eecc0 | MinerJobDig's job after a failed dig, building type 9 (iron mine); next job: MinerEatIronMine |
+| 98 | 0x62 | MinerFoundIronMine | medium | handler 0x4eecf3 | MinerJobDig's job after a find, building type 9 (iron mine); its handler adds the good to the output pile |
 | 99 | 0x63 | Job99 | placeholder | handler 0x4eecc0 |  |
 | 100 | 0x64 | LeaveHouse | medium | handler 0x4eef09 | set for a settler created at the door of a residence or big temple (UpdateEconomy); handler only clears the job |
 | 101 | 0x65 | Job101 | placeholder | handler 0x4ecf74 |  |
@@ -442,9 +451,9 @@ loop end. Handlers and job chains: `re/update_settlers_jobs.csv` and
 | 137 | 0x89 | Job137 | placeholder | no-op |  |
 | 138 | 0x8a | RecruitAtBarracks | medium | handler 0x4ebac6 | job 4 start for type 0 (carrier): a carrier sent by the barracks (UpdateEconomy) to become a soldier; its saved_counter is the input slot |
 | 139 | 0x8b | Job139 | placeholder | handler 0x4ecd51 |  |
-| 140 | 0x8c | Job140 | placeholder | handler 0x4ece16 |  |
-| 141 | 0x8d | Job141 | placeholder | handler 0x4f8b7c |  |
-| 142 | 0x8e | Job142 | placeholder | handler 0x4e9884 |  |
+| 140 | 0x8c | Job140 | placeholder | handler 0x4ece16 | bowman shooting from a tower: range 22/10, arrows from the tower places (UpdateSoldier) |
+| 141 | 0x8d | Job141 | placeholder | handler 0x4f8b7c | a pikeman that captured a tower (UpdateSoldier) |
+| 142 | 0x8e | Job142 | placeholder | handler 0x4e9884 | a soldier attacking (set by UpdateSoldier on each hit; next job 55) |
 | 143 | 0x8f | Job143 | placeholder | handler 0x4f1e6d |  |
 | 144 | 0x90 | Job144 | placeholder | walking, handler 0x4ead27 |  |
 | 145 | 0x91 | Job145 | placeholder | handler 0x4f1e93 |  |
@@ -475,9 +484,9 @@ loop end. Handlers and job chains: `re/update_settlers_jobs.csv` and
 | 170 | 0xaa | CarrierLeavePile | medium | handler 0x4ec086 | next job of 0xa9; SetSettlerTarget to the building, then 0xc; carries the good |
 | 171 | 0xab | WalkToOwnArea | medium | walking, handler 0x4ead27 | walking; on arrival in its own area the job is cleared, else health -2 and job 0xac (WalkSettler) |
 | 172 | 0xac | SeekOwnArea | medium | handler 0x4ea55d | set by ResetSettlerToIdle; handler picks a target (Random, SetSettlerTarget) and walks there with 0xab |
-| 173 | 0xad | Job173 | placeholder | handler 0x4ea531 |  |
+| 173 | 0xad | Job173 | placeholder | handler 0x4ea531 | a military building's guard (Building::guard; UpdateSoldier) |
 | 174 | 0xae | GuardBuilding | low | handler 0x4ea314 | a soldier in this job guards a military building against shots (WalkSettler's target search) |
-| 175 | 0xaf | Job175 | placeholder | handler 0x4ef005 |  |
+| 175 | 0xaf | Job175 | placeholder | handler 0x4ef005 | a garrison soldier killed while others remain (UpdateSoldier) |
 | 176 | 0xb0 | Job176 | placeholder | walking, handler 0x4eacd2 |  |
 | 177 | 0xb1 | Job177 | placeholder | handler 0x4f2d69 |  |
 | 178 | 0xb2 | Job178 | placeholder | walking, handler 0x4ead27 |  |
@@ -518,15 +527,15 @@ loop end. Handlers and job chains: `re/update_settlers_jobs.csv` and
 | 213 | 0xd5 | Job213 | placeholder | handler 0x4f376b |  |
 | 214 | 0xd6 | MinerEnterGemMine | medium | handler 0x4eeafd | job 4, type 10, building type 0x25 (gem mine) |
 | 215 | 0xd7 | MinerEnterSulfurMine | medium | handler 0x4eeafd | job 4, type 10, building types 0x1d / 0x38 (sulfur mines) |
-| 216 | 0xd8 | Job216 | placeholder | handler 0x4eeb0a |  |
-| 217 | 0xd9 | Job217 | placeholder | handler 0x4eeb0a |  |
-| 218 | 0xda | Job218 | placeholder | handler 0x4eeb31 |  |
-| 219 | 0xdb | Job219 | placeholder | handler 0x4eed81 |  |
-| 220 | 0xdc | Job220 | placeholder | handler 0x4eedb4 |  |
+| 216 | 0xd8 | MinerEatGemMine | medium | handler 0x4eeb0a | set by MinerJobEnter 0x4f9a00 for building type 37 (0x25, gem mine); its handler calls MinerJobFood 0x4f9b80 |
+| 217 | 0xd9 | MinerEatSulfurMine | medium | handler 0x4eeb0a | set by MinerJobEnter 0x4f9a00 for building type 29/56 (0x1d/0x38, sulfur mines); its handler calls MinerJobFood 0x4f9b80 |
+| 218 | 0xda | MinerDigGemMine | medium | handler 0x4eeb31 | set by MinerJobFood for building type 37 (0x25, gem mine); its handler calls MinerJobDig 0x4fa220 |
+| 219 | 0xdb | MinerFoundNothingGemMine | medium | handler 0x4eed81 | MinerJobDig's job after a failed dig, building type 37 (0x25, gem mine); next job: MinerEatGemMine |
+| 220 | 0xdc | MinerFoundGemMine | medium | handler 0x4eedb4 | MinerJobDig's job after a find, building type 37 (0x25, gem mine); its handler adds the good to the output pile |
 | 221 | 0xdd | Job221 | placeholder | handler 0x4eed81 |  |
-| 222 | 0xde | Job222 | placeholder | handler 0x4eeb31 |  |
-| 223 | 0xdf | Job223 | placeholder | handler 0x4eee45 |  |
-| 224 | 0xe0 | Job224 | placeholder | handler 0x4eee78 |  |
+| 222 | 0xde | MinerDigSulfurMine | medium | handler 0x4eeb31 | set by MinerJobFood for building type 29/56 (0x1d/0x38, sulfur mines); its handler calls MinerJobDig 0x4fa220 |
+| 223 | 0xdf | MinerFoundNothingSulfurMine | medium | handler 0x4eee45 | MinerJobDig's job after a failed dig, building type 29/56 (0x1d/0x38, sulfur mines); next job: MinerEatSulfurMine |
+| 224 | 0xe0 | MinerFoundSulfurMine | medium | handler 0x4eee78 | MinerJobDig's job after a find, building type 29/56 (0x1d/0x38, sulfur mines); its handler adds the good to the output pile |
 | 225 | 0xe1 | Job225 | placeholder | handler 0x4eee45 |  |
 | 226 | 0xe2 | Job226 | placeholder | handler 0x4f3d45 |  |
 | 227 | 0xe3 | Job227 | placeholder | handler 0x4f3d53 |  |
@@ -606,12 +615,12 @@ loop end. Handlers and job chains: `re/update_settlers_jobs.csv` and
 | 301 | 0x12d | Job301 | placeholder | handler 0x4f05c0 |  |
 | 302 | 0x12e | PioneerWork | medium | handler 0x4f37bd | type 0x28 (pioneer) on a tile of no or another owner starts it (WalkSettler); handler calls SetOwnerOfFreeTile |
 | 303 | 0x12f | Job303 | placeholder | handler 0x4f3cf3 |  |
-| 304 | 0x130 | Job304 | placeholder | handler 0x4f5f6b |  |
+| 304 | 0x130 | Job304 | placeholder | handler 0x4f5f6b | the parts (type 42) of a seven-tile unit (CreateSevenTileUnit) |
 | 305 | 0x131 | Job305 | placeholder | handler 0x4f1458 |  |
 | 306 | 0x132 | Job306 | placeholder | handler 0x4f1466 |  |
-| 307 | 0x133 | Job307 | placeholder | walking, handler 0x4ead27 |  |
+| 307 | 0x133 | Job307 | placeholder | walking, handler 0x4ead27 | a donkey sent to a pile (SendNearestSettlerToPile; idle list of type 39) |
 | 308 | 0x134 | Job308 | placeholder | handler 0x4f5f79 |  |
-| 309 | 0x135 | Job309 | placeholder | walking, handler 0x4ead27 |  |
+| 309 | 0x135 | Job309 | placeholder | walking, handler 0x4ead27 | a donkey (class 30) job in which a soldier's hit does no damage (-> 310; UpdateSoldier) |
 | 310 | 0x136 | Job310 | placeholder | handler 0x4f6255 |  |
 | 311 | 0x137 | CatapultProduction | high | handler 0x4f0229 | DebugLog "Katapultproduktion owner %u" |
 | 312 | 0x138 | Job312 | placeholder | handler 0x4f04cc |  |
@@ -629,7 +638,7 @@ loop end. Handlers and job chains: `re/update_settlers_jobs.csv` and
 | 324 | 0x144 | Job324 | placeholder | handler 0x4f735e |  |
 | 325 | 0x145 | Job325 | placeholder | handler 0x4f8b7c |  |
 | 326 | 0x146 | OnBoard | high | handler 0x4f8b7c | a settler that boarded a ferry (WalkSettler BoardShip) |
-| 327 | 0x147 | Job327 | placeholder | walking, handler 0x4ead27 |  |
+| 327 | 0x147 | Job327 | placeholder | walking, handler 0x4ead27 | a trade ship sent to a harbour (SendNearestSettlerToBuilding; idle list of type 43) |
 | 328 | 0x148 | Job328 | placeholder | walking, handler 0x4ead27 |  |
 | 329 | 0x149 | Job329 | placeholder | walking, handler 0x4ead27 |  |
 | 330 | 0x14a | Job330 | placeholder | walking, handler 0x4ead27 |  |

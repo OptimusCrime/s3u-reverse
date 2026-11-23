@@ -23,8 +23,8 @@
 //   the tiles (x+dx, y+dy) for the entries 1..36 of the offset table at
 //   world+0x110a588 (int32 dx, dy; 16-byte stride; the rings around a
 //   tile), skipping those off the map (CGameData::IsOnMap), and stops at
-//   the first one whose settler is non-zero, of type 0x29 and of the same
-//   player as `settler`. Returns, as the original does, the settler word of
+//   the first one whose settler is non-zero, a catapult (type 41, 0x29) and
+//   of the same player as `settler`. Returns, as the original does, the settler word of
 //   the last tile on the map it looked at: the match if there was one,
 //   otherwise whatever settler (or 0) stood on the last tile looked at, or
 //   x itself if none of the tiles was on the map. Caller 0x50e9f0.
@@ -35,25 +35,28 @@
 //   settler: tile word +0x0 = settler, settler +0xc (uint16) = 0, +0x8
 //   (int32) = CGameData::RandomBelow6(), position +0x4/+0x6 = the tile.
 //   EAX = 1 if placed, else 0. ret 0xc.
-// Two lists of settlers per player (heads at player record +0x6e and +0x76;
-// settlers link with +0x10 next and +0x12 previous) hold settlers waiting
-// for work (probably carriers and builders). The two functions below take
-// the settler of a list nearest to a target (TileDistance; the first of
-// equal ones), unlink it and send it there (CGameData::SetSettlerTarget):
+// Each player has an idle list per settler type (Player::settler_lists,
+// heads at player record +0x20 + type*2; settlers link with +0x10 next and
+// +0x12 previous; ResetSettlerToIdle unlinks a waiting unit from the list
+// of its type). The two functions below use the lists of the donkeys (type
+// 39: +0x6e) and of the trade ships (type 43: +0x76): they take the settler
+// nearest to a target (TileDistance; the first of equal ones), unlink it
+// and send it there (CGameData::SetSettlerTarget):
 // CGameData::SendNearestSettlerToPile (0x004ddbd0): (pile, player, building):
-//   list +0x6e, target = the pile's tile (+0x6/+0x8). The pile's byte +0x2
-//   (reserved amount?) goes up by one; the settler gets job word +0xe =
-//   0x133, +0xc = 0, byte +0x1a = the pile's goods type, byte +0x17 = 0, and
+//   the donkeys, target = the pile's tile (+0x6/+0x8). The pile's byte +0x2
+//   (units leaving) goes up by one; the donkey gets job word +0xe = 307
+//   (0x133), +0xc = 0, byte +0x1a = the pile's goods type, byte +0x17 = 0, and
 //   if (byte +0x2 & 0xf) != the pile's amount (+0x1) afterwards, byte +0x2
 //   goes up once more and byte +0x17 = 1; word +0x22 = building. Nothing
 //   happens with an empty list. EAX (ignored by the caller) reproduced.
 //   ret 0xc.
-// CGameData::SendNearestSettlerToBuilding (0x004ddd70): (building): list
-//   +0x76 of the building's player (byte +0x0); target = two steps from the
-//   building's tile (+0x30/+0x32) in direction (word +0x22 + 3) % 6
-//   (NeighbourX/NeighbourY twice); only if the nearest settler is less than
-//   40 tiles away. The settler gets job word +0xe = 0x147, byte +0x3c = 0,
-//   +0xc = 0 and word +0x22 = building. EAX (one caller tail-returns it)
+// CGameData::SendNearestSettlerToBuilding (0x004ddd70): (building): the
+//   trade ships of the building's player (byte +0x0); target = two steps
+//   from the building's tile (+0x30/+0x32) in the direction opposite its
+//   landing direction, (word +0x22 + 3) % 6 (NeighbourX/NeighbourY twice):
+//   the water in front of a harbour; only if the nearest ship is less than
+//   40 tiles away. The ship gets job word +0xe = 327 (0x147), byte +0x3c =
+//   0, +0xc = 0 and word +0x22 = building. EAX (one caller tail-returns it)
 //   reproduced. ret 4.
 // CGameData::RemoveSettlerFromLists (0x0050dff0): (settler): queues event
 //   (5, settler, type, player) (CGameData::QueueEvent; type and player are
@@ -74,7 +77,7 @@
 //   standing in the region (tile byte +0x10) of the building's tile
 //   (+0xa/+0xc); the first one wins a tie. It is unlinked,
 //   CGameData::RemoveSettlerFromLists, sent to the building's tile
-//   (CGameData::SetSettlerTarget) and gets job word +0xe = 3, +0xc = 0 and
+//   (CGameData::SetSettlerTarget) and gets job word +0xe = WalkToWork (3), +0xc = 0 and
 //   word +0x22 = building. EAX = that settler, or 0 if none. (The original
 //   also walks the list to its end twice without using the result; that is
 //   left out.) ret 0xc.
@@ -97,15 +100,18 @@
 //   (goods byte 0xff), which gets `goods`; if there is none either, nothing
 //   more happens. Otherwise the destination's byte +0x2 += 0x10 (high
 //   nibble: units on the way), the carrier is sent to the source pile
-//   (CGameData::SetSettlerTarget) and gets job word +0xe = 0x4c, +0xc = 0,
-//   word +0x22 = destination and byte +0x1a = goods. Probably a market or
-//   port ordering goods to trade. Callers (UpdateEconomy) ignore EAX.
+//   (CGameData::SetSettlerTarget) and gets job word +0xe = 76 (0x4c), +0xc =
+//   0, word +0x22 = destination and byte +0x1a = goods. The marketplace and
+//   the harbour ordering goods to trade (UpdateEconomy's trade buildings).
+//   Callers ignore EAX.
 //   ret 0xc.
 // All thiscall (ECX = world).
 
+#include "game/enums.h"
 #include "game/raw.h"
 #include "game/replacements.h"
 #include "game/settler_groups.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -128,15 +134,33 @@ using layout::Player;
 using layout::Settler;
 using layout::Tile;
 
-constexpr std::uint8_t kSettlerType29 = 0x29;
+using Job = SettlerJob;
+
+constexpr std::uint8_t kCatapult = Value(SettlerType::Catapult);
+// FindNearbySettlerType29 looks at the offset table entries 1..36 (the
+// rings around the tile); PlaceSettlerNear at entries 0..999.
 constexpr std::uint32_t kRingEntriesFirst = 1;
 constexpr std::uint32_t kRingEntriesLast = 36;
 constexpr std::uint32_t kPlaceEntries = 1000;
 
-// The two waiting lists of a player: settler_lists[39] (+0x6e) and [43]
-// (+0x76) of the player record.
-constexpr std::size_t kPlayerWaitingA = (0x6e - 0x20) / 2;
-constexpr std::size_t kPlayerWaitingB = (0x76 - 0x20) / 2;
+// The idle lists the Send* functions use: Player::settler_lists is indexed
+// by settler type (player record +0x6e and +0x76).
+constexpr std::size_t kIdleDonkeys = Value(SettlerType::Donkey);
+constexpr std::size_t kIdleTradeShips = Value(SettlerType::TradeShip);
+static_assert(offsetof(Player, settler_lists) + kIdleDonkeys * 2 == 0x6e);
+static_assert(offsetof(Player, settler_lists) + kIdleTradeShips * 2 == 0x76);
+
+// SetSettlerTarget: a new target forgets the cached path.
+constexpr std::uint16_t kNoCachedStep = 0xffff;
+constexpr std::uint8_t kPathModeNewTarget = 1;
+
+// A trade ship is sent only from less than 40 tiles away.
+constexpr std::uint32_t kMaxShipDistance = 40;
+
+// A pile holds up to 8 units; a trade building's pile counts the units on
+// the way to it in the high nibble of `leaving`.
+constexpr std::int32_t kPileCapacity = 8;
+constexpr std::uint8_t kOneUnitComing = 0x10;
 
 // Tile (x, y) with the original's 32-bit arithmetic.
 Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
@@ -170,9 +194,9 @@ std::uint32_t __fastcall CGameData_SetSettlerTarget(CGameData* world, void*, std
         record.target_y = record.y;
     }
     for (std::uint16_t& word : record.path_cache) {
-        word = 0xffff;
+        word = kNoCachedStep;
     }
-    record.path_mode = 1;
+    record.path_mode = kPathModeNewTarget;
     if (record.step_time == 0) {
         record.step_time = 1;
     }
@@ -195,8 +219,8 @@ std::uint32_t __fastcall CGameData_CountListSettlersNear(CGameData* world, void*
     return count;
 }
 
-// Purpose: Looks around a tile for a type-0x29 settler of the same player. Its return value has an odd
-// quirk in the original (see the notes above), which we keep.
+// Purpose: Looks around a tile for a catapult of the same player. Its return value has an odd quirk in
+// the original (see the notes above), which we keep.
 std::uint32_t __fastcall CGameData_FindNearbySettlerType29(CGameData* world, void*, std::uint32_t settler,
                                                            std::uint32_t x, std::uint32_t y) {
     std::uint32_t last = x;  // the original's register, see above
@@ -207,7 +231,7 @@ std::uint32_t __fastcall CGameData_FindNearbySettlerType29(CGameData* world, voi
             continue;
         }
         last = TileAt(world, tx, ty).settler;
-        if (last != 0 && world->settlers[last].art == kSettlerType29 &&
+        if (last != 0 && TypeOf(world->settlers[last]) == SettlerType::Catapult &&
             world->settlers[last].owner == world->settlers[settler].owner) {
             break;
         }
@@ -292,11 +316,11 @@ using SendToPileFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std
                                                 std::uint32_t building);
 using SendToBuildingFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t building);
 
-// Purpose: Assigns work: finds the nearest waiting settler (probably a carrier) of a player and sends it to
-// a goods pile to pick goods up for a building.
+// Purpose: Assigns work: finds the nearest idle donkey of a player and sends it to a goods pile to pick
+// up one or two units for a building.
 std::uint32_t __fastcall CGameData_SendNearestSettlerToPile(CGameData* world, void*, std::uint32_t pile,
                                                             std::uint32_t player, std::uint32_t building) {
-    std::uint16_t& head = world->players[player].settler_lists[kPlayerWaitingA];
+    std::uint16_t& head = world->players[player].settler_lists[kIdleDonkeys];
     if (head == 0) {
         return Address(&head);
     }
@@ -309,50 +333,53 @@ std::uint32_t __fastcall CGameData_SendNearestSettlerToPile(CGameData* world, vo
     if (best == 0) {
         return last;
     }
-    std::uint8_t& reserved = record.leaving;
-    reserved = static_cast<std::uint8_t>(reserved + 1);
+    std::uint8_t& leaving = record.leaving;
+    leaving = static_cast<std::uint8_t>(leaving + 1);
     Unlink(world, head, best);
     CGameData_SetSettlerTarget(world, nullptr, best, record.x, record.y);
-    Settler& settler = world->settlers[best];
-    settler.job = 0x133;
-    settler.counter = 0;
-    settler.good = record.good;
-    settler.second_unit = 0;
-    if (record.amount != (reserved & 0x0f)) {
-        reserved = static_cast<std::uint8_t>(reserved + 1);
-        settler.second_unit = 1;
+    Settler& donkey = world->settlers[best];
+    SetJob(donkey, Job::Job307);
+    donkey.counter = 0;
+    donkey.good = record.good;
+    donkey.second_unit = 0;
+    // A donkey carries two units when the pile has a second one to spare.
+    if (record.amount != (leaving & 0x0f)) {
+        leaving = static_cast<std::uint8_t>(leaving + 1);
+        donkey.second_unit = 1;
     }
-    settler.building = static_cast<std::uint16_t>(building);
-    return ((pile + 0x14d2e2u) & 0xffffff00u) | reserved;
+    donkey.building = static_cast<std::uint16_t>(building);
+    // EAX: the original's register (the pile index scaled into the world, low byte the leaving count).
+    return ((pile + 0x14d2e2u) & 0xffffff00u) | leaving;
 }
 
-// Purpose: Assigns work: finds the nearest waiting settler (probably a builder) and sends it to a building
-// site, if one is close enough.
+// Purpose: Sends the nearest idle trade ship of a player to a harbour (to the water two tiles in front of
+// its landing), if one is close enough.
 std::uint32_t __fastcall CGameData_SendNearestSettlerToBuilding(CGameData* world, void*, std::uint32_t building) {
     const Building& record = world->buildings[building];
-    const std::uint32_t direction = (record.dock_direction + 3u) % 6u;
+    // The opposite of the landing direction.
+    const std::uint32_t direction = (record.dock_direction + kDirectionCount / 2) % kDirectionCount;
     const std::uint32_t x1 = NeighbourX(record.work_x, direction);
     const std::uint32_t y1 = NeighbourY(record.work_y, direction);
     const std::uint32_t x2 = NeighbourX(x1, direction);
     const std::uint32_t y2 = NeighbourY(y1, direction);
     const std::uint32_t player = record.owner;
-    std::uint16_t& head = world->players[player].settler_lists[kPlayerWaitingB];
+    std::uint16_t& head = world->players[player].settler_lists[kIdleTradeShips];
     if (head == 0) {
         return Address(&head);
     }
     std::uint32_t distance = 0;
     std::uint32_t last = 0;
     const std::uint32_t best = NearestInList(world, head, x2, y2, distance, last);
-    if (best == 0 || distance >= 40) {
+    if (best == 0 || distance >= kMaxShipDistance) {
         return last;
     }
     Unlink(world, head, best);
     const std::uint32_t result = CGameData_SetSettlerTarget(world, nullptr, best, x2, y2);
-    Settler& settler = world->settlers[best];
-    settler.job = 0x147;
-    settler.ship_walk = 0;
-    settler.counter = 0;
-    settler.building = static_cast<std::uint16_t>(building);
+    Settler& ship = world->settlers[best];
+    SetJob(ship, Job::Job327);
+    ship.ship_walk = 0;
+    ship.counter = 0;
+    ship.building = static_cast<std::uint16_t>(building);
     return (result & 0xffff0000u) | (building & 0xffffu);
 }
 
@@ -365,6 +392,9 @@ namespace {
 
 constexpr std::uint32_t kListCount = SettlerGroups::kGroups;
 constexpr std::uint32_t kListWords = SettlerGroups::kWords;
+
+// QueueEvent's event type 5: a settler left the lists (args: settler, type, player).
+constexpr std::uint32_t kEventSettlerRemoved = 5;
 
 // Removes `value` from words[0..count) as the original does; `count` is
 // re-read through the reference.
@@ -396,7 +426,7 @@ using RemoveSettlerFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, 
 // event. Probably used when a settler dies or changes job.
 std::uint32_t __fastcall CGameData_RemoveSettlerFromLists(CGameData* world, void*, std::uint32_t settler) {
     const Settler& record = world->settlers[settler];
-    CGameData_QueueEvent(world, nullptr, 5, settler, record.art, record.owner);
+    CGameData_QueueEvent(world, nullptr, kEventSettlerRemoved, settler, record.art, record.owner);
     const std::uint32_t player = record.owner;
     SettlerGroups& groups = GlobalSettlerGroups();
     for (std::uint32_t list = 0; list < kListCount; ++list) {
@@ -454,25 +484,28 @@ std::uint32_t __fastcall CGameData_SendNearestWorkerToBuilding(CGameData* world,
     Unlink(world, head, chosen);
     CGameData_RemoveSettlerFromLists(world, nullptr, chosen);
     CGameData_SetSettlerTarget(world, nullptr, chosen, record.door_x, record.door_y);
-    Settler& settler = world->settlers[chosen];
-    settler.job = 3;
-    settler.counter = 0;
-    settler.building = static_cast<std::uint16_t>(building);
+    Settler& worker = world->settlers[chosen];
+    SetJob(worker, Job::WalkToWork);
+    worker.counter = 0;
+    worker.building = static_cast<std::uint16_t>(building);
     return chosen;
 }
 
 namespace {
 
 constexpr std::uint32_t kBuildingPiles = 6;
-constexpr std::uint8_t kFreePile = 0xff;
-constexpr std::uint16_t kJobFetchForTrade = 0x4c;
+constexpr std::uint8_t kFreePile = Value(Good::Empty);  // a ring pile without a goods type yet
+// A pile of kind 0xff is scored by distance only (probably a free-standing pile).
+constexpr std::uint8_t kPileKindPlain = 0xff;
+// Score of other piles: 5 per unit more than (leaving + 1), plus the distance.
+constexpr std::uint32_t kScorePerUnit = 5;
 
 }  // namespace
 
 using FetchGoodsFn = void(__fastcall*)(CGameData* world, void* edx, std::uint32_t area, std::uint32_t building,
                                        std::uint32_t goods);
 
-// Purpose: Probably a market or port ordering goods: finds the best pile of the wanted goods in its area and
+// Purpose: A marketplace or harbour ordering goods: finds the best pile of the wanted goods in its area and
 // the carrier nearest to that pile, and sends the carrier to bring a unit to one of the building's six
 // stock piles.
 void __fastcall CGameData_FetchGoodsToTradeBuilding(CGameData* world, void*, std::uint32_t area,
@@ -488,8 +521,10 @@ void __fastcall CGameData_FetchGoodsToTradeBuilding(CGameData* world, void*, std
             continue;
         }
         std::uint32_t score = TileDistance(record.x, record.y, p.x, p.y);
-        if (p.art != 0xff) {
-            score = (amount * 5 + score + (leaving + 1) * 0x7ffffffbu) * 2;
+        if (p.art != kPileKindPlain) {
+            // The original's 32-bit arithmetic: 0x7ffffffb * 2 = -10 (mod 2^32), so this is
+            // 2 * (distance + 5 * (amount - leaving - 1)), compared unsigned.
+            score = (amount * kScorePerUnit + score + (leaving + 1) * 0x7ffffffbu) * 2;
         }
         if (score < bestScore) {
             bestScore = score;
@@ -514,13 +549,15 @@ void __fastcall CGameData_FetchGoodsToTradeBuilding(CGameData* world, void*, std
     const std::uint32_t first = record.pile_ring;
     std::uint32_t target = 0;
     std::uint32_t pile = first;
+    // The last ring pile of these goods with room (units there plus units coming)...
     for (std::uint32_t k = 0; k < kBuildingPiles; ++k) {
         const Pile& p = world->piles[pile];
-        if (p.good == goods && static_cast<std::int32_t>((p.leaving >> 4) + p.amount) < 8) {
+        if (p.good == goods && static_cast<std::int32_t>((p.leaving >> 4) + p.amount) < kPileCapacity) {
             target = pile;
         }
         pile = p.next;
     }
+    // ... else the last one without goods.
     if (target == 0) {
         pile = first;
         for (std::uint32_t k = 0; k < kBuildingPiles; ++k) {
@@ -534,12 +571,12 @@ void __fastcall CGameData_FetchGoodsToTradeBuilding(CGameData* world, void*, std
         }
         world->piles[target].good = static_cast<std::uint8_t>(goods);
     }
-    world->piles[target].leaving += 0x10;
+    world->piles[target].leaving += kOneUnitComing;
     CGameData_SetSettlerTarget(world, nullptr, carrier, from.x, from.y);
     Settler& s = world->settlers[carrier];
-    s.job = kJobFetchForTrade;
+    SetJob(s, Job::Job76);
     s.counter = 0;
-    s.building = static_cast<std::uint16_t>(target);
+    s.building = static_cast<std::uint16_t>(target);  // here: the destination pile
     s.good = static_cast<std::uint8_t>(goods);
 }
 
@@ -618,7 +655,7 @@ std::uint32_t __fastcall WrongFindNearbySettlerType29(CGameData* world, void* ed
     if (last == 0 || last == x) {
         return last;
     }
-    const bool match = world->settlers[last].art == kSettlerType29 &&
+    const bool match = world->settlers[last].art == kCatapult &&
                        world->settlers[last].owner == world->settlers[settler].owner;
     return match ? last : 0;
 }
@@ -648,7 +685,7 @@ void CompareFindNearby(test::Context& ctx, FindNearbyFn candidate, int cases) {
                 SetField(worlds, o->tiles[tx][ty].settler, other);
                 if (other != 0) {
                     SetField(worlds, o->settlers[other].art,
-                             ctx.rng().Chance(1, 6) ? kSettlerType29 : static_cast<std::uint8_t>(ctx.rng().Below(0x40)));
+                             ctx.rng().Chance(1, 6) ? kCatapult : static_cast<std::uint8_t>(ctx.rng().Below(0x40)));
                     SetField(worlds, o->settlers[other].owner, ctx.rng().Below(3));
                 }
             }
@@ -817,7 +854,7 @@ S3RE_TEST(CGameData_SendNearestSettlerToPile_MatchesOriginal) {
         SetField(worlds, record.y, y);
         SetField(worlds, record.amount, ctx.rng().Below(10));
         SetField(worlds, record.leaving, ctx.rng().Chance(1, 2) ? ctx.rng().Below(10) : ctx.rng().Next32());
-        SetUpWaitingList(ctx, worlds, o->players[player].settler_lists[kPlayerWaitingA], x, y);
+        SetUpWaitingList(ctx, worlds, o->players[player].settler_lists[kIdleDonkeys], x, y);
         const std::uint32_t building = ctx.rng().Next32();
         expected = RelativeIfPointer(
             Original_CGameData_SendNearestSettlerToPile(worlds.original(), nullptr, pile, player, building), worlds.original());
@@ -839,7 +876,7 @@ S3RE_TEST(CGameData_SendNearestSettlerToBuilding_MatchesOriginal) {
         SetField(worlds, record.work_x, x);
         SetField(worlds, record.work_y, y);
         SetField(worlds, record.dock_direction, ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(6));
-        SetUpWaitingList(ctx, worlds, o->players[player].settler_lists[kPlayerWaitingB], x, y);
+        SetUpWaitingList(ctx, worlds, o->players[player].settler_lists[kIdleTradeShips], x, y);
         expected = RelativeIfPointer(Original_CGameData_SendNearestSettlerToBuilding(worlds.original(), nullptr, building),
                                      worlds.original());
         actual = RelativeIfPointer(CGameData_SendNearestSettlerToBuilding(worlds.ours(), nullptr, building), worlds.ours());

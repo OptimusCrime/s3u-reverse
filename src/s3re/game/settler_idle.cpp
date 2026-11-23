@@ -399,7 +399,7 @@ constexpr Job kTestJobs[] = {
     Job::DiggerWalkToSpot, Job::DiggerLevel, Job::Job8, Job::Job9, Job::BuilderStart, Job::Job15, Job::Job17,
     Job::BuilderBuild, Job::Job307, Job::Job308, Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp,
     Job::Job76, Job::Job77, Job::Job78, Job::Job79, Job::CarrierLeavePile, Job::CarrierWalkToBuilding,
-    Job::CarrierAtBuilding, Job::CarrierDeliver, Job::SeekOwnArea, Job::Job256, Job::Job85};
+    Job::CarrierAtBuilding, Job::CarrierDeliver, Job::SeekOwnArea, Job::Job256, Job::MinerEatCoalMine};
 constexpr SettlerType kTestTypes[] = {
     SettlerType::Carrier,   SettlerType::Digger,   SettlerType::Builder,     SettlerType::Geologist,
     SettlerType::Pioneer,   SettlerType::Pikeman1, SettlerType::Swordsman2,  SettlerType::Bowman1,

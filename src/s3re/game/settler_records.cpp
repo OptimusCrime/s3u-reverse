@@ -13,8 +13,8 @@
 // starts with (20 for most, 100..150 for some, 250 for ships).
 //
 // CGameData::SettlerStartHealth (0x00510470): (settler) -> the start health
-//   of the settler's type (+0x1); 20 less for race 3 (+0x2) when the type's
-//   class is 1..9 (signed). EAX: the table's dword - 20, else the table's
+//   of the settler's type (+0x1); 20 less for Amazons (race 3, +0x2) when
+//   the type's class is 1..9 (signed; the soldiers). EAX: the table's dword - 20, else the table's
 //   word in AX with the upper half of settler << 6 (race 3: of type * 4,
 //   i.e. 0) (callers use AL/AX).
 //   ret 4.
@@ -31,17 +31,20 @@
 //   = the saved +0x1c, counter +0xc = the saved +0x20. EAX = world +
 //   settler * 0x40. ret 4.
 // CGameData::IsSettlerJob01Or37 (0x004fa6b0): (job) -> AL = 1 if job (a
-//   settler's word +0xe, full 32-bit compare) is 1 or 0x37, else 0; the
-//   upper bits of EAX are the argument's. ECX unused. ret 4.
-// CGameData::JobAfter01Or37 (0x004faa40): (job) -> 2 for job 1, 0x35 for
-//   job 0x37, else 0. ECX unused. ret 4. Both are used by 0x500860 (a
+//   settler's word +0xe, full 32-bit compare) is Nothing (1) or UnitIdle
+//   (55, 0x37), else 0; the upper bits of EAX are the argument's. ECX
+//   unused. ret 4.
+// CGameData::JobAfter01Or37 (0x004faa40): (job) -> StepAside (2) for job
+//   Nothing (1), UnitWalk (53, 0x35) for UnitIdle (55, 0x37), else 0. ECX unused. ret 4. Both are used by 0x500860 (a
 //   settler update, probably movement: it calls the first and, if true,
 //   saves the position in +0x24/+0x26 and sets the job to the second);
 //   0x4a33d0 (Dirk\Pathing.cpp) calls the first on a tile's settler.
 // All thiscall (ECX = world). Names provisional.
 
+#include "game/enums.h"
 #include "game/replacements.h"
 #include "game/tables.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -60,6 +63,12 @@ constexpr std::uint32_t kSettlerBytes = sizeof(Settler);
 constexpr std::uint32_t kLastSettler = layout::kMaxSettler + 1;  // 0x7cff, never handed out
 constexpr std::uint8_t kFreeSettler = 0xff;
 
+// The soldier classes as SettlerStartHealth tests them (signed 1..9).
+constexpr std::int32_t kFirstSoldierClass = 1;
+constexpr std::int32_t kLastSoldierClass = 9;
+constexpr std::int32_t kAmazonSoldierHealthMalus = 20;
+// A new settler's counter: Random() & 31.
+constexpr std::uint32_t kCounterMask = 0x1f;
 
 std::uint32_t WorldAddress(CGameData* world) {
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
@@ -77,10 +86,10 @@ std::uint32_t __fastcall CGameData_SettlerStartHealth(CGameData* world, void*, s
     const std::uint32_t type = record.art;
     // The upper half of EAX: what the original's register held before the word load.
     std::uint32_t upper = (settler << 6) & 0xffff0000u;
-    if (record.race == 3) {
-        const std::int32_t typeClass = g_settlerTypeClass[type];
-        if (typeClass >= 1 && typeClass <= 9) {
-            return static_cast<std::uint32_t>(g_settlerTypeStartHealth[type] - 20);
+    if (RaceOf(record) == Race::Amazon) {
+        const std::int32_t typeClass = Value(ClassOf(record));
+        if (typeClass >= kFirstSoldierClass && typeClass <= kLastSoldierClass) {
+            return static_cast<std::uint32_t>(g_settlerTypeStartHealth[type] - kAmazonSoldierHealthMalus);
         }
         upper = 0;  // type * 4
     }
@@ -113,9 +122,9 @@ std::uint32_t __fastcall CGameData_CreateSettler(CGameData* world, void*, std::u
     record.art = static_cast<std::uint8_t>(type);
     record.health = static_cast<std::uint8_t>(CGameData_SettlerStartHealth(world, nullptr, settler));
     record.owner = static_cast<std::uint8_t>(player);
-    record.job = 0;
+    SetJob(record, SettlerJob::New);
     record.direction = CGameData_RandomBelow6(world, nullptr);
-    record.counter = static_cast<std::uint16_t>(CGameData_Random(world, nullptr) & 0x1f);
+    record.counter = static_cast<std::uint16_t>(CGameData_Random(world, nullptr) & kCounterMask);
     record.next = 0;
     record.prev = 0;
     // Bytes +0x15..+0x1a, in this order.
@@ -139,7 +148,7 @@ std::uint32_t __fastcall CGameData_CreateSettler(CGameData* world, void*, std::u
 // when it becomes idle.
 std::uint32_t __fastcall CGameData_ClearSettlerJob(CGameData* world, void*, std::uint32_t settler) {
     Settler& record = world->settlers[settler];
-    record.job = 0;
+    SetJob(record, SettlerJob::New);
     record.counter = 0;
     record.building = 0;
     return WorldAddress(world) + settler * kSettlerBytes;
@@ -194,13 +203,13 @@ void CompareSettlerFn(test::Context& ctx, SettlerFn original, SettlerFn candidat
 }
 
 void SetUpHealthCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t settler) {
-    const auto race = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 3 : ctx.rng().Below(256));
+    const auto race = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? Value(Race::Amazon) : ctx.rng().Below(256));
     worlds.Both([&](CGameData* w) { w->settlers[settler].race = race; });
     const auto type = static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? ctx.rng().Below(0x50) : ctx.rng().Below(256));
     worlds.Both([&](CGameData* w) { w->settlers[settler].art = type; });
 }
 
-// Wrong: no health malus for race 3.
+// Wrong: no health malus for Amazons.
 std::uint32_t __fastcall WrongSettlerStartHealth(CGameData* world, void* edx, std::uint32_t settler) {
     const std::uint8_t race = world->settlers[settler].race;
     world->settlers[settler].race = 0;
@@ -248,7 +257,8 @@ void CompareCreateSettler(test::Context& ctx, CreateSettlerFn candidate, int cas
         const std::uint32_t type = ctx.rng().Chance(3, 4) ? ctx.rng().Below(0x50) : ctx.rng().Next32();
         const std::uint32_t player = ctx.rng().Below(20);
         const auto race = static_cast<std::int32_t>(
-            ctx.rng().Chance(1, 2) ? 3 : ctx.rng().Chance(1, 2) ? ctx.rng().Below(4) : ctx.rng().Next32());
+            ctx.rng().Chance(1, 2) ? Value(Race::Amazon)
+                                   : ctx.rng().Chance(1, 2) ? ctx.rng().Below(kRaces) : ctx.rng().Next32());
         worlds.Both([&](CGameData* w) { w->players[player].race = race; });
         const std::uint32_t expected = Original_CGameData_CreateSettler(worlds.original(), nullptr, x, y, type, player);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, x, y, type, player);
@@ -295,20 +305,22 @@ S3RE_TEST(CGameData_RestoreSettlerAnimation_MatchesOriginal) {
 
 using JobFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t job);
 
-// Purpose: Whether a settler's job is one of two (1 or 0x37) that are probably "walking somewhere" states,
-// which the settler update and the path finder treat specially.
+// Purpose: Whether a settler's job is one of two (Nothing 1 or UnitIdle 55, 0x37) that are probably
+// "standing around" states, which the settler update and the path finder treat specially.
 std::uint32_t __fastcall CGameData_IsSettlerJob01Or37(CGameData*, void*, std::uint32_t job) {
-    return (job & 0xffffff00u) | ((job == 1 || job == 0x37) ? 1u : 0u);
+    // Full 32-bit compares; AL holds the result, the rest of EAX is the argument's.
+    const bool idle = job == Value(SettlerJob::Nothing) || job == Value(SettlerJob::UnitIdle);
+    return (job & 0xffffff00u) | (idle ? 1u : 0u);
 }
 
-// Purpose: The job that follows job 1 (2) or job 0x37 (0x35), probably once the settler has arrived;
-// 0 for other jobs.
+// Purpose: The job that follows job Nothing (StepAside) or UnitIdle (UnitWalk), probably when the settler
+// has to make room; 0 for other jobs.
 std::uint32_t __fastcall CGameData_JobAfter01Or37(CGameData*, void*, std::uint32_t job) {
-    if (job == 1) {
-        return 2;
+    if (job == Value(SettlerJob::Nothing)) {
+        return Value(SettlerJob::StepAside);
     }
-    if (job == 0x37) {
-        return 0x35;
+    if (job == Value(SettlerJob::UnitIdle)) {
+        return Value(SettlerJob::UnitWalk);
     }
     return 0;
 }
@@ -323,7 +335,7 @@ namespace {
 void CompareJobFn(test::Context& ctx, JobFn original, JobFn candidate) {
     for (std::uint32_t i = 0; i < 0x2000; ++i) {
         const std::uint32_t job = i < 0x400 ? i : (ctx.rng().Chance(1, 2) ? ctx.rng().Next32()
-                                                                            : (ctx.rng().Next32() & ~0xffu) | 0x37);
+                                                                            : (ctx.rng().Next32() & ~0xffu) | Value(SettlerJob::UnitIdle));
         if (!S3RE_EXPECT_EQ(original(nullptr, nullptr, job), candidate(nullptr, nullptr, job))) {
             ctx.Fail(__FILE__, __LINE__, "  job 0x%x", job);
             return;
@@ -334,7 +346,7 @@ void CompareJobFn(test::Context& ctx, JobFn original, JobFn candidate) {
 // Wrong: compares only the low byte.
 std::uint32_t __fastcall WrongIsSettlerJob01Or37(CGameData*, void*, std::uint32_t job) {
     const std::uint32_t low = job & 0xff;
-    return (job & 0xffffff00u) | ((low == 1 || low == 0x37) ? 1u : 0u);
+    return (job & 0xffffff00u) | ((low == Value(SettlerJob::Nothing) || low == Value(SettlerJob::UnitIdle)) ? 1u : 0u);
 }
 
 }  // namespace

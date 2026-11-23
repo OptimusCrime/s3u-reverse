@@ -6,7 +6,7 @@
 //   size) without a settler, with terrain >= 0x10 (land), none of the tile
 //   flags 0x0f and owned by `player` (byte compared with the full dword)
 //   gets CreateSettler(tx, ty, type, player). For each one whose type
-//   class (S3.EXE 0x658f64) is 0 or 10..29 the player's counter +0xcc
+//   class (S3.EXE 0x658f64) is Civilian (0) or 10..29 the player's counter +0xcc
 //   (Player::population_limit_base) grows by one. No limit on the walk (callers
 //   make sure there is room). EAX: callers don't use it. ret 0x14.
 //   Callers: UpdateSettlers, 0x506cf0.
@@ -15,23 +15,27 @@
 //   (flag 0x40 of +0x14), it takes the first tile without a settler in the
 //   building's row (x + 1, x + 2, ... at the building's y): slot byte +0x15
 //   = (tile x - building x - 1) + (building byte +0x7 << 5), plus 8 for
-//   building type 0x10 or 0x10 for type 0x12 (type 0x0f: nothing added),
+//   the large tower (type 16, 0x10) or 16 for the castle (18, 0x12) (small
+//   tower 15, 0x0f: nothing added),
 //   flag 0x40 set, position = that tile, dword +0x8 = 2, and the tile's
 //   settler word = the settler. EAX: callers don't use it. ret 4.
 //   Callers: UpdateSettlers, the map loader 0x4fd540.
 // CGameData::CreateSevenTileUnit (0x0050dd20): (type, player, x, y): a
 //   settler of `type` at (x, y) with slot byte +0x15 = 6, and six settlers
-//   of type 0x2a (parts) at (x+1, y), (x+1, y+1), (x, y+1), (x-1, y),
-//   (x-1, y-1), (x, y-1), each with job 0x130; word +0x20 of the main
+//   of type 42 (0x2a, parts) at (x+1, y), (x+1, y+1), (x, y+1), (x-1, y),
+//   (x-1, y-1), (x, y-1), each with job 304 (0x130); word +0x20 of the main
 //   settler and of each part but the last holds the next part (a chain).
-//   Probably big units that cover seven tiles (ships? catapults?);
-//   "Katapultproduktion"/"Gongproduktion" jobs and the map loader call it.
+//   Big units that cover seven tiles (the catapult, type 41, stands on
+//   seven tiles in WalkSettler); the jobs CatapultProduction and
+//   GongProduction and the map loader call it.
 //   EAX: callers don't use it. ret 0x10.
 // CGameData::SetSoldierAnimationInBuilding (0x0050e140): (settler):
-//   SetSettlerAnimation(settler, kind) with kind 0x125, or 0x126..0x12d
-//   for settler types 0x20, 0x23, 8, 0x1e, 0x21, 0x0f, 0x1f, 0x22; +9 in a
-//   building of type 0x10, +0x12 in type 0x12; +0x1b for building byte +0x7
-//   == 1, +0x36 for 2 (27 kinds per race, so +0x7 is probably the race).
+//   SetSettlerAnimation(settler, kind) with kind 293 (0x125), or 294..301
+//   (0x126..0x12d) for the soldier types Swordsman2, Swordsman3, Bowman1,
+//   Bowman2, Bowman3, Pikeman1, Pikeman2, Pikeman3 (the others, e.g.
+//   Swordsman1, get 293); +9 in a large tower (type 16), +18 in a castle
+//   (18); +27 for building byte +0x7 (race) == 1 (Egyptian), +54 for 2
+//   (Asian): 27 kinds per race.
 //   EAX = SetSettlerAnimation's. ret 4.
 // CGameData::SetSettlerSavedAnimation (0x0050e320): (settler, kind): like
 //   SetSettlerAnimation, but into the saved pair: dword +0x1c = animation
@@ -39,10 +43,12 @@
 //   on the graphics object [0x7a8010]. EAX = SpriteWord - 1. ret 8.
 // All thiscall (ECX = world).
 
+#include "game/enums.h"
 #include "game/globals.h"
 #include "game/raw.h"
 #include "game/replacements.h"
 #include "game/tables.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -51,6 +57,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <vector>
 
 namespace s3re::game {
@@ -67,10 +74,46 @@ using layout::Player;
 using layout::Settler;
 using layout::Tile;
 
+using B = BuildingType;
+using S = SettlerType;
 
 constexpr std::uint8_t kSettlerInSlot = 0x40;  // Settler::flags
-constexpr std::uint32_t kPartType = 0x2a;
-constexpr std::uint16_t kPartJob = 0x130;
+
+// Terrain values below 0x10 are water (re/structs.md "Tile").
+constexpr std::uint8_t kFirstLandTerrain = 0x10;
+// Tile flags that rule out a new settler: blocked, 0x02, 0x04, footprint.
+constexpr std::uint8_t kTileFlagsNoSpawn = 0x0f;
+
+// The classes SpawnSettlersAround counts as inhabitants: Civilian and 10..29
+// (thief, geologist, pioneer, mage).
+constexpr std::int32_t kFirstSpecialistClass = 10;
+constexpr std::int32_t kLastSpecialistClass = 29;
+
+// A settler in its building's slot faces direction 2.
+constexpr std::uint32_t kSlotDirection = 2;
+// Slot byte: the building's race in bits 5..7, the row position below it,
+// shifted by 8 in the large tower and 16 in the castle.
+constexpr std::uint32_t kSlotRaceShift = 5;
+constexpr std::uint8_t kLargeTowerSlotBase = 8;
+constexpr std::uint8_t kCastleSlotBase = 16;
+
+// The seven-tile unit: the main settler's slot byte and its six parts.
+constexpr std::uint8_t kSevenTileMainSlot = 6;
+constexpr std::uint32_t kPartType = Value(S::Type42);
+constexpr std::uint16_t kPartJob = Value(SettlerJob::Job304);
+
+// SetSoldierAnimationInBuilding: animation kinds (index into 0x6a8060, four
+// races each). 293 for other soldiers, then one per soldier type; the
+// building's size and race add an offset.
+constexpr std::uint32_t kSoldierInBuildingAnimation = 293;  // 0x125
+constexpr S kSoldierAnimationOrder[] = {S::Swordsman2, S::Swordsman3, S::Bowman1, S::Bowman2,
+                                        S::Bowman3,    S::Pikeman1,   S::Pikeman2, S::Pikeman3};
+constexpr std::uint32_t kLargeTowerAnimationOffset = 9;
+constexpr std::uint32_t kCastleAnimationOffset = 18;
+constexpr std::uint32_t kAnimationsPerRace = 27;
+
+// g_settlerAnimations holds one id per animation kind and race.
+constexpr std::uint32_t kAnimationRaces = 4;
 
 }  // namespace
 
@@ -96,13 +139,15 @@ std::uint32_t __fastcall CGameData_SpawnSettlersAround(CGameData* world, void*, 
             continue;
         }
         const Tile& tile = TileAtOffset(world, TileOffset(tx, ty));
-        if (tile.settler != 0 || tile.terrain < 0x10 || (tile.flags & 0x0f) != 0 || tile.owner != player) {
+        if (tile.settler != 0 || tile.terrain < kFirstLandTerrain || (tile.flags & kTileFlagsNoSpawn) != 0 ||
+            tile.owner != player) {
             continue;
         }
         CGameData_CreateSettler(world, nullptr, tx, ty, type, player);
         --remaining;
         const std::int32_t typeClass = g_settlerTypeClass[type];
-        if (typeClass == 0 || (typeClass >= 10 && typeClass <= 0x1d)) {
+        if (typeClass == Value(SettlerClass::Civilian) ||
+            (typeClass >= kFirstSpecialistClass && typeClass <= kLastSpecialistClass)) {
             ++world->players[player].population_limit_base;
         }
     }
@@ -112,38 +157,38 @@ std::uint32_t __fastcall CGameData_SpawnSettlersAround(CGameData* world, void*, 
 // Purpose: A worker takes its place inside its building: the first free tile of the building's row
 // becomes its spot, and the slot number tells where it is drawn.
 std::uint32_t __fastcall CGameData_EnterBuildingSlot(CGameData* world, void*, std::uint32_t settler) {
-    Settler& s = world->settlers[settler];
-    if ((s.flags & kSettlerInSlot) != 0) {
+    Settler& worker = world->settlers[settler];
+    if ((worker.flags & kSettlerInSlot) != 0) {
         return 0;
     }
-    const Building& building = world->buildings[s.building];
+    const Building& building = world->buildings[worker.building];
     const std::uint32_t y = building.y;
     std::uint32_t x = building.x + 1u;
     while (TileAtOffset(world, TileOffset(x, y)).settler != 0) {
         ++x;
     }
-    const auto slot = static_cast<std::uint8_t>(x - building.x - 1);
-    std::uint8_t value = static_cast<std::uint8_t>((building.race << 5) + slot);
-    if (building.art == 0x10) {
-        value = static_cast<std::uint8_t>(value + 8);
-    } else if (building.art == 0x12) {
-        value = static_cast<std::uint8_t>(value + 0x10);
+    const auto position = static_cast<std::uint8_t>(x - building.x - 1);
+    std::uint8_t slot = static_cast<std::uint8_t>((building.race << kSlotRaceShift) + position);
+    if (TypeOf(building) == B::LargeTower) {
+        slot = static_cast<std::uint8_t>(slot + kLargeTowerSlotBase);
+    } else if (TypeOf(building) == B::Castle) {
+        slot = static_cast<std::uint8_t>(slot + kCastleSlotBase);
     }
-    s.slot = value;
-    s.flags |= kSettlerInSlot;
-    s.x = static_cast<std::uint16_t>(x);
-    s.y = static_cast<std::uint16_t>(y);
-    s.direction = 2;
+    worker.slot = slot;
+    worker.flags |= kSettlerInSlot;
+    worker.x = static_cast<std::uint16_t>(x);
+    worker.y = static_cast<std::uint16_t>(y);
+    worker.direction = kSlotDirection;
     TileAtOffset(world, TileOffset(x, y)).settler = static_cast<std::uint16_t>(settler);
     return 0;  // callers don't use EAX
 }
 
 // Purpose: Creates a unit that covers seven tiles: a main settler and six part settlers around it, linked
-// in a chain (probably a catapult or a big ship-like object built in a workshop).
+// in a chain (the catapult, and probably what the gong workshop makes).
 std::uint32_t __fastcall CGameData_CreateSevenTileUnit(CGameData* world, void*, std::uint32_t type,
                                                        std::uint32_t player, std::uint32_t x, std::uint32_t y) {
     const std::uint32_t main = CGameData_CreateSettler(world, nullptr, x, y, type, player);
-    world->settlers[main].slot = 6;
+    world->settlers[main].slot = kSevenTileMainSlot;
     struct Step {
         std::int32_t dx, dy;
     };
@@ -161,30 +206,26 @@ std::uint32_t __fastcall CGameData_CreateSevenTileUnit(CGameData* world, void*, 
 // Purpose: Shows a soldier inside a military building with the animation for its kind of soldier, the
 // building's size and the race.
 std::uint32_t __fastcall CGameData_SetSoldierAnimationInBuilding(CGameData* world, void*, std::uint32_t settler) {
-    std::uint32_t kind = 0x125;
-    switch (world->settlers[settler].art) {
-    case 0x20: kind = 0x126; break;
-    case 0x23: kind = 0x127; break;
-    case 0x08: kind = 0x128; break;
-    case 0x1e: kind = 0x129; break;
-    case 0x21: kind = 0x12a; break;
-    case 0x0f: kind = 0x12b; break;
-    case 0x1f: kind = 0x12c; break;
-    case 0x22: kind = 0x12d; break;
-    default: break;
+    const Settler& soldier = world->settlers[settler];
+    std::uint32_t kind = kSoldierInBuildingAnimation;
+    for (std::uint32_t k = 0; k < std::size(kSoldierAnimationOrder); ++k) {
+        if (TypeOf(soldier) == kSoldierAnimationOrder[k]) {
+            kind = kSoldierInBuildingAnimation + 1 + k;
+        }
     }
-    const Building& building = world->buildings[world->settlers[settler].building];
-    if (building.art == 0x10) {
-        kind += 9;
+    const Building& building = world->buildings[soldier.building];
+    if (TypeOf(building) == B::LargeTower) {
+        kind += kLargeTowerAnimationOffset;
     }
-    if (building.art == 0x12) {
-        kind += 0x12;
+    if (TypeOf(building) == B::Castle) {
+        kind += kCastleAnimationOffset;
     }
-    if (building.race == 1) {
-        kind += 0x1b;
+    // The byte compares of the original: values above 3 add nothing.
+    if (building.race == Value(Race::Egyptian)) {
+        kind += kAnimationsPerRace;
     }
-    if (building.race == 2) {
-        kind += 0x36;
+    if (building.race == Value(Race::Asian)) {
+        kind += 2 * kAnimationsPerRace;
     }
     return CGameData_SetSettlerAnimation(world, nullptr, settler, kind);
 }
@@ -193,11 +234,12 @@ std::uint32_t __fastcall CGameData_SetSoldierAnimationInBuilding(CGameData* worl
 // its work): the animation id and its frame count are stored in the saved fields.
 std::uint32_t __fastcall CGameData_SetSettlerSavedAnimation(CGameData* world, void*, std::uint32_t settler,
                                                             std::uint32_t kind) {
-    Settler& s = world->settlers[settler];
-    s.saved_animation = g_settlerAnimations[s.race + kind * 4];
+    Settler& record = world->settlers[settler];
+    // The original reads the table twice.
+    record.saved_animation = g_settlerAnimations[record.race + kind * kAnimationRaces];
     const std::uint32_t frames =
-        GfxData_SpriteWord(g_gfxData.get(), nullptr, g_settlerAnimations[s.race + kind * 4]) - 1;
-    s.saved_counter = static_cast<std::uint16_t>(frames);
+        GfxData_SpriteWord(g_gfxData.get(), nullptr, g_settlerAnimations[record.race + kind * kAnimationRaces]) - 1;
+    record.saved_counter = static_cast<std::uint16_t>(frames);
     return frames;
 }
 
@@ -332,7 +374,8 @@ void CompareEnterSlot(test::Context& ctx, SettlerFn candidate, int cases) {
         const std::uint32_t settler = 1 + ctx.rng().Below(kTestSettlers);
         const std::uint32_t building = 1 + ctx.rng().Below(kTestBuildings);
         const std::uint32_t bx = 1 + ctx.rng().Below(370), by = 1 + ctx.rng().Below(380);
-        static constexpr std::uint8_t kArts[] = {0x0f, 0x10, 0x12, 0x11, 0x05};
+        static constexpr std::uint8_t kArts[] = {
+            Value(B::SmallTower), Value(B::LargeTower), Value(B::Castle), Value(B::Mill), Value(B::Forester)};
         const std::uint8_t art = kArts[ctx.rng().Below(5)];
         const auto race = static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(4));
         const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32() & (ctx.rng().Chance(1, 4) ? 0xff : ~0x40));
@@ -355,12 +398,12 @@ void CompareEnterSlot(test::Context& ctx, SettlerFn candidate, int cases) {
     });
 }
 
-// Wrong: adds 8 for type 0x0f too.
+// Wrong: adds 8 for the small tower too.
 std::uint32_t __fastcall WrongEnterBuildingSlot(CGameData* world, void* edx, std::uint32_t settler) {
     Building& b = world->buildings[world->settlers[settler].building];
     const std::uint8_t art = b.art;
-    if (art == 0x0f) {
-        b.art = 0x10;
+    if (art == Value(B::SmallTower)) {
+        b.art = Value(B::LargeTower);
     }
     CGameData_EnterBuildingSlot(world, edx, settler);
     b.art = art;
@@ -414,8 +457,12 @@ void CompareSoldierAnimation(test::Context& ctx, SettlerFn candidate, int cases)
     Compare(ctx, cases, 64, [&](test::WorldPair& worlds, std::uint32_t& expected, std::uint32_t& actual) {
         const std::uint32_t settler = 1 + ctx.rng().Below(kTestSettlers);
         const std::uint32_t building = 1 + ctx.rng().Below(kTestBuildings);
-        static constexpr std::uint8_t kTypes[] = {0x20, 0x23, 0x08, 0x1e, 0x21, 0x0f, 0x1f, 0x22, 0x05, 0x30};
-        static constexpr std::uint8_t kArts[] = {0x10, 0x12, 0x11, 0x0f};
+        static constexpr std::uint8_t kTypes[] = {
+            Value(S::Swordsman2), Value(S::Swordsman3), Value(S::Bowman1),  Value(S::Bowman2),
+            Value(S::Bowman3),    Value(S::Pikeman1),   Value(S::Pikeman2), Value(S::Pikeman3),
+            Value(S::Swordsman1), 0x30 /* past the last type */};
+        static constexpr std::uint8_t kArts[] = {Value(B::LargeTower), Value(B::Castle), Value(B::Mill),
+                                                 Value(B::SmallTower)};
         const std::uint8_t type = kTypes[ctx.rng().Below(10)];
         const std::uint8_t art = kArts[ctx.rng().Below(4)];
         const auto race = static_cast<std::uint8_t>(ctx.rng().Below(3));
@@ -429,15 +476,16 @@ void CompareSoldierAnimation(test::Context& ctx, SettlerFn candidate, int cases)
             w->buildings[building].race = race;
         });
         // The kind the original will use, to prepare the graphics data.
-        std::uint32_t kind = 0x125;
-        static constexpr std::uint8_t kOrder[] = {0x20, 0x23, 0x08, 0x1e, 0x21, 0x0f, 0x1f, 0x22};
-        for (std::uint32_t k = 0; k < 8; ++k) {
-            if (kOrder[k] == type) {
-                kind = 0x126 + k;
+        std::uint32_t kind = kSoldierInBuildingAnimation;
+        for (std::uint32_t k = 0; k < std::size(kSoldierAnimationOrder); ++k) {
+            if (Value(kSoldierAnimationOrder[k]) == type) {
+                kind = kSoldierInBuildingAnimation + 1 + k;
             }
         }
-        kind += art == 0x10 ? 9 : art == 0x12 ? 0x12 : 0;
-        kind += race == 1 ? 0x1b : race == 2 ? 0x36 : 0;
+        kind += art == Value(B::LargeTower) ? kLargeTowerAnimationOffset
+                : art == Value(B::Castle)   ? kCastleAnimationOffset
+                                            : 0;
+        kind += race == 1 ? kAnimationsPerRace : race == 2 ? 2 * kAnimationsPerRace : 0;
         if (!gfx.PrepareSprite(ctx, g_settlerAnimations[kind * 4 + settlerRace])) {
             return;
         }
@@ -446,8 +494,8 @@ void CompareSoldierAnimation(test::Context& ctx, SettlerFn candidate, int cases)
     });
 }
 
-// Wrong: the race byte 2 of the building adds 0x1b (as race 1) instead
-// of 0x36. (The graphics data is only prepared for the right kind, so the
+// Wrong: the race byte 2 of the building adds 27 (as race 1) instead
+// of 54. (The graphics data is only prepared for the right kind, so the
 // mistake is applied to the result: kind 0x1b lower means a different id.)
 std::uint32_t __fastcall WrongSetSoldierAnimationInBuilding(CGameData* world, void* edx, std::uint32_t settler) {
     const std::uint32_t result = CGameData_SetSoldierAnimationInBuilding(world, edx, settler);

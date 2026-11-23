@@ -380,20 +380,20 @@ enum class SettlerJob : std::uint16_t {
     MinerEnterCoalMine = 82,  // 0x52 handler 0x4eeafd
     MinerEnterGoldMine = 83,  // 0x53 handler 0x4eeafd
     MinerEnterIronMine = 84,  // 0x54 handler 0x4eeafd
-    Job85 = 85,  // 0x55 handler 0x4eeb0a
-    Job86 = 86,  // 0x56 handler 0x4eeb0a
-    Job87 = 87,  // 0x57 handler 0x4eeb0a
-    Job88 = 88,  // 0x58 handler 0x4eeb31
-    Job89 = 89,  // 0x59 handler 0x4eeb3e
-    Job90 = 90,  // 0x5a handler 0x4eeb71
+    MinerEatCoalMine = 85,  // 0x55 handler 0x4eeb0a
+    MinerEatGoldMine = 86,  // 0x56 handler 0x4eeb0a
+    MinerEatIronMine = 87,  // 0x57 handler 0x4eeb0a
+    MinerDigCoalMine = 88,  // 0x58 handler 0x4eeb31
+    MinerFoundNothingCoalMine = 89,  // 0x59 handler 0x4eeb3e
+    MinerFoundCoalMine = 90,  // 0x5a handler 0x4eeb71
     Job91 = 91,  // 0x5b handler 0x4eeb3e
-    Job92 = 92,  // 0x5c handler 0x4eeb31
-    Job93 = 93,  // 0x5d handler 0x4eebff
-    Job94 = 94,  // 0x5e handler 0x4eec32
+    MinerDigGoldMine = 92,  // 0x5c handler 0x4eeb31
+    MinerFoundNothingGoldMine = 93,  // 0x5d handler 0x4eebff
+    MinerFoundGoldMine = 94,  // 0x5e handler 0x4eec32
     Job95 = 95,  // 0x5f handler 0x4eebff
-    Job96 = 96,  // 0x60 handler 0x4eeb31
-    Job97 = 97,  // 0x61 handler 0x4eecc0
-    Job98 = 98,  // 0x62 handler 0x4eecf3
+    MinerDigIronMine = 96,  // 0x60 handler 0x4eeb31
+    MinerFoundNothingIronMine = 97,  // 0x61 handler 0x4eecc0
+    MinerFoundIronMine = 98,  // 0x62 handler 0x4eecf3
     Job99 = 99,  // 0x63 handler 0x4eecc0
     LeaveHouse = 100,  // 0x64 handler 0x4eef09
     Job101 = 101,  // 0x65 handler 0x4ecf74
@@ -511,15 +511,15 @@ enum class SettlerJob : std::uint16_t {
     Job213 = 213,  // 0xd5 handler 0x4f376b
     MinerEnterGemMine = 214,  // 0xd6 handler 0x4eeafd
     MinerEnterSulfurMine = 215,  // 0xd7 handler 0x4eeafd
-    Job216 = 216,  // 0xd8 handler 0x4eeb0a
-    Job217 = 217,  // 0xd9 handler 0x4eeb0a
-    Job218 = 218,  // 0xda handler 0x4eeb31
-    Job219 = 219,  // 0xdb handler 0x4eed81
-    Job220 = 220,  // 0xdc handler 0x4eedb4
+    MinerEatGemMine = 216,  // 0xd8 handler 0x4eeb0a
+    MinerEatSulfurMine = 217,  // 0xd9 handler 0x4eeb0a
+    MinerDigGemMine = 218,  // 0xda handler 0x4eeb31
+    MinerFoundNothingGemMine = 219,  // 0xdb handler 0x4eed81
+    MinerFoundGemMine = 220,  // 0xdc handler 0x4eedb4
     Job221 = 221,  // 0xdd handler 0x4eed81
-    Job222 = 222,  // 0xde handler 0x4eeb31
-    Job223 = 223,  // 0xdf handler 0x4eee45
-    Job224 = 224,  // 0xe0 handler 0x4eee78
+    MinerDigSulfurMine = 222,  // 0xde handler 0x4eeb31
+    MinerFoundNothingSulfurMine = 223,  // 0xdf handler 0x4eee45
+    MinerFoundSulfurMine = 224,  // 0xe0 handler 0x4eee78
     Job225 = 225,  // 0xe1 handler 0x4eee45
     Job226 = 226,  // 0xe2 handler 0x4f3d45
     Job227 = 227,  // 0xe3 handler 0x4f3d53
@@ -700,6 +700,30 @@ enum class SettlerJob : std::uint16_t {
     GongProduction = 402,  // 0x192 handler 0x4f9122
     ThiefSteal = 403,  // 0x193 handler 0x4f7a84
     Job404 = 404,  // 0x194 handler 0x4f7bdf
+
+    // Old placeholder names of the miner jobs (renamed in the readability
+    // rollout), kept as aliases until the code using them is converted.
+    // Never use both names of one value as case labels of one switch.
+    Job85 = MinerEatCoalMine,
+    Job86 = MinerEatGoldMine,
+    Job87 = MinerEatIronMine,
+    Job88 = MinerDigCoalMine,
+    Job89 = MinerFoundNothingCoalMine,
+    Job90 = MinerFoundCoalMine,
+    Job92 = MinerDigGoldMine,
+    Job93 = MinerFoundNothingGoldMine,
+    Job94 = MinerFoundGoldMine,
+    Job96 = MinerDigIronMine,
+    Job97 = MinerFoundNothingIronMine,
+    Job98 = MinerFoundIronMine,
+    Job216 = MinerEatGemMine,
+    Job217 = MinerEatSulfurMine,
+    Job218 = MinerDigGemMine,
+    Job219 = MinerFoundNothingGemMine,
+    Job220 = MinerFoundGemMine,
+    Job222 = MinerDigSulfurMine,
+    Job223 = MinerFoundNothingSulfurMine,
+    Job224 = MinerFoundSulfurMine,
 };
 constexpr std::uint32_t kSettlerJobCount = 405;
 

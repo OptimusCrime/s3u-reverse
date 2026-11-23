@@ -1,25 +1,27 @@
 // Settler helpers.
 //
 // Settler records: 64 bytes each at world+0x12a5e60 (index 0 unused?);
-// byte +1 (Settler::art) is the settler type. The table at 0x00658f64 (int32
-// per type, in S3.EXE's .rdata) gives a class per type: 0 for most
-// (civilians), 1..3 for some (soldier levels?), and other values (10,
-// 20..22, 30, 40, 41, 50, 51, 99) for a few special types. Names here are
-// provisional.
+// byte +1 (Settler::art) is the settler type (SettlerType). The table at
+// 0x00658f64 (int32 per type, in S3.EXE's .rdata) gives a class per type
+// (SettlerClass): Civilian 0 for most, 1..3 for the soldiers, and other
+// values (10, 20..22, 30, 40, 41, 50, 51, 99) for a few special types.
 //
 // CGameData::CanSettlerEnterTile (0x00503760): (x, y, player, settlerType)
 // -> 1 if the tile is not blocked (Tile::flags bit 0 clear) and has no
-// occupant (Tile::settler == 0), and, for class-0 types only, the tile's
+// occupant (Tile::settler == 0), and, for civilian types only, the tile's
 // owner byte equals `player`; else 0. thiscall, ret 0x10; EAX is 0/1.
 // (Older notes used a tile base of 0x67440, which put these fields at
 // +0xe, +0x4 and +0xc; the absolute addresses are the same.)
 //
-// CGameData::SettlerGroup (0x005038e0): (settler) -> 3 for type 0x29; 1 for
-// classes 50..59; for class 0: 2 if the settler's job (word +0xe) is 0xab
-// or 0xac, else 1; 2 for all other classes. thiscall, ret 4; EAX is the
+// CGameData::SettlerGroup (0x005038e0): (settler) -> 3 for the catapult
+// (type 41, 0x29); 1 for classes 50..59 (ships); for civilians: 2 if the
+// settler's job (word +0xe) is WalkToOwnArea or SeekOwnArea (171/172,
+// 0xab/0xac), else 1; 2 for all other classes. thiscall, ret 4; EAX is the
 // result.
 
+#include "game/enums.h"
 #include "game/tables.h"
+#include "game/typed_fields.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -35,7 +37,16 @@ namespace {
 using layout::Settler;
 using layout::Tile;
 
-// int32 per settler type, in S3.EXE's read-only data.
+// The ship classes (TradeShip 50, Ferry 51; the original tests 50..59).
+constexpr std::int32_t kFirstShipClass = 50;
+constexpr std::int32_t kLastShipClass = 59;
+
+// SettlerGroup's results; what the callers make of the groups is not known
+// yet: 1 = ships and civilians, 2 = other classes and civilians heading for
+// their own area, 3 = the catapult.
+constexpr std::uint32_t kGroup1 = 1;
+constexpr std::uint32_t kGroup2 = 2;
+constexpr std::uint32_t kGroup3 = 3;
 
 Tile& TileRecord(CGameData* world, std::uint32_t x, std::uint32_t y) {
     // The original's arithmetic: ((x * 0x300 + y) * 24), 32-bit (wraps).
@@ -60,7 +71,7 @@ std::uint32_t __fastcall CGameData_CanSettlerEnterTile(CGameData* world, void* /
     if ((tile.flags & layout::kTileBlocked) != 0 || tile.settler != 0) {
         return 0;
     }
-    if (g_settlerTypeClass[settlerType] != 0) {
+    if (static_cast<SettlerClass>(g_settlerTypeClass[settlerType]) != SettlerClass::Civilian) {
         return 1;
     }
     return tile.owner == player ? 1 : 0;
@@ -71,19 +82,18 @@ std::uint32_t __fastcall CGameData_CanSettlerEnterTile(CGameData* world, void* /
 std::uint32_t __fastcall CGameData_SettlerGroup(CGameData* world, void* /*edx*/,
                                                 std::uint32_t settler) {
     const Settler& record = world->settlers[settler];
-    const std::uint8_t type = record.art;
-    if (type == 0x29) {
-        return 3;
+    if (TypeOf(record) == SettlerType::Catapult) {
+        return kGroup3;
     }
-    const std::int32_t typeClass = g_settlerTypeClass[type];
-    if (typeClass >= 50 && typeClass <= 59) {
-        return 1;
+    const std::int32_t typeClass = Value(ClassOf(record));
+    if (typeClass >= kFirstShipClass && typeClass <= kLastShipClass) {
+        return kGroup1;
     }
-    if (typeClass != 0) {
-        return 2;
+    if (typeClass != Value(SettlerClass::Civilian)) {
+        return kGroup2;
     }
-    const std::uint16_t job = record.job;
-    return (job == 0xab || job == 0xac) ? 2 : 1;
+    const SettlerJob job = JobOf(record);
+    return (job == SettlerJob::WalkToOwnArea || job == SettlerJob::SeekOwnArea) ? kGroup2 : kGroup1;
 }
 
 S3RE_HOOK(0x00503760, CGameData_CanSettlerEnterTile, CanEnterFn,
@@ -116,7 +126,7 @@ void CompareCanEnter(test::Context& ctx, CanEnterFn candidate, int cases) {
             worlds.Both([&](CGameData* w) { w->tiles[x][y].settler = 0; });
         }
         if (ctx.rng().Chance(2, 3)) {
-            worlds.Both([&](CGameData* w) { w->tiles[x][y].flags &= 0xfe; });
+            worlds.Both([&](CGameData* w) { w->tiles[x][y].flags &= static_cast<std::uint8_t>(~layout::kTileBlocked); });
         }
         if (ctx.rng().Chance(1, 2)) {
             worlds.Both([&](CGameData* w) { w->tiles[x][y].owner = static_cast<std::uint8_t>(player); });
@@ -148,11 +158,12 @@ void CompareSettlerGroup(test::Context& ctx, SettlerGroupFn candidate, int cases
         const std::uint32_t settler = ctx.rng().Below(kTestSettlers);
         std::uint8_t type = static_cast<std::uint8_t>(ctx.rng().Below(kTestTypes));
         if (ctx.rng().Chance(1, 10)) {
-            type = 0x29;
+            type = Value(SettlerType::Catapult);
         }
         worlds.Both([&](CGameData* w) { w->settlers[settler].art = type; });
         if (ctx.rng().Chance(1, 3)) {
-            const auto job = static_cast<std::uint16_t>(0xaa + ctx.rng().Below(4));
+            // Jobs 170..173 (0xaa..0xad), around WalkToOwnArea and SeekOwnArea.
+            const auto job = static_cast<std::uint16_t>(Value(SettlerJob::CarrierLeavePile) + ctx.rng().Below(4));
             worlds.Both([&](CGameData* w) { w->settlers[settler].job = job; });
         }
         const std::uint32_t expected =
@@ -160,18 +171,19 @@ void CompareSettlerGroup(test::Context& ctx, SettlerGroupFn candidate, int cases
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, settler);
         if (!S3RE_EXPECT_EQ(expected, actual) ||
             (i % 4096 == 4095 && !worlds.Checkpoint(ctx))) {
-            ctx.Fail(__FILE__, __LINE__, "  case %d: settler %u, type 0x%02x", i, settler, type);
+            ctx.Fail(__FILE__, __LINE__, "  case %d: settler %u, type %u", i, settler, type);
             return;
         }
     }
     worlds.Checkpoint(ctx);
 }
 
-// Wrong: treats only 0xab as the special job.
+// Wrong: treats only WalkToOwnArea as the special job.
 std::uint32_t __fastcall WrongSettlerGroup(CGameData* world, void* edx, std::uint32_t settler) {
     const Settler& record = world->settlers[settler];
-    if (record.art != 0x29 && g_settlerTypeClass[record.art] == 0 && record.job == 0xac) {
-        return 1;
+    if (TypeOf(record) != SettlerType::Catapult && ClassOf(record) == SettlerClass::Civilian &&
+        JobOf(record) == SettlerJob::SeekOwnArea) {
+        return kGroup1;
     }
     return CGameData_SettlerGroup(world, edx, settler);
 }
