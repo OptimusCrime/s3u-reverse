@@ -647,6 +647,42 @@ Converted to `docs/coding_style.md`, behaviour unchanged:
   files: a `--test` run whose filter matched all 561 tests passed (before
   the last pile-kind step, whose files then select no spec in `--changed`
   and pass their 8 tests). `inventory.py check` 0 errors.
+### 2026-11-23 (47): computer players, batch 1 (parallel worktree)
+
+- **Analysis of the computer players** in `re/computer_players.md`: code
+  range 0x54cbd0..0x59fcd0 (502 game functions, ~50k instructions, files
+  Rainer\*), the two RTTI hierarchies (BLACK_BOARD_AGENT: 11 agent kinds
+  per computer player made by the factory `AI::CreateAgent` 0x56f6d0, was
+  "CCentrumCheckAgent::CCentrumCheckAgent"; BLACK_BOARD_NOTE: up to 300
+  request notes per player, a tree by ids), the per-step entry 0x550f80
+  (staggered timers with periods 15 / 71 / 841 steps, round robin over
+  the player's AiPlayerData nodes), the 19 command senders (ids 1, 3..12,
+  14..17, 21, 24, 0xf5; pushed on the logic->net queue, so the AI is in
+  every recording), RNG: only `CGameData::Random` (13 call sites, no CRT
+  rand), the data it reads, and a package plan (A2..A6).
+- **37 functions verified** (new files `ai_computer_player.cpp`,
+  `ai_census.cpp`, `ai_agents.cpp`): CComputerPlayer's note lists
+  (Add/RemoveRootNote, Add/RemovePendingNote, Add/RemoveActiveNote,
+  RemoveFromList200), Activate/DeactivateNote(Of), RaiseBuildPriorities
+  (tables `g_aiBuildPriorityCaps` 0x7328e8 / `g_aiBuildPrioritySteps`
+  0x73295c); BLACK_BOARD_NOTE ResetLinks, Init, MarkDispatched,
+  Set/Clear/HasFlags, FindChildOfType; the census (constructor,
+  CountBuildings, ComputeTeamStrength), StartPositionWalkRegion,
+  EvaLand::SumAllCells, two vector helpers, list begin/empty, a pair
+  constructor, CountPlayersTakingPart, and the seven agent constructors
+  (GLOBAL_EXPAND_EMPIRE, COMPUTER_PLAYER, T_MAP_WORKER, T_ATTACK,
+  T_ECONOMY, T_SAFETY, CCentrumCheck). Evidence: in-process tests
+  `AiComputerPlayer_*`, `AiCensus_*`, `AiAgents_*` (each with
+  wrong-implementation probes) and emulator specs with 0 mismatches and
+  full block coverage for all 37.
+- **Layouts** (`ai_layout.h`, `re/structs.md`): `ComputerPlayer` (0x780
+  bytes, all fields placed), `BlackBoardNote`, the census fields
+  (buildings per player/type, soldiers, team strength; renamed from
+  dwordsNNN), AiPlayerData's build priorities and countdowns.
+- Next (TODO.md "Computer players"): packages A2 (small READY helpers),
+  A3 (CComputerPlayer note tree with virtual calls), A4 (command senders,
+  need MessageQueue::Push as a probed callee), A5 (Cevaland), A6 (the
+  agents' run functions).
 
 ### 2026-11-23 (46): round end (spells, game-end check, ExecuteCommands callees, renames)
 

@@ -539,8 +539,11 @@ byte: random races include the Amazons. **V** (layout of these fields).
   protocol.cpp): +0x04 id (Lobby_EqualField4 0x606AC0, Lobby_HasField4
   0x5DA3A0), strings at +0x08 and +0x18, byte +0x28, dword +0x2C,
   container +0x9C (its assignment 0x5DB590). **S**.
-- **AiTaggedRecord** (computer players; AI_SetWord4 0x55CA60): word +0x04
-  tag passed by the constructors (4, 7, 0xA...); no vtable. **G** (meaning).
+- **AiTaggedRecord** = the start of a **BLACK_BOARD_AGENT** (computer
+  players; AI_SetWord4 0x55CA60): vtable +0 (stored by the factory
+  AI::CreateAgent 0x56F6D0), word +0x04 the agent kind 0..10 (the
+  subclass constructors pass 3, 5..10). **V** (constructors), details in
+  `re/computer_players.md`.
 - **WCSkipListDictKeyVal<unsigned int / int, String>** (Watcom): key +0,
   string +4 (destructors 0x459440, 0x49A070; 0x4581A0, 0x499470 same
   shape). **S**.
@@ -548,3 +551,37 @@ byte: random races include the Amazons. **V** (layout of these fields).
   string at +0x50 (0x45F060 probably its destructor). **S**.
 - **DDBLTFX** (DirectDraw): the SDK struct (`<ddraw.h>`), 0x64 bytes,
   dwFillColor at +0x50, as CScreenElement_FillBackground builds it.
+
+## Computer players (CComputerPlayer, notes, census)
+
+Overview, classes and the per-step entry: `re/computer_players.md`; C++
+layouts in `src/s3re/game/ai_layout.h`.
+
+- **CComputerPlayer** (0x780 bytes, vtable 0x65A530; 20 pointers at
+  CLogicThread+0x350): +0x004 root note ids (100 words, 0xFFFF free,
+  packed) and count +0x0CC; +0x0CE pending note ids (50) and count +0x132;
+  +0x134 active note ids (100), count +0x1FC; +0x200 a fourth list (50),
+  count +0x264; +0x266 handler agent kind per note type (6 words, 0xFFFF
+  none); +0x272 player number (byte); +0x274 / +0x278 / +0x27C step
+  counters of 0x550F80 (periods 15, 71, 841 steps, offset by the player
+  index); +0x280 notes by id (300 pointers); +0x730 agents by kind (11
+  pointers); +0x75C world; +0x760 the logic->net MessageQueue; +0x764
+  steps; +0x76C player index; +0x770 setup index; +0x774 per-player node
+  lists (12-byte entries per player: +4 list, +8 count; a reset flag at +0xF0 + 12 * player); +0x778
+  the current AiPlayerData node; +0x77C its key (node word +8). **V**
+  (lists, notes, node pointer: batch 1 functions), **R** (the rest).
+- **BLACK_BOARD_NOTE** (0x1A bytes + subclass fields): +0 vtable, +4 flags
+  (1 dispatched, 4 active), +6 type, +8 own id, +0xA word and +0xC dword
+  (0 after a reset), +0x10 parent id, +0x12 next sibling, +0x14 first
+  child (0xFFFF = none), +0x16 / +0x18 agent kinds for the callbacks
+  0x582480 (slot 9) / 0x582510 (slot 10). **V** (0x582400..0x5824D0).
+- **AiPlayerData** node: +0x26 per building type (57) 6 bytes: build
+  priority, x, y (AI::RecordBestCandidate; CComputerPlayer::
+  RaiseBuildPriorities raises the priority by the tables 0x73295C up to
+  0x7328E8); +0x2D2 per-type countdowns (reset to 0x7329D0[type], lowered
+  every 15 steps); +0x20 dword counted up per step. **V**.
+- **AI census** (AiAgentData, 0x1AD8 bytes; constructor 0x55B6B0): +1
+  buildings counted, +2 set by the count, +0x25C team strength per
+  player (20 dwords), +0x2AC its valid flag, +0x444 soldiers per player
+  (20 x 9 dwords), +0x714 finished buildings per player and type (20 x
+  57 dwords). **V** (0x55BE00, 0x55BEA0).

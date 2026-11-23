@@ -5,6 +5,7 @@
 // Only the fields our replacements touch are named; the rest is padding
 // (unkXX) whose meaning is unknown. Offsets are checked by static_asserts.
 
+#include "game/enums.h"
 #include "game/layout.h"
 
 #include <cstddef>
@@ -26,22 +27,112 @@ struct AiPlayerSetup {
 };
 static_assert(sizeof(AiPlayerSetup) == 0x180);
 
-// ---------------------------------------------------------------- CComputerPlayer
-// The fields AI_SetCurrentPlayer copies into the globals (size unknown).
-struct ComputerPlayer {
-    std::uint8_t unk000[0x272];
-    std::uint8_t player_number;   // 0x272
-    std::uint8_t unk273[0x75c - 0x273];
-    std::uint32_t world;          // 0x75c CGameData*
-    std::uint8_t unk760[0x10];
-    std::uint32_t setup_index;    // 0x770 index into g_aiPlayerSetups
-    std::uint32_t unk774;
-    std::uint32_t data;           // 0x778 AiPlayerData*
+// ---------------------------------------------------------------- blackboard
+// The computer players work like a blackboard system (RTTI names):
+// - BLACK_BOARD_AGENT (vtable 0x65a828, 13 slots) and its 11 subclasses are
+//   the agents ("knowledge sources"), one of each kind 0..10 per computer
+//   player in ComputerPlayer::agents, made by the factory 0x56f6d0
+//   (fastcall kind). Kind 3 GLOBAL_EXPAND_EMPIRE_AGENT, 5
+//   COMPUTER_PLAYER_AGENT, 6 T_MAP_WORKER_AGENT, 7 T_ATTACK_AGENT, 8
+//   T_ECONOMY_AGENT, 9 T_SAFETY_AGENT, 10 CCentrumCheckAgent; 0
+//   LOCAL_WARE_REQUEST_AGENT; 1, 2, 4 the house request / ground request /
+//   do-build-house agents (to confirm). Their word +4 is the kind
+//   (AiTaggedRecord below; AI_SetWord4).
+// - BLACK_BOARD_NOTE (vtable 0x65a56c) and its subclasses HOUSE_REQUEST_NOTE,
+//   HOUSE_GROUND_REQUEST_NOTE, LOCAL_WARE_REQUEST_NOTE, T_DO_BUILD_HOUSE_NOTE
+//   are the notes (requests) on the blackboard: up to 300 per computer
+//   player by id in ComputerPlayer::notes, in a tree (parent / first child /
+//   next sibling, all ids, 0xffff = none). Layout from 0x582400 (which
+//   resets it), 0x551330 (deletes a note and its subtree) and 0x5824d0
+//   (child search); re/computer_players.md. The subclasses' own fields
+//   follow at +0x1a.
+constexpr std::size_t kMaxNotes = 300;
+constexpr std::uint16_t kNoNote = 0xffff;
+constexpr std::uint16_t kNoteDispatched = 0x0001;  // set before the note goes to its handler (0x551510)
+constexpr std::uint16_t kNoteActive = 0x0004;      // in ComputerPlayer::active_notes (0x5515e0 / 0x551630)
+
+struct BlackBoardNote {
+    std::uint32_t vtable;         // 0x00
+    std::uint16_t flags;          // 0x04 kNote* bits
+    std::uint16_t type;           // 0x06 indexes ComputerPlayer::handlers; FindChildOfType compares it
+    std::uint16_t id;             // 0x08 own index in ComputerPlayer::notes (0xffff after the reset)
+    std::uint16_t unk0a;          // 0x0a 0 after the reset
+    std::uint32_t unk0c;          // 0x0c 0 after the reset
+    std::uint16_t parent;         // 0x10 id or kNoNote (then it is a root note)
+    std::uint16_t next_sibling;   // 0x12
+    std::uint16_t first_child;    // 0x14
+    std::uint16_t agent16;        // 0x16 agent kind (ComputerPlayer::agents) 0x582480 calls slot 9 of
+    std::uint16_t agent18;        // 0x18 agent kind 0x582510 calls slot 10 of
 };
+static_assert(offsetof(BlackBoardNote, flags) == 0x04);
+static_assert(offsetof(BlackBoardNote, id) == 0x08);
+static_assert(offsetof(BlackBoardNote, parent) == 0x10);
+static_assert(offsetof(BlackBoardNote, first_child) == 0x14);
+static_assert(offsetof(BlackBoardNote, agent18) == 0x18);
+static_assert(sizeof(BlackBoardNote) == 0x1a);
+
+// ---------------------------------------------------------------- CComputerPlayer
+// One per computer player (20 pointers at CLogicThread+0x350; constructor
+// 0x550900, per-tick entry 0x550f80). Size at least 0x780. The four id
+// lists are AI_WordListInsert/Remove lists (0xffff = free, packed at the
+// front) with a count of the entries added.
+constexpr std::size_t kRootNoteSlots = 100;
+constexpr std::size_t kPendingNoteSlots = 50;
+constexpr std::size_t kActiveNoteSlots = 100;
+constexpr std::size_t kList200Slots = 50;
+constexpr std::size_t kAgentKinds = 11;
+
+struct ComputerPlayer {
+    std::uint32_t vtable;                              // 0x000 0x65a530
+    std::uint16_t root_notes[kRootNoteSlots];          // 0x004 notes without a parent
+    std::uint16_t root_note_count;                     // 0x0cc
+    std::uint16_t pending_notes[kPendingNoteSlots];    // 0x0ce new notes, handed to their handler by 0x5514c0
+    std::uint16_t pending_note_count;                  // 0x132
+    std::uint16_t active_notes[kActiveNoteSlots];      // 0x134 notes with kNoteActive
+    std::uint16_t active_note_count;                   // 0x1fc
+    std::uint16_t unk1fe;
+    std::uint16_t list200[kList200Slots];              // 0x200 (AI_List32Add; meaning unknown)
+    std::uint16_t list200_count;                       // 0x264
+    std::uint16_t handlers[6];                         // 0x266 per note type: agent kind, 0xffff = none (0x551510)
+    std::uint8_t player_number;                        // 0x272
+    std::uint8_t unk273;
+    std::uint16_t timer274;                            // 0x274 the three step counters of 0x550f80
+    std::uint16_t unk276;
+    std::uint16_t timer278;                            // 0x278
+    std::uint16_t unk27a;
+    std::uint16_t timer27c;                            // 0x27c
+    std::uint16_t unk27e;
+    BlackBoardNote* notes[kMaxNotes];                  // 0x280 by id
+    std::uint32_t agents[kAgentKinds];                 // 0x730 BLACK_BOARD_AGENT* by kind; 0x550f80 runs slot 8 of [7] (probably T_ATTACK_AGENT) when the player has no nodes
+    std::uint32_t world;                               // 0x75c CGameData*
+    std::uint32_t message_queue;                       // 0x760 the logic->net MessageQueue (commands are pushed there)
+    std::uint32_t steps;                               // 0x764 +1 per 0x550f80
+    std::uint8_t unk768;
+    std::uint8_t pad769[3];
+    std::uint32_t player;                              // 0x76c the player index (constructor argument)
+    std::uint32_t setup_index;                         // 0x770 index into g_aiPlayerSetups
+    std::uint32_t settlement_lists;                    // 0x774 12-byte entries per player: [+4] list of AiPlayerData nodes, [+8] their count
+    std::uint32_t data;                                // 0x778 AiPlayerData* (the current node of that list)
+    std::uint32_t data_key;                            // 0x77c word +8 of the current node
+};
+static_assert(offsetof(ComputerPlayer, root_notes) == 0x004);
+static_assert(offsetof(ComputerPlayer, root_note_count) == 0x0cc);
+static_assert(offsetof(ComputerPlayer, pending_notes) == 0x0ce);
+static_assert(offsetof(ComputerPlayer, pending_note_count) == 0x132);
+static_assert(offsetof(ComputerPlayer, active_notes) == 0x134);
+static_assert(offsetof(ComputerPlayer, active_note_count) == 0x1fc);
+static_assert(offsetof(ComputerPlayer, list200) == 0x200);
+static_assert(offsetof(ComputerPlayer, list200_count) == 0x264);
+static_assert(offsetof(ComputerPlayer, handlers) == 0x266);
 static_assert(offsetof(ComputerPlayer, player_number) == 0x272);
+static_assert(offsetof(ComputerPlayer, timer27c) == 0x27c);
+static_assert(offsetof(ComputerPlayer, notes) == 0x280);
+static_assert(offsetof(ComputerPlayer, agents) == 0x730);
 static_assert(offsetof(ComputerPlayer, world) == 0x75c);
+static_assert(offsetof(ComputerPlayer, player) == 0x76c);
 static_assert(offsetof(ComputerPlayer, setup_index) == 0x770);
 static_assert(offsetof(ComputerPlayer, data) == 0x778);
+static_assert(sizeof(ComputerPlayer) == 0x780);
 
 // ---------------------------------------------------------------- AI player data
 // g_aiPlayerData: the best place found per candidate index (probably per
@@ -58,42 +149,52 @@ static_assert(sizeof(AiCandidate) == 6);
 
 struct AiPlayerData {
     std::uint8_t unk000[0x26];
+    // Indexes 0..56 are building types: best[type].score is the build
+    // priority that 0x551b10 raises by g_aiBuildPrioritySteps[type] up to
+    // g_aiBuildPriorityCaps[type] (only while non-zero); candidate_values
+    // are per-type countdowns (0x550f80 lowers 57 of them by one per step
+    // in every node of the list). The rest of best[] is not known.
     AiCandidate best[114];                // 0x026
-    std::uint16_t candidate_values[1];    // 0x2d2 (count unknown)
+    std::uint16_t candidate_values[1];    // 0x2d2 (count unknown, at least 57)
 };
 static_assert(offsetof(AiPlayerData, best) == 0x26);
 static_assert(offsetof(AiPlayerData, candidate_values) == 0x2d2);
 
 // ---------------------------------------------------------------- agent data
-// The working data AI_ResetAgentData clears (size at least 0x1ad8; probably
-// a computer player's statistics and orders, meanings unknown).
+// The computer players' census of the world (AI_ResetAgentData clears it,
+// constructor 0x55b6b0; size 0x1ad8): buildings per player and type
+// (0x55be00), soldiers per player (filled elsewhere, not yet known) and
+// the military strength of each player's team (0x55bea0). Other fields'
+// meanings unknown.
+constexpr std::size_t kCensusSoldierKinds = 9;  // probably 3 weapons x 3 levels (every third weighs double)
+
 struct AiAgentData {
     std::uint8_t unk000;                 // 0x000
-    std::uint8_t unk001;                 // 0x001
-    std::uint8_t unk002;                 // 0x002
+    std::uint8_t buildings_counted;      // 0x001 0 while 0x55be00 counts, then 1
+    std::uint8_t unk002;                 // 0x002 set to 1 by 0x55be00
     std::uint8_t unk003;
     std::uint16_t words004[20][10];      // 0x004
     std::uint8_t bytes194[20][10];       // 0x194
-    std::uint32_t dwords25c[20];         // 0x25c
-    std::uint8_t unk2ac;                 // 0x2ac
+    std::uint32_t team_strength[20];     // 0x25c per player: soldiers and towers of its team (0x55bea0)
+    std::uint8_t team_strength_valid;    // 0x2ac set to 1 by 0x55bea0
     std::uint8_t unk2ad[7];
     std::uint32_t dwords2b4[20];         // 0x2b4
     std::uint32_t dwords304[20];         // 0x304
     std::uint32_t dwords354[20];         // 0x354
     std::uint32_t dwords3a4[20];         // 0x3a4
     std::uint32_t dwords3f4[20];         // 0x3f4
-    std::uint32_t dwords444[0xb4];       // 0x444
-    std::uint32_t dwords714[0x474];      // 0x714
+    std::uint32_t soldiers[20][kCensusSoldierKinds];      // 0x444 per player
+    std::uint32_t buildings[20][kBuildingTypeCount];      // 0x714 finished buildings per player and type
     std::uint32_t dwords18e4[0x7d];      // 0x18e4..0x1ad4
 };
 static_assert(offsetof(AiAgentData, words004) == 0x4);
 static_assert(offsetof(AiAgentData, bytes194) == 0x194);
-static_assert(offsetof(AiAgentData, dwords25c) == 0x25c);
-static_assert(offsetof(AiAgentData, unk2ac) == 0x2ac);
+static_assert(offsetof(AiAgentData, team_strength) == 0x25c);
+static_assert(offsetof(AiAgentData, team_strength_valid) == 0x2ac);
 static_assert(offsetof(AiAgentData, dwords2b4) == 0x2b4);
 static_assert(offsetof(AiAgentData, dwords3f4) == 0x3f4);
-static_assert(offsetof(AiAgentData, dwords444) == 0x444);
-static_assert(offsetof(AiAgentData, dwords714) == 0x714);
+static_assert(offsetof(AiAgentData, soldiers) == 0x444);
+static_assert(offsetof(AiAgentData, buildings) == 0x714);
 static_assert(offsetof(AiAgentData, dwords18e4) == 0x18e4);
 static_assert(sizeof(AiAgentData) == 0x1ad8);
 
@@ -176,10 +277,10 @@ struct AiVector {
 static_assert(sizeof(AiVector) == 0x10);
 
 // ---------------------------------------------------------------- tagged record
-// The objects AI_SetWord4 (0x55ca60) starts: their constructors (e.g.
-// 0x55ebe0 in Rainer\Cevaland.cpp, 0x560dd0) pass a constant tag (4, 7,
-// 0xa...) and then clear their own fields from +8. No vtable is stored, and
-// the class is not identified; the tag is probably the record's kind.
+// A BLACK_BOARD_AGENT's start: AI_SetWord4 (0x55ca60) stores its kind at +4
+// (the base class adds no fields; its vtable is stored by the factory
+// 0x56f6d0 before the subclass constructor runs, e.g. 0x55ebe0 for
+// T_ATTACK_AGENT, kind 7).
 struct AiTaggedRecord {
     std::uint32_t unk00;  // +0
     std::uint16_t tag;    // +4

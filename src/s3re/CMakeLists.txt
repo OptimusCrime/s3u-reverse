@@ -25,6 +25,9 @@ add_library(s3re SHARED
     game/ai_evaland.cpp
     game/ai_helpers.cpp
     game/ai_small_helpers.cpp
+    game/ai_computer_player.cpp
+    game/ai_census.cpp
+    game/ai_agents.cpp
     game/area_piles.cpp
     game/area_split.cpp
     game/building_crush.cpp
