@@ -111,7 +111,7 @@ struct ComputerPlayer {
     std::uint8_t pad769[3];
     std::uint32_t player;                              // 0x76c the player index (constructor argument)
     std::uint32_t setup_index;                         // 0x770 index into g_aiPlayerSetups
-    std::uint32_t settlement_lists;                    // 0x774 12-byte entries per player: [+4] list of AiPlayerData nodes
+    std::uint32_t settlement_lists;                    // 0x774 12-byte entries per player: [+4] list of AiPlayerData nodes, [+8] their count
     std::uint32_t data;                                // 0x778 AiPlayerData* (the current node of that list)
     std::uint32_t data_key;                            // 0x77c word +8 of the current node
 };

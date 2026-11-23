@@ -68,6 +68,31 @@ Each item: what, why, and where to start.
 - **Lint** for hex literals in comparisons and magic numbers in
   job/type/goods comparisons (coding_style.md "Checks").
 
+## Computer players (re/computer_players.md)
+
+- **Package A2: small READY helpers** of the AI range (`python
+  tools/frontier.py --range 54cbd0 59fcd0`): the T_ECONOMY_AGENT
+  conditions 0x5693c0..0x569c90 (calls of AI::RecordBestCandidate; first
+  find what the agent fields +0x42..+0x90 are), the map queries
+  0x599510..0x5999e0, 0x58ecb0, 0x58ed30, 0x58ed70, 0x59dbb0, 0x59dc70,
+  0x5930f0, 0x593140, 0x593f50, 0x5720c0, 0x571d00..0x572420.
+- **Package A3: CComputerPlayer's note tree**: DeleteNote 0x551330,
+  0x551270, 0x551400, 0x551490, dispatch 0x551510, 0x5514c0, 0x551590,
+  0x5516e0, 0x551670, the destructor 0x5509d0 / 0x550f30, 0x551a70, the
+  note callbacks 0x582480 / 0x582510 (virtual calls: Spec.virtuals).
+- **Package A4: command senders** 0x58e220..0x58ec33 and
+  0x590990..0x590d86: need `MessageQueue::Push` (pass-through hook) and
+  `GameSetup_sub_4318a0` (0x7a7a18 +0x7c flag; name it) as probed callees.
+- **Package A5: Cevaland** (land evaluation) and **A6: the agents' run
+  functions** (slot 8), smallest first; then 0x550f80 and the
+  constructor 0x550900 / 0x550a30.
+- **Open:** which classes kinds 1, 2, 4 of AI::CreateAgent make (read its
+  jump table 0x56fa68); the meaning of CComputerPlayer list +0x200 and of
+  the AiPlayerData nodes (per settlement?); `AiList50Owner` in
+  ai_layout.h is the same object as ComputerPlayer (merge them when
+  ai_helpers.cpp is next touched); a world-field list of the AI range with
+  `tools/world_fields.py`.
+
 ## Naming
 
 - **Audit provisional names.** Many names were given early from partial
