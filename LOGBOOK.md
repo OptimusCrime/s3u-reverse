@@ -609,6 +609,58 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-23 (48): backlog cleanups (parallel worktree)
+
+Four backlog items from TODO "Evidence and testing", branch wip/cleanups,
+one commit each:
+
+- **trivial.py decodes the bytes itself** (capstone on S3.EXE from each
+  function start; padding checked byte by byte; `check` also requires each
+  note to quote the decoded instructions). The dumpbin listing, desynced by
+  jump tables, had made 0x53ba50 a false "ret". Result: 707 trivial
+  functions (was 708); 0x53ba50 was the only false positive (row already
+  fixed), no new ones, all 706 notes match. frontier.py: only the count
+  changes (435 of 707 done).
+- **Comments with old names:** Player::unk0b4[0] -> promotion_cost
+  (godly_events.cpp), Building::water -> workshop (area_split.cpp),
+  SpriteWord -> FrameCount, GfxData::FrameOffset ->
+  CGraphicsData::VariantFrameAddress, SumAreaGoods10PerPlayer ->
+  SumGoldPerPlayer, g_pixelChannelShifts -> g_pixelFormat, AreaDirection
+  (found by checking Struct::member references and the "Was X" names).
+- **Crashing tests no longer leave stubs behind:** CalleeStubs/ScopedJump
+  record their patches in LivePatches(); after a crash RunAll restores them
+  and clears the DebugLog capture (a test that ends with patches left
+  fails). ReleaseSiteWorkers_MatchesOriginal crashed in the original
+  because settler_high_water stayed random until the first case with
+  workers; it now starts at 0. Crash seed 18266603132645735647 and seeds
+  0..20 pass; with only the harness fix the crash restored 4 patches and
+  MinerJobFood/StealGoodFromPile passed. In-process suite 577/577.
+- **UpdateSoldier emulator memory 2.6 GB -> 247 MB:** one invalid case
+  (409, random owner >= 20 -> RemoveSettlerFromLists shifts a list of
+  random length) wrote 8M bytes in 20M instructions. Spec
+  max_instructions = 1M (all valid cases need < 200k: same 1490 cases /
+  10 invalid / 294 of 294 blocks at 200k, 1M and 20M, Release and Debug);
+  memory_mb dropped; 191 s -> 67 s. run.py --help fixed. --self-test 21/21,
+  --changed (200 specs, --jobs 4): 0 mismatches.
+
+Open: FakeClock (screen_element.cpp) isn't restored after a crash
+(harmless so far; TODO.md). `--changed` selected 200 specs in the fresh
+worktree although only comments/tests changed (probably its own build's
+fingerprints vs main's recorded passes; not investigated).
+
+### 2026-11-23 (48): source layout plan (parallel worktree)
+
+`docs/source_layout_plan.md` (commit 1c6b658, merged): inventory of
+`src/s3re` (126 of 154 files, 70,500 of 76,117 lines in `game/`; 51 % of
+the hooks in unnamed original files), options (by original file, by
+subsystem, hybrid) and the recommendation: subsystem folders (world, map,
+mapgen, environment, economy, buildings, settlers/jobs, pathing, spells,
+logic/commands, ai; ui, graphics, net, framework), shared headers stay in
+`game/`, `enums.h` split into `game/enums/`, a generated `source_file`
+column in re/functions.csv, one script-driven move commit
+(`tools/move_sources.py`) when no worktree is open. Waiting for the user's
+answers to its open questions.
+
 ### 2026-11-23 (47): round end (ExecuteCommands, computer players 1, readability)
 
 - Three parallel agents (entries below). ExecuteCommands' agent left five

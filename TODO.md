@@ -144,18 +144,11 @@ Each item: what, why, and where to start.
   0x164..0x171, 0x17c..0x185, 0x190..0x194; units 0xae and the walking
   jobs 0xe5, 0xe8, 0xed, 0xf1, 0xfe, 0x102, 0x133, 0x135, 0x140, 0x141,
   0x147..0x14a, 0x165, 0x168; the 20 no-op jobs.
-- **In-process tests that crash on other inputs:** test inputs are seeded
-  from the test name. During the GameWorld -> CGameData rename (session
-  45) the new names gave new inputs, and
-  `CGameData_ReleaseSiteWorkers_MatchesOriginal` crashed inside the
-  original (access violation at S3.EXE+0x10e443, address 0x0548B002); the
-  crash left CalleeStubs patches installed, so later stub tests
-  (MinerJobFood, StealGoodFromPile) crashed too. The rename now hashes the
-  old names (`SeedName` in difftest.cpp, `seed_name` in emutest/run.py),
-  so inputs are unchanged. To do: make that test's input generator
-  produce only states the original can handle (try `S3RE_TEST_SEED`
-  values), and have a crashing test's CalleeStubs restore its patches
-  (the SEH guard skips the destructor).
+- **FakeClock after a crashed test (session 48):** CalleeStubs and
+  ScopedJump are restored after a crash now (`LivePatches()`,
+  `RestoreLeftoverPatches()` in test/callee_stub.h), but `FakeClock`
+  (screen_element.cpp, patches the timeGetTime import) is not. Harmless so
+  far (later tests keep running); register it in `LivePatches()` too.
 
 - **Emulator coverage of `CGameData::GenerateRandomMap`:** 338/415 blocks
   in full Debug runs (1 quick case per batch since 2026-11-23); the rest
