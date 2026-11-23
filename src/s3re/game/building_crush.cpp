@@ -1568,6 +1568,11 @@ void CompareReleaseSiteWorkers(test::Context& ctx, BuildingFn candidate, int cas
     stubs.Install<2, kRecalculateTerritory>();
     DebugLogRecorder logs;
     SetUpWorld(ctx, worlds);
+    // ReleaseSiteWorkers scans settlers 1..settler_high_water. Until the
+    // first case with workers sets the count (SetUpWorkers), it is random
+    // and the original read far past the world (crash at 0x50e443 with
+    // S3RE_TEST_SEED 18266603132645735647): start without settlers.
+    worlds.Both([](CGameData* w) { w->settler_high_water = 0; });
     static BuildingFn original = nullptr;
     static BuildingFn ours = nullptr;
     original = Original_CGameData_ReleaseSiteWorkers;

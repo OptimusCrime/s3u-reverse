@@ -130,14 +130,6 @@ Each item: what, why, and where to start.
   replays/saves against the original and record the call count; the
   multiplayer/UI paths (0x06 text, 0xf4, 0xf7..0xff, messages 3..0x22)
   have tests only.
-- **trivial.py reads misaligned dumpbin output (session 47).** 0x53ba50
-  (`mov eax, [0x7e9168]; ret`) was marked "Trivial ... (ret)" because the
-  jump tables before it desync build/s3.asm. Make `trivial.py` check that
-  the listing has an instruction exactly at the start (or decode the bytes
-  itself), then rerun `trivial.py check` for other false positives.
-- **godly_events.cpp comments (session 47):** lines 62 and 89 still say
-  `Player::unk0b4[0]`; it is now `Player::promotion_cost` (the file was
-  locked by a hung compiler when the rename ran).
 - **UpdateSettlers handlers with tests only (session 45).** The
   whole-game checks (two replays, three saves, a random map) never reach
   these UpdateSettlers jobs; check them against the user's full-game
@@ -152,13 +144,6 @@ Each item: what, why, and where to start.
   0x164..0x171, 0x17c..0x185, 0x190..0x194; units 0xae and the walking
   jobs 0xe5, 0xe8, 0xed, 0xf1, 0xfe, 0x102, 0x133, 0x135, 0x140, 0x141,
   0x147..0x14a, 0x165, 0x168; the 20 no-op jobs.
-- **Emulator memory: the CGameData_UpdateSoldier spec peaks at ~1.6 GB
-  per worker** (measured 2026-11-22 with `run.py CGameData_UpdateSoldier
-  --jobs 1 --memory`; WalkSettler/UpdateEconomy/UpdateEnvironment ~120 MB).
-  The default worker count now counts it (`Spec.memory_mb=1600`, 400 MB
-  for the others, session 45 tooling). Still to do: find what grows
-  (probably a huge lazily-random world range or the garrison walks) and
-  bound it; then drop `memory_mb` and update CLAUDE.md's figure.
 - **In-process tests that crash on other inputs:** test inputs are seeded
   from the test name. During the GameWorld -> CGameData rename (session
   45) the new names gave new inputs, and

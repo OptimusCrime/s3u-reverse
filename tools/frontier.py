@@ -126,7 +126,7 @@ def main():
     asm = read_asm(args.asm)
     starts = load_starts()
     inventory = load_inventory()
-    trivial = {} if args.no_trivial else find_trivial(asm, starts)
+    trivial = {} if args.no_trivial else find_trivial(starts)
     # Graph over all game code, so caller counts are complete.
     graph = build_graph(asm, starts, GAME_LOW, GAME_HIGH)
     callers = Counter()

@@ -59,7 +59,7 @@ std::uint32_t HasManaForSpell(CGameData* world, std::uint32_t player, std::uint3
         ++slot;
     }
     // Slot 8 (spell not in the list) reads the dword after spell_mana
-    // (Player::unk0b4[0]), like the original.
+    // (Player::promotion_cost), like the original.
     const auto needed = static_cast<std::uint32_t>(record.spell_mana[slot]);
     GameDebugLog(texts::kManaNeeded, needed, slot);
     const auto mana = static_cast<std::uint32_t>(record.mana);
@@ -86,7 +86,7 @@ void __fastcall CGameData_PayForSpell(CGameData* world, void*, std::uint32_t pla
     while (slot < kSpellSlots && spells[slot] != spell) {
         ++slot;
     }
-    // Slot 8 is the dword after spell_mana (Player::unk0b4[0]), as in the original.
+    // Slot 8 is the dword after spell_mana (Player::promotion_cost), as in the original.
     auto& needed = reinterpret_cast<std::uint32_t*>(record.spell_mana)[slot];
     record.mana = static_cast<std::int32_t>(static_cast<std::uint32_t>(record.mana) - needed);
     needed = ((needed - 1) >> 2) + 1 + needed;
