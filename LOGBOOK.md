@@ -605,7 +605,8 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   all identical to the original, UpdateSettlers called every step:
   replays scripted-seed127 and fun8-seed2024-input31 (3,000 ticks),
   slots 1..3 (2,000 ticks), random map 448,3 (2,000 ticks); call counts
-  recorded.
+  recorded. After merging readability groups 2, 3 and 5: build clean,
+  `--test` 510/510, `--changed` (154 and 103 specs) 0 mismatches.
 - **Known differences (unrealistic data only):** ship steering with an
   offset-table sector outside 0..5 (the original writes into a stack
   array indexed by it, ours skips); job 331 (ship loading) for races > 3
