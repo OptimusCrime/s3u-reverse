@@ -119,7 +119,7 @@ Initialization order (all verified by reading the code):
 | 0x1539484 | 0x15394AC | 0x28 | uint32 | 10 | UI feedback list (`PushUiFeedback`) | verified |
 | 0x15394AC | 0x15394B0 | 4 | uint32 | | its count | verified |
 | 0x15394B0 | 0x15394B1 | 1 | uint8 | | flag (ExecuteCommands, OnStart) | guess |
-| 0x15394B1 | 0x1539528 | 0x77 | uint8 | 119 | **VictoryConditions** (savegame name; read by 0x5145c0) | strong |
+| 0x15394B1 | 0x1539528 | 0x77 | struct | 1 | **VictoryConditions** (savegame name), `VictoryConditions`: destroy players / buildings, hold places, protect players, collect goods (CheckVictoryConditions 0x5145C0; fields in structs.md) | verified (layout) |
 | 0x1539528 | 0x153A128 | 0xC00 | int32 | 768 | reciprocals 0x10000 / i (i = 1..767; [0] = 0), Dirk\Pathing.cpp | verified |
 
 "Free" markers set by the constructor: areas, settlers, buildings, trade
@@ -188,7 +188,7 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 | 0x2D244 | int32 | statistics window selection | UI, skip | strong |
 | 0x2D248 | int32 | NewGameObjectiveTimeout (minutes; 0x4FFBC0 "NGO TimeOut", game end 0x511C50) | sim | strong |
 | 0x2D24C | int32 | `end_warning_minutes`: 10 (OnStart, NGO setup 0x4FFBC0); Step (0x53E230) shows "Spiel endet in %u min" (0x730A60) with it at tick (objective_timeout - it) * 60000 / 64 | sim | strong |
-| 0x2D250 | uint8 | when set, Add/SubtractPlayerCounter do nothing | sim | verified |
+| 0x2D250 | uint8 | when set, Add/SubtractPlayerCounter do nothing; set by CheckGameEnd (0x511C50) when the new game objectives' time is up | sim | verified |
 | 0x2D254, 0x2D258 | int32 | last camera position drawn (10,000,000 = force); equal to the camera in the dump | UI, skip | strong |
 | 0x2D25C, 0x2D260 | int32 | camera x, y in pixels | UI, skip, saved | verified |
 | 0x2D264 | int32 | redraw flag | UI, skip | verified |

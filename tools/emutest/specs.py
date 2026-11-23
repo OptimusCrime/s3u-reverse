@@ -1430,13 +1430,13 @@ SPECS = [
     Spec("CGameData_FindNearbySettlerType29", 0x0050cdb0, "thiscall",
          [between(1, 0x2fff), below(384), below(384)], presets=settlers_around),
     # game-end counts (game_end.cpp)
-    Spec("CLogicThread_CountBuildingsOfTypes15To18", 0x00514a00, "logicthread", [scratch(0)],
+    Spec("CLogicThread_CountMilitaryBuildings", 0x00514a00, "logicthread", [scratch(0)],
          presets=game_end_buildings, max_cases=500),
     Spec("CLogicThread_CountTilesOwnedBy", 0x00514a90, "logicthread",
          [below(4, 0.1), scratch(0), between(-2, 20)], presets=owned_points),
     Spec("CLogicThread_CountTilesOwnedByEither", 0x00514ae0, "logicthread",
          [below(4, 0.1), below(4, 0.1), scratch(0), between(-2, 20)], presets=owned_points),
-    Spec("CLogicThread_SumAreaGoods10PerPlayer", 0x00514b40, "logicthread", [scratch(0)],
+    Spec("CLogicThread_SumGoldPerPlayer", 0x00514b40, "logicthread", [scratch(0)],
          presets=area_piles),
     # map generation (map_generation.cpp)
     Spec("CGameData_ScatterTileByte11", 0x0051ad40, "thiscall", [anything, below(41)], eax_mask=0,
@@ -1821,6 +1821,360 @@ def free_tile_owner(rng, pool, args):
         fields += [(PILES + pile * PILE_BYTES, rng.randrange(36), 1), (PILES + pile * PILE_BYTES + 1, rng.randrange(9), 1)]
     return fields
 
+
+# --- game-end check (game_end.cpp, victory_conditions.cpp, objectives.cpp,
+# game_end_check.cpp), batch 46 -----------------------------------------------
+
+GAME_TICK = 0x7dfd48
+GAME_END_MISSION = 0x7dfdb0  # g_campaignMission
+WORLD_UPDATE_DISABLED = 0x7deb55
+PLAYER_TALLIES = 0x7acfd4
+PLAYER_COLOUR_INDEX = 0x7ace64
+LOCAL_PLAYER = 0x2d2d4
+VICTORY_CONDITIONS = 0x15394b1
+OFFSET_ENTRIES = 48
+GAME_END_TICKS = (56250, 65625, 70312, 112500)
+GAME_END_HARD_MISSIONS = (27, 30, 33, 34, 35, 36, 37, 39, 40, 41, 42, 43, 45, 47, 48, 51, 52, 54, 56, 58, 66, 68,
+                          69, 72)
+
+# Places the campaign missions look at (CheckGameEnd); the tiles around them
+# get buildings, piles and settlers from the small test tables.
+GAME_END_CENTRES = (
+    (122, 112), (295, 194), (314, 208), (300, 222), (319, 249), (412, 504), (171, 326), (118, 541), (207, 358),
+    (370, 335), (411, 266), (332, 74), (357, 292), (540, 47), (251, 74), (568, 387), (340, 576), (67, 319),
+    (603, 34), (56, 607), (93, 43), (40, 250), (103, 381), (468, 506), (222, 342), (157, 394), (508, 463),
+    (256, 420), (234, 425), (224, 438), (258, 444), (250, 456), (243, 540), (260, 551), (180, 483), (235, 497),
+    (238, 542), (178, 434), (476, 37), (344, 430), (267, 536), (274, 522), (293, 508), (310, 510), (324, 511),
+    (344, 519), (359, 527), (376, 533), (404, 554), (373, 548), (365, 588), (347, 595), (330, 599), (304, 592),
+    (296, 576), (331, 571), (433, 538), (196, 67), (202, 53), (252, 54), (278, 70), (480, 474), (501, 494),
+    (525, 480), (509, 466), (129, 90), (138, 95), (198, 138), (283, 193), (345, 209), (371, 230), (417, 218),
+    (276, 149), (230, 100), (250, 70), (280, 100), (430, 320), (310, 220), (300, 180), (360, 180), (360, 140),
+    (350, 100), (400, 100), (270, 20), (380, 20), (115, 175), (65, 150), (95, 120), (260, 290), (320, 290),
+    (380, 290), (440, 290), (280, 340), (160, 250), (220, 250), (230, 160), (290, 160), (50, 50), (110, 50),
+)
+GAME_END_ARTS = (8, 15, 16, 18, 22, 25, 28, 34, 36, 41, 42, 43, 44, 45, 50)
+GAME_END_SETTLER_TYPES = (5, 8, 15, 30, 31, 32, 33, 34, 35, 0, 1, 36)
+
+
+def small_owner(rng):
+    return 0xff if rng.random() < 0.12 else rng.randrange(5)
+
+
+def offset_rings(rng, entries=OFFSET_ENTRIES, wide=False):
+    """The offset table: entries of growing (signed) distance, then -1 (the
+    end for any radius below 0xffffffff)."""
+    fields = []
+    distance = rng.randint(-1, 30) if rng.random() < 0.1 else 10 if wide and rng.random() < 0.1 else 0
+    for k in range(entries + 1):
+        reach = 5 if wide else 3
+        dx, dy = rng.randint(-reach, reach), rng.randint(-reach, reach)
+        if rng.random() < 0.35:
+            distance += 1
+        stored = 0xFFFFFFFF if k == entries else distance & 0xFFFFFFFF
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 8, stored, 4)]
+    return fields
+
+
+def game_end_tile(rng, x, y, buildings=40, settlers=64, local=0):
+    flags = rng.getrandbits(8) & ~0x21
+    if rng.random() < 0.5:
+        flags |= 0x20
+    if rng.random() < 0.25:
+        flags |= 0x01
+    owner = local if rng.random() < 0.3 else small_owner(rng)
+    return [(tile(x, y) + 0x8, owner, 1), (tile(x, y) + 0xa, flags, 1),
+            (tile(x, y) + 0x2, 0 if rng.random() < 0.15 else rng.randint(1, buildings), 2),
+            (tile(x, y) + 0x0, 0 if rng.random() < 0.3 else rng.randint(1, settlers), 2),
+            (tile(x, y) + 0x6, 0x80 if rng.random() < 0.5 else rng.randrange(256), 1),
+            (tile(x, y) + 0x10, rng.randrange(3), 1)]
+
+
+def game_end_buildings_table(rng, count):
+    fields = [(BUILDING_COUNT, count, 4)]
+    for b in range(1, 41):
+        record = BUILDINGS + b * BUILDING_BYTES
+        art = rng.choice(GAME_END_ARTS) if rng.random() < 0.8 else rng.randrange(60)
+        fields += [(record + 0x0, small_owner(rng), 1), (record + 0x6, art, 1),
+                   (record + 0x21, 0 if rng.random() < 0.8 else rng.randint(1, 200), 1),
+                   (record + 0x34, rng.randrange(64), 2)]
+    return fields
+
+
+def game_end_piles(rng):
+    """Piles 1..40 (on tiles): a few goods and amounts."""
+    fields = []
+    for p in range(1, 41):
+        good = rng.choice((8, 11, 8, 11, rng.randrange(36)))
+        fields += [(PILES + p * PILE_BYTES, good, 1), (PILES + p * PILE_BYTES + 1, rng.randrange(30), 1)]
+    return fields
+
+
+def game_end_areas(rng, local):
+    """Areas 1..10 with pile chains (piles from 100 on) for every good."""
+    count = rng.choice([0, 1, rng.randrange(11), 10])
+    fields = [(0xe115dc, count, 4)]
+    next_pile = 100
+    for area in range(1, 11):
+        record = AREAS + area * AREA_BYTES
+        owner = local if rng.random() < 0.4 else small_owner(rng)
+        fields.append((record, owner, 1))
+        for good in range(36):
+            first = 0
+            for _ in range(0 if rng.random() < 0.5 else rng.randrange(5)):
+                fields += [(PILES + next_pile * PILE_BYTES + 0xc, first, 2),
+                           (PILES + next_pile * PILE_BYTES + 0x1, rng.randrange(70), 1)]
+                first = next_pile
+                next_pile += 1
+            fields.append((record + 0xa + good * 2, first, 2))
+    return fields
+
+
+def game_end_players(rng):
+    fields = []
+    for p in range(20):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        fields += [(record + 0x0, 0 if rng.random() < 0.2 else rng.choice([1, rng.getrandbits(32) | 1]), 4),
+                   (record + 0xc, rng.randrange(3), 4),
+                   (record + 0x8c, rng.randint(150, 250), 4),
+                   (record + 0x80, rng.randint(190, 300), 4),
+                   (record + 0x12c, rng.randrange(400), 4),
+                   (record + 0x134, 0 if rng.random() < 0.5 else rng.getrandbits(13), 4)]
+    return fields
+
+
+def victory_conditions(rng, local, places=GAME_END_CENTRES):
+    """VictoryConditions (world+0x15394b1) with each condition on in a third
+    of the cases; places on the map."""
+    vc = VICTORY_CONDITIONS
+    fields = [(vc + 0x00, int(rng.random() < 0.35), 1)]
+    fields += [(vc + 0x01 + i, int(rng.random() < 0.15), 1) for i in range(20)]
+    fields.append((vc + 0x15, int(rng.random() < 0.35), 1))
+    for i in range(10):
+        player = 0xff if rng.random() < 0.4 else rng.choice([rng.randrange(5), rng.randrange(5), 0xfe, 0x80])
+        art = rng.choice(GAME_END_ARTS) if rng.random() < 0.8 else rng.choice([0x80, 0xff, rng.randrange(60)])
+        fields += [(vc + 0x16 + i * 2, player, 1), (vc + 0x17 + i * 2, art, 1)]
+    fields.append((vc + 0x2a, int(rng.random() < 0.35), 1))
+    for i in range(5):
+        x, y = rng.choice(places)
+        fields += [(vc + 0x2b + i * 5, int(rng.random() < 0.5), 1), (vc + 0x2c + i * 5, x, 2),
+                   (vc + 0x2e + i * 5, y, 2)]
+    fields.append((vc + 0x44, int(rng.random() < 0.35), 1))
+    for i in range(20):
+        minutes = 0 if rng.random() < 0.8 else rng.choice([rng.randrange(4), rng.randrange(300), 0xffff, 40000])
+        fields.append((vc + 0x45 + i * 2, minutes, 2))
+    fields.append((vc + 0x6d, int(rng.random() < 0.35), 1))
+    for i in range(3):
+        fields += [(vc + 0x6e + i * 3, 0 if rng.random() < 0.3 else rng.randrange(60), 2),
+                   (vc + 0x70 + i * 3, rng.randrange(36) if rng.random() < 0.9 else rng.choice([0xff, 0x80]), 1)]
+    return fields
+
+
+def game_end_settlers(rng, local):
+    count = rng.choice([0, 1, rng.randrange(65), 64])
+    fields = [(SETTLER_COUNT, count, 4)]
+    for s in range(0, 66):
+        owner = local if rng.random() < 0.3 else small_owner(rng)
+        fields += [(SETTLERS + s * SETTLER_BYTES, owner, 1),
+                   (SETTLERS + s * SETTLER_BYTES + 1, rng.choice(GAME_END_SETTLER_TYPES), 1)]
+    return fields
+
+
+# Buildings the missions look for (CheckGameEnd: IsBuildingNear goals and the
+# tower places of missions 42/45/69, the marketplaces of 34/58): (x, y, art,
+# owner) with owner "local", "ally" (another player of the local team),
+# "any" or a player number.
+GAME_END_GOALS = (
+    (332, 74, 44, "local"), (357, 292, 18, "local"), (540, 47, 25, "local"), (251, 74, 15, "local"),
+    (568, 387, 15, "local"), (340, 576, 15, "local"), (67, 319, 15, "local"), (603, 34, 41, "local"),
+    (56, 607, 41, "local"), (468, 506, 45, "local"), (508, 463, 45, "any"), (256, 420, 41, 3), (234, 425, 42, 3),
+    (224, 438, 42, 3), (258, 444, 42, 3), (250, 456, 42, 3), (243, 540, 50, "any"), (260, 551, 50, "any"),
+    (180, 483, 15, 0), (235, 497, 15, 0), (238, 542, 15, 0), (267, 536, 18, 0), (274, 522, 16, 0),
+    (293, 508, 16, 0), (310, 510, 16, 0), (324, 511, 16, 0), (344, 519, 15, 0), (359, 527, 16, 0),
+    (376, 533, 16, 0), (404, 554, 16, 0), (373, 548, 16, 0), (365, 588, 16, 0), (347, 595, 16, 0),
+    (330, 599, 16, 0), (304, 592, 16, 0), (296, 576, 16, 0), (331, 571, 15, 0), (433, 538, 16, 0),
+    (196, 67, 15, 0), (202, 53, 16, 0), (252, 54, 15, 0), (278, 70, 16, 0), (480, 474, 15, 0), (501, 494, 16, 0),
+    (525, 480, 15, 0), (509, 466, 16, 0), (129, 90, 15, 0), (138, 95, 16, 0), (412, 504, 34, "ally"),
+    (171, 326, 34, "ally"), (118, 541, 43, "any"),
+)
+GOAL_BUILDINGS = 41  # goal k uses building 41 + k (outside the counted 1..40)
+
+
+def game_end_world(rng, pool, args):
+    local = rng.randrange(4)
+    ally = (local + 1) % 4
+    # The last check: random (in time), or just before the ticks game_end_globals favours (too early).
+    last = rng.getrandbits(32) if rng.random() < 0.8 else rng.choice(GAME_END_TICKS) - rng.randrange(20, 30)
+    scenario = rng.choice(("random", "random", "army", "army", "peace", "goals"))
+    fields = [(MAP_SIZE, 768 if rng.random() < 0.9 else rng.randrange(300, 768), 4),
+              (0x1195dcc, int(rng.random() < 0.15), 1), (0x2d248, rng.randrange(150), 4),
+              (LOGIC_THREAD + 0x24c, last & 0xFFFFFFFF, 4)]
+    fields += [(0x1195dcd + k, rng.randrange(36), 1) for k in range(7)]
+    fields += game_end_players(rng)
+    if scenario == "peace":
+        local = 0
+    fields += [(LOCAL_PLAYER, local, 4)]
+    team = rng.randrange(3)
+    fields += [(PLAYER_RECORDS + local * PLAYER_RECORD_BYTES + 0xc, team, 4),
+               (PLAYER_RECORDS + ally * PLAYER_RECORD_BYTES + 0xc, team, 4)]
+    # Buildings 1..40 (counted by CountMilitaryBuildings, up to the count);
+    # 1..5 mostly military buildings of players 0..4.
+    count = rng.choice([0, rng.randrange(41), 40, 40])
+    fields += game_end_buildings_table(rng, count)
+    for player in range(5):
+        record = BUILDINGS + (player + 1) * BUILDING_BYTES
+        military = (rng.random() < 0.75 or (scenario == "peace" and player == 0)) and \
+            (scenario not in ("peace", "goals") or player not in (2, 3)) and (scenario != "peace" or player == 0)
+        fields += [(record + 0x0, player, 1), (record + 0x21, 0, 1),
+                   (record + 0x6, rng.choice((15, 16, 18)) if military else rng.choice((8, 22, 28, 36, 41, 42)), 1)]
+    if scenario == "peace":  # nobody but player 0 has military buildings
+        for b in range(6, 41):
+            fields.append((BUILDINGS + b * BUILDING_BYTES, rng.choice((0, 0, 0xff)), 1))
+    elif scenario == "goals":  # the buildings mission 34 wants, of the local player; a gold mine of player 1
+        for b, art, owner in zip(range(6, 13), (41, 42, 28, 41, 42, 28, 8), (local,) * 6 + (1,)):
+            fields += [(BUILDINGS + b * BUILDING_BYTES, owner, 1), (BUILDINGS + b * BUILDING_BYTES + 0x6, art, 1),
+                       (BUILDINGS + b * BUILDING_BYTES + 0x21, 0, 1)]
+    fields += game_end_settlers(rng, local)
+    army = scenario == "army" or (scenario == "peace" and rng.random() < 0.5)
+    if army:  # 130 soldiers of one player (missions 27, 35, 37, 47, 51, 54)
+        owner = rng.choice((local, local, 1, 3))
+        fields.append((SETTLER_COUNT, 130, 4))
+        for s in range(0, 132):
+            fields += [(SETTLERS + s * SETTLER_BYTES, owner, 1),
+                       (SETTLERS + s * SETTLER_BYTES + 1, rng.choice((33, 34, 35, 33, 34, 35, 5, 8, 15, 30)), 1)]
+    fields += game_end_piles(rng)
+    fields += game_end_areas(rng, 1 if scenario == "goals" and rng.random() < 0.5 else local)
+    fields += offset_rings(rng, wide=True)
+    if rng.random() < 0.7:  # the place itself first
+        fields += [(NEIGHBOUR_OFFSETS, 0, 4), (NEIGHBOUR_OFFSETS + 4, 0, 4), (NEIGHBOUR_OFFSETS + 8, 0, 4)]
+    fields += victory_conditions(rng, local)
+    reach = 5 if army else 4
+    for cx, cy in GAME_END_CENTRES:
+        for dx in range(-reach, reach + 1):
+            for dy in range(-reach, reach + 1):
+                if (dx or dy) and not army and rng.random() < 0.6:
+                    continue
+                fields += game_end_tile(rng, cx + dx, cy + dy, settlers=130 if army else 64,
+                                        local=local)
+                if army:
+                    fields.append((tile(cx + dx, cy + dy), rng.randint(1, 130), 2))
+    every_goal = scenario == "goals" or rng.random() < 0.3
+    for k, (x, y, art, owner) in enumerate(GAME_END_GOALS):
+        if not every_goal and rng.random() < 0.5:
+            continue
+        building = GOAL_BUILDINGS + k
+        record = BUILDINGS + building * BUILDING_BYTES
+        player = {"local": local, "ally": ally, "any": rng.randrange(5)}.get(owner, owner)
+        exact = scenario == "goals"
+        if not exact and rng.random() < 0.1:
+            player = small_owner(rng)
+        fields += [(tile(x, y) + 0x2, building, 2), (tile(x, y) + 0xa, 0x20 | (rng.getrandbits(8) & 0xde), 1),
+                   (tile(x, y) + 0x8, player, 1), (record + 0x0, player, 1), (record + 0x6, art, 1),
+                   (record + 0x21, 0 if exact or rng.random() < 0.95 else 1, 1), (record + 0x34, rng.randrange(64), 2)]
+    if rng.random() < 0.5:  # all places of the "own every place" goals held
+        owner = local if rng.random() < 0.5 else 0
+        for x, y in GAME_END_CENTRES:
+            fields.append((tile(x, y) + 0x8, owner, 1))
+    if rng.random() < 0.3:  # mission 33's places held by players 1 and 2
+        for x, y in ((295, 194), (314, 208), (300, 222), (319, 249)):
+            fields.append((tile(x, y) + 0x8, rng.choice((1, 2)), 1))
+    return fields
+
+def game_end_globals(rng, pool, args):
+    tick = rng.randrange(130000) if rng.random() < 0.5 else rng.choice(GAME_END_TICKS)
+    if rng.random() < 0.3:
+        tick += rng.randint(-2, 2)
+    # Half the cases go to the missions whose goals need rare worlds.
+    mission = rng.randrange(101) if rng.random() < 0.5 else rng.choice(GAME_END_HARD_MISSIONS)
+    if rng.random() < 0.03:
+        mission = rng.getrandbits(32)
+    outcome = 0xFFFFFFFF if rng.random() < 0.95 else rng.choice([0, 1, 2])
+    fields = [(GAME_TICK, tick, 4), (GAME_END_MISSION, mission, 4), (GAME_OUTCOME, outcome, 4),
+              (WORLD_UPDATE_DISABLED, 0, 1)]
+    for p in range(20):
+        fields.append((PLAYER_TALLIES + p * 0x44 + 0xc, rng.choice([rng.randint(450, 650), rng.getrandbits(32)]), 4))
+        fields.append((PLAYER_COLOUR_INDEX + p * 2, rng.randrange(8), 2))
+    return fields
+
+
+
+def victory_world(rng, pool, args):
+    local = rng.randrange(4)
+    fields = [(MAP_SIZE, 768, 4), (LOCAL_PLAYER, local, 4)]
+    fields += game_end_players(rng)
+    fields += game_end_buildings_table(rng, rng.choice([0, rng.randrange(41), 40]))
+    fields += game_end_areas(rng, local)
+    fields += victory_conditions(rng, local, places=((10, 10), (11, 12), (20, 5), (7, 30)))
+    for x, y in ((10, 10), (11, 12), (20, 5), (7, 30)):
+        fields.append((tile(x, y) + 0x8, local if rng.random() < 0.6 else small_owner(rng), 1))
+    return fields
+
+
+def victory_globals(rng, pool, args):
+    tick = rng.randrange(40 * 938) if rng.random() < 0.7 else rng.getrandbits(32)
+    fields = [(GAME_TICK, tick, 4), (GAME_END_MISSION, 0 if rng.random() < 0.5 else rng.randint(1, 72), 4)]
+    fields += [(PLAYER_COLOUR_INDEX + p * 2, rng.randrange(8), 2) for p in range(20)]
+    return fields
+
+
+def ngo_world(rng, pool, args):
+    fields = [(LOCAL_PLAYER, rng.randrange(20), 4)]
+    for p in range(20):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        fields += [(record, 0 if rng.random() < 0.3 else rng.getrandbits(32) | 1, 4), (record + 0xc, rng.randrange(3), 4)]
+        for good in range(36):
+            fields.append((record + 0xdc + good * 2, rng.randrange(4) if rng.random() < 0.8 else rng.getrandbits(16), 2))
+    fields += [(0x1195dcd + k, rng.randrange(36) if rng.random() < 0.9 else rng.randrange(256), 1) for k in range(7)]
+    return fields
+
+
+def colour_players(rng, pool, args):
+    return [(PLAYER_RECORDS + p * PLAYER_RECORD_BYTES, 0 if rng.random() < 0.3 else 1, 4) for p in range(20)]
+
+
+def colour_table(rng, pool, args):
+    return [(PLAYER_COLOUR_INDEX + p * 2, rng.randrange(24), 2) for p in range(20)]
+
+
+def neighbourhood(rng, pool, args):
+    """IsBuildingNear / SumGoodsNear: offsets, and tiles around (args[0],
+    args[1]) with buildings 1..40 / piles 1..40."""
+    x, y = args[0], args[1]
+    fields = [(MAP_SIZE, 400 if rng.random() < 0.85 else rng.randrange(401), 4)]
+    fields += offset_rings(rng, entries=36)
+    fields += game_end_buildings_table(rng, 40)[1:]
+    fields += game_end_piles(rng)
+    for dx in range(-3, 4):
+        for dy in range(-3, 4):
+            if 0 <= x + dx < 400 and 0 <= y + dy < 400:
+                fields += game_end_tile(rng, x + dx, y + dy)
+    return fields
+
+
+def game_end_player_arg(rng, pool):
+    return rng.choice([0xFFFFFFFF, 0xFFFFFFFE, 0x80000000, rng.randrange(5), rng.randrange(5)])
+
+
+SPECS += [
+    Spec("CLogicThread_IsBuildingNear", 0x00514bf0, "logicthread",
+         [between(3, 396), between(3, 396), lambda rng, pool: rng.choice([0, 1, 2, 3, 5, 0xFFFFFFFE, 0x80000000]),
+          lambda rng, pool: rng.choice(GAME_END_ARTS + (rng.getrandbits(32),)), game_end_player_arg],
+         eax_mask=0xFF, presets=neighbourhood, max_cases=800),
+    Spec("CLogicThread_SumGoodsNear", 0x00514cc0, "logicthread",
+         [between(3, 396), between(3, 396), lambda rng, pool: rng.choice([0, 1, 2, 3, 5, 0xFFFFFFFE, 0x80000000]),
+          lambda rng, pool: rng.choice((8, 11, rng.getrandbits(32))), game_end_player_arg],
+         presets=neighbourhood, max_cases=800),
+    Spec("CGameData_DecideNgoOutcome", 0x004ffc80, "thiscall", [], presets=ngo_world, max_cases=800),
+    Spec("CGameData_PlayerOfColour", 0x004ffe00, "thiscall",
+         [lambda rng, pool: rng.choice([rng.randrange(24), rng.getrandbits(32)])],
+         presets=colour_players, globals=colour_table),
+    Spec("CLogicThread_CheckVictoryConditions", 0x005145c0, "logicthread", [], presets=victory_world,
+         globals=victory_globals, max_cases=1000),
+    # The jump table of the 100 missions follows the code at 0x514424 (data, not code).
+    Spec("CLogicThread_CheckGameEnd", 0x00511c50, "logicthread", [], eax_mask=0xFF, presets=game_end_world,
+         globals=game_end_globals, cover_until=0x00514424, case_scale=5),
+]
 
 SPECS += [
     Spec("CGameData_UnblockTile", 0x0051b770, "thiscall", [between(3, 8), between(3, 8)], presets=unblock_tile,

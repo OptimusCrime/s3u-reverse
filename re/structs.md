@@ -105,7 +105,7 @@ reimplementations) unless marked.
 
 | Off | Size | Meaning | Evidence | Conf. |
 |---|---|---|---|---|
-| 0x000 | u8 | player; 0xFF = free | ctor, AllocArea, SumAreaGoods10PerPlayer; dump | V |
+| 0x000 | u8 | player; 0xFF = free | ctor, AllocArea, SumGoldPerPlayer; dump | V |
 | 0x004 | u32 | number of tiles | AssignTileToArea, RemoveTileFromArea; dump (3156, 3127) | V |
 | 0x008 | u16 | head of the list of **empty piles** (goods byte 0xFF; MakePileEmpty 0x506080 pushes a pile here after unlinking it from its goods list) | Move/MergeAreaContents, MakePileEmpty | V |
 | 0x00A | u16[36] | heads of the pile lists per goods type (piles linked +0xA/+0xC) | AddTilePileToArea, FetchGoodsToTradeBuilding | V |
@@ -289,7 +289,9 @@ building_flags.cpp, settler_queries.cpp, dump (players 0 and 1).
 | 0x0DC | u16[36] | goods counters per goods type (Add/SubtractPlayerCounter, RecountPlayerGoods) | V |
 | 0x124 | u8 | map_revealed: 0 in ctor; SpellRevealMap (0x5495D0, spell 31) sets 1 for the local player; Step (0x53E530) clears it and the reveal global 0x7DFD84 once (tick - +0x128) * 64 / 1000 >= 15 (15 s) | V |
 | 0x128 | i32 | map_revealed_tick: the game tick of that spell | V |
-| 0x12C..0x134 | i32 | game-end check 0x511C50, UpdateSettlers; +0x12C / +0x130: soldiers / civilians died (UpdateSettlers jobs 0xAF GarrisonSoldierDies / 0x36 SettlerDies count +1, session 45) | G (V for +0x12C/+0x130 writes) |
+| 0x12C | i32 | soldiers_lost: +1 per dying settler of class 1..9 (UpdateSettlers jobs 0xAF GarrisonSoldierDies / 0x36 SettlerDies); campaign mission 52 is won when players 1..3 together reach 350 (CheckGameEnd 0x511C50) | V |
+| 0x130 | i32 | civilians_lost: +1 per dying settler of another class | V |
+| 0x134 | i32 | mission_state: low 12 bits counted up by the spell handler 0x54A370; CheckGameEnd: mission 67 sets bit 0x1000 of the local player's and needs bits 0..11 >= 10, mission 68 stores a game tick in player 0's (when its three towers first stand) | V (CheckGameEnd uses), G (spell) |
 | 0x138..0x147 | | not accessed | |
 
 Overlap: the request counters +0x20..+0x28 share bytes with the list
@@ -423,6 +425,19 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   MapEffects::ExpireSome 0x545D40 checks next), +0x668B0
   block_count_16, +0x668B4 width, +0x668B8 height. **V** (layout, from
   map_effects.cpp's verified functions), **S** (names).
+- **VictoryConditions** (world+0x15394B1, 0x77 bytes, layout::VictoryConditions;
+  savegame chunk 0x18): +0x00 destroy_players flag, +0x01 u8[20] marked
+  slots; +0x15 destroy_buildings flag, +0x16 10 x {i8 player (-1 unused),
+  i8 building type}; +0x2A hold_places flag, +0x2B 5 x {u8 active, u16 x,
+  u16 y} (5 bytes each); +0x44 protect_players flag, +0x45 u16[20] minutes;
+  +0x6D collect_goods flag, +0x6E 3 x {u16 amount, i8 good}. Slots are
+  colours outside campaigns (CGameData::PlayerOfColour 0x4FFE00).
+  Evaluated by CLogicThread::CheckVictoryConditions (0x5145C0). **V**
+  (layout, from the verified reimplementation), **S** (meaning).
+- **Game end:** world +0x2D248 objective_timeout (minutes; the NGO game
+  ends at tick >= minutes * 60000 >> 6), +0x2D250 counters_disabled (set
+  then by CheckGameEnd 0x511C50). CLogicThread +0x24C: game tick of the
+  last CheckGameEnd evaluation (every 50 ticks). **V**.
 - **New game objectives** (world+0x1195DCC): byte +0x0 `objectives_enabled`
   (non-zero = on); bytes +0x1..+0x7 `objectives`, the seven chosen objective ids (1..34, drawn by 0x4FFBC0
   with Random, distinct, never 21, 25, 27..31, 33, 34; checked by

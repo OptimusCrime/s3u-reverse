@@ -2758,16 +2758,16 @@ address,name,source,ticks,calls,commit,date,note
 0x00510800,CGameData::CountOtherPileClaims,save:slot 1.sav,2000,0,5a6eb86,2026-11-22,
 0x00510800,CGameData::CountOtherPileClaims,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,
 0x00510800,CGameData::CountOtherPileClaims,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,
-0x00514a00,CLogicThread::CountBuildingsOfTypes15To18,"random:384,0 seed 1234",2000,39,9adc76c,2026-11-22,
-0x00514a00,CLogicThread::CountBuildingsOfTypes15To18,"random:448,3 seed 1234",2000,39,5a6eb86,2026-11-22,
-0x00514a00,CLogicThread::CountBuildingsOfTypes15To18,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,5,5536f09,2026-11-10,
-0x00514a00,CLogicThread::CountBuildingsOfTypes15To18,"random:512,1 seed 1234",1500,29,21f1f01,2026-11-10,
-0x00514a00,CLogicThread::CountBuildingsOfTypes15To18,"random:640,2 seed 1234",1500,29,21f1f01,2026-11-10,
-0x00514a00,CLogicThread::CountBuildingsOfTypes15To18,replay:fun8-seed2024-input31,5000,99,c561f41,2026-11-10,seed 2024
-0x00514a00,CLogicThread::CountBuildingsOfTypes15To18,replay:scripted-seed127,3000,59,5a6eb86,2026-11-22,seed 1234
-0x00514a00,CLogicThread::CountBuildingsOfTypes15To18,save:slot 1.sav,2000,40,5a6eb86,2026-11-22,
-0x00514a00,CLogicThread::CountBuildingsOfTypes15To18,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,
-0x00514a00,CLogicThread::CountBuildingsOfTypes15To18,save:slot 3.sav,2000,40,5a6eb86,2026-11-22,
+0x00514a00,CLogicThread::CountMilitaryBuildings,"random:384,0 seed 1234",2000,39,9adc76c,2026-11-22,
+0x00514a00,CLogicThread::CountMilitaryBuildings,"random:448,3 seed 1234",2000,39,5a6eb86,2026-11-22,
+0x00514a00,CLogicThread::CountMilitaryBuildings,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,5,5536f09,2026-11-10,
+0x00514a00,CLogicThread::CountMilitaryBuildings,"random:512,1 seed 1234",1500,29,21f1f01,2026-11-10,
+0x00514a00,CLogicThread::CountMilitaryBuildings,"random:640,2 seed 1234",1500,29,21f1f01,2026-11-10,
+0x00514a00,CLogicThread::CountMilitaryBuildings,replay:fun8-seed2024-input31,5000,99,c561f41,2026-11-10,seed 2024
+0x00514a00,CLogicThread::CountMilitaryBuildings,replay:scripted-seed127,3000,59,5a6eb86,2026-11-22,seed 1234
+0x00514a00,CLogicThread::CountMilitaryBuildings,save:slot 1.sav,2000,40,5a6eb86,2026-11-22,
+0x00514a00,CLogicThread::CountMilitaryBuildings,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,
+0x00514a00,CLogicThread::CountMilitaryBuildings,save:slot 3.sav,2000,40,5a6eb86,2026-11-22,
 0x00514a90,CLogicThread::CountTilesOwnedBy,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
 0x00514a90,CLogicThread::CountTilesOwnedBy,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
 0x00514a90,CLogicThread::CountTilesOwnedBy,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
@@ -2788,16 +2788,16 @@ address,name,source,ticks,calls,commit,date,note
 0x00514ae0,CLogicThread::CountTilesOwnedByEither,save:slot 1.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x00514ae0,CLogicThread::CountTilesOwnedByEither,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x00514ae0,CLogicThread::CountTilesOwnedByEither,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x00514b40,CLogicThread::SumAreaGoods10PerPlayer,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
-0x00514b40,CLogicThread::SumAreaGoods10PerPlayer,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
-0x00514b40,CLogicThread::SumAreaGoods10PerPlayer,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
-0x00514b40,CLogicThread::SumAreaGoods10PerPlayer,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
-0x00514b40,CLogicThread::SumAreaGoods10PerPlayer,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
-0x00514b40,CLogicThread::SumAreaGoods10PerPlayer,replay:fun8-seed2024-input31,3000,0,5a6eb86,2026-11-22,seed 2024
-0x00514b40,CLogicThread::SumAreaGoods10PerPlayer,replay:scripted-seed127,3000,0,5a6eb86,2026-11-22,seed 1234
-0x00514b40,CLogicThread::SumAreaGoods10PerPlayer,save:slot 1.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x00514b40,CLogicThread::SumAreaGoods10PerPlayer,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x00514b40,CLogicThread::SumAreaGoods10PerPlayer,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x00514b40,CLogicThread::SumGoldPerPlayer,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
+0x00514b40,CLogicThread::SumGoldPerPlayer,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
+0x00514b40,CLogicThread::SumGoldPerPlayer,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
+0x00514b40,CLogicThread::SumGoldPerPlayer,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
+0x00514b40,CLogicThread::SumGoldPerPlayer,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
+0x00514b40,CLogicThread::SumGoldPerPlayer,replay:fun8-seed2024-input31,3000,0,5a6eb86,2026-11-22,seed 2024
+0x00514b40,CLogicThread::SumGoldPerPlayer,replay:scripted-seed127,3000,0,5a6eb86,2026-11-22,seed 1234
+0x00514b40,CLogicThread::SumGoldPerPlayer,save:slot 1.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x00514b40,CLogicThread::SumGoldPerPlayer,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x00514b40,CLogicThread::SumGoldPerPlayer,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x005157b0,CGameData::IsUiSelectionMode,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
 0x005157b0,CGameData::IsUiSelectionMode,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
 0x005157b0,CGameData::IsUiSelectionMode,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,

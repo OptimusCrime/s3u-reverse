@@ -9,7 +9,23 @@
 // CGameData::IsNgoObjectiveChosen (0x004ffb90): (id) -> AL = 1 if one of
 //   the seven bytes equals the low byte of `id`, else 0; the upper bits of
 //   EAX are the caller's (only AL is used). thiscall, ret 4.
+// CGameData::DecideNgoOutcome (0x004ffc80): when the objectives' time is up
+//   (CLogicThread::CheckGameEnd): for each of the seven objectives (goods
+//   ids), sums the goods counter (player +0xdc, uint16 per good, indexed by
+//   the objective byte without a bound) of the active players in the local
+//   player's team and of all other active players (uint32 sums). The team
+//   wins the objective if its sum is larger, loses it if smaller. EAX = 1
+//   (won more objectives than lost), 0 (lost more), 2 (as many). thiscall,
+//   no arguments.
+// CGameData::PlayerOfColour (0x004ffe00): (colour) -> the first player
+//   0..19 whose record is active and whose colour index (g_playerColourIndex,
+//   uint16 per player) equals colour (32-bit compare), or 0 if there is
+//   none. Quirk: a match only at player 19 also gives 0. Used by
+//   CheckVictoryConditions outside campaigns, where the victory conditions
+//   name players by colour. thiscall, ret 4.
 
+#include "game/globals.h"
+#include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -36,6 +52,8 @@ std::uint8_t* NgoObjectives(CGameData* world) {
 }  // namespace
 
 using IsChosenFn = bool(__fastcall*)(CGameData* world, void* edx, std::uint32_t id);
+using DecideNgoOutcomeFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx);
+using PlayerOfColourFn = std::int32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t colour);
 
 // Purpose: Whether an objective has already been chosen for this game's "new game objectives" (used while
 // drawing the seven objectives at random, so none is picked twice).
@@ -49,8 +67,70 @@ bool __fastcall CGameData_IsNgoObjectiveChosen(CGameData* world, void*, std::uin
     return false;
 }
 
+// The outcomes of DecideNgoOutcome (also stored in g_gameOutcome).
+constexpr std::uint32_t kNgoLost = 0;
+constexpr std::uint32_t kNgoWon = 1;
+constexpr std::uint32_t kNgoDraw = 2;
+
+// Purpose: Decides a "new game objectives" game when its time is up: the local player's team wins an
+// objective if its players together hold more of that good than everyone else, and the game is won if the
+// team wins more objectives than it loses (drawn if as many).
+std::uint32_t __fastcall CGameData_DecideNgoOutcome(CGameData* world, void*) {
+    std::uint32_t won = 0;
+    std::uint32_t lost = 0;
+    for (std::uint32_t k = 0; k < kNgoObjectiveCount; ++k) {
+        const std::uint8_t good = NgoObjectives(world)[k];
+        std::uint32_t team = 0;
+        std::uint32_t others = 0;
+        for (std::uint32_t player = 0; player < layout::kPlayers; ++player) {
+            const layout::Player& record = world->players[player];
+            if (record.active == 0) {
+                continue;
+            }
+            // Indexed by the objective byte without a bound check, as the original.
+            const std::uint16_t amount = record.goods[good];
+            if (world->players[world->local_player].team == record.team) {
+                team += amount;
+            } else {
+                others += amount;
+            }
+        }
+        if (others < team) {
+            ++won;
+        } else if (others > team) {
+            ++lost;
+        }
+    }
+    if (won > lost) {
+        return kNgoWon;
+    }
+    return won < lost ? kNgoLost : kNgoDraw;
+}
+
+// Purpose: Finds the player who plays a given colour (maps use colours to name players in their victory
+// conditions); 0 if no active player has it.
+std::int32_t __fastcall CGameData_PlayerOfColour(CGameData* world, void*, std::uint32_t colour) {
+    std::int32_t found = -1;
+    std::uint32_t player = 0;
+    while (player != layout::kPlayers) {
+        if (world->players[player].active != 0 && g_playerColourIndex[player] == colour) {
+            found = static_cast<std::int32_t>(player);
+        }
+        ++player;
+        if (found != -1) {
+            // A match at the last player is lost (the original tests the counter after the increment).
+            return player == layout::kPlayers ? 0 : found;
+        }
+    }
+    return 0;
+}
+
 S3RE_HOOK(0x004ffb90, CGameData_IsNgoObjectiveChosen, IsChosenFn, Original_CGameData_IsNgoObjectiveChosen,
           CGameData_IsNgoObjectiveChosen);
+S3RE_HOOK(0x004ffc80, CGameData_DecideNgoOutcome, DecideNgoOutcomeFn, Original_CGameData_DecideNgoOutcome,
+          CGameData_DecideNgoOutcome);
+S3RE_HOOK(0x004ffe00, CGameData_PlayerOfColour, PlayerOfColourFn, Original_CGameData_PlayerOfColour,
+          CGameData_PlayerOfColour);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -103,4 +183,87 @@ S3RE_TEST(CGameData_IsNgoObjectiveChosen_ComparisonDetectsWrongImplementation) {
     S3RE_EXPECT(probe.failures() > 0);
 }
 
+namespace {
+
+// The players, the local player's team and the objectives, from a few values
+// so that teams and sums often tie.
+void SetUpNgo(test::Context& ctx, test::WorldPair& worlds) {
+    for (std::uint32_t player = 0; player < layout::kPlayers; ++player) {
+        const std::int32_t active = ctx.rng().Chance(1, 3) ? 0 : static_cast<std::int32_t>(ctx.rng().Next32() | 1);
+        const std::int32_t team = static_cast<std::int32_t>(ctx.rng().Below(3));
+        worlds.Both([&](CGameData* w) {
+            w->players[player].active = active;
+            w->players[player].team = team;
+        });
+        // The goods counters and the bytes after them (objective bytes up to 255 read on).
+        for (std::uint32_t word = 0; word < 0x148 / 2 - 0xdc / 2; ++word) {
+            const auto amount = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? ctx.rng().Next32()
+                                                                                  : ctx.rng().Below(4));
+            worlds.Both([&](CGameData* w) { w->players[player].goods[word] = amount; });
+        }
+    }
+    const std::int32_t local = static_cast<std::int32_t>(ctx.rng().Below(layout::kPlayers));
+    worlds.Both([&](CGameData* w) { w->local_player = local; });
+    for (std::uint32_t k = 0; k < kNgoObjectiveCount; ++k) {
+        const auto good = static_cast<std::uint8_t>(ctx.rng().Chance(1, 10) ? ctx.rng().Below(256) : ctx.rng().Below(36));
+        worlds.Both([&](CGameData* w) { NgoObjectives(w)[k] = good; });
+    }
+}
+
+// Wrong: a tie on an objective counts as lost.
+std::uint32_t __fastcall WrongDecideNgoOutcome(CGameData* world, void* edx) {
+    const std::uint32_t result = CGameData_DecideNgoOutcome(world, edx);
+    return result == kNgoDraw ? kNgoLost : result;
+}
+
+void CompareDecideNgoOutcome(test::Context& ctx, DecideNgoOutcomeFn candidate, int cases) {
+    test::WorldPair worlds(ctx, offsetof(CGameData, site_cache));  // goods[255] of player 19 reads up to 0x1195f7e
+    for (int i = 0; i < cases; ++i) {
+        SetUpNgo(ctx, worlds);
+        const std::uint32_t expected = Original_CGameData_DecideNgoOutcome(worlds.original(), nullptr);
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr);
+        if (!S3RE_EXPECT_EQ(expected, actual) || (i % 256 == 255 && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return;
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(CGameData_DecideNgoOutcome_MatchesOriginal) {
+    CompareDecideNgoOutcome(ctx, &CGameData_DecideNgoOutcome, 5000);
+}
+S3RE_TEST(CGameData_DecideNgoOutcome_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareDecideNgoOutcome(probe, &WrongDecideNgoOutcome, 2000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(CGameData_PlayerOfColour_MatchesOriginal) {
+    test::WorldPair worlds(ctx, offsetof(CGameData, per_player_1195d7c));
+    std::uint16_t saved[layout::kPlayers];
+    for (std::uint32_t player = 0; player < layout::kPlayers; ++player) {
+        saved[player] = g_playerColourIndex[player];
+    }
+    for (int i = 0; i < 20000; ++i) {
+        for (std::uint32_t player = 0; player < layout::kPlayers; ++player) {
+            const std::int32_t active = ctx.rng().Chance(1, 3) ? 0 : static_cast<std::int32_t>(ctx.rng().Next32() | 1);
+            worlds.Both([&](CGameData* w) { w->players[player].active = active; });
+            g_playerColourIndex[player] = static_cast<std::uint16_t>(ctx.rng().Below(24));
+        }
+        const std::uint32_t colour = ctx.rng().Chance(1, 10) ? (ctx.rng().Next32() & ~0xffu) | ctx.rng().Below(24)
+                                                             : ctx.rng().Below(24);
+        const std::int32_t expected = Original_CGameData_PlayerOfColour(worlds.original(), nullptr, colour);
+        const std::int32_t actual = CGameData_PlayerOfColour(worlds.ours(), nullptr, colour);
+        if (!S3RE_EXPECT_EQ(expected, actual)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: colour 0x%x", i, colour);
+            break;
+        }
+    }
+    for (std::uint32_t player = 0; player < layout::kPlayers; ++player) {
+        g_playerColourIndex[player] = saved[player];
+    }
+    worlds.Checkpoint(ctx);
+}
 }  // namespace s3re::game
