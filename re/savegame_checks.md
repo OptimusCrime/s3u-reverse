@@ -43,7 +43,7 @@ Repeated with main a37a88b (batch 28, building sites; 453 installed):
 identical for all three saves again (201 / 180 / 200 called, 209 in all).
 Of batch 28 only `CGameData::CheckBuildingSite` (0x4d99e0) ran: 2,690
 calls in slot 3, none in slots 1 and 2; PlanSiteLevelling,
-AddBuildingSite, IsFreeCastleSite and IsGoodStartPosition were not
+AddBuildingSite, IsFreeSmallTowerSite and IsGoodStartPosition were not
 called. (CheckBuildingSite runs PlanSiteLevelling only for some modes;
 these calls evidently didn't reach it.)
 

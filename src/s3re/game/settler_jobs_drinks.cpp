@@ -10,7 +10,7 @@
 //   tile_ring2).
 // - The rice farmer (0xe2..0xf2) and the winegrower (0xf3..0x104): look
 //   for a field to harvest or a spot to plant around their building's work
-//   point (the offset table), walk there, plant (SetTerrain16Patch) or
+//   point (the offset table), walk there, plant (MakeFieldTile) or
 //   harvest and bring the goods home.
 // - Three two-input workshops (0x105..0x122): the distiller (coal and rice
 //   -> rice liquor), the powder maker (coal and sulfur -> gunpowder) and
@@ -570,14 +570,14 @@ JobResult PlantRice(SettlerContext& ctx) {
         SetJob(ctx.settler, kRiceWalkHome);
         return ReturnHome(ctx);
     }
-    Call<kSetTerrain16Patch>(world, x, y);
+    Call<kMakeFieldTile>(world, x, y);
     // The six neighbours, each with the settler's position read again.
-    Call<kSetTerrain16Patch>(world, ctx.settler.x + 1u, ctx.settler.y);
-    Call<kSetTerrain16Patch>(world, ctx.settler.x - 1u, ctx.settler.y);
-    Call<kSetTerrain16Patch>(world, ctx.settler.x, ctx.settler.y + 1u);
-    Call<kSetTerrain16Patch>(world, ctx.settler.x, ctx.settler.y - 1u);
-    Call<kSetTerrain16Patch>(world, ctx.settler.x + 1u, ctx.settler.y + 1u);
-    Call<kSetTerrain16Patch>(world, ctx.settler.x - 1u, ctx.settler.y - 1u);
+    Call<kMakeFieldTile>(world, ctx.settler.x + 1u, ctx.settler.y);
+    Call<kMakeFieldTile>(world, ctx.settler.x - 1u, ctx.settler.y);
+    Call<kMakeFieldTile>(world, ctx.settler.x, ctx.settler.y + 1u);
+    Call<kMakeFieldTile>(world, ctx.settler.x, ctx.settler.y - 1u);
+    Call<kMakeFieldTile>(world, ctx.settler.x + 1u, ctx.settler.y + 1u);
+    Call<kMakeFieldTile>(world, ctx.settler.x - 1u, ctx.settler.y - 1u);
     SetJob(ctx.settler, kRicePlanted);
     Anim(ctx, 0xe0);
     return JobResult::Next;
@@ -594,7 +594,7 @@ JobResult PlantVine(SettlerContext& ctx) {
         SetJob(ctx.settler, kWineWalkHome);
         return ReturnHome(ctx);  // 0x4f4d46 -> 0x4f323b
     }
-    Call<kSetTerrain16Patch>(world, ctx.settler.x, ctx.settler.y);
+    Call<kMakeFieldTile>(world, ctx.settler.x, ctx.settler.y);
     SetJob(ctx.settler, kWinePlanted);
     Anim(ctx, 0xe9);
     return JobResult::Next;

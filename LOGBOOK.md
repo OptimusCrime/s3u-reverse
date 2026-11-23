@@ -591,6 +591,44 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-23 (46): renames (parallel worktree)
+
+- **Functions named after old guesses renamed** (TODO "Readability pass"
+  and "Typed access leftovers"; each correction checked in the asm first):
+  `FindNearbySettlerType29` 0x50cdb0 -> `CGameData::FindNearbyOwnCatapult`
+  and `IsFreeOfSettlerType29Nearby` 0x5199e0 -> `IsFreeOfCatapultsNearby`
+  (both compare the settler type with 0x29 = catapult; the first also the
+  owner), `UnblockType12BuildingTiles` 0x4dfa60 -> `UnblockCastleTiles`
+  (`cmp byte [+2], 12h` = BuildingType::Castle), `SetTerrain16Patch`
+  0x51ba00 -> `MakeFieldTile` (terrain 0x16 = field; only callers the
+  farmer/rice farmer/winegrower jobs 0x91/0xe6/0xf7), `IsFreeCastleSite`
+  0x508420 -> `IsFreeSmallTowerSite` (`push 0Fh` to CheckBuildingSite).
+- **GfxData -> CGraphicsData:** 0x5faaa0 `GfxData::FrameOffset` ->
+  `CGraphicsData::VariantFrameAddress` (returns offset + the group's mapped
+  view, an address), 0x5fad20 `SpriteWord` -> `FrameCount` (all callers use
+  the word as a frame count: count - 1 or modulo), 0x5faaf0
+  `AnimationPointer` and 0x5fac70 `FramePointer` keep their method names
+  (code names lose the `_5faaf0`/`_5fac70` suffixes). 0x5fc540
+  `GfxData::SetDword` is not a CGraphicsData method (its +0 is the vtable;
+  callers construct stack locals and CDrawer's 0x14-byte array entries):
+  now `GfxDword::Construct`. The ~60 survey rows `GfxData_sub_*` keep their
+  subsystem prefix (no evidence yet that each is a CGraphicsData method).
+- **`BuildingWaterBytes` -> `BuildingWorkshopBytes`**, union member
+  `Building::water` -> `workshop` (war machine workshops, the large gong
+  and the shipyard).
+- **Test inputs unchanged:** `SeedName` (difftest.cpp) and `seed_name`
+  (emutest/run.py, table `RENAMED_FUNCTIONS`, now also part of
+  changed.py's harness fingerprint) map the new names back to the old ones.
+  Because `seed_name` changed, the emulator harness fingerprint changed:
+  the next `--changed` run selects all specs (a full run is due at the
+  round end anyway). Run here: the 10 renamed specs (0 mismatches, full
+  coverage) and `--self-test`.
+- **Behaviour unchanged:** the release s3re.dll disassembly, compared per
+  symbol with addresses normalized, differs only in `__LINE__` immediates
+  of moved test lines, in SeedName and in symbol-boundary artefacts.
+  The whole in-process suite passes (548 of 548);
+  `inventory.py check` passes; `whole_game.py fix-names` updated 97 rows.
+
 ### 2026-11-23 (46): spells package S1 (parallel worktree)
 
 - **The land spells of Volker\GodlyEvents.cpp, 8 functions verified**

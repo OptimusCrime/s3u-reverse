@@ -5,8 +5,8 @@
 // step in x is 0x4800 bytes, in y 0x18 bytes. Tile byte +0xa is a terrain
 // (or ground) type; 0x70 and 0xf0 are tested together below (0xf0 = 0x70
 // with the top bit set), probably water. Tile byte +0x9 is not known; names
-// are provisional. Settler type 41 (0x29) is the catapult (SettlerType), so
-// "SettlerType29" in the names means catapult.
+// are provisional. Settler type 41 (0x29) is the catapult (SettlerType);
+// IsFreeOfCatapultsNearby was IsFreeOfSettlerType29Nearby.
 //
 // CGameData::ReplaceTerrainType (0x00519210): (old, new) sets byte +0xa to
 // `new` on every tile with x and y in [1, mapSize - 2] whose byte +0xa equals
@@ -19,7 +19,7 @@
 // CGameData::IsClearOfType70Nearby (0x00519960): (x, y) -> 1 if none of the
 // tile, its six neighbours and (x, y+2), (x-1, y+1), (x+1, y+2) has terrain
 // 0x70 (exactly).
-// CGameData::IsFreeOfSettlerType29Nearby (0x005199e0): (x, y) -> 0 if the
+// CGameData::IsFreeOfCatapultsNearby (0x005199e0): (x, y) -> 0 if the
 // tile has an occupant (word +0x4); else 0 if any of 18 offsets from the
 // table at world+0x110a598 (int32 dx, dy; 16-byte entries) lands on the map
 // on a tile whose occupant is a catapult (settler type 41, 0x29); else 1.
@@ -151,7 +151,7 @@ std::uint32_t __fastcall CGameData_IsClearOfType70Nearby(CGameData* world, void*
 
 // Purpose: Whether a tile is free and no catapult stands on the tiles around it (a catapult covers seven
 // tiles). Used before taking the seven extra tiles of a war machine workshop.
-std::uint32_t __fastcall CGameData_IsFreeOfSettlerType29Nearby(CGameData* world, void* /*edx*/,
+std::uint32_t __fastcall CGameData_IsFreeOfCatapultsNearby(CGameData* world, void* /*edx*/,
                                                                std::uint32_t x, std::uint32_t y) {
     if (TileOccupant(world, x, y) != 0) {
         return 0;
@@ -219,8 +219,8 @@ S3RE_HOOK(0x005198d0, CGameData_HasAtMostTwoType70Neighbours, TileCheckFn,
           CGameData_HasAtMostTwoType70Neighbours);
 S3RE_HOOK(0x00519960, CGameData_IsClearOfType70Nearby, TileCheckFn,
           Original_CGameData_IsClearOfType70Nearby, CGameData_IsClearOfType70Nearby);
-S3RE_HOOK(0x005199e0, CGameData_IsFreeOfSettlerType29Nearby, TileCheckFn,
-          Original_CGameData_IsFreeOfSettlerType29Nearby, CGameData_IsFreeOfSettlerType29Nearby);
+S3RE_HOOK(0x005199e0, CGameData_IsFreeOfCatapultsNearby, TileCheckFn,
+          Original_CGameData_IsFreeOfCatapultsNearby, CGameData_IsFreeOfCatapultsNearby);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -357,12 +357,12 @@ std::uint32_t __fastcall WrongAtMostTwo(CGameData* world, void* /*edx*/, std::ui
 }
 
 // Wrong: misses the occupant check of the tile itself.
-std::uint32_t __fastcall WrongFreeOf29(CGameData* world, void* edx, std::uint32_t x,
+std::uint32_t __fastcall WrongFreeOfCatapults(CGameData* world, void* edx, std::uint32_t x,
                                        std::uint32_t y) {
     std::uint16_t& occupant = TileAt(world, x, y).settler;
     const std::uint16_t saved = occupant;
     occupant = 0;
-    const std::uint32_t result = CGameData_IsFreeOfSettlerType29Nearby(world, edx, x, y);
+    const std::uint32_t result = CGameData_IsFreeOfCatapultsNearby(world, edx, x, y);
     occupant = saved;
     return result;
 }
@@ -478,14 +478,14 @@ S3RE_TEST(CGameData_IsClearOfType70Nearby_MatchesOriginal) {
                      &CGameData_IsClearOfType70Nearby, 50000);
 }
 
-S3RE_TEST(CGameData_IsFreeOfSettlerType29Nearby_MatchesOriginal) {
-    CompareTileCheck(ctx, Original_CGameData_IsFreeOfSettlerType29Nearby,
-                     &CGameData_IsFreeOfSettlerType29Nearby, 50000);
+S3RE_TEST(CGameData_IsFreeOfCatapultsNearby_MatchesOriginal) {
+    CompareTileCheck(ctx, Original_CGameData_IsFreeOfCatapultsNearby,
+                     &CGameData_IsFreeOfCatapultsNearby, 50000);
 }
 
-S3RE_TEST(CGameData_IsFreeOfSettlerType29Nearby_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_IsFreeOfCatapultsNearby_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareTileCheck(probe, Original_CGameData_IsFreeOfSettlerType29Nearby, &WrongFreeOf29, 5000);
+    CompareTileCheck(probe, Original_CGameData_IsFreeOfCatapultsNearby, &WrongFreeOfCatapults, 5000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

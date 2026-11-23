@@ -790,7 +790,7 @@ JobResult BeekeeperSearch(SettlerContext& ctx) {
             } else if (TileSteps(world, x, y, 1).area == homeArea && t.object >= 0x44 && t.object <= 0x52 &&
                        TileSteps(world, x, y, 1).object == 0 && (TileSteps(world, x, y, 1).flags & kTileBlocking) == 0 &&
                        (TileSteps(world, x, y, 3).flags & kTileBlocking) == 0 &&
-                       Call<kIsFreeOfSettlerType29Nearby>(world, x, y + 1) != 0) {
+                       Call<kIsFreeOfCatapultsNearby>(world, x, y + 1) != 0) {
                 state = 1;
                 ctx.frame.slot14 = y + 1;
                 for (std::uint32_t i = 0; i < 61; ++i) {
@@ -869,7 +869,7 @@ JobResult BeekeeperPlaceHive(SettlerContext& ctx) {
     const Tile& here = TileAt(world, x, y);
     if (hive.area == TileAt(world, b.door_x, b.door_y).area && hive.object == 0 && here.object_number == 0 &&
         (here.flags & kTileBlocking) == 0 && (hive.flags & kTileBlocking) == 0 &&
-        Call<kIsFreeOfSettlerType29Nearby>(world, x, y - 2) != 0) {
+        Call<kIsFreeOfCatapultsNearby>(world, x, y - 2) != 0) {
         Call<kBlockTile>(world, static_cast<std::uint32_t>(s.x), static_cast<std::uint32_t>(s.y) - 2);
         SetJob(s, Job::Job359);
         Animate(ctx, 0x202);

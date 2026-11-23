@@ -20,7 +20,7 @@
 //   new ring index (10000 when it wrapped), else the tile's address.
 // CGameData_SetSettlerAnimation (0x0050e2c0): (settler, kind), ret 8:
 //   id = table 0x6a8060[kind * 4 + race] (race = settler byte +2); settler
-//   dword +8 (Settler::direction) = id, word +0xc = GfxData_SpriteWord(id) - 1 on the graphics
+//   dword +8 (Settler::direction) = id, word +0xc = CGraphicsData_FrameCount(id) - 1 on the graphics
 //   object [0x7a8010] (probably the number of frames - 1). EAX = that
 //   SpriteWord result - 1 (the whole register).
 // CLogicThread_RemoveSettlerFromGroups (0x005428e0): (settler, group), ret 8;
@@ -76,7 +76,7 @@ Tile& TileNear(CGameData* world, std::uint32_t centre, std::int32_t delta) {
 
 }  // namespace
 
-std::uint32_t __fastcall GfxData_SpriteWord(void* self, void* edx, std::uint32_t id);
+std::uint32_t __fastcall CGraphicsData_FrameCount(void* self, void* edx, std::uint32_t id);
 
 using PositionFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 using SettlerAnimationFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t settler,
@@ -171,7 +171,7 @@ std::uint32_t __fastcall CGameData_SetSettlerAnimation(CGameData* world, void* /
     const std::uint32_t entry = record.race + kind * 4;
     // The animation id goes into the dword +0x8 (Settler::direction).
     record.animation = g_settlerAnimations[entry];
-    const std::uint32_t frames = GfxData_SpriteWord(g_gfxData.get(), nullptr, g_settlerAnimations[entry]) - 1;
+    const std::uint32_t frames = CGraphicsData_FrameCount(g_gfxData.get(), nullptr, g_settlerAnimations[entry]) - 1;
     record.counter = static_cast<std::uint16_t>(frames);
     return frames;
 }

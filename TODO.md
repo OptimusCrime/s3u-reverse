@@ -55,11 +55,6 @@ Each item: what, why, and where to start.
 - **Tile::object enum:** the landscape object values (trees 0x44..0x52,
   young trees 0x55..0x6f, fire 0xf3..0xf6, ...) stay hex in
   environment.cpp, spells.cpp and map_generation.cpp until they have names.
-- **Rename the functions named after old guesses** (re/enums.md
-  "Corrections"): `FindNearbySettlerType29` / `IsFreeOfSettlerType29Nearby`
-  (catapult), `UnblockType12BuildingTiles` (castle), `SetTerrain16Patch`
-  (makes a field), `IsFreeCastleSite` (checks the small tower); with
-  inventory, whole_game fix-names and specs.
 - **Drop the miner job aliases** (`SettlerJob::Job85` ... `Job224` in
   enums.h) once UpdateSettlers' files use the MinerEat/Dig/... names.
 - **Unify pile kinds:** building_crush.cpp / building_done.cpp still have
@@ -68,9 +63,6 @@ Each item: what, why, and where to start.
   `Building::art`, `Pile::good` or the race fields is converted, give the
   field its enum type in `layout.h` and drop its accessor from
   `game/typed_fields.h`.
-- **Rename `BuildingWaterBytes`** (layout.h, re/structs.md) to a workshop
-  name: its buildings 0x1f/0x2f/0x30/0x32 are the catapult, ballista and
-  cannon workshops and the large gong (re/enums.md).
 - **BuildingTypeAllowedForRace** (player_queries.cpp) does not fit the
   building numbering of enums.h; find what its argument really is.
 - **Lint** for hex literals in comparisons and magic numbers in
@@ -207,9 +199,6 @@ cast within ~8 tiles of the map edge (kept).
 - **Class layouts left after struct pass S2 (session 45).** The object
   `RawAt`s are gone (two test-only ones in string_members.cpp are marked
   `raw-ok`). Left, by value:
-  - Rename the `GfxData_*` functions to `CGraphicsData::*` (the class is
-    identified, game/gfx_layout.h): inventory, hooks, tests,
-    `whole_game.py fix-names`.
   - `DrawTarget` (graphics_helpers.cpp; Render_PutPixel16 / Entry204:
     pitch +0x90, pixel buffer +0xa4, table +0x204; Volker\DrawBuilding.cpp):
     class not identified (not CLandscapeSurface, which is 0xa8 bytes).

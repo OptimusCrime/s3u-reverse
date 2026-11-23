@@ -165,7 +165,7 @@ are game state:
 Not saved (rebuilt or transient): the offset table, the tile rings, the
 territory scratch 0x1158788, the member at 0x14D2BC8, the reciprocal
 table, the 50-entry table 0x14D28A8, the UI block (except camera).
-After loading, the loader re-runs `UnblockType12BuildingTiles`, frees
+After loading, the loader re-runs `UnblockCastleTiles`, frees
 ("LOAD: Dropped eco %i") every area 1..0xFFF that no tile's area word
 refers to, and sets the minimap flag +0x2D278.
 

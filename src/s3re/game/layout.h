@@ -259,7 +259,7 @@ struct BuildingMilitaryBytes {     // towers and castle 0x0f, 0x10, 0x12; classe
     std::uint8_t class3_coming;    // 0x1f
     std::uint8_t class3_wanted;    // 0x20
 };
-struct BuildingWaterBytes {        // buildings at the water 0x1f, 0x2f, 0x30, 0x32 and the shipyard 0x20
+struct BuildingWorkshopBytes {     // workshops: catapult 0x1f, ballista 0x2f, cannon 0x30, large gong 0x32; shipyard 0x20
     std::uint8_t : 8;
     std::uint8_t wanted[3];        // 0x1a input amount wanted per slot (from the state; shipyard: tables 0x659670/0x659680)
     std::uint8_t : 8;
@@ -306,11 +306,11 @@ struct BuildingRecruitBytes {      // 0x13 (probably the barracks): carriers tur
     std::uint8_t : 8;
 };
 static_assert(sizeof(BuildingSiteBytes) == 8 && sizeof(BuildingProductionBytes) == 8);
-static_assert(sizeof(BuildingMilitaryBytes) == 8 && sizeof(BuildingWaterBytes) == 8);
+static_assert(sizeof(BuildingMilitaryBytes) == 8 && sizeof(BuildingWorkshopBytes) == 8);
 static_assert(sizeof(BuildingTradeBytes) == 8 && sizeof(BuildingTempleBytes) == 8);
 static_assert(sizeof(BuildingResidenceBytes) == 8 && sizeof(BuildingRecruitBytes) == 8);
 static_assert(offsetof(BuildingMilitaryBytes, class3_coming) == 6);
-static_assert(offsetof(BuildingWaterBytes, state) == 6);
+static_assert(offsetof(BuildingWorkshopBytes, state) == 6);
 static_assert(offsetof(BuildingTradeBytes, call_countdown) == 7);
 static_assert(offsetof(BuildingTempleBytes, countdown) == 3);
 
@@ -337,7 +337,7 @@ struct Building {
         BuildingSiteBytes site;
         BuildingProductionBytes production;
         BuildingMilitaryBytes military;
-        BuildingWaterBytes water;
+        BuildingWorkshopBytes workshop;
         BuildingTradeBytes trading;
         BuildingTempleBytes temple;
         BuildingResidenceBytes residence;
@@ -364,7 +364,7 @@ static_assert(offsetof(Building, digger_slots) == 0x16);
 static_assert(offsetof(Building, request_flags) == 0x18);
 static_assert(offsetof(Building, kind_bytes) == 0x19);
 static_assert(offsetof(Building, site) == 0x19);
-static_assert(offsetof(Building, water) == 0x19);
+static_assert(offsetof(Building, workshop) == 0x19);
 static_assert(offsetof(Building, buildup) == 0x21);
 static_assert(offsetof(Building, guard) == 0x22);
 static_assert(offsetof(Building, input_amount) == 0x24);

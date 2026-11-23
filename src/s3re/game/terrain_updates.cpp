@@ -7,7 +7,7 @@
 //   check (the original's 32-bit tile arithmetic). Called after a tile's
 //   height changes (diggers levelling a site: UpdateSettlers jobs 5/7/8/9;
 //   0x506cf0). ret 8; EAX = the last TileShade's (callers ignore it).
-// CGameData::SetTerrain16Patch (0x0051ba00): (x, y): only if the tile's
+// CGameData::MakeFieldTile (0x0051ba00): (x, y): only if the tile's
 //   terrain (+0x6) is 0x10, 0x12, 0x13, 0x18 or 0x1c (grass and its
 //   variants; 0x1c a worn path): the six neighbours are checked in the
 //   order (x+1, y), (x-1, y), (x, y+1), (x, y-1), (x+1, y+1), (x-1, y-1).
@@ -77,7 +77,7 @@ bool IsGrassVariant(std::uint8_t terrain) {
 
 // Purpose: A farmer, rice farmer or winegrower turns a grass tile whose surroundings are all grass into a
 // field (terrain 0x16), making the grass variants around it plain grass.
-std::uint32_t __fastcall CGameData_SetTerrain16Patch(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall CGameData_MakeFieldTile(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
     const std::uint32_t tile = TileOffset(x, y);
     const std::uint32_t result = tile - static_cast<std::uint32_t>(offsetof(CGameData, tiles)) +
                                  static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(world));
@@ -109,8 +109,8 @@ std::uint32_t __fastcall CGameData_SetTerrain16Patch(CGameData* world, void*, st
 
 S3RE_HOOK(0x00519670, CGameData_UpdateShadeAround, TileFn, Original_CGameData_UpdateShadeAround,
           CGameData_UpdateShadeAround);
-S3RE_HOOK(0x0051ba00, CGameData_SetTerrain16Patch, TileFn, Original_CGameData_SetTerrain16Patch,
-          CGameData_SetTerrain16Patch);
+S3RE_HOOK(0x0051ba00, CGameData_MakeFieldTile, TileFn, Original_CGameData_MakeFieldTile,
+          CGameData_MakeFieldTile);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -125,7 +125,7 @@ std::uint32_t Relative(std::uint32_t value, CGameData* world) {
 }
 
 // Tiles (1..30, 1..30): heights near each other (UpdateShadeAround) and
-// terrains mostly from the accepted set (SetTerrain16Patch).
+// terrains mostly from the accepted set (MakeFieldTile).
 void CompareTileFn(test::Context& ctx, TileFn original, TileFn candidate, int cases, bool relativeEax) {
     test::WorldPair worlds(ctx, kTestWorld);
     static constexpr std::uint8_t kTerrains[] = {kTerrainGrass, kTerrainField, 0x12, 0x13, 0x18, 0x1c};
@@ -168,8 +168,8 @@ std::uint32_t __fastcall WrongUpdateShadeAround(CGameData* world, void*, std::ui
 }
 
 // Wrong: the centre tile becomes grass (the CSV's first guess).
-std::uint32_t __fastcall WrongSetTerrain16Patch(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t result = CGameData_SetTerrain16Patch(world, nullptr, x, y);
+std::uint32_t __fastcall WrongMakeFieldTile(CGameData* world, void*, std::uint32_t x, std::uint32_t y) {
+    const std::uint32_t result = CGameData_MakeFieldTile(world, nullptr, x, y);
     if (world->tiles[x][y].terrain == kTerrainField) {
         world->tiles[x][y].terrain = kTerrainGrass;
     }
@@ -186,12 +186,12 @@ S3RE_TEST(CGameData_UpdateShadeAround_ComparisonDetectsWrongImplementation) {
     CompareTileFn(probe, Original_CGameData_UpdateShadeAround, &WrongUpdateShadeAround, 2000, false);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(CGameData_SetTerrain16Patch_MatchesOriginal) {
-    CompareTileFn(ctx, Original_CGameData_SetTerrain16Patch, &CGameData_SetTerrain16Patch, 20000, true);
+S3RE_TEST(CGameData_MakeFieldTile_MatchesOriginal) {
+    CompareTileFn(ctx, Original_CGameData_MakeFieldTile, &CGameData_MakeFieldTile, 20000, true);
 }
-S3RE_TEST(CGameData_SetTerrain16Patch_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_MakeFieldTile_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareTileFn(probe, Original_CGameData_SetTerrain16Patch, &WrongSetTerrain16Patch, 20000, true);
+    CompareTileFn(probe, Original_CGameData_MakeFieldTile, &WrongMakeFieldTile, 20000, true);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

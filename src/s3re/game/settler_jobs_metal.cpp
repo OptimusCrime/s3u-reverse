@@ -20,7 +20,7 @@
 // job.
 //
 // Building fields used (layout::Building): pile_ring is the output pile,
-// piles[0..2] the inputs; war machine workshops (BuildingWaterBytes): the
+// piles[0..2] the inputs; war machine workshops (BuildingWorkshopBytes): the
 // three input amounts wanted +0x1a..+0x1c, state +0x1f (0x10 + k: a
 // catapult-like unit is done, 0x20 + k: a ship-like order is done) and
 // +0x20 the units still to be put in; +0x19 counts workers starting
@@ -494,7 +494,7 @@ JobResult WorkshopPutInput(SettlerContext& ctx, const Workshop& shop) {
     std::uint32_t slot = 3;
     for (std::uint32_t k = 0; k < 3; ++k) {
         if (Call<kBuildingPileHasGoods>(ctx.world, number, k + 1) & 0xff) {
-            if (building.water.wanted[k] != 0) {
+            if (building.workshop.wanted[k] != 0) {
                 slot = k;
                 break;
             }
@@ -506,7 +506,7 @@ JobResult WorkshopPutInput(SettlerContext& ctx, const Workshop& shop) {
     Call<kPileIncAmountLeaving>(ctx.world, WorkBuilding(ctx).piles[slot]);
     Call<kTakeGoodFromPile>(ctx.world, building.piles[slot]);
     Call<kSubtractPlayerCounter>(ctx.world, Owner(ctx), Value(goods[slot]), 1);
-    --building.water.wanted[slot];
+    --building.workshop.wanted[slot];
     building.kind_bytes[7] = static_cast<std::uint8_t>(building.kind_bytes[7] - 1);
     Call<kSetSettlerAnimation>(ctx.world, ctx.number, 275);
     SetJob(ctx.settler, shop.check);  // after the animation, as the original
@@ -521,8 +521,8 @@ JobResult WorkshopCheck(SettlerContext& ctx, std::uint32_t k) {
     const Workshop& shop = kWorkshops[k];
     const std::uint32_t number = ctx.settler.building;
     Building& building = BuildingAt(ctx.world, number);
-    if (building.kind_bytes[7] == 0 && building.water.state != 0) {
-        const std::uint8_t state = building.water.state;
+    if (building.kind_bytes[7] == 0 && building.workshop.state != 0) {
+        const std::uint8_t state = building.workshop.state;
         if (state == kStateUnitDone + k) {
             Call<kReleaseBuildingExtraTiles>(ctx.world, number);
             const std::uint32_t y = building.y + static_cast<std::uint32_t>(g_extraTilesCentre[k][1]);
@@ -530,17 +530,17 @@ JobResult WorkshopCheck(SettlerContext& ctx, std::uint32_t k) {
             Call<kCreateSevenTileUnit>(ctx.world, Value(SettlerType::Catapult), Owner(ctx), x, y);
             if (k == 0) {
                 GameDebugLog(texts::kCatapultProduction, Owner(ctx));
-                building.water.state = 0;
+                building.workshop.state = 0;
                 Call<kNotifyLocalPlayer>(ctx.world, Owner(ctx), shop.notify, ctx.settler.x, ctx.settler.y);
             } else {
                 Call<kNotifyLocalPlayer>(ctx.world, Owner(ctx), shop.notify, ctx.settler.x, ctx.settler.y);
-                building.water.state = 0;
+                building.workshop.state = 0;
             }
         } else if (state == kStateOrderDone + k) {
             Call<kReleaseBuildingExtraTiles>(ctx.world, number);
             building.unk36 = static_cast<std::uint8_t>(building.unk36 + kOrderTilesStep);
             Call<kNotifyLocalPlayer>(ctx.world, Owner(ctx), kNotifyOrderDone, ctx.settler.x, ctx.settler.y);
-            building.water.state = 0;
+            building.workshop.state = 0;
         }
     }
     SetJob(ctx.settler, shop.work);

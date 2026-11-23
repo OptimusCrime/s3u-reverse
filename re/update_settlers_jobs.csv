@@ -100,7 +100,7 @@ job,handler,instructions,shared_with_jobs,next_jobs,start_of_chain,chain_started
 0x28,0x4eda48,41,,0x29,,,,CGameData::AddStatistic CGameData::AddPlayerCounter CGameData::AddGoodsToPile CGameData::PileIncAmountComing CGameData::SetSettlerAnimation,,0
 0x1b,0x4edadd,171,,0x2c,0x16,0x7,,CGameData::SetSettlerTarget CGameData::CanSettlerEnterTile CGameData::SetSettlerAnimation,,0
 0x2c,0x4eddbe,7,,0x2d,0x16,0x7,,CGameData::MoveSettlerToBuildingTileB,,1
-0x2e,0x4edde4,88,,0x2f,,,,CGameData::SetSettlerAnimation CGameData::IsFreeOfSettlerType29Nearby CGameData::BlockTile,,0
+0x2e,0x4edde4,88,,0x2f,,,,CGameData::SetSettlerAnimation CGameData::IsFreeOfCatapultsNearby CGameData::BlockTile,,0
 0x2f,0x4edf93,26,,0x30,,,,CGameData::SetSettlerAnimation,,0
 0x1a,0x4edffb,47,,0x31,0x15,0x6,,CGameData::BuildingPileHasGoods CGameData::PileIncAmountLeaving CGameData::SetSettlerAnimation,,0
 0x31,0x4ee0c1,23,0x34,0x32,0x15,0x6,0x505820,CGameData::SubtractPlayerCounter CGameData::SetSettlerAnimation,,0
@@ -345,9 +345,9 @@ job,handler,instructions,shared_with_jobs,next_jobs,start_of_chain,chain_started
 0x193,0x4f7a84,91,,0x35,,,0x505c20,DebugLog CGameData::AddPlayerCounter CGameData::SubtractPlayerCounter,"Dieb[%u (%u,%u)]: StealGoodFromPile fail! | Dieb[%u (%u,%u)]: SpyTakeGood -> no pile there? so search again! ",0
 0x194,0x4f7bdf,28,,0x37,,,0x5046b0,CGameData::SubtractPlayerCounter CGameData::RandomBelow6,,0
 0x161,0x4f7c4b,2,,0x163,0x161,0x2d,,,,0
-0x163,0x4f7c59,270,,0x164 0x169,0x161,0x2d,,CGameData::SetSettlerTarget CGameData::CanSettlerEnterTile CGameData::SetSettlerAnimation CGameData::IsOnMap CGameData::IsFreeOfSettlerType29Nearby,,0
+0x163,0x4f7c59,270,,0x164 0x169,0x161,0x2d,,CGameData::SetSettlerTarget CGameData::CanSettlerEnterTile CGameData::SetSettlerAnimation CGameData::IsOnMap CGameData::IsFreeOfCatapultsNearby,,0
 0x164,0x4f8065,6,,0x165,0x161,0x2d,,CGameData::MoveSettlerToBuildingTileB,,1
-0x166,0x4f8084,65,,0x167 0x168,,,,CGameData::SetSettlerAnimation CGameData::IsFreeOfSettlerType29Nearby CGameData::BlockTile,,0
+0x166,0x4f8084,65,,0x167 0x168,,,,CGameData::SetSettlerAnimation CGameData::IsFreeOfCatapultsNearby CGameData::BlockTile,,0
 0x167,0x4f8181,13,,0x168,,,,,,0
 0x169,0x4f81c4,6,,0x16a,0x161,0x2d,,CGameData::MoveSettlerToBuildingTileB,,1
 0x16b,0x4f81e3,23,,0x16c 0x16d,,,,CGameData::SetSettlerAnimation,,0

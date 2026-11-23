@@ -29,8 +29,8 @@ constexpr std::size_t kGroups = 70;
 #pragma pack(push, 1)
 
 // A group's frame-offset table (CGraphicsData::frameTables; read by
-// GfxData_FrameOffset 0x5faaa0): frames per variant, then one offset (from
-// the group's view) per frame, variant by variant.
+// CGraphicsData::VariantFrameAddress 0x5faaa0): frames per variant, then one
+// offset (from the group's view) per frame, variant by variant.
 struct FrameTable {
     std::uint8_t unk00[8];
     std::uint16_t framesPerVariant;  // +0x08
@@ -41,8 +41,9 @@ static_assert(offsetof(FrameTable, framesPerVariant) == 0x08);
 static_assert(offsetof(FrameTable, offsets) == 0x0c);
 
 // A table of per-frame offsets (from the group's view) with a count:
-// CGraphicsData::animationTables (GfxData_AnimationPointer 0x5faaf0 checks
-// the count) and ::frameTables5ac (GfxData_FramePointer 0x5fac70, no check).
+// CGraphicsData::animationTables (CGraphicsData::AnimationPointer 0x5faaf0
+// checks the count) and ::frameTables5ac (CGraphicsData::FramePointer
+// 0x5fac70, no check).
 struct OffsetTable {
     std::uint8_t unk00[6];
     std::uint16_t count;        // +0x06 (the animation table's number of entries)
@@ -51,9 +52,10 @@ struct OffsetTable {
 static_assert(offsetof(OffsetTable, count) == 0x06);
 static_assert(offsetof(OffsetTable, offsets) == 0x08);
 
-// A group's sprite table (CGraphicsData::spriteTables; GfxData_SpriteWord
-// 0x5fad20): per sprite the address of its header, relative to the
-// group's view (the view is added).
+// A group's sprite table (CGraphicsData::spriteTables; CGraphicsData::FrameCount
+// 0x5fad20): per sprite (animation) the address of its header, relative to
+// the group's view (the view is added); the header's first word is the
+// number of frames.
 struct SpriteTable {
     std::uint32_t unk00[2];
     std::uint32_t sprites[1];  // +0x08 variable length
@@ -71,14 +73,14 @@ struct CGraphicsData {
                                                  //        table offset is relative to it
     const FrameTable* frameTables[kGroups];      // +0x37c
     const OffsetTable* animationTables[kGroups]; // +0x494
-    const OffsetTable* frameTables5ac[kGroups];  // +0x5ac frame tables read by GfxData_FramePointer
+    const OffsetTable* frameTables5ac[kGroups];  // +0x5ac frame tables read by FramePointer
     std::uint32_t unk6c4[kGroups];               // +0x6c4 a table per group (zeroed by Close)
     std::uint32_t unk7dc[kGroups];               // +0x7dc a table per group (zeroed by Close)
     std::uint32_t unk8f4[kGroups];               // +0x8f4 a table per group (zeroed by Close)
     std::uint32_t unka0c[kGroups];               // +0xa0c a table per group (zeroed by Close)
     const SpriteTable* spriteTables[kGroups];    // +0xb24
     std::uint32_t unkc3c;                        // +0xc3c zeroed by the constructor and Close
-    std::uint32_t currentVariant;                // +0xc40 the variant GfxData_FrameOffset uses for -1
+    std::uint32_t currentVariant;                // +0xc40 the variant VariantFrameAddress uses for -1
 };
 static_assert(offsetof(CGraphicsData, name) == 0x024);
 static_assert(offsetof(CGraphicsData, unk034) == 0x034);

@@ -385,7 +385,7 @@ subsystem guess came from their position.
   0x659DD0 (notification radii). Read them at their addresses, don't copy
   the values.
 - **Graphics data in the simulation.** 0x50E320 (like SetSettlerAnimation)
-  calls GfxData_SpriteWord 0x5FAD20 on [0x7A8010]: the frame count of an
+  calls CGraphicsData_FrameCount 0x5FAD20 on [0x7A8010]: the frame count of an
   animation becomes the settler's wait counter. Emulator specs need the
   same preset as the SetSettlerAnimation spec.
 - **UI and screen.** NotifyLocalPlayer depends on the local player

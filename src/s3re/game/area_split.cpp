@@ -110,7 +110,7 @@
 //   dy at S3.EXE 0x659624 + 8 * k: (-2, 4), (-2, 6), (-2, 4), (-1, 7)),
 //   DebugLog("centerx,centery = %u,%u") for the gong, and if the seven
 //   tiles (cx-1, cy-1), (cx, cy-1), (cx-1, cy), (cx, cy), (cx+1, cy),
-//   (cx, cy+1), (cx+1, cy+1) are all CGameData::IsFreeOfSettlerType29Nearby
+//   (cx, cy+1), (cx+1, cy+1) are all CGameData::IsFreeOfCatapultsNearby
 //   they are blocked (BlockTile, same order) and the building is done; EAX
 //   0 if one is not free, else the last BlockTile's EAX. Shipyard (0x20)
 //   with a ship position (+0x30 != 0xffff): the ship tile is two steps
@@ -130,7 +130,7 @@
 //   occupant of its ship tile (settler byte +0x0 = 0xff, tile word 0; EAX =
 //   the tile's address); it does not check for an unset ship position.
 //   Otherwise EAX = world + building * 0x3a. ret 4.
-// CGameData::UnblockType12BuildingTiles (0x004dfa60): (): for buildings
+// CGameData::UnblockCastleTiles (0x004dfa60): (): for buildings
 //   1..count (count re-read each time) of type 18 (0x12, the castle):
 //   owner's race (int32 at player record +0x4) Roman: UnblockTile(x-2, y+3)
 //   if that tile is blocked; Egyptian: the same for (x, y+7), then (x, y+6).
@@ -805,14 +805,14 @@ void ShipTile(const Building& record, std::uint32_t& direction, std::uint32_t& x
 // the ship it has built onto its ship tile (a new ship settler). Marks the building as done.
 std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void*, std::uint32_t building) {
     Building& record = world->buildings[building];
-    if (record.water.extra_tiles == kExtraDone) {
+    if (record.workshop.extra_tiles == kExtraDone) {
         return building;
     }
     const std::uint8_t type = record.art;
     if (const std::int32_t* offset = ExtraTilesOffset(type)) {
-        if ((record.water.state & kStateMask) == kStateMachineWaiting) {
+        if ((record.workshop.state & kStateMask) == kStateMachineWaiting) {
             if (record.unk36 <= kMaxUnk36ForDone) {
-                record.water.extra_tiles = kExtraDone;
+                record.workshop.extra_tiles = kExtraDone;
             }
             return building;
         }
@@ -822,7 +822,7 @@ std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void
             GameDebugLog(texts::kCentreXY, cx, cy);
         }
         for (const auto& step : kExtraTiles) {
-            if (CGameData_IsFreeOfSettlerType29Nearby(world, nullptr, cx + step[0], cy + step[1]) == 0) {
+            if (CGameData_IsFreeOfCatapultsNearby(world, nullptr, cx + step[0], cy + step[1]) == 0) {
                 return 0;
             }
         }
@@ -830,7 +830,7 @@ std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void
         for (const auto& step : kExtraTiles) {
             result = CGameData_BlockTile(world, nullptr, cx + step[0], cy + step[1]);
         }
-        record.water.extra_tiles = kExtraDone;
+        record.workshop.extra_tiles = kExtraDone;
         return result;
     }
     if (type != kShipyard || record.work_x == kNoShipPosition) {
@@ -843,7 +843,7 @@ std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void
     if (TileAt(world, x, y).settler != 0) {
         return y;
     }
-    const std::uint8_t state = record.water.state & kStateMask;
+    const std::uint8_t state = record.workshop.state & kStateMask;
     std::uint32_t ship = 0;
     if (state == kStateTradeShip) {
         ship = CGameData_CreateSettler(world, nullptr, x, y, Value(SettlerType::TradeShip), record.owner);
@@ -863,7 +863,7 @@ std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void
     settler.slot = 0;
     settler.saved_animation = 0;
     settler.direction = (direction + 2) % kDirectionCount;
-    record.water.extra_tiles = kExtraDone;
+    record.workshop.extra_tiles = kExtraDone;
     return (direction + 2) / kDirectionCount;  // the original's EAX after the division
 }
 
@@ -885,7 +885,7 @@ std::uint32_t __fastcall CGameData_ReleaseBuildingExtraTiles(CGameData* world, v
         }
         return result;
     }
-    if (type != kShipyard || record.water.state == 0) {
+    if (type != kShipyard || record.workshop.state == 0) {
         return recordAddress;
     }
     std::uint32_t direction = 0;
@@ -901,7 +901,7 @@ std::uint32_t __fastcall CGameData_ReleaseBuildingExtraTiles(CGameData* world, v
 // Purpose: For every castle (type 18, 0x12), unblocks one or two tiles at a fixed place next to it that
 // depends on the owner's race (Romans: (x-2, y+3); Egyptians: (x, y+7) and (x, y+6)). Probably repairs
 // tiles after a savegame is loaded.
-std::uint32_t __fastcall CGameData_UnblockType12BuildingTiles(CGameData* world, void*) {
+std::uint32_t __fastcall CGameData_UnblockCastleTiles(CGameData* world, void*) {
     std::uint32_t count = world->building_high_water;
     for (std::uint32_t building = 1; building <= count; ++building) {
         const Building& record = world->buildings[building];
@@ -940,8 +940,8 @@ S3RE_HOOK(0x004dd6f0, CGameData_TakeBuildingExtraTiles, BuildingFn, Original_CGa
           CGameData_TakeBuildingExtraTiles);
 S3RE_HOOK(0x004dda10, CGameData_ReleaseBuildingExtraTiles, BuildingFn, Original_CGameData_ReleaseBuildingExtraTiles,
           CGameData_ReleaseBuildingExtraTiles);
-S3RE_HOOK(0x004dfa60, CGameData_UnblockType12BuildingTiles, WorldFn, Original_CGameData_UnblockType12BuildingTiles,
-          CGameData_UnblockType12BuildingTiles);
+S3RE_HOOK(0x004dfa60, CGameData_UnblockCastleTiles, WorldFn, Original_CGameData_UnblockCastleTiles,
+          CGameData_UnblockCastleTiles);
 S3RE_HOOK(0x004e6510, CGameData_InitArea, InitAreaFn, Original_CGameData_InitArea, CGameData_InitArea);
 S3RE_HOOK(0x004e64c0, CGameData_AllocArea, AllocAreaFn, Original_CGameData_AllocArea, CGameData_AllocArea);
 S3RE_HOOK(0x004e54f0, CGameData_MoveAreaContents, MoveAreaContentsFn, Original_CGameData_MoveAreaContents,
@@ -1651,8 +1651,8 @@ std::uint32_t SetUpExtraTilesBuilding(test::Context& ctx, test::WorldPair& world
     worlds.Both([&](CGameData* w) {
         record(w).art = type;
         record(w).owner = owner;
-        record(w).water.extra_tiles = extraTiles;
-        record(w).water.state = storedState;
+        record(w).workshop.extra_tiles = extraTiles;
+        record(w).workshop.state = storedState;
         record(w).unk36 = byte36;
     });
     if (const std::int32_t* offset = ExtraTilesOffset(type)) {
@@ -1701,9 +1701,9 @@ void BlockExtraTiles(test::Context& ctx, test::WorldPair& worlds, std::uint32_t 
 
 // Wrong: never marks the building as done.
 std::uint32_t __fastcall WrongTakeBuildingExtraTiles(CGameData* world, void* edx, std::uint32_t building) {
-    const std::uint8_t done = world->buildings[building].water.extra_tiles;
+    const std::uint8_t done = world->buildings[building].workshop.extra_tiles;
     const std::uint32_t result = CGameData_TakeBuildingExtraTiles(world, edx, building);
-    world->buildings[building].water.extra_tiles = done;
+    world->buildings[building].workshop.extra_tiles = done;
     return result;
 }
 
@@ -1750,7 +1750,7 @@ void CompareExtraTiles(test::Context& ctx, Fn original, Fn candidate, int cases,
 }
 
 // Wrong: Egyptians unblock the Romans' tile.
-std::uint32_t __fastcall WrongUnblockType12BuildingTiles(CGameData* world, void* edx) {
+std::uint32_t __fastcall WrongUnblockCastleTiles(CGameData* world, void* edx) {
     for (std::uint32_t building = 1; building <= world->building_high_water; ++building) {
         const Building& record = world->buildings[building];
         if (record.art == kCastle) {
@@ -1763,7 +1763,7 @@ std::uint32_t __fastcall WrongUnblockType12BuildingTiles(CGameData* world, void*
     return world->building_high_water;
 }
 
-void CompareUnblockType12(test::Context& ctx, WorldFn candidate, int cases) {
+void CompareUnblockCastleTiles(test::Context& ctx, WorldFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     SetUpOffsets(worlds);
     for (int i = 0; i < cases; ++i) {
@@ -1795,7 +1795,7 @@ void CompareUnblockType12(test::Context& ctx, WorldFn candidate, int cases) {
                 }
             }
         }
-        const std::uint32_t expected = Original_CGameData_UnblockType12BuildingTiles(worlds.original(), nullptr);
+        const std::uint32_t expected = Original_CGameData_UnblockCastleTiles(worlds.original(), nullptr);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr);
         if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 4 == 3 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 3 before it): %u buildings, map %u", i, count, size);
@@ -1838,12 +1838,12 @@ S3RE_TEST(CGameData_ReleaseBuildingExtraTiles_ComparisonDetectsWrongImplementati
                                   &WrongReleaseBuildingExtraTiles, 200, true);
     S3RE_EXPECT(probe.failures() > 0);
 }
-S3RE_TEST(CGameData_UnblockType12BuildingTiles_MatchesOriginal) {
-    CompareUnblockType12(ctx, &CGameData_UnblockType12BuildingTiles, 800);
+S3RE_TEST(CGameData_UnblockCastleTiles_MatchesOriginal) {
+    CompareUnblockCastleTiles(ctx, &CGameData_UnblockCastleTiles, 800);
 }
-S3RE_TEST(CGameData_UnblockType12BuildingTiles_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_UnblockCastleTiles_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareUnblockType12(probe, &WrongUnblockType12BuildingTiles, 200);
+    CompareUnblockCastleTiles(probe, &WrongUnblockCastleTiles, 200);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

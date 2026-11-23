@@ -1080,7 +1080,7 @@ JobResult ForesterAtSpot(SettlerContext& ctx) {
     for (const auto& d : kRing) {
         ok = ok && (TileNear(world, here, d[0], d[1]).flags & 0x09) == 0;
     }
-    if (ok && Call<kIsFreeOfSettlerType29Nearby>(world, x, y + 1) != 0) {
+    if (ok && Call<kIsFreeOfCatapultsNearby>(world, x, y + 1) != 0) {
         const std::uint8_t terrain = TileNear(world, TileOff(settler.x, settler.y), 0, 1).terrain;
         if ((terrain & 0xf0) == 0x10 && terrain != 0x1c) {
             Call<kBlockTile>(world, settler.x, settler.y + 1u);

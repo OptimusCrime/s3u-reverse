@@ -217,13 +217,13 @@ void FinishLargeTemple(CGameData* world, Building& building) {
     g_playerTallies[building.owner].unk0c += kTempleMana;
 }
 
-// The war machine workshops and the large gong (BuildingWaterBytes, bytes +0x1a..+0x20).
+// The war machine workshops and the large gong (BuildingWorkshopBytes, bytes +0x1a..+0x20).
 void ClearWorkshopBytes(Building& building) {
-    building.water.wanted[0] = 0;
-    building.water.wanted[1] = 0;
-    building.water.wanted[2] = 0;
-    building.water.state = 0;
-    building.water.extra_tiles = 0;
+    building.workshop.wanted[0] = 0;
+    building.workshop.wanted[1] = 0;
+    building.workshop.wanted[2] = 0;
+    building.workshop.state = 0;
+    building.workshop.extra_tiles = 0;
 }
 
 // Step 3: the type's own piles and fields. The original tests the types one after another; each type

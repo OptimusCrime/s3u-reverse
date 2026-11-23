@@ -39,10 +39,10 @@
 //   count) ret 4: copies `count` 16-bit characters; EAX = to.
 // UI_WideEos_428880 (0x00428880): (n) ret 4: the wide string's _Eos: +8 =
 //   n, word [+4][n] = 0; EAX = n.
-// GfxData_FramePointer_5fac70 (0x005fac70): (out, id = group << 16 |
+// CGraphicsData::FramePointer (0x005fac70): (out, id = group << 16 |
 //   frame) ret 8: *out = table(+0x5ac)[group][frame + 2] + base(+0x264)
 //   [group]; EAX = out. 23 callers (sprite data of a frame).
-// GfxData_AnimationPointer_5faaf0 (0x005faaf0): the same with the table at
+// CGraphicsData::AnimationPointer (0x005faaf0): the same with the table at
 //   +0x494, and DebugLog "GFX: Animation not found %u:%u" (group, frame)
 //   when frame >= the word +6 of the group's table (it reads on anyway).
 
@@ -157,8 +157,8 @@ std::uint32_t __fastcall Win32_CEvent_Construct(void* self, void* edx);
 std::uint32_t __fastcall Lobby_HasField4_5da3a0(void* self, void* edx);
 std::uint32_t __fastcall UI_CopyWords_418fb0(std::uint16_t* to, const std::uint16_t* from, std::uint32_t count);
 std::uint32_t __fastcall UI_WideEos_428880(void* self, void* edx, std::uint32_t n);
-std::uint32_t __fastcall GfxData_FramePointer_5fac70(void* self, void* edx, std::uint32_t out, std::uint32_t id);
-std::uint32_t __fastcall GfxData_AnimationPointer_5faaf0(void* self, void* edx, std::uint32_t out, std::uint32_t id);
+std::uint32_t __fastcall CGraphicsData_FramePointer(void* self, void* edx, std::uint32_t out, std::uint32_t id);
+std::uint32_t __fastcall CGraphicsData_AnimationPointer(void* self, void* edx, std::uint32_t out, std::uint32_t id);
 
 S3RE_HOOK(0x0060b5a0, WCIsvListBase_Destroy, ThisFn, Original_WCIsvListBase_Destroy, WCIsvListBase_Destroy);
 
@@ -340,12 +340,12 @@ std::uint32_t __fastcall UI_WideEos_428880(void* self, void* /*edx*/, std::uint3
     return n;
 }
 
-S3RE_HOOK(0x005fac70, GfxData_FramePointer_5fac70, This2Fn, Original_GfxData_FramePointer_5fac70,
-          GfxData_FramePointer_5fac70);
+S3RE_HOOK(0x005fac70, CGraphicsData_FramePointer, This2Fn, Original_CGraphicsData_FramePointer,
+          CGraphicsData_FramePointer);
 
 // Purpose: The address of a sprite frame's data in the loaded graphics
 // (group << 16 | frame).
-std::uint32_t __fastcall GfxData_FramePointer_5fac70(void* self, void* /*edx*/, std::uint32_t out, std::uint32_t id) {
+std::uint32_t __fastcall CGraphicsData_FramePointer(void* self, void* /*edx*/, std::uint32_t out, std::uint32_t id) {
     const std::uint32_t group = id >> 16;
     const std::uint32_t frame = id & 0xffff;
     const gfx::CGraphicsData* const gfx = As<gfx::CGraphicsData>(self);
@@ -354,12 +354,12 @@ std::uint32_t __fastcall GfxData_FramePointer_5fac70(void* self, void* /*edx*/, 
     return out;
 }
 
-S3RE_HOOK(0x005faaf0, GfxData_AnimationPointer_5faaf0, This2Fn, Original_GfxData_AnimationPointer_5faaf0,
-          GfxData_AnimationPointer_5faaf0);
+S3RE_HOOK(0x005faaf0, CGraphicsData_AnimationPointer, This2Fn, Original_CGraphicsData_AnimationPointer,
+          CGraphicsData_AnimationPointer);
 
 // Purpose: The address of an animation's data in the loaded graphics, with
 // the original's (only logged) range check.
-std::uint32_t __fastcall GfxData_AnimationPointer_5faaf0(void* self, void* /*edx*/, std::uint32_t out,
+std::uint32_t __fastcall CGraphicsData_AnimationPointer(void* self, void* /*edx*/, std::uint32_t out,
                                                          std::uint32_t id) {
     const std::uint32_t group = id >> 16;
     const std::uint32_t frame = id & 0xffff;
@@ -418,7 +418,7 @@ Functions OriginalFunctions() {
             Original_Lobby_MemoryBlock_Assign,  Original_Win32_CRegistryKey_Construct,
             Original_Win32_CEvent_Construct,    Original_Lobby_HasField4_5da3a0,
             Original_UI_CopyWords_418fb0,       Original_UI_WideEos_428880,
-            Original_GfxData_FramePointer_5fac70, Original_GfxData_AnimationPointer_5faaf0,
+            Original_CGraphicsData_FramePointer, Original_CGraphicsData_AnimationPointer,
             Original_WCUIntVector_Destroy,      Original_WCIntVector_ConstructBare,
             Original_Lobby_CLMMessageBlock_Copy};
 }
@@ -428,7 +428,7 @@ Functions OurFunctions() {
             &WCIntVector_Destroy,       &Lobby_ScaleBy4_44c450,    &Win32_CWin32Handle_Set,
             &Lobby_MemoryBlock_Assign,  &Win32_CRegistryKey_Construct, &Win32_CEvent_Construct,
             &Lobby_HasField4_5da3a0,    &UI_CopyWords_418fb0,      &UI_WideEos_428880,
-            &GfxData_FramePointer_5fac70, &GfxData_AnimationPointer_5faaf0, &WCUIntVector_Destroy,
+            &CGraphicsData_FramePointer, &CGraphicsData_AnimationPointer, &WCUIntVector_Destroy,
             &WCIntVector_ConstructBare, &Lobby_CLMMessageBlock_Copy};
 }
 

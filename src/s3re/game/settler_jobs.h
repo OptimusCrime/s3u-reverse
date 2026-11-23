@@ -150,7 +150,7 @@ constexpr std::uintptr_t kSettlerStartHealth = 0x00510470;           // (type)
 constexpr std::uintptr_t kAddPileClaim = 0x00510770;                 // 2 args
 constexpr std::uintptr_t kCountOtherPileClaims = 0x00510800;         // 2 args
 constexpr std::uintptr_t kIsOnMap = 0x005194e0;                      // (x, y)
-constexpr std::uintptr_t kIsFreeOfSettlerType29Nearby = 0x005199e0;  // (x, y)
+constexpr std::uintptr_t kIsFreeOfCatapultsNearby = 0x005199e0;  // (x, y)
 constexpr std::uintptr_t kTileScreenX = 0x00519610;                  // (x, y)
 constexpr std::uintptr_t kTileScreenY = 0x00519640;                  // (x, y)
 constexpr std::uintptr_t kUpdateShadeAround = 0x00519670;            // (x, y)
@@ -161,7 +161,7 @@ constexpr std::uintptr_t kClearTileOwner = 0x0051b640;               // (x, y)
 constexpr std::uintptr_t kBlockTile = 0x0051b6f0;                    // (x, y)
 constexpr std::uintptr_t kUnblockTile = 0x0051b770;                  // (x, y)
 constexpr std::uintptr_t kWearPath = 0x0051b7f0;                     // (x, y)
-constexpr std::uintptr_t kSetTerrain16Patch = 0x0051ba00;            // (x, y)
+constexpr std::uintptr_t kMakeFieldTile = 0x0051ba00;            // (x, y)
 // MapEffects members, thiscall on world->map_effects.
 constexpr std::uintptr_t kSpawn544630 = 0x00544630;                  // 8 args
 constexpr std::uintptr_t kSpawn5449f0 = 0x005449f0;                  // 8 args

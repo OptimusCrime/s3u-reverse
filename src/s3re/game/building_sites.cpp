@@ -79,7 +79,7 @@
 //   0xff for type 1; the position for types 2, 3, 5, 0x19, 0x1e, 0x33; the
 //   position + (4, 8) / (5, 10) / (6, 12) clamped to the map for types 0xe /
 //   0x18 / 0x24. EAX = the building. ret 0x10.
-// CGameData::IsFreeCastleSite (0x00508420): (player, x, y): 1 if
+// CGameData::IsFreeSmallTowerSite (0x00508420): (player, x, y): 1 if
 //   CheckBuildingSite(x, y, 0xf, player, mode 2) is non-zero, else 0. Type
 //   0xf is the small tower (250 hit points in BuildingDone; the castle is
 //   0x12), so the name "castle site" is probably too narrow: the check uses
@@ -185,7 +185,7 @@ constexpr std::uint32_t kMarkBorder = 0x80000002;
 constexpr std::uint32_t kMarkEnd = 0x80000003;
 constexpr std::uint32_t kMarkDoor = 0x80000004;
 
-// The building type IsFreeCastleSite and IsGoodStartPosition check: 0xf is the small tower, not the
+// The building type IsFreeSmallTowerSite and IsGoodStartPosition check: 0xf is the small tower, not the
 // castle (0x12); kept as the original has it.
 constexpr std::uint32_t kStartSiteType = Value(B::SmallTower);
 constexpr std::uint32_t kModeCheck = 0;
@@ -795,24 +795,24 @@ std::uint32_t __fastcall CGameData_CheckBuildingSite(CGameData* world, void* /*e
 }
 
 
-using CastleSiteFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player, std::uint32_t x,
-                                                std::uint32_t y);
+using SmallTowerSiteFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player,
+                                                    std::uint32_t x, std::uint32_t y);
 using StartPositionFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player,
                                                    std::uint32_t x, std::uint32_t y, std::uint32_t attempts);
-std::uint32_t __fastcall CGameData_IsFreeCastleSite(CGameData* world, void* edx, std::uint32_t player,
+std::uint32_t __fastcall CGameData_IsFreeSmallTowerSite(CGameData* world, void* edx, std::uint32_t player,
                                                     std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall CGameData_IsGoodStartPosition(CGameData* world, void* edx, std::uint32_t player,
                                                        std::uint32_t x, std::uint32_t y, std::uint32_t attempts);
 
-S3RE_HOOK(0x00508420, CGameData_IsFreeCastleSite, CastleSiteFn, Original_CGameData_IsFreeCastleSite,
-          CGameData_IsFreeCastleSite);
+S3RE_HOOK(0x00508420, CGameData_IsFreeSmallTowerSite, SmallTowerSiteFn,
+          Original_CGameData_IsFreeSmallTowerSite, CGameData_IsFreeSmallTowerSite);
 S3RE_HOOK(0x005081a0, CGameData_IsGoodStartPosition, StartPositionFn, Original_CGameData_IsGoodStartPosition,
           CGameData_IsGoodStartPosition);
 
 // Purpose: Whether a player's castle could stand at (x, y) on land nobody
 // owns yet; used when the start positions are chosen (0x5074b0). It checks the small tower's footprint
-// (type 0xf), not the castle's. CGameData::IsFreeCastleSite (0x508420).
-std::uint32_t __fastcall CGameData_IsFreeCastleSite(CGameData* world, void* /*edx*/, std::uint32_t player,
+// (type 0xf), not the castle's. CGameData::IsFreeSmallTowerSite (0x508420).
+std::uint32_t __fastcall CGameData_IsFreeSmallTowerSite(CGameData* world, void* /*edx*/, std::uint32_t player,
                                                     std::uint32_t x, std::uint32_t y) {
     return CGameData_CheckBuildingSite(world, nullptr, x, y, kStartSiteType, player, kModeUnowned + kModeCheck) != 0
                ? 1
@@ -1321,7 +1321,7 @@ S3RE_TEST(CGameData_CheckBuildingSite_ComparisonDetectsWrongImplementation) {
 
 namespace {
 
-void CompareIsFreeCastleSite(test::Context& ctx, CastleSiteFn candidate, int cases) {
+void CompareIsFreeSmallTowerSite(test::Context& ctx, SmallTowerSiteFn candidate, int cases) {
     test::WorldPair worlds(ctx, kTestWorld);
     const SiteWorld site = SetUpSiteWorld(ctx, worlds, 256, 0);
     for (int i = 0; i < cases; ++i) {
@@ -1332,7 +1332,8 @@ void CompareIsFreeCastleSite(test::Context& ctx, CastleSiteFn candidate, int cas
             x = ctx.rng().Below(site.size);
             y = ctx.rng().Below(site.size);
         }
-        const std::uint32_t expected = Original_CGameData_IsFreeCastleSite(worlds.original(), nullptr, player, x, y);
+        const std::uint32_t expected =
+            Original_CGameData_IsFreeSmallTowerSite(worlds.original(), nullptr, player, x, y);
         const std::uint32_t actual = candidate(worlds.ours(), nullptr, player, x, y);
         if (!S3RE_EXPECT_EQ(expected, actual) || ((i % 64 == 63 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: player %u (%u, %u)", i, player, x, y);
@@ -1442,8 +1443,8 @@ void CompareIsGoodStartPosition(test::Context& ctx, StartPositionFn candidate, i
 }
 
 // Wrong: a castle on the player's own land counts as free.
-std::uint32_t __fastcall WrongIsFreeCastleSite(CGameData* world, void* /*edx*/, std::uint32_t player, std::uint32_t x,
-                                               std::uint32_t y) {
+std::uint32_t __fastcall WrongIsFreeSmallTowerSite(CGameData* world, void* /*edx*/, std::uint32_t player,
+                                                   std::uint32_t x, std::uint32_t y) {
     return CGameData_CheckBuildingSite(world, nullptr, x, y, kStartSiteType, player, kModeCheck) != 0 ? 1 : 0;
 }
 
@@ -1461,12 +1462,12 @@ std::uint32_t __fastcall WrongIsGoodStartPosition(CGameData* world, void* edx, s
 
 }  // namespace
 
-S3RE_TEST(CGameData_IsFreeCastleSite_MatchesOriginal) {
-    CompareIsFreeCastleSite(ctx, &CGameData_IsFreeCastleSite, 2000);
+S3RE_TEST(CGameData_IsFreeSmallTowerSite_MatchesOriginal) {
+    CompareIsFreeSmallTowerSite(ctx, &CGameData_IsFreeSmallTowerSite, 2000);
 }
-S3RE_TEST(CGameData_IsFreeCastleSite_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_IsFreeSmallTowerSite_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareIsFreeCastleSite(probe, &WrongIsFreeCastleSite, 2000);
+    CompareIsFreeSmallTowerSite(probe, &WrongIsFreeSmallTowerSite, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 S3RE_TEST(CGameData_IsGoodStartPosition_MatchesOriginal) {

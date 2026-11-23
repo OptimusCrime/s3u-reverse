@@ -1288,7 +1288,7 @@ SPECS = [
     Spec("CGameData_AreOffsetTilesClear", 0x0051b3c0, "thiscall",
          [between(4, 379), between(4, 379), below(21)], presets=offset_tiles),
     Spec("CGameData_IsClearOfType70Nearby", 0x00519960, "thiscall", [TILE, TILE]),
-    Spec("CGameData_IsFreeOfSettlerType29Nearby", 0x005199e0, "thiscall", [TILE, TILE],
+    Spec("CGameData_IsFreeOfCatapultsNearby", 0x005199e0, "thiscall", [TILE, TILE],
          presets=full_map),
     # counting (counting.cpp)
     Spec("CGameData_CountBuildings", 0x00515850, "thiscall", [below(5), below(5)],
@@ -1427,7 +1427,7 @@ SPECS = [
          [lambda rng, pool: 0 if rng.random() < 0.1 else rng.randrange(1, 0x3000),
           below(20, 0.2), below(384), below(384), below(3, 0.1)],
          presets=settler_list),
-    Spec("CGameData_FindNearbySettlerType29", 0x0050cdb0, "thiscall",
+    Spec("CGameData_FindNearbyOwnCatapult", 0x0050cdb0, "thiscall",
          [between(1, 0x2fff), below(384), below(384)], presets=settlers_around),
     # game-end counts (game_end.cpp)
     Spec("CLogicThread_CountMilitaryBuildings", 0x00514a00, "logicthread", [scratch(0)],
@@ -2338,7 +2338,7 @@ def release_extra_tiles(rng, pool, args):
     return fields
 
 
-def type12_buildings(rng, pool, args):
+def castle_buildings(rng, pool, args):
     """1..5 buildings (sometimes none), mostly of type 0x12, of players of
     race 0 or 1; their tiles (x-2, y+3), (x, y+7), (x, y+6) inside the map,
     mostly blocked."""
@@ -2376,7 +2376,7 @@ SPECS += [
          max_cases=300),
     Spec("CGameData_ReleaseBuildingExtraTiles", 0x004dda10, "thiscall", [between(1, 64)],
          presets=release_extra_tiles, max_cases=300),
-    Spec("CGameData_UnblockType12BuildingTiles", 0x004dfa60, "thiscall", [], presets=type12_buildings,
+    Spec("CGameData_UnblockCastleTiles", 0x004dfa60, "thiscall", [], presets=castle_buildings,
          max_cases=200),
 ]
 
@@ -3027,10 +3027,10 @@ def keep_or_value(rng, pool) -> int:
 SPECS += [
     Spec("Render_PackColour", 0x004c7b00, "stdcall", [anything, anything, anything],
          globals=colour_format),
-    Spec("GfxData_SpriteWord", 0x005fad20, "thiscall",
+    Spec("CGraphicsData_FrameCount", 0x005fad20, "thiscall",
          [lambda rng, pool: (rng.randrange(0x100) << 16) | rng.randrange(0x100)],
          presets=sprite_tables),
-    Spec("GfxData_SetDword", 0x005fc540, "thiscall", [anything]),
+    Spec("GfxDword_Construct", 0x005fc540, "thiscall", [anything]),
     Spec("Point16_Construct", 0x005fdab0, "thiscall", [anything, anything]),
     Spec("LogicRecord24_Construct", 0x005437b0, "thiscall", []),
     Spec("MapEffect_SetLinks", 0x00544290, "thiscall", [anything, keep_or_value, keep_or_value]),
@@ -3716,7 +3716,7 @@ def equal_ids(rng, pool, args):
 
 
 SPECS += [
-    Spec("GfxData_FrameOffset", 0x005faaa0, "thiscall", [frame_id, one_of(0, 1, 3, 0xFFFFFFFF)],
+    Spec("CGraphicsData_VariantFrameAddress", 0x005faaa0, "thiscall", [frame_id, one_of(0, 1, 3, 0xFFFFFFFF)],
          presets=frame_offset_world),
     Spec("Render_PutPixel16", 0x004c7ac0, "thiscall", [below(64), below(64), anything],
          presets=put_pixel_world, globals=draw_origin),
@@ -4401,8 +4401,8 @@ SPECS += [
     Spec("UI_CopyWords_418fb0", 0x00418fb0, "fastcall", [scratch(0), scratch(1), below(20)]),
     Spec("UI_WideEos_428880", 0x00428880, "thiscall", [below(30)],
          presets=lambda rng, pool, args: [(4, WORLD_BASE + SCRATCH, 4)]),
-    Spec("GfxData_FramePointer_5fac70", 0x005fac70, "thiscall", [scratch(6), gfx_id], presets=gfx_tables(0x5ac)),
-    Spec("GfxData_AnimationPointer_5faaf0", 0x005faaf0, "thiscall", [scratch(6), gfx_id],
+    Spec("CGraphicsData_FramePointer", 0x005fac70, "thiscall", [scratch(6), gfx_id], presets=gfx_tables(0x5ac)),
+    Spec("CGraphicsData_AnimationPointer", 0x005faaf0, "thiscall", [scratch(6), gfx_id],
          presets=gfx_tables(0x494)),
     Spec("String_CompareText", 0x0040a0e0, "thiscall", [one_of(STRING_TEXT_PTR)], presets=string_world),
 ]
@@ -4603,7 +4603,7 @@ SPECS += [
 ]
 
 
-# Castle sites for the random start positions (0x5074b0): IsFreeCastleSite
+# Sites for the random start positions (0x5074b0): IsFreeSmallTowerSite
 # 0x508420 = CheckBuildingSite(x, y, 0xf, player, 2) != 0, and
 # IsGoodStartPosition 0x5081a0, which also counts land and resources over
 # the first 9995 offset-table entries around (x, y). The region's densities
@@ -4680,7 +4680,7 @@ def start_attempts(rng, pool):
 
 
 SPECS += [
-    Spec("CGameData_IsFreeCastleSite", 0x00508420, "thiscall", [below(8), between(10, 120), between(10, 120)],
+    Spec("CGameData_IsFreeSmallTowerSite", 0x00508420, "thiscall", [below(8), between(10, 120), between(10, 120)],
          presets=castle_site_state, max_cases=600),
     Spec("CGameData_IsGoodStartPosition", 0x005081a0, "thiscall",
          [below(8), between(15, 400), between(15, 400), start_attempts], presets=start_position_state,
@@ -4808,7 +4808,7 @@ def pile_claims(rng, pool, args):
 SPECS += [
     Spec("CGameData_UpdateShadeAround", 0x00519670, "thiscall", [between(2, 380), between(2, 380)],
          eax_mask=0, presets=shade_around_heights, max_cases=1000),
-    Spec("CGameData_SetTerrain16Patch", 0x0051ba00, "thiscall", [between(1, 380), between(1, 380)],
+    Spec("CGameData_MakeFieldTile", 0x0051ba00, "thiscall", [between(1, 380), between(1, 380)],
          eax_mask=0, presets=terrain16_patch, max_cases=2000),
     Spec("CGameData_CountOtherPileClaims", 0x00510800, "thiscall", [below(6, 0.1), below(6, 0.1)],
          presets=pile_claims, max_cases=500),
@@ -6892,7 +6892,7 @@ def soldier_state(rng, pool, args):
                 q = SETTLERS + k * SETTLER_BYTES
                 fields += [(q + 0x0, rng.randrange(4), 1), (q + 0x22, building, 2),
                            (q + 0x1, rng.choice([5, 8, 0x0f, 1]), 1), (q + 0xe, rng.choice([3, 4, 0x10, 0x6a, 0x8b, 5]), 2)]
-        # A type-0x29 unit next to the soldier (FindNearbySettlerType29 for job 0x130 targets).
+        # A type-0x29 unit next to the soldier (FindNearbyOwnCatapult for job 0x130 targets).
         if ejob == 0x130 and rng.random() < 0.5:
             u = 1 + (e + 7) % 0x3ff
             ux, uy = x + rng.choice([-1, 1]), y
@@ -7665,7 +7665,7 @@ def _econ_dispatch(machine, ecx, args, h):
 ECONOMY_UPDATE_PROBES = {
     0x005104c0: (0, "thiscall", "probe"),                 # RecountPlayerPopulation
     0x004dacd0: (2, "thiscall", _small(60)),              # RequestSettlerForBuilding
-    0x005199e0: (2, "thiscall", lambda h: int((h & 0x7F) != 0)),  # IsFreeOfSettlerType29Nearby
+    0x005199e0: (2, "thiscall", lambda h: int((h & 0x7F) != 0)),  # IsFreeOfCatapultsNearby
     0x0051b6f0: (2, "thiscall", "probe"),                 # BlockTile
     0x004ddf30: (4, "thiscall", "probe"),                 # AddBuildingGoodsRequest
     0x004db500: (3, "thiscall", _small(60, 0.8)),         # SendNearestWorkerToBuilding
@@ -7999,7 +7999,7 @@ US_PROBES = {
     0x00510440: (1, "thiscall", "probe"),   # ClearSettlerJob
     0x00510770: (2, "thiscall", "probe"),   # AddPileClaim
     0x00510800: (2, "thiscall", lambda h: h & 1),  # CountOtherPileClaims
-    0x005199e0: (2, "thiscall", lambda h: h & 1),  # IsFreeOfSettlerType29Nearby
+    0x005199e0: (2, "thiscall", lambda h: h & 1),  # IsFreeOfCatapultsNearby
     0x00519670: (2, "thiscall", "probe"),   # UpdateShadeAround
     0x00519a90: (2, "thiscall", "probe"),   # RecalculateTerritory
     0x0051a460: (2, "thiscall", "probe"),   # UpdateBorderFlagsAround
@@ -8008,7 +8008,7 @@ US_PROBES = {
     0x0051b6f0: (2, "thiscall", "probe"),   # BlockTile
     0x0051b770: (2, "thiscall", "probe"),   # UnblockTile
     0x0051b7f0: (2, "thiscall", "probe"),   # WearPath
-    0x0051ba00: (2, "thiscall", "probe"),   # SetTerrain16Patch
+    0x0051ba00: (2, "thiscall", "probe"),   # MakeFieldTile
     0x00544630: (8, "thiscall", "probe"),   # MapEffects::Spawn_544630
     0x005449f0: (8, "thiscall", "probe"),   # MapEffects::Spawn_5449f0
     0x00544dc0: (7, "thiscall", "probe"),   # MapEffects::Spawn_544dc0

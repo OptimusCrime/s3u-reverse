@@ -130,11 +130,30 @@ def case_count(spec: specs.Spec, cases: int) -> int:
     return cases if spec.max_cases is None else min(cases, spec.max_cases)
 
 
+# New name -> name before the renames of functions named after old guesses
+# (2026-11-23); the same table as SeedName in src/s3re/test/difftest.cpp.
+RENAMED_FUNCTIONS = (
+    ("CGameData_FindNearbyOwnCatapult", "CGameData_FindNearbySettlerType29"),
+    ("CGameData_IsFreeOfCatapultsNearby", "CGameData_IsFreeOfSettlerType29Nearby"),
+    ("CGameData_UnblockCastleTiles", "CGameData_UnblockType12BuildingTiles"),
+    ("CGameData_MakeFieldTile", "CGameData_SetTerrain16Patch"),
+    ("CGameData_IsFreeSmallTowerSite", "CGameData_IsFreeCastleSite"),
+    ("CGraphicsData_VariantFrameAddress", "GfxData_FrameOffset"),
+    ("CGraphicsData_FrameCount", "GfxData_SpriteWord"),
+    ("CGraphicsData_FramePointer", "GfxData_FramePointer_5fac70"),
+    ("CGraphicsData_AnimationPointer", "GfxData_AnimationPointer_5faaf0"),
+    ("GfxDword_Construct", "GfxData_SetDword"),
+)
+
+
 def seed_name(name: str) -> str:
     """The name a spec's inputs are derived from: the name before the
-    GameWorld -> CGameData rename (2026-11-22; GameWorld_Create became
+    renames (RENAMED_FUNCTIONS, 2026-11-23) and before the GameWorld ->
+    CGameData rename (2026-11-22; GameWorld_Create became
     CGameData_GenerateRandomMap), so every spec keeps the inputs it was
     verified with. Same rule as SeedName in src/s3re/test/difftest.cpp."""
+    for now, before in RENAMED_FUNCTIONS:
+        name = name.replace(now, before, 1)
     return name.replace("CGameData_GenerateRandomMap", "GameWorld_Create").replace("CGameData", "GameWorld")
 
 

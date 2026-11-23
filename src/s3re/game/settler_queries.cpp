@@ -19,7 +19,7 @@
 //   `value` (zero-extended, 32-bit compare) and have TileDistance(x, y,
 //   settler position) < maxDistance (unsigned). 0 if first is 0. Called by
 //   PrepareDrawData. ret 0x14.
-// CGameData::FindNearbySettlerType29 (0x0050cdb0): (settler, x, y): looks at
+// CGameData::FindNearbyOwnCatapult (0x0050cdb0): (settler, x, y): looks at
 //   the tiles (x+dx, y+dy) for the entries 1..36 of the offset table at
 //   world+0x110a588 (int32 dx, dy; 16-byte stride; the rings around a
 //   tile), skipping those off the map (CGameData::IsOnMap), and stops at
@@ -137,7 +137,7 @@ using layout::Tile;
 using Job = SettlerJob;
 
 constexpr std::uint8_t kCatapult = Value(SettlerType::Catapult);
-// FindNearbySettlerType29 looks at the offset table entries 1..36 (the
+// FindNearbyOwnCatapult looks at the offset table entries 1..36 (the
 // rings around the tile); PlaceSettlerNear at entries 0..999.
 constexpr std::uint32_t kRingEntriesFirst = 1;
 constexpr std::uint32_t kRingEntriesLast = 36;
@@ -221,7 +221,7 @@ std::uint32_t __fastcall CGameData_CountListSettlersNear(CGameData* world, void*
 
 // Purpose: Looks around a tile for a catapult of the same player. Its return value has an odd quirk in
 // the original (see the notes above), which we keep.
-std::uint32_t __fastcall CGameData_FindNearbySettlerType29(CGameData* world, void*, std::uint32_t settler,
+std::uint32_t __fastcall CGameData_FindNearbyOwnCatapult(CGameData* world, void*, std::uint32_t settler,
                                                            std::uint32_t x, std::uint32_t y) {
     std::uint32_t last = x;  // the original's register, see above
     for (std::uint32_t entry = kRingEntriesFirst; entry <= kRingEntriesLast; ++entry) {
@@ -243,8 +243,8 @@ S3RE_HOOK(0x00503610, CGameData_SetSettlerTarget, SetTargetFn, Original_CGameDat
           CGameData_SetSettlerTarget);
 S3RE_HOOK(0x0050e8f0, CGameData_CountListSettlersNear, CountNearFn, Original_CGameData_CountListSettlersNear,
           CGameData_CountListSettlersNear);
-S3RE_HOOK(0x0050cdb0, CGameData_FindNearbySettlerType29, FindNearbyFn,
-          Original_CGameData_FindNearbySettlerType29, CGameData_FindNearbySettlerType29);
+S3RE_HOOK(0x0050cdb0, CGameData_FindNearbyOwnCatapult, FindNearbyFn,
+          Original_CGameData_FindNearbyOwnCatapult, CGameData_FindNearbyOwnCatapult);
 
 using PlaceNearFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t settler,
                                                std::uint32_t x, std::uint32_t y);
@@ -649,9 +649,9 @@ void SetUpRings(test::Context& ctx, test::WorldPair& worlds) {
 }
 
 // Wrong: returns the match or 0 (what the code probably meant).
-std::uint32_t __fastcall WrongFindNearbySettlerType29(CGameData* world, void* edx, std::uint32_t settler,
+std::uint32_t __fastcall WrongFindNearbyOwnCatapult(CGameData* world, void* edx, std::uint32_t settler,
                                                       std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t last = CGameData_FindNearbySettlerType29(world, edx, settler, x, y);
+    const std::uint32_t last = CGameData_FindNearbyOwnCatapult(world, edx, settler, x, y);
     if (last == 0 || last == x) {
         return last;
     }
@@ -690,7 +690,7 @@ void CompareFindNearby(test::Context& ctx, FindNearbyFn candidate, int cases) {
                 }
             }
         }
-        expected = Original_CGameData_FindNearbySettlerType29(worlds.original(), nullptr, settler, x, y);
+        expected = Original_CGameData_FindNearbyOwnCatapult(worlds.original(), nullptr, settler, x, y);
         actual = candidate(worlds.ours(), nullptr, settler, x, y);
     });
 }
@@ -752,12 +752,12 @@ S3RE_TEST(CGameData_CountListSettlersNear_MatchesOriginal) {
     });
 }
 
-S3RE_TEST(CGameData_FindNearbySettlerType29_MatchesOriginal) {
-    CompareFindNearby(ctx, &CGameData_FindNearbySettlerType29, 3000);
+S3RE_TEST(CGameData_FindNearbyOwnCatapult_MatchesOriginal) {
+    CompareFindNearby(ctx, &CGameData_FindNearbyOwnCatapult, 3000);
 }
-S3RE_TEST(CGameData_FindNearbySettlerType29_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CGameData_FindNearbyOwnCatapult_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareFindNearby(probe, &WrongFindNearbySettlerType29, 500);
+    CompareFindNearby(probe, &WrongFindNearbyOwnCatapult, 500);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

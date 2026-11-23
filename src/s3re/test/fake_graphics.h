@@ -2,7 +2,7 @@
 
 // A stand-in for the game's graphics object (game::gfx::CGraphicsData, the
 // pointer g_gfxData), for tests of simulation code that reads animation
-// lengths through GfxData_SpriteWord ([spriteTables[group]->sprites[index]
+// lengths through CGraphicsData_FrameCount ([spriteTables[group]->sprites[index]
 // + views[group]]). While a FakeGraphics exists, the game's pointer points
 // at it; the destructor restores the old pointer.
 //
