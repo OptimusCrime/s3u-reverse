@@ -72,6 +72,17 @@ UpdateEnvironment itself: batch 2 (verified, whole-game identical).
 
 0x61FF50 (called by 0x548380) is in the CRT range.
 
+Session 46, package S1 (spells_land.cpp): spells 0..3 SpellTransformLand
+0x548340 with TransformTerrainAround 0x548380 (also UpdateEnvironment's
+burning trees, kind 32), SpreadTerrainTransform 0x548760,
+IsTransformableTerrain 0x548a10, NextTransformTerrain 0x548bb0,
+CanTerrainsBorder 0x548d50; spell 4 SpellCreateStones 0x548fb0; spell 30
+SpellTreeCurse 0x5492a0. All verified (in-process tests + emulator specs
+with full coverage). 0x61ff50 is the CRT's `_chkstk` (stack probe; ours
+gets the compiler's own). SpellCreateStones and SpellTreeCurse use the
+CRT's rand() 0x61f802 (per-thread state, not the simulation RNG) for the
+effects' start delay only.
+
 Batch 4 (spells.cpp): spells 5 SpellRevealSpot 0x549530, 6 SpellBurnTrees
 0x549650, 7 SpellAddFish 0x549700, 8 SpellHalveResources 0x5497F0, 9
 SpellGrowTrees 0x5498A0, 31 SpellRevealMap 0x5495D0. The other handlers

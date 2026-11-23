@@ -129,8 +129,14 @@ inline constexpr GameGlobal<const std::uint32_t[4]> g_spawnOffsetsY{0x65a1ac};
 inline constexpr GameGlobal<const double> g_flightFactor05{0x65a1c0};
 inline constexpr GameGlobal<const double> g_flightFactor2{0x65a1c8};
 inline constexpr GameGlobal<const double> g_flightFactor0{0x65a1d0};
-// Per spell area index its size.
-inline constexpr GameGlobal<const std::int32_t[]> g_spellAreaSizes{0x65a1f0};
+// Per spell 0..31 the number of ring offsets (world+0x110a588) its area
+// covers (200, 200, 200, 200, 500, 0, 127, ...; TreeCurse 1000), and at 32
+// that of the burning tree's terrain transform (7). Read again every loop
+// step by the original (the array is not const in its source).
+inline constexpr GameGlobal<const std::int32_t[]> g_spellRingCounts{0x65a1d8};
+// Per transform kind 0..32 the side of TransformTerrainAround's grid (32
+// for spells 0..3 and the burning tree).
+inline constexpr GameGlobal<const std::int32_t[]> g_spellGridSides{0x65a25c};
 // Per notification type.
 inline constexpr GameGlobal<const NotificationKind[]> g_notificationKinds{0x659dd0};
 

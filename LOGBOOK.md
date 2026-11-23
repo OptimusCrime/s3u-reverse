@@ -591,6 +591,42 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-23 (46): spells package S1 (parallel worktree)
+
+- **The land spells of Volker\GodlyEvents.cpp, 8 functions verified**
+  (new file `src/s3re/game/spells_land.cpp`): SpellTransformLand 0x548340
+  (spells 0..3), TransformTerrainAround 0x548380 (also UpdateEnvironment's
+  burning tree, kind 32), SpreadTerrainTransform 0x548760,
+  IsTransformableTerrain 0x548a10, NextTransformTerrain 0x548bb0,
+  CanTerrainsBorder 0x548d50, SpellCreateStones 0x548fb0 (spell 4),
+  SpellTreeCurse 0x5492a0 (spell 30). 0x61ff50 is the CRT's `_chkstk`
+  (renamed in the inventory; nothing to reproduce, ours gets the
+  compiler's). Spells 0..3 transform terrain along chains (probably 0 dry
+  swamp, 1 melt snow, 2 grass to desert, 3 green the desert; re/enums.md);
+  the transform works on a 32 x 32 `TerrainGrid` on the stack
+  (re/structs.md) and uses the world's tile ring as the fill queue.
+- **Evidence:** in-process tests for all 8 (exhaustive for the three
+  table functions; the original side runs its helpers as original code
+  through `ScopedJump`s; UnblockTile/WearPath/BlockTile recorded by
+  stubs; the CRT's rand() 0x61f802 replaced by a fixed sequence during
+  the tests; NextTransformTerrain's assertion ("HILFE", lines 588/598,
+  reachable on random grids) caught with SEH on both sides; 4
+  wrong-implementation tests) and emulator specs with full coverage (0
+  mismatches; exempt: SpreadTerrainTransform's ring-index wraps, dead).
+  The emulator probes rand() (its per-thread data needs TlsGetValue).
+  Spell specs and `Terrain` specs rerun on the final Release build: 0
+  mismatches.
+- **Tables:** `g_spellAreaSizes` (0x65a1f0) was index 6 of the per-spell
+  ring counts: now `g_spellRingCounts` (0x65a1d8, by spell; 32 = burning
+  tree 7) and `g_spellGridSides` (0x65a25c); spells.cpp uses the spell
+  number instead of an area index.
+- **Not run:** `run.py --changed` selects 187 specs here because the main
+  checkout's pass records have no Release-build passes yet (the full suite
+  was running); I ran the spell and terrain specs only. No whole-game
+  check (no recorded game casts spells).
+- **Open:** the spell names of 0..4 are guesses from the terrain chains;
+  a recording with spells would give whole-game evidence.
+
 ### 2026-11-23 (45): faster verification tooling
 
 - **`run.py --changed` selects by compiled code** (`changed.py`

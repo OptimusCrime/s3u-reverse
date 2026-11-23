@@ -116,6 +116,10 @@ inline constexpr GameText kExecuteGoodsBan{0x730fe0};      // "xxx about to exec
 inline constexpr GameText kExecuteGoodsSummon{0x730fb8};   // "xxx about to execute EventGoodsSummon"
 inline constexpr GameText kExecuteTreeCurse{0x731004};     // "xxx about to execute EventTreeCurse"
 inline constexpr GameText kExecuteRevealMap{0x731028};     // "xxx about to execute EventRevealMap"
+inline constexpr GameText kHelp{0x73104c};                 // "HILFE" ("help"), NextTransformTerrain's assertion
+inline constexpr GameText kGodlyEventsFile{0x731054};      // "E:\Siedler3\Volker\GodlyEvents.cpp"
+inline constexpr GameText kTreeCurseTreesSet{0x731078};    // "xxx GE: TreeCurse: trees set: %u"
+inline constexpr GameText kTreeCurseOffsets{0x73109c};     // "xxx GE: TreeCurse iEventOffset: %u"
 // Random map generator
 inline constexpr GameText kCreatingWorld{0x72fef8};     // "creating world"
 inline constexpr GameText kErrorTop{0x72fee4};          // "Error top %u %u %u"

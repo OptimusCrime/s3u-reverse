@@ -349,7 +349,15 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   countdown (0 = unused; active entries first), x, y. CountDownTimers.
   **V** (layout).
 - **Tile ring entry** (4 bytes, 10000 at world+0xDFDC48 and +0xE07890):
-  uint16 x, uint16 y. **V**.
+  uint16 x, uint16 y. **V**. The first ring is also the queue of
+  SpreadTerrainTransform 0x548760 (grid cells, not map tiles).
+- **TerrainGrid** (0x2018 bytes, on TransformTerrainAround's stack,
+  0x548380; passed by pointer to SpreadTerrainTransform 0x548760 and the
+  table functions 0x548bb0 / 0x548d50; `TerrainGrid` in spells_land.cpp):
+  +0x0 kind (spell 0..3 or 32), +0x4 x0, +0x8 y0 (map position of cell
+  0, 0), +0xC cx, +0x10 cy (the centre's cell), +0x14 side (32),
+  +0x18 uint8 can_change[64][64] ([gx][gy], 1 = may change, border 0),
+  +0x1018 uint8 terrain[64][64] (the new terrain). **V**.
 - **Pile claim** (4 bytes, 128 at world+0x1195DD4, `PileClaim`): uint16
   pile, uint16 settler (both 0 = free). AddPileClaim 0x510770 (was
   AddToRecentPositions) adds one, called only by UpdateSettlers job 0x152

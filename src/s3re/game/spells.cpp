@@ -2,8 +2,8 @@
 // small spells. Each spell checks HasManaForSpell (0x54b240) and, when it
 // had an effect, pays with PayForSpell (0x54b2b0); see godly_events.cpp.
 // The ring table world+0x110a588 (MapOffset) gives the area: the first N
-// offsets around (x, y), N from a table of int32 at 0x65a1f0 (127, 200,
-// 100, 200, 300 in the image; re-read every step of a loop), tiles checked
+// offsets around (x, y), N = g_spellRingCounts[spell] (0x65a1d8; 127, 200,
+// 100, 200 for spells 6..9 in the image; re-read every step of a loop), tiles checked
 // signed against the map size. Spell numbers: the Spell enum (enums.h).
 //
 // CGameData::ExecuteSpell (0x005480b0): (player, x, y, a4, spell), the
@@ -72,11 +72,6 @@ constexpr std::uintptr_t kRandom = 0x004feb70;
 constexpr std::uintptr_t kPushUiFeedback = 0x004febe0;
 constexpr std::uintptr_t kDebugLogFn = 0x00428720;
 
-// The area sizes (index into g_spellAreaSizes, 0x65a1f0: 127, 200, 100, 200, ...).
-constexpr U kBurnTreesArea = 0;
-constexpr U kAddFishArea = 1;
-constexpr U kHalveResourcesArea = 2;
-constexpr U kGrowTreesArea = 3;
 
 constexpr std::int32_t kRevealPoints = 50;
 constexpr std::int32_t kRevealSpotTicks = 250;  // 0xfa
@@ -138,15 +133,11 @@ void Pay(CGameData* world, U player, U spell) {
     Callee<Fn2>(kPayForSpell)(world, nullptr, player, spell);
 }
 
-std::int32_t AreaSize(U index) {
-    return g_spellAreaSizes[index];
-}
-
-// Calls visit(tile) for the map tiles among the first AreaSize(area)
+// Calls visit(tile) for the map tiles among the first g_spellRingCounts[spell]
 // offsets around (x, y).
 template <typename Visit>
-void ForArea(CGameData* world, U area, std::int32_t x, std::int32_t y, Visit visit) {
-    for (std::int32_t i = 0; i < AreaSize(area); ++i) {
+void ForArea(CGameData* world, Spell spell, std::int32_t x, std::int32_t y, Visit visit) {
+    for (std::int32_t i = 0; i < g_spellRingCounts[Value(spell)]; ++i) {
         const MapOffset& o = world->offsets[i];
         const std::int32_t tx = o.dx + x;
         const std::int32_t ty = o.dy + y;
@@ -220,7 +211,7 @@ U __fastcall CGameData_SpellBurnTrees(CGameData* world, void*, U player, std::in
         return 0;
     }
     bool done = false;
-    ForArea(world, kBurnTreesArea, x, y, [&](Tile& t) {
+    ForArea(world, Spell::BurnTrees, x, y, [&](Tile& t) {
         if (t.object >= kFirstTree && t.object <= kLastBurningTree) {
             t.object = kFireStart;
             done = true;
@@ -239,7 +230,7 @@ U __fastcall CGameData_SpellAddFish(CGameData* world, void*, U player, std::int3
         return 0;
     }
     bool done = false;
-    ForArea(world, kAddFishArea, x, y, [&](Tile& t) {
+    ForArea(world, Spell::AddFish, x, y, [&](Tile& t) {
         if ((t.terrain & kTerrainClassMask) != kTerrainClassWater) {
             return;
         }
@@ -265,7 +256,7 @@ U __fastcall CGameData_SpellHalveResources(CGameData* world, void*, U player, st
         return 0;
     }
     bool done = false;
-    ForArea(world, kHalveResourcesArea, x, y, [&](Tile& t) {
+    ForArea(world, Spell::HalveResources, x, y, [&](Tile& t) {
         done = true;
         // The amount (low nibble) halves; the kind (high nibble) stays.
         const std::uint8_t r = t.resources;
@@ -284,7 +275,7 @@ U __fastcall CGameData_SpellGrowTrees(CGameData* world, void*, U player, std::in
         return 0;
     }
     bool done = false;
-    ForArea(world, kGrowTreesArea, x, y, [&](Tile& t) {
+    ForArea(world, Spell::GrowTrees, x, y, [&](Tile& t) {
         // The three kinds of young trees (first and last stage); one kind
         // after the other on the same tile, as in the original.
         static constexpr std::uint8_t kKinds[3][2] = {{0x55, 0x5d}, {0x5e, 0x66}, {0x67, 0x6f}};
