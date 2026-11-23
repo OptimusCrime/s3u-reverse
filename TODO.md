@@ -130,11 +130,6 @@ Each item: what, why, and where to start.
   replays/saves against the original and record the call count; the
   multiplayer/UI paths (0x06 text, 0xf4, 0xf7..0xff, messages 3..0x22)
   have tests only.
-- **trivial.py reads misaligned dumpbin output (session 47).** 0x53ba50
-  (`mov eax, [0x7e9168]; ret`) was marked "Trivial ... (ret)" because the
-  jump tables before it desync build/s3.asm. Make `trivial.py` check that
-  the listing has an instruction exactly at the start (or decode the bytes
-  itself), then rerun `trivial.py check` for other false positives.
 - **godly_events.cpp comments (session 47):** lines 62 and 89 still say
   `Player::unk0b4[0]`; it is now `Player::promotion_cost` (the file was
   locked by a hung compiler when the rename ran).

@@ -445,7 +445,11 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
 - **Trivial functions count as done, proven by their bytes** (user
   decision 2026-11-09). Some bodies are too short for a Detours hook and
   have nothing to reimplement. `python tools/trivial.py list|apply|check`
-  finds them mechanically: the whole body (start to next start, then only
+  finds them mechanically by decoding S3.EXE's bytes with capstone from
+  each start (not the dumpbin listing, which jump tables desync: it once
+  read 0x53ba50 `mov eax,[g_app]; ret` as `ret`; `check` also requires
+  each note to quote exactly the decoded instructions): the whole body
+  (start to next start, then only
   `nop`/`int 3`) is `ret [N]`; or one of `xor eax,eax` / `mov eax,IMM` /
   `or eax,-1` / `xor al,al` / `mov al,IMM` then `ret [N]`; or a forwarder
   `jmp T`, `add|sub ecx,IMM; jmp T`, or the vtordisp thunk

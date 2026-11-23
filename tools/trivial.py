@@ -22,13 +22,21 @@ the next known start, must be one of these shapes, followed only by `nop` /
 Anything else (field getters/setters, `mov ecx,global; jmp` initializer
 stubs, which frontier.py hides by shape anyway) does not qualify.
 
+How (2026-11-23): the bytes are decoded from Settlers3Ultimate/S3.EXE with
+capstone, starting exactly at each function start. (Until then the dumpbin
+listing build/s3.asm was read; jump tables in .text desync that linear
+listing, so 0x53ba50 `mov eax,[007E9168h]; ret` read as a lone `ret`.)
+Padding is checked byte by byte (0x90 / 0xCC). The instructions are quoted
+in dumpbin's spelling, so notes stay comparable with the listing; `check`
+also requires that a marked row's note quotes exactly these instructions.
+
 Usage:
   python tools/trivial.py list            print every trivial function in game code
   python tools/trivial.py apply           record them in re/functions.csv (status
                                           identified + note); never touches verified,
                                           reimplemented or hooked rows
   python tools/trivial.py check           exit 1 if the inventory is out of sync
-Options: --asm PATH (default build/s3.asm, see tools/asm_tools.py)
+Options: --exe PATH (default Settlers3Ultimate/S3.EXE)
 """
 
 from __future__ import annotations
@@ -36,68 +44,120 @@ from __future__ import annotations
 import argparse
 import csv
 import os
-import re
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from asm_tools import ROOT, containing, read_asm, load_starts  # noqa: E402
+from asm_tools import ROOT, function_end, load_starts  # noqa: E402
 
 CRT_START = 0x61e4ef
 GAME_LOW = 0x401000
 NOTE_PREFIX = "Trivial, proven by its bytes"
 INVENTORY = os.path.join(ROOT, "re", "functions.csv")
-
-RET = re.compile(r"ret(\s+[0-9A-F]+h?)?$")
-CONSTANT = re.compile(r"(xor\s+eax,eax|mov\s+eax,[0-9A-F]+h?|or\s+eax,0FFFFFFFFh"
-                      r"|xor\s+al,al|mov\s+al,[0-9A-F]+h?)$")
-JMP = re.compile(r"jmp\s+([0-9A-F]{8})$")
-ADJUST = re.compile(r"(add|sub)\s+ecx,[0-9A-F]+h?$")
-VTORDISP = re.compile(r"sub\s+ecx,dword ptr \[ecx-[0-9A-F]+h?\]$")
-PADDING = re.compile(r"(nop|int\s+3)$")
+EXE = os.path.join(ROOT, "Settlers3Ultimate", "S3.EXE")
+PADDING_BYTES = (0x90, 0xCC)  # nop, int 3
+MAX_REAL = 3                  # the longest shape: vtordisp, adjust, jmp
 
 
-def bodies(asm, starts, low=GAME_LOW, high=CRT_START):
-    out = defaultdict(list)
-    for address, ins in asm:
-        if low <= address < high:
-            out[containing(starts, address)].append(re.sub(r"\s+", " ", ins).strip())
-    return out
+def load_image(path=EXE):
+    """(image base, memory-mapped image bytes) of S3.EXE."""
+    import pefile
+    pe = pefile.PE(path, fast_load=True)
+    return pe.OPTIONAL_HEADER.ImageBase, pe.get_memory_mapped_image()
 
 
-def classify(ins: list[str], start_set) -> tuple[str, int | None] | None:
-    """(kind, forward target or None) when the body is trivial, else None."""
-    real = list(ins)
-    while real and PADDING.match(real[-1]):
-        real.pop()
-    if not real or any(PADDING.match(i) for i in real):
+def dumpbin_number(value: int) -> str:
+    """A constant spelled like dumpbin: 4, 9ECh, 0FFFFFFFFh."""
+    if value < 10:
+        return str(value)
+    text = f"{value:X}"
+    return ("0" + text if text[0] in "ABCDEF" else text) + "h"
+
+
+def decode(code: bytes, address: int):
+    """The instructions from `address` up to and including the first ret/jmp,
+    as (kind, value, text) tuples, if each is one of the trivial building
+    blocks, there are at most MAX_REAL, and only padding bytes follow;
+    otherwise None."""
+    from capstone import CS_ARCH_X86, CS_MODE_32, Cs
+    from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_OP_REG, X86_REG_AL, \
+        X86_REG_EAX, X86_REG_ECX
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
+    md.detail = True
+    out = []
+    for i in md.disasm(code, address):
+        if len(out) == MAX_REAL:
+            return None
+        ops = i.operands
+        kinds = [o.type for o in ops]
+        m = i.mnemonic
+        entry = None
+        if any(i.prefix):
+            entry = None
+        elif m == "ret" and kinds in ([], [X86_OP_IMM]):
+            n = ops[0].imm if ops else None
+            entry = ("ret", n, "ret" if n is None else f"ret {dumpbin_number(n)}")
+        elif m == "jmp" and kinds == [X86_OP_IMM]:
+            entry = ("jmp", ops[0].imm, f"jmp {ops[0].imm:08X}")
+        elif m in ("xor", "mov", "or", "add", "sub") and len(ops) == 2 \
+                and kinds[0] == X86_OP_REG:
+            reg = ops[0].reg
+            r = {X86_REG_EAX: "eax", X86_REG_AL: "al"}.get(reg)
+            if kinds[1] == X86_OP_REG and m == "xor" and ops[1].reg == reg and r:
+                entry = ("const", 0, f"xor {r},{r}")
+            elif kinds[1] == X86_OP_IMM:
+                imm = ops[1].imm & (0xFF if reg == X86_REG_AL else 0xFFFFFFFF)
+                if m == "mov" and r:
+                    entry = ("const", imm, f"mov {r},{dumpbin_number(imm)}")
+                elif m == "or" and reg == X86_REG_EAX and imm == 0xFFFFFFFF:
+                    entry = ("const", imm, "or eax,0FFFFFFFFh")
+                elif m in ("add", "sub") and reg == X86_REG_ECX:
+                    entry = ("adjust", imm, f"{m} ecx,{dumpbin_number(imm)}")
+            elif kinds[1] == X86_OP_MEM and m == "sub" and reg == X86_REG_ECX:
+                mem = ops[1].mem
+                if mem.base == X86_REG_ECX and not mem.index and mem.disp < 0 \
+                        and not mem.segment and ops[1].size == 4:
+                    entry = ("vtordisp", -mem.disp,
+                             f"sub ecx,dword ptr [ecx-{dumpbin_number(-mem.disp)}]")
+        if entry is None:
+            return None
+        out.append(entry)
+        if entry[0] in ("ret", "jmp"):
+            rest = code[i.address + i.size - address:]
+            return out if all(b in PADDING_BYTES for b in rest) else None
+    return None
+
+
+def classify(body, start_set) -> tuple[str, int | None] | None:
+    """(kind, forward target or None) when the decoded body is a trivial shape."""
+    if body is None:
         return None
-    if len(real) == 1 and RET.match(real[0]):
+    kinds = [k for k, _, _ in body]
+    if kinds == ["ret"]:
         return ("leaf", None)
-    if len(real) == 2 and CONSTANT.match(real[0]) and RET.match(real[1]):
+    if kinds == ["const", "ret"]:
         return ("constant", None)
-    m = JMP.match(real[-1])
-    if not m:
+    if kinds[-1] != "jmp" or body[-1][1] not in start_set:
         return None
-    target = int(m.group(1), 16)
-    if target not in start_set:
-        return None
-    prefix = real[:-1]
-    ok = (not prefix
-          or (len(prefix) == 1 and ADJUST.match(prefix[0]))
-          or (len(prefix) == 1 and VTORDISP.match(prefix[0]))
-          or (len(prefix) == 2 and VTORDISP.match(prefix[0]) and ADJUST.match(prefix[1])))
-    return ("forward", target) if ok else None
+    if kinds[:-1] in ([], ["adjust"], ["vtordisp"], ["vtordisp", "adjust"]):
+        return ("forward", body[-1][1])
+    return None
 
 
-def find_trivial(asm, starts) -> dict[int, tuple[str, int | None, list[str]]]:
+def find_trivial(starts, exe=EXE) -> dict[int, tuple[str, int | None, list[str]]]:
+    """{start: (kind, forward target or None, instructions in dumpbin spelling)}
+    for every trivial function in game code."""
+    base, image = load_image(exe)
     start_set = set(starts)
     out = {}
-    for f, ins in bodies(asm, starts).items():
-        c = classify(ins, start_set)
+    for f in starts:
+        if not GAME_LOW <= f < CRT_START or f == starts[-1]:
+            continue
+        end = min(function_end(starts, f), CRT_START)
+        body = decode(image[f - base:end - base], f)
+        c = classify(body, start_set)
         if c:
-            real = [i for i in ins if not PADDING.match(i)]
-            out[f] = (c[0], c[1], real)
+            out[f] = (c[0], c[1], [text for _, _, text in body])
     return out
 
 
@@ -159,6 +219,11 @@ def cmd_check(trivial):
         if marked and address not in trivial:
             print(f"error: {row['address']} is marked trivial but its bytes are not")
             errors += 1
+        elif marked and not row["notes"].startswith(
+                f"{NOTE_PREFIX} ({'; '.join(trivial[address][2])})"):
+            print(f"error: {row['address']} is marked trivial but its note doesn't quote "
+                  f"its instructions ({'; '.join(trivial[address][2])})")
+            errors += 1
         elif marked and row["status"] != "identified":
             print(f"error: {row['address']} is marked trivial but status is {row['status']}")
             errors += 1
@@ -172,11 +237,11 @@ def cmd_check(trivial):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("command", choices=("list", "apply", "check"))
-    parser.add_argument("--asm", default=os.path.join(ROOT, "build", "s3.asm"))
+    parser.add_argument("--exe", default=EXE)
     args = parser.parse_args()
-    if not os.path.exists(args.asm):
-        sys.exit(f"{args.asm} not found; see tools/asm_tools.py for how to make it")
-    trivial = find_trivial(read_asm(args.asm), load_starts())
+    if not os.path.exists(args.exe):
+        sys.exit(f"{args.exe} not found")
+    trivial = find_trivial(load_starts(), args.exe)
     return {"list": cmd_list, "apply": cmd_apply, "check": cmd_check}[args.command](trivial)
 
 
