@@ -716,3 +716,59 @@ loop end. Handlers and job chains: `re/update_settlers_jobs.csv` and
 | 402 | 0x192 | GongProduction | high | handler 0x4f9122 | DebugLog "Gongproduktion owner %u" |
 | 403 | 0x193 | ThiefSteal | high | handler 0x4f7a84 | DebugLog "Dieb[%u (%u,%u)]: StealGoodFromPile fail!" (Dieb = thief) |
 | 404 | 0x194 | Job404 | placeholder | handler 0x4f7bdf |  |
+
+## Net messages (`NetMessage`, uint8) and commands (`CommandId`, uint8)
+
+Byte 0 and byte 1 of the messages CLogicThread::ExecuteCommands (0x535990)
+pops from CLogicThread+0x3c8. Analysis, payloads and the handler of every
+id: `re/execute_commands.md`.
+
+| value | name | confidence | evidence |
+|-------|------|------------|----------|
+| msg 1 | Command | high | dispatched on byte 1 (jump table 0x53b898); the recorder sees the same ids as 0x21 messages |
+| msg 2 | StepGrant | high | sets this+0x3b4 and ends the loop (CNetBounceThread's "run up to step+5") |
+| msg 3 | PlayerLost | high | DebugLog "Message PlayerLost", "LOGIC: Kill wegen lag" |
+| msg 4 | FilmEnd | high | DebugLog "Message FilmEnd" |
+| msg 5 | KillPlayer | high | DebugLog "Message KillPlayer" |
+| msg 6 | InGameChat | high | DebugLog "Message InGameChat" |
+| msg 8 | ChecksumFailure | high | DebugLog "Message ChecksumFailure" |
+| msg 0x22 | LagReport | low | compares per-player words with 5000 and shows texts |
+| 0x01 | PlaceBuilding | high | CheckBuildingSite(x, y, type, player, 1) |
+| 0x02 | ScrollCamera | high | camera += deltas, ClampCamera |
+| 0x03 | SetSettlerGroup | medium | writes player_lists[player][group] and its length |
+| 0x04 | SetBuildingWorking | medium | request flag 0x01; off recalls the carriers |
+| 0x05 | SetWorkArea | medium | work tile of production buildings (woodcutter, forester, ...) within distance 60 |
+| 0x06 | DestroyBuilding | high | CrushBuilding |
+| 0x07 | ChangeGoodsPriority | medium | area settings1[good] +-1, 0..20 |
+| 0x08 | SetGoodsSetting | low | area settings2[good] = value |
+| 0x09 | MoveUnits | high | soldier targets (SetSettlerTarget), "GongAttack" |
+| 0x0a | ChangeTransportOrder | low | area settings4/5 order list |
+| 0x0b | ChangeToolSettings | low | area bytes +0x23e..+0x244, shares in steps of 5 |
+| 0x0c | ChangeGarrison | medium | towers/castle: wanted soldiers per class |
+| 0x0d..0x0f | MoveUnitsMode1..3 | high | the same handler as 0x09 with a mode |
+| 0x10 | ConvertCarriers | medium | carriers become types 0x16/0x17/0x28 or back |
+| 0x11 | SetAreaCondition | medium | area condition_enabled[kind], ResetAreaConditionCounters |
+| 0x12 | SetTradeRoute | medium | Trade route points and orders of harbour/marketplace |
+| 0x13 | SetWorkshopProduction | low | production state of water buildings / shipyard |
+| 0x14 | SetShipyardDock | medium | BlockBuildingLine + PlaceDockLine on a shipyard |
+| 0x15 | CastSpell | high | DebugLog "GodlyEvent (ID#)%u GodRange: %u" |
+| 0x16 | UnloadShip | medium | a ferry (type 0x2c) puts its passengers on the shore |
+| 0x17 | SetHarbourDock | medium | as 0x14 for a harbour |
+| 0x18 | PromoteSoldiers | medium | soldier levels +0xb8..+0xc0 for mana, SetPromotionCost |
+| 0x19 | LoadShip | low | units from water buildings into a ship (+0x15 up to 6) |
+| 0x1b | HoldPosition | low | soldiers get flag 0x20 and their position as home |
+| 0x1c | SetStorehouseGoods | medium | storehouse (type 1) piles: ChangePileGood |
+| 0xf1 | RevealMap | medium | global 0x7dfd84 = 1 (also set by SpellRevealMap) |
+| 0xf2 | ClearPlayerFlag | placeholder | CLogicThread+0x235[player] = 0 |
+| 0xf4 | SyncCheck | high | "CheckSum player %u", "Desync World!" ... |
+| 0xf5 | PrioritizeSite | medium | sets all four request bits of a site |
+| 0xf6 | UnprioritizeSite | medium | clears them |
+| 0xf7 | SaveRequest | high | "Multiplayersave ..." |
+| 0xf8 | SaveDone | high | "Multiplayersave was ok! Calling SaveGameCommit()" |
+| 0xf9 | SaveFailed | high | "Multiplayersave failed Calling SaveGameRollBack()" |
+| 0xfa | SaveAllowed | low | tick limit, pushes 0xf7 for the local player |
+| 0xfb | CheckVersion | low | word table 0x7dfb58 compared per player; every recording sends it at step 1 |
+| 0xfc | PlayerLost | medium | Step sends it when g_gameOutcome is 0 (CheckGameEnd); crushes the military buildings |
+| 0xfd | PlayerWon | medium | Step sends it when g_gameOutcome is 1 |
+| 0xfe | DropPlayer | high | "LOGIC: Dropped player %i %i", "Neuer Computer %u bei step %u" |
+| 0xff | PlayerLeft | medium | the same handling as 0xfe |

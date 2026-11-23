@@ -591,6 +591,33 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-23 (46): ExecuteCommands (parallel worktree)
+
+- **Analysis of CLogicThread::ExecuteCommands 0x535990** (24 KB, one
+  function): plan in `re/execute_commands.md`: the wait/pop loop, the
+  message types (`NetMessage`: 1 command, 2 step grant, 3/4/5/6/8/0x22
+  network and UI messages) and all 38 command ids with handler address,
+  payload, callees and how often the recordings contain them (`CommandId`
+  in `game/enums.h`, evidence in `re/enums.md`). The recordings contain
+  ids 0x01, 0x03, 0x04, 0x05, 0x09, 0x0b, 0x0c, 0x0f, 0x10, 0x11 and 0xfb.
+- **Its not-yet-done simulation callees, 8 verified** (new file
+  `src/s3re/game/command_helpers.cpp`): RecallSiteCarriers 0x4dee20,
+  RecallBuildingCarriers 0x4deec0, RecallCarriersOfOtherSites 0x4df8e0
+  (commands 4, 0xf5, 0xf6), ChangePileGood 0x4dfb40 (0x1c, storehouse),
+  SetPromotionCost 0x508450 (0x18, soldier promotion), PlaceDockLine
+  0x4db710 and OpenDockLineTile 0x4dbab0 (0x14/0x17: the shipyard/harbour
+  line, inverse of BlockBuildingLine), ResetAreaConditionCounters 0x51bc20
+  (0x11). Evidence: in-process tests with stubbed callees (13 tests, 7
+  with a wrong-implementation check) and emulator specs with 0 mismatches
+  and full block coverage for all eight.
+- **Fields:** Player +0xb4 = promotion cost, +0xb8..+0xc0 soldier levels;
+  +0x90 (mana_total) also pays promotions (layout.h comments, structs.md).
+- **Not done (too big for this session): ExecuteCommands itself.** It is
+  hooked as one unit; the order for the next sessions (frame, simple
+  commands, larger ones, MoveUnits, multiplayer/UI) and the test plan
+  (fake queues, logicthread specs) are in `re/execute_commands.md` and
+  TODO.md.
+
 ### 2026-11-23 (46): spells package S1 (parallel worktree)
 
 - **The land spells of Volker\GodlyEvents.cpp, 8 functions verified**

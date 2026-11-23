@@ -9336,3 +9336,118 @@ SPECS += [
          eax_mask=0, presets=land_world(1000, 20, False), callees=LAND_SPELL_PROBES, globals=LAND_TICK,
          ignore_bytes=tuple(WORLD_EFFECTS + b for b in EFFECT_TABLE_PADDING), max_cases=300),
 ]
+
+
+# The helpers of CLogicThread::ExecuteCommands (src/s3re/game/command_helpers.cpp,
+# re/execute_commands.md). Their callees are verified replacements with own
+# specs; the ones with world effects are probed (calls compared).
+CARRIER_PROBES = {0x0050cf50: (1, "thiscall", "probe"), 0x004def80: (1, "thiscall", "probe")}
+CARRIER_JOBS = (10, 11, 12, 13, 80, 169, 170, 9, 14, 79, 81, 168, 171, 0x10a)
+
+
+def carriers_of_building(rng, pool, args):
+    """Settlers 1..count (count 0..30) with owners, the argument's building or another, carrier jobs or
+    others; the building a site or not."""
+    count = rng.randrange(31)
+    fields = [(SETTLER_COUNT, count, 4), (BUILDINGS + args[0] * BUILDING_BYTES + 0x21,
+                                          0 if rng.random() < 0.5 else rng.randrange(1, 256), 1)]
+    for n in range(1, count + 2):
+        s = SETTLERS + n * SETTLER_BYTES
+        fields += [(s, 0xFF if rng.random() < 0.15 else rng.randrange(4), 1),
+                   (s + 0x22, args[0] if rng.random() < 0.6 else rng.randrange(0x10000), 2),
+                   (s + 0xE, rng.choice(CARRIER_JOBS), 2)]
+    return fields
+
+
+def sites_in_areas(rng, pool, args):
+    """Buildings 1..count (count 0..30) of a few owners with doors on a 4 x 4 patch of areas 0..2, sites or
+    not, request flags 0/1 or random."""
+    count = rng.randrange(31)
+    fields = [(BUILDING_COUNT, count, 4)]
+    for n in range(1, 32):
+        b = BUILDINGS + n * BUILDING_BYTES
+        fields += [(b, rng.randrange(3), 1), (b + 0xA, rng.randrange(4), 2), (b + 0xC, rng.randrange(4), 2),
+                   (b + 0x21, 0 if rng.random() < 0.3 else rng.randrange(1, 10), 1),
+                   (b + 0x18, rng.randrange(2) if rng.random() < 0.5 else rng.randrange(256), 1)]
+    for x in range(4):
+        for y in range(4):
+            fields.append((tile(x, y) + 0x14, rng.randrange(3), 2))
+    return fields
+
+
+def pile_for_good_change(rng, pool, args):
+    p = PILES + args[0] * PILE_BYTES
+    return [(p + 1, 0 if rng.random() < 0.6 else rng.randrange(1, 9), 1),
+            (p + 3, 0 if rng.random() < 0.6 else rng.randrange(1, 9), 1),
+            (p, 0xFF if rng.random() < 0.4 else rng.randrange(40), 1)]
+
+
+def pile_good_arg(rng, pool):
+    good = 0xFF if rng.random() < 0.4 else rng.randrange(40)
+    return good | (rng.getrandbits(24) << 8 if rng.random() < 0.25 else 0)
+
+
+def soldier_levels(rng, pool, args):
+    p = PLAYER_RECORDS + args[0] * PLAYER_RECORD_BYTES
+    return [(p + 0xB4 + 4 * k, (rng.randrange(-1, 4) if rng.random() < 0.85 else rng.getrandbits(32)) & 0xFFFFFFFF, 4)
+            for k in (1, 2, 3)]
+
+
+def owned_tile(rng, pool, args):
+    return [(tile(args[0], args[1]) + 8, 0xFF if rng.random() < 0.5 else rng.randrange(20), 1)]
+
+
+DOCK_MAP = 128
+DOCK_REACH = 40   # tiles preset around the chosen tile (walks end at a shore long before)
+
+
+def dock_coordinate(rng, pool):
+    return rng.randrange(45, 84)
+
+
+def dock_world(rng, pool, args):
+    """A 128-tile map; around the chosen tile water (5), shore (0x30) and land in patches, areas 0..2 (half
+    0), a few line markers (0x72); the offset table rings 0..9 (91 entries for the candidates, the marker
+    check stops at distance 10); the building's door on the patch and its owner."""
+    x0, y0 = args[1], args[2]
+    fields = [(MAP_SIZE, DOCK_MAP, 4)] + walk_rings(10)
+    for x in range(x0 - DOCK_REACH, x0 + DOCK_REACH + 1):
+        for y in range(y0 - DOCK_REACH, y0 + DOCK_REACH + 1):
+            r = rng.randrange(10)
+            terrain = 5 if r < 4 else 0x30 if r < 7 else rng.randrange(64)
+            t = tile(x, y)
+            fields += [(t + 6, terrain, 1), (t + 0x14, 0 if rng.random() < 0.5 else rng.randrange(1, 3), 2),
+                       (t + 7, 0x72 if rng.random() < 0.02 else rng.randrange(100), 1)]
+    b = BUILDINGS + args[0] * BUILDING_BYTES
+    fields += [(b, rng.randrange(20), 1), (b + 0xA, rng.randrange(x0 - 10, x0 + 11), 2),
+               (b + 0xC, rng.randrange(y0 - 10, y0 + 11), 2)]
+    return fields
+
+
+CONDITION_KINDS = tuple(range(53))
+
+
+def condition_kind(rng, pool):
+    return rng.choice(CONDITION_KINDS) if rng.random() < 0.9 else rng.getrandbits(32)
+
+
+SPECS += [
+    Spec("CGameData_RecallSiteCarriers", 0x004dee20, "thiscall", [between(1, 40)],
+         presets=carriers_of_building, callees=CARRIER_PROBES, max_cases=800),
+    Spec("CGameData_RecallBuildingCarriers", 0x004deec0, "thiscall", [between(1, 40)],
+         presets=carriers_of_building, callees=CARRIER_PROBES, max_cases=800),
+    Spec("CGameData_RecallCarriersOfOtherSites", 0x004df8e0, "thiscall", [between(1, 31)], eax_mask=0,
+         presets=sites_in_areas, callees={0x004dee20: (1, "thiscall", "probe")}, max_cases=800),
+    Spec("CGameData_ChangePileGood", 0x004dfb40, "thiscall", [between(1, 1000), pile_good_arg], eax_mask=0,
+         presets=pile_for_good_change,
+         callees={0x00506080: (1, "thiscall", "probe"), 0x005061b0: (2, "thiscall", "probe")}),
+    Spec("CGameData_SetPromotionCost", 0x00508450, "thiscall", [below(20)], presets=soldier_levels),
+    Spec("CGameData_OpenDockLineTile", 0x004dbab0, "thiscall", [below(384), below(384), anything], eax_mask=0,
+         presets=owned_tile,
+         callees={0x0051b640: (2, "thiscall", "probe"), 0x0051b5d0: (3, "thiscall", "probe"),
+                  0x0051b770: (2, "thiscall", "probe")}),
+    Spec("CGameData_PlaceDockLine", 0x004db710, "thiscall", [between(1, 40), dock_coordinate, dock_coordinate],
+         eax_mask=0, presets=dock_world, callees={0x004dbab0: (3, "thiscall", "probe")}, max_cases=300),
+    Spec("CGameData_ResetAreaConditionCounters", 0x0051bc20, "thiscall", [below(64), condition_kind],
+         case_scale=2),
+]
