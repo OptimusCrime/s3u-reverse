@@ -627,6 +627,38 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   rollout still changes enums.h); also there: the jobs only tests reach,
   to check against the user's full-game recording.
 
+### 2026-11-22 (45): readability rollout
+
+Groups 1..5 converted to `docs/coding_style.md` and pushed one commit per
+group (groups 1..3 by helpers in worktrees ro-g1..g3, integrated and
+re-verified here; groups 4 and 5 here):
+1 settlers (miner_jobs, settler_queries/records/spawn, settlers, soldier),
+2 buildings (building_crush/done/flags/goods/sites/tiles), 3 piles/areas
+(area_piles, counting, economy, economy_helpers, goods_piles,
+pile_goods_moves), 4 map (territory, area_split, flood_fills, fog_of_war,
+map_generation/neighbourhood/regions/terrain, terrain_updates), 5
+environment, spells, spell_effects, godly_events, map_effect_spawns.
+- New enums: `Spell` (32 spells, names from ExecuteSpell's handlers and
+  DebugLog texts, race lists from 0x658d64), `PileKind` (Pile::art) with
+  `KindOf`; 20 miner job names (MinerEat/Dig/FoundNothing/Found per mine;
+  the old `JobNN` names stay as aliases until UpdateSettlers' files use
+  the new ones).
+- Corrections (re/enums.md): settler type 0x29 = catapult (the
+  "SettlerType29" functions), type 42 = the parts of a seven-tile unit,
+  type 37 = a military building's guard (job 173); soldier class 3 =
+  pikemen; player lists +0x6e/+0x76 = idle donkeys / trade ships; the
+  seven extra tiles belong to the war machine workshops and the gong;
+  UnblockType12BuildingTiles works on castles; terrain 0x16 is a field;
+  IsFreeCastleSite / IsGoodStartPosition check the small tower (15).
+- Evidence per group: build without warnings, full --test (490..494),
+  emulator --changed 0 mismatches (only GenerateRandomMap's known
+  coverage gap), inventory check, one whole-game check each (replay
+  fun8-seed2024-input31 3000 ticks for 4, 3, 1; "slot 1.sav" 2000 ticks for
+  5, 2): all identical to the original.
+- The three "silent stops" of helper --test runs (after 205, 249, 258
+  tests) were S3.EXE processes this session killed by mistake at its start;
+  concurrent --test runs share no files or named objects.
+
 ### 2026-11-22 (45): text recordings v4 (parallel worktree)
 
 User decision: recordings are committed to the repository, as text. The
