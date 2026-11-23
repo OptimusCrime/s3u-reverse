@@ -595,26 +595,47 @@ layouts in `src/s3re/game/ai_layout.h`.
 - **CComputerPlayer** (0x780 bytes, vtable 0x65A530; 20 pointers at
   CLogicThread+0x350): +0x004 root note ids (100 words, 0xFFFF free,
   packed) and count +0x0CC; +0x0CE pending note ids (50) and count +0x132;
-  +0x134 active note ids (100), count +0x1FC; +0x200 a fourth list (50),
-  count +0x264; +0x266 handler agent kind per note type (6 words, 0xFFFF
-  none); +0x272 player number (byte); +0x274 / +0x278 / +0x27C step
+  +0x134 active note ids (100), count +0x1FC; +0x1FE the round-robin
+  cursor over them (0x551670); +0x200 the notes to delete ("doomed",
+  50; AI::List32Add adds, 0x551790 deletes them after each active note's
+  turn), count +0x264; +0x266 handler agent kind per note type (6 words,
+  0xFFFF none; set by AddAgent 0x551400 from agent slot 2); +0x272 player number (byte); +0x274 / +0x278 / +0x27C step
   counters of 0x550F80 (periods 15, 71, 841 steps, offset by the player
   index); +0x280 notes by id (300 pointers); +0x730 agents by kind (11
   pointers); +0x75C world; +0x760 the logic->net MessageQueue; +0x764
   steps; +0x76C player index; +0x770 setup index; +0x774 per-player node
   lists (12-byte entries per player: +4 list, +8 count; a reset flag at +0xF0 + 12 * player); +0x778
   the current AiPlayerData node; +0x77C its key (node word +8). **V**
-  (lists, notes, node pointer: batch 1 functions), **R** (the rest).
+  (lists, notes, node pointer, cursor, agents, handlers: batch 1 and
+  package A3 functions), **R** (the rest).
 - **BLACK_BOARD_NOTE** (0x1A bytes + subclass fields): +0 vtable, +4 flags
-  (1 dispatched, 4 active), +6 type, +8 own id, +0xA word and +0xC dword
-  (0 after a reset), +0x10 parent id, +0x12 next sibling, +0x14 first
-  child (0xFFFF = none), +0x16 / +0x18 agent kinds for the callbacks
-  0x582480 (slot 9) / 0x582510 (slot 10). **V** (0x582400..0x5824D0).
+  (1 dispatched, 2 taken by an agent, 4 active), +6 type, +8 own id, +0xA
+  word and +0xC dword (0 after a reset), +0x10 parent id, +0x12 next
+  sibling, +0x14 first child (0xFFFF = none; AddNote 0x551270 puts a new
+  child in front), +0x16 requester: kind of the agent that made it
+  (AddNote's third argument; ReportToRequester 0x582480 calls its slot 9),
+  +0x18 handler: kind of the agent that took it (written by the agents'
+  slot 3 with flag 2; CancelAtHandler 0x582510 calls its slot 10). **V**
+  (0x582400..0x5824D0, package A3), flag 2 and +0x18's writer **R**.
+- **Request notes** (HOUSE_REQUEST_NOTE, LOCAL_WARE_REQUEST_NOTE,
+  T_DO_BUILD_HOUSE_NOTE; `RequestNote` in ai_layout.h): +0x1C building
+  type, +0x1E x, +0x20 y, +0x22 a value (32 for the expansion's small
+  towers), +0x24 / +0x26 cleared (not by the local ware note's init).
+  **V** (layout, inits 0x57ab20 / 0x578760 / 0x565470), meanings **G**.
+- **BLACK_BOARD_AGENT** as the CComputerPlayer uses it: +0 vtable, +4 kind
+  (index in agents[]). Virtual slots called: 0 scalar deleting
+  destructor, 2 note types it handles (into a word buffer, AX = count), 3
+  take a new note, 4 work on an active note, 5 busy (skip 4), 7 wants to
+  run, 8 run, 9 a note it made reports back (parent, note, result, value),
+  10 a note it took is withdrawn (G). **V** (calls), meanings **R**/**G**.
 - **AiPlayerData** node: +0x26 per building type (57) 6 bytes: build
   priority, x, y (AI::RecordBestCandidate; CComputerPlayer::
   RaiseBuildPriorities raises the priority by the tables 0x73295C up to
   0x7328E8); +0x2D2 per-type countdowns (reset to 0x7329D0[type], lowered
-  every 15 steps); +0x20 dword counted up per step. **V**. Session 48
+  every 15 steps); +0x20 dword counted up per step; +0x10 / +0x14 dwords: when set,
+  StartBestBuilding 0x551a70 only starts woodcutter, sawmill, forester or
+  small tower / stonecutter or small tower (G: short of wood / stone;
+  **V** reads). **V**. Session 48
   (A2): +0x26 + 6 * (57 + type) the candidate taken for building
   (AI::TakeBestCandidate 0x58ECB0 moves best[type] there); +0x344 the
   node's buildings per type (57 words; filled by 0x572420, copied by the

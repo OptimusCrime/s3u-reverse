@@ -14,6 +14,7 @@ constants found in the original function's code.
 from __future__ import annotations
 
 import os
+import random
 import struct
 from dataclasses import dataclass
 from typing import Callable
@@ -4141,7 +4142,7 @@ SPECS += [
     Spec("CComputerPlayer_AddActiveNote", 0x005518b0, "thiscall", [id_with_noise(12)], presets=computer_player),
     Spec("CComputerPlayer_RemoveActiveNote", 0x005518e0, "thiscall", [id_with_noise(12)],
          presets=computer_player),
-    Spec("CComputerPlayer_RemoveFromList200", 0x00551940, "thiscall", [id_with_noise(12)],
+    Spec("CComputerPlayer_RemoveDoomedNote", 0x00551940, "thiscall", [id_with_noise(12)],
          presets=computer_player),
     Spec("CComputerPlayer_ActivateNote", 0x005515e0, "thiscall", [id_with_noise(AGENT_POOL_SIZE)],
          presets=computer_player),
@@ -4187,6 +4188,313 @@ SPECS += [
          presets=lambda rng, pool, args: [(AI_PLAYERS + p * 0x148, 0 if rng.random() < 0.5 else rng.getrandbits(32), 4)
                                           for p in range(20)]),
 ]
+
+# -- computer players, package A3: the note tree, the agents, destruction
+# (ai_computer_player.cpp) ---------------------------------------------------
+#
+# The CComputerPlayer at the world base with a consistent note forest (24
+# ids, some free; parents, children and root list agree, as DeleteNote
+# needs to end), its four id lists, the 11 agent objects (vtable =
+# emu.FAKE_VTABLE, kind mostly its index; most in agents[]), the handlers
+# per note type, an AiPlayerData node, the note AddNote adds and a filler
+# note for a player whose 300 ids are all taken. Notes have the fake vtable
+# too: their slot 0 (scalar deleting destructor) is probed. Agent slot 2
+# writes the note types into the caller's stack buffer (an effect; the
+# buffer's address is not compared). DeleteNote's spec sometimes makes the
+# note an orphan (its parent doesn't list it: the sibling search runs to
+# the end).
+
+TREE_NOTES = SCRATCH                              # notes 0..23, 0x20 apart
+TREE_AGENTS = SCRATCH + SCRATCH_SLOT_BYTES        # agents 0..10, 0x20 apart
+TREE_DATA = SCRATCH + 2 * SCRATCH_SLOT_BYTES      # the AiPlayerData node
+TREE_NEW_NOTE = SCRATCH + 3 * SCRATCH_SLOT_BYTES  # the note AddNote adds
+TREE_FILLER = TREE_NEW_NOTE + 0x20
+TREE_NOTE_COUNT = 24
+AI_EVALAND_COUNT = 0x007E0568  # g_aiEvaLandRefCount
+AI_EVALAND = 0x007E056C        # g_aiEvaLand
+AI_WORLD_GLOBAL = 0x007E3408   # g_aiWorld
+AI_MAP_WIDTH = 0x007E3414      # words AI::BuildingArea compares x / y with
+AI_MAP_HEIGHT = 0x007E3412
+
+
+def tree_note(k: int) -> int:
+    return TREE_NOTES + 0x20 * k
+
+
+def tree_agent(k: int) -> int:
+    return TREE_AGENTS + 0x20 * k
+
+
+def tree_note_index(value: int):
+    """The note index of a pointer argument, or None."""
+    offset = value - WORLD_BASE - TREE_NOTES
+    return offset // 0x20 if 0 <= offset < TREE_NOTE_COUNT * 0x20 and offset % 0x20 == 0 else None
+
+
+def note_tree(rng, required=(), allow_full=True, orphan=None, base=0):
+    """The fields; `base`: the player's world offset (0: ECX)."""
+    fields = []
+    agents = []
+    for k in range(11):
+        agent = tree_agent(k)
+        listed = rng.random() >= 0.125 or (k == 0 and not agents)
+        kind = rng.randrange(11) if rng.random() < 0.1 else k
+        fields += [(agent, FAKE_VTABLE, 4), (agent + 4, kind, 2), (base + 0x730 + 4 * k, WORLD_BASE + agent if listed else 0, 4)]
+        if listed:
+            agents.append(k)
+    fields += [(base + 0x266 + 2 * t, 0xFFFF if rng.random() < 0.25 else rng.choice(agents), 2) for t in range(6)]
+    present, roots, parent_of, first_child, next_sibling = [], [], {}, {}, {}
+    for k in range(TREE_NOTE_COUNT):
+        if k not in required and rng.random() < 1 / 6:
+            continue
+        first_child[k] = 0xFFFF
+        if present and rng.random() < 0.6:
+            parent = rng.choice(present)
+            parent_of[k] = parent
+            if k == orphan:  # not in its parent's children
+                next_sibling[k] = rng.getrandbits(16)
+            else:
+                next_sibling[k] = first_child[parent]
+                first_child[parent] = k
+        else:
+            parent_of[k] = 0xFFFF
+            next_sibling[k] = rng.getrandbits(16)
+            roots.append(k)
+        present.append(k)
+
+    def subset(chance):
+        ids = [k for k in present if rng.random() < chance]
+        rng.shuffle(ids)
+        return ids
+
+    rng.shuffle(roots)
+    lists = {0x4: (100, 0xCC, roots), 0xCE: (50, 0x132, subset(1 / 3)), 0x134: (100, 0x1FC, subset(0.5)),
+             0x200: (50, 0x264, subset(0.2))}
+    for offset, (slots, count_offset, ids) in lists.items():
+        fields += [(base + offset + 2 * k, ids[k] if k < len(ids) else 0xFFFF, 2) for k in range(slots)]
+        count = rng.randrange(TREE_NOTE_COUNT + 8) if rng.random() < 0.125 else len(ids)
+        fields.append((base + count_offset, count, 2))
+    active = set(lists[0x134][2])
+    for k in present:
+        note = tree_note(k)
+        flags = rng.randrange(16) if rng.random() < 0.5 else rng.getrandbits(16)
+        if rng.random() < 0.9:
+            flags = flags | 4 if k in active else flags & ~4
+        fields += [(note, FAKE_VTABLE, 4), (note + 4, flags, 2), (note + 6, rng.randrange(6), 2), (note + 8, k, 2),
+                   (note + 0x10, parent_of[k], 2), (note + 0x12, next_sibling[k], 2), (note + 0x14, first_child[k], 2),
+                   (note + 0x16, 0xFFFF if rng.random() < 0.25 else rng.choice(agents), 2),
+                   (note + 0x18, rng.choice(agents), 2)]
+    full = allow_full and rng.random() < 1 / 16
+    for k in range(300):
+        value = WORLD_BASE + tree_note(k) if k in parent_of else WORLD_BASE + TREE_FILLER if full else 0
+        fields.append((base + 0x280 + 4 * k, value, 4))
+    fields += [(TREE_FILLER, FAKE_VTABLE, 4), (TREE_FILLER + 6, 0, 2), (TREE_NEW_NOTE, FAKE_VTABLE, 4),
+               (base + 0x1FE, rng.randrange(103), 2), (base + 0x770, rng.randrange(64), 4),
+               (base + 0x778, WORLD_BASE + TREE_DATA, 4)]
+    zeros = rng.random() < 0.25
+    for t in range(57):
+        r = rng.random()
+        if zeros:
+            score = rng.randrange(3) if r < 0.25 else 0
+        else:
+            score = 0 if r < 0.35 else rng.randrange(2000) if r < 0.6 else 65000 if r < 0.75 else rng.getrandbits(16)
+        fields.append((TREE_DATA + 0x26 + 6 * t, score, 2))
+    fields += [(TREE_DATA + 0x10, 0 if rng.random() < 0.5 else rng.getrandbits(32), 4),
+               (TREE_DATA + 0x14, 0 if rng.random() < 0.5 else rng.getrandbits(32), 4)]
+    return fields
+
+
+def tree_note_arg(rng, pool):
+    return WORLD_BASE + tree_note(rng.randrange(TREE_NOTE_COUNT))
+
+
+def tree_note_or_null(rng, pool):
+    return 0 if rng.random() < 0.25 else tree_note_arg(rng, pool)
+
+
+def tree_agent_arg(rng, pool):
+    return WORLD_BASE + tree_agent(rng.randrange(11))
+
+
+def tree_agent_or_null(rng, pool):
+    return 0 if rng.random() < 0.25 else tree_agent_arg(rng, pool)
+
+
+def tree_parent_id(rng, pool):
+    value = 0xFFFF if rng.random() < 0.35 else rng.randrange(TREE_NOTE_COUNT)
+    return value | (rng.getrandbits(16) << 16) if rng.random() < 0.3 else value
+
+
+def tree_with_notes(*positions):
+    """The tree, with the notes the given arguments point at present."""
+    def presets(rng, pool, args):
+        required = {tree_note_index(args[i]) for i in positions} - {None}
+        return note_tree(rng, required)
+    return presets
+
+
+def tree_for_add_note(rng, pool, args):
+    parent = args[1] & 0xFFFF
+    return note_tree(rng, {parent} if parent != 0xFFFF else ())
+
+
+def tree_for_delete(rng, pool, args):
+    """Half the cases: the id is present (sometimes an orphan; a full
+    player possible); otherwise any id below 24 and never full (a free id
+    would be the filler)."""
+    k = args[0] & 0xFFFF
+    if rng.random() < 0.5:
+        return note_tree(rng, {k}, orphan=k if rng.random() < 0.3 else None)
+    return note_tree(rng, allow_full=False)
+
+
+TREE_OTHER_PLAYER = SCRATCH + 4 * SCRATCH_SLOT_BYTES  # g_aiPlayer for the note callbacks
+
+
+def note_at_base(rng, pool, args):
+    """The note callbacks: ECX = the note at the world base, its player
+    (g_aiPlayer) in scratch slot 4 with the tree. The note's requester is
+    sometimes none; its parent a tree note or none (then the original reads
+    notes[0xffff], lazily random); its handler an agent."""
+    fields = note_tree(rng, base=TREE_OTHER_PLAYER)
+    agents = [k for k in range(11) if any(o == TREE_OTHER_PLAYER + 0x730 + 4 * k and v for o, v, _ in fields)]
+    present = sorted({o for o, v, _ in fields if TREE_OTHER_PLAYER + 0x280 <= o < TREE_OTHER_PLAYER + 0x280 + 4 * TREE_NOTE_COUNT
+                      and v == WORLD_BASE + tree_note((o - TREE_OTHER_PLAYER - 0x280) // 4)})
+    parent = 0xFFFF if rng.random() < 0.3 or not present else (rng.choice(present) - TREE_OTHER_PLAYER - 0x280) // 4
+    return fields + [(0x10, parent, 2), (0x16, 0xFFFF if rng.random() < 0.3 else rng.choice(agents), 2),
+                     (0x18, rng.choice(agents), 2)]
+
+
+def note_player_global(rng, pool, args):
+    return [(AI_PLAYER, WORLD_BASE + TREE_OTHER_PLAYER, 4)]
+
+
+def eva_land_users(rng, pool, args):
+    """CEvaLand::Release: mostly other users left; sometimes the last one,
+    with no instance to free."""
+    count = 1 if rng.random() < 0.25 else rng.randint(2, 6)
+    return [(AI_EVALAND_COUNT, count, 4), (AI_EVALAND, 0, 4)]
+
+
+def write_note_types(machine, ecx, args, h):
+    """Agent slot 2: the note types it handles, into the caller's buffer
+    (50 words; types 6..8 reach past handlers[])."""
+    r = random.Random(h)
+    machine.guest_write(args[0], struct.pack("<50H", *(r.randrange(9) for _ in range(50))))
+
+
+def note_type_count(h):
+    count = h % 51 if (h >> 40) & 7 == 0 else (h >> 8) % 4
+    return (h & 0xFFFF0000) | count  # callers use AX
+
+
+def agent_answer(h):
+    """Slots 3 and 4: 0, 1, kAgentDone (100) or anything."""
+    return [0, 1, (h & 0xFFFF0000) | 100, h & 0xFFFFFFFF][h & 3]
+
+
+TREE_VIRTUALS = {
+    0x00: 1,                                       # scalar deleting destructor (flags)
+    0x08: (1, {0: ()}, {"returns": note_type_count}),  # note types into a stack buffer
+    0x0C: (1, {}, {"returns": agent_answer}),      # take a new note
+    0x10: (1, {}, {"returns": agent_answer}),      # work on an active note
+    0x14: 0,                                       # busy?
+    0x1C: 0,                                       # wants to run?
+    0x20: 0,                                       # run
+    0x24: 4,                                       # a note reports back
+    0x28: 1,                                       # cancel a note
+}
+TREE_EFFECTS = {0x08: write_note_types}
+
+
+def tree_spec(name, address, args, presets, eax_mask=0, **kwargs):
+    return Spec(name, address, "thiscall", args, presets=presets, eax_mask=eax_mask, virtuals=TREE_VIRTUALS,
+                virtual_effects=TREE_EFFECTS, **kwargs)
+
+
+def best_building_world(rng, pool, args):
+    """StartBestBuilding: the tree and up to 8 buildings, mostly the
+    player's, some construction sites, mostly in the current area, so that
+    0x59dbb0 (run as original code) counts 0..8 sites."""
+    fields = note_tree(rng)
+    player = rng.randrange(20)
+    area = rng.getrandbits(16)
+    fields += [(0x76C, player | (rng.getrandbits(24) << 8), 4), (0x77C, area | (rng.getrandbits(16) << 16), 4)]
+    count = rng.randrange(9)
+    fields.append((0x1499E60, count, 4))
+    for building_id in range(1, count + 1):
+        b = AI_BUILDINGS + building_id * 0x3A
+        x, y = rng.randrange(64), rng.randrange(64)
+        fields += [(b, player if rng.random() < 0.8 else rng.choice([0xFF, rng.randrange(20)]), 1),
+                   (b + 0x21, rng.getrandbits(8) | 1 if rng.random() < 0.8 else 0, 1),
+                   (b + 0xA, x, 2), (b + 0xC, y, 2),
+                   (TILES + (x * 0x300 + y) * 24 + 0x14, area if rng.random() < 0.8 else rng.getrandbits(16), 2)]
+    return fields
+
+
+def best_building_globals(rng, pool, args):
+    return [(AI_WORLD_GLOBAL, WORLD_BASE, 4), (AI_MAP_WIDTH, 64, 2), (AI_MAP_HEIGHT, 64, 2),
+            (AI_PLAYER_DATA, WORLD_BASE + TREE_DATA, 4)]
+
+
+def result_arg(rng, pool):
+    return rng.choice([0, 100, rng.getrandbits(32)])
+
+
+SPECS += [
+    tree_spec("CComputerPlayer_AddNote", 0x00551270, [scratch(3), tree_parent_id, tree_agent_or_null],
+              tree_for_add_note, eax_mask=0xFFFFFFFF),
+    tree_spec("CComputerPlayer_AddNoteUnder", 0x00551230, [scratch(3), tree_note_or_null, tree_agent_or_null],
+              tree_with_notes(1), eax_mask=0xFFFFFFFF),
+    tree_spec("CComputerPlayer_DeleteNote", 0x00551330, [id_with_noise(TREE_NOTE_COUNT)], tree_for_delete,
+              eax_mask=0xFFFFFFFF),
+    tree_spec("CComputerPlayer_AddAgent", 0x00551400, [tree_agent_arg], tree_with_notes()),
+    tree_spec("CComputerPlayer_DeleteAgent", 0x00551490, [tree_agent_arg], tree_with_notes()),
+    tree_spec("CComputerPlayer_DispatchNote", 0x00551510, [tree_note_arg], tree_with_notes(0)),
+    tree_spec("CComputerPlayer_DispatchPendingNotes", 0x005514c0, [], tree_with_notes()),
+    tree_spec("CComputerPlayer_RunAgents", 0x00551590, [], tree_with_notes()),
+    tree_spec("CComputerPlayer_WorkOnNote", 0x005516e0, [tree_note_or_null], tree_with_notes(0)),
+    tree_spec("CComputerPlayer_WorkOnNextActiveNote", 0x00551670, [], tree_with_notes()),
+    tree_spec("CComputerPlayer_DeleteDoomedNotes", 0x00551790, [], tree_with_notes()),
+    tree_spec("CComputerPlayer_UpdateBlackboard", 0x005517d0, [], tree_with_notes()),
+    # The function ends with the tail call at 0x550f78 (nop padding after it).
+    tree_spec("CComputerPlayer_Shutdown", 0x00550f30, [], tree_with_notes(), globals=eva_land_users,
+              cover_until=0x00550f7d),
+    tree_spec("CComputerPlayer_Destroy", 0x005509d0, [], tree_with_notes(), globals=eva_land_users),
+    # Bit 0 frees the player (the emulator's operator delete, compared).
+    tree_spec("CComputerPlayer_DeletingDestroy", 0x005509b0, [anything], tree_with_notes(), globals=eva_land_users,
+              eax_mask=0xFFFFFFFF),
+    # 0x59dbb0 and 0x58ecb0 (package A2) run as original code on both sides.
+    tree_spec("CComputerPlayer_StartBestBuilding", 0x00551a70, [], best_building_world,
+              globals=best_building_globals),
+    # AX only for a note without requester (the upper half is the caller's EAX; callers use AX).
+    tree_spec("BLACK_BOARD_NOTE_ReportToRequester", 0x00582480, [result_arg, anything], note_at_base,
+              eax_mask=0xFFFF, globals=note_player_global),
+    tree_spec("BLACK_BOARD_NOTE_CancelAtHandler", 0x00582510, [], note_at_base, eax_mask=0xFFFFFFFF,
+              globals=note_player_global),
+]
+
+# -- package A3 batch 2: the request agents' constructors, the request notes'
+# set-up and destruction (ai_request_notes.cpp); the object at the world
+# base. The agent constructors' EAX is not used (the factory returns the
+# object; its upper half is the caller's). Bit 0 of a deleting destructor's
+# flags frees the object (the emulator's operator delete, compared).
+
+SPECS += [
+    Spec("LOCAL_WARE_REQUEST_AGENT_Construct", 0x0057ab50, "thiscall", [], eax_mask=0),
+    Spec("HOUSE_GROUND_REQUEST_AGENT_Construct", 0x005764f0, "thiscall", [], eax_mask=0),
+    Spec("HOUSE_REQUEST_AGENT_Construct", 0x005787a0, "thiscall", [], eax_mask=0),
+    Spec("T_DO_BUILD_HOUSE_AGENT_Construct", 0x005654b0, "thiscall", [], eax_mask=0),
+    Spec("LOCAL_WARE_REQUEST_NOTE_Init", 0x0057ab20, "thiscall", [anything, anything, anything]),
+    Spec("HOUSE_REQUEST_NOTE_Init", 0x00578760, "thiscall", [anything, anything, anything, anything]),
+    Spec("T_DO_BUILD_HOUSE_NOTE_Init", 0x00565470, "thiscall", [anything, anything, anything, anything]),
+    Spec("T_DO_BUILD_HOUSE_NOTE_Construct", 0x005801c0, "thiscall", [anything, anything, anything, anything]),
+    Spec("BLACK_BOARD_NOTE_Construct", 0x005801b0, "thiscall", []),
+    Spec("BLACK_BOARD_NOTE_Destroy", 0x00565590, "thiscall", [], eax_mask=0),
+    Spec("BLACK_BOARD_NOTE_DeletingDestroy", 0x005655a0, "thiscall", [anything]),
+    Spec("RequestNote_DeletingDestroy", 0x0056f6b0, "thiscall", [anything]),
+]
+
 
 # -- batch 26: exception classes (win32_exceptions.cpp) -----------------------
 #

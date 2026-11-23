@@ -47,16 +47,7 @@ using layout::kPlayers;
 
 namespace {
 
-// The agent kinds (ComputerPlayer::agents index, word +4).
-enum class AgentKind : std::uint16_t {
-    GlobalExpandEmpire = 3,
-    ComputerPlayer = 5,
-    MapWorker = 6,
-    Attack = 7,
-    Economy = 8,
-    Safety = 9,
-    CentrumCheck = 10,
-};
+// The agent kinds: ai::AgentKind (ai_layout.h).
 
 constexpr std::uint16_t kCentrumCheckInitial = 140;  // 0x560dd0: word +8 after the clearing
 

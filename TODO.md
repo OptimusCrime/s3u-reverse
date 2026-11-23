@@ -88,23 +88,27 @@ Each item: what, why, and where to start.
   (fills AiPlayerData::building_counts), the larger economy conditions
   0x567e00, 0x568420, 0x568bc0, 0x568d80, 0x568f40, the snapshot 0x567910
   (needs 0x59dcc0), and the other small READY ones of the frontier (e.g.
-  0x597110..0x597260, 0x59cf20, 0x58f8c0, 0x58f940, 0x57ab20, 0x578760).
+  0x597110..0x597260, 0x59cf20, 0x58f8c0, 0x58f940).
   The ~60 identical 104-instruction SEH functions on the READY list are
   probably static std::string-array initializers (check before counting
   them as work).
-- **Package A3: CComputerPlayer's note tree**: DeleteNote 0x551330,
-  0x551270, 0x551400, 0x551490, dispatch 0x551510, 0x5514c0, 0x551590,
-  0x5516e0, 0x551670, the destructor 0x5509d0 / 0x550f30, 0x551a70, the
-  note callbacks 0x582480 / 0x582510 (virtual calls: Spec.virtuals).
+- **Package A3 follow-ups** (A3 done in session 48): rename the
+  deletion-queue adders in ai_helpers.cpp / ai_small_helpers.cpp, which
+  add a note id to CComputerPlayer::doomed_notes: `AI::List32Add`
+  0x551910 -> `CComputerPlayer::DoomNote`, `AI::List32AddValue_551780`
+  -> `CComputerPlayer::DoomNoteId`, `AI::List32AddWord8_551760` ->
+  `CComputerPlayer::DoomNoteOf` (the note's id); left out of A3 because
+  package A2 worked in those files (both merged now). Also: who creates
+  the AiPlayerData nodes; the constructor part 0x550a30 (calls AddAgent)
+  is next to 0x550f80.
 - **Package A4: command senders** 0x58e220..0x58ec33 and
   0x590990..0x590d86: need `MessageQueue::Push` (pass-through hook) and
   `GameSetup_sub_4318a0` (0x7a7a18 +0x7c flag; name it) as probed callees.
 - **Package A5: Cevaland** (land evaluation) and **A6: the agents' run
   functions** (slot 8), smallest first; then 0x550f80 and the
   constructor 0x550900 / 0x550a30.
-- **Open:** which classes kinds 1, 2, 4 of AI::CreateAgent make (read its
-  jump table 0x56fa68); the meaning of CComputerPlayer list +0x200 and of
-  the AiPlayerData nodes (per settlement?); `AiList50Owner` in
+- **Open:** who creates the AiPlayerData nodes (one per
+  economy area; list +0x200 is the deletion queue, session 48); `AiList50Owner` in
   ai_layout.h is the same object as ComputerPlayer (merge them when
   ai_helpers.cpp is next touched); a world-field list of the AI range with
   `tools/world_fields.py`.
