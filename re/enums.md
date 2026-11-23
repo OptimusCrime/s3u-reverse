@@ -95,18 +95,21 @@ More checks:
   (donkeys) to its ring piles: the **marketplace**.
 - **The "water buildings"** 0x1f, 0x2f, 0x30, 0x32 (`BuildingWaterBytes` in
   layout.h) are the **catapult, ballista and cannon workshops and the large
-  gong** (worker: smith; "Gong bauen" at 0x32). The layout view keeps its
-  old name for now (TODO.md).
+  gong** (worker: smith; "Gong bauen" at 0x32). Their layout view is now
+  `Building::workshop` (`BuildingWorkshopBytes`, was `water` /
+  `BuildingWaterBytes`, renamed 2026-11-23); the shipyard 0x20 uses it too.
 - 0xc/0xd "tile drop buildings" are the **tool smith and weapon smith**;
   0x13 is the **barracks**.
 - **Settler type 0x29 is the catapult** (session 45 rollout): the
   "SettlerType29" in `FindNearbySettlerType29` / `IsFreeOfSettlerType29Nearby`
-  means catapult; the seven extra tiles of the war machine workshops
+  meant catapult; the seven extra tiles of the war machine workshops
   (TakeBuildingExtraTiles) are where the machine stands. `UnblockType12BuildingTiles`
   works on **castles** (type 18). Terrain 0x16, which `SetTerrain16Patch`
   makes (jobs 145, 230, 247 of the farmer, rice farmer and winegrower), is a
   **field**, and UpdateEnvironment turns a field without growing objects (0x55..0x6f) around back
-  into grass. The function names are kept for now (TODO.md).
+  into grass. `IsFreeCastleSite` checks the small tower (type 15). Renamed
+  2026-11-23: `FindNearbyOwnCatapult`, `IsFreeOfCatapultsNearby`,
+  `UnblockCastleTiles`, `MakeFieldTile`, `IsFreeSmallTowerSite`.
 - **The "waiting lists" of SendNearestSettlerToPile/-ToBuilding**
   (settler_queries.cpp, player record +0x6e/+0x76) are the idle lists of
   settler types 39 and 43 (`Player::settler_lists` is indexed by type):

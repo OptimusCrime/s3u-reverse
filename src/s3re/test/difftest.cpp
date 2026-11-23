@@ -38,12 +38,34 @@ std::uint64_t Fnv1a64(const char* text) {
 
 // The name a test's inputs are derived from. Test names were renamed with
 // the class (GameWorld_X -> CGameData_X, GameWorld_Create ->
-// CGameData_GenerateRandomMap, 2026-11-22); hashing the old name keeps
-// every test on exactly the inputs it was verified with. (No test name had
-// "CGameData" before that rename.) tools/emutest/run.py seed_name does the
-// same for the emulator specs.
+// CGameData_GenerateRandomMap, 2026-11-22) and with the functions named
+// after old guesses (kRenamedFunctions, 2026-11-23); hashing the old name
+// keeps every test on exactly the inputs it was verified with. (No test name
+// had "CGameData" before the class rename.) tools/emutest/run.py seed_name
+// does the same for the emulator specs.
 std::string SeedName(const char* name) {
+    // New name -> name before the 2026-11-23 renames (same table in
+    // tools/emutest/run.py).
+    static constexpr const char* kRenamedFunctions[][2] = {
+        {"CGameData_FindNearbyOwnCatapult", "CGameData_FindNearbySettlerType29"},
+        {"CGameData_IsFreeOfCatapultsNearby", "CGameData_IsFreeOfSettlerType29Nearby"},
+        {"CGameData_UnblockCastleTiles", "CGameData_UnblockType12BuildingTiles"},
+        {"CGameData_MakeFieldTile", "CGameData_SetTerrain16Patch"},
+        {"CGameData_IsFreeSmallTowerSite", "CGameData_IsFreeCastleSite"},
+        {"CGraphicsData_VariantFrameAddress", "GfxData_FrameOffset"},
+        {"CGraphicsData_FrameCount", "GfxData_SpriteWord"},
+        {"CGraphicsData_FramePointer", "GfxData_FramePointer_5fac70"},
+        {"CGraphicsData_AnimationPointer", "GfxData_AnimationPointer_5faaf0"},
+        {"GfxDword_Construct", "GfxData_SetDword"},
+    };
     std::string result = name;
+    for (const auto& renamed : kRenamedFunctions) {
+        const std::string now = renamed[0];
+        const std::size_t at = result.find(now);
+        if (at != std::string::npos) {
+            result.replace(at, now.size(), renamed[1]);
+        }
+    }
     const std::string generate = "CGameData_GenerateRandomMap";
     for (std::size_t at; (at = result.find(generate)) != std::string::npos;) {
         result.replace(at, generate.size(), "GameWorld_Create");

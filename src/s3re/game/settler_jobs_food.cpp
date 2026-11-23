@@ -595,7 +595,7 @@ JobResult FarmerSow(SettlerContext& ctx) {
     for (const auto& d : patches) {
         const std::uint32_t x = ctx.settler.x + d[0];
         const std::uint32_t y = ctx.settler.y + d[1];
-        Call<kSetTerrain16Patch>(world, x, y);
+        Call<kMakeFieldTile>(world, x, y);
     }
     return Switch(ctx, Job::Job146, 156);
 }

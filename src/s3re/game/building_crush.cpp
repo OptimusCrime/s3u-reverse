@@ -850,8 +850,8 @@ std::uint32_t __fastcall CGameData_CrushBuilding(CGameData* world, void*, std::u
     // and up, extra_tiles set).
     if (IsOneOf(TypeOf(b), {B::Shipyard, B::CatapultWorkshop, B::BallistaWorkshop, B::CannonWorkshop, B::LargeGong}) &&
         b.buildup == 0) {
-        const std::uint8_t state = static_cast<std::uint8_t>(b.water.state & 0xf0);
-        if (state != 0 && state != 0x10 && b.water.extra_tiles != 0xff) {
+        const std::uint8_t state = static_cast<std::uint8_t>(b.workshop.state & 0xf0);
+        if (state != 0 && state != 0x10 && b.workshop.extra_tiles != 0xff) {
             CallBuildingFn(world, kReleaseBuildingExtraTiles, number);
         }
     }
@@ -1539,8 +1539,8 @@ void SetUpBuilding(test::Context& ctx, test::WorldPair& worlds, std::uint32_t nu
         b.door_y = static_cast<std::uint16_t>(y + 1);
         b.digger_slots = bits16;
         b.builder_slots = bits17;
-        b.water.state = state;
-        b.water.extra_tiles = extra;
+        b.workshop.state = state;
+        b.workshop.extra_tiles = extra;
         b.dock_direction = line;
     });
 }

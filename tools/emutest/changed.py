@@ -481,7 +481,7 @@ def record_full_pass(build: str, incomplete: list[str]) -> None:
 # command-line or report changes don't.
 RESULT_FILES = ("tools/emutest/emu.py", "tools/requirements.txt", "re/ghidra_functions.tsv",
                 "re/extra_functions.tsv")
-RESULT_FUNCTIONS = ("first_difference", "case_count", "quick_case_count", "seed_name", "run_spec",
+RESULT_FUNCTIONS = ("first_difference", "case_count", "quick_case_count", "seed_name", "RENAMED_FUNCTIONS", "run_spec",
                     "QUICK_FRACTION")
 PASSES_KEPT = 8  # passing fingerprints kept per spec (worktrees on different code)
 

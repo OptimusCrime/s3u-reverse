@@ -131,7 +131,7 @@ std::uint32_t __fastcall CGameData_SetTileAreaMarked(CGameData* world, void* edx
                                                      std::uint32_t y, std::uint32_t value);
 
 // map_neighbourhood.cpp
-std::uint32_t __fastcall CGameData_IsFreeOfSettlerType29Nearby(CGameData* world, void* edx, std::uint32_t x,
+std::uint32_t __fastcall CGameData_IsFreeOfCatapultsNearby(CGameData* world, void* edx, std::uint32_t x,
                                                                std::uint32_t y);
 std::uint32_t __fastcall CGameData_ReplaceTerrainType(CGameData* world, void* edx,
                                                       std::uint32_t oldType, std::uint32_t newType);

@@ -31,7 +31,7 @@
 //     pikemen and seven-tile parts (class 41) take half, attacker flag
 //     0x8 3/4; at least 1;
 //   - a tower guard (173) queues event 4; a seven-tile part (job 304)
-//     hands the hit to the catapult nearby (FindNearbySettlerType29);
+//     hands the hit to the catapult nearby (FindNearbyOwnCatapult);
 //     notifications type 3; job 309 targets take no damage (-> 310,
 //     0x136); in campaigns computer players' soldiers take half again;
 //   - health (+3) >= damage: health -= damage. Otherwise the target dies:
@@ -91,7 +91,7 @@ std::uint32_t __fastcall CGameData_TileScreenX(CGameData* world, void* edx, std:
 std::uint32_t __fastcall CGameData_TileScreenY(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall CGameData_QueuePendingEvent(CGameData* world, void* edx, std::uint32_t type,
                                                      std::uint32_t a, std::uint32_t b);
-std::uint32_t __fastcall CGameData_FindNearbySettlerType29(CGameData* world, void* edx, std::uint32_t settler,
+std::uint32_t __fastcall CGameData_FindNearbyOwnCatapult(CGameData* world, void* edx, std::uint32_t settler,
                                                            std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall CGameData_ClearSettlerJob(CGameData* world, void* edx, std::uint32_t settler);
 std::uint32_t __fastcall CGameData_SetOwnerOfFreeTile(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,
@@ -358,11 +358,11 @@ void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapO
     }
 
     // 3. Who takes the hit: a seven-tile unit's part passes it on to the
-    // catapult nearby (FindNearbySettlerType29).
+    // catapult nearby (FindNearbyOwnCatapult).
     std::uint32_t victimNumber = t;
     if (JobOf(world->settlers[t]) == kJobSevenTilePart) {
         CGameData_NotifyLocalPlayer(world, nullptr, world->settlers[t].owner, kNoticeUnderAttack, s.x, s.y);
-        victimNumber = CGameData_FindNearbySettlerType29(world, nullptr, t, s.x, s.y);
+        victimNumber = CGameData_FindNearbyOwnCatapult(world, nullptr, t, s.x, s.y);
     } else {
         CGameData_NotifyLocalPlayer(world, nullptr, world->settlers[t].owner, kNoticeUnderAttack, world->settlers[t].x,
                                     world->settlers[t].y);

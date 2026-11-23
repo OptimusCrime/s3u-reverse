@@ -86,7 +86,7 @@ constexpr std::uintptr_t kCountDownTimers = 0x004fee00;
 constexpr std::uintptr_t kRecountPlayerPopulation = 0x005104c0;
 constexpr std::uintptr_t kIsOnMap = 0x005194e0;
 constexpr std::uintptr_t kRequestSettlerForBuilding = 0x004dacd0;
-constexpr std::uintptr_t kIsFreeOfSettlerType29Nearby = 0x005199e0;
+constexpr std::uintptr_t kIsFreeOfCatapultsNearby = 0x005199e0;
 constexpr std::uintptr_t kBlockTile = 0x0051b6f0;
 constexpr std::uintptr_t kAddBuildingGoodsRequest = 0x004ddf30;
 constexpr std::uintptr_t kGoodsRequestPriority = 0x004ff380;
@@ -152,7 +152,7 @@ constexpr std::uint32_t kUnitsWorthACarrier = 5;
 
 constexpr std::uint8_t kPileFreeStanding = 0xff;   // Pile::art of a pile on open ground
 constexpr std::uint8_t kSettlerFlagSurplus = 0x80;  // Settler::flags: a surplus carrier (not sent)
-constexpr std::uint8_t kNoExtraTilesYet = 0xff;     // BuildingWaterBytes::extra_tiles
+constexpr std::uint8_t kNoExtraTilesYet = 0xff;     // BuildingWorkshopBytes::extra_tiles
 constexpr std::uint8_t kExtraTilesTaken = 0xfe;
 constexpr std::uint16_t kNoDirection = 0xffff;       // Building::dock_direction
 constexpr std::uint16_t kRouteUnset = 0xffff;        // Trade::route_x
@@ -345,7 +345,7 @@ const std::int32_t* SiteTileList(const Building& site) {
     return p;
 }
 
-// Once IsFreeOfSettlerType29Nearby holds for every tile of the footprint,
+// Once IsFreeOfCatapultsNearby holds for every tile of the footprint,
 // the site's tiles are blocked and their objects cleared. (The site's
 // position is read again for every tile, as in the original.)
 void FinishLevelling(CGameData* world, Building& site) {
@@ -353,7 +353,7 @@ void FinishLevelling(CGameData* world, Building& site) {
     const auto tileY = [&](const std::int32_t* p) { return std::uint32_t{site.y} + p[1]; };
     bool blocked = false;
     for (const std::int32_t* p = SiteTileList(site); *p != kEndBlockList; p += 2) {
-        if (Call(kIsFreeOfSettlerType29Nearby, world, tileX(p), tileY(p)) == 0) {
+        if (Call(kIsFreeOfCatapultsNearby, world, tileX(p), tileY(p)) == 0) {
             blocked = true;  // the original tests every tile
         }
     }
@@ -660,7 +660,7 @@ void UpdateResidence(CGameData* world, std::uint32_t n, std::uint32_t animation)
 // the large gong; the shipyard is similar): once its extra tiles are taken
 // (TakeBuildingExtraTiles), its state +0x1f fixes how much of its three
 // inputs it wants (+0x1a..+0x1c, total in +0x20); requests inputs below that.
-// (These are the "water" bytes of layout.h, named before the types were known.)
+// (These are the bytes of Building::workshop, layout.h.)
 struct WorkshopSpec {
     SettlerType worker;
     std::uint8_t stateA, wantA[3];  // state high nibble 0x10..0x40: the machine being built
@@ -669,38 +669,39 @@ struct WorkshopSpec {
     bool logGong;         // "Gong bauen - nach SecureProduction ..."
 };
 
-void SetWanted(Building& workshop, const std::uint8_t (&want)[3]) {
-    workshop.water.wanted[0] = want[0];
-    workshop.water.wanted[1] = want[1];
-    workshop.water.wanted[2] = want[2];
+void SetWanted(Building& building, const std::uint8_t (&want)[3]) {
+    building.workshop.wanted[0] = want[0];
+    building.workshop.wanted[1] = want[1];
+    building.workshop.wanted[2] = want[2];
 }
 
-std::uint8_t SumOfWanted(const Building& workshop) {
-    return static_cast<std::uint8_t>(workshop.water.wanted[2] + workshop.water.wanted[0] + workshop.water.wanted[1]);
+std::uint8_t SumOfWanted(const Building& building) {
+    return static_cast<std::uint8_t>(building.workshop.wanted[2] + building.workshop.wanted[0] +
+                                     building.workshop.wanted[1]);
 }
 
 void UpdateWorkshop(CGameData* world, std::uint32_t n, const WorkshopSpec& spec) {
-    Building& workshop = BuildingAt(world, n);
-    if (workshop.worker == 0) {
+    Building& building = BuildingAt(world, n);
+    if (building.worker == 0) {
         RequestWorker(world, n, spec.worker);
         return;
     }
-    if (workshop.water.state != 0 && workshop.water.extra_tiles == kNoExtraTilesYet) {
+    if (building.workshop.state != 0 && building.workshop.extra_tiles == kNoExtraTilesYet) {
         Call(kTakeBuildingExtraTiles, world, n);
         if (spec.logGong) {
-            GameDebugLog(texts::kBuildGong, std::uint32_t{workshop.water.extra_tiles});
+            GameDebugLog(texts::kBuildGong, std::uint32_t{building.workshop.extra_tiles});
         }
-        if (workshop.water.extra_tiles == kExtraTilesTaken) {
-            if (workshop.water.state == spec.stateA) {
-                SetWanted(workshop, spec.wantA);
-            } else if (spec.stateB != 0 && workshop.water.state == spec.stateB) {
-                SetWanted(workshop, spec.wantB);
+        if (building.workshop.extra_tiles == kExtraTilesTaken) {
+            if (building.workshop.state == spec.stateA) {
+                SetWanted(building, spec.wantA);
+            } else if (spec.stateB != 0 && building.workshop.state == spec.stateB) {
+                SetWanted(building, spec.wantB);
             }
-            workshop.water.extra_tiles = SumOfWanted(workshop);
+            building.workshop.extra_tiles = SumOfWanted(building);
         }
     }
     for (std::uint32_t slot = 0; slot < 3; ++slot) {
-        RequestInputBelow(world, n, slot, spec.inputs[slot].good, workshop.water.wanted[slot],
+        RequestInputBelow(world, n, slot, spec.inputs[slot].good, building.workshop.wanted[slot],
                           spec.inputs[slot].consumerSlot);
     }
 }
@@ -714,10 +715,10 @@ void UpdateShipyard(CGameData* world, std::uint32_t n) {
         RequestWorker(world, n, SettlerType::ShipyardWorker);
         return;
     }
-    if (shipyard.water.state != 0 && shipyard.water.extra_tiles == kNoExtraTilesYet) {
+    if (shipyard.workshop.state != 0 && shipyard.workshop.extra_tiles == kNoExtraTilesYet) {
         Call(kTakeBuildingExtraTiles, world, n);
-        if (shipyard.water.extra_tiles == kExtraTilesTaken) {
-            const std::uint8_t state = shipyard.water.state;
+        if (shipyard.workshop.extra_tiles == kExtraTilesTaken) {
+            const std::uint8_t state = shipyard.workshop.state;
             int column = -1;
             if (state >= 0x30 && state <= 0x33) {
                 column = 0;
@@ -725,16 +726,16 @@ void UpdateShipyard(CGameData* world, std::uint32_t n) {
                 column = 1;
             }
             if (column >= 0) {
-                const ShipyardInputs& inputs = g_shipyardInputs[shipyard.water.state & 0xfu][column];
-                shipyard.water.wanted[0] = static_cast<std::uint8_t>(inputs.first);
-                shipyard.water.wanted[1] = static_cast<std::uint8_t>(inputs.second);
-                shipyard.water.wanted[2] = static_cast<std::uint8_t>(inputs.third);
+                const ShipyardInputs& inputs = g_shipyardInputs[shipyard.workshop.state & 0xfu][column];
+                shipyard.workshop.wanted[0] = static_cast<std::uint8_t>(inputs.first);
+                shipyard.workshop.wanted[1] = static_cast<std::uint8_t>(inputs.second);
+                shipyard.workshop.wanted[2] = static_cast<std::uint8_t>(inputs.third);
             }
-            shipyard.water.extra_tiles = SumOfWanted(shipyard);
+            shipyard.workshop.extra_tiles = SumOfWanted(shipyard);
         }
     }
-    RequestInputBelow(world, n, 0, Good::Board, shipyard.water.wanted[0], 14);
-    RequestInputBelow(world, n, 1, Good::Iron, shipyard.water.wanted[1], 9);
+    RequestInputBelow(world, n, 0, Good::Board, shipyard.workshop.wanted[0], 14);
+    RequestInputBelow(world, n, 1, Good::Iron, shipyard.workshop.wanted[1], 9);
 }
 
 // The goods the ring of six piles of a harbour or marketplace (from +0xe,
@@ -1432,7 +1433,8 @@ void Probe(test::CalleeStubs& stubs, std::uint32_t (*value)(std::uint32_t h) = n
 
 void InstallEconomyStubs(test::CalleeStubs& stubs) {
     Probe<kRequestSettlerForBuilding, 2>(stubs, [](std::uint32_t h) { return SmallOrZero(h, 60, 128); });
-    Probe<kIsFreeOfSettlerType29Nearby, 2>(stubs, [](std::uint32_t h) { return static_cast<std::uint32_t>((h & 0x7f) != 0); });
+    Probe<kIsFreeOfCatapultsNearby, 2>(stubs,
+                                       [](std::uint32_t h) { return static_cast<std::uint32_t>((h & 0x7f) != 0); });
     Probe<kBlockTile, 2>(stubs);
     Probe<kAddBuildingGoodsRequest, 4>(stubs);
     Probe<kSendNearestWorkerToBuilding, 3>(stubs, [](std::uint32_t h) { return SmallOrZero(h, 60, 205); });
@@ -1446,7 +1448,7 @@ void InstallEconomyStubs(test::CalleeStubs& stubs) {
     Probe<kSetSettlerAnimation, 2>(stubs);
     stubs.Install<1, kTakeBuildingExtraTiles>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
         if ((Mix(static_cast<std::uint32_t>(kTakeBuildingExtraTiles), args) & 1) != 0) {
-            BuildingAt(w, args[0]).water.extra_tiles = 0xfe;
+            BuildingAt(w, args[0]).workshop.extra_tiles = 0xfe;
         }
         return 0u;
     });

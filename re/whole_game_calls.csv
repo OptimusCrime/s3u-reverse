@@ -1776,16 +1776,16 @@ address,name,source,ticks,calls,commit,date,note
 0x004df9b0,CGameData::BuildingPileHasGoods,save:slot 1.sav,2000,27387,c561f41,2026-11-10,
 0x004df9b0,CGameData::BuildingPileHasGoods,save:slot 2.sav,2000,19442,5a6eb86,2026-11-22,
 0x004df9b0,CGameData::BuildingPileHasGoods,save:slot 3.sav,2000,11073,5a6eb86,2026-11-22,
-0x004dfa60,CGameData::UnblockType12BuildingTiles,"random:384,0 seed 1234",2000,1,9adc76c,2026-11-22,
-0x004dfa60,CGameData::UnblockType12BuildingTiles,"random:448,3 seed 1234",2000,1,5a6eb86,2026-11-22,
-0x004dfa60,CGameData::UnblockType12BuildingTiles,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,1,5536f09,2026-11-10,
-0x004dfa60,CGameData::UnblockType12BuildingTiles,"random:512,1 seed 1234",1500,1,21f1f01,2026-11-10,
-0x004dfa60,CGameData::UnblockType12BuildingTiles,"random:640,2 seed 1234",1500,1,21f1f01,2026-11-10,
-0x004dfa60,CGameData::UnblockType12BuildingTiles,replay:fun8-seed2024-input31,3000,1,5a6eb86,2026-11-22,seed 2024
-0x004dfa60,CGameData::UnblockType12BuildingTiles,replay:scripted-seed127,3000,1,5a6eb86,2026-11-22,seed 1234
-0x004dfa60,CGameData::UnblockType12BuildingTiles,save:slot 1.sav,2000,1,5a6eb86,2026-11-22,
-0x004dfa60,CGameData::UnblockType12BuildingTiles,save:slot 2.sav,2000,1,5a6eb86,2026-11-22,
-0x004dfa60,CGameData::UnblockType12BuildingTiles,save:slot 3.sav,2000,1,5a6eb86,2026-11-22,
+0x004dfa60,CGameData::UnblockCastleTiles,"random:384,0 seed 1234",2000,1,9adc76c,2026-11-22,
+0x004dfa60,CGameData::UnblockCastleTiles,"random:448,3 seed 1234",2000,1,5a6eb86,2026-11-22,
+0x004dfa60,CGameData::UnblockCastleTiles,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,1,5536f09,2026-11-10,
+0x004dfa60,CGameData::UnblockCastleTiles,"random:512,1 seed 1234",1500,1,21f1f01,2026-11-10,
+0x004dfa60,CGameData::UnblockCastleTiles,"random:640,2 seed 1234",1500,1,21f1f01,2026-11-10,
+0x004dfa60,CGameData::UnblockCastleTiles,replay:fun8-seed2024-input31,3000,1,5a6eb86,2026-11-22,seed 2024
+0x004dfa60,CGameData::UnblockCastleTiles,replay:scripted-seed127,3000,1,5a6eb86,2026-11-22,seed 1234
+0x004dfa60,CGameData::UnblockCastleTiles,save:slot 1.sav,2000,1,5a6eb86,2026-11-22,
+0x004dfa60,CGameData::UnblockCastleTiles,save:slot 2.sav,2000,1,5a6eb86,2026-11-22,
+0x004dfa60,CGameData::UnblockCastleTiles,save:slot 3.sav,2000,1,5a6eb86,2026-11-22,
 0x004e05e0,CGameData::UpdateEconomy,"random:384,0 seed 1234",2000,2000,9adc76c,2026-11-22,
 0x004e05e0,CGameData::UpdateEconomy,"random:448,3 seed 1234",2000,2000,5a6eb86,2026-11-22,
 0x004e05e0,CGameData::UpdateEconomy,replay:fun8-seed2024-input31,3000,3000,5a6eb86,2026-11-22,seed 2024
@@ -2494,16 +2494,16 @@ address,name,source,ticks,calls,commit,date,note
 0x005081a0,CGameData::IsGoodStartPosition,save:slot 1.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 28 repeat)
 0x005081a0,CGameData::IsGoodStartPosition,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 28 repeat)
 0x005081a0,CGameData::IsGoodStartPosition,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 28 repeat)
-0x00508420,CGameData::IsFreeCastleSite,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
-0x00508420,CGameData::IsFreeCastleSite,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
-0x00508420,CGameData::IsFreeCastleSite,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
-0x00508420,CGameData::IsFreeCastleSite,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
-0x00508420,CGameData::IsFreeCastleSite,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
-0x00508420,CGameData::IsFreeCastleSite,replay:fun8-seed2024-input31,3000,133,5a6eb86,2026-11-22,seed 2024
-0x00508420,CGameData::IsFreeCastleSite,replay:scripted-seed127,3000,2,5a6eb86,2026-11-22,seed 1234
-0x00508420,CGameData::IsFreeCastleSite,save:slot 1.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 28 repeat)
-0x00508420,CGameData::IsFreeCastleSite,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 28 repeat)
-0x00508420,CGameData::IsFreeCastleSite,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 28 repeat)
+0x00508420,CGameData::IsFreeSmallTowerSite,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
+0x00508420,CGameData::IsFreeSmallTowerSite,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
+0x00508420,CGameData::IsFreeSmallTowerSite,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
+0x00508420,CGameData::IsFreeSmallTowerSite,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
+0x00508420,CGameData::IsFreeSmallTowerSite,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
+0x00508420,CGameData::IsFreeSmallTowerSite,replay:fun8-seed2024-input31,3000,133,5a6eb86,2026-11-22,seed 2024
+0x00508420,CGameData::IsFreeSmallTowerSite,replay:scripted-seed127,3000,2,5a6eb86,2026-11-22,seed 1234
+0x00508420,CGameData::IsFreeSmallTowerSite,save:slot 1.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 28 repeat)
+0x00508420,CGameData::IsFreeSmallTowerSite,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 28 repeat)
+0x00508420,CGameData::IsFreeSmallTowerSite,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 28 repeat)
 0x0050c9c0,CGameData::ClearPlayerListLengths,"random:384,0 seed 1234",2000,1,9adc76c,2026-11-22,
 0x0050c9c0,CGameData::ClearPlayerListLengths,"random:448,3 seed 1234",2000,1,5a6eb86,2026-11-22,
 0x0050c9c0,CGameData::ClearPlayerListLengths,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,1,5536f09,2026-11-10,
@@ -2548,16 +2548,16 @@ address,name,source,ticks,calls,commit,date,note
 0x0050ccb0,CGameData::EnterBuildingSlot,save:slot 1.sav,2000,0,5a6eb86,2026-11-22,
 0x0050ccb0,CGameData::EnterBuildingSlot,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,
 0x0050ccb0,CGameData::EnterBuildingSlot,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,
-0x0050cdb0,CGameData::FindNearbySettlerType29,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
-0x0050cdb0,CGameData::FindNearbySettlerType29,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
-0x0050cdb0,CGameData::FindNearbySettlerType29,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
-0x0050cdb0,CGameData::FindNearbySettlerType29,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
-0x0050cdb0,CGameData::FindNearbySettlerType29,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
-0x0050cdb0,CGameData::FindNearbySettlerType29,replay:fun8-seed2024-input31,3000,0,5a6eb86,2026-11-22,seed 2024
-0x0050cdb0,CGameData::FindNearbySettlerType29,replay:scripted-seed127,3000,0,5a6eb86,2026-11-22,seed 1234
-0x0050cdb0,CGameData::FindNearbySettlerType29,save:slot 1.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x0050cdb0,CGameData::FindNearbySettlerType29,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x0050cdb0,CGameData::FindNearbySettlerType29,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x0050cdb0,CGameData::FindNearbyOwnCatapult,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
+0x0050cdb0,CGameData::FindNearbyOwnCatapult,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
+0x0050cdb0,CGameData::FindNearbyOwnCatapult,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
+0x0050cdb0,CGameData::FindNearbyOwnCatapult,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
+0x0050cdb0,CGameData::FindNearbyOwnCatapult,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
+0x0050cdb0,CGameData::FindNearbyOwnCatapult,replay:fun8-seed2024-input31,3000,0,5a6eb86,2026-11-22,seed 2024
+0x0050cdb0,CGameData::FindNearbyOwnCatapult,replay:scripted-seed127,3000,0,5a6eb86,2026-11-22,seed 1234
+0x0050cdb0,CGameData::FindNearbyOwnCatapult,save:slot 1.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x0050cdb0,CGameData::FindNearbyOwnCatapult,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x0050cdb0,CGameData::FindNearbyOwnCatapult,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x0050ce80,CGameData::PlaceSettlerNear,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
 0x0050ce80,CGameData::PlaceSettlerNear,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
 0x0050ce80,CGameData::PlaceSettlerNear,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
@@ -3128,16 +3128,16 @@ address,name,source,ticks,calls,commit,date,note
 0x00519960,CGameData::IsClearOfType70Nearby,save:slot 1.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x00519960,CGameData::IsClearOfType70Nearby,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x00519960,CGameData::IsClearOfType70Nearby,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x005199e0,CGameData::IsFreeOfSettlerType29Nearby,"random:384,0 seed 1234",2000,119,9adc76c,2026-11-22,
-0x005199e0,CGameData::IsFreeOfSettlerType29Nearby,"random:448,3 seed 1234",2000,77,5a6eb86,2026-11-22,
-0x005199e0,CGameData::IsFreeOfSettlerType29Nearby,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
-0x005199e0,CGameData::IsFreeOfSettlerType29Nearby,"random:512,1 seed 1234",1500,249,21f1f01,2026-11-10,
-0x005199e0,CGameData::IsFreeOfSettlerType29Nearby,"random:640,2 seed 1234",1500,202,21f1f01,2026-11-10,
-0x005199e0,CGameData::IsFreeOfSettlerType29Nearby,replay:fun8-seed2024-input31,5000,6449,c561f41,2026-11-10,seed 2024
-0x005199e0,CGameData::IsFreeOfSettlerType29Nearby,replay:scripted-seed127,3000,607,5a6eb86,2026-11-22,seed 1234
-0x005199e0,CGameData::IsFreeOfSettlerType29Nearby,save:slot 1.sav,2000,531,5a6eb86,2026-11-22,
-0x005199e0,CGameData::IsFreeOfSettlerType29Nearby,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,
-0x005199e0,CGameData::IsFreeOfSettlerType29Nearby,save:slot 3.sav,2000,411,5a6eb86,2026-11-22,
+0x005199e0,CGameData::IsFreeOfCatapultsNearby,"random:384,0 seed 1234",2000,119,9adc76c,2026-11-22,
+0x005199e0,CGameData::IsFreeOfCatapultsNearby,"random:448,3 seed 1234",2000,77,5a6eb86,2026-11-22,
+0x005199e0,CGameData::IsFreeOfCatapultsNearby,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
+0x005199e0,CGameData::IsFreeOfCatapultsNearby,"random:512,1 seed 1234",1500,249,21f1f01,2026-11-10,
+0x005199e0,CGameData::IsFreeOfCatapultsNearby,"random:640,2 seed 1234",1500,202,21f1f01,2026-11-10,
+0x005199e0,CGameData::IsFreeOfCatapultsNearby,replay:fun8-seed2024-input31,5000,6449,c561f41,2026-11-10,seed 2024
+0x005199e0,CGameData::IsFreeOfCatapultsNearby,replay:scripted-seed127,3000,607,5a6eb86,2026-11-22,seed 1234
+0x005199e0,CGameData::IsFreeOfCatapultsNearby,save:slot 1.sav,2000,531,5a6eb86,2026-11-22,
+0x005199e0,CGameData::IsFreeOfCatapultsNearby,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,
+0x005199e0,CGameData::IsFreeOfCatapultsNearby,save:slot 3.sav,2000,411,5a6eb86,2026-11-22,
 0x00519a90,CGameData::RecalculateTerritory,"random:384,0 seed 1234",2000,2,9adc76c,2026-11-22,
 0x00519a90,CGameData::RecalculateTerritory,"random:448,3 seed 1234",2000,2,5a6eb86,2026-11-22,
 0x00519a90,CGameData::RecalculateTerritory,replay:fun8-seed2024-input31,3000,10,5a6eb86,2026-11-22,seed 2024
@@ -3353,13 +3353,13 @@ address,name,source,ticks,calls,commit,date,note
 0x0051b7f0,CGameData::WearPath,save:slot 1.sav,2000,205304,c561f41,2026-11-10,
 0x0051b7f0,CGameData::WearPath,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,
 0x0051b7f0,CGameData::WearPath,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,
-0x0051ba00,CGameData::SetTerrain16Patch,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
-0x0051ba00,CGameData::SetTerrain16Patch,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
-0x0051ba00,CGameData::SetTerrain16Patch,replay:fun8-seed2024-input31,5000,5,c561f41,2026-11-10,seed 2024
-0x0051ba00,CGameData::SetTerrain16Patch,replay:scripted-seed127,3000,0,5a6eb86,2026-11-22,seed 1234
-0x0051ba00,CGameData::SetTerrain16Patch,save:slot 1.sav,2000,738,5a6eb86,2026-11-22,
-0x0051ba00,CGameData::SetTerrain16Patch,save:slot 2.sav,2000,695,5a6eb86,2026-11-22,
-0x0051ba00,CGameData::SetTerrain16Patch,save:slot 3.sav,2000,266,5a6eb86,2026-11-22,
+0x0051ba00,CGameData::MakeFieldTile,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
+0x0051ba00,CGameData::MakeFieldTile,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
+0x0051ba00,CGameData::MakeFieldTile,replay:fun8-seed2024-input31,5000,5,c561f41,2026-11-10,seed 2024
+0x0051ba00,CGameData::MakeFieldTile,replay:scripted-seed127,3000,0,5a6eb86,2026-11-22,seed 1234
+0x0051ba00,CGameData::MakeFieldTile,save:slot 1.sav,2000,738,5a6eb86,2026-11-22,
+0x0051ba00,CGameData::MakeFieldTile,save:slot 2.sav,2000,695,5a6eb86,2026-11-22,
+0x0051ba00,CGameData::MakeFieldTile,save:slot 3.sav,2000,266,5a6eb86,2026-11-22,
 0x0051c040,CGameData::FindFreeId8192,"random:384,0 seed 1234",2000,0,9adc76c,2026-11-22,
 0x0051c040,CGameData::FindFreeId8192,"random:448,3 seed 1234",2000,0,5a6eb86,2026-11-22,
 0x0051c040,CGameData::FindFreeId8192,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
@@ -4754,56 +4754,56 @@ address,name,source,ticks,calls,commit,date,note
 0x005f3bf0,std::string::string_repeat,save:slot 1.sav,2000,1,5a6eb86,2026-11-22,
 0x005f3bf0,std::string::string_repeat,save:slot 2.sav,2000,1,5a6eb86,2026-11-22,
 0x005f3bf0,std::string::string_repeat,save:slot 3.sav,2000,1,5a6eb86,2026-11-22,
-0x005faaa0,GfxData::FrameOffset,"random:384,0 seed 1234",2000,33,9adc76c,2026-11-22,
-0x005faaa0,GfxData::FrameOffset,"random:448,3 seed 1234",2000,33,5a6eb86,2026-11-22,
-0x005faaa0,GfxData::FrameOffset,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,33,5536f09,2026-11-10,
-0x005faaa0,GfxData::FrameOffset,"random:512,1 seed 1234",1500,33,21f1f01,2026-11-10,
-0x005faaa0,GfxData::FrameOffset,"random:640,2 seed 1234",1500,33,21f1f01,2026-11-10,
-0x005faaa0,GfxData::FrameOffset,replay:fun8-seed2024-input31,3000,33,5a6eb86,2026-11-22,seed 2024
-0x005faaa0,GfxData::FrameOffset,replay:scripted-seed127,3000,33,5a6eb86,2026-11-22,seed 1234
-0x005faaa0,GfxData::FrameOffset,save:slot 1.sav,2000,13,5a6eb86,2026-11-22,
-0x005faaa0,GfxData::FrameOffset,save:slot 2.sav,2000,997,5a6eb86,2026-11-22,
-0x005faaa0,GfxData::FrameOffset,save:slot 3.sav,2000,13,5a6eb86,2026-11-22,
-0x005faaf0,GfxData::AnimationPointer,"random:384,0 seed 1234",1500,5484223,21f1f01,2026-11-10,
-0x005faaf0,GfxData::AnimationPointer,"random:448,3 seed 1234",1500,4887235,21f1f01,2026-11-10,
-0x005faaf0,GfxData::AnimationPointer,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,949123,5536f09,2026-11-10,
-0x005faaf0,GfxData::AnimationPointer,"random:512,1 seed 1234",1500,5390186,21f1f01,2026-11-10,
-0x005faaf0,GfxData::AnimationPointer,"random:640,2 seed 1234",1500,5723749,21f1f01,2026-11-10,
-0x005faaf0,GfxData::AnimationPointer,replay:fun8-seed2024-input31,5000,18656704,5536f09,2026-11-10,seed 2024
-0x005faaf0,GfxData::AnimationPointer,replay:scripted-seed127,3000,13611574,f3f4a64,2026-11-09,backfilled from the inventory notes
-0x005faaf0,GfxData::AnimationPointer,save:slot 1.sav,2000,5964283,eff5bd6,2026-11-09,
-0x005faaf0,GfxData::AnimationPointer,save:slot 2.sav,2000,155003,5a6eb86,2026-11-22,
-0x005faaf0,GfxData::AnimationPointer,save:slot 3.sav,2000,172535,5a6eb86,2026-11-22,
-0x005fac70,GfxData::FramePointer,"random:384,0 seed 1234",2000,4,9adc76c,2026-11-22,
-0x005fac70,GfxData::FramePointer,"random:448,3 seed 1234",2000,4,5a6eb86,2026-11-22,
-0x005fac70,GfxData::FramePointer,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,4,5536f09,2026-11-10,
-0x005fac70,GfxData::FramePointer,"random:512,1 seed 1234",1500,4,21f1f01,2026-11-10,
-0x005fac70,GfxData::FramePointer,"random:640,2 seed 1234",1500,4,21f1f01,2026-11-10,
-0x005fac70,GfxData::FramePointer,replay:fun8-seed2024-input31,3000,4,5a6eb86,2026-11-22,seed 2024
-0x005fac70,GfxData::FramePointer,replay:scripted-seed127,3000,4,5a6eb86,2026-11-22,seed 1234
-0x005fac70,GfxData::FramePointer,save:slot 1.sav,2000,4,5a6eb86,2026-11-22,
-0x005fac70,GfxData::FramePointer,save:slot 2.sav,2000,4,5a6eb86,2026-11-22,
-0x005fac70,GfxData::FramePointer,save:slot 3.sav,2000,4,5a6eb86,2026-11-22,
-0x005fad20,GfxData::SpriteWord,"random:384,0 seed 1234",1500,39,21f1f01,2026-11-10,
-0x005fad20,GfxData::SpriteWord,"random:448,3 seed 1234",1500,40,21f1f01,2026-11-10,
-0x005fad20,GfxData::SpriteWord,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
-0x005fad20,GfxData::SpriteWord,"random:512,1 seed 1234",1500,38,21f1f01,2026-11-10,
-0x005fad20,GfxData::SpriteWord,"random:640,2 seed 1234",1500,38,21f1f01,2026-11-10,
-0x005fad20,GfxData::SpriteWord,replay:fun8-seed2024-input31,5000,842,c561f41,2026-11-10,seed 2024
-0x005fad20,GfxData::SpriteWord,replay:scripted-seed127,3000,3359,ea9c79e,2026-11-09,backfilled from the inventory notes
-0x005fad20,GfxData::SpriteWord,save:slot 1.sav,2000,968,c561f41,2026-11-10,
-0x005fad20,GfxData::SpriteWord,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,
-0x005fad20,GfxData::SpriteWord,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,
-0x005fc540,GfxData::SetDword,"random:384,0 seed 1234",1500,390791746,21f1f01,2026-11-10,
-0x005fc540,GfxData::SetDword,"random:448,3 seed 1234",1500,388089370,21f1f01,2026-11-10,
-0x005fc540,GfxData::SetDword,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,75374106,5536f09,2026-11-10,
-0x005fc540,GfxData::SetDword,"random:512,1 seed 1234",1500,388867044,21f1f01,2026-11-10,
-0x005fc540,GfxData::SetDword,"random:640,2 seed 1234",1500,387740422,21f1f01,2026-11-10,
-0x005fc540,GfxData::SetDword,replay:fun8-seed2024-input31,5000,1300150570,5536f09,2026-11-10,seed 2024
-0x005fc540,GfxData::SetDword,replay:scripted-seed127,3000,774171824,ea9c79e,2026-11-09,backfilled from the inventory notes
-0x005fc540,GfxData::SetDword,save:slot 1.sav,2000,496875976,eff5bd6,2026-11-09,
-0x005fc540,GfxData::SetDword,save:slot 2.sav,2000,16201692,5a6eb86,2026-11-22,
-0x005fc540,GfxData::SetDword,save:slot 3.sav,2000,11771824,5a6eb86,2026-11-22,
+0x005faaa0,CGraphicsData::VariantFrameAddress,"random:384,0 seed 1234",2000,33,9adc76c,2026-11-22,
+0x005faaa0,CGraphicsData::VariantFrameAddress,"random:448,3 seed 1234",2000,33,5a6eb86,2026-11-22,
+0x005faaa0,CGraphicsData::VariantFrameAddress,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,33,5536f09,2026-11-10,
+0x005faaa0,CGraphicsData::VariantFrameAddress,"random:512,1 seed 1234",1500,33,21f1f01,2026-11-10,
+0x005faaa0,CGraphicsData::VariantFrameAddress,"random:640,2 seed 1234",1500,33,21f1f01,2026-11-10,
+0x005faaa0,CGraphicsData::VariantFrameAddress,replay:fun8-seed2024-input31,3000,33,5a6eb86,2026-11-22,seed 2024
+0x005faaa0,CGraphicsData::VariantFrameAddress,replay:scripted-seed127,3000,33,5a6eb86,2026-11-22,seed 1234
+0x005faaa0,CGraphicsData::VariantFrameAddress,save:slot 1.sav,2000,13,5a6eb86,2026-11-22,
+0x005faaa0,CGraphicsData::VariantFrameAddress,save:slot 2.sav,2000,997,5a6eb86,2026-11-22,
+0x005faaa0,CGraphicsData::VariantFrameAddress,save:slot 3.sav,2000,13,5a6eb86,2026-11-22,
+0x005faaf0,CGraphicsData::AnimationPointer,"random:384,0 seed 1234",1500,5484223,21f1f01,2026-11-10,
+0x005faaf0,CGraphicsData::AnimationPointer,"random:448,3 seed 1234",1500,4887235,21f1f01,2026-11-10,
+0x005faaf0,CGraphicsData::AnimationPointer,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,949123,5536f09,2026-11-10,
+0x005faaf0,CGraphicsData::AnimationPointer,"random:512,1 seed 1234",1500,5390186,21f1f01,2026-11-10,
+0x005faaf0,CGraphicsData::AnimationPointer,"random:640,2 seed 1234",1500,5723749,21f1f01,2026-11-10,
+0x005faaf0,CGraphicsData::AnimationPointer,replay:fun8-seed2024-input31,5000,18656704,5536f09,2026-11-10,seed 2024
+0x005faaf0,CGraphicsData::AnimationPointer,replay:scripted-seed127,3000,13611574,f3f4a64,2026-11-09,backfilled from the inventory notes
+0x005faaf0,CGraphicsData::AnimationPointer,save:slot 1.sav,2000,5964283,eff5bd6,2026-11-09,
+0x005faaf0,CGraphicsData::AnimationPointer,save:slot 2.sav,2000,155003,5a6eb86,2026-11-22,
+0x005faaf0,CGraphicsData::AnimationPointer,save:slot 3.sav,2000,172535,5a6eb86,2026-11-22,
+0x005fac70,CGraphicsData::FramePointer,"random:384,0 seed 1234",2000,4,9adc76c,2026-11-22,
+0x005fac70,CGraphicsData::FramePointer,"random:448,3 seed 1234",2000,4,5a6eb86,2026-11-22,
+0x005fac70,CGraphicsData::FramePointer,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,4,5536f09,2026-11-10,
+0x005fac70,CGraphicsData::FramePointer,"random:512,1 seed 1234",1500,4,21f1f01,2026-11-10,
+0x005fac70,CGraphicsData::FramePointer,"random:640,2 seed 1234",1500,4,21f1f01,2026-11-10,
+0x005fac70,CGraphicsData::FramePointer,replay:fun8-seed2024-input31,3000,4,5a6eb86,2026-11-22,seed 2024
+0x005fac70,CGraphicsData::FramePointer,replay:scripted-seed127,3000,4,5a6eb86,2026-11-22,seed 1234
+0x005fac70,CGraphicsData::FramePointer,save:slot 1.sav,2000,4,5a6eb86,2026-11-22,
+0x005fac70,CGraphicsData::FramePointer,save:slot 2.sav,2000,4,5a6eb86,2026-11-22,
+0x005fac70,CGraphicsData::FramePointer,save:slot 3.sav,2000,4,5a6eb86,2026-11-22,
+0x005fad20,CGraphicsData::FrameCount,"random:384,0 seed 1234",1500,39,21f1f01,2026-11-10,
+0x005fad20,CGraphicsData::FrameCount,"random:448,3 seed 1234",1500,40,21f1f01,2026-11-10,
+0x005fad20,CGraphicsData::FrameCount,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
+0x005fad20,CGraphicsData::FrameCount,"random:512,1 seed 1234",1500,38,21f1f01,2026-11-10,
+0x005fad20,CGraphicsData::FrameCount,"random:640,2 seed 1234",1500,38,21f1f01,2026-11-10,
+0x005fad20,CGraphicsData::FrameCount,replay:fun8-seed2024-input31,5000,842,c561f41,2026-11-10,seed 2024
+0x005fad20,CGraphicsData::FrameCount,replay:scripted-seed127,3000,3359,ea9c79e,2026-11-09,backfilled from the inventory notes
+0x005fad20,CGraphicsData::FrameCount,save:slot 1.sav,2000,968,c561f41,2026-11-10,
+0x005fad20,CGraphicsData::FrameCount,save:slot 2.sav,2000,0,5a6eb86,2026-11-22,
+0x005fad20,CGraphicsData::FrameCount,save:slot 3.sav,2000,0,5a6eb86,2026-11-22,
+0x005fc540,GfxDword::Construct,"random:384,0 seed 1234",1500,390791746,21f1f01,2026-11-10,
+0x005fc540,GfxDword::Construct,"random:448,3 seed 1234",1500,388089370,21f1f01,2026-11-10,
+0x005fc540,GfxDword::Construct,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,75374106,5536f09,2026-11-10,
+0x005fc540,GfxDword::Construct,"random:512,1 seed 1234",1500,388867044,21f1f01,2026-11-10,
+0x005fc540,GfxDword::Construct,"random:640,2 seed 1234",1500,387740422,21f1f01,2026-11-10,
+0x005fc540,GfxDword::Construct,replay:fun8-seed2024-input31,5000,1300150570,5536f09,2026-11-10,seed 2024
+0x005fc540,GfxDword::Construct,replay:scripted-seed127,3000,774171824,ea9c79e,2026-11-09,backfilled from the inventory notes
+0x005fc540,GfxDword::Construct,save:slot 1.sav,2000,496875976,eff5bd6,2026-11-09,
+0x005fc540,GfxDword::Construct,save:slot 2.sav,2000,16201692,5a6eb86,2026-11-22,
+0x005fc540,GfxDword::Construct,save:slot 3.sav,2000,11771824,5a6eb86,2026-11-22,
 0x005fdab0,Point16::Point16,"random:384,0 seed 1234",1500,60915584,21f1f01,2026-11-10,
 0x005fdab0,Point16::Point16,"random:448,3 seed 1234",1500,54166772,21f1f01,2026-11-10,
 0x005fdab0,Point16::Point16,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,10519364,5536f09,2026-11-10,

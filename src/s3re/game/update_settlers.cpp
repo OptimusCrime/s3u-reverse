@@ -191,7 +191,7 @@ void InstallStubs(test::CalleeStubs& stubs) {
     Stub<1, kClearSettlerJob>(stubs);
     Stub<2, kAddPileClaim>(stubs);
     Stub<2, kCountOtherPileClaims>(stubs);
-    Stub<2, kIsFreeOfSettlerType29Nearby>(stubs);
+    Stub<2, kIsFreeOfCatapultsNearby>(stubs);
     Stub<2, kUpdateShadeAround>(stubs);
     Stub<2, kRecalculateTerritory>(stubs);
     Stub<2, kUpdateBorderFlagsAround>(stubs);
@@ -200,7 +200,7 @@ void InstallStubs(test::CalleeStubs& stubs) {
     Stub<2, kBlockTile>(stubs);
     Stub<2, kUnblockTile>(stubs);
     Stub<2, kWearPath>(stubs);
-    Stub<2, kSetTerrain16Patch>(stubs);
+    Stub<2, kMakeFieldTile>(stubs);
     Stub<8, kSpawn544630>(stubs);
     Stub<8, kSpawn5449f0>(stubs);
     Stub<7, kSpawn544dc0>(stubs);
