@@ -64,6 +64,8 @@ add_library(s3re SHARED
     game/minimap.cpp
     game/spells.cpp
     game/spells_land.cpp
+    game/spell_units.cpp
+    game/spell_goods.cpp
     game/map_regions.cpp
     game/map_neighbourhood.cpp
     game/map_terrain.cpp

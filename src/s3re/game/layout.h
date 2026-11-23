@@ -203,6 +203,18 @@ static_assert(offsetof(Settler, path_cache) == 0x30);
 static_assert(offsetof(Settler, path_mode) == 0x2c);
 static_assert(offsetof(Settler, ship_walk) == 0x3c);
 
+// Settler::flags bits. UpdateSoldier (soldier.cpp) reads 0x01..0x20; the
+// soldier spells (SpellMarkSoldiers 0x549f40) set 0x01 (spell 10, on
+// enemies), 0x02 (12), 0x04 (17), 0x08 (16), 0x10 (25) and 0x80 (24, on
+// enemies) for a while.
+constexpr std::uint8_t kSettlerHalfDamage = 0x01;     // outside own land: damage halved
+constexpr std::uint8_t kSettlerDoubleDamage = 0x02;   // outside own land: damage doubled
+constexpr std::uint8_t kSettlerStrongHit = 0x04;      // melee: the stronger hit (and a shorter animation)
+constexpr std::uint8_t kSettlerThreeQuarters = 0x08;  // damage * 3/4
+constexpr std::uint8_t kSettlerSpotted = 0x10;        // a thief-like target (class 10..19) seen once; spell 25
+constexpr std::uint8_t kSettlerNoFight = 0x20;        // doesn't attack or approach; cleared when hit
+constexpr std::uint8_t kSettlerSpell24 = 0x80;        // set by spell 24, meaning unknown
+
 // Settler::path_mode: what Pathing::FindPath (0x4a1ee0) does next.
 constexpr std::uint8_t kPathPlanLine = 0x01;     // plan a straight leg to the target (0x4a3ab0)
 constexpr std::uint8_t kPathWalkLine = 0x02;     // walk towards the waypoint (0x4a22f0)

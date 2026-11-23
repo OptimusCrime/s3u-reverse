@@ -120,6 +120,14 @@ inline constexpr GameText kHelp{0x73104c};                 // "HILFE" ("help"), 
 inline constexpr GameText kGodlyEventsFile{0x731054};      // "E:\Siedler3\Volker\GodlyEvents.cpp"
 inline constexpr GameText kTreeCurseTreesSet{0x731078};    // "xxx GE: TreeCurse: trees set: %u"
 inline constexpr GameText kTreeCurseOffsets{0x73109c};     // "xxx GE: TreeCurse iEventOffset: %u"
+inline constexpr GameText kGodlyEventsAssert{0x7310e0};    // "bl\xf6dkopf" (Latin-1, "thickhead": the assert text for a race > 3)
+inline constexpr GameText kChangeSettler{0x731154};        // "GOD: EventChangeSettler %i %i %i %i"
+inline constexpr GameText kConvertGoodsMax{0x73112c};      // "xxx convert goods iEventMaxObjects: %u"
+inline constexpr GameText kGoodStolenAndAdded{0x7310ec};   // "xxx good stolen and new one added: %u"
+inline constexpr GameText kCannotStealGood{0x731114};      // "xxx cannot steal good"
+inline constexpr GameText kGoodsBanMax{0x7311ac};          // "xxx goods ban iEventMaxObjects: %u"
+inline constexpr GameText kCannotStealGoodBan{0x731188};   // "xxx cannot steal good (GoodsBan)"
+inline constexpr GameText kGoodsPorted{0x731178};          // "xxx ported: %u"
 // Random map generator
 inline constexpr GameText kCreatingWorld{0x72fef8};     // "creating world"
 inline constexpr GameText kErrorTop{0x72fee4};          // "Error top %u %u %u"

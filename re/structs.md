@@ -172,7 +172,7 @@ settler_records.cpp, settler_queries.cpp, building_tiles.cpp, counting.cpp.
 | 0x0E | u16 | job | current job ("todo"; jobs 1 and 0x37 are followed by 2 and 0x35 (IsSettlerJob01Or37 0x4FA6B0, JobAfter01Or37 0x4FAA40, probably walking); e.g. 3 work, 0x4C fetch for trade, 0x133 carry to pile, 0x145 ship, 0x147 to building, 0xAD soldier in building) | V (values), S (name) |
 | 0x10 | u16 | next | list link (area/player settler lists) | V |
 | 0x12 | u16 | prev | list link | V |
-| 0x14 | u8 | flags | bit 0x40: in a building slot (LeaveBuildingSlot) | V (0x40) |
+| 0x14 | u8 | flags | bit 0x40: in a building slot (LeaveBuildingSlot); soldier spells (SpellMarkSoldiers 0x549F40) set 0x01 (spell 10, enemies), 0x02 (12), 0x04 (17), 0x08 (16), 0x80 (24, enemies), 0x10 (25) for 375 ticks (188 for 24), removed by a timed event of type 3; soldier.cpp reads 1 half damage, 2 double, 4 strong hit, 8 three quarters | V (0x40, spell bits) |
 | 0x15 | u8 | slot / arrows / passengers (union) | `slot` low 3 bits: the settler's slot in its building; LeaveBuildingSlot clears the tile (A.x + slot + 1, A.y). `arrows`: a shooting soldier's arrows (WalkSettler, -1 per shot; race 3 sets 6). `passengers`: a ship's passenger count (+1 per boarding settler, capacity per race S3.EXE 0x659644; UpdateEnvironment frees the passengers of a sunk ship); type 0x17 with +0x15 != 0 walks one tick slower | V |
 | 0x16 | u8 | frame | animation frame while walking: WalkSettler adds +0x19 each step modulo 12 (type 0x29: 36), 0 at the target, 1 after a step if 0 | V |
 | 0x17 | u8 | second_unit / food / cargo_amounts01 (union) | job data: carrier jobs 0x133/0x134: 1 when it takes a second unit (SendNearestSettlerToPile; PileGoodsMoves and ResetSettlerToIdle release it); miner: meals left (MinerJobEnter sets 10, MinerJobFood adds 10/2 (+4 computer players) per meal and uses one per dig); ship 0x2B: cargo amounts of goods slots 0 / 1 in the low / high nibble (goods in the low bytes of +0x1C; UpdateEnvironment subtracts them from the player when the ship sinks) | V |
@@ -180,7 +180,7 @@ settler_records.cpp, settler_queries.cpp, building_tiles.cpp, counting.cpp.
 | 0x19 | u8 | step time | set to 1 with a new target if it was 0; WalkSettler: ticks per step = terrain speed (S3.EXE 0x658c1c) + type speed (0x6591a4), counter +0xC = it - 1; 0 while waiting | V |
 | 0x1A | u8 | good / walk_state (union) | goods type being carried / fetched; `walk_state` for jobs 0x35/0xB0 (WalkSettler): 1 look for a ship to board, 2 shoot from the post (path cache [2]/[3]), 3/4/5 for type 0x17 | V |
 | 0x1B | u8 | | no direct access found | |
-| 0x1C | u32 | saved animation | restored by RestoreSettlerAnimation (0x50E380); ship 0x2B: cargo goods of slots 0 / 1 in its low bytes | V |
+| 0x1C | u32 | saved animation | restored by RestoreSettlerAnimation (0x50E380); ship 0x2B: cargo goods of slots 0 / 1 in its low bytes; geologists (0x16) and pioneers (0x28): 0xFFFF = no work target (ReleaseSpellTarget 0x54B000 then also sets +0x20 = 0xFFFF and unclaims the tile) | V |
 | 0x20 | u16 | saved counter | restored with it (accessed in the folded form `(n + 0x4A97A) << 6`); SetSettlerSavedAnimation 0x50E320 stores the frame count - 1 here. For seven-tile units (CreateSevenTileUnit 0x50DD20) it is the next part settler instead (main settler -> part 1 -> ... -> part 6) | V |
 | 0x22 | u16 | building | the settler's building / destination record | V |
 | 0x24 | u16 | target x | SetSettlerTarget | V |
@@ -289,7 +289,7 @@ building_flags.cpp, settler_queries.cpp, dump (players 0 and 1).
 | 0x0DC | u16[36] | goods counters per goods type (Add/SubtractPlayerCounter, RecountPlayerGoods) | V |
 | 0x124 | u8 | map_revealed: 0 in ctor; SpellRevealMap (0x5495D0, spell 31) sets 1 for the local player; Step (0x53E530) clears it and the reveal global 0x7DFD84 once (tick - +0x128) * 64 / 1000 >= 15 (15 s) | V |
 | 0x128 | i32 | map_revealed_tick: the game tick of that spell | V |
-| 0x12C..0x134 | i32 | game-end check 0x511C50, UpdateSettlers; +0x12C / +0x130: soldiers / civilians died (UpdateSettlers jobs 0xAF GarrisonSoldierDies / 0x36 SettlerDies count +1, session 45) | G (V for +0x12C/+0x130 writes) |
+| 0x12C..0x134 | i32 | game-end check 0x511C50, UpdateSettlers; +0x12C / +0x130: soldiers / civilians died (UpdateSettlers jobs 0xAF GarrisonSoldierDies / 0x36 SettlerDies count +1, session 45); +0x134: in campaign mission 67, SpellConvertSettlers (0x54A370) adds (count + 1) & 0xFFF per converted Amazon | G (V for +0x12C/+0x130/+0x134 writes) |
 | 0x138..0x147 | | not accessed | |
 
 Overlap: the request counters +0x20..+0x28 share bytes with the list

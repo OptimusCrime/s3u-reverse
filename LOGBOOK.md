@@ -626,6 +626,46 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   check (no recorded game casts spells).
 - **Open:** the spell names of 0..4 are guesses from the terrain chains;
   a recording with spells would give whole-game evidence.
+### 2026-11-23 (46): spells package S2 (parallel worktree)
+
+- **Spells 10..29 of Volker\GodlyEvents.cpp replaced and verified** (11
+  functions, new files `game/spell_units.cpp` and `game/spell_goods.cpp`):
+  0x54AF60 IsSpellTarget, 0x54B000 ReleaseSpellTarget (helpers),
+  0x549F40 SpellMarkSoldiers (10, 12, 16, 17, 24, 25), 0x54A370
+  SpellConvertSettlers (11), 0x54A7C0 SpellTeleportEnemies (13), 0x54A540
+  SpellGatherUnits (14), 0x54A1E0 SpellDisarmBowmen (15), 0x549BD0
+  SpellConvertGoods (18..20, 27), 0x5499B0 SpellGodlyGoods (21..23, 26),
+  0x54AA40 SpellGoodsBan (28), 0x54ACD0 SpellGoodsSummon (29).
+  ExecuteSpell already calls every handler through its address, so it
+  needed no change.
+- **Evidence:** in-process differential tests (15, incl. 4 wrong-
+  implementation probes) on random worlds with settlers/piles/players;
+  StealGoodFromPile and DropGoodNear stubbed, the CRT rand seeded with
+  srand (0x61F7F5) before each run; map-effect padding (stack leftovers of
+  the make functions) cleared before comparing. Emulator specs for all 11
+  with full block coverage (exempt as dead: 0x54A00A, MarkSoldiers'
+  default case, never passed by ExecuteSpell; 0x549A5C, a signed fix-up of
+  Random() & 0xffff; 0x549ABE, an amount cap unreachable with the image's
+  table); rand (0x61F802) is a callee probe (TLS state), also returning
+  negative values to cover the signed-modulo fix-ups; a race > 3 runs the
+  assert's throw path in both. No whole-game evidence (no recording casts
+  spells).
+- **Findings:** 0x5499B0 has no x87 code (the TODO's note was wrong); its
+  and ConvertGoods' effect delays/scatter come from the C runtime's
+  rand(), not CGameData::Random, so they don't touch the simulation RNG.
+  **SpellConvertGoods hangs the original** when an area tile is off the
+  map (0x549CD2 skips the loop increment): casting it within ~8 tiles of
+  the edge loops forever; reproduced as is. Spells 13/28 take a settler as
+  ExecuteSpell's a4 and work around it; 14/29 move units/goods to it.
+  Spell 15 turns enemy bowmen (8, 30, 33) into type 40 (pioneers). Player
+  +0x134 is a campaign-67 counter of converted Amazons. Settler flag bits
+  moved to layout.h (`kSettler*`, soldier.cpp aliases them); new tables
+  (g_spellArea 0x65A1D8 per spell, g_spellMaxObjects 0x65A2E0, godly and
+  convert tables) and texts.
+- **Open:** meaning of settler flags 0x80 (spell 24) and 0x10 for
+  soldiers (spell 25); better names for Spell10..17/24/25 in enums.h (left
+  as placeholders, comments updated); the spells still need a recording
+  that casts them.
 
 ### 2026-11-23 (45): faster verification tooling
 

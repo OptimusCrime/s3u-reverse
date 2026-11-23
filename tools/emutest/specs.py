@@ -6884,6 +6884,144 @@ SPECS += [
 ]
 
 
+# --- package S2: spells on settlers and goods (spell_units.cpp, spell_goods.cpp)
+# Small maps (24..48) whose tiles are all pinned, settlers / piles 1..60,
+# players 0..7 (teams, races, mana; now and then a race > 3, which the goods
+# spells assert on: a throw, compared), a ring table of 1001 offsets
+# reaching 1 + n // 30 tiles, the map effect table (the padding of the make
+# functions' stack temporaries ignored, as for SpawnSpellEffects) and some
+# free timed-event records. StealGoodFromPile and DropGoodNear (verified;
+# they need consistent carriers and piles) are probes; a steal takes one
+# unit when it reports success. The C runtime's rand (0x61f802: the effect
+# delays and scatter of ConvertGoods/GodlyGoods) is a probe too: it keeps
+# its state in the thread data (TLS); it also returns negative values, which
+# cover the signed-modulo fix-ups.
+S2_SETTLERS = 60
+S2_PILES = 60
+S2_TYPES = [5, 8, 15, 30, 31, 32, 33, 34, 35, 22, 23, 36, 40, 40, 22, 0, 1, 0x2b]
+S2_JOBS = [0, 0x35, 0x37, 0x8e, 0xb0, 0xd4, 0xd5, 0x12e, 0x12f, 0x37, 0x35, 3, 0x10, 0xad]
+S2_GOODS = [11, 8, 2, 10, 28, 1, 3, 24, 0xff]
+S2_RING = 1001
+S2_PADDING = tuple(WORLD_EFFECTS + slot * 0x4c + p for slot in range(1, 200) for p in EFFECT_PADDING)
+
+
+def s2_world(rng, goods: bool):
+    size = rng.randint(24, 48)
+    fields = [(SIGHT_MAP, size, 4), (LOCAL_PLAYER, rng.randrange(4), 4)]
+    for n in range(S2_RING):
+        d = 1 + n // 30
+        fields += [(NEIGHBOUR_OFFSETS + n * 16, rng.randint(-d, d) & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + n * 16 + 4, rng.randint(-d, d) & 0xFFFFFFFF, 4)]
+    for x in range(size):
+        for y in range(size):
+            t = tile(x, y)
+            if goods:
+                fields += [(t + 0x2, 1 + rng.randrange(S2_PILES) if rng.random() < 0.5 else 0, 2),
+                           (t + 0xa, 0x20 if rng.random() < 0.2 else rng.randrange(0x20), 1),
+                           (t + 0x8, 0xff if rng.random() < 0.15 else rng.randrange(8), 1)]
+            else:
+                fields += [(t, 1 + rng.randrange(S2_SETTLERS) if rng.random() < 0.4 else 0, 2),
+                           (t + 0xa, rng.randrange(256), 1),
+                           (t + 0x10, 0 if rng.random() < 0.25 else 1 + rng.randrange(5), 1)]
+    for n in range(S2_SETTLERS + 1):
+        s = SETTLERS + n * SETTLER_BYTES
+        fields += [(s + 0x4, rng.randrange(size), 2), (s + 0x6, rng.randrange(size), 2)]
+        if not goods:
+            fields += [(s, rng.randrange(8), 1), (s + 0x1, rng.choice(S2_TYPES), 1), (s + 0x2, rng.randrange(5), 1),
+                       (s + 0xe, rng.choice(S2_JOBS), 2),
+                       (s + 0x10, 0 if rng.random() < 0.25 else rng.randrange(S2_SETTLERS + 1), 2),
+                       (s + 0x12, 0 if rng.random() < 0.25 else rng.randrange(S2_SETTLERS + 1), 2),
+                       (s + 0x1c, 0xFFFF if rng.random() < 0.3 else rng.getrandbits(32), 4),
+                       (s + 0x24, rng.randrange(size), 2), (s + 0x26, rng.randrange(size), 2)]
+    if goods:
+        for n in range(S2_PILES + 1):
+            p = PILES + n * PILE_BYTES
+            fields += [(p, rng.choice(S2_GOODS), 1), (p + 1, 0 if rng.random() < 0.15 else 1 + rng.randrange(8), 1),
+                       (p + 6, rng.randrange(size), 2), (p + 8, rng.randrange(size), 2)]
+    for player in range(8):
+        record = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+        race = rng.randrange(4) if not goods or rng.random() < 0.95 else rng.choice([4, 0xFFFFFFFF])
+        fields += [(record + 0x4, race, 4), (record + 0xc, rng.randrange(4), 4), (record + 0x8c, rng.randrange(100), 4)]
+        fields += [(record + 0x94 + slot * 4, rng.randrange(60), 4) for slot in range(9)]
+    for record in range(1, 12):
+        fields.append((0x36700 + record * 0x14, 0 if rng.random() < 0.4 else 1 + rng.randrange(0xFFFF), 2))
+    fields += [(WORLD_EFFECTS + offset, value, width) for offset, value, width in effect_table(0.0)(rng, None, None)]
+    return fields
+
+
+def s2_unit_presets(rng, pool, args):
+    return s2_world(rng, goods=False)
+
+
+def s2_goods_presets(rng, pool, args):
+    return s2_world(rng, goods=True)
+
+
+def s2_globals(rng, pool, args):
+    return [(0x007dfd48, rng.getrandbits(32), 4), (0x007dfdb0, rng.choice([0, 67, 67, 3]), 4)]
+
+
+def s2_steal(machine, ecx, args, h):
+    """A successful steal (AL != 0) takes one unit from the pile."""
+    if h & 0xFF:
+        p = PILES + (args[0] & 0xFFFF) * PILE_BYTES + 1
+        amount = int.from_bytes(machine.guest_read(WORLD_BASE + p, 1), "little")
+        _write(machine, p, amount - 1, 1)
+
+
+S2_GOODS_CALLEES = {
+    0x00505c20: (1, "thiscall", lambda h: h & 0xFFFFFF01, s2_steal),   # StealGoodFromPile
+    0x005046b0: (4, "thiscall", "probe"),                               # DropGoodNear
+    0x0061f802: (0, "cdecl", lambda h: (h & 0x7FFF) if h & 0x10000 else (h >> 32) & 0xFFFFFFFF),  # rand
+}
+
+
+def s2_coordinate(rng, pool):
+    return rng.randint(-6, 54) & 0xFFFFFFFF
+
+
+def s2_inner(rng, pool):
+    """ConvertGoods' centre: its 200 offsets (7 tiles) stay on a 24-tile map
+    (the original loops forever on an area tile off the map)."""
+    return rng.randint(8, 15)
+
+
+def s2_spec(name, address, args, goods, **kwargs):
+    return Spec(name, address, "thiscall", args, eax_mask=0,
+                presets=s2_goods_presets if goods else s2_unit_presets, globals=s2_globals,
+                ignore_bytes=S2_PADDING, callees=S2_GOODS_CALLEES if goods else None, max_cases=300, **kwargs)
+
+
+SPECS += [
+    Spec("CGameData_IsSpellTarget", 0x0054af60, "thiscall", [below(S2_SETTLERS + 1)], presets=s2_unit_presets,
+         max_cases=400),
+    Spec("CGameData_ReleaseSpellTarget", 0x0054b000, "thiscall", [below(S2_SETTLERS + 1)], presets=s2_unit_presets,
+         max_cases=600),
+    # Exempt: 0x54a00a (a spell outside 10, 12, 16, 17, 24, 25): dead, the
+    # only caller ExecuteSpell passes just these six.
+    s2_spec("CGameData_SpellMarkSoldiers", 0x00549f40,
+            [below(8), s2_coordinate, s2_coordinate, lambda rng, pool: rng.choice([10, 12, 16, 17, 24, 25])],
+            goods=False, exempt_blocks=(0x54a00a,)),
+    s2_spec("CGameData_SpellConvertSettlers", 0x0054a370, [below(8), s2_coordinate, s2_coordinate], goods=False),
+    s2_spec("CGameData_SpellTeleportEnemies", 0x0054a7c0,
+            [below(8), s2_coordinate, s2_coordinate, below(S2_SETTLERS + 1)], goods=False),
+    s2_spec("CGameData_SpellGatherUnits", 0x0054a540,
+            [below(8), s2_coordinate, s2_coordinate, below(S2_SETTLERS + 1)], goods=False),
+    s2_spec("CGameData_SpellDisarmBowmen", 0x0054a1e0, [below(8), s2_coordinate, s2_coordinate], goods=False),
+    s2_spec("CGameData_SpellConvertGoods", 0x00549bd0, [below(8), s2_inner, s2_inner], goods=True),
+    # Exempt: 0x549a5c (the signed-modulo fix-up of Random() & 0xffff):
+    # dead, the value is never negative; 0x549abe (an amount above 8 is
+    # capped): dead with the image's table, amount <= (max + 1) / 2 - 1 +
+    # max / 2 <= max and every max in 0x65a47c is at most 8.
+    s2_spec("CGameData_SpellGodlyGoods", 0x005499b0, [below(8), s2_coordinate, s2_coordinate], goods=True,
+            exempt_blocks=(0x549a5c, 0x549abe)),
+    s2_spec("CGameData_SpellGoodsBan", 0x0054aa40,
+            [below(8), s2_coordinate, s2_coordinate, below(S2_SETTLERS + 1)], goods=True),
+    s2_spec("CGameData_SpellGoodsSummon", 0x0054acd0,
+            [below(8), s2_coordinate, s2_coordinate, below(S2_SETTLERS + 1)], goods=True),
+]
+
+
 # WalkSettler 0x500860 (package A): one step of a walking settler. The
 # window around the settler (and around a soldier's post, and radius 15
 # for settlers looking for a ship) holds small settler/building numbers
