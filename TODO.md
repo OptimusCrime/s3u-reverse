@@ -202,22 +202,6 @@ cast within ~8 tiles of the map edge (kept).
   ends), but worth fixing for the standalone build. List: inventory notes
   containing "Known difference".
 
-## Worktrees
-
-- **Leftover agent worktrees under `.claude/worktrees/`** (session 45):
-  the ones the harness had locked during the session (agent-a06fb7fd..,
-  a089628b.., a090b8c4.., a32f40a0.., a7607aa3.. (wip/us-cov-metal),
-  a784dc0d.., aba56779.. (wip/us-cov-units), ac48a388.., ad07aa1b..,
-  ad939af6.. (wip/update-settlers), adbd2600.., add0005d.., ae866f8e..)
-  plus agent-a06bfddbf49ac7135 (old, not merged by hash; its content was
-  probably merged as "Merge typed-access conversion (group B)": check
-  `git diff origin/main...worktree-agent-a06bfddbf49ac7135` first). All
-  other work is on main. Remove each: FIRST `cmd /c rmdir
-  <wt>\Settlers3Ultimate` (only if it is a junction), then `git worktree
-  unlock <wt>` if needed, then `git worktree remove <wt>` WITHOUT
-  --force; then delete its branch (and the merged wip/* branches). Also
-  stale local branches `worktree-agent-*` without a worktree.
-
 ## Typed access leftovers
 
 - **Class layouts left after struct pass S2 (session 45).** The object
