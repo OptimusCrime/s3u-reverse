@@ -604,6 +604,50 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-23 (47): readability: map_effects, pathing, logic_helpers, player_queries (parallel worktree)
+
+Converted to `docs/coding_style.md`, behaviour unchanged:
+- **pathing.cpp:** every helper result, phase and limit named (file-local:
+  `kStepBlocked`, `kTargetNear`, `kStepRandom`, StepOut/CompareEdges/
+  TraceLine/FollowRightWall results incl. the walkers' states 0x80..0x82,
+  `kPhase*` (decimal, hex in the comment), the assertion line numbers in
+  decimal, `kQuarterTurn`/`kFullTurn` of Angle, 16.16 constants);
+  `path_mode`'s top two bits are a retry counter (`kPathRetries`, `kPathRestart`
+  = 0xc1, `SwitchPathMode`); FindPath's wait bits use `kPathWait`/
+  `kPathSwap`/`PathDirection` of pathing.h; direction wrap via
+  `kDirectionCount`; comments per block.
+- **map_effects.cpp:** -1/0xff defaults (`kUnset32/8`, `kKeepLink`), the
+  256-pixel block grid (`kBlockPixels`, `BlocksFor`, tile pixel sizes),
+  spawn arguments in decimal with the record field they fill (the old
+  comments called the duration a "type"), the burst table as a struct.
+- **logic_helpers.cpp:** WearPath's terrain values named (grass, the three
+  grass variants, worn path), QueueMarkedTileWithRoom's "class 0x2_" is
+  the mountain class (`kTerrainClassMountain`), race stride `kRaces`.
+- **player_queries.cpp:** `BuildingTypeAllowedForRace` with `Race` names
+  (type numbers stay numbers, TODO), `kNoPlayer`, the land survey's
+  terrain/object/resource constants and `SurveyWeight`.
+- **Pile kinds unified:** building_crush, building_done (PileAt takes a
+  `PileKind`), building_sites, settler_idle, settler_queries, territory,
+  update_economy use `PileKind`/`KindOf`; kind 0xff, called "free-standing"
+  / "plain" in UpdateEconomy and FetchGoodsToTradeBuilding, is the output
+  pile (re/enums.md).
+- **Miner job aliases dropped** (`SettlerJob::Job85`..`Job224`):
+  settler_jobs_metal.cpp, their only user, uses the Miner* names.
+- Evidence: Release s3re.dll disassembly per function before/after
+  (addresses normalized to map symbols, jump tables cut): of the
+  replacements only BuildingTypeAllowedForRace (case order),
+  LogPlayerLandResources (jump table labels), Spawn_544f80 (table name),
+  CompareEdges (`<= 3` -> `< 4`), FollowEdge (a jump target) and TryStep
+  (operand order of an add) changed; the rest of the diffs are tests
+  (__LINE__) and helper symbols; the pile/alias step changed no
+  replacement. Emulator `--changed --require-coverage --jobs 4` (204 specs,
+  most selected by earlier unrecorded code): 0 mismatches; FollowRightWall
+  `--full` 116/116 blocks; UpdateSoldier, UpdateSettlers, CheckGameEnd
+  hit the budget (not touched here). In-process tests of the converted
+  files: a `--test` run whose filter matched all 561 tests passed (before
+  the last pile-kind step, whose files then select no spec in `--changed`
+  and pass their 8 tests). `inventory.py check` 0 errors.
+
 ### 2026-11-23 (46): round end (spells, game-end check, ExecuteCommands callees, renames)
 
 - Five parallel agents (entries below): spells S1 (spells 0..4, 30;

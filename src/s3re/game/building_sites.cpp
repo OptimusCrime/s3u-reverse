@@ -162,8 +162,6 @@ constexpr std::uint8_t kResourceGold = 0x30;
 constexpr std::uint8_t kResourceGems = 0x40;
 constexpr std::uint8_t kResourceSulfur = 0x50;
 
-// Pile kind of the site's two empty construction piles (CreatePile's last argument).
-constexpr std::uint8_t kPileInput = 0xfd;
 // The pending event a new site queues (QueuePendingEvent(2, building, 0)).
 constexpr std::uint32_t kEventSitePlaced = 2;
 
@@ -497,9 +495,9 @@ std::uint32_t __fastcall CGameData_AddBuildingSite(CGameData* world, void* /*edx
 
     // Empty construction piles left and right of the door.
     b.piles[0] = static_cast<std::uint16_t>(
-        CGameData_CreatePile(world, nullptr, doorX - 1u, doorY, Value(Good::Board), 0, kPileInput));
+        CGameData_CreatePile(world, nullptr, doorX - 1u, doorY, Value(Good::Board), 0, Value(PileKind::Order)));
     b.piles[1] = static_cast<std::uint16_t>(
-        CGameData_CreatePile(world, nullptr, doorX + 1u, doorY, Value(Good::Stone), 0, kPileInput));
+        CGameData_CreatePile(world, nullptr, doorX + 1u, doorY, Value(Good::Stone), 0, Value(PileKind::Order)));
 
     // Work centre: words +0x0e (x) and +0x14 (y) of a construction site.
     if (IsType(type, {B::Storehouse})) {

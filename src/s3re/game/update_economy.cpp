@@ -150,7 +150,6 @@ constexpr std::uint32_t kConsumerSiteStones = 16;
 constexpr std::uint32_t kPileCapacity = 8;
 constexpr std::uint32_t kUnitsWorthACarrier = 5;
 
-constexpr std::uint8_t kPileFreeStanding = 0xff;   // Pile::art of a pile on open ground
 constexpr std::uint8_t kSettlerFlagSurplus = 0x80;  // Settler::flags: a surplus carrier (not sent)
 constexpr std::uint8_t kNoExtraTilesYet = 0xff;     // BuildingWorkshopBytes::extra_tiles
 constexpr std::uint8_t kExtraTilesTaken = 0xfe;
@@ -1165,7 +1164,7 @@ std::uint32_t BestSource(CGameData* world, const Area& area, std::uint32_t good,
             continue;
         }
         std::uint32_t d = Distance(world, b.x, b.y, pile.x, pile.y);
-        if (pile.art != kPileFreeStanding) {
+        if (KindOf(pile) != PileKind::Output) {  // output piles: by distance only
             d = 2 * (d + 5 * std::uint32_t{pile.amount}) - 10 * (std::uint32_t{pile.leaving} + 1);
         }
         if (d < nearest) {

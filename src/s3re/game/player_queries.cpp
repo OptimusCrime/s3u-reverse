@@ -7,10 +7,12 @@
 // BuildingTypeAllowedForRace (0x004ffd60): (race, type) -> AL. Callers pass
 //   byte +0x4 of the local player's record (world+0x2d2d4 is the local
 //   player; probably the race) and a type from static UI tables (0x658d1c,
-//   0x65a117; probably building types of the build menu). Rules: type 0x15
-//   only for race 0; 0x19 for races 2 and 3; 0x1b, 0x1e and 0x21 for race 2;
-//   0x1c for races 1 and 3; 0x1d for race 1; 0x22 and 0x23 for race 3; all
-//   other types for everybody. Race is the low byte of the first argument,
+//   0x65a117; probably building types of the build menu, but not in the
+//   numbering of enums.h' BuildingType). Rules: type 21 (0x15) only for
+//   Romans; 25 (0x19) for Asians and Amazons; 27, 30 and 33 (0x1b, 0x1e,
+//   0x21) for Asians; 28 (0x1c) for Egyptians and Amazons; 29 (0x1d) for
+//   Egyptians; 34 and 35 (0x22, 0x23) for Amazons; all other types for
+//   everybody. Race is the low byte of the first argument,
 //   the type a full int32. ECX is not used (callers load the world into it).
 //   The original only sets AL (the rest of EAX is the caller's); every
 //   caller only tests AL. ret 8.
@@ -21,7 +23,7 @@
 //   the player record), skipping tiles off the map (unsigned compare with
 //   the map size), and sums with a weight of 4 for entries below 3,500, 3
 //   below 8,000, 2 below 13,500, else 1: land (high nibble of terrain byte
-//   +0x6 is 1), swamp (terrain 0x15), stream (high nibble 6), trees (object
+//   +0x6 is 1), swamp (terrain 21, 0x15), stream (high nibble 6), trees (object
 //   byte +0x7 in 0x44..0x53), stone (object 0x73..0x7e, weight * (0x7f -
 //   object)), and the resource byte +0x11 (high nibble: 0 fish, 1 coal, 2
 //   iron, 3 gold, 4 gems, 5 sulfur; low nibble = amount, times the weight).
@@ -29,6 +31,7 @@
 //   thiscall, ret 4.
 
 #include "game/debug_log.h"
+#include "game/enums.h"
 #include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
@@ -45,6 +48,7 @@ namespace {
 using layout::Player;
 
 constexpr std::uint32_t kPlayers = layout::kPlayers;
+constexpr std::uint32_t kNoPlayer = 0xffffffffu;  // FindPlayerByField0C: -1
 
 }  // namespace
 
@@ -63,30 +67,62 @@ std::uint32_t __fastcall CGameData_FindPlayerByField0C(CGameData* world, void*,
             return player;
         }
     }
-    return 0xffffffffu;
+    return kNoPlayer;
 }
 
 // Purpose: Some buildings exist only for certain races (Romans, Egyptians, Asians, Amazons). This tells the
 // build menu whether a building type is available to a race.
+// The type numbers are not those of BuildingType (TODO.md), so they stay
+// numbers here; only the low byte of `race` counts.
 std::uint32_t __stdcall BuildingTypeAllowedForRace(std::uint32_t race, std::uint32_t type) {
-    const auto r = static_cast<std::uint8_t>(race);
+    const auto r = static_cast<Race>(static_cast<std::uint8_t>(race));
     switch (type) {
-    case 0x15: return r == 0;
-    case 0x19: return r == 2 || r == 3;
-    case 0x1b: return r == 2;
-    case 0x1c: return r == 1 || r == 3;
-    case 0x1d: return r == 1;
-    case 0x1e: return r == 2;
-    case 0x21: return r == 2;
-    case 0x22:
-    case 0x23: return r == 3;
+    case 21: return r == Race::Roman;
+    case 25: return r == Race::Asian || r == Race::Amazon;
+    case 27: return r == Race::Asian;
+    case 28: return r == Race::Egyptian || r == Race::Amazon;
+    case 29: return r == Race::Egyptian;
+    case 30: return r == Race::Asian;
+    case 33: return r == Race::Asian;
+    case 34:
+    case 35: return r == Race::Amazon;
     default: return 1;
     }
 }
 
 namespace {
 
-constexpr std::uint32_t kSurveyEntries = 0x4e1b;  // entries of world->offsets
+constexpr std::uint32_t kSurveyEntries = 19995;  // 0x4e1b entries of world->offsets
+
+// The weight of a tile falls with its index in the offset table (which
+// spirals outwards from the start position): 4 for the first 3,500, then
+// 3, 2 and 1.
+std::uint32_t SurveyWeight(std::uint32_t index) {
+    return index < 3500 ? 4 : index < 8000 ? 3 : index < 13500 ? 2 : 1;
+}
+
+// Tile::terrain: the class is the high nibble.
+constexpr std::uint8_t kTerrainClassGrass = 0x10;   // counted as land
+constexpr std::uint8_t kTerrainSwamp = 21;          // 0x15
+constexpr std::uint8_t kTerrainClassStream = 0x60;  // the waterworker draws water here
+
+// Tile::object: trees 68..83 (0x44..0x53); stone 115..126 (0x73..0x7e)
+// with 127 - object units left.
+constexpr std::uint32_t kObjectFirstTree = 0x44;
+constexpr std::uint32_t kObjectLastTree = 0x53;
+constexpr std::uint32_t kObjectFirstStone = 0x73;
+constexpr std::uint32_t kObjectLastStone = 0x7e;
+constexpr std::uint32_t kStoneEnd = 0x7f;
+
+// Tile::resources: the high nibble is the kind, the low nibble the amount.
+constexpr std::uint32_t kResourceKindMask = 0xf0;
+constexpr std::uint32_t kResourceAmountMask = 0x0f;
+constexpr std::uint32_t kResourceFish = 0x00;
+constexpr std::uint32_t kResourceCoal = 0x10;
+constexpr std::uint32_t kResourceIron = 0x20;
+constexpr std::uint32_t kResourceGold = 0x30;
+constexpr std::uint32_t kResourceGems = 0x40;
+constexpr std::uint32_t kResourceSulfur = 0x50;
 
 }  // namespace
 
@@ -101,7 +137,7 @@ std::uint32_t __fastcall CGameData_LogPlayerLandResources(CGameData* world, void
     std::uint32_t land = 0, trees = 0, stone = 0, coal = 0, iron = 0, gold = 0, sulfur = 0, gems = 0, fish = 0,
                   swamp = 0, stream = 0;
     for (std::uint32_t i = 0; i < kSurveyEntries; ++i) {
-        const std::uint32_t weight = i < 3500 ? 4 : i < 8000 ? 3 : i < 13500 ? 2 : 1;
+        const std::uint32_t weight = SurveyWeight(i);
         const std::uint32_t x = static_cast<std::uint32_t>(world->offsets[i].dx) + px;
         const std::uint32_t y = static_cast<std::uint32_t>(world->offsets[i].dy) + py;
         const std::uint32_t size = world->map_size;  // re-read every entry, like the original
@@ -110,34 +146,35 @@ std::uint32_t __fastcall CGameData_LogPlayerLandResources(CGameData* world, void
         }
         const layout::Tile& tile = world->tiles[x][y];
         const std::uint32_t terrain = tile.terrain;
-        if ((terrain & 0xf0) == 0x10) {
+        if ((terrain & kTerrainClassMask) == kTerrainClassGrass) {
             land += weight;
         }
-        if (terrain == 0x15) {
+        if (terrain == kTerrainSwamp) {
             swamp += weight;
         }
-        if ((terrain & 0xf0) == 0x60) {
+        if ((terrain & kTerrainClassMask) == kTerrainClassStream) {
             stream += weight;
         }
         const std::uint32_t object = tile.object;
-        if (object >= 0x44 && object <= 0x53) {
+        if (object >= kObjectFirstTree && object <= kObjectLastTree) {
             trees += weight;
         }
-        if (object >= 0x73 && object <= 0x7e) {
-            stone += (0x7f - object) * weight;
+        if (object >= kObjectFirstStone && object <= kObjectLastStone) {
+            stone += (kStoneEnd - object) * weight;
         }
         const std::uint32_t resource = tile.resources;
-        const std::uint32_t amount = (resource & 0xf) * weight;
-        switch (resource & 0xf0) {
-        case 0x00: fish += amount; break;
-        case 0x10: coal += amount; break;
-        case 0x20: iron += amount; break;
-        case 0x30: gold += amount; break;
-        case 0x40: gems += amount; break;
-        case 0x50: sulfur += amount; break;
+        const std::uint32_t amount = (resource & kResourceAmountMask) * weight;
+        switch (resource & kResourceKindMask) {
+        case kResourceFish: fish += amount; break;
+        case kResourceCoal: coal += amount; break;
+        case kResourceIron: iron += amount; break;
+        case kResourceGold: gold += amount; break;
+        case kResourceGems: gems += amount; break;
+        case kResourceSulfur: sulfur += amount; break;
         default: break;
         }
     }
+    // Each sum is logged halved.
     GameDebugLog(texts::kPlayerLand, player, land >> 1, trees >> 1, stone >> 1, coal >> 1, iron >> 1, gold >> 1,
                  sulfur >> 1, gems >> 1, fish >> 1, swamp >> 1, stream >> 1);
     return land >> 1;
@@ -192,7 +229,7 @@ std::uint32_t __fastcall WrongFindPlayerByField0C(CGameData* world, void*, std::
             return player;
         }
     }
-    return 0xffffffffu;
+    return kNoPlayer;
 }
 
 }  // namespace

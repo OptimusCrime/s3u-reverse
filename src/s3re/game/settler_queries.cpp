@@ -495,8 +495,7 @@ namespace {
 
 constexpr std::uint32_t kBuildingPiles = 6;
 constexpr std::uint8_t kFreePile = Value(Good::Empty);  // a ring pile without a goods type yet
-// A pile of kind 0xff is scored by distance only (probably a free-standing pile).
-constexpr std::uint8_t kPileKindPlain = 0xff;
+// A building's output pile (PileKind::Output) is scored by distance only.
 // Score of other piles: 5 per unit more than (leaving + 1), plus the distance.
 constexpr std::uint32_t kScorePerUnit = 5;
 
@@ -521,7 +520,7 @@ void __fastcall CGameData_FetchGoodsToTradeBuilding(CGameData* world, void*, std
             continue;
         }
         std::uint32_t score = TileDistance(record.x, record.y, p.x, p.y);
-        if (p.art != kPileKindPlain) {
+        if (KindOf(p) != PileKind::Output) {
             // The original's 32-bit arithmetic: 0x7ffffffb * 2 = -10 (mod 2^32), so this is
             // 2 * (distance + 5 * (amount - leaving - 1)), compared unsigned.
             score = (amount * kScorePerUnit + score + (leaving + 1) * 0x7ffffffbu) * 2;
