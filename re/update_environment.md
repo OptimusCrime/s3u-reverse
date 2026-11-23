@@ -66,7 +66,7 @@ Ghidra pseudocode.
 | 0x4FB520 | 95 | UpdateMinimapSlice | interleaved 8x8 order | batch 3 |
 | 0x4FB720 | 618 | MinimapPixel | UI globals 0x730F58/5C/60, pixel format 0x7DFBA0.. | batch 3 |
 | 0x5480B0 | 262 | ExecuteSpell (dispatcher) | 18 spell handlers | batch 4 |
-| 0x548340..0x54B000 | ~3,000 | spell handlers + helpers | Volker\GodlyEvents.cpp: 548340 (spells 0..3: 548380 area effect, needs 548760/548A10/548BB0/548D50), 548FB0, 549530 (reveal), 549650, 549700, 5497F0, 5498A0, 549F40, 54A370, 54A7C0, 54A540, 54A1E0 (+54AF60, 54B000), 5495D0 (EventReveal), 5492A0 (EventTreeCut), 54AA40 (EventGoodsB), 54ACD0 (EventGoodsS), 549BD0 (EventConvert), 5499B0 (EventGodlyG.., x87) | |
+| 0x548340..0x54B000 | ~3,000 | spell handlers + helpers | Volker\GodlyEvents.cpp: 548340 (spells 0..3: 548380 area effect, needs 548760/548A10/548BB0/548D50), 548FB0, 549530 (reveal), 549650, 549700, 5497F0, 5498A0, 549F40, 54A370, 54A7C0, 54A540, 54A1E0 (+54AF60, 54B000), 5495D0 (EventReveal), 5492A0 (EventTreeCut), 54AA40 (EventGoodsB), 54ACD0 (EventGoodsS), 549BD0 (EventConvert), 5499B0 (EventGodlyG.., x87) | S2 (session 46): spells 10..29 and helpers 54AF60/54B000 |
 
 UpdateEnvironment itself: batch 2 (verified, whole-game identical).
 
@@ -76,6 +76,20 @@ Batch 4 (spells.cpp): spells 5 SpellRevealSpot 0x549530, 6 SpellBurnTrees
 0x549650, 7 SpellAddFish 0x549700, 8 SpellHalveResources 0x5497F0, 9
 SpellGrowTrees 0x5498A0, 31 SpellRevealMap 0x5495D0. The other handlers
 are listed in TODO.md ("Spells left of UpdateEnvironment's call tree").
+
+Package S2 (session 46, spell_units.cpp / spell_goods.cpp): 0x54AF60
+IsSpellTarget, 0x54B000 ReleaseSpellTarget, 0x549F40 SpellMarkSoldiers
+(10, 12, 16, 17, 24, 25: settler flag bits 1/2/8/4/0x80/0x10 for 375 ticks,
+188 for 24, via timed event type 3), 0x54A370 SpellConvertSettlers (11),
+0x54A7C0 SpellTeleportEnemies (13), 0x54A540 SpellGatherUnits (14),
+0x54A1E0 SpellDisarmBowmen (15: bowmen become pioneers), 0x549BD0
+SpellConvertGoods (18..20, 27), 0x5499B0 SpellGodlyGoods (21..23, 26),
+0x54AA40 SpellGoodsBan (28), 0x54ACD0 SpellGoodsSummon (29). Findings:
+0x5499B0 has no x87 code (its effects use the C runtime's rand(),
+0x61F802, for delays and scatter, as does 0x549BD0); 0x549BD0 never
+advances its loop on an area tile off the map, so it hangs when cast near
+the map edge (reproduced); spells 13/28 work around a settler given as the
+fourth argument (ExecuteSpell's a4), spells 14/29 move to that settler.
 
 Spells are only cast by players and computer players; none of the
 recorded games or savegames casts one (all spell call counts 0, session

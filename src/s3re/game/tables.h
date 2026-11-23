@@ -131,6 +131,25 @@ inline constexpr GameGlobal<const double> g_flightFactor2{0x65a1c8};
 inline constexpr GameGlobal<const double> g_flightFactor0{0x65a1d0};
 // Per spell area index its size.
 inline constexpr GameGlobal<const std::int32_t[]> g_spellAreaSizes{0x65a1f0};
+// Per spell (0..31) the number of ring offsets its area covers (200, 300,
+// 999, ...); g_spellAreaSizes above is the same table from spell 6 on.
+inline constexpr GameGlobal<const std::int32_t[32]> g_spellArea{0x65a1d8};
+// Per spell (0..31) the most objects (settlers, goods) it affects
+// ("iEventMaxObjects" in the DebugLog texts).
+inline constexpr GameGlobal<const std::int32_t[32]> g_spellMaxObjects{0x65a2e0};
+// Per soldier spell (SpellMarkSoldiers 0x549f40, index 0..5 for spells 10,
+// 12, 17, 16, 24, 25) the ticks until its settler flag is taken back
+// (375, 375, 375, 375, 188, 375).
+inline constexpr GameGlobal<const std::int32_t[6]> g_soldierSpellTicks{0x65a364};
+// SpellGodlyGoods (0x5499b0): per race 8 goods (race * 8 + k), their
+// cumulative chances out of 65536 and their largest amounts.
+inline constexpr GameGlobal<const std::int32_t[32]> g_godlyGoods{0x65a37c};
+inline constexpr GameGlobal<const std::int32_t[32]> g_godlyGoodsChance{0x65a3fc};
+inline constexpr GameGlobal<const std::int32_t[32]> g_godlyGoodsMaxAmount{0x65a47c};
+// SpellConvertGoods (0x549bd0): per race the good taken (iron, fish, stone,
+// gold) and the good dropped instead (gold, meat, iron, stone).
+inline constexpr GameGlobal<const std::int32_t[4]> g_convertGoodsFrom{0x65a4fc};
+inline constexpr GameGlobal<const std::int32_t[4]> g_convertGoodsTo{0x65a50c};
 // Per notification type.
 inline constexpr GameGlobal<const NotificationKind[]> g_notificationKinds{0x659dd0};
 

@@ -32,7 +32,15 @@ address,name,type,status,notes
 0x0065a1c0,g_flightFactor05,const double,classified,Flight-time factors of projectiles (sqrt(distance) * factor). Declared in src/s3re/game/tables.h; used by map_effect_spawns.cpp.
 0x0065a1c8,g_flightFactor2,const double,classified,Flight-time factors of projectiles (sqrt(distance) * factor). Declared in src/s3re/game/tables.h; used by map_effect_spawns.cpp.
 0x0065a1d0,g_flightFactor0,const double,classified,Flight-time factors of projectiles (sqrt(distance) * factor). Declared in src/s3re/game/tables.h; used by map_effect_spawns.cpp.
+0x0065a1d8,g_spellArea,const int32_t[32],classified,"Per spell (0..31) the number of ring offsets its area covers (200, 300, 999, ...); g_spellAreaSizes (0x65a1f0) is the same table from spell 6 on. Declared in src/s3re/game/tables.h; used by spell_units.cpp, spell_goods.cpp."
 0x0065a1f0,g_spellAreaSizes,const int32_t[],classified,Per spell area index its size. Declared in src/s3re/game/tables.h; used by spells.cpp.
+0x0065a2e0,g_spellMaxObjects,const int32_t[32],classified,"Per spell the most settlers or goods units it affects (""iEventMaxObjects""). Declared in src/s3re/game/tables.h; used by spell_units.cpp, spell_goods.cpp."
+0x0065a364,g_soldierSpellTicks,const int32_t[6],classified,"Per soldier spell (SpellMarkSoldiers, index 0..5 for spells 10, 12, 17, 16, 24, 25) the ticks until its settler flag is removed (375, 188 for spell 24). Declared in src/s3re/game/tables.h; used by spell_units.cpp."
+0x0065a37c,g_godlyGoods,const int32_t[32],classified,SpellGodlyGoods: per race 8 goods (race * 8 + k). Declared in src/s3re/game/tables.h; used by spell_goods.cpp.
+0x0065a3fc,g_godlyGoodsChance,const int32_t[32],classified,SpellGodlyGoods: per race the 8 cumulative chances out of 65536 (the last is 65536). Declared in src/s3re/game/tables.h; used by spell_goods.cpp.
+0x0065a47c,g_godlyGoodsMaxAmount,const int32_t[32],classified,SpellGodlyGoods: per race the largest amount per good (3..8). Declared in src/s3re/game/tables.h; used by spell_goods.cpp.
+0x0065a4fc,g_convertGoodsFrom,const int32_t[4],classified,"SpellConvertGoods: per race the good taken (11 iron, 8 fish, 2 stone, 10 gold). Declared in src/s3re/game/tables.h; used by spell_goods.cpp."
+0x0065a50c,g_convertGoodsTo,const int32_t[4],classified,"SpellConvertGoods: per race the good dropped instead (10 gold, 24 meat, 11 iron, 2 stone). Declared in src/s3re/game/tables.h; used by spell_goods.cpp."
 0x0065c0b8,g_guidNull,const uint32_t[4],classified,GUID_NULL (16 zero bytes). Declared in src/s3re/game/tables.h; used by string_members.cpp.
 0x006970f0,g_versionNumber,uint32,identified,Game version x100 (logged as %i.%i by CConsoleThread::OnStart).
 0x006974a4,texts::kFullStop,char[],identified,"String ""."" Declared in src/s3re/game/texts.h; used by win32_errors.cpp."
@@ -141,7 +149,16 @@ address,name,type,status,notes
 0x00730fe0,texts::kExecuteGoodsBan,char[],identified,"String ""xxx about to execute EventGoodsBan"" Declared in src/s3re/game/texts.h; used by spells.cpp."
 0x00731004,texts::kExecuteTreeCurse,char[],identified,"String ""xxx about to execute EventTreeCurse"" Declared in src/s3re/game/texts.h; used by spells.cpp."
 0x00731028,texts::kExecuteRevealMap,char[],identified,"String ""xxx about to execute EventRevealMap"" Declared in src/s3re/game/texts.h; used by spells.cpp."
+0x00731054,texts::kGodlyEventsFile,char[],identified,"String ""E:\Siedler3\Volker\GodlyEvents.cpp"" (assert file name). Declared in src/s3re/game/texts.h; used by spell_goods.cpp."
 0x007310c0,texts::kRevealMapDone,char[],identified,"String ""xxx GE done: optionviewall SET"" Declared in src/s3re/game/texts.h; used by spells.cpp."
+0x007310e0,texts::kGodlyEventsAssert,char[],identified,"String ""bl\xf6dkopf"" (assert text for a race > 3). Declared in src/s3re/game/texts.h; used by spell_goods.cpp."
+0x007310ec,texts::kGoodStolenAndAdded,char[],identified,"String ""xxx good stolen and new one added: %u"" Declared in src/s3re/game/texts.h; used by spell_goods.cpp."
+0x00731114,texts::kCannotStealGood,char[],identified,"String ""xxx cannot steal good"" Declared in src/s3re/game/texts.h; used by spell_goods.cpp."
+0x0073112c,texts::kConvertGoodsMax,char[],identified,"String ""xxx convert goods iEventMaxObjects: %u"" Declared in src/s3re/game/texts.h; used by spell_goods.cpp."
+0x00731154,texts::kChangeSettler,char[],identified,"String ""GOD: EventChangeSettler %i %i %i %i"" Declared in src/s3re/game/texts.h; used by spell_units.cpp."
+0x00731178,texts::kGoodsPorted,char[],identified,"String ""xxx ported: %u"" Declared in src/s3re/game/texts.h; used by spell_goods.cpp."
+0x00731188,texts::kCannotStealGoodBan,char[],identified,"String ""xxx cannot steal good (GoodsBan)"" Declared in src/s3re/game/texts.h; used by spell_goods.cpp."
+0x007311ac,texts::kGoodsBanMax,char[],identified,"String ""xxx goods ban iEventMaxObjects: %u"" Declared in src/s3re/game/texts.h; used by spell_goods.cpp."
 0x007311d0,texts::kManaNeeded,char[],identified,"String ""xxx Godevent mana needed: %u at slot: %u"" Declared in src/s3re/game/texts.h; used by godly_events.cpp."
 0x00731278,texts::kTooManyColours,char[],identified,"String ""Error ! zu viele Farben"" Declared in src/s3re/game/texts.h; used by landscape_colours.cpp."
 0x00731488,g_aiPlayerSetups,ai::AiPlayerSetup[],classified,"The settings table g_aiPlayerSetup points into (0x180-byte entries). Declared in src/s3re/game/globals.h; used by ai_helpers.cpp, ai_layout.h."

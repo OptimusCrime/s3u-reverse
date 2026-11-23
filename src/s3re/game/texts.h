@@ -116,6 +116,15 @@ inline constexpr GameText kExecuteGoodsBan{0x730fe0};      // "xxx about to exec
 inline constexpr GameText kExecuteGoodsSummon{0x730fb8};   // "xxx about to execute EventGoodsSummon"
 inline constexpr GameText kExecuteTreeCurse{0x731004};     // "xxx about to execute EventTreeCurse"
 inline constexpr GameText kExecuteRevealMap{0x731028};     // "xxx about to execute EventRevealMap"
+inline constexpr GameText kGodlyEventsFile{0x731054};      // "E:\Siedler3\Volker\GodlyEvents.cpp"
+inline constexpr GameText kGodlyEventsAssert{0x7310e0};    // "bl\xf6dkopf" (Latin-1, "thickhead": the assert text for a race > 3)
+inline constexpr GameText kChangeSettler{0x731154};        // "GOD: EventChangeSettler %i %i %i %i"
+inline constexpr GameText kConvertGoodsMax{0x73112c};      // "xxx convert goods iEventMaxObjects: %u"
+inline constexpr GameText kGoodStolenAndAdded{0x7310ec};   // "xxx good stolen and new one added: %u"
+inline constexpr GameText kCannotStealGood{0x731114};      // "xxx cannot steal good"
+inline constexpr GameText kGoodsBanMax{0x7311ac};          // "xxx goods ban iEventMaxObjects: %u"
+inline constexpr GameText kCannotStealGoodBan{0x731188};   // "xxx cannot steal good (GoodsBan)"
+inline constexpr GameText kGoodsPorted{0x731178};          // "xxx ported: %u"
 // Random map generator
 inline constexpr GameText kCreatingWorld{0x72fef8};     // "creating world"
 inline constexpr GameText kErrorTop{0x72fee4};          // "Error top %u %u %u"

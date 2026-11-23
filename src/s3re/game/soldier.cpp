@@ -140,13 +140,13 @@ constexpr Job kJobSevenTilePart = Job::Job304;     // 0x130: a part of a seven-t
 constexpr Job kJobShielded = Job::Job309;          // 0x135: a donkey's job in which a hit does no damage
 constexpr Job kJobShieldHit = Job::Job310;         // 0x136: ... and the job it gets when hit
 
-// Settler::flags bits as UpdateSoldier uses them (meaning beyond that unknown).
-constexpr std::uint8_t kFlagHalfDamage = 0x01;      // outside own land: damage halved
-constexpr std::uint8_t kFlagDoubleDamage = 0x02;    // outside own land: damage doubled
-constexpr std::uint8_t kFlagStrongHit = 0x04;       // melee: the stronger hit (and a shorter animation)
-constexpr std::uint8_t kFlagThreeQuarters = 0x08;   // damage * 3/4
-constexpr std::uint8_t kFlagSpotted = 0x10;         // a thief-like target (class 10..19) seen once
-constexpr std::uint8_t kFlagNoFight = 0x20;         // doesn't attack or approach; cleared when hit
+// Settler::flags bits as UpdateSoldier uses them (layout.h).
+constexpr std::uint8_t kFlagHalfDamage = layout::kSettlerHalfDamage;
+constexpr std::uint8_t kFlagDoubleDamage = layout::kSettlerDoubleDamage;
+constexpr std::uint8_t kFlagStrongHit = layout::kSettlerStrongHit;
+constexpr std::uint8_t kFlagThreeQuarters = layout::kSettlerThreeQuarters;
+constexpr std::uint8_t kFlagSpotted = layout::kSettlerSpotted;
+constexpr std::uint8_t kFlagNoFight = layout::kSettlerNoFight;
 
 // Tile flag 0x02: probably "a settler is on its way to work here" (as in settler_idle.cpp).
 constexpr std::uint8_t kTileClaimed = layout::kTileFlag02;
