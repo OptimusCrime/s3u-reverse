@@ -10491,3 +10491,328 @@ def ec_interlocked_stubs(rng, pool, args):
 
 
 EC_GLOBALS_EXTRA.append(ec_interlocked_stubs)
+
+# -- computer players A2: T_ECONOMY_AGENT conditions (ai_economy_conditions.cpp) --
+#
+# The agent (EconomyAgent, 0xa0 bytes) sits at world offset 0 (ECX = the
+# world), g_aiPlayerData points at scratch 0, g_aiWorld at the world. The
+# conditions call AI::RecordBestCandidate, AI_CountBuildings (buildings of
+# the types they count, on a 400 x 400 map) and AI_AreaGoodsAmount (short
+# pile lists in the agent's area). EAX is not used by 0x56a1a0.
+
+AI_PLAYER_NUMBER = 0x007e2eb8
+ECONOMY_SLOPES = (0x007e1290, 0x007e12b0)  # g_aiWantedWeaponsmithSlopes, g_aiWantedGoldMineSlopes
+
+
+def economy_globals(rng, pool, args):
+    fields = [(AI_WORLD, WORLD_BASE, 4), (AI_PLAYER_DATA, WORLD_BASE + SCRATCH, 4),
+              (AI_PLAYER_NUMBER, rng.randrange(3), 1), (AI_MAP_SIZES, 400, 2), (AI_MAP_SIZES + 2, 400, 2)]
+    for table in ECONOMY_SLOPES:
+        for s in range(4):
+            if rng.random() < 0.1:
+                bits = rng.getrandbits(32)
+            else:
+                bits = struct.unpack("<I", struct.pack("<f", rng.randrange(1000) / 997.0))[0]
+            fields.append((table + 4 * s, bits, 4))
+    return fields
+
+
+def economy_pile_chain(rng, base, length, storehouse_kinds):
+    """(head, fields) of a chain of distinct piles from id `base`."""
+    fields, head = [], 0
+    stride = rng.randint(1, 3)
+    for k in range(length):
+        pile = base + k * stride
+        record = AI_PILES + pile * 14
+        art = 0 if storehouse_kinds and rng.random() < 0.5 else rng.randrange(256)
+        fields += [(record + 1, rng.randrange(5), 1), (record + 4, art, 1), (record + 0xC, head, 2)]
+        head = pile
+    return head, fields
+
+
+def economy_agent(rng, pool, args):
+    area = rng.randrange(4)
+    race = rng.randrange(4) if rng.random() < 0.9 else rng.getrandbits(32)
+    fields = [(8, race, 4), (0xC, area, 2)]
+    for offset in range(0x42, 0xA0, 2):
+        r = rng.random()
+        value = 0 if r < 0.35 else rng.getrandbits(16) if r < 0.4 else rng.randrange(9)
+        fields.append((offset, value, 2))
+    if rng.random() < 0.25:
+        fields += [(0x42, rng.randrange(100), 2), (0x44, rng.randrange(100), 2), (0x46, rng.randrange(40), 2),
+                   (0x48, rng.randrange(12), 2)]
+    # The population: every stage and crowd limit about equally often.
+    low, high = rng.choice(((0, 40), (40, 101), (101, 251), (251, 501), (501, 2000), (2000, 2500), (0, 0x10000)))
+    fields.append((0x3E, rng.randrange(low, high), 2))
+    # AiPlayerData: the toolsmith order, unk550, the storehouse count.
+    if rng.random() < 0.5:
+        fields.append((SCRATCH + 0x26 + 6 * (57 + 12), 0, 2))
+    if rng.random() < 0.25:
+        fields.append((SCRATCH + 0x550, 0, 4))
+    fields.append((SCRATCH + 0x344 + 2 * 1, rng.randrange(3), 2))
+    # Buildings for AI_CountBuildings.
+    count = rng.randrange(30)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        x, y = rng.randrange(400), rng.randrange(400)
+        fields += [(record, 0xFF if rng.random() < 0.15 else rng.randrange(3), 1),
+                   (record + 6, rng.choice((1, 12, 23, 24)), 1),
+                   (record + 0x21, int(rng.random() < 0.25), 1), (record + 0xA, x, 2), (record + 0xC, y, 2),
+                   (TILES + (x * 0x300 + y) * 24 + 0x14, area if rng.random() < 0.6 else rng.randrange(4), 2)]
+    # Pile lists of the area: gold ore, swords, bows, spears and the area's own list.
+    base = rng.randint(1, 1000)
+    record = AI_AREAS + area * 0x2E0
+    for goods in (6, 18, 19, 20):
+        head, chain = economy_pile_chain(rng, base, rng.randrange(9), False)
+        fields += chain + [(record + 0xA + goods * 2, head, 2)]
+        base += 40
+    head, chain = economy_pile_chain(rng, base, rng.randrange(8), True)
+    fields += chain + [(record + 8, head, 2)]
+    return fields
+
+
+def economy_condition(name: str, address: int) -> Spec:
+    return Spec(name, address, "thiscall", [], eax_mask=0, presets=economy_agent, globals=economy_globals,
+                max_cases=1000)
+
+
+SPECS += [
+    economy_condition("T_ECONOMY_AGENT_ConsiderSawmill", 0x00568250),
+    economy_condition("T_ECONOMY_AGENT_ConsiderForester", 0x005682b0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderToolsmith", 0x00569160),
+    economy_condition("T_ECONOMY_AGENT_ConsiderWeaponsmith", 0x005691b0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderRiceFarm", 0x00569330),
+    economy_condition("T_ECONOMY_AGENT_ConsiderFishery", 0x005693c0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderFarm", 0x00569430),
+    economy_condition("T_ECONOMY_AGENT_ConsiderMill", 0x00569490),
+    economy_condition("T_ECONOMY_AGENT_ConsiderBakery", 0x005694f0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderPigFarm", 0x00569520),
+    economy_condition("T_ECONOMY_AGENT_ConsiderSlaughterhouse", 0x00569590),
+    economy_condition("T_ECONOMY_AGENT_ConsiderWaterworks", 0x005695e0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderBarracks", 0x00569640),
+    economy_condition("T_ECONOMY_AGENT_ConsiderGoldMine", 0x005696d0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderGoldSmelter", 0x00569860),
+    economy_condition("T_ECONOMY_AGENT_ConsiderStorehouse", 0x00569900),
+    economy_condition("T_ECONOMY_AGENT_ConsiderHospital", 0x005699d0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderGemMine", 0x00569a00),
+    economy_condition("T_ECONOMY_AGENT_ConsiderSulfurMine", 0x00569a30),
+    economy_condition("T_ECONOMY_AGENT_ConsiderPowderMaker", 0x00569aa0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderCharcoalBurner", 0x00569b00),
+    economy_condition("T_ECONOMY_AGENT_ConsiderSmallTemple", 0x00569b30),
+    economy_condition("T_ECONOMY_AGENT_ConsiderLargeTemple", 0x00569c00),
+    economy_condition("T_ECONOMY_AGENT_ConsiderApiary", 0x00569c90),
+    economy_condition("T_ECONOMY_AGENT_ConsiderDrinkBuilding", 0x00569d20),
+]
+
+# -- computer players A2: map queries (ai_map_queries.cpp) ------------------
+#
+# Coordinates are words at scratch 0 (x) and scratch 1 (y), near and past
+# the edges of a random AI map size; the tile's fields are pinned. Off the
+# map the original leaves its caller's EAX upper half (AX compared only).
+
+
+def ai_query_map(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_WORLD, WORLD_BASE, 4), (AI_PLAYER_DATA, WORLD_BASE + SCRATCH, 4),
+            (AI_MAP_SIZES, rng.randint(1, 0x2FF), 2), (AI_MAP_SIZES + 2, rng.randint(1, 0x2FF), 2)]
+
+
+def query_coordinate(rng):
+    r = rng.random()
+    if r < 0.15:
+        return rng.randint(0x2F0, 0x2FF)
+    if r < 0.2:
+        return rng.getrandbits(16)
+    return rng.randrange(0x2F0)
+
+
+def query_tile(rng, x, y):
+    t = TILES + (x * 0x300 + y) * 24
+    obj = rng.choice((0x43, 0x44, 0x53, 0x54, 0x72, 0x73, 0x7E, 0x7F, 0)) if rng.random() < 0.5 else rng.getrandbits(8)
+    return [(t + 2, 0 if rng.random() < 0.25 else rng.getrandbits(16), 2), (t + 7, obj, 1),
+            (t + 0xA, rng.getrandbits(8), 1), (t + 0x11, rng.getrandbits(8), 1)]
+
+
+def ai_query_coords(rng, pool, args):
+    """x, y at scratch 0 / 1 and the tile there (only tiles inside the
+    0x300 x 0x300 array)."""
+    x, y = query_coordinate(rng), query_coordinate(rng)
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2)]
+    if x < 0x300 and y < 0x300:
+        fields += query_tile(rng, x, y)
+    return fields
+
+
+def ai_query_tile_any(rng, pool, args):
+    """For the queries without a bounds check: x, y inside the tile array."""
+    x, y = rng.randrange(0x300), rng.randrange(0x300)
+    return [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2)] + query_tile(rng, x, y)
+
+
+def ai_query_record(rng, pool, args):
+    """A building record at scratch 0 (door x / y at +0xa / +0xc)."""
+    x, y = query_coordinate(rng), query_coordinate(rng)
+    return [(SCRATCH + 0xA, x, 2), (SCRATCH + 0xC, y, 2)]
+
+
+class WalkRow:
+    """x, y values for AI_WalkRegionAlongRow (upper halves sometimes set)
+    and walk regions along the row, mostly 0."""
+
+    def __init__(self):
+        self.xy = (0, 0)
+
+    def x(self, rng, pool):
+        self.xy = (query_coordinate(rng), query_coordinate(rng))
+        return self.xy[0] | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+    def y(self, rng, pool):
+        return self.xy[1] | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+    def presets(self, rng, pool, args):
+        x, y = args[0] & 0xFFFF, args[1] & 0xFFFF
+        fields = []
+        for k in range(20):
+            if x + k < 0x300 and y < 0x300:
+                fields.append((TILES + ((x + k) * 0x300 + y) * 24 + 0x10, 0 if rng.random() < 0.8 else rng.getrandbits(8), 1))
+        return fields
+
+
+WALK_ROW = WalkRow()
+
+
+def ai_query_sites(rng, pool, args):
+    fields = count_buildings_world(rng, pool, args)
+    return fields + [(SCRATCH, rng.randrange(3), 1), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(4), 2)]
+
+
+def ai_query_settlers(rng, pool, args):
+    """A settler list of up to 9 in the area's list for the type."""
+    settler_type, area = rng.randrange(48), rng.randrange(4096)
+    fields = [(SCRATCH, settler_type, 1), (SCRATCH + SCRATCH_SLOT_BYTES, area, 2)]
+    start, head = rng.randint(1, 20000), 0
+    for k in range(rng.randrange(10)):
+        settler = start + 7 * k
+        fields.append((SETTLERS + settler * 0x40 + 0x10, head, 2))
+        head = settler
+    return fields + [(AI_AREAS + area * 0x2E0 + 0x12A + settler_type * 2, head, 2)]
+
+
+def ai_query_teams(rng, pool, args):
+    fields = []
+    for p in range(20):
+        record = AI_PLAYERS + p * 0x148
+        active = 1 if rng.random() < 0.5 else rng.choice((0, 2, rng.getrandbits(32)))
+        fields += [(record, active, 4), (record + 0xC, rng.randrange(4), 4)]
+    return fields
+
+
+def tower_type(rng, pool):
+    return rng.choice((14, 15, 16, 17, 18, 19, 0)) if rng.random() < 0.7 else rng.getrandbits(16)
+
+
+SPECS += [
+    Spec("AI_BuildingAt", 0x00599510, "fastcall", [scratch(0), scratch(1)], eax_mask=0xFFFF,
+         presets=ai_query_coords, globals=ai_query_map),
+    Spec("AI_AreaAt", 0x005995c0, "fastcall", [scratch(0), scratch(1)], eax_mask=0xFFFF,
+         presets=ai_query_coords, globals=ai_query_map),
+    Spec("AI_BuildingRecordArea", 0x00599670, "fastcall", [scratch(0)], eax_mask=0xFFFF,
+         presets=ai_query_record, globals=ai_query_map),
+    Spec("AI_WalkRegionAlongRow", 0x00599870, "fastcall", [WALK_ROW.x, WALK_ROW.y], eax_mask=0xFFFF,
+         presets=WALK_ROW.presets, globals=ai_query_map),
+    Spec("AI_StoneAmountAt", 0x00599910, "fastcall", [scratch(0), scratch(1)], presets=ai_query_tile_any,
+         globals=ai_query_map),
+    Spec("AI_IsTreeAt", 0x00599950, "fastcall", [scratch(0), scratch(1)], presets=ai_query_tile_any,
+         globals=ai_query_map),
+    Spec("AI_ResourceAmountAt", 0x00599990, "fastcall", [scratch(0), scratch(1)], eax_mask=0xFFFF,
+         presets=ai_query_coords, globals=ai_query_map),
+    Spec("AI_ResourceKindAt", 0x005999e0, "fastcall", [scratch(0), scratch(1)], eax_mask=0xFFFF,
+         presets=ai_query_coords, globals=ai_query_map),
+    Spec("AI_TerritoryRadius", 0x0058ed30, "fastcall", [scratch(0)], globals=ai_query_map,
+         presets=lambda rng, pool, args: [(SCRATCH, tower_type(rng, pool), 2)]),
+    # AL only: the rest of EAX is the caller's.
+    Spec("AI_SiteKindOf", 0x0058ed70, "fastcall", [small_with_noise(0, 40)], eax_mask=0xFF),
+    Spec("AI_TakeBestCandidate", 0x0058ecb0, "fastcall", [id_with_noise(0x60)], globals=ai_query_map),
+    Spec("AI_CountSitesInArea", 0x0059dbb0, "fastcall", [scratch(0), scratch(1)], presets=ai_query_sites,
+         globals=ai_world_400, max_cases=600),
+    Spec("AI_CountAreaSettlersOfType", 0x0059dc70, "fastcall", [scratch(0), scratch(1)],
+         presets=ai_query_settlers, globals=ai_world),
+    Spec("AI_TeamHasActivePlayer", 0x00593140, "stdcall", [below(20)], presets=ai_query_teams,
+         globals=ai_map_world),
+]
+
+# -- computer players A2, batch 3: site queries (ai_site_queries.cpp) --------
+
+AI_NOTES_PLAYER = SCRATCH + 2 * SCRATCH_SLOT_BYTES   # a ComputerPlayer (0x780 bytes)
+AI_SITE_NOTES = SCRATCH + 3 * SCRATCH_SLOT_BYTES     # 300 notes of 0x24 bytes
+
+
+def site_notes(rng, pool, args):
+    """g_aiPlayer's 300 note pointers (a third null) to notes of types 0..5
+    with a building type 0..3 and a position, and the tile areas there."""
+    fields = [(SCRATCH, rng.randrange(4), 2), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(300), 2)]
+    for n in range(300):
+        note = AI_SITE_NOTES + n * 0x24
+        pointer = 0 if rng.random() < 0.33 else WORLD_BASE + note
+        x, y = rng.randrange(410), rng.randrange(400)
+        fields += [(AI_NOTES_PLAYER + 0x280 + 4 * n, pointer, 4), (note + 6, rng.randrange(6), 2),
+                   (note + 0x1C, rng.randrange(4), 2), (note + 0x1E, x, 2), (note + 0x20, y, 2)]
+        if x < 400:
+            fields.append((TILES + (x * 0x300 + y) * 24 + 0x14, 0 if rng.random() < 0.5 else rng.randrange(300), 2))
+    return fields
+
+
+def site_notes_globals(rng, pool, args):
+    return ai_world_400(rng, pool, args) + [(AI_PLAYER, WORLD_BASE + AI_NOTES_PLAYER, 4)]
+
+
+def near_buildings(rng, pool, args):
+    """Up to 40 buildings of players 0..2 near the origin; some military
+    with a garrison."""
+    count = rng.randrange(40)
+    fields = [(BUILDING_COUNT, count, 4)]
+    for building in range(1, count + 2):
+        record = BUILDINGS + building * BUILDING_BYTES
+        fields += [(record, 0xFF if rng.random() < 0.15 else rng.randrange(3), 1),
+                   (record + 2, rng.randrange(60), 2), (record + 4, rng.randrange(60), 2),
+                   (record + 6, rng.choice((2, 3, 15, 16, 18, 24)), 1),
+                   (record + 8, 0 if rng.random() < 0.5 else rng.randint(1, 100), 2)]
+    return fields
+
+
+def near_type(rng, pool):
+    return rng.choice((0xFFFF, 15, 2, 18)) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+def with_noise(generator):
+    def generate(rng, pool):
+        return generator(rng, pool) | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+    return generate
+
+
+def basic_economy(rng, pool, args):
+    player = rng.randrange(20)
+    race = rng.randrange(5) if rng.random() < 0.9 else rng.getrandbits(32)
+    fields = [(SCRATCH, player, 2), (AI_PLAYERS + player * 0x148 + 4, race, 4)]
+    data = SCRATCH + SCRATCH_SLOT_BYTES
+    fields += [(data + 0x344 + 2 * t, 0 if rng.random() < 0.2 else 1, 2) for t in range(57)]
+    return fields
+
+
+SPECS += [
+    Spec("AI_HasSiteNoteInArea", 0x00571d00, "fastcall", [scratch(0), scratch(1)], presets=site_notes,
+         globals=site_notes_globals, max_cases=300),
+    Spec("AI_HasBuildingNear", 0x00571d90, "fastcall",
+         [near_type, with_noise(below(60)), with_noise(below(60)), with_noise(below(40)), below(3)],
+         presets=near_buildings, globals=ai_world, max_cases=600),
+    Spec("AI_CountBuildingsNear", 0x00571e30, "fastcall",
+         [near_type, with_noise(below(60)), with_noise(below(60)), with_noise(below(40)), below(3)],
+         presets=near_buildings, globals=ai_world, max_cases=600),
+    Spec("AI_NextGarrisonedMilitaryBuilding", 0x00571ee0, "fastcall",
+         [lambda rng, pool: 0xFFFF if rng.random() < 0.1 else rng.randrange(45), with_noise(below(3))],
+         presets=near_buildings, globals=ai_world, max_cases=600),
+    Spec("AI_CheckBasicEconomy", 0x005720c0, "fastcall", [scratch(0), anything, scratch(1)],
+         presets=basic_economy, globals=ai_world),
+    Spec("AI_ResetUnitGroup", 0x005930f0, "stdcall", [below(20), below(10)]),
+    Spec("AI_ArmyState_Reset", 0x00593f50, "thiscall", []),
+]
