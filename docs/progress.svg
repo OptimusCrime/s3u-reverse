@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1000" fill="#ffffff"/>
 <g><rect x="0" y="0" width="1220.1" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 17.3% verified (11.3% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 17.3% verified (12.8% in a whole game)</text>
 <g><title>(free functions): 2440 functions</title><rect x="2" y="19" width="722.2" height="979" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="327.9" height="148.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -5418,8 +5418,8 @@
 <text x="726.2" y="331.2" font-size="8.5" fill="#ffffff">CLogicThread</text>
 <rect x="724.7" y="334.2" width="173.7" height="245.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ProcessEvents @ 0x00524fa0
 64912 bytes — Classified (class/role known)</title></rect>
-<rect x="898.4" y="334.2" width="171.6" height="92.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ExecuteCommands @ 0x00535990
-24211 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="898.4" y="334.2" width="171.6" height="92.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ExecuteCommands @ 0x00535990
+24211 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="898.4" y="426.9" width="116" height="92.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::PrepareDrawData @ 0x0051f110
 16384 bytes — Classified (class/role known)</title></rect>
 <rect x="898.4" y="519.7" width="116" height="60.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::CheckGameEnd @ 0x00511c50
@@ -5966,8 +5966,8 @@
 160 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1034.1" y="653.4" width="8.4" height="12.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::FreeTileArea @ 0x0058b480
 160 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1011.3" y="666" width="11.7" height="8.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::StartPositionWalkRegion @ 0x0055b6e0
-144 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1011.3" y="666" width="11.7" height="8.2" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::StartPositionWalkRegion @ 0x0055b6e0
+144 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1023" y="666" width="10.4" height="8.2" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::WordListRemove @ 0x005519b0
 128 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1033.5" y="666" width="9.1" height="8.2" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::CountBuildings @ 0x0059dac0
@@ -5994,10 +5994,10 @@
 64 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1031.7" y="680.3" width="5.5" height="5.8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::List32Add @ 0x00551910
 48 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1037.1" y="680.3" width="5.5" height="5.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::CountPlayersTakingPart @ 0x00572370
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1024.4" y="686.2" width="6.3" height="5.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::UninitializedCopyPtrs @ 0x0055bff0
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1037.1" y="680.3" width="5.5" height="5.8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::CountPlayersTakingPart @ 0x00572370
+48 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1024.4" y="686.2" width="6.3" height="5.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::UninitializedCopyPtrs @ 0x0055bff0
+48 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1024.4" y="691.2" width="6.3" height="5.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::CEvaLand_FreeGrid @ 0x00554040
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1024.4" y="696.3" width="6.3" height="5.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::CEvaLand_GridCell @ 0x00554700
@@ -6754,8 +6754,8 @@
 <g><title>CCentrumCheckAgent: 2 functions</title><rect x="991.8" y="887.3" width="26" height="28.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="992.3" y="887.8" width="25" height="26.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CCentrumCheckAgent::vf08 @ 0x00560e00
 1024 bytes — Classified (class/role known)</title></rect>
-<rect x="992.3" y="914.1" width="25" height="1.2" fill="#a8c8e6"><title>CCentrumCheckAgent::CCentrumCheckAgent @ 0x00560dd0
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="992.3" y="914.1" width="25" height="1.2" fill="#3d9a50"><title>CCentrumCheckAgent::CCentrumCheckAgent @ 0x00560dd0
+48 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>CSoundData: 5 functions</title><rect x="991.8" y="915.8" width="26" height="28.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="992.3" y="916.3" width="14.9" height="17.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CSoundData::~CSoundData @ 0x005fdc90
@@ -6964,34 +6964,34 @@
 <g><title>CComputerPlayer: 15 functions</title><rect x="1042.1" y="873.9" width="23.5" height="25.6" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1042.6" y="874.4" width="13.8" height="8.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::CComputerPlayer @ 0x00550900
 176 bytes — Classified (class/role known)</title></rect>
-<rect x="1056.4" y="874.4" width="8.8" height="8.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::RaiseBuildPriorities @ 0x00551b10
-112 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1056.4" y="874.4" width="8.8" height="8.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::RaiseBuildPriorities @ 0x00551b10
+112 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1042.6" y="882.6" width="7.4" height="8.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::~CComputerPlayer @ 0x005509d0
 96 bytes — Classified (class/role known)</title></rect>
-<rect x="1042.6" y="890.8" width="7.4" height="4.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::ActivateNote @ 0x005515e0
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1042.6" y="894.9" width="7.4" height="4.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::AddRootNote @ 0x005517f0
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1050" y="882.6" width="5" height="6.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::RemoveRootNote @ 0x00551820
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1055.1" y="882.6" width="5" height="6.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::AddPendingNote @ 0x00551850
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1060.1" y="882.6" width="5" height="6.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::RemovePendingNote @ 0x00551880
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1050" y="888.6" width="5.9" height="5.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::AddActiveNote @ 0x005518b0
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1050" y="893.8" width="5.9" height="5.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::RemoveActiveNote @ 0x005518e0
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1055.9" y="888.6" width="5.5" height="5.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::RemoveFromList200 @ 0x00551940
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1042.6" y="890.8" width="7.4" height="4.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::ActivateNote @ 0x005515e0
+48 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1042.6" y="894.9" width="7.4" height="4.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::AddRootNote @ 0x005517f0
+48 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1050" y="882.6" width="5" height="6.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::RemoveRootNote @ 0x00551820
+48 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1055.1" y="882.6" width="5" height="6.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::AddPendingNote @ 0x00551850
+48 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1060.1" y="882.6" width="5" height="6.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::RemovePendingNote @ 0x00551880
+48 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1050" y="888.6" width="5.9" height="5.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::AddActiveNote @ 0x005518b0
+48 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1050" y="893.8" width="5.9" height="5.2" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::RemoveActiveNote @ 0x005518e0
+48 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1055.9" y="888.6" width="5.5" height="5.5" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::RemoveFromList200 @ 0x00551940
+48 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1061.4" y="888.6" width="3.7" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::scalar_deleting_destructor @ 0x005509b0
 32 bytes — Classified (class/role known)</title></rect>
-<rect x="1055.9" y="894.1" width="4.2" height="4.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::ActivateNoteOf @ 0x005515c0
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1060.1" y="894.1" width="4.2" height="4.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::DeactivateNoteOf @ 0x00551610
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1064.2" y="894.1" width="0.9" height="4.9" fill="#a8c8e6"><title>CComputerPlayer::DeactivateNote @ 0x00551630
-7 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1055.9" y="894.1" width="4.2" height="4.9" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::ActivateNoteOf @ 0x005515c0
+32 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1060.1" y="894.1" width="4.2" height="4.9" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CComputerPlayer::DeactivateNoteOf @ 0x00551610
+32 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1064.2" y="894.1" width="0.9" height="4.9" fill="#3d9a50"><title>CComputerPlayer::DeactivateNote @ 0x00551630
+7 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>CGraphicsData: 7 functions</title><rect x="1042.1" y="899.5" width="23.5" height="25.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1042.6" y="900" width="14.2" height="15.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CGraphicsData::~CGraphicsData @ 0x005f68b0
@@ -7354,12 +7354,12 @@
 496 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>AI::Census: 3 functions</title><rect x="1086.8" y="943.2" width="18.4" height="18.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1087.3" y="943.7" width="17.4" height="10.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::Census::ComputeTeamStrength @ 0x0055bea0
-288 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1087.3" y="953.9" width="13.3" height="7.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::Census::CountBuildings @ 0x0055be00
-160 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1100.7" y="953.9" width="4" height="7.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::Census::Census @ 0x0055b6b0
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1087.3" y="943.7" width="17.4" height="10.3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::Census::ComputeTeamStrength @ 0x0055bea0
+288 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1087.3" y="953.9" width="13.3" height="7.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::Census::CountBuildings @ 0x0055be00
+160 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1100.7" y="953.9" width="4" height="7.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::Census::Census @ 0x0055b6b0
+48 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>Lobby::CLobbyProtocol: 3 functions</title><rect x="1086.8" y="961.8" width="18.4" height="18.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1087.3" y="962.3" width="17.4" height="9.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Lobby::CLobbyProtocol::~CLobbyProtocol @ 0x00606ef0
@@ -7568,24 +7568,24 @@
 32 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>BLACK_BOARD_NOTE: 10 functions</title><rect x="1123.2" y="916.9" width="14.2" height="14.1" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1123.7" y="917.4" width="5.1" height="7.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::FindChildOfType @ 0x005824d0
-64 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1123.7" y="924.8" width="5.1" height="5.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::ResetLinks @ 0x00582400
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1128.8" y="917.4" width="4" height="4.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::Init @ 0x005823e0
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1132.9" y="917.4" width="4" height="4.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::HasFlags @ 0x00582460
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1123.7" y="917.4" width="5.1" height="7.5" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::FindChildOfType @ 0x005824d0
+64 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1123.7" y="924.8" width="5.1" height="5.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::ResetLinks @ 0x00582400
+48 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1128.8" y="917.4" width="4" height="4.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::Init @ 0x005823e0
+32 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1132.9" y="917.4" width="4" height="4.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::HasFlags @ 0x00582460
+32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1128.8" y="922.1" width="5.4" height="3.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::scalar_deleting_destructor @ 0x005655a0
 32 bytes — Classified (class/role known)</title></rect>
 <rect x="1134.2" y="922.1" width="2.7" height="3.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::BLACK_BOARD_NOTE_5801b0 @ 0x005801b0
 16 bytes — Classified (class/role known)</title></rect>
-<rect x="1128.8" y="925.7" width="4" height="2.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::MarkDispatched @ 0x00582430
-16 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1128.8" y="928.1" width="4" height="2.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::SetFlags @ 0x00582440
-16 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1132.9" y="925.7" width="4" height="2.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::ClearFlags @ 0x00582450
-16 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1128.8" y="925.7" width="4" height="2.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::MarkDispatched @ 0x00582430
+16 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1128.8" y="928.1" width="4" height="2.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::SetFlags @ 0x00582440
+16 bytes — Verified, and identical in a whole-game check</title></rect>
+<rect x="1132.9" y="925.7" width="4" height="2.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::ClearFlags @ 0x00582450
+16 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1132.9" y="928.1" width="4" height="2.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_NOTE::BLACK_BOARD_NOTE @ 0x00565590
 16 bytes — Classified (class/role known)</title></rect>
 </g>
@@ -7710,8 +7710,8 @@
 <g><title>T_MAP_WORKER_AGENT: 2 functions</title><rect x="1150.6" y="930.2" width="12" height="12" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1151.1" y="930.7" width="9.3" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>T_MAP_WORKER_AGENT::vf08 @ 0x0057cde0
 176 bytes — Classified (class/role known)</title></rect>
-<rect x="1160.4" y="930.7" width="1.7" height="11" fill="#a8c8e6"><title>T_MAP_WORKER_AGENT::T_MAP_WORKER_AGENT @ 0x0057cda0
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1160.4" y="930.7" width="1.7" height="11" fill="#3d9a50"><title>T_MAP_WORKER_AGENT::T_MAP_WORKER_AGENT @ 0x0057cda0
+32 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>CDialog: 1 functions</title><rect x="1162.6" y="930.2" width="12" height="12" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1163.1" y="930.7" width="11" height="11" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CDialog::CDialog @ 0x00427850
@@ -7734,8 +7734,8 @@
 <g><title>T_ECONOMY_AGENT: 3 functions</title><rect x="1196.8" y="930.2" width="11.1" height="12" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1197.3" y="930.7" width="10.1" height="7.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::vf08 @ 0x00567890
 128 bytes — Classified (class/role known)</title></rect>
-<rect x="1197.3" y="938" width="5.1" height="3.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::T_ECONOMY_AGENT @ 0x00567850
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1197.3" y="938" width="5.1" height="3.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::T_ECONOMY_AGENT @ 0x00567850
+32 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1202.4" y="938" width="5.1" height="3.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::vf11 @ 0x00567870
 32 bytes — Classified (class/role known)</title></rect>
 </g>
@@ -7780,8 +7780,8 @@
 64 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>AI::EvaLand: 3 functions</title><rect x="1150.6" y="987.3" width="10.3" height="10.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1151.1" y="987.8" width="5.3" height="6.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::EvaLand::SumAllCells @ 0x005546c0
-64 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1151.1" y="987.8" width="5.3" height="6.8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::EvaLand::SumAllCells @ 0x005546c0
+64 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1156.4" y="987.8" width="4" height="6.8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::EvaLand::ResetGrid_554070 @ 0x00554070
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1151.1" y="994.6" width="9.3" height="2.9" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::EvaLand::GridCellOfTile_554770 @ 0x00554770
@@ -7802,8 +7802,8 @@
 <g><title>GLOBAL_EXPAND_EMPIRE_AGENT: 2 functions</title><rect x="1160.9" y="961.7" width="10.7" height="9.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1161.4" y="962.2" width="7.6" height="8.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>GLOBAL_EXPAND_EMPIRE_AGENT::vf08 @ 0x0056cd20
 112 bytes — Classified (class/role known)</title></rect>
-<rect x="1168.9" y="962.2" width="2.2" height="8.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GLOBAL_EXPAND_EMPIRE_AGENT::GLOBAL_EXPAND_EMPIRE_AGENT @ 0x0056cd00
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1168.9" y="962.2" width="2.2" height="8.3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GLOBAL_EXPAND_EMPIRE_AGENT::GLOBAL_EXPAND_EMPIRE_AGENT @ 0x0056cd00
+32 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>CRequestType: 4 functions</title><rect x="1160.9" y="971" width="10.7" height="9.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1161.4" y="971.5" width="5.4" height="5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CRequestType::CRequestType @ 0x0049d760
@@ -7826,8 +7826,8 @@
 <g><title>T_ATTACK_AGENT: 2 functions</title><rect x="1160.9" y="989.5" width="10.7" height="8.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1161.4" y="990" width="7.4" height="7.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>T_ATTACK_AGENT::vf08 @ 0x0055ec10
 100 bytes — Classified (class/role known)</title></rect>
-<rect x="1168.7" y="990" width="2.4" height="7.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_ATTACK_AGENT::T_ATTACK_AGENT @ 0x0055ebe0
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1168.7" y="990" width="2.4" height="7.5" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ATTACK_AGENT::T_ATTACK_AGENT @ 0x0055ebe0
+32 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>Lobby::CLMLogon: 1 functions</title><rect x="1171.6" y="942.1" width="9.8" height="9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1172.1" y="942.6" width="8.8" height="8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Lobby::CLMLogon::CLMLogon @ 0x005e1d50
@@ -7840,8 +7840,8 @@
 <g><title>COMPUTER_PLAYER_AGENT: 2 functions</title><rect x="1191.2" y="942.1" width="9.8" height="9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1191.7" y="942.6" width="6.6" height="8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>COMPUTER_PLAYER_AGENT::vf08 @ 0x005846a0
 96 bytes — Classified (class/role known)</title></rect>
-<rect x="1198.3" y="942.6" width="2.2" height="8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>COMPUTER_PLAYER_AGENT::COMPUTER_PLAYER_AGENT @ 0x00584680
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1198.3" y="942.6" width="2.2" height="8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>COMPUTER_PLAYER_AGENT::COMPUTER_PLAYER_AGENT @ 0x00584680
+32 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>Lobby::CLMCheckFileVersion: 1 functions</title><rect x="1201" y="942.1" width="8.6" height="9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1201.5" y="942.6" width="7.6" height="8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Lobby::CLMCheckFileVersion::CLMCheckFileVersion @ 0x005e8380
@@ -7890,8 +7890,8 @@
 <g><title>T_SAFETY_AGENT: 2 functions</title><rect x="1208.8" y="951.2" width="9.3" height="8.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1209.3" y="951.7" width="5.9" height="7.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>T_SAFETY_AGENT::vf08 @ 0x00586850
 80 bytes — Classified (class/role known)</title></rect>
-<rect x="1215.2" y="951.7" width="2.4" height="7.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_SAFETY_AGENT::T_SAFETY_AGENT @ 0x00586830
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1215.2" y="951.7" width="2.4" height="7.3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_SAFETY_AGENT::T_SAFETY_AGENT @ 0x00586830
+32 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>Dialog: 6 functions</title><rect x="1171.6" y="959.5" width="7.8" height="10" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1172.1" y="960" width="4.5" height="3.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>Dialog::CopyGlobals7a8020 @ 0x00416880
@@ -8034,10 +8034,10 @@
 48 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>AI::List: 2 functions</title><rect x="1195.7" y="986.5" width="5.8" height="3.8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1196.2" y="987" width="2.4" height="2.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::List::begin_580220 @ 0x00580220
-16 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1198.6" y="987" width="2.4" height="2.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::List::empty_580230 @ 0x00580230
-16 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1196.2" y="987" width="2.4" height="2.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>AI::List::begin_580220 @ 0x00580220
+16 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
+<rect x="1198.6" y="987" width="2.4" height="2.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>AI::List::empty_580230 @ 0x00580230
+16 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>Lobby::CLMGetLobbyServerList: 1 functions</title><rect x="1195.7" y="990.3" width="5.8" height="3.8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1196.2" y="990.8" width="4.8" height="2.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Lobby::CLMGetLobbyServerList::CLMGetLobbyServerList @ 0x005e16f0
@@ -8064,16 +8064,16 @@
 32 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>AI::PtrVector: 1 functions</title><rect x="1201.5" y="986" width="5.6" height="4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1202" y="986.5" width="4.6" height="3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::PtrVector::size @ 0x0055bfc0
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1202" y="986.5" width="4.6" height="3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::PtrVector::size @ 0x0055bfc0
+32 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>Win32::CEvent: 1 functions</title><rect x="1201.5" y="990" width="5.6" height="4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1202" y="990.5" width="4.6" height="3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>Win32::CEvent::CEvent @ 0x0060c510
 32 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>AI::Pair5: 1 functions</title><rect x="1201.5" y="994" width="5.6" height="4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1202" y="994.5" width="4.6" height="3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::Pair5::Pair5 @ 0x0059c5a0
-32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1202" y="994.5" width="4.6" height="3" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>AI::Pair5::Pair5 @ 0x0059c5a0
+32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>Win32::CMutex: 1 functions</title><rect x="1207" y="986" width="5.6" height="4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1207.5" y="986.5" width="4.6" height="3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CMutex::CMutex @ 0x0060c9e0

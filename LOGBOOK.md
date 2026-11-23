@@ -7,24 +7,29 @@ progress.
 
 ## Current focus
 
-**Next session (written 2026-11-23, end of session 46):**
+**Next session (written 2026-11-23, end of session 47):**
 1. **The user's full-game recording** (they play with `python tools/play_game.py`;
    it lands in `recordings/`): commit it with a line in recordings/README.md,
    `check_replay.py --recording NAME --against-original --ticks N`,
    `record_call_counts.py --recording NAME --seed S --ticks N` (right after
    its check_replay: it reads the last s3re.log), then check the test-only
    jobs and paths listed in TODO.md (UpdateSettlers jobs, spells, ships,
-   tower captures, shooting soldiers, late building types, the command ids
-   no recording has yet) against it.
-2. **ExecuteCommands 0x535990 itself** (~24 KB, hooked as one unit):
-   plan, command ids and order in `re/execute_commands.md`; all its
-   simulation callees are verified (session 46). Then the computer players
-   (0x550f80, AI ~37 KB), ProcessEvents 0x524fa0 (UI events, ~65 KB),
-   later the file formats (maps, savegames, graphics).
-3. **Cleanup alongside** (one agent per round, TODO.md "Readability
-   pass"): remaining style conversions (map_effects.cpp, AI/UI/framework,
-   logic_helpers.cpp, player_queries.cpp), job/landscape/spell names,
-   enums.h split, typed record fields.
+   tower captures, shooting soldiers, late building types, command ids no
+   recording has yet) against it.
+2. **Computer players, next batches** (plan in `re/computer_players.md`,
+   TODO.md "Computer players"): A2 small READY helpers, A3 the note tree,
+   A4 the command senders (0x590990 unblocks 10), A5 land evaluation, A6
+   the agents' run functions, then 0x550f80. ~500 functions in all.
+3. **Then** ProcessEvents 0x524fa0 (UI events, ~65 KB), the file formats
+   (maps, savegames, graphics). Cleanup alongside (TODO.md "Readability
+   pass": map_effect_spawns.cpp, AI/UI/framework files, shared
+   terrain/object constants, job/landscape/spell names, enums.h split).
+
+**Done in session 47:** `CLogicThread::ExecuteCommands` 0x535990 verified
+(all commands, one hook); computer players batch 1 (37 functions, AI
+structure in `re/computer_players.md`); readability of map_effects,
+pathing, logic_helpers, player_queries, pile kinds unified, miner aliases
+dropped. Round end: see its entry.
 
 **Done in session 46** (details in the session entries): Release is the
 emulator's default build; all 32 spells verified (packages S1/S2); the
@@ -603,6 +608,25 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-23 (47): round end (ExecuteCommands, computer players 1, readability)
+
+- Three parallel agents (entries below). ExecuteCommands' agent left five
+  hung `cl.exe` processes in its worktree (builds piped into `Select-Object
+  -First N` stop reading the pipe; don't pipe builds into a truncating
+  reader); its worktree can only be removed once they are gone.
+- Whole game, all identical to the original: scripted-seed127,
+  fun8-seed2024-input31, random768-seed4321-input7 (3,000 ticks, call
+  counts recorded), slots 1-3 (2,000 ticks), random maps 384,0 and 448,3
+  (2,000 ticks). ExecuteCommands ran every tick (3,000 calls); most of the
+  new AI functions are seen (e.g. RaiseBuildPriorities 20,650,
+  Census::ComputeTeamStrength 37). Totals: 627 verified, 356 seen in a
+  whole game, 271 tests only.
+- Full emulator suite at the round end (`--full`, Release, 627 specs, 17
+  workers, 1,423 s wall; ExecuteCommands alone 1,412 s for 31,991 cases):
+  0 mismatches, incomplete coverage only GenerateRandomMap (338/415, as
+  before). The round's worktrees are removed (an empty folder of the
+  ExecuteCommands worktree stayed busy until the session ended).
 
 ### 2026-11-23 (47): readability: map_effects, pathing, logic_helpers, player_queries (parallel worktree)
 
