@@ -74,6 +74,11 @@ Each item: what, why, and where to start.
   (probably a graphics id), +0x32, +0x34 (the value the "stationary"
   make function 0x543f70 sets) are still `unkNN`; the spawn functions in
   map_effects.cpp name the arguments by offset only.
+- **Lint for enum narrowing (session 48):** `static_cast<BuildingType>(x)`
+  of a 16-bit value truncates to the uint8 enum (A2's SiteKindOf: type 270
+  became Vineyard; caught by its test). Flag casts of wider integers to
+  8-bit enums in `typed_access_lint.py` or a new check; switch on the word
+  with `case Value(...)` instead.
 - **Lint** for hex literals in comparisons and magic numbers in
   job/type/goods comparisons (coding_style.md "Checks").
 
@@ -169,6 +174,12 @@ Each item: what, why, and where to start.
   ~5x faster on FindPath); time GenerateRandomMap there and decide whether
   a bounded larger-map case is worth it, or exempt the rest with reasons
   so `--require-coverage` stops failing on it.
+- **`--changed` reselects 5 slow specs every time (session 48):**
+  CheckGameEnd, FollowRightWall, UpdateSoldier, UpdateSettlers,
+  ExecuteCommands stop at the quick budget without full coverage, so no
+  pass is recorded and every worktree reruns them (seen by all three
+  agents of session 48). A `--full` run of them on main records passes;
+  better presets or `quick_cases` would stop it for good.
 - **Specs over the quick-mode budget (60 s) before full coverage:** they
   get no recorded pass from quick runs, so `--changed` reselects them
   until a `--full` run passes. Seen in the first quick run (2026-11-23):

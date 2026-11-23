@@ -609,6 +609,91 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 
 ## Session log
 
+### 2026-11-23 (48): computer players A2 (parallel worktree)
+
+- **46 functions verified** in three batches (branch wip/ai-a2):
+  - The 25 T_ECONOMY_AGENT conditions 0x568250..0x569d20
+    (`T_ECONOMY_AGENT::Consider<Type>`, ai_economy_conditions.cpp): one per
+    building type, asking for it with AI::RecordBestCandidate. They encode
+    the economy's build order (a sawmill per three woodcutters, farms per
+    three mines, fisheries per two mines, mills / pig farms by the grain
+    left over, toolsmith once coal and iron are there, barracks per three
+    weaponsmiths, the race's drink building and temples by population).
+    Gold mines and weaponsmiths follow a "wanted for the population"
+    curve (stages 0/40/100/500/2000, x87 + _ftol).
+  - 14 map queries (ai_map_queries.cpp): BuildingAt, AreaAt,
+    BuildingRecordArea, WalkRegionAlongRow, StoneAmountAt, IsTreeAt,
+    ResourceAmount/KindAt, TerritoryRadius (distance of the 3500th /
+    4000th / 5000th map offset per tower type), SiteKindOf (2 storehouse,
+    3 military, 4 mine, 5 field), TakeBestCandidate, CountSitesInArea,
+    CountAreaSettlersOfType, TeamHasActivePlayer.
+  - 7 site queries (ai_site_queries.cpp): HasSiteNoteInArea,
+    HasBuildingNear, CountBuildingsNear, NextGarrisonedMilitaryBuilding,
+    CheckBasicEconomy, ResetUnitGroup, ArmyState_Reset.
+  - Evidence: in-process tests AiEconomyConditions_*, AiMapQueries_*,
+    AiSiteQueries_* (with wrong-implementation probes) and emulator specs
+    with 0 mismatches and full block coverage for all 46.
+- **Layouts** (ai_layout.h, re/structs.md): EconomyAgent (0xa0 bytes: race,
+  area, population stage, goods in stock, the node's buildings per type),
+  AiPlayerData (+0xc basic_economy, +0x344 building_counts, +0x3b6
+  type_blocked, +0x550, best[57 + type] = taken candidates), AiArmyState
+  (0x7e58c8) and AiGroupOrders (0x7e37d0) with per player and unit group
+  arrays (meanings G). Globals/tables: g_aiPopulationStages,
+  g_aiWantedGoldMines / Weaponsmiths and their slopes.
+- Lesson: never switch on `static_cast<BuildingType>(uint16)`; it
+  truncates to the uint8 enum (caught by the SiteKindOf test). Switch on
+  the word with `case Value(...)` (lint idea in TODO.md).
+- Next (TODO.md "Computer players"): 0x591e00, 0x572420, the larger
+  economy conditions 0x567e00 / 0x568420 / 0x568bc0 / 0x568d80 /
+  0x568f40, the snapshot 0x567910, more small READY ones; then A4/A5/A6.
+
+### 2026-11-23 (48): computer players A3 (parallel worktree)
+
+- **30 functions verified** (package A3, two commits on wip/ai-a3).
+  Batch 1, `ai_computer_player.cpp`: CComputerPlayer's note tree and
+  agents: AddNote 0x551270 / AddNoteUnder 0x551230, DeleteNote 0x551330
+  (recursive, subtree first), AddAgent 0x551400 (agent slot 2 lists the
+  note types it handles; first come first served in handlers[]),
+  DeleteAgent 0x551490, DispatchNote 0x551510 / DispatchPendingNotes
+  0x5514c0, RunAgents 0x551590, WorkOnNote 0x5516e0 /
+  WorkOnNextActiveNote 0x551670, DeleteDoomedNotes 0x551790,
+  UpdateBlackboard 0x5517d0, Shutdown 0x550f30, ~CComputerPlayer 0x5509d0
+  and its deleting destructor 0x5509b0, StartBestBuilding 0x551a70 (fewer
+  than 4 construction sites in the area: hand on the best build
+  candidate; wood/stone shortage modes), the note callbacks
+  ReportToRequester 0x582480 / CancelAtHandler 0x582510. Batch 2,
+  `ai_request_notes.cpp`: the request agents' constructors (kinds 0, 1,
+  2, 4), the request notes' inits 0x57ab20 / 0x578760 / 0x565470,
+  T_DO_BUILD_HOUSE_NOTE's constructor 0x5801c0, BLACK_BOARD_NOTE's
+  constructor / destructor / deleting destructors (0x5801b0, 0x565590,
+  0x5655a0, 0x56f6b0).
+- **Evidence:** in-process `AiNoteTree_*` (consistent random note
+  forests, fake vtables recording every virtual call, the original side
+  run entirely as original code through ScopedJumps to the trampolines;
+  StartBestBuilding's callees 0x59dbb0 / 0x58ecb0 as recording stubs)
+  and `AiRequestNotes_*`, both with wrong-implementation probes; seeds 0-3
+  pass. Emulator: 30 new specs (virtual calls via `TREE_VIRTUALS`, agent
+  slot 2 fills the caller's stack buffer as an effect; StartBestBuilding
+  runs 0x59dbb0 / 0x58ecb0 as original code on preset buildings), 0
+  mismatches, all blocks covered; `--changed` runs clean.
+- **Findings / names:** list +0x200 is the deletion queue (`doomed_notes`;
+  RemoveFromList200 -> RemoveDoomedNote), +0x1fe the active-note cursor;
+  note +0x16 requester / +0x18 handler (flag 2 "taken"); the agent slots
+  (`agent_slot`: 0 delete, 2 note types, 3 take, 4 work, 5 busy, 7/8 run,
+  9 report, 10 cancel); factory kinds 1/2/4 = HOUSE_GROUND_REQUEST /
+  HOUSE_REQUEST / T_DO_BUILD_HOUSE (`ai::AgentKind`, now shared), note
+  type = handling agent kind (`ai::NoteType`); AiPlayerData nodes are
+  per economy area (ComputerPlayer +0x77c `area`), +0x10/+0x14 shortage
+  flags (G), best[57 + type] the candidate handed on; `RequestNote`
+  fields. 0x56cd90 / 0x57ce90 renamed *::MakeBuildOrders (were named as
+  T_DO_BUILD_HOUSE_NOTE constructors).
+- Merged with A2 by the coordinator: conflicts only in AiPlayerData's head
+  (A2's +0xc basic_economy and A3's +0x10/+0x14 combined), structs.md and
+  TODO.md.
+- Next (TODO.md): rename AI::List32Add* to CComputerPlayer::DoomNote*,
+  who creates the AiPlayerData nodes, then 0x550a30 / 0x550f80 once A4/A5
+  are in.
+
 ### 2026-11-23 (48): backlog cleanups (parallel worktree)
 
 Four backlog items from TODO "Evidence and testing", branch wip/cleanups,
