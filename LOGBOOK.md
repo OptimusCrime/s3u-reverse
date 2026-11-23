@@ -17,6 +17,17 @@ progress.
    `framework_small.cpp`/`misc_helpers.cpp`/`logic_helpers.cpp`/
    `ai_*helpers.cpp`, a CMake library for the simulation) are in
    `docs/source_layout_plan.md` section 5, step 6.
+   **Planned as three parallel worktree batches (session 48, ~2-3 h):**
+   (a) small cleanups: the two lints (enum narrowing, hex literals in
+   comparisons), FakeClock restore, the DoomNote renames, the slow specs
+   that `--changed` keeps reselecting, the `--changed` fresh-worktree
+   reselection, GenerateRandomMap coverage (exempt or one larger case);
+   (b) readability of map_effect_spawns.cpp and the AI/UI/framework files;
+   (c) SettlerJob names into job_ids.h (check each against its handler)
+   and the shared terrain/object/resource constants into game/enums/.
+   (b) and (c) touch some of the same files: merge (c) last, carefully.
+   Worktrees have their own build/ and DLL, so they can run while the
+   user plays a recording from the main checkout.
 2. (Done in session 48: the source tree move into subsystem folders, the
    generated `source_file` column, `game/enums/`.)
 3. **Computer players, continued** (TODO.md "Computer players"): A2

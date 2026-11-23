@@ -175,6 +175,12 @@ Each item: what, why, and where to start.
   ~5x faster on FindPath); time GenerateRandomMap there and decide whether
   a bounded larger-map case is worth it, or exempt the rest with reasons
   so `--require-coverage` stops failing on it.
+- **`--changed` reselected 200 specs in a fresh worktree (session 48)**
+  although only comments and tests had changed (backlog-cleanups agent,
+  wip/cleanups). Probably the worktree's own build gives different
+  fingerprints than the passes recorded from main's build (absolute
+  paths, build order?). Compare the fingerprints of one such spec in
+  both builds (`tools/emutest/changed.py`).
 - **`--changed` reselects 5 slow specs every time (session 48):**
   CheckGameEnd, FollowRightWall, UpdateSoldier, UpdateSettlers,
   ExecuteCommands stop at the quick budget without full coverage, so no
