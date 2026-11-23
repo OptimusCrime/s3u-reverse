@@ -7,20 +7,33 @@ progress.
 
 ## Current focus
 
-**Next session (written 2026-11-23, end of session 45):**
+**Next session (written 2026-11-23, end of session 46):**
 1. **The user's full-game recording** (they play with `python tools/play_game.py`;
    it lands in `recordings/`): commit it with a line in recordings/README.md,
    `check_replay.py --recording NAME --against-original --ticks N`,
-   `record_call_counts.py --recording NAME`, then check the test-only jobs
-   and paths listed in TODO.md (UpdateSettlers jobs, spells, ships, tower
-   captures, shooting soldiers, late building types) against it.
-2. **Make the Release build run.py's default** (TODO.md; its full suite is
-   clean) and record passes for the 9 over-budget specs.
-3. **Next simulation work** (proposed, user to confirm): command handling
-   `CLogicThread::ExecuteCommands` 0x535990 (player input), the
-   per-player objects 0x550f80 (computer players), the 17 spell functions
-   left of UpdateEnvironment, the game-end check 0x511c50; later the file
-   formats (maps, savegames, graphics).
+   `record_call_counts.py --recording NAME --seed S --ticks N` (right after
+   its check_replay: it reads the last s3re.log), then check the test-only
+   jobs and paths listed in TODO.md (UpdateSettlers jobs, spells, ships,
+   tower captures, shooting soldiers, late building types, the command ids
+   no recording has yet) against it.
+2. **ExecuteCommands 0x535990 itself** (~24 KB, hooked as one unit):
+   plan, command ids and order in `re/execute_commands.md`; all its
+   simulation callees are verified (session 46). Then the computer players
+   (0x550f80, AI ~37 KB), ProcessEvents 0x524fa0 (UI events, ~65 KB),
+   later the file formats (maps, savegames, graphics).
+3. **Cleanup alongside** (one agent per round, TODO.md "Readability
+   pass"): remaining style conversions (map_effects.cpp, AI/UI/framework,
+   logic_helpers.cpp, player_queries.cpp), job/landscape/spell names,
+   enums.h split, typed record fields.
+
+**Done in session 46** (details in the session entries): Release is the
+emulator's default build; all 32 spells verified (packages S1/S2); the
+game-end check `CLogicThread::CheckGameEnd` 0x511c50 with the victory
+conditions; ExecuteCommands analysed (`re/execute_commands.md`, enums
+`NetMessage`/`CommandId`) and its 8 simulation callees verified; renames
+(catapult/castle/field/small-tower functions, CGraphicsData,
+BuildingWorkshopBytes); 17 leftover worktrees and 30 stale branches
+removed. Round-end checks: see the round-end entry.
 
 **Done in session 45** (details in the session entries): struct pass
 (typed globals, real class layouts, named world fields; worklist
@@ -590,6 +603,31 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-23 (46): round end (spells, game-end check, ExecuteCommands callees, renames)
+
+- Five parallel agents (entries below): spells S1 (spells 0..4, 30;
+  spells_land.cpp), spells S2 (10..29; spell_units.cpp, spell_goods.cpp),
+  game-end check (CheckGameEnd 0x511c50 and callees), ExecuteCommands
+  (analysis, 8 callees; command_helpers.cpp), renames. Merge fixes: one
+  per-spell table `g_spellRingCounts` (0x65a1d8; S2 had called it
+  g_spellArea), SpellConvertSettlers writes the named
+  `Player::mission_state`.
+- Release default: full `--full` suite on Release before the round (556
+  specs, 0 mismatches, only GenerateRandomMap incomplete as before, 1,468 s
+  on 17 workers).
+- Whole game, all identical to the original: scripted-seed127,
+  fun8-seed2024-input31 and random768-seed4321-input7 (3,000 ticks; call
+  counts recorded, random768 for the first time), slots 1-3 (2,000 ticks),
+  random maps 384,0 and 448,3 (2,000 ticks). New functions seen:
+  CheckGameEnd (3,000 calls), ResetAreaConditionCounters (71); the
+  spells, CheckVictoryConditions, DecideNgoOutcome and the carrier recalls
+  are tests only so far (no victory conditions / spells / matching
+  commands in these games). Totals: 589 verified, 327 seen in a whole
+  game, 262 tests only.
+- Full emulator suite at the round end (`--full`, Release, 589 specs, 17
+  workers, 788 s wall): 0 mismatches, incomplete coverage only
+  GenerateRandomMap (338/415, as before).
 
 ### 2026-11-23 (46): renames (parallel worktree)
 
