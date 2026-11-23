@@ -1,6 +1,8 @@
 #include "test/difftest.h"
 
+#include "game/debug_log.h"
 #include "log.h"
+#include "test/callee_stub.h"
 
 #include <windows.h>
 
@@ -250,12 +252,25 @@ int RunAll() {
                      static_cast<unsigned long>(g_crashAt - reinterpret_cast<ULONG_PTR>(module)),
                      reinterpret_cast<void*>(g_crashAccess), BaseName(test.file));
             ++failed;
+            // The crash skipped the test's destructors: undo what they would
+            // have undone, so later tests start clean.
+            const int restored = RestoreLeftoverPatches();
+            game::SetDebugLogCapture(nullptr);
+            if (restored > 0) {
+                S3RE_LOG("[test]   restored %d code patch(es) the crashed test left behind", restored);
+            }
         } else if (ctx.failures() > 0) {
             S3RE_LOG("[test] FAIL  %s (%d failure(s)) [%s]", test.name, ctx.failures(),
                      BaseName(test.file));
             ++failed;
         } else {
             S3RE_LOG("[test] ok    %s (%lu ms)", test.name, elapsed);
+        }
+        if (exception == 0 && !LivePatches().empty()) {
+            S3RE_LOG("[test] FAIL  %s left %zu code patch(es) behind (restored)", test.name,
+                     LivePatches().size());
+            RestoreLeftoverPatches();
+            ++failed;
         }
     }
 

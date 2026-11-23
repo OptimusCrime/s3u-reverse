@@ -151,19 +151,6 @@ Each item: what, why, and where to start.
   for the others, session 45 tooling). Still to do: find what grows
   (probably a huge lazily-random world range or the garrison walks) and
   bound it; then drop `memory_mb` and update CLAUDE.md's figure.
-- **In-process tests that crash on other inputs:** test inputs are seeded
-  from the test name. During the GameWorld -> CGameData rename (session
-  45) the new names gave new inputs, and
-  `CGameData_ReleaseSiteWorkers_MatchesOriginal` crashed inside the
-  original (access violation at S3.EXE+0x10e443, address 0x0548B002); the
-  crash left CalleeStubs patches installed, so later stub tests
-  (MinerJobFood, StealGoodFromPile) crashed too. The rename now hashes the
-  old names (`SeedName` in difftest.cpp, `seed_name` in emutest/run.py),
-  so inputs are unchanged. To do: make that test's input generator
-  produce only states the original can handle (try `S3RE_TEST_SEED`
-  values), and have a crashing test's CalleeStubs restore its patches
-  (the SEH guard skips the destructor).
-
 - **Emulator coverage of `CGameData::GenerateRandomMap`:** 338/415 blocks
   in full Debug runs (1 quick case per batch since 2026-11-23); the rest
   needs maps of 130+ tiles. Its real evidence is the in-process
