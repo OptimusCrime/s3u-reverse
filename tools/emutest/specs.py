@@ -13,6 +13,7 @@ constants found in the original function's code.
 
 from __future__ import annotations
 
+import os
 import struct
 from dataclasses import dataclass
 from typing import Callable
@@ -9719,6 +9720,19 @@ EC_NET_MESSAGES: dict = {
 }
 
 
+def ec_choices() -> tuple:
+    """The command ids and network message types to generate. The
+    environment variable S3RE_EC_ONLY (e.g. "c9,cd,n3": c = command id, n =
+    message type, hex) restricts them, for work on one part of the function."""
+    only = os.environ.get("S3RE_EC_ONLY")
+    commands, net_types = sorted(EC_COMMANDS), sorted(EC_NET_MESSAGES)
+    if only:
+        wanted = [item.strip().lower() for item in only.split(",") if item.strip()]
+        commands = [c for c in commands if f"c{c:x}" in wanted]
+        net_types = [t for t in net_types if f"n{t:x}" in wanted]
+    return commands, net_types
+
+
 def ec_message(type_: int, byte1: int, payload: list) -> list:
     data = [type_, byte1, 0, 0] + list(payload)
     while len(data) % 4:
@@ -9742,13 +9756,14 @@ def execute_commands_world(rng, pool, args):
     step = 0 if rng.random() < 0.08 else rng.randrange(1, 1000)
     fields.append((LOGIC_THREAD + EC_STEP, step, 4))
     dwords: list = []
+    commands, net_types = ec_choices()
     for _ in range(rng.randrange(5)):
-        if rng.random() < 0.1:
-            type_ = rng.choice(list(EC_NET_MESSAGES))
+        if net_types and (rng.random() < 0.1 or not commands):
+            type_ = rng.choice(net_types)
             byte1, payload = EC_NET_MESSAGES[type_](rng, fields)
             dwords += ec_message(type_, byte1, payload)
-        else:
-            command = rng.choice(list(EC_COMMANDS))
+        elif commands:
+            command = rng.choice(commands)
             dwords += ec_message(1, command, EC_COMMANDS[command](rng, fields))
     dwords += [2 | 8 << 16, (step + rng.randrange(-2, 6)) & 0xFFFFFFFF]  # StepGrant
     fields += [(EC_FROM_RING + 4 * i, d, 4) for i, d in enumerate(dwords)]
@@ -9758,9 +9773,12 @@ def execute_commands_world(rng, pool, args):
 
 
 def execute_commands_globals(rng, pool, args):
-    return [(CAMPAIGN_MISSION, 66 if rng.random() < 0.25 else rng.randrange(3), 4),
-            (SELECTED_BUILDING, rng.randrange(1, 4) if rng.random() < 0.5 else rng.randrange(EC_BUILDINGS + 2), 4), (REVEAL_MAP, 0, 4),
-            (EC_SET_EVENT_CALL, EC_SET_EVENT_STUB, 6)]
+    fields = [(CAMPAIGN_MISSION, 66 if rng.random() < 0.25 else rng.randrange(3), 4),
+              (SELECTED_BUILDING, rng.randrange(1, 4) if rng.random() < 0.5 else rng.randrange(EC_BUILDINGS + 2), 4),
+              (REVEAL_MAP, 0, 4), (EC_SET_EVENT_CALL, EC_SET_EVENT_STUB, 6)]
+    for extra in EC_GLOBALS_EXTRA:
+        fields += extra(rng, pool, args)
+    return fields
 
 
 # Callees probed: the simulation functions the commands call (verified on
@@ -9781,10 +9799,14 @@ EC_CALLEES = {
 # Blocks only reachable through a C++ exception: the catch of Win32::CTimeout*
 # (0x53b823; the probed wait never throws; in-process tests throw one).
 # Dead: 0x53b81e, the `jmp` after the loop's `xor eax, eax; test eax, eax; je`.
-EC_EXEMPT = (0x0053b823, 0x0053b82d, 0x0053b833, 0x0053b81e)
+EC_EXEMPT = [0x0053b823, 0x0053b82d, 0x0053b833, 0x0053b81e]
+# Virtual calls (slot offset -> as Spec.virtuals); slot 0xc is the queue's wait.
+EC_VIRTUALS = {0xc: 2}
+# More S3.EXE globals per case: functions (rng, pool, args) -> [(address, value, size)].
+EC_GLOBALS_EXTRA: list = []
 
 SPECS += [
     Spec("CLogicThread_ExecuteCommands", 0x00535990, "logicthread", [], presets=execute_commands_world,
-         globals=execute_commands_globals, virtuals={0xc: 2}, callees=EC_CALLEES, exempt_blocks=EC_EXEMPT,
+         globals=execute_commands_globals, virtuals=EC_VIRTUALS, callees=EC_CALLEES, exempt_blocks=EC_EXEMPT,
          case_scale=4),
 ]
