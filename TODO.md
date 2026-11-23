@@ -132,16 +132,18 @@ Each item: what, why, and where to start.
   values), and have a crashing test's CalleeStubs restore its patches
   (the SEH guard skips the destructor).
 
-- **Emulator coverage of `CGameData::GenerateRandomMap`:** 338/415 blocks; the rest
-  needs maps of 130+ tiles, too slow in the emulator (a 320-tile case ran
-  for over an hour). Options: a release build of s3re.dll for the emulator,
-  a faster emulator path, or accept the in-process whole-world comparison.
-  The plain Release build doesn't work for the emulator yet (2026-11-10):
-  `run.py --build Release` stops with "CGameData_CenterCameraOnLocalPlayer:
-  0 matching symbols in s3re.map", because the linker folds identical
-  functions (/OPT:ICF) and keeps only one name. A separate emulator
-  configuration with `/OPT:NOICF` (maybe `/Ob1`) would be needed; then
-  compare its full run with Debug's and time CGameData_GenerateRandomMap.
+- **Emulator coverage of `CGameData::GenerateRandomMap`:** 338/415 blocks
+  in full Debug runs (1 quick case per batch since 2026-11-23); the rest
+  needs maps of 130+ tiles. Its real evidence is the in-process
+  whole-world tests and the random-map whole-game checks. Since c3f29be
+  the Release build works for the emulator (`run.py --build Release`,
+  ~5x faster on FindPath); time GenerateRandomMap there and decide whether
+  a bounded larger-map case is worth it, or exempt the rest with reasons
+  so `--require-coverage` stops failing on it.
+- **Finish one Release `--full` emulator run** (stopped at 129/556 specs,
+  0 mismatches, on 2026-11-23) and compare it with Debug; a difference is
+  a real finding. If clean, make Release the default build of run.py and
+  record passes for the 9 over-budget specs with it.
 - **Specs over the quick-mode budget (60 s) before full coverage:** they
   get no recorded pass from quick runs, so `--changed` reselects them
   until a `--full` run passes. Seen in the first quick run (2026-11-23):
