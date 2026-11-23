@@ -30,7 +30,7 @@ savegame code 0x509980: probably loading/saving the AI state, G), and
 ## Classes (RTTI)
 
 Two hierarchies, both without data in the base class (R; layouts in
-`src/s3re/game/ai_layout.h`):
+`src/s3re/game/ai/ai_layout.h`):
 
 | Class | vtable | Role |
 |---|---|---|

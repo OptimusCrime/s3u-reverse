@@ -2,7 +2,7 @@
 
 Written 2026-11-23 (session 46, parallel worktree). How commands reach the
 simulation: "Commands and lockstep" in `CLAUDE.md`; the recorder:
-`src/s3re/replay/command_log.h`. Enums: `NetMessage` and `CommandId` in
+`src/s3re/tooling/replay/command_log.h`. Enums: `NetMessage` and `CommandId` in
 `src/s3re/game/enums.h` (evidence in `re/enums.md`).
 
 ## Status (session 47): reimplemented and verified
@@ -183,7 +183,7 @@ RemoveSettlerFromGroups, UpdateGroupMenu, CGraphicsData::VariantFrameAddress, th
 std::string functions, Win32::ThrowOutOfMemory, MessageQueue::Push/Pop
 (identified, passthrough/none).
 
-**Done in session 46 (this package, `src/s3re/game/command_helpers.cpp`,
+**Done in session 46 (this package, `src/s3re/game/logic/commands/command_helpers.cpp`,
 all verified: in-process tests + emulator specs with full coverage):**
 RecallSiteCarriers 0x4dee20, RecallBuildingCarriers 0x4deec0,
 RecallCarriersOfOtherSites 0x4df8e0, ChangePileGood 0x4dfb40,
@@ -204,7 +204,7 @@ message), 0x61f27e (sprintf), operator new/delete, memmove.
 
 ExecuteCommands is hooked as one unit, so it can only be switched once all
 of it is written. Proposed split of our version (one file
-`src/s3re/game/execute_commands.cpp`, plus `execute_commands_units.cpp`
+`src/s3re/game/logic/commands/execute_commands.cpp`, plus `execute_commands_units.cpp`
 for MoveUnits):
 
 1. The frame: wait/pop loop, NetMessage dispatch, step grant and the 0x20

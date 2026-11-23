@@ -1,6 +1,6 @@
 # Plan: organising the source tree
 
-Status: **proposal, nothing moved yet** (2026-11-23). This document answers
+Status: **carried out on 2026-11-23 (session 48)** with `tools/move_sources.py`; the user answered all questions of section 6 "as recommended" (job enum header: `game/enums/job_ids.h`). The appendix keeps the old paths ("Now"). This document answers
 the roadmap item "reorganize our source tree after the original files"
 (`LOGBOOK.md`, Roadmap) and the TODO items "Code organisation" and "Split
 `game/enums.h` by category". It needs the user's decisions (section 6)

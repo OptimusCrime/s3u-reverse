@@ -20,7 +20,7 @@ visited once per 16 calls.
 
 **Name: `CGameData::UpdateEconomy`** (was "UpdatePhase2", which only said
 where it is called; renamed 2026-11-22 when it was reimplemented in
-`src/s3re/game/update_economy.cpp`, whose header and handler comments are
+`src/s3re/game/economy/update_economy.cpp`, whose header and handler comments are
 the exact description): goods requests, worker requests, population counts
 and goods distribution, time-sliced. The presence-map part is military, so
 `UpdateEconomyAndPresence` would be more exact but clumsy.
@@ -107,7 +107,7 @@ maps and the notification timers are also written by UI-side code
 
 ## Corrections from the reimplementation (2026-11-22)
 
-The reimplementation (`src/s3re/game/update_economy.cpp`, verified) settled
+The reimplementation (`src/s3re/game/economy/update_economy.cpp`, verified) settled
 the details; where this analysis differs, the code is right:
 
 - The "SendCarriersToPile when a pile's +1 and +2 differ" step is per

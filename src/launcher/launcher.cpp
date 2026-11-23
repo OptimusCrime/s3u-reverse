@@ -35,7 +35,7 @@
 //
 // --record-commands <file> records every command with the step it belongs
 // to; --replay-commands <file> replays such a recording instead of the live
-// commands (see src/s3re/replay/command_log.h). A recording stores the game
+// commands (see src/s3re/tooling/replay/command_log.h). A recording stores the game
 // seed and map, and the replay uses them (an explicit --seed or -map must
 // agree); version 1 recordings need --seed and -map. A recording (version 3
 // and 4) of a --random-map game also stores the random map and the player
@@ -62,7 +62,7 @@
 // recording with synthetic input (that input follows the wall clock).
 //
 // --load-save <file> starts the game directly from a savegame (no menus),
-// through the game's own load code (see src/s3re/game/savegame_start.cpp).
+// through the game's own load code (see src/s3re/tooling/savegame_start.cpp).
 // <file> is looked up as given, then in <game dir>\Save\. The launcher
 // loads a copy (s3re-loaded.sav next to s3re.dll), so the game never opens
 // the user's savegame itself. The RNG state comes from the savegame, so

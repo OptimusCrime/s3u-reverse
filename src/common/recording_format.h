@@ -2,7 +2,7 @@
 
 // File format of command recordings (s3re_launcher --record-commands /
 // --replay-commands), shared by the launcher and s3re.dll. See
-// src/s3re/replay/command_log.h for what is recorded. tools/command_log.py
+// src/s3re/tooling/replay/command_log.h for what is recorded. tools/command_log.py
 // reads and writes the same formats (convert, list). Readers tell the
 // versions apart by the first bytes: "S3RECMD1/2/3" binary, "s3re-recording 4"
 // text.

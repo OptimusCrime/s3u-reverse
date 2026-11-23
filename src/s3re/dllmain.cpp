@@ -6,7 +6,7 @@
 #include "hooks.h"
 #include "log.h"
 #include "tooling/version.h"
-#include "trace/determinism.h"
+#include "tooling/trace/determinism.h"
 
 #include <windows.h>
 #include <detours.h>

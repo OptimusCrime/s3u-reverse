@@ -2662,7 +2662,7 @@ SPECS += [
 ]
 
 # --- Batch 22: the other std::string members, string members of game
-# objects (src/s3re/game/string_members.cpp) and std::logic_error /
+# objects (src/s3re/game/framework/string_members.cpp) and std::logic_error /
 # out_of_range (src/s3re/msvc6/exceptions.cpp). `this` is the world base;
 # its string members get buffers in scratch slots 5 and up, a second object
 # at STRING_OTHER (scratch slot 0) gets its strings' buffers in slots 9 and
@@ -9862,7 +9862,7 @@ SPECS += [
 ]
 
 
-# The helpers of CLogicThread::ExecuteCommands (src/s3re/game/command_helpers.cpp,
+# The helpers of CLogicThread::ExecuteCommands (src/s3re/game/logic/commands/command_helpers.cpp,
 # re/execute_commands.md). Their callees are verified replacements with own
 # specs; the ones with world effects are probed (calls compared).
 CARRIER_PROBES = {0x0050cf50: (1, "thiscall", "probe"), 0x004def80: (1, "thiscall", "probe")}

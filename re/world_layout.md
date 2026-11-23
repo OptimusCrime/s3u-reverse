@@ -179,7 +179,7 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 ## The scalar block 0x2D038 .. 0x2D320
 
 "UI" means presentation state that changes with the local player's input;
-"skip" means `src/s3re/trace/determinism.cpp` leaves it out of the hash.
+"skip" means `src/s3re/tooling/trace/determinism.cpp` leaves it out of the hash.
 
 | Offset | Type | Name / meaning | Users | Conf. |
 |---|---|---|---|---|

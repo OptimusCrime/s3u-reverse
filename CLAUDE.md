@@ -139,10 +139,41 @@ C++ code.
   - `src/launcher/`: checks the SHA-256 of `S3.EXE` and starts it with the DLL.
   - `src/s3re/`: the DLL. Hooks are registered with `S3RE_HOOK` (replacement)
     or `S3RE_PASSTHROUGH` (observe and call the original), see `hooks.h`.
-    Game code goes under `src/s3re/game/`, one file per class or subsystem.
+    Game code goes under `src/s3re/game/` (decided 2026-11-23, plan and
+    history in `docs/source_layout_plan.md`; the move was made by
+    `tools/move_sources.py`). The shared headers stay in `game/` itself
+    (`world.h`, `layout.h`, `globals.h`, `global_access.h`, `tables.h`,
+    `texts.h`, `vtables.h`, `raw.h`, `typed_fields.h`, `replacements.h`,
+    `debug_log.h`, `enums.h`); everything else is in subsystem folders:
+    - simulation (portable): `world/` (CGameData basics: RNG, players,
+      statistics, counters, id allocators, tables, notifications), `map/`
+      (tiles, directions, areas and regions, territory, flood fills, fog
+      of war, minimap), `mapgen/` (random map generator), `environment/`
+      (UpdateEnvironment, map effects), `economy/` (UpdateEconomy, goods
+      piles), `buildings/`, `settlers/` (UpdateSettlers, settler records,
+      walking, soldiers) with `settlers/jobs/` (the job handlers),
+      `pathing/` (Dirk/Pathing.cpp), `spells/` (Volker/GodlyEvents.cpp),
+      `logic/` (CLogicThread, game end, victory conditions, UI state in
+      the world) with `logic/commands/` (ExecuteCommands), `ai/`
+      (computer players);
+    - platform side: `ui/` (CScreenElement and controls, menu layouts),
+      `graphics/` (graphics data, DirectDraw surface), `net/` (CNetThread,
+      lobby buffer), `framework/` (WinMain, Win32/DirectX framework
+      classes, exceptions, string members).
+    Rules: a new file goes into the subsystem folder of its main function
+    (a new folder needs a line here and a group in
+    `src/s3re/CMakeLists.txt`); `.cpp` base names stay unique across
+    `src/s3re` (`tools/emutest/changed.py` keys objects by base name);
+    includes are relative to `src/s3re` (`"game/pathing/pathing.h"`),
+    never `../`; no catch-all files. Which original source file a
+    function sat in is data (`re/source_files.csv`), not a folder.
     MSVC 6.0 library code that game data depends on (e.g. `std::string`
-    layout) goes under `src/s3re/msvc6/`.
+    layout) goes under `src/s3re/msvc6/`, Watcom container code under
+    `src/s3re/watcom/`.
   - `src/s3re/test/`: the differential test harness (`difftest.h`).
+  - `src/s3re/tooling/`: original-mode tooling (`--fast`, `--random-map`,
+    `--load-save`), with `tooling/trace/` (determinism trace) and
+    `tooling/replay/` (command recorder and replay).
   - `re/functions.csv`: the function inventory (source of truth for names,
     status and verification). `re/ghidra_functions.tsv`: Ghidra's function
     list (the baseline). `tools/inventory.py`: check, stats and names.
@@ -272,7 +303,7 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   `--no-cache`, `--refresh-cache`, `--verify-cache` (rerun the original and
   compare with the cache). **Version rules:** change the trace format or
   what it hashes -> bump "s3re determinism trace vN" in
-  `src/s3re/trace/determinism.cpp` (old reference traces, e.g. a
+  `src/s3re/tooling/trace/determinism.cpp` (old reference traces, e.g. a
   recording's `.tsv`, must then be regenerated); change any code that runs
   in `--original` mode (passthrough and `S3RE_HOOK_ALWAYS` hooks, trace,
   replay, seed, load-save, fast) -> bump `S3RE_ORIGINAL_TOOLING_VERSION` in
@@ -329,7 +360,7 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   `CLogicThread::OnStart` then runs the savegame loader `0x508fa0`; the RNG
   state comes from the file (`--seed` has no effect). With a loaded save,
   `--exit-after-ticks N` counts from the save's start tick. Not combinable
-  with `-map` or the command recorder. Code: `src/s3re/game/savegame_start.cpp`.
+  with `-map` or the command recorder. Code: `src/s3re/tooling/savegame_start.cpp`.
   `python tools/check_save.py "slot 1.sav" --ticks N [--against-original]`
   runs it unattended (twice original, or original vs ours), compares the
   traces, checks that no savegame in `Save\` changed, and writes the call
@@ -408,7 +439,7 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
   the simulation, and a few more change with mouse input and are not
   repeated by a replay. The determinism trace leaves them out of its hashes;
   each excluded field and the code evidence for it is listed in
-  `src/s3re/trace/determinism.cpp` (keep `tools/diff_world_dumps.py` in
+  `src/s3re/tooling/trace/determinism.cpp` (keep `tools/diff_world_dumps.py` in
   sync). To find new ones: `--dump-tick N[,N...]` in both runs, then
   `python tools/diff_world_dumps.py A.bin B.bin`, then check the writers in
   the code before excluding anything.
@@ -492,7 +523,7 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
 ## Commands and lockstep
 
 How player commands reach the simulation (verified by recording and
-replaying, see `src/s3re/replay/command_log.h`):
+replaying, see `src/s3re/tooling/replay/command_log.h`):
 
 - The logic thread talks to a network thread through two `MessageQueue`s
   (ring buffers of dwords; `Push` `0x4309c0`, `Pop` `0x430980`): it pushes

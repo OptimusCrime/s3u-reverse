@@ -22,7 +22,7 @@ alignment padding (+0x2A..+0x2B, +0x3B, +0x3E..+0x3F) of the 0x4C-byte
 MapEffect records at world+0x14D2BC8. No constructor writes those bytes and
 no MapEffect code reads them; they are copied from uninitialized stack
 memory when a record is added (0x5445E0). Since trace v3 the rest hash
-leaves them out (src/s3re/trace/determinism.cpp, kMapEffectPadding;
+leaves them out (src/s3re/tooling/trace/determinism.cpp, kMapEffectPadding;
 tools/diff_world_dumps.py knows them too).
 
 ## Original vs our build

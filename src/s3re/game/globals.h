@@ -156,7 +156,7 @@ inline constexpr GameGlobal<GameSettings> g_gameSettings{0x7a7a18};
 inline constexpr GameGlobal<GameConfig> g_config{0x7a7af0};
 
 // ------------------------------------------------------------ graphics and minimap
-// The loaded graphics (gfx::CGraphicsData, game/gfx_layout.h).
+// The loaded graphics (gfx::CGraphicsData, game/graphics/gfx_layout.h).
 inline constexpr GameGlobal<gfx::CGraphicsData*> g_gfxData{0x7a8010};
 // The screen's pixel format (shifts at 0x7dfba0, scales at 0x7dfbac).
 inline constexpr GameGlobal<PixelFormat> g_pixelFormat{0x7dfba0};

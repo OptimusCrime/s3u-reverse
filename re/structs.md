@@ -14,7 +14,7 @@ Confidence: **V** verified (our verified reimplementations or code that
 proves it, plus the dump), **S** strong, **G** guess.
 
 "Hash": `skip` = left out of the determinism hash by
-`src/s3re/trace/determinism.cpp`; `UI` = presentation state.
+`src/s3re/tooling/trace/determinism.cpp`; `UI` = presentation state.
 
 ---
 
@@ -100,7 +100,7 @@ are not comparable (bump the trace version). Keep
 Numbers 1..0xFFE (0xFFF is never handed out); high-water mark +0xE115DC
 (`maxusedeconomysector`). Allocated by AllocArea (0x4E64C0), set up by
 InitArea (0x4E6510, defaults per race). All fields below are from
-`src/s3re/game/area_split.cpp` and its siblings (verified
+`src/s3re/game/map/area_split.cpp` and its siblings (verified
 reimplementations) unless marked.
 
 | Off | Size | Meaning | Evidence | Conf. |
@@ -417,7 +417,7 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   "make" functions 0x543930..0x543F70 pass fixed values (e.g. type 9,
   graphics id 0xD0031) and the tick; 0x5445E0 adds a record (it passes
   +0x10/+0x14 to 0x545EB0, probably a position). Meanings **G**; layout
-  **V** (src/s3re/game/map_effects.cpp).
+  **V** (src/s3re/game/environment/map_effects.cpp).
   Field names in `layout.h` (`MapEffect`): +0x0 start_tick (0 = free
   record; MapEffects_FindFreeSlot), +0x4 duration (i16), +0x8/+0xC
   start_x/y, +0x10/+0x14 end_x/y (pixels; MapEffect_PositionAt
@@ -480,7 +480,7 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
 Layouts of the other objects our code touches, by class (RTTI names where
 the binary has them). The C++ structs are the source of truth for offsets
 (every field `static_assert`ed); this lists what is known and the evidence.
-Headers: `src/s3re/game/gfx_layout.h`, `framework_layout.h`,
+Headers: `src/s3re/game/graphics/gfx_layout.h`, `framework_layout.h`,
 `screen_element_layout.h`, `menus_layout.h`, `game_settings_layout.h`,
 `ai_layout.h`, `logic_thread_layout.h`.
 
@@ -590,7 +590,7 @@ byte: random races include the Amazons. **V** (layout of these fields).
 ## Computer players (CComputerPlayer, notes, census)
 
 Overview, classes and the per-step entry: `re/computer_players.md`; C++
-layouts in `src/s3re/game/ai_layout.h`.
+layouts in `src/s3re/game/ai/ai_layout.h`.
 
 - **CComputerPlayer** (0x780 bytes, vtable 0x65A530; 20 pointers at
   CLogicThread+0x350): +0x004 root note ids (100 words, 0xFFFF free,

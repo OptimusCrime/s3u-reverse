@@ -1,131 +1,171 @@
 add_library(s3re SHARED
+    # src/s3re/: DLL main, hooks, logs
     dllmain.cpp
     crash_log.cpp
     debug_log.cpp
-    log.cpp
     hooks.cpp
+    log.cpp
     s3re.def
 
+    # test/: the differential test harness
     test/difftest.cpp
     test/harness_selftest.cpp
 
+    # msvc6/: MSVC 6.0 library code (std::string, exceptions)
     msvc6/exceptions.cpp
     msvc6/string.cpp
 
+    # watcom/: Watcom container library code
     watcom/ptr_vector.cpp
     watcom/string_vector.cpp
 
-    trace/determinism.cpp
-
-    replay/command_log.cpp
-
-    tooling/random_map_start.cpp
+    # tooling/: launcher features: --fast, --random-map, --load-save
     tooling/fast.cpp
+    tooling/random_map_start.cpp
+    tooling/savegame_start.cpp
 
-    game/ai_evaland.cpp
-    game/ai_helpers.cpp
-    game/ai_small_helpers.cpp
-    game/ai_computer_player.cpp
-    game/ai_request_notes.cpp
-    game/ai_census.cpp
-    game/ai_agents.cpp
-    game/ai_economy_conditions.cpp
-    game/ai_map_queries.cpp
-    game/ai_site_queries.cpp
-    game/area_piles.cpp
-    game/area_split.cpp
-    game/building_crush.cpp
-    game/building_done.cpp
-    game/building_flags.cpp
-    game/building_sites.cpp
-    game/command_helpers.cpp
-    game/building_goods.cpp
-    game/building_tiles.cpp
-    game/counting.cpp
-    game/directx_surface.cpp
-    game/economy.cpp
-    game/execute_commands.cpp
-    game/execute_commands_areas.cpp
-    game/execute_commands_net.cpp
-    game/execute_commands_trade.cpp
-    game/execute_commands_units.cpp
-    game/economy_helpers.cpp
-    game/flood_fills.cpp
-    game/folded_getters.cpp
-    game/framework_helpers.cpp
-    game/framework_small.cpp
-    game/game_end.cpp
-    game/game_end_check.cpp
-    game/godly_events.cpp
-    game/graphics_helpers.cpp
-    game/goods_piles.cpp
-    game/id_allocators.cpp
-    game/landscape_colours.cpp
-    game/lobby_memory_block.cpp
-    game/logic_helpers.cpp
-    game/logic_thread.cpp
-    game/map.cpp
-    game/map_areas.cpp
-    game/map_directions.cpp
-    game/map_effect_spawns.cpp
-    game/map_effects.cpp
-    game/map_generation.cpp
-    game/map_marks.cpp
-    game/fog_of_war.cpp
-    game/map_effect_expiry.cpp
-    game/environment.cpp
-    game/spell_effects.cpp
-    game/minimap.cpp
-    game/spells.cpp
-    game/spells_land.cpp
-    game/spell_units.cpp
-    game/spell_goods.cpp
-    game/map_regions.cpp
-    game/map_neighbourhood.cpp
-    game/map_terrain.cpp
-    game/miner_jobs.cpp
-    game/misc_helpers.cpp
-    game/net_thread.cpp
-    game/notifications.cpp
-    game/objectives.cpp
-    game/pile_goods_moves.cpp
-    game/player_presence.cpp
-    game/player_queries.cpp
-    game/players.cpp
-    game/random.cpp
-    game/savegame_start.cpp
-    game/screen_element.cpp
-    game/settler_idle.cpp
-    game/settler_jobs_building.cpp
-    game/settler_jobs_drinks.cpp
-    game/settler_jobs_food.cpp
-    game/settler_jobs_metal.cpp
-    game/settler_jobs_special.cpp
-    game/settler_jobs_units.cpp
-    game/settler_queries.cpp
-    game/settler_records.cpp
-    game/settlers.cpp
-    game/soldier.cpp
-    game/settler_spawn.cpp
-    game/string_members.cpp
-    game/territory.cpp
-    game/terrain_updates.cpp
-    game/pathing.cpp
-    game/settler_walk.cpp
-    game/statistics.cpp
-    game/ui_overlays.cpp
-    game/ui_static_text.cpp
-    game/ui_state.cpp
-    game/update_economy.cpp
-    game/update_settlers.cpp
-    game/victory_conditions.cpp
-    game/world_create.cpp
-    game/world_search.cpp
-    game/win32_classes.cpp
-    game/win32_errors.cpp
-    game/win32_exceptions.cpp
-    game/winmain.cpp
-    game/world_tables.cpp
+    # tooling/trace/: the determinism trace
+    tooling/trace/determinism.cpp
+
+    # tooling/replay/: command recorder and replay
+    tooling/replay/command_log.cpp
+
+    # game/world/: CGameData basics: RNG, players, statistics, counters, tables
+    game/world/counting.cpp
+    game/world/id_allocators.cpp
+    game/world/notifications.cpp
+    game/world/player_presence.cpp
+    game/world/player_queries.cpp
+    game/world/players.cpp
+    game/world/random.cpp
+    game/world/statistics.cpp
+    game/world/world_search.cpp
+    game/world/world_tables.cpp
+
+    # game/map/: tiles, directions, areas and regions, territory, fog of war, minimap
+    game/map/area_split.cpp
+    game/map/flood_fills.cpp
+    game/map/fog_of_war.cpp
+    game/map/map.cpp
+    game/map/map_areas.cpp
+    game/map/map_directions.cpp
+    game/map/map_marks.cpp
+    game/map/map_neighbourhood.cpp
+    game/map/map_regions.cpp
+    game/map/map_terrain.cpp
+    game/map/minimap.cpp
+    game/map/terrain_updates.cpp
+    game/map/territory.cpp
+
+    # game/mapgen/: the random map generator
+    game/mapgen/map_generation.cpp
+    game/mapgen/world_create.cpp
+
+    # game/environment/: UpdateEnvironment and the map effects
+    game/environment/environment.cpp
+    game/environment/map_effect_expiry.cpp
+    game/environment/map_effect_spawns.cpp
+    game/environment/map_effects.cpp
+
+    # game/economy/: UpdateEconomy, goods piles and their moves
+    game/economy/area_piles.cpp
+    game/economy/economy.cpp
+    game/economy/economy_helpers.cpp
+    game/economy/goods_piles.cpp
+    game/economy/pile_goods_moves.cpp
+    game/economy/update_economy.cpp
+
+    # game/buildings/: building sites, construction, crushing, flags, goods
+    game/buildings/building_crush.cpp
+    game/buildings/building_done.cpp
+    game/buildings/building_flags.cpp
+    game/buildings/building_goods.cpp
+    game/buildings/building_sites.cpp
+    game/buildings/building_tiles.cpp
+
+    # game/settlers/: UpdateSettlers, settler records, walking, soldiers
+    game/settlers/miner_jobs.cpp
+    game/settlers/settler_idle.cpp
+    game/settlers/settler_queries.cpp
+    game/settlers/settler_records.cpp
+    game/settlers/settler_spawn.cpp
+    game/settlers/settler_walk.cpp
+    game/settlers/settlers.cpp
+    game/settlers/soldier.cpp
+    game/settlers/update_settlers.cpp
+
+    # game/settlers/jobs/: the job handlers of UpdateSettlers
+    game/settlers/jobs/settler_jobs_building.cpp
+    game/settlers/jobs/settler_jobs_drinks.cpp
+    game/settlers/jobs/settler_jobs_food.cpp
+    game/settlers/jobs/settler_jobs_metal.cpp
+    game/settlers/jobs/settler_jobs_special.cpp
+    game/settlers/jobs/settler_jobs_units.cpp
+
+    # game/pathing/: the pathfinder (Dirk/Pathing.cpp)
+    game/pathing/pathing.cpp
+
+    # game/spells/: the god events (Volker/GodlyEvents.cpp)
+    game/spells/godly_events.cpp
+    game/spells/spell_effects.cpp
+    game/spells/spell_goods.cpp
+    game/spells/spell_units.cpp
+    game/spells/spells.cpp
+    game/spells/spells_land.cpp
+
+    # game/logic/: CLogicThread: Step, game end, victory conditions, UI state in the world
+    game/logic/game_end.cpp
+    game/logic/game_end_check.cpp
+    game/logic/logic_helpers.cpp
+    game/logic/logic_thread.cpp
+    game/logic/objectives.cpp
+    game/logic/ui_overlays.cpp
+    game/logic/ui_state.cpp
+    game/logic/victory_conditions.cpp
+
+    # game/logic/commands/: ExecuteCommands and its parts
+    game/logic/commands/command_helpers.cpp
+    game/logic/commands/execute_commands.cpp
+    game/logic/commands/execute_commands_areas.cpp
+    game/logic/commands/execute_commands_net.cpp
+    game/logic/commands/execute_commands_trade.cpp
+    game/logic/commands/execute_commands_units.cpp
+
+    # game/ai/: computer players (Rainer/*.cpp)
+    game/ai/ai_agents.cpp
+    game/ai/ai_census.cpp
+    game/ai/ai_computer_player.cpp
+    game/ai/ai_economy_conditions.cpp
+    game/ai/ai_evaland.cpp
+    game/ai/ai_helpers.cpp
+    game/ai/ai_map_queries.cpp
+    game/ai/ai_request_notes.cpp
+    game/ai/ai_site_queries.cpp
+    game/ai/ai_small_helpers.cpp
+
+    # game/ui/: CScreenElement and the controls, menu and settings layouts
+    game/ui/screen_element.cpp
+    game/ui/ui_static_text.cpp
+
+    # game/graphics/: graphics data, landscape colours, DirectDraw surface
+    game/graphics/directx_surface.cpp
+    game/graphics/graphics_helpers.cpp
+    game/graphics/landscape_colours.cpp
+
+    # game/net/: CNetThread, lobby protocol buffer
+    game/net/lobby_memory_block.cpp
+    game/net/net_thread.cpp
+
+    # game/framework/: WinMain, Win32/DirectX framework classes, exceptions, strings
+    game/framework/folded_getters.cpp
+    game/framework/framework_helpers.cpp
+    game/framework/framework_small.cpp
+    game/framework/misc_helpers.cpp
+    game/framework/string_members.cpp
+    game/framework/win32_classes.cpp
+    game/framework/win32_errors.cpp
+    game/framework/win32_exceptions.cpp
+    game/framework/winmain.cpp
 )
 
 target_include_directories(s3re PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)

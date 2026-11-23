@@ -12,7 +12,7 @@
 // serves every group; sprite headers live in the second half of the data
 // buffer.
 
-#include "game/gfx_layout.h"
+#include "game/graphics/gfx_layout.h"
 #include "game/globals.h"
 #include "test/difftest.h"
 

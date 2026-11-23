@@ -11,6 +11,6 @@
 // NUMBER whenever such code changes in a way that could change what the
 // original game does or what the trace records; otherwise checks keep
 // comparing against stale cached references. (The trace format has its own
-// version, "s3re determinism trace vN" in trace/determinism.cpp, which is
+// version, "s3re determinism trace vN" in tooling/trace/determinism.cpp, which is
 // part of the key as well.)
 #define S3RE_ORIGINAL_TOOLING_VERSION "s3re original-mode tooling version 4"

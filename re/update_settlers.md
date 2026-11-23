@@ -78,8 +78,8 @@ preferred so that each replacement's tests run against verified callees.
 
 ### Package A: walking and pathfinding (26 functions, 6,979 instructions)
 
-Files: `game/pathing.cpp` (Dirk\Pathing.cpp; keep it separate, it is
-another programmer's source file), `game/settler_walk.cpp`.
+Files: `game/pathing/pathing.cpp` (Dirk\Pathing.cpp; keep it separate, it is
+another programmer's source file), `game/settlers/settler_walk.cpp`.
 
 Order:
 1. Leaves: 0x503940 AddTileTraffic, 0x4FA6D0 IsWalkingJob, 0x4FA880
@@ -98,12 +98,12 @@ Heaviest package, but self-contained (no other package calls into it).
 
 ### Package B: settler state, piles, soldiers, mines, map effects (28 functions, 6,201 instructions)
 
-Files: `game/settler_idle.cpp` (0x50CF50), `game/pile_goods_moves.cpp`
-(0x5046B0, 0x5061B0, 0x505820, 0x505C20), `game/notifications.cpp`
-(0x4FEC10), `game/soldier.cpp` (0x50E9F0), `game/miner_jobs.cpp`
-(0x4F9A00, 0x4F9B80, 0x4FA220, 0x4FAA70), `game/settler_spawn.cpp`
+Files: `game/settlers/settler_idle.cpp` (0x50CF50), `game/economy/pile_goods_moves.cpp`
+(0x5046B0, 0x5061B0, 0x505820, 0x505C20), `game/world/notifications.cpp`
+(0x4FEC10), `game/settlers/soldier.cpp` (0x50E9F0), `game/settlers/miner_jobs.cpp`
+(0x4F9A00, 0x4F9B80, 0x4FA220, 0x4FAA70), `game/settlers/settler_spawn.cpp`
 (0x50CB20, 0x50CCB0, 0x50DD20, 0x50E140, 0x50E320), and the MapEffects
-spawns in a new `game/map_effect_spawns.cpp` (0x544630, 0x5449F0,
+spawns in a new `game/environment/map_effect_spawns.cpp` (0x544630, 0x5449F0,
 0x545150, 0x545B90, 0x5453F0, 0x545730, 0x5458D0, 0x545C80, 0x543FD0,
 0x545E40) so that `map_effects.cpp` stays untouched.
 
@@ -121,11 +121,11 @@ Order (the first wave is what A and C call most):
 
 ### Package C: buildings, territory, terrain, UpdateEconomy callees (22 functions, 5,448 instructions)
 
-Files: `game/building_done.cpp` (0x4DBC50), `game/building_crush.cpp`
+Files: `game/buildings/building_done.cpp` (0x4DBC50), `game/buildings/building_crush.cpp`
 (0x4D97B0, 0x4D9250, 0x4DE430, 0x504A00, 0x504B70, 0x504E20, 0x50E3B0,
-0x51AAE0, 0x4DBB10, 0x4DBB90), `game/territory.cpp` (0x519A90, 0x51B640,
-0x504F70, 0x50E980), `game/terrain_updates.cpp` (0x519670, 0x51BA00,
-0x510800), `game/economy.cpp` (UpdateEconomy's 0x4DACD0, 0x5052C0,
+0x51AAE0, 0x4DBB10, 0x4DBB90), `game/map/territory.cpp` (0x519A90, 0x51B640,
+0x504F70, 0x50E980), `game/map/terrain_updates.cpp` (0x519670, 0x51BA00,
+0x510800), `game/economy/economy.cpp` (UpdateEconomy's 0x4DACD0, 0x5052C0,
 0x5104C0, 0x50E200).
 
 Order:
