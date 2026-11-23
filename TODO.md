@@ -140,10 +140,6 @@ Each item: what, why, and where to start.
   ~5x faster on FindPath); time GenerateRandomMap there and decide whether
   a bounded larger-map case is worth it, or exempt the rest with reasons
   so `--require-coverage` stops failing on it.
-- **Make Release the default build of run.py:** its full suite (2026-11-23,
-  12 workers, 1,422 s) gave 0 mismatches over all 556 specs, only
-  GenerateRandomMap incomplete, as with Debug. Switch the default and
-  record passes for the over-budget specs with it.
 - **Specs over the quick-mode budget (60 s) before full coverage:** they
   get no recorded pass from quick runs, so `--changed` reselects them
   until a `--full` run passes. Seen in the first quick run (2026-11-23):

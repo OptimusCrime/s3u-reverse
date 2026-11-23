@@ -756,6 +756,11 @@ replaying, see `src/s3re/replay/command_log.h`):
      elsewhere (CGameData_GenerateRandomMap: 1 case of ~100 s; its
      evidence is the in-process whole-world tests and the random-map
      whole-game checks). `--full` runs every case without budget.
+   - **Build (2026-11-23):** run.py tests the **Release** build by
+     default (`cmake --build --preset release` first; its full suite
+     matched Debug's, 0 mismatches, several times faster); `--build Debug`
+     for debugging a mismatch. Passes are recorded per compiled code, so
+     each build has its own.
    - **Policy:** small and medium functions get full emulator evidence;
      large ones (GenerateRandomMap, UpdateSettlers, UpdateSoldier) get
      bounded emulator runs per batch and rely on the in-process tests

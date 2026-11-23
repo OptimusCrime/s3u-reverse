@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Emulator differential tests: our replacements against the original code.
 
-Usage: python tools/emutest/run.py [filter] [--cases N] [--seed N] [--build Debug]
+Usage: python tools/emutest/run.py [filter] [--cases N] [--seed N] [--build Release|Debug]
                                    [--bin-dir DIR] [--jobs N] [--changed] [--full]
                                    [--quick] [--budget S]
 
@@ -517,13 +517,21 @@ def run_all(selected: list[tuple[int, specs.Spec]], self_test: bool, cases: int,
     return peak
 
 
+# The build the emulator tests by default (2026-11-23: the Release full suite
+# gave 0 mismatches over all 556 specs, like Debug, about 5x faster on the
+# heavy specs).
+DEFAULT_BUILD = "Release"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("filter", nargs="?", default="")
     parser.add_argument("--cases", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=1)
-    parser.add_argument("--build", default="Debug",
-                        help="configuration under build/x86/bin (Debug or Release)")
+    parser.add_argument("--build", default=DEFAULT_BUILD,
+                        help="configuration under build/x86/bin (default Release: its full "
+                             "suite matches Debug's and runs several times faster; Debug for "
+                             "debugging a mismatch)")
     parser.add_argument("--bin-dir", help="directory with s3re.dll and s3re.map "
                                           "(instead of build/x86/bin/BUILD)")
     parser.add_argument("--jobs", "-j", type=int, default=None,
@@ -640,7 +648,7 @@ def main() -> int:
     # A full run (every spec, default cases and seed) becomes the new
     # reference for the header-based selection when it passes cleanly.
     full_run = len(selected) == len(specs.SPECS) and standard_inputs and not quick \
-        and args.build == "Debug"
+        and args.build == DEFAULT_BUILD
     jobs = jobs_for([spec for _, spec in selected]) if selected else 1
     if quick:
         print(f"quick mode: a spec stops once fully covered after {QUICK_FRACTION:.0%} of its "
