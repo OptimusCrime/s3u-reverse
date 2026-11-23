@@ -179,6 +179,15 @@ inline constexpr GameGlobal<const std::uint16_t[]> g_aiCandidateDefaults{0x7329d
 // raises a non-zero build priority (AiPlayerData::best[type].score).
 inline constexpr GameGlobal<const std::uint16_t[58]> g_aiBuildPriorityCaps{0x7328e8};
 inline constexpr GameGlobal<const std::uint16_t[58]> g_aiBuildPrioritySteps{0x73295c};
+// The T_ECONOMY_AGENT's population stages (EconomyAgent::population):
+// stage s while population < stages[s + 1] (0, 40, 100, 500, 2000).
+inline constexpr GameGlobal<const std::uint16_t[5]> g_aiPopulationStages{0x65a85c};
+// Buildings wanted at the start of each population stage (0x5696d0 gold
+// mines 0, 2, 3, 5, 7; 0x5691b0 weaponsmiths 0, 1, 2, 3, 4); the static
+// initializers derive the per-stage slopes (g_aiWantedGoldMineSlopes,
+// g_aiWantedWeaponsmithSlopes) from them and the stages.
+inline constexpr GameGlobal<const std::uint8_t[5]> g_aiWantedGoldMines{0x65a8c8};
+inline constexpr GameGlobal<const std::uint8_t[5]> g_aiWantedWeaponsmiths{0x65a8d2};
 
 // ------------------------------------------------------------ library data
 // std::string::npos of S3.EXE's statically linked library (read at run

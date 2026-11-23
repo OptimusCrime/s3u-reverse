@@ -153,12 +153,114 @@ struct AiPlayerData {
     // priority that 0x551b10 raises by g_aiBuildPrioritySteps[type] up to
     // g_aiBuildPriorityCaps[type] (only while non-zero); candidate_values
     // are per-type countdowns (0x550f80 lowers 57 of them by one per step
-    // in every node of the list). The rest of best[] is not known.
+    // in every node of the list). best[57 + type] is the candidate taken
+    // for building (0x58ecb0 moves best[type] there and clears it; the
+    // T_ECONOMY_AGENT's toolsmith condition 0x569160 waits while one is
+    // there).
     AiCandidate best[114];                // 0x026
-    std::uint16_t candidate_values[1];    // 0x2d2 (count unknown, at least 57)
+    std::uint16_t candidate_values[kBuildingTypeCount];  // 0x2d2 (0x56a1a0 skips a type while non-zero)
+    // Computer players A2 (session 48), read by the T_ECONOMY_AGENT:
+    std::uint16_t building_counts[kBuildingTypeCount];   // 0x344 per type; filled by 0x572420, copied by 0x567910
+    std::uint8_t type_blocked[kBuildingTypeCount];       // 0x3b6 per type; non-zero: 0x56a1a0 skips the type (cleared by 0x565630, 0x573890)
+    std::uint8_t unk3ef[0x550 - 0x3ef];
+    std::uint32_t unk550;                                 // 0x550 the fishery condition 0x5693c0 needs it non-zero (probably "has fishing water")
 };
 static_assert(offsetof(AiPlayerData, best) == 0x26);
 static_assert(offsetof(AiPlayerData, candidate_values) == 0x2d2);
+static_assert(offsetof(AiPlayerData, building_counts) == 0x344);
+static_assert(offsetof(AiPlayerData, type_blocked) == 0x3b6);
+static_assert(offsetof(AiPlayerData, unk550) == 0x550);
+// best[kOrderedCandidates + type]: the candidate taken for building.
+constexpr std::size_t kOrderedCandidates = kBuildingTypeCount;
+
+// ---------------------------------------------------------------- T_ECONOMY_AGENT
+// The economy agent (kind 8; vtable 0x65a630, constructor 0x567850, run
+// 0x567890). Each run, 0x567910 takes a snapshot of the current node's
+// area: its population, goods in stock (AI_AreaGoodsAmount 0x59dc10) and
+// the node's buildings per type (AiPlayerData::building_counts; the
+// race-specific fields hold the race's own building, 0 for other races).
+// Then 0x56a1a0 runs one condition per building type (0x568250..0x569d20,
+// ai_economy_conditions.cpp) that asks for the type with a priority
+// through AI::RecordBestCandidate (0x58ec50).
+struct EconomyAgent {
+    std::uint32_t vtable;               // 0x00
+    std::uint16_t kind;                 // 0x04 8 (AI_SetWord4)
+    std::uint16_t unk06;
+    std::int32_t race;                  // 0x08 Race of g_aiPlayerNumber (Player::race)
+    std::uint16_t area;                 // 0x0c the node's key (ComputerPlayer::data_key): an economy area
+    std::uint16_t unk0e;
+    std::uint16_t run_count;            // 0x10 +1 per run; past player + 14 reset, and 0x56a000.. run
+    std::uint16_t unk12;
+    std::uint32_t unk14[6];             // 0x14..0x2b (cleared with run_count by the constructor)
+    std::int32_t stock_ratio;           // 0x2c buildings * 100 / wanted, of the last stage-based condition
+    std::uint32_t forester_priority;    // 0x30 the forester condition's last priority (0x5682b0)
+    std::uint16_t stage;                // 0x34 population stage 0..3 (g_aiPopulationStages)
+    std::uint8_t unk36[8];
+    std::uint16_t population;           // 0x3e settlers of class 0 in the area (CGameData::CountAreaSettlersOfClass0), or a per-player global
+    std::uint16_t carriers;             // 0x40 settlers of type 0 in the area (0x59dc70)
+    std::uint16_t logs;                 // 0x42 goods in the area
+    std::uint16_t boards;               // 0x44
+    std::uint16_t coal;                 // 0x46
+    std::uint16_t iron;                 // 0x48
+    std::uint16_t unk4a;
+    std::uint16_t gold_ore;             // 0x4c (set by the gold smelter condition 0x569860)
+    std::uint16_t sulfur;               // 0x4e
+    std::uint16_t stones;               // 0x50
+    std::uint16_t woodcutters;          // 0x52 buildings of the node per type
+    std::uint16_t stonecutters;         // 0x54
+    std::uint16_t sawmills;             // 0x56
+    std::uint16_t foresters;            // 0x58
+    std::uint16_t iron_smelters;        // 0x5a
+    std::uint16_t toolsmiths;           // 0x5c
+    std::uint16_t weaponsmiths;         // 0x5e
+    std::uint16_t gold_smelters;        // 0x60
+    std::uint16_t coal_mines;           // 0x62
+    std::uint16_t iron_mines;           // 0x64
+    std::uint16_t gold_mines;           // 0x66
+    std::uint16_t sulfur_mines;         // 0x68 Asian SulfurMine, Amazon AmazonSulfurMine
+    std::uint16_t gem_mines;            // 0x6a Egyptian, Amazon
+    std::uint16_t fisheries;            // 0x6c
+    std::uint16_t farms;                // 0x6e
+    std::uint16_t waterworks;           // 0x70
+    std::uint16_t mills;                // 0x72
+    std::uint16_t bakeries;             // 0x74
+    std::uint16_t pig_farms;            // 0x76
+    std::uint16_t slaughterhouses;      // 0x78
+    std::uint16_t vineyards;            // 0x7a Roman
+    std::uint16_t breweries;            // 0x7c Egyptian
+    std::uint16_t distilleries;         // 0x7e Asian
+    std::uint16_t donkey_farms;         // 0x80
+    std::uint16_t barracks;             // 0x82
+    std::uint16_t rice_farms;           // 0x84 Asian
+    std::uint16_t castles;              // 0x86
+    std::uint16_t large_towers;         // 0x88
+    std::uint16_t harbours;             // 0x8a
+    std::uint16_t shipyards;            // 0x8c
+    std::uint16_t marketplaces;         // 0x8e
+    std::uint16_t hospitals;            // 0x90
+    std::uint16_t war_workshops;        // 0x92 catapult / ballista / cannon workshop, Amazon large gong
+    std::uint16_t powder_makers;        // 0x94 Asian
+    std::uint16_t small_temples;        // 0x96 the race's small temple
+    std::uint16_t large_temples;        // 0x98 the race's large temple
+    std::uint16_t apiaries;             // 0x9a Amazon
+    std::uint16_t meaderies;            // 0x9c Amazon
+    std::uint16_t laboratories;         // 0x9e Amazon
+};
+static_assert(offsetof(EconomyAgent, race) == 0x08);
+static_assert(offsetof(EconomyAgent, area) == 0x0c);
+static_assert(offsetof(EconomyAgent, run_count) == 0x10);
+static_assert(offsetof(EconomyAgent, stock_ratio) == 0x2c);
+static_assert(offsetof(EconomyAgent, stage) == 0x34);
+static_assert(offsetof(EconomyAgent, population) == 0x3e);
+static_assert(offsetof(EconomyAgent, logs) == 0x42);
+static_assert(offsetof(EconomyAgent, gold_ore) == 0x4c);
+static_assert(offsetof(EconomyAgent, woodcutters) == 0x52);
+static_assert(offsetof(EconomyAgent, coal_mines) == 0x62);
+static_assert(offsetof(EconomyAgent, fisheries) == 0x6c);
+static_assert(offsetof(EconomyAgent, donkey_farms) == 0x80);
+static_assert(offsetof(EconomyAgent, hospitals) == 0x90);
+static_assert(offsetof(EconomyAgent, laboratories) == 0x9e);
+static_assert(sizeof(EconomyAgent) == 0xa0);
 
 // ---------------------------------------------------------------- agent data
 // The computer players' census of the world (AI_ResetAgentData clears it,

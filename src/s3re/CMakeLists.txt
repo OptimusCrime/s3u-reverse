@@ -28,6 +28,7 @@ add_library(s3re SHARED
     game/ai_computer_player.cpp
     game/ai_census.cpp
     game/ai_agents.cpp
+    game/ai_economy_conditions.cpp
     game/area_piles.cpp
     game/area_split.cpp
     game/building_crush.cpp

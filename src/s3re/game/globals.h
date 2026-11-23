@@ -211,6 +211,11 @@ inline constexpr GameGlobal<ai::AiLandEvaluation*> g_aiEvaLand{0x7e056c};
 inline constexpr GameGlobal<std::uint32_t> g_aiUnk7e3134{0x7e3134};
 // 20 vectors emptied by AI_ResetAgentData.
 inline constexpr GameGlobal<ai::AiVector[20]> g_aiAgentVectors{0x7e7a24};
+// Per population stage, the extra buildings wanted per settler (floats
+// set by static initializers, 0x566xxx: (wanted[s + 1] - wanted[s]) /
+// (stages[s + 1] - stages[s])). Stored in reverse: stage s at [3 - s].
+inline constexpr GameGlobal<float[4]> g_aiWantedWeaponsmithSlopes{0x7e1290};
+inline constexpr GameGlobal<float[4]> g_aiWantedGoldMineSlopes{0x7e12b0};
 
 // ------------------------------------------------------------ imports
 // S3.EXE's import address table slots (called through by the original;

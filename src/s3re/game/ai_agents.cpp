@@ -84,12 +84,6 @@ struct AttackAgent {
     std::uint32_t unk08;
     std::uint32_t unk0c;
 };
-struct EconomyAgent {
-    AiTaggedRecord base;
-    std::uint16_t unk06;
-    std::uint8_t unk08[8];
-    std::uint32_t unk10[7];
-};
 struct SafetyAgent {
     AiTaggedRecord base;
     std::uint16_t unk06;
@@ -104,7 +98,6 @@ struct CentrumCheckAgent {
 };
 static_assert(offsetof(GlobalExpandEmpireAgent, unk08) == 8);
 static_assert(offsetof(MapWorkerAgent, unk10) == 0x10);
-static_assert(offsetof(EconomyAgent, unk10) == 0x10 && sizeof(EconomyAgent) == 0x2c);
 static_assert(sizeof(SafetyAgent) == 0x1c);
 static_assert(sizeof(CentrumCheckAgent) == 0x28);
 
@@ -196,7 +189,11 @@ S3RE_HOOK(0x00567850, T_ECONOMY_AGENT_Construct, ThisFn, Original_T_ECONOMY_AGEN
 // Purpose: Constructor of the economy agent (kind 8).
 std::uint32_t __fastcall T_ECONOMY_AGENT_Construct(void* self, void* /*edx*/) {
     SetKind(self, AgentKind::Economy);
-    for (std::uint32_t& value : static_cast<EconomyAgent*>(self)->unk10) {
+    // The seven dwords +0x10..+0x2b (EconomyAgent in ai_layout.h).
+    auto* agent = static_cast<EconomyAgent*>(self);
+    agent->run_count = 0;
+    agent->unk12 = 0;
+    for (std::uint32_t& value : agent->unk14) {
         value = 0;
     }
     return 0;

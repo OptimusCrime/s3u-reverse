@@ -10483,3 +10483,117 @@ def ec_interlocked_stubs(rng, pool, args):
 
 
 EC_GLOBALS_EXTRA.append(ec_interlocked_stubs)
+
+# -- computer players A2: T_ECONOMY_AGENT conditions (ai_economy_conditions.cpp) --
+#
+# The agent (EconomyAgent, 0xa0 bytes) sits at world offset 0 (ECX = the
+# world), g_aiPlayerData points at scratch 0, g_aiWorld at the world. The
+# conditions call AI::RecordBestCandidate, AI_CountBuildings (buildings of
+# the types they count, on a 400 x 400 map) and AI_AreaGoodsAmount (short
+# pile lists in the agent's area). EAX is not used by 0x56a1a0.
+
+AI_PLAYER_NUMBER = 0x007e2eb8
+ECONOMY_SLOPES = (0x007e1290, 0x007e12b0)  # g_aiWantedWeaponsmithSlopes, g_aiWantedGoldMineSlopes
+
+
+def economy_globals(rng, pool, args):
+    fields = [(AI_WORLD, WORLD_BASE, 4), (AI_PLAYER_DATA, WORLD_BASE + SCRATCH, 4),
+              (AI_PLAYER_NUMBER, rng.randrange(3), 1), (AI_MAP_SIZES, 400, 2), (AI_MAP_SIZES + 2, 400, 2)]
+    for table in ECONOMY_SLOPES:
+        for s in range(4):
+            if rng.random() < 0.1:
+                bits = rng.getrandbits(32)
+            else:
+                bits = struct.unpack("<I", struct.pack("<f", rng.randrange(1000) / 997.0))[0]
+            fields.append((table + 4 * s, bits, 4))
+    return fields
+
+
+def economy_pile_chain(rng, base, length, storehouse_kinds):
+    """(head, fields) of a chain of distinct piles from id `base`."""
+    fields, head = [], 0
+    stride = rng.randint(1, 3)
+    for k in range(length):
+        pile = base + k * stride
+        record = AI_PILES + pile * 14
+        art = 0 if storehouse_kinds and rng.random() < 0.5 else rng.randrange(256)
+        fields += [(record + 1, rng.randrange(5), 1), (record + 4, art, 1), (record + 0xC, head, 2)]
+        head = pile
+    return head, fields
+
+
+def economy_agent(rng, pool, args):
+    area = rng.randrange(4)
+    race = rng.randrange(4) if rng.random() < 0.9 else rng.getrandbits(32)
+    fields = [(8, race, 4), (0xC, area, 2)]
+    for offset in range(0x42, 0xA0, 2):
+        r = rng.random()
+        value = 0 if r < 0.35 else rng.getrandbits(16) if r < 0.4 else rng.randrange(9)
+        fields.append((offset, value, 2))
+    if rng.random() < 0.25:
+        fields += [(0x42, rng.randrange(100), 2), (0x44, rng.randrange(100), 2), (0x46, rng.randrange(40), 2),
+                   (0x48, rng.randrange(12), 2)]
+    # The population: every stage and crowd limit about equally often.
+    low, high = rng.choice(((0, 40), (40, 101), (101, 251), (251, 501), (501, 2000), (2000, 2500), (0, 0x10000)))
+    fields.append((0x3E, rng.randrange(low, high), 2))
+    # AiPlayerData: the toolsmith order, unk550, the storehouse count.
+    if rng.random() < 0.5:
+        fields.append((SCRATCH + 0x26 + 6 * (57 + 12), 0, 2))
+    if rng.random() < 0.25:
+        fields.append((SCRATCH + 0x550, 0, 4))
+    fields.append((SCRATCH + 0x344 + 2 * 1, rng.randrange(3), 2))
+    # Buildings for AI_CountBuildings.
+    count = rng.randrange(30)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        x, y = rng.randrange(400), rng.randrange(400)
+        fields += [(record, 0xFF if rng.random() < 0.15 else rng.randrange(3), 1),
+                   (record + 6, rng.choice((1, 12, 23, 24)), 1),
+                   (record + 0x21, int(rng.random() < 0.25), 1), (record + 0xA, x, 2), (record + 0xC, y, 2),
+                   (TILES + (x * 0x300 + y) * 24 + 0x14, area if rng.random() < 0.6 else rng.randrange(4), 2)]
+    # Pile lists of the area: gold ore, swords, bows, spears and the area's own list.
+    base = rng.randint(1, 1000)
+    record = AI_AREAS + area * 0x2E0
+    for goods in (6, 18, 19, 20):
+        head, chain = economy_pile_chain(rng, base, rng.randrange(9), False)
+        fields += chain + [(record + 0xA + goods * 2, head, 2)]
+        base += 40
+    head, chain = economy_pile_chain(rng, base, rng.randrange(8), True)
+    fields += chain + [(record + 8, head, 2)]
+    return fields
+
+
+def economy_condition(name: str, address: int) -> Spec:
+    return Spec(name, address, "thiscall", [], eax_mask=0, presets=economy_agent, globals=economy_globals,
+                max_cases=1000)
+
+
+SPECS += [
+    economy_condition("T_ECONOMY_AGENT_ConsiderSawmill", 0x00568250),
+    economy_condition("T_ECONOMY_AGENT_ConsiderForester", 0x005682b0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderToolsmith", 0x00569160),
+    economy_condition("T_ECONOMY_AGENT_ConsiderWeaponsmith", 0x005691b0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderRiceFarm", 0x00569330),
+    economy_condition("T_ECONOMY_AGENT_ConsiderFishery", 0x005693c0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderFarm", 0x00569430),
+    economy_condition("T_ECONOMY_AGENT_ConsiderMill", 0x00569490),
+    economy_condition("T_ECONOMY_AGENT_ConsiderBakery", 0x005694f0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderPigFarm", 0x00569520),
+    economy_condition("T_ECONOMY_AGENT_ConsiderSlaughterhouse", 0x00569590),
+    economy_condition("T_ECONOMY_AGENT_ConsiderWaterworks", 0x005695e0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderBarracks", 0x00569640),
+    economy_condition("T_ECONOMY_AGENT_ConsiderGoldMine", 0x005696d0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderGoldSmelter", 0x00569860),
+    economy_condition("T_ECONOMY_AGENT_ConsiderStorehouse", 0x00569900),
+    economy_condition("T_ECONOMY_AGENT_ConsiderHospital", 0x005699d0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderGemMine", 0x00569a00),
+    economy_condition("T_ECONOMY_AGENT_ConsiderSulfurMine", 0x00569a30),
+    economy_condition("T_ECONOMY_AGENT_ConsiderPowderMaker", 0x00569aa0),
+    economy_condition("T_ECONOMY_AGENT_ConsiderCharcoalBurner", 0x00569b00),
+    economy_condition("T_ECONOMY_AGENT_ConsiderSmallTemple", 0x00569b30),
+    economy_condition("T_ECONOMY_AGENT_ConsiderLargeTemple", 0x00569c00),
+    economy_condition("T_ECONOMY_AGENT_ConsiderApiary", 0x00569c90),
+    economy_condition("T_ECONOMY_AGENT_ConsiderDrinkBuilding", 0x00569d20),
+]
+
