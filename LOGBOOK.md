@@ -608,6 +608,10 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
 - **Optimized build for the emulator:** non-Debug configurations link
   with /OPT:NOICF /OPT:NOREF, so `run.py --build Release` finds every
   replacement; Pathing_FindPath 100 cases: Debug 100 s, Release 19 s.
+  Release `--full` suite (556 specs, 12 workers): 0 mismatches, only
+  GenerateRandomMap incomplete (338/415, as in Debug), 1,422 s wall
+  (GenerateRandomMap 10 cases 173 s; Debug's took ~1,036 s); a worker
+  peaked at 2.6 GB.
 - Not done: splitting enums.h (TODO.md); the full Debug `--full` suite
   wasn't rerun.
 
