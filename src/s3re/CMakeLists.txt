@@ -117,3 +117,11 @@ target_compile_options(s3re PRIVATE /W4 /utf-8)
 # Symbol map next to the DLL (s3re.map), for the emulator tests in
 # tools/emutest, which call our functions by name.
 target_link_options(s3re PRIVATE /MAP)
+# Optimized builds keep every function under its own name for the emulator
+# (run.py --build Release finds our replacements by name in s3re.map):
+# identical-code folding (/OPT:ICF, the linker's default with
+# optimizations) would merge identical functions and keep one name, and
+# /OPT:REF would drop a replacement whose only use (the counting thunk of
+# its hook) inlined it.
+target_link_options(s3re PRIVATE $<$<NOT:$<CONFIG:Debug>>:/OPT:NOICF>
+                    $<$<NOT:$<CONFIG:Debug>>:/OPT:NOREF>)
