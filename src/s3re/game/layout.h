@@ -404,7 +404,9 @@ struct Player {
     std::uint8_t map_revealed;       // 0x124 1 while spell 31 (SpellRevealMap) shows the map; Step ends it after 15 s
     std::uint8_t pad125[3];
     std::int32_t map_revealed_tick;  // 0x128 game tick of that spell
-    std::int32_t unk12c[3];          // 0x12c
+    std::int32_t soldiers_lost;      // 0x12c +1 per dying settler of class 1..9 (UpdateSettlers job 0x36, 0x4eef33); campaign mission 52 is won when players 1..3 together lost 350 (CheckGameEnd 0x511c50)
+    std::int32_t civilians_lost;     // 0x130 +1 per dying settler of another class
+    std::int32_t mission_state;      // 0x134 low 12 bits counted up by the spell handler 0x54a370; CheckGameEnd: mission 67 sets bit 0x1000 (local player) and needs bits 0..11 >= 10; mission 68 keeps a game tick in player 0's
     std::uint8_t unused138[0x10];    // 0x138
 };
 static_assert(sizeof(Player) == 0x148);
@@ -468,6 +470,47 @@ struct MapOffset {  // world+0x110a588
     std::int32_t dx, dy, distance, sector;
 };
 static_assert(sizeof(MapOffset) == 0x10);
+
+// The goals of a map with victory conditions ("VictoryConditions" in the
+// savegame, world+0x15394b1), checked by CLogicThread::CheckVictoryConditions
+// (0x5145c0). Player numbers are colour slots outside campaigns (mapped to a
+// player by CGameData::PlayerOfColour 0x4ffe00), else player numbers.
+struct VictoryPlace {  // a place the local player must own
+    std::uint8_t active;             // 0x0
+    std::uint16_t x;                 // 0x1
+    std::uint16_t y;                 // 0x3
+};
+static_assert(sizeof(VictoryPlace) == 5);
+
+struct VictoryBuilding {  // a building that must be destroyed
+    std::int8_t player;              // 0x0 -1 (0xff) = unused entry
+    std::int8_t building_type;       // 0x1
+};
+static_assert(sizeof(VictoryBuilding) == 2);
+
+struct VictoryGoods {  // goods the local player must have lying in its areas
+    std::uint16_t amount;            // 0x0 0 = unused entry
+    std::int8_t good;                // 0x2
+};
+static_assert(sizeof(VictoryGoods) == 3);
+
+struct VictoryConditions {
+    std::uint8_t destroy_players;            // 0x00 on: the marked players must lose all military buildings
+    std::uint8_t player_to_destroy[kPlayers];  // 0x01
+    std::uint8_t destroy_buildings;          // 0x15 on: the listed buildings must be gone
+    VictoryBuilding buildings[10];           // 0x16
+    std::uint8_t hold_places;                // 0x2a on: the local player must own the places
+    VictoryPlace places[5];                  // 0x2b
+    std::uint8_t protect_players;            // 0x44 on: the players with a time must keep military buildings that long
+    std::uint16_t protect_minutes[kPlayers];  // 0x45 0 = no condition for that player
+    std::uint8_t collect_goods;              // 0x6d on: the local player must collect the goods
+    VictoryGoods goods[3];                   // 0x6e
+};
+static_assert(sizeof(VictoryConditions) == 0x77);
+static_assert(offsetof(VictoryConditions, destroy_buildings) == 0x15);
+static_assert(offsetof(VictoryConditions, hold_places) == 0x2a);
+static_assert(offsetof(VictoryConditions, protect_players) == 0x44);
+static_assert(offsetof(VictoryConditions, collect_goods) == 0x6d);
 
 struct RevealPoint {  // world+0x14d28a8: a revealed spot (spell "EventReveal"?)
     std::uint8_t active;             // 0x00 0 = free
@@ -677,7 +720,7 @@ struct CGameDataFields {
     std::uint32_t ui_feedback[10];                          // 0x1539484
     std::uint32_t ui_feedback_count;                        // 0x15394ac
     std::uint8_t flag15394b0;                               // 0x15394b0
-    std::uint8_t victory_conditions[119];                   // 0x15394b1
+    VictoryConditions victory_conditions;                   // 0x15394b1
     std::int32_t reciprocal[768];                           // 0x1539528 0x10000 / i
 };
 #pragma pack(pop)

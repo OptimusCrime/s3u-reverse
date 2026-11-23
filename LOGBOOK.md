@@ -666,6 +666,48 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   soldiers (spell 25); better names for Spell10..17/24/25 in enums.h (left
   as placeholders, comments updated); the spells still need a recording
   that casts them.
+### 2026-11-23 (46): game-end check (parallel worktree)
+
+- **0x511c50 is CLogicThread::CheckGameEnd** (was Logic_sub_511c50; the
+  "EventGodlyGoods" string is a neighbour's). Every 50 ticks while
+  g_gameOutcome is -1 (stamp at CLogicThread +0x24c): new game objectives
+  whose time is up -> world +0x2d250 = 1 and the outcome from
+  CGameData::DecideNgoOutcome (0x4ffc80); else a jump table over
+  g_campaignMission (100 entries at 0x514424, data after the code):
+  mission 0 (no campaign) and 14 others use the map's victory conditions
+  (CLogicThread::CheckVictoryConditions 0x5145c0), the rest have
+  hard-coded goals per campaign mission (defeat players, hold places,
+  towers/temples/gongs near places, collect gold/liquor/fish/iron,
+  soldiers near a place, ...). Some missions also act: 34/58 open an
+  allied marketplace's trade route, 51 gives player 1 mana and summons a
+  mage with two effect records, 67/68 keep state in player +0x134, 68/69
+  set g_worldUpdateDisabled when won. g_gameOutcome: 1 won, 0 lost, 2 NGO
+  draw, -1 undecided (Step sends command 0xfd / 0xfc). One unit, split into
+  a function per mission in src/s3re/game/game_end_check.cpp.
+- **Callees:** CLogicThread::IsBuildingNear (0x514bf0),
+  CLogicThread::SumGoodsNear (0x514cc0), CLogicThread::CheckVictoryConditions
+  (0x5145c0, ictory_conditions.cpp), CGameData::DecideNgoOutcome
+  (0x4ffc80) and CGameData::PlayerOfColour (0x4ffe00, quirk: a match only at
+  player 19 gives 0; both objectives.cpp). Renamed
+  CountBuildingsOfTypes15To18 -> CountMilitaryBuildings and
+  SumAreaGoods10PerPlayer -> SumGoldPerPlayer (whole_game fix-names).
+- **Fields:** layout::VictoryConditions (world +0x15394b1: destroy
+  players / buildings, hold places, protect players N minutes, collect
+  goods), player +0x12c soldiers_lost / +0x130 civilians_lost / +0x134
+  mission_state (were unk12c[3]), CLogicThread +0x24c
+  last_game_end_check, table g_table658ee4 (globals.csv). structs.md,
+  world_layout.md updated.
+- **Evidence:** in-process tests for all seven (CheckGameEnd: 6,000 cases
+  over missions 0..100 on a whole world with sanitized tables, globals
+  saved/restored, plus a wrong-implementation test); emulator specs with
+  0 mismatches and full block coverage for all seven (CheckGameEnd: 512
+  blocks, 10,000 cases (case_scale 5, half on the 24 missions with rare goals), cover_until 0x514424, presets with goal /
+  army / peace scenarios). Not yet in a whole-game check (mission 0 runs
+  every 50 ticks in every game: the round-end checks will count it).
+- **Open:** the meaning of g_table658ee4 and of the effect records mission
+  51 creates; the original writes CountMilitaryBuildings / SumGoldPerPlayer
+  results for owners >= 20 into its own stack frame (ours uses 256-entry
+  buffers; real games have owners < 20).
 
 ### 2026-11-23 (45): faster verification tooling
 

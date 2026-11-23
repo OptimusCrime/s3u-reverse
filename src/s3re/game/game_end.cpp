@@ -2,7 +2,7 @@
 // (0x511c50; also called by 0x5145c0 and ProcessEvents). They take the
 // logic thread in ECX and reach the world through this+0x3a0.
 //
-// CLogicThread::CountBuildingsOfTypes15To18 (0x00514a00): (int32 out[20]):
+// CLogicThread::CountMilitaryBuildings (0x00514a00): (int32 out[20]):
 //   zeroes out[0..19], then for each building 1..count (count at
 //   world+0x1499e60, re-read every round; 0x3a-byte records at
 //   world+0x1499e64) whose player byte (+0x0) is not 0xff, byte +0x21 is 0
@@ -19,7 +19,7 @@
 // CLogicThread::CountTilesOwnedByEither (0x00514ae0): (playerA, playerB,
 //   points, count): the same for owner == playerA or owner == playerB.
 //   ret 0x10.
-// CLogicThread::SumAreaGoods10PerPlayer (0x00514b40): (int32 out[20]): zeroes
+// CLogicThread::SumGoldPerPlayer (0x00514b40): (int32 out[20]): zeroes
 //   out[0..19], then for each area 1..count (count at world+0xe115dc;
 //   0x2e0-byte records at world+0xe145e8) whose player byte (+0x0) is not
 //   0xff: walks its list of goods-type-10 piles (head at +0x1e; the area
@@ -28,8 +28,21 @@
 //   world+0x123885c) and adds each pile's amount (byte +0x1) to
 //   out[player]. EAX (callers ignore it) = count + 1.
 //   ret 4.
+// CLogicThread::IsBuildingNear (0x00514bf0): (x, y, radius, type, player)
+//   -> AL = 1 if one of the tiles (x + dx, y + dy) of the offset table
+//   (world+0x110a588, sorted by distance) with distance <= radius (unsigned)
+//   that lie on the map has a building (flag 0x20, building = object
+//   number) of that type, finished (byte +0x21 == 0) and owned by player
+//   (any owner if player < 0). The first entry is checked only if its
+//   distance is <= radius too. Upper bits of EAX are the caller's (only AL
+//   is used). ret 0x14.
+// CLogicThread::SumGoodsNear (0x00514cc0): (x, y, radius, good, player)
+//   -> the summed amounts of the piles (object number, tile without flag
+//   0x20) of that good on the same tiles, of tiles owned by player (any
+//   if player < 0). ret 0x14.
 
 #include "game/logic_thread_layout.h"
+#include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -45,8 +58,11 @@ namespace {
 
 using layout::Area;
 using layout::Building;
+using layout::kTileHasBuilding;
+using layout::MapOffset;
+using layout::Tile;
 
-// Goods type whose piles SumAreaGoods10PerPlayer sums (list head at area +0x1e).
+// Goods type whose piles SumGoldPerPlayer sums (list head at area +0x1e).
 constexpr std::uint32_t kGoods10 = 10;
 static_assert(offsetof(Area, piles_by_goods) + kGoods10 * 2 == 0x1e);
 
@@ -73,10 +89,14 @@ using CountOwnedFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, s
 using CountOwnedEitherFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t playerA,
                                                       std::uint32_t playerB, const std::int32_t* points,
                                                       std::int32_t count);
+using IsBuildingNearFn = bool(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t x, std::uint32_t y,
+                                           std::uint32_t radius, std::uint32_t type, std::int32_t player);
+using SumGoodsNearFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t x, std::uint32_t y,
+                                                  std::uint32_t radius, std::uint32_t good, std::int32_t player);
 
-// Purpose: For the game-end check: counts, per player, the finished buildings of three particular types
-// (probably castles/military buildings that decide whether a player is still in the game).
-std::uint32_t __fastcall CLogicThread_CountBuildingsOfTypes15To18(CLogicThread* self, void*, std::int32_t* out) {
+// Purpose: For the game-end check: counts each player's finished military buildings (small and large towers,
+// castles); a player without any has lost.
+std::uint32_t __fastcall CLogicThread_CountMilitaryBuildings(CLogicThread* self, void*, std::int32_t* out) {
     std::memset(out, 0, kPlayers * sizeof(std::int32_t));
     std::uint32_t last = 0;
     for (std::uint32_t building = 1; building <= WorldOf(self)->building_high_water; ++building) {
@@ -125,9 +145,9 @@ std::uint32_t __fastcall CLogicThread_CountTilesOwnedByEither(CLogicThread* self
     return result;
 }
 
-// Purpose: For the game-end check: how much of goods type 10 each player has lying in their areas (probably
-// gold, for 'collect N gold' goals).
-std::uint32_t __fastcall CLogicThread_SumAreaGoods10PerPlayer(CLogicThread* self, void*, std::int32_t* out) {
+// Purpose: For the game-end check: how much gold each player has lying in their areas (campaign goals like
+// 'don't let the enemy collect 70 gold').
+std::uint32_t __fastcall CLogicThread_SumGoldPerPlayer(CLogicThread* self, void*, std::int32_t* out) {
     std::memset(out, 0, kPlayers * sizeof(std::int32_t));
     std::uint32_t area = 1;
     for (; area <= WorldOf(self)->area_high_water; ++area) {
@@ -145,14 +165,77 @@ std::uint32_t __fastcall CLogicThread_SumAreaGoods10PerPlayer(CLogicThread* self
     return area;
 }
 
-S3RE_HOOK(0x00514a00, CLogicThread_CountBuildingsOfTypes15To18, CountPerPlayerFn,
-          Original_CLogicThread_CountBuildingsOfTypes15To18, CLogicThread_CountBuildingsOfTypes15To18);
+// Purpose: For campaign mission goals: whether a finished building of a given type (of a given player, or of
+// anyone) stands within a radius around a place, e.g. 'build a large temple near the river'.
+bool __fastcall CLogicThread_IsBuildingNear(CLogicThread* self, void*, std::uint32_t x, std::uint32_t y,
+                                            std::uint32_t radius, std::uint32_t type, std::int32_t player) {
+    CGameData* world = WorldOf(self);
+    bool found = false;
+    // The offset table is sorted by distance (unsigned compares, as the original).
+    if (static_cast<std::uint32_t>(world->offsets[0].distance) > radius) {
+        return false;
+    }
+    for (std::uint32_t k = 0; !found; ++k) {
+        const MapOffset& offset = world->offsets[k];
+        const std::uint32_t tx = static_cast<std::uint32_t>(offset.dx) + x;
+        const std::uint32_t ty = static_cast<std::uint32_t>(offset.dy) + y;
+        if (tx < world->map_size && ty < world->map_size) {
+            const Tile& tile = TileAtOffset(world, TileOffset(tx, ty));
+            if ((tile.flags & kTileHasBuilding) != 0) {
+                const Building& building = world->buildings[tile.object_number];
+                if (building.art == type && building.buildup == 0 &&
+                    (player < 0 || building.owner == static_cast<std::uint32_t>(player))) {
+                    found = true;
+                }
+            }
+        }
+        if (static_cast<std::uint32_t>(world->offsets[k + 1].distance) > radius) {
+            break;
+        }
+    }
+    return found;
+}
+
+// Purpose: For campaign mission goals: how many goods of a type lie on free piles (not in buildings) within a
+// radius around a place, of piles on one player's land or anywhere.
+std::uint32_t __fastcall CLogicThread_SumGoodsNear(CLogicThread* self, void*, std::uint32_t x, std::uint32_t y,
+                                                   std::uint32_t radius, std::uint32_t good, std::int32_t player) {
+    CGameData* world = WorldOf(self);
+    std::uint32_t sum = 0;
+    if (static_cast<std::uint32_t>(world->offsets[0].distance) > radius) {
+        return 0;
+    }
+    for (std::uint32_t k = 0;; ++k) {
+        const MapOffset& offset = world->offsets[k];
+        const std::uint32_t tx = static_cast<std::uint32_t>(offset.dx) + x;
+        const std::uint32_t ty = static_cast<std::uint32_t>(offset.dy) + y;
+        if (tx < world->map_size && ty < world->map_size) {
+            const Tile& tile = TileAtOffset(world, TileOffset(tx, ty));
+            const std::uint32_t pile = tile.object_number;
+            if (pile != 0 && (tile.flags & kTileHasBuilding) == 0 && world->piles[pile].good == good &&
+                (player < 0 || tile.owner == static_cast<std::uint32_t>(player))) {
+                sum += world->piles[pile].amount;
+            }
+        }
+        if (static_cast<std::uint32_t>(world->offsets[k + 1].distance) > radius) {
+            break;
+        }
+    }
+    return sum;
+}
+
+S3RE_HOOK(0x00514a00, CLogicThread_CountMilitaryBuildings, CountPerPlayerFn,
+          Original_CLogicThread_CountMilitaryBuildings, CLogicThread_CountMilitaryBuildings);
 S3RE_HOOK(0x00514a90, CLogicThread_CountTilesOwnedBy, CountOwnedFn, Original_CLogicThread_CountTilesOwnedBy,
           CLogicThread_CountTilesOwnedBy);
 S3RE_HOOK(0x00514ae0, CLogicThread_CountTilesOwnedByEither, CountOwnedEitherFn,
           Original_CLogicThread_CountTilesOwnedByEither, CLogicThread_CountTilesOwnedByEither);
-S3RE_HOOK(0x00514b40, CLogicThread_SumAreaGoods10PerPlayer, CountPerPlayerFn,
-          Original_CLogicThread_SumAreaGoods10PerPlayer, CLogicThread_SumAreaGoods10PerPlayer);
+S3RE_HOOK(0x00514b40, CLogicThread_SumGoldPerPlayer, CountPerPlayerFn,
+          Original_CLogicThread_SumGoldPerPlayer, CLogicThread_SumGoldPerPlayer);
+S3RE_HOOK(0x00514bf0, CLogicThread_IsBuildingNear, IsBuildingNearFn, Original_CLogicThread_IsBuildingNear,
+          CLogicThread_IsBuildingNear);
+S3RE_HOOK(0x00514cc0, CLogicThread_SumGoodsNear, SumGoodsNearFn, Original_CLogicThread_SumGoodsNear,
+          CLogicThread_SumGoodsNear);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -206,9 +289,9 @@ void SetUpPlayers(test::Context& ctx, test::WorldPair& worlds) {
 }
 
 // Wrong: counts type 0x11 too.
-std::uint32_t __fastcall WrongCountBuildingsOfTypes15To18(CLogicThread* self, void* edx, std::int32_t* out) {
+std::uint32_t __fastcall WrongCountMilitaryBuildings(CLogicThread* self, void* edx, std::int32_t* out) {
     CGameData* world = WorldOf(self);
-    const std::uint32_t result = CLogicThread_CountBuildingsOfTypes15To18(self, edx, out);
+    const std::uint32_t result = CLogicThread_CountMilitaryBuildings(self, edx, out);
     for (std::uint32_t building = 1; building <= world->building_high_water; ++building) {
         const Building& record = world->buildings[building];
         const std::uint32_t player = record.owner;
@@ -237,7 +320,7 @@ void CompareBuildingCounts(test::Context& ctx, CountPerPlayerFn candidate, int c
             });
         }
         f.FillOutputs(ctx);
-        const std::uint32_t expected = Original_CLogicThread_CountBuildingsOfTypes15To18(f.original(), nullptr, f.outA);
+        const std::uint32_t expected = Original_CLogicThread_CountMilitaryBuildings(f.original(), nullptr, f.outA);
         const std::uint32_t actual = candidate(f.ours(), nullptr, f.outB);
         if (!S3RE_EXPECT_EQ(expected, actual) || !f.SameOutputs(ctx) ||
             ((i % 16 == 15 || i == cases - 1) && !f.worlds.Checkpoint(ctx))) {
@@ -265,12 +348,12 @@ std::uint32_t RandomOwnerArgument(test::Context& ctx) {
 
 }  // namespace
 
-S3RE_TEST(CLogicThread_CountBuildingsOfTypes15To18_MatchesOriginal) {
-    CompareBuildingCounts(ctx, &CLogicThread_CountBuildingsOfTypes15To18, 200);
+S3RE_TEST(CLogicThread_CountMilitaryBuildings_MatchesOriginal) {
+    CompareBuildingCounts(ctx, &CLogicThread_CountMilitaryBuildings, 200);
 }
-S3RE_TEST(CLogicThread_CountBuildingsOfTypes15To18_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(CLogicThread_CountMilitaryBuildings_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareBuildingCounts(probe, &WrongCountBuildingsOfTypes15To18, 50);
+    CompareBuildingCounts(probe, &WrongCountMilitaryBuildings, 50);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
@@ -310,7 +393,7 @@ S3RE_TEST(CLogicThread_CountTilesOwnedByEither_MatchesOriginal) {
     f.worlds.Checkpoint(ctx);
 }
 
-S3RE_TEST(CLogicThread_SumAreaGoods10PerPlayer_MatchesOriginal) {
+S3RE_TEST(CLogicThread_SumGoldPerPlayer_MatchesOriginal) {
     Fixture f(ctx);
     for (int i = 0; i < 300; ++i) {
         const std::uint32_t count = ctx.rng().Chance(1, 16) ? 0 : ctx.rng().Below(kTestAreas);
@@ -333,8 +416,8 @@ S3RE_TEST(CLogicThread_SumAreaGoods10PerPlayer_MatchesOriginal) {
             f.worlds.Both([&](CGameData* w) { w->areas[area].piles_by_goods[kGoods10] = static_cast<std::uint16_t>(first); });
         }
         f.FillOutputs(ctx);
-        const std::uint32_t expected = Original_CLogicThread_SumAreaGoods10PerPlayer(f.original(), nullptr, f.outA);
-        const std::uint32_t actual = CLogicThread_SumAreaGoods10PerPlayer(f.ours(), nullptr, f.outB);
+        const std::uint32_t expected = Original_CLogicThread_SumGoldPerPlayer(f.original(), nullptr, f.outA);
+        const std::uint32_t actual = CLogicThread_SumGoldPerPlayer(f.ours(), nullptr, f.outB);
         if (!S3RE_EXPECT_EQ(expected, actual) || !f.SameOutputs(ctx) ||
             ((i % 16 == 15 || i == 299) && !f.worlds.Checkpoint(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: %u areas", i, count);
@@ -343,4 +426,125 @@ S3RE_TEST(CLogicThread_SumAreaGoods10PerPlayer_MatchesOriginal) {
     }
 }
 
+namespace {
+
+// A neighbourhood around (cx, cy): the first `entries` offsets (rings of
+// growing distance, sometimes unsorted or with a large first distance), and
+// tiles there with buildings or piles of a few types and owners.
+void SetUpNeighbourhood(test::Context& ctx, test::WorldPair& worlds, std::uint32_t cx, std::uint32_t cy) {
+    const std::uint32_t mapSize = ctx.rng().Chance(1, 8) ? ctx.rng().Below(401) : 400;
+    worlds.Both([&](CGameData* w) { w->map_size = mapSize; });
+    const std::uint32_t entries = 2 + ctx.rng().Below(40);
+    std::int32_t distance = ctx.rng().Chance(1, 10) ? ctx.rng().Range(-2, 40) : 0;
+    for (std::uint32_t k = 0; k < entries + 1; ++k) {
+        const std::int32_t dx = ctx.rng().Range(-6, 6);
+        const std::int32_t dy = ctx.rng().Range(-6, 6);
+        if (ctx.rng().Chance(1, 3)) {
+            distance += ctx.rng().Range(0, 2);
+        }
+        const std::int32_t stored = k == entries ? -1 : distance;  // -1: the end for any radius but 0xffffffff
+        worlds.Both([&](CGameData* w) {
+            w->offsets[k].dx = dx;
+            w->offsets[k].dy = dy;
+            w->offsets[k].distance = stored;
+        });
+        const std::uint32_t tx = cx + static_cast<std::uint32_t>(dx);
+        const std::uint32_t ty = cy + static_cast<std::uint32_t>(dy);
+        if (tx >= 400 || ty >= 400) {
+            continue;
+        }
+        const bool building = ctx.rng().Chance(1, 2);
+        const auto object = static_cast<std::uint16_t>(ctx.rng().Chance(1, 8) ? 0 : 1 + ctx.rng().Below(kTestBuildings));
+        const auto flags = static_cast<std::uint8_t>((ctx.rng().Next32() & ~kTileHasBuilding) |
+                                                     (building ? kTileHasBuilding : 0));
+        const auto owner = static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? kNoPlayer : ctx.rng().Below(4));
+        const auto art = static_cast<std::uint8_t>(14 + ctx.rng().Below(4));
+        const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(3, 4) ? 0 : 1 + ctx.rng().Below(255));
+        const auto good = static_cast<std::uint8_t>(7 + ctx.rng().Below(4));
+        const auto amount = static_cast<std::uint8_t>(ctx.rng().Below(9));
+        const std::uint8_t buildingOwner = ctx.rng().Chance(1, 2) ? owner : 0;
+        worlds.Both([&](CGameData* w) {
+            Tile& tile = w->tiles[tx][ty];
+            tile.object_number = object;
+            tile.flags = flags;
+            tile.owner = owner;
+            Building& record = w->buildings[object];
+            record.art = art;
+            record.buildup = buildup;
+            record.owner = buildingOwner;
+            w->piles[object].good = good;
+            w->piles[object].amount = amount;
+        });
+    }
+}
+
+std::int32_t RandomPlayerArgument(test::Context& ctx) {
+    return ctx.rng().Chance(1, 4) ? -1 - static_cast<std::int32_t>(ctx.rng().Below(3)) : ctx.rng().Range(0, 4);
+}
+
+// Wrong: ignores the finished check.
+bool __fastcall WrongIsBuildingNear(CLogicThread* self, void*, std::uint32_t x, std::uint32_t y, std::uint32_t radius,
+                                    std::uint32_t type, std::int32_t player) {
+    CGameData* world = WorldOf(self);
+    std::uint8_t saved[kTestBuildings + 1];
+    for (std::uint32_t b = 0; b <= kTestBuildings; ++b) {
+        saved[b] = world->buildings[b].buildup;
+        world->buildings[b].buildup = 0;
+    }
+    const bool result = CLogicThread_IsBuildingNear(self, nullptr, x, y, radius, type, player);
+    for (std::uint32_t b = 0; b <= kTestBuildings; ++b) {
+        world->buildings[b].buildup = saved[b];
+    }
+    return result;
+}
+
+void CompareIsBuildingNear(test::Context& ctx, IsBuildingNearFn candidate, int cases) {
+    Fixture f(ctx);
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t cx = ctx.rng().Below(400);
+        const std::uint32_t cy = ctx.rng().Below(400);
+        SetUpNeighbourhood(ctx, f.worlds, cx, cy);
+        const std::uint32_t radius = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() >> 1 : ctx.rng().Below(12);
+        const std::uint32_t type = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : 14 + ctx.rng().Below(4);
+        const std::int32_t player = RandomPlayerArgument(ctx);
+        const bool expected = Original_CLogicThread_IsBuildingNear(f.original(), nullptr, cx, cy, radius, type, player);
+        const bool actual = candidate(f.ours(), nullptr, cx, cy, radius, type, player);
+        if (!S3RE_EXPECT_EQ(expected, actual) || (i % 64 == 63 && !f.worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u) radius %u type %u player %d", i, cx, cy, radius, type,
+                     player);
+            return;
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(CLogicThread_IsBuildingNear_MatchesOriginal) {
+    CompareIsBuildingNear(ctx, &CLogicThread_IsBuildingNear, 3000);
+}
+S3RE_TEST(CLogicThread_IsBuildingNear_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareIsBuildingNear(probe, &WrongIsBuildingNear, 1000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(CLogicThread_SumGoodsNear_MatchesOriginal) {
+    Fixture f(ctx);
+    for (int i = 0; i < 3000; ++i) {
+        const std::uint32_t cx = ctx.rng().Below(400);
+        const std::uint32_t cy = ctx.rng().Below(400);
+        SetUpNeighbourhood(ctx, f.worlds, cx, cy);
+        const std::uint32_t radius = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() >> 1 : ctx.rng().Below(12);
+        const std::uint32_t good = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : 7 + ctx.rng().Below(4);
+        const std::int32_t player = RandomPlayerArgument(ctx);
+        const std::uint32_t expected =
+            Original_CLogicThread_SumGoodsNear(f.original(), nullptr, cx, cy, radius, good, player);
+        const std::uint32_t actual = CLogicThread_SumGoodsNear(f.ours(), nullptr, cx, cy, radius, good, player);
+        if (!S3RE_EXPECT_EQ(expected, actual) || (i % 64 == 63 && !f.worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u) radius %u good %u player %d", i, cx, cy, radius, good,
+                     player);
+            return;
+        }
+    }
+}
 }  // namespace s3re::game

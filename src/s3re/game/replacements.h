@@ -14,6 +14,8 @@
 
 namespace s3re::game {
 
+struct CLogicThread;  // logic_thread_layout.h
+
 // area_piles.cpp
 std::uint32_t __fastcall CGameData_PileIncAmountLeaving(CGameData* world, void* edx, std::uint32_t pile);
 std::uint32_t __fastcall CGameData_AddTilePileToArea(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y);
@@ -32,6 +34,26 @@ std::uint32_t __fastcall CGameData_SetBuildingInputWord2A(CGameData* world, void
                                                           std::uint32_t goods, std::uint32_t value);
 std::uint32_t __fastcall CGameData_SetBuildingInputWord24(CGameData* world, void* edx, std::uint32_t building,
                                                           std::uint32_t goods, std::uint32_t value);
+
+// game_end.cpp (the counting helpers of CLogicThread::CheckGameEnd)
+std::uint32_t __fastcall CLogicThread_CountMilitaryBuildings(CLogicThread* self, void* edx, std::int32_t* out);
+std::uint32_t __fastcall CLogicThread_CountTilesOwnedBy(CLogicThread* self, void* edx, std::uint32_t player,
+                                                        const std::int32_t* points, std::int32_t count);
+std::uint32_t __fastcall CLogicThread_CountTilesOwnedByEither(CLogicThread* self, void* edx, std::uint32_t playerA,
+                                                              std::uint32_t playerB, const std::int32_t* points,
+                                                              std::int32_t count);
+std::uint32_t __fastcall CLogicThread_SumGoldPerPlayer(CLogicThread* self, void* edx, std::int32_t* out);
+bool __fastcall CLogicThread_IsBuildingNear(CLogicThread* self, void* edx, std::uint32_t x, std::uint32_t y,
+                                            std::uint32_t radius, std::uint32_t type, std::int32_t player);
+std::uint32_t __fastcall CLogicThread_SumGoodsNear(CLogicThread* self, void* edx, std::uint32_t x, std::uint32_t y,
+                                                   std::uint32_t radius, std::uint32_t good, std::int32_t player);
+
+// victory_conditions.cpp
+std::int32_t __fastcall CLogicThread_CheckVictoryConditions(CLogicThread* self, void* edx);
+
+// objectives.cpp
+std::int32_t __fastcall CGameData_PlayerOfColour(CGameData* world, void* edx, std::uint32_t colour);
+std::uint32_t __fastcall CGameData_DecideNgoOutcome(CGameData* world, void* edx);
 
 // flood_fills.cpp
 std::uint32_t __fastcall CGameData_FloodMarkAreaTerrain5To7(CGameData* world, void* edx, std::uint32_t x,
@@ -176,6 +198,10 @@ std::uint32_t __stdcall TileDistance(std::uint32_t x0, std::uint32_t y0, std::ui
                                      std::uint32_t y1);
 
 // world_tables.cpp
+std::uint32_t __fastcall CGameData_AllocTable36700Record(CGameData* world, void* edx, std::uint32_t a0,
+                                                         std::uint32_t a1, std::uint32_t a2, std::uint32_t a3,
+                                                         std::uint32_t a4, std::uint32_t a5, std::uint32_t a6,
+                                                         std::uint32_t a7, std::uint32_t a8, std::uint32_t a9);
 std::uint32_t __fastcall CGameData_QueueEvent(CGameData* world, void* edx, std::uint32_t type, std::uint32_t a,
                                               std::uint32_t b, std::uint32_t c);
 std::uint32_t __fastcall CGameData_QueueMarkedTile(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y,

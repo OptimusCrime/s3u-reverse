@@ -42,6 +42,7 @@ add_library(s3re SHARED
     game/framework_helpers.cpp
     game/framework_small.cpp
     game/game_end.cpp
+    game/game_end_check.cpp
     game/godly_events.cpp
     game/graphics_helpers.cpp
     game/goods_piles.cpp
@@ -104,6 +105,7 @@ add_library(s3re SHARED
     game/ui_state.cpp
     game/update_economy.cpp
     game/update_settlers.cpp
+    game/victory_conditions.cpp
     game/world_create.cpp
     game/world_search.cpp
     game/win32_classes.cpp

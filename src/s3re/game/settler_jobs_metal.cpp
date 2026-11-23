@@ -253,14 +253,14 @@ void RemoveSettler(SettlerContext& ctx) {
 }
 
 // 0x4eef33 (job 0x36): a settler dies: counted per player (soldier-like
-// classes 1..9 in unk12c[0], others in unk12c[1]); a thief drops the goods
+// classes 1..9 in soldiers_lost, others in civilians_lost); a thief drops the goods
 // it carries (byte +0x15).
 JobResult SettlerDies(SettlerContext& ctx) {
     const std::uint32_t owner = Owner(ctx);
     if (ctx.typeClass >= 1 && ctx.typeClass <= 9) {
-        AddWrapping(PlayerAt(ctx.world, owner).unk12c[0], 1);
+        AddWrapping(PlayerAt(ctx.world, owner).soldiers_lost, 1);
     } else {
-        AddWrapping(PlayerAt(ctx.world, owner).unk12c[1], 1);
+        AddWrapping(PlayerAt(ctx.world, owner).civilians_lost, 1);
     }
     if (TypeOf(ctx.settler) == SettlerType::Thief && ctx.settler.slot != 0) {
         Call<kDropGoodNear>(ctx.world, ctx.settler.slot, 1, ctx.settler.x, ctx.settler.y);

@@ -120,6 +120,11 @@ inline constexpr GameGlobal<const std::int32_t[8]> g_table658adc{0x658adc};
 // UpdateSettlers: per race (3, 4, 2, 3 in the image), compared in the ship
 // jobs (settler_jobs_special.cpp); meaning still to be named.
 inline constexpr GameGlobal<const std::int32_t[4]> g_table659654{0x659654};
+// int32 per index (20 in every entry of the image); ExecuteCommands
+// (0x5389f4) and campaign mission 51 of CheckGameEnd (entry 0) pass entry + 1
+// as the second value of the second effect record (AllocTable36700Record);
+// meaning still to be named.
+inline constexpr GameGlobal<const std::int32_t[]> g_table658ee4{0x658ee4};
 
 // ------------------------------------------------------------ effects and spells
 // Per variant 0..3 the x and y offsets of MapEffects_Spawn_544dc0.

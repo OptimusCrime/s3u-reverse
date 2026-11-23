@@ -341,9 +341,9 @@ U __fastcall CGameData_SpellConvertSettlers(CGameData* world, void*, U player, U
         Callee<Fn1>(kReleaseSpellTarget)(world, nullptr, number);
         s.owner = static_cast<std::uint8_t>(player);
         if (g_campaignMission == kCampaignConvertMission && RaceOf(s) == Race::Amazon) {
-            // +0x134 (unk12c[2]), 32-bit wrapping add.
+            // mission_state (+0x134, read by CheckGameEnd 0x511c50), 32-bit wrapping add.
             const U added = (static_cast<U>(count) + 1) & kConvertCountMask;
-            caster.unk12c[2] = static_cast<std::int32_t>(static_cast<U>(caster.unk12c[2]) + added);
+            caster.mission_state = static_cast<std::int32_t>(static_cast<U>(caster.mission_state) + added);
         }
         s.race = static_cast<std::uint8_t>(caster.race);
         Callee<Fn1>(kClearSettlerJob)(world, nullptr, number);
