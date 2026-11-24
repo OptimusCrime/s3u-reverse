@@ -735,7 +735,7 @@ Detach): four reviews, 269 names. Notes in `re/directx_framework.md` and
   CDirectDraw slot 3. Sounds: a master buffer plus duplicates kept in a
   Watcom dictionary, purged every 2.5 s.
 - Input is the mouse only, buffered DirectInput.
-- Registry: ~30 values under HKLM\Software\BlueByte\Siedler3.0\General
+- Registry: ~30 values under HKLM\Software\BlueByte\Siedler3\1.0\General
   (re/win32_framework.md has the table); CD music through MCI with a
   callback window; threads post unhandled exceptions to their parent;
   framework timeouts become infinite with `-debug`.
