@@ -26,6 +26,7 @@ struct SettlerGroups;
 namespace ai {
 struct AiAgentData;
 struct AiArmyState;
+struct AiCommandSender;
 struct AiGroupOrders;
 struct AiLandEvaluation;
 struct AiPlayerData;
@@ -232,6 +233,16 @@ inline constexpr GameGlobal<float[4]> g_aiWantedGoldMineSlopes{0x7e12b0};
 // per-player array cleared with the army state (0x593f50; meaning unknown).
 inline constexpr GameGlobal<ai::AiGroupOrders> g_aiGroupOrders{0x7e37d0};
 inline constexpr GameGlobal<ai::AiArmyState> g_aiArmyState{0x7e58c8};
+// The message queue (MessageQueue*) the military AI's commands go to: the
+// current computer player's, set by AI::RunMilitary 0x58f990.
+inline constexpr GameGlobal<std::uint32_t> g_aiMilitaryQueue{0x7e37c8};
+// The thiscall `this` of the military AI's enemy counts near a tile (0x58a2c0,
+// 0x58a610, ...); dword +0 is a MapOffset search limit (0x595050 sets 5000
+// or 500).
+inline constexpr GameGlobal<std::uint32_t> g_aiEnemySearch{0x7e5de4};
+// The military AI's command sender (the thiscall `this` of 0x590990..
+// 0x590c80): battle-spell slots and the command buffer (ai_layout.h).
+inline constexpr GameGlobal<ai::AiCommandSender> g_aiCommandSender{0x7e5de8};
 // The computer players' census (savegame chunk 0x16; AI_ResetAgentData,
 // the AI_Census functions).
 inline constexpr GameGlobal<ai::AiAgentData> g_aiCensus{0x7e5ef8};

@@ -1497,3 +1497,143 @@ SPECS += [
     Spec("AI_Army_PruneHunters", 0x005934a0, "thiscall", [below(20)], presets=hunter_entries,
          globals=hunter_vector, callees={0x00596570: (0, "thiscall", "probe")}, max_cases=1000),
 ]
+
+
+# -- computer players A4, session 52: command senders (ai_commands.cpp) -------
+#
+# GameSettings::IsHost (0x4318a0) and MessageQueue::Push (0x4309c0) are
+# probed: IsHost takes the settings object's critical section (Win32 API
+# calls of the lock wrappers) and Push its queue's; the senders' own work is
+# building the message. Push is recorded with the queue (ECX), the dword
+# count, the signal flag and the pushed bytes. The economy senders build the
+# message in an uninitialized stack buffer: the bytes they don't write (the
+# `gaps` of each spec, always header byte 3) are the original's stack
+# leftovers and 0 in ours (ai_commands.cpp: ExecuteCommands doesn't read
+# them for these commands), so the record leaves them out, and it leaves out
+# the buffer address (a stack address that differs between the two runs).
+# The military senders push from g_aiCommandSender's buffer, recorded with
+# its address. AI::CountEnemyBowmenOnOwnLandNear (0x58a610, not
+# reimplemented yet; a search over the enemy bowmen lists) is probed for
+# SendMoveGroup.
+
+AI_COMMAND_SENDER = 0x007E5DE8   # g_aiCommandSender (battle spells, message at +0xc)
+AI_MILITARY_QUEUE = 0x007E37C8   # g_aiMilitaryQueue
+AI_GROUP_ORDERS = 0x007E37D0     # g_aiGroupOrders
+COMMAND_PLAYER = SCRATCH + 4 * SCRATCH_SLOT_BYTES  # a ComputerPlayer (message_queue at +0x760)
+
+
+def host_flag(h):
+    """IsHost's EAX: the low byte 0 a third of the time."""
+    value = h & 0xFFFFFFFF
+    return value & 0xFFFFFF00 if h % 3 == 0 else value | 1
+
+
+def pushed_bytes(gaps, with_address):
+    """A Push record: queue, count, signal and the message bytes (count * 4
+    of them) without the bytes in `gaps`."""
+    def record(machine, ecx, args):
+        count = args[1]
+        data = bytearray(machine.guest_read(args[0], 4 * min(count, 3)))
+        for gap in gaps:
+            if gap < len(data):
+                data[gap] = 0
+        return (count, args[2], bytes(data)) + ((args[0],) if with_address else ())
+    return record
+
+
+def command_callees(gaps=(), with_address=False):
+    return {0x004318A0: (0, "thiscall", host_flag),
+            0x004309C0: (3, "thiscall", "probe", None, pushed_bytes(gaps, with_address)),
+            0x0058A610: (4, "thiscall", lambda h: (h % 3) - 1)}
+
+
+def command_globals(rng, pool, args):
+    return [(AI_PLAYER, WORLD_BASE + COMMAND_PLAYER, 4), (AI_MILITARY_QUEUE, rng.getrandbits(32), 4),
+            (AI_MAP_WORLD, WORLD_BASE, 4), (AI_WORLD, WORLD_BASE, 4)]
+
+
+def work_area_world(rng, pool, args):
+    """SetWorkArea's search: the building (scratch 0) with its door in
+    areas 0..3 (sometimes 7, which no tile has: the whole search runs), the
+    tile (scratch 2 / 3) and the tiles around it in areas 0..3, small map
+    offsets first."""
+    size = rng.randint(40, 70)
+    building = rng.randrange(4000)
+    x, y = rng.randrange(size + 3), rng.randrange(size + 3)
+    door_x, door_y = rng.randrange(size), rng.randrange(size)
+    fields = [(MAP_SIZE, size, 4), (SCRATCH, building, 2), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(256), 1),
+              (SCRATCH + 2 * SCRATCH_SLOT_BYTES, x, 2), (SCRATCH + 3 * SCRATCH_SLOT_BYTES, y, 2),
+              (BUILDINGS + building * BUILDING_BYTES + 0xA, door_x, 2),
+              (BUILDINGS + building * BUILDING_BYTES + 0xC, door_y, 2),
+              (TILES + (door_x * 0x300 + door_y) * 24 + 0x14, 7 if rng.random() < 0.1 else rng.randrange(4), 2)]
+    for tx in range(max(0, x - 12), min(size, x + 13)):
+        for ty in range(max(0, y - 12), min(size, y + 13)):
+            if (tx, ty) != (door_x, door_y):
+                fields.append((TILES + (tx * 0x300 + ty) * 24 + 0x14, rng.randrange(4), 2))
+    for i in range(300):
+        fields += [(0x110A588 + 16 * i, rng.randint(-12, 12) & 0xFFFFFFFF, 4),
+                   (0x110A58C + 16 * i, rng.randint(-12, 12) & 0xFFFFFFFF, 4)]
+    return fields
+
+
+def work_area_globals(rng, pool, args):
+    return command_globals(rng, pool, args) + [(AI_MAP_SIZES, 70, 2), (AI_MAP_SIZES + 2, 70, 2)]
+
+
+def move_group_world(rng, pool, args):
+    """The group's length (often 0) in the world."""
+    index = args[0] * 10 + args[1]
+    return [(0x11940BC + 4 * index, 0 if rng.random() < 0.25 else rng.randrange(1, 5), 4)]
+
+
+def move_group_globals(rng, pool, args):
+    """command_globals plus the group's target settler, steal flag, target
+    building and defending flag, each often 0."""
+    index = args[0] * 10 + args[1]
+    pick = lambda bits: 0 if rng.random() < 0.5 else rng.getrandbits(bits) or 1  # noqa: E731
+    return command_globals(rng, pool, args) + [
+        (AI_GROUP_ORDERS + 0x3E8 + 6 * index + 4, pick(16), 2), (AI_GROUP_ORDERS + 0x320 + index, pick(8), 1),
+        (AI_CENSUS + 4 + 2 * index, pick(16), 2), (AI_CENSUS + 0x194 + index, pick(8), 1)]
+
+
+LONG_GAPS = (3, 9, 10, 11)
+
+SPECS += [
+    Spec("AI_SendSetWorkArea", 0x0058e220, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         presets=work_area_world, globals=work_area_globals, callees=command_callees((3, 11)), max_cases=400),
+    Spec("AI_SendDestroyBuilding", 0x0058e5c0, "fastcall", [scratch(0), scratch(1)], globals=command_globals,
+         callees=command_callees((3, 7))),
+    Spec("AI_SendChangeGarrison", 0x0058e630, "fastcall", [anything, anything, anything], globals=command_globals,
+         callees=command_callees((3,))),
+    Spec("AI_SendPlaceBuilding", 0x0058e6a0, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         globals=command_globals, callees=command_callees((3, 11))),
+    Spec("AI_SendChangeToolSettings", 0x0058e740, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    Spec("AI_SendRaiseGoodsPriority", 0x0058e7d0, "fastcall", [scratch(0), scratch(1), scratch(2)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    Spec("AI_SendPromoteSoldiers", 0x0058e850, "fastcall", [scratch(0), scratch(1)], globals=command_globals,
+         callees=command_callees((3, 6, 7))),
+    Spec("AI_SendClearGoodsSetting", 0x0058e8b0, "fastcall", [scratch(0), scratch(1), scratch(2)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    Spec("AI_SendSetAreaCondition", 0x0058ea30, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    Spec("AI_SendSetBuildingWorking", 0x0058eac0, "fastcall", [scratch(0), scratch(1), scratch(2)],
+         globals=command_globals, callees=command_callees((3,))),
+    Spec("AI_SendToolSetting10", 0x0058eb40, "fastcall", [scratch(0), scratch(1), scratch(2)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    Spec("AI_SendChangeTransportOrder", 0x0058ebc0, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    # The military senders (`this` = the world's first bytes as the sender).
+    Spec("AI_SendCastSpell", 0x00590990, "thiscall", [anything, below(32000), below(12, 0.1), anything, anything],
+         globals=command_globals, callees=command_callees(with_address=True)),
+    Spec("AI_SendMoveSettler", 0x00590a30, "thiscall", [anything, anything, anything, anything],
+         globals=command_globals, callees=command_callees(with_address=True)),
+    Spec("AI_SendPatrolSettler", 0x00590af0, "thiscall", [anything, anything, anything, anything],
+         globals=command_globals, callees=command_callees(with_address=True)),
+    Spec("AI_QueueChangeGarrison", 0x00590bb0, "thiscall", [anything, anything, anything],
+         globals=command_globals, callees=command_callees(with_address=True)),
+    Spec("AI_SendConvertCarriers", 0x00590c10, "thiscall", [anything, anything, anything, anything, anything],
+         globals=command_globals, callees=command_callees(with_address=True)),
+    Spec("AI_SendMoveGroup", 0x00590c80, "thiscall", [below(20), below(10), anything, anything],
+         presets=move_group_world, globals=move_group_globals, callees=command_callees(with_address=True)),
+]

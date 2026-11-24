@@ -332,6 +332,27 @@ and lockstep"; ids in `re/execute_commands.md`, enum `CommandId`):
 | 0x590c80 | 15 MoveUnitsMode3 / 9 MoveUnits | 0x58f990, 0x590da0, 0x592620, 0x593180, 0x594080, 0x594d40 |
 | 0x590990 | 21 CastSpell | ten functions 0x5957c0..0x596210 (one per spell kind, probably) |
 
+**Session 52 (V, package A4, `ai_commands.cpp`):** all senders above except
+0x58e510 are replaced and verified. `0x4318a0` is `GameSettings::IsHost`
+(byte +0x7c, set by NewGame and LoadSaveGame, cleared by the network
+RemoteSetup 0x4322e0 and the reset 0x433810: G, "this machine set up the
+game"). The economy senders 0x58e220..0x58ebc0 build their message in an
+uninitialized stack buffer: header byte 3 and some payload bytes (listed in
+ai_commands.cpp) are stack leftovers; ours writes 0 there, and
+ExecuteCommands' handlers never read those bytes, **except** for
+`AI::SendPrioritizeSite` 0x58e510: PrioritizeSite (0xf5) reads its player
+from message byte 6, which that sender never writes, and does nothing unless
+it equals the site's owner. So whether a computer player's site
+prioritization works depends on the original's stack contents (open; not
+replaced; observe at runtime). The military senders 0x590990..0x590c80 build
+in `g_aiCommandSender` (0x7e5de8) +0xc, so unwritten bytes keep the previous
+command's values (deterministic, reproduced). 0x58e6a0 always sends the
+building type's high byte as 0 (`shr cl, 8` on a byte). SendMoveGroup
+attack-moves (MoveUnitsMode3) when the group has no target settler and has
+the steal flag, no target building or defends; a defending group stays while
+enemy bowmen are within 30 of its first member (0x58a610 on
+`g_aiEnemySearch` 0x7e5de4).
+
 The building placement check the AI uses is the simulation's own
 `CGameData::CheckBuildingSite` 0x4d99e0 (verified; called from 0x575df0
 and 0x5760d0 on `ComputerPlayer::world`; the mode argument there is still
