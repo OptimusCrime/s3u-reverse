@@ -121,6 +121,7 @@ const STATUS = [  // index = status code in the data file (data.statuses)
   { key: "verified_tests",      label: "Verified by tests only (never called in a whole-game check)", color: "#4f8fc0" },
   { key: "verified_game",       label: "Verified, and identical in a whole-game check",      color: "#3d9a50" },
 ];
+const IDENTIFIED = 2;     // codes >= IDENTIFIED are "understood"
 const VERIFIED = 4;       // codes >= VERIFIED are verified
 const VERIFIED_GAME = 6;  // ... and seen in a whole-game check
 const CATEGORY_LABEL = {
@@ -316,6 +317,15 @@ function summary() {
   const totalBytes = bytes.reduce((a, b) => a + b, 0);
   const verifiedCount = count.slice(VERIFIED).reduce((a, b) => a + b, 0);
   const verifiedBytes = bytes.slice(VERIFIED).reduce((a, b) => a + b, 0);
+  // "Understood" = identified or better (identified, reimplemented, verified),
+  // the same as "Understood" in `python tools/inventory.py stats`.
+  const understoodCount = count.slice(IDENTIFIED).reduce((a, b) => a + b, 0);
+  const understoodBytes = bytes.slice(IDENTIFIED).reduce((a, b) => a + b, 0);
+  let gameUnderstood = 0;
+  for (const [, size, status, group] of data.functions) {
+    const category = data.groups[group][0];
+    if ((category === "game" || category === "unidentified") && status >= IDENTIFIED) gameUnderstood += size;
+  }
   const game = tree.children.filter((c) => c.category === "game" || c.category === "unidentified");
   const gameBytes = game.reduce((s, c) => s + c.size, 0), gameDone = game.reduce((s, c) => s + c.done, 0);
 
@@ -324,6 +334,9 @@ function summary() {
   document.getElementById("stats").innerHTML = [
     [pct(verifiedBytes, totalBytes), "of all code verified"],
     [pct(gameDone, gameBytes), "of game code verified"],
+    [pct(understoodBytes, totalBytes), "of all code understood (identified or better)"],
+    [pct(gameUnderstood, gameBytes), "of game code understood"],
+    [`${fmt(understoodCount)} / ${fmt(data.functions.length)}`, "functions understood"],
     [`${fmt(verifiedCount)} / ${fmt(data.functions.length)}`, "functions verified"],
     [`${fmt(count[VERIFIED_GAME])} / ${fmt(verifiedCount)}`, "of them identical in a whole game"],
     [fmt(count[VERIFIED_GAME - 1]), "verified by tests only"],
