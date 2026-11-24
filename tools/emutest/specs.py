@@ -11366,3 +11366,67 @@ SPECS += [
          presets=mapfile_add_world, globals=mapfile_globals, new_fails=0.03,
          exempt_blocks=(0x004a64b9, 0x004a64e2, 0x004a64ee)),
 ]
+
+
+# CMapFileStream (map_file_stream.cpp) with ECX = the world: the stream at
+# world offset 0 (rethrow +0, CFile +4 with its vtable, handle +8, owned
+# +0xc, error +0x10). The Win32::CFile calls are probed (they reach
+# kernel32); CFile::Read/Write's bytes-transferred pointer is a stack
+# local of the stream member (recorded as "stack"), and the probe's effect
+# stores a transfer count there. Not reached: the catch blocks, which only
+# a C++ exception thrown by CFile reaches (in-process MapFileStream_* tests
+# reach them on real files).
+STREAM_ERROR = 0x10
+STREAM_PATH = SCRATCH  # a std::string: allocator, ptr, len, res
+
+
+def _stream_transfer_effect(m, ecx, args, h):
+    m.guest_write(args[2], struct.pack("<I", h % (args[1] + 1)))
+
+
+def _stream_record_transfer(m, ecx, args):
+    return (args[0], args[1], "stack", args[3])
+
+
+def stream_world(rng, pool, args):
+    return [(0, rng.choice((0, 0, 1, rng.getrandbits(8))), 1),
+            (STREAM_ERROR, 0 if rng.random() < 0.7 else rng.getrandbits(32), 4)]
+
+
+def stream_open_world(rng, pool, args):
+    text = WORLD_BASE + SCRATCH + 0x40
+    return stream_world(rng, pool, args) + [(STREAM_PATH + 4, 0 if rng.random() < 0.2 else text, 4),
+                                            (STREAM_PATH + 8, rng.randrange(20), 4)]
+
+
+def stream_close_world(rng, pool, args):
+    return stream_world(rng, pool, args) + [(4, FAKE_VTABLE, 4)]
+
+
+STREAM_OPEN_MODES = one_of(0, 1, 2, 3, 4, 5, 6, 7, 0xFFFFFFFF, 0x10)
+
+SPECS += [
+    # The CFile constructor (0x6195c0) runs as is.
+    Spec("CMapFileStream_Construct", 0x004a55e0, "thiscall", [anything]),
+    Spec("CMapFileStream_Open", 0x004a5600, "thiscall", [one_of(WORLD_BASE + STREAM_PATH), STREAM_OPEN_MODES],
+         presets=stream_open_world, callees={0x00619610: (7, "thiscall", "probe")},
+         exempt_blocks=(0x004a56a3, 0x004a56b3, 0x004a56ba, 0x004a56c0, 0x004a56c6, 0x004a56e5,
+                        0x004a56e9, 0x004a56f1)),
+    Spec("CMapFileStream_Close", 0x004a5710, "thiscall", [], presets=stream_close_world, virtuals={4: 0},
+         exempt_blocks=(0x004a576d, 0x004a5783, 0x004a5787, 0x004a578f)),
+    Spec("CMapFileStream_Read", 0x004a57b0, "thiscall", [one_of(WORLD_BASE + SCRATCH), between(0, 0x400)],
+         presets=stream_world,
+         callees={0x006198d0: (4, "thiscall", "probe", _stream_transfer_effect, _stream_record_transfer)},
+         exempt_blocks=(0x004a5817, 0x004a582d, 0x004a5831, 0x004a5839, 0x004a583f, 0x004a5844)),
+    Spec("CMapFileStream_Write", 0x004a5870, "thiscall", [one_of(WORLD_BASE + SCRATCH), between(0, 0x400)],
+         presets=stream_world,
+         callees={0x00619b10: (4, "thiscall", "probe", _stream_transfer_effect, _stream_record_transfer)},
+         exempt_blocks=(0x004a58d7, 0x004a58ed, 0x004a58f1, 0x004a58f9, 0x004a58ff, 0x004a5904)),
+    Spec("CMapFileStream_Seek", 0x004a5930, "thiscall", [anything, below(4)], presets=stream_world,
+         callees={0x00619d50: (3, "thiscall", "probe")},
+         exempt_blocks=(0x004a5980, 0x004a5996, 0x004a599a, 0x004a59a2, 0x004a59a8)),
+    # Coverage up to the end of the epilogue Ghidra split off as 0x4a5a37.
+    Spec("CMapFileStream_GetSize", 0x004a59d0, "thiscall", [], presets=stream_world,
+         callees={0x0061a080: (1, "thiscall", "probe")}, cover_until=0x004a5a60,
+         exempt_blocks=(0x004a5a09, 0x004a5a1f, 0x004a5a23, 0x004a5a2b, 0x004a5a31)),
+]

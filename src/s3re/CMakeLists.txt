@@ -145,6 +145,8 @@ add_library(s3re SHARED
 
     # game/fileformats/: the map and savegame container (Dirk::CMapFile)
     game/fileformats/map_file.cpp
+    game/fileformats/map_file_stream.cpp
+    game/fileformats/map_file_stream_tests.cpp
     game/fileformats/map_file_tests.cpp
 
     # game/ui/: CScreenElement and the controls, menu and settings layouts
