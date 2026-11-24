@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1000" fill="#ffffff"/>
 <g><rect x="0" y="0" width="1107.9" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 19.6% verified (15.9% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 20.0% verified (15.9% in a whole game)</text>
 <g><title>(free functions): 1015 functions</title><rect x="2" y="19" width="525.1" height="674.6" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="261.7" height="184.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -2880,8 +2880,8 @@
 192 bytes — Classified (class/role known)</title></rect>
 <rect x="663.1" y="336.9" width="11.2" height="10.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::HasSiteNoteNear @ 0x00571c40
 192 bytes — Identified (purpose known)</title></rect>
-<rect x="663.1" y="347.8" width="11.2" height="10.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::CountNodeBuildingsByType @ 0x00572420
-192 bytes — Identified (purpose known)</title></rect>
+<rect x="663.1" y="347.8" width="11.2" height="10.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::CountNodeBuildingsByType @ 0x00572420
+192 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="663.1" y="358.6" width="11.2" height="10.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>AI::HasForeignCellAround @ 0x0059c200
 192 bytes — Classified (class/role known)</title></rect>
 <rect x="663.1" y="369.5" width="11.2" height="9.9" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::CountBuildingsNear @ 0x00571e30
@@ -3020,8 +3020,8 @@
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="720.5" y="392.2" width="5.2" height="5.9" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::TileCentre_554880 @ 0x00554880
 48 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="725.7" y="392.2" width="5.2" height="5.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::AreaPopulation @ 0x0059dcc0
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="725.7" y="392.2" width="5.2" height="5.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::AreaPopulation @ 0x0059dcc0
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="730.8" y="392.2" width="5.2" height="5.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::NoSmallTowerNear @ 0x0058ede0
 48 bytes — Identified (purpose known)</title></rect>
 <rect x="720.5" y="398.1" width="5.5" height="3.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::IsOnMap @ 0x00572090
@@ -3444,8 +3444,8 @@
 <text x="1023.9" y="418.2" font-size="8.5" fill="#ffffff">T_ECONOMY_AGENT</text>
 <rect x="1022.4" y="421.2" width="34.3" height="30" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderBuildings @ 0x0056a1a0
 1696 bytes — Identified (purpose known)</title></rect>
-<rect x="1056.8" y="421.2" width="25.6" height="30" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::TakeAreaSnapshot @ 0x00567910
-1264 bytes — Classified (class/role known)</title></rect>
+<rect x="1056.8" y="421.2" width="25.6" height="30" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::TakeAreaSnapshot @ 0x00567910
+1264 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1082.4" y="421.2" width="23" height="30" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderStonecutter @ 0x00568420
 1136 bytes — Identified (purpose known)</title></rect>
 <rect x="1022.4" y="451.2" width="24.2" height="27.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderWoodcutter @ 0x00567e00
@@ -3454,14 +3454,14 @@
 816 bytes — Identified (purpose known)</title></rect>
 <rect x="1022.4" y="499.3" width="24.2" height="18.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderDrinkBuilding @ 0x00569d20
 736 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1046.7" y="451.2" width="20.8" height="15.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderIronSmelter @ 0x00568f40
-544 bytes — Identified (purpose known)</title></rect>
+<rect x="1046.7" y="451.2" width="20.8" height="15.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderIronSmelter @ 0x00568f40
+544 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1067.5" y="451.2" width="20.8" height="15.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::AdjustSoldierShares @ 0x0056a840
 544 bytes — Classified (class/role known)</title></rect>
-<rect x="1088.3" y="451.2" width="17.1" height="15.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderCoalMine @ 0x00568bc0
-448 bytes — Identified (purpose known)</title></rect>
-<rect x="1046.7" y="467.1" width="14.8" height="18.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderIronMine @ 0x00568d80
-448 bytes — Identified (purpose known)</title></rect>
+<rect x="1088.3" y="451.2" width="17.1" height="15.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderCoalMine @ 0x00568bc0
+448 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1046.7" y="467.1" width="14.8" height="18.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderIronMine @ 0x00568d80
+448 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1046.7" y="485.5" width="14.8" height="16.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderGoldMine @ 0x005696d0
 400 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1046.7" y="502" width="14.8" height="15.8" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderWeaponsmith @ 0x005691b0
@@ -3613,8 +3613,8 @@
 576 bytes — Classified (class/role known)</title></rect>
 <rect x="555.4" y="768.1" width="19.6" height="13.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::Army::RebuildAssignedSettlers @ 0x00591c40
 448 bytes — Identified (purpose known)</title></rect>
-<rect x="555.4" y="781.2" width="19.6" height="12.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::Army::Reset @ 0x00591e00
-432 bytes — Identified (purpose known)</title></rect>
+<rect x="555.4" y="781.2" width="19.6" height="12.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::Army::Reset @ 0x00591e00
+432 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="575" y="751.2" width="19.3" height="12.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>AI::Army::MoveLastGroupInto @ 0x00592240
 416 bytes — Classified (class/role known)</title></rect>
 <rect x="594.4" y="751.2" width="15.6" height="12.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>AI::Army::CountSpareGroups @ 0x00591fb0
@@ -4401,16 +4401,16 @@
 704 bytes — Identified (purpose known)</title></rect>
 <rect x="853.9" y="601.3" width="19.6" height="21.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::ReadPartySetup @ 0x004a67c0
 624 bytes — Classified (class/role known)</title></rect>
-<rect x="873.5" y="577.5" width="21.2" height="17" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::GetChunk @ 0x004a60f0
-544 bytes — Identified (purpose known)</title></rect>
-<rect x="894.7" y="577.5" width="13.1" height="17" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::AddChunk @ 0x004a63f0
-336 bytes — Identified (purpose known)</title></rect>
+<rect x="873.5" y="577.5" width="21.2" height="17" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::GetChunk @ 0x004a60f0
+544 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="894.7" y="577.5" width="13.1" height="17" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::AddChunk @ 0x004a63f0
+336 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="873.5" y="594.5" width="12.9" height="15.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::~CMapFile @ 0x004a5b50
 304 bytes — Classified (class/role known)</title></rect>
 <rect x="873.5" y="610.1" width="12.9" height="12.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::WriteChunkData @ 0x004a66d0
 240 bytes — Identified (purpose known)</title></rect>
-<rect x="886.5" y="594.5" width="11.1" height="13.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::ReleaseChunk @ 0x004a6310
-224 bytes — Identified (purpose known)</title></rect>
+<rect x="886.5" y="594.5" width="11.1" height="13.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::ReleaseChunk @ 0x004a6310
+224 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="897.5" y="594.5" width="10.3" height="13.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::WriteChunkWithTail @ 0x004a6600
 208 bytes — Identified (purpose known)</title></rect>
 <rect x="886.5" y="608" width="8.8" height="14.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::WriteChunk @ 0x004a6540
@@ -4419,12 +4419,12 @@
 176 bytes — Classified (class/role known)</title></rect>
 <rect x="895.3" y="617.3" width="4.2" height="5.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::scalar_deleting_destructor @ 0x004a5b20
 32 bytes — Classified (class/role known)</title></rect>
-<rect x="899.5" y="617.3" width="4.2" height="5.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::GetError @ 0x004a60d0
-32 bytes — Identified (purpose known)</title></rect>
-<rect x="903.6" y="617.3" width="4.2" height="2.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::SetMemoryOnly @ 0x004a60c0
-16 bytes — Identified (purpose known)</title></rect>
-<rect x="903.6" y="619.9" width="4.2" height="2.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::GetChecksum @ 0x004a6a30
-16 bytes — Identified (purpose known)</title></rect>
+<rect x="899.5" y="617.3" width="4.2" height="5.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::GetError @ 0x004a60d0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="903.6" y="617.3" width="4.2" height="2.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::SetMemoryOnly @ 0x004a60c0
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="903.6" y="619.9" width="4.2" height="2.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMapFile::GetChecksum @ 0x004a6a30
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>CLandscapeSurface: 7 functions</title><rect x="908.3" y="577" width="53.9" height="45.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="908.8" y="577.5" width="39.4" height="44.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CLandscapeSurface::Create @ 0x0054bec0
@@ -5915,24 +5915,24 @@
 32 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>AI::WrappedPos: 9 functions</title><rect x="1005.5" y="795.6" width="26" height="23.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1006" y="796.1" width="12.7" height="11.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::Step @ 0x00597110
-224 bytes — Identified (purpose known)</title></rect>
-<rect x="1006" y="807.3" width="12.7" height="11.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::Advance @ 0x00597300
-224 bytes — Identified (purpose known)</title></rect>
-<rect x="1018.7" y="796.1" width="12.3" height="8.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::WrapCoords @ 0x00597260
-160 bytes — Identified (purpose known)</title></rect>
-<rect x="1018.7" y="804.4" width="8.2" height="7.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::Distance @ 0x005971f0
-96 bytes — Identified (purpose known)</title></rect>
-<rect x="1026.9" y="804.4" width="4.1" height="7.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::WrappedPos_xywh @ 0x00597090
-48 bytes — Identified (purpose known)</title></rect>
-<rect x="1018.7" y="811.8" width="4.6" height="6.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::SetPosition @ 0x005970c0
-48 bytes — Identified (purpose known)</title></rect>
-<rect x="1023.3" y="811.8" width="6.1" height="3.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::WrappedPos @ 0x00597070
-32 bytes — Identified (purpose known)</title></rect>
-<rect x="1023.3" y="815.2" width="6.1" height="3.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::SetSize @ 0x005970f0
-32 bytes — Identified (purpose known)</title></rect>
-<rect x="1029.4" y="811.8" width="1.5" height="6.6" fill="#f2c86b"><title>AI::WrappedPos::Wrap @ 0x00597250
-16 bytes — Identified (purpose known)</title></rect>
+<rect x="1006" y="796.1" width="12.7" height="11.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::Step @ 0x00597110
+224 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1006" y="807.3" width="12.7" height="11.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::Advance @ 0x00597300
+224 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1018.7" y="796.1" width="12.3" height="8.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::WrapCoords @ 0x00597260
+160 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1018.7" y="804.4" width="8.2" height="7.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::Distance @ 0x005971f0
+96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1026.9" y="804.4" width="4.1" height="7.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::WrappedPos_xywh @ 0x00597090
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1018.7" y="811.8" width="4.6" height="6.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::SetPosition @ 0x005970c0
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1023.3" y="811.8" width="6.1" height="3.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::WrappedPos @ 0x00597070
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1023.3" y="815.2" width="6.1" height="3.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::WrappedPos::SetSize @ 0x005970f0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1029.4" y="811.8" width="1.5" height="6.6" fill="#a8c8e6"><title>AI::WrappedPos::Wrap @ 0x00597250
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>Win32::CMessageQueue: 6 functions</title><rect x="1031.4" y="795.6" width="25.5" height="23.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1031.9" y="796.1" width="19" height="22.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CMessageQueue::ProcessMessage @ 0x0060d740
@@ -6117,24 +6117,24 @@
 720 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>CMapFileStream: 9 functions</title><rect x="927.6" y="889.4" width="21.4" height="22.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="928.1" y="889.9" width="12.5" height="8.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::Open @ 0x004a5600
-163 bytes — Identified (purpose known)</title></rect>
-<rect x="940.6" y="889.9" width="7.9" height="8.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::Read @ 0x004a57b0
-103 bytes — Identified (purpose known)</title></rect>
-<rect x="928.1" y="898.1" width="9.5" height="6.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::Write @ 0x004a5870
-103 bytes — Identified (purpose known)</title></rect>
-<rect x="928.1" y="904.9" width="9.5" height="6.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::Close @ 0x004a5710
-93 bytes — Identified (purpose known)</title></rect>
-<rect x="937.6" y="898.1" width="6.4" height="7.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::Seek @ 0x004a5930
-80 bytes — Identified (purpose known)</title></rect>
-<rect x="944" y="898.1" width="4.5" height="7.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::GetSize @ 0x004a59d0
-57 bytes — Identified (purpose known)</title></rect>
+<rect x="928.1" y="889.9" width="12.5" height="8.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::Open @ 0x004a5600
+163 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="940.6" y="889.9" width="7.9" height="8.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::Read @ 0x004a57b0
+103 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="928.1" y="898.1" width="9.5" height="6.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::Write @ 0x004a5870
+103 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="928.1" y="904.9" width="9.5" height="6.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::Close @ 0x004a5710
+93 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="937.6" y="898.1" width="6.4" height="7.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::Seek @ 0x004a5930
+80 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="944" y="898.1" width="4.5" height="7.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::GetSize @ 0x004a59d0
+57 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="937.6" y="905.9" width="5" height="5.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::GetSize_epilogue @ 0x004a5a37
 41 bytes — Classified (class/role known)</title></rect>
-<rect x="942.6" y="905.9" width="3.9" height="5.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::CMapFileStream @ 0x004a55e0
-32 bytes — Identified (purpose known)</title></rect>
-<rect x="946.6" y="905.9" width="2" height="5.1" fill="#f2c86b"><title>CMapFileStream::HasError @ 0x004a5a60
-16 bytes — Identified (purpose known)</title></rect>
+<rect x="942.6" y="905.9" width="3.9" height="5.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CMapFileStream::CMapFileStream @ 0x004a55e0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="946.6" y="905.9" width="2" height="5.1" fill="#a8c8e6"><title>CMapFileStream::HasError @ 0x004a5a60
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>CDrawThread: 9 functions</title><rect x="927.6" y="911.6" width="21.4" height="22.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="928.1" y="912.1" width="10.9" height="7.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDrawThread::OnStart @ 0x0042c390
