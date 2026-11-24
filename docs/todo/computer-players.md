@@ -7,12 +7,13 @@ LOGBOOK session entry).
 ## Computer players (re/computer_players.md)
 - **Package A2: small READY helpers** of the AI range (`python
   tools/frontier.py --range 54cbd0 59fcd0 --library-done`; 74 READY after
-  session 53). Done in sessions 48, 51, 52, 53 (see the LOGBOOK). Next:
-  `CEvaLand::EvaluateCell` 0x5540f0 (unblocks 3), RandomPointNearSettler
-  0x594f70 / 0x5952d0, Army 0x592100 / 0x592240, the military-building
-  searches 0x58aa70 / 0x58a7e0 (ret 0xc; 0x58a7e0's first argument looks
-  unused), CountResourceInOwnersLand 0x599a30 (7 callers), CheckSite
-  0x5760d0, small ones 0x593f40, 0x58e200, 0x591c10, 0x58ede0. x87 code
+  session 53). Done in sessions 48, 51, 52, 53, 54 (see the LOGBOOK). Next:
+  RandomPointNearSettler 0x594f70 / 0x5952d0, Army 0x592100 / 0x592240,
+  the military-building searches 0x58aa70 / 0x58a7e0 (ret 0xc; 0x58a7e0's
+  first argument looks unused), small ones 0x593f40, 0x591c10, 0x58ae90
+  FirstUnassignedMilitaryBuilding, 0x599760 AreaInDirection, 0x59a260 /
+  0x59a7a0 (trees / stones near own fields), 0x573670 (EmergencyPowersActWood),
+  then FillAreaSiteLists 0x556630 (needs 0x599a30/0x599f50, now done). x87 code
   (follow CLAUDE.md "Floating point"): residences 0x568890 (curves at 0x7e1380..),
   woodcutter 0x567e00 and stonecutter 0x568420 (curves per race and stage
   at 0x7e1300..0x7e137c, jump tables 0x568200..0x568240; races above 3
@@ -41,5 +42,5 @@ LOGBOOK session entry).
   code): fix re/source_files.csv.
 - **Original bugs to keep** (found in the naming pass): 0x58af60 always
   returns 0 (best distance starts at 0); `AI::FewUnownedTilesNear`
-  0x59c2c0 always returns 1; `AI::CastBattleSpells` 0x5953b0 pairs the
+  0x59c2c0 always returns 1 (kept in the replacement, session 54); `AI::CastBattleSpells` 0x5953b0 pairs the
   Amazons' mana checks with the wrong casters.
