@@ -65,7 +65,7 @@ vbase vtable of the application classes):
 | 9 | Step (pure in CGameThread) | Main |
 | 10 | OnActivate(bool) (was "OnEvent") | Main calls it when SetActive set flag bit 1 |
 | 11 | CGameDrawThread: StartWithWindow(HWND) | |
-| 12 | CGameDrawThread: create the drawer (pure; CDrawThread::vf12 0x42c6a0) | OnStart, assert "lpDrawer" |
+| 12 | CGameDrawThread: create the drawer (pure; CDrawThread::CreateDrawer 0x42c6a0) | OnStart, assert "lpDrawer" |
 | 13 | CGameDrawThread: draw one frame (bool full redraw) (pure; Menus::CDrawThread::Update) | Step |
 
 Application primary vtable (CWindowedApp -> CConsoleThread):
@@ -281,7 +281,7 @@ no RTTI vtable).
 
 ### Display / flip / lock model
 
-`CDrawer::vf12` (0x42e430) builds the screen. Drawer fields: +0x5f6c0 the
+`CDrawer::InitSurfaces` (0x42e430) builds the screen. Drawer fields: +0x5f6c0 the
 CPrimaryFlipSurface (fullscreen), +0x5f6c4 the primary surface (CPrimarySurface,
 or the flip surface's CPrimarySurface part), +0x5f6c8 the surface the game
 draws into, +0x5f6e4 = 1 in flip mode, +0x5f6f8 the selected copy routine.
@@ -311,7 +311,7 @@ draws into, +0x5f6e4 = 1 in flip mode, +0x5f6f8 the selected copy routine.
   0x5c40f0 are not in the function lists yet (only reached through the table
   in 0x5c3740); candidates for `re/extra_functions.tsv` (kind `manual`).
 - **Locking for drawing**: `CSurface::Lock(rect, desc, flags)` 0x5bf050
-  (19 callers in the UI/drawing code, e.g. CDrawer::vf12 0x42e80d, the static
+  (19 callers in the UI/drawing code, e.g. CDrawer::InitSurfaces 0x42e80d, the static
   images) fills a DDSURFACEDESC, defaults to DDLOCK_WAIT, masks the flags by
   interface version and retries `DDLock` (IDirectDrawSurface::Lock +0x64 on
   +8) while WASSTILLDRAWING. Unlock is done inline by the callers

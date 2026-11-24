@@ -192,6 +192,25 @@ Each item: what, why, and where to start.
   the window handle, not `owner`; the CSimpleSurface/CSurface fields in
   re/directx_framework.md. CTextException::vf01 0x618250 is a
   linker-folded `mov eax,[ecx+4]; ret` with 132 callers (a neutral name).
+- **Verified UI names found misleading (session 50, re/ui_classes.md)**,
+  each a code rename: `CControl::OnMessage10` -> `OnLButtonDown`;
+  `CScreenElement::ParentQuery78` -> `GetScreen`, `IsQuery78Zero` ->
+  `IsOffScreen`; `CScreenElement::Enable` (slot 26) is the parent-changed
+  handler and slot 27 "OnEnable" means shown on / removed from a screen
+  (real enabling is `CControl::SetEnabled` 0x418810); the
+  `Dialog::Global7a823c`/`7a8238`/`Table7a809c`/`Table7a8064`/
+  `Global7a8240`/`CopyGlobals7a8020` globals are the GDI surface,
+  CGraphicsData, font table, colour table, pen and pixel format (filled by
+  `Dialog::Init` 0x416190); screen_element_layout.h CControl
+  `tooltip_owner` (+0x08) is a functor called every timer tick;
+  `UI_WideEos_428880` -> `std::wstring::_Eos`; `Menus::CDrawThread::
+  OnDialogResult` 0x494990 handles only state 0 (`OnMainMenuResult`).
+  Missing function starts of the UI rounds (dialog handlers merged into
+  their neighbours, e.g. 0x47df70, 0x47efd0, 0x4882e0, 0x48d930,
+  0x48d9e0; 0x41e410, 0x421260, 0x4271e0) and false starts (0x419b5f,
+  0x427cab, 0x49859c) are listed in re/ui_classes.md; the rows 0x47ecc0,
+  0x482d00, 0x486ea0, 0x48d620 span more than one function. 0x42c2d0..
+  0x42ca70 belong to Draw.cpp, not dialog.cpp.
 
 ## Naming
 

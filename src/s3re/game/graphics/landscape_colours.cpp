@@ -1,7 +1,7 @@
 // A colour table of the landscape drawing code (Volker\landscape.cpp).
 //
 // Landscape::FindOrAddColour (0x0054c940): ECX is the CLandscapeSurface
-//   (its caller 0x54bec0 is called by CDrawer::vf12); its dword +0xa0
+//   (its caller 0x54bec0 is called by CDrawer::InitSurfaces); its dword +0xa0
 //   points at its table of uint16 colours (new(0x202) in the constructor
 //   0x54bd30), slots 1..255 used (slot 0 never). (colour): 0 for colour 0
 //   (only the low 16 bits of the argument count). Otherwise the first slot

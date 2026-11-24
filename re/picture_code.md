@@ -197,7 +197,7 @@ The range is not game picture code. It has three unrelated parts:
      The cookie is (wDayOfWeek+1)*253 from GetSystemTime, made the first
      time (initially -1).
    - Signature `int __stdcall ProtectCD_RunEmbeddedCheck(const char*, int)`
-     (ret 8). The only caller is UI_sub_497040 at 0x497548: arg1 = [0x7a980c]
+     (ret 8). The only caller is Menus::CDrawThread::PromptForCD at 0x497548: arg1 = [0x7a980c]
      or "" (0x6553a0), arg2 = 0x95. It logs "CHECK.2: %i %i" and stores
      (result != 0).
    - The 27 rows 0x5b2fb3..0x5b50ad (26 `Zlib_sub_*` plus

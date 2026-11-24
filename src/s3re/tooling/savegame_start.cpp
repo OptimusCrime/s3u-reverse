@@ -6,7 +6,7 @@
 // do:
 //
 // - `-map <file>` stores a startup map in the config object (0x7a7af0,
-//   string at +0x15c). Menus::CDrawThread::vf04 (0x4932e0) then sets the
+//   string at +0x15c). Menus::CDrawThread::OnStart (0x4932e0) then sets the
 //   menu state (this+0x104) to 0x14, and the first call of
 //   Menus::CDrawThread::vf13 (0x493880, the menu thread's per-frame update;
 //   thiscall, one stack argument, `ret 4`; EAX is passed through) sets up a

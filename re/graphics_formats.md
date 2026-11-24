@@ -129,8 +129,8 @@ PalettePointer (CStaticColorIndexedFrame, drawers).
 ## Load call tree
 
 ```
-CDrawer::CDrawer 0x42c820 / Menus::CDrawThread::vf04 -> CGraphicsData::CGraphicsData 0x5f67c0, CSoundData::CSoundData 0x5fdb60
-CDrawer::vf12 0x42e430 / Menus CDrawer::vf11 0x497ef0:
+CDrawer::CDrawer 0x42c820 / Menus::CDrawThread::OnStart -> CGraphicsData::CGraphicsData 0x5f67c0, CSoundData::CSoundData 0x5fdb60
+CDrawer::InitSurfaces 0x42e430 / Menus CDrawer::CreateSurfaces 0x497ef0:
   CGraphicsData::Open 0x5f6fd0 (pixel format, base path 0x7a7c80, detach mode from g_config, group-set mode [0x7a7ff8])
     FindDirectoryContainingFile 0x5f6a10 ("siedler3_??.<fmt>.dat")
     IsPathOnRemovableDrive 0x5fa750 (detach mode 3), DebugLog "GFX: Preparing DAT files for detach"
@@ -139,7 +139,7 @@ CDrawer::vf12 0x42e430 / Menus CDrawer::vf11 0x497ef0:
     pixel-format masks, SetShadowSpan 0x5fcd30
   CGraphicsData::GetPixelFormat, LanguageCount, SetLanguage, SetShadowMethod, DetachFromMedium
   CSoundData::Open 0x5fe760 (+ chunks), CSoundData::DetachFromMedium 0x5ff230
-CDrawer::vf05 / destructor -> CGraphicsData::Close 0x5fa690 (UnmapView 0x61aa40)
+CDrawer::ReleaseSurfaces / destructor -> CGraphicsData::Close 0x5fa690 (UnmapView 0x61aa40)
 ```
 
 Group-set mode (4th argument of Open, values 0..4): before loading, it empties some group names:

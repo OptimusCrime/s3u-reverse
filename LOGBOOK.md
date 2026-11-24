@@ -742,6 +742,26 @@ Detach): four reviews, 269 names. Notes in `re/directx_framework.md` and
 - Source-file ranges around DirectX\ are shifted by about one file, and
   more missing/false function starts (TODO.md).
 
+Fourth round: the user interface, five reviews (dialog.cpp in three
+parts with Draw.cpp/DrawInitSurfaces.cpp, MenuShared.cpp and netdialogs.cpp
+in two; lobby/network rows left out): 472 names, notes in
+`re/ui_classes.md`. Findings:
+- Messages: slot 31 PostMessage goes up to CScreen's queue (+0x80), which
+  Menus::CDrawThread::Update drains back down to slot 22; message types
+  0x10/0x12 mouse button, 1 key, 3 character, 0x30 timer, 0x40 command.
+- Menus::CDrawThread: SetActualScreen 0x494550 builds each menu state's
+  screen; 0x494260 dispatches dialog results to one handler per state
+  (slots 14..29); ExitMenus posts 0x801 (1 start game, 2 quit);
+  modal dialogs run a nested CGameThread::Main loop.
+- CListView is a table of typed cell controls; CDropdown, CDialog keyboard
+  handling (Tab, Enter, Escape), the controls' fields; the draw thread
+  double-buffers the draw data (FetchDrawData 0x42c780); CDrawer slots.
+- Some verified UI names are misleading (CControl::OnMessage10 ->
+  OnLButtonDown, CScreenElement::ParentQuery78 -> GetScreen,
+  CScreenElement::Enable is the parent-changed handler,
+  UI_WideEos_428880 -> std::wstring::_Eos; TODO.md), and ~16 more missing
+  function starts (dialog handlers Ghidra merged into their neighbours).
+
 
 ### 2026-11-24 (49): the user's full game
 - The user played a whole game: `python tools/play_game.py --map

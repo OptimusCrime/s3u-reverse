@@ -28,7 +28,7 @@ Win32::CObject (vtable 0x65d67c; slot 0 deleting dtor)
              2 MsgWaitFor(timeout, wakeMask) -> bool message arrived 0x60c3e0
     Win32::CEvent / CSemaphore / CMutex: Create = CreateEventA/
       CreateSemaphoreA/CreateMutexA. CEvent::Set is 0x42cf80 (SetEvent,
-      today "Render_sub_42cf80", outside this range).
+      today "Win32::CEvent::Set", outside this range).
     Win32::CTimer (0x65d6e4): +0x14 timer resolution ms (timeBeginPeriod
       when no waitable timers), +0x18 timeSetEvent id, +0x1c fallback
       CEvent* (signalled by the TimeProc 0x60d640), +0x20..+0x2c
@@ -150,7 +150,7 @@ ThrowAssertmentFailed 0x6119b0, ThrowOutOfMemory 0x610960, ThrowWin32Error
 - 0x00466200 `Menu_sub_466200` (mov eax,1; ret): CMessagedThread slot 3,
   i.e. `Win32::CMessagedThread::IsMessagedThread` (also folded with any
   other `return 1` slot; check its other xrefs).
-- 0x0042cf80 `Render_sub_42cf80`: `Win32::CEvent::Set` (SetEvent(+8),
+- 0x0042cf80 `Win32::CEvent::Set`: `Win32::CEvent::Set` (SetEvent(+8),
   ThrowWin32Error); folded into Draw.cpp's range.
 - 0x00618250 `CTextException::vf01` is called as "get handle" on
   CWin32Handle subobjects (0x60d08b, 0x60dad6) – a folded `mov eax,[ecx+4]`
