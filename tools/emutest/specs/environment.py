@@ -427,3 +427,20 @@ SPECS += [
          [tile_effect_tick, view_near_effect, view_near_effect, view_right, view_right], eax_mask=0xFF,
          presets=visible_effect_record),
 ]
+
+
+def draw_record_effect(rng, pool, args):
+    """tile_effect_record for the tick argument, with a graphic (or none), a
+    non-zero animation period (sometimes negative) and a brightness."""
+    fields = tile_effect_record(rng, pool, [args[1]])
+    period = rng.randint(1, 64) if rng.random() < 0.9 else rng.randint(0x8000, 0xfffe)
+    fields += [(0x2c, 0xFFFFFFFF if rng.random() < 0.25 else rng.getrandbits(32), 4), (0x6, period, 2),
+               (0x30, rng.getrandbits(16), 2), (0x32, rng.getrandbits(16), 2),
+               (0x39, 0 if rng.random() < 0.5 else rng.getrandbits(8), 1)]
+    return fields
+
+
+SPECS += [
+    Spec("MapEffect_MakeDrawRecord", 0x00544100, "thiscall", [scratch(0), tile_effect_tick, anything],
+         presets=draw_record_effect),
+]

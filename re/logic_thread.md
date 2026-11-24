@@ -174,3 +174,28 @@ Suggested field names:
   (CLobbyManager ctor, 0x497040, CGraphicsData::Open).
 - The names `CLogicThread::ProcessEvents` / `PrepareDrawData` are fine.
 - execute_commands.md's "0x53ba60 (message from a wide string)" is just the wstring-from-wcs constructor.
+
+## Session 54 (logic-misc): verified functions and corrections
+
+- The `Logic_sub_4d7xxx/4d8xxx` cluster (obj unit 0x4d65e0..0x4d9250) is **drawing code of the
+  in-game CDrawer**, not simulation: per-screen-row draw queues for shadows, sprites and their
+  player-colour layers (QueueShadow 0x4d7c90, QueueShadowPart 0x4d7d50, QueueSprite 0x4d7e10,
+  QueueSpritePart 0x4d7f30, QueueSpriteWithColour 0x4d8050, QueueColourLayer 0x4d8170; layout in
+  `src/s3re/game/graphics/drawer_layout.h`), the hit areas of drawn objects (AddHitArea 0x4d8240,
+  g_hitAreas 0x7ade08: two interleaved halves swapped by 0x4b3f4b after a frame), DrawStatisticsBar
+  0x4d7bd0 and DrawGlyphRow 0x4d6950 (debug font).
+- `CGameData::FindNearest_a` 0x4ff0a0 is **PickHitArea**: the click picks the nearest hit area (squared
+  distance < 2000) and stores its two values in world+0x2d2e4/+0x2d2e8. `FindNearest_b` 0x4ff170 is
+  probably the screen-to-tile conversion (not done).
+- `Logic_sub_4fce90` is **CGameData::FinishInitialising** ("*** GAMEDATA Initialising done"), the
+  first-step UI reset.
+- Render: 0x4c6d70 SetScreenLayout (the display-mode globals 0x730f08..0x730f40), 0x4c7b50
+  IsNearView, 0x4c79f0 / 0x4c7a50 the ambient sound pan / volume (CDrawer +0x5f588.., used by 0x4c7730).
+- CLogicThread fields named (logic_thread_layout.h): Setup's arguments (+0x3a8, +0x3b8, +0x3c0, the
+  draw slot/events +0x3cc..+0x3d8, lobby +0x66c/+0x670), the message ring (+0x414 MessageLine[20],
+  +0x644 count, +0x648 index).
+- World fields named: chart (uint16[256]) / chart_max / chart_axis[5], notification_icon +0x2d2cc,
+  jump_return_x/y +0x2d314, jump_tick +0x2d31c; MapEffect start/end tiles +0x18..+0x24, anim_period,
+  graphic, first_frame, frame_count, brightness.
+- Not renamed (would collide with the savegame work): world +0x2d304 (`unk2d304`) is the tutorial wait
+  countdown (TutorialWaitDone 0x515b00 verified), +0x2d308 the tutorial step.

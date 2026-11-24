@@ -30,6 +30,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 #include <initializer_list>
 
 namespace s3re::game {
@@ -260,6 +261,118 @@ S3RE_TEST(MapEffects_Construct_MatchesOriginal) {
 S3RE_TEST(MapEffects_Construct_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareConstruct(probe, &WrongConstruct, 2);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+
+// MapEffect::MakeDrawRecord (0x00544100): (LogicRecord24* out, tick, brightness) thiscall on a record,
+//   ret 0xc; called by MapEffects::CollectVisible for every visible effect. The pixel position at `tick`
+//   (PositionAt), the tile (TileAt), the frame (with a graphic: first_frame + (tick - start) %
+//   anim_period * frame_count / anim_period, signed; without one (-1) 0) and the brightness (the record's
+//   own if non-zero, else the argument) go into a LogicRecord24 (pixel x, pixel y, tile x, tile y, graphic,
+//   frame, byte +0x38, brightness, dword +0x34), built on the stack by its constructor 0x5437e0 and copied
+//   to *out. A duration of -1 is set to 0 on the way (the original writes the record). EAX = out.
+
+namespace {
+
+constexpr std::uintptr_t kMapEffectTileAt = 0x005441c0;
+constexpr std::uintptr_t kDrawRecordConstruct = 0x005437e0;  // LogicRecord24::LogicRecord24 (a1..a9)
+constexpr std::uint32_t kNoGraphic = 0xffffffffu;
+
+struct DrawRecord {
+    std::uint32_t values[9];
+};
+static_assert(sizeof(DrawRecord) == 0x24);
+
+}  // namespace
+
+using MakeDrawRecordFn = DrawRecord*(__fastcall*)(MapEffect* self, void* edx, DrawRecord* out, std::int32_t tick,
+                                                  std::uint32_t brightness);
+
+// Purpose: Describes a visible map effect for the draw thread (where to draw
+// which frame of its graphic, how bright).
+DrawRecord* __fastcall MapEffect_MakeDrawRecord(MapEffect* self, void*, DrawRecord* out, std::int32_t tick,
+                                                std::uint32_t brightness) {
+    std::int32_t pixelX = 0, pixelY = 0, tileX = 0, tileY = 0;
+    using PositionAtFn = void(__fastcall*)(MapEffect*, void*, std::int32_t, std::int32_t*, std::int32_t*);
+    reinterpret_cast<PositionAtFn>(kMapEffectPositionAt)(self, nullptr, tick, &pixelX, &pixelY);
+    using TileAtFn = std::int32_t(__fastcall*)(MapEffect*, void*, std::uint32_t, std::int32_t*, std::int32_t*);
+    reinterpret_cast<TileAtFn>(kMapEffectTileAt)(self, nullptr, static_cast<std::uint32_t>(tick), &tileX, &tileY);
+    const std::uint32_t graphic = self->graphic;
+    std::int32_t frame = 0;
+    if (graphic != kNoGraphic) {
+        const auto period = static_cast<std::int32_t>(static_cast<std::int16_t>(self->anim_period));
+        const auto elapsed = static_cast<std::int32_t>(static_cast<std::uint32_t>(tick) - self->start_tick);
+        const auto scaled = static_cast<std::int32_t>(static_cast<std::uint32_t>(elapsed % period) *
+                                                      static_cast<std::uint32_t>(static_cast<std::int16_t>(self->frame_count)));
+        frame = static_cast<std::int32_t>(static_cast<std::uint32_t>(scaled / period) +
+                                          static_cast<std::uint32_t>(static_cast<std::int16_t>(self->first_frame)));
+    }
+    if (self->duration == kForever) {
+        self->duration = 0;
+    }
+    const std::uint32_t shade = self->brightness != 0 ? self->brightness : brightness;
+    DrawRecord record;
+    using ConstructFn = DrawRecord*(__fastcall*)(DrawRecord*, void*, std::uint32_t, std::uint32_t, std::uint32_t,
+                                                 std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t,
+                                                 std::uint32_t, std::uint32_t);
+    const DrawRecord* built = reinterpret_cast<ConstructFn>(kDrawRecordConstruct)(
+        &record, nullptr, static_cast<std::uint32_t>(pixelX), static_cast<std::uint32_t>(pixelY),
+        static_cast<std::uint32_t>(tileX), static_cast<std::uint32_t>(tileY), graphic, static_cast<std::uint32_t>(frame),
+        self->unk38, shade, self->unk34);
+    *out = *built;
+    return out;
+}
+
+S3RE_HOOK(0x00544100, MapEffect_MakeDrawRecord, MakeDrawRecordFn, Original_MapEffect_MakeDrawRecord,
+          MapEffect_MakeDrawRecord);
+
+namespace {
+
+void CompareMakeDrawRecord(test::Context& ctx, MakeDrawRecordFn candidate, int cases) {
+    std::uint8_t a[kRecordBytes], b[kRecordBytes];
+    DrawRecord outA[3], outB[3];
+    for (int i = 0; i < cases; ++i) {
+        const std::int32_t tick = RandomRecord(ctx, a);
+        auto* record = reinterpret_cast<MapEffect*>(a);
+        if (record->duration == 0) {
+            record->duration = 1;
+        }
+        record->graphic = ctx.rng().Chance(1, 4) ? kNoGraphic : ctx.rng().Next32();
+        record->anim_period = static_cast<std::uint16_t>(ctx.rng().Chance(1, 10) ? 0x8000 + ctx.rng().Below(0x7fff) : 1 + ctx.rng().Below(64));
+        record->brightness = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Next32());
+        std::memcpy(b, a, sizeof(a));
+        ctx.rng().Fill(outA, sizeof(outA));
+        std::memcpy(outB, outA, sizeof(outA));
+        const std::uint32_t brightness = ctx.rng().Next32();
+        DrawRecord* ra = Original_MapEffect_MakeDrawRecord(reinterpret_cast<MapEffect*>(a), nullptr, &outA[1], tick, brightness);
+        DrawRecord* rb = candidate(reinterpret_cast<MapEffect*>(b), nullptr, &outB[1], tick, brightness);
+        if (!S3RE_EXPECT(ra == &outA[1] && rb == &outB[1]) || !S3RE_EXPECT_MEM_EQ(a, b, sizeof(a)) ||
+            !S3RE_EXPECT_MEM_EQ(outA, outB, sizeof(outA))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: tick %d", i, tick);
+            return;
+        }
+    }
+}
+
+// Wrong: the record's own brightness is ignored.
+DrawRecord* __fastcall WrongMakeDrawRecord(MapEffect* self, void* edx, DrawRecord* out, std::int32_t tick,
+                                           std::uint32_t brightness) {
+    const std::uint8_t own = self->brightness;
+    self->brightness = 0;
+    DrawRecord* r = MapEffect_MakeDrawRecord(self, edx, out, tick, brightness);
+    self->brightness = own;
+    return r;
+}
+
+}  // namespace
+
+S3RE_TEST(MapEffect_MakeDrawRecord_MatchesOriginal) {
+    CompareMakeDrawRecord(ctx, &MapEffect_MakeDrawRecord, 30000);
+}
+S3RE_TEST(MapEffect_MakeDrawRecord_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareMakeDrawRecord(probe, &WrongMakeDrawRecord, 3000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

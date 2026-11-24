@@ -1842,3 +1842,97 @@ SPECS += [
     Spec("CGameData_PickHitArea", 0x004ff0a0, "thiscall", [between(-50, 1100), between(-50, 800)], eax_mask=0,
          presets=pick_hit_area_world, globals=pick_hit_area_globals, max_cases=1000),
 ]
+
+
+# -- session 54 (logic-misc): SelectSettlerGroup, SelectSettlersOfType (logic_thread_members.cpp) --
+
+def _trunc_div(a, b):
+    """Signed 32-bit division truncating toward zero."""
+    a = a - (1 << 32) if a & 0x80000000 else a
+    q = abs(a) // b
+    return (q if a >= 0 else -q) & 0xFFFFFFFF
+
+
+def screen_centre_tile(camera_x, camera_y, size, width, height):
+    """CGameData::ScreenCenterTileX/Y (ui_state.cpp) in Python."""
+    row = _trunc_div((camera_y + 0x640) & 0xFFFFFFFF, 18)
+    rows = lambda shift: ((_trunc_div((height + 0xff) & 0xFFFFFFFF, 9) + 0xb) & 0xFFFFFFFF) >> shift
+    skew = ((size + ((100 - row) & 0xFFFFFFFF) * 2) & 0xFFFFFFFF) >> 1
+    half = ((_trunc_div((width + 0x17) & 0xFFFFFFFF, 16) + 0xa) & 0xFFFFFFFF) >> 1
+    column = _trunc_div((camera_x - 0xd0) & 0xFFFFFFFF, 16)
+    x = (column + rows(2) - skew + half) & 0xFFFFFFFF
+    y = (rows(1) + row * 2 - 200) & 0xFFFFFFFF
+    return x, y
+
+
+SELECT_EXE: list = []
+SELECT_SCREEN = (504, 480)
+
+
+def select_group_state(rng, pool, args):
+    """The groups (group_store_state) with every listed settler's owner and
+    position on a small map (CenterCameraOnTile reads its tile)."""
+    world, exe = group_store_state(rng, pool, args)
+    size = rng.randrange(32, 200)
+    local = rng.randrange(4)
+    world += [(MAP_SIZE, size, 4), (0x2d2d4, local, 4)]
+    for address, value, width in list(exe):
+        if GROUP_SETTLERS <= address < GROUP_SETTLERS + 2000 and width == 2:
+            s = SETTLERS + value * 0x40
+            world += [(s, local if rng.random() < 0.6 else rng.randrange(4), 1),
+                      (s + 4, rng.randrange(size), 2), (s + 6, rng.randrange(size), 2)]
+    if rng.random() < 0.6 and args:  # the same group again (camera jump)
+        exe.append((CURRENT_GROUP, args[0], 4))
+    SELECT_EXE[:] = exe + [(SCREEN_WIDTH, SELECT_SCREEN[0], 4), (SCREEN_HEIGHT, SELECT_SCREEN[1], 4)]
+    return world
+
+
+def select_globals(rng, pool, args):
+    return list(SELECT_EXE)
+
+
+def select_type_state(rng, pool, args):
+    """A map whose screen-centre tile is known (camera and view size fixed per
+    case), a ring table of small offsets, settlers of a few owners and the
+    four types 0..3 on the tiles around the centre, and the groups."""
+    type_, mode = args
+    world, exe = group_store_state(rng, pool, [0])
+    size = rng.randrange(48, 160)
+    local = rng.randrange(4)
+    camera_x, camera_y = rng.randrange(0, 2500), rng.randrange(0, 1200)
+    cx, cy = screen_centre_tile(camera_x, camera_y, size, *SELECT_SCREEN)
+    world += [(MAP_SIZE, size, 4), (0x2d2d4, local, 4), (0x2d25c, camera_x, 4), (0x2d260, camera_y, 4)]
+    n = 0
+    d = 0
+    pool_settlers = [rng.randrange(1, 32000) for _ in range(150)]
+    while n < 400:
+        for dx in range(-d, d + 1):
+            for dy in range(-d, d + 1):
+                if max(abs(dx), abs(dy)) != d or n >= 400:
+                    continue
+                world += [(0x110a588 + n * 16, dx & 0xFFFFFFFF, 4), (0x110a588 + n * 16 + 4, dy & 0xFFFFFFFF, 4)]
+                x, y = (cx + dx) & 0xFFFFFFFF, (cy + dy) & 0xFFFFFFFF
+                if x < size and y < size:
+                    settler = rng.choice(pool_settlers) if rng.random() < 0.5 else 0
+                    world.append((TILES + (x * 0x300 + y) * 24, settler, 2))
+                n += 1
+        d += 1
+    for s in pool_settlers:
+        world += [(SETTLERS + s * 0x40, local if rng.random() < 0.7 else rng.randrange(4), 1),
+                  (SETTLERS + s * 0x40 + 1, type_ if rng.random() < 0.6 else rng.randrange(4), 1)]
+    SELECT_EXE[:] = exe + [(SCREEN_WIDTH, SELECT_SCREEN[0], 4), (SCREEN_HEIGHT, SELECT_SCREEN[1], 4)]
+    return world
+
+
+def select_mode(rng, pool):
+    return rng.choice([1, 2, 3, 1, 2, 0, 4, rng.getrandbits(32)])
+
+
+SPECS += [
+    # EAX: the empty-group path leaves the caller's (not used).
+    Spec("CLogicThread_SelectSettlerGroup", 0x00542660, "logicthread", [below(10)], eax_mask=0,
+         presets=select_group_state, globals=select_globals),
+    # EAX not used by the callers (an invalid mode leaves the caller's).
+    Spec("CLogicThread_SelectSettlersOfType", 0x00542b60, "logicthread", [below(4), select_mode], eax_mask=0,
+         presets=select_type_state, globals=select_globals, max_cases=300),
+]

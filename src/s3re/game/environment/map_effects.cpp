@@ -74,14 +74,14 @@ void* __fastcall MapEffect_DefaultConstruct(MapEffect* self, void*) {
     self->previous = 0;
     self->next = 0;
     self->duration = 0;
-    self->unk06 = 0;
+    self->anim_period = 0;
     self->arc = 0;
-    self->unk32 = 0;
+    self->frame_count = 0;
     self->source_id = 0;
-    self->unk2c = kUnset32;
+    self->graphic = kUnset32;
     self->unk34 = kUnset32;
     self->unk38 = kUnset8;
-    self->unk39 = 0;
+    self->brightness = 0;
     self->source_kind = 0;
     return self;
 }
@@ -96,7 +96,7 @@ void* __fastcall MapEffect_Construct(MapEffect* self, void*, std::uint32_t a1, s
                                      std::uint32_t a20) {
     self->start_tick = a1;
     self->duration = static_cast<std::int16_t>(a2);
-    self->unk06 = static_cast<std::uint16_t>(a3);
+    self->anim_period = static_cast<std::uint16_t>(a3);
     self->source_kind = static_cast<std::uint8_t>(a4);
     self->source_id = static_cast<std::uint16_t>(a5);
     self->start_x = static_cast<std::int32_t>(a6);
@@ -108,11 +108,11 @@ void* __fastcall MapEffect_Construct(MapEffect* self, void*, std::uint32_t a1, s
     self->start_tile_y = a12;
     self->end_tile_x = a13;
     self->end_tile_y = a14;
-    self->unk2c = a15;
-    self->unk30 = static_cast<std::uint16_t>(a16);
-    self->unk32 = static_cast<std::uint16_t>(a17);
+    self->graphic = a15;
+    self->first_frame = static_cast<std::uint16_t>(a16);
+    self->frame_count = static_cast<std::uint16_t>(a17);
     self->unk38 = static_cast<std::uint8_t>(a18);
-    self->unk39 = static_cast<std::uint8_t>(a19);
+    self->brightness = static_cast<std::uint8_t>(a19);
     self->unk34 = a20;
     self->list = 0;
     self->previous = 0;

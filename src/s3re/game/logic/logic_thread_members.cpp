@@ -47,6 +47,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 namespace s3re::game {
 
@@ -446,7 +447,7 @@ void CompareGoodsPriorityPosition(test::Context& ctx, ThreadPairFn candidate, in
     for (int i = 0; i < cases; ++i) {
         const std::uint32_t area = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(0x1001);
         const std::uint32_t good = ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(40);
-        if (area < 0x1000) {
+        if (area < kAreaLimit) {
             const std::uint8_t player = ctx.rng().Chance(1, 5) ? kFreeArea : static_cast<std::uint8_t>(ctx.rng().Below(20));
             std::uint8_t order[layout::kGoodsTypes];
             for (std::uint8_t& value : order) {
@@ -513,6 +514,321 @@ S3RE_TEST(LogicRecord24_Construct_args_MatchesOriginal) {
             return;
         }
     }
+}
+
+
+// CLogicThread::SelectSettlerGroup (0x00542660): (group) thiscall, ret 4; ProcessEvents calls it for a
+//   group hotkey. An empty group does nothing. A group that isn't the current one becomes current: the
+//   thread's +0x4c = 1, no building selected, selection mode 5, special menu 0, refresh the UI, and
+//   UpdateGroupMenu(group) (its EAX is returned; the original also sums the positions of the local
+//   player's settlers there without using them). Pressing the current group again centres the camera
+//   on the average position (unsigned division) of its settlers that belong to the local player (none:
+//   nothing) and clears world+0x2d264 (redraw). The group number is not range-checked. EAX not used
+//   by the caller.
+// CLogicThread::SelectSettlersOfType (0x00542b60): (type, mode) thiscall, ret 8; ProcessEvents calls it
+//   (probably for a double click on a settler, mode 1..3; any other mode does nothing). From the tile at
+//   the screen centre, the first 3000 (mode 3: 19995) entries of the world's ring table (offsets
+//   sorted by distance) are visited in order: a tile on the map (IsOnMap) with a settler of the local
+//   player (owner compared with the whole dword) and of `type` (the type byte compared with the whole
+//   dword) that is not yet in the list is appended to settler group 0's list (RemoveSettlerFromGroups(
+//   settler, 0) for each), up to 100 settlers (mode 1: one). If any were found, group 0 holds them and
+//   becomes current (changed, thread +0x4c = 1, no building, selection mode 5, special menu 0, refresh)
+//   and UpdateGroupMenu(0) runs. EAX not used by the callers.
+
+namespace {
+
+constexpr std::uintptr_t kCenterCameraOnTile = 0x0051b560;  // ECX = the world
+constexpr std::uintptr_t kScreenCenterTileX = 0x005158f0;
+constexpr std::uintptr_t kScreenCenterTileY = 0x00515980;
+constexpr std::uintptr_t kIsOnMap = 0x005194e0;
+constexpr std::int32_t kGroupSelectionMode = 5;  // ui_selection_mode of a selected settler group
+
+template <std::uintptr_t Address, typename... Args>
+std::uint32_t CallWorld(CGameData* world, Args... args) {
+    using Fn = std::uint32_t(__fastcall*)(CGameData*, void*, decltype(static_cast<std::uint32_t>(args))...);
+    return reinterpret_cast<Fn>(Address)(world, nullptr, static_cast<std::uint32_t>(args)...);
+}
+
+// What becomes of the UI when a settler group is selected (0x54270f, 0x542ce1).
+void ShowGroup(CLogicThread* thread) {
+    thread->group_selection_changed = 1;
+    g_selectedBuilding = 0;
+    thread->world->ui_selection_mode = kGroupSelectionMode;
+    thread->world->ui_special_menu = 0;
+    thread->world->refresh_ui = 1;
+}
+
+}  // namespace
+
+using SelectTypeFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t type, std::uint32_t mode);
+
+// Purpose: Selects a numbered settler group (hotkey); pressing it again
+// moves the camera to the group.
+std::uint32_t __fastcall CLogicThread_SelectSettlerGroup(CLogicThread* self, void*, std::uint32_t group) {
+    CLogicThread* thread = LogicThreadOf(self);
+    SettlerGroups& groups = GlobalSettlerGroups();
+    const std::uint16_t count = groups.counts[group];
+    if (count == 0) {
+        return 0;  // (the caller's EAX in the original; not used)
+    }
+    if (static_cast<std::uint32_t>(g_currentSettlerGroup.get()) != group) {
+        g_currentSettlerGroup = static_cast<std::int32_t>(group);
+        ShowGroup(thread);
+        return CallThread<kUpdateGroupMenu>(self, static_cast<std::uint32_t>(g_currentSettlerGroup.get()));
+    }
+    CGameData* world = thread->world;
+    std::uint32_t sumX = 0, sumY = 0, own = 0;
+    for (std::uint32_t i = 0; i < count; ++i) {
+        const layout::Settler& settler = world->settlers[groups.lists[group][i]];
+        if (static_cast<std::uint32_t>(settler.owner) == static_cast<std::uint32_t>(world->local_player)) {
+            sumX += settler.x;
+            sumY += settler.y;
+            ++own;
+        }
+    }
+    if (own == 0) {
+        return static_cast<std::uint32_t>(world->local_player);  // (what the original leaves in EAX)
+    }
+    CallWorld<kCenterCameraOnTile>(world, sumX / own, sumY / own);
+    thread->world->redraw = 0;
+    return reinterpret_cast<std::uint32_t>(self);
+}
+
+// Purpose: Selects the local player's settlers of one type around the
+// screen centre (probably a double click on a settler: the nearest one, or
+// up to 100 nearby, or on a larger area) as settler group 0.
+std::uint32_t __fastcall CLogicThread_SelectSettlersOfType(CLogicThread* self, void*, std::uint32_t type,
+                                                           std::uint32_t mode) {
+    if (mode != 1 && mode != 2 && mode != 3) {
+        return 0;
+    }
+    CLogicThread* thread = LogicThreadOf(self);
+    const std::uint32_t centreX = CallWorld<kScreenCenterTileX>(thread->world);
+    const std::uint32_t centreY = CallWorld<kScreenCenterTileY>(thread->world);
+    const std::uint32_t wanted = mode == 1 ? 1 : 100;
+    const std::uint32_t offsets = mode == 3 ? 19995 : 3000;
+    SettlerGroups& groups = GlobalSettlerGroups();
+    std::uint16_t* const list = groups.lists[0];
+    std::uint32_t found = 0;
+    for (std::uint32_t i = 0; i < offsets && found != wanted; ++i) {
+        CGameData* world = thread->world;
+        const layout::MapOffset& offset = world->offsets[i];
+        const std::uint32_t x = centreX + static_cast<std::uint32_t>(offset.dx);
+        const std::uint32_t y = centreY + static_cast<std::uint32_t>(offset.dy);
+        if (CallWorld<kIsOnMap>(world, x, y) == 0) {
+            continue;
+        }
+        CGameData* const w = thread->world;
+        const std::uint32_t number = TileAtOffset(w, TileOffset(x, y)).settler;
+        if (number == 0) {
+            continue;
+        }
+        const layout::Settler& settler = w->settlers[number];
+        if (static_cast<std::uint32_t>(settler.owner) != static_cast<std::uint32_t>(w->local_player) ||
+            static_cast<std::uint32_t>(settler.art) != type) {
+            continue;
+        }
+        bool known = false;
+        for (std::uint32_t k = 0; k < found; ++k) {
+            if (list[k] == number) {
+                known = true;
+            }
+        }
+        if (known) {
+            continue;
+        }
+        list[found] = static_cast<std::uint16_t>(number);
+        CallThread<kRemoveSettlerFromGroups>(self, number, 0u);
+        ++found;
+    }
+    if (found == 0) {
+        return 0;
+    }
+    groups.counts[0] = static_cast<std::uint16_t>(found);
+    g_currentSettlerGroup = 0;
+    g_settlerGroupChanged[0] = 1;
+    ShowGroup(thread);
+    return CallThread<kUpdateGroupMenu>(self, static_cast<std::uint32_t>(g_currentSettlerGroup.get()));
+}
+
+S3RE_HOOK(0x00542660, CLogicThread_SelectSettlerGroup, ThreadValueFn, Original_CLogicThread_SelectSettlerGroup,
+          CLogicThread_SelectSettlerGroup);
+S3RE_HOOK(0x00542b60, CLogicThread_SelectSettlersOfType, SelectTypeFn, Original_CLogicThread_SelectSettlersOfType,
+          CLogicThread_SelectSettlersOfType);
+
+namespace {
+
+// A full world with a ring table (distance-sorted small offsets), a map,
+// settlers of a few players and types on the tiles around the centre, and
+// random settler groups.
+struct SelectionWorld {
+    explicit SelectionWorld(test::Context& ctx) : worlds(ctx, sizeof(CGameData)), threads(ctx, &worlds) {
+        std::vector<layout::MapOffset> table(20000);
+        std::uint32_t n = 0;
+        for (std::int32_t d = 0; n < 20000; ++d) {
+            for (std::int32_t dx = -d; dx <= d && n < 20000; ++dx) {
+                for (std::int32_t dy = -d; dy <= d && n < 20000; ++dy) {
+                    if ((dx < 0 ? -dx : dx) == d || (dy < 0 ? -dy : dy) == d) {
+                        table[n++] = layout::MapOffset{dx, dy, d, 0};
+                    }
+                }
+            }
+        }
+        worlds.Both([&](CGameData* w) { std::memcpy(w->offsets, table.data(), sizeof(w->offsets)); });
+    }
+    test::WorldPair worlds;
+    Threads threads;
+};
+
+void PrepareSelection(test::Context& ctx, SelectionWorld& s) {
+    const std::uint32_t size = 64 + ctx.rng().Below(200);
+    const auto local = static_cast<std::int32_t>(ctx.rng().Below(4));
+    const std::int32_t cameraX = ctx.rng().Range(0, 3000), cameraY = ctx.rng().Range(0, 2000);
+    s.worlds.Both([&](CGameData* w) {
+        w->map_size = size;
+        w->local_player = local;
+        w->camera_x = cameraX;
+        w->camera_y = cameraY;
+    });
+    // Settlers on a patch of tiles (most of the map is empty).
+    for (std::uint32_t x = 0; x < size; ++x) {
+        for (std::uint32_t y = 0; y < size; ++y) {
+            const std::uint16_t number = static_cast<std::uint16_t>(ctx.rng().Chance(1, 6) ? 1 + ctx.rng().Below(31999) : 0);
+            s.worlds.Both([&](CGameData* w) { w->tiles[x][y].settler = number; });
+        }
+    }
+    for (std::uint32_t n = 0; n < 32000; ++n) {  // (every settler: the groups name any of them)
+        const auto owner = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? local : ctx.rng().Below(4));
+        const auto art = static_cast<std::uint8_t>(ctx.rng().Below(4));
+        const auto x = static_cast<std::uint16_t>(ctx.rng().Below(size));
+        const auto y = static_cast<std::uint16_t>(ctx.rng().Below(size));
+        s.worlds.Both([&](CGameData* w) {
+            w->settlers[n].owner = owner;
+            w->settlers[n].art = art;
+            w->settlers[n].x = x;
+            w->settlers[n].y = y;
+        });
+    }
+}
+
+using SelectionCall = std::uint32_t (*)(CLogicThread* thread, std::uint32_t a, std::uint32_t b, bool original);
+
+void CompareSelection(test::Context& ctx, SelectionCall call, bool byType, int cases) {
+    const SavedGroupState saved;
+    const std::uint32_t savedWidth = g_screenWidth, savedHeight = g_screenHeight;
+    g_screenWidth = 504;
+    g_screenHeight = 480;
+    SelectionWorld s(ctx);
+    for (int i = 0; i < cases; ++i) {
+        if (i % 50 == 0) {
+            PrepareSelection(ctx, s);
+        }
+        RandomGroups(ctx);
+        g_currentSettlerGroup = ctx.rng().Chance(1, 10) ? -1 : static_cast<std::int32_t>(ctx.rng().Below(10));
+        g_selectedBuilding = static_cast<std::int32_t>(ctx.rng().Below(5000));
+        // (Group -1 would read settler numbers from the data before the
+        // groups, past the settler array: not tested.)
+        const bool again = g_currentSettlerGroup >= 0 && ctx.rng().Chance(1, 2);
+        const std::uint32_t a = byType ? ctx.rng().Below(4)
+                                       : again ? static_cast<std::uint32_t>(g_currentSettlerGroup.get()) : ctx.rng().Below(10);
+        const std::uint32_t b = byType ? (ctx.rng().Chance(1, 8) ? ctx.rng().Below(6) : 1 + ctx.rng().Below(3)) : 0;
+        const SettlerGroups before = g_settlerGroups.get();
+        std::int32_t changedBefore[10];
+        std::memcpy(changedBefore, &g_settlerGroupChanged.get(), sizeof(changedBefore));
+        const std::int32_t currentBefore = g_currentSettlerGroup, buildingBefore = g_selectedBuilding;
+
+        const std::uint32_t expected = call(s.threads.original(), a, b, true);
+        const SettlerGroups originalGroups = g_settlerGroups.get();
+        std::int32_t originalChanged[10];
+        std::memcpy(originalChanged, &g_settlerGroupChanged.get(), sizeof(originalChanged));
+        const std::int32_t originalCurrent = g_currentSettlerGroup, originalBuilding = g_selectedBuilding;
+
+        g_settlerGroups.get() = before;
+        std::memcpy(&g_settlerGroupChanged.get(), changedBefore, sizeof(changedBefore));
+        g_currentSettlerGroup = currentBefore;
+        g_selectedBuilding = buildingBefore;
+        const std::uint32_t actual = call(s.threads.ours(), a, b, false);
+
+        bool same = S3RE_EXPECT_EQ(expected, actual);
+        same &= S3RE_EXPECT_MEM_EQ(&originalGroups, &g_settlerGroups.get(), sizeof(SettlerGroups));
+        same &= S3RE_EXPECT_MEM_EQ(originalChanged, &g_settlerGroupChanged.get(), sizeof(originalChanged));
+        same &= S3RE_EXPECT_EQ(originalCurrent, g_currentSettlerGroup.get());
+        same &= S3RE_EXPECT_EQ(originalBuilding, g_selectedBuilding.get());
+        same &= s.threads.Same(ctx);
+        same &= s.worlds.Same(ctx, offsetof(CGameData, chart), offsetof(CGameData, notifications) - offsetof(CGameData, chart));
+        if (!same || (i % 100 == 99 && !s.worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u), current %d", i, a, b, currentBefore);
+            break;
+        }
+    }
+    g_screenWidth = savedWidth;
+    g_screenHeight = savedHeight;
+}
+
+// The results compare as "world", "thread" or 0 (the empty-group path's
+// caller EAX is left out).
+std::uint32_t Normalized(std::uint32_t result, CLogicThread* thread) {
+    if (result == reinterpret_cast<std::uint32_t>(thread->world)) {
+        return 1;
+    }
+    return result == reinterpret_cast<std::uint32_t>(thread) ? 2 : result;
+}
+
+std::uint32_t CallSelectGroup(CLogicThread* thread, std::uint32_t group, std::uint32_t, bool original) {
+    const bool empty = GlobalSettlerGroups().counts[group] == 0;
+    const std::uint32_t r = original ? Original_CLogicThread_SelectSettlerGroup(thread, nullptr, group)
+                                     : CLogicThread_SelectSettlerGroup(thread, nullptr, group);
+    return empty ? 0 : Normalized(r, thread);
+}
+
+std::uint32_t CallSelectType(CLogicThread* thread, std::uint32_t type, std::uint32_t mode, bool original) {
+    // (EAX: not used by the callers, and the "nothing found" paths leave
+    // registers of the original's own; only the side effects are compared.)
+    if (original) {
+        Original_CLogicThread_SelectSettlersOfType(thread, nullptr, type, mode);
+    } else {
+        CLogicThread_SelectSettlersOfType(thread, nullptr, type, mode);
+    }
+    return 0;
+}
+
+// Wrong: the farthest settler found is dropped.
+std::uint32_t CallWrongSelectType(CLogicThread* thread, std::uint32_t type, std::uint32_t mode, bool original) {
+    const std::uint16_t before = GlobalSettlerGroups().counts[0];
+    CallSelectType(thread, type, mode, original);
+    const std::uint16_t after = GlobalSettlerGroups().counts[0];
+    if (!original && after >= 2 && after != before) {
+        GlobalSettlerGroups().counts[0] = static_cast<std::uint16_t>(after - 1);
+    }
+    return 0;
+}
+
+}  // namespace
+
+// Wrong: the camera jump leaves the redraw flag set.
+static std::uint32_t CallWrongSelectGroup(CLogicThread* thread, std::uint32_t group, std::uint32_t b, bool original) {
+    const std::uint32_t r = CallSelectGroup(thread, group, b, original);
+    if (!original && r == 2) {
+        LogicThreadOf(thread)->world->redraw = 1;
+    }
+    return r;
+}
+
+S3RE_TEST(CLogicThread_SelectSettlerGroup_MatchesOriginal) {
+    CompareSelection(ctx, &CallSelectGroup, false, 2000);
+}
+S3RE_TEST(CLogicThread_SelectSettlerGroup_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSelection(probe, &CallWrongSelectGroup, false, 500);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+S3RE_TEST(CLogicThread_SelectSettlersOfType_MatchesOriginal) {
+    CompareSelection(ctx, &CallSelectType, true, 600);
+}
+S3RE_TEST(CLogicThread_SelectSettlersOfType_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSelection(probe, &CallWrongSelectType, true, 600);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 }  // namespace s3re::game

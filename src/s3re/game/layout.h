@@ -557,7 +557,7 @@ static_assert(sizeof(PlayerSiteCache) == 0x3c2);
 struct MapEffect {  // constructors 0x543830 / 0x543880 (argument a<i>)
     std::uint32_t start_tick;        // 0x00 a1; 0 = free record
     std::int16_t duration;           // 0x04 a2 (ticks, signed in PositionAt)
-    std::uint16_t unk06;             // 0x06 a3
+    std::uint16_t anim_period;       // 0x06 a3 ticks per animation cycle (MakeDrawRecord: frame = first_frame + elapsed % period * frame_count / period)
     std::int32_t start_x;            // 0x08 a6 (pixels)
     std::int32_t start_y;            // 0x0c a7
     std::int32_t end_x;              // 0x10 a8 (gives the block list)
@@ -568,12 +568,12 @@ struct MapEffect {  // constructors 0x543830 / 0x543880 (argument a<i>)
     std::uint32_t end_tile_y;        // 0x24 a14
     std::int16_t arc;                // 0x28 a10 hop height (PositionAt)
     std::uint8_t pad2a[2];           // 0x2a never written (copied garbage)
-    std::uint32_t unk2c;             // 0x2c a15 graphics id? (-1 default)
-    std::uint16_t unk30;             // 0x30 a16 (left alone by the default ctor)
-    std::uint16_t unk32;             // 0x32 a17
+    std::uint32_t graphic;           // 0x2c a15 graphics id (-1 default: none, MakeDrawRecord draws frame 0)
+    std::uint16_t first_frame;       // 0x30 a16 (left alone by the default ctor)
+    std::uint16_t frame_count;       // 0x32 a17
     std::uint32_t unk34;             // 0x34 a20 (-1 default)
     std::uint8_t unk38;              // 0x38 a18 (0xff default)
-    std::uint8_t unk39;              // 0x39 a19
+    std::uint8_t brightness;         // 0x39 a19 non-zero: overrides the fog brightness in the draw record
     std::uint8_t source_kind;        // 0x3a a4 what made it (0 = a building; MapEffects::RemoveMatching)
     std::uint8_t pad3b;              // 0x3b never written
     std::uint16_t source_id;         // 0x3c a5 its number (CrushBuilding removes a building's effects)
@@ -590,8 +590,9 @@ static_assert(offsetof(MapEffect, start_tile_x) == 0x18);
 static_assert(offsetof(MapEffect, end_tile_y) == 0x24);
 static_assert(offsetof(MapEffect, arc) == 0x28);
 static_assert(offsetof(MapEffect, pad2a) == 0x2a);
-static_assert(offsetof(MapEffect, unk2c) == 0x2c);
-static_assert(offsetof(MapEffect, unk30) == 0x30);
+static_assert(offsetof(MapEffect, graphic) == 0x2c);
+static_assert(offsetof(MapEffect, first_frame) == 0x30);
+static_assert(offsetof(MapEffect, brightness) == 0x39);
 static_assert(offsetof(MapEffect, unk34) == 0x34);
 static_assert(offsetof(MapEffect, unk38) == 0x38);
 static_assert(offsetof(MapEffect, pad3b) == 0x3b);
