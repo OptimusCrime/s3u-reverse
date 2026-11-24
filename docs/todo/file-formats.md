@@ -26,12 +26,6 @@ LOGBOOK session entry).
   worlds from `map_test::ConstructWorld`. Then the savegame writer
   `CLogicThread::SaveGame` 0x509980. Optional: the Watcom skip list
   (0x60bab0/0x60bbe0/0x60be20) as our code.
-- **Whole-game evidence for the loaders** (each opens the game window):
-  `check_save.py "slot N.sav" --ticks 2000 --against-original` for slots
-  1..3; `check_random_map.py --maps "384,0;448,3" --ticks 1000
-  --against-original` (AddPlayerTowns, PlaceTown, PrepareLoadedTerrain);
-  `check_replay.py --recording scripted-seed127 --against-original
-  --ticks 3000` (Lakes.map through LoadMap and AddPlayerTowns).
 - **Shared catch-type helper:** the SEH filter that matches MSVC 6.0
   catchable types exists twice (execute_commands.cpp,
   map_file_stream.cpp); make it one helper.

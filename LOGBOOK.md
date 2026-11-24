@@ -32,11 +32,8 @@ a batch.**
    `CGameData::LoadMap` 0x4fd540 (needs only GameSettings::PlayerSetup
    0x4351e0: reimplement it or keep calling the original), with an
    all-maps whole-world test (map/map_test_support.h); then the savegame
-   writer `CLogicThread::SaveGame` 0x509980. **Needs the screen once:**
-   `check_save.py "slot N.sav" --ticks 2000 --against-original` (slots
-   1..3), `check_random_map.py --maps "384,0;448,3" --ticks 1000
-   --against-original`, `check_replay.py --recording scripted-seed127
-   --against-original --ticks 3000`: whole-game evidence for the loaders.
+   writer `CLogicThread::SaveGame` 0x509980. The whole-game checks run
+   over the user's Remote Desktop session (the screen is free to use).
 3. Open from session 49: the live-vs-replay header/rest hash difference
    of the user's full game (backlog "Evidence and testing").
 4. Later, only when it blocks a batch: readability leftovers
@@ -160,6 +157,13 @@ testing".
   `--test` 648/648; full emulator suite `--full --require-coverage`: 796
   functions, 0 mismatches, 0 with incomplete coverage (16 workers,
   1,299 s); inventory check clean. Verified: 768 -> 796.
+- **Whole-game checks against the original** (run over the user's Remote
+  Desktop session: works): `check_save.py` slots 1, 2, 3 (2,000 ticks
+  each), `check_random_map.py` 384,0 and 448,3 (1,000 ticks), and
+  `check_replay.py --recording scripted-seed127` (3,000 ticks): all
+  identical; call counts recorded (re/whole_game_calls.csv). Identical in
+  a whole-game check: 470 -> 539 functions; every verified function now
+  has a whole-game row (257 with tests only).
 
 ### 2026-11-24 (52): savegame loader, computer players A2/A4, progress page
 
