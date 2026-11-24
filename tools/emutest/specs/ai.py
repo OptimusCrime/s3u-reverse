@@ -2154,3 +2154,106 @@ SPECS += [
     Spec("AI_DiscountExploitedResources", 0x0059bc20, "fastcall", [low_word_noise(4), anything],
          presets=discount_world, globals=discount_globals, max_cases=300),
 ]
+
+# -- session 54 (ai-land): HOUSE_GROUND_REQUEST_NOTE's site search (ai_ground_request.cpp) --
+# ECX = the world: the note is world bytes 0..0x4b. g_aiPlayer points at
+# scratch slot 9 (its world field +0x75c = the world), g_aiPlayerSetup at
+# slot 10 (+4: the mines' minimum). CheckBuildingSite (verified on its own)
+# is probed with values 0..10: on these random tiles it would almost always
+# return 0, so the site values would never vary.
+AI_PLAYER_SETUP = 0x007e2eb4
+GROUND_PLAYER = SCRATCH + 9 * SCRATCH_SLOT_BYTES
+GROUND_SETUP = SCRATCH + 10 * SCRATCH_SLOT_BYTES
+MAP_OFFSETS = 0x110a588
+
+
+def ring_offsets(count):
+    """The map offset table's first `count` entries (dx, dy, ring), ordered by
+    hexagonal ring as the game builds it."""
+    entries = []
+    ring = 0
+    while len(entries) < count:
+        for dx in range(-ring, ring + 1):
+            for dy in range(-ring, ring + 1):
+                d = max(abs(dx), abs(dy)) if (dx >= 0) == (dy >= 0) else abs(dx) + abs(dy)
+                if d == ring:
+                    entries.append((dx, dy, ring))
+        ring += 1
+    return entries[:count]
+
+
+RING_OFFSETS = ring_offsets(401)
+
+
+def site_value(h):
+    return 0 if h % 10 < 3 else 1 + (h >> 8) % 10
+
+
+GROUND_CALLEES = {0x004d99e0: (5, "thiscall", site_value)}
+
+
+def ground_note_world(rng, pool, args):
+    """The note, the map offsets, the tiles around the place (owned in 4 x 4
+    patches by players 0..2 or nobody: the player number is a global, drawn
+    separately) and 0..6 buildings, mostly fields."""
+    cx, cy = rng.randint(15, 65), rng.randint(15, 65)
+    roll = rng.random()
+    kind = rng.choice((7, 8, 9, 29, 37)) if roll < 0.3 else \
+        rng.choice((7, 8, 9, 29, 37, 14, 24, 36, 15, 2, 3, 5, 1, 25, 51)) if roll < 0.9 else rng.randrange(64)
+    barren = rng.random() < 0.15  # no resources at all (a mine finds no place)
+    size = rng.randint(70, 80)
+    max_radius = rng.randint(1, 8)
+    ring = 0 if rng.random() < 0.2 else rng.randint(0, max_radius)
+    fields = [(0x1c, kind, 2), (0x1e, cx + rng.randint(-6, 6), 2), (0x20, cy + rng.randint(-6, 6), 2),
+              (0x2c, cx, 2), (0x2e, cy, 2), (0x30, size, 2), (0x32, size, 2), (0x3c, ring, 2),
+              (0x3e, rng.randrange(6), 2), (0x40, rng.randrange(ring) if ring else 0, 2), (0x42, max_radius, 2),
+              (SCRATCH, cx + rng.randint(-3, 3), 2), (SCRATCH + SCRATCH_SLOT_BYTES, cy + rng.randint(-3, 3), 2),
+              (GROUND_PLAYER + 0x75c, WORLD_BASE, 4), (GROUND_SETUP + 4, 0 if rng.random() < 0.2 else rng.randrange(60), 2),
+              (MAP_SIZE, size, 4)]
+    for k, (dx, dy, d) in enumerate(RING_OFFSETS):
+        base = MAP_OFFSETS + 16 * k
+        if k < 150:
+            fields += [(base, dx & 0xFFFFFFFF, 4), (base + 4, dy & 0xFFFFFFFF, 4)]
+        if k in (150, 300, 400):
+            fields.append((base + 8, d, 4))
+    resource = rng.randrange(6) << 4
+    patches = {}
+    for x in range(cx - 14, cx + 15):
+        for y in range(cy - 14, cy + 15):
+            base = TILES + (x * 0x300 + y) * 24
+            patch = (x // 4, y // 4)
+            if patch not in patches:
+                patches[patch] = rng.choice((0, 1, 2, 0xFF))
+            owner = patches[patch]
+            amount = 0 if barren or rng.random() < 0.3 else rng.randrange(16)
+            kind_here = resource if rng.random() < 0.8 else rng.randrange(6) << 4
+            fields += [(base + 8, owner, 1), (base + 0x11, kind_here | amount, 1)]
+    count = rng.randrange(7)
+    fields.append((BUILDING_HIGH_WATER, count, 4))
+    for building in range(count + 2):
+        base = BUILDING_RECORDS + building * 0x3a
+        btype = rng.choice((14, 24, 36, 14, 24, 36, 2, 7)) if rng.random() < 0.9 else kind
+        owner = rng.choice((0, 1, 2, 0xFF))
+        fields += [(base, owner, 1), (base + 2, cx + rng.randint(-20, 20), 2), (base + 4, cy + rng.randint(-20, 20), 2),
+                   (base + 6, btype, 1), (base + 0x21, rng.randrange(1, 256) if rng.random() < 0.15 else 0, 1),
+                   (base + 0x30, cx + rng.randint(-25, 25), 2), (base + 0x32, cy + rng.randint(-25, 25), 2)]
+    return fields
+
+
+def ground_note_globals(rng, pool, args):
+    size = rng.randint(70, 80)
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_PLAYER, WORLD_BASE + GROUND_PLAYER, 4),
+            (AI_PLAYER_SETUP, WORLD_BASE + GROUND_SETUP, 4), (AI_PLAYER_NUMBER, rng.randrange(3), 1),
+            (AI_MAP_SIZES, size, 2), (AI_MAP_SIZES + 2, size, 2)]
+
+
+SPECS += [
+    # AL only: the caller CheckAndImproveSite tests AL; the upper bytes are
+    # the callees' leftovers.
+    Spec("HOUSE_GROUND_REQUEST_NOTE_CheckSite", 0x005760d0, "thiscall", [scratch(0), scratch(1)], eax_mask=0xFF,
+         presets=ground_note_world, globals=ground_note_globals, callees=GROUND_CALLEES, max_cases=600),
+    Spec("HOUSE_GROUND_REQUEST_NOTE_CheckAndImproveSite", 0x00575df0, "thiscall", [],
+         presets=ground_note_world, globals=ground_note_globals, callees=GROUND_CALLEES, max_cases=600),
+    Spec("HOUSE_GROUND_REQUEST_NOTE_NextSpiralPosition", 0x005763a0, "thiscall", [],
+         presets=ground_note_world, globals=ground_note_globals, max_cases=600),
+]

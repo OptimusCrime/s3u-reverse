@@ -234,7 +234,7 @@ void __fastcall HOUSE_GROUND_REQUEST_NOTE_Init(void* self, void* /*edx*/, std::u
     reinterpret_cast<PairFn>(kSetSize)(&note->spiral, nullptr, g_aiMapSizeX, g_aiMapSizeY);
     reinterpret_cast<PairFn>(kSetPosition)(&note->spiral, nullptr, note->request.x, note->request.y);
     note->max_radius = static_cast<std::uint16_t>(radius);
-    note->unk3c = 0;
+    note->spiral_ring = 0;
     note->unk28 = 0;
     note->unk44 = 0;
     const auto siteKindOf = reinterpret_cast<SiteKindFn>(kSiteKindOf);

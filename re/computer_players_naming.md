@@ -257,7 +257,9 @@ and 3 (`std::multimap::end_580220` / `empty_580230`, category stl like their nei
 - Site rules (0x5760d0): own tile; mines need >= g_aiPlayerSetup+4 resources
   of their kind on rings 0..2 (resource kinds: coal 0x10, iron 0x20, gold
   0x30, gem 0x40, sulfur 0x50); fields (vineyard, farm, rice farm) keep their
-  work radius (+5/+3) from the centre and from other field buildings; table
+  work radius from the request's place (the distance of map offset 150,
+  300 + 5, 400 + 3) and every site keeps away from the player's finished
+  fields' work points (offset 150 / 300 / 400 distance + 4) (V, session 54); table
   0x731a88 = minimum distance to a building of the same type (woodcutter 4,
   stonecutter 4, sawmill/forester/mines 8, fields/fishery/apiary 24);
   final value from CheckBuildingSite 0x4d99e0 (lower is better, < 3 taken

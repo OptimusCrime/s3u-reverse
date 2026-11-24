@@ -23,8 +23,12 @@ constexpr std::size_t kAgentVectorCount = 20;  // g_aiAgentVectors
 // ---------------------------------------------------------------- player setup
 // An entry of the settings table g_aiPlayerSetups (contents not known).
 struct AiPlayerSetup {
-    std::uint8_t unk000[0x180];
+    std::uint16_t positions_per_turn;  // 0x000 HOUSE_GROUND_REQUEST_AGENT::WorkOnNote 0x576530: spiral positions per turn
+    std::uint16_t unk002;
+    std::uint16_t min_mine_resources;  // 0x004 HOUSE_GROUND_REQUEST_NOTE::CheckSite: ResourceAmountNear at least this
+    std::uint8_t unk006[0x180 - 6];
 };
+static_assert(offsetof(AiPlayerSetup, min_mine_resources) == 4);
 static_assert(sizeof(AiPlayerSetup) == 0x180);
 
 // ---------------------------------------------------------------- blackboard
@@ -598,14 +602,16 @@ struct HouseGroundRequestNote {
     std::uint16_t unk28;          // 0x28 0 after Init
     std::uint16_t unk2a;
     WrappedPos spiral;            // 0x2c the search position: map-sized, starting at (x, y)
-    std::uint16_t unk3c;          // 0x3c 0 after Init
-    std::uint16_t unk3e[2];
+    std::uint16_t spiral_ring;    // 0x3c NextSpiralPosition 0x5763a0: the ring (0 after Init: not started)
+    std::uint16_t spiral_side;    // 0x3e the ring's side 0..5 (WrappedPos::Step direction)
+    std::uint16_t spiral_step;    // 0x40 the step on that side
     std::uint16_t max_radius;     // 0x42 Init's fourth argument
     std::uint32_t unk44;          // 0x44 0 after Init
     std::uint32_t military;       // 0x48 1 if the building needs a military site (AI_SiteKindOf == 3)
 };
 static_assert(offsetof(HouseGroundRequestNote, spiral) == 0x2c);
-static_assert(offsetof(HouseGroundRequestNote, unk3c) == 0x3c);
+static_assert(offsetof(HouseGroundRequestNote, spiral_ring) == 0x3c);
+static_assert(offsetof(HouseGroundRequestNote, spiral_step) == 0x40);
 static_assert(offsetof(HouseGroundRequestNote, max_radius) == 0x42);
 static_assert(offsetof(HouseGroundRequestNote, military) == 0x48);
 static_assert(sizeof(HouseGroundRequestNote) == 0x4c);
