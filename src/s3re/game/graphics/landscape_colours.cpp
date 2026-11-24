@@ -28,7 +28,8 @@ using framework::CLandscapeSurface;
 
 namespace {
 
-constexpr std::uint32_t kSlots = 0x100;
+constexpr std::uint32_t kSlots = 256;  // colours in the landscape colour table
+constexpr std::uint32_t kLastSlot = kSlots - 1;
 
 std::uint16_t* ColourTable(CLandscapeSurface* self) {
     return static_cast<std::uint16_t*>(self->colours);
@@ -57,7 +58,7 @@ std::uint32_t __fastcall Landscape_FindOrAddColour(CLandscapeSurface* self, void
     }
     if (slot == kSlots) {
         GameDebugLog(texts::kTooManyColours);
-        slot = 0xff;
+        slot = kLastSlot;  // the table is full: the last slot is overwritten
     }
     ColourTable(self)[slot] = wanted;
     return slot;

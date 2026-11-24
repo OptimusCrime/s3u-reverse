@@ -126,6 +126,16 @@ updated. Worth adding to re/structs.md "Pending event".
 
 ### Census and AI globals (savegame chunks)
 
+**Done 2026-11-24** (ai_layout.h, globals.h, re/globals.csv): `g_aiGroupOrders`
+is 0x20f8 bytes with the fields below, `g_aiArmyState` 0x51c
+(`group_values` -> `attack_delays`), the census is `g_aiCensus` 0x7e5ef8
+(`settlers_counted`, `group_target_buildings`, `group_defending`),
+`g_aiUnk7e3134` -> `g_aiLandEvaluation`, ComputerPlayer +0x774 ->
+`land_evaluation`, `AiList50Owner` merged into ComputerPlayer; renamed the
+DoomNote functions, `AI::CEvaLand::*` (ResetGrid, SumAllCells, GridCell,
+FreeGrid, GridCellOfTile, GridCellWrapped, GridSumAround, ResetGlobals),
+`AI::CellCentreOwner`, `AI::TileOwner`; re/computer_players.md corrected.
+
 - The census `AiAgentData` lives at **0x7e5ef8** (savegame chunk 0x16, size
   0x1ad8 = sizeof(AiAgentData)). Therefore **`AiArmyState` (g_aiArmyState
   0x7e58c8) is only 0x51c bytes** (chunk 0x17): its fields from +0x630 on

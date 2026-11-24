@@ -16,7 +16,7 @@
 //   0x5518b0 AddActiveNote(id)     active_notes (100), active_note_count
 //   0x5518e0 RemoveActiveNote(id)
 //   0x551940 RemoveDoomedNote(id)  doomed_notes (50), doomed_note_count (the
-//                                   add is AI_List32Add 0x551910, ai_helpers.cpp)
+//                                   add is CComputerPlayer_DoomNote 0x551910, ai_helpers.cpp)
 //   EAX = the insert/remove result (1/0).
 // 0x5515e0 ActivateNote(id): AI_SetCurrentPlayer(this), AddActiveNote(id),
 //   then BLACK_BOARD_NOTE::SetFlags(notes[id], 4). EAX = 4 (SetFlags puts
@@ -89,6 +89,7 @@
 #include "game/tables.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/callee_stub.h"
 #include "test/difftest.h"
 
@@ -160,7 +161,7 @@ std::uint32_t __fastcall BLACK_BOARD_NOTE_ReportToRequester(void* self, void* ed
 std::uint32_t __fastcall BLACK_BOARD_NOTE_ExecuteAtHandler(void* self, void* edx);
 
 // ai_evaland.cpp, win32_classes.cpp
-std::uint32_t __cdecl AI_EvaLand_Release();
+std::uint32_t __cdecl AI_CEvaLand_Release();
 void __fastcall Win32_CObject_Destroy(void* self, void* edx);
 
 namespace {
@@ -257,7 +258,7 @@ S3RE_HOOK(0x00551940, CComputerPlayer_RemoveDoomedNote, NoteIdFn, Original_CComp
           CComputerPlayer_RemoveDoomedNote);
 
 // Purpose: Removes an id from the computer player's fourth id list (the one
-// AI_List32Add fills; its meaning is not known yet).
+// CComputerPlayer_DoomNote fills; its meaning is not known yet).
 std::uint32_t __fastcall CComputerPlayer_RemoveDoomedNote(void* self, void* /*edx*/, std::uint32_t id) {
     ComputerPlayer* player = AsPlayer(self);
     return RemoveFromList(id, player->doomed_notes, kDoomedNoteSlots, player->doomed_note_count);
@@ -708,7 +709,7 @@ void __fastcall CComputerPlayer_WorkOnNextActiveNote(void* self, void* /*edx*/) 
 S3RE_HOOK(0x00551790, CComputerPlayer_DeleteDoomedNotes, NoteVoidFn, Original_CComputerPlayer_DeleteDoomedNotes,
           CComputerPlayer_DeleteDoomedNotes);
 
-// Purpose: Deletes the notes that were marked for deletion (AI_List32Add,
+// Purpose: Deletes the notes that were marked for deletion (CComputerPlayer_DoomNote,
 // e.g. by the agents' slot 3 through 0x551760) since the last time.
 void __fastcall CComputerPlayer_DeleteDoomedNotes(void* self, void* /*edx*/) {
     ComputerPlayer* player = AsPlayer(self);
@@ -750,7 +751,7 @@ void __fastcall CComputerPlayer_Shutdown(void* self, void* /*edx*/) {
             CComputerPlayer_DeleteAgent(self, nullptr, Address(agent));
         }
     }
-    AI_EvaLand_Release();  // a tail call in the original
+    AI_CEvaLand_Release();  // a tail call in the original
 }
 
 S3RE_HOOK(0x005509d0, CComputerPlayer_Destroy, NoteVoidFn, Original_CComputerPlayer_Destroy, CComputerPlayer_Destroy);
@@ -775,7 +776,7 @@ S3RE_HOOK(0x005509b0, CComputerPlayer_DeletingDestroy, DeletingDestroyFn, Origin
 void* __fastcall CComputerPlayer_DeletingDestroy(void* self, void* /*edx*/, std::uint32_t flags) {
     CComputerPlayer_Destroy(self, nullptr);
     if ((flags & 1) != 0) {
-        reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(self);  // the game's operator delete
+        msvc6::GameOperatorDelete(self);  // the game's operator delete
     }
     return self;
 }

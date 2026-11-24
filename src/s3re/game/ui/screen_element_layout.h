@@ -103,8 +103,9 @@ static_assert(sizeof(CScreen) == 0x98);
 struct CControl {
     std::uint32_t vtable;          // 0x00 (this-0x3c)
     const std::int32_t* vbptr;     // 0x04 (this-0x38) vbtable leading to the CScreenElement virtual base
-    std::uint32_t tooltip_owner;   // 0x08 an object told when the tooltip time is up (0x4183c0)
-    std::uint32_t unk0c;
+    std::uint32_t timer_functor;   // 0x08 a functor called on every timer tick (CControl::OnTimer 0x4183c0), 0 = none
+    std::uint8_t disabled;         // 0x0c = !enabled (CControl::SetEnabled 0x418810)
+    std::uint8_t pad0d[3];
     msvc6::String tooltip_text;    // 0x10
     std::uint32_t tooltip;         // 0x20 (this-0x1c) the tooltip object
     std::uint32_t last_move_time;  // 0x24 (this-0x18) timeGetTime() of the last mouse movement
@@ -115,6 +116,8 @@ struct CControl {
     std::int32_t vtordisp;         // 0x38 (this-0x4) the virtual base's displacement correction
 };
 static_assert(offsetof(CControl, vbptr) == 0x3c - 0x38);
+static_assert(offsetof(CControl, timer_functor) == 0x08);
+static_assert(offsetof(CControl, disabled) == 0x0c);
 static_assert(offsetof(CControl, tooltip_text) == 0x10);
 static_assert(offsetof(CControl, tooltip) == 0x3c - 0x1c);
 static_assert(offsetof(CControl, last_move_time) == 0x3c - 0x18);
@@ -122,6 +125,64 @@ static_assert(offsetof(CControl, tooltip_x) == 0x3c - 0xc);
 static_assert(sizeof(CControl) == 0x3c);
 
 #pragma pack(pop)
+
+// CScreenElement's virtual functions, as byte offsets into its vtable (slot
+// number * 4; re/ui_classes.md "Virtual slots").
+namespace element_slot {
+inline constexpr std::uint32_t kDeletingDestructor = 0x00;
+inline constexpr std::uint32_t kSetParent = 0x04;
+inline constexpr std::uint32_t kOnMessage = 0x08;
+inline constexpr std::uint32_t kSetFocus = 0x0c;        // (child): a group remembers it as its focus child
+inline constexpr std::uint32_t kKillFocus = 0x10;
+inline constexpr std::uint32_t kSetFlag1F = 0x18;
+inline constexpr std::uint32_t kInvalidate = 0x1c;
+inline constexpr std::uint32_t kWantsMessage = 0x20;    // (const Message*)
+inline constexpr std::uint32_t kDispatchMessage = 0x24;  // (Message by value)
+inline constexpr std::uint32_t kDraw = 0x28;            // (surface, rect A, rect B)
+inline constexpr std::uint32_t kFillBackground = 0x2c;  // (surface, rect)
+// The per-message-type handlers (Message by value; the timer without it).
+inline constexpr std::uint32_t kOnLButtonDown = 0x30;  // type 0x10
+inline constexpr std::uint32_t kOnLButtonUp = 0x34;    // type 0x12
+inline constexpr std::uint32_t kOnMessage13 = 0x38;    // type 0x13 (probably double click or right button)
+inline constexpr std::uint32_t kOnMessage15 = 0x3c;    // type 0x15
+inline constexpr std::uint32_t kOnMouseMove = 0x40;    // type 0x16
+inline constexpr std::uint32_t kOnKeyDown = 0x44;      // type 1
+inline constexpr std::uint32_t kOnKeyUp = 0x48;        // type 2 (probably)
+inline constexpr std::uint32_t kOnChar = 0x4c;         // type 3
+inline constexpr std::uint32_t kOnMessage20 = 0x50;    // type 0x20
+inline constexpr std::uint32_t kOnTimer = 0x54;        // type 0x30, no argument
+inline constexpr std::uint32_t kOnCommand = 0x58;      // type 0x40
+inline constexpr std::uint32_t kOnMouseEnter = 0x5c;
+inline constexpr std::uint32_t kOnMouseLeave = 0x60;
+inline constexpr std::uint32_t kOnFocusChanged = 0x64;   // (bool)
+inline constexpr std::uint32_t kOnParentChanged = 0x68;  // (bool attached)
+inline constexpr std::uint32_t kOnShow = 0x6c;           // (bool shown on a screen)
+inline constexpr std::uint32_t kOnMoved = 0x70;          // (rect, delta)
+inline constexpr std::uint32_t kOnResized = 0x74;        // (rect, size delta)
+inline constexpr std::uint32_t kGetScreen = 0x78;
+inline constexpr std::uint32_t kPostMessage = 0x7c;
+}  // namespace element_slot
+
+// CScreenGroup's own vtable (0x655b70), also as byte offsets.
+namespace group_slot {
+inline constexpr std::uint32_t kAddChild = 0x00;
+inline constexpr std::uint32_t kRemoveChild = 0x04;
+}  // namespace group_slot
+
+// Message types (byte +0 of a Message; re/ui_classes.md).
+namespace message_type {
+inline constexpr std::uint8_t kKeyDown = 0x01;
+inline constexpr std::uint8_t kKeyUp = 0x02;  // probably
+inline constexpr std::uint8_t kChar = 0x03;
+inline constexpr std::uint8_t kLButtonDown = 0x10;
+inline constexpr std::uint8_t kLButtonUp = 0x12;
+inline constexpr std::uint8_t kType13 = 0x13;
+inline constexpr std::uint8_t kType15 = 0x15;
+inline constexpr std::uint8_t kMouseMove = 0x16;
+inline constexpr std::uint8_t kType20 = 0x20;
+inline constexpr std::uint8_t kTimer = 0x30;
+inline constexpr std::uint8_t kCommand = 0x40;
+}  // namespace message_type
 
 // Byte distance from the start of these parts to the pointer the methods
 // get ("this", the CScreenElement part).

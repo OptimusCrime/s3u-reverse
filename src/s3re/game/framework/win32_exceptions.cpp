@@ -40,6 +40,7 @@
 #include "game/texts.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
 
@@ -60,6 +61,8 @@ using msvc6::String;
 
 constexpr std::uintptr_t kItoa = 0x00621380;
 constexpr std::uintptr_t kCxxThrowException = 0x0061f027;
+constexpr std::uint32_t kDataErrorBytes = 0x18;  // the Lobby::CDataError object
+constexpr std::int32_t kDecimal = 10;            // _itoa's radix
 
 using framework::CException;
 
@@ -69,10 +72,6 @@ CException* AsException(void* self) {
 
 std::uint32_t Npos() {
     return g_stringNpos;
-}
-
-void* GameNew(std::uint32_t size) {
-    return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
 }
 
 }  // namespace
@@ -139,7 +138,8 @@ void BuildMessage(String t[4], const String* text, const String* file, std::int3
     msvc6::String_ConcatChars(&t[0], text, texts::kCommaFile.c_str());
     msvc6::String_ConcatString(&t[1], &t[0], file);
     msvc6::String_ConcatChars(&t[2], &t[1], texts::kCommaLine.c_str());
-    const char* number = reinterpret_cast<char*(__cdecl*)(std::int32_t, char*, std::int32_t)>(kItoa)(line, digits, 10);
+    const char* number =
+        reinterpret_cast<char*(__cdecl*)(std::int32_t, char*, std::int32_t)>(kItoa)(line, digits, kDecimal);
     msvc6::String_ConcatChars(&t[3], &t[2], number);
 }
 
@@ -156,7 +156,7 @@ void __fastcall Lobby_ThrowDataError(const String* text, const String* file, std
         msvc6::String_Erase(&first[k], nullptr, 0, Npos());
         msvc6::String_Tidy(&first[k], nullptr, 1);
     }
-    void* error = GameNew(0x18);
+    void* error = msvc6::GameOperatorNew(kDataErrorBytes);
     void* thrown = nullptr;
     String message[4];  // left alive: the original's unwinding frees them, ours has no frame
     if (error != nullptr) {
@@ -195,7 +195,7 @@ String MakeMessage(std::uint32_t length, std::uint8_t count, const char* text, b
     if (none) {
         return s;
     }
-    auto* block = static_cast<char*>(GameNew(length + 2));
+    auto* block = static_cast<char*>(msvc6::GameOperatorNew(length + 2));
     block[0] = static_cast<char>(count);
     std::memcpy(block + 1, text, length);
     block[1 + length] = 0;

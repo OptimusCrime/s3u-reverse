@@ -24,6 +24,7 @@ struct CGameData;
 struct SettlerGroups;
 
 namespace ai {
+struct AiAgentData;
 struct AiArmyState;
 struct AiGroupOrders;
 struct AiLandEvaluation;
@@ -179,14 +180,15 @@ inline constexpr GameGlobal<std::uint16_t[]> g_playerColourIndex{0x7ace64};
 inline constexpr GameGlobal<ColourChannels[]> g_playerColours{0x7ace90};
 
 // ------------------------------------------------------------ dialogs and UI
-// Dialog-system values (Dialog_* getters in screen_element.cpp; meaning not
-// known: probably fonts, colours or GDI objects).
-inline constexpr GameGlobal<std::uint32_t[8]> g_dialogSettings{0x7a8020};
-inline constexpr GameGlobal<std::uint32_t[14]> g_dialogTable7a8064{0x7a8064};
-inline constexpr GameGlobal<std::uint32_t[]> g_dialogTable7a809c{0x7a809c};
-inline constexpr GameGlobal<std::uint32_t> g_dialogValue7a8238{0x7a8238};
-inline constexpr GameGlobal<std::uint32_t> g_dialogValue7a823c{0x7a823c};
-inline constexpr GameGlobal<std::uint32_t> g_dialogGdiObject7a8240{0x7a8240};
+// The dialog system's drawing resources, filled by Dialog::Init (0x416190),
+// freed by Dialog::Shutdown (0x416760); read through the Dialog_* getters in
+// screen_element.cpp.
+inline constexpr GameGlobal<std::uint32_t[8]> g_dialogPixelFormat{0x7a8020};  // the GDI surface's DDPIXELFORMAT
+inline constexpr GameGlobal<std::uint32_t[14]> g_dialogColors{0x7a8064};      // colour table
+inline constexpr GameGlobal<std::uint32_t[]> g_dialogFonts{0x7a809c};         // font table (HFONTs)
+inline constexpr GameGlobal<std::uint32_t> g_dialogGraphicsData{0x7a8238};    // CGraphicsData* (texts, GUI images)
+inline constexpr GameGlobal<std::uint32_t> g_dialogSurface{0x7a823c};         // the DirectDraw surface used for GDI
+inline constexpr GameGlobal<std::uint32_t> g_dialogPen{0x7a8240};             // HPEN (cursor and frames)
 // An object in .data whose address the credits screen stores as a text
 // style's default (probably a font or palette; contents not known).
 inline constexpr GameGlobal<std::uint8_t[]> g_creditsDefaultStyle{0x69fff0};
@@ -209,8 +211,11 @@ inline constexpr GameGlobal<CGameData*> g_aiMapWorld{0x7e7b60};
 // The shared land evaluation object: reference count and instance.
 inline constexpr GameGlobal<std::uint32_t> g_aiEvaLandRefCount{0x7e0568};
 inline constexpr GameGlobal<ai::AiLandEvaluation*> g_aiEvaLand{0x7e056c};
-// Cleared by AI_EvaLand_Destroy (meaning not known).
-inline constexpr GameGlobal<std::uint32_t> g_aiUnk7e3134{0x7e3134};
+// The CEvaLand in use (the same object as g_aiEvaLand): set to `this` at the
+// end of CEvaLand::Init (0x553ea0), cleared by AI_CEvaLand_Destroy and by
+// CComputerPlayer::InitAiGlobals (0x551b80); the AI code reads the land grid
+// and the per-player area lists through it.
+inline constexpr GameGlobal<std::uint32_t> g_aiLandEvaluation{0x7e3134};
 // 20 vectors emptied by AI_ResetAgentData.
 inline constexpr GameGlobal<ai::AiVector[20]> g_aiAgentVectors{0x7e7a24};
 // Per population stage, the extra buildings wanted per settler (floats
@@ -222,6 +227,9 @@ inline constexpr GameGlobal<float[4]> g_aiWantedGoldMineSlopes{0x7e12b0};
 // per-player array cleared with the army state (0x593f50; meaning unknown).
 inline constexpr GameGlobal<ai::AiGroupOrders> g_aiGroupOrders{0x7e37d0};
 inline constexpr GameGlobal<ai::AiArmyState> g_aiArmyState{0x7e58c8};
+// The computer players' census (savegame chunk 0x16; AI_ResetAgentData,
+// the AI_Census functions).
+inline constexpr GameGlobal<ai::AiAgentData> g_aiCensus{0x7e5ef8};
 inline constexpr GameGlobal<std::uint32_t[20]> g_aiPerPlayer7e79d0{0x7e79d0};
 
 // ------------------------------------------------------------ imports

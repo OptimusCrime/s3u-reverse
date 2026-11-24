@@ -37,8 +37,8 @@
 // Lobby_HasField4_5da3a0 (0x005da3a0): EAX = (+4 != 0).
 // UI_CopyWords_418fb0 (0x00418fb0): fastcall (ECX = to, EDX = from, stack:
 //   count) ret 4: copies `count` 16-bit characters; EAX = to.
-// UI_WideEos_428880 (0x00428880): (n) ret 4: the wide string's _Eos: +8 =
-//   n, word [+4][n] = 0; EAX = n.
+// std_wstring_Eos (0x00428880; MSVC6 std::wstring::_Eos, was UI_WideEos_428880):
+//   (n) ret 4: +8 = n, word [+4][n] = 0; EAX = n.
 // CGraphicsData::GuiImagePointer (0x005fac70; was CGraphicsData::FramePointer
 //   until session 50): (out, id = group << 16 | frame) ret 8: *out =
 //   table(+0x5ac)[group][frame + 2] + base(+0x264)[group]; EAX = out. The
@@ -54,6 +54,7 @@
 #include "game/texts.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/difftest.h"
 
 #include <cstddef>
@@ -72,7 +73,6 @@ std::uint32_t __fastcall Lobby_MemoryBlock_Append(void* self, void* edx, const v
 std::uint32_t __fastcall Lobby_MemoryBlock_Copy(void* self, void* edx, const void* other);
 
 namespace {
-
 
 using framework::CLMMessageBlock;
 using framework::CRegistryKey;
@@ -104,14 +104,6 @@ struct IntVector {
 static_assert(offsetof(IntVector, unk18) == 0x18);
 #pragma pack(pop)
 
-void* GameNew(std::uint32_t size) {
-    return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
-}
-
-std::uint32_t GameDelete(void* block) {
-    return reinterpret_cast<std::uint32_t(__cdecl*)(void*)>(0x0061e4ef)(block);
-}
-
 std::uint32_t Address(const void* p) {
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p));
 }
@@ -123,7 +115,7 @@ void ConstructIntVectorStart(void* self, std::uint32_t capacity) {
     vector->capacity = capacity;
     vector->filled = 0;
     if (capacity != 0) {
-        void* block = GameNew(capacity << 2);
+        void* block = msvc6::GameOperatorNew(capacity * 4);  // int elements
         vector->data = static_cast<std::uint32_t*>(block);
         if (block == nullptr) {
             vector->capacity = 0;
@@ -132,7 +124,6 @@ void ConstructIntVectorStart(void* self, std::uint32_t capacity) {
         vector->data = nullptr;
     }
 }
-
 
 }  // namespace
 
@@ -158,7 +149,7 @@ std::uint32_t __fastcall Win32_CRegistryKey_Construct(void* self, void* edx);
 std::uint32_t __fastcall Win32_CEvent_Construct(void* self, void* edx);
 std::uint32_t __fastcall Lobby_HasField4_5da3a0(void* self, void* edx);
 std::uint32_t __fastcall UI_CopyWords_418fb0(std::uint16_t* to, const std::uint16_t* from, std::uint32_t count);
-std::uint32_t __fastcall UI_WideEos_428880(void* self, void* edx, std::uint32_t n);
+std::uint32_t __fastcall std_wstring_Eos(void* self, void* edx, std::uint32_t n);
 std::uint32_t __fastcall CGraphicsData_GuiImagePointer(void* self, void* edx, std::uint32_t out, std::uint32_t id);
 std::uint32_t __fastcall CGraphicsData_AnimationPointer(void* self, void* edx, std::uint32_t out, std::uint32_t id);
 
@@ -213,7 +204,7 @@ std::uint32_t __fastcall WCIntVector_Destroy(void* self, void* /*edx*/) {
     vector->vtable = vtables::kWCBareVectorBase_int;
     std::uint32_t result = Address(vector->data);
     if (result != 0) {
-        result = GameDelete(vector->data);  // (after the empty error hook 0x59f200)
+        result = msvc6::GameOperatorDelete(vector->data);  // (after the empty error hook 0x59f200)
     }
     vector->vtable = vtables::kWCExcept;
     return result;
@@ -227,7 +218,7 @@ std::uint32_t __fastcall WCUIntVector_Destroy(void* self, void* /*edx*/) {
     vector->vtable = vtables::kWCBareVectorBase_uint;
     std::uint32_t result = Address(vector->data);
     if (result != 0) {
-        result = GameDelete(vector->data);  // (after the empty error hook 0x59f200)
+        result = msvc6::GameOperatorDelete(vector->data);  // (after the empty error hook 0x59f200)
     }
     vector->vtable = vtables::kWCExcept;
     return result;
@@ -265,10 +256,10 @@ S3RE_HOOK(0x0044c450, Lobby_ScaleBy4_44c450, ScaleFn, Original_Lobby_ScaleBy4_44
 // finer units for the menus).
 std::uint32_t __stdcall Lobby_ScaleBy4_44c450(std::uint32_t* out, std::uint32_t a, std::uint32_t b, std::uint32_t c,
                                               std::uint32_t d) {
-    out[0] = a << 2;
-    out[1] = b << 2;
-    out[2] = c << 2;
-    out[3] = d << 2;
+    out[0] = a * 4;
+    out[1] = b * 4;
+    out[2] = c * 4;
+    out[3] = d * 4;
     return Address(out);
 }
 
@@ -331,10 +322,10 @@ std::uint32_t __fastcall UI_CopyWords_418fb0(std::uint16_t* to, const std::uint1
     return Address(to);
 }
 
-S3RE_HOOK(0x00428880, UI_WideEos_428880, This1Fn, Original_UI_WideEos_428880, UI_WideEos_428880);
+S3RE_HOOK(0x00428880, std_wstring_Eos, This1Fn, Original_std_wstring_Eos, std_wstring_Eos);
 
 // Purpose: Sets a wide string's length and writes its terminating zero.
-std::uint32_t __fastcall UI_WideEos_428880(void* self, void* /*edx*/, std::uint32_t n) {
+std::uint32_t __fastcall std_wstring_Eos(void* self, void* /*edx*/, std::uint32_t n) {
     WideString* const string = As<WideString>(self);
     string->len = n;
     // 32-bit address arithmetic, as the original's [ptr + n * 2].
@@ -419,7 +410,7 @@ Functions OriginalFunctions() {
             Original_Lobby_ScaleBy4_44c450,     Original_Win32_CWin32Handle_Set,
             Original_Lobby_MemoryBlock_Assign,  Original_Win32_CRegistryKey_Construct,
             Original_Win32_CEvent_Construct,    Original_Lobby_HasField4_5da3a0,
-            Original_UI_CopyWords_418fb0,       Original_UI_WideEos_428880,
+            Original_UI_CopyWords_418fb0,       Original_std_wstring_Eos,
             Original_CGraphicsData_GuiImagePointer, Original_CGraphicsData_AnimationPointer,
             Original_WCUIntVector_Destroy,      Original_WCIntVector_ConstructBare,
             Original_Lobby_CLMMessageBlock_Copy};
@@ -429,7 +420,7 @@ Functions OurFunctions() {
     return {&WCIsvListBase_Destroy,     &WCIsvList_Insert,         &WCIntVector_Construct,
             &WCIntVector_Destroy,       &Lobby_ScaleBy4_44c450,    &Win32_CWin32Handle_Set,
             &Lobby_MemoryBlock_Assign,  &Win32_CRegistryKey_Construct, &Win32_CEvent_Construct,
-            &Lobby_HasField4_5da3a0,    &UI_CopyWords_418fb0,      &UI_WideEos_428880,
+            &Lobby_HasField4_5da3a0,    &UI_CopyWords_418fb0,      &std_wstring_Eos,
             &CGraphicsData_GuiImagePointer, &CGraphicsData_AnimationPointer, &WCUIntVector_Destroy,
             &WCIntVector_ConstructBare, &Lobby_CLMMessageBlock_Copy};
 }
@@ -591,7 +582,7 @@ void CompareSmall(test::Context& ctx, const Functions& candidate, int cases) {
                     std::uint8_t source[0x24];
                     ctx.rng().Fill(source, sizeof(source));
                     const std::uint32_t used = ctx.rng().Below(20);
-                    auto* data = static_cast<std::uint8_t*>(GameNew(used + 1));
+                    auto* data = static_cast<std::uint8_t*>(msvc6::GameOperatorNew(used + 1));
                     ctx.rng().Fill(data, used + 1);
                     static_assert(sizeof(source) >= sizeof(CLMMessageBlock));
                     As<CLMMessageBlock>(source)->block.data = data;

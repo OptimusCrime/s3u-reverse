@@ -30,7 +30,7 @@
 //   ret 0xc: copies dwords from [first, last) to dest, skipping the store
 //   where dest is null (std::uninitialized_copy with construct); EAX = the
 //   dest end.
-// AI_EvaLand_SumAllCells (0x005546c0): () AI_GridSumAround(x, y) for every
+// AI_CEvaLand_SumAllCells (0x005546c0): () AI_CEvaLand_GridSumAround(x, y) for every
 //   cell of the land evaluation grid, rows (y) outside, the sizes re-read
 //   after each call. EAX = the grid height.
 
@@ -51,7 +51,7 @@ namespace s3re::game {
 
 // ai_helpers.cpp
 bool __fastcall AI_IsOnMap(std::int32_t v);
-std::uint32_t __fastcall AI_GridSumAround(void* self, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall AI_CEvaLand_GridSumAround(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall AI_ResetAgentData(void* self, void* edx);
 
 using namespace ai;
@@ -88,7 +88,7 @@ std::uint32_t __stdcall AI_StartPositionWalkRegion(std::uint32_t player);
 std::uint32_t __fastcall AI_PtrVector_Size(void* self, void* edx);
 std::uint32_t __stdcall AI_UninitializedCopyPtrs(const std::uint32_t* first, const std::uint32_t* last,
                                                  std::uint32_t* dest);
-std::uint32_t __fastcall AI_EvaLand_SumAllCells(void* self, void* edx);
+std::uint32_t __fastcall AI_CEvaLand_SumAllCells(void* self, void* edx);
 
 S3RE_HOOK(0x0055b6b0, AI_Census_Construct, ThisFn, Original_AI_Census_Construct, AI_Census_Construct);
 
@@ -206,15 +206,15 @@ std::uint32_t __stdcall AI_UninitializedCopyPtrs(const std::uint32_t* first, con
     return reinterpret_cast<std::uint32_t>(dest);
 }
 
-S3RE_HOOK(0x005546c0, AI_EvaLand_SumAllCells, ThisFn, Original_AI_EvaLand_SumAllCells, AI_EvaLand_SumAllCells);
+S3RE_HOOK(0x005546c0, AI_CEvaLand_SumAllCells, ThisFn, Original_AI_CEvaLand_SumAllCells, AI_CEvaLand_SumAllCells);
 
 // Purpose: Fills in the neighbourhood sums of every cell of the land
 // evaluation grid.
-std::uint32_t __fastcall AI_EvaLand_SumAllCells(void* self, void* /*edx*/) {
+std::uint32_t __fastcall AI_CEvaLand_SumAllCells(void* self, void* /*edx*/) {
     const auto* evaluation = static_cast<const AiLandEvaluation*>(self);
     for (std::uint32_t y = 0; y < evaluation->height; ++y) {
         for (std::uint32_t x = 0; x < evaluation->width; ++x) {
-            AI_GridSumAround(self, nullptr, x, y);
+            AI_CEvaLand_GridSumAround(self, nullptr, x, y);
         }
     }
     return evaluation->height;
@@ -246,13 +246,13 @@ CensusFunctions OriginalCensus() {
     return {Original_AI_Census_Construct, Original_AI_Census_CountBuildings,
             Original_AI_Census_ComputeTeamStrength, Original_AI_StartPositionWalkRegion,
             Original_AI_PtrVector_Size, Original_AI_UninitializedCopyPtrs,
-            Original_AI_EvaLand_SumAllCells};
+            Original_AI_CEvaLand_SumAllCells};
 }
 
 CensusFunctions OurCensus() {
     return {&AI_Census_Construct, &AI_Census_CountBuildings, &AI_Census_ComputeTeamStrength,
             &AI_StartPositionWalkRegion, &AI_PtrVector_Size, &AI_UninitializedCopyPtrs,
-            &AI_EvaLand_SumAllCells};
+            &AI_CEvaLand_SumAllCells};
 }
 
 constexpr std::size_t kCensusBytes = 0x2000;  // 0x1ad8 + slack (index up to 19 * 57 + 255)

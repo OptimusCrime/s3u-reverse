@@ -14,8 +14,9 @@
 //   0x005bb0b0  probably a wrapper of DirectPlay's DPSESSIONDESC2 (80 bytes,
 //               copied as dwords; the session name at +0x30 is a char*), with
 //               the name as a string at +0x50 (DirectX/netsession.cpp)
-//   0x005b6790  a GUID (16 bytes, default GUID_NULL from 0x65c0b8) followed
-//               by two strings at +0x10 and +0x20 from C texts
+//   0x005b6790  DirectX::CDirectDrawDevice(GUID*, description, name): a GUID
+//               (16 bytes, default GUID_NULL from 0x65c0b8) followed by the
+//               description and name strings at +0x10 and +0x20
 //   0x006161e0  Win32::CRegistryValueInfo(std::string name, value): vtable
 //               0x65d984, name at +4, value at +0x14; the name is passed by
 //               value and destroyed by the callee
@@ -42,6 +43,10 @@ namespace s3re::game {
 
 using msvc6::String;
 namespace sd = msvc6::detail;
+
+// DPSESSIONDESC2 (80 bytes) and a GUID (16 bytes), copied as dwords.
+constexpr std::uint32_t kSessionDescDwords = 0x50 / 4;
+constexpr std::uint32_t kGuidDwords = 16 / 4;
 
 namespace {
 
@@ -134,14 +139,15 @@ struct LobbyRecord5ed590 {
 };
 static_assert(offsetof(LobbyRecord5ed590, text) == 0x14);
 
-// A GUID and two names (0x5b6790).
-struct GuidNames {
-    std::uint32_t guid[4];  // +0x00
-    String first;           // +0x10
-    String second;          // +0x20
+// DirectX::CDirectDrawDevice (0x30 bytes): one DirectDraw device found by
+// CGameDrawer::EnumDevicesCallback (constructor 0x5b6790).
+struct DirectDrawDevice {
+    std::uint32_t guid[4];  // +0x00 the driver GUID (GUID_NULL: the primary display driver)
+    String description;     // +0x10
+    String name;            // +0x20
 };
-static_assert(offsetof(GuidNames, first) == 0x10);
-static_assert(offsetof(GuidNames, second) == 0x20);
+static_assert(offsetof(DirectDrawDevice, description) == 0x10);
+static_assert(offsetof(DirectDrawDevice, name) == 0x20);
 #pragma pack(pop)
 
 template <typename T>
@@ -202,8 +208,8 @@ void* __fastcall AssignTwoDwordsAndString_4499e0(void* self, void* edx, const vo
 void* __fastcall SessionDesc_Assign_5be000(void* self, void* edx, const void* x);
 void* __fastcall LobbyRecord_Assign_5ed590(void* self, void* edx, const void* x);
 void* __fastcall SessionDesc_Construct_5bb0b0(void* self, void* edx, const void* desc);
-void* __fastcall GuidNames_Construct_5b6790(void* self, void* edx, const void* guid, const char* first,
-                                            const char* second);
+void* __fastcall CDirectDrawDevice_Construct(void* self, void* edx, const void* guid, const char* description,
+                                             const char* name);
 void* __fastcall CRegistryValueInfo_Construct(void* self, void* edx, String name, std::uint32_t value);
 
 // ---------------------------------------------------------------------------
@@ -339,7 +345,7 @@ S3RE_HOOK(0x005be000, SessionDesc_Assign_5be000, AssignFn, Original_SessionDesc_
 void* __fastcall SessionDesc_Assign_5be000(void* self, void* /*edx*/, const void* x) {
     SessionDesc* const to = As<SessionDesc>(self);
     const SessionDesc* const from = As<SessionDesc>(x);
-    CopyDwords(to, from, 0x14);  // the whole DPSESSIONDESC2 (+0..+0x50), as dwords
+    CopyDwords(to, from, kSessionDescDwords);  // the whole DPSESSIONDESC2 (+0..+0x50)
     AssignMember(&to->name, &from->name);
     return self;
 }
@@ -382,7 +388,7 @@ void* __fastcall SessionDesc_Construct_5bb0b0(void* self, void* /*edx*/, const v
         session->desc[0] = 0;
         return self;
     }
-    CopyDwords(session, desc, 0x14);  // the DPSESSIONDESC2, as dwords
+    CopyDwords(session, desc, kSessionDescDwords);  // the DPSESSIONDESC2
     const char* text = As<SessionDesc>(desc)->sessionName;
     if (text != nullptr) {
         String temporary{};
@@ -399,35 +405,36 @@ void* __fastcall SessionDesc_Construct_5bb0b0(void* self, void* /*edx*/, const v
     return self;
 }
 
-using GuidNamesConstructFn = void*(__fastcall*)(void* self, void* edx, const void* guid,
-                                                const char* first, const char* second);
+using DirectDrawDeviceConstructFn = void*(__fastcall*)(void* self, void* edx, const void* guid,
+                                                       const char* description, const char* name);
 
-S3RE_HOOK(0x005b6790, GuidNames_Construct_5b6790, GuidNamesConstructFn,
-          Original_GuidNames_Construct_5b6790, GuidNames_Construct_5b6790);
+S3RE_HOOK(0x005b6790, CDirectDrawDevice_Construct, DirectDrawDeviceConstructFn,
+          Original_CDirectDrawDevice_Construct, CDirectDrawDevice_Construct);
 
-// Purpose: Builds a record of a GUID and two names (probably a network player
-// or session id with short and long name): the GUID defaults to GUID_NULL,
-// null names stay empty.
-void* __fastcall GuidNames_Construct_5b6790(void* self, void* /*edx*/, const void* guid,
-                                            const char* first, const char* second) {
-    GuidNames* const record = As<GuidNames>(self);
-    CopyDwords(record->guid, &g_guidNull, 4);
-    String* a = &record->first;
-    a->allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(first));
+// Purpose: Constructor of a DirectDraw device record (DirectX::CDirectDrawDevice,
+// GUID, description and name), used when the game lists the display devices
+// (CGameDrawer::EnumDevicesCallback): the GUID defaults to GUID_NULL, null
+// names stay empty.
+void* __fastcall CDirectDrawDevice_Construct(void* self, void* /*edx*/, const void* guid,
+                                             const char* description, const char* name) {
+    DirectDrawDevice* const device = As<DirectDrawDevice>(self);
+    CopyDwords(device->guid, &g_guidNull, kGuidDwords);
+    String* a = &device->description;
+    a->allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(description));
     sd::Clear(a);
-    if (first != nullptr) {
-        AssignTextViaTemporaries(a, first);
+    if (description != nullptr) {
+        AssignTextViaTemporaries(a, description);
     }
-    String* b = &record->second;
-    // The compiler reused the stack slot of `first` for &b, and takes the
-    // allocator byte from there.
+    String* b = &device->name;
+    // The compiler reused the stack slot of `description` for &b, and takes
+    // the allocator byte from there.
     b->allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(b));
     sd::Clear(b);
-    if (second != nullptr) {
-        AssignTextViaTemporaries(b, second);
+    if (name != nullptr) {
+        AssignTextViaTemporaries(b, name);
     }
     if (guid != nullptr) {
-        CopyDwords(record->guid, guid, 4);
+        CopyDwords(device->guid, guid, kGuidDwords);
     }
     return self;
 }
@@ -559,7 +566,7 @@ struct Members {
     SetStringFn set14, set10;
     AssignFn assign4499e0, assign5be000, assign5ed590;
     SessionDescConstructFn sessionDesc;
-    GuidNamesConstructFn guidNames;
+    DirectDrawDeviceConstructFn directDrawDevice;
     RegistryValueInfoConstructFn registryValueInfo;
 };
 
@@ -577,7 +584,7 @@ Members OriginalMembers() {
             Original_SessionDesc_Assign_5be000,
             Original_LobbyRecord_Assign_5ed590,
             Original_SessionDesc_Construct_5bb0b0,
-            Original_GuidNames_Construct_5b6790,
+            Original_CDirectDrawDevice_Construct,
             Original_CRegistryValueInfo_Construct};
 }
 
@@ -592,7 +599,7 @@ Members OurMembers() {
             &SessionDesc_Assign_5be000,
             &LobbyRecord_Assign_5ed590,
             &SessionDesc_Construct_5bb0b0,
-            &GuidNames_Construct_5b6790,
+            &CDirectDrawDevice_Construct,
             &CRegistryValueInfo_Construct};
 }
 
@@ -691,8 +698,8 @@ void CompareMembers(test::Context& ctx, const Members& candidate, int iterations
                 const void* g = ctx.rng().Chance(1, 3) ? nullptr : guid;
                 const char* first = ctx.rng().Chance(1, 4) ? nullptr : t1.c_str();
                 const char* second = ctx.rng().Chance(1, 4) ? nullptr : t2.c_str();
-                original.guidNames(a1.data(), nullptr, g, first, second);
-                candidate.guidNames(b1.data(), nullptr, g, first, second);
+                original.directDrawDevice(a1.data(), nullptr, g, first, second);
+                candidate.directDrawDevice(b1.data(), nullptr, g, first, second);
                 strings = {0x10, 0x20};
                 // b's allocator byte is the low byte of its own address,
                 // which differs between the two buffers: compare it apart.

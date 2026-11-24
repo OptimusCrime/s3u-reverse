@@ -150,7 +150,9 @@ description string (CDirectInputException, CAppNotActiveException).
   RequestStop: returns +0x3c (exit code)" and mention the wait on
   lpSigActive while inactive. CLAUDE.md "Runtime structure" says "slot 10
   OnEvent"; same correction.
-- 0x5b6790 `GuidNames_Construct_5b6790` (verified, not renamed here) is
+- 0x5b6790 `GuidNames_Construct_5b6790` (verified; renamed 2026-11-24 to
+  `DirectX::CDirectDrawDevice::CDirectDrawDevice_guid`, ours
+  `CDirectDrawDevice_Construct`) is
   `DirectX::CDirectDrawDevice::CDirectDrawDevice(const GUID*, const char*
   description, const char* name)`, the constructor used by
   CGameDrawer::EnumDevicesCallback (0x30-byte record; default constructor

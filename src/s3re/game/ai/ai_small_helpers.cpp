@@ -3,32 +3,34 @@
 // ai_helpers.cpp: 0x7e3408 the world, 0x7e3412 / 0x7e3414 the map size (y /
 // x, uint16 copies).
 //
-// AI_List32AddValue_551780 (0x00551780): (value) thiscall, ret 4:
-//   AI_List32Add(value). EAX = its result.
-// AI_List32AddWord8_551760 (0x00551760): (record) thiscall, ret 4: passes
-//   the word at record+8 to 0x551780. The original loads it with `mov dx`,
-//   so the upper half of the pushed dword is the caller's EDX (ours gets it
-//   as the EDX parameter); AI_WordListInsert stores only the low word.
+// CComputerPlayer_DoomNoteId (0x00551780): (id) thiscall, ret 4:
+//   CComputerPlayer_DoomNote(id). EAX = its result. Was
+//   AI_List32AddValue_551780.
+// CComputerPlayer_DoomNoteOf (0x00551760): (note) thiscall, ret 4: passes
+//   the note's id (word +8) to 0x551780 (was AI_List32AddWord8_551760).
+//   The original loads it with `mov dx`, so the upper half of the pushed
+//   dword is the caller's EDX (ours gets it as the EDX parameter);
+//   AI_WordListInsert stores only the low word.
 //   EAX = 0x551780's result.
-// AI_EvaLand_ResetGrid_554070 (0x00554070): () +0x140, +0x144, +0x148,
+// AI_CEvaLand_ResetGrid (0x00554070): () +0x140, +0x144, +0x148,
 //   +0x14c, +0x158 = 0 (grid width, height, two more sizes, grid pointer of
-//   the land evaluation, see AI_GridCellWrapped); EAX = 0.
+//   the land evaluation, see AI_CEvaLand_GridCellWrapped); EAX = 0.
 // AI_TileCentre_554880 (0x00554880): (x, y, u16* outX, u16* outY) ret 0x10,
 //   ECX unused: *outX = x * 8 + 4, *outY = y * 8 + 4 (the centre of an
 //   8x8 block in tiles). EAX = y (the register keeps the last loaded
 //   argument).
-// AI_TileByte8_599570 (0x00599570): fastcall (ECX = const u16* x, EDX =
+// AI_TileOwner (0x00599570): fastcall (ECX = const u16* x, EDX =
 //   const u16* y): if x < map size x (0x7e3414) and y < map size y
 //   (0x7e3412) (16-bit compares): AX = byte +8 of tile (x, y) (world +
 //   0x67444 + (x * 0x300 + y) * 24 + 8: Tile::owner, the player owning the
 //   ground, per re/structs.md; this comment once guessed terrain); else AX
 //   = 0xffff. Callers use AX. The upper half of EAX is (x * 0x300 + y) * 3
 //   >> 16 on the map and the caller's EAX off it (ours: 0 there).
-// AI_BlockCentreByte8_554850 (0x00554850): (bx, by) ret 8, ECX unused:
-//   AI_TileByte8 of (bx * 8 + 4, by * 8 + 4) (dwords stored over its own
+// AI_CellCentreOwner (0x00554850): (bx, by) ret 8, ECX unused:
+//   AI_TileOwner of (bx * 8 + 4, by * 8 + 4) (dwords stored over its own
 //   arguments). EAX as above, where the caller's EAX is bx * 8 + 4.
-// AI_EvaLand_GridCellOfTile_554770 (0x00554770): (x, y) thiscall, ret 8:
-//   AI_GridCellWrapped(x / 8, y / 8) (low words only). EAX = the cell.
+// AI_CEvaLand_GridCellOfTile (0x00554770): (x, y) thiscall, ret 8:
+//   AI_CEvaLand_GridCellWrapped(x / 8, y / 8) (low words only). EAX = the cell.
 // AI_BuildingIfUsed_58e1c0 (0x0058e1c0): fastcall (ECX = id; low word): the
 //   building record (world + 0x1499e64 + id * 0x3a) if id <= the building
 //   count (+0x1499e60, unsigned) and its first byte is not 0xff (unused
@@ -51,15 +53,15 @@
 namespace s3re::game {
 
 // ai_helpers.cpp
-std::uint32_t __fastcall AI_List32Add(void* self, void* edx, std::uint32_t value);
-void* __fastcall AI_GridCellWrapped(void* self, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall CComputerPlayer_DoomNote(void* self, void* edx, std::uint32_t value);
+void* __fastcall AI_CEvaLand_GridCellWrapped(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 
 using namespace ai;
 
 namespace {
 
-// AI_TileByte8 with the caller's EAX (kept in the upper half off the map).
-std::uint32_t TileByte8(std::uint16_t x, std::uint16_t y, std::uint32_t callerEax) {
+// AI_TileOwner with the caller's EAX (kept in the upper half off the map).
+std::uint32_t TileOwnerOrNone(std::uint16_t x, std::uint16_t y, std::uint32_t callerEax) {
     if (x >= g_aiMapSizeX || y >= g_aiMapSizeY) {
         return callerEax | 0xffffu;
     }
@@ -74,48 +76,49 @@ using ThisValueFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint3
 using ThisFn = std::uint32_t(__fastcall*)(void* self, void* edx);
 using TileCentreFn = std::uint32_t(__stdcall*)(std::uint32_t x, std::uint32_t y, std::uint16_t* outX,
                                                std::uint16_t* outY);
-using TileByteFn = std::uint32_t(__fastcall*)(const std::uint16_t* x, const std::uint16_t* y);
-using BlockByteFn = std::uint32_t(__stdcall*)(std::uint32_t bx, std::uint32_t by);
+using TileOwnerFn = std::uint32_t(__fastcall*)(const std::uint16_t* x, const std::uint16_t* y);
+using CellOwnerFn = std::uint32_t(__stdcall*)(std::uint32_t bx, std::uint32_t by);
 using GridCellOfTileFn = void*(__fastcall*)(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 using BuildingIfUsedFn = void*(__fastcall*)(std::uint32_t id);
 
-std::uint32_t __fastcall AI_List32AddValue_551780(void* self, void* edx, std::uint32_t value);
-std::uint32_t __fastcall AI_List32AddWord8_551760(void* self, void* edx, std::uint32_t record);
-std::uint32_t __fastcall AI_EvaLand_ResetGrid_554070(void* self, void* edx);
+std::uint32_t __fastcall CComputerPlayer_DoomNoteId(void* self, void* edx, std::uint32_t value);
+std::uint32_t __fastcall CComputerPlayer_DoomNoteOf(void* self, void* edx, std::uint32_t record);
+std::uint32_t __fastcall AI_CEvaLand_ResetGrid(void* self, void* edx);
 std::uint32_t __stdcall AI_TileCentre_554880(std::uint32_t x, std::uint32_t y, std::uint16_t* outX,
                                              std::uint16_t* outY);
-std::uint32_t __fastcall AI_TileByte8_599570(const std::uint16_t* x, const std::uint16_t* y);
-std::uint32_t __stdcall AI_BlockCentreByte8_554850(std::uint32_t bx, std::uint32_t by);
-void* __fastcall AI_EvaLand_GridCellOfTile_554770(void* self, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall AI_TileOwner(const std::uint16_t* x, const std::uint16_t* y);
+std::uint32_t __stdcall AI_CellCentreOwner(std::uint32_t bx, std::uint32_t by);
+void* __fastcall AI_CEvaLand_GridCellOfTile(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 void* __fastcall AI_BuildingIfUsed_58e1c0(std::uint32_t id);
 
-S3RE_HOOK(0x00551780, AI_List32AddValue_551780, ThisValueFn, Original_AI_List32AddValue_551780,
-          AI_List32AddValue_551780);
+S3RE_HOOK(0x00551780, CComputerPlayer_DoomNoteId, ThisValueFn, Original_CComputerPlayer_DoomNoteId,
+          CComputerPlayer_DoomNoteId);
 
-// Purpose: Adds a number to a computer player's 50-entry list (a thin
-// wrapper of AI_List32Add).
-std::uint32_t __fastcall AI_List32AddValue_551780(void* self, void* /*edx*/, std::uint32_t value) {
-    return AI_List32Add(self, nullptr, value);
+// Purpose: Marks a computer player's blackboard note for deletion by its id
+// (a thin wrapper of CComputerPlayer_DoomNote).
+std::uint32_t __fastcall CComputerPlayer_DoomNoteId(void* self, void* /*edx*/, std::uint32_t id) {
+    return CComputerPlayer_DoomNote(self, nullptr, id);
 }
 
-S3RE_HOOK(0x00551760, AI_List32AddWord8_551760, ThisValueFn, Original_AI_List32AddWord8_551760,
-          AI_List32AddWord8_551760);
+S3RE_HOOK(0x00551760, CComputerPlayer_DoomNoteOf, ThisValueFn, Original_CComputerPlayer_DoomNoteOf,
+          CComputerPlayer_DoomNoteOf);
 
-// Purpose: Adds the id stored in a record (word +8, probably a building or
-// settler id) to a computer player's 50-entry list.
-std::uint32_t __fastcall AI_List32AddWord8_551760(void* self, void* edx, std::uint32_t record) {
-    // The only known field of the record (layout otherwise unknown).
-    const std::uint16_t word = RawAtAddress<std::uint16_t>(record + 8);
-    const std::uint32_t value = (reinterpret_cast<std::uint32_t>(edx) & 0xffff0000u) | word;
-    return AI_List32AddValue_551780(self, nullptr, value);
+// Purpose: Marks a computer player's blackboard note for deletion (by the
+// note's id).
+std::uint32_t __fastcall CComputerPlayer_DoomNoteOf(void* self, void* edx, std::uint32_t note) {
+    // The note's id (word +8); the original loads it with `mov dx`, so the
+    // upper half of the pushed dword is the caller's EDX.
+    const std::uint16_t id = RawAtAddress<std::uint16_t>(note + 8);
+    const std::uint32_t value = (reinterpret_cast<std::uint32_t>(edx) & 0xffff0000u) | id;
+    return CComputerPlayer_DoomNoteId(self, nullptr, value);
 }
 
-S3RE_HOOK(0x00554070, AI_EvaLand_ResetGrid_554070, ThisFn, Original_AI_EvaLand_ResetGrid_554070,
-          AI_EvaLand_ResetGrid_554070);
+S3RE_HOOK(0x00554070, AI_CEvaLand_ResetGrid, ThisFn, Original_AI_CEvaLand_ResetGrid,
+          AI_CEvaLand_ResetGrid);
 
 // Purpose: Forgets the land evaluation grid of a computer player (sizes and
 // pointer to 0, after the grid was freed).
-std::uint32_t __fastcall AI_EvaLand_ResetGrid_554070(void* self, void* /*edx*/) {
+std::uint32_t __fastcall AI_CEvaLand_ResetGrid(void* self, void* /*edx*/) {
     auto* evaluation = static_cast<AiLandEvaluation*>(self);
     evaluation->width = 0;
     evaluation->height = 0;
@@ -136,31 +139,31 @@ std::uint32_t __stdcall AI_TileCentre_554880(std::uint32_t x, std::uint32_t y, s
     return y;
 }
 
-S3RE_HOOK(0x00599570, AI_TileByte8_599570, TileByteFn, Original_AI_TileByte8_599570, AI_TileByte8_599570);
+S3RE_HOOK(0x00599570, AI_TileOwner, TileOwnerFn, Original_AI_TileOwner, AI_TileOwner);
 
-// Purpose: A map byte of a tile for the computer players (tile byte +8,
-// the owner of the ground), or 0xffff off the map.
-std::uint32_t __fastcall AI_TileByte8_599570(const std::uint16_t* x, const std::uint16_t* y) {
-    return TileByte8(*x, *y, 0);
+// Purpose: The owner of a tile's ground for the computer players (tile byte
+// +8), or 0xffff off the map. Was AI_TileByte8_599570.
+std::uint32_t __fastcall AI_TileOwner(const std::uint16_t* x, const std::uint16_t* y) {
+    return TileOwnerOrNone(*x, *y, 0);
 }
 
-S3RE_HOOK(0x00554850, AI_BlockCentreByte8_554850, BlockByteFn, Original_AI_BlockCentreByte8_554850,
-          AI_BlockCentreByte8_554850);
+S3RE_HOOK(0x00554850, AI_CellCentreOwner, CellOwnerFn, Original_AI_CellCentreOwner,
+          AI_CellCentreOwner);
 
-// Purpose: The map byte (the owner of the ground) at the centre of an 8x8
-// block of the computer players' coarse grid.
-std::uint32_t __stdcall AI_BlockCentreByte8_554850(std::uint32_t bx, std::uint32_t by) {
+// Purpose: The owner of the ground at the centre of a cell (8x8 tiles) of
+// the computer players' land grid. Was AI_BlockCentreByte8_554850.
+std::uint32_t __stdcall AI_CellCentreOwner(std::uint32_t bx, std::uint32_t by) {
     const std::uint32_t x = bx * 8 + 4;
     const std::uint32_t y = by * 8 + 4;
-    return TileByte8(static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), x & 0xffff0000u);
+    return TileOwnerOrNone(static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), x & 0xffff0000u);
 }
 
-S3RE_HOOK(0x00554770, AI_EvaLand_GridCellOfTile_554770, GridCellOfTileFn, Original_AI_EvaLand_GridCellOfTile_554770,
-          AI_EvaLand_GridCellOfTile_554770);
+S3RE_HOOK(0x00554770, AI_CEvaLand_GridCellOfTile, GridCellOfTileFn, Original_AI_CEvaLand_GridCellOfTile,
+          AI_CEvaLand_GridCellOfTile);
 
 // Purpose: The land evaluation grid cell (8x8 tiles) that contains a tile.
-void* __fastcall AI_EvaLand_GridCellOfTile_554770(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
-    return AI_GridCellWrapped(self, nullptr, (x & 0xffff) >> 3, (y & 0xffff) >> 3);
+void* __fastcall AI_CEvaLand_GridCellOfTile(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
+    return AI_CEvaLand_GridCellWrapped(self, nullptr, (x & 0xffff) >> 3, (y & 0xffff) >> 3);
 }
 
 S3RE_HOOK(0x0058e1c0, AI_BuildingIfUsed_58e1c0, BuildingIfUsedFn, Original_AI_BuildingIfUsed_58e1c0,
@@ -193,29 +196,31 @@ struct AiSmallFunctions {
     ThisValueFn addWord8;
     ThisFn resetGrid;
     TileCentreFn tileCentre;
-    TileByteFn tileByte;
-    BlockByteFn blockByte;
+    TileOwnerFn tileByte;
+    CellOwnerFn blockByte;
     GridCellOfTileFn cellOfTile;
     BuildingIfUsedFn buildingIfUsed;
 };
 
 AiSmallFunctions OriginalAiSmall() {
-    return {Original_AI_List32AddValue_551780, Original_AI_List32AddWord8_551760,
-            Original_AI_EvaLand_ResetGrid_554070, Original_AI_TileCentre_554880,
-            Original_AI_TileByte8_599570,      Original_AI_BlockCentreByte8_554850,
-            Original_AI_EvaLand_GridCellOfTile_554770, Original_AI_BuildingIfUsed_58e1c0};
+    return {Original_CComputerPlayer_DoomNoteId, Original_CComputerPlayer_DoomNoteOf,
+            Original_AI_CEvaLand_ResetGrid, Original_AI_TileCentre_554880,
+            Original_AI_TileOwner,      Original_AI_CellCentreOwner,
+            Original_AI_CEvaLand_GridCellOfTile, Original_AI_BuildingIfUsed_58e1c0};
 }
 
 AiSmallFunctions OurAiSmall() {
-    return {&AI_List32AddValue_551780, &AI_List32AddWord8_551760, &AI_EvaLand_ResetGrid_554070,
-            &AI_TileCentre_554880,      &AI_TileByte8_599570,      &AI_BlockCentreByte8_554850,
-            &AI_EvaLand_GridCellOfTile_554770, &AI_BuildingIfUsed_58e1c0};
+    return {&CComputerPlayer_DoomNoteId, &CComputerPlayer_DoomNoteOf, &AI_CEvaLand_ResetGrid,
+            &AI_TileCentre_554880,      &AI_TileOwner,      &AI_CellCentreOwner,
+            &AI_CEvaLand_GridCellOfTile, &AI_BuildingIfUsed_58e1c0};
 }
 
 constexpr std::size_t kObjectBytes = 0x300;
 constexpr std::size_t kMaxBuildings = 2100;
 constexpr std::size_t kWorldBytes = offsetof(CGameData, buildings) + (kMaxBuildings + 1) * sizeof(layout::Building);
-static_assert(kObjectBytes >= sizeof(AiList50Owner) && kObjectBytes >= sizeof(AiLandEvaluation));
+// The buffer holds the doomed notes of a ComputerPlayer (only that part).
+static_assert(kObjectBytes >= offsetof(ComputerPlayer, doomed_note_count) + 2 &&
+              kObjectBytes >= sizeof(AiLandEvaluation));
 
 void CompareObjects(test::Context& ctx, const AiSmallFunctions& candidate, int cases) {
     const AiSmallFunctions original = OriginalAiSmall();
@@ -223,10 +228,10 @@ void CompareObjects(test::Context& ctx, const AiSmallFunctions& candidate, int c
     for (int i = 0; i < cases; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(5));
         ctx.rng().Fill(a.data(), a.size());
-        // The buffer is both the list owner and the land evaluation. The
-        // list (50 words) holds small values with some free slots.
-        auto* list = reinterpret_cast<AiList50Owner*>(a.data());
-        for (std::uint16_t& entry : list->entries) {
+        // The buffer is both the computer player and the land evaluation.
+        // The doomed notes (50 words) hold small ids with some free slots.
+        auto* player = reinterpret_cast<ComputerPlayer*>(a.data());
+        for (std::uint16_t& entry : player->doomed_notes) {
             entry = ctx.rng().Chance(1, 4) ? 0xffff : static_cast<std::uint16_t>(ctx.rng().Below(64));
         }
         auto* evaluation = reinterpret_cast<AiLandEvaluation*>(a.data());
@@ -337,7 +342,7 @@ void CompareWorld(test::Context& ctx, const AiSmallFunctions& candidate, int cas
 
 std::uint32_t __fastcall WrongAddWord8(void* self, void* /*edx*/, std::uint32_t record) {
     // Wrong: reads the word at +6 instead of +8.
-    return AI_List32AddValue_551780(self, nullptr, RawAtAddress<std::uint16_t>(record + 6));
+    return CComputerPlayer_DoomNoteId(self, nullptr, RawAtAddress<std::uint16_t>(record + 6));
 }
 
 void* __fastcall WrongBuildingIfUsed(std::uint32_t id) {

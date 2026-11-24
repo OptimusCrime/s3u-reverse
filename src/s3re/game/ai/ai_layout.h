@@ -168,7 +168,7 @@ struct ComputerPlayer {
     std::uint16_t active_notes[kActiveNoteSlots];      // 0x134 notes with kNoteActive
     std::uint16_t active_note_count;                   // 0x1fc
     std::uint16_t active_cursor;                       // 0x1fe next index into active_notes (0x551670, round robin)
-    std::uint16_t doomed_notes[kDoomedNoteSlots];      // 0x200 notes to delete after the next active note's turn (AI_List32Add; 0x551790)
+    std::uint16_t doomed_notes[kDoomedNoteSlots];      // 0x200 notes to delete after the next active note's turn (CComputerPlayer::DoomNote 0x551910; 0x551790)
     std::uint16_t doomed_note_count;                   // 0x264
     std::uint16_t handlers[6];                         // 0x266 per note type: the kind of the agent that handles it, kNoAgent = none (0x551400, 0x551510)
     std::uint8_t player_number;                        // 0x272
@@ -188,7 +188,7 @@ struct ComputerPlayer {
     std::uint8_t pad769[3];
     std::uint32_t player;                              // 0x76c the player index (constructor argument)
     std::uint32_t setup_index;                         // 0x770 index into g_aiPlayerSetups
-    std::uint32_t settlement_lists;                    // 0x774 12-byte entries per player: [+4] list of AiPlayerData nodes, [+8] their count
+    std::uint32_t land_evaluation;                     // 0x774 AiLandEvaluation* (CEvaLand::Acquire 0x553d30, stored by CComputerPlayer::Init 0x550a30; ECX of 0x5547a0 / 0x554980)
     std::uint32_t data;                                // 0x778 AiPlayerData* (the current node of that list)
     std::uint32_t area;                                // 0x77c the current node's economy area (node word +8; a tile area id, 0x551a70)
 };
@@ -209,6 +209,7 @@ static_assert(offsetof(ComputerPlayer, agents) == 0x730);
 static_assert(offsetof(ComputerPlayer, world) == 0x75c);
 static_assert(offsetof(ComputerPlayer, player) == 0x76c);
 static_assert(offsetof(ComputerPlayer, setup_index) == 0x770);
+static_assert(offsetof(ComputerPlayer, land_evaluation) == 0x774);
 static_assert(offsetof(ComputerPlayer, data) == 0x778);
 static_assert(sizeof(ComputerPlayer) == 0x780);
 
@@ -218,6 +219,10 @@ static_assert(sizeof(ComputerPlayer) == 0x780);
 // its default from g_aiCandidateDefaults. Indexes are not range-checked by the
 // original (callers pass up to 0xffff), so the arrays are indexed past their
 // declared ends like the original's address arithmetic.
+// An AiPlayerData is a node of the player's std::list in CEvaLand::lists
+// (one per economy area of the player, created by CEvaLand::AddArea
+// 0x555260): +0 next, +4 previous, the value (the area record, starting
+// with the area id word at +8) after it. Its offsets below are node offsets.
 struct AiCandidate {
     std::uint16_t score;  // +0
     std::uint16_t a;      // +2 (probably x)
@@ -365,17 +370,45 @@ struct AiGroupTarget {
 };
 static_assert(sizeof(AiGroupTarget) == 6);
 
-// g_aiGroupOrders (0x7e37d0), set up by 0x591e00.
+struct AiGroupPosition {
+    std::int16_t x;  // +0
+    std::int16_t y;  // +2
+};
+static_assert(sizeof(AiGroupPosition) == 4);
+
+// g_aiGroupOrders (0x7e37d0), the military AI's "army" object (the thiscall
+// `this` of 0x591c40..0x5953b0), set up by 0x591e00; 0x20f8 bytes (savegame
+// chunk 0x15, so it ends at g_aiArmyState). Fields from
+// re/computer_players_naming.md ("Army object 0x7e37d0").
 struct AiGroupOrders {
-    std::uint8_t unk000[0x320];
-    std::uint8_t group_flags[layout::kPlayers][kUnitGroups];      // 0x320 (byte; 0x590c80 tests it)
-    AiGroupTarget group_targets[layout::kPlayers][kUnitGroups];   // 0x3e8
+    std::uint16_t home_areas[layout::kPlayers][kUnitGroups];     // 0x000 area of the own military building nearest to the group (0x592820)
+    std::uint16_t unk190[layout::kPlayers][kUnitGroups];         // 0x190 cleared per group by the reset (meaning open)
+    std::uint8_t group_flags[layout::kPlayers][kUnitGroups];     // 0x320 steal flag: the group goes for a weakly guarded enemy building (0x594080; 0x590c80 tests it)
+    AiGroupTarget group_targets[layout::kPlayers][kUnitGroups];  // 0x3e8
+    std::uint32_t gather_buildings[layout::kPlayers];            // 0x898 the gather building of a pending attack (0x594080)
+    std::uint32_t per_player8e8[layout::kPlayers];               // 0x8e8
+    std::uint8_t unk938[0x988 - 0x938];
+    std::int32_t group_mages[layout::kPlayers][kUnitGroups];     // 0x988 mages per group (0x591c40, 0x5926e0)
+    std::uint8_t settlers_with_orders[32000 / 8];                // 0xca8 std::bitset<32000>: group members, hunters, busy geologists
+    std::uint8_t unk1c48[0x1d10 - 0x1c48];
+    std::int32_t highest_group[layout::kPlayers];                // 0x1d10 highest group in use
+    std::int32_t group_size[layout::kPlayers];                   // 0x1d60 7 after the reset, up to 100
+    AiGroupPosition gather_positions[layout::kPlayers][kUnitGroups];  // 0x1db0
+    AiGroupPosition gather_offsets[kUnitGroups];                 // 0x20d0 added to the gather position
 };
 static_assert(offsetof(AiGroupOrders, group_flags) == 0x320);
 static_assert(offsetof(AiGroupOrders, group_targets) == 0x3e8);
-static_assert(sizeof(AiGroupOrders) == 0x898);
+static_assert(offsetof(AiGroupOrders, gather_buildings) == 0x898);
+static_assert(offsetof(AiGroupOrders, group_mages) == 0x988);
+static_assert(offsetof(AiGroupOrders, settlers_with_orders) == 0xca8);
+static_assert(offsetof(AiGroupOrders, highest_group) == 0x1d10);
+static_assert(offsetof(AiGroupOrders, gather_positions) == 0x1db0);
+static_assert(offsetof(AiGroupOrders, gather_offsets) == 0x20d0);
+static_assert(sizeof(AiGroupOrders) == 0x20f8);
 
-// g_aiArmyState (0x7e58c8), reset by 0x593f50.
+// g_aiArmyState (0x7e58c8), reset by 0x593f50; 0x51c bytes (savegame chunk
+// 0x17). The per-group target building and defending flag once placed
+// behind it (+0x634, +0x7c4) belong to the census g_aiCensus (AiAgentData).
 struct AiArmyState {
     std::uint32_t per_player000[layout::kPlayers];               // 0x000 25 * player after the reset
     std::uint32_t per_player050[layout::kPlayers];               // 0x050
@@ -383,26 +416,19 @@ struct AiArmyState {
     std::uint32_t per_player0f0[layout::kPlayers];               // 0x0f0
     std::uint32_t per_player140[layout::kPlayers];               // 0x140
     std::uint32_t unk190;                                // 0x190
-    std::uint32_t group_values[layout::kPlayers][kUnitGroups];   // 0x194 groups 1..9: 10 + 2 * group after the reset
+    std::uint32_t attack_delays[layout::kPlayers][kUnitGroups];  // 0x194 countdowns; 0x594000 resets the group when one runs out (groups 1..9: 10 + 2 * group after the reset)
     std::uint32_t per_player4b4[layout::kPlayers];               // 0x4b4 2000000 after the reset
     std::uint32_t unk504;                                // 0x504 300 after the reset
     std::uint32_t unk508;                                // 0x508 0
     std::uint32_t unk50c;                                // 0x50c 500
     std::uint32_t unk510[3];                             // 0x510 2000000
-    std::uint8_t unk51c[0x630 - 0x51c];
-    std::uint8_t use_player_population;                  // 0x630 the economy agent's population source (0x567910)
-    std::uint8_t unk631[3];
-    std::uint16_t group_words[layout::kPlayers][kUnitGroups];    // 0x634
-    std::uint8_t group_bytes[layout::kPlayers][kUnitGroups];     // 0x7c4
 };
 static_assert(offsetof(AiArmyState, unk190) == 0x190);
-static_assert(offsetof(AiArmyState, group_values) == 0x194);
+static_assert(offsetof(AiArmyState, attack_delays) == 0x194);
 static_assert(offsetof(AiArmyState, per_player4b4) == 0x4b4);
 static_assert(offsetof(AiArmyState, unk504) == 0x504);
 static_assert(offsetof(AiArmyState, unk510) == 0x510);
-static_assert(offsetof(AiArmyState, use_player_population) == 0x630);
-static_assert(offsetof(AiArmyState, group_words) == 0x634);
-static_assert(offsetof(AiArmyState, group_bytes) == 0x7c4);
+static_assert(sizeof(AiArmyState) == 0x51c);
 
 // ---------------------------------------------------------------- agent data
 // The computer players' census of the world (AI_ResetAgentData clears it,
@@ -413,12 +439,12 @@ static_assert(offsetof(AiArmyState, group_bytes) == 0x7c4);
 constexpr std::size_t kCensusSoldierKinds = 9;  // probably 3 weapons x 3 levels (every third weighs double)
 
 struct AiAgentData {
-    std::uint8_t unk000;                 // 0x000
+    std::uint8_t settlers_counted;       // 0x000 0 while CountSettlers 0x55b880 counts, then 1 (the economy agent 0x567910 then takes the per-player figure)
     std::uint8_t buildings_counted;      // 0x001 0 while 0x55be00 counts, then 1
     std::uint8_t unk002;                 // 0x002 set to 1 by 0x55be00
     std::uint8_t unk003;
-    std::uint16_t words004[20][10];      // 0x004
-    std::uint8_t bytes194[20][10];       // 0x194
+    std::uint16_t group_target_buildings[20][10];  // 0x004 per player and unit group the target building, 0 = none (0x594080, 0x594a10)
+    std::uint8_t group_defending[20][10];          // 0x194 per player and unit group: the group defends (skipped as attacker, 0x594a10)
     std::uint32_t team_strength[20];     // 0x25c per player: soldiers and towers of its team (0x55bea0)
     std::uint8_t team_strength_valid;    // 0x2ac set to 1 by 0x55bea0
     std::uint8_t unk2ad[7];
@@ -431,8 +457,8 @@ struct AiAgentData {
     std::uint32_t buildings[20][kBuildingTypeCount];      // 0x714 finished buildings per player and type
     std::uint32_t dwords18e4[0x7d];      // 0x18e4..0x1ad4
 };
-static_assert(offsetof(AiAgentData, words004) == 0x4);
-static_assert(offsetof(AiAgentData, bytes194) == 0x194);
+static_assert(offsetof(AiAgentData, group_target_buildings) == 0x4);
+static_assert(offsetof(AiAgentData, group_defending) == 0x194);
 static_assert(offsetof(AiAgentData, team_strength) == 0x25c);
 static_assert(offsetof(AiAgentData, team_strength_valid) == 0x2ac);
 static_assert(offsetof(AiAgentData, dwords2b4) == 0x2b4);
@@ -441,17 +467,6 @@ static_assert(offsetof(AiAgentData, soldiers) == 0x444);
 static_assert(offsetof(AiAgentData, buildings) == 0x714);
 static_assert(offsetof(AiAgentData, dwords18e4) == 0x18e4);
 static_assert(sizeof(AiAgentData) == 0x1ad8);
-
-// ---------------------------------------------------------------- 50-entry list
-// The object AI_List32Add works on (meaning unknown): a list of up to 50
-// ids (0xffff = free slot) and a count of the entries added.
-struct AiList50Owner {
-    std::uint8_t unk000[0x200];
-    std::uint16_t entries[50];  // 0x200
-    std::uint16_t count;        // 0x264
-};
-static_assert(offsetof(AiList50Owner, entries) == 0x200);
-static_assert(offsetof(AiList50Owner, count) == 0x264);
 
 // ---------------------------------------------------------------- linked list
 // A 12-byte list object (element destructor 0x5591e0 frees its nodes); the

@@ -64,6 +64,7 @@
 #include "game/layout.h"
 #include "game/tables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
@@ -88,6 +89,23 @@ struct SixByteRecord {
 #pragma pack(pop)
 static_assert(sizeof(SixByteRecord) == 6);
 
+// A free slot of the AI's fixed-size id lists (AI_WordListInsert/Remove).
+constexpr std::uint16_t kFreeSlot = 0xffff;
+// Tile::area as a 24-byte index from the world: (tiles + Tile::area) / 24.
+// The original keeps (tile index + this) * 3 in a register, so the upper
+// half of its EAX shows it.
+constexpr std::uint32_t kTileAreaIndex = 0x44d9;
+static_assert(kTileAreaIndex * kTileBytes == offsetof(CGameData, tiles) + offsetof(layout::Tile, area),
+              "tile area word");
+// AI_AreaAlongRow looks at most this many tiles further in +x.
+constexpr int kAreaSearchSteps = 16;
+// x * 100 / 576 (the 3x3 cells of 64 tiles) as the compiler's multiply:
+// (x * 0x38e38e39) >> 39.
+constexpr std::uint32_t kDivide576Multiplier = 0x38e38e39u;
+constexpr std::uint32_t kDivide576Shift = 7;  // after taking the high dword
+// AI_ResetAgentData's return value (EAX of its last loop).
+constexpr std::uint32_t kResetAgentDataResult = 10;
+
 }  // namespace
 
 using SetCurrentPlayerFn = std::uint32_t(__fastcall*)(void* player);
@@ -103,7 +121,7 @@ using GetBuildingFn = void*(__fastcall*)(std::uint32_t id, std::uint32_t* error)
 using RecordBestCandidateFn = std::uint32_t(__fastcall*)(std::uint32_t index, std::uint32_t score, std::uint32_t a,
                                                          std::uint32_t b);
 using GridCellFn = void*(__fastcall*)(void* self, void* edx, std::uint32_t x, std::uint32_t y);
-using GridFreeFn = void(__fastcall*)(void* self, void* edx);
+using FreeGridFn = void(__fastcall*)(void* self, void* edx);
 using CopySixBytesFn = void(__fastcall*)(void* dst, const void* src);
 using SetWord4Fn = std::uint16_t(__fastcall*)(void* self, void* edx, std::uint32_t value);
 
@@ -116,8 +134,8 @@ std::uint32_t __fastcall AI_AreaGoodsAmount(const std::uint8_t* goods, const std
 void* __fastcall AI_GetBuilding(std::uint32_t id, std::uint32_t* error);
 std::uint32_t __fastcall AI_RecordBestCandidate(std::uint32_t index, std::uint32_t score, std::uint32_t a,
                                                 std::uint32_t b);
-void* __fastcall AI_GridCell(void* self, void* edx, std::uint32_t x, std::uint32_t y);
-void __fastcall AI_GridFree(void* self, void* edx);
+void* __fastcall AI_CEvaLand_GridCell(void* self, void* edx, std::uint32_t x, std::uint32_t y);
+void __fastcall AI_CEvaLand_FreeGrid(void* self, void* edx);
 void __fastcall AI_CopySixBytes(void* dst, const void* src);
 std::uint16_t __fastcall AI_SetWord4(void* self, void* edx, std::uint32_t value);
 
@@ -138,12 +156,12 @@ std::uint32_t __fastcall AI_SetCurrentPlayer(void* player) {
 
 S3RE_HOOK(0x00551970, AI_WordListInsert, WordListFn, Original_AI_WordListInsert, AI_WordListInsert);
 
-// Purpose: Adds a number (probably a building or settler id) to a computer
-// player's fixed-size list, in the first free (0xffff) slot.
+// Purpose: Adds an id (a note, building or settler id) to one of a
+// computer player's fixed-size lists, in the first free (kFreeSlot) slot.
 std::uint32_t __stdcall AI_WordListInsert(std::uint32_t value, std::uint16_t* list, std::uint32_t count) {
     const auto n = static_cast<std::uint16_t>(count);
     for (std::uint16_t i = 0; i < n; ++i) {
-        if (list[i] == 0xffff) {
+        if (list[i] == kFreeSlot) {
             list[i] = static_cast<std::uint16_t>(value);
             return 1;
         }
@@ -163,10 +181,10 @@ std::uint32_t __stdcall AI_WordListRemove(std::uint32_t value, std::uint16_t* li
             for (std::int32_t j = i; j < static_cast<std::int32_t>(n) - 1; ++j) {
                 list[j] = list[j + 1];
             }
-            list[n - 1] = 0xffff;
+            list[n - 1] = kFreeSlot;
             return 1;
         }
-        if (entry == 0xffff) {
+        if (entry == kFreeSlot) {
             return 0;
         }
     }
@@ -258,11 +276,11 @@ std::uint32_t __fastcall AI_RecordBestCandidate(std::uint32_t index, std::uint32
     return i * 3 + 0x15;
 }
 
-S3RE_HOOK(0x00554700, AI_GridCell, GridCellFn, Original_AI_GridCell, AI_GridCell);
+S3RE_HOOK(0x00554700, AI_CEvaLand_GridCell, GridCellFn, Original_AI_CEvaLand_GridCell, AI_CEvaLand_GridCell);
 
 // Purpose: The cell at (x, y) of a computer player's map evaluation grid
 // (Cevaland, "evaluate land").
-void* __fastcall AI_GridCell(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
+void* __fastcall AI_CEvaLand_GridCell(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
     const auto* evaluation = static_cast<const AiLandEvaluation*>(self);
     const std::uint32_t index = y * evaluation->width + x;
     // 32-bit address arithmetic (wraps like the original's for any x, y).
@@ -270,13 +288,13 @@ void* __fastcall AI_GridCell(void* self, void* /*edx*/, std::uint32_t x, std::ui
                                    index * static_cast<std::uint32_t>(sizeof(AiGridCell)));
 }
 
-S3RE_HOOK(0x00554040, AI_GridFree, GridFreeFn, Original_AI_GridFree, AI_GridFree);
+S3RE_HOOK(0x00554040, AI_CEvaLand_FreeGrid, FreeGridFn, Original_AI_CEvaLand_FreeGrid, AI_CEvaLand_FreeGrid);
 
 // Purpose: Frees a computer player's map evaluation grid.
-void __fastcall AI_GridFree(void* self, void* /*edx*/) {
+void __fastcall AI_CEvaLand_FreeGrid(void* self, void* /*edx*/) {
     AiGridCell*& grid = static_cast<AiLandEvaluation*>(self)->cells;
     if (grid != nullptr) {
-        reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(grid);
+        msvc6::GameOperatorDelete(grid);
         grid = nullptr;
     }
 }
@@ -316,11 +334,9 @@ std::uint32_t __fastcall AI_BuildingArea(const std::uint16_t* building) {
     if (x >= g_aiMapSizeX || y >= g_aiMapSizeY) {
         return ((id * 29) & 0xffff0000u) | 0xffffu;  // `or ax, 0FFFFh` on 29 * id
     }
-    // The original indexes [world + (tile + 0x44d9) * 24], which is the
-    // tile's area word (0x44d9 * 24 = tiles + Tile::area); the upper half of
-    // EAX keeps that index's.
-    const std::uint32_t index = x * 0x300u + y + 0x44d9u;
-    static_assert(0x44d9 * kTileBytes == offsetof(CGameData, tiles) + offsetof(layout::Tile, area), "tile area word");
+    // The original indexes [world + (tile + kTileAreaIndex) * 24], the
+    // tile's area word; the upper half of EAX keeps that index's.
+    const std::uint32_t index = x * static_cast<std::uint32_t>(layout::kMapRowTiles) + y + kTileAreaIndex;
     return (index & 0xffff0000u) | TileAtOffset(world, TileOffset(x, y)).area;
 }
 
@@ -366,12 +382,13 @@ std::uint32_t __stdcall AI_FreeTileArea(std::int32_t x, std::int32_t y) {
 //              used by callers; the upper half is reproduced (the last tile
 //              index * 3, or 0 after stopping at the edge) except off the
 //              map, where the original keeps its caller's.
-//   0x00551910 AI_List32Add(value) thiscall, ret 4: AI_WordListInsert(value,
-//              this+0x200, 50); on success ++word this+0x264. EAX = the
-//              insert's result.
-//   0x00554730 AI_GridCellWrapped(x, y) thiscall, ret 8: like AI_GridCell
+//   0x00551910 CComputerPlayer_DoomNote(id) thiscall, ret 4:
+//              AI_WordListInsert(id, doomed_notes (+0x200), 50); on success
+//              ++doomed_note_count (+0x264). EAX = the insert's result. Was
+//              AI_List32Add.
+//   0x00554730 AI_CEvaLand_GridCellWrapped(x, y) thiscall, ret 8: like AI_CEvaLand_GridCell
 //              with x mod width (+0x140) and y mod height (+0x144).
-//   0x00554530 AI_GridSumAround(x, y) thiscall, ret 8: in cell (x, y) (low
+//   0x00554530 AI_CEvaLand_GridSumAround(x, y) thiscall, ret 8: in cell (x, y) (low
 //              words) clears byte +0xf, words +0x10..+0x1c and bytes
 //              +0x1e..+0x20, then adds the 3x3 cells around it (16-bit
 //              coordinates x-1..x+1, y-1..y+1 that are on the grid): byte +4
@@ -386,7 +403,7 @@ std::uint32_t __stdcall AI_FreeTileArea(std::int32_t x, std::int32_t y) {
 //              (20), 20x10 words at +4 and 20x10 bytes at +0x194) and empties
 //              the 20 vectors at 0x7e7a24 (end = begin, 16-byte entries).
 //              EAX = 10.
-//   0x00553e00 AI_ClearGlobals7e0568(): 0x7e0568 = 0x7e056c = 0; EAX = 0.
+//   0x00553e00 AI_CEvaLand_ResetGlobals(): 0x7e0568 = 0x7e056c = 0; EAX = 0.
 //   0x00559260 AI_SiteTree_begin(out) thiscall, ret 4: *out = **(this+4)
 //              (MSVC6 std::_Tree::begin(): _Left(_Head), the first node of
 //              a CEvaLand area record's site tree); EAX = out. Was
@@ -394,7 +411,7 @@ std::uint32_t __stdcall AI_FreeTileArea(std::int32_t x, std::int32_t y) {
 
 using CountBuildingsFn = std::uint32_t(__fastcall*)(std::uint32_t player, std::uint32_t type, std::uint32_t area);
 using AreaAlongRowFn = std::uint32_t(__fastcall*)(std::uint32_t x, std::uint32_t y);
-using List32AddFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t value);
+using DoomNoteFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t value);
 using GridSumFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 using AgentResetFn = std::uint32_t(__fastcall*)(void* self, void* edx);
 using ClearGlobalsFn = std::uint32_t(__cdecl*)();
@@ -402,11 +419,11 @@ using SiteTreeBeginFn = void*(__fastcall*)(void* self, void* edx, std::uint32_t*
 
 std::uint32_t __fastcall AI_CountBuildings(std::uint32_t player, std::uint32_t type, std::uint32_t area);
 std::uint32_t __fastcall AI_AreaAlongRow(std::uint32_t x, std::uint32_t y);
-std::uint32_t __fastcall AI_List32Add(void* self, void* edx, std::uint32_t value);
-void* __fastcall AI_GridCellWrapped(void* self, void* edx, std::uint32_t x, std::uint32_t y);
-std::uint32_t __fastcall AI_GridSumAround(void* self, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall CComputerPlayer_DoomNote(void* self, void* edx, std::uint32_t value);
+void* __fastcall AI_CEvaLand_GridCellWrapped(void* self, void* edx, std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall AI_CEvaLand_GridSumAround(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall AI_ResetAgentData(void* self, void* edx);
-std::uint32_t __cdecl AI_ClearGlobals7e0568();
+std::uint32_t __cdecl AI_CEvaLand_ResetGlobals();
 void* __fastcall AI_SiteTree_begin(void* self, void* edx, std::uint32_t* out);
 
 S3RE_HOOK(0x0059dac0, AI_CountBuildings, CountBuildingsFn, Original_AI_CountBuildings, AI_CountBuildings);
@@ -444,13 +461,15 @@ std::uint32_t __fastcall AI_AreaAlongRow(std::uint32_t x, std::uint32_t y) {
     }
     CGameData* world = g_aiWorld.get();
     y &= 0xffff;
-    // The original's register holds (tile index + 0x44d9) * 3; times 8 it is
-    // the offset of the tile's area word (see AI_BuildingArea).
-    const auto index3 = [&](std::uint32_t tx) { return ((tx & 0xffff) * 0x300 + y + 0x44d9) * 3; };
+    // The original's register holds (tile index + kTileAreaIndex) * 3; times
+    // 8 it is the offset of the tile's area word (see AI_BuildingArea).
+    const auto index3 = [&](std::uint32_t tx) {
+        return ((tx & 0xffff) * static_cast<std::uint32_t>(layout::kMapRowTiles) + y + kTileAreaIndex) * 3;
+    };
     const auto area = [&](std::uint32_t tx) { return TileAtOffset(world, TileOffset(tx & 0xffff, y)).area; };
     std::uint32_t upper = index3(x);
     if (area(x) == 0) {
-        for (int steps = 0; steps < 16; ++steps) {
+        for (int steps = 0; steps < kAreaSearchSteps; ++steps) {
             ++x;
             if (static_cast<std::int32_t>(x & 0xffff) >= static_cast<std::int32_t>(sizeX) - 1) {
                 upper = 0;
@@ -465,24 +484,26 @@ std::uint32_t __fastcall AI_AreaAlongRow(std::uint32_t x, std::uint32_t y) {
     return (upper & 0xffff0000u) | area(x);
 }
 
-S3RE_HOOK(0x00551910, AI_List32Add, List32AddFn, Original_AI_List32Add, AI_List32Add);
+S3RE_HOOK(0x00551910, CComputerPlayer_DoomNote, DoomNoteFn, Original_CComputerPlayer_DoomNote, CComputerPlayer_DoomNote);
 
-// Purpose: Adds a number to a computer player's list of up to 50 entries
-// (+0x200) and counts it (+0x264); probably a list of buildings or orders.
-std::uint32_t __fastcall AI_List32Add(void* self, void* /*edx*/, std::uint32_t value) {
-    auto* owner = static_cast<AiList50Owner*>(self);
-    const std::uint32_t added = AI_WordListInsert(value, owner->entries, 50);
+// Purpose: Marks a blackboard note of a computer player for deletion: adds
+// its id to the player's doomed notes (+0x200, up to 50), which
+// CComputerPlayer::DeleteDoomedNotes (0x551790) deletes after the next
+// active note's turn, and counts it (+0x264).
+std::uint32_t __fastcall CComputerPlayer_DoomNote(void* self, void* /*edx*/, std::uint32_t id) {
+    auto* player = static_cast<ComputerPlayer*>(self);
+    const std::uint32_t added = AI_WordListInsert(id, player->doomed_notes, kDoomedNoteSlots);
     if (added != 0) {
-        ++owner->count;
+        ++player->doomed_note_count;
     }
     return added;
 }
 
-S3RE_HOOK(0x00554730, AI_GridCellWrapped, GridCellFn, Original_AI_GridCellWrapped, AI_GridCellWrapped);
+S3RE_HOOK(0x00554730, AI_CEvaLand_GridCellWrapped, GridCellFn, Original_AI_CEvaLand_GridCellWrapped, AI_CEvaLand_GridCellWrapped);
 
 // Purpose: A cell of a computer player's map evaluation grid, with the
 // coordinates wrapped around the grid size.
-void* __fastcall AI_GridCellWrapped(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
+void* __fastcall AI_CEvaLand_GridCellWrapped(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
     const auto* evaluation = static_cast<const AiLandEvaluation*>(self);
     const std::uint32_t width = evaluation->width;
     const std::uint32_t row = y % evaluation->height;
@@ -490,14 +511,14 @@ void* __fastcall AI_GridCellWrapped(void* self, void* /*edx*/, std::uint32_t x, 
     return reinterpret_cast<std::uint8_t*>(evaluation->cells) + (row * width + column) * sizeof(AiGridCell);
 }
 
-S3RE_HOOK(0x00554530, AI_GridSumAround, GridSumFn, Original_AI_GridSumAround, AI_GridSumAround);
+S3RE_HOOK(0x00554530, AI_CEvaLand_GridSumAround, GridSumFn, Original_AI_CEvaLand_GridSumAround, AI_CEvaLand_GridSumAround);
 
 // Purpose: Sums the evaluation values of the 3x3 grid cells around a cell
 // into it (probably how good the surroundings of a place are for a
 // building), three of them scaled to percentages.
-std::uint32_t __fastcall AI_GridSumAround(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
+std::uint32_t __fastcall AI_CEvaLand_GridSumAround(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
     const auto* evaluation = static_cast<const AiLandEvaluation*>(self);
-    auto* cell = static_cast<AiGridCell*>(AI_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
+    auto* cell = static_cast<AiGridCell*>(AI_CEvaLand_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
     cell->sum0f = 0;
     cell->sum10 = 0;
     for (std::uint16_t& sum : cell->sums12) {
@@ -516,7 +537,7 @@ std::uint32_t __fastcall AI_GridSumAround(void* self, void* /*edx*/, std::uint32
                 continue;
             }
             const auto* other = static_cast<const AiGridCell*>(
-                AI_GridCell(self, nullptr, static_cast<std::uint32_t>(cx), static_cast<std::uint32_t>(cy)));
+                AI_CEvaLand_GridCell(self, nullptr, static_cast<std::uint32_t>(cx), static_cast<std::uint32_t>(cy)));
             cell->sum0f = static_cast<std::uint8_t>(cell->sum0f + other->value04);
             cell->sum10 = static_cast<std::uint16_t>(cell->sum10 + other->value03);
             for (std::size_t k = 0; k < 6; ++k) {
@@ -529,9 +550,9 @@ std::uint32_t __fastcall AI_GridSumAround(void* self, void* /*edx*/, std::uint32
     }
     std::uint32_t low = 0;
     const auto percent = [&low](std::uint32_t sum) {
-        const std::uint64_t product = static_cast<std::uint64_t>(sum * 100u) * 0x38e38e39u;
+        const std::uint64_t product = static_cast<std::uint64_t>(sum * 100u) * kDivide576Multiplier;
         low = static_cast<std::uint32_t>(product);
-        return static_cast<std::uint8_t>((product >> 32) >> 7);
+        return static_cast<std::uint8_t>((product >> 32) >> kDivide576Shift);
     };
     cell->percent1e = percent(sumB);
     cell->percent1f = percent(sumC);
@@ -558,28 +579,28 @@ std::uint32_t __fastcall AI_ResetAgentData(void* self, void* /*edx*/) {
     for (std::size_t k = 0; k < kAgentVectorCount; ++k) {
         vectors[k].end = vectors[k].begin;
     }
-    data->unk000 = 0;
+    data->settlers_counted = 0;
     data->unk002 = 0;
     data->team_strength_valid = 0;
-    for (std::size_t k = 0; k < 20; ++k) {
-        data->team_strength[k] = 0;
-        data->dwords2b4[k] = 0;
-        data->dwords304[k] = 0;
-        data->dwords354[k] = 0;
-        data->dwords3f4[k] = 0;
-        for (std::size_t j = 0; j < 10; ++j) {
-            data->words004[k][j] = 0;
-            data->bytes194[k][j] = 0;
+    for (std::size_t p = 0; p < layout::kPlayers; ++p) {
+        data->team_strength[p] = 0;
+        data->dwords2b4[p] = 0;
+        data->dwords304[p] = 0;
+        data->dwords354[p] = 0;
+        data->dwords3f4[p] = 0;
+        for (std::size_t group = 0; group < kUnitGroups; ++group) {
+            data->group_target_buildings[p][group] = 0;
+            data->group_defending[p][group] = 0;
         }
     }
-    return 10;
+    return kResetAgentDataResult;
 }
 
-S3RE_HOOK(0x00553e00, AI_ClearGlobals7e0568, ClearGlobalsFn, Original_AI_ClearGlobals7e0568, AI_ClearGlobals7e0568);
+S3RE_HOOK(0x00553e00, AI_CEvaLand_ResetGlobals, ClearGlobalsFn, Original_AI_CEvaLand_ResetGlobals, AI_CEvaLand_ResetGlobals);
 
 // Purpose: Resets two AI globals (0x7e0568, 0x7e056c; meaning unknown)
 // when a computer player's turn is set up.
-std::uint32_t __cdecl AI_ClearGlobals7e0568() {
+std::uint32_t __cdecl AI_CEvaLand_ResetGlobals() {
     g_aiEvaLandRefCount = 0;
     g_aiEvaLand = nullptr;
     return 0;
@@ -610,7 +631,7 @@ struct AiFunctions {
     GetBuildingFn getBuilding;
     RecordBestCandidateFn recordBest;
     GridCellFn gridCell;
-    GridFreeFn gridFree;
+    FreeGridFn freeGrid;
     CopySixBytesFn copySix;
     SetWord4Fn setWord4;
     BuildingAreaFn buildingArea;
@@ -620,15 +641,15 @@ struct AiFunctions {
 AiFunctions OriginalAi() {
     return {Original_AI_SetCurrentPlayer, Original_AI_WordListInsert, Original_AI_WordListRemove,
             Original_AI_IsOnMap,          Original_AI_ClampToMap,     Original_AI_AreaGoodsAmount,
-            Original_AI_GetBuilding,      Original_AI_RecordBestCandidate, Original_AI_GridCell,
-            Original_AI_GridFree,         Original_AI_CopySixBytes,   Original_AI_SetWord4,
+            Original_AI_GetBuilding,      Original_AI_RecordBestCandidate, Original_AI_CEvaLand_GridCell,
+            Original_AI_CEvaLand_FreeGrid,         Original_AI_CopySixBytes,   Original_AI_SetWord4,
             Original_AI_BuildingArea,     Original_AI_FreeTileArea};
 }
 
 AiFunctions OurAi() {
     return {&AI_SetCurrentPlayer, &AI_WordListInsert, &AI_WordListRemove, &AI_IsOnMap,
             &AI_ClampToMap,       &AI_AreaGoodsAmount, &AI_GetBuilding,   &AI_RecordBestCandidate,
-            &AI_GridCell,         &AI_GridFree,       &AI_CopySixBytes,  &AI_SetWord4,
+            &AI_CEvaLand_GridCell,         &AI_CEvaLand_FreeGrid,       &AI_CopySixBytes,  &AI_SetWord4,
             &AI_BuildingArea,     &AI_FreeTileArea};
 }
 
@@ -829,8 +850,8 @@ void CompareAi(test::Context& ctx, const AiFunctions& candidate, int cases) {
                 std::memcpy(ob, oa, sizeof(oa));
                 gridB = empty ? nullptr : static_cast<AiGridCell*>(newFn(16));
                 void* blockB = gridB;
-                original.gridFree(oa, nullptr);
-                candidate.gridFree(ob, nullptr);
+                original.freeGrid(oa, nullptr);
+                candidate.freeGrid(ob, nullptr);
                 same &= S3RE_EXPECT_MEM_EQ(oa, ob, sizeof(oa));
                 (void)blockB;
                 break;
@@ -943,7 +964,7 @@ namespace {
 struct Ai25Functions {
     CountBuildingsFn countBuildings;
     AreaAlongRowFn areaAlongRow;
-    List32AddFn list32Add;
+    DoomNoteFn doomNote;
     GridCellFn gridCellWrapped;
     GridSumFn gridSumAround;
     AgentResetFn resetAgentData;
@@ -952,14 +973,14 @@ struct Ai25Functions {
 };
 
 Ai25Functions OriginalAi25() {
-    return {Original_AI_CountBuildings, Original_AI_AreaAlongRow,  Original_AI_List32Add,
-            Original_AI_GridCellWrapped, Original_AI_GridSumAround, Original_AI_ResetAgentData,
-            Original_AI_ClearGlobals7e0568, Original_AI_SiteTree_begin};
+    return {Original_AI_CountBuildings, Original_AI_AreaAlongRow,  Original_CComputerPlayer_DoomNote,
+            Original_AI_CEvaLand_GridCellWrapped, Original_AI_CEvaLand_GridSumAround, Original_AI_ResetAgentData,
+            Original_AI_CEvaLand_ResetGlobals, Original_AI_SiteTree_begin};
 }
 
 Ai25Functions OurAi25() {
-    return {&AI_CountBuildings, &AI_AreaAlongRow,  &AI_List32Add,     &AI_GridCellWrapped,
-            &AI_GridSumAround,  &AI_ResetAgentData, &AI_ClearGlobals7e0568, &AI_SiteTree_begin};
+    return {&AI_CountBuildings, &AI_AreaAlongRow,  &CComputerPlayer_DoomNote,     &AI_CEvaLand_GridCellWrapped,
+            &AI_CEvaLand_GridSumAround,  &AI_ResetAgentData, &AI_CEvaLand_ResetGlobals, &AI_SiteTree_begin};
 }
 
 // S3.EXE memory the functions write: the two globals and the 20 vectors
@@ -1034,7 +1055,7 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
             }
             case 2:
                 for (std::size_t k = 0; k < 50; ++k) {
-                    reinterpret_cast<AiList50Owner*>(a.data())->entries[k] =
+                    reinterpret_cast<ComputerPlayer*>(a.data())->doomed_notes[k] =
                         ctx.rng().Chance(1, 10) ? 0xffff : static_cast<std::uint16_t>(ctx.rng().Below(9));
                 }
                 args[0] = ctx.rng().Chance(1, 4) ? 0xffff : ctx.rng().Below(9);
@@ -1064,7 +1085,7 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
             switch (op) {
                 case 0: return f.countBuildings(args[0], args[1], args[2]);
                 case 1: return f.areaAlongRow(args[0], args[1]) & 0xffff;
-                case 2: return f.list32Add(object, nullptr, args[0]);
+                case 2: return f.doomNote(object, nullptr, args[0]);
                 case 3: return static_cast<std::uint32_t>(static_cast<std::uint8_t*>(f.gridCellWrapped(object, nullptr, args[0], args[1])) - object);
                 case 4: return f.gridSumAround(object, nullptr, args[0], args[1]);
                 case 5: return f.resetAgentData(object, nullptr);
@@ -1105,11 +1126,11 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
 
 // Wrong: the 3x3 sum skips the centre cell.
 std::uint32_t __fastcall WrongGridSumAround(void* self, void* edx, std::uint32_t x, std::uint32_t y) {
-    auto* cell = static_cast<AiGridCell*>(AI_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
+    auto* cell = static_cast<AiGridCell*>(AI_CEvaLand_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
     AiGridCell saved;
     std::memcpy(&saved, cell, sizeof(saved));
     std::memset(cell, 0, offsetof(AiGridCell, unk0e));  // the centre's values read as 0
-    const std::uint32_t result = AI_GridSumAround(self, edx, x, y);
+    const std::uint32_t result = AI_CEvaLand_GridSumAround(self, edx, x, y);
     std::memcpy(cell, &saved, offsetof(AiGridCell, unk0e));
     return result;
 }

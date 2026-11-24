@@ -99,6 +99,28 @@ constexpr U kKeepLink = 0xffffffffu;
 // RemoveMatching: x or y -1 means "anywhere" (all records are searched).
 constexpr U kAnyPosition = 0xffffffffu;
 
+// A graphics id: GFX file << 16 | frame.
+constexpr U Graphics(U file, U frame) {
+    return file << 16 | frame;
+}
+
+// The graphics of the effects made here.
+constexpr U kArrowGraphics = Graphics(1, 100);       // 0x10064, + 0..5 by direction (0x545150)
+constexpr U kProjectile1Graphics = Graphics(22, 8);  // 0x160008, + 0..5 by direction (0x5453f0)
+constexpr U kProjectile0Graphics = Graphics(12, 8);  // 0xc0008 (0x5458d0)
+constexpr U kProjectile2Graphics = Graphics(32, 8);  // 0x200008 (0x545730)
+constexpr U kImpactGraphics = Graphics(13, 49);      // 0xd0031, where a projectile lands
+constexpr U kSparkGraphics = Graphics(13, 42);       // 0xd002a, sparks / chips of a worker's tool
+constexpr U kToolGraphics = Graphics(13, 43);        // 0xd002b, tool effect of 0x5449f0, variants 0 and 1
+static_assert(kArrowGraphics == 0x10064 && kProjectile1Graphics == 0x160008 && kProjectile0Graphics == 0xc0008 &&
+              kProjectile2Graphics == 0x200008 && kImpactGraphics == 0xd0031 && kSparkGraphics == 0xd002a &&
+              kToolGraphics == 0xd002b);
+
+// Arc height = (dx*dx + 4*dy*dy) / divisor: a flat arc for arrows and most
+// projectiles, a high one for 0x5458d0.
+constexpr std::int32_t kFlatArcDivisor = 12000;
+constexpr std::int32_t kHighArcDivisor = 1500;
+
 void* Edx(U value) {
     return reinterpret_cast<void*>(static_cast<std::uintptr_t>(value));
 }
@@ -149,7 +171,7 @@ Flight MakeFlight(U a2, U a3, U a6, U a7, std::int32_t divisor, const double& fa
 }
 
 // The graphics id of a three-stage flight by direction: `base` + 0..5
-// (0x10064.. for arrows, 0x160008.. for 0x5453f0).
+// (kArrowGraphics.. for arrows, kProjectile1Graphics.. for 0x5453f0).
 U DirectionGraphics(const Flight& f, U base) {
     const U adx = Abs(f.dx), twice = Abs(f.dy) + Abs(f.dy);
     const bool steep = static_cast<std::int32_t>(adx) <= static_cast<std::int32_t>(twice);
@@ -160,8 +182,9 @@ U DirectionGraphics(const Flight& f, U base) {
     return !steep ? base + 1 : down ? base + 0 : base + 2;
 }
 
-// The three stages of an arrow-like flight (0x545150, 0x5453f0). EAX = the
-// last Add's.
+// The three stages of an arrow-like flight (0x545150, 0x5453f0): the first
+// quarter of the way, the middle half along the arc, the last quarter (in
+// 256ths: 64, 128, 192). EAX = the last Add's.
 U ThreeStages(MapEffectTable* self, U tick, const Flight& f, U g, U a2, U a3, U a4, U a5, U a6, U a7, U a8, U a9) {
     const U p1x = Div256(f.dx * 64) + a2, p2x = Div256(f.dx * 192) + a2;
     const U lift = Div256(f.arc * 64);
@@ -185,7 +208,7 @@ void EndEffects(MapEffectTable* self, U tick, U time, U startKind, U endKind, U 
     MapEffects_Add(self, nullptr, &effect);
     MapEffect_Make_543f70(&effect, Edx(tick + time), a6, a7, endKind);
     MapEffects_Add(self, nullptr, &effect);
-    MapEffect_Make_543930(&effect, Edx(tick + time), 9, a6, a7, a8, a9 + 3, 0xd0031);
+    MapEffect_Make_543930(&effect, Edx(tick + time), 9, a6, a7, a8, a9 + 3, kImpactGraphics);
     MapEffects_Add(self, nullptr, &effect);
 }
 
@@ -283,53 +306,54 @@ std::uint32_t __fastcall MapEffects_RemoveMatching(MapEffectTable* self, void*, 
 std::uint32_t __fastcall MapEffects_SpawnArrow(MapEffectTable* self, void*, U a1, U a2, U a3, U a4, U a5, U a6, U a7,
                                                U a8, U a9) {
     const U tick = a1 + 10;
-    const Flight f = MakeFlight(a2, a3, a6, a7, 12000, g_flightFactor05);
-    return ThreeStages(self, tick, f, DirectionGraphics(f, 0x10064), a2, a3, a4, a5, a6, a7, a8, a9);
+    const Flight f = MakeFlight(a2, a3, a6, a7, kFlatArcDivisor, g_flightFactor05);
+    return ThreeStages(self, tick, f, DirectionGraphics(f, kArrowGraphics), a2, a3, a4, a5, a6, a7, a8, a9);
 }
 
-// Purpose: Shows a thrown object (graphics 0x16000x by direction) flying in three stages, with an
-// effect where it starts and where it lands; returns the flight time plus 3 ticks.
+// Purpose: Shows a thrown object (kProjectile1Graphics + direction) flying in three stages, with
+// an effect where it starts and where it lands; returns the flight time plus 3 ticks.
 std::uint32_t __fastcall MapEffects_SpawnProjectile1(MapEffectTable* self, void*, U a1, U a2, U a3, U a4, U a5, U a6,
                                                      U a7, U a8, U a9) {
     const U tick = a1 + 3;
-    const Flight f = MakeFlight(a2, a3, a6, a7, 12000, g_flightFactor05);
-    ThreeStages(self, tick, f, DirectionGraphics(f, 0x160008), a2, a3, a4, a5, a6, a7, a8, a9);
-    EndEffects(self, tick, f.time, 0x55, 0x59, a2, a3, a6, a7, a8, a9);
+    const Flight f = MakeFlight(a2, a3, a6, a7, kFlatArcDivisor, g_flightFactor05);
+    ThreeStages(self, tick, f, DirectionGraphics(f, kProjectile1Graphics), a2, a3, a4, a5, a6, a7, a8, a9);
+    EndEffects(self, tick, f.time, 85, 89, a2, a3, a6, a7, a8, a9);  // kinds 0x55, 0x59
     return f.time + 3;
 }
 
-// Purpose: Shows a thrown object (graphics 0xc0008) on a high arc in three stages, with start and
-// landing effects; returns the flight time plus 2 ticks.
+// Purpose: Shows a thrown object (kProjectile0Graphics) on a high arc in three stages, with start
+// and landing effects; returns the flight time plus 2 ticks.
 std::uint32_t __fastcall MapEffects_SpawnProjectile0(MapEffectTable* self, void*, U a1, U a2, U a3, U a4, U a5, U a6,
                                                      U a7, U a8, U a9) {
     const U tick = a1 + 2;
-    const Flight f = MakeFlight(a2, a3, a6, a7, 1500, g_flightFactor0);
+    const Flight f = MakeFlight(a2, a3, a6, a7, kHighArcDivisor, g_flightFactor0);
     const U p1x = Div256(f.dx * 64) + a2, p2x = Div256(f.dx * 192) + a2;
     const U lift = Div256(f.arc * 160);
     const U p1y = Div256(f.dy * 64) - lift + a3, p2y = Div256(f.dy * 192) - lift + a3;
     const U t1 = Div256(f.time * 64);
     MapEffect effect;
-    MapEffect_Make_543a10(&effect, Edx(tick), t1, a2, a3, p1x, p1y, a4, a5, 0xc0008, 0, 0xc);
+    MapEffect_Make_543a10(&effect, Edx(tick), t1, a2, a3, p1x, p1y, a4, a5, kProjectile0Graphics, 0, 12);
     MapEffects_Add(self, nullptr, &effect);
     MapEffect_Make_543c40(&effect, Edx(tick + t1), Div256(f.time * 128), p1x, p1y, p2x, p2y, Div256(f.arc * 80), a4,
-                          a5, a8, a9, 0xc0008, 0xc);
+                          a5, a8, a9, kProjectile0Graphics, 12);
     MapEffects_Add(self, nullptr, &effect);
-    MapEffect_Make_543a10(&effect, Edx(tick + Div256(f.time * 192)), t1, p2x, p2y, a6, a7, a8, a9, 0xc0008, 0, 0xc);
+    MapEffect_Make_543a10(&effect, Edx(tick + Div256(f.time * 192)), t1, p2x, p2y, a6, a7, a8, a9,
+                          kProjectile0Graphics, 0, 12);
     MapEffects_Add(self, nullptr, &effect);
-    EndEffects(self, tick, f.time, 0x54, 0x58, a2, a3, a6, a7, a8, a9);
+    EndEffects(self, tick, f.time, 84, 88, a2, a3, a6, a7, a8, a9);  // kinds 0x54, 0x58
     return f.time + 2;
 }
 
-// Purpose: Shows a thrown object (graphics 0x200008) in one arc, with start and landing effects;
+// Purpose: Shows a thrown object (kProjectile2Graphics) in one arc, with start and landing effects;
 // returns the flight time plus 8 ticks.
 std::uint32_t __fastcall MapEffects_SpawnProjectile2(MapEffectTable* self, void*, U a1, U a2, U a3, U a4, U a5, U a6,
                                                      U a7, U a8, U a9) {
     const U tick = a1 + 8;
-    const Flight f = MakeFlight(a2, a3, a6, a7, 12000, g_flightFactor2);
+    const Flight f = MakeFlight(a2, a3, a6, a7, kFlatArcDivisor, g_flightFactor2);
     MapEffect effect;
-    MapEffect_Make_543c40(&effect, Edx(tick), f.time, a2, a3, a6, a7, f.arc, a4, a5, a8, a9, 0x200008, 0xc);
+    MapEffect_Make_543c40(&effect, Edx(tick), f.time, a2, a3, a6, a7, f.arc, a4, a5, a8, a9, kProjectile2Graphics, 12);
     MapEffects_Add(self, nullptr, &effect);
-    EndEffects(self, tick, f.time, 0x56, 0x5a, a2, a3, a6, a7, a8, a9);
+    EndEffects(self, tick, f.time, 86, 90, a2, a3, a6, a7, a8, a9);  // kinds 0x56, 0x5a
     return f.time + 8;
 }
 
@@ -348,24 +372,37 @@ std::uint32_t __fastcall MapEffects_SpawnProjectile(MapEffectTable* self, void*,
 
 namespace {
 
-// The stack tables of 0x544630, indexed by a3 + 2 * a2 (0..7).
-constexpr U kWorkGraphics[8] = {0xd0025, 0xd0024, 0x170025, 0x170024, 0x210027, 0x210026, 0x2b0028, 0x2b0027};
-constexpr U kWorkFrames[8] = {0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19};
-constexpr U kWorkStart[8] = {0x32, 0x32, 0x46, 0x32, 0x32, 0x32, 0x32, 0x32};
-constexpr U kWorkKinds[8] = {0x5e, 0x58, 0x5a, 0x6e, 0x78, 0x66, 0x5e, 0x58};
-constexpr U kWorkSparkDelay[8] = {0x23, 0x26, 0x29, 0x19, 0x19, 0x24, 0x23, 0x26};
-constexpr U kWorkOffsets[8][2] = {{0xffffffdau, 0xffffffbau}, {0xffffffdau, 0xffffffb8u}, {0xffffffe6u, 0xffffffd9u},
-                                  {0xffffffe5u, 0xffffffd6u}, {0xffffffe1u, 0xffffffbfu}, {0xffffffd7u, 0xffffffd7u},
-                                  {0xffffffe8u, 0xffffffaeu}, {0xffffffe0u, 0xffffffaeu}};
+// The stack tables of 0x544630, indexed by a3 + 2 * a2 (0..7; a2 the race,
+// a3 the variant). Times in ticks, offsets in pixels.
+constexpr U kWorkGraphics[8] = {Graphics(13, 37), Graphics(13, 36), Graphics(23, 37), Graphics(23, 36),
+                                Graphics(33, 39), Graphics(33, 38), Graphics(43, 40), Graphics(43, 39)};
+static_assert(kWorkGraphics[0] == 0xd0025 && kWorkGraphics[3] == 0x170024 && kWorkGraphics[5] == 0x210026 &&
+              kWorkGraphics[7] == 0x2b0027);
+constexpr U kWorkFrames[8] = {25, 25, 25, 25, 25, 25, 25, 25};
+constexpr U kWorkStart[8] = {50, 50, 70, 50, 50, 50, 50, 50};
+constexpr U kWorkKinds[8] = {94, 88, 90, 110, 120, 102, 94, 88};
+constexpr U kWorkSparkDelay[8] = {35, 38, 41, 25, 25, 36, 35, 38};
+// Where the sparks fly, relative to the worker (x, y); added as wrapping
+// 32-bit values like the original's.
+constexpr std::int32_t kWorkOffsets[8][2] = {{-38, -70}, {-38, -72}, {-26, -39}, {-27, -42},
+                                             {-31, -65}, {-41, -41}, {-24, -82}, {-32, -82}};
 
-// The stack tables of 0x5449f0, indexed by a3 + 4 * a2 (0..15).
-constexpr U kToolOffsets[16][2] = {
-    {0xffffffdbu, 0xfffffff2u}, {0xffffffdfu, 0xfffffff2u}, {0xfffffff1u, 0xffffffd9u}, {0xffffffefu, 0xffffffdbu},
-    {0xffffffe5u, 0xfffffff9u}, {0xffffffdeu, 0xfffffffcu}, {0x22u, 0xffffffefu},       {0u, 0u},
-    {0xffffffe3u, 2u},          {0xffffffdeu, 0xffffffffu}, {0xfffffff6u, 0xffffffecu}, {0u, 0u},
-    {0xffffffd5u, 0xffffffefu}, {0xffffffd5u, 0xfffffff3u}, {0x24u, 0xffffffbeu},       {0u, 0u}};
-constexpr U kToolDelay[16] = {0x2d, 0x32, 0x78, 0x276, 0x2d, 0x28, 0x78, 0, 0x2d, 0x28, 0x78, 0, 0x2d, 0x32, 0x78, 0};
-constexpr U kToolStart[16] = {0x62, 0x2e, 0xc8, 0x50, 0x5f, 0x0f, 0xf8, 0, 0x36, 0x58, 0xdb, 0, 0x62, 0x2e, 0xc8, 0};
+// The stack tables of 0x5449f0, indexed by a3 + 4 * a2 (0..15; a2 the race,
+// a3 the variant 0..3, of which only 0..2 have values for races 1..3).
+constexpr std::int32_t kToolOffsets[16][2] = {{-37, -14}, {-33, -14}, {-15, -39}, {-17, -37},
+                                              {-27, -7},  {-34, -4},  {34, -17},  {0, 0},
+                                              {-29, 2},   {-34, -1},  {-10, -20}, {0, 0},
+                                              {-43, -17}, {-43, -13}, {36, -66},  {0, 0}};
+constexpr U kToolDelay[16] = {45, 50, 120, 630, 45, 40, 120, 0, 45, 40, 120, 0, 45, 50, 120, 0};
+constexpr U kToolStart[16] = {98, 46, 200, 80, 95, 15, 248, 0, 54, 88, 219, 0, 98, 46, 200, 0};
+
+// The spark effect of both functions: 6 ticks appearing, a moving middle
+// part, 6 ticks fading (frames 0, 6, 30 of kSparkGraphics).
+constexpr U kSparkFadeTicks = 6;
+
+U AddOffset(U base, std::int32_t offset) {
+    return base + static_cast<U>(offset);
+}
 
 }  // namespace
 
@@ -381,36 +418,39 @@ std::uint32_t __fastcall MapEffects_Spawn_544630(MapEffectTable* self, void*, U 
     const U second = a1 + start + frames;
     MapEffect_Make_543bc0(&effect, nullptr, a4, second, kWorkKinds[i], a5, a6, a7, a8, graphics, frames - 1, 1);
     MapEffects_Add(self, nullptr, &effect);
-    const U x = a5 + kWorkOffsets[i][0], y = a6 + kWorkOffsets[i][1];
+    const U x = AddOffset(a5, kWorkOffsets[i][0]), y = AddOffset(a6, kWorkOffsets[i][1]);
     const U delay = kWorkSparkDelay[i];
     const U spark = start - delay + a1;
-    MapEffect_Make_543bc0(&effect, nullptr, a4, spark, 6, x, y, a7, a8, 0xd002a, 0, 6);
+    MapEffect_Make_543bc0(&effect, nullptr, a4, spark, kSparkFadeTicks, x, y, a7, a8, kSparkGraphics, 0, 6);
     MapEffects_Add(self, nullptr, &effect);
-    MapEffect_Make_543df0(&effect, nullptr, a4, spark + 6, delay + frames - 12, 0x30, x, y, a7, a8, 0xd002a, 6, 0x18);
+    MapEffect_Make_543df0(&effect, nullptr, a4, spark + kSparkFadeTicks, delay + frames - 2 * kSparkFadeTicks, 48, x,
+                          y, a7, a8, kSparkGraphics, 6, 24);
     MapEffects_Add(self, nullptr, &effect);
-    MapEffect_Make_543bc0(&effect, nullptr, a4, second - 6, 6, x, y, a7, a8, 0xd002a, 0x1e, 6);
+    MapEffect_Make_543bc0(&effect, nullptr, a4, second - kSparkFadeTicks, kSparkFadeTicks, x, y, a7, a8,
+                          kSparkGraphics, 30, 6);
     return MapEffects_Add(self, nullptr, &effect);
 }
 
-// Purpose: Shows a worker's tool effect (graphics 0xd002b, or sparks 0xd002a for variants 2 and 3)
-// at an offset that depends on the race and the variant.
+// Purpose: Shows a worker's tool effect (kToolGraphics, or sparks kSparkGraphics for variants 2
+// and 3) at an offset that depends on the race and the variant.
 std::uint32_t __fastcall MapEffects_Spawn_5449f0(MapEffectTable* self, void*, U a1, U a2, U a3, U a4, U a5, U a6, U a7,
                                                  U a8) {
     const U i = a3 + 4 * a2;
-    const U x = a5 + kToolOffsets[i][0], y = a6 + kToolOffsets[i][1];
+    const U x = AddOffset(a5, kToolOffsets[i][0]), y = AddOffset(a6, kToolOffsets[i][1]);
     MapEffect effect;
     if (static_cast<std::int32_t>(a3) < 2) {
-        MapEffect_Make_543d60(&effect, nullptr, a4, a1 + kToolStart[i], kToolDelay[i], 0x50, x, y, a7, a8, 0xd002b,
-                              0x28);
+        MapEffect_Make_543d60(&effect, nullptr, a4, a1 + kToolStart[i], kToolDelay[i], 80, x, y, a7, a8, kToolGraphics,
+                              40);
         return MapEffects_Add(self, nullptr, &effect);
     }
     const U start = a1 + kToolStart[i];
-    MapEffect_Make_543bc0(&effect, nullptr, a4, start, 6, x, y, a7, a8, 0xd002a, 0, 6);
+    MapEffect_Make_543bc0(&effect, nullptr, a4, start, kSparkFadeTicks, x, y, a7, a8, kSparkGraphics, 0, 6);
     MapEffects_Add(self, nullptr, &effect);
-    MapEffect_Make_543df0(&effect, nullptr, a4, start + 6, kToolDelay[i] - 12, 0x48, x, y, a7, a8, 0xd002a, 6, 0x18);
+    MapEffect_Make_543df0(&effect, nullptr, a4, start + kSparkFadeTicks, kToolDelay[i] - 2 * kSparkFadeTicks, 72, x,
+                          y, a7, a8, kSparkGraphics, 6, 24);
     MapEffects_Add(self, nullptr, &effect);
-    MapEffect_Make_543bc0(&effect, nullptr, a4, kToolStart[i] + kToolDelay[i] + a1 - 6, 6, x, y, a7, a8, 0xd002a, 0x1e,
-                          6);
+    MapEffect_Make_543bc0(&effect, nullptr, a4, kToolStart[i] + kToolDelay[i] + a1 - kSparkFadeTicks, kSparkFadeTicks,
+                          x, y, a7, a8, kSparkGraphics, 30, 6);
     return MapEffects_Add(self, nullptr, &effect);
 }
 

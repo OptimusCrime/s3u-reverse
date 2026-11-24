@@ -141,6 +141,11 @@ ThrowAssertmentFailed 0x6119b0, ThrowOutOfMemory 0x610960, ThrowWin32Error
 
 ### Corrections of existing names (not in the TSV)
 
+**Done 2026-11-24:** 0x463100 is `Win32::CWin32WaitableBag_Win32_CWin32Waitable::WaitFor`
+(hook `CWin32WaitableBag_WaitFor` in fast.cpp; original-mode tooling version
+6); `CMessageQueue::owner` is now `window`; 0x618250 had already been
+renamed `Folded_GetMember4` in the naming pass.
+
 - 0x00463100 `Win32::CWin32Waitable::WaitForXYZ` (identified, passthrough
   in fast.cpp): `this` is a `CWin32WaitableBag<CWin32Waitable>` (list at
   +4), not a CWin32Waitable; better

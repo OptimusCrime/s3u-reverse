@@ -21,8 +21,11 @@
 // (pointer to it), 0x24 handle message, 0x28 / 0x2c draw, 0x30..0x58
 // per-message-type handlers (5-dword message by value; 0x54 without it),
 // 0x5c / 0x60 mouse entered / left, 0x64 focus changed (bool), 0x68 parent
-// changed (bool), 0x6c enable (bool), 0x70 moved (rect, delta), 0x74
-// resized (rect, size delta), 0x78 a query (probably "can be enabled").
+// changed (bool: attached), 0x6c shown on / removed from a screen (bool),
+// 0x70 moved (rect, delta), 0x74 resized (rect, size delta), 0x78 GetScreen
+// (the CScreen the element is on: the base asks its parent, CScreen 0x417f90
+// returns itself). Message type 0x10 (slot 0x30) is the left button going
+// down (re/ui_classes.md).
 //
 // Messages are 20-byte records passed by value: byte +0 type (1, 2, 3, 0x20,
 // 0x30, 0x40: mouse messages, see WantsMessage), words +8 / +0xa x / y.
@@ -39,6 +42,7 @@
 #include "game/ui/screen_element_layout.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/callee_stub.h"
 #include "test/difftest.h"
 #include "watcom/ptr_vector.h"
@@ -65,6 +69,17 @@ using ui::CScreenGroup;
 
 namespace {
 
+namespace slot = ui::element_slot;
+namespace group_slot = ui::group_slot;
+
+// The background colour a new element fills with (CScreenElement +0x04).
+constexpr std::uint32_t kDefaultBackground = 0x1111;
+// A control's tooltip closes once the mouse moved this far (pixels, in x or
+// y) from where it opened.
+constexpr std::int32_t kTooltipCloseDistance = 50;  // compared signed, like the original
+// DDPIXELFORMAT is 32 bytes (Dialog::PixelFormat copies it as dwords).
+constexpr int kPixelFormatDwords = sizeof(DDPIXELFORMAT) / 4;
+static_assert(kPixelFormatDwords == 8);
 
 // CGroupControl: the "this" its control part's methods get is 0x7c bytes
 // before the group part's "this" (it is where the group part starts).
@@ -135,7 +150,7 @@ using Draw2Fn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t 
 using Draw3Fn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t surface, const RECT* rect, std::uint32_t c);
 using IntersectFn = RECT*(__fastcall*)(void* self, void* edx, RECT* out, const RECT* a, const RECT* b);
 using GlobalFn = std::uint32_t(__cdecl*)();
-using CopyGlobalsFn = void*(__stdcall*)(void* out);
+using PixelFormatFn = void*(__stdcall*)(void* out);
 using VoidArg1Fn = void(__fastcall*)(void* self, void* edx, std::uint32_t a);
 using TableFn = std::uint32_t(__stdcall*)(std::uint32_t index);
 using MovedFn = std::uint32_t(__fastcall*)(void* self, void* edx, const RECT* rect, const std::int32_t* delta);
@@ -153,7 +168,7 @@ std::uint32_t __fastcall CScreenElement_MoveBy(void* self, void* edx, std::int32
 std::uint32_t __fastcall CScreenElement_SetParent(void* self, void* edx, std::uint32_t parent);
 std::uint32_t __fastcall CScreenElement_ContainsPoint(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall CScreenElement_NeedsRedraw(void* self, void* edx);
-std::uint32_t __fastcall CScreenElement_IsQuery78Zero(void* self, void* edx);
+std::uint32_t __fastcall CScreenElement_IsOffScreen(void* self, void* edx);
 std::uint32_t __fastcall CScreenElement_OnMessage(void* self, void* edx, Message message);
 std::uint32_t __fastcall CScreenElement_WantsMessage(void* self, void* edx, const Message* message);
 std::uint32_t __fastcall CScreenElement_DispatchMessage(void* self, void* edx, Message message);
@@ -165,21 +180,21 @@ std::uint32_t __fastcall CScreenElement_SetFocus(void* self, void* edx, std::uin
 std::uint32_t __fastcall CScreenElement_KillFocus(void* self, void* edx);
 std::uint32_t __fastcall CScreenElement_Invalidate(void* self, void* edx);
 std::uint32_t __fastcall CScreenElement_TrackMouse(void* self, void* edx, Message message);
-std::uint32_t __fastcall CScreenElement_Enable(void* self, void* edx, std::uint32_t enable);
-std::uint32_t __fastcall CScreenElement_ParentQuery78(void* self, void* edx);
+std::uint32_t __fastcall CScreenElement_OnParentChanged(void* self, void* edx, std::uint32_t attached);
+std::uint32_t __fastcall CScreenElement_GetScreen(void* self, void* edx);
 void __fastcall CScreenElement_SetFlag1F(void* self, void* edx, std::uint32_t unused);
-std::uint32_t __cdecl Dialog_Global7a823c();
-void* __stdcall Dialog_CopyGlobals7a8020(void* out);
-std::uint32_t __stdcall Dialog_Table7a809c(std::uint32_t index);
-std::uint32_t __stdcall Dialog_Table7a8064(std::uint32_t index);
-std::uint32_t __cdecl Dialog_Global7a8238();
-std::uint32_t __cdecl Dialog_Global7a8240();
+std::uint32_t __cdecl Dialog_Surface();
+void* __stdcall Dialog_PixelFormat(void* out);
+std::uint32_t __stdcall Dialog_Font(std::uint32_t index);
+std::uint32_t __stdcall Dialog_Color(std::uint32_t index);
+std::uint32_t __cdecl Dialog_GraphicsData();
+std::uint32_t __cdecl Dialog_Pen();
 std::uint32_t __fastcall UiGroup_WantsMessage(void* self, void* edx, const Message* message);
 std::uint32_t __fastcall UiGroup_SetFocus(void* self, void* edx, std::uint32_t child);
 std::uint32_t __fastcall UiGroup_KillFocus(void* self, void* edx);
 std::uint32_t __fastcall UiGroup_SetFocus_429d70(void* self, void* edx, std::uint32_t child);
 std::uint32_t __fastcall UiGroup_WantsMessage_429df0(void* self, void* edx, const Message* message);
-std::uint32_t __fastcall UiGroup_Enable_429fd0(void* self, void* edx, std::uint32_t enable);
+std::uint32_t __fastcall UiGroup_OnParentChanged_429fd0(void* self, void* edx, std::uint32_t attached);
 std::uint32_t __fastcall CScreenGroup_SetFlag1F(void* self, void* edx, std::uint32_t argument);
 std::uint32_t __fastcall CScreenGroup_OnMoved(void* self, void* edx, const RECT* rect, const std::int32_t* delta);
 std::uint32_t __fastcall CScreenGroup_Draw(void* self, void* edx, std::uint32_t surface, const RECT* rectA,
@@ -194,17 +209,17 @@ std::uint32_t __fastcall CScreenGroup_Draw_42a180(void* self, void* edx, std::ui
 std::uint32_t __fastcall CScreenGroup_HandleMessage_429e10(void* self, void* edx, Message message);
 std::uint32_t __fastcall CScreen_HandleMessage(void* self, void* edx, Message message);
 void __fastcall CControl_DeleteTooltip(void* control, void* edx);
-std::uint32_t __fastcall CControl_OnMessage10(void* self, void* edx, Message message);
+std::uint32_t __fastcall CControl_OnLButtonDown(void* self, void* edx, Message message);
 std::uint32_t __fastcall CControl_OnMouseMove(void* self, void* edx, Message message);
 std::uint32_t __fastcall CControl_OnMouseEnter(void* self, void* edx, Message message);
 std::uint32_t __fastcall CControl_OnMouseLeave(void* self, void* edx, Message message);
-std::uint32_t __fastcall CGroupControl_OnMessage10(void* self, void* edx, Message message);
+std::uint32_t __fastcall CGroupControl_OnLButtonDown(void* self, void* edx, Message message);
 std::uint32_t __fastcall CGroupControl_OnMouseMove(void* self, void* edx, Message message);
 std::uint32_t __fastcall CGroupControl_OnMouseEnter(void* self, void* edx, Message message);
 std::uint32_t __fastcall CGroupControl_OnMouseLeave(void* self, void* edx, Message message);
-std::uint32_t __fastcall CScreenGroup_OnEnable(void* self, void* edx, std::uint32_t enable);
-std::uint32_t __fastcall CControl_OnEnable(void* self, void* edx, std::uint32_t enable);
-std::uint32_t __fastcall CGroupControl_OnEnable(void* self, void* edx, std::uint32_t enable);
+std::uint32_t __fastcall CScreenGroup_OnShow(void* self, void* edx, std::uint32_t shown);
+std::uint32_t __fastcall CControl_OnShow(void* self, void* edx, std::uint32_t shown);
+std::uint32_t __fastcall CGroupControl_OnShow(void* self, void* edx, std::uint32_t shown);
 std::uint32_t __fastcall CScreenElement_FillBackground(void* self, void* edx, void* surface, const RECT* rect);
 std::uint32_t __fastcall CScreenGroup_FillBackground(void* self, void* edx, void* surface, const RECT* rect);
 std::uint32_t __fastcall CScreenGroup_FillBackground_429e50(void* self, void* edx, void* surface, const RECT* rect);
@@ -219,7 +234,7 @@ namespace {
 
 void InitScreenElement(void* self) {
     CScreenElement* element = ElementOf(self);
-    element->background = 0x1111;
+    element->background = kDefaultBackground;
     element->parent = 0;
     element->has_focus = 0;
     element->mouse_inside = 0;
@@ -245,7 +260,7 @@ S3RE_HOOK(0x00415660, CScreenElement_ConstructRect, CtorRectFn, Original_CScreen
 // Purpose: Constructor of a UI element at a given screen rectangle. Byte
 // +0x1f is left as it was (the original doesn't set it here).
 void* __fastcall CScreenElement_ConstructRect(void* self, void* /*edx*/, const RECT* rect) {
-    ElementOf(self)->background = 0x1111;
+    ElementOf(self)->background = kDefaultBackground;
     std::memcpy(&ElementOf(self)->rect, rect, sizeof(RECT));
     InitScreenElement(self);
     return self;
@@ -260,7 +275,7 @@ std::uint32_t __fastcall CScreenElement_Destroy(void* self, void* /*edx*/) {
     if (parent == nullptr) {
         return reinterpret_cast<std::uint32_t>(self);
     }
-    return CallVirtual<std::uint32_t>(parent, 0x04, self);
+    return CallVirtual<std::uint32_t>(parent, group_slot::kRemoveChild, self);
 }
 
 S3RE_HOOK(0x00415640, CScreenElement_DeletingDestroy, DeletingDtorFn, Original_CScreenElement_DeletingDestroy,
@@ -271,7 +286,7 @@ S3RE_HOOK(0x00415640, CScreenElement_DeletingDestroy, DeletingDtorFn, Original_C
 void* __fastcall CScreenElement_DeletingDestroy(void* self, void* /*edx*/, std::uint32_t flags) {
     CScreenElement_Destroy(self, nullptr);
     if ((flags & 1) != 0) {
-        reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(self);
+        msvc6::GameOperatorDelete(self);
     }
     return self;
 }
@@ -303,10 +318,10 @@ std::uint32_t __fastcall CScreenElement_SetRect(void* self, void* /*edx*/, const
                             (rect->bottom - own.bottom) - rect->top + own.top};
     own = *rect;
     if (move[0] != 0 || move[1] != 0) {
-        CallVirtual<std::uint32_t>(self, 0x70, rect, static_cast<void*>(move));
+        CallVirtual<std::uint32_t>(self, slot::kOnMoved, rect, static_cast<void*>(move));
     }
     if (size[0] != 0 || size[1] != 0) {
-        return CallVirtual<std::uint32_t>(self, 0x74, rect, static_cast<void*>(size));
+        return CallVirtual<std::uint32_t>(self, slot::kOnResized, rect, static_cast<void*>(size));
     }
     return 0;
 }
@@ -357,7 +372,7 @@ std::uint32_t __fastcall CScreenElement_SetParent(void* self, void* /*edx*/, std
         return parent;
     }
     ElementOf(self)->parent = parent;
-    return CallVirtual<std::uint32_t>(self, 0x68, static_cast<std::uint32_t>(parent != 0 ? 1 : 0));
+    return CallVirtual<std::uint32_t>(self, slot::kOnParentChanged, static_cast<std::uint32_t>(parent != 0 ? 1 : 0));
 }
 
 S3RE_HOOK(0x00415830, CScreenElement_NeedsRedraw, NoArgFn, Original_CScreenElement_NeedsRedraw,
@@ -368,13 +383,13 @@ std::uint32_t __fastcall CScreenElement_NeedsRedraw(void* self, void* /*edx*/) {
     return ElementOf(self)->needs_redraw;
 }
 
-S3RE_HOOK(0x00415840, CScreenElement_IsQuery78Zero, NoArgFn, Original_CScreenElement_IsQuery78Zero,
-          CScreenElement_IsQuery78Zero);
+S3RE_HOOK(0x00415840, CScreenElement_IsOffScreen, NoArgFn, Original_CScreenElement_IsOffScreen,
+          CScreenElement_IsOffScreen);
 
-// Purpose: The negation of the element's virtual query 0x78 (probably "is
-// it disabled").
-std::uint32_t __fastcall CScreenElement_IsQuery78Zero(void* self, void* /*edx*/) {
-    return CallVirtual<std::uint32_t>(self, 0x78) == 0 ? 1 : 0;
+// Purpose: Whether the element is not on a screen (GetScreen, slot 0x78,
+// returns 0). Was IsQuery78Zero.
+std::uint32_t __fastcall CScreenElement_IsOffScreen(void* self, void* /*edx*/) {
+    return CallVirtual<std::uint32_t>(self, slot::kGetScreen) == 0 ? 1 : 0;
 }
 
 S3RE_HOOK(0x00415ba0, CScreenElement_SetFocus, Arg1Fn, Original_CScreenElement_SetFocus, CScreenElement_SetFocus);
@@ -384,9 +399,9 @@ S3RE_HOOK(0x00415ba0, CScreenElement_SetFocus, Arg1Fn, Original_CScreenElement_S
 std::uint32_t __fastcall CScreenElement_SetFocus(void* self, void* /*edx*/, std::uint32_t /*unused*/) {
     ElementOf(self)->has_focus = 1;
     if (void* parent = reinterpret_cast<void*>(ElementOf(self)->parent); parent != nullptr) {
-        CallVirtual<std::uint32_t>(ParentBase(parent), 0x0c, self);
+        CallVirtual<std::uint32_t>(ParentBase(parent), slot::kSetFocus, self);
     }
-    return CallVirtual<std::uint32_t>(self, 0x64, 1u);
+    return CallVirtual<std::uint32_t>(self, slot::kOnFocusChanged, 1u);
 }
 
 S3RE_HOOK(0x00415bd0, CScreenElement_KillFocus, NoArgFn, Original_CScreenElement_KillFocus,
@@ -397,7 +412,7 @@ S3RE_HOOK(0x00415bd0, CScreenElement_KillFocus, NoArgFn, Original_CScreenElement
 std::uint32_t __fastcall CScreenElement_KillFocus(void* self, void* /*edx*/) {
     std::uint32_t result = 0;
     if (ElementOf(self)->has_focus != 0) {
-        result = CallVirtual<std::uint32_t>(self, 0x64, 0u);
+        result = CallVirtual<std::uint32_t>(self, slot::kOnFocusChanged, 0u);
     }
     ElementOf(self)->has_focus = 0;
     return result;
@@ -414,34 +429,37 @@ std::uint32_t __fastcall CScreenElement_Invalidate(void* self, void* /*edx*/) {
     if (parent == nullptr) {
         return 0;
     }
-    return CallVirtual<std::uint32_t>(ParentBase(parent), 0x1c);
+    return CallVirtual<std::uint32_t>(ParentBase(parent), slot::kInvalidate);
 }
 
-S3RE_HOOK(0x00415ca0, CScreenElement_Enable, Arg1Fn, Original_CScreenElement_Enable, CScreenElement_Enable);
+S3RE_HOOK(0x00415ca0, CScreenElement_OnParentChanged, Arg1Fn, Original_CScreenElement_OnParentChanged, CScreenElement_OnParentChanged);
 
-// Purpose: Probably enables (if its query 0x78 allows it) or disables the
-// element.
-std::uint32_t __fastcall CScreenElement_Enable(void* self, void* /*edx*/, std::uint32_t enable) {
-    if (static_cast<std::uint8_t>(enable) == 0) {
-        return CallVirtual<std::uint32_t>(self, 0x6c, 0u);
+// Purpose: Called by SetParent when the element gets or loses its parent
+// (vtable slot 26, 0x68): tells the element it is now shown on a screen
+// (slot 27, 0x6c, with 1) if the new parent chain reaches a screen, or that
+// it was removed from it (0 when detached). Was CScreenElement::Enable.
+std::uint32_t __fastcall CScreenElement_OnParentChanged(void* self, void* /*edx*/, std::uint32_t attached) {
+    if (static_cast<std::uint8_t>(attached) == 0) {
+        return CallVirtual<std::uint32_t>(self, slot::kOnShow, 0u);
     }
-    const std::uint32_t allowed = CallVirtual<std::uint32_t>(self, 0x78);
-    if (allowed == 0) {
-        return allowed;
+    const std::uint32_t screen = CallVirtual<std::uint32_t>(self, slot::kGetScreen);
+    if (screen == 0) {
+        return screen;
     }
-    return CallVirtual<std::uint32_t>(self, 0x6c, 1u);
+    return CallVirtual<std::uint32_t>(self, slot::kOnShow, 1u);
 }
 
-S3RE_HOOK(0x004160d0, CScreenElement_ParentQuery78, NoArgFn, Original_CScreenElement_ParentQuery78,
-          CScreenElement_ParentQuery78);
+S3RE_HOOK(0x004160d0, CScreenElement_GetScreen, NoArgFn, Original_CScreenElement_GetScreen,
+          CScreenElement_GetScreen);
 
-// Purpose: Asks the parent the same query 0x78 (0 without a parent).
-std::uint32_t __fastcall CScreenElement_ParentQuery78(void* self, void* /*edx*/) {
+// Purpose: The screen (CScreen) the element is on: asks the parent (slot
+// 0x78), 0 without a parent. Was ParentQuery78.
+std::uint32_t __fastcall CScreenElement_GetScreen(void* self, void* /*edx*/) {
     void* parent = reinterpret_cast<void*>(ElementOf(self)->parent);
     if (parent == nullptr) {
         return 0;
     }
-    return CallVirtual<std::uint32_t>(ParentBase(parent), 0x78);
+    return CallVirtual<std::uint32_t>(ParentBase(parent), slot::kGetScreen);
 }
 
 S3RE_HOOK(0x00416c60, CScreenElement_SetFlag1F, VoidArg1Fn, Original_CScreenElement_SetFlag1F,
@@ -464,11 +482,11 @@ S3RE_HOOK(0x00415850, CScreenElement_OnMessage, MessageFn, Original_CScreenEleme
 // "accepts" check agrees, then handles it.
 std::uint32_t __fastcall CScreenElement_OnMessage(void* self, void* /*edx*/, Message message) {
     ElementOf(self)->has_focus = 1;
-    const std::uint32_t accepted = CallVirtual<std::uint32_t>(self, 0x20, static_cast<const void*>(&message));
+    const std::uint32_t accepted = CallVirtual<std::uint32_t>(self, slot::kWantsMessage, static_cast<const void*>(&message));
     if (static_cast<std::uint8_t>(accepted) == 0) {
         return accepted;
     }
-    return CallVirtual<std::uint32_t>(self, 0x24, message);
+    return CallVirtual<std::uint32_t>(self, slot::kDispatchMessage, message);
 }
 
 S3RE_HOOK(0x00415890, CScreenElement_WantsMessage, MessagePtrFn, Original_CScreenElement_WantsMessage,
@@ -478,8 +496,10 @@ S3RE_HOOK(0x00415890, CScreenElement_WantsMessage, MessagePtrFn, Original_CScree
 // 1, 2, 3, 0x20, 0x30 and 0x40, otherwise if its position lies inside.
 // Only AL is the result.
 std::uint32_t __fastcall CScreenElement_WantsMessage(void* self, void* /*edx*/, const Message* message) {
+    namespace type = ui::message_type;
     switch (message->type) {
-        case 1: case 2: case 3: case 0x30: case 0x40: case 0x20:
+        case type::kKeyDown: case type::kKeyUp: case type::kChar: case type::kTimer: case type::kCommand:
+        case type::kType20:
             return 1;
         default:
             return CScreenElement_ContainsPoint(self, nullptr, message->x, message->y);
@@ -492,24 +512,25 @@ S3RE_HOOK(0x004158d0, CScreenElement_DispatchMessage, MessageFn, Original_CScree
 // Purpose: Passes a message to the element's handler for its type (one
 // virtual function per type); 0 for types it has no handler for.
 std::uint32_t __fastcall CScreenElement_DispatchMessage(void* self, void* /*edx*/, Message message) {
-    std::size_t slot = 0;
+    namespace type = ui::message_type;
+    std::size_t handler = 0;
     switch (message.type) {
-        case 0x01: slot = 0x44; break;
-        case 0x02: slot = 0x48; break;
-        case 0x03: slot = 0x4c; break;
-        case 0x10: slot = 0x30; break;
-        case 0x12: slot = 0x34; break;
-        case 0x13: slot = 0x38; break;
-        case 0x15: slot = 0x3c; break;
-        case 0x16: slot = 0x40; break;
-        case 0x20: slot = 0x50; break;
-        case 0x30: return CallVirtual<std::uint32_t>(self, 0x54);
-        case 0x40: slot = 0x58; break;
+        case type::kKeyDown: handler = slot::kOnKeyDown; break;
+        case type::kKeyUp: handler = slot::kOnKeyUp; break;
+        case type::kChar: handler = slot::kOnChar; break;
+        case type::kLButtonDown: handler = slot::kOnLButtonDown; break;
+        case type::kLButtonUp: handler = slot::kOnLButtonUp; break;
+        case type::kType13: handler = slot::kOnMessage13; break;
+        case type::kType15: handler = slot::kOnMessage15; break;
+        case type::kMouseMove: handler = slot::kOnMouseMove; break;
+        case type::kType20: handler = slot::kOnMessage20; break;
+        case type::kTimer: return CallVirtual<std::uint32_t>(self, slot::kOnTimer);
+        case type::kCommand: handler = slot::kOnCommand; break;
         default:
             // xor al, al on EAX = this.
             return reinterpret_cast<std::uint32_t>(self) & ~0xffu;
     }
-    return CallVirtual<std::uint32_t>(self, slot, message);
+    return CallVirtual<std::uint32_t>(self, handler, message);
 }
 
 S3RE_HOOK(0x00415c10, CScreenElement_TrackMouse, MessageFn, Original_CScreenElement_TrackMouse,
@@ -527,13 +548,13 @@ std::uint32_t __fastcall CScreenElement_TrackMouse(void* self, void* /*edx*/, Me
             return mouseInside;
         }
         mouseInside = 1;
-        return CallVirtual<std::uint32_t>(self, 0x5c, message);
+        return CallVirtual<std::uint32_t>(self, slot::kOnMouseEnter, message);
     }
     if (mouseInside != 1) {
         return mouseInside;
     }
     mouseInside = 0;
-    return CallVirtual<std::uint32_t>(self, 0x60, message);
+    return CallVirtual<std::uint32_t>(self, slot::kOnMouseLeave, message);
 }
 
 S3RE_HOOK(0x00415aa0, CScreenElement_DrawClipped, Draw2Fn, Original_CScreenElement_DrawClipped,
@@ -547,7 +568,7 @@ std::uint32_t __fastcall CScreenElement_DrawClipped(void* self, void* /*edx*/, s
     IntersectRect(&visible, clip, CScreenElement_Rect(self, nullptr));
     std::uint32_t result = static_cast<std::uint32_t>(IsRectEmpty(&visible));
     if (result == 0) {
-        result = CallVirtual<std::uint32_t>(self, 0x28, surface, static_cast<const void*>(&visible),
+        result = CallVirtual<std::uint32_t>(self, slot::kDraw, surface, static_cast<const void*>(&visible),
                                             static_cast<const void*>(&visible));
     }
     ElementOf(self)->needs_redraw = 0;
@@ -562,65 +583,65 @@ std::uint32_t __fastcall CScreenElement_DrawRect(void* self, void* /*edx*/, std:
                                                  const RECT* rect, std::uint32_t /*unused*/) {
     std::uint32_t result = static_cast<std::uint32_t>(IsRectEmpty(rect));
     if (result == 0) {
-        result = CallVirtual<std::uint32_t>(self, 0x2c, surface, rect);
+        result = CallVirtual<std::uint32_t>(self, slot::kFillBackground, surface, rect);
     }
     ElementOf(self)->needs_redraw = 0;
     return result;
 }
 
 // ---------------------------------------------------------------------------
-// Dialog globals (0x7a8020..0x7a8240; probably fonts and colours of the
-// menu screens, set up by the dialog initialization 0x4168d0)
+// Dialog globals (0x7a8020..0x7a8240): the drawing resources of the menu
+// screens, filled by Dialog::Init (0x416190) and freed by Dialog::Shutdown
+// (0x416760)
 // ---------------------------------------------------------------------------
 
-S3RE_HOOK(0x00416870, Dialog_Global7a823c, GlobalFn, Original_Dialog_Global7a823c, Dialog_Global7a823c);
+S3RE_HOOK(0x00416870, Dialog_Surface, GlobalFn, Original_Dialog_Surface, Dialog_Surface);
 
-// Purpose: Returns a dialog-system global (0x7a823c; probably a font or
-// palette handle).
-std::uint32_t __cdecl Dialog_Global7a823c() {
-    return g_dialogValue7a823c;
+// Purpose: The DirectDraw surface the dialogs draw on with GDI (0x7a823c).
+std::uint32_t __cdecl Dialog_Surface() {
+    return g_dialogSurface;
 }
 
-S3RE_HOOK(0x004168c0, Dialog_Global7a8238, GlobalFn, Original_Dialog_Global7a8238, Dialog_Global7a8238);
+S3RE_HOOK(0x004168c0, Dialog_GraphicsData, GlobalFn, Original_Dialog_GraphicsData, Dialog_GraphicsData);
 
-// Purpose: Returns a dialog-system global (0x7a8238).
-std::uint32_t __cdecl Dialog_Global7a8238() {
-    return g_dialogValue7a8238;
+// Purpose: The graphics data (CGraphicsData*) the dialogs take texts and GUI
+// images from (0x7a8238).
+std::uint32_t __cdecl Dialog_GraphicsData() {
+    return g_dialogGraphicsData;
 }
 
-S3RE_HOOK(0x00416c50, Dialog_Global7a8240, GlobalFn, Original_Dialog_Global7a8240, Dialog_Global7a8240);
+S3RE_HOOK(0x00416c50, Dialog_Pen, GlobalFn, Original_Dialog_Pen, Dialog_Pen);
 
-// Purpose: Returns a dialog-system global (0x7a8240; a GDI object that
-// 0x416760 deletes).
-std::uint32_t __cdecl Dialog_Global7a8240() {
-    return g_dialogGdiObject7a8240;
+// Purpose: The pen the dialogs draw the cursor and frames with (0x7a8240).
+std::uint32_t __cdecl Dialog_Pen() {
+    return g_dialogPen;
 }
 
-S3RE_HOOK(0x00416880, Dialog_CopyGlobals7a8020, CopyGlobalsFn, Original_Dialog_CopyGlobals7a8020,
-          Dialog_CopyGlobals7a8020);
+S3RE_HOOK(0x00416880, Dialog_PixelFormat, PixelFormatFn, Original_Dialog_PixelFormat,
+          Dialog_PixelFormat);
 
-// Purpose: Copies a 32-byte block of dialog settings (at 0x7a8020) out.
-void* __stdcall Dialog_CopyGlobals7a8020(void* out) {
+// Purpose: Copies out the pixel format (DDPIXELFORMAT, 32 bytes at
+// 0x7a8020) of the dialogs' drawing surface.
+void* __stdcall Dialog_PixelFormat(void* out) {
     auto* to = static_cast<std::uint32_t*>(out);
-    for (int i = 0; i < 8; ++i) {
-        to[i] = g_dialogSettings[i];
+    for (int i = 0; i < kPixelFormatDwords; ++i) {
+        to[i] = g_dialogPixelFormat[i];
     }
     return out;
 }
 
-S3RE_HOOK(0x004168a0, Dialog_Table7a809c, TableFn, Original_Dialog_Table7a809c, Dialog_Table7a809c);
+S3RE_HOOK(0x004168a0, Dialog_Font, TableFn, Original_Dialog_Font, Dialog_Font);
 
-// Purpose: An entry of a dialog-system table (0x7a809c; probably fonts or
-// colours by index).
-std::uint32_t __stdcall Dialog_Table7a809c(std::uint32_t index) {
-    return g_dialogTable7a809c[index];
+// Purpose: A dialog font by index (font table 0x7a809c).
+std::uint32_t __stdcall Dialog_Font(std::uint32_t index) {
+    return g_dialogFonts[index];
 }
 
-S3RE_HOOK(0x004168b0, Dialog_Table7a8064, TableFn, Original_Dialog_Table7a8064, Dialog_Table7a8064);
+S3RE_HOOK(0x004168b0, Dialog_Color, TableFn, Original_Dialog_Color, Dialog_Color);
 
-// Purpose: An entry of another dialog-system table (0x7a8064, 14 entries).
-std::uint32_t __stdcall Dialog_Table7a8064(std::uint32_t index) {
-    return g_dialogTable7a8064[index];
+// Purpose: A dialog colour by index (colour table 0x7a8064, 14 entries).
+std::uint32_t __stdcall Dialog_Color(std::uint32_t index) {
+    return g_dialogColors[index];
 }
 
 // ---------------------------------------------------------------------------
@@ -653,7 +674,7 @@ std::uint32_t __fastcall UiGroup_SetFocus(void* self, void* /*edx*/, std::uint32
     if (old == nullptr) {
         return result;
     }
-    return CallVirtual<std::uint32_t>(old, 0x10);
+    return CallVirtual<std::uint32_t>(old, slot::kKillFocus);
 }
 
 S3RE_HOOK(0x00417680, UiGroup_KillFocus, NoArgFn, Original_UiGroup_KillFocus, UiGroup_KillFocus);
@@ -664,7 +685,7 @@ std::uint32_t __fastcall UiGroup_KillFocus(void* self, void* /*edx*/) {
     void* old = reinterpret_cast<void*>(GroupOf(self)->focus);
     GroupOf(self)->focus = 0;
     if (old != nullptr) {
-        CallVirtual<std::uint32_t>(old, 0x10);
+        CallVirtual<std::uint32_t>(old, slot::kKillFocus);
     }
     return CScreenElement_KillFocus(GroupBase(self), nullptr);
 }
@@ -685,13 +706,13 @@ std::uint32_t __fastcall UiGroup_WantsMessage_429df0(void* self, void* /*edx*/, 
     return UiGroup_WantsMessage(self, nullptr, message);
 }
 
-S3RE_HOOK(0x00429fd0, UiGroup_Enable_429fd0, Arg1Fn, Original_UiGroup_Enable_429fd0, UiGroup_Enable_429fd0);
+S3RE_HOOK(0x00429fd0, UiGroup_OnParentChanged_429fd0, Arg1Fn, Original_UiGroup_OnParentChanged_429fd0, UiGroup_OnParentChanged_429fd0);
 
-// Purpose: A derived class's Enable, forwarded to its CScreenElement part
-// (vbtable at this-0xb4: the vbptr of the control part whose "this" is
-// this-0x7c, as in CGroupControl).
-std::uint32_t __fastcall UiGroup_Enable_429fd0(void* self, void* /*edx*/, std::uint32_t enable) {
-    return CScreenElement_Enable(VirtualBase(GroupControlOf(self)->vbptr), nullptr, enable);
+// Purpose: A derived class's parent-changed handler (slot 26), forwarded to
+// its CScreenElement part (vbtable at this-0xb4: the vbptr of the control
+// part whose "this" is this-0x7c, as in CGroupControl).
+std::uint32_t __fastcall UiGroup_OnParentChanged_429fd0(void* self, void* /*edx*/, std::uint32_t attached) {
+    return CScreenElement_OnParentChanged(VirtualBase(GroupControlOf(self)->vbptr), nullptr, attached);
 }
 
 // CStaticControl (RTTI name; vtable 0x6560d8): a CScreenElement with its
@@ -797,26 +818,27 @@ S3RE_HOOK(0x00417130, CScreenGroup_HandleMessage, MessageFn, Original_CScreenGro
 // handled).
 std::uint32_t __fastcall CScreenGroup_HandleMessage(void* self, void* /*edx*/, Message message) {
     if (void* captured = reinterpret_cast<void*>(GroupOf(self)->captured); captured != nullptr) {
-        const std::uint32_t accepted = CallVirtual<std::uint32_t>(captured, 0x20, static_cast<const void*>(&message));
+        const std::uint32_t accepted = CallVirtual<std::uint32_t>(captured, slot::kWantsMessage, static_cast<const void*>(&message));
         if (static_cast<std::uint8_t>(accepted) == 0) {
             return 0;
         }
         // (re-read after the call, as in the original)
-        return CallVirtual<std::uint32_t>(reinterpret_cast<void*>(GroupOf(self)->captured), 0x24, message);
+        return CallVirtual<std::uint32_t>(reinterpret_cast<void*>(GroupOf(self)->captured), slot::kDispatchMessage, message);
     }
     std::uint8_t handled =
         static_cast<std::uint8_t>(CScreenElement_DispatchMessage(GroupBase(self), nullptr, message));
     if (handled != 0) {
         return handled;
     }
+    namespace type = ui::message_type;
     switch (message.type) {
-        case 1: case 2: case 3:
+        case type::kKeyDown: case type::kKeyUp: case type::kChar:  // keyboard: to the focus child
             if (void* focus = reinterpret_cast<void*>(GroupOf(self)->focus); focus != nullptr) {
-                handled = static_cast<std::uint8_t>(CallVirtual<std::uint32_t>(focus, 0x24, message));
+                handled = static_cast<std::uint8_t>(CallVirtual<std::uint32_t>(focus, slot::kDispatchMessage, message));
             }
             return handled;
-        case 0x30:
-        case 0x16:
+        case type::kTimer:
+        case type::kMouseMove:  // to every child
             for (std::uint32_t i = 0; i < ChildCount(self); ++i) {
                 CallVirtual<std::uint32_t>(Child(self, i), 0x24, message);
             }
@@ -898,7 +920,9 @@ std::uint32_t __fastcall CScreen_HandleMessage(void* self, void* /*edx*/, Messag
 // the dialogs derive from it). These members get the address of its
 // CScreenElement part ("this" below = control + 0x3c); the base is found
 // through the vbtable at this-0x38. Fields (offsets from the control):
-//   +0x08 an object told when the tooltip time is up (0x4183c0, not done)
+//   +0x08 a functor called on every timer tick (CControl::OnTimer
+//         0x4183c0, not done)
+//   +0x0c disabled (= !enabled, CControl::SetEnabled 0x418810)
 //   +0x10 std::string: the tooltip text
 //   +0x20 the tooltip object (deleted through its vtable slot 0)
 //   +0x24 timeGetTime() of the last mouse movement
@@ -943,16 +967,16 @@ void __fastcall CControl_DeleteTooltip(void* control, void* /*edx*/) {
     if (tooltip == nullptr) {
         return;
     }
-    CallVirtual<std::uint32_t>(tooltip, 0x00, 1u);  // scalar deleting destructor
+    CallVirtual<std::uint32_t>(tooltip, slot::kDeletingDestructor, 1u);  // scalar deleting destructor
     part->tooltip = 0;
 }
 
-S3RE_HOOK(0x00418380, CControl_OnMessage10, MessageFn, Original_CControl_OnMessage10, CControl_OnMessage10);
+S3RE_HOOK(0x00418380, CControl_OnLButtonDown, MessageFn, Original_CControl_OnLButtonDown, CControl_OnLButtonDown);
 
-// Purpose: A control's handler for message type 0x10 (probably a mouse
-// click): gives it the focus (vf03 with 0).
-std::uint32_t __fastcall CControl_OnMessage10(void* self, void* /*edx*/, Message /*message*/) {
-    CallVirtual<std::uint32_t>(ControlBase(self), 0x0c, 0u);
+// Purpose: A control's handler for message type 0x10, the left mouse button
+// going down: gives it the focus (vf03 with 0). Was OnMessage10.
+std::uint32_t __fastcall CControl_OnLButtonDown(void* self, void* /*edx*/, Message /*message*/) {
+    CallVirtual<std::uint32_t>(ControlBase(self), slot::kSetFocus, 0u);
     return BaseHandlerResult(ControlVbptr(self));
 }
 
@@ -970,8 +994,8 @@ std::uint32_t __fastcall CControl_OnMouseMove(void* self, void* /*edx*/, Message
     control->mouse_x = x;
     control->mouse_y = y;
     if (control->tooltip != 0) {
-        if (AbsoluteDifference(control->mouse_x, control->tooltip_x) > 50 ||
-            AbsoluteDifference(y, control->tooltip_y) > 50) {
+        if (AbsoluteDifference(control->mouse_x, control->tooltip_x) > kTooltipCloseDistance ||
+            AbsoluteDifference(y, control->tooltip_y) > kTooltipCloseDistance) {
             CControl_DeleteTooltip(control, nullptr);
         }
     }
@@ -999,12 +1023,13 @@ std::uint32_t __fastcall CControl_OnMouseLeave(void* self, void* /*edx*/, Messag
 // CGroupControl (a control that is also a group; its group part is "this"
 // here, its control part's CScreenElement address this-0x7c).
 
-S3RE_HOOK(0x00429e80, CGroupControl_OnMessage10, MessageFn, Original_CGroupControl_OnMessage10,
-          CGroupControl_OnMessage10);
+S3RE_HOOK(0x00429e80, CGroupControl_OnLButtonDown, MessageFn, Original_CGroupControl_OnLButtonDown,
+          CGroupControl_OnLButtonDown);
 
-// Purpose: CGroupControl's handler for message type 0x10: the control's.
-std::uint32_t __fastcall CGroupControl_OnMessage10(void* self, void* /*edx*/, Message message) {
-    return CControl_OnMessage10(Offset(self, -kGroupControlControl), nullptr, message);
+// Purpose: CGroupControl's left-button-down handler (message type 0x10):
+// the control's.
+std::uint32_t __fastcall CGroupControl_OnLButtonDown(void* self, void* /*edx*/, Message message) {
+    return CControl_OnLButtonDown(Offset(self, -kGroupControlControl), nullptr, message);
 }
 
 S3RE_HOOK(0x00429ec0, CGroupControl_OnMouseMove, MessageFn, Original_CGroupControl_OnMouseMove,
@@ -1035,40 +1060,41 @@ std::uint32_t __fastcall CGroupControl_OnMouseLeave(void* self, void* /*edx*/, M
 }
 
 // ---------------------------------------------------------------------------
-// Batch 25: the "enabled changed" notification (vtable slot 0x6c, vf27) of
+// Batch 25: the "shown on a screen" notification (vtable slot 0x6c, vf27) of
 // groups and controls, and the background fill (slot 0x2c, vf11)
 // ---------------------------------------------------------------------------
 
-S3RE_HOOK(0x004177f0, CScreenGroup_OnEnable, Arg1Fn, Original_CScreenGroup_OnEnable, CScreenGroup_OnEnable);
+S3RE_HOOK(0x004177f0, CScreenGroup_OnShow, Arg1Fn, Original_CScreenGroup_OnShow, CScreenGroup_OnShow);
 
-// Purpose: Tells every child of a group that the group was enabled or
-// disabled (vf27 of each child). The base's handler (0x582530) is empty.
+// Purpose: Tells every child of a group that the group is now shown on a
+// screen or removed from it (vf27 of each child). The base's handler
+// (0x582530) is empty. Was OnEnable.
 // EAX: the vbtable pointer at this-0x7c (left over from that base call).
-std::uint32_t __fastcall CScreenGroup_OnEnable(void* self, void* /*edx*/, std::uint32_t enable) {
+std::uint32_t __fastcall CScreenGroup_OnShow(void* self, void* /*edx*/, std::uint32_t shown) {
     for (std::uint32_t i = 0; i < ChildCount(self); ++i) {
-        CallVirtual<std::uint32_t>(Child(self, i), 0x6c, enable);
+        CallVirtual<std::uint32_t>(Child(self, i), 0x6c, shown);
     }
     return reinterpret_cast<std::uint32_t>(GroupOf(self)->vbptr);
 }
 
-S3RE_HOOK(0x00418520, CControl_OnEnable, Arg1Fn, Original_CControl_OnEnable, CControl_OnEnable);
+S3RE_HOOK(0x00418520, CControl_OnShow, Arg1Fn, Original_CControl_OnShow, CControl_OnShow);
 
-// Purpose: A control being disabled closes its tooltip (only the low byte
-// of the argument counts). EAX: the vbtable pointer at this-0x38.
-std::uint32_t __fastcall CControl_OnEnable(void* self, void* /*edx*/, std::uint32_t enable) {
-    if (static_cast<std::uint8_t>(enable) == 0) {
+// Purpose: A control removed from its screen closes its tooltip (only the
+// low byte of the argument counts). EAX: the vbtable pointer at this-0x38.
+std::uint32_t __fastcall CControl_OnShow(void* self, void* /*edx*/, std::uint32_t shown) {
+    if (static_cast<std::uint8_t>(shown) == 0) {
         CControl_DeleteTooltip(ControlOf(self), nullptr);
     }
     return ControlVbptr(self);
 }
 
-S3RE_HOOK(0x0042a000, CGroupControl_OnEnable, Arg1Fn, Original_CGroupControl_OnEnable, CGroupControl_OnEnable);
+S3RE_HOOK(0x0042a000, CGroupControl_OnShow, Arg1Fn, Original_CGroupControl_OnShow, CGroupControl_OnShow);
 
-// Purpose: CGroupControl's "enabled changed" handler: the control's
+// Purpose: CGroupControl's "shown on a screen" handler: the control's
 // (tooltip), then the group's (children).
-std::uint32_t __fastcall CGroupControl_OnEnable(void* self, void* /*edx*/, std::uint32_t enable) {
-    CControl_OnEnable(Offset(self, -kGroupControlControl), nullptr, enable);
-    return CScreenGroup_OnEnable(self, nullptr, enable);
+std::uint32_t __fastcall CGroupControl_OnShow(void* self, void* /*edx*/, std::uint32_t shown) {
+    CControl_OnShow(Offset(self, -kGroupControlControl), nullptr, shown);
+    return CScreenGroup_OnShow(self, nullptr, shown);
 }
 
 using FillFn = std::uint32_t(__fastcall*)(void* self, void* edx, void* surface, const RECT* rect);
@@ -1284,16 +1310,16 @@ constexpr std::size_t kElement = 0x100;
 constexpr std::size_t kParent = 0x200;
 constexpr std::size_t kGroup = 0x300;
 constexpr std::size_t kChild = 0x380;
-constexpr std::size_t kEnableThis = 0x400;
+constexpr std::size_t kParentChangedThis = 0x400;
 // Where the vbtable pointers lie in the buffer, and the vbtables leading
 // from them to the element.
 constexpr std::size_t kFreeRect = 0x40;  // a free spot for an output RECT
 constexpr std::size_t kGroupVbptr = kGroup - ui::kGroupThis + offsetof(CScreenGroup, vbptr);
-constexpr std::size_t kEnableVbptr = kEnableThis - kGroupControlControl - ui::kControlThis + offsetof(CControl, vbptr);
-static_assert(kGroupVbptr == 0x284 && kEnableVbptr == 0x34c);
+constexpr std::size_t kParentChangedVbptr = kParentChangedThis - kGroupControlControl - ui::kControlThis + offsetof(CControl, vbptr);
+static_assert(kGroupVbptr == 0x284 && kParentChangedVbptr == 0x34c);
 const std::int32_t kParentVbtable[2] = {0, 0x20};  // the parent's element part at kParent + 0x24
 const std::int32_t kGroupVbtable[2] = {0, static_cast<std::int32_t>(kElement) - static_cast<std::int32_t>(kGroupVbptr)};
-const std::int32_t kEnableVbtable[2] = {0, static_cast<std::int32_t>(kElement) - static_cast<std::int32_t>(kEnableVbptr)};
+const std::int32_t kParentChangedVbtable[2] = {0, static_cast<std::int32_t>(kElement) - static_cast<std::int32_t>(kParentChangedVbptr)};
 // Batch 24 additions: the group's children vector at kGroup-0x74 (data at
 // kChildData: four children at kChildren + 0x40 * k), the captured child at
 // kGroup-0x50; a CControl's CScreenElement part at kControl (vbtable at
@@ -1320,7 +1346,7 @@ struct Functions {
     Arg1Fn setParent;
     ContainsPointFn containsPoint;
     NoArgFn needsRedraw;
-    NoArgFn isQuery78Zero;
+    NoArgFn isOffScreen;
     MessageFn onMessage;
     MessagePtrFn wantsMessage;
     MessageFn dispatch;
@@ -1331,11 +1357,11 @@ struct Functions {
     NoArgFn killFocus;
     NoArgFn invalidate;
     MessageFn trackMouse;
-    Arg1Fn enable;
-    NoArgFn parentQuery78;
+    Arg1Fn onParentChanged;
+    NoArgFn getScreen;
     VoidArg1Fn setFlag1F;
     GlobalFn global823c;
-    CopyGlobalsFn copyGlobals;
+    PixelFormatFn pixelFormat;
     TableFn table809c;
     TableFn table8064;
     GlobalFn global8238;
@@ -1345,7 +1371,7 @@ struct Functions {
     NoArgFn groupKillFocus;
     Arg1Fn groupSetFocus429d70;
     MessagePtrFn groupWants429df0;
-    Arg1Fn groupEnable429fd0;
+    Arg1Fn groupOnParentChanged429fd0;
     Arg1Fn screenGroupSetFlag1F;
     MovedFn screenGroupOnMoved;
     Draw3PtrFn screenGroupDraw;
@@ -1357,17 +1383,17 @@ struct Functions {
     MessageFn handleMessage429e10;
     MessageFn screenHandleMessage;
     VoidNoArgFn controlDeleteTooltip;
-    MessageFn controlOnMessage10;
+    MessageFn controlOnLButtonDown;
     MessageFn controlOnMouseMove;
     MessageFn controlOnMouseEnter;
     MessageFn controlOnMouseLeave;
-    MessageFn groupControlOnMessage10;
+    MessageFn groupControlOnLButtonDown;
     MessageFn groupControlOnMouseMove;
     MessageFn groupControlOnMouseEnter;
     MessageFn groupControlOnMouseLeave;
-    Arg1Fn screenGroupOnEnable;
-    Arg1Fn controlOnEnable;
-    Arg1Fn groupControlOnEnable;
+    Arg1Fn screenGroupOnShow;
+    Arg1Fn controlOnShow;
+    Arg1Fn groupControlOnShow;
 };
 constexpr int kOperations = 58;
 
@@ -1377,53 +1403,53 @@ Functions OriginalFunctions() {
             Original_CScreenElement_Rect,          Original_CScreenElement_SetRect,
             Original_CScreenElement_MoveBy,        Original_CScreenElement_SetParent,
             Original_CScreenElement_ContainsPoint, Original_CScreenElement_NeedsRedraw,
-            Original_CScreenElement_IsQuery78Zero, Original_CScreenElement_OnMessage,
+            Original_CScreenElement_IsOffScreen, Original_CScreenElement_OnMessage,
             Original_CScreenElement_WantsMessage,  Original_CScreenElement_DispatchMessage,
             Original_CScreenElement_DrawClipped,   Original_CScreenElement_DrawRect,
             Original_CScreenElement_IntersectRects, Original_CScreenElement_SetFocus,
             Original_CScreenElement_KillFocus,     Original_CScreenElement_Invalidate,
-            Original_CScreenElement_TrackMouse,    Original_CScreenElement_Enable,
-            Original_CScreenElement_ParentQuery78, Original_CScreenElement_SetFlag1F,
-            Original_Dialog_Global7a823c,          Original_Dialog_CopyGlobals7a8020,
-            Original_Dialog_Table7a809c,           Original_Dialog_Table7a8064,
-            Original_Dialog_Global7a8238,          Original_Dialog_Global7a8240,
+            Original_CScreenElement_TrackMouse,    Original_CScreenElement_OnParentChanged,
+            Original_CScreenElement_GetScreen, Original_CScreenElement_SetFlag1F,
+            Original_Dialog_Surface,          Original_Dialog_PixelFormat,
+            Original_Dialog_Font,           Original_Dialog_Color,
+            Original_Dialog_GraphicsData,          Original_Dialog_Pen,
             Original_UiGroup_WantsMessage,         Original_UiGroup_SetFocus,
             Original_UiGroup_KillFocus,            Original_UiGroup_SetFocus_429d70,
-            Original_UiGroup_WantsMessage_429df0,  Original_UiGroup_Enable_429fd0,
+            Original_UiGroup_WantsMessage_429df0,  Original_UiGroup_OnParentChanged_429fd0,
             Original_CScreenGroup_SetFlag1F,       Original_CScreenGroup_OnMoved,
             Original_CScreenGroup_Draw,            Original_CScreenGroup_HandleMessage,
             Original_CScreenGroup_OnMouseMove,     Original_CScreenGroup_SetFlag1F_429dd0,
             Original_CScreenGroup_OnMoved_42a030,  Original_CScreenGroup_Draw_42a180,
             Original_CScreenGroup_HandleMessage_429e10, Original_CScreen_HandleMessage,
-            Original_CControl_DeleteTooltip,       Original_CControl_OnMessage10,
+            Original_CControl_DeleteTooltip,       Original_CControl_OnLButtonDown,
             Original_CControl_OnMouseMove,         Original_CControl_OnMouseEnter,
-            Original_CControl_OnMouseLeave,        Original_CGroupControl_OnMessage10,
+            Original_CControl_OnMouseLeave,        Original_CGroupControl_OnLButtonDown,
             Original_CGroupControl_OnMouseMove,    Original_CGroupControl_OnMouseEnter,
-            Original_CGroupControl_OnMouseLeave,   Original_CScreenGroup_OnEnable,
-            Original_CControl_OnEnable,            Original_CGroupControl_OnEnable};
+            Original_CGroupControl_OnMouseLeave,   Original_CScreenGroup_OnShow,
+            Original_CControl_OnShow,            Original_CGroupControl_OnShow};
 }
 
 Functions OurFunctions() {
     return {&CScreenElement_Construct,     &CScreenElement_ConstructRect, &CScreenElement_Destroy,
             &CScreenElement_DeletingDestroy, &CScreenElement_Rect,        &CScreenElement_SetRect,
             &CScreenElement_MoveBy,        &CScreenElement_SetParent,     &CScreenElement_ContainsPoint,
-            &CScreenElement_NeedsRedraw,   &CScreenElement_IsQuery78Zero, &CScreenElement_OnMessage,
+            &CScreenElement_NeedsRedraw,   &CScreenElement_IsOffScreen, &CScreenElement_OnMessage,
             &CScreenElement_WantsMessage,  &CScreenElement_DispatchMessage, &CScreenElement_DrawClipped,
             &CScreenElement_DrawRect,      &CScreenElement_IntersectRects, &CScreenElement_SetFocus,
             &CScreenElement_KillFocus,     &CScreenElement_Invalidate,    &CScreenElement_TrackMouse,
-            &CScreenElement_Enable,        &CScreenElement_ParentQuery78, &CScreenElement_SetFlag1F,
-            &Dialog_Global7a823c,          &Dialog_CopyGlobals7a8020,     &Dialog_Table7a809c,
-            &Dialog_Table7a8064,           &Dialog_Global7a8238,          &Dialog_Global7a8240,
+            &CScreenElement_OnParentChanged,        &CScreenElement_GetScreen, &CScreenElement_SetFlag1F,
+            &Dialog_Surface,          &Dialog_PixelFormat,     &Dialog_Font,
+            &Dialog_Color,           &Dialog_GraphicsData,          &Dialog_Pen,
             &UiGroup_WantsMessage,         &UiGroup_SetFocus,             &UiGroup_KillFocus,
-            &UiGroup_SetFocus_429d70,      &UiGroup_WantsMessage_429df0,  &UiGroup_Enable_429fd0,
+            &UiGroup_SetFocus_429d70,      &UiGroup_WantsMessage_429df0,  &UiGroup_OnParentChanged_429fd0,
             &CScreenGroup_SetFlag1F,       &CScreenGroup_OnMoved,         &CScreenGroup_Draw,
             &CScreenGroup_HandleMessage,   &CScreenGroup_OnMouseMove,     &CScreenGroup_SetFlag1F_429dd0,
             &CScreenGroup_OnMoved_42a030,  &CScreenGroup_Draw_42a180,     &CScreenGroup_HandleMessage_429e10,
-            &CScreen_HandleMessage,        &CControl_DeleteTooltip,       &CControl_OnMessage10,
+            &CScreen_HandleMessage,        &CControl_DeleteTooltip,       &CControl_OnLButtonDown,
             &CControl_OnMouseMove,         &CControl_OnMouseEnter,        &CControl_OnMouseLeave,
-            &CGroupControl_OnMessage10,    &CGroupControl_OnMouseMove,    &CGroupControl_OnMouseEnter,
-            &CGroupControl_OnMouseLeave,   &CScreenGroup_OnEnable,        &CControl_OnEnable,
-            &CGroupControl_OnEnable};
+            &CGroupControl_OnLButtonDown,    &CGroupControl_OnMouseMove,    &CGroupControl_OnMouseEnter,
+            &CGroupControl_OnMouseLeave,   &CScreenGroup_OnShow,        &CControl_OnShow,
+            &CGroupControl_OnShow};
 }
 
 struct Inputs {
@@ -1461,7 +1487,7 @@ std::uint32_t RunOperation(const Functions& f, int op, std::uint8_t* buffer, Inp
         case 7: return f.setParent(element, nullptr, (in.b & 1) ? ptr(buffer + kParent) : in.a);
         case 8: return f.containsPoint(element, nullptr, in.a, in.b);
         case 9: return f.needsRedraw(element, nullptr) & 0xff;
-        case 10: return f.isQuery78Zero(element, nullptr);
+        case 10: return f.isOffScreen(element, nullptr);
         case 11: return f.onMessage(element, nullptr, in.message);
         case 12: return f.wantsMessage(element, nullptr, &in.message) & 0xff;
         case 13: return f.dispatch(element, nullptr, in.message);
@@ -1472,11 +1498,11 @@ std::uint32_t RunOperation(const Functions& f, int op, std::uint8_t* buffer, Inp
         case 18: return f.killFocus(element, nullptr) & 0xff;
         case 19: return f.invalidate(element, nullptr);
         case 20: return f.trackMouse(element, nullptr, in.message);
-        case 21: return f.enable(element, nullptr, in.a);
-        case 22: return f.parentQuery78(element, nullptr);
+        case 21: return f.onParentChanged(element, nullptr, in.a);
+        case 22: return f.getScreen(element, nullptr);
         case 23: f.setFlag1F(element, nullptr, in.a); return 0;
         case 24: return f.global823c();
-        case 25: return ptr(f.copyGlobals(buffer + 0x20)) - ptr(buffer);
+        case 25: return ptr(f.pixelFormat(buffer + 0x20)) - ptr(buffer);
         case 26: return f.table809c(in.a % 14);
         case 27: return f.table8064(in.a % 14);
         case 28: return f.global8238();
@@ -1486,7 +1512,7 @@ std::uint32_t RunOperation(const Functions& f, int op, std::uint8_t* buffer, Inp
         case 32: return f.groupKillFocus(group, nullptr) & 0xff;
         case 33: return f.groupSetFocus429d70(group, nullptr, (in.b & 1) ? ptr(buffer + kChild) : in.a);
         case 34: return f.groupWants429df0(group, nullptr, &in.message) & 0xff;
-        case 35: return f.groupEnable429fd0(buffer + kEnableThis, nullptr, in.a);
+        case 35: return f.groupOnParentChanged429fd0(buffer + kParentChangedThis, nullptr, in.a);
         case 36: return f.screenGroupSetFlag1F(group, nullptr, in.a);
         case 37: return f.screenGroupOnMoved(group, nullptr, &in.rects[0], in.delta);
         case 38: return f.screenGroupDraw(group, nullptr, in.a, &in.rects[0], &in.rects[1]);
@@ -1498,17 +1524,17 @@ std::uint32_t RunOperation(const Functions& f, int op, std::uint8_t* buffer, Inp
         case 44: return HandleMessageResult(f.handleMessage429e10, group, group, in);
         case 45: return HandleMessageResult(f.screenHandleMessage, buffer + kGroup + kScreenGroup, group, in);
         case 46: f.controlDeleteTooltip(ControlOf(buffer + kControl), nullptr); return 0;
-        case 47: return f.controlOnMessage10(buffer + kControl, nullptr, in.message);
+        case 47: return f.controlOnLButtonDown(buffer + kControl, nullptr, in.message);
         case 48: return f.controlOnMouseMove(buffer + kControl, nullptr, in.message) & 0xff;
         case 49: return f.controlOnMouseEnter(buffer + kControl, nullptr, in.message);
         case 50: return f.controlOnMouseLeave(buffer + kControl, nullptr, in.message);
-        case 51: return f.groupControlOnMessage10(group, nullptr, in.message);
+        case 51: return f.groupControlOnLButtonDown(group, nullptr, in.message);
         case 52: return f.groupControlOnMouseMove(group, nullptr, in.message) & 0xff;
         case 53: return f.groupControlOnMouseEnter(group, nullptr, in.message);
         case 54: return f.groupControlOnMouseLeave(group, nullptr, in.message);
-        case 55: return f.screenGroupOnEnable(group, nullptr, in.a);
-        case 56: return f.controlOnEnable(buffer + kControl, nullptr, in.a);
-        default: return f.groupControlOnEnable(group, nullptr, in.a);
+        case 55: return f.screenGroupOnShow(group, nullptr, in.a);
+        case 56: return f.controlOnShow(buffer + kControl, nullptr, in.a);
+        default: return f.groupControlOnShow(group, nullptr, in.a);
     }
 }
 
@@ -1539,7 +1565,7 @@ void SetUpBuffer(test::Context& ctx, std::uint8_t* buffer) {
     group->vbptr = kGroupVbtable;
     group->focus = ctx.rng().Chance(1, 3) ? 0 : reinterpret_cast<std::uint32_t>(buffer + kChild);
     group->only_inside = static_cast<std::uint8_t>(ctx.rng().Below(2));
-    GroupControlOf(buffer + kEnableThis)->vbptr = kEnableVbtable;
+    GroupControlOf(buffer + kParentChangedThis)->vbptr = kParentChangedVbtable;
     // The group's children (capacity never 0 here, so the bounds handling
     // never allocates; the emulator spec covers that).
     const std::uint32_t count = std::array<std::uint32_t, 7>{0, 1, 2, 3, 4, 4, 0x80000001u}[ctx.rng().Below(7)];

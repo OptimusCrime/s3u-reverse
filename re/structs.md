@@ -79,7 +79,7 @@ are not comparable (bump the trace version). Keep
 | 0x05 | u8 | shade | recomputed from heights for a tile and its six neighbours by 0x519670 (via 0x519720); ~0x40 on flat land (dump: 64 on 93,813 tiles); read for drawing | 0x519670, PrepareDrawData, IsNeighbourhoodByte9Clear | | S |
 | 0x06 | u8 | terrain ("worldart") | ground type; map file byte 1; high nibble = class (owned land when non-zero; 0x10 grass/land, 0x60 stream, 0x15 swamp); 0x70/0xF0 tested together (water?); 0x1C worn path (decays to 0x10); 0x16 a field (MakeFieldTile 0x51BA00, called by the farmer, rice farmer and winegrower jobs, turns a grass tile surrounded by grass into 0x16); dump: 7 on 79,249 tiles (water on this map), 16 on 42,334 | map_terrain.cpp, LogPlayerLandResources, 0x503980 | | V (field), S (values) |
 | 0x07 | u8 | object | landscape object: trees 0x44..0x53, stone 0x73..0x7E (smaller = more left), fields (UpdateSettlers farmer jobs, session 45): grain 0x55 sown, 0x5A..0x5C ripe, 0x5D harvested; vines 0x5E planted, rice 0x67 planted, ripe vines and rice 0x63..0x65 and 0x6C..0x6E (which is which not checked); others; map file byte 2; must be 0 to build; a new construction site puts 0x70 on its own tile and 0x71 (stakes) on the outermost footprint tile per direction sector (CheckBuildingSite 0x4D99E0); AddBuildingSite 0x4DD280 sets 0xFF on the door tile list of some types | ScatterObjects, AreOffsetTilesClear, map loader, LogPlayerLandResources, building_sites.cpp | | V |
-| 0x08 | u8 | owner | player owning the ground, 0xFF = nobody; map file byte 3 (mapped to game players) | map_terrain.cpp, CountTilesOwnedBy, SetOwnerOfFreeTile, AI_TileByte8 0x599570 (its comment had guessed terrain); dump 255/0/1 | | V |
+| 0x08 | u8 | owner | player owning the ground, 0xFF = nobody; map file byte 3 (mapped to game players) | map_terrain.cpp, CountTilesOwnedBy, SetOwnerOfFreeTile, AI::TileOwner 0x599570 (was AI_TileByte8; its comment had guessed terrain); dump 255/0/1 | | V |
 | 0x09 | u8 | draw flags | bit 0x40 territory border (UpdateBorderFlagsAround), bit 0x80 redraw (set by the simulation when the tile changes, e.g. 0x5039DE; cleared by PrepareDrawData); bits 3..5 fog level (0 unseen .. 7 seen; 7 everywhere while 0x7DFD84 reveals the map), bits 0..2 the previous level after a change (UpdateFogSlice 0x519010; dump: 63, 191, 146...) | map_terrain.cpp, fog_of_war.cpp, determinism.cpp | bit 0x80 skip | V |
 | 0x0A | u8 | flags | 0x01 blocked; 0x02 (UpdateSettlers sets); 0x04 being levelled (CheckBuildingSite sets it on every tile whose height a placed site changes; PlanSiteLevelling keeps such a tile and five neighbours fixed; building sites need it clear); 0x08 part of a building footprint ("Building-Bits"; set on the footprint and border tiles of a placed site by CheckBuildingSite; cleared by the map loader with 0x01 from the layout table at 0x6AA170); 0x10 temporary mark of flood fills/splits; 0x20 word +0x2 is a building; 0x40 owned (map loader sets it when the owner is valid; 0x519A90); 0x80 tested by FloodMarkAreaTerrain5To7; map file byte 4 | area_split.cpp, flood_fills.cpp, map loader | | V (0x01, 0x10, 0x20), S (others) |
 | 0x0B | u8 | search mark | the search generation (+0x2D300) of the last search/overlay that visited the tile; the map loader sets 1 for tiles of a missing player | NextSearchGeneration, overlays, map loader | skip | V |
@@ -597,14 +597,16 @@ layouts in `src/s3re/game/ai/ai_layout.h`.
   packed) and count +0x0CC; +0x0CE pending note ids (50) and count +0x132;
   +0x134 active note ids (100), count +0x1FC; +0x1FE the round-robin
   cursor over them (0x551670); +0x200 the notes to delete ("doomed",
-  50; AI::List32Add adds, 0x551790 deletes them after each active note's
+  50; CComputerPlayer::DoomNote 0x551910 adds, 0x551790 deletes them after each active note's
   turn), count +0x264; +0x266 handler agent kind per note type (6 words,
   0xFFFF none; set by AddAgent 0x551400 from agent slot 2); +0x272 player number (byte); +0x274 / +0x278 / +0x27C step
   counters of 0x550F80 (periods 15, 71, 841 steps, offset by the player
   index); +0x280 notes by id (300 pointers); +0x730 agents by kind (11
   pointers); +0x75C world; +0x760 the logic->net MessageQueue; +0x764
-  steps; +0x76C player index; +0x770 setup index; +0x774 per-player node
-  lists (12-byte entries per player: +4 list, +8 count; a reset flag at +0xF0 + 12 * player); +0x778
+  steps; +0x76C player index; +0x770 setup index; +0x774 the CEvaLand
+  (AiLandEvaluation*, from CEvaLand::Acquire; its `lists[p]` are the per-player
+  node lists, 12 bytes each: +4 list, +8 count; "area list changed" flag at
+  CEvaLand +0xF0 + 4 * player); +0x778
   the current AiPlayerData node; +0x77C its key (node word +8). **V**
   (lists, notes, node pointer, cursor, agents, handlers: batch 1 and
   package A3 functions), **R** (the rest).

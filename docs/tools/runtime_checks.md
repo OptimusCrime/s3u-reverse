@@ -19,7 +19,7 @@ that opens the game window, take the game lock (`docs/tools/game_lock.md`).
 - **Tick pacing and `--fast`:** `CLogicThread::OnStart` starts a periodic
   64 ms `Win32::CTimer` (CLogicThread+0x3bc; 15.6 ticks/s), and
   `CLogicThread::Step` waits on its wait set (+0x3dc,
-  `CWin32Waitable::WaitForXYZ` `0x463100`, 500 ms) and runs a tick only
+  `CWin32WaitableBag::WaitFor` `0x463100`, 500 ms) and runs a tick only
   when the timer was the signalled object; other objects wake it without a
   tick (hence ~240 steps/s). `CNetBounceThread` answers step messages at
   once, so it doesn't pace. `--fast` (`src/s3re/tooling/fast.cpp`) makes

@@ -42,6 +42,7 @@
 #include "game/texts.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
 
@@ -119,15 +120,6 @@ static_assert(offsetof(NetHelpRecord, vector38) == 0x38);
 static_assert(offsetof(NetHelpRecord, textBc) == 0xbc);
 #pragma pack(pop)
 
-void GameDelete(void* block) {
-    reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(block);
-}
-
-void* GameNew(std::uint32_t size) {
-    return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
-}
-
-
 std::uint8_t TopByte(const void* self) {
     return static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(self) >> 24);
 }
@@ -158,7 +150,7 @@ S3RE_HOOK(0x0049d980, Net_DeletePointee_49d980, ObjFn, Original_Net_DeletePointe
 // Purpose: Frees the block an object points to with its first field
 // (network helper code; probably the destructor of an owning pointer).
 std::uint32_t __fastcall Net_DeletePointee_49d980(void* self, void* /*edx*/) {
-    GameDelete(As<OwningPointer>(self)->pointee);
+    msvc6::GameOperatorDelete(As<OwningPointer>(self)->pointee);
     return 0;
 }
 
@@ -234,8 +226,8 @@ std::uint32_t __fastcall Credits_TextStyle_5a0960(void* self, void* /*edx*/) {
     style->unk14 = 0;
     style->font = static_cast<std::uint32_t>(g_creditsDefaultStyle.address());
     style->unk04 = 0;
-    style->size = 0xc;
-    style->colour = 0xff;
+    style->size = 12;
+    style->colour = 255;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -283,7 +275,7 @@ S3RE_HOOK(0x00601250, Lobby_FreeBlock_601250, ObjFn, Original_Lobby_FreeBlock_60
 // Purpose: Frees the buffer of a lobby memory block and empties it.
 std::uint32_t __fastcall Lobby_FreeBlock_601250(void* self, void* /*edx*/) {
     CMemoryBlock* const block = As<CMemoryBlock>(self);
-    GameDelete(block->data);
+    msvc6::GameOperatorDelete(block->data);
     block->data = nullptr;
     block->used = 0;
     block->reserved = 0;
@@ -392,11 +384,11 @@ constexpr std::size_t kObject = 0x60;
 void Prepare(int op, std::uint8_t* object, test::Rng& rng, std::uint32_t mode) {
     switch (op) {
         case 0:
-            As<OwningPointer>(object)->pointee = (mode & 1) != 0 ? nullptr : GameNew(8 + (mode & 0x30));
+            As<OwningPointer>(object)->pointee = (mode & 1) != 0 ? nullptr : msvc6::GameOperatorNew(8 + (mode & 0x30));
             break;
         case 10:
             As<CMemoryBlock>(object)->data =
-                (mode & 1) != 0 ? nullptr : static_cast<std::uint8_t*>(GameNew(8 + (mode & 0x30)));
+                (mode & 1) != 0 ? nullptr : static_cast<std::uint8_t*>(msvc6::GameOperatorNew(8 + (mode & 0x30)));
             break;
         case 11: {
             // Both strings: empty (null), or a fresh unshared buffer with text.
@@ -409,7 +401,7 @@ void Prepare(int op, std::uint8_t* object, test::Rng& rng, std::uint32_t mode) {
                     s.res = 0;
                 } else {
                     const std::uint32_t length = rng.Below(40);
-                    auto* block = static_cast<char*>(GameNew(length + 2));
+                    auto* block = static_cast<char*>(msvc6::GameOperatorNew(length + 2));
                     block[0] = 0;
                     for (std::uint32_t k = 0; k < length; ++k) {
                         block[1 + k] = static_cast<char>('a' + k % 26);
@@ -563,7 +555,6 @@ void __fastcall NetHelp_Destroy_49ec80(void* self, void* edx);
 
 namespace {
 
-
 }  // namespace
 
 S3RE_HOOK(0x0049ec80, NetHelp_Destroy_49ec80, DestroyMembersFn, Original_NetHelp_Destroy_49ec80,
@@ -578,7 +569,7 @@ void __fastcall NetHelp_Destroy_49ec80(void* self, void* /*edx*/) {
     if (record->vector38.data != nullptr) {
         using NoOpFn = void(__fastcall*)(void* self, void* edx);
         reinterpret_cast<NoOpFn>(0x0059f200)(&record->vector38, nullptr);
-        GameDelete(record->vector38.data);
+        msvc6::GameOperatorDelete(record->vector38.data);
     }
     record->vector38.vtable = vtables::kWCExcept;
     auto* wide = reinterpret_cast<std::uint8_t*>(record->wide28.ptr);
@@ -587,7 +578,7 @@ void __fastcall NetHelp_Destroy_49ec80(void* self, void* /*edx*/) {
         if (count != 0 && count != 0xff) {
             wide[-1] = static_cast<std::uint8_t>(count - 1);
         } else {
-            GameDelete(wide - 2);
+            msvc6::GameOperatorDelete(wide - 2);
         }
     }
     record->wide28.ptr = nullptr;
@@ -619,7 +610,7 @@ NetBuffers PrepareNet(std::uint8_t* object, std::uint32_t mode, const std::uint8
             s.res = 0;
             continue;
         }
-        auto* block = static_cast<char*>(GameNew(length + 2));
+        auto* block = static_cast<char*>(msvc6::GameOperatorNew(length + 2));
         block[0] = static_cast<char>(counts[k]);
         for (std::uint32_t c = 0; c < length; ++c) {
             block[1 + c] = static_cast<char>('a' + (c + k) % 26);
@@ -630,11 +621,11 @@ NetBuffers PrepareNet(std::uint8_t* object, std::uint32_t mode, const std::uint8
         s.res = length;
         buffers.narrow[k] = s.ptr;
     }
-    record->vector38.data = ((mode >> 2) & 1) != 0 ? nullptr : static_cast<std::uint32_t*>(GameNew(24));
+    record->vector38.data = ((mode >> 2) & 1) != 0 ? nullptr : static_cast<std::uint32_t*>(msvc6::GameOperatorNew(24));
     if (((mode >> 3) & 1) != 0) {
         record->wide28.ptr = nullptr;
     } else {
-        auto* block = static_cast<std::uint8_t*>(GameNew(16));
+        auto* block = static_cast<std::uint8_t*>(msvc6::GameOperatorNew(16));
         block[1] = counts[2];
         buffers.wide = block + 2;
         record->wide28.ptr = reinterpret_cast<std::uint16_t*>(buffers.wide);
