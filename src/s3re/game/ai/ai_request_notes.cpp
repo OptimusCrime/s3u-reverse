@@ -18,6 +18,14 @@
 //   0x578760 HOUSE_REQUEST_NOTE (type, x, y, value) ret 0x10: Init(2), the
 //     four words at +0x1c..+0x22, +0x24 = +0x26 = 0. EAX = 0.
 //   0x565470 T_DO_BUILD_HOUSE_NOTE (the same with Init(4)).
+//   0x575d60 HOUSE_GROUND_REQUEST_NOTE (type, x, y, radius) ret 0x10 (session
+//     53): Init(1) (through 0x5823e0), +0x1c/+0x1e/+0x20 = the low words,
+//     +0x22..+0x26 = 0xffff; the spiral position +0x2c gets the AI's map
+//     size (WrappedPos::SetSize 0x5970f0 with g_aiMapSizeX, g_aiMapSizeY)
+//     and (x, y) (SetPosition 0x5970c0); +0x42 = radius, +0x3c = +0x28 = 0
+//     (words), +0x44 = 0; +0x48 = 1 if AI_SiteKindOf(type) (0x58ed70) is 3
+//     (a military site), else 0. EAX (AI_SiteKindOf's) is not used by the
+//     caller HOUSE_REQUEST_AGENT::TakeNote 0x5787c0.
 //   0x5801c0 T_DO_BUILD_HOUSE_NOTE::T_DO_BUILD_HOUSE_NOTE(type, x, y, value)
 //     ret 0x10: vtable 0x65a584, then 0x565470. EAX = this. (Its exception
 //     frame has nothing to unwind.)
@@ -30,6 +38,7 @@
 //     same through 0x565590 (shared by all four subclasses' vtables).
 
 #include "game/ai/ai_layout.h"
+#include "game/globals.h"
 #include "game/vtables.h"
 #include "hooks.h"
 #include "msvc6/game_heap.h"
@@ -68,6 +77,8 @@ std::uint32_t __fastcall T_DO_BUILD_HOUSE_NOTE_Init(void* self, void* edx, std::
                                                    std::uint32_t y, std::uint32_t value);
 std::uint32_t __fastcall T_DO_BUILD_HOUSE_NOTE_Construct(void* self, void* edx, std::uint32_t type,
                                                         std::uint32_t x, std::uint32_t y, std::uint32_t value);
+void __fastcall HOUSE_GROUND_REQUEST_NOTE_Init(void* self, void* edx, std::uint32_t buildingType, std::uint32_t x,
+                                               std::uint32_t y, std::uint32_t radius);
 std::uint32_t __fastcall BLACK_BOARD_NOTE_Construct(void* self, void* edx);
 void __fastcall BLACK_BOARD_NOTE_Destroy(void* self, void* edx);
 void* __fastcall BLACK_BOARD_NOTE_DeletingDestroy(void* self, void* edx, std::uint32_t flags);
@@ -183,6 +194,52 @@ std::uint32_t __fastcall T_DO_BUILD_HOUSE_NOTE_Construct(void* self, void* /*edx
     AsRequest(self)->base.vtable = vtables::kDoBuildHouseNote;
     T_DO_BUILD_HOUSE_NOTE_Init(self, nullptr, buildingType, x, y, value);
     return reinterpret_cast<std::uint32_t>(self);
+}
+
+namespace {
+
+// Callees of HOUSE_GROUND_REQUEST_NOTE's Init, called through their S3.EXE addresses.
+constexpr std::uintptr_t kNoteInit = 0x005823e0;         // BLACK_BOARD_NOTE::Init (thiscall)
+constexpr std::uintptr_t kSetSize = 0x005970f0;          // AI::WrappedPos::SetSize (thiscall)
+constexpr std::uintptr_t kSetPosition = 0x005970c0;      // AI::WrappedPos::SetPosition (thiscall)
+constexpr std::uintptr_t kSiteKindOf = 0x0058ed70;       // AI_SiteKindOf (fastcall)
+constexpr std::uint8_t kMilitarySite = 3;                // AI_SiteKindOf's kind for military buildings
+constexpr std::uint16_t kNoValue = 0xffff;
+
+using NoteInitFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t type);
+using PairFn = std::uint32_t(__fastcall*)(WrappedPos* self, void* edx, std::uint32_t a, std::uint32_t b);
+using SiteKindFn = std::uint32_t(__fastcall*)(std::uint32_t type);
+
+}  // namespace
+
+using GroundInitFn = void(__fastcall*)(void* self, void* edx, std::uint32_t buildingType, std::uint32_t x,
+                                       std::uint32_t y, std::uint32_t radius);
+
+S3RE_HOOK(0x00575d60, HOUSE_GROUND_REQUEST_NOTE_Init, GroundInitFn, Original_HOUSE_GROUND_REQUEST_NOTE_Init,
+          HOUSE_GROUND_REQUEST_NOTE_Init);
+
+// Purpose: Sets up a request for ground for a building (made by the house
+// request agent's slot 3): where the search for a site starts, how far it
+// may go, and whether the building needs a military site.
+void __fastcall HOUSE_GROUND_REQUEST_NOTE_Init(void* self, void* /*edx*/, std::uint32_t buildingType,
+                                               std::uint32_t x, std::uint32_t y, std::uint32_t radius) {
+    reinterpret_cast<NoteInitFn>(kNoteInit)(self, nullptr, Value(NoteType::HouseGroundRequest));
+    auto* note = static_cast<HouseGroundRequestNote*>(self);
+    note->request.building_type = static_cast<std::uint16_t>(buildingType);
+    note->request.x = static_cast<std::uint16_t>(x);
+    note->request.y = static_cast<std::uint16_t>(y);
+    note->request.value22 = kNoValue;
+    note->request.unk24 = kNoValue;
+    note->request.unk26 = kNoValue;
+    reinterpret_cast<PairFn>(kSetSize)(&note->spiral, nullptr, g_aiMapSizeX, g_aiMapSizeY);
+    reinterpret_cast<PairFn>(kSetPosition)(&note->spiral, nullptr, note->request.x, note->request.y);
+    note->max_radius = static_cast<std::uint16_t>(radius);
+    note->unk3c = 0;
+    note->unk28 = 0;
+    note->unk44 = 0;
+    const auto siteKindOf = reinterpret_cast<SiteKindFn>(kSiteKindOf);
+    const auto kind = static_cast<std::uint8_t>(siteKindOf(note->request.building_type));
+    note->military = kind == kMilitarySite ? 1 : 0;
 }
 
 // ---------------------------------------------------------------- BLACK_BOARD_NOTE
@@ -337,7 +394,60 @@ std::uint32_t __fastcall WrongAgentKind(void* self, void* /*edx*/) {
     return 0;
 }
 
+// HOUSE_GROUND_REQUEST_NOTE's Init: a 0x4c-byte object (random, with guard
+// bytes), random AI map sizes and arguments (building types 0..70: military
+// and others); its callees run (verified).
+constexpr std::size_t kGroundNoteBytes = sizeof(HouseGroundRequestNote) + 8;
+
+void CompareGroundInit(test::Context& ctx, GroundInitFn candidate, int cases) {
+    const std::uint16_t sizeX = g_aiMapSizeX, sizeY = g_aiMapSizeY;
+    std::vector<std::uint8_t> a(kGroundNoteBytes), b(kGroundNoteBytes);
+    int military = 0;
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        test::Rng& rng = ctx.rng();
+        rng.Fill(a.data(), a.size());
+        b = a;
+        g_aiMapSizeX = static_cast<std::uint16_t>(rng.Chance(1, 10) ? rng.Next32() : 1 + rng.Below(500));
+        g_aiMapSizeY = static_cast<std::uint16_t>(rng.Chance(1, 10) ? rng.Next32() : 1 + rng.Below(500));
+        std::uint32_t args[4];
+        for (std::uint32_t& arg : args) {
+            arg = rng.Chance(1, 2) ? rng.Below(600) : rng.Next32();
+        }
+        args[0] = rng.Below(71) | (rng.Chance(1, 4) ? rng.Next32() & 0xffff0000u : 0);
+        Original_HOUSE_GROUND_REQUEST_NOTE_Init(a.data(), nullptr, args[0], args[1], args[2], args[3]);
+        candidate(b.data(), nullptr, args[0], args[1], args[2], args[3]);
+        military += reinterpret_cast<const HouseGroundRequestNote*>(a.data())->military;
+        if (!S3RE_EXPECT_MEM_EQ(a.data(), b.data(), a.size())) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, type %08x", i, args[0]);
+        }
+    }
+    g_aiMapSizeX = sizeX;
+    g_aiMapSizeY = sizeY;
+    if (cases >= 1000 && !S3RE_EXPECT(military > 10)) {
+        ctx.Fail(__FILE__, __LINE__, "  only %d military sites", military);
+    }
+}
+
+void __fastcall WrongGroundInit(void* self, void* edx, std::uint32_t buildingType, std::uint32_t x,
+                                std::uint32_t y, std::uint32_t radius) {
+    // Wrong: the spiral's size is height x width.
+    HOUSE_GROUND_REQUEST_NOTE_Init(self, edx, buildingType, x, y, radius);
+    auto* note = static_cast<HouseGroundRequestNote*>(self);
+    reinterpret_cast<PairFn>(kSetSize)(&note->spiral, nullptr, g_aiMapSizeY, g_aiMapSizeX);
+    reinterpret_cast<PairFn>(kSetPosition)(&note->spiral, nullptr, note->request.x, note->request.y);
+}
+
 }  // namespace
+
+S3RE_TEST(AiGroundRequestInit_MatchesOriginal) {
+    CompareGroundInit(ctx, &HOUSE_GROUND_REQUEST_NOTE_Init, 3000);
+}
+
+S3RE_TEST(AiGroundRequestInit_ComparisonDetectsWrongImplementation) {
+    test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+    CompareGroundInit(quiet, &WrongGroundInit, 3000);
+    S3RE_EXPECT(quiet.failures() > 0);
+}
 
 S3RE_TEST(AiRequestNotes_MatchOriginal) {
     CompareRequests(ctx, OurRequests(), 20000);

@@ -358,6 +358,34 @@ The building placement check the AI uses is the simulation's own
 and 0x5760d0 on `ComputerPlayer::world`; the mode argument there is still
 to be read).
 
+## Battle spells (session 53)
+
+`AI::CastBattleSpells` 0x5953b0 (from RunMilitary 0x58f990, when a per-player
+counter at 0x7e5918 has passed 75; it is then reset) walks the player's mages
+(settler list 36). Per mage, by
+the mage's own race, bit k is set when `Player::mana` pays (unsigned >=)
+`Player::spell_mana[battle_spells[race][k]]` (slots from
+`AI::InitBattleSpellSlots` 0x590870: the index of the race's battle spell
+in `g_raceSpells`). With any bit, it counts the enemy soldiers within 20 of
+the mage (`AI::CountEnemySoldiersNear` 0x58a2c0: players not of the
+player's team, the nine soldier lists, TileDistance) and tries the race's
+casters in a fixed order; a caster whose bit is set gets one
+`CGameData::Random` draw and runs if the draw's low word is above 25000
+(about 24 %), else the next one is tried. Order: Romans 11, 10; Egyptians
+13, 15, 12; Asians 14, 17, 16; Amazons 24 (on the slot-1 bit), 25 (on the
+slot-0 bit), the crossed pairing being an original bug (kept). The casters
+(0x5957c0..0x596210, stdcall (player, mage, enemies, minimum 0)): the
+Romans cast nothing in campaign mission 67; 11, 24 need at least 5
+enemies, 13 at least 4, the others more than the minimum (0, i.e. any
+enemy). Targets: the first settler of the wanted kind among the first 500
+map offsets around the mage: enemy soldiers (10, 11, 24), own soldiers
+(12, 16, 17), enemy bowmen (types 8, 30, 33: 15, 25); 13 casts at a
+random map position (two draws, y first), 14 at the player's start
+position when the members of its unit groups 1..9 have at most a third of
+their start health. A mage of a race above 3 makes the original read its
+mana bits from stack leftovers; that leads at most to a side-effect-free
+enemy count, never a cast (ours skips such mages).
+
 ## Randomness and determinism
 
 The AI uses only the simulation's RNG `CGameData::Random` 0x4feb70 (13

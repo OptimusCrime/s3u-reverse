@@ -1637,3 +1637,316 @@ SPECS += [
     Spec("AI_SendMoveGroup", 0x00590c80, "thiscall", [below(20), below(10), anything, anything],
          presets=move_group_world, globals=move_group_globals, callees=command_callees(with_address=True)),
 ]
+
+# -- session 53: the battle-spell casters (ai_battle_spells.cpp) -----------
+
+SPELL_TEST_SETTLERS = 64  # settler ids 1..63 stand on the tiles around the mage
+SPELL_SETTLER_TYPES = (5, 8, 15, 30, 31, 32, 33, 34, 35, 0, 3, 36, 9, 255)
+PLAYER_LIST_LENGTHS = 0x11940BC
+PLAYER_LISTS = 0x118A47C
+
+
+def spell_caster_world(rng, pool, args):
+    """A small map (size 40..80); the mage (args[1]) inside it; the first
+    500 map offsets small (+-12); the tiles around the mage hold settlers
+    1..63 (or none) of the players 0..3 (or nobody) and of soldier, bowman
+    and other types; the player's unit groups 1..9 (0..5 members, sometimes
+    an empty or negative length) of those settlers, with health near a third
+    of the soldiers' start health in half the cases."""
+    size = rng.randint(40, 80)
+    player, mage = args[0], args[1]
+    x, y = rng.randrange(size), rng.randrange(size)
+    record = SETTLERS + mage * SETTLER_BYTES
+    fields = [(MAP_SIZE, size, 4), (record + 4, x, 2), (record + 6, y, 2)]
+    for i in range(500):
+        fields += [(NEIGHBOUR_OFFSETS + 16 * i, rng.randint(-12, 12) & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + 16 * i + 4, rng.randint(-12, 12) & 0xFFFFFFFF, 4)]
+    density = rng.choice((0.02, 0.1, 0.3))
+    for tx in range(max(0, x - 12), min(size, x + 13)):
+        for ty in range(max(0, y - 12), min(size, y + 13)):
+            settler = rng.randrange(1, SPELL_TEST_SETTLERS) if rng.random() < density else 0
+            fields.append((TILES + (tx * 0x300 + ty) * 24, settler, 2))
+    healthy = rng.randint(25, 55) if rng.random() < 0.5 else rng.randrange(256)
+    for settler in range(SPELL_TEST_SETTLERS):
+        if settler == mage:
+            continue
+        base = SETTLERS + settler * SETTLER_BYTES
+        owner = 0xFF if rng.random() < 0.1 else (player if rng.random() < 0.4 else rng.randrange(4))
+        fields += [(base, owner, 1), (base + 1, rng.choice(SPELL_SETTLER_TYPES), 1),
+                   (base + 3, healthy if rng.random() < 0.85 else rng.randrange(256), 1),
+                   (base + 4, rng.randrange(size), 2), (base + 6, rng.randrange(size), 2)]
+    if player < 20:
+        for group in range(10):
+            index = player * 10 + group
+            length = -rng.randrange(3) if rng.random() < 0.1 else rng.randrange(6)
+            fields.append((PLAYER_LIST_LENGTHS + 4 * index, length & 0xFFFFFFFF, 4))
+            for k in range(max(length, 0)):
+                fields.append((PLAYER_LISTS + index * 200 + 2 * k, rng.randrange(SPELL_TEST_SETTLERS), 2))
+    return fields
+
+
+def spell_caster_globals(rng, pool, args):
+    return command_globals(rng, pool, args) + [(CAMPAIGN_MISSION, 67 if rng.random() < 0.25 else rng.randrange(80), 4)]
+
+
+def spell_caster(name, address):
+    # mage ids 0..63 and sometimes beyond (then the mage is not on the tiles'
+    # list); SendCastSpell runs for real, with IsHost and Push probed.
+    return Spec(name, address, "stdcall",
+                [below(4), below(SPELL_TEST_SETTLERS + 40), between(-1, 9), between(-1, 6)],
+                eax_mask=0, presets=spell_caster_world, globals=spell_caster_globals,
+                callees=command_callees(with_address=True), max_cases=600)
+
+
+SPECS += [
+    spell_caster("AI_CastRomanSpell10", 0x005957c0),
+    spell_caster("AI_CastRomanSpell11", 0x00595910),
+    spell_caster("AI_CastEgyptianSpell12", 0x00595a60),
+    spell_caster("AI_CastEgyptianSpell13", 0x00595bb0),
+    spell_caster("AI_CastEgyptianSpell15", 0x00595c10),
+    spell_caster("AI_CastAsianSpell16", 0x00595d30),
+    spell_caster("AI_CastAsianSpell17", 0x00595e80),
+    spell_caster("AI_CastAsianSpell14", 0x00595fd0),
+    spell_caster("AI_CastAmazonSpell24", 0x005960d0),
+    spell_caster("AI_CastAmazonSpell25", 0x00596210),
+]
+
+# -- session 53: the enemy counts near a tile (ai_enemy_search.cpp) ---------
+
+ENEMY_SOLDIER_TYPES = (5, 8, 15, 30, 31, 32, 33, 34, 35)
+
+
+def enemy_lists_world(rng, pool, args):
+    """Teams 0..3 for the 20 players; each soldier list (some empty) holds
+    up to 6 settlers on a 64 x 64 map whose tiles belong to players 0..5 or
+    nobody (only the tiles the settlers stand on are set)."""
+    fields = []
+    next_id = 1
+    for player in range(20):
+        record = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+        fields.append((record + 0xC, rng.randrange(4), 4))
+        for settler_type in ENEMY_SOLDIER_TYPES:
+            length = 0 if rng.random() < 0.3 else rng.randint(1, 6)
+            ids = list(range(next_id, next_id + length))
+            next_id += length
+            fields.append((record + 0x20 + 2 * settler_type, ids[0] if ids else 0, 2))
+            for k, settler in enumerate(ids):
+                base = SETTLERS + settler * SETTLER_BYTES
+                x, y = rng.randrange(64), rng.randrange(64)
+                fields += [(base + 4, x, 2), (base + 6, y, 2),
+                           (base + 0x10, ids[k + 1] if k + 1 < length else 0, 2),
+                           (TILES + (x * 0x300 + y) * 24 + 8, 0xFF if rng.random() < 0.1 else rng.randrange(6), 1)]
+    return fields
+
+
+def enemy_count_spec(name, address):
+    near = lambda rng, pool: rng.randrange(64) if rng.random() < 0.9 else rng.getrandbits(32)  # noqa: E731
+    return Spec(name, address, "thiscall", [near, near, below(50, 0.1), below(20)],
+                presets=enemy_lists_world, globals=lambda rng, pool, args: [(AI_MAP_WORLD, WORLD_BASE, 4)],
+                max_cases=600)
+
+
+SPECS += [
+    enemy_count_spec("AI_CountEnemySoldiersNear", 0x0058a2c0),
+    enemy_count_spec("AI_CountEnemyBowmenOnTerritoryNear", 0x0058a610),
+]
+
+# -- session 53: CastBattleSpells and InitBattleSpellSlots (ai_battle_spells.cpp)
+
+BATTLE_SPELL_CASTERS = (0x005957C0, 0x00595910, 0x00595A60, 0x00595BB0, 0x00595C10,
+                        0x00595D30, 0x00595E80, 0x00595FD0, 0x005960D0, 0x00596210)
+AI_COMMAND_SENDER = 0x007E5DE8
+RACE_SPELLS = 0x00658D64
+
+
+def battle_world(rng, pool, args):
+    """enemy_lists_world (the enemy count's lists), plus the player's mages
+    (ids 2000.., 0..5 of them, races 0..3 or sometimes above), its mana and
+    spell costs near each other."""
+    fields = enemy_lists_world(rng, pool, args)
+    player = args[0]
+    record = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+    mages = [] if rng.random() < 0.1 else [2000 + 20 * k + rng.randrange(20) for k in range(rng.randint(1, 5))]
+    fields.append((record + 0x20 + 2 * 36, mages[0] if mages else 0, 2))
+    for k, mage in enumerate(mages):
+        base = SETTLERS + mage * SETTLER_BYTES
+        race = rng.randrange(4, 256) if rng.random() < 0.1 else rng.randrange(4)
+        fields += [(base + 2, race, 1), (base + 4, rng.randrange(64), 2), (base + 6, rng.randrange(64), 2),
+                   (base + 0x10, mages[k + 1] if k + 1 < len(mages) else 0, 2)]
+    cost = lambda: rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(200)  # noqa: E731
+    fields.append((record + 0x8C, cost(), 4))
+    for slot in range(10):  # spell_mana[0..7], then promotion_cost and soldier_levels[0]
+        fields.append((record + 0x94 + 4 * slot, cost(), 4))
+    return fields
+
+
+def battle_globals(rng, pool, args):
+    """g_aiMapWorld; the battle-spell slots 0..7 (sometimes 8, 9)."""
+    fields = [(AI_MAP_WORLD, WORLD_BASE, 4)]
+    for k in range(12):
+        fields.append((AI_COMMAND_SENDER + k, rng.randrange(8, 10) if rng.random() < 0.1 else rng.randrange(8), 1))
+    return fields
+
+
+def race_spell_changes(rng, pool, args):
+    """A few entries of g_raceSpells changed (other spells, duplicates,
+    missing ones)."""
+    fields = []
+    for _ in range(rng.randrange(8)):
+        spell = rng.randrange(10, 26) if rng.random() < 0.5 else rng.randrange(40)
+        fields.append((RACE_SPELLS + 4 * rng.randrange(32), spell, 4))
+    return fields
+
+
+SPECS += [
+    # The casters are probed (verified on their own, see above): the log
+    # shows which caster runs, with ECX and the arguments, in order with the
+    # Random draws (CGameData::Random runs) and the enemy count (runs).
+    Spec("AI_CastBattleSpells", 0x005953b0, "thiscall", [below(20)], eax_mask=0,
+         presets=battle_world, globals=battle_globals,
+         callees={address: (4, "thiscall", "probe") for address in BATTLE_SPELL_CASTERS}, max_cases=600),
+    # ECX = the world: the sender's 12 bytes are world bytes 0..11.
+    Spec("AI_InitBattleSpellSlots", 0x00590870, "thiscall", [], eax_mask=0, globals=race_spell_changes,
+         max_cases=400),
+]
+
+# -- session 53: grid-cell resource queries (ai_cell_resources.cpp) --------
+
+AI_LAND_EVALUATION = 0x007E3134
+CELL_GRID = SCRATCH + 4 * SCRATCH_SLOT_BYTES  # 9 x 9 AiGridCells (0xc4 bytes each; runs over slots 4..7)
+
+
+def resource_tiles(rng, x0, y0, size, player):
+    """Tiles x0..x0+size-1, y0..y0+size-1: owned by the player (low byte)
+    in most cases, with trees, stones and water terrain."""
+    owned = rng.choice((0.3, 0.7, 0.95))
+    fields = []
+    for x in range(max(0, x0), x0 + size):
+        for y in range(max(0, y0), y0 + size):
+            base = TILES + (x * 0x300 + y) * 24
+            roll = rng.randrange(25)
+            obj = 0x44 + rng.randrange(16) if roll == 0 else 0x73 + rng.randrange(12) if roll == 1 else rng.randrange(256)
+            terrain = 0x60 + rng.randrange(16) if rng.random() < 0.04 else rng.randrange(256)
+            owner = player & 0xFF if rng.random() < owned else rng.choice((0xFF, (player + 1) & 0xFF))
+            fields += [(base + 6, terrain, 1), (base + 7, obj, 1), (base + 8, owner, 1)]
+    return fields
+
+
+def resource_goods(rng, pool):
+    return rng.choice((2, 3, 26, 9, 0)) | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def low_word_noise(n):
+    return lambda rng, pool: rng.randrange(n) | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def ai_map_size_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, rng.randint(40, 72), 2), (AI_MAP_SIZES + 2, rng.randint(40, 72), 2)]
+
+
+def owners_land_tiles(rng, pool, args):
+    cell_x, cell_y = args[0] & 0xFFFF, args[1] & 0xFFFF
+    return resource_tiles(rng, cell_x * 8, cell_y * 8, 10, args[2])
+
+
+def work_cell_tiles(rng, pool, args):
+    building = SCRATCH
+    work_x, work_y = rng.randrange(72), rng.randrange(72)
+    player = rng.randrange(4)
+    return [(building, player, 1), (building + 0x30, work_x, 2), (building + 0x32, work_y, 2)] + \
+        resource_tiles(rng, work_x // 8 * 8, work_y // 8 * 8, 10, player)
+
+
+def resource_cell_world(rng, pool, args):
+    """The tile (scratch 0 / 1, words), a 9 x 9 grid of cells (width and
+    height 0..9 used) with random presence bytes, and the tiles of the
+    3 x 3 cells around the tile."""
+    x = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(80)
+    y = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(80)
+    land = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2), (land + 0x140, rng.randrange(10), 4),
+              (land + 0x144, rng.randrange(10), 4), (land + 0x158, WORLD_BASE + CELL_GRID, 4)]
+    for cell in range(81):
+        base = CELL_GRID + cell * 0xC4
+        fields += [(base + 3, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1),
+                   (base + 4, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1)]
+    if x < 80 and y < 80:
+        fields += resource_tiles(rng, (x // 8 - 1) * 8, (y // 8 - 1) * 8, 26, args[2])
+    return fields
+
+
+def resource_cell_globals(rng, pool, args):
+    return ai_map_size_globals(rng, pool, args) + [(AI_LAND_EVALUATION, WORLD_BASE + SCRATCH + 2 * SCRATCH_SLOT_BYTES, 4)]
+
+
+SPECS += [
+    Spec("AI_OwnersLandHasResource", 0x00599df0, "fastcall",
+         [low_word_noise(9), low_word_noise(9), low_word_noise(3), resource_goods],
+         presets=owners_land_tiles, globals=ai_map_size_globals, max_cases=1000),
+    Spec("AI_WorkCellHasTrees", 0x0059a380, "fastcall", [scratch(0)], presets=work_cell_tiles,
+         globals=ai_map_size_globals, max_cases=600),
+    Spec("AI_WorkCellHasStones", 0x0059a8b0, "fastcall", [scratch(0)], presets=work_cell_tiles,
+         globals=ai_map_size_globals, max_cases=600),
+    Spec("AI_FindResourceCellAround", 0x0059a120, "fastcall",
+         [scratch(0), scratch(1), low_word_noise(3), resource_goods],
+         presets=resource_cell_world, globals=resource_cell_globals, max_cases=1000),
+]
+
+# -- session 53: FindNode, IsForceProduction, HasSiteNoteNear, -------------
+# -- HOUSE_GROUND_REQUEST_NOTE::Init ---------------------------------------
+
+
+def every_area_nodes(rng, pool, args):
+    """The node lists of players 0..2 (NODE_LAND's lists; the others empty):
+    a node for each area 0..4 in random order plus up to 3 duplicates, each
+    with a random force_production (+0x18); the out pointer at scratch 0."""
+    fields = []
+    last = {}
+    for p in range(20):
+        head = NODE_HEADS + 8 * p
+        fields.append((NODE_LAND + 12 * p + 4, WORLD_BASE + head, 4))
+        last[p] = head
+    slot = 0
+    for p in range(3):
+        areas = list(range(5)) + [rng.randrange(5) for _ in range(rng.randrange(4))]
+        rng.shuffle(areas)
+        for area in areas:
+            node = SCRATCH + SCRATCH_SLOT_BYTES + slot * 0x40
+            slot += 1
+            fields += [(last[p], WORLD_BASE + node, 4), (node + 8, area | (rng.getrandbits(16) << 16), 4),
+                       (node + 0x18, rng.getrandbits(32), 4)]
+            last[p] = node
+    for p in range(20):
+        fields.append((last[p], WORLD_BASE + NODE_HEADS + 8 * p, 4))
+    return fields
+
+
+def every_area_globals(rng, pool, args):
+    return [(AI_LAND_EVALUATION, WORLD_BASE + NODE_LAND, 4)]
+
+
+def notes_near_globals(rng, pool, args):
+    size = rng.randint(20, 420)
+    return [(AI_PLAYER, WORLD_BASE + AI_NOTES_PLAYER, 4), (AI_MAP_SIZES, size, 2),
+            (AI_MAP_SIZES + 2, size if rng.random() < 0.5 else rng.randint(20, 420), 2)]
+
+
+def ground_note_globals(rng, pool, args):
+    edge = lambda: rng.getrandbits(16) if rng.random() < 0.1 else rng.randint(1, 500)  # noqa: E731
+    return [(AI_MAP_SIZES, edge(), 2), (AI_MAP_SIZES + 2, edge(), 2)]
+
+
+SPECS += [
+    Spec("AI_FindNode", 0x00573be0, "fastcall", [scratch(0), low_word_noise(3), low_word_noise(6)],
+         presets=every_area_nodes, globals=every_area_globals, max_cases=600),
+    Spec("AI_IsForceProduction", 0x00572fa0, "fastcall", [low_word_noise(3), low_word_noise(5)],
+         presets=every_area_nodes, globals=every_area_globals, max_cases=600),
+    Spec("AI_HasSiteNoteNear", 0x00571c40, "fastcall",
+         [low_word_noise(4), between(0, 420), between(0, 420), low_word_noise(40)],
+         presets=site_notes, globals=notes_near_globals, max_cases=1000),
+    # ECX = the world: the note is world bytes 0..0x4b. EAX (AI_SiteKindOf's)
+    # is not used by the caller.
+    Spec("HOUSE_GROUND_REQUEST_NOTE_Init", 0x00575d60, "thiscall",
+         [low_word_noise(71), anything, anything, anything], eax_mask=0, globals=ground_note_globals,
+         max_cases=600),
+]

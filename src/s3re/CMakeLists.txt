@@ -136,17 +136,22 @@ add_library(s3re SHARED
     # game/ai/: computer players (Rainer/*.cpp)
     game/ai/ai_agents.cpp
     game/ai/ai_army.cpp
+    game/ai/ai_battle_spells.cpp
     game/ai/ai_building_queries.cpp
+    game/ai/ai_cell_resources.cpp
     game/ai/ai_census.cpp
     game/ai/ai_commands.cpp
     game/ai/ai_computer_player.cpp
     game/ai/ai_economy_conditions.cpp
     game/ai/ai_economy_snapshot.cpp
+    game/ai/ai_enemy_search.cpp
     game/ai/ai_evaland.cpp
     game/ai/ai_helpers.cpp
     game/ai/ai_land_queries.cpp
     game/ai/ai_map_queries.cpp
+    game/ai/ai_player_nodes.cpp
     game/ai/ai_request_notes.cpp
+    game/ai/ai_site_notes.cpp
     game/ai/ai_site_queries.cpp
     game/ai/ai_small_helpers.cpp
     game/ai/ai_wrapped_pos.cpp
