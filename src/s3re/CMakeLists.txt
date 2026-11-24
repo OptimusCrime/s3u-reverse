@@ -149,6 +149,7 @@ add_library(s3re SHARED
     game/ai/ai_economy_snapshot.cpp
     game/ai/ai_enemy_search.cpp
     game/ai/ai_evaland.cpp
+    game/ai/ai_evaland_cells.cpp
     game/ai/ai_helpers.cpp
     game/ai/ai_land_queries.cpp
     game/ai/ai_map_queries.cpp

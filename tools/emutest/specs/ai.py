@@ -1950,3 +1950,102 @@ SPECS += [
          [low_word_noise(71), anything, anything, anything], eax_mask=0, globals=ground_note_globals,
          max_cases=600),
 ]
+
+# -- session 54 (ai-land): the land evaluation's cells (ai_evaland_cells.cpp) --
+# ECX = the world: the CEvaLand object is world bytes 0..0x15b (width +0x140,
+# height +0x144, tiles_per_cell +0x14c, cursor +0x150/+0x154, grid +0x158 ->
+# CELL_GRID, 9 x 9 cells); g_aiWorld = the world too.
+
+
+def evaland_cell_tiles(rng, x0, y0):
+    """The 64 tiles of a cell with a dominant terrain class (so that the sums
+    pass the cap of 250), trees, stones (sometimes a rocky block), tile
+    flags, resources mostly of one kind and low or high heights."""
+    dominant = rng.choice((0x00, 0x10, 0x10, 0x20, 0x20, 0x30, 0x60))
+    mixed = rng.random() * 0.6
+    kind = rng.randrange(6) << 4
+    stone_rolls = 7 if rng.random() < 0.25 else 1
+    fields = []
+    for x in range(x0, x0 + 8):
+        for y in range(y0, y0 + 8):
+            base = TILES + (x * 0x300 + y) * 24
+            cls = rng.randrange(10) << 4 if rng.random() < mixed else dominant
+            terrain = cls | (5 if rng.random() < 0.25 else rng.randrange(16))
+            roll = rng.randrange(8)
+            obj = 0x73 + rng.randrange(12) if roll < stone_rolls else 0x44 + rng.randrange(16) \
+                if roll == stone_rolls else rng.randrange(256)
+            flags = rng.randrange(256) if rng.random() < 0.3 else 0
+            resources = (kind if rng.random() < 0.75 else rng.randrange(16) << 4) | rng.randrange(16)
+            height = rng.randrange(6 if rng.random() < 0.5 else 40)
+            fields += [(base + 4, height, 1), (base + 6, terrain, 1), (base + 7, obj, 1), (base + 10, flags, 1),
+                       (base + 0x11, resources, 1)]
+    return fields
+
+
+def evaland_object(rng, width, height):
+    divisor = 64 if rng.random() < 0.75 else rng.randint(1, 200)
+    return [(0x140, width, 4), (0x144, height, 4), (0x14c, divisor, 4), (0x158, WORLD_BASE + CELL_GRID, 4),
+            (MAP_SIZE, rng.randint(40, 100), 4)]
+
+
+def evaluate_cell_world(rng, pool, args):
+    cell_x, cell_y = args[0], args[1]
+    return evaland_object(rng, rng.randint(cell_x + 1, 9), rng.randint(cell_y + 1, 9)) + \
+        evaland_cell_tiles(rng, cell_x * 8, cell_y * 8)
+
+
+def evaluate_all_world(rng, pool, args):
+    width = rng.choice((0, 1, 2, 3)) if rng.random() < 0.9 else rng.randint(4, 9)
+    height = rng.choice((0, 1, 2, 3)) if rng.random() < 0.9 else rng.randint(4, 9)
+    return evaland_object(rng, width, height)
+
+
+def cell_centre_owners(rng, width, height):
+    """The centre tiles' owners of the grid's cells: owned by player 0..3 with
+    a per-case share (none, few, half, most), else 0xff."""
+    share = rng.choice((0.0, 0.03, 0.5, 0.9))
+    fields = []
+    for cx in range(width):
+        for cy in range(height):
+            owner = rng.randrange(4) if rng.random() < share else 0xFF
+            fields.append((TILES + ((cx * 8 + 4) * 0x300 + cy * 8 + 4) * 24 + 8, owner, 1))
+    return fields
+
+
+def update_next_world(rng, pool, args):
+    width, height = rng.randint(1, 9), rng.randint(1, 9)
+    return evaland_object(rng, width, height) + cell_centre_owners(rng, width, height) + \
+        [(0x150, rng.randrange(width), 4), (0x154, rng.randrange(height), 4)]
+
+
+def around_tile_world(rng, pool, args):
+    return evaland_object(rng, rng.randint(0, 9), rng.randint(0, 9))
+
+
+def evaland_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, rng.randint(40, 80), 2),
+            (AI_MAP_SIZES + 2, rng.randint(40, 80), 2)]
+
+
+def tile_word(rng, pool):
+    value = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(88)
+    return value | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+SPECS += [
+    # DEAD 0x554439 / 0x55444c: the caps of the tree and stream tile counts
+    # (a cell has 64 tiles, the cap is 250).
+    Spec("AI_CEvaLand_EvaluateCell", 0x005540f0, "thiscall", [below(9), below(9)],
+         presets=evaluate_cell_world, globals=evaland_globals, max_cases=1000,
+         exempt_blocks=(0x554439, 0x55444c)),
+    Spec("AI_CEvaLand_EvaluateAllCells", 0x005540a0, "thiscall", [],
+         presets=evaluate_all_world, globals=evaland_globals, max_cases=300),
+    # EAX: left over (the last callee's or the owner test's), the caller
+    # CComputerPlayer::Step doesn't use it.
+    Spec("AI_CEvaLand_UpdateNextCells", 0x005547a0, "thiscall", [], eax_mask=0,
+         presets=update_next_world, globals=evaland_globals, max_cases=400),
+    # EAX: left over (depends on the caller's EBP); the three callers
+    # overwrite it.
+    Spec("AI_CEvaLand_ReevaluateAroundTile", 0x005548b0, "thiscall", [tile_word, tile_word], eax_mask=0,
+         presets=around_tile_world, globals=evaland_globals, max_cases=300),
+]

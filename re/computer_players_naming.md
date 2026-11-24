@@ -504,8 +504,8 @@ FindWaterworksWorkArea 0x59ba90, IsFarmLand 0x59a720 (all R):
 
 | Offset | Meaning |
 |---|---|
-| +0x00 | flags; bit 8 tested by 0x59c200 (meaning unknown) |
-| +0x02 | water present (goods 26) |
+| +0x00 | flags (EvaluateCell 0x5540f0, V): 1 has land, 2 no water tiles, 4 has water, 8 no land tiles (starts as 2 / 8); bit 8 tested by 0x59c200 |
+| +0x02 | stream tiles (terrain class 0x60; goods 26, water for the waterworks), at most 250 |
 | +0x03 | stone present (value03, summed into +0x10) |
 | +0x04 | trees present (value04, summed into +0x0f) |
 | +0x05 | iron (summed into +0x12) |
@@ -521,8 +521,10 @@ FindWaterworksWorkArea 0x59ba90, IsFarmLand 0x59a720 (all R):
 | +0x10 | stones around (word) |
 | +0x12..+0x1c | iron, coal, gold, sulfur, gems, fish around (words) |
 
-So `values05[6]` in ai_layout.h are iron, coal, gold, sulfur, gems, fish
-and `sums12[6]` their 3x3 sums. 576 in the percent formula = 9 cells x 64
+So `resources[6]` (was `values05`) in ai_layout.h are iron, coal, gold,
+sulfur, gems, fish and `resources_around[6]` (was `sums12`) their 3x3 sums
+(field names since session 54; how EvaluateCell computes each byte:
+ai_evaland_cells.cpp). 576 in the percent formula = 9 cells x 64
 tiles (the 3x3 neighbourhood).
 
 ### Tile terrain classes used by the AI (CountResourceInOwnersLand)

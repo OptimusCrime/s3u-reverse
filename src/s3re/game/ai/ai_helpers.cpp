@@ -519,14 +519,14 @@ S3RE_HOOK(0x00554530, AI_CEvaLand_GridSumAround, GridSumFn, Original_AI_CEvaLand
 std::uint32_t __fastcall AI_CEvaLand_GridSumAround(void* self, void* /*edx*/, std::uint32_t x, std::uint32_t y) {
     const auto* evaluation = static_cast<const AiLandEvaluation*>(self);
     auto* cell = static_cast<AiGridCell*>(AI_CEvaLand_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
-    cell->sum0f = 0;
-    cell->sum10 = 0;
-    for (std::uint16_t& sum : cell->sums12) {
+    cell->trees_around = 0;
+    cell->stones_around = 0;
+    for (std::uint16_t& sum : cell->resources_around) {
         sum = 0;
     }
-    cell->percent1e = 0;
-    cell->percent1f = 0;
-    cell->percent20 = 0;
+    cell->grain_land_around = 0;
+    cell->wine_land_around = 0;
+    cell->rice_land_around = 0;
     std::uint32_t sumB = 0, sumC = 0, sumD = 0;
     for (std::uint32_t i = 0; i < 3; ++i) {
         for (std::uint32_t j = 0; j < 3; ++j) {
@@ -538,14 +538,14 @@ std::uint32_t __fastcall AI_CEvaLand_GridSumAround(void* self, void* /*edx*/, st
             }
             const auto* other = static_cast<const AiGridCell*>(
                 AI_CEvaLand_GridCell(self, nullptr, static_cast<std::uint32_t>(cx), static_cast<std::uint32_t>(cy)));
-            cell->sum0f = static_cast<std::uint8_t>(cell->sum0f + other->value04);
-            cell->sum10 = static_cast<std::uint16_t>(cell->sum10 + other->value03);
+            cell->trees_around = static_cast<std::uint8_t>(cell->trees_around + other->trees);
+            cell->stones_around = static_cast<std::uint16_t>(cell->stones_around + other->stones);
             for (std::size_t k = 0; k < 6; ++k) {
-                cell->sums12[k] = static_cast<std::uint16_t>(cell->sums12[k] + other->values05[k]);
+                cell->resources_around[k] = static_cast<std::uint16_t>(cell->resources_around[k] + other->resources[k]);
             }
-            sumB += other->value0b;
-            sumC += other->value0c;
-            sumD += other->value0d;
+            sumB += other->grain_land_percent;
+            sumC += other->wine_land_percent;
+            sumD += other->rice_land_percent;
         }
     }
     std::uint32_t low = 0;
@@ -554,9 +554,9 @@ std::uint32_t __fastcall AI_CEvaLand_GridSumAround(void* self, void* /*edx*/, st
         low = static_cast<std::uint32_t>(product);
         return static_cast<std::uint8_t>((product >> 32) >> kDivide576Shift);
     };
-    cell->percent1e = percent(sumB);
-    cell->percent1f = percent(sumC);
-    cell->percent20 = percent(sumD);
+    cell->grain_land_around = percent(sumB);
+    cell->wine_land_around = percent(sumC);
+    cell->rice_land_around = percent(sumD);
     return low;
 }
 
@@ -1129,9 +1129,9 @@ std::uint32_t __fastcall WrongGridSumAround(void* self, void* edx, std::uint32_t
     auto* cell = static_cast<AiGridCell*>(AI_CEvaLand_GridCell(self, nullptr, x & 0xffff, y & 0xffff));
     AiGridCell saved;
     std::memcpy(&saved, cell, sizeof(saved));
-    std::memset(cell, 0, offsetof(AiGridCell, unk0e));  // the centre's values read as 0
+    std::memset(cell, 0, offsetof(AiGridCell, grass_percent));  // the centre's values read as 0
     const std::uint32_t result = AI_CEvaLand_GridSumAround(self, edx, x, y);
-    std::memcpy(cell, &saved, offsetof(AiGridCell, unk0e));
+    std::memcpy(cell, &saved, offsetof(AiGridCell, grass_percent));
     return result;
 }
 

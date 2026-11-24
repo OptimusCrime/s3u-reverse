@@ -182,8 +182,8 @@ std::uint32_t __fastcall AI_FindResourceCellAround(std::uint16_t* x, std::uint16
             const AiGridCell* cell = reinterpret_cast<GridCellFn>(kGridCell)(land, nullptr, cellX, cellY);
             std::uint8_t present = 0;
             switch (static_cast<std::uint16_t>(goods)) {
-            case kGoodsStone: present = cell->value03; break;
-            case kGoodsLog: present = cell->value04; break;
+            case kGoodsStone: present = cell->stones; break;
+            case kGoodsLog: present = cell->trees; break;
             default: continue;
             }
             if (present == 0) {
@@ -255,8 +255,8 @@ void SetUpMap(test::Rng& rng, CGameData* world, std::vector<AiGridCell>& cells) 
         }
     }
     for (AiGridCell& cell : cells) {
-        cell.value03 = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0 : rng.Next32());
-        cell.value04 = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0 : rng.Next32());
+        cell.stones = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0 : rng.Next32());
+        cell.trees = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0 : rng.Next32());
     }
 }
 
