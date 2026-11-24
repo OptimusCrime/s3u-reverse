@@ -122,8 +122,8 @@ std::uint32_t __fastcall AI_CEvaLand_ResetGrid(void* self, void* /*edx*/) {
     auto* evaluation = static_cast<AiLandEvaluation*>(self);
     evaluation->width = 0;
     evaluation->height = 0;
-    evaluation->unk148 = 0;
-    evaluation->unk14c = 0;
+    evaluation->cell_count = 0;
+    evaluation->tiles_per_cell = 0;
     evaluation->cells = nullptr;
     return 0;
 }

@@ -257,7 +257,9 @@ and 3 (`std::multimap::end_580220` / `empty_580230`, category stl like their nei
 - Site rules (0x5760d0): own tile; mines need >= g_aiPlayerSetup+4 resources
   of their kind on rings 0..2 (resource kinds: coal 0x10, iron 0x20, gold
   0x30, gem 0x40, sulfur 0x50); fields (vineyard, farm, rice farm) keep their
-  work radius (+5/+3) from the centre and from other field buildings; table
+  work radius from the request's place (the distance of map offset 150,
+  300 + 5, 400 + 3) and every site keeps away from the player's finished
+  fields' work points (offset 150 / 300 / 400 distance + 4) (V, session 54); table
   0x731a88 = minimum distance to a building of the same type (woodcutter 4,
   stonecutter 4, sawmill/forester/mines 8, fields/fishery/apiary 24);
   final value from CheckBuildingSite 0x4d99e0 (lower is better, < 3 taken
@@ -504,8 +506,8 @@ FindWaterworksWorkArea 0x59ba90, IsFarmLand 0x59a720 (all R):
 
 | Offset | Meaning |
 |---|---|
-| +0x00 | flags; bit 8 tested by 0x59c200 (meaning unknown) |
-| +0x02 | water present (goods 26) |
+| +0x00 | flags (EvaluateCell 0x5540f0, V): 1 has land, 2 no water tiles, 4 has water, 8 no land tiles (starts as 2 / 8); bit 8 tested by 0x59c200 |
+| +0x02 | stream tiles (terrain class 0x60; goods 26, water for the waterworks), at most 250 |
 | +0x03 | stone present (value03, summed into +0x10) |
 | +0x04 | trees present (value04, summed into +0x0f) |
 | +0x05 | iron (summed into +0x12) |
@@ -521,8 +523,10 @@ FindWaterworksWorkArea 0x59ba90, IsFarmLand 0x59a720 (all R):
 | +0x10 | stones around (word) |
 | +0x12..+0x1c | iron, coal, gold, sulfur, gems, fish around (words) |
 
-So `values05[6]` in ai_layout.h are iron, coal, gold, sulfur, gems, fish
-and `sums12[6]` their 3x3 sums. 576 in the percent formula = 9 cells x 64
+So `resources[6]` (was `values05`) in ai_layout.h are iron, coal, gold,
+sulfur, gems, fish and `resources_around[6]` (was `sums12`) their 3x3 sums
+(field names since session 54; how EvaluateCell computes each byte:
+ai_evaland_cells.cpp). 576 in the percent formula = 9 cells x 64
 tiles (the 3x3 neighbourhood).
 
 ### Tile terrain classes used by the AI (CountResourceInOwnersLand)

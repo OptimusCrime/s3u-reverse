@@ -20,11 +20,11 @@
 //   0x0059a720 AI::IsFarmLand(player, x, y) fastcall (const u8* player,
 //              const u16* x, stack const u16* y; ret 4): the land
 //              evaluation cell of the tile (CEvaLand::GridCellOfTile on
-//              g_aiLandEvaluation): 1 if its percent1e is above 40 (G:
+//              g_aiLandEvaluation): 1 if its grain_land_around is above 40 (G:
 //              grain land), or for a player of race word 0 (Roman) its
-//              percent1f is at least 10 (G: wine land), or for race word 2
-//              (Asian) its value0d is at least 10 (G: rice land; the raw
-//              value, not percent20); else 0. Caller CCentrumCheckAgent's
+//              wine_land_around is at least 10 (G: wine land), or for race word 2
+//              (Asian) its rice_land_percent is at least 10 (G: rice land; the raw
+//              value, not rice_land_around); else 0. Caller CCentrumCheckAgent's
 //              run 0x560e00 (before it tears down a woodcutter).
 //   0x0058a250 AI::NextSparseMapOffset(int* index, int* dx, int* dy)
 //              fastcall (ECX, stack; ret 8): for *index >= 20000 (signed)
@@ -149,14 +149,14 @@ std::uint32_t __fastcall AI_ResourceAmountNear(std::uint32_t x, std::uint32_t y,
 std::uint32_t __fastcall AI_IsFarmLand(const std::uint8_t* player, const std::uint16_t* x, const std::uint16_t* y) {
     using CellFn = const AiGridCell*(__fastcall*)(std::uint32_t self, void* edx, std::uint32_t x, std::uint32_t y);
     const AiGridCell* cell = reinterpret_cast<CellFn>(kGridCellOfTile)(g_aiLandEvaluation, nullptr, *x, *y);
-    if (cell->percent1e > kGrainLandAbove) {
+    if (cell->grain_land_around > kGrainLandAbove) {
         return 1;
     }
     // The race's low word, as the original compares it.
     const auto race = static_cast<std::uint16_t>(g_aiWorld.get()->players[*player].race);
     switch (race) {
-    case Value(Race::Roman): return cell->percent1f >= kWineLandFrom ? 1 : 0;
-    case Value(Race::Asian): return cell->value0d >= kRiceLandFrom ? 1 : 0;
+    case Value(Race::Roman): return cell->wine_land_around >= kWineLandFrom ? 1 : 0;
+    case Value(Race::Asian): return cell->rice_land_percent >= kRiceLandFrom ? 1 : 0;
     default: return 0;
     }
 }
@@ -270,9 +270,9 @@ void CompareLandQueries(test::Context& ctx, const LandQueries& candidate, int ca
         }
         case 2: {
             for (AiGridCell& cell : cells) {
-                cell.percent1e = RandomPercent(rng);
-                cell.percent1f = RandomPercent(rng);
-                cell.value0d = RandomPercent(rng);
+                cell.grain_land_around = RandomPercent(rng);
+                cell.wine_land_around = RandomPercent(rng);
+                cell.rice_land_percent = RandomPercent(rng);
             }
             const auto player = static_cast<std::uint8_t>(rng.Below(kPlayers));
             const std::int32_t race = rng.Chance(9, 10) ? static_cast<std::int32_t>(rng.Below(5))
@@ -336,12 +336,12 @@ std::uint32_t __fastcall WrongAmountNear(std::uint32_t x, std::uint32_t y, std::
 }
 
 std::uint32_t __fastcall WrongFarmLand(const std::uint8_t* player, const std::uint16_t* x, const std::uint16_t* y) {
-    // Wrong: the Asians' rice land by percent20.
+    // Wrong: the Asians' rice land by rice_land_around.
     using CellFn = const AiGridCell*(__fastcall*)(std::uint32_t self, void* edx, std::uint32_t x, std::uint32_t y);
     const AiGridCell* cell = reinterpret_cast<CellFn>(kGridCellOfTile)(g_aiLandEvaluation, nullptr, *x, *y);
     if (static_cast<std::uint16_t>(g_aiWorld.get()->players[*player].race) == Value(Race::Asian) &&
-        cell->percent1e <= kGrainLandAbove) {
-        return cell->percent20 >= kRiceLandFrom ? 1 : 0;
+        cell->grain_land_around <= kGrainLandAbove) {
+        return cell->rice_land_around >= kRiceLandFrom ? 1 : 0;
     }
     return AI_IsFarmLand(player, x, y);
 }

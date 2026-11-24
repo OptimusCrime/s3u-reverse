@@ -174,6 +174,10 @@ inline constexpr GameGlobal<const NotificationKind[]> g_notificationKinds{0x659d
 // ------------------------------------------------------------ computer players
 // Default per-candidate value (AI_RecordBestCandidate).
 inline constexpr GameGlobal<const std::uint16_t[]> g_aiCandidateDefaults{0x7329d0};
+// Per building type: the minimum distance a computer player keeps between
+// two buildings of that type (0 = none; woodcutter 4, mines 8, fields 24;
+// HOUSE_GROUND_REQUEST_NOTE::CheckSite 0x5760d0).
+inline constexpr GameGlobal<const std::uint16_t[]> g_aiSameTypeDistance{0x731a88};
 // Per building type (58 words, 0 for type 0 and past the last): the cap
 // and the step by which CComputerPlayer::RaiseBuildPriorities (0x551b10)
 // raises a non-zero build priority (AiPlayerData::best[type].score).

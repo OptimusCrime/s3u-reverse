@@ -141,6 +141,7 @@ add_library(s3re SHARED
     game/ai/ai_agents.cpp
     game/ai/ai_army.cpp
     game/ai/ai_battle_spells.cpp
+    game/ai/ai_building_orders.cpp
     game/ai/ai_building_queries.cpp
     game/ai/ai_cell_resources.cpp
     game/ai/ai_census.cpp
@@ -150,6 +151,8 @@ add_library(s3re SHARED
     game/ai/ai_economy_snapshot.cpp
     game/ai/ai_enemy_search.cpp
     game/ai/ai_evaland.cpp
+    game/ai/ai_evaland_cells.cpp
+    game/ai/ai_ground_request.cpp
     game/ai/ai_helpers.cpp
     game/ai/ai_land_queries.cpp
     game/ai/ai_map_queries.cpp
@@ -158,6 +161,7 @@ add_library(s3re SHARED
     game/ai/ai_site_notes.cpp
     game/ai/ai_site_queries.cpp
     game/ai/ai_small_helpers.cpp
+    game/ai/ai_state.cpp
     game/ai/ai_wrapped_pos.cpp
 
     # game/fileformats/: the map and savegame container (Dirk::CMapFile)

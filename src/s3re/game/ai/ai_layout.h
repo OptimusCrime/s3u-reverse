@@ -23,8 +23,12 @@ constexpr std::size_t kAgentVectorCount = 20;  // g_aiAgentVectors
 // ---------------------------------------------------------------- player setup
 // An entry of the settings table g_aiPlayerSetups (contents not known).
 struct AiPlayerSetup {
-    std::uint8_t unk000[0x180];
+    std::uint16_t positions_per_turn;  // 0x000 HOUSE_GROUND_REQUEST_AGENT::WorkOnNote 0x576530: spiral positions per turn
+    std::uint16_t unk002;
+    std::uint16_t min_mine_resources;  // 0x004 HOUSE_GROUND_REQUEST_NOTE::CheckSite: ResourceAmountNear at least this
+    std::uint8_t unk006[0x180 - 6];
 };
+static_assert(offsetof(AiPlayerSetup, min_mine_resources) == 4);
 static_assert(sizeof(AiPlayerSetup) == 0x180);
 
 // ---------------------------------------------------------------- blackboard
@@ -492,42 +496,66 @@ static_assert(offsetof(AiList, head) == 4);
 
 // ---------------------------------------------------------------- land evaluation
 // A cell of the land evaluation grid (0xc4 bytes; one per 8x8 tiles).
+// +0x00..+0x0e are written by AI::CEvaLand::EvaluateCell 0x5540f0 from the
+// cell's tiles; +0x0f..+0x20 by GridSumAround 0x554530 from the 3x3 cells
+// around (re/computer_players_naming.md "Land evaluation grid cell").
+// Amounts are halved and capped at 250 (EvaluateCell).
 struct AiGridCell {
-    std::uint8_t unk00[3];
-    std::uint8_t value03;          // 0x03 summed into sum10
-    std::uint8_t value04;          // 0x04 summed into sum0f
-    std::uint8_t values05[6];      // 0x05..0x0a summed into sums12
-    std::uint8_t value0b;          // 0x0b
-    std::uint8_t value0c;          // 0x0c
-    std::uint8_t value0d;          // 0x0d
-    std::uint8_t unk0e;
-    std::uint8_t sum0f;            // 0x0f
-    std::uint16_t sum10;           // 0x10
-    std::uint16_t sums12[6];       // 0x12..0x1c
-    std::uint8_t percent1e;        // 0x1e sum of value0b * 100 / 576
-    std::uint8_t percent1f;        // 0x1f the same for value0c
-    std::uint8_t percent20;        // 0x20 the same for value0d
-    std::uint8_t unk21[0xc4 - 0x21];
+    std::uint16_t flags;                // 0x00 kGridCellHasLand / NoWater / HasWater / NoLand
+    std::uint8_t stream_tiles;          // 0x02 tiles of terrain class 0x60 (stream: water for waterworks)
+    std::uint8_t stones;                // 0x03 stone amount / 2, summed into stones_around
+    std::uint8_t trees;                 // 0x04 tree tiles, summed into trees_around
+    std::uint8_t resources[6];          // 0x05..0x0a iron, coal, gold, sulfur, gems, fish (amount / 2)
+    std::uint8_t grain_land_percent;    // 0x0b % of grass tiles with TileSlope < 7 (incl. trees and stones)
+    std::uint8_t wine_land_percent;     // 0x0c % of grass tiles with slope >= 7
+    std::uint8_t rice_land_percent;     // 0x0d % of free swampy-grass (0x15) tiles with slope < 7
+    std::uint8_t grass_percent;         // 0x0e % of grass-class (0x10) tiles
+    std::uint8_t trees_around;          // 0x0f
+    std::uint16_t stones_around;        // 0x10
+    std::uint16_t resources_around[6];  // 0x12..0x1c
+    std::uint8_t grain_land_around;     // 0x1e sum of grain_land_percent * 100 / 576
+    std::uint8_t wine_land_around;      // 0x1f the same for wine_land_percent
+    std::uint8_t rice_land_around;      // 0x20 the same for rice_land_percent
+    std::uint8_t unk21[3];
+    std::uint32_t building_types[20][2];  // 0x24 per player a std::bitset<57>: the building types in the cell
 };
 static_assert(sizeof(AiGridCell) == 0xc4);
-static_assert(offsetof(AiGridCell, sum0f) == 0x0f);
-static_assert(offsetof(AiGridCell, sums12) == 0x12);
-static_assert(offsetof(AiGridCell, percent1e) == 0x1e);
+static_assert(offsetof(AiGridCell, stream_tiles) == 0x02);
+static_assert(offsetof(AiGridCell, resources) == 0x05);
+static_assert(offsetof(AiGridCell, grass_percent) == 0x0e);
+static_assert(offsetof(AiGridCell, trees_around) == 0x0f);
+static_assert(offsetof(AiGridCell, resources_around) == 0x12);
+static_assert(offsetof(AiGridCell, grain_land_around) == 0x1e);
+static_assert(offsetof(AiGridCell, building_types) == 0x24);
+
+// AiGridCell::flags (EvaluateCell): starts as NoWater | NoLand; a land tile
+// (terrain class not 0) sets HasLand and clears NoLand, a water tile
+// (class 0) sets HasWater and clears NoWater.
+constexpr std::uint16_t kGridCellHasLand = 0x1;
+constexpr std::uint16_t kGridCellNoWater = 0x2;
+constexpr std::uint16_t kGridCellHasWater = 0x4;
+constexpr std::uint16_t kGridCellNoLand = 0x8;
+
+// AiGridCell::resources indexes.
+enum GridResource : std::uint8_t { kGridIron, kGridCoal, kGridGold, kGridSulfur, kGridGems, kGridFish };
 
 // CEvaLand (our name, from Rainer\Cevaland.cpp; 0x15c bytes): the computer
 // players' shared land evaluation object.
 struct AiLandEvaluation {
     AiList lists[20];          // 0x000
-    std::uint8_t unk0f0[0x50];
-    std::uint32_t width;       // 0x140 grid width (cells)
-    std::uint32_t height;      // 0x144 grid height
-    std::uint32_t unk148;      // 0x148 (cleared with the sizes)
-    std::uint32_t unk14c;      // 0x14c
-    std::uint32_t unk150;
-    std::uint32_t unk154;
+    std::uint32_t areas_changed[20];  // 0x0f0 per player: set by RemoveArea 0x558e80, read by CComputerPlayer::Step
+    std::uint32_t width;           // 0x140 grid width (cells)
+    std::uint32_t height;          // 0x144 grid height
+    std::uint32_t cell_count;      // 0x148 width * height (Init 0x553ea0)
+    std::uint32_t tiles_per_cell;  // 0x14c 64 (Init); EvaluateCell's percentages divide by it
+    std::uint32_t cursor_x;        // 0x150 UpdateNextCells' position on the grid
+    std::uint32_t cursor_y;        // 0x154
     AiGridCell* cells;         // 0x158 the grid
 };
+static_assert(offsetof(AiLandEvaluation, areas_changed) == 0x0f0);
 static_assert(offsetof(AiLandEvaluation, width) == 0x140);
+static_assert(offsetof(AiLandEvaluation, tiles_per_cell) == 0x14c);
+static_assert(offsetof(AiLandEvaluation, cursor_x) == 0x150);
 static_assert(offsetof(AiLandEvaluation, height) == 0x144);
 static_assert(offsetof(AiLandEvaluation, cells) == 0x158);
 static_assert(sizeof(AiLandEvaluation) == 0x15c);
@@ -576,14 +604,16 @@ struct HouseGroundRequestNote {
     std::uint16_t unk28;          // 0x28 0 after Init
     std::uint16_t unk2a;
     WrappedPos spiral;            // 0x2c the search position: map-sized, starting at (x, y)
-    std::uint16_t unk3c;          // 0x3c 0 after Init
-    std::uint16_t unk3e[2];
+    std::uint16_t spiral_ring;    // 0x3c NextSpiralPosition 0x5763a0: the ring (0 after Init: not started)
+    std::uint16_t spiral_side;    // 0x3e the ring's side 0..5 (WrappedPos::Step direction)
+    std::uint16_t spiral_step;    // 0x40 the step on that side
     std::uint16_t max_radius;     // 0x42 Init's fourth argument
     std::uint32_t unk44;          // 0x44 0 after Init
     std::uint32_t military;       // 0x48 1 if the building needs a military site (AI_SiteKindOf == 3)
 };
 static_assert(offsetof(HouseGroundRequestNote, spiral) == 0x2c);
-static_assert(offsetof(HouseGroundRequestNote, unk3c) == 0x3c);
+static_assert(offsetof(HouseGroundRequestNote, spiral_ring) == 0x3c);
+static_assert(offsetof(HouseGroundRequestNote, spiral_step) == 0x40);
 static_assert(offsetof(HouseGroundRequestNote, max_radius) == 0x42);
 static_assert(offsetof(HouseGroundRequestNote, military) == 0x48);
 static_assert(sizeof(HouseGroundRequestNote) == 0x4c);

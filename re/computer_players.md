@@ -428,7 +428,8 @@ Frontier after batch 1 (`python tools/frontier.py --range 54cbd0 59fcd0`):
    of the recorder, so the emulator must probe it as a callee).
    `0x590990` alone unblocks 10 functions.
 4. **A5: Cevaland** (land evaluation): `0x5540f0`, `0x5547a0`,
-   `0x5548b0`, `0x553e10`/`0x553ea0`, the lists `0x5593a0`..`0x55a440`
+   `0x5548b0`, `0x5540a0` done (session 54, see "The land evaluation
+   grid" below); open: `0x553e10`/`0x553ea0`, the lists `0x5593a0`..`0x55a440`
    (SEH, Watcom-style containers), then `0x554980`, `0x555260`,
    `0x556080`, `0x556630`/`0x5579d0` (1,361 instructions each).
 5. **A6: agents' run functions**, smallest first: T_SAFETY (0.7k),
@@ -438,6 +439,48 @@ Frontier after batch 1 (`python tools/frontier.py --range 54cbd0 59fcd0`):
 6. Whole-game evidence comes with every recording (computer players run
    in all of them); `--skip-hooks` can isolate an AI replacement when a
    replay diverges.
+
+## The land evaluation grid (session 54, V)
+
+One `AiGridCell` (0xc4 bytes) per 8 x 8 tiles; fields named in
+ai_layout.h, how each byte is computed in `ai_evaland_cells.cpp`.
+
+- `EvaluateCell` 0x5540f0 tallies the cell's tiles by terrain class:
+  water tiles give the flags (has water / no water) and the fish (kind 0
+  resources), grass tiles the stones, trees and grain / wine / rice land
+  percentages (TileSlope < 7 grain, >= 7 wine; swampy grass 0x15 rice),
+  mountain tiles the five mine resources, stream tiles (class 0x60) the
+  waterworks' water. Amounts are stored halved, but a sum above 250 as 250
+  (so 250 -> 125, 251 -> 250; quirk kept).
+- `UpdateNextCells` 0x5547a0 (every computer player step): the cursor
+  visits up to 64 cells and re-evaluates up to 4 owned ones (and their 3 x
+  3 sums, GridSumAround 0x554530). `ReevaluateAroundTile` 0x5548b0 does
+  the 3 x 3 cells around a tile.
+- `DiscountExploitedResources` 0x59bc20 (every 71 steps): for the
+  player's finished woodcutters, stonecutters, mines and fisheries the
+  3 x 3 sum of their resource is divided by 8 in the building's cell and by
+  4, 2, 1 in the square rings 1..3 of cells around it; the 4th ring's
+  shift count 3 - 4 wraps to 31 on x86, so those sums are **cleared**
+  (quirk kept). Only cells whose centre tile the player owns; only when
+  the work point is on the building's row or column.
+- `CountResourceInOwnersLand` 0x599a30 / `CountPlayersResourcesAround`
+  0x599f50 count a resource on the player's tiles of a cell / of the 3 x 3
+  cells whose presence byte is set. Slope exactly 7 counts as grain, rice
+  and wine land; fish (goods 8) is not handled (DebugLog per owned tile).
+- The per-player building-type bitsets at +0x24 are filled at the start by
+  `MarkBuildingTypesInLandGrid` 0x5723a0 (once, guarded by
+  g_aiMarkBuildingTypesPending 0x7312ac).
+
+The ground request's site search (`ai_ground_request.cpp`, V): CheckSite
+0x5760d0 rates a tile (0 = impossible, else CheckBuildingSite's earth
+class; mines need g_aiPlayerSetup->min_mine_resources nearby, fields keep
+their work radius from the request's place, every site keeps away from
+the player's fields' work areas and from its buildings of the same type,
+g_aiSameTypeDistance 0x731a88). CheckAndImproveSite 0x575df0 then moves a
+mine to the richest spot among the first 100 offsets and other buildings
+(not the small tower) to the best-rated of the first 150 offsets.
+SetForestersWorking 0x59c0f0: foresters work while the area's logs / 5 <
+its woodcutters (AiPlayerData::building_counts[2]).
 
 Open questions: who makes the
 AiPlayerData nodes (one per economy area, see step 4 of 0x550f80) and

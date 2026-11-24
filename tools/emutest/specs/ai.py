@@ -1950,3 +1950,470 @@ SPECS += [
          [low_word_noise(71), anything, anything, anything], eax_mask=0, globals=ground_note_globals,
          max_cases=600),
 ]
+
+# -- session 54 (ai-land): the land evaluation's cells (ai_evaland_cells.cpp) --
+# ECX = the world: the CEvaLand object is world bytes 0..0x15b (width +0x140,
+# height +0x144, tiles_per_cell +0x14c, cursor +0x150/+0x154, grid +0x158 ->
+# CELL_GRID, 9 x 9 cells); g_aiWorld = the world too.
+
+
+def evaland_cell_tiles(rng, x0, y0):
+    """The 64 tiles of a cell with a dominant terrain class (so that the sums
+    pass the cap of 250), trees, stones (sometimes a rocky block), tile
+    flags, resources mostly of one kind and low or high heights."""
+    dominant = rng.choice((0x00, 0x10, 0x10, 0x20, 0x20, 0x30, 0x60))
+    mixed = rng.random() * 0.6
+    kind = rng.randrange(6) << 4
+    stone_rolls = 7 if rng.random() < 0.25 else 1
+    fields = []
+    for x in range(x0, x0 + 8):
+        for y in range(y0, y0 + 8):
+            base = TILES + (x * 0x300 + y) * 24
+            cls = rng.randrange(10) << 4 if rng.random() < mixed else dominant
+            terrain = cls | (5 if rng.random() < 0.25 else rng.randrange(16))
+            roll = rng.randrange(8)
+            obj = 0x73 + rng.randrange(12) if roll < stone_rolls else 0x44 + rng.randrange(16) \
+                if roll == stone_rolls else rng.randrange(256)
+            flags = rng.randrange(256) if rng.random() < 0.3 else 0
+            resources = (kind if rng.random() < 0.75 else rng.randrange(16) << 4) | rng.randrange(16)
+            height = rng.randrange(6 if rng.random() < 0.5 else 40)
+            fields += [(base + 4, height, 1), (base + 6, terrain, 1), (base + 7, obj, 1), (base + 10, flags, 1),
+                       (base + 0x11, resources, 1)]
+    return fields
+
+
+def evaland_object(rng, width, height):
+    divisor = 64 if rng.random() < 0.75 else rng.randint(1, 200)
+    return [(0x140, width, 4), (0x144, height, 4), (0x14c, divisor, 4), (0x158, WORLD_BASE + CELL_GRID, 4),
+            (MAP_SIZE, rng.randint(40, 100), 4)]
+
+
+def evaluate_cell_world(rng, pool, args):
+    cell_x, cell_y = args[0], args[1]
+    return evaland_object(rng, rng.randint(cell_x + 1, 9), rng.randint(cell_y + 1, 9)) + \
+        evaland_cell_tiles(rng, cell_x * 8, cell_y * 8)
+
+
+def evaluate_all_world(rng, pool, args):
+    width = rng.choice((0, 1, 2, 3)) if rng.random() < 0.9 else rng.randint(4, 9)
+    height = rng.choice((0, 1, 2, 3)) if rng.random() < 0.9 else rng.randint(4, 9)
+    return evaland_object(rng, width, height)
+
+
+def cell_centre_owners(rng, width, height):
+    """The centre tiles' owners of the grid's cells: owned by player 0..3 with
+    a per-case share (none, few, half, most), else 0xff."""
+    share = rng.choice((0.0, 0.03, 0.5, 0.9))
+    fields = []
+    for cx in range(width):
+        for cy in range(height):
+            owner = rng.randrange(4) if rng.random() < share else 0xFF
+            fields.append((TILES + ((cx * 8 + 4) * 0x300 + cy * 8 + 4) * 24 + 8, owner, 1))
+    return fields
+
+
+def update_next_world(rng, pool, args):
+    width, height = rng.randint(1, 9), rng.randint(1, 9)
+    return evaland_object(rng, width, height) + cell_centre_owners(rng, width, height) + \
+        [(0x150, rng.randrange(width), 4), (0x154, rng.randrange(height), 4)]
+
+
+def around_tile_world(rng, pool, args):
+    return evaland_object(rng, rng.randint(0, 9), rng.randint(0, 9))
+
+
+def evaland_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, rng.randint(40, 80), 2),
+            (AI_MAP_SIZES + 2, rng.randint(40, 80), 2)]
+
+
+def tile_word(rng, pool):
+    value = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(88)
+    return value | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+SPECS += [
+    # DEAD 0x554439 / 0x55444c: the caps of the tree and stream tile counts
+    # (a cell has 64 tiles, the cap is 250).
+    Spec("AI_CEvaLand_EvaluateCell", 0x005540f0, "thiscall", [below(9), below(9)],
+         presets=evaluate_cell_world, globals=evaland_globals, max_cases=1000,
+         exempt_blocks=(0x554439, 0x55444c)),
+    Spec("AI_CEvaLand_EvaluateAllCells", 0x005540a0, "thiscall", [],
+         presets=evaluate_all_world, globals=evaland_globals, max_cases=300),
+    # EAX: left over (the last callee's or the owner test's), the caller
+    # CComputerPlayer::Step doesn't use it.
+    Spec("AI_CEvaLand_UpdateNextCells", 0x005547a0, "thiscall", [], eax_mask=0,
+         presets=update_next_world, globals=evaland_globals, max_cases=400),
+    # EAX: left over (depends on the caller's EBP); the three callers
+    # overwrite it.
+    Spec("AI_CEvaLand_ReevaluateAroundTile", 0x005548b0, "thiscall", [tile_word, tile_word], eax_mask=0,
+         presets=around_tile_world, globals=evaland_globals, max_cases=300),
+]
+
+# -- session 54 (ai-land): CountResourceInOwnersLand, CountPlayersResourcesAround --
+
+
+def field_tiles(rng, x0, y0, size, player):
+    """resource_tiles plus heights (TileSlope), tile flags, resources and
+    grass / swampy grass / stream terrain."""
+    fields = resource_tiles(rng, x0, y0, size, player)
+    for x in range(max(0, x0), x0 + size):
+        for y in range(max(0, y0), y0 + size):
+            base = TILES + (x * 0x300 + y) * 24
+            roll = rng.randrange(8)
+            terrain = 0x10 | rng.randrange(16) if roll < 3 else 0x15 if roll == 3 else \
+                0x60 | rng.randrange(16) if roll == 4 else rng.randrange(256)
+            flags = rng.randrange(256) if rng.random() < 0.3 else 0
+            height = rng.randrange(8 if rng.random() < 0.5 else 30)
+            fields += [(base + 4, height, 1), (base + 6, terrain, 1), (base + 10, flags, 1),
+                       (base + 0x11, rng.randrange(256), 1)]
+    return fields
+
+
+def count_goods(rng, pool):
+    goods = rng.choice((2, 3, 5, 6, 7, 9, 21, 25, 26, 27, 28, 8, 0, 4, 29, 0x102))
+    return goods | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def count_resource_tiles(rng, pool, args):
+    cell_x, cell_y = args[0] & 0xFFFF, args[1] & 0xFFFF
+    return field_tiles(rng, cell_x * 8, cell_y * 8, 10, args[2]) + [(MAP_SIZE, rng.randint(40, 100), 4)]
+
+
+COUNT_LAND = SCRATCH + 8 * SCRATCH_SLOT_BYTES  # the CEvaLand object (grid at CELL_GRID)
+
+
+def count_around_world(rng, pool, args):
+    """Cell x, y, player and goods words at scratch 0..3; a 9 x 9 grid with
+    random presence bytes (width and height 0..9) and the tiles of the 3 x 3
+    cells around."""
+    x = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(10)
+    y = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(10)
+    player = rng.randrange(3)
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2), (SCRATCH + 2 * SCRATCH_SLOT_BYTES, player, 2),
+              (SCRATCH + 3 * SCRATCH_SLOT_BYTES, count_goods(rng, pool) & 0xFFFF, 2),
+              (COUNT_LAND + 0x140, rng.randrange(10), 4), (COUNT_LAND + 0x144, rng.randrange(10), 4),
+              (COUNT_LAND + 0x158, WORLD_BASE + CELL_GRID, 4), (MAP_SIZE, rng.randint(40, 100), 4)]
+    for cell in range(81):
+        base = CELL_GRID + cell * 0xC4
+        fields += [(base + k, 0 if rng.random() < 0.33 else rng.randrange(1, 256), 1) for k in range(2, 0xF)]
+    if x < 10 and y < 10:
+        fields += field_tiles(rng, (x - 1) * 8, (y - 1) * 8, 24, player)
+    return fields
+
+
+def count_around_globals(rng, pool, args):
+    return ai_map_size_globals(rng, pool, args) + [(AI_LAND_EVALUATION, WORLD_BASE + COUNT_LAND, 4)]
+
+
+SPECS += [
+    # DEAD 0x599d8c: the empty-loop exit (y * 8 >= y * 8 + 8 can't happen for
+    # a 16-bit y).
+    Spec("AI_CountResourceInOwnersLand", 0x00599a30, "fastcall",
+         [low_word_noise(9), low_word_noise(9), low_word_noise(3), count_goods],
+         presets=count_resource_tiles, globals=ai_map_size_globals, max_cases=1000, exempt_blocks=(0x599d8c,)),
+    Spec("AI_CountPlayersResourcesAround", 0x00599f50, "fastcall",
+         [scratch(0), scratch(1), scratch(2), scratch(3)],
+         presets=count_around_world, globals=count_around_globals, max_cases=600),
+]
+
+# -- session 54 (ai-land): DiscountExploitedResources -------------------------
+BUILDING_HIGH_WATER = 0x1499e60
+BUILDING_RECORDS = 0x1499e64
+
+
+def discount_world(rng, pool, args):
+    """1..8 building records of players 0..3 (or free), mostly finished
+    resource buildings with their work point often on their row or column;
+    the CEvaLand object at COUNT_LAND (9 x 9 grid at CELL_GRID, random sums)
+    and the owners of the grid cells' centre tiles."""
+    count = rng.randint(1, 8)
+    fields = [(BUILDING_HIGH_WATER, count, 4), (COUNT_LAND + 0x140, 9, 4), (COUNT_LAND + 0x144, 9, 4),
+              (COUNT_LAND + 0x14c, 64, 4), (COUNT_LAND + 0x158, WORLD_BASE + CELL_GRID, 4),
+              (MAP_SIZE, rng.randint(40, 100), 4)]
+    types = (2, 3, 5, 7, 8, 9, 25, 29, 37, 4)
+    for building in range(count + 2):
+        base = BUILDING_RECORDS + building * 0x3a
+        x, y = rng.randrange(80), rng.randrange(80)
+        roll = rng.randrange(3)
+        work_x = x if roll == 0 else rng.randrange(80)
+        work_y = y if roll == 1 else rng.randrange(80)
+        kind = rng.randrange(64) if rng.random() < 0.1 else rng.choice(types)
+        owner = 0xFF if rng.random() < 0.15 else rng.randrange(4)
+        buildup = rng.randrange(1, 256) if rng.random() < 0.15 else 0
+        fields += [(base, owner, 1), (base + 2, x, 2), (base + 4, y, 2), (base + 6, kind, 1),
+                   (base + 0x21, buildup, 1), (base + 0x30, work_x, 2), (base + 0x32, work_y, 2)]
+    return fields + cell_centre_owners(rng, 10, 10)
+
+
+def discount_globals(rng, pool, args):
+    return evaland_globals(rng, pool, args) + [(AI_LAND_EVALUATION, WORLD_BASE + COUNT_LAND, 4)]
+
+
+SPECS += [
+    Spec("AI_DiscountExploitedResources", 0x0059bc20, "fastcall", [low_word_noise(4), anything],
+         presets=discount_world, globals=discount_globals, max_cases=300),
+]
+
+# -- session 54 (ai-land): HOUSE_GROUND_REQUEST_NOTE's site search (ai_ground_request.cpp) --
+# ECX = the world: the note is world bytes 0..0x4b. g_aiPlayer points at
+# scratch slot 9 (its world field +0x75c = the world), g_aiPlayerSetup at
+# slot 10 (+4: the mines' minimum). CheckBuildingSite (verified on its own)
+# is probed with values 0..10: on these random tiles it would almost always
+# return 0, so the site values would never vary.
+AI_PLAYER_SETUP = 0x007e2eb4
+GROUND_PLAYER = SCRATCH + 9 * SCRATCH_SLOT_BYTES
+GROUND_SETUP = SCRATCH + 10 * SCRATCH_SLOT_BYTES
+MAP_OFFSETS = 0x110a588
+
+
+def ring_offsets(count):
+    """The map offset table's first `count` entries (dx, dy, ring), ordered by
+    hexagonal ring as the game builds it."""
+    entries = []
+    ring = 0
+    while len(entries) < count:
+        for dx in range(-ring, ring + 1):
+            for dy in range(-ring, ring + 1):
+                d = max(abs(dx), abs(dy)) if (dx >= 0) == (dy >= 0) else abs(dx) + abs(dy)
+                if d == ring:
+                    entries.append((dx, dy, ring))
+        ring += 1
+    return entries[:count]
+
+
+RING_OFFSETS = ring_offsets(401)
+
+
+def site_value(h):
+    return 0 if h % 10 < 3 else 1 + (h >> 8) % 10
+
+
+GROUND_CALLEES = {0x004d99e0: (5, "thiscall", site_value)}
+
+
+def ground_note_world(rng, pool, args):
+    """The note, the map offsets, the tiles around the place (owned in 4 x 4
+    patches by players 0..2 or nobody: the player number is a global, drawn
+    separately) and 0..6 buildings, mostly fields."""
+    cx, cy = rng.randint(15, 65), rng.randint(15, 65)
+    roll = rng.random()
+    kind = rng.choice((7, 8, 9, 29, 37)) if roll < 0.3 else \
+        rng.choice((7, 8, 9, 29, 37, 14, 24, 36, 15, 2, 3, 5, 1, 25, 51)) if roll < 0.9 else rng.randrange(64)
+    barren = rng.random() < 0.15  # no resources at all (a mine finds no place)
+    size = rng.randint(70, 80)
+    max_radius = rng.randint(1, 8)
+    ring = 0 if rng.random() < 0.2 else rng.randint(0, max_radius)
+    fields = [(0x1c, kind, 2), (0x1e, cx + rng.randint(-6, 6), 2), (0x20, cy + rng.randint(-6, 6), 2),
+              (0x2c, cx, 2), (0x2e, cy, 2), (0x30, size, 2), (0x32, size, 2), (0x3c, ring, 2),
+              (0x3e, rng.randrange(6), 2), (0x40, rng.randrange(ring) if ring else 0, 2), (0x42, max_radius, 2),
+              (SCRATCH, cx + rng.randint(-3, 3), 2), (SCRATCH + SCRATCH_SLOT_BYTES, cy + rng.randint(-3, 3), 2),
+              (GROUND_PLAYER + 0x75c, WORLD_BASE, 4), (GROUND_SETUP + 4, 0 if rng.random() < 0.2 else rng.randrange(60), 2),
+              (MAP_SIZE, size, 4)]
+    for k, (dx, dy, d) in enumerate(RING_OFFSETS):
+        base = MAP_OFFSETS + 16 * k
+        if k < 150:
+            fields += [(base, dx & 0xFFFFFFFF, 4), (base + 4, dy & 0xFFFFFFFF, 4)]
+        if k in (150, 300, 400):
+            fields.append((base + 8, d, 4))
+    resource = rng.randrange(6) << 4
+    patches = {}
+    for x in range(cx - 14, cx + 15):
+        for y in range(cy - 14, cy + 15):
+            base = TILES + (x * 0x300 + y) * 24
+            patch = (x // 4, y // 4)
+            if patch not in patches:
+                patches[patch] = rng.choice((0, 1, 2, 0xFF))
+            owner = patches[patch]
+            amount = 0 if barren or rng.random() < 0.3 else rng.randrange(16)
+            kind_here = resource if rng.random() < 0.8 else rng.randrange(6) << 4
+            fields += [(base + 8, owner, 1), (base + 0x11, kind_here | amount, 1)]
+    count = rng.randrange(7)
+    fields.append((BUILDING_HIGH_WATER, count, 4))
+    for building in range(count + 2):
+        base = BUILDING_RECORDS + building * 0x3a
+        btype = rng.choice((14, 24, 36, 14, 24, 36, 2, 7)) if rng.random() < 0.9 else kind
+        owner = rng.choice((0, 1, 2, 0xFF))
+        fields += [(base, owner, 1), (base + 2, cx + rng.randint(-20, 20), 2), (base + 4, cy + rng.randint(-20, 20), 2),
+                   (base + 6, btype, 1), (base + 0x21, rng.randrange(1, 256) if rng.random() < 0.15 else 0, 1),
+                   (base + 0x30, cx + rng.randint(-25, 25), 2), (base + 0x32, cy + rng.randint(-25, 25), 2)]
+    return fields
+
+
+def ground_note_globals(rng, pool, args):
+    size = rng.randint(70, 80)
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_PLAYER, WORLD_BASE + GROUND_PLAYER, 4),
+            (AI_PLAYER_SETUP, WORLD_BASE + GROUND_SETUP, 4), (AI_PLAYER_NUMBER, rng.randrange(3), 1),
+            (AI_MAP_SIZES, size, 2), (AI_MAP_SIZES + 2, size, 2)]
+
+
+SPECS += [
+    # AL only: the caller CheckAndImproveSite tests AL; the upper bytes are
+    # the callees' leftovers.
+    Spec("HOUSE_GROUND_REQUEST_NOTE_CheckSite", 0x005760d0, "thiscall", [scratch(0), scratch(1)], eax_mask=0xFF,
+         presets=ground_note_world, globals=ground_note_globals, callees=GROUND_CALLEES, max_cases=600),
+    Spec("HOUSE_GROUND_REQUEST_NOTE_CheckAndImproveSite", 0x00575df0, "thiscall", [],
+         presets=ground_note_world, globals=ground_note_globals, callees=GROUND_CALLEES, max_cases=600),
+    Spec("HOUSE_GROUND_REQUEST_NOTE_NextSpiralPosition", 0x005763a0, "thiscall", [],
+         presets=ground_note_world, globals=ground_note_globals, max_cases=600),
+]
+
+# -- session 54 (ai-land): HasForeignCellAround, FewUnownedTilesNear, MarkBuildingTypesInLandGrid --
+
+
+def foreign_cell_world(rng, pool, args):
+    """The tile (scratch 0 / 1), the CEvaLand object at COUNT_LAND (9 x 9 grid,
+    width / height 0..9, random flags) and the cells' centre owners."""
+    x = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(80)
+    y = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(80)
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2), (COUNT_LAND + 0x140, rng.randrange(10), 4),
+              (COUNT_LAND + 0x144, rng.randrange(10), 4), (COUNT_LAND + 0x158, WORLD_BASE + CELL_GRID, 4)]
+    fields += [(CELL_GRID + cell * 0xC4, rng.getrandbits(16), 2) for cell in range(81)]
+    return fields + cell_centre_owners(rng, 10, 10)
+
+
+def player_number_globals(rng, pool, args):
+    return discount_globals(rng, pool, args) + [(AI_PLAYER_NUMBER, rng.randrange(4), 1)]
+
+
+def few_unowned_world(rng, pool, args):
+    x = rng.getrandbits(10) if rng.random() < 0.05 else rng.randrange(400)
+    y = rng.getrandbits(10) if rng.random() < 0.05 else rng.randrange(400)
+    return [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2)]
+
+
+def mark_types_world(rng, pool, args):
+    """1..12 building records (any owner byte below 0x14 or free, types 0..63:
+    from 57 the bitset's _Xran throws) on a 10 x 10 grid (GridCellOfTile
+    wraps)."""
+    count = rng.randint(1, 12)
+    fields = [(BUILDING_HIGH_WATER, count, 4), (COUNT_LAND + 0x140, rng.randint(1, 9), 4),
+              (COUNT_LAND + 0x144, rng.randint(1, 9), 4), (COUNT_LAND + 0x158, WORLD_BASE + CELL_GRID, 4)]
+    for building in range(count + 2):
+        base = BUILDING_RECORDS + building * 0x3a
+        kind = rng.randrange(64) if rng.random() < 0.05 else rng.randrange(57)
+        owner = 0xFF if rng.random() < 0.15 else rng.randrange(20)
+        fields += [(base, owner, 1), (base + 2, rng.randrange(80), 2), (base + 4, rng.randrange(80), 2),
+                   (base + 6, kind, 1)]
+    return fields
+
+
+SPECS += [
+    Spec("AI_HasForeignCellAround", 0x0059c200, "fastcall", [scratch(0), scratch(1)],
+         presets=foreign_cell_world, globals=player_number_globals, max_cases=1000),
+    Spec("AI_FewUnownedTilesNear", 0x0059c2c0, "fastcall", [scratch(0), scratch(1)],
+         presets=few_unowned_world, globals=ai_world, max_cases=600),
+    Spec("AI_MarkBuildingTypesInLandGrid", 0x005723a0, "stdcall", [],
+         presets=mark_types_world, globals=discount_globals, max_cases=600),
+]
+
+# -- session 54 (ai-land): building orders (ai_building_orders.cpp) -----------
+# The senders run (verified); MessageQueue::Push and IsHost are probed as for
+# the senders' own specs (command_callees, the unwritten bytes left out).
+ORDER_NODES = SCRATCH + 11 * SCRATCH_SLOT_BYTES  # AiPlayerData nodes, 0x400 apart
+PLAYER_RECORDS = 0x11943dc
+PLAYER_BYTES = 0x148
+
+
+def order_buildings(rng, count, size):
+    """Building records 0..count+1: foresters, small towers, apiaries and
+    others of players 0..2 (or free), finished or not, doors on the map."""
+    fields = [(BUILDING_HIGH_WATER, count, 4)]
+    for building in range(count + 2):
+        base = BUILDINGS + building * BUILDING_BYTES
+        kind = rng.choice((5, 5, 15, 51, 2)) if rng.random() < 0.9 else rng.randrange(64)
+        owner = 0xFF if rng.random() < 0.15 else rng.randrange(3)
+        fields += [(base, owner, 1), (base + 2, rng.randrange(size), 2), (base + 4, rng.randrange(size), 2),
+                   (base + 6, kind, 1), (base + 0x21, rng.randrange(1, 256) if rng.random() < 0.15 else 0, 1),
+                   (base + 0xA, rng.randrange(size), 2), (base + 0xC, rng.randrange(size), 2)]
+    return fields
+
+
+def order_tile_areas(rng, size):
+    return [(TILES + (x * 0x300 + y) * 24 + 0x14, rng.randrange(4), 2) for x in range(size) for y in range(size)]
+
+
+def place_order_world(rng, pool, args):
+    return [(SCRATCH + k * SCRATCH_SLOT_BYTES, rng.getrandbits(16), 2) for k in range(4)]
+
+
+def no_tower_world(rng, pool, args):
+    return order_buildings(rng, rng.randrange(20), 64)
+
+
+def clear_tools_world(rng, pool, args):
+    count = rng.randrange(30)
+    return [(SCRATCH, rng.randrange(count + 2), 2)] + order_buildings(rng, count, 32) + order_tile_areas(rng, 32)
+
+
+def foresters_world(rng, pool, args):
+    """Area (scratch 0, 0..4) and player (scratch 1, 0..2); the players'
+    races (Amazons often); the node lists of players 0..2 (a node for some
+    areas, with a small woodcutter count at +0x348); the area's log piles
+    are lazily random (AreaGoodsAmount); buildings and door tile areas."""
+    size = 32
+    fields = [(SCRATCH, rng.randrange(5), 2), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(3), 2)]
+    fields += [(PLAYER_RECORDS + p * PLAYER_BYTES + 4, 3 if rng.random() < 0.5 else rng.randrange(4), 4)
+               for p in range(20)]
+    last = {}
+    for p in range(20):
+        head = NODE_HEADS + 8 * p
+        fields.append((NODE_LAND + 12 * p + 4, WORLD_BASE + head, 4))
+        last[p] = head
+    for p in range(3):
+        for area in range(4):
+            if rng.random() < 0.25:
+                continue
+            node = ORDER_NODES + (p * 4 + area) * 0x400
+            fields += [(last[p], WORLD_BASE + node, 4), (node + 8, area, 2), (node + 0x348, rng.randrange(6), 2)]
+            last[p] = node
+    for p in range(20):
+        fields.append((last[p], WORLD_BASE + NODE_HEADS + 8 * p, 4))
+    # each area's log piles: a short list (a random head would be followed far)
+    for area in range(5):
+        head = 0
+        for k in range(rng.randrange(4)):
+            pile = 1 + area * 100 + k
+            fields += [(AI_PILES + pile * 14 + 0xc, head, 2), (AI_PILES + pile * 14 + 1, rng.randrange(9), 1)]
+            head = pile
+        fields.append((AI_AREAS + area * 0x2e0 + 0xa + 3 * 2, head, 2))
+    return fields + order_buildings(rng, rng.randrange(30), size) + order_tile_areas(rng, size)
+
+
+def foresters_globals(rng, pool, args):
+    return command_globals(rng, pool, args) + [(AI_LAND_EVALUATION, WORLD_BASE + NODE_LAND, 4),
+                                               (AI_MAP_SIZES, 32, 2), (AI_MAP_SIZES + 2, 32, 2)]
+
+
+SPECS += [
+    Spec("AI_OrderPlaceBuilding", 0x0058e200, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         presets=place_order_world, globals=command_globals, callees=command_callees((3, 11)), max_cases=300),
+    Spec("AI_NoSmallTowerNear", 0x0058ede0, "fastcall", [low_word_noise(64), low_word_noise(64), low_word_noise(3)],
+         presets=no_tower_world, globals=ai_world, max_cases=600),
+    Spec("AI_ClearToolGoodsSettings", 0x0058e930, "fastcall", [scratch(0)],
+         presets=clear_tools_world, globals=command_globals, callees=command_callees(LONG_GAPS), max_cases=300),
+    Spec("AI_SetForestersWorking", 0x0059c0f0, "fastcall", [scratch(0), scratch(1)],
+         presets=foresters_world, globals=foresters_globals, callees=command_callees((3,)), max_cases=400),
+]
+
+# -- session 54 (ai-land): InitAiGlobals, SaveState (ai_state.cpp) -----------
+# InitAiGlobals: ECX = a computer player at scratch 0 whose world (+0x75c) is
+# the emulated world (random map size and player records). SaveState: ECX =
+# a fake CMapFile; WriteChunkData (verified; it writes a file) is probed.
+
+
+def init_globals_world(rng, pool, args):
+    fields = [(SCRATCH + 0x75c, WORLD_BASE, 4), (MAP_SIZE, rng.getrandbits(32) if rng.random() < 0.2 else rng.randint(64, 464), 4)]
+    fields += [(PLAYER_RECORDS + p * PLAYER_BYTES, 0 if rng.random() < 0.5 else rng.getrandbits(32), 4)
+               for p in range(20)]
+    return fields
+
+
+SPECS += [
+    Spec("CComputerPlayer_InitAiGlobals", 0x00551b80, "fastcall", [scratch(0), anything],
+         presets=init_globals_world, globals=lambda rng, pool, args: [], max_cases=300),
+    # EAX: WriteChunkData's leftover; the caller 0x551220 returns it to the
+    # savegame writer's loop, which doesn't use it.
+    Spec("AI_SaveState", 0x00596330, "fastcall", [scratch(1), anything], eax_mask=0,
+         callees={0x004a66d0: (4, "thiscall", "probe")}, max_cases=100),
+]
