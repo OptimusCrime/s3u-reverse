@@ -1809,3 +1809,85 @@ SPECS += [
     Spec("AI_InitBattleSpellSlots", 0x00590870, "thiscall", [], eax_mask=0, globals=race_spell_changes,
          max_cases=400),
 ]
+
+# -- session 53: grid-cell resource queries (ai_cell_resources.cpp) --------
+
+AI_LAND_EVALUATION = 0x007E3134
+CELL_GRID = SCRATCH + 4 * SCRATCH_SLOT_BYTES  # 9 x 9 AiGridCells (0xc4 bytes each; runs over slots 4..7)
+
+
+def resource_tiles(rng, x0, y0, size, player):
+    """Tiles x0..x0+size-1, y0..y0+size-1: owned by the player (low byte)
+    in most cases, with trees, stones and water terrain."""
+    owned = rng.choice((0.3, 0.7, 0.95))
+    fields = []
+    for x in range(max(0, x0), x0 + size):
+        for y in range(max(0, y0), y0 + size):
+            base = TILES + (x * 0x300 + y) * 24
+            roll = rng.randrange(25)
+            obj = 0x44 + rng.randrange(16) if roll == 0 else 0x73 + rng.randrange(12) if roll == 1 else rng.randrange(256)
+            terrain = 0x60 + rng.randrange(16) if rng.random() < 0.04 else rng.randrange(256)
+            owner = player & 0xFF if rng.random() < owned else rng.choice((0xFF, (player + 1) & 0xFF))
+            fields += [(base + 6, terrain, 1), (base + 7, obj, 1), (base + 8, owner, 1)]
+    return fields
+
+
+def resource_goods(rng, pool):
+    return rng.choice((2, 3, 26, 9, 0)) | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def low_word_noise(n):
+    return lambda rng, pool: rng.randrange(n) | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def ai_map_size_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, rng.randint(40, 72), 2), (AI_MAP_SIZES + 2, rng.randint(40, 72), 2)]
+
+
+def owners_land_tiles(rng, pool, args):
+    cell_x, cell_y = args[0] & 0xFFFF, args[1] & 0xFFFF
+    return resource_tiles(rng, cell_x * 8, cell_y * 8, 10, args[2])
+
+
+def work_cell_tiles(rng, pool, args):
+    building = SCRATCH
+    work_x, work_y = rng.randrange(72), rng.randrange(72)
+    player = rng.randrange(4)
+    return [(building, player, 1), (building + 0x30, work_x, 2), (building + 0x32, work_y, 2)] + \
+        resource_tiles(rng, work_x // 8 * 8, work_y // 8 * 8, 10, player)
+
+
+def resource_cell_world(rng, pool, args):
+    """The tile (scratch 0 / 1, words), a 9 x 9 grid of cells (width and
+    height 0..9 used) with random presence bytes, and the tiles of the
+    3 x 3 cells around the tile."""
+    x = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(80)
+    y = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(80)
+    land = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2), (land + 0x140, rng.randrange(10), 4),
+              (land + 0x144, rng.randrange(10), 4), (land + 0x158, WORLD_BASE + CELL_GRID, 4)]
+    for cell in range(81):
+        base = CELL_GRID + cell * 0xC4
+        fields += [(base + 3, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1),
+                   (base + 4, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1)]
+    if x < 80 and y < 80:
+        fields += resource_tiles(rng, (x // 8 - 1) * 8, (y // 8 - 1) * 8, 26, args[2])
+    return fields
+
+
+def resource_cell_globals(rng, pool, args):
+    return ai_map_size_globals(rng, pool, args) + [(AI_LAND_EVALUATION, WORLD_BASE + SCRATCH + 2 * SCRATCH_SLOT_BYTES, 4)]
+
+
+SPECS += [
+    Spec("AI_OwnersLandHasResource", 0x00599df0, "fastcall",
+         [low_word_noise(9), low_word_noise(9), low_word_noise(3), resource_goods],
+         presets=owners_land_tiles, globals=ai_map_size_globals, max_cases=1000),
+    Spec("AI_WorkCellHasTrees", 0x0059a380, "fastcall", [scratch(0)], presets=work_cell_tiles,
+         globals=ai_map_size_globals, max_cases=600),
+    Spec("AI_WorkCellHasStones", 0x0059a8b0, "fastcall", [scratch(0)], presets=work_cell_tiles,
+         globals=ai_map_size_globals, max_cases=600),
+    Spec("AI_FindResourceCellAround", 0x0059a120, "fastcall",
+         [scratch(0), scratch(1), low_word_noise(3), resource_goods],
+         presets=resource_cell_world, globals=resource_cell_globals, max_cases=1000),
+]
