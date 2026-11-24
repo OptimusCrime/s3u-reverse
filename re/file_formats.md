@@ -235,6 +235,39 @@ version gate), with these details:
 - In the three savegames of the installation (version 0xa0, 704 x 704, 732
   chunks) every chunk the loader asks for exists.
 
+## Verified LoadMap callees (session 53)
+
+Replaced and verified (in-process tests on worlds built like a new game's:
+the original CGameData constructor 0x4fc990, then GenerateRandomMap; whole
+world, DebugLog calls and S3.EXE globals compared; emulator specs):
+
+- `CGameData::PrepareLoadedTerrain` 0x519540 (map/load_map.cpp): every
+  water variant 0..15 becomes 0, then the water gets depth bands from the
+  shore: 0 along the shore (terrain 0x30, through the marker 0xff), 1..6
+  band by band, 7 further out.
+- `CGameData::SpawnSettlersOnWater` 0x50dc10 (settlers/settler_spawn.cpp):
+  the map's ships (settler types 0x2b/0x2c of chunk 7) on water tiles (area
+  >= 0x8000) with no settler within distance 9; the candidate tile is not
+  bounds-checked.
+- `CGameData::PlaceTown` 0x506cf0 and `CGameData::AddPlayerTowns` 0x5074b0
+  (map/player_towns.cpp): the start building is a **small tower** (type
+  15), garrisoned by a Swordsman1 (job 23); start settlers and goods by
+  `GameSettings::StartGoods` 0x412300 (+0x74: 1 low, 0 or 2 medium, else
+  high; tables in player_towns.cpp); a computer player gets 10 more
+  Swordsman1. Player +0x18 is the "town placed" flag. AddPlayerTowns uses a
+  given start position (offset entries 0..9999, IsFreeSmallTowerSite) or up
+  to 1,000,000 random ones (IsGoodStartPosition), and on symmetric random
+  maps (world +0x2d274) places the mirror players of teams 1..3 (Player
+  +0xc, FindPlayerByField0C) at (y, x), (size - y - 1, size - x - 1) and
+  (size - x - 1, size - y - 1).
+- The colour helpers: 0x4351e0 is `GameSettings::PlayerSetup(index)`,
+  element access of the player-setup vector at GameSettings +0x58 (0xcc-byte
+  records; grows an empty vector to one record, clamps a bad index; Watcom
+  vector code with an SEH frame, UI/settings side, not reimplemented), and
+  0x49fec0 is `GamePlayerSetup::Colour` (+0xb4), verified. LoadMap copies
+  `PlayerSetup(i)->Colour()` for i = 0..19 into g_playerColourIndex
+  0x7ace64 (0x4fe550..0x4fe576), right after chunk 0x40.
+
 ## Load call trees
 
 ```
@@ -253,7 +286,7 @@ CLogicThread::OnStart 0x53c9e0
        AddBuildingSite 0x4dd280, BuildingDone 0x4dbc50, CreateSettler 0x50c9e0, EnterBuildingSlot 0x50ccb0
        CreateSevenTileUnit 0x50dd20, SpawnSettlersOnWater 0x50dc10, CreatePile 0x504420
        [no chunk 8] AddPlayerTowns 0x5074b0 -> PlaceTown 0x506cf0, IsGoodStartPosition, IsFreeSmallTowerSite
-       0x4351e0/0x49fec0 (player colours), UnblockCastleTiles
+       GameSettings::PlayerSetup 0x4351e0 / GamePlayerSetup::Colour 0x49fec0 (player colours), UnblockCastleTiles
      CGameData::InitAfterMapLoad 0x4fd020 -> InitPlayerInfo 0x4fd0d0, BuildMinimap, ...
   ChooseNewGameObjectives 0x4ffbc0
 File opening happens in the menus: GameSettings::LoadSaveGame 0x432b00 -> CMapFile::Open 0x4a5c80 (mode 1)

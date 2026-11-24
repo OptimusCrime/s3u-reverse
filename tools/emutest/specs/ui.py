@@ -273,3 +273,10 @@ SPECS += [
          exempt_blocks=(0x0041c434, 0x0041c445, 0x0041c460, 0x0041c488, 0x0041c4f9)),
     Spec("CStaticText_SetStyle", 0x0041ca60, "thiscall", [anything]),
 ]
+
+
+# -- game_settings.cpp (session 53) -------------------------------------------------
+SPECS += [
+    Spec("GameSettings_StartGoods", 0x00412300, "fastcall", [scratch(0)], max_cases=200),
+    Spec("GamePlayerSetup_Colour", 0x0049fec0, "fastcall", [scratch(0)], max_cases=200),
+]

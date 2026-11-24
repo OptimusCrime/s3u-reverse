@@ -376,6 +376,40 @@ def seven_tile_state(rng, pool, args):
     return fields
 
 
+WATER_SPIRAL = sorted(((dx, dy) for dx in range(-24, 25) for dy in range(-24, 25) if hex_distance(dx, dy) <= 24),
+                      key=lambda p: (hex_distance(*p), p))  # radius 0..24, nearest first (1801 entries)
+
+
+def water_spawn_state(rng, pool, args):
+    """Offset entries of radius 0..24 in the game's order with their
+    distances (sometimes 10+ from an early entry on), water and land tiles
+    within that radius of (x, y) (tiles off the map stay lazily random: the
+    original doesn't bounds-check the candidate), some settlers, free
+    settler records and the player's race for CreateSettler. Each created
+    settler blocks the water within distance 9, so the walk needs the wide
+    table to make up to five."""
+    count, kind, player, x, y = args
+    n = 384 if rng.random() < 0.8 or max(x, y) >= 50 else rng.randint(max(x, y) + 1, 60)
+    fields = [(MAP_SIZE, n, 4), (PLAYER_RACE + player * PLAYER_RECORD_BYTES, rng.randrange(4), 4)]
+    cut = rng.randrange(40) if rng.random() < 0.15 else len(WATER_SPIRAL)
+    for k, (dx, dy) in enumerate(WATER_SPIRAL):
+        distance = hex_distance(dx, dy) if k < cut else 10 + rng.randrange(3)
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4), (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 8, distance, 4)]
+    water = rng.random() * 0.6 + 0.35
+    # Radius 33: the candidates and their neighbours.
+    for tx in range(max(x - 33, 0), min(x + 34, n)):
+        for ty in range(max(y - 33, 0), min(y + 34, n)):
+            t = tile(tx, ty)
+            near = hex_distance(tx - x, ty - y) <= 24
+            area = rng.randrange(0x8000, 0x10000) if near and rng.random() < water else rng.randrange(0x8000)
+            settler = rng.randrange(1, 100) if rng.random() < 0.003 else 0
+            fields += [(t + 0x14, area, 2), (t + 0x0, settler, 2)]
+    fields += [(SETTLERS + s * SETTLER_BYTES, rng.randrange(20) if s % 4 == 0 else 0xff, 1) for s in range(1, 41)]
+    fields.append((SETTLER_HIGH_WATER, rng.randrange(60), 4))
+    return fields
+
+
 def gfx_sprite(animation: int, rng) -> list:
     """Presets that make `animation` a valid sprite id of the fake graphics object."""
     group, index = animation >> 16, animation & 0xFFFF
@@ -440,6 +474,12 @@ SPECS += [
     Spec("CGameData_CreateSevenTileUnit", 0x0050dd20, "thiscall",
          [below(0x50), below(4), between(1, 382), between(1, 382)], eax_mask=0,
          presets=seven_tile_state, max_cases=300),
+    Spec("CGameData_SpawnSettlersOnWater", 0x0050dc10, "thiscall",
+         [lambda rng, pool: 0 if rng.random() < 0.1 else rng.randint(1, 5),
+          lambda rng, pool: rng.choice([0x2b, 0x2c, rng.randrange(0x50)]), below(4),
+          lambda rng, pool: rng.randrange(60) if rng.random() < 0.3 else rng.randrange(384),
+          lambda rng, pool: rng.randrange(60) if rng.random() < 0.3 else rng.randrange(384)],
+         eax_mask=0, presets=water_spawn_state, max_cases=300),
     Spec("CGameData_SetSoldierAnimationInBuilding", 0x0050e140, "thiscall", [between(1, 0x7cfe)],
          presets=soldier_animation_state, globals=gfx_global, max_cases=1000),
     Spec("CGameData_SetSettlerSavedAnimation", 0x0050e320, "thiscall", [below(0x8000), below(0x180)],

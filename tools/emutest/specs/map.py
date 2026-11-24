@@ -1066,3 +1066,117 @@ SPECS += [
     Spec("CGameData_UpdateMinimapSlice", 0x004fb520, "thiscall", [below(64)], eax_mask=0, presets=minimap_slice,
          globals=minimap_slice_globals, max_cases=150),
 ]
+
+
+# -- load_map.cpp (session 53) ---------------------------------------------------
+
+def loaded_terrain_map(rng, pool, args):
+    """Maps of size 0..3 (no bands) or 4..24: patches of water variants 0..15,
+    shore 0x30 and land, some random bytes."""
+    n = rng.randrange(4) if rng.random() < 0.1 else rng.randint(4, 24)
+    patch = rng.randint(2, 6)
+    fields = [(MAP_SIZE, n, 4)]
+    for x in range(n):
+        for y in range(n):
+            kind = ((x // patch) * 7 + (y // patch) * 3) % 5
+            if rng.random() < 0.05:
+                terrain = rng.getrandbits(8)
+            elif kind < 2:
+                terrain = rng.randrange(16)
+            elif kind == 2:
+                terrain = 0x30
+            else:
+                terrain = rng.randrange(0x10, 0x40)
+            fields.append((tile(x, y) + 0x6, terrain, 1))
+    return fields
+
+SPECS += [
+    Spec("CGameData_PrepareLoadedTerrain", 0x00519540, "thiscall", [], presets=loaded_terrain_map, max_cases=200),
+]
+
+
+# -- player_towns.cpp (session 53) ------------------------------------------------
+def created_settler(machine, ecx, args, h):
+    """CreateSettler's effect: a settler record at (x, y) (PlaceTown reads
+    its position back)."""
+    settler = 1 + h % 0x7cfe
+    _write(machine, SETTLERS + settler * SETTLER_BYTES + 4, args[0], 2)
+    _write(machine, SETTLERS + settler * SETTLER_BYTES + 6, args[1], 2)
+    return settler
+
+
+# PlaceTown: every callee is probed (calls and arguments compared); the
+# start-goods getter returns 0..4 (low, medium, high and the map's own),
+# AddBuildingSite and CreateSettler return record numbers.
+PLACE_TOWN_PROBES = {
+    0x00412300: (0, "thiscall", lambda h: h % 5),               # GameSettings::StartGoods
+    0x004dbc50: (1, "thiscall", "probe"),                       # BuildingDone
+    0x004dd280: (4, "thiscall", lambda h: 1 + h % 3998),        # AddBuildingSite
+    0x005046b0: (4, "thiscall", "probe"),                       # DropGoodNear
+    0x0050c9e0: (4, "thiscall", "probe", created_settler),       # CreateSettler
+    0x0050cb20: (5, "thiscall", "probe"),                       # SpawnSettlersAround
+    0x00519670: (2, "thiscall", "probe"),                       # UpdateShadeAround
+    0x00519a90: (2, "thiscall", "probe"),                       # RecalculateTerritory
+    0x0051b6f0: (2, "thiscall", "probe"),                       # BlockTile
+    0x0051b7f0: (2, "thiscall", "probe"),                       # WearPath
+}
+
+
+def place_town_state(rng, pool, args):
+    player = args[0]
+    record = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+    return [(record, rng.choice([0, 1, 2, 2, rng.getrandbits(32)]), 4), (record + 4, rng.randrange(4), 4)]
+
+SPECS += [
+    Spec("CGameData_PlaceTown", 0x00506cf0, "thiscall", [below(20), between(16, 368), between(16, 368)],
+         eax_mask=0, presets=place_town_state, callees=PLACE_TOWN_PROBES, max_cases=300),
+]
+
+
+# AddPlayerTowns: IsGoodStartPosition, IsFreeSmallTowerSite and PlaceTown
+# are probed (a third of the site checks succeed); Random, TileDistance and
+# FindPlayerByField0C run. Players 0..5 take part or not, with teams 0..3,
+# placed or not, with or without a start position. A start position on the
+# diagonal with the offset entries 0..9999 at (0, 0) never passes the
+# mirror distance: the "keine Kreisposition" paths.
+RANDOM_MAP_SYMMETRY = 0x2d274
+ADD_TOWNS_PROBES = {
+    0x005081a0: (4, "thiscall", lambda h: 1 if h % 3 == 0 else 0),  # IsGoodStartPosition
+    0x00508420: (3, "thiscall", lambda h: 1 if h % 3 == 0 else 0),  # IsFreeSmallTowerSite
+    0x00506cf0: (3, "thiscall", "probe"),                             # PlaceTown
+}
+
+
+def add_towns_state(rng, pool, args):
+    size = rng.choice([128, 256, 384, 384, rng.randrange(100, 769)])
+    symmetry = rng.choice([0, 1, 2, 3, 3, rng.choice([4, rng.getrandbits(32)])])
+    fields = [(MAP_SIZE, size, 4), (RANDOM_MAP_SYMMETRY, symmetry, 4)]
+    fields += spiral_offsets(400)
+    stuck = rng.random() < 0.15
+    mirrors = rng.random() < 0.7  # otherwise every team is 0: no mirror players
+    if stuck:
+        for k in range(400, 10000):
+            fields += [(NEIGHBOUR_OFFSETS + k * 16, 0, 4), (NEIGHBOUR_OFFSETS + k * 16 + 4, 0, 4)]
+    for p in range(20):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        active = rng.choice([1, 2, 0, rng.getrandbits(32)]) if p < 6 else 0
+        if stuck:
+            start = rng.randrange(size)
+            sx, sy = start, start
+        elif rng.random() < 0.5:
+            sx, sy = 0xFFFFFFFF, rng.getrandbits(32)
+        else:
+            sx, sy = rng.randrange(size), rng.randrange(size)
+        fields += [(record, active, 4), (record + 0x18, 0 if rng.random() < 0.85 else 1, 4),
+                   (record + 0x0c, 0 if not mirrors else rng.randrange(4) if rng.random() < 0.9 else rng.getrandbits(32), 4),
+                   (record + 0x10, sx, 4), (record + 0x14, sy, 4)]
+    return fields
+
+SPECS += [
+    # Not covered: 0x507d72, 0x50778e and 0x5079cb, the "keine Zufallsposition" paths after 1,000,000
+    # failed random attempts (several hundred million instructions); their continuation (DebugLog, the
+    # player taken out) is the same code as the covered "keine Kreisposition" paths. 0x5075cc is dead:
+    # symmetry 0 reaches it after a placement only if the attempt counter were 1,000,000.
+    Spec("CGameData_AddPlayerTowns", 0x005074b0, "thiscall", [], presets=add_towns_state,
+         callees=ADD_TOWNS_PROBES, max_cases=600, exempt_blocks=(0x507d72, 0x50778e, 0x5079cb, 0x5075cc)),
+]

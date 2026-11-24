@@ -15,7 +15,10 @@ namespace s3re::game {
 #pragma pack(push, 1)
 
 struct GameSettings {
-    std::uint8_t unk000[0x88];
+    std::uint8_t unk000[0x74];
+    std::uint32_t start_goods;   // +0x74 NewGame arg 9: 0 the map's own, 1 low, 2 medium, 3 high (re/game_setup.md;
+                                 //       getter GameSettings::StartGoods 0x412300)
+    std::uint8_t unk078[0x88 - 0x78];
     std::uint16_t seed;          // +0x88 the game's random seed (CGameData::SeedRandom; re/globals.csv)
     std::uint8_t unk08a[0xb0 - 0x8a];
     std::uint32_t valuesB0[4];   // +0xb0 four values copied as one (GameParams_CopyRectB0 0x437400;
@@ -23,6 +26,17 @@ struct GameSettings {
     std::uint8_t unk0c0[0xcc - 0xc0];
     std::uint8_t randomRaceAmazons;  // +0xcc whether random races include the Amazons (random.cpp)
 };
+static_assert(offsetof(GameSettings, start_goods) == 0x74);
+
+// One player's setup (0xcc bytes; the vector at GameSettings +0x58, element
+// access GameSettings 0x4351e0; filled by GamePlayerSetup::Set 0x49f120).
+struct GamePlayerSetup {
+    std::uint8_t unk000[0xb4];
+    std::uint32_t colour;  // +0xb4 colour index: LoadMap copies it into g_playerColourIndex (getter 0x49fec0)
+    std::uint8_t unk0b8[0xcc - 0xb8];
+};
+static_assert(sizeof(GamePlayerSetup) == 0xcc);
+static_assert(offsetof(GamePlayerSetup, colour) == 0xb4);
 static_assert(offsetof(GameSettings, seed) == 0x88);
 static_assert(offsetof(GameSettings, valuesB0) == 0xb0);
 static_assert(offsetof(GameSettings, randomRaceAmazons) == 0xcc);

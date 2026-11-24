@@ -29,6 +29,16 @@
 //   seven tiles in WalkSettler); the jobs CatapultProduction and
 //   GongProduction and the map loader call it.
 //   EAX: callers don't use it. ret 0x10.
+// CGameData::SpawnSettlersOnWater (0x0050dc10): (count, type, player, x,
+//   y): like SpawnSettlersAround, but on water: walks offset entries 0..19989
+//   from (x, y) (no bounds check on the candidate tile itself) until `count`
+//   settlers are made; a candidate whose tile area (+0x14) is a water body
+//   (>= 0x8000) gets CreateSettler(tx, ty, type, player) unless one of the
+//   neighbours at offset entries 0.. while their distance is below 10
+//   (signed; none at all if entry 0's distance is 10 or more) is on the map
+//   (unsigned compares) and holds a settler. count 0 makes nothing. No
+//   population counter. EAX: the only caller (LoadMap, ship settler types
+//   0x2b/0x2c) doesn't use it. ret 0x14.
 // CGameData::SetSoldierAnimationInBuilding (0x0050e140): (settler):
 //   SetSettlerAnimation(settler, kind) with kind 293 (0x125), or 294..301
 //   (0x126..0x12d) for the soldier types Swordsman2, Swordsman3, Bowman1,
@@ -91,6 +101,11 @@ constexpr std::uint8_t kTileFlagsNoSpawn = 0x0f;
 // (thief, geologist, pioneer, mage).
 constexpr std::int32_t kFirstSpecialistClass = 10;
 constexpr std::int32_t kLastSpecialistClass = 29;
+
+// SpawnSettlersOnWater: how many offset entries it tries, and how near
+// another settler may be.
+constexpr std::uint32_t kWaterSpawnOffsets = 19990;
+constexpr std::int32_t kWaterSpawnClearDistance = 10;
 
 // A settler in its building's slot faces direction 2.
 constexpr std::uint32_t kSlotDirection = 2;
@@ -155,6 +170,50 @@ std::uint32_t __fastcall CGameData_SpawnSettlersAround(CGameData* world, void*, 
         }
     }
     return 0;  // callers don't use EAX
+}
+
+namespace {
+
+// 0x50dc76..0x50dccd: whether a settler stands on a map tile within the
+// clear distance of (x, y). Every entry is checked (no early end).
+bool HasSettlerNear(CGameData* world, std::uint32_t x, std::uint32_t y) {
+    if (world->offsets[0].distance >= kWaterSpawnClearDistance) {
+        return false;
+    }
+    const std::uint32_t size = world->map_size;
+    bool found = false;
+    for (const MapOffset* offset = world->offsets;; ++offset) {
+        const std::uint32_t nx = offset->dx + x;
+        const std::uint32_t ny = offset->dy + y;
+        if (nx < size && ny < size && TileAtOffset(world, TileOffset(nx, ny)).settler != 0) {
+            found = true;
+        }
+        if (offset[1].distance >= kWaterSpawnClearDistance) {
+            return found;
+        }
+    }
+}
+
+}  // namespace
+
+// Purpose: Places a map's ships (and other water units) when a map is loaded: creates settlers of one type
+// on free water tiles near a place, none next to another settler.
+std::uint32_t __fastcall CGameData_SpawnSettlersOnWater(CGameData* world, void*, std::uint32_t count,
+                                                        std::uint32_t type, std::uint32_t player, std::uint32_t x,
+                                                        std::uint32_t y) {
+    std::uint32_t remaining = count;
+    for (std::uint32_t k = 0; remaining != 0 && k != kWaterSpawnOffsets; ++k) {
+        const MapOffset& offset = world->offsets[k];
+        const std::uint32_t tx = offset.dx + x;
+        const std::uint32_t ty = offset.dy + y;
+        // The candidate itself is not bounds-checked (0x50dc45).
+        if (TileAtOffset(world, TileOffset(tx, ty)).area < layout::kTileAreaWater || HasSettlerNear(world, tx, ty)) {
+            continue;
+        }
+        CGameData_CreateSettler(world, nullptr, tx, ty, type, player);
+        --remaining;
+    }
+    return 0;  // the caller doesn't use EAX
 }
 
 // Purpose: A worker takes its place inside its building: the first free tile of the building's row
@@ -252,6 +311,8 @@ S3RE_HOOK(0x0050ccb0, CGameData_EnterBuildingSlot, SettlerFn, Original_CGameData
           CGameData_EnterBuildingSlot);
 S3RE_HOOK(0x0050dd20, CGameData_CreateSevenTileUnit, SevenTileFn, Original_CGameData_CreateSevenTileUnit,
           CGameData_CreateSevenTileUnit);
+S3RE_HOOK(0x0050dc10, CGameData_SpawnSettlersOnWater, SpawnFn, Original_CGameData_SpawnSettlersOnWater,
+          CGameData_SpawnSettlersOnWater);
 S3RE_HOOK(0x0050e140, CGameData_SetSoldierAnimationInBuilding, SettlerFn,
           Original_CGameData_SetSoldierAnimationInBuilding, CGameData_SetSoldierAnimationInBuilding);
 S3RE_HOOK(0x0050e320, CGameData_SetSettlerSavedAnimation, SettlerKindFn, Original_CGameData_SetSettlerSavedAnimation,
@@ -369,6 +430,82 @@ std::uint32_t __fastcall WrongSpawnSettlersAround(CGameData* world, void* edx, s
     const std::uint32_t before = world->players[player].population_limit_base;
     CGameData_SpawnSettlersAround(world, edx, count, type, player, x, y);
     world->players[player].population_limit_base = before + count;
+    return 0;
+}
+
+// Water bodies near (x, y), settlers here and there, offset entries with
+// their real distances (the spiral; sometimes a short table: distance 10 from
+// some entry on, or already at entry 0).
+void CompareSpawnOnWater(test::Context& ctx, SpawnFn candidate, int cases) {
+    Compare(ctx, cases, 16, [&](test::WorldPair& worlds, std::uint32_t&, std::uint32_t&) {
+        FillOffsetSpiral(worlds, 400);
+        const std::uint32_t cut = ctx.rng().Chance(1, 8) ? ctx.rng().Below(40) : 400;
+        std::int32_t distances[400];
+        for (std::uint32_t k = 0; k < 400; ++k) {
+            const MapOffset& o = worlds.original()->offsets[k];
+            distances[k] = k >= cut ? 10 + static_cast<std::int32_t>(ctx.rng().Below(3))
+                                    : static_cast<std::int32_t>(TileDistance(
+                                          0, 0, static_cast<std::uint32_t>(o.dx), static_cast<std::uint32_t>(o.dy)));
+        }
+        worlds.Both([&](CGameData* w) {
+            for (std::uint32_t k = 0; k < 400; ++k) {
+                w->offsets[k].distance = distances[k];
+            }
+        });
+        FreeSettlers(worlds);
+        const std::uint32_t size = ctx.rng().Chance(1, 4) ? 20 + ctx.rng().Below(40) : 384;
+        const std::uint32_t x = ctx.rng().Below(size), y = ctx.rng().Below(size);
+        const std::uint32_t player = ctx.rng().Below(4);
+        const std::uint32_t type = ctx.rng().Chance(1, 2) ? 0x2b + ctx.rng().Below(2) : ctx.rng().Below(0x30);
+        const std::uint32_t waterChance = 1 + ctx.rng().Below(6);
+        // No settlers elsewhere on the map (the neighbour checks reach 9
+        // tiles past the candidates).
+        worlds.Both([&](CGameData* w) {
+            for (std::uint32_t tx = 0; tx < size; ++tx) {
+                for (std::uint32_t ty = 0; ty < size; ++ty) {
+                    w->tiles[tx][ty].settler = 0;
+                }
+            }
+        });
+        for (std::int32_t dx = -14; dx <= 14; ++dx) {
+            for (std::int32_t dy = -14; dy <= 14; ++dy) {
+                const std::uint32_t tx = x + dx, ty = y + dy;
+                if (tx >= size || ty >= size) {
+                    continue;
+                }
+                const bool water = ctx.rng().Below(8) < waterChance;
+                const auto area = static_cast<std::uint16_t>(water ? 0x8000 + ctx.rng().Below(0x8000)
+                                                                   : ctx.rng().Below(0x8000));
+                const auto settler =
+                    static_cast<std::uint16_t>(ctx.rng().Chance(1, 300) ? 1 + ctx.rng().Below(100) : 0);
+                worlds.Both([&](CGameData* w) {
+                    w->tiles[tx][ty].area = area;
+                    w->tiles[tx][ty].settler = settler;
+                });
+            }
+        }
+        const std::uint32_t count = ctx.rng().Chance(1, 10) ? 0 : 1 + ctx.rng().Below(5);
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
+        Original_CGameData_SpawnSettlersOnWater(worlds.original(), nullptr, count, type, player, x, y);
+        candidate(worlds.ours(), nullptr, count, type, player, x, y);
+    });
+}
+
+// Wrong: ignores the settlers at distance 9 (checks only up to 8).
+std::uint32_t __fastcall WrongSpawnSettlersOnWater(CGameData* world, void* edx, std::uint32_t count,
+                                                   std::uint32_t type, std::uint32_t player, std::uint32_t x,
+                                                   std::uint32_t y) {
+    std::int32_t saved[400];
+    for (std::uint32_t k = 0; k < 400; ++k) {
+        saved[k] = world->offsets[k].distance;
+        if (saved[k] == 9) {
+            world->offsets[k].distance = 10;
+        }
+    }
+    CGameData_SpawnSettlersOnWater(world, edx, count, type, player, x, y);
+    for (std::uint32_t k = 0; k < 400; ++k) {
+        world->offsets[k].distance = saved[k];
+    }
     return 0;
 }
 
@@ -517,6 +654,14 @@ S3RE_TEST(CGameData_SpawnSettlersAround_MatchesOriginal) {
 S3RE_TEST(CGameData_SpawnSettlersAround_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareSpawn(probe, &WrongSpawnSettlersAround, 500);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+S3RE_TEST(CGameData_SpawnSettlersOnWater_MatchesOriginal) {
+    CompareSpawnOnWater(ctx, &CGameData_SpawnSettlersOnWater, 1500);
+}
+S3RE_TEST(CGameData_SpawnSettlersOnWater_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSpawnOnWater(probe, &WrongSpawnSettlersOnWater, 500);
     S3RE_EXPECT(probe.failures() > 0);
 }
 S3RE_TEST(CGameData_EnterBuildingSlot_MatchesOriginal) {
