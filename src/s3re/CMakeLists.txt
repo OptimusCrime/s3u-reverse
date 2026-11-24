@@ -55,6 +55,8 @@ add_library(s3re SHARED
     game/map/map_regions.cpp
     game/map/map_terrain.cpp
     game/map/minimap.cpp
+    game/map/player_towns.cpp
+    game/map/player_towns_tests.cpp
     game/map/terrain_updates.cpp
     game/map/territory.cpp
 
@@ -161,6 +163,7 @@ add_library(s3re SHARED
     game/fileformats/map_file_tests.cpp
 
     # game/ui/: CScreenElement and the controls, menu and settings layouts
+    game/ui/game_settings.cpp
     game/ui/screen_element.cpp
     game/ui/ui_static_text.cpp
 

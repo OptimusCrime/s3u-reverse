@@ -1093,3 +1093,41 @@ def loaded_terrain_map(rng, pool, args):
 SPECS += [
     Spec("CGameData_PrepareLoadedTerrain", 0x00519540, "thiscall", [], presets=loaded_terrain_map, max_cases=200),
 ]
+
+
+# -- player_towns.cpp (session 53) ------------------------------------------------
+def created_settler(machine, ecx, args, h):
+    """CreateSettler's effect: a settler record at (x, y) (PlaceTown reads
+    its position back)."""
+    settler = 1 + h % 0x7cfe
+    _write(machine, SETTLERS + settler * SETTLER_BYTES + 4, args[0], 2)
+    _write(machine, SETTLERS + settler * SETTLER_BYTES + 6, args[1], 2)
+    return settler
+
+
+# PlaceTown: every callee is probed (calls and arguments compared); the
+# start-goods getter returns 0..4 (low, medium, high and the map's own),
+# AddBuildingSite and CreateSettler return record numbers.
+PLACE_TOWN_PROBES = {
+    0x00412300: (0, "thiscall", lambda h: h % 5),               # GameSettings::StartGoods
+    0x004dbc50: (1, "thiscall", "probe"),                       # BuildingDone
+    0x004dd280: (4, "thiscall", lambda h: 1 + h % 3998),        # AddBuildingSite
+    0x005046b0: (4, "thiscall", "probe"),                       # DropGoodNear
+    0x0050c9e0: (4, "thiscall", "probe", created_settler),       # CreateSettler
+    0x0050cb20: (5, "thiscall", "probe"),                       # SpawnSettlersAround
+    0x00519670: (2, "thiscall", "probe"),                       # UpdateShadeAround
+    0x00519a90: (2, "thiscall", "probe"),                       # RecalculateTerritory
+    0x0051b6f0: (2, "thiscall", "probe"),                       # BlockTile
+    0x0051b7f0: (2, "thiscall", "probe"),                       # WearPath
+}
+
+
+def place_town_state(rng, pool, args):
+    player = args[0]
+    record = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+    return [(record, rng.choice([0, 1, 2, 2, rng.getrandbits(32)]), 4), (record + 4, rng.randrange(4), 4)]
+
+SPECS += [
+    Spec("CGameData_PlaceTown", 0x00506cf0, "thiscall", [below(20), between(16, 368), between(16, 368)],
+         eax_mask=0, presets=place_town_state, callees=PLACE_TOWN_PROBES, max_cases=300),
+]

@@ -36,6 +36,32 @@ inline constexpr GameText kChunkName{0x69fccc};         // "lpChunk" (CMapFile::
 inline constexpr GameText kNewChunkName{0x69fcf4};      // "newchunk" (CMapFile::AddChunk's allocation)
 inline constexpr GameText kTempName{0x69fd00};          // "lpTemp" (CMapFile::WriteChunk*'s allocations)
 inline constexpr GameText kInvalidFileType{0x69fc38};   // "LOAD: Invalid filetype %i %i"
+// CGameData::LoadMap (0x4fd540)
+inline constexpr GameText kLoadingMap{0x6a5dbc};            // "Loading map..."
+inline constexpr GameText kWorldsize{0x6a5dac};             // "Worldsize: %u"
+inline constexpr GameText kDeletingBuildingBits{0x6a5d90};  // "Deleting Building-Bits..."
+inline constexpr GameText kSettingAllSectors{0x6a5d6c};     // "Setting all sectors for loaded Map"
+inline constexpr GameText kLoadingBuildings{0x6a5d54};      // "Loading buildings..."
+inline constexpr GameText kAmountOfBuildings{0x6a5d3c};     // "Amount of buildings: %u"
+// "Gebäude Typ %u    x,y  %u %u    mapowner %u gameowner %u" (building type, position, map and game owner)
+inline constexpr GameText kBuildingTypeAt{0x6a5d00};
+inline constexpr GameText kLoadingSettlers{0x6a5cec};       // "Loading settlers..."
+inline constexpr GameText kAmountOfSettlers{0x6a5cd4};      // "Amount of settlers: %u"
+inline constexpr GameText kLoadingPiles{0x6a5cc0};          // "Loading piles..."
+inline constexpr GameText kAmountOfPiles{0x6a5cac};         // "Amount of piles: %u"
+inline constexpr GameText kRaceChanged{0x6a5c84};           // "xxx race changed #%u - BuildingType %u"
+inline constexpr GameText kRaceNotChanged{0x6a5c58};        // "xxx race NOT changed #%u - BuildingType %u"
+// CGameData::PlaceTown (0x506cf0) and AddPlayerTowns (0x5074b0)
+inline constexpr GameText kPlacingTown{0x6a6250};           // "placing town: %u at: %u,%u"
+inline constexpr GameText kPlacingPlayer{0x6a6390};         // "Placing player %u"
+inline constexpr GameText kPositionFound{0x6a636c};         // "Position gefunden nach %u Versuchen" (found after %u attempts)
+inline constexpr GameText kMirrorPositionFound{0x6a62d0};   // "Mirror-Position gefunden nach %u Versuchen"
+inline constexpr GameText kQuadMirrorPositionFound{0x6a62a0};    // "Quad-Mirror Position gefunden nach %u Versuchen"
+inline constexpr GameText kTripleMirrorPositionFound{0x6a626c};  // "Triple-Mirror-Position gefunden nach %u Versuchen"
+// "fct AddPlayerTowns: Konnte keine Zufallsposition finden" (could not find a random position)
+inline constexpr GameText kNoRandomPosition{0x6a6334};
+// "fct AddPlayerTowns: Konnte keine Kreisposition finden" (could not find a circle position)
+inline constexpr GameText kNoCirclePosition{0x6a62fc};
 // CLogicThread::LoadSaveGame (0x508fa0)
 inline constexpr GameText kSavefileVersion{0x6a659c};         // "Savefile Version : %d"
 inline constexpr GameText kLoadingVictoryConditions{0x6a6574};  // "LoadGame: loading VictoryConditions..."
