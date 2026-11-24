@@ -578,7 +578,7 @@ void __fastcall CGameData_DispatchPileCarrier(CGameData* world, void*, std::uint
     Settler& s = world->settlers[carrier];
     UnlinkSettler(world, carrierList, carrier);
     CGameData_SetSettlerTarget(world, nullptr, carrier, pile.x, pile.y);
-    SetJob(s, Job::Job76);
+    SetJob(s, Job::CarrierWalkToSourcePile);
     s.counter = 0;
     s.building = static_cast<std::uint16_t>(target);
     s.good = pile.good;

@@ -232,7 +232,7 @@ JobResult WeaponSmithTakeInputs(SettlerContext& ctx) {
     ReserveInput(ctx, 0);
     ReserveInput(ctx, 1);
     OccupyTile(ctx);
-    return Switch(ctx, Job::Job131, 131);
+    return Switch(ctx, Job::WeaponSmithTakeCoal, 131);
 }
 
 // Job 0x86 (0x4f0b1f): a weapon is done. Ordered weapons first (sword, bow,
@@ -285,31 +285,31 @@ JobResult WeaponSmithFinish(SettlerContext& ctx) {
         WeaponPilesHaveRoom(world, BuildingOf(ctx)) && AreaWantsWeapons(world, BuildingOf(ctx))) {
         ReserveInput(ctx, 0);
         ReserveInput(ctx, 1);
-        return Switch(ctx, Job::Job136, 136);
+        return Switch(ctx, Job::WeaponSmithTakeCoalAgain, 136);
     }
-    return Switch(ctx, Job::Job135, 135);  // 0x4f0ee4, 0x4f106c
+    return Switch(ctx, Job::WeaponSmithEndRound, 135);  // 0x4f0ee4, 0x4f106c
 }
 
 JobResult RunWeaponSmith(SettlerContext& ctx, Job job) {
     switch (job) {
-    case Job::Job108: return StartWork(ctx, Job::Job117, false);  // 0x6c (0x4f10be)
-    case Job::Job117: return WeaponSmithTakeInputs(ctx);
-    case Job::Job131:  // 0x83 and 0x88 (0x4f09f7): coal
-    case Job::Job136:
+    case Job::WeaponSmithGoIn: return StartWork(ctx, Job::WeaponSmithTakeInputs, false);  // 0x6c (0x4f10be)
+    case Job::WeaponSmithTakeInputs: return WeaponSmithTakeInputs(ctx);
+    case Job::WeaponSmithTakeCoal:  // 0x83 and 0x88 (0x4f09f7): coal
+    case Job::WeaponSmithTakeCoalAgain:
         Consume(ctx, 0, Good::Coal);
-        return Switch(ctx, Job::Job132, 132);
-    case Job::Job132: return Switch(ctx, Job::Job133, 133);  // 0x84 (0x4f0a4d)
-    case Job::Job133: {  // 0x85 (0x4f0a68): iron, and the anvil effect
+        return Switch(ctx, Job::WeaponSmithWork, 132);
+    case Job::WeaponSmithWork: return Switch(ctx, Job::WeaponSmithTakeIron, 133);  // 0x84 (0x4f0a4d)
+    case Job::WeaponSmithTakeIron: {  // 0x85 (0x4f0a68): iron, and the anvil effect
         const std::uint32_t building = ctx.settler.building;
         const std::uint32_t x = BuildingAt(ctx.world, building).x;
         const std::uint32_t y = BuildingAt(ctx.world, building).y;
         Consume(ctx, 1, Good::Iron);
-        Switch(ctx, Job::Job134, 134);
+        Switch(ctx, Job::WeaponSmithFinish, 134);
         SpawnWorkEffect(ctx, building, x, y, 1);
         return JobResult::Next;
     }
-    case Job::Job134: return WeaponSmithFinish(ctx);
-    case Job::Job135: return Restart(ctx, Job::Job117);  // 0x87 (0x4f108b)
+    case Job::WeaponSmithFinish: return WeaponSmithFinish(ctx);
+    case Job::WeaponSmithEndRound: return Restart(ctx, Job::WeaponSmithTakeInputs);  // 0x87 (0x4f108b)
     default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
@@ -360,28 +360,41 @@ JobResult TakeOutAnimal(SettlerContext& ctx, Job job, std::uint32_t animation) {
 JobResult RunAnimalFarms(SettlerContext& ctx, Job job) {
     switch (job) {
     // Pig farm.
-    case Job::Job110: return StartWork(ctx, Job::Job119, false);  // 0x6e (0x4f10da)
-    case Job::Job119: return FarmTakeInputs(ctx, true, 5, Job::Job200, 181, Job::Job203, 184);
-    case Job::Job200: Consume(ctx, 0, Good::Grain); return Switch(ctx, Job::Job201, 182);  // 0xc8 (0x4f125f)
-    case Job::Job201: Consume(ctx, 1, Good::Water); return Switch(ctx, Job::Job202, 183);  // 0xc9 (0x4f12b5)
-    case Job::Job202: return FarmFed(ctx, Job::Job119, 15000);
-    case Job::Job203: return TakeOutAnimal(ctx, Job::Job204, 185);  // 0xcb (0x4f1352)
-    case Job::Job204: Produce(ctx, Good::Pig); return Switch(ctx, Job::Job205, 186);  // 0xcc (0x4f1394)
-    case Job::Job205: return Restart(ctx, Job::Job119);  // 0xcd (0x4f1425)
+    case Job::PigFarmGoIn: return StartWork(ctx, Job::PigFarmTakeInputs, false);  // 0x6e (0x4f10da)
+    case Job::PigFarmTakeInputs:
+        return FarmTakeInputs(ctx, true, 5, Job::PigFarmTakeGrain, 181, Job::PigFarmTakeOut, 184);
+    case Job::PigFarmTakeGrain:
+        Consume(ctx, 0, Good::Grain);
+        return Switch(ctx, Job::PigFarmTakeWater, 182);  // 0xc8 (0x4f125f)
+    case Job::PigFarmTakeWater:
+        Consume(ctx, 1, Good::Water);
+        return Switch(ctx, Job::PigFarmFed, 183);  // 0xc9 (0x4f12b5)
+    case Job::PigFarmFed: return FarmFed(ctx, Job::PigFarmTakeInputs, 15000);
+    case Job::PigFarmTakeOut: return TakeOutAnimal(ctx, Job::PigFarmStorePig, 185);  // 0xcb (0x4f1352)
+    case Job::PigFarmStorePig:
+        Produce(ctx, Good::Pig);
+        return Switch(ctx, Job::PigFarmEndRound, 186);  // 0xcc (0x4f1394)
+    case Job::PigFarmEndRound:
+        return Restart(ctx, Job::PigFarmTakeInputs);  // 0xcd (0x4f1425)
     // Donkey farm: the animal walks out (SpawnSettlersAround, type donkey).
-    case Job::Job305: return StartWork(ctx, Job::Job306, false);  // 0x131 (0x4f1458)
-    case Job::Job306: return FarmTakeInputs(ctx, false, 3, Job::Job206, 206, Job::Job209, 209);
-    case Job::Job206: Consume(ctx, 0, Good::Grain); return Switch(ctx, Job::Job207, 207);  // 0xce (0x4f15bf)
-    case Job::Job207: Consume(ctx, 1, Good::Water); return Switch(ctx, Job::Job208, 208);  // 0xcf (0x4f1615)
-    case Job::Job208: return FarmFed(ctx, Job::Job306, 30000);
-    case Job::Job209: return TakeOutAnimal(ctx, Job::Job210, 210);  // 0xd1 (0x4f16df)
-    case Job::Job210: {  // 0xd2 (0x4f1721)
+    case Job::DonkeyFarmGoIn: return StartWork(ctx, Job::DonkeyFarmTakeInputs, false);  // 0x131 (0x4f1458)
+    case Job::DonkeyFarmTakeInputs:
+        return FarmTakeInputs(ctx, false, 3, Job::DonkeyFarmTakeGrain, 206, Job::DonkeyFarmTakeOut, 209);
+    case Job::DonkeyFarmTakeGrain:
+        Consume(ctx, 0, Good::Grain);
+        return Switch(ctx, Job::DonkeyFarmTakeWater, 207);  // 0xce (0x4f15bf)
+    case Job::DonkeyFarmTakeWater:
+        Consume(ctx, 1, Good::Water);
+        return Switch(ctx, Job::DonkeyFarmFed, 208);  // 0xcf (0x4f1615)
+    case Job::DonkeyFarmFed: return FarmFed(ctx, Job::DonkeyFarmTakeInputs, 30000);
+    case Job::DonkeyFarmTakeOut: return TakeOutAnimal(ctx, Job::DonkeyFarmRelease, 210);  // 0xd1 (0x4f16df)
+    case Job::DonkeyFarmRelease: {                                                        // 0xd2 (0x4f1721)
         const Building& building = BuildingOf(ctx);
         Call<kSpawnSettlersAround>(ctx.world, 1, Value(SettlerType::Donkey), OwnerOf(ctx), building.door_x,
                                    building.door_y);
-        return Switch(ctx, Job::Job211, 211);
+        return Switch(ctx, Job::DonkeyFarmEndRound, 211);
     }
-    case Job::Job211: return Restart(ctx, Job::Job306);  // 0xd3 (0x4f177a)
+    case Job::DonkeyFarmEndRound: return Restart(ctx, Job::DonkeyFarmTakeInputs);  // 0xd3 (0x4f177a)
     default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
@@ -437,7 +450,7 @@ JobResult MillerGrind(SettlerContext& ctx) {
     const std::uint32_t x = building.x;
     const std::uint32_t y = building.y;
     Consume(ctx, 0, Good::Grain);
-    Switch(ctx, Job::Job159, 162);
+    Switch(ctx, Job::MillerWork, 162);
     const std::uint32_t screenY = Call<kTileScreenY>(world, x, y);
     const std::uint32_t screenX = Call<kTileScreenX>(world, x, y);
     Call<kSpawn544dc0>(&world->map_effects, g_gameTick.get(), building.race, number, screenX, screenY, x, y);
@@ -454,38 +467,45 @@ JobResult MillerGrind(SettlerContext& ctx) {
 JobResult RunMills(SettlerContext& ctx, Job job) {
     switch (job) {
     // Butcher.
-    case Job::Job111: return StartWork(ctx, Job::Job120, false);  // 0x6f (0x4f17ad)
-    case Job::Job120: return TakeInputs(ctx, 1, Job::Job195, 175);
-    case Job::Job195:  // 0xc3 and 0xc7 (0x4f1884)
-    case Job::Job199: Consume(ctx, 0, Good::Pig); return Switch(ctx, Job::Job196, 176);
-    case Job::Job196: return Switch(ctx, Job::Job197, 177);  // 0xc4 (0x4f18da)
-    case Job::Job197: return ProduceAndContinue(ctx, Good::Meat, 1, Job::Job199, 179, Job::Job198, 178);
-    case Job::Job198: return Restart(ctx, Job::Job120);  // 0xc6 (0x4f1a06)
+    case Job::ButcherGoIn: return StartWork(ctx, Job::ButcherTakeInputs, false);  // 0x6f (0x4f17ad)
+    case Job::ButcherTakeInputs: return TakeInputs(ctx, 1, Job::ButcherTakePig, 175);
+    case Job::ButcherTakePig:  // 0xc3 and 0xc7 (0x4f1884)
+    case Job::ButcherTakePigAgain: Consume(ctx, 0, Good::Pig); return Switch(ctx, Job::ButcherWork, 176);
+    case Job::ButcherWork: return Switch(ctx, Job::ButcherStoreMeat, 177);  // 0xc4 (0x4f18da)
+    case Job::ButcherStoreMeat:
+        return ProduceAndContinue(ctx, Good::Meat, 1, Job::ButcherTakePigAgain, 179, Job::ButcherEndRound,
+                                  178);
+    case Job::ButcherEndRound:
+        return Restart(ctx, Job::ButcherTakeInputs);  // 0xc6 (0x4f1a06)
     // Miller.
-    case Job::Job113: return StartWork(ctx, Job::Job122, false);  // 0x71 (0x4f22d2)
-    case Job::Job122: return TakeInputs(ctx, 1, Job::Job158, 161);
-    case Job::Job158:
-    case Job::Job162: return MillerGrind(ctx);
-    case Job::Job159: return Switch(ctx, Job::Job160, 163);  // 0x9f (0x4f24bf)
-    case Job::Job160: return ProduceAndContinue(ctx, Good::Flour, 1, Job::Job162, 165, Job::Job161, 164);
-    case Job::Job161: return Restart(ctx, Job::Job122);  // 0xa1 (0x4f25ec)
+    case Job::MillerGoIn: return StartWork(ctx, Job::MillerTakeInputs, false);  // 0x71 (0x4f22d2)
+    case Job::MillerTakeInputs: return TakeInputs(ctx, 1, Job::MillerGrind, 161);
+    case Job::MillerGrind:
+    case Job::MillerGrindAgain: return MillerGrind(ctx);
+    case Job::MillerWork: return Switch(ctx, Job::MillerStoreFlour, 163);  // 0x9f (0x4f24bf)
+    case Job::MillerStoreFlour:
+        return ProduceAndContinue(ctx, Good::Flour, 1, Job::MillerGrindAgain, 165, Job::MillerEndRound, 164);
+    case Job::MillerEndRound:
+        return Restart(ctx, Job::MillerTakeInputs);  // 0xa1 (0x4f25ec)
     // Baker.
-    case Job::Job114: return StartWork(ctx, Job::Job123, false);  // 0x72 (0x4f2734)
-    case Job::Job123: return TakeInputs(ctx, 2, Job::Job163, 166);
-    case Job::Job163:  // 0xa3 and 0xa8 (0x4f284d): water
-    case Job::Job168: Consume(ctx, 1, Good::Water); return Switch(ctx, Job::Job164, 167);
-    case Job::Job164: {  // 0xa4 (0x4f28a3): flour, and the oven effect
+    case Job::BakerGoIn: return StartWork(ctx, Job::BakerTakeInputs, false);  // 0x72 (0x4f2734)
+    case Job::BakerTakeInputs: return TakeInputs(ctx, 2, Job::BakerTakeWater, 166);
+    case Job::BakerTakeWater:  // 0xa3 and 0xa8 (0x4f284d): water
+    case Job::BakerTakeWaterAgain: Consume(ctx, 1, Good::Water); return Switch(ctx, Job::BakerTakeFlour, 167);
+    case Job::BakerTakeFlour: {  // 0xa4 (0x4f28a3): flour, and the oven effect
         const std::uint32_t building = ctx.settler.building;
         const std::uint32_t x = BuildingAt(ctx.world, building).x;
         const std::uint32_t y = BuildingAt(ctx.world, building).y;
         Consume(ctx, 0, Good::Flour);
-        Switch(ctx, Job::Job165, 168);
+        Switch(ctx, Job::BakerWork, 168);
         SpawnWorkEffect(ctx, building, x, y, 2);
         return JobResult::Next;
     }
-    case Job::Job165: return Switch(ctx, Job::Job166, 169);  // 0xa5 (0x4f295a)
-    case Job::Job166: return ProduceAndContinue(ctx, Good::Bread, 2, Job::Job168, 171, Job::Job167, 170);
-    case Job::Job167: return Restart(ctx, Job::Job123);  // 0xa7 (0x4f2acc)
+    case Job::BakerWork: return Switch(ctx, Job::BakerStoreBread, 169);  // 0xa5 (0x4f295a)
+    case Job::BakerStoreBread:
+        return ProduceAndContinue(ctx, Good::Bread, 2, Job::BakerTakeWaterAgain, 171, Job::BakerEndRound,
+                                  170);
+    case Job::BakerEndRound: return Restart(ctx, Job::BakerTakeInputs);  // 0xa7 (0x4f2acc)
     default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
@@ -585,7 +605,8 @@ JobResult FarmerSearch(SettlerContext& ctx) {
     }
     OccupyTile(ctx);
     Call<kSetSettlerTarget>(world, ctx.number, x, y);
-    return found == Found::Harvest ? Switch(ctx, Job::Job149, 160) : Switch(ctx, Job::Job143, 155);
+    return found == Found::Harvest ? Switch(ctx, Job::FarmerLeaveToHarvest, 160)
+                                   : Switch(ctx, Job::FarmerLeaveToSow, 155);
 }
 
 // Job 0x91 (0x4f1e93): sow the field here (seven terrain patches), or walk
@@ -593,7 +614,7 @@ JobResult FarmerSearch(SettlerContext& ctx) {
 JobResult FarmerSow(SettlerContext& ctx) {
     CGameData* world = ctx.world;
     if (!CanSow(world, ctx.settler.x, ctx.settler.y)) {
-        return WalkHome(ctx, Job::Job147);
+        return WalkHome(ctx, Job::FarmerWalkHome);
     }
     const std::int32_t patches[7][2] = {{0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {-1, -1}};
     for (const auto& d : patches) {
@@ -601,7 +622,7 @@ JobResult FarmerSow(SettlerContext& ctx) {
         const std::uint32_t y = ctx.settler.y + d[1];
         Call<kMakeFieldTile>(world, x, y);
     }
-    return Switch(ctx, Job::Job146, 156);
+    return Switch(ctx, Job::FarmerSown, 156);
 }
 
 // Job 0x97 (0x4f218a): harvest in two steps (Settler +0x17 counts them).
@@ -615,7 +636,7 @@ JobResult FarmerHarvest(SettlerContext& ctx) {
     }
     if (step == 2) {
         SettlerTile(ctx).object = kFieldHarvested;
-        return WalkHome(ctx, Job::Job152);
+        return WalkHome(ctx, Job::FarmerWalkHomeLoaded);
     }
     return JobResult::Next;
 }
@@ -639,41 +660,42 @@ JobResult ComeHome(SettlerContext& ctx, Job deliver, std::uint32_t deliverAnimat
 
 JobResult RunFarmer(SettlerContext& ctx, Job job) {
     switch (job) {
-    case Job::Job112: return StartWork(ctx, Job::Job121, true);  // 0x70 (0x4f1a39)
-    case Job::Job121: return FarmerSearch(ctx);
-    case Job::Job143:  // 0x8f (0x4f1e6d): walk out to sow
+    case Job::FarmerGoIn: return StartWork(ctx, Job::FarmerSearch, true);  // 0x70 (0x4f1a39)
+    case Job::FarmerSearch: return FarmerSearch(ctx);
+    case Job::FarmerLeaveToSow:  // 0x8f (0x4f1e6d): walk out to sow
         Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
         ctx.settler.slot = 1;
         ctx.settler.counter = 0;
-        SetJob(ctx.settler, Job::Job144);
+        SetJob(ctx.settler, Job::FarmerWalkToSow);
         return JobResult::Again;
-    case Job::Job145: return FarmerSow(ctx);
-    case Job::Job146:  // 0x92 (0x4f20d5): sown
+    case Job::FarmerSow: return FarmerSow(ctx);
+    case Job::FarmerSown:  // 0x92 (0x4f20d5): sown
         SettlerTile(ctx).object = kFieldSown;
-        return WalkHome(ctx, Job::Job147);
-    case Job::Job148:  // 0x94 and 0x9d (0x4f2108)
-    case Job::Job157: return RestartNow(ctx, Job::Job121);
-    case Job::Job149:  // 0x95 (0x4f2116): walk out to harvest
+        return WalkHome(ctx, Job::FarmerWalkHome);
+    case Job::FarmerBackIn:  // 0x94 and 0x9d (0x4f2108)
+    case Job::FarmerRest: return RestartNow(ctx, Job::FarmerSearch);
+    case Job::FarmerLeaveToHarvest:  // 0x95 (0x4f2116): walk out to harvest
         Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
         ctx.settler.slot = 0;
         ctx.settler.counter = 0;
-        SetJob(ctx.settler, Job::Job156);
+        SetJob(ctx.settler, Job::FarmerWalkToHarvest);
         return JobResult::Again;
-    case Job::Job150: {  // 0x96 (0x4f213c): at the field, still ripe?
+    case Job::FarmerAtField: {  // 0x96 (0x4f213c): at the field, still ripe?
         const std::uint8_t object = SettlerTile(ctx).object;
         if (object < kFieldRipeFirst || object > kFieldRipeLast) {
-            return WalkHome(ctx, Job::Job147);
+            return WalkHome(ctx, Job::FarmerWalkHome);
         }
-        Switch(ctx, Job::Job151, 158);
+        Switch(ctx, Job::FarmerHarvest, 158);
         ctx.settler.food = 0;
         return JobResult::Next;
     }
-    case Job::Job151: return FarmerHarvest(ctx);
-    case Job::Job153: return ComeHome(ctx, Job::Job154, 172, Job::Job157, 121);  // 0x99 (0x4f21f5)
-    case Job::Job155: return GoIn(ctx, Job::Job157, 121);                         // 0x9b (0x4f221a)
-    case Job::Job154:  // 0x9a (0x4f223a): the grain onto the pile
+    case Job::FarmerHarvest: return FarmerHarvest(ctx);
+    case Job::FarmerHome:
+        return ComeHome(ctx, Job::FarmerStore, 172, Job::FarmerRest, 121);  // 0x99 (0x4f21f5)
+    case Job::FarmerGoInAgain: return GoIn(ctx, Job::FarmerRest, 121);      // 0x9b (0x4f221a)
+    case Job::FarmerStore:  // 0x9a (0x4f223a): the grain onto the pile
         Produce(ctx, Good::Grain);
-        Switch(ctx, Job::Job155, 173);
+        Switch(ctx, Job::FarmerGoInAgain, 173);
         ctx.settler.slot = 0;
         return JobResult::Next;
     default: return JobResult::Next;  // not a job of this family (kJobFamily)
@@ -732,7 +754,7 @@ JobResult FisherSearch(SettlerContext& ctx) {
     }
     OccupyTile(ctx);
     Call<kSetSettlerTarget>(world, ctx.number, x, y);
-    return Switch(ctx, Job::Job177, 191);
+    return Switch(ctx, Job::FisherLeave, 191);
 }
 
 // Job 0xb3 (0x4f2d88): at the shore: cast towards a random water
@@ -743,7 +765,7 @@ JobResult FisherSearch(SettlerContext& ctx) {
 JobResult FisherCast(SettlerContext& ctx) {
     CGameData* world = ctx.world;
     if (!NextToWater(world, ctx.settler.x, ctx.settler.y)) {
-        return WalkHome(ctx, Job::Job181);
+        return WalkHome(ctx, Job::FisherWalkHome);
     }
     std::uint32_t direction = Call<kRandomBelow6>(world);
     std::uint32_t x = 0;
@@ -770,29 +792,30 @@ JobResult FisherCast(SettlerContext& ctx) {
         animation = direction + 198;
     }
     Animate(ctx, animation);
-    SetJob(ctx.settler, Job::Job180);
+    SetJob(ctx.settler, Job::FisherCastDone);
     return JobResult::Next;
 }
 
 JobResult RunFisher(SettlerContext& ctx, Job job) {
     switch (job) {
-    case Job::Job109: return StartWork(ctx, Job::Job118, true);  // 0x6d (0x4f10cc)
-    case Job::Job118: return FisherSearch(ctx);
-    case Job::Job177:  // 0xb1 (0x4f2d69): walk out
+    case Job::FisherGoIn: return StartWork(ctx, Job::FisherSearch, true);  // 0x6d (0x4f10cc)
+    case Job::FisherSearch: return FisherSearch(ctx);
+    case Job::FisherLeave:  // 0xb1 (0x4f2d69): walk out
         Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
         ctx.settler.counter = 0;
-        SetJob(ctx.settler, Job::Job178);
+        SetJob(ctx.settler, Job::FisherWalkToWater);
         return JobResult::Again;
-    case Job::Job179: return FisherCast(ctx);
-    case Job::Job180: return WalkHome(ctx, Job::Job181);  // 0xb4 (0x4f2de1)
-    case Job::Job182: return ComeHome(ctx, Job::Job183, 204, Job::Job185, 118);  // 0xb6 (0x4f2eb5)
-    case Job::Job184: return GoIn(ctx, Job::Job185, 118);                         // 0xb8 (0x4f2eda)
-    case Job::Job183:  // 0xb7 (0x4f2efa): the fish onto the pile
+    case Job::FisherCast: return FisherCast(ctx);
+    case Job::FisherCastDone: return WalkHome(ctx, Job::FisherWalkHome);  // 0xb4 (0x4f2de1)
+    case Job::FisherHome:
+        return ComeHome(ctx, Job::FisherStore, 204, Job::FisherRest, 118);  // 0xb6 (0x4f2eb5)
+    case Job::FisherGoInAgain: return GoIn(ctx, Job::FisherRest, 118);      // 0xb8 (0x4f2eda)
+    case Job::FisherStore:  // 0xb7 (0x4f2efa): the fish onto the pile
         Produce(ctx, Good::Fish);
-        Switch(ctx, Job::Job184, 205);
+        Switch(ctx, Job::FisherGoInAgain, 205);
         ctx.settler.slot = 0;
         return JobResult::Next;
-    case Job::Job185: return RestartNow(ctx, Job::Job118);  // 0xb9 (0x4f2f92)
+    case Job::FisherRest: return RestartNow(ctx, Job::FisherSearch);  // 0xb9 (0x4f2f92)
     default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
@@ -836,35 +859,36 @@ JobResult WaterworkerSearch(SettlerContext& ctx) {
     }
     OccupyTile(ctx);
     Call<kSetSettlerTarget>(world, ctx.number, x, y);
-    return Switch(ctx, Job::Job186, 187);
+    return Switch(ctx, Job::WaterworkerLeave, 187);
 }
 
 JobResult RunWaterworker(SettlerContext& ctx, Job job) {
     switch (job) {
-    case Job::Job115: return StartWork(ctx, Job::Job124, true);  // 0x73 (0x4f2aff)
-    case Job::Job124: return WaterworkerSearch(ctx);
-    case Job::Job186:  // 0xba (0x4f31c5): walk out
+    case Job::WaterworkerGoIn: return StartWork(ctx, Job::WaterworkerSearch, true);  // 0x73 (0x4f2aff)
+    case Job::WaterworkerSearch: return WaterworkerSearch(ctx);
+    case Job::WaterworkerLeave:  // 0xba (0x4f31c5): walk out
         Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
         ctx.settler.counter = 0;
-        SetJob(ctx.settler, Job::Job187);
+        SetJob(ctx.settler, Job::WaterworkerWalkToWater);
         return JobResult::Again;
-    case Job::Job189:  // 0xbd (0x4f31e4): draw water, if still there
+    case Job::WaterworkerDraw:  // 0xbd (0x4f31e4): draw water, if still there
         if ((SettlerTile(ctx).terrain & kTerrainClassMask) != kTerrainClass60) {
-            return WalkHome(ctx, Job::Job188);
+            return WalkHome(ctx, Job::WaterworkerWalkHome);
         }
         ctx.settler.slot = Value(Good::Water);
         Animate(ctx, 188);
-        SetJob(ctx.settler, Job::Job190);
+        SetJob(ctx.settler, Job::WaterworkerDrawn);
         return JobResult::Next;
-    case Job::Job190: return WalkHome(ctx, Job::Job188);  // 0xbe (0x4f3261)
-    case Job::Job191: return ComeHome(ctx, Job::Job192, 189, Job::Job194, 124);  // 0xbf (0x4f326f)
-    case Job::Job193: return GoIn(ctx, Job::Job194, 124);                         // 0xc1 (0x4f3294)
-    case Job::Job192:  // 0xc0 (0x4f32b4): the water onto the pile
+    case Job::WaterworkerDrawn: return WalkHome(ctx, Job::WaterworkerWalkHome);  // 0xbe (0x4f3261)
+    case Job::WaterworkerHome:
+        return ComeHome(ctx, Job::WaterworkerStore, 189, Job::WaterworkerRest, 124);  // 0xbf (0x4f326f)
+    case Job::WaterworkerGoInAgain: return GoIn(ctx, Job::WaterworkerRest, 124);      // 0xc1 (0x4f3294)
+    case Job::WaterworkerStore:  // 0xc0 (0x4f32b4): the water onto the pile
         Produce(ctx, Good::Water);
-        Switch(ctx, Job::Job193, 190);
+        Switch(ctx, Job::WaterworkerGoInAgain, 190);
         ctx.settler.slot = 0;
         return JobResult::Next;
-    case Job::Job194: return RestartNow(ctx, Job::Job124);  // 0xc2 (0x4f334c)
+    case Job::WaterworkerRest: return RestartNow(ctx, Job::WaterworkerSearch);  // 0xc2 (0x4f334c)
     default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
@@ -876,28 +900,83 @@ JobResult RunWaterworker(SettlerContext& ctx, Job job) {
 JobResult RunFoodJobs(SettlerContext& ctx) {
     const auto job = static_cast<Job>(ctx.job);
     switch (job) {
-    case Job::Job108: case Job::Job117: case Job::Job131: case Job::Job132: case Job::Job133: case Job::Job134:
-    case Job::Job135: case Job::Job136:
-        return RunWeaponSmith(ctx, job);
-    case Job::Job110: case Job::Job119: case Job::Job200: case Job::Job201: case Job::Job202: case Job::Job203:
-    case Job::Job204: case Job::Job205: case Job::Job305: case Job::Job306: case Job::Job206: case Job::Job207:
-    case Job::Job208: case Job::Job209: case Job::Job210: case Job::Job211:
-        return RunAnimalFarms(ctx, job);
-    case Job::Job111: case Job::Job120: case Job::Job195: case Job::Job196: case Job::Job197: case Job::Job198:
-    case Job::Job199: case Job::Job113: case Job::Job122: case Job::Job158: case Job::Job159: case Job::Job160:
-    case Job::Job161: case Job::Job162: case Job::Job114: case Job::Job123: case Job::Job163: case Job::Job164:
-    case Job::Job165: case Job::Job166: case Job::Job167: case Job::Job168:
-        return RunMills(ctx, job);
-    case Job::Job112: case Job::Job121: case Job::Job143: case Job::Job145: case Job::Job146: case Job::Job148:
-    case Job::Job149: case Job::Job150: case Job::Job151: case Job::Job153: case Job::Job154: case Job::Job155:
-    case Job::Job157:
-        return RunFarmer(ctx, job);
-    case Job::Job109: case Job::Job118: case Job::Job177: case Job::Job179: case Job::Job180: case Job::Job182:
-    case Job::Job183: case Job::Job184: case Job::Job185:
-        return RunFisher(ctx, job);
-    case Job::Job115: case Job::Job124: case Job::Job186: case Job::Job189: case Job::Job190: case Job::Job191:
-    case Job::Job192: case Job::Job193: case Job::Job194:
-        return RunWaterworker(ctx, job);
+    case Job::WeaponSmithGoIn:
+    case Job::WeaponSmithTakeInputs:
+    case Job::WeaponSmithTakeCoal:
+    case Job::WeaponSmithWork:
+    case Job::WeaponSmithTakeIron:
+    case Job::WeaponSmithFinish:
+    case Job::WeaponSmithEndRound:
+    case Job::WeaponSmithTakeCoalAgain: return RunWeaponSmith(ctx, job);
+    case Job::PigFarmGoIn:
+    case Job::PigFarmTakeInputs:
+    case Job::PigFarmTakeGrain:
+    case Job::PigFarmTakeWater:
+    case Job::PigFarmFed:
+    case Job::PigFarmTakeOut:
+    case Job::PigFarmStorePig:
+    case Job::PigFarmEndRound:
+    case Job::DonkeyFarmGoIn:
+    case Job::DonkeyFarmTakeInputs:
+    case Job::DonkeyFarmTakeGrain:
+    case Job::DonkeyFarmTakeWater:
+    case Job::DonkeyFarmFed:
+    case Job::DonkeyFarmTakeOut:
+    case Job::DonkeyFarmRelease:
+    case Job::DonkeyFarmEndRound: return RunAnimalFarms(ctx, job);
+    case Job::ButcherGoIn:
+    case Job::ButcherTakeInputs:
+    case Job::ButcherTakePig:
+    case Job::ButcherWork:
+    case Job::ButcherStoreMeat:
+    case Job::ButcherEndRound:
+    case Job::ButcherTakePigAgain:
+    case Job::MillerGoIn:
+    case Job::MillerTakeInputs:
+    case Job::MillerGrind:
+    case Job::MillerWork:
+    case Job::MillerStoreFlour:
+    case Job::MillerEndRound:
+    case Job::MillerGrindAgain:
+    case Job::BakerGoIn:
+    case Job::BakerTakeInputs:
+    case Job::BakerTakeWater:
+    case Job::BakerTakeFlour:
+    case Job::BakerWork:
+    case Job::BakerStoreBread:
+    case Job::BakerEndRound:
+    case Job::BakerTakeWaterAgain: return RunMills(ctx, job);
+    case Job::FarmerGoIn:
+    case Job::FarmerSearch:
+    case Job::FarmerLeaveToSow:
+    case Job::FarmerSow:
+    case Job::FarmerSown:
+    case Job::FarmerBackIn:
+    case Job::FarmerLeaveToHarvest:
+    case Job::FarmerAtField:
+    case Job::FarmerHarvest:
+    case Job::FarmerHome:
+    case Job::FarmerStore:
+    case Job::FarmerGoInAgain:
+    case Job::FarmerRest: return RunFarmer(ctx, job);
+    case Job::FisherGoIn:
+    case Job::FisherSearch:
+    case Job::FisherLeave:
+    case Job::FisherCast:
+    case Job::FisherCastDone:
+    case Job::FisherHome:
+    case Job::FisherStore:
+    case Job::FisherGoInAgain:
+    case Job::FisherRest: return RunFisher(ctx, job);
+    case Job::WaterworkerGoIn:
+    case Job::WaterworkerSearch:
+    case Job::WaterworkerLeave:
+    case Job::WaterworkerDraw:
+    case Job::WaterworkerDrawn:
+    case Job::WaterworkerHome:
+    case Job::WaterworkerStore:
+    case Job::WaterworkerGoInAgain:
+    case Job::WaterworkerRest: return RunWaterworker(ctx, job);
     default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
@@ -919,17 +998,83 @@ using settler_jobs::Settler;
 using settler_jobs::Tile;
 using Job = SettlerJob;
 
-constexpr Job kFoodJobs[] = {
-    Job::Job108, Job::Job117, Job::Job131, Job::Job132, Job::Job133, Job::Job134, Job::Job135, Job::Job136,
-    Job::Job110, Job::Job119, Job::Job200, Job::Job201, Job::Job202, Job::Job203, Job::Job204, Job::Job205,
-    Job::Job305, Job::Job306, Job::Job206, Job::Job207, Job::Job208, Job::Job209, Job::Job210, Job::Job211,
-    Job::Job111, Job::Job120, Job::Job195, Job::Job196, Job::Job197, Job::Job198, Job::Job199, Job::Job113,
-    Job::Job122, Job::Job158, Job::Job159, Job::Job160, Job::Job161, Job::Job162, Job::Job114, Job::Job123,
-    Job::Job163, Job::Job164, Job::Job165, Job::Job166, Job::Job167, Job::Job168, Job::Job112, Job::Job121,
-    Job::Job143, Job::Job145, Job::Job146, Job::Job148, Job::Job149, Job::Job150, Job::Job151, Job::Job153,
-    Job::Job154, Job::Job155, Job::Job157, Job::Job109, Job::Job118, Job::Job177, Job::Job179, Job::Job180,
-    Job::Job182, Job::Job183, Job::Job184, Job::Job185, Job::Job115, Job::Job124, Job::Job186, Job::Job189,
-    Job::Job190, Job::Job191, Job::Job192, Job::Job193, Job::Job194};
+constexpr Job kFoodJobs[] = {Job::WeaponSmithGoIn,
+                             Job::WeaponSmithTakeInputs,
+                             Job::WeaponSmithTakeCoal,
+                             Job::WeaponSmithWork,
+                             Job::WeaponSmithTakeIron,
+                             Job::WeaponSmithFinish,
+                             Job::WeaponSmithEndRound,
+                             Job::WeaponSmithTakeCoalAgain,
+                             Job::PigFarmGoIn,
+                             Job::PigFarmTakeInputs,
+                             Job::PigFarmTakeGrain,
+                             Job::PigFarmTakeWater,
+                             Job::PigFarmFed,
+                             Job::PigFarmTakeOut,
+                             Job::PigFarmStorePig,
+                             Job::PigFarmEndRound,
+                             Job::DonkeyFarmGoIn,
+                             Job::DonkeyFarmTakeInputs,
+                             Job::DonkeyFarmTakeGrain,
+                             Job::DonkeyFarmTakeWater,
+                             Job::DonkeyFarmFed,
+                             Job::DonkeyFarmTakeOut,
+                             Job::DonkeyFarmRelease,
+                             Job::DonkeyFarmEndRound,
+                             Job::ButcherGoIn,
+                             Job::ButcherTakeInputs,
+                             Job::ButcherTakePig,
+                             Job::ButcherWork,
+                             Job::ButcherStoreMeat,
+                             Job::ButcherEndRound,
+                             Job::ButcherTakePigAgain,
+                             Job::MillerGoIn,
+                             Job::MillerTakeInputs,
+                             Job::MillerGrind,
+                             Job::MillerWork,
+                             Job::MillerStoreFlour,
+                             Job::MillerEndRound,
+                             Job::MillerGrindAgain,
+                             Job::BakerGoIn,
+                             Job::BakerTakeInputs,
+                             Job::BakerTakeWater,
+                             Job::BakerTakeFlour,
+                             Job::BakerWork,
+                             Job::BakerStoreBread,
+                             Job::BakerEndRound,
+                             Job::BakerTakeWaterAgain,
+                             Job::FarmerGoIn,
+                             Job::FarmerSearch,
+                             Job::FarmerLeaveToSow,
+                             Job::FarmerSow,
+                             Job::FarmerSown,
+                             Job::FarmerBackIn,
+                             Job::FarmerLeaveToHarvest,
+                             Job::FarmerAtField,
+                             Job::FarmerHarvest,
+                             Job::FarmerHome,
+                             Job::FarmerStore,
+                             Job::FarmerGoInAgain,
+                             Job::FarmerRest,
+                             Job::FisherGoIn,
+                             Job::FisherSearch,
+                             Job::FisherLeave,
+                             Job::FisherCast,
+                             Job::FisherCastDone,
+                             Job::FisherHome,
+                             Job::FisherStore,
+                             Job::FisherGoInAgain,
+                             Job::FisherRest,
+                             Job::WaterworkerGoIn,
+                             Job::WaterworkerSearch,
+                             Job::WaterworkerLeave,
+                             Job::WaterworkerDraw,
+                             Job::WaterworkerDrawn,
+                             Job::WaterworkerHome,
+                             Job::WaterworkerStore,
+                             Job::WaterworkerGoInAgain,
+                             Job::WaterworkerRest};
 static_assert(sizeof(kFoodJobs) / sizeof(kFoodJobs[0]) == 77);
 
 constexpr SettlerType kFoodTypes[] = {SettlerType::Smith,  SettlerType::PigFarmer, SettlerType::Butcher,
@@ -1067,7 +1212,7 @@ FamilyTest FoodFamily() {
 // Wrong: the farmer's search starts one offset further.
 std::uint32_t __fastcall WrongFarmerSearch(CGameData* world, void* edx) {
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
-        if (world->settlers[n].job == Value(Job::Job121)) {
+        if (world->settlers[n].job == Value(Job::FarmerSearch)) {
             ++world->settlers[n].next;
         }
     }

@@ -189,13 +189,15 @@ constexpr std::uint16_t kNoDirection = 0xffff;
 
 // Carriers bringing goods to a building pile (jobs 76..79, 0x4c..0x4f).
 bool IsDeliveringJob(Job job) {
-    return IsOneOf(job, {Job::Job76, Job::Job77, Job::Job78, Job::Job79});
+    return IsOneOf(job, {Job::CarrierWalkToSourcePile, Job::CarrierAtSourcePile, Job::CarrierWalkToTargetPile,
+                         Job::CarrierAtTargetPile});
 }
 
 // Settlers on their way to take goods from a pile (its position is their target).
 bool IsFetchingJob(Job job) {
-    return IsOneOf(job, {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::Job76, Job::Job77,
-                         Job::CarrierWalkToTool, Job::CarrierTakeTool});
+    return IsOneOf(
+        job, {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::CarrierWalkToSourcePile,
+              Job::CarrierAtSourcePile, Job::CarrierWalkToTool, Job::CarrierTakeTool});
 }
 
 // Resets every settler with an owner for which `match` is true.
@@ -321,9 +323,10 @@ void __fastcall CGameData_DropInputPile(CGameData* world, void*, std::uint32_t n
     }
     GameDebugLog(texts::kCannotFindBringers);  // always, as in the original
     if (pile.leaving != 0) {
-        // Jobs 307/308 (0x133/0x134): probably ships loading at a trade building.
+        // Jobs 307/308 (0x133/0x134): donkeys fetching from this pile (DonkeyWalkToPile, DonkeyLoad).
         ResetSettlersWhere(world, [&](const layout::Settler& s) {
-            return IsOneOf(JobOf(s), {Job::Job307, Job::Job308}) && s.target_x == pile.x && s.target_y == pile.y;
+            return IsOneOf(JobOf(s), {Job::DonkeyWalkToPile, Job::DonkeyLoad}) && s.target_x == pile.x &&
+                   s.target_y == pile.y;
         });
     }
     const std::uint32_t x = pile.x;
@@ -682,12 +685,12 @@ bool IsSiteWorker(const layout::Settler& s) {
         case Job::DiggerDig:
         case Job::DiggerWalkToSpot:
         case Job::DiggerLevel:
-        case Job::Job9:
-        case Job::Job8:
+        case Job::DiggerRaise:
+        case Job::DiggerLower:
         case Job::BuilderStart:
-        case Job::Job17:
+        case Job::BuilderWalkToSpot:
         case Job::BuilderBuild:
-        case Job::Job15: return true;
+        case Job::BuilderWalkToWait: return true;
         default: return false;
     }
 }
@@ -743,7 +746,7 @@ void __fastcall CGameData_ReleaseSiteWorkers(CGameData* world, void*, std::uint3
     std::uint32_t soldier = b.garrison;
     if (soldier != 0) {
         while (soldier != 0) {
-            if (JobOf(world->settlers[soldier]) == Job::Job140) {
+            if (JobOf(world->settlers[soldier]) == Job::BowmanInTower) {
                 CGameData_LeaveBuildingSlot(world, nullptr, soldier);
             }
             ResetSettlerToIdle(world, soldier);
@@ -755,7 +758,8 @@ void __fastcall CGameData_ReleaseSiteWorkers(CGameData* world, void*, std::uint3
     // Non-civilians on their way to it.
     ResetSettlersWhere(world, [&](const layout::Settler& s) {
         return ClassOf(s) != SettlerClass::Civilian && s.building == number &&
-               IsOneOf(JobOf(s), {Job::WalkToWork, Job::ArriveAtWork, Job::Job16, Job::Job106, Job::Job139});
+               IsOneOf(JobOf(s), {Job::WalkToWork, Job::ArriveAtWork, Job::SwordsmanEnterTower,
+                                  Job::BowmanEnterTower, Job::PikemanEnterTower});
     });
 }
 

@@ -568,11 +568,12 @@ void HoldPosition(Run& run) {
             continue;
         }
         const SettlerJob job = JobOf(settler);
-        if (job != SettlerJob::UnitIdle && job != SettlerJob::UnitWalk && job != SettlerJob::Job176) {
+        if (job != SettlerJob::UnitIdle && job != SettlerJob::UnitWalk &&
+            job != SettlerJob::UnitWalkCountdown) {
             continue;
         }
         settler.flags |= kSettlerNoFight;
-        if (JobOf(settler) == SettlerJob::UnitWalk || JobOf(settler) == SettlerJob::Job176) {
+        if (JobOf(settler) == SettlerJob::UnitWalk || JobOf(settler) == SettlerJob::UnitWalkCountdown) {
             settler.target_x = settler.x;
             settler.target_y = settler.y;
             settler.waypoint_x = settler.x;

@@ -173,17 +173,17 @@ bool HasWorkTarget(SettlerType type) {
 }
 
 bool IsGeologistWork(SettlerJob job) {
-    return job == SettlerJob::GeologistWork || job == SettlerJob::Job213;
+    return job == SettlerJob::GeologistWork || job == SettlerJob::GeologistDone;
 }
 
 bool IsPioneerWork(SettlerJob job) {
-    return job == SettlerJob::PioneerWork || job == SettlerJob::Job303;
+    return job == SettlerJob::PioneerWork || job == SettlerJob::PioneerDone;
 }
 
 // The jobs of units standing or walking around (not inside a building).
 bool IsIdleUnitJob(SettlerJob job) {
-    return job == SettlerJob::UnitIdle || job == SettlerJob::UnitWalk || job == SettlerJob::Job176 ||
-           job == SettlerJob::Job142;
+    return job == SettlerJob::UnitIdle || job == SettlerJob::UnitWalk ||
+           job == SettlerJob::UnitWalkCountdown || job == SettlerJob::UnitFighting;
 }
 
 }  // namespace
@@ -200,9 +200,10 @@ U __fastcall CGameData_IsSpellTarget(CGameData* world, void*, U settler) {
         return 0;
     }
     const SettlerJob job = JobOf(s);
-    return job == SettlerJob::GeologistWork || job == SettlerJob::Job213 || job == SettlerJob::PioneerWork ||
-                   job == SettlerJob::Job303 || job == SettlerJob::New || job == SettlerJob::UnitIdle ||
-                   job == SettlerJob::UnitWalk || job == SettlerJob::Job142 || job == SettlerJob::Job176
+    return job == SettlerJob::GeologistWork || job == SettlerJob::GeologistDone ||
+                   job == SettlerJob::PioneerWork || job == SettlerJob::PioneerDone ||
+                   job == SettlerJob::New || job == SettlerJob::UnitIdle || job == SettlerJob::UnitWalk ||
+                   job == SettlerJob::UnitFighting || job == SettlerJob::UnitWalkCountdown
                ? 1
                : 0;
 }
@@ -227,7 +228,7 @@ U __fastcall CGameData_ReleaseSpellTarget(CGameData* world, void*, U settler) {
     // 0x54b0f7: the job continues at once.
     const SettlerJob job = JobOf(s);
     if (IsGeologistWork(job) || IsPioneerWork(job) || job == SettlerJob::New || job == SettlerJob::UnitIdle ||
-        job == SettlerJob::Job142) {
+        job == SettlerJob::UnitFighting) {
         s.counter = 1;
     }
     if (HasWorkTarget(TypeOf(s))) {

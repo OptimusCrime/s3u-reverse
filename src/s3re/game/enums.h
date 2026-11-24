@@ -16,7 +16,7 @@
 // list the same building, settler and goods ids; they were used as hints
 // and every name used here agrees with the binary's behaviour. Evidence and
 // confidence per value: re/enums.md. A value whose meaning is not known yet
-// is a placeholder with its decimal number (SettlerJob::Job309), so it can
+// is a placeholder with its decimal number (SettlerJob::Job390), so it can
 // be found and renamed later.
 //
 // One header per category in game/enums/ (split 2026-11-23); this file

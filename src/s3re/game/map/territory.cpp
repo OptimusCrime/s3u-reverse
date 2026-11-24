@@ -78,8 +78,9 @@ bool IsLandArea(std::uint16_t area) {
 // The jobs of settlers on their way to take goods from a pile (carriers and
 // workers; the pile is their target position).
 bool IsFetchingJob(std::uint16_t job) {
-    for (const Job fetching : {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::Job76,
-                               Job::Job77, Job::CarrierWalkToTool, Job::CarrierTakeTool}) {
+    for (const Job fetching :
+         {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::CarrierWalkToSourcePile,
+          Job::CarrierAtSourcePile, Job::CarrierWalkToTool, Job::CarrierTakeTool}) {
         if (job == Value(fetching)) {
             return true;
         }
@@ -413,11 +414,16 @@ TileCase SetUpTile(test::Context& ctx, test::WorldPair& worlds) {
         p.next = next;
     });
     for (std::uint32_t n = 1; n <= 150; ++n) {
-        static constexpr std::uint16_t kJobs[] = {
-            Value(Job::CarrierWalkToPile), Value(Job::CarrierAtPile), Value(Job::CarrierPickUp),
-            Value(Job::Job76),             Value(Job::Job77),         Value(Job::CarrierWalkToTool),
-            Value(Job::CarrierTakeTool),   Value(Job::Job78),         Value(Job::Nothing),
-            Value(Job::UnitIdle)};
+        static constexpr std::uint16_t kJobs[] = {Value(Job::CarrierWalkToPile),
+                                                  Value(Job::CarrierAtPile),
+                                                  Value(Job::CarrierPickUp),
+                                                  Value(Job::CarrierWalkToSourcePile),
+                                                  Value(Job::CarrierAtSourcePile),
+                                                  Value(Job::CarrierWalkToTool),
+                                                  Value(Job::CarrierTakeTool),
+                                                  Value(Job::CarrierWalkToTargetPile),
+                                                  Value(Job::Nothing),
+                                                  Value(Job::UnitIdle)};
         const auto job = ctx.rng().Chance(3, 4) ? kJobs[ctx.rng().Below(10)] : static_cast<std::uint16_t>(ctx.rng().Below(0x195));
         const auto sowner = static_cast<std::uint8_t>(ctx.rng().Chance(1, 6) ? kFree : ctx.rng().Chance(1, 2) ? owner : ctx.rng().Below(8));
         const auto tx = static_cast<std::uint16_t>(ctx.rng().Chance(2, 3) ? px : ctx.rng().Below(384));
@@ -755,7 +761,7 @@ void CompareCycle(test::Context& ctx, CycleCrushFn candidate, int cases, int& re
         PlaceBuilding(worlds, 3, siteType, 1, 1, static_cast<std::uint16_t>(xs), static_cast<std::uint16_t>(ys),
                       static_cast<std::uint8_t>(1 + ctx.rng().Below(3)), 0);
         for (std::uint32_t n = 1; n <= 60; ++n) {
-            const auto job = static_cast<std::uint16_t>(n <= 6                   ? Value(Job::Job140)
+            const auto job = static_cast<std::uint16_t>(n <= 6                   ? Value(Job::BowmanInTower)
                                                         : ctx.rng().Chance(1, 2) ? Value(Job::DiggerDig)
                                                                                  : Value(Job::Nothing));
             const auto building = static_cast<std::uint16_t>(n <= 3 ? 1 : n <= 6 ? 2 : ctx.rng().Chance(2, 3) ? 3 : 0);

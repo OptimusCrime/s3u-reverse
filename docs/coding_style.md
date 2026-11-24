@@ -66,7 +66,7 @@ Readable code must still lead back to the binary:
 - Names come from evidence: the game's own strings (German DebugLog
   texts, data files, the manual), RTTI, or what the code does. A value
   whose meaning isn't known yet is still named, as a placeholder with its
-  number (`SettlerJob::Job309`), so it can be found and renamed later.
+  number (`SettlerJob::Job390`), so it can be found and renamed later.
 - Don't name a value that is just arithmetic (`x + 1`, `count / 2`).
 - **Enum or constant?** A *category* (one of several kinds a field can
   hold: job, type, good, race, class) is an `enum class`. *Bits* of a flag
@@ -77,7 +77,7 @@ Readable code must still lead back to the binary:
   header (`game/enums/*.h`, `layout.h`, `pathing.h`) once a second file needs
   them.
 - **Placeholders** are the category's word plus the decimal value:
-  `SettlerJob::Job309`, `SettlerType::Type20`, `Good::Good31`,
+  `SettlerJob::Job390`, `SettlerType::Type20`, `Good::Good31`,
   `SettlerClass::Class41`. When a placeholder's meaning becomes clear,
   rename it everywhere and update `re/enums.md`.
 - Each enum has the field's width as its underlying type; where the same

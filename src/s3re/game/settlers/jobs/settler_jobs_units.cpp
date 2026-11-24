@@ -439,7 +439,7 @@ JobResult UnitIdle(SettlerContext& ctx) {
     if (static_cast<std::uint8_t>(ctx.type) == Value(S::Thief) && settler.slot != 0 &&
         OwnTile(ctx).owner == settler.owner) {
         settler.counter = 0;
-        SetJob(settler, Job::Job404);
+        SetJob(settler, Job::ThiefReturned);
     }
     if (TypeOf(settler) == S::TradeShip || TypeOf(settler) == S::Ferry) {
         settler.counter = 10;
@@ -519,19 +519,19 @@ JobResult GuardBuilding(SettlerContext& ctx) {
     TileAt(world, settler.x, settler.y).settler = 0;
     const std::uint32_t guard = Call<kCreateSettler>(world, settler.x, settler.y, 37, settler.owner);
     Settler& created = SettlerAt(world, guard);
-    SetJob(created, Job::Job173);
+    SetJob(created, Job::GuardHeal);
     created.building = settler.building;
     created.health = 1;
     created.counter = 0;
     BuildingAt(world, settler.building).guard = static_cast<std::uint16_t>(guard);
     const std::int32_t typeClass = (&g_settlerTypeClass[0])[settler.art];
     if (typeClass == 1) {
-        SetJob(settler, Job::Job23);
+        SetJob(settler, Job::SwordsmanInTower);
     } else if (typeClass == 2) {
         Call<kEnterBuildingSlot>(world, ctx.number);
-        SetJob(settler, Job::Job140);
+        SetJob(settler, Job::BowmanInTower);
     } else if (typeClass == 3) {
-        SetJob(settler, Job::Job141);
+        SetJob(settler, Job::PikemanInTower);
     }
     settler.counter = 0;
     return JobResult::Next;
@@ -776,12 +776,12 @@ JobResult MinerArrives(SettlerContext& ctx, std::uint8_t mine) {
 // 0x4eb08b: a smith, by its building (tool / weapon smith, war machines, gong).
 JobResult SmithArrives(SettlerContext& ctx, std::uint8_t building) {
     switch (static_cast<B>(building)) {
-    case B::Toolsmith: return StartWork(ctx, Job::Job107, 0x74);
-    case B::Weaponsmith: return StartWork(ctx, Job::Job108, 0x75);
-    case B::CatapultWorkshop: return StartWork(ctx, Job::Job296, 0x112);
-    case B::BallistaWorkshop: return StartWork(ctx, Job::Job298, 0x112);
-    case B::CannonWorkshop: return StartWork(ctx, Job::Job300, 0x112);
-    case B::LargeGong: return StartWork(ctx, Job::Job400, 0x112);
+    case B::Toolsmith: return StartWork(ctx, Job::ToolsmithGoIn, 0x74);
+    case B::Weaponsmith: return StartWork(ctx, Job::WeaponSmithGoIn, 0x75);
+    case B::CatapultWorkshop: return StartWork(ctx, Job::CatapultWorkshopGoIn, 0x112);
+    case B::BallistaWorkshop: return StartWork(ctx, Job::BallistaWorkshopGoIn, 0x112);
+    case B::CannonWorkshop: return StartWork(ctx, Job::CannonWorkshopGoIn, 0x112);
+    case B::LargeGong: return StartWork(ctx, Job::GongGoIn, 0x112);
     default: return JobResult::Next;
     }
 }
@@ -804,24 +804,24 @@ JobResult ArriveAtWork(SettlerContext& ctx) {
         ++BuildingAt(world, settler.building).site.unk1e;
         SetJob(settler, Job::BuilderStart);
         return Wait(ctx);
-    case S::Woodcutter: return StartWork(ctx, Job::Job19, 4);
-    case S::Stonecutter: return StartWork(ctx, Job::Job20, 15);
+    case S::Woodcutter: return StartWork(ctx, Job::WoodcutterGoIn, 4);
+    case S::Stonecutter: return StartWork(ctx, Job::StonecutterGoIn, 15);
     case S::Swordsman1:
     case S::Swordsman2:
-    case S::Swordsman3: return StartGuard(ctx, Job::Job16);
+    case S::Swordsman3: return StartGuard(ctx, Job::SwordsmanEnterTower);
     case S::Bowman1:
     case S::Bowman2:
-    case S::Bowman3: return StartGuard(ctx, Job::Job106);
+    case S::Bowman3: return StartGuard(ctx, Job::BowmanEnterTower);
     case S::Pikeman1:
     case S::Pikeman2:
-    case S::Pikeman3: return StartGuard(ctx, Job::Job139);
-    case S::Sawmiller: return StartWork(ctx, Job::Job21, 0x15);
-    case S::Forester: return StartWork(ctx, Job::Job22, 0x1b);
+    case S::Pikeman3: return StartGuard(ctx, Job::PikemanEnterTower);
+    case S::Sawmiller: return StartWork(ctx, Job::SawmillerGoIn, 0x15);
+    case S::Forester: return StartWork(ctx, Job::ForesterGoIn, 0x1b);
     case S::Smelter:
         if (buildingType() == Value(B::GoldSmelter)) {
-            return StartWork(ctx, Job::Job56, 0x47);
+            return StartWork(ctx, Job::GoldSmelterGoIn, 0x47);
         }
-        return StartWork(ctx, Job::Job66, 0x50);
+        return StartWork(ctx, Job::IronSmelterGoIn, 0x50);
     case S::Miner: {
         const std::uint32_t mine = buildingType();
         if (mine - 7 > 49) {
@@ -830,33 +830,33 @@ JobResult ArriveAtWork(SettlerContext& ctx) {
         return MinerArrives(ctx, static_cast<std::uint8_t>(mine));
     }
     case S::Smith: return SmithArrives(ctx, buildingType());
-    case S::Miller: return StartWork(ctx, Job::Job113, 0x7a);
-    case S::Baker: return StartWork(ctx, Job::Job114, 0x7b);
-    case S::Butcher: return StartWork(ctx, Job::Job111, 0x78);
-    case S::Farmer: return StartWork(ctx, Job::Job112, 0x79);
-    case S::Fisher: return StartWork(ctx, Job::Job109, 0x76);
-    case S::Waterworker: return StartWork(ctx, Job::Job115, 0x7c);
-    case S::ShipyardWorker: return StartWork(ctx, Job::Job314, 0x114);
-    case S::Healer: return StartWork(ctx, Job::Job336, 0x120);
-    case S::CharcoalBurner: return StartWork(ctx, Job::Job282, 0x105);
-    case S::Distiller: return StartWork(ctx, Job::Job261, 0xf0);
-    case S::Brewer: return StartWork(ctx, Job::Job268, 0xf7);
-    case S::PowderMaker: return StartWork(ctx, Job::Job275, 0xfe);
+    case S::Miller: return StartWork(ctx, Job::MillerGoIn, 0x7a);
+    case S::Baker: return StartWork(ctx, Job::BakerGoIn, 0x7b);
+    case S::Butcher: return StartWork(ctx, Job::ButcherGoIn, 0x78);
+    case S::Farmer: return StartWork(ctx, Job::FarmerGoIn, 0x79);
+    case S::Fisher: return StartWork(ctx, Job::FisherGoIn, 0x76);
+    case S::Waterworker: return StartWork(ctx, Job::WaterworkerGoIn, 0x7c);
+    case S::ShipyardWorker: return StartWork(ctx, Job::ShipyardGoIn, 0x114);
+    case S::Healer: return StartWork(ctx, Job::HealerGoIn, 0x120);
+    case S::CharcoalBurner: return StartWork(ctx, Job::CharcoalBurnerGoIn, 0x105);
+    case S::Distiller: return StartWork(ctx, Job::DistillerGoIn, 0xf0);
+    case S::Brewer: return StartWork(ctx, Job::BrewerGoIn, 0xf7);
+    case S::PowderMaker: return StartWork(ctx, Job::PowderMakerGoIn, 0xfe);
     case S::PigFarmer: {  // 0x4eb1f5
         const std::uint8_t farm = buildingType();
         if (farm == Value(B::PigFarm)) {
-            return StartWork(ctx, Job::Job110, 0x77);
+            return StartWork(ctx, Job::PigFarmGoIn, 0x77);
         }
         if (farm == Value(B::DonkeyFarm)) {
-            return StartWork(ctx, Job::Job305, 0x111);
+            return StartWork(ctx, Job::DonkeyFarmGoIn, 0x111);
         }
         return JobResult::Next;
     }
-    case S::Winegrower: return StartWork(ctx, Job::Job243, 0xe7);
-    case S::RiceFarmer: return StartWork(ctx, Job::Job226, 0xde);
-    case S::Beekeeper: return StartWork(ctx, Job::Job353, 0x1fd);
-    case S::MeadMaker: return StartWork(ctx, Job::Job380, 0x206);
-    case S::Alchemist: return StartWork(ctx, Job::Job339, 0x1f0);
+    case S::Winegrower: return StartWork(ctx, Job::WinegrowerGoIn, 0xe7);
+    case S::RiceFarmer: return StartWork(ctx, Job::RiceFarmerGoIn, 0xde);
+    case S::Beekeeper: return StartWork(ctx, Job::BeekeeperGoIn, 0x1fd);
+    case S::MeadMaker: return StartWork(ctx, Job::MeadMakerGoIn, 0x206);
+    case S::Alchemist: return StartWork(ctx, Job::AlchemistGoIn, 0x1f0);
     default: return Wait(ctx);  // types 20, 22, 23, 36, 37, 39..44: 0x4f91fb
     }
 }
@@ -866,16 +866,17 @@ JobResult ArriveAtWork(SettlerContext& ctx) {
 JobResult RunUnitJobs(SettlerContext& ctx) {
     switch (static_cast<Job>(ctx.job)) {
     case Job::New: return NewSettler(ctx);
-    case Job::Job142: return AfterFight(ctx);
+    case Job::UnitFighting: return AfterFight(ctx);
     case Job::UnitIdle: return UnitIdle(ctx);
     case Job::GuardBuilding: return GuardBuilding(ctx);
-    case Job::Job173: return Heal(ctx);
+    case Job::GuardHeal: return Heal(ctx);
     case Job::SeekOwnArea: return SeekOwnArea(ctx);
     case Job::Nothing: return Nothing(ctx);
-    case Job::Job176: return WalkCountingDown(ctx);
+    case Job::UnitWalkCountdown: return WalkCountingDown(ctx);
     case Job::UnitWalk: return UnitWalk(ctx);
     case Job::ArriveAtWork: return ArriveAtWork(ctx);
-    case Job::Job368: return StartWork(ctx, Job::Job353, 0x1fd);  // 0x4eb3d2, shared with type 45
+    case Job::BeekeeperGoInAgain:
+        return StartWork(ctx, Job::BeekeeperGoIn, 0x1fd);  // 0x4eb3d2, shared with type 45
     default: return Walk(ctx);  // the 45 walking jobs (0x4ead27)
     }
 }
@@ -896,16 +897,24 @@ using settler_jobs::testing::FamilyTest;
 using S = SettlerType;
 
 constexpr Job kUnitJobs[] = {
-    Job::New, Job::Job142, Job::UnitIdle, Job::UnitIdle, Job::UnitIdle, Job::GuardBuilding, Job::Job173,
-    Job::SeekOwnArea, Job::Nothing, Job::Nothing, Job::Nothing, Job::Nothing, Job::Job176, Job::UnitWalk, Job::ArriveAtWork,
-    Job::ArriveAtWork, Job::ArriveAtWork, Job::Job368,
+    Job::New, Job::UnitFighting, Job::UnitIdle, Job::UnitIdle, Job::UnitIdle, Job::GuardBuilding,
+    Job::GuardHeal, Job::SeekOwnArea, Job::Nothing, Job::Nothing, Job::Nothing, Job::Nothing,
+    Job::UnitWalkCountdown, Job::UnitWalk, Job::ArriveAtWork, Job::ArriveAtWork, Job::ArriveAtWork,
+    Job::BeekeeperGoInAgain,
     // walking (0x4ead27)
-    Job::StepAside, Job::WalkToWork, Job::DiggerWalkToSpot, Job::CarrierWalkToPile, Job::CarrierWalkToBuilding,
-    Job::Job15, Job::Job17, Job::Job28, Job::Job29, Job::Job42, Job::Job43, Job::Job45, Job::Job48, Job::Job76,
-    Job::Job78, Job::CarrierWalkToTool, Job::Job144, Job::Job147, Job::Job152, Job::Job156, Job::WalkToOwnArea,
-    Job::Job178, Job::Job181, Job::Job187, Job::Job188, Job::Job229, Job::Job232, Job::Job237, Job::Job241,
-    Job::Job246, Job::Job249, Job::Job254, Job::Job258, Job::Job307, Job::Job309, Job::Job320, Job::Job321,
-    Job::Job327, Job::Job328, Job::Job329, Job::Job330, Job::Job357, Job::Job360, Job::Job362, Job::Job365};
+    Job::StepAside, Job::WalkToWork, Job::DiggerWalkToSpot, Job::CarrierWalkToPile,
+    Job::CarrierWalkToBuilding, Job::BuilderWalkToWait, Job::BuilderWalkToSpot, Job::WoodcutterWalkToTree,
+    Job::StonecutterWalkToStone, Job::WoodcutterWalkHome, Job::StonecutterWalkHome, Job::ForesterWalkToSpot,
+    Job::ForesterWalkHome, Job::CarrierWalkToSourcePile, Job::CarrierWalkToTargetPile, Job::CarrierWalkToTool,
+    Job::FarmerWalkToSow, Job::FarmerWalkHome, Job::FarmerWalkHomeLoaded, Job::FarmerWalkToHarvest,
+    Job::WalkToOwnArea, Job::FisherWalkToWater, Job::FisherWalkHome, Job::WaterworkerWalkToWater,
+    Job::WaterworkerWalkHome, Job::RiceFarmerWalkToPlant, Job::RiceFarmerWalkHome,
+    Job::RiceFarmerWalkHomeLoaded, Job::RiceFarmerWalkToHarvest, Job::WinegrowerWalkToPlant,
+    Job::WinegrowerWalkHome, Job::WinegrowerWalkHomeLoaded, Job::WinegrowerWalkToHarvest,
+    Job::DonkeyWalkToPile, Job::DonkeyWalkToMarket, Job::ShipyardWalkToSlipway, Job::ShipyardWalkHome,
+    Job::ShipWalkToHarbour, Job::ShipSailWithCargo, Job::ShipSailHome, Job::DonkeyWalkHome,
+    Job::BeekeeperWalkToHiveSpot, Job::BeekeeperWalkHome, Job::BeekeeperWalkToHive,
+    Job::BeekeeperWalkHomeLoaded};
 
 // Every type once, the ones with their own code paths more often.
 constexpr S kUnitTypes[] = {

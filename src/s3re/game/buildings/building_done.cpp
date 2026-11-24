@@ -91,10 +91,9 @@ using G = Good;
 constexpr std::uint32_t kStorePiles = 6;
 constexpr std::uint16_t kNoDirection = 0xffff;  // Building::dock_direction not chosen yet
 
-// The settler a finished military building gets (type 37 = 0x25, job 173 = 0xad, both placeholders;
-// Building::guard keeps it).
+// The settler a finished military building gets (type 37 = 0x25, a placeholder; its job is
+// SettlerJob::GuardHeal; Building::guard keeps it).
 constexpr SettlerType kGuardType = SettlerType::Type37;
-constexpr SettlerJob kGuardJob = SettlerJob::Job173;
 
 constexpr std::uint16_t kStartHitPoints = 100;
 constexpr std::int32_t kTempleMana = 8;
@@ -179,7 +178,7 @@ void FinishMilitaryBuilding(CGameData* world, std::uint32_t buildingId, Building
     }
     reinterpret_cast<TileFn>(kUnblockTile)(world, nullptr, x, y);
     const std::uint32_t guard = CGameData_CreateSettler(world, nullptr, x, y, Value(kGuardType), building.owner);
-    world->settlers[guard].job = Value(kGuardJob);
+    world->settlers[guard].job = Value(SettlerJob::GuardHeal);
     world->settlers[guard].building = static_cast<std::uint16_t>(buildingId);
     building.guard = static_cast<std::uint16_t>(guard);
 }

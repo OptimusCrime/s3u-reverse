@@ -75,14 +75,53 @@ constexpr std::uint8_t kTileClaimed = layout::kTileFlag02;
 constexpr std::uint8_t kLeavingHighNibbleMinusOne = 0xf0;  // + 0xf0 = - 0x10 in a byte
 
 // The jobs in which a settler holds a place in its building (step 5).
-constexpr Job kWorkJobs[] = {
-    Job::WalkToWork, Job::ArriveAtWork, Job::RecruitAtBarracks, Job::CarrierWalkToTool, Job::CarrierTakeTool,
-    Job::Job28,  Job::Job29,  Job::Job32,  Job::Job33,  Job::Job34,  Job::Job35,  Job::Job42,  Job::Job43,
-    Job::Job45,  Job::Job46,  Job::Job47,  Job::Job48,  Job::Job144, Job::Job145, Job::Job146, Job::Job147,
-    Job::Job150, Job::Job151, Job::Job152, Job::Job156, Job::Job181, Job::Job178, Job::Job187, Job::Job188,
-    Job::Job229, Job::Job230, Job::Job231, Job::Job232, Job::Job235, Job::Job236, Job::Job237, Job::Job241,
-    Job::Job246, Job::Job247, Job::Job248, Job::Job249, Job::Job252, Job::Job253, Job::Job254, Job::Job258,
-    Job::Job357, Job::Job360};
+constexpr Job kWorkJobs[] = {Job::WalkToWork,
+                             Job::ArriveAtWork,
+                             Job::RecruitAtBarracks,
+                             Job::CarrierWalkToTool,
+                             Job::CarrierTakeTool,
+                             Job::WoodcutterWalkToTree,
+                             Job::StonecutterWalkToStone,
+                             Job::WoodcutterAtTree,
+                             Job::WoodcutterCut,
+                             Job::StonecutterAtStone,
+                             Job::StonecutterCut,
+                             Job::WoodcutterWalkHome,
+                             Job::StonecutterWalkHome,
+                             Job::ForesterWalkToSpot,
+                             Job::ForesterAtSpot,
+                             Job::ForesterPlant,
+                             Job::ForesterWalkHome,
+                             Job::FarmerWalkToSow,
+                             Job::FarmerSow,
+                             Job::FarmerSown,
+                             Job::FarmerWalkHome,
+                             Job::FarmerAtField,
+                             Job::FarmerHarvest,
+                             Job::FarmerWalkHomeLoaded,
+                             Job::FarmerWalkToHarvest,
+                             Job::FisherWalkHome,
+                             Job::FisherWalkToWater,
+                             Job::WaterworkerWalkToWater,
+                             Job::WaterworkerWalkHome,
+                             Job::RiceFarmerWalkToPlant,
+                             Job::RiceFarmerPlant,
+                             Job::RiceFarmerPlanted,
+                             Job::RiceFarmerWalkHome,
+                             Job::RiceFarmerAtField,
+                             Job::RiceFarmerHarvest,
+                             Job::RiceFarmerWalkHomeLoaded,
+                             Job::RiceFarmerWalkToHarvest,
+                             Job::WinegrowerWalkToPlant,
+                             Job::WinegrowerPlant,
+                             Job::WinegrowerPlanted,
+                             Job::WinegrowerWalkHome,
+                             Job::WinegrowerAtField,
+                             Job::WinegrowerHarvest,
+                             Job::WinegrowerWalkHomeLoaded,
+                             Job::WinegrowerWalkToHarvest,
+                             Job::BeekeeperWalkToHiveSpot,
+                             Job::BeekeeperWalkHome};
 
 bool IsOneOf(Job job, std::initializer_list<Job> jobs) {
     for (const Job candidate : jobs) {
@@ -249,15 +288,16 @@ std::uint32_t __fastcall CGameData_ResetSettlerToIdle(CGameData* world, void*, s
 
     // 1. Units waiting in their player's idle list (head per settler type;
     // for owner 0xff past the players, as the original's arithmetic does).
-    if (IsOneOf(JobOf(settler), {Job::UnitIdle, Job::UnitWalk, Job::Job176, Job::Job142})) {
+    if (IsOneOf(JobOf(settler), {Job::UnitIdle, Job::UnitWalk, Job::UnitWalkCountdown, Job::UnitFighting})) {
         Unlink(world, settler, world->players[settler.owner].settler_lists[settler.art]);
     }
     // 2. Pioneers and geologists.
     if (TypeOf(settler) == SettlerType::Pioneer || TypeOf(settler) == SettlerType::Geologist) {
-        if (JobOf(settler) == Job::UnitWalk || JobOf(settler) == Job::Job176) {
+        if (JobOf(settler) == Job::UnitWalk || JobOf(settler) == Job::UnitWalkCountdown) {
             Unclaim(TargetTile(world, settler));
         }
-        if (IsOneOf(JobOf(settler), {Job::GeologistWork, Job::Job213, Job::PioneerWork, Job::Job303})) {
+        if (IsOneOf(JobOf(settler),
+                    {Job::GeologistWork, Job::GeologistDone, Job::PioneerWork, Job::PioneerDone})) {
             Unclaim(TileAt(world, settler.x, settler.y));
         }
     }
@@ -285,41 +325,44 @@ std::uint32_t __fastcall CGameData_ResetSettlerToIdle(CGameData* world, void*, s
         LeaveWorkplace(world, settler);
     }
     // 6. Diggers (jobs 5..9).
-    if (IsOneOf(JobOf(settler), {Job::DiggerDig, Job::DiggerWalkToSpot, Job::DiggerLevel, Job::Job8, Job::Job9})) {
+    if (IsOneOf(JobOf(settler), {Job::DiggerDig, Job::DiggerWalkToSpot, Job::DiggerLevel, Job::DiggerLower,
+                                 Job::DiggerRaise})) {
         Building& site = world->buildings[settler.building];
         if (ClearHighestBit(site.digger_slots)) {
             --site.site.workers_at_work;
         }
     }
     // 7. Builders (jobs 14, 15, 17, 18).
-    if (IsOneOf(JobOf(settler), {Job::BuilderStart, Job::Job15, Job::Job17, Job::BuilderBuild})) {
+    if (IsOneOf(JobOf(settler),
+                {Job::BuilderStart, Job::BuilderWalkToWait, Job::BuilderWalkToSpot, Job::BuilderBuild})) {
         Building& site = world->buildings[settler.building];
         if (ClearHighestBit(site.builder_slots)) {
             --site.site.workers_at_work;
         }
     }
     // 8.
-    if (IsOneOf(JobOf(settler), {Job::DiggerWalkToSpot, Job::DiggerLevel, Job::Job9, Job::Job8, Job::Job17,
-                                 Job::BuilderBuild})) {
+    if (IsOneOf(JobOf(settler), {Job::DiggerWalkToSpot, Job::DiggerLevel, Job::DiggerRaise, Job::DiggerLower,
+                                 Job::BuilderWalkToSpot, Job::BuilderBuild})) {
         Tile& target = TargetTile(world, settler);
         if ((target.flags & kTileClaimed) != 0) {
             Unclaim(target);
         }
     }
     // 9. One unit, or two with second_unit, of the target pile were taken.
-    if (JobOf(settler) == Job::Job307 || JobOf(settler) == Job::Job308) {
+    if (JobOf(settler) == Job::DonkeyWalkToPile || JobOf(settler) == Job::DonkeyLoad) {
         --world->piles[TargetTile(world, settler).object_number].leaving;
         if (settler.second_unit != 0) {
             --world->piles[TargetTile(world, settler).object_number].leaving;
         }
     }
     // 10.
-    if (IsOneOf(JobOf(settler), {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::Job76,
-                                 Job::Job77})) {
+    if (IsOneOf(JobOf(settler), {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp,
+                                 Job::CarrierWalkToSourcePile, Job::CarrierAtSourcePile})) {
         CGameData_PileDecAmountLeaving(world, nullptr, TargetTile(world, settler).object_number);
     }
     // 11.
-    if (IsOneOf(JobOf(settler), {Job::Job76, Job::Job77, Job::Job78, Job::Job79})) {
+    if (IsOneOf(JobOf(settler), {Job::CarrierWalkToSourcePile, Job::CarrierAtSourcePile,
+                                 Job::CarrierWalkToTargetPile, Job::CarrierAtTargetPile})) {
         ReleasePileOfJobs76To79(world, settler, savedGoods);
     }
     // 12. Before the pick-up the good is the ordered one (+0x1a), after it
@@ -395,14 +438,50 @@ void FillOffsetSpiral(test::WorldPair& worlds) {
 }
 
 // Jobs that reach every step (and some others).
-constexpr Job kTestJobs[] = {
-    Job::UnitIdle, Job::UnitWalk, Job::Job176, Job::Job142, Job::GeologistWork, Job::Job213, Job::PioneerWork,
-    Job::Job303, Job::Nothing, Job::StepAside, Job::CarrierWalkToTool, Job::CarrierTakeTool, Job::WalkToWork,
-    Job::ArriveAtWork, Job::RecruitAtBarracks, Job::Job28, Job::Job42, Job::Job229, Job::Job360, Job::DiggerDig,
-    Job::DiggerWalkToSpot, Job::DiggerLevel, Job::Job8, Job::Job9, Job::BuilderStart, Job::Job15, Job::Job17,
-    Job::BuilderBuild, Job::Job307, Job::Job308, Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp,
-    Job::Job76, Job::Job77, Job::Job78, Job::Job79, Job::CarrierLeavePile, Job::CarrierWalkToBuilding,
-    Job::CarrierAtBuilding, Job::CarrierDeliver, Job::SeekOwnArea, Job::Job256, Job::MinerEatCoalMine};
+constexpr Job kTestJobs[] = {Job::UnitIdle,
+                             Job::UnitWalk,
+                             Job::UnitWalkCountdown,
+                             Job::UnitFighting,
+                             Job::GeologistWork,
+                             Job::GeologistDone,
+                             Job::PioneerWork,
+                             Job::PioneerDone,
+                             Job::Nothing,
+                             Job::StepAside,
+                             Job::CarrierWalkToTool,
+                             Job::CarrierTakeTool,
+                             Job::WalkToWork,
+                             Job::ArriveAtWork,
+                             Job::RecruitAtBarracks,
+                             Job::WoodcutterWalkToTree,
+                             Job::WoodcutterWalkHome,
+                             Job::RiceFarmerWalkToPlant,
+                             Job::BeekeeperWalkHome,
+                             Job::DiggerDig,
+                             Job::DiggerWalkToSpot,
+                             Job::DiggerLevel,
+                             Job::DiggerLower,
+                             Job::DiggerRaise,
+                             Job::BuilderStart,
+                             Job::BuilderWalkToWait,
+                             Job::BuilderWalkToSpot,
+                             Job::BuilderBuild,
+                             Job::DonkeyWalkToPile,
+                             Job::DonkeyLoad,
+                             Job::CarrierWalkToPile,
+                             Job::CarrierAtPile,
+                             Job::CarrierPickUp,
+                             Job::CarrierWalkToSourcePile,
+                             Job::CarrierAtSourcePile,
+                             Job::CarrierWalkToTargetPile,
+                             Job::CarrierAtTargetPile,
+                             Job::CarrierLeavePile,
+                             Job::CarrierWalkToBuilding,
+                             Job::CarrierAtBuilding,
+                             Job::CarrierDeliver,
+                             Job::SeekOwnArea,
+                             Job::WinegrowerEnterLoaded,
+                             Job::MinerEatCoalMine};
 constexpr SettlerType kTestTypes[] = {
     SettlerType::Carrier,   SettlerType::Digger,   SettlerType::Builder,     SettlerType::Geologist,
     SettlerType::Pioneer,   SettlerType::Pikeman1, SettlerType::Swordsman2,  SettlerType::Bowman1,
@@ -410,7 +489,8 @@ constexpr SettlerType kTestTypes[] = {
     static_cast<SettlerType>(kSettlerTypeCount)};  // one past the last type: the tables are read past their end
 
 bool CarriesPileOfJobs76To79(Job job) {
-    return IsOneOf(job, {Job::Job76, Job::Job77, Job::Job78, Job::Job79});
+    return IsOneOf(job, {Job::CarrierWalkToSourcePile, Job::CarrierAtSourcePile, Job::CarrierWalkToTargetPile,
+                         Job::CarrierAtTargetPile});
 }
 
 void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t settler) {

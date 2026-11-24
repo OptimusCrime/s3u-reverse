@@ -138,14 +138,13 @@ bool IsMovableUnit(std::uint8_t type) {
 bool IsMovableJob(std::uint16_t job) {
     switch (static_cast<Job>(job)) {
     case Job::GeologistWork:
-    case Job::Job213:
+    case Job::GeologistDone:
     case Job::PioneerWork:
-    case Job::Job303:
+    case Job::PioneerDone:
     case Job::UnitIdle:
     case Job::UnitWalk:
-    case Job::Job142:
-    case Job::Job176:
-        return true;
+    case Job::UnitFighting:
+    case Job::UnitWalkCountdown: return true;
     default:
         return false;
     }
@@ -321,10 +320,10 @@ void ReleaseWorkTile(Run& run, std::uint32_t number) {
     if (unit.job == Value(Job::UnitWalk)) {
         TileAt(world, unit.target_x, unit.target_y).flags &= static_cast<std::uint8_t>(~kTileReserved);
     }
-    if (unit.job == Value(Job::PioneerWork) || unit.job == Value(Job::Job303)) {
+    if (unit.job == Value(Job::PioneerWork) || unit.job == Value(Job::PioneerDone)) {
         TileAt(world, unit.x, unit.y).flags &= static_cast<std::uint8_t>(~kTileReserved);
     }
-    if (unit.job == Value(Job::GeologistWork) || unit.job == Value(Job::Job213)) {
+    if (unit.job == Value(Job::GeologistWork) || unit.job == Value(Job::GeologistDone)) {
         TileAt(world, unit.x, unit.y).flags &= static_cast<std::uint8_t>(~kTileReserved);
     }
 }
@@ -346,11 +345,11 @@ void GiveWaypoint(Run& run, std::uint32_t number, std::uint32_t x, std::uint32_t
     Settler& unit = SettlerAt(run.world(), number);
     switch (static_cast<Job>(unit.job)) {
     case Job::GeologistWork:
-    case Job::Job213:
+    case Job::GeologistDone:
     case Job::PioneerWork:
-    case Job::Job303:
+    case Job::PioneerDone:
     case Job::UnitIdle:
-    case Job::Job142:
+    case Job::UnitFighting:
         SetTarget(run, number, x, y);  // not walking yet: walk there
         break;
     default:  // walking (jobs 53, 176): queue it in the first free of three slots
@@ -409,7 +408,7 @@ void GiveMove(Run& run, const MoveOrder& order, std::uint32_t number, std::uint3
         if (IsShip(unit.art)) {
             SetJob(unit, Job::UnitWalk);
         } else {
-            SetJob(unit, Job::Job176);
+            SetJob(unit, Job::UnitWalkCountdown);
             unit.ship_walk = order.mode == MoveMode::AttackMove ? 0 : kAttackMoveCountdown;
         }
         unit.walk_state = order.walkState;
