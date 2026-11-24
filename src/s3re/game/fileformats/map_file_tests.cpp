@@ -315,7 +315,9 @@ S3RE_TEST(MapFile_AllGameFiles) {
         const bool shouldOpen = raw.size() >= 8 && (fileType == fileformats::kFileTypeMap ||
                                                     fileType == fileformats::kFileTypeSaveGame) &&
                                 ComputeChecksum(raw) == StoredWord(raw, 0);
-        // Read mode with the checksum check, as the game opens them.
+        // Read mode with the checksum check, as the game opens them (through our
+        // CMapFile::Open since it is replaced; MapFileOpen_AllGameFiles compares
+        // it with the original on these files).
         CMapFile* a = OpenMapFile(path, fileformats::kOpenRead);
         CMapFile* b = OpenMapFile(path, fileformats::kOpenRead);
         const bool opened = Original_CMapFile_GetError(a, nullptr) == 0;

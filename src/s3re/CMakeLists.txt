@@ -150,6 +150,8 @@ add_library(s3re SHARED
 
     # game/fileformats/: the map and savegame container (Dirk::CMapFile)
     game/fileformats/map_file.cpp
+    game/fileformats/map_file_io.cpp
+    game/fileformats/map_file_io_tests.cpp
     game/fileformats/map_file_stream.cpp
     game/fileformats/map_file_stream_tests.cpp
     game/fileformats/map_file_tests.cpp

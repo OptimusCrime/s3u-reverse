@@ -84,15 +84,50 @@ every distinct chunk key twice with the original and our GetChunk:
   (through g_skipListRandomBits 0x7e8e24 / g_skipListRandomBitsLeft
   0x7a4030), so loading a file consumes CRT random numbers; the simulation
   RNG is not involved.
-- CMapFile::Open (0x4a5c80, not yet replaced): a bad file type does not end
-  Open: it logs "LOAD: Invalid filetype", closes the stream (which clears
-  the error) and sets error E_INVALIDARG (0x80070057, through the folded
-  setter 0x4276a0, no throw), then still runs the checksum pass. The pass
-  reads 0x40000 bytes each time and checksums the bytes it expected. When
-  the file could not be opened, the reads fail and the file type and the
-  checksum come from uninitialized stack memory (a 256 KB buffer); the
-  result is an error either way, but which code stays depends on that
-  memory. A reimplementation of Open has to document this.
+- CMapFile::Open (0x4a5c80) and the rest of the container are replaced
+  since session 52, see below.
+
+## Verified open, close and write path (session 52)
+
+`src/s3re/game/fileformats/map_file_io.cpp` replaces the constructor
+(0x4a5a70), Open (0x4a5c80), Close (0x4a5f40) and the writers WriteChunk
+(0x4a6540), WriteChunkWithTail (0x4a6600) and WriteChunkData (0x4a66d0).
+In-process tests (`map_file_io_tests.cpp`) compare them with the original on
+every file under `Map\` and `Save\` (read only), on random containers and on
+savegames written into a temporary folder (the written bytes are compared,
+then reopened with the checksum check); `MapFile_AllGameFiles` now opens
+through our Open.
+
+- Constructor: the path's allocator byte is the low byte of the `rethrow`
+  argument (its stack slot); `mode` (+0x2c) is left as it was.
+- Open: `path = *arg` is std::string assign(x, 0, npos) (inlined; ours calls
+  0x401d60). `open` = 1 and `mode` are set before anything is read. Read
+  mode (bit 0) opens the stream with the caller's mode, write mode (bit 1
+  without bit 0) with mode 3 and writes a placeholder checksum (the field's
+  value) and type 11. A bad file type does not end Open (see above). The
+  checksum pass reads 0x40000 bytes each time and checksums the bytes it
+  expected from GetSize.
+  **Known difference:** when a read fails (a file that cannot be opened,
+  an I/O error) the original uses uninitialized stack memory for the file
+  type and the checksum buffer; ours uses 0 and zeros. A failed open is
+  reported either way, only the error code (E_INVALIDARG or the stream's)
+  can differ. The tests zero the stack below their frame, so the original
+  reads zeros as well, and then compare.
+- Close: frees the cached chunk buffers, clears both dictionaries
+  (0x60bd80), and only in mode 2 exactly (not 3) recomputes the checksum
+  from offset 8 and writes it at offset 0; it does not keep that checksum
+  (+0x130 = 0 afterwards).
+- WriteChunk / WriteChunkWithTail ignore the sub index (the caller filled
+  in the header); WithTail seeks to the end before allocating, WriteChunk
+  after copying. WriteChunkData writes the 8-byte header itself (key,
+  size + 8), then the payload encoded from its first byte with the counter
+  at 0x18a, while GetChunk decodes payload byte j with the counter at
+  0x628 + j * 0xc5. Only the counter's sign bit matters (it is ORed into
+  the key as 0xff), and both reach it after about 10.9 million bytes, at
+  slightly different bytes; so a WriteChunkData chunk over ~10.9 MB would
+  not read back correctly (none is that big). `MapFileWrite_HugeChunks`
+  writes 11.2 MB chunks with all
+  three writers and compares the files.
 
 ## Map chunks (CGameData::LoadMap 0x4fd540 and the menus)
 
