@@ -289,6 +289,20 @@ class DllReferences:
         return objects
 
 
+_ANONYMOUS_NAMESPACE = re.compile(r"\?A0x[0-9a-f]{8}", re.I)
+
+
+def stable_name(name: str) -> str:
+    """A decorated name without the anonymous-namespace hash: MSVC names an
+    anonymous namespace `?A0x` plus a hash of the source file's absolute
+    path, so the same code built in another worktree (another path) got
+    other names, and every replacement that reaches a symbol in an
+    anonymous namespace another fingerprint (206 of 703 specs reselected in
+    a fresh worktree, session 49). Two such symbols of the same name in
+    different files still differ by their own digests."""
+    return _ANONYMOUS_NAMESPACE.sub("?A0x", name)
+
+
 class CodeFingerprints(DllReferences):
     """Fingerprints of the compiled code behind each replacement.
 
@@ -300,7 +314,9 @@ class CodeFingerprints(DllReferences):
     targets of relative calls and jumps that leave the symbol (followed
     through incremental-linking thunks). So moving a function, or a callee
     moving, doesn't change anything; changing an instruction, a constant, a
-    string or a table does.
+    string or a table does. Names are taken without MSVC's per-path
+    anonymous-namespace hash (stable_name), so a build in another worktree
+    gives the same fingerprints.
 
     A replacement's fingerprint hashes the normalized forms of every symbol
     of our own objects it can reach (calls, jumps, data references and the
@@ -332,7 +348,7 @@ class CodeFingerprints(DllReferences):
             return f"abs:{value:#x}", None
         if target == symbol:
             return f"self+{target_value - target:#x}", None
-        return f"{self.symbols[target][0]}+{target_value - target:#x}", target
+        return f"{stable_name(self.symbols[target][0])}+{target_value - target:#x}", target
 
     def digest(self, symbol: int) -> tuple[str, set[int]]:
         """(hash of the normalized form, symbols it refers to)."""
@@ -342,16 +358,35 @@ class CodeFingerprints(DllReferences):
         is_code = symbol in self.functions or self._in_text(symbol)
         if is_code:
             code = code.rstrip(b"\xcc")
+        else:
+            # Alignment padding up to the next symbol depends on the layout,
+            # which differs between worktrees (stable_name: the symbols sort
+            # differently): leave out up to 15 trailing zero bytes.
+            kept = len(code.rstrip(b"\0"))
+            code = code[:max(kept, len(code) - 15)]
         end = symbol + len(code)
         patches: dict[int, tuple[int, str]] = {}  # offset -> (length, replacement)
         refs: set[int] = set()
         low = bisect.bisect_left(self.relocations, symbol)
         high = bisect.bisect_left(self.relocations, end)
         relocated = set()
-        for address in self.relocations[low:high]:
-            if address + 4 > end:
+        values = {address: int.from_bytes(code[address - symbol:address - symbol + 4], "little")
+                  for address in self.relocations[low:high] if address + 4 <= end}
+        # A pointer one past the end of a table (a loop bound) equals the
+        # start of whatever symbol the linker put next, which depends on the
+        # layout: when the symbol before it is referenced too, name it as
+        # that symbol's end instead.
+        inside = {self.symbol_at(v) for v in values.values() if self._in_image(v)}
+        for address, value in values.items():
+            index = bisect.bisect_left(self.addresses, value)
+            if (0 < index < len(self.addresses) and self.addresses[index] == value
+                    and self.addresses[index - 1] in inside and self.addresses[index - 1] != symbol
+                    and any(self.addresses[index - 1] <= v < value for v in values.values())):
+                previous = self.addresses[index - 1]
+                patches[address - symbol] = (4, f"{stable_name(self.symbols[previous][0])}+{value - previous:#x}")
+                relocated.update(range(address, address + 4))
+                refs.add(previous)
                 continue
-            value = int.from_bytes(code[address - symbol:address - symbol + 4], "little")
             name, target = self._name(value, symbol)
             patches[address - symbol] = (4, name)
             relocated.update(range(address, address + 4))
@@ -405,7 +440,7 @@ class CodeFingerprints(DllReferences):
         parts = []
         while todo:
             symbol = todo.pop()
-            name = self.symbols[symbol][0]
+            name = stable_name(self.symbols[symbol][0])
             if not self.own(self.object_of(symbol)):
                 parts.append(f"{name} lib")
                 continue
