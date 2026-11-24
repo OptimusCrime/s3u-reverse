@@ -1652,3 +1652,67 @@ def ec_interlocked_stubs(rng, pool, args):
 
 
 EC_GLOBALS_EXTRA.append(ec_interlocked_stubs)
+
+
+# --- CLogicThread::LoadSaveGame (load_save_game.cpp) ---
+# The savegame is modelled in Python: GetChunk (0x4a60f0) is probed and its
+# effect returns a chunk buffer in unused world space (one slot per chunk
+# key; contents lazily random) after writing the fields that steer the
+# load: the version (all gates), a map size of 0..5, small table
+# high-water marks, tiles of the rows that refer to economy sectors 1..7
+# (so the eco drop sees used and unused sectors), the victory conditions'
+# protect flag. ReleaseChunk (0x4a6310), UnblockCastleTiles (0x4dfa60,
+# verified on its own) and the player names' assign (0x413d70, verified on
+# its own) are probed: their calls and arguments are compared.
+LSG_CHUNKS = 0x1540000
+LSG_SLOTS = {0: 0x0, 1: 0x1000, 4: 0xa000, 6: 0xf000, 7: 0x11000, 8: 0x12000, 9: 0x13000, 13: 0x14000,
+             14: 0x15000, 10: 0x16000, 11: 0xa4000, 12: 0xba000, 15: 0xc4000, 16: 0xc7000, 0x18: 0xde000,
+             0x19: 0xdf000, 0x1c: 0xe0000, 0x1d: 0x10e000, 0x1f: 0x10f000}
+LSG_VERSIONS = (0x50, 0x81, 0x82, 0x85, 0x86, 0x88, 0x89, 0x95, 0x96, 0x98, 0x99, 0xa0)
+
+
+def _lsg_chunk(m, ecx, args, h):
+    """CMapFile::GetChunk(type, sub) on the fake savegame."""
+    chunk_type, sub = args[0] & 0xFFFF, args[1] & 0xFFFF
+    if chunk_type == 2:
+        offset = 0x3000 + 0x3000 * sub
+    elif chunk_type == 3:
+        offset = 0x9000 + 0x100 * sub
+    else:
+        offset = LSG_SLOTS[chunk_type]
+    base = WORLD_BASE + LSG_CHUNKS + offset
+
+    def put(at, value, size):
+        m.guest_write(base + at, value.to_bytes(size, "little"))
+
+    if chunk_type == 0:
+        put(8, LSG_VERSIONS[h % len(LSG_VERSIONS)], 4)
+    elif chunk_type == 1:
+        put(0x18, h % 6, 4)
+    elif chunk_type == 3:
+        size = struct.unpack("<I", m.guest_read(WORLD_BASE + MAP_SIZE, 4))[0]
+        for y in range(min(size, 8)):
+            pick = (h >> (3 * y)) % 4
+            area = 0 if pick == 0 else (h >> (2 * y + 20)) % 8 if pick < 3 else (h >> y) & 0xFFFF
+            put(8 + 24 * y + 0x14, area, 2)
+    elif chunk_type == 4:
+        put(0xc, h % 8, 4)
+    elif chunk_type in (7, 8, 9, 13, 14):
+        put(8, h % 6, 4)
+    elif chunk_type == 0x18:
+        put(8 + 0x44, h & 1, 1)
+    return base
+
+
+# About 14 s per case (Release): every case copies ~1 MB of fixed-size
+# chunks (diggertab 578 KB, ProdStat 184 KB, ...), tracked byte by byte. 20
+# cases cover all 40 blocks; the main evidence is the in-process tests
+# (every savegame of the installation and synthetic ones, whole world).
+SPECS += [
+    Spec("CLogicThread_LoadSaveGame", 0x00508fa0, "logicthread", [anything], eax_mask=0, max_cases=40,
+         quick_cases=20,
+         callees={0x004a60f0: (2, "thiscall", "probe", _lsg_chunk),
+                  0x004a6310: (2, "thiscall", "probe"),
+                  0x004dfa60: (0, "thiscall", "probe"),
+                  0x00413d70: (1, "thiscall", "this")}),
+]

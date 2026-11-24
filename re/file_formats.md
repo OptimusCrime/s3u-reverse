@@ -149,6 +149,57 @@ The original names come from SaveGame's out-of-memory labels (`Win32::ThrowOutOf
 After loading: UnblockCastleTiles. Every economy sector that no tile references (tile +0x14) gets
 id byte 0xff ("LOAD: Dropped eco %i"). Then world+0x2d278 (minimap_ready) = 1.
 
+## Verified savegame loader (session 52)
+
+`CLogicThread::LoadSaveGame` (0x508fa0) is replaced
+(`src/s3re/game/logic/load_save_game.cpp`; chunk layouts as packed structs in
+`src/s3re/game/fileformats/savegame_chunks.h`). The table above is confirmed
+by the in-process tests (every savegame under `Save\`, loaded by the
+original and ours into two worlds, and synthetic savegames for every
+version gate), with these details:
+
+- Order: chunk 0 (only +8 version is read; the chunk is **never released**,
+  it stays in the cache), 1, 2/0, 2/1, 3/row for rows 0..map_size-1 (the
+  map size from chunk 1, re-read each row), 4, 6, 7, 8, 9, 10, 11, 12, 13,
+  14, 15, 16, DebugLog "Savefile Version : %d", then the versioned chunks
+  (0x18 + 0x19 from 0x82, 0x1c from 0x86, 0x1d from 0x96, 0x1f from 0x99;
+  older: colour indexes 0..19 = i, ProdStat zeroed, objectives zeroed,
+  timeout 60), Player +8 cleared for every player below 0x89,
+  UnblockCastleTiles, the eco drop, minimap_ready = 1. Every other chunk is
+  released right after its copy.
+- Chunk 1 ("general"): camera_drawn_x/y are not read; both are set to
+  10,000,000 (forces a redraw). +0x2c (minimap_cycle) is not read; it is set
+  to 63. The RNG state is three words (+0x1c..+0x21). +0x30 goes to
+  g_lastDrawnTick (0x7dfd4c), +0x34 to g_gameTick. The player info table
+  g_playerInfo (0x7acfa8, 20 x 0x44 bytes): +0 and +4 from the record's
+  first two dwords, the name (`std::string` at +8) assigned from the
+  0x100 characters (assign_cstr_or_empty 0x413d70, up to the first zero),
+  +0x18..+0x40 from the record's +0x108..+0x130.
+  +0x1848 -> g_strengthDivisor (active players), +0x184c -> g_gameOutcome,
+  +0x1850 + 1 -> g_campaignMission.
+- Chunk 2/1 ("events"): 3000 dwords are copied into the event ring like
+  into the pending-event ring, but the event records are 16 bytes: only
+  750 of the 1000 events (12,000 of 16,000 bytes) come from the file.
+- Table chunks (7 settlers 0x40, 8 buildings 0x3a, 9 piles 0xe, 13 trades
+  0x5a, 14 timer 0x14 bytes): +8 the high-water mark, then (mark + 1)
+  records from index 0. Chunk 4 copies (area_high_water + 1) area records.
+- **Chunk 0x19 of the game's own savegames is 40 bytes** (16 colour
+  indexes), but the loader copies 40 data bytes (20 indexes): colours
+  16..19 come from the 8 heap bytes after the chunk buffer (the slack of
+  its 48-byte heap block, contents left from earlier allocations). Ours
+  reads the same bytes; the in-process test leaves those four indexes out
+  for the game's files (the two runs' heaps differ) and compares all 20 on
+  synthetic savegames. The other chunks of the three savegames are at
+  least as long as the loader reads.
+- g_victoryProtectActive (0x7deb54) = 1 when the loaded victory conditions
+  have protect_players (+0x44) set (only on the >= 0x82 path).
+- Eco drop: tiles 0..map_size-1 in both directions mark their area (tile
+  +0x14) when 0 < area < 4096; every unmarked sector of the 4096 gets
+  player byte 0xff, with "LOAD: Dropped eco %i" when it was not 0xff
+  already.
+- In the three savegames of the installation (version 0xa0, 704 x 704, 732
+  chunks) every chunk the loader asks for exists.
+
 ## Load call trees
 
 ```

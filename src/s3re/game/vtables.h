@@ -31,6 +31,10 @@ inline constexpr std::uint32_t kCRunTimeError = 0x65d744;      // Win32::CRunTim
 inline constexpr std::uint32_t kCProgrammingError = 0x65d91c;  // Win32::CProgrammingError
 inline constexpr std::uint32_t kCAssertmentFailed = 0x65d8cc;  // Win32::CAssertmentFailed
 inline constexpr std::uint32_t kCOutOfMemory = 0x65d8b8;       // Win32::COutOfMemory
+// Dirk::CMapFile and its chunk cache (Watcom skip-list dictionaries)
+inline constexpr std::uint32_t kCMapFile = 0x658770;               // Dirk::CMapFile
+inline constexpr std::uint32_t kChunkDict = 0x658794;              // WCValSkipListDict<unsigned int, void*>
+inline constexpr std::uint32_t kReferenceDict = 0x658778;          // WCValSkipListDict<unsigned int, int>
 // DirectX::*
 inline constexpr std::uint32_t kCSimpleSurface = 0x65cda0;      // DirectX::CSimpleSurface
 inline constexpr std::uint32_t kCSurface = 0x65cda8;            // DirectX::CSurface

@@ -13,6 +13,7 @@
 // fields.
 
 #include "game/global_access.h"
+#include "msvc6/string.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -53,6 +54,20 @@ struct PlayerTally {
 static_assert(sizeof(PlayerTally) == 0x44);
 static_assert(offsetof(PlayerTally, unk0c) == 0x0c);
 static_assert(offsetof(PlayerTally, unk14) == 0x14);
+
+// One entry of the player info table (g_playerInfo): 20 entries of 0x44
+// bytes. Savegames store it in chunk 1 (SavedPlayerInfo, the name as 0x100
+// characters). g_playerTallies is the same memory from +0x2c on.
+struct PlayerInfo {
+    std::int32_t unk00;          // +0x00
+    std::int32_t unk04;          // +0x04
+    msvc6::String name;          // +0x08 the player's name
+    std::int32_t fields[11];     // +0x18 (+0x18 probably the player's +0xc, +0x1c the player index; from
+                                 //  +0x2c on the PlayerTally counters)
+};
+static_assert(offsetof(PlayerInfo, name) == 0x08);
+static_assert(offsetof(PlayerInfo, fields) == 0x18);
+static_assert(sizeof(PlayerInfo) == 0x44);
 
 // The configuration read from the registry at startup (g_config;
 // Dirk\DGlobals.cpp). Size not known.
@@ -115,6 +130,10 @@ inline constexpr GameGlobal<std::uint16_t[]> g_syncRandomHistory{0x7dfb58};
 inline constexpr GameGlobal<std::int32_t> g_global7deb50{0x7deb50};
 // Game tick of the last committed multiplayer save (ExecuteCommands 0xf8).
 inline constexpr GameGlobal<std::uint32_t> g_lastSaveTick{0x7dfd50};
+// The statically linked CRT's small-block heap state (__sbh_* globals of
+// malloc/free, code 0x6284d2..0x628b6f); tests skip it when they compare
+// S3.EXE's globals around code that allocates.
+inline constexpr GameGlobal<std::uint8_t[0x1c]> g_crtSmallBlockHeap{0x7e9728};
 // The application object (DirectX::CGameApp; returned by 0x53ba50).
 inline constexpr GameGlobal<std::uint8_t*> g_app{0x7e9168};
 // Outcome of the current game: -1 while undecided, then set by the game-end
@@ -136,6 +155,16 @@ inline constexpr GameGlobal<std::int32_t> g_selectedBuilding{0x7dfd6c};
 inline constexpr GameGlobal<const std::uint8_t> g_byte730ef8{0x730ef8};
 // Per-player tallies, probably end-of-game statistics.
 inline constexpr GameGlobal<PlayerTally[20]> g_playerTallies{0x7acfd4};
+// The player info table (names and per-player values; the savegame's
+// chunk 1). g_playerTallies lies inside it (+0x2c).
+inline constexpr GameGlobal<PlayerInfo[20]> g_playerInfo{0x7acfa8};
+// The game tick at the last update of the draw data (0x5230e0 stores
+// g_gameTick before calling 0x51f0e0); saved in chunk 1.
+inline constexpr GameGlobal<std::uint32_t> g_lastDrawnTick{0x7dfd4c};
+// Set to 1 when the loaded victory conditions protect players for a time
+// (LoadMap 0x4fe503, LoadSaveGame 0x509738; also 0x4ffc6c), cleared by
+// CLogicThread::OnStart 0x53caa3; read by 0x4b3f95 and 0x5260f1.
+inline constexpr GameGlobal<std::uint8_t> g_victoryProtectActive{0x7deb54};
 // Cursor 0..127 into the 128 pile claims at world+0x1195dd4 (pile_claims).
 inline constexpr GameGlobal<std::uint16_t> g_pileClaimsCursor{0x7ace60};
 // The ten settler groups (probably the player's selection groups).
