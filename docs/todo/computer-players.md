@@ -6,18 +6,17 @@ LOGBOOK session entry).
 
 ## Computer players (re/computer_players.md)
 - **Package A2: small READY helpers** of the AI range (`python
-  tools/frontier.py --range 54cbd0 59fcd0`). Done in session 48: the 25
-  T_ECONOMY_AGENT conditions 0x568250..0x569d20 and the map queries
-  0x599510..0x5999e0, 0x58ecb0, 0x58ed30, 0x58ed70, 0x59dbb0, 0x59dc70,
-  0x593140, and the site queries 0x571d00..0x5720c0, 0x5930f0, 0x593f50.
-  Left: 0x591e00 (sets up g_aiGroupOrders, vectors at 0x7e3690), 0x572420
-  (fills AiPlayerData::building_counts), the larger economy conditions
-  0x567e00, 0x568420, 0x568bc0, 0x568d80, 0x568f40, the snapshot 0x567910
-  (needs 0x59dcc0), and the other small READY ones of the frontier (e.g.
-  0x597110..0x597260, 0x59cf20, 0x58f8c0, 0x58f940).
-  The ~60 identical 104-instruction SEH functions on the READY list are
-  probably static std::string-array initializers (check before counting
-  them as work).
+  tools/frontier.py --range 54cbd0 59fcd0 --library-done`; without that
+  flag ~93 already classified std::string static initializers show up as
+  READY). Done in sessions 48 and 51 (see the LOGBOOK). Left: the
+  woodcutter 0x567e00 and stonecutter 0x568420 conditions (two float
+  curves per race and stage at 0x7e1300..0x7e137c, jump tables
+  0x568200..0x568240; races above 3 keep the defaults from 0x65a57c; a
+  per-race woodcutter surplus term), residences 0x568890 (uses Random),
+  and small READY ones: 0x59db30, 0x571f60, 0x58a250, 0x59a720, 0x58b410,
+  0x573810, 0x58b380, 0x593040, 0x5934a0. Open: the meaning of
+  AiGroupOrders +0x1c48 (`group_flags1c48`, 20 x 10 bytes cleared by
+  Army::Reset).
 - **Who creates the AiPlayerData nodes** (one per economy area; list
   +0x200 is the deletion queue, session 48); the constructor part
   0x550a30 (calls AddAgent) is next to 0x550f80. AiPlayerData offsets are
