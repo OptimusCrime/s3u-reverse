@@ -211,9 +211,11 @@ disassembly; "READY" = not done, every direct callee done, all game code
    functions / 7,200 ins), plus std::string 0x413d70. (Corrected in session
    50: 0x60bab0/0x60bbe0/0x60be20 are the Watcom skip list of CMapFile's
    chunk cache, 0x4a57b0/0x4a5930/0x4a5a60 the stream's Read/Seek/HasError;
-   there is no compression, see re/file_formats.md.) Picture (194 functions, 25,400
-   ins, 79 READY; includes zlib/libpng at 0x5b2fb3..0x5b50ad) and GfxData
-   (67, 7,700 ins, 29 READY) are the graphics loaders: self-contained,
+   there is no compression, see re/file_formats.md.) (Corrected in session
+   50: "Picture" is the credits scroller plus PaintLib/libpng/zlib for the
+   lobby banner, re/picture_code.md; the game's graphics loader is
+   CGraphicsData alone, re/graphics_formats.md.) Picture and GfxData
+   (67, 7,700 ins, 29 READY) were thought to be the graphics loaders: self-contained,
    verifiable by comparing decoded bytes, needed for the macOS port.
 6. **Win32/DirectX framework classes** - `Win32::CObject::~CObject`
    0x610330 (13 ins) unblocks 24, `Win32::ThrowWin32Error` 0x610de0 21,
@@ -675,6 +677,24 @@ Findings (details in the new `re/file_formats.md` and
   bugs a reimplementation must keep.
 - The LOGBOOK roadmap's "Win32 file wrappers" and "decompressor" guesses
   were wrong (corrected in the roadmap item).
+
+Second round, on the user's request: the graphics loaders, three more
+reviews (0x5a0000..0x5a8f20, 0x5a8f20..0x5b50ad, CGraphicsData
+0x5f0000..0x600000): 313 names, and a new inventory category
+`thirdparty` (inventory.py, frontier.py, source_files.py, progress) for
+156 rows of PaintLib, libpng 1.0.2 and zlib 1.1.3. Notes in
+`re/graphics_formats.md` and `re/picture_code.md`. Findings:
+- The "Picture" range is not the game's graphics: it is the credits text
+  scroller (DATA.DAT is the credits as HTML), then PaintLib + libpng +
+  zlib, used only for the online lobby's Banner\Banner.png. The 26
+  "Zlib_sub" rows are junk targets inside 0x5b2f70, which writes the
+  ProtectCD.dll embedded in S3.EXE (0x735b58) to a temp file and calls it.
+- The game's graphics are `GFX\siedler3_NN.<RGB masks>.dat`, memory
+  mapped: 0x54-byte header (8 table offsets), RLE sprites, 8 brightness
+  palettes; confirmed on all 45 files.
+- Four verified names are wrong (png_free, CGraphicsData::TextAddress,
+  GuiImagePointer, SequenceFrameCount): renamed in the next batch with the
+  AI ones.
 
 
 ### 2026-11-24 (49): the user's full game

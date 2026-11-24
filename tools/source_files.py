@@ -270,7 +270,7 @@ def load_ranges():
 
 
 # Categories of library code: no original game source file.
-LIBRARY_CATEGORIES = {"crt", "stl", "mfc", "watcom", "compiler"}
+LIBRARY_CATEGORIES = {"crt", "stl", "mfc", "watcom", "thirdparty", "compiler"}
 INVENTORY = os.path.join(ROOT, "re", "functions.csv")
 
 

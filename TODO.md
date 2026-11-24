@@ -162,6 +162,22 @@ Each item: what, why, and where to start.
   chunk table) is self-contained and testable against every map and save
   file; then `CGameData::LoadMap` 0x4fd540 and
   `CLogicThread::LoadSaveGame` 0x508fa0 (mostly memcpy of world regions).
+- **Graphics (re/graphics_formats.md, session 50):** the game's graphics
+  are the memory-mapped `GFX\siedler3_NN.<pixel format>.dat` files read by
+  CGraphicsData (8 tables, RLE sprites, palettes by brightness); the draw
+  spans 0x5f4980..0x5f5910 pick by brightness. Reimplement the loader and
+  the sprite decoding first (verifiable by comparing decoded bytes).
+- **Function-start fixes found in the naming pass (session 50):**
+  missing starts (add as `manual` rows in re/extra_functions.tsv with
+  evidence): 0x5a0920, 0x5a0950, 0x5a1a60, 0x5a42c0, 0x5a4610, 0x5a4970
+  (re/picture_code.md) and 13 draw spans plus the halve span 0x5fd0c0
+  (re/graphics_formats.md). False starts (keep out of the counts, e.g. a
+  `notfunction` kind): the 26 `ProtectCD_RunEmbeddedCheck_junk_*` rows
+  inside the obfuscated 0x5b2f70, the catch-continuation points 0x5fe948,
+  0x5fe9d8, 0x5feb05 inside CSoundData::Open, the `_tail` rows 0x5f6c3d,
+  0x5f65f2, 0x5f674b, 0x5fd902, and 0x551637 inside DeactivateNote.
+  The source-file range `Credits\cpp_exo_text__diverses.h`
+  0x5a0d20..0x5b50ad really ends at the credits code (~0x5a4220).
 
 ## Naming
 

@@ -18,13 +18,15 @@ Commands:
 Columns of re/functions.csv:
   address      0x-prefixed, 8 lowercase hex digits; rows sorted by address.
   name         Our name, e.g. WinMain or std::string::_Eos (Class::Method).
-  category     game | crt | stl | mfc | watcom | compiler
+  category     game | crt | stl | mfc | watcom | thirdparty | compiler
                  game     = written by Blue Byte
                  crt      = Microsoft C runtime (statically linked), including
                             the old iostream library
                  stl      = Microsoft C++ standard library template code
                  mfc      = Microsoft Foundation Classes
                  watcom   = Watcom C++ container library (WC* classes)
+                 thirdparty = other statically linked libraries (zlib 1.1.3,
+                            libpng 1.0.2)
                  compiler = other compiler-generated code (e.g. thunks)
   status       classified    = we know which class it belongs to and its role
                                there (vtable slot, destructor), not yet what
@@ -48,7 +50,7 @@ Columns of re/functions.csv:
                  unnamed: A.cpp..B.cpp    between the ranges of two named
                                           files (start/end at the edges)
                  (empty)                  library code (category crt, stl,
-                                          mfc, watcom, compiler) or the CRT
+                                          mfc, watcom, thirdparty, compiler) or the CRT
                                           (from 0x61e4ef)
                The ranges are estimates (re/source_files.md, "Limits"): a
                range runs from the first to the last function that voted
@@ -73,7 +75,7 @@ SOURCE_DIR = ROOT / "src"
 
 COLUMNS = ["address", "name", "category", "status", "hook", "verified_by", "source_file",
            "notes"]
-CATEGORIES = ("game", "crt", "stl", "mfc", "watcom", "compiler")
+CATEGORIES = ("game", "crt", "stl", "mfc", "watcom", "thirdparty", "compiler")
 STATUSES = ("classified", "identified", "reimplemented", "verified")
 HOOKS = ("none", "passthrough", "replaced", "unverified")
 

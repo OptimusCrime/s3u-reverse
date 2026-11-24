@@ -65,6 +65,7 @@ CATEGORY_LABEL = {
     "unidentified": "Not yet identified (probably game code)",
     "crt": "C runtime",
     "watcom": "Watcom container library",
+    "thirdparty": "Third-party libraries (zlib, libpng)",
     "compiler": "Compiler-generated",
     "stl": "C++ standard library",
     "mfc": "MFC",

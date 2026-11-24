@@ -63,7 +63,7 @@ GAME_LOW, GAME_HIGH = 0x401000, CRT_START
 # --range 401000 61e4ef for all game code.
 SIM_LOW, SIM_HIGH = 0x4c0000, 0x560000
 
-LIBRARY = {"stl", "crt", "mfc", "watcom", "compiler"}
+LIBRARY = {"stl", "crt", "mfc", "watcom", "thirdparty", "compiler"}
 STUB_PART = re.compile(r"(push\s+(0?[0-9A-F]+h|[0-9])|mov\s+ecx,(0?[0-9A-F]+h|[0-9])|ret)$")
 
 DIRECT = re.compile(r"(call|jmp)\s+([0-9A-F]{8})$")
