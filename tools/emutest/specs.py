@@ -11311,3 +11311,55 @@ SPECS += [
                           ("T_ECONOMY_AGENT_ConsiderIronMine", 0x00568d80),
                           ("T_ECONOMY_AGENT_ConsiderIronSmelter", 0x00568f40))
 ]
+
+
+AI_CENSUS = 0x007E5EF8  # g_aiCensus: byte +0 settlers_counted, dwords +0x3f4 per player
+
+
+def snapshot_world(rng, pool, args):
+    """The agent at world +0 (race, area < 4), 40 settlers on a small part
+    of the map (some on their tile, in one of the areas), and per area its
+    player, a carrier list and pile lists of logs, boards, stones, coal, iron
+    and sulfur. scratch 1 holds an area for AI_AreaPopulation."""
+    race = rng.randrange(4) if rng.random() < 0.9 else rng.getrandbits(32)
+    fields = [(8, race, 4), (0xC, rng.randrange(4), 2), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(4), 2),
+              (SETTLER_COUNT, 40, 4)]
+    for settler in range(1, 42):
+        record = SETTLERS + settler * SETTLER_BYTES
+        x, y = rng.randrange(60), rng.randrange(60)
+        owner = 0xFF if rng.random() < 0.15 else rng.randrange(3)
+        art = 0 if rng.random() < 0.3 else rng.randrange(60)
+        fields += [(record, owner, 1), (record + 1, art, 1), (record + 4, x, 2), (record + 6, y, 2)]
+        if rng.random() < 0.67:
+            fields += [(tile(x, y), settler, 2), (tile(x, y) + 0x14, rng.randrange(4), 2)]
+    base = rng.randint(1, 1000)
+    for area in range(4):
+        record = AI_AREAS + area * 0x2E0
+        fields.append((record, 0xFF if rng.random() < 0.12 else rng.randrange(3), 1))
+        head = 0
+        for k in range(rng.randrange(5)):
+            settler = 1000 + area * 10 + k
+            fields.append((SETTLERS + settler * SETTLER_BYTES + 0x10, head, 2))
+            head = settler
+        fields.append((record + 0x12A, head, 2))
+        for goods in (3, 1, 2, 5, 11, 25):
+            head, chain = economy_pile_chain(rng, base, rng.randrange(6), False)
+            fields += chain + [(record + 0xA + goods * 2, head, 2)]
+            base += 20
+    return fields
+
+
+def snapshot_globals(rng, pool, args):
+    fields = economy_globals(rng, pool, args)
+    fields.append((AI_CENSUS, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1))
+    fields += [(AI_CENSUS + 0x3F4 + 4 * p, rng.getrandbits(32), 4) for p in range(20)]
+    return fields
+
+
+SPECS += [
+    # EAX is left over from the last copy; the caller (0x567890) doesn't use it.
+    Spec("T_ECONOMY_AGENT_TakeAreaSnapshot", 0x00567910, "thiscall", [], eax_mask=0, presets=snapshot_world,
+         globals=snapshot_globals, max_cases=600),
+    Spec("AI_AreaPopulation", 0x0059dcc0, "fastcall", [scratch(1)], presets=snapshot_world,
+         globals=snapshot_globals, max_cases=600),
+]

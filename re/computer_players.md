@@ -233,8 +233,13 @@ the smiths; one smelter per two smiths). They store the last ratio in
 the iron mine stores the iron (goods 11) in stock, the smelter the iron
 ore (goods 7), in +0x4a (`ore`). Still open in this family: 0x567e00
 (woodcutter), 0x568420 (stonecutter; both with two float curves per race
-and stage, 0x7e1300..0x7e137c), 0x568890 (residences, Random) and
-0x567910 itself.
+and stage, 0x7e1300..0x7e137c) and 0x568890 (residences, Random).
+The snapshot 0x567910 is done too (V, session 51, `ai_economy_snapshot.cpp`):
+the "per-player global" population is the census's settler figure
+(`g_aiCensus.dwords3f4[player]`, low word) once `settlers_counted` is set,
+else `AI::AreaPopulation` 0x59dcc0 (CountAreaSettlersOfClass0); the goods
+are logs, boards, stones, coal, iron (goods 11) and sulfur; a race above 3
+leaves the race-specific counts as they were.
 
 ## Map queries (session 48, A2)
 
