@@ -2306,3 +2306,92 @@ SPECS += [
     Spec("AI_MarkBuildingTypesInLandGrid", 0x005723a0, "stdcall", [],
          presets=mark_types_world, globals=discount_globals, max_cases=600),
 ]
+
+# -- session 54 (ai-land): building orders (ai_building_orders.cpp) -----------
+# The senders run (verified); MessageQueue::Push and IsHost are probed as for
+# the senders' own specs (command_callees, the unwritten bytes left out).
+ORDER_NODES = SCRATCH + 11 * SCRATCH_SLOT_BYTES  # AiPlayerData nodes, 0x400 apart
+PLAYER_RECORDS = 0x11943dc
+PLAYER_BYTES = 0x148
+
+
+def order_buildings(rng, count, size):
+    """Building records 0..count+1: foresters, small towers, apiaries and
+    others of players 0..2 (or free), finished or not, doors on the map."""
+    fields = [(BUILDING_HIGH_WATER, count, 4)]
+    for building in range(count + 2):
+        base = BUILDINGS + building * BUILDING_BYTES
+        kind = rng.choice((5, 5, 15, 51, 2)) if rng.random() < 0.9 else rng.randrange(64)
+        owner = 0xFF if rng.random() < 0.15 else rng.randrange(3)
+        fields += [(base, owner, 1), (base + 2, rng.randrange(size), 2), (base + 4, rng.randrange(size), 2),
+                   (base + 6, kind, 1), (base + 0x21, rng.randrange(1, 256) if rng.random() < 0.15 else 0, 1),
+                   (base + 0xA, rng.randrange(size), 2), (base + 0xC, rng.randrange(size), 2)]
+    return fields
+
+
+def order_tile_areas(rng, size):
+    return [(TILES + (x * 0x300 + y) * 24 + 0x14, rng.randrange(4), 2) for x in range(size) for y in range(size)]
+
+
+def place_order_world(rng, pool, args):
+    return [(SCRATCH + k * SCRATCH_SLOT_BYTES, rng.getrandbits(16), 2) for k in range(4)]
+
+
+def no_tower_world(rng, pool, args):
+    return order_buildings(rng, rng.randrange(20), 64)
+
+
+def clear_tools_world(rng, pool, args):
+    count = rng.randrange(30)
+    return [(SCRATCH, rng.randrange(count + 2), 2)] + order_buildings(rng, count, 32) + order_tile_areas(rng, 32)
+
+
+def foresters_world(rng, pool, args):
+    """Area (scratch 0, 0..4) and player (scratch 1, 0..2); the players'
+    races (Amazons often); the node lists of players 0..2 (a node for some
+    areas, with a small woodcutter count at +0x348); the area's log piles
+    are lazily random (AreaGoodsAmount); buildings and door tile areas."""
+    size = 32
+    fields = [(SCRATCH, rng.randrange(5), 2), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(3), 2)]
+    fields += [(PLAYER_RECORDS + p * PLAYER_BYTES + 4, 3 if rng.random() < 0.5 else rng.randrange(4), 4)
+               for p in range(20)]
+    last = {}
+    for p in range(20):
+        head = NODE_HEADS + 8 * p
+        fields.append((NODE_LAND + 12 * p + 4, WORLD_BASE + head, 4))
+        last[p] = head
+    for p in range(3):
+        for area in range(4):
+            if rng.random() < 0.25:
+                continue
+            node = ORDER_NODES + (p * 4 + area) * 0x400
+            fields += [(last[p], WORLD_BASE + node, 4), (node + 8, area, 2), (node + 0x348, rng.randrange(6), 2)]
+            last[p] = node
+    for p in range(20):
+        fields.append((last[p], WORLD_BASE + NODE_HEADS + 8 * p, 4))
+    # each area's log piles: a short list (a random head would be followed far)
+    for area in range(5):
+        head = 0
+        for k in range(rng.randrange(4)):
+            pile = 1 + area * 100 + k
+            fields += [(AI_PILES + pile * 14 + 0xc, head, 2), (AI_PILES + pile * 14 + 1, rng.randrange(9), 1)]
+            head = pile
+        fields.append((AI_AREAS + area * 0x2e0 + 0xa + 3 * 2, head, 2))
+    return fields + order_buildings(rng, rng.randrange(30), size) + order_tile_areas(rng, size)
+
+
+def foresters_globals(rng, pool, args):
+    return command_globals(rng, pool, args) + [(AI_LAND_EVALUATION, WORLD_BASE + NODE_LAND, 4),
+                                               (AI_MAP_SIZES, 32, 2), (AI_MAP_SIZES + 2, 32, 2)]
+
+
+SPECS += [
+    Spec("AI_OrderPlaceBuilding", 0x0058e200, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         presets=place_order_world, globals=command_globals, callees=command_callees((3, 11)), max_cases=300),
+    Spec("AI_NoSmallTowerNear", 0x0058ede0, "fastcall", [low_word_noise(64), low_word_noise(64), low_word_noise(3)],
+         presets=no_tower_world, globals=ai_world, max_cases=600),
+    Spec("AI_ClearToolGoodsSettings", 0x0058e930, "fastcall", [scratch(0)],
+         presets=clear_tools_world, globals=command_globals, callees=command_callees(LONG_GAPS), max_cases=300),
+    Spec("AI_SetForestersWorking", 0x0059c0f0, "fastcall", [scratch(0), scratch(1)],
+         presets=foresters_world, globals=foresters_globals, callees=command_callees((3,)), max_cases=400),
+]

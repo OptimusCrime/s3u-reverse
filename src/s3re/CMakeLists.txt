@@ -140,6 +140,7 @@ add_library(s3re SHARED
     game/ai/ai_agents.cpp
     game/ai/ai_army.cpp
     game/ai/ai_battle_spells.cpp
+    game/ai/ai_building_orders.cpp
     game/ai/ai_building_queries.cpp
     game/ai/ai_cell_resources.cpp
     game/ai/ai_census.cpp
