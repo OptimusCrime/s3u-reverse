@@ -9,7 +9,10 @@ reimplemented and tested function shows it), **R** read from the code,
 ## Where the code is
 
 - Range `0x54cbd0..0x59fcd0` (after Volker\landscape.cpp, before the
-  Credits code): 502 game functions, ~50k instructions (plus ~1,270
+  Credits code; correction from the session 50 naming pass: the AI code
+  really ends at 0x59e0a0, the last AI function is 0x59dcc0, then a static
+  initializer block 0x59dcf0..0x59e6b0; 0x59e6f0.. is Credits code):
+  502 game functions, ~50k instructions (plus ~1,270
   compiler-generated static-initializer stubs for the many static
   `std::string`s each AI source file includes). After batch 1: 74 verified
   (1.6k instructions), 428 open (48k instructions).
@@ -100,7 +103,8 @@ below it), +0x16 / +0x18 agent kinds for the callbacks.
 pending notes (+0x0ce, 50; new notes, handed to their handler by
 0x5514c0 on the next step), active notes (+0x134, 100; worked on round
 robin with the cursor +0x1fe) and the notes to delete ("doomed", +0x200,
-50; `AI::List32Add`, e.g. through 0x551760 from the agents' slot 3;
+50; `CComputerPlayer::DoomNote` 0x551910, e.g. through `DoomNoteOf`
+0x551760 from the agents' slot 3;
 deleted by 0x551790 after each active note's turn).
 
 **The note life cycle** (V, package A3, `ai_computer_player.cpp`):
@@ -150,12 +154,15 @@ same step:
 2. `0x5547a0` (land evaluation update, Cevaland) and `0x554980` (696
    instructions, subtree 12k: a large Cevaland step); if 0x554980 returns
    non-zero, stop here.
-3. If the player has no nodes (`settlement_lists[p].count` == 0): only
+3. If the player has no nodes (the count of `CEvaLand::lists[p]`, through
+   the CEvaLand pointer `land_evaluation` +0x774, is 0): only
    `agents[7]` slot 8 runs (probably T_ATTACK_AGENT: a player without land
    can only fight).
 4. Pick the current node (`data` +0x778 / `area` +0x77c): the next
-   node of the list, round robin (or the first one after a reset flag at
-   +0xf0 + 12 * p of the node lists, which it clears). The nodes
+   node of the list, round robin (or the first one after the "area list
+   changed" flag at CEvaLand +0xf0 + 4 * p, set by RemoveArea 0x558e80,
+   which it clears; corrected in the session 50 naming pass, the
+   `lea edx,[eax+eax*2]` there is only for the list). The nodes
    (`AiPlayerData`) are one per economy area of the player (R: word +8 is
    the area id; StartBestBuilding passes it to 0x59dbb0, which compares
    it with the tile area (`Tile::area`, +0x14) of the player's buildings'
@@ -246,9 +253,15 @@ a guess (G: the computer players' unit groups and armies).
 
 ## How decisions reach the simulation
 
-The AI never writes the world directly as far as seen (R: the writes of
-the verified functions go to AI objects only; the world is read through
-`g_aiWorld` 0x7e3408 and `g_aiMapWorld` 0x7e7b60). Decisions become
+Most decisions don't write the world directly (the world is read through
+`g_aiWorld` 0x7e3408 and `g_aiMapWorld` 0x7e7b60). Two exceptions, found
+in the session 50 naming pass (re/computer_players_naming.md): the
+military code writes the computer players' `player_lists` /
+`player_list_lengths` itself (AssignSoldier 0x592820, AssignMage 0x5926e0,
+SendHunter 0x5935b0, DisbandWeakGroups 0x592bf0, MoveLastGroupInto
+0x592240), and ProcessWorldEvents 0x590da0 consumes the world's event ring
+(advances world +0x366f8). Both are simulation state, so replacements must
+keep them exact. The other decisions become
 **commands**: 0x21 messages pushed with `MessageQueue::Push` 0x4309c0 on
 the logic->net queue (`ComputerPlayer::message_queue` +0x760, or the
 global 0x7e37c8), each guarded by `0x4318a0` (a flag at game setup

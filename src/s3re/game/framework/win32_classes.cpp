@@ -21,7 +21,8 @@
 //                                      0x65d660; EAX = this. ret 8.
 // Win32::CWindowBase (vtable 0x65d854): +4 the window handle.
 //   CWindowBase()          0x0060f960  CObject(); +4 = 0; EAX = this. ret.
-// Win32::CMessageQueue (vtable 0x65d6f4): +4 the owning thread (probably).
+// Win32::CMessageQueue (vtable 0x65d6f4): +4 the HWND filter its message
+//   loop passes to GetMessageA (0 = all windows; re/win32_framework.md).
 //   CMessageQueue(a)       0x0060d690  CObject(); +4 = a; EAX = this. ret 4.
 // DirectX::CSimpleSurface (vtable 0x65cda0): +4..+0x10.
 //   CSimpleSurface()       0x005befb0  CObject(); +4, +8, +0xc = 0 (+0x10 is
@@ -87,7 +88,7 @@ void* __fastcall Win32_CObject_DeletingDestroy(void* self, void* edx, std::uint3
 void* __fastcall Win32_CWin32Handle_Construct(void* self, void* edx, std::uint32_t handle, std::uint32_t b);
 void* __fastcall Win32_CWaitable_Construct(void* self, void* edx, std::uint32_t handle, std::uint32_t b);
 void* __fastcall Win32_CWindowBase_Construct(void* self, void* edx);
-void* __fastcall Win32_CMessageQueue_Construct(void* self, void* edx, std::uint32_t owner);
+void* __fastcall Win32_CMessageQueue_Construct(void* self, void* edx, std::uint32_t window);
 void* __fastcall DirectX_CSimpleSurface_Construct(void* self, void* edx);
 void* __fastcall DirectX_CSimpleSurface_Construct4(void* self, void* edx, std::uint32_t a, std::uint32_t b,
                                                    std::uint32_t c, std::uint32_t d);
@@ -170,10 +171,10 @@ S3RE_HOOK(0x0060d690, Win32_CMessageQueue_Construct, Ctor1Fn, Original_Win32_CMe
           Win32_CMessageQueue_Construct);
 
 // Purpose: Constructor of a thread's Windows message queue wrapper.
-void* __fastcall Win32_CMessageQueue_Construct(void* self, void* /*edx*/, std::uint32_t owner) {
+void* __fastcall Win32_CMessageQueue_Construct(void* self, void* /*edx*/, std::uint32_t window) {
     Win32_CObject_Construct(self, nullptr);
     As<CMessageQueue>(self)->vtable = vtables::kCMessageQueue;
-    As<CMessageQueue>(self)->owner = owner;
+    As<CMessageQueue>(self)->window = window;
     return self;
 }
 

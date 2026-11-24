@@ -103,8 +103,9 @@ static_assert(sizeof(CScreen) == 0x98);
 struct CControl {
     std::uint32_t vtable;          // 0x00 (this-0x3c)
     const std::int32_t* vbptr;     // 0x04 (this-0x38) vbtable leading to the CScreenElement virtual base
-    std::uint32_t tooltip_owner;   // 0x08 an object told when the tooltip time is up (0x4183c0)
-    std::uint32_t unk0c;
+    std::uint32_t timer_functor;   // 0x08 a functor called on every timer tick (CControl::OnTimer 0x4183c0), 0 = none
+    std::uint8_t disabled;         // 0x0c = !enabled (CControl::SetEnabled 0x418810)
+    std::uint8_t pad0d[3];
     msvc6::String tooltip_text;    // 0x10
     std::uint32_t tooltip;         // 0x20 (this-0x1c) the tooltip object
     std::uint32_t last_move_time;  // 0x24 (this-0x18) timeGetTime() of the last mouse movement
@@ -115,6 +116,8 @@ struct CControl {
     std::int32_t vtordisp;         // 0x38 (this-0x4) the virtual base's displacement correction
 };
 static_assert(offsetof(CControl, vbptr) == 0x3c - 0x38);
+static_assert(offsetof(CControl, timer_functor) == 0x08);
+static_assert(offsetof(CControl, disabled) == 0x0c);
 static_assert(offsetof(CControl, tooltip_text) == 0x10);
 static_assert(offsetof(CControl, tooltip) == 0x3c - 0x1c);
 static_assert(offsetof(CControl, last_move_time) == 0x3c - 0x18);

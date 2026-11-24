@@ -2855,7 +2855,7 @@ SPECS += [
     Spec("SessionDesc_Construct_5bb0b0", 0x005bb0b0, "thiscall",
          [one_of(0, STRING_OTHER_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR)], presets=session_desc,
          globals=empty_text),
-    Spec("GuidNames_Construct_5b6790", 0x005b6790, "thiscall",
+    Spec("CDirectDrawDevice_Construct", 0x005b6790, "thiscall",
          [one_of(0, STRING_OTHER_PTR), text_or_null, text_or_null], presets=member_strings(()),
          exempt_blocks=(0x005b689a, 0x005b6978)),  # DROP (the first temporary)
     Spec("CRegistryValueInfo_Construct", 0x006161e0, "thiscall",
@@ -2987,8 +2987,8 @@ SPECS += [
     Spec("AI_RecordBestCandidate", 0x0058ec50, "fastcall",
          [id_with_noise(0x300), anything, anything, anything], presets=best_candidate,
          globals=ai_player_data),
-    Spec("AI_GridCell", 0x00554700, "thiscall", [anything, anything]),
-    Spec("AI_GridFree", 0x00554040, "thiscall", [], eax_mask=0,
+    Spec("AI_CEvaLand_GridCell", 0x00554700, "thiscall", [anything, anything]),
+    Spec("AI_CEvaLand_FreeGrid", 0x00554040, "thiscall", [], eax_mask=0,
          presets=lambda rng, pool, args: [(0x158, 0, 4)] if rng.random() < 0.3 else []),
     Spec("AI_CopySixBytes", 0x0055a420, "fastcall", [one_of(0, WORLD_BASE + SCRATCH), scratch(1)],
          eax_mask=0),
@@ -3130,7 +3130,7 @@ SPECS += [
     ui_spec("CScreenElement_SetParent", 0x004157d0, [one_of(0, UI_PARENT, UI_PARENT, 0x1234)]),
     ui_spec("CScreenElement_ContainsPoint", 0x00415800, [message_position, message_position]),
     ui_spec("CScreenElement_NeedsRedraw", 0x00415830, [], eax_mask=0xFF),
-    ui_spec("CScreenElement_IsQuery78Zero", 0x00415840, []),
+    ui_spec("CScreenElement_IsOffScreen", 0x00415840, []),
     ui_spec("CScreenElement_OnMessage", 0x00415850, MESSAGE),
     ui_spec("CScreenElement_WantsMessage", 0x00415890, [one_of(UI_MESSAGE)], eax_mask=0xFF),
     # The jump table's data (0x415a22..0x415a93) follows the last ret.
@@ -3143,8 +3143,8 @@ SPECS += [
     ui_spec("CScreenElement_KillFocus", 0x00415bd0, [], eax_mask=0xFF),
     ui_spec("CScreenElement_Invalidate", 0x00415bf0, []),
     ui_spec("CScreenElement_TrackMouse", 0x00415c10, MESSAGE),
-    ui_spec("CScreenElement_Enable", 0x00415ca0, [small]),
-    ui_spec("CScreenElement_ParentQuery78", 0x004160d0, []),
+    ui_spec("CScreenElement_OnParentChanged", 0x00415ca0, [small]),
+    ui_spec("CScreenElement_GetScreen", 0x004160d0, []),
     ui_spec("CScreenElement_SetFlag1F", 0x00416c60, [anything], eax_mask=0),
     ui_spec("UiGroup_WantsMessage", 0x00417100, [one_of(UI_MESSAGE)], this=UI_GROUP, eax_mask=0xFF),
     ui_spec("UiGroup_SetFocus", 0x00417650, [one_of(0, UI_CHILD, UI_CHILD)], this=UI_GROUP),
@@ -3152,13 +3152,13 @@ SPECS += [
     ui_spec("UiGroup_SetFocus_429d70", 0x00429d70, [one_of(0, UI_CHILD, UI_CHILD)], this=UI_GROUP),
     ui_spec("UiGroup_WantsMessage_429df0", 0x00429df0, [one_of(UI_MESSAGE)], this=UI_GROUP,
             eax_mask=0xFF),
-    ui_spec("UiGroup_Enable_429fd0", 0x00429fd0, [small], this=UI_ENABLE),
-    Spec("Dialog_Global7a823c", 0x00416870, "stdcall", [], globals=dialog_globals),
-    Spec("Dialog_Global7a8238", 0x004168c0, "stdcall", [], globals=dialog_globals),
-    Spec("Dialog_Global7a8240", 0x00416c50, "stdcall", [], globals=dialog_globals),
-    Spec("Dialog_CopyGlobals7a8020", 0x00416880, "stdcall", [scratch(0)], globals=dialog_globals),
-    Spec("Dialog_Table7a809c", 0x004168a0, "stdcall", [below(14)]),
-    Spec("Dialog_Table7a8064", 0x004168b0, "stdcall", [below(14)]),
+    ui_spec("UiGroup_OnParentChanged_429fd0", 0x00429fd0, [small], this=UI_ENABLE),
+    Spec("Dialog_Surface", 0x00416870, "stdcall", [], globals=dialog_globals),
+    Spec("Dialog_GraphicsData", 0x004168c0, "stdcall", [], globals=dialog_globals),
+    Spec("Dialog_Pen", 0x00416c50, "stdcall", [], globals=dialog_globals),
+    Spec("Dialog_PixelFormat", 0x00416880, "stdcall", [scratch(0)], globals=dialog_globals),
+    Spec("Dialog_Font", 0x004168a0, "stdcall", [below(14)]),
+    Spec("Dialog_Color", 0x004168b0, "stdcall", [below(14)]),
 ]
 
 
@@ -3357,11 +3357,11 @@ SPECS += [
     # CControl (EAX: only AL is defined for the message handlers' results,
     # but ours reproduce the whole register where it is known).
     group_spec("CControl_DeleteTooltip", 0x004187b0, [], this=CONTROL - 0x3c, eax_mask=0),
-    group_spec("CControl_OnMessage10", 0x00418380, MESSAGE, this=CONTROL),
+    group_spec("CControl_OnLButtonDown", 0x00418380, MESSAGE, this=CONTROL),
     group_spec("CControl_OnMouseMove", 0x00418430, MESSAGE, this=CONTROL, eax_mask=0xFF),
     group_spec("CControl_OnMouseEnter", 0x004184b0, MESSAGE, this=CONTROL),
     group_spec("CControl_OnMouseLeave", 0x004184e0, MESSAGE, this=CONTROL),
-    group_spec("CGroupControl_OnMessage10", 0x00429e80, MESSAGE),
+    group_spec("CGroupControl_OnLButtonDown", 0x00429e80, MESSAGE),
     group_spec("CGroupControl_OnMouseMove", 0x00429ec0, MESSAGE, eax_mask=0xFF),
     group_spec("CGroupControl_OnMouseEnter", 0x00429f50, MESSAGE),
     group_spec("CGroupControl_OnMouseLeave", 0x00429f90, MESSAGE),
@@ -3586,9 +3586,9 @@ SPECS += [
     fill_spec("CScreenElement_FillBackground", 0x00415b60, ELEMENT),
     fill_spec("CScreenGroup_FillBackground", 0x00417460, UI_GROUP),
     fill_spec("CScreenGroup_FillBackground_429e50", 0x00429e50, UI_GROUP),
-    group_spec("CScreenGroup_OnEnable", 0x004177f0, [anything], exempt_blocks=EMPTY_4177F0),
-    group_spec("CControl_OnEnable", 0x00418520, [anything], this=CONTROL),
-    group_spec("CGroupControl_OnEnable", 0x0042a000, [anything]),
+    group_spec("CScreenGroup_OnShow", 0x004177f0, [anything], exempt_blocks=EMPTY_4177F0),
+    group_spec("CControl_OnShow", 0x00418520, [anything], this=CONTROL),
+    group_spec("CGroupControl_OnShow", 0x0042a000, [anything]),
 ]
 
 # -- batch 25: std::string compare (msvc6/string.cpp) -----------------------
@@ -3676,15 +3676,15 @@ SPECS += [
          presets=count_buildings_world, globals=ai_world_400, max_cases=600),
     Spec("AI_AreaAlongRow", 0x005996c0, "fastcall", [small_with_noise(0, 64), small_with_noise(0, 64)],
          eax_mask=0xFFFF, presets=area_row_world, globals=ai_small_map),
-    Spec("AI_List32Add", 0x00551910, "thiscall", [id_with_noise(8)], presets=list32_world),
-    Spec("AI_GridCellWrapped", 0x00554730, "thiscall", [anything, anything]),
-    Spec("AI_GridSumAround", 0x00554530, "thiscall", [small_with_noise(-1, 6), small_with_noise(-1, 6)],
+    Spec("CComputerPlayer_DoomNote", 0x00551910, "thiscall", [id_with_noise(8)], presets=list32_world),
+    Spec("AI_CEvaLand_GridCellWrapped", 0x00554730, "thiscall", [anything, anything]),
+    Spec("AI_CEvaLand_GridSumAround", 0x00554530, "thiscall", [small_with_noise(-1, 6), small_with_noise(-1, 6)],
          presets=grid_world),
     # DEAD 0x55b802: the element copy of an inlined erase(begin, end) whose
     # source range is empty (it starts with source = end).
     Spec("AI_ResetAgentData", 0x0055b770, "thiscall", [], globals=ai_vectors, max_cases=200,
          exempt_blocks=(0x55b802,)),
-    Spec("AI_ClearGlobals7e0568", 0x00553e00, "stdcall", [],
+    Spec("AI_CEvaLand_ResetGlobals", 0x00553e00, "stdcall", [],
          globals=lambda rng, pool, args: [(0x007e0568, rng.getrandbits(32), 4), (0x007e056c, rng.getrandbits(32), 4)]),
     Spec("AI_SiteTree_begin", 0x00559260, "thiscall", [scratch(0)],
          presets=lambda rng, pool, args: [(4, WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES, 4)]),
@@ -3967,16 +3967,16 @@ def ui_refresh(rng, pool, args):
 
 
 SPECS += [
-    Spec("AI_List32AddValue_551780", 0x00551780, "thiscall", [anything], presets=list32_world),
-    Spec("AI_List32AddWord8_551760", 0x00551760, "thiscall", [scratch(0)], presets=word8_record),
-    Spec("AI_EvaLand_ResetGrid_554070", 0x00554070, "thiscall", []),
+    Spec("CComputerPlayer_DoomNoteId", 0x00551780, "thiscall", [anything], presets=list32_world),
+    Spec("CComputerPlayer_DoomNoteOf", 0x00551760, "thiscall", [scratch(0)], presets=word8_record),
+    Spec("AI_CEvaLand_ResetGrid", 0x00554070, "thiscall", []),
     Spec("AI_TileCentre_554880", 0x00554880, "stdcall", [anything, anything, scratch(0), scratch(1)]),
     # Callers use AX; off the map the upper half is the caller's EAX.
-    Spec("AI_TileByte8_599570", 0x00599570, "fastcall", [scratch(0), scratch(1)], eax_mask=0xFFFF,
+    Spec("AI_TileOwner", 0x00599570, "fastcall", [scratch(0), scratch(1)], eax_mask=0xFFFF,
          presets=tile_words, globals=ai_small_map),
-    Spec("AI_BlockCentreByte8_554850", 0x00554850, "stdcall",
+    Spec("AI_CellCentreOwner", 0x00554850, "stdcall",
          [small_with_noise(0, 9), small_with_noise(0, 9)], globals=ai_small_map),
-    Spec("AI_EvaLand_GridCellOfTile_554770", 0x00554770, "thiscall", [anything, anything], presets=grid_world),
+    Spec("AI_CEvaLand_GridCellOfTile", 0x00554770, "thiscall", [anything, anything], presets=grid_world),
     Spec("AI_BuildingIfUsed_58e1c0", 0x0058e1c0, "fastcall", [small_with_noise(0, 64)],
          presets=building_count, globals=ai_world),
     Spec("CLogicThread_ClearPendingUiRefresh", 0x0053f530, "logicthread", [], presets=ui_refresh),
@@ -4171,7 +4171,7 @@ SPECS += [
          globals=ai_map_world),
     Spec("AI_PtrVector_Size", 0x0055bfc0, "thiscall", [], presets=ptr_vector),
     Spec("AI_UninitializedCopyPtrs", 0x0055bff0, "stdcall", [COPY_RANGE.first, COPY_RANGE.last, COPY_RANGE.dest]),
-    Spec("AI_EvaLand_SumAllCells", 0x005546c0, "thiscall", [], presets=grid_world_or_empty, max_cases=500),
+    Spec("AI_CEvaLand_SumAllCells", 0x005546c0, "thiscall", [], presets=grid_world_or_empty, max_cases=500),
     # The agent constructors: EAX is not used (the factory 0x56f6d0 returns the object).
     Spec("GLOBAL_EXPAND_EMPIRE_AGENT_Construct", 0x0056cd00, "thiscall", [], eax_mask=0),
     Spec("COMPUTER_PLAYER_AGENT_Construct", 0x00584680, "thiscall", [], eax_mask=0),
@@ -4872,9 +4872,9 @@ def evaland_globals(rng, pool, args):
 
 
 SPECS += [
-    Spec("AI_EvaLand_Destroy", 0x00553fe0, "thiscall", [], eax_mask=0, presets=evaland_object,
+    Spec("AI_CEvaLand_Destroy", 0x00553fe0, "thiscall", [], eax_mask=0, presets=evaland_object,
          globals=evaland_globals, callees=EH_VECTOR_DESTRUCTOR),
-    Spec("AI_EvaLand_Release", 0x00553dc0, "stdcall", [], presets=evaland_object, globals=evaland_globals,
+    Spec("AI_CEvaLand_Release", 0x00553dc0, "stdcall", [], presets=evaland_object, globals=evaland_globals,
          callees=EH_VECTOR_DESTRUCTOR),
 ]
 
@@ -4915,7 +4915,7 @@ SPECS += [
     Spec("Lobby_HasField4_5da3a0", 0x005da3a0, "thiscall", [],
          presets=lambda rng, pool, args: [(4, rng.choice([0, rng.getrandbits(32)]), 4)]),
     Spec("UI_CopyWords_418fb0", 0x00418fb0, "fastcall", [scratch(0), scratch(1), below(20)]),
-    Spec("UI_WideEos_428880", 0x00428880, "thiscall", [below(30)],
+    Spec("std_wstring_Eos", 0x00428880, "thiscall", [below(30)],
          presets=lambda rng, pool, args: [(4, WORLD_BASE + SCRATCH, 4)]),
     Spec("CGraphicsData_GuiImagePointer", 0x005fac70, "thiscall", [scratch(6), gfx_id], presets=gfx_tables(0x5ac)),
     Spec("CGraphicsData_AnimationPointer", 0x005faaf0, "thiscall", [scratch(6), gfx_id],

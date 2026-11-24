@@ -73,7 +73,7 @@ struct CWindowBase {
 // logic/net MessageQueue of logic_thread_layout.h).
 struct CMessageQueue {
     std::uint32_t vtable;  // +0x00
-    std::uint32_t owner;   // +0x04 probably the owning thread
+    std::uint32_t window;  // +0x04 the HWND filter passed to GetMessageA (0 = all windows)
 };
 
 // Win32::CRegistryKey.

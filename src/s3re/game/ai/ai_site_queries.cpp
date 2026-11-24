@@ -28,12 +28,13 @@
 //              and Amazon: stonecutter and forester; Egyptian: stonecutter;
 //              Asian: forester), else 0 (also for a race above 3). EAX = it.
 //   0x005930f0 AI_ResetUnitGroup(player, group) stdcall: clears the
-//              group's entries of g_aiArmyState (group_values, group_words,
-//              group_bytes) and g_aiGroupOrders (target, flag); index
-//              player * 10 + group, not range-checked.
+//              group's entries of the census g_aiCensus (defending flag,
+//              target building), g_aiArmyState (attack delay) and
+//              g_aiGroupOrders (target, steal flag); index player * 10 +
+//              group, not range-checked.
 //   0x00593f50 AI_ArmyState_Reset() thiscall (on g_aiArmyState): the
 //              per-player arrays (25 * player, zeros, 2000000), group
-//              values 1..9 = 10 + 2 * group, the scalars (300, 500,
+//              attack delays 1..9 = 10 + 2 * group, the scalars (300, 500,
 //              2000000) and g_aiPerPlayer7e79d0 = 0. EAX = this.
 
 #include "game/ai/ai_layout.h"
@@ -261,11 +262,12 @@ std::uint32_t __fastcall AI_CheckBasicEconomy(const std::uint16_t* player, void*
 std::uint32_t __stdcall AI_ResetUnitGroup(std::uint32_t player, std::uint32_t group) {
     // Flat index, not range-checked (like the original's address arithmetic).
     const std::uint32_t index = player * kUnitGroups + group;
+    AiAgentData& census = g_aiCensus;
     AiArmyState& army = g_aiArmyState;
     AiGroupOrders& orders = g_aiGroupOrders;
-    (&army.group_bytes[0][0])[index] = 0;
-    (&army.group_words[0][0])[index] = 0;
-    (&army.group_values[0][0])[index] = 0;
+    (&census.group_defending[0][0])[index] = 0;
+    (&census.group_target_buildings[0][0])[index] = 0;
+    (&army.attack_delays[0][0])[index] = 0;
     AiGroupTarget& target = (&orders.group_targets[0][0])[index];
     target.x = 0;
     target.y = 0;
@@ -287,7 +289,7 @@ std::uint32_t __fastcall AI_ArmyState_Reset(AiArmyState* self, void* /*edx*/) {
         self->per_player4b4[p] = kFar;
         // Groups 1..9 (the original's row pointer starts at +0x198).
         for (std::uint32_t group = 1; group < kUnitGroups; ++group) {
-            self->group_values[p][group] = 10 + 2 * group;
+            self->attack_delays[p][group] = 10 + 2 * group;
         }
     }
     self->unk190 = 0;
@@ -329,11 +331,25 @@ SiteQueries OurSiteQueries() {
 constexpr std::uint32_t kMap = 400;
 constexpr std::size_t kNoteBytes = sizeof(SiteNote) + 8;
 
+// The memory ResetUnitGroup writes, as two blocks: from g_aiArmyState up to
+// the end of the census's per-group fields (the army state, the objects at
+// 0x7e5de4.., the census up to group_defending), and g_aiGroupOrders up to
+// its group targets. The test fills and compares these blocks (the sizes
+// the test used when the army state was thought to reach that far, so the
+// inputs stay the same).
+constexpr std::size_t kArmyBlockBytes =
+    (g_aiCensus.address() - g_aiArmyState.address()) + offsetof(AiAgentData, group_defending) + kPlayers * kUnitGroups;
+constexpr std::size_t kOrdersBlockBytes = offsetof(AiGroupOrders, gather_buildings);
+static_assert(kArmyBlockBytes == 0x88c && kOrdersBlockBytes == 0x898);
+
+std::uint8_t* ArmyBlock() { return reinterpret_cast<std::uint8_t*>(&g_aiArmyState.get()); }
+std::uint8_t* OrdersBlock() { return reinterpret_cast<std::uint8_t*>(&g_aiGroupOrders.get()); }
+
 struct Saved {
     CGameData* world = g_aiWorld;
     ComputerPlayer* player = g_aiPlayer;
     std::uint16_t sizeX = g_aiMapSizeX, sizeY = g_aiMapSizeY;
-    AiArmyState army = g_aiArmyState;
+    std::vector<std::uint8_t> army{ArmyBlock(), ArmyBlock() + kArmyBlockBytes};
     AiGroupOrders orders = g_aiGroupOrders;
     std::uint32_t perPlayer[kPlayers];
     Saved() { std::memcpy(perPlayer, g_aiPerPlayer7e79d0.get(), sizeof(perPlayer)); }
@@ -342,7 +358,7 @@ struct Saved {
         g_aiPlayer = player;
         g_aiMapSizeX = sizeX;
         g_aiMapSizeY = sizeY;
-        g_aiArmyState = army;
+        std::memcpy(ArmyBlock(), army.data(), kArmyBlockBytes);
         g_aiGroupOrders = orders;
         std::memcpy(g_aiPerPlayer7e79d0.get(), perPlayer, sizeof(perPlayer));
     }
@@ -377,8 +393,8 @@ void CompareSiteQueries(test::Context& ctx, const SiteQueries& candidate, int ca
     test::WorldPair worlds(ctx, sizeof(CGameData));
     std::vector<std::uint8_t> player(sizeof(ComputerPlayer));
     std::vector<std::uint8_t> notes(kMaxNotes * kNoteBytes);
-    std::vector<std::uint8_t> a(sizeof(AiArmyState) + 16), b(a.size());
-    std::vector<std::uint8_t> ordersA(sizeof(AiGroupOrders)), perA(4 * kPlayers);
+    std::vector<std::uint8_t> a(kArmyBlockBytes + 16), b(a.size());
+    std::vector<std::uint8_t> ordersA(kOrdersBlockBytes), perA(4 * kPlayers);
     for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(7));
         if (i % 16 == 0) {
@@ -461,20 +477,20 @@ void CompareSiteQueries(test::Context& ctx, const SiteQueries& candidate, int ca
             break;
         }
         case 5: {
-            ctx.rng().Fill(&g_aiArmyState.get(), sizeof(AiArmyState));
-            ctx.rng().Fill(&g_aiGroupOrders.get(), sizeof(AiGroupOrders));
-            std::memcpy(b.data(), &g_aiArmyState.get(), sizeof(AiArmyState));
-            std::memcpy(ordersA.data(), &g_aiGroupOrders.get(), sizeof(AiGroupOrders));
+            ctx.rng().Fill(ArmyBlock(), kArmyBlockBytes);
+            ctx.rng().Fill(OrdersBlock(), kOrdersBlockBytes);
+            std::memcpy(b.data(), ArmyBlock(), kArmyBlockBytes);
+            std::memcpy(ordersA.data(), OrdersBlock(), kOrdersBlockBytes);
             const std::uint32_t p = ctx.rng().Below(kPlayers), g = ctx.rng().Below(kUnitGroups);
             original.resetGroup(p, g);
-            std::memcpy(a.data(), &g_aiArmyState.get(), sizeof(AiArmyState));
-            std::vector<std::uint8_t> ordersOriginal(sizeof(AiGroupOrders));
-            std::memcpy(ordersOriginal.data(), &g_aiGroupOrders.get(), sizeof(AiGroupOrders));
-            std::memcpy(&g_aiArmyState.get(), b.data(), sizeof(AiArmyState));
-            std::memcpy(&g_aiGroupOrders.get(), ordersA.data(), sizeof(AiGroupOrders));
+            std::memcpy(a.data(), ArmyBlock(), kArmyBlockBytes);
+            std::vector<std::uint8_t> ordersOriginal(kOrdersBlockBytes);
+            std::memcpy(ordersOriginal.data(), OrdersBlock(), kOrdersBlockBytes);
+            std::memcpy(ArmyBlock(), b.data(), kArmyBlockBytes);
+            std::memcpy(OrdersBlock(), ordersA.data(), kOrdersBlockBytes);
             candidate.resetGroup(p, g);  // EAX is not used by the callers
-            same &= S3RE_EXPECT_MEM_EQ(a.data(), &g_aiArmyState.get(), sizeof(AiArmyState));
-            same &= S3RE_EXPECT_MEM_EQ(ordersOriginal.data(), &g_aiGroupOrders.get(), sizeof(AiGroupOrders));
+            same &= S3RE_EXPECT_MEM_EQ(a.data(), ArmyBlock(), kArmyBlockBytes);
+            same &= S3RE_EXPECT_MEM_EQ(ordersOriginal.data(), OrdersBlock(), kOrdersBlockBytes);
             break;
         }
         default: {
@@ -520,7 +536,7 @@ std::uint32_t __fastcall WrongBasic(const std::uint16_t* player, void* edx, AiPl
 std::uint32_t __fastcall WrongArmyReset(AiArmyState* self, void* edx) {
     // Wrong: also sets group 0.
     const std::uint32_t result = AI_ArmyState_Reset(self, edx);
-    for (auto& row : self->group_values) {
+    for (auto& row : self->attack_delays) {
         row[0] = 10;
     }
     return result;

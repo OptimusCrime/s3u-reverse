@@ -37,8 +37,8 @@
 // Lobby_HasField4_5da3a0 (0x005da3a0): EAX = (+4 != 0).
 // UI_CopyWords_418fb0 (0x00418fb0): fastcall (ECX = to, EDX = from, stack:
 //   count) ret 4: copies `count` 16-bit characters; EAX = to.
-// UI_WideEos_428880 (0x00428880): (n) ret 4: the wide string's _Eos: +8 =
-//   n, word [+4][n] = 0; EAX = n.
+// std_wstring_Eos (0x00428880; MSVC6 std::wstring::_Eos, was UI_WideEos_428880):
+//   (n) ret 4: +8 = n, word [+4][n] = 0; EAX = n.
 // CGraphicsData::GuiImagePointer (0x005fac70; was CGraphicsData::FramePointer
 //   until session 50): (out, id = group << 16 | frame) ret 8: *out =
 //   table(+0x5ac)[group][frame + 2] + base(+0x264)[group]; EAX = out. The
@@ -158,7 +158,7 @@ std::uint32_t __fastcall Win32_CRegistryKey_Construct(void* self, void* edx);
 std::uint32_t __fastcall Win32_CEvent_Construct(void* self, void* edx);
 std::uint32_t __fastcall Lobby_HasField4_5da3a0(void* self, void* edx);
 std::uint32_t __fastcall UI_CopyWords_418fb0(std::uint16_t* to, const std::uint16_t* from, std::uint32_t count);
-std::uint32_t __fastcall UI_WideEos_428880(void* self, void* edx, std::uint32_t n);
+std::uint32_t __fastcall std_wstring_Eos(void* self, void* edx, std::uint32_t n);
 std::uint32_t __fastcall CGraphicsData_GuiImagePointer(void* self, void* edx, std::uint32_t out, std::uint32_t id);
 std::uint32_t __fastcall CGraphicsData_AnimationPointer(void* self, void* edx, std::uint32_t out, std::uint32_t id);
 
@@ -331,10 +331,10 @@ std::uint32_t __fastcall UI_CopyWords_418fb0(std::uint16_t* to, const std::uint1
     return Address(to);
 }
 
-S3RE_HOOK(0x00428880, UI_WideEos_428880, This1Fn, Original_UI_WideEos_428880, UI_WideEos_428880);
+S3RE_HOOK(0x00428880, std_wstring_Eos, This1Fn, Original_std_wstring_Eos, std_wstring_Eos);
 
 // Purpose: Sets a wide string's length and writes its terminating zero.
-std::uint32_t __fastcall UI_WideEos_428880(void* self, void* /*edx*/, std::uint32_t n) {
+std::uint32_t __fastcall std_wstring_Eos(void* self, void* /*edx*/, std::uint32_t n) {
     WideString* const string = As<WideString>(self);
     string->len = n;
     // 32-bit address arithmetic, as the original's [ptr + n * 2].
@@ -419,7 +419,7 @@ Functions OriginalFunctions() {
             Original_Lobby_ScaleBy4_44c450,     Original_Win32_CWin32Handle_Set,
             Original_Lobby_MemoryBlock_Assign,  Original_Win32_CRegistryKey_Construct,
             Original_Win32_CEvent_Construct,    Original_Lobby_HasField4_5da3a0,
-            Original_UI_CopyWords_418fb0,       Original_UI_WideEos_428880,
+            Original_UI_CopyWords_418fb0,       Original_std_wstring_Eos,
             Original_CGraphicsData_GuiImagePointer, Original_CGraphicsData_AnimationPointer,
             Original_WCUIntVector_Destroy,      Original_WCIntVector_ConstructBare,
             Original_Lobby_CLMMessageBlock_Copy};
@@ -429,7 +429,7 @@ Functions OurFunctions() {
     return {&WCIsvListBase_Destroy,     &WCIsvList_Insert,         &WCIntVector_Construct,
             &WCIntVector_Destroy,       &Lobby_ScaleBy4_44c450,    &Win32_CWin32Handle_Set,
             &Lobby_MemoryBlock_Assign,  &Win32_CRegistryKey_Construct, &Win32_CEvent_Construct,
-            &Lobby_HasField4_5da3a0,    &UI_CopyWords_418fb0,      &UI_WideEos_428880,
+            &Lobby_HasField4_5da3a0,    &UI_CopyWords_418fb0,      &std_wstring_Eos,
             &CGraphicsData_GuiImagePointer, &CGraphicsData_AnimationPointer, &WCUIntVector_Destroy,
             &WCIntVector_ConstructBare, &Lobby_CLMMessageBlock_Copy};
 }

@@ -8,8 +8,9 @@
 //     the normal 15.6 ticks a second.
 //   - CLogicThread::Step (0x53db30), when no fast-forward countdown is
 //     running (g_stepCountdown 0x7dfd2c == 0), waits on its wait set at
-//     CLogicThread+0x3dc (CWaitSet::Wait 0x463100, thiscall, (timeout 500 ms,
-//     throw on timeout 1), returns the signalled object). Only if the timer
+//     CLogicThread+0x3dc (Win32::CWin32WaitableBag::WaitFor 0x463100,
+//     thiscall, (timeout 500 ms, throw on timeout 1), returns the signalled
+//     object). Only if the timer
 //     object (+0x3bc) was signalled does it run the tick (ExecuteCommands,
 //     then the world update). Other objects in the set (+0x3d8) wake it
 //     without a tick; that is why Step runs about 240 times a second.
@@ -42,16 +43,18 @@
 namespace s3re::tooling {
 namespace {
 
-struct CWaitSet;  // opaque; the wait set at CLogicThread+0x3dc
+// Win32::CWin32WaitableBag<Win32::CWin32Waitable> (opaque): the wait set at
+// CLogicThread+0x3dc.
+struct CWin32WaitableBag;
 
-using WaitFn = void*(__fastcall*)(CWaitSet* self, void* edx, unsigned timeoutMs,
+using WaitFn = void*(__fastcall*)(CWin32WaitableBag* self, void* edx, unsigned timeoutMs,
                                   int throwOnTimeout);
 
-void* __fastcall Hooked_CWaitSet_Wait(CWaitSet* self, void* edx, unsigned timeoutMs,
-                                      int throwOnTimeout);
+void* __fastcall Hooked_CWin32WaitableBag_WaitFor(CWin32WaitableBag* self, void* edx, unsigned timeoutMs,
+                                                  int throwOnTimeout);
 
-S3RE_PASSTHROUGH(0x00463100, CWaitSet_Wait, WaitFn, Original_CWaitSet_Wait,
-                 Hooked_CWaitSet_Wait);
+S3RE_PASSTHROUGH(0x00463100, CWin32WaitableBag_WaitFor, WaitFn, Original_CWin32WaitableBag_WaitFor,
+                 Hooked_CWin32WaitableBag_WaitFor);
 
 constexpr std::uintptr_t kStepWaitReturn = 0x0053dc6d;  // after the call in Step
 constexpr std::uintptr_t kWaitSetOffset = 0x3dc;        // CLogicThread -> wait set
@@ -64,11 +67,11 @@ bool FastMode() {
 
 bool g_logged = false;  // only touched by the logic thread
 
-void* __fastcall Hooked_CWaitSet_Wait(CWaitSet* self, void* edx, unsigned timeoutMs,
-                                      int throwOnTimeout) {
+void* __fastcall Hooked_CWin32WaitableBag_WaitFor(CWin32WaitableBag* self, void* edx, unsigned timeoutMs,
+                                                  int throwOnTimeout) {
     if (!FastMode() ||
         reinterpret_cast<std::uintptr_t>(_ReturnAddress()) != kStepWaitReturn) {
-        return Original_CWaitSet_Wait(self, edx, timeoutMs, throwOnTimeout);
+        return Original_CWin32WaitableBag_WaitFor(self, edx, timeoutMs, throwOnTimeout);
     }
     const auto logic = reinterpret_cast<std::uintptr_t>(self) - kWaitSetOffset;
     if (!g_logged) {
@@ -77,7 +80,7 @@ void* __fastcall Hooked_CWaitSet_Wait(CWaitSet* self, void* edx, unsigned timeou
                  reinterpret_cast<void*>(logic));
     }
     // Poll; a timeout returns null (no throw with throwOnTimeout = 0).
-    void* signalled = Original_CWaitSet_Wait(self, edx, 0, 0);
+    void* signalled = Original_CWin32WaitableBag_WaitFor(self, edx, 0, 0);
     if (signalled != nullptr) {
         return signalled;
     }

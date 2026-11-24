@@ -100,6 +100,17 @@ they go back down through OnMessage -> dispatch -> slot 22 of the dialog.
 
 ### Corrections of existing (verified) names, for the next rename pass
 
+**Done 2026-11-24** (code, inventory, specs): OnLButtonDown, GetScreen,
+IsOffScreen, OnParentChanged (slot 26; also
+`Menus::priv::CGameSetupDialog::OnParentChanged` 0x486e60 and
+`UiGroup::OnParentChanged_429fd0`), OnShow (slot 27 of CScreenGroup,
+CControl, CGroupControl), the Dialog getters and their globals
+(`g_dialogSurface`, `g_dialogGraphicsData`, `g_dialogFonts`,
+`g_dialogColors`, `g_dialogPen`, `g_dialogPixelFormat`), CControl
+`timer_functor` / `disabled`, `std::wstring::_Eos`,
+`Menus::CDrawThread::OnMainMenuResult`. `Menus::CDrawThread::OnMessage10`
+0x4941c0 (slots 12 and 20) keeps its name.
+
 - `CControl::OnMessage10` (0x418380) -> `CControl::OnLButtonDown` (type 0x10 is the
   left button down; buttons press on it, edit/list controls take the focus).
   Likewise `CGroupControl::OnMessage10`.
