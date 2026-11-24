@@ -88,7 +88,10 @@ original does.
   current fingerprints: the compiled code of the replacement in
   s3re.dll plus everything of ours it reaches (calls, data, pointers
   in data; addresses normalized to symbol names, so moved code
-  doesn't count), its specs.py entry (with the helpers it uses;
+  doesn't count; names without MSVC's per-path anonymous-namespace
+  hash, data without trailing alignment padding, a past-the-end
+  pointer named after its table, so another worktree's build gives
+  the same fingerprints, 2026-11-24), its specs.py entry (with the helpers it uses;
   comments don't count) and the harness (emu.py, requirements, the
   `re/*_functions.tsv` lists, the case-running functions of run.py).
   So a header change that doesn't change code (a new enum, comments,
@@ -113,9 +116,15 @@ original does.
   "budget", fine with full coverage, otherwise a warning listing the
   specs and no recorded pass. Quick runs don't split specs into parts.
   `Spec.quick_cases` caps very slow specs whose main evidence is
-  elsewhere (CGameData_GenerateRandomMap: 1 case of ~100 s; its
-  evidence is the in-process whole-world tests and the random-map
-  whole-game checks). `--full` runs every case without budget.
+  elsewhere (CGameData_GenerateRandomMap: 1 case of ~30 s in Release;
+  CheckGameEnd, FollowRightWall, UpdateSoldier, UpdateSettlers,
+  ExecuteCommands: about 35 s each, since full coverage takes them
+  50..1350 s, 2026-11-24); a quick run that ran all of a spec's
+  quick_cases records the pass and only notes the incomplete coverage
+  (no `--require-coverage` failure). `specs.COVERED_ELSEWHERE` lists
+  blocks a `--full` run measurably doesn't reach, with their evidence
+  (GenerateRandomMap's 77 big-map blocks); they are reported as covered
+  elsewhere. `--full` runs every case without budget.
 - **Build (2026-11-23):** run.py tests the **Release** build by
   default (`cmake --build --preset release` first; its full suite
   matched Debug's, 0 mismatches, several times faster); `--build Debug`
