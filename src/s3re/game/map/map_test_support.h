@@ -42,10 +42,15 @@ public:
     // Compares the globals after the original's run with the state before
     // it, puts back every byte the original changed (so that our run starts
     // from the same globals), and returns the original's result.
-    std::vector<std::uint8_t> TakeOriginal() {
+    std::vector<std::uint8_t> TakeOriginal() { return TakeOriginalExcept(0, 0); }
+
+    // The same, but the bytes of [keepFrom, keepFrom + keepSize) stay as the
+    // original left them (e.g. the CRT heap's state after allocations that
+    // live on).
+    std::vector<std::uint8_t> TakeOriginalExcept(std::uintptr_t keepFrom, std::size_t keepSize) {
         std::vector<std::uint8_t> after;
         Snapshot(after);
-        Restore(bytes_, after);
+        Restore(bytes_, after, keepFrom, keepSize);
         return after;
     }
 
@@ -66,6 +71,20 @@ public:
             }
         }
         return a.size() == b.size() ? -1 : static_cast<std::ptrdiff_t>((std::min)(a.size(), b.size()));
+    }
+
+    // The snapshot offset of an S3.EXE address (-1 outside the writable sections).
+    static std::ptrdiff_t OffsetOf(std::uintptr_t address) {
+        std::ptrdiff_t result = -1;
+        std::ptrdiff_t offset = 0;
+        ForEachSection([&](std::uint8_t* start, std::size_t size) {
+            const auto begin = reinterpret_cast<std::uintptr_t>(start);
+            if (result < 0 && address >= begin && address < begin + size) {
+                result = offset + static_cast<std::ptrdiff_t>(address - begin);
+            }
+            offset += static_cast<std::ptrdiff_t>(size);
+        });
+        return result;
     }
 
     // The S3.EXE address of a snapshot offset.
@@ -98,12 +117,15 @@ private:
         ForEachSection([&](std::uint8_t* start, std::size_t size) { bytes.insert(bytes.end(), start, start + size); });
     }
 
-    // Writes `before` back where it differs from `after`.
-    static void Restore(const std::vector<std::uint8_t>& before, const std::vector<std::uint8_t>& after) {
+    // Writes `before` back where it differs from `after` (outside the kept range).
+    static void Restore(const std::vector<std::uint8_t>& before, const std::vector<std::uint8_t>& after,
+                        std::uintptr_t keepFrom = 0, std::size_t keepSize = 0) {
         std::size_t offset = 0;
         ForEachSection([&](std::uint8_t* start, std::size_t size) {
             for (std::size_t i = 0; i < size; ++i) {
-                if (before[offset + i] != after[offset + i]) {
+                const auto address = reinterpret_cast<std::uintptr_t>(start + i);
+                const bool kept = address >= keepFrom && address < keepFrom + keepSize;
+                if (!kept && before[offset + i] != after[offset + i]) {
                     start[i] = before[offset + i];
                 }
             }

@@ -136,7 +136,7 @@ All multi-byte fields are little-endian. LoadMap assembles them byte by byte.
 | type | content |
 |---|---|
 | 1 | map info: +8 kind (0 = map file, 2 = random map), +0xc number of players/start positions, +0x10 start goods (random_map_start.cpp) |
-| 2 | 98 bytes in 384-2-Lakes: player races? (NewGame uses "chunk 2 race"; not analysed here) |
+| 2 | per map slot a 45-byte record: +0 dword (0xff in the multiplayer maps; probably the race, "chunk 2 race"), +4 start x, +8 start y (384-2-Lakes: (203, 304) and (121, 73)); read by the menus, not by LoadMap. The rest of a record was zero in the maps looked at |
 | 3/sub | team setup: name text, then from +0x29 two bytes per player (party, type; type 2 = computer). Read by CMapFile::ReadPartySetup 0x4a67c0 |
 | 4 | 131,084 bytes = 12 + 128*128*8: probably the preview picture (not read by LoadMap) |
 | 5 | random map parameters (size, field0c, symmetry, seed), only in memory |
@@ -267,6 +267,81 @@ world, DebugLog calls and S3.EXE globals compared; emulator specs):
   0x49fec0 is `GamePlayerSetup::Colour` (+0xb4), verified. LoadMap copies
   `PlayerSetup(i)->Colour()` for i = 0..19 into g_playerColourIndex
   0x7ace64 (0x4fe550..0x4fe576), right after chunk 0x40.
+
+## Verified map loader (session 54)
+
+`CGameData::LoadMap` (0x4fd540) is replaced (`src/s3re/game/map/load_map.cpp`,
+one helper per chunk). Evidence: `CGameData_LoadMap_AllMaps` loads every
+map under `Map\` (166 files of type 10; read only) with the original and
+ours into two worlds built like a new game's (zeroed, original
+constructor), 2..4 players taking the map slots in random orders with the
+maps' start positions; variants in memory cover the rest (listed tower
+garrisons, catapults and ships, pile records without a kind, missing
+chunks, chunk 0x40, victory conditions, campaign missions 49..71). Whole
+world, S3.EXE globals (CRT heap state left out), DebugLog calls, CRT rand
+state and the CMapFile caches identical. Details confirmed:
+
+- Order: chunk 6 ("Loading map...", "Worldsize: %u"; records y-major:
+  record (y * size + x) is tile (x, y)); with chunk 6 also chunk 8's first
+  pass ("Deleting Building-Bits...") and then "Setting all sectors for
+  loaded Map", PrepareLoadedTerrain, BuildRegionsAndAreas. Without chunk 6
+  none of these run (the map size stays). Chunk 8 again ("Loading
+  buildings...", "Amount of buildings: %u", per record "Gebäude Typ %u
+  x,y %u %u mapowner %u gameowner %u" with the slot and its table entry),
+  then chunk 7 ("Loading settlers...", "Amount of settlers: %u"); without
+  chunk 8 AddPlayerTowns runs and chunk 7 is not read. Then 9 ("Loading
+  piles...", "Amount of piles: %u"), 10, 0x40, the colours, search marks
+  cleared, UnblockCastleTiles, the mission fix-ups.
+- Landscape tiles: +4 height, +6 terrain, +7 object and +0xe seen_object,
+  +8 owner (slot 0xff: 0xff; an untaken slot (table entry 0xff): 0xff and
+  search_mark +0xb = 1; else the entry's low byte), +0xa flags (| 0x40
+  when owned), +0x11 resources; +0, +2, +9, +0x10, +0x12, +0x14 zeroed.
+  Objects 0x6f..0x72 on terrain 0..7 become 0x0d..0x10 (seen_object keeps
+  the old value).
+- "Deleting Building-Bits": for each building record whose slot's table
+  entry is 0xff: tile object = 0, then the layout of (race of player
+  *number slot*, Player +4; type) from its first 0x80000000: footprint
+  pairs lose flags 0x08 and 0x01, the pairs after 0x80000001 (skipping
+  0x80000002 markers) lose 0x08.
+- Buildings of taken slots: AddBuildingSite(x, y, player, type), buildup
+  0, BuildingDone. Towers (15, 16, 18), record byte 6: 0 = one Swordsman1
+  as the garrison; 1 = counts in nibbles: byte 7 high/low Swordsman1/2,
+  byte 9 high Swordsman3 (job 23, chained into the garrison, counter
+  +0x1a), byte 9 low Bowman1, byte 8 high/low Bowman2/3 (job 140,
+  EnterBuildingSlot, counter +0x1c), byte 11 high/low Pikeman1/2, byte 10
+  high Pikeman3 (job 141, chained, counter +0x20); byte 10 low is unused;
+  other values: no garrison. The soldiers are created at the door and
+  removed from their tile.
+- Settlers of taken slots: type 41 CreateSevenTileUnit, 43/44
+  SpawnSettlersOnWater(1, ...), **both with the map slot as the player**;
+  others CreateSettler(x, y, type, player), counter +0xc = 0 (also on
+  record 0 when it fails), and Player +0xcc of the settler's owner + 1 for
+  classes 0 and 10..29.
+- Piles: skipped on tiles with search_mark; kind != 0: CreatePile(x, y,
+  goods, amount, kind); kind 0 and amount != 0: the tile's pile is
+  unlinked from its area's list (area +8 when it was the head), gets the
+  goods and amount, kind 0, and becomes the head of the area's list for
+  its goods. No game map has such a record (78 records with amount and
+  kind 0 are skipped).
+- Victory conditions: 0x77 bytes to world +0x15394b1, g_victoryProtectActive
+  = 1 when +0x44 is set. Chunk 0x40 sets g_worldUpdateDisabled, its
+  absence clears it.
+- Colours: `GameSettings::PlayerSetup(i)->Colour()` for 20 players
+  (PlayerSetup stays the original).
+- Missions: 49 halves every resource amount, but only for y 0..249; 50
+  creates four ferries of player 0 at (60, 510), (70, 520), (80, 530),
+  (90, 540) and on board 8 pioneers each in the first three (Player +0xcc
+  counted) and 8 Swordsman1 in the last (created at (60, 530), job 326);
+  53 sets player 0's mana +0x8c to 30, 61 to 60; 59 sets the first tree
+  (object 0x44..0x51) among offset entries 0..20 around (313, 64), (351,
+  113), (392, 152), (535, 277) on fire (0xf3) and mana 60; 70 makes 17
+  towers at fixed positions Amazon (race 3) when the building there has
+  the expected type ("xxx race changed #%u - BuildingType %u"; no building:
+  "... NOT changed ...").
+- In the 166 maps: 100 have only chunk 6 (AddPlayerTowns), 34 have
+  buildings; building and settler slots 0..3; one landscape tile has slot
+  191 (an index past the game's 20-entry table: it reads OnStart's stack
+  there; the test's table is 256 entries of 0xff).
 
 ## Load call trees
 

@@ -16,16 +16,14 @@ LOGBOOK session entry).
   "messages"): rename in layout.h / re/world_layout.md. Dirk/Pathing.cpp's
   range in re/source_files.csv probably wrongly includes the CMapFile
   stream 0x4a55e0..0x4a5c80.
-- **Reimplementation order (the CMapFile container, LoadSaveGame and
-  LoadMap's callees are verified, sessions 51-53; re/file_formats.md):**
-  next `CGameData::LoadMap` 0x4fd540: split into helpers per chunk (6
-  landscape, 8 buildings, 7 settlers, 9 piles, 10 victory conditions,
-  0x40), the colours (GameSettings::PlayerSetup 0x4351e0 per player:
-  reimplement or call the original), UnblockCastleTiles and the
-  campaign-mission fix-ups; test every map under Map\ (read only) into
-  worlds from `map_test::ConstructWorld`. Then the savegame writer
-  `CLogicThread::SaveGame` 0x509980. Optional: the Watcom skip list
-  (0x60bab0/0x60bbe0/0x60be20) as our code.
+- **Reimplementation order (the CMapFile container, LoadSaveGame, LoadMap
+  and its callees are verified, sessions 51-54; re/file_formats.md):** next
+  the savegame writer `CLogicThread::SaveGame` 0x509980 (1,365 lines, 131
+  calls: directories, the game setup writer 0x433490, the computer players'
+  save 0x551220, which sits in the AI range). Optional: the Watcom skip list
+  (0x60bab0/0x60bbe0/0x60be20) and `GameSettings::PlayerSetup` 0x4351e0
+  (LoadMap calls the original; Watcom vector code behind a mutex) as our
+  code.
 - **Shared catch-type helper:** the SEH filter that matches MSVC 6.0
   catchable types exists twice (execute_commands.cpp,
   map_file_stream.cpp); make it one helper.

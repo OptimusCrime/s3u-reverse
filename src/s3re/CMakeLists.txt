@@ -47,6 +47,7 @@ add_library(s3re SHARED
     game/map/flood_fills.cpp
     game/map/fog_of_war.cpp
     game/map/load_map.cpp
+    game/map/load_map_tests.cpp
     game/map/map.cpp
     game/map/map_areas.cpp
     game/map/map_directions.cpp
