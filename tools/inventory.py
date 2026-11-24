@@ -204,6 +204,9 @@ def check() -> int:
     import typed_access_lint  # no raw world offsets in src/ (CLAUDE.md)
     errors.extend(typed_access_lint.findings())
 
+    import style_lint  # enum narrowing casts (docs/coding_style.md "Checks"; the other rules are report-only)
+    errors.extend(style_lint.enforced_findings())
+
     for error in errors:
         print(f"error: {error}")
     print(f"inventory check: {len(rows)} rows, {len(code_hooks)} hooks, "

@@ -206,8 +206,16 @@ workshops), see `re/enums.md`.
 
 - `python tools/inventory.py check` runs the typed-access lint (no raw
   offsets or data addresses outside the globals headers).
-- Planned: a lint for hex literals in comparisons and for magic numbers
-  in job/type comparisons once `enums.h` covers them.
+- `python tools/style_lint.py` (2026-11-24): rule `narrowing` (a
+  `static_cast` of a wider value into a narrower enum, or of a value whose
+  width it can't resolve) is enforced by `inventory.py check`; mark a
+  deliberate one with `narrow-ok` and the reason. The rules `hex-compare`
+  (hex literals in comparisons and `case` labels, masks/markers/offsets
+  excluded) and `magic-category` (numbers compared with jobs, types,
+  goods, races) are report-only while the readability pass converts code:
+  the command prints the hits per file (`--list RULE` lists them,
+  `noqa-style` exempts a line). They become enforced once the counts are
+  down to the lines that should stay.
 
 ## Typed access and globals (decided 2026-11-09 / 2026-11-22)
 
