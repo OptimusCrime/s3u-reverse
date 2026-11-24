@@ -106,7 +106,7 @@ AiGroupOrders* __fastcall AI_Army_Reset(AiGroupOrders* self, void* /*edx*/) {
         self->highest_group[p] = 0;
         hunters[p].end = hunters[p].begin;  // the vector's clear()
         self->gather_buildings[p] = 0;
-        self->per_player8e8[p] = 0;
+        self->thief_cursors[p] = 0;
         for (std::size_t group = 0; group < kUnitGroups; ++group) {
             self->group_flags1c48[p][group] = 0;
             self->group_targets[p][group] = AiGroupTarget{0, 0, 0};

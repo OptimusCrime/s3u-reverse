@@ -199,6 +199,18 @@ inline constexpr GameGlobal<const std::uint16_t[5]> g_aiPopulationStages{0x65a85
 // g_aiWantedWeaponsmithSlopes) from them and the stages.
 inline constexpr GameGlobal<const std::uint8_t[5]> g_aiWantedGoldMines{0x65a8c8};
 inline constexpr GameGlobal<const std::uint8_t[5]> g_aiWantedWeaponsmiths{0x65a8d2};
+// Per race (0..3) and population stage, what the woodcutter and
+// stonecutter conditions (0x567e00, 0x568420) want at the start of the
+// stage: wood in stock (logs + boards), woodcutters, stones in stock,
+// stonecutters. The stonecutters' table is the one at 0x65a8c8
+// (g_aiWantedGoldMines is its Roman row, g_aiWantedWeaponsmiths its Asian
+// row; those conditions use just that row). Index race * 5 + stage, not
+// range-checked.
+inline constexpr GameGlobal<const std::uint8_t[4][5]> g_aiWantedWoodStock{0x65a88c};
+inline constexpr GameGlobal<const std::uint8_t[4][5]> g_aiWantedWoodcutters{0x65a8a0};
+inline constexpr GameGlobal<const std::uint8_t[4][5]> g_aiWantedStoneStock{0x65a8b4};
+// The default slope of those conditions for a race above 3 (0.0f).
+inline constexpr GameGlobal<const float> g_aiDefaultSlope{0x65a57c};
 
 // ------------------------------------------------------------ library data
 // std::string::npos of S3.EXE's statically linked library (read at run

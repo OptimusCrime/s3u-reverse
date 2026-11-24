@@ -305,6 +305,13 @@ inline constexpr GameGlobal<ai::AiVector[20]> g_aiHunterVectors{0x7e368c};
 // (stages[s + 1] - stages[s])). Stored in reverse: stage s at [3 - s].
 inline constexpr GameGlobal<float[4]> g_aiWantedWeaponsmithSlopes{0x7e1290};
 inline constexpr GameGlobal<float[4]> g_aiWantedGoldMineSlopes{0x7e12b0};
+// The same slopes per race and stage for the stonecutter (0x568420) and
+// woodcutter (0x567e00) conditions: [3 - race][3 - stage] the slope of the
+// wanted cutters, [7 - race][3 - stage] that of the wanted stock (set by
+// static initializers; g_aiWantedWeaponsmithSlopes / GoldMineSlopes are
+// rows 2 and 0 of the stonecutters' table).
+inline constexpr GameGlobal<float[8][4]> g_aiStonecutterSlopes{0x7e1280};
+inline constexpr GameGlobal<float[8][4]> g_aiWoodcutterSlopes{0x7e1300};
 // Rainer\CompMapWorkerAgent.cpp's global objects (ai_layout.h) and a
 // per-player array cleared with the army state (0x593f50; meaning unknown).
 inline constexpr GameGlobal<ai::AiGroupOrders> g_aiGroupOrders{0x7e37d0};
@@ -337,8 +344,10 @@ inline constexpr GameGlobal<std::int32_t> g_skipListRandomBitsLeft{0x7a4030};
 using SleepImport = void(__stdcall*)(std::uint32_t milliseconds);
 using CloseHandleImport = int(__stdcall*)(void* handle);
 using TimeGetTimeImport = std::uint32_t(__stdcall*)();
+using OutputDebugStringAImport = void(__stdcall*)(const char* text);
 inline constexpr GameGlobal<SleepImport> g_importSleep{0x6550dc};
 inline constexpr GameGlobal<CloseHandleImport> g_importCloseHandle{0x655180};
 inline constexpr GameGlobal<TimeGetTimeImport> g_importTimeGetTime{0x655358};  // from _INMM.dll
+inline constexpr GameGlobal<OutputDebugStringAImport> g_importOutputDebugStringA{0x6550b0};
 
 }  // namespace s3re::game

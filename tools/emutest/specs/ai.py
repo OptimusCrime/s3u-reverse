@@ -2417,3 +2417,554 @@ SPECS += [
     Spec("AI_SaveState", 0x00596330, "fastcall", [scratch(1), anything], eax_mask=0,
          callees={0x004a66d0: (4, "thiscall", "probe")}, max_cases=100),
 ]
+
+
+
+# -- session 54 (wip/ai-army): unit-group bookkeeping (ai_army_groups.cpp) ----
+#
+# `this` (ECX) is the world base, so the army object's fields are world bytes
+# 0..0x20f8 (home areas +0, mages +0x988, bitset +0xca8, highest group
+# +0x1d10, group size +0x1d60, gather positions +0x1db0, offsets +0x20d0).
+# DisbandWeakGroups clears bits in the real g_aiGroupOrders (0x7e37d0) and
+# calls MoveLastGroupInto on it, so those globals get random values too.
+# std::bitset::_Xran (0x596570) is probed (it throws; see AI_Army_PruneHunters).
+
+ARMY_HOME_AREAS = 0x0
+ARMY_MAGES = 0x988
+ARMY_BITSET = 0xCA8
+ARMY_HIGHEST_GROUP = 0x1D10
+ARMY_GROUP_SIZE = 0x1D60
+AI_CENSUS_TARGETS = 0x007E5EFC   # g_aiCensus +4: target building per player * 10 + group
+AI_CENSUS_DEFENDING = 0x007E608C  # g_aiCensus +0x194
+AI_ARMY_STATE = 0x007E58C8
+XRAN_PROBE = {0x00596570: (0, "thiscall", "probe")}
+ARMY_SETTLERS = 3000  # members are mostly drawn from 1..2999
+
+
+def army_member(rng):
+    return rng.randrange(1, ARMY_SETTLERS) if rng.random() < 0.995 else rng.randrange(32000, 33000)
+
+
+def army_group_size(rng):
+    roll = rng.random()
+    if roll < 0.1:
+        return rng.randint(-60, 200) & 0xFFFFFFFF
+    if roll < 0.3:
+        return rng.randint(94, 101)
+    return rng.randint(0, 30)
+
+
+def army_lists(rng, players, size_of, lengths_full=False):
+    """World unit lists of `players`: lengths around the group size (at most
+    100), members from the settler pool (types: melee soldiers, bowmen,
+    anything)."""
+    fields = []
+    for p in players:
+        size = size_of(p)
+        signed = size - (1 << 32) if size >= 1 << 31 else size
+        full = lengths_full and rng.random() < 0.5
+        for g in range(10):
+            roll = rng.random()
+            if full:
+                length = min(100, max(0, signed + rng.randrange(3)))
+            elif roll < 0.25:
+                length = 0
+            elif roll < 0.45:
+                length = rng.randint(1, 3)
+            elif roll < 0.7:
+                length = min(100, max(0, signed + rng.randint(-2, 2)))
+            else:
+                length = rng.randint(0, 100 if rng.random() < 0.3 else 12)
+            index = p * 10 + g
+            fields.append((PLAYER_LIST_LENGTHS + 4 * index, length, 4))
+            for k in range(min(length + 1, 100)):
+                fields.append((PLAYER_LISTS + index * 200 + 2 * k, army_member(rng), 2))
+    return fields
+
+
+def army_settler_types(rng):
+    """Types of the pool's settlers: mostly bowmen in half of the cases, so
+    that groups without a melee soldier occur."""
+    bowmen = rng.random() < 0.5
+    fields = []
+    for settler in range(1, ARMY_SETTLERS):
+        if bowmen and rng.random() < 0.9:
+            art = 8
+        else:
+            art = rng.randrange(5, 36) if rng.random() < 0.5 else rng.randrange(48)
+        fields.append((SETTLERS + settler * SETTLER_BYTES + 1, art, 1))
+    return fields
+
+
+def army_object(rng, base, players):
+    """Army fields of `players` at `base`: group size, highest group, home
+    areas 0..2 (so groups pair up), mage counts, a few bitset words."""
+    fields = []
+    sizes = {}
+    for p in players:
+        sizes[p] = army_group_size(rng)
+        fields += [(base + ARMY_GROUP_SIZE + 4 * p, sizes[p], 4),
+                   (base + ARMY_HIGHEST_GROUP + 4 * p, rng.randrange(10), 4)]
+        for g in range(10):
+            index = p * 10 + g
+            mages = rng.randrange(4) if rng.random() < 0.85 else rng.randint(-60, 200) & 0xFFFFFFFF
+            fields += [(base + ARMY_HOME_AREAS + 2 * index, rng.randrange(3), 2),
+                       (base + ARMY_MAGES + 4 * index, mages, 4)]
+    for word in range(ARMY_SETTLERS // 32 + 1):
+        fields.append((base + ARMY_BITSET + 4 * word, rng.getrandbits(32) if rng.random() < 0.5 else 0, 4))
+    return fields, sizes
+
+
+def army_census(rng, players):
+    """Census target buildings (often 0) and defending flags of `players`
+    (globals)."""
+    fields = []
+    for p in players:
+        for g in range(10):
+            index = p * 10 + g
+            fields += [(AI_CENSUS_TARGETS + 2 * index, 0 if rng.random() < 0.5 else rng.getrandbits(16), 2),
+                       (AI_CENSUS_DEFENDING + index, 0 if rng.random() < 0.5 else rng.getrandbits(8), 1)]
+    return fields
+
+
+def army_player_groups(rng, pool, args):
+    """The army at the world base and the lists of the player (args[0])."""
+    fields, sizes = army_object(rng, 0, (args[0],))
+    if len(args) > 1 and rng.random() < 0.4:  # MoveLastGroupInto: the highest group itself
+        fields.append((ARMY_HIGHEST_GROUP + 4 * args[0], args[1], 4))
+    fields += army_lists(rng, (args[0],), lambda p: sizes[p], lengths_full=True)
+    if len(args) > 1:
+        bit_word = ARMY_BITSET + 4 * ((args[1] & 0xFFFF) >> 5)
+        if rng.random() < 0.3:  # AssignMage / AssignSoldier: already assigned
+            fields.append((bit_word, 0xFFFFFFFF, 4))
+        elif args[1] >= 32000:  # a bad index (_Xran probed) whose bit is clear
+            fields.append((bit_word, 0, 4))
+    return fields
+
+
+def army_player_globals(rng, pool, args):
+    return [(AI_MAP_WORLD, WORLD_BASE, 4)] + army_census(rng, (args[0],))
+
+
+def army_soldier_world(rng, pool, args):
+    """army_player_groups plus areas (high-water mark 0..5, sometimes -1)
+    owned by the player, others or none, and buildings in them; the
+    soldier's position."""
+    fields = army_player_groups(rng, pool, args) + buildings_in_areas(rng, pool, args)
+    high = 0xFFFFFFFF if rng.random() < 0.05 else rng.randrange(6)
+    fields.append((AREA_HIGH_WATER, high, 4))
+    for area in range(6):
+        owner = 0xFF if rng.random() < 0.15 else rng.choice((args[0], args[0], rng.randrange(3)))
+        fields.append((AI_AREAS + area * 0x2E0, owner, 1))
+    soldier = args[1] if args[1] < 0x10000 else 0
+    record = SETTLERS + soldier * SETTLER_BYTES
+    fields += [(record + 4, rng.randrange(400), 2), (record + 6, rng.randrange(400), 2)]
+    return fields
+
+
+def army_disband_world(rng, pool, args):
+    """Every player's lists and active flag (0, 1, 2) and the settler pool's
+    types; this's group sizes."""
+    fields = []
+    sizes = {}
+    for p in range(20):
+        sizes[p] = army_group_size(rng)
+        fields += [(ARMY_GROUP_SIZE + 4 * p, sizes[p], 4),
+                   (PLAYER_RECORDS + p * PLAYER_RECORD_BYTES, rng.choice((0, 1, 2, 2)), 4)]
+    return fields + army_lists(rng, range(20), lambda p: sizes[p]) + army_settler_types(rng)
+
+
+def army_disband_globals(rng, pool, args):
+    """g_aiGroupOrders (whose bitset and MoveLastGroupInto the function uses)
+    with random army fields, the census of every player."""
+    fields, _ = army_object(rng, AI_GROUP_ORDERS, range(20))
+    return [(AI_MAP_WORLD, WORLD_BASE, 4)] + fields + army_census(rng, range(20))
+
+
+def army_member_arg(rng, pool):
+    return rng.randrange(32000, 33000) if rng.random() < 0.05 else army_member(rng)
+
+
+def army_home_world(rng, pool, args):
+    """The group's length 0..3 or more and its first member."""
+    index = args[0] * 10 + args[1]
+    length = rng.choice((0, 1, 2, rng.randint(3, 100)))
+    member = army_member(rng) % 32000
+    return [(PLAYER_LIST_LENGTHS + 4 * index, length, 4), (PLAYER_LISTS + index * 200, member, 2)]
+
+
+SPECS += [
+    Spec("AI_Army_Army", 0x00591c10, "thiscall", [], globals=army_hunter_vectors, max_cases=200),
+    Spec("AI_ArmyState_ArmyState", 0x00593f40, "thiscall", [], max_cases=200),
+    Spec("AI_Army_CountSpareGroups", 0x00591fb0, "thiscall", [below(20)], presets=army_player_groups,
+         globals=army_player_globals, max_cases=1000),
+    Spec("AI_Army_CountSpareSoldiers", 0x00592100, "thiscall", [below(20)], presets=army_player_groups,
+         globals=army_player_globals, max_cases=1000),
+    Spec("AI_Army_MoveLastGroupInto", 0x00592240, "thiscall", [below(20), below(10)], presets=army_player_groups,
+         globals=army_player_globals, max_cases=1000),
+    Spec("AI_Army_AssignMage", 0x005926e0, "thiscall", [below(20), army_member_arg], presets=army_player_groups,
+         globals=army_player_globals, callees=XRAN_PROBE, max_cases=1000),
+    # 0x592aeb is dead: it runs only if the address this + 0x1d10 is 0 (the
+    # original tests an array's address instead of an element).
+    Spec("AI_Army_AssignSoldier", 0x00592820, "thiscall", [below(3), army_member_arg], presets=army_soldier_world,
+         globals=army_player_globals, callees=XRAN_PROBE, exempt_blocks=(0x592aeb,), max_cases=1000),
+    Spec("AI_Army_DisbandWeakGroups", 0x00592bf0, "thiscall", [], presets=army_disband_world,
+         globals=army_disband_globals, callees=XRAN_PROBE, max_cases=300),
+    Spec("AI_Army_ReturnGroupHome", 0x00592620, "thiscall", [below(20), below(10)], presets=army_home_world,
+         globals=army_player_globals,
+         callees={0x0058A610: (4, "thiscall", lambda h: (h % 3) - 1 if h % 2 else 0),
+                  0x00590C80: (4, "thiscall", "probe")},
+         max_cases=600),
+]
+
+
+# -- session 54 (wip/ai-army): military orders (ai_army_orders.cpp) ---------
+#
+# AI::CountEnemySoldiersNear (0x58a2c0, verified; it walks every other
+# player's soldier lists) and the command senders are probed, so that the
+# cases reach every branch; the other callees (TileDistance, IsOnMap,
+# ClampToMap, FreeTileArea, NextSparseMapOffset, CGameData::Random,
+# ResetUnitGroup, CountSpareSoldiers, StartPositionWalkRegion,
+# WeakestFrontierMilitaryBuilding) run as original code on both sides.
+
+AI_GROUP_TARGETS = AI_GROUP_ORDERS + 0x3E8   # 6-byte {x, y, unk4} per player * 10 + group
+AI_STEAL_FLAGS = AI_GROUP_ORDERS + 0x320
+AI_THIEF_CURSORS = AI_GROUP_ORDERS + 0x8E8
+AI_ORDER_BITSET = AI_GROUP_ORDERS + 0xCA8
+AI_GEOLOGIST_TIMERS = AI_ARMY_STATE + 0x4B4
+AI_ENEMY_SEARCH = 0x007E5DE4
+OFFSET_TABLE = 0x110A588  # MapOffset {dx, dy, distance, sector}, 16 bytes
+ORDER_MAP = 140
+
+
+def enemy_count(h):
+    """CountEnemySoldiersNear's result: 0 half of the time, else 1..12."""
+    return 0 if h % 2 else 1 + (h >> 8) % 12
+
+
+ORDER_CALLEES = {0x0058A2C0: (4, "thiscall", enemy_count),
+                 0x00590A30: (4, "thiscall", "probe"),
+                 0x00590AF0: (4, "thiscall", "probe"),
+                 0x00590C80: (4, "thiscall", "probe")}
+
+
+def order_globals(rng, pool, args):
+    """Both AI world pointers at the world; the census targets and defending
+    flags and the group targets / steal flags of players 0..2 (targets
+    often naming buildings 1..12)."""
+    fields = [(AI_MAP_WORLD, WORLD_BASE, 4), (AI_WORLD, WORLD_BASE, 4)]
+    for p in range(3):
+        for g in range(10):
+            index = p * 10 + g
+            target = 0 if rng.random() < 0.3 else rng.randrange(1, 13)
+            fields += [(AI_CENSUS_TARGETS + 2 * index, target, 2),
+                       (AI_CENSUS_DEFENDING + index, 0 if rng.random() < 0.6 else rng.randrange(1, 256), 1),
+                       (AI_STEAL_FLAGS + index, 0 if rng.random() < 0.6 else 1, 1),
+                       (AI_GROUP_TARGETS + 6 * index, 0 if rng.random() < 0.6 else rng.randrange(13), 2),
+                       (AI_GROUP_TARGETS + 6 * index + 2, 0 if rng.random() < 0.6 else rng.randrange(13), 2)]
+    return fields
+
+
+def area_tile(x, y, area):
+    return (TILES + ((x & 0xFFFFFFFF) * 0x300 + (y & 0xFFFFFFFF)) * 24 + 0x14) & 0xFFFFFFFF, area, 2
+
+
+def military_buildings(rng, pool, args, owner_choices=(0, 1, 2)):
+    """A map of 100..139, buildings 1..12 at 20..99 (owners, types 15..19 and
+    others, buildup, garrison chains of 0..4 soldiers) and the tiles the
+    searches probe around them: door, +-18 / -+9 (Nearest...), the frontier
+    probes at the type's radius (offsets 3500 / 4000 / 5000) in the door's
+    area or another one; walk regions 0..2."""
+    size = rng.randrange(100, 140)
+    count = 0xFFFFFFFF if rng.random() < 0.03 else rng.randrange(13)
+    fields = [(MAP_SIZE, size, 4), (BUILDING_COUNT, count, 4)]
+    radius = {}
+    for index, kind in ((3500, 15), (4000, 16), (5000, 18)):
+        radius[kind] = rng.randrange(25)
+        fields.append((OFFSET_TABLE + 16 * index + 8, radius[kind], 4))
+    point_x, point_y = (args[1] & 0xFFFF, args[2] & 0xFFFF) if len(args) > 2 else (0, 0)
+    settler = 100
+    for b in range(1, 13):
+        record = BUILDINGS + b * BUILDING_BYTES
+        x, y = rng.randrange(20, 100), rng.randrange(20, 100)
+        kind = rng.choice((15, 16, 18, 19, 15, 16, 18, 17, 1))
+        area = rng.randrange(3)
+        fields += [(record, 0xFF if rng.random() < 0.1 else rng.choice(owner_choices), 1),
+                   (record + 6, kind, 1), (record + 0x21, 0 if rng.random() < 0.8 else rng.randrange(1, 256), 1),
+                   (record + 2, x, 2), (record + 4, y, 2), (record + 0xA, x + 1, 2), (record + 0xC, y + 1, 2),
+                   area_tile(x + 1, y + 1, area),
+                   (TILES + ((x + 1) * 0x300 + y + 1) * 24 + 0x10, rng.randrange(3), 1)]
+        other = lambda: area if rng.random() < 0.75 else rng.choice((0, 0, area + 1))  # noqa: E731
+        for px, py in ((x - 18, y), (x + 18, y), (point_x - 9, y - 18), (point_x + 9, y + 18)):
+            fields.append(area_tile(px, py, other()))
+        r = radius.get(kind, 0) + 5
+        for px, py in ((x - r, y), (x + r, y), (x - r // 2, y - r), (x + r // 2, y + r)):
+            fields.append(area_tile(px, py, other()))
+        head = 0
+        for _ in range(rng.choice((0, 0, 1, 2, 3, 4))):
+            fields.append((SETTLERS + settler * SETTLER_BYTES + 0x10, head, 2))
+            head = settler
+            settler += 1
+        fields.append((record + 8, head, 2))
+    if len(args) > 2:
+        fields.append(area_tile(point_x, point_y, rng.choice((0, 1, 2))))
+    return fields
+
+
+def order_point(rng, pool):
+    return rng.randrange(150) if rng.random() < 0.9 else rng.getrandbits(32)
+
+
+def walk_region_arg(rng, pool):
+    return rng.choice((0, 1, 2, 3, 0xFFFFFFFF, 0xFFFFFFFE, 0x80000000, 256))
+
+
+def frontier_world(rng, pool, args):
+    return military_buildings(rng, pool, args)
+
+
+def assault_world(rng, pool, args):
+    """Player 0's buildings, player 1's start position (in the map) and its
+    tile's walk region."""
+    fields = military_buildings(rng, pool, args, owner_choices=(0, 0, 1))
+    x, y = rng.randrange(20, 100), rng.randrange(20, 100)
+    fields += [(PLAYER_RECORDS + PLAYER_RECORD_BYTES + 0x10, x, 4), (PLAYER_RECORDS + PLAYER_RECORD_BYTES + 0x14, y, 4),
+               (TILES + (x * 0x300 + y) * 24 + 0x10, rng.randrange(3), 1)]
+    return fields
+
+
+def ratio_bits(rng, pool):
+    """CheckGroupTargets' float ratio: simple values (exact products), values
+    near k / n, NaN, infinities and random bits."""
+    roll = rng.random()
+    if roll < 0.4:
+        value = rng.choice((0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 0.25, 0.1, 1 / 3, 2 / 3))
+    elif roll < 0.7:
+        value = rng.randrange(1, 40) / rng.randrange(1, 60)
+    elif roll < 0.8:
+        return rng.choice((0x7FC00000, 0xFFC00000, 0x7F800000, 0xFF800000, 0x80000000))
+    elif roll < 0.9:
+        value = -rng.random() * 3
+    else:
+        return rng.getrandbits(32)
+    bits = struct.unpack("<I", struct.pack("<f", value))[0]
+    return (bits + rng.choice((0, 0, 1, -1))) & 0xFFFFFFFF
+
+
+def group_targets_world(rng, pool, args):
+    """military_buildings plus the player's group lists: lengths (small, or
+    large so that the attackers' sum gets big), first members."""
+    fields = military_buildings(rng, pool, args)
+    player = args[0]
+    for g in range(10):
+        index = player * 10 + g
+        roll = rng.random()
+        length = rng.randrange(12) if roll < 0.7 else rng.randrange(100) if roll < 0.9 else rng.getrandbits(31)
+        fields += [(PLAYER_LIST_LENGTHS + 4 * index, length, 4), (PLAYER_LISTS + index * 200, rng.randrange(1, 32000), 2)]
+    return fields
+
+
+def point_settler(rng, pool, args):
+    """The settler's position (0..150, sometimes anything) and the map size."""
+    record = SETTLERS + (args[0] & 0xFFFF) * SETTLER_BYTES
+    coordinate = lambda: rng.randrange(150) if rng.random() < 0.9 else rng.getrandbits(16)  # noqa: E731
+    return [(record + 4, coordinate(), 2), (record + 6, coordinate(), 2), (MAP_SIZE, rng.randrange(1, 200), 4)]
+
+
+def settler_chain(rng, start, length, art, owner):
+    """`length` settlers from `start` on, linked by next (+0x10), of type
+    `art` and owner `owner`; returns (head, fields)."""
+    fields = []
+    ids = [start + 3 * k for k in range(length)]
+    for k, settler in enumerate(ids):
+        record = SETTLERS + settler * SETTLER_BYTES
+        fields += [(record + 0x10, ids[k + 1] if k + 1 < len(ids) else 0, 2), (record + 1, art, 1),
+                   (record, owner, 1), (record + 4, rng.randrange(150), 2), (record + 6, rng.randrange(150), 2)]
+    return (ids[0] if ids else 0), fields
+
+
+THIEF_CURSOR = 2500  # the first settler of the cursor chain
+
+
+def thieves_world(rng, pool, args):
+    """The player's thief list (0..9 thieves) and a second chain from
+    THIEF_CURSOR on (sometimes not thieves or not the player's), where
+    thieves_globals may point the cursor."""
+    player = args[0]
+    head, fields = settler_chain(rng, rng.randrange(1, 1000), rng.choice((0, 1, 3, 6, 7, 9)), 23, player)
+    fields += [(PLAYER_RECORDS + player * PLAYER_RECORD_BYTES + 0x20 + 23 * 2, head, 2),
+               (MAP_SIZE, rng.randrange(50, 200), 4)]
+    _, cursor_fields = settler_chain(rng, THIEF_CURSOR, rng.choice((1, 4, 8)), 23 if rng.random() < 0.8 else 22,
+                                     player if rng.random() < 0.8 else player + 1)
+    return fields + cursor_fields
+
+
+def thieves_globals(rng, pool, args):
+    """The player's thief cursor: 0, the cursor chain or anything."""
+    roll = rng.random()
+    cursor = 0 if roll < 0.3 else rng.getrandbits(32) if roll < 0.4 else THIEF_CURSOR
+    return [(AI_MAP_WORLD, WORLD_BASE, 4), (AI_WORLD, WORLD_BASE, 4), (AI_THIEF_CURSORS + 4 * args[0], cursor, 4)]
+
+
+def geologists_world(rng, pool, args):
+    """The player's geologist list (0..6) on a map of 50..199; the four map
+    corners (where clamped far points land) sometimes mountains (32), and
+    tiles near the geologists too."""
+    player = args[0]
+    size = rng.randrange(50, 200)
+    start = rng.randrange(1, 900) if rng.random() < 0.9 else rng.randrange(32000, 32900)  # (bad ids: _Xran)
+    head, fields = settler_chain(rng, start, rng.choice((0, 1, 2, 4, 6)), 22, player)
+    fields += [(PLAYER_RECORDS + player * PLAYER_RECORD_BYTES + 0x20 + 22 * 2, head, 2), (MAP_SIZE, size, 4)]
+    for x, y in ((0, 0), (0, size), (size, 0), (size, size)):
+        fields.append((TILES + (x * 0x300 + y) * 24 + 6, 32 if rng.random() < 0.3 else rng.randrange(32), 1))
+    for k in range(rng.randrange(20)):  # small offsets near the start of the searches
+        index = rng.choice((500, 5000)) + k
+        fields += [(OFFSET_TABLE + 16 * index, rng.randint(-20, 20) & 0xFFFFFFFF, 4),
+                   (OFFSET_TABLE + 16 * index + 4, rng.randint(-20, 20) & 0xFFFFFFFF, 4)]
+    return fields
+
+
+def geologists_globals(rng, pool, args):
+    """The call counter around 6, the bitset words of the geologists
+    (sometimes busy)."""
+    fields = [(AI_MAP_WORLD, WORLD_BASE, 4), (AI_WORLD, WORLD_BASE, 4),
+              (AI_GEOLOGIST_TIMERS + 4 * args[0], rng.choice((0, 5, 6, 7, 8, 100, 0xFFFFFFFF)), 4)]
+    for word in list(range(32)) + list(range(1000, 1030)):
+        fields.append((AI_ORDER_BITSET + 4 * word, 0 if rng.random() < 0.5 else rng.getrandbits(32), 4))
+    return fields
+
+
+SPECS += [
+    Spec("AI_NearestFreeInteriorMilitaryBuilding", 0x0058aa70, "thiscall", [below(3), order_point, order_point],
+         presets=military_buildings, globals=order_globals, max_cases=1500),
+    Spec("AI_WeakestFrontierMilitaryBuilding", 0x0058a7e0, "thiscall", [anything, below(3), walk_region_arg],
+         presets=frontier_world, globals=order_globals, max_cases=1500),
+    Spec("AI_Mission56FinalAssault", 0x00594d40, "thiscall", [], presets=assault_world, globals=order_globals,
+         callees=ORDER_CALLEES, max_cases=800),
+    # EAX is not used by the caller (0x58f990).
+    Spec("AI_Army_CheckGroupTargets", 0x00594a10, "fastcall", [below(3), anything, ratio_bits], eax_mask=0,
+         presets=group_targets_world, globals=order_globals, callees=ORDER_CALLEES, max_cases=2000),
+    # 0x594fa0, 0x594fbd, 0x594feb, 0x595008 (and the far version's
+    # 0x595300, 0x59531d, 0x59534b, 0x595368) are dead: the remainder of a
+    # value masked to 16 bits is never negative.
+    Spec("AI_RandomPointNearSettler", 0x00594f70, "fastcall", [between(1, 31999), scratch(0), scratch(1)],
+         presets=point_settler, globals=order_globals,
+         exempt_blocks=(0x594fa0, 0x594fbd, 0x594feb, 0x595008)),
+    Spec("AI_RandomPointNearSettlerFar", 0x005952d0, "fastcall", [between(1, 31999), scratch(0), scratch(1)],
+         presets=point_settler, globals=order_globals,
+         exempt_blocks=(0x595300, 0x59531d, 0x59534b, 0x595368)),
+    # EAX is not used by the caller (0x58f990).
+    Spec("AI_SendThieves", 0x00594e70, "fastcall", [below(3), anything], eax_mask=0, presets=thieves_world,
+         globals=thieves_globals, callees=ORDER_CALLEES, max_cases=1500),
+    Spec("AI_SendGeologists", 0x00595050, "fastcall", [below(3), anything], eax_mask=0, presets=geologists_world,
+         globals=geologists_globals, callees={**ORDER_CALLEES, **XRAN_PROBE}, max_cases=1000),
+]
+
+
+# -- session 54 (wip/ai-army): economy agent actions (ai_economy_actions.cpp)
+#
+# The agent is the world base (barracks +0x82, small temples +0x96); the
+# senders SendDestroyBuilding / SendPromoteSoldiers run as original code,
+# with IsHost and Push probed (command_callees; the messages' unwritten
+# stack bytes 3, 6 and 7 left out).
+
+AI_PLAYER_NUMBER = 0x007E2EB8
+AI_PLAYER_SETUP = 0x007E2EB4
+ACTION_SETUP = SCRATCH + 5 * SCRATCH_SLOT_BYTES  # an AiPlayerSetup (promotion interval +0xc4)
+
+
+def economy_actions_world(rng, pool, args):
+    """Players 0..2: beds (free 0..200 or anything), residences 26..28
+    and other buildings (owner, buildup, births), the computer player's step
+    and promotion counts, the setup's interval (sometimes right at the
+    threshold), the agent's barracks and small temples."""
+    fields = [(BUILDING_COUNT, 0xFFFFFFFF if rng.random() < 0.03 else rng.randrange(40), 4)]
+    for player in range(3):  # (g_aiPlayerNumber is one of them, economy_actions_globals)
+        record = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+        population = rng.randrange(300)
+        roll = rng.random()
+        spare = (rng.randrange(12) if roll < 0.2 else rng.randrange(8, 35) if roll < 0.45 else
+                 rng.randrange(28, 110) if roll < 0.7 else rng.randrange(95, 200) if roll < 0.95 else
+                 rng.getrandbits(32))
+        fields += [(record + 0xC4, population, 4), (record + 0xC8, (population + spare) & 0xFFFFFFFF, 4)]
+    for b in range(1, 40):
+        base = BUILDINGS + b * BUILDING_BYTES
+        fields += [(base, rng.randrange(3), 1),
+                   (base + 6, rng.choice((26, 27, 28, 26, 27, 28, 15, 1)), 1),
+                   (base + 0x21, 0 if rng.random() < 0.85 else rng.randrange(1, 256), 1),
+                   (base + 0x19, 0 if rng.random() < 0.85 else rng.randrange(1, 11), 1)]
+    interval = rng.randrange(150) if rng.random() < 0.7 else rng.getrandbits(16)
+    steps = (interval * 14 + rng.randrange(2)) if rng.random() < 0.3 else (
+        rng.randrange(2500) if rng.random() < 0.8 else rng.getrandbits(32))
+    fields += [(ACTION_SETUP + 0xC4, interval, 2), (COMMAND_PLAYER + 0x764, steps & 0xFFFFFFFF, 4),
+               (COMMAND_PLAYER + 0x768, rng.randrange(5), 1),
+               (0x82, 0 if rng.random() < 0.25 else rng.randrange(1, 4), 2),
+               (0x96, 0 if rng.random() < 0.25 else rng.randrange(1, 4), 2)]
+    return fields
+
+
+def economy_actions_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_PLAYER, WORLD_BASE + COMMAND_PLAYER, 4),
+            (AI_PLAYER_SETUP, WORLD_BASE + ACTION_SETUP, 4), (AI_PLAYER_NUMBER, rng.randrange(3), 1)]
+
+
+SPECS += [
+    # EAX is not used by the caller (Run 0x567890).
+    Spec("T_ECONOMY_AGENT_DemolishSurplusResidence", 0x0056a000, "thiscall", [], eax_mask=0,
+         presets=economy_actions_world, globals=economy_actions_globals,
+         callees=command_callees(gaps=(3, 6, 7)), max_cases=1500),
+    Spec("T_ECONOMY_AGENT_PromoteSoldiers", 0x0056a0f0, "thiscall", [], eax_mask=0,
+         presets=economy_actions_world, globals=economy_actions_globals,
+         callees=command_callees(gaps=(3, 6, 7)), max_cases=1500),
+]
+
+
+# -- session 54 (wip/ai-army): woodcutter and stonecutter conditions --------
+# (ai_economy_conditions.cpp). The per-race slope tables are set by static
+# initializers (zero in the image), so every case gets random ones: real-like
+# fractions, values whose products land on integer boundaries (1/3, k/n),
+# and random bits (NaN, huge: _ftol's "indefinite" 0).
+
+CUTTER_SLOPES = (0x007E1280, 0x007E1300)  # g_aiStonecutterSlopes, g_aiWoodcutterSlopes: float[8][4]
+
+
+def cutter_slope_bits(rng):
+    roll = rng.random()
+    if roll < 0.12:
+        return rng.getrandbits(32)
+    if roll < 0.3:
+        value = rng.randint(1, 20) / rng.randint(1, 500)
+    elif roll < 0.4:
+        value = 1 / 3
+    elif roll < 0.45:
+        value = -rng.random()
+    else:
+        value = rng.randrange(1000) / 997.0
+    bits = struct.unpack("<I", struct.pack("<f", value))[0]
+    return (bits + rng.choice((0, 0, 0, 1, -1))) & 0xFFFFFFFF
+
+
+def cutter_globals(rng, pool, args):
+    fields = economy_globals(rng, pool, args)
+    for table in CUTTER_SLOPES:
+        fields += [(table + 4 * k, cutter_slope_bits(rng), 4) for k in range(32)]
+    return fields
+
+
+def cutter_agent(rng, pool, args):
+    """economy_agent with races 0..7 (the tables are indexed race * 5 + stage
+    without a check, so far-off races fault), sometimes no stonecutter and
+    stock around the wanted amounts."""
+    fields = [f for f in economy_agent(rng, pool, args) if f[0] != 8]
+    fields.append((8, rng.randrange(4) if rng.random() < 0.85 else rng.randrange(4, 8), 4))
+    if rng.random() < 0.5:
+        fields += [(0x42, rng.randrange(150), 2), (0x44, rng.randrange(150), 2), (0x50, rng.randrange(150), 2),
+                   (0x52, rng.randrange(12), 2), (0x54, rng.randrange(12), 2)]
+    return fields
+
+
+SPECS += [
+    Spec(name, address, "thiscall", [], eax_mask=0, presets=cutter_agent, globals=cutter_globals, max_cases=2000)
+    for name, address in (("T_ECONOMY_AGENT_ConsiderWoodcutter", 0x00567e00),
+                          ("T_ECONOMY_AGENT_ConsiderStonecutter", 0x00568420))
+]

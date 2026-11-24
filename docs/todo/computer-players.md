@@ -6,19 +6,27 @@ LOGBOOK session entry).
 
 ## Computer players (re/computer_players.md)
 - **Package A2: small READY helpers** of the AI range (`python
-  tools/frontier.py --range 54cbd0 59fcd0 --library-done`; 74 READY after
-  session 53). Done in sessions 48, 51, 52, 53, 54 (see the LOGBOOK). Next:
-  RandomPointNearSettler 0x594f70 / 0x5952d0, Army 0x592100 / 0x592240,
-  the military-building searches 0x58aa70 / 0x58a7e0 (ret 0xc; 0x58a7e0's
-  first argument looks unused), small ones 0x593f40, 0x591c10, 0x58ae90
+  tools/frontier.py --range 54cbd0 59fcd0 --library-done`). Done in
+  sessions 48, 51, 52, 53, 54 (see the LOGBOOK; session 54: CEvaLand cell
+  evaluation, resource counts, CheckSite, the army group bookkeeping,
+  military-building searches, CheckGroupTargets, thieves/geologists,
+  economy actions, woodcutter/stonecutter). Next: small ones 0x58ae90
   FirstUnassignedMilitaryBuilding, 0x599760 AreaInDirection, 0x59a260 /
-  0x59a7a0 (trees / stones near own fields), 0x573670 (EmergencyPowersActWood),
-  then FillAreaSiteLists 0x556630 (needs 0x599a30/0x599f50, now done). x87 code
-  (follow CLAUDE.md "Floating point"): residences 0x568890 (curves at 0x7e1380..),
-  woodcutter 0x567e00 and stonecutter 0x568420 (curves per race and stage
-  at 0x7e1300..0x7e137c, jump tables 0x568200..0x568240; races above 3
-  keep the defaults from 0x65a57c). Open: the meaning of AiGroupOrders
-  +0x1c48 (`group_flags1c48`).
+  0x59a7a0 (trees / stones near own fields), 0x573670
+  (EmergencyPowersActWood), then FillAreaSiteLists 0x556630. x87 code
+  (CLAUDE.md "Floating point"): residences 0x568890 (curves at
+  0x7e1380..; same shape as ConsiderCutters in ai_economy_conditions.cpp
+  probably). Then SendHunter 0x5935b0 (unblocks HuntEnemyThieves/Mages)
+  and StartAttack 0x594080. Open: the meaning of AiGroupOrders +0x1c48
+  (`group_flags1c48`) and whether AiGroupTarget x / y are building ids
+  (NearestFreeInteriorMilitaryBuilding 0x58aa70 compares them with
+  building ids).
+- **Table names to revisit:** g_aiWantedGoldMines 0x65a8c8 /
+  g_aiWantedWeaponsmiths 0x65a8d2 and g_aiWantedGoldMineSlopes 0x7e12b0 /
+  g_aiWantedWeaponsmithSlopes 0x7e1290 are rows (Roman, Asian) of the
+  stonecutter's per-race tables (session 54); the mine/smelter conditions
+  use just those rows. Maybe rename once the static initializers 0x566xxx
+  are read.
 - **Who creates the AiPlayerData nodes** (one per economy area; list
   +0x200 is the deletion queue, session 48); the constructor part
   0x550a30 (calls AddAgent) is next to 0x550f80. AiPlayerData offsets are

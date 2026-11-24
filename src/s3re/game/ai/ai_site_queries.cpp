@@ -336,7 +336,7 @@ std::uint32_t __fastcall AI_ArmyState_Reset(AiArmyState* self, void* /*edx*/) {
         self->per_player0f0[p] = 0;
         self->per_player140[p] = 0;
         g_aiPerPlayer7e79d0[p] = 0;
-        self->per_player4b4[p] = kFar;
+        self->geologist_timers[p] = kFar;
         // Groups 1..9 (the original's row pointer starts at +0x198).
         for (std::uint32_t group = 1; group < kUnitGroups; ++group) {
             self->attack_delays[p][group] = 10 + 2 * group;
