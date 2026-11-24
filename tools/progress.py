@@ -29,6 +29,7 @@ import datetime
 import html
 import io
 import json
+import re
 import pathlib
 import subprocess
 import sys
@@ -263,19 +264,76 @@ def svg_treemap(tree, width=1600, height=1000) -> str:
 STATUS_CODE = {s: i for i, s in enumerate(STATUS_STYLE)}
 
 
-def data_js(tree, points, evidence) -> str:
+# Bookkeeping prefixes of re/functions.csv notes, dropped from the
+# one-line descriptions on the progress page.
+NOTE_PREFIXES = (
+    re.compile(r"^(Survey|Named) \([^)]*\): "),
+    re.compile(r"^Name confirmed \([^)]*\)\. "),
+    re.compile(r"^Third-party: "),
+    re.compile(r"^Was [^.]*\(renamed in session [^)]*\)\. "),
+)
+DESCRIPTION_CHARS = 150
+# Notes that only say where a function sits or that it exists.
+PLACEHOLDER_NOTES = ("Trivial, proven by its bytes", "Virtual function, vtable slot",
+                     "inside the code range", "between ", "old iostream library",
+                     "stores the vtable of", "Destructor", "Compiler-generated",
+                     "After operator delete", "Called only from")
+
+
+def describe(notes: str) -> str:
+    """A one-line description of a function from its inventory note: the
+    first sentence without the bookkeeping prefixes, at most
+    DESCRIPTION_CHARS characters. Empty for compiler stubs and placeholders."""
+    text = notes.strip()
+    for _ in range(3):
+        for prefix in NOTE_PREFIXES:
+            text = prefix.sub("", text)
+    # a leading calling-convention note: "(id) thiscall, ret 4: ..."
+    text = re.sub(r"^Was \S+( \([^)]*\))?[:.]\s*", "", text)
+    text = re.sub(r"^(\([^)]*\)\s*)?(thiscall|cdecl|stdcall|fastcall)?\s*(\([^)]*\))?"
+                  r"(,? ?ret [0-9a-fx]+h?)?:\s*", "", text, flags=re.IGNORECASE)
+    if (not text or text.lower().startswith(tuple(n.lower() for n in PLACEHOLDER_NOTES))
+            or "purpose not yet known" in text[:80]):
+        return ""
+    depth, end = 0, len(text)
+    for i, ch in enumerate(text):
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth = max(0, depth - 1)
+        elif ch in ".;" and depth == 0 and (i + 1 == len(text) or text[i + 1] == " "):
+            end = i + (ch == ".")
+            break
+    text = text[:end].strip()
+    first = text.split(" ", 1)[0]
+    if first.isalpha() and first.islower():  # a word, not code such as fclose(...)
+        text = text[:1].upper() + text[1:]
+    if len(text) > DESCRIPTION_CHARS:
+        text = text[:DESCRIPTION_CHARS - 1].rsplit(" ", 1)[0] + "…"
+    return text
+
+
+def data_js(tree, points, evidence, rows) -> str:
     """The data for docs/progress.html, as a script that sets
     window.PROGRESS_DATA (a script file, unlike JSON, also loads from file://).
-    "evidence" has one entry per verified function: [address, largest
-    whole-game call count or null if never measured, {source: calls},
-    [seen replacements it may run uncounted inside]]."""
+    "functions": [address, size, status code, group index, name or null,
+    one-line description (game, third-party and library code; omitted when
+    empty)]. "evidence" has one entry per verified function: [address,
+    largest whole-game call count or null if never measured, {source:
+    calls}, [seen replacements it may run uncounted inside]]."""
     groups, functions = [], []
     for category, category_groups in sorted(tree.items()):
         for group, members in sorted(category_groups.items()):
             groups.append([category, group])
             for address, name, status, size in members:
-                functions.append([address, size, STATUS_CODE[status], len(groups) - 1,
-                                  None if status == "unknown" else name])
+                entry = [address, size, STATUS_CODE[status], len(groups) - 1,
+                         None if status == "unknown" else name]
+                row = rows.get(address)
+                if row and category != "compiler":
+                    description = describe(row["notes"])
+                    if description:
+                        entry.append(description)
+                functions.append(entry)
     functions.sort()
     ev = [[address, e["calls"], e["sources"], e["via"]] for address, e in sorted(evidence.items())]
     data = {"generated": datetime.date.today().isoformat(), "statuses": list(STATUS_STYLE),
@@ -302,7 +360,7 @@ def main() -> int:
 
     OUT_DIR.mkdir(exist_ok=True)
     (OUT_DIR / "progress.svg").write_text(treemap, encoding="utf-8", newline="\n")
-    (OUT_DIR / "progress-data.js").write_text(data_js(tree, points, evidence), encoding="utf-8", newline="\n")
+    (OUT_DIR / "progress-data.js").write_text(data_js(tree, points, evidence, rows), encoding="utf-8", newline="\n")
 
     count, size = totals(tree)
     total = sum(size.values())

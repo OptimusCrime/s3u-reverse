@@ -12,73 +12,142 @@
 -->
 <style>
   :root {
-    --bg: #f7f7f8; --fg: #1d2026; --muted: #5d6470; --card: #ffffff; --line: #e1e3e7;
-    --cat: #2b2f36; --group: #5b616b; --tip-bg: #1d2026; --tip-fg: #ffffff;
+    --paper: #f2f4f0; --sheet: #fbfcfa; --ink: #1e2924; --muted: #5b6861; --rule: #d3dbd2;
+    --cat: #24372d; --group: #4d6157; --tip-bg: #fbfcfa; --tip-rule: #c4cdc3; --focus: #2f6fb0;
+    --serif: "Palatino Linotype", Palatino, "Book Antiqua", "URW Palladio L", Georgia, serif;
+    --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #16181c; --fg: #e7e9ec; --muted: #9aa1ab; --card: #1f2228; --line: #30343b;
-      --cat: #0e0f12; --group: #3a3f47; --tip-bg: #e7e9ec; --tip-fg: #16181c;
+      --paper: #121815; --sheet: #1a221e; --ink: #e2e9e4; --muted: #9aa8a0; --rule: #2e3a34;
+      --cat: #0b100d; --group: #33433b; --tip-bg: #1f2924; --tip-rule: #3a4a42; --focus: #7fb2e8;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #16181c; --fg: #e7e9ec; --muted: #9aa1ab; --card: #1f2228; --line: #30343b;
-    --cat: #0e0f12; --group: #3a3f47; --tip-bg: #e7e9ec; --tip-fg: #16181c;
+    --paper: #121815; --sheet: #1a221e; --ink: #e2e9e4; --muted: #9aa8a0; --rule: #2e3a34;
+    --cat: #0b100d; --group: #33433b; --tip-bg: #1f2924; --tip-rule: #3a4a42; --focus: #7fb2e8;
   }
-  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--fg);
-         font: 15px/1.5 "Segoe UI", Helvetica, Arial, sans-serif; }
-  main { max-width: 1600px; margin: 0 auto; }
-  h1 { font-size: 24px; margin: 0 0 4px; }
-  h2 { font-size: 17px; margin: 28px 0 8px; }
+  body { margin: 0; padding: 32px 24px 56px; background: var(--paper); color: var(--ink);
+         font: 15px/1.55 var(--sans); }
+  main { max-width: 1480px; margin: 0 auto; }
+  h1, h2 { font-family: var(--serif); font-weight: 600; }
+  h1 { font-size: 34px; line-height: 1.15; margin: 0; }
+  h2 { font-size: 23px; line-height: 1.25; margin: 48px 0 4px; }
   code { font-size: 13px; }
   .muted { color: var(--muted); }
-  .stats { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
-  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; }
-  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
-  .bar { display: flex; height: 16px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
-  .bar span { display: block; height: 100%; }
-  table { border-collapse: collapse; margin-top: 10px; font-variant-numeric: tabular-nums; }
-  td, th { padding: 3px 14px 3px 0; text-align: right; }
-  td:first-child, th:first-child { text-align: left; }
-  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 8px; vertical-align: -1px; }
-  .crumbs { margin: 0 0 8px; min-height: 22px; }
-  .crumbs a { color: inherit; cursor: pointer; text-decoration: underline; }
-  #map { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
-  #map svg { display: block; width: 100%; height: auto; }
-  #map svg { cursor: zoom-in; }
-  #tip { position: fixed; pointer-events: none; background: var(--tip-bg); color: var(--tip-fg);
-         padding: 6px 9px; border-radius: 6px; font-size: 13px; max-width: 420px; display: none;
-         white-space: pre-line; z-index: 10; }
-  #history svg { width: 100%; max-width: 760px; height: auto; }
-  .grid { stroke: var(--line); }
+  .intro { color: var(--muted); max-width: 72ch; margin: 0 0 12px; }
+
+  /* masthead */
+  .masthead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline;
+              gap: 4px 32px; padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
+  .lede { color: var(--muted); max-width: 68ch; margin: 6px 0 0; }
+  .generated { color: var(--muted); font-size: 13px; }
+
+  /* the frontier strips: status of the code, best first, with markers at the boundaries */
+  .overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 460px);
+              gap: 32px 48px; margin-top: 28px; align-items: start; }
+  @media (max-width: 960px) { .overview { grid-template-columns: 1fr; } }
+  .frontier + .frontier { margin-top: 30px; }
+  .frontier h3 { font: 600 16px/1.3 var(--sans); margin: 0; }
+  .frontier .sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+  .strip { position: relative; margin-top: 84px; }
+  .strip .fill { display: flex; height: 30px; border-radius: 3px; overflow: hidden;
+                 background: var(--sheet); box-shadow: inset 0 0 0 1px var(--rule); }
+  .strip .fill span { height: 100%; }
+  .marker { position: absolute; bottom: 0; width: 0; border-left: 2px solid var(--ink); }
+  .marker.level0 { height: calc(100% + 12px); }
+  .marker.level1 { height: calc(100% + 38px); }
+  .marker.level2 { height: calc(100% + 64px); }
+  .marker span { position: absolute; top: 0; left: 0; transform: translateY(-60%); padding: 0 6px;
+                 white-space: nowrap; font-size: 13px; color: var(--muted); background: var(--paper);
+                 z-index: 1; }
+  .marker.flip span { left: auto; right: 0; }
+  .marker b { font: 600 20px/1 var(--serif); color: var(--ink); margin-right: 3px; }
+  .frontier.small .strip { margin-top: 70px; }
+  .frontier.small .strip .fill { height: 16px; }
+  .frontier.small .marker.level1 { height: calc(100% + 32px); }
+  .frontier.small .marker.level2 { height: calc(100% + 52px); }
+  .frontier.small .marker b { font-size: 16px; }
+  .facts { margin: 22px 0 0; max-width: 72ch; }
+
+  table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td, th { padding: 4px 0 4px 16px; text-align: right; }
+  td:first-child, th:first-child { text-align: left; padding-left: 0; }
+  #legend { width: 100%; font-size: 14px; }
+  #legend th { font-weight: 600; color: var(--muted); font-size: 13px; border-bottom: 1px solid var(--rule); }
+  #legend td { border-bottom: 1px solid var(--rule); }
+  #legend tr.empty td { color: var(--muted); }
+  #legend tr.empty .swatch { opacity: 0.5; }
+  .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 8px;
+            vertical-align: -1px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+
+  /* treemap */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 10px 0; }
+  .controls select, .controls input { font: inherit; padding: 4px 8px; background: var(--sheet); color: var(--ink);
+                                      border: 1px solid var(--rule); border-radius: 4px; }
+  select:focus-visible, input:focus-visible, .crumbs a:focus-visible, #evidence th:focus-visible {
+    outline: 2px solid var(--focus); outline-offset: 2px; }
+  .crumbs { margin: 0 0 8px; min-height: 22px; font-size: 14px; }
+  .crumbs a { color: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  #map { background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 4px; }
+  #map svg { display: block; width: 100%; height: auto; cursor: zoom-in; }
+  .hl { fill: none; stroke: var(--ink); stroke-width: 2; pointer-events: none; }
+
+  /* tooltip */
+  #tip { position: fixed; pointer-events: none; display: none; z-index: 10; max-width: 360px;
+         background: var(--tip-bg); color: var(--ink); border: 1px solid var(--tip-rule); border-radius: 6px;
+         box-shadow: 0 8px 28px rgba(15, 25, 20, 0.18); padding: 10px 12px; font-size: 13px; line-height: 1.45; }
+  #tip .t-class { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  #tip .t-name { font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
+  #tip .t-desc { margin-top: 4px; }
+  #tip .t-status { margin-top: 8px; }
+  #tip .t-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  #tip .t-bar { display: flex; height: 8px; border-radius: 2px; overflow: hidden; margin: 8px 0 6px;
+                box-shadow: inset 0 0 0 1px var(--rule); }
+  #tip .t-hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+  /* evidence list and history */
+  #history svg { width: 100%; max-width: 820px; height: auto; }
+  .grid { stroke: var(--rule); }
   .axis { fill: var(--muted); font-size: 11px; }
-  .controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 8px 0; }
-  .controls select, .controls input { font: inherit; padding: 3px 6px; background: var(--card); color: var(--fg);
-                                      border: 1px solid var(--line); border-radius: 4px; }
-  .listwrap { max-height: 520px; overflow: auto; background: var(--card); border: 1px solid var(--line);
-              border-radius: 8px; padding: 0 10px; }
+  .key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 6px 0 14px; vertical-align: -1px; }
+  .key:first-child { margin-left: 0; }
+  .listwrap { max-height: 520px; overflow: auto; background: var(--sheet); border: 1px solid var(--rule);
+              border-radius: 4px; padding: 0 12px; }
   #evidence { width: 100%; margin: 0; font-size: 13px; }
-  #evidence th { position: sticky; top: 0; background: var(--card); cursor: pointer; user-select: none;
-                 border-bottom: 1px solid var(--line); padding-top: 6px; }
-  #evidence td { vertical-align: top; }
+  #evidence th { position: sticky; top: 0; background: var(--sheet); cursor: pointer; user-select: none;
+                 border-bottom: 1px solid var(--rule); padding-top: 8px; font-weight: 600; }
+  #evidence td { vertical-align: top; border-bottom: 1px solid var(--rule); }
   #evidence td.l, #evidence th.l { text-align: left; }
   #evidence td.wrap { white-space: normal; max-width: 360px; color: var(--muted); }
 </style>
 </head>
 <body>
 <main>
-  <h1>Settlers 3 reimplementation progress</h1>
-  <div class="muted" id="generated"></div>
-  <div class="stats" id="stats"></div>
-  <div class="bar" id="bar"></div>
-  <table id="legend"></table>
+  <header class="masthead">
+    <div>
+      <h1>Settlers 3 reimplementation</h1>
+      <p class="lede">How much of S3.EXE we understand, and how much of it already runs as our own
+        verified code. Shares are measured in bytes of machine code.</p>
+    </div>
+    <div class="generated" id="generated"></div>
+  </header>
 
-  <h2>Treemap</h2>
-  <div class="muted">Each box is one function of S3.EXE, sized by its code size.
-    Hover for details; click a group to zoom in.</div>
+  <section class="overview">
+    <div>
+      <div class="frontier" id="frontierGame"></div>
+      <div class="frontier small" id="frontierAll"></div>
+      <p class="facts" id="facts"></p>
+    </div>
+    <table id="legend"></table>
+  </section>
+
+  <h2>Map of S3.EXE</h2>
+  <p class="intro">Each box is one function, sized by its machine code. Hover a box to see what the
+    function does; click a group to zoom in.</p>
   <div class="controls">
     <label>Colour by <select id="colourMode">
-      <option value="status">status (as in the table above)</option>
+      <option value="status">status</option>
       <option value="understood">understood or not</option>
       <option value="verified">verified or not</option>
     </select></label>
@@ -88,12 +157,11 @@
   <div id="map"></div>
 
   <h2>Whole-game evidence of verified functions</h2>
-  <div class="muted">Every verified function passed its differential tests (and usually an emulator spec).
-    Whole-game evidence means the game also called our replacement during a whole-game check
-    (a recorded game replayed, or a savegame run) whose trace was identical to the original's
-    (<code>re/whole_game_calls.csv</code>). "Tests only": installed and counted, but never called in any check.
-    "May run inside": the count can miss calls that come straight from our own replacements of the
-    listed functions (they bypass the counting thunk), so these might have run anyway; unconfirmed.</div>
+  <p class="intro">Every verified function passed its differential tests, usually also an emulator spec.
+    Whole-game evidence means the game also called our replacement during a whole-game check (a recorded
+    game replayed, or a savegame run) whose trace matched the original's (<code>re/whole_game_calls.csv</code>).
+    "Tests only": installed and counted, but never called in any check. "May run inside": calls that come
+    straight from our own replacements of the listed functions skip the counter, so these may have run anyway.</p>
   <div class="controls">
     <label>Show <select id="evFilter">
       <option value="all">all verified</option>
@@ -108,10 +176,10 @@
   <div class="listwrap"><table id="evidence"></table></div>
 
   <h2>History</h2>
-  <div class="muted">Share of all code bytes at each commit that changed the inventory.
-    <span style="color:#3d9a50">●</span> verified and seen in a whole-game check &nbsp;
-    <span style="color:#4f8fc0">●</span> verified &nbsp;
-    <span style="color:#d9a53a">●</span> understood (identified or better)</div>
+  <p class="intro">Share of all code at each commit that changed the inventory.<br>
+    <span class="key" style="background:#d9a53a"></span>understood
+    <span class="key" style="background:#4f8fc0"></span>verified
+    <span class="key" style="background:#3d9a50"></span>verified and identical in a whole-game check</p>
   <div id="history"></div>
 </main>
 <div id="tip"></div>
@@ -131,6 +199,7 @@ const STATUS = [  // index = status code in the data file (data.statuses)
 ];
 const IDENTIFIED = 2;     // codes >= IDENTIFIED are "understood"
 const VERIFIED = 4;       // codes >= VERIFIED are verified
+const BEST_FIRST = [6, 5, 4, 3, 2, 1, 0];  // status codes, best first (strips, legend, tooltip bars)
 const VERIFIED_GAME = 6;  // ... and seen in a whole-game check
 const CATEGORY_LABEL = {
   game: "Game code (Blue Byte)",
@@ -166,12 +235,14 @@ function buildTree() {
     categories.get(category).children.push(group);
     return group;
   });
-  for (const [address, size, status, group, name] of data.functions) {
-    groups[group].children.push({ address, size, status, name: name || "FUN_" + address.toString(16).padStart(8, "0") });
+  for (const [address, size, status, group, name, about] of data.functions) {
+    groups[group].children.push({ address, size, status, about: about || "",
+                                  name: name || "FUN_" + address.toString(16).padStart(8, "0") });
   }
   (function sum(node) {
     if (!node.children) return;
-    node.size = 0; node.done = 0; node.game = 0; node.understood = 0;
+    node.size = 0; node.done = 0; node.game = 0; node.understood = 0; node.count = 0;
+    node.statusBytes = STATUS.map(() => 0);
     for (const child of node.children) {
       child.parent = node;
       sum(child);
@@ -179,6 +250,9 @@ function buildTree() {
       node.done += child.children ? child.done : (child.status >= VERIFIED ? child.size : 0);
       node.game += child.children ? child.game : (child.status === VERIFIED_GAME ? child.size : 0);
       node.understood += child.children ? child.understood : (child.status >= IDENTIFIED ? child.size : 0);
+      node.count += child.children ? child.count : 1;
+      if (child.children) child.statusBytes.forEach((b, k) => { node.statusBytes[k] += b; });
+      else node.statusBytes[child.status] += child.size;
     }
     node.children.sort((a, b) => b.size - a.size);
   })(root);
@@ -261,20 +335,25 @@ function draw() {
                `fill="var(${depth === 0 ? "--cat" : "--group"})" stroke="var(--card)" stroke-width="${depth === 0 ? 2 : 0.6}"/>`);
       if (header) {
         const fontSize = depth === 0 ? 12 : 9;
-        let label = child.name + (depth === 0 ? ` — ${pct(child.understood, child.size, 1)} understood, ` +
-                                  `${pct(child.done, child.size, 1)} verified, ` +
-                                  `${pct(child.game, child.size, 1)} in a whole game` : "");
         const maxChars = Math.floor((cw - 6) / (fontSize * 0.58));
-        if (label.length > maxChars) label = label.slice(0, Math.max(1, maxChars - 1)) + "…";
+        const stats = depth === 0
+          ? `${pct(child.understood, child.size, 1)} understood, ${pct(child.done, child.size, 1)} verified` : "";
+        let label = esc(child.name);
+        if (stats && child.name.length + 3 + stats.length <= maxChars) {
+          label += `<tspan font-weight="400" fill-opacity="0.75" dx="10">${stats}</tspan>`;
+        } else if (child.name.length > maxChars) {
+          label = esc(child.name.slice(0, Math.max(1, maxChars - 1)) + "…");
+        }
         out.push(`<text class="zoomable" data-id="${id}" x="${r(cx + 4)}" y="${r(cy + fontSize + 2)}" font-size="${fontSize}" ` +
-                 `font-weight="${depth === 0 ? 600 : 400}" fill="#ffffff">${esc(label)}</text>`);
+                 `font-weight="${depth === 0 ? 600 : 400}" fill="#ffffff">${label}</text>`);
       }
       const pad = depth === 0 ? 2 : 0.5;
       layout(child, cx + pad, cy + header + pad, cw - 2 * pad, ch - header - 2 * pad, depth + 1);
     });
   }
   layout(zoomPath[zoomPath.length - 1], 0, 0, width, height, 0);
-  box.innerHTML = `<svg viewBox="0 0 ${width} ${height}" font-family="Segoe UI, Helvetica, Arial, sans-serif">${out.join("")}</svg>`;
+  out.push('<rect id="hl" class="hl" x="0" y="0" width="0" height="0"/>');
+  box.innerHTML = `<svg viewBox="0 0 ${width} ${height}" font-family="Segoe UI, system-ui, Helvetica, Arial, sans-serif">${out.join("")}</svg>`;
 
   document.getElementById("crumbs").innerHTML = zoomPath.map((node, k) =>
     k === zoomPath.length - 1 ? `<b>${esc(node.name)}</b>` : `<a data-depth="${k}">${esc(node.name)}</a>`
@@ -286,20 +365,23 @@ const tip = document.getElementById("tip");
 const map = document.getElementById("map");
 map.addEventListener("mousemove", (event) => {
   const id = event.target.dataset && event.target.dataset.id;
-  if (id === undefined) { tip.style.display = "none"; return; }
+  const hl = document.getElementById("hl");
+  if (id === undefined) { tip.style.display = "none"; if (hl) hl.setAttribute("width", 0); return; }
   const node = nodesById[id];
-  tip.textContent = node.children
-    ? `${node.name}\n${fmt(node.size)} bytes, ${pct(node.understood, node.size)} understood, ` +
-      `${pct(node.done, node.size)} verified, ` +
-      `${pct(node.game, node.size)} identical in a whole game`
-    : `${node.name}\n${hex(node.address)}, ${fmt(node.size)} bytes\n${STATUS[node.status].label}` +
-      evidenceText(node.address);
+  if (hl && event.target.tagName === "rect") {
+    for (const a of ["x", "y", "width", "height"]) hl.setAttribute(a, event.target.getAttribute(a));
+  }
+  tip.innerHTML = tipHtml(node);
   tip.style.display = "block";
   const x = Math.min(event.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
   const y = event.clientY + 16 + tip.offsetHeight > window.innerHeight ? event.clientY - tip.offsetHeight - 10 : event.clientY + 16;
   tip.style.left = x + "px"; tip.style.top = y + "px";
 });
-map.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+map.addEventListener("mouseleave", () => {
+  tip.style.display = "none";
+  const hl = document.getElementById("hl");
+  if (hl) hl.setAttribute("width", 0);
+});
 map.addEventListener("click", (event) => {
   const id = event.target.dataset && event.target.dataset.id;
   if (id === undefined) return;
@@ -328,58 +410,94 @@ document.getElementById("colourMode").addEventListener("change", (event) => {
 let resizeTimer;
 window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(draw, 150); });
 
+// The hover card: what a person wants to know about a box, without repeats.
+function splitName(name) {
+  const i = name.lastIndexOf("::");
+  return i < 0 ? ["", name] : [name.slice(0, i + 2), name.slice(i + 2)];
+}
+function callsLine(address) {
+  const e = evidence.get(address);
+  if (!e || e[0] === null) return "";
+  const [calls, sources, via] = e;
+  const checks = Object.keys(sources).length;
+  if (calls > 0) {
+    return `<div class="t-meta">Called ${fmt(calls)} times in ` +
+           (checks > 1 ? `one whole-game check (the busiest of ${checks})` : "a whole-game check") + "</div>";
+  }
+  let text = "Not called in any whole-game check yet";
+  if (via.length) text += `; may run inside ${esc(via[0])}` + (via.length > 1 ? ` and ${via.length - 1} more` : "");
+  return `<div class="t-meta">${text}</div>`;
+}
+function tipHtml(node) {
+  if (node.children) {
+    const bar = BEST_FIRST.map((k) => node.statusBytes[k]
+      ? `<span style="width:${100 * node.statusBytes[k] / node.size}%;background:${STATUS[k].color}"></span>` : "").join("");
+    const shares = [`${pct(node.understood, node.size, 1)} understood`, `${pct(node.done, node.size, 1)} verified`];
+    if (node.game) shares.push(`${pct(node.game, node.size, 1)} identical in a whole game`);
+    const zoomed = node === zoomPath[zoomPath.length - 1];
+    return `<div class="t-name">${esc(node.name)}</div>` +
+           `<div class="t-meta">${fmt(node.count)} function${node.count === 1 ? "" : "s"}, ${fmt(node.size)} bytes</div>` +
+           `<div class="t-bar">${bar}</div><div>${shares.join(", ")}</div>` +
+           (zoomed ? "" : `<div class="t-hint">Click to zoom in</div>`);
+  }
+  const [owner, method] = splitName(node.name);
+  return (owner ? `<div class="t-class">${esc(owner)}</div>` : "") +
+         `<div class="t-name">${esc(method)}</div>` +
+         (node.about ? `<div class="t-desc">${esc(node.about)}</div>` : "") +
+         `<div class="t-status"><span class="swatch" style="background:${STATUS[node.status].color}"></span>` +
+         `${STATUS[node.status].label}</div>` + callsLine(node.address) +
+         `<div class="t-meta">${hex(node.address)}, ${fmt(node.size)} bytes</div>`;
+}
+
 function sourcesText(sources) {
   return Object.entries(sources).map(([source, calls]) => `${source} ${fmt(calls)}`).join(", ");
 }
-function evidenceText(address) {
-  const e = evidence.get(address);
-  if (!e) return "";
-  const [calls, sources, via] = e;
-  if (calls === null) return "";
-  let text = `\nwhole-game calls: ${sourcesText(sources)}`;
-  if (via.length) text += `\nmay run uncounted inside ${via.slice(0, 3).join(", ")}` +
-                          (via.length > 3 ? ` and ${via.length - 3} more` : "");
-  return text;
-}
 
 // ------------------------------------------------------------ summary
+// One strip per scope: the status of its code, best first, with a marker at
+// the end of each of "identical in a whole game", "verified", "understood".
+function frontier(el, statusBytes, title, sub) {
+  const total = statusBytes.reduce((a, b) => a + b, 0) || 1;
+  const share = (from) => 100 * statusBytes.slice(from).reduce((a, b) => a + b, 0) / total;
+  const segments = BEST_FIRST.map((k) => statusBytes[k]
+    ? `<span style="width:${100 * statusBytes[k] / total}%;background:${STATUS[k].color}" ` +
+      `title="${STATUS[k].label}: ${pct(statusBytes[k], total, 1)}"></span>` : "").join("");
+  const markers = [[VERIFIED_GAME, "identical in a whole game", 0], [VERIFIED, "verified", 1],
+                   [IDENTIFIED, "understood", 2]].map(([from, label, level]) => {
+    const x = share(from);
+    return `<div class="marker level${level}${x > 70 ? " flip" : ""}" style="left:${x}%">` +
+           `<span><b>${x.toFixed(1)}%</b>${label}</span></div>`;
+  }).join("");
+  el.innerHTML = `<h3>${title}</h3><p class="sub">${sub}</p>` +
+                 `<div class="strip"><div class="fill">${segments}</div>${markers}</div>`;
+}
+
 function summary() {
-  const count = STATUS.map(() => 0), bytes = STATUS.map(() => 0);
-  for (const [, size, status] of data.functions) { count[status]++; bytes[status] += size; }
+  const count = STATUS.map(() => 0), bytes = STATUS.map(() => 0), gameBytes = STATUS.map(() => 0);
+  for (const [, size, status, group] of data.functions) {
+    count[status]++; bytes[status] += size;
+    const category = data.groups[group][0];
+    if (category === "game" || category === "unidentified") gameBytes[status] += size;
+  }
   const totalBytes = bytes.reduce((a, b) => a + b, 0);
   const verifiedCount = count.slice(VERIFIED).reduce((a, b) => a + b, 0);
-  const verifiedBytes = bytes.slice(VERIFIED).reduce((a, b) => a + b, 0);
-  // "Understood" = identified or better (identified, reimplemented, verified),
-  // the same as "Understood" in `python tools/inventory.py stats`.
+  // "Understood" = identified or better, the same as in `python tools/inventory.py stats`.
   const understoodCount = count.slice(IDENTIFIED).reduce((a, b) => a + b, 0);
-  const understoodBytes = bytes.slice(IDENTIFIED).reduce((a, b) => a + b, 0);
-  let gameUnderstood = 0;
-  for (const [, size, status, group] of data.functions) {
-    const category = data.groups[group][0];
-    if ((category === "game" || category === "unidentified") && status >= IDENTIFIED) gameUnderstood += size;
-  }
-  const game = tree.children.filter((c) => c.category === "game" || c.category === "unidentified");
-  const gameBytes = game.reduce((s, c) => s + c.size, 0), gameDone = game.reduce((s, c) => s + c.done, 0);
 
   document.getElementById("generated").innerHTML =
-    `Generated ${esc(data.generated)} from <code>re/functions.csv</code> by <code>tools/progress.py</code>.`;
-  document.getElementById("stats").innerHTML = [
-    [pct(verifiedBytes, totalBytes), "of all code verified"],
-    [pct(gameDone, gameBytes), "of game code verified"],
-    [pct(understoodBytes, totalBytes), "of all code understood (identified or better)"],
-    [pct(gameUnderstood, gameBytes), "of game code understood"],
-    [`${fmt(understoodCount)} / ${fmt(data.functions.length)}`, "functions understood"],
-    [`${fmt(verifiedCount)} / ${fmt(data.functions.length)}`, "functions verified"],
-    [`${fmt(count[VERIFIED_GAME])} / ${fmt(verifiedCount)}`, "of them identical in a whole game"],
-    [fmt(count[VERIFIED_GAME - 1]), "verified by tests only"],
-    [fmt(data.functions.length - count[0]), "functions named"],
-  ].map(([value, label]) => `<div class="stat"><b>${value}</b>${label}</div>`).join("");
-  document.getElementById("bar").innerHTML = STATUS.map((s, k) =>
-    `<span style="width:${100 * bytes[k] / totalBytes}%;background:${s.color}" title="${s.label}: ${fmt(bytes[k])} bytes"></span>`).join("");
+    `Generated ${esc(data.generated)} from <code>re/functions.csv</code>`;
+  frontier(document.getElementById("frontierGame"), gameBytes, "Game code",
+           "Blue Byte's own code, the part we have to reimplement");
+  frontier(document.getElementById("frontierAll"), bytes, "All code",
+           "Including the C runtime, library and compiler-generated code");
+  document.getElementById("facts").innerHTML =
+    `${fmt(understoodCount)} of ${fmt(data.functions.length)} functions are understood and ` +
+    `${fmt(verifiedCount)} are verified: ${fmt(count[VERIFIED_GAME])} of those ran identically in a ` +
+    `whole game, ${fmt(count[VERIFIED_GAME - 1])} only in tests so far.`;
   document.getElementById("legend").innerHTML =
-    "<tr><th>Status</th><th>Functions</th><th>Bytes</th><th>Share</th></tr>" +
-    STATUS.map((s, k) => `<tr><td><span class="swatch" style="background:${s.color}"></span>${s.label}</td>` +
-      `<td>${fmt(count[k])}</td><td>${fmt(bytes[k])}</td><td>${pct(bytes[k], totalBytes)}</td></tr>`).join("");
+    "<tr><th>Status</th><th>Functions</th><th>Share</th></tr>" +
+    BEST_FIRST.map((k) => `<tr${count[k] ? "" : ' class="empty"'}><td><span class="swatch" style="background:${STATUS[k].color}"></span>${STATUS[k].label}</td>` +
+      `<td>${fmt(count[k])}</td><td title="${fmt(bytes[k])} bytes">${pct(bytes[k], totalBytes, 1)}</td></tr>`).join("");
   return totalBytes;
 }
 

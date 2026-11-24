@@ -773,6 +773,16 @@ and chat input at CLogicThread +0x414/+0x3f8; lobby/ladder status
 functions; FinishGame 0x53e720 and the music start/stop/next track.
 Progress page: "understood" (identified or better) added to the stats,
 treemap labels, tooltips and a "Colour by" selector.
+Then, on the user's request, a redesign of docs/progress.html (frontend-design
+plugin): a "frontier" strip per scope (game code, all code) with markers at
+the identical / verified / understood boundaries instead of nine stat boxes,
+a one-sentence summary, the status table beside it, serif headings on a
+cool green-grey palette, an outline on the hovered treemap box, and a new
+hover card (class and method, a one-line description from the inventory
+note, status chip, whole-game calls, address and size; groups: function
+count, a status bar and the shares). progress.py now writes that
+description (`describe`, notes without bookkeeping prefixes, first
+sentence, at most 150 characters; 2,365 functions; data file 1.0 MB).
 
 
 ### 2026-11-24 (49): the user's full game
