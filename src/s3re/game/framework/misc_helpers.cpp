@@ -12,11 +12,11 @@
 //   other+4); the upper 24 bits of EAX are those of this+4's dword (left
 //   over from the load). Dirk\protocol.cpp; probably operator== of a small
 //   id class.
-// Picture_FreeIfBoth (0x005aa0a0): (a, b) cdecl: if a and b are not null,
-//   the C runtime's free(b) (0x621b7e); EAX = 0 when either is null, else
+// png_free (0x005aa0a0; was Picture_FreeIfBoth until session 50): libpng
+//   1.0.2's png_free(png_ptr, ptr), cdecl: if png_ptr and ptr are not null,
+//   the C runtime's free(ptr) (0x621b7e); EAX = 0 when either is null, else
 //   whatever free left in EAX (callers pass it on, so ours returns the same
-//   register). Probably a memory callback of the PNG/zlib code in
-//   Picture (free(opaque, address) shape).
+//   register). Third-party code (re/picture_code.md).
 
 #include "game/framework/framework_layout.h"
 #include "game/ui/game_settings_layout.h"
@@ -38,12 +38,12 @@ constexpr std::uintptr_t kCrtFree = 0x00621b7e;
 using CopyRectFn = void*(__fastcall*)(void* self, void* edx, std::uint32_t* out);
 using CopyByteFn = const void*(__cdecl*)(std::uint8_t* dst, const std::uint8_t* src);
 using EqualFn = std::uint32_t(__fastcall*)(const void* self, void* edx, const void* other);
-using FreeIfBothFn = std::uint32_t(__cdecl*)(const void* a, void* b);
+using PngFreeFn = std::uint32_t(__cdecl*)(const void* a, void* b);
 
 void* __fastcall GameParams_CopyRectB0(void* self, void* edx, std::uint32_t* out);
 const void* __cdecl Watcom_CopyByte(std::uint8_t* dst, const std::uint8_t* src);
 std::uint32_t __fastcall Lobby_EqualField4(const void* self, void* edx, const void* other);
-std::uint32_t __cdecl Picture_FreeIfBoth(const void* a, void* b);
+std::uint32_t __cdecl png_free(const void* a, void* b);
 
 S3RE_HOOK(0x00437400, GameParams_CopyRectB0, CopyRectFn, Original_GameParams_CopyRectB0, GameParams_CopyRectB0);
 
@@ -77,11 +77,12 @@ std::uint32_t __fastcall Lobby_EqualField4(const void* self, void* /*edx*/, cons
     return (mine & 0xffffff00u) | (same ? 1u : 0u);
 }
 
-S3RE_HOOK(0x005aa0a0, Picture_FreeIfBoth, FreeIfBothFn, Original_Picture_FreeIfBoth, Picture_FreeIfBoth);
+S3RE_HOOK(0x005aa0a0, png_free, PngFreeFn, Original_png_free, png_free);
 
-// Purpose: Frees a block of the picture decoder's memory (probably the
-// zlib/PNG "free" callback: nothing happens without a context or a block).
-std::uint32_t __cdecl Picture_FreeIfBoth(const void* a, void* b) {
+// Purpose: libpng's png_free: frees a block of the PNG decoder's memory
+// (used only for the online lobby's banner image; nothing happens without a
+// png_ptr or a block).
+std::uint32_t __cdecl png_free(const void* a, void* b) {
     if (a == nullptr || b == nullptr) {
         return 0;
     }
@@ -98,12 +99,12 @@ struct MiscFunctions {
     CopyRectFn copyRect;
     CopyByteFn copyByte;
     EqualFn equal;
-    FreeIfBothFn freeIfBoth;
+    PngFreeFn pngFree;
 };
 
 void CompareMisc(test::Context& ctx, const MiscFunctions& candidate, int cases) {
     const MiscFunctions original{Original_GameParams_CopyRectB0, Original_Watcom_CopyByte, Original_Lobby_EqualField4,
-                                 Original_Picture_FreeIfBoth};
+                                 Original_png_free};
     std::vector<std::uint8_t> a(0x100), b(0x100);
     for (int i = 0; i < cases; ++i) {
         const int op = static_cast<int>(ctx.rng().Below(4));
@@ -130,8 +131,8 @@ void CompareMisc(test::Context& ctx, const MiscFunctions& candidate, int cases) 
                 // Only the null cases: the block case frees memory, which
                 // the emulator spec covers (free is probed there).
                 const bool first = ctx.rng().Chance(1, 2);
-                ra = original.freeIfBoth(first ? nullptr : a.data(), first ? a.data() : nullptr);
-                rb = candidate.freeIfBoth(first ? nullptr : b.data(), first ? b.data() : nullptr);
+                ra = original.pngFree(first ? nullptr : a.data(), first ? a.data() : nullptr);
+                rb = candidate.pngFree(first ? nullptr : b.data(), first ? b.data() : nullptr);
                 break;
             }
         }
@@ -154,12 +155,12 @@ std::uint32_t __fastcall WrongEqual(const void* self, void* edx, const void* oth
 }  // namespace
 
 S3RE_TEST(MiscHelpers_MatchOriginal) {
-    CompareMisc(ctx, {&GameParams_CopyRectB0, &Watcom_CopyByte, &Lobby_EqualField4, &Picture_FreeIfBoth}, 20000);
+    CompareMisc(ctx, {&GameParams_CopyRectB0, &Watcom_CopyByte, &Lobby_EqualField4, &png_free}, 20000);
 }
 
 S3RE_TEST(MiscHelpers_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareMisc(probe, {&GameParams_CopyRectB0, &Watcom_CopyByte, &WrongEqual, &Picture_FreeIfBoth}, 5000);
+    CompareMisc(probe, {&GameParams_CopyRectB0, &Watcom_CopyByte, &WrongEqual, &png_free}, 5000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

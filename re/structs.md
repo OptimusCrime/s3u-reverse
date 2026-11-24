@@ -499,13 +499,13 @@ checks the group, and tests use groups up to 0xAF. **V** (layout).
 | +0x034 | dword[70], not cleared by Close | **G** |
 | +0x14C | Win32::CFileMapping*[70] (new 0x2C, ctor 0x61A3A0) | constructor, Close **V** |
 | +0x264 | views[70]: each group's mapped view; table offsets are relative to it | Close (UnmapView 0x61AA40), GfxData_* **V** |
-| +0x37C | frameTables[70] (FrameTable: word +8 frames per variant, dword offsets from +0xC) | CGraphicsData_VariantFrameAddress **V** |
+| +0x37C | textTables[70] (TextTable: word +8 texts per language, word +0xA languages (8), dword offsets to C strings from +0xC; was frameTables) | CGraphicsData_TextAddress **V** |
 | +0x494 | animationTables[70] (OffsetTable: word +6 count, dword offsets from +8) | CGraphicsData_AnimationPointer **V** |
-| +0x5AC | frameTables5ac[70] (OffsetTable, count not checked) | CGraphicsData_FramePointer **V** |
+| +0x5AC | guiImageTables[70] (OffsetTable, count not checked; filled only for GUI groups; was frameTables5ac) | CGraphicsData_GuiImagePointer **V** |
 | +0x6C4, +0x7DC, +0x8F4, +0xA0C | four more table arrays, zeroed by Close | **S** |
-| +0xB24 | spriteTables[70] (SpriteTable: dword entries from +8, relative to the view) | CGraphicsData_FrameCount **V** |
-| +0xC3C | dword, zeroed by constructor and Close | |
-| +0xC40 | currentVariant (used for variant -1) | CGraphicsData_VariantFrameAddress **V** |
+| +0xB24 | sequenceTables[70] (SequenceTable: dword entries from +8, relative to the view; was spriteTables) | CGraphicsData_SequenceFrameCount **V** |
+| +0xC3C | languageCount, zeroed by constructor and Close | re/graphics_formats.md |
+| +0xC40 | language: the current language (used for -1; was currentVariant) | CGraphicsData_TextAddress **V** |
 
 Tests: `src/s3re/test/fake_graphics.h` (FakeGraphics) installs a fake
 object for the simulation tests that read animation lengths.
@@ -615,7 +615,7 @@ layouts in `src/s3re/game/ai/ai_layout.h`.
   child in front), +0x16 requester: kind of the agent that made it
   (AddNote's third argument; ReportToRequester 0x582480 calls its slot 9),
   +0x18 handler: kind of the agent that took it (written by the agents'
-  slot 3 with flag 2; CancelAtHandler 0x582510 calls its slot 10). **V**
+  slot 3 with flag 2; ExecuteAtHandler 0x582510 calls its slot 10, "carry it out"). **V**
   (0x582400..0x5824D0, package A3), flag 2 and +0x18's writer **R**.
 - **Request notes** (HOUSE_REQUEST_NOTE, LOCAL_WARE_REQUEST_NOTE,
   T_DO_BUILD_HOUSE_NOTE; `RequestNote` in ai_layout.h): +0x1C building

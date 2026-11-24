@@ -131,18 +131,24 @@ def case_count(spec: specs.Spec, cases: int) -> int:
 
 
 # New name -> name before the renames of functions named after old guesses
-# (2026-11-23); the same table as SeedName in src/s3re/test/difftest.cpp.
+# (2026-11-23, session 50); the same table as SeedName in src/s3re/test/difftest.cpp.
 RENAMED_FUNCTIONS = (
     ("CGameData_FindNearbyOwnCatapult", "CGameData_FindNearbySettlerType29"),
     ("CGameData_IsFreeOfCatapultsNearby", "CGameData_IsFreeOfSettlerType29Nearby"),
     ("CGameData_UnblockCastleTiles", "CGameData_UnblockType12BuildingTiles"),
     ("CGameData_MakeFieldTile", "CGameData_SetTerrain16Patch"),
     ("CGameData_IsFreeSmallTowerSite", "CGameData_IsFreeCastleSite"),
-    ("CGraphicsData_VariantFrameAddress", "GfxData_FrameOffset"),
-    ("CGraphicsData_FrameCount", "GfxData_SpriteWord"),
-    ("CGraphicsData_FramePointer", "GfxData_FramePointer_5fac70"),
+    ("CGraphicsData_TextAddress", "GfxData_FrameOffset"),
+    ("CGraphicsData_SequenceFrameCount", "GfxData_SpriteWord"),
+    ("CGraphicsData_GuiImagePointer", "GfxData_FramePointer_5fac70"),
     ("CGraphicsData_AnimationPointer", "GfxData_AnimationPointer_5faaf0"),
     ("GfxDword_Construct", "GfxData_SetDword"),
+    # Session 50 renames.
+    ("png_free", "Picture_FreeIfBoth"),
+    ("BLACK_BOARD_NOTE_ExecuteAtHandler", "BLACK_BOARD_NOTE_CancelAtHandler"),
+    ("AI_SiteTree_begin", "AI_ListFirst"),
+    ("std_multimap_end_580220", "AI_List_Begin"),
+    ("std_multimap_empty_580230", "AI_List_Empty"),
 )
 
 

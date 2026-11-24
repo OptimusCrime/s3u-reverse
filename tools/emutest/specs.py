@@ -3029,7 +3029,7 @@ def keep_or_value(rng, pool) -> int:
 SPECS += [
     Spec("Render_PackColour", 0x004c7b00, "stdcall", [anything, anything, anything],
          globals=colour_format),
-    Spec("CGraphicsData_FrameCount", 0x005fad20, "thiscall",
+    Spec("CGraphicsData_SequenceFrameCount", 0x005fad20, "thiscall",
          [lambda rng, pool: (rng.randrange(0x100) << 16) | rng.randrange(0x100)],
          presets=sprite_tables),
     Spec("GfxDword_Construct", 0x005fc540, "thiscall", [anything]),
@@ -3686,7 +3686,7 @@ SPECS += [
          exempt_blocks=(0x55b802,)),
     Spec("AI_ClearGlobals7e0568", 0x00553e00, "stdcall", [],
          globals=lambda rng, pool, args: [(0x007e0568, rng.getrandbits(32), 4), (0x007e056c, rng.getrandbits(32), 4)]),
-    Spec("AI_ListFirst", 0x00559260, "thiscall", [scratch(0)],
+    Spec("AI_SiteTree_begin", 0x00559260, "thiscall", [scratch(0)],
          presets=lambda rng, pool, args: [(4, WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES, 4)]),
 ]
 
@@ -3718,7 +3718,7 @@ def equal_ids(rng, pool, args):
 
 
 SPECS += [
-    Spec("CGraphicsData_VariantFrameAddress", 0x005faaa0, "thiscall", [frame_id, one_of(0, 1, 3, 0xFFFFFFFF)],
+    Spec("CGraphicsData_TextAddress", 0x005faaa0, "thiscall", [frame_id, one_of(0, 1, 3, 0xFFFFFFFF)],
          presets=frame_offset_world),
     Spec("Render_PutPixel16", 0x004c7ac0, "thiscall", [below(64), below(64), anything],
          presets=put_pixel_world, globals=draw_origin),
@@ -3728,7 +3728,7 @@ SPECS += [
     Spec("Watcom_CopyByte", 0x004584f0, "stdcall", [scratch(0), scratch(1)]),
     Spec("Lobby_EqualField4", 0x00606ac0, "thiscall", [scratch(0)], presets=equal_ids),
     # The C runtime's free (0x621b7e) locks the heap and calls HeapFree: probed.
-    Spec("Picture_FreeIfBoth", 0x005aa0a0, "stdcall", [one_of(0, WORLD_BASE + SCRATCH), one_of(0, WORLD_BASE + SCRATCH + 0x100)],
+    Spec("png_free", 0x005aa0a0, "stdcall", [one_of(0, WORLD_BASE + SCRATCH), one_of(0, WORLD_BASE + SCRATCH + 0x100)],
          callees={0x00621b7e: (1, "cdecl", "probe")}),
 ]
 
@@ -4180,8 +4180,8 @@ SPECS += [
     Spec("T_ECONOMY_AGENT_Construct", 0x00567850, "thiscall", [], eax_mask=0),
     Spec("T_SAFETY_AGENT_Construct", 0x00586830, "thiscall", [], eax_mask=0),
     Spec("CCentrumCheckAgent_Construct", 0x00560dd0, "thiscall", [], eax_mask=0),
-    Spec("AI_List_Begin", 0x00580220, "thiscall", [scratch(0)]),
-    Spec("AI_List_Empty", 0x00580230, "thiscall", [],
+    Spec("std_multimap_end_580220", 0x00580220, "thiscall", [scratch(0)]),
+    Spec("std_multimap_empty_580230", 0x00580230, "thiscall", [],
          presets=lambda rng, pool, args: [(0xC, 0, 4)] if rng.random() < 0.4 else []),
     Spec("AI_Pair5_Construct", 0x0059c5a0, "thiscall", [scratch(0), scratch(1)]),
     Spec("AI_CountPlayersTakingPart", 0x00572370, "stdcall", [], globals=ai_world,
@@ -4470,7 +4470,7 @@ SPECS += [
     # AX only for a note without requester (the upper half is the caller's EAX; callers use AX).
     tree_spec("BLACK_BOARD_NOTE_ReportToRequester", 0x00582480, [result_arg, anything], note_at_base,
               eax_mask=0xFFFF, globals=note_player_global),
-    tree_spec("BLACK_BOARD_NOTE_CancelAtHandler", 0x00582510, [], note_at_base, eax_mask=0xFFFFFFFF,
+    tree_spec("BLACK_BOARD_NOTE_ExecuteAtHandler", 0x00582510, [], note_at_base, eax_mask=0xFFFFFFFF,
               globals=note_player_global),
 ]
 
@@ -4917,7 +4917,7 @@ SPECS += [
     Spec("UI_CopyWords_418fb0", 0x00418fb0, "fastcall", [scratch(0), scratch(1), below(20)]),
     Spec("UI_WideEos_428880", 0x00428880, "thiscall", [below(30)],
          presets=lambda rng, pool, args: [(4, WORLD_BASE + SCRATCH, 4)]),
-    Spec("CGraphicsData_FramePointer", 0x005fac70, "thiscall", [scratch(6), gfx_id], presets=gfx_tables(0x5ac)),
+    Spec("CGraphicsData_GuiImagePointer", 0x005fac70, "thiscall", [scratch(6), gfx_id], presets=gfx_tables(0x5ac)),
     Spec("CGraphicsData_AnimationPointer", 0x005faaf0, "thiscall", [scratch(6), gfx_id],
          presets=gfx_tables(0x494)),
     Spec("String_CompareText", 0x0040a0e0, "thiscall", [one_of(STRING_TEXT_PTR)], presets=string_world),

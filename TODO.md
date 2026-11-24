@@ -120,14 +120,7 @@ Each item: what, why, and where to start.
   `tools/world_fields.py`.
 - **Corrections from the naming pass (session 50,
   `re/computer_players_naming.md`)**, each touching code or layouts:
-  rename the verified `BLACK_BOARD_NOTE::CancelAtHandler` 0x582510 ->
-  `ExecuteAtHandler` (slot 10 carries a request out: it ends in the
-  PlaceBuilding sender 0x576430; `agent_slot::kCancelNote` -> `kExecute`,
-  ai_layout.h, re/computer_players.md, re/structs.md); verified
-  `AI::ListFirst` 0x559260 is the site tree's `begin()`; verified
-  `AI::List::begin_580220` / `empty_580230` are `std::map` `end()` /
-  `empty()` (MakeBuildOrders takes the last = best entry);
-  `BLACK_BOARD_AGENT::vf05` -> `IsBusy`; unify `AI::EvaLand::*` /
+  unify `AI::EvaLand::*` /
   `AI::CEvaLand_*` under `AI::CEvaLand::`; `AI::BlockCentreByte8` reads
   the centre tile's owner. Layouts: `g_aiGroupOrders` is 0x20f8 bytes
   (not 0x898), `g_aiArmyState` only 0x51c (its fields from +0x630 belong

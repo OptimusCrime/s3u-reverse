@@ -134,7 +134,7 @@ id occurs in `recordings/*.s3rec` (fun8 / random768 / scripted).
 | 0x03 | SetSettlerGroup | 0x535cb0 | player_lists[player][group] = up to n settler words, length (0 clears) | - | 18 / - / - |
 | 0x04 | SetBuildingWorking | 0x536fbf | owner check; request_flags bit 0 = value; off: site -> ClearBuildingFlag02/04/10/08 + RecallSiteCarriers, finished -> RecallBuildingCarriers; UI refresh | **RecallSiteCarriers, RecallBuildingCarriers (new)**, ClearBuildingFlag* (verified) | 126 / - / - |
 | 0x05 | SetWorkArea | 0x5370b4 | for building types 2, 0x1e, 0x0e, 0x19, 0x24, 0x18, 5, 3, 0x33 within distance 60 and the same tile area: work tile (+0x30/+0x32, or +0x0e/+0x14 of a site); clears the worker's +0x10; overlay (DrawWorkAreaOverlay) when selected | TileDistance, DrawWorkAreaOverlay (verified) | 34 / - / - |
-| 0x06 | DestroyBuilding | 0x53729c | owner check; a finished big temple (0x29, 0x2b, 0x2d, 0x37) sets bit 0 of Player +0x8; CrushBuilding; if it failed for the local player: a text (CGraphicsData::VariantFrameAddress 0x8018e, sprintf, std::string, 0x60b840, ShowMessage 0x51e440); clears the selection | CrushBuilding (verified), UI text helpers (not ours) | - |
+| 0x06 | DestroyBuilding | 0x53729c | owner check; a finished big temple (0x29, 0x2b, 0x2d, 0x37) sets bit 0 of Player +0x8; CrushBuilding; if it failed for the local player: a text (CGraphicsData::TextAddress 0x8018e, sprintf, std::string, 0x60b840, ShowMessage 0x51e440); clears the selection | CrushBuilding (verified), UI text helpers (not ours) | - |
 | 0x07 | ChangeGoodsPriority | 0x5375c7 | area settings1[good] +-1 (0..20) | - | - |
 | 0x08 | SetGoodsSetting | 0x53767d | area settings2[good] = value; ClearAreaGoodsSettings1D2 | verified | - |
 | 0x09, 0x0d..0x0f | MoveUnits (modes 0..3) | 0x536045 | the selected units of a group: attack target search (tiles with flag 0x20 / enemy military buildings, "GongAttack"), then formation targets per settler (SetSettlerTarget) around the tile; the longest handler (~0x536045..0x536f98) | TileDistance, SetSettlerTarget, NeighbourX/Y (verified) | 18 + 990 (0x0f) / 92 / 78 |
@@ -179,7 +179,7 @@ CrushBuilding, BlockBuildingLine, ReleaseBuildingExtraTiles,
 TileDistance, NeighbourX/Y, SetSettlerTarget, PlaceSettlerNear,
 ResetSettlerToIdle, IsOnMap, AllocTable36700Record,
 ClearAreaGoodsSettings1D2, DrawBuildingRouteOverlay, DrawWorkAreaOverlay,
-RemoveSettlerFromGroups, UpdateGroupMenu, CGraphicsData::VariantFrameAddress, the
+RemoveSettlerFromGroups, UpdateGroupMenu, CGraphicsData::TextAddress, the
 std::string functions, Win32::ThrowOutOfMemory, MessageQueue::Push/Pop
 (identified, passthrough/none).
 

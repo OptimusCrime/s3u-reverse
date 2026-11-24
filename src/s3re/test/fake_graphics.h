@@ -2,7 +2,7 @@
 
 // A stand-in for the game's graphics object (game::gfx::CGraphicsData, the
 // pointer g_gfxData), for tests of simulation code that reads animation
-// lengths through CGraphicsData_FrameCount ([spriteTables[group]->sprites[index]
+// lengths through CGraphicsData_SequenceFrameCount ([sequenceTables[group]->sequences[index]
 // + views[group]]). While a FakeGraphics exists, the game's pointer points
 // at it; the destructor restores the old pointer.
 //
@@ -35,7 +35,7 @@ public:
     FakeGraphics& operator=(const FakeGraphics&) = delete;
 
     game::gfx::CGraphicsData& object() { return *reinterpret_cast<game::gfx::CGraphicsData*>(object_.data()); }
-    game::gfx::SpriteTable& table() { return *reinterpret_cast<game::gfx::SpriteTable*>(data_.data()); }
+    game::gfx::SequenceTable& table() { return *reinterpret_cast<game::gfx::SequenceTable*>(data_.data()); }
     std::uint8_t* sprites() { return data_.data() + kSpriteArea; }
 
     // Random object bytes, and `id` (group << 16 | index) a valid sprite of
@@ -47,16 +47,16 @@ public:
             return false;
         }
         ctx.rng().Fill(object_.data(), object_.size());
-        object().spriteTables[group] = &table();
+        object().sequenceTables[group] = &table();
         object().views[group] = 0;
-        table().sprites[index] = Address(sprites() + ctx.rng().Below(0x1000));
+        table().sequences[index] = Address(sprites() + ctx.rng().Below(0x1000));
         return true;
     }
 
     // Every group 0..0xaf uses the shared table with view 0.
     void ShareTable() {
         for (std::uint32_t g = 0; g < kGroups; ++g) {
-            object().spriteTables[g] = &table();
+            object().sequenceTables[g] = &table();
             object().views[g] = 0;
         }
     }
@@ -67,7 +67,7 @@ public:
         ShareTable();
         std::memset(sprites(), fill, 0x100);
         for (std::uint32_t k = 0; k < kSprites; ++k) {
-            table().sprites[k] = Address(sprites());
+            table().sequences[k] = Address(sprites());
         }
     }
 

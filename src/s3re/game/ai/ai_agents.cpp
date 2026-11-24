@@ -16,9 +16,14 @@
 //   0x00560dd0 CCentrumCheckAgent          kind 10, dwords +8..+0x24 = 0, then word +8 = 140
 //
 // Helpers:
-//   AI_List_Begin (0x00580220): (iterator* out) thiscall, ret 4: *out =
-//     dword +4 (the list's head); EAX = out.
-//   AI_List_Empty (0x00580230): () thiscall: EAX = (dword +0xc == 0).
+//   std_multimap_end_580220 (0x00580220; was AI::List::begin_580220):
+//     (iterator* out) thiscall, ret 4: *out = dword +4 (the MSVC6 _Tree's
+//     _Head, i.e. end()); EAX = out. The container is the build-order tree
+//     at AiPlayerData value +0x68c: MakeBuildOrders 0x57ce90 does end(),
+//     -- (0x580270), * (0x580260), erase (0x580240), taking the last
+//     (highest-key, best) entry.
+//   std_multimap_empty_580230 (0x00580230; was AI::List::empty_580230):
+//     () thiscall: EAX = (dword +0xc == 0) (_Size).
 //   AI_Pair5_Construct (0x0059c5a0): (const u32* a, const u8* b) thiscall,
 //     ret 8: dword +0 = *a, byte +4 = *b; EAX = this.
 //   AI_CountPlayersTakingPart (0x00572370): () the number of the 20 player
@@ -94,13 +99,14 @@ static_assert(sizeof(CentrumCheckAgent) == 0x28);
 
 void SetKind(void* self, AgentKind kind) { AI_SetWord4(self, nullptr, static_cast<std::uint16_t>(kind)); }
 
-struct ListHeader {
-    std::uint32_t unk0;
-    std::uint32_t head;   // +4
-    std::uint32_t unk8;
-    std::uint32_t count;  // +0xc
+// An MSVC6 std::_Tree (map/multimap) object: the build-order tree.
+struct TreeHeader {
+    std::uint32_t unk0;   // +0 comparator and allocator (empty objects)
+    std::uint32_t head;   // +4 _Head (end())
+    std::uint32_t unk8;   // +8 _Multi
+    std::uint32_t count;  // +0xc _Size
 };
-static_assert(offsetof(ListHeader, count) == 0xc);
+static_assert(offsetof(TreeHeader, count) == 0xc);
 
 struct Pair5 {
     std::uint32_t first;
@@ -122,8 +128,8 @@ std::uint32_t __fastcall T_ATTACK_AGENT_Construct(void* self, void* edx);
 std::uint32_t __fastcall T_ECONOMY_AGENT_Construct(void* self, void* edx);
 std::uint32_t __fastcall T_SAFETY_AGENT_Construct(void* self, void* edx);
 std::uint32_t __fastcall CCentrumCheckAgent_Construct(void* self, void* edx);
-std::uint32_t __fastcall AI_List_Begin(void* self, void* edx, std::uint32_t* out);
-std::uint32_t __fastcall AI_List_Empty(void* self, void* edx);
+std::uint32_t __fastcall std_multimap_end_580220(void* self, void* edx, std::uint32_t* out);
+std::uint32_t __fastcall std_multimap_empty_580230(void* self, void* edx);
 std::uint32_t __fastcall AI_Pair5_Construct(void* self, void* edx, const std::uint32_t* a, const std::uint8_t* b);
 std::uint32_t __cdecl AI_CountPlayersTakingPart();
 
@@ -219,20 +225,22 @@ std::uint32_t __fastcall CCentrumCheckAgent_Construct(void* self, void* /*edx*/)
 
 // ---------------------------------------------------------------- helpers
 
-S3RE_HOOK(0x00580220, AI_List_Begin, ThisArgFn, Original_AI_List_Begin, AI_List_Begin);
+S3RE_HOOK(0x00580220, std_multimap_end_580220, ThisArgFn, Original_std_multimap_end_580220,
+          std_multimap_end_580220);
 
-// Purpose: The first position of a list (an iterator returned through a
-// pointer; inlined container code).
-std::uint32_t __fastcall AI_List_Begin(void* self, void* /*edx*/, std::uint32_t* out) {
-    *out = static_cast<const ListHeader*>(self)->head;
+// Purpose: end() of the computer player's build-order tree (an iterator at
+// its head node, returned through a pointer; inlined container code).
+std::uint32_t __fastcall std_multimap_end_580220(void* self, void* /*edx*/, std::uint32_t* out) {
+    *out = static_cast<const TreeHeader*>(self)->head;
     return reinterpret_cast<std::uint32_t>(out);
 }
 
-S3RE_HOOK(0x00580230, AI_List_Empty, ThisFn, Original_AI_List_Empty, AI_List_Empty);
+S3RE_HOOK(0x00580230, std_multimap_empty_580230, ThisFn, Original_std_multimap_empty_580230,
+          std_multimap_empty_580230);
 
-// Purpose: Whether a list is empty (inlined container code).
-std::uint32_t __fastcall AI_List_Empty(void* self, void* /*edx*/) {
-    return static_cast<const ListHeader*>(self)->count == 0 ? 1 : 0;
+// Purpose: Whether the build-order tree is empty (inlined container code).
+std::uint32_t __fastcall std_multimap_empty_580230(void* self, void* /*edx*/) {
+    return static_cast<const TreeHeader*>(self)->count == 0 ? 1 : 0;
 }
 
 S3RE_HOOK(0x0059c5a0, AI_Pair5_Construct, PairFn, Original_AI_Pair5_Construct, AI_Pair5_Construct);
@@ -284,8 +292,8 @@ AgentFunctions OriginalAgents() {
              Original_T_MAP_WORKER_AGENT_Construct, Original_T_ATTACK_AGENT_Construct,
              Original_T_ECONOMY_AGENT_Construct, Original_T_SAFETY_AGENT_Construct,
              Original_CCentrumCheckAgent_Construct},
-            Original_AI_List_Begin,
-            Original_AI_List_Empty,
+            Original_std_multimap_end_580220,
+            Original_std_multimap_empty_580230,
             Original_AI_Pair5_Construct,
             Original_AI_CountPlayersTakingPart};
 }
@@ -294,8 +302,8 @@ AgentFunctions OurAgents() {
     return {{&GLOBAL_EXPAND_EMPIRE_AGENT_Construct, &COMPUTER_PLAYER_AGENT_Construct, &T_MAP_WORKER_AGENT_Construct,
              &T_ATTACK_AGENT_Construct, &T_ECONOMY_AGENT_Construct, &T_SAFETY_AGENT_Construct,
              &CCentrumCheckAgent_Construct},
-            &AI_List_Begin,
-            &AI_List_Empty,
+            &std_multimap_end_580220,
+            &std_multimap_empty_580230,
             &AI_Pair5_Construct,
             &AI_CountPlayersTakingPart};
 }
@@ -312,7 +320,7 @@ void CompareAgents(test::Context& ctx, const AgentFunctions& candidate, int case
         const int op = static_cast<int>(ctx.rng().Below(11));
         ctx.rng().Fill(a.data(), a.size());
         if (ctx.rng().Chance(1, 3)) {
-            reinterpret_cast<ListHeader*>(a.data())->count = 0;
+            reinterpret_cast<TreeHeader*>(a.data())->count = 0;
         }
         b = a;
         std::uint32_t ra = 0, rb = 0;

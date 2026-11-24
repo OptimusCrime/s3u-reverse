@@ -39,7 +39,7 @@
 //   EAX = SetSettlerAnimation's. ret 4.
 // CGameData::SetSettlerSavedAnimation (0x0050e320): (settler, kind): like
 //   SetSettlerAnimation, but into the saved pair: dword +0x1c = animation
-//   id 0x6a8060[kind * 4 + race], word +0x20 = CGraphicsData_FrameCount(id) - 1
+//   id 0x6a8060[kind * 4 + race], word +0x20 = CGraphicsData_SequenceFrameCount(id) - 1
 //   on the graphics object [0x7a8010]. EAX = FrameCount - 1. ret 8.
 // All thiscall (ECX = world).
 
@@ -65,7 +65,7 @@
 
 namespace s3re::game {
 
-std::uint32_t __fastcall CGraphicsData_FrameCount(void* self, void* edx, std::uint32_t id);
+std::uint32_t __fastcall CGraphicsData_SequenceFrameCount(void* self, void* edx, std::uint32_t id);
 std::uint32_t __fastcall CGameData_SetSettlerAnimation(CGameData* world, void* edx, std::uint32_t settler,
                                                        std::uint32_t kind);
 
@@ -240,7 +240,7 @@ std::uint32_t __fastcall CGameData_SetSettlerSavedAnimation(CGameData* world, vo
     Settler& record = world->settlers[settler];
     // The original reads the table twice.
     record.saved_animation = g_settlerAnimations[record.race + kind * kAnimationRaces];
-    const std::uint32_t frames = CGraphicsData_FrameCount(
+    const std::uint32_t frames = CGraphicsData_SequenceFrameCount(
         g_gfxData.get(), nullptr, g_settlerAnimations[record.race + kind * kAnimationRaces]) - 1;
     record.saved_counter = static_cast<std::uint16_t>(frames);
     return frames;

@@ -4,7 +4,7 @@
 // called by address) or drive the multiplayer save; single player sends
 // 0xfb at the start and 0xfc / 0xfd at the end of a game.
 //
-// Texts: CGraphicsData::VariantFrameAddress (0x5faaa0) gives a text of the
+// Texts: CGraphicsData::TextAddress (0x5faaa0) gives a text of the
 // graphics data (ids 0x8xxxx), sprintf (0x61f27e) formats it into a 2 KB
 // buffer, std::string (0x401a10) holds it, 0x60b840 turns it into a wide
 // string and 0x51e440 (thiscall on the thread: wide string by value, colour)
@@ -39,7 +39,7 @@ struct WideString {
 static_assert(sizeof(WideString) == 16);
 
 constexpr std::uintptr_t kCrushBuilding = 0x004d9250;
-constexpr std::uintptr_t kVariantFrameAddress = 0x005faaa0;  // CGraphicsData: text by id
+constexpr std::uintptr_t kTextAddress = 0x005faaa0;  // CGraphicsData: text by id
 constexpr std::uintptr_t kSprintf = 0x0061f27e;
 constexpr std::uintptr_t kStringFromChars = 0x00401a10;
 constexpr std::uintptr_t kStringDestroy = 0x00401b60;
@@ -74,7 +74,7 @@ constexpr std::uint32_t kTextDesync = 0x80129;  // raw-ok: text id, not an offse
 constexpr std::uint32_t kTextChecksumFailure = 0x8012a;  // raw-ok: text id, not an offset
 constexpr std::uint32_t kTextLagging = 0x80156;  // raw-ok: text id, not an offset
 constexpr std::uint32_t kTextYouLag = 0x8015d;  // raw-ok: text id, not an offset
-constexpr std::uint32_t kCurrentVariant = 0xffffffff;
+constexpr std::uint32_t kCurrentLanguage = 0xffffffff;
 
 constexpr std::uint32_t kPlayers = 20;
 constexpr std::int32_t kPlayerActive = 1;
@@ -105,7 +105,7 @@ Building& BuildingAt(CGameData* world, std::uint32_t n) {
 // The text `id` of the graphics data.
 const char* GfxText(std::uint32_t id) {
     using Fn = const char*(__fastcall*)(void* gfx, void* edx, std::uint32_t id, std::uint32_t variant);
-    return reinterpret_cast<Fn>(kVariantFrameAddress)(g_gfxData.get(), nullptr, id, kCurrentVariant);
+    return reinterpret_cast<Fn>(kTextAddress)(g_gfxData.get(), nullptr, id, kCurrentLanguage);
 }
 
 template <typename... Args>
@@ -674,7 +674,7 @@ void __fastcall FakePostAppMessage(void* self, void*, std::uint32_t message, std
 }
 
 struct NetTestPatches {
-    test::ScopedJump gfx{kVariantFrameAddress, reinterpret_cast<const void*>(&FakeGfxText)};
+    test::ScopedJump gfx{kTextAddress, reinterpret_cast<const void*>(&FakeGfxText)};
     test::ScopedJump show{kShowMessage, reinterpret_cast<const void*>(&FakeShowMessage)};
     test::ScopedJump setup{kPlayerSetup, reinterpret_cast<const void*>(&FakePlayerSetup)};
     test::ScopedJump name{kPlayerName, reinterpret_cast<const void*>(&FakePlayerName)};

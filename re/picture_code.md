@@ -106,7 +106,7 @@ object unit (unit 72, `Credits\cpp_exo_text__diverses.h` range):
 - `Credits::TextStyle_5a0960` (verified) -> should become `Credits::TextStyle::TextStyle`
   (default face "Times New Roman" 0x69fff0, height 12, colour 0xff = red). Not in the
   TSV (not a target row).
-- `Picture::FreeIfBoth` 0x5aa0a0 (verified, other agent's range) is libpng's
+- `png_free` 0x5aa0a0 (verified; was `Picture::FreeIfBoth`) is libpng's
   `png_free(png_ptr, ptr)`. Also there: 0x5a9e20 png_error, 0x5a9fe0 png_set_error_fn,
   0x5aa000 png_create_struct, 0x5aa050 png_destroy_struct, 0x5aa060 png_malloc,
   0x5a9990 png_get_IHDR, 0x5a9a80 png_get_PLTE, 0x5a9af0 png_set_read_fn,
@@ -238,7 +238,7 @@ format code is in 0x5a8f20..0x5b50ad.
 ### Corrections of existing names
 
 - 0x5aa0a0 `Picture::FreeIfBoth` (verified) is libpng's `png_free(png_ptr,
-  ptr)`. Rename the hook, test and inventory row ("Was Picture::FreeIfBoth").
+  ptr)`. Done (session 50): renamed to `png_free`, category `thirdparty`.
 - All `Zlib_sub_*` rows: not zlib (see above). The actual zlib code is in
   rows that were named `Picture_sub_*`.
 - `CDataSource::ctor_or_dtor_5b0460` is the destructor `~CDataSource`, and

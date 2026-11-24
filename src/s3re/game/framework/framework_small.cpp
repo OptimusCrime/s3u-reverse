@@ -39,9 +39,11 @@
 //   count) ret 4: copies `count` 16-bit characters; EAX = to.
 // UI_WideEos_428880 (0x00428880): (n) ret 4: the wide string's _Eos: +8 =
 //   n, word [+4][n] = 0; EAX = n.
-// CGraphicsData::FramePointer (0x005fac70): (out, id = group << 16 |
-//   frame) ret 8: *out = table(+0x5ac)[group][frame + 2] + base(+0x264)
-//   [group]; EAX = out. 23 callers (sprite data of a frame).
+// CGraphicsData::GuiImagePointer (0x005fac70; was CGraphicsData::FramePointer
+//   until session 50): (out, id = group << 16 | frame) ret 8: *out =
+//   table(+0x5ac)[group][frame + 2] + base(+0x264)[group]; EAX = out. The
+//   table is filled only for the GUI groups (re/graphics_formats.md); the
+//   callers are menu dialogs and CStaticImage.
 // CGraphicsData::AnimationPointer (0x005faaf0): the same with the table at
 //   +0x494, and DebugLog "GFX: Animation not found %u:%u" (group, frame)
 //   when frame >= the word +6 of the group's table (it reads on anyway).
@@ -157,7 +159,7 @@ std::uint32_t __fastcall Win32_CEvent_Construct(void* self, void* edx);
 std::uint32_t __fastcall Lobby_HasField4_5da3a0(void* self, void* edx);
 std::uint32_t __fastcall UI_CopyWords_418fb0(std::uint16_t* to, const std::uint16_t* from, std::uint32_t count);
 std::uint32_t __fastcall UI_WideEos_428880(void* self, void* edx, std::uint32_t n);
-std::uint32_t __fastcall CGraphicsData_FramePointer(void* self, void* edx, std::uint32_t out, std::uint32_t id);
+std::uint32_t __fastcall CGraphicsData_GuiImagePointer(void* self, void* edx, std::uint32_t out, std::uint32_t id);
 std::uint32_t __fastcall CGraphicsData_AnimationPointer(void* self, void* edx, std::uint32_t out, std::uint32_t id);
 
 S3RE_HOOK(0x0060b5a0, WCIsvListBase_Destroy, ThisFn, Original_WCIsvListBase_Destroy, WCIsvListBase_Destroy);
@@ -340,16 +342,16 @@ std::uint32_t __fastcall UI_WideEos_428880(void* self, void* /*edx*/, std::uint3
     return n;
 }
 
-S3RE_HOOK(0x005fac70, CGraphicsData_FramePointer, This2Fn, Original_CGraphicsData_FramePointer,
-          CGraphicsData_FramePointer);
+S3RE_HOOK(0x005fac70, CGraphicsData_GuiImagePointer, This2Fn, Original_CGraphicsData_GuiImagePointer,
+          CGraphicsData_GuiImagePointer);
 
-// Purpose: The address of a sprite frame's data in the loaded graphics
-// (group << 16 | frame).
-std::uint32_t __fastcall CGraphicsData_FramePointer(void* self, void* /*edx*/, std::uint32_t out, std::uint32_t id) {
+// Purpose: The address of a GUI image (menus, buttons) in the loaded
+// graphics (group << 16 | index).
+std::uint32_t __fastcall CGraphicsData_GuiImagePointer(void* self, void* /*edx*/, std::uint32_t out, std::uint32_t id) {
     const std::uint32_t group = id >> 16;
     const std::uint32_t frame = id & 0xffff;
     const gfx::CGraphicsData* const gfx = As<gfx::CGraphicsData>(self);
-    const std::uint32_t offset = gfx->frameTables5ac[group]->offsets[frame];
+    const std::uint32_t offset = gfx->guiImageTables[group]->offsets[frame];
     *reinterpret_cast<std::uint32_t*>(out) = offset + gfx->views[group];
     return out;
 }
@@ -418,7 +420,7 @@ Functions OriginalFunctions() {
             Original_Lobby_MemoryBlock_Assign,  Original_Win32_CRegistryKey_Construct,
             Original_Win32_CEvent_Construct,    Original_Lobby_HasField4_5da3a0,
             Original_UI_CopyWords_418fb0,       Original_UI_WideEos_428880,
-            Original_CGraphicsData_FramePointer, Original_CGraphicsData_AnimationPointer,
+            Original_CGraphicsData_GuiImagePointer, Original_CGraphicsData_AnimationPointer,
             Original_WCUIntVector_Destroy,      Original_WCIntVector_ConstructBare,
             Original_Lobby_CLMMessageBlock_Copy};
 }
@@ -428,7 +430,7 @@ Functions OurFunctions() {
             &WCIntVector_Destroy,       &Lobby_ScaleBy4_44c450,    &Win32_CWin32Handle_Set,
             &Lobby_MemoryBlock_Assign,  &Win32_CRegistryKey_Construct, &Win32_CEvent_Construct,
             &Lobby_HasField4_5da3a0,    &UI_CopyWords_418fb0,      &UI_WideEos_428880,
-            &CGraphicsData_FramePointer, &CGraphicsData_AnimationPointer, &WCUIntVector_Destroy,
+            &CGraphicsData_GuiImagePointer, &CGraphicsData_AnimationPointer, &WCUIntVector_Destroy,
             &WCIntVector_ConstructBare, &Lobby_CLMMessageBlock_Copy};
 }
 
@@ -616,7 +618,7 @@ void CompareSmall(test::Context& ctx, const Functions& candidate, int cases) {
                 ctx.rng().Fill(tableA, sizeof(tableA));
                 const std::uint32_t group = ctx.rng().Below(4);
                 const std::uint32_t frame = ctx.rng().Below(6);
-                const std::size_t tableField = op == 12 ? offsetof(gfx::CGraphicsData, frameTables5ac)
+                const std::size_t tableField = op == 12 ? offsetof(gfx::CGraphicsData, guiImageTables)
                                                         : offsetof(gfx::CGraphicsData, animationTables);
                 std::memcpy(gfxB, gfxA, sizeof(gfxA));
                 std::memcpy(tableB, tableA, sizeof(tableA));

@@ -88,7 +88,10 @@ constexpr std::size_t kBusy = 5;          // () non-zero: kWorkOnNote is skipped
 constexpr std::size_t kWantsToRun = 7;    // () non-zero: kRun is called (0x551590)
 constexpr std::size_t kRun = 8;           // () the agent's own work
 constexpr std::size_t kNoteReported = 9;  // (parent note, note, result, value) a note made by it reports back (0x582480)
-constexpr std::size_t kCancelNote = 10;   // (note) G: a note it took is withdrawn (0x582510)
+constexpr std::size_t kExecute = 10;      // (note) carry out a note it took (0x582510; was kCancelNote)
+// kExecute: T_DO_BUILD_HOUSE_AGENT::WorkOnNote 0x5655c0 calls its own slot 10
+// once the house request reported success; the chain through the request
+// agents' slot 10 ends in the PlaceBuilding command sender 0x576430.
 }  // namespace agent_slot
 // The agent kinds (ComputerPlayer::agents index, word +4), from the
 // factory AI::CreateAgent 0x56f6d0 (jump table 0x56fa68; each constructor

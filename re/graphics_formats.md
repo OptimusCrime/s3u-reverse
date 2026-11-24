@@ -150,6 +150,10 @@ probably the installed content (e.g. the 4th race of the add-on). Detach mode (3
 
 ## Corrections of existing names
 
+Done in session 50: the three CGraphicsData renames below and their gfx_layout.h fields
+(TextTable, textTables, language, languageCount, guiImageTables, SequenceTable, sequenceTables).
+The unknowns in the fourth item are not renamed yet.
+
 * 0x5faaa0 `CGraphicsData::VariantFrameAddress` (verified) -> `TextAddress`: the "variants" are the
   8 languages and the "frames" are text strings (checked in siedler3_08: same text id in German,
   English, Italian, French, Polish, Spanish, Korean, Japanese). Rename `FrameTable` in gfx_layout.h

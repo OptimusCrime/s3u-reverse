@@ -696,6 +696,28 @@ reviews (0x5a0000..0x5a8f20, 0x5a8f20..0x5b50ad, CGraphicsData
   GuiImagePointer, SequenceFrameCount): renamed in the next batch with the
   AI ones.
 
+Renames of verified (and one trivial) functions found wrong by the naming
+pass, each confirmed from the disassembly first: `Picture::FreeIfBoth` ->
+`png_free` (category thirdparty), `CGraphicsData::VariantFrameAddress` ->
+`TextAddress`, `FramePointer` -> `GuiImagePointer`, `FrameCount` ->
+`SequenceFrameCount` (with the gfx_layout.h fields: TextTable
+textsPerLanguage/languages, textTables, language, languageCount,
+guiImageTables, SequenceTable/sequenceTables),
+`BLACK_BOARD_NOTE::CancelAtHandler` -> `ExecuteAtHandler`
+(`agent_slot::kCancelNote` -> `kExecute`), `AI::ListFirst` ->
+`AI::SiteTree::begin`, `AI::List::begin_580220` / `empty_580230` ->
+`std::multimap::end_580220` / `empty_580230` (category stl, like their
+neighbours 0x580240..0x580270), `BLACK_BOARD_AGENT::vf05` -> `IsBusy`
+(slot 5 stays `agent_slot::kBusy`). Hooks, trampolines, specs, docs and
+re/whole_game_calls.csv follow; the seed-name tables (difftest.cpp
+SeedName, run.py RENAMED_FUNCTIONS) map the new names to the old ones, so
+inputs are unchanged. Evidence: Debug and Release build; all 587
+in-process tests pass; `run.py --changed --require-coverage` (every spec,
+because run.py changed): 703 specs, 0 mismatches, self-test 21 of 21;
+8 large specs stopped at the 60 s budget before full coverage (code
+unchanged; their passes need a `--full` run) and GenerateRandomMap is
+capped at 1 case as usual.
+
 
 ### 2026-11-24 (49): the user's full game
 - The user played a whole game: `python tools/play_game.py --map

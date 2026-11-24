@@ -9,7 +9,8 @@
 //   [0x7dfba4]) + ((c3 * [0x7dfbac]) >> 8 << [0x7dfba0])
 // (32-bit products, logical shifts, shift counts mod 32).
 //
-// CGraphicsData::FrameCount (0x005fad20; was GfxData::SpriteWord): (id)
+// CGraphicsData::SequenceFrameCount (0x005fad20; was GfxData::SpriteWord, then
+// CGraphicsData::FrameCount until session 50): (id)
 // thiscall, ret 4. id = group << 16 | index; reads the pointer at
 // [[this+0xb24+group*4] + 8 + index*4] and returns the word at that pointer
 // + [this+0x264+group*4] (the group's mapped view). Only AX is the result;
@@ -98,13 +99,13 @@ static_assert(offsetof(DrawTarget, table204) == 0x204);
 }  // namespace
 
 using PackColourFn = std::uint32_t(__stdcall*)(std::uint32_t c1, std::uint32_t c2, std::uint32_t c3);
-using FrameCountFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t id);
+using SequenceFrameCountFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t id);
 using SetDwordFn = void*(__fastcall*)(void* self, void* edx, std::uint32_t value);
 using Point16Fn = void*(__fastcall*)(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 using Record24Fn = void*(__fastcall*)(void* self, void* edx);
 
 std::uint32_t __stdcall Render_PackColour(std::uint32_t c1, std::uint32_t c2, std::uint32_t c3);
-std::uint32_t __fastcall CGraphicsData_FrameCount(void* self, void* edx, std::uint32_t id);
+std::uint32_t __fastcall CGraphicsData_SequenceFrameCount(void* self, void* edx, std::uint32_t id);
 void* __fastcall GfxDword_Construct(void* self, void* edx, std::uint32_t value);
 void* __fastcall Point16_Construct(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 void* __fastcall LogicRecord24_Construct(void* self, void* edx);
@@ -120,17 +121,17 @@ std::uint32_t __stdcall Render_PackColour(std::uint32_t c1, std::uint32_t c2, st
     return part3 + part2 + part1;
 }
 
-S3RE_HOOK(0x005fad20, CGraphicsData_FrameCount, FrameCountFn, Original_CGraphicsData_FrameCount,
-          CGraphicsData_FrameCount);
+S3RE_HOOK(0x005fad20, CGraphicsData_SequenceFrameCount, SequenceFrameCountFn, Original_CGraphicsData_SequenceFrameCount,
+          CGraphicsData_SequenceFrameCount);
 
 // Purpose: The number of frames of an animation (group and index) in the
 // loaded graphics, e.g. how long a settler's animation runs.
-std::uint32_t __fastcall CGraphicsData_FrameCount(void* self, void* /*edx*/, std::uint32_t id) {
+std::uint32_t __fastcall CGraphicsData_SequenceFrameCount(void* self, void* /*edx*/, std::uint32_t id) {
     const std::uint32_t group = id >> 16;
     const std::uint32_t index = id & 0xffff;
     const CGraphicsData* const gfx = As<CGraphicsData>(self);
     const std::uint32_t view = gfx->views[group];
-    const std::uint32_t entry = gfx->spriteTables[group]->sprites[index];
+    const std::uint32_t entry = gfx->sequenceTables[group]->sequences[index];
     // 32-bit address arithmetic (entry + view), as the original.
     return (view & 0xffff0000u) | *reinterpret_cast<const std::uint16_t*>(entry + view);
 }
@@ -175,9 +176,11 @@ void* __fastcall LogicRecord24_Construct(void* self, void* /*edx*/) {
 
 // Batch 25.
 //
-// CGraphicsData::VariantFrameAddress (0x005faaa0; was GfxData::FrameOffset):
-//   (id, variant) thiscall, ret 8. id = group << 16 | frame; variant -1
-//   means the object's current one (+0xc40). table = [this+0x37c+group*4]; returns the dword at table +
+// CGraphicsData::TextAddress (0x005faaa0; was GfxData::FrameOffset, then
+//   CGraphicsData::VariantFrameAddress until session 50): (id, language)
+//   thiscall, ret 8. id = group << 16 | text; the "variants" are the 8
+//   languages and the "frames" C strings (re/graphics_formats.md); -1
+//   means the current language (+0xc40). table = [this+0x37c+group*4]; returns the dword at table +
 //   0xc + (word table+8 * variant + frame) * 4 plus [this+0x264+group*4]
 //   (the group's mapped view). 78 callers.
 // Render_PutPixel16 (0x004c7ac0): (x, y, colour) thiscall, ret 0xc: the
@@ -187,14 +190,14 @@ void* __fastcall LogicRecord24_Construct(void* self, void* /*edx*/) {
 // Render_Entry204 (0x004c7ab0): (i) thiscall, ret 4: dword i of the table
 //   at [this+0x204].
 
-using VariantFrameAddressFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t id,
-                                                         std::uint32_t variant);
+using TextAddressFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t id,
+                                                 std::uint32_t variant);
 using PutPixelFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t x, std::uint32_t y,
                                               std::uint32_t colour);
 using Entry204Fn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t i);
 
-std::uint32_t __fastcall CGraphicsData_VariantFrameAddress(void* self, void* edx, std::uint32_t id,
-                                                          std::uint32_t variant);
+std::uint32_t __fastcall CGraphicsData_TextAddress(void* self, void* edx, std::uint32_t id,
+                                                  std::uint32_t variant);
 std::uint32_t __fastcall Render_PutPixel16(void* self, void* edx, std::uint32_t x, std::uint32_t y,
                                            std::uint32_t colour);
 std::uint32_t __fastcall Render_Entry204(void* self, void* edx, std::uint32_t i);
@@ -202,21 +205,20 @@ std::uint32_t __fastcall Render_Entry204(void* self, void* edx, std::uint32_t i)
 namespace {
 }  // namespace
 
-S3RE_HOOK(0x005faaa0, CGraphicsData_VariantFrameAddress, VariantFrameAddressFn,
-          Original_CGraphicsData_VariantFrameAddress, CGraphicsData_VariantFrameAddress);
+S3RE_HOOK(0x005faaa0, CGraphicsData_TextAddress, TextAddressFn,
+          Original_CGraphicsData_TextAddress, CGraphicsData_TextAddress);
 
-// Purpose: Where a frame of a graphics group starts in the loaded graphics
-// data (probably the offset of a sprite's image in the GFX file), for one
-// variant (e.g. a player colour or direction) or the current one.
-std::uint32_t __fastcall CGraphicsData_VariantFrameAddress(void* self, void* /*edx*/, std::uint32_t id,
-                                                          std::uint32_t variant) {
+// Purpose: The address of a game text (a C string in the loaded text
+// groups of the GFX files), in one language or the current one.
+std::uint32_t __fastcall CGraphicsData_TextAddress(void* self, void* /*edx*/, std::uint32_t id,
+                                                  std::uint32_t variant) {
     const std::uint32_t group = id >> 16;
     const CGraphicsData* const gfx = As<CGraphicsData>(self);
     if (variant == 0xffffffffu) {
-        variant = gfx->currentVariant;
+        variant = gfx->language;
     }
-    const gfx::FrameTable* const table = gfx->frameTables[group];
-    const std::uint32_t index = table->framesPerVariant * variant + (id & 0xffff);
+    const gfx::TextTable* const table = gfx->textTables[group];
+    const std::uint32_t index = table->textsPerLanguage * variant + (id & 0xffff);
     return table->offsets[index] + gfx->views[group];
 }
 
@@ -249,14 +251,14 @@ namespace {
 
 struct GraphicsFunctions {
     PackColourFn packColour;
-    FrameCountFn frameCount;
+    SequenceFrameCountFn frameCount;
     SetDwordFn setDword;
     Point16Fn point16;
     Record24Fn record24;
 };
 
 void CompareGraphics(test::Context& ctx, const GraphicsFunctions& candidate, int cases) {
-    const GraphicsFunctions original{Original_Render_PackColour, Original_CGraphicsData_FrameCount,
+    const GraphicsFunctions original{Original_Render_PackColour, Original_CGraphicsData_SequenceFrameCount,
                                      Original_GfxDword_Construct, Original_Point16_Construct,
                                      Original_LogicRecord24_Construct};
     std::uint32_t saved[6];
@@ -283,14 +285,14 @@ void CompareGraphics(test::Context& ctx, const GraphicsFunctions& candidate, int
             ctx.rng().Fill(data, sizeof(data));
             const std::uint32_t group = ctx.rng().Below(0xb0);
             const std::uint32_t index = ctx.rng().Below(0x100);
-            static_assert(sizeof(object) >= offsetof(CGraphicsData, spriteTables) + 0xb0 * 4);
-            auto* const table = reinterpret_cast<gfx::SpriteTable*>(data);
-            As<CGraphicsData>(object)->spriteTables[group] = table;
+            static_assert(sizeof(object) >= offsetof(CGraphicsData, sequenceTables) + 0xb0 * 4);
+            auto* const table = reinterpret_cast<gfx::SequenceTable*>(data);
+            As<CGraphicsData>(object)->sequenceTables[group] = table;
             // Any offset (its upper half shows in EAX); the entry points so
             // that entry + offset lands in the buffer.
             const std::uint32_t offset = ctx.rng().Next32();
             As<CGraphicsData>(object)->views[group] = offset;
-            table->sprites[index] = reinterpret_cast<std::uint32_t>(data) + 0x1000 + ctx.rng().Below(0x1000) - offset;
+            table->sequences[index] = reinterpret_cast<std::uint32_t>(data) + 0x1000 + ctx.rng().Below(0x1000) - offset;
             same &= S3RE_EXPECT_EQ(original.frameCount(object, nullptr, group << 16 | index),
                                    candidate.frameCount(object, nullptr, group << 16 | index));
         } else {
@@ -330,14 +332,14 @@ std::uint32_t __stdcall WrongPackColour(std::uint32_t c1, std::uint32_t c2, std:
 }  // namespace
 
 S3RE_TEST(GraphicsHelpers_MatchOriginal) {
-    CompareGraphics(ctx, {&Render_PackColour, &CGraphicsData_FrameCount, &GfxDword_Construct, &Point16_Construct,
+    CompareGraphics(ctx, {&Render_PackColour, &CGraphicsData_SequenceFrameCount, &GfxDword_Construct, &Point16_Construct,
                           &LogicRecord24_Construct},
                     50000);
 }
 
 S3RE_TEST(GraphicsHelpers_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareGraphics(probe, {&WrongPackColour, &CGraphicsData_FrameCount, &GfxDword_Construct, &Point16_Construct,
+    CompareGraphics(probe, {&WrongPackColour, &CGraphicsData_SequenceFrameCount, &GfxDword_Construct, &Point16_Construct,
                             &LogicRecord24_Construct},
                     5000);
     S3RE_EXPECT(probe.failures() > 0);
@@ -347,13 +349,13 @@ S3RE_TEST(GraphicsHelpers_ComparisonDetectsWrongImplementation) {
 namespace {
 
 struct Graphics25Functions {
-    VariantFrameAddressFn variantFrameAddress;
+    TextAddressFn textAddress;
     PutPixelFn putPixel;
     Entry204Fn entry204;
 };
 
 void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate, int cases) {
-    const Graphics25Functions original{Original_CGraphicsData_VariantFrameAddress, Original_Render_PutPixel16,
+    const Graphics25Functions original{Original_CGraphicsData_TextAddress, Original_Render_PutPixel16,
                                        Original_Render_Entry204};
     const std::uint32_t savedX = g_drawOriginX, savedY = g_drawOriginY;
     static std::uint8_t a[0x8000], b[0x8000];
@@ -367,15 +369,15 @@ void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate,
             const std::uint32_t frames = ctx.rng().Below(8);
             const std::uint32_t frame = ctx.rng().Below(8);
             std::uint32_t variant = ctx.rng().Chance(1, 3) ? 0xffffffffu : ctx.rng().Below(4);
-            As<CGraphicsData>(a)->currentVariant = ctx.rng().Below(4);
+            As<CGraphicsData>(a)->language = ctx.rng().Below(4);
             std::memcpy(b, a, sizeof(a));
             for (std::uint8_t* side : std::initializer_list<std::uint8_t*>{a, b}) {
-                auto* const table = reinterpret_cast<gfx::FrameTable*>(side + 0x1000 + group * 0x40);
-                As<CGraphicsData>(side)->frameTables[group] = table;
-                table->framesPerVariant = static_cast<std::uint16_t>(frames);
+                auto* const table = reinterpret_cast<gfx::TextTable*>(side + 0x1000 + group * 0x40);
+                As<CGraphicsData>(side)->textTables[group] = table;
+                table->textsPerLanguage = static_cast<std::uint16_t>(frames);
             }
-            ra = original.variantFrameAddress(a, nullptr, group << 16 | frame, variant);
-            rb = candidate.variantFrameAddress(b, nullptr, group << 16 | frame, variant);
+            ra = original.textAddress(a, nullptr, group << 16 | frame, variant);
+            rb = candidate.textAddress(b, nullptr, group << 16 | frame, variant);
         } else if (op == 1) {
             g_drawOriginX = ctx.rng().Below(32);
             g_drawOriginY = ctx.rng().Below(32);
@@ -399,9 +401,9 @@ void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate,
         As<DrawTarget>(b)->pixels = As<DrawTarget>(a)->pixels;
         As<DrawTarget>(b)->table204 = As<DrawTarget>(a)->table204;
         for (std::uint32_t group = 0; group < 0xb0; ++group) {  // past the 70 groups, like the cases above
-            if (As<CGraphicsData>(a)->frameTables[group] ==
-                reinterpret_cast<const gfx::FrameTable*>(a + 0x1000 + group * 0x40)) {
-                As<CGraphicsData>(b)->frameTables[group] = As<CGraphicsData>(a)->frameTables[group];
+            if (As<CGraphicsData>(a)->textTables[group] ==
+                reinterpret_cast<const gfx::TextTable*>(a + 0x1000 + group * 0x40)) {
+                As<CGraphicsData>(b)->textTables[group] = As<CGraphicsData>(a)->textTables[group];
             }
         }
         bool same = S3RE_EXPECT_EQ(ra, rb);
@@ -417,13 +419,13 @@ void CompareGraphics25(test::Context& ctx, const Graphics25Functions& candidate,
 
 // Wrong: ignores the "current variant" default.
 std::uint32_t __fastcall WrongFrameOffset(void* self, void* edx, std::uint32_t id, std::uint32_t variant) {
-    return CGraphicsData_VariantFrameAddress(self, edx, id, variant == 0xffffffffu ? 0 : variant);
+    return CGraphicsData_TextAddress(self, edx, id, variant == 0xffffffffu ? 0 : variant);
 }
 
 }  // namespace
 
 S3RE_TEST(GraphicsHelpers25_MatchOriginal) {
-    CompareGraphics25(ctx, {&CGraphicsData_VariantFrameAddress, &Render_PutPixel16, &Render_Entry204}, 30000);
+    CompareGraphics25(ctx, {&CGraphicsData_TextAddress, &Render_PutPixel16, &Render_Entry204}, 30000);
 }
 
 S3RE_TEST(GraphicsHelpers25_ComparisonDetectsWrongImplementation) {

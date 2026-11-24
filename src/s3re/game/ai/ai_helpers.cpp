@@ -387,8 +387,10 @@ std::uint32_t __stdcall AI_FreeTileArea(std::int32_t x, std::int32_t y) {
 //              the 20 vectors at 0x7e7a24 (end = begin, 16-byte entries).
 //              EAX = 10.
 //   0x00553e00 AI_ClearGlobals7e0568(): 0x7e0568 = 0x7e056c = 0; EAX = 0.
-//   0x00559260 AI_ListFirst(out) thiscall, ret 4: *out = **(this+4) (the
-//              first node after the list head); EAX = out.
+//   0x00559260 AI_SiteTree_begin(out) thiscall, ret 4: *out = **(this+4)
+//              (MSVC6 std::_Tree::begin(): _Left(_Head), the first node of
+//              a CEvaLand area record's site tree); EAX = out. Was
+//              AI_ListFirst until session 50.
 
 using CountBuildingsFn = std::uint32_t(__fastcall*)(std::uint32_t player, std::uint32_t type, std::uint32_t area);
 using AreaAlongRowFn = std::uint32_t(__fastcall*)(std::uint32_t x, std::uint32_t y);
@@ -396,7 +398,7 @@ using List32AddFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint3
 using GridSumFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 using AgentResetFn = std::uint32_t(__fastcall*)(void* self, void* edx);
 using ClearGlobalsFn = std::uint32_t(__cdecl*)();
-using ListFirstFn = void*(__fastcall*)(void* self, void* edx, std::uint32_t* out);
+using SiteTreeBeginFn = void*(__fastcall*)(void* self, void* edx, std::uint32_t* out);
 
 std::uint32_t __fastcall AI_CountBuildings(std::uint32_t player, std::uint32_t type, std::uint32_t area);
 std::uint32_t __fastcall AI_AreaAlongRow(std::uint32_t x, std::uint32_t y);
@@ -405,7 +407,7 @@ void* __fastcall AI_GridCellWrapped(void* self, void* edx, std::uint32_t x, std:
 std::uint32_t __fastcall AI_GridSumAround(void* self, void* edx, std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall AI_ResetAgentData(void* self, void* edx);
 std::uint32_t __cdecl AI_ClearGlobals7e0568();
-void* __fastcall AI_ListFirst(void* self, void* edx, std::uint32_t* out);
+void* __fastcall AI_SiteTree_begin(void* self, void* edx, std::uint32_t* out);
 
 S3RE_HOOK(0x0059dac0, AI_CountBuildings, CountBuildingsFn, Original_AI_CountBuildings, AI_CountBuildings);
 
@@ -583,11 +585,11 @@ std::uint32_t __cdecl AI_ClearGlobals7e0568() {
     return 0;
 }
 
-S3RE_HOOK(0x00559260, AI_ListFirst, ListFirstFn, Original_AI_ListFirst, AI_ListFirst);
+S3RE_HOOK(0x00559260, AI_SiteTree_begin, SiteTreeBeginFn, Original_AI_SiteTree_begin, AI_SiteTree_begin);
 
-// Purpose: The first entry of a linked list (the node after the head at
-// this+4), as an iterator written to `out`.
-void* __fastcall AI_ListFirst(void* self, void* /*edx*/, std::uint32_t* out) {
+// Purpose: begin() of a CEvaLand area's site tree (an MSVC6 std::_Tree:
+// the head's left link, the leftmost node), as an iterator written to `out`.
+void* __fastcall AI_SiteTree_begin(void* self, void* /*edx*/, std::uint32_t* out) {
     *out = static_cast<const AiList*>(self)->head->next;
     return out;
 }
@@ -946,18 +948,18 @@ struct Ai25Functions {
     GridSumFn gridSumAround;
     AgentResetFn resetAgentData;
     ClearGlobalsFn clearGlobals;
-    ListFirstFn listFirst;
+    SiteTreeBeginFn siteTreeBegin;
 };
 
 Ai25Functions OriginalAi25() {
     return {Original_AI_CountBuildings, Original_AI_AreaAlongRow,  Original_AI_List32Add,
             Original_AI_GridCellWrapped, Original_AI_GridSumAround, Original_AI_ResetAgentData,
-            Original_AI_ClearGlobals7e0568, Original_AI_ListFirst};
+            Original_AI_ClearGlobals7e0568, Original_AI_SiteTree_begin};
 }
 
 Ai25Functions OurAi25() {
     return {&AI_CountBuildings, &AI_AreaAlongRow,  &AI_List32Add,     &AI_GridCellWrapped,
-            &AI_GridSumAround,  &AI_ResetAgentData, &AI_ClearGlobals7e0568, &AI_ListFirst};
+            &AI_GridSumAround,  &AI_ResetAgentData, &AI_ClearGlobals7e0568, &AI_SiteTree_begin};
 }
 
 // S3.EXE memory the functions write: the two globals and the 20 vectors
@@ -1069,7 +1071,7 @@ void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) 
                 case 6: return f.clearGlobals();
                 default: {
                     std::uint32_t out = 0;
-                    void* r = f.listFirst(object, nullptr, &out);
+                    void* r = f.siteTreeBegin(object, nullptr, &out);
                     return (r == &out ? 0x5a5a5a5au : 0) ^ out;  // the first node (the same dword on both sides)
                 }
             }

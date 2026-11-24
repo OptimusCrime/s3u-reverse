@@ -156,6 +156,8 @@ updated. Worth adding to re/structs.md "Pending event".
 
 ### Corrections of other names
 
+Done in session 50: `AI::SiteTree::begin` and `BLACK_BOARD_AGENT::IsBusy`.
+
 - `AI::ListFirst` 0x559260 (verified): it is `std::_Tree::begin()`
   (head->left) as used on the site trees by ~Area 0x556080, AddArea,
   FillAreaSiteLists and RefillAreaSiteList (39 + 21 calls); probably
@@ -184,6 +186,9 @@ base NoOp_ret4 and clears +0x14), 0x56cd90 / 0x57ce90 (already named
 MakeBuildOrders, fine), 0x56faa0 (name already right).
 
 ### Corrections of existing names (including verified ones)
+
+Done in session 50: items 1 (`BLACK_BOARD_NOTE::ExecuteAtHandler`, `agent_slot::kExecute`)
+and 3 (`std::multimap::end_580220` / `empty_580230`, category stl like their neighbours).
 
 1. **0x582510 `BLACK_BOARD_NOTE::CancelAtHandler` is not a cancel.** Slot 10
    is "carry the request out": T_DO_BUILD_HOUSE_AGENT::WorkOnNote 0x5655c0

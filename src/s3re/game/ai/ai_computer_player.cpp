@@ -65,7 +65,7 @@
 // 0x5509d0 ~CComputerPlayer, 0x5509b0 its scalar deleting destructor.
 // 0x551a70 StartBestBuilding(): see there (0x550f80 step 7).
 // 0x582480 BLACK_BOARD_NOTE::ReportToRequester(result, value) ret 8 and
-//   0x582510 CancelAtHandler(): the note callbacks (agent slots 9 and 10).
+//   0x582510 ExecuteAtHandler(): the note callbacks (agent slots 9 and 10).
 // Agent slots: ai_layout.h agent_slot. Reimplementations call ours
 // directly; the tests run the original side entirely as original code
 // (ScopedJump to the trampolines).
@@ -157,7 +157,7 @@ void* __fastcall CComputerPlayer_DeletingDestroy(void* self, void* edx, std::uin
 void __fastcall CComputerPlayer_StartBestBuilding(void* self, void* edx);
 std::uint32_t __fastcall BLACK_BOARD_NOTE_ReportToRequester(void* self, void* edx, std::uint32_t result,
                                                             std::uint32_t value);
-std::uint32_t __fastcall BLACK_BOARD_NOTE_CancelAtHandler(void* self, void* edx);
+std::uint32_t __fastcall BLACK_BOARD_NOTE_ExecuteAtHandler(void* self, void* edx);
 
 // ai_evaland.cpp, win32_classes.cpp
 std::uint32_t __cdecl AI_EvaLand_Release();
@@ -845,15 +845,17 @@ std::uint32_t __fastcall BLACK_BOARD_NOTE_ReportToRequester(void* self, void* /*
     return CallSlot(requester, agent_slot::kNoteReported, Address(parent), Address(note), result, value);
 }
 
-S3RE_HOOK(0x00582510, BLACK_BOARD_NOTE_CancelAtHandler, NoteFn, Original_BLACK_BOARD_NOTE_CancelAtHandler,
-          BLACK_BOARD_NOTE_CancelAtHandler);
+S3RE_HOOK(0x00582510, BLACK_BOARD_NOTE_ExecuteAtHandler, NoteFn, Original_BLACK_BOARD_NOTE_ExecuteAtHandler,
+          BLACK_BOARD_NOTE_ExecuteAtHandler);
 
-// Purpose: Tells the agent that took a note that it is withdrawn (its slot
-// 10; G), e.g. when the request above it is cancelled (0x5656e0, 0x5789b0).
-// There is no check for a note nobody took.
-std::uint32_t __fastcall BLACK_BOARD_NOTE_CancelAtHandler(void* self, void* /*edx*/) {
+// Purpose: Tells the agent that took a note to carry the request out (its
+// slot 10): T_DO_BUILD_HOUSE_AGENT's slot 10 0x5656e0 and
+// HOUSE_REQUEST_AGENT's 0x5789b0 pass it down, and the ground request
+// agent's slot 10 0x576610 sends the PlaceBuilding command (0x576430). Was
+// CancelAtHandler until session 50. There is no check for a note nobody took.
+std::uint32_t __fastcall BLACK_BOARD_NOTE_ExecuteAtHandler(void* self, void* /*edx*/) {
     ComputerPlayer* player = g_aiPlayer;
-    return CallSlot(player->agents[AsNote(self)->handler], agent_slot::kCancelNote, Address(self));
+    return CallSlot(player->agents[AsNote(self)->handler], agent_slot::kExecute, Address(self));
 }
 
 // ---------------------------------------------------------------------------
@@ -1302,7 +1304,7 @@ const void* const kFakeVtable[] = {
     reinterpret_cast<const void*>(&FakeSlot<agent_slot::kWantsToRun>),
     reinterpret_cast<const void*>(&FakeSlot<agent_slot::kRun>),
     reinterpret_cast<const void*>(&FakeNoteReported),
-    reinterpret_cast<const void*>(&FakeSlotWithNote<agent_slot::kCancelNote>),
+    reinterpret_cast<const void*>(&FakeSlotWithNote<agent_slot::kExecute>),
 };
 
 std::uint32_t __fastcall FakeCountSites(const std::uint8_t* player, const std::uint32_t* area) {
@@ -1518,7 +1520,7 @@ NoteTreeFunctions OriginalNoteTree() {
             Original_CComputerPlayer_DeletingDestroy,
             Original_CComputerPlayer_StartBestBuilding,
             Original_BLACK_BOARD_NOTE_ReportToRequester,
-            Original_BLACK_BOARD_NOTE_CancelAtHandler};
+            Original_BLACK_BOARD_NOTE_ExecuteAtHandler};
 }
 
 NoteTreeFunctions OurNoteTree() {
@@ -1539,7 +1541,7 @@ NoteTreeFunctions OurNoteTree() {
             &CComputerPlayer_DeletingDestroy,
             &CComputerPlayer_StartBestBuilding,
             &BLACK_BOARD_NOTE_ReportToRequester,
-            &BLACK_BOARD_NOTE_CancelAtHandler};
+            &BLACK_BOARD_NOTE_ExecuteAtHandler};
 }
 
 // While it lives, the A3 entry points run their original code (the
@@ -1661,7 +1663,7 @@ bool TreeOpRunnable(const TreeCase& c, const TreeShape& shape) {
     if (c.op == TreeOp::DeleteNote && shape.full && shape.notes.empty()) {
         return false;  // every id is the filler's
     }
-    // CancelAtHandler and the handlers need agents (a note's handler is one).
+    // ExecuteAtHandler and the handlers need agents (a note's handler is one).
     return !shape.agents.empty() || c.op == TreeOp::AddNote || c.op == TreeOp::AddNoteUnder;
 }
 

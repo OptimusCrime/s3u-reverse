@@ -5780,18 +5780,18 @@ address,name,source,ticks,calls,commit,date,note
 0x00554880,AI::TileCentre_554880,save:slot 1.sav,2000,10764,d85015d,2026-11-23,
 0x00554880,AI::TileCentre_554880,save:slot 2.sav,2000,0,d85015d,2026-11-23,
 0x00554880,AI::TileCentre_554880,save:slot 3.sav,2000,16353,d85015d,2026-11-23,
-0x00559260,AI::ListFirst,"random:384,0 seed 1234",2000,90,d85015d,2026-11-23,
-0x00559260,AI::ListFirst,"random:448,3 seed 1234",2000,90,d85015d,2026-11-23,
-0x00559260,AI::ListFirst,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,90,5536f09,2026-11-10,
-0x00559260,AI::ListFirst,"random:512,1 seed 1234",1500,90,21f1f01,2026-11-10,
-0x00559260,AI::ListFirst,"random:640,2 seed 1234",1500,90,21f1f01,2026-11-10,
-0x00559260,AI::ListFirst,replay:fullgame-20261124-0055-seed10779,138402,1808,4080b11,2026-11-24,seed 10779
-0x00559260,AI::ListFirst,replay:fun8-seed2024-input31,5000,927,d85015d,2026-11-23,seed 2024
-0x00559260,AI::ListFirst,replay:random768-seed4321-input7,3000,258,bde052e,2026-11-23,seed 4321
-0x00559260,AI::ListFirst,replay:scripted-seed127,3000,90,d85015d,2026-11-23,seed 1234
-0x00559260,AI::ListFirst,save:slot 1.sav,2000,153,d85015d,2026-11-23,
-0x00559260,AI::ListFirst,save:slot 2.sav,2000,0,d85015d,2026-11-23,
-0x00559260,AI::ListFirst,save:slot 3.sav,2000,154,d85015d,2026-11-23,
+0x00559260,AI::SiteTree::begin,"random:384,0 seed 1234",2000,90,d85015d,2026-11-23,
+0x00559260,AI::SiteTree::begin,"random:448,3 seed 1234",2000,90,d85015d,2026-11-23,
+0x00559260,AI::SiteTree::begin,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,90,5536f09,2026-11-10,
+0x00559260,AI::SiteTree::begin,"random:512,1 seed 1234",1500,90,21f1f01,2026-11-10,
+0x00559260,AI::SiteTree::begin,"random:640,2 seed 1234",1500,90,21f1f01,2026-11-10,
+0x00559260,AI::SiteTree::begin,replay:fullgame-20261124-0055-seed10779,138402,1808,4080b11,2026-11-24,seed 10779
+0x00559260,AI::SiteTree::begin,replay:fun8-seed2024-input31,5000,927,d85015d,2026-11-23,seed 2024
+0x00559260,AI::SiteTree::begin,replay:random768-seed4321-input7,3000,258,bde052e,2026-11-23,seed 4321
+0x00559260,AI::SiteTree::begin,replay:scripted-seed127,3000,90,d85015d,2026-11-23,seed 1234
+0x00559260,AI::SiteTree::begin,save:slot 1.sav,2000,153,d85015d,2026-11-23,
+0x00559260,AI::SiteTree::begin,save:slot 2.sav,2000,0,d85015d,2026-11-23,
+0x00559260,AI::SiteTree::begin,save:slot 3.sav,2000,154,d85015d,2026-11-23,
 0x00559630,std::logic_error::what,"random:384,0 seed 1234",2000,0,d85015d,2026-11-23,
 0x00559630,std::logic_error::what,"random:448,3 seed 1234",2000,0,d85015d,2026-11-23,
 0x00559630,std::logic_error::what,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
@@ -6398,24 +6398,24 @@ address,name,source,ticks,calls,commit,date,note
 0x005801c0,T_DO_BUILD_HOUSE_NOTE::T_DO_BUILD_HOUSE_NOTE,save:slot 1.sav,2000,0,d85015d,2026-11-23,
 0x005801c0,T_DO_BUILD_HOUSE_NOTE::T_DO_BUILD_HOUSE_NOTE,save:slot 2.sav,2000,0,d85015d,2026-11-23,
 0x005801c0,T_DO_BUILD_HOUSE_NOTE::T_DO_BUILD_HOUSE_NOTE,save:slot 3.sav,2000,0,d85015d,2026-11-23,
-0x00580220,AI::List::begin_580220,"random:384,0 seed 1234",2000,0,d85015d,2026-11-23,
-0x00580220,AI::List::begin_580220,"random:448,3 seed 1234",2000,0,d85015d,2026-11-23,
-0x00580220,AI::List::begin_580220,replay:fullgame-20261124-0055-seed10779,138402,72,4080b11,2026-11-24,seed 10779
-0x00580220,AI::List::begin_580220,replay:fun8-seed2024-input31,5000,0,d85015d,2026-11-23,seed 2024
-0x00580220,AI::List::begin_580220,replay:random768-seed4321-input7,1500,0,d85015d,2026-11-23,seed 4321
-0x00580220,AI::List::begin_580220,replay:scripted-seed127,3000,0,d85015d,2026-11-23,seed 1234
-0x00580220,AI::List::begin_580220,save:slot 1.sav,2000,0,d85015d,2026-11-23,
-0x00580220,AI::List::begin_580220,save:slot 2.sav,2000,0,d85015d,2026-11-23,
-0x00580220,AI::List::begin_580220,save:slot 3.sav,2000,0,d85015d,2026-11-23,
-0x00580230,AI::List::empty_580230,"random:384,0 seed 1234",2000,0,d85015d,2026-11-23,
-0x00580230,AI::List::empty_580230,"random:448,3 seed 1234",2000,0,d85015d,2026-11-23,
-0x00580230,AI::List::empty_580230,replay:fullgame-20261124-0055-seed10779,138402,170,4080b11,2026-11-24,seed 10779
-0x00580230,AI::List::empty_580230,replay:fun8-seed2024-input31,5000,0,d85015d,2026-11-23,seed 2024
-0x00580230,AI::List::empty_580230,replay:random768-seed4321-input7,1500,0,d85015d,2026-11-23,seed 4321
-0x00580230,AI::List::empty_580230,replay:scripted-seed127,3000,0,d85015d,2026-11-23,seed 1234
-0x00580230,AI::List::empty_580230,save:slot 1.sav,2000,0,d85015d,2026-11-23,
-0x00580230,AI::List::empty_580230,save:slot 2.sav,2000,0,d85015d,2026-11-23,
-0x00580230,AI::List::empty_580230,save:slot 3.sav,2000,0,d85015d,2026-11-23,
+0x00580220,std::multimap::end_580220,"random:384,0 seed 1234",2000,0,d85015d,2026-11-23,
+0x00580220,std::multimap::end_580220,"random:448,3 seed 1234",2000,0,d85015d,2026-11-23,
+0x00580220,std::multimap::end_580220,replay:fullgame-20261124-0055-seed10779,138402,72,4080b11,2026-11-24,seed 10779
+0x00580220,std::multimap::end_580220,replay:fun8-seed2024-input31,5000,0,d85015d,2026-11-23,seed 2024
+0x00580220,std::multimap::end_580220,replay:random768-seed4321-input7,1500,0,d85015d,2026-11-23,seed 4321
+0x00580220,std::multimap::end_580220,replay:scripted-seed127,3000,0,d85015d,2026-11-23,seed 1234
+0x00580220,std::multimap::end_580220,save:slot 1.sav,2000,0,d85015d,2026-11-23,
+0x00580220,std::multimap::end_580220,save:slot 2.sav,2000,0,d85015d,2026-11-23,
+0x00580220,std::multimap::end_580220,save:slot 3.sav,2000,0,d85015d,2026-11-23,
+0x00580230,std::multimap::empty_580230,"random:384,0 seed 1234",2000,0,d85015d,2026-11-23,
+0x00580230,std::multimap::empty_580230,"random:448,3 seed 1234",2000,0,d85015d,2026-11-23,
+0x00580230,std::multimap::empty_580230,replay:fullgame-20261124-0055-seed10779,138402,170,4080b11,2026-11-24,seed 10779
+0x00580230,std::multimap::empty_580230,replay:fun8-seed2024-input31,5000,0,d85015d,2026-11-23,seed 2024
+0x00580230,std::multimap::empty_580230,replay:random768-seed4321-input7,1500,0,d85015d,2026-11-23,seed 4321
+0x00580230,std::multimap::empty_580230,replay:scripted-seed127,3000,0,d85015d,2026-11-23,seed 1234
+0x00580230,std::multimap::empty_580230,save:slot 1.sav,2000,0,d85015d,2026-11-23,
+0x00580230,std::multimap::empty_580230,save:slot 2.sav,2000,0,d85015d,2026-11-23,
+0x00580230,std::multimap::empty_580230,save:slot 3.sav,2000,0,d85015d,2026-11-23,
 0x005823e0,BLACK_BOARD_NOTE::Init,"random:384,0 seed 1234",2000,28,bde052e,2026-11-23,
 0x005823e0,BLACK_BOARD_NOTE::Init,"random:448,3 seed 1234",2000,24,bde052e,2026-11-23,
 0x005823e0,BLACK_BOARD_NOTE::Init,replay:fullgame-20261124-0055-seed10779,138402,349,4080b11,2026-11-24,seed 10779
@@ -6488,15 +6488,15 @@ address,name,source,ticks,calls,commit,date,note
 0x005824d0,BLACK_BOARD_NOTE::FindChildOfType,save:slot 1.sav,2000,0,d85015d,2026-11-23,
 0x005824d0,BLACK_BOARD_NOTE::FindChildOfType,save:slot 2.sav,2000,0,d85015d,2026-11-23,
 0x005824d0,BLACK_BOARD_NOTE::FindChildOfType,save:slot 3.sav,2000,10,d85015d,2026-11-23,
-0x00582510,BLACK_BOARD_NOTE::CancelAtHandler,"random:384,0 seed 1234",2000,12,d85015d,2026-11-23,
-0x00582510,BLACK_BOARD_NOTE::CancelAtHandler,"random:448,3 seed 1234",2000,12,d85015d,2026-11-23,
-0x00582510,BLACK_BOARD_NOTE::CancelAtHandler,replay:fullgame-20261124-0055-seed10779,138402,342,4080b11,2026-11-24,seed 10779
-0x00582510,BLACK_BOARD_NOTE::CancelAtHandler,replay:fun8-seed2024-input31,5000,230,d85015d,2026-11-23,seed 2024
-0x00582510,BLACK_BOARD_NOTE::CancelAtHandler,replay:random768-seed4321-input7,1500,20,d85015d,2026-11-23,seed 4321
-0x00582510,BLACK_BOARD_NOTE::CancelAtHandler,replay:scripted-seed127,3000,26,d85015d,2026-11-23,seed 1234
-0x00582510,BLACK_BOARD_NOTE::CancelAtHandler,save:slot 1.sav,2000,0,d85015d,2026-11-23,
-0x00582510,BLACK_BOARD_NOTE::CancelAtHandler,save:slot 2.sav,2000,0,d85015d,2026-11-23,
-0x00582510,BLACK_BOARD_NOTE::CancelAtHandler,save:slot 3.sav,2000,10,d85015d,2026-11-23,
+0x00582510,BLACK_BOARD_NOTE::ExecuteAtHandler,"random:384,0 seed 1234",2000,12,d85015d,2026-11-23,
+0x00582510,BLACK_BOARD_NOTE::ExecuteAtHandler,"random:448,3 seed 1234",2000,12,d85015d,2026-11-23,
+0x00582510,BLACK_BOARD_NOTE::ExecuteAtHandler,replay:fullgame-20261124-0055-seed10779,138402,342,4080b11,2026-11-24,seed 10779
+0x00582510,BLACK_BOARD_NOTE::ExecuteAtHandler,replay:fun8-seed2024-input31,5000,230,d85015d,2026-11-23,seed 2024
+0x00582510,BLACK_BOARD_NOTE::ExecuteAtHandler,replay:random768-seed4321-input7,1500,20,d85015d,2026-11-23,seed 4321
+0x00582510,BLACK_BOARD_NOTE::ExecuteAtHandler,replay:scripted-seed127,3000,26,d85015d,2026-11-23,seed 1234
+0x00582510,BLACK_BOARD_NOTE::ExecuteAtHandler,save:slot 1.sav,2000,0,d85015d,2026-11-23,
+0x00582510,BLACK_BOARD_NOTE::ExecuteAtHandler,save:slot 2.sav,2000,0,d85015d,2026-11-23,
+0x00582510,BLACK_BOARD_NOTE::ExecuteAtHandler,save:slot 3.sav,2000,10,d85015d,2026-11-23,
 0x00584680,COMPUTER_PLAYER_AGENT::COMPUTER_PLAYER_AGENT,"random:384,0 seed 1234",2000,1,d85015d,2026-11-23,
 0x00584680,COMPUTER_PLAYER_AGENT::COMPUTER_PLAYER_AGENT,"random:448,3 seed 1234",2000,1,d85015d,2026-11-23,
 0x00584680,COMPUTER_PLAYER_AGENT::COMPUTER_PLAYER_AGENT,replay:fullgame-20261124-0055-seed10779,138402,1,4080b11,2026-11-24,seed 10779
@@ -6788,18 +6788,18 @@ address,name,source,ticks,calls,commit,date,note
 0x005a0960,Credits::TextStyle_5a0960,save:slot 1.sav,2000,0,d85015d,2026-11-23,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x005a0960,Credits::TextStyle_5a0960,save:slot 2.sav,2000,0,d85015d,2026-11-23,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x005a0960,Credits::TextStyle_5a0960,save:slot 3.sav,2000,0,d85015d,2026-11-23,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x005aa0a0,Picture::FreeIfBoth,"random:384,0 seed 1234",2000,0,d85015d,2026-11-23,
-0x005aa0a0,Picture::FreeIfBoth,"random:448,3 seed 1234",2000,0,d85015d,2026-11-23,
-0x005aa0a0,Picture::FreeIfBoth,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
-0x005aa0a0,Picture::FreeIfBoth,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
-0x005aa0a0,Picture::FreeIfBoth,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
-0x005aa0a0,Picture::FreeIfBoth,replay:fullgame-20261124-0055-seed10779,138402,0,4080b11,2026-11-24,seed 10779
-0x005aa0a0,Picture::FreeIfBoth,replay:fun8-seed2024-input31,5000,0,d85015d,2026-11-23,seed 2024
-0x005aa0a0,Picture::FreeIfBoth,replay:random768-seed4321-input7,1500,0,d85015d,2026-11-23,seed 4321
-0x005aa0a0,Picture::FreeIfBoth,replay:scripted-seed127,3000,0,d85015d,2026-11-23,seed 1234
-0x005aa0a0,Picture::FreeIfBoth,save:slot 1.sav,2000,0,d85015d,2026-11-23,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x005aa0a0,Picture::FreeIfBoth,save:slot 2.sav,2000,0,d85015d,2026-11-23,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x005aa0a0,Picture::FreeIfBoth,save:slot 3.sav,2000,0,d85015d,2026-11-23,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x005aa0a0,png_free,"random:384,0 seed 1234",2000,0,d85015d,2026-11-23,
+0x005aa0a0,png_free,"random:448,3 seed 1234",2000,0,d85015d,2026-11-23,
+0x005aa0a0,png_free,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
+0x005aa0a0,png_free,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
+0x005aa0a0,png_free,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
+0x005aa0a0,png_free,replay:fullgame-20261124-0055-seed10779,138402,0,4080b11,2026-11-24,seed 10779
+0x005aa0a0,png_free,replay:fun8-seed2024-input31,5000,0,d85015d,2026-11-23,seed 2024
+0x005aa0a0,png_free,replay:random768-seed4321-input7,1500,0,d85015d,2026-11-23,seed 4321
+0x005aa0a0,png_free,replay:scripted-seed127,3000,0,d85015d,2026-11-23,seed 1234
+0x005aa0a0,png_free,save:slot 1.sav,2000,0,d85015d,2026-11-23,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x005aa0a0,png_free,save:slot 2.sav,2000,0,d85015d,2026-11-23,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x005aa0a0,png_free,save:slot 3.sav,2000,0,d85015d,2026-11-23,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x005b6790,GuidNames_Construct_5b6790,"random:384,0 seed 1234",2000,2,d85015d,2026-11-23,
 0x005b6790,GuidNames_Construct_5b6790,"random:448,3 seed 1234",2000,2,d85015d,2026-11-23,
 0x005b6790,GuidNames_Construct_5b6790,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,2,5536f09,2026-11-10,
@@ -7088,18 +7088,18 @@ address,name,source,ticks,calls,commit,date,note
 0x005f3bf0,std::string::string_repeat,save:slot 1.sav,2000,1,d85015d,2026-11-23,
 0x005f3bf0,std::string::string_repeat,save:slot 2.sav,2000,1,d85015d,2026-11-23,
 0x005f3bf0,std::string::string_repeat,save:slot 3.sav,2000,1,d85015d,2026-11-23,
-0x005faaa0,CGraphicsData::VariantFrameAddress,"random:384,0 seed 1234",2000,33,d85015d,2026-11-23,
-0x005faaa0,CGraphicsData::VariantFrameAddress,"random:448,3 seed 1234",2000,33,d85015d,2026-11-23,
-0x005faaa0,CGraphicsData::VariantFrameAddress,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,33,5536f09,2026-11-10,
-0x005faaa0,CGraphicsData::VariantFrameAddress,"random:512,1 seed 1234",1500,33,21f1f01,2026-11-10,
-0x005faaa0,CGraphicsData::VariantFrameAddress,"random:640,2 seed 1234",1500,33,21f1f01,2026-11-10,
-0x005faaa0,CGraphicsData::VariantFrameAddress,replay:fullgame-20261124-0055-seed10779,138402,515,4080b11,2026-11-24,seed 10779
-0x005faaa0,CGraphicsData::VariantFrameAddress,replay:fun8-seed2024-input31,5000,33,d85015d,2026-11-23,seed 2024
-0x005faaa0,CGraphicsData::VariantFrameAddress,replay:random768-seed4321-input7,1500,33,d85015d,2026-11-23,seed 4321
-0x005faaa0,CGraphicsData::VariantFrameAddress,replay:scripted-seed127,3000,33,d85015d,2026-11-23,seed 1234
-0x005faaa0,CGraphicsData::VariantFrameAddress,save:slot 1.sav,2000,13,d85015d,2026-11-23,
-0x005faaa0,CGraphicsData::VariantFrameAddress,save:slot 2.sav,2000,1006,bde052e,2026-11-23,
-0x005faaa0,CGraphicsData::VariantFrameAddress,save:slot 3.sav,2000,13,d85015d,2026-11-23,
+0x005faaa0,CGraphicsData::TextAddress,"random:384,0 seed 1234",2000,33,d85015d,2026-11-23,
+0x005faaa0,CGraphicsData::TextAddress,"random:448,3 seed 1234",2000,33,d85015d,2026-11-23,
+0x005faaa0,CGraphicsData::TextAddress,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,33,5536f09,2026-11-10,
+0x005faaa0,CGraphicsData::TextAddress,"random:512,1 seed 1234",1500,33,21f1f01,2026-11-10,
+0x005faaa0,CGraphicsData::TextAddress,"random:640,2 seed 1234",1500,33,21f1f01,2026-11-10,
+0x005faaa0,CGraphicsData::TextAddress,replay:fullgame-20261124-0055-seed10779,138402,515,4080b11,2026-11-24,seed 10779
+0x005faaa0,CGraphicsData::TextAddress,replay:fun8-seed2024-input31,5000,33,d85015d,2026-11-23,seed 2024
+0x005faaa0,CGraphicsData::TextAddress,replay:random768-seed4321-input7,1500,33,d85015d,2026-11-23,seed 4321
+0x005faaa0,CGraphicsData::TextAddress,replay:scripted-seed127,3000,33,d85015d,2026-11-23,seed 1234
+0x005faaa0,CGraphicsData::TextAddress,save:slot 1.sav,2000,13,d85015d,2026-11-23,
+0x005faaa0,CGraphicsData::TextAddress,save:slot 2.sav,2000,1006,bde052e,2026-11-23,
+0x005faaa0,CGraphicsData::TextAddress,save:slot 3.sav,2000,13,d85015d,2026-11-23,
 0x005faaf0,CGraphicsData::AnimationPointer,"random:384,0 seed 1234",1500,5484223,21f1f01,2026-11-10,
 0x005faaf0,CGraphicsData::AnimationPointer,"random:448,3 seed 1234",1500,4887235,21f1f01,2026-11-10,
 0x005faaf0,CGraphicsData::AnimationPointer,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,949123,5536f09,2026-11-10,
@@ -7112,30 +7112,30 @@ address,name,source,ticks,calls,commit,date,note
 0x005faaf0,CGraphicsData::AnimationPointer,save:slot 1.sav,2000,5964283,eff5bd6,2026-11-09,
 0x005faaf0,CGraphicsData::AnimationPointer,save:slot 2.sav,2000,156476,bde052e,2026-11-23,
 0x005faaf0,CGraphicsData::AnimationPointer,save:slot 3.sav,2000,172535,5a6eb86,2026-11-22,
-0x005fac70,CGraphicsData::FramePointer,"random:384,0 seed 1234",2000,4,d85015d,2026-11-23,
-0x005fac70,CGraphicsData::FramePointer,"random:448,3 seed 1234",2000,4,d85015d,2026-11-23,
-0x005fac70,CGraphicsData::FramePointer,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,4,5536f09,2026-11-10,
-0x005fac70,CGraphicsData::FramePointer,"random:512,1 seed 1234",1500,4,21f1f01,2026-11-10,
-0x005fac70,CGraphicsData::FramePointer,"random:640,2 seed 1234",1500,4,21f1f01,2026-11-10,
-0x005fac70,CGraphicsData::FramePointer,replay:fullgame-20261124-0055-seed10779,138402,4,4080b11,2026-11-24,seed 10779
-0x005fac70,CGraphicsData::FramePointer,replay:fun8-seed2024-input31,5000,4,d85015d,2026-11-23,seed 2024
-0x005fac70,CGraphicsData::FramePointer,replay:random768-seed4321-input7,1500,4,d85015d,2026-11-23,seed 4321
-0x005fac70,CGraphicsData::FramePointer,replay:scripted-seed127,3000,4,d85015d,2026-11-23,seed 1234
-0x005fac70,CGraphicsData::FramePointer,save:slot 1.sav,2000,4,d85015d,2026-11-23,
-0x005fac70,CGraphicsData::FramePointer,save:slot 2.sav,2000,4,d85015d,2026-11-23,
-0x005fac70,CGraphicsData::FramePointer,save:slot 3.sav,2000,4,d85015d,2026-11-23,
-0x005fad20,CGraphicsData::FrameCount,"random:384,0 seed 1234",1500,39,21f1f01,2026-11-10,
-0x005fad20,CGraphicsData::FrameCount,"random:448,3 seed 1234",1500,40,21f1f01,2026-11-10,
-0x005fad20,CGraphicsData::FrameCount,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
-0x005fad20,CGraphicsData::FrameCount,"random:512,1 seed 1234",1500,38,21f1f01,2026-11-10,
-0x005fad20,CGraphicsData::FrameCount,"random:640,2 seed 1234",1500,38,21f1f01,2026-11-10,
-0x005fad20,CGraphicsData::FrameCount,replay:fullgame-20261124-0055-seed10779,138402,0,4080b11,2026-11-24,seed 10779
-0x005fad20,CGraphicsData::FrameCount,replay:fun8-seed2024-input31,5000,842,c561f41,2026-11-10,seed 2024
-0x005fad20,CGraphicsData::FrameCount,replay:random768-seed4321-input7,1500,0,d85015d,2026-11-23,seed 4321
-0x005fad20,CGraphicsData::FrameCount,replay:scripted-seed127,3000,3359,ea9c79e,2026-11-09,backfilled from the inventory notes
-0x005fad20,CGraphicsData::FrameCount,save:slot 1.sav,2000,968,c561f41,2026-11-10,
-0x005fad20,CGraphicsData::FrameCount,save:slot 2.sav,2000,0,d85015d,2026-11-23,
-0x005fad20,CGraphicsData::FrameCount,save:slot 3.sav,2000,0,d85015d,2026-11-23,
+0x005fac70,CGraphicsData::GuiImagePointer,"random:384,0 seed 1234",2000,4,d85015d,2026-11-23,
+0x005fac70,CGraphicsData::GuiImagePointer,"random:448,3 seed 1234",2000,4,d85015d,2026-11-23,
+0x005fac70,CGraphicsData::GuiImagePointer,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,4,5536f09,2026-11-10,
+0x005fac70,CGraphicsData::GuiImagePointer,"random:512,1 seed 1234",1500,4,21f1f01,2026-11-10,
+0x005fac70,CGraphicsData::GuiImagePointer,"random:640,2 seed 1234",1500,4,21f1f01,2026-11-10,
+0x005fac70,CGraphicsData::GuiImagePointer,replay:fullgame-20261124-0055-seed10779,138402,4,4080b11,2026-11-24,seed 10779
+0x005fac70,CGraphicsData::GuiImagePointer,replay:fun8-seed2024-input31,5000,4,d85015d,2026-11-23,seed 2024
+0x005fac70,CGraphicsData::GuiImagePointer,replay:random768-seed4321-input7,1500,4,d85015d,2026-11-23,seed 4321
+0x005fac70,CGraphicsData::GuiImagePointer,replay:scripted-seed127,3000,4,d85015d,2026-11-23,seed 1234
+0x005fac70,CGraphicsData::GuiImagePointer,save:slot 1.sav,2000,4,d85015d,2026-11-23,
+0x005fac70,CGraphicsData::GuiImagePointer,save:slot 2.sav,2000,4,d85015d,2026-11-23,
+0x005fac70,CGraphicsData::GuiImagePointer,save:slot 3.sav,2000,4,d85015d,2026-11-23,
+0x005fad20,CGraphicsData::SequenceFrameCount,"random:384,0 seed 1234",1500,39,21f1f01,2026-11-10,
+0x005fad20,CGraphicsData::SequenceFrameCount,"random:448,3 seed 1234",1500,40,21f1f01,2026-11-10,
+0x005fad20,CGraphicsData::SequenceFrameCount,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
+0x005fad20,CGraphicsData::SequenceFrameCount,"random:512,1 seed 1234",1500,38,21f1f01,2026-11-10,
+0x005fad20,CGraphicsData::SequenceFrameCount,"random:640,2 seed 1234",1500,38,21f1f01,2026-11-10,
+0x005fad20,CGraphicsData::SequenceFrameCount,replay:fullgame-20261124-0055-seed10779,138402,0,4080b11,2026-11-24,seed 10779
+0x005fad20,CGraphicsData::SequenceFrameCount,replay:fun8-seed2024-input31,5000,842,c561f41,2026-11-10,seed 2024
+0x005fad20,CGraphicsData::SequenceFrameCount,replay:random768-seed4321-input7,1500,0,d85015d,2026-11-23,seed 4321
+0x005fad20,CGraphicsData::SequenceFrameCount,replay:scripted-seed127,3000,3359,ea9c79e,2026-11-09,backfilled from the inventory notes
+0x005fad20,CGraphicsData::SequenceFrameCount,save:slot 1.sav,2000,968,c561f41,2026-11-10,
+0x005fad20,CGraphicsData::SequenceFrameCount,save:slot 2.sav,2000,0,d85015d,2026-11-23,
+0x005fad20,CGraphicsData::SequenceFrameCount,save:slot 3.sav,2000,0,d85015d,2026-11-23,
 0x005fc540,GfxDword::Construct,"random:384,0 seed 1234",1500,390791746,21f1f01,2026-11-10,
 0x005fc540,GfxDword::Construct,"random:448,3 seed 1234",1500,388089370,21f1f01,2026-11-10,
 0x005fc540,GfxDword::Construct,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,75374106,5536f09,2026-11-10,

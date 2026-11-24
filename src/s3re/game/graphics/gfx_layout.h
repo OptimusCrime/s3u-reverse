@@ -28,21 +28,24 @@ constexpr std::size_t kGroups = 70;
 
 #pragma pack(push, 1)
 
-// A group's frame-offset table (CGraphicsData::frameTables; read by
-// CGraphicsData::VariantFrameAddress 0x5faaa0): frames per variant, then one
-// offset (from the group's view) per frame, variant by variant.
-struct FrameTable {
+// A group's text table (CGraphicsData::textTables; read by
+// CGraphicsData::TextAddress 0x5faaa0; groups 07/08/09/99): texts per
+// language, the language count, then one offset (from the group's view) to
+// a C string per text, language by language (8 languages, see
+// re/graphics_formats.md; was "FrameTable" with frames per variant).
+struct TextTable {
     std::uint8_t unk00[8];
-    std::uint16_t framesPerVariant;  // +0x08
-    std::uint16_t unk0a;             // +0x0a
-    std::uint32_t offsets[1];        // +0x0c variable length: [framesPerVariant * variant + frame]
+    std::uint16_t textsPerLanguage;  // +0x08
+    std::uint16_t languages;         // +0x0a (8)
+    std::uint32_t offsets[1];        // +0x0c variable length: [textsPerLanguage * language + text]
 };
-static_assert(offsetof(FrameTable, framesPerVariant) == 0x08);
-static_assert(offsetof(FrameTable, offsets) == 0x0c);
+static_assert(offsetof(TextTable, textsPerLanguage) == 0x08);
+static_assert(offsetof(TextTable, languages) == 0x0a);
+static_assert(offsetof(TextTable, offsets) == 0x0c);
 
 // A table of per-frame offsets (from the group's view) with a count:
 // CGraphicsData::animationTables (CGraphicsData::AnimationPointer 0x5faaf0
-// checks the count) and ::frameTables5ac (CGraphicsData::FramePointer
+// checks the count) and ::guiImageTables (CGraphicsData::GuiImagePointer
 // 0x5fac70, no check).
 struct OffsetTable {
     std::uint8_t unk00[6];
@@ -52,15 +55,15 @@ struct OffsetTable {
 static_assert(offsetof(OffsetTable, count) == 0x06);
 static_assert(offsetof(OffsetTable, offsets) == 0x08);
 
-// A group's sprite table (CGraphicsData::spriteTables; CGraphicsData::FrameCount
-// 0x5fad20): per sprite (animation) the address of its header, relative to
+// A group's sequence table (CGraphicsData::sequenceTables;
+// CGraphicsData::SequenceFrameCount 0x5fad20): per sequence (animation) the address of its header, relative to
 // the group's view (the view is added); the header's first word is the
 // number of frames.
-struct SpriteTable {
+struct SequenceTable {
     std::uint32_t unk00[2];
-    std::uint32_t sprites[1];  // +0x08 variable length
+    std::uint32_t sequences[1];  // +0x08 variable length
 };
-static_assert(offsetof(SpriteTable, sprites) == 0x08);
+static_assert(offsetof(SequenceTable, sequences) == 0x08);
 
 // CGraphicsData (RTTI; base Win32::CObject), 0xc44 bytes.
 struct CGraphicsData {
@@ -71,31 +74,31 @@ struct CGraphicsData {
     std::uint32_t mappings[kGroups];             // +0x14c Win32::CFileMapping* per group (new 0x2c, ctor 0x61a3a0)
     std::uint32_t views[kGroups];                // +0x264 the group's mapped file view (0: not loaded); every
                                                  //        table offset is relative to it
-    const FrameTable* frameTables[kGroups];      // +0x37c
+    const TextTable* textTables[kGroups];        // +0x37c texts (8 languages)
     const OffsetTable* animationTables[kGroups]; // +0x494
-    const OffsetTable* frameTables5ac[kGroups];  // +0x5ac frame tables read by FramePointer
+    const OffsetTable* guiImageTables[kGroups];  // +0x5ac GUI image tables (GUI groups only), read by GuiImagePointer
     std::uint32_t unk6c4[kGroups];               // +0x6c4 a table per group (zeroed by Close)
     std::uint32_t unk7dc[kGroups];               // +0x7dc a table per group (zeroed by Close)
     std::uint32_t unk8f4[kGroups];               // +0x8f4 a table per group (zeroed by Close)
     std::uint32_t unka0c[kGroups];               // +0xa0c a table per group (zeroed by Close)
-    const SpriteTable* spriteTables[kGroups];    // +0xb24
-    std::uint32_t unkc3c;                        // +0xc3c zeroed by the constructor and Close
-    std::uint32_t currentVariant;                // +0xc40 the variant VariantFrameAddress uses for -1
+    const SequenceTable* sequenceTables[kGroups];  // +0xb24
+    std::uint32_t languageCount;                 // +0xc3c zeroed by the constructor and Close
+    std::uint32_t language;                      // +0xc40 the current language (TextAddress uses it for -1)
 };
 static_assert(offsetof(CGraphicsData, name) == 0x024);
 static_assert(offsetof(CGraphicsData, unk034) == 0x034);
 static_assert(offsetof(CGraphicsData, mappings) == 0x14c);
 static_assert(offsetof(CGraphicsData, views) == 0x264);
-static_assert(offsetof(CGraphicsData, frameTables) == 0x37c);
+static_assert(offsetof(CGraphicsData, textTables) == 0x37c);
 static_assert(offsetof(CGraphicsData, animationTables) == 0x494);
-static_assert(offsetof(CGraphicsData, frameTables5ac) == 0x5ac);
+static_assert(offsetof(CGraphicsData, guiImageTables) == 0x5ac);
 static_assert(offsetof(CGraphicsData, unk6c4) == 0x6c4);
 static_assert(offsetof(CGraphicsData, unk7dc) == 0x7dc);
 static_assert(offsetof(CGraphicsData, unk8f4) == 0x8f4);
 static_assert(offsetof(CGraphicsData, unka0c) == 0xa0c);
-static_assert(offsetof(CGraphicsData, spriteTables) == 0xb24);
-static_assert(offsetof(CGraphicsData, unkc3c) == 0xc3c);
-static_assert(offsetof(CGraphicsData, currentVariant) == 0xc40);
+static_assert(offsetof(CGraphicsData, sequenceTables) == 0xb24);
+static_assert(offsetof(CGraphicsData, languageCount) == 0xc3c);
+static_assert(offsetof(CGraphicsData, language) == 0xc40);
 static_assert(sizeof(CGraphicsData) == 0xc44);
 
 #pragma pack(pop)

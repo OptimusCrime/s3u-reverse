@@ -74,7 +74,7 @@ callbacks 0x582480 / 0x582510 call. The slots the CComputerPlayer calls
 | 5 | WorkOnNote | () | busy |
 | 7, 8 | RunAgents 0x551590 | () | slot 8 (its own work) when slot 7 says so |
 | 9 | ReportToRequester 0x582480 | (parent note, note, result, value) | a note the agent made reports back (result 0 / 100 at the callers) |
-| 10 | CancelAtHandler 0x582510 | (note) | a note the agent took is withdrawn (G) |
+| 10 | ExecuteAtHandler 0x582510 (was CancelAtHandler) | (note) | carry out a note the agent took (T_DO_BUILD_HOUSE_AGENT's WorkOnNote calls it once the house request succeeded; the chain ends in the PlaceBuilding sender 0x576430) |
 
 Kinds 1, 2, 4 from the factory's jump table 0x56fa68 (session 48; enum
 `ai::AgentKind`). Each request agent handles the notes of the type with
@@ -121,8 +121,8 @@ deleted by 0x551790 after each active note's turn).
    one active note per step gets a turn at its handler (slot 4, unless
    slot 5 says busy), then `DeleteDoomedNotes` 0x551790.
 3. Notes report to their requester (`ReportToRequester` 0x582480, slot 9)
-   and are withdrawn from their handler (`CancelAtHandler` 0x582510, slot
-   10) by the agents' code.
+   and are carried out by their handler (`ExecuteAtHandler` 0x582510, slot
+   10; was CancelAtHandler, renamed in session 50) by the agents' code.
 4. `DeleteNote` 0x551330 deletes a note with its whole subtree (unlink,
    children first, off the pending and active lists, slot 0).
    `Shutdown` 0x550f30 (from the destructor 0x5509d0) deletes every root

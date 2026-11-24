@@ -664,7 +664,7 @@ void CompareTowerAnimation(test::Context& ctx, SettlerFn candidate, int cases) {
     ctx.rng().Fill(frames.data(), frames.size());
     gfx.ShareTable();
     for (std::uint32_t k = 0; k < test::FakeGraphics::kSprites; ++k) {
-        gfx.table().sprites[k] = reinterpret_cast<std::uint32_t>(frames.data() + ctx.rng().Below(0x1f00));
+        gfx.table().sequences[k] = reinterpret_cast<std::uint32_t>(frames.data() + ctx.rng().Below(0x1f00));
     }
 
     test::WorldPair worlds(ctx, offsetof(CGameData, buildings) + 0x200 * sizeof(Building));
