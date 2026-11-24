@@ -1637,3 +1637,76 @@ SPECS += [
     Spec("AI_SendMoveGroup", 0x00590c80, "thiscall", [below(20), below(10), anything, anything],
          presets=move_group_world, globals=move_group_globals, callees=command_callees(with_address=True)),
 ]
+
+# -- session 53: the battle-spell casters (ai_battle_spells.cpp) -----------
+
+SPELL_TEST_SETTLERS = 64  # settler ids 1..63 stand on the tiles around the mage
+SPELL_SETTLER_TYPES = (5, 8, 15, 30, 31, 32, 33, 34, 35, 0, 3, 36, 9, 255)
+PLAYER_LIST_LENGTHS = 0x11940BC
+PLAYER_LISTS = 0x118A47C
+
+
+def spell_caster_world(rng, pool, args):
+    """A small map (size 40..80); the mage (args[1]) inside it; the first
+    500 map offsets small (+-12); the tiles around the mage hold settlers
+    1..63 (or none) of the players 0..3 (or nobody) and of soldier, bowman
+    and other types; the player's unit groups 1..9 (0..5 members, sometimes
+    an empty or negative length) of those settlers, with health near a third
+    of the soldiers' start health in half the cases."""
+    size = rng.randint(40, 80)
+    player, mage = args[0], args[1]
+    x, y = rng.randrange(size), rng.randrange(size)
+    record = SETTLERS + mage * SETTLER_BYTES
+    fields = [(MAP_SIZE, size, 4), (record + 4, x, 2), (record + 6, y, 2)]
+    for i in range(500):
+        fields += [(NEIGHBOUR_OFFSETS + 16 * i, rng.randint(-12, 12) & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + 16 * i + 4, rng.randint(-12, 12) & 0xFFFFFFFF, 4)]
+    density = rng.choice((0.02, 0.1, 0.3))
+    for tx in range(max(0, x - 12), min(size, x + 13)):
+        for ty in range(max(0, y - 12), min(size, y + 13)):
+            settler = rng.randrange(1, SPELL_TEST_SETTLERS) if rng.random() < density else 0
+            fields.append((TILES + (tx * 0x300 + ty) * 24, settler, 2))
+    healthy = rng.randint(25, 55) if rng.random() < 0.5 else rng.randrange(256)
+    for settler in range(SPELL_TEST_SETTLERS):
+        if settler == mage:
+            continue
+        base = SETTLERS + settler * SETTLER_BYTES
+        owner = 0xFF if rng.random() < 0.1 else (player if rng.random() < 0.4 else rng.randrange(4))
+        fields += [(base, owner, 1), (base + 1, rng.choice(SPELL_SETTLER_TYPES), 1),
+                   (base + 3, healthy if rng.random() < 0.85 else rng.randrange(256), 1),
+                   (base + 4, rng.randrange(size), 2), (base + 6, rng.randrange(size), 2)]
+    if player < 20:
+        for group in range(10):
+            index = player * 10 + group
+            length = -rng.randrange(3) if rng.random() < 0.1 else rng.randrange(6)
+            fields.append((PLAYER_LIST_LENGTHS + 4 * index, length & 0xFFFFFFFF, 4))
+            for k in range(max(length, 0)):
+                fields.append((PLAYER_LISTS + index * 200 + 2 * k, rng.randrange(SPELL_TEST_SETTLERS), 2))
+    return fields
+
+
+def spell_caster_globals(rng, pool, args):
+    return command_globals(rng, pool, args) + [(CAMPAIGN_MISSION, 67 if rng.random() < 0.25 else rng.randrange(80), 4)]
+
+
+def spell_caster(name, address):
+    # mage ids 0..63 and sometimes beyond (then the mage is not on the tiles'
+    # list); SendCastSpell runs for real, with IsHost and Push probed.
+    return Spec(name, address, "stdcall",
+                [below(4), below(SPELL_TEST_SETTLERS + 40), between(-1, 9), between(-1, 6)],
+                eax_mask=0, presets=spell_caster_world, globals=spell_caster_globals,
+                callees=command_callees(with_address=True), max_cases=600)
+
+
+SPECS += [
+    spell_caster("AI_CastRomanSpell10", 0x005957c0),
+    spell_caster("AI_CastRomanSpell11", 0x00595910),
+    spell_caster("AI_CastEgyptianSpell12", 0x00595a60),
+    spell_caster("AI_CastEgyptianSpell13", 0x00595bb0),
+    spell_caster("AI_CastEgyptianSpell15", 0x00595c10),
+    spell_caster("AI_CastAsianSpell16", 0x00595d30),
+    spell_caster("AI_CastAsianSpell17", 0x00595e80),
+    spell_caster("AI_CastAsianSpell14", 0x00595fd0),
+    spell_caster("AI_CastAmazonSpell24", 0x005960d0),
+    spell_caster("AI_CastAmazonSpell25", 0x00596210),
+]
