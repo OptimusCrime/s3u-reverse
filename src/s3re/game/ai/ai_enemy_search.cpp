@@ -75,8 +75,8 @@ std::int32_t __fastcall AI_CountEnemyBowmenOnTerritoryNear(void* self, void* edx
 
 S3RE_HOOK(0x0058a2c0, AI_CountEnemySoldiersNear, EnemyCountFn, Original_AI_CountEnemySoldiersNear,
           AI_CountEnemySoldiersNear);
-S3RE_HOOK(0x0058a610, AI_CountEnemyBowmenOnTerritoryNear, EnemyCountFn, Original_AI_CountEnemyBowmenOnTerritoryNear,
-          AI_CountEnemyBowmenOnTerritoryNear);
+S3RE_HOOK(0x0058a610, AI_CountEnemyBowmenOnTerritoryNear, EnemyCountFn,
+          Original_AI_CountEnemyBowmenOnTerritoryNear, AI_CountEnemyBowmenOnTerritoryNear);
 
 // Purpose: How many enemy soldiers are near a tile; the military AI uses it
 // to decide whether a mage should cast a battle spell.

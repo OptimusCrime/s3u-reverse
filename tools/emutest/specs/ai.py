@@ -1750,3 +1750,62 @@ SPECS += [
     enemy_count_spec("AI_CountEnemySoldiersNear", 0x0058a2c0),
     enemy_count_spec("AI_CountEnemyBowmenOnTerritoryNear", 0x0058a610),
 ]
+
+# -- session 53: CastBattleSpells and InitBattleSpellSlots (ai_battle_spells.cpp)
+
+BATTLE_SPELL_CASTERS = (0x005957C0, 0x00595910, 0x00595A60, 0x00595BB0, 0x00595C10,
+                        0x00595D30, 0x00595E80, 0x00595FD0, 0x005960D0, 0x00596210)
+AI_COMMAND_SENDER = 0x007E5DE8
+RACE_SPELLS = 0x00658D64
+
+
+def battle_world(rng, pool, args):
+    """enemy_lists_world (the enemy count's lists), plus the player's mages
+    (ids 2000.., 0..5 of them, races 0..3 or sometimes above), its mana and
+    spell costs near each other."""
+    fields = enemy_lists_world(rng, pool, args)
+    player = args[0]
+    record = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+    mages = [] if rng.random() < 0.1 else [2000 + 20 * k + rng.randrange(20) for k in range(rng.randint(1, 5))]
+    fields.append((record + 0x20 + 2 * 36, mages[0] if mages else 0, 2))
+    for k, mage in enumerate(mages):
+        base = SETTLERS + mage * SETTLER_BYTES
+        race = rng.randrange(4, 256) if rng.random() < 0.1 else rng.randrange(4)
+        fields += [(base + 2, race, 1), (base + 4, rng.randrange(64), 2), (base + 6, rng.randrange(64), 2),
+                   (base + 0x10, mages[k + 1] if k + 1 < len(mages) else 0, 2)]
+    cost = lambda: rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(200)  # noqa: E731
+    fields.append((record + 0x8C, cost(), 4))
+    for slot in range(10):  # spell_mana[0..7], then promotion_cost and soldier_levels[0]
+        fields.append((record + 0x94 + 4 * slot, cost(), 4))
+    return fields
+
+
+def battle_globals(rng, pool, args):
+    """g_aiMapWorld; the battle-spell slots 0..7 (sometimes 8, 9)."""
+    fields = [(AI_MAP_WORLD, WORLD_BASE, 4)]
+    for k in range(12):
+        fields.append((AI_COMMAND_SENDER + k, rng.randrange(8, 10) if rng.random() < 0.1 else rng.randrange(8), 1))
+    return fields
+
+
+def race_spell_changes(rng, pool, args):
+    """A few entries of g_raceSpells changed (other spells, duplicates,
+    missing ones)."""
+    fields = []
+    for _ in range(rng.randrange(8)):
+        spell = rng.randrange(10, 26) if rng.random() < 0.5 else rng.randrange(40)
+        fields.append((RACE_SPELLS + 4 * rng.randrange(32), spell, 4))
+    return fields
+
+
+SPECS += [
+    # The casters are probed (verified on their own, see above): the log
+    # shows which caster runs, with ECX and the arguments, in order with the
+    # Random draws (CGameData::Random runs) and the enemy count (runs).
+    Spec("AI_CastBattleSpells", 0x005953b0, "thiscall", [below(20)], eax_mask=0,
+         presets=battle_world, globals=battle_globals,
+         callees={address: (4, "thiscall", "probe") for address in BATTLE_SPELL_CASTERS}, max_cases=600),
+    # ECX = the world: the sender's 12 bytes are world bytes 0..11.
+    Spec("AI_InitBattleSpellSlots", 0x00590870, "thiscall", [], eax_mask=0, globals=race_spell_changes,
+         max_cases=400),
+]
