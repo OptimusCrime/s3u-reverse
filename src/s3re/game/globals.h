@@ -237,6 +237,13 @@ inline constexpr GameGlobal<ai::AiArmyState> g_aiArmyState{0x7e58c8};
 inline constexpr GameGlobal<ai::AiAgentData> g_aiCensus{0x7e5ef8};
 inline constexpr GameGlobal<std::uint32_t[20]> g_aiPerPlayer7e79d0{0x7e79d0};
 
+// ------------------------------------------------------------ Watcom skip lists
+// WCSkipNonTempBase::base_random_level (0x60bca0) draws node levels two bits
+// at a time from a cached CRT rand() value; every skip-list insert (e.g.
+// CMapFile's chunk cache) consumes them.
+inline constexpr GameGlobal<std::uint32_t> g_skipListRandomBits{0x7e8e24};
+inline constexpr GameGlobal<std::int32_t> g_skipListRandomBitsLeft{0x7a4030};
+
 // ------------------------------------------------------------ imports
 // S3.EXE's import address table slots (called through by the original;
 // in-process tests may point one at a fake).

@@ -424,8 +424,12 @@ class Emulator:
         64-bit value fixed by the case and the call's position). An optional
         fourth element effect(machine, ECX, arguments, h) runs after the
         call is recorded (a callee's side effects, written with
-        guest_write). Recorded as ("callee", address, ECX or None,
-        arguments...)."""
+        guest_write); if it returns a value, that becomes EAX (a callee
+        modelled in Python, e.g. a file read). An optional fifth element
+        record(machine, ECX, arguments) -> tuple replaces the recorded
+        arguments (e.g. a stack buffer's address, which differs between the
+        original's and our frames). Recorded as ("callee", address, ECX or
+        None, arguments...)."""
         for handle in self._callee_hooks:
             self.uc.hook_del(handle)
         self._callee_hooks = []
@@ -437,15 +441,19 @@ class Emulator:
     def _on_callee(self, uc, address, size, user_data):
         count, convention, returns = self.callees[address][:3]
         effect = self.callees[address][3] if len(self.callees[address]) > 3 else None
+        record = self.callees[address][4] if len(self.callees[address]) > 4 else None
         esp, ret, args = self._stack_args(uc, count)
         ecx = uc.reg_read(UC_X86_REG_ECX) if convention == "thiscall" else None
-        self.probe_calls.append(("callee", address, ecx, *args))
+        recorded = tuple(args) if record is None else tuple(record(self, ecx, args))
+        self.probe_calls.append(("callee", address, ecx, *recorded))
         if callable(returns):
             eax = returns(_mix((self.seed << 32) ^ (0xCA11E000 + len(self.probe_calls))))
         else:
             eax = ecx if returns == "this" else self._probe_value()
         if effect is not None:
-            effect(self, ecx, args, _mix((self.seed << 32) ^ (0xCA11EF00 + len(self.probe_calls))))
+            result = effect(self, ecx, args, _mix((self.seed << 32) ^ (0xCA11EF00 + len(self.probe_calls))))
+            if result is not None:
+                eax = result  # an effect that models the callee's result
         self._finish_probe(uc, esp, ret, 0 if convention == "cdecl" else count, eax)
 
     def _on_api(self, uc, address, size, user_data):

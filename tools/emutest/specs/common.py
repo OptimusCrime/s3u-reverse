@@ -13,6 +13,13 @@ import struct
 from dataclasses import dataclass
 from typing import Callable
 
+# The game's executable, for helpers that read S3.EXE's bytes. The parts run
+# in specs/__init__.py's namespace, so __file__ is tools/emutest/specs/
+# __init__.py: the repository is four folders up (session 51; the former
+# single specs.py was one folder higher).
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+S3_EXE_PATH = os.path.join(REPO_ROOT, "Settlers3Ultimate", "S3.EXE")
+
 Generator = Callable[..., int]
 
 
@@ -643,8 +650,7 @@ def animation_table() -> list[int]:
         import struct
 
         import pefile
-        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                            "Settlers3Ultimate", "S3.EXE")
+        path = S3_EXE_PATH
         pe = pefile.PE(path, fast_load=True)
         data = pe.get_data(0x6a8060 - 0x400000, 4 * 0x800)
         _ANIMATION_TABLE.extend(struct.unpack("<2048I", data))

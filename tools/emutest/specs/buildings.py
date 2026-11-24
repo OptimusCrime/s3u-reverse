@@ -504,8 +504,7 @@ def layout_dwords(race, type_):
         import struct
 
         import pefile
-        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                            "Settlers3Ultimate", "S3.EXE")
+        path = S3_EXE_PATH
         pe = pefile.PE(path, fast_load=True)
         data = pe.get_data(0x6aa170 + (type_ + race * 57) * 2400 - 0x400000, 2400)
         _LAYOUTS[key] = struct.unpack("<600I", data)

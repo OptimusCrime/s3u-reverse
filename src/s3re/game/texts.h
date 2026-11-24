@@ -31,6 +31,10 @@ inline constexpr GameText kRightWallNoAngle{0x69fa8c};      // "PATH: Right wall
 inline constexpr GameText kLeftWallNoDirection{0x69fa60};   // "PATH: Leftwall, no direction %i %i %i %i"
 inline constexpr GameText kLeftWallNoWay{0x69fa3c};         // "PATH: Leftwall, no way  %i %i %i %i"
 inline constexpr GameText kLeftWallNoAngle{0x69fa14};       // "PATH: Leftwall, no angle %i %i %i %i"
+inline constexpr GameText kSaveGamesFile{0x69fcd4};     // "E:\Siedler3\Dirk\SaveGames.cpp"
+inline constexpr GameText kChunkName{0x69fccc};         // "lpChunk" (CMapFile::GetChunk's allocation)
+inline constexpr GameText kNewChunkName{0x69fcf4};      // "newchunk" (CMapFile::AddChunk's allocation)
+inline constexpr GameText kInvalidFileType{0x69fc38};   // "LOAD: Invalid filetype %i %i"
 inline constexpr GameText kProtocolFile{0x7a34fc};      // "E:\Siedler3\Dirk\protocol.cpp"
 inline constexpr GameText kNewDataName{0x7a3570};       // "lpNewData"
 inline constexpr GameText kDuringResize{0x7a355c};      // "PROT: During Resize"

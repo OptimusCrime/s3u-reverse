@@ -13,29 +13,25 @@ to `docs/todo/`). The archive is for searching, not for reading whole.
 
 ## Current focus
 
-**In progress (session 51, 2026-11-24):** two parallel worktree
-batches: computer players A2 leftovers (`wip/ai-a2`) and the CMapFile
-container (`wip/mapfile`); new specs go into one new `SPECS += [` block
-at the end of specs.py. Meanwhile, in main: the split of
-`tools/emutest/specs.py` by subsystem (the last part of the bookkeeping
-restructure).
-
-**Next, after this round (the user's order of session 48):**
-1. Readability leftovers (`docs/todo/readability.md`). Optional follow-ups of the source layout plan (renames that read
-   better, splitting the catch-all files `framework_small.cpp`/
-   `misc_helpers.cpp`/`logic_helpers.cpp`/`ai_*helpers.cpp`, a CMake
-   library for the simulation): `docs/source_layout_plan.md` section 5,
-   step 6.
-2. **Computer players, continued** (backlog "Computer players"): A2
-   leftovers (0x591e00, 0x572420, the larger economy conditions, the
-   snapshot 0x567910), A4 command senders, A5 Cevaland, A6 the agents'
-   run functions, then 0x550a30 / 0x550f80. The whole AI range is named
-   (session 50): start from the names and `re/computer_players_naming.md`.
-3. **File formats** (savegame loader 0x508fa0 first, then maps,
-   graphics). Container format, chunk tables and load call trees are in
-   `re/file_formats.md`; start with the CMapFile container.
-4. Open from session 49: the live-vs-replay header/rest hash difference
+**Next (updated in session 51). The user's priority (2026-11-24): function
+batches (reimplement + verify), less cleanup; cleanup only where it blocks
+a batch.**
+1. **Computer players, continued** (`docs/todo/computer-players.md`):
+   A2 leftovers (woodcutter 0x567e00 / stonecutter 0x568420 float curves,
+   residences 0x568890, small READY helpers), A4 command senders, A5
+   Cevaland, A6 the agents' run functions, then 0x550a30 / 0x550f80.
+   Start from the names and `re/computer_players_naming.md`.
+2. **File formats** (`docs/todo/file-formats.md`): the CMapFile container's
+   read side is verified (session 51). Next: `CLogicThread::LoadSaveGame`
+   0x508fa0 (all callees verified), then CMapFile::Open/Close/constructor
+   and the write path, then `CGameData::LoadMap` 0x4fd540 (needs
+   PrepareLoadedTerrain 0x519540, SpawnSettlersOnWater 0x50dc10,
+   AddPlayerTowns 0x5074b0, colour helpers 0x4351e0 / 0x49fec0).
+3. Open from session 49: the live-vs-replay header/rest hash difference
    of the user's full game (backlog "Evidence and testing").
+4. Later, only when it blocks a batch: readability leftovers
+   (`docs/todo/readability.md`) and the optional follow-ups of the source
+   layout plan (`docs/source_layout_plan.md` section 5, step 6).
 
 **Standing decisions** (details in `CLAUDE.md` and the archive):
 core gameplay first, no network/lobby code (2026-11-09); reimplementation
@@ -107,6 +103,53 @@ testing".
   classes by default; they might be library code.
 
 ## Session log (recent sessions; older ones in docs/history/)
+
+### 2026-11-24 (51): computer players A2 leftovers, CMapFile container, specs split
+
+- **specs.py split** (main): `tools/emutest/specs/` with `common.py`, one
+  part per source folder, `self_test.py`, `covered_elsewhere.py`;
+  `specs/__init__.py` executes them in `PARTS` order into one namespace.
+  Two helpers defined twice with different bodies were renamed
+  (player_colour_globals, decay_traffic_tile). Evidence: every spec,
+  self-test pairing and COVERED_ELSEWHERE identical before/after (by
+  compiled code); all fingerprints identical (`changed.py` reads the parts
+  concatenated, `specs_source`), so the recorded passes stayed valid;
+  `--self-test` 21/21. Both batches' spec blocks later moved into their
+  parts without changing fingerprints. **Bug of the split, found by the
+  round-end full suite:** four helpers that read S3.EXE (buildings,
+  common, economy, settlers parts; only some cases call them) located it
+  three folders up from `__file__`, which is now `specs/__init__.py`, one
+  folder deeper; fixed with `REPO_ROOT`/`S3_EXE_PATH` in common.py. The
+  pushed commits 59d2b56..2495c95 have it. Lesson: a snapshot of the spec
+  objects doesn't run lazily executed helper code; only the full suite
+  does.
+- **Computer players A2 (`wip/ai-a2`)**, 16 functions verified:
+  AI::Army::Reset 0x591e00, AI::CountNodeBuildingsByType 0x572420, the
+  nine AI::WrappedPos members 0x597070..0x597300 (wrapping grid cursor of
+  the site searches), the coal mine / iron mine / iron smelter conditions
+  0x568bc0 / 0x568d80 / 0x568f40, the economy snapshot 0x567910 and
+  AI::AreaPopulation 0x59dcc0 (new ai_army.cpp, ai_wrapped_pos.cpp,
+  ai_economy_snapshot.cpp). Findings in re/computer_players.md: mine and
+  smelter conditions take the higher of a per-population and a
+  stock-per-demand priority; the gold mine tables serve all mines; one
+  smelter per two smiths; the ~93 "READY" SEH functions of the AI range
+  are already classified string initializers (use `--library-done`).
+- **CMapFile container (`wip/mapfile`)**, 14 functions verified in the new
+  folder `src/s3re/game/fileformats/`: CMapFileStream constructor, Open,
+  Close, Read, Write, Seek, GetSize, HasError (0x4a55e0..0x4a5a60) and
+  CMapFile GetChunk (rolling XOR), ReleaseChunk, AddChunk, SetMemoryOnly,
+  GetError, GetChecksum. The original's catch (CHResult*/CFileNotFound*) is
+  an SEH filter matching MSVC 6.0 catchable types. `MapFile_AllGameFiles`:
+  all 181 files under Map\ and Save\ (read only), 4,651 chunks / 395 MB
+  identical between original, ours and our own decoding. emu.py: callee
+  effects may return EAX, and a 5th element replaces recorded arguments.
+  Format findings in re/file_formats.md ("Verified container").
+- Merges: specs blocks moved into specs/ai.py and the new
+  specs/fileformats.py; re/globals.csv kept both sides.
+- Evidence on the merged main (both batches + the fix): Debug and Release
+  build; `--test` 602/602; full emulator suite `--full --require-coverage`:
+  733 functions, 0 mismatches, 0 with incomplete coverage (17 workers,
+  925 s); inventory check and style lint clean. Verified: 703 -> 733.
 
 ### 2026-11-24 (51): bookkeeping restructure, readability round (a, b, c)
 

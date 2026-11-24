@@ -572,8 +572,7 @@ def _levelling_sites() -> list:
         import struct
 
         import pefile
-        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                            "Settlers3Ultimate", "S3.EXE")
+        path = S3_EXE_PATH
         pe = pefile.PE(path, fast_load=True)
         data = pe.get_data(0x6aa170 - 0x400000, 0x960 * 4 * 0x39)
         for race in range(4):

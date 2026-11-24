@@ -86,6 +86,8 @@ inline constexpr std::uintptr_t kCTimeoutPointer = 0x674f38;  // Win32::CTimeout
 // Type descriptors (catch types).
 namespace type_descriptor {
 inline constexpr std::uintptr_t kCTimeoutPointer = 0x698e98;  // ".PAVCTimeout@Win32@@" (ExecuteCommands' catch)
+inline constexpr std::uintptr_t kCHResultPointer = 0x6968d8;  // ".PAVCHResult@Win32@@" (CMapFileStream's catches)
+inline constexpr std::uintptr_t kCFileNotFoundPointer = 0x69f908;  // ".PAVCFileNotFound@Win32@@" (CMapFileStream::Open)
 }  // namespace type_descriptor
 
 }  // namespace s3re::game
