@@ -221,9 +221,9 @@ Global instance at **0x7a7a00** (not in re/globals.csv yet).
   track `from` to the end of track `to` (MCI_TO = to+1 when to < track
   count, else to the disc end), with MCI_NOTIFY so the end of a track is
   reported (looping is up to the receiver of MM_MCINOTIFY).
-- Callers of Play: credits dialog (track 10 or 12), `Logic_sub_53f5f0`
+- Callers of Play: credits dialog (track 10 or 12), `CLogicThread::PlayNextMusicTrack`
   (music choice from the table at 0x730b60, indexed by 3 * [+0x660] +
-  [+0x658]), Stop from the credits dialog and `Logic_sub_53f5c0`. The
+  [+0x658]), Stop from the credits dialog and `CLogicThread::StopMusic`. The
   console help text lists `-cdaudioXY` ("Spielt den Audiotrack XY ab").
   The registry value `CDAudio` (General key) is read by the config reader.
 - Errors in Open/Close go to `0x6114f0` (Win32_sub_6114f0, Classes.cpp,

@@ -762,6 +762,18 @@ in two; lobby/network rows left out): 472 names, notes in
   UI_WideEos_428880 -> std::wstring::_Eos; TODO.md), and ~16 more missing
   function starts (dialog handlers Ghidra merged into their neighbours).
 
+Fifth round: the logic thread 0x509980..0x54cbd0 (61 names, 17 existing
+names confirmed and set to identified; notes in `re/logic_thread.md`):
+a tutorial ("boot camp") state machine (world +0x2d304 wait countdown,
++0x2d308 step; UpdateTutorial 0x53fbb0 when g_campaignMission == 99);
+the draw-data handoff (PrepareDrawData fills a 0xc7720-byte DrawData,
+PublishDrawData 0x51f0e0 swaps it to the draw thread; the verified
+LogicRecord24 is the map-effect draw record); the on-screen message ring
+and chat input at CLogicThread +0x414/+0x3f8; lobby/ladder status
+functions; FinishGame 0x53e720 and the music start/stop/next track.
+Progress page: "understood" (identified or better) added to the stats,
+treemap labels, tooltips and a "Colour by" selector.
+
 
 ### 2026-11-24 (49): the user's full game
 - The user played a whole game: `python tools/play_game.py --map
