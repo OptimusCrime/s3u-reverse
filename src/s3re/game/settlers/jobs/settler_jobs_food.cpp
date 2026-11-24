@@ -74,7 +74,7 @@ void Animate(const SettlerContext& ctx, std::uint32_t animation) {
 
 // The job first, then the animation (the original's order).
 JobResult Switch(SettlerContext& ctx, Job job, std::uint32_t animation) {
-    SetJob(ctx.settler, job);
+    ctx.settler.job = job;
     Animate(ctx, animation);
     return JobResult::Next;
 }
@@ -133,14 +133,14 @@ void OccupyTile(const SettlerContext& ctx) {
 // 0x4f108b, 0x4f1425).
 JobResult Restart(SettlerContext& ctx, Job job) {
     SettlerTile(ctx).settler = 0;
-    SetJob(ctx.settler, job);
+    ctx.settler.job = job;
     ctx.settler.counter = 0;
     return JobResult::Next;
 }
 
 // 0x4f73bb (special range): leave the tile, counter 0, run again with `job`.
 JobResult RestartNow(SettlerContext& ctx, Job job) {
-    SetJob(ctx.settler, job);
+    ctx.settler.job = job;
     SettlerTile(ctx).settler = 0;
     ctx.settler.counter = 0;
     return JobResult::Again;
@@ -151,7 +151,7 @@ JobResult RestartNow(SettlerContext& ctx, Job job) {
 // ranges); with `clearNext` 0x4ece3b (building range), which also clears
 // Settler::next (the search position of farmer, fisher, waterworker).
 JobResult StartWork(SettlerContext& ctx, Job job, bool clearNext) {
-    SetJob(ctx.settler, job);
+    ctx.settler.job = job;
     ++BuildingOf(ctx).kind_bytes[0];
     SettlerTile(ctx).settler = 0;
     if (clearNext) {
@@ -163,7 +163,7 @@ JobResult StartWork(SettlerContext& ctx, Job job, bool clearNext) {
 
 // 0x4f4328 (drinks range): counter 0, walk to the building's door.
 JobResult WalkHome(SettlerContext& ctx, Job job) {
-    SetJob(ctx.settler, job);
+    ctx.settler.job = job;
     ctx.settler.counter = 0;
     const Building& building = BuildingOf(ctx);
     Call<kSetSettlerTarget>(ctx.world, ctx.number, building.door_x, building.door_y);
@@ -333,7 +333,7 @@ JobResult FarmTakeInputs(SettlerContext& ctx, bool pileOutput, std::uint8_t anim
 // animal more (Random above `threshold`).
 JobResult FarmFed(SettlerContext& ctx, Job job, std::uint16_t threshold) {
     SettlerTile(ctx).settler = 0;
-    SetJob(ctx.settler, job);
+    ctx.settler.job = job;
     ctx.settler.counter = 0;
     const auto roll = static_cast<std::uint16_t>(Call<kRandom>(ctx.world));
     if (roll > threshold) {
@@ -657,7 +657,7 @@ JobResult RunFarmer(SettlerContext& ctx, Job job) {
         Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
         ctx.settler.slot = 1;
         ctx.settler.counter = 0;
-        SetJob(ctx.settler, Job::FarmerWalkToSow);
+        ctx.settler.job = Job::FarmerWalkToSow;
         return JobResult::Again;
     case Job::FarmerSow: return FarmerSow(ctx);
     case Job::FarmerSown:  // 0x92 (0x4f20d5): sown
@@ -669,7 +669,7 @@ JobResult RunFarmer(SettlerContext& ctx, Job job) {
         Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
         ctx.settler.slot = 0;
         ctx.settler.counter = 0;
-        SetJob(ctx.settler, Job::FarmerWalkToHarvest);
+        ctx.settler.job = Job::FarmerWalkToHarvest;
         return JobResult::Again;
     case Job::FarmerAtField: {  // 0x96 (0x4f213c): at the field, still ripe?
         const std::uint8_t object = SettlerTile(ctx).object;
@@ -783,7 +783,7 @@ JobResult FisherCast(SettlerContext& ctx) {
         animation = direction + 198;
     }
     Animate(ctx, animation);
-    SetJob(ctx.settler, Job::FisherCastDone);
+    ctx.settler.job = Job::FisherCastDone;
     return JobResult::Next;
 }
 
@@ -794,7 +794,7 @@ JobResult RunFisher(SettlerContext& ctx, Job job) {
     case Job::FisherLeave:  // 0xb1 (0x4f2d69): walk out
         Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
         ctx.settler.counter = 0;
-        SetJob(ctx.settler, Job::FisherWalkToWater);
+        ctx.settler.job = Job::FisherWalkToWater;
         return JobResult::Again;
     case Job::FisherCast: return FisherCast(ctx);
     case Job::FisherCastDone: return WalkHome(ctx, Job::FisherWalkHome);  // 0xb4 (0x4f2de1)
@@ -860,7 +860,7 @@ JobResult RunWaterworker(SettlerContext& ctx, Job job) {
     case Job::WaterworkerLeave:  // 0xba (0x4f31c5): walk out
         Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
         ctx.settler.counter = 0;
-        SetJob(ctx.settler, Job::WaterworkerWalkToWater);
+        ctx.settler.job = Job::WaterworkerWalkToWater;
         return JobResult::Again;
     case Job::WaterworkerDraw:  // 0xbd (0x4f31e4): draw water, if still there
         if ((SettlerTile(ctx).terrain & kTerrainClassMask) != kTerrainClassStream) {
@@ -868,7 +868,7 @@ JobResult RunWaterworker(SettlerContext& ctx, Job job) {
         }
         ctx.settler.slot = Value(Good::Water);
         Animate(ctx, 188);
-        SetJob(ctx.settler, Job::WaterworkerDrawn);
+        ctx.settler.job = Job::WaterworkerDrawn;
         return JobResult::Next;
     case Job::WaterworkerDrawn: return WalkHome(ctx, Job::WaterworkerWalkHome);  // 0xbe (0x4f3261)
     case Job::WaterworkerHome:
@@ -1203,7 +1203,7 @@ FamilyTest FoodFamily() {
 // Wrong: the farmer's search starts one offset further.
 std::uint32_t __fastcall WrongFarmerSearch(CGameData* world, void* edx) {
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
-        if (world->settlers[n].job == Value(Job::FarmerSearch)) {
+        if (world->settlers[n].job == Job::FarmerSearch) {
             ++world->settlers[n].next;
         }
     }

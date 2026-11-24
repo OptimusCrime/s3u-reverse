@@ -342,7 +342,7 @@ std::uint32_t __fastcall CGameData_SendNearestSettlerToPile(CGameData* world, vo
     Unlink(world, head, best);
     CGameData_SetSettlerTarget(world, nullptr, best, record.x, record.y);
     Settler& donkey = world->settlers[best];
-    SetJob(donkey, Job::DonkeyWalkToPile);
+    donkey.job = Job::DonkeyWalkToPile;
     donkey.counter = 0;
     donkey.good = record.good;
     donkey.second_unit = 0;
@@ -380,7 +380,7 @@ std::uint32_t __fastcall CGameData_SendNearestSettlerToBuilding(CGameData* world
     Unlink(world, head, best);
     const std::uint32_t result = CGameData_SetSettlerTarget(world, nullptr, best, x2, y2);
     Settler& ship = world->settlers[best];
-    SetJob(ship, Job::ShipWalkToHarbour);
+    ship.job = Job::ShipWalkToHarbour;
     ship.ship_walk = 0;
     ship.counter = 0;
     ship.building = static_cast<std::uint16_t>(building);
@@ -489,7 +489,7 @@ std::uint32_t __fastcall CGameData_SendNearestWorkerToBuilding(CGameData* world,
     CGameData_RemoveSettlerFromLists(world, nullptr, chosen);
     CGameData_SetSettlerTarget(world, nullptr, chosen, record.door_x, record.door_y);
     Settler& worker = world->settlers[chosen];
-    SetJob(worker, Job::WalkToWork);
+    worker.job = Job::WalkToWork;
     worker.counter = 0;
     worker.building = static_cast<std::uint16_t>(building);
     return chosen;
@@ -577,7 +577,7 @@ void __fastcall CGameData_FetchGoodsToTradeBuilding(CGameData* world, void*, std
     world->piles[target].leaving += kOneUnitComing;
     CGameData_SetSettlerTarget(world, nullptr, carrier, from.x, from.y);
     Settler& s = world->settlers[carrier];
-    SetJob(s, Job::CarrierWalkToSourcePile);
+    s.job = Job::CarrierWalkToSourcePile;
     s.counter = 0;
     s.building = static_cast<std::uint16_t>(target);  // here: the destination pile
     s.good = static_cast<std::uint8_t>(goods);

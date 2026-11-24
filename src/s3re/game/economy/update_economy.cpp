@@ -655,7 +655,7 @@ void UpdateResidence(CGameData* world, std::uint32_t n, std::uint32_t animation)
     const std::uint32_t settler =
         Call(kCreateSettler, world, house.door_x, house.door_y, Value(SettlerType::Carrier), owner);
     if (settler != 0) {
-        SetJob(SettlerAt(world, settler), SettlerJob::LeaveHouse);
+        SettlerAt(world, settler).job = SettlerJob::LeaveHouse;
         Call(kSetSettlerAnimation, world, settler, animation);
     }
 }
@@ -845,7 +845,7 @@ void UpdateTemple(CGameData* world, std::uint32_t n) {
         Call(kCreateSettler, world, temple.door_x, temple.door_y, Value(SettlerType::Mage), temple.owner);
     if (settler != 0) {
         Settler& mage = SettlerAt(world, settler);
-        SetJob(mage, SettlerJob::LeaveHouse);
+        mage.job = SettlerJob::LeaveHouse;
         Call(kSetSettlerAnimation, world, settler, 281u);
         ++PlayerAt(world, mage.owner).population_limit_base;
     }
@@ -1214,7 +1214,7 @@ void SendCarrier(CGameData* world, Area& area, std::uint32_t carrierNumber, std:
         SettlerAt(world, carrier.next).prev = carrier.prev;
     }
     Call(kSetSettlerTarget, world, carrierNumber, PileAt(world, source).x, PileAt(world, source).y);
-    SetJob(carrier, SettlerJob::CarrierWalkToPile);
+    carrier.job = SettlerJob::CarrierWalkToPile;
     carrier.counter = 0;
     carrier.building = static_cast<std::uint16_t>(target);
     carrier.good = static_cast<std::uint8_t>(good);

@@ -77,11 +77,11 @@ bool IsLandArea(std::uint16_t area) {
 
 // The jobs of settlers on their way to take goods from a pile (carriers and
 // workers; the pile is their target position).
-bool IsFetchingJob(std::uint16_t job) {
+bool IsFetchingJob(Job job) {
     for (const Job fetching :
          {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::CarrierWalkToSourcePile,
           Job::CarrierAtSourcePile, Job::CarrierWalkToTool, Job::CarrierTakeTool}) {
-        if (job == Value(fetching)) {
+        if (job == fetching) {
             return true;
         }
     }
@@ -361,7 +361,7 @@ constexpr std::size_t kTestWorld = offsetof(CGameData, settlers) + 200 * sizeof(
 // so that a scan doesn't find him twice) and SplitAreaAtTile (no effect).
 void InstallStubs(test::CalleeStubs& stubs) {
     stubs.Install<1, kResetSettlerToIdle>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
-        SetJob(w->settlers[args[0] & 0xffff], Job::Nothing);
+        w->settlers[args[0] & 0xffff].job = Job::Nothing;
         return 0x5a5a0001u;
     });
     stubs.Install<2, kSplitAreaAtTile>();
@@ -431,7 +431,7 @@ TileCase SetUpTile(test::Context& ctx, test::WorldPair& worlds) {
         const auto sart = static_cast<std::uint8_t>(ctx.rng().Below(0x30));
         worlds.Both([&](CGameData* w) {
             Settler& s = w->settlers[n];
-            s.job = job;
+            s.job = static_cast<SettlerJob>(job);
             s.owner = sowner;
             s.target_x = tx;
             s.target_y = ty;
@@ -480,15 +480,15 @@ void __fastcall WrongResetCivilianOnTile(CGameData* world, void* edx, std::uint3
 void __fastcall WrongLosePileOnTile(CGameData* world, void* edx, std::uint32_t x, std::uint32_t y) {
     std::vector<std::uint32_t> changed;
     for (std::uint32_t n = 1; n <= world->settler_high_water && n < 200; ++n) {
-        if (JobOf(world->settlers[n]) == Job::CarrierPickUp) {
-            SetJob(world->settlers[n], Job::WalkToWork);
+        if (world->settlers[n].job == Job::CarrierPickUp) {
+            world->settlers[n].job = Job::WalkToWork;
             changed.push_back(n);
         }
     }
     CGameData_LosePileOnTile(world, edx, x, y);
     for (const std::uint32_t n : changed) {
-        if (JobOf(world->settlers[n]) == Job::WalkToWork) {
-            SetJob(world->settlers[n], Job::CarrierPickUp);
+        if (world->settlers[n].job == Job::WalkToWork) {
+            world->settlers[n].job = Job::CarrierPickUp;
         }
     }
 }
@@ -770,7 +770,7 @@ void CompareCycle(test::Context& ctx, CycleCrushFn candidate, int cases, int& re
                 layout::Settler& s = w->settlers[n];
                 s.owner = static_cast<std::uint8_t>(n <= 3 ? 0 : 1);
                 s.art = n <= 6 ? Value(SettlerType::Swordsman2) : Value(SettlerType::Digger);
-                s.job = job;
+                s.job = static_cast<SettlerJob>(job);
                 s.building = building;
                 s.next = next;
                 s.flags = 0;

@@ -249,8 +249,8 @@ void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapO
     if (static_cast<std::int32_t>(direction) >= static_cast<std::int32_t>(kDirectionCount)) {
         direction -= kDirectionCount;
     }
-    if (JobOf(s) != Job::GuardBuilding && JobOf(s) != Job::BowmanInTower) {
-        SetJob(s, Job::UnitFighting);
+    if (s.job != Job::GuardBuilding && s.job != Job::BowmanInTower) {
+        s.job = Job::UnitFighting;
     }
 
     // 1. The hit by soldier type: attack animation and base damage; bowmen shoot an arrow.
@@ -301,7 +301,7 @@ void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapO
     case S::Bowman1:
         damage = 5;
         CGameData_SetSettlerAnimation(world, nullptr, settler, direction + 40);
-        if (JobOf(s) == Job::BowmanInTower) {
+        if (s.job == Job::BowmanInTower) {
             towerArrow();
         } else {
             arrow(false);
@@ -312,7 +312,7 @@ void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapO
         const bool second = TypeOf(s) == S::Bowman2;
         damage = second ? 6 : 7;
         CGameData_SetSettlerAnimation(world, nullptr, settler, direction + (second ? 52 : 64));
-        if (JobOf(s) == Job::BowmanInTower) {
+        if (s.job == Job::BowmanInTower) {
             towerArrow();
         } else {
             arrow(true);
@@ -345,7 +345,7 @@ void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapO
     if ((s.flags & kFlagThreeQuarters) != 0) {
         damage = (damage * 3) >> 2;
     }
-    if (JobOf(world->settlers[t]) == Job::GuardHeal) {
+    if (world->settlers[t].job == Job::GuardHeal) {
         CGameData_QueueEvent(world, nullptr, kEventTowerAttacked, world->settlers[t].building, world->settlers[t].owner,
                              s.owner);
     }
@@ -356,7 +356,7 @@ void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapO
     // 3. Who takes the hit: a seven-tile unit's part passes it on to the
     // catapult nearby (FindNearbyOwnCatapult).
     std::uint32_t victimNumber = t;
-    if (JobOf(world->settlers[t]) == Job::SevenTileUnitPart) {
+    if (world->settlers[t].job == Job::SevenTileUnitPart) {
         CGameData_NotifyLocalPlayer(world, nullptr, world->settlers[t].owner, kNoticeUnderAttack, s.x, s.y);
         victimNumber = CGameData_FindNearbyOwnCatapult(world, nullptr, t, s.x, s.y);
     } else {
@@ -364,8 +364,8 @@ void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapO
                                     world->settlers[t].y);
     }
     Settler& victim = world->settlers[victimNumber];
-    if (JobOf(victim) == Job::DonkeyWalkToMarket) {
-        SetJob(victim, Job::DonkeyUnload);
+    if (victim.job == Job::DonkeyWalkToMarket) {
+        victim.job = Job::DonkeyUnload;
         damage = 0;
     }
     victim.flags &= static_cast<std::uint8_t>(~kFlagNoFight);
@@ -380,7 +380,7 @@ void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapO
     }
 
     // 4. The victim dies (0x50f4a7..).
-    const Job job = JobOf(victim);
+    const Job job = victim.job;
     if (job == Job::GuardHeal || job == Job::GuardBuilding) {
         CaptureTower(world, settler, victim, victimNumber);
         return;
@@ -395,7 +395,7 @@ void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapO
         default: break;
         }
     }
-    switch (JobOf(victim)) {
+    switch (victim.job) {
     case Job::UnitIdle:
     case Job::UnitWalk:
     case Job::UnitWalkCountdown:
@@ -410,11 +410,11 @@ void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapO
     }
     if (TypeOf(victim) == S::Pioneer || TypeOf(victim) == S::Geologist) {
         // Free the tile it walked to or worked on.
-        if (JobOf(victim) == Job::UnitWalk || JobOf(victim) == Job::UnitWalkCountdown) {
+        if (victim.job == Job::UnitWalk || victim.job == Job::UnitWalkCountdown) {
             TileAt(world, victim.target_x, victim.target_y).flags &= static_cast<std::uint8_t>(~kTileClaimed);
         }
-        if (JobOf(victim) == Job::GeologistWork || JobOf(victim) == Job::GeologistDone ||
-            JobOf(victim) == Job::PioneerWork || JobOf(victim) == Job::PioneerDone) {
+        if (victim.job == Job::GeologistWork || victim.job == Job::GeologistDone ||
+            victim.job == Job::PioneerWork || victim.job == Job::PioneerDone) {
             TileAt(world, victim.x, victim.y).flags &= static_cast<std::uint8_t>(~kTileClaimed);
         }
     }
@@ -437,7 +437,7 @@ void Attack(CGameData* world, std::uint32_t settler, std::uint32_t t, const MapO
     ++g_playerTallies[s.owner].unk14;
     CGameData_QueueEvent(world, nullptr, kEventSettlerDied, victimNumber, victim.art, victim.owner);
     CGameData_RemoveSettlerFromLists(world, nullptr, victimNumber);
-    SetJob(victim, Job::SettlerDies);
+    victim.job = Job::SettlerDies;
     CGameData_SetSettlerAnimation(world, nullptr, victimNumber, kDyingAnimation);
 }
 
@@ -447,7 +447,7 @@ void CaptureTower(CGameData* world, std::uint32_t settler, Settler& victim, std:
     Settler& s = world->settlers[settler];
     CGameData_NotifyLocalPlayer(world, nullptr, victim.owner, kNoticeTowerSoldierDied, victim.x, victim.y);
     const std::uint32_t tower = victim.building;
-    if (JobOf(victim) == Job::GuardBuilding) {
+    if (victim.job == Job::GuardBuilding) {
         std::uint16_t& head = world->buildings[tower].garrison;  // the garrison list
         if (head == victimNumber) {
             head = victim.next;
@@ -459,12 +459,12 @@ void CaptureTower(CGameData* world, std::uint32_t settler, Settler& victim, std:
             world->settlers[p].next = victim.next;
         }
     }
-    if (JobOf(victim) == Job::GuardHeal) {
+    if (victim.job == Job::GuardHeal) {
         world->buildings[tower].guard = 0;
     }
     Building& b = world->buildings[tower];
     if (b.garrison != 0) {
-        SetJob(victim, Job::GarrisonSoldierDies);
+        victim.job = Job::GarrisonSoldierDies;
         CGameData_SetSettlerAnimation(world, nullptr, victimNumber, kDyingAnimation);
         return;
     }
@@ -477,7 +477,7 @@ void CaptureTower(CGameData* world, std::uint32_t settler, Settler& victim, std:
         if (r.owner == kNoOwner || r.building != tower || ClassOf(r) == SettlerClass::Civilian) {
             continue;
         }
-        const Job job = JobOf(r);
+        const Job job = r.job;
         if (job == Job::WalkToWork || job == Job::ArriveAtWork || job == Job::SwordsmanEnterTower ||
             job == Job::BowmanEnterTower || job == Job::PikemanEnterTower) {
             CGameData_ClearSettlerJob(world, nullptr, i);
@@ -499,7 +499,7 @@ void CaptureTower(CGameData* world, std::uint32_t settler, Settler& victim, std:
     b.owner = s.owner;
     // A new guard (type 37, class 99) at the dead one's place.
     const std::uint32_t guard = CGameData_CreateSettler(world, nullptr, victim.x, victim.y, Value(S::Type37), s.owner);
-    SetJob(world->settlers[guard], Job::GuardHeal);
+    world->settlers[guard].job = Job::GuardHeal;
     world->settlers[guard].building = static_cast<std::uint16_t>(tower);
     world->settlers[guard].health = 1;
     b.guard = static_cast<std::uint16_t>(guard);
@@ -542,15 +542,15 @@ void CaptureTower(CGameData* world, std::uint32_t settler, Settler& victim, std:
     b.military.class3_wanted = 0;
     switch (ClassOf(s)) {
     case SettlerClass::Swordsman:
-        SetJob(s, Job::SwordsmanInTower);
+        s.job = Job::SwordsmanInTower;
         b.military.class1_wanted = 1;
         break;
     case SettlerClass::Bowman:
-        SetJob(s, Job::BowmanInTower);
+        s.job = Job::BowmanInTower;
         b.military.class2_wanted = 1;
         break;
     case SettlerClass::Pikeman:
-        SetJob(s, Job::PikemanInTower);
+        s.job = Job::PikemanInTower;
         b.military.class3_wanted = 1;
         break;
     default: break;
@@ -560,7 +560,7 @@ void CaptureTower(CGameData* world, std::uint32_t settler, Settler& victim, std:
     s.building = static_cast<std::uint16_t>(tower);
     s.next = 0;
     kRecalculateTerritory(world, nullptr, world->buildings[tower].x, world->buildings[tower].y);
-    SetJob(victim, Job::SettlerDies);
+    victim.job = Job::SettlerDies;
     CGameData_SetSettlerAnimation(world, nullptr, victimNumber, kDyingAnimation);
 }
 
@@ -582,7 +582,7 @@ bool ValidTarget(CGameData* world, const Settler& s, Settler& e, std::int32_t di
     // shielded job for swordsmen and pikemen.
     if (!ok) {
         ok = c == Value(SettlerClass::Class99) || c == Value(SettlerClass::Class41) ||
-             (c == Value(SettlerClass::Donkey) && JobOf(e) == Job::DonkeyWalkToMarket &&
+             (c == Value(SettlerClass::Donkey) && e.job == Job::DonkeyWalkToMarket &&
               (ClassNumber(s) == kSwordsman || ClassNumber(s) == kPikeman));
     }
     if (!ok) {
@@ -631,11 +631,11 @@ bool AttackInReach(CGameData* world, std::uint32_t settler, std::int32_t range, 
             continue;
         }
         // A tower bowman shoots at computer players' settlers only on its own land.
-        if (JobOf(s) == Job::BowmanInTower && world->players[e.owner].active == kComputerPlayer &&
+        if (s.job == Job::BowmanInTower && world->players[e.owner].active == kComputerPlayer &&
             TileAt(world, e.x, e.y).owner != s.owner) {
             continue;
         }
-        if (!AttackableJob(JobOf(e), cls, entry.distance, false)) {
+        if (!AttackableJob(e.job, cls, entry.distance, false)) {
             continue;
         }
         Attack(world, settler, t, entry);
@@ -692,7 +692,7 @@ void ApproachEnemy(CGameData* world, std::uint32_t settler) {
         if (!ValidTarget(world, s, e, entry.distance, true)) {
             continue;
         }
-        if (!AttackableJob(JobOf(e), cls, entry.distance, true)) {
+        if (!AttackableJob(e.job, cls, entry.distance, true)) {
             continue;
         }
         // Next to the enemy; bowmen that are already close go next to the
@@ -725,7 +725,7 @@ void ApproachEnemy(CGameData* world, std::uint32_t settler) {
         if (!sent) {
             continue;
         }
-        SetJob(s, Job::UnitWalk);
+        s.job = Job::UnitWalk;
         s.walk_state = 0;
         return;
     }
@@ -747,7 +747,7 @@ std::uint32_t __fastcall CGameData_UpdateSoldier(CGameData* world, void*, std::u
     case SettlerClass::Bowman:
         range = kBowmanRange;
         minimum = kBowmanMinimum;
-        if (JobOf(s) == Job::BowmanInTower) {
+        if (s.job == Job::BowmanInTower) {
             range = kTowerBowmanRange;
             minimum = kTowerBowmanMinimum;
         }
@@ -761,7 +761,7 @@ std::uint32_t __fastcall CGameData_UpdateSoldier(CGameData* world, void*, std::u
     if (AttackInReach(world, settler, range, minimum)) {
         return 1;
     }
-    if (JobOf(s) == Job::GuardBuilding || JobOf(s) == Job::BowmanInTower || (s.flags & kFlagNoFight) != 0) {
+    if (s.job == Job::GuardBuilding || s.job == Job::BowmanInTower || (s.flags & kFlagNoFight) != 0) {
         return 0;
     }
     ApproachEnemy(world, settler);
@@ -863,7 +863,7 @@ void SetUpWorld(CGameData* w) {
         r.prev = static_cast<std::uint16_t>(r.prev % kTestSettlers);
         r.owner = static_cast<std::uint8_t>(s < kTestSettlers ? r.owner % 4 : 1);
         r.art = static_cast<std::uint8_t>(r.art % 0x40);
-        r.job = Value(Job::MinerEatCoalMine);  // no attackable job: only the settlers a case places are targets
+        r.job = Job::MinerEatCoalMine;  // no attackable job: only the settlers a case places are targets
     }
     for (std::uint32_t b = 0; b <= kTestBuildings; ++b) {
         Building& r = w->buildings[b];
@@ -922,7 +922,7 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t soldie
             if (w->tiles[r.x][r.y].settler == old) {
                 w->tiles[r.x][r.y].settler = 0;
             }
-            r.job = Value(Job::MinerEatCoalMine);
+            r.job = Job::MinerEatCoalMine;
         });
     }
     placed.clear();
@@ -939,7 +939,7 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t soldie
         Settler& s = w->settlers[soldier];
         s.slot = slot;
         s.art = art;
-        s.job = job;
+        s.job = static_cast<SettlerJob>(job);
         s.flags = flags;
         s.owner = owner;
         s.x = static_cast<std::uint16_t>(x);
@@ -971,7 +971,7 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t soldie
             Settler& r = w->settlers[e];
             w->tiles[r.x][r.y].settler = 0;
             r.art = eart;
-            r.job = ejob;
+            r.job = static_cast<SettlerJob>(ejob);
             r.owner = eowner;
             r.health = health;
             r.flags = eflags;
@@ -1037,11 +1037,11 @@ void Compare(test::Context& ctx, SoldierFn candidate, int cases) {
 // Wrong: bowmen in towers use the normal range.
 std::uint32_t __fastcall WrongUpdateSoldier(CGameData* world, void* edx, std::uint32_t settler) {
     Settler& s = world->settlers[settler];
-    if (JobOf(s) == Job::BowmanInTower) {
-        SetJob(s, Job::PikemanEnterTower);
+    if (s.job == Job::BowmanInTower) {
+        s.job = Job::PikemanEnterTower;
         const std::uint32_t result = CGameData_UpdateSoldier(world, edx, settler);
-        if (JobOf(s) == Job::PikemanEnterTower) {
-            SetJob(s, Job::BowmanInTower);
+        if (s.job == Job::PikemanEnterTower) {
+            s.job = Job::BowmanInTower;
         }
         return result;
     }

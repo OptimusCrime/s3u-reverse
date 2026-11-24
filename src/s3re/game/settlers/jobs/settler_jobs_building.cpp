@@ -209,7 +209,7 @@ JobResult DiggerDig(SettlerContext& ctx) {
             }
         }
         Call<kSetSettlerTarget>(world, ctx.number, tx, ty);
-        SetJob(settler, J::DiggerWalkToSpot);
+        settler.job = J::DiggerWalkToSpot;
         settler.counter = 0;
         const std::uint8_t* now = SiteEntry(world, BuildingAt(world, settler.building).levelling_slot, settler.owner);
         settler.food = now[1 + row * kSiteGridSide + column];  // +0x17: the wanted height
@@ -253,22 +253,22 @@ JobResult DiggerLevel(SettlerContext& ctx) {
             1 + kSiteGridCentre * kSiteGridSide + kSiteGridCentre + (x - building.x) * kSiteGridSide + (y - building.y);
         *reinterpret_cast<std::uint8_t*>(reinterpret_cast<std::uintptr_t>(entry) + cell) = 0;  // raw-ok: unchecked cell, as the original
         tile.flags &= 0xf9;
-        SetJob(settler, J::DiggerDig);
+        settler.job = J::DiggerDig;
         settler.counter = 0;
         return JobResult::Next;
     }
     if (!LevelStepAllowed(world, offset, height, wanted)) {
         tile.flags &= static_cast<std::uint8_t>(~kTileTargeted);  // 0x4eba11
-        SetJob(settler, J::DiggerDig);
+        settler.job = J::DiggerDig;
         settler.counter = 0;
         return JobResult::Next;
     }
     if (height > wanted) {
-        SetJob(settler, J::DiggerLower);
+        settler.job = J::DiggerLower;
         Call<kSetSettlerAnimation>(world, ctx.number, 1);
         tile.height = static_cast<std::uint8_t>(tile.height - 1);
     } else {
-        SetJob(settler, J::DiggerRaise);
+        settler.job = J::DiggerRaise;
         Call<kSetSettlerAnimation>(world, ctx.number, 1);
         tile.height = static_cast<std::uint8_t>(tile.height + 1);
     }
@@ -375,7 +375,7 @@ JobResult CarrierTakeTool(SettlerContext& ctx) {
     }
     const Building& building = BuildingAt(world, settler.building);
     Call<kSetSettlerTarget>(world, ctx.number, building.door_x, building.door_y);
-    SetJob(settler, J::WalkToWork);
+    settler.job = J::WalkToWork;
     settler.art = settler.tool_type;
     settler.counter = 0;
     const std::uint32_t taken = OwnTile(ctx).object_number;
@@ -392,7 +392,7 @@ JobResult CarrierTakeTool(SettlerContext& ctx) {
 JobResult CarrierBend(SettlerContext& ctx, J next) {
     Call<kSetSettlerAnimation>(ctx.world, ctx.number, 0x6f);
     Call<kSetSettlerSavedAnimation>(ctx.world, ctx.number, 0x70);
-    SetJob(ctx.settler, next);
+    ctx.settler.job = next;
     return JobResult::Next;
 }
 
@@ -405,7 +405,7 @@ JobResult CarrierPickUp(SettlerContext& ctx) {
     const std::uint32_t pile = OwnTile(ctx).object_number;
     ctx.frame.slot30 = pile;
     Call<kTakeGoodFromPile>(ctx.world, pile);
-    SetJob(settler, J::CarrierLeavePile);
+    settler.job = J::CarrierLeavePile;
     return JobResult::Next;
 }
 
@@ -436,7 +436,7 @@ JobResult CarrierLeavePile(SettlerContext& ctx) {
             break;
         }
     }
-    SetJob(settler, J::CarrierWalkToBuilding);
+    settler.job = J::CarrierWalkToBuilding;
     settler.counter = 0;  // 0x4f91fb with EDX = 0
     return JobResult::Next;
 }
@@ -450,7 +450,7 @@ JobResult CarrierAtSourcePile(SettlerContext& ctx) {
     Settler& settler = ctx.settler;
     const Pile& target = PileAt(ctx.world, settler.building);
     Call<kSetSettlerTarget>(ctx.world, ctx.number, target.x, target.y);
-    SetJob(settler, J::CarrierWalkToTargetPile);
+    settler.job = J::CarrierWalkToTargetPile;
     settler.counter = 0;
     settler.slot = settler.good;
     const std::uint32_t pile = OwnTile(ctx).object_number;
@@ -467,7 +467,7 @@ JobResult CarrierDeliver(SettlerContext& ctx) {
     CGameData* world = ctx.world;
     Settler& settler = ctx.settler;
     Call<kRestoreSettlerAnimation>(world, ctx.number);
-    SetJob(settler, J::CarrierDone);
+    settler.job = J::CarrierDone;
     const std::uint32_t b = settler.building;
     Building& building = BuildingAt(world, b);
     if (building.buildup != 0) {
@@ -604,7 +604,7 @@ JobResult BuilderStart(SettlerContext& ctx) {
         }
         TileAt(world, x, y).flags |= kTileTargeted;
         Call<kSetSettlerTarget>(world, ctx.number, x, y);
-        SetJob(settler, J::BuilderWalkToSpot);
+        settler.job = J::BuilderWalkToSpot;
         settler.counter = 0;
         settler.food = static_cast<std::uint8_t>(value);  // +0x17: the builder's animation variant
         return JobResult::Next;
@@ -645,7 +645,7 @@ JobResult BuilderStart(SettlerContext& ctx) {
         }
     }
     Call<kSetSettlerTarget>(world, ctx.number, x, y);
-    SetJob(settler, J::BuilderWalkToWait);
+    settler.job = J::BuilderWalkToWait;
     settler.counter = 0;
     return JobResult::Next;
 }
@@ -725,7 +725,7 @@ JobResult BuilderBuild(SettlerContext& ctx) {
 JobResult SoldierEnter(SettlerContext& ctx, J next, std::uint8_t& coming) {
     CGameData* world = ctx.world;
     Settler& settler = ctx.settler;
-    SetJob(settler, next);
+    settler.job = next;
     --coming;
     OwnTile(ctx).settler = 0;
     settler.counter = 0;
@@ -743,7 +743,7 @@ JobResult SoldierEnter(SettlerContext& ctx, J next, std::uint8_t& coming) {
 JobResult BowmanEnter(SettlerContext& ctx) {
     CGameData* world = ctx.world;
     Settler& settler = ctx.settler;
-    SetJob(settler, J::BowmanInTower);
+    settler.job = J::BowmanInTower;
     --BuildingAt(world, settler.building).military.class2_coming;
     OwnTile(ctx).settler = 0;
     settler.next = BuildingAt(world, settler.building).garrison;
@@ -838,7 +838,7 @@ JobResult CutterSearchJob(SettlerContext& ctx, const CutterSearch& kind) {
     }
     OwnTile(ctx).settler = static_cast<std::uint16_t>(ctx.number);
     Call<kSetSettlerTarget>(world, ctx.number, tx + kind.step, ty + kind.step);
-    SetJob(settler, kind.next);
+    settler.job = kind.next;
     Call<kSetSettlerAnimation>(world, ctx.number, kind.animation);
     settler.tool_type = 1;
     return JobResult::Next;
@@ -856,7 +856,7 @@ constexpr CutterSearch kStonecutterSearch{2,     false, kObjectFirstStone,   kOb
 JobResult LeaveBuilding(SettlerContext& ctx, J walk) {
     Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
     ctx.settler.counter = 0;
-    SetJob(ctx.settler, walk);
+    ctx.settler.job = walk;
     return JobResult::Again;
 }
 
@@ -867,12 +867,12 @@ JobResult WoodcutterAtTree(SettlerContext& ctx) {
     Settler& settler = ctx.settler;
     const std::uint8_t object = TileNear(ctx.world, TileOff(settler.x, settler.y), -1, -1).object;
     if (object >= kObjectFirstTree && object <= kObjectLastCuttableTree) {
-        SetJob(settler, J::WoodcutterCut);
+        settler.job = J::WoodcutterCut;
         Call<kSetSettlerAnimation>(ctx.world, ctx.number, 6);
         settler.food = 0;  // +0x17: cutting state
         return JobResult::Next;
     }
-    SetJob(settler, J::WoodcutterWalkHome);
+    settler.job = J::WoodcutterWalkHome;
     return WalkToDoorAgain(ctx);  // 0x4f827f
 }
 
@@ -883,12 +883,12 @@ JobResult StonecutterAtStone(SettlerContext& ctx) {
     Settler& settler = ctx.settler;
     const std::uint8_t object = TileNear(ctx.world, TileOff(settler.x, settler.y), -2, -2).object;
     if (object >= kObjectFirstStone && object <= kObjectLastStone) {
-        SetJob(settler, J::StonecutterCut);
+        settler.job = J::StonecutterCut;
         Call<kSetSettlerAnimation>(ctx.world, ctx.number, 0x11);
         settler.food = 0;
         return JobResult::Next;
     }
-    SetJob(settler, J::StonecutterWalkHome);  // 0x4ed7eb
+    settler.job = J::StonecutterWalkHome;  // 0x4ed7eb
     return WalkToDoorAgain(ctx);
 }
 
@@ -907,7 +907,7 @@ JobResult WoodcutterCut(SettlerContext& ctx) {
     if (state == 9) {
         Call<kUnblockTile>(world, settler.x - 1u, settler.y - 1u);  // 0x4ed774
         settler.slot = 3;  // carries a log
-        SetJob(settler, J::WoodcutterWalkHome);
+        settler.job = J::WoodcutterWalkHome;
         return WalkToDoorAgain(ctx);  // 0x4f82a0
     }
     static constexpr std::uint32_t kAnimations[8] = {7, 7, 7, 8, 9, 0xa, 0xb, 0xc};
@@ -931,7 +931,7 @@ JobResult StonecutterCut(SettlerContext& ctx) {
     const std::uint8_t state = ++settler.food;
     if (state == 2) {
         settler.slot = 2;  // carries a stone
-        SetJob(settler, J::StonecutterWalkHome);
+        settler.job = J::StonecutterWalkHome;
         return WalkToDoorAgain(ctx);
     }
     if (state != 1) {
@@ -962,7 +962,7 @@ JobResult GoInside(SettlerContext& ctx, J inside, std::uint32_t animation);
 JobResult HomeWithGoods(SettlerContext& ctx, J put, std::uint32_t putAnimation, J inside,
                         std::uint32_t insideAnimation) {
     if (ctx.settler.slot != 0) {
-        SetJob(ctx.settler, put);
+        ctx.settler.job = put;
         Call<kSetSettlerAnimation>(ctx.world, ctx.number, putAnimation);
         return JobResult::Next;
     }
@@ -978,7 +978,7 @@ JobResult PutOnPile(SettlerContext& ctx, Good good, J next, std::uint32_t animat
     Call<kAddGoodsToPile>(world, BuildingAt(world, settler.building).pile_ring);
     Call<kAddStatistic>(world, settler.owner, Value(good), 1);
     Call<kAddPlayerCounter>(world, settler.owner, Value(good), 1);
-    SetJob(settler, next);
+    settler.job = next;
     Call<kSetSettlerAnimation>(world, ctx.number, animation);
     settler.slot = 0;
     return JobResult::Next;
@@ -1044,7 +1044,7 @@ JobResult ForesterSearch(SettlerContext& ctx) {
     }
     OwnTile(ctx).settler = static_cast<std::uint16_t>(ctx.number);
     Call<kSetSettlerTarget>(world, ctx.number, tx, ty - 1);
-    SetJob(settler, J::ForesterLeave);
+    settler.job = J::ForesterLeave;
     Call<kSetSettlerAnimation>(world, ctx.number, 0x1d);
     return JobResult::Next;
 }
@@ -1055,7 +1055,7 @@ JobResult ForesterLeave(SettlerContext& ctx) {
     Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
     ctx.settler.slot = 1;
     ctx.settler.counter = 0;
-    SetJob(ctx.settler, J::ForesterWalkToSpot);
+    ctx.settler.job = J::ForesterWalkToSpot;
     return JobResult::Again;
 }
 
@@ -1081,13 +1081,13 @@ JobResult ForesterAtSpot(SettlerContext& ctx) {
         const std::uint8_t terrain = TileNear(world, TileOff(settler.x, settler.y), 0, 1).terrain;
         if ((terrain & 0xf0) == 0x10 && terrain != 0x1c) {
             Call<kBlockTile>(world, settler.x, settler.y + 1u);
-            SetJob(settler, J::ForesterPlant);
+            settler.job = J::ForesterPlant;
             Call<kSetSettlerAnimation>(world, ctx.number, 0x1e);
             settler.food = 0;
             return JobResult::Next;
         }
     }
-    SetJob(settler, J::ForesterWalkHome);  // 0x4edfd7
+    settler.job = J::ForesterWalkHome;  // 0x4edfd7
     return WalkToDoor(ctx);     // 0x4f4328
 }
 
@@ -1106,7 +1106,7 @@ JobResult ForesterPlant(SettlerContext& ctx) {
         return JobResult::Next;
     }
     TileNear(ctx.world, TileOff(settler.x, settler.y), 0, 1).object = kObjectSapling;
-    SetJob(settler, J::ForesterWalkHome);
+    settler.job = J::ForesterWalkHome;
     return WalkToDoor(ctx);
 }
 
@@ -1129,14 +1129,14 @@ JobResult SawmillStart(SettlerContext& ctx) {
     }
     Call<kPileIncAmountLeaving>(world, building.piles[0]);
     OwnTile(ctx).settler = static_cast<std::uint16_t>(ctx.number);
-    SetJob(settler, J::SawmillerTakeLog);
+    settler.job = J::SawmillerTakeLog;
     Call<kSetSettlerAnimation>(world, ctx.number, 0x17);
     return JobResult::Next;
 }
 
 JobResult GoInside(SettlerContext& ctx, J inside, std::uint32_t animation) {
     Call<kMoveSettlerToBuildingTileA>(ctx.world, ctx.number);
-    SetJob(ctx.settler, inside);
+    ctx.settler.job = inside;
     Call<kSetSettlerAnimation>(ctx.world, ctx.number, animation);
     return JobResult::Next;
 }
@@ -1151,7 +1151,7 @@ JobResult RunBuildingJobs(SettlerContext& ctx) {
     case J::DiggerLevel: return DiggerLevel(ctx);
     case J::DiggerLower:
     case J::DiggerRaise:
-        SetJob(settler, J::DiggerLevel);  // 0x4ebab8
+        settler.job = J::DiggerLevel;  // 0x4ebab8
         settler.counter = 0;
         return JobResult::Next;
     case J::RecruitAtBarracks: return RecruitAtBarracks(ctx);
@@ -1182,44 +1182,44 @@ JobResult RunBuildingJobs(SettlerContext& ctx) {
         }
         return JobResult::Next;
     case J::WoodcutterGoIn:  // 0x4ece32: the woodcutter goes in
-        SetJob(settler, J::WoodcutterSearch);
+        settler.job = J::WoodcutterSearch;
         EnterWorkplace(ctx);
         settler.next = 0;
         settler.counter = 0;
         return JobResult::Next;
     case J::ForesterGoIn:  // 0x4ecf66: the forester goes in (0x4ece3b)
-        SetJob(settler, J::ForesterSearch);
+        settler.job = J::ForesterSearch;
         EnterWorkplace(ctx);
         settler.next = 0;
         settler.counter = 0;
         return JobResult::Next;
     case J::StonecutterGoIn:  // 0x4ecea1: the stonecutter goes in
-        SetJob(settler, J::StonecutterSearch);
+        settler.job = J::StonecutterSearch;
         EnterWorkplace(ctx);
         settler.next = 0;
         settler.counter = 0;
         return JobResult::Again;
     case J::WoodcutterBackIn:  // 0x4ece93 -> 0x4f73bb: back inside, search again
-        SetJob(settler, J::WoodcutterSearch);
+        settler.job = J::WoodcutterSearch;
         OwnTile(ctx).settler = 0;
         settler.counter = 0;
         return JobResult::Again;
     case J::ForesterBackIn:  // 0x4ecf74 -> 0x4f73bb
-        SetJob(settler, J::ForesterSearch);
+        settler.job = J::ForesterSearch;
         OwnTile(ctx).settler = 0;
         settler.counter = 0;
         return JobResult::Again;
     case J::StonecutterBackIn:  // 0x4ecf09
-        SetJob(settler, J::StonecutterSearch);
+        settler.job = J::StonecutterSearch;
         OwnTile(ctx).settler = 0;
         settler.counter = 0;
         return JobResult::Next;
     case J::SawmillerGoIn:    // 0x4ecf3c -> 0x4f8f44: the sawmill worker goes in
     case J::GoldSmelterGoIn:  // 0x4ecf4a: smelter
     case J::IronSmelterGoIn:  // 0x4ecf58: smelter
-        SetJob(settler, static_cast<J>(ctx.job) == J::SawmillerGoIn     ? J::SawmillerStart
-                        : static_cast<J>(ctx.job) == J::GoldSmelterGoIn ? J::GoldSmelterStart
-                                                                        : J::IronSmelterStart);
+        settler.job = static_cast<J>(ctx.job) == J::SawmillerGoIn     ? J::SawmillerStart
+                      : static_cast<J>(ctx.job) == J::GoldSmelterGoIn ? J::GoldSmelterStart
+                                                                      : J::IronSmelterStart;
         ++BuildingAt(world, settler.building).kind_bytes[0];  // +0x19
         OwnTile(ctx).settler = 0;                             // 0x4ecf12
         settler.counter = 0;
@@ -1418,7 +1418,7 @@ void CustomizeBuilding(CaseSetup& setup, std::uint32_t n) {
             layout::Trade& trade = *(w->trades + BuildingAt(w, PileAt(w, w->tiles[s.x][s.y].object_number).prev).trade);
             (&trade.ordered[0])[s.slot] = 0;
         }
-        isDigger = JobOf(s) == J::DiggerDig;
+        isDigger = s.job == J::DiggerDig;
         gridOwner = s.owner % 20;
         if (levelDone) {
             s.food = w->tiles[s.x][s.y].height;
@@ -1500,7 +1500,7 @@ FamilyTest BuildingFamily() {
 std::uint32_t __fastcall WrongDiggerHeight(CGameData* world, void* edx) {
     const std::uint32_t result = CGameData_UpdateSettlers(world, edx);
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
-        if (JobOf(world->settlers[n]) == J::DiggerWalkToSpot) {
+        if (world->settlers[n].job == J::DiggerWalkToSpot) {
             world->settlers[n].food ^= 1;
         }
     }
@@ -1513,7 +1513,7 @@ std::uint32_t __fastcall WrongSearchCursor(CGameData* world, void* edx) {
     const std::uint32_t result = CGameData_UpdateSettlers(world, edx);
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
         layout::Settler& s = world->settlers[n];
-        if (JobOf(s) == J::WoodcutterSearch && s.counter == 10) {
+        if (s.job == J::WoodcutterSearch && s.counter == 10) {
             ++s.next;
         }
     }

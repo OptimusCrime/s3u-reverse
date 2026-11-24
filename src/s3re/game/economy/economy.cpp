@@ -416,7 +416,7 @@ std::uint32_t __fastcall CGameData_RequestSettlerForBuilding(CGameData* world, v
         Settler& s = world->settlers[worker];
         UnlinkSettler(world, idle, worker);
         CGameData_SetSettlerTarget(world, nullptr, worker, b.door_x, b.door_y);
-        SetJob(s, Job::WalkToWork);
+        s.job = Job::WalkToWork;
         s.counter = 0;
         s.building = static_cast<std::uint16_t>(number);
         return worker;
@@ -457,7 +457,7 @@ std::uint32_t __fastcall CGameData_RequestSettlerForBuilding(CGameData* world, v
         UnlinkSettler(world, carrierList, carrier);
         s.building = static_cast<std::uint16_t>(number);
         CGameData_SetSettlerTarget(world, nullptr, carrier, b.door_x, b.door_y);
-        SetJob(s, Job::WalkToWork);
+        s.job = Job::WalkToWork;
         s.counter = 0;
         s.art = static_cast<std::uint8_t>(type);
         return carrier;
@@ -488,7 +488,7 @@ std::uint32_t __fastcall CGameData_RequestSettlerForBuilding(CGameData* world, v
     Settler& s = world->settlers[carrier];
     UnlinkSettler(world, carrierList, carrier);
     CGameData_SetSettlerTarget(world, nullptr, carrier, pile.x, pile.y);
-    SetJob(s, Job::CarrierWalkToTool);
+    s.job = Job::CarrierWalkToTool;
     s.counter = 0;
     s.building = static_cast<std::uint16_t>(number);
     s.good = static_cast<std::uint8_t>(tool);
@@ -578,7 +578,7 @@ void __fastcall CGameData_DispatchPileCarrier(CGameData* world, void*, std::uint
     Settler& s = world->settlers[carrier];
     UnlinkSettler(world, carrierList, carrier);
     CGameData_SetSettlerTarget(world, nullptr, carrier, pile.x, pile.y);
-    SetJob(s, Job::CarrierWalkToSourcePile);
+    s.job = Job::CarrierWalkToSourcePile;
     s.counter = 0;
     s.building = static_cast<std::uint16_t>(target);
     s.good = pile.good;

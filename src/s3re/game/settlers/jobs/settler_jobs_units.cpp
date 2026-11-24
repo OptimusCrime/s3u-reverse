@@ -86,7 +86,7 @@ void SetTarget(SettlerContext& ctx, std::uint32_t x, std::uint32_t y) {
 
 // Starts walking to the target just set (job UnitWalk).
 void StartUnitWalk(Settler& settler) {
-    SetJob(settler, Job::UnitWalk);
+    settler.job = Job::UnitWalk;
     settler.walk_state = 0;
     settler.counter = 0;
 }
@@ -144,7 +144,7 @@ bool StepAside(SettlerContext& ctx, std::uint32_t side, Job walkJob) {
         if (Inside(world, x, y) &&
             Call<kCanSettlerEnterTile>(world, x, y, settler.owner, settler.art) != 0) {
             SetTarget(ctx, x, y);
-            SetJob(settler, walkJob);
+            settler.job = walkJob;
             if (walkJob == Job::UnitWalk) {
                 settler.walk_state = 0;
             }
@@ -172,7 +172,7 @@ JobResult NewSettler(SettlerContext& ctx) {
     settler.direction = Call<kRandomBelow6>(world);
     if ((&g_settlerTypeClass[0])[settler.art] != 0) {
         // Units: their player's idle list per type.
-        SetJob(settler, Job::UnitIdle);
+        settler.job = Job::UnitIdle;
         if (TypeOf(settler) == S::Pioneer || TypeOf(settler) == S::Geologist) {
             settler.saved_animation = kNoSpot;
             settler.saved_counter = kNoSpot;
@@ -190,7 +190,7 @@ JobResult NewSettler(SettlerContext& ctx) {
         return JobResult::Again;
     }
     // Civilians: the idle list per type of the area they stand in.
-    SetJob(settler, Job::Nothing);
+    settler.job = Job::Nothing;
     const std::uint32_t area = OwnTile(ctx).area;
     const std::uint16_t head = AreaAt(world, area).settlers_by_type[settler.art];
     settler.next = head;
@@ -209,7 +209,7 @@ JobResult AfterFight(SettlerContext& ctx) {
     if (Call<kUpdateSoldier>(ctx.world, ctx.number) != 0) {
         return JobResult::Next;
     }
-    SetJob(ctx.settler, Job::UnitIdle);
+    ctx.settler.job = Job::UnitIdle;
     ctx.settler.counter = 5;
     ctx.settler.frame = 0;  // AL of UpdateSoldier's 0
     ctx.settler.direction = Call<kRandomBelow6>(ctx.world);
@@ -401,7 +401,7 @@ JobResult SteerShip(SettlerContext& ctx) {
             }
         }
     }
-    SetJob(settler, Job::UnitWalk);
+    settler.job = Job::UnitWalk;
     settler.counter = 0;
     const std::uint32_t y = CallStd<kNeighbourY>(sy, side);
     const std::uint32_t x = CallStd<kNeighbourX>(sx, side);
@@ -439,7 +439,7 @@ JobResult UnitIdle(SettlerContext& ctx) {
     if (static_cast<std::uint8_t>(ctx.type) == Value(S::Thief) && settler.slot != 0 &&
         OwnTile(ctx).owner == settler.owner) {
         settler.counter = 0;
-        SetJob(settler, Job::ThiefReturned);
+        settler.job = Job::ThiefReturned;
     }
     if (TypeOf(settler) == S::TradeShip || TypeOf(settler) == S::Ferry) {
         settler.counter = 10;
@@ -519,19 +519,19 @@ JobResult GuardBuilding(SettlerContext& ctx) {
     TileAt(world, settler.x, settler.y).settler = 0;
     const std::uint32_t guard = Call<kCreateSettler>(world, settler.x, settler.y, 37, settler.owner);
     Settler& created = SettlerAt(world, guard);
-    SetJob(created, Job::GuardHeal);
+    created.job = Job::GuardHeal;
     created.building = settler.building;
     created.health = 1;
     created.counter = 0;
     BuildingAt(world, settler.building).guard = static_cast<std::uint16_t>(guard);
     const std::int32_t typeClass = (&g_settlerTypeClass[0])[settler.art];
     if (typeClass == 1) {
-        SetJob(settler, Job::SwordsmanInTower);
+        settler.job = Job::SwordsmanInTower;
     } else if (typeClass == 2) {
         Call<kEnterBuildingSlot>(world, ctx.number);
-        SetJob(settler, Job::BowmanInTower);
+        settler.job = Job::BowmanInTower;
     } else if (typeClass == 3) {
-        SetJob(settler, Job::PikemanInTower);
+        settler.job = Job::PikemanInTower;
     }
     settler.counter = 0;
     return JobResult::Next;
@@ -621,7 +621,7 @@ JobResult SeekOwnArea(SettlerContext& ctx) {
         }
     }
     settler.counter = 0;
-    SetJob(settler, Job::WalkToOwnArea);
+    settler.job = Job::WalkToOwnArea;
     return JobResult::Next;
 }
 
@@ -682,7 +682,7 @@ JobResult Nothing(SettlerContext& ctx) {
         const Tile& t = TileAt(world, x, y);
         if (t.area == OwnTile(ctx).area && (t.flags & kTileOccupiedMask) == 0 && t.settler == 0) {
             SetTarget(ctx, x, y);
-            SetJob(settler, Job::StepAside);
+            settler.job = Job::StepAside;
             settler.counter = 0;
             return JobResult::Next;
         }
@@ -699,7 +699,7 @@ JobResult WalkCountingDown(SettlerContext& ctx) {
     if (count != 0) {
         --count;
         if (count == 0) {
-            SetJob(ctx.settler, Job::UnitWalk);
+            ctx.settler.job = Job::UnitWalk;
         }
     }
     Call<kWalkSettler>(ctx.world, ctx.number);  // EAX ignored
@@ -725,7 +725,7 @@ JobResult Walk(SettlerContext& ctx) {
 // The common start of a work chain: into the building, first job, its animation.
 JobResult StartWork(SettlerContext& ctx, Job job, std::uint32_t animation) {
     Call<kMoveSettlerToBuildingTileA>(ctx.world, ctx.number);
-    SetJob(ctx.settler, job);
+    ctx.settler.job = job;
     Call<kSetSettlerAnimation>(ctx.world, ctx.number, animation);
     return JobResult::Next;
 }
@@ -733,7 +733,7 @@ JobResult StartWork(SettlerContext& ctx, Job job, std::uint32_t animation) {
 // Soldiers: into the building, first job, the soldier animation of its slot.
 JobResult StartGuard(SettlerContext& ctx, Job job) {
     Call<kMoveSettlerToBuildingTileA>(ctx.world, ctx.number);
-    SetJob(ctx.settler, job);
+    ctx.settler.job = job;
     Call<kSetSoldierAnimationInBuilding>(ctx.world, ctx.number);
     return JobResult::Next;
 }
@@ -755,7 +755,7 @@ JobResult CarrierArrives(SettlerContext& ctx) {
         Call<kResetSettlerToIdle>(world, ctx.number);
         return JobResult::Next;
     }
-    SetJob(ctx.settler, Job::RecruitAtBarracks);
+    ctx.settler.job = Job::RecruitAtBarracks;
     ctx.settler.counter = 0;
     return JobResult::Next;
 }
@@ -798,11 +798,11 @@ JobResult ArriveAtWork(SettlerContext& ctx) {
     case S::Carrier: return CarrierArrives(ctx);
     case S::Digger:  // 0x4eadd0: one more worker at the site
         ++BuildingAt(world, settler.building).site.workers_at_work;
-        SetJob(settler, Job::DiggerDig);
+        settler.job = Job::DiggerDig;
         return Wait(ctx);
     case S::Builder:  // 0x4eae05
         ++BuildingAt(world, settler.building).site.unk1e;
-        SetJob(settler, Job::BuilderStart);
+        settler.job = Job::BuilderStart;
         return Wait(ctx);
     case S::Woodcutter: return StartWork(ctx, Job::WoodcutterGoIn, 4);
     case S::Stonecutter: return StartWork(ctx, Job::StonecutterGoIn, 15);
@@ -975,7 +975,7 @@ void CustomizeUnit(CaseSetup& setup, std::uint32_t n) {
     setup.Both([&](CGameData* w) {
         const layout::Settler& s = w->settlers[n];
         type = s.art;
-        job = s.job;
+        job = Value(s.job);
         x = s.x;
         y = s.y;
         building = s.building;
@@ -1097,7 +1097,7 @@ std::uint32_t __fastcall WrongUnitsBowmen(CGameData* world, void* edx) {
     constexpr std::uint32_t kMax = settler_jobs::testing::kMaxCaseSettlers;
     bool changed[kMax + 1] = {};
     for (std::uint32_t n = 1; n <= world->settler_high_water && n <= kMax; ++n) {
-        if (world->settlers[n].art == Value(S::Bowman1) && world->settlers[n].job == Value(Job::ArriveAtWork)) {
+        if (world->settlers[n].art == Value(S::Bowman1) && world->settlers[n].job == Job::ArriveAtWork) {
             world->settlers[n].art = Value(S::Swordsman1);
             changed[n] = true;
         }

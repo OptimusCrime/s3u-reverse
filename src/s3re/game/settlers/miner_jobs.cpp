@@ -216,7 +216,7 @@ std::uint32_t __fastcall CGameData_MinerJobFood(CGameData* world, void*, std::ui
     if ((mine.request_flags & kRequestFlagWork) != 0 && miner.food != 0 &&
         world->piles[mine.pile_ring].amount <= kMaxOutputBeforeDigging) {
         miner.food = static_cast<std::uint8_t>(miner.food - 1);
-        SetJob(miner, digJob);
+        miner.job = digJob;
         miner.counter = kDigCounter;
         return 0;
     }
@@ -302,7 +302,7 @@ std::uint32_t __fastcall CGameData_MinerJobDig(CGameData* world, void*, std::uin
     // 3. Back on the tile with the job and animation for the result.
     if (!found) {
         TileAtOffset(world, TileOffset(miner.x, miner.y)).settler = static_cast<std::uint16_t>(settler);
-        miner.job = static_cast<std::uint16_t>(failJob);
+        miner.job = static_cast<SettlerJob>(static_cast<std::uint16_t>(failJob));
         CGameData_SetSettlerAnimation(world, nullptr, settler, failAnimation);
         const layout::Building& after = world->buildings[miner.building];
         if (after.production.digs >= kDigsBeforeExhaustedNotice && after.work_x == 0) {
@@ -316,7 +316,7 @@ std::uint32_t __fastcall CGameData_MinerJobDig(CGameData* world, void*, std::uin
         Tally(miner.owner).points += kGemPointsForEgyptians;
     }
     TileAtOffset(world, TileOffset(miner.x, miner.y)).settler = static_cast<std::uint16_t>(settler);
-    miner.job = static_cast<std::uint16_t>(foundJob);
+    miner.job = static_cast<SettlerJob>(static_cast<std::uint16_t>(foundJob));
     CGameData_SetSettlerAnimation(world, nullptr, settler, foundAnimation);
     return 0;  // UpdateSettlers overwrites EAX
 }
@@ -329,12 +329,12 @@ S3RE_HOOK(0x004fa220, CGameData_MinerJobDig, SettlerFn, Original_CGameData_Miner
 std::uint32_t __fastcall CGameData_MinerJobEnter(CGameData* world, void*, std::uint32_t settler) {
     layout::Settler& miner = world->settlers[settler];
     switch (TypeOf(world->buildings[miner.building])) {
-    case B::CoalMine: SetJob(miner, Job::MinerEatCoalMine); break;
-    case B::GoldMine: SetJob(miner, Job::MinerEatGoldMine); break;
-    case B::IronMine: SetJob(miner, Job::MinerEatIronMine); break;
-    case B::GemMine: SetJob(miner, Job::MinerEatGemMine); break;
+    case B::CoalMine: miner.job = Job::MinerEatCoalMine; break;
+    case B::GoldMine: miner.job = Job::MinerEatGoldMine; break;
+    case B::IronMine: miner.job = Job::MinerEatIronMine; break;
+    case B::GemMine: miner.job = Job::MinerEatGemMine; break;
     case B::SulfurMine:
-    case B::AmazonSulfurMine: SetJob(miner, Job::MinerEatSulfurMine); break;
+    case B::AmazonSulfurMine: miner.job = Job::MinerEatSulfurMine; break;
     default: break;
     }
     layout::Building& mine = world->buildings[miner.building];
@@ -405,7 +405,7 @@ std::uint32_t __fastcall WrongMinerJobEnter(CGameData* world, void* edx, std::ui
     const std::uint32_t result = CGameData_MinerJobEnter(world, edx, settler);
     layout::Settler& s = world->settlers[settler];
     if (TypeOf(world->buildings[s.building]) == B::AmazonSulfurMine) {
-        SetJob(s, Job::MinerEatGemMine);
+        s.job = Job::MinerEatGemMine;
     }
     return result;
 }

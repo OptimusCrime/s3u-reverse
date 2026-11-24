@@ -290,7 +290,7 @@ bool TargetsPile(const Settler& settler, const Pile& pile) {
 void CancelFirstFetcher(CGameData* world, const Pile& p) {
     for (std::uint32_t s = 1; s <= world->settler_high_water; ++s) {
         const Settler& settler = world->settlers[s];
-        if (settler.owner != kFreeSettler && IsFetchJob(JobOf(settler)) && TargetsPile(settler, p)) {
+        if (settler.owner != kFreeSettler && IsFetchJob(settler.job) && TargetsPile(settler, p)) {
             CGameData_ResetSettlerToIdle(world, nullptr, s);
             return;
         }
@@ -304,7 +304,7 @@ void CancelFirstTradeRingFetcher(CGameData* world, std::uint32_t pile) {
     for (std::uint32_t s = 1; s <= world->settler_high_water; ++s) {
         Settler& settler = world->settlers[s];
         if (settler.owner != kFreeSettler && TargetsPile(settler, p) &&
-            (JobOf(settler) == Job::DonkeyWalkToPile || JobOf(settler) == Job::DonkeyLoad)) {
+            (settler.job == Job::DonkeyWalkToPile || settler.job == Job::DonkeyLoad)) {
             if (settler.second_unit == 0) {
                 CGameData_ResetSettlerToIdle(world, nullptr, s);
             } else {
@@ -717,7 +717,7 @@ void CompareSteal(test::Context& ctx, PileFn candidate, int cases) {
             const auto secondUnit = static_cast<std::uint8_t>(ctx.rng().Below(2));
             worlds.Both([&](CGameData* w) {
                 layout::Settler& r = w->settlers[s];
-                r.job = job;
+                r.job = static_cast<SettlerJob>(job);
                 r.owner = owner;
                 r.second_unit = secondUnit;
                 if (here) {

@@ -123,7 +123,7 @@ JobResult LeaveBuilding(SettlerContext& ctx, std::uint8_t slot, Job walk) {
     Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
     ctx.settler.slot = slot;
     ctx.settler.counter = 0;
-    SetJob(ctx.settler, walk);
+    ctx.settler.job = walk;
     return JobResult::Again;
 }
 
@@ -175,7 +175,7 @@ std::uint32_t SignNotification(std::uint32_t found, bool deposit) {
 // 0xd4 (0x4f335a): the geologist examines its tile.
 JobResult GeologistWork(SettlerContext& ctx) {
     CGameData* const world = ctx.world;
-    SetJob(ctx.settler, Job::GeologistDone);
+    ctx.settler.job = Job::GeologistDone;
     Anim(ctx, 0xd5);
     Tile& tile = SettlerTile(ctx);
     const std::uint32_t resources = tile.resources;
@@ -240,7 +240,7 @@ JobResult GeologistWork(SettlerContext& ctx) {
 
 // 0xd5 (0x4f376b) and 0x12f (0x4f3cf3): back to idle.
 JobResult BackToIdle(SettlerContext& ctx) {
-    SetJob(ctx.settler, Job::UnitIdle);
+    ctx.settler.job = Job::UnitIdle;
     ctx.settler.counter = 0;
     ctx.settler.direction = 0;
     ctx.settler.frame = 0;
@@ -353,7 +353,7 @@ bool RegionIsEnclosed(SettlerContext& ctx, std::uint32_t nx, std::uint32_t ny, s
 // 0x12e (0x4f37bd): the pioneer takes its tile and encloses cut-off land.
 JobResult PioneerWork(SettlerContext& ctx) {
     CGameData* const world = ctx.world;
-    SetJob(ctx.settler, Job::PioneerDone);
+    ctx.settler.job = Job::PioneerDone;
     Anim(ctx, 0x110);
     const std::uint32_t x = ctx.settler.x;
     const std::uint32_t y = ctx.settler.y;
@@ -503,7 +503,7 @@ JobResult SearchField(SettlerContext& ctx, const FieldSearch& s) {
     }
     SettlerTile(ctx).settler = static_cast<std::uint16_t>(ctx.number);
     Call<kSetSettlerTarget>(world, ctx.number, x, y);
-    SetJob(ctx.settler, found == 2 ? s.harvest : s.plant);
+    ctx.settler.job = found == 2 ? s.harvest : s.plant;
     Anim(ctx, found == 2 ? s.harvestAnimation : s.plantAnimation);
     return JobResult::Next;
 }
@@ -525,7 +525,7 @@ JobResult PlantRice(SettlerContext& ctx) {
     const std::uint32_t offset = TileOffset(x, y);
     if (!IsFreeFieldTile(world, WorkBuilding(ctx), offset) ||
         TileAtOffset(world, offset).terrain != kTerrainSwampyGrass) {
-        SetJob(ctx.settler, Job::RiceFarmerWalkHome);
+        ctx.settler.job = Job::RiceFarmerWalkHome;
         return ReturnHome(ctx);
     }
     Call<kMakeFieldTile>(world, x, y);
@@ -536,7 +536,7 @@ JobResult PlantRice(SettlerContext& ctx) {
     Call<kMakeFieldTile>(world, ctx.settler.x, ctx.settler.y - 1u);
     Call<kMakeFieldTile>(world, ctx.settler.x + 1u, ctx.settler.y + 1u);
     Call<kMakeFieldTile>(world, ctx.settler.x - 1u, ctx.settler.y - 1u);
-    SetJob(ctx.settler, Job::RiceFarmerPlanted);
+    ctx.settler.job = Job::RiceFarmerPlanted;
     Anim(ctx, 0xe0);
     return JobResult::Next;
 }
@@ -549,11 +549,11 @@ JobResult PlantVine(SettlerContext& ctx) {
     ctx.frame.slot20 = x;
     ctx.frame.slot14 = y;
     if (!CanPlantVineAt(ctx, x, y, TileOffset(x, y))) {
-        SetJob(ctx.settler, Job::WinegrowerWalkHome);
+        ctx.settler.job = Job::WinegrowerWalkHome;
         return ReturnHome(ctx);  // 0x4f4d46 -> 0x4f323b
     }
     Call<kMakeFieldTile>(world, ctx.settler.x, ctx.settler.y);
-    SetJob(ctx.settler, Job::WinegrowerPlanted);
+    ctx.settler.job = Job::WinegrowerPlanted;
     Anim(ctx, 0xe9);
     return JobResult::Next;
 }
@@ -563,10 +563,10 @@ JobResult StartHarvest(SettlerContext& ctx, std::uint8_t first, std::uint8_t las
                        std::uint32_t animation, Job walkHome) {
     const std::uint8_t object = SettlerTile(ctx).object;
     if (object < first || object > last) {
-        SetJob(ctx.settler, walkHome);
+        ctx.settler.job = walkHome;
         return ReturnHome(ctx);
     }
-    SetJob(ctx.settler, harvest);
+    ctx.settler.job = harvest;
     Anim(ctx, animation);
     ctx.settler.second_unit = 0;  // +0x17: harvest step
     return JobResult::Next;
@@ -582,7 +582,7 @@ JobResult HarvestRice(SettlerContext& ctx) {
     }
     if (step == 2) {
         SettlerTile(ctx).object = kObjectRiceDone;
-        SetJob(ctx.settler, Job::RiceFarmerWalkHomeLoaded);
+        ctx.settler.job = Job::RiceFarmerWalkHomeLoaded;
         return ReturnHome(ctx);
     }
     return JobResult::Next;
@@ -596,21 +596,21 @@ JobResult HarvestVine(SettlerContext& ctx) {
     }
     ctx.settler.slot = 2;
     SettlerTile(ctx).object = kObjectVineDone;
-    SetJob(ctx.settler, Job::WinegrowerWalkHomeLoaded);
+    ctx.settler.job = Job::WinegrowerWalkHomeLoaded;
     return ReturnHome(ctx);
 }
 
 // 0xee (0x4f4383) / 0xf0 (0x4f43a8): back at the rice farm.
 JobResult RiceEnter(SettlerContext& ctx) {
     Call<kMoveSettlerToBuildingTileA>(ctx.world, ctx.number);
-    SetJob(ctx.settler, Job::RiceFarmerRest);
+    ctx.settler.job = Job::RiceFarmerRest;
     Anim(ctx, 0xde);
     return JobResult::Next;
 }
 
 JobResult RiceArrive(SettlerContext& ctx) {
     if (ctx.settler.slot != 0) {
-        SetJob(ctx.settler, Job::RiceFarmerStore);
+        ctx.settler.job = Job::RiceFarmerStore;
         Anim(ctx, 0xe5);
         return JobResult::Next;
     }
@@ -620,7 +620,7 @@ JobResult RiceArrive(SettlerContext& ctx) {
 // 0x104 (0x4f4f4b): back in the winery.
 JobResult WineEnter(SettlerContext& ctx) {
     Call<kMoveSettlerToBuildingTileA>(ctx.world, ctx.number);
-    SetJob(ctx.settler, Job::WinegrowerRest);
+    ctx.settler.job = Job::WinegrowerRest;
     Anim(ctx, 0xe7);
     return JobResult::Next;
 }
@@ -632,7 +632,7 @@ JobResult WineArrive(SettlerContext& ctx) {
     }
     Call<kMoveSettlerToBuildingTileA>(ctx.world, ctx.number);
     Anim(ctx, 0xe7);
-    SetJob(ctx.settler, Job::WinegrowerEnterLoaded);
+    ctx.settler.job = Job::WinegrowerEnterLoaded;
     return JobResult::Next;
 }
 
@@ -685,14 +685,14 @@ JobResult WorkshopCheck(SettlerContext& ctx, const TwoInputWorkshop& w) {
     }
     ReserveTwoInputs(ctx);
     SettlerTile(ctx).settler = static_cast<std::uint16_t>(ctx.number);
-    SetJob(ctx.settler, w.first);
+    ctx.settler.job = w.first;
     Anim(ctx, w.firstAnimation);
     return JobResult::Next;
 }
 
 JobResult WorkshopTake(SettlerContext& ctx, std::uint32_t pile, Good good, Job next, std::uint32_t animation) {
     TakeInput(ctx, pile, good);
-    SetJob(ctx.settler, next);
+    ctx.settler.job = next;
     Anim(ctx, animation);
     return JobResult::Next;
 }
@@ -703,10 +703,10 @@ JobResult WorkshopProduce(SettlerContext& ctx, const TwoInputWorkshop& w) {
     StoreProduct(ctx, w.product);
     if (InputsReady(ctx) && (WorkBuilding(ctx).request_flags & kRequestInputs) != 0) {
         ReserveTwoInputs(ctx);
-        SetJob(ctx.settler, w.again);
+        ctx.settler.job = w.again;
         Anim(ctx, w.againAnimation);
     } else {
-        SetJob(ctx.settler, w.wait);
+        ctx.settler.job = w.wait;
         Anim(ctx, w.waitAnimation);
     }
     return JobResult::Next;
@@ -715,7 +715,7 @@ JobResult WorkshopProduce(SettlerContext& ctx, const TwoInputWorkshop& w) {
 // 0x10a / 0x111 / 0x118 / 0x11e: leaves its work tile and checks again.
 JobResult WorkshopWait(SettlerContext& ctx, Job check) {
     SettlerTile(ctx).settler = 0;
-    SetJob(ctx.settler, check);
+    ctx.settler.job = check;
     ctx.settler.counter = 0;
     return JobResult::Next;
 }
@@ -746,7 +746,7 @@ JobResult CharcoalCheck(SettlerContext& ctx) {
     }
     ReserveFiveBoards(ctx, b.piles[0]);
     SettlerTile(ctx).settler = static_cast<std::uint16_t>(ctx.number);
-    SetJob(ctx.settler, Job::CharcoalBurnerTakeBoard1);
+    ctx.settler.job = Job::CharcoalBurnerTakeBoard1;
     Anim(ctx, 0x107);
     return JobResult::Next;
 }
@@ -762,7 +762,7 @@ JobResult CharcoalFirstBoard(SettlerContext& ctx) {
     const std::uint32_t pile = b.piles[0];
     Call<kTakeGoodFromPile>(world, pile);
     Call<kSubtractPlayerCounter>(world, OwnerOf(ctx), Value(G::Board), 1);
-    SetJob(ctx.settler, Job::CharcoalBurnerTakeBoard2);
+    ctx.settler.job = Job::CharcoalBurnerTakeBoard2;
     Anim(ctx, 0x108);
     const std::uint32_t screenY = Call<kTileScreenY>(world, bx, by);
     const std::uint32_t screenX = Call<kTileScreenX>(world, bx, by);
@@ -777,10 +777,10 @@ JobResult CharcoalProduce(SettlerContext& ctx) {
     const Building& b = WorkBuilding(ctx);
     if (CharcoalInputsReady(ctx.world, b) && (b.request_flags & kRequestInputs) != 0) {
         ReserveFiveBoards(ctx, b.piles[0]);
-        SetJob(ctx.settler, Job::CharcoalBurnerTakeBoard1Again);
+        ctx.settler.job = Job::CharcoalBurnerTakeBoard1Again;
         Anim(ctx, 0x10a);
     } else {
-        SetJob(ctx.settler, Job::CharcoalBurnerEndRound);
+        ctx.settler.job = Job::CharcoalBurnerEndRound;
         Anim(ctx, 0x109);
     }
     return JobResult::Next;
@@ -798,16 +798,16 @@ JobResult RunDrinkJobs(SettlerContext& ctx) {
     case Job::PioneerWork: return PioneerWork(ctx);
 
     // Rice farmer.
-    case Job::RiceFarmerGoIn: SetJob(ctx.settler, Job::RiceFarmerSearch); return StartWork(ctx);
+    case Job::RiceFarmerGoIn: ctx.settler.job = Job::RiceFarmerSearch; return StartWork(ctx);
     case Job::RiceFarmerSearch: return SearchField(ctx, kRiceSearchParams);
     case Job::RiceFarmerLeaveToPlant: return LeaveBuilding(ctx, 1, Job::RiceFarmerWalkToPlant);
     case Job::RiceFarmerPlant: return PlantRice(ctx);
     case Job::RiceFarmerPlanted:
         SettlerTile(ctx).object = kObjectRicePlanted;
-        SetJob(ctx.settler, Job::RiceFarmerWalkHome);
+        ctx.settler.job = Job::RiceFarmerWalkHome;
         return ReturnHome(ctx);
     case Job::RiceFarmerBackIn:  // 0xe9
-    case Job::RiceFarmerRest: SetJob(ctx.settler, Job::RiceFarmerSearch); return ReleaseTileAndRepeat(ctx);
+    case Job::RiceFarmerRest: ctx.settler.job = Job::RiceFarmerSearch; return ReleaseTileAndRepeat(ctx);
     case Job::RiceFarmerLeaveToHarvest: return LeaveBuilding(ctx, 0, Job::RiceFarmerWalkToHarvest);
     case Job::RiceFarmerAtField:
         return StartHarvest(ctx, kObjectRiceRipeFirst, kObjectRiceRipeLast, Job::RiceFarmerHarvest, 0xe2,
@@ -817,22 +817,22 @@ JobResult RunDrinkJobs(SettlerContext& ctx) {
     case Job::RiceFarmerGoInAgain: return RiceEnter(ctx);
     case Job::RiceFarmerStore:
         StoreProduct(ctx, G::Rice);
-        SetJob(ctx.settler, Job::RiceFarmerGoInAgain);
+        ctx.settler.job = Job::RiceFarmerGoInAgain;
         Anim(ctx, 0xe6);
         ctx.settler.slot = 0;
         return JobResult::Next;
 
     // Winegrower.
-    case Job::WinegrowerGoIn: SetJob(ctx.settler, Job::WinegrowerSearch); return StartWork(ctx);  // 0xf3
+    case Job::WinegrowerGoIn: ctx.settler.job = Job::WinegrowerSearch; return StartWork(ctx);  // 0xf3
     case Job::WinegrowerSearch: return SearchField(ctx, kVineSearchParams);
     case Job::WinegrowerLeaveToPlant: return LeaveBuilding(ctx, 1, Job::WinegrowerWalkToPlant);
     case Job::WinegrowerPlant: return PlantVine(ctx);  // 0xf7
     case Job::WinegrowerPlanted:
         SettlerTile(ctx).object = kObjectVinePlanted;
-        SetJob(ctx.settler, Job::WinegrowerWalkHome);
+        ctx.settler.job = Job::WinegrowerWalkHome;
         return ReturnHome(ctx);
     case Job::WinegrowerBackIn:  // 0xfa
-    case Job::WinegrowerRest: SetJob(ctx.settler, Job::WinegrowerSearch); return ReleaseTileAndRepeat(ctx);
+    case Job::WinegrowerRest: ctx.settler.job = Job::WinegrowerSearch; return ReleaseTileAndRepeat(ctx);
     case Job::WinegrowerLeaveToHarvest: return LeaveBuilding(ctx, 0, Job::WinegrowerWalkToHarvest);
     case Job::WinegrowerAtField:
         return StartHarvest(ctx, kObjectVineRipeFirst, kObjectVineRipeLast, Job::WinegrowerHarvest, 0xeb,
@@ -841,21 +841,21 @@ JobResult RunDrinkJobs(SettlerContext& ctx) {
     case Job::WinegrowerHome: return WineArrive(ctx);  // 0xff
     case Job::WinegrowerEnterLoaded:
         Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
-        SetJob(ctx.settler, Job::WinegrowerStore);
+        ctx.settler.job = Job::WinegrowerStore;
         Anim(ctx, 0xee);
         return JobResult::Next;
     case Job::WinegrowerStore:
         StoreProduct(ctx, G::Wine);
-        SetJob(ctx.settler, Job::WinegrowerGoInAgain);
+        ctx.settler.job = Job::WinegrowerGoInAgain;
         Anim(ctx, 0xef);
         ctx.settler.slot = 0;
         return JobResult::Next;
     case Job::WinegrowerGoInAgain: return WineEnter(ctx);
 
     // Distiller, brewer, powder maker.
-    case Job::DistillerGoIn: SetJob(ctx.settler, Job::DistillerCheck); return StartWorkB(ctx);      // 0x105
-    case Job::BrewerGoIn: SetJob(ctx.settler, Job::BrewerCheck); return StartWorkB(ctx);            // 0x10c
-    case Job::PowderMakerGoIn: SetJob(ctx.settler, Job::PowderMakerCheck); return StartWorkB(ctx);  // 0x113
+    case Job::DistillerGoIn: ctx.settler.job = Job::DistillerCheck; return StartWorkB(ctx);      // 0x105
+    case Job::BrewerGoIn: ctx.settler.job = Job::BrewerCheck; return StartWorkB(ctx);            // 0x10c
+    case Job::PowderMakerGoIn: ctx.settler.job = Job::PowderMakerCheck; return StartWorkB(ctx);  // 0x113
     case Job::DistillerCheck: return WorkshopCheck(ctx, kDistiller);
     case Job::BrewerCheck: return WorkshopCheck(ctx, kBrewer);
     case Job::PowderMakerCheck: return WorkshopCheck(ctx, kPowderMaker);
@@ -878,7 +878,7 @@ JobResult RunDrinkJobs(SettlerContext& ctx) {
 
     // Charcoal burner.
     case Job::CharcoalBurnerGoIn:
-        SetJob(ctx.settler, Job::CharcoalBurnerCheck);
+        ctx.settler.job = Job::CharcoalBurnerCheck;
         return StartWorkB(ctx);  // 0x11a
     case Job::CharcoalBurnerCheck: return CharcoalCheck(ctx);
     case Job::CharcoalBurnerTakeBoard1:  // 0x11c
@@ -1084,7 +1084,7 @@ void CustomizeDrinks(CaseSetup& setup, std::uint32_t n) {
     std::uint32_t job = 0, x = 0, y = 0, building = 0;
     setup.Both([&](CGameData* w) {
         const Settler& s = w->settlers[n];
-        job = s.job;
+        job = Value(s.job);
         x = s.x;
         y = s.y;
         building = s.building;
@@ -1154,7 +1154,7 @@ std::uint32_t __fastcall WrongGeologistSign(CGameData* world, void* edx) {
     const std::uint32_t result = CGameData_UpdateSettlers(world, edx);
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
         const Settler& s = world->settlers[n];
-        if (JobOf(s) == Job::GeologistDone && s.x < layout::kMapRowTiles && s.y < layout::kMapRowTiles) {
+        if (s.job == Job::GeologistDone && s.x < layout::kMapRowTiles && s.y < layout::kMapRowTiles) {
             world->tiles[s.x][s.y].object ^= 1;
         }
     }
@@ -1166,8 +1166,7 @@ std::uint32_t __fastcall WrongFieldCursor(CGameData* world, void* edx) {
     const std::uint32_t result = CGameData_UpdateSettlers(world, edx);
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
         Settler& s = world->settlers[n];
-        if ((JobOf(s) == Job::RiceFarmerLeaveToPlant || JobOf(s) == Job::WinegrowerLeaveToPlant) &&
-            s.next == 0) {
+        if ((s.job == Job::RiceFarmerLeaveToPlant || s.job == Job::WinegrowerLeaveToPlant) && s.next == 0) {
             s.next = 1;
         }
     }

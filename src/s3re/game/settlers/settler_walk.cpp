@@ -317,7 +317,7 @@ void StopFrames(Settler& settler) {
 }
 
 void SetJobNow(Settler& settler, Job job) {
-    SetJob(settler, job);
+    settler.job = job;
     settler.counter = 0;
 }
 
@@ -482,7 +482,7 @@ bool CrowdedAhead(CGameData* world, const Settler& s, std::uint32_t d) {
 // ship_walk.
 std::uint32_t ShipDecision(Walk& w, std::uint32_t first, std::uint32_t path) {
     Settler& s = w.s;
-    const bool legJob = TypeOf(s) != SettlerType::Ferry && IsShipLegJob(JobOf(s));
+    const bool legJob = TypeOf(s) != SettlerType::Ferry && IsShipLegJob(s.job);
     auto back = [&]() { return static_cast<std::uint32_t>(((s.ship_walk & kShipWalkDirection) + 3) % kDirectionCount); };
     auto disagree = [&]() { s.ship_walk = static_cast<std::uint8_t>(s.ship_walk + kShipWalkCountStep); };
     auto agree = [&]() {
@@ -554,7 +554,7 @@ std::uint32_t WalkShip(Walk& w) {
     bool wait = false;
     const std::uint8_t count = s.ship_walk;
     if (count >= kShipWalkGiveUp) {
-        if (TypeOf(s) == SettlerType::TradeShip && IsShipLegJob(JobOf(s))) {
+        if (TypeOf(s) == SettlerType::TradeShip && IsShipLegJob(s.job)) {
             s.ship_walk = kShipWalksLikeSettler;
         } else {
             s.ship_walk = static_cast<std::uint8_t>(count & kShipWalkDirection);
@@ -567,7 +567,7 @@ std::uint32_t WalkShip(Walk& w) {
         wait = true;
     } else if (IsPlainStep(path)) {
         const std::uint32_t d = PathDirection(path);
-        if (TypeOf(s) != SettlerType::Ferry && IsShipLegJob(JobOf(s))) {
+        if (TypeOf(s) != SettlerType::Ferry && IsShipLegJob(s.job)) {
             s.ship_walk = static_cast<std::uint8_t>((count & ~kShipWalkDirection) | d);
         } else {
             s.ship_walk = static_cast<std::uint8_t>(d);
@@ -615,7 +615,7 @@ std::uint32_t WalkOne(Walk& w) {
         std::uint32_t nx = 0, ny = 0;
         Tile& next = StepTo(w, d, &nx, &ny);
         // Carriers with goods wear paths three times as fast as other civilians.
-        if (JobOf(s) == Job::CarrierWalkToBuilding || JobOf(s) == Job::CarrierWalkToTargetPile) {
+        if (s.job == Job::CarrierWalkToBuilding || s.job == Job::CarrierWalkToTargetPile) {
             Call<kAddTileTraffic>(world, nx, ny);
             Call<kAddTileTraffic>(world, nx, ny);
             Call<kAddTileTraffic>(world, nx, ny);
@@ -646,8 +646,8 @@ std::uint32_t WalkOne(Walk& w) {
     Tile& next = TileAt(world, nx, ny);
     const std::uint32_t other = next.settler;
     const Settler& blocker = world->settlers[other];
-    if (ClassOf(blocker) == SettlerClass::Civilian && JobOf(blocker) != Job::WalkToOwnArea &&
-        JobOf(blocker) != Job::SeekOwnArea) {
+    if (ClassOf(blocker) == SettlerClass::Civilian && blocker.job != Job::WalkToOwnArea &&
+        blocker.job != Job::SeekOwnArea) {
         const Tile& here = TileAt(world, s.x, s.y);
         if (here.owner != blocker.owner) {
             GameDebugLog(texts::kIllegalSwap, static_cast<std::uint32_t>(here.owner),
@@ -663,7 +663,8 @@ std::uint32_t WalkOne(Walk& w) {
     if ((Call<kIsSettlerJob01Or37>(world, static_cast<std::uint32_t>(o.job)) & 0xff) != 0) {
         o.target_x = o.x;
         o.target_y = o.y;
-        o.job = static_cast<std::uint16_t>(Call<kJobAfter01Or37>(world, static_cast<std::uint32_t>(o.job)));
+        o.job = static_cast<SettlerJob>(static_cast<std::uint16_t>(
+            Call<kJobAfter01Or37>(world, static_cast<std::uint32_t>(Value(o.job)))));
     }
     return w.again;
 }
@@ -702,7 +703,7 @@ bool Guarded(CGameData* world, std::uint32_t x, std::uint32_t y) {
         }
         const std::uint32_t guard = TileAt(world, qx, qy).settler;
         if (guard != 0 && ClassOf(world->settlers[guard]) != SettlerClass::Civilian &&
-            JobOf(world->settlers[guard]) == Job::GuardBuilding) {
+            world->settlers[guard].job == Job::GuardBuilding) {
             return true;
         }
     }
@@ -767,7 +768,7 @@ bool SoldierShoot(Walk& w) {
                 GameDebugLog(texts::kAttackCatapult);
                 kind = kShotAtCatapult;
                 target = number;
-            } else if (IsShip(TypeOf(o)) && JobOf(o) != Job::ShipBeingBuilt) {
+            } else if (IsShip(TypeOf(o)) && o.job != Job::ShipBeingBuilt) {
                 kind = kShotAtShip;
                 target = number;
                 tx = o.x;
@@ -810,7 +811,7 @@ bool SoldierShoot(Walk& w) {
     s.counter = static_cast<std::uint16_t>(static_cast<std::uint16_t>(g_raceShotTime[me.race]) - 1u);
     // Bit 15 on top of the direction: unknown, probably "shooting".
     s.direction = CallStd<kDirectionFromDelta>(tx - s.x, ty - s.y) + 0x8000;
-    SetJob(s, Job::Shoot);
+    s.job = Job::Shoot;
     if (amazon) {
         s.arrows = 6;
     }
@@ -847,7 +848,7 @@ bool BoardShip(Walk& w) {
             continue;
         }
         const Settler& boat = world->settlers[ship];
-        if (TypeOf(boat) != SettlerType::Ferry || JobOf(boat) == Job::ShipBeingBuilt ||
+        if (TypeOf(boat) != SettlerType::Ferry || boat.job == Job::ShipBeingBuilt ||
             world->players[boat.owner].team != world->players[s.owner].team) {
             continue;
         }
@@ -931,7 +932,7 @@ bool PioneerArrives(Walk& w) {
     Tile& t = TileAt(w.world, s.x, s.y);
     const std::uint8_t flags = t.flags;
     if ((flags & kTileNotForPioneers) == 0 && (t.owner == kNoOwner || t.owner != s.owner)) {
-        SetJob(s, Job::PioneerWork);
+        s.job = Job::PioneerWork;
         Call<kSetSettlerAnimation>(w.world, w.n, kPioneerWorkAnimation);
         return true;
     }
@@ -950,7 +951,7 @@ bool GeologistArrives(Walk& w) {
         t.object == 0 && TileNear(w.world, at, -1, 0).object == 0 && TileNear(w.world, at, 1, 0).object == 0 &&
         TileNear(w.world, at, 0, -1).object == 0 && TileNear(w.world, at, 0, 1).object == 0 &&
         TileNear(w.world, at, -1, -1).object == 0 && TileNear(w.world, at, 1, 1).object == 0) {
-        SetJob(s, Job::GeologistWork);
+        s.job = Job::GeologistWork;
         Call<kSetSettlerAnimation>(w.world, w.n, kGeologistWorkAnimation);
         return true;
     }
@@ -974,7 +975,7 @@ std::uint32_t ArriveWaiting(Walk& w) {
         Call<kSetSettlerTarget>(world, w.n, static_cast<std::uint32_t>(s.path_cache[0]),
                                 static_cast<std::uint32_t>(s.path_cache[1]));
         s.counter = 0;
-        SetJob(s, Job::UnitWalk);
+        s.job = Job::UnitWalk;
         s.walk_state = kWalkStateThiefBack;
         handled = true;
     } else if (state == kWalkStateThiefArrived && thief) {
@@ -1011,7 +1012,7 @@ std::uint32_t ArriveWaiting(Walk& w) {
             PopWaypoint(s);
         }
         s.counter = 0;
-        SetJob(s, Job::UnitWalk);
+        s.job = Job::UnitWalk;
         s.walk_state = 0;
         return w.again;
     }
@@ -1059,11 +1060,11 @@ template <typename Same>
 std::uint32_t ArriveShipLeg(Walk& w, Job stop, Same same) {
     Settler& s = w.s;
     if (s.path_cache[0] == kNoWaypoint) {
-        SetJob(s, stop);
+        s.job = stop;
     } else {
         PopWaypoint(s);
         if (!same(TileAt(w.world, s.x, s.y), TileAt(w.world, s.target_x, s.target_y))) {
-            SetJob(s, stop);
+            s.job = stop;
         }
     }
     s.counter = 0;
@@ -1072,7 +1073,7 @@ std::uint32_t ArriveShipLeg(Walk& w, Job stop, Same same) {
 
 std::uint32_t MoveIntoBuilding(Walk& w, Job job, std::uint32_t animation) {
     Call<kMoveSettlerToBuildingTileA>(w.world, w.n);
-    SetJob(w.s, job);
+    w.s.job = job;
     Call<kSetSettlerAnimation>(w.world, w.n, animation);
     return w.again;
 }
@@ -1086,7 +1087,7 @@ std::uint32_t Arrive(Walk& w) {
     };
     auto sameRegion = [](const Tile& a, const Tile& b) { return a.walk_region == b.walk_region; };
     auto sameArea = [](const Tile& a, const Tile& b) { return a.area == b.area; };
-    switch (JobOf(s)) {
+    switch (s.job) {
     case Job::StepAside:
         SetJobNow(s, Job::Nothing);
         return 1;
@@ -1420,7 +1421,7 @@ void SanitizeWalkWorld(test::Context& ctx, test::WorldPair& worlds) {
             s.x = x;
             s.y = y;
             s.art = art;
-            s.job = job;
+            s.job = static_cast<SettlerJob>(job);
             s.saved_counter = part;
             s.next = next;
             s.prev = prev;
@@ -1526,7 +1527,7 @@ WalkCase SetUpWalkCase(test::Context& ctx, test::WorldPair& worlds) {
         }
         Settler& s = w->settlers[c.n];
         s.art = art;
-        s.job = job;
+        s.job = static_cast<SettlerJob>(job);
         s.owner = owner;
         s.race = race;
         s.x = x;
@@ -1625,7 +1626,7 @@ void CompareWalkSettler(test::Context& ctx, WalkFn candidate, int cases) {
 // Wrong: a shot faces one direction off.
 std::uint32_t __fastcall WrongWalkSettlerShot(CGameData* world, void* edx, std::uint32_t settler) {
     const std::uint32_t result = CGameData_WalkSettler(world, edx, settler);
-    if (JobOf(world->settlers[settler]) == Job::Shoot) {
+    if (world->settlers[settler].job == Job::Shoot) {
         world->settlers[settler].direction ^= 1;
     }
     return result;

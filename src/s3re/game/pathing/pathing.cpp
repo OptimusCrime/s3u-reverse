@@ -290,7 +290,8 @@ std::int32_t __fastcall Pathing_TileCost(CGameData* world, void*, PathState* sta
         return kBlocked;
     }
     if (static_cast<std::uint8_t>(blockBusy) != 0 && tile.settler != 0 &&
-        static_cast<std::uint8_t>(CGameData_IsStationaryJob(world, nullptr, SettlerAt(world, tile.settler).job)) != 0) {
+        static_cast<std::uint8_t>(
+            CGameData_IsStationaryJob(world, nullptr, Value(SettlerAt(world, tile.settler).job))) != 0) {
         return kBlocked;
     }
     if (static_cast<std::uint8_t>(withCost) == 0) {
@@ -745,7 +746,8 @@ std::uint32_t __fastcall Pathing_ResolveBlocker(CGameData* world, void*, PathSta
     // An idle settler in the same area swaps places.
     const Tile& next = TileAt(world, StepX(s.x, first), StepY(s.y, first));
     if (next.settler != 0 &&
-        static_cast<std::uint8_t>(CGameData_IsSettlerJob01Or37(world, nullptr, SettlerAt(world, next.settler).job)) != 0 &&
+        static_cast<std::uint8_t>(
+            CGameData_IsSettlerJob01Or37(world, nullptr, Value(SettlerAt(world, next.settler).job))) != 0 &&
         next.area == ownArea) {
         return direction | kPathSwap;
     }
@@ -763,7 +765,7 @@ std::uint32_t __fastcall Pathing_ResolveBlocker(CGameData* world, void*, PathSta
             return direction | kPathWait;
         }
         const Settler& other = SettlerAt(world, number);
-        if (static_cast<std::uint8_t>(CGameData_IsWalkingJob(world, nullptr, other.job)) == 0) {
+        if (static_cast<std::uint8_t>(CGameData_IsWalkingJob(world, nullptr, Value(other.job))) == 0) {
             return direction | kPathWait;
         }
         if ((other.path_mode & layout::kPathWaiting) == 0 && number != static_cast<std::uint32_t>(s.settler)) {
@@ -1599,7 +1601,7 @@ void PrepareTiles(test::Context& ctx, test::WorldPair& worlds, std::int32_t x, s
                 tile.wide_region = wide;
                 tile.settler = settler;
                 if (settler != 0) {
-                    SettlerAt(w, settler).job = job;
+                    SettlerAt(w, settler).job = static_cast<SettlerJob>(job);
                 }
             });
         }
@@ -1865,14 +1867,14 @@ WalkCase PrepareWalkCase(test::Context& ctx, test::WorldPair& worlds) {
         settler.path_mode = mode;
         settler.path_steps = steps;
         settler.path_direction = direction;
-        settler.job = 2;
+        settler.job = SettlerJob::StepAside;
         w->tiles[x][y].settler = static_cast<std::uint16_t>(n);
         if (queue == 1 && a != n) {
             // Neighbour in direction qd walks back to (x, y).
             Tile& t = w->tiles[x + g_directionDx[qd]][y + g_directionDy[qd]];
             t.settler = a;
             t.area = areaA;
-            w->settlers[a].job = 2;
+            w->settlers[a].job = SettlerJob::StepAside;
             w->settlers[a].path_mode = modeA;
             w->settlers[a].path_direction = static_cast<std::uint8_t>((qd + 3) % 6);
             w->settlers[a].path_steps = stepsA;
@@ -1885,12 +1887,12 @@ WalkCase PrepareWalkCase(test::Context& ctx, test::WorldPair& worlds) {
             const std::int32_t d2 = (qd + 2) % 6;
             Tile& ta = w->tiles[ax][ay];
             ta.settler = a;
-            w->settlers[a].job = 0x16d;
+            w->settlers[a].job = SettlerJob::BeekeeperWalkHomeLoaded;
             w->settlers[a].path_mode = modeA;
             w->settlers[a].path_direction = static_cast<std::uint8_t>(d2);
             Tile& tb = w->tiles[ax + g_directionDx[d2]][ay + g_directionDy[d2]];
             tb.settler = b;
-            w->settlers[b].job = 2;
+            w->settlers[b].job = SettlerJob::StepAside;
             w->settlers[b].path_mode = modeB;
             w->settlers[b].path_direction = static_cast<std::uint8_t>((qd + 4) % 6);
         }
@@ -2022,7 +2024,7 @@ void PrepareObstacleWindow(test::Context& ctx, test::WorldPair& worlds, std::int
                 t.settler = settler;
                 t.terrain = terrain;
                 if (settler != 0) {
-                    w->settlers[settler].job = job;
+                    w->settlers[settler].job = static_cast<SettlerJob>(job);
                     w->settlers[settler].path_mode = mode;
                 }
             });
@@ -2125,7 +2127,7 @@ PathCase PreparePathCase(test::Context& ctx, test::WorldPair& worlds) {
             for (std::int32_t k = 0; k < 6; ++k) {
                 const auto other = static_cast<std::uint16_t>(1 + (n + 97 * (k + 1)) % 31998);
                 w->tiles[x + g_directionDx[k]][y + g_directionDy[k]].settler = other;
-                w->settlers[other].job = 4;
+                w->settlers[other].job = SettlerJob::ArriveAtWork;
             }
         } else if (shape < 10) {
             for (std::int32_t k = 0; k < 6; ++k) {
@@ -2149,7 +2151,7 @@ PathCase PreparePathCase(test::Context& ctx, test::WorldPair& worlds) {
         s.path_direction = direction;
         s.direction = facing;
         s.art = art;
-        s.job = job;
+        s.job = static_cast<SettlerJob>(job);
         Tile& here = w->tiles[x][y];
         here.walk_region = 0;
         here.area = 0;

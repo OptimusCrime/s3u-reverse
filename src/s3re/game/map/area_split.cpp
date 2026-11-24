@@ -863,7 +863,7 @@ std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void
     Settler& settler = world->settlers[ship];
     GameDebugLog(texts::kShipProduction, static_cast<std::uint32_t>(settler.art),
                  static_cast<std::uint32_t>(settler.owner));
-    SetJob(settler, SettlerJob::ShipBeingBuilt);
+    settler.job = SettlerJob::ShipBeingBuilt;
     settler.slot = 0;
     settler.saved_animation = 0;
     settler.direction = (direction + 2) % kDirectionCount;

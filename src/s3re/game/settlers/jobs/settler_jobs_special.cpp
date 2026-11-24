@@ -98,7 +98,7 @@ JobResult CountUpAndLeaveTile(SettlerContext& ctx) {
 
 // 0x4ecf12 + 0x4f91fb (DX = 0): leaves its tile, next step at once.
 JobResult LeaveTile(SettlerContext& ctx, Job next) {
-    SetJob(ctx.settler, next);
+    ctx.settler.job = next;
     SettlerTile(ctx).settler = 0;
     ctx.settler.counter = 0;
     return JobResult::Next;
@@ -179,7 +179,7 @@ void ReturnAlongRoute(SettlerContext& ctx, const Trade& trade, Job job, bool shi
     std::uint32_t count = 0;
     for (int k = 0; k < 4; ++k) {
         if (k <= 2 && trade.route_x[2 - k] == kRouteUnset) {
-            SetJob(s, job);
+            s.job = job;
             if (ship) {
                 s.ship_walk = 0;
             }
@@ -194,7 +194,7 @@ void ReturnAlongRoute(SettlerContext& ctx, const Trade& trade, Job job, bool shi
         }
         SetRoutePoint(ctx, count, x, y);
         ++count;
-        SetJob(s, job);
+        s.job = job;
         if (ship) {
             s.ship_walk = 0;
         }
@@ -203,7 +203,7 @@ void ReturnAlongRoute(SettlerContext& ctx, const Trade& trade, Job job, bool shi
 
 // 0x4f6e6a: the trip ends here (no usable route or building).
 JobResult EndTrip(SettlerContext& ctx) {
-    SetJob(ctx.settler, Job::New);
+    ctx.settler.job = Job::New;
     ctx.settler.building = 0;
     ctx.settler.counter = 0;
     return JobResult::Next;
@@ -241,13 +241,13 @@ JobResult DonkeyLoad(SettlerContext& ctx) {
     Trade& trade = TradeAt(world, BuildingAt(world, pile.prev).trade);
     if (RouteLeavesRegion(ctx, trade, false) || trade.route_x[3] == kRouteUnset) {
         ClearRoute(trade);
-        SetJob(s, Job::New);
+        s.job = Job::New;
         s.counter = 0;
         --pile.leaving;
         return JobResult::Next;
     }
     FollowRoute(ctx, trade);
-    SetJob(s, Job::DonkeyWalkToMarket);
+    s.job = Job::DonkeyWalkToMarket;
     s.counter = 0;
     s.slot = s.good;
     --pile.amount;
@@ -274,7 +274,7 @@ JobResult DonkeyUnload(SettlerContext& ctx) {
         Call<kSubtractPlayerCounter>(world, s.owner, s.slot, 1);
         s.cargo_amounts01 = 0;
     }
-    SetJob(s, Job::New);
+    s.job = Job::New;
     s.slot = 0;
     Trade* trade = RouteBackFromHere(ctx, B::Marketplace, false);
     if (trade == nullptr) {
@@ -355,13 +355,13 @@ JobResult ShipLoadAtHarbour(SettlerContext& ctx) {
     }
     if (loads == 0) {
         ClearRoute(trade);
-        SetJob(s, Job::New);
+        s.job = Job::New;
         s.counter = 0;
         --PileAt(world, lastPile).leaving;  // the last ring pile looked at (as the original)
         return JobResult::Next;
     }
     FollowRoute(ctx, trade);
-    SetJob(s, Job::ShipSailWithCargo);
+    s.job = Job::ShipSailWithCargo;
     s.ship_walk = 0;
     s.counter = 0;
     Pile& last = PileAt(world, lastPile);
@@ -432,13 +432,13 @@ JobResult ShipyardFetch(SettlerContext& ctx) {
         Call<kPileIncAmountLeaving>(ctx.world, BuildingOf(ctx).piles[0]);
         --b.kind_bytes[kBoardsWanted];
         --b.kind_bytes[kStepsLeft];
-        SetJob(s, Job::ShipyardTakeBoard);
+        s.job = Job::ShipyardTakeBoard;
         animation = 0x115;
     } else if (HasGoods(ctx, number, 2) && b.kind_bytes[kIronWanted] != 0) {
         Call<kPileIncAmountLeaving>(ctx.world, BuildingOf(ctx).piles[1]);
         --b.kind_bytes[kIronWanted];
         --b.kind_bytes[kStepsLeft];
-        SetJob(s, Job::ShipyardTakeIron);
+        s.job = Job::ShipyardTakeIron;
         animation = 0x117;
     } else {
         return WaitTen(ctx);
@@ -456,7 +456,7 @@ JobResult ShipyardTake(SettlerContext& ctx, int pileSlot, Good good, Job next, s
     Call<kTakeGoodFromPile>(ctx.world, BuildingOf(ctx).piles[pileSlot]);
     Call<kSubtractPlayerCounter>(ctx.world, s.owner, Value(good), 1);
     s.slot = Value(good);
-    SetJob(s, next);
+    s.job = next;
     Animate(ctx, animation);
     return JobResult::Next;
 }
@@ -469,7 +469,7 @@ JobResult ShipyardToSlipway(SettlerContext& ctx) {
     Settler& s = ctx.settler;
     Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
     s.counter = 0;
-    SetJob(s, Job::ShipyardWalkToSlipway);
+    s.job = Job::ShipyardWalkToSlipway;
     s.good = kShipyardWorkSteps;
     return JobResult::Again;
 }
@@ -499,7 +499,7 @@ JobResult ShipyardBuild(SettlerContext& ctx) {
     Settler& s = ctx.settler;
     {
         Settler& ship = SettlerAt(world, ShipTileSettler(ctx, BuildingOf(ctx)));
-        if (JobOf(ship) == Job::ShipBeingBuilt) {
+        if (ship.job == Job::ShipBeingBuilt) {
             ++ship.saved_animation;
         }
     }
@@ -510,7 +510,7 @@ JobResult ShipyardBuild(SettlerContext& ctx) {
             ship.saved_counter = 0;
             ship.cargo_amounts01 = 0;
             ship.cargo_amounts23 = 0;
-            SetJob(ship, Job::New);
+            ship.job = Job::New;
             BuildingOf(ctx).kind_bytes[kOrderState] = 0;
             ship.slot = 0;
             if (TypeOf(ship) == SettlerType::TradeShip) {
@@ -520,7 +520,7 @@ JobResult ShipyardBuild(SettlerContext& ctx) {
                 Call<kNotifyLocalPlayer>(world, s.owner, 22, s.x, s.y);
             }
         }
-        SetJob(s, Job::ShipyardLeaveSlipway);
+        s.job = Job::ShipyardLeaveSlipway;
     }
     const std::uint32_t away = (static_cast<std::uint32_t>(BuildingOf(ctx).dock_direction) + 3) % 6;
     Animate(ctx, away + 0x11a);
@@ -545,7 +545,7 @@ JobResult HealerWait(SettlerContext& ctx) {
                 static_cast<std::uint16_t>(Call<kSettlerStartHealth>(world, patient)) != p.health) {
                 s.prev = static_cast<std::uint16_t>(patient);
                 SettlerTile(ctx).settler = static_cast<std::uint16_t>(ctx.number);
-                SetJob(s, Job::HealerHeal);
+                s.job = Job::HealerHeal;
                 Animate(ctx, 0x121);
                 return JobResult::Next;
             }
@@ -577,7 +577,7 @@ JobResult HealerWait(SettlerContext& ctx) {
                 const Settler& p = SettlerAt(world, candidate);
                 const std::int32_t pClass = (&g_settlerTypeClass[0])[p.art];
                 if (TeamOf(world, p.owner) == TeamOf(world, s.owner) && pClass >= 1 && pClass <= 39 &&
-                    JobOf(p) == Job::UnitIdle &&
+                    p.job == Job::UnitIdle &&
                     static_cast<std::uint16_t>(Call<kSettlerStartHealth>(world, candidate)) != p.health) {
                     found = true;
                     patient = candidate;
@@ -598,7 +598,7 @@ JobResult HealerWait(SettlerContext& ctx) {
     if (found) {
         const Building& b = BuildingOf(ctx);
         Call<kSetSettlerTarget>(world, patient, b.door_x, b.door_y);
-        SetJob(SettlerAt(world, patient), Job::UnitWalk);
+        SettlerAt(world, patient).job = Job::UnitWalk;
         s.good = 200;
     }
     s.counter = 1;
@@ -618,7 +618,7 @@ JobResult HealerHeal(SettlerContext& ctx) {
             p.health = static_cast<std::uint8_t>(Call<kSettlerStartHealth>(world, patient));
         }
     }
-    SetJob(s, Job::HealerHealed);
+    s.job = Job::HealerHealed;
     Animate(ctx, 0x122);
     return JobResult::Next;
 }
@@ -636,7 +636,7 @@ JobResult ShootReload(SettlerContext& ctx) {
         s.counter = static_cast<std::uint16_t>((&g_raceShotTime[0])[race] - 1);
         return JobResult::Next;
     }
-    SetJob(s, Job::UnitIdle);
+    s.job = Job::UnitIdle;
     s.counter = 0;
     s.frame = 0;
     return JobResult::Again;
@@ -649,7 +649,7 @@ JobResult ThiefChoosePile(SettlerContext& ctx) {
     CGameData* world = ctx.world;
     Settler& s = ctx.settler;
     if (s.slot != 0) {  // already carries something
-        SetJob(s, Job::UnitWalk);
+        s.job = Job::UnitWalk;
         s.walk_state = 4;
         s.counter = 0;
         return JobResult::Next;
@@ -682,7 +682,7 @@ JobResult ThiefChoosePile(SettlerContext& ctx) {
         }
     }
     if (best == 0) {
-        SetJob(s, Job::UnitWalk);
+        s.job = Job::UnitWalk;
         s.walk_state = 4;
         s.counter = 0;
         return JobResult::Next;
@@ -691,12 +691,12 @@ JobResult ThiefChoosePile(SettlerContext& ctx) {
     const Pile& pile = PileAt(world, best);
     if (s.x == pile.x && s.y == pile.y) {
         s.counter = 0;
-        SetJob(s, Job::ThiefSteal);
+        s.job = Job::ThiefSteal;
         return JobResult::Next;
     }
     s.target_x = pile.x;
     s.target_y = pile.y;
-    SetJob(s, Job::UnitWalk);
+    s.job = Job::UnitWalk;
     s.walk_state = 3;
     s.counter = 0;
     return JobResult::Next;
@@ -709,7 +709,7 @@ JobResult ThiefSteal(SettlerContext& ctx) {
     Settler& s = ctx.settler;
     const std::uint32_t pileNumber = SettlerTile(ctx).object_number;
     if (pileNumber == 0) {
-        SetJob(s, Job::UnitWalk);
+        s.job = Job::UnitWalk;
         s.walk_state = 3;
         s.counter = 0;
         GameDebugLog(texts::kThiefNoPile, ctx.number, static_cast<std::uint32_t>(s.x),
@@ -733,7 +733,7 @@ JobResult ThiefSteal(SettlerContext& ctx) {
             }
         }
     }
-    SetJob(s, Job::UnitWalk);
+    s.job = Job::UnitWalk;
     s.walk_state = 4;
     s.counter = 0;
     return JobResult::Next;
@@ -747,7 +747,7 @@ JobResult DropAndIdle(SettlerContext& ctx) {
     Call<kSubtractPlayerCounter>(world, s.owner, s.slot, 1);
     s.slot = 0;
     s.counter = 0;
-    SetJob(s, Job::UnitIdle);
+    s.job = Job::UnitIdle;
     s.direction = Call<kRandomBelow6>(world);
     return JobResult::Next;
 }
@@ -838,11 +838,11 @@ JobResult BeekeeperSearch(SettlerContext& ctx) {
     SettlerTile(ctx).settler = static_cast<std::uint16_t>(ctx.number);
     Call<kSetSettlerTarget>(world, ctx.number, x, y);
     if (state == 2) {
-        SetJob(s, Job::BeekeeperLeaveToHarvest);
+        s.job = Job::BeekeeperLeaveToHarvest;
         s.slot = 2;
         Animate(ctx, 0x201);
     } else {
-        SetJob(s, Job::BeekeeperLeaveToPlaceHive);
+        s.job = Job::BeekeeperLeaveToPlaceHive;
         s.slot = 1;
         Animate(ctx, 0x200);
     }
@@ -853,7 +853,7 @@ JobResult BeekeeperSearch(SettlerContext& ctx) {
 JobResult BeekeeperGo(SettlerContext& ctx, Job next) {
     Call<kMoveSettlerToBuildingTileB>(ctx.world, ctx.number);
     ctx.settler.counter = 0;
-    SetJob(ctx.settler, next);
+    ctx.settler.job = next;
     return JobResult::Again;
 }
 
@@ -873,11 +873,11 @@ JobResult BeekeeperPlaceHive(SettlerContext& ctx) {
         (here.flags & kTileBlocking) == 0 && (hive.flags & kTileBlocking) == 0 &&
         Call<kIsFreeOfCatapultsNearby>(world, x, y - 2) != 0) {
         Call<kBlockTile>(world, static_cast<std::uint32_t>(s.x), static_cast<std::uint32_t>(s.y) - 2);
-        SetJob(s, Job::BeekeeperHivePlaced);
+        s.job = Job::BeekeeperHivePlaced;
         Animate(ctx, 0x202);
         return JobResult::Next;
     }
-    SetJob(s, Job::BeekeeperWalkHome);
+    s.job = Job::BeekeeperWalkHome;
     s.counter = 0;  // 0x4f323b
     SetTargetToDoor(ctx);
     return JobResult::Next;
@@ -886,7 +886,7 @@ JobResult BeekeeperPlaceHive(SettlerContext& ctx) {
 // 0x4f8181..0x4f81bf, job 359 (0x167): the hive (object 247) is set up.
 JobResult BeekeeperHiveDone(SettlerContext& ctx) {
     Settler& s = ctx.settler;
-    SetJob(s, Job::BeekeeperWalkHome);
+    s.job = Job::BeekeeperWalkHome;
     s.slot = 0;
     s.counter = 0;
     TileSteps(ctx.world, s.x, s.y, -2).object = kObjectHive;
@@ -900,12 +900,12 @@ JobResult BeekeeperHarvest(SettlerContext& ctx) {
     Settler& s = ctx.settler;
     const std::uint8_t object = TileSteps(ctx.world, s.x, s.y, -2).object;
     if (object >= kObjectHiveFirstHarvest && object <= kObjectHiveFull) {
-        SetJob(s, Job::BeekeeperHarvested);
+        s.job = Job::BeekeeperHarvested;
         Animate(ctx, 0x203);
         s.slot = Value(G::Honey);
         return JobResult::Next;
     }
-    SetJob(s, Job::BeekeeperWalkHomeLoaded);
+    s.job = Job::BeekeeperWalkHomeLoaded;
     s.slot = 2;
     SetTargetToDoor(ctx);  // 0x4f4331
     return JobResult::Next;
@@ -915,7 +915,7 @@ JobResult BeekeeperHarvest(SettlerContext& ctx) {
 JobResult BeekeeperHarvested(SettlerContext& ctx) {
     Settler& s = ctx.settler;
     TileSteps(ctx.world, s.x, s.y, -2).object -= 3;
-    SetJob(s, Job::BeekeeperWalkHomeLoaded);
+    s.job = Job::BeekeeperWalkHomeLoaded;
     s.counter = 0;
     SetTargetToDoor(ctx);
     return JobResult::Again;
@@ -927,11 +927,11 @@ JobResult BeekeeperHome(SettlerContext& ctx) {
     Settler& s = ctx.settler;
     if (s.slot == 0) {
         Call<kMoveSettlerToBuildingTileA>(ctx.world, ctx.number);
-        SetJob(s, Job::BeekeeperGoIn);
+        s.job = Job::BeekeeperGoIn;
         Animate(ctx, 0x1fd);
         return JobResult::Next;
     }
-    SetJob(s, Job::BeekeeperStore);
+    s.job = Job::BeekeeperStore;
     Animate(ctx, 0x204);
     return JobResult::Next;
 }
@@ -945,7 +945,7 @@ JobResult BeekeeperStore(SettlerContext& ctx) {
     Call<kAddStatistic>(world, s.owner, Value(G::Honey), 1);
     Call<kAddPlayerCounter>(world, s.owner, Value(G::Honey), 1);
     s.slot = 0;
-    SetJob(s, Job::BeekeeperGoInAgain);
+    s.job = Job::BeekeeperGoInAgain;
     Animate(ctx, 0x204);
     s.counter = 0;
     return JobResult::Next;
@@ -983,7 +983,7 @@ JobResult AlchemistStart(SettlerContext& ctx) {
     Call<kPileIncAmountLeaving>(world, b.piles[0]);
     Call<kPileIncAmountLeaving>(world, BuildingOf(ctx).piles[1]);
     SettlerTile(ctx).settler = static_cast<std::uint16_t>(ctx.number);
-    SetJob(s, Job::AlchemistTakeInput1);
+    s.job = Job::AlchemistTakeInput1;
     Animate(ctx, 0x1f2);
     return JobResult::Next;
 }
@@ -998,7 +998,7 @@ void TakeInput(SettlerContext& ctx, int pileSlot) {
 
 // A step that only sets the next job and an animation.
 JobResult AnimateStep(SettlerContext& ctx, Job next, std::uint32_t animation) {
-    SetJob(ctx.settler, next);
+    ctx.settler.job = next;
     Animate(ctx, animation);
     return JobResult::Next;
 }
@@ -1038,17 +1038,17 @@ JobResult AlchemistRoll(SettlerContext& ctx) {
     if (someIron) {
         if (someGold) {
             Animate(ctx, 0x1f9);
-            SetJob(s, Job::AlchemistStoreBoth);
+            s.job = Job::AlchemistStoreBoth;
         } else {
             Animate(ctx, 0x1f8);
-            SetJob(s, Job::AlchemistStoreIron);
+            s.job = Job::AlchemistStoreIron;
         }
     } else if (someGold) {
         Animate(ctx, 0x1f7);
-        SetJob(s, Job::AlchemistStoreGold);
+        s.job = Job::AlchemistStoreGold;
     } else {
         Animate(ctx, 0x1fa);
-        SetJob(s, Job::AlchemistStoreNothing);
+        s.job = Job::AlchemistStoreNothing;
     }
     return JobResult::Next;
 }
@@ -1112,7 +1112,7 @@ JobResult MeadStart(SettlerContext& ctx) {
     Call<kPileIncAmountLeaving>(world, b.piles[0]);
     Call<kPileIncAmountLeaving>(world, BuildingOf(ctx).piles[1]);
     SettlerTile(ctx).settler = static_cast<std::uint16_t>(ctx.number);
-    SetJob(s, Job::MeadMakerWork1);
+    s.job = Job::MeadMakerWork1;
     Animate(ctx, 0x208);
     return JobResult::Next;
 }
@@ -1172,7 +1172,7 @@ JobResult GongFetch(SettlerContext& ctx) {
     }
     --b.kind_bytes[kStepsLeft];
     Animate(ctx, 0x113);
-    SetJob(s, Job::GongProduction);
+    s.job = Job::GongProduction;
     return JobResult::Next;
 }
 
@@ -1195,7 +1195,7 @@ JobResult GongProduction(SettlerContext& ctx) {
         const std::uint32_t x = b.x + static_cast<std::uint32_t>(g_extraTilesCentre[3][0]);
         Call<kNotifyLocalPlayer>(world, s.owner, 41, x, y);
     }
-    SetJob(s, Job::GongFetch);
+    s.job = Job::GongFetch;
     s.counter = 0;
     return JobResult::Next;
 }
@@ -1215,7 +1215,7 @@ JobResult RunSpecialJobs(SettlerContext& ctx) {
     case Job::ShipLoad: return ShipLoadAtHarbour(ctx);
     case Job::ShipUnload: return ShipUnload(ctx);
     // Shipyard.
-    case Job::ShipyardGoIn: SetJob(s, Job::ShipyardFetch); return CountUpAndLeaveTile(ctx);  // 0x4f6e84
+    case Job::ShipyardGoIn: s.job = Job::ShipyardFetch; return CountUpAndLeaveTile(ctx);  // 0x4f6e84
     case Job::ShipyardFetch: return ShipyardFetch(ctx);
     case Job::ShipyardTakeBoard: return ShipyardTake(ctx, 0, G::Board, Job::ShipyardLeaveWithBoard, 0x116);
     case Job::ShipyardTakeIron: return ShipyardTake(ctx, 1, G::Iron, Job::ShipyardLeaveWithIron, 0x118);
@@ -1224,18 +1224,18 @@ JobResult RunSpecialJobs(SettlerContext& ctx) {
     case Job::ShipyardBuild: return ShipyardBuild(ctx);
     case Job::ShipyardLeaveSlipway:  // 0x4f735e
         s.slot = 0;
-        SetJob(s, Job::ShipyardWalkHome);
+        s.job = Job::ShipyardWalkHome;
         SetTargetToDoor(ctx);
         s.counter = 0;
         return JobResult::Again;
     case Job::ShipyardBackIn:  // 0x4f73b2
-        SetJob(s, Job::ShipyardFetch);
+        s.job = Job::ShipyardFetch;
         SettlerTile(ctx).settler = 0;
         s.counter = 0;
         return JobResult::Again;
     // Healer.
     case Job::HealerGoIn:  // 0x4f73ec
-        SetJob(s, Job::HealerWait);
+        s.job = Job::HealerWait;
         ++BuildingOf(ctx).kind_bytes[kUnitsDone];
         SettlerTile(ctx).settler = 0;
         s.good = 0;
@@ -1246,7 +1246,7 @@ JobResult RunSpecialJobs(SettlerContext& ctx) {
     case Job::HealerHeal: return HealerHeal(ctx);
     case Job::HealerHealed:  // 0x4f780f
         SettlerTile(ctx).settler = 0;
-        SetJob(s, Job::HealerWait);
+        s.job = Job::HealerWait;
         s.counter = 0;
         return JobResult::Next;
     case Job::Shoot: return ShootReload(ctx);
@@ -1255,7 +1255,7 @@ JobResult RunSpecialJobs(SettlerContext& ctx) {
     case Job::ThiefReturned: return DropAndIdle(ctx);
     // Beekeeper.
     case Job::BeekeeperGoIn:  // 0x4f7c4b + 0x4ece3b
-        SetJob(s, Job::BeekeeperSearch);
+        s.job = Job::BeekeeperSearch;
         ++BuildingOf(ctx).kind_bytes[kUnitsDone];
         SettlerTile(ctx).settler = 0;
         s.next = 0;
@@ -1273,7 +1273,7 @@ JobResult RunSpecialJobs(SettlerContext& ctx) {
     case Job::BeekeeperEndRound:
         return LeaveTile(ctx, Job::BeekeeperSearch);  // 0x4f838b
     // Alchemist.
-    case Job::AlchemistGoIn: SetJob(s, Job::AlchemistStart); return CountUpAndLeaveTile(ctx);  // 0x4f8399
+    case Job::AlchemistGoIn: s.job = Job::AlchemistStart; return CountUpAndLeaveTile(ctx);  // 0x4f8399
     case Job::AlchemistStart: return AlchemistStart(ctx);
     case Job::AlchemistTakeInput1:
     case Job::AlchemistTakeInput1Again:  // 0x4f8a95
@@ -1292,7 +1292,7 @@ JobResult RunSpecialJobs(SettlerContext& ctx) {
     case Job::AlchemistEndRound:
         return LeaveTile(ctx, Job::AlchemistStart);  // 0x4f8b1c
     // Mead maker.
-    case Job::MeadMakerGoIn: SetJob(s, Job::MeadMakerStart); return CountUpAndLeaveTile(ctx);  // 0x4f8b4f
+    case Job::MeadMakerGoIn: s.job = Job::MeadMakerStart; return CountUpAndLeaveTile(ctx);  // 0x4f8b4f
     case Job::MeadMakerStart: return MeadStart(ctx);
     case Job::MeadMakerWork1: return AnimateStep(ctx, Job::MeadMakerTakeInput1, 0x209);
     case Job::MeadMakerTakeInput1:  // 0x4f8c77
@@ -1305,10 +1305,10 @@ JobResult RunSpecialJobs(SettlerContext& ctx) {
     case Job::MeadMakerStore: return MeadStore(ctx);
     case Job::MeadMakerEndRound: return LeaveTile(ctx, Job::MeadMakerStart);  // 0x4f8efa
     case Job::MeadMakerAgain:
-        SetJob(s, Job::MeadMakerTakeInput1);
+        s.job = Job::MeadMakerTakeInput1;
         return JobResult::Next;  // 0x4f8f2d
     // Gong order.
-    case Job::GongGoIn: SetJob(s, Job::GongFetch); return CountUpAndLeaveTile(ctx);  // 0x4f8f3b
+    case Job::GongGoIn: s.job = Job::GongFetch; return CountUpAndLeaveTile(ctx);  // 0x4f8f3b
     case Job::GongFetch: return GongFetch(ctx);
     case Job::GongProduction: return GongProduction(ctx);
     default: return JobResult::Next;  // not a job of this family (kJobFamily)
@@ -1596,13 +1596,13 @@ void CustomizeSpecial(CaseSetup& setup, std::uint32_t n) {
             m.owner = owner;
             m.art = Value(SettlerType::Swordsman1);
             m.health = p.health;
-            SetJob(m, p.idle ? Job::UnitIdle : Job::Nothing);
+            m.job = p.idle ? Job::UnitIdle : Job::Nothing;
             w->tiles[p.x][p.y].settler = p.number;
         }
         if (shipThere && shipX < 768 && shipY < 768) {
             layout::Settler& m = SettlerAt(w, ship);
             m.art = shipType;
-            SetJob(m, shipBuilt ? Job::ShipBeingBuilt : Job::SevenTileUnitPart);
+            m.job = shipBuilt ? Job::ShipBeingBuilt : Job::SevenTileUnitPart;
             w->tiles[shipX][shipY].settler = ship;
         }
         for (std::uint32_t k = 0; k < 2200; ++k) {
@@ -1689,7 +1689,7 @@ FamilyTest SpecialFamily() {
 std::uint32_t __fastcall WrongUpdateSettlersYield(CGameData* world, void* edx) {
     std::vector<std::uint32_t> rolling;
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
-        if (JobOf(world->settlers[n]) == Job::AlchemistRoll) {
+        if (world->settlers[n].job == Job::AlchemistRoll) {
             rolling.push_back(n);
         }
     }

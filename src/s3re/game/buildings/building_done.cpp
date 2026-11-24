@@ -178,7 +178,7 @@ void FinishMilitaryBuilding(CGameData* world, std::uint32_t buildingId, Building
     }
     reinterpret_cast<TileFn>(kUnblockTile)(world, nullptr, x, y);
     const std::uint32_t guard = CGameData_CreateSettler(world, nullptr, x, y, Value(kGuardType), building.owner);
-    world->settlers[guard].job = Value(SettlerJob::GuardHeal);
+    world->settlers[guard].job = SettlerJob::GuardHeal;
     world->settlers[guard].building = static_cast<std::uint16_t>(buildingId);
     building.guard = static_cast<std::uint16_t>(guard);
 }

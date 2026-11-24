@@ -63,7 +63,7 @@ std::uint32_t HasGoods(SettlerContext& ctx, std::uint32_t slot) {
 
 // Sets the next job, then starts its animation (in this order, as the original).
 JobResult Animate(SettlerContext& ctx, Job next, std::uint32_t animation) {
-    SetJob(ctx.settler, next);
+    ctx.settler.job = next;
     Call<kSetSettlerAnimation>(ctx.world, ctx.number, animation);
     return JobResult::Next;
 }
@@ -78,7 +78,7 @@ JobResult Wait(SettlerContext& ctx) {
 // jump to 0x4f91fb).
 JobResult LeaveWorkTile(SettlerContext& ctx, Job next) {
     OwnTile(ctx).settler = 0;
-    SetJob(ctx.settler, next);
+    ctx.settler.job = next;
     ctx.settler.counter = 0;
     return JobResult::Next;
 }
@@ -87,7 +87,7 @@ JobResult LeaveWorkTile(SettlerContext& ctx, Job next) {
 // first round: counts itself into building byte +0x19, leaves the tile,
 // counter 0.
 JobResult StartFirstRound(SettlerContext& ctx, Job next) {
-    SetJob(ctx.settler, next);
+    ctx.settler.job = next;
     ++WorkBuilding(ctx).kind_bytes[0];
     OwnTile(ctx).settler = 0;
     ctx.settler.counter = 0;
@@ -304,7 +304,7 @@ JobResult GarrisonSoldierDies(SettlerContext& ctx) {
     guard.x = ctx.settler.x;
     guard.y = ctx.settler.y;
     TileAt(ctx.world, guard.x, guard.y).settler = static_cast<std::uint16_t>(best);
-    SetJob(guard, Job::GuardBuilding);
+    guard.job = Job::GuardBuilding;
     guard.counter = 0;
     return JobResult::Next;
 }
@@ -509,7 +509,7 @@ JobResult WorkshopPutInput(SettlerContext& ctx, const Workshop& shop) {
     --building.workshop.wanted[slot];
     building.kind_bytes[7] = static_cast<std::uint8_t>(building.kind_bytes[7] - 1);
     Call<kSetSettlerAnimation>(ctx.world, ctx.number, 275);
-    SetJob(ctx.settler, shop.check);  // after the animation, as the original
+    ctx.settler.job = shop.check;  // after the animation, as the original
     return JobResult::Next;
 }
 
@@ -543,7 +543,7 @@ JobResult WorkshopCheck(SettlerContext& ctx, std::uint32_t k) {
             building.workshop.state = 0;
         }
     }
-    SetJob(ctx.settler, shop.work);
+    ctx.settler.job = shop.work;
     ctx.settler.counter = 0;
     return JobResult::Next;
 }
@@ -844,7 +844,7 @@ bool MetalStubReturn(std::uintptr_t callee, std::uint32_t h, const std::uint32_t
         // As the real one: job, counter and building cleared; the job here is
         // a no-op one (job 0 belongs to another family).
         layout::Settler& s = world->settlers[args[0] & 0xffff];
-        s.job = Value(Job::Job57);
+        s.job = Job::Job57;
         s.counter = 0;
         s.building = 0;
         eax = 0;
@@ -867,7 +867,7 @@ FamilyTest MetalFamily() {
 std::uint32_t __fastcall WrongUpdateSettlersGoldPoints(CGameData* world, void* edx) {
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
         const layout::Settler& s = world->settlers[n];
-        if (s.owner < 20 && s.counter == 0 && JobOf(s) == Job::GoldBarDone &&
+        if (s.owner < 20 && s.counter == 0 && s.job == Job::GoldBarDone &&
             world->players[s.owner].race == 1) {
             ++g_playerTallies[s.owner].points;
         }

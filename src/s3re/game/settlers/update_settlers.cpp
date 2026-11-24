@@ -92,7 +92,7 @@ std::uint32_t __fastcall CGameData_UpdateSettlers(CGameData* world, void*) {
             settler.counter = 0;  // 0x4f91fb
             continue;
         }
-        const std::uint32_t job = settler.job;
+        const std::uint32_t job = Value(settler.job);
         if (job > kLastJob) {
             continue;
         }
@@ -302,7 +302,7 @@ void SetUpSettler(CaseSetup& setup, const FamilyTest& family, std::uint32_t n) {
     const auto buildingOwner = static_cast<std::uint8_t>(rng.Chance(1, 20) ? kFree : rng.Below(4));
     setup.Both([&](CGameData* w) {
         Settler& s = SettlerAt(w, n);
-        SetJob(s, job);
+        s.job = job;
         s.art = Value(type);
         s.owner = owner;
         s.race = race;

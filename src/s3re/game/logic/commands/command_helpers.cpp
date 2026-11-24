@@ -119,8 +119,8 @@ Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
 }
 
 // Carrier jobs that bring goods to or fetch them from a building.
-bool IsCarrierJob(std::uint16_t job) {
-    switch (static_cast<Job>(job)) {
+bool IsCarrierJob(Job job) {
+    switch (job) {
     case Job::CarrierWalkToPile:
     case Job::CarrierAtPile:
     case Job::CarrierPickUp:
@@ -454,14 +454,14 @@ void FillCarriers(test::Context& ctx, test::WorldPair& worlds, std::uint32_t set
         worlds.Both([&](CGameData* w) {
             w->settlers[n].owner = owner;
             w->settlers[n].building = building;
-            w->settlers[n].job = job;
+            w->settlers[n].job = static_cast<SettlerJob>(job);
         });
     }
 }
 
 void InstallCarrierStubs(test::CalleeStubs& stubs) {
     stubs.Install<1, kResetSettlerToIdle>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
-        w->settlers[args[0]].job = 0xac;
+        w->settlers[args[0]].job = SettlerJob::SeekOwnArea;
         return args[0] * 3;
     });
     stubs.Install<1, kRemoveBuildingFromAreaRequests>(
@@ -491,7 +491,7 @@ std::uint32_t __fastcall WrongRecallBuildingCarriers(CGameData* world, void*, st
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
         const Settler& settler = world->settlers[n];
         if (settler.owner != kFree && settler.building == building && IsCarrierJob(settler.job) &&
-            settler.job != Value(Job::CarrierDeliver)) {
+            settler.job != Job::CarrierDeliver) {
             Call<kResetSettlerToIdle>(world, n);
         }
     }

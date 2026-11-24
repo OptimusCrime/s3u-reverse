@@ -93,7 +93,7 @@ std::uint32_t __fastcall CGameData_SettlerGroup(CGameData* world, void* /*edx*/,
     if (typeClass != Value(SettlerClass::Civilian)) {
         return kGroup2;
     }
-    const SettlerJob job = JobOf(record);
+    const SettlerJob job = record.job;
     return (job == SettlerJob::WalkToOwnArea || job == SettlerJob::SeekOwnArea) ? kGroup2 : kGroup1;
 }
 
@@ -165,7 +165,7 @@ void CompareSettlerGroup(test::Context& ctx, SettlerGroupFn candidate, int cases
         if (ctx.rng().Chance(1, 3)) {
             // Jobs 170..173 (0xaa..0xad), around WalkToOwnArea and SeekOwnArea.
             const auto job = static_cast<std::uint16_t>(Value(SettlerJob::CarrierLeavePile) + ctx.rng().Below(4));
-            worlds.Both([&](CGameData* w) { w->settlers[settler].job = job; });
+            worlds.Both([&](CGameData* w) { w->settlers[settler].job = static_cast<SettlerJob>(job); });
         }
         const std::uint32_t expected =
             Original_CGameData_SettlerGroup(worlds.original(), nullptr, settler);
@@ -183,7 +183,7 @@ void CompareSettlerGroup(test::Context& ctx, SettlerGroupFn candidate, int cases
 std::uint32_t __fastcall WrongSettlerGroup(CGameData* world, void* edx, std::uint32_t settler) {
     const Settler& record = world->settlers[settler];
     if (TypeOf(record) != SettlerType::Catapult && ClassOf(record) == SettlerClass::Civilian &&
-        JobOf(record) == SettlerJob::SeekOwnArea) {
+        record.job == SettlerJob::SeekOwnArea) {
         return kGroup1;
     }
     return CGameData_SettlerGroup(world, edx, settler);

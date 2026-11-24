@@ -187,7 +187,7 @@ void Unlink(CGameData* world, Settler& settler, std::uint16_t& head) {
 void LeaveWorkplace(CGameData* world, Settler& settler) {
     Building& building = world->buildings[settler.building];
     const SettlerType type = TypeOf(settler);
-    const Job job = JobOf(settler);
+    const Job job = settler.job;
     if (type == SettlerType::Carrier && IsOneOf(job, {Job::WalkToWork, Job::ArriveAtWork, Job::RecruitAtBarracks})) {
         // A carrier on its way to become a recruit: saved_counter is the
         // barracks' input slot + 1. Three separate tests, as in the original.
@@ -288,21 +288,21 @@ std::uint32_t __fastcall CGameData_ResetSettlerToIdle(CGameData* world, void*, s
 
     // 1. Units waiting in their player's idle list (head per settler type;
     // for owner 0xff past the players, as the original's arithmetic does).
-    if (IsOneOf(JobOf(settler), {Job::UnitIdle, Job::UnitWalk, Job::UnitWalkCountdown, Job::UnitFighting})) {
+    if (IsOneOf(settler.job, {Job::UnitIdle, Job::UnitWalk, Job::UnitWalkCountdown, Job::UnitFighting})) {
         Unlink(world, settler, world->players[settler.owner].settler_lists[settler.art]);
     }
     // 2. Pioneers and geologists.
     if (TypeOf(settler) == SettlerType::Pioneer || TypeOf(settler) == SettlerType::Geologist) {
-        if (JobOf(settler) == Job::UnitWalk || JobOf(settler) == Job::UnitWalkCountdown) {
+        if (settler.job == Job::UnitWalk || settler.job == Job::UnitWalkCountdown) {
             Unclaim(TargetTile(world, settler));
         }
-        if (IsOneOf(JobOf(settler),
+        if (IsOneOf(settler.job,
                     {Job::GeologistWork, Job::GeologistDone, Job::PioneerWork, Job::PioneerDone})) {
             Unclaim(TileAt(world, settler.x, settler.y));
         }
     }
     // 3. Idle civilians are listed in their area (by settler type).
-    if (JobOf(settler) == Job::Nothing || JobOf(settler) == Job::StepAside) {
+    if (settler.job == Job::Nothing || settler.job == Job::StepAside) {
         const std::uint32_t area = TileAt(world, settler.x, settler.y).area;
         if (area == 0) {
             GameDebugLog(texts::kStepAsideOnSectorZero, static_cast<std::uint32_t>(settler.art),
@@ -317,23 +317,23 @@ std::uint32_t __fastcall CGameData_ResetSettlerToIdle(CGameData* world, void*, s
         Unlink(world, settler, world->areas[area].settlers_by_type[settler.art]);
     }
     // 4.
-    if (JobOf(settler) == Job::CarrierWalkToTool || JobOf(settler) == Job::CarrierTakeTool) {
+    if (settler.job == Job::CarrierWalkToTool || settler.job == Job::CarrierTakeTool) {
         CGameData_PileDecAmountLeaving(world, nullptr, TargetTile(world, settler).object_number);
     }
     // 5.
-    if (IsWorkJob(JobOf(settler))) {
+    if (IsWorkJob(settler.job)) {
         LeaveWorkplace(world, settler);
     }
     // 6. Diggers (jobs 5..9).
-    if (IsOneOf(JobOf(settler), {Job::DiggerDig, Job::DiggerWalkToSpot, Job::DiggerLevel, Job::DiggerLower,
-                                 Job::DiggerRaise})) {
+    if (IsOneOf(settler.job, {Job::DiggerDig, Job::DiggerWalkToSpot, Job::DiggerLevel, Job::DiggerLower,
+                              Job::DiggerRaise})) {
         Building& site = world->buildings[settler.building];
         if (ClearHighestBit(site.digger_slots)) {
             --site.site.workers_at_work;
         }
     }
     // 7. Builders (jobs 14, 15, 17, 18).
-    if (IsOneOf(JobOf(settler),
+    if (IsOneOf(settler.job,
                 {Job::BuilderStart, Job::BuilderWalkToWait, Job::BuilderWalkToSpot, Job::BuilderBuild})) {
         Building& site = world->buildings[settler.building];
         if (ClearHighestBit(site.builder_slots)) {
@@ -341,42 +341,43 @@ std::uint32_t __fastcall CGameData_ResetSettlerToIdle(CGameData* world, void*, s
         }
     }
     // 8.
-    if (IsOneOf(JobOf(settler), {Job::DiggerWalkToSpot, Job::DiggerLevel, Job::DiggerRaise, Job::DiggerLower,
-                                 Job::BuilderWalkToSpot, Job::BuilderBuild})) {
+    if (IsOneOf(settler.job, {Job::DiggerWalkToSpot, Job::DiggerLevel, Job::DiggerRaise, Job::DiggerLower,
+                              Job::BuilderWalkToSpot, Job::BuilderBuild})) {
         Tile& target = TargetTile(world, settler);
         if ((target.flags & kTileClaimed) != 0) {
             Unclaim(target);
         }
     }
     // 9. One unit, or two with second_unit, of the target pile were taken.
-    if (JobOf(settler) == Job::DonkeyWalkToPile || JobOf(settler) == Job::DonkeyLoad) {
+    if (settler.job == Job::DonkeyWalkToPile || settler.job == Job::DonkeyLoad) {
         --world->piles[TargetTile(world, settler).object_number].leaving;
         if (settler.second_unit != 0) {
             --world->piles[TargetTile(world, settler).object_number].leaving;
         }
     }
     // 10.
-    if (IsOneOf(JobOf(settler), {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp,
-                                 Job::CarrierWalkToSourcePile, Job::CarrierAtSourcePile})) {
+    if (IsOneOf(settler.job, {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp,
+                              Job::CarrierWalkToSourcePile, Job::CarrierAtSourcePile})) {
         CGameData_PileDecAmountLeaving(world, nullptr, TargetTile(world, settler).object_number);
     }
     // 11.
-    if (IsOneOf(JobOf(settler), {Job::CarrierWalkToSourcePile, Job::CarrierAtSourcePile,
-                                 Job::CarrierWalkToTargetPile, Job::CarrierAtTargetPile})) {
+    if (IsOneOf(settler.job, {Job::CarrierWalkToSourcePile, Job::CarrierAtSourcePile,
+                              Job::CarrierWalkToTargetPile, Job::CarrierAtTargetPile})) {
         ReleasePileOfJobs76To79(world, settler, savedGoods);
     }
     // 12. Before the pick-up the good is the ordered one (+0x1a), after it
     // the carried one (+0x15).
-    if (IsOneOf(JobOf(settler), {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp,
-                                 Job::CarrierLeavePile, Job::CarrierWalkToBuilding, Job::CarrierAtBuilding,
-                                 Job::CarrierDeliver})) {
-        const bool pickedUp = !IsOneOf(JobOf(settler), {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp});
+    if (IsOneOf(settler.job,
+                {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::CarrierLeavePile,
+                 Job::CarrierWalkToBuilding, Job::CarrierAtBuilding, Job::CarrierDeliver})) {
+        const bool pickedUp =
+            !IsOneOf(settler.job, {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp});
         const std::uint32_t good = pickedUp ? CarriedGood(settler) : settler.good;
         CancelDelivery(world, world->buildings[settler.building], good);
     }
     // 13.
-    if (IsOneOf(JobOf(settler), {Job::CarrierLeavePile, Job::CarrierWalkToBuilding, Job::CarrierAtBuilding,
-                                 Job::CarrierDeliver})) {
+    if (IsOneOf(settler.job, {Job::CarrierLeavePile, Job::CarrierWalkToBuilding, Job::CarrierAtBuilding,
+                              Job::CarrierDeliver})) {
         CGameData_DropGoodNear(world, nullptr, CarriedGood(settler), 1, settler.x, settler.y);
         CGameData_SubtractPlayerCounter(world, nullptr, settler.owner, CarriedGood(settler), 1);
         CarriedGood(settler) = Value(Good::Nothing);
@@ -393,7 +394,7 @@ std::uint32_t __fastcall CGameData_ResetSettlerToIdle(CGameData* world, void*, s
         LogTile(TileAt(world, settler.x, settler.y), settler.owner);
     }
     // 16.
-    SetJob(settler, Job::SeekOwnArea);
+    settler.job = Job::SeekOwnArea;
     settler.slot = 0;
     settler.building = 0;
     settler.counter = 0;
@@ -516,7 +517,7 @@ void SetUpCase(test::Context& ctx, test::WorldPair& worlds, std::uint32_t settle
     const auto targetPile = static_cast<std::uint16_t>(1 + rng.Below(kTestPiles));
     worlds.Both([&](CGameData* w) {
         Settler& s = w->settlers[settler];
-        SetJob(s, job);
+        s.job = job;
         s.art = Value(type);
         s.owner = owner;
         s.x = static_cast<std::uint16_t>(x);
@@ -622,7 +623,7 @@ void Compare(test::Context& ctx, SettlerFn candidate, int cases) {
 // Wrong: the pikemen (class 3) give back the bowmen's count instead of their own.
 std::uint32_t __fastcall WrongResetSettlerToIdle(CGameData* world, void* edx, std::uint32_t settlerNumber) {
     const Settler& settler = world->settlers[settlerNumber];
-    if (IsWorkJob(JobOf(settler)) && TypeOf(settler) != SettlerType::Carrier &&
+    if (IsWorkJob(settler.job) && TypeOf(settler) != SettlerType::Carrier &&
         ClassOf(settler) == SettlerClass::Pikeman) {
         Building& building = world->buildings[settler.building];
         ++building.military.class3_coming;
