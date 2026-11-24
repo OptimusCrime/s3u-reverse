@@ -143,6 +143,10 @@ add_library(s3re SHARED
     game/ai/ai_site_queries.cpp
     game/ai/ai_small_helpers.cpp
 
+    # game/fileformats/: the map and savegame container (Dirk::CMapFile)
+    game/fileformats/map_file.cpp
+    game/fileformats/map_file_tests.cpp
+
     # game/ui/: CScreenElement and the controls, menu and settings layouts
     game/ui/screen_element.cpp
     game/ui/ui_static_text.cpp

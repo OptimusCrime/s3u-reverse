@@ -184,7 +184,8 @@ C++ code.
       `pathing/` (Dirk/Pathing.cpp), `spells/` (Volker/GodlyEvents.cpp),
       `logic/` (CLogicThread, game end, victory conditions, UI state in
       the world) with `logic/commands/` (ExecuteCommands), `ai/`
-      (computer players);
+      (computer players), `fileformats/` (the map and savegame
+      container `Dirk::CMapFile`, re/file_formats.md);
     - platform side: `ui/` (CScreenElement and controls, menu layouts),
       `graphics/` (graphics data, DirectDraw surface), `net/` (CNetThread,
       lobby buffer), `framework/` (WinMain, Win32/DirectX framework
