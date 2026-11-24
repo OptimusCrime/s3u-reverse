@@ -34,7 +34,20 @@ inline constexpr GameText kLeftWallNoAngle{0x69fa14};       // "PATH: Leftwall, 
 inline constexpr GameText kSaveGamesFile{0x69fcd4};     // "E:\Siedler3\Dirk\SaveGames.cpp"
 inline constexpr GameText kChunkName{0x69fccc};         // "lpChunk" (CMapFile::GetChunk's allocation)
 inline constexpr GameText kNewChunkName{0x69fcf4};      // "newchunk" (CMapFile::AddChunk's allocation)
+inline constexpr GameText kTempName{0x69fd00};          // "lpTemp" (CMapFile::WriteChunk*'s allocations)
 inline constexpr GameText kInvalidFileType{0x69fc38};   // "LOAD: Invalid filetype %i %i"
+// CLogicThread::LoadSaveGame (0x508fa0)
+inline constexpr GameText kSavefileVersion{0x6a659c};         // "Savefile Version : %d"
+inline constexpr GameText kLoadingVictoryConditions{0x6a6574};  // "LoadGame: loading VictoryConditions..."
+inline constexpr GameText kLoadingPlayerColors{0x6a6550};     // "LoadGame: loading PlayerColors..."
+inline constexpr GameText kClearingPlayerColors{0x6a652c};    // "LoadGame: clearing PlayerColors..."
+inline constexpr GameText kLoadingProdStat{0x6a6508};         // "LoadGame: loading ProdStatArray..."
+inline constexpr GameText kClearingProdStat{0x6a64e4};        // "LoadGame: clearing ProdStatArray..."
+inline constexpr GameText kLoadingObjective{0x6a64bc};        // "LoadGame: loading NewGameObjective..."
+inline constexpr GameText kClearingObjective{0x6a6494};       // "LoadGame: clearing NewGameObjective..."
+inline constexpr GameText kLoadingObjectiveTimeout{0x6a6464};   // "LoadGame: loading NewGameObjectiveTimeout..."
+inline constexpr GameText kClearingObjectiveTimeout{0x6a6434};  // "LoadGame: clearing NewGameObjectiveTimeout..."
+inline constexpr GameText kDroppedEco{0x6a641c};              // "LOAD: Dropped eco %i"
 inline constexpr GameText kProtocolFile{0x7a34fc};      // "E:\Siedler3\Dirk\protocol.cpp"
 inline constexpr GameText kNewDataName{0x7a3570};       // "lpNewData"
 inline constexpr GameText kDuringResize{0x7a355c};      // "PROT: During Resize"

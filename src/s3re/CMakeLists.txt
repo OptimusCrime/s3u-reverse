@@ -116,6 +116,8 @@ add_library(s3re SHARED
     # game/logic/: CLogicThread: Step, game end, victory conditions, UI state in the world
     game/logic/game_end.cpp
     game/logic/game_end_check.cpp
+    game/logic/load_save_game.cpp
+    game/logic/load_save_game_tests.cpp
     game/logic/logic_helpers.cpp
     game/logic/logic_thread.cpp
     game/logic/objectives.cpp
@@ -151,6 +153,8 @@ add_library(s3re SHARED
 
     # game/fileformats/: the map and savegame container (Dirk::CMapFile)
     game/fileformats/map_file.cpp
+    game/fileformats/map_file_io.cpp
+    game/fileformats/map_file_io_tests.cpp
     game/fileformats/map_file_stream.cpp
     game/fileformats/map_file_stream_tests.cpp
     game/fileformats/map_file_tests.cpp

@@ -260,3 +260,136 @@ SPECS += [
          callees={0x0061a080: (1, "thiscall", "probe")}, cover_until=0x004a5a60,
          exempt_blocks=(0x004a5a09, 0x004a5a1f, 0x004a5a23, 0x004a5a2b, 0x004a5a31)),
 ]
+
+
+# --- session 52: CMapFile constructor, Open, Close and the write path (map_file_io.cpp) ---
+# ECX = the world (the CMapFile at world offset 0), the file modelled as
+# above (_mf_container); the stream members are probed. Write records the
+# bytes it is given (the encoded chunk, or a header word on the stack), so
+# the encoding is compared; GetSize returns the fake file's length.
+MF_STREAM_OPEN = 0x004a5600
+MF_STREAM_CLOSE = 0x004a5710
+MF_STREAM_WRITE = 0x004a5870
+MF_STREAM_GET_SIZE = 0x004a59d0
+MF_PATH = 0x1c
+MF_MODE = 0x2c
+MF_CHUNK_ARG = SCRATCH + 0x1000
+MF_TAIL_ARG = SCRATCH + 0x2000
+
+
+def _mf_record_write(m, ecx, args):
+    buffer, size = args
+    return (bytes(m.guest_read(buffer, min(size, 0x1000))), size)
+
+
+def _mf_length(seed):
+    """The fake file's length for Open and Close: the container, or in a
+    quarter of the cases more than one checksum block (0x40000 bytes; the
+    bytes past the container are a pattern), so that the checksum pass
+    reads a whole block first."""
+    data = _mf_container(seed)
+    return len(data) if seed % 4 else 0x40000 + 8 + (seed >> 2) % 0x40
+
+
+def _mf_get_size(m, ecx, args, h):
+    return _mf_length(m.seed)
+
+
+def _mf_long_read(m, ecx, args, h):
+    """CMapFileStream::Read on the file of _mf_length (no read errors)."""
+    buffer, size = args
+    data = bytearray(_mf_container(m.seed))
+    if m.seed % 5 == 1:
+        data[4:8] = struct.pack("<I", 12)  # an invalid file type
+    length = _mf_length(m.seed)
+    position = _mf_dword(m, ecx + 8)
+    count = max(0, min(size, length - position))
+    part = bytes(data[p] if p < len(data) else (p * 7 + m.seed) & 0xFF for p in range(position, position + count))
+    if part:
+        m.guest_write(buffer, part)
+    m.guest_write(ecx + 8, struct.pack("<I", position + count))
+    return count
+
+
+def _mf_long_seek(m, ecx, args, h):
+    offset = struct.unpack("<i", struct.pack("<I", args[0]))[0]
+    position = _mf_dword(m, ecx + 8)
+    new = {0: offset, 1: position + offset}.get(args[1], _mf_length(m.seed) + offset) & 0xFFFFFFFF
+    m.guest_write(ecx + 8, struct.pack("<I", new))
+    return new
+
+
+MF_WRITE_PROBES = {
+    MF_STREAM_SEEK: (2, "thiscall", "probe"),
+    MF_STREAM_WRITE: (2, "thiscall", "probe", None, _mf_record_write),
+}
+MF_FILE_PROBES = {
+    MF_STREAM_OPEN: (2, "thiscall", "probe"),
+    MF_STREAM_CLOSE: (0, "thiscall", "probe"),
+    MF_STREAM_READ: (2, "thiscall", "probe", _mf_long_read, _mf_record_read),
+    MF_STREAM_SEEK: (2, "thiscall", "probe", _mf_long_seek),
+    MF_STREAM_WRITE: (2, "thiscall", "probe", None, _mf_record_write),
+    MF_STREAM_GET_SIZE: (0, "thiscall", "probe", _mf_get_size),
+    0x004a8f10: (2, "thiscall", "probe"),  # the skip-list node destructor (see ReleaseChunk)
+}
+
+
+def mapfile_write_chunk(rng, pool, args):
+    """The chunk argument: its header's size (8 + data) and random data."""
+    size = 8 + rng.randrange(80)
+    return [(MF_CHUNK_ARG + 4, size, 4)]
+
+
+def mapfile_write_tail(rng, pool, args):
+    """WriteChunkWithTail: the chunk's size covers the tail (args[3])."""
+    return [(MF_CHUNK_ARG + 4, 8 + args[3] + rng.randrange(60), 4)]
+
+
+def mapfile_open_world(rng, pool, args):
+    """Open: the object's path (a std::string, sometimes the argument
+    itself), the argument string, the stored checksum field; the fake
+    file's first reads succeed (Open's reads of a missing file take
+    uninitialized stack memory, see map_file_io.cpp: not modelled)."""
+    fields, ptr = string_fields(rng, MF_PATH, STRING_SELF_BUFFER)
+    other, _ = string_fields(rng, STRING_OTHER, STRING_OTHER_BUFFER, shared_ptr=ptr)
+    return fields + other + [(MF_POSITION, 0, 4), (MF_ERROR, 0, 4), (0x130, rng.getrandbits(32), 4)]
+
+
+def mapfile_close_world(rng, pool, args):
+    mode = rng.choice((1, 2, 2, 3, 5, rng.getrandbits(32)))
+    return [(MF_MODE, mode, 4), (MF_POSITION, 0, 4), (MF_ERROR, 0, 4)] + mapfile_cache(rng, 0)
+
+
+def _mf_open_path(rng, pool):
+    return WORLD_BASE + (MF_PATH if rng.random() < 0.2 else STRING_OTHER)
+
+
+def _mf_open_mode(rng, pool):
+    return rng.choice((1, 1, 5, 2, 3, 0, 4, 6, rng.getrandbits(32)))
+
+
+SPECS += [
+    # The stream's constructor (0x4a55e0, CFile's 0x6195c0) and the
+    # skip-list constructor (0x60b9f0) run as is.
+    Spec("CMapFile_Construct", 0x004a5a70, "thiscall", [anything]),
+    # The container's checksum and type come from _mf_container; a valid
+    # checksum in about half the cases (the stored field is random).
+    # Dead: 0x4a5cb1 (npos below the length) and 0x4a5cbc (std::_Xran when
+    # a string assigned to itself is shorter than the length it just took)
+    # of the inlined assign(x, 0, npos).
+    Spec("CMapFile_Open", 0x004a5c80, "thiscall", [_mf_open_path, _mf_open_mode], eax_mask=0,
+         presets=mapfile_open_world, callees=MF_FILE_PROBES, exempt_blocks=(0x004a5cb1, 0x004a5cbc)),
+    # Not reached: 0x4a5fd3, the inlined iterator's destructor call, only
+    # taken when the dictionary pointer is null or the walk already ended
+    # (neither can happen at the loop's start).
+    Spec("CMapFile_Close", 0x004a5f40, "thiscall", [], eax_mask=0, presets=mapfile_close_world,
+         callees=MF_FILE_PROBES, exempt_blocks=(0x004a5fd3,)),
+    Spec("CMapFile_WriteChunk", 0x004a6540, "thiscall", [anything, anything, one_of(WORLD_BASE + MF_CHUNK_ARG)],
+         eax_mask=0, presets=mapfile_write_chunk, callees=MF_WRITE_PROBES, new_fails=0.03),
+    Spec("CMapFile_WriteChunkWithTail", 0x004a6600, "thiscall",
+         [anything, anything, one_of(WORLD_BASE + MF_CHUNK_ARG), between(0, 40), one_of(WORLD_BASE + MF_TAIL_ARG)],
+         eax_mask=0, presets=mapfile_write_tail, callees=MF_WRITE_PROBES, new_fails=0.03),
+    Spec("CMapFile_WriteChunkData", 0x004a66d0, "thiscall",
+         [anything, anything, between(0, 120), one_of(WORLD_BASE + MF_CHUNK_ARG)],
+         eax_mask=0, callees=MF_WRITE_PROBES, new_fails=0.03),
+]

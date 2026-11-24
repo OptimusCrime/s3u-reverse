@@ -84,15 +84,50 @@ every distinct chunk key twice with the original and our GetChunk:
   (through g_skipListRandomBits 0x7e8e24 / g_skipListRandomBitsLeft
   0x7a4030), so loading a file consumes CRT random numbers; the simulation
   RNG is not involved.
-- CMapFile::Open (0x4a5c80, not yet replaced): a bad file type does not end
-  Open: it logs "LOAD: Invalid filetype", closes the stream (which clears
-  the error) and sets error E_INVALIDARG (0x80070057, through the folded
-  setter 0x4276a0, no throw), then still runs the checksum pass. The pass
-  reads 0x40000 bytes each time and checksums the bytes it expected. When
-  the file could not be opened, the reads fail and the file type and the
-  checksum come from uninitialized stack memory (a 256 KB buffer); the
-  result is an error either way, but which code stays depends on that
-  memory. A reimplementation of Open has to document this.
+- CMapFile::Open (0x4a5c80) and the rest of the container are replaced
+  since session 52, see below.
+
+## Verified open, close and write path (session 52)
+
+`src/s3re/game/fileformats/map_file_io.cpp` replaces the constructor
+(0x4a5a70), Open (0x4a5c80), Close (0x4a5f40) and the writers WriteChunk
+(0x4a6540), WriteChunkWithTail (0x4a6600) and WriteChunkData (0x4a66d0).
+In-process tests (`map_file_io_tests.cpp`) compare them with the original on
+every file under `Map\` and `Save\` (read only), on random containers and on
+savegames written into a temporary folder (the written bytes are compared,
+then reopened with the checksum check); `MapFile_AllGameFiles` now opens
+through our Open.
+
+- Constructor: the path's allocator byte is the low byte of the `rethrow`
+  argument (its stack slot); `mode` (+0x2c) is left as it was.
+- Open: `path = *arg` is std::string assign(x, 0, npos) (inlined; ours calls
+  0x401d60). `open` = 1 and `mode` are set before anything is read. Read
+  mode (bit 0) opens the stream with the caller's mode, write mode (bit 1
+  without bit 0) with mode 3 and writes a placeholder checksum (the field's
+  value) and type 11. A bad file type does not end Open (see above). The
+  checksum pass reads 0x40000 bytes each time and checksums the bytes it
+  expected from GetSize.
+  **Known difference:** when a read fails (a file that cannot be opened,
+  an I/O error) the original uses uninitialized stack memory for the file
+  type and the checksum buffer; ours uses 0 and zeros. A failed open is
+  reported either way, only the error code (E_INVALIDARG or the stream's)
+  can differ. The tests zero the stack below their frame, so the original
+  reads zeros as well, and then compare.
+- Close: frees the cached chunk buffers, clears both dictionaries
+  (0x60bd80), and only in mode 2 exactly (not 3) recomputes the checksum
+  from offset 8 and writes it at offset 0; it does not keep that checksum
+  (+0x130 = 0 afterwards).
+- WriteChunk / WriteChunkWithTail ignore the sub index (the caller filled
+  in the header); WithTail seeks to the end before allocating, WriteChunk
+  after copying. WriteChunkData writes the 8-byte header itself (key,
+  size + 8), then the payload encoded from its first byte with the counter
+  at 0x18a, while GetChunk decodes payload byte j with the counter at
+  0x628 + j * 0xc5. Only the counter's sign bit matters (it is ORed into
+  the key as 0xff), and both reach it after about 10.9 million bytes, at
+  slightly different bytes; so a WriteChunkData chunk over ~10.9 MB would
+  not read back correctly (none is that big). `MapFileWrite_HugeChunks`
+  writes 11.2 MB chunks with all
+  three writers and compares the files.
 
 ## Map chunks (CGameData::LoadMap 0x4fd540 and the menus)
 
@@ -148,6 +183,57 @@ The original names come from SaveGame's out-of-memory labels (`Win32::ThrowOutOf
 
 After loading: UnblockCastleTiles. Every economy sector that no tile references (tile +0x14) gets
 id byte 0xff ("LOAD: Dropped eco %i"). Then world+0x2d278 (minimap_ready) = 1.
+
+## Verified savegame loader (session 52)
+
+`CLogicThread::LoadSaveGame` (0x508fa0) is replaced
+(`src/s3re/game/logic/load_save_game.cpp`; chunk layouts as packed structs in
+`src/s3re/game/fileformats/savegame_chunks.h`). The table above is confirmed
+by the in-process tests (every savegame under `Save\`, loaded by the
+original and ours into two worlds, and synthetic savegames for every
+version gate), with these details:
+
+- Order: chunk 0 (only +8 version is read; the chunk is **never released**,
+  it stays in the cache), 1, 2/0, 2/1, 3/row for rows 0..map_size-1 (the
+  map size from chunk 1, re-read each row), 4, 6, 7, 8, 9, 10, 11, 12, 13,
+  14, 15, 16, DebugLog "Savefile Version : %d", then the versioned chunks
+  (0x18 + 0x19 from 0x82, 0x1c from 0x86, 0x1d from 0x96, 0x1f from 0x99;
+  older: colour indexes 0..19 = i, ProdStat zeroed, objectives zeroed,
+  timeout 60), Player +8 cleared for every player below 0x89,
+  UnblockCastleTiles, the eco drop, minimap_ready = 1. Every other chunk is
+  released right after its copy.
+- Chunk 1 ("general"): camera_drawn_x/y are not read; both are set to
+  10,000,000 (forces a redraw). +0x2c (minimap_cycle) is not read; it is set
+  to 63. The RNG state is three words (+0x1c..+0x21). +0x30 goes to
+  g_lastDrawnTick (0x7dfd4c), +0x34 to g_gameTick. The player info table
+  g_playerInfo (0x7acfa8, 20 x 0x44 bytes): +0 and +4 from the record's
+  first two dwords, the name (`std::string` at +8) assigned from the
+  0x100 characters (assign_cstr_or_empty 0x413d70, up to the first zero),
+  +0x18..+0x40 from the record's +0x108..+0x130.
+  +0x1848 -> g_strengthDivisor (active players), +0x184c -> g_gameOutcome,
+  +0x1850 + 1 -> g_campaignMission.
+- Chunk 2/1 ("events"): 3000 dwords are copied into the event ring like
+  into the pending-event ring, but the event records are 16 bytes: only
+  750 of the 1000 events (12,000 of 16,000 bytes) come from the file.
+- Table chunks (7 settlers 0x40, 8 buildings 0x3a, 9 piles 0xe, 13 trades
+  0x5a, 14 timer 0x14 bytes): +8 the high-water mark, then (mark + 1)
+  records from index 0. Chunk 4 copies (area_high_water + 1) area records.
+- **Chunk 0x19 of the game's own savegames is 40 bytes** (16 colour
+  indexes), but the loader copies 40 data bytes (20 indexes): colours
+  16..19 come from the 8 heap bytes after the chunk buffer (the slack of
+  its 48-byte heap block, contents left from earlier allocations). Ours
+  reads the same bytes; the in-process test leaves those four indexes out
+  for the game's files (the two runs' heaps differ) and compares all 20 on
+  synthetic savegames. The other chunks of the three savegames are at
+  least as long as the loader reads.
+- g_victoryProtectActive (0x7deb54) = 1 when the loaded victory conditions
+  have protect_players (+0x44) set (only on the >= 0x82 path).
+- Eco drop: tiles 0..map_size-1 in both directions mark their area (tile
+  +0x14) when 0 < area < 4096; every unmarked sector of the 4096 gets
+  player byte 0xff, with "LOAD: Dropped eco %i" when it was not 0xff
+  already.
+- In the three savegames of the installation (version 0xa0, 704 x 704, 732
+  chunks) every chunk the loader asks for exists.
 
 ## Load call trees
 

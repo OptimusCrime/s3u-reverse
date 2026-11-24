@@ -149,10 +149,32 @@ std::uint32_t CountConversions(const char* format) {
     return count;
 }
 
+// Calls of the folded `ret` that are not DebugLog: the Watcom containers'
+// element destroyers call an empty destructor (thiscall, ECX = the
+// element) that the linker folded into DebugLog's bytes; their first stack
+// slot is a saved register that may point into S3.EXE's data (e.g. the
+// chunk cache's node deallocator 0x4a8f10, reached from
+// CLogicThread::LoadSaveGame with EDI = 0x7ad4fc). Return addresses.
+constexpr std::uintptr_t kFoldedDestructorSites[] = {
+    0x00428310, 0x00429013, 0x00472ec6, 0x004a8f26, 0x005b8003, 0x005dfe53,
+};
+
+bool IsFoldedDestructorCall(std::uintptr_t site) {
+    for (const std::uintptr_t folded : kFoldedDestructorSites) {
+        if (site == folded) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // `stack` is ESP at entry: [0] return address, [1] format, [2...] arguments.
 void __stdcall LogMessage(const std::uint32_t* stack) {
     const std::uintptr_t site = stack[0];
     const std::uintptr_t formatAddress = stack[1];
+    if (IsFoldedDestructorCall(site)) {
+        return;
+    }
     if (g_capture != nullptr && formatAddress >= kGameDataBegin && formatAddress < kGameDataEnd) {
         DebugLogCall call{};
         call.format = static_cast<std::uint32_t>(formatAddress);

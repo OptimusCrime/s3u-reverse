@@ -109,6 +109,13 @@ inline constexpr std::uint32_t ChunkKey(std::uint32_t type, std::uint32_t subInd
 // starts at the chunk type's low byte and takes each decoded byte in.
 void DecodeChunkData(std::uint8_t* data, std::uint32_t size, std::uint8_t key);
 
+// The rolling XOR of the write path (WriteChunk 0x4a659b..0x4a65c4), the
+// inverse of DecodeChunkData: bytes begin..end-1 with the key starting at
+// the chunk type's low byte and the counter at `counter` (0x628 from the
+// chunk start, 0x18a for WriteChunkData's payload).
+void EncodeChunkData(std::uint8_t* data, std::uint32_t begin, std::uint32_t end, std::uint8_t key,
+                     std::uint32_t counter);
+
 // The file checksum step (Open 0x4a5e96..0x4a5ead): rotate left by one,
 // with the XOR applied before the carried-in bit is ORed in.
 inline constexpr std::uint32_t ChecksumStep(std::uint32_t checksum, std::uint32_t word) {

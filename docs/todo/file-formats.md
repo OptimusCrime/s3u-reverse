@@ -16,18 +16,16 @@ LOGBOOK session entry).
   "messages"): rename in layout.h / re/world_layout.md. Dirk/Pathing.cpp's
   range in re/source_files.csv probably wrongly includes the CMapFile
   stream 0x4a55e0..0x4a5c80.
-- **Reimplementation order (container read side verified in session 51,
-  re/file_formats.md "Verified container"):** next
-  `CLogicThread::LoadSaveGame` 0x508fa0 (all direct callees verified;
-  mostly memcpy of world regions); then CMapFile::Open 0x4a5c80 (quirks: a
-  bad file type still runs the checksum pass; an unopenable file reads
-  type and checksum from uninitialized stack memory, so the remaining
-  error code depends on it), Close 0x4a5f40, the constructor 0x4a5a70,
-  the write path WriteChunk 0x4a6540 / WriteChunkWithTail 0x4a6600 /
-  WriteChunkData 0x4a66d0; then `CGameData::LoadMap` 0x4fd540 (needs
-  PrepareLoadedTerrain 0x519540, SpawnSettlersOnWater 0x50dc10,
-  AddPlayerTowns 0x5074b0 and the colour helpers 0x4351e0 / 0x49fec0).
-  Optional: the Watcom skip list (0x60bab0/0x60bbe0/0x60be20) as our code.
+- **Reimplementation order (the CMapFile container and LoadSaveGame are
+  verified, sessions 51/52; re/file_formats.md):** next
+  PrepareLoadedTerrain 0x519540 and SpawnSettlersOnWater 0x50dc10 (all
+  callees verified), PlaceTown 0x506cf0 -> AddPlayerTowns 0x5074b0, the
+  colour helpers 0x4351e0 / 0x49fec0, then `CGameData::LoadMap` 0x4fd540;
+  then the savegame writer `CLogicThread::SaveGame` 0x509980. Optional:
+  the Watcom skip list (0x60bab0/0x60bbe0/0x60be20) as our code.
+- **Whole-game evidence for the loaders:** `python tools/check_save.py
+  "slot N.sav" --ticks 2000 --against-original` for slots 1..3 (opens the
+  game window).
 - **Shared catch-type helper:** the SEH filter that matches MSVC 6.0
   catchable types exists twice (execute_commands.cpp,
   map_file_stream.cpp); make it one helper.

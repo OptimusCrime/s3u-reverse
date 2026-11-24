@@ -6,25 +6,30 @@ LOGBOOK session entry).
 
 ## Computer players (re/computer_players.md)
 - **Package A2: small READY helpers** of the AI range (`python
-  tools/frontier.py --range 54cbd0 59fcd0 --library-done`; without that
-  flag ~93 already classified std::string static initializers show up as
-  READY). Done in sessions 48 and 51 (see the LOGBOOK). Left: the
-  woodcutter 0x567e00 and stonecutter 0x568420 conditions (two float
-  curves per race and stage at 0x7e1300..0x7e137c, jump tables
-  0x568200..0x568240; races above 3 keep the defaults from 0x65a57c; a
-  per-race woodcutter surplus term), residences 0x568890 (uses Random),
-  and small READY ones: 0x59db30, 0x571f60, 0x58a250, 0x59a720, 0x58b410,
-  0x573810, 0x58b380, 0x593040, 0x5934a0. Open: the meaning of
-  AiGroupOrders +0x1c48 (`group_flags1c48`, 20 x 10 bytes cleared by
-  Army::Reset).
+  tools/frontier.py --range 54cbd0 59fcd0 --library-done`). Done in
+  sessions 48, 51 and 52 (see the LOGBOOK). Left: the woodcutter 0x567e00
+  and stonecutter 0x568420 conditions (x87 float curves per race and
+  stage at 0x7e1300..0x7e137c, jump tables 0x568200..0x568240; races
+  above 3 keep the defaults from 0x65a57c), residences 0x568890 (uses
+  Random), the enemy counts 0x58a610 / 0x58a2c0 (on g_aiEnemySearch),
+  `AI::OwnersLandHasResource` 0x599df0 (unblocks 4),
+  `CEvaLand::EvaluateCell` 0x5540f0, FindNode 0x573be0,
+  `HOUSE_GROUND_REQUEST_NOTE::Init` 0x575d60, 0x571c40, and the ten spell
+  casters 0x5957c0..0x596210 (READY since SendCastSpell). Open: the
+  meaning of AiGroupOrders +0x1c48 (`group_flags1c48`).
 - **Who creates the AiPlayerData nodes** (one per economy area; list
   +0x200 is the deletion queue, session 48); the constructor part
   0x550a30 (calls AddAgent) is next to 0x550f80. AiPlayerData offsets are
   list-node offsets (value from +8): documented in ai_helpers.cpp
   (session 51), the fields are not re-based yet.
-- **Package A4: command senders** 0x58e220..0x58ec33 and
-  0x590990..0x590d86: need `MessageQueue::Push` (pass-through hook) and
-  `GameSetup_sub_4318a0` (0x7a7a18 +0x7c flag; name it) as probed callees.
+- **SendPrioritizeSite 0x58e510 (left out of package A4, session 52):**
+  the PrioritizeSite (0xf5) handler takes the player from message byte 6,
+  which this sender never writes (stack garbage); the handler does
+  nothing unless that byte equals the site's owner. So whether a computer
+  player's site prioritisation works depends on the original's stack
+  contents. Next: log byte 6 against the site owner in a real game
+  (runtime observation), then decide how to reimplement it. The other 18
+  senders are verified (ai_commands.cpp).
 - **Package A5: Cevaland** (land evaluation) and **A6: the agents' run
   functions** (slot 8), smallest first; then 0x550f80 and the
   constructor 0x550900 / 0x550a30.
