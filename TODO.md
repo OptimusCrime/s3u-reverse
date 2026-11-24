@@ -118,6 +118,50 @@ Each item: what, why, and where to start.
   ai_layout.h is the same object as ComputerPlayer (merge them when
   ai_helpers.cpp is next touched); a world-field list of the AI range with
   `tools/world_fields.py`.
+- **Corrections from the naming pass (session 50,
+  `re/computer_players_naming.md`)**, each touching code or layouts:
+  rename the verified `BLACK_BOARD_NOTE::CancelAtHandler` 0x582510 ->
+  `ExecuteAtHandler` (slot 10 carries a request out: it ends in the
+  PlaceBuilding sender 0x576430; `agent_slot::kCancelNote` -> `kExecute`,
+  ai_layout.h, re/computer_players.md, re/structs.md); verified
+  `AI::ListFirst` 0x559260 is the site tree's `begin()`; verified
+  `AI::List::begin_580220` / `empty_580230` are `std::map` `end()` /
+  `empty()` (MakeBuildOrders takes the last = best entry);
+  `BLACK_BOARD_AGENT::vf05` -> `IsBusy`; unify `AI::EvaLand::*` /
+  `AI::CEvaLand_*` under `AI::CEvaLand::`; `AI::BlockCentreByte8` reads
+  the centre tile's owner. Layouts: `g_aiGroupOrders` is 0x20f8 bytes
+  (not 0x898), `g_aiArmyState` only 0x51c (its fields from +0x630 belong
+  to the census at 0x7e5ef8; savegame chunks 0x15..0x17);
+  `g_aiUnk7e3134` is the CEvaLand object (`g_aiLandEvaluation`);
+  CComputerPlayer +0x774 is that pointer, not "settlement_lists";
+  AiPlayerData offsets are list-node offsets (value from +8).
+  re/computer_players.md: "the AI never writes the world directly" is
+  wrong (the military code edits player_lists, ProcessWorldEvents 0x590da0
+  consumes the event ring); the "list changed" flag is +0xf0 + 4*p; the AI
+  code ends at 0x59e0a0 (0x59e6f0.. is Credits code; also in
+  re/source_files.csv).
+- **Original bugs to keep** (found in the naming pass): 0x58af60 always
+  returns 0 (best distance starts at 0); `AI::FewUnownedTilesNear`
+  0x59c2c0 always returns 1; `AI::CastBattleSpells` 0x5953b0 pairs the
+  Amazons' mana checks with the wrong casters.
+
+## File formats (re/file_formats.md)
+
+- **Corrections from the naming pass (session 50):** `g_strengthDivisor`
+  0x7acfa4 is the number of active players (`g_activePlayerCount`;
+  UpdateEnvironment's 0x600 / (n + 4)); `g_playerTallies` 0x7acfd4 is +0x2c
+  into a 20 x 0x44-byte player-info table at 0x7acfa8 (re-base the global
+  with the real record); the world regions' original names from the save
+  labels ("timer" = effects +0x36700, "warmap" = presence_a/b,
+  "activesettlers" = player_lists, "diggertab" = site_cache +
+  footprint_scratch, which is saved, so not scratch; "sectors", "events",
+  "messages"): rename in layout.h / re/world_layout.md. Dirk/Pathing.cpp's
+  range in re/source_files.csv probably wrongly includes the CMapFile
+  stream 0x4a55e0..0x4a5c80.
+- **Reimplementation order:** the CMapFile container (checksum, XOR key,
+  chunk table) is self-contained and testable against every map and save
+  file; then `CGameData::LoadMap` 0x4fd540 and
+  `CLogicThread::LoadSaveGame` 0x508fa0 (mostly memcpy of world regions).
 
 ## Naming
 

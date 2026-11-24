@@ -34,7 +34,12 @@ progress.
    leftovers (0x591e00, 0x572420, the larger economy conditions, the
    snapshot 0x567910), the DoomNote renames, A4 command senders, A5
    Cevaland, A6 the agents' run functions, then 0x550a30 / 0x550f80.
+   The whole AI range is named now (session 50): start from the names and
+   `re/computer_players_naming.md`; the corrections that touch code are in
+   TODO.md.
 4. **File formats** (savegame loader 0x508fa0 first, then maps, graphics).
+   Container format, chunk tables and load call trees are in
+   `re/file_formats.md` (session 50); start with the CMapFile container.
 5. (Done in session 49: the user's full game
    `recordings/fullgame-20261124-0055-seed10779.s3rec`, 138,402 ticks on
    M704-2-Longrun as Romans, replayed identical against the original and
@@ -203,9 +208,10 @@ disassembly; "READY" = not done, every direct callee done, all game code
 5. **File formats: savegames, Picture/GfxData.** Savegame loader 0x508fa0
    (677 ins, called by CLogicThread::OnStart) needs Dirk/SaveGames.cpp's
    chunk readers 0x4a60f0/0x4a6310 (unit 0x4a55e0..0x4a77c0, 30 SaveGame
-   functions / 7,200 ins), which need Win32 file wrappers 0x60bab0/0x60bbe0/
-   0x60be20 and probably a decompressor 0x4a57b0/0x4a5930/0x4a5a60 (not
-   analysed), plus std::string 0x413d70. Picture (194 functions, 25,400
+   functions / 7,200 ins), plus std::string 0x413d70. (Corrected in session
+   50: 0x60bab0/0x60bbe0/0x60be20 are the Watcom skip list of CMapFile's
+   chunk cache, 0x4a57b0/0x4a5930/0x4a5a60 the stream's Read/Seek/HasError;
+   there is no compression, see re/file_formats.md.) Picture (194 functions, 25,400
    ins, 79 READY; includes zlib/libpng at 0x5b2fb3..0x5b50ad) and GfxData
    (67, 7,700 ins, 29 READY) are the graphics loaders: self-contained,
    verifiable by comparing decoded bytes, needed for the macOS port.
@@ -629,6 +635,47 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-24 (50): naming pass over the AI range and the file formats
+
+The user asked to identify and name more functions in the areas we work
+on next. Five parallel read-only reviews (Ghidra through REA plus
+build/s3.asm), one per range: AI 0x54cbd0..0x565000, 0x565000..0x58b520,
+0x58b520..0x596650, 0x596650..0x5a0000, and the file formats
+(Dirk/SaveGames.cpp 0x4a55e0..0x4a77c0, the loaders in 0x4fd000..0x50a000,
+Win32\Mapping.cpp, 0x60b000..0x60d000). Each wrote proposals (address,
+old name, new name, confidence, evidence); the new `tools/apply_names.py`
+merged them into re/functions.csv: 425 names (high -> identified, medium
+stays classified, note "Named (session 50, conf): evidence. Was OLD.").
+Then a mechanical rule over the whole binary found 192 more static
+std::string initializers (registry path "Software\BlueByte\Siedler3\1.0"
++ "\General" / "\Index Server" / "\Patches", one set per source file
+that includes the header): followed by StaticDtorReg_X, writes X, calls
+0x401c70 -> `StaticInit_X`, category compiler. 15 MSVC6 container rows
+moved to category stl. Understood: 58.8 % -> 64.0 % (game classified
+3,047 -> 2,536). inventory.py check passes. No code changed, nothing
+verified.
+
+Findings (details in the new `re/file_formats.md` and
+`re/computer_players_naming.md`):
+- Maps and savegames share the Dirk::CMapFile container: a checksum over
+  bytes 8..end, the file type, then chunks `[sub<<16|type][size][data]`,
+  data XORed with a rolling key; no compression. A parser written from it
+  recomputed the stored checksums of 384-2-Lakes.map and slot 1.sav.
+- 0x4fd540 is `CGameData::LoadMap`, 0x508fa0 `CLogicThread::LoadSaveGame`,
+  0x509980 `CLogicThread::SaveGame`; SaveGame's labels give the original
+  names of world regions ("timer", "warmap", "activesettlers",
+  "diggertab", ...; TODO.md "File formats").
+- AI: CEvaLand grid cells and area records decoded, the AI event ring,
+  the census layout, the request chain down to the PlaceBuilding sender,
+  the military AI (`AI::RunMilitary` 0x58f990, command senders named by
+  command id), AI save/load (`AI::SaveState`/`LoadState`, chunks
+  0x15..0x17). Several existing names and layouts are wrong (verified
+  `CancelAtHandler`, the AI globals' sizes; TODO.md), and three original
+  bugs a reimplementation must keep.
+- The LOGBOOK roadmap's "Win32 file wrappers" and "decompressor" guesses
+  were wrong (corrected in the roadmap item).
+
 
 ### 2026-11-24 (49): the user's full game
 - The user played a whole game: `python tools/play_game.py --map
