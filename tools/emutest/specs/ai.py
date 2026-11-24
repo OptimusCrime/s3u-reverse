@@ -2116,3 +2116,41 @@ SPECS += [
          [scratch(0), scratch(1), scratch(2), scratch(3)],
          presets=count_around_world, globals=count_around_globals, max_cases=600),
 ]
+
+# -- session 54 (ai-land): DiscountExploitedResources -------------------------
+BUILDING_HIGH_WATER = 0x1499e60
+BUILDING_RECORDS = 0x1499e64
+
+
+def discount_world(rng, pool, args):
+    """1..8 building records of players 0..3 (or free), mostly finished
+    resource buildings with their work point often on their row or column;
+    the CEvaLand object at COUNT_LAND (9 x 9 grid at CELL_GRID, random sums)
+    and the owners of the grid cells' centre tiles."""
+    count = rng.randint(1, 8)
+    fields = [(BUILDING_HIGH_WATER, count, 4), (COUNT_LAND + 0x140, 9, 4), (COUNT_LAND + 0x144, 9, 4),
+              (COUNT_LAND + 0x14c, 64, 4), (COUNT_LAND + 0x158, WORLD_BASE + CELL_GRID, 4),
+              (MAP_SIZE, rng.randint(40, 100), 4)]
+    types = (2, 3, 5, 7, 8, 9, 25, 29, 37, 4)
+    for building in range(count + 2):
+        base = BUILDING_RECORDS + building * 0x3a
+        x, y = rng.randrange(80), rng.randrange(80)
+        roll = rng.randrange(3)
+        work_x = x if roll == 0 else rng.randrange(80)
+        work_y = y if roll == 1 else rng.randrange(80)
+        kind = rng.randrange(64) if rng.random() < 0.1 else rng.choice(types)
+        owner = 0xFF if rng.random() < 0.15 else rng.randrange(4)
+        buildup = rng.randrange(1, 256) if rng.random() < 0.15 else 0
+        fields += [(base, owner, 1), (base + 2, x, 2), (base + 4, y, 2), (base + 6, kind, 1),
+                   (base + 0x21, buildup, 1), (base + 0x30, work_x, 2), (base + 0x32, work_y, 2)]
+    return fields + cell_centre_owners(rng, 10, 10)
+
+
+def discount_globals(rng, pool, args):
+    return evaland_globals(rng, pool, args) + [(AI_LAND_EVALUATION, WORLD_BASE + COUNT_LAND, 4)]
+
+
+SPECS += [
+    Spec("AI_DiscountExploitedResources", 0x0059bc20, "fastcall", [low_word_noise(4), anything],
+         presets=discount_world, globals=discount_globals, max_cases=300),
+]

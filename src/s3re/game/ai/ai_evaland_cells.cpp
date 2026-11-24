@@ -48,12 +48,29 @@
 //              width / height), then GridSumAround on the same cells. EAX:
 //              left over (depends on the caller's EBP), not used by any of
 //              the callers (0x554980, 0x560e00, 0x59bc20 overwrite it).
+//   0x0059bc20 AI::DiscountExploitedResources(player) fastcall (CX), from
+//              CComputerPlayer::Step every 71 steps (Rainer\CompMapWorkerAgent.cpp):
+//              for every building (AI::GetBuilding 0x58e170 from id 1 until
+//              its end flag) of the player that is finished (+0x21 = 0) and
+//              a woodcutter, stonecutter, forester, coal / gold / iron /
+//              sulfur / gem mine or fishery: ReevaluateAroundTile at its
+//              work point (mines: the building's position); then, only if
+//              that point is on the building's column or row, the 3 x 3
+//              sum of the resource it uses (trees +0x0f, stones +0x10,
+//              resources_around: coal, gold, iron, sulfur, gems, fish; the
+//              forester has none) in the building's own cell is shifted
+//              right by 3, and in the player's cells (CellCentreOwner) of
+//              the square rings 1..4 around it by 2, 1, 0 and "-1": x86
+//              masks the shift count 0xff to 31, which clears the 4th
+//              ring's sums (kept). EAX = the end flag (1).
 
 #include "game/ai/ai_layout.h"
+#include "game/enums/buildings.h"
 #include "game/enums/resources.h"
 #include "game/enums/terrain.h"
 #include "game/globals.h"
 #include "game/layout.h"
+#include "game/typed_fields.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
@@ -326,6 +343,135 @@ std::uint32_t __fastcall AI_CEvaLand_ReevaluateAroundTile(void* self, void* /*ed
     return 0;  // EAX is left over in the original; no caller uses it
 }
 
+namespace {
+
+constexpr std::uintptr_t kGetBuilding = 0x0058e170;           // AI::GetBuilding (fastcall)
+constexpr std::uintptr_t kReevaluateAroundTile = 0x005548b0;  // AI::CEvaLand::ReevaluateAroundTile
+using GetBuildingFn = layout::Building*(__fastcall*)(std::uint32_t id, std::uint32_t* error);
+
+constexpr std::uint32_t kExploitedShift = 3;  // the building's own cell: / 8
+constexpr std::uint16_t kDiscountRings = 4;   // rings 1..4 around it: / 4, / 2, / 1, cleared
+
+// The buildings whose work uses up a resource of the land around them.
+bool IsResourceBuilding(BuildingType type) {
+    using B = BuildingType;
+    switch (type) {
+    case B::Woodcutter:
+    case B::Stonecutter:
+    case B::Forester:
+    case B::CoalMine:
+    case B::GoldMine:
+    case B::IronMine:
+    case B::Fishery:
+    case B::SulfurMine:
+    case B::GemMine: return true;
+    default: return false;
+    }
+}
+
+// Mines work at their own position, the others at their work point.
+bool WorksAtOwnPosition(BuildingType type) {
+    using B = BuildingType;
+    return type == B::CoalMine || type == B::GoldMine || type == B::IronMine || type == B::SulfurMine ||
+           type == B::GemMine;
+}
+
+// Shifts the cell's 3 x 3 sum of the resource the building uses right by
+// `count` (jump tables 0x59bed0 and 0x59bf28; the forester has none). The
+// x86 shift masks its count to 5 bits, so the 4th ring's count 3 - 4 = -1
+// becomes 31 and clears the sum (deliberately reproduced).
+void ShiftResourceSum(AiGridCell& cell, BuildingType type, std::uint32_t count) {
+    count &= 31;
+    const auto shifted = [count](std::uint16_t value) { return static_cast<std::uint16_t>(value >> count); };
+    using B = BuildingType;
+    switch (type) {
+    case B::Woodcutter: cell.trees_around = static_cast<std::uint8_t>(cell.trees_around >> count); break;
+    case B::Stonecutter: cell.stones_around = shifted(cell.stones_around); break;
+    case B::CoalMine: cell.resources_around[kGridCoal] = shifted(cell.resources_around[kGridCoal]); break;
+    case B::GoldMine: cell.resources_around[kGridGold] = shifted(cell.resources_around[kGridGold]); break;
+    case B::IronMine: cell.resources_around[kGridIron] = shifted(cell.resources_around[kGridIron]); break;
+    case B::Fishery: cell.resources_around[kGridFish] = shifted(cell.resources_around[kGridFish]); break;
+    case B::SulfurMine: cell.resources_around[kGridSulfur] = shifted(cell.resources_around[kGridSulfur]); break;
+    case B::GemMine: cell.resources_around[kGridGems] = shifted(cell.resources_around[kGridGems]); break;
+    default: break;
+    }
+}
+
+AiGridCell& CellAt(std::int32_t cellX, std::int32_t cellY) {
+    return *reinterpret_cast<AiGridCell*>(reinterpret_cast<CellCallFn>(kGridCell)(
+        reinterpret_cast<void*>(g_aiLandEvaluation.get()), nullptr, static_cast<std::uint32_t>(cellX),
+        static_cast<std::uint32_t>(cellY)));
+}
+
+// 0x59bd4c..0x59beb0: the square rings 1..4 of cells around (cellX, cellY),
+// each walked from its top-right corner: left, down, right, up (jump table
+// 0x59bf18). The player's cells (owner of the centre tile) get their sum
+// shifted by 3 - ring.
+void DiscountRingsAround(std::int32_t cellX, std::int32_t cellY, std::uint16_t player, const layout::Building& building) {
+    constexpr std::int32_t kSideX[4] = {-1, 0, 1, 0};
+    constexpr std::int32_t kSideY[4] = {0, 1, 0, -1};
+    std::int32_t x = cellX, y = cellY;
+    std::int32_t side_length = 2;
+    for (std::uint16_t ring = 1; ring <= kDiscountRings; ++ring, side_length += 2) {
+        ++x;
+        --y;
+        for (int side = 0; side < 4; ++side) {
+            for (std::int32_t step = 0; step < side_length; ++step) {
+                const auto owner = static_cast<std::uint16_t>(reinterpret_cast<CellCallFn>(kCellCentreOwner)(
+                    reinterpret_cast<void*>(g_aiLandEvaluation.get()), nullptr, static_cast<std::uint32_t>(x),
+                    static_cast<std::uint32_t>(y)));
+                if (owner == player) {
+                    // the type is read again from the record for every cell
+                    ShiftResourceSum(CellAt(x, y), TypeOf(building), kExploitedShift - ring);
+                }
+                x += kSideX[side];
+                y += kSideY[side];
+            }
+        }
+    }
+}
+
+}  // namespace
+
+using DiscountFn = std::uint32_t(__fastcall*)(std::uint32_t player);
+
+std::uint32_t __fastcall AI_DiscountExploitedResources(std::uint32_t player);
+
+S3RE_HOOK(0x0059bc20, AI_DiscountExploitedResources, DiscountFn, Original_AI_DiscountExploitedResources,
+          AI_DiscountExploitedResources);
+
+// Purpose: Makes a computer player's land evaluation count the resources
+// its woodcutters, stonecutters, mines and fisheries already work on as
+// mostly used up (less and less towards the outside), so new buildings of
+// those kinds are placed elsewhere. Called every 71 steps.
+std::uint32_t __fastcall AI_DiscountExploitedResources(std::uint32_t player) {
+    const auto owner = static_cast<std::uint16_t>(player);
+    std::uint32_t end = 0;
+    for (std::uint32_t id = 1; end == 0; ++id) {
+        const layout::Building* building = reinterpret_cast<GetBuildingFn>(kGetBuilding)(id, &end);
+        if (building == nullptr || building->owner != owner || building->buildup != 0) {
+            continue;
+        }
+        const BuildingType type = TypeOf(*building);
+        if (!IsResourceBuilding(type)) {
+            continue;
+        }
+        const bool atOwnPosition = WorksAtOwnPosition(type);
+        const std::uint16_t workX = atOwnPosition ? building->x : building->work_x;
+        const std::uint16_t workY = atOwnPosition ? building->y : building->work_y;
+        reinterpret_cast<AroundTileFn>(kReevaluateAroundTile)(reinterpret_cast<void*>(g_aiLandEvaluation.get()),
+                                                              nullptr, workX, workY);
+        // only when the work point is on the building's column or row
+        if (workX != building->x && workY != building->y) {
+            continue;
+        }
+        const std::int32_t cellX = building->x >> kCellShift, cellY = building->y >> kCellShift;
+        ShiftResourceSum(CellAt(cellX, cellY), type, kExploitedShift);
+        DiscountRingsAround(cellX, cellY, owner, *building);
+    }
+    return end;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -532,5 +678,107 @@ S3RE_TEST(AiEvaLandCells_ComparisonDetectsWrongImplementation) {
         S3RE_EXPECT(quiet.failures() > 0);
     }
 }
+
+// DiscountExploitedResources: the same test map with 1..40 building records
+// of players 0..3 (or free), mostly finished, mostly of the resource
+// building types, their work points often on their row or column; a 10 x 10
+// grid per side with random sums. Compared: the grids and EAX.
+
+namespace {
+
+using DiscountFn = std::uint32_t(__fastcall*)(std::uint32_t player);
+
+void SetUpBuildings(test::Rng& rng, CGameData* world) {
+    using B = BuildingType;
+    constexpr B kTypes[] = {B::Woodcutter, B::Stonecutter, B::Forester, B::CoalMine,   B::GoldMine,
+                            B::IronMine,   B::Fishery,     B::SulfurMine, B::GemMine, B::Sawmill};
+    world->building_high_water = 1 + rng.Below(40);
+    for (std::uint32_t id = 0; id <= world->building_high_water + 1; ++id) {
+        layout::Building& building = world->buildings[id];
+        std::memset(&building, 0, sizeof(building));
+        building.owner = static_cast<std::uint8_t>(rng.Chance(1, 6) ? 0xff : rng.Below(4));
+        building.buildup = static_cast<std::uint8_t>(rng.Chance(1, 6) ? 1 + rng.Below(255) : 0);
+        building.art = rng.Chance(1, 8) ? static_cast<std::uint8_t>(rng.Below(64))
+                                        : Value(kTypes[rng.Below(sizeof(kTypes) / sizeof(kTypes[0]))]);
+        building.x = static_cast<std::uint16_t>(rng.Below(kTestMap));
+        building.y = static_cast<std::uint16_t>(rng.Below(kTestMap));
+        const std::uint32_t roll = rng.Below(3);
+        building.work_x = roll == 0 ? building.x : static_cast<std::uint16_t>(rng.Below(kTestMap));
+        building.work_y = roll == 1 ? building.y : static_cast<std::uint16_t>(rng.Below(kTestMap));
+    }
+}
+
+void CompareDiscount(test::Context& ctx, DiscountFn candidate, int cases) {
+    SavedGlobals saved;
+    const std::uint32_t savedLand = g_aiLandEvaluation;
+    test::WorldBuffer buffer(sizeof(CGameData));
+    CGameData* world = buffer.world();
+    g_aiWorld = world;
+    TestEvaluation a, b;
+    int discounted = 0;
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        test::Rng& rng = ctx.rng();
+        if (i % 20 == 0) {
+            SetUpTestMap(rng, world);
+        }
+        SetUpBuildings(rng, world);
+        g_aiMapSizeX = static_cast<std::uint16_t>(40 + rng.Below(41));
+        g_aiMapSizeY = static_cast<std::uint16_t>(40 + rng.Below(41));
+        rng.Fill(&a.object, sizeof(a.object));
+        rng.Fill(a.cells.data(), a.cells.size() * sizeof(AiGridCell));
+        a.object.width = kTestGrid;
+        a.object.height = kTestGrid;
+        a.object.tiles_per_cell = 64;
+        b.object = a.object;
+        b.cells = a.cells;
+        a.object.cells = a.cells.data();
+        b.object.cells = b.cells.data();
+        const std::uint32_t player = rng.Below(4) | (rng.Chance(1, 4) ? rng.Next32() & 0xffff0000u : 0);
+        g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&a.object);
+        const std::vector<AiGridCell> before = a.cells;
+        const std::uint32_t ra = Original_AI_DiscountExploitedResources(player);
+        g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&b.object);
+        const std::uint32_t rb = candidate(player);
+        for (std::size_t k = 0; k < a.cells.size(); ++k) {
+            discounted += a.cells[k].stones_around < before[k].stones_around ? 1 : 0;
+        }
+        bool same = SameEvaluation(ctx, a, b);
+        same &= S3RE_EXPECT_EQ(ra, rb);
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, player %08x", i, player);
+        }
+    }
+    g_aiLandEvaluation = savedLand;
+    if (cases >= 200 && !S3RE_EXPECT(discounted >= 20)) {
+        ctx.Fail(__FILE__, __LINE__, "  only %d discounted stone sums", discounted);
+    }
+}
+
+// Wrong: the 4th ring keeps its sums (a shift by 3 - 4 taken as 0).
+std::uint32_t __fastcall WrongDiscount(std::uint32_t player) {
+    auto* evaluation = reinterpret_cast<AiLandEvaluation*>(g_aiLandEvaluation.get());
+    std::vector<AiGridCell> before(evaluation->cells, evaluation->cells + kTestGrid * kTestGrid);
+    const std::uint32_t result = AI_DiscountExploitedResources(player);
+    for (std::size_t k = 0; k < before.size(); ++k) {
+        AiGridCell& cell = evaluation->cells[k];
+        if (cell.stones_around == 0 && before[k].stones_around > 15) {
+            cell.stones_around = before[k].stones_around;
+        }
+    }
+    return result;
+}
+
+}  // namespace
+
+S3RE_TEST(AiDiscountExploited_MatchOriginal) {
+    CompareDiscount(ctx, &AI_DiscountExploitedResources, 300);
+}
+
+S3RE_TEST(AiDiscountExploited_ComparisonDetectsWrongImplementation) {
+    test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+    CompareDiscount(quiet, &WrongDiscount, 300);
+    S3RE_EXPECT(quiet.failures() > 0);
+}
+
 
 }  // namespace s3re::game
