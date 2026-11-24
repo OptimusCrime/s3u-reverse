@@ -35,11 +35,11 @@ progress.
    snapshot 0x567910), the DoomNote renames, A4 command senders, A5
    Cevaland, A6 the agents' run functions, then 0x550a30 / 0x550f80.
 4. **File formats** (savegame loader 0x508fa0 first, then maps, graphics).
-5. **Postponed:** the user plays a full game with `python
-   tools/play_game.py`; when the recording arrives, commit it, run
-   `check_replay.py --against-original` and `record_call_counts.py`, and
-   check the test-only paths in TODO.md. The user asked to skip extra
-   synthetic whole-game runs until then.
+5. (Done in session 49: the user's full game
+   `recordings/fullgame-20261124-0055-seed10779.s3rec`, 138,402 ticks on
+   M704-2-Longrun as Romans, replayed identical against the original and
+   recorded; open: the live-vs-replay header/rest hash difference, TODO.md
+   "Evidence and testing".)
 
 **Done in session 48:** computer players A2 (46) and A3 (30), backlog
 cleanups (trivial.py from bytes, crash-safe test stubs, UpdateSoldier spec
@@ -629,6 +629,30 @@ column in `re/functions.csv` filled from `tools/source_files.py`.
   0x5fcdc0 at 0x5fcdfb). Fixed: recordings carry seed and map now.
 
 ## Session log
+
+### 2026-11-24 (49): the user's full game
+- The user played a whole game: `python tools/play_game.py --map
+  M704-2-Longrun --race roman` (seed 10779, high goods, original code,
+  normal speed, no F12), 00:55..03:23, 138,402 ticks, 23,735 commands,
+  ended through the game's menu (FinishGame). Committed as
+  `recordings/fullgame-20261124-0055-seed10779.s3rec` (README row). The
+  aborted first attempt (seed 43191) was deleted.
+- `check_replay.py --recording fullgame-20261124-0055-seed10779
+  --against-original --ticks 138402`: **replay vs original: identical**
+  (original 276 s, ours 343 s with `--fast`); 376 of 702 replacements
+  called. The original's trace is cached.
+- `record_call_counts.py`: 702 rows as source
+  `replay:fullgame-20261124-0055-seed10779`; 53 verified functions are
+  seen in a whole game for the first time (spells: ExecuteSpell,
+  HasManaForSpell, PayForSpell, SpawnSpellEffects, SpellRevealSpot,
+  SpellTransformLand; destroying buildings: DestroyBuildingAt,
+  CrushBuilding, RemoveBuildingFromTiles, RecallBuildingCarriers...;
+  docks: PlaceDockLine, OpenDockLineTile; piles: StealGoodFromPile,
+  ChangePileGood...). Verified functions: 470 seen, 233 tests only.
+- Live trace vs the original's replay (`compare_traces.py`): RNG and map
+  hash identical on every tick, header hash differs from tick 192, rest
+  hash from 4,992: probably UI-written fields not yet skipped by the
+  trace. Needs world dumps of a live game to find (TODO.md).
 
 ### 2026-11-23 (48): source tree move, source_file column, enums split
 

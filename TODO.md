@@ -146,12 +146,16 @@ Each item: what, why, and where to start.
   0x04, 0x05, 0x09, 0x0b, 0x0c, 0x0f, 0x10, 0x11, 0xfb. Run the round-end
   replays/saves against the original and record the call count; the
   multiplayer/UI paths (0x06 text, 0xf4, 0xf7..0xff, messages 3..0x22)
-  have tests only.
+  have tests only. The user's full game (fullgame-20261124-0055-seed10779,
+  session 49) adds ids 0x06, 0x07, 0x08, 0x0e, 0x14, 0x15, 0x18, 0xf1 and
+  0xf5 (identical to the original over 138,402 ticks); ExecuteCommands is
+  one hook, so per-id counts would need a temporary counter.
 - **UpdateSettlers handlers with tests only (session 45).** The
   whole-game checks (two replays, three saves, a random map) never reach
-  these UpdateSettlers jobs; check them against the user's full-game
-  recording (`check_replay.py --recording FILE --against-original`, then
-  `record_call_counts.py`). A per-job hit count needs a temporary counter
+  these UpdateSettlers jobs; the user's full-game recording
+  (fullgame-20261124-0055-seed10779, session 49) is identical to the
+  original and recorded; which of these jobs it reached is unknown until
+  a per-job hit count exists. A per-job hit count needs a temporary counter
   in update_settlers.cpp's dispatch. Jobs (hex):
   building 0x38, 0x6a; drinks 0xe2..0x127 (rice farmer, winegrower,
   distiller/brewer/powder maker, charcoal burner); food 0x6c..0x73,
@@ -225,14 +229,30 @@ Each item: what, why, and where to start.
   `--fast` by default, but normal vs fast has only been compared on file
   maps and a savegame.
 
+- **Live game vs its replay: header and rest hashes differ (session 49).**
+  `compare_traces.py` of the user's live trace
+  (`recordings/fullgame-20261124-0055-seed10779.s3rec.tsv`) against the
+  original's replay of it: RNG state and map hash identical on all
+  138,402 ticks, but the header hash differs from tick 192 (right after
+  the player's first commands) and the rest hash from tick 4,992. Most
+  likely world fields written by the live UI (mouse, menus) that the
+  replay doesn't repeat and the trace doesn't skip yet; the replays of
+  the original and ours are identical, so the verification evidence
+  stands. To find them, the live game needs world dumps: let
+  `play_game.py` pass `--dump-tick` at a few ticks (e.g. 200,5000;
+  ~22 MB each), replay with the same `--dump-tick`, then
+  `tools/diff_world_dumps.py`, check the writers and add skips
+  (trace version bump).
+
 ## Spells: whole-game evidence
 
 The dispatcher CGameData::ExecuteSpell 0x5480B0 and all spell handlers
 of Volker\GodlyEvents.cpp are verified (spells.cpp, spells_land.cpp,
-spell_units.cpp, spell_goods.cpp; packages S1/S2 of session 46). No
-recorded game casts spells yet (all spell counts 0 in the replays and
-savegames): a recording with spells (temples, mana) would give whole-game
-evidence. Note: SpellConvertGoods (0x549BD0) hangs the original game when
+spell_units.cpp, spell_goods.cpp; packages S1/S2 of session 46). The
+user's full game (fullgame-20261124-0055-seed10779, session 49) reaches
+ExecuteSpell, HasManaForSpell, PayForSpell, SpawnSpellEffects,
+SpellRevealSpot and SpellTransformLand; the other spell handlers still
+have tests only. Note: SpellConvertGoods (0x549BD0) hangs the original game when
 cast within ~8 tiles of the map edge (kept).
 
 ## Known differences to clean up
