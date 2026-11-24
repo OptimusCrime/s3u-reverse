@@ -1710,3 +1710,43 @@ SPECS += [
     spell_caster("AI_CastAmazonSpell24", 0x005960d0),
     spell_caster("AI_CastAmazonSpell25", 0x00596210),
 ]
+
+# -- session 53: the enemy counts near a tile (ai_enemy_search.cpp) ---------
+
+ENEMY_SOLDIER_TYPES = (5, 8, 15, 30, 31, 32, 33, 34, 35)
+
+
+def enemy_lists_world(rng, pool, args):
+    """Teams 0..3 for the 20 players; each soldier list (some empty) holds
+    up to 6 settlers on a 64 x 64 map whose tiles belong to players 0..5 or
+    nobody (only the tiles the settlers stand on are set)."""
+    fields = []
+    next_id = 1
+    for player in range(20):
+        record = PLAYER_RECORDS + player * PLAYER_RECORD_BYTES
+        fields.append((record + 0xC, rng.randrange(4), 4))
+        for settler_type in ENEMY_SOLDIER_TYPES:
+            length = 0 if rng.random() < 0.3 else rng.randint(1, 6)
+            ids = list(range(next_id, next_id + length))
+            next_id += length
+            fields.append((record + 0x20 + 2 * settler_type, ids[0] if ids else 0, 2))
+            for k, settler in enumerate(ids):
+                base = SETTLERS + settler * SETTLER_BYTES
+                x, y = rng.randrange(64), rng.randrange(64)
+                fields += [(base + 4, x, 2), (base + 6, y, 2),
+                           (base + 0x10, ids[k + 1] if k + 1 < length else 0, 2),
+                           (TILES + (x * 0x300 + y) * 24 + 8, 0xFF if rng.random() < 0.1 else rng.randrange(6), 1)]
+    return fields
+
+
+def enemy_count_spec(name, address):
+    near = lambda rng, pool: rng.randrange(64) if rng.random() < 0.9 else rng.getrandbits(32)  # noqa: E731
+    return Spec(name, address, "thiscall", [near, near, below(50, 0.1), below(20)],
+                presets=enemy_lists_world, globals=lambda rng, pool, args: [(AI_MAP_WORLD, WORLD_BASE, 4)],
+                max_cases=600)
+
+
+SPECS += [
+    enemy_count_spec("AI_CountEnemySoldiersNear", 0x0058a2c0),
+    enemy_count_spec("AI_CountEnemyBowmenOnTerritoryNear", 0x0058a610),
+]
