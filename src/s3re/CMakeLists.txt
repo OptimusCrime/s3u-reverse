@@ -140,12 +140,14 @@ add_library(s3re SHARED
     game/ai/ai_agents.cpp
     game/ai/ai_army.cpp
     game/ai/ai_army_groups.cpp
+    game/ai/ai_army_orders.cpp
     game/ai/ai_battle_spells.cpp
     game/ai/ai_building_queries.cpp
     game/ai/ai_cell_resources.cpp
     game/ai/ai_census.cpp
     game/ai/ai_commands.cpp
     game/ai/ai_computer_player.cpp
+    game/ai/ai_economy_actions.cpp
     game/ai/ai_economy_conditions.cpp
     game/ai/ai_economy_snapshot.cpp
     game/ai/ai_enemy_search.cpp

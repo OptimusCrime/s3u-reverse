@@ -314,6 +314,31 @@ OutputDebugStringA and sends the group to its gather position. Dead code:
 AssignSoldier's block 0x592aeb (NearestFreeInteriorMilitaryBuilding
 0x58aa70) is guarded by `&highest_group == 0`, so it never runs.
 
+Session 54 (V, `ai_army_orders.cpp`, `ai_economy_actions.cpp`): orders.
+`NearestFreeInteriorMilitaryBuilding` 0x58aa70 skips buildings named by a
+group's AiGroupTarget x or y word (so those two words are probably
+building ids, not coordinates; to confirm) and buildings at the border
+(original quirk: two of its four border probes use the searched point's x).
+`WeakestFrontierMilitaryBuilding` 0x58a7e0 takes the territory radius from
+the map offset table (distance of entry 3500 / 4000 / 5000 for small tower /
+large tower / castle) and picks the frontier building with the fewest
+soldiers in its garrison chain. Mission 56's scripted assault 0x594d40
+sends player 1's groups at player 0's weakest frontier building (the
+inventory said player 1's). `CheckGroupTargets` 0x594a10 ends defences
+without enemies (within 135), attacks on buildings that became the
+player's own, steals against more than a tenth of the group and attacks
+where all attacking groups' members times a float ratio are below the
+enemies within 60 (x87 compare; NaN resets). Thieves (0x594e70, cursor
+AiGroupOrders +0x8e8 `thief_cursors`) and geologists (0x595050, every 7th
+call, counter AiArmyState +0x4b4 `geologist_timers`; nearest mountain by
+the sparse offset search from index 5000 or 500 in g_aiEnemySearch, else a
+random point within 127) go to points without enemy soldiers within 18;
+of the up to five retries, a point found by the fifth is dropped (quirk).
+The economy agent tears down a residence when more than 10 beds are free
+(0x56a000: large above 100, medium above 30, else small) and promotes
+soldiers (0x56a0f0, kinds 0x81..0x83) after 14 x AiPlayerSetup +0xc4 steps,
+at most 3 times (ComputerPlayer +0x768).
+
 ## How decisions reach the simulation
 
 Most decisions don't write the world directly (the world is read through

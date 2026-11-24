@@ -20,7 +20,8 @@ the other function starts from the same state.
 Calls of the game's DebugLog (DEBUG_LOG, a bare `ret`) are recorded with
 their format address and as many argument dwords as the format string has
 conversions, so replacements must log the same messages with the same
-arguments in the same order.
+arguments in the same order. A format in the stack (a text sprintf'd into
+a buffer first) is recorded as its text.
 
 The game's operator new and delete are replaced by a bump allocator in the
 world area (HEAP_OFFSET; reset for every call, so both functions get the
@@ -595,6 +596,11 @@ class Emulator:
         fmt = struct.unpack("<I", bytes(uc.mem_read(esp + 4, 4)))[0]
         base, image_size = self.exe_range
         count = 0
+        if STACK_BASE <= fmt < STACK_BASE + STACK_SIZE:
+            # A text formatted into a stack buffer (sprintf, then DebugLog of
+            # the buffer, e.g. 0x594d40): the text, not the frame's address.
+            self.debug_logs.append(("stack text", bytes(uc.mem_read(fmt, 256)).split(b"\0", 1)[0]))
+            return
         if base <= fmt < base + image_size:
             text = bytes(uc.mem_read(fmt, 256)).split(b"\0", 1)[0]
             count = sum(1 for m in _CONVERSION.finditer(text) if m.group(1) != b"%")

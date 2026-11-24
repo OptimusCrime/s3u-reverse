@@ -21,10 +21,13 @@ constexpr std::size_t kAgentVectorCount = 20;  // g_aiAgentVectors
 #pragma pack(push, 1)
 
 // ---------------------------------------------------------------- player setup
-// An entry of the settings table g_aiPlayerSetups (contents not known).
+// An entry of the settings table g_aiPlayerSetups (contents mostly not known).
 struct AiPlayerSetup {
-    std::uint8_t unk000[0x180];
+    std::uint8_t unk000[0xc4];
+    std::uint16_t promotion_interval;  // 0x0c4 the economy agent promotes soldiers after more than 14 times this many steps (0x56a0f0)
+    std::uint8_t unk0c6[0x180 - 0xc6];
 };
+static_assert(offsetof(AiPlayerSetup, promotion_interval) == 0xc4);
 static_assert(sizeof(AiPlayerSetup) == 0x180);
 
 // ---------------------------------------------------------------- blackboard
@@ -183,8 +186,8 @@ struct ComputerPlayer {
     BlackBoardAgent* agents[kAgentKinds];              // 0x730 by kind (0x551400 adds, 0x551490 deletes); 0x550f80 runs slot 8 of [7] (probably T_ATTACK_AGENT) when the player has no nodes
     std::uint32_t world;                               // 0x75c CGameData*
     std::uint32_t message_queue;                       // 0x760 the logic->net MessageQueue (commands are pushed there)
-    std::uint32_t steps;                               // 0x764 +1 per 0x550f80
-    std::uint8_t unk768;
+    std::uint32_t steps;                               // 0x764 +1 per 0x550f80; 0 after a promotion (0x56a0f0)
+    std::uint8_t promotions;                           // 0x768 soldier promotions made by the economy agent (at most 3, 0x56a0f0)
     std::uint8_t pad769[3];
     std::uint32_t player;                              // 0x76c the player index (constructor argument)
     std::uint32_t setup_index;                         // 0x770 index into g_aiPlayerSetups
@@ -392,7 +395,7 @@ struct AiGroupOrders {
     std::uint8_t group_flags[layout::kPlayers][kUnitGroups];     // 0x320 steal flag: the group goes for a weakly guarded enemy building (0x594080; 0x590c80 tests it)
     AiGroupTarget group_targets[layout::kPlayers][kUnitGroups];  // 0x3e8
     std::uint32_t gather_buildings[layout::kPlayers];            // 0x898 the gather building of a pending attack (0x594080)
-    std::uint32_t per_player8e8[layout::kPlayers];               // 0x8e8
+    std::uint32_t thief_cursors[layout::kPlayers];               // 0x8e8 per player the next thief SendThieves 0x594e70 moves (stored after six)
     std::uint8_t unk938[0x988 - 0x938];
     std::int32_t group_mages[layout::kPlayers][kUnitGroups];     // 0x988 mages per group (0x591c40, 0x5926e0)
     std::uint8_t settlers_with_orders[32000 / 8];                // 0xca8 std::bitset<32000>: group members, hunters, busy geologists
@@ -423,7 +426,7 @@ struct AiArmyState {
     std::uint32_t per_player140[layout::kPlayers];               // 0x140
     std::uint32_t unk190;                                // 0x190
     std::uint32_t attack_delays[layout::kPlayers][kUnitGroups];  // 0x194 countdowns; 0x594000 resets the group when one runs out (groups 1..9: 10 + 2 * group after the reset)
-    std::uint32_t per_player4b4[layout::kPlayers];               // 0x4b4 2000000 after the reset
+    std::uint32_t geologist_timers[layout::kPlayers];            // 0x4b4 per player: calls of SendGeologists 0x595050 since it last worked (works above 6); 2000000 after the reset
     std::uint32_t unk504;                                // 0x504 300 after the reset
     std::uint32_t unk508;                                // 0x508 0
     std::uint32_t unk50c;                                // 0x50c 500
@@ -431,7 +434,7 @@ struct AiArmyState {
 };
 static_assert(offsetof(AiArmyState, unk190) == 0x190);
 static_assert(offsetof(AiArmyState, attack_delays) == 0x194);
-static_assert(offsetof(AiArmyState, per_player4b4) == 0x4b4);
+static_assert(offsetof(AiArmyState, geologist_timers) == 0x4b4);
 static_assert(offsetof(AiArmyState, unk504) == 0x504);
 static_assert(offsetof(AiArmyState, unk510) == 0x510);
 static_assert(sizeof(AiArmyState) == 0x51c);

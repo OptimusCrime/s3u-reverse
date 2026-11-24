@@ -218,4 +218,14 @@ inline constexpr GameText kWideSaveError{0x7302b0};   // L"Error while saving! C
 inline constexpr GameText kWideCannotDeleteTemp{0x730224};  // L"Cannot delete the file Save\Multi\Temp.mps!"
 // Computer players (Rainer\CompMapWorkerAgent.cpp).
 inline constexpr GameText kAiCenterGroup{0x732dd8};  // "Center - player: %d, group: %d \n" (OutputDebugStringA)
+inline constexpr GameText kRandom55{0x732a84};       // "RANDOM_55 wert = %u" (value, DebugLog of mission 56)
+// "Verteidigung building: %d, group: %d, gegner: %d\n" (defence, enemies)
+inline constexpr GameText kAiDefence{0x73303c};
+// "Verteidigung building: %d, player: %d, group: %d abgebrochen - keine Feinde mehr\n" (defence ended, no enemies)
+inline constexpr GameText kAiDefenceOver{0x732fe8};
+// "Attack building: %d, player: %d, group: %d abgebrochen - gehoert mir\n" (attack ended, it is mine; o-umlaut in the binary)
+inline constexpr GameText kAiAttackOwnBuilding{0x732fa0};
+inline constexpr GameText kAiStealTargetDeleted{0x732f64};  // "Tower steal: Attack target %d is deleted for all armys! \n"
+// "Reset global Attack - player: %d, group: %d, building: %d ^gegner ist zu stark\n" (the enemy is too strong)
+inline constexpr GameText kAiGlobalAttackReset{0x732f14};
 }  // namespace s3re::game::texts
