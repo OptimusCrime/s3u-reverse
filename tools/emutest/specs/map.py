@@ -1066,3 +1066,30 @@ SPECS += [
     Spec("CGameData_UpdateMinimapSlice", 0x004fb520, "thiscall", [below(64)], eax_mask=0, presets=minimap_slice,
          globals=minimap_slice_globals, max_cases=150),
 ]
+
+
+# -- load_map.cpp (session 53) ---------------------------------------------------
+
+def loaded_terrain_map(rng, pool, args):
+    """Maps of size 0..3 (no bands) or 4..24: patches of water variants 0..15,
+    shore 0x30 and land, some random bytes."""
+    n = rng.randrange(4) if rng.random() < 0.1 else rng.randint(4, 24)
+    patch = rng.randint(2, 6)
+    fields = [(MAP_SIZE, n, 4)]
+    for x in range(n):
+        for y in range(n):
+            kind = ((x // patch) * 7 + (y // patch) * 3) % 5
+            if rng.random() < 0.05:
+                terrain = rng.getrandbits(8)
+            elif kind < 2:
+                terrain = rng.randrange(16)
+            elif kind == 2:
+                terrain = 0x30
+            else:
+                terrain = rng.randrange(0x10, 0x40)
+            fields.append((tile(x, y) + 0x6, terrain, 1))
+    return fields
+
+SPECS += [
+    Spec("CGameData_PrepareLoadedTerrain", 0x00519540, "thiscall", [], presets=loaded_terrain_map, max_cases=200),
+]
