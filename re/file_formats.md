@@ -158,7 +158,7 @@ File opening happens in the menus: GameSettings::LoadSaveGame 0x432b00 -> CMapFi
   footprint_scratch is **"diggertab"**. footprint_scratch is saved, so it is not scratch
   (digger = levelling builders). pending_events/events are **"events"**. The areas block is
   **"sectors"** (economy sectors, "eco"). Chunk 1 is "general". notifications + 0x2e5e0 are "messages".
-- 0x618250 `CTextException::vf01` is a linker-folded `mov eax,[ecx+4]; ret`. CFileMapping::Create
+- 0x618250 `Folded_GetMember4` is a linker-folded `mov eax,[ecx+4]; ret`. CFileMapping::Create
   uses it as the CWin32Handle handle getter. 0x49f4d0 `Net_sub_49f4d0` is the folded
   `mov eax,[ecx+0x10]; ret` that CMapFile::GetError uses as the stream's error getter.
 - 0x4a6b00/0x4a6b20/0x4a6d40 are WC skip-list virtuals shared by every `<unsigned int,*>`

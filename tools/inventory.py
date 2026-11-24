@@ -25,8 +25,9 @@ Columns of re/functions.csv:
                  stl      = Microsoft C++ standard library template code
                  mfc      = Microsoft Foundation Classes
                  watcom   = Watcom C++ container library (WC* classes)
-                 thirdparty = other statically linked libraries (zlib 1.1.3,
-                            libpng 1.0.2)
+                 thirdparty = other statically linked libraries (PaintLib,
+                            libpng 1.0.2, zlib 1.1.3, Bruce Dawson's
+                            ExceptionHandler.cpp)
                  compiler = other compiler-generated code (e.g. thunks)
   status       classified    = we know which class it belongs to and its role
                                there (vtable slot, destructor), not yet what

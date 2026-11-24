@@ -108,7 +108,11 @@ def main():
         prefix = f"Named ({args.tag}, {conf}): {evidence}"
         if new != old:
             prefix += f" Was {old}."
-        row["notes"] = prefix + (" " + row["notes"] if row["notes"] else "")
+        if row["notes"].startswith("Trivial, proven by its bytes"):
+            # trivial.py check needs its note first.
+            row["notes"] = row["notes"] + " " + prefix
+        else:
+            row["notes"] = prefix + (" " + row["notes"] if row["notes"] else "")
         applied += 1
     print(f"applied {applied}, skipped {skipped}, renamed {len(renames)}")
     if args.dry_run:

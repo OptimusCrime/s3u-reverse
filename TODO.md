@@ -171,6 +171,27 @@ Each item: what, why, and where to start.
   0x5f65f2, 0x5f674b, 0x5fd902, and 0x551637 inside DeactivateNote.
   The source-file range `Credits\cpp_exo_text__diverses.h`
   0x5a0d20..0x5b50ad really ends at the credits code (~0x5a4220).
+  More from the DirectX/Win32 rounds: missing starts 0x5b7810 (the
+  EnumDisplayModes callback), the six surface-copy candidates around
+  0x5c3a40..0x5c40f0 (re/directx_framework.md), 0x60ec20, 0x610380,
+  0x610040, 0x6101a0, 0x615bd0, 0x615bb0, 0x618a30
+  (re/win32_framework.md); false starts 0x5c45e3 (after a catch of
+  0x5c4520), 0x615601 (`CCDAudio::Init_tail`). Source-file ranges
+  around DirectX\ are shifted by about one file (netsession.cpp's last
+  rows are Ddraw.cpp, the DirectSound wrapper sits in "Dplay.cpp",
+  0x5c3740..0x5c4140 in "Dsound.cpp" is CPU detection and the copy
+  benchmark); ExceptionHandler.cpp 0x61b990..0x61c4b8 is not Detach.cpp;
+  0x615520/0x615601 belong to cdaudio.cpp. Fix re/source_files.csv's
+  boundaries (`source_files.py scan`) or add overrides.
+- **Verified names found wrong in the DirectX/Win32/UI rounds (session
+  50)**, each a code rename: `GuidNames_Construct_5b6790` is the
+  `CDirectDrawDevice` (GUID, description, name) constructor;
+  `CWin32Waitable::WaitForXYZ` 0x463100 runs on a wait set
+  (`CWin32WaitableBag`; touches the `--fast` hook in fast.cpp, so bump
+  S3RE_ORIGINAL_TOOLING_VERSION); framework_layout.h CMessageQueue +4 is
+  the window handle, not `owner`; the CSimpleSurface/CSurface fields in
+  re/directx_framework.md. CTextException::vf01 0x618250 is a
+  linker-folded `mov eax,[ecx+4]; ret` with 132 callers (a neutral name).
 
 ## Naming
 

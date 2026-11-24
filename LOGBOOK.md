@@ -718,6 +718,30 @@ because run.py changed): 703 specs, 0 mismatches, self-test 21 of 21;
 unchanged; their passes need a `--full` run) and GenerateRandomMap is
 capped at 1 case as usual.
 
+Third round, on the user's request: the DirectX framework (Gamebase,
+Dxbase, dinput; Ddraw and Dsound; network files left out) and the Win32
+framework (Synchronize, Classes; cdaudio, Registry, Internet, Mapping,
+Detach): four reviews, 269 names. Notes in `re/directx_framework.md` and
+`re/win32_framework.md`. Bruce Dawson's ExceptionHandler.cpp
+(0x61b990..0x61c4b8, writes errorlog.txt) is category thirdparty.
+`apply_names.py` now appends to "Trivial, proven by its bytes" notes
+(trivial.py check needs that note first). Findings:
+- Game-thread slot 10 is OnActivate(bool) (WM_ACTIVATEAPP -> SetActive ->
+  request bit 2), not "OnEvent" (CLAUDE.md corrected; also
+  CComputerPlayer::Step there).
+- Display: fullscreen uses a flip chain, windowed a primary plus an
+  offscreen back buffer copied by a routine chosen by a startup benchmark
+  of five copy methods (with CPU detection). Lost surfaces restore through
+  CDirectDraw slot 3. Sounds: a master buffer plus duplicates kept in a
+  Watcom dictionary, purged every 2.5 s.
+- Input is the mouse only, buffered DirectInput.
+- Registry: ~30 values under HKLM\Software\BlueByte\Siedler3.0\General
+  (re/win32_framework.md has the table); CD music through MCI with a
+  callback window; threads post unhandled exceptions to their parent;
+  framework timeouts become infinite with `-debug`.
+- Source-file ranges around DirectX\ are shifted by about one file, and
+  more missing/false function starts (TODO.md).
+
 
 ### 2026-11-24 (49): the user's full game
 - The user played a whole game: `python tools/play_game.py --map
