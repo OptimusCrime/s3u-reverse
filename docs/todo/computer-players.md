@@ -6,17 +6,18 @@ LOGBOOK session entry).
 
 ## Computer players (re/computer_players.md)
 - **Package A2: small READY helpers** of the AI range (`python
-  tools/frontier.py --range 54cbd0 59fcd0 --library-done`). Done in
-  sessions 48, 51 and 52 (see the LOGBOOK). Left: the woodcutter 0x567e00
-  and stonecutter 0x568420 conditions (x87 float curves per race and
-  stage at 0x7e1300..0x7e137c, jump tables 0x568200..0x568240; races
-  above 3 keep the defaults from 0x65a57c), residences 0x568890 (uses
-  Random), the enemy counts 0x58a610 / 0x58a2c0 (on g_aiEnemySearch),
-  `AI::OwnersLandHasResource` 0x599df0 (unblocks 4),
-  `CEvaLand::EvaluateCell` 0x5540f0, FindNode 0x573be0,
-  `HOUSE_GROUND_REQUEST_NOTE::Init` 0x575d60, 0x571c40, and the ten spell
-  casters 0x5957c0..0x596210 (READY since SendCastSpell). Open: the
-  meaning of AiGroupOrders +0x1c48 (`group_flags1c48`).
+  tools/frontier.py --range 54cbd0 59fcd0 --library-done`; 74 READY after
+  session 53). Done in sessions 48, 51, 52, 53 (see the LOGBOOK). Next:
+  `CEvaLand::EvaluateCell` 0x5540f0 (unblocks 3), RandomPointNearSettler
+  0x594f70 / 0x5952d0, Army 0x592100 / 0x592240, the military-building
+  searches 0x58aa70 / 0x58a7e0 (ret 0xc; 0x58a7e0's first argument looks
+  unused), CountResourceInOwnersLand 0x599a30 (7 callers), CheckSite
+  0x5760d0, small ones 0x593f40, 0x58e200, 0x591c10, 0x58ede0. x87 code
+  (follow CLAUDE.md "Floating point"): residences 0x568890 (curves at 0x7e1380..),
+  woodcutter 0x567e00 and stonecutter 0x568420 (curves per race and stage
+  at 0x7e1300..0x7e137c, jump tables 0x568200..0x568240; races above 3
+  keep the defaults from 0x65a57c). Open: the meaning of AiGroupOrders
+  +0x1c48 (`group_flags1c48`).
 - **Who creates the AiPlayerData nodes** (one per economy area; list
   +0x200 is the deletion queue, session 48); the constructor part
   0x550a30 (calls AddAgent) is next to 0x550f80. AiPlayerData offsets are

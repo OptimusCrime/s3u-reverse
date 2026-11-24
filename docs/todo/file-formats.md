@@ -16,16 +16,22 @@ LOGBOOK session entry).
   "messages"): rename in layout.h / re/world_layout.md. Dirk/Pathing.cpp's
   range in re/source_files.csv probably wrongly includes the CMapFile
   stream 0x4a55e0..0x4a5c80.
-- **Reimplementation order (the CMapFile container and LoadSaveGame are
-  verified, sessions 51/52; re/file_formats.md):** next
-  PrepareLoadedTerrain 0x519540 and SpawnSettlersOnWater 0x50dc10 (all
-  callees verified), PlaceTown 0x506cf0 -> AddPlayerTowns 0x5074b0, the
-  colour helpers 0x4351e0 / 0x49fec0, then `CGameData::LoadMap` 0x4fd540;
-  then the savegame writer `CLogicThread::SaveGame` 0x509980. Optional:
-  the Watcom skip list (0x60bab0/0x60bbe0/0x60be20) as our code.
-- **Whole-game evidence for the loaders:** `python tools/check_save.py
-  "slot N.sav" --ticks 2000 --against-original` for slots 1..3 (opens the
-  game window).
+- **Reimplementation order (the CMapFile container, LoadSaveGame and
+  LoadMap's callees are verified, sessions 51-53; re/file_formats.md):**
+  next `CGameData::LoadMap` 0x4fd540: split into helpers per chunk (6
+  landscape, 8 buildings, 7 settlers, 9 piles, 10 victory conditions,
+  0x40), the colours (GameSettings::PlayerSetup 0x4351e0 per player:
+  reimplement or call the original), UnblockCastleTiles and the
+  campaign-mission fix-ups; test every map under Map\ (read only) into
+  worlds from `map_test::ConstructWorld`. Then the savegame writer
+  `CLogicThread::SaveGame` 0x509980. Optional: the Watcom skip list
+  (0x60bab0/0x60bbe0/0x60be20) as our code.
+- **Whole-game evidence for the loaders** (each opens the game window):
+  `check_save.py "slot N.sav" --ticks 2000 --against-original` for slots
+  1..3; `check_random_map.py --maps "384,0;448,3" --ticks 1000
+  --against-original` (AddPlayerTowns, PlaceTown, PrepareLoadedTerrain);
+  `check_replay.py --recording scripted-seed127 --against-original
+  --ticks 3000` (Lakes.map through LoadMap and AddPlayerTowns).
 - **Shared catch-type helper:** the SEH filter that matches MSVC 6.0
   catchable types exists twice (execute_commands.cpp,
   map_file_stream.cpp); make it one helper.

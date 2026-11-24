@@ -22,10 +22,13 @@ LOGBOOK session entry).
   whether its exact behaviour matters: `_ftol` 0x61fe98 (truncation),
   `qsort` (order of equal elements), `sprintf` formatting, `rand`/`srand`
   (the simulation uses CGameData::Random instead?), string/memory
-  functions (no difference). The result settles the open x87 question
-  (LOGBOOK, "Standing decisions"; proposal in
-  docs/history/logbook-2026-11.md, "x87 floating point") and becomes a
-  short list in `re/` of CRT behaviour our code must reproduce.
+  functions (no difference). The result becomes a short list in `re/` of
+  CRT behaviour our code must reproduce.
+- **Confirm the x87 control word at runtime** (the floating-point rule,
+  CLAUDE.md, assumes 53-bit precision, round to nearest): log
+  `_controlfp(0, 0)` once per game thread (e.g. a pass-through on
+  `CLogicThread::Step`, original-mode tooling: bump the version), in a
+  normal game run. Details: docs/reimplementation_notes.md.
 - **Prove the third-party library identifications** (zlib 1.1.3,
   libpng 1.0.2, PaintLib; category `thirdparty`, re/picture_code.md)
   against the published sources. Low value: only the online lobby's

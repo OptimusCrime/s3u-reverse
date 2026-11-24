@@ -19,3 +19,37 @@ on 2026-11-24.
 - **Detours and tiny functions:** a 4-byte body such as `mov eax,[ecx+0Ch];
   ret` can be hooked when nop/int 3 padding follows it (Detours uses the
   padding; 0x601270).
+
+## Floating point: x87 code as `double` (decided 2026-11-24)
+
+The original was compiled for the x87 FPU; our build uses SSE2. Their
+results are identical when (a) x87 runs at 53-bit precision, round to
+nearest, (b) the operations happen in the same order with the same operand
+widths, and (c) float-to-int conversion truncates like the CRT's `_ftol`
+0x61fe98. Windows starts threads with x87 at 53 bits / round to nearest
+(control word 0x27F); the game never executes `fldcw` itself (every
+`fldcw` is in the CRT: `_ftol` switches to truncation and back, and the
+math library), and plain DirectDraw doesn't change it (only Direct3D
+device creation does).
+
+Rules for a replacement:
+- Compute in `double` (`/fp:precise`, no FMA contraction), in the
+  original's order of operations; where the original stores a `float`
+  (`fstp dword`), round through a `float` variable at the same point.
+- Convert to integers by truncation toward zero, as `_ftol` does (a
+  `static_cast<int>` of the double, or a helper named after `_ftol`).
+- CRT transcendental functions (sin, atan, pow, ...) would need the
+  original CRT's results; none are known in the simulation so far: stop
+  and ask if one shows up.
+- The emulator spec includes inputs near rounding edges (values whose
+  product or quotient lands on .5 or on an integer boundary).
+- Say in the function's comment that it is x87 code done in `double`.
+
+Still to do once: confirm the control word at runtime (log
+`_controlfp(0, 0)` from a pass-through on `CLogicThread::Step` in the game
+thread and in the logic thread); backlog item in
+docs/todo/known-differences.md. If it is not 0x27F-equivalent, or a
+whole-game check diverges in x87 code, that function gets inline x87
+assembly.
+
+Done this way so far: AI WantedForPopulation, Army::GroupFightingShareAbove.

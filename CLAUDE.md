@@ -146,6 +146,17 @@ checks run verified code only. "Unverified" means "no evidence yet", not
 `frontier.py` counts reimplemented functions as done (`--verified-only`
 doesn't). When the evidence exists, switch to `S3RE_HOOK` and `verified`.
 
+**Floating point (decided 2026-11-24).** Code that uses the original's
+x87 floating point is written with `double`, in exactly the original's
+order of operations, with `float` stores rounded where the original
+stores a `float`, and float-to-int conversion as truncation toward zero
+like the CRT's `_ftol` 0x61fe98. Its emulator spec (the emulator runs the
+real x87 code) includes values near rounding edges. This is exact as long
+as the game's threads run at Windows' default x87 precision (53 bits,
+round to nearest); confirm that once at runtime. If a difference ever
+shows up, that function gets inline x87 assembly instead. Details:
+`docs/reimplementation_notes.md`.
+
 Rejected alternatives: a from-scratch rewrite can't prove equivalence. Matching
 decompilation (byte-identical recompile with MSVC 6) is too slow for this much
 C++ code.

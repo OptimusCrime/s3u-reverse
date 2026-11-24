@@ -17,20 +17,26 @@ to `docs/todo/`). The archive is for searching, not for reading whole.
 batches (reimplement + verify), less cleanup; cleanup only where it blocks
 a batch.**
 1. **Computer players, continued** (`docs/todo/computer-players.md`):
-   A2 leftovers (residences 0x568890, enemy counts, the ten spell casters
-   0x5957c0..0x596210, other READY helpers; woodcutter/stonecutter wait
-   for the x87 decision), SendPrioritizeSite 0x58e510 (needs a runtime
-   look), A5 Cevaland, A6 the agents' run functions, then 0x550a30 /
-   0x550f80.
+   READY helpers (`frontier.py --range 54cbd0 59fcd0 --library-done`, 74
+   READY after session 53: EvaluateCell 0x5540f0, RandomPointNearSettler
+   0x594f70 / 0x5952d0, Army 0x592100 / 0x592240, military-building
+   searches 0x58aa70 / 0x58a7e0, CountResourceInOwnersLand 0x599a30,
+   CheckSite 0x5760d0, ...); residences 0x568890, woodcutter 0x567e00 and
+   stonecutter 0x568420 (x87, now unblocked by the floating-point rule);
+   SendPrioritizeSite
+   0x58e510 needs a runtime look; then A5 Cevaland, A6 the agents' run
+   functions, 0x550a30 / 0x550f80.
    Start from the names and `re/computer_players_naming.md`.
-2. **File formats** (`docs/todo/file-formats.md`): the CMapFile container
-   and `CLogicThread::LoadSaveGame` 0x508fa0 are verified (sessions
-   51/52). **Needs the screen once:** `python tools/check_save.py "slot
-   1.sav" --ticks 2000 --against-original` (and slots 2, 3): the
-   whole-game evidence for LoadSaveGame and the container. Next functions:
-   PrepareLoadedTerrain 0x519540 and SpawnSettlersOnWater 0x50dc10 (READY),
-   PlaceTown 0x506cf0 -> AddPlayerTowns 0x5074b0, then `CGameData::LoadMap`
-   0x4fd540.
+2. **File formats** (`docs/todo/file-formats.md`): the CMapFile container,
+   LoadSaveGame and LoadMap's callees are verified (sessions 51-53). Next:
+   `CGameData::LoadMap` 0x4fd540 (needs only GameSettings::PlayerSetup
+   0x4351e0: reimplement it or keep calling the original), with an
+   all-maps whole-world test (map/map_test_support.h); then the savegame
+   writer `CLogicThread::SaveGame` 0x509980. **Needs the screen once:**
+   `check_save.py "slot N.sav" --ticks 2000 --against-original` (slots
+   1..3), `check_random_map.py --maps "384,0;448,3" --ticks 1000
+   --against-original`, `check_replay.py --recording scripted-seed127
+   --against-original --ticks 3000`: whole-game evidence for the loaders.
 3. Open from session 49: the live-vs-replay header/rest hash difference
    of the user's full game (backlog "Evidence and testing").
 4. Later, only when it blocks a batch: readability leftovers
@@ -40,9 +46,9 @@ a batch.**
 **Standing decisions** (details in `CLAUDE.md` and the archive):
 core gameplay first, no network/lobby code (2026-11-09); reimplementation
 coverage may run ahead of verification (`S3RE_HOOK_UNVERIFIED`,
-2026-11-09); new code follows `docs/coding_style.md`; the x87 question
-(proposal in the archive, "x87 floating point") is still undecided:
-decide it before reimplementing code with real floating point.
+2026-11-09); new code follows `docs/coding_style.md`; x87 floating point is written
+as `double` in the original's order with `_ftol` truncation (decided
+2026-11-24, CLAUDE.md "Floating point").
 
 **Simulation state (2026-11-22):** CLogicThread::Step's three world
 updates (`UpdateEnvironment` 0x4e7810, `UpdateEconomy` 0x4e05e0,
@@ -107,6 +113,53 @@ testing".
   classes by default; they might be library code.
 
 ## Session log (recent sessions; older ones in docs/history/)
+
+### 2026-11-24 (53): computer players battle spells and queries, map loader callees
+
+- **Computer players (`wip/ai-spells`)**, 22 functions verified (in-process
+  tests with wrong-implementation checks, emulator specs with all blocks
+  covered; the branch's full `--test` 636/636). Battle spells
+  (ai_battle_spells.cpp): the ten casters 0x5957c0..0x596210,
+  AI::CastBattleSpells 0x5953b0 (the crossed Amazon casters kept),
+  AI::InitBattleSpellSlots 0x590870. Enemy counts 0x58a2c0 / 0x58a610
+  (ai_enemy_search.cpp); cell resources OwnersLandHasResource 0x599df0,
+  WorkCellHasTrees/Stones 0x59a380 / 0x59a8b0, FindResourceCellAround
+  0x59a120 (ai_cell_resources.cpp); FindNode 0x573be0, IsForceProduction
+  0x572fa0 (ai_player_nodes.cpp); HasSiteNoteNear 0x571c40;
+  HOUSE_GROUND_REQUEST_NOTE::Init 0x575d60. Findings in
+  re/computer_players.md "Battle spells": per mage a mana check by its own
+  race, then the race's casters in fixed order, each with one Random draw
+  (low word > 25000, ~24%); enemies within 20 tiles; the Romans cast
+  nothing in campaign mission 67; several old caster notes corrected.
+  Known difference: a mage of race > 3 makes the original read leftover
+  stack bytes as its mana bits (at most a side-effect-free enemy count,
+  never a cast); ours skips it.
+- **Map loader callees (`wip/loadmap`)**, 7 functions verified (in-process
+  tests incl. whole-world comparisons on worlds built by the original
+  CGameData constructor + GenerateRandomMap, emulator specs full
+  coverage; the branch's full `--test` 632/632): PrepareLoadedTerrain
+  0x519540 (water depth bands from the shore; map/load_map.cpp),
+  SpawnSettlersOnWater 0x50dc10, PlaceTown 0x506cf0 and AddPlayerTowns
+  0x5074b0 (map/player_towns.cpp), GameSettings::StartGoods 0x412300 and
+  GamePlayerSetup::Colour 0x49fec0 (ui/game_settings.cpp). 0x4351e0 is
+  GameSettings::PlayerSetup(index) (identified; Watcom vector access, UI
+  side). Findings: the start building is a small tower (type 15) with a
+  Swordsman1 garrison (job 23); start goods from GameSettings +0x74;
+  AddPlayerTowns mirrors teams 1..3 by the symmetry (world +0x2d274);
+  quirk kept: symmetry 3 with given start positions places teams 2/3
+  whenever team 1 exists (PlaceTown(-1), never reached by the game). Test
+  support for LoadMap: map/map_test_support.h.
+- The residences condition 0x568890 also uses x87 float curves, like the
+  woodcutter and stonecutter conditions. **Decision (the user,
+  2026-11-24): x87 code is written as `double` in the original's order,
+  with `_ftol` truncation and emulator specs near rounding edges**
+  (CLAUDE.md "Floating point", docs/reimplementation_notes.md); the
+  runtime check of the x87 control word is in the backlog. The three
+  conditions are unblocked.
+- Evidence on the merged main (both batches): Debug and Release build;
+  `--test` 648/648; full emulator suite `--full --require-coverage`: 796
+  functions, 0 mismatches, 0 with incomplete coverage (16 workers,
+  1,299 s); inventory check clean. Verified: 768 -> 797 (796 specs).
 
 ### 2026-11-24 (52): savegame loader, computer players A2/A4, progress page
 
