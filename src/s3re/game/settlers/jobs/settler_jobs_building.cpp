@@ -28,6 +28,7 @@
 // settler's handler left (the reads the leak analysis lists here are all
 // preceded by a write on every path that reaches them).
 
+#include "game/enums/objects.h"
 #include "game/settlers/jobs/settler_jobs.h"
 #include "game/settlers/jobs/settler_jobs_test.h"
 #include "test/callee_stub.h"
@@ -56,14 +57,6 @@ constexpr std::uint32_t kLayoutStart = 0x80000005;  // building layout list: sta
 
 // Tile flags used here (layout::kTile*).
 constexpr std::uint8_t kTileTargeted = layout::kTileFlag02;  // a digger / builder goes there
-
-// Landscape objects (Tile::object) of trees and stones.
-constexpr std::uint8_t kFirstTree = 0x44;
-constexpr std::uint8_t kLastTree = 0x52;
-constexpr std::uint8_t kFirstStone = 0x73;
-constexpr std::uint8_t kLastStone = 0x7e;
-constexpr std::uint8_t kStoneUsedUp = 0x7f;
-constexpr std::uint8_t kSapling = 0x54;
 
 // ------------------------------------------------------------------- helpers
 
@@ -852,9 +845,10 @@ JobResult CutterSearchJob(SettlerContext& ctx, const CutterSearch& kind) {
 }
 
 // 0x4ecf82..0x4ed212 (job 0x18)
-constexpr CutterSearch kWoodcutterSearch{1, true, kFirstTree, kLastTree, true, 0x12, J::WoodcutterLeave, 5};
+constexpr CutterSearch kWoodcutterSearch{1,    true, kObjectFirstTree,   kObjectLastCuttableTree,
+                                         true, 0x12, J::WoodcutterLeave, 5};
 // 0x4ed213..0x4ed4a3 (job 0x19)
-constexpr CutterSearch kStonecutterSearch{2,     false, kFirstStone,         kLastStone,
+constexpr CutterSearch kStonecutterSearch{2,     false, kObjectFirstStone,   kObjectLastStone,
                                           false, 0x13,  J::StonecutterLeave, 0x10};
 
 // Purpose: The worker steps out of the building and walks to its spot.
@@ -872,7 +866,7 @@ JobResult LeaveBuilding(SettlerContext& ctx, J walk) {
 JobResult WoodcutterAtTree(SettlerContext& ctx) {
     Settler& settler = ctx.settler;
     const std::uint8_t object = TileNear(ctx.world, TileOff(settler.x, settler.y), -1, -1).object;
-    if (object >= kFirstTree && object <= kLastTree) {
+    if (object >= kObjectFirstTree && object <= kObjectLastCuttableTree) {
         SetJob(settler, J::WoodcutterCut);
         Call<kSetSettlerAnimation>(ctx.world, ctx.number, 6);
         settler.food = 0;  // +0x17: cutting state
@@ -888,7 +882,7 @@ JobResult WoodcutterAtTree(SettlerContext& ctx) {
 JobResult StonecutterAtStone(SettlerContext& ctx) {
     Settler& settler = ctx.settler;
     const std::uint8_t object = TileNear(ctx.world, TileOff(settler.x, settler.y), -2, -2).object;
-    if (object >= kFirstStone && object <= kLastStone) {
+    if (object >= kObjectFirstStone && object <= kObjectLastStone) {
         SetJob(settler, J::StonecutterCut);
         Call<kSetSettlerAnimation>(ctx.world, ctx.number, 0x11);
         settler.food = 0;
@@ -919,8 +913,8 @@ JobResult WoodcutterCut(SettlerContext& ctx) {
     static constexpr std::uint32_t kAnimations[8] = {7, 7, 7, 8, 9, 0xa, 0xb, 0xc};
     if (state == 1) {
         // The felled tree: (object - 0x44) / 2 + 0x80 (signed division).
-        const std::int32_t felled = (static_cast<std::int32_t>(tree.object) - 0x44) / 2;
-        tree.object = static_cast<std::uint8_t>(felled + 0x80);
+        const std::int32_t felled = (static_cast<std::int32_t>(tree.object) - kObjectFirstTree) / 2;
+        tree.object = static_cast<std::uint8_t>(felled + kObjectFirstFelledTree);
     } else {
         tree.object = static_cast<std::uint8_t>(tree.object + 8);
     }
@@ -945,7 +939,7 @@ JobResult StonecutterCut(SettlerContext& ctx) {
     }
     Tile& stone = TileNear(world, TileOff(settler.x, settler.y), -2, -2);
     ++stone.object;
-    if (TileNear(world, TileOff(settler.x, settler.y), -2, -2).object == kStoneUsedUp) {
+    if (TileNear(world, TileOff(settler.x, settler.y), -2, -2).object == kObjectStoneUsedUp) {
         const std::uint32_t x = settler.x;
         const std::uint32_t y = settler.y;
         Call<kUnblockTile>(world, x - 3, y - 3);
@@ -1111,7 +1105,7 @@ JobResult ForesterPlant(SettlerContext& ctx) {
     if (state != 2) {
         return JobResult::Next;
     }
-    TileNear(ctx.world, TileOff(settler.x, settler.y), 0, 1).object = kSapling;
+    TileNear(ctx.world, TileOff(settler.x, settler.y), 0, 1).object = kObjectSapling;
     SetJob(settler, J::ForesterWalkHome);
     return WalkToDoor(ctx);
 }

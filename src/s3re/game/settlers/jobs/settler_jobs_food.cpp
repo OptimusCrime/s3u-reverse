@@ -27,12 +27,13 @@
 // reads a slot left by another settler (the leaks2 entries of this range
 // are loop-carried values written in the search's first iteration).
 
-#include "game/settlers/jobs/settler_jobs.h"
-#include "game/settlers/jobs/settler_jobs_test.h"
-#include "game/enums/settler_types.h"
 #include "game/enums/goods.h"
 #include "game/enums/job_ids.h"
+#include "game/enums/objects.h"
+#include "game/enums/settler_types.h"
 #include "game/enums/terrain.h"
+#include "game/settlers/jobs/settler_jobs.h"
+#include "game/settlers/jobs/settler_jobs_test.h"
 
 #include <vector>
 
@@ -46,17 +47,6 @@ constexpr std::uint8_t kRequestWork = 0x01;    // Building::request_flags bit 0:
 constexpr std::uint8_t kTileNotFree = layout::kTileBlocked | layout::kTileBuildingFootprint;
 constexpr std::uint32_t kSearchSteps = 50;     // offset table entries tried per search
 constexpr std::uint32_t kMaxSlope = 7;         // TileSlope below this: flat enough for a field
-
-// Terrain classes (Tile::terrain & 0xf0) the searches look for.
-constexpr std::uint8_t kTerrainClassGrass = 0x10;   // fields are sown here
-constexpr std::uint8_t kTerrainClassShore = 0x30;   // the fisher stands here (kTerrainShore)
-constexpr std::uint8_t kTerrainClass60 = 0x60;      // the waterworker draws water here (meaning unknown)
-
-// Tile::object values of a field.
-constexpr std::uint8_t kFieldSown = 0x55;
-constexpr std::uint8_t kFieldRipeFirst = 0x5a;
-constexpr std::uint8_t kFieldRipeLast = 0x5c;
-constexpr std::uint8_t kFieldHarvested = 0x5d;
 
 // The weapon smith's output: per weapon an area setting triple (settings1:
 // ordered units, settings2: share, settings3: made so far), indexed by the
@@ -581,7 +571,8 @@ JobResult FarmerSearch(SettlerContext& ctx) {
         }
         if (!OutputFull(world, building)) {
             const std::uint8_t object = TileAt(world, x, y).object;
-            if (object >= kFieldRipeFirst && object <= kFieldRipeLast && SameAreaAsDoor(world, building, x, y)) {
+            if (object >= kObjectGrainRipeFirst && object <= kObjectGrainRipeLast &&
+                SameAreaAsDoor(world, building, x, y)) {
                 found = Found::Harvest;
                 break;
             }
@@ -635,7 +626,7 @@ JobResult FarmerHarvest(SettlerContext& ctx) {
         return JobResult::Next;
     }
     if (step == 2) {
-        SettlerTile(ctx).object = kFieldHarvested;
+        SettlerTile(ctx).object = kObjectGrainDone;
         return WalkHome(ctx, Job::FarmerWalkHomeLoaded);
     }
     return JobResult::Next;
@@ -670,7 +661,7 @@ JobResult RunFarmer(SettlerContext& ctx, Job job) {
         return JobResult::Again;
     case Job::FarmerSow: return FarmerSow(ctx);
     case Job::FarmerSown:  // 0x92 (0x4f20d5): sown
-        SettlerTile(ctx).object = kFieldSown;
+        SettlerTile(ctx).object = kObjectGrainSown;
         return WalkHome(ctx, Job::FarmerWalkHome);
     case Job::FarmerBackIn:  // 0x94 and 0x9d (0x4f2108)
     case Job::FarmerRest: return RestartNow(ctx, Job::FarmerSearch);
@@ -682,7 +673,7 @@ JobResult RunFarmer(SettlerContext& ctx, Job job) {
         return JobResult::Again;
     case Job::FarmerAtField: {  // 0x96 (0x4f213c): at the field, still ripe?
         const std::uint8_t object = SettlerTile(ctx).object;
-        if (object < kFieldRipeFirst || object > kFieldRipeLast) {
+        if (object < kObjectGrainRipeFirst || object > kObjectGrainRipeLast) {
             return WalkHome(ctx, Job::FarmerWalkHome);
         }
         Switch(ctx, Job::FarmerHarvest, 158);
@@ -847,7 +838,7 @@ JobResult WaterworkerSearch(SettlerContext& ctx) {
         if (x < 1 || x >= last || y < 1 || y >= last) {
             continue;
         }
-        if ((TileAt(world, x, y).terrain & kTerrainClassMask) == kTerrainClass60 &&
+        if ((TileAt(world, x, y).terrain & kTerrainClassMask) == kTerrainClassStream &&
             SameAreaAsDoor(world, building, x, y)) {
             found = true;
             break;
@@ -872,7 +863,7 @@ JobResult RunWaterworker(SettlerContext& ctx, Job job) {
         SetJob(ctx.settler, Job::WaterworkerWalkToWater);
         return JobResult::Again;
     case Job::WaterworkerDraw:  // 0xbd (0x4f31e4): draw water, if still there
-        if ((SettlerTile(ctx).terrain & kTerrainClassMask) != kTerrainClass60) {
+        if ((SettlerTile(ctx).terrain & kTerrainClassMask) != kTerrainClassStream) {
             return WalkHome(ctx, Job::WaterworkerWalkHome);
         }
         ctx.settler.slot = Value(Good::Water);

@@ -53,6 +53,7 @@
 // 16. LogBorderErrors again, then BuildRegionsAndAreas (0x51a580).
 
 #include "game/debug_log.h"
+#include "game/enums/resources.h"
 #include "game/replacements.h"
 #include "game/texts.h"
 #include "game/world.h"
@@ -947,8 +948,11 @@ struct GroupRule {
     std::uint8_t extra;
 };
 
-// ScatterObjectGroups calls: forests (0x44..0x51) and stone fields
-// (0x73..0x7e).
+// ScatterObjectGroups calls (required terrain: the tile and its six
+// neighbours, objects low..high, ...): forests of each tree kind
+// (Tile::object 0x44..0x51, game/enums/objects.h; the kind 0x4e/0x4f on
+// terrain 0x40) and stone fields (0x73..0x7e). Data tables: the values stay
+// as the original's (objects 0x01..0x43 of kObjectsBeforeGroups have no names yet).
 constexpr GroupRule kGroups[] = {
     {0x10, 0x44, 0x45, 11, 1, 2}, {0x10, 0x46, 0x47, 11, 1, 2}, {0x10, 0x48, 0x49, 11, 1, 2},
     {0x10, 0x4a, 0x4b, 11, 1, 2}, {0x10, 0x4c, 0x4d, 11, 1, 2}, {0x40, 0x4e, 0x4f, 11, 1, 2},
@@ -965,8 +969,12 @@ constexpr ObjectRule kObjectsAfterGroups[] = {
     {0x10, 0x7d, 1, 2, 1}, {0x10, 0x7e, 1, 2, 1}, {0x10, 0x7f, 1, 0, 0},
 };
 
-// ScatterTileByte11 calls (base, density): resources 0x50.., 0x40.., ...
-constexpr std::uint16_t kResources[][2] = {{0x50, 30}, {0x40, 20}, {0x30, 60}, {0x20, 100}, {0x10, 300}};
+// ScatterTileByte11 calls (resource kind, density).
+constexpr std::uint16_t kResources[][2] = {{kResourceSulfur, 30},
+                                           {kResourceGems, 20},
+                                           {kResourceGold, 60},
+                                           {kResourceIron, 100},
+                                           {kResourceCoal, 300}};
 
 void PlaceObjects(CGameData* world) {
     for (const ObjectRule& rule : kObjectsBeforeGroups) {

@@ -52,6 +52,7 @@
 // Callees go through their S3.EXE addresses (all verified replacements).
 
 #include "game/enums/job_ids.h"
+#include "game/enums/objects.h"
 #include "game/enums/terrain.h"
 #include "game/typed_fields.h"
 #include "game/world.h"
@@ -82,7 +83,6 @@ using Job = SettlerJob;
 
 constexpr std::uint8_t kFree = 0xff;     // owner byte of an unused record / unowned tile
 constexpr std::uint8_t kNoGood = 0xff;   // Pile::good of a pile without a goods type
-constexpr std::uint8_t kObjectDockLine = 114;  // 0x72: a tile of a shipyard's or harbour's dock line
 constexpr std::uint8_t kTerrainWater = kTerrainWater5;
 
 // Request bits of Building::request_flags (building_flags.cpp).

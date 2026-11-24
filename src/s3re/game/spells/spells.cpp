@@ -38,12 +38,13 @@
 //   resource amount (low nibble) of the first 100 offsets' tiles is halved
 //   ((r >> 1) & 7 | r & 0xf0); paid if any tile was on the map. ret 0xc.
 // CGameData::SpellGrowTrees (0x005498a0): (player, x, y) spell 9: growing
-//   trees among the first 200 offsets advance three stages within their
-//   kind (0x55..0x5d up to 0x5d, 0x5e..0x66 up to 0x66, 0x67..0x6f up to
+//   crops (grain, vines, rice) among the first 200 offsets advance three
+//   stages within their kind (0x55..0x5d up to 0x5d, 0x5e..0x66 up to 0x66, 0x67..0x6f up to
 //   0x6f, one after the other on the same tile); paid if any grew. ret 0xc.
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
+#include "game/enums/objects.h"
 #include "game/enums/spells.h"
 #include "game/enums/terrain.h"
 #include "game/globals.h"
@@ -78,12 +79,9 @@ constexpr std::int32_t kRevealPoints = 50;
 constexpr std::int32_t kRevealSpotTicks = 250;  // 0xfa
 constexpr U kFeedbackMapAlreadyRevealed = 54;   // PushUiFeedback 0x36 (probably "not possible")
 
-// Tile::object values (hex, see environment.cpp): trees 0x44..0x51 catch
-// fire (object 0xf3); the three kinds of young trees grow in 0x55..0x5d,
-// 0x5e..0x66 and 0x67..0x6f.
-constexpr std::uint8_t kFirstTree = 0x44;
+// BurnTrees sets the trees 0x44..0x51 on fire, not the whole tree range
+// (0x44..0x53, game/enums/objects.h), as the original.
 constexpr std::uint8_t kLastBurningTree = 0x51;
-constexpr std::uint8_t kFireStart = 0xf3;
 constexpr std::int32_t kGrowStages = 3;
 
 // Tile::resources: fish in the low nibble, up to 15.
@@ -213,8 +211,8 @@ U __fastcall CGameData_SpellBurnTrees(CGameData* world, void*, U player, std::in
     }
     bool done = false;
     ForArea(world, Spell::BurnTrees, x, y, [&](Tile& t) {
-        if (t.object >= kFirstTree && t.object <= kLastBurningTree) {
-            t.object = kFireStart;
+        if (t.object >= kObjectFirstTree && t.object <= kLastBurningTree) {
+            t.object = kObjectFireStart;
             done = true;
         }
     });
@@ -269,7 +267,9 @@ U __fastcall CGameData_SpellHalveResources(CGameData* world, void*, U player, st
     return 0;
 }
 
-// Purpose: Spell 9: makes the young trees around a spot grow faster.
+// Purpose: Spell 9: makes the crops (grain, vines, rice) around a spot grow
+// faster. (Named GrowTrees before the objects were known; the ranges are the
+// three crops of game/enums/objects.h, not trees.)
 U __fastcall CGameData_SpellGrowTrees(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
     constexpr U kSpell = Value(Spell::GrowTrees);
     if (!HasMana(world, player, kSpell)) {
@@ -277,9 +277,11 @@ U __fastcall CGameData_SpellGrowTrees(CGameData* world, void*, U player, std::in
     }
     bool done = false;
     ForArea(world, Spell::GrowTrees, x, y, [&](Tile& t) {
-        // The three kinds of young trees (first and last stage); one kind
-        // after the other on the same tile, as in the original.
-        static constexpr std::uint8_t kKinds[3][2] = {{0x55, 0x5d}, {0x5e, 0x66}, {0x67, 0x6f}};
+        // The three crops (planted .. done); one after the other on the
+        // same tile, as in the original.
+        static constexpr std::uint8_t kKinds[3][2] = {{kObjectGrainSown, kObjectGrainDone},
+                                                      {kObjectVinePlanted, kObjectVineDone},
+                                                      {kObjectRicePlanted, kObjectRiceDone}};
         for (const auto& kind : kKinds) {
             const std::uint8_t o = t.object;
             if (o >= kind[0] && o <= kind[1]) {

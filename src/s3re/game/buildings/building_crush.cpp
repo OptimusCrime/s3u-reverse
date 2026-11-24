@@ -81,11 +81,12 @@
 //   the CSV's proposal.)
 
 #include "game/debug_log.h"
-#include "game/enums/settler_types.h"
 #include "game/enums/buildings.h"
 #include "game/enums/goods.h"
-#include "game/enums/piles.h"
 #include "game/enums/job_ids.h"
+#include "game/enums/objects.h"
+#include "game/enums/piles.h"
+#include "game/enums/settler_types.h"
 #include "game/enums/terrain.h"
 #include "game/globals.h"
 #include "game/replacements.h"
@@ -121,7 +122,6 @@ constexpr std::uint32_t kMarkFootprintEnd = 0x80000001;
 constexpr std::uint32_t kMarkBorder = 0x80000002;
 constexpr std::uint32_t kMarkEnd = 0x80000003;
 
-constexpr std::uint8_t kObjectStake = 113;     // 0x71: a stake on a footprint tile (CheckBuildingSite)
 constexpr std::uint8_t kTileFootprint = 0x08;  // Tile::flags: part of a building
 constexpr std::uint8_t kTileLevelling = 0x04;  // Tile::flags: being levelled
 constexpr std::uint32_t kGrid = 31;

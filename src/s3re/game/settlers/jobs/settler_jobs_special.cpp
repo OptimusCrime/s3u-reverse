@@ -21,6 +21,7 @@
 // its cargo loop ends before the first ring scan (only for a race whose
 // cargo count in S3.EXE 0x659654 is 0, i.e. reading past the table).
 
+#include "game/enums/objects.h"
 #include "game/settlers/jobs/settler_jobs.h"
 #include "game/settlers/jobs/settler_jobs_test.h"
 #include "test/difftest.h"
@@ -783,12 +784,13 @@ JobResult BeekeeperSearch(SettlerContext& ctx) {
             const Building& home = BuildingOf(ctx);
             const std::uint16_t homeArea = TileAt(world, home.door_x, home.door_y).area;
             const Tile& t = TileAt(world, x, y);
-            if (PileAt(world, home.pile_ring).amount <= 7 && t.object >= 250 && t.object <= 253 &&
-                TileSteps(world, x, y, 2).area == homeArea) {
+            if (PileAt(world, home.pile_ring).amount <= 7 && t.object >= kObjectHiveFirstHarvest &&
+                t.object <= kObjectHiveFull && TileSteps(world, x, y, 2).area == homeArea) {
                 state = 2;
                 counted = false;
-            } else if (TileSteps(world, x, y, 1).area == homeArea && t.object >= 0x44 && t.object <= 0x52 &&
-                       TileSteps(world, x, y, 1).object == 0 && (TileSteps(world, x, y, 1).flags & kTileBlocking) == 0 &&
+            } else if (TileSteps(world, x, y, 1).area == homeArea && t.object >= kObjectFirstTree &&
+                       t.object <= kObjectLastCuttableTree && TileSteps(world, x, y, 1).object == 0 &&
+                       (TileSteps(world, x, y, 1).flags & kTileBlocking) == 0 &&
                        (TileSteps(world, x, y, 3).flags & kTileBlocking) == 0 &&
                        Call<kIsFreeOfCatapultsNearby>(world, x, y + 1) != 0) {
                 state = 1;
@@ -801,7 +803,7 @@ JobResult BeekeeperSearch(SettlerContext& ctx) {
                         continue;
                     }
                     const std::uint8_t object = TileAt(world, xx, yy).object;
-                    if (object >= 247 && object <= 253) {
+                    if (object >= kObjectHive && object <= kObjectHiveFull) {
                         state = 0;
                         --ctx.frame.slot14;  // as the original: the next offsets are looked at one row up
                     }
@@ -887,7 +889,7 @@ JobResult BeekeeperHiveDone(SettlerContext& ctx) {
     SetJob(s, Job::BeekeeperWalkHome);
     s.slot = 0;
     s.counter = 0;
-    TileSteps(ctx.world, s.x, s.y, -2).object = 247;
+    TileSteps(ctx.world, s.x, s.y, -2).object = kObjectHive;
     SetTargetToDoor(ctx);  // 0x4f4331
     return JobResult::Next;
 }
@@ -897,7 +899,7 @@ JobResult BeekeeperHiveDone(SettlerContext& ctx) {
 JobResult BeekeeperHarvest(SettlerContext& ctx) {
     Settler& s = ctx.settler;
     const std::uint8_t object = TileSteps(ctx.world, s.x, s.y, -2).object;
-    if (object >= 250 && object <= 253) {
+    if (object >= kObjectHiveFirstHarvest && object <= kObjectHiveFull) {
         SetJob(s, Job::BeekeeperHarvested);
         Animate(ctx, 0x203);
         s.slot = Value(G::Honey);

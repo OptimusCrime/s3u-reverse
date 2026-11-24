@@ -31,7 +31,9 @@
 //   thiscall, ret 4.
 
 #include "game/debug_log.h"
+#include "game/enums/objects.h"
 #include "game/enums/races.h"
+#include "game/enums/resources.h"
 #include "game/enums/terrain.h"
 #include "game/texts.h"
 #include "game/world.h"
@@ -102,29 +104,6 @@ std::uint32_t SurveyWeight(std::uint32_t index) {
     return index < 3500 ? 4 : index < 8000 ? 3 : index < 13500 ? 2 : 1;
 }
 
-// Tile::terrain: the class is the high nibble.
-constexpr std::uint8_t kTerrainClassGrass = 0x10;   // counted as land
-constexpr std::uint8_t kTerrainSwamp = 21;          // 0x15
-constexpr std::uint8_t kTerrainClassStream = 0x60;  // the waterworker draws water here
-
-// Tile::object: trees 68..83 (0x44..0x53); stone 115..126 (0x73..0x7e)
-// with 127 - object units left.
-constexpr std::uint32_t kObjectFirstTree = 0x44;
-constexpr std::uint32_t kObjectLastTree = 0x53;
-constexpr std::uint32_t kObjectFirstStone = 0x73;
-constexpr std::uint32_t kObjectLastStone = 0x7e;
-constexpr std::uint32_t kStoneEnd = 0x7f;
-
-// Tile::resources: the high nibble is the kind, the low nibble the amount.
-constexpr std::uint32_t kResourceKindMask = 0xf0;
-constexpr std::uint32_t kResourceAmountMask = 0x0f;
-constexpr std::uint32_t kResourceFish = 0x00;
-constexpr std::uint32_t kResourceCoal = 0x10;
-constexpr std::uint32_t kResourceIron = 0x20;
-constexpr std::uint32_t kResourceGold = 0x30;
-constexpr std::uint32_t kResourceGems = 0x40;
-constexpr std::uint32_t kResourceSulfur = 0x50;
-
 }  // namespace
 
 using LogLandFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player);
@@ -150,7 +129,7 @@ std::uint32_t __fastcall CGameData_LogPlayerLandResources(CGameData* world, void
         if ((terrain & kTerrainClassMask) == kTerrainClassGrass) {
             land += weight;
         }
-        if (terrain == kTerrainSwamp) {
+        if (terrain == kTerrainSwampyGrass) {
             swamp += weight;
         }
         if ((terrain & kTerrainClassMask) == kTerrainClassStream) {
@@ -161,7 +140,7 @@ std::uint32_t __fastcall CGameData_LogPlayerLandResources(CGameData* world, void
             trees += weight;
         }
         if (object >= kObjectFirstStone && object <= kObjectLastStone) {
-            stone += (kStoneEnd - object) * weight;
+            stone += (kObjectStoneUsedUp - object) * weight;
         }
         const std::uint32_t resource = tile.resources;
         const std::uint32_t amount = (resource & kResourceAmountMask) * weight;

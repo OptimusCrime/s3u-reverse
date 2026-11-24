@@ -30,6 +30,7 @@
 //   that moved into the slot is not checked (the index still advances), as
 //   in the original. EAX not used by callers.
 
+#include "game/enums/objects.h"
 #include "game/enums/races.h"
 #include "game/enums/terrain.h"
 #include "game/globals.h"
@@ -57,12 +58,6 @@ using layout::Tile;
 constexpr std::uint32_t kTileRingEntries = 10000;
 constexpr std::uint32_t kGroups = SettlerGroups::kGroups;
 
-// Tile::terrain values of WearPath (the same values as environment.cpp's).
-constexpr std::uint8_t kTerrainGrass = 0x10;
-constexpr std::uint8_t kTerrainGrass18 = 0x12;  // probably grass variants: worn paths smooth them to grass
-constexpr std::uint8_t kTerrainGrass19 = 0x13;
-constexpr std::uint8_t kTerrainGrass24 = 0x18;
-constexpr std::uint8_t kTerrainWornPath = 0x1c;  // decays back to grass (UpdateEnvironment)
 // A new worn path's traffic counter grows by this (it was 12 when WearPath was called).
 constexpr std::uint8_t kWornPathTraffic = 9;
 

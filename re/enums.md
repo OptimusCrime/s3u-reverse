@@ -4,7 +4,8 @@ The named values of `src/s3re/game/enums/` (one header per category,
 split from `game/enums.h` on 2026-11-23: `races.h`, `settler_types.h`
 (SettlerType, SettlerClass), `buildings.h`, `goods.h`, `piles.h`,
 `spells.h`, `job_ids.h` (SettlerJob), `commands.h` (NetMessage,
-CommandId), `terrain.h`, `directions.h`; `game/enums.h` includes them
+CommandId), `terrain.h`, `objects.h` (Tile::object), `resources.h`
+(Tile::resources), `directions.h`; `game/enums.h` includes them
 all), with the evidence for each
 name and how sure we are. Made in session 45 (2026-11-22, readability
 pilot). Values are decimal, with hex where the disassembly shows it.
@@ -321,6 +322,67 @@ Each race has eight spells (int32[4][8] at 0x658d64, the slots of
 | 29 | GoodsSummon | high | "EventGoodsSummon", handler 0x54acd0 |
 | 30 | TreeCurse | high | "EventTreeCurse", handler 0x5492a0 |
 | 31 | RevealMap | high | "EventRevealMap", SpellRevealMap |
+
+## Terrain (`terrain.h`; Tile::terrain, uint8) — constants
+
+Session 51: the per-file copies (building_sites, player_queries,
+environment, terrain_updates, spells_land, settler_jobs_food,
+logic_helpers, fog_of_war, map_generation) moved here. Constants, not an
+enum: the code masks the class nibble and compares values alike.
+
+| value | name | confidence | evidence |
+|---|---|---|---|
+| class 0x00 | kTerrainClassWater | high | water bodies' flood fill (values 5..7); the fisher casts into it |
+| class 0x10 | kTerrainClassGrass | high | building ground of every race (CheckBuildingSite); fields are sown on it; LogLand counts it as land |
+| class 0x20 | kTerrainClassMountain | high | geologists work here; mines need it at the centre |
+| class 0x30 | kTerrainClassShore | high | never levelled; the fisher stands here; value 0x30 is where settlers board a ferry |
+| class 0x40 | kTerrainClassDesert | high | Egyptians may build on it; the desertify chain of NextTransformTerrain ends at 0x40 (0x10 -> 0x14 -> 0x41 -> 0x40) |
+| class 0x50 | kTerrainClassSwamp | high | the swamp chain ends at 0x50 (0x10 -> 0x15 -> 0x51 -> 0x50) |
+| class 0x60 | kTerrainClassStream | medium | the waterworker draws water only here (WaterworkerSearch / Draw) |
+| class 0x80 | kTerrainClassSnow | high | the snow chain ends at 0x80 (0x20 -> 0x23 -> 0x81 -> 0x80); the map generator puts resources into mountains and this class |
+| class 0x90 | kTerrainClass90 | placeholder | Asians may build on it |
+| 4 | kTerrainHarbourWater | medium | the shipyard and the harbour need it within 20 tiles (CheckBuildingSite) |
+| 5, 6 | kTerrainWater5/6 | medium | water a ferry can lie in |
+| 0x10 | kTerrainGrass | high | what a field without crops and a faded worn path turn back into |
+| 0x12, 0x13, 0x18 | kTerrainGrass18/19/24 | placeholder | WearPath turns them into plain grass (probably grass variants) |
+| 0x15 | kTerrainSwampyGrass | high | first step of the swamp chain; rice is planted only here (CanPlantRice); LogLand counts it as swamp (was `kTerrainSwamp`) |
+| 0x16 | kTerrainField | high | SetTerrain16Patch (farmer, rice farmer, winegrower); UpdateEnvironment turns it back into grass without crops around |
+| 0x1c | kTerrainWornPath | high | WearPath makes it, DecayTraffic fades it back |
+| 0x30 | kTerrainShore | high | where settlers board a ferry |
+
+## Landscape objects (`objects.h`; Tile::object, uint8) — constants
+
+Session 51, from UpdateEnvironment's landscape pass (0x4e7810,
+`UpdateLandscapeTile`), the job handlers and the spells. Ranges count a
+stage, so constants rather than an enum.
+
+| values | names | confidence | evidence |
+|---|---|---|---|
+| 0x01..0x43 | (none yet) | — | decorations scattered by the map generator (world_create.cpp kObjectsBeforeGroups) |
+| 0x44..0x53 | kObjectFirstTree..kObjectLastTree | high | a young tree becomes (stage + 0x4a) * 2 + a random bit = 0x44..0x53 (8 kinds x 2 variants); fire spreads to all of them; the map generator scatters 0x44..0x51 by kind |
+| 0x52 | kObjectLastCuttableTree | high | the woodcutter, the beekeeper's search and the hives' growth only look at 0x44..0x52 (0x53 is never cut, as the original); BurnTrees stops at 0x51 (local to spells.cpp) |
+| 0x54 | kObjectSapling | high | ForesterPlant and TreeCurse place it; the landscape pass turns it into a young tree (0xe0..0xe4, 0xe6) |
+| 0x55, 0x5a..0x5c, 0x5d | kObjectGrainSown, ...RipeFirst/Last, kObjectGrainDone | high | FarmerSown / FarmerSearch / FarmerHarvest; the landscape pass grows 0x55..0x5c by one and clears 0x5d |
+| 0x5e, 0x63..0x65, 0x66 | kObjectVinePlanted, ...RipeFirst/Last, kObjectVineDone | high | the winegrower's jobs; the same growth |
+| 0x67, 0x6c..0x6e, 0x6f | kObjectRicePlanted, ...RipeFirst/Last, kObjectRiceDone | high | the rice farmer's jobs; the same growth. SpellGrowTrees advances these three crop ranges (not trees: the spell's name is older than this) |
+| 112, 113, 114 | kObjectSiteCentre, kObjectStake, kObjectDockLine | high | AddBuildingSite / CheckBuildingSite / PlaceDockLine |
+| 0x73..0x7e, 0x7f | kObjectFirstStone..kObjectLastStone, kObjectStoneUsedUp | high | StonecutterCut counts up; 0x7f frees the stone's tiles; CreateStones places 0x73..0x7d |
+| 0x80, 0xb8..0xcf, 0xd0..0xd7 | kObjectFirstFelledTree, kObjectFirst/LastRottingTree, kObjectFirst/LastFelledTreeGone | high | WoodcutterCut: (tree - 0x44) / 2 + 0x80, + 8 per step; the landscape pass adds 8 to 0xb8..0xcf and clears 0xd0..0xd7 |
+| 0xd8..0xdf, 0xe0..0xe7 | kObjectLastGrowingTree, kObjectFirst/LastYoungTree | high | young trees: 0xe0..0xe7 step down by 8; from g_objectAgeStart..0xdf they become trees |
+| 0xe8, 0xe9..0xf2 | kObjectSignNothing, kObjectLastSign | high | GeologistWork: nothing found, or one sign per resource kind and size; the landscape pass removes them by chance |
+| 0xf3..0xf6 | kObjectFireStart, kObjectFireBurning, kObjectFireLast, kObjectFireOut | high | BurnTrees / fire spread set 0xf3; 0xf4 calls SpellOnArea kind 32; 0xf6 is cleared and unblocked |
+| 247, 250..253 | kObjectHive, kObjectHiveFirstHarvest, kObjectHiveFull | high | BeekeeperHivePlaced sets 247; with trees near the landscape pass fills it up to 253, else it empties and vanishes; the beekeeper harvests 250..253 (minus 3) |
+| 0xff | kObjectCleared | medium | AddBuildingSite: tiles after the door of some types |
+
+## Resources (`resources.h`; Tile::resources, uint8) — constants
+
+High nibble kind, low nibble amount (kResourceKindMask / kResourceAmountMask,
+up to kResourceMaxAmount = 15). Kinds: 0x00 fish (FisherCast lowers it,
+UpdateEnvironment moves fish between water tiles), 0x10 coal, 0x20 iron,
+0x30 gold, 0x40 gems, 0x50 sulfur (MinerJobDig per mine type, the
+geologist's signs, LogLand, IsGoodStartPosition, the map generator's
+ScatterTileByte11 calls). High confidence. Session 51: the copies in
+building_sites, player_queries and miner_jobs moved here.
 
 ## Settler jobs (`SettlerJob`, uint16; Settler::job)
 

@@ -49,8 +49,8 @@
 //   defined (both callers store AX). ret 8.
 // All thiscall (ECX = world).
 
-#include "game/enums/settler_types.h"
 #include "game/enums/buildings.h"
+#include "game/enums/settler_types.h"
 #include "game/enums/terrain.h"
 #include "game/globals.h"
 #include "game/typed_fields.h"
@@ -105,7 +105,6 @@ constexpr std::uint16_t kStageFirst = 60;
 constexpr std::uint16_t kStageSecond = 120;
 constexpr std::uint16_t kStageThird = 180;
 constexpr std::uint16_t kStageLast = 250;
-constexpr std::uint8_t kTerrainWornPath = 0x1c;
 
 Tile& TileAt(CGameData* world, std::uint32_t x, std::uint32_t y) {
     return TileAtOffset(world, TileOffset(x, y));

@@ -33,6 +33,9 @@
 // 0x4f3f36.., 0x4f48b7.. slots 14/20) are loop artifacts or use only the
 // byte written in the same handler.
 
+#include "game/enums/objects.h"
+#include "game/enums/resources.h"
+#include "game/enums/terrain.h"
 #include "game/settlers/jobs/settler_jobs.h"
 #include "game/settlers/jobs/settler_jobs_test.h"
 #include "test/callee_stub.h"
@@ -43,20 +46,6 @@ namespace {
 
 using G = Good;
 
-// Job values of this range (placeholders of enums.h with their meaning here).
-
-// Tile objects (Tile::object) the jobs here place or look for.
-constexpr std::uint8_t kNoSign = 0xe8;          // geologist: nothing found
-constexpr std::uint8_t kRicePlantedObject = 0x67;
-constexpr std::uint8_t kRiceRipeFirst = 0x6c;   // 0x6c..0x6e: ripe rice
-constexpr std::uint8_t kRiceRipeLast = 0x6e;
-constexpr std::uint8_t kRiceHarvested = 0x6f;
-constexpr std::uint8_t kVinePlanted = 0x5e;
-constexpr std::uint8_t kVineRipeFirst = 0x63;   // 0x63..0x65: ripe vines
-constexpr std::uint8_t kVineRipeLast = 0x65;
-constexpr std::uint8_t kVineHarvested = 0x66;
-
-constexpr std::uint8_t kRiceTerrain = 0x15;     // Tile::terrain where rice grows
 constexpr std::uint8_t kTileBlockedOrFootprint = 0x09;  // layout::kTileBlocked | kTileBuildingFootprint
 constexpr std::uint8_t kTileNotFree = 0x4d;     // 0x12e: blocked, footprint, has building, owned
 constexpr std::uint8_t kTileFlag02Clear = 0xfd;
@@ -191,7 +180,7 @@ JobResult GeologistWork(SettlerContext& ctx) {
     Tile& tile = SettlerTile(ctx);
     const std::uint32_t resources = tile.resources;
     std::uint32_t found = 0;  // [esp+28h]
-    tile.object = kNoSign;
+    tile.object = kObjectSignNothing;
     for (const GeologistSign& s : kSigns) {
         if (resources < s.first || resources > s.last) {
             continue;
@@ -426,7 +415,7 @@ bool IsFreeFieldTile(CGameData* world, const Building& b, std::uint32_t offset) 
 
 bool CanPlantRice(SettlerContext& ctx, std::uint32_t, std::uint32_t, std::uint32_t offset) {
     return IsFreeFieldTile(ctx.world, WorkBuilding(ctx), offset) &&
-           TileAtOffset(ctx.world, offset).terrain == kRiceTerrain;
+           TileAtOffset(ctx.world, offset).terrain == kTerrainSwampyGrass;
 }
 
 bool IsVineTerrain(std::uint8_t terrain) { return terrain == 0x10 || terrain == 0x18 || terrain == 0x16; }
@@ -519,12 +508,12 @@ JobResult SearchField(SettlerContext& ctx, const FieldSearch& s) {
     return JobResult::Next;
 }
 
-constexpr FieldSearch kRiceSearchParams{
-    1,    kRiceRipeFirst, kRiceRipeLast, 400, 1, Job::RiceFarmerLeaveToHarvest, Job::RiceFarmerLeaveToPlant,
-    0xe4, 0xdf,           &CanPlantRice};
-constexpr FieldSearch kVineSearchParams{
-    2,    kVineRipeFirst, kVineRipeLast,  150, 0, Job::WinegrowerLeaveToHarvest, Job::WinegrowerLeaveToPlant,
-    0xed, 0xe8,           &CanPlantVineAt};
+constexpr FieldSearch kRiceSearchParams{1,    kObjectRiceRipeFirst,          kObjectRiceRipeLast,
+                                        400,  1,    Job::RiceFarmerLeaveToHarvest, Job::RiceFarmerLeaveToPlant,
+                                        0xe4, 0xdf, &CanPlantRice};
+constexpr FieldSearch kVineSearchParams{2,    kObjectVineRipeFirst,          kObjectVineRipeLast,
+                                        150,  0,    Job::WinegrowerLeaveToHarvest, Job::WinegrowerLeaveToPlant,
+                                        0xed, 0xe8, &CanPlantVineAt};
 
 // 0xe6 (0x4f4097): plants rice on the settler's tile (a patch of seven tiles).
 JobResult PlantRice(SettlerContext& ctx) {
@@ -535,7 +524,7 @@ JobResult PlantRice(SettlerContext& ctx) {
     ctx.frame.slot20 = x;
     const std::uint32_t offset = TileOffset(x, y);
     if (!IsFreeFieldTile(world, WorkBuilding(ctx), offset) ||
-        TileAtOffset(world, offset).terrain != kRiceTerrain) {
+        TileAtOffset(world, offset).terrain != kTerrainSwampyGrass) {
         SetJob(ctx.settler, Job::RiceFarmerWalkHome);
         return ReturnHome(ctx);
     }
@@ -592,7 +581,7 @@ JobResult HarvestRice(SettlerContext& ctx) {
         return JobResult::Next;
     }
     if (step == 2) {
-        SettlerTile(ctx).object = kRiceHarvested;
+        SettlerTile(ctx).object = kObjectRiceDone;
         SetJob(ctx.settler, Job::RiceFarmerWalkHomeLoaded);
         return ReturnHome(ctx);
     }
@@ -606,7 +595,7 @@ JobResult HarvestVine(SettlerContext& ctx) {
         return JobResult::Next;
     }
     ctx.settler.slot = 2;
-    SettlerTile(ctx).object = kVineHarvested;
+    SettlerTile(ctx).object = kObjectVineDone;
     SetJob(ctx.settler, Job::WinegrowerWalkHomeLoaded);
     return ReturnHome(ctx);
 }
@@ -814,14 +803,14 @@ JobResult RunDrinkJobs(SettlerContext& ctx) {
     case Job::RiceFarmerLeaveToPlant: return LeaveBuilding(ctx, 1, Job::RiceFarmerWalkToPlant);
     case Job::RiceFarmerPlant: return PlantRice(ctx);
     case Job::RiceFarmerPlanted:
-        SettlerTile(ctx).object = kRicePlantedObject;
+        SettlerTile(ctx).object = kObjectRicePlanted;
         SetJob(ctx.settler, Job::RiceFarmerWalkHome);
         return ReturnHome(ctx);
     case Job::RiceFarmerBackIn:  // 0xe9
     case Job::RiceFarmerRest: SetJob(ctx.settler, Job::RiceFarmerSearch); return ReleaseTileAndRepeat(ctx);
     case Job::RiceFarmerLeaveToHarvest: return LeaveBuilding(ctx, 0, Job::RiceFarmerWalkToHarvest);
     case Job::RiceFarmerAtField:
-        return StartHarvest(ctx, kRiceRipeFirst, kRiceRipeLast, Job::RiceFarmerHarvest, 0xe2,
+        return StartHarvest(ctx, kObjectRiceRipeFirst, kObjectRiceRipeLast, Job::RiceFarmerHarvest, 0xe2,
                             Job::RiceFarmerWalkHome);
     case Job::RiceFarmerHarvest: return HarvestRice(ctx);
     case Job::RiceFarmerHome: return RiceArrive(ctx);  // 0xee
@@ -839,14 +828,14 @@ JobResult RunDrinkJobs(SettlerContext& ctx) {
     case Job::WinegrowerLeaveToPlant: return LeaveBuilding(ctx, 1, Job::WinegrowerWalkToPlant);
     case Job::WinegrowerPlant: return PlantVine(ctx);  // 0xf7
     case Job::WinegrowerPlanted:
-        SettlerTile(ctx).object = kVinePlanted;
+        SettlerTile(ctx).object = kObjectVinePlanted;
         SetJob(ctx.settler, Job::WinegrowerWalkHome);
         return ReturnHome(ctx);
     case Job::WinegrowerBackIn:  // 0xfa
     case Job::WinegrowerRest: SetJob(ctx.settler, Job::WinegrowerSearch); return ReleaseTileAndRepeat(ctx);
     case Job::WinegrowerLeaveToHarvest: return LeaveBuilding(ctx, 0, Job::WinegrowerWalkToHarvest);
     case Job::WinegrowerAtField:
-        return StartHarvest(ctx, kVineRipeFirst, kVineRipeLast, Job::WinegrowerHarvest, 0xeb,
+        return StartHarvest(ctx, kObjectVineRipeFirst, kObjectVineRipeLast, Job::WinegrowerHarvest, 0xeb,
                             Job::WinegrowerWalkHome);
     case Job::WinegrowerHarvest: return HarvestVine(ctx);
     case Job::WinegrowerHome: return WineArrive(ctx);  // 0xff

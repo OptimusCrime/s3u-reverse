@@ -52,9 +52,10 @@
 //   stack (not reproduced; only mines call it). EAX unused. ret 4.
 // thiscall (ECX = world).
 
-#include "game/enums/races.h"
 #include "game/enums/buildings.h"
 #include "game/enums/job_ids.h"
+#include "game/enums/races.h"
+#include "game/enums/resources.h"
 #include "game/globals.h"
 #include "game/replacements.h"
 #include "game/typed_fields.h"
@@ -154,14 +155,6 @@ constexpr std::uint16_t kWaitCounter = 10;
 
 // MinerJobDig.
 constexpr std::uint32_t kDigOffsets = 0x3f;            // Random() & 63: offset table entries 0..63
-constexpr std::uint8_t kResourceKindMask = 0xf0;       // tile +0x11: high nibble kind, low nibble amount
-constexpr std::uint8_t kResourceAmountMask = 0x0f;
-// The resource kinds (high nibble of tile +0x11).
-constexpr std::uint32_t kResourceCoal = 0x10;
-constexpr std::uint32_t kResourceIron = 0x20;
-constexpr std::uint32_t kResourceGold = 0x30;
-constexpr std::uint32_t kResourceGems = 0x40;
-constexpr std::uint32_t kResourceSulfur = 0x50;
 constexpr std::uint32_t kDigChanceMask = 3;            // found if (Random() & 3) < amount
 constexpr std::uint32_t kCampaignComputerFailAbove = 22000;  // 0x55f0
 constexpr std::uint8_t kMaxDigsCounted = 32;

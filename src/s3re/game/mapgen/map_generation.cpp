@@ -44,6 +44,7 @@
 //   (unsigned shift, low byte) and the same blocking. ret 0x18.
 // All thiscall (ECX = world); callers ignore EAX.
 
+#include "game/enums/resources.h"
 #include "game/enums/terrain.h"
 #include "game/replacements.h"
 #include "game/world.h"
@@ -69,10 +70,8 @@ constexpr std::int32_t kColumn = static_cast<std::int32_t>(kTileBytes);   // y +
 // ScatterTileByte11: resources go into mountains and terrain class 0x80
 // (unknown); each cluster covers 32..95 offset entries and fills a tile with
 // a chance of (32768..65535) / 65536.
-constexpr std::uint8_t kTerrainClass80 = 0x80;
 constexpr std::uint32_t kMinClusterEntries = 32;
 constexpr std::uint32_t kMinFillThreshold = 32768;
-constexpr std::uint32_t kResourceAmounts = 15;  // amount 1..15 in the low nibble
 
 std::uint32_t TileOffsetXY(std::int32_t x, std::int32_t y) {
     return TileOffset(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y));
@@ -160,13 +159,13 @@ std::uint32_t __fastcall CGameData_ScatterTileByte11(CGameData* world, void*, st
             }
             const std::uint32_t tile = TileOffsetXY(tx, ty);
             const std::uint8_t terrainClass = TileAt(world, tile).terrain & kTerrainClassMask;
-            if ((terrainClass != kTerrainClassMountain && terrainClass != kTerrainClass80) ||
+            if ((terrainClass != kTerrainClassMountain && terrainClass != kTerrainClassSnow) ||
                 TileAt(world, tile).resources != 0) {
                 continue;
             }
             if (Random16(world) < threshold) {
                 TileAt(world, tile).resources =
-                    static_cast<std::uint8_t>(Random16(world) % kResourceAmounts + base + 1);
+                    static_cast<std::uint8_t>(Random16(world) % kResourceMaxAmount + base + 1);
             }
         }
     }
