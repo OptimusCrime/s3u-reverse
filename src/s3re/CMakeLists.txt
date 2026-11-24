@@ -32,6 +32,7 @@ add_library(s3re SHARED
 
     # game/world/: CGameData basics: RNG, players, statistics, counters, tables
     game/world/counting.cpp
+    game/world/finish_initialising.cpp
     game/world/id_allocators.cpp
     game/world/notifications.cpp
     game/world/player_presence.cpp
@@ -67,6 +68,7 @@ add_library(s3re SHARED
     # game/environment/: UpdateEnvironment and the map effects
     game/environment/environment.cpp
     game/environment/map_effect_expiry.cpp
+    game/environment/map_effect_queries.cpp
     game/environment/map_effect_spawns.cpp
     game/environment/map_effects.cpp
 

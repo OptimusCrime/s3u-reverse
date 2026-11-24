@@ -297,3 +297,78 @@ SPECS += [
          [below(4), below(42), below(384), below(384)], eax_mask=0,
          presets=notification_state, globals=notification_level, max_cases=1500),
 ]
+
+
+# -- session 54 (logic-misc): FinishInitialising (finish_initialising.cpp), BuildStatisticsChart
+#    (statistics.cpp), GoToNotification (notifications.cpp) --
+
+def finish_initialising_world(rng, pool, args):
+    return [(0x1195dcc, 0 if rng.random() < 0.5 else rng.getrandbits(8), 1),
+            (MAP_SIZE, rng.choice([64, 128, 384, rng.randrange(800), rng.getrandbits(32)]), 4)]
+
+
+STATISTICS_KERNEL = 0x4
+STATISTICS_HISTORIES = 0x38
+GAME_KERNEL = (3, 6, 8, 9, 9, 10, 10, 10, 9, 9, 8, 6, 3)
+
+
+def statistics_chart_world(rng, pool, args):
+    """The game's kernel or small random weights (high bits only where they
+    don't reach the divisor), and a history: sparse, dense, small or random."""
+    player, category = args
+    fields = []
+    for k in range(13):
+        w = GAME_KERNEL[k] if rng.random() < 0.6 else rng.randrange(16)
+        if k >= 6 and rng.random() < 0.2:
+            w |= rng.getrandbits(16) << 16
+        fields.append((STATISTICS_KERNEL + 4 * k, w, 4))
+    kind = rng.randrange(5)
+    history = STATISTICS_HISTORIES + (player * 36 + category) * 256
+    for i in range(256):
+        if kind == 4:  # (almost) empty: the chart fits the first axis scale
+            v = 1 if rng.random() < 0.01 else 0
+        elif kind == 0:
+            v = rng.getrandbits(8)
+        elif kind == 1:
+            v = rng.randrange(101) if rng.random() < 0.3 else 0
+        else:
+            v = rng.randrange(101 if kind == 2 else 8)
+        fields.append((history + i, v, 1))
+    return fields
+
+
+GO_TO_TICK = [5000]  # (GAME_TICK: logic.py)
+
+
+def go_to_notification_world(rng, pool, args):
+    """The list's entries (a few, sometimes full), a stored return position
+    or none, the last jump recent or not, a map size; tick in the globals."""
+    GO_TO_TICK[0] = 1000 + rng.randrange(100000)  # (globals run after the presets)
+    row = NOTIFICATION_LISTS + (args[0] - 1) * 1200
+    size = rng.randrange(64, 385)
+    used = 100 if rng.random() < 0.15 else rng.randrange(1, 12)
+    fields = [(MAP_SIZE, size, 4), (0x2d314, 0 if rng.random() < 0.25 else rng.randrange(384), 4),
+              (0x2d31c, GO_TO_TICK[0] - rng.randrange(400) if rng.random() < 0.6 else rng.getrandbits(32), 4)]
+    for k in range(100):
+        t = rng.randrange(1, 42) if k < used else (7 if rng.random() < 0.3 else 0)
+        fields += [(row + k * 12, t, 4), (row + k * 12 + 4, rng.randrange(2, size - 2), 4),
+                   (row + k * 12 + 8, rng.randrange(2, size - 2), 4)]
+    return fields
+
+
+def go_to_notification_globals(rng, pool, args):
+    return [(GAME_TICK, GO_TO_TICK[0], 4)] + screen_size(rng, pool, args)
+
+
+SPECS += [
+    # EAX: DebugLog's (callers ignore it).
+    Spec("CGameData_FinishInitialising", 0x004fce90, "thiscall", [], eax_mask=0, presets=finish_initialising_world,
+         max_cases=300),
+    Spec("CGameData_BuildStatisticsChart", 0x004ff550, "thiscall", [below(20), below(36)], eax_mask=0,
+         presets=statistics_chart_world, max_cases=300),
+    # The marker effect is probed (MapEffects::Spawn_5450d0 has its own spec);
+    # the camera and screen-position helpers run.
+    Spec("CGameData_GoToNotification", 0x004fee90, "thiscall", [between(1, 4)], eax_mask=0,
+         presets=go_to_notification_world, globals=go_to_notification_globals, max_cases=500,
+         callees={0x005450d0: (5, "thiscall", "probe")}),
+]

@@ -10,6 +10,7 @@ address,name,type,status,notes
 0x006586ac,g_pathSplitTable,const int32_t[6][4],classified,"Per direction four values used to split a turn into two axes (pathing.cpp, AngleSetup), and the two axes. Declared in src/s3re/game/tables.h; used by pathing.cpp."
 0x0065870c,g_pathAxisTable,const int32_t[6][4],classified,"Per direction four values used to split a turn into two axes (pathing.cpp, AngleSetup), and the two axes. Declared in src/s3re/game/tables.h; used by pathing.cpp."
 0x00658adc,g_table658adc,const int32_t[8],classified,"Two tables of four int32 (0x46,0x46,0x46,0x46 / 0x54,0x54,0x60,0x54), read per race by UpdateSettlers; meaning to be named. Declared in src/s3re/game/tables.h; used by the settler_jobs_*.cpp files (UpdateSettlers)."
+0x00658afc,g_chartAxisScales,const int32_t[14][5],classified,"The axis scales of the statistics chart: 14 entries of five 16.16 values (x100: the top of the axis and four grid lines, 100/20/40/60/80 .. 10000/2000/../8000); CGameData::BuildStatisticsChart 0x4ff550 picks the first that fits (past the last it reads the following 20 bytes, the CGameData vtable area). Declared in src/s3re/game/tables.h; used by statistics.cpp."
 0x00658c1c,g_terrainSpeed,const uint8_t[256],classified,Walking time added per terrain type. Declared in src/s3re/game/tables.h; used by settler_walk.cpp.
 0x00658d64,g_raceSpells,const uint32_t[][8],classified,Per race the eight spells it can cast. Declared in src/s3re/game/tables.h; used by godly_events.cpp.
 0x00658de4,g_spellCastRange,const uint32_t[],classified,Per spell (the numbers of g_raceSpells) the cast range in tiles around the priest: ExecuteCommands 0x15 (CastSpell) needs TileDistance - 2 below it. Declared in src/s3re/game/tables.h; used by execute_commands.cpp.
@@ -95,6 +96,7 @@ address,name,type,status,notes
 0x006a5bb4,texts::kCatapultProduction,char[],identified,"String ""Katapultproduktion owner %u"" Declared in src/s3re/game/texts.h; used by the settler_jobs_*.cpp files (UpdateSettlers)."
 0x006a5bd0,texts::kTypeNumber,char[],identified,"String ""Typ: %u Nr %u"" Declared in src/s3re/game/texts.h; used by the settler_jobs_*.cpp files (UpdateSettlers)."
 0x006a5be0,texts::kSettlerOnForeignGround,char[],identified,"String ""nr. %u art %u owner %u groundowner %u"" Declared in src/s3re/game/texts.h; used by the settler_jobs_*.cpp files (UpdateSettlers)."
+0x006a5c38,texts::kGameDataInitialisingDone,char[],identified,"String ""*** GAMEDATA Initialising done"" (DebugLog of CGameData::FinishInitialising 0x4fce90). Declared in src/s3re/game/texts.h; used by finish_initialising.cpp."
 0x006a5f5c,texts::kIllegalWalkCount,char[],identified,"String ""Illegal walkcount vorher %u, Ship %u"" Declared in src/s3re/game/texts.h; used by settler_walk.cpp."
 0x006a5f84,texts::kIllegalSwap,char[],identified,"String ""TROUBLE: wollte auf illegals Feld wechseln %i %i %i %i"" Declared in src/s3re/game/texts.h; used by settler_walk.cpp."
 0x006a5fbc,texts::kNotThere,char[],identified,"String ""SnotThere nr: %u  owner %u   art %u   job  %u"" Declared in src/s3re/game/texts.h; used by settler_walk.cpp."
@@ -130,6 +132,7 @@ address,name,type,status,notes
 0x0072fecc,texts::kErrorBottom,char[],identified,"String ""Error bottom %u %u %u"" Declared in src/s3re/game/texts.h; used by world_create.cpp."
 0x0072fee4,texts::kErrorTop,char[],identified,"String ""Error top %u %u %u"" Declared in src/s3re/game/texts.h; used by world_create.cpp."
 0x0072fef8,texts::kCreatingWorld,char[],identified,"String ""creating world"" Declared in src/s3re/game/texts.h; used by world_create.cpp."
+0x0072ff08,texts::kSectorsDone,char[],identified,"String ""sectors done"" (DebugLog of CGameData::InitTileShadesAndMapEdge 0x519e80). Declared in src/s3re/game/texts.h; used by map_terrain.cpp."
 0x00730ed4,texts::kEffectOverflow,char[],identified,"String ""EFFECT: Effect overflow"" Declared in src/s3re/game/texts.h; used by map_effects.cpp."
 0x00730eec,g_damageDivisor,uint32_t,classified,"Divisor of soldier damage (256 in the image), UpdateSoldier. Declared in src/s3re/game/globals.h; used by soldier.cpp."
 0x00730ef0,g_goodType0B,const int32_t,classified,"Single constants in .data: the output good of building type 0xb (11), mana per offering (1), the residence capacity unit (10) and the smith's full input amount (8). Declared in src/s3re/game/tables.h; used by building_done.cpp."

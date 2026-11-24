@@ -235,10 +235,10 @@ std::uint32_t __fastcall MapEffect_Reset(MapEffect* self, void*) {
     self->end_x = 0;
     self->end_y = 0;
     self->arc = 0;
-    self->unk18 = 0;
-    self->unk1c = 0;
-    self->unk20 = 0;
-    self->unk24 = 0;
+    self->start_tile_x = 0;
+    self->start_tile_y = 0;
+    self->end_tile_x = 0;
+    self->end_tile_y = 0;
     self->unk2c = 0xffffffffu;
     self->unk30 = 0;
     self->unk32 = 0;

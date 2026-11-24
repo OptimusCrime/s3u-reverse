@@ -1720,7 +1720,6 @@ SPECS += [
 
 # -- session 54 (logic-misc): small CLogicThread members (logic_thread_members.cpp) --
 
-SELECTED_BUILDING = 0x007dfd6c
 CURRENT_GROUP = 0x007dfd68
 GROUP_CHANGED = 0x007ad5f8
 
@@ -1800,4 +1799,46 @@ SPECS += [
     Spec("CLogicThread_GoodsPriorityPosition", 0x00542d40, "logicthread", [area_number, below(40, 0.1)],
          presets=transport_order_area),
     Spec("LogicRecord24_Construct_args", 0x005437e0, "thiscall", [anything] * 9),
+]
+
+
+# -- session 54 (logic-misc): TutorialWaitDone, PickHitArea (ui_state.cpp) --
+
+def tutorial_wait(rng, pool, args):
+    return [(0x2d304, rng.choice([0, 0, 1, 2, rng.getrandbits(32)]), 4)]
+
+
+HIT_AREAS = 0x7ade08
+PICK_STATE: list = []
+
+
+def pick_hit_area_world(rng, pool, args):
+    """Draws the hit areas for the globals (run after the presets): a count
+    of 0, negative or up to 60, half 0/1, entries near (x, y) or anywhere."""
+    x, y = args
+    x = x - (1 << 32) if x & 0x80000000 else x
+    y = y - (1 << 32) if y & 0x80000000 else y
+    kind = rng.randrange(8)
+    count = 0 if kind == 0 else ((-1 - rng.randrange(5)) & 0xFFFFFFFF) if kind == 1 else rng.randrange(1, 60)
+    half = rng.randrange(2)
+    exe = [(0x7dfd5c, count, 4), (0x7dfd64, half, 4)]
+    for k in range(count if count < 0x80000000 else 0):
+        entry = HIT_AREAS + (2 * k + half) * 10
+        close = rng.random() < 0.3
+        ex = (x + rng.randint(-50, 50)) if close else rng.getrandbits(16)
+        ey = (y + rng.randint(-50, 50)) if close else rng.getrandbits(16)
+        exe += [(entry + 2, ex & 0xFFFF, 2), (entry + 4, ey & 0xFFFF, 2),
+                (entry + 6, rng.getrandbits(16), 2), (entry + 8, rng.getrandbits(16), 2)]
+    PICK_STATE[:] = exe
+    return []
+
+
+def pick_hit_area_globals(rng, pool, args):
+    return list(PICK_STATE)
+
+
+SPECS += [
+    Spec("CGameData_TutorialWaitDone", 0x00515b00, "thiscall", [], presets=tutorial_wait),
+    Spec("CGameData_PickHitArea", 0x004ff0a0, "thiscall", [between(-50, 1100), between(-50, 800)], eax_mask=0,
+         presets=pick_hit_area_world, globals=pick_hit_area_globals, max_cases=1000),
 ]

@@ -83,6 +83,8 @@ inline constexpr GameText kDDBltName{0x7a01e0};         // "CSurface::DDBlt"
 inline constexpr GameText kDDBltFastName{0x7a01f0};     // "CSurface::DDBltFast"
 
 // ------------------------------------------------------------ simulation (DebugLog formats)
+inline constexpr GameText kGameDataInitialisingDone{0x6a5c38};  // "*** GAMEDATA Initialising done" (CGameData::FinishInitialising)
+inline constexpr GameText kSectorsDone{0x72ff08};               // "sectors done" (CGameData::InitTileShadesAndMapEdge)
 // Buildings
 inline constexpr GameText kStartCrushing{0x6a5824};     // "Start crushing nr. %u art %u"
 inline constexpr GameText kCampaign70NoCrush{0x6a57f8};  // "Campaign 70: Building must not be crushed!"

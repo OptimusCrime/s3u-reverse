@@ -422,7 +422,9 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   record; MapEffects_FindFreeSlot), +0x4 duration (i16), +0x8/+0xC
   start_x/y, +0x10/+0x14 end_x/y (pixels; MapEffect_PositionAt
   interpolates, MapEffects_Add files the record under the end position's
-  256-pixel block), +0x28 arc (i16 hop height), +0x40 list (block),
+  256-pixel block), +0x18/+0x1C start_tile_x/y and +0x20/+0x24
+  end_tile_x/y (the tile it is over, MapEffect::TileAt 0x5441C0
+  interpolates them; session 54), +0x28 arc (i16 hop height), +0x40 list (block),
   +0x44 previous, +0x48 next (MapEffect_SetLinks), +0x3A source_kind and
   +0x3C source_id (what made the effect: MapEffects::RemoveMatching
   0x545C80 removes those of a kind and number; CrushBuilding passes kind 0

@@ -562,10 +562,10 @@ struct MapEffect {  // constructors 0x543830 / 0x543880 (argument a<i>)
     std::int32_t start_y;            // 0x0c a7
     std::int32_t end_x;              // 0x10 a8 (gives the block list)
     std::int32_t end_y;              // 0x14 a9
-    std::uint32_t unk18;             // 0x18 a11
-    std::uint32_t unk1c;             // 0x1c a12
-    std::uint32_t unk20;             // 0x20 a13
-    std::uint32_t unk24;             // 0x24 a14
+    std::uint32_t start_tile_x;      // 0x18 a11 the tile it moves from (MapEffect::TileAt interpolates
+    std::uint32_t start_tile_y;      // 0x1c a12  from the start tile to the end tile over its duration)
+    std::uint32_t end_tile_x;        // 0x20 a13
+    std::uint32_t end_tile_y;        // 0x24 a14
     std::int16_t arc;                // 0x28 a10 hop height (PositionAt)
     std::uint8_t pad2a[2];           // 0x2a never written (copied garbage)
     std::uint32_t unk2c;             // 0x2c a15 graphics id? (-1 default)
@@ -586,7 +586,8 @@ static_assert(sizeof(MapEffect) == 0x4c);
 static_assert(offsetof(MapEffect, duration) == 0x04);
 static_assert(offsetof(MapEffect, start_x) == 0x08);
 static_assert(offsetof(MapEffect, end_x) == 0x10);
-static_assert(offsetof(MapEffect, unk18) == 0x18);
+static_assert(offsetof(MapEffect, start_tile_x) == 0x18);
+static_assert(offsetof(MapEffect, end_tile_y) == 0x24);
 static_assert(offsetof(MapEffect, arc) == 0x28);
 static_assert(offsetof(MapEffect, pad2a) == 0x2a);
 static_assert(offsetof(MapEffect, unk2c) == 0x2c);
@@ -630,9 +631,9 @@ struct CGameDataFields {
     std::uint32_t vtable;                                   // 0x0000000 0x658c18
     std::int32_t statistics_kernel[13];                     // 0x0000004
     std::uint8_t statistics[kPlayers][kGoodsTypes][256];    // 0x0000038 ProdStatArray
-    std::uint8_t chart[0x200];                              // 0x002d038 (UI)
-    std::uint16_t chart_max;                                // 0x002d238
-    std::uint8_t pad2d23a[0xa];
+    std::uint16_t chart[256];                               // 0x002d038 (UI) the smoothed statistics curve (BuildStatisticsChart)
+    std::uint16_t chart_max;                                // 0x002d238 its largest value, or the first axis scale
+    std::int16_t chart_axis[5];                             // 0x002d23a the chosen axis scale: top value and 4 grid lines
     std::int32_t chart_selection;                           // 0x002d244 (UI)
     std::int32_t objective_timeout;                         // 0x002d248
     std::int32_t end_warning_minutes;                       // 0x002d24c 10: Step shows "Spiel endet in %u min" this long before objective_timeout
@@ -654,7 +655,7 @@ struct CGameDataFields {
     std::int32_t ui_2d2a0;                                  // 0x002d2a0
     std::int32_t ui_2d2a4[9];                               // 0x002d2a4..0x002d2c4
     std::int32_t notification_blink;                        // 0x002d2c8 (UI) bits for the draw thread, PrepareDrawData 0x51f110
-    std::int32_t ui_2d2cc;                                  // 0x002d2cc
+    std::int32_t notification_icon;                         // 0x002d2cc icon of the notification jumped to last (GoToNotification)
     std::uint32_t map_size;                                 // 0x002d2d0
     std::int32_t local_player;                              // 0x002d2d4
     std::int32_t command_attempts;                          // 0x002d2d8 Step adds 4 before every ExecuteCommands attempt; the UI tests bit 0x20 (blinking)
@@ -670,7 +671,9 @@ struct CGameDataFields {
     std::uint8_t pad2d302[2];
     std::int32_t unk2d304, unk2d308;                        // 0x002d304 (saved)
     std::int32_t unk2d30c, unk2d310;
-    std::int32_t ui_2d314[3];                               // 0x002d314
+    std::int32_t jump_return_x, jump_return_y;              // 0x002d314 screen-centre tile before the first of a series of
+                                                            //           notification jumps (GoToNotification; 0 = none)
+    std::uint32_t jump_tick;                                // 0x002d31c game tick of the last notification jump
     Notification notifications[4][100];                     // 0x002d320
     NotificationTimer notification_timers[42][10];          // 0x002e5e0
     PendingEvent pending_events[1000];                      // 0x002f990
@@ -741,6 +744,7 @@ struct CGameData : layout::CGameDataFields {};
 static_assert(sizeof(CGameData) == 0x153a128, "size passed to operator new in OnStart");
 static_assert(offsetof(CGameData, statistics) == 0x38);
 static_assert(offsetof(CGameData, chart) == 0x2d038);
+static_assert(offsetof(CGameData, chart_axis) == 0x2d23a);
 static_assert(offsetof(CGameData, objective_timeout) == 0x2d248);
 static_assert(offsetof(CGameData, counters_disabled) == 0x2d250);
 static_assert(offsetof(CGameData, camera_x) == 0x2d25c);
@@ -758,7 +762,9 @@ static_assert(offsetof(CGameData, last_search_x) == 0x2d2e4);
 static_assert(offsetof(CGameData, ui_cursor_mode) == 0x2d2f0);
 static_assert(offsetof(CGameData, search_generation) == 0x2d300);
 static_assert(offsetof(CGameData, unk2d304) == 0x2d304);
-static_assert(offsetof(CGameData, ui_2d314) == 0x2d314);
+static_assert(offsetof(CGameData, jump_return_x) == 0x2d314);
+static_assert(offsetof(CGameData, jump_tick) == 0x2d31c);
+static_assert(offsetof(CGameData, notification_icon) == 0x2d2cc);
 static_assert(offsetof(CGameData, notifications) == 0x2d320);
 static_assert(offsetof(CGameData, notification_timers) == 0x2e5e0);
 static_assert(offsetof(CGameData, pending_events) == 0x2f990);

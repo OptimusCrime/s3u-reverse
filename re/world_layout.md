@@ -183,8 +183,9 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 
 | Offset | Type | Name / meaning | Users | Conf. |
 |---|---|---|---|---|
-| 0x2D038..0x2D237 | | statistics chart buffer (BuildStatisticsChart 0x4FF550) | UI, skip | verified |
-| 0x2D238 | uint16 | chart maximum (0 in Init) | UI, skip | strong |
+| 0x2D038..0x2D237 | uint16 x 256 | `chart`: the smoothed statistics curve (BuildStatisticsChart 0x4FF550) | UI, skip | verified |
+| 0x2D238 | uint16 | `chart_max`: its maximum, or the first axis scale's top (0 in FinishInitialising) | UI, skip | verified |
+| 0x2D23A..0x2D243 | int16 x 5 | `chart_axis`: the chosen axis scale (top and four grid lines; g_chartAxisScales 0x658AFC) | UI, skip | verified |
 | 0x2D244 | int32 | statistics window selection | UI, skip | strong |
 | 0x2D248 | int32 | NewGameObjectiveTimeout (minutes; 0x4FFBC0 "NGO TimeOut", game end 0x511C50) | sim | strong |
 | 0x2D24C | int32 | `end_warning_minutes`: 10 (OnStart, NGO setup 0x4FFBC0); Step (0x53E230) shows "Spiel endet in %u min" (0x730A60) with it at tick (objective_timeout - it) * 60000 / 64 | sim | strong |
@@ -204,19 +205,21 @@ The debug dumper `CGameData::DumpTables` (our name, 0x4FF6D0) writes
 | 0x2D298 | int32 | special menu of the selected settler group (`ui_special_menu`; set by CLogicThread::UpdateGroupMenu 0x542990: 1 for one own settler of type 0x24, 2..7 for groups of types 0x2C/0x2B/0x29/0x28/0x16/0x17, else 0); `IsUiField298`; 340 reads | UI | strong |
 | 0x2D29C | int32 | UI (also 0x542990) | UI, hashed | strong |
 | 0x2D2A0 | int32 | UI menu sub-page | UI, skip | strong |
-| 0x2D2A4..0x2D2CC | int32 x 10 | UI fields written by ProcessEvents, read by PrepareDrawData | UI, hashed | strong |
+| 0x2D2A4..0x2D2C8 | int32 x 10 | UI fields written by ProcessEvents, read by PrepareDrawData | UI, hashed | strong |
+| 0x2D2CC | int32 | `notification_icon`: icon of the notification jumped to last (GoToNotification: g_notificationKinds[type].icon) | UI, hashed | verified |
 | 0x2D2D0 | uint32 | **map size** (square; tiles per side) | sim, saved | verified |
 | 0x2D2D4 | int32 | **local player** | sim/UI, saved | verified |
 | 0x2D2D8 | int32 | `command_attempts`: Step adds 4 before every ExecuteCommands attempt (0x53DDA5, also when the network allowance stops it); ProcessEvents reads it, PrepareDrawData tests bit 0x20 (blinking) | UI? | strong |
 | 0x2D2DC | uint16 x3 | **RNG state** a, b, c (`CGameData::Random`) | sim, saved | verified |
-| 0x2D2E4, 0x2D2E8 | int32 | last search result position (-1 after Init) | volatile, skip | verified |
+| 0x2D2E4, 0x2D2E8 | int32 | last search result / picked hit area (-1 after FinishInitialising 0x4FCE90; CGameData::PickHitArea 0x4FF0A0 stores the two values of the clicked hit area, 0 for none) | volatile, skip | verified |
 | 0x2D2F0 | int32 | UI cursor mode (6 after Init) | UI, skip | verified |
 | 0x2D2F4, 0x2D2F8, 0x2D2FC | int32 | UpdateEnvironment counters (Init: 0, 0, 0xD) | sim | strong |
 | 0x2D300 | uint8 | search generation (stamped into tile +0xB) | skip | verified |
 | 0x2D301 | uint8 | PrepareDrawData call counter | volatile, skip | verified |
-| 0x2D304 | int32 | saved; ProcessEvents, 0x515AF0/0x515B00 | ? | guess |
+| 0x2D304 | int32 | tutorial wait countdown (StartTutorialWait 0x515AF0 = 100000, a click sets 1, TutorialWaitDone 0x515B00 counts down); saved (`unk2d304`) | UI | verified (0x515B00) |
 | 0x2D308 | int32 | saved; UI code 0x53F950/0x53FBB0 | UI? | guess |
-| 0x2D314..0x2D31C | int32 x3 | 0x4FEE90 and ProcessEvents (notifications) | UI | guess |
+| 0x2D314, 0x2D318 | int32 | `jump_return_x/y`: screen-centre tile before a series of notification jumps (GoToNotification 0x4FEE90; 0 = none; ProcessEvents jumps back) | UI | verified (0x4FEE90) |
+| 0x2D31C | uint32 | `jump_tick`: game tick of the last notification jump (the return position is kept for 20 s) | UI | verified (0x4FEE90) |
 
 ## Accessors per region (names from `re/functions.csv`)
 

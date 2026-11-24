@@ -1180,3 +1180,38 @@ SPECS += [
     Spec("CGameData_AddPlayerTowns", 0x005074b0, "thiscall", [], presets=add_towns_state,
          callees=ADD_TOWNS_PROBES, max_cases=600, exempt_blocks=(0x507d72, 0x50778e, 0x5079cb, 0x5075cc)),
 ]
+
+
+# -- session 54 (logic-misc): BuildMinimap (minimap.cpp), RebuildFogOfWar (fog_of_war.cpp),
+#    InitTileShadesAndMapEdge (map_terrain.cpp) --
+
+def build_minimap_world(rng, pool, args):
+    return [(MAP_SIZE, rng.randrange(16, 385), 4)]
+
+
+def build_minimap_globals(rng, pool, args):
+    """Minimap widths 1..24 (every pixel probed), sometimes 0 or below (one
+    divides by zero in both, so only -1 and less)."""
+    width = rng.randrange(1, 25) if rng.random() < 0.85 else (-1 - rng.randrange(3)) & 0xFFFFFFFF
+    return [(0x00730f28, width, 4)]
+
+
+def init_shades_world(rng, pool, args):
+    return [(MAP_SIZE, rng.choice([1, 2, 3]) if rng.random() < 0.15 else rng.randrange(4, 30), 4)]
+
+
+SPECS += [
+    # MinimapPixel is probed (its own spec covers it; here every pixel's call
+    # and the stored AX are compared).
+    Spec("CGameData_BuildMinimap", 0x004fb650, "thiscall", [], presets=build_minimap_world,
+         globals=build_minimap_globals, max_cases=300, callees={0x004fb720: (4, "thiscall", "probe")}),
+    # The five steps loop over whole record tables and have their own specs:
+    # probed, so the order and arguments of the 57 calls are compared.
+    Spec("CGameData_RebuildFogOfWar", 0x00518e70, "thiscall", [], eax_mask=0, max_cases=50,
+         callees={0x00518ec0: (1, "thiscall", "probe"), 0x00518f20: (0, "thiscall", "probe"),
+                  0x00519fa0: (1, "thiscall", "probe"), 0x0051a150: (1, "thiscall", "probe"),
+                  0x00519010: (1, "thiscall", "probe")}),
+    # TileShade runs; UpdateAllBorderFlags (whole map, own spec) is probed.
+    Spec("CGameData_InitTileShadesAndMapEdge", 0x00519e80, "thiscall", [], eax_mask=0, presets=init_shades_world,
+         max_cases=200, callees={0x0051a420: (0, "thiscall", "probe")}),
+]

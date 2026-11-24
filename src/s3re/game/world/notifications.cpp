@@ -28,6 +28,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 namespace s3re::game {
 
@@ -198,6 +199,163 @@ S3RE_TEST(CGameData_NotifyLocalPlayer_MatchesOriginal) {
 S3RE_TEST(CGameData_NotifyLocalPlayer_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareNotify(probe, &WrongNotifyLocalPlayer, 5000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+
+// CGameData::GoToNotification (0x004fee90): (list) thiscall, ret 4; ProcessEvents calls it when the player
+//   clicks one of the four notification buttons (list 1..4, not checked). Takes the list's oldest entry:
+//   notification_icon = the icon of its type (g_notificationKinds); unless the last jump (jump_tick) was at
+//   most 20 seconds ago (ticks * 64 ms, unsigned 32-bit) and a return position is stored (jump_return_x !=
+//   0), the screen-centre tile becomes the return position; jump_tick = now; the camera centres on the
+//   entry (CenterCameraOnTile) and a marker effect starts there (MapEffects::Spawn_5450d0(tick, screen x,
+//   screen y, x + 3, y + 6) with TileScreenY then TileScreenX). The list then moves up by one: entries 0..98
+//   take the next one's values up to the first empty entry (type 0, as it was before the move); entry 99's
+//   type becomes 0. EAX not used.
+
+namespace {
+
+constexpr std::uint32_t kJumpMemorySeconds = 20;
+constexpr std::uint32_t kTickMilliseconds = 64;
+constexpr std::int32_t kMarkerOffsetX = 3;  // the marker effect's end tile, relative to the entry
+constexpr std::int32_t kMarkerOffsetY = 6;
+
+namespace callee {
+constexpr std::uintptr_t kScreenCenterTileX = 0x005158f0;
+constexpr std::uintptr_t kScreenCenterTileY = 0x00515980;
+constexpr std::uintptr_t kCenterCameraOnTile = 0x0051b560;
+constexpr std::uintptr_t kTileScreenX = 0x00519610;
+constexpr std::uintptr_t kTileScreenY = 0x00519640;
+constexpr std::uintptr_t kSpawnMarker = 0x005450d0;  // MapEffects::Spawn_5450d0, ECX = the effect table
+}  // namespace callee
+
+template <std::uintptr_t Address, typename... Args>
+std::uint32_t Call(CGameData* world, Args... args) {
+    using Fn = std::uint32_t(__fastcall*)(CGameData*, void*, decltype(static_cast<std::uint32_t>(args))...);
+    return reinterpret_cast<Fn>(Address)(world, nullptr, static_cast<std::uint32_t>(args)...);
+}
+
+}  // namespace
+
+using GoToFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t list);
+
+// Purpose: Shows the oldest message of a notification list: the camera
+// jumps to its place (remembering where it was, for jumping back), a marker
+// appears there, and the message leaves the list.
+std::uint32_t __fastcall CGameData_GoToNotification(CGameData* world, void*, std::uint32_t list) {
+    // (list - 1) * 100 in 32 bits, as the original.
+    Notification* const entries = &world->notifications[0][0] + (list - 1) * kListEntries;
+    world->notification_icon = g_notificationKinds[static_cast<std::uint32_t>(entries[0].type)].icon;
+    const std::uint32_t seconds = (g_gameTick - world->jump_tick) * kTickMilliseconds / 1000u;
+    if (world->jump_return_x == 0 || seconds > kJumpMemorySeconds) {
+        world->jump_return_x = static_cast<std::int32_t>(Call<callee::kScreenCenterTileX>(world));
+        world->jump_return_y = static_cast<std::int32_t>(Call<callee::kScreenCenterTileY>(world));
+    }
+    world->jump_tick = g_gameTick;
+    Call<callee::kCenterCameraOnTile>(world, entries[0].x, entries[0].y);
+    const std::int32_t x = entries[0].x;
+    const std::int32_t y = entries[0].y;
+    const std::uint32_t screenY = Call<callee::kTileScreenY>(world, x, y);
+    const std::uint32_t screenX = Call<callee::kTileScreenX>(world, x, y);
+    using SpawnFn = std::uint32_t(__fastcall*)(layout::MapEffectTable*, void*, std::uint32_t, std::uint32_t,
+                                               std::uint32_t, std::uint32_t, std::uint32_t);
+    reinterpret_cast<SpawnFn>(callee::kSpawnMarker)(&world->map_effects, nullptr, g_gameTick, screenX, screenY,
+                                                    static_cast<std::uint32_t>(x + kMarkerOffsetX),
+                                                    static_cast<std::uint32_t>(y + kMarkerOffsetY));
+    for (std::uint32_t k = 0; k + 1 < kListEntries && entries[k].type != 0; ++k) {
+        entries[k] = entries[k + 1];
+    }
+    entries[kListEntries - 1].type = 0;
+    return 0;
+}
+
+S3RE_HOOK(0x004fee90, CGameData_GoToNotification, GoToFn, Original_CGameData_GoToNotification,
+          CGameData_GoToNotification);
+
+namespace {
+
+// The padding bytes of the effect records (written from stack temporaries
+// by the make functions, so they differ between any two runs).
+void ClearEffectPadding(CGameData* world) {
+    for (layout::MapEffect& record : world->map_effects.records) {
+        std::memset(record.pad2a, 0, sizeof(record.pad2a));
+        record.pad3b = 0;
+        std::memset(record.pad3e, 0, sizeof(record.pad3e));
+    }
+}
+
+using MapEffectsCtorFn = layout::MapEffectTable*(__fastcall*)(layout::MapEffectTable*, void*);
+using SetMapSizeFn = std::int32_t(__fastcall*)(layout::MapEffectTable*, void*, std::int32_t, std::int32_t);
+
+void CompareGoTo(test::Context& ctx, GoToFn candidate, int cases) {
+    const std::uint32_t savedTick = g_gameTick;
+    const std::uint32_t savedWidth = g_screenWidth, savedHeight = g_screenHeight;
+    test::WorldPair full(ctx, sizeof(CGameData));
+    // An empty effect table with the grid of the largest map (the markers
+    // are added to it).
+    full.Both([](CGameData* w) {
+        reinterpret_cast<MapEffectsCtorFn>(0x005442c0)(&w->map_effects, nullptr);
+        reinterpret_cast<SetMapSizeFn>(0x00544320)(&w->map_effects, nullptr, 384, 200);
+    });
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t list = 1 + ctx.rng().Below(4);
+        const std::uint32_t tick = 1000 + ctx.rng().Below(100000);
+        g_gameTick = tick;
+        g_screenWidth = 504 + ctx.rng().Below(400);
+        g_screenHeight = 480 + ctx.rng().Below(300);
+        const std::uint32_t size = 64 + ctx.rng().Below(321);
+        const std::uint32_t used = ctx.rng().Chance(1, 8) ? kListEntries : 1 + ctx.rng().Below(10);
+        const std::uint32_t last = ctx.rng().Chance(1, 2) ? tick - ctx.rng().Below(400) : ctx.rng().Next32();
+        const std::int32_t returnX = ctx.rng().Chance(1, 4) ? 0 : static_cast<std::int32_t>(ctx.rng().Below(384));
+        full.Both([&](CGameData* w) {
+            w->map_size = size;
+            w->jump_tick = last;
+            w->jump_return_x = returnX;
+        });
+        for (std::uint32_t k = 0; k < kListEntries; ++k) {
+            Notification n{};
+            n.type = static_cast<std::int32_t>(k < used ? 1 + ctx.rng().Below(41) : ctx.rng().Chance(1, 3) ? 7 : 0);
+            n.x = static_cast<std::int32_t>(2 + ctx.rng().Below(size - 4));
+            n.y = static_cast<std::int32_t>(2 + ctx.rng().Below(size - 4));
+            full.Both([&](CGameData* w) { w->notifications[list - 1][k] = n; });
+        }
+        Original_CGameData_GoToNotification(full.original(), nullptr, list);
+        candidate(full.ours(), nullptr, list);
+        ClearEffectPadding(full.original());
+        ClearEffectPadding(full.ours());
+        if (!full.Same(ctx, offsetof(CGameData, chart), offsetof(CGameData, notification_timers) - offsetof(CGameData, chart)) ||
+            !full.Same(ctx, offsetof(CGameData, map_effects), sizeof(layout::MapEffectTable)) ||
+            (i % 256 == 255 && !full.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: list %u, used %u", i, list, used);
+            break;
+        }
+    }
+    full.Checkpoint(ctx);
+    g_gameTick = savedTick;
+    g_screenWidth = savedWidth;
+    g_screenHeight = savedHeight;
+}
+
+// Wrong: the return position is kept for 30 seconds.
+std::uint32_t __fastcall WrongGoTo(CGameData* world, void* edx, std::uint32_t list) {
+    const std::uint32_t seconds = (g_gameTick - world->jump_tick) * kTickMilliseconds / 1000u;
+    const std::int32_t rx = world->jump_return_x, ry = world->jump_return_y;
+    const std::uint32_t r = CGameData_GoToNotification(world, edx, list);
+    if (rx != 0 && seconds > kJumpMemorySeconds && seconds <= 30) {
+        world->jump_return_x = rx;
+        world->jump_return_y = ry;
+    }
+    return r;
+}
+
+}  // namespace
+
+S3RE_TEST(CGameData_GoToNotification_MatchesOriginal) {
+    CompareGoTo(ctx, &CGameData_GoToNotification, 2000);
+}
+S3RE_TEST(CGameData_GoToNotification_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareGoTo(probe, &WrongGoTo, 2000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 
