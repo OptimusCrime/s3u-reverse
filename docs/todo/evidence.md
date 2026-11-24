@@ -29,38 +29,6 @@ LOGBOOK session entry).
   0x164..0x171, 0x17c..0x185, 0x190..0x194; units 0xae and the walking
   jobs 0xe5, 0xe8, 0xed, 0xf1, 0xfe, 0x102, 0x133, 0x135, 0x140, 0x141,
   0x147..0x14a, 0x165, 0x168; the 20 no-op jobs.
-- **FakeClock after a crashed test (session 48):** CalleeStubs and
-  ScopedJump are restored after a crash now (`LivePatches()`,
-  `RestoreLeftoverPatches()` in test/callee_stub.h), but `FakeClock`
-  (screen_element.cpp, patches the timeGetTime import) is not. Harmless so
-  far (later tests keep running); register it in `LivePatches()` too.
-
-- **Emulator coverage of `CGameData::GenerateRandomMap`:** 338/415 blocks
-  in full Debug runs (1 quick case per batch since 2026-11-23); the rest
-  needs maps of 130+ tiles. Its real evidence is the in-process
-  whole-world tests and the random-map whole-game checks. Since c3f29be
-  the Release build works for the emulator (`run.py --build Release`,
-  ~5x faster on FindPath); time GenerateRandomMap there and decide whether
-  a bounded larger-map case is worth it, or exempt the rest with reasons
-  so `--require-coverage` stops failing on it.
-- **`--changed` reselected 200 specs in a fresh worktree (session 48)**
-  although only comments and tests had changed (backlog-cleanups agent,
-  wip/cleanups). Probably the worktree's own build gives different
-  fingerprints than the passes recorded from main's build (absolute
-  paths, build order?). Compare the fingerprints of one such spec in
-  both builds (`tools/emutest/changed.py`).
-- **`--changed` reselects 5 slow specs every time (session 48):**
-  CheckGameEnd, FollowRightWall, UpdateSoldier, UpdateSettlers,
-  ExecuteCommands stop at the quick budget without full coverage, so no
-  pass is recorded and every worktree reruns them (seen by all three
-  agents of session 48). A `--full` run of them on main records passes;
-  better presets or `quick_cases` would stop it for good.
-- **Specs over the quick-mode budget (60 s) before full coverage:** they
-  get no recorded pass from quick runs, so `--changed` reselects them
-  until a `--full` run passes. Seen in the first quick run (2026-11-23):
-  see LOGBOOK session 45 "faster verification tooling". Options: better
-  presets that reach the rare blocks early (then quick mode stops
-  early), or `Spec.quick_cases` with the evidence named at the spec.
 - **Full serial emulator run as a cross-check of `--jobs`:** the parallel
   runs (3 schedules: specs.py order, longest first, slow specs split into
   parts) gave identical output; the `--jobs 1` run was stopped after its

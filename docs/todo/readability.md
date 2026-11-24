@@ -70,14 +70,12 @@ LOGBOOK session entry).
   (probably a graphics id), +0x32, +0x34 (the value the "stationary"
   make function 0x543f70 sets) are still `unkNN`; the spawn functions in
   map_effects.cpp name the arguments by offset only.
-- **Lint for enum narrowing (session 48):** `static_cast<BuildingType>(x)`
-  of a 16-bit value truncates to the uint8 enum (A2's SiteKindOf: type 270
-  became Vineyard; caught by its test). Flag casts of wider integers to
-  8-bit enums in `typed_access_lint.py` or a new check; switch on the word
-  with `case Value(...)` instead.
-- **Lint** for hex literals in comparisons and magic numbers in
-  job/type/goods comparisons (coding_style.md "Checks").
-
+- **Enforce the hex-literal and magic-number lint rules** (session 51:
+  `tools/style_lint.py` reports them, rules "hex-compare", 161 hits, and
+  "magic-category", 17 hits, report-only while the readability batches
+  converted code; the "narrowing" rule is enforced). Once the counts are
+  down, convert the rest and run them with `--strict` in `inventory.py
+  check`.
 ## Typed access leftovers
 - **Class layouts left after struct pass S2 (session 45).** The object
   `RawAt`s are gone (two test-only ones in string_members.cpp are marked
