@@ -43,41 +43,46 @@
   .lede { color: var(--muted); max-width: 68ch; margin: 6px 0 0; }
   .generated { color: var(--muted); font-size: 13px; }
 
-  /* the frontier strips: status of the code, best first, with markers at the boundaries */
-  .overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 460px);
-              gap: 32px 48px; margin-top: 28px; align-items: start; }
-  @media (max-width: 960px) { .overview { grid-template-columns: 1fr; } }
-  .frontier + .frontier { margin-top: 30px; }
-  .frontier h3 { font: 600 16px/1.3 var(--sans); margin: 0; }
-  .frontier .sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
-  .strip { position: relative; margin-top: 84px; }
-  .strip .fill { display: flex; height: 30px; border-radius: 3px; overflow: hidden;
-                 background: var(--sheet); box-shadow: inset 0 0 0 1px var(--rule); }
-  .strip .fill span { height: 100%; }
-  .marker { position: absolute; bottom: 0; width: 0; border-left: 2px solid var(--ink); }
-  .marker.level0 { height: calc(100% + 12px); }
-  .marker.level1 { height: calc(100% + 38px); }
-  .marker.level2 { height: calc(100% + 64px); }
-  .marker span { position: absolute; top: 0; left: 0; transform: translateY(-60%); padding: 0 6px;
-                 white-space: nowrap; font-size: 13px; color: var(--muted); background: var(--paper);
-                 z-index: 1; }
-  .marker.flip span { left: auto; right: 0; }
-  .marker b { font: 600 20px/1 var(--serif); color: var(--ink); margin-right: 3px; }
-  .frontier.small .strip { margin-top: 70px; }
-  .frontier.small .strip .fill { height: 16px; }
-  .frontier.small .marker.level1 { height: calc(100% + 32px); }
-  .frontier.small .marker.level2 { height: calc(100% + 52px); }
-  .frontier.small .marker b { font-size: 16px; }
-  .facts { margin: 22px 0 0; max-width: 72ch; }
+  /* summary: the headline share, one stacked bar per scope, and the numbers behind the bars */
+  .summary { margin-top: 28px; max-width: 980px; }
+  .headline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; margin: 0; }
+  .headline b { font: 600 64px/1 var(--serif); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .headline span { font: 400 22px/1.35 var(--serif); max-width: 40ch; }
+  .facts { color: var(--muted); margin: 10px 0 0; max-width: 72ch; }
+  .bars { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 14px 18px;
+          align-items: center; margin-top: 28px; }
+  .bars .scope { font-weight: 600; line-height: 1.25; }
+  .bars .scope small { display: block; font-weight: 400; font-size: 13px; color: var(--muted); }
+  .bar { display: flex; height: 34px; border-radius: 3px; overflow: hidden;
+         box-shadow: inset 0 0 0 1px var(--rule); }
+  .bar span { container-type: inline-size; display: flex; align-items: center; justify-content: center;
+              overflow: hidden; white-space: nowrap; font-size: 13px; font-weight: 600;
+              font-variant-numeric: tabular-nums; }
+  @container (max-width: 38px) { .bar i { display: none; } }
+  .bar i { font-style: normal; }
+  @media (max-width: 560px) {
+    body { padding: 24px 16px 40px; }
+    .headline b { font-size: 48px; }
+    .bars { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+    .bars .bar { margin-bottom: 10px; }
+  }
 
   table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
   td, th { padding: 4px 0 4px 16px; text-align: right; }
   td:first-child, th:first-child { text-align: left; padding-left: 0; }
-  #legend { width: 100%; font-size: 14px; }
-  #legend th { font-weight: 600; color: var(--muted); font-size: 13px; border-bottom: 1px solid var(--rule); }
-  #legend td { border-bottom: 1px solid var(--rule); }
-  #legend tr.empty td { color: var(--muted); }
-  #legend tr.empty .swatch { opacity: 0.5; }
+  #breakdown { width: 100%; margin-top: 22px; font-size: 14px; }
+  #breakdown th { font-weight: 600; color: var(--muted); font-size: 13px; border-bottom: 1px solid var(--rule);
+                  vertical-align: bottom; }
+  #breakdown td { border-bottom: 1px solid var(--rule); padding-top: 7px; padding-bottom: 7px; vertical-align: top; }
+  #breakdown td:first-child { padding-left: 21px; text-indent: -21px; }
+  #breakdown td small { display: block; text-indent: 0; color: var(--muted); font-size: 13px; }
+  #breakdown td.num b { font-size: 15px; }
+  #breakdown td.num small { white-space: nowrap; }
+  #breakdown tr.total td { border-bottom: 0; border-top: 2px solid var(--ink); font-weight: 600; }
+  #breakdown tr.total td:first-child { padding-left: 0; text-indent: 0; }
+  .statuslist { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; padding: 0; list-style: none;
+                font-size: 13px; }
+  .statuslist .muted { margin-left: 4px; }
   .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 8px;
             vertical-align: -1px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
 
@@ -133,13 +138,12 @@
     <div class="generated" id="generated"></div>
   </header>
 
-  <section class="overview">
-    <div>
-      <div class="frontier" id="frontierGame"></div>
-      <div class="frontier small" id="frontierAll"></div>
-      <p class="facts" id="facts"></p>
-    </div>
-    <table id="legend"></table>
+  <section class="summary">
+    <p class="headline"><b id="headNumber"></b><span>of the game code is reimplemented and verified
+      against the original</span></p>
+    <p class="facts" id="facts"></p>
+    <div class="bars" id="bars"></div>
+    <table id="breakdown"></table>
   </section>
 
   <h2>Map of S3.EXE</h2>
@@ -151,8 +155,8 @@
       <option value="understood">understood or not</option>
       <option value="verified">verified or not</option>
     </select></label>
-    <span class="muted" id="colourLegend"></span>
   </div>
+  <div class="controls" id="colourLegend"></div>
   <div class="crumbs" id="crumbs"></div>
   <div id="map"></div>
 
@@ -199,7 +203,7 @@ const STATUS = [  // index = status code in the data file (data.statuses)
 ];
 const IDENTIFIED = 2;     // codes >= IDENTIFIED are "understood"
 const VERIFIED = 4;       // codes >= VERIFIED are verified
-const BEST_FIRST = [6, 5, 4, 3, 2, 1, 0];  // status codes, best first (strips, legend, tooltip bars)
+const BEST_FIRST = [6, 5, 4, 3, 2, 1, 0];  // status codes, best first (treemap legend, hover-card bars)
 const VERIFIED_GAME = 6;  // ... and seen in a whole-game check
 const CATEGORY_LABEL = {
   game: "Game code (Blue Byte)",
@@ -291,16 +295,16 @@ function squarify(items, x, y, w, h) {
 // ------------------------------------------------------------ draw the treemap
 // Colour modes of the treemap's function boxes (the "Colour by" selector).
 const COLOUR_MODES = {
-  status: { colour: (s) => STATUS[s].color, legend: "" },
+  status: { colour: (s) => STATUS[s].color, legend: "" },  // filled in by summary()
   understood: {
     colour: (s) => (s >= IDENTIFIED ? "#f2c86b" : "#c9ccd1"),
-    legend: '<span class="swatch" style="background:#f2c86b"></span>understood (identified or better) &nbsp; ' +
-            '<span class="swatch" style="background:#c9ccd1"></span>classified or not looked at',
+    legend: '<ul class="statuslist"><li><span class="swatch" style="background:#f2c86b"></span>understood (identified or better)</li>' +
+            '<li><span class="swatch" style="background:#c9ccd1"></span>classified or not looked at</li></ul>',
   },
   verified: {
     colour: (s) => (s >= VERIFIED ? "#3d9a50" : "#c9ccd1"),
-    legend: '<span class="swatch" style="background:#3d9a50"></span>verified &nbsp; ' +
-            '<span class="swatch" style="background:#c9ccd1"></span>not verified',
+    legend: '<ul class="statuslist"><li><span class="swatch" style="background:#3d9a50"></span>verified</li>' +
+            '<li><span class="swatch" style="background:#c9ccd1"></span>not verified</li></ul>',
   },
 };
 let colourMode = "status";
@@ -454,50 +458,85 @@ function sourcesText(sources) {
 }
 
 // ------------------------------------------------------------ summary
-// One strip per scope: the status of its code, best first, with a marker at
-// the end of each of "identical in a whole game", "verified", "understood".
-function frontier(el, statusBytes, title, sub) {
-  const total = statusBytes.reduce((a, b) => a + b, 0) || 1;
-  const share = (from) => 100 * statusBytes.slice(from).reduce((a, b) => a + b, 0) / total;
-  const segments = BEST_FIRST.map((k) => statusBytes[k]
-    ? `<span style="width:${100 * statusBytes[k] / total}%;background:${STATUS[k].color}" ` +
-      `title="${STATUS[k].label}: ${pct(statusBytes[k], total, 1)}"></span>` : "").join("");
-  const markers = [[VERIFIED_GAME, "identical in a whole game", 0], [VERIFIED, "verified", 1],
-                   [IDENTIFIED, "understood", 2]].map(([from, label, level]) => {
-    const x = share(from);
-    return `<div class="marker level${level}${x > 70 ? " flip" : ""}" style="left:${x}%">` +
-           `<span><b>${x.toFixed(1)}%</b>${label}</span></div>`;
-  }).join("");
-  el.innerHTML = `<h3>${title}</h3><p class="sub">${sub}</p>` +
-                 `<div class="strip"><div class="fill">${segments}</div>${markers}</div>`;
-}
+// The top of the page groups the seven statuses into a few plain buckets.
+// Both bars and the table below them show the same buckets in the same
+// order and colours; every number is the bucket's own share (they add up
+// to 100%), never a running total.
+const BUCKETS = [
+  { statuses: [6], color: STATUS[6].color, text: "#ffffff",
+    label: "Verified, and identical in a whole-game check",
+    about: "Our code ran in a whole game and the game state matched the original's at every tick." },
+  { statuses: [5, 4], color: STATUS[5].color, text: "#ffffff",
+    label: "Verified by tests only",
+    about: "Matches the original in differential tests, but no whole-game check has called it yet." },
+  { statuses: [3], color: STATUS[3].color, text: "#1e2924", optional: true,
+    label: "Reimplemented, not verified yet",
+    about: "Our code exists but has no evidence yet; it only runs with --unverified." },
+  { statuses: [2], color: STATUS[2].color, text: "#1e2924",
+    label: "Understood, not reimplemented yet",
+    about: "We know what the function does." },
+  { statuses: [1, 0], color: STATUS[1].color, text: "#1e2924",
+    label: "Not understood yet",
+    about: "At most its class or role is known." },
+];
 
 function summary() {
-  const count = STATUS.map(() => 0), bytes = STATUS.map(() => 0), gameBytes = STATUS.map(() => 0);
+  const count = STATUS.map(() => 0), bytes = STATUS.map(() => 0);
+  const gameCount = STATUS.map(() => 0), gameBytes = STATUS.map(() => 0);
   for (const [, size, status, group] of data.functions) {
     count[status]++; bytes[status] += size;
     const category = data.groups[group][0];
-    if (category === "game" || category === "unidentified") gameBytes[status] += size;
+    if (category === "game" || category === "unidentified") { gameCount[status]++; gameBytes[status] += size; }
   }
-  const totalBytes = bytes.reduce((a, b) => a + b, 0);
-  const verifiedCount = count.slice(VERIFIED).reduce((a, b) => a + b, 0);
-  // "Understood" = identified or better, the same as in `python tools/inventory.py stats`.
-  const understoodCount = count.slice(IDENTIFIED).reduce((a, b) => a + b, 0);
+  const sum = (list, statuses) => statuses.reduce((s, k) => s + list[k], 0);
+  const scopes = [
+    { name: "Game code", sub: "Blue Byte's own code", count: gameCount, bytes: gameBytes },
+    { name: "All code", sub: "also C runtime and libraries", count, bytes },
+  ];
+  for (const scope of scopes) scope.total = scope.bytes.reduce((a, b) => a + b, 0) || 1;
+  const verifiedStatuses = [6, 5, 4];
+  const buckets = BUCKETS.filter((b) => !b.optional || sum(count, b.statuses));
 
   document.getElementById("generated").innerHTML =
     `Generated ${esc(data.generated)} from <code>re/functions.csv</code>`;
-  frontier(document.getElementById("frontierGame"), gameBytes, "Game code",
-           "Blue Byte's own code, the part we have to reimplement");
-  frontier(document.getElementById("frontierAll"), bytes, "All code",
-           "Including the C runtime, library and compiler-generated code");
+  const game = scopes[0];
+  document.getElementById("headNumber").textContent = pct(sum(game.bytes, verifiedStatuses), game.total, 1);
   document.getElementById("facts").innerHTML =
-    `${fmt(understoodCount)} of ${fmt(data.functions.length)} functions are understood and ` +
-    `${fmt(verifiedCount)} are verified: ${fmt(count[VERIFIED_GAME])} of those ran identically in a ` +
-    `whole game, ${fmt(count[VERIFIED_GAME - 1])} only in tests so far.`;
-  document.getElementById("legend").innerHTML =
-    "<tr><th>Status</th><th>Functions</th><th>Share</th></tr>" +
-    BEST_FIRST.map((k) => `<tr${count[k] ? "" : ' class="empty"'}><td><span class="swatch" style="background:${STATUS[k].color}"></span>${STATUS[k].label}</td>` +
-      `<td>${fmt(count[k])}</td><td title="${fmt(bytes[k])} bytes">${pct(bytes[k], totalBytes, 1)}</td></tr>`).join("");
+    `${fmt(sum(game.count, verifiedStatuses))} of the game's ${fmt(game.count.reduce((a, b) => a + b, 0))} functions ` +
+    `are verified (${fmt(sum(count, verifiedStatuses))} of ${fmt(data.functions.length)} counting libraries).`;
+
+  document.getElementById("bars").innerHTML = scopes.map((scope) => {
+    const segments = buckets.map((b) => {
+      const part = sum(scope.bytes, b.statuses);
+      if (!part) return "";
+      const share = pct(part, scope.total, 1);
+      return `<span style="width:${100 * part / scope.total}%;background:${b.color};color:${b.text}" ` +
+             `title="${b.label}: ${share} (${fmt(sum(scope.count, b.statuses))} functions)"><i>${share}</i></span>`;
+    }).join("");
+    return `<div class="scope">${scope.name}<small>${scope.sub}</small></div>` +
+           `<div class="bar" role="img" aria-label="${scope.name}: ` +
+           buckets.map((b) => `${b.label} ${pct(sum(scope.bytes, b.statuses), scope.total, 1)}`).join(", ") +
+           `">${segments}</div>`;
+  }).join("");
+
+  const cell = (scope, statuses) => {
+    const n = sum(scope.count, statuses);
+    return `<td class="num"><b>${pct(sum(scope.bytes, statuses), scope.total, 1)}</b>` +
+           `<small>${fmt(n)} function${n === 1 ? "" : "s"}</small></td>`;
+  };
+  document.getElementById("breakdown").innerHTML =
+    "<tr><th></th>" + scopes.map((s) => `<th>${s.name}</th>`).join("") + "</tr>" +
+    buckets.map((b) => `<tr><td><span class="swatch" style="background:${b.color}"></span>${b.label}` +
+      `<small>${esc(b.about)}</small></td>` + scopes.map((s) => cell(s, b.statuses)).join("") + "</tr>").join("") +
+    `<tr class="total"><td>Reimplemented and verified</td>` +
+    scopes.map((s) => cell(s, verifiedStatuses)).join("") + "</tr>";
+
+  // the treemap's legend in "status" mode: all seven statuses, of all code
+  const totalBytes = bytes.reduce((a, b) => a + b, 0);
+  COLOUR_MODES.status.legend = '<ul class="statuslist">' + BEST_FIRST.filter((k) => count[k]).map((k) =>
+    `<li title="${fmt(bytes[k])} bytes"><span class="swatch" style="background:${STATUS[k].color}"></span>` +
+    `${STATUS[k].label}<span class="muted">${fmt(count[k])}, ${pct(bytes[k], totalBytes, 1)}</span></li>`).join("") + "</ul>";
+  document.getElementById("colourLegend").innerHTML = COLOUR_MODES[colourMode].legend;
   return totalBytes;
 }
 
