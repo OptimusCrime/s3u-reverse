@@ -24,6 +24,7 @@
 //   (callers ignore it).
 // Both thiscall (ECX = world).
 
+#include "game/enums/terrain.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
@@ -42,9 +43,6 @@ using layout::Tile;
 
 constexpr std::uint32_t kStepX = kTileRowBytes;
 constexpr std::uint32_t kStepY = kTileBytes;
-
-constexpr std::uint8_t kTerrainGrass = 0x10;
-constexpr std::uint8_t kTerrainField = 0x16;  // a farmer's, rice farmer's or winegrower's field
 
 }  // namespace
 

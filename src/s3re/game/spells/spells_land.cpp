@@ -62,6 +62,7 @@
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
+#include "game/enums/objects.h"
 #include "game/enums/spells.h"
 #include "game/enums/terrain.h"
 #include "game/globals.h"
@@ -165,18 +166,12 @@ constexpr std::int32_t kDirections = 6;
 constexpr std::int32_t kSeenRingOffsets = 7;    // tiles whose seen_object loses bit 0x400
 constexpr std::uint16_t kSeenWornPath = 0x400;  // seen_object: worn path (re/structs.md)
 
-// Tile::object: stones 0x73..0x7e (kept by the transform up to 0x7f), a
-// young tree planted by TreeCurse.
-constexpr std::uint8_t kFirstStone = 0x73;
-constexpr std::uint8_t kLastKeptObject = 0x7f;
+// CreateStones places one of the 11 largest stones (Tile::object 0x73..0x7d).
 constexpr U kStoneVariants = 11;
-constexpr std::uint8_t kCursedTree = 0x54;
 
 constexpr std::uint8_t kCreateStonesBlockingFlags = 0x0f;  // Tile::flags
 constexpr std::uint8_t kTreeCurseBlockingFlags = 0x0d;
 constexpr std::uint8_t kTreeCurseNeighbourFlags = layout::kTileBlocked | layout::kTileBuildingFootprint;
-constexpr std::uint8_t kTerrainClassGrass = 0x10;
-constexpr std::uint8_t kTerrainPath = 0x1c;  // worn path (WearPath)
 
 constexpr U kStoneChance = 5000;      // of 65536, per ring offset
 constexpr std::int32_t kStoneClearance = 19;  // ring offsets that must be empty
@@ -297,7 +292,7 @@ U __fastcall CGameData_IsTransformableTerrain(CGameData*, void*, U kind, U terra
     case kKindStones:
         return IsOneOf(terrain, {0x10, 0x12, 0x13, 0x41, 0x14, 0x18, 0x1c, 0x40});
     case kKindTreeCurse:
-        return (terrain & kTerrainClassMask) == kTerrainClassGrass && terrain != kTerrainPath;
+        return (terrain & kTerrainClassMask) == kTerrainClassGrass && terrain != kTerrainWornPath;
     case kKindBurntGround:
         return IsOneOf(terrain, {0x10, 0x12, 0x13, 0x18, 0x17, 0x91});
     default:
@@ -501,7 +496,7 @@ U __fastcall CGameData_TransformTerrainAround(CGameData* world, void*, U kind, s
                 Callee<Fn2>(kUnblockTile)(world, nullptr, static_cast<U>(tx), static_cast<U>(ty));
             } else if (kind == kKindDesertify || kind == kKindGreenDesert || kind == kKindBurntGround) {
                 const bool keep = (tile.flags & layout::kTileBlocked) != 0 ||
-                                  (tile.object >= kFirstStone && tile.object <= kLastKeptObject);
+                                  (tile.object >= kObjectFirstStone && tile.object <= kObjectStoneUsedUp);
                 if (!keep) {
                     tile.object = 0;
                 }
@@ -586,7 +581,7 @@ U __fastcall CGameData_SpellCreateStones(CGameData* world, void*, U player, std:
         }
         placed = true;
         const U r = Random(world) & 0xffff;
-        tile.object = static_cast<std::uint8_t>(kFirstStone + ((r * kStoneVariants) >> 16));
+        tile.object = static_cast<std::uint8_t>(kObjectFirstStone + ((r * kStoneVariants) >> 16));
         Callee<Fn2>(kBlockTile)(world, nullptr, static_cast<U>(tx), static_cast<U>(ty));
         for (std::int32_t direction = 0; direction < kDirections; ++direction) {
             const U nx = NeighbourX(world, static_cast<U>(tx), static_cast<U>(direction));
@@ -626,7 +621,7 @@ bool CanPlantCursedTree(CGameData* world, std::int32_t x, std::int32_t y) {
             return false;
         }
     }
-    return (tile.terrain & kTerrainClassMask) == kTerrainClassGrass && tile.terrain != kTerrainPath;
+    return (tile.terrain & kTerrainClassMask) == kTerrainClassGrass && tile.terrain != kTerrainWornPath;
 }
 
 }  // namespace
@@ -648,7 +643,7 @@ U __fastcall CGameData_SpellTreeCurse(CGameData* world, void*, U player, std::in
             continue;
         }
         ++planted;
-        world->tiles[tx][ty].object = kCursedTree;
+        world->tiles[tx][ty].object = kObjectSapling;
         Callee<Fn2>(kBlockTile)(world, nullptr, static_cast<U>(tx), static_cast<U>(ty));
         AddStationaryEffect(world, static_cast<U>(tx), static_cast<U>(ty), EffectDelay(), kSpellFlashKind);
     }
@@ -1106,8 +1101,8 @@ U __fastcall WrongSpellCreateStones(CGameData* world, void*, U player, std::int3
     CGameData_SpellCreateStones(world, nullptr, player, x, y);
     for (U tx = 0; tx < world->map_size; ++tx) {
         for (U ty = 0; ty < world->map_size; ++ty) {
-            if (world->tiles[tx][ty].object == kFirstStone + 10) {
-                world->tiles[tx][ty].object = kFirstStone + 9;
+            if (world->tiles[tx][ty].object == kObjectFirstStone + 10) {
+                world->tiles[tx][ty].object = kObjectFirstStone + 9;
             }
         }
     }
@@ -1118,7 +1113,7 @@ U __fastcall WrongSpellCreateStones(CGameData* world, void*, U player, std::int3
 U __fastcall WrongSpellTreeCurse(CGameData* world, void*, U player, std::int32_t x, std::int32_t y) {
     for (U tx = 0; tx < world->map_size; ++tx) {
         for (U ty = 0; ty < world->map_size; ++ty) {
-            if (world->tiles[tx][ty].terrain == kTerrainPath) {
+            if (world->tiles[tx][ty].terrain == kTerrainWornPath) {
                 world->tiles[tx][ty].terrain = 0x10;
             }
         }

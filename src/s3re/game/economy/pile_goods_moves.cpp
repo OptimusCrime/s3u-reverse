@@ -44,7 +44,7 @@
 //   CarrierPickUp, 76, 77, CarrierWalkToTool, CarrierTakeTool; with nothing
 //   leaving: AL = 1 for kinds 0..0x32, 0 for output piles, and nothing is
 //   taken); trade ring piles (only the low nibble of leaving counts) cancel
-//   the first carrier with job 307/308 there, or take back his second unit
+//   the first donkey with job 307/308 there, or take back his second unit
 //   (PileDecAmountLeaving); order piles refuse (DebugLog "OrderPile nix mehr
 //   frei!", AL = 0); dropped piles cancel a fetcher if units are leaving.
 //   Kinds 0x33..0xfb: AL = 1, nothing happens. ret 4.
@@ -277,7 +277,8 @@ namespace {
 // The jobs of a settler on its way to fetch from a pile (or at it).
 bool IsFetchJob(Job job) {
     return job == Job::CarrierWalkToPile || job == Job::CarrierAtPile || job == Job::CarrierPickUp ||
-           job == Job::Job76 || job == Job::Job77 || job == Job::CarrierWalkToTool || job == Job::CarrierTakeTool;
+           job == Job::CarrierWalkToSourcePile || job == Job::CarrierAtSourcePile ||
+           job == Job::CarrierWalkToTool || job == Job::CarrierTakeTool;
 }
 
 bool TargetsPile(const Settler& settler, const Pile& pile) {
@@ -289,21 +290,21 @@ bool TargetsPile(const Settler& settler, const Pile& pile) {
 void CancelFirstFetcher(CGameData* world, const Pile& p) {
     for (std::uint32_t s = 1; s <= world->settler_high_water; ++s) {
         const Settler& settler = world->settlers[s];
-        if (settler.owner != kFreeSettler && IsFetchJob(JobOf(settler)) && TargetsPile(settler, p)) {
+        if (settler.owner != kFreeSettler && IsFetchJob(settler.job) && TargetsPile(settler, p)) {
             CGameData_ResetSettlerToIdle(world, nullptr, s);
             return;
         }
     }
 }
 
-// A trade ring pile: the first carrier fetching there (jobs 307/308) is
+// A trade ring pile: the first donkey fetching there (jobs 307/308) is
 // sent back idle, or gives up the second unit he meant to take.
 void CancelFirstTradeRingFetcher(CGameData* world, std::uint32_t pile) {
     const Pile& p = world->piles[pile];
     for (std::uint32_t s = 1; s <= world->settler_high_water; ++s) {
         Settler& settler = world->settlers[s];
         if (settler.owner != kFreeSettler && TargetsPile(settler, p) &&
-            (JobOf(settler) == Job::Job307 || JobOf(settler) == Job::Job308)) {
+            (settler.job == Job::DonkeyWalkToPile || settler.job == Job::DonkeyLoad)) {
             if (settler.second_unit == 0) {
                 CGameData_ResetSettlerToIdle(world, nullptr, s);
             } else {
@@ -716,7 +717,7 @@ void CompareSteal(test::Context& ctx, PileFn candidate, int cases) {
             const auto secondUnit = static_cast<std::uint8_t>(ctx.rng().Below(2));
             worlds.Both([&](CGameData* w) {
                 layout::Settler& r = w->settlers[s];
-                r.job = job;
+                r.job = static_cast<SettlerJob>(job);
                 r.owner = owner;
                 r.second_unit = secondUnit;
                 if (here) {

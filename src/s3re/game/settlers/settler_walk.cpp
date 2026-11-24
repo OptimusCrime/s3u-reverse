@@ -9,7 +9,7 @@
 //   WalkSettler 0x500860, ignores it).
 // CGameData::IsWalkingJob (0x004fa6d0): (job) -> AL = 1 for the 47 jobs that
 //   UpdateSettlers hands to WalkSettler (handler 0x4ead27 and the two jobs
-//   UnitWalk and Job176 that call it too), else 0. The upper 24 bits of EAX
+//   UnitWalk and UnitWalkCountdown that call it too), else 0. The upper 24 bits of EAX
 //   are those of the argument. ret 4, ECX unused. Called by 0x4a33d0.
 // CGameData::IsStationaryJob (0x004fa880, was Logic_sub_4fa880, proposed
 //   "IsWalkingOrIdleJob"): (job) -> AL = 0 for the same 47 walking jobs and
@@ -31,7 +31,7 @@
 //   3. At the target: +0x16 = 0 and the job's next step (Arrive): most jobs
 //      become the next job; some step onto their building's tile A with an
 //      animation; WalkToOwnArea, the ships' waypoint legs and the
-//      UnitWalk / Job176 walk states have their own handlers below.
+//      UnitWalk / UnitWalkCountdown walk states have their own handlers below.
 //   Known difference: Amazon soldiers that shoot at a catapult or ship
 //   with a delay roll above 20000 take the delay from the building last
 //   looked at in the target search (+0x38 + 1); when no building was
@@ -70,17 +70,53 @@ using layout::Tile;
 using Job = SettlerJob;
 
 // UpdateSettlers' walking jobs (IsWalkingJob's list, 0x4fa6d0).
-constexpr Job kWalkingJobs[] = {
-    Job::StepAside,     Job::WalkToWork, Job::DiggerWalkToSpot, Job::CarrierWalkToPile, Job::CarrierWalkToBuilding,
-    Job::Job15,         Job::Job17,      Job::Job28,            Job::Job29,             Job::Job42,
-    Job::Job43,         Job::Job45,      Job::Job48,            Job::UnitWalk,          Job::Job76,
-    Job::Job78,         Job::CarrierWalkToTool, Job::Job144,    Job::Job147,            Job::Job152,
-    Job::Job156,        Job::WalkToOwnArea, Job::Job176,        Job::Job178,            Job::Job181,
-    Job::Job187,        Job::Job188,     Job::Job229,           Job::Job232,            Job::Job237,
-    Job::Job241,        Job::Job246,     Job::Job249,           Job::Job254,            Job::Job258,
-    Job::Job307,        Job::Job309,     Job::Job320,           Job::Job321,            Job::Job327,
-    Job::Job328,        Job::Job329,     Job::Job330,           Job::Job357,            Job::Job360,
-    Job::Job362,        Job::Job365};
+constexpr Job kWalkingJobs[] = {Job::StepAside,
+                                Job::WalkToWork,
+                                Job::DiggerWalkToSpot,
+                                Job::CarrierWalkToPile,
+                                Job::CarrierWalkToBuilding,
+                                Job::BuilderWalkToWait,
+                                Job::BuilderWalkToSpot,
+                                Job::WoodcutterWalkToTree,
+                                Job::StonecutterWalkToStone,
+                                Job::WoodcutterWalkHome,
+                                Job::StonecutterWalkHome,
+                                Job::ForesterWalkToSpot,
+                                Job::ForesterWalkHome,
+                                Job::UnitWalk,
+                                Job::CarrierWalkToSourcePile,
+                                Job::CarrierWalkToTargetPile,
+                                Job::CarrierWalkToTool,
+                                Job::FarmerWalkToSow,
+                                Job::FarmerWalkHome,
+                                Job::FarmerWalkHomeLoaded,
+                                Job::FarmerWalkToHarvest,
+                                Job::WalkToOwnArea,
+                                Job::UnitWalkCountdown,
+                                Job::FisherWalkToWater,
+                                Job::FisherWalkHome,
+                                Job::WaterworkerWalkToWater,
+                                Job::WaterworkerWalkHome,
+                                Job::RiceFarmerWalkToPlant,
+                                Job::RiceFarmerWalkHome,
+                                Job::RiceFarmerWalkHomeLoaded,
+                                Job::RiceFarmerWalkToHarvest,
+                                Job::WinegrowerWalkToPlant,
+                                Job::WinegrowerWalkHome,
+                                Job::WinegrowerWalkHomeLoaded,
+                                Job::WinegrowerWalkToHarvest,
+                                Job::DonkeyWalkToPile,
+                                Job::DonkeyWalkToMarket,
+                                Job::ShipyardWalkToSlipway,
+                                Job::ShipyardWalkHome,
+                                Job::ShipWalkToHarbour,
+                                Job::ShipSailWithCargo,
+                                Job::ShipSailHome,
+                                Job::DonkeyWalkHome,
+                                Job::BeekeeperWalkToHiveSpot,
+                                Job::BeekeeperWalkHome,
+                                Job::BeekeeperWalkToHive,
+                                Job::BeekeeperWalkHomeLoaded};
 static_assert(sizeof(kWalkingJobs) / sizeof(kWalkingJobs[0]) == 47);
 
 // The callers pass the job as a dword and the original compares all 32 bits.
@@ -206,7 +242,7 @@ constexpr std::uint32_t kWalkFrames = 12;           // Settler::frame cycles thr
 constexpr std::uint32_t kCatapultWalkFrames = 36;   // ... the catapult's through 36
 constexpr std::uint16_t kShipWaitTicks = 7;
 
-// Settler::walk_state (+0x1a) of the jobs UnitWalk / Job176 at their target.
+// Settler::walk_state (+0x1a) of the jobs UnitWalk / UnitWalkCountdown at their target.
 constexpr std::uint8_t kWalkStateBoardShip = 1;     // land units: board a ferry
 constexpr std::uint8_t kWalkStateShoot = 2;         // soldiers at their post
 constexpr std::uint8_t kWalkStateThiefArrived = 3;  // probably: the thief is at the enemy's piles
@@ -251,9 +287,9 @@ Tile& TileNear(CGameData* world, std::uint32_t offset, std::int32_t dx, std::int
 constexpr std::int32_t kSixDx[kDirectionCount] = {1, 1, 0, -1, -1, 0};
 constexpr std::int32_t kSixDy[kDirectionCount] = {0, 1, 1, 0, -1, -1};
 
-// Ship jobs whose walk follows waypoints (Job327..Job329).
+// Ship jobs whose walk follows waypoints (ShipWalkToHarbour..ShipSailHome).
 bool IsShipLegJob(Job job) {
-    return job == Job::Job327 || job == Job::Job328 || job == Job::Job329;
+    return job == Job::ShipWalkToHarbour || job == Job::ShipSailWithCargo || job == Job::ShipSailHome;
 }
 
 // The step time of a settler entering `tile`: terrain speed plus type
@@ -281,7 +317,7 @@ void StopFrames(Settler& settler) {
 }
 
 void SetJobNow(Settler& settler, Job job) {
-    SetJob(settler, job);
+    settler.job = job;
     settler.counter = 0;
 }
 
@@ -446,7 +482,7 @@ bool CrowdedAhead(CGameData* world, const Settler& s, std::uint32_t d) {
 // ship_walk.
 std::uint32_t ShipDecision(Walk& w, std::uint32_t first, std::uint32_t path) {
     Settler& s = w.s;
-    const bool legJob = TypeOf(s) != SettlerType::Ferry && IsShipLegJob(JobOf(s));
+    const bool legJob = TypeOf(s) != SettlerType::Ferry && IsShipLegJob(s.job);
     auto back = [&]() { return static_cast<std::uint32_t>(((s.ship_walk & kShipWalkDirection) + 3) % kDirectionCount); };
     auto disagree = [&]() { s.ship_walk = static_cast<std::uint8_t>(s.ship_walk + kShipWalkCountStep); };
     auto agree = [&]() {
@@ -518,7 +554,7 @@ std::uint32_t WalkShip(Walk& w) {
     bool wait = false;
     const std::uint8_t count = s.ship_walk;
     if (count >= kShipWalkGiveUp) {
-        if (TypeOf(s) == SettlerType::TradeShip && IsShipLegJob(JobOf(s))) {
+        if (TypeOf(s) == SettlerType::TradeShip && IsShipLegJob(s.job)) {
             s.ship_walk = kShipWalksLikeSettler;
         } else {
             s.ship_walk = static_cast<std::uint8_t>(count & kShipWalkDirection);
@@ -531,7 +567,7 @@ std::uint32_t WalkShip(Walk& w) {
         wait = true;
     } else if (IsPlainStep(path)) {
         const std::uint32_t d = PathDirection(path);
-        if (TypeOf(s) != SettlerType::Ferry && IsShipLegJob(JobOf(s))) {
+        if (TypeOf(s) != SettlerType::Ferry && IsShipLegJob(s.job)) {
             s.ship_walk = static_cast<std::uint8_t>((count & ~kShipWalkDirection) | d);
         } else {
             s.ship_walk = static_cast<std::uint8_t>(d);
@@ -579,7 +615,7 @@ std::uint32_t WalkOne(Walk& w) {
         std::uint32_t nx = 0, ny = 0;
         Tile& next = StepTo(w, d, &nx, &ny);
         // Carriers with goods wear paths three times as fast as other civilians.
-        if (JobOf(s) == Job::CarrierWalkToBuilding || JobOf(s) == Job::Job78) {
+        if (s.job == Job::CarrierWalkToBuilding || s.job == Job::CarrierWalkToTargetPile) {
             Call<kAddTileTraffic>(world, nx, ny);
             Call<kAddTileTraffic>(world, nx, ny);
             Call<kAddTileTraffic>(world, nx, ny);
@@ -610,8 +646,8 @@ std::uint32_t WalkOne(Walk& w) {
     Tile& next = TileAt(world, nx, ny);
     const std::uint32_t other = next.settler;
     const Settler& blocker = world->settlers[other];
-    if (ClassOf(blocker) == SettlerClass::Civilian && JobOf(blocker) != Job::WalkToOwnArea &&
-        JobOf(blocker) != Job::SeekOwnArea) {
+    if (ClassOf(blocker) == SettlerClass::Civilian && blocker.job != Job::WalkToOwnArea &&
+        blocker.job != Job::SeekOwnArea) {
         const Tile& here = TileAt(world, s.x, s.y);
         if (here.owner != blocker.owner) {
             GameDebugLog(texts::kIllegalSwap, static_cast<std::uint32_t>(here.owner),
@@ -627,7 +663,8 @@ std::uint32_t WalkOne(Walk& w) {
     if ((Call<kIsSettlerJob01Or37>(world, static_cast<std::uint32_t>(o.job)) & 0xff) != 0) {
         o.target_x = o.x;
         o.target_y = o.y;
-        o.job = static_cast<std::uint16_t>(Call<kJobAfter01Or37>(world, static_cast<std::uint32_t>(o.job)));
+        o.job = static_cast<SettlerJob>(static_cast<std::uint16_t>(
+            Call<kJobAfter01Or37>(world, static_cast<std::uint32_t>(Value(o.job)))));
     }
     return w.again;
 }
@@ -666,7 +703,7 @@ bool Guarded(CGameData* world, std::uint32_t x, std::uint32_t y) {
         }
         const std::uint32_t guard = TileAt(world, qx, qy).settler;
         if (guard != 0 && ClassOf(world->settlers[guard]) != SettlerClass::Civilian &&
-            JobOf(world->settlers[guard]) == Job::GuardBuilding) {
+            world->settlers[guard].job == Job::GuardBuilding) {
             return true;
         }
     }
@@ -731,7 +768,7 @@ bool SoldierShoot(Walk& w) {
                 GameDebugLog(texts::kAttackCatapult);
                 kind = kShotAtCatapult;
                 target = number;
-            } else if (IsShip(TypeOf(o)) && JobOf(o) != Job::Job325) {
+            } else if (IsShip(TypeOf(o)) && o.job != Job::ShipBeingBuilt) {
                 kind = kShotAtShip;
                 target = number;
                 tx = o.x;
@@ -774,7 +811,7 @@ bool SoldierShoot(Walk& w) {
     s.counter = static_cast<std::uint16_t>(static_cast<std::uint16_t>(g_raceShotTime[me.race]) - 1u);
     // Bit 15 on top of the direction: unknown, probably "shooting".
     s.direction = CallStd<kDirectionFromDelta>(tx - s.x, ty - s.y) + 0x8000;
-    SetJob(s, Job::Shoot);
+    s.job = Job::Shoot;
     if (amazon) {
         s.arrows = 6;
     }
@@ -811,7 +848,7 @@ bool BoardShip(Walk& w) {
             continue;
         }
         const Settler& boat = world->settlers[ship];
-        if (TypeOf(boat) != SettlerType::Ferry || JobOf(boat) == Job::Job325 ||
+        if (TypeOf(boat) != SettlerType::Ferry || boat.job == Job::ShipBeingBuilt ||
             world->players[boat.owner].team != world->players[s.owner].team) {
             continue;
         }
@@ -895,7 +932,7 @@ bool PioneerArrives(Walk& w) {
     Tile& t = TileAt(w.world, s.x, s.y);
     const std::uint8_t flags = t.flags;
     if ((flags & kTileNotForPioneers) == 0 && (t.owner == kNoOwner || t.owner != s.owner)) {
-        SetJob(s, Job::PioneerWork);
+        s.job = Job::PioneerWork;
         Call<kSetSettlerAnimation>(w.world, w.n, kPioneerWorkAnimation);
         return true;
     }
@@ -914,7 +951,7 @@ bool GeologistArrives(Walk& w) {
         t.object == 0 && TileNear(w.world, at, -1, 0).object == 0 && TileNear(w.world, at, 1, 0).object == 0 &&
         TileNear(w.world, at, 0, -1).object == 0 && TileNear(w.world, at, 0, 1).object == 0 &&
         TileNear(w.world, at, -1, -1).object == 0 && TileNear(w.world, at, 1, 1).object == 0) {
-        SetJob(s, Job::GeologistWork);
+        s.job = Job::GeologistWork;
         Call<kSetSettlerAnimation>(w.world, w.n, kGeologistWorkAnimation);
         return true;
     }
@@ -922,7 +959,7 @@ bool GeologistArrives(Walk& w) {
     return false;
 }
 
-// Jobs UnitWalk and Job176 at their target: the walk states (+0x1a), then
+// Jobs UnitWalk and UnitWalkCountdown at their target: the walk states (+0x1a), then
 // pioneers and geologists, then the path cache.
 std::uint32_t ArriveWaiting(Walk& w) {
     CGameData* world = w.world;
@@ -938,7 +975,7 @@ std::uint32_t ArriveWaiting(Walk& w) {
         Call<kSetSettlerTarget>(world, w.n, static_cast<std::uint32_t>(s.path_cache[0]),
                                 static_cast<std::uint32_t>(s.path_cache[1]));
         s.counter = 0;
-        SetJob(s, Job::UnitWalk);
+        s.job = Job::UnitWalk;
         s.walk_state = kWalkStateThiefBack;
         handled = true;
     } else if (state == kWalkStateThiefArrived && thief) {
@@ -975,7 +1012,7 @@ std::uint32_t ArriveWaiting(Walk& w) {
             PopWaypoint(s);
         }
         s.counter = 0;
-        SetJob(s, Job::UnitWalk);
+        s.job = Job::UnitWalk;
         s.walk_state = 0;
         return w.again;
     }
@@ -1023,11 +1060,11 @@ template <typename Same>
 std::uint32_t ArriveShipLeg(Walk& w, Job stop, Same same) {
     Settler& s = w.s;
     if (s.path_cache[0] == kNoWaypoint) {
-        SetJob(s, stop);
+        s.job = stop;
     } else {
         PopWaypoint(s);
         if (!same(TileAt(w.world, s.x, s.y), TileAt(w.world, s.target_x, s.target_y))) {
-            SetJob(s, stop);
+            s.job = stop;
         }
     }
     s.counter = 0;
@@ -1036,7 +1073,7 @@ std::uint32_t ArriveShipLeg(Walk& w, Job stop, Same same) {
 
 std::uint32_t MoveIntoBuilding(Walk& w, Job job, std::uint32_t animation) {
     Call<kMoveSettlerToBuildingTileA>(w.world, w.n);
-    SetJob(w.s, job);
+    w.s.job = job;
     Call<kSetSettlerAnimation>(w.world, w.n, animation);
     return w.again;
 }
@@ -1050,7 +1087,7 @@ std::uint32_t Arrive(Walk& w) {
     };
     auto sameRegion = [](const Tile& a, const Tile& b) { return a.walk_region == b.walk_region; };
     auto sameArea = [](const Tile& a, const Tile& b) { return a.area == b.area; };
-    switch (JobOf(s)) {
+    switch (s.job) {
     case Job::StepAside:
         SetJobNow(s, Job::Nothing);
         return 1;
@@ -1058,51 +1095,51 @@ std::uint32_t Arrive(Walk& w) {
     case Job::DiggerWalkToSpot: return next(Job::DiggerLevel);
     case Job::CarrierWalkToPile: return next(Job::CarrierAtPile);
     case Job::CarrierWalkToBuilding: return next(Job::CarrierAtBuilding);
-    case Job::Job15: return next(Job::BuilderStart);
-    case Job::Job17: return next(Job::BuilderBuild);
-    case Job::Job28: return next(Job::Job32);
-    case Job::Job29: return next(Job::Job34);
-    case Job::Job42: return next(Job::Job36);
-    case Job::Job43: return next(Job::Job39);
-    case Job::Job45: return next(Job::Job46);
-    case Job::Job48: return MoveIntoBuilding(w, Job::Job101, 27);
+    case Job::BuilderWalkToWait: return next(Job::BuilderStart);
+    case Job::BuilderWalkToSpot: return next(Job::BuilderBuild);
+    case Job::WoodcutterWalkToTree: return next(Job::WoodcutterAtTree);
+    case Job::StonecutterWalkToStone: return next(Job::StonecutterAtStone);
+    case Job::WoodcutterWalkHome: return next(Job::WoodcutterHome);
+    case Job::StonecutterWalkHome: return next(Job::StonecutterHome);
+    case Job::ForesterWalkToSpot: return next(Job::ForesterAtSpot);
+    case Job::ForesterWalkHome: return MoveIntoBuilding(w, Job::ForesterBackIn, 27);
     case Job::UnitWalk:
-    case Job::Job176: return ArriveWaiting(w);
-    case Job::Job76: return next(Job::Job77);
-    case Job::Job78: return next(Job::Job79);
+    case Job::UnitWalkCountdown: return ArriveWaiting(w);
+    case Job::CarrierWalkToSourcePile: return next(Job::CarrierAtSourcePile);
+    case Job::CarrierWalkToTargetPile: return next(Job::CarrierAtTargetPile);
     case Job::CarrierWalkToTool: return next(Job::CarrierTakeTool);
-    case Job::Job144: return next(Job::Job145);
-    case Job::Job147: return MoveIntoBuilding(w, Job::Job148, 157);
-    case Job::Job152: return next(Job::Job153);
-    case Job::Job156: return next(Job::Job150);
+    case Job::FarmerWalkToSow: return next(Job::FarmerSow);
+    case Job::FarmerWalkHome: return MoveIntoBuilding(w, Job::FarmerBackIn, 157);
+    case Job::FarmerWalkHomeLoaded: return next(Job::FarmerHome);
+    case Job::FarmerWalkToHarvest: return next(Job::FarmerAtField);
     case Job::WalkToOwnArea: return ArriveSoldierAtArea(w);
-    case Job::Job178: return next(Job::Job179);
-    case Job::Job181: return next(Job::Job182);
-    case Job::Job187: return next(Job::Job189);
-    case Job::Job188: return next(Job::Job191);
-    case Job::Job229: return next(Job::Job230);
-    case Job::Job232: return MoveIntoBuilding(w, Job::Job233, 225);
-    case Job::Job237: return next(Job::Job238);
-    case Job::Job241: return next(Job::Job235);
-    case Job::Job246: return next(Job::Job247);
-    case Job::Job249: return MoveIntoBuilding(w, Job::Job250, 234);
-    case Job::Job254: return next(Job::Job255);
-    case Job::Job258: return next(Job::Job252);
-    case Job::Job307: return next(Job::Job308);
-    case Job::Job309: return ArriveShipLeg(w, Job::Job310, sameRegion);
-    case Job::Job320: return next(Job::Job323);
-    case Job::Job321: return MoveIntoBuilding(w, Job::Job322, 276);
+    case Job::FisherWalkToWater: return next(Job::FisherCast);
+    case Job::FisherWalkHome: return next(Job::FisherHome);
+    case Job::WaterworkerWalkToWater: return next(Job::WaterworkerDraw);
+    case Job::WaterworkerWalkHome: return next(Job::WaterworkerHome);
+    case Job::RiceFarmerWalkToPlant: return next(Job::RiceFarmerPlant);
+    case Job::RiceFarmerWalkHome: return MoveIntoBuilding(w, Job::RiceFarmerBackIn, 225);
+    case Job::RiceFarmerWalkHomeLoaded: return next(Job::RiceFarmerHome);
+    case Job::RiceFarmerWalkToHarvest: return next(Job::RiceFarmerAtField);
+    case Job::WinegrowerWalkToPlant: return next(Job::WinegrowerPlant);
+    case Job::WinegrowerWalkHome: return MoveIntoBuilding(w, Job::WinegrowerBackIn, 234);
+    case Job::WinegrowerWalkHomeLoaded: return next(Job::WinegrowerHome);
+    case Job::WinegrowerWalkToHarvest: return next(Job::WinegrowerAtField);
+    case Job::DonkeyWalkToPile: return next(Job::DonkeyLoad);
+    case Job::DonkeyWalkToMarket: return ArriveShipLeg(w, Job::DonkeyUnload, sameRegion);
+    case Job::ShipyardWalkToSlipway: return next(Job::ShipyardBuild);
+    case Job::ShipyardWalkHome: return MoveIntoBuilding(w, Job::ShipyardBackIn, 276);
     case Job::OnBoard:
         s.counter = 0;
         return w.again;
-    case Job::Job327: return next(Job::Job331);
-    case Job::Job328: return ArriveShipLeg(w, Job::ShipUnload, sameArea);
-    case Job::Job329: return ArriveShipLeg(w, Job::New, sameArea);
-    case Job::Job330: return ArriveShipLeg(w, Job::New, sameRegion);
-    case Job::Job357: return next(Job::Job358);
-    case Job::Job360: return MoveIntoBuilding(w, Job::Job353, 509);
-    case Job::Job362: return next(Job::Job363);
-    case Job::Job365: return next(Job::Job366);
+    case Job::ShipWalkToHarbour: return next(Job::ShipLoad);
+    case Job::ShipSailWithCargo: return ArriveShipLeg(w, Job::ShipUnload, sameArea);
+    case Job::ShipSailHome: return ArriveShipLeg(w, Job::New, sameArea);
+    case Job::DonkeyWalkHome: return ArriveShipLeg(w, Job::New, sameRegion);
+    case Job::BeekeeperWalkToHiveSpot: return next(Job::BeekeeperPlaceHive);
+    case Job::BeekeeperWalkHome: return MoveIntoBuilding(w, Job::BeekeeperGoIn, 509);
+    case Job::BeekeeperWalkToHive: return next(Job::BeekeeperHarvest);
+    case Job::BeekeeperWalkHomeLoaded: return next(Job::BeekeeperHome);
     default: return w.again;
     }
 }
@@ -1236,15 +1273,59 @@ constexpr std::uint32_t kWalkMapSize = 384;
 constexpr std::uint32_t kWalkRings = 16;       // offset table rings 0..15, then an end mark
 
 // Walking jobs, a few that follow them, and some that are not walking.
-constexpr Job kWalkJobs[] = {
-    Job::StepAside, Job::WalkToWork, Job::DiggerWalkToSpot, Job::CarrierWalkToPile, Job::CarrierWalkToBuilding,
-    Job::Job15, Job::Job17, Job::Job28, Job::Job29, Job::Job42, Job::Job43, Job::Job45, Job::Job48, Job::UnitWalk,
-    Job::Job76, Job::Job78, Job::CarrierWalkToTool, Job::Job144, Job::Job147, Job::Job152, Job::Job156,
-    Job::WalkToOwnArea, Job::Job176, Job::Job178, Job::Job181, Job::Job187, Job::Job188, Job::Job229, Job::Job232,
-    Job::Job237, Job::Job241, Job::Job246, Job::Job249, Job::Job254, Job::Job258, Job::Job307, Job::Job309,
-    Job::Job320, Job::Job321, Job::OnBoard, Job::Job327, Job::Job328, Job::Job329, Job::Job330, Job::Job357,
-    Job::Job360, Job::Job362, Job::Job365, Job::Nothing, Job::UnitIdle, Job::SeekOwnArea, Job::ArriveAtWork,
-    Job::Job336};
+constexpr Job kWalkJobs[] = {Job::StepAside,
+                             Job::WalkToWork,
+                             Job::DiggerWalkToSpot,
+                             Job::CarrierWalkToPile,
+                             Job::CarrierWalkToBuilding,
+                             Job::BuilderWalkToWait,
+                             Job::BuilderWalkToSpot,
+                             Job::WoodcutterWalkToTree,
+                             Job::StonecutterWalkToStone,
+                             Job::WoodcutterWalkHome,
+                             Job::StonecutterWalkHome,
+                             Job::ForesterWalkToSpot,
+                             Job::ForesterWalkHome,
+                             Job::UnitWalk,
+                             Job::CarrierWalkToSourcePile,
+                             Job::CarrierWalkToTargetPile,
+                             Job::CarrierWalkToTool,
+                             Job::FarmerWalkToSow,
+                             Job::FarmerWalkHome,
+                             Job::FarmerWalkHomeLoaded,
+                             Job::FarmerWalkToHarvest,
+                             Job::WalkToOwnArea,
+                             Job::UnitWalkCountdown,
+                             Job::FisherWalkToWater,
+                             Job::FisherWalkHome,
+                             Job::WaterworkerWalkToWater,
+                             Job::WaterworkerWalkHome,
+                             Job::RiceFarmerWalkToPlant,
+                             Job::RiceFarmerWalkHome,
+                             Job::RiceFarmerWalkHomeLoaded,
+                             Job::RiceFarmerWalkToHarvest,
+                             Job::WinegrowerWalkToPlant,
+                             Job::WinegrowerWalkHome,
+                             Job::WinegrowerWalkHomeLoaded,
+                             Job::WinegrowerWalkToHarvest,
+                             Job::DonkeyWalkToPile,
+                             Job::DonkeyWalkToMarket,
+                             Job::ShipyardWalkToSlipway,
+                             Job::ShipyardWalkHome,
+                             Job::OnBoard,
+                             Job::ShipWalkToHarbour,
+                             Job::ShipSailWithCargo,
+                             Job::ShipSailHome,
+                             Job::DonkeyWalkHome,
+                             Job::BeekeeperWalkToHiveSpot,
+                             Job::BeekeeperWalkHome,
+                             Job::BeekeeperWalkToHive,
+                             Job::BeekeeperWalkHomeLoaded,
+                             Job::Nothing,
+                             Job::UnitIdle,
+                             Job::SeekOwnArea,
+                             Job::ArriveAtWork,
+                             Job::HealerGoIn};
 constexpr std::uint32_t kWalkJobCount = sizeof(kWalkJobs) / sizeof(kWalkJobs[0]);
 constexpr SettlerType kWalkTypes[] = {
     SettlerType::Catapult, SettlerType::Ferry,      SettlerType::TradeShip, SettlerType::Thief,
@@ -1340,7 +1421,7 @@ void SanitizeWalkWorld(test::Context& ctx, test::WorldPair& worlds) {
             s.x = x;
             s.y = y;
             s.art = art;
-            s.job = job;
+            s.job = static_cast<SettlerJob>(static_cast<std::uint16_t>(job));
             s.saved_counter = part;
             s.next = next;
             s.prev = prev;
@@ -1384,9 +1465,9 @@ WalkCase SetUpWalkCase(test::Context& ctx, test::WorldPair& worlds) {
     const std::uint32_t jobPick = rng.Below(10);
     // Mostly the jobs with their own arrival code: the walk states, the ship legs (327..330).
     const auto job = static_cast<std::uint16_t>(
-        jobPick < 3   ? Value(rng.Chance(1, 2) ? Job::UnitWalk : Job::Job176)
-        : jobPick < 4 ? Value(Job::Job327) + rng.Below(4)
-        : jobPick < 5 ? Value(rng.Chance(1, 2) ? Job::Job309 : Job::WalkToOwnArea)
+        jobPick < 3   ? Value(rng.Chance(1, 2) ? Job::UnitWalk : Job::UnitWalkCountdown)
+        : jobPick < 4 ? Value(Job::ShipWalkToHarbour) + rng.Below(4)
+        : jobPick < 5 ? Value(rng.Chance(1, 2) ? Job::DonkeyWalkToMarket : Job::WalkToOwnArea)
                       : Value(kWalkJobs[rng.Below(kWalkJobCount)]));
     const auto owner = static_cast<std::uint8_t>(rng.Below(4));
     std::int32_t races[4], presence[4];
@@ -1446,7 +1527,7 @@ WalkCase SetUpWalkCase(test::Context& ctx, test::WorldPair& worlds) {
         }
         Settler& s = w->settlers[c.n];
         s.art = art;
-        s.job = job;
+        s.job = static_cast<SettlerJob>(static_cast<std::uint16_t>(job));
         s.owner = owner;
         s.race = race;
         s.x = x;
@@ -1545,7 +1626,7 @@ void CompareWalkSettler(test::Context& ctx, WalkFn candidate, int cases) {
 // Wrong: a shot faces one direction off.
 std::uint32_t __fastcall WrongWalkSettlerShot(CGameData* world, void* edx, std::uint32_t settler) {
     const std::uint32_t result = CGameData_WalkSettler(world, edx, settler);
-    if (JobOf(world->settlers[settler]) == Job::Shoot) {
+    if (world->settlers[settler].job == Job::Shoot) {
         world->settlers[settler].direction ^= 1;
     }
     return result;

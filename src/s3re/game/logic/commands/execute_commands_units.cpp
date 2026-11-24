@@ -135,17 +135,16 @@ bool IsMovableUnit(std::uint8_t type) {
 }
 
 // Jobs in which a unit takes orders (0x536597).
-bool IsMovableJob(std::uint16_t job) {
-    switch (static_cast<Job>(job)) {
+bool IsMovableJob(Job job) {
+    switch (job) {
     case Job::GeologistWork:
-    case Job::Job213:
+    case Job::GeologistDone:
     case Job::PioneerWork:
-    case Job::Job303:
+    case Job::PioneerDone:
     case Job::UnitIdle:
     case Job::UnitWalk:
-    case Job::Job142:
-    case Job::Job176:
-        return true;
+    case Job::UnitFighting:
+    case Job::UnitWalkCountdown: return true;
     default:
         return false;
     }
@@ -318,13 +317,13 @@ void ReleaseWorkTile(Run& run, std::uint32_t number) {
     if (!IsWorkTileUnit(unit.art) || unit.saved_animation == kNoWorkTile) {
         return;
     }
-    if (unit.job == Value(Job::UnitWalk)) {
+    if (unit.job == Job::UnitWalk) {
         TileAt(world, unit.target_x, unit.target_y).flags &= static_cast<std::uint8_t>(~kTileReserved);
     }
-    if (unit.job == Value(Job::PioneerWork) || unit.job == Value(Job::Job303)) {
+    if (unit.job == Job::PioneerWork || unit.job == Job::PioneerDone) {
         TileAt(world, unit.x, unit.y).flags &= static_cast<std::uint8_t>(~kTileReserved);
     }
-    if (unit.job == Value(Job::GeologistWork) || unit.job == Value(Job::Job213)) {
+    if (unit.job == Job::GeologistWork || unit.job == Job::GeologistDone) {
         TileAt(world, unit.x, unit.y).flags &= static_cast<std::uint8_t>(~kTileReserved);
     }
 }
@@ -335,7 +334,7 @@ void SetTarget(Run& run, std::uint32_t number, std::uint32_t x, std::uint32_t y)
 
 // The common end of every order: walking, not holding position.
 void StartWalking(Settler& unit, std::uint8_t walkState) {
-    SetJob(unit, Job::UnitWalk);
+    unit.job = Job::UnitWalk;
     unit.walk_state = walkState;
     unit.flags &= static_cast<std::uint8_t>(~layout::kSettlerNoFight);
 }
@@ -344,13 +343,13 @@ void StartWalking(Settler& unit, std::uint8_t walkState) {
 void GiveWaypoint(Run& run, std::uint32_t number, std::uint32_t x, std::uint32_t y) {
     ReleaseWorkTile(run, number);
     Settler& unit = SettlerAt(run.world(), number);
-    switch (static_cast<Job>(unit.job)) {
+    switch (unit.job) {
     case Job::GeologistWork:
-    case Job::Job213:
+    case Job::GeologistDone:
     case Job::PioneerWork:
-    case Job::Job303:
+    case Job::PioneerDone:
     case Job::UnitIdle:
-    case Job::Job142:
+    case Job::UnitFighting:
         SetTarget(run, number, x, y);  // not walking yet: walk there
         break;
     default:  // walking (jobs 53, 176): queue it in the first free of three slots
@@ -407,9 +406,9 @@ void GiveMove(Run& run, const MoveOrder& order, std::uint32_t number, std::uint3
                              PlayerAt(run.world(), unit.owner).active != kPlayerComputerTakeover);
     if (attackMove) {
         if (IsShip(unit.art)) {
-            SetJob(unit, Job::UnitWalk);
+            unit.job = Job::UnitWalk;
         } else {
-            SetJob(unit, Job::Job176);
+            unit.job = Job::UnitWalkCountdown;
             unit.ship_walk = order.mode == MoveMode::AttackMove ? 0 : kAttackMoveCountdown;
         }
         unit.walk_state = order.walkState;
@@ -606,7 +605,7 @@ void SetUpUnitWorld(test::Context& ctx, Bench& bench) {
         s.target_x = static_cast<std::uint16_t>(rng.Below(kUnitsMap));
         s.target_y = static_cast<std::uint16_t>(rng.Below(kUnitsMap));
         const std::uint16_t jobs[] = {212, 213, 302, 303, 55, 53, 142, 176, 0, 1};
-        s.job = jobs[rng.Below(10)];
+        s.job = static_cast<SettlerJob>(jobs[rng.Below(10)]);
         s.saved_animation = rng.Chance(1, 2) ? 0xffff : rng.Below(kUnitsMap);
         s.walk_state = static_cast<std::uint8_t>(rng.Chance(2, 3) ? 0 : 1);
         for (auto& c : s.path_cache) {
@@ -655,7 +654,7 @@ void RandomizeGroup(test::Context& ctx, Bench& bench, std::uint32_t player, std:
         bench.worlds.Both([&](CGameData* w) {
             w->settlers[n].owner = owner;
             w->settlers[n].art = art;
-            w->settlers[n].job = job;
+            w->settlers[n].job = static_cast<SettlerJob>(job);
         });
     }
 }

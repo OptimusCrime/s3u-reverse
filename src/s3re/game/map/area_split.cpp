@@ -119,7 +119,7 @@
 //   a trade ship (43, 0x2b) / a ferry (44, 0x2c) for the building's player;
 //   any other state uses the number +0x32 instead, a stale register in the
 //   original), then DebugLog("Schiffsproduktion %u owner %u", type,
-//   player), ship job +0xe = Job325 (0x145), +0x15 = 0, +0x1c = 0,
+//   player), ship job +0xe = ShipBeingBuilt (0x145), +0x15 = 0, +0x1c = 0,
 //   direction +0x8 = (d + 2) % 6, building
 //   done; EAX (d + 2) / 6, 0 if no ship, the ship tile's y if occupied.
 //   Other types: EAX = building. ret 4.
@@ -863,7 +863,7 @@ std::uint32_t __fastcall CGameData_TakeBuildingExtraTiles(CGameData* world, void
     Settler& settler = world->settlers[ship];
     GameDebugLog(texts::kShipProduction, static_cast<std::uint32_t>(settler.art),
                  static_cast<std::uint32_t>(settler.owner));
-    SetJob(settler, SettlerJob::Job325);
+    settler.job = SettlerJob::ShipBeingBuilt;
     settler.slot = 0;
     settler.saved_animation = 0;
     settler.direction = (direction + 2) % kDirectionCount;

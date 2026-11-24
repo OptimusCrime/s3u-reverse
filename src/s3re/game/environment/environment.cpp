@@ -45,9 +45,11 @@
 // thiscall (ECX = world).
 
 #include "game/debug_log.h"
-#include "game/enums/races.h"
-#include "game/enums/settler_types.h"
 #include "game/enums/goods.h"
+#include "game/enums/objects.h"
+#include "game/enums/races.h"
+#include "game/enums/resources.h"
+#include "game/enums/settler_types.h"
 #include "game/enums/terrain.h"
 #include "game/globals.h"
 #include "game/texts.h"
@@ -68,11 +70,6 @@ namespace s3re::game {
 using layout::Tile;
 
 namespace {
-
-// Terrain values (class in the high nibble, so hex).
-constexpr std::uint8_t kTerrainGrass = 0x10;
-constexpr std::uint8_t kTerrainField = 0x16;     // a farmer's, rice farmer's or winegrower's field
-constexpr std::uint8_t kTerrainWornPath = 0x1c;  // grass walked on often (AddTileTraffic)
 
 // DecayTraffic: a path whose traffic falls to 7 grows back (a footprint
 // tile keeps 8).
@@ -430,8 +427,9 @@ void UpdateSoldierStrength(CGameData* world) {
     }
 }
 
-bool IsGrowingTree(std::uint8_t object) {
-    return object >= 0x55 && object <= 0x6f;
+// The three crops, planted to done (0x55..0x6f).
+bool IsCrop(std::uint8_t object) {
+    return object >= kObjectGrainSown && object <= kObjectRiceDone;
 }
 
 // One tile of the landscape pass (the cursor was just advanced).
@@ -441,15 +439,14 @@ void UpdateLandscapeTile(CGameData* world) {
     auto object = [&]() -> std::uint8_t& { return TileAt(world, x(), y()).object; };
     const auto random = Callee<Fn0>(kRandom);
 
-    // A field (terrain 0x16) without growing objects (0x55..0x6f, the young
-    // trees of SpellGrowTrees; probably also the crops) around turns back into grass.
+    // A field (terrain 0x16) without crops (0x55..0x6f) around turns back into grass.
     if (TileAt(world, x(), y()).terrain == kTerrainField && Callee<Fn2>(kIsOnMap)(world, nullptr, x(), y()) != 0) {
         const U cx = x();
         const U cy = y();
         static constexpr std::int32_t kAround[7][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, 1}};
         bool clear = true;
         for (const auto& d : kAround) {
-            if (IsGrowingTree(TileAt(world, cx + static_cast<U>(d[0]), cy + static_cast<U>(d[1])).object)) {
+            if (IsCrop(TileAt(world, cx + static_cast<U>(d[0]), cy + static_cast<U>(d[1])).object)) {
                 clear = false;
                 break;
             }
@@ -460,31 +457,35 @@ void UpdateLandscapeTile(CGameData* world) {
             TileAt(world, x(), y()).draw_flags |= layout::kTileDrawRedraw;
         }
     }
-    if (object() >= 0xd0 && object() <= 0xd7) {
-        object() = 0;
+    // A felled tree rots away (0xd0..0xd7 is gone, 0xb8..0xcf rots on).
+    if (object() >= kObjectFirstFelledTreeGone && object() <= kObjectLastFelledTreeGone) {
+        object() = kObjectNone;
     }
-    if (object() == 0x5d || object() == 0x66 || object() == 0x6f) {
-        object() = 0;
+    if (object() == kObjectGrainDone || object() == kObjectVineDone || object() == kObjectRiceDone) {
+        object() = kObjectNone;
     }
-    if (object() >= 0xb8 && object() <= 0xcf) {
+    if (object() >= kObjectFirstRottingTree && object() <= kObjectLastRottingTree) {
         object() = static_cast<std::uint8_t>(object() + 8);
     }
-    if (object() >= g_objectAgeStart && object() <= 0xdf) {
+    // A young tree old enough becomes a tree: (stage + 0x4a) * 2 + a random
+    // bit wraps into 0x44..0x53.
+    if (object() >= g_objectAgeStart && object() <= kObjectLastGrowingTree) {
         std::uint8_t& o = object();
         const U r = random(world, nullptr);
         o = static_cast<std::uint8_t>((r & 1) + ((o + 0x4a) << 1));
     }
-    if (object() >= 0xe0 && object() <= 0xe7) {
+    if (object() >= kObjectFirstYoungTree && object() <= kObjectLastYoungTree) {
         object() = static_cast<std::uint8_t>(object() - 8);
     }
-    if (object() == 0x54) {
+    // A sapling becomes a young tree of a random stage (0xe0..0xe4, 0xe6).
+    if (object() == kObjectSapling) {
         U stage = (random(world, nullptr) & 0xffff) % 6;
         if (stage == 5) {
             stage = 6;
         }
         object() = static_cast<std::uint8_t>(stage - 0x20);
     }
-    if (object() >= 0xf7 && object() <= 0xfd) {
+    if (object() >= kObjectHive && object() <= kObjectHiveFull) {
         // Trees (0x44..0x52) among the first 201 ring offsets; one within
         // the first 19 is needed to go on.
         bool treeNear = false;
@@ -494,7 +495,7 @@ void UpdateLandscapeTile(CGameData* world) {
             const U ty = static_cast<U>(world->offsets[i].dy) + y();
             if (Callee<Fn2>(kIsOnMap)(world, nullptr, tx, ty) != 0) {
                 const std::uint8_t o = TileAt(world, tx, ty).object;
-                if (o >= 0x44 && o <= 0x52) {
+                if (o >= kObjectFirstTree && o <= kObjectLastCuttableTree) {
                     if (!treeNear && i <= 0x12) {
                         treeNear = true;
                     }
@@ -504,13 +505,13 @@ void UpdateLandscapeTile(CGameData* world) {
         }
         if (!treeNear) {
             std::uint8_t& o = object();
-            if (o >= 0xf8) {
+            if (o > kObjectHive) {
                 --o;
             } else {
-                o = 0;
+                o = kObjectNone;
                 Callee<Fn2>(kUnblockTile)(world, nullptr, x(), y());
             }
-        } else if (object() <= 0xfc) {
+        } else if (object() < kObjectHiveFull) {
             const U chance = trees < 10 ? trees * 10 : 100;
             const U roll = (random(world, nullptr) & 0xffff) % 0x63;
             if (chance >= roll) {
@@ -518,23 +519,24 @@ void UpdateLandscapeTile(CGameData* world) {
             }
         }
     }
-    if (object() >= 0x55 && object() <= 0x5c) {
+    // The crops grow one stage (up to done).
+    if (object() >= kObjectGrainSown && object() < kObjectGrainDone) {
         ++object();
     }
-    if (object() >= 0x5e && object() <= 0x65) {
+    if (object() >= kObjectVinePlanted && object() < kObjectVineDone) {
         ++object();
     }
-    if (object() >= 0x67 && object() <= 0x6e) {
+    if (object() >= kObjectRicePlanted && object() < kObjectRiceDone) {
         ++object();
     }
-    if (object() == 0xf6) {
-        object() = 0;
+    if (object() == kObjectFireOut) {
+        object() = kObjectNone;
         Callee<Fn2>(kUnblockTile)(world, nullptr, x(), y());
         Callee<Fn3>(kQueuePendingEvent)(world, nullptr, kPendingTileChanged, x(), y());
     }
-    if (object() >= 0xf3 && object() <= 0xf5) {
+    if (object() >= kObjectFireStart && object() <= kObjectFireLast) {
         ++object();
-        if (object() == 0xf4) {
+        if (object() == kObjectFireBurning) {
             Callee<Fn3>(kSpellOnArea)(world, nullptr, 0x20, x(), y());
         }
         // Fire spreads to trees (0x44..0x53) at ring offsets 19..60.
@@ -548,8 +550,9 @@ void UpdateLandscapeTile(CGameData* world) {
                 continue;
             }
             Tile& t = TileAt(world, tx, ty);
-            if (t.object >= 0x44 && t.object <= 0x53 && TileAt(world, tx + 1, ty + 1).settler == 0) {
-                t.object = 0xf3;
+            if (t.object >= kObjectFirstTree && t.object <= kObjectLastTree &&
+                TileAt(world, tx + 1, ty + 1).settler == 0) {
+                t.object = kObjectFireStart;
                 Callee<Fn3>(kQueuePendingEvent)(world, nullptr, kPendingTileChanged, tx, ty);
             }
         }
@@ -558,21 +561,22 @@ void UpdateLandscapeTile(CGameData* world) {
     // Fish (resources of kind 0, amount 1..15) move to a random neighbour in
     // the water.
     const std::uint8_t fish = TileAt(world, x(), y()).resources;
-    if (fish <= 0x0f && fish != 0) {
+    if (fish <= kResourceMaxAmount && fish != 0) {
         const U direction = Callee<Fn0>(kRandomBelow6)(world, nullptr);
         const U nx = Callee<NeighbourFn>(kNeighbourX)(x(), direction);
         const U ny = Callee<NeighbourFn>(kNeighbourY)(y(), direction);
         if (nx < world->map_size && ny < world->map_size) {
             Tile& to = TileAt(world, nx, ny);
-            if ((to.terrain & kTerrainClassMask) == kTerrainClassWater && to.resources != 0x0f) {
+            if ((to.terrain & kTerrainClassMask) == kTerrainClassWater &&
+                to.resources != kResourceMaxAmount) {
                 ++to.resources;
                 --TileAt(world, x(), y()).resources;
             }
         }
     }
     if ((random(world, nullptr) & 0xffff) > 50000) {
-        if (object() >= 0xe8 && object() <= 0xf2) {
-            object() = 0;
+        if (object() >= kObjectSignNothing && object() <= kObjectLastSign) {
+            object() = kObjectNone;
         }
     }
 }

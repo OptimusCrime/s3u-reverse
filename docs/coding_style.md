@@ -66,7 +66,7 @@ Readable code must still lead back to the binary:
 - Names come from evidence: the game's own strings (German DebugLog
   texts, data files, the manual), RTTI, or what the code does. A value
   whose meaning isn't known yet is still named, as a placeholder with its
-  number (`SettlerJob::Job309`), so it can be found and renamed later.
+  number (`SettlerJob::Job390`), so it can be found and renamed later.
 - Don't name a value that is just arithmetic (`x + 1`, `count / 2`).
 - **Enum or constant?** A *category* (one of several kinds a field can
   hold: job, type, good, race, class) is an `enum class`. *Bits* of a flag
@@ -77,7 +77,7 @@ Readable code must still lead back to the binary:
   header (`game/enums/*.h`, `layout.h`, `pathing.h`) once a second file needs
   them.
 - **Placeholders** are the category's word plus the decimal value:
-  `SettlerJob::Job309`, `SettlerType::Type20`, `Good::Good31`,
+  `SettlerJob::Job390`, `SettlerType::Type20`, `Good::Good31`,
   `SettlerClass::Class41`. When a placeholder's meaning becomes clear,
   rename it everywhere and update `re/enums.md`.
 - Each enum has the field's width as its underlying type; where the same
@@ -96,8 +96,7 @@ Readable code must still lead back to the binary:
 
 The record fields in `layout.h` stay plain integers for now; converted
 code reads and writes them through the accessors of
-`game/typed_fields.h`: `JobOf(settler)`, `SetJob(settler, job)`,
-`TypeOf(settler)`, `TypeOf(building)`, `GoodOf(pile)`, `RaceOf(...)`,
+`game/typed_fields.h`: `TypeOf(settler)`, `TypeOf(building)`, `GoodOf(pile)`, `RaceOf(...)`,
 `ClassOf(type or settler)`. Changing the field types now would have
 touched about 30 files at once (188 uses of `.job`, 328 of `.art`), and
 every `layout.h` change makes `run.py --changed` select every spec. Once
@@ -105,6 +104,12 @@ all files that use a field are converted, the field takes the enum type
 (same size, the `static_assert`s keep holding) and its accessors go.
 Fields that are indexes (`settler_lists[settler.art]`) or that are passed
 to original functions stay raw (`settler.art`, or `Value(type)`).
+
+Done so far: `Settler::job` is a `SettlerJob` (session 51; `JobOf` /
+`SetJob` are gone: write `settler.job == Job::UnitIdle`,
+`settler.job = Job::New`; `Value(settler.job)` where the original passes
+or compares the whole word, `static_cast<SettlerJob>(word)` where a word
+from elsewhere becomes a job).
 
 ## 4. Decimal by default, hex where it carries meaning
 

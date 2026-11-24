@@ -22,12 +22,7 @@
 namespace s3re::game {
 
 // ---------------------------------------------------------------- Settler
-inline SettlerJob JobOf(const layout::Settler& settler) {
-    return static_cast<SettlerJob>(settler.job);
-}
-inline void SetJob(layout::Settler& settler, SettlerJob job) {
-    settler.job = Value(job);
-}
+// Settler::job has its enum type (SettlerJob) since session 51.
 inline SettlerType TypeOf(const layout::Settler& settler) {
     return static_cast<SettlerType>(settler.art);
 }

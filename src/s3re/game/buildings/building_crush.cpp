@@ -81,11 +81,12 @@
 //   the CSV's proposal.)
 
 #include "game/debug_log.h"
-#include "game/enums/settler_types.h"
 #include "game/enums/buildings.h"
 #include "game/enums/goods.h"
-#include "game/enums/piles.h"
 #include "game/enums/job_ids.h"
+#include "game/enums/objects.h"
+#include "game/enums/piles.h"
+#include "game/enums/settler_types.h"
 #include "game/enums/terrain.h"
 #include "game/globals.h"
 #include "game/replacements.h"
@@ -121,7 +122,6 @@ constexpr std::uint32_t kMarkFootprintEnd = 0x80000001;
 constexpr std::uint32_t kMarkBorder = 0x80000002;
 constexpr std::uint32_t kMarkEnd = 0x80000003;
 
-constexpr std::uint8_t kObjectStake = 113;     // 0x71: a stake on a footprint tile (CheckBuildingSite)
 constexpr std::uint8_t kTileFootprint = 0x08;  // Tile::flags: part of a building
 constexpr std::uint8_t kTileLevelling = 0x04;  // Tile::flags: being levelled
 constexpr std::uint32_t kGrid = 31;
@@ -189,13 +189,15 @@ constexpr std::uint16_t kNoDirection = 0xffff;
 
 // Carriers bringing goods to a building pile (jobs 76..79, 0x4c..0x4f).
 bool IsDeliveringJob(Job job) {
-    return IsOneOf(job, {Job::Job76, Job::Job77, Job::Job78, Job::Job79});
+    return IsOneOf(job, {Job::CarrierWalkToSourcePile, Job::CarrierAtSourcePile, Job::CarrierWalkToTargetPile,
+                         Job::CarrierAtTargetPile});
 }
 
 // Settlers on their way to take goods from a pile (its position is their target).
 bool IsFetchingJob(Job job) {
-    return IsOneOf(job, {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::Job76, Job::Job77,
-                         Job::CarrierWalkToTool, Job::CarrierTakeTool});
+    return IsOneOf(
+        job, {Job::CarrierWalkToPile, Job::CarrierAtPile, Job::CarrierPickUp, Job::CarrierWalkToSourcePile,
+              Job::CarrierAtSourcePile, Job::CarrierWalkToTool, Job::CarrierTakeTool});
 }
 
 // Resets every settler with an owner for which `match` is true.
@@ -212,7 +214,7 @@ void ResetSettlersWhere(CGameData* world, Match match) {
 // Resets the settlers about to fetch goods from the pile.
 void ResetFetchers(CGameData* world, const layout::Pile& pile) {
     ResetSettlersWhere(world, [&](const layout::Settler& s) {
-        return IsFetchingJob(JobOf(s)) && s.target_x == pile.x && s.target_y == pile.y;
+        return IsFetchingJob(s.job) && s.target_x == pile.x && s.target_y == pile.y;
     });
 }
 
@@ -316,14 +318,15 @@ void __fastcall CGameData_DropInputPile(CGameData* world, void*, std::uint32_t n
     layout::Pile& pile = world->piles[number];
     if ((pile.leaving >> 4) != 0) {  // units coming, in the high nibble
         ResetSettlersWhere(world, [&](const layout::Settler& s) {
-            return s.building == number && IsDeliveringJob(JobOf(s));
+            return s.building == number && IsDeliveringJob(s.job);
         });
     }
     GameDebugLog(texts::kCannotFindBringers);  // always, as in the original
     if (pile.leaving != 0) {
-        // Jobs 307/308 (0x133/0x134): probably ships loading at a trade building.
+        // Jobs 307/308 (0x133/0x134): donkeys fetching from this pile (DonkeyWalkToPile, DonkeyLoad).
         ResetSettlersWhere(world, [&](const layout::Settler& s) {
-            return IsOneOf(JobOf(s), {Job::Job307, Job::Job308}) && s.target_x == pile.x && s.target_y == pile.y;
+            return IsOneOf(s.job, {Job::DonkeyWalkToPile, Job::DonkeyLoad}) && s.target_x == pile.x &&
+                   s.target_y == pile.y;
         });
     }
     const std::uint32_t x = pile.x;
@@ -348,7 +351,7 @@ void __fastcall CGameData_DropStoragePile(CGameData* world, void*, std::uint32_t
     if (coming != 0) {
         for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
             const layout::Settler& settler = world->settlers[n];
-            if (settler.owner != kFree && settler.building == number && IsDeliveringJob(JobOf(settler))) {
+            if (settler.owner != kFree && settler.building == number && IsDeliveringJob(settler.job)) {
                 ResetSettlerToIdle(world, n);
                 --coming;
             }
@@ -571,7 +574,7 @@ void __fastcall CGameData_RemoveBuildingGoods(CGameData* world, void*, std::uint
     GameDebugLog(texts::kGoodsOnTheirWay, coming);
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
         const layout::Settler& settler = world->settlers[n];
-        if (settler.owner != kFree && settler.building == number && IsBuildingGoodsJob(JobOf(settler))) {
+        if (settler.owner != kFree && settler.building == number && IsBuildingGoodsJob(settler.job)) {
             ResetSettlerToIdle(world, n);
             --coming;
         }
@@ -674,7 +677,7 @@ bool IsSiteWorker(const layout::Settler& s) {
     // A carrier fetching a shovel or hammer to become a digger or builder (tool_type = the type it becomes).
     const bool digOrBuild = s.tool_type == Value(SettlerType::Digger) || s.tool_type == Value(SettlerType::Builder);
     const bool diggerOrBuilder = TypeOf(s) == SettlerType::Digger || TypeOf(s) == SettlerType::Builder;
-    switch (JobOf(s)) {
+    switch (s.job) {
         case Job::CarrierWalkToTool:
         case Job::CarrierTakeTool: return digOrBuild;
         case Job::WalkToWork:
@@ -682,12 +685,12 @@ bool IsSiteWorker(const layout::Settler& s) {
         case Job::DiggerDig:
         case Job::DiggerWalkToSpot:
         case Job::DiggerLevel:
-        case Job::Job9:
-        case Job::Job8:
+        case Job::DiggerRaise:
+        case Job::DiggerLower:
         case Job::BuilderStart:
-        case Job::Job17:
+        case Job::BuilderWalkToSpot:
         case Job::BuilderBuild:
-        case Job::Job15: return true;
+        case Job::BuilderWalkToWait: return true;
         default: return false;
     }
 }
@@ -726,7 +729,7 @@ void __fastcall CGameData_ReleaseSiteWorkers(CGameData* world, void*, std::uint3
         }
         // Carriers on their way to become recruits.
         ResetSettlersWhere(world, [&](const layout::Settler& s) {
-            return s.building == number && JobOf(s) == Job::WalkToWork && TypeOf(s) == SettlerType::Carrier;
+            return s.building == number && s.job == Job::WalkToWork && TypeOf(s) == SettlerType::Carrier;
         });
     }
     if (b.buildup != 0) {
@@ -743,7 +746,7 @@ void __fastcall CGameData_ReleaseSiteWorkers(CGameData* world, void*, std::uint3
     std::uint32_t soldier = b.garrison;
     if (soldier != 0) {
         while (soldier != 0) {
-            if (JobOf(world->settlers[soldier]) == Job::Job140) {
+            if (world->settlers[soldier].job == Job::BowmanInTower) {
                 CGameData_LeaveBuildingSlot(world, nullptr, soldier);
             }
             ResetSettlerToIdle(world, soldier);
@@ -755,7 +758,8 @@ void __fastcall CGameData_ReleaseSiteWorkers(CGameData* world, void*, std::uint3
     // Non-civilians on their way to it.
     ResetSettlersWhere(world, [&](const layout::Settler& s) {
         return ClassOf(s) != SettlerClass::Civilian && s.building == number &&
-               IsOneOf(JobOf(s), {Job::WalkToWork, Job::ArriveAtWork, Job::Job16, Job::Job106, Job::Job139});
+               IsOneOf(s.job, {Job::WalkToWork, Job::ArriveAtWork, Job::SwordsmanEnterTower,
+                               Job::BowmanEnterTower, Job::PikemanEnterTower});
     });
 }
 
@@ -1026,7 +1030,7 @@ namespace {
 // bit only; the real one floods regions over the random map).
 void InstallSettlerStubs(test::CalleeStubs& stubs) {
     stubs.Install<1, kResetSettlerToIdle>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
-        w->settlers[args[0] & 0xffff].job = 1;
+        w->settlers[args[0] & 0xffff].job = Job::Nothing;
         return 0x5a5a0001u;
     });
     stubs.Install<1, kTakeGoodFromPile>([](CGameData* w, std::uint32_t, const std::uint32_t* args) {
@@ -1076,7 +1080,7 @@ void SetUpSettlers(test::Context& ctx, test::WorldPair& worlds, std::uint32_t pi
         const auto building = static_cast<std::uint16_t>(ctx.rng().Chance(1, 2) ? pile : ctx.rng().Below(100));
         worlds.Both([&](CGameData* w) {
             layout::Settler& s = w->settlers[n];
-            s.job = job;
+            s.job = static_cast<SettlerJob>(static_cast<std::uint16_t>(job));
             s.owner = owner;
             s.target_x = tx;
             s.target_y = ty;
@@ -1273,15 +1277,15 @@ void __fastcall WrongDropStoragePile(CGameData* world, void* edx, std::uint32_t 
 void __fastcall WrongDropOutputPile(CGameData* world, void* edx, std::uint32_t number) {
     std::vector<std::uint32_t> changed;
     for (std::uint32_t n = 1; n <= world->settler_high_water && n <= kSettlers; ++n) {
-        if (world->settlers[n].job == 0x68) {
-            world->settlers[n].job = 0x3;
+        if (world->settlers[n].job == Job::CarrierWalkToTool) {
+            world->settlers[n].job = Job::WalkToWork;
             changed.push_back(n);
         }
     }
     CGameData_DropOutputPile(world, edx, number);
     for (const std::uint32_t n : changed) {
-        if (world->settlers[n].job == 0x3) {
-            world->settlers[n].job = 0x68;
+        if (world->settlers[n].job == Job::WalkToWork) {
+            world->settlers[n].job = Job::CarrierWalkToTool;
         }
     }
 }
@@ -1408,7 +1412,7 @@ void CompareRemoveGoods(test::Context& ctx, BuildingFn candidate, int cases) {
             static constexpr std::uint16_t kJobs[] = {0x0a, 0x0b, 0xa9, 0xaa, 0x0c, 0x0d, 0x50, 0x4c, 0x1};
             if (ctx.rng().Chance(1, 2)) {
                 const std::uint16_t job = kJobs[ctx.rng().Below(9)];
-                worlds.Both([&](CGameData* w) { w->settlers[n].job = job; });
+                worlds.Both([&](CGameData* w) { w->settlers[n].job = static_cast<SettlerJob>(job); });
             }
         }
         if (!RunCase(ctx, worlds, stubs, logs, Original_CGameData_RemoveBuildingGoods, candidate,
@@ -1486,7 +1490,7 @@ std::uint16_t SetUpWorkers(test::Context& ctx, test::WorldPair& worlds, std::uin
         const auto sy = static_cast<std::uint16_t>(30 + ctx.rng().Below(320));
         worlds.Both([&](CGameData* w) {
             layout::Settler& s = w->settlers[n];
-            s.job = job;
+            s.job = static_cast<SettlerJob>(job);
             s.owner = owner;
             s.art = art;
             s.tool_type = task;
@@ -1776,15 +1780,15 @@ void CompareDestroyBuildingAt(test::Context& ctx, TileFn candidate, int cases) {
 void __fastcall WrongReleaseSiteWorkers(CGameData* world, void* edx, std::uint32_t number) {
     std::vector<std::uint32_t> changed;
     for (std::uint32_t n = 1; n <= world->settler_high_water && n < 200; ++n) {
-        if (world->settlers[n].job == 3 && world->settlers[n].art == 2) {
-            world->settlers[n].job = 0x37;
+        if (world->settlers[n].job == Job::WalkToWork && world->settlers[n].art == 2) {
+            world->settlers[n].job = Job::UnitIdle;
             changed.push_back(n);
         }
     }
     CGameData_ReleaseSiteWorkers(world, edx, number);
     for (const std::uint32_t n : changed) {
-        if (world->settlers[n].job == 0x37) {
-            world->settlers[n].job = 3;
+        if (world->settlers[n].job == Job::UnitIdle) {
+            world->settlers[n].job = Job::WalkToWork;
         }
     }
 }

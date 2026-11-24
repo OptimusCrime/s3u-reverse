@@ -1,7 +1,8 @@
 #pragma once
 
 // The game's categories as named values: settler jobs and types, settler
-// classes, building types, goods, races, and a few terrain values.
+// classes, building types, goods, races, terrain values, landscape objects and
+// resources in the ground.
 //
 // Each enum's underlying type is the width of the record field that holds
 // it (layout.h), so a field can later take the enum type without changing
@@ -16,7 +17,7 @@
 // list the same building, settler and goods ids; they were used as hints
 // and every name used here agrees with the binary's behaviour. Evidence and
 // confidence per value: re/enums.md. A value whose meaning is not known yet
-// is a placeholder with its decimal number (SettlerJob::Job309), so it can
+// is a placeholder with its decimal number (SettlerJob::Job390), so it can
 // be found and renamed later.
 //
 // One header per category in game/enums/ (split 2026-11-23); this file
@@ -32,4 +33,6 @@
 #include "game/enums/job_ids.h"
 #include "game/enums/commands.h"
 #include "game/enums/terrain.h"
+#include "game/enums/objects.h"
+#include "game/enums/resources.h"
 #include "game/enums/directions.h"

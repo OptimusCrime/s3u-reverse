@@ -123,7 +123,7 @@ std::uint32_t __fastcall CGameData_CreateSettler(CGameData* world, void*, std::u
     record.art = static_cast<std::uint8_t>(type);
     record.health = static_cast<std::uint8_t>(CGameData_SettlerStartHealth(world, nullptr, settler));
     record.owner = static_cast<std::uint8_t>(player);
-    SetJob(record, SettlerJob::New);
+    record.job = SettlerJob::New;
     record.direction = CGameData_RandomBelow6(world, nullptr);
     record.counter = static_cast<std::uint16_t>(CGameData_Random(world, nullptr) & kCounterMask);
     record.next = 0;
@@ -149,7 +149,7 @@ std::uint32_t __fastcall CGameData_CreateSettler(CGameData* world, void*, std::u
 // when it becomes idle.
 std::uint32_t __fastcall CGameData_ClearSettlerJob(CGameData* world, void*, std::uint32_t settler) {
     Settler& record = world->settlers[settler];
-    SetJob(record, SettlerJob::New);
+    record.job = SettlerJob::New;
     record.counter = 0;
     record.building = 0;
     return WorldAddress(world) + settler * kSettlerBytes;

@@ -403,7 +403,7 @@ void ConvertCarriers(Run& run) {
         }
         const Settler& settler = SettlerAt(world, n);
         if (settler.owner != player || settler.art != Value(from) || tile.owner != player ||
-            !IsConvertibleJob(JobOf(settler))) {
+            !IsConvertibleJob(settler.job)) {
             continue;
         }
         // 0x53a0dc
@@ -411,7 +411,7 @@ void ConvertCarriers(Run& run) {
         SettlerAt(run.world(), n).art = Value(to);
         SettlerAt(run.world(), n).flags &= kClearMark;
         --left;
-        SetJob(SettlerAt(run.world(), n), SettlerJob::New);
+        SettlerAt(run.world(), n).job = SettlerJob::New;
         if (IsNewUnit(Value(to))) {
             if (static_cast<std::uint32_t>(run.world()->local_player) == player) {
                 // 0x53a157: add it to group 0 and show that group.
@@ -522,7 +522,7 @@ void SetUpAreaWorld(test::Context& ctx, Bench& bench) {
         s.owner = static_cast<std::uint8_t>(rng.Chance(1, 6) ? 0xff : rng.Below(4));
         s.art = kAreaSettlerTypes[rng.Below(static_cast<std::uint32_t>(sizeof(kAreaSettlerTypes)))];
         const std::uint16_t jobs[] = {1, 2, 0x37, 0x35, 0, 3};
-        s.job = jobs[rng.Below(6)];
+        s.job = static_cast<SettlerJob>(jobs[rng.Below(6)]);
         s.next = 0;
         if (n == 0) {
             s.next = static_cast<std::uint16_t>(kGarrisonEnd);

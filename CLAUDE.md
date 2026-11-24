@@ -211,7 +211,8 @@ C++ code.
   values instead of magic numbers (shared enums in
   `src/s3re/game/enums/`, one header per category: `races.h`,
   `settler_types.h`, `buildings.h`, `goods.h`, `piles.h`, `spells.h`,
-  `job_ids.h`, `commands.h`, `terrain.h`, `directions.h`, `value.h`;
+  `job_ids.h`, `commands.h`, `terrain.h`, `objects.h`, `resources.h`,
+  `directions.h`, `value.h`;
   include the ones you use, `game/enums.h` includes all; evidence in
   `re/enums.md`; typed access to the
   category fields through `game/typed_fields.h`), decimal except

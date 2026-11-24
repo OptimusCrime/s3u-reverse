@@ -63,7 +63,7 @@ std::uint32_t HasGoods(SettlerContext& ctx, std::uint32_t slot) {
 
 // Sets the next job, then starts its animation (in this order, as the original).
 JobResult Animate(SettlerContext& ctx, Job next, std::uint32_t animation) {
-    SetJob(ctx.settler, next);
+    ctx.settler.job = next;
     Call<kSetSettlerAnimation>(ctx.world, ctx.number, animation);
     return JobResult::Next;
 }
@@ -78,7 +78,7 @@ JobResult Wait(SettlerContext& ctx) {
 // jump to 0x4f91fb).
 JobResult LeaveWorkTile(SettlerContext& ctx, Job next) {
     OwnTile(ctx).settler = 0;
-    SetJob(ctx.settler, next);
+    ctx.settler.job = next;
     ctx.settler.counter = 0;
     return JobResult::Next;
 }
@@ -87,7 +87,7 @@ JobResult LeaveWorkTile(SettlerContext& ctx, Job next) {
 // first round: counts itself into building byte +0x19, leaves the tile,
 // counter 0.
 JobResult StartFirstRound(SettlerContext& ctx, Job next) {
-    SetJob(ctx.settler, next);
+    ctx.settler.job = next;
     ++WorkBuilding(ctx).kind_bytes[0];
     OwnTile(ctx).settler = 0;
     ctx.settler.counter = 0;
@@ -157,7 +157,7 @@ JobResult StartTwoInputRound(SettlerContext& ctx, Job next, std::uint32_t animat
 // 0x4ee0c1 (jobs 0x31, 0x34): the sawmiller takes a log.
 JobResult SawmillTakeLog(SettlerContext& ctx) {
     ConsumeInput(ctx, 0, Value(G::Log));
-    return Animate(ctx, Job::Job50, 24);
+    return Animate(ctx, Job::SawmillerBoardDone, 24);
 }
 
 // 0x4ee114 (job 0x32): a board is done.
@@ -165,9 +165,9 @@ JobResult SawmillBoardDone(SettlerContext& ctx) {
     ProduceToOutput(ctx, G::Board);
     if (CanWorkAgain(ctx, false)) {
         ReserveInputs(ctx, false);
-        return Animate(ctx, Job::Job52, 26);
+        return Animate(ctx, Job::SawmillerTakeLogAgain, 26);
     }
-    return Animate(ctx, Job::Job51, 25);
+    return Animate(ctx, Job::SawmillerEndRound, 25);
 }
 
 // ----------------------------------------------------------------- smelters
@@ -202,9 +202,9 @@ JobResult GoldBarDone(SettlerContext& ctx) {
     ProduceToOutput(ctx, G::Gold);
     if (CanWorkAgain(ctx, true)) {
         ReserveInputs(ctx, true);
-        return Animate(ctx, Job::Job64, 79);
+        return Animate(ctx, Job::GoldSmelterTakeOreAgain, 79);
     }
-    return Animate(ctx, Job::Job63, 78);
+    return Animate(ctx, Job::GoldSmelterEndRound, 78);
 }
 
 // 0x4ee978 (job 0x48): an iron bar is done.
@@ -212,9 +212,9 @@ JobResult IronBarDone(SettlerContext& ctx) {
     ProduceToOutput(ctx, G::Iron);
     if (CanWorkAgain(ctx, true)) {
         ReserveInputs(ctx, true);
-        return Animate(ctx, Job::Job74, 88);
+        return Animate(ctx, Job::IronSmelterTakeOreAgain, 88);
     }
-    return Animate(ctx, Job::Job73, 87);
+    return Animate(ctx, Job::IronSmelterEndRound, 87);
 }
 
 // ----------------------------------------------------------------- miners
@@ -304,7 +304,7 @@ JobResult GarrisonSoldierDies(SettlerContext& ctx) {
     guard.x = ctx.settler.x;
     guard.y = ctx.settler.y;
     TileAt(ctx.world, guard.x, guard.y).settler = static_cast<std::uint16_t>(best);
-    SetJob(guard, Job::GuardBuilding);
+    guard.job = Job::GuardBuilding;
     guard.counter = 0;
     return JobResult::Next;
 }
@@ -372,13 +372,13 @@ JobResult ToolsmithStart(SettlerContext& ctx) {
     }
     ReserveInputs(ctx, true);
     OwnTile(ctx).settler = static_cast<std::uint16_t>(ctx.number);
-    return Animate(ctx, Job::Job125, 125);
+    return Animate(ctx, Job::ToolsmithTakeCoal, 125);
 }
 
 // 0x4ef41b (jobs 0x7d, 0x82): take the coal.
 JobResult ToolsmithTakeCoal(SettlerContext& ctx) {
     ConsumeInput(ctx, 0, Value(G::Coal));
-    return Animate(ctx, Job::Job126, 126);
+    return Animate(ctx, Job::ToolsmithWork, 126);
 }
 
 // 0x4ef486 (job 0x7f): take the iron and show the forge (MapEffects 0x5449f0).
@@ -387,7 +387,7 @@ JobResult ToolsmithTakeIron(SettlerContext& ctx) {
     const std::uint32_t x = BuildingAt(ctx.world, building).x;
     const std::uint32_t y = BuildingAt(ctx.world, building).y;
     ConsumeInput(ctx, 1, Value(G::Iron));
-    Animate(ctx, Job::Job128, 128);
+    Animate(ctx, Job::ToolsmithToolDone, 128);
     const std::uint32_t screenY = Call<kTileScreenY>(ctx.world, x, y);
     const std::uint32_t screenX = Call<kTileScreenX>(ctx.world, x, y);
     const std::uint32_t tick = g_gameTick;
@@ -450,16 +450,16 @@ JobResult ToolsmithToolDone(SettlerContext& ctx) {
     Call<kAddPlayerCounter>(ctx.world, Owner(ctx), Value(tool.good), 1);
     // 0x4efa5c: another tool at once?
     if (HasGoods(ctx, 1) == 0 || HasGoods(ctx, 2) == 0) {
-        return Animate(ctx, Job::Job129, 129);
+        return Animate(ctx, Job::ToolsmithEndRound, 129);
     }
     Building& building = WorkBuilding(ctx);
     if ((building.request_flags & kRequestWork) == 0 || ToolPileUnits(ctx) > kOutputPileFull ||
         !AnyToolWanted(DoorArea(ctx))) {
-        return Animate(ctx, Job::Job129, 129);
+        return Animate(ctx, Job::ToolsmithEndRound, 129);
     }
     Call<kPileIncAmountLeaving>(ctx.world, building.piles[0]);
     Call<kPileIncAmountLeaving>(ctx.world, WorkBuilding(ctx).piles[1]);
-    return Animate(ctx, Job::Job130, 130);
+    return Animate(ctx, Job::ToolsmithTakeCoalAgain, 130);
 }
 
 // ----------------------------------------------------------------- war machine workshops
@@ -472,9 +472,9 @@ struct Workshop {
     Job check;   // 0x137 / 0x138 / 0x139: after putting a unit in
     std::uint32_t notify;  // NotifyLocalPlayer kind when a unit is done
 };
-constexpr Workshop kWorkshops[3] = {{G::Stone, Job::Job297, Job::CatapultProduction, 13},
-                                    {G::Log, Job::Job299, Job::Job312, 14},
-                                    {G::Gunpowder, Job::Job301, Job::Job313, 15}};
+constexpr Workshop kWorkshops[3] = {{G::Stone, Job::CatapultWorkshopPutInput, Job::CatapultProduction, 13},
+                                    {G::Log, Job::BallistaWorkshopPutInput, Job::BallistaProduction, 14},
+                                    {G::Gunpowder, Job::CannonWorkshopPutInput, Job::CannonProduction, 15}};
 constexpr std::uint8_t kUnitsLeftMax = 0xfa;
 constexpr std::uint8_t kStateUnitDone = 0x10;   // + k
 constexpr std::uint8_t kStateOrderDone = 0x20;  // + k
@@ -509,7 +509,7 @@ JobResult WorkshopPutInput(SettlerContext& ctx, const Workshop& shop) {
     --building.workshop.wanted[slot];
     building.kind_bytes[7] = static_cast<std::uint8_t>(building.kind_bytes[7] - 1);
     Call<kSetSettlerAnimation>(ctx.world, ctx.number, 275);
-    SetJob(ctx.settler, shop.check);  // after the animation, as the original
+    ctx.settler.job = shop.check;  // after the animation, as the original
     return JobResult::Next;
 }
 
@@ -543,7 +543,7 @@ JobResult WorkshopCheck(SettlerContext& ctx, std::uint32_t k) {
             building.workshop.state = 0;
         }
     }
-    SetJob(ctx.settler, shop.work);
+    ctx.settler.job = shop.work;
     ctx.settler.counter = 0;
     return JobResult::Next;
 }
@@ -553,28 +553,31 @@ JobResult WorkshopCheck(SettlerContext& ctx, std::uint32_t k) {
 JobResult RunMetalJobs(SettlerContext& ctx) {
     switch (static_cast<Job>(ctx.job)) {
     // Sawmill (type Sawmiller).
-    case Job::Job49:
-    case Job::Job52: return SawmillTakeLog(ctx);
-    case Job::Job50: return SawmillBoardDone(ctx);
-    case Job::Job51: return LeaveWorkTile(ctx, Job::Job26);  // 0x4ee21f
+    case Job::SawmillerTakeLog:
+    case Job::SawmillerTakeLogAgain: return SawmillTakeLog(ctx);
+    case Job::SawmillerBoardDone: return SawmillBoardDone(ctx);
+    case Job::SawmillerEndRound:
+        return LeaveWorkTile(ctx, Job::SawmillerStart);  // 0x4ee21f
     // Gold smelter.
-    case Job::Job65: return StartTwoInputRound(ctx, Job::Job58, 73);  // 0x4ee252
-    case Job::Job58:
-    case Job::Job64: return SmelterTakeOre(ctx, Job::Job59, 74);
-    case Job::Job59: return SmelterTakeCoal(ctx, Job::Job60, 75, 1);
-    case Job::Job60: return Animate(ctx, Job::Job61, 76);  // 0x4ee4cf
-    case Job::Job61: return Animate(ctx, Job::Job62, 77);  // 0x4ee4e7
-    case Job::Job62: return GoldBarDone(ctx);
-    case Job::Job63: return LeaveWorkTile(ctx, Job::Job65);  // 0x4ee698
+    case Job::GoldSmelterStart: return StartTwoInputRound(ctx, Job::GoldSmelterTakeOre, 73);  // 0x4ee252
+    case Job::GoldSmelterTakeOre:
+    case Job::GoldSmelterTakeOreAgain: return SmelterTakeOre(ctx, Job::GoldSmelterTakeCoal, 74);
+    case Job::GoldSmelterTakeCoal: return SmelterTakeCoal(ctx, Job::GoldSmelterWork1, 75, 1);
+    case Job::GoldSmelterWork1: return Animate(ctx, Job::GoldSmelterWork2, 76);  // 0x4ee4cf
+    case Job::GoldSmelterWork2: return Animate(ctx, Job::GoldBarDone, 77);       // 0x4ee4e7
+    case Job::GoldBarDone: return GoldBarDone(ctx);
+    case Job::GoldSmelterEndRound:
+        return LeaveWorkTile(ctx, Job::GoldSmelterStart);  // 0x4ee698
     // Iron smelter.
-    case Job::Job75: return StartTwoInputRound(ctx, Job::Job68, 82);  // 0x4ee6cb
-    case Job::Job68:
-    case Job::Job74: return SmelterTakeOre(ctx, Job::Job69, 83);
-    case Job::Job69: return SmelterTakeCoal(ctx, Job::Job70, 84, 0);
-    case Job::Job70: return Animate(ctx, Job::Job71, 85);  // 0x4ee948
-    case Job::Job71: return Animate(ctx, Job::Job72, 86);  // 0x4ee960
-    case Job::Job72: return IronBarDone(ctx);
-    case Job::Job73: return LeaveWorkTile(ctx, Job::Job75);  // 0x4eeaca
+    case Job::IronSmelterStart: return StartTwoInputRound(ctx, Job::IronSmelterTakeOre, 82);  // 0x4ee6cb
+    case Job::IronSmelterTakeOre:
+    case Job::IronSmelterTakeOreAgain: return SmelterTakeOre(ctx, Job::IronSmelterTakeCoal, 83);
+    case Job::IronSmelterTakeCoal: return SmelterTakeCoal(ctx, Job::IronSmelterWork1, 84, 0);
+    case Job::IronSmelterWork1: return Animate(ctx, Job::IronSmelterWork2, 85);  // 0x4ee948
+    case Job::IronSmelterWork2: return Animate(ctx, Job::IronBarDone, 86);       // 0x4ee960
+    case Job::IronBarDone: return IronBarDone(ctx);
+    case Job::IronSmelterEndRound:
+        return LeaveWorkTile(ctx, Job::IronSmelterStart);  // 0x4eeaca
     // Miners: entering, eating, digging (miner_jobs.cpp), then the products.
     case Job::MinerEnterCoalMine:
     case Job::MinerEnterGoldMine:
@@ -598,20 +601,20 @@ JobResult RunMetalJobs(SettlerContext& ctx) {
         Call<kMinerJobDig>(ctx.world, ctx.number);
         return JobResult::Next;
     case Job::MinerFoundNothingCoalMine:
-    case Job::Job91: return LeaveWorkTile(ctx, Job::MinerEatCoalMine);  // 0x4eeb3e
-    case Job::MinerFoundCoalMine: return MineProductDone(ctx, G::Coal, Job::Job91, 96);
+    case Job::MinerEndRoundCoalMine: return LeaveWorkTile(ctx, Job::MinerEatCoalMine);  // 0x4eeb3e
+    case Job::MinerFoundCoalMine: return MineProductDone(ctx, G::Coal, Job::MinerEndRoundCoalMine, 96);
     case Job::MinerFoundNothingGoldMine:
-    case Job::Job95: return LeaveWorkTile(ctx, Job::MinerEatGoldMine);  // 0x4eebff
-    case Job::MinerFoundGoldMine: return MineProductDone(ctx, G::GoldOre, Job::Job95, 99);
+    case Job::MinerEndRoundGoldMine: return LeaveWorkTile(ctx, Job::MinerEatGoldMine);  // 0x4eebff
+    case Job::MinerFoundGoldMine: return MineProductDone(ctx, G::GoldOre, Job::MinerEndRoundGoldMine, 99);
     case Job::MinerFoundNothingIronMine:
-    case Job::Job99: return LeaveWorkTile(ctx, Job::MinerEatIronMine);  // 0x4eecc0
-    case Job::MinerFoundIronMine: return MineProductDone(ctx, G::IronOre, Job::Job99, 102);
+    case Job::MinerEndRoundIronMine: return LeaveWorkTile(ctx, Job::MinerEatIronMine);  // 0x4eecc0
+    case Job::MinerFoundIronMine: return MineProductDone(ctx, G::IronOre, Job::MinerEndRoundIronMine, 102);
     case Job::MinerFoundNothingGemMine:
-    case Job::Job221: return LeaveWorkTile(ctx, Job::MinerEatGemMine);  // 0x4eed81
-    case Job::MinerFoundGemMine: return MineProductDone(ctx, G::Gems, Job::Job221, 218);
+    case Job::MinerEndRoundGemMine: return LeaveWorkTile(ctx, Job::MinerEatGemMine);  // 0x4eed81
+    case Job::MinerFoundGemMine: return MineProductDone(ctx, G::Gems, Job::MinerEndRoundGemMine, 218);
     case Job::MinerFoundNothingSulfurMine:
-    case Job::Job225: return LeaveWorkTile(ctx, Job::MinerEatSulfurMine);  // 0x4eee45
-    case Job::MinerFoundSulfurMine: return MineProductDone(ctx, G::Sulfur, Job::Job225, 221);
+    case Job::MinerEndRoundSulfurMine: return LeaveWorkTile(ctx, Job::MinerEatSulfurMine);  // 0x4eee45
+    case Job::MinerFoundSulfurMine: return MineProductDone(ctx, G::Sulfur, Job::MinerEndRoundSulfurMine, 221);
     // 0x4eeb17, 0x4eeb24: jobs 0x186..0x18f call an empty function.
     case Job::Job390:
     case Job::Job391:
@@ -624,27 +627,28 @@ JobResult RunMetalJobs(SettlerContext& ctx) {
     case Job::Job398:
     case Job::Job399: Call<kNoOpRet4>(ctx.world, ctx.number); return JobResult::Next;
     case Job::LeaveHouse: return LeaveHouse(ctx);
-    case Job::Job54: return SettlerDies(ctx);
-    case Job::Job175: return GarrisonSoldierDies(ctx);
+    case Job::SettlerDies: return SettlerDies(ctx);
+    case Job::GarrisonSoldierDies: return GarrisonSoldierDies(ctx);
     // Toolsmith.
-    case Job::Job107: return StartFirstRound(ctx, Job::Job116);  // 0x4ef162
-    case Job::Job116: return ToolsmithStart(ctx);
-    case Job::Job125:
-    case Job::Job130: return ToolsmithTakeCoal(ctx);
-    case Job::Job126: return Animate(ctx, Job::Job127, 127);  // 0x4ef46e
-    case Job::Job127: return ToolsmithTakeIron(ctx);
-    case Job::Job128: return ToolsmithToolDone(ctx);
-    case Job::Job129: return LeaveWorkTile(ctx, Job::Job116);  // 0x4f0036
+    case Job::ToolsmithGoIn: return StartFirstRound(ctx, Job::ToolsmithStart);  // 0x4ef162
+    case Job::ToolsmithStart: return ToolsmithStart(ctx);
+    case Job::ToolsmithTakeCoal:
+    case Job::ToolsmithTakeCoalAgain: return ToolsmithTakeCoal(ctx);
+    case Job::ToolsmithWork: return Animate(ctx, Job::ToolsmithTakeIron, 127);  // 0x4ef46e
+    case Job::ToolsmithTakeIron: return ToolsmithTakeIron(ctx);
+    case Job::ToolsmithToolDone: return ToolsmithToolDone(ctx);
+    case Job::ToolsmithEndRound:
+        return LeaveWorkTile(ctx, Job::ToolsmithStart);  // 0x4f0036
     // War machine workshops.
-    case Job::Job296: return StartFirstRound(ctx, Job::Job297);  // 0x4f0069
-    case Job::Job297: return WorkshopPutInput(ctx, kWorkshops[0]);
+    case Job::CatapultWorkshopGoIn: return StartFirstRound(ctx, Job::CatapultWorkshopPutInput);  // 0x4f0069
+    case Job::CatapultWorkshopPutInput: return WorkshopPutInput(ctx, kWorkshops[0]);
     case Job::CatapultProduction: return WorkshopCheck(ctx, 0);
-    case Job::Job298: return StartFirstRound(ctx, Job::Job299);  // 0x4f034e
-    case Job::Job299: return WorkshopPutInput(ctx, kWorkshops[1]);
-    case Job::Job312: return WorkshopCheck(ctx, 1);
-    case Job::Job300: return StartFirstRound(ctx, Job::Job301);  // 0x4f05b2
-    case Job::Job301: return WorkshopPutInput(ctx, kWorkshops[2]);
-    case Job::Job313: return WorkshopCheck(ctx, 2);
+    case Job::BallistaWorkshopGoIn: return StartFirstRound(ctx, Job::BallistaWorkshopPutInput);  // 0x4f034e
+    case Job::BallistaWorkshopPutInput: return WorkshopPutInput(ctx, kWorkshops[1]);
+    case Job::BallistaProduction: return WorkshopCheck(ctx, 1);
+    case Job::CannonWorkshopGoIn: return StartFirstRound(ctx, Job::CannonWorkshopPutInput);  // 0x4f05b2
+    case Job::CannonWorkshopPutInput: return WorkshopPutInput(ctx, kWorkshops[2]);
+    case Job::CannonProduction: return WorkshopCheck(ctx, 2);
     default: return JobResult::Next;  // not a job of this family (kJobFamily)
     }
 }
@@ -666,18 +670,86 @@ using settler_jobs::Job;
 using settler_jobs::testing::CaseSetup;
 using settler_jobs::testing::FamilyTest;
 
-constexpr Job kMetalJobs[] = {
-    Job::Job49, Job::Job50, Job::Job51, Job::Job52, Job::Job54, Job::Job58, Job::Job59, Job::Job60,
-    Job::Job61, Job::Job62, Job::Job63, Job::Job64, Job::Job65, Job::Job68, Job::Job69, Job::Job70,
-    Job::Job71, Job::Job72, Job::Job73, Job::Job74, Job::Job75, Job::MinerEnterCoalMine,
-    Job::MinerEnterGoldMine, Job::MinerEnterIronMine, Job::MinerEatCoalMine, Job::MinerEatGoldMine, Job::MinerEatIronMine, Job::MinerDigCoalMine,
-    Job::MinerFoundNothingCoalMine, Job::MinerFoundCoalMine, Job::Job91, Job::MinerDigGoldMine, Job::MinerFoundNothingGoldMine, Job::MinerFoundGoldMine, Job::Job95, Job::MinerDigIronMine,
-    Job::MinerFoundNothingIronMine, Job::MinerFoundIronMine, Job::Job99, Job::LeaveHouse, Job::Job107, Job::Job116, Job::Job125, Job::Job126,
-    Job::Job127, Job::Job128, Job::Job129, Job::Job130, Job::Job175, Job::MinerEnterGemMine,
-    Job::MinerEnterSulfurMine, Job::MinerEatGemMine, Job::MinerEatSulfurMine, Job::MinerDigGemMine, Job::MinerFoundNothingGemMine, Job::MinerFoundGemMine, Job::Job221,
-    Job::MinerDigSulfurMine, Job::MinerFoundNothingSulfurMine, Job::MinerFoundSulfurMine, Job::Job225, Job::Job296, Job::Job297, Job::Job298, Job::Job299,
-    Job::Job300, Job::Job301, Job::CatapultProduction, Job::Job312, Job::Job313, Job::Job390, Job::Job391,
-    Job::Job392, Job::Job393, Job::Job394, Job::Job395, Job::Job396, Job::Job397, Job::Job398, Job::Job399};
+constexpr Job kMetalJobs[] = {Job::SawmillerTakeLog,
+                              Job::SawmillerBoardDone,
+                              Job::SawmillerEndRound,
+                              Job::SawmillerTakeLogAgain,
+                              Job::SettlerDies,
+                              Job::GoldSmelterTakeOre,
+                              Job::GoldSmelterTakeCoal,
+                              Job::GoldSmelterWork1,
+                              Job::GoldSmelterWork2,
+                              Job::GoldBarDone,
+                              Job::GoldSmelterEndRound,
+                              Job::GoldSmelterTakeOreAgain,
+                              Job::GoldSmelterStart,
+                              Job::IronSmelterTakeOre,
+                              Job::IronSmelterTakeCoal,
+                              Job::IronSmelterWork1,
+                              Job::IronSmelterWork2,
+                              Job::IronBarDone,
+                              Job::IronSmelterEndRound,
+                              Job::IronSmelterTakeOreAgain,
+                              Job::IronSmelterStart,
+                              Job::MinerEnterCoalMine,
+                              Job::MinerEnterGoldMine,
+                              Job::MinerEnterIronMine,
+                              Job::MinerEatCoalMine,
+                              Job::MinerEatGoldMine,
+                              Job::MinerEatIronMine,
+                              Job::MinerDigCoalMine,
+                              Job::MinerFoundNothingCoalMine,
+                              Job::MinerFoundCoalMine,
+                              Job::MinerEndRoundCoalMine,
+                              Job::MinerDigGoldMine,
+                              Job::MinerFoundNothingGoldMine,
+                              Job::MinerFoundGoldMine,
+                              Job::MinerEndRoundGoldMine,
+                              Job::MinerDigIronMine,
+                              Job::MinerFoundNothingIronMine,
+                              Job::MinerFoundIronMine,
+                              Job::MinerEndRoundIronMine,
+                              Job::LeaveHouse,
+                              Job::ToolsmithGoIn,
+                              Job::ToolsmithStart,
+                              Job::ToolsmithTakeCoal,
+                              Job::ToolsmithWork,
+                              Job::ToolsmithTakeIron,
+                              Job::ToolsmithToolDone,
+                              Job::ToolsmithEndRound,
+                              Job::ToolsmithTakeCoalAgain,
+                              Job::GarrisonSoldierDies,
+                              Job::MinerEnterGemMine,
+                              Job::MinerEnterSulfurMine,
+                              Job::MinerEatGemMine,
+                              Job::MinerEatSulfurMine,
+                              Job::MinerDigGemMine,
+                              Job::MinerFoundNothingGemMine,
+                              Job::MinerFoundGemMine,
+                              Job::MinerEndRoundGemMine,
+                              Job::MinerDigSulfurMine,
+                              Job::MinerFoundNothingSulfurMine,
+                              Job::MinerFoundSulfurMine,
+                              Job::MinerEndRoundSulfurMine,
+                              Job::CatapultWorkshopGoIn,
+                              Job::CatapultWorkshopPutInput,
+                              Job::BallistaWorkshopGoIn,
+                              Job::BallistaWorkshopPutInput,
+                              Job::CannonWorkshopGoIn,
+                              Job::CannonWorkshopPutInput,
+                              Job::CatapultProduction,
+                              Job::BallistaProduction,
+                              Job::CannonProduction,
+                              Job::Job390,
+                              Job::Job391,
+                              Job::Job392,
+                              Job::Job393,
+                              Job::Job394,
+                              Job::Job395,
+                              Job::Job396,
+                              Job::Job397,
+                              Job::Job398,
+                              Job::Job399};
 static_assert(sizeof(kMetalJobs) / sizeof(kMetalJobs[0]) == 80);
 
 constexpr SettlerType kMetalTypes[] = {SettlerType::Sawmiller, SettlerType::Smelter,  SettlerType::Miner,
@@ -772,7 +844,7 @@ bool MetalStubReturn(std::uintptr_t callee, std::uint32_t h, const std::uint32_t
         // As the real one: job, counter and building cleared; the job here is
         // a no-op one (job 0 belongs to another family).
         layout::Settler& s = world->settlers[args[0] & 0xffff];
-        s.job = Value(Job::Job57);
+        s.job = Job::Job57;
         s.counter = 0;
         s.building = 0;
         eax = 0;
@@ -795,7 +867,8 @@ FamilyTest MetalFamily() {
 std::uint32_t __fastcall WrongUpdateSettlersGoldPoints(CGameData* world, void* edx) {
     for (std::uint32_t n = 1; n <= world->settler_high_water; ++n) {
         const layout::Settler& s = world->settlers[n];
-        if (s.owner < 20 && s.counter == 0 && JobOf(s) == Job::Job62 && world->players[s.owner].race == 1) {
+        if (s.owner < 20 && s.counter == 0 && s.job == Job::GoldBarDone &&
+            world->players[s.owner].race == 1) {
             ++g_playerTallies[s.owner].points;
         }
     }

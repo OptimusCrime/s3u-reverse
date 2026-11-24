@@ -117,7 +117,8 @@ std::uint32_t __fastcall CGameData_CountSettlers(CGameData* world, void* /*edx*/
 // Purpose: Counts a player's settlers that currently do one job.
 std::uint32_t __fastcall CGameData_CountSettlersWithJob(CGameData* world, void* /*edx*/,
                                                         std::uint32_t player, std::uint32_t job) {
-    return CountSettlersWhere(world, [&](const Settler& s) { return s.owner == player && s.job == job; });
+    return CountSettlersWhere(world,
+                              [&](const Settler& s) { return s.owner == player && Value(s.job) == job; });
 }
 
 S3RE_HOOK(0x00515850, CGameData_CountBuildings, CountFn, Original_CGameData_CountBuildings,
@@ -203,7 +204,7 @@ void FillRecords(test::Context& ctx, test::WorldPair& worlds) {
             Settler& s = w->settlers[i];
             s.owner = sPlayer;
             s.art = sType;
-            s.job = job;
+            s.job = static_cast<SettlerJob>(job);
         });
     }
 }

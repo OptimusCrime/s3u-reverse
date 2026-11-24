@@ -173,17 +173,17 @@ bool HasWorkTarget(SettlerType type) {
 }
 
 bool IsGeologistWork(SettlerJob job) {
-    return job == SettlerJob::GeologistWork || job == SettlerJob::Job213;
+    return job == SettlerJob::GeologistWork || job == SettlerJob::GeologistDone;
 }
 
 bool IsPioneerWork(SettlerJob job) {
-    return job == SettlerJob::PioneerWork || job == SettlerJob::Job303;
+    return job == SettlerJob::PioneerWork || job == SettlerJob::PioneerDone;
 }
 
 // The jobs of units standing or walking around (not inside a building).
 bool IsIdleUnitJob(SettlerJob job) {
-    return job == SettlerJob::UnitIdle || job == SettlerJob::UnitWalk || job == SettlerJob::Job176 ||
-           job == SettlerJob::Job142;
+    return job == SettlerJob::UnitIdle || job == SettlerJob::UnitWalk ||
+           job == SettlerJob::UnitWalkCountdown || job == SettlerJob::UnitFighting;
 }
 
 }  // namespace
@@ -199,10 +199,11 @@ U __fastcall CGameData_IsSpellTarget(CGameData* world, void*, U settler) {
     if (!IsSpellTargetType(TypeOf(s))) {
         return 0;
     }
-    const SettlerJob job = JobOf(s);
-    return job == SettlerJob::GeologistWork || job == SettlerJob::Job213 || job == SettlerJob::PioneerWork ||
-                   job == SettlerJob::Job303 || job == SettlerJob::New || job == SettlerJob::UnitIdle ||
-                   job == SettlerJob::UnitWalk || job == SettlerJob::Job142 || job == SettlerJob::Job176
+    const SettlerJob job = s.job;
+    return job == SettlerJob::GeologistWork || job == SettlerJob::GeologistDone ||
+                   job == SettlerJob::PioneerWork || job == SettlerJob::PioneerDone ||
+                   job == SettlerJob::New || job == SettlerJob::UnitIdle || job == SettlerJob::UnitWalk ||
+                   job == SettlerJob::UnitFighting || job == SettlerJob::UnitWalkCountdown
                ? 1
                : 0;
 }
@@ -214,20 +215,20 @@ U __fastcall CGameData_ReleaseSpellTarget(CGameData* world, void*, U settler) {
     const auto result = static_cast<U>(reinterpret_cast<std::uintptr_t>(world) + settler * sizeof(Settler));
     // 0x54b00f: a geologist's or pioneer's claimed tile.
     if (HasWorkTarget(TypeOf(s)) && s.saved_animation != kNoWorkTarget) {
-        if (JobOf(s) == SettlerJob::UnitWalk) {
+        if (s.job == SettlerJob::UnitWalk) {
             TileAt(world, s.target_x, s.target_y).flags &= static_cast<std::uint8_t>(~kTileClaimed);
         }
-        if (IsPioneerWork(JobOf(s))) {
+        if (IsPioneerWork(s.job)) {
             TileAt(world, s.x, s.y).flags &= static_cast<std::uint8_t>(~kTileClaimed);
         }
-        if (IsGeologistWork(JobOf(s))) {
+        if (IsGeologistWork(s.job)) {
             TileAt(world, s.x, s.y).flags &= static_cast<std::uint8_t>(~kTileClaimed);
         }
     }
     // 0x54b0f7: the job continues at once.
-    const SettlerJob job = JobOf(s);
+    const SettlerJob job = s.job;
     if (IsGeologistWork(job) || IsPioneerWork(job) || job == SettlerJob::New || job == SettlerJob::UnitIdle ||
-        job == SettlerJob::Job142) {
+        job == SettlerJob::UnitFighting) {
         s.counter = 1;
     }
     if (HasWorkTarget(TypeOf(s))) {
@@ -235,7 +236,7 @@ U __fastcall CGameData_ReleaseSpellTarget(CGameData* world, void*, U settler) {
         s.saved_counter = 0xffff;
     }
     // 0x54b15e: out of the player's list of units of its type.
-    if (IsIdleUnitJob(JobOf(s)) && IsSpellTargetType(TypeOf(s))) {
+    if (IsIdleUnitJob(s.job) && IsSpellTargetType(TypeOf(s))) {
         if (s.prev != 0) {
             world->settlers[s.prev].next = s.next;
         } else {
@@ -562,7 +563,7 @@ void SetUpUnitWorld(test::Context& ctx, test::WorldPair& worlds) {
         s.race = static_cast<std::uint8_t>(rng.Below(5));
         s.x = static_cast<std::uint16_t>(rng.Below(size));
         s.y = static_cast<std::uint16_t>(rng.Below(size));
-        s.job = kTestJobs[rng.Below(sizeof(kTestJobs) / sizeof(kTestJobs[0]))];
+        s.job = static_cast<SettlerJob>(static_cast<std::uint16_t>(kTestJobs[rng.Below(sizeof(kTestJobs) / sizeof(kTestJobs[0]))]));
         s.next = static_cast<std::uint16_t>(rng.Chance(1, 4) ? 0 : rng.Below(kTestSettlers + 1));
         s.prev = static_cast<std::uint16_t>(rng.Chance(1, 4) ? 0 : rng.Below(kTestSettlers + 1));
         s.saved_animation = rng.Chance(1, 3) ? kNoWorkTarget : rng.Next32();

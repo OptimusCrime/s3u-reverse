@@ -467,7 +467,7 @@ void UnloadShip(Run& run) {
             SettlerAt(run.world(), number).next = static_cast<std::uint16_t>(passenger);
             ++SettlerAt(run.world(), number).passengers;
         } else {
-            SettlerAt(run.world(), passenger).job = 0;
+            SettlerAt(run.world(), passenger).job = SettlerJob::New;
         }
         passenger = following;
     }
@@ -567,12 +567,13 @@ void HoldPosition(Run& run) {
         if (settlerClass < 1 || settlerClass > 9) {
             continue;
         }
-        const SettlerJob job = JobOf(settler);
-        if (job != SettlerJob::UnitIdle && job != SettlerJob::UnitWalk && job != SettlerJob::Job176) {
+        const SettlerJob job = settler.job;
+        if (job != SettlerJob::UnitIdle && job != SettlerJob::UnitWalk &&
+            job != SettlerJob::UnitWalkCountdown) {
             continue;
         }
         settler.flags |= kSettlerNoFight;
-        if (JobOf(settler) == SettlerJob::UnitWalk || JobOf(settler) == SettlerJob::Job176) {
+        if (settler.job == SettlerJob::UnitWalk || settler.job == SettlerJob::UnitWalkCountdown) {
             settler.target_x = settler.x;
             settler.target_y = settler.y;
             settler.waypoint_x = settler.x;
@@ -991,7 +992,7 @@ void SetUpWorld(test::Context& ctx, Bench& bench) {
         s.x = static_cast<std::uint16_t>(rng.Range(10, kTestMapSize - 11));
         s.y = static_cast<std::uint16_t>(rng.Range(10, kTestMapSize - 11));
         const std::uint16_t jobs[] = {0x37, 0x35, 0xb0, 0, 1, 0x36};
-        s.job = jobs[rng.Below(6)];
+        s.job = static_cast<SettlerJob>(jobs[rng.Below(6)]);
         s.next = static_cast<std::uint16_t>(rng.Below(kTestSettlers));
         s.passengers = static_cast<std::uint8_t>(rng.Below(8));
         worlds.Both([&](CGameData* w) { w->settlers[n] = s; });

@@ -98,12 +98,14 @@
 //   5, 15, 20, 10; otherwise anything. EAX 1 or 0. ret 0x10.
 
 #include "game/debug_log.h"
-#include "game/enums/races.h"
 #include "game/enums/buildings.h"
-#include "game/enums/goods.h"
-#include "game/enums/piles.h"
-#include "game/enums/terrain.h"
 #include "game/enums/directions.h"
+#include "game/enums/goods.h"
+#include "game/enums/objects.h"
+#include "game/enums/piles.h"
+#include "game/enums/races.h"
+#include "game/enums/resources.h"
+#include "game/enums/terrain.h"
 #include "game/raw.h"
 #include "game/replacements.h"
 #include "game/tables.h"
@@ -140,32 +142,8 @@ constexpr std::uint8_t kFlagBuilding = layout::kTileHasBuilding;
 
 constexpr std::uint8_t kNobody = 0xff;  // Tile::owner of unowned land, Building::owner of a free record
 
-// Terrain classes (Tile::terrain & kTerrainClassMask) that matter for building sites.
-constexpr std::uint8_t kTerrainClassGrass = 0x10;  // building ground of every race; counted as grass
-constexpr std::uint8_t kTerrainClassShore = 0x30;  // never levelled (0x30 is kTerrainShore)
-constexpr std::uint8_t kTerrainClass40 = 0x40;     // Egyptians may build here too
-constexpr std::uint8_t kTerrainClass90 = 0x90;     // Asians may build here too
-// The shipyard and the harbour need this terrain byte within kWaterDistance.
-constexpr std::uint8_t kTerrainHarbourWater = 4;
+// The shipyard and the harbour need kTerrainHarbourWater within this distance.
 constexpr std::int32_t kWaterDistance = 20;
-
-// Landscape objects (Tile::object).
-constexpr std::uint8_t kObjectCleared = 0xff;    // tiles after the door of some types (AddBuildingSite)
-constexpr std::uint8_t kObjectSiteCentre = 112;  // 0x70: the site's own tile
-constexpr std::uint8_t kObjectStake = 113;       // 0x71: the outermost footprint tile per direction
-constexpr std::uint8_t kObjectFirstTree = 0x44;  // trees 0x44..0x53 (IsGoodStartPosition)
-constexpr std::uint8_t kObjectLastTree = 0x53;
-constexpr std::uint8_t kObjectFirstStone = 0x73;  // stone 0x73..0x7e, 0x7f - object units left
-constexpr std::uint8_t kObjectLastStone = 0x7e;
-constexpr std::uint8_t kStoneEnd = 0x7f;
-
-// Tile::resources: the high nibble is the kind.
-constexpr std::uint8_t kResourceMask = 0xf0;
-constexpr std::uint8_t kResourceCoal = 0x10;
-constexpr std::uint8_t kResourceIron = 0x20;
-constexpr std::uint8_t kResourceGold = 0x30;
-constexpr std::uint8_t kResourceGems = 0x40;
-constexpr std::uint8_t kResourceSulfur = 0x50;
 
 // The pending event a new site queues (QueuePendingEvent(2, building, 0)).
 constexpr std::uint32_t kEventSitePlaced = 2;
@@ -559,7 +537,7 @@ bool TileSuitsSite(const Tile& tile, std::uint32_t owner, std::uint32_t area, Si
             }
             break;
         case SiteGroup::kEgyptian:
-            if (ground != kTerrainClassGrass && ground != kTerrainClass40) {
+            if (ground != kTerrainClassGrass && ground != kTerrainClassDesert) {
                 return false;
             }
             break;
@@ -864,13 +842,13 @@ std::uint32_t __fastcall CGameData_IsGoodStartPosition(CGameData* world, void* /
                 ++trees;
             }
             if (object >= kObjectFirstStone && object <= kObjectLastStone) {
-                stone += kStoneEnd - object;
+                stone += kObjectStoneUsedUp - object;
             }
             if (tile.owner == kNobody) {
                 ++unowned;
             }
         }
-        switch (tile.resources & kResourceMask) {
+        switch (tile.resources & kResourceKindMask) {
             case kResourceCoal: ++coal; break;
             case kResourceIron: ++iron; break;
             case kResourceGold: ++gold; break;

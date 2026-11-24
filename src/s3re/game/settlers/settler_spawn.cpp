@@ -103,7 +103,7 @@ constexpr std::uint8_t kCastleSlotBase = 16;
 // The seven-tile unit: the main settler's slot byte and its six parts.
 constexpr std::uint8_t kSevenTileMainSlot = 6;
 constexpr std::uint32_t kPartType = Value(S::Type42);
-constexpr std::uint16_t kPartJob = Value(SettlerJob::Job304);
+constexpr SettlerJob kPartJob = SettlerJob::SevenTileUnitPart;
 
 // SetSoldierAnimationInBuilding: animation kinds (index into 0x6a8060, four
 // races each). 293 for other soldiers, then one per soldier type; the

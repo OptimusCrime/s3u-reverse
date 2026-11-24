@@ -12,7 +12,8 @@
 //
 // Layout rules:
 // - All structs are packed (1-byte alignment) and contain only fixed-width
-//   integers, so the layout does not depend on the compiler. The DLL is
+//   integers (or enums of game/enums/ with a fixed underlying type), so the
+//   layout does not depend on the compiler. The DLL is
 //   32-bit, like S3.EXE: pointers and pointer arithmetic wrap at 2^32
 //   exactly like the original's address arithmetic (see TileAtOffset).
 // - The vtable pointer of CGameData is a uint32_t (a 32-bit pointer in
@@ -25,6 +26,8 @@
 
 #include <cstddef>
 #include <cstdint>
+
+#include "game/enums/job_ids.h"
 
 namespace s3re::game {
 
@@ -147,7 +150,7 @@ struct Settler {
         std::uint32_t animation;   //   working: animation id, group << 16 | index (SetSettlerAnimation 0x50e2c0)
     };
     std::uint16_t counter;         // 0x0c frames left of the animation / ticks to the next step
-    std::uint16_t job;             // 0x0e
+    SettlerJob job;                // 0x0e (uint16)
     std::uint16_t next;            // 0x10
     std::uint16_t prev;            // 0x12
     std::uint8_t flags;            // 0x14 0x40 = in a building slot
