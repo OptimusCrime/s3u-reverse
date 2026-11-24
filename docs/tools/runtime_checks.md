@@ -204,3 +204,8 @@ recording is `replay-check/recording.s3rec` next to the DLL).
   `0x61e4ef` onwards (exact boundary unknown). Game code comes before it.
   Known runtime functions include `operator delete` at `0x61e4ef`,
   `_purecall` at `0x61f061`, and `operator new` at `0x61efb9`.
+
+- **Don't run `--test` from the same build folder during a whole-game
+  check** (session 54): `check_random_map.py` reads `s3re.log` next to the
+  DLL, and a concurrent `s3re_launcher --test` overwrites it, so the check
+  reports "the random map was not set up".
