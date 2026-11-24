@@ -2395,3 +2395,25 @@ SPECS += [
     Spec("AI_SetForestersWorking", 0x0059c0f0, "fastcall", [scratch(0), scratch(1)],
          presets=foresters_world, globals=foresters_globals, callees=command_callees((3,)), max_cases=400),
 ]
+
+# -- session 54 (ai-land): InitAiGlobals, SaveState (ai_state.cpp) -----------
+# InitAiGlobals: ECX = a computer player at scratch 0 whose world (+0x75c) is
+# the emulated world (random map size and player records). SaveState: ECX =
+# a fake CMapFile; WriteChunkData (verified; it writes a file) is probed.
+
+
+def init_globals_world(rng, pool, args):
+    fields = [(SCRATCH + 0x75c, WORLD_BASE, 4), (MAP_SIZE, rng.getrandbits(32) if rng.random() < 0.2 else rng.randint(64, 464), 4)]
+    fields += [(PLAYER_RECORDS + p * PLAYER_BYTES, 0 if rng.random() < 0.5 else rng.getrandbits(32), 4)
+               for p in range(20)]
+    return fields
+
+
+SPECS += [
+    Spec("CComputerPlayer_InitAiGlobals", 0x00551b80, "fastcall", [scratch(0), anything],
+         presets=init_globals_world, globals=lambda rng, pool, args: [], max_cases=300),
+    # EAX: WriteChunkData's leftover; the caller 0x551220 returns it to the
+    # savegame writer's loop, which doesn't use it.
+    Spec("AI_SaveState", 0x00596330, "fastcall", [scratch(1), anything], eax_mask=0,
+         callees={0x004a66d0: (4, "thiscall", "probe")}, max_cases=100),
+]

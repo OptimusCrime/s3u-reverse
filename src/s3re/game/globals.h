@@ -246,6 +246,13 @@ inline constexpr GameGlobal<ai::AiLandEvaluation*> g_aiEvaLand{0x7e056c};
 // CComputerPlayer::InitAiGlobals (0x551b80); the AI code reads the land grid
 // and the per-player area lists through it.
 inline constexpr GameGlobal<std::uint32_t> g_aiLandEvaluation{0x7e3134};
+// 1 until the first computer player's set-up (0x550a30) has run
+// AI::MarkBuildingTypesInLandGrid (0x5723a0); set by InitAiGlobals.
+inline constexpr GameGlobal<std::uint32_t> g_aiMarkBuildingTypesPending{0x7312ac};
+// AI::CountPlayersTakingPart at the set-up (InitAiGlobals; no reader found).
+inline constexpr GameGlobal<std::uint32_t> g_aiPlayersTakingPart{0x7e02f0};
+// Cleared by InitAiGlobals; no other access found.
+inline constexpr GameGlobal<std::uint32_t> g_aiUnk7e340c{0x7e340c};
 // 20 vectors emptied by AI_ResetAgentData.
 inline constexpr GameGlobal<ai::AiVector[20]> g_aiAgentVectors{0x7e7a24};
 // Per player a std::vector of {hunter settler, target settler} pairs (the
