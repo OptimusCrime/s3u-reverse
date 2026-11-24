@@ -208,3 +208,38 @@ workshops), see `re/enums.md`.
   offsets or data addresses outside the globals headers).
 - Planned: a lint for hex literals in comparisons and for magic numbers
   in job/type comparisons once `enums.h` covers them.
+
+## Typed access and globals (decided 2026-11-09 / 2026-11-22)
+
+Moved here from `CLAUDE.md` on 2026-11-24 (a summary stays there).
+
+- **Typed access, no raw offsets (decided 2026-11-09).** Our code reads and
+  writes the world through the packed structs of `src/s3re/game/layout.h`
+  (`world->tiles[x][y].owner`, `world->settlers[n].job`,
+  `world->players[p].race`; record types in namespace `layout`, every
+  offset `static_assert`ed). Tiles start at `0x67444` (settled,
+  `re/structs.md`). Code that carries a tile as a 32-bit byte offset and
+  steps it past the map (as the original does) uses `TileOffset` /
+  `TileAtOffset`. Other objects (UI classes, CLogicThread, Watcom vectors,
+  ...) get small packed structs with `static_assert`s next to the code or
+  in a shared header. New field knowledge goes into the structs (and
+  `re/structs.md`), never into new offset constants in `.cpp` files;
+  unknown fields are named `unkXXXX`. The only raw helper is `RawAt` in
+  `game/raw.h`, for genuinely unstructured bytes, with a comment. Tests use
+  `WorldPair::Both` / `SameField` / `OffsetOf` or `offsetof`.
+  `python tools/typed_access_lint.py` (part of `inventory.py check`) flags
+  old `At<`/`WorldField`/`world_offset::` uses, byte casts of the world
+  and world-range offset constants; a justified exception carries `raw-ok`
+  in a comment.
+  **Globals (2026-11-22):** every S3.EXE data address (0x63a000..0x7ed000)
+  is declared once, typed, in `game/globals.h` (variables, e.g.
+  `inline constexpr GameGlobal<std::uint32_t> g_gameTick{0x7dfd48};`),
+  `game/tables.h` (constant tables), `game/texts.h` (strings, `GameText`,
+  passed to `GameDebugLog`) or `game/vtables.h` (vtables, vbtables, throw
+  info), and recorded in `re/globals.csv`. `GameGlobal`
+  (`game/global_access.h`) is constant-initialized (works in the emulator)
+  and used like a variable (`g_gameTick & 0x3f`, `g_settlerTypeClass[t]`,
+  `g_config->unk189`, `&g_playerTallies`); write `.get()` for variadic or
+  deducing calls (it is not copyable, so a mistake fails to compile). The
+  lint rejects data-address literals anywhere else; code addresses
+  (function calls, hooks) stay allowed.

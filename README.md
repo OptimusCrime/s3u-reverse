@@ -126,9 +126,11 @@ it reads. Regenerate the data and the picture with `python tools/progress.py`.
 - `re/`: reverse-engineering notes and data: the function inventory,
   structure layouts, globals, analysis of larger subsystems.
 - `tools/`: inventory, progress, emulator tests and whole-game checks.
-- `docs/`: progress page and the [coding style](docs/coding_style.md).
-- `CLAUDE.md`, `LOGBOOK.md`, `TODO.md`: project facts and procedures,
-  progress log, backlog.
+- `docs/`: progress page, the [coding style](docs/coding_style.md), tool
+  guides (`docs/tools/`), the backlog by area (`docs/todo/`) and the
+  logbook archive (`docs/history/`).
+- `CLAUDE.md`, `LOGBOOK.md`, `TODO.md`: project rules and pointers,
+  current focus and recent sessions, backlog index.
 
 ## License
 
