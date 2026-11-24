@@ -2049,3 +2049,70 @@ SPECS += [
     Spec("AI_CEvaLand_ReevaluateAroundTile", 0x005548b0, "thiscall", [tile_word, tile_word], eax_mask=0,
          presets=around_tile_world, globals=evaland_globals, max_cases=300),
 ]
+
+# -- session 54 (ai-land): CountResourceInOwnersLand, CountPlayersResourcesAround --
+
+
+def field_tiles(rng, x0, y0, size, player):
+    """resource_tiles plus heights (TileSlope), tile flags, resources and
+    grass / swampy grass / stream terrain."""
+    fields = resource_tiles(rng, x0, y0, size, player)
+    for x in range(max(0, x0), x0 + size):
+        for y in range(max(0, y0), y0 + size):
+            base = TILES + (x * 0x300 + y) * 24
+            roll = rng.randrange(8)
+            terrain = 0x10 | rng.randrange(16) if roll < 3 else 0x15 if roll == 3 else \
+                0x60 | rng.randrange(16) if roll == 4 else rng.randrange(256)
+            flags = rng.randrange(256) if rng.random() < 0.3 else 0
+            height = rng.randrange(8 if rng.random() < 0.5 else 30)
+            fields += [(base + 4, height, 1), (base + 6, terrain, 1), (base + 10, flags, 1),
+                       (base + 0x11, rng.randrange(256), 1)]
+    return fields
+
+
+def count_goods(rng, pool):
+    goods = rng.choice((2, 3, 5, 6, 7, 9, 21, 25, 26, 27, 28, 8, 0, 4, 29, 0x102))
+    return goods | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def count_resource_tiles(rng, pool, args):
+    cell_x, cell_y = args[0] & 0xFFFF, args[1] & 0xFFFF
+    return field_tiles(rng, cell_x * 8, cell_y * 8, 10, args[2]) + [(MAP_SIZE, rng.randint(40, 100), 4)]
+
+
+COUNT_LAND = SCRATCH + 8 * SCRATCH_SLOT_BYTES  # the CEvaLand object (grid at CELL_GRID)
+
+
+def count_around_world(rng, pool, args):
+    """Cell x, y, player and goods words at scratch 0..3; a 9 x 9 grid with
+    random presence bytes (width and height 0..9) and the tiles of the 3 x 3
+    cells around."""
+    x = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(10)
+    y = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(10)
+    player = rng.randrange(3)
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2), (SCRATCH + 2 * SCRATCH_SLOT_BYTES, player, 2),
+              (SCRATCH + 3 * SCRATCH_SLOT_BYTES, count_goods(rng, pool) & 0xFFFF, 2),
+              (COUNT_LAND + 0x140, rng.randrange(10), 4), (COUNT_LAND + 0x144, rng.randrange(10), 4),
+              (COUNT_LAND + 0x158, WORLD_BASE + CELL_GRID, 4), (MAP_SIZE, rng.randint(40, 100), 4)]
+    for cell in range(81):
+        base = CELL_GRID + cell * 0xC4
+        fields += [(base + k, 0 if rng.random() < 0.33 else rng.randrange(1, 256), 1) for k in range(2, 0xF)]
+    if x < 10 and y < 10:
+        fields += field_tiles(rng, (x - 1) * 8, (y - 1) * 8, 24, player)
+    return fields
+
+
+def count_around_globals(rng, pool, args):
+    return ai_map_size_globals(rng, pool, args) + [(AI_LAND_EVALUATION, WORLD_BASE + COUNT_LAND, 4)]
+
+
+SPECS += [
+    # DEAD 0x599d8c: the empty-loop exit (y * 8 >= y * 8 + 8 can't happen for
+    # a 16-bit y).
+    Spec("AI_CountResourceInOwnersLand", 0x00599a30, "fastcall",
+         [low_word_noise(9), low_word_noise(9), low_word_noise(3), count_goods],
+         presets=count_resource_tiles, globals=ai_map_size_globals, max_cases=1000, exempt_blocks=(0x599d8c,)),
+    Spec("AI_CountPlayersResourcesAround", 0x00599f50, "fastcall",
+         [scratch(0), scratch(1), scratch(2), scratch(3)],
+         presets=count_around_world, globals=count_around_globals, max_cases=600),
+]

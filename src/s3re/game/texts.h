@@ -216,4 +216,7 @@ inline constexpr GameText kWideDesyncSettler{0x7303c4};    // L"DESYNC Settler!"
 inline constexpr GameText kWideDesyncBuildings{0x730390};  // L"DESYNC Buildings!"
 inline constexpr GameText kWideSaveError{0x7302b0};   // L"Error while saving! Check the file attributes and disk space!"
 inline constexpr GameText kWideCannotDeleteTemp{0x730224};  // L"Cannot delete the file Save\Multi\Temp.mps!"
+// Computer players (Rainer\CompMapWorkerAgent.cpp)
+inline constexpr GameText kAiCountResourceDefault{0x733070};  // "RAINER - DEFAULT IN SWITCH CountResourceInOwnersLand"
+inline constexpr GameText kAiCountAroundDefault{0x7330a8};  // "RAINER - DEFAULT IN SWITCH CountPlayersResourcesAround"
 }  // namespace s3re::game::texts
