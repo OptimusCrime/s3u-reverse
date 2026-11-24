@@ -13,7 +13,8 @@ Writes:
   docs/progress-data.js  the data for docs/progress.html, a static page that
                          draws the interactive treemap, totals and history
                          in the browser (open it, or publish both files)
-  docs/progress.svg      a static picture of the treemap for README.md
+  docs/progress.svg      a static picture for README.md: the summary bars
+                         of docs/progress.html above the treemap
 
 Usage:  python tools/progress.py            (regenerate both files)
         python tools/progress.py --no-history  (skip reading git history)
@@ -211,12 +212,72 @@ def squarify(values, x, y, w, h):
 
 # ---------------------------------------------------------------- drawing
 
+# The summary above the treemap groups the statuses into the same plain
+# buckets as the top of docs/progress.html: (label, statuses, colour, text colour).
+SUMMARY_BUCKETS = (
+    ("Verified, identical in a whole-game check", ("verified_game",), "#3d9a50", "#ffffff"),
+    ("Verified by tests only", ("verified_tests", "verified_unmeasured"), "#4f8fc0", "#ffffff"),
+    ("Reimplemented, not verified yet", ("reimplemented",), "#a9d18e", "#1e2924"),
+    ("Understood, not reimplemented yet", ("identified",), "#f2c86b", "#1e2924"),
+    ("Not understood yet", ("classified", "unknown"), "#e8a39b", "#1e2924"),
+)
+GAME_CATEGORIES = ("game", "unidentified")
+
+
+def svg_summary(tree, width, esc, fmt) -> tuple[list[str], int]:
+    """The headline share and one stacked bar per scope (game code, all
+    code), each segment labelled with its own share, plus a legend.
+    Returns the SVG elements and their height."""
+    scopes = []
+    for label, categories in (("Game code", GAME_CATEGORIES), ("All code", tuple(tree))):
+        size = collections.Counter()
+        for category in categories:
+            for functions in tree.get(category, {}).values():
+                for _, _, status, s in functions:
+                    size[status] += s
+        scopes.append((label, size, sum(size.values()) or 1))
+    all_size = scopes[1][1]
+    buckets = [b for b in SUMMARY_BUCKETS if b[1] != ("reimplemented",) or all_size["reimplemented"]]
+    game_label, game_size, game_total = scopes[0]
+    verified = sum(game_size[s] for s in VERIFIED_STATUSES)
+    out = [f'<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">'
+           f'{100 * verified / game_total:.1f}%</text>',
+           f'<text x="{24 + 190}" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented '
+           f'and verified against the original</text>']
+    bar_x, bar_w, bar_h, y = 170, width - 170 - 24, 40, 100
+    for label, size, total in scopes:
+        out.append(f'<text x="24" y="{y + 27}" font-size="20" font-weight="600" fill="#1e2924">{label}</text>')
+        x = bar_x
+        for name, statuses, colour, text in buckets:
+            part = sum(size[s] for s in statuses)
+            if not part:
+                continue
+            w = bar_w * part / total
+            share = f"{100 * part / total:.1f}%"
+            out.append(f'<rect x="{fmt(x)}" y="{y}" width="{fmt(w)}" height="{bar_h}" fill="{colour}">'
+                       f'<title>{esc(name)}: {share}</title></rect>')
+            if w > 10 * len(share) + 12:  # room for the label
+                out.append(f'<text x="{fmt(x + w / 2)}" y="{y + 27}" font-size="18" font-weight="600" '
+                           f'text-anchor="middle" fill="{text}">{share}</text>')
+            x += w
+        y += bar_h + 14
+    x = bar_x
+    y += 8
+    for name, statuses, colour, _ in buckets:
+        out.append(f'<rect x="{fmt(x)}" y="{y}" width="16" height="16" fill="{colour}"/>'
+                   f'<text x="{fmt(x + 24)}" y="{y + 14}" font-size="19" fill="#1e2924">{esc(name)}</text>')
+        x += 24 + 9.2 * len(name) + 36
+    return out, y + 42
+
+
 def svg_treemap(tree, width=1600, height=1000) -> str:
-    out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
-           f'width="{width}" height="{height}" font-family="Segoe UI, Helvetica, Arial, sans-serif">',
-           f'<rect width="{width}" height="{height}" fill="#ffffff"/>']
     esc = lambda s: html.escape(s, quote=True)  # noqa: E731
     fmt = lambda v: f"{v:.1f}".rstrip("0").rstrip(".")  # noqa: E731
+    summary, top = svg_summary(tree, width, esc, fmt)
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height + top}" '
+           f'width="{width}" height="{height + top}" font-family="Segoe UI, Helvetica, Arial, sans-serif">',
+           f'<rect width="{width}" height="{height + top}" fill="#ffffff"/>', *summary,
+           f'<g transform="translate(0 {top})">']
 
     categories = sorted(tree.items(), key=lambda kv: -sum(f[3] for g in kv[1].values() for f in g))
     cat_sizes = [sum(f[3] for g in groups.values() for f in g) for _, groups in categories]
@@ -257,6 +318,7 @@ def svg_treemap(tree, width=1600, height=1000) -> str:
                            f'\n{size} bytes — {STATUS_STYLE[status][0]}</title></rect>')
             out.append("</g>")
         out.append("</g>")
+    out.append("</g>")
     out.append("</svg>")
     return "\n".join(out)
 
