@@ -122,6 +122,13 @@ def _api_sleep(machine, uc, args):
     return 0, ("Sleep", args[0])
 
 
+def _api_output_debug_string(machine, uc, args):
+    """OutputDebugStringA(text): records the text (up to its zero byte, at most
+    256 bytes; the buffer's address differs between the two frames)."""
+    text = machine.guest_read(args[0], 256).split(b"\0")[0]
+    return 0, ("OutputDebugStringA", text)
+
+
 def _api_close_handle(machine, uc, args):
     return 1, ("CloseHandle", args[0])
 
@@ -144,6 +151,7 @@ API_HANDLERS = {
     "timeGetTime": (0, _api_time_get_time),
     "Sleep": (1, _api_sleep),
     "CloseHandle": (1, _api_close_handle),
+    "OutputDebugStringA": (1, _api_output_debug_string),
 }
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,

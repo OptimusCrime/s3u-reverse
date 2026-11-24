@@ -1950,3 +1950,201 @@ SPECS += [
          [low_word_noise(71), anything, anything, anything], eax_mask=0, globals=ground_note_globals,
          max_cases=600),
 ]
+
+
+# -- session 54 (wip/ai-army): unit-group bookkeeping (ai_army_groups.cpp) ----
+#
+# `this` (ECX) is the world base, so the army object's fields are world bytes
+# 0..0x20f8 (home areas +0, mages +0x988, bitset +0xca8, highest group
+# +0x1d10, group size +0x1d60, gather positions +0x1db0, offsets +0x20d0).
+# DisbandWeakGroups clears bits in the real g_aiGroupOrders (0x7e37d0) and
+# calls MoveLastGroupInto on it, so those globals get random values too.
+# std::bitset::_Xran (0x596570) is probed (it throws; see AI_Army_PruneHunters).
+
+ARMY_HOME_AREAS = 0x0
+ARMY_MAGES = 0x988
+ARMY_BITSET = 0xCA8
+ARMY_HIGHEST_GROUP = 0x1D10
+ARMY_GROUP_SIZE = 0x1D60
+AI_CENSUS_TARGETS = 0x007E5EFC   # g_aiCensus +4: target building per player * 10 + group
+AI_CENSUS_DEFENDING = 0x007E608C  # g_aiCensus +0x194
+AI_ARMY_STATE = 0x007E58C8
+XRAN_PROBE = {0x00596570: (0, "thiscall", "probe")}
+ARMY_SETTLERS = 3000  # members are mostly drawn from 1..2999
+
+
+def army_member(rng):
+    return rng.randrange(1, ARMY_SETTLERS) if rng.random() < 0.995 else rng.randrange(32000, 33000)
+
+
+def army_group_size(rng):
+    roll = rng.random()
+    if roll < 0.1:
+        return rng.randint(-60, 200) & 0xFFFFFFFF
+    if roll < 0.3:
+        return rng.randint(94, 101)
+    return rng.randint(0, 30)
+
+
+def army_lists(rng, players, size_of, lengths_full=False):
+    """World unit lists of `players`: lengths around the group size (at most
+    100), members from the settler pool (types: melee soldiers, bowmen,
+    anything)."""
+    fields = []
+    for p in players:
+        size = size_of(p)
+        signed = size - (1 << 32) if size >= 1 << 31 else size
+        full = lengths_full and rng.random() < 0.5
+        for g in range(10):
+            roll = rng.random()
+            if full:
+                length = min(100, max(0, signed + rng.randrange(3)))
+            elif roll < 0.25:
+                length = 0
+            elif roll < 0.45:
+                length = rng.randint(1, 3)
+            elif roll < 0.7:
+                length = min(100, max(0, signed + rng.randint(-2, 2)))
+            else:
+                length = rng.randint(0, 100 if rng.random() < 0.3 else 12)
+            index = p * 10 + g
+            fields.append((PLAYER_LIST_LENGTHS + 4 * index, length, 4))
+            for k in range(min(length + 1, 100)):
+                fields.append((PLAYER_LISTS + index * 200 + 2 * k, army_member(rng), 2))
+    return fields
+
+
+def army_settler_types(rng):
+    """Types of the pool's settlers: mostly bowmen in half of the cases, so
+    that groups without a melee soldier occur."""
+    bowmen = rng.random() < 0.5
+    fields = []
+    for settler in range(1, ARMY_SETTLERS):
+        if bowmen and rng.random() < 0.9:
+            art = 8
+        else:
+            art = rng.randrange(5, 36) if rng.random() < 0.5 else rng.randrange(48)
+        fields.append((SETTLERS + settler * SETTLER_BYTES + 1, art, 1))
+    return fields
+
+
+def army_object(rng, base, players):
+    """Army fields of `players` at `base`: group size, highest group, home
+    areas 0..2 (so groups pair up), mage counts, a few bitset words."""
+    fields = []
+    sizes = {}
+    for p in players:
+        sizes[p] = army_group_size(rng)
+        fields += [(base + ARMY_GROUP_SIZE + 4 * p, sizes[p], 4),
+                   (base + ARMY_HIGHEST_GROUP + 4 * p, rng.randrange(10), 4)]
+        for g in range(10):
+            index = p * 10 + g
+            mages = rng.randrange(4) if rng.random() < 0.85 else rng.randint(-60, 200) & 0xFFFFFFFF
+            fields += [(base + ARMY_HOME_AREAS + 2 * index, rng.randrange(3), 2),
+                       (base + ARMY_MAGES + 4 * index, mages, 4)]
+    for word in range(ARMY_SETTLERS // 32 + 1):
+        fields.append((base + ARMY_BITSET + 4 * word, rng.getrandbits(32) if rng.random() < 0.5 else 0, 4))
+    return fields, sizes
+
+
+def army_census(rng, players):
+    """Census target buildings (often 0) and defending flags of `players`
+    (globals)."""
+    fields = []
+    for p in players:
+        for g in range(10):
+            index = p * 10 + g
+            fields += [(AI_CENSUS_TARGETS + 2 * index, 0 if rng.random() < 0.5 else rng.getrandbits(16), 2),
+                       (AI_CENSUS_DEFENDING + index, 0 if rng.random() < 0.5 else rng.getrandbits(8), 1)]
+    return fields
+
+
+def army_player_groups(rng, pool, args):
+    """The army at the world base and the lists of the player (args[0])."""
+    fields, sizes = army_object(rng, 0, (args[0],))
+    if len(args) > 1 and rng.random() < 0.4:  # MoveLastGroupInto: the highest group itself
+        fields.append((ARMY_HIGHEST_GROUP + 4 * args[0], args[1], 4))
+    fields += army_lists(rng, (args[0],), lambda p: sizes[p], lengths_full=True)
+    if len(args) > 1:
+        bit_word = ARMY_BITSET + 4 * ((args[1] & 0xFFFF) >> 5)
+        if rng.random() < 0.3:  # AssignMage / AssignSoldier: already assigned
+            fields.append((bit_word, 0xFFFFFFFF, 4))
+        elif args[1] >= 32000:  # a bad index (_Xran probed) whose bit is clear
+            fields.append((bit_word, 0, 4))
+    return fields
+
+
+def army_player_globals(rng, pool, args):
+    return [(AI_MAP_WORLD, WORLD_BASE, 4)] + army_census(rng, (args[0],))
+
+
+def army_soldier_world(rng, pool, args):
+    """army_player_groups plus areas (high-water mark 0..5, sometimes -1)
+    owned by the player, others or none, and buildings in them; the
+    soldier's position."""
+    fields = army_player_groups(rng, pool, args) + buildings_in_areas(rng, pool, args)
+    high = 0xFFFFFFFF if rng.random() < 0.05 else rng.randrange(6)
+    fields.append((AREA_HIGH_WATER, high, 4))
+    for area in range(6):
+        owner = 0xFF if rng.random() < 0.15 else rng.choice((args[0], args[0], rng.randrange(3)))
+        fields.append((AI_AREAS + area * 0x2E0, owner, 1))
+    soldier = args[1] if args[1] < 0x10000 else 0
+    record = SETTLERS + soldier * SETTLER_BYTES
+    fields += [(record + 4, rng.randrange(400), 2), (record + 6, rng.randrange(400), 2)]
+    return fields
+
+
+def army_disband_world(rng, pool, args):
+    """Every player's lists and active flag (0, 1, 2) and the settler pool's
+    types; this's group sizes."""
+    fields = []
+    sizes = {}
+    for p in range(20):
+        sizes[p] = army_group_size(rng)
+        fields += [(ARMY_GROUP_SIZE + 4 * p, sizes[p], 4),
+                   (PLAYER_RECORDS + p * PLAYER_RECORD_BYTES, rng.choice((0, 1, 2, 2)), 4)]
+    return fields + army_lists(rng, range(20), lambda p: sizes[p]) + army_settler_types(rng)
+
+
+def army_disband_globals(rng, pool, args):
+    """g_aiGroupOrders (whose bitset and MoveLastGroupInto the function uses)
+    with random army fields, the census of every player."""
+    fields, _ = army_object(rng, AI_GROUP_ORDERS, range(20))
+    return [(AI_MAP_WORLD, WORLD_BASE, 4)] + fields + army_census(rng, range(20))
+
+
+def army_member_arg(rng, pool):
+    return rng.randrange(32000, 33000) if rng.random() < 0.05 else army_member(rng)
+
+
+def army_home_world(rng, pool, args):
+    """The group's length 0..3 or more and its first member."""
+    index = args[0] * 10 + args[1]
+    length = rng.choice((0, 1, 2, rng.randint(3, 100)))
+    member = army_member(rng) % 32000
+    return [(PLAYER_LIST_LENGTHS + 4 * index, length, 4), (PLAYER_LISTS + index * 200, member, 2)]
+
+
+SPECS += [
+    Spec("AI_Army_Army", 0x00591c10, "thiscall", [], globals=army_hunter_vectors, max_cases=200),
+    Spec("AI_ArmyState_ArmyState", 0x00593f40, "thiscall", [], max_cases=200),
+    Spec("AI_Army_CountSpareGroups", 0x00591fb0, "thiscall", [below(20)], presets=army_player_groups,
+         globals=army_player_globals, max_cases=1000),
+    Spec("AI_Army_CountSpareSoldiers", 0x00592100, "thiscall", [below(20)], presets=army_player_groups,
+         globals=army_player_globals, max_cases=1000),
+    Spec("AI_Army_MoveLastGroupInto", 0x00592240, "thiscall", [below(20), below(10)], presets=army_player_groups,
+         globals=army_player_globals, max_cases=1000),
+    Spec("AI_Army_AssignMage", 0x005926e0, "thiscall", [below(20), army_member_arg], presets=army_player_groups,
+         globals=army_player_globals, callees=XRAN_PROBE, max_cases=1000),
+    # 0x592aeb is dead: it runs only if the address this + 0x1d10 is 0 (the
+    # original tests an array's address instead of an element).
+    Spec("AI_Army_AssignSoldier", 0x00592820, "thiscall", [below(3), army_member_arg], presets=army_soldier_world,
+         globals=army_player_globals, callees=XRAN_PROBE, exempt_blocks=(0x592aeb,), max_cases=1000),
+    Spec("AI_Army_DisbandWeakGroups", 0x00592bf0, "thiscall", [], presets=army_disband_world,
+         globals=army_disband_globals, callees=XRAN_PROBE, max_cases=300),
+    Spec("AI_Army_ReturnGroupHome", 0x00592620, "thiscall", [below(20), below(10)], presets=army_home_world,
+         globals=army_player_globals,
+         callees={0x0058A610: (4, "thiscall", lambda h: (h % 3) - 1 if h % 2 else 0),
+                  0x00590C80: (4, "thiscall", "probe")},
+         max_cases=600),
+]

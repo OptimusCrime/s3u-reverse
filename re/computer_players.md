@@ -293,6 +293,27 @@ stonecutter / forester), and two CompMapWorkerAgent globals:
 cleared by `AI::ResetUnitGroup` 0x5930f0. What the arrays mean is still
 a guess (G: the computer players' unit groups and armies).
 
+Session 54 (V, `ai_army_groups.cpp`): the unit-group bookkeeping.
+Soldiers go into the first group 1..9 below the group size
+(`AssignSoldier` 0x592820; when all nine are full the size grows by 5, at
+most 100); mages into the group with the fewest mages (`AssignMage`
+0x5926e0). A group's first soldier sets its gather position: the group's
+gather offset plus the nearest (TileDistance) of the player's buildings,
+one per owned economy area (its first military building, else its first
+building), whose area becomes the group's home area. `CountSpareGroups`
+0x591fb0 / `CountSpareSoldiers` 0x592100 pair groups by home area: per
+pass the first free group is picked and every second later group of the
+same area becomes spare. `DisbandWeakGroups` 0x592bf0 dissolves groups
+of at most a quarter of the group size (without a target building) and
+any group without a swordsman or pikeman; `MoveLastGroupInto` 0x592240
+then moves the highest group into the hole (target building, defending
+flag, target, steal flag, list; NOT the home area or gather position,
+which the slot keeps) and shrinks the group size by 5 (not below 7).
+`ReturnGroupHome` 0x592620 logs "Center - player ..." through
+OutputDebugStringA and sends the group to its gather position. Dead code:
+AssignSoldier's block 0x592aeb (NearestFreeInteriorMilitaryBuilding
+0x58aa70) is guarded by `&highest_group == 0`, so it never runs.
+
 ## How decisions reach the simulation
 
 Most decisions don't write the world directly (the world is read through

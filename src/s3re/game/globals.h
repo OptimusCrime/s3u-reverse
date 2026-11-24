@@ -290,8 +290,10 @@ inline constexpr GameGlobal<std::int32_t> g_skipListRandomBitsLeft{0x7a4030};
 using SleepImport = void(__stdcall*)(std::uint32_t milliseconds);
 using CloseHandleImport = int(__stdcall*)(void* handle);
 using TimeGetTimeImport = std::uint32_t(__stdcall*)();
+using OutputDebugStringAImport = void(__stdcall*)(const char* text);
 inline constexpr GameGlobal<SleepImport> g_importSleep{0x6550dc};
 inline constexpr GameGlobal<CloseHandleImport> g_importCloseHandle{0x655180};
 inline constexpr GameGlobal<TimeGetTimeImport> g_importTimeGetTime{0x655358};  // from _INMM.dll
+inline constexpr GameGlobal<OutputDebugStringAImport> g_importOutputDebugStringA{0x6550b0};
 
 }  // namespace s3re::game
