@@ -10,8 +10,9 @@ a recorded pass for their current compiled code (tools/emutest/changed.py),
 in quick mode: a spec stops once every block is covered and a quarter of its
 cases ran, no new case starts after --budget seconds (60; "budget" in the
 report; a warning, and no recorded pass, if coverage is incomplete then),
-and Spec.quick_cases caps the slowest specs. --full runs every case without
-a budget (round ends, milestones).
+and Spec.quick_cases caps the slowest specs (a capped spec's incomplete
+coverage is noted, not a --require-coverage failure, in quick runs). --full
+runs every case without a budget (round ends, milestones).
 
 For every spec in tools/emutest/specs.py (or those whose name contains
 `filter`), runs N cases. Each case calls the original function from S3.EXE
@@ -684,6 +685,7 @@ def main() -> int:
     incomplete = 0
     incomplete_names: list[str] = []
     over_budget: list[str] = []
+    capped: list[str] = []  # quick runs: specs that ran all their Spec.quick_cases
     passes: dict[str, dict] = {}
     run_commit = None
 
@@ -691,7 +693,12 @@ def main() -> int:
         nonlocal mismatches, incomplete, run_commit
         status = "MISMATCH" if r["mismatch"] else "ok"
         coverage = f"{r['covered']}/{r['blocks']} blocks"
-        if r["uncovered"]:
+        elsewhere = specs.COVERED_ELSEWHERE.get(spec.ours, ((), ""))[0]
+        if r["uncovered"] and set(r["uncovered"]) <= set(elsewhere):
+            # Blocks the emulator's inputs can't reach in reasonable time;
+            # the spec module names the evidence for them.
+            coverage += f" (the other {len(r['uncovered'])}: specs.COVERED_ELSEWHERE)"
+        elif r["uncovered"]:
             shown = r["uncovered"] if args.all_uncovered else r["uncovered"][:6]
             coverage += " (uncovered: " + ", ".join(f"{a:#x}" for a in shown) + \
                         (" ..." if len(r["uncovered"]) > len(shown) else "") + ")"
@@ -705,6 +712,11 @@ def main() -> int:
             status = "budget" if not r["mismatch"] else status
             if r["uncovered"] and not r["mismatch"]:
                 over_budget.append(spec.ours)
+        elif quick and spec.quick_cases is not None and r["ran_all"] and r["uncovered"]:
+            # Capped on purpose (the spec names where its evidence is);
+            # --full runs reach the coverage.
+            stopped = f" (quick_cases: {r['cases'] + r['invalid']} of {r['planned']} cases)"
+            capped.append(spec.ours)
         print(f"{status:8} {spec.ours:45} {r['cases']:6} cases, {r['invalid']:4} invalid, "
               f"{coverage}{stopped}  [{seconds:.1f}s]", flush=True)
         if r["mismatch"]:
@@ -734,8 +746,11 @@ def main() -> int:
     if over_budget:
         print(f"WARNING: {len(over_budget)} spec(s) hit the time budget before full coverage "
               f"(not recorded as passed; run them with --full): {', '.join(over_budget)}")
+    if capped:
+        print(f"note: {len(capped)} spec(s) ran all their Spec.quick_cases without full coverage "
+              f"(not a --require-coverage failure in quick runs; --full covers them): {', '.join(capped)}")
     show_memory(jobs, peak)
-    over = set(over_budget)
+    over = set(over_budget) | set(capped)
     failed = bool(mismatches or (args.require_coverage
                                  and any(name not in over for name in incomplete_names)))
     if full_run and not mismatches:

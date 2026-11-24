@@ -2174,8 +2174,11 @@ SPECS += [
     Spec("CLogicThread_CheckVictoryConditions", 0x005145c0, "logicthread", [], presets=victory_world,
          globals=victory_globals, max_cases=1000),
     # The jump table of the 100 missions follows the code at 0x514424 (data, not code).
+    # Full coverage takes 2752 cases (188 s alone in Release, 2026-11-24):
+    # quick runs do 500 cases (about 35 s, room for a busy machine), --full
+    # runs (10000) cover all 512 blocks.
     Spec("CLogicThread_CheckGameEnd", 0x00511c50, "logicthread", [], eax_mask=0xFF, presets=game_end_world,
-         globals=game_end_globals, cover_until=0x00514424, case_scale=5),
+         globals=game_end_globals, cover_until=0x00514424, case_scale=5, quick_cases=500),
 ]
 
 SPECS += [
@@ -5287,6 +5290,36 @@ SPECS += [
 ]
 
 
+# Blocks of a spec's original that its emulator inputs don't reach in
+# reasonable time, with the evidence for them: {spec: (blocks, reason)}.
+# run.py reports them as covered elsewhere (not a --require-coverage
+# failure). Only for blocks measured as unreached by a --full run; not part
+# of the spec entries, so editing it doesn't reselect specs.
+COVERED_ELSEWHERE = {
+    # The 77 blocks a --full run (10 maps of 33..96 tiles, Release, 146 s)
+    # doesn't reach, 2026-11-24. Many need maps of 130+ tiles (0x516815: a
+    # tile 65 or more from every border) or 258+ (0x516842: 129 or more);
+    # the others depend on what larger maps contain. Measured: 3 extra maps
+    # of 192 tiles took 220 s each in Release and reached only 7 of them
+    # (0x516815, 0x517424, 0x517443, 0x517446, 0x5177db, 0x517cc5,
+    # 0x517cd5), so no larger case was added. Evidence for them: the
+    # in-process whole-world comparisons of world_create.cpp on maps of 128
+    # to 768 tiles and the random-map whole-game checks (check_random_map.py).
+    "CGameData_GenerateRandomMap": ((
+        0x516815, 0x51681c, 0x516821, 0x516825, 0x51682d, 0x516836, 0x51683e, 0x516842,
+        0x516867, 0x516ad7, 0x516bf7, 0x516c41, 0x516e14, 0x516e2d, 0x516ee1, 0x516ee9,
+        0x516ef2, 0x516f25, 0x516f2e, 0x516f47, 0x516f79, 0x516f7e, 0x516f93, 0x516f9b,
+        0x516fa4, 0x516fc9, 0x516fd2, 0x516ffc, 0x517015, 0x517033, 0x51705d, 0x517076,
+        0x5170ae, 0x5170e0, 0x5170e5, 0x5170f7, 0x5170ff, 0x517108, 0x517151, 0x51715a,
+        0x51716f, 0x51719a, 0x51719f, 0x5171b1, 0x5171b5, 0x5171ba, 0x5171ed, 0x5171fb,
+        0x517200, 0x517225, 0x51723a, 0x5172e8, 0x5172f1, 0x51738b, 0x517395, 0x51739e,
+        0x5173a7, 0x5173b8, 0x5173c3, 0x5173e4, 0x5173ed, 0x5173f3, 0x5173fc, 0x517411,
+        0x517424, 0x517443, 0x517446, 0x5175f2, 0x5177db, 0x51793a, 0x517cc5, 0x517cd5,
+        0x517cfe, 0x517df7, 0x517e15, 0x518c43, 0x518c8d,
+    ), "maps of 128+ tiles: world_create.cpp in-process tests, check_random_map.py"),
+}
+
+
 # Package C, batch 1 (terrain_updates.cpp, economy_helpers.cpp)
 def shade_around_heights(rng, pool, args):
     """Heights of the 5x5 block around the tile: the shade of the tile and of
@@ -7014,8 +7047,11 @@ SPECS += [
     # the first two rounds, and the left walker can only fail in round 1
     # when enclosed at the same start tile (then the right one failed
     # first) and not by returning to a blocked start tile.
+    # About 0.26 s per case (Release); full coverage takes 368 cases (96 s,
+    # 2026-11-24), more than the quick budget: quick runs do 120 cases, the
+    # full coverage (116/116 blocks) is shown by --full runs (600 cases).
     Spec("Pathing_FollowRightWall", 0x004a4050, "thiscall", [walk_settler, scratch(0)], presets=route_wall,
-         max_cases=600,
+         max_cases=600, quick_cases=120,
          exempt_blocks=(0x4a4422, 0x4a4438, 0x4a4546, 0x4a4550, 0x4a476d, 0x4a4777, 0x4a4781),
          max_instructions=300_000_000),  # walks of up to 10000 rounds in the debug build
     Spec("Pathing_PlanLine", 0x004a3ab0, "thiscall", [walk_settler, scratch(0)], presets=route_plan, max_cases=300,
@@ -7465,7 +7501,11 @@ SPECS += [
          globals=soldier_globals, callees=SOLDIER_PROBES, ignore_bytes=tuple(MAP_EFFECTS + s * 0x4c + p
                                                                           for s in range(1, 40)
                                                                           for p in EFFECT_PADDING),
-         max_cases=1500, exempt_blocks=(0x50fde8,), max_instructions=1_000_000),
+         max_cases=1500, exempt_blocks=(0x50fde8,), max_instructions=1_000_000,
+         # Full coverage takes 1072 cases (52 s alone in Release, 2026-11-24;
+         # over the 60 s budget when other workers share the machine):
+         # quick runs do 600 cases, --full runs (1500) cover all 294 blocks.
+         quick_cases=600),
 ]
 
 
@@ -9698,7 +9738,12 @@ SPECS += [
     # draws each left 5..7 rare blocks uncovered, disjoint between them.
     Spec("CGameData_UpdateSettlers", 0x004e9670, "thiscall", [], presets=update_settlers_world,
          globals=update_settlers_globals, callees=US_PROBES, case_scale=12, cover_until=0x004f926d,
-         exempt_blocks=US_EXEMPT),
+         exempt_blocks=US_EXEMPT,
+         # Full coverage takes 22784 cases (1346 s alone in Release,
+         # 2026-11-24): quick runs do 600 cases (about 36 s), --full runs
+         # (24000) cover all 2236 blocks; the in-process tests and the
+         # whole-game replays are its main evidence.
+         quick_cases=600),
 ]
 
 
@@ -10338,7 +10383,11 @@ SPECS += [
          # start in the function list; the jump tables follow at 0x53b850.
          cover_until=0x0053b850,
          # About 45 command ids and message types share the cases.
-         case_scale=16),
+         case_scale=16,
+         # Full coverage takes 24233 cases (1025 s alone in Release,
+         # 2026-11-24): quick runs do 900 cases (about 38 s), --full runs
+         # (32000) cover all 985 blocks.
+         quick_cases=900),
 ]
 
 
