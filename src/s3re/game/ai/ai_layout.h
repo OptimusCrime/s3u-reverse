@@ -539,6 +539,32 @@ struct AiVector {
 };
 static_assert(sizeof(AiVector) == 0x10);
 
+// ---------------------------------------------------------------- command sender
+// g_aiCommandSender (0x7e5de8; our name, no RTTI): the thiscall `this` of
+// the military AI's command senders 0x590990..0x590c80 (ai_commands.cpp).
+// They build each command in `message` and push it from there, so bytes a
+// sender doesn't write keep the previous command's values (deterministic).
+struct AiCommandSender {
+    std::uint8_t battle_spells[4][3];  // 0x00 per race the spell of battle-spell slot k (0x590870 fills it)
+    std::uint8_t message[12];          // 0x0c the command being sent (0x21, id, size, ...)
+};
+static_assert(offsetof(AiCommandSender, message) == 0x0c);
+static_assert(sizeof(AiCommandSender) == 0x18);
+
+// ---------------------------------------------------------------- wrapping position
+// AI::WrappedPos (our name; 0x597070..0x597300, ai_wrapped_pos.cpp): a
+// position on a width x height grid that wraps at the edges, the cursor of
+// the computer players' searches around a tile.
+struct WrappedPos {
+    std::int16_t x;        // +0x0
+    std::int16_t y;        // +0x2
+    std::uint16_t width;   // +0x4
+    std::uint16_t height;  // +0x6
+    std::uint32_t unk08;   // +0x8 cleared by SetPosition
+    std::uint32_t unk0c;   // +0xc cleared by SetPosition
+};
+static_assert(sizeof(WrappedPos) == 16);
+
 // ---------------------------------------------------------------- tagged record
 // A BLACK_BOARD_AGENT's start: AI_SetWord4 (0x55ca60) stores its kind at +4
 // (the base class adds no fields; its vtable is stored by the factory

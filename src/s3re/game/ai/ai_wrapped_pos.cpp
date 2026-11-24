@@ -39,20 +39,6 @@
 
 namespace s3re::game {
 
-namespace ai {
-
-struct WrappedPos {
-    std::int16_t x;        // +0x0
-    std::int16_t y;        // +0x2
-    std::uint16_t width;   // +0x4
-    std::uint16_t height;  // +0x6
-    std::uint32_t unk08;   // +0x8 cleared by SetPosition
-    std::uint32_t unk0c;   // +0xc cleared by SetPosition
-};
-static_assert(sizeof(WrappedPos) == 16);
-
-}  // namespace ai
-
 using namespace ai;
 
 namespace {

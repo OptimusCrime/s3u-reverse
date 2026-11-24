@@ -1302,3 +1302,338 @@ SPECS += [
     Spec("AI_AreaPopulation", 0x0059dcc0, "fastcall", [scratch(1)], presets=snapshot_world,
          globals=snapshot_globals, max_cases=600),
 ]
+
+
+# -- computer players A2, session 52: building, land and army queries --------
+# (ai_building_queries.cpp, ai_land_queries.cpp, ai_army.cpp)
+
+AI_LAND_EVALUATION = 0x007E3134  # g_aiLandEvaluation (CEvaLand*)
+MILITARY_AND_OTHER_TYPES = (15, 16, 18, 17, 14, 19, 1, 7)
+
+
+def sites_of_type(rng, pool, args):
+    """count_buildings_world plus the player (scratch 0, byte), type
+    (scratch 2, byte) and area (scratch 1, word; often 0) asked for."""
+    fields = count_buildings_world(rng, pool, args)
+    area = 0 if rng.random() < 0.4 else rng.randrange(4)
+    return fields + [(SCRATCH, rng.randrange(3), 1), (SCRATCH + 2 * SCRATCH_SLOT_BYTES, rng.randrange(3), 1),
+                     (SCRATCH + SCRATCH_SLOT_BYTES, area, 2)]
+
+
+def buildings_in_areas(rng, pool, args):
+    """Up to 30 building records (high-water mark, sometimes -1) with owners
+    0..2, military and other types, buildup 0 or not and door tiles in
+    areas 0..3."""
+    count = rng.randrange(30)
+    fields = [(BUILDING_COUNT, 0xFFFFFFFF if rng.random() < 0.03 else count, 4)]
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        x, y = rng.randrange(400), rng.randrange(400)
+        fields += [(record, 0xFF if rng.random() < 0.15 else rng.randrange(3), 1),
+                   (record + 6, rng.choice(MILITARY_AND_OTHER_TYPES), 1),
+                   (record + 0x21, 0 if rng.random() < 0.6 else rng.randrange(1, 256), 1),
+                   (record + 0xA, x, 2), (record + 0xC, y, 2),
+                   (TILES + (x * 0x300 + y) * 24 + 0x14, rng.randrange(4), 2)]
+    return fields
+
+
+def mine_record(rng, pool, args):
+    """A building id (scratch 0, word) whose worker and dig count are
+    sometimes 0."""
+    building = rng.randrange(4000)
+    record = BUILDINGS + building * BUILDING_BYTES
+    fields = [(SCRATCH, building, 2), (record + 0x1A, 0 if rng.random() < 0.2 else rng.randrange(1, 40), 1)]
+    if rng.random() < 0.2:
+        fields.append((record + 8, 0, 2))
+    return fields
+
+
+def resource_kind(rng, pool):
+    """A resource kind (high nibble values), sometimes with noise above."""
+    return (rng.randrange(16) << 4) | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def resource_tile(rng, pool, args):
+    """The tile (x, y) holds the asked kind half of the time."""
+    x, y, kind = args[0] & 0xFFFF, args[1] & 0xFFFF, args[2] & 0xFFFF
+    if x < 0x300 and y < 0x300 and rng.random() < 0.5:
+        return [(TILES + (x * 0x300 + y) * 24 + 0x11, (kind & 0xF0) | rng.randrange(16), 1)]
+    return []
+
+
+def resource_ring_tiles(rng, pool, args):
+    """The tiles around (x, y) (wrapped on a 64 x 64 corner of the map) hold
+    the asked kind half of the time."""
+    x, y, kind = args[0] & 0xFFFF, args[1] & 0xFFFF, args[2] & 0xFFFF
+    fields = []
+    for dx in range(-3, 4):
+        for dy in range(-3, 4):
+            tx, ty = (x + dx) % 64, (y + dy) % 64
+            if rng.random() < 0.5:
+                fields.append((TILES + (tx * 0x300 + ty) * 24 + 0x11, (kind & 0xF0) | rng.randrange(16), 1))
+    return fields
+
+
+def ai_small_map_world(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, rng.randrange(1, 60), 2),
+            (AI_MAP_SIZES + 2, rng.randrange(1, 60), 2)]
+
+
+FARM_LAND = SCRATCH + 3 * SCRATCH_SLOT_BYTES   # the CEvaLand
+FARM_CELLS = SCRATCH + 4 * SCRATCH_SLOT_BYTES  # its 8 x 8 grid cells (0xc4 bytes each)
+
+
+def farm_land(rng, pool, args):
+    """player (scratch 0, byte) with race 0..4 (sometimes anything), x / y
+    (scratch 1 / 2, words), and the CEvaLand's 8 x 8 grid with edge values
+    of the three land shares."""
+    player = rng.randrange(20)
+    race = rng.randrange(5) if rng.random() < 0.9 else rng.getrandbits(32)
+    fields = [(SCRATCH, player, 1), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(100), 2),
+              (SCRATCH + 2 * SCRATCH_SLOT_BYTES, rng.randrange(100), 2), (AI_PLAYERS + player * 0x148 + 4, race, 4),
+              (FARM_LAND + 0x140, 8, 4), (FARM_LAND + 0x144, 8, 4), (FARM_LAND + 0x158, WORLD_BASE + FARM_CELLS, 4)]
+    edges = (9, 10, 11, 39, 40, 41, 0, 255)
+    for cell in range(64):
+        base = FARM_CELLS + cell * 0xC4
+        for offset in (0x1E, 0x1F, 0x0D):
+            fields.append((base + offset, rng.choice(edges) if rng.random() < 0.7 else rng.getrandbits(8), 1))
+    return fields
+
+
+def farm_land_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_LAND_EVALUATION, WORLD_BASE + FARM_LAND, 4)]
+
+
+def sparse_index(rng, pool, args):
+    """The index (scratch 0): in the table, at its end or negative."""
+    roll = rng.random()
+    if roll < 0.2:
+        index = rng.randint(19990, 20010)
+    elif roll < 0.3:
+        index = -rng.randrange(1, 2000)
+    elif roll < 0.35:
+        index = rng.getrandbits(32)
+    else:
+        index = rng.randrange(20000)
+    return [(SCRATCH, index & 0xFFFFFFFF, 4)]
+
+
+def fighting_group(rng, pool, args):
+    """The unit group's length (0..100, sometimes 0) and members whose job
+    is 142 (fighting) with a random share."""
+    index = args[0] * 10 + args[1]
+    length = 0 if rng.random() < 0.1 else rng.randint(1, 100 if rng.random() < 0.3 else 10)
+    share = rng.random()
+    fields = [(0x11940BC + 4 * index, length, 4)]
+    for i in range(length):
+        settler = rng.randrange(1, 32000)
+        fields += [(0x118A47C + index * 200 + 2 * i, settler, 2),
+                   (SETTLERS + settler * SETTLER_BYTES + 0xE, 142 if rng.random() < share else rng.randrange(300), 2)]
+    return fields
+
+
+def fighting_percent(rng, pool):
+    return rng.randrange(101) if rng.random() < 0.9 else rng.getrandbits(32)
+
+
+HUNTERS = SCRATCH + 5 * SCRATCH_SLOT_BYTES  # 24 hunter entries {hunter, target}
+HUNTER_SLOTS = 24
+
+
+def hunter_entries(rng, pool, args):
+    """24 entries {hunter, target} in scratch 5 (targets often 0, hunters
+    sometimes >= 32000); each target stands on a tile of an area 0..7 owned
+    by the player, another one or none."""
+    player = args[0]
+    fields = []
+    owners = {}
+    for k in range(HUNTER_SLOTS):
+        hunter = rng.randrange(32000) if rng.random() < 0.97 else rng.randrange(32000, 40000)
+        target = 0 if rng.random() < 0.2 else rng.randrange(1, 32000)
+        fields += [(HUNTERS + 8 * k, hunter, 4), (HUNTERS + 8 * k + 4, target, 4)]
+        if target:
+            x, y, area = rng.randrange(0x300), rng.randrange(0x300), rng.randrange(8)
+            owners[area] = 0xFF if rng.random() < 0.1 else rng.choice((player, player, (player + 1) % 20))
+            fields += [(SETTLERS + target * SETTLER_BYTES + 4, x, 2), (SETTLERS + target * SETTLER_BYTES + 6, y, 2),
+                       (TILES + (x * 0x300 + y) * 24 + 0x14, area, 2)]
+    return fields + [(AI_AREAS + area * 0x2E0, owner, 1) for area, owner in owners.items()]
+
+
+def hunter_vector(rng, pool, args):
+    """g_aiMapWorld and the player's vector: begin at the entries, 0..24 of
+    them in use."""
+    vector = AI_HUNTER_VECTORS + 16 * args[0]
+    count = 0 if rng.random() < 0.1 else rng.randint(1, HUNTER_SLOTS)
+    return [(AI_MAP_WORLD, WORLD_BASE, 4), (vector, WORLD_BASE + HUNTERS, 4),
+            (vector + 4, WORLD_BASE + HUNTERS + 8 * count, 4)]
+
+
+SPECS += [
+    Spec("AI_CountSitesOfType", 0x0059db30, "fastcall", [scratch(0), scratch(2), scratch(1)], presets=sites_of_type,
+         globals=ai_world_400, max_cases=600),
+    Spec("AI_FirstBuildingInArea", 0x0058b410, "stdcall", [with_noise(below(3)), with_noise(below(4))],
+         presets=buildings_in_areas, globals=ai_map_world, max_cases=1000),
+    Spec("AI_FirstMilitaryBuildingInArea", 0x0058b380, "stdcall", [with_noise(below(3)), with_noise(below(4))],
+         presets=buildings_in_areas, globals=ai_map_world, max_cases=1000),
+    Spec("AI_MineSuccessPercent", 0x00573810, "fastcall", [scratch(0)], presets=mine_record, globals=ai_world),
+    # AX only: off the map the callees keep the upper half of their caller's
+    # EAX (the only caller, 0x571fa0, returns AX of the sum).
+    Spec("AI_ResourceAmountOfKindAt", 0x00571f60, "fastcall",
+         [with_noise(between(0, 0x2FF)), with_noise(between(0, 0x2FF)), resource_kind], eax_mask=0xFFFF,
+         presets=resource_tile, globals=ai_query_map),
+    # AX only: the callers compare AX (0x5760d0).
+    Spec("AI_ResourceAmountNear", 0x00571fa0, "fastcall",
+         [with_noise(between(0, 70)), with_noise(between(0, 70)), resource_kind], eax_mask=0xFFFF,
+         presets=resource_ring_tiles, globals=ai_small_map_world, max_cases=600),
+    Spec("AI_IsFarmLand", 0x0059a720, "fastcall", [scratch(0), scratch(1), scratch(2)], presets=farm_land,
+         globals=farm_land_globals),
+    Spec("AI_NextSparseMapOffset", 0x0058a250, "fastcall", [scratch(0), anything, scratch(1), scratch(2)],
+         presets=sparse_index, globals=ai_map_world),
+    Spec("AI_Army_GroupFightingShareAbove", 0x00593040, "thiscall", [below(20), below(10), fighting_percent],
+         presets=fighting_group, globals=ai_map_world, max_cases=1000),
+    # The bitset's _Xran (0x596570) throws std::out_of_range; probed, since
+    # the thrown object lies in its own frame (a stack address that differs
+    # between the two runs). Both versions go on as if it returned.
+    Spec("AI_Army_PruneHunters", 0x005934a0, "thiscall", [below(20)], presets=hunter_entries,
+         globals=hunter_vector, callees={0x00596570: (0, "thiscall", "probe")}, max_cases=1000),
+]
+
+
+# -- computer players A4, session 52: command senders (ai_commands.cpp) -------
+#
+# GameSettings::IsHost (0x4318a0) and MessageQueue::Push (0x4309c0) are
+# probed: IsHost takes the settings object's critical section (Win32 API
+# calls of the lock wrappers) and Push its queue's; the senders' own work is
+# building the message. Push is recorded with the queue (ECX), the dword
+# count, the signal flag and the pushed bytes. The economy senders build the
+# message in an uninitialized stack buffer: the bytes they don't write (the
+# `gaps` of each spec, always header byte 3) are the original's stack
+# leftovers and 0 in ours (ai_commands.cpp: ExecuteCommands doesn't read
+# them for these commands), so the record leaves them out, and it leaves out
+# the buffer address (a stack address that differs between the two runs).
+# The military senders push from g_aiCommandSender's buffer, recorded with
+# its address. AI::CountEnemyBowmenOnOwnLandNear (0x58a610, not
+# reimplemented yet; a search over the enemy bowmen lists) is probed for
+# SendMoveGroup.
+
+AI_COMMAND_SENDER = 0x007E5DE8   # g_aiCommandSender (battle spells, message at +0xc)
+AI_MILITARY_QUEUE = 0x007E37C8   # g_aiMilitaryQueue
+AI_GROUP_ORDERS = 0x007E37D0     # g_aiGroupOrders
+COMMAND_PLAYER = SCRATCH + 4 * SCRATCH_SLOT_BYTES  # a ComputerPlayer (message_queue at +0x760)
+
+
+def host_flag(h):
+    """IsHost's EAX: the low byte 0 a third of the time."""
+    value = h & 0xFFFFFFFF
+    return value & 0xFFFFFF00 if h % 3 == 0 else value | 1
+
+
+def pushed_bytes(gaps, with_address):
+    """A Push record: queue, count, signal and the message bytes (count * 4
+    of them) without the bytes in `gaps`."""
+    def record(machine, ecx, args):
+        count = args[1]
+        data = bytearray(machine.guest_read(args[0], 4 * min(count, 3)))
+        for gap in gaps:
+            if gap < len(data):
+                data[gap] = 0
+        return (count, args[2], bytes(data)) + ((args[0],) if with_address else ())
+    return record
+
+
+def command_callees(gaps=(), with_address=False):
+    return {0x004318A0: (0, "thiscall", host_flag),
+            0x004309C0: (3, "thiscall", "probe", None, pushed_bytes(gaps, with_address)),
+            0x0058A610: (4, "thiscall", lambda h: (h % 3) - 1)}
+
+
+def command_globals(rng, pool, args):
+    return [(AI_PLAYER, WORLD_BASE + COMMAND_PLAYER, 4), (AI_MILITARY_QUEUE, rng.getrandbits(32), 4),
+            (AI_MAP_WORLD, WORLD_BASE, 4), (AI_WORLD, WORLD_BASE, 4)]
+
+
+def work_area_world(rng, pool, args):
+    """SetWorkArea's search: the building (scratch 0) with its door in
+    areas 0..3 (sometimes 7, which no tile has: the whole search runs), the
+    tile (scratch 2 / 3) and the tiles around it in areas 0..3, small map
+    offsets first."""
+    size = rng.randint(40, 70)
+    building = rng.randrange(4000)
+    x, y = rng.randrange(size + 3), rng.randrange(size + 3)
+    door_x, door_y = rng.randrange(size), rng.randrange(size)
+    fields = [(MAP_SIZE, size, 4), (SCRATCH, building, 2), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(256), 1),
+              (SCRATCH + 2 * SCRATCH_SLOT_BYTES, x, 2), (SCRATCH + 3 * SCRATCH_SLOT_BYTES, y, 2),
+              (BUILDINGS + building * BUILDING_BYTES + 0xA, door_x, 2),
+              (BUILDINGS + building * BUILDING_BYTES + 0xC, door_y, 2),
+              (TILES + (door_x * 0x300 + door_y) * 24 + 0x14, 7 if rng.random() < 0.1 else rng.randrange(4), 2)]
+    for tx in range(max(0, x - 12), min(size, x + 13)):
+        for ty in range(max(0, y - 12), min(size, y + 13)):
+            if (tx, ty) != (door_x, door_y):
+                fields.append((TILES + (tx * 0x300 + ty) * 24 + 0x14, rng.randrange(4), 2))
+    for i in range(300):
+        fields += [(0x110A588 + 16 * i, rng.randint(-12, 12) & 0xFFFFFFFF, 4),
+                   (0x110A58C + 16 * i, rng.randint(-12, 12) & 0xFFFFFFFF, 4)]
+    return fields
+
+
+def work_area_globals(rng, pool, args):
+    return command_globals(rng, pool, args) + [(AI_MAP_SIZES, 70, 2), (AI_MAP_SIZES + 2, 70, 2)]
+
+
+def move_group_world(rng, pool, args):
+    """The group's length (often 0) in the world."""
+    index = args[0] * 10 + args[1]
+    return [(0x11940BC + 4 * index, 0 if rng.random() < 0.25 else rng.randrange(1, 5), 4)]
+
+
+def move_group_globals(rng, pool, args):
+    """command_globals plus the group's target settler, steal flag, target
+    building and defending flag, each often 0."""
+    index = args[0] * 10 + args[1]
+    pick = lambda bits: 0 if rng.random() < 0.5 else rng.getrandbits(bits) or 1  # noqa: E731
+    return command_globals(rng, pool, args) + [
+        (AI_GROUP_ORDERS + 0x3E8 + 6 * index + 4, pick(16), 2), (AI_GROUP_ORDERS + 0x320 + index, pick(8), 1),
+        (AI_CENSUS + 4 + 2 * index, pick(16), 2), (AI_CENSUS + 0x194 + index, pick(8), 1)]
+
+
+LONG_GAPS = (3, 9, 10, 11)
+
+SPECS += [
+    Spec("AI_SendSetWorkArea", 0x0058e220, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         presets=work_area_world, globals=work_area_globals, callees=command_callees((3, 11)), max_cases=400),
+    Spec("AI_SendDestroyBuilding", 0x0058e5c0, "fastcall", [scratch(0), scratch(1)], globals=command_globals,
+         callees=command_callees((3, 7))),
+    Spec("AI_SendChangeGarrison", 0x0058e630, "fastcall", [anything, anything, anything], globals=command_globals,
+         callees=command_callees((3,))),
+    Spec("AI_SendPlaceBuilding", 0x0058e6a0, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         globals=command_globals, callees=command_callees((3, 11))),
+    Spec("AI_SendChangeToolSettings", 0x0058e740, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    Spec("AI_SendRaiseGoodsPriority", 0x0058e7d0, "fastcall", [scratch(0), scratch(1), scratch(2)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    Spec("AI_SendPromoteSoldiers", 0x0058e850, "fastcall", [scratch(0), scratch(1)], globals=command_globals,
+         callees=command_callees((3, 6, 7))),
+    Spec("AI_SendClearGoodsSetting", 0x0058e8b0, "fastcall", [scratch(0), scratch(1), scratch(2)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    Spec("AI_SendSetAreaCondition", 0x0058ea30, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    Spec("AI_SendSetBuildingWorking", 0x0058eac0, "fastcall", [scratch(0), scratch(1), scratch(2)],
+         globals=command_globals, callees=command_callees((3,))),
+    Spec("AI_SendToolSetting10", 0x0058eb40, "fastcall", [scratch(0), scratch(1), scratch(2)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    Spec("AI_SendChangeTransportOrder", 0x0058ebc0, "fastcall", [scratch(0), scratch(1), scratch(2), scratch(3)],
+         globals=command_globals, callees=command_callees(LONG_GAPS)),
+    # The military senders (`this` = the world's first bytes as the sender).
+    Spec("AI_SendCastSpell", 0x00590990, "thiscall", [anything, below(32000), below(12, 0.1), anything, anything],
+         globals=command_globals, callees=command_callees(with_address=True)),
+    Spec("AI_SendMoveSettler", 0x00590a30, "thiscall", [anything, anything, anything, anything],
+         globals=command_globals, callees=command_callees(with_address=True)),
+    Spec("AI_SendPatrolSettler", 0x00590af0, "thiscall", [anything, anything, anything, anything],
+         globals=command_globals, callees=command_callees(with_address=True)),
+    Spec("AI_QueueChangeGarrison", 0x00590bb0, "thiscall", [anything, anything, anything],
+         globals=command_globals, callees=command_callees(with_address=True)),
+    Spec("AI_SendConvertCarriers", 0x00590c10, "thiscall", [anything, anything, anything, anything, anything],
+         globals=command_globals, callees=command_callees(with_address=True)),
+    Spec("AI_SendMoveGroup", 0x00590c80, "thiscall", [below(20), below(10), anything, anything],
+         presets=move_group_world, globals=move_group_globals, callees=command_callees(with_address=True)),
+]
