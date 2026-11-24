@@ -1180,3 +1180,178 @@ SPECS += [
     Spec("CGameData_AddPlayerTowns", 0x005074b0, "thiscall", [], presets=add_towns_state,
          callees=ADD_TOWNS_PROBES, max_cases=600, exempt_blocks=(0x507d72, 0x50778e, 0x5079cb, 0x5075cc)),
 ]
+
+
+# -- load_map.cpp: CGameData::LoadMap (session 54) ---------------------------------
+# The map file is modelled in the world: the presets build chunks 6, 7, 8, 9,
+# 10 and 0x40 at LM_CHUNKS (one slot per type) and a presence mask; the
+# probed GetChunk returns a chunk's slot or 0, ReleaseChunk is recorded.
+# Every other callee is probed (verified on its own; PlayerSetup is the
+# original UI code): calls and arguments are compared. The landscape is
+# 0..6 tiles square; building, settler and pile records use slots 0..5 (the
+# slot table, at scratch slot 0, maps them to players or 0xff), tower
+# garrisons of both modes, catapults and ships, pile records with and
+# without a kind. g_buildingLayouts (filled at runtime, zero in the image)
+# gets small layouts for the races and types used. The missions LoadMap
+# fixes up (49, 50, 53, 59, 61, 70) get the tiles, offsets and buildings
+# their fix-ups look at. A few percent of the cases fault in both (random
+# record fields past the modelled area); they count as invalid input.
+LM_CHUNKS = 0x1560000
+LM_SLOTS = {6: 0x0, 7: 0x1000, 8: 0x2000, 9: 0x3000, 10: 0x4000, 0x40: 0x5000}
+LM_MASK = LM_CHUNKS + 0x6000
+LM_SLOT_TABLE = SCRATCH  # scratch slot 0: 256 dwords
+LM_BUILDING_TYPES = (1, 5, 15, 16, 18, 30)
+LM_LAYOUTS = 0x6aa170
+LM_MISSIONS = (0, 0, 49, 50, 51, 53, 59, 61, 70, 70, 71)
+LM_FIRE_POINTS = ((313, 64), (351, 113), (392, 152), (535, 277))
+LM_AMAZON_TOWERS = ((266, 533, 16), (276, 524, 16), (293, 512, 16), (312, 511, 16), (323, 510, 16),
+                    (342, 515, 15), (360, 528, 16), (377, 532, 16), (404, 555, 16), (372, 544, 16),
+                    (365, 586, 16), (348, 594, 16), (326, 596, 16), (305, 591, 16), (297, 578, 16),
+                    (331, 570, 15), (429, 542, 16))
+
+
+def _lm_get_chunk(machine, ecx, args, h):
+    chunk_type = args[0] & 0xFFFF
+    mask = struct.unpack("<I", machine.guest_read(WORLD_BASE + LM_MASK, 4))[0]
+    if chunk_type not in LM_SLOTS or not mask & (1 << list(LM_SLOTS).index(chunk_type)):
+        return 0
+    return WORLD_BASE + LM_CHUNKS + LM_SLOTS[chunk_type]
+
+
+def _lm_created_settler(machine, ecx, args, h):
+    """CreateSettler: a settler number (sometimes 0) whose record has a
+    position on the small map and an owner (LoadMap reads them back)."""
+    if h % 16 == 0:
+        return 0
+    settler = 1 + h % 0x7cfe
+    record = SETTLERS + settler * SETTLER_BYTES
+    _write(machine, record, (h >> 20) % 24 if h & 0x10000 else 0xFF, 1)
+    _write(machine, record + 4, (h >> 24) % 8, 2)
+    _write(machine, record + 6, (h >> 32) % 8, 2)
+    return settler
+
+
+LOAD_MAP_PROBES = {
+    0x004a60f0: (2, "thiscall", "probe", _lm_get_chunk),                  # CMapFile::GetChunk
+    0x004a6310: (2, "thiscall", "probe"),                                # CMapFile::ReleaseChunk
+    0x004351e0: (1, "thiscall", lambda h: 0x10000000 + (h & 0xFFFFF0)),  # GameSettings::PlayerSetup
+    0x0049fec0: (0, "thiscall", lambda h: h % 20),                       # GamePlayerSetup::Colour
+    0x004dbc50: (1, "thiscall", "probe"),                                # BuildingDone
+    0x004dd280: (4, "thiscall", lambda h: 1 + h % 3998),                 # AddBuildingSite
+    0x004dfa60: (0, "thiscall", "probe"),                                # UnblockCastleTiles
+    0x00504420: (5, "thiscall", "probe"),                                # CreatePile
+    0x005074b0: (0, "thiscall", "probe"),                                # AddPlayerTowns
+    0x0050c9e0: (4, "thiscall", "probe", _lm_created_settler),           # CreateSettler
+    0x0050ccb0: (1, "thiscall", "probe"),                                # EnterBuildingSlot
+    0x0050dc10: (5, "thiscall", "probe"),                                # SpawnSettlersOnWater
+    0x0050dd20: (4, "thiscall", "probe"),                                # CreateSevenTileUnit
+    0x00519540: (0, "thiscall", "probe"),                                # PrepareLoadedTerrain
+    0x0051a580: (0, "thiscall", "probe"),                                # BuildRegionsAndAreas
+}
+
+
+def _lm_slot(rng):
+    return rng.choice([0, 1, 2, 3, 4, 5, 5])
+
+
+def _lm_records(fields, chunk_type, count, record_bytes, make):
+    base = LM_CHUNKS + LM_SLOTS[chunk_type]
+    fields.append((base + 8, count, 4))
+    for i in range(count):
+        for k, value in enumerate(make(i)):
+            fields.append((base + 12 + i * record_bytes + k, value & 0xFF, 1))
+
+
+def load_map_state(rng, pool, args):
+    fields = []
+    mask = 0
+    for bit in range(6):
+        if rng.random() < (0.6 if bit == 2 else 0.9 if bit < 4 else 0.5):  # bit 2: chunk 8 (else AddPlayerTowns)
+            mask |= 1 << bit
+    fields.append((LM_MASK, mask, 4))
+    # The slot table: slots 0..5 to players 0..19 or nobody; the rest nobody.
+    for slot in range(256):
+        value = 0xFF
+        if slot < 6 and rng.random() < 0.6:
+            value = rng.choice([rng.randrange(20), rng.randrange(20), 0x1FF])
+        fields.append((LM_SLOT_TABLE + slot * 4, value, 4))
+    for p in range(6):
+        fields.append((PLAYER_RACE + p * PLAYER_RECORD_BYTES, rng.randrange(4), 4))
+    # Settler 0 (what a failed CreateSettler returns): its tile on the map.
+    fields += [(SETTLERS + 4, rng.randrange(8), 2), (SETTLERS + 6, rng.randrange(8), 2)]
+    # Chunk 6: a 0..6 tile landscape.
+    size = rng.choice([0, 1, 2, 3, 4, 5, 6, 6])
+    base6 = LM_CHUNKS + LM_SLOTS[6]
+    fields.append((base6 + 8, size, 4))
+    for i in range(size * size):
+        record = (rng.getrandbits(8), rng.choice([rng.randrange(8), rng.randrange(8), 8, rng.getrandbits(8)]),
+                  rng.choice([0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, rng.getrandbits(8)]),
+                  rng.choice([0, 1, 2, 3, 4, 5, 0xFF, 0xFF]), rng.getrandbits(8), rng.getrandbits(8))
+        for k, value in enumerate(record):
+            fields.append((base6 + 12 + i * 6 + k, value, 1))
+
+    # Chunk 8: buildings, towers with garrisons.
+    def building(i):
+        x, y = rng.randrange(8), rng.randrange(8)
+        mode = rng.choice([0, 1, 1, 2])
+        counts = [rng.choice([0, 0x11, 0x21, 0x12, rng.getrandbits(8)]) for _ in range(5)]
+        return (_lm_slot(rng), rng.choice(LM_BUILDING_TYPES + (15, 16, 18)), x, x >> 8, y, y >> 8, mode, *counts)
+    _lm_records(fields, 8, rng.randrange(6), 12, building)
+
+    # Chunk 7: settlers, catapults (41) and ships (43, 44) among them.
+    def settler(i):
+        x, y = rng.randrange(8), rng.randrange(8)
+        return (_lm_slot(rng), rng.choice([0, 1, 5, 12, 41, 42, 43, 44, 45, rng.getrandbits(8)]), x, 0, y, 0)
+    _lm_records(fields, 7, rng.randrange(8), 6, settler)
+
+    # Chunk 9: piles, with and without a kind; their tiles' areas and piles
+    # inside the emulated world (the map's tiles get area 0 and pile 0).
+    def pile(i):
+        x, y = rng.randrange(8), rng.randrange(8)
+        fields.append((tile(x, y) + 0x14, rng.randrange(AREA_LIMIT), 2))
+        fields.append((tile(x, y) + 0x2, rng.randrange(32000), 2))
+        fields.append((tile(x, y) + 0xb, rng.choice([0, 0, 1]), 1))
+        return (x, 0, y, 0, rng.randrange(40), rng.choice([0, 0, 1, 8]), rng.choice([0, 0, 0xfd, 0xff]), 0)
+    _lm_records(fields, 9, rng.randrange(8), 8, pile)
+
+    # Chunk 10's protect flag (+0x44).
+    fields.append((LM_CHUNKS + LM_SLOTS[10] + 8 + 0x44, rng.choice([0, 0, 1, rng.getrandbits(8)]), 1))
+    # Mission 59: the offset entries and trees near the points.
+    fields += spiral_offsets(21)
+    for (px, py) in LM_FIRE_POINTS:
+        for (dx, dy) in SPIRAL[:21]:
+            fields.append((tile(px + dx, py + dy) + 7, rng.choice([0x43, 0x44, 0x51, 0x52, 0x10, 0x60]), 1))
+    # Mission 70: buildings at the tower positions, of either type or none.
+    for (x, y, kind) in LM_AMAZON_TOWERS:
+        number = rng.choice([0, rng.randrange(1, 4000)])
+        fields += [(tile(x, y) + 0x2, number, 2), (tile(x, y) + 0xa, rng.choice([0x20, 0x21, 0, 0x40]), 1)]
+        if number:
+            fields.append((BUILDINGS + number * BUILDING_BYTES + 6, rng.choice([kind, kind, 15, 16, 18]), 1))
+    return fields
+
+
+def _lm_layout(rng):
+    words = [rng.choice([0, 1, 0x80000001]) for _ in range(rng.randrange(3))] + [0x80000000]
+    for _ in range(rng.randrange(4)):
+        words += [rng.randrange(-2, 3) & 0xFFFFFFFF, rng.randrange(-2, 3) & 0xFFFFFFFF]
+    words.append(0x80000001)
+    for _ in range(rng.randrange(4)):
+        if rng.random() < 0.3:
+            words.append(0x80000002)
+        words += [rng.randrange(-2, 3) & 0xFFFFFFFF, rng.randrange(-2, 3) & 0xFFFFFFFF]
+    words.append(0x80000003)
+    return words
+
+
+def load_map_globals(rng, pool, args):
+    fields = [(CAMPAIGN_MISSION, rng.choice(LM_MISSIONS), 4)]
+    for race in range(4):
+        for building_type in sorted(set(LM_BUILDING_TYPES) | {15, 16, 18}):
+            address = LM_LAYOUTS + (race * 57 + building_type) * 2400
+            fields += [(address + 4 * k, word, 4) for k, word in enumerate(_lm_layout(rng))]
+    return fields
+
+SPECS += [
+    Spec("CGameData_LoadMap", 0x004fd540, "thiscall", [anything, lambda rng, pool: WORLD_BASE + LM_SLOT_TABLE],
+         eax_mask=0, presets=load_map_state, globals=load_map_globals, callees=LOAD_MAP_PROBES, max_cases=600),
+]
