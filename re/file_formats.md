@@ -4,8 +4,10 @@ Findings of the naming pass of session 50 (2026-11-24), read from the code
 (dumpbin disassembly, Ghidra) and checked against the game's own files: a
 parser written from this recomputed the stored checksums of
 `Map\MULTI\384-2-Lakes.map` and `Save\slot 1.sav` and decoded sensible
-chunks. Not yet reimplemented: treat the details as "read from the code"
-until a verified loader confirms them. Function names are in
+chunks. The container layer (stream, chunk scan, decoding, chunk cache) is
+reimplemented and verified since session 51 (see "Verified container
+(session 51)" below); the chunk contents are still "read from the code"
+until verified loaders confirm them. Function names are in
 `re/functions.csv` (notes start with "Named (session 50, ...)").
 
 
@@ -50,6 +52,47 @@ Maps (`.map`, file type 10) and savegames (`.sav`/`.mps`, type 11) use the same 
   memory-only chunk into the cache, which is how random maps work.
 - Open modes: 1 = read (OPEN_EXISTING, share read), 2 = write
   (CREATE_ALWAYS; the game only ever writes type 11), 4 = skip the checksum check.
+
+## Verified container (session 51)
+
+`src/s3re/game/fileformats/` (map_file.cpp, map_file_stream.cpp) replaces
+CMapFileStream (0x4a55e0..0x4a5a60) and CMapFile's GetChunk, ReleaseChunk,
+AddChunk, SetMemoryOnly, GetError and GetChecksum. The in-process test
+`MapFile_AllGameFiles` opens every file under `Settlers3Ultimate\Map\`
+(178, recursively) and `Save\` (3) read-only with the original Open and reads
+every distinct chunk key twice with the original and our GetChunk:
+
+- All 181 files have the file type 10 or 11 and a valid checksum (our
+  ChecksumStep over the dwords from offset 8; trailing bytes that don't fill
+  a dword are not checksummed). 4,651 distinct chunks, 395 MB decoded, none
+  cut short by the end of a file; original, ours and our own decoding of the
+  raw bytes (`DecodeChunkData`) agree byte for byte.
+- GetChunk finds the **first** chunk with the key. The decoding key starts at
+  the low byte of the type *argument* (the same as the stored key's, since
+  the keys match). A chunk header with a size below 8 would make the scan
+  step backwards or loop forever (size 0); no file of the game has one.
+- CMapFileStream (CMapFile + 8, 0x14 bytes): +0 a "rethrow" flag (every
+  caller passes 0 to the CMapFile constructor), +4 Win32::CFile (0xc bytes),
+  +0x10 the error code. Each member wraps its CFile call in
+  `catch (Win32::CHResult*)` (Open first `catch (Win32::CFileNotFound*)`,
+  error 2). Read/Write return -1 once an error is pending and don't touch
+  the file then; Seek and GetSize call the file even with an error pending;
+  GetSize returns -1 whenever an error is pending afterwards; Seek after a
+  caught error returns 0x4a59a8 (the catch continuation, EAX after the CRT's
+  _JumpToContinuation 0x61eb95).
+- The chunk cache's skip-list inserts draw node levels from the CRT rand()
+  (through g_skipListRandomBits 0x7e8e24 / g_skipListRandomBitsLeft
+  0x7a4030), so loading a file consumes CRT random numbers; the simulation
+  RNG is not involved.
+- CMapFile::Open (0x4a5c80, not yet replaced): a bad file type does not end
+  Open: it logs "LOAD: Invalid filetype", closes the stream (which clears
+  the error) and sets error E_INVALIDARG (0x80070057, through the folded
+  setter 0x4276a0, no throw), then still runs the checksum pass. The pass
+  reads 0x40000 bytes each time and checksums the bytes it expected. When
+  the file could not be opened, the reads fail and the file type and the
+  checksum come from uninitialized stack memory (a 256 KB buffer); the
+  result is an error either way, but which code stays depends on that
+  memory. A reimplementation of Open has to document this.
 
 ## Map chunks (CGameData::LoadMap 0x4fd540 and the menus)
 
