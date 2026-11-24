@@ -14,7 +14,7 @@ and Spec.quick_cases caps the slowest specs (a capped spec's incomplete
 coverage is noted, not a --require-coverage failure, in quick runs). --full
 runs every case without a budget (round ends, milestones).
 
-For every spec in tools/emutest/specs.py (or those whose name contains
+For every spec in tools/emutest/specs/ (or those whose name contains
 `filter`), runs N cases. Each case calls the original function from S3.EXE
 and our replacement from s3re.dll in the emulator (tools/emutest/emu.py) on
 the same arguments, registers and lazily-random world, and compares:
@@ -44,7 +44,7 @@ per worker plus the Spec.memory_mb extras, or S3RE_EMU_JOBS; workers run at
 below-normal priority). Each worker has its own emulator
 and resets it before every spec (emu.Emulator.reset), so the results don't
 depend on the number of workers or on the order; the output is printed in
-the order of specs.py either way. Each spec's run time is kept in
+the order of specs.SPECS either way. Each spec's run time is kept in
 build/emutest_times.json, and the slowest specs are started first.
 
 Needs a build (the DLL and its linker map s3re.map) and
@@ -501,7 +501,7 @@ def _worker_init(bin_dir: str) -> None:
 def _worker_run(task: tuple) -> tuple[int, int, dict, float, int]:
     """(self-test?, spec index, cases, seed, part, first case, end case) ->
     (index, part, result, seconds, peak memory). Specs hold lambdas, so
-    workers get indices into specs.py."""
+    workers get indices into specs.SPECS."""
     self_test, index, cases, seed, part, first, last, quick, budget = task
     spec = (specs.SELF_TEST if self_test else specs.SPECS)[index]
     started = time.time()
@@ -608,7 +608,7 @@ def main() -> int:
                              "parts gives the result of a whole run")
     parser.add_argument("--changed", action="store_true",
                         help="only the specs without a recorded pass for their current compiled "
-                             "code, specs.py entry and harness (see tools/emutest/changed.py); "
+                             "code, spec entry and harness (see tools/emutest/changed.py); "
                              "runs in quick mode unless --full")
     parser.add_argument("--since", metavar="REF",
                         help="select by changed source files since this commit instead "

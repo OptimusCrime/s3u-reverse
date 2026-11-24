@@ -7,7 +7,8 @@ unless a pass is recorded for its current
     normalized to symbol names (CodeFingerprints), so a header change that
     doesn't change the code (a new enum, a comment, moved lines) selects
     nothing, and a changed callee selects its callers' specs;
-  - specs.py fingerprint: its entry and the helpers it uses (spec_units);
+  - spec fingerprint: its entry and the helpers it uses (spec_units; the
+    specs/ parts read as one text, specs_source);
   - harness fingerprint: emu.py, tools/requirements.txt, the function lists
     in re/, and the case-running functions of run.py (RESULT_FUNCTIONS).
 Passes are recorded by run.py for every spec that ran with the standard
@@ -20,7 +21,7 @@ The older selection by source files (--since REF, or --changed
 --by-headers) is kept below: a spec is selected when
   - a source file that one of the objects behind its replacement was
     compiled from changed (the .cpp or any header it includes), or
-  - its definition in specs.py changed (the Spec(...) entry or any top-level
+  - its definition in the specs changed (the Spec(...) entry or any top-level
     helper, constant or generator it uses, transitively; comments don't
     count), or
   - the harness or the build setup changed (tools/emutest/emu.py, run.py,
@@ -43,7 +44,7 @@ object read (e.g. a new file not built yet) select everything.
 plus untracked files). Without --since, REF is the commit of the last full
 clean run (build/emutest_last_full.json, written by run.py after a full run
 with 0 mismatches; specs with incomplete coverage are listed there); files that were uncommitted at that
-run count as changed, and specs.py is compared with the copy that run used.
+run count as changed, and the specs are compared with the copy that run used.
 """
 
 from __future__ import annotations
@@ -63,7 +64,8 @@ import pefile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 LAST_FULL_PATH = os.path.join(ROOT, "build", "emutest_last_full.json")
-SPECS_PATH = "tools/emutest/specs.py"
+SPECS_PATH = "tools/emutest/specs.py"  # the single file, until session 51
+SPECS_DIR = "tools/emutest/specs"     # the package of parts since then (specs/__init__.py)
 
 # Changes to these select every spec (and call for the self-test).
 HARNESS_FILES = {
@@ -98,6 +100,34 @@ def dirty_files() -> list[str]:
 
 
 # -- specs.py units ------------------------------------------------------------
+
+def _parts_of(init_source: str) -> list[str]:
+    for statement in ast.parse(init_source).body:
+        if isinstance(statement, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "PARTS"
+                                                     for t in statement.targets):
+            return list(ast.literal_eval(statement.value))
+    raise ValueError("specs/__init__.py has no PARTS")
+
+
+def specs_source(ref: str | None = None) -> str:
+    """All spec code as one text: the parts of the specs package in PARTS
+    order (they run in one namespace, so this is what the specs see), or
+    the single specs.py of a commit from before the split. ref=None: the
+    working tree. Raises CalledProcessError if neither exists at ref."""
+    def read(path: str) -> str:
+        if ref is None:
+            return open(os.path.join(ROOT, path), encoding="utf-8").read()
+        return _git("show", f"{ref}:{path}")
+    try:
+        parts = _parts_of(read(f"{SPECS_DIR}/__init__.py"))
+    except (OSError, subprocess.CalledProcessError):
+        return read(SPECS_PATH)
+    return "\n".join(read(f"{SPECS_DIR}/{part}.py") for part in parts)
+
+
+def specs_changed(paths) -> bool:
+    return any(p == SPECS_PATH or p.startswith(SPECS_DIR + "/") for p in paths)
+
 
 def _definitions(tree: ast.Module) -> dict[str, list[ast.stmt]]:
     """Top-level name -> the statements that define (or extend) it."""
@@ -166,7 +196,7 @@ def changed_spec_names(specs_module, old_fingerprints: list[str]) -> set[str]:
         old[fingerprint] = old.get(fingerprint, 0) + 1
     names: set[str] = set()
     namespace = vars(specs_module)
-    current = open(os.path.join(ROOT, SPECS_PATH), encoding="utf-8").read()
+    current = specs_source()
     for element, fingerprint in spec_units(current):
         if old.get(fingerprint, 0) > 0:
             old[fingerprint] -= 1
@@ -499,8 +529,7 @@ def record_full_pass(build: str, incomplete: list[str]) -> None:
         data = {"commit": head_commit(), "dirty": dirty_files(), "build": build,
                 "incomplete_coverage": incomplete,
                 "time": datetime.datetime.now().isoformat(timespec="seconds"),
-                "specs_units": unit_fingerprints(
-                    open(os.path.join(ROOT, SPECS_PATH), encoding="utf-8").read())}
+                "specs_units": unit_fingerprints(specs_source())}
         os.makedirs(os.path.dirname(LAST_FULL_PATH), exist_ok=True)
         with open(LAST_FULL_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=1)
@@ -554,7 +583,7 @@ def spec_fingerprints(specs_module) -> dict[str, str]:
     (spec_units: the entry and the helpers it uses, without comments)."""
     namespace = vars(specs_module)
     result = {}
-    current = open(os.path.join(ROOT, SPECS_PATH), encoding="utf-8").read()
+    current = specs_source()
     for element, fingerprint in spec_units(current):
         value = element.value if isinstance(element, ast.Starred) else element
         produced = eval(compile(ast.Expression(value), SPECS_PATH, "eval"), namespace)  # noqa: S307
@@ -663,15 +692,15 @@ def select(specs_module, machine_symbols, bin_dir: str, since: str | None):
 
     names: set[str] = set()
     reasons: list[str] = []
-    if SPECS_PATH in changed:
+    if specs_changed(changed):
         if old_units is None:
             try:
-                old_units = unit_fingerprints(_git("show", f"{ref}:{SPECS_PATH}"))
+                old_units = unit_fingerprints(specs_source(ref))
             except subprocess.CalledProcessError:
                 old_units = []  # specs.py didn't exist then
         changed_names = changed_spec_names(specs_module, old_units)
         names |= changed_names
-        reasons.append(f"specs.py ({len(changed_names)} spec(s) new or changed)")
+        reasons.append(f"specs ({len(changed_names)} spec(s) new or changed)")
 
     sources = sorted(p for p in changed if p.startswith("src/"))
     if sources:

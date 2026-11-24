@@ -358,7 +358,9 @@ Game threads (CLogicThread, CDrawThread, CNetThread, CNetBounceThread)
    memory touched (including guard bytes past buffers). Where the comparison
    is non-trivial, also add a test that a deliberately wrong implementation
    is caught.
-4. Add a spec to `tools/emutest/specs.py` and run `python
+4. Add a spec to the part of `tools/emutest/specs/` named after the
+   replacement's source folder (`specs/settlers.py`, ...; shared helpers
+   in `specs/common.py`) and run `python
    tools/emutest/run.py [filter] --require-coverage` (Unicorn emulator:
    the original bytes against our function on identical random inputs;
    0 mismatches and every block covered is the gate). Read

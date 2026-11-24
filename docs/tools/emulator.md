@@ -1,8 +1,23 @@
 # Emulator differential tests (tools/emutest)
 
+**Where specs live (session 51):** `tools/emutest/specs/` is a package of
+parts, one per folder of `src/s3re/game/` (`ai.py`, `settlers.py`, ...;
+`msvc6.py`, `watcom.py` for those folders), plus `common.py` (the `Spec`
+class, argument generators, helpers used by several parts),
+`self_test.py` and `covered_elsewhere.py`. `specs/__init__.py` executes
+the parts in its `PARTS` order into one shared namespace (common first),
+exactly like the former single `specs.py`, so `specs.SPECS` and every
+helper are used as before and a part needs no imports. Put a new spec
+into the part of the folder its replacement's `.cpp` is in, its helpers
+next to it; a helper that a second part starts using moves to
+`common.py`. A new folder gets a new part and an entry in `PARTS`.
+`changed.py` fingerprints the parts concatenated in `PARTS` order
+(`specs_source`), so moving an entry between parts doesn't change its
+fingerprint.
+
 Moved out of `CLAUDE.md` on 2026-11-24 (workflow step 4 in detail).
 
-Add a spec to `tools/emutest/specs.py` and run `python
+Add a spec to `tools/emutest/specs/` and run `python
 tools/emutest/run.py [filter] --require-coverage` (no game needed; needs
 `pip install -r tools/requirements.txt`). It runs the original bytes
 from S3.EXE and our function from s3re.dll in an x86 emulator (Unicorn)
@@ -69,7 +84,7 @@ original does.
   zeroed, no world bytes, Unicorn's translated-code cache flushed),
   and every call starts with an empty x87 stack and fixed flags, so
   results don't depend on the order or the worker count, and the
-  output is printed in specs.py order. Python writes over S3.EXE code
+  output is printed in SPECS order. Python writes over S3.EXE code
   (a stub in `Spec.globals`) go through `Emulator.write_image`, which
   drops the stale translated blocks: Unicorn doesn't notice them (a
   WalkSettler FindPath stub ran the real FindPath after
@@ -91,7 +106,7 @@ original does.
   doesn't count; names without MSVC's per-path anonymous-namespace
   hash, data without trailing alignment padding, a past-the-end
   pointer named after its table, so another worktree's build gives
-  the same fingerprints, 2026-11-24), its specs.py entry (with the helpers it uses;
+  the same fingerprints, 2026-11-24), its spec entry (with the helpers it uses;
   comments don't count) and the harness (emu.py, requirements, the
   `re/*_functions.tsv` lists, the case-running functions of run.py).
   So a header change that doesn't change code (a new enum, comments,
