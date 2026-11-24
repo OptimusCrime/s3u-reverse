@@ -11173,3 +11173,141 @@ SPECS += [
     Spec("AI_ResetUnitGroup", 0x005930f0, "stdcall", [below(20), below(10)]),
     Spec("AI_ArmyState_Reset", 0x00593f50, "thiscall", []),
 ]
+
+# --- session 51: AI A2 leftovers (wip/ai-a2) ---
+
+AI_LAND_EVALUATION = 0x007e3134  # g_aiLandEvaluation (a CEvaLand pointer)
+AI_HUNTER_VECTORS = 0x007e368c   # g_aiHunterVectors: 20 x {begin, end, ...}, stride 16
+
+
+def army_hunter_vectors(rng, pool, args):
+    """g_aiHunterVectors with random begin/end pointers (the reset sets end =
+    begin)."""
+    fields = []
+    for p in range(20):
+        fields += [(AI_HUNTER_VECTORS + 16 * p, rng.getrandbits(32), 4),
+                   (AI_HUNTER_VECTORS + 16 * p + 4, rng.getrandbits(32), 4)]
+    return fields
+
+
+NODE_LAND = SCRATCH + 2 * SCRATCH_SLOT_BYTES    # the CEvaLand (lists at +0, 12 bytes each)
+NODE_HEADS = SCRATCH + 3 * SCRATCH_SLOT_BYTES   # 20 list heads of 8 bytes
+NODE_SLOTS = 6                                  # AiPlayerData nodes in scratch slots 4..9
+
+
+def node_buildings(rng, pool, args):
+    """Buildings with door tiles and areas (count_buildings_world), the
+    player word (scratch 0, < 4) and area word (scratch 1, < 5), and the
+    players' node lists: each node (area word +8 < 5) in the list of one of
+    the players 0..2."""
+    fields = count_buildings_world(rng, pool, args)
+    fields += [(SCRATCH, rng.randrange(4), 2), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(5), 2)]
+    last = {}
+    for p in range(20):
+        head = NODE_HEADS + 8 * p
+        fields.append((NODE_LAND + 12 * p + 4, WORLD_BASE + head, 4))
+        last[p] = head
+    for n in range(NODE_SLOTS):
+        node = SCRATCH + (4 + n) * SCRATCH_SLOT_BYTES
+        p = rng.randrange(3)
+        fields += [(last[p], WORLD_BASE + node, 4), (node + 8, rng.randrange(5), 2)]
+        last[p] = node
+    for p in range(20):
+        fields.append((last[p], WORLD_BASE + NODE_HEADS + 8 * p, 4))
+    return fields
+
+
+def node_buildings_globals(rng, pool, args):
+    return ai_world_400(rng, pool, args) + [(AI_LAND_EVALUATION, WORLD_BASE + NODE_LAND, 4)]
+
+
+def wrapped_pos(rng, pool, args):
+    """A WrappedPos at world +0 (ECX): sizes above 0 (the original divides
+    by them), sometimes from 0x8000 on, often on the grid's edges; the
+    coordinates WrapCoords gets in scratch 0 and 1."""
+    def size():
+        roll = rng.random()
+        if roll < 0.1:
+            return rng.randrange(0x7FF0, 0x8010)
+        if roll < 0.2:
+            return rng.randrange(1, 0x10000)
+        return rng.randrange(1, 50)
+    width, height = size(), size()
+    def coordinate(limit):
+        roll = rng.random()
+        if roll < 0.3:
+            return rng.choice((0, limit - 1, limit, limit + 1)) & 0xFFFF
+        if roll < 0.5:
+            return -rng.randrange(1, 200) & 0xFFFF
+        if roll < 0.9:
+            return rng.randrange(60)
+        return rng.getrandbits(16)
+    return [(0, coordinate(width), 2), (2, coordinate(height), 2), (4, width, 2), (6, height, 2),
+            (SCRATCH, coordinate(width), 2), (SCRATCH + SCRATCH_SLOT_BYTES, coordinate(height), 2)]
+
+
+def grid_coordinate(rng, pool):
+    roll = rng.random()
+    if roll < 0.3:
+        return rng.randrange(60)
+    if roll < 0.5:
+        return -rng.randrange(1, 200) & 0xFFFFFFFF
+    if roll < 0.8:
+        return rng.randrange(1000)
+    return rng.getrandbits(32)
+
+
+def grid_size(rng, pool):
+    """A size whose low word is above 0, sometimes with an upper half."""
+    value = rng.randrange(1, 60) if rng.random() < 0.8 else rng.randrange(1, 0x10000)
+    return value | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+SPECS += [
+    # 0x591e6e is dead: the inlined vector erase(begin(), end()) copies the
+    # elements from end to end (cmp edx, edx; je), i.e. never.
+    Spec("AI_Army_Reset", 0x00591e00, "thiscall", [], globals=army_hunter_vectors, exempt_blocks=(0x591e6e,),
+         max_cases=200),
+    Spec("AI_CountNodeBuildingsByType", 0x00572420, "fastcall", [scratch(0), scratch(1)],
+         presets=node_buildings, globals=node_buildings_globals, max_cases=600),
+    Spec("AI_WrappedPos_Construct", 0x00597070, "thiscall", [], presets=wrapped_pos),
+    Spec("AI_WrappedPos_ConstructXywh", 0x00597090, "thiscall",
+         [grid_coordinate, grid_coordinate, grid_size, grid_size], presets=wrapped_pos),
+    Spec("AI_WrappedPos_SetPosition", 0x005970c0, "thiscall", [grid_coordinate, grid_coordinate],
+         presets=wrapped_pos),
+    Spec("AI_WrappedPos_SetSize", 0x005970f0, "thiscall", [grid_size, grid_size], presets=wrapped_pos),
+    # EAX is left over from the step's arithmetic; the callers don't use it.
+    Spec("AI_WrappedPos_Step", 0x00597110, "thiscall", [with_noise(below(8))], presets=wrapped_pos, eax_mask=0),
+    Spec("AI_WrappedPos_Distance", 0x005971f0, "thiscall", [grid_coordinate, grid_coordinate],
+         presets=wrapped_pos),
+    Spec("AI_WrappedPos_Wrap", 0x00597250, "thiscall", [], presets=wrapped_pos),
+    Spec("AI_WrappedPos_WrapCoords", 0x00597260, "thiscall", [scratch(0), scratch(1)], presets=wrapped_pos),
+    Spec("AI_WrappedPos_Advance", 0x00597300, "thiscall", [with_noise(below(8)), with_noise(below(40))],
+         presets=wrapped_pos),
+]
+
+
+def economy_agent_with_ores(rng, pool, args):
+    """economy_agent plus pile lists of iron ore (7) and iron (11) in the
+    agent's area (AI_AreaGoodsAmount of the mine and smelter conditions),
+    sometimes long enough for more than 10 units."""
+    fields = economy_agent(rng, pool, args)
+    area = next(value for offset, value, size in fields if offset == 0xC and size == 2)
+    record = AI_AREAS + area * 0x2E0
+    base = rng.randint(2000, 3000)
+    for goods in (7, 11):
+        head, chain = economy_pile_chain(rng, base, rng.randrange(12), False)
+        fields += chain + [(record + 0xA + goods * 2, head, 2)]
+        base += 40
+    if rng.random() < 0.3:  # coal around the coal users' demand (every grade)
+        fields.append((0x46, rng.randrange(60), 2))
+    return fields
+
+
+SPECS += [
+    Spec(name, address, "thiscall", [], eax_mask=0, presets=economy_agent_with_ores, globals=economy_globals,
+         max_cases=1000)
+    for name, address in (("T_ECONOMY_AGENT_ConsiderCoalMine", 0x00568bc0),
+                          ("T_ECONOMY_AGENT_ConsiderIronMine", 0x00568d80),
+                          ("T_ECONOMY_AGENT_ConsiderIronSmelter", 0x00568f40))
+]

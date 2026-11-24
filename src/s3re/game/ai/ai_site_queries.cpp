@@ -27,6 +27,16 @@
 //              woodcutter and a small tower and the race's basics (Roman
 //              and Amazon: stonecutter and forester; Egyptian: stonecutter;
 //              Asian: forester), else 0 (also for a race above 3). EAX = it.
+//   0x00572420 AI_CountNodeBuildingsByType(const u16* player, const u16*
+//              area) fastcall: the player's AiPlayerData node of that area
+//              (CEvaLand list g_aiLandEvaluation->lists[player], node word
+//              +8); none: EAX = the list head. Otherwise its building_counts
+//              are cleared and refilled: per building id (AI_GetBuilding,
+//              until it reports the end) of that player whose door tile
+//              lies in the area (AI_BuildingArea) +1 for its type. *player
+//              and *area are re-read per building. EAX = GetBuilding's end
+//              flag. Callers CEvaLand::ProcessPendingEvents 0x554980,
+//              CEvaLand::AddArea 0x555260.
 //   0x005930f0 AI_ResetUnitGroup(player, group) stdcall: clears the
 //              group's entries of the census g_aiCensus (defending flag,
 //              target building), g_aiArmyState (attack delay) and
@@ -62,6 +72,7 @@ namespace {
 constexpr std::uintptr_t kAreaAlongRow = 0x005996c0;     // AI_AreaAlongRow
 constexpr std::uintptr_t kGetBuilding = 0x0058e170;      // AI_GetBuilding
 constexpr std::uintptr_t kBuildingIfUsed = 0x0058e1c0;   // AI_BuildingIfUsed_58e1c0
+constexpr std::uintptr_t kBuildingArea = 0x00599610;   // AI_BuildingArea
 constexpr std::uintptr_t kTileDistance = 0x004ff320;     // TileDistance (ECX = world, unused)
 
 constexpr std::uint16_t kNone = 0xffff;
@@ -111,6 +122,7 @@ using NearFn = std::uint32_t(__fastcall*)(std::uint32_t type, std::uint32_t x, s
                                           std::uint32_t distance, std::uint32_t player);
 using NextMilitaryFn = std::uint32_t(__fastcall*)(std::uint32_t start, std::uint32_t player);
 using BasicEconomyFn = std::uint32_t(__fastcall*)(const std::uint16_t* player, void* edx, AiPlayerData* data);
+using CountNodeBuildingsFn = std::uint32_t(__fastcall*)(const std::uint16_t* player, const std::uint16_t* area);
 using ResetGroupFn = std::uint32_t(__stdcall*)(std::uint32_t player, std::uint32_t group);
 using ArmyResetFn = std::uint32_t(__fastcall*)(AiArmyState* self, void* edx);
 
@@ -121,6 +133,7 @@ std::uint32_t __fastcall AI_CountBuildingsNear(std::uint32_t type, std::uint32_t
                                                std::uint32_t distance, std::uint32_t player);
 std::uint32_t __fastcall AI_NextGarrisonedMilitaryBuilding(std::uint32_t start, std::uint32_t player);
 std::uint32_t __fastcall AI_CheckBasicEconomy(const std::uint16_t* player, void* edx, AiPlayerData* data);
+std::uint32_t __fastcall AI_CountNodeBuildingsByType(const std::uint16_t* player, const std::uint16_t* area);
 std::uint32_t __stdcall AI_ResetUnitGroup(std::uint32_t player, std::uint32_t group);
 std::uint32_t __fastcall AI_ArmyState_Reset(AiArmyState* self, void* edx);
 
@@ -130,6 +143,8 @@ S3RE_HOOK(0x00571e30, AI_CountBuildingsNear, NearFn, Original_AI_CountBuildingsN
 S3RE_HOOK(0x00571ee0, AI_NextGarrisonedMilitaryBuilding, NextMilitaryFn, Original_AI_NextGarrisonedMilitaryBuilding,
           AI_NextGarrisonedMilitaryBuilding);
 S3RE_HOOK(0x005720c0, AI_CheckBasicEconomy, BasicEconomyFn, Original_AI_CheckBasicEconomy, AI_CheckBasicEconomy);
+S3RE_HOOK(0x00572420, AI_CountNodeBuildingsByType, CountNodeBuildingsFn, Original_AI_CountNodeBuildingsByType,
+          AI_CountNodeBuildingsByType);
 S3RE_HOOK(0x005930f0, AI_ResetUnitGroup, ResetGroupFn, Original_AI_ResetUnitGroup, AI_ResetUnitGroup);
 S3RE_HOOK(0x00593f50, AI_ArmyState_Reset, ArmyResetFn, Original_AI_ArmyState_Reset, AI_ArmyState_Reset);
 
@@ -255,6 +270,41 @@ std::uint32_t __fastcall AI_CheckBasicEconomy(const std::uint16_t* player, void*
     }
     data->basic_economy = ready ? 1 : 0;
     return data->basic_economy;
+}
+
+// Purpose: Recounts the player's buildings per type in one of its economy
+// areas (the T_ECONOMY_AGENT's build decisions read these counts), when
+// the land evaluation adds or updates the area.
+std::uint32_t __fastcall AI_CountNodeBuildingsByType(const std::uint16_t* player, const std::uint16_t* area) {
+    using AreaFn = std::uint32_t(__fastcall*)(const std::uint16_t* building);
+    const auto* land = reinterpret_cast<const AiLandEvaluation*>(g_aiLandEvaluation.get());
+    const AiListNode* head = land->lists[*player].head;
+    AiPlayerData* node = nullptr;
+    for (std::uint32_t at = head->next; at != reinterpret_cast<std::uint32_t>(head);
+         at = reinterpret_cast<const AiPlayerData*>(at)->next) {
+        if (reinterpret_cast<AiPlayerData*>(at)->area == *area) {
+            node = reinterpret_cast<AiPlayerData*>(at);
+            break;
+        }
+    }
+    if (node == nullptr) {
+        return reinterpret_cast<std::uint32_t>(head);
+    }
+    for (std::uint16_t& count : node->building_counts) {
+        count = 0;
+    }
+    std::uint32_t error = 0;
+    std::uint32_t id = 0;
+    do {
+        ++id;
+        const auto* building = reinterpret_cast<const layout::Building*>(GetBuilding(id, &error));
+        if (building != nullptr && *player == building->owner &&
+            *area == static_cast<std::uint16_t>(
+                         reinterpret_cast<AreaFn>(kBuildingArea)(reinterpret_cast<const std::uint16_t*>(&id)))) {
+            ++(&node->building_counts[0])[building->art];  // not range-checked, as in the original
+        }
+    } while (error == 0);
+    return error;
 }
 
 // Purpose: Forgets what the computer players planned for one of a player's
@@ -560,6 +610,105 @@ S3RE_TEST(AiSiteQueries_ComparisonDetectsWrongImplementation) {
     probe([](SiteQueries& f) { f.basic = &WrongBasic; });
     probe([](SiteQueries& f) { f.armyReset = &WrongArmyReset; });
     probe([](SiteQueries& f) { f.hasNear = f.countNear; });
+}
+
+// ---------------------------------------------------------------------------
+// AI_CountNodeBuildingsByType
+// ---------------------------------------------------------------------------
+
+namespace {
+
+constexpr std::size_t kNodeCount = 6;
+
+struct NodeSetup {
+    AiLandEvaluation land;
+    AiListNode heads[kPlayers];
+    AiPlayerData nodes[kNodeCount];
+    std::uint8_t guard[16];
+};
+
+void CompareCountNodeBuildings(test::Context& ctx, CountNodeBuildingsFn candidate, int cases) {
+    Saved saved;
+    const std::uint32_t savedLand = g_aiLandEvaluation;
+    g_aiMapSizeX = static_cast<std::uint16_t>(kMap);
+    g_aiMapSizeY = static_cast<std::uint16_t>(kMap);
+    test::WorldPair worlds(ctx, sizeof(CGameData));
+    std::vector<std::uint8_t> before(sizeof(NodeSetup)), afterOriginal(sizeof(NodeSetup));
+    std::vector<std::uint8_t> setupBytes(sizeof(NodeSetup));
+    auto* setup = reinterpret_cast<NodeSetup*>(setupBytes.data());
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        if (i % 8 == 0) {
+            SetUpBuildings(ctx, worlds);
+            // Door tiles on the map (now and then off it) with a few areas.
+            for (std::uint32_t id = 1; id <= 41; ++id) {
+                const auto doorX = static_cast<std::uint16_t>(ctx.rng().Chance(1, 10) ? kMap + ctx.rng().Below(5)
+                                                                                     : ctx.rng().Below(60));
+                const auto doorY = static_cast<std::uint16_t>(ctx.rng().Below(60));
+                const auto area = static_cast<std::uint16_t>(ctx.rng().Below(4));
+                worlds.Both([&](CGameData* w) {
+                    w->buildings[id].door_x = doorX;
+                    w->buildings[id].door_y = doorY;
+                    if (doorX < kMap) {
+                        w->tiles[doorX][doorY].area = area;
+                    }
+                });
+            }
+        }
+        ctx.rng().Fill(setup, sizeof(NodeSetup));
+        // Each player's list: its head, then some of the nodes (each node in
+        // one list), back to the head.
+        std::uint32_t last[kPlayers];
+        for (std::size_t p = 0; p < kPlayers; ++p) {
+            setup->land.lists[p].head = &setup->heads[p];
+            last[p] = reinterpret_cast<std::uint32_t>(&setup->heads[p]);
+        }
+        for (std::size_t n = 0; n < kNodeCount; ++n) {
+            const std::size_t p = ctx.rng().Below(3);
+            AiPlayerData& node = setup->nodes[n];
+            node.area = static_cast<std::uint16_t>(ctx.rng().Below(5));
+            *reinterpret_cast<std::uint32_t*>(last[p]) = reinterpret_cast<std::uint32_t>(&node);  // ->next
+            last[p] = reinterpret_cast<std::uint32_t>(&node);
+        }
+        for (std::size_t p = 0; p < kPlayers; ++p) {
+            *reinterpret_cast<std::uint32_t*>(last[p]) = reinterpret_cast<std::uint32_t>(&setup->heads[p]);
+        }
+        g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&setup->land);
+        const auto player = static_cast<std::uint16_t>(ctx.rng().Below(4));
+        const auto area = static_cast<std::uint16_t>(ctx.rng().Below(5));
+        std::memcpy(before.data(), setup, sizeof(NodeSetup));
+        g_aiWorld = worlds.original();
+        const std::uint32_t ra = Original_AI_CountNodeBuildingsByType(&player, &area);
+        std::memcpy(afterOriginal.data(), setup, sizeof(NodeSetup));
+        std::memcpy(setup, before.data(), sizeof(NodeSetup));
+        g_aiWorld = worlds.ours();
+        const std::uint32_t rb = candidate(&player, &area);
+        bool same = S3RE_EXPECT_EQ(ra, rb);
+        same &= S3RE_EXPECT_MEM_EQ(afterOriginal.data(), setup, sizeof(NodeSetup));
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+        }
+    }
+    S3RE_EXPECT(worlds.Checkpoint(ctx));
+    g_aiLandEvaluation = savedLand;
+}
+
+std::uint32_t __fastcall WrongCountNodeBuildings(const std::uint16_t* player, const std::uint16_t* area) {
+    // Wrong: ignores the owner.
+    const std::uint16_t anyone = 0;
+    const std::uint32_t result = AI_CountNodeBuildingsByType(player, area);
+    return *player == 1 ? AI_CountNodeBuildingsByType(&anyone, area) : result;
+}
+
+}  // namespace
+
+S3RE_TEST(AiCountNodeBuildings_MatchesOriginal) {
+    CompareCountNodeBuildings(ctx, &AI_CountNodeBuildingsByType, 1500);
+}
+
+S3RE_TEST(AiCountNodeBuildings_ComparisonDetectsWrongImplementation) {
+    test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+    CompareCountNodeBuildings(quiet, &WrongCountNodeBuildings, 600);
+    S3RE_EXPECT(quiet.failures() > 0);
 }
 
 }  // namespace s3re::game

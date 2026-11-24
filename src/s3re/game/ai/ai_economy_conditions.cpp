@@ -19,8 +19,22 @@
 //              Asian and Amazon (wc - 2 f) * 100) minus boards and logs in
 //              stock, graded > 80 / 60 / 40 / 20 / 0 into the cap of
 //              Forester / 2 / 3 / 4 / 6 / 0 (also stored in
-//              forester_priority). For a race above 3 the original grades
+//              last_priority). For a race above 3 the original grades
 //              the agent's own address (a stack leftover; reproduced).
+//   0x00568bc0 CoalMine: the higher (16-bit) of two priorities: coal mines
+//              per the population's wanted mines (the gold mine tables,
+//              graded 10000 / 5000 / 2000 / 1000 / 500) and coal in stock
+//              per the demand (2 * coal users - mines) * 20 (graded
+//              50000 / 20000 / 10000 / 5000 / 1000, only below 100 %).
+//              Each ratio goes to stock_ratio, the result to last_priority.
+//   0x00568d80 IronMine: the same with iron mines, the iron (goods 11) in
+//              stock (stored in `ore`) and the toolsmiths and weaponsmiths
+//              as the users.
+//   0x00568f40 IronSmelter: needs coal (mines or stock) and ore (mines or
+//              iron ore in stock, stored in `ore`); none -> 30000; else
+//              with more than 10 coal and ore, the higher of smelters per
+//              the wanted weaponsmiths (graded as the mines) and smelters
+//              per half the smiths (40000 / 20000 / 10000 / 5000 / 1000).
 //   0x00569160 Toolsmith: no toolsmith order taken (best[57 + Toolsmith])
 //              and no toolsmith, with coal (mines or stock) and iron
 //              (smelters or stock) -> 35000.
@@ -184,12 +198,47 @@ Crowd CrowdOf(std::uint16_t population) {
     return Crowd::Small;
 }
 
+// The priority ladder of the mine and smelter conditions for "have * 100 /
+// wanted" (0x568c72..0x568cb6): 10000 below 10 % down to 500 below 100 %.
+// No wanted count (its low word is 0): 0. Stores the ratio.
+std::uint16_t MineSupplyPriority(Agent& agent, std::uint16_t have, std::uint32_t wanted) {
+    const auto wanted16 = static_cast<std::uint16_t>(wanted);
+    if (wanted16 == 0) {
+        return 0;
+    }
+    const std::int32_t ratio = have * 100 / wanted16;
+    agent.stock_ratio = ratio;
+    return static_cast<std::uint16_t>(PriorityForRatio(ratio, {10000, 5000, 2000, 1000, 500}));
+}
+
+// Coal mine and iron mine (0x568cba.., 0x568e94..): the goods in stock
+// against the demand of their users; a higher priority replaces `supply`.
+// The result is stored in last_priority and requested.
+void RequestMine(Agent& agent, B type, std::uint16_t supply, std::int32_t users, std::uint16_t mines,
+                 std::uint16_t stock) {
+    const std::int32_t demand = (users * 2 - mines) * 20 - stock;
+    std::uint16_t priority = supply;
+    if (demand > 0) {
+        const std::int32_t ratio = stock * 100 / demand;
+        agent.stock_ratio = ratio;
+        const auto shortage = static_cast<std::uint16_t>(PriorityForRatio(ratio, {50000, 20000, 10000, 5000, 1000}));
+        if (shortage > supply) {
+            priority = shortage;
+        }
+    }
+    agent.last_priority = priority;
+    Request(type, priority);
+}
+
 }  // namespace
 
 using ConditionFn = void(__fastcall*)(Agent* agent, void* edx);
 
 void __fastcall T_ECONOMY_AGENT_ConsiderSawmill(Agent* agent, void* edx);
 void __fastcall T_ECONOMY_AGENT_ConsiderForester(Agent* agent, void* edx);
+void __fastcall T_ECONOMY_AGENT_ConsiderCoalMine(Agent* agent, void* edx);
+void __fastcall T_ECONOMY_AGENT_ConsiderIronMine(Agent* agent, void* edx);
+void __fastcall T_ECONOMY_AGENT_ConsiderIronSmelter(Agent* agent, void* edx);
 void __fastcall T_ECONOMY_AGENT_ConsiderToolsmith(Agent* agent, void* edx);
 void __fastcall T_ECONOMY_AGENT_ConsiderWeaponsmith(Agent* agent, void* edx);
 void __fastcall T_ECONOMY_AGENT_ConsiderRiceFarm(Agent* agent, void* edx);
@@ -218,6 +267,12 @@ S3RE_HOOK(0x00568250, T_ECONOMY_AGENT_ConsiderSawmill, ConditionFn, Original_T_E
           T_ECONOMY_AGENT_ConsiderSawmill);
 S3RE_HOOK(0x005682b0, T_ECONOMY_AGENT_ConsiderForester, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderForester,
           T_ECONOMY_AGENT_ConsiderForester);
+S3RE_HOOK(0x00568bc0, T_ECONOMY_AGENT_ConsiderCoalMine, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderCoalMine,
+          T_ECONOMY_AGENT_ConsiderCoalMine);
+S3RE_HOOK(0x00568d80, T_ECONOMY_AGENT_ConsiderIronMine, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderIronMine,
+          T_ECONOMY_AGENT_ConsiderIronMine);
+S3RE_HOOK(0x00568f40, T_ECONOMY_AGENT_ConsiderIronSmelter, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderIronSmelter,
+          T_ECONOMY_AGENT_ConsiderIronSmelter);
 S3RE_HOOK(0x00569160, T_ECONOMY_AGENT_ConsiderToolsmith, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderToolsmith,
           T_ECONOMY_AGENT_ConsiderToolsmith);
 S3RE_HOOK(0x005691b0, T_ECONOMY_AGENT_ConsiderWeaponsmith, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderWeaponsmith,
@@ -311,8 +366,67 @@ void __fastcall T_ECONOMY_AGENT_ConsiderForester(Agent* agent, void* /*edx*/) {
     } else if (surplus > 0) {
         priority = cap / 6;
     }
-    agent->forester_priority = priority;
+    agent->last_priority = priority;
     Request(B::Forester, priority);
+}
+
+// Purpose: Asks for coal mines, the more urgently the fewer there are for
+// the population and the less coal is left for the smelters and smiths.
+void __fastcall T_ECONOMY_AGENT_ConsiderCoalMine(Agent* agent, void* /*edx*/) {
+    // The gold mine tables serve all mines.
+    const std::uint32_t wanted =
+        WantedForPopulation(*agent, g_aiWantedGoldMineSlopes.get(), g_aiWantedGoldMines.get());
+    const std::uint16_t supply = MineSupplyPriority(*agent, agent->coal_mines, wanted);
+    const std::int32_t users = agent->powder_makers + agent->distilleries + agent->gold_smelters +
+                               agent->weaponsmiths + agent->toolsmiths + agent->iron_smelters;
+    RequestMine(*agent, B::CoalMine, supply, users, agent->coal_mines, agent->coal);
+}
+
+// Purpose: Asks for iron mines, the more urgently the fewer there are for
+// the population and the less iron is left for the smiths.
+void __fastcall T_ECONOMY_AGENT_ConsiderIronMine(Agent* agent, void* /*edx*/) {
+    agent->ore = static_cast<std::uint16_t>(GoodsInArea(*agent, Good::Iron));
+    const std::uint32_t wanted =
+        WantedForPopulation(*agent, g_aiWantedGoldMineSlopes.get(), g_aiWantedGoldMines.get());
+    const std::uint16_t supply = MineSupplyPriority(*agent, agent->iron_mines, wanted);
+    const std::int32_t users = agent->weaponsmiths + agent->toolsmiths;
+    RequestMine(*agent, B::IronMine, supply, users, agent->iron_mines, agent->ore);
+}
+
+// Purpose: Asks for iron smelters once coal and iron ore are there: the
+// first at once, more by the population and by the number of smiths.
+void __fastcall T_ECONOMY_AGENT_ConsiderIronSmelter(Agent* agent, void* /*edx*/) {
+    constexpr std::uint16_t kEnoughStock = 10;
+    const auto ore = static_cast<std::uint16_t>(GoodsInArea(*agent, Good::IronOre));
+    agent->ore = ore;
+    if (agent->coal_mines == 0 && agent->coal == 0) {
+        return;
+    }
+    if (agent->iron_mines == 0 && ore == 0) {
+        return;
+    }
+    const std::uint16_t smelters = agent->iron_smelters;
+    if (smelters == 0) {
+        Request(B::IronSmelter, 30000);
+        return;
+    }
+    if (agent->coal <= kEnoughStock || ore <= kEnoughStock) {
+        return;
+    }
+    const std::uint32_t wanted =
+        WantedForPopulation(*agent, g_aiWantedWeaponsmithSlopes.get(), g_aiWantedWeaponsmiths.get());
+    const std::uint16_t forPopulation = MineSupplyPriority(*agent, smelters, wanted);
+    // 0x5690aa..0x569126: one smelter per two smiths.
+    const auto smiths = static_cast<std::uint16_t>((agent->weaponsmiths + agent->toolsmiths + 1) / 2);
+    std::uint16_t forSmiths = 0;
+    if (smiths != 0) {
+        const std::int32_t ratio = smelters * 100 / smiths;
+        agent->stock_ratio = ratio;
+        forSmiths = static_cast<std::uint16_t>(PriorityForRatio(ratio, {40000, 20000, 10000, 5000, 1000}));
+    }
+    const std::uint16_t priority = forPopulation > forSmiths ? forPopulation : forSmiths;
+    agent->last_priority = priority;
+    Request(B::IronSmelter, priority);
 }
 
 // Purpose: Asks for the first toolsmith once coal and iron are available
@@ -712,7 +826,7 @@ void __fastcall T_ECONOMY_AGENT_ConsiderLargeTemple(Agent* agent, void* /*edx*/)
 
 namespace {
 
-constexpr std::size_t kConditions = 25;
+constexpr std::size_t kConditions = 28;
 constexpr std::size_t kAgentBytes = sizeof(Agent) + 16;
 constexpr std::size_t kDataBytes = 0x600;
 constexpr std::uint32_t kMapSize = 400;
@@ -734,7 +848,8 @@ Conditions OriginalConditions() {
              Original_T_ECONOMY_AGENT_ConsiderSulfurMine,    Original_T_ECONOMY_AGENT_ConsiderPowderMaker,
              Original_T_ECONOMY_AGENT_ConsiderCharcoalBurner, Original_T_ECONOMY_AGENT_ConsiderSmallTemple,
              Original_T_ECONOMY_AGENT_ConsiderLargeTemple,   Original_T_ECONOMY_AGENT_ConsiderApiary,
-             Original_T_ECONOMY_AGENT_ConsiderDrinkBuilding}};
+             Original_T_ECONOMY_AGENT_ConsiderDrinkBuilding, Original_T_ECONOMY_AGENT_ConsiderCoalMine,
+             Original_T_ECONOMY_AGENT_ConsiderIronMine,      Original_T_ECONOMY_AGENT_ConsiderIronSmelter}};
 }
 
 Conditions OurConditions() {
@@ -750,7 +865,8 @@ Conditions OurConditions() {
              &T_ECONOMY_AGENT_ConsiderSulfurMine,    &T_ECONOMY_AGENT_ConsiderPowderMaker,
              &T_ECONOMY_AGENT_ConsiderCharcoalBurner, &T_ECONOMY_AGENT_ConsiderSmallTemple,
              &T_ECONOMY_AGENT_ConsiderLargeTemple,   &T_ECONOMY_AGENT_ConsiderApiary,
-             &T_ECONOMY_AGENT_ConsiderDrinkBuilding}};
+             &T_ECONOMY_AGENT_ConsiderDrinkBuilding, &T_ECONOMY_AGENT_ConsiderCoalMine,
+             &T_ECONOMY_AGENT_ConsiderIronMine,      &T_ECONOMY_AGENT_ConsiderIronSmelter}};
 }
 
 struct SavedState {
@@ -827,8 +943,9 @@ void SetUpWorld(test::Context& ctx, test::WorldPair& worlds) {
             w->tiles[x][y].area = tileArea;
         });
     }
-    // Pile lists of each area: goods 6 and 18..20, and the area's own list.
-    constexpr Good kGoods[] = {Good::GoldOre, Good::Sword, Good::Bow, Good::Spear};
+    // Pile lists of each area: goods 6, 7, 11 and 18..20, and the area's
+    // own list.
+    constexpr Good kGoods[] = {Good::GoldOre, Good::Sword, Good::Bow, Good::Spear, Good::IronOre, Good::Iron};
     std::uint32_t base = 1 + ctx.rng().Below(1000);
     for (std::uint16_t area = 0; area < kAreas; ++area) {
         for (Good good : kGoods) {
@@ -968,6 +1085,22 @@ void __fastcall WrongDrink(Agent* agent, void* /*edx*/) {
     T_ECONOMY_AGENT_ConsiderDrinkBuilding(agent, nullptr);
 }
 
+void __fastcall WrongCoalMine(Agent* agent, void* /*edx*/) {
+    // Wrong: the distilleries don't burn coal.
+    const std::uint16_t distilleries = agent->distilleries;
+    agent->distilleries = 0;
+    T_ECONOMY_AGENT_ConsiderCoalMine(agent, nullptr);
+    agent->distilleries = distilleries;
+}
+
+void __fastcall WrongIronSmelter(Agent* agent, void* /*edx*/) {
+    // Wrong: one smelter per smith.
+    const std::uint16_t toolsmiths = agent->toolsmiths;
+    agent->toolsmiths = static_cast<std::uint16_t>(toolsmiths + agent->weaponsmiths + 1);
+    T_ECONOMY_AGENT_ConsiderIronSmelter(agent, nullptr);
+    agent->toolsmiths = toolsmiths;
+}
+
 }  // namespace
 
 S3RE_TEST(AiEconomyConditions_MatchOriginal) {
@@ -987,6 +1120,8 @@ S3RE_TEST(AiEconomyConditions_ComparisonDetectsWrongImplementation) {
     probe(15, &WrongStorehouse);
     probe(24, &WrongDrink);
     probe(21, &T_ECONOMY_AGENT_ConsiderLargeTemple);  // swapped small and large temple
+    probe(25, &WrongCoalMine);
+    probe(27, &WrongIronSmelter);
 }
 
 }  // namespace s3re::game
