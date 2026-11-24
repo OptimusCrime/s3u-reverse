@@ -1891,3 +1891,62 @@ SPECS += [
          [scratch(0), scratch(1), low_word_noise(3), resource_goods],
          presets=resource_cell_world, globals=resource_cell_globals, max_cases=1000),
 ]
+
+# -- session 53: FindNode, IsForceProduction, HasSiteNoteNear, -------------
+# -- HOUSE_GROUND_REQUEST_NOTE::Init ---------------------------------------
+
+
+def every_area_nodes(rng, pool, args):
+    """The node lists of players 0..2 (NODE_LAND's lists; the others empty):
+    a node for each area 0..4 in random order plus up to 3 duplicates, each
+    with a random force_production (+0x18); the out pointer at scratch 0."""
+    fields = []
+    last = {}
+    for p in range(20):
+        head = NODE_HEADS + 8 * p
+        fields.append((NODE_LAND + 12 * p + 4, WORLD_BASE + head, 4))
+        last[p] = head
+    slot = 0
+    for p in range(3):
+        areas = list(range(5)) + [rng.randrange(5) for _ in range(rng.randrange(4))]
+        rng.shuffle(areas)
+        for area in areas:
+            node = SCRATCH + SCRATCH_SLOT_BYTES + slot * 0x40
+            slot += 1
+            fields += [(last[p], WORLD_BASE + node, 4), (node + 8, area | (rng.getrandbits(16) << 16), 4),
+                       (node + 0x18, rng.getrandbits(32), 4)]
+            last[p] = node
+    for p in range(20):
+        fields.append((last[p], WORLD_BASE + NODE_HEADS + 8 * p, 4))
+    return fields
+
+
+def every_area_globals(rng, pool, args):
+    return [(AI_LAND_EVALUATION, WORLD_BASE + NODE_LAND, 4)]
+
+
+def notes_near_globals(rng, pool, args):
+    size = rng.randint(20, 420)
+    return [(AI_PLAYER, WORLD_BASE + AI_NOTES_PLAYER, 4), (AI_MAP_SIZES, size, 2),
+            (AI_MAP_SIZES + 2, size if rng.random() < 0.5 else rng.randint(20, 420), 2)]
+
+
+def ground_note_globals(rng, pool, args):
+    edge = lambda: rng.getrandbits(16) if rng.random() < 0.1 else rng.randint(1, 500)  # noqa: E731
+    return [(AI_MAP_SIZES, edge(), 2), (AI_MAP_SIZES + 2, edge(), 2)]
+
+
+SPECS += [
+    Spec("AI_FindNode", 0x00573be0, "fastcall", [scratch(0), low_word_noise(3), low_word_noise(6)],
+         presets=every_area_nodes, globals=every_area_globals, max_cases=600),
+    Spec("AI_IsForceProduction", 0x00572fa0, "fastcall", [low_word_noise(3), low_word_noise(5)],
+         presets=every_area_nodes, globals=every_area_globals, max_cases=600),
+    Spec("AI_HasSiteNoteNear", 0x00571c40, "fastcall",
+         [low_word_noise(4), between(0, 420), between(0, 420), low_word_noise(40)],
+         presets=site_notes, globals=notes_near_globals, max_cases=1000),
+    # ECX = the world: the note is world bytes 0..0x4b. EAX (AI_SiteKindOf's)
+    # is not used by the caller.
+    Spec("HOUSE_GROUND_REQUEST_NOTE_Init", 0x00575d60, "thiscall",
+         [low_word_noise(71), anything, anything, anything], eax_mask=0, globals=ground_note_globals,
+         max_cases=600),
+]

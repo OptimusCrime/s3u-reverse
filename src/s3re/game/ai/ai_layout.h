@@ -241,7 +241,8 @@ struct AiPlayerData {
     // small tower.
     std::uint32_t short_of_wood;          // 0x010
     std::uint32_t short_of_stone;         // 0x014
-    std::uint8_t unk018[0x0e];
+    std::uint32_t force_production;       // 0x018 set by COMP_ForceProduction 0x572fc0, read by AI::IsForceProduction 0x572fa0
+    std::uint8_t unk01c[0x0a];
     // Indexes 0..56 are building types: best[type].score is the build
     // priority that 0x551b10 raises by g_aiBuildPrioritySteps[type] up to
     // g_aiBuildPriorityCaps[type] (only while non-zero); candidate_values
@@ -260,6 +261,7 @@ struct AiPlayerData {
 };
 static_assert(offsetof(AiPlayerData, area) == 0x8);
 static_assert(offsetof(AiPlayerData, basic_economy) == 0xc);
+static_assert(offsetof(AiPlayerData, force_production) == 0x18);
 static_assert(offsetof(AiPlayerData, short_of_wood) == 0x10);
 static_assert(offsetof(AiPlayerData, short_of_stone) == 0x14);
 static_assert(offsetof(AiPlayerData, best) == 0x26);
@@ -564,6 +566,27 @@ struct WrappedPos {
     std::uint32_t unk0c;   // +0xc cleared by SetPosition
 };
 static_assert(sizeof(WrappedPos) == 16);
+
+// HOUSE_GROUND_REQUEST_NOTE (0x4c bytes, vtable 0x65a598): the request for
+// ground for a building; its agent searches a spiral around (x, y)
+// (NextSpiralPosition 0x5763a0, CheckSite 0x5760d0). Set up by Init
+// 0x575d60.
+struct HouseGroundRequestNote {
+    RequestNote request;          // 0x00 (+0x22..+0x26 = 0xffff after Init)
+    std::uint16_t unk28;          // 0x28 0 after Init
+    std::uint16_t unk2a;
+    WrappedPos spiral;            // 0x2c the search position: map-sized, starting at (x, y)
+    std::uint16_t unk3c;          // 0x3c 0 after Init
+    std::uint16_t unk3e[2];
+    std::uint16_t max_radius;     // 0x42 Init's fourth argument
+    std::uint32_t unk44;          // 0x44 0 after Init
+    std::uint32_t military;       // 0x48 1 if the building needs a military site (AI_SiteKindOf == 3)
+};
+static_assert(offsetof(HouseGroundRequestNote, spiral) == 0x2c);
+static_assert(offsetof(HouseGroundRequestNote, unk3c) == 0x3c);
+static_assert(offsetof(HouseGroundRequestNote, max_radius) == 0x42);
+static_assert(offsetof(HouseGroundRequestNote, military) == 0x48);
+static_assert(sizeof(HouseGroundRequestNote) == 0x4c);
 
 // ---------------------------------------------------------------- tagged record
 // A BLACK_BOARD_AGENT's start: AI_SetWord4 (0x55ca60) stores its kind at +4
