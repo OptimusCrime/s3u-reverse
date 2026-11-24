@@ -205,6 +205,9 @@ std::uint32_t __fastcall Render_Entry204(void* self, void* edx, std::uint32_t i)
 namespace {
 }  // namespace
 
+// CGraphicsData::TextAddress's `variant` -1: the current language.
+constexpr std::uint32_t kCurrentLanguage = 0xffffffffu;
+
 S3RE_HOOK(0x005faaa0, CGraphicsData_TextAddress, TextAddressFn,
           Original_CGraphicsData_TextAddress, CGraphicsData_TextAddress);
 
@@ -214,7 +217,7 @@ std::uint32_t __fastcall CGraphicsData_TextAddress(void* self, void* /*edx*/, st
                                                   std::uint32_t variant) {
     const std::uint32_t group = id >> 16;
     const CGraphicsData* const gfx = As<CGraphicsData>(self);
-    if (variant == 0xffffffffu) {
+    if (variant == kCurrentLanguage) {
         variant = gfx->language;
     }
     const gfx::TextTable* const table = gfx->textTables[group];

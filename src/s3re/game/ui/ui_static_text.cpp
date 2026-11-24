@@ -17,6 +17,7 @@
 #include "game/ui/screen_element_layout.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
 
@@ -32,9 +33,13 @@ void* __fastcall CStaticControl_Construct(void* self, void* edx, const RECT* rec
 
 namespace {
 
+// A label without its own font uses font id 36 (0x24);
+// style 5 (meaning not known) is every new label's.
+constexpr std::uint32_t kDefaultFont = 36;
+constexpr std::uint32_t kDefaultStyle = 5;
+
 using msvc6::String;
 using ui::CStaticText;
-
 
 CStaticText* TextOf(void* self) {
     return static_cast<CStaticText*>(self);
@@ -62,8 +67,8 @@ void* __fastcall CStaticText_Construct(void* self, void* /*edx*/, const RECT* re
     const auto allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(rect));
     msvc6::String_FromSubstr(&label->text, nullptr, text, 0, msvc6::detail::Npos(), &allocator);
     label->unk38 = 0;
-    label->font = font != 0 ? font : 0x24;
-    label->style = 5;
+    label->font = font != 0 ? font : kDefaultFont;
+    label->style = kDefaultStyle;
     label->element.vtable = vtables::kCStaticText;
     label->element.flag1f = 1;
     return self;
@@ -91,17 +96,13 @@ std::uint32_t __fastcall CStaticText_SetStyle(void* self, void* /*edx*/, std::ui
 
 namespace {
 
-void* GameNew(std::uint32_t size) {
-    return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
-}
-
 String MakeText(std::uint32_t length, std::uint8_t count, const char* text, bool none) {
     String s{};
     s.allocator = static_cast<std::uint8_t>(length * 3);
     if (none) {
         return s;
     }
-    auto* block = static_cast<char*>(GameNew(length + 2));
+    auto* block = static_cast<char*>(msvc6::GameOperatorNew(length + 2));
     block[0] = static_cast<char>(count);
     std::memcpy(block + 1, text, length);
     block[1 + length] = 0;

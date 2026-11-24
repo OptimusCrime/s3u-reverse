@@ -58,6 +58,7 @@
 #include "game/texts.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
 
@@ -81,6 +82,10 @@ using msvc6::String;
 constexpr std::uintptr_t kItoa = 0x00621380;
 constexpr std::uintptr_t kUltoa = 0x006213aa;
 constexpr std::uintptr_t kCxxThrowException = 0x0061f027;
+// Sizes of the exception objects these throw helpers allocate.
+constexpr std::uint32_t kAssertmentFailedBytes = 0x24;
+constexpr std::uint32_t kOutOfMemoryBytes = 0x18;
+constexpr std::int32_t kDecimal = 10;  // _itoa's radix
 
 using framework::CAssertmentFailed;
 using framework::CException;
@@ -91,10 +96,6 @@ CException* AsException(void* self) {
 
 CAssertmentFailed* AsAssertment(void* self) {
     return static_cast<CAssertmentFailed*>(self);
-}
-
-void* GameNew(std::uint32_t size) {
-    return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
 }
 
 [[noreturn]] void Throw(void* object, std::uintptr_t info) {
@@ -184,7 +185,7 @@ String* __fastcall Win32_CAssertmentFailed_Describe(void* self, void* /*edx*/, S
     msvc6::String_ConcatString(&withLineText, &withFile, &line);
     char digits[16];
     const char* number = reinterpret_cast<char*(__cdecl*)(std::uint32_t, char*, std::int32_t)>(kUltoa)(
-        AsAssertment(self)->line, digits, 10);
+        AsAssertment(self)->line, digits, kDecimal);
     msvc6::String_ConcatChars(&withNumber, &withLineText, number);
     msvc6::String_ConcatString(&whole, &withNumber, &newline);
     msvc6::String_FromSubstrDefault(result, nullptr, &whole, 0, 0xFFFFFFFFu);
@@ -244,7 +245,7 @@ S3RE_HOOK(0x006119b0, Win32_ThrowAssertmentFailed, ThrowFn, Original_Win32_Throw
 // Purpose: The framework's assert: throws CAssertmentFailed with the failed
 // expression, source file and line (ends in the game's error report).
 void __fastcall Win32_ThrowAssertmentFailed(const char* expression, const char* file, std::int32_t line) {
-    void* error = GameNew(0x24);
+    void* error = msvc6::GameOperatorNew(kAssertmentFailedBytes);
     void* thrown = nullptr;
     if (error != nullptr) {
         thrown = Win32_CAssertmentFailed_Construct(error, nullptr, expression, file, static_cast<std::uint32_t>(line),
@@ -302,14 +303,15 @@ void __fastcall Win32_ThrowOutOfMemory(const char* text, const char* file, std::
     msvc6::String_ConcatChars2(&withFile, &withFileText, file);
     msvc6::String_ConcatChars(&withLineText, &withFile, texts::kCommaLine.c_str());
     char digits[16];
-    const char* number = reinterpret_cast<char*(__cdecl*)(std::int32_t, char*, std::int32_t)>(kItoa)(line, digits, 10);
+    const char* number =
+        reinterpret_cast<char*(__cdecl*)(std::int32_t, char*, std::int32_t)>(kItoa)(line, digits, kDecimal);
     msvc6::String_ConcatChars(&whole, &withLineText, number);
     msvc6::String_AssignSubstr(&message, nullptr, &whole, 0, msvc6::detail::Npos());
     CallEraseAndFree(&whole);
     CallEraseAndFree(&withLineText);
     CallEraseAndFree(&withFile);
     CallEraseAndFree(&withFileText);
-    void* error = GameNew(0x18);
+    void* error = msvc6::GameOperatorNew(kOutOfMemoryBytes);
     void* thrown = nullptr;
     if (error != nullptr) {
         thrown = Win32_COutOfMemory_Construct(error, nullptr, &message, 1);
@@ -341,7 +343,7 @@ String MakeString(std::uint32_t length, std::uint8_t count, const char* text, bo
     if (none) {
         return s;
     }
-    auto* block = static_cast<char*>(GameNew(length + 2));
+    auto* block = static_cast<char*>(msvc6::GameOperatorNew(length + 2));
     block[0] = static_cast<char>(count);
     std::memcpy(block + 1, text, length);
     block[1 + length] = 0;

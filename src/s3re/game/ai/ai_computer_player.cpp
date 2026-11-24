@@ -89,6 +89,7 @@
 #include "game/tables.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/callee_stub.h"
 #include "test/difftest.h"
 
@@ -775,7 +776,7 @@ S3RE_HOOK(0x005509b0, CComputerPlayer_DeletingDestroy, DeletingDestroyFn, Origin
 void* __fastcall CComputerPlayer_DeletingDestroy(void* self, void* /*edx*/, std::uint32_t flags) {
     CComputerPlayer_Destroy(self, nullptr);
     if ((flags & 1) != 0) {
-        reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(self);  // the game's operator delete
+        msvc6::GameOperatorDelete(self);  // the game's operator delete
     }
     return self;
 }

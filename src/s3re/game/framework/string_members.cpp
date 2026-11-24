@@ -44,6 +44,10 @@ namespace s3re::game {
 using msvc6::String;
 namespace sd = msvc6::detail;
 
+// DPSESSIONDESC2 (80 bytes) and a GUID (16 bytes), copied as dwords.
+constexpr std::uint32_t kSessionDescDwords = 0x50 / 4;
+constexpr std::uint32_t kGuidDwords = 16 / 4;
+
 namespace {
 
 using framework::CRegistryValueInfo;
@@ -341,7 +345,7 @@ S3RE_HOOK(0x005be000, SessionDesc_Assign_5be000, AssignFn, Original_SessionDesc_
 void* __fastcall SessionDesc_Assign_5be000(void* self, void* /*edx*/, const void* x) {
     SessionDesc* const to = As<SessionDesc>(self);
     const SessionDesc* const from = As<SessionDesc>(x);
-    CopyDwords(to, from, 0x14);  // the whole DPSESSIONDESC2 (+0..+0x50), as dwords
+    CopyDwords(to, from, kSessionDescDwords);  // the whole DPSESSIONDESC2 (+0..+0x50)
     AssignMember(&to->name, &from->name);
     return self;
 }
@@ -384,7 +388,7 @@ void* __fastcall SessionDesc_Construct_5bb0b0(void* self, void* /*edx*/, const v
         session->desc[0] = 0;
         return self;
     }
-    CopyDwords(session, desc, 0x14);  // the DPSESSIONDESC2, as dwords
+    CopyDwords(session, desc, kSessionDescDwords);  // the DPSESSIONDESC2
     const char* text = As<SessionDesc>(desc)->sessionName;
     if (text != nullptr) {
         String temporary{};
@@ -414,7 +418,7 @@ S3RE_HOOK(0x005b6790, CDirectDrawDevice_Construct, DirectDrawDeviceConstructFn,
 void* __fastcall CDirectDrawDevice_Construct(void* self, void* /*edx*/, const void* guid,
                                              const char* description, const char* name) {
     DirectDrawDevice* const device = As<DirectDrawDevice>(self);
-    CopyDwords(device->guid, &g_guidNull, 4);
+    CopyDwords(device->guid, &g_guidNull, kGuidDwords);
     String* a = &device->description;
     a->allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(description));
     sd::Clear(a);
@@ -430,7 +434,7 @@ void* __fastcall CDirectDrawDevice_Construct(void* self, void* /*edx*/, const vo
         AssignTextViaTemporaries(b, name);
     }
     if (guid != nullptr) {
-        CopyDwords(device->guid, guid, 4);
+        CopyDwords(device->guid, guid, kGuidDwords);
     }
     return self;
 }

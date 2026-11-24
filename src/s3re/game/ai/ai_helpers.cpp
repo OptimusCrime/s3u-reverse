@@ -64,6 +64,7 @@
 #include "game/layout.h"
 #include "game/tables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
@@ -87,6 +88,23 @@ struct SixByteRecord {
 };
 #pragma pack(pop)
 static_assert(sizeof(SixByteRecord) == 6);
+
+// A free slot of the AI's fixed-size id lists (AI_WordListInsert/Remove).
+constexpr std::uint16_t kFreeSlot = 0xffff;
+// Tile::area as a 24-byte index from the world: (tiles + Tile::area) / 24.
+// The original keeps (tile index + this) * 3 in a register, so the upper
+// half of its EAX shows it.
+constexpr std::uint32_t kTileAreaIndex = 0x44d9;
+static_assert(kTileAreaIndex * kTileBytes == offsetof(CGameData, tiles) + offsetof(layout::Tile, area),
+              "tile area word");
+// AI_AreaAlongRow looks at most this many tiles further in +x.
+constexpr int kAreaSearchSteps = 16;
+// x * 100 / 576 (the 3x3 cells of 64 tiles) as the compiler's multiply:
+// (x * 0x38e38e39) >> 39.
+constexpr std::uint32_t kDivide576Multiplier = 0x38e38e39u;
+constexpr std::uint32_t kDivide576Shift = 7;  // after taking the high dword
+// AI_ResetAgentData's return value (EAX of its last loop).
+constexpr std::uint32_t kResetAgentDataResult = 10;
 
 }  // namespace
 
@@ -138,12 +156,12 @@ std::uint32_t __fastcall AI_SetCurrentPlayer(void* player) {
 
 S3RE_HOOK(0x00551970, AI_WordListInsert, WordListFn, Original_AI_WordListInsert, AI_WordListInsert);
 
-// Purpose: Adds a number (probably a building or settler id) to a computer
-// player's fixed-size list, in the first free (0xffff) slot.
+// Purpose: Adds an id (a note, building or settler id) to one of a
+// computer player's fixed-size lists, in the first free (kFreeSlot) slot.
 std::uint32_t __stdcall AI_WordListInsert(std::uint32_t value, std::uint16_t* list, std::uint32_t count) {
     const auto n = static_cast<std::uint16_t>(count);
     for (std::uint16_t i = 0; i < n; ++i) {
-        if (list[i] == 0xffff) {
+        if (list[i] == kFreeSlot) {
             list[i] = static_cast<std::uint16_t>(value);
             return 1;
         }
@@ -163,10 +181,10 @@ std::uint32_t __stdcall AI_WordListRemove(std::uint32_t value, std::uint16_t* li
             for (std::int32_t j = i; j < static_cast<std::int32_t>(n) - 1; ++j) {
                 list[j] = list[j + 1];
             }
-            list[n - 1] = 0xffff;
+            list[n - 1] = kFreeSlot;
             return 1;
         }
-        if (entry == 0xffff) {
+        if (entry == kFreeSlot) {
             return 0;
         }
     }
@@ -276,7 +294,7 @@ S3RE_HOOK(0x00554040, AI_CEvaLand_FreeGrid, FreeGridFn, Original_AI_CEvaLand_Fre
 void __fastcall AI_CEvaLand_FreeGrid(void* self, void* /*edx*/) {
     AiGridCell*& grid = static_cast<AiLandEvaluation*>(self)->cells;
     if (grid != nullptr) {
-        reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(grid);
+        msvc6::GameOperatorDelete(grid);
         grid = nullptr;
     }
 }
@@ -316,11 +334,9 @@ std::uint32_t __fastcall AI_BuildingArea(const std::uint16_t* building) {
     if (x >= g_aiMapSizeX || y >= g_aiMapSizeY) {
         return ((id * 29) & 0xffff0000u) | 0xffffu;  // `or ax, 0FFFFh` on 29 * id
     }
-    // The original indexes [world + (tile + 0x44d9) * 24], which is the
-    // tile's area word (0x44d9 * 24 = tiles + Tile::area); the upper half of
-    // EAX keeps that index's.
-    const std::uint32_t index = x * 0x300u + y + 0x44d9u;
-    static_assert(0x44d9 * kTileBytes == offsetof(CGameData, tiles) + offsetof(layout::Tile, area), "tile area word");
+    // The original indexes [world + (tile + kTileAreaIndex) * 24], the
+    // tile's area word; the upper half of EAX keeps that index's.
+    const std::uint32_t index = x * static_cast<std::uint32_t>(layout::kMapRowTiles) + y + kTileAreaIndex;
     return (index & 0xffff0000u) | TileAtOffset(world, TileOffset(x, y)).area;
 }
 
@@ -445,13 +461,15 @@ std::uint32_t __fastcall AI_AreaAlongRow(std::uint32_t x, std::uint32_t y) {
     }
     CGameData* world = g_aiWorld.get();
     y &= 0xffff;
-    // The original's register holds (tile index + 0x44d9) * 3; times 8 it is
-    // the offset of the tile's area word (see AI_BuildingArea).
-    const auto index3 = [&](std::uint32_t tx) { return ((tx & 0xffff) * 0x300 + y + 0x44d9) * 3; };
+    // The original's register holds (tile index + kTileAreaIndex) * 3; times
+    // 8 it is the offset of the tile's area word (see AI_BuildingArea).
+    const auto index3 = [&](std::uint32_t tx) {
+        return ((tx & 0xffff) * static_cast<std::uint32_t>(layout::kMapRowTiles) + y + kTileAreaIndex) * 3;
+    };
     const auto area = [&](std::uint32_t tx) { return TileAtOffset(world, TileOffset(tx & 0xffff, y)).area; };
     std::uint32_t upper = index3(x);
     if (area(x) == 0) {
-        for (int steps = 0; steps < 16; ++steps) {
+        for (int steps = 0; steps < kAreaSearchSteps; ++steps) {
             ++x;
             if (static_cast<std::int32_t>(x & 0xffff) >= static_cast<std::int32_t>(sizeX) - 1) {
                 upper = 0;
@@ -532,9 +550,9 @@ std::uint32_t __fastcall AI_CEvaLand_GridSumAround(void* self, void* /*edx*/, st
     }
     std::uint32_t low = 0;
     const auto percent = [&low](std::uint32_t sum) {
-        const std::uint64_t product = static_cast<std::uint64_t>(sum * 100u) * 0x38e38e39u;
+        const std::uint64_t product = static_cast<std::uint64_t>(sum * 100u) * kDivide576Multiplier;
         low = static_cast<std::uint32_t>(product);
-        return static_cast<std::uint8_t>((product >> 32) >> 7);
+        return static_cast<std::uint8_t>((product >> 32) >> kDivide576Shift);
     };
     cell->percent1e = percent(sumB);
     cell->percent1f = percent(sumC);
@@ -564,18 +582,18 @@ std::uint32_t __fastcall AI_ResetAgentData(void* self, void* /*edx*/) {
     data->settlers_counted = 0;
     data->unk002 = 0;
     data->team_strength_valid = 0;
-    for (std::size_t k = 0; k < 20; ++k) {
-        data->team_strength[k] = 0;
-        data->dwords2b4[k] = 0;
-        data->dwords304[k] = 0;
-        data->dwords354[k] = 0;
-        data->dwords3f4[k] = 0;
-        for (std::size_t j = 0; j < 10; ++j) {
-            data->group_target_buildings[k][j] = 0;
-            data->group_defending[k][j] = 0;
+    for (std::size_t p = 0; p < layout::kPlayers; ++p) {
+        data->team_strength[p] = 0;
+        data->dwords2b4[p] = 0;
+        data->dwords304[p] = 0;
+        data->dwords354[p] = 0;
+        data->dwords3f4[p] = 0;
+        for (std::size_t group = 0; group < kUnitGroups; ++group) {
+            data->group_target_buildings[p][group] = 0;
+            data->group_defending[p][group] = 0;
         }
     }
-    return 10;
+    return kResetAgentDataResult;
 }
 
 S3RE_HOOK(0x00553e00, AI_CEvaLand_ResetGlobals, ClearGlobalsFn, Original_AI_CEvaLand_ResetGlobals, AI_CEvaLand_ResetGlobals);

@@ -42,6 +42,7 @@
 #include "game/ui/screen_element_layout.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/difftest.h"
 #include "watcom/ptr_vector.h"
 
@@ -67,6 +68,17 @@ using ui::CScreenGroup;
 
 namespace {
 
+namespace slot = ui::element_slot;
+namespace group_slot = ui::group_slot;
+
+// The background colour a new element fills with (CScreenElement +0x04).
+constexpr std::uint32_t kDefaultBackground = 0x1111;
+// A control's tooltip closes once the mouse moved this far (pixels, in x or
+// y) from where it opened.
+constexpr std::int32_t kTooltipCloseDistance = 50;  // compared signed, like the original
+// DDPIXELFORMAT is 32 bytes (Dialog::PixelFormat copies it as dwords).
+constexpr int kPixelFormatDwords = sizeof(DDPIXELFORMAT) / 4;
+static_assert(kPixelFormatDwords == 8);
 
 // CGroupControl: the "this" its control part's methods get is 0x7c bytes
 // before the group part's "this" (it is where the group part starts).
@@ -221,7 +233,7 @@ namespace {
 
 void InitScreenElement(void* self) {
     CScreenElement* element = ElementOf(self);
-    element->background = 0x1111;
+    element->background = kDefaultBackground;
     element->parent = 0;
     element->has_focus = 0;
     element->mouse_inside = 0;
@@ -247,7 +259,7 @@ S3RE_HOOK(0x00415660, CScreenElement_ConstructRect, CtorRectFn, Original_CScreen
 // Purpose: Constructor of a UI element at a given screen rectangle. Byte
 // +0x1f is left as it was (the original doesn't set it here).
 void* __fastcall CScreenElement_ConstructRect(void* self, void* /*edx*/, const RECT* rect) {
-    ElementOf(self)->background = 0x1111;
+    ElementOf(self)->background = kDefaultBackground;
     std::memcpy(&ElementOf(self)->rect, rect, sizeof(RECT));
     InitScreenElement(self);
     return self;
@@ -262,7 +274,7 @@ std::uint32_t __fastcall CScreenElement_Destroy(void* self, void* /*edx*/) {
     if (parent == nullptr) {
         return reinterpret_cast<std::uint32_t>(self);
     }
-    return CallVirtual<std::uint32_t>(parent, 0x04, self);
+    return CallVirtual<std::uint32_t>(parent, group_slot::kRemoveChild, self);
 }
 
 S3RE_HOOK(0x00415640, CScreenElement_DeletingDestroy, DeletingDtorFn, Original_CScreenElement_DeletingDestroy,
@@ -273,7 +285,7 @@ S3RE_HOOK(0x00415640, CScreenElement_DeletingDestroy, DeletingDtorFn, Original_C
 void* __fastcall CScreenElement_DeletingDestroy(void* self, void* /*edx*/, std::uint32_t flags) {
     CScreenElement_Destroy(self, nullptr);
     if ((flags & 1) != 0) {
-        reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(self);
+        msvc6::GameOperatorDelete(self);
     }
     return self;
 }
@@ -305,10 +317,10 @@ std::uint32_t __fastcall CScreenElement_SetRect(void* self, void* /*edx*/, const
                             (rect->bottom - own.bottom) - rect->top + own.top};
     own = *rect;
     if (move[0] != 0 || move[1] != 0) {
-        CallVirtual<std::uint32_t>(self, 0x70, rect, static_cast<void*>(move));
+        CallVirtual<std::uint32_t>(self, slot::kOnMoved, rect, static_cast<void*>(move));
     }
     if (size[0] != 0 || size[1] != 0) {
-        return CallVirtual<std::uint32_t>(self, 0x74, rect, static_cast<void*>(size));
+        return CallVirtual<std::uint32_t>(self, slot::kOnResized, rect, static_cast<void*>(size));
     }
     return 0;
 }
@@ -359,7 +371,7 @@ std::uint32_t __fastcall CScreenElement_SetParent(void* self, void* /*edx*/, std
         return parent;
     }
     ElementOf(self)->parent = parent;
-    return CallVirtual<std::uint32_t>(self, 0x68, static_cast<std::uint32_t>(parent != 0 ? 1 : 0));
+    return CallVirtual<std::uint32_t>(self, slot::kOnParentChanged, static_cast<std::uint32_t>(parent != 0 ? 1 : 0));
 }
 
 S3RE_HOOK(0x00415830, CScreenElement_NeedsRedraw, NoArgFn, Original_CScreenElement_NeedsRedraw,
@@ -376,7 +388,7 @@ S3RE_HOOK(0x00415840, CScreenElement_IsOffScreen, NoArgFn, Original_CScreenEleme
 // Purpose: Whether the element is not on a screen (GetScreen, slot 0x78,
 // returns 0). Was IsQuery78Zero.
 std::uint32_t __fastcall CScreenElement_IsOffScreen(void* self, void* /*edx*/) {
-    return CallVirtual<std::uint32_t>(self, 0x78) == 0 ? 1 : 0;
+    return CallVirtual<std::uint32_t>(self, slot::kGetScreen) == 0 ? 1 : 0;
 }
 
 S3RE_HOOK(0x00415ba0, CScreenElement_SetFocus, Arg1Fn, Original_CScreenElement_SetFocus, CScreenElement_SetFocus);
@@ -386,9 +398,9 @@ S3RE_HOOK(0x00415ba0, CScreenElement_SetFocus, Arg1Fn, Original_CScreenElement_S
 std::uint32_t __fastcall CScreenElement_SetFocus(void* self, void* /*edx*/, std::uint32_t /*unused*/) {
     ElementOf(self)->has_focus = 1;
     if (void* parent = reinterpret_cast<void*>(ElementOf(self)->parent); parent != nullptr) {
-        CallVirtual<std::uint32_t>(ParentBase(parent), 0x0c, self);
+        CallVirtual<std::uint32_t>(ParentBase(parent), slot::kSetFocus, self);
     }
-    return CallVirtual<std::uint32_t>(self, 0x64, 1u);
+    return CallVirtual<std::uint32_t>(self, slot::kOnFocusChanged, 1u);
 }
 
 S3RE_HOOK(0x00415bd0, CScreenElement_KillFocus, NoArgFn, Original_CScreenElement_KillFocus,
@@ -399,7 +411,7 @@ S3RE_HOOK(0x00415bd0, CScreenElement_KillFocus, NoArgFn, Original_CScreenElement
 std::uint32_t __fastcall CScreenElement_KillFocus(void* self, void* /*edx*/) {
     std::uint32_t result = 0;
     if (ElementOf(self)->has_focus != 0) {
-        result = CallVirtual<std::uint32_t>(self, 0x64, 0u);
+        result = CallVirtual<std::uint32_t>(self, slot::kOnFocusChanged, 0u);
     }
     ElementOf(self)->has_focus = 0;
     return result;
@@ -416,7 +428,7 @@ std::uint32_t __fastcall CScreenElement_Invalidate(void* self, void* /*edx*/) {
     if (parent == nullptr) {
         return 0;
     }
-    return CallVirtual<std::uint32_t>(ParentBase(parent), 0x1c);
+    return CallVirtual<std::uint32_t>(ParentBase(parent), slot::kInvalidate);
 }
 
 S3RE_HOOK(0x00415ca0, CScreenElement_OnParentChanged, Arg1Fn, Original_CScreenElement_OnParentChanged, CScreenElement_OnParentChanged);
@@ -427,13 +439,13 @@ S3RE_HOOK(0x00415ca0, CScreenElement_OnParentChanged, Arg1Fn, Original_CScreenEl
 // it was removed from it (0 when detached). Was CScreenElement::Enable.
 std::uint32_t __fastcall CScreenElement_OnParentChanged(void* self, void* /*edx*/, std::uint32_t attached) {
     if (static_cast<std::uint8_t>(attached) == 0) {
-        return CallVirtual<std::uint32_t>(self, 0x6c, 0u);
+        return CallVirtual<std::uint32_t>(self, slot::kOnShow, 0u);
     }
-    const std::uint32_t screen = CallVirtual<std::uint32_t>(self, 0x78);
+    const std::uint32_t screen = CallVirtual<std::uint32_t>(self, slot::kGetScreen);
     if (screen == 0) {
         return screen;
     }
-    return CallVirtual<std::uint32_t>(self, 0x6c, 1u);
+    return CallVirtual<std::uint32_t>(self, slot::kOnShow, 1u);
 }
 
 S3RE_HOOK(0x004160d0, CScreenElement_GetScreen, NoArgFn, Original_CScreenElement_GetScreen,
@@ -446,7 +458,7 @@ std::uint32_t __fastcall CScreenElement_GetScreen(void* self, void* /*edx*/) {
     if (parent == nullptr) {
         return 0;
     }
-    return CallVirtual<std::uint32_t>(ParentBase(parent), 0x78);
+    return CallVirtual<std::uint32_t>(ParentBase(parent), slot::kGetScreen);
 }
 
 S3RE_HOOK(0x00416c60, CScreenElement_SetFlag1F, VoidArg1Fn, Original_CScreenElement_SetFlag1F,
@@ -469,11 +481,11 @@ S3RE_HOOK(0x00415850, CScreenElement_OnMessage, MessageFn, Original_CScreenEleme
 // "accepts" check agrees, then handles it.
 std::uint32_t __fastcall CScreenElement_OnMessage(void* self, void* /*edx*/, Message message) {
     ElementOf(self)->has_focus = 1;
-    const std::uint32_t accepted = CallVirtual<std::uint32_t>(self, 0x20, static_cast<const void*>(&message));
+    const std::uint32_t accepted = CallVirtual<std::uint32_t>(self, slot::kWantsMessage, static_cast<const void*>(&message));
     if (static_cast<std::uint8_t>(accepted) == 0) {
         return accepted;
     }
-    return CallVirtual<std::uint32_t>(self, 0x24, message);
+    return CallVirtual<std::uint32_t>(self, slot::kDispatchMessage, message);
 }
 
 S3RE_HOOK(0x00415890, CScreenElement_WantsMessage, MessagePtrFn, Original_CScreenElement_WantsMessage,
@@ -483,8 +495,10 @@ S3RE_HOOK(0x00415890, CScreenElement_WantsMessage, MessagePtrFn, Original_CScree
 // 1, 2, 3, 0x20, 0x30 and 0x40, otherwise if its position lies inside.
 // Only AL is the result.
 std::uint32_t __fastcall CScreenElement_WantsMessage(void* self, void* /*edx*/, const Message* message) {
+    namespace type = ui::message_type;
     switch (message->type) {
-        case 1: case 2: case 3: case 0x30: case 0x40: case 0x20:
+        case type::kKeyDown: case type::kKeyUp: case type::kChar: case type::kTimer: case type::kCommand:
+        case type::kType20:
             return 1;
         default:
             return CScreenElement_ContainsPoint(self, nullptr, message->x, message->y);
@@ -497,24 +511,25 @@ S3RE_HOOK(0x004158d0, CScreenElement_DispatchMessage, MessageFn, Original_CScree
 // Purpose: Passes a message to the element's handler for its type (one
 // virtual function per type); 0 for types it has no handler for.
 std::uint32_t __fastcall CScreenElement_DispatchMessage(void* self, void* /*edx*/, Message message) {
-    std::size_t slot = 0;
+    namespace type = ui::message_type;
+    std::size_t handler = 0;
     switch (message.type) {
-        case 0x01: slot = 0x44; break;
-        case 0x02: slot = 0x48; break;
-        case 0x03: slot = 0x4c; break;
-        case 0x10: slot = 0x30; break;
-        case 0x12: slot = 0x34; break;
-        case 0x13: slot = 0x38; break;
-        case 0x15: slot = 0x3c; break;
-        case 0x16: slot = 0x40; break;
-        case 0x20: slot = 0x50; break;
-        case 0x30: return CallVirtual<std::uint32_t>(self, 0x54);
-        case 0x40: slot = 0x58; break;
+        case type::kKeyDown: handler = slot::kOnKeyDown; break;
+        case type::kKeyUp: handler = slot::kOnKeyUp; break;
+        case type::kChar: handler = slot::kOnChar; break;
+        case type::kLButtonDown: handler = slot::kOnLButtonDown; break;
+        case type::kLButtonUp: handler = slot::kOnLButtonUp; break;
+        case type::kType13: handler = slot::kOnMessage13; break;
+        case type::kType15: handler = slot::kOnMessage15; break;
+        case type::kMouseMove: handler = slot::kOnMouseMove; break;
+        case type::kType20: handler = slot::kOnMessage20; break;
+        case type::kTimer: return CallVirtual<std::uint32_t>(self, slot::kOnTimer);
+        case type::kCommand: handler = slot::kOnCommand; break;
         default:
             // xor al, al on EAX = this.
             return reinterpret_cast<std::uint32_t>(self) & ~0xffu;
     }
-    return CallVirtual<std::uint32_t>(self, slot, message);
+    return CallVirtual<std::uint32_t>(self, handler, message);
 }
 
 S3RE_HOOK(0x00415c10, CScreenElement_TrackMouse, MessageFn, Original_CScreenElement_TrackMouse,
@@ -532,13 +547,13 @@ std::uint32_t __fastcall CScreenElement_TrackMouse(void* self, void* /*edx*/, Me
             return mouseInside;
         }
         mouseInside = 1;
-        return CallVirtual<std::uint32_t>(self, 0x5c, message);
+        return CallVirtual<std::uint32_t>(self, slot::kOnMouseEnter, message);
     }
     if (mouseInside != 1) {
         return mouseInside;
     }
     mouseInside = 0;
-    return CallVirtual<std::uint32_t>(self, 0x60, message);
+    return CallVirtual<std::uint32_t>(self, slot::kOnMouseLeave, message);
 }
 
 S3RE_HOOK(0x00415aa0, CScreenElement_DrawClipped, Draw2Fn, Original_CScreenElement_DrawClipped,
@@ -552,7 +567,7 @@ std::uint32_t __fastcall CScreenElement_DrawClipped(void* self, void* /*edx*/, s
     IntersectRect(&visible, clip, CScreenElement_Rect(self, nullptr));
     std::uint32_t result = static_cast<std::uint32_t>(IsRectEmpty(&visible));
     if (result == 0) {
-        result = CallVirtual<std::uint32_t>(self, 0x28, surface, static_cast<const void*>(&visible),
+        result = CallVirtual<std::uint32_t>(self, slot::kDraw, surface, static_cast<const void*>(&visible),
                                             static_cast<const void*>(&visible));
     }
     ElementOf(self)->needs_redraw = 0;
@@ -567,7 +582,7 @@ std::uint32_t __fastcall CScreenElement_DrawRect(void* self, void* /*edx*/, std:
                                                  const RECT* rect, std::uint32_t /*unused*/) {
     std::uint32_t result = static_cast<std::uint32_t>(IsRectEmpty(rect));
     if (result == 0) {
-        result = CallVirtual<std::uint32_t>(self, 0x2c, surface, rect);
+        result = CallVirtual<std::uint32_t>(self, slot::kFillBackground, surface, rect);
     }
     ElementOf(self)->needs_redraw = 0;
     return result;
@@ -608,7 +623,7 @@ S3RE_HOOK(0x00416880, Dialog_PixelFormat, PixelFormatFn, Original_Dialog_PixelFo
 // 0x7a8020) of the dialogs' drawing surface.
 void* __stdcall Dialog_PixelFormat(void* out) {
     auto* to = static_cast<std::uint32_t*>(out);
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < kPixelFormatDwords; ++i) {
         to[i] = g_dialogPixelFormat[i];
     }
     return out;
@@ -658,7 +673,7 @@ std::uint32_t __fastcall UiGroup_SetFocus(void* self, void* /*edx*/, std::uint32
     if (old == nullptr) {
         return result;
     }
-    return CallVirtual<std::uint32_t>(old, 0x10);
+    return CallVirtual<std::uint32_t>(old, slot::kKillFocus);
 }
 
 S3RE_HOOK(0x00417680, UiGroup_KillFocus, NoArgFn, Original_UiGroup_KillFocus, UiGroup_KillFocus);
@@ -669,7 +684,7 @@ std::uint32_t __fastcall UiGroup_KillFocus(void* self, void* /*edx*/) {
     void* old = reinterpret_cast<void*>(GroupOf(self)->focus);
     GroupOf(self)->focus = 0;
     if (old != nullptr) {
-        CallVirtual<std::uint32_t>(old, 0x10);
+        CallVirtual<std::uint32_t>(old, slot::kKillFocus);
     }
     return CScreenElement_KillFocus(GroupBase(self), nullptr);
 }
@@ -802,26 +817,27 @@ S3RE_HOOK(0x00417130, CScreenGroup_HandleMessage, MessageFn, Original_CScreenGro
 // handled).
 std::uint32_t __fastcall CScreenGroup_HandleMessage(void* self, void* /*edx*/, Message message) {
     if (void* captured = reinterpret_cast<void*>(GroupOf(self)->captured); captured != nullptr) {
-        const std::uint32_t accepted = CallVirtual<std::uint32_t>(captured, 0x20, static_cast<const void*>(&message));
+        const std::uint32_t accepted = CallVirtual<std::uint32_t>(captured, slot::kWantsMessage, static_cast<const void*>(&message));
         if (static_cast<std::uint8_t>(accepted) == 0) {
             return 0;
         }
         // (re-read after the call, as in the original)
-        return CallVirtual<std::uint32_t>(reinterpret_cast<void*>(GroupOf(self)->captured), 0x24, message);
+        return CallVirtual<std::uint32_t>(reinterpret_cast<void*>(GroupOf(self)->captured), slot::kDispatchMessage, message);
     }
     std::uint8_t handled =
         static_cast<std::uint8_t>(CScreenElement_DispatchMessage(GroupBase(self), nullptr, message));
     if (handled != 0) {
         return handled;
     }
+    namespace type = ui::message_type;
     switch (message.type) {
-        case 1: case 2: case 3:
+        case type::kKeyDown: case type::kKeyUp: case type::kChar:  // keyboard: to the focus child
             if (void* focus = reinterpret_cast<void*>(GroupOf(self)->focus); focus != nullptr) {
-                handled = static_cast<std::uint8_t>(CallVirtual<std::uint32_t>(focus, 0x24, message));
+                handled = static_cast<std::uint8_t>(CallVirtual<std::uint32_t>(focus, slot::kDispatchMessage, message));
             }
             return handled;
-        case 0x30:
-        case 0x16:
+        case type::kTimer:
+        case type::kMouseMove:  // to every child
             for (std::uint32_t i = 0; i < ChildCount(self); ++i) {
                 CallVirtual<std::uint32_t>(Child(self, i), 0x24, message);
             }
@@ -950,7 +966,7 @@ void __fastcall CControl_DeleteTooltip(void* control, void* /*edx*/) {
     if (tooltip == nullptr) {
         return;
     }
-    CallVirtual<std::uint32_t>(tooltip, 0x00, 1u);  // scalar deleting destructor
+    CallVirtual<std::uint32_t>(tooltip, slot::kDeletingDestructor, 1u);  // scalar deleting destructor
     part->tooltip = 0;
 }
 
@@ -959,7 +975,7 @@ S3RE_HOOK(0x00418380, CControl_OnLButtonDown, MessageFn, Original_CControl_OnLBu
 // Purpose: A control's handler for message type 0x10, the left mouse button
 // going down: gives it the focus (vf03 with 0). Was OnMessage10.
 std::uint32_t __fastcall CControl_OnLButtonDown(void* self, void* /*edx*/, Message /*message*/) {
-    CallVirtual<std::uint32_t>(ControlBase(self), 0x0c, 0u);
+    CallVirtual<std::uint32_t>(ControlBase(self), slot::kSetFocus, 0u);
     return BaseHandlerResult(ControlVbptr(self));
 }
 
@@ -977,8 +993,8 @@ std::uint32_t __fastcall CControl_OnMouseMove(void* self, void* /*edx*/, Message
     control->mouse_x = x;
     control->mouse_y = y;
     if (control->tooltip != 0) {
-        if (AbsoluteDifference(control->mouse_x, control->tooltip_x) > 50 ||
-            AbsoluteDifference(y, control->tooltip_y) > 50) {
+        if (AbsoluteDifference(control->mouse_x, control->tooltip_x) > kTooltipCloseDistance ||
+            AbsoluteDifference(y, control->tooltip_y) > kTooltipCloseDistance) {
             CControl_DeleteTooltip(control, nullptr);
         }
     }

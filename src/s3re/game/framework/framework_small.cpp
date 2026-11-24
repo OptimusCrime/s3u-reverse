@@ -54,6 +54,7 @@
 #include "game/texts.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/difftest.h"
 
 #include <cstddef>
@@ -72,7 +73,6 @@ std::uint32_t __fastcall Lobby_MemoryBlock_Append(void* self, void* edx, const v
 std::uint32_t __fastcall Lobby_MemoryBlock_Copy(void* self, void* edx, const void* other);
 
 namespace {
-
 
 using framework::CLMMessageBlock;
 using framework::CRegistryKey;
@@ -104,14 +104,6 @@ struct IntVector {
 static_assert(offsetof(IntVector, unk18) == 0x18);
 #pragma pack(pop)
 
-void* GameNew(std::uint32_t size) {
-    return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
-}
-
-std::uint32_t GameDelete(void* block) {
-    return reinterpret_cast<std::uint32_t(__cdecl*)(void*)>(0x0061e4ef)(block);
-}
-
 std::uint32_t Address(const void* p) {
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p));
 }
@@ -123,7 +115,7 @@ void ConstructIntVectorStart(void* self, std::uint32_t capacity) {
     vector->capacity = capacity;
     vector->filled = 0;
     if (capacity != 0) {
-        void* block = GameNew(capacity << 2);
+        void* block = msvc6::GameOperatorNew(capacity * 4);  // int elements
         vector->data = static_cast<std::uint32_t*>(block);
         if (block == nullptr) {
             vector->capacity = 0;
@@ -132,7 +124,6 @@ void ConstructIntVectorStart(void* self, std::uint32_t capacity) {
         vector->data = nullptr;
     }
 }
-
 
 }  // namespace
 
@@ -213,7 +204,7 @@ std::uint32_t __fastcall WCIntVector_Destroy(void* self, void* /*edx*/) {
     vector->vtable = vtables::kWCBareVectorBase_int;
     std::uint32_t result = Address(vector->data);
     if (result != 0) {
-        result = GameDelete(vector->data);  // (after the empty error hook 0x59f200)
+        result = msvc6::GameOperatorDelete(vector->data);  // (after the empty error hook 0x59f200)
     }
     vector->vtable = vtables::kWCExcept;
     return result;
@@ -227,7 +218,7 @@ std::uint32_t __fastcall WCUIntVector_Destroy(void* self, void* /*edx*/) {
     vector->vtable = vtables::kWCBareVectorBase_uint;
     std::uint32_t result = Address(vector->data);
     if (result != 0) {
-        result = GameDelete(vector->data);  // (after the empty error hook 0x59f200)
+        result = msvc6::GameOperatorDelete(vector->data);  // (after the empty error hook 0x59f200)
     }
     vector->vtable = vtables::kWCExcept;
     return result;
@@ -265,10 +256,10 @@ S3RE_HOOK(0x0044c450, Lobby_ScaleBy4_44c450, ScaleFn, Original_Lobby_ScaleBy4_44
 // finer units for the menus).
 std::uint32_t __stdcall Lobby_ScaleBy4_44c450(std::uint32_t* out, std::uint32_t a, std::uint32_t b, std::uint32_t c,
                                               std::uint32_t d) {
-    out[0] = a << 2;
-    out[1] = b << 2;
-    out[2] = c << 2;
-    out[3] = d << 2;
+    out[0] = a * 4;
+    out[1] = b * 4;
+    out[2] = c * 4;
+    out[3] = d * 4;
     return Address(out);
 }
 
@@ -591,7 +582,7 @@ void CompareSmall(test::Context& ctx, const Functions& candidate, int cases) {
                     std::uint8_t source[0x24];
                     ctx.rng().Fill(source, sizeof(source));
                     const std::uint32_t used = ctx.rng().Below(20);
-                    auto* data = static_cast<std::uint8_t*>(GameNew(used + 1));
+                    auto* data = static_cast<std::uint8_t*>(msvc6::GameOperatorNew(used + 1));
                     ctx.rng().Fill(data, used + 1);
                     static_assert(sizeof(source) >= sizeof(CLMMessageBlock));
                     As<CLMMessageBlock>(source)->block.data = data;

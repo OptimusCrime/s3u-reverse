@@ -17,6 +17,7 @@
 #include "game/ai/ai_layout.h"
 #include "game/globals.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/difftest.h"
 
 #include <cstdint>
@@ -30,10 +31,6 @@ namespace {
 
 constexpr std::uintptr_t kEhVectorDestructor = 0x0061f18a;
 constexpr std::uintptr_t kListDestructor = 0x005591e0;
-
-std::uint32_t GameDelete(void* block) {
-    return reinterpret_cast<std::uint32_t(__cdecl*)(void*)>(0x0061e4ef)(block);
-}
 
 }  // namespace
 
@@ -75,7 +72,7 @@ std::uint32_t __cdecl AI_CEvaLand_Release() {
     void* instance = g_aiEvaLand.get();
     if (instance != nullptr) {
         AI_CEvaLand_Destroy(instance, nullptr);
-        result = GameDelete(instance);
+        result = msvc6::GameOperatorDelete(instance);
     }
     g_aiEvaLand = nullptr;
     g_aiEvaLandRefCount = 0;
@@ -95,20 +92,16 @@ std::uint32_t __cdecl AI_CEvaLand_Release() {
 
 namespace {
 
-void* GameNew(std::uint32_t size) {
-    return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
-}
-
 AiLandEvaluation* MakeEvaLand(test::Context& ctx) {
-    auto* object = static_cast<AiLandEvaluation*>(GameNew(sizeof(AiLandEvaluation)));
+    auto* object = static_cast<AiLandEvaluation*>(msvc6::GameOperatorNew(sizeof(AiLandEvaluation)));
     ctx.rng().Fill(object, sizeof(AiLandEvaluation));
     for (AiList& list : object->lists) {
-        auto* head = static_cast<AiListNode*>(GameNew(sizeof(AiListNode)));
+        auto* head = static_cast<AiListNode*>(msvc6::GameOperatorNew(sizeof(AiListNode)));
         head->next = head->prev = reinterpret_cast<std::uintptr_t>(head);
         list.head = head;
         list.count = 0;
     }
-    object->cells = ctx.rng().Chance(1, 4) ? nullptr : static_cast<AiGridCell*>(GameNew(16));
+    object->cells = ctx.rng().Chance(1, 4) ? nullptr : static_cast<AiGridCell*>(msvc6::GameOperatorNew(16));
     return object;
 }
 

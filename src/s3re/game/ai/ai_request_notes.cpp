@@ -32,6 +32,7 @@
 #include "game/ai/ai_layout.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/difftest.h"
 
 #include <cstddef>
@@ -89,10 +90,6 @@ void SetRequest(void* self, NoteType type, std::uint32_t buildingType, std::uint
     note->value22 = static_cast<std::uint16_t>(value);
     note->unk24 = 0;
     note->unk26 = 0;
-}
-
-void GameOperatorDelete(void* block) {
-    reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(block);
 }
 
 }  // namespace
@@ -215,7 +212,7 @@ S3RE_HOOK(0x005655a0, BLACK_BOARD_NOTE_DeletingDestroy, DeletingFn, Original_BLA
 void* __fastcall BLACK_BOARD_NOTE_DeletingDestroy(void* self, void* /*edx*/, std::uint32_t flags) {
     BLACK_BOARD_NOTE_Destroy(self, nullptr);  // inlined in the original
     if ((flags & 1) != 0) {
-        GameOperatorDelete(self);
+        msvc6::GameOperatorDelete(self);
     }
     return self;
 }
@@ -228,7 +225,7 @@ S3RE_HOOK(0x0056f6b0, RequestNote_DeletingDestroy, DeletingFn, Original_RequestN
 void* __fastcall RequestNote_DeletingDestroy(void* self, void* /*edx*/, std::uint32_t flags) {
     BLACK_BOARD_NOTE_Destroy(self, nullptr);
     if ((flags & 1) != 0) {
-        GameOperatorDelete(self);
+        msvc6::GameOperatorDelete(self);
     }
     return self;
 }

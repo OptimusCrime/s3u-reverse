@@ -219,6 +219,10 @@ static_assert(sizeof(ComputerPlayer) == 0x780);
 // its default from g_aiCandidateDefaults. Indexes are not range-checked by the
 // original (callers pass up to 0xffff), so the arrays are indexed past their
 // declared ends like the original's address arithmetic.
+// An AiPlayerData is a node of the player's std::list in CEvaLand::lists
+// (one per economy area of the player, created by CEvaLand::AddArea
+// 0x555260): +0 next, +4 previous, the value (the area record, starting
+// with the area id word at +8) after it. Its offsets below are node offsets.
 struct AiCandidate {
     std::uint16_t score;  // +0
     std::uint16_t a;      // +2 (probably x)

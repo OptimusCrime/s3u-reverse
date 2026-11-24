@@ -39,6 +39,7 @@
 #include "game/framework/framework_layout.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/difftest.h"
 
 #include <cstdint>
@@ -58,7 +59,6 @@ using framework::CWaitable;
 using framework::CWin32Handle;
 using framework::CWindowBase;
 
-
 template <typename T>
 T* As(void* self) {
     return static_cast<T*>(self);
@@ -66,10 +66,6 @@ T* As(void* self) {
 
 void* AsPointer(std::uint32_t value) {
     return reinterpret_cast<void*>(static_cast<std::uintptr_t>(value));
-}
-
-void GameOperatorDelete(void* block) {
-    reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef)(block);
 }
 
 }  // namespace
@@ -121,7 +117,7 @@ S3RE_HOOK(0x0060bfc0, Win32_CObject_DeletingDestroy, DeletingDtorFn, Original_Wi
 void* __fastcall Win32_CObject_DeletingDestroy(void* self, void* /*edx*/, std::uint32_t flags) {
     Win32_CObject_Destroy(self, nullptr);
     if ((flags & 1) != 0) {
-        GameOperatorDelete(self);
+        msvc6::GameOperatorDelete(self);
     }
     return self;
 }
@@ -275,10 +271,6 @@ Win32Functions OurWin32() {
             &DirectX_CSurface_Construct};
 }
 
-void* GameOperatorNew(std::uint32_t size) {
-    return reinterpret_cast<void*(__cdecl*)(std::uint32_t)>(0x0061efb9)(size);
-}
-
 // Runs operation `op` of `f` on `object` (with a guard area around it);
 // returns EAX as an offset from the object (or the value for void ones).
 std::uintptr_t RunWin32(const Win32Functions& f, int op, std::uint8_t* object, const std::uint32_t* args) {
@@ -322,8 +314,8 @@ void CompareWin32(test::Context& ctx, const Win32Functions& candidate, int cases
     // The deleting destructor with the delete flag: both free a fresh block
     // from the game's heap and return it.
     for (int i = 0; i < 200; ++i) {
-        void* blockA = GameOperatorNew(8);
-        void* blockB = GameOperatorNew(8);
+        void* blockA = msvc6::GameOperatorNew(8);
+        void* blockB = msvc6::GameOperatorNew(8);
         const std::uint32_t flags = ctx.rng().Next32() | 1u;
         void* ra = original.objectDeletingDtor(blockA, nullptr, flags);
         void* rb = candidate.objectDeletingDtor(blockB, nullptr, flags);
