@@ -235,6 +235,8 @@ void RequestMine(Agent& agent, B type, std::uint16_t supply, std::int32_t users,
 using ConditionFn = void(__fastcall*)(Agent* agent, void* edx);
 
 void __fastcall T_ECONOMY_AGENT_ConsiderSawmill(Agent* agent, void* edx);
+void __fastcall T_ECONOMY_AGENT_ConsiderWoodcutter(Agent* agent, void* edx);
+void __fastcall T_ECONOMY_AGENT_ConsiderStonecutter(Agent* agent, void* edx);
 void __fastcall T_ECONOMY_AGENT_ConsiderForester(Agent* agent, void* edx);
 void __fastcall T_ECONOMY_AGENT_ConsiderCoalMine(Agent* agent, void* edx);
 void __fastcall T_ECONOMY_AGENT_ConsiderIronMine(Agent* agent, void* edx);
@@ -263,6 +265,10 @@ void __fastcall T_ECONOMY_AGENT_ConsiderLargeTemple(Agent* agent, void* edx);
 void __fastcall T_ECONOMY_AGENT_ConsiderApiary(Agent* agent, void* edx);
 void __fastcall T_ECONOMY_AGENT_ConsiderDrinkBuilding(Agent* agent, void* edx);
 
+S3RE_HOOK(0x00567e00, T_ECONOMY_AGENT_ConsiderWoodcutter, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderWoodcutter,
+          T_ECONOMY_AGENT_ConsiderWoodcutter);
+S3RE_HOOK(0x00568420, T_ECONOMY_AGENT_ConsiderStonecutter, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderStonecutter,
+          T_ECONOMY_AGENT_ConsiderStonecutter);
 S3RE_HOOK(0x00568250, T_ECONOMY_AGENT_ConsiderSawmill, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderSawmill,
           T_ECONOMY_AGENT_ConsiderSawmill);
 S3RE_HOOK(0x005682b0, T_ECONOMY_AGENT_ConsiderForester, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderForester,
@@ -319,6 +325,96 @@ S3RE_HOOK(0x00569c90, T_ECONOMY_AGENT_ConsiderApiary, ConditionFn, Original_T_EC
           T_ECONOMY_AGENT_ConsiderApiary);
 S3RE_HOOK(0x00569d20, T_ECONOMY_AGENT_ConsiderDrinkBuilding, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderDrinkBuilding,
           T_ECONOMY_AGENT_ConsiderDrinkBuilding);
+
+namespace {
+
+// 0x567e00 / 0x568420: the woodcutter and stonecutter conditions share
+// their shape. Per race (0..3; other races keep the default slope 0.0 of
+// g_aiDefaultSlope) and population stage, two x87 lines "start value +
+// (population - stage start) * slope" (in double, original order; the
+// product of a 17-bit integer and a float is exact) give the wanted
+// cutters and the wanted stock. The cutters per wanted cutters and the
+// stock per wanted stock give two priorities; the higher one is stored in
+// last_priority. If the stock's is higher but there are already enough
+// cutters, it is lowered: by 65000 per cutter beyond the wanted (one race:
+// Asians for the woodcutter, Egyptians for the stonecutter) or by 65000
+// (the other races; a race above 3: by 0).
+struct CutterCurves {
+    const float (*slopes)[4];       // [3 - race] cutters, [7 - race] stock, each [3 - stage]
+    const std::uint8_t* cutters;    // wanted cutters at the stage start, [race * 5 + stage]
+    const std::uint8_t* stock;      // wanted stock at the stage start
+    Race surplusRace;               // lowered per surplus cutter
+    bool stockDivisorIsWord;        // woodcutter: the wanted stock's low word; stonecutter: the whole dword
+};
+
+void ConsiderCutters(Agent& agent, B type, const CutterCurves& curves, std::uint16_t cutters, std::int32_t stock) {
+    const std::uint16_t population = agent.population;
+    const std::uint16_t stage = PopulationStage(population);
+    float cutterSlope = g_aiDefaultSlope;
+    float stockSlope = g_aiDefaultSlope;
+    if (static_cast<std::uint32_t>(agent.race) <= 3) {
+        cutterSlope = curves.slopes[3 - agent.race][kStages - 1 - stage];
+        stockSlope = curves.slopes[7 - agent.race][kStages - 1 - stage];
+    }
+    agent.stage = stage;
+    const std::int32_t index = agent.race * 5 + stage;  // (not range-checked)
+    const std::int32_t above = population - g_aiPopulationStages[stage];
+    const auto wantedCutters = static_cast<std::uint16_t>(
+        Ftol(static_cast<double>(above) * cutterSlope + static_cast<double>(curves.cutters[index])));
+    std::uint32_t cutterPriority = 0;
+    if (wantedCutters != 0) {
+        const std::int32_t ratio = cutters * 100 / wantedCutters;
+        agent.stock_ratio = ratio;
+        cutterPriority = PriorityForRatio(ratio, {65000, 55000, 45000, 25000, 10000});
+    }
+    const std::uint32_t wantedStock =
+        Ftol(static_cast<double>(above) * stockSlope + static_cast<double>(curves.stock[index]));
+    std::uint32_t stockPriority = 0;
+    const std::int32_t divisor = curves.stockDivisorIsWord ? static_cast<std::uint16_t>(wantedStock)
+                                                           : static_cast<std::int32_t>(wantedStock);
+    if (divisor > 0) {
+        const std::int32_t ratio = stock * 100 / divisor;
+        agent.stock_ratio = ratio;
+        stockPriority = PriorityForRatio(ratio, {65000, 45000, 35000, 15000, 5000});
+    }
+    const auto cutterWord = static_cast<std::uint16_t>(cutterPriority);
+    const auto stockWord = static_cast<std::uint16_t>(stockPriority);
+    agent.last_priority = stockWord > cutterWord ? stockWord : cutterWord;
+    if (stockWord > cutterWord && cutters >= wantedCutters) {
+        std::int32_t lower = 0;
+        if (static_cast<std::uint32_t>(agent.race) <= 3) {
+            lower = static_cast<Race>(agent.race) == curves.surplusRace
+                        ? static_cast<std::int32_t>(65000u * static_cast<std::uint32_t>(cutters - wantedCutters))
+                        : 65000;
+        }
+        const auto priority = static_cast<std::int32_t>(agent.last_priority);
+        agent.last_priority = priority > lower ? static_cast<std::uint32_t>(priority - lower) : 0;
+    }
+    Request(type, static_cast<std::uint16_t>(agent.last_priority));
+}
+
+}  // namespace
+
+// Purpose: Asks for woodcutters by the population (per race and stage) and
+// by the wood in stock.
+void __fastcall T_ECONOMY_AGENT_ConsiderWoodcutter(Agent* agent, void* /*edx*/) {
+    const CutterCurves curves{g_aiWoodcutterSlopes.get(), &g_aiWantedWoodcutters.get()[0][0],
+                              &g_aiWantedWoodStock.get()[0][0], Race::Asian, true};
+    ConsiderCutters(*agent, B::Woodcutter, curves, agent->woodcutters, agent->boards + agent->logs);
+}
+
+// Purpose: Asks for a stonecutter (at once if the area has none), else by
+// the population (per race and stage) and by the stones in stock.
+void __fastcall T_ECONOMY_AGENT_ConsiderStonecutter(Agent* agent, void* /*edx*/) {
+    if (agent->stonecutters == 0) {
+        Request(B::Stonecutter, 65000);
+        return;
+    }
+    // (0x65a8c8: g_aiWantedGoldMines is the Roman row of this per-race table.)
+    const CutterCurves curves{g_aiStonecutterSlopes.get(), g_aiWantedGoldMines.get(), &g_aiWantedStoneStock.get()[0][0],
+                              Race::Egyptian, false};
+    ConsiderCutters(*agent, B::Stonecutter, curves, agent->stonecutters, agent->stones);
+}
 
 // Purpose: Asks for a sawmill when the area has none or too few for its
 // woodcutters (one per three).
@@ -826,7 +922,7 @@ void __fastcall T_ECONOMY_AGENT_ConsiderLargeTemple(Agent* agent, void* /*edx*/)
 
 namespace {
 
-constexpr std::size_t kConditions = 28;
+constexpr std::size_t kConditions = 30;
 constexpr std::size_t kAgentBytes = sizeof(Agent) + 16;
 constexpr std::size_t kDataBytes = 0x600;
 constexpr std::uint32_t kMapSize = 400;
@@ -849,7 +945,8 @@ Conditions OriginalConditions() {
              Original_T_ECONOMY_AGENT_ConsiderCharcoalBurner, Original_T_ECONOMY_AGENT_ConsiderSmallTemple,
              Original_T_ECONOMY_AGENT_ConsiderLargeTemple,   Original_T_ECONOMY_AGENT_ConsiderApiary,
              Original_T_ECONOMY_AGENT_ConsiderDrinkBuilding, Original_T_ECONOMY_AGENT_ConsiderCoalMine,
-             Original_T_ECONOMY_AGENT_ConsiderIronMine,      Original_T_ECONOMY_AGENT_ConsiderIronSmelter}};
+             Original_T_ECONOMY_AGENT_ConsiderIronMine,      Original_T_ECONOMY_AGENT_ConsiderIronSmelter,
+             Original_T_ECONOMY_AGENT_ConsiderWoodcutter,    Original_T_ECONOMY_AGENT_ConsiderStonecutter}};
 }
 
 Conditions OurConditions() {
@@ -866,7 +963,8 @@ Conditions OurConditions() {
              &T_ECONOMY_AGENT_ConsiderCharcoalBurner, &T_ECONOMY_AGENT_ConsiderSmallTemple,
              &T_ECONOMY_AGENT_ConsiderLargeTemple,   &T_ECONOMY_AGENT_ConsiderApiary,
              &T_ECONOMY_AGENT_ConsiderDrinkBuilding, &T_ECONOMY_AGENT_ConsiderCoalMine,
-             &T_ECONOMY_AGENT_ConsiderIronMine,      &T_ECONOMY_AGENT_ConsiderIronSmelter}};
+             &T_ECONOMY_AGENT_ConsiderIronMine,      &T_ECONOMY_AGENT_ConsiderIronSmelter,
+             &T_ECONOMY_AGENT_ConsiderWoodcutter,    &T_ECONOMY_AGENT_ConsiderStonecutter}};
 }
 
 struct SavedState {
@@ -876,9 +974,13 @@ struct SavedState {
     std::uint16_t sizeX = g_aiMapSizeX, sizeY = g_aiMapSizeY;
     float weaponsmithSlopes[kStages];
     float goldMineSlopes[kStages];
+    float stonecutterSlopes[8][kStages];
+    float woodcutterSlopes[8][kStages];
     SavedState() {
         std::memcpy(weaponsmithSlopes, g_aiWantedWeaponsmithSlopes.get(), sizeof(weaponsmithSlopes));
         std::memcpy(goldMineSlopes, g_aiWantedGoldMineSlopes.get(), sizeof(goldMineSlopes));
+        std::memcpy(stonecutterSlopes, g_aiStonecutterSlopes.get(), sizeof(stonecutterSlopes));
+        std::memcpy(woodcutterSlopes, g_aiWoodcutterSlopes.get(), sizeof(woodcutterSlopes));
     }
     ~SavedState() {
         g_aiWorld = world;
@@ -888,6 +990,8 @@ struct SavedState {
         g_aiMapSizeY = sizeY;
         std::memcpy(g_aiWantedWeaponsmithSlopes.get(), weaponsmithSlopes, sizeof(weaponsmithSlopes));
         std::memcpy(g_aiWantedGoldMineSlopes.get(), goldMineSlopes, sizeof(goldMineSlopes));
+        std::memcpy(g_aiStonecutterSlopes.get(), stonecutterSlopes, sizeof(stonecutterSlopes));
+        std::memcpy(g_aiWoodcutterSlopes.get(), woodcutterSlopes, sizeof(woodcutterSlopes));
     }
 };
 
@@ -979,7 +1083,28 @@ void RandomAgent(test::Context& ctx, std::uint8_t* bytes, std::uint16_t area) {
                                                                             : ctx.rng().Below(2500));
 }
 
+void RandomCutterSlopes(test::Context& ctx, float (*table)[kStages]) {
+    // Slopes like the real ones (wanted increase / stage width), sometimes
+    // a value whose product lands on a rounding edge, sometimes any bits.
+    for (std::size_t row = 0; row < 8; ++row) {
+        for (std::size_t s = 0; s < kStages; ++s) {
+            switch (ctx.rng().Below(8)) {
+            case 0: {
+                const std::uint32_t bits = ctx.rng().Next32();
+                std::memcpy(&table[row][s], &bits, 4);
+                break;
+            }
+            case 1: table[row][s] = static_cast<float>(1 + ctx.rng().Below(20)) / static_cast<float>(1 + ctx.rng().Below(500)); break;
+            case 2: table[row][s] = 1.0f / 3.0f; break;
+            default: table[row][s] = static_cast<float>(ctx.rng().Below(1000)) / 997.0f; break;
+            }
+        }
+    }
+}
+
 void RandomSlopes(test::Context& ctx) {
+    RandomCutterSlopes(ctx, g_aiStonecutterSlopes.get());
+    RandomCutterSlopes(ctx, g_aiWoodcutterSlopes.get());
     float* slopes[2] = {g_aiWantedWeaponsmithSlopes.get(), g_aiWantedGoldMineSlopes.get()};
     for (float* table : slopes) {
         for (std::size_t s = 0; s < kStages; ++s) {
@@ -1007,6 +1132,12 @@ void CompareConditions(test::Context& ctx, const Conditions& candidate, int case
             SetUpWorld(ctx, worlds);
         }
         RandomAgent(ctx, agentA.data(), area);
+        if (op >= 28) {  // woodcutter, stonecutter: race * 5 + stage indexes a table (not range-checked)
+            auto* agent = reinterpret_cast<Agent*>(agentA.data());
+            if (static_cast<std::uint32_t>(agent->race) > 7) {
+                agent->race = static_cast<std::int32_t>(ctx.rng().Below(8));
+            }
+        }
         agentB = agentA;
         ctx.rng().Fill(dataA.data(), dataA.size());
         auto* data = reinterpret_cast<AiPlayerData*>(dataA.data());
@@ -1093,6 +1224,36 @@ void __fastcall WrongCoalMine(Agent* agent, void* /*edx*/) {
     agent->distilleries = distilleries;
 }
 
+void __fastcall WrongWoodcutter(Agent* agent, void* /*edx*/) {
+    // Wrong: the Romans' surplus lowering per cutter too.
+    const std::int32_t race = agent->race;
+    if (race == Value(Race::Roman)) {
+        agent->race = Value(Race::Asian);
+        const std::int32_t stage = PopulationStage(agent->population);
+        float (*slopes)[kStages] = g_aiWoodcutterSlopes.get();
+        const float cutter = slopes[3 - 2][3 - stage], stock = slopes[7 - 2][3 - stage];
+        slopes[3 - 2][3 - stage] = slopes[3][3 - stage];
+        slopes[7 - 2][3 - stage] = slopes[7][3 - stage];
+        T_ECONOMY_AGENT_ConsiderWoodcutter(agent, nullptr);  // (the table row of race 2 differs too)
+        slopes[3 - 2][3 - stage] = cutter;
+        slopes[7 - 2][3 - stage] = stock;
+        agent->race = race;
+        return;
+    }
+    T_ECONOMY_AGENT_ConsiderWoodcutter(agent, nullptr);
+}
+
+void __fastcall WrongStonecutter(Agent* agent, void* /*edx*/) {
+    // Wrong: divides by the wanted stock's low word (as the woodcutter).
+    if (agent->stonecutters == 0) {
+        Request(B::Stonecutter, 65000);
+        return;
+    }
+    const CutterCurves curves{g_aiStonecutterSlopes.get(), g_aiWantedGoldMines.get(), &g_aiWantedStoneStock.get()[0][0],
+                              Race::Egyptian, true};
+    ConsiderCutters(*agent, B::Stonecutter, curves, agent->stonecutters, agent->stones);
+}
+
 void __fastcall WrongIronSmelter(Agent* agent, void* /*edx*/) {
     // Wrong: one smelter per smith.
     const std::uint16_t toolsmiths = agent->toolsmiths;
@@ -1122,6 +1283,8 @@ S3RE_TEST(AiEconomyConditions_ComparisonDetectsWrongImplementation) {
     probe(21, &T_ECONOMY_AGENT_ConsiderLargeTemple);  // swapped small and large temple
     probe(25, &WrongCoalMine);
     probe(27, &WrongIronSmelter);
+    probe(28, &WrongWoodcutter);
+    probe(29, &WrongStonecutter);
 }
 
 }  // namespace s3re::game

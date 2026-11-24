@@ -2449,3 +2449,54 @@ SPECS += [
          presets=economy_actions_world, globals=economy_actions_globals,
          callees=command_callees(gaps=(3, 6, 7)), max_cases=1500),
 ]
+
+
+# -- session 54 (wip/ai-army): woodcutter and stonecutter conditions --------
+# (ai_economy_conditions.cpp). The per-race slope tables are set by static
+# initializers (zero in the image), so every case gets random ones: real-like
+# fractions, values whose products land on integer boundaries (1/3, k/n),
+# and random bits (NaN, huge: _ftol's "indefinite" 0).
+
+CUTTER_SLOPES = (0x007E1280, 0x007E1300)  # g_aiStonecutterSlopes, g_aiWoodcutterSlopes: float[8][4]
+
+
+def cutter_slope_bits(rng):
+    roll = rng.random()
+    if roll < 0.12:
+        return rng.getrandbits(32)
+    if roll < 0.3:
+        value = rng.randint(1, 20) / rng.randint(1, 500)
+    elif roll < 0.4:
+        value = 1 / 3
+    elif roll < 0.45:
+        value = -rng.random()
+    else:
+        value = rng.randrange(1000) / 997.0
+    bits = struct.unpack("<I", struct.pack("<f", value))[0]
+    return (bits + rng.choice((0, 0, 0, 1, -1))) & 0xFFFFFFFF
+
+
+def cutter_globals(rng, pool, args):
+    fields = economy_globals(rng, pool, args)
+    for table in CUTTER_SLOPES:
+        fields += [(table + 4 * k, cutter_slope_bits(rng), 4) for k in range(32)]
+    return fields
+
+
+def cutter_agent(rng, pool, args):
+    """economy_agent with races 0..7 (the tables are indexed race * 5 + stage
+    without a check, so far-off races fault), sometimes no stonecutter and
+    stock around the wanted amounts."""
+    fields = [f for f in economy_agent(rng, pool, args) if f[0] != 8]
+    fields.append((8, rng.randrange(4) if rng.random() < 0.85 else rng.randrange(4, 8), 4))
+    if rng.random() < 0.5:
+        fields += [(0x42, rng.randrange(150), 2), (0x44, rng.randrange(150), 2), (0x50, rng.randrange(150), 2),
+                   (0x52, rng.randrange(12), 2), (0x54, rng.randrange(12), 2)]
+    return fields
+
+
+SPECS += [
+    Spec(name, address, "thiscall", [], eax_mask=0, presets=cutter_agent, globals=cutter_globals, max_cases=2000)
+    for name, address in (("T_ECONOMY_AGENT_ConsiderWoodcutter", 0x00567e00),
+                          ("T_ECONOMY_AGENT_ConsiderStonecutter", 0x00568420))
+]

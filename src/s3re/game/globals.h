@@ -258,6 +258,13 @@ inline constexpr GameGlobal<ai::AiVector[20]> g_aiHunterVectors{0x7e368c};
 // (stages[s + 1] - stages[s])). Stored in reverse: stage s at [3 - s].
 inline constexpr GameGlobal<float[4]> g_aiWantedWeaponsmithSlopes{0x7e1290};
 inline constexpr GameGlobal<float[4]> g_aiWantedGoldMineSlopes{0x7e12b0};
+// The same slopes per race and stage for the stonecutter (0x568420) and
+// woodcutter (0x567e00) conditions: [3 - race][3 - stage] the slope of the
+// wanted cutters, [7 - race][3 - stage] that of the wanted stock (set by
+// static initializers; g_aiWantedWeaponsmithSlopes / GoldMineSlopes are
+// rows 2 and 0 of the stonecutters' table).
+inline constexpr GameGlobal<float[8][4]> g_aiStonecutterSlopes{0x7e1280};
+inline constexpr GameGlobal<float[8][4]> g_aiWoodcutterSlopes{0x7e1300};
 // Rainer\CompMapWorkerAgent.cpp's global objects (ai_layout.h) and a
 // per-player array cleared with the army state (0x593f50; meaning unknown).
 inline constexpr GameGlobal<ai::AiGroupOrders> g_aiGroupOrders{0x7e37d0};
