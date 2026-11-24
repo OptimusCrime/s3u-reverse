@@ -2257,3 +2257,52 @@ SPECS += [
     Spec("HOUSE_GROUND_REQUEST_NOTE_NextSpiralPosition", 0x005763a0, "thiscall", [],
          presets=ground_note_world, globals=ground_note_globals, max_cases=600),
 ]
+
+# -- session 54 (ai-land): HasForeignCellAround, FewUnownedTilesNear, MarkBuildingTypesInLandGrid --
+
+
+def foreign_cell_world(rng, pool, args):
+    """The tile (scratch 0 / 1), the CEvaLand object at COUNT_LAND (9 x 9 grid,
+    width / height 0..9, random flags) and the cells' centre owners."""
+    x = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(80)
+    y = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(80)
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2), (COUNT_LAND + 0x140, rng.randrange(10), 4),
+              (COUNT_LAND + 0x144, rng.randrange(10), 4), (COUNT_LAND + 0x158, WORLD_BASE + CELL_GRID, 4)]
+    fields += [(CELL_GRID + cell * 0xC4, rng.getrandbits(16), 2) for cell in range(81)]
+    return fields + cell_centre_owners(rng, 10, 10)
+
+
+def player_number_globals(rng, pool, args):
+    return discount_globals(rng, pool, args) + [(AI_PLAYER_NUMBER, rng.randrange(4), 1)]
+
+
+def few_unowned_world(rng, pool, args):
+    x = rng.getrandbits(10) if rng.random() < 0.05 else rng.randrange(400)
+    y = rng.getrandbits(10) if rng.random() < 0.05 else rng.randrange(400)
+    return [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2)]
+
+
+def mark_types_world(rng, pool, args):
+    """1..12 building records (any owner byte below 0x14 or free, types 0..63:
+    from 57 the bitset's _Xran throws) on a 10 x 10 grid (GridCellOfTile
+    wraps)."""
+    count = rng.randint(1, 12)
+    fields = [(BUILDING_HIGH_WATER, count, 4), (COUNT_LAND + 0x140, rng.randint(1, 9), 4),
+              (COUNT_LAND + 0x144, rng.randint(1, 9), 4), (COUNT_LAND + 0x158, WORLD_BASE + CELL_GRID, 4)]
+    for building in range(count + 2):
+        base = BUILDING_RECORDS + building * 0x3a
+        kind = rng.randrange(64) if rng.random() < 0.05 else rng.randrange(57)
+        owner = 0xFF if rng.random() < 0.15 else rng.randrange(20)
+        fields += [(base, owner, 1), (base + 2, rng.randrange(80), 2), (base + 4, rng.randrange(80), 2),
+                   (base + 6, kind, 1)]
+    return fields
+
+
+SPECS += [
+    Spec("AI_HasForeignCellAround", 0x0059c200, "fastcall", [scratch(0), scratch(1)],
+         presets=foreign_cell_world, globals=player_number_globals, max_cases=1000),
+    Spec("AI_FewUnownedTilesNear", 0x0059c2c0, "fastcall", [scratch(0), scratch(1)],
+         presets=few_unowned_world, globals=ai_world, max_cases=600),
+    Spec("AI_MarkBuildingTypesInLandGrid", 0x005723a0, "stdcall", [],
+         presets=mark_types_world, globals=discount_globals, max_cases=600),
+]

@@ -516,7 +516,8 @@ struct AiGridCell {
     std::uint8_t grain_land_around;     // 0x1e sum of grain_land_percent * 100 / 576
     std::uint8_t wine_land_around;      // 0x1f the same for wine_land_percent
     std::uint8_t rice_land_around;      // 0x20 the same for rice_land_percent
-    std::uint8_t unk21[0xc4 - 0x21];    // +0x24: per player a bitset<57> of building types (naming notes)
+    std::uint8_t unk21[3];
+    std::uint32_t building_types[20][2];  // 0x24 per player a std::bitset<57>: the building types in the cell
 };
 static_assert(sizeof(AiGridCell) == 0xc4);
 static_assert(offsetof(AiGridCell, stream_tiles) == 0x02);
@@ -525,6 +526,7 @@ static_assert(offsetof(AiGridCell, grass_percent) == 0x0e);
 static_assert(offsetof(AiGridCell, trees_around) == 0x0f);
 static_assert(offsetof(AiGridCell, resources_around) == 0x12);
 static_assert(offsetof(AiGridCell, grain_land_around) == 0x1e);
+static_assert(offsetof(AiGridCell, building_types) == 0x24);
 
 // AiGridCell::flags (EvaluateCell): starts as NoWater | NoLand; a land tile
 // (terrain class not 0) sets HasLand and clears NoLand, a water tile

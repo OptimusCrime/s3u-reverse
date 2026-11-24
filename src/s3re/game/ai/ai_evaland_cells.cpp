@@ -63,6 +63,24 @@
 //              the square rings 1..4 around it by 2, 1, 0 and "-1": x86
 //              masks the shift count 0xff to 31, which clears the 4th
 //              ring's sums (kept). EAX = the end flag (1).
+//   0x0059c200 AI::HasForeignCellAround(const u16* x, const u16* y)
+//              fastcall: 1 if one of the 3 x 3 cells around the tile's cell
+//              (x / 8 - 1 .. + 1 outer, y / 8 - 1 .. + 1 inner, 16-bit
+//              signed, on the grid) has a centre tile not owned by
+//              g_aiPlayerNumber (CellCentreOwner, 16-bit compare) and has
+//              land (flags without kGridCellNoLand); else 0.
+//   0x0059c2c0 AI::FewUnownedTilesNear(const u16* x, const u16* y)
+//              fastcall: counts the tiles without kTileOwned among the 3 x 3
+//              tiles (x / 8 + i, y / 8 + j) and returns count <= 19: always
+//              1 (bug: cell coordinates used as tile coordinates; kept, the
+//              tiles are read as in the original).
+//   0x005723a0 AI::MarkBuildingTypesInLandGrid() (Rainer\compGlobs.cpp):
+//              for every building record (GetBuilding from id 1 to its end
+//              flag) sets bit `type` in the owner's bitset (+0x24 + owner *
+//              8) of the cell of its position (GridCellOfTile 0x554770);
+//              types from 57 go to std::bitset's _Xran 0x559550 (throws
+//              out_of_range). EAX = the end flag (1). Called once by the
+//              computer player set-up 0x550a30.
 
 #include "game/ai/ai_layout.h"
 #include "game/enums/buildings.h"
@@ -75,6 +93,7 @@
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -472,6 +491,110 @@ std::uint32_t __fastcall AI_DiscountExploitedResources(std::uint32_t player) {
     return end;
 }
 
+namespace {
+
+constexpr std::uintptr_t kGridCellOfTile = 0x00554770;  // AI::CEvaLand::GridCellOfTile (thiscall)
+constexpr std::uintptr_t kBitsetXran = 0x00559550;      // std::bitset::_Xran (thiscall, throws)
+
+constexpr std::uint32_t kBuildingTypeBits = 57;   // the cells' per-player std::bitset<57>
+constexpr std::uint32_t kUnownedTilesLimit = 19;  // FewUnownedTilesNear
+
+}  // namespace
+
+using CellPointerFn = std::uint32_t(__fastcall*)(const std::uint16_t* x, const std::uint16_t* y);
+using MarkTypesFn = std::uint32_t(__cdecl*)();
+
+std::uint32_t __fastcall AI_HasForeignCellAround(const std::uint16_t* x, const std::uint16_t* y);
+std::uint32_t __fastcall AI_FewUnownedTilesNear(const std::uint16_t* x, const std::uint16_t* y);
+std::uint32_t __cdecl AI_MarkBuildingTypesInLandGrid();
+
+S3RE_HOOK(0x0059c200, AI_HasForeignCellAround, CellPointerFn, Original_AI_HasForeignCellAround,
+          AI_HasForeignCellAround);
+S3RE_HOOK(0x0059c2c0, AI_FewUnownedTilesNear, CellPointerFn, Original_AI_FewUnownedTilesNear,
+          AI_FewUnownedTilesNear);
+S3RE_HOOK(0x005723a0, AI_MarkBuildingTypesInLandGrid, MarkTypesFn, Original_AI_MarkBuildingTypesInLandGrid,
+          AI_MarkBuildingTypesInLandGrid);
+
+// Purpose: Whether, next to a tile's cell, there is a cell with land that
+// isn't the computer player's (probably a sign that the place is at the
+// border, where the AI wants to expand).
+std::uint32_t __fastcall AI_HasForeignCellAround(const std::uint16_t* x, const std::uint16_t* y) {
+    void* land = reinterpret_cast<void*>(g_aiLandEvaluation.get());
+    const auto* evaluation = static_cast<const AiLandEvaluation*>(land);
+    const std::uint32_t width = evaluation->width, height = evaluation->height;
+    const auto firstX = static_cast<std::uint16_t>((*x >> kCellShift) - 1);
+    const auto firstY = static_cast<std::uint16_t>((*y >> kCellShift) - 1);
+    for (std::uint16_t i = 0; i < 3; ++i) {
+        const auto cellX = static_cast<std::int16_t>(firstX + i);
+        if (cellX < 0 || static_cast<std::uint32_t>(cellX) >= width) {
+            continue;
+        }
+        for (std::uint16_t j = 0; j < 3; ++j) {
+            const auto cellY = static_cast<std::int16_t>(firstY + j);
+            if (cellY < 0 || static_cast<std::uint32_t>(cellY) >= height) {
+                continue;
+            }
+            const auto cx = static_cast<std::uint32_t>(static_cast<std::int32_t>(cellX));
+            const auto cy = static_cast<std::uint32_t>(static_cast<std::int32_t>(cellY));
+            const auto owner = static_cast<std::uint16_t>(reinterpret_cast<CellCallFn>(kCellCentreOwner)(
+                reinterpret_cast<void*>(g_aiLandEvaluation.get()), nullptr, cx, cy));
+            if (owner == g_aiPlayerNumber) {
+                continue;
+            }
+            const auto* cell = reinterpret_cast<const AiGridCell*>(reinterpret_cast<CellCallFn>(kGridCell)(
+                reinterpret_cast<void*>(g_aiLandEvaluation.get()), nullptr, cx, cy));
+            if ((cell->flags & kGridCellNoLand) == 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+// Purpose: Meant to tell whether few tiles near a place are unowned, but
+// always says yes: it counts the 3 x 3 tiles at (x / 8, y / 8) (cell
+// coordinates used as tile coordinates), and 9 tiles never exceed the
+// limit of 19 (original bug, kept).
+std::uint32_t __fastcall AI_FewUnownedTilesNear(const std::uint16_t* x, const std::uint16_t* y) {
+    const auto left = static_cast<std::uint16_t>(*x >> kCellShift);
+    const auto top = static_cast<std::uint16_t>(*y >> kCellShift);
+    const CGameData* world = g_aiWorld;
+    std::uint32_t unowned = 0;
+    for (std::uint16_t j = 0; j < 3; ++j) {
+        const std::int32_t tileY = static_cast<std::int16_t>(top + j);
+        for (std::uint16_t i = 0; i < 3; ++i) {
+            const std::int32_t tileX = static_cast<std::int16_t>(left + i);
+            if (((&world->tiles[0][0])[tileX * kMapRowTiles + tileY].flags & layout::kTileOwned) == 0) {
+                ++unowned;
+            }
+        }
+    }
+    return static_cast<std::uint16_t>(unowned) <= kUnownedTilesLimit ? 1 : 0;
+}
+
+// Purpose: Records in the land evaluation grid which building types each
+// player has in each cell (at the start of a game; later the land events
+// keep it up to date).
+std::uint32_t __cdecl AI_MarkBuildingTypesInLandGrid() {
+    std::uint32_t end = 0;
+    for (std::uint32_t id = 1; end == 0; ++id) {
+        const layout::Building* building = reinterpret_cast<GetBuildingFn>(kGetBuilding)(id, &end);
+        if (building == nullptr) {
+            continue;
+        }
+        const std::uint32_t type = building->art;
+        auto* cell = reinterpret_cast<AiGridCell*>(reinterpret_cast<CellCallFn>(kGridCellOfTile)(
+            reinterpret_cast<void*>(g_aiLandEvaluation.get()), nullptr, building->x, building->y));
+        // the owner's bitset (any owner byte below 0xff indexes on, as in the original)
+        std::uint32_t* bits = &cell->building_types[0][0] + building->owner * 2;
+        if (type >= kBuildingTypeBits) {
+            reinterpret_cast<void(__fastcall*)(void*, void*)>(kBitsetXran)(bits, nullptr);  // throws out_of_range
+        }
+        bits[type >> 5] |= 1u << (type & 31);
+    }
+    return end;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -778,6 +901,131 @@ S3RE_TEST(AiDiscountExploited_ComparisonDetectsWrongImplementation) {
     test::Context quiet(ctx.name(), 1, /*quiet=*/true);
     CompareDiscount(quiet, &WrongDiscount, 300);
     S3RE_EXPECT(quiet.failures() > 0);
+}
+
+
+// HasForeignCellAround, FewUnownedTilesNear, MarkBuildingTypesInLandGrid:
+// the test map and buildings above (types below 57: _Xran would throw), a
+// grid with random flags. Compared: EAX and the grids.
+
+namespace {
+
+struct CellQueryFunctions {
+    CellPointerFn foreign;
+    CellPointerFn fewUnowned;
+    MarkTypesFn markTypes;
+};
+
+void CompareCellQueryFunctions(test::Context& ctx, const CellQueryFunctions& candidate, int cases) {
+    const CellQueryFunctions original = {Original_AI_HasForeignCellAround, Original_AI_FewUnownedTilesNear,
+                                         Original_AI_MarkBuildingTypesInLandGrid};
+    SavedGlobals saved;
+    const std::uint32_t savedLand = g_aiLandEvaluation;
+    const std::uint8_t savedPlayer = g_aiPlayerNumber;
+    test::WorldBuffer buffer(sizeof(CGameData));
+    CGameData* world = buffer.world();
+    g_aiWorld = world;
+    TestEvaluation a, b;
+    int foreign = 0;
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        test::Rng& rng = ctx.rng();
+        if (i % 20 == 0) {
+            SetUpTestMap(rng, world);
+        }
+        g_aiMapSizeX = static_cast<std::uint16_t>(40 + rng.Below(41));
+        g_aiMapSizeY = static_cast<std::uint16_t>(40 + rng.Below(41));
+        g_aiPlayerNumber = static_cast<std::uint8_t>(rng.Below(4));
+        rng.Fill(&a.object, sizeof(a.object));
+        rng.Fill(a.cells.data(), a.cells.size() * sizeof(AiGridCell));
+        a.object.width = rng.Below(kTestGrid + 1);
+        a.object.height = rng.Below(kTestGrid + 1);
+        b.object = a.object;
+        b.cells = a.cells;
+        a.object.cells = a.cells.data();
+        b.object.cells = b.cells.data();
+        const int op = static_cast<int>(rng.Below(3));
+        std::uint32_t ra = 0, rb = 0;
+        if (op == 2) {
+            SetUpBuildings(rng, world);
+            for (std::uint32_t id = 0; id <= world->building_high_water + 1; ++id) {
+                layout::Building& building = world->buildings[id];
+                building.art = static_cast<std::uint8_t>(building.art % kBuildingTypeBits);
+                building.owner = static_cast<std::uint8_t>(rng.Chance(1, 6) ? 0xff : rng.Below(20));
+            }
+            a.object.width = b.object.width = kTestGrid;
+            a.object.height = b.object.height = kTestGrid;
+            g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&a.object);
+            ra = original.markTypes();
+            g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&b.object);
+            rb = candidate.markTypes();
+        } else {
+            const auto x = static_cast<std::uint16_t>(rng.Chance(1, 20) ? rng.Next32() & 0x3ff : rng.Below(kTestMap));
+            const auto y = static_cast<std::uint16_t>(rng.Chance(1, 20) ? rng.Next32() & 0x3ff : rng.Below(kTestMap));
+            const CellPointerFn fa = op == 0 ? original.foreign : original.fewUnowned;
+            const CellPointerFn fb = op == 0 ? candidate.foreign : candidate.fewUnowned;
+            g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&a.object);
+            ra = fa(&x, &y);
+            g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&b.object);
+            rb = fb(&x, &y);
+            foreign += op == 0 && ra != 0 ? 1 : 0;
+        }
+        bool same = SameEvaluation(ctx, a, b);
+        same &= S3RE_EXPECT_EQ(ra, rb);
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, op %d", i, op);
+        }
+    }
+    g_aiLandEvaluation = savedLand;
+    g_aiPlayerNumber = savedPlayer;
+    if (cases >= 1000 && !S3RE_EXPECT(foreign >= 20)) {
+        ctx.Fail(__FILE__, __LINE__, "  only %d foreign cells found", foreign);
+    }
+}
+
+// Wrong: the cell's flags are not checked.
+std::uint32_t __fastcall WrongForeign(const std::uint16_t* x, const std::uint16_t* y) {
+    auto* evaluation = reinterpret_cast<AiLandEvaluation*>(g_aiLandEvaluation.get());
+    std::vector<AiGridCell> before(evaluation->cells, evaluation->cells + kTestGrid * kTestGrid);
+    for (std::size_t k = 0; k < before.size(); ++k) {
+        evaluation->cells[k].flags = static_cast<std::uint16_t>(evaluation->cells[k].flags & ~kGridCellNoLand);
+    }
+    const std::uint32_t result = AI_HasForeignCellAround(x, y);
+    std::copy(before.begin(), before.end(), evaluation->cells);
+    return result;
+}
+
+// Wrong: the bit of the next type set.
+std::uint32_t __cdecl WrongMarkTypes() {
+    CGameData* world = g_aiWorld;
+    std::vector<std::uint8_t> types;
+    for (std::uint32_t id = 0; id <= world->building_high_water + 1; ++id) {
+        types.push_back(world->buildings[id].art);
+        world->buildings[id].art = static_cast<std::uint8_t>((world->buildings[id].art + 1) % kBuildingTypeBits);
+    }
+    const std::uint32_t result = AI_MarkBuildingTypesInLandGrid();
+    for (std::uint32_t id = 0; id < types.size(); ++id) {
+        world->buildings[id].art = types[id];
+    }
+    return result;
+}
+
+}  // namespace
+
+S3RE_TEST(AiCellQueries_MatchOriginal) {
+    CompareCellQueryFunctions(ctx, {&AI_HasForeignCellAround, &AI_FewUnownedTilesNear,
+                                    &AI_MarkBuildingTypesInLandGrid}, 3000);
+}
+
+S3RE_TEST(AiCellQueries_ComparisonDetectsWrongImplementation) {
+    const CellQueryFunctions wrongs[] = {
+        {&WrongForeign, &AI_FewUnownedTilesNear, &AI_MarkBuildingTypesInLandGrid},
+        {&AI_HasForeignCellAround, &AI_FewUnownedTilesNear, &WrongMarkTypes},
+    };
+    for (const CellQueryFunctions& wrong : wrongs) {
+        test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+        CompareCellQueryFunctions(quiet, wrong, 3000);
+        S3RE_EXPECT(quiet.failures() > 0);
+    }
 }
 
 
