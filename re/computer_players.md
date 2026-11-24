@@ -221,10 +221,25 @@ population" curve: population stages 0 / 40 / 100 / 500 / 2000 settlers
 (`g_aiPopulationStages`), a wanted count per stage start
 (`g_aiWantedGoldMines` 0, 2, 3, 5, 7; `g_aiWantedWeaponsmiths` 0..4) and
 per-stage float slopes computed by static initializers; the priority
-falls as have * 100 / wanted rises past 10 / 30 / 50 / 70 / 100. Still
-open in this family: 0x567e00, 0x568420, 0x568890 (Random), 0x568bc0,
-0x568d80, 0x568f40 (larger conditions with float curves per race) and
-0x567910 itself.
+falls as have * 100 / wanted rises past 10 / 30 / 50 / 70 / 100.
+Session 51 (V): the coal mine 0x568bc0, iron mine 0x568d80 and iron
+smelter 0x568f40 conditions take the higher (16-bit) of two priorities:
+mines per the population's wanted count (the gold mine tables serve all
+mines; smelters use the weaponsmith tables) and the stock per its users'
+demand ((2 * users - mines) * 20 - stock; coal users: iron and gold
+smelters, tool- and weaponsmiths, distilleries, powder makers; iron users:
+the smiths; one smelter per two smiths). They store the last ratio in
++0x2c and the result in +0x30 (`last_priority`, was forester_priority);
+the iron mine stores the iron (goods 11) in stock, the smelter the iron
+ore (goods 7), in +0x4a (`ore`). Still open in this family: 0x567e00
+(woodcutter), 0x568420 (stonecutter; both with two float curves per race
+and stage, 0x7e1300..0x7e137c) and 0x568890 (residences, Random).
+The snapshot 0x567910 is done too (V, session 51, `ai_economy_snapshot.cpp`):
+the "per-player global" population is the census's settler figure
+(`g_aiCensus.dwords3f4[player]`, low word) once `settlers_counted` is set,
+else `AI::AreaPopulation` 0x59dcc0 (CountAreaSettlersOfClass0); the goods
+are logs, boards, stones, coal, iron (goods 11) and sulfur; a race above 3
+leaves the race-specific counts as they were.
 
 ## Map queries (session 48, A2)
 
@@ -237,6 +252,19 @@ AI's map size; `AI::TerritoryRadius` (the distance of the 3500th / 4000th
 `AI::TakeBestCandidate` (moves best[type] to best[57 + type]); counts of
 construction sites and of settlers of a type in an area; and
 `AI::TeamHasActivePlayer`.
+
+Session 51 (V): `AI::WrappedPos` 0x597070..0x597300 (`ai_wrapped_pos.cpp`):
+a position on a width x height grid that wraps at the edges (Step in six
+directions, torus Distance, WrapCoords; Advance moves without wrapping and
+reports leaving the grid), the cursor of the AI's site searches.
+`AI::CountNodeBuildingsByType` 0x572420 refills a node's
+`building_counts` (the node: the player's CEvaLand list node whose word +8,
+`AiPlayerData::area`, is the area). `AI::Army::Reset` 0x591e00
+(`ai_army.cpp`) resets g_aiGroupOrders (also 20 x 10 bytes at +0x1c48,
+meaning open) and empties the per-player hunter vectors
+(`g_aiHunterVectors` 0x7e368c); the gather offsets of groups 1..9 are
+(0,0), (9,18), (-9,-18), (-18,0), (18,0), (-9,18), (27,18), (-27,-18),
+(18,-27).
 
 Batch 3 (`ai_site_queries.cpp`, V): `AI::HasSiteNoteInArea` (a build
 order of this type or a ground request of another type already planned

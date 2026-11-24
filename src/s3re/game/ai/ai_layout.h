@@ -231,7 +231,10 @@ struct AiCandidate {
 static_assert(sizeof(AiCandidate) == 6);
 
 struct AiPlayerData {
-    std::uint8_t unk000[0xc];
+    std::uint32_t next;                   // 0x000 list node: the next node (the list head is the sentinel)
+    std::uint32_t prev;                   // 0x004 the previous node
+    std::uint16_t area;                   // 0x008 the node's key: the economy area (AI::FindNode 0x573be0, 0x572420)
+    std::uint16_t unk00a;
     std::uint32_t basic_economy;          // 0x00c 1 once a sawmill, woodcutter, small tower and the race's basics (stonecutter, forester) stand (AI::CheckBasicEconomy 0x5720c0)
     // G: the economy lacks wood / stone; 0x551a70 then only starts a
     // woodcutter, sawmill, forester (wood) / a stonecutter (stone) or a
@@ -255,6 +258,7 @@ struct AiPlayerData {
     std::uint8_t unk3ef[0x550 - 0x3ef];
     std::uint32_t unk550;                                 // 0x550 the fishery condition 0x5693c0 needs it non-zero (probably "has fishing water")
 };
+static_assert(offsetof(AiPlayerData, area) == 0x8);
 static_assert(offsetof(AiPlayerData, basic_economy) == 0xc);
 static_assert(offsetof(AiPlayerData, short_of_wood) == 0x10);
 static_assert(offsetof(AiPlayerData, short_of_stone) == 0x14);
@@ -286,7 +290,7 @@ struct EconomyAgent {
     std::uint16_t unk12;
     std::uint32_t unk14[6];             // 0x14..0x2b (cleared with run_count by the constructor)
     std::int32_t stock_ratio;           // 0x2c buildings * 100 / wanted, of the last stage-based condition
-    std::uint32_t forester_priority;    // 0x30 the forester condition's last priority (0x5682b0)
+    std::uint32_t last_priority;        // 0x30 the last priority of the forester, woodcutter, stonecutter, coal/iron mine and iron smelter conditions (was forester_priority)
     std::uint16_t stage;                // 0x34 population stage 0..3 (g_aiPopulationStages)
     std::uint8_t unk36[8];
     std::uint16_t population;           // 0x3e settlers of class 0 in the area (CGameData::CountAreaSettlersOfClass0), or a per-player global
@@ -295,7 +299,7 @@ struct EconomyAgent {
     std::uint16_t boards;               // 0x44
     std::uint16_t coal;                 // 0x46
     std::uint16_t iron;                 // 0x48
-    std::uint16_t unk4a;
+    std::uint16_t ore;                  // 0x4a iron (0x568d80) or iron ore (0x568f40) in the area, stored by those conditions
     std::uint16_t gold_ore;             // 0x4c (set by the gold smelter condition 0x569860)
     std::uint16_t sulfur;               // 0x4e
     std::uint16_t stones;               // 0x50
@@ -390,7 +394,7 @@ struct AiGroupOrders {
     std::uint8_t unk938[0x988 - 0x938];
     std::int32_t group_mages[layout::kPlayers][kUnitGroups];     // 0x988 mages per group (0x591c40, 0x5926e0)
     std::uint8_t settlers_with_orders[32000 / 8];                // 0xca8 std::bitset<32000>: group members, hunters, busy geologists
-    std::uint8_t unk1c48[0x1d10 - 0x1c48];
+    std::uint8_t group_flags1c48[layout::kPlayers][kUnitGroups];  // 0x1c48 per group, cleared by the reset 0x591e00 (meaning open)
     std::int32_t highest_group[layout::kPlayers];                // 0x1d10 highest group in use
     std::int32_t group_size[layout::kPlayers];                   // 0x1d60 7 after the reset, up to 100
     AiGroupPosition gather_positions[layout::kPlayers][kUnitGroups];  // 0x1db0

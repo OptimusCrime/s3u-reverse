@@ -218,6 +218,11 @@ inline constexpr GameGlobal<ai::AiLandEvaluation*> g_aiEvaLand{0x7e056c};
 inline constexpr GameGlobal<std::uint32_t> g_aiLandEvaluation{0x7e3134};
 // 20 vectors emptied by AI_ResetAgentData.
 inline constexpr GameGlobal<ai::AiVector[20]> g_aiAgentVectors{0x7e7a24};
+// Per player a std::vector of {hunter settler, target settler} pairs (the
+// 16-byte vector objects start at 0x7e3688; like g_aiAgentVectors this
+// array starts at the first vector's begin pointer). AI::Army::Reset
+// (0x591e00) empties them.
+inline constexpr GameGlobal<ai::AiVector[20]> g_aiHunterVectors{0x7e368c};
 // Per population stage, the extra buildings wanted per settler (floats
 // set by static initializers, 0x566xxx: (wanted[s + 1] - wanted[s]) /
 // (stages[s + 1] - stages[s])). Stored in reverse: stage s at [3 - s].
