@@ -39,6 +39,7 @@
 #include "game/ui/screen_element_layout.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "test/callee_stub.h"
 #include "test/difftest.h"
 #include "watcom/ptr_vector.h"
 
@@ -1603,23 +1604,20 @@ DWORD WINAPI FakeTimeGetTime() {
     return g_fakeTime;
 }
 
+// The entry is a live patch (test/callee_stub.h), so a crashing test can't
+// leave the fake clock behind.
 class FakeClock {
 public:
     FakeClock() {
-        VirtualProtect(Entry(), sizeof(void*), PAGE_READWRITE, &protection_);
-        saved_ = *Entry();
-        *Entry() = reinterpret_cast<void*>(&FakeTimeGetTime);
+        const void* fake = reinterpret_cast<const void*>(&FakeTimeGetTime);
+        test::PatchBytes(Entry(), &fake, sizeof(fake));
     }
-    ~FakeClock() {
-        *Entry() = saved_;
-        DWORD ignored = 0;
-        VirtualProtect(Entry(), sizeof(void*), protection_, &ignored);
-    }
+    ~FakeClock() { test::UnpatchBytes(Entry()); }
+    FakeClock(const FakeClock&) = delete;
+    FakeClock& operator=(const FakeClock&) = delete;
 
 private:
-    static void** Entry() { return reinterpret_cast<void**>(&g_importTimeGetTime); }
-    DWORD protection_ = 0;
-    void* saved_ = nullptr;
+    static std::uintptr_t Entry() { return reinterpret_cast<std::uintptr_t>(&g_importTimeGetTime); }
 };
 
 void CompareScreenElement(test::Context& ctx, const Functions& candidate, int cases) {

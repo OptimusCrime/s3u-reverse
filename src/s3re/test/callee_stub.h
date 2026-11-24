@@ -21,7 +21,9 @@
 // doesn't unwind C++ objects), so every patch is also listed in
 // LivePatches() until it is restored, and the test runner calls
 // RestoreLeftoverPatches() after a crash: one crashing test must not leave
-// stubs behind that later tests run into.
+// stubs behind that later tests run into. Other test patches of S3.EXE
+// memory (FakeClock's import entry in screen_element.cpp) go through
+// PatchBytes/UnpatchBytes for the same reason.
 
 #include "game/world.h"
 
@@ -47,41 +49,52 @@ inline void WriteCode(std::uintptr_t address, const void* bytes, std::size_t siz
     FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(address), size);
 }
 
-// A 5-byte jump written over code, with the bytes it replaced.
+// Up to 5 bytes written over S3.EXE code or data (a jump, an import
+// entry), with the bytes they replaced.
+constexpr std::size_t kMaxPatchBytes = 5;
 struct LivePatch {
     std::uintptr_t address;
-    std::uint8_t saved[5];
+    std::size_t size;
+    std::uint8_t saved[kMaxPatchBytes];
 };
 
-// The patches of CalleeStubs and ScopedJump that are not restored yet, oldest
-// first.
+// The patches of CalleeStubs, ScopedJump and PatchBytes users that are not
+// restored yet, oldest first.
 inline std::vector<LivePatch>& LivePatches() {
     static std::vector<LivePatch> patches;
     return patches;
 }
 
-// Writes `jmp target` over the 5 bytes at `address` and lists the patch.
-inline void PatchJump(std::uintptr_t address, const void* target) {
-    LivePatch patch{address, {}};
-    std::memcpy(patch.saved, reinterpret_cast<const void*>(address), 5);
-    std::uint8_t jump[5] = {0xe9};
-    const std::uint32_t rel = reinterpret_cast<std::uint32_t>(target) - (static_cast<std::uint32_t>(address) + 5);
-    std::memcpy(jump + 1, &rel, 4);
-    WriteCode(address, jump, 5);
+// Writes `size` bytes (at most kMaxPatchBytes) at `address` and lists the
+// patch, so it is restored even after a crashed test.
+inline void PatchBytes(std::uintptr_t address, const void* bytes, std::size_t size) {
+    LivePatch patch{address, size, {}};
+    std::memcpy(patch.saved, reinterpret_cast<const void*>(address), size);
+    WriteCode(address, bytes, size);
     LivePatches().push_back(patch);
 }
 
 // Restores the newest live patch at `address`.
-inline void UnpatchJump(std::uintptr_t address) {
+inline void UnpatchBytes(std::uintptr_t address) {
     auto& patches = LivePatches();
     for (auto it = patches.rbegin(); it != patches.rend(); ++it) {
         if (it->address == address) {
-            WriteCode(address, it->saved, 5);
+            WriteCode(address, it->saved, it->size);
             patches.erase(std::next(it).base());
             return;
         }
     }
 }
+
+// Writes `jmp target` over the 5 bytes at `address` and lists the patch.
+inline void PatchJump(std::uintptr_t address, const void* target) {
+    std::uint8_t jump[5] = {0xe9};
+    const std::uint32_t rel = reinterpret_cast<std::uint32_t>(target) - (static_cast<std::uint32_t>(address) + 5);
+    std::memcpy(jump + 1, &rel, 4);
+    PatchBytes(address, jump, sizeof(jump));
+}
+
+inline void UnpatchJump(std::uintptr_t address) { UnpatchBytes(address); }
 
 class CalleeStubs;
 // After a crashed test: restores every patch still live (newest first) and
@@ -202,7 +215,7 @@ inline int RestoreLeftoverPatches() {
     auto& patches = LivePatches();
     const int count = static_cast<int>(patches.size());
     for (auto it = patches.rbegin(); it != patches.rend(); ++it) {
-        WriteCode(it->address, it->saved, 5);
+        WriteCode(it->address, it->saved, it->size);
     }
     patches.clear();
     // The crashed test's CalleeStubs is gone with its stack frame (its
