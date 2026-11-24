@@ -76,6 +76,14 @@
   <h2>Treemap</h2>
   <div class="muted">Each box is one function of S3.EXE, sized by its code size.
     Hover for details; click a group to zoom in.</div>
+  <div class="controls">
+    <label>Colour by <select id="colourMode">
+      <option value="status">status (as in the table above)</option>
+      <option value="understood">understood or not</option>
+      <option value="verified">verified or not</option>
+    </select></label>
+    <span class="muted" id="colourLegend"></span>
+  </div>
   <div class="crumbs" id="crumbs"></div>
   <div id="map"></div>
 
@@ -103,7 +111,7 @@
   <div class="muted">Share of all code bytes at each commit that changed the inventory.
     <span style="color:#3d9a50">●</span> verified and seen in a whole-game check &nbsp;
     <span style="color:#4f8fc0">●</span> verified &nbsp;
-    <span style="color:#d9a53a">●</span> identified or better</div>
+    <span style="color:#d9a53a">●</span> understood (identified or better)</div>
   <div id="history"></div>
 </main>
 <div id="tip"></div>
@@ -163,13 +171,14 @@ function buildTree() {
   }
   (function sum(node) {
     if (!node.children) return;
-    node.size = 0; node.done = 0; node.game = 0;
+    node.size = 0; node.done = 0; node.game = 0; node.understood = 0;
     for (const child of node.children) {
       child.parent = node;
       sum(child);
       node.size += child.size;
       node.done += child.children ? child.done : (child.status >= VERIFIED ? child.size : 0);
       node.game += child.children ? child.game : (child.status === VERIFIED_GAME ? child.size : 0);
+      node.understood += child.children ? child.understood : (child.status >= IDENTIFIED ? child.size : 0);
     }
     node.children.sort((a, b) => b.size - a.size);
   })(root);
@@ -206,6 +215,22 @@ function squarify(items, x, y, w, h) {
 }
 
 // ------------------------------------------------------------ draw the treemap
+// Colour modes of the treemap's function boxes (the "Colour by" selector).
+const COLOUR_MODES = {
+  status: { colour: (s) => STATUS[s].color, legend: "" },
+  understood: {
+    colour: (s) => (s >= IDENTIFIED ? "#f2c86b" : "#c9ccd1"),
+    legend: '<span class="swatch" style="background:#f2c86b"></span>understood (identified or better) &nbsp; ' +
+            '<span class="swatch" style="background:#c9ccd1"></span>classified or not looked at',
+  },
+  verified: {
+    colour: (s) => (s >= VERIFIED ? "#3d9a50" : "#c9ccd1"),
+    legend: '<span class="swatch" style="background:#3d9a50"></span>verified &nbsp; ' +
+            '<span class="swatch" style="background:#c9ccd1"></span>not verified',
+  },
+};
+let colourMode = "status";
+const leafColour = (status) => COLOUR_MODES[colourMode].colour(status);
 const tree = buildTree();
 let zoomPath = [tree];       // root ... currently shown node
 const nodesById = [];        // for hover/click lookup
@@ -227,7 +252,7 @@ function draw() {
       const id = nodesById.push(child) - 1;
       if (!child.children) {
         const stroke = cw > 2 && ch > 2 ? ' stroke="#ffffff" stroke-opacity="0.6" stroke-width="0.4"' : "";
-        out.push(`<rect data-id="${id}" x="${r(cx)}" y="${r(cy)}" width="${r(cw)}" height="${r(ch)}" fill="${STATUS[child.status].color}"${stroke}/>`);
+        out.push(`<rect data-id="${id}" x="${r(cx)}" y="${r(cy)}" width="${r(cw)}" height="${r(ch)}" fill="${leafColour(child.status)}"${stroke}/>`);
         return;
       }
       const headerSize = depth === 0 ? 18 : 12;
@@ -236,7 +261,8 @@ function draw() {
                `fill="var(${depth === 0 ? "--cat" : "--group"})" stroke="var(--card)" stroke-width="${depth === 0 ? 2 : 0.6}"/>`);
       if (header) {
         const fontSize = depth === 0 ? 12 : 9;
-        let label = child.name + (depth === 0 ? ` — ${pct(child.done, child.size, 1)} verified, ` +
+        let label = child.name + (depth === 0 ? ` — ${pct(child.understood, child.size, 1)} understood, ` +
+                                  `${pct(child.done, child.size, 1)} verified, ` +
                                   `${pct(child.game, child.size, 1)} in a whole game` : "");
         const maxChars = Math.floor((cw - 6) / (fontSize * 0.58));
         if (label.length > maxChars) label = label.slice(0, Math.max(1, maxChars - 1)) + "…";
@@ -263,7 +289,8 @@ map.addEventListener("mousemove", (event) => {
   if (id === undefined) { tip.style.display = "none"; return; }
   const node = nodesById[id];
   tip.textContent = node.children
-    ? `${node.name}\n${fmt(node.size)} bytes, ${pct(node.done, node.size)} verified, ` +
+    ? `${node.name}\n${fmt(node.size)} bytes, ${pct(node.understood, node.size)} understood, ` +
+      `${pct(node.done, node.size)} verified, ` +
       `${pct(node.game, node.size)} identical in a whole game`
     : `${node.name}\n${hex(node.address)}, ${fmt(node.size)} bytes\n${STATUS[node.status].label}` +
       evidenceText(node.address);
@@ -291,6 +318,11 @@ document.getElementById("crumbs").addEventListener("click", (event) => {
   const depth = event.target.dataset && event.target.dataset.depth;
   if (depth === undefined) return;
   zoomPath = zoomPath.slice(0, Number(depth) + 1);
+  draw();
+});
+document.getElementById("colourMode").addEventListener("change", (event) => {
+  colourMode = event.target.value;
+  document.getElementById("colourLegend").innerHTML = COLOUR_MODES[colourMode].legend;
   draw();
 });
 let resizeTimer;
