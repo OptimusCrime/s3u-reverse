@@ -159,7 +159,7 @@ testing".
 - Evidence on the merged main (both batches): Debug and Release build;
   `--test` 648/648; full emulator suite `--full --require-coverage`: 796
   functions, 0 mismatches, 0 with incomplete coverage (16 workers,
-  1,299 s); inventory check clean. Verified: 768 -> 797 (796 specs).
+  1,299 s); inventory check clean. Verified: 768 -> 796.
 
 ### 2026-11-24 (52): savegame loader, computer players A2/A4, progress page
 
