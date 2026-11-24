@@ -36,14 +36,17 @@
 //   mapSize (two callers tail-return it). Plain ret.
 // All thiscall (ECX = world).
 
+#include "game/debug_log.h"
 #include "game/enums/terrain.h"
 #include "game/replacements.h"
+#include "game/texts.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
 #include <cstdint>
+#include <vector>
 
 namespace s3re::game {
 
@@ -480,6 +483,108 @@ S3RE_TEST(CGameData_TileShade_MatchesOriginal) {
 S3RE_TEST(CGameData_TileShade_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareTileShade(probe, &WrongTileShade, 20000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+
+// CGameData::InitTileShadesAndMapEdge (0x00519e80): () thiscall, called by InitAfterMapLoad: every inner
+//   tile (x, y in 1 .. size - 2; the bounds re-read, unsigned, y the outer loop) gets shade = TileShade(x,
+//   y) (AL); the four edge lines (x or y = 0 or size - 1) get shade 0x1f and terrain 7 (deep water);
+//   DebugLog("sectors done"); then UpdateAllBorderFlags. A map size of 0 would make the shade loops run
+//   over 2^32 rows (the original's bug; never reached). EAX not used.
+
+namespace {
+
+constexpr std::uint8_t kEdgeShade = 0x1f;
+constexpr std::uint8_t kEdgeTerrain = 7;  // deep water around the map
+constexpr std::uintptr_t kTileShade = 0x00519720;
+constexpr std::uintptr_t kUpdateAllBorderFlags = 0x0051a420;
+
+Tile& TileAtXY(CGameData* world, std::uint32_t x, std::uint32_t y) {
+    return TileAtOffset(world, TileOffset(x, y));
+}
+
+}  // namespace
+
+// Purpose: Prepares a freshly loaded map for drawing and play: the shading
+// of every tile from the heights, a border of deep water around the map,
+// and the border flags of the territories.
+std::uint32_t __fastcall CGameData_InitTileShadesAndMapEdge(CGameData* world, void*) {
+    for (std::uint32_t y = 1; y < world->map_size - 1; ++y) {
+        for (std::uint32_t x = 1; x < world->map_size - 1; ++x) {
+            const std::uint32_t shade = reinterpret_cast<TileShadeFn>(kTileShade)(world, nullptr, x, y);
+            TileAtXY(world, x, y).shade = static_cast<std::uint8_t>(shade);
+        }
+    }
+    for (std::uint32_t i = 0; i < world->map_size; ++i) {
+        const std::uint32_t last = world->map_size - 1;
+        TileAtXY(world, i, 0).shade = kEdgeShade;
+        TileAtXY(world, i, last).shade = kEdgeShade;
+        TileAtXY(world, 0, i).shade = kEdgeShade;
+        TileAtXY(world, last, i).shade = kEdgeShade;
+        TileAtXY(world, i, 0).terrain = kEdgeTerrain;
+        TileAtXY(world, i, last).terrain = kEdgeTerrain;
+        TileAtXY(world, 0, i).terrain = kEdgeTerrain;
+        TileAtXY(world, last, i).terrain = kEdgeTerrain;
+    }
+    GameDebugLog(texts::kSectorsDone);
+    reinterpret_cast<NoArgsFn>(kUpdateAllBorderFlags)(world, nullptr);
+    return 0;
+}
+
+S3RE_HOOK(0x00519e80, CGameData_InitTileShadesAndMapEdge, NoArgsFn, Original_CGameData_InitTileShadesAndMapEdge,
+          CGameData_InitTileShadesAndMapEdge);
+
+namespace {
+
+void CompareInitTileShades(test::Context& ctx, NoArgsFn candidate, int cases) {
+    test::WorldPair worlds(ctx, sizeof(CGameData));
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t size = ctx.rng().Chance(1, 8) ? 1 + ctx.rng().Below(4) : 8 + ctx.rng().Below(200);
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
+        std::vector<DebugLogCall> logA, logB;
+        {
+            DebugLogRecorder recorder;
+            Original_CGameData_InitTileShadesAndMapEdge(worlds.original(), nullptr);
+            logA = recorder.Take();
+        }
+        {
+            DebugLogRecorder recorder;
+            candidate(worlds.ours(), nullptr);
+            logB = recorder.Take();
+        }
+        if (!S3RE_EXPECT(logA == logB) || !worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: size %u", i, size);
+            return;
+        }
+    }
+}
+
+// Wrong: the last row and column don't get the water edge.
+std::uint32_t __fastcall WrongInitTileShades(CGameData* world, void* edx) {
+    const std::uint32_t size = world->map_size;
+    if (size >= 2) {
+        std::vector<std::uint8_t> saved(size);
+        for (std::uint32_t i = 0; i < size; ++i) {
+            saved[i] = TileAtXY(world, size - 1, i).terrain;
+        }
+        const std::uint32_t r = CGameData_InitTileShadesAndMapEdge(world, edx);
+        for (std::uint32_t i = 1; i + 1 < size; ++i) {
+            TileAtXY(world, size - 1, i).terrain = saved[i];
+        }
+        return r;
+    }
+    return CGameData_InitTileShadesAndMapEdge(world, edx);
+}
+
+}  // namespace
+
+S3RE_TEST(CGameData_InitTileShadesAndMapEdge_MatchesOriginal) {
+    CompareInitTileShades(ctx, &CGameData_InitTileShadesAndMapEdge, 12);
+}
+S3RE_TEST(CGameData_InitTileShadesAndMapEdge_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareInitTileShades(probe, &WrongInitTileShades, 4);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

@@ -356,6 +356,15 @@ scalar_deleting_destructor/~CDrawer, and CEventQueueOverflow ctor/sdd/dtor.
    surfaces (primary, back/flip...), +0x5f6d0 ctor arg, +0x5f6d4 lobby flag, +0x5f6d5 software
    cursor flag, +0x5f6d8 mouse surface, +0x5f6dc current cursor id (-1 none), +0x5f6e0 object
    deleted on release, +0x5f6f8 flip callback (member function pointer) on +0x5f6c8.
+   **Draw queues (session 54, verified):** +0x20c shadows (4000 x 0x14), +0x14260 sprites
+   (8000 x 0x1c), +0x4b534 player-colour layers (4000 x 0x14), each followed by tails[250],
+   counts[250] and used; the rows are drawn in order by 0x4b26c0 (shadows, then sprites with
+   their colour layers). Queue functions 0x4d7c90..0x4d8170 (were Logic_sub_4d7xxx; the record
+   layout is in `src/s3re/game/graphics/drawer_layout.h`); +0x5f588/+0x5f5cc/+0x5f610 ambient
+   sound sources left/right/total per kind (17), used by 0x4c7730 (ambient sounds) through
+   AmbientSoundPan 0x4c79f0 / AmbientSoundVolume 0x4c7a50; +0x90 pitch, +0xa4 / +0xec 16-bit
+   surfaces (DrawStatisticsBar 0x4d7bd0, DrawGlyphRow 0x4d6950). Hit areas of drawn objects
+   (g_hitAreas 0x7ade08, AddHitArea 0x4d8240) are read by CGameData::PickHitArea 0x4ff0a0.
    CGameDrawer slot meanings (from CDrawer and CGameDrawer code): 4 RestoreSurfaces, 5
    ReleaseSurfaces(bool keepGraphics), 7 Init(hwnd) 0x5b6ed0 (calls 10 and 11(0)), 8 Exit/Release
    0x5b6f00, 10 SetConfiguredDisplayMode (pure), 11 CreateSurfaces(bool) (pure); CDrawer adds

@@ -1716,3 +1716,223 @@ SPECS += [
                   0x004dfa60: (0, "thiscall", "probe"),
                   0x00413d70: (1, "thiscall", "this")}),
 ]
+
+
+# -- session 54 (logic-misc): small CLogicThread members (logic_thread_members.cpp) --
+
+CURRENT_GROUP = 0x007dfd68
+GROUP_CHANGED = 0x007ad5f8
+
+
+def message_lifetimes(rng, pool, args):
+    """The 20 message lines' lifetimes around 0, sometimes any value."""
+    return [(LOGIC_THREAD + 0x414 + line * 0x1c + 0x10,
+             rng.choice([0, 1, 2, -1 & 0xFFFFFFFF, rng.randrange(1000), rng.getrandbits(32)]), 4)
+            for line in range(20)]
+
+
+def group_store_state(rng, pool, args):
+    """All ten groups (lists of a few settlers, often shared between groups,
+    sometimes empty), the current group (sometimes -1 or the argument), the
+    change flags and the selected building; the world part: the settlers'
+    owner and type bytes and the special menu (UpdateGroupMenu)."""
+    world = [(0x2d2d4, rng.randrange(4), 4), (0x2d298, rng.randrange(8), 4)]
+    exe = []
+    shared = [rng.randrange(1, 0x8000) for _ in range(6)]
+    for group in range(10):
+        count = 0 if rng.random() < 0.25 else rng.randrange(1, 12) if rng.random() < 0.9 else rng.randrange(101)
+        exe.append((GROUP_COUNTS + group * 2, count, 2))
+        for k in range(count):
+            settler = rng.choice(shared) if rng.random() < 0.6 else rng.randrange(0x8000)
+            exe.append((GROUP_SETTLERS + group * 200 + k * 2, settler, 2))
+            world.append((SETTLERS + settler * 0x40 + 1, rng.choice([0x24, 0x2c, 0x17, 0x02]), 1))
+        exe.append((GROUP_CHANGED + group * 4, rng.randrange(3), 4))
+    current = 0xFFFFFFFF if rng.random() < 0.1 else args[0] if args and rng.random() < 0.15 else rng.randrange(10)
+    exe += [(CURRENT_GROUP, current, 4),
+            (SELECTED_BUILDING, 0 if rng.random() < 0.5 else rng.randrange(5000), 4)]
+    return world, exe
+
+
+GROUP_STORE_EXE: list = []
+
+
+def group_store_presets(rng, pool, args):
+    world, exe = group_store_state(rng, pool, args)
+    GROUP_STORE_EXE[:] = exe
+    return world
+
+
+def group_store_globals(rng, pool, args):
+    return list(GROUP_STORE_EXE)
+
+
+def transport_order_area(rng, pool, args):
+    """The argument's area (when below 0x1000): free or a player's, its
+    transport order list with small goods numbers, sometimes the asked one."""
+    area, good = args
+    if area >= 0x1000:
+        return []
+    base = AREAS + area * 0x2e0
+    fields = [(base, 0xFF if rng.random() < 0.2 else rng.randrange(20), 1)]
+    for p in range(36):
+        fields.append((base + 0x1f6 + p, rng.randrange(40) if rng.random() < 0.8 else rng.getrandbits(8), 1))
+    if rng.random() < 0.5 and good < 256:
+        fields.append((base + 0x1f6 + rng.randrange(36), good, 1))
+    return fields
+
+
+def area_number(rng, pool):
+    return rng.choice([rng.randrange(0x1000), rng.randrange(0x1000), 0x1000, 0xfff, rng.getrandbits(32)])
+
+
+SPECS += [
+    Spec("CLogicThread_Setup", 0x0053c970, "logicthread", [anything] * 10),
+    Spec("CLogicThread_ClearMessages", 0x0051e650, "logicthread", [], presets=message_lifetimes),
+    # EAX: the original's points past the last line (callers don't use it).
+    Spec("CLogicThread_AgeMessages", 0x0051e680, "logicthread", [], eax_mask=0, presets=message_lifetimes),
+    Spec("CLogicThread_ClearSelection", 0x00542630, "logicthread", [], presets=group_store_presets,
+         globals=group_store_globals),
+    # EAX: the empty-group path leaves the caller's (callers don't use it);
+    # the in-process test compares it on the other paths.
+    Spec("CLogicThread_StoreSettlerGroup", 0x00542820, "logicthread", [below(10)], eax_mask=0,
+         presets=group_store_presets, globals=group_store_globals),
+    Spec("CLogicThread_GoodsPriorityPosition", 0x00542d40, "logicthread", [area_number, below(40, 0.1)],
+         presets=transport_order_area),
+    Spec("LogicRecord24_Construct_args", 0x005437e0, "thiscall", [anything] * 9),
+]
+
+
+# -- session 54 (logic-misc): TutorialWaitDone, PickHitArea (ui_state.cpp) --
+
+def tutorial_wait(rng, pool, args):
+    return [(0x2d304, rng.choice([0, 0, 1, 2, rng.getrandbits(32)]), 4)]
+
+
+HIT_AREAS = 0x7ade08
+PICK_STATE: list = []
+
+
+def pick_hit_area_world(rng, pool, args):
+    """Draws the hit areas for the globals (run after the presets): a count
+    of 0, negative or up to 60, half 0/1, entries near (x, y) or anywhere."""
+    x, y = args
+    x = x - (1 << 32) if x & 0x80000000 else x
+    y = y - (1 << 32) if y & 0x80000000 else y
+    kind = rng.randrange(8)
+    count = 0 if kind == 0 else ((-1 - rng.randrange(5)) & 0xFFFFFFFF) if kind == 1 else rng.randrange(1, 60)
+    half = rng.randrange(2)
+    exe = [(0x7dfd5c, count, 4), (0x7dfd64, half, 4)]
+    for k in range(count if count < 0x80000000 else 0):
+        entry = HIT_AREAS + (2 * k + half) * 10
+        close = rng.random() < 0.3
+        ex = (x + rng.randint(-50, 50)) if close else rng.getrandbits(16)
+        ey = (y + rng.randint(-50, 50)) if close else rng.getrandbits(16)
+        exe += [(entry + 2, ex & 0xFFFF, 2), (entry + 4, ey & 0xFFFF, 2),
+                (entry + 6, rng.getrandbits(16), 2), (entry + 8, rng.getrandbits(16), 2)]
+    PICK_STATE[:] = exe
+    return []
+
+
+def pick_hit_area_globals(rng, pool, args):
+    return list(PICK_STATE)
+
+
+SPECS += [
+    Spec("CGameData_TutorialWaitDone", 0x00515b00, "thiscall", [], presets=tutorial_wait),
+    Spec("CGameData_PickHitArea", 0x004ff0a0, "thiscall", [between(-50, 1100), between(-50, 800)], eax_mask=0,
+         presets=pick_hit_area_world, globals=pick_hit_area_globals, max_cases=1000),
+]
+
+
+# -- session 54 (logic-misc): SelectSettlerGroup, SelectSettlersOfType (logic_thread_members.cpp) --
+
+def _trunc_div(a, b):
+    """Signed 32-bit division truncating toward zero."""
+    a = a - (1 << 32) if a & 0x80000000 else a
+    q = abs(a) // b
+    return (q if a >= 0 else -q) & 0xFFFFFFFF
+
+
+def screen_centre_tile(camera_x, camera_y, size, width, height):
+    """CGameData::ScreenCenterTileX/Y (ui_state.cpp) in Python."""
+    row = _trunc_div((camera_y + 0x640) & 0xFFFFFFFF, 18)
+    rows = lambda shift: ((_trunc_div((height + 0xff) & 0xFFFFFFFF, 9) + 0xb) & 0xFFFFFFFF) >> shift
+    skew = ((size + ((100 - row) & 0xFFFFFFFF) * 2) & 0xFFFFFFFF) >> 1
+    half = ((_trunc_div((width + 0x17) & 0xFFFFFFFF, 16) + 0xa) & 0xFFFFFFFF) >> 1
+    column = _trunc_div((camera_x - 0xd0) & 0xFFFFFFFF, 16)
+    x = (column + rows(2) - skew + half) & 0xFFFFFFFF
+    y = (rows(1) + row * 2 - 200) & 0xFFFFFFFF
+    return x, y
+
+
+SELECT_EXE: list = []
+SELECT_SCREEN = (504, 480)
+
+
+def select_group_state(rng, pool, args):
+    """The groups (group_store_state) with every listed settler's owner and
+    position on a small map (CenterCameraOnTile reads its tile)."""
+    world, exe = group_store_state(rng, pool, args)
+    size = rng.randrange(32, 200)
+    local = rng.randrange(4)
+    world += [(MAP_SIZE, size, 4), (0x2d2d4, local, 4)]
+    for address, value, width in list(exe):
+        if GROUP_SETTLERS <= address < GROUP_SETTLERS + 2000 and width == 2:
+            s = SETTLERS + value * 0x40
+            world += [(s, local if rng.random() < 0.6 else rng.randrange(4), 1),
+                      (s + 4, rng.randrange(size), 2), (s + 6, rng.randrange(size), 2)]
+    if rng.random() < 0.6 and args:  # the same group again (camera jump)
+        exe.append((CURRENT_GROUP, args[0], 4))
+    SELECT_EXE[:] = exe + [(SCREEN_WIDTH, SELECT_SCREEN[0], 4), (SCREEN_HEIGHT, SELECT_SCREEN[1], 4)]
+    return world
+
+
+def select_globals(rng, pool, args):
+    return list(SELECT_EXE)
+
+
+def select_type_state(rng, pool, args):
+    """A map whose screen-centre tile is known (camera and view size fixed per
+    case), a ring table of small offsets, settlers of a few owners and the
+    four types 0..3 on the tiles around the centre, and the groups."""
+    type_, mode = args
+    world, exe = group_store_state(rng, pool, [0])
+    size = rng.randrange(48, 160)
+    local = rng.randrange(4)
+    camera_x, camera_y = rng.randrange(0, 2500), rng.randrange(0, 1200)
+    cx, cy = screen_centre_tile(camera_x, camera_y, size, *SELECT_SCREEN)
+    world += [(MAP_SIZE, size, 4), (0x2d2d4, local, 4), (0x2d25c, camera_x, 4), (0x2d260, camera_y, 4)]
+    n = 0
+    d = 0
+    pool_settlers = [rng.randrange(1, 32000) for _ in range(150)]
+    while n < 400:
+        for dx in range(-d, d + 1):
+            for dy in range(-d, d + 1):
+                if max(abs(dx), abs(dy)) != d or n >= 400:
+                    continue
+                world += [(0x110a588 + n * 16, dx & 0xFFFFFFFF, 4), (0x110a588 + n * 16 + 4, dy & 0xFFFFFFFF, 4)]
+                x, y = (cx + dx) & 0xFFFFFFFF, (cy + dy) & 0xFFFFFFFF
+                if x < size and y < size:
+                    settler = rng.choice(pool_settlers) if rng.random() < 0.5 else 0
+                    world.append((TILES + (x * 0x300 + y) * 24, settler, 2))
+                n += 1
+        d += 1
+    for s in pool_settlers:
+        world += [(SETTLERS + s * 0x40, local if rng.random() < 0.7 else rng.randrange(4), 1),
+                  (SETTLERS + s * 0x40 + 1, type_ if rng.random() < 0.6 else rng.randrange(4), 1)]
+    SELECT_EXE[:] = exe + [(SCREEN_WIDTH, SELECT_SCREEN[0], 4), (SCREEN_HEIGHT, SELECT_SCREEN[1], 4)]
+    return world
+
+
+def select_mode(rng, pool):
+    return rng.choice([1, 2, 3, 1, 2, 0, 4, rng.getrandbits(32)])
+
+
+SPECS += [
+    # EAX: the empty-group path leaves the caller's (not used).
+    Spec("CLogicThread_SelectSettlerGroup", 0x00542660, "logicthread", [below(10)], eax_mask=0,
+         presets=select_group_state, globals=select_globals),
+    # EAX not used by the callers (an invalid mode leaves the caller's).
+    Spec("CLogicThread_SelectSettlersOfType", 0x00542b60, "logicthread", [below(4), select_mode], eax_mask=0,
+         presets=select_type_state, globals=select_globals, max_cases=300),
+]

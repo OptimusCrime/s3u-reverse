@@ -370,3 +370,77 @@ SPECS += [
     Spec("CGameData_UpdateEnvironment", 0x004e7810, "thiscall", [], eax_mask=0, presets=update_environment,
          globals=update_environment_globals, callees=ENV_CALLEES, max_cases=600),
 ]
+
+
+# -- session 54 (logic-misc): MapEffects::MapEffects, MapEffect::TileAt, IsVisibleIn (map_effect_queries.cpp).
+#    ECX = the world buffer as the record / the table. --
+
+def tile_effect_record(rng, pool, args):
+    """A record (at world offset 0) with a start tick near the argument tick,
+    a duration (sometimes -1 or negative, never 0), tiles and pixels."""
+    tick = args[0] - (1 << 32) if args[0] & 0x80000000 else args[0]
+    start = tick - rng.randint(-10, 210)
+    r = rng.random()
+    duration = 0xFFFF if r < 0.1 else (-rng.randint(2, 50)) & 0xFFFF if r < 0.2 else rng.randint(1, 200)
+    fields = [(0x0, start & 0xFFFFFFFF, 4), (0x4, duration, 2), (0x28, 0 if rng.random() < 0.4 else rng.randint(-100, 300) & 0xFFFF, 2)]
+    for off in (0x18, 0x1c, 0x20, 0x24):
+        fields.append((off, rng.randrange(400) if rng.random() < 0.9 else rng.getrandbits(32), 4))
+    for off in (0x8, 0xc, 0x10, 0x14):
+        fields.append((off, rng.randint(-500, 12000) & 0xFFFFFFFF, 4))
+    return fields
+
+
+def tile_effect_tick(rng, pool):
+    return rng.randint(0, 2000)
+
+
+def view_near_effect(rng, pool):
+    return rng.randint(-600, 12000) & 0xFFFFFFFF
+
+
+VISIBLE_VIEW: list = []
+
+
+def visible_effect_record(rng, pool, args):
+    """As tile_effect_record; the view (arguments 2..5) is often moved next to the
+    effect's start pixel so that both outcomes occur (the arguments are
+    drawn first, so the record is placed relative to them instead)."""
+    fields = tile_effect_record(rng, pool, args)
+    left, top = args[1], args[2]
+    if rng.random() < 0.6:
+        fields = [f for f in fields if f[0] not in (0x8, 0xc)]
+        fields += [(0x8, (left + rng.randint(-100, 700)) & 0xFFFFFFFF, 4),
+                   (0xc, (top + rng.randint(-100, 500)) & 0xFFFFFFFF, 4)]
+    return fields
+
+
+def view_right(rng, pool):
+    return rng.randint(-600, 13200) & 0xFFFFFFFF
+
+
+SPECS += [
+    # Writes the whole table (0x668bc bytes) per case.
+    Spec("MapEffects_Construct", 0x005442c0, "thiscall", [], max_cases=6),
+    Spec("MapEffect_TileAt", 0x005441c0, "thiscall", [tile_effect_tick, scratch(0), scratch(1)],
+         presets=tile_effect_record),
+    Spec("MapEffect_IsVisibleIn", 0x00544030, "thiscall",
+         [tile_effect_tick, view_near_effect, view_near_effect, view_right, view_right], eax_mask=0xFF,
+         presets=visible_effect_record),
+]
+
+
+def draw_record_effect(rng, pool, args):
+    """tile_effect_record for the tick argument, with a graphic (or none), a
+    non-zero animation period (sometimes negative) and a brightness."""
+    fields = tile_effect_record(rng, pool, [args[1]])
+    period = rng.randint(1, 64) if rng.random() < 0.9 else rng.randint(0x8000, 0xfffe)
+    fields += [(0x2c, 0xFFFFFFFF if rng.random() < 0.25 else rng.getrandbits(32), 4), (0x6, period, 2),
+               (0x30, rng.getrandbits(16), 2), (0x32, rng.getrandbits(16), 2),
+               (0x39, 0 if rng.random() < 0.5 else rng.getrandbits(8), 1)]
+    return fields
+
+
+SPECS += [
+    Spec("MapEffect_MakeDrawRecord", 0x00544100, "thiscall", [scratch(0), tile_effect_tick, anything],
+         presets=draw_record_effect),
+]

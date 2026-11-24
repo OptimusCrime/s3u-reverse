@@ -636,4 +636,102 @@ S3RE_TEST(CGameData_UpdateFogSlice_ComparisonDetectsWrongImplementation) {
     S3RE_EXPECT(probe.failures() > 0);
 }
 
+
+// CGameData::RebuildFogOfWar (0x00518e70): () thiscall, called twice by InitAfterMapLoad: runs the whole
+//   56-step fog cycle at once: ClearSightSlice(0..7), MarkRevealPointsSight(), MarkBuildingSight(0..15),
+//   MarkSettlerSight(0..15), UpdateFogSlice(0..15), each through its S3.EXE address. EAX not used.
+
+namespace {
+
+namespace fog_callee {
+constexpr std::uintptr_t kClearSightSlice = 0x00518ec0;
+constexpr std::uintptr_t kMarkRevealPointsSight = 0x00518f20;
+constexpr std::uintptr_t kMarkBuildingSight = 0x00519fa0;
+constexpr std::uintptr_t kMarkSettlerSight = 0x0051a150;
+constexpr std::uintptr_t kUpdateFogSlice = 0x00519010;
+}  // namespace fog_callee
+
+constexpr std::uint32_t kSightSlices = 8;
+constexpr std::uint32_t kFogSteps = 16;  // also the stride of the building and settler steps
+
+void CallSlice(std::uintptr_t address, CGameData* world, std::uint32_t slice) {
+    reinterpret_cast<FirstFn>(address)(world, nullptr, slice);
+}
+
+}  // namespace
+
+// Purpose: Computes the fog of war of the whole map at once (after a map was
+// loaded), instead of spread over 56 game steps.
+void __fastcall CGameData_RebuildFogOfWar(CGameData* world, void*) {
+    for (std::uint32_t slice = 0; slice < kSightSlices; ++slice) {
+        CallSlice(fog_callee::kClearSightSlice, world, slice);
+    }
+    reinterpret_cast<VoidFn>(fog_callee::kMarkRevealPointsSight)(world, nullptr);
+    for (std::uint32_t first = 0; first < kFogSteps; ++first) {
+        CallSlice(fog_callee::kMarkBuildingSight, world, first);
+    }
+    for (std::uint32_t first = 0; first < kFogSteps; ++first) {
+        CallSlice(fog_callee::kMarkSettlerSight, world, first);
+    }
+    for (std::uint32_t slice = 0; slice < kFogSteps; ++slice) {
+        CallSlice(fog_callee::kUpdateFogSlice, world, slice);
+    }
+}
+
+S3RE_HOOK(0x00518e70, CGameData_RebuildFogOfWar, VoidFn, Original_CGameData_RebuildFogOfWar,
+          CGameData_RebuildFogOfWar);
+
+namespace {
+
+// A map with reveal points, buildings and settlers (the set-ups of the
+// five steps' own tests): the whole world after the rebuild is compared.
+void CompareRebuildFog(test::Context& ctx, VoidFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kWorld);
+    SetUpOffsets(ctx, worlds);
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t size = 16 + ctx.rng().Below(113);
+        worlds.Both([&](CGameData* w) { w->map_size = size; });
+        SetUpTeams(ctx, worlds);
+        RandomSight(ctx, worlds, size);
+        SetUpRevealPoints(ctx, worlds, size);
+        SetUpBuildings(ctx, worlds, size);
+        SetUpSettlers(ctx, worlds, size);
+        SetUpSeenTiles(ctx, worlds, size);
+        Original_CGameData_RebuildFogOfWar(worlds.original(), nullptr);
+        candidate(worlds.ours(), nullptr);
+        if (!worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: size %u", i, size);
+            return;
+        }
+    }
+}
+
+// Wrong: the last settler step is left out.
+void __fastcall WrongRebuildFog(CGameData* world, void*) {
+    for (std::uint32_t slice = 0; slice < kSightSlices; ++slice) {
+        CallSlice(fog_callee::kClearSightSlice, world, slice);
+    }
+    reinterpret_cast<VoidFn>(fog_callee::kMarkRevealPointsSight)(world, nullptr);
+    for (std::uint32_t first = 0; first < kFogSteps; ++first) {
+        CallSlice(fog_callee::kMarkBuildingSight, world, first);
+    }
+    for (std::uint32_t first = 0; first + 1 < kFogSteps; ++first) {
+        CallSlice(fog_callee::kMarkSettlerSight, world, first);
+    }
+    for (std::uint32_t slice = 0; slice < kFogSteps; ++slice) {
+        CallSlice(fog_callee::kUpdateFogSlice, world, slice);
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(CGameData_RebuildFogOfWar_MatchesOriginal) {
+    CompareRebuildFog(ctx, &CGameData_RebuildFogOfWar, 6);
+}
+S3RE_TEST(CGameData_RebuildFogOfWar_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareRebuildFog(probe, &WrongRebuildFog, 4);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 }  // namespace s3re::game

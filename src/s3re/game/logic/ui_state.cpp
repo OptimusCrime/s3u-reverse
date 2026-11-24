@@ -747,4 +747,163 @@ S3RE_TEST(CLogicThread_ClearPendingUiRefresh_ComparisonDetectsWrongImplementatio
     S3RE_EXPECT(probe.failures() > 0);
 }
 
+
+// Session 54 (logic-misc).
+//
+// CGameData::TutorialWaitDone (0x00515b00): () thiscall: while the tutorial
+//   wait countdown (+0x2d304, set to 100000 by StartTutorialWait 0x515af0,
+//   to 1 by a click in ProcessEvents) is not 0, counts it down and returns
+//   0; returns 1 once it is 0. Called by UpdateTutorial.
+// CGameData::PickHitArea (0x004ff0a0, was CGameData::FindNearest_a): (x, y)
+//   thiscall, ret 8: the hit area (g_hitAreas, the half g_hitAreaReadHalf,
+//   g_hitAreaReadCount entries) nearest to the screen position (x, y) with
+//   a squared distance below 2000 (32-bit wrapping squares, signed
+//   compares; the first of equal ones) gives its two values to
+//   last_search_x / _y (+0x2d2e4 / +0x2d2e8); none: both 0. A count of 0
+//   leaves them alone, a negative count clears them. Called by
+//   ProcessEvents for clicks (probably to find the object clicked). EAX
+//   not used.
+
+namespace {
+
+constexpr std::int32_t kPickRadiusSquared = 2000;
+constexpr std::int32_t kNoneYet = 0x7fffffff;
+
+}  // namespace
+
+using PickFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::int32_t x, std::int32_t y);
+
+// Purpose: Whether the tutorial's wait before the next lesson is over
+// (counting it down on each call).
+std::uint32_t __fastcall CGameData_TutorialWaitDone(CGameData* world, void*) {
+    if (world->unk2d304 == 0) {
+        return 1;
+    }
+    world->unk2d304 = world->unk2d304 - 1;
+    return 0;
+}
+
+// Purpose: Finds the drawn object nearest to a click on the screen (from the
+// hit areas the draw thread recorded) and remembers it.
+std::uint32_t __fastcall CGameData_PickHitArea(CGameData* world, void*, std::int32_t x, std::int32_t y) {
+    const std::int32_t count = g_hitAreaReadCount;
+    if (count == 0) {
+        return 0;
+    }
+    std::int32_t best = kNoneYet;
+    std::uint32_t value1 = 0, value2 = 0;
+    if (count > 0) {
+        // Every second entry, from entry g_hitAreaReadHalf (not checked).
+        const HitArea* area = &g_hitAreas.get()[static_cast<std::uint32_t>(g_hitAreaReadHalf.get())];
+        for (std::int32_t n = count; n != 0; --n, area += 2) {
+            const std::uint32_t dx = static_cast<std::uint32_t>(x) - static_cast<std::uint32_t>(area->x);
+            const std::uint32_t dy = static_cast<std::uint32_t>(y) - static_cast<std::uint32_t>(area->y);
+            const auto distance = static_cast<std::int32_t>(dy * dy + dx * dx);
+            if (distance < kPickRadiusSquared && distance < best) {
+                value1 = area->value1;
+                value2 = area->value2;
+                best = distance;
+            }
+        }
+    }
+    if (best == kNoneYet) {
+        world->last_search_x = 0;
+        world->last_search_y = 0;
+    } else {
+        world->last_search_x = static_cast<std::int32_t>(value1);
+        world->last_search_y = static_cast<std::int32_t>(value2);
+    }
+    return 0;
+}
+
+S3RE_HOOK(0x00515b00, CGameData_TutorialWaitDone, WorldQueryFn, Original_CGameData_TutorialWaitDone,
+          CGameData_TutorialWaitDone);
+S3RE_HOOK(0x004ff0a0, CGameData_PickHitArea, PickFn, Original_CGameData_PickHitArea, CGameData_PickHitArea);
+
+namespace {
+
+void CompareTutorialWait(test::Context& ctx, WorldQueryFn original, WorldQueryFn candidate, int cases) {
+    test::WorldPair worlds(ctx, offsetof(CGameData, unk2d308));
+    for (int i = 0; i < cases; ++i) {
+        const auto wait = static_cast<std::int32_t>(ctx.rng().Chance(1, 2) ? ctx.rng().Below(3) : ctx.rng().Next32());
+        worlds.Both([&](CGameData* w) { w->unk2d304 = wait; });
+        const std::uint32_t expected = original(worlds.original(), nullptr);
+        const std::uint32_t actual = candidate(worlds.ours(), nullptr);
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: wait %d", i, wait);
+            return;
+        }
+    }
+}
+
+void ComparePickHitArea(test::Context& ctx, PickFn candidate, int cases) {
+    static HitArea saved[20000];
+    std::memcpy(saved, &g_hitAreas.get(), sizeof(saved));
+    const std::int32_t savedCount = g_hitAreaReadCount, savedHalf = g_hitAreaReadHalf;
+    test::WorldPair worlds(ctx, offsetof(CGameData, unk2d2ec));
+    for (int i = 0; i < cases; ++i) {
+        const std::int32_t x = ctx.rng().Range(-50, 1100), y = ctx.rng().Range(-50, 800);
+        const std::uint32_t kind = ctx.rng().Below(8);
+        g_hitAreaReadCount = kind == 0 ? 0 : kind == 1 ? -static_cast<std::int32_t>(ctx.rng().Below(5)) - 1
+                                                       : static_cast<std::int32_t>(ctx.rng().Below(kind == 2 ? 10000 : 200));
+        g_hitAreaReadHalf = static_cast<std::int32_t>(ctx.rng().Below(2));
+        // Entries near (x, y) or anywhere (x/y as int16, sometimes far off).
+        const std::uint32_t used = static_cast<std::uint32_t>(g_hitAreaReadCount > 0 ? g_hitAreaReadCount : 0);
+        for (std::uint32_t k = 0; k < used; ++k) {
+            HitArea& a = g_hitAreas[2 * k + static_cast<std::uint32_t>(g_hitAreaReadHalf.get())];
+            const bool close = ctx.rng().Chance(1, 4);
+            a.x = static_cast<std::int16_t>(close ? x + ctx.rng().Range(-50, 50) : static_cast<std::int32_t>(ctx.rng().Next32()));
+            a.y = static_cast<std::int16_t>(close ? y + ctx.rng().Range(-50, 50) : static_cast<std::int32_t>(ctx.rng().Next32()));
+            a.value1 = static_cast<std::uint16_t>(ctx.rng().Next32());
+            a.value2 = static_cast<std::uint16_t>(ctx.rng().Next32());
+        }
+        Original_CGameData_PickHitArea(worlds.original(), nullptr, x, y);
+        candidate(worlds.ours(), nullptr, x, y);
+        if (!worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: count %d, half %d", i, g_hitAreaReadCount.get(), g_hitAreaReadHalf.get());
+            break;
+        }
+    }
+    std::memcpy(&g_hitAreas.get(), saved, sizeof(saved));
+    g_hitAreaReadCount = savedCount;
+    g_hitAreaReadHalf = savedHalf;
+}
+
+// Wrong: the last of equally near hit areas wins.
+std::uint32_t __fastcall WrongPickHitArea(CGameData* world, void* edx, std::int32_t x, std::int32_t y) {
+    const std::int32_t count = g_hitAreaReadCount;
+    if (count <= 0) {
+        return CGameData_PickHitArea(world, edx, x, y);
+    }
+    std::int32_t best = kNoneYet;
+    for (std::int32_t k = 0; k < count; ++k) {
+        const HitArea& a = g_hitAreas[2 * static_cast<std::uint32_t>(k) + static_cast<std::uint32_t>(g_hitAreaReadHalf.get())];
+        const std::int32_t d = (x - a.x) * (x - a.x) + (y - a.y) * (y - a.y);
+        if (d < kPickRadiusSquared && d <= best) {
+            world->last_search_x = a.value1;
+            world->last_search_y = a.value2;
+            best = d;
+        }
+    }
+    if (best == kNoneYet) {
+        world->last_search_x = 0;
+        world->last_search_y = 0;
+    }
+    return 0;
+}
+
+}  // namespace
+
+S3RE_TEST(CGameData_TutorialWaitDone_MatchesOriginal) {
+    CompareTutorialWait(ctx, Original_CGameData_TutorialWaitDone, &CGameData_TutorialWaitDone, 3000);
+}
+S3RE_TEST(CGameData_PickHitArea_MatchesOriginal) {
+    ComparePickHitArea(ctx, &CGameData_PickHitArea, 3000);
+}
+S3RE_TEST(CGameData_PickHitArea_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    ComparePickHitArea(probe, &WrongPickHitArea, 3000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 }  // namespace s3re::game

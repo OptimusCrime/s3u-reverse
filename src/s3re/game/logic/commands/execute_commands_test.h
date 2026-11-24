@@ -377,8 +377,8 @@ private:
         bool same = worlds.Same(ctx, kThreadOffset, offsetof(CLogicThread, world)) &&
                     worlds.Same(ctx, kThreadOffset + offsetof(CLogicThread, unk3a4),
                                 offsetof(CLogicThread, toNet) - offsetof(CLogicThread, unk3a4)) &&
-                    worlds.Same(ctx, kThreadOffset + offsetof(CLogicThread, unk3cc),
-                                kThreadBytes - offsetof(CLogicThread, unk3cc));
+                    worlds.Same(ctx, kThreadOffset + offsetof(CLogicThread, draw_slot),
+                                kThreadBytes - offsetof(CLogicThread, draw_slot));
         for (const std::size_t queue : {kFromNetOffset, kToNetOffset}) {
             same = same && worlds.Same(ctx, queue + offsetof(MessageQueue, capacity),
                                        sizeof(MessageQueue) - offsetof(MessageQueue, capacity));

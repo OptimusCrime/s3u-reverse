@@ -431,4 +431,103 @@ S3RE_TEST(CGameData_UpdateMinimapSlice_ComparisonDetectsWrongImplementation) {
     S3RE_EXPECT(probe.failures() > 0);
 }
 
+
+// CGameData::BuildMinimap (0x004fb650): () thiscall: recomputes the whole minimap at once (after loading,
+//   and from ProcessEvents when a minimap option changes): with scale = (map size << 8) / W (signed; W =
+//   g_minimapWidth, read once for the scale and the row loop, again after every pixel for the column loop
+//   and the index), pixel (column c, row r) = MinimapPixel(c * scale >> 8, r * scale >> 8, (c * scale +
+//   scale - 256) >> 8, (r * scale + scale - 256) >> 8) (arithmetic shifts, the row's values computed once
+//   per row) into minimap[W * r + c] (AX). Then minimap_ready = 1, also when W <= 0. EAX: the row count
+//   reached, or the scale when W <= 0 (callers don't use it; one tail-jumps here).
+
+namespace {
+
+constexpr U kMinimapReady = 1;
+
+std::int32_t Shift8(U value) {
+    return static_cast<std::int32_t>(value) >> 8;
+}
+
+}  // namespace
+
+using BuildMinimapFn = U(__fastcall*)(CGameData* world, void* edx);
+
+// Purpose: Draws the whole minimap from the map, e.g. after loading a game or when the minimap mode changes.
+U __fastcall CGameData_BuildMinimap(CGameData* world, void*) {
+    const auto pixel = reinterpret_cast<PixelFn>(kMinimapPixel);
+    const auto rows = static_cast<std::int32_t>(g_minimapWidth);
+    const U scale = static_cast<U>(static_cast<std::int32_t>(world->map_size << 8) / rows);
+    if (rows <= 0) {
+        world->minimap_ready = kMinimapReady;
+        return scale;
+    }
+    std::int32_t r = 0;
+    // (The row loop compares with the width last read, as the original.)
+    for (U ry = 0; r < static_cast<std::int32_t>(g_minimapWidth); ++r, ry += scale) {
+        const std::int32_t top = Shift8(ry);
+        const std::int32_t bottom = Shift8(ry + scale - 0x100);
+        U cx = 0;
+        for (std::int32_t c = 0; c < static_cast<std::int32_t>(g_minimapWidth); ++c, cx += scale) {
+            const U value = pixel(world, nullptr, Shift8(cx), top, Shift8(cx + scale - 0x100), bottom);
+            world->minimap[static_cast<U>(g_minimapWidth) * static_cast<U>(r) + static_cast<U>(c)] =
+                static_cast<std::uint16_t>(value);
+        }
+    }
+    world->minimap_ready = kMinimapReady;
+    return static_cast<U>(r);
+}
+
+S3RE_HOOK(0x004fb650, CGameData_BuildMinimap, BuildMinimapFn, Original_CGameData_BuildMinimap,
+          CGameData_BuildMinimap);
+
+namespace {
+
+void CompareBuildMinimap(test::Context& ctx, BuildMinimapFn candidate, int cases) {
+    SavedGlobals saved;
+    test::WorldPair worlds(ctx, kWorld);
+    for (int i = 0; i < cases; ++i) {
+        const U size = 64 + ctx.rng().Below(321);
+        SetUpTiles(ctx, worlds, size);
+        RandomGlobals(ctx);
+        const U widest = size < 208 ? size : 208;
+        g_minimapWidth = ctx.rng().Chance(1, 8) ? -static_cast<std::int32_t>(ctx.rng().Below(3))
+                                                : static_cast<std::int32_t>(16 + ctx.rng().Below(widest - 15));
+        if (g_minimapWidth == 0) {
+            g_minimapWidth = -1;  // (0 divides by zero, in both)
+        }
+        const U expected = Original_CGameData_BuildMinimap(worlds.original(), nullptr);
+        const U actual = candidate(worlds.ours(), nullptr);
+        if (!S3RE_EXPECT_EQ(expected, actual) || !worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: size %u, width %d", i, size, g_minimapWidth.get());
+            return;
+        }
+    }
+}
+
+// Wrong: the last column of every row is left out.
+U __fastcall WrongBuildMinimap(CGameData* world, void* edx) {
+    const std::int32_t width = g_minimapWidth;
+    std::uint16_t lastColumn[208];
+    for (std::int32_t r = 0; r < width && r < 208; ++r) {
+        lastColumn[r] = world->minimap[width * r + width - 1];
+    }
+    const U result = CGameData_BuildMinimap(world, edx);
+    for (std::int32_t r = 0; r < width && r < 208; ++r) {
+        world->minimap[width * r + width - 1] = lastColumn[r];
+    }
+    return result;
+}
+
+}  // namespace
+
+S3RE_TEST(CGameData_BuildMinimap_MatchesOriginal) {
+    CompareBuildMinimap(ctx, &CGameData_BuildMinimap, 12);
+}
+
+S3RE_TEST(CGameData_BuildMinimap_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareBuildMinimap(probe, &WrongBuildMinimap, 4);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 }  // namespace s3re::game

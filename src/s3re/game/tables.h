@@ -123,6 +123,13 @@ inline constexpr GameGlobal<const std::uint32_t> g_manaPerOffering{0x730ef4};
 inline constexpr GameGlobal<const std::int8_t> g_residenceUnit{0x730f00};
 inline constexpr GameGlobal<const std::uint32_t> g_smithInputFull{0x730f04};
 
+// The axis scales of the statistics chart (CGameData::BuildStatisticsChart
+// 0x4ff550): 14 entries of five 16.16 values (times 100: the top of the
+// axis and four grid lines, 100/20/40/60/80 .. 10000/2000/../8000). The
+// first that fits the chart is chosen; past the last one the function reads
+// the 20 bytes after the table (the CGameData vtable's RTTI pointer and
+// first slots), as the original does.
+inline constexpr GameGlobal<const std::int32_t[14][5]> g_chartAxisScales{0x658afc};
 // UpdateSettlers: two int32 tables of four values each (0x46, 0x46, 0x46,
 // 0x46 and 0x54, 0x54, 0x60, 0x54 in the image), read per race; meaning
 // still to be named (settler_jobs_food.cpp).

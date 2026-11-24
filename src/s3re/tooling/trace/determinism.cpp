@@ -268,7 +268,7 @@ constexpr ByteRange kHeaderSkips[] = {
     // 0x4fce90. PrepareDrawData runs a timing-dependent number of times, so
     // the value differs between normal speed and --fast (found 2026-11-10,
     // savegame "slot 1.sav", header dumps).
-    {offsetof(CGameData, notification_blink), offsetof(CGameData, ui_2d2cc)},
+    {offsetof(CGameData, notification_blink), offsetof(CGameData, notification_icon)},
     // Last search result position (x, y), written by 0x4ff0a0/0x4ff170,
     // called from 0x524fa0 on every step (volatile).
     {offsetof(CGameData, last_search_x), offsetof(CGameData, unk2d2ec)},

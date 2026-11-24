@@ -16,7 +16,22 @@
 // `amount` to the newest sample of that history, capped at 100. The cap test
 // is done in unsigned 32-bit arithmetic on sample + amount, the store in
 // 8 bits. thiscall, three stack arguments, ret 0xc; callers don't use EAX.
+//
+// CGameData::BuildStatisticsChart (0x004ff550): (player, category) thiscall,
+// ret 8. Builds the curve the statistics window draws (world+0x2d038, 256
+// uint16) from one history: every non-zero sample s at position i adds s *
+// kernel[k] (16-bit products and sums of the low words) to the entries i +
+// k - 6 that lie in 0..255. The first six entries, whose kernel is cut off
+// at the newest end, are scaled up: entry j = entry * 100 / (100 - the
+// kernel weights that fell off) (unsigned 32-bit division; the right end is
+// not corrected). chart_max (+0x2d238) = the largest entry; the first axis
+// scale of g_chartAxisScales whose top (value * 100 >> 16, signed) + 1 is at
+// least that maximum is chosen (past the 14th the bytes after the table, as
+// the original), and its five values * 100 >> 16 go to chart_axis
+// (+0x2d23a); if it is the first scale, chart_max becomes its top. Neither
+// argument is range-checked. EAX not used.
 
+#include "game/tables.h"
 #include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -93,6 +108,80 @@ void __fastcall CGameData_AddStatistic(CGameData* world, void* /*edx*/, std::uin
 
 S3RE_HOOK(0x004ff510, CGameData_AddStatistic, AddStatisticFn, Original_CGameData_AddStatistic,
           CGameData_AddStatistic);
+
+namespace {
+
+constexpr std::int32_t kKernelTaps = 13;
+constexpr std::int32_t kKernelCentre = 6;    // the kernel covers samples i - 6 .. i + 6
+constexpr std::uint32_t kKernelTotal = 100;  // the weights sum to 100
+constexpr std::size_t kAxisScales = 14;
+constexpr std::size_t kAxisValues = 5;
+
+// A 16.16 axis value times 100, in whole units (signed shift).
+std::int16_t AxisUnits(std::int32_t value) {
+    return static_cast<std::int16_t>(static_cast<std::int32_t>(static_cast<std::uint32_t>(value) * 100u) >> 16);
+}
+
+// The largest maximum a scale's top fits: (value * 100 - 100) >> 16, + 1.
+std::int32_t AxisLimit(std::int32_t top) {
+    return (static_cast<std::int32_t>(static_cast<std::uint32_t>(top) * 100u - 100u) >> 16) + 1;
+}
+
+}  // namespace
+
+using ChartFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player, std::uint32_t category);
+
+// Purpose: Prepares the curve and the axis of the statistics window for one
+// player and category (smoothed history of the last 256 samples).
+std::uint32_t __fastcall CGameData_BuildStatisticsChart(CGameData* world, void*, std::uint32_t player,
+                                                        std::uint32_t category) {
+    std::memset(world->chart, 0, sizeof(world->chart));
+    const std::uint8_t* samples = History(world, player, category);
+    for (std::uint32_t i = 0; i < kStatisticsSamples; ++i) {
+        if (samples[i] == 0) {
+            continue;
+        }
+        for (std::int32_t k = 0; k < kKernelTaps; ++k) {
+            const std::uint32_t target = i + static_cast<std::uint32_t>(k - kKernelCentre);
+            if (target < kStatisticsSamples) {
+                // 16-bit multiply of the sample by the weight's low word.
+                const auto weight = static_cast<std::uint16_t>(world->statistics_kernel[k]);
+                world->chart[target] = static_cast<std::uint16_t>(world->chart[target] + samples[i] * weight);
+            }
+        }
+    }
+    // 0x4ff5ce: the newest entries lost the weights of samples before 0.
+    for (std::int32_t j = 0; j < kKernelCentre; ++j) {
+        std::uint32_t weights = kKernelTotal;
+        for (std::int32_t k = 0; k < kKernelCentre - j; ++k) {
+            weights -= static_cast<std::uint32_t>(world->statistics_kernel[k]);
+        }
+        world->chart[j] = static_cast<std::uint16_t>(world->chart[j] * 100u / weights);
+    }
+    world->chart_max = 0;
+    for (const std::uint16_t value : world->chart) {
+        if (value > world->chart_max) {
+            world->chart_max = value;
+        }
+    }
+    // 0x4ff63d: the first scale whose top fits.
+    const std::int32_t* scales = &g_chartAxisScales[0][0];
+    std::size_t scale = 0;
+    while (scale < kAxisScales && world->chart_max > AxisLimit(scales[scale * kAxisValues])) {
+        ++scale;
+    }
+    if (scale == 0) {
+        world->chart_max = static_cast<std::uint16_t>(AxisUnits(scales[0]));
+    }
+    // (scale 14 reads past the table, as the original.)
+    for (std::size_t v = 0; v < kAxisValues; ++v) {
+        world->chart_axis[v] = AxisUnits(scales[scale * kAxisValues + v]);
+    }
+    return 0;
+}
+
+S3RE_HOOK(0x004ff550, CGameData_BuildStatisticsChart, ChartFn, Original_CGameData_BuildStatisticsChart,
+          CGameData_BuildStatisticsChart);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -220,7 +309,72 @@ void __fastcall WrongAddStatistic(CGameData* world, void* /*edx*/, std::uint32_t
     sample = sum > 100 ? 100 : static_cast<std::uint8_t>(sum);
 }
 
+void CompareStatisticsChart(test::Context& ctx, ChartFn candidate, int cases) {
+    test::WorldPair worlds(ctx, offsetof(CGameData, chart_selection));
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t player = ctx.rng().Below(kPlayers);
+        const std::uint32_t category = ctx.rng().Below(kGoodsTypes);
+        // The game's kernel, or random weights whose cut-off sums stay below 100.
+        std::int32_t kernel[13] = {3, 6, 8, 9, 9, 10, 10, 10, 9, 9, 8, 6, 3};
+        if (ctx.rng().Chance(1, 3)) {
+            for (std::int32_t k = 0; k < 13; ++k) {
+                // (high bits only where they don't reach the divisor)
+                const bool high = k >= 6 && ctx.rng().Chance(1, 4);
+                kernel[k] = static_cast<std::int32_t>(ctx.rng().Below(16) | (high ? ctx.rng().Next32() & 0xffff0000u : 0u));
+            }
+        }
+        std::uint8_t samples[kStatisticsSamples];
+        const std::uint32_t kind = ctx.rng().Below(5);  // 4: (almost) empty, fits the first axis scale
+        for (std::uint8_t& s : samples) {
+            s = kind == 4 ? static_cast<std::uint8_t>(ctx.rng().Chance(1, 100) ? 1 : 0)
+              : kind == 0 ? static_cast<std::uint8_t>(ctx.rng().Next32())
+              : kind == 1 ? (ctx.rng().Chance(1, 3) ? static_cast<std::uint8_t>(ctx.rng().Below(101)) : 0)
+                          : static_cast<std::uint8_t>(ctx.rng().Below(kind == 2 ? 101 : 8));
+        }
+        worlds.Both([&](CGameData* w) {
+            std::memcpy(w->statistics_kernel, kernel, sizeof(kernel));
+            std::memcpy(History(w, player, category), samples, sizeof(samples));
+        });
+        Original_CGameData_BuildStatisticsChart(worlds.original(), nullptr, player, category);
+        candidate(worlds.ours(), nullptr, player, category);
+        if (!worlds.Same(ctx, offsetof(CGameData, chart), offsetof(CGameData, chart_selection) - offsetof(CGameData, chart)) ||
+            (i % 64 == 63 && !worlds.Checkpoint(ctx))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: player %u, category %u, kind %u", i, player, category, kind);
+            return;
+        }
+    }
+    worlds.Checkpoint(ctx);
+}
+
+// Wrong: the first six entries are not scaled up (recomputed as plain sums).
+std::uint32_t __fastcall WrongStatisticsChart(CGameData* world, void* edx, std::uint32_t player,
+                                              std::uint32_t category) {
+    const std::uint32_t r = CGameData_BuildStatisticsChart(world, edx, player, category);
+    const std::uint8_t* samples = History(world, player, category);
+    for (std::uint32_t j = 0; j < 6; ++j) {
+        std::uint16_t sum = 0;
+        for (std::int32_t k = 0; k < 13; ++k) {
+            const std::uint32_t source = j - static_cast<std::uint32_t>(k - 6);
+            if (source < kStatisticsSamples) {
+                sum = static_cast<std::uint16_t>(sum + samples[source] * static_cast<std::uint16_t>(world->statistics_kernel[k]));
+            }
+        }
+        world->chart[j] = sum;
+    }
+    return r;
+}
+
 }  // namespace
+
+S3RE_TEST(CGameData_BuildStatisticsChart_MatchesOriginal) {
+    CompareStatisticsChart(ctx, &CGameData_BuildStatisticsChart, 3000);
+}
+
+S3RE_TEST(CGameData_BuildStatisticsChart_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareStatisticsChart(probe, &WrongStatisticsChart, 300);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(CGameData_InitStatisticsKernel_MatchesOriginal) {
     CompareInitKernel(ctx, &CGameData_InitStatisticsKernel, 100);

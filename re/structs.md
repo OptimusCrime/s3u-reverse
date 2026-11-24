@@ -422,7 +422,11 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   record; MapEffects_FindFreeSlot), +0x4 duration (i16), +0x8/+0xC
   start_x/y, +0x10/+0x14 end_x/y (pixels; MapEffect_PositionAt
   interpolates, MapEffects_Add files the record under the end position's
-  256-pixel block), +0x28 arc (i16 hop height), +0x40 list (block),
+  256-pixel block), +0x18/+0x1C start_tile_x/y and +0x20/+0x24
+  end_tile_x/y (the tile it is over, MapEffect::TileAt 0x5441C0
+  interpolates them; session 54), +0x6 anim_period, +0x2C graphic (-1 =
+  none), +0x30 first_frame, +0x32 frame_count, +0x39 brightness (non-zero:
+  overrides the fog brightness; MapEffect::MakeDrawRecord 0x544100), +0x28 arc (i16 hop height), +0x40 list (block),
   +0x44 previous, +0x48 next (MapEffect_SetLinks), +0x3A source_kind and
   +0x3C source_id (what made the effect: MapEffects::RemoveMatching
   0x545C80 removes those of a kind and number; CrushBuilding passes kind 0
@@ -551,7 +555,7 @@ loaded game starts). **S** (savegame_start.cpp).
 (GameParams_CopyRectB0 0x437400; CNetSession and savegame code); +0xCC
 byte: random races include the Amazons. **V** (layout of these fields).
 
-## CLogicThread (fields ExecuteCommands uses; `logic_thread_layout.h`)
+## CLogicThread (fields our code uses; `logic_thread_layout.h`)
 
 | Off | Meaning | Conf. |
 |---|---|---|
@@ -564,6 +568,12 @@ byte: random races include the Amazons. **V** (layout of these fields).
 | 0x3B0 | step: the lockstep step the logic runs next (0 before the first) | V |
 | 0x3B4 | granted_step: the last StepGrant | V |
 | 0x3C4 / 0x3C8 | MessageQueue* logic -> network / network -> logic | V |
+| 0x3A8, 0x3B8 (u8), 0x3C0 | Setup 0x53c970 arguments 8, 4, 1 (`setup_3a8` / `setup_3b8` / `setup_3c0`; meaning unknown) | V (writes) |
+| 0x3CC / 0x3D0 | draw_slot (the shared draw-data slot) / draw_data (the buffer being filled) | V (Setup), S |
+| 0x3D4 / 0x3D8 | draw_event / draw_request_event (Setup arguments 6, 7) | V (Setup), S |
+| 0x414 | MessageLine[20] (0x1c each: wstring, +0x10 lifetime, +0x14 kind, +0x18 dirty); ClearMessages 0x51e650, AgeMessages 0x51e680 | V |
+| 0x644 / 0x648 | message_count / message_index (ClearMessages: index = count - 1) | V |
+| 0x66C / 0x670 | lobby / lobby_client (Setup arguments 9, 10) | V (writes) |
 | 0x675 | desync_detected: set by 0xfb (SyncRandomCheck) | V |
 
 **MessageQueue** (ring of dwords, Pop 0x430980 / Push 0x4309C0): +0x00 vtable (slot 3: Wait(timeout, flag), throws Win32::CTimeout*), +0x14 buffer, +0x18 capacity (power of two), +0x1C read, +0x20 write, +0x24 count, +0x28 event object (+8 = HANDLE, SetEvent on Push), +0x2C CRITICAL_SECTION*, +0x30 peak count. **V**.
