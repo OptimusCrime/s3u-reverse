@@ -18,4 +18,4 @@ session entry). A new area gets a new file and a line here.
 | `docs/todo/file-formats.md` | savegame/map/graphics loaders, naming-pass corrections (globals, world regions, verified names found wrong), missing and false function starts, source-file range fixes |
 | `docs/todo/naming.md` | provisional names to audit, constructors, remaining `unk` fields |
 | `docs/todo/evidence.md` | whole-game evidence gaps (jobs, spells, ExecuteCommands ids), emulator tooling issues, longer and more varied runs, the live-vs-replay hash difference |
-| `docs/todo/known-differences.md` | known behaviour differences to clean up; work postponed by decision (network and lobby) |
+| `docs/todo/known-differences.md` | known behaviour differences to clean up, libraries and the standalone build (CRT behaviour to copy, third-party identifications), work postponed by decision (network and lobby) |
