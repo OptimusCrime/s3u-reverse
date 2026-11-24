@@ -1131,3 +1131,52 @@ SPECS += [
     Spec("CGameData_PlaceTown", 0x00506cf0, "thiscall", [below(20), between(16, 368), between(16, 368)],
          eax_mask=0, presets=place_town_state, callees=PLACE_TOWN_PROBES, max_cases=300),
 ]
+
+
+# AddPlayerTowns: IsGoodStartPosition, IsFreeSmallTowerSite and PlaceTown
+# are probed (a third of the site checks succeed); Random, TileDistance and
+# FindPlayerByField0C run. Players 0..5 take part or not, with teams 0..3,
+# placed or not, with or without a start position. A start position on the
+# diagonal with the offset entries 0..9999 at (0, 0) never passes the
+# mirror distance: the "keine Kreisposition" paths.
+RANDOM_MAP_SYMMETRY = 0x2d274
+ADD_TOWNS_PROBES = {
+    0x005081a0: (4, "thiscall", lambda h: 1 if h % 3 == 0 else 0),  # IsGoodStartPosition
+    0x00508420: (3, "thiscall", lambda h: 1 if h % 3 == 0 else 0),  # IsFreeSmallTowerSite
+    0x00506cf0: (3, "thiscall", "probe"),                             # PlaceTown
+}
+
+
+def add_towns_state(rng, pool, args):
+    size = rng.choice([128, 256, 384, 384, rng.randrange(100, 769)])
+    symmetry = rng.choice([0, 1, 2, 3, 3, rng.choice([4, rng.getrandbits(32)])])
+    fields = [(MAP_SIZE, size, 4), (RANDOM_MAP_SYMMETRY, symmetry, 4)]
+    fields += spiral_offsets(400)
+    stuck = rng.random() < 0.15
+    mirrors = rng.random() < 0.7  # otherwise every team is 0: no mirror players
+    if stuck:
+        for k in range(400, 10000):
+            fields += [(NEIGHBOUR_OFFSETS + k * 16, 0, 4), (NEIGHBOUR_OFFSETS + k * 16 + 4, 0, 4)]
+    for p in range(20):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        active = rng.choice([1, 2, 0, rng.getrandbits(32)]) if p < 6 else 0
+        if stuck:
+            start = rng.randrange(size)
+            sx, sy = start, start
+        elif rng.random() < 0.5:
+            sx, sy = 0xFFFFFFFF, rng.getrandbits(32)
+        else:
+            sx, sy = rng.randrange(size), rng.randrange(size)
+        fields += [(record, active, 4), (record + 0x18, 0 if rng.random() < 0.85 else 1, 4),
+                   (record + 0x0c, 0 if not mirrors else rng.randrange(4) if rng.random() < 0.9 else rng.getrandbits(32), 4),
+                   (record + 0x10, sx, 4), (record + 0x14, sy, 4)]
+    return fields
+
+SPECS += [
+    # Not covered: 0x507d72, 0x50778e and 0x5079cb, the "keine Zufallsposition" paths after 1,000,000
+    # failed random attempts (several hundred million instructions); their continuation (DebugLog, the
+    # player taken out) is the same code as the covered "keine Kreisposition" paths. 0x5075cc is dead:
+    # symmetry 0 reaches it after a placement only if the attempt counter were 1,000,000.
+    Spec("CGameData_AddPlayerTowns", 0x005074b0, "thiscall", [], presets=add_towns_state,
+         callees=ADD_TOWNS_PROBES, max_cases=600, exempt_blocks=(0x507d72, 0x50778e, 0x5079cb, 0x5075cc)),
+]

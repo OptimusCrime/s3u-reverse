@@ -278,4 +278,5 @@ SPECS += [
 # -- game_settings.cpp (session 53) -------------------------------------------------
 SPECS += [
     Spec("GameSettings_StartGoods", 0x00412300, "fastcall", [scratch(0)], max_cases=200),
+    Spec("GamePlayerSetup_Colour", 0x0049fec0, "fastcall", [scratch(0)], max_cases=200),
 ]

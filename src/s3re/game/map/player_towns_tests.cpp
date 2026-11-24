@@ -13,6 +13,7 @@
 #include "test/world_buffer.h"
 
 #include <cstdint>
+#include <iterator>
 #include <vector>
 
 namespace s3re::game {
@@ -22,6 +23,9 @@ std::uint32_t __fastcall CGameData_PlaceTown(CGameData* world, void* edx, std::u
 using PlaceTownFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx, std::uint32_t player, std::uint32_t x,
                                                std::uint32_t y);
 extern PlaceTownFn Original_CGameData_PlaceTown;
+std::uint32_t __fastcall CGameData_AddPlayerTowns(CGameData* world, void* edx);
+using AddPlayerTownsFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx);
+extern AddPlayerTownsFn Original_CGameData_AddPlayerTowns;
 
 namespace {
 
@@ -146,8 +150,102 @@ std::uint32_t __fastcall WrongPlaceTown(CGameData* world, void* edx, std::uint32
     return 0;
 }
 
+// AddPlayerTowns cases: a random map, the players taking part, their mirror
+// teams (Player +0xc) and whether they have start positions.
+struct TownsCase {
+    MapCase map;
+    std::uint32_t players;
+    std::uint32_t teams[4];
+    bool startPositions;
+    std::uint32_t symmetryOverride;  // world+0x2d274 after the map is made (0xffffffff: keep)
+};
+
+constexpr std::uint32_t kKeep = 0xffffffff;
+
+constexpr TownsCase kTownsCases[] = {
+    {{1234, 256, 0}, 3, {0, 0, 0, 0}, false, kKeep},
+    {{77, 320, 1}, 2, {0, 1, 0, 0}, false, kKeep},
+    {{78, 320, 1}, 3, {0, 0, 0, 0}, false, kKeep},
+    {{5150, 384, 2}, 2, {0, 1, 0, 0}, false, kKeep},
+    {{4242, 384, 3}, 4, {0, 1, 2, 3}, false, kKeep},
+    {{4243, 384, 3}, 3, {0, 1, 2, 0}, false, kKeep},
+    {{4244, 320, 3}, 2, {0, 1, 0, 0}, false, kKeep},
+    {{999, 256, 0}, 3, {0, 0, 0, 0}, true, kKeep},
+    {{998, 320, 1}, 2, {0, 1, 0, 0}, true, kKeep},
+    {{997, 320, 2}, 2, {0, 1, 0, 0}, true, kKeep},
+    {{996, 384, 3}, 4, {0, 1, 2, 3}, true, kKeep},
+    // Not tested: symmetry 3 with start positions, team 1 present and team 2 or 3 missing. Both would place
+    // player -1 (PlaceTown on the record before the player table; SpawnSettlersAround then writes before the
+    // world). Random maps have no start positions, so the game never gets there.
+    {{995, 384, 3}, 4, {1, 0, 3, 2}, true, kKeep},
+    {{994, 256, 0}, 2, {0, 0, 0, 0}, false, 7},  // symmetry above 3: no towns
+};
+
+void CompareAddPlayerTowns(test::Context& ctx, AddPlayerTownsFn candidate, const TownsCase* cases, int count) {
+    GameSettings& settings = g_gameSettings;
+    const std::uint32_t savedGoods = settings.start_goods;
+    test::WorldPair worlds(ctx, sizeof(CGameData));
+    for (int i = 0; i < count; ++i) {
+        const TownsCase& c = cases[i];
+        PrepareGame(ctx, worlds, c.map, c.players);
+        const auto size = static_cast<std::uint32_t>(c.map.size);
+        std::int32_t starts[4][2];
+        for (auto& start : starts) {
+            // Given start positions: near the map's middle or anywhere (a site may not be found).
+            start[0] = static_cast<std::int32_t>(ctx.rng().Chance(1, 2) ? size / 2 - 40 + ctx.rng().Below(80)
+                                                                        : ctx.rng().Below(size));
+            start[1] = static_cast<std::int32_t>(ctx.rng().Below(size));
+        }
+        worlds.Both([&](CGameData* w) {
+            for (std::uint32_t p = 0; p < 4; ++p) {
+                w->players[p].team = static_cast<std::int32_t>(c.teams[p]);
+                if (c.startPositions) {
+                    w->players[p].start_x = starts[p][0];
+                    w->players[p].start_y = starts[p][1];
+                }
+            }
+            if (c.symmetryOverride != kKeep) {
+                w->random_map_symmetry = static_cast<std::int32_t>(c.symmetryOverride);
+            }
+        });
+        settings.start_goods = ctx.rng().Below(4);
+        const bool same = CompareRun(ctx, worlds, [&](bool original) {
+            if (original) {
+                Original_CGameData_AddPlayerTowns(worlds.original(), nullptr);
+            } else {
+                candidate(worlds.ours(), nullptr);
+            }
+        });
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: map seed %u size %d symmetry %u", i, c.map.seed, c.map.size,
+                     c.map.symmetry);
+            break;
+        }
+    }
+    settings.start_goods = savedGoods;
+}
+
+// Wrong: symmetry 2 mirrors like symmetry 1 ((y, x) instead of (size - y - 1, size - x - 1)).
+std::uint32_t __fastcall WrongAddPlayerTowns(CGameData* world, void* edx) {
+    const std::int32_t saved = world->random_map_symmetry;
+    if (saved == 2) {
+        world->random_map_symmetry = 1;
+    }
+    const std::uint32_t result = CGameData_AddPlayerTowns(world, edx);
+    world->random_map_symmetry = saved;
+    return result;
+}
+
 }  // namespace
 
+S3RE_TEST(CGameData_AddPlayerTowns_MatchesOriginal) {
+    CompareAddPlayerTowns(ctx, &CGameData_AddPlayerTowns, kTownsCases, static_cast<int>(std::size(kTownsCases)));
+}
+S3RE_TEST(CGameData_AddPlayerTowns_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareAddPlayerTowns(probe, &WrongAddPlayerTowns, kTownsCases + 3, 1);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 S3RE_TEST(CGameData_PlaceTown_MatchesOriginal) {
     ComparePlaceTown(ctx, &CGameData_PlaceTown, 12, 3);
 }

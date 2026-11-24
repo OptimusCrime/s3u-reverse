@@ -27,6 +27,16 @@ struct GameSettings {
     std::uint8_t randomRaceAmazons;  // +0xcc whether random races include the Amazons (random.cpp)
 };
 static_assert(offsetof(GameSettings, start_goods) == 0x74);
+
+// One player's setup (0xcc bytes; the vector at GameSettings +0x58, element
+// access GameSettings 0x4351e0; filled by GamePlayerSetup::Set 0x49f120).
+struct GamePlayerSetup {
+    std::uint8_t unk000[0xb4];
+    std::uint32_t colour;  // +0xb4 colour index: LoadMap copies it into g_playerColourIndex (getter 0x49fec0)
+    std::uint8_t unk0b8[0xcc - 0xb8];
+};
+static_assert(sizeof(GamePlayerSetup) == 0xcc);
+static_assert(offsetof(GamePlayerSetup, colour) == 0xb4);
 static_assert(offsetof(GameSettings, seed) == 0x88);
 static_assert(offsetof(GameSettings, valuesB0) == 0xb0);
 static_assert(offsetof(GameSettings, randomRaceAmazons) == 0xcc);

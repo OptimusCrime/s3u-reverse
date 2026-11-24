@@ -376,26 +376,32 @@ def seven_tile_state(rng, pool, args):
     return fields
 
 
+WATER_SPIRAL = sorted(((dx, dy) for dx in range(-24, 25) for dy in range(-24, 25) if hex_distance(dx, dy) <= 24),
+                      key=lambda p: (hex_distance(*p), p))  # radius 0..24, nearest first (1801 entries)
+
+
 def water_spawn_state(rng, pool, args):
-    """Offsets 0..399 in the game's order with their distances (sometimes 10+
-    from an early entry on, or at entry 0), water and land tiles within
-    radius 12 of (x, y) (tiles off the map stay lazily random: the original
-    doesn't bounds-check the candidate), some settlers, free settler records
-    and the player's race for CreateSettler."""
+    """Offset entries of radius 0..24 in the game's order with their
+    distances (sometimes 10+ from an early entry on), water and land tiles
+    within that radius of (x, y) (tiles off the map stay lazily random: the
+    original doesn't bounds-check the candidate), some settlers, free
+    settler records and the player's race for CreateSettler. Each created
+    settler blocks the water within distance 9, so the walk needs the wide
+    table to make up to five."""
     count, kind, player, x, y = args
     n = 384 if rng.random() < 0.8 or max(x, y) >= 50 else rng.randint(max(x, y) + 1, 60)
     fields = [(MAP_SIZE, n, 4), (PLAYER_RACE + player * PLAYER_RECORD_BYTES, rng.randrange(4), 4)]
-    fields += spiral_offsets(400)
-    cut = rng.randrange(40) if rng.random() < 0.15 else 400
-    for k, (dx, dy) in enumerate(SPIRAL[:400]):
+    cut = rng.randrange(40) if rng.random() < 0.15 else len(WATER_SPIRAL)
+    for k, (dx, dy) in enumerate(WATER_SPIRAL):
         distance = hex_distance(dx, dy) if k < cut else 10 + rng.randrange(3)
-        fields.append((NEIGHBOUR_OFFSETS + k * 16 + 8, distance, 4))
-    water = rng.random() * 0.8 + 0.1
-    # Radius 22: the candidates of the first 400 entries and their neighbours.
-    for tx in range(max(x - 22, 0), min(x + 23, n)):
-        for ty in range(max(y - 22, 0), min(y + 23, n)):
+        fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4), (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4),
+                   (NEIGHBOUR_OFFSETS + k * 16 + 8, distance, 4)]
+    water = rng.random() * 0.6 + 0.35
+    # Radius 33: the candidates and their neighbours.
+    for tx in range(max(x - 33, 0), min(x + 34, n)):
+        for ty in range(max(y - 33, 0), min(y + 34, n)):
             t = tile(tx, ty)
-            near = hex_distance(tx - x, ty - y) <= 12
+            near = hex_distance(tx - x, ty - y) <= 24
             area = rng.randrange(0x8000, 0x10000) if near and rng.random() < water else rng.randrange(0x8000)
             settler = rng.randrange(1, 100) if rng.random() < 0.003 else 0
             fields += [(t + 0x14, area, 2), (t + 0x0, settler, 2)]
