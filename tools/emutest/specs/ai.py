@@ -1302,3 +1302,198 @@ SPECS += [
     Spec("AI_AreaPopulation", 0x0059dcc0, "fastcall", [scratch(1)], presets=snapshot_world,
          globals=snapshot_globals, max_cases=600),
 ]
+
+
+# -- computer players A2, session 52: building, land and army queries --------
+# (ai_building_queries.cpp, ai_land_queries.cpp, ai_army.cpp)
+
+AI_LAND_EVALUATION = 0x007E3134  # g_aiLandEvaluation (CEvaLand*)
+MILITARY_AND_OTHER_TYPES = (15, 16, 18, 17, 14, 19, 1, 7)
+
+
+def sites_of_type(rng, pool, args):
+    """count_buildings_world plus the player (scratch 0, byte), type
+    (scratch 2, byte) and area (scratch 1, word; often 0) asked for."""
+    fields = count_buildings_world(rng, pool, args)
+    area = 0 if rng.random() < 0.4 else rng.randrange(4)
+    return fields + [(SCRATCH, rng.randrange(3), 1), (SCRATCH + 2 * SCRATCH_SLOT_BYTES, rng.randrange(3), 1),
+                     (SCRATCH + SCRATCH_SLOT_BYTES, area, 2)]
+
+
+def buildings_in_areas(rng, pool, args):
+    """Up to 30 building records (high-water mark, sometimes -1) with owners
+    0..2, military and other types, buildup 0 or not and door tiles in
+    areas 0..3."""
+    count = rng.randrange(30)
+    fields = [(BUILDING_COUNT, 0xFFFFFFFF if rng.random() < 0.03 else count, 4)]
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        x, y = rng.randrange(400), rng.randrange(400)
+        fields += [(record, 0xFF if rng.random() < 0.15 else rng.randrange(3), 1),
+                   (record + 6, rng.choice(MILITARY_AND_OTHER_TYPES), 1),
+                   (record + 0x21, 0 if rng.random() < 0.6 else rng.randrange(1, 256), 1),
+                   (record + 0xA, x, 2), (record + 0xC, y, 2),
+                   (TILES + (x * 0x300 + y) * 24 + 0x14, rng.randrange(4), 2)]
+    return fields
+
+
+def mine_record(rng, pool, args):
+    """A building id (scratch 0, word) whose worker and dig count are
+    sometimes 0."""
+    building = rng.randrange(4000)
+    record = BUILDINGS + building * BUILDING_BYTES
+    fields = [(SCRATCH, building, 2), (record + 0x1A, 0 if rng.random() < 0.2 else rng.randrange(1, 40), 1)]
+    if rng.random() < 0.2:
+        fields.append((record + 8, 0, 2))
+    return fields
+
+
+def resource_kind(rng, pool):
+    """A resource kind (high nibble values), sometimes with noise above."""
+    return (rng.randrange(16) << 4) | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def resource_tile(rng, pool, args):
+    """The tile (x, y) holds the asked kind half of the time."""
+    x, y, kind = args[0] & 0xFFFF, args[1] & 0xFFFF, args[2] & 0xFFFF
+    if x < 0x300 and y < 0x300 and rng.random() < 0.5:
+        return [(TILES + (x * 0x300 + y) * 24 + 0x11, (kind & 0xF0) | rng.randrange(16), 1)]
+    return []
+
+
+def resource_ring_tiles(rng, pool, args):
+    """The tiles around (x, y) (wrapped on a 64 x 64 corner of the map) hold
+    the asked kind half of the time."""
+    x, y, kind = args[0] & 0xFFFF, args[1] & 0xFFFF, args[2] & 0xFFFF
+    fields = []
+    for dx in range(-3, 4):
+        for dy in range(-3, 4):
+            tx, ty = (x + dx) % 64, (y + dy) % 64
+            if rng.random() < 0.5:
+                fields.append((TILES + (tx * 0x300 + ty) * 24 + 0x11, (kind & 0xF0) | rng.randrange(16), 1))
+    return fields
+
+
+def ai_small_map_world(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, rng.randrange(1, 60), 2),
+            (AI_MAP_SIZES + 2, rng.randrange(1, 60), 2)]
+
+
+FARM_LAND = SCRATCH + 3 * SCRATCH_SLOT_BYTES   # the CEvaLand
+FARM_CELLS = SCRATCH + 4 * SCRATCH_SLOT_BYTES  # its 8 x 8 grid cells (0xc4 bytes each)
+
+
+def farm_land(rng, pool, args):
+    """player (scratch 0, byte) with race 0..4 (sometimes anything), x / y
+    (scratch 1 / 2, words), and the CEvaLand's 8 x 8 grid with edge values
+    of the three land shares."""
+    player = rng.randrange(20)
+    race = rng.randrange(5) if rng.random() < 0.9 else rng.getrandbits(32)
+    fields = [(SCRATCH, player, 1), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(100), 2),
+              (SCRATCH + 2 * SCRATCH_SLOT_BYTES, rng.randrange(100), 2), (AI_PLAYERS + player * 0x148 + 4, race, 4),
+              (FARM_LAND + 0x140, 8, 4), (FARM_LAND + 0x144, 8, 4), (FARM_LAND + 0x158, WORLD_BASE + FARM_CELLS, 4)]
+    edges = (9, 10, 11, 39, 40, 41, 0, 255)
+    for cell in range(64):
+        base = FARM_CELLS + cell * 0xC4
+        for offset in (0x1E, 0x1F, 0x0D):
+            fields.append((base + offset, rng.choice(edges) if rng.random() < 0.7 else rng.getrandbits(8), 1))
+    return fields
+
+
+def farm_land_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_LAND_EVALUATION, WORLD_BASE + FARM_LAND, 4)]
+
+
+def sparse_index(rng, pool, args):
+    """The index (scratch 0): in the table, at its end or negative."""
+    roll = rng.random()
+    if roll < 0.2:
+        index = rng.randint(19990, 20010)
+    elif roll < 0.3:
+        index = -rng.randrange(1, 2000)
+    elif roll < 0.35:
+        index = rng.getrandbits(32)
+    else:
+        index = rng.randrange(20000)
+    return [(SCRATCH, index & 0xFFFFFFFF, 4)]
+
+
+def fighting_group(rng, pool, args):
+    """The unit group's length (0..100, sometimes 0) and members whose job
+    is 142 (fighting) with a random share."""
+    index = args[0] * 10 + args[1]
+    length = 0 if rng.random() < 0.1 else rng.randint(1, 100 if rng.random() < 0.3 else 10)
+    share = rng.random()
+    fields = [(0x11940BC + 4 * index, length, 4)]
+    for i in range(length):
+        settler = rng.randrange(1, 32000)
+        fields += [(0x118A47C + index * 200 + 2 * i, settler, 2),
+                   (SETTLERS + settler * SETTLER_BYTES + 0xE, 142 if rng.random() < share else rng.randrange(300), 2)]
+    return fields
+
+
+def fighting_percent(rng, pool):
+    return rng.randrange(101) if rng.random() < 0.9 else rng.getrandbits(32)
+
+
+HUNTERS = SCRATCH + 5 * SCRATCH_SLOT_BYTES  # 24 hunter entries {hunter, target}
+HUNTER_SLOTS = 24
+
+
+def hunter_entries(rng, pool, args):
+    """24 entries {hunter, target} in scratch 5 (targets often 0, hunters
+    sometimes >= 32000); each target stands on a tile of an area 0..7 owned
+    by the player, another one or none."""
+    player = args[0]
+    fields = []
+    owners = {}
+    for k in range(HUNTER_SLOTS):
+        hunter = rng.randrange(32000) if rng.random() < 0.97 else rng.randrange(32000, 40000)
+        target = 0 if rng.random() < 0.2 else rng.randrange(1, 32000)
+        fields += [(HUNTERS + 8 * k, hunter, 4), (HUNTERS + 8 * k + 4, target, 4)]
+        if target:
+            x, y, area = rng.randrange(0x300), rng.randrange(0x300), rng.randrange(8)
+            owners[area] = 0xFF if rng.random() < 0.1 else rng.choice((player, player, (player + 1) % 20))
+            fields += [(SETTLERS + target * SETTLER_BYTES + 4, x, 2), (SETTLERS + target * SETTLER_BYTES + 6, y, 2),
+                       (TILES + (x * 0x300 + y) * 24 + 0x14, area, 2)]
+    return fields + [(AI_AREAS + area * 0x2E0, owner, 1) for area, owner in owners.items()]
+
+
+def hunter_vector(rng, pool, args):
+    """g_aiMapWorld and the player's vector: begin at the entries, 0..24 of
+    them in use."""
+    vector = AI_HUNTER_VECTORS + 16 * args[0]
+    count = 0 if rng.random() < 0.1 else rng.randint(1, HUNTER_SLOTS)
+    return [(AI_MAP_WORLD, WORLD_BASE, 4), (vector, WORLD_BASE + HUNTERS, 4),
+            (vector + 4, WORLD_BASE + HUNTERS + 8 * count, 4)]
+
+
+SPECS += [
+    Spec("AI_CountSitesOfType", 0x0059db30, "fastcall", [scratch(0), scratch(2), scratch(1)], presets=sites_of_type,
+         globals=ai_world_400, max_cases=600),
+    Spec("AI_FirstBuildingInArea", 0x0058b410, "stdcall", [with_noise(below(3)), with_noise(below(4))],
+         presets=buildings_in_areas, globals=ai_map_world, max_cases=1000),
+    Spec("AI_FirstMilitaryBuildingInArea", 0x0058b380, "stdcall", [with_noise(below(3)), with_noise(below(4))],
+         presets=buildings_in_areas, globals=ai_map_world, max_cases=1000),
+    Spec("AI_MineSuccessPercent", 0x00573810, "fastcall", [scratch(0)], presets=mine_record, globals=ai_world),
+    # AX only: off the map the callees keep the upper half of their caller's
+    # EAX (the only caller, 0x571fa0, returns AX of the sum).
+    Spec("AI_ResourceAmountOfKindAt", 0x00571f60, "fastcall",
+         [with_noise(between(0, 0x2FF)), with_noise(between(0, 0x2FF)), resource_kind], eax_mask=0xFFFF,
+         presets=resource_tile, globals=ai_query_map),
+    # AX only: the callers compare AX (0x5760d0).
+    Spec("AI_ResourceAmountNear", 0x00571fa0, "fastcall",
+         [with_noise(between(0, 70)), with_noise(between(0, 70)), resource_kind], eax_mask=0xFFFF,
+         presets=resource_ring_tiles, globals=ai_small_map_world, max_cases=600),
+    Spec("AI_IsFarmLand", 0x0059a720, "fastcall", [scratch(0), scratch(1), scratch(2)], presets=farm_land,
+         globals=farm_land_globals),
+    Spec("AI_NextSparseMapOffset", 0x0058a250, "fastcall", [scratch(0), anything, scratch(1), scratch(2)],
+         presets=sparse_index, globals=ai_map_world),
+    Spec("AI_Army_GroupFightingShareAbove", 0x00593040, "thiscall", [below(20), below(10), fighting_percent],
+         presets=fighting_group, globals=ai_map_world, max_cases=1000),
+    # The bitset's _Xran (0x596570) throws std::out_of_range; probed, since
+    # the thrown object lies in its own frame (a stack address that differs
+    # between the two runs). Both versions go on as if it returned.
+    Spec("AI_Army_PruneHunters", 0x005934a0, "thiscall", [below(20)], presets=hunter_entries,
+         globals=hunter_vector, callees={0x00596570: (0, "thiscall", "probe")}, max_cases=1000),
+]

@@ -266,6 +266,20 @@ meaning open) and empties the per-player hunter vectors
 (0,0), (9,18), (-9,-18), (-18,0), (18,0), (-9,18), (27,18), (-27,-18),
 (18,-27).
 
+Session 52 (V): `ai_building_queries.cpp`: `AI::CountSitesOfType` 0x59db30
+(original quirk: `*area == door area || *area != 0`, so a non-zero area
+counts every site of the type and area 0 only those in area 0),
+`AI::FirstBuildingInArea` / `FirstMilitaryBuildingInArea` 0x58b410 /
+0x58b380, `AI::MineSuccessPercent` 0x573810 (finds in the mine's 32-bit dig
+history work_y:work_x * 100 / digs); `ai_land_queries.cpp`:
+`AI::ResourceAmountOfKindAt` 0x571f60, `AI::ResourceAmountNear` 0x571fa0
+(the tile and two hexagonal rings, WrappedPos), `AI::IsFarmLand` 0x59a720
+(the Asian rice test reads the raw cell byte +0xd), `AI::NextSparseMapOffset`
+0x58a250; `ai_army.cpp`: `AI::Army::GroupFightingShareAbove` 0x593040 (job
+142 is UnitFighting; was GroupJob142ShareAbove) and `AI::Army::PruneHunters`
+0x5934a0 (original quirk: after an erase the entry moved into the slot is
+skipped).
+
 Batch 3 (`ai_site_queries.cpp`, V): `AI::HasSiteNoteInArea` (a build
 order of this type or a ground request of another type already planned
 in the area; note subclass fields +0x1c type, +0x1e/+0x20 position),
