@@ -98,6 +98,17 @@ struct PixelFormat {
 };
 static_assert(sizeof(PixelFormat) == 0x18);
 
+// One hit area of a drawn object (g_hitAreas): what was drawn where, so a
+// click can be matched to it (CDrawer::AddHitArea 0x4d8240).
+struct HitArea {
+    std::uint16_t kind;    // +0x0 (e.g. 100)
+    std::int16_t x;        // +0x2 screen position
+    std::int16_t y;        // +0x4
+    std::uint16_t value1;  // +0x6 PickHitArea stores these two into world+0x2d2e4/+0x2d2e8
+    std::uint16_t value2;  // +0x8
+};
+static_assert(sizeof(HitArea) == 10);
+
 #pragma pack(pop)
 
 // ------------------------------------------------------------ simulation
@@ -177,6 +188,21 @@ inline constexpr GameGlobal<std::int32_t[10]> g_settlerGroupChanged{0x7ad5f8};
 // The settler group the UI shows (index into g_settlerGroups); ExecuteCommands
 // 0x10 sets it to 0 when the local player's carriers become units.
 inline constexpr GameGlobal<std::int32_t> g_currentSettlerGroup{0x7dfd68};
+// The hit areas of the drawn objects (CDrawer::AddHitArea 0x4d8240,
+// CGameData::PickHitArea 0x4ff0a0): two interleaved halves of 10,000
+// entries (entry 2 * i + half); the draw thread fills half 1 -
+// g_hitAreaReadHalf while the UI reads half g_hitAreaReadHalf (0x4b3f4b
+// swaps them after a frame).
+inline constexpr GameGlobal<HitArea[20000]> g_hitAreas{0x7ade08};
+inline constexpr GameGlobal<std::int32_t> g_hitAreaReadCount{0x7dfd5c};   // entries in the half the UI reads
+inline constexpr GameGlobal<std::int32_t> g_hitAreaDrawCount{0x7dfd60};   // entries drawn so far (at most 10000)
+inline constexpr GameGlobal<std::int32_t> g_hitAreaReadHalf{0x7dfd64};    // 0 or 1
+// Cleared by CGameData::FinishInitialising (0x4fce90), meaning unknown
+// (0x7dfd34..0x7dfd3c are also set by 0x4b26c0 and ProcessEvents).
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd34{0x7dfd34};
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd38{0x7dfd38};
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd3c{0x7dfd3c};
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd40{0x7dfd40};
 // The pathfinder's progress marker (pathing.h, PathPhase).
 inline constexpr GameGlobal<volatile std::uint32_t> g_pathPhase{0x7a9d98};
 
@@ -204,6 +230,20 @@ inline constexpr GameGlobal<std::int32_t> g_minimapMode{0x730f58};
 inline constexpr GameGlobal<std::int32_t> g_minimapShowBuildings{0x730f5c};
 inline constexpr GameGlobal<std::int32_t> g_minimapShowSettlers{0x730f60};
 inline constexpr GameGlobal<std::int32_t[64]> g_minimapSliceDirty{0x7ad4f8};
+// The screen layout of the display mode, set by Render::SetScreenLayout
+// (0x4c6d70) for mode 0/1/2 (640x480, 800x600, 1024x768); the values per
+// mode are in screen_layout.cpp. Names from that function and a few uses.
+inline constexpr GameGlobal<std::int32_t> g_displayMode{0x730f08};       // 1, 2, 3 (451 uses)
+inline constexpr GameGlobal<std::int32_t> g_displayWidth{0x730f0c};      // 640, 800, 1024
+inline constexpr GameGlobal<std::int32_t> g_displayHeight{0x730f10};     // 480, 600, 768
+inline constexpr GameGlobal<std::int32_t> g_displayBitsPerPixel{0x730f14};  // 16 (SetConfiguredDisplayMode)
+inline constexpr GameGlobal<std::int32_t> g_layout730f20{0x730f20};      // 437, 540, 697
+inline constexpr GameGlobal<std::int32_t> g_sidebarWidth{0x730f24};      // 136, 176, 216 (display - view width)
+inline constexpr GameGlobal<std::int32_t> g_layout730f2c{0x730f2c};      // 5, 8, 6
+inline constexpr GameGlobal<std::int32_t> g_layout730f30{0x730f30};      // 10, 5, 8
+inline constexpr GameGlobal<std::int32_t> g_layout730f34{0x730f34};      // 142, 170, 224
+inline constexpr GameGlobal<std::int32_t> g_uiCellSize{0x730f38};        // 3, 4, 5 (CDrawer::DrawStatisticsBar)
+inline constexpr GameGlobal<std::int32_t> g_layout7dfd58{0x7dfd58};      // 0 in every mode
 // Per player the index of its colour in g_playerColours.
 inline constexpr GameGlobal<std::uint16_t[]> g_playerColourIndex{0x7ace64};
 // Player colours as three channels.

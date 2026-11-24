@@ -1,0 +1,297 @@
+// The display-mode layout and two helpers of the in-game drawer's ambient
+// sounds (Volker\DrawBuilding.cpp's object file 0x4c6d40..0x4c85a0).
+//
+// Render::SetScreenLayout (0x004c6d70, was Render_sub_4c6d70): (mode)
+//   ret 4; ECX (the drawer, from 0x4c6d40) not used. For mode 0, 1, 2
+//   (640x480, 800x600, 1024x768; 0x4c6d40 reads it from the configuration)
+//   sets the layout globals (g_displayMode .. g_drawOriginY, g_layout7dfd58,
+//   values below); any other mode changes nothing. EAX: 480 for mode 0, 8
+//   for modes 1 and 2, else the mode (the caller ignores it).
+// Render::IsNearView (0x004c7b50, was Render_sub_4c7b50): (x, y) stdcall,
+//   ret 8: 1 if the screen position is within 30 pixels around the drawn
+//   area (g_drawOriginX - 30 <= x < g_displayWidth + 30 and -30 <= y <=
+//   g_displayHeight + 30, signed), else 0. Callers count ambient sound
+//   sources with it (0x4d3050, 0x4c85a0).
+// CDrawer::AmbientSoundPan (0x004c79f0, was Render_sub_4c79f0): (kind)
+//   thiscall, ret 4: the stereo position of an ambient sound in DirectSound
+//   pan units, from its sources left and right of the screen centre: with
+//   left > right, 10000 - left * 20000 / (left + right), else right * 20000
+//   / (left + right) - 10000 (signed 32-bit products and divisions, which
+//   fault on left + right == 0, as in the original).
+// CDrawer::AmbientSoundVolume (0x004c7a50, was Render_sub_4c7a50): (kind,
+//   low, high, offset) thiscall, ret 0x10: the volume in hundredths of a
+//   dB: the source count (at most `high`), (count - low) * 1500 / (high -
+//   low) + offset - 1500, clamped to -10000..0 (signed).
+
+#include "game/globals.h"
+#include "game/graphics/drawer_layout.h"
+#include "hooks.h"
+#include "test/difftest.h"
+#include "test/world_buffer.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+
+namespace s3re::game {
+
+namespace {
+
+// The globals of one display mode, in the order SetScreenLayout writes them
+// for mode 0 (the other modes write the same values in another order; no
+// global is read in between, so the order doesn't show).
+struct ScreenLayout {
+    std::int32_t mode, width, height, bitsPerPixel, viewWidth, viewHeight, layout20, sidebarWidth;
+    std::int32_t minimapWidth, layout2c, layout30, layout34, cellSize, originX, originY;
+    std::uint32_t result;  // EAX
+};
+
+constexpr ScreenLayout kLayouts[] = {
+    {1, 640, 480, 16, 504, 480, 437, 136, 128, 5, 10, 142, 3, 8, 152, 480},
+    {2, 800, 600, 16, 624, 600, 540, 176, 160, 8, 5, 170, 4, 8, 171, 8},
+    {3, 1024, 768, 16, 808, 768, 697, 216, 208, 6, 8, 224, 5, 8, 228, 8},
+};
+
+constexpr std::int32_t kViewMargin = 30;  // IsNearView: pixels around the drawn area
+constexpr std::int32_t kPanRange = 10000;  // DirectSound: DSBPAN_LEFT..DSBPAN_RIGHT
+constexpr std::int32_t kSilence = -10000;  // DirectSound: DSBVOLUME_MIN
+constexpr std::int32_t kVolumeSpan = 1500;  // AmbientSoundVolume: count low..high spans 15 dB
+
+}  // namespace
+
+using ModeFn = std::uint32_t(__stdcall*)(std::uint32_t mode);
+using NearViewFn = std::uint32_t(__stdcall*)(std::int32_t x, std::int32_t y);
+using PanFn = std::int32_t(__fastcall*)(CDrawer* self, void* edx, std::uint32_t kind);
+using VolumeFn = std::int32_t(__fastcall*)(CDrawer* self, void* edx, std::uint32_t kind, std::int32_t low,
+                                           std::int32_t high, std::int32_t offset);
+
+// Purpose: Sets up the screen layout (screen size, view, sidebar, minimap and
+// cell sizes) for the chosen display resolution.
+std::uint32_t __stdcall Render_SetScreenLayout(std::uint32_t mode) {
+    if (mode >= sizeof(kLayouts) / sizeof(kLayouts[0])) {
+        return mode;
+    }
+    const ScreenLayout& layout = kLayouts[mode];
+    g_displayMode = layout.mode;
+    g_displayWidth = layout.width;
+    g_displayHeight = layout.height;
+    g_displayBitsPerPixel = layout.bitsPerPixel;
+    g_screenWidth = static_cast<std::uint32_t>(layout.viewWidth);
+    g_screenHeight = static_cast<std::uint32_t>(layout.viewHeight);
+    g_layout730f20 = layout.layout20;
+    g_sidebarWidth = layout.sidebarWidth;
+    g_layout7dfd58 = 0;
+    g_minimapWidth = layout.minimapWidth;
+    g_layout730f2c = layout.layout2c;
+    g_layout730f30 = layout.layout30;
+    g_layout730f34 = layout.layout34;
+    g_uiCellSize = layout.cellSize;
+    g_drawOriginX = static_cast<std::uint32_t>(layout.originX);
+    g_drawOriginY = static_cast<std::uint32_t>(layout.originY);
+    return layout.result;
+}
+
+// Purpose: Whether a screen position is on or just around the visible part
+// of the map (e.g. to count the sources of ambient sounds).
+std::uint32_t __stdcall Render_IsNearView(std::int32_t x, std::int32_t y) {
+    const auto left = static_cast<std::int32_t>(g_drawOriginX.get()) - kViewMargin;
+    if (x < left || x >= g_displayWidth + kViewMargin) {
+        return 0;
+    }
+    if (y < -kViewMargin || y > g_displayHeight + kViewMargin) {
+        return 0;
+    }
+    return 1;
+}
+
+// Purpose: Where between the left and right speaker an ambient sound plays,
+// from where on the screen its sources are.
+std::int32_t __fastcall CDrawer_AmbientSoundPan(CDrawer* self, void*, std::uint32_t kind) {
+    const std::int32_t left = DrawerOf(self)->ambient_left[kind];
+    const std::int32_t right = DrawerOf(self)->ambient_right[kind];
+    // (32-bit wrapping products, as the original's lea chain computes them.)
+    const auto total = static_cast<std::int32_t>(static_cast<std::uint32_t>(left) + static_cast<std::uint32_t>(right));
+    if (left > right) {
+        const auto scaled = static_cast<std::int32_t>(static_cast<std::uint32_t>(left) * 20000u);
+        return kPanRange - scaled / total;
+    }
+    const auto scaled = static_cast<std::int32_t>(static_cast<std::uint32_t>(right) * 20000u);
+    return scaled / total - kPanRange;
+}
+
+// Purpose: How loud an ambient sound plays, from how many of its sources are
+// on the screen.
+std::int32_t __fastcall CDrawer_AmbientSoundVolume(CDrawer* self, void*, std::uint32_t kind, std::int32_t low,
+                                                   std::int32_t high, std::int32_t offset) {
+    std::int32_t count = DrawerOf(self)->ambient_count[kind];
+    if (count > high) {
+        count = high;
+    }
+    const auto scaled = static_cast<std::int32_t>((static_cast<std::uint32_t>(count) - static_cast<std::uint32_t>(low)) *
+                                                  static_cast<std::uint32_t>(kVolumeSpan));
+    const auto span = static_cast<std::int32_t>(static_cast<std::uint32_t>(high) - static_cast<std::uint32_t>(low));
+    const auto volume = static_cast<std::int32_t>(static_cast<std::uint32_t>(scaled / span) +
+                                                  static_cast<std::uint32_t>(offset) -
+                                                  static_cast<std::uint32_t>(kVolumeSpan));
+    if (volume < kSilence) {
+        return kSilence;
+    }
+    return volume > 0 ? 0 : volume;
+}
+
+S3RE_HOOK(0x004c6d70, Render_SetScreenLayout, ModeFn, Original_Render_SetScreenLayout, Render_SetScreenLayout);
+S3RE_HOOK(0x004c7b50, Render_IsNearView, NearViewFn, Original_Render_IsNearView, Render_IsNearView);
+S3RE_HOOK(0x004c79f0, CDrawer_AmbientSoundPan, PanFn, Original_CDrawer_AmbientSoundPan, CDrawer_AmbientSoundPan);
+S3RE_HOOK(0x004c7a50, CDrawer_AmbientSoundVolume, VolumeFn, Original_CDrawer_AmbientSoundVolume,
+          CDrawer_AmbientSoundVolume);
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// The layout globals g_displayMode (0x730f08) .. g_drawOriginY (0x730f40)
+// as one block, and g_layout7dfd58.
+constexpr std::size_t kLayoutBytes = 0x3c;
+
+class SavedLayout {
+public:
+    SavedLayout() : extra_(g_layout7dfd58) { std::memcpy(saved_, Block(), kLayoutBytes); }
+    ~SavedLayout() {
+        std::memcpy(Block(), saved_, kLayoutBytes);
+        g_layout7dfd58 = extra_;
+    }
+    static void* Block() { return &g_displayMode.get(); }
+
+private:
+    std::uint8_t saved_[kLayoutBytes];
+    std::int32_t extra_;
+};
+
+void CompareScreenLayout(test::Context& ctx, ModeFn candidate, int cases) {
+    const SavedLayout saved;
+    std::uint8_t start[kLayoutBytes], expected[kLayoutBytes];
+    for (int i = 0; i < cases; ++i) {
+        ctx.rng().Fill(start, sizeof(start));
+        const std::int32_t extra = static_cast<std::int32_t>(ctx.rng().Next32());
+        const std::uint32_t mode = ctx.rng().Chance(1, 5) ? ctx.rng().Next32() : ctx.rng().Below(4);
+        std::memcpy(SavedLayout::Block(), start, kLayoutBytes);
+        g_layout7dfd58 = extra;
+        const std::uint32_t expectedResult = Original_Render_SetScreenLayout(mode);
+        std::memcpy(expected, SavedLayout::Block(), kLayoutBytes);
+        const std::int32_t expectedExtra = g_layout7dfd58;
+        std::memcpy(SavedLayout::Block(), start, kLayoutBytes);
+        g_layout7dfd58 = extra;
+        const std::uint32_t actualResult = candidate(mode);
+        bool same = S3RE_EXPECT_EQ(expectedResult, actualResult);
+        same &= S3RE_EXPECT_MEM_EQ(expected, SavedLayout::Block(), kLayoutBytes);
+        same &= S3RE_EXPECT_EQ(expectedExtra, g_layout7dfd58.get());
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: mode %u", i, mode);
+            return;
+        }
+    }
+}
+
+// Wrong: 800x600 gets the cell size of 640x480.
+std::uint32_t __stdcall WrongScreenLayout(std::uint32_t mode) {
+    const std::uint32_t r = Render_SetScreenLayout(mode);
+    if (mode == 1) {
+        g_uiCellSize = 3;
+    }
+    return r;
+}
+
+std::int32_t Edge(test::Context& ctx, std::int32_t around) {
+    return ctx.rng().Chance(1, 2) ? around + ctx.rng().Range(-2, 2) : static_cast<std::int32_t>(ctx.rng().Next32());
+}
+
+}  // namespace
+
+S3RE_TEST(Render_SetScreenLayout_MatchesOriginal) {
+    CompareScreenLayout(ctx, &Render_SetScreenLayout, 500);
+}
+S3RE_TEST(Render_SetScreenLayout_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareScreenLayout(probe, &WrongScreenLayout, 200);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(Render_IsNearView_MatchesOriginal) {
+    const std::uint32_t savedX = g_drawOriginX;
+    const std::int32_t savedW = g_displayWidth, savedH = g_displayHeight;
+    for (int i = 0; i < 20000; ++i) {
+        g_drawOriginX = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(200);
+        g_displayWidth = ctx.rng().Chance(1, 8) ? static_cast<std::int32_t>(ctx.rng().Next32()) : 640 + static_cast<std::int32_t>(ctx.rng().Below(400));
+        g_displayHeight = ctx.rng().Chance(1, 8) ? static_cast<std::int32_t>(ctx.rng().Next32()) : 480 + static_cast<std::int32_t>(ctx.rng().Below(300));
+        const std::int32_t x = ctx.rng().Chance(1, 2) ? Edge(ctx, static_cast<std::int32_t>(g_drawOriginX.get()) - 30)
+                                                      : Edge(ctx, g_displayWidth + 30);
+        const std::int32_t y = ctx.rng().Chance(1, 2) ? Edge(ctx, -30) : Edge(ctx, g_displayHeight + 30);
+        if (!S3RE_EXPECT_EQ(Original_Render_IsNearView(x, y), Render_IsNearView(x, y))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: (%d, %d)", i, x, y);
+            break;
+        }
+    }
+    g_drawOriginX = savedX;
+    g_displayWidth = savedW;
+    g_displayHeight = savedH;
+}
+
+namespace {
+
+// Small source counts (left + right never 0, no overflowing quotient) and
+// random volume ranges (high > low).
+void CompareAmbient(test::Context& ctx, PanFn pan, VolumeFn volume, int cases) {
+    test::WorldPair drawers(ctx, sizeof(CDrawer));
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t kind = ctx.rng().Below(kAmbientKinds);
+        const std::int32_t left = static_cast<std::int32_t>(ctx.rng().Chance(1, 4) ? ctx.rng().Below(100000) : ctx.rng().Below(40));
+        const std::int32_t right = static_cast<std::int32_t>(ctx.rng().Chance(1, 4) ? ctx.rng().Below(100000) : ctx.rng().Below(40)) +
+                                   (left == 0 ? 1 : 0);
+        const std::int32_t count = static_cast<std::int32_t>(ctx.rng().Below(3000)) - 100;
+        drawers.Both([&](CGameData* w) {
+            DrawerOf(w)->ambient_left[kind] = left;
+            DrawerOf(w)->ambient_right[kind] = right;
+            DrawerOf(w)->ambient_count[kind] = count;
+        });
+        const std::int32_t low = static_cast<std::int32_t>(ctx.rng().Below(1000));
+        const std::int32_t high = low + 1 + static_cast<std::int32_t>(ctx.rng().Below(3000));
+        const std::int32_t offset = ctx.rng().Range(-12000, 3000);
+        bool same = S3RE_EXPECT_EQ(Original_CDrawer_AmbientSoundPan(DrawerOf(drawers.original()), nullptr, kind),
+                                   pan(DrawerOf(drawers.ours()), nullptr, kind));
+        same &= S3RE_EXPECT_EQ(Original_CDrawer_AmbientSoundVolume(DrawerOf(drawers.original()), nullptr, kind, low,
+                                                                   high, offset),
+                               volume(DrawerOf(drawers.ours()), nullptr, kind, low, high, offset));
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: kind %u, %d/%d, count %d (%d..%d, %d)", i, kind, left, right,
+                     count, low, high, offset);
+            return;
+        }
+    }
+    drawers.Checkpoint(ctx);
+}
+
+// Wrong: the volume is clamped at -10000 only.
+std::int32_t __fastcall WrongAmbientSoundVolume(CDrawer* self, void*, std::uint32_t kind, std::int32_t low,
+                                                std::int32_t high, std::int32_t offset) {
+    std::int32_t count = DrawerOf(self)->ambient_count[kind];
+    if (count > high) {
+        count = high;
+    }
+    const std::int32_t v = (count - low) * kVolumeSpan / (high - low) + offset - kVolumeSpan;
+    return v < kSilence ? kSilence : v;
+}
+
+}  // namespace
+
+S3RE_TEST(CDrawer_AmbientSound_MatchesOriginal) {
+    CompareAmbient(ctx, &CDrawer_AmbientSoundPan, &CDrawer_AmbientSoundVolume, 20000);
+}
+S3RE_TEST(CDrawer_AmbientSound_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareAmbient(probe, &CDrawer_AmbientSoundPan, &WrongAmbientSoundVolume, 2000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+}  // namespace s3re::game

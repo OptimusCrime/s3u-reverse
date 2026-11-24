@@ -123,6 +123,7 @@ add_library(s3re SHARED
     game/logic/load_save_game_tests.cpp
     game/logic/logic_helpers.cpp
     game/logic/logic_thread.cpp
+    game/logic/logic_thread_members.cpp
     game/logic/objectives.cpp
     game/logic/ui_overlays.cpp
     game/logic/ui_state.cpp
@@ -174,8 +175,10 @@ add_library(s3re SHARED
 
     # game/graphics/: graphics data, landscape colours, DirectDraw surface
     game/graphics/directx_surface.cpp
+    game/graphics/drawer_queues.cpp
     game/graphics/graphics_helpers.cpp
     game/graphics/landscape_colours.cpp
+    game/graphics/screen_layout.cpp
 
     # game/net/: CNetThread, lobby protocol buffer
     game/net/lobby_memory_block.cpp

@@ -1716,3 +1716,88 @@ SPECS += [
                   0x004dfa60: (0, "thiscall", "probe"),
                   0x00413d70: (1, "thiscall", "this")}),
 ]
+
+
+# -- session 54 (logic-misc): small CLogicThread members (logic_thread_members.cpp) --
+
+SELECTED_BUILDING = 0x007dfd6c
+CURRENT_GROUP = 0x007dfd68
+GROUP_CHANGED = 0x007ad5f8
+
+
+def message_lifetimes(rng, pool, args):
+    """The 20 message lines' lifetimes around 0, sometimes any value."""
+    return [(LOGIC_THREAD + 0x414 + line * 0x1c + 0x10,
+             rng.choice([0, 1, 2, -1 & 0xFFFFFFFF, rng.randrange(1000), rng.getrandbits(32)]), 4)
+            for line in range(20)]
+
+
+def group_store_state(rng, pool, args):
+    """All ten groups (lists of a few settlers, often shared between groups,
+    sometimes empty), the current group (sometimes -1 or the argument), the
+    change flags and the selected building; the world part: the settlers'
+    owner and type bytes and the special menu (UpdateGroupMenu)."""
+    world = [(0x2d2d4, rng.randrange(4), 4), (0x2d298, rng.randrange(8), 4)]
+    exe = []
+    shared = [rng.randrange(1, 0x8000) for _ in range(6)]
+    for group in range(10):
+        count = 0 if rng.random() < 0.25 else rng.randrange(1, 12) if rng.random() < 0.9 else rng.randrange(101)
+        exe.append((GROUP_COUNTS + group * 2, count, 2))
+        for k in range(count):
+            settler = rng.choice(shared) if rng.random() < 0.6 else rng.randrange(0x8000)
+            exe.append((GROUP_SETTLERS + group * 200 + k * 2, settler, 2))
+            world.append((SETTLERS + settler * 0x40 + 1, rng.choice([0x24, 0x2c, 0x17, 0x02]), 1))
+        exe.append((GROUP_CHANGED + group * 4, rng.randrange(3), 4))
+    current = 0xFFFFFFFF if rng.random() < 0.1 else args[0] if args and rng.random() < 0.15 else rng.randrange(10)
+    exe += [(CURRENT_GROUP, current, 4),
+            (SELECTED_BUILDING, 0 if rng.random() < 0.5 else rng.randrange(5000), 4)]
+    return world, exe
+
+
+GROUP_STORE_EXE: list = []
+
+
+def group_store_presets(rng, pool, args):
+    world, exe = group_store_state(rng, pool, args)
+    GROUP_STORE_EXE[:] = exe
+    return world
+
+
+def group_store_globals(rng, pool, args):
+    return list(GROUP_STORE_EXE)
+
+
+def transport_order_area(rng, pool, args):
+    """The argument's area (when below 0x1000): free or a player's, its
+    transport order list with small goods numbers, sometimes the asked one."""
+    area, good = args
+    if area >= 0x1000:
+        return []
+    base = AREAS + area * 0x2e0
+    fields = [(base, 0xFF if rng.random() < 0.2 else rng.randrange(20), 1)]
+    for p in range(36):
+        fields.append((base + 0x1f6 + p, rng.randrange(40) if rng.random() < 0.8 else rng.getrandbits(8), 1))
+    if rng.random() < 0.5 and good < 256:
+        fields.append((base + 0x1f6 + rng.randrange(36), good, 1))
+    return fields
+
+
+def area_number(rng, pool):
+    return rng.choice([rng.randrange(0x1000), rng.randrange(0x1000), 0x1000, 0xfff, rng.getrandbits(32)])
+
+
+SPECS += [
+    Spec("CLogicThread_Setup", 0x0053c970, "logicthread", [anything] * 10),
+    Spec("CLogicThread_ClearMessages", 0x0051e650, "logicthread", [], presets=message_lifetimes),
+    # EAX: the original's points past the last line (callers don't use it).
+    Spec("CLogicThread_AgeMessages", 0x0051e680, "logicthread", [], eax_mask=0, presets=message_lifetimes),
+    Spec("CLogicThread_ClearSelection", 0x00542630, "logicthread", [], presets=group_store_presets,
+         globals=group_store_globals),
+    # EAX: the empty-group path leaves the caller's (callers don't use it);
+    # the in-process test compares it on the other paths.
+    Spec("CLogicThread_StoreSettlerGroup", 0x00542820, "logicthread", [below(10)], eax_mask=0,
+         presets=group_store_presets, globals=group_store_globals),
+    Spec("CLogicThread_GoodsPriorityPosition", 0x00542d40, "logicthread", [area_number, below(40, 0.1)],
+         presets=transport_order_area),
+    Spec("LogicRecord24_Construct_args", 0x005437e0, "thiscall", [anything] * 9),
+]
