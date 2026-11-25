@@ -188,6 +188,11 @@ add_library(s3re SHARED
     # game/graphics/: graphics data, landscape colours, DirectDraw surface
     game/graphics/directx_surface.cpp
     game/graphics/drawer_queues.cpp
+    game/graphics/gfx_draw.cpp
+    game/graphics/gfx_files.cpp
+    game/graphics/gfx_images.cpp
+    game/graphics/gfx_rle.cpp
+    game/graphics/gfx_spans.cpp
     game/graphics/graphics_helpers.cpp
     game/graphics/landscape_colours.cpp
     game/graphics/screen_layout.cpp

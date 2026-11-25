@@ -32,16 +32,27 @@ LOGBOOK session entry).
 - **Shared catch-type helper:** the SEH filter that matches MSVC 6.0
   catchable types exists twice (execute_commands.cpp,
   map_file_stream.cpp); make it one helper.
-- **Graphics (re/graphics_formats.md, session 50):** the game's graphics
-  are the memory-mapped `GFX\siedler3_NN.<pixel format>.dat` files read by
-  CGraphicsData (8 tables, RLE sprites, palettes by brightness); the draw
-  spans 0x5f4980..0x5f5910 pick by brightness. Reimplement the loader and
-  the sprite decoding first (verifiable by comparing decoded bytes).
+- **Graphics loader (re/graphics_formats.md):** session 55 verified the
+  accessors, spans, RLE helpers, all blitters, the Draw methods and Close.
+  Left: `CGraphicsData::Open` 0x5f6fd0 (~3,500 instructions: file search,
+  CFile/CFileMapping, header checks, the 8 tables, pixel-format masks),
+  `FindDirectoryContainingFile` 0x5f6a10, `DetachFromMedium` 0x5fa7c0,
+  the constructor 0x5f67c0 / destructor 0x5f68b0 / scalar deleting
+  destructor 0x5f6890. They need the Win32 mapping classes first
+  (`Win32::CFileMapping` ctor 0x61a3a0, UnmapView 0x61aa40, MapView
+  0x61a7d0, `Win32::DetachMemory` 0x61ab60, CFile 0x6195c0..0x61a080).
+  The constructor's std::string at +0x24 gets its allocator byte from an
+  uninitialized local (docs/reimplementation_notes.md, case b). An
+  in-process test can run Open itself (no DirectDraw needed) on two
+  objects and compare. The false starts 0x5f65f2/0x5f674b
+  (DrawGuiImage_tail*) and 0x5fd902 (SequenceFrame_tail) are inside
+  verified functions.
 - **Function-start fixes found in the naming pass (session 50):**
   missing starts (add as `manual` rows in re/extra_functions.tsv with
   evidence): 0x5a0920, 0x5a0950, 0x5a1a60, 0x5a42c0, 0x5a4610, 0x5a4970
-  (re/picture_code.md) and 13 draw spans plus the halve span 0x5fd0c0
-  (re/graphics_formats.md). False starts (keep out of the counts, e.g. a
+  (re/picture_code.md); the 13 draw spans and the halve span were added
+  in session 55. Also missing: the static initializers 0x5f5a20,
+  0x5fda80, 0x5fdb30 after the graphics code. False starts (keep out of the counts, e.g. a
   `notfunction` kind): the 26 `ProtectCD_RunEmbeddedCheck_junk_*` rows
   inside the obfuscated 0x5b2f70, the catch-continuation points 0x5fe948,
   0x5fe9d8, 0x5feb05 inside CSoundData::Open, the `_tail` rows 0x5f6c3d,

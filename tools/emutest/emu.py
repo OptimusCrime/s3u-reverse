@@ -142,6 +142,15 @@ def _api_time_get_time(machine, uc, args):
     return value, ("timeGetTime",)
 
 
+def _api_get_drive_type(machine, uc, args):
+    """GetDriveTypeA(root): a drive type 0..6 (sometimes any value) fixed by
+    the case and the root's first four bytes, which are recorded (the
+    buffer's address differs between the two frames)."""
+    root = machine.guest_read(args[0], 4)
+    value = _mix((machine.seed << 32) ^ 0x6D7E0000 ^ int.from_bytes(root, "little"))
+    return (value % 7 if value & 0x700 else value & 0xFFFFFFFF), ("GetDriveTypeA", root)
+
+
 # name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
 # record holds what the call saw (rectangle contents, not pointers, which
 # differ between the original's and our stack frames).
@@ -153,6 +162,7 @@ API_HANDLERS = {
     "Sleep": (1, _api_sleep),
     "CloseHandle": (1, _api_close_handle),
     "OutputDebugStringA": (1, _api_output_debug_string),
+    "GetDriveTypeA": (1, _api_get_drive_type),
 }
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,

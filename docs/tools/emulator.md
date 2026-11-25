@@ -35,7 +35,8 @@ run as a throw (compared), FS points at a fake TIB so SEH frames work.
 Virtual calls: point an object's vtable at `emu.FAKE_VTABLE` with a
 preset and declare the slots in `Spec.virtuals` (calls recorded and
 compared); imported Windows functions go to API probes
-(`emu.API_HANDLERS`; add a handler for a new one). Convention
+(`emu.API_HANDLERS`; add a handler for a new one; GetDriveTypeA
+returns a drive type fixed by the case and the root string). Convention
 `fastcall` passes args[0]/args[1] in ECX/EDX. `Spec.virtual_effects`
 lets a probed virtual call change memory (e.g. a child that shrinks its
 parent's list), `Spec.new_fails` makes operator new return null in some
