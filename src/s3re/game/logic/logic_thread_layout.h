@@ -45,7 +45,8 @@ static_assert(offsetof(MessageLine, dirty) == 0x18);
 struct CLogicThread {
     std::uint8_t unk000[0x4c];
     std::uint32_t group_selection_changed;  // +0x04c set to 1 by ExecuteCommands 0x10 when the local player's carriers became units (new group 0)
-    std::uint8_t unk050[0x24];
+    std::uint8_t unk050[0x20];
+    std::uint32_t tick;                // +0x070 the game tick (copied to g_gameTick at the end of each Step); SaveGame passes it to GameSettings::SaveSetup
     std::uint32_t unk074;              // +0x074 cleared by ClearPendingUiRefresh (ui_state.cpp)
     std::uint8_t unk078[0xc];
     std::uint32_t pending_ui_refresh;  // +0x084 turned into the world's refresh_ui (ui_state.cpp)
@@ -90,6 +91,7 @@ struct CLogicThread {
 
 static_assert(sizeof(void*) == 4, "32-bit build only");
 static_assert(offsetof(CLogicThread, group_selection_changed) == 0x4c);
+static_assert(offsetof(CLogicThread, tick) == 0x70);
 static_assert(offsetof(CLogicThread, unk074) == 0x74);
 static_assert(offsetof(CLogicThread, pending_ui_refresh) == 0x84);
 static_assert(offsetof(CLogicThread, save_request_tick) == 0x224);

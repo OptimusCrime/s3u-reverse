@@ -146,6 +146,9 @@ inline constexpr GameGlobal<std::uint32_t> g_lastSaveTick{0x7dfd50};
 // malloc/free, code 0x6284d2..0x628b6f); tests skip it when they compare
 // S3.EXE's globals around code that allocates.
 inline constexpr GameGlobal<std::uint8_t[0x1c]> g_crtSmallBlockHeap{0x7e9728};
+// The CRT time()'s cache (0x61f6a7): +0 the last result, +8 the SYSTEMTIME
+// of GetLocalTime it came from; depends on the clock, so tests skip it.
+inline constexpr GameGlobal<std::uint8_t[0x18]> g_crtTimeCache{0x7e93b0};
 // The application object (DirectX::CGameApp; returned by 0x53ba50).
 inline constexpr GameGlobal<std::uint8_t*> g_app{0x7e9168};
 // Outcome of the current game: -1 while undecided, then set by the game-end
@@ -211,6 +214,14 @@ inline constexpr GameGlobal<volatile std::uint32_t> g_pathPhase{0x7a9d98};
 inline constexpr GameGlobal<GameSettings> g_gameSettings{0x7a7a18};
 // The configuration from the registry.
 inline constexpr GameGlobal<GameConfig> g_config{0x7a7af0};
+// The folder the game's files are found in (a prefix of "Save\" and
+// "Save\Multi"; empty or ending in a backslash). CLogicThread::SaveGame
+// builds its paths from it; the tests point it at a temporary folder.
+inline constexpr GameGlobal<msvc6::String> g_gameFolder{0x7a7c80};
+// The game's version x100 (0xa0: 1.60), written as the savegame version.
+inline constexpr GameGlobal<std::int32_t> g_versionNumber{0x6970f0};
+// Two build values (CConsoleThread::OnStart from 0x60eff0), saved in chunk 0.
+inline constexpr GameGlobal<std::uint32_t[2]> g_buildInfo{0x7a8000};
 
 // ------------------------------------------------------------ graphics and minimap
 // The loaded graphics (gfx::CGraphicsData, game/graphics/gfx_layout.h).

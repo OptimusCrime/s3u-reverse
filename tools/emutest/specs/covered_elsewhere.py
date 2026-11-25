@@ -12,6 +12,18 @@ the names of common.py and of its own earlier lines without imports.
 # failure). Only for blocks measured as unreached by a --full run; not part
 # of the spec entries, so editing it doesn't reselect specs.
 COVERED_ELSEWHERE = {
+    # CLogicThread::SaveGame after the allocation of chunk 10's 0x8d63a-byte
+    # buffer, which the emulator's heap (0x30000 bytes) can't hold: every
+    # case ends in that out-of-memory throw (2026-11-25). Evidence: the
+    # in-process tests CLogicThread_SaveGame_AllSaveGames, _Maps and
+    # _RandomWorlds_MatchOriginal (whole files written by the original and
+    # ours from the same worlds, byte for byte outside the bytes neither
+    # writes; computer players, both results of GetError).
+    "CLogicThread_SaveGame": ((
+        0x50a6cc, 0x50a770, 0x50a784, 0x50a7eb, 0x50a7ff, 0x50a870, 0x50a884, 0x50a8f6, 0x50a90a, 0x50a972,
+        0x50a986, 0x50a9e9, 0x50a9ef, 0x50a9f9, 0x50a9ff, 0x50aa0f, 0x50aa23, 0x50aa72, 0x50aa86, 0x50aace,
+        0x50aae2, 0x50ab2c, 0x50ab40, 0x50ab8d, 0x50aba1, 0x50abe6, 0x50abeb, 0x50ac01, 0x50ac06),
+        "in-process: CLogicThread_SaveGame_AllSaveGames, _Maps, _RandomWorlds_MatchOriginal"),
     # The 77 blocks a --full run (10 maps of 33..96 tiles, Release, 146 s)
     # doesn't reach, 2026-11-24. Many need maps of 130+ tiles (0x516815: a
     # tile 65 or more from every border) or 258+ (0x516842: 129 or more);

@@ -35,6 +35,10 @@ inline constexpr std::uint32_t kCOutOfMemory = 0x65d8b8;       // Win32::COutOfM
 inline constexpr std::uint32_t kCMapFile = 0x658770;               // Dirk::CMapFile
 inline constexpr std::uint32_t kChunkDict = 0x658794;              // WCValSkipListDict<unsigned int, void*>
 inline constexpr std::uint32_t kReferenceDict = 0x658778;          // WCValSkipListDict<unsigned int, int>
+// The skip-list base classes the dictionaries pass through while
+// ~CMapFile (0x4a5b50) destroys them.
+inline constexpr std::uint32_t kReferenceSkipListBase = 0x6587cc;  // WCSkipListBase<WCSkipListDictKeyVal<uint, int>>
+inline constexpr std::uint32_t kChunkSkipListBase = 0x6587b0;      // WCSkipListBase<WCSkipListDictKeyVal<uint, void*>>
 // DirectX::*
 inline constexpr std::uint32_t kCSimpleSurface = 0x65cda0;      // DirectX::CSimpleSurface
 inline constexpr std::uint32_t kCSurface = 0x65cda8;            // DirectX::CSurface

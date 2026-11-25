@@ -1936,3 +1936,205 @@ SPECS += [
     Spec("CLogicThread_SelectSettlersOfType", 0x00542b60, "logicthread", [below(4), select_mode], eax_mask=0,
          presets=select_type_state, globals=select_globals, max_cases=300),
 ]
+
+
+# --- CLogicThread::SaveGame (save_game.cpp) ---
+# The file is not written: the CMapFile members SaveGame calls (all verified
+# on their own) are probed, with the bytes they are given: WriteChunk the
+# whole chunk buffer (heap blocks of the emulator's allocator, so the
+# bytes SaveGame leaves unwritten are the same lazily random ones in both
+# runs and compared as well), WriteChunkWithTail the header part and the
+# tail's size and address, WriteChunkData size and address, Open the path's
+# text. The CMapFile lives in SaveGame's frame, so these probes don't
+# record ECX ("stdcall": the same stack arguments, ECX left out) and a
+# stack address in an argument is recorded as "stack". Also probed: the
+# CRT's _mkdir (the path's text) and time, GameSettings::MapName (its
+# effect fills the result string: empty, unshared, frozen or shared
+# buffer), GameSettings::SaveSetup and AI::SaveGlobals (both stay the
+# original). GetError returns 0, 1 or a failure, so both results occur.
+#
+# The emulator's heap (emu.HEAP_SIZE, 0x30000 bytes) can't hold the
+# 0x8d63a-byte diggertab buffer: that operator new returns null and every
+# case ends in its out-of-memory throw. So the spec covers SaveGame up to
+# chunk 10; the earlier out-of-memory paths are reached by an effect of the
+# probe that precedes each allocation (SG_FAIL_AFTER picks one per case).
+# The blocks after chunk 10's allocation are in COVERED_ELSEWHERE.
+SG_NAME = SCRATCH + 0x8000          # the name argument (a std::string) and its text
+SG_FOLDER_TEXT = SCRATCH + 0x8100   # g_gameFolder's text
+SG_PLAYER_NAMES = SCRATCH + 0x8200  # 20 player name texts, 0x80 bytes each
+SG_MAP_NAME = SCRATCH + 0x9200      # MapName's result text
+SG_FAIL_AFTER = LOGIC_THREAD + 0x6f0  # which probe call makes the next operator new fail (fake thread, unused)
+SG_PLAYER_INFO_NAME_PTRS = 0x007acfb4  # g_playerInfo[i].name.ptr, 0x44 apart
+SG_GAME_FOLDER = 0x007a7c80
+SG_STACK = (0x00200000, 0x00300000)  # emu.STACK_BASE, + STACK_SIZE
+SG_EXE = []
+
+# The probe call after which the next chunk buffer's allocation fails, and
+# that buffer's size (chunks 0, 1, 2, 4, 6, 7, 8, 9; only that size, so the
+# strings ThrowOutOfMemory builds still get memory); anything else: no
+# forced failure.
+SG_TRIGGERS = ((("open",), 0x120), (("setup",), 0x1860), (("chunk", 1), 0x10), (("tail", 2, 1), 0x3118),
+               (("tail", 4), 0x19fc), (("chunk", 6), 0xc), (("tail", 7), 0xc), (("tail", 8), 0xc))
+
+
+def _sg_text(m, address, limit=0x200):
+    return m.guest_read(address, limit).split(b"\0", 1)[0]
+
+
+def _sg_stack(value):
+    return "stack" if SG_STACK[0] <= value < SG_STACK[1] else value
+
+
+def _sg_dword(m, address):
+    return struct.unpack("<I", m.guest_read(address, 4))[0]
+
+
+def _sg_trigger(m, event):
+    index = _sg_dword(m, WORLD_BASE + SG_FAIL_AFTER)
+    if index < len(SG_TRIGGERS) and SG_TRIGGERS[index][0] == event:
+        m.new_fails = True
+        m.new_fails_size = SG_TRIGGERS[index][1]
+
+
+def _sg_construct(m, ecx, args, h):
+    """The first probe call of each run: the original's run may have set
+    new_fails (run.py sets it once per case, before both runs)."""
+    m.new_fails = False
+    m.new_fails_size = None
+
+
+def _sg_record_open(m, ecx, args):
+    path, mode = args
+    pointer, length = _sg_dword(m, path + 4), _sg_dword(m, path + 8)
+    return (bytes(m.guest_read(pointer, length)) if pointer else b"", length, mode)
+
+
+def _sg_open(m, ecx, args, h):
+    _sg_trigger(m, ("open",))
+
+
+def _sg_record_chunk(m, ecx, args):
+    chunk_type, sub, buffer = args
+    size = _sg_dword(m, buffer + 4)
+    return (chunk_type, sub, bytes(m.guest_read(buffer, min(size, 0x20000))))
+
+
+def _sg_chunk(m, ecx, args, h):
+    _sg_trigger(m, ("chunk", args[0]))
+
+
+def _sg_record_tail(m, ecx, args):
+    chunk_type, sub, buffer, tail, tail_at = args
+    size = _sg_dword(m, buffer + 4)
+    head = (size - tail) & 0xFFFFFFFF
+    return (chunk_type, sub, bytes(m.guest_read(buffer, min(head, 0x4000))), size, tail, tail_at)
+
+
+def _sg_tail(m, ecx, args, h):
+    _sg_trigger(m, ("tail", args[0], args[1]))
+    _sg_trigger(m, ("tail", args[0]))
+
+
+def _sg_map_name(m, ecx, args, h):
+    """GameSettings::MapName(result): the result string."""
+    result = args[0]
+    kind = h % 4
+    text_at = WORLD_BASE + SG_MAP_NAME
+    if kind == 0:
+        m.guest_write(result, struct.pack("<IIII", 0, 0, 0, 0))
+        return result
+    length = (h >> 8) % 60
+    text = bytes(0x41 + (h >> (16 + i % 16)) % 26 for i in range(length))
+    count = {1: 0, 2: 0xFF, 3: 1 + (h >> 40) % 3}[kind]  # unshared, frozen, shared
+    m.guest_write(text_at, bytes([count]) + text + b"\0")
+    m.guest_write(result, struct.pack("<IIII", 0, text_at + 1, length, length | 31))
+    return result
+
+
+def _sg_record_setup(m, ecx, args):
+    return (_sg_stack(args[0]), args[1], args[2] & 0xFFFF)
+
+
+def _sg_setup(m, ecx, args, h):
+    _sg_trigger(m, ("setup",))
+
+
+SG_CALLEES = {
+    0x004a5a70: (1, "stdcall", "probe", _sg_construct),                    # CMapFile::CMapFile
+    0x00621556: (1, "cdecl", "probe", None, lambda m, ecx, args: (_sg_text(m, args[0]),)),  # _mkdir
+    0x004a5c80: (2, "stdcall", "probe", _sg_open, _sg_record_open),        # CMapFile::Open
+    0x0061f6a7: (1, "cdecl", "probe"),                                     # time
+    0x00436a60: (1, "thiscall", "probe", _sg_map_name, lambda m, ecx, args: (_sg_stack(args[0]),)),
+    0x00433490: (3, "thiscall", "probe", _sg_setup, _sg_record_setup),    # GameSettings::SaveSetup
+    0x004a6540: (3, "stdcall", "probe", _sg_chunk, _sg_record_chunk),      # WriteChunk
+    0x004a6600: (5, "stdcall", "probe", _sg_tail, _sg_record_tail),        # WriteChunkWithTail
+    0x004a66d0: (4, "stdcall", "probe"),                                   # WriteChunkData
+    0x00551220: (1, "thiscall", "probe", None, lambda m, ecx, args: (_sg_stack(args[0]),)),
+    0x004a60d0: (0, "stdcall", lambda h: (0, 0, 1, 0x80004005)[h % 4]),    # GetError
+    0x004a5f40: (0, "stdcall", "probe"),                                   # Close
+    0x004a5b50: (0, "stdcall", "probe"),                                   # ~CMapFile
+}
+
+
+def save_game_state(rng, pool, args):
+    fields = [(SG_FAIL_AFTER, rng.randrange(len(SG_TRIGGERS) + 3), 4),
+              (MAP_SIZE, rng.choice([0, 1, 2, 3, 5]), 4),
+              (0x2d2d4, rng.randrange(20), 4),  # local_player
+              (0xe115dc, rng.choice([0, 3, rng.getrandbits(32)]), 4)]  # area_high_water (only sizes)
+    for offset in (0x12a5e5c, 0x1499e60, 0x1238858, 0x110a578, 0x67440):  # the tables' high-water marks
+        fields.append((offset, rng.choice([0, 7, rng.getrandbits(32)]), 4))
+    for i in range(20):  # computer players
+        fields.append((LOGIC_THREAD + 0x350 + 4 * i, 0 if rng.random() < 0.6 else rng.getrandbits(32) | 1, 4))
+    # The name argument: a string with or without text.
+    name = bytes(0x61 + rng.randrange(26) for _ in range(rng.randrange(1, 30)))
+    empty = rng.random() < 0.2
+    fields += [(SG_NAME, 0, 4), (SG_NAME + 4, 0 if empty else WORLD_BASE + SG_NAME + 0x21, 4),
+               (SG_NAME + 8, 0 if empty else len(name), 4), (SG_NAME + 12, len(name) | 31, 4),
+               (SG_NAME + 0x20, 0, 1)]
+    for i, byte in enumerate(name + b"\0"):
+        fields.append((SG_NAME + 0x21 + i, byte, 1))
+    for i, byte in enumerate(b"C:\\Games\\S3\\\0"):
+        fields.append((SG_FOLDER_TEXT + 1 + i, byte, 1))
+    folder = WORLD_BASE + SG_FOLDER_TEXT + 1 if rng.random() < 0.5 else 0
+    exe = [(SG_GAME_FOLDER, 0, 4), (SG_GAME_FOLDER + 4, folder, 4), (SG_GAME_FOLDER + 8, 12 if folder else 0, 4),
+           (SG_GAME_FOLDER + 12, 31 if folder else 0, 4)]
+    for player in range(20):
+        text = bytes(0x41 + rng.randrange(26) for _ in range(rng.randrange(0x7f)))
+        at = SG_PLAYER_NAMES + player * 0x80
+        for i, byte in enumerate(text + b"\0"):
+            fields.append((at + i, byte, 1))
+        exe.append((SG_PLAYER_INFO_NAME_PTRS + player * 0x44, WORLD_BASE + at if rng.random() < 0.8 else 0, 4))
+    SG_EXE[:] = exe
+    return fields
+
+
+def save_game_globals(rng, pool, args):
+    return SG_EXE
+
+
+# Dead blocks: the inlined destructors (erase(), then _Tidy(true)) of the
+# path temporaries g_gameFolder + "Save", + "Save\Multi", + "Save\\" and
+# that + name: each is a fresh result of operator+ (never empty, its buffer
+# unshared: count byte 0), so the null-text, shared-buffer and frozen
+# branches never run; erase(0, npos) leaves length 0, so _Grow(0) returns
+# false and the length checks against max_size (std::_Xlen) never fail.
+# The same for the map name's copy (MapName's result, all four kinds of
+# buffer reached by the probe's effect): after erase() its length is 0, and
+# a shared buffer was split first, so the final _Tidy sees count 0 or 0xff.
+SG_DEAD_STRING_BLOCKS = (
+    0x5099d5, 0x509a01, 0x509a06, 0x509a62, 0x509a86, 0x509a8b,  # g_gameFolder + "Save"
+    0x509ab4, 0x509adf, 0x509ae4, 0x509b40, 0x509b66, 0x509b6a,  # g_gameFolder + "Save\Multi"
+    0x509c67, 0x509c7b, 0x509c7f, 0x509c83, 0x509ca8, 0x509cae,  # (g_gameFolder + "Save\\") + name
+    0x509cbc, 0x509cd4, 0x509cd9,
+    0x509d15, 0x509d1a, 0x509d45, 0x509d65, 0x509da6, 0x509dba,  # g_gameFolder + "Save\\"
+    0x509dbf, 0x509dc3, 0x509ddf, 0x509de5, 0x509def, 0x509e13, 0x509e17,
+    0x509f95, 0x509fae, 0x509fb2, 0x509fd4, 0x509fda, 0x509fe8, 0x50a00f,  # the map name
+)
+
+SPECS += [
+    # Returns a bool in AL (the caller reads AL only); every case throws at
+    # chunk 10 at the latest (see above). About 0.3 s per case (Release).
+    Spec("CLogicThread_SaveGame", 0x00509980, "logicthread", [lambda rng, pool: WORLD_BASE + SG_NAME],
+         eax_mask=0xFF, presets=save_game_state, globals=save_game_globals, callees=SG_CALLEES, max_cases=300,
+         exempt_blocks=SG_DEAD_STRING_BLOCKS),
+]

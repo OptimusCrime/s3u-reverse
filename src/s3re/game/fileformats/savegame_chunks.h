@@ -32,10 +32,17 @@ enum class SaveChunk : std::uint32_t {
     Timer = 14,             // "timer"
     Messages = 15,          // "messages"
     WarMap = 16,            // "warmap"
+    SetupPlayers = 0x14,    // GameSettings::SaveSetup 0x433490: the player setups
+    AiState15 = 0x15,       // AI::SaveState 0x596330 (once per computer player)
+    AiState16 = 0x16,
+    AiState17 = 0x17,
     VictoryConditions = 0x18,
     PlayerColours = 0x19,
+    Setup1A = 0x1a,         // GameSettings::SaveSetup 0x433490
+    Setup1B = 0x1b,
     ProdStat = 0x1c,
     NewGameObjective = 0x1d,
+    Setup1E = 0x1e,         // GameSettings::SaveSetup 0x433490
     NewGameObjectiveTimeout = 0x1f,
 };
 
@@ -49,19 +56,29 @@ inline constexpr std::int32_t kVersionObjectiveTimeout = 0x99;
 
 #pragma pack(push, 1)
 
+// Chunk 0 ("desc"). SaveGame copies the map name with strcpy into a heap
+// buffer it doesn't clear: the bytes after the name's terminating zero are
+// whatever the heap block held before.
 struct SaveHeaderChunk {        // chunk 0, 0x120 bytes
     ChunkHeader header;
-    std::int32_t version;       // +0x08 (0xa0 in the game's own savegames)
-    std::uint8_t unk0c[0x120 - 0x0c];  // build info, mission, time, map name (not read by LoadSaveGame)
+    std::int32_t version;       // +0x08 g_versionNumber (0xa0 in the game's own savegames); the only field read
+    std::uint32_t build_info[2];  // +0x0c g_buildInfo
+    std::int32_t mission_minus_one;  // +0x14 g_campaignMission - 1
+    std::int32_t local_race;    // +0x18 the local player's race (Player +4)
+    std::uint32_t save_time;    // +0x1c time(0) when saved
+    char map_name[0x100];       // +0x20 GameSettings::MapName (0x436a60), zero-terminated
 };
 static_assert(offsetof(SaveHeaderChunk, version) == 0x08);
+static_assert(offsetof(SaveHeaderChunk, local_race) == 0x18);
+static_assert(offsetof(SaveHeaderChunk, map_name) == 0x20);
 static_assert(sizeof(SaveHeaderChunk) == 0x120);
 
 // One entry of the player info table (g_playerInfo 0x7acfa8) as saved.
 struct SavedPlayerInfo {
     std::int32_t unk00;         // +0x000
     std::int32_t unk04;         // +0x004
-    char name[0x100];           // +0x008 the player's name (assigned up to its first zero)
+    char name[0x100];           // +0x008 the player's name (assigned up to its first zero); SaveGame
+                                //        strcpys it, the bytes after its zero are heap leftovers
     std::int32_t fields[11];    // +0x108 -> PlayerInfo +0x18..+0x40
 };
 static_assert(offsetof(SavedPlayerInfo, fields) == 0x108);
@@ -75,7 +92,7 @@ struct SaveGeneralChunk {       // chunk 1
     std::int32_t camera_y;            // +0x14
     std::uint32_t map_size;           // +0x18
     std::uint16_t random_state[3];    // +0x1c
-    std::uint8_t pad22[2];
+    std::uint8_t pad22[2];            // not written by SaveGame (heap leftovers)
     std::uint32_t counter_110a57c;    // +0x24
     std::uint32_t fog_cycle;          // +0x28
     std::uint32_t minimap_cycle;      // +0x2c not read on load (forced to 63)
@@ -99,9 +116,11 @@ static_assert(offsetof(SaveGeneralChunk, active_players) == 0x1848);
 static_assert(offsetof(SaveGeneralChunk, presence_max_player) == 0x185c);
 static_assert(sizeof(SaveGeneralChunk) == 0x1860);
 
-// Chunks 2/0 and 2/1: a ring's read and write index, then 3000 dwords of
-// records (the whole pending-event ring of 1000 x 12 bytes, but only the
-// first 12,000 of the event ring's 16,000 bytes).
+// Chunks 2/0 and 2/1: a ring's read and write index, then the ring's
+// records. SaveGame writes the whole rings (2/0: 1000 x 12 bytes, 2/1:
+// 1000 x 16 bytes), LoadSaveGame reads 3000 dwords of each (the whole
+// pending-event ring, only the first 12,000 of the event ring's 16,000
+// bytes).
 inline constexpr std::uint32_t kSavedEventBytes = 3000 * 4;
 struct SaveEventsChunk {
     ChunkHeader header;

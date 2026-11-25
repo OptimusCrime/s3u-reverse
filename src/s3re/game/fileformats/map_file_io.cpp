@@ -11,6 +11,13 @@
 //   argument's stack slot, docs/reimplementation_notes.md), the two
 //   dictionaries (WCSkipNonTempBase 0x60b9f0 with 3, 8, 0, then their
 //   vtables), checksum 0, the vtable.
+// Dirk::CMapFile::~CMapFile (0x004a5b50): () ret 0. Sets the vtable,
+//   closes the file if it is open (Close), destroys the reference and the
+//   chunk dictionary (each: its WCSkipListBase vtable, the inlined call
+//   0x59f200 when it still has entries, which is a bare `ret`, clear
+//   0x60bd80, the WCExcept vtable), the path (the string destructor
+//   inlined: erase(), then _Tidy(true)) and the stream's file
+//   (Win32::CWin32Handle::~CWin32Handle 0x60beb0, the original).
 // Dirk::CMapFile::Open (0x004a5c80): (const std::string* path, mode) ret 8.
 //   path = *path (assign 0x401d60 with 0, npos; the original inlines it),
 //   open = 1, mode = mode. Read mode (bit 0): opens the stream with the
@@ -109,6 +116,8 @@ using StringAssignSubstrFn = msvc6::String*(__fastcall*)(msvc6::String* self, vo
 using DictConstructFn = SkipListDict*(__fastcall*)(SkipListDict* self, void* edx, std::uint32_t maxLevels,
                                                    std::uint32_t probability, std::uint32_t allowDuplicates);
 using DictClearFn = void(__fastcall*)(SkipListDict* self, void* edx);
+using HandleDestructFn = void(__fastcall*)(framework::CWin32Handle* self, void* edx);
+using MapFileCloseFn = void(__fastcall*)(CMapFile* self, void* edx);
 using ThrowOutOfMemoryFn = void(__fastcall*)(const char* text, const char* file, std::int32_t line);
 
 constexpr std::uintptr_t kStreamConstruct = 0x004a55e0;
@@ -121,6 +130,8 @@ constexpr std::uintptr_t kStreamGetSize = 0x004a59d0;
 constexpr std::uintptr_t kStringAssignSubstr = 0x00401d60;
 constexpr std::uintptr_t kDictConstruct = 0x0060b9f0;
 constexpr std::uintptr_t kDictClear = 0x0060bd80;
+constexpr std::uintptr_t kHandleDestruct = 0x0060beb0;  // Win32::CWin32Handle::~CWin32Handle
+constexpr std::uintptr_t kClose = 0x004a5f40;           // Dirk::CMapFile::Close
 constexpr std::uintptr_t kThrowOutOfMemory = 0x00610960;  // never returns
 
 constexpr std::int32_t kWriteChunkLine = 494;          // 0x1ee
@@ -213,6 +224,33 @@ CMapFile* __fastcall CMapFile_Construct(CMapFile* self, void* /*edx*/, std::uint
     self->checksum = 0;
     self->vtable = vtables::kCMapFile;
     return self;
+}
+
+namespace {
+
+// The destruction of one dictionary (0x4a5b8d..0x4a5bb7, 0x4a5bbd..0x4a5be4).
+void DestroyDict(SkipListDict* dict, std::uint32_t baseVtable) {
+    dict->vtable = baseVtable;
+    // With entries left the original calls 0x59f200, a bare `ret` (an
+    // inlined member that compiled to nothing); there is nothing to do.
+    reinterpret_cast<DictClearFn>(kDictClear)(dict, nullptr);
+    dict->vtable = vtables::kWCExcept;
+}
+
+}  // namespace
+
+// Purpose: destroys a map or savegame file object (closing the file if it
+// is still open); every CMapFile ends here.
+void __fastcall CMapFile_Destruct(CMapFile* self, void* /*edx*/) {
+    self->vtable = vtables::kCMapFile;
+    if (self->open != 0) {
+        // Through its S3.EXE address (our Close, hooked there).
+        reinterpret_cast<MapFileCloseFn>(kClose)(self, nullptr);
+    }
+    DestroyDict(&self->references, vtables::kReferenceSkipListBase);
+    DestroyDict(&self->chunks, vtables::kChunkSkipListBase);
+    msvc6::String_Destroy(&self->path, nullptr);
+    reinterpret_cast<HandleDestructFn>(kHandleDestruct)(&self->stream.file, nullptr);
 }
 
 // Purpose: opens a map or savegame for reading (checking its file type and
@@ -331,6 +369,7 @@ using WriteChunkDataFn = void(__fastcall*)(CMapFile* self, void* edx, std::uint3
 
 S3RE_HOOK(0x004a5a70, CMapFile_Construct, ConstructFn, Original_CMapFile_Construct, CMapFile_Construct);
 S3RE_HOOK(0x004a5c80, CMapFile_Open, OpenFn, Original_CMapFile_Open, CMapFile_Open);
+S3RE_HOOK(0x004a5b50, CMapFile_Destruct, CloseFn, Original_CMapFile_Destruct, CMapFile_Destruct);
 S3RE_HOOK(0x004a5f40, CMapFile_Close, CloseFn, Original_CMapFile_Close, CMapFile_Close);
 S3RE_HOOK(0x004a6540, CMapFile_WriteChunk, WriteChunkFn, Original_CMapFile_WriteChunk, CMapFile_WriteChunk);
 S3RE_HOOK(0x004a6600, CMapFile_WriteChunkWithTail, WriteChunkWithTailFn, Original_CMapFile_WriteChunkWithTail,
