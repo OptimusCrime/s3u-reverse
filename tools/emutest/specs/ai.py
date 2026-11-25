@@ -3406,3 +3406,25 @@ SPECS += [
     Spec("AI_FindWaterworksWorkArea", 0x0059ba90, "fastcall", [scratch(0), scratch(1), scratch(2)],
          presets=waterworks_world, globals=waterworks_globals, max_cases=300),
 ]
+
+
+# -- session 55 (wip/ai-econ): small agent slots (ai_agent_slots.cpp) ------
+# The agent / note at world +0 (ECX = the world).
+
+SPECS += [
+    Spec(name, address, "thiscall", [scratch(0)])
+    for name, address in (("T_DO_BUILD_HOUSE_AGENT_GetNoteTypes", 0x005654c0),
+                          ("HOUSE_GROUND_REQUEST_AGENT_GetNoteTypes", 0x00576500),
+                          ("HOUSE_REQUEST_AGENT_GetNoteTypes", 0x005787b0),
+                          ("LOCAL_WARE_REQUEST_AGENT_GetNoteTypes", 0x0057ab60))
+] + [
+    Spec("HOUSE_GROUND_REQUEST_AGENT_TakeNote", 0x00576510, "thiscall", [scratch(1)],
+         globals=lambda rng, pool, args: [(AI_PLAYER, rng.getrandbits(32), 4)],
+         callees={0x005515C0: (1, "thiscall", "probe")}),
+    Spec("T_ECONOMY_AGENT_vf11", 0x00567870, "thiscall", [anything]),
+    # EAX is the caller's (the destructor doesn't touch it); its only caller
+    # 0x56fad0 sets EAX = this afterwards.
+    Spec("BLACK_BOARD_AGENT_Destructor", 0x0056fac0, "thiscall", [], eax_mask=0),
+    Spec("BLACK_BOARD_AGENT_SubclassDeletingDestructor", 0x0056fad0, "thiscall", [anything]),
+    Spec("BLACK_BOARD_AGENT_DeletingDestructor", 0x0056faa0, "thiscall", [anything]),
+]
