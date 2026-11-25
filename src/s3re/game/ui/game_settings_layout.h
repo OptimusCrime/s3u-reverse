@@ -8,6 +8,7 @@
 // savegame code read it. Only the fields our code uses are named.
 
 #include "msvc6/string.h"
+#include "watcom/vector_base.h"
 
 namespace s3re::game::fileformats {
 struct CMapFile;
@@ -26,8 +27,12 @@ namespace s3re::game {
 // owns std::strings at +0x18 and +0xbc, a 16-bit string at +0x28 and a
 // Watcom vector at +0x38, which the copy functions don't copy).
 struct GamePlayerSetup {
-    std::uint8_t unk000[0x10];
-    std::uint32_t value10;  // +0x10 saved as a byte in chunk 0x14 (getter 0x49f4d0)
+    std::uint32_t unk000;
+    std::uint32_t id04;     // +0x04 the second of the "SLOT: Ids: %i %x" (GamePlayerSetup::LogSlot 0x4a01c0)
+    std::uint32_t version;  // +0x08 "Version" in that log line
+    std::uint8_t unk00c[4];
+    std::uint32_t value10;  // +0x10 saved as a byte in chunk 0x14 (getter 0x49f4d0); the first of the
+                            //       "SLOT: Ids" (probably the network player id)
     std::uint32_t party;    // +0x14 Set's third argument (getter 0x49f590)
     msvc6::String text18;   // +0x18
     std::uint8_t unk028[0x5c - 0x28];
@@ -38,10 +43,12 @@ struct GamePlayerSetup {
     std::uint8_t unk069[0xa8 - 0x69];
     std::uint32_t saved_values[3];  // +0xa8 Set's arguments 6..8; chunk 0x14 +0xc..+0x14 (getter 0x49fed0)
     std::uint32_t colour;  // +0xb4 colour index: LoadMap copies it into g_playerColourIndex (getter 0x49fec0)
-    std::uint8_t unk0b8[4];
-    msvc6::String textBC;  // +0xbc
+    std::uint8_t unk0b8[4];  // +0xb8 "Clan" in the SLOT log line (0x4a01c0)
+    msvc6::String textBC;  // +0xbc the text that log line ends with (probably the player's name)
 };
 static_assert(sizeof(GamePlayerSetup) == 0xcc);
+static_assert(offsetof(GamePlayerSetup, id04) == 0x04);
+static_assert(offsetof(GamePlayerSetup, version) == 0x08);
 static_assert(offsetof(GamePlayerSetup, value10) == 0x10);
 static_assert(offsetof(GamePlayerSetup, text18) == 0x18);
 static_assert(offsetof(GamePlayerSetup, type) == 0x5c);
@@ -50,6 +57,21 @@ static_assert(offsetof(GamePlayerSetup, race_byte) == 0x68);
 static_assert(offsetof(GamePlayerSetup, saved_values) == 0xa8);
 static_assert(offsetof(GamePlayerSetup, colour) == 0xb4);
 static_assert(offsetof(GamePlayerSetup, textBC) == 0xbc);
+
+// Dirk::CTeam (RTTI name; 0x40 bytes): one team of the game setup, in a
+// WCValSortedVector<Dirk::CTeam> of the game settings (members in
+// game_teams.cpp and game_settings_vectors.cpp).
+struct CTeam {
+    std::int32_t id;               // +0x00 -1 from the default constructor; the sort key
+    std::uint32_t unk04;           // +0x04 (not copied by the copy constructor or operator=)
+    watcom::VectorBase player_ids; // +0x08 WCValSortedVector<int> (vtable 0x655a0c), probably the ids of
+                                   //       the team's players
+    watcom::VectorBase players;    // +0x24 WCValOrderedVector<Dirk::CPlayer> (vtable 0x656b6c; GamePlayerSetup
+                                   //       elements)
+};
+static_assert(sizeof(CTeam) == 0x40);
+static_assert(offsetof(CTeam, player_ids) == 0x08);
+static_assert(offsetof(CTeam, players) == 0x24);
 
 // The player-setup vector (a Watcom value vector of GamePlayerSetup, the
 // layout of watcom/ptr_vector.h with 0xcc-byte elements). Its element
@@ -88,6 +110,9 @@ struct GameSettings {
     std::uint32_t valueC8;       // +0xc8 read by CNetThread::OnStart and CNetSession; chunk 0x1b
     std::uint8_t randomRaceAmazons;  // +0xcc whether random races include the Amazons (random.cpp)
     std::uint8_t goods_objective;    // +0xcd the "NGO" goods objective is on (re/game_setup.md); chunk 0x1e
+    std::uint8_t unk0ce[2];
+    std::uint32_t ngo_timeout;       // +0xd0 the new game objectives' time in minutes (GameSettings::NgoTimeout
+                                     //       0x437470; CGameData::ChooseNewGameObjectives logs it)
 };
 static_assert(offsetof(GameSettings, map_name) == 0x2c);
 static_assert(offsetof(GameSettings, player_setups) == 0x58);
@@ -100,6 +125,7 @@ static_assert(offsetof(GameSettings, game_guid) == 0xb0);
 static_assert(offsetof(GameSettings, valueC8) == 0xc8);
 static_assert(offsetof(GameSettings, randomRaceAmazons) == 0xcc);
 static_assert(offsetof(GameSettings, goods_objective) == 0xcd);
+static_assert(offsetof(GameSettings, ngo_timeout) == 0xd0);
 
 #pragma pack(pop)
 

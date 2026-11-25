@@ -2227,3 +2227,22 @@ SPECS += [
 SELF_TEST += [
     Spec("WrongDrawDataConstruct", 0x00523480, "thiscall", [], ignore_bytes=(DRAW_DATA_ALLOCATOR,), max_cases=20),
 ]
+
+
+# -- CGameData::ChooseNewGameObjectives (objectives.cpp, session 57) ---------
+# Objectives on or off, the RNG state and the seven objective bytes lazily
+# random; the NGO time in g_gameSettings (+0xd0) random.
+def ngo_choose_state(rng, pool, args):
+    return [(0x1195dcc, rng.choice([0, 1, 1, 1, rng.getrandbits(8)]), 1)]
+
+
+def ngo_choose_globals(rng, pool, args):
+    return [(0x007a7a18 + 0xd0, rng.getrandbits(32), 4), (0x007deb54, rng.getrandbits(8), 1)]
+
+
+SPECS += [
+    # A random RNG state can sit in a short cycle that never draws seven
+    # usable ids (both versions loop forever): such cases end at max_instructions.
+    Spec("CGameData_ChooseNewGameObjectives", 0x004ffbc0, "thiscall", [], eax_mask=0, presets=ngo_choose_state,
+         globals=ngo_choose_globals, max_instructions=300_000),
+]

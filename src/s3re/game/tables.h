@@ -85,6 +85,10 @@ inline constexpr GameGlobal<const std::uint32_t[]> g_settlerAnimations{0x6a8060}
 // ------------------------------------------------------------ races
 // Per race the eight spells it can cast.
 inline constexpr GameGlobal<const std::uint32_t[][8]> g_raceSpells{0x658d64};
+// Per spell (the numbers of g_raceSpells) the value a player's spell_mana
+// slot starts with (CGameData::InitAfterMapLoad 0x4fd020; probably the
+// spell's mana cost): 15, 10, 20, 4, 12, ...
+inline constexpr GameGlobal<const std::uint32_t[]> g_spellInitialMana{0x658e64};
 // Per spell (the numbers of g_raceSpells) the range in tiles around the
 // priest (ExecuteCommands 0x15: TileDistance - 2 must be below it).
 inline constexpr GameGlobal<const std::uint32_t[]> g_spellCastRange{0x658de4};
@@ -233,12 +237,23 @@ inline constexpr GameGlobal<const std::uint8_t[4][5]> g_aiWantedStoneStock{0x65a
 // The default slope of those conditions for a race above 3 (0.0f).
 inline constexpr GameGlobal<const float> g_aiDefaultSlope{0x65a57c};
 
+// The animation ids of the draw data's cell objects (CDrawer::QueueCellObject
+// 0x4d5a50; also read by 0x4d1690 / 0x4d1945): 8 per object type, 4 shadow
+// animations and then 4 sprite animations, each chosen by Render::Entry204
+// of the owner (probably the race). Indexed with 32-bit arithmetic.
+inline constexpr GameGlobal<const std::uint32_t[8]> g_cellObjectAnimations{0x6a36b8};
+
 // ------------------------------------------------------------ library data
 // std::string::npos of S3.EXE's statically linked library (read at run
 // time, like the original).
 inline constexpr GameGlobal<const volatile std::uint32_t> g_stringNpos{0x655390};
 // The shared empty buffer of S3.EXE's std::string (a zero byte).
 inline constexpr GameGlobal<char[1]> g_stringNullBuffer{0x6553a0};
+// The same for std::wstring (16-bit characters): the shared empty buffer
+// (a zero word; its "count byte" 0x655dc7 is read and can be incremented
+// by assign) and npos.
+inline constexpr GameGlobal<std::uint16_t[1]> g_wstringNullBuffer{0x655dc8};
+inline constexpr GameGlobal<const volatile std::uint32_t> g_wstringNpos{0x655dcc};
 // GUID_NULL (16 zero bytes).
 inline constexpr GameGlobal<const std::uint32_t[4]> g_guidNull{0x65c0b8};
 // The 16-bit span functions by brightness (SelectBrightnessSpans 0x5fb4c0):

@@ -4,6 +4,8 @@ address,name,type,status,notes
 0x00655358,g_importTimeGetTime,TimeGetTimeImport,classified,S3.EXE's import address table slot of timeGetTime (from _INMM.dll); CControl_OnMouseMove calls through it and the in-process tests point it at a fake clock. Declared in src/s3re/game/globals.h; used by screen_element.cpp.
 0x00655390,g_stringNpos,const volatile uint32_t,classified,"std::string::npos of S3.EXE's statically linked library (read at run time, like the original). Declared in src/s3re/game/tables.h; used by win32_exceptions.cpp, string.cpp."
 0x006553a0,g_stringNullBuffer,char[1],classified,"The shared empty buffer of S3.EXE's std::string (a zero byte). Declared in src/s3re/game/tables.h; used by exceptions.cpp, string.cpp."
+0x00655dc8,g_wstringNullBuffer,uint16_t[1],classified,"The shared empty buffer of S3.EXE's std::wstring (a zero word; the byte before it is read as its count and assign can increment it). Declared in src/s3re/game/tables.h; used by wstring.cpp."
+0x00655dcc,g_wstringNpos,const volatile uint32_t,classified,"std::wstring::npos of S3.EXE's statically linked library (0xFFFFFFFF; read at run time like the original). Declared in src/s3re/game/tables.h; used by wstring.cpp."
 0x0065857c,g_terrainCost,const int8_t[256],classified,Pathing cost per terrain type (signed). Declared in src/s3re/game/tables.h; used by pathing.cpp.
 0x0065867c,g_directionDx,const int32_t[6],classified,x and y steps of the six directions. Declared in src/s3re/game/tables.h; used by pathing.cpp.
 0x00658694,g_directionDy,const int32_t[6],classified,x and y steps of the six directions. Declared in src/s3re/game/tables.h; used by pathing.cpp.
@@ -13,6 +15,7 @@ address,name,type,status,notes
 0x00658afc,g_chartAxisScales,const int32_t[14][5],classified,"The axis scales of the statistics chart: 14 entries of five 16.16 values (x100: the top of the axis and four grid lines, 100/20/40/60/80 .. 10000/2000/../8000); CGameData::BuildStatisticsChart 0x4ff550 picks the first that fits (past the last it reads the following 20 bytes, the CGameData vtable area). Declared in src/s3re/game/tables.h; used by statistics.cpp."
 0x00658c1c,g_terrainSpeed,const uint8_t[256],classified,Walking time added per terrain type. Declared in src/s3re/game/tables.h; used by settler_walk.cpp.
 0x00658d64,g_raceSpells,const uint32_t[][8],classified,Per race the eight spells it can cast. Declared in src/s3re/game/tables.h; used by godly_events.cpp.
+0x00658e64,g_spellInitialMana,const uint32_t[],classified,"Per spell the start value of a player's spell_mana slot (CGameData::InitAfterMapLoad 0x4fd020; probably the mana cost). Declared in src/s3re/game/tables.h; used by init_after_map_load.cpp."
 0x00658de4,g_spellCastRange,const uint32_t[],classified,Per spell (the numbers of g_raceSpells) the cast range in tiles around the priest: ExecuteCommands 0x15 (CastSpell) needs TileDistance - 2 below it. Declared in src/s3re/game/tables.h; used by execute_commands.cpp.
 0x00658ee4,g_table658ee4,const int32_t[],classified,int32 per index (20 in every entry of the image); ExecuteCommands (0x5389f4) and campaign mission 51 of CheckGameEnd (entry 0) pass entry + 1 as the second value of the second effect record (AllocTable36700Record); meaning to be named. Declared in src/s3re/game/tables.h; used by game_end_check.cpp.
 0x00658f64,g_settlerTypeClass,const int32_t[0x30],classified,"Per settler type (0x30 types): its class (0 = civilian; 9 and 1 are builders and diggers, 3 carriers...), the pathing turn cost, the start health and the walking speed (the original reads its low byte). Declared in src/s3re/game/tables.h; used by building_crush.cpp, counting.cpp, economy.cpp, minimap.cpp, settler_idle.cpp, settler_records.cpp, settler_spawn.cpp, settler_walk.cpp, settlers.cpp, soldier.cpp, territory.cpp, update_economy.cpp."
@@ -66,6 +69,7 @@ address,name,type,status,notes
 0x006970f0,g_versionNumber,int32_t,identified,"Game version x100 (logged as %i.%i by CConsoleThread::OnStart); CLogicThread::SaveGame writes it as the savegame version (chunk 0 +8, 0xa0)."
 0x006974a4,texts::kFullStop,char[],identified,"String ""."" Declared in src/s3re/game/texts.h; used by win32_errors.cpp."
 0x00699000,texts::kNewline,char[],identified,"String ""\n"" Declared in src/s3re/game/texts.h; used by win32_errors.cpp."
+0x0069f974,texts::kSlotLog,char[],identified,"String ""SLOT: Ids: %i %x Version: %i Team: %i Type: %i Nation: %i Clan: %i %s"" Declared in src/s3re/game/texts.h; used by game_settings_vectors.cpp."
 0x0069f9bc,texts::kShouldManage,char[],identified,"String ""Das solltest du schon schaffen"" Declared in src/s3re/game/texts.h; used by pathing.cpp."
 0x0069f9dc,texts::kPathingFile,char[],identified,"String ""E:\Siedler3\Dirk\Pathing.cpp"" Declared in src/s3re/game/texts.h; used by pathing.cpp."
 0x0069f9fc,texts::kUnsupportedSectorType,char[],identified,"String ""Unsupported SectorType"" Declared in src/s3re/game/texts.h; used by pathing.cpp."
@@ -505,3 +509,4 @@ address,name,type,status,notes
 0x007a4ad0,texts::kCDSetTimeFormatError,char[],identified,"String ""CD: Error during SetTimeFormat: %u"" Declared in src/s3re/game/texts.h; used by win32_cdaudio.cpp."
 0x007a4b10,texts::kCDStopError,char[],identified,"String ""CD: Error during stop: %u"" Declared in src/s3re/game/texts.h; used by win32_cdaudio.cpp."
 0x007a4b2c,texts::kCDGetTrackCountError,char[],identified,"String ""CD: Error during GetTrackCount: %u"" Declared in src/s3re/game/texts.h; used by win32_cdaudio.cpp."
+0x006a36b8,g_cellObjectAnimations,const uint32_t[8 * types],classified,"Animation ids of the draw data's cell objects: per type 4 shadow ids then 4 sprite ids, chosen by Render::Entry204 of the owner (CDrawer::QueueCellObject 0x4d5a50; also 0x4d1690, 0x4d1945). Declared in src/s3re/game/tables.h; used by drawer_objects.cpp."

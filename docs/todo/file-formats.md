@@ -23,12 +23,26 @@ LOGBOOK session entry).
   the caller `CLogicThread::SaveGameToSlot` 0x50ac40 since session 55;
   re/file_formats.md):** left on the savegame path: the CRT's `_mkdir`
   0x621556 and `time` 0x61f6a7 (SaveGame calls the originals),
-  AI::SaveGlobals 0x551220 (AI range). Settings side: the GamePlayerSetup
-  copy constructor 0x49eaf0 and operator= 0x49edf0 (inlined string and
-  16-bit string assigns; the 16-bit `assign_substr` 0x428400 first) and
-  `GameSettings::LoadSaveGame` 0x432b00 (~730 lines; needs the Watcom
-  vector members 0x437820, 0x437d00, 0x4379e0, 0x433e50, 0x4a01c0..0x4a06d0
-  first). Optional: the Watcom skip list (0x60bab0/0x60bbe0/0x60be20).
+  AI::SaveGlobals 0x551220 (AI range). Settings side (the GamePlayerSetup
+  copy constructor, operator= and Set and the 16-bit string members
+  _Copy/_Grow/_Split/assign_substr are verified, session 57):
+  `GameSettings::LoadSaveGame` 0x432b00 (~730 lines). Its Watcom vector
+  members (player/team resize and insertAt, CTeam copy/assign/AddPlayerId,
+  GamePlayerSetup::LogSlot; ui/game_settings_vectors.cpp) are verified
+  (session 57); left among its callees: 0x433e50 (380 instructions, "CFG:
+  Searching for NetId %i", with 0x437950, 0x433a90, 0x437e20, 0x4a0e10,
+  0x433c80, 0x49f360, 0x49f190 and Win32::CLock) and the trivial 0x413bd0.
+- **Logic range leftovers (session 57):** CGameData::InitPlayerInfo
+  0x4fd0d0 (321 instructions of string temporaries; needs
+  GameSettings 0x4318d0, a byte +0x29 read under the lock, and the lobby
+  name getter 0x5db260; InitAfterMapLoad calls the original meanwhile);
+  CGameData::DumpTableToFile 0x4ff6d0 (debug dumps to d:\*.dmp through
+  the CRT's fopen/fprintf; a test would need a redirected path);
+  Logic_sub_4d6740 (debug text through 0x4a8bd0 / 0x4a8e00) and
+  Logic_sub_4d8400 (draws with it); CLogicThread::~CLogicThread 0x53c7d0
+  (needs ~CGameThread 0x5b60a0 and the Watcom list code). The row
+  CLogicThread::ExecuteCommands_tail 0x53b839 is not a function (frontier
+  lists it as READY; it belongs to the false starts below). Optional: the Watcom skip list (0x60bab0/0x60bbe0/0x60be20).
 - **Graphics/sound loader leftovers:** the graphics loader (session 55
   round 2) and the sound loader (session 56: CSoundData ctor/dtors, Open,
   Close, Detach, GetEffect, PurgeEffects, volume; the DirectSound wrapper

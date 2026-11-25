@@ -1,6 +1,8 @@
 // Small getters of the game settings (g_gameSettings, game_settings_layout.h)
 // that the simulation calls while a game is set up.
 //
+// GameSettings::NgoTimeout (0x00437470): () -> the dword +0xd0, the new
+//   game objectives' time in minutes. fastcall-compatible thiscall getter.
 // GameSettings::StartGoods (0x00412300): () -> the start goods setting
 //   (+0x74; 0 the map's own, 1 low, 2 medium, 3 high). `mov eax,[ecx+74h];
 //   ret`, hooked through its padding. Called by CGameData::PlaceTown and the
@@ -47,6 +49,11 @@ using SettingsGetterFn = std::uint32_t(__fastcall*)(const GameSettings* self, vo
 // Purpose: Tells the town placement how many goods and settlers the players start with.
 std::uint32_t __fastcall GameSettings_StartGoods(const GameSettings* self, void*) {
     return self->start_goods;
+}
+
+// Purpose: Tells the game start how many minutes the "new game objectives" run.
+std::uint32_t __fastcall GameSettings_NgoTimeout(const GameSettings* self, void*) {
+    return self->ngo_timeout;
 }
 
 using PlayerSetupGetterFn = std::uint32_t(__fastcall*)(const GamePlayerSetup* self, void* edx);
@@ -137,6 +144,8 @@ S3RE_HOOK(0x00437fc0, GamePlayerSetup_ScalarDeletingDestructor, SetupDeletingDes
           Original_GamePlayerSetup_ScalarDeletingDestructor, GamePlayerSetup_ScalarDeletingDestructor);
 S3RE_HOOK(0x00412300, GameSettings_StartGoods, SettingsGetterFn, Original_GameSettings_StartGoods,
           GameSettings_StartGoods);
+S3RE_HOOK(0x00437470, GameSettings_NgoTimeout, SettingsGetterFn, Original_GameSettings_NgoTimeout,
+          GameSettings_NgoTimeout);
 S3RE_HOOK(0x0049fec0, GamePlayerSetup_Colour, PlayerSetupGetterFn, Original_GamePlayerSetup_Colour,
           GamePlayerSetup_Colour);
 S3RE_HOOK(0x00436a60, GameSettings_MapName, MapNameFn, Original_GameSettings_MapName, GameSettings_MapName);
@@ -157,6 +166,10 @@ void CompareGetter(test::Context& ctx, Fn original, Fn candidate, int cases) {
 }
 
 // Wrong: reads the byte before the field.
+std::uint32_t __fastcall WrongNgoTimeout(const GameSettings* self, void*) {
+    return self->ngo_timeout + 1;
+}
+
 std::uint32_t __fastcall WrongStartGoods(const GameSettings* self, void*) {
     std::uint32_t value;
     std::memcpy(&value, reinterpret_cast<const std::uint8_t*>(self) + offsetof(GameSettings, start_goods) - 1,
@@ -380,6 +393,15 @@ S3RE_TEST(GameSettings_MapName_MatchesOriginal) {
 S3RE_TEST(GameSettings_MapName_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareMapName(probe, &WrongMapName, 200);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(GameSettings_NgoTimeout_MatchesOriginal) {
+    CompareGetter<GameSettings>(ctx, Original_GameSettings_NgoTimeout, &GameSettings_NgoTimeout, 1000);
+}
+S3RE_TEST(GameSettings_NgoTimeout_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareGetter<GameSettings>(probe, Original_GameSettings_NgoTimeout, &WrongNgoTimeout, 100);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

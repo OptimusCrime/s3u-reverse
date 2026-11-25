@@ -372,3 +372,32 @@ SPECS += [
          presets=go_to_notification_world, globals=go_to_notification_globals, max_cases=500,
          callees={0x005450d0: (5, "thiscall", "probe")}),
 ]
+
+
+# -- CGameData::BuildOffsetTable (offset_table.cpp, session 57): no inputs;
+# 3333 searches over 5000 points (~50M instructions), so a few cases.
+SPECS += [
+    Spec("CGameData_BuildOffsetTable", 0x00516530, "thiscall", [], eax_mask=0, max_cases=3, quick_cases=1,
+         max_instructions=200_000_000),
+]
+
+
+# -- CGameData destructors (world_object.cpp) and InitAfterMapLoad
+# (init_after_map_load.cpp), session 57. InitAfterMapLoad's callees are
+# probed (verified on their own, or the original InitPlayerInfo); the
+# players' active flags and races (0..4, 4 reads past the spell table).
+def init_after_map_load_players(rng, pool, args):
+    fields = []
+    for p in range(20):
+        base = 0x11943dc + 0x148 * p
+        fields += [(base, rng.choice([0, 0, 1, rng.getrandbits(32)]), 4), (base + 4, rng.randrange(5), 4)]
+    return fields
+
+
+SPECS += [
+    Spec("CGameData_Destroy", 0x004fce80, "thiscall", [], eax_mask=0, cover_until=0x004fce8b),
+    Spec("CGameData_DeletingDestroy", 0x004fce60, "thiscall", [below(4)]),
+    Spec("CGameData_InitAfterMapLoad", 0x004fd020, "thiscall", [], eax_mask=0, presets=init_after_map_load_players,
+         callees={address: (0, "thiscall", "probe") for address in
+                  (0x00519e80, 0x00518e70, 0x004fb650, 0x0050c9c0, 0x004fd0d0, 0x0051b6b0)}),
+]

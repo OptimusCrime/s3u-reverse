@@ -53,6 +53,9 @@ add_library(s3re SHARED
     game/world/random.cpp
     game/world/statistics.cpp
     game/world/world_search.cpp
+    game/world/init_after_map_load.cpp
+    game/world/offset_table.cpp
+    game/world/world_object.cpp
     game/world/world_tables.cpp
 
     # game/map/: tiles, directions, areas and regions, territory, fog of war, minimap
@@ -223,6 +226,7 @@ add_library(s3re SHARED
     game/ui/game_settings.cpp
     game/ui/game_settings_players.cpp
     game/ui/game_settings_players_tests.cpp
+    game/ui/game_settings_vectors.cpp
     game/ui/game_teams.cpp
     game/ui/screen_element.cpp
     game/ui/ui_control_members.cpp
@@ -230,6 +234,7 @@ add_library(s3re SHARED
 
     # game/graphics/: graphics data, landscape colours, DirectDraw surface
     game/graphics/directx_surface.cpp
+    game/graphics/drawer_objects.cpp
     game/graphics/drawer_queues.cpp
     game/graphics/gfx_draw.cpp
     game/graphics/gfx_files.cpp

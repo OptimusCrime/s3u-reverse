@@ -289,3 +289,70 @@ SPECS += [
           lambda rng, pool: rng.randrange(40)], presets=wstring_world),
     Spec("Allocator_Deallocate", 0x00486920, "thiscall", [anything, anything]),
 ]
+
+
+# -- std::wstring _Copy / _Grow / _Split / assign(x, pos, n) (wstring.cpp, session 57) --
+# `this` at world offset 0 (block in scratch slot 4), a second wide string
+# at scratch slot 0 (block in slot 1, sometimes sharing this one's);
+# blocks: unused byte, count byte, the characters, a zero word.
+WSTRING_NULL_COUNT = 0x00655dc7  # "count byte" of the static empty wide string 0x655dc8
+
+
+def wstring_fields(rng, offset: int, buffer: int, shared_ptr: int | None = None, overlong: bool = False):
+    length = string_length(rng)
+    capacity = rng.choice([length, length, max(length, 0x1f), length + rng.randrange(0x30), rng.randrange(0x60)])
+    fields = [(offset, rng.getrandbits(8), 1)]
+    roll = rng.random()
+    if roll < 0.12:
+        ptr = 0
+        if rng.random() < 0.6:
+            length, capacity = 0, 0
+    elif shared_ptr and roll < 0.4:
+        ptr = shared_ptr
+    else:
+        ptr = WORLD_BASE + buffer + 2
+        fields.append((buffer + 1, rng.choice([0, 0, 0, 1, 2, 3, 0xfd, 0xfe, 0xff, rng.getrandbits(8)]), 1))
+        text = length
+        if rng.random() < 0.15:
+            text = rng.randrange(length + 6)  # _Split uses wcslen, not the length
+        for i in range(text):
+            fields.append((buffer + 2 + 2 * i, rng.choice([rng.randint(1, 0xffff), rng.randint(1, 255)]), 2))
+        fields.append((buffer + 2 + 2 * text, 0, 2))
+    if overlong and rng.random() < 0.04:
+        length, ptr = 0xFFFFFFFF, 0x7FFF0000
+    fields += [(offset + 4, ptr, 4), (offset + 8, length, 4), (offset + 12, capacity, 4)]
+    return fields, ptr
+
+
+def wide_string_world(rng, pool, args):
+    fields, ptr = wstring_fields(rng, STRING_SELF, STRING_SELF_BUFFER)
+    other, _ = wstring_fields(rng, STRING_OTHER, STRING_OTHER_BUFFER, shared_ptr=ptr, overlong=True)
+    return fields + other
+
+
+def wstring_null_count(rng, pool, args):
+    """The count byte before the static empty wide string: 0 in the image;
+    0xfe or more makes assign copy instead of share."""
+    return [(WSTRING_NULL_COUNT, rng.choice([0, 0, 0, 1, 0xfd, 0xfe, 0xff]), 1)]
+
+
+SPECS += [
+    # The catch handler (0x428a38..0x428a5f) only runs if operator new
+    # throws; the code after the try block is the Ghidra function 0x428a62.
+    Spec("WString_Copy", 0x004289e0, "thiscall", [copy_count], eax_mask=0, presets=wide_string_world,
+         cover_until=0x00428af0, exempt_blocks=(0x00428a38, 0x00428a45, 0x00428a47, 0x00428a5c)),
+    # Dead: 0x428905 and 0x42896a decrement a count that the inlined _Tidy
+    # re-checks after _Grow already found it to be 0 or 0xFF.
+    Spec("WString_Grow", 0x004288a0, "thiscall", [string_count, string_bool], eax_mask=0xFF,
+         presets=wide_string_world, exempt_blocks=(0x00428905, 0x0042896a)),
+    # Dead: 0x428b42 is _Xlen for a wcslen above 0x7ffffffd; 0x428b4e..0x428b5d
+    # re-check the buffer pointer that was just set to null.
+    Spec("WString_Split", 0x00428af0, "thiscall", [], eax_mask=0, presets=wide_string_world,
+         exempt_blocks=(0x00428b42, 0x00428b4e, 0x00428b55, 0x00428b59, 0x00428b5d)),
+    # Dead: 0x428442 (_Xran in erase(pos + n) of a self-assignment: pos + n
+    # <= length by construction) and 0x4284a0 (the second erase finds a
+    # length below pos: the first erase leaves at least pos characters).
+    Spec("WString_AssignSubstr", 0x00428400, "thiscall",
+         [one_of(STRING_SELF_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR), string_count, string_count],
+         presets=wide_string_world, globals=wstring_null_count, exempt_blocks=(0x00428442, 0x004284a0)),
+]

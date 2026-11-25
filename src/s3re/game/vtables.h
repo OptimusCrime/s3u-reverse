@@ -13,6 +13,7 @@ namespace s3re::game {
 namespace vtables {
 // Win32::*
 inline constexpr std::uint32_t kCObject = 0x65d67c;            // Win32::CObject
+inline constexpr std::uint32_t kCGameData = 0x658c18;          // CGameData (the world object)
 inline constexpr std::uint32_t kCWin32Handle = 0x65d654;       // Win32::CWin32Handle
 inline constexpr std::uint32_t kCWaitable = 0x65d3c8;          // Win32::CWaitable
 inline constexpr std::uint32_t kCWin32Waitable = 0x65d660;     // Win32::CWin32Waitable

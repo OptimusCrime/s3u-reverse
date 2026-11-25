@@ -76,8 +76,9 @@ The `-map` start reads chunk 3 (setup 0) of the given map file into the
 two party vectors, then calls NewGame. `random_map_start.cpp` replaces the
 map file by a random one (as the dialog builds it), and optionally the
 start goods (arg 9), the party vectors (`--computers N`: N+1 parties of
-one player each; you in party 0) and, through a pass-through on
-`GamePlayerSetup::Set` during that call, the human player's race
+one player each; you in party 0) and, through the `GamePlayerSetup::Set`
+hook (S3RE_HOOK_ALWAYS, game_settings_players.cpp, session 57) during that
+call, the human player's race
 (`--race`). The `-map` file (default `Map\MULTI\384-2-Lakes.map`) is only
 used for what the menu thread reads besides (chunk 0x40).
 

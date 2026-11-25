@@ -1085,3 +1085,48 @@ SPECS += [
          eax_mask=0, presets=gfx_open_world, globals=gfx_open_globals, callees=GFX_OPEN_CALLEES,
          new_fails=0.03, new_fails_size=0x0c, max_cases=400, exempt_blocks=(0x5f9e93,)),
 ]
+
+
+# -- CDrawer::QueueCellObject (drawer_objects.cpp, session 57) ---------------
+# The drawer at world offset 0 (only its +0x5f6b8 is read and passed on), the
+# draw data at QCO_DATA (lazily random cells); the callees are probed: the
+# getters write into their out argument (the animation pointer: a sequence
+# record at QCO_SEQUENCE, lazily random) and return it, Entry204 returns
+# 0..3 (an index into the animation table).
+QCO_DATA = 0x100000
+QCO_SEQUENCE = SCRATCH
+
+
+def qco_out(value):
+    def effect(m, ecx, args, h):
+        m.guest_write(args[0], struct.pack("<I", value(h, args)))
+        return args[0]
+    return effect
+
+
+def qco_this_value(m):
+    from unicorn.x86_const import UC_X86_REG_ECX
+    return struct.unpack("<I", bytes(m.guest_read(m.uc.reg_read(UC_X86_REG_ECX), 4)))[0]
+
+
+QCO_CALLEES = {
+    0x004c7ab0: (1, "thiscall", lambda h: h & 3),  # Render::Entry204
+    0x005fabb0: (2, "thiscall", "probe", qco_out(lambda h, a: h & 0xFFFFFFFF), lambda m, ecx, a: (a[1],)),
+    # (`this` is a stack local: "stdcall" leaves ECX out, its value is recorded)
+    0x005fcce0: (2, "stdcall", "probe", qco_out(lambda h, a: (h >> 8) & 0xFFFFFFFF),
+                 lambda m, ecx, a: (qco_this_value(m), a[1])),
+    0x005faaf0: (2, "thiscall", "probe", qco_out(lambda h, a: WORLD_BASE + QCO_SEQUENCE), lambda m, ecx, a: (a[1],)),
+    0x004d7c90: (4, "thiscall", "probe"),  # CDrawer::QueueShadow
+    0x004d7e10: (5, "thiscall", "probe"),  # CDrawer::QueueSprite
+}
+
+
+def qco_sequence(rng, pool, args):
+    return [(QCO_SEQUENCE + 7, rng.choice([0, 1, 2, 5, rng.randrange(256)]), 1)]
+
+
+SPECS += [
+    Spec("CDrawer_QueueCellObject", 0x004d5a50, "thiscall",
+         [one_of(WORLD_BASE + QCO_DATA), below(130), below(130), anything, anything],
+         presets=qco_sequence, callees=QCO_CALLEES, eax_mask=0, cover_until=0x004d5bd0),
+]

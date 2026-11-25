@@ -444,3 +444,61 @@ SPECS += [
     Spec("MapEffect_MakeDrawRecord", 0x00544100, "thiscall", [scratch(0), tile_effect_tick, anything],
          presets=draw_record_effect),
 ]
+
+
+# -- MapEffects::CollectVisible (map_effect_queries.cpp, session 57) ---------
+# The table at world offset 0 (blocks of a small map, cell lists of up to 30
+# records ending at lower slots), the CGameData at CV_WORLD (map size; tiles
+# lazily random); the callees are probed (verified on their own): cells
+# from CellOfPosition are small, TileAt writes a tile around the map,
+# MakeDrawRecord fills its stack temporary from `h` and returns it.
+CV_WORLD = 0x100000
+CV_OUT = SCRATCH
+
+
+def cv_table(rng, pool, args):
+    blocks_x = rng.randint(1, 10)
+    fields = [(0x668a4, blocks_x, 4), (0x668a8, rng.randint(1, 10), 4),
+              (0x668b4, rng.choice([0, 100, 1000, 3000, rng.getrandbits(31)]), 4),
+              (0x668b8, rng.choice([0, 100, 1000, 3000, rng.getrandbits(31)]), 4),
+              (CV_WORLD + 0x2d2d0, rng.choice([32, 64, 128]), 4)]
+    for cell in range(-2, 140):
+        if cell >= 0:
+            fields.append((0x5cc60 + 4 * cell, rng.choice([0, 0, rng.randrange(31)]), 4))
+    for slot in range(1, 31):
+        fields.append((slot * 0x4c + 0x48, rng.choice([0, rng.randrange(slot)]), 4))
+    return fields
+
+
+def cv_cell(h):
+    return (h % 120) - 3
+
+
+def cv_tile_at(m, ecx, args, h):
+    m.guest_write(args[1], struct.pack("<i", (h & 0xff) - 40))
+    m.guest_write(args[2], struct.pack("<i", ((h >> 8) & 0xff) - 40))
+
+
+def cv_make_record(m, ecx, args, h):
+    m.guest_write(args[0], bytes(((h >> (k % 56)) + k * 0x3b) & 0xff for k in range(36)))
+    return args[0]
+
+
+CV_CALLEES = {
+    0x00545eb0: (2, "thiscall", cv_cell),                                          # CellOfPosition
+    0x00544030: (5, "thiscall", "probe"),                                          # MapEffect::IsVisibleIn
+    0x005441c0: (3, "thiscall", "probe", cv_tile_at, lambda m, ecx, a: (a[0],)),   # MapEffect::TileAt
+    0x00544100: (3, "thiscall", "probe", cv_make_record, lambda m, ecx, a: (a[1], a[2])),  # MakeDrawRecord
+}
+
+
+def cv_view(rng, pool):
+    return rng.choice([-5, 0, 1, rng.randrange(3000), rng.getrandbits(32)]) & 0xFFFFFFFF
+
+
+SPECS += [
+    Spec("MapEffects_CollectVisible", 0x00544390, "thiscall",
+         [one_of(WORLD_BASE + CV_WORLD), anything, cv_view, cv_view, cv_view, cv_view, one_of(WORLD_BASE + CV_OUT),
+          lambda rng, pool: rng.choice([0, 1, 3, 10, 100, 0xFFFFFFFF])],
+         presets=cv_table, callees=CV_CALLEES),
+]

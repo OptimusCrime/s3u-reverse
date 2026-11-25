@@ -24,8 +24,10 @@
 //   leaves other bytes of EAX; its caller CollectVisible tests AL).
 
 #include "game/layout.h"
+#include "game/world.h"
 #include "hooks.h"
 #include "test/difftest.h"
+#include "test/world_buffer.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -327,6 +329,97 @@ DrawRecord* __fastcall MapEffect_MakeDrawRecord(MapEffect* self, void*, DrawReco
 S3RE_HOOK(0x00544100, MapEffect_MakeDrawRecord, MakeDrawRecordFn, Original_MapEffect_MakeDrawRecord,
           MapEffect_MakeDrawRecord);
 
+// MapEffects::CollectVisible (0x00544390): (CGameData* world, tick, left,
+//   top, right, bottom, DrawRecord* out, max) thiscall on the table, ret
+//   0x20, EAX = the number of records written. Called by
+//   CLogicThread::PrepareDrawData. left and top below 1 become 0 (`x > 0 ?
+//   x : 0`), right and bottom are clamped to the table's width and height
+//   (signed). The cells (CellOfPosition 0x545eb0) from the one up-left of
+//   (left, top) to the one right of (right - 1, top), row by row (rows of
+//   blocks_x cells, read again per row) down to the one below
+//   (left, bottom - 1); cells outside 0..blocks_x * blocks_y (both read
+//   per cell) are skipped. For each effect of a cell's list (next +0x48)
+//   that IsVisibleIn(tick, view) while fewer than `max` are written (signed):
+//   its tile at `tick` (TileAt), the brightness from that tile's fog level
+//   (draw_flags & 7, times 36; 0xff off the map, world map size signed)
+//   and its MakeDrawRecord into a stack temporary, copied to out[count].
+namespace {
+
+constexpr std::uintptr_t kCellOfPosition = 0x00545eb0;
+constexpr std::uintptr_t kIsVisibleIn = 0x00544030;
+constexpr std::uintptr_t kMakeDrawRecord = 0x00544100;
+constexpr std::uint32_t kOffMapBrightness = 0xff;
+constexpr std::uint32_t kBrightnessPerFogLevel = 36;
+constexpr std::uint8_t kFogLevelMask = 0x07;
+
+std::int32_t CellOf(MapEffectTable* table, std::int32_t x, std::int32_t y) {
+    using CellFn = std::int32_t(__fastcall*)(MapEffectTable*, void*, std::int32_t, std::int32_t);
+    return reinterpret_cast<CellFn>(kCellOfPosition)(table, nullptr, x, y);
+}
+
+}  // namespace
+
+using CollectVisibleFn = std::int32_t(__fastcall*)(MapEffectTable* self, void* edx, CGameData* world,
+                                                   std::int32_t tick, std::int32_t left, std::int32_t top,
+                                                   std::int32_t right, std::int32_t bottom, DrawRecord* out,
+                                                   std::int32_t max);
+std::int32_t __fastcall MapEffects_CollectVisible(MapEffectTable* self, void* edx, CGameData* world, std::int32_t tick,
+                                                  std::int32_t left, std::int32_t top, std::int32_t right,
+                                                  std::int32_t bottom, DrawRecord* out, std::int32_t max);
+S3RE_HOOK(0x00544390, MapEffects_CollectVisible, CollectVisibleFn, Original_MapEffects_CollectVisible,
+          MapEffects_CollectVisible);
+
+// Purpose: Collects the draw records of the map effects (flying stones,
+// spell effects...) in and near the visible part of the map for the draw
+// thread.
+std::int32_t __fastcall MapEffects_CollectVisible(MapEffectTable* self, void*, CGameData* world, std::int32_t tick,
+                                                  std::int32_t left, std::int32_t top, std::int32_t right,
+                                                  std::int32_t bottom, DrawRecord* out, std::int32_t max) {
+    left = left > 0 ? left : 0;
+    top = top > 0 ? top : 0;
+    std::int32_t count = 0;
+    if (right >= self->width) {
+        right = self->width;
+    }
+    if (bottom >= self->height) {
+        bottom = self->height;
+    }
+    std::int32_t rowFirst = CellOf(self, left, top) - self->blocks_x - 1;
+    std::int32_t rowLast = CellOf(self, right - 1, top) + 1 - self->blocks_x;
+    const std::int32_t last = CellOf(self, left, bottom - 1) + self->blocks_x;
+    using VisibleFn = bool(__fastcall*)(MapEffect*, void*, std::int32_t, std::int32_t, std::int32_t, std::int32_t,
+                                        std::int32_t);
+    using TileFn = std::int32_t(__fastcall*)(MapEffect*, void*, std::int32_t, std::int32_t*, std::int32_t*);
+    for (; rowFirst <= last; rowFirst += self->blocks_x, rowLast += self->blocks_x) {
+        for (std::int32_t cell = rowFirst; cell <= rowLast; ++cell) {
+            if (cell < 0 || cell >= self->blocks_y * self->blocks_x + 1) {
+                continue;
+            }
+            for (std::uint32_t slot = self->cell_heads[cell]; slot != 0;) {
+                MapEffect& effect = self->records[slot];
+                if (reinterpret_cast<VisibleFn>(kIsVisibleIn)(&effect, nullptr, tick, left, top, right, bottom) &&
+                    count < max) {
+                    std::int32_t tileX = 0, tileY = 0;
+                    reinterpret_cast<TileFn>(kMapEffectTileAt)(&effect, nullptr, tick, &tileX, &tileY);
+                    const std::int32_t size = world->map_size;
+                    std::uint32_t brightness = kOffMapBrightness;
+                    if (tileX >= 0 && tileX < size && tileY >= 0 && tileY < size) {
+                        brightness = (world->tiles[tileX][tileY].draw_flags & kFogLevelMask) * kBrightnessPerFogLevel;
+                    }
+                    DrawRecord record;
+                    const DrawRecord* made = reinterpret_cast<MakeDrawRecordFn>(kMakeDrawRecord)(&effect, nullptr,
+                                                                                               &record, tick,
+                                                                                               brightness);
+                    out[count] = *made;
+                    ++count;
+                }
+                slot = effect.next;
+            }
+        }
+    }
+    return count;
+}
+
 namespace {
 
 void CompareMakeDrawRecord(test::Context& ctx, MakeDrawRecordFn candidate, int cases) {
@@ -365,7 +458,115 @@ DrawRecord* __fastcall WrongMakeDrawRecord(MapEffect* self, void* edx, DrawRecor
     return r;
 }
 
+
+// CollectVisible on worlds with a small effect table (blocks of 256 pixels,
+// a few dozen records in finite lists, some cells empty) and a map of
+// random size with random fog levels; random views, ticks and limits
+// (sometimes smaller than the visible count). Compared: EAX, the output
+// buffer with guard records, the table (MakeDrawRecord rewrites a duration
+// of -1) and the tiles.
+void CompareCollectVisible(test::Context& ctx, CollectVisibleFn candidate, int cases) {
+    constexpr std::size_t kWorld = offsetof(CGameData, map_effects) + sizeof(MapEffectTable);
+    constexpr int kOut = 40;
+    test::WorldPair worlds(ctx, kWorld);
+    int collected = 0;
+    for (int i = 0; i < cases; ++i) {
+        const std::int32_t mapSize = 32 + 32 * static_cast<std::int32_t>(ctx.rng().Below(8));
+        const std::int32_t blocksX = mapSize * 32 / 256 + 2;
+        const std::int32_t blocksY = blocksX - static_cast<std::int32_t>(ctx.rng().Below(2));
+        const std::int32_t tick = 200 + static_cast<std::int32_t>(ctx.rng().Below(400));
+        std::vector<std::uint8_t> effects(sizeof(MapEffect) * 60);
+        std::vector<std::uint32_t> heads(10000, 0);
+        for (int r = 1; r < 60; ++r) {
+            std::uint8_t bytes[kRecordBytes];
+            RandomRecord(ctx, bytes);
+            auto* record = reinterpret_cast<MapEffect*>(bytes);
+            record->start_tick = static_cast<std::uint32_t>(tick - static_cast<std::int32_t>(ctx.rng().Below(300)));
+            record->start_x = static_cast<std::int32_t>(ctx.rng().Below(static_cast<std::uint32_t>(mapSize * 32)));
+            record->start_y = static_cast<std::int32_t>(ctx.rng().Below(static_cast<std::uint32_t>(mapSize * 32)));
+            record->end_x = record->start_x + ctx.rng().Range(-300, 300);
+            record->end_y = record->start_y + ctx.rng().Range(-300, 300);
+            record->start_tile_x = ctx.rng().Below(static_cast<std::uint32_t>(mapSize + 20)) - 10;
+            record->start_tile_y = ctx.rng().Below(static_cast<std::uint32_t>(mapSize + 20)) - 10;
+            if (record->duration == 0) {
+                record->duration = 5;  // (TileAt divides by it)
+            }
+            if (ctx.rng().Chance(1, 2)) {
+                record->anim_period = static_cast<std::uint16_t>(1 + ctx.rng().Below(30));
+            }
+            // Mostly in the cell of its end position, as MapEffects::Add links it.
+            const std::uint32_t cell =
+                ctx.rng().Chance(1, 5) ? ctx.rng().Below(static_cast<std::uint32_t>(blocksX * blocksY + 3))
+                                       : static_cast<std::uint32_t>(((record->end_y > 0 ? record->end_y : 0) / 256) *
+                                                                        blocksX +
+                                                                    (record->end_x > 0 ? record->end_x : 0) / 256 + 1) %
+                                             10000;
+            record->next = heads[cell];  // lists end at lower slots, so they are finite
+            heads[cell] = static_cast<std::uint32_t>(r);
+            std::memcpy(effects.data() + sizeof(MapEffect) * r, bytes, sizeof(MapEffect));
+        }
+        worlds.Both([&](CGameData* w) {
+            w->map_size = mapSize;
+            MapEffectTable& table = w->map_effects;
+            std::memcpy(&table.records[0], effects.data(), effects.size());
+            std::memcpy(table.cell_heads, heads.data(), sizeof(table.cell_heads));
+            table.blocks_x = blocksX;
+            table.blocks_y = blocksY;
+            table.width = mapSize * 32 + 64;
+            table.height = mapSize * 32 + 64;
+        });
+        if (i % 8 == 0) {  // fog levels of the map
+            for (std::int32_t x = 0; x < mapSize; ++x) {
+                for (std::int32_t y = 0; y < mapSize; ++y) {
+                    const auto flags = static_cast<std::uint8_t>(ctx.rng().Next32());
+                    worlds.Both([&](CGameData* w) { w->tiles[x][y].draw_flags = flags; });
+                }
+            }
+        }
+        const std::int32_t left = ctx.rng().Range(-300, mapSize * 32);
+        const std::int32_t top = ctx.rng().Range(-300, mapSize * 32);
+        const std::int32_t right = left + ctx.rng().Range(1, 1500);
+        const std::int32_t bottom = top + ctx.rng().Range(1, 1000);
+        const std::int32_t max = ctx.rng().Chance(1, 3) ? ctx.rng().Range(-1, 4) : kOut - 2;
+        DrawRecord outA[kOut], outB[kOut];
+        ctx.rng().Fill(outA, sizeof(outA));
+        std::memcpy(outB, outA, sizeof(outA));
+        const std::int32_t ra = Original_MapEffects_CollectVisible(&worlds.original()->map_effects, nullptr,
+                                                                   worlds.original(), tick, left, top, right, bottom,
+                                                                   outA, max);
+        const std::int32_t rb = candidate(&worlds.ours()->map_effects, nullptr, worlds.ours(), tick, left, top, right,
+                                          bottom, outB, max);
+        collected += ra;
+        if (!S3RE_EXPECT_EQ(ra, rb) || !S3RE_EXPECT_MEM_EQ(outA, outB, sizeof(outA)) ||
+            !worlds.Same(ctx, offsetof(CGameData, map_effects), sizeof(MapEffect) * 60)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: view (%d, %d)..(%d, %d), max %d", i, left, top, right, bottom, max);
+            return;
+        }
+    }
+    S3RE_EXPECT(cases < 100 || collected > cases / 2);  // the inputs reach visible effects
+}
+
+// Wrong: the tile's previous fog level instead of the current one.
+std::int32_t __fastcall WrongCollectVisible(MapEffectTable* self, void* edx, CGameData* world, std::int32_t tick,
+                                            std::int32_t left, std::int32_t top, std::int32_t right,
+                                            std::int32_t bottom, DrawRecord* out, std::int32_t max) {
+    const std::int32_t n = MapEffects_CollectVisible(self, edx, world, tick, left, top, right, bottom, out, max);
+    if (n > 0) {
+        out[0].values[7] ^= 1;
+    }
+    return n;
+}
+
 }  // namespace
+
+S3RE_TEST(MapEffects_CollectVisible_MatchesOriginal) {
+    CompareCollectVisible(ctx, &MapEffects_CollectVisible, 400);
+}
+S3RE_TEST(MapEffects_CollectVisible_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareCollectVisible(probe, &WrongCollectVisible, 100);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(MapEffect_MakeDrawRecord_MatchesOriginal) {
     CompareMakeDrawRecord(ctx, &MapEffect_MakeDrawRecord, 30000);

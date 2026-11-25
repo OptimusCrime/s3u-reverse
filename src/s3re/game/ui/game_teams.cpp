@@ -47,17 +47,7 @@ namespace s3re::game {
 
 namespace {
 
-#pragma pack(push, 1)
-struct Team {
-    std::int32_t id;
-    std::uint32_t unk04;
-    watcom::VectorBase intList;  // +0x08, probably the ids of the team's players
-    watcom::VectorBase players;  // +0x24
-};
-#pragma pack(pop)
-static_assert(sizeof(Team) == 0x40);
-static_assert(offsetof(Team, intList) == 0x08);
-static_assert(offsetof(Team, players) == 0x24);
+using Team = CTeam;
 
 constexpr std::uint32_t kInitialCapacity = 10;
 constexpr std::uint32_t kGrowStep = 5;
@@ -65,7 +55,7 @@ constexpr std::int32_t kNoId = -1;
 constexpr std::uintptr_t kDestroyPlayer = 0x0049ec80;  // GamePlayerSetup::~GamePlayerSetup (ours)
 
 void ConstructMembers(Team* team) {
-    watcom::ConstructVector(&team->intList, kInitialCapacity, kGrowStep, sizeof(std::int32_t),
+    watcom::ConstructVector(&team->player_ids, kInitialCapacity, kGrowStep, sizeof(std::int32_t),
                             vtables::kWCBareVectorBase_int, vtables::kWCValSortedVector_int);
     watcom::ConstructVector(&team->players, kInitialCapacity, kGrowStep, sizeof(GamePlayerSetup),
                             vtables::kWCBareVectorBase_CPlayer, vtables::kWCValOrderedVector_CPlayer);
@@ -108,7 +98,7 @@ std::uint32_t __fastcall CTeam_Destroy(Team* self, void*) {
                               reinterpret_cast<void(__fastcall*)(std::uint32_t, void*)>(kDestroyPlayer)(player,
                                                                                                     nullptr);
                           });
-    return watcom::DestroyVector(&self->intList, vtables::kWCBareVectorBase_int, vtables::kWCExcept, 0,
+    return watcom::DestroyVector(&self->player_ids, vtables::kWCBareVectorBase_int, vtables::kWCExcept, 0,
                                  [](std::uint32_t) {});
 }
 
@@ -128,7 +118,7 @@ using TeamPlayerIdsFn = watcom::VectorBase*(__fastcall*)(const Team* self, void*
 // Purpose: Gives a copy of a team's list of player ids (probably; the
 // game launch dialog and the settings read it).
 watcom::VectorBase* __fastcall CTeam_PlayerIds(const Team* self, void*, watcom::VectorBase* result) {
-    return watcom::CopyVector(result, &self->intList, vtables::kWCValSortedVector_int, sizeof(std::int32_t),
+    return watcom::CopyVector(result, &self->player_ids, vtables::kWCValSortedVector_int, sizeof(std::int32_t),
                               [](std::int32_t, std::uint32_t to, std::uint32_t from) {
                                   *reinterpret_cast<std::uint32_t*>(to) = *reinterpret_cast<const std::uint32_t*>(from);
                               });
@@ -156,7 +146,7 @@ namespace {
 
 bool SameConstructedTeams(test::Context& ctx, Team& a, Team& b) {
     bool same = true;
-    for (watcom::VectorBase Team::*member : {&Team::intList, &Team::players}) {
+    for (watcom::VectorBase Team::*member : {&Team::player_ids, &Team::players}) {
         same = S3RE_EXPECT_EQ((a.*member).data == 0, (b.*member).data == 0) && same;
         msvc6::GameOperatorDelete(reinterpret_cast<void*>((a.*member).data));
         msvc6::GameOperatorDelete(reinterpret_cast<void*>((b.*member).data));
@@ -200,18 +190,18 @@ void CompareDestructor(test::Context& ctx, TeamDestructorFn candidate, int cases
         Team a, b;
         ctx.rng().Fill(&a, sizeof(a));
         a.players.filled = ctx.rng().Range(-2, 6);
-        a.intList.filled = ctx.rng().Range(-2, 6);
+        a.player_ids.filled = ctx.rng().Range(-2, 6);
         std::memcpy(&b, &a, sizeof(a));
         const bool intBlock = ctx.rng().Chance(3, 4);
         const bool playerBlock = ctx.rng().Chance(3, 4);
         for (Team* team : {&a, &b}) {
-            team->intList.data = intBlock ? reinterpret_cast<std::uintptr_t>(msvc6::GameOperatorNew(40)) : 0;
+            team->player_ids.data = intBlock ? reinterpret_cast<std::uintptr_t>(msvc6::GameOperatorNew(40)) : 0;
             team->players.data =
                 playerBlock ? reinterpret_cast<std::uintptr_t>(msvc6::GameOperatorNew(6 * sizeof(GamePlayerSetup))) : 0;
         }
         const DestroyRun ra = RunDestroy(Original_CTeam_Destroy, a);
         const DestroyRun rb = RunDestroy(candidate, b);
-        a.intList.data = b.intList.data = a.players.data = b.players.data = 0;  // freed (or none)
+        a.player_ids.data = b.player_ids.data = a.players.data = b.players.data = 0;  // freed (or none)
         bool same = S3RE_EXPECT(ra.calls == rb.calls) && S3RE_EXPECT_MEM_EQ(&a, &b, sizeof(a));
         if (!intBlock) {
             same = S3RE_EXPECT_EQ(ra.eax, rb.eax) && same;
@@ -250,10 +240,10 @@ void ComparePlayerIds(test::Context& ctx, TeamPlayerIdsFn candidate, int cases) 
         ctx.rng().Fill(&team, sizeof(team));
         std::uint32_t ints[8];
         ctx.rng().Fill(ints, sizeof(ints));
-        team.intList.data = reinterpret_cast<std::uintptr_t>(ints);
-        team.intList.capacity = ctx.rng().Chance(1, 8) ? 0x80000000u : ctx.rng().Below(9);
+        team.player_ids.data = reinterpret_cast<std::uintptr_t>(ints);
+        team.player_ids.capacity = ctx.rng().Chance(1, 8) ? 0x80000000u : ctx.rng().Below(9);
         // (more filled than capacity would overrun the new block in both)
-        team.intList.filled = ctx.rng().Range(-1, team.intList.capacity > 8 ? 8 : static_cast<std::int32_t>(team.intList.capacity));
+        team.player_ids.filled = ctx.rng().Range(-1, team.player_ids.capacity > 8 ? 8 : static_cast<std::int32_t>(team.player_ids.capacity));
         watcom::VectorBase a, b;
         ctx.rng().Fill(&a, sizeof(a));
         std::memcpy(&b, &a, sizeof(b));
@@ -277,7 +267,7 @@ void ComparePlayerIds(test::Context& ctx, TeamPlayerIdsFn candidate, int cases) 
 // Wrong: the length copied even without a block.
 watcom::VectorBase* __fastcall WrongPlayerIds(const Team* self, void* edx, watcom::VectorBase* result) {
     CTeam_PlayerIds(self, edx, result);
-    result->length = self->intList.length;
+    result->length = self->player_ids.length;
     return result;
 }
 

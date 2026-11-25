@@ -49,10 +49,11 @@
 //   party (what the free-game dialog produces for that choice);
 // - with --race, passes the human player's race: NewGame gives every player
 //   race 0xFF (random, drawn by OnStart with CGameData::Random) when the
-//   map has no chunk 2; a pass-through on the player record's setter
-//   (GamePlayerSetup::Set 0x49f120, only during this NewGame call) replaces
-//   race and race-given flag of the human player's record, as a chunk 2
-//   race would.
+//   map has no chunk 2; the hook of the player record's setter
+//   (GamePlayerSetup::Set 0x49f120, game_settings_players.cpp, installed in
+//   original mode too) calls ApplyHumanRaceOverride, which only during this
+//   NewGame call replaces race and race-given flag of the human player's
+//   record, as a chunk 2 race would.
 // The menu thread doesn't read the setup afterwards; the -map file (default
 // Map\MULTI\384-2-Lakes.map) only supplies what the -map start reads besides.
 // The game has no computer-player difficulty (re/game_setup.md).
@@ -81,7 +82,6 @@ namespace {
 
 struct CGameSettings;  // GameSettings at 0x7a7a18, opaque
 struct CMapFile;       // Dirk::CMapFile, opaque, 0x134 bytes
-struct GamePlayerSetup;  // one player's record in the game setup (0xcc bytes), opaque
 
 #pragma pack(push, 1)
 // Watcom WCValVector<int> as WCIntVector_Construct 0x4376b0 builds it
@@ -108,14 +108,6 @@ using NewGameFn = void(__fastcall*)(CGameSettings* self, void* edx, std::uint32_
                                     std::uint32_t a8, std::uint32_t startGoods,
                                     std::uint32_t a10, std::uint32_t a11, std::uint32_t a12,
                                     std::uint32_t a13);
-// GamePlayerSetup::Set 0x49f120 (thiscall, 9 stack arguments, ret 0x24):
-// +0x5c = type (0 human, 2 computer), +0x60 = byte, +0x14 = party, +0x64 =
-// race (0xff random), +0x68 = race given (byte), start position and three
-// more values (+0x6c/+0x70 only if still -1, +0xa8..+0xb4).
-using PlayerSetFn = void(__fastcall*)(GamePlayerSetup* self, void* edx, std::uint32_t type,
-                                      std::uint32_t b, std::uint32_t party, std::uint32_t race,
-                                      std::uint32_t raceGiven, std::uint32_t start,
-                                      std::uint32_t a7, std::uint32_t a8, std::uint32_t a9);
 using OperatorNewFn = void*(__cdecl*)(std::uint32_t size);
 using MapFileCtorFn = void(__fastcall*)(CMapFile* self, void* edx, std::uint32_t mode);
 using MapFileMemoryOnlyFn = void(__fastcall*)(CMapFile* self, void* edx);
@@ -129,16 +121,8 @@ void __fastcall Hooked_GameSettings_NewGame(CGameSettings* self, void* edx, std:
                                             void* a7, std::uint32_t a8, std::uint32_t startGoods,
                                             std::uint32_t a10, std::uint32_t a11,
                                             std::uint32_t a12, std::uint32_t a13);
-void __fastcall Hooked_GamePlayerSetup_Set(GamePlayerSetup* self, void* edx, std::uint32_t type,
-                                           std::uint32_t b, std::uint32_t party,
-                                           std::uint32_t race, std::uint32_t raceGiven,
-                                           std::uint32_t start, std::uint32_t a7,
-                                           std::uint32_t a8, std::uint32_t a9);
-
 S3RE_PASSTHROUGH(0x00431ab0, GameSettings_NewGame, NewGameFn, Original_GameSettings_NewGame,
                  Hooked_GameSettings_NewGame);
-S3RE_PASSTHROUGH(0x0049f120, GamePlayerSetup_Set, PlayerSetFn, Original_GamePlayerSetup_Set,
-                 Hooked_GamePlayerSetup_Set);
 
 const auto GameOperatorNew = reinterpret_cast<OperatorNewFn>(0x0061efb9);
 const auto GameOperatorDelete = reinterpret_cast<void(__cdecl*)(void*)>(0x0061e4ef);
@@ -286,20 +270,6 @@ std::uint32_t g_humanRaceDuringNewGame = recording::kRandomRace;
 recording::GameSetup g_applied;
 std::atomic<bool> g_appliedReady{false};
 
-void __fastcall Hooked_GamePlayerSetup_Set(GamePlayerSetup* self, void* edx, std::uint32_t type,
-                                           std::uint32_t b, std::uint32_t party,
-                                           std::uint32_t race, std::uint32_t raceGiven,
-                                           std::uint32_t start, std::uint32_t a7,
-                                           std::uint32_t a8, std::uint32_t a9) {
-    if (g_humanRaceDuringNewGame != recording::kRandomRace && type == kHumanType) {
-        S3RE_LOG("random-map: human player (party %u) gets race %u instead of %u", party,
-                 g_humanRaceDuringNewGame, race);
-        race = g_humanRaceDuringNewGame;
-        raceGiven = 1;  // as NewGame passes (race != 0xff) for a chunk 2 race
-    }
-    Original_GamePlayerSetup_Set(self, edx, type, b, party, race, raceGiven, start, a7, a8, a9);
-}
-
 void __fastcall Hooked_GameSettings_NewGame(CGameSettings* self, void* edx, std::uint32_t a1,
                                             std::uint32_t a2, std::uint32_t a3,
                                             WCIntVector* playersPerParty,
@@ -365,6 +335,16 @@ std::uint32_t StartPositions(std::uint32_t size) {
     const std::uint32_t distance = size - 0x20;
     const std::uint32_t positions = ((distance * distance) >> 14) + 1;
     return positions < kMaxStartPositions ? positions : kMaxStartPositions;
+}
+
+void ApplyHumanRaceOverride(std::uint32_t type, std::uint32_t party, std::uint32_t& race,
+                            std::uint32_t& raceGiven) {
+    if (g_humanRaceDuringNewGame != recording::kRandomRace && type == kHumanType) {
+        S3RE_LOG("random-map: human player (party %u) gets race %u instead of %u", party,
+                 g_humanRaceDuringNewGame, race);
+        race = g_humanRaceDuringNewGame;
+        raceGiven = 1;  // as NewGame passes (race != 0xff) for a chunk 2 race
+    }
 }
 
 recording::GameSetup AppliedGameSetup() {
