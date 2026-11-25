@@ -573,7 +573,7 @@ MEMBER_CALLEES = {
     0x413d70: (1, "thiscall", "probe"), 0x415c80: (5, "thiscall", "probe"), 0x418380: (5, "thiscall", "probe"),
     0x417ab0: (2, "thiscall", "probe"), 0x417be0: (1, "thiscall", "probe"),
     0x4156e0: (1, "thiscall", "probe", None, lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)),)),
-    0x41c3c0: (1, "thiscall", "probe"),
+    0x41c3c0: (1, "thiscall", "probe"), 0x4180a0: (0, "thiscall", "probe"),
 }
 
 
@@ -583,6 +583,20 @@ def member_state(delta=None, fields=()):
         if delta is not None:
             out += [(MEMBER_THIS + delta, WORLD_BASE + MEMBER_VBTABLE, 4),
                     (MEMBER_VBTABLE + 4, (-delta + rng.randint(-0x40, 0x40)) & 0xFFFFFFFF, 4)]
+        return out
+    return presets
+
+
+def member_vbptrs(*deltas):
+    """Presets: vbptrs at this + delta, all pointing at the member vbtable
+    (one displacement, so their bases sit at distinct places), plus the
+    rect at MEMBER_A sometimes small (the up-down's halves round both
+    ways)."""
+    def presets(rng, pool, args):
+        out = [(MEMBER_THIS + delta, WORLD_BASE + MEMBER_VBTABLE, 4) for delta in deltas]
+        out.append((MEMBER_VBTABLE + 4, rng.randint(0x600, 0x700), 4))
+        if rng.random() < 0.5:
+            out += [(MEMBER_A + 4 * k, rng.randint(-9, 9) & 0xFFFFFFFF, 4) for k in range(4)]
         return out
     return presets
 
@@ -633,6 +647,16 @@ SPECS += [
     member_spec("CStaticFrame_Construct", 0x0041d960, [one_of(WORLD_BASE + MEMBER_A), anything, anything]),
     member_spec("CStaticColorIndexedFrame_Construct", 0x0041db90,
                 [one_of(WORLD_BASE + MEMBER_A), anything, anything, anything]),
+    member_spec("CVScrollBar_OnResized", 0x0041e940, [one_of(WORLD_BASE + MEMBER_A), anything],
+                presets=member_vbptrs(-0x238, -0x1b8)),
+    member_spec("CDropdown_OnResized", 0x004224c0, [one_of(WORLD_BASE + MEMBER_A), anything],
+                presets=member_vbptrs(-0x5b0, -0x520, -0x4a0)),
+    member_spec("CUpDown_OnResized", 0x00422d90, [one_of(WORLD_BASE + MEMBER_A), anything],
+                presets=member_vbptrs(-0x124, -0xa4)),
+    # The text's buffer in MEMBER_B (count byte 0, 0xff or shared) or none.
+    member_spec("CEditControl_Destroy", 0x00421f50, [],
+                presets=member_state(fields=((MEMBER_THIS - 0x20, lambda rng: rng.choice([0, WORLD_BASE + MEMBER_B + 2]), 4),
+                                             (MEMBER_B + 1, lambda rng: rng.choice([0, 0xff, 1, 2, 0xfe]), 1)))),
     Spec("UI_MoveWords", 0x00418cf0, "fastcall",
          [lambda rng, pool: WORLD_BASE + MEMBER_A + 2 * rng.randrange(-20, 84), words_move,
           lambda rng, pool: rng.randrange(40)]),

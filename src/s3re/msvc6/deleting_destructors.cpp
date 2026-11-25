@@ -55,6 +55,17 @@
 // ~CScreenElement leaves in it (callers don't use it).
 //     0x00421fa0 CListBox   +0x444  ~CListBox 0x421fc0
 //     0x004816d0 CDropdown  +0x66c  ~CDropdown 0x42b380
+//   and (session 57) of the other controls:
+//     0x0041e270 CImageButton     +0x60  0x41b630
+//     0x0041eff0 CVScrollBar      +0x2f4  0x41f010
+//     0x00421f30 CEditControl     +0x70  0x421f50
+//     0x00423850 CScreenGroup     +0x80  0x416da0
+//     0x00439520 CTextButton      +0x74  0x42ab70
+//     0x004416e0 CTextView        +0x434  0x42a380
+//     0x00441700 CListView        +0x59c  0x423870
+//     0x00441720 CAnimatedButton  +0x68  0x42a280
+//     0x00476ef0 CButton          +0x50  0x41a900
+//     0x00486930 CUpDown          +0x224  0x42b100
 // Session 57 (wip/ui-controls), found by their bytes in 0x400000..0x4c0000
 // (network and lobby classes left out): the three shapes above, "plain"
 // (destructor(this)), "vbase" (+offset of the CScreenElement virtual base,
@@ -503,6 +514,36 @@ std::uint32_t __fastcall CompleteDestructor_421fa0(std::uintptr_t self, void*) {
 std::uint32_t __fastcall CompleteDestructor_4816d0(std::uintptr_t self, void*) {
     return VirtualBaseDestructor(0x0042b380, 0x66c, self);
 }
+std::uint32_t __fastcall CompleteDestructor_41e270(std::uintptr_t self, void*) {
+    return VirtualBaseDestructor(0x0041b630, 0x60, self);  // CImageButton
+}
+std::uint32_t __fastcall CompleteDestructor_41eff0(std::uintptr_t self, void*) {
+    return VirtualBaseDestructor(0x0041f010, 0x2f4, self);  // CVScrollBar
+}
+std::uint32_t __fastcall CompleteDestructor_421f30(std::uintptr_t self, void*) {
+    return VirtualBaseDestructor(0x00421f50, 0x70, self);  // CEditControl
+}
+std::uint32_t __fastcall CompleteDestructor_423850(std::uintptr_t self, void*) {
+    return VirtualBaseDestructor(0x00416da0, 0x80, self);  // CScreenGroup
+}
+std::uint32_t __fastcall CompleteDestructor_439520(std::uintptr_t self, void*) {
+    return VirtualBaseDestructor(0x0042ab70, 0x74, self);  // CTextButton
+}
+std::uint32_t __fastcall CompleteDestructor_4416e0(std::uintptr_t self, void*) {
+    return VirtualBaseDestructor(0x0042a380, 0x434, self);  // CTextView
+}
+std::uint32_t __fastcall CompleteDestructor_441700(std::uintptr_t self, void*) {
+    return VirtualBaseDestructor(0x00423870, 0x59c, self);  // CListView
+}
+std::uint32_t __fastcall CompleteDestructor_441720(std::uintptr_t self, void*) {
+    return VirtualBaseDestructor(0x0042a280, 0x68, self);  // CAnimatedButton
+}
+std::uint32_t __fastcall CompleteDestructor_476ef0(std::uintptr_t self, void*) {
+    return VirtualBaseDestructor(0x0041a900, 0x50, self);  // CButton
+}
+std::uint32_t __fastcall CompleteDestructor_486930(std::uintptr_t self, void*) {
+    return VirtualBaseDestructor(0x0042b100, 0x224, self);  // CUpDown
+}
 
 S3RE_HOOK(0x0044e300, ScalarDeletingDestructor_44e300, DeletingDestructorFn,
           Original_ScalarDeletingDestructor_44e300, ScalarDeletingDestructor_44e300);
@@ -578,6 +619,26 @@ S3RE_HOOK(0x00421fa0, CompleteDestructor_421fa0, CompleteDestructorFn, Original_
           CompleteDestructor_421fa0);
 S3RE_HOOK(0x004816d0, CompleteDestructor_4816d0, CompleteDestructorFn, Original_CompleteDestructor_4816d0,
           CompleteDestructor_4816d0);
+S3RE_HOOK(0x0041e270, CompleteDestructor_41e270, CompleteDestructorFn, Original_CompleteDestructor_41e270,
+          CompleteDestructor_41e270);
+S3RE_HOOK(0x0041eff0, CompleteDestructor_41eff0, CompleteDestructorFn, Original_CompleteDestructor_41eff0,
+          CompleteDestructor_41eff0);
+S3RE_HOOK(0x00421f30, CompleteDestructor_421f30, CompleteDestructorFn, Original_CompleteDestructor_421f30,
+          CompleteDestructor_421f30);
+S3RE_HOOK(0x00423850, CompleteDestructor_423850, CompleteDestructorFn, Original_CompleteDestructor_423850,
+          CompleteDestructor_423850);
+S3RE_HOOK(0x00439520, CompleteDestructor_439520, CompleteDestructorFn, Original_CompleteDestructor_439520,
+          CompleteDestructor_439520);
+S3RE_HOOK(0x004416e0, CompleteDestructor_4416e0, CompleteDestructorFn, Original_CompleteDestructor_4416e0,
+          CompleteDestructor_4416e0);
+S3RE_HOOK(0x00441700, CompleteDestructor_441700, CompleteDestructorFn, Original_CompleteDestructor_441700,
+          CompleteDestructor_441700);
+S3RE_HOOK(0x00441720, CompleteDestructor_441720, CompleteDestructorFn, Original_CompleteDestructor_441720,
+          CompleteDestructor_441720);
+S3RE_HOOK(0x00476ef0, CompleteDestructor_476ef0, CompleteDestructorFn, Original_CompleteDestructor_476ef0,
+          CompleteDestructor_476ef0);
+S3RE_HOOK(0x00486930, CompleteDestructor_486930, CompleteDestructorFn, Original_CompleteDestructor_486930,
+          CompleteDestructor_486930);
 
 S3RE_HOOK(0x0041c560, ScalarDeletingDestructor_41c560, DeletingDestructorFn,
           Original_ScalarDeletingDestructor_41c560, ScalarDeletingDestructor_41c560);
@@ -831,6 +892,16 @@ struct CompleteCase {
 const CompleteCase kCompleteCases[] = {
     {Original_CompleteDestructor_421fa0, &CompleteDestructor_421fa0, 0x00421fc0, 0x444},
     {Original_CompleteDestructor_4816d0, &CompleteDestructor_4816d0, 0x0042b380, 0x66c},
+    {Original_CompleteDestructor_41e270, &CompleteDestructor_41e270, 0x0041b630, 0x60},
+    {Original_CompleteDestructor_41eff0, &CompleteDestructor_41eff0, 0x0041f010, 0x2f4},
+    {Original_CompleteDestructor_421f30, &CompleteDestructor_421f30, 0x00421f50, 0x70},
+    {Original_CompleteDestructor_423850, &CompleteDestructor_423850, 0x00416da0, 0x80},
+    {Original_CompleteDestructor_439520, &CompleteDestructor_439520, 0x0042ab70, 0x74},
+    {Original_CompleteDestructor_4416e0, &CompleteDestructor_4416e0, 0x0042a380, 0x434},
+    {Original_CompleteDestructor_441700, &CompleteDestructor_441700, 0x00423870, 0x59c},
+    {Original_CompleteDestructor_441720, &CompleteDestructor_441720, 0x0042a280, 0x68},
+    {Original_CompleteDestructor_476ef0, &CompleteDestructor_476ef0, 0x0041a900, 0x50},
+    {Original_CompleteDestructor_486930, &CompleteDestructor_486930, 0x0042b100, 0x224},
 };
 
 // Installs the stubs a case needs (its class destructor, ~CScreenElement).
