@@ -118,8 +118,8 @@ void CopyAreaFields(AiArea& to, const AiArea& from) {
     to.short_of_wood = from.short_of_wood;
     to.short_of_stone = from.short_of_stone;
     to.force_production = from.force_production;
-    to.unk014 = from.unk014;
-    to.unk018 = from.unk018;
+    to.share_stage = from.share_stage;
+    to.steps_since_expansion = from.steps_since_expansion;
     to.sites = from.sites;
     std::memcpy(to.best, from.best, sizeof(to.best));
     std::memcpy(to.candidate_values, from.candidate_values, sizeof(to.candidate_values));

@@ -42,16 +42,14 @@ LOGBOOK session entry).
   AI) that logs byte 6 and the site's owner in a real game with computer
   players, then decide (reproduce the observed value, or document a
   known difference). The other 18 senders are verified (ai_commands.cpp).
-- **Package A5/A6: what is left of the CComputerPlayer** (session 56
-  did the area lists: AddArea, Fill/RefillAreaSiteList(s),
-  ProcessPendingEvents, OnBuildingFinished, COMP_FoodForMinesOptimum, the
-  list ctor/dtor and bitset ctor (manual function starts), Init and the
-  constructor). Left: GLOBAL_EXPAND_EMPIRE_AGENT::MakeBuildOrders
-  0x56cd90 / Run 0x56cd20, T_MAP_WORKER_AGENT::MakeBuildOrders 0x57ce90
-  (3228 ins) / Run 0x57cde0 (wip/ai-agents), then CComputerPlayer::Step
-  0x550f80. READY in the range (frontier): HasBuildingTypeNear 0x558f00,
-  AdjustSoldierShares 0x56a840, CCentrumCheckAgent::Run 0x560e00.
-  Not in Ghidra's list (no rows): 0x596540 (a vector's free).
+- **Package A5/A6: what is left of the CComputerPlayer.** Session 56
+  did the area lists (wip/ai-areas: AddArea, Fill/RefillAreaSiteList(s),
+  ProcessPendingEvents, COMP_FoodForMinesOptimum, the list ctor/dtor and
+  bitset ctor (manual function starts), Init and the constructor) and the
+  expand / map worker agents, OnBuildingFinished, HasBuildingTypeNear,
+  AdjustSoldierShares, CCentrumCheckAgent::Run (wip/ai-agents). Left:
+  CComputerPlayer::Step 0x550f80. Not in Ghidra's list (no rows): 0x596540
+  (a vector's free).
 - **Open (session 55 round 2):** the woodcutter /
   stonecutter finders pick the cell with the FEWEST trees / stones when the
   area stocks more than 10 (an ascending SiteTree): looks like an original
@@ -71,3 +69,14 @@ LOGBOOK session entry).
   returns 0 (best distance starts at 0); `AI::FewUnownedTilesNear`
   0x59c2c0 always returns 1 (kept in the replacement, session 54); `AI::CastBattleSpells` 0x5953b0 pairs the
   Amazons' mana checks with the wrong casters.
+- **Open (session 56):** the map worker's castle order needs another own
+  castle within 60 (HasBuildingNear's result tested the other way round
+  than everywhere else) and the residences 27 / 28 use the farm's site
+  tree pointer: confirm in a game whether computer players ever build
+  castles through this path (they also get them from the safety agent).
+- **Session 56 (wip/ai-agents) also did** AdjustSoldierShares 0x56a840,
+  OnBuildingFinished 0x573890, CCentrumCheckAgent::Run 0x560e00 and the
+  credits' debug / timer helpers 0x59e6f0..0x59f2a0. Left in the AI range
+  besides the area-list group: CComputerPlayer::Init / ctor / Step,
+  COMP_EmergencyPowersActStone 0x573560 (needs SendPrioritizeSite).
+

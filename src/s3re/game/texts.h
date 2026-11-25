@@ -308,6 +308,53 @@ inline constexpr GameText kAiNoChildNote{0x731b78};  // "Kein ChildNote gefunden
 inline constexpr GameText kNotePtr{0x731b44};                 // "notePtr"
 inline constexpr GameText kBuildHouseSourceFile{0x731b4c};    // "E:\Siedler3\Rainer\CompDoBuildHouseReq.cpp"
 inline constexpr GameText kHouseRequestSourceFile{0x732718};  // "E:\Siedler3\Rainer\CompHouseReq.cpp"
+// GLOBAL_EXPAND_EMPIRE_AGENT::MakeBuildOrders 0x56cd90 (Rainer\CompGExpand.cpp; DebugLog).
+inline constexpr GameText kCompGExpandSourceFile{0x731c44};  // "E:\Siedler3\Rainer\CompGExpand.cpp"
+inline constexpr GameText kExpandStart{0x732014};          // "RAINER: ***** GLOBAL_EXPAND  AUSDEHNEN *****"
+inline constexpr GameText kExpandLongNotExpanded{0x731fe0};  // "RAINER GLOBAL_EXPAND  LANGE NICHT MEHR AUSGEDEHNT"
+// Questions (no sites of that kind left): "RAINER: GLOBAL_EXPAND <resource>? "
+inline constexpr GameText kExpandTreesQ{0x731fc0};      // "... B<a-umlaut>UME? " (trees)
+inline constexpr GameText kExpandStonesQ{0x731fa0};     // "... STEINE? "
+inline constexpr GameText kExpandIronQ{0x731f80};       // "... EISEN? "
+inline constexpr GameText kExpandCoalQ{0x731f60};       // "... KOHLE? "
+inline constexpr GameText kExpandGoldQ{0x731f40};       // "... GOLD? "
+inline constexpr GameText kExpandFishQ{0x731f20};       // "... FISCH? "
+inline constexpr GameText kExpandWaterQ{0x731f00};      // "... WASSER?"
+inline constexpr GameText kExpandFarmlandQ{0x731edc};   // "... FARMLAND? "
+inline constexpr GameText kExpandSwampQ{0x731ebc};      // "... SUMPF? " (rice land)
+inline constexpr GameText kExpandSulfurQ{0x731e98};     // "... SCHWEFEL? "
+inline constexpr GameText kExpandGemsQ{0x731e74};       // "... EDELSTEINE? "
+inline constexpr GameText kExpandVineyardQ{0x731e50};   // "... WEINBERG? "
+inline constexpr GameText kExpandResources{0x731e2c};   // "RAINER: GLOBAL_EXPAND ROHSTOFFE "
+// "RAINER: GLOBAL_EXPANDkeine brauchbare Resource gefunden ES: %i" (no usable resource found; the area)
+inline constexpr GameText kExpandNothingFound{0x731dec};
+// Found: "RAINER: GLOBAL_EXPAND <resource>!"
+inline constexpr GameText kExpandTreesFound{0x731dcc};
+inline constexpr GameText kExpandStonesFound{0x731dac};  // "... STEIEN! " (sic)
+inline constexpr GameText kExpandWaterFound{0x731d8c};
+inline constexpr GameText kExpandFishFound{0x731d6c};
+inline constexpr GameText kExpandSwampFound{0x731d54};   // "RAINER: GLOBAL_EXPAND  " (no word)
+inline constexpr GameText kExpandSulfurFound{0x731d34};
+inline constexpr GameText kExpandGemsFound{0x731d10};
+inline constexpr GameText kExpandVineyardFound{0x731cec};
+inline constexpr GameText kExpandCoalFound{0x731ccc};
+inline constexpr GameText kExpandIronFound{0x731cac};
+inline constexpr GameText kExpandGoldFound{0x731c8c};
+inline constexpr GameText kExpandFarmlandFound{0x731c68};
+// T_MAP_WORKER_AGENT::MakeBuildOrders 0x57ce90 (OutputDebugStringA; Rainer\CompMapWorkerAgent.cpp).
+inline constexpr GameText kMapWorkerSourceFile{0x7327d8};  // "E:\Siedler3\Rainer\CompMapWorkerAgent.cpp"
+inline constexpr GameText kBuildLargeTowerQ{0x7327b8};     // "ooo RAINER Baue BigTower ???" + newline
+inline constexpr GameText kBuildLargeTowerGo{0x732798};    // "ooo RAINER Baue BigTower !!!" + newline
+inline constexpr GameText kBuildCastleQ{0x73277c};         // "ooo RAINER Baue Castle ???" + newline
+inline constexpr GameText kBuildCastleGo{0x732760};        // "ooo RAINER Baue Castle !!!" + newline
+// The credits code's debug reports (ui/credits_debug.cpp; OutputDebugStringA).
+inline constexpr GameText kFileLineFormat{0x7330e0};     // "%s %d"
+inline constexpr GameText kCaughtUnknown{0x7330e8};      // "catched (...?): "
+inline constexpr GameText kCaughtCmy{0x7330fc};          // "catched cmy: "
+inline constexpr GameText kColonSpace{0x69a240};         // ": "
+inline constexpr GameText kCreatingException{0x73310c};  // "creating exception: "
+// "RAINER: Haus das fertig sein soll gibt es nicht mehr!" (the finished house no longer exists; AI::OnBuildingFinished)
+inline constexpr GameText kAiFinishedHouseGone{0x7326e0};
 // The out-of-memory checks of the land evaluation (CEvaLand::Acquire, Init).
 inline constexpr GameText kEvalMap{0x7312e8};            // "pEvalMap"
 inline constexpr GameText kEvaLandSourceFile{0x7312f4};  // "E:\Siedler3\Rainer\Cevaland.cpp"
@@ -317,7 +364,6 @@ inline constexpr GameText kAiSiteBuildingGone{0x7313b8};     // "RAINER: Haus da
 inline constexpr GameText kAiOwnerChangeBuildingGone{0x73137c};  // "RAINER: Haus das Besitzer wechseln soll gibt es nicht mehr!"
 inline constexpr GameText kAiSameTypeStillThere{0x73134c};   // "RAINER: Hier ist noch ein Haus dieses Types!"
 inline constexpr GameText kAiDemolitionMixup{0x731328};      // "RAINER: Durcheinander bei ABRISS!"
-inline constexpr GameText kAiFinishedBuildingGone{0x7326e0};  // "RAINER: Haus das fertig sein soll gibt es nicht mehr!" (AI::OnBuildingFinished 0x573890)
 // COMP_FoodForMinesOptimum 0x572a30 (OutputDebugStringA texts; each ends in a line feed).
 inline constexpr GameText kFoodForMinesHeader{0x73257c};     // "COMP_FoodForMinesOptimum player: %u, ecosector %u" (sprintf)
 inline constexpr GameText kFoodForMinesNotOwned{0x732534};   // "COMP_FoodForMinesOptimum - EcoSector gehört nicht dem Spieler ???????"

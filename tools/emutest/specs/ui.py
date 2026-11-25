@@ -467,3 +467,62 @@ SELF_TEST += [
     Spec("WrongGamePlayerSetupConstruct", 0x0049e8f0, "thiscall", [], ignore_bytes=SETUP_ALLOCATOR_BYTES,
          max_cases=50),
 ]
+
+# -- session 56 (wip/ai-agents): the credits' debug reports and timer (credits_debug.cpp) --
+#
+# Texts in scratch slots 0 / 1 (args point there); OutputDebugStringA is an
+# API probe (records the text), sprintf runs. The timer at world +0 (ECX):
+# its owner in scratch 2 with its vtable at emu.FAKE_VTABLE (slot 0: one
+# stack argument).
+
+CREDITS_WORDS = (b"", b"OutOfMemory", b"file klemmt(fehlt?)", b"E:/Siedler3/Credits/cmy_x.cpp", b"a%sb")
+
+
+def credits_texts(rng, pool, args):
+    fields = []
+    for slot in (0, 1):
+        text = rng.choice(CREDITS_WORDS) + b"\0"
+        fields += [(SCRATCH + slot * SCRATCH_SLOT_BYTES + k, byte, 1) for k, byte in enumerate(text)]
+    return fields
+
+
+def credits_line(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.3 else rng.randrange(3000)
+
+
+def credits_timer(rng, pool, args):
+    interval = rng.randint(-3, 0) if rng.random() < 0.1 else rng.randint(1, 40)
+    catch_up = 0 if rng.random() < 0.5 else rng.randint(1, 255)
+    if catch_up and interval <= 0:
+        interval = 1  # (the original would loop forever)
+    now = args[0] if args else 0
+    signed_now = now - (1 << 32) if now & 0x80000000 else now
+    nxt = (signed_now + rng.randint(-200, 50)) & 0xFFFFFFFF
+    return [(0, WORLD_BASE + SCRATCH + 2 * SCRATCH_SLOT_BYTES, 4), (4, interval & 0xFFFFFFFF, 4), (8, nxt, 4),
+            (0xC, catch_up, 1), (0xD, 0 if rng.random() < 0.5 else rng.randint(1, 255), 1),
+            (SCRATCH + 2 * SCRATCH_SLOT_BYTES, FAKE_VTABLE, 4)]
+
+
+def credits_now(rng, pool):
+    return rng.randint(-1000, 1000) & 0xFFFFFFFF
+
+
+SPECS += [
+    Spec("Credits_DebugPrint", 0x0059e6f0, "fastcall", [scratch(0)], eax_mask=0, presets=credits_texts),
+    Spec("Credits_DebugPrintLine", 0x0059e700, "fastcall", [scratch(0)], eax_mask=0, presets=credits_texts),
+    Spec("Credits_DebugPrint2", 0x0059e720, "fastcall", [scratch(0), scratch(1)], eax_mask=0,
+         presets=credits_texts),
+    Spec("Credits_DebugPrintFileLine", 0x0059e730, "fastcall", [scratch(0), credits_line], eax_mask=0,
+         presets=credits_texts),
+    Spec("Credits_ReportCaughtUnknown", 0x0059e760, "fastcall", [scratch(0), scratch(1), credits_line],
+         eax_mask=0, presets=credits_texts),
+    Spec("Credits_ReportCaughtException", 0x0059e790, "fastcall", [anything, scratch(0), scratch(1), credits_line],
+         eax_mask=0, presets=credits_texts),
+    Spec("Credits_ReportCreatingException", 0x0059e7d0, "fastcall", [scratch(0), scratch(1), credits_line],
+         eax_mask=0, presets=credits_texts),
+    Spec("cmy_impuls_Timer_Construct", 0x0059f210, "thiscall", [anything]),
+    Spec("cmy_impuls_Timer_Fire", 0x0059f230, "thiscall", [credits_now], presets=credits_timer, virtuals={0: 1}),
+    Spec("cmy_impuls_Timer_Update", 0x0059f250, "thiscall", [credits_now], eax_mask=0, presets=credits_timer,
+         virtuals={0: 1}),
+    Spec("cmy_impuls_Timer_Restart", 0x0059f2a0, "thiscall", [credits_now], presets=credits_timer),
+]
