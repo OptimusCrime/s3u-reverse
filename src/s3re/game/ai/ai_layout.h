@@ -376,10 +376,15 @@ static_assert(sizeof(EconomyAgent) == 0xa0);
 // player * 10 + group.
 constexpr std::size_t kUnitGroups = 10;
 
+// A unit group's orders (AI::RunMilitary 0x58f990): two own military
+// buildings it patrols between ("Patrouille point 0 / 1", building ids
+// from NearestFreeInteriorMilitaryBuilding 0x58aa70 and friends; was x / y)
+// and the enemy settler it hunts (a catapult, AttackEnemyCatapults
+// 0x593180; was unk4; SendMoveGroup 0x590c80 tests it).
 struct AiGroupTarget {
-    std::uint16_t x;   // +0 (probably; 0x590649 / 0x593180)
-    std::uint16_t y;   // +2
-    std::uint16_t unk4;  // +4 (0x590c80 tests it)
+    std::uint16_t patrol0;  // +0 building id, 0 = none
+    std::uint16_t patrol1;  // +2 building id, 0 = none
+    std::uint16_t prey;     // +4 settler id, 0 = none
 };
 static_assert(sizeof(AiGroupTarget) == 6);
 

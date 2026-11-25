@@ -95,7 +95,7 @@
 //              nothing for an empty unit group (player_list_lengths; EAX =
 //              the index player * 10 + group). Attack-move (MoveUnitsMode3,
 //              15) instead of MoveUnits (9) when the group has no target
-//              settler (AiGroupTarget::unk4 == 0) and either has the steal
+//              settler (AiGroupTarget::prey == 0) and either has the steal
 //              flag, no target building (census) or defends. A defending
 //              group asks AI::CountEnemyBowmenOnOwnLandNear 0x58a610 (on
 //              0x7e5de4: x, y of its first member, distance 30, player)
@@ -508,7 +508,7 @@ std::uint32_t __fastcall AI_SendMoveGroup(AiCommandSender* self, void* /*edx*/, 
     const AiAgentData& census = g_aiCensus.get();
     const std::uint8_t defending = (&census.group_defending[0][0])[index];
     bool attack = false;
-    if ((&orders.group_targets[0][0])[index].unk4 == 0) {
+    if ((&orders.group_targets[0][0])[index].prey == 0) {
         attack = (&orders.group_flags[0][0])[index] != 0 || (&census.group_target_buildings[0][0])[index] == 0 ||
                  defending != 0;
     }
@@ -756,7 +756,7 @@ void CompareSenders(test::Context& ctx, const Senders& candidate, int cases) {
             auto* orders = reinterpret_cast<AiGroupOrders*>(ordersStart.data());
             auto* census = reinterpret_cast<AiAgentData*>(censusStart.data());
             const std::uint32_t p = in.values[0] % 20, g = in.values[1] % 10;
-            orders->group_targets[p][g].unk4 = static_cast<std::uint16_t>(rng.Chance(1, 2) ? 0 : rng.Next32());
+            orders->group_targets[p][g].prey = static_cast<std::uint16_t>(rng.Chance(1, 2) ? 0 : rng.Next32());
             orders->group_flags[p][g] = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0 : rng.Next32());
             census->group_target_buildings[p][g] =
                 static_cast<std::uint16_t>(rng.Chance(1, 2) ? 0 : rng.Next32());

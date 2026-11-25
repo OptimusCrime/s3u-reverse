@@ -319,9 +319,9 @@ std::uint32_t __stdcall AI_ResetUnitGroup(std::uint32_t player, std::uint32_t gr
     (&census.group_target_buildings[0][0])[index] = 0;
     (&army.attack_delays[0][0])[index] = 0;
     AiGroupTarget& target = (&orders.group_targets[0][0])[index];
-    target.x = 0;
-    target.y = 0;
-    target.unk4 = 0;
+    target.patrol0 = 0;
+    target.patrol1 = 0;
+    target.prey = 0;
     (&orders.group_flags[0][0])[index] = 0;
     return index;
 }

@@ -2719,6 +2719,30 @@ def walk_region_arg(rng, pool):
     return rng.choice((0, 1, 2, 3, 0xFFFFFFFF, 0xFFFFFFFE, 0x80000000, 256))
 
 
+# 0x58b118..0x58b160 (keep the building; door area check) of
+# FreeInteriorMilitaryBuildingNear_AlwaysNone are dead: the best distance
+# starts at 0 and TileDistance is never negative (original bug).
+ALWAYS_NONE_DEAD = (0x58b118, 0x58b150, 0x58b154)
+AI_GARRISONED_BUILDINGS = 0x007E77DC
+GARRISON_XRAN_PROBE = {0x0058B520: (0, "thiscall", "probe")}
+
+
+def unassigned_world(rng, pool, args):
+    """military_buildings, and sometimes a high-water mark past 4000 with a
+    tower of the player at 4000 (the bitset's _Xran)."""
+    fields = military_buildings(rng, pool, args)
+    if rng.random() < 0.1:
+        record = BUILDINGS + 4000 * BUILDING_BYTES
+        fields += [(BUILDING_COUNT, 4000 + rng.randrange(3), 4), (record, args[0], 1), (record + 6, 15, 1)]
+    return fields
+
+
+def unassigned_globals(rng, pool, args):
+    """order_globals plus the garrison bits of buildings 0..31."""
+    word = 0 if rng.random() < 0.3 else rng.getrandbits(32) & rng.getrandbits(32)
+    return order_globals(rng, pool, args) + [(AI_GARRISONED_BUILDINGS, word, 4)]
+
+
 def frontier_world(rng, pool, args):
     return military_buildings(rng, pool, args)
 
@@ -2837,6 +2861,13 @@ def geologists_globals(rng, pool, args):
 SPECS += [
     Spec("AI_NearestFreeInteriorMilitaryBuilding", 0x0058aa70, "thiscall", [below(3), order_point, order_point],
          presets=military_buildings, globals=order_globals, max_cases=1500),
+    Spec("AI_NearestInteriorMilitaryBuilding", 0x0058acd0, "thiscall", [below(3), order_point, order_point],
+         presets=military_buildings, globals=order_globals, max_cases=1500),
+    Spec("AI_FreeInteriorMilitaryBuildingNear_AlwaysNone", 0x0058af60, "thiscall",
+         [below(3), order_point, order_point], presets=military_buildings, globals=order_globals,
+         exempt_blocks=ALWAYS_NONE_DEAD, max_cases=1500),
+    Spec("AI_FirstUnassignedMilitaryBuilding", 0x0058ae90, "thiscall", [below(3)], presets=unassigned_world,
+         globals=unassigned_globals, callees=GARRISON_XRAN_PROBE, max_cases=1500),
     Spec("AI_WeakestFrontierMilitaryBuilding", 0x0058a7e0, "thiscall", [anything, below(3), walk_region_arg],
          presets=frontier_world, globals=order_globals, max_cases=1500),
     Spec("AI_Mission56FinalAssault", 0x00594d40, "thiscall", [], presets=assault_world, globals=order_globals,

@@ -330,6 +330,12 @@ inline constexpr GameGlobal<ai::AiCommandSender> g_aiCommandSender{0x7e5de8};
 // the AI_Census functions).
 inline constexpr GameGlobal<ai::AiAgentData> g_aiCensus{0x7e5ef8};
 inline constexpr GameGlobal<std::uint32_t[20]> g_aiPerPlayer7e79d0{0x7e79d0};
+// std::bitset<4000> of buildings (Rainer\CompMapWorkerAgent.cpp): a computer
+// player's military building whose bit is set has a garrison or one on the
+// way (set by AI::RunMilitary 0x58f990, read by
+// AI::FirstUnassignedMilitaryBuilding 0x58ae90; cleared by
+// AI::ProcessWorldEvents 0x590da0). Index checks call _Xran 0x58b520.
+inline constexpr GameGlobal<std::uint32_t[125]> g_aiGarrisonedBuildings{0x7e77dc};
 
 // ------------------------------------------------------------ Watcom skip lists
 // WCSkipNonTempBase::base_random_level (0x60bca0) draws node levels two bits

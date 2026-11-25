@@ -339,6 +339,17 @@ The economy agent tears down a residence when more than 10 beds are free
 soldiers (0x56a0f0, kinds 0x81..0x83) after 14 x AiPlayerSetup +0xc4 steps,
 at most 3 times (ComputerPlayer +0x768).
 
+Session 55 (V, `ai_army_orders.cpp`): the group "targets" at AiGroupOrders
++0x3e8 are two patrol buildings and a prey settler (AiGroupTarget
+`patrol0` / `patrol1` / `prey`; AI::RunMilitary 0x58f990 logs "Patrouille
+point 0 / 1" and sends the group to those buildings' positions). The three
+interior searches 0x58aa70 / 0x58acd0 / 0x58af60 are one body copied with
+small differences (InteriorSearch); 0x58af60 never finds anything
+(original bug). g_aiGarrisonedBuildings 0x7e77dc (std::bitset<4000>) marks
+military buildings with a garrison or one on the way;
+FirstUnassignedMilitaryBuilding 0x58ae90 returns the first tower / castle
+without that bit that no group patrols.
+
 ## How decisions reach the simulation
 
 Most decisions don't write the world directly (the world is read through
