@@ -2,8 +2,12 @@
 
 Findings of the naming pass of session 50 (2026-11-24), read from the code
 and checked against the game's files in `GFX\` (headers of all 45 files)
-and `SND\`. Not yet reimplemented: treat details as "read from the code"
-until a verified loader confirms them. Function names are in
+and `SND\`. Session 55 (gfx batch) reimplemented and verified the table
+accessors, the image accessors, all span functions, the RLE row helpers,
+every blitter, the four Draw methods and Close (sections marked
+"verified" below; the code is in `src/s3re/game/graphics/gfx_*.cpp`). Not
+yet reimplemented: the loader (Open, FindDirectoryContainingFile,
+DetachFromMedium, constructor/destructor). Function names are in
 `re/functions.csv` (notes "Named (session 50, ...)").
 
 
@@ -85,8 +89,11 @@ relative to the list. `GfxDword::ListImage` 0x5fc5a0 (no check) and `ListImageCh
   pixels). The skip is the number of transparent pixels before the run (row 0 of siedler3_10 list 0
   image 0: `04 87` = 4 pixels after 7 transparent ones, last run; width 15). Skipping rows:
   Rle16SkipRows 0x5fb130, ColorIndexedSkipRows 0x5fc810, ShadowSkipRows 0x5fd040.
-  The "skip before the run" reading fits the widths but isn't proven by the blitter code (not read
-  run by run).
+  Verified (session 55): the blitters read a run as `count`, `flags`; they first move the
+  destination by `flags & 0x7f` pixels (transparent), then draw `count` pixels; bit 7 ends the row.
+  The real files hold 52,892 16-bit sprites, 47,121 colour-indexed sprites, 49,223 shadows and
+  1,617 GUI images (RGB565 set); the in-process tests draw all of them with the original and with
+  ours and compare the surfaces.
 
 ### Sequences (0x21702 entries)
 
@@ -126,6 +133,39 @@ animated buildings); GuiImagePointer(At) + DrawGuiImage (menus, CStaticImage, pa
 LandscapeTexturePointer + Texture* (landscape.cpp 0x54bec0); TextAddress (UI texts, 294 callers);
 PalettePointer (CStaticColorIndexedFrame, drawers).
 
+## Drawing, verified (session 55)
+
+* **Shade spans** (32, `g_shadeSpans` 0x7a2bd8, picked by `brightness >> 3`): level i scales each
+  channel by (i + 1) / 32 as a sum of `(x >> k) & mask[k]` terms, one per set bit of i + 1 (bit 4:
+  `>> 1` ... bit 0: `>> 5`); two pixels per dword with the doubled masks, then an odd pixel.
+  Exceptions: level 31 copies, level 0 writes black (not 1/32). The masks (0x7e8dd8..0x7e8e04,
+  `ShadeMasks`) keep only the bits that stayed inside their channel.
+* **Masked spans** (8, `g_maskedSpans` 0x7a2c58, `brightness >> 5`): (i + 1) / 8 with `>> 1..3`,
+  level 7 copies, level 0 black; a pixel is written only where the 16-byte dither mask row
+  (`g_ditherMasks` 0x7a2b58, 8 rows) has a non-zero entry at the phase (phase & 15, advanced by
+  every transparent and drawn pixel, reset per row).
+* **Construction progress** (DrawSprite's fraction, 16.16, 0x10000 = whole): the sprite keeps its
+  bottom `kept = min(h, ((h + 8) * f) >> 16)` rows; `Rle16VerticalClip` makes up to 8 top rows of
+  those "dissolving" rows (drawn with the masked spans through mask rows maskStart..), the rest
+  normal. Shadows keep `(h * f) >> 16` rows (no dissolve).
+* **Shadows**: method 0 halves the destination (`ShadowSpan_Halve` 0x5fd0c0, `(x >> 1) & 0x7bef`),
+  method 1 writes black where `(phase + parity)` is odd (checkerboard; phase = origin x mod 32 +
+  pixels, parity = origin y mod 32 + row). The origin is the shadow's position plus DrawShadow's
+  shift argument.
+* **Blitter choice**: x < clip.left: ClipLeft (or ClipBoth for 16-bit sprites wider than the clip);
+  x + w >= clip.right: ClipRight; else Shaded / FullBright (brightness 248..255) for 16-bit,
+  Unclipped for colour-indexed and shadows. Colour-indexed and shadow layers have no ClipBoth: a
+  layer crossing both edges is cut only at the left and drawn past the right edge (original bug,
+  kept).
+* **Quirk kept**: in every ClipRight blitter a run that starts at or past the right edge advances
+  the RLE pointer but not the destination (harmless: later runs are further right).
+* **Close** unmaps only when group 0 is mapped (it checks `views[0]` once before the loop).
+
+Function starts added (manual rows in `re/extra_functions.tsv`, session 55): shade spans 0x5f48e0,
+0x5f4920, 0x5f4a00, 0x5f4c00, 0x5f5070, 0x5f59e0; masked spans 0x5fb470, 0x5fb410, 0x5fb3a0,
+0x5fb340, 0x5fb2d0, 0x5fb260, 0x5fb180; shadow span 0x5fd0c0. Lobby_sub_5f4830 now ends at
+0x5f48d5 (a vector reserve of 0x18-byte records, not graphics code).
+
 ## Load call tree
 
 ```
@@ -163,21 +203,16 @@ The unknowns in the fourth item are not renamed yet.
   `guiImageTables`.
 * 0x5fad20 `FrameCount` -> `SequenceFrameCount` (medium; optional); `spriteTables` -> `sequenceTables`
   (its entries are sequences, not sprites).
-* gfx_layout.h unknowns: `unk034` = file sizes, `unk004` = DDPIXELFORMAT, `unk6c4` = landscape
-  texture tables, `unk7dc` = colour-indexed list tables, `unk8f4` = shadow list tables, `unka0c` =
-  palette tables.
+* gfx_layout.h unknowns: renamed in session 55 (`pixelFormat`, `fileSizes`,
+  `landscapeTextureTables`, `colorIndexedTables`, `shadowTables`, `paletteTables` with
+  `PaletteTable`).
 * `GfxDword` (verified constructor 0x5fc540) is a reference to one image or image list. A better class
   name would be something like `GfxImage`; the tsv keeps `GfxDword::` so it matches the current name.
 * 0x5fe948 `DirectX::CDirectSound::DSSetCooperativeLevel` (identified) and 0x5fe9d8
   `DirectX::CPrimaryBuffer::DSSetFormat` aren't functions: they're catch-continuation addresses inside
   CSoundData::Open 0x5fe760 (`mov eax, <addr>; ret` funclet returns right before them); same for
   0x5feb05.
-* Missing function starts (not in the inventory; Ghidra merged or missed them): shade spans 0x5f48e0,
-  0x5f4920, 0x5f4a00, 0x5f4c00, 0x5f5070, 0x5f59e0 (table 0x7a2bd8 entries 0, 1, 3, 7, 15, 31);
-  masked spans 0x5fb470, 0x5fb410, 0x5fb3a0, 0x5fb340, 0x5fb2d0, 0x5fb260, 0x5fb180 (table 0x7a2c58
-  entries 0..5 and 7); shadow span 0x5fd0c0 (method 0). Suggested names: `ShadeSpan16_LevelNN`,
-  `MaskedSpan16_LevelN`, `ShadowSpan_Halve`.
-* Lobby_sub_5f4830 may run into 0x5f48e0 (its end wasn't checked).
+* Missing function starts: added in session 55 (see "Drawing, verified").
 
 ## Not done
 
