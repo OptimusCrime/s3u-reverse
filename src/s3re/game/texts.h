@@ -353,6 +353,8 @@ inline constexpr GameText kCaughtUnknown{0x7330e8};      // "catched (...?): "
 inline constexpr GameText kCaughtCmy{0x7330fc};          // "catched cmy: "
 inline constexpr GameText kColonSpace{0x69a240};         // ": "
 inline constexpr GameText kCreatingException{0x73310c};  // "creating exception: "
+// "RAINER: Haus das fertig sein soll gibt es nicht mehr!" (the finished house no longer exists; AI::OnBuildingFinished)
+inline constexpr GameText kAiFinishedHouseGone{0x7326e0};
 // The out-of-memory checks of the land evaluation (CEvaLand::Acquire, Init).
 inline constexpr GameText kEvalMap{0x7312e8};            // "pEvalMap"
 inline constexpr GameText kEvaLandSourceFile{0x7312f4};  // "E:\Siedler3\Rainer\Cevaland.cpp"

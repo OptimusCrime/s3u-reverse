@@ -1,32 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1258" fill="#ffffff"/>
-<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">29.9%</text>
+<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">30.0%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="328.8" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 23.4%</title></rect>
 <text x="334.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">23.4%</text>
-<rect x="498.8" y="100" width="92.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.6%</title></rect>
-<text x="544.9" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.6%</text>
-<rect x="591" y="100" width="293.2" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.9%</title></rect>
-<text x="737.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.9%</text>
-<rect x="884.2" y="100" width="691.8" height="40" fill="#e8a39b"><title>Not understood yet: 49.2%</title></rect>
-<text x="1230.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">49.2%</text>
+<rect x="498.8" y="100" width="93.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.6%</title></rect>
+<text x="545.5" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.6%</text>
+<rect x="592.2" y="100" width="293.2" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.9%</title></rect>
+<text x="738.8" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.9%</text>
+<rect x="885.4" y="100" width="690.6" height="40" fill="#e8a39b"><title>Not understood yet: 49.1%</title></rect>
+<text x="1230.7" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">49.1%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="232.4" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 16.5%</title></rect>
 <text x="286.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">16.5%</text>
-<rect x="402.4" y="154" width="65.5" height="40" fill="#4f8fc0"><title>Verified by tests only: 4.7%</title></rect>
-<text x="435.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">4.7%</text>
-<rect x="468" y="154" width="514.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.6%</title></rect>
-<text x="725.1" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.6%</text>
-<rect x="982.3" y="154" width="593.7" height="40" fill="#e8a39b"><title>Not understood yet: 42.2%</title></rect>
-<text x="1279.1" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.2%</text>
+<rect x="402.4" y="154" width="66.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 4.7%</title></rect>
+<text x="435.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">4.7%</text>
+<rect x="468.8" y="154" width="514.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.6%</title></rect>
+<text x="726" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.6%</text>
+<rect x="983.1" y="154" width="592.9" height="40" fill="#e8a39b"><title>Not understood yet: 42.2%</title></rect>
+<text x="1279.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.2%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
 <rect x="869.6" y="216" width="16" height="16" fill="#f2c86b"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
 <rect x="1233.2" y="216" width="16" height="16" fill="#e8a39b"/><text x="1257.2" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1108.3" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 29.9% verified (23.4% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 30.0% verified (23.4% in a whole game)</text>
 <g><title>(free functions): 1003 functions</title><rect x="2" y="19" width="520.9" height="671.6" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="259.6" height="185.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -2791,8 +2791,8 @@
 848 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="594.2" y="341.3" width="24.7" height="21.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>AI::FindVineyardWorkArea @ 0x0059b430
 848 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="594.2" y="362.9" width="24.7" height="21.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>AI::OnBuildingFinished @ 0x00573890
-848 bytes — Classified (class/role known)</title></rect>
+<rect x="594.2" y="362.9" width="24.7" height="21.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::OnBuildingFinished @ 0x00573890
+848 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="594.2" y="384.5" width="24.7" height="21.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::DiscountExploitedResources @ 0x0059bc20
 848 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="618.9" y="274.1" width="23.9" height="20.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>AI::FindFisheryWorkArea @ 0x0059b780
@@ -3459,8 +3459,8 @@
 736 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1046.6" y="447.9" width="21" height="15.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderIronSmelter @ 0x00568f40
 544 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1067.6" y="447.9" width="21" height="15.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::AdjustSoldierShares @ 0x0056a840
-544 bytes — Classified (class/role known)</title></rect>
+<rect x="1067.6" y="447.9" width="21" height="15.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::AdjustSoldierShares @ 0x0056a840
+544 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1088.5" y="447.9" width="17.3" height="15.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderCoalMine @ 0x00568bc0
 448 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1046.6" y="463.6" width="14.9" height="18.3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderIronMine @ 0x00568d80

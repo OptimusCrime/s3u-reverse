@@ -193,6 +193,11 @@ inline constexpr GameGlobal<const std::uint16_t[58]> g_aiBuildPrioritySteps{0x73
 // The T_ECONOMY_AGENT's population stages (EconomyAgent::population):
 // stage s while population < stages[s + 1] (0, 40, 100, 500, 2000).
 inline constexpr GameGlobal<const std::uint16_t[5]> g_aiPopulationStages{0x65a85c};
+// Per population stage 0..3 the weapon shares (Area::settings_extra, sword /
+// bow / spear, G) the economy agent moves an area towards
+// (T_ECONOMY_AGENT::AdjustSoldierShares 0x56a840): {10,35,30} {25,30,25}
+// {35,25,20} {45,20,15}.
+inline constexpr GameGlobal<const std::uint8_t[4][3]> g_aiWeaponShares{0x65a87c};
 // Carriers wanted at the start of each population stage (0, 20, 50, 200,
 // 500; the residences condition 0x568890); the static initializers derive
 // g_aiResidenceSlopes from them and the stages.

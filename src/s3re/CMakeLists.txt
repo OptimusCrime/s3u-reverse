@@ -157,6 +157,7 @@ add_library(s3re SHARED
     game/ai/ai_army_groups.cpp
     game/ai/ai_army_orders.cpp
     game/ai/ai_battle_spells.cpp
+    game/ai/ai_building_finished.cpp
     game/ai/ai_building_orders.cpp
     game/ai/ai_building_queries.cpp
     game/ai/ai_cell_resources.cpp
@@ -187,6 +188,7 @@ add_library(s3re SHARED
     game/ai/ai_site_notes.cpp
     game/ai/ai_site_queries.cpp
     game/ai/ai_small_helpers.cpp
+    game/ai/ai_soldier_shares.cpp
     game/ai/ai_state.cpp
     game/ai/ai_work_areas.cpp
     game/ai/ai_work_area_finders.cpp

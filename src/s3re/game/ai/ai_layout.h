@@ -327,7 +327,10 @@ struct AiPlayerData {
     std::uint32_t short_of_wood;          // 0x010
     std::uint32_t short_of_stone;         // 0x014
     std::uint32_t force_production;       // 0x018 set by COMP_ForceProduction 0x572fc0, read by AI::IsForceProduction 0x572fa0
-    std::uint8_t unk01c[4];
+    // 0x01c the population stage the weapon shares were last set for
+    // (T_ECONOMY_AGENT::AdjustSoldierShares 0x56a840; 0xff = not yet).
+    std::uint8_t share_stage;
+    std::uint8_t unk01d[3];
     // 0x020 +1 per computer-player step (0x550f80 step 9); above 4200 the
     // expand agent's MakeBuildOrders 0x56cd90 looks around in all six
     // directions ("LANGE NICHT MEHR AUSGEDEHNT", G: steps since the last

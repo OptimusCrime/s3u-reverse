@@ -830,3 +830,27 @@ nothing here (the expand agent places towers).
 HasBuildingTypeNear's rings all start at (x + 1, y - 1) (shifted squares
 instead of rings; kept).
 
+## Weapon shares (session 56, V)
+
+`T_ECONOMY_AGENT::AdjustSoldierShares` 0x56A840 (ai_soldier_shares.cpp):
+the area's population picks a stage (> 250, > 100, > 40, else 0; the 250
+is g_aiPopulationStages[3] / 2); when it differs from
+`AiPlayerData::share_stage` (+0x1C, 0xFF at first) the three weapon shares
+of the area (Area +0x23E..+0x240, G sword / bow / spear) are moved towards
+g_aiWeaponShares[stage] ({10,35,30}, {25,30,25}, {35,25,20}, {45,20,15})
+with one ChangeToolSettings command per 5. Quirk kept: a population of
+exactly 40 keeps a stage that was set before.
+
+## A finished building (session 56, V)
+
+`AI::OnBuildingFinished` 0x573890 (ai_building_finished.cpp; from the land
+evaluation's event processing 0x554980), only for computer players
+(Player::active 2): the owner's area nodes of the building's area count
+one construction site less (AiPlayerData::sites +0x24) and unblock the
+type; then a follow-up order by type: the work area of a farm, waterworks,
+fishery, rice farm or vineyard (its finder, then SendSetWorkArea), the
+toolsmith's tool settings cleared, goods 13 (and 12 for the large one)
+secured for the medium / large residence, a garrison order for a large
+tower or castle, and for a gem mine every own gold mine and gold smelter is
+torn down (G: the Egyptians trade gold for gems).
+

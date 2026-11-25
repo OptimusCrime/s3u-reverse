@@ -5442,3 +5442,134 @@ SPECS += [
          [type_near_coordinate, type_near_coordinate, type_near_kind, type_near_radius],
          presets=type_near_world, globals=type_near_globals, max_cases=1500),
 ]
+
+
+# -- session 56 (wip/ai-agents): T_ECONOMY_AGENT::AdjustSoldierShares (ai_soldier_shares.cpp) --
+# The agent at world +0 (population +0x3e around the stage limits, area
+# +0xc), the area node in scratch 4 (share_stage +0x1c), the area's three
+# shares. SendChangeToolSettings is probed (verified; ECX = &player is the
+# same global in both, its kind / direction arguments point at stack
+# bytes, whose values are recorded).
+
+def soldier_shares_world(rng, pool, args):
+    population = rng.choice((39, 40, 41, 99, 100, 101, 249, 250, 251)) if rng.random() < 0.5 else rng.randrange(400)
+    area = rng.randrange(4096)
+    stage = 0xFF if rng.random() < 0.25 else rng.randrange(5)
+    fields = [(0x3E, population, 2), (0xC, area, 2), (MAP_WORKER_DATA + 0x1C, stage, 1)]
+    fields += [(AI_AREAS + area * 0x2E0 + 0x23E + k, rng.randrange(256) if rng.random() < 0.3 else rng.randrange(60), 1)
+               for k in range(3)]
+    return fields
+
+
+def soldier_shares_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_PLAYER_DATA, WORLD_BASE + MAP_WORKER_DATA, 4),
+            (AI_PLAYER_NUMBER, rng.randrange(20), 1)]
+
+
+SOLDIER_SHARES_CALLEES = {
+    0x0058E740: (2, "thiscall", "probe", None,
+                 lambda machine, ecx, args: (machine.guest_read(args[0], 1), machine.guest_read(args[1], 1))),
+}
+
+SPECS += [
+    Spec("T_ECONOMY_AGENT_AdjustSoldierShares", 0x0056a840, "thiscall", [], eax_mask=0,
+         presets=soldier_shares_world, globals=soldier_shares_globals, callees=SOLDIER_SHARES_CALLEES),
+]
+
+
+# -- session 56 (wip/ai-agents): AI::OnBuildingFinished (ai_building_finished.cpp) --
+# The finished building (ECX = its id) among buildings near the origin, of a
+# type that reaches every case; players mostly computer players
+# (Player::active 2); the owner's area list in the CEvaLand (scratch 12):
+# a head in scratch 5 and up to four nodes in scratch 6.. whose area is
+# often the building's door-tile area. The follow-up senders and the work
+# area finders are probed (verified elsewhere): the words / bytes their
+# pointer arguments point at are recorded (the original's are stack
+# copies), and a finder sometimes writes a new work area.
+
+FINISHED_TYPES = (12, 14, 16, 18, 24, 25, 27, 28, 30, 36, 37, 2, 13, 0, 56)
+FINISHED_HEAD = SCRATCH + 5 * SCRATCH_SLOT_BYTES
+FINISHED_NODES = SCRATCH + 6 * SCRATCH_SLOT_BYTES  # 0x744 bytes each, four nodes over slots 6..7
+
+
+def finished_world(rng, pool, args):
+    fields = near_buildings(rng, pool, args)
+    # some gold mines and smelters (torn down for a gem mine)
+    fields += [(BUILDINGS + other * BUILDING_BYTES + 6, rng.choice((8, 10)), 1)
+               for other in range(1, 42) if rng.random() < 0.15]
+    building = args[0] & 0xFFFF
+    record = BUILDINGS + building * BUILDING_BYTES
+    owner = rng.randrange(3)
+    area = rng.randrange(1, 5)
+    door_x, door_y = rng.randrange(60), rng.randrange(60)
+    fields += [(record, 0xFF if rng.random() < 0.05 else owner, 1), (record + 6, rng.choice(FINISHED_TYPES), 1),
+               (record + 0xA, door_x, 2), (record + 0xC, door_y, 2),
+               (TILES + (door_x * 0x300 + door_y) * 24 + 0x14, area, 2)]
+    for player in range(3):
+        fields.append((EXPAND_PLAYERS + player * 0x148, 2 if rng.random() < 0.85 else rng.randrange(3), 4))
+    # the owner's area list: head -> nodes -> head
+    nodes = [FINISHED_NODES + k * 0x744 for k in range(rng.randrange(5))]
+    chain = [FINISHED_HEAD, *nodes, FINISHED_HEAD]
+    for here, there in zip(chain, chain[1:]):
+        fields.append((here, WORLD_BASE + there, 4))
+    for node in nodes:
+        fields += [(node + 8, area if rng.random() < 0.6 else rng.randrange(6), 2),
+                   (node + 0x24, 0 if rng.random() < 0.3 else rng.randrange(1, 5), 2)]
+    fields.append((MAP_WORKER_LAND + owner * 12 + 4, WORLD_BASE + FINISHED_HEAD, 4))
+    return fields
+
+
+def finished_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, 64, 2), (AI_MAP_SIZES + 2, 64, 2),
+            (AI_LAND_EVALUATION, WORLD_BASE + MAP_WORKER_LAND, 4)]
+
+
+def finished_id(rng, pool):
+    return (rng.randrange(1, 42) if rng.random() < 0.95 else rng.randrange(3000)) | (
+        rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+def _word(machine, address):
+    return int.from_bytes(machine.guest_read(address, 2), "little")
+
+
+def _finder_record(machine, ecx, args):
+    from unicorn.x86_const import UC_X86_REG_EDX
+    return (ecx, _word(machine, machine.uc.reg_read(UC_X86_REG_EDX)), _word(machine, args[0]))
+
+
+def _finder_effect(machine, ecx, args, h):
+    from unicorn.x86_const import UC_X86_REG_EDX
+    if h & 1:
+        machine.guest_write(machine.uc.reg_read(UC_X86_REG_EDX), ((h >> 8) & 0x3F).to_bytes(2, "little"))
+        machine.guest_write(args[0], ((h >> 16) & 0x3F).to_bytes(2, "little"))
+
+
+def _pointed_record(sizes):
+    """Records ECX's and EDX's pointed values and the stack arguments' (sizes: ECX, EDX, stack...;
+    probed as "stdcall", so the raw ECX, a stack address, is not recorded)."""
+    def record(machine, ecx, args):
+        from unicorn.x86_const import UC_X86_REG_ECX, UC_X86_REG_EDX
+        ecx = machine.uc.reg_read(UC_X86_REG_ECX)
+        edx = machine.uc.reg_read(UC_X86_REG_EDX)
+        pointers = [ecx, edx, *args]
+        return tuple(int.from_bytes(machine.guest_read(p, n), "little") if n else p
+                     for p, n in zip(pointers, sizes))
+    return record
+
+
+FINISHED_CALLEES = {
+    **{finder: (1, "thiscall", "probe", _finder_effect, _finder_record)
+       for finder in (0x0059AC50, 0x0059BA90, 0x0059B780, 0x0059B0A0, 0x0059B430)},
+    0x0058E220: (2, "stdcall", "probe", None, _pointed_record((2, 1, 2, 2))),  # SendSetWorkArea
+    0x0058E930: (0, "stdcall", "probe", None, _pointed_record((2,))),           # ClearToolGoodsSettings
+    0x00573760: (1, "stdcall", "probe", None, _pointed_record((1, 1, 2))),      # EnsureGoodsSupply
+    0x0058E630: (1, "thiscall", "probe", None,                                   # SendChangeGarrison
+                 lambda machine, ecx, args: (ecx & 0xFFFF, args[0])),
+    0x0058E5C0: (0, "stdcall", "probe", None, _pointed_record((2, 1))),         # SendDestroyBuilding
+}
+
+SPECS += [
+    Spec("AI_OnBuildingFinished", 0x00573890, "fastcall", [finished_id], eax_mask=0, presets=finished_world,
+         globals=finished_globals, callees=FINISHED_CALLEES),
+]

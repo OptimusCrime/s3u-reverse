@@ -436,3 +436,5 @@ address,name,type,status,notes
 0x007330fc,texts::kCaughtCmy,char[],identified,"String ""catched cmy: "" (the credits code's debug reports). Declared in src/s3re/game/texts.h; used by credits_debug.cpp."
 0x0069a240,texts::kColonSpace,char[],identified,"String "": "" (the credits code's debug reports). Declared in src/s3re/game/texts.h; used by credits_debug.cpp."
 0x0073310c,texts::kCreatingException,char[],identified,"String ""creating exception: "" (the credits code's debug reports). Declared in src/s3re/game/texts.h; used by credits_debug.cpp."
+0x0065a87c,g_aiWeaponShares,const uint8_t[4][3],classified,"Per population stage the three weapon shares (Area +0x23e..+0x240) the economy agent moves an area towards in steps of 5 (T_ECONOMY_AGENT::AdjustSoldierShares 0x56a840). Declared in src/s3re/game/tables.h; used by ai_soldier_shares.cpp."
+0x007326e0,texts::kAiFinishedHouseGone,char[],identified,"String ""RAINER: Haus das fertig sein soll gibt es nicht mehr!"" (DebugLog of AI::OnBuildingFinished 0x573890). Declared in src/s3re/game/texts.h; used by ai_building_finished.cpp."
