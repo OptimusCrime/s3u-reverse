@@ -359,3 +359,5 @@ address,name,type,status,notes
 0x007e7ccc,g_aiUnk7e7ccc,uint32_t,classified,"Cleared by the reset of AI::RunMilitary 0x58f990 (no other access found). Declared in src/s3re/game/globals.h; used by ai_military.cpp."
 0x007e7cd0,g_aiUnk7e7cd0,uint32_t,classified,"Cleared by the reset of AI::RunMilitary 0x58f990 (no other access found). Declared in src/s3re/game/globals.h; used by ai_military.cpp."
 0x007e3410,g_aiMilitaryResetRequest,uint8_t,classified,"Non-zero: T_ATTACK_AGENT::Run 0x55ec10 passes a reset request to AI::RunMilitary 0x58f990, then clears it (set by the CComputerPlayer constructor 0x550900). Declared in src/s3re/game/globals.h; used by ai_military.cpp."
+0x007e80a8,g_aiFieldMapNil,ai::SiteTreeNode*,classified,"MSVC6 _Tree::_Nil of the farm / rice farm / vineyard finders' std::map<u8, position, greater<u8>> (library code 0x59cb70.., the same node layout as AI::SiteTree). Declared in src/s3re/game/globals.h; used by ai_work_area_finders.cpp."
+0x007e80ac,g_aiFieldMapNilRefs,uint32_t,classified,"MSVC6 _Tree::_Nilrefs of that map instance. Declared in src/s3re/game/globals.h; used by ai_work_area_finders.cpp."

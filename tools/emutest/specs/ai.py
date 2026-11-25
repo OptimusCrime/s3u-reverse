@@ -4835,3 +4835,114 @@ SPECS += [
     Spec("AI_SiteTree_iterator_PostDecrement", 0x00580270, "fastcall", [scratch(12), anything, scratch(11), anything],
          presets=site_tree_iterator, globals=site_tree_globals, callees=LOCKIT_PROBES),
 ]
+
+
+# -- session 55 round 2 (ai-step): the work-area finders of farms, rice --------
+# -- farms, vineyards, woodcutters, stonecutters, fisheries -------------------
+# -- (ai_work_area_finders.cpp) ------------------------------------------------
+#
+# The building record at scratch 0 (owner, x, y), *x / *y at scratch 1 / 2;
+# a 64 x 64 map, the land evaluation at WORK_LAND with an 8 x 8 grid, up to
+# 14 buildings of the work-area types (HasSameTypeWorkAreaNear), pile lists
+# of logs and stones in areas 0..3 (the cutters' stock test). The nil nodes
+# of both tree instances exist (refs 1..3) or are made by the call.
+
+FIELD_MAP_NIL_GLOBAL = 0x007e80a8
+FIELD_MAP_REFS_GLOBAL = 0x007e80ac
+FINDER_FIELD_NIL = SCRATCH + 15 * SCRATCH_SLOT_BYTES
+FINDER_SITE_NIL = SCRATCH + 16 * SCRATCH_SLOT_BYTES
+FINDER_HEAP = 0x01fc0000  # emu.HEAP_OFFSET: the fake heap, 0x20 bytes per tree node
+FINDER_TYPES = (2, 3, 14, 24, 36, 25)
+# ignore_bytes: byte +0xd of every tree node in the fake heap (one node per
+# 0x20 bytes; at most 2 + 120 nodes). It is the padding byte of the stored
+# value, copied from a stack temporary whose padding the original never
+# writes: an uninitialized byte of each function's own frame (ours 0). The
+# nodes are freed before the function returns.
+FINDER_NODE_PADDING = tuple(FINDER_HEAP + 0x20 * k + 0xd for k in range(130))
+
+
+def finder_world(rng, pool, args):
+    owner = rng.randrange(3) if rng.random() < 0.95 else 0xFF
+    bx, by = rng.randrange(64), rng.randrange(64)
+    # (the door tile gives the cutters' area: on the smallest map, so that
+    # the pile lists below are the ones read; lazily random ones may loop)
+    fields = [(SCRATCH, owner, 1), (SCRATCH + 2, bx, 2), (SCRATCH + 4, by, 2), (SCRATCH + 0xA, bx % 24, 2),
+              (SCRATCH + 0xC, by % 24, 2), (MAP_SIZE, 64, 4),
+              (WORK_LAND + 0x140, 8, 4), (WORK_LAND + 0x144, 8, 4), (WORK_LAND + 0x158, WORLD_BASE + WORK_GRID, 4)]
+    patch = rng.choice((8, 12, 16, 24, 64))
+    phase = rng.randrange(4)
+    flat = rng.random() < 0.6
+    for x in range(64):
+        for y in range(64):
+            k = (x // patch) * 7 + (y // patch) * 3 + phase
+            roll = rng.randrange(10)
+            terrain = 0x10 | rng.randrange(16) if roll < 5 else 0x15 if roll == 5 else \
+                0x60 | rng.randrange(16) if roll == 6 else rng.randrange(256)
+            obj = rng.randrange(12)
+            obj = 0x44 + rng.randrange(16) if obj == 0 else 0x73 + rng.randrange(12) if obj == 1 else rng.randrange(0x40)
+            base = tile(x, y)
+            fields += [(base + 8, 0xFF if k % 4 == 3 else k % 4, 1), (base + 6, terrain, 1),
+                       (base + 4, rng.randrange(2 if flat else 30), 1),
+                       (base + 10, rng.randrange(256) & ~0x20 if rng.random() < 0.1 else 0, 1), (base + 7, obj, 1),
+                       (base + 0x11, rng.randrange(256), 1),
+                       (base + 0x14, 0 if rng.random() < 0.1 else rng.randrange(1, 4), 2)]
+    if rng.random() < 0.7:
+        fields += [(tile(bx, by) + 2, rng.randrange(1, 16), 2), (tile(bx, by) + 10, 0x20, 1)]
+    for cell in range(64):
+        base = WORK_GRID + cell * 0xC4
+        fields += [(base + b, 0 if rng.random() < 0.33 else rng.randrange(1, 256), 1) for b in range(2, 0xF)]
+        fields.append((base + 0x1c, 0 if rng.random() < 0.7 else rng.randrange(1, 300), 2))
+    for k in (150, 300, 400):
+        fields.append((0x110A588 + 16 * k + 8, rng.randrange(40), 4))
+    count = rng.randrange(15)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        dx, dy = rng.randrange(64), rng.randrange(64)
+        fields += [(record, 0xFF if rng.random() < 0.1 else rng.randrange(3), 1),
+                   (record + 6, rng.choice(FINDER_TYPES), 1), (record + 0x21, 0 if rng.random() < 0.85 else 1, 1),
+                   (record + 0xA, dx, 2), (record + 0xC, dy, 2),
+                   (record + 0x30, rng.randrange(64), 2), (record + 0x32, rng.randrange(64), 2)]
+    used = set()
+    for area in range(4):
+        for goods in (2, 3):
+            head = 0
+            for _ in range(rng.randrange(5)):
+                pile = rng.randrange(1, 400)
+                if pile in used:
+                    continue
+                used.add(pile)
+                fields += [(PILES + pile * 14 + 1, rng.randrange(9), 1), (PILES + pile * 14 + 0xC, head, 2)]
+                head = pile
+            fields.append((AI_AREAS + area * 0x2e0 + 0xa + goods * 2, head, 2))
+    for nil in (FINDER_FIELD_NIL, FINDER_SITE_NIL):
+        fields += [(nil, 0, 4), (nil + 4, 0, 4), (nil + 8, 0, 4), (nil + 0x14, 1, 4)]
+    return fields
+
+
+def finder_globals(rng, pool, args):
+    fields = [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, rng.choice((64, 64, rng.randint(24, 64))), 2),
+              (AI_MAP_SIZES + 2, rng.choice((64, 64, rng.randint(24, 64))), 2),
+              (AI_LAND_EVALUATION, WORLD_BASE + WORK_LAND, 4)]
+    for nil_global, nil in ((FIELD_MAP_NIL_GLOBAL, FINDER_FIELD_NIL), (SITE_TREE_NIL_GLOBAL, FINDER_SITE_NIL)):
+        if rng.random() < 0.5:
+            fields += [(nil_global, 0, 4), (nil_global + 4, 0, 4)]
+        else:
+            fields += [(nil_global, WORLD_BASE + nil, 4), (nil_global + 4, rng.randint(1, 3), 4)]
+    return fields
+
+
+def finder_spec(name, address, **kwargs):
+    return Spec(name, address, "fastcall", [scratch(0), scratch(1), scratch(2)], presets=finder_world,
+                globals=finder_globals, callees=LOCKIT_PROBES, ignore_bytes=FINDER_NODE_PADDING, max_cases=400,
+                **kwargs)
+
+
+SPECS += [
+    finder_spec("AI_FindFarmWorkArea", 0x0059ac50),
+    finder_spec("AI_FindRiceFarmWorkArea", 0x0059b0a0),
+    finder_spec("AI_FindVineyardWorkArea", 0x0059b430),
+    finder_spec("AI_FindWoodcutterWorkArea", 0x0059a3a0),
+    finder_spec("AI_FindStonecutterWorkArea", 0x0059a8d0),
+    finder_spec("AI_FindFisheryWorkArea", 0x0059b780),
+]

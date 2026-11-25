@@ -334,6 +334,11 @@ inline constexpr GameGlobal<std::uint32_t> g_aiLandEvaluation{0x7e3134};
 // by the first tree, freed with the last) and the number of trees using it.
 inline constexpr GameGlobal<ai::SiteTreeNode*> g_aiSiteTreeNil{0x7e0570};
 inline constexpr GameGlobal<std::uint32_t> g_aiSiteTreeNilRefs{0x7e0574};
+// The nil node and its reference count of the farm, rice farm and vineyard
+// finders' std::map<u8, position, greater<u8>> (a second MSVC6 _Tree
+// instance; library code 0x59cb70.., ai_work_area_finders.cpp).
+inline constexpr GameGlobal<ai::SiteTreeNode*> g_aiFieldMapNil{0x7e80a8};
+inline constexpr GameGlobal<std::uint32_t> g_aiFieldMapNilRefs{0x7e80ac};
 // 1 until the first computer player's set-up (0x550a30) has run
 // AI::MarkBuildingTypesInLandGrid (0x5723a0); set by InitAiGlobals.
 inline constexpr GameGlobal<std::uint32_t> g_aiMarkBuildingTypesPending{0x7312ac};

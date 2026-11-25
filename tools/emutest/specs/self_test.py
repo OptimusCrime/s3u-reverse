@@ -72,3 +72,9 @@ SELF_TEST += [
          presets=site_tree_insert_world, globals=site_tree_globals, callees=LOCKIT_PROBES,
          ignore_bytes=(SITE_TREE_OUT + 5, SITE_TREE_OUT + 6, SITE_TREE_OUT + 7)),
 ]
+
+SELF_TEST += [
+    # ignore_bytes on byte +0xd of the finders' freed tree nodes: the wrong
+    # farm finder stores every key one higher (node byte +0xc).
+    finder_spec("WrongFarmKeys", 0x0059ac50),
+]

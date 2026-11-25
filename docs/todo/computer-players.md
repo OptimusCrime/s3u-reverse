@@ -44,16 +44,10 @@ LOGBOOK session entry).
   known difference). The other 18 senders are verified (ai_commands.cpp).
 - **Package A5: Cevaland** (land evaluation) and **A6: the agents' run
   functions** (slot 8), smallest first; then 0x550f80 and the
-  constructor 0x550900 / 0x550a30. Session 55 left the MSVC6 tree code
-  for later: the SiteTree functions (0x55a260 _Dec, 0x55a320 _Inc,
-  0x55a970 _Init, 0x5590a0, 0x559f60 _Insert, ...) and the farm / rice
-  farm / vineyard / fishery work-area finders (0x59ac50, 0x59b0a0,
-  0x59b430, 0x59b780) call std::_Lockit (0x61e6e3 / 0x61e77f:
-  Enter/LeaveCriticalSection, which the emulator lacks: probe them) and
-  the finders copy a 6-byte map value whose padding byte (node +0xd) is an
-  uninitialized stack byte (needs ignore_bytes or another way to compare
-  freed nodes). Call the library tree functions (0x59cb70, 0x59c330,
-  0x59c470) through their addresses in the original's order.
+  constructor 0x550900 / 0x550a30. Session 55 round 2 did the SiteTree
+  (all 16 functions) and the six work-area finders (std::_Lockit is
+  probed by the emulator, `LOCKIT_PROBES`; the finders' node padding bytes
+  are ignored with a self-test pairing).
 - **Open:** a world-field list of the AI range with
   `tools/world_fields.py`.
 - **Left from the naming-pass corrections (session 51 did the code and

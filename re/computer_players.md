@@ -729,3 +729,27 @@ replacements take it at the same places (msvc6/lockit.h) and the
 emulator compares the order of those calls (LOCKIT_PROBES). Quirks of the
 library code kept: erase writes the nil node's parent link; insert's
 result pair has 3 padding bytes of stack leftovers (ours 0).
+
+## Work areas of new production buildings (session 55 round 2, V)
+
+`ai_work_area_finders.cpp` / `ai_work_areas.cpp`. The finders walk square
+rings of grid cells around the building's cell (ring r: from (x + r, y - r)
+four sides of 2r cells, -x, +y, +x, -y) and return a cell centre.
+- Farm 0x59ac50 (rings 1..3): score = owned grain land in the cell + 8 *
+  (1 - |dx| - |dy| - ring - penalty), penalty 4 straight below the
+  building's cell, 2 for the other cells below, 0 above; cells near another
+  farm's work area (HasSameTypeWorkAreaNear) are skipped. The best score
+  wins, but through a `std::map<u8, ...>` keyed by the score's LOW BYTE with
+  unique keys (the first cell of a key stays). Rice farm 0x59b0a0 / vineyard
+  0x59b430: the same with the 3 x 3 rice sum / the cell's wine land, no
+  distance term.
+- Woodcutter 0x59a3a0 / stonecutter 0x59a8d0 (rings 1..5): if the area
+  stores more than 10 logs / stones, the owned cell with the FEWEST trees /
+  stones (an ascending AI::SiteTree, key = count's low byte; G: thin out a
+  sparse spot when wood is plentiful), else the first cell with any.
+- Fishery 0x59b780 (rings 1..7, no bounds test): the first cell owned by
+  the player whose 3 x 3 fish sum is not 0. Builds an unused SiteTree.
+- Waterworks 0x59ba90: the first owned cell with stream tiles and water.
+The stored values' padding byte is an uninitialized stack byte in the
+original (ours 0; the nodes are freed before the return; emulator
+ignore_bytes with the self-test WrongFarmKeys).

@@ -180,6 +180,7 @@ add_library(s3re SHARED
     game/ai/ai_small_helpers.cpp
     game/ai/ai_state.cpp
     game/ai/ai_work_areas.cpp
+    game/ai/ai_work_area_finders.cpp
     game/ai/ai_world_events.cpp
     game/ai/ai_wrapped_pos.cpp
 
