@@ -291,6 +291,457 @@ void __fastcall AI_CEvaLand_AddArea(AiLandEvaluation* self, void* /*edx*/, std::
     reinterpret_cast<void(__fastcall*)(AiArea*, void*)>(kAreaDestruct)(record, nullptr);
 }
 
+// ---- the AI event ring
+
+namespace {
+
+constexpr std::uintptr_t kBuildingIfUsed = 0x0058e1c0;        // AI::BuildingIfUsed_58e1c0 (fastcall)
+constexpr std::uintptr_t kGetBuilding = 0x0058e170;           // AI::GetBuilding (fastcall)
+constexpr std::uintptr_t kBuildingArea = 0x00599610;          // AI::BuildingArea (fastcall)
+constexpr std::uintptr_t kGridCellOfTile = 0x00554770;        // CEvaLand::GridCellOfTile (thiscall)
+constexpr std::uintptr_t kReevaluateAroundTile = 0x005548b0;  // CEvaLand::ReevaluateAroundTile (thiscall)
+constexpr std::uintptr_t kAreaAlongRow = 0x005996c0;          // AI::AreaAlongRow (fastcall)
+constexpr std::uintptr_t kAreaPopulation = 0x0059dcc0;        // AI::AreaPopulation (fastcall)
+constexpr std::uintptr_t kRemoveArea = 0x00558e80;            // CEvaLand::RemoveArea
+constexpr std::uintptr_t kAddArea = 0x00555260;               // CEvaLand::AddArea
+constexpr std::uintptr_t kRefillAreaSiteList = 0x005579d0;    // CEvaLand::RefillAreaSiteList
+constexpr std::uintptr_t kOnBuildingFinished = 0x00573890;    // AI::OnBuildingFinished (fastcall)
+constexpr std::uintptr_t kBitsetXran = 0x00559550;            // std::bitset::_Xran (thiscall, throws)
+constexpr std::uintptr_t kSetWorkArea = 0x0058e220;           // AI::SendSetWorkArea (fastcall)
+constexpr std::uintptr_t kDestroyBuilding = 0x0058e5c0;       // AI::SendDestroyBuilding (fastcall)
+constexpr std::uintptr_t kChangeGarrison = 0x0058e630;        // AI::SendChangeGarrison (fastcall)
+constexpr std::uintptr_t kClearToolGoodsSettings = 0x0058e930;  // AI::ClearToolGoodsSettings (fastcall)
+constexpr std::uintptr_t kEnsureGoodsSupply = 0x00573760;     // AI::EnsureGoodsSupply (fastcall)
+// The work-area finders (fastcall: building, u16* x; stack u16* y).
+constexpr std::uintptr_t kFindWoodcutterWorkArea = 0x0059a3a0;
+constexpr std::uintptr_t kFindFarmWorkArea = 0x0059ac50;
+constexpr std::uintptr_t kFindRiceFarmWorkArea = 0x0059b0a0;
+constexpr std::uintptr_t kFindVineyardWorkArea = 0x0059b430;
+constexpr std::uintptr_t kFindFisheryWorkArea = 0x0059b780;
+constexpr std::uintptr_t kFindWaterworksWorkArea = 0x0059ba90;
+
+constexpr std::int32_t kComputerControlled = 2;  // Player::active of a computer player
+constexpr std::uint32_t kPendingEvents = 1000;   // the ring's size
+constexpr std::uint32_t kNoPlayer = 0xff;
+constexpr std::int32_t kCellTiles = 8;
+
+// The ring's event types (who queues them: re/computer_players.md).
+enum class AiEvent : std::int32_t {
+    BuildingFinished = 1,  // BuildingDone: a = building
+    SitePlaced = 2,        // CheckBuildingSite: a = building (the new site)
+    BuildingGoneAt = 3,    // CrushBuilding: a = x, b = y (the next event's place)
+    AreaChanged = 4,       // the area functions: a = area
+    OwnerChanged = 5,      // UpdateSoldier (a building conquered): a = building, b = its old owner
+    BuildingGone = 6,      // CrushBuilding: a = building type, b = player
+    WorkerIdle = 7,        // UpdateSettlers: a = building (G: its worker finds nothing to do)
+    Reevaluate = 8,        // UpdateEnvironment: a = x, b = y
+};
+
+const layout::Building* BuildingIfUsed(std::uint32_t id) {
+    using Fn = const layout::Building*(__fastcall*)(std::uint32_t id);
+    return reinterpret_cast<Fn>(kBuildingIfUsed)(id);
+}
+
+bool IsComputerPlayer(std::uint32_t player) {
+    // (not range-checked, as in the original)
+    return g_aiWorld.get()->players[player].active == kComputerControlled;
+}
+
+AiLandEvaluation* CurrentLand() {
+    return reinterpret_cast<AiLandEvaluation*>(g_aiLandEvaluation.get());
+}
+
+AiGridCell* GridCellOfTile(AiLandEvaluation* land, std::uint32_t x, std::uint32_t y) {
+    using Fn = AiGridCell*(__fastcall*)(AiLandEvaluation* self, void* edx, std::uint32_t x, std::uint32_t y);
+    return reinterpret_cast<Fn>(kGridCellOfTile)(land, nullptr, x, y);
+}
+
+// The cell's std::bitset<57> of the player's building types; a type above
+// 56 throws std::out_of_range (_Xran 0x559550, called with the bitset).
+std::uint32_t& BuildingTypeWord(AiGridCell* cell, std::uint32_t player, std::uint32_t type) {
+    std::uint32_t* bits = &cell->building_types[0][0] + 2 * player;  // (player not range-checked)
+    if (type >= kBuildingTypeCount) {
+        reinterpret_cast<void(__fastcall*)(void*, void*)>(kBitsetXran)(bits, nullptr);
+    }
+    return bits[type / 32];
+}
+
+std::uint32_t BuildingAreaOf(const std::uint32_t* building) {
+    using Fn = std::uint32_t(__fastcall*)(const void* building);
+    return reinterpret_cast<Fn>(kBuildingArea)(building);
+}
+
+AiAreaNode* FindAreaNode(AiList& list, std::uint16_t area) {
+    auto* const head = reinterpret_cast<AiAreaNode*>(list.head);
+    for (AiAreaNode* node = head->next; node != head; node = node->next) {
+        if (node->value.area == area) {
+            return node;
+        }
+    }
+    return nullptr;
+}
+
+void Reevaluate(std::uint32_t x, std::uint32_t y) {
+    using Fn = std::uint32_t(__fastcall*)(AiLandEvaluation* self, void* edx, std::uint32_t x, std::uint32_t y);
+    reinterpret_cast<Fn>(kReevaluateAroundTile)(CurrentLand(), nullptr, x, y);
+}
+
+// A finder's work area sent as the building's (the finder's result is not
+// looked at: without one the building's own position goes out).
+void SetWorkAreaWith(std::uintptr_t finder, const layout::Building* building, std::uint32_t id, std::uint8_t owner,
+                     std::uint32_t x, std::uint32_t y) {
+    using FinderFn = std::uint32_t(__fastcall*)(const layout::Building* building, std::uint32_t* x, std::uint32_t* y);
+    reinterpret_cast<FinderFn>(finder)(building, &x, &y);
+    const std::uint32_t number = id & 0xffff;
+    using SendFn = std::uint32_t(__fastcall*)(const void* building, const void* player, const void* x, const void* y);
+    reinterpret_cast<SendFn>(kSetWorkArea)(&number, &owner, &x, &y);
+}
+
+void DestroyBuilding(std::uint32_t id, std::uint8_t owner) {
+    using Fn = std::uint32_t(__fastcall*)(const void* building, const void* player);
+    reinterpret_cast<Fn>(kDestroyBuilding)(&id, &owner);
+}
+
+void EnsureGoodsSupply(Good goods, std::uint8_t owner, const std::uint32_t* area) {
+    const auto kind = static_cast<std::uint8_t>(Value(goods));
+    using Fn = std::uint32_t(__fastcall*)(const void* goods, const void* player, const void* area);
+    reinterpret_cast<Fn>(kEnsureGoodsSupply)(&kind, &owner, area);
+}
+
+std::uint32_t AreaPopulation(const std::uint32_t* area) {
+    using Fn = std::uint32_t(__fastcall*)(const void* area);
+    return reinterpret_cast<Fn>(kAreaPopulation)(area);
+}
+
+void RemoveArea(AiLandEvaluation* land, std::uint32_t area, std::uint32_t player) {
+    using Fn = std::uint32_t(__fastcall*)(AiLandEvaluation* self, void* edx, std::uint32_t area, std::uint32_t player);
+    reinterpret_cast<Fn>(kRemoveArea)(land, nullptr, area, player);
+}
+
+void AddArea(AiLandEvaluation* land, std::uint32_t area, std::uint32_t player) {
+    reinterpret_cast<AddAreaFn>(kAddArea)(land, nullptr, area, player);
+}
+
+void Refill(AiLandEvaluation* land, std::uint32_t player, std::uint32_t area, B type) {
+    using Fn = void(__fastcall*)(AiLandEvaluation* self, void* edx, std::uint32_t player, std::uint32_t area,
+                                 std::uint32_t type);
+    reinterpret_cast<Fn>(kRefillAreaSiteList)(land, nullptr, player, area, Value(type));
+}
+
+// 0x555002..0x5551b6 (event 2, the owner a computer player): the new site's
+// type goes into its cell's bitset and its area record's counts; the
+// candidates of the types that depend on it are rated again.
+void OnSitePlaced(AiLandEvaluation* self, std::uint32_t id, const layout::Building& site) {
+    // The player as passed on: the owner in the low word, the event
+    // argument's high word left in the register.
+    const std::uint32_t owner = site.owner;
+    const std::uint32_t player = (id & 0xffff0000u) | owner;
+    const std::uint32_t type = site.art;
+    AiGridCell* cell = GridCellOfTile(CurrentLand(), site.x, site.y);
+    BuildingTypeWord(cell, owner, type) |= 1u << (type % 32);
+    const std::uint32_t area = BuildingAreaOf(&id);
+    AiList& list = CurrentLand()->lists[owner];
+    AiAreaNode* node = FindAreaNode(list, static_cast<std::uint16_t>(area));
+    if (node != nullptr) {
+        ++(&node->value.building_counts[0])[type];
+        ++node->value.sites;
+    }
+    switch (type) {
+    case Value(B::Woodcutter):
+        Refill(self, player, area, B::Forester);
+        Refill(self, player, area, B::Sawmill);
+        break;
+    case Value(B::CoalMine):
+        Refill(self, player, area, B::Toolsmith);
+        Refill(self, player, area, B::Weaponsmith);
+        Refill(self, player, area, B::IronSmelter);
+        Refill(self, player, area, B::GoldSmelter);
+        break;
+    case Value(B::IronMine): Refill(self, player, area, B::IronSmelter); break;
+    case Value(B::IronSmelter):
+        Refill(self, player, area, B::Toolsmith);
+        Refill(self, player, area, B::Weaponsmith);
+        break;
+    case Value(B::SmallTower):
+        // Without a record of the area this writes the list head's bytes
+        // (a full node block), as the original does.
+        (node != nullptr ? node : reinterpret_cast<AiAreaNode*>(list.head))->value.unk018 = 0;
+        break;
+    case Value(B::Mill): case Value(B::Waterworks): Refill(self, player, area, B::Bakery); break;
+    case Value(B::Bakery): Refill(self, player, area, B::Mill); break;
+    case Value(B::Farm):
+        Refill(self, player, area, B::Mill);
+        Refill(self, player, area, B::Bakery);
+        break;
+    default:
+        break;
+    }
+}
+
+// 0x554a62..0x554c34 (event 4): an area's owner may have changed; the
+// records follow the area's current owner.
+void OnAreaChanged(AiLandEvaluation* self, std::uint32_t area) {
+    std::uint32_t found = kNoPlayer;  // the player with a record of the area
+    AiAreaNode* node = nullptr;
+    for (std::uint32_t p = 0; p < std::size(self->lists); ++p) {
+        node = FindAreaNode(self->lists[p], static_cast<std::uint16_t>(area));
+        if (node != nullptr) {
+            found = p;
+            break;
+        }
+    }
+    const std::uint32_t owner = g_aiWorld.get()->areas[area & 0xffff].player;
+    if (owner == kNoPlayer) {
+        if (found != kNoPlayer && IsComputerPlayer(found)) {
+            RemoveArea(self, area, found);
+        }
+        return;
+    }
+    if (found == kNoPlayer) {
+        if (IsComputerPlayer(owner) && AreaPopulation(&area) != 0) {
+            AddArea(self, area, owner);
+        }
+        return;
+    }
+    if (owner == found) {
+        if (!IsComputerPlayer(owner)) {
+            return;
+        }
+        if (AreaPopulation(&area) != 0) {
+            using FillFn = void(__fastcall*)(AiLandEvaluation*, void*, AiArea*, std::uint32_t);
+            reinterpret_cast<FillFn>(kFillAreaSiteLists)(self, nullptr, &node->value, owner);
+            using CountFn = std::uint32_t(__fastcall*)(const void* player, const void* area);
+            reinterpret_cast<CountFn>(kCountNodeBuildings)(&owner, &area);
+        } else {
+            RemoveArea(self, area, owner);
+        }
+        return;
+    }
+    if (IsComputerPlayer(found)) {
+        RemoveArea(self, area, found);
+    }
+    if (IsComputerPlayer(owner) && AreaPopulation(&area) != 0) {
+        AddArea(self, area, owner);
+    }
+}
+
+// 0x554c39..0x554d49 (event 5): a conquered building moves from its old
+// owner's bitset to its new owner's.
+void OnOwnerChanged(std::uint32_t id, std::uint32_t oldOwner) {
+    if (BuildingIfUsed(id) == nullptr) {
+        GameDebugLog(texts::kAiOwnerChangeBuildingGone);
+        return;
+    }
+    const layout::Building& building = g_aiWorld.get()->buildings[id & 0xffff];
+    const std::uint32_t type = building.art;
+    const std::uint32_t owner = building.owner;
+    AiGridCell* cell = GridCellOfTile(CurrentLand(), building.x, building.y);
+    if (IsComputerPlayer(oldOwner)) {
+        BuildingTypeWord(cell, oldOwner, type) &= ~(1u << (type % 32));
+    }
+    if (IsComputerPlayer(owner)) {
+        BuildingTypeWord(cell, owner, type) |= 1u << (type % 32);
+    }
+}
+
+// 0x554d4e..0x554ec5 (event 6 after event 3's place): a building of `type`
+// is gone. Its bit is cleared unless another building of the type stands in
+// the 8 x 8 block of the place; its area record's count goes down.
+void OnBuildingGone(AiLandEvaluation* self, std::uint32_t type, std::uint32_t player, std::uint32_t x,
+                    std::uint32_t y) {
+    AiGridCell* cell = GridCellOfTile(self, x, y);
+    CGameData* world = g_aiWorld;
+    const std::uint32_t left = (x & 0xffff) & ~static_cast<std::uint32_t>(kCellTiles - 1);
+    const std::uint32_t top = (y & 0xffff) & ~static_cast<std::uint32_t>(kCellTiles - 1);
+    bool another = false;
+    std::uint32_t tx = 0;
+    std::uint32_t ty = 0;
+    for (std::int32_t i = 0; i < kCellTiles; ++i) {
+        ty = top + i;
+        for (std::int32_t j = 0; j < kCellTiles; ++j) {
+            tx = left + j;
+            const layout::Tile& tile = TileAtOffset(world, TileOffset(tx & 0xffff, ty & 0xffff));
+            if (tile.object_number != 0 && (tile.flags & layout::kTileHasBuilding) != 0 &&
+                world->buildings[tile.object_number].art == type) {
+                GameDebugLog(texts::kAiSameTypeStillThere);
+                another = true;
+            }
+        }
+    }
+    if (!another) {
+        BuildingTypeWord(cell, player, type) &= ~(1u << (type % 32));
+    }
+    // The area at the block's last tile (the loops' last position).
+    using AreaFn = std::uint32_t(__fastcall*)(std::uint32_t x, std::uint32_t y);
+    const auto area = static_cast<std::uint16_t>(reinterpret_cast<AreaFn>(kAreaAlongRow)(tx, ty));
+    AiAreaNode* node = FindAreaNode(self->lists[player], area);
+    if (node == nullptr) {
+        return;
+    }
+    std::uint16_t& count = (&node->value.building_counts[0])[type];  // (not range-checked)
+    --count;
+    if (another && count == 0) {
+        GameDebugLog(texts::kAiDemolitionMixup);
+    }
+}
+
+// 0x554eca..0x554fcb (event 7): a woodcutter or stonecutter gets a new work
+// area, a mine is torn down (G: nothing left to cut or mine).
+void OnWorkerIdle(std::uint32_t id) {
+    const layout::Building* building = BuildingIfUsed(id);
+    if (building == nullptr || !IsComputerPlayer(building->owner)) {
+        return;
+    }
+    const auto owner = static_cast<std::uint8_t>(building->owner);
+    const std::uint32_t x = building->x;
+    const std::uint32_t y = building->y;
+    Reevaluate(x, y);
+    switch (building->art) {
+    case Value(B::Woodcutter): SetWorkAreaWith(kFindWoodcutterWorkArea, building, id, owner, x, y); break;
+    // The farm finder for a stonecutter (quirk kept; FindStonecutterWorkArea
+    // is 0x59a8d0).
+    case Value(B::Stonecutter): SetWorkAreaWith(kFindFarmWorkArea, building, id, owner, x, y); break;
+    case Value(B::CoalMine): case Value(B::GoldMine): case Value(B::IronMine): case Value(B::SulfurMine):
+    case Value(B::GemMine):
+        DestroyBuilding(id & 0xffff, owner);
+        break;
+    default:
+        break;
+    }
+}
+
+}  // namespace
+
+using ProcessPendingEventsFn = std::uint32_t(__fastcall*)(AiLandEvaluation* self, void* edx);
+using OnBuildingFinishedFn = void(__fastcall*)(std::uint32_t id);
+
+std::uint32_t __fastcall AI_CEvaLand_ProcessPendingEvents(AiLandEvaluation* self, void* edx);
+void __fastcall AI_OnBuildingFinished(std::uint32_t id);
+
+S3RE_HOOK(0x00554980, AI_CEvaLand_ProcessPendingEvents, ProcessPendingEventsFn,
+          Original_AI_CEvaLand_ProcessPendingEvents, AI_CEvaLand_ProcessPendingEvents);
+S3RE_HOOK(0x00573890, AI_OnBuildingFinished, OnBuildingFinishedFn, Original_AI_OnBuildingFinished,
+          AI_OnBuildingFinished);
+
+// Purpose: Brings the computer players' land evaluation up to date with what
+// happened in the world since the last step (buildings finished, placed,
+// conquered or gone, areas changing owner); stops after a new site of a
+// computer player (returns 1) so that only one is handled per step.
+std::uint32_t __fastcall AI_CEvaLand_ProcessPendingEvents(AiLandEvaluation* self, void* /*edx*/) {
+    layout::Ring1000Indices& ring = g_aiWorld.get()->pending_event_index;
+    // Event 3's place for the following event 6 (uninitialized stack slots
+    // in the original until a 3 comes; CrushBuilding always queues 3 then 6).
+    std::uint32_t goneX = 0;
+    std::uint32_t goneY = 0;
+    for (std::uint32_t index = ring.read; g_aiWorld.get()->pending_event_index.write != index; index = ring.read) {
+        const layout::PendingEvent& entry = g_aiWorld.get()->pending_events[index];
+        const std::int32_t type = entry.type;
+        const auto a = static_cast<std::uint32_t>(entry.a);
+        const auto b = static_cast<std::uint32_t>(entry.b);
+        ring.read = index + 1;
+        if (index + 1 >= kPendingEvents) {
+            ring.read = 0;
+        }
+        switch (static_cast<AiEvent>(type)) {
+        case AiEvent::BuildingFinished:
+            reinterpret_cast<OnBuildingFinishedFn>(kOnBuildingFinished)(a);
+            break;
+        case AiEvent::SitePlaced: {
+            const auto* site = BuildingIfUsed(a);
+            if (site == nullptr) {
+                GameDebugLog(texts::kAiSiteBuildingGone);
+            } else if (IsComputerPlayer(site->owner)) {
+                OnSitePlaced(self, a, *site);
+                return 1;
+            }
+            break;
+        }
+        case AiEvent::BuildingGoneAt:
+            goneX = a;
+            goneY = b;
+            break;
+        case AiEvent::AreaChanged: OnAreaChanged(self, a); break;
+        case AiEvent::OwnerChanged: OnOwnerChanged(a, b); break;
+        case AiEvent::BuildingGone: OnBuildingGone(self, a, b, goneX, goneY); break;
+        case AiEvent::WorkerIdle: OnWorkerIdle(a); break;
+        case AiEvent::Reevaluate: Reevaluate(a, b); break;
+        default: break;
+        }
+    }
+    return 0;
+}
+
+// Purpose: A computer player's building is finished: the area record's site
+// count and the type's block go, and the building is set up (work area of
+// fields and fisheries, the garrison of towers and castles, tool goods of a
+// toolsmith, goods for residences; a gem mine tears down the player's gold
+// mines and gold smelters).
+void __fastcall AI_OnBuildingFinished(std::uint32_t id) {
+    const layout::Building* building = BuildingIfUsed(id);
+    if (building == nullptr) {
+        GameDebugLog(texts::kAiFinishedBuildingGone);
+        return;
+    }
+    const std::uint32_t owner = building->owner;
+    if (!IsComputerPlayer(owner)) {
+        return;
+    }
+    const std::uint32_t x = building->x;
+    const std::uint32_t y = building->y;
+    const std::uint32_t type = building->art;
+    const std::uint32_t area = BuildingAreaOf(&id);
+    // 0x573905..0x57394c: every record of the area (the list re-read from
+    // g_aiLandEvaluation each time).
+    auto* const head = reinterpret_cast<AiAreaNode*>(CurrentLand()->lists[owner].head);
+    for (AiAreaNode* node = head->next; node != reinterpret_cast<AiAreaNode*>(CurrentLand()->lists[owner].head);
+         node = node->next) {
+        if (node->value.area == static_cast<std::uint16_t>(area)) {
+            (&node->value.type_blocked[0])[type] = 0;  // (type not range-checked)
+            if (node->value.sites != 0) {
+                --node->value.sites;
+            }
+        }
+    }
+    const auto ownerByte = static_cast<std::uint8_t>(owner);
+    switch (type) {
+    case Value(B::Toolsmith):
+        reinterpret_cast<std::uint32_t(__fastcall*)(const void*)>(kClearToolGoodsSettings)(&id);
+        break;
+    case Value(B::Vineyard): SetWorkAreaWith(kFindVineyardWorkArea, building, id, ownerByte, x, y); break;
+    case Value(B::LargeTower): case Value(B::Castle):
+        reinterpret_cast<std::uint32_t(__fastcall*)(std::uint32_t, std::uint32_t, std::uint32_t)>(kChangeGarrison)(
+            owner, id & 0xffff, 1);
+        break;
+    case Value(B::Farm): SetWorkAreaWith(kFindFarmWorkArea, building, id, ownerByte, x, y); break;
+    case Value(B::Fishery): SetWorkAreaWith(kFindFisheryWorkArea, building, id, ownerByte, x, y); break;
+    case Value(B::MediumResidence): EnsureGoodsSupply(Good::Hammer, ownerByte, &area); break;
+    case Value(B::LargeResidence):
+        EnsureGoodsSupply(Good::Hammer, ownerByte, &area);
+        EnsureGoodsSupply(Good::Shovel, ownerByte, &area);
+        break;
+    case Value(B::Waterworks): SetWorkAreaWith(kFindWaterworksWorkArea, building, id, ownerByte, x, y); break;
+    case Value(B::RiceFarm): SetWorkAreaWith(kFindRiceFarmWorkArea, building, id, ownerByte, x, y); break;
+    case Value(B::GemMine): {
+        // 0x573b38: every building of the owner's that is a gold mine or a
+        // gold smelter is torn down.
+        std::uint32_t error = 0;
+        std::uint32_t other = 0;
+        do {
+            ++other;
+            using GetFn = const layout::Building*(__fastcall*)(std::uint32_t id, std::uint32_t* error);
+            const layout::Building* candidate = reinterpret_cast<GetFn>(kGetBuilding)(other, &error);
+            if (candidate != nullptr && candidate->owner == ownerByte &&
+                (candidate->art == Value(B::GoldMine) || candidate->art == Value(B::GoldSmelter))) {
+                DestroyBuilding(other, ownerByte);
+            }
+        } while (error == 0);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -580,6 +1031,241 @@ S3RE_TEST(AiAreaEvents_ComparisonDetectsWrongImplementation) {
     {
         test::Context quiet(ctx.name(), 1, /*quiet=*/true);
         CompareAddArea(quiet, &WrongAddArea, 300);
+        S3RE_EXPECT(quiet.failures() > 0);
+    }
+}
+
+
+// ProcessPendingEvents and OnBuildingFinished: the test map and buildings
+// (above) with tiles marking the buildings, players 0..2 (computer players
+// mostly), areas 0..4 owned by players 0..2 or nobody; two CEvaLand
+// objects with their own copies of the grid and the same lists for
+// players 0..2; a ring of 1..10 events (types 0..9; a 3 always followed by
+// a 6; sometimes across the ring's end). Compared: the result, the ring's
+// read index, every list's records, the grids, the commands, DebugLog calls
+// and log lines.
+
+namespace {
+
+bool PointsIntoRecord(const AiArea& record) {
+    const auto* tree = record.site_tree_of_type[Value(B::Woodcutter)];
+    return tree >= &record.site_trees[0] && tree < &record.site_trees[0] + std::size(record.site_trees);
+}
+
+std::vector<std::uint8_t> AllLists(const AiLandEvaluation& land) {
+    std::vector<std::uint8_t> out;
+    for (const AiList& list : land.lists) {
+        out.push_back(static_cast<std::uint8_t>(list.count));
+        const auto* head = reinterpret_cast<const AiAreaNode*>(list.head);
+        for (const AiAreaNode* node = head->next; node != head; node = node->next) {
+            const std::vector<std::uint8_t> record = RecordContents(node->value, PointsIntoRecord(node->value));
+            out.insert(out.end(), record.begin(), record.end());
+        }
+    }
+    return out;
+}
+
+void MarkBuildingTiles(test::Rng& rng, CGameData* world) {
+    for (std::uint32_t id = 1; id <= world->building_high_water; ++id) {
+        const layout::Building& b = world->buildings[id];
+        layout::Tile& tile = world->tiles[b.x][b.y];
+        tile.object_number = static_cast<std::uint16_t>(rng.Chance(1, 5) ? 0 : id);
+        tile.flags = static_cast<std::uint8_t>(rng.Chance(1, 5) ? tile.flags & ~layout::kTileHasBuilding
+                                                                : tile.flags | layout::kTileHasBuilding);
+    }
+}
+
+std::uint32_t RandomBuildingId(test::Rng& rng, const CGameData* world) {
+    return rng.Chance(1, 15) ? rng.Below(4000) : 1 + rng.Below(world->building_high_water + 2);
+}
+
+void QueueEvents(test::Rng& rng, CGameData* world) {
+    layout::Ring1000Indices& ring = world->pending_event_index;
+    ring.read = rng.Chance(1, 4) ? 995 + rng.Below(5) : rng.Below(1000);
+    std::uint32_t write = ring.read;
+    const std::uint32_t count = rng.Below(11);
+    for (std::uint32_t k = 0; k < count; ++k) {
+        layout::PendingEvent event{};
+        event.type = static_cast<std::int32_t>(rng.Below(10));
+        switch (event.type) {
+        case 1: case 2: case 7:
+            event.a = static_cast<std::int32_t>(RandomBuildingId(rng, world));
+            if (rng.Chance(1, 8)) {
+                event.a |= static_cast<std::int32_t>(rng.Next32() & 0xffff0000u);
+            }
+            break;
+        case 3: case 6: {
+            // 3 (the place) then 6 (type, player)
+            event.type = 3;
+            const layout::Building& b = world->buildings[1 + rng.Below(world->building_high_water + 1)];
+            event.a = rng.Chance(1, 2) ? b.x : static_cast<std::int32_t>(rng.Below(kTestMap));
+            event.b = rng.Chance(1, 2) ? b.y : static_cast<std::int32_t>(rng.Below(kTestMap));
+            world->pending_events[write] = event;
+            write = (write + 1) % 1000;
+            event.type = 6;
+            event.a = rng.Chance(1, 2) ? b.art : static_cast<std::int32_t>(rng.Below(kBuildingTypeCount));
+            event.b = static_cast<std::int32_t>(rng.Below(3));
+            break;
+        }
+        case 4:
+            event.a = static_cast<std::int32_t>(rng.Below(5) | (rng.Chance(1, 8) ? rng.Next32() & 0xffff0000u : 0));
+            break;
+        case 5:
+            event.a = static_cast<std::int32_t>(RandomBuildingId(rng, world));
+            event.b = static_cast<std::int32_t>(rng.Below(4));
+            break;
+        default:
+            event.a = static_cast<std::int32_t>(rng.Below(kTestMap + 8));
+            event.b = static_cast<std::int32_t>(rng.Below(kTestMap + 8));
+            break;
+        }
+        world->pending_events[write] = event;
+        write = (write + 1) % 1000;
+    }
+    ring.write = write;
+}
+
+struct EventFns {
+    ProcessPendingEventsFn process;
+    OnBuildingFinishedFn finished;
+};
+
+void CompareEvents(test::Context& ctx, const EventFns& ours, int cases) {
+    const EventFns original{Original_AI_CEvaLand_ProcessPendingEvents, Original_AI_OnBuildingFinished};
+    Harness harness;
+    DebugLogRecorder logs;
+    CGameData* world = harness.world();
+    const std::uint32_t refs = g_aiSiteTreeNilRefs;
+    int handled = 0;
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        test::Rng& rng = ctx.rng();
+        if (!S3RE_EXPECT_EQ(g_aiSiteTreeNilRefs.get(), refs)) {
+            ctx.Fail(__FILE__, __LINE__, "  before case %d", i);
+        }
+        if (i % 10 == 0) {
+            SetUpMap(rng, world, harness.cells());
+        }
+        SetUpEconomy(rng, world);
+        MarkBuildingTiles(rng, world);
+        for (std::uint32_t p = 0; p < 4; ++p) {
+            world->players[p].active = static_cast<std::int32_t>(rng.Chance(1, 4) ? rng.Below(3) : 2);
+            world->players[p].race = static_cast<std::int32_t>(rng.Below(4));
+        }
+        for (std::uint32_t a = 0; a < 5; ++a) {
+            world->areas[a].player = static_cast<std::uint8_t>(rng.Chance(1, 5) ? 0xff : rng.Below(3));
+        }
+        std::vector<AiGridCell> cellsA = harness.cells();
+        std::vector<AiGridCell> cellsB = harness.cells();
+        TestLand a(cellsA), b(cellsB);
+        a.land.width = b.land.width = kGridSide;
+        a.land.height = b.land.height = kGridSide;
+        a.land.cell_count = b.land.cell_count = kGridSide * kGridSide;
+        a.land.tiles_per_cell = b.land.tiles_per_cell = 64;  // (EvaluateCell divides by it)
+        auto* record = static_cast<AiArea*>(msvc6::GameOperatorNew(sizeof(AiArea)));
+        for (std::uint32_t p = 0; p < 3; ++p) {
+            for (std::uint32_t k = rng.Below(3); k > 0; --k) {
+                MakeRecord(rng, record, static_cast<std::uint16_t>(rng.Below(4)));
+                a.Append(p, record);
+                b.Append(p, record);
+                DestroyRecord(record);
+            }
+        }
+        msvc6::GameOperatorDelete(record);
+        const bool direct = rng.Chance(1, 4);
+        const std::uint32_t id = RandomBuildingId(rng, world);
+        QueueEvents(rng, world);
+        const layout::Ring1000Indices ring = world->pending_event_index;
+        std::uint32_t ra = 0, rb = 0;
+        const Captured ca = harness.Capture([&] {
+            g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&a.land);
+            if (direct) {
+                original.finished(id);
+            } else {
+                ra = original.process(&a.land, nullptr);
+            }
+        });
+        const std::vector<DebugLogCall> logsA = logs.Take();
+        const layout::Ring1000Indices ringA = world->pending_event_index;
+        world->pending_event_index = ring;
+        const Captured cb = harness.Capture([&] {
+            g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&b.land);
+            if (direct) {
+                ours.finished(id);
+            } else {
+                rb = ours.process(&b.land, nullptr);
+            }
+        });
+        const std::vector<DebugLogCall> logsB = logs.Take();
+        handled += ca.messages.empty() && ra == 0 ? 0 : 1;
+        bool same = S3RE_EXPECT_EQ(ra, rb);
+        same &= S3RE_EXPECT_EQ(ringA.read, world->pending_event_index.read);
+        same &= S3RE_EXPECT(ca == cb);
+        same &= S3RE_EXPECT(logsA == logsB);
+        same &= S3RE_EXPECT_MEM_EQ(cellsA.data(), cellsB.data(), cellsA.size() * sizeof(AiGridCell));
+        same &= S3RE_EXPECT(AllLists(a.land) == AllLists(b.land));
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, %s, ring %u..%u", i, direct ? "finished" : "events", ring.read,
+                     ring.write);
+        }
+    }
+    if (cases >= 500 && !S3RE_EXPECT(handled >= cases / 5)) {
+        ctx.Fail(__FILE__, __LINE__, "  only %d cases sent commands or stopped", handled);
+    }
+}
+
+std::uint32_t __fastcall WrongProcessEvents(AiLandEvaluation* self, void* edx) {
+    // Wrong: the stonecutter's work area from its own finder.
+    CGameData* world = g_aiWorld;
+    layout::Ring1000Indices& ring = world->pending_event_index;
+    for (std::uint32_t k = ring.read; k != ring.write; k = (k + 1) % 1000) {
+        layout::PendingEvent& event = world->pending_events[k];
+        if (event.type == 7) {
+            const layout::Building* b = BuildingIfUsed(static_cast<std::uint32_t>(event.a));
+            if (b != nullptr && b->art == Value(B::Stonecutter) && IsComputerPlayer(b->owner)) {
+                const std::uint32_t result = AI_CEvaLand_ProcessPendingEvents(self, edx);
+                SetWorkAreaWith(0x0059a8d0, b, static_cast<std::uint32_t>(event.a), b->owner, b->x, b->y);
+                return result;
+            }
+        }
+    }
+    return AI_CEvaLand_ProcessPendingEvents(self, edx);
+}
+
+void __fastcall WrongFinished(std::uint32_t id) {
+    // Wrong: the site count isn't lowered.
+    const layout::Building* b = BuildingIfUsed(id);
+    std::vector<std::uint16_t> sites;
+    if (b != nullptr) {
+        auto* head = reinterpret_cast<AiAreaNode*>(CurrentLand()->lists[b->owner].head);
+        for (AiAreaNode* node = head->next; node != head; node = node->next) {
+            sites.push_back(node->value.sites);
+        }
+    }
+    AI_OnBuildingFinished(id);
+    if (b != nullptr) {
+        auto* head = reinterpret_cast<AiAreaNode*>(CurrentLand()->lists[b->owner].head);
+        std::size_t k = 0;
+        for (AiAreaNode* node = head->next; node != head && k < sites.size(); node = node->next) {
+            node->value.sites = sites[k++];
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(AiAreaPendingEvents_MatchOriginal) {
+    CompareEvents(ctx, {&AI_CEvaLand_ProcessPendingEvents, &AI_OnBuildingFinished}, 1500);
+}
+
+S3RE_TEST(AiAreaPendingEvents_ComparisonDetectsWrongImplementation) {
+    {
+        test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+        CompareEvents(quiet, {&WrongProcessEvents, &AI_OnBuildingFinished}, 1500);
+        S3RE_EXPECT(quiet.failures() > 0);
+    }
+    {
+        test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+        CompareEvents(quiet, {&AI_CEvaLand_ProcessPendingEvents, &WrongFinished}, 1500);
         S3RE_EXPECT(quiet.failures() > 0);
     }
 }

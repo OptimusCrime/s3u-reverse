@@ -5392,3 +5392,168 @@ SPECS += [
          globals=area_destruct_globals, callees=LOCKIT_PROBES, cover_until=0x00559238, max_cases=300),
     Spec("BuildingTypeBits_Construct", 0x00559240, "thiscall", [], cover_until=0x00559259, max_cases=50),
 ]
+
+
+# CEvaLand::ProcessPendingEvents and AI::OnBuildingFinished
+# (ai_area_events.cpp). The CEvaLand at world offset 0 (also
+# g_aiLandEvaluation; grid of 9 x 9 cells at SITE_LIST_GRID), lists of 0..2
+# bare records (area word, counts lazily random) for players 0..3; up to 20
+# buildings (force_buildings) with their tiles marked; players 0..3 active
+# 0..2; areas 0..4 owned by 0..2 or nobody; a ring of 0..10 events (a 3
+# always followed by a 6). The record keepers (AddArea, Fill / Refill,
+# RemoveArea, OnBuildingFinished), ReevaluateAroundTile, AreaPopulation, the
+# work-area finders and the command senders are probed (their own specs
+# cover them; pointer arguments recorded by the values they point at).
+
+EVENT_HEADS = SCRATCH + 30 * SCRATCH_SLOT_BYTES
+EVENT_NODES = SCRATCH + 31 * SCRATCH_SLOT_BYTES   # 0x800 bytes per node, slots 31..34
+EVENT_RING = 0x2F990
+EVENT_INDEX = 0x32870
+
+
+def probe_reg(machine, name):
+    from unicorn import x86_const
+    return machine.uc.reg_read(getattr(x86_const, "UC_X86_REG_" + name))
+
+
+def probe_word(machine, address):
+    return struct.unpack("<H", machine.guest_read(address, 2))[0]
+
+
+def probe_byte(machine, address):
+    return machine.guest_read(address, 1)[0]
+
+
+EVENT_PROBES = {
+    0x00555260: (2, "thiscall", "probe"),                  # AddArea(area, player)
+    0x00556630: (2, "thiscall", "probe"),                  # FillAreaSiteLists(record, player)
+    0x005579d0: (3, "thiscall", "probe"),                  # RefillAreaSiteList(player, area, type)
+    0x00558e80: (2, "thiscall", "probe"),                  # RemoveArea(area, player)
+    0x00573890: (0, "thiscall", "probe"),                  # OnBuildingFinished(ECX = building)
+    # ReevaluateAroundTile(x, y): recorded as words (it uses only those; the
+    # original's x of event 7 has the world pointer's high word left over).
+    0x005548b0: (2, "thiscall", "probe", None, lambda m, ecx, args: (args[0] & 0xFFFF, args[1] & 0xFFFF)),
+    0x0059dcc0: (0, "cdecl", lambda h: h % 2, None,        # AreaPopulation(ECX = &area)
+                 lambda m, ecx, args: (probe_word(m, probe_reg(m, "ECX")),)),
+    0x0058e220: (2, "stdcall", "probe", None,              # SendSetWorkArea(&id, &owner; &x, &y)
+                 lambda m, ecx, args: (probe_word(m, probe_reg(m, "ECX")), probe_byte(m, probe_reg(m, "EDX")),
+                                       probe_word(m, args[0]), probe_word(m, args[1]))),
+    0x0058e5c0: (0, "cdecl", "probe", None,                # SendDestroyBuilding(&id, &owner)
+                 lambda m, ecx, args: (probe_word(m, probe_reg(m, "ECX")), probe_byte(m, probe_reg(m, "EDX")))),
+    0x0058e630: (1, "stdcall", "probe", None,              # SendChangeGarrison(owner, id; 1)
+                 lambda m, ecx, args: (probe_reg(m, "ECX"), probe_reg(m, "EDX"), args[0])),
+    0x0058e930: (0, "cdecl", "probe", None,                # ClearToolGoodsSettings(&id)
+                 lambda m, ecx, args: (struct.unpack("<I", m.guest_read(probe_reg(m, "ECX"), 4))[0],)),
+    0x00573760: (1, "stdcall", "probe", None,              # EnsureGoodsSupply(&goods, &owner; &area)
+                 lambda m, ecx, args: (probe_byte(m, probe_reg(m, "ECX")), probe_byte(m, probe_reg(m, "EDX")), probe_word(m, args[0]))),
+}
+for _finder in (0x0059a3a0, 0x0059ac50, 0x0059b0a0, 0x0059b430, 0x0059b780, 0x0059ba90):
+    EVENT_PROBES[_finder] = (1, "stdcall", "probe", None,  # finder(building, &x; &y)
+                             lambda m, ecx, args: (probe_reg(m, "ECX"), probe_word(m, probe_reg(m, "EDX")), probe_word(m, args[0])))
+
+
+def event_land(rng):
+    fields = [(0x140, 9, 4), (0x144, 9, 4), (0x148, 81, 4), (0x14C, 64, 4), (0x158, WORLD_BASE + SITE_LIST_GRID, 4)]
+    slot = 0
+    for p in range(20):
+        head = EVENT_HEADS + 8 * p
+        fields += [(12 * p + 4, WORLD_BASE + head, 4), (12 * p + 8, 0, 4)]
+        nodes = []
+        for _ in range(rng.randrange(3) if p < 4 else 0):
+            if slot < 8:
+                nodes.append(EVENT_NODES + 0x800 * slot)
+                slot += 1
+        chain = [head] + nodes
+        for k, node in enumerate(chain):
+            fields += [(node, WORLD_BASE + chain[(k + 1) % len(chain)], 4),
+                       (node + 4, WORLD_BASE + chain[k - 1], 4)]
+            if k:
+                fields += [(node + 8, rng.randrange(5), 2), (node + 0x24, rng.randrange(3), 2)]
+                fields += [(node + 0x344 + 2 * t, rng.choice((0, 1, 1, 2)), 2) for t in range(57)]
+    return fields
+
+
+EVENT_BUILDING_TYPES = (2, 3, 7, 8, 9, 10, 12, 14, 15, 16, 18, 24, 25, 27, 28, 29, 30, 36, 37, 11, 17, 20)
+
+
+def event_buildings(rng):
+    fields = force_buildings(rng)
+    count = next(v for o, v, s in fields if o == BUILDING_COUNT)
+    values = {o: v for o, v, s in fields}
+    positions = [(values[BUILDINGS + b * BUILDING_BYTES + 2], values[BUILDINGS + b * BUILDING_BYTES + 4])
+                 for b in range(1, count + 1)]
+    types = []
+    for b in range(1, count + 1):
+        kind = rng.choice(EVENT_BUILDING_TYPES) if rng.random() < 0.98 else rng.randint(57, 70)  # (_Xran)
+        fields.append((BUILDINGS + b * BUILDING_BYTES + 6, kind, 1))
+        types.append(kind)
+        x, y = positions[b - 1]
+        fields += [(tile(x, y) + 2, 0 if rng.random() < 0.2 else b, 2),
+                   (tile(x, y) + 0xA, 0x20 if rng.random() < 0.8 else 0, 1)]
+    return fields, count, positions, types
+
+
+def event_ring(rng, count, positions, types):
+    read = rng.choice((rng.randrange(1000), rng.randint(995, 999)))
+    events, write = [], read
+
+    def building():
+        return rng.randint(1, count + 2) if rng.random() < 0.9 else rng.randrange(4000)
+    for _ in range(rng.randrange(11)):
+        kind = rng.randrange(10)
+        if kind in (3, 6):
+            k = rng.randrange(count) if count else None
+            x, y = positions[k] if k is not None and rng.random() < 0.7 else (rng.randrange(60), rng.randrange(60))
+            events.append((3, x, y))
+            gone = types[k] if k is not None and rng.random() < 0.6 else rng.randrange(57)
+            if rng.random() < 0.02:
+                gone = rng.randint(57, 70)
+            events.append((6, gone, rng.randrange(3)))
+        elif kind in (1, 2, 7):
+            events.append((kind, building() | (rng.getrandbits(16) << 16 if rng.random() < 0.1 else 0), 0))
+        elif kind == 4:
+            events.append((4, rng.randrange(5) | (rng.getrandbits(16) << 16 if rng.random() < 0.1 else 0), 0))
+        elif kind == 5:
+            events.append((5, building(), rng.randrange(4)))
+        else:
+            events.append((kind, rng.randrange(68), rng.randrange(68)))
+    fields = []
+    for kind, a, b in events:
+        base = EVENT_RING + 12 * write
+        fields += [(base, kind, 4), (base + 4, a & 0xFFFFFFFF, 4), (base + 8, b, 4)]
+        write = (write + 1) % 1000
+    return fields + [(EVENT_INDEX, read, 4), (EVENT_INDEX + 4, write, 4)]
+
+
+def event_world(rng, pool, args):
+    fields, count, positions, types = event_buildings(rng)
+    for p in range(4):
+        fields += [(PLAYER_RECORDS + p * PLAYER_RECORD_BYTES, rng.randrange(3) if rng.random() < 0.3 else 2, 4),
+                   (PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, rng.randrange(4), 4)]
+    for area in range(5):
+        fields.append((AI_AREAS + area * 0x2E0, 0xFF if rng.random() < 0.2 else rng.randrange(3), 1))
+    fields += event_land(rng) + event_ring(rng, count, positions, types)
+    return fields
+
+
+def event_globals(rng, pool, args):
+    return command_globals(rng, pool, args) + [
+        (AI_LAND_EVALUATION, WORLD_BASE, 4), (AI_MAP_SIZES, 60, 2), (AI_MAP_SIZES + 2, 60, 2)]
+
+
+def finished_world(rng, pool, args):
+    """As event_world; ECX = one of the buildings (sometimes none)."""
+    fields = event_world(rng, pool, args)
+    count = next(v for o, v, s in fields if o == BUILDING_COUNT)
+    args[0] = rng.randint(1, count + 1) if rng.random() < 0.95 else rng.randrange(4000)
+    return fields
+
+
+SPECS += [
+    Spec("AI_CEvaLand_ProcessPendingEvents", 0x00554980, "thiscall", [], presets=event_world,
+         globals=event_globals, callees={**FORCE_CALLEES, **EVENT_PROBES}, max_cases=3000),
+    # EAX: left over (not used by ProcessPendingEvents).
+    Spec("AI_OnBuildingFinished", 0x00573890, "fastcall", [anything], eax_mask=0, presets=finished_world,
+         globals=event_globals,
+         callees={**FORCE_CALLEES, **{a: v for a, v in EVENT_PROBES.items() if a != 0x00573890}}, max_cases=3000),
+]

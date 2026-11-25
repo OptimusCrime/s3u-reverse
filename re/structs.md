@@ -344,8 +344,11 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   against the pending ring). The dump holds 102 type-6 events. Read by
   the AI (0x590DA0). **V** (layout).
 - **Pending event** (12 bytes, ring of 1000 at world+0x2F990, indices
-  +0x32870/+0x32874): int32 type, a, b. Types: 1 (building done), 2, 4
-  (area; deduplicated). Read by the AI (0x554980). **V** (layout).
+  +0x32870/+0x32874): int32 type, a, b. Types: 1 building done, 2 site
+  placed, 3 + 6 building crushed (x, y; type, player), 4 area changed
+  (deduplicated), 5 building conquered (building, old owner), 7 worker idle
+  (G), 8 re-evaluate (x, y). Read by the AI (CEvaLand::ProcessPendingEvents
+  0x554980, re/computer_players.md "The AI event ring"). **V**.
 - **Notification** (12 bytes, 4 lists x 100 at world+0x2D320): int32
   message type, x, y; local player only (0x4FEC10). **S**.
 - **Notification timer** (12 bytes, 42 types x 10 at world+0x2E5E0): int32

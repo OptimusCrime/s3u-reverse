@@ -829,3 +829,31 @@ military buildings, have none).
 - The 20 lists' constructor 0x553e70 / destructor 0x5591e0 and the grid
   cells' bitset constructor 0x559240 have no function starts in Ghidra's
   list (re/extra_functions.tsv).
+
+## The AI event ring (session 56, V)
+
+`CEvaLand::ProcessPendingEvents` 0x554980 (step 2 of 0x550f80) drains the
+world's ring of AI events (world+0x2f990, 1000 x {type, a, b}; queued by
+CGameData::QueuePendingEvent 0x4e8ba0) and keeps the land evaluation up
+to date; `ai_area_events.cpp`.
+
+| Type | Queued by | a, b | Handling |
+|---|---|---|---|
+| 1 | BuildingDone | building | AI::OnBuildingFinished 0x573890 |
+| 2 | CheckBuildingSite | site | owner a computer player: its type bit in the cell, the record's count and `sites` + 1, then the dependent types' site lists refilled (woodcutter: forester, sawmill; coal mine: tool/weapon smith, iron/gold smelter; iron mine: iron smelter; iron smelter: the smiths; mill, waterworks: bakery; bakery: mill; farm: mill, bakery; small tower: record `unk018` = 0, the list head's bytes when there is no record); **returns 1** (one new site per step) |
+| 3 | CrushBuilding | x, y | kept for the next 6 |
+| 6 | CrushBuilding | type, player | the type's bit cleared unless a building of the type stands in the 8 x 8 block (log "Hier ist noch ein Haus dieses Types!"); the record (area at the block's last tile) count - 1 ("Durcheinander bei ABRISS!" if another stands and the count hits 0) |
+| 4 | area functions | area | the record follows the area's owner: RemoveArea / AddArea, or FillAreaSiteLists + CountNodeBuildingsByType while populated (AreaPopulation) |
+| 5 | UpdateSoldier | building, old owner | the type bit moves from the old to the new owner (computer players only) |
+| 7 | UpdateSettlers | building | G: the worker finds nothing: a woodcutter gets a new work area (FindWoodcutterWorkArea), a stonecutter one from **the farm finder** 0x59ac50 (quirk kept; FindStonecutterWorkArea is 0x59a8d0), coal, gold, iron, sulfur and gem mines are torn down |
+| 8 | UpdateEnvironment | x, y | ReevaluateAroundTile |
+
+`AI::OnBuildingFinished` 0x573890 (fastcall building): unblocks the type in
+every record of the building's area and lowers its `sites`; work areas
+for vineyard, farm, fishery, waterworks and rice farm (the finder's result
+is not checked: without a place the building's own position is sent);
+SendChangeGarrison(owner, building, 1) for a large tower or castle;
+ClearToolGoodsSettings for a toolsmith; EnsureGoodsSupply hammer (and
+shovel for a large residence); a finished **gem mine tears down all the
+owner's gold mines and gold smelters** (G: the Egyptians trade gold for
+gems).

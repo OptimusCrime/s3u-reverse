@@ -317,6 +317,7 @@ inline constexpr GameText kAiSiteBuildingGone{0x7313b8};     // "RAINER: Haus da
 inline constexpr GameText kAiOwnerChangeBuildingGone{0x73137c};  // "RAINER: Haus das Besitzer wechseln soll gibt es nicht mehr!"
 inline constexpr GameText kAiSameTypeStillThere{0x73134c};   // "RAINER: Hier ist noch ein Haus dieses Types!"
 inline constexpr GameText kAiDemolitionMixup{0x731328};      // "RAINER: Durcheinander bei ABRISS!"
+inline constexpr GameText kAiFinishedBuildingGone{0x7326e0};  // "RAINER: Haus das fertig sein soll gibt es nicht mehr!" (AI::OnBuildingFinished 0x573890)
 // COMP_FoodForMinesOptimum 0x572a30 (OutputDebugStringA texts; each ends in a line feed).
 inline constexpr GameText kFoodForMinesHeader{0x73257c};     // "COMP_FoodForMinesOptimum player: %u, ecosector %u" (sprintf)
 inline constexpr GameText kFoodForMinesNotOwned{0x732534};   // "COMP_FoodForMinesOptimum - EcoSector gehört nicht dem Spieler ???????"

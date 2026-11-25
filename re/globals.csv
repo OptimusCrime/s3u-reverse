@@ -203,6 +203,7 @@ address,name,type,status,notes
 0x0073134c,texts::kAiSameTypeStillThere,char[],identified,"String ""RAINER: Hier ist noch ein Haus dieses Types!"" (DebugLog of ProcessPendingEvents 0x554980, event 6). Declared in src/s3re/game/texts.h; used by ai_area_events.cpp."
 0x0073137c,texts::kAiOwnerChangeBuildingGone,char[],identified,"String ""RAINER: Haus das Besitzer wechseln soll gibt es nicht mehr!"" (DebugLog of ProcessPendingEvents 0x554980, event 5). Declared in src/s3re/game/texts.h; used by ai_area_events.cpp."
 0x007313b8,texts::kAiSiteBuildingGone,char[],identified,"String ""RAINER: Haus das Gebaut werden soll gibt es nicht mehr!"" (DebugLog of CEvaLand::ProcessPendingEvents 0x554980, event 2). Declared in src/s3re/game/texts.h; used by ai_area_events.cpp."
+0x007326e0,texts::kAiFinishedBuildingGone,char[],identified,"String ""RAINER: Haus das fertig sein soll gibt es nicht mehr!"" (DebugLog of AI::OnBuildingFinished 0x573890). Declared in src/s3re/game/texts.h; used by ai_area_events.cpp."
 0x007323fc,texts::kFoodForMinesNoFish,char[],identified,"OutputDebugStringA text of COMP_FoodForMinesOptimum 0x572a30. Declared in src/s3re/game/texts.h; used by ai_area_events.cpp."
 0x00732434,texts::kFoodForMinesFish,char[],identified,"OutputDebugStringA text of COMP_FoodForMinesOptimum 0x572a30. Declared in src/s3re/game/texts.h; used by ai_area_events.cpp."
 0x00732464,texts::kFoodForMinesNoMeat,char[],identified,"OutputDebugStringA text of COMP_FoodForMinesOptimum 0x572a30. Declared in src/s3re/game/texts.h; used by ai_area_events.cpp."
