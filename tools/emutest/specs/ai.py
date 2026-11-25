@@ -5573,3 +5573,94 @@ SPECS += [
     Spec("AI_OnBuildingFinished", 0x00573890, "fastcall", [finished_id], eax_mask=0, presets=finished_world,
          globals=finished_globals, callees=FINISHED_CALLEES),
 ]
+
+
+# -- session 56 (wip/ai-agents): CCentrumCheckAgent::Run (ai_centrum_check.cpp) --
+# The agent at world +0 (run counter +8 around 41, the forester / waterworks
+# counters around 60); buildings near the origin of resource types, mostly
+# the player's, finished, with a worker. The callees with their own
+# evidence are probed: they record the values their ECX / EDX / stack
+# pointers point at (the original's are stack copies) and answer at random;
+# GetBuilding runs.
+
+CENTRUM_TYPES = (2, 3, 5, 30, 7, 8, 9, 29, 37, 4, 15)
+
+
+def centrum_world(rng, pool, args):
+    count = rng.randrange(1, 30)
+    player = rng.randrange(3)
+    CENTRUM_CASE["player"] = player
+    fields = [(BUILDING_COUNT, count, 4), (8, rng.choice((40, 41, 41, 41, rng.randrange(0x10000))), 2)]
+    fields += [(offset, rng.choice((59, 60, 60, 61, rng.randrange(0x10000))), 2) for offset in (0xA, 0xC, 0xE, 0x10, 0x12)]
+    for building in range(1, count + 2):
+        record = BUILDINGS + building * BUILDING_BYTES
+        fields += [(record, player if rng.random() < 0.8 else rng.choice((0xFF, (player + 1) % 3)), 1),
+                   (record + 2, rng.randrange(60), 2), (record + 4, rng.randrange(60), 2),
+                   (record + 6, rng.choice(CENTRUM_TYPES), 1),
+                   (record + 8, 0 if rng.random() < 0.15 else rng.randint(1, 100), 2),
+                   (record + 0x21, 0 if rng.random() < 0.85 else rng.randint(1, 255), 1)]
+    return fields
+
+
+CENTRUM_CASE = {}
+
+
+def centrum_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_PLAYER_NUMBER, CENTRUM_CASE.get("player", 0), 1),
+            (AI_LAND_EVALUATION, WORLD_BASE + MAP_WORKER_LAND, 4)]
+
+
+def _answer(choices):
+    return lambda h: choices[h % len(choices)]
+
+
+def _register_record(registers, stack_sizes):
+    """Records the values ECX / EDX point at (sizes; 0 = the value itself)
+    and the stack arguments' (sizes, 0 = the value itself)."""
+    def record(machine, ecx, args):
+        from unicorn.x86_const import UC_X86_REG_ECX, UC_X86_REG_EDX
+        values = []
+        for register, size in zip((UC_X86_REG_ECX, UC_X86_REG_EDX), registers):
+            value = machine.uc.reg_read(register)
+            values.append(int.from_bytes(machine.guest_read(value, size), "little") if size else value)
+        for value, size in zip(args, stack_sizes):
+            values.append(int.from_bytes(machine.guest_read(value, size), "little") if size else value)
+        return tuple(values)
+    return record
+
+
+def _waterworks_found(machine, ecx, args, h):
+    """FindWaterworksWorkArea: 0, 2 or 1 with a work area written (*EDX, *stack)."""
+    from unicorn.x86_const import UC_X86_REG_EDX
+    result = h % 3
+    if result == 1:
+        machine.guest_write(machine.uc.reg_read(UC_X86_REG_EDX), ((h >> 8) & 0x3F).to_bytes(2, "little"))
+        machine.guest_write(args[0], ((h >> 16) & 0x3F).to_bytes(2, "little"))
+    return result
+
+
+CENTRUM_CALLEES = {
+    0x00599670: (0, "stdcall", _answer((1, 2, 3)), None, _register_record((0,), ())),          # BuildingRecordArea
+    0x0059DC10: (0, "stdcall", _answer((5, 10, 11, 40)), None, _register_record((1, 2), ())),   # AreaGoodsAmount
+    0x0059A260: (0, "stdcall", _answer((0, 1)), None, _register_record((2, 2), ())),          # FindTreesNearOwnFields
+    0x0059A7A0: (0, "stdcall", _answer((0, 1)), None, _register_record((2, 2), ())),          # FindStonesNearOwnFields
+    0x0058E390: (3, "stdcall", _answer((0, 1, 0x100, 0x101)), None,                           # HasSameTypeWorkAreaNear
+                 _register_record((0, 1), (1, 2, 2))),
+    0x005548B0: (2, "thiscall", "probe"),                                                      # ReevaluateAroundTile
+    0x0058E220: (2, "stdcall", "probe", None, _register_record((2, 1), (2, 2))),              # SendSetWorkArea
+    0x0059A380: (0, "stdcall", _answer((0, 1)), None, _register_record((0,), ())),            # WorkCellHasTrees
+    0x0059A8B0: (0, "stdcall", _answer((0, 1)), None, _register_record((0,), ())),            # WorkCellHasStones
+    0x0059A3A0: (1, "stdcall", _answer((0, 1)), None, _register_record((0, 2), (2,))),        # FindWoodcutterWorkArea
+    0x0059A8D0: (1, "stdcall", _answer((0, 1)), None, _register_record((0, 2), (2,))),        # FindStonecutterWorkArea
+    0x0059BA90: (1, "stdcall", "probe", _waterworks_found, _register_record((0,), ())),       # FindWaterworksWorkArea
+    0x0059A720: (1, "stdcall", _answer((0, 1)), None, _register_record((1, 2), (2,))),        # IsFarmLand
+    0x00571D90: (3, "stdcall", _answer((0, 1)), None,                                         # HasBuildingNear
+                 lambda machine, ecx, args: (args[0] & 0xFFFF, args[1], args[2] & 0xFF)),
+    0x00573810: (0, "stdcall", _answer((0, 1, 6, 7, 0xFFFFFFFF, 50)), None, _register_record((2,), ())),  # MineSuccessPercent
+    0x0058E5C0: (0, "stdcall", "probe", None, _register_record((2, 1), ())),                  # SendDestroyBuilding
+}
+
+SPECS += [
+    Spec("CCentrumCheckAgent_Run", 0x00560e00, "thiscall", [], eax_mask=0, presets=centrum_world,
+         globals=centrum_globals, callees=CENTRUM_CALLEES),
+]

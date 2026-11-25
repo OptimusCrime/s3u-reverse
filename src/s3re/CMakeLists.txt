@@ -162,6 +162,7 @@ add_library(s3re SHARED
     game/ai/ai_building_queries.cpp
     game/ai/ai_cell_resources.cpp
     game/ai/ai_census.cpp
+    game/ai/ai_centrum_check.cpp
     game/ai/ai_census_settlers.cpp
     game/ai/ai_commands.cpp
     game/ai/ai_computer_player.cpp

@@ -78,3 +78,9 @@ LOGBOOK session entry).
   than everywhere else) and the residences 27 / 28 use the farm's site
   tree pointer: confirm in a game whether computer players ever build
   castles through this path (they also get them from the safety agent).
+- **Session 56 (wip/ai-agents) also did** AdjustSoldierShares 0x56a840,
+  OnBuildingFinished 0x573890, CCentrumCheckAgent::Run 0x560e00 and the
+  credits' debug / timer helpers 0x59e6f0..0x59f2a0. Left in the AI range
+  besides the area-list group: CComputerPlayer::Init / ctor / Step,
+  COMP_EmergencyPowersActStone 0x573560 (needs SendPrioritizeSite).
+

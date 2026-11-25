@@ -854,3 +854,16 @@ secured for the medium / large residence, a garrison order for a large
 tower or castle, and for a gem mine every own gold mine and gold smelter is
 torn down (G: the Egyptians trade gold for gems).
 
+## The centre check agent (session 56, V)
+
+`CCentrumCheckAgent::Run` 0x560E00 (ai_centrum_check.cpp; kind 10) is
+the computer player's caretaker of resource buildings, not of a "centre":
+every 42nd run it walks all its finished, manned buildings. A woodcutter /
+stonecutter whose area stocks more than 10 logs / stones moves to trees /
+stones near the player's fields that no other cutter works; otherwise,
+once its work cell is empty, it gets a new work area or is torn down (a
+woodcutter only on farm land without a forester within 30). Waterworks get
+a new work area when their counter (+0xC) passes 60, foresters only count
+(+0x12), and mines whose MineSuccessPercent is 1..6 are torn down. Every
+change re-evaluates the land grid around the position first.
+

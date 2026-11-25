@@ -6568,7 +6568,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-25","statuses":["unknown","classifi
 [5633632,32,2,0,"StaticInit_7e0bc8"],
 [5633664,5968,2,0,"StaticDtorReg_7e0bc8"],
 [5639632,48,6,85,"CCentrumCheckAgent::CCentrumCheckAgent","AI::SetWord4(10), 8 dwords from +8 = 0, then word +8 = 140 (vtable 0x65a5c0 stored by 0x56f6d0)"],
-[5639680,1024,2,85,"CCentrumCheckAgent::Run","Vtable slot 8 (run) of CCentrumCheckAgent: goes over the player's buildings (queries 0x59a260..0x59ba90, GetBuilding 0x58e170, BuildingRecordArea\u2026"],
+[5639680,1024,4,85,"CCentrumCheckAgent::Run","Replaced by CCentrumCheckAgent_Run (session 56), src/s3re/game/ai/ai_centrum_check.cpp: every 42nd run checks the player's finished, manned\u2026"],
 [5640704,32,2,0,"StaticInit_7e0f88"],
 [5640736,48,2,0,"StaticDtorReg_7e0f88"],
 [5640784,32,2,0,"StaticInit_7e0f78"],
@@ -11105,6 +11105,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-25","statuses":["unknown","classifi
 [5630944,7,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:fullgame-20261124-0055-seed10779":1,"replay:fun8-seed2024-input31":7,"replay:random768-seed4321-input7":2,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5630992,2950,{"random:384,0 seed 1234":982,"random:448,3 seed 1234":982,"replay:scripted-seed127":2950,"save:slot 1.sav":1972,"save:slot 2.sav":2000,"save:slot 3.sav":1972},[]],
 [5639632,7,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:fullgame-20261124-0055-seed10779":1,"replay:fun8-seed2024-input31":7,"replay:random768-seed4321-input7":2,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
+[5639680,null,{},[]],
 [5657712,257,{"random:384,0 seed 1234":7,"random:448,3 seed 1234":6,"replay:fullgame-20261124-0055-seed10779":257,"replay:fun8-seed2024-input31":105,"replay:random768-seed4321-input7":15,"replay:scripted-seed127":9,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":1},[]],
 [5657776,7,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:fullgame-20261124-0055-seed10779":1,"replay:fun8-seed2024-input31":7,"replay:random768-seed4321-input7":2,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5657792,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
@@ -11762,4 +11763,5 @@ window.PROGRESS_DATA = {"generated":"2026-11-25","statuses":["unknown","classifi
 ["2026-11-25","d24a294",1102,462299,1289296,341541,726],
 ["2026-11-25","158ad8d",1102,462299,1289296,373324,777],
 ["2026-11-25","12efadf",1109,478171,1304464,373324,777],
-["2026-11-25","78a3957",1120,478603,1304624,373324,777]]};
+["2026-11-25","78a3957",1120,478603,1304624,373324,777],
+["2026-11-25","cac15a3",1122,479995,1306016,373324,777]]};
