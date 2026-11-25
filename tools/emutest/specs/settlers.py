@@ -34,7 +34,7 @@ def settler_list(rng, pool, args):
     return fields
 
 
-def ring_offsets(rng, k):
+def random_ring_offset(rng, k):
     """Entry k of a plausible offset table: rings of growing distance."""
     radius = 1 if k <= 6 else 2 if k <= 18 else 3
     return rng.randint(-radius, radius), rng.randint(-radius, radius)
@@ -50,7 +50,7 @@ def settlers_around(rng, pool, args):
     fields = [(MAP_SIZE, n, 4), (me + 0x0, player, 1)]
     sparse = rng.random()
     for k in range(1, 37):
-        dx, dy = ring_offsets(rng, k)
+        dx, dy = random_ring_offset(rng, k)
         fields += [(NEIGHBOUR_OFFSETS + k * 16, dx & 0xFFFFFFFF, 4),
                    (NEIGHBOUR_OFFSETS + k * 16 + 4, dy & 0xFFFFFFFF, 4)]
         x, y = (args[1] + dx) & 0xFFFFFFFF, (args[2] + dy) & 0xFFFFFFFF

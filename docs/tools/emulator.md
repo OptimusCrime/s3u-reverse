@@ -11,6 +11,23 @@ helper are used as before and a part needs no imports. Put a new spec
 into the part of the folder its replacement's `.cpp` is in, its helpers
 next to it; a helper that a second part starts using moves to
 `common.py`. A new folder gets a new part and an entry in `PARTS`.
+**One namespace, so no name twice (guard, session 57):** names in a
+helper's body resolve when it is called, so a top-level name bound again
+by a later statement (in the same part or a later one) silently changes
+every earlier spec whose helpers use it (GFX_HEADERS in session 55;
+`evaland_object`, `evaland_globals`, `ground_note_globals`,
+`ring_offsets`, `null_string_count` in session 57, renamed so that each
+spec keeps the value it was written for; all presets and globals gave
+the same output before and after on 30 seeds, and the 23 affected specs
+passed again). `specs/__init__.py` therefore executes the parts
+statement by statement and raises `NameClashError` at import (run.py,
+changed.py, everything) on a top-level name bound twice with different
+values: defs and classes are compared by their source (the same helper
+text twice is fine), everything else by `==`. Exempt: names starting
+with `_` (loop temporaries); in-place changes (`SPECS += [...]`,
+`TABLE[key] = ...`) are not rebindings. When it fires, give the later
+helper its own name (a `Spec(...)` takes `presets=`/`globals=` when it
+is built, so the earlier specs keep theirs).
 `changed.py` fingerprints the parts concatenated in `PARTS` order
 (`specs_source`), so moving an entry between parts doesn't change its
 fingerprint.

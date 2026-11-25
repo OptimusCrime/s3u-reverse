@@ -407,6 +407,14 @@ inline constexpr GameText kFoodForMinesMeat{0x73249c};       // "*** COMP_FoodFo
 inline constexpr GameText kFoodForMinesNoMeat{0x732464};     // "*** COMP_FoodForMinesOptimum - KEIN Fleisch vorhanden"
 inline constexpr GameText kFoodForMinesFish{0x732434};       // "*** COMP_FoodForMinesOptimum - Fisch vorhanden"
 inline constexpr GameText kFoodForMinesNoFish{0x7323fc};     // "*** COMP_FoodForMinesOptimum - KEIN Fisch vorhanden"
+// COMP_FoodForMines 0x5724e0 (OutputDebugStringA texts; each ends in a line feed).
+inline constexpr GameText kMineFoodNotOwned{0x7323bc};       // "COMP_FoodForMines - EcoSector gehört nicht dem Spieler ???????"
+inline constexpr GameText kMineFoodEntry{0x73239c};          // "*** COMP_FoodForMines entry "
+inline constexpr GameText kMineFoodForceProduction{0x732374};  // "*** COMP_FoodForMines ForceProduction"
+inline constexpr GameText kMineFoodHeader{0x732334};         // "*** COMP_FoodForMines Food for mines player: %u, ecosector %u" (sprintf)
+inline constexpr GameText kMineFoodCoalPercent{0x732300};    // "*** COMP_FoodForMines Food for coalmine percent %i" (sprintf)
+inline constexpr GameText kMineFoodIronPercent{0x7322cc};    // "*** COMP_FoodForMines Food for oremine percent %i" (sprintf)
+inline constexpr GameText kMineFoodGoldPercent{0x732298};    // "*** COMP_FoodForMines Food for goldmine percent %i" (sprintf)
 // The out-of-memory check of AI::CreateAgent 0x56f6d0.
 inline constexpr GameText kAgentPtr{0x73228c};              // "agentPtr"
 inline constexpr GameText kCompGlobsSourceFile{0x732098};   // "E:\Siedler3\Rainer\compGlobs.cpp"

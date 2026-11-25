@@ -250,6 +250,8 @@ SPECS += [
     Spec("AI_CEvaLand_GridCellOfTile", 0x00554770, "thiscall", [anything, anything], presets=grid_world),
     Spec("AI_BuildingIfUsed_58e1c0", 0x0058e1c0, "fastcall", [small_with_noise(0, 64)],
          presets=building_count, globals=ai_world),
+    # EAX = the argument (kept by NoOp_ret4, which runs).
+    Spec("AI_BlackBoardEmptyVirtual", 0x0055ec00, "thiscall", [anything], max_cases=200),
 ]
 
 
@@ -774,19 +776,19 @@ SPECS += [
 EH_VECTOR_DESTRUCTOR = {0x0061f18a: (4, "stdcall", "probe")}
 
 
-def evaland_object(rng, pool, args):
+def evaland_release_object(rng, pool, args):
     return [(0x158, rng.choice([0, WORLD_BASE + SCRATCH]), 4)]
 
 
-def evaland_globals(rng, pool, args):
+def evaland_release_globals(rng, pool, args):
     return [(0x007e0568, rng.choice([1, 1, 2, 3, 0, rng.getrandbits(32)]), 4),
             (0x007e056c, rng.choice([WORLD_BASE, WORLD_BASE, 0]), 4),
             (0x007e3134, rng.getrandbits(32), 4)]
 
 SPECS += [
-    Spec("AI_CEvaLand_Destroy", 0x00553fe0, "thiscall", [], eax_mask=0, presets=evaland_object,
-         globals=evaland_globals, callees=EH_VECTOR_DESTRUCTOR),
-    Spec("AI_CEvaLand_Release", 0x00553dc0, "stdcall", [], presets=evaland_object, globals=evaland_globals,
+    Spec("AI_CEvaLand_Destroy", 0x00553fe0, "thiscall", [], eax_mask=0, presets=evaland_release_object,
+         globals=evaland_release_globals, callees=EH_VECTOR_DESTRUCTOR),
+    Spec("AI_CEvaLand_Release", 0x00553dc0, "stdcall", [], presets=evaland_release_object, globals=evaland_release_globals,
          callees=EH_VECTOR_DESTRUCTOR),
 ]
 
@@ -1931,7 +1933,7 @@ def notes_near_globals(rng, pool, args):
             (AI_MAP_SIZES + 2, size if rng.random() < 0.5 else rng.randint(20, 420), 2)]
 
 
-def ground_note_globals(rng, pool, args):
+def ground_note_init_globals(rng, pool, args):
     edge = lambda: rng.getrandbits(16) if rng.random() < 0.1 else rng.randint(1, 500)  # noqa: E731
     return [(AI_MAP_SIZES, edge(), 2), (AI_MAP_SIZES + 2, edge(), 2)]
 
@@ -1947,7 +1949,7 @@ SPECS += [
     # ECX = the world: the note is world bytes 0..0x4b. EAX (AI_SiteKindOf's)
     # is not used by the caller.
     Spec("HOUSE_GROUND_REQUEST_NOTE_Init", 0x00575d60, "thiscall",
-         [low_word_noise(71), anything, anything, anything], eax_mask=0, globals=ground_note_globals,
+         [low_word_noise(71), anything, anything, anything], eax_mask=0, globals=ground_note_init_globals,
          max_cases=600),
 ]
 
@@ -5293,10 +5295,48 @@ def force_world_need(rng, fields):
     return fields + [(SCRATCH + SCRATCH_SLOT_BYTES, rng.choice(areas) if areas else rng.randrange(FORCE_AREAS), 2)]
 
 
+# COMP_FoodForMines (ai_area_events.cpp): food_world plus piles of coal,
+# gold ore and iron ore (chains of 0..3 piles of amount 0..4; in a third of
+# the cases the same chain shape for all three, so the shares come out even
+# and COMP_FoodForMinesOptimum runs, as original code) and force_production
+# (node +0x18) set in a third of the nodes.
+
+MINE_FOOD_ORES = (5, 6, 7)
+
+
+def mine_food_world(rng, pool, args):
+    fields = food_world(rng, pool, args)
+    for slot in range(12, 18):
+        node = SCRATCH + slot * SCRATCH_SLOT_BYTES
+        fields.append((node + 0x18, rng.randint(1, 3) if rng.random() < 0.33 else 0, 4))
+        if rng.random() < 0.5:  # all three shared mine types
+            fields += [(node + 0x344 + 2 * t, rng.randint(1, 2), 2) for t in (7, 8, 9)]
+    base = 1200
+    for area in range(FORCE_AREAS):
+        even = rng.random() < 0.33
+        length, amount = rng.randint(1, 3), rng.randrange(3)
+        for goods in MINE_FOOD_ORES:
+            if not even:
+                length, amount = rng.randrange(4), rng.randrange(5)
+            head, chain = economy_pile_chain(rng, base, length, False)
+            fields += chain + [(AI_AREAS + area * 0x2E0 + 0xA + goods * 2, head, 2)]
+            if even:  # amounts +1 per pile summed: coal 2 * (amount + 1) per pile
+                fields += mine_food_even_amounts(chain, 2 * amount + 1 if goods == 5 else amount)
+            base += 10
+    return fields
+
+
+def mine_food_even_amounts(chain, amount):
+    """The pile amount bytes (+1) of a chain from economy_pile_chain set to `amount`."""
+    return [(offset, amount, 1) for offset, value, size in chain if (offset - AI_PILES) % 14 == 1]
+
+
 SPECS += [
     # EAX: left over (callers don't use it).
     Spec("COMP_FoodForMinesOptimum", 0x00572a30, "fastcall", [scratch(0), scratch(1)], eax_mask=0,
          presets=food_world, globals=force_globals, callees=FORCE_CALLEES, max_cases=1500),
+    Spec("COMP_FoodForMines", 0x005724e0, "fastcall", [scratch(0), scratch(1)], eax_mask=0,
+         presets=mine_food_world, globals=force_globals, callees=FORCE_CALLEES, max_cases=2000),
 ]
 
 
@@ -5602,6 +5642,176 @@ SPECS += [
          callees={0x00550a30: (0, "thiscall", "probe"), 0x00551b80: (0, "thiscall", "probe")}, max_cases=300),
 ]
 
+
+
+# -- CComputerPlayer::Step (ai_computer_player_step.cpp) --
+#
+# The computer player at world offset 0 (player 0..19), its CEvaLand in
+# scratch 50 (lists, counts, areas_changed), the player's list head in
+# scratch 51 and 0..4 nodes in scratch 52..55 (area words, countdowns
+# around 0..2, steps_since_expansion), the current node one of them (or the
+# head), area sometimes 0xffffffff; agents[7] a fake agent (run slot
+# recorded). The timers start near their limits. Every callee but
+# SetCurrentPlayer (runs) is probed: the land's UpdateNextCells /
+# ProcessPendingEvents (mostly 0), the blackboard, the building start and
+# priorities with ECX; the fastcall ones with the words their pointer
+# arguments point at (the original passes them in stack dwords with
+# leftover upper halves, which the callees don't read).
+
+STEP_LAND = SCRATCH + 50 * SCRATCH_SLOT_BYTES
+STEP_HEAD = SCRATCH + 51 * SCRATCH_SLOT_BYTES
+STEP_NODES = SCRATCH + 52 * SCRATCH_SLOT_BYTES   # one node per slot, 52..55
+STEP_AGENT = SCRATCH + 56 * SCRATCH_SLOT_BYTES
+
+
+def step_words(m, ecx, args):
+    return (probe_word(m, probe_reg(m, "ECX")), probe_word(m, probe_reg(m, "EDX")))
+
+
+STEP_PROBES = {
+    0x005547a0: (0, "thiscall", "probe"),                              # CEvaLand::UpdateNextCells
+    0x00554980: (0, "thiscall", lambda h: 0 if h % 6 else 1 + h % 3),  # CEvaLand::ProcessPendingEvents
+    0x005517d0: (0, "thiscall", "probe"),                              # UpdateBlackboard
+    0x00551a70: (0, "thiscall", "probe"),                              # StartBestBuilding
+    0x00551b10: (0, "thiscall", "probe"),                              # RaiseBuildPriorities
+    0x0059bc20: (0, "cdecl", "probe", None,                            # DiscountExploitedResources(ECX)
+                 lambda m, ecx, args: (probe_reg(m, "ECX"),)),
+    0x0059c0f0: (0, "cdecl", "probe", None, step_words),               # SetForestersWorking(&area, &player)
+    0x0059bf70: (0, "cdecl", "probe", None, step_words),               # OrderMissingTools(&player, &area)
+    0x005724e0: (0, "cdecl", "probe", None, step_words),               # COMP_FoodForMines(&player, &area)
+    0x005720c0: (1, "stdcall", "probe", None,                          # CheckBasicEconomy(&player; data)
+                 lambda m, ecx, args: (probe_word(m, probe_reg(m, "ECX")), args[0])),
+}
+
+
+def step_world(rng, pool, args):
+    player = rng.randrange(3) if rng.random() < 0.8 else rng.randrange(20)
+    count = 0 if rng.random() < 0.12 else rng.randint(1, 4)
+    head = WORLD_BASE + STEP_HEAD
+    nodes = [head] + [WORLD_BASE + STEP_NODES + k * SCRATCH_SLOT_BYTES for k in range(count)]
+    fields = [(0x76C, player, 4), (0x770, rng.randrange(3), 4), (0x774, WORLD_BASE + STEP_LAND, 4),
+              (0x74C, WORLD_BASE + STEP_AGENT, 4), (STEP_AGENT, FAKE_VTABLE, 4),
+              (STEP_LAND + 12 * player + 4, head, 4), (STEP_LAND + 12 * player + 8, count, 4),
+              (STEP_LAND + 0xF0 + 4 * player, 0 if rng.random() < 0.75 else rng.choice((1, rng.getrandbits(32))), 4)]
+    for k, node in enumerate(nodes):
+        offset = node - WORLD_BASE
+        fields += [(offset, nodes[(k + 1) % len(nodes)], 4), (offset + 4, nodes[k - 1], 4)]
+        if k:
+            fields.append((offset + 8, rng.getrandbits(16), 2))
+            fields += [(offset + 0x2D2 + 2 * t, rng.choice((0, 0, 1, 2, rng.getrandbits(16))), 2) for t in range(57)]
+    fields += [(0x778, rng.choice(nodes[1:]) if count and rng.random() < 0.95 else head, 4),
+               (0x77C, 0xFFFFFFFF if rng.random() < 0.15 else rng.getrandbits(32), 4)]
+    for offset, limit in ((0x274, 14), (0x278, 71), (0x27C, 844)):
+        timer = player + limit + rng.randrange(2) if rng.random() < 0.4 else rng.randrange(player + limit + 1)
+        fields.append((offset, timer if rng.random() < 0.97 else rng.getrandbits(16), 2))
+    return fields
+
+
+SPECS += [
+    # EAX: left over (CLogicThread::Step doesn't use it).
+    Spec("CComputerPlayer_Step", 0x00550f80, "thiscall", [], eax_mask=0, presets=step_world,
+         virtuals={0x20: 0}, callees=STEP_PROBES, max_cases=2000),
+]
+
+
+# -- T_DO_BUILD_HOUSE_AGENT::WorkOnNote (ai_request_agents.cpp) --
+#
+# The agent at world offset 0 (fake vtable: slot 3 takes the note again,
+# slot 10 executes it and answers 0, an upper half only, or random), the
+# note in scratch 1 (state bits 2 / 4, reports around 4, a building type),
+# g_aiLandEvaluation in scratch 60 with the lists of players 0..2 (a head
+# and 0..3 nodes with areas 0..3 each, scratch 61..72). DeactivateNoteOf,
+# DoomNoteOf and ReportToRequester are probed; AreaAlongRow too (recorded
+# by the x / y words it uses, answering an area 0..3 with noise above).
+# A second spec: BLACK_BOARD_AGENT::DeleteThis on a fake object or null
+# (EAX left out: the original's is the caller's for null, and nothing
+# calls the slot).
+
+BUILD_WORK_NOTE = SCRATCH + 1 * SCRATCH_SLOT_BYTES
+BUILD_WORK_LAND = SCRATCH + 60 * SCRATCH_SLOT_BYTES
+BUILD_WORK_NODES = SCRATCH + 61 * SCRATCH_SLOT_BYTES   # per player 0..2: the head, then up to 3 nodes
+
+
+def build_work_area(h):
+    return (h % 4) | (((h >> 8) & 0xFFFF) << 16 if h & 0x80 else 0)
+
+
+def build_work_execute(h):
+    return 0 if h % 3 == 0 else (0x10000 << (h >> 4) % 16) if h % 3 == 1 else h & 0xFFFFFFFF
+
+
+BUILD_WORK_PROBES = {
+    0x00551610: (1, "thiscall", "probe"),   # DeactivateNoteOf(note)
+    0x00551760: (1, "thiscall", "probe"),   # DoomNoteOf(note)
+    0x00582480: (2, "thiscall", "probe"),   # ReportToRequester(result, value)
+    0x005996c0: (0, "cdecl", build_work_area, None,  # AreaAlongRow(x, y): words
+                 lambda m, ecx, args: (probe_reg(m, "ECX") & 0xFFFF, probe_reg(m, "EDX") & 0xFFFF)),
+}
+
+
+def build_work_world(rng, pool, args):
+    fields = [(0, FAKE_VTABLE, 4), (4, 4, 2),
+              (BUILD_WORK_NOTE + 0x1C, rng.randrange(57), 2),
+              (BUILD_WORK_NOTE + 0x24, rng.randrange(16) if rng.random() < 0.8 else rng.getrandbits(16), 2),
+              (BUILD_WORK_NOTE + 0x26, rng.randint(3, 5) if rng.random() < 0.6 else rng.getrandbits(16), 2)]
+    for player in range(3):  # (g_aiPlayerNumber is 0..2)
+        count = rng.randrange(4)
+        first = BUILD_WORK_NODES + 4 * player * SCRATCH_SLOT_BYTES
+        nodes = [WORLD_BASE + first + k * SCRATCH_SLOT_BYTES for k in range(count + 1)]
+        fields += [(BUILD_WORK_LAND + 12 * player + 4, nodes[0], 4), (BUILD_WORK_LAND + 12 * player + 8, count, 4)]
+        for k, node in enumerate(nodes):
+            offset = node - WORLD_BASE
+            fields.append((offset, nodes[(k + 1) % len(nodes)], 4))
+            if k:
+                fields.append((offset + 8, rng.randrange(4), 2))
+    return fields
+
+
+def build_work_globals(rng, pool, args):
+    return [(AI_PLAYER, rng.getrandbits(32), 4), (AI_PLAYER_NUMBER, rng.randrange(3), 1),
+            (AI_LAND_EVALUATION, WORLD_BASE + BUILD_WORK_LAND, 4)]
+
+
+SPECS += [
+    # AX: the result (the upper half is the last callee's).
+    Spec("T_DO_BUILD_HOUSE_AGENT_WorkOnNote", 0x005655c0, "thiscall", [scratch(1)], eax_mask=0xFFFF,
+         presets=build_work_world, globals=build_work_globals, callees=BUILD_WORK_PROBES,
+         virtuals={0x0C: 1, 0x28: (1, {}, {"returns": build_work_execute})}, max_cases=2000),
+    Spec("BLACK_BOARD_AGENT_DeleteThis", 0x0056faf0, "fastcall", [one_of(0, WORLD_BASE, WORLD_BASE)], eax_mask=0,
+         presets=lambda rng, pool, args: [(0, FAKE_VTABLE, 4)], virtuals={0x00: 1}, max_cases=200),
+]
+
+
+# -- T_ECONOMY_AGENT::ConsiderBuildings (ai_economy_consider.cpp) --
+#
+# The agent at world offset 0 (race +8: 0..3, sometimes another value),
+# g_aiPlayerData in scratch 3 with per-case shares of running countdowns
+# and blocked types; every condition is probed (their own specs cover
+# them), NoOp 0x59f200 runs.
+
+CONSIDER_DATA = SCRATCH + 3 * SCRATCH_SLOT_BYTES
+CONSIDER_CONDITIONS = (0x567E00, 0x568420, 0x568250, 0x5682B0, 0x568890, 0x568BC0, 0x568D80, 0x568F40, 0x569160,
+                       0x5691B0, 0x5693C0, 0x569430, 0x569490, 0x5694F0, 0x5695E0, 0x569520, 0x569590, 0x569640,
+                       0x5696D0, 0x569860, 0x569900, 0x5699D0, 0x569B00, 0x569D20, 0x569B30, 0x569C00, 0x569A00,
+                       0x569A30, 0x569AA0, 0x569330, 0x569C90)
+
+
+def consider_world(rng, pool, args):
+    race = rng.randrange(4) if rng.random() < 0.9 else rng.getrandbits(32)
+    busy = rng.choice((0.0, 0.1, 0.3, 0.6))
+    fields = [(8, race, 4)]
+    for t in range(57):
+        fields += [(CONSIDER_DATA + 0x2D2 + 2 * t, rng.getrandbits(16) | 1 if rng.random() < busy else 0, 2),
+                   (CONSIDER_DATA + 0x3B6 + t, rng.getrandbits(8) | 1 if rng.random() < busy else 0, 1)]
+    return fields
+
+
+SPECS += [
+    # EAX: left over (Run doesn't use it).
+    Spec("T_ECONOMY_AGENT_ConsiderBuildings", 0x0056a1a0, "thiscall", [], eax_mask=0, presets=consider_world,
+         globals=lambda rng, pool, args: [(AI_PLAYER_DATA, WORLD_BASE + CONSIDER_DATA, 4)],
+         callees={a: (0, "thiscall", "probe") for a in CONSIDER_CONDITIONS}, max_cases=2000),
+]
 
 # -- session 56 (wip/ai-agents): GLOBAL_EXPAND_EMPIRE_AGENT (ai_expand_empire_agent.cpp) --
 #
