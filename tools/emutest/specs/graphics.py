@@ -889,7 +889,7 @@ GFX_RESULT = SCRATCH + 16 * SCRATCH_SLOT_BYTES      # the result string
 GFX_FORMAT = SCRATCH + 17 * SCRATCH_SLOT_BYTES      # a DDPIXELFORMAT
 GFX_BASE = SCRATCH + 18 * SCRATCH_SLOT_BYTES        # the base path string, its text at +0x20
 GFX_FAKES = SCRATCH + 19 * SCRATCH_SLOT_BYTES       # fake mapping objects (0x20 apart)
-GFX_HEADERS = SCRATCH + 22 * SCRATCH_SLOT_BYTES     # fake GFX file headers (0x100 apart)
+GFX_FAKE_HEADERS = SCRATCH + 22 * SCRATCH_SLOT_BYTES     # fake GFX file headers (0x100 apart)
 GFX_FOUND = SCRATCH + 26 * SCRATCH_SLOT_BYTES       # FindDirectory's result buffer (Open)
 
 
@@ -1006,7 +1006,7 @@ def text_record(machine, ecx, args):
 
 def map_view_effect(machine, ecx, args, h):
     """MapView: one of four fake file headers (sometimes the wrong magic)."""
-    return WORLD_BASE + GFX_HEADERS + 0x100 * (h & 3)
+    return WORLD_BASE + GFX_FAKE_HEADERS + 0x100 * (h & 3)
 
 
 def gfx_open_world(rng, pool, args):
@@ -1022,7 +1022,7 @@ def gfx_open_world(rng, pool, args):
     fields += [(GFX_FORMAT + 4 * i, v, 4) for i, v in enumerate((0x20, 0x40, 0, 16) + masks + (0,))]
     fields += gfx_text_string(rng, GFX_BASE, [b"", b"C:\\S3\\", None, b"..\\"])
     for k in range(4):
-        header = GFX_HEADERS + 0x100 * k
+        header = GFX_FAKE_HEADERS + 0x100 * k
         magic = 0x1404 if rng.random() < 0.03 else 0x41304
         fields.append((header, magic, 4))
         for t in range(8):

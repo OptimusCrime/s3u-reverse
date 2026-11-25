@@ -148,8 +148,10 @@ add_library(s3re SHARED
     game/logic/commands/execute_commands_units.cpp
 
     # game/ai/: computer players (Rainer/*.cpp)
+    game/ai/ai_agent_factory.cpp
     game/ai/ai_agent_slots.cpp
     game/ai/ai_agents.cpp
+    game/ai/ai_area_records.cpp
     game/ai/ai_army.cpp
     game/ai/ai_army_attack.cpp
     game/ai/ai_army_groups.cpp
@@ -179,11 +181,13 @@ add_library(s3re SHARED
     game/ai/ai_request_execute.cpp
     game/ai/ai_request_notes.cpp
     game/ai/ai_safety_agent.cpp
+    game/ai/ai_site_tree.cpp
     game/ai/ai_site_notes.cpp
     game/ai/ai_site_queries.cpp
     game/ai/ai_small_helpers.cpp
     game/ai/ai_state.cpp
     game/ai/ai_work_areas.cpp
+    game/ai/ai_work_area_finders.cpp
     game/ai/ai_world_events.cpp
     game/ai/ai_wrapped_pos.cpp
 

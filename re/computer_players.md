@@ -706,3 +706,70 @@ NoteReported 0x5656a0 sets the build order's state (2 placed, 8 site found,
 4 no site). COMPUTER_PLAYER_AGENT::Run 0x5846a0 asks for a small tower
 (priority 20000) every `small_tower_interval` (setup +0xb2) * 14 + player
 runs.
+
+## The site trees (session 55 round 2, V)
+
+`AI::SiteTree` (ai_site_tree.cpp, layout in ai_layout.h) is MSVC 6.0's
+`std::_Tree` (red-black tree, `<xtree>`) compiled into Cevaland.cpp: 38
+per CEvaLand area record, values of 6 bytes (`SiteValue`: key byte, a
+padding byte copied along, two words), ordered by the key, equal keys
+after the older ones (`_Multi` = 1). Node 0x18 bytes: left, parent,
+right, value +0xc, colour dword +0x14 (0 red, 1 black); +0x12..+0x13
+never written. The nil node is shared by all site trees
+(`g_aiSiteTreeNil` 0x7e0570, made by the first tree, freed with the last:
+`g_aiSiteTreeNilRefs` 0x7e0574); the farm / rice farm / vineyard finders'
+`map<u8, position, greater<u8>>` is a second instance with its own nil
+(0x7e80a8 / 0x7e80ac; library rows 0x59c330.., not reimplemented).
+Verified: constructor, destructor, _Init, copy constructor, _Copy (both),
+insert, _Insert, erase (with rebalancing), erase(first, last), clear,
+_Erase, ++ / --, and MakeBuildOrders' erase / it-- wrappers 0x580240 /
+0x580270. Every operation takes `std::_Lockit` (0x61e6e3 / 0x61e77f) like
+the library code, also nested in the inlined _Min / _Max / rotations; the
+replacements take it at the same places (msvc6/lockit.h) and the
+emulator compares the order of those calls (LOCKIT_PROBES). Quirks of the
+library code kept: erase writes the nil node's parent link; insert's
+result pair has 3 padding bytes of stack leftovers (ours 0).
+
+## Work areas of new production buildings (session 55 round 2, V)
+
+`ai_work_area_finders.cpp` / `ai_work_areas.cpp`. The finders walk square
+rings of grid cells around the building's cell (ring r: from (x + r, y - r)
+four sides of 2r cells, -x, +y, +x, -y) and return a cell centre.
+- Farm 0x59ac50 (rings 1..3): score = owned grain land in the cell + 8 *
+  (1 - |dx| - |dy| - ring - penalty), penalty 4 straight below the
+  building's cell, 2 for the other cells below, 0 above; cells near another
+  farm's work area (HasSameTypeWorkAreaNear) are skipped. The best score
+  wins, but through a `std::map<u8, ...>` keyed by the score's LOW BYTE with
+  unique keys (the first cell of a key stays). Rice farm 0x59b0a0 / vineyard
+  0x59b430: the same with the 3 x 3 rice sum / the cell's wine land, no
+  distance term.
+- Woodcutter 0x59a3a0 / stonecutter 0x59a8d0 (rings 1..5): if the area
+  stores more than 10 logs / stones, the owned cell with the FEWEST trees /
+  stones (an ascending AI::SiteTree, key = count's low byte; G: thin out a
+  sparse spot when wood is plentiful), else the first cell with any.
+- Fishery 0x59b780 (rings 1..7, no bounds test): the first cell owned by
+  the player whose 3 x 3 fish sum is not 0. Builds an unused SiteTree.
+- Waterworks 0x59ba90: the first owned cell with stream tiles and water.
+The stored values' padding byte is an uninitialized stack byte in the
+original (ours 0; the nodes are freed before the return; emulator
+ignore_bytes with the self-test WrongFarmKeys).
+
+## Area records and the CEvaLand's construction (session 55 round 2, V)
+
+`ai_area_records.cpp`; layouts `AiArea` (0x73c bytes, value offsets) and
+`AiAreaNode` (0x744) in ai_layout.h. Findings:
+- The record has 39 site trees at +0x4cc (not 38); `AiPlayerData::unk550`
+  (the fishery condition 0x5693c0) is `site_trees[7].size`.
+- The copy constructor 0x55a440 skips the padding bytes and copies the
+  per-type tree pointers (+0x3e8, 57) verbatim: in a copy they still point
+  at the source record's trees (AddArea appends a copy of its stack
+  record; whether something refreshes them is open, G).
+- RemoveArea 0x558e80 removes only the first record with the area id and
+  sets `areas_changed[player]`; EAX = the new size (head when not found).
+- Acquire 0x553d30 / constructor 0x553e10 / Init 0x553ea0: grid side =
+  map size / 8 (signed), cells constructed (bitsets 0x559240 through the
+  vector constructor iterator 0x42c9d0) then zeroed, EvaluateAllCells,
+  SumAllCells, g_aiLandEvaluation = this. Out of memory: "pEvalMap" (line
+  70) / "map_part_list_ptr" (line 141). The 20 lists' allocator byte is
+  the high byte of each list's own address (constructor 0x553e70 reads it
+  from the saved ECX).

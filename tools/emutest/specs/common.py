@@ -589,6 +589,15 @@ SURFACE_OWNER = UI_BASE + 0x540
 SOURCE_SURFACE = UI_BASE + 0x580
 SOURCE_IFACE = UI_BASE + 0x5c0
 EXCEPTION_CTORS = {0x005be180: (3, "thiscall", "this"), 0x005bfdb0: (3, "thiscall", "this")}
+# std::_Lockit of S3.EXE's MSVC6 library (constructor 0x61e6e3 enters,
+# destructor 0x61e77f leaves the critical section of the std::_Tree nil
+# nodes; msvc6/lockit.h). The emulator has no threads and no critical
+# sections (the first call would also run the CRT's lock set-up and
+# atexit), so the calls are recorded as probes and their order compared:
+# replacements of tree code must lock and unlock exactly where the
+# original does. "cdecl" with no arguments: the lock object's address
+# (ECX, a stack local of each frame) is not recorded; EAX is not used.
+LOCKIT_PROBES = {0x0061e6e3: (0, "cdecl", "probe"), 0x0061e77f: (0, "cdecl", "probe")}
 
 
 def hresult_from(h: int) -> int:

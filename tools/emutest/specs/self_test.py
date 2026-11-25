@@ -81,4 +81,15 @@ SELF_TEST += [
     Spec("WrongFindDirectory", 0x005f6a10, "thiscall",
          [one_of(WORLD_BASE + GFX_RESULT), one_of(WORLD_BASE + GFX_FOLDERS), one_of(WORLD_BASE + GFX_FILE)],
          presets=gfx_folders, callees=GFX_THROWERS, ignore_bytes=(GFX_RESULT,), cover_until=0x005f6fc5),
+    # ignore_bytes on bytes 5..7 of SiteTree::insert's result pair: the wrong
+    # insert reports "not inserted" (byte 4) for the first node of a tree.
+    Spec("WrongSiteTreeInsertFlag", 0x00559270, "thiscall", [scratch(11), scratch(12)],
+         presets=site_tree_insert_world, globals=site_tree_globals, callees=LOCKIT_PROBES,
+         ignore_bytes=(SITE_TREE_OUT + 5, SITE_TREE_OUT + 6, SITE_TREE_OUT + 7)),
+]
+
+SELF_TEST += [
+    # ignore_bytes on byte +0xd of the finders' freed tree nodes: the wrong
+    # farm finder stores every key one higher (node byte +0xc).
+    finder_spec("WrongFarmKeys", 0x0059ac50),
 ]

@@ -4494,3 +4494,658 @@ SPECS += [
     Spec("T_ATTACK_AGENT_Run", 0x0055ec10, "thiscall", [], presets=attack_agent_world, globals=attack_agent_globals,
          callees={0x0058F990: (2, "thiscall", "probe", None, record_run_military)}, max_cases=300),
 ]
+
+# -- session 55 round 2 (ai-step): AI::SiteTree, the MSVC6 std::_Tree of ------
+# -- the CEvaLand area records (ai_site_tree.cpp) ------------------------------
+#
+# A random red-black tree is laid out in the world: the tree object at
+# offset 0 (thiscall ECX), its head and nodes in scratch slots 8/9 (0x20 per
+# node), the shared nil node (g_aiSiteTreeNil 0x7e0570) in slot 10. It is
+# built with the MSVC6 insert algorithm (equal keys go right), so it is a
+# valid tree whose shape depends on the insertion order. Arguments that
+# must point at nodes of the tree are placeholders the presets replace in
+# the `args` list (run.py passes that list on after the presets).
+
+SITE_TREE_NIL_GLOBAL = 0x007e0570
+SITE_TREE_REFS_GLOBAL = 0x007e0574
+SITE_TREE = 0                                       # world offset of the tree (thiscall ECX)
+SITE_TREE_OTHER = SCRATCH + 7 * SCRATCH_SLOT_BYTES  # a second tree object (copies)
+SITE_TREE_NODES = SCRATCH + 8 * SCRATCH_SLOT_BYTES  # head at +0, nodes from +0x20 (two slots)
+SITE_TREE_NIL = SCRATCH + 10 * SCRATCH_SLOT_BYTES
+SITE_TREE_OUT = SCRATCH + 11 * SCRATCH_SLOT_BYTES   # results (insert's pair, iterators)
+SITE_TREE_VALUE = SCRATCH + 12 * SCRATCH_SLOT_BYTES  # a 6-byte value / iterator slot
+
+
+class _SiteNode:
+    __slots__ = ("left", "parent", "right", "red", "key", "address")
+
+    def __init__(self, key, address):
+        self.left = self.parent = self.right = None
+        self.red, self.key, self.address = True, key, address
+
+
+def _site_tree_insert(tree, nil, head, node):
+    """MSVC6 _Tree::insert + _Insert (multi: equal keys go right)."""
+    y, x, left = head, head.parent, True
+    while x is not nil:
+        y = x
+        left = node.key < x.key
+        x = x.left if left else x.right
+    node.parent, node.left, node.right = y, nil, nil
+    if y is head or left:
+        y.left = node
+        if y is head:
+            head.parent = node
+            head.right = node
+        elif y is head.left:
+            head.left = node
+    else:
+        y.right = node
+        if y is head.right:
+            head.right = node
+
+    def rotate(x, to_left):
+        y = x.right if to_left else x.left
+        if to_left:
+            x.right = y.left
+            if y.left is not nil:
+                y.left.parent = x
+        else:
+            x.left = y.right
+            if y.right is not nil:
+                y.right.parent = x
+        y.parent = x.parent
+        if x is head.parent:
+            head.parent = y
+        elif x is x.parent.left:
+            x.parent.left = y
+        else:
+            x.parent.right = y
+        if to_left:
+            y.left = x
+        else:
+            y.right = x
+        x.parent = y
+
+    x = node
+    while x is not head.parent and x.parent.red:
+        grand = x.parent.parent
+        on_left = x.parent is grand.left
+        uncle = grand.right if on_left else grand.left
+        if uncle.red:
+            x.parent.red = uncle.red = False
+            grand.red = True
+            x = grand
+            continue
+        if x is (x.parent.right if on_left else x.parent.left):
+            x = x.parent
+            rotate(x, on_left)
+        x.parent.red = False
+        x.parent.parent.red = True
+        rotate(x.parent.parent, not on_left)
+    head.parent.red = False
+
+
+def _site_tree_shape(rng, nil, black_height, red_chance):
+    """A random red-black subtree with this black height below a black
+    parent (red root allowed); colours only, keys and links set later."""
+    def black(height):
+        if height == 0:
+            return nil
+        node = _SiteNode(0, 0)
+        node.red = False
+        node.left, node.right = below_black(height - 1), below_black(height - 1)
+        return node
+
+    def below_black(height):
+        if rng.random() < red_chance:
+            node = _SiteNode(0, 0)
+            node.left, node.right = black(height), black(height)
+            return node
+        return black(height)
+    return black(black_height)
+
+
+def site_tree_model(rng, count, base=SITE_TREE_NODES, max_key=8, random_shapes=True):
+    """(head, nil, nodes in order): usually `count` nodes with keys below
+    max_key (often equal keys), inserted in random order; sometimes (a third)
+    a tree of random shape and colouring (also all-black ones, which
+    insertion seldom makes; erase's rebalancing needs them)."""
+    nil = _SiteNode(0, WORLD_BASE + SITE_TREE_NIL)
+    nil.red = False
+    head = _SiteNode(0, WORLD_BASE + base)
+    head.parent, head.left, head.right = nil, head, head
+    key = lambda: rng.randrange(256) if rng.random() < 0.1 else rng.randrange(max_key)  # noqa: E731
+    nodes = []
+
+    def walk(node):
+        if node is not nil:
+            walk(node.left)
+            nodes.append(node)
+            walk(node.right)
+    if random_shapes and count > 0 and rng.random() < 0.35:
+        for _ in range(20):
+            root = _site_tree_shape(rng, nil, rng.randint(1, 4), rng.choice((0.0, 0.15, 0.4)))
+            walk(root)
+            if len(nodes) <= 60:
+                break
+            nodes = []
+        slots = list(range(1, len(nodes) + 1))
+        rng.shuffle(slots)
+        for node, slot, k in zip(nodes, slots, sorted(key() for _ in nodes)):
+            node.address, node.key = WORLD_BASE + base + 0x20 * slot, k
+
+        def link(node, parent):
+            if node is not nil:
+                node.parent = parent
+                link(node.left, node)
+                link(node.right, node)
+        link(root, head)
+        head.parent, head.left, head.right = root, nodes[0], nodes[-1]
+        return head, nil, nodes
+    slots = list(range(1, count + 1))
+    rng.shuffle(slots)
+    for slot in slots:
+        _site_tree_insert(None, nil, head, _SiteNode(key(), WORLD_BASE + base + 0x20 * slot))
+    walk(head.parent)
+    return head, nil, nodes
+
+
+def site_tree_fields(rng, head, nil, nodes, tree=SITE_TREE, multi=1):
+    """World fields of the tree object, its head, nodes and the nil node."""
+    fields = [(tree, rng.getrandbits(16), 2), (tree + 4, head.address, 4), (tree + 8, multi, 1),
+              (tree + 0xc, len(nodes), 4)]
+    for node in [head, *nodes]:
+        offset = node.address - WORLD_BASE
+        fields += [(offset, node.left.address, 4), (offset + 4, node.parent.address, 4),
+                   (offset + 8, node.right.address, 4), (offset + 0xc, node.key, 1),
+                   (offset + 0xd, rng.getrandbits(8), 1), (offset + 0xe, rng.getrandbits(32), 4),
+                   (offset + 0x14, 0 if node.red else 1, 4)]
+    nil_offset = nil.address - WORLD_BASE
+    nil_parent = rng.choice([head, *nodes]).address if rng.random() < 0.9 else 0
+    fields += [(nil_offset, 0, 4), (nil_offset + 4, nil_parent, 4), (nil_offset + 8, 0, 4),
+               (nil_offset + 0x14, 1, 4)]
+    return fields
+
+
+def site_tree_size(rng):
+    return 0 if rng.random() < 0.08 else rng.randint(1, 6) if rng.random() < 0.4 else rng.randint(7, 60)
+
+
+def site_tree_globals(rng, pool, args):
+    """The nil node and its reference count (sometimes 1: the last tree)."""
+    return [(SITE_TREE_NIL_GLOBAL, WORLD_BASE + SITE_TREE_NIL, 4),
+            (SITE_TREE_REFS_GLOBAL, rng.choice((1, 1, 2, 3, 40)), 4)]
+
+
+def site_tree_new_globals(rng, pool, args):
+    """As site_tree_globals; sometimes no nil node yet (the first tree)."""
+    fields = site_tree_globals(rng, pool, args)
+    if rng.random() < 0.4:
+        fields = [(SITE_TREE_NIL_GLOBAL, 0, 4), (SITE_TREE_REFS_GLOBAL, 0, 4)]
+    return fields
+
+
+def site_tree_world(rng, pool, args):
+    """A random tree (multi or not) at offset 0."""
+    head, nil, nodes = site_tree_model(rng, site_tree_size(rng))
+    return site_tree_fields(rng, head, nil, nodes, multi=1 if rng.random() < 0.7 else rng.choice((0, 2)))
+
+
+def site_tree_iterator(rng, pool, args):
+    """A tree and an iterator (args[0] points at it) on one of its nodes or
+    the head."""
+    head, nil, nodes = site_tree_model(rng, max(1, site_tree_size(rng)))
+    node = head if rng.random() < 0.15 else rng.choice(nodes)
+    return site_tree_fields(rng, head, nil, nodes) + [(SITE_TREE_VALUE, node.address, 4)]
+
+
+def site_tree_insert_world(rng, pool, args):
+    """A tree (multi or unique keys) and a value (args[1]) with a key that
+    is often already there; nodes the insert needs come from the fake heap."""
+    head, nil, nodes = site_tree_model(rng, site_tree_size(rng))
+    key = rng.choice([n.key for n in nodes]) if nodes and rng.random() < 0.6 else rng.randrange(9)
+    return (site_tree_fields(rng, head, nil, nodes, multi=rng.choice((0, 1, 1)))
+            + [(SITE_TREE_VALUE, key, 1), (SITE_TREE_VALUE + 1, rng.getrandbits(40), 5)])
+
+
+def site_tree_erase_world(rng, pool, args):
+    """A non-empty tree; args[1] = one of its nodes."""
+    head, nil, nodes = site_tree_model(rng, max(1, site_tree_size(rng)))
+    args[1] = rng.choice(nodes).address
+    return site_tree_fields(rng, head, nil, nodes)
+
+
+def site_tree_range_world(rng, pool, args):
+    """A tree; args[1] / args[2] = a range of it (often all of it)."""
+    head, nil, nodes = site_tree_model(rng, site_tree_size(rng))
+    ends = [*nodes, head]
+    if rng.random() < 0.4:
+        first, last = 0, len(nodes)
+    else:
+        first = rng.randrange(len(ends))
+        last = rng.randrange(first, len(ends))
+    args[1], args[2] = ends[first].address, ends[last].address
+    return site_tree_fields(rng, head, nil, nodes)
+
+
+def site_tree_subtree_world(rng, pool, args):
+    """A tree; args[0] = a node (the root of a subtree) or the nil node."""
+    head, nil, nodes = site_tree_model(rng, site_tree_size(rng))
+    args[0] = rng.choice(nodes).address if nodes and rng.random() < 0.85 else nil.address
+    if nodes and rng.random() < 0.4:
+        args[0] = head.parent.address
+    return site_tree_fields(rng, head, nil, nodes)
+
+
+def site_tree_insert_below_world(rng, pool, args):
+    """_Insert(out, x, y, value): y is where insert's search ends for the
+    value's key (x = nil), or a node without a left child and a non-nil x
+    (the branch insert never takes), or the head of an empty tree."""
+    head, nil, nodes = site_tree_model(rng, site_tree_size(rng))
+    key = rng.choice([n.key for n in nodes]) if nodes and rng.random() < 0.5 else rng.randrange(9)
+    y, x = head, head.parent
+    while x is not nil:
+        y = x
+        x = x.left if key < x.key else x.right
+    x = nil
+    no_left = [n for n in nodes if n.left is nil]
+    if no_left and rng.random() < 0.15:
+        y = rng.choice(no_left)
+        x = rng.choice(nodes)
+    args[1], args[2] = x.address, y.address
+    return (site_tree_fields(rng, head, nil, nodes)
+            + [(SITE_TREE_VALUE, key, 1), (SITE_TREE_VALUE + 1, rng.getrandbits(40), 5)])
+
+
+def site_tree_copy_world(rng, pool, args):
+    """A source tree at SITE_TREE_OTHER (args[0] points at it); the
+    destination at offset 0: an empty tree (for _Copy) or garbage (for the
+    copy constructor)."""
+    head, nil, nodes = site_tree_model(rng, site_tree_size(rng))
+    fields = site_tree_fields(rng, head, nil, nodes, tree=SITE_TREE_OTHER)
+    empty_head = SITE_TREE_OUT + 0x100
+    fields += [(SITE_TREE + 4, WORLD_BASE + empty_head, 4), (SITE_TREE + 0xc, 0, 4),
+               (empty_head, WORLD_BASE + empty_head, 4), (empty_head + 4, nil.address, 4),
+               (empty_head + 8, WORLD_BASE + empty_head, 4), (empty_head + 0x14, 0, 4)]
+    return fields
+
+
+def site_tree_copy_subtree_world(rng, pool, args):
+    """_Copy(node, parent): args[0] = a subtree root of a tree (or nil),
+    args[1] = a destination parent node."""
+    head, nil, nodes = site_tree_model(rng, site_tree_size(rng))
+    args[0] = rng.choice(nodes).address if nodes and rng.random() < 0.85 else nil.address
+    return site_tree_fields(rng, head, nil, nodes)
+
+
+SPECS += [
+    Spec("AI_SiteTree_iterator_Inc", 0x0055a320, "fastcall", [scratch(12)], eax_mask=0,
+         presets=site_tree_iterator, globals=site_tree_globals, callees=LOCKIT_PROBES),
+    Spec("AI_SiteTree_iterator_Dec", 0x0055a260, "fastcall", [scratch(12)], eax_mask=0,
+         presets=site_tree_iterator, globals=site_tree_globals, callees=LOCKIT_PROBES),
+    Spec("AI_SiteTree_Construct", 0x005590a0, "thiscall", [scratch(12), scratch(13)],
+         globals=site_tree_new_globals, callees=LOCKIT_PROBES),
+    Spec("AI_SiteTree_Init", 0x0055a970, "thiscall", [], eax_mask=0,
+         globals=site_tree_new_globals, callees=LOCKIT_PROBES),
+    # cover_until: std::list<Area>::~list 0x5591e0 follows (a function start
+    # not in Ghidra's list).
+    Spec("AI_SiteTree_Destruct", 0x00559170, "thiscall", [], eax_mask=0,
+         presets=site_tree_world, globals=site_tree_globals, callees=LOCKIT_PROBES, cover_until=0x005591dc),
+    # ignore_bytes: bytes 5..7 of the result pair are the padding of the
+    # original's stack temporary (a dword whose low byte gets the bool), so
+    # they hold the original's own stack leftovers; ours writes 0.
+    Spec("AI_SiteTree_insert", 0x00559270, "thiscall", [scratch(11), scratch(12)],
+         presets=site_tree_insert_world, globals=site_tree_globals, callees=LOCKIT_PROBES,
+         ignore_bytes=(SITE_TREE_OUT + 5, SITE_TREE_OUT + 6, SITE_TREE_OUT + 7)),
+    Spec("AI_SiteTree_erase_range", 0x005593a0, "thiscall", [scratch(11), anything, anything],
+         presets=site_tree_range_world, globals=site_tree_globals, callees=LOCKIT_PROBES),
+    Spec("AI_SiteTree_clear", 0x005594d0, "thiscall", [], eax_mask=0,
+         presets=site_tree_world, globals=site_tree_globals, callees=LOCKIT_PROBES),
+    # Dead in a valid red-black tree (inlined generic _Min / _Max): 0x559afe
+    # and 0x559b50 step down from x when the erased node z was the leftmost /
+    # rightmost with one child x; such a child is a red leaf. 0x559d06 /
+    # 0x559df0 (the sibling w is the root) and 0x559d18 / 0x559e00 (w on
+    # the other side of its parent) in the inner rotation of w: w is x's
+    # sibling on the side the branch has tested.
+    Spec("AI_SiteTree_erase", 0x005599b0, "thiscall", [scratch(11), anything],
+         presets=site_tree_erase_world, globals=site_tree_globals, callees=LOCKIT_PROBES, case_scale=2,
+         exempt_blocks=(0x00559afe, 0x00559b50, 0x00559d06, 0x00559d18, 0x00559df0, 0x00559e00)),
+    Spec("AI_SiteTree_EraseSubtree", 0x00559ed0, "thiscall", [anything], eax_mask=0,
+         presets=site_tree_subtree_world, globals=site_tree_globals, callees=LOCKIT_PROBES),
+    # Dead in a valid red-black tree (the inlined generic _Lrotate / _Rrotate
+    # of the inner rotation): 0x55a091 / 0x55a18c rotate the root and
+    # 0x55a0a1 / 0x55a19e a node on the other side of its parent, but that
+    # rotation's node is a red parent (never the root) on the side the
+    # branch has just tested.
+    Spec("AI_SiteTree_InsertBelow", 0x00559f60, "thiscall", [scratch(11), anything, anything, scratch(12)],
+         presets=site_tree_insert_below_world, globals=site_tree_globals, callees=LOCKIT_PROBES, case_scale=2,
+         exempt_blocks=(0x0055a091, 0x0055a0a1, 0x0055a18c, 0x0055a19e)),
+    Spec("AI_SiteTree_CopyConstruct", 0x0055aa20, "thiscall", [one_of(WORLD_BASE + SITE_TREE_OTHER)],
+         presets=site_tree_copy_world, globals=site_tree_globals, callees=LOCKIT_PROBES),
+    Spec("AI_SiteTree_Copy", 0x0055aa50, "thiscall", [one_of(WORLD_BASE + SITE_TREE_OTHER)], eax_mask=0,
+         presets=site_tree_copy_world, globals=site_tree_globals, callees=LOCKIT_PROBES),
+    Spec("AI_SiteTree_CopySubtree", 0x0055abc0, "thiscall", [anything, one_of(WORLD_BASE + SITE_TREE_OUT + 0x200)],
+         presets=site_tree_copy_subtree_world, globals=site_tree_globals, callees=LOCKIT_PROBES),
+]
+
+SPECS += [
+    Spec("AI_SiteTree_EraseIterator", 0x00580240, "thiscall", [scratch(11), anything],
+         presets=site_tree_erase_world, globals=site_tree_globals, callees=LOCKIT_PROBES),
+    Spec("AI_SiteTree_iterator_PostDecrement", 0x00580270, "fastcall", [scratch(12), anything, scratch(11), anything],
+         presets=site_tree_iterator, globals=site_tree_globals, callees=LOCKIT_PROBES),
+]
+
+
+# -- session 55 round 2 (ai-step): the work-area finders of farms, rice --------
+# -- farms, vineyards, woodcutters, stonecutters, fisheries -------------------
+# -- (ai_work_area_finders.cpp) ------------------------------------------------
+#
+# The building record at scratch 0 (owner, x, y), *x / *y at scratch 1 / 2;
+# a 64 x 64 map, the land evaluation at WORK_LAND with an 8 x 8 grid, up to
+# 14 buildings of the work-area types (HasSameTypeWorkAreaNear), pile lists
+# of logs and stones in areas 0..3 (the cutters' stock test). The nil nodes
+# of both tree instances exist (refs 1..3) or are made by the call.
+
+FIELD_MAP_NIL_GLOBAL = 0x007e80a8
+FIELD_MAP_REFS_GLOBAL = 0x007e80ac
+FINDER_FIELD_NIL = SCRATCH + 15 * SCRATCH_SLOT_BYTES
+FINDER_SITE_NIL = SCRATCH + 16 * SCRATCH_SLOT_BYTES
+FINDER_HEAP = 0x01fc0000  # emu.HEAP_OFFSET: the fake heap, 0x20 bytes per tree node
+FINDER_TYPES = (2, 3, 14, 24, 36, 25)
+# ignore_bytes: byte +0xd of every tree node in the fake heap (one node per
+# 0x20 bytes; at most 2 + 120 nodes). It is the padding byte of the stored
+# value, copied from a stack temporary whose padding the original never
+# writes: an uninitialized byte of each function's own frame (ours 0). The
+# nodes are freed before the function returns.
+FINDER_NODE_PADDING = tuple(FINDER_HEAP + 0x20 * k + 0xd for k in range(130))
+
+
+def finder_world(rng, pool, args):
+    owner = rng.randrange(3) if rng.random() < 0.95 else 0xFF
+    bx, by = rng.randrange(64), rng.randrange(64)
+    # (the door tile gives the cutters' area: on the smallest map, so that
+    # the pile lists below are the ones read; lazily random ones may loop)
+    fields = [(SCRATCH, owner, 1), (SCRATCH + 2, bx, 2), (SCRATCH + 4, by, 2), (SCRATCH + 0xA, bx % 24, 2),
+              (SCRATCH + 0xC, by % 24, 2), (MAP_SIZE, 64, 4),
+              (WORK_LAND + 0x140, 8, 4), (WORK_LAND + 0x144, 8, 4), (WORK_LAND + 0x158, WORLD_BASE + WORK_GRID, 4)]
+    patch = rng.choice((8, 12, 16, 24, 64))
+    phase = rng.randrange(4)
+    flat = rng.random() < 0.6
+    for x in range(64):
+        for y in range(64):
+            k = (x // patch) * 7 + (y // patch) * 3 + phase
+            roll = rng.randrange(10)
+            terrain = 0x10 | rng.randrange(16) if roll < 5 else 0x15 if roll == 5 else \
+                0x60 | rng.randrange(16) if roll == 6 else rng.randrange(256)
+            obj = rng.randrange(12)
+            obj = 0x44 + rng.randrange(16) if obj == 0 else 0x73 + rng.randrange(12) if obj == 1 else rng.randrange(0x40)
+            base = tile(x, y)
+            fields += [(base + 8, 0xFF if k % 4 == 3 else k % 4, 1), (base + 6, terrain, 1),
+                       (base + 4, rng.randrange(2 if flat else 30), 1),
+                       (base + 10, rng.randrange(256) & ~0x20 if rng.random() < 0.1 else 0, 1), (base + 7, obj, 1),
+                       (base + 0x11, rng.randrange(256), 1),
+                       (base + 0x14, 0 if rng.random() < 0.1 else rng.randrange(1, 4), 2)]
+    if rng.random() < 0.7:
+        fields += [(tile(bx, by) + 2, rng.randrange(1, 16), 2), (tile(bx, by) + 10, 0x20, 1)]
+    for cell in range(64):
+        base = WORK_GRID + cell * 0xC4
+        fields += [(base + b, 0 if rng.random() < 0.33 else rng.randrange(1, 256), 1) for b in range(2, 0xF)]
+        fields.append((base + 0x1c, 0 if rng.random() < 0.7 else rng.randrange(1, 300), 2))
+    for k in (150, 300, 400):
+        fields.append((0x110A588 + 16 * k + 8, rng.randrange(40), 4))
+    count = rng.randrange(15)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        dx, dy = rng.randrange(64), rng.randrange(64)
+        fields += [(record, 0xFF if rng.random() < 0.1 else rng.randrange(3), 1),
+                   (record + 6, rng.choice(FINDER_TYPES), 1), (record + 0x21, 0 if rng.random() < 0.85 else 1, 1),
+                   (record + 0xA, dx, 2), (record + 0xC, dy, 2),
+                   (record + 0x30, rng.randrange(64), 2), (record + 0x32, rng.randrange(64), 2)]
+    used = set()
+    for area in range(4):
+        for goods in (2, 3):
+            head = 0
+            for _ in range(rng.randrange(5)):
+                pile = rng.randrange(1, 400)
+                if pile in used:
+                    continue
+                used.add(pile)
+                fields += [(PILES + pile * 14 + 1, rng.randrange(9), 1), (PILES + pile * 14 + 0xC, head, 2)]
+                head = pile
+            fields.append((AI_AREAS + area * 0x2e0 + 0xa + goods * 2, head, 2))
+    for nil in (FINDER_FIELD_NIL, FINDER_SITE_NIL):
+        fields += [(nil, 0, 4), (nil + 4, 0, 4), (nil + 8, 0, 4), (nil + 0x14, 1, 4)]
+    return fields
+
+
+def finder_globals(rng, pool, args):
+    fields = [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, rng.choice((64, 64, rng.randint(24, 64))), 2),
+              (AI_MAP_SIZES + 2, rng.choice((64, 64, rng.randint(24, 64))), 2),
+              (AI_LAND_EVALUATION, WORLD_BASE + WORK_LAND, 4)]
+    for nil_global, nil in ((FIELD_MAP_NIL_GLOBAL, FINDER_FIELD_NIL), (SITE_TREE_NIL_GLOBAL, FINDER_SITE_NIL)):
+        if rng.random() < 0.5:
+            fields += [(nil_global, 0, 4), (nil_global + 4, 0, 4)]
+        else:
+            fields += [(nil_global, WORLD_BASE + nil, 4), (nil_global + 4, rng.randint(1, 3), 4)]
+    return fields
+
+
+def finder_spec(name, address, **kwargs):
+    return Spec(name, address, "fastcall", [scratch(0), scratch(1), scratch(2)], presets=finder_world,
+                globals=finder_globals, callees=LOCKIT_PROBES, ignore_bytes=FINDER_NODE_PADDING, max_cases=400,
+                **kwargs)
+
+
+SPECS += [
+    finder_spec("AI_FindFarmWorkArea", 0x0059ac50),
+    finder_spec("AI_FindRiceFarmWorkArea", 0x0059b0a0),
+    finder_spec("AI_FindVineyardWorkArea", 0x0059b430),
+    finder_spec("AI_FindWoodcutterWorkArea", 0x0059a3a0),
+    finder_spec("AI_FindStonecutterWorkArea", 0x0059a8d0),
+    finder_spec("AI_FindFisheryWorkArea", 0x0059b780),
+]
+
+
+# -- session 55 round 2 (ai-step): CEvaLand area records and lists, the -------
+# -- CEvaLand's construction (ai_area_records.cpp) -----------------------------
+#
+# Area records (0x73c bytes) with 39 small site trees: the trees' heads and
+# nodes 0xe0 bytes apart per tree (head + up to 6 nodes) from AREA_TREE_NODES
+# on, the shared nil node of the site tree specs. A list node is 0x744 bytes
+# (next, prev, record).
+
+AREA_SOURCE = SCRATCH                                # a record (copy / insert source)
+AREA_TREE_NODES = SCRATCH + 1 * SCRATCH_SLOT_BYTES    # up to 4 records' trees: slots 1..8
+AREA_TREES_PER_RECORD = 39
+AREA_TREE_STRIDE = 0xe0
+AREA_LIST_NODES = SCRATCH + 12 * SCRATCH_SLOT_BYTES   # list nodes, one per slot (12..16)
+AREA_TREES_OFFSET = 0x4cc
+AREA_PADDING = (0x2, 0x3, 0x15, 0x16, 0x17, 0x3e7)
+
+
+def area_record_fields(rng, record, first_tree, max_nodes=4, area=None):
+    """A record at world offset `record` with random fields and 39 trees
+    (often empty) whose nodes start at tree slot `first_tree`."""
+    fields = [(record + k, rng.getrandbits(32), 4) for k in range(0, AREA_TREES_OFFSET, 4)]
+    if area is not None:
+        fields.append((record, area, 2))
+    for t in range(AREA_TREES_PER_RECORD):
+        base = AREA_TREE_NODES + (first_tree + t) * AREA_TREE_STRIDE
+        count = 0 if rng.random() < 0.5 else rng.randint(1, max_nodes)
+        head, nil, nodes = site_tree_model(rng, count, base=base, random_shapes=False)
+        fields += site_tree_fields(rng, head, nil, nodes, tree=record + AREA_TREES_OFFSET + 0x10 * t)
+    return fields
+
+
+def area_copy_world(rng, pool, args):
+    """The source record at scratch 0 (args[0]); the destination (offset
+    0) lazily random."""
+    return area_record_fields(rng, AREA_SOURCE, 0)
+
+
+def area_destruct_world(rng, pool, args):
+    return area_record_fields(rng, 0, 0)
+
+
+def area_list_world(rng, pool, args):
+    """The list at offset 0 (unk0, head, size) with 0..4 nodes; args[1] =
+    one of its nodes or the head (where); the source record at scratch 0."""
+    count = rng.randrange(5)
+    head = WORLD_BASE + AREA_LIST_NODES
+    nodes = [head] + [WORLD_BASE + AREA_LIST_NODES + (k + 1) * SCRATCH_SLOT_BYTES for k in range(count)]
+    fields = [(4, head, 4), (8, count, 4)]
+    for k, node in enumerate(nodes):
+        offset = node - WORLD_BASE
+        fields += [(offset, nodes[(k + 1) % len(nodes)], 4), (offset + 4, nodes[k - 1], 4)]
+    args[1] = rng.choice(nodes)
+    if rng.random() < 0.2:  # MSVC6 _Buynode links a node to itself when prev is null
+        fields.append((args[1] - WORLD_BASE + 4, 0, 4))
+    return fields + area_record_fields(rng, AREA_SOURCE, 0)
+
+
+def remove_area_world(rng, pool, args):
+    """The CEvaLand at offset 0; lists[player] (args[1]) with 0..3 nodes of
+    area ids 0..4 whose records have small trees; args[0] = an area id
+    (sometimes with high bits)."""
+    player = args[1] & 0xFFFF
+    count = rng.randrange(4)
+    head = WORLD_BASE + AREA_LIST_NODES
+    nodes = [head] + [WORLD_BASE + AREA_LIST_NODES + (k + 1) * SCRATCH_SLOT_BYTES for k in range(count)]
+    fields = [(12 * player + 4, head, 4), (12 * player + 8, count, 4), (0xF0 + 4 * player, rng.choice((0, 0, 1)), 4)]
+    for k, node in enumerate(nodes):
+        offset = node - WORLD_BASE
+        fields += [(offset, nodes[(k + 1) % len(nodes)], 4), (offset + 4, nodes[k - 1], 4)]
+        if k:
+            fields += area_record_fields(rng, offset + 8, (k - 1) * AREA_TREES_PER_RECORD, max_nodes=2,
+                                         area=rng.randrange(5))
+    return fields
+
+
+def area_destruct_globals(rng, pool, args):
+    """As site_tree_globals with 1..40 references, so that the last one
+    goes with any of the 39 trees (the inlined destructors of trees 0..7
+    free the nil node when refs is 32..39)."""
+    return [(SITE_TREE_NIL_GLOBAL, WORLD_BASE + SITE_TREE_NIL, 4), (SITE_TREE_REFS_GLOBAL, rng.randint(1, 40), 4)]
+
+
+def remove_area_args(rng, pool):
+    return rng.randrange(6) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+def remove_area_player(rng, pool):
+    return rng.randrange(20) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+SPECS += [
+    Spec("AI_CEvaLand_Area_Copy", 0x0055a440, "thiscall", [one_of(WORLD_BASE + AREA_SOURCE)],
+         presets=area_copy_world, globals=site_tree_globals, callees=LOCKIT_PROBES, max_cases=300),
+    # EAX: the last lock call's leftover (callers don't use it).
+    Spec("AI_CEvaLand_Area_Destruct", 0x00556080, "thiscall", [], eax_mask=0,
+         presets=area_destruct_world, globals=area_destruct_globals, callees=LOCKIT_PROBES, max_cases=600),
+    # EAX: left over (AreaList::insert doesn't use it).
+    Spec("AI_AreaList_Construct", 0x0055a3d0, "fastcall", [one_of(WORLD_BASE, WORLD_BASE, 0),
+                                                           one_of(WORLD_BASE + AREA_SOURCE)], eax_mask=0,
+         presets=area_copy_world, globals=site_tree_globals, callees=LOCKIT_PROBES, max_cases=300),
+    # Dead 0x559512: a null `where` (where->prev is read before the test).
+    Spec("AI_AreaList_insert", 0x005594f0, "thiscall", [scratch(20), anything, one_of(WORLD_BASE + AREA_SOURCE)],
+         presets=area_list_world, globals=site_tree_globals, callees=LOCKIT_PROBES, max_cases=300,
+         exempt_blocks=(0x00559512,)),
+    Spec("AI_CEvaLand_RemoveArea", 0x00558e80, "thiscall", [remove_area_args, remove_area_player],
+         presets=remove_area_world, globals=site_tree_globals, callees=LOCKIT_PROBES, max_cases=600),
+]
+
+
+EVALAND_PLAYER = SCRATCH + 20 * SCRATCH_SLOT_BYTES  # a ComputerPlayer: world (+0x75c) = the world
+EVALAND_EXISTING = SCRATCH + 21 * SCRATCH_SLOT_BYTES
+
+
+def evaland_build_world(rng, pool, args):
+    """The map size (0..71: grids of 0..8 x 8 cells); tiles lazily random."""
+    return [(MAP_SIZE, rng.randrange(72) if rng.random() < 0.9 else rng.choice((0, 7, 8, 64)), 4),
+            (EVALAND_PLAYER + 0x75c, WORLD_BASE, 4)]
+
+
+def evaland_build_globals(rng, pool, args):
+    """g_aiPlayer, g_aiWorld, the map sizes; the reference count and the
+    instance (none, or one at EVALAND_EXISTING)."""
+    return [(AI_PLAYER, WORLD_BASE + EVALAND_PLAYER, 4), (AI_WORLD, WORLD_BASE, 4),
+            (AI_MAP_SIZES, rng.randint(40, 80), 2), (AI_MAP_SIZES + 2, rng.randint(40, 80), 2),
+            (0x007e0568, rng.choice((0, 0, 1, 2, rng.getrandbits(32))), 4),
+            (0x007e056c, 0 if rng.random() < 0.8 else WORLD_BASE + EVALAND_EXISTING, 4),
+            (0x007e3134, rng.getrandbits(32), 4)]
+
+
+EVALAND_GRID_SIZES = tuple(k * k * 0xC4 for k in range(9))
+
+
+def vector_ctor_count(rng, pool):
+    """-3..30 (INT_MIN would construct 2^31 elements: a time-out in both)."""
+    return rng.randint(-3, 30) & 0xFFFFFFFF if rng.random() < 0.95 else rng.choice((0x80000001, 0xFFFFFFFF))
+
+
+SPECS += [
+    # The constructor's grid allocation or Acquire's object fail sometimes
+    # (Win32::ThrowOutOfMemory runs and throws).
+    Spec("AI_CEvaLand_Acquire", 0x00553d30, "stdcall", [], presets=evaland_build_world,
+         globals=evaland_build_globals, new_fails=0.1, new_fails_size=(0x15C,) + EVALAND_GRID_SIZES,
+         max_cases=150),
+    # cover_until: padding before the list constructor 0x553e70.
+    Spec("AI_CEvaLand_Construct", 0x00553e10, "thiscall", [], presets=evaland_build_world, cover_until=0x00553e69,
+         globals=evaland_build_globals, new_fails=0.1, new_fails_size=EVALAND_GRID_SIZES, max_cases=150),
+    # EAX: left over (callers don't use it).
+    Spec("AI_CEvaLand_Init", 0x00553ea0, "thiscall", [], eax_mask=0, presets=evaland_build_world,
+         globals=evaland_build_globals, new_fails=0.1, new_fails_size=EVALAND_GRID_SIZES, max_cases=150),
+    # The bitset constructor 0x559240 of the grid cells; EAX left over.
+    Spec("VectorConstructorIterator", 0x0042c9d0, "stdcall",
+         [scratch(1), one_of(8, 12, 1, 0xC4), vector_ctor_count, one_of(0x00559240)], eax_mask=0),
+]
+
+
+# -- session 55 round 2 (ai-step): AI::LoadState and the load / save -----------
+# -- wrappers (ai_state.cpp) ---------------------------------------------------
+# ECX = a fake CMapFile; GetChunk (verified; it reads the file) is a callee
+# probe that returns lazily random chunk data per type (chunk 0x15 missing
+# in a third of the cases: a new game); ReleaseChunk is probed too. The
+# resets run (verified) on the globals.
+
+AI_STATE_CHUNKS = {0x15: SCRATCH + 2 * SCRATCH_SLOT_BYTES, 0x16: SCRATCH + 5 * SCRATCH_SLOT_BYTES,
+                   0x17: SCRATCH + 7 * SCRATCH_SLOT_BYTES}
+
+
+def ai_state_get_chunk(machine, ecx, args, h):
+    if args[0] == 0x15 and h % 3 == 0:
+        return 0
+    return WORLD_BASE + AI_STATE_CHUNKS.get(args[0], SCRATCH + 9 * SCRATCH_SLOT_BYTES)
+
+
+AI_STATE_CALLEES = {0x004a60f0: (2, "thiscall", "probe", ai_state_get_chunk), 0x004a6310: (2, "thiscall", "probe")}
+
+SPECS += [
+    # Dead 0x5963db / 0x596411 / 0x5964c1 / 0x5964f7: the copy loops of the
+    # inlined vector::erase(begin, end), which run over [end, end).
+    # cover_until: 0x596540 is the next function (no function start in
+    # Ghidra's list).
+    Spec("AI_LoadState", 0x00596380, "fastcall", [scratch(1), anything], callees=AI_STATE_CALLEES, max_cases=300,
+         exempt_blocks=(0x005963db, 0x00596411, 0x005964c1, 0x005964f7), cover_until=0x00596540),
+    Spec("AI_LoadGlobals", 0x00551210, "stdcall", [scratch(1)], callees=AI_STATE_CALLEES, max_cases=100),
+    # EAX: SaveState's leftover (not used by the savegame writer).
+    Spec("AI_SaveGlobals", 0x00551220, "stdcall", [scratch(1)], eax_mask=0,
+         callees={0x004a66d0: (4, "thiscall", "probe")}, max_cases=100),
+]
+
+
+# -- session 55 round 2 (ai-step): AI::CreateAgent (ai_agent_factory.cpp) -----
+
+
+def agent_kind(rng, pool):
+    return rng.randrange(13) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+SPECS += [
+    # The agents' constructors run (verified); operator new fails sometimes
+    # (Win32::ThrowOutOfMemory runs and throws).
+    Spec("AI_CreateAgent", 0x0056f6d0, "fastcall", [agent_kind], new_fails=0.6,
+         new_fails_size=(8, 12, 16, 20, 28, 40, 160), max_cases=600),
+]

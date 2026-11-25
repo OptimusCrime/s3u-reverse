@@ -726,6 +726,108 @@ struct AiTaggedRecord {
 };
 static_assert(offsetof(AiTaggedRecord, tag) == 4);
 
+// ---------------------------------------------------------------- site trees
+// AI::SiteTree (ai_site_tree.cpp): an MSVC6 std::_Tree instance
+// (multiset/multimap) of 6-byte site values ordered by their first byte;
+// the CEvaLand area records hold 38 of them (node+0x4d4..+0x734, stride
+// 0x10). All instances share the nil node g_aiSiteTreeNil (0x7e0570),
+// created on first use and freed with the last tree (g_aiSiteTreeNilRefs).
+struct SiteValue {
+    std::uint8_t key;   // +0 the order (probably a rating)
+    std::uint8_t pad;   // +1 copied along (dword + word copies), never read
+    std::uint16_t x;    // +2 (probably)
+    std::uint16_t y;    // +4
+};
+static_assert(sizeof(SiteValue) == 6);
+
+struct SiteTreeNode {
+    SiteTreeNode* left;    // 0x00
+    SiteTreeNode* parent;  // 0x04
+    SiteTreeNode* right;   // 0x08
+    SiteValue value;       // 0x0c
+    std::uint16_t unk12;   // 0x12 never written (heap leftovers)
+    std::uint32_t color;   // 0x14 kTreeRed / kTreeBlack
+};
+static_assert(offsetof(SiteTreeNode, value) == 0x0c);
+static_assert(offsetof(SiteTreeNode, color) == 0x14);
+static_assert(sizeof(SiteTreeNode) == 0x18);
+
+constexpr std::uint32_t kTreeRed = 0;    // MSVC6 _Redbl
+constexpr std::uint32_t kTreeBlack = 1;
+
+// The head node: parent = root, left = leftmost, right = rightmost (the
+// head itself in an empty tree).
+struct SiteTree {
+    std::uint8_t allocator;   // 0x00 empty allocator object (copied, never read)
+    std::uint8_t comparator;  // 0x01 empty std::less<uint8_t> (copied, never read)
+    std::uint16_t unk02;
+    SiteTreeNode* head;       // 0x04
+    std::uint8_t multi;       // 0x08 _Multi: 1 = equal keys allowed (the site trees)
+    std::uint8_t unk09[3];
+    std::uint32_t size;       // 0x0c
+};
+static_assert(offsetof(SiteTree, head) == 0x04);
+static_assert(offsetof(SiteTree, multi) == 0x08);
+static_assert(sizeof(SiteTree) == 0x10);
+
+// SiteTree::insert's result (std::pair<iterator, bool>): bytes 5..7 are
+// padding the original leaves as stack leftovers.
+struct SiteTreeInsertResult {
+    SiteTreeNode* where;    // 0x0
+    std::uint8_t inserted;  // 0x4
+    std::uint8_t pad[3];
+};
+static_assert(sizeof(SiteTreeInsertResult) == 8);
+
+// ---------------------------------------------------------------- area records
+// CEvaLand::Area (ai_area_records.cpp): the 0x73c-byte value of a node of
+// CEvaLand::lists[player], one per economy area the computer player owns
+// (AddArea 0x555260 / RemoveArea 0x558e80). AiPlayerData is the same record
+// seen as the list node (offsets + 8); its field names are used here too.
+// The copy constructor 0x55a440 copies the fields below (the padding bytes
+// +0x02, +0x15..+0x17, +0x3e7 are not copied) and copy-constructs the 39
+// site trees; the type -> tree pointers are copied as they are (they still
+// point at the source record's trees: probably refreshed by the callers, G).
+struct AiArea {
+    std::uint16_t area;                                  // 0x000 the economy area
+    std::uint16_t unk002;
+    std::uint32_t basic_economy;                         // 0x004
+    std::uint32_t short_of_wood;                         // 0x008
+    std::uint32_t short_of_stone;                        // 0x00c
+    std::uint32_t force_production;                      // 0x010
+    std::uint8_t unk014;
+    std::uint8_t unk015[3];
+    std::uint32_t unk018;
+    std::uint16_t sites;                                 // 0x01c construction sites in the area (AddArea; +1 on a new site)
+    AiCandidate best[114];                               // 0x01e
+    std::uint16_t candidate_values[kBuildingTypeCount];  // 0x2ca
+    std::uint16_t building_counts[kBuildingTypeCount];   // 0x33c
+    std::uint8_t type_blocked[kBuildingTypeCount];       // 0x3ae
+    std::uint8_t unk3e7;
+    SiteTree* site_tree_of_type[kBuildingTypeCount];     // 0x3e8 per building type: one of site_trees (shared by types)
+    SiteTree site_trees[39];                             // 0x4cc
+};
+static_assert(offsetof(AiArea, basic_economy) + 8 == offsetof(AiPlayerData, basic_economy));
+static_assert(offsetof(AiArea, force_production) + 8 == offsetof(AiPlayerData, force_production));
+static_assert(offsetof(AiArea, best) + 8 == offsetof(AiPlayerData, best));
+static_assert(offsetof(AiArea, candidate_values) + 8 == offsetof(AiPlayerData, candidate_values));
+static_assert(offsetof(AiArea, building_counts) + 8 == offsetof(AiPlayerData, building_counts));
+static_assert(offsetof(AiArea, type_blocked) + 8 == offsetof(AiPlayerData, type_blocked));
+static_assert(offsetof(AiArea, site_tree_of_type) == 0x3e8);
+static_assert(offsetof(AiArea, site_trees) == 0x4cc);
+// AiPlayerData::unk550 (the fishery condition 0x5693c0) is site_trees[7].size.
+static_assert(offsetof(AiArea, site_trees) + 7 * sizeof(SiteTree) + offsetof(SiteTree, size) + 8 ==
+              offsetof(AiPlayerData, unk550));
+static_assert(sizeof(AiArea) == 0x73c);
+
+// A node of CEvaLand::lists[player] (0x744 bytes; MSVC6 std::list node).
+struct AiAreaNode {
+    AiAreaNode* next;  // 0x0
+    AiAreaNode* prev;  // 0x4
+    AiArea value;      // 0x8
+};
+static_assert(sizeof(AiAreaNode) == 0x744);
+
 #pragma pack(pop)
 
 }  // namespace s3re::game::ai

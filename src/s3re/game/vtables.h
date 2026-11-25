@@ -69,6 +69,18 @@ inline constexpr std::uint32_t kDoBuildHouseNote = 0x65a584;  // T_DO_BUILD_HOUS
 inline constexpr std::uint32_t kHouseRequestNote = 0x65a558;        // HOUSE_REQUEST_NOTE
 inline constexpr std::uint32_t kHouseGroundRequestNote = 0x65a598;  // HOUSE_GROUND_REQUEST_NOTE
 inline constexpr std::uint32_t kLocalWareRequestNote = 0x65a5ac;    // LOCAL_WARE_REQUEST_NOTE
+// The agents (made by AI::CreateAgent 0x56f6d0; kinds in ai::AgentKind).
+inline constexpr std::uint32_t kLocalWareRequestAgent = 0x65a7f0;    // LOCAL_WARE_REQUEST_AGENT (kind 0)
+inline constexpr std::uint32_t kHouseGroundRequestAgent = 0x65a7b8;  // HOUSE_GROUND_REQUEST_AGENT (1)
+inline constexpr std::uint32_t kHouseRequestAgent = 0x65a780;        // HOUSE_REQUEST_AGENT (2)
+inline constexpr std::uint32_t kGlobalExpandEmpireAgent = 0x65a748;  // GLOBAL_EXPAND_EMPIRE_AGENT (3)
+inline constexpr std::uint32_t kDoBuildHouseAgent = 0x65a710;        // T_DO_BUILD_HOUSE_AGENT (4)
+inline constexpr std::uint32_t kComputerPlayerAgent = 0x65a6d8;      // COMPUTER_PLAYER_AGENT (5)
+inline constexpr std::uint32_t kMapWorkerAgent = 0x65a6a0;           // T_MAP_WORKER_AGENT (6)
+inline constexpr std::uint32_t kAttackAgent = 0x65a668;              // T_ATTACK_AGENT (7)
+inline constexpr std::uint32_t kEconomyAgent = 0x65a630;             // T_ECONOMY_AGENT (8)
+inline constexpr std::uint32_t kSafetyAgent = 0x65a5f8;              // T_SAFETY_AGENT (9)
+inline constexpr std::uint32_t kCentrumCheckAgent = 0x65a5c0;        // CCentrumCheckAgent (10)
 // Watcom container library
 inline constexpr std::uint32_t kWCExcept = 0x655438;                    // WCExcept (base of the containers)
 inline constexpr std::uint32_t kWCIsvListBase = 0x655fa4;               // WCIsvListBase

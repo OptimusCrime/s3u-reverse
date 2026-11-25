@@ -308,6 +308,13 @@ inline constexpr GameText kAiNoChildNote{0x731b78};  // "Kein ChildNote gefunden
 inline constexpr GameText kNotePtr{0x731b44};                 // "notePtr"
 inline constexpr GameText kBuildHouseSourceFile{0x731b4c};    // "E:\Siedler3\Rainer\CompDoBuildHouseReq.cpp"
 inline constexpr GameText kHouseRequestSourceFile{0x732718};  // "E:\Siedler3\Rainer\CompHouseReq.cpp"
+// The out-of-memory checks of the land evaluation (CEvaLand::Acquire, Init).
+inline constexpr GameText kEvalMap{0x7312e8};            // "pEvalMap"
+inline constexpr GameText kEvaLandSourceFile{0x7312f4};  // "E:\Siedler3\Rainer\Cevaland.cpp"
+inline constexpr GameText kMapPartListPtr{0x731314};     // "map_part_list_ptr"
+// The out-of-memory check of AI::CreateAgent 0x56f6d0.
+inline constexpr GameText kAgentPtr{0x73228c};              // "agentPtr"
+inline constexpr GameText kCompGlobsSourceFile{0x732098};   // "E:\Siedler3\Rainer\compGlobs.cpp"
 // Computer players (Rainer\CompMapWorkerAgent.cpp).
 inline constexpr GameText kAiCenterGroup{0x732dd8};  // "Center - player: %d, group: %d \n" (OutputDebugStringA)
 inline constexpr GameText kRandom55{0x732a84};       // "RANDOM_55 wert = %u" (value, DebugLog of mission 56)
