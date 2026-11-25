@@ -90,6 +90,12 @@ inline constexpr std::uint32_t kCScreenGroup_element = 0x655aec;   // its CScree
 inline constexpr std::uint32_t kWCValOrderedVector_CScreenElementP = 0x655b9c;  // WCValOrderedVector<CScreenElement*>
 inline constexpr std::uint32_t kWCStack_CScreenElementP = 0x655b8c;  // WCStack<CScreenElement*, WCValSList<..>>
 inline constexpr std::uint32_t kWCStack_bool = 0x655b7c;             // WCStack<bool, WCValSList<bool>>
+inline constexpr std::uint32_t kCGroupControl = 0x655e64;           // CGroupControl
+inline constexpr std::uint32_t kCGroupControl_group = 0x655e58;     // its CScreenGroup part (+0x38)
+inline constexpr std::uint32_t kCGroupControl_element = 0x655dd4;   // its CScreenElement part
+inline constexpr std::uint32_t kCScreen = 0x655c80;                 // CScreen
+inline constexpr std::uint32_t kCScreen_element = 0x655bfc;         // its CScreenElement part
+inline constexpr std::uint32_t kWCQueue_MsgConsole = 0x655c8c;      // WCQueue<MsgConsole, WCValSList<MsgConsole>> (CScreen +0x7c)
 // Lobby::*
 inline constexpr std::uint32_t kCMemoryBlock = 0x65d4f4;    // Lobby::CMemoryBlock
 inline constexpr std::uint32_t kCLMMessageBlock = 0x65d4fc;  // Lobby::CLMMessageBlock
@@ -189,6 +195,9 @@ inline constexpr std::uint32_t kCImageButton = 0x655f98;  // CImageButton
 inline constexpr std::uint32_t kCTextButton = 0x6560cc;      // CTextButton
 inline constexpr std::uint32_t kCAnimatedButton = 0x656038;  // CAnimatedButton
 inline constexpr std::uint32_t kCScreenGroup = 0x655bac;     // CScreenGroup
+inline constexpr std::uint32_t kCGroupControl = 0x655e70;          // CGroupControl
+inline constexpr std::uint32_t kCGroupControl_group = 0x655e68;    // its CScreenGroup part (+0x3c)
+inline constexpr std::uint32_t kCScreen = 0x655c98;                // CScreen
 }  // namespace vbtables
 
 // _ThrowInfo records passed to _CxxThrowException.

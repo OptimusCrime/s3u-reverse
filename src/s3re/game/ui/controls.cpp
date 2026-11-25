@@ -88,6 +88,17 @@
 //   stores the last two arguments swapped); the frame = the first
 //   sequence's frame count (CGraphicsData::SequenceFrameCount 0x5fad20, its
 //   low 16 bits) - 1, or -1 for sequence -1. EAX = this.
+// CGroupControl::CGroupControl (0x0041a5a0): (RECT by value, most derived)
+//   ret 0x14: most derived: vbptrs +4 = 0x655e70 and +0x3c (the group
+//   part's) = 0x655e68, CScreenElement(rect) on +0xb8. CControl(rect, 0),
+//   CScreenGroup(&rect, 0) on +0x38; vtables 0x655e64 (+0), 0x655e58
+//   (+0x38), 0x655dd4 (the element), vtordisp vbtable[1] - 0xb4. EAX =
+//   this.
+// CScreen::CScreen (0x00417d10): (most derived) ret 4: most derived: vbptr
+//   = 0x655c98, CScreenElement() on +0x98. CScreenGroup({0, 0, 800, 600},
+//   0); the message queue at +0x7c (+0x80..+0x90 = 0, vtable 0x655c8c);
+//   vtables 0x655c80 / 0x655bfc, vtordisp vbtable[1] - 0x94; then the
+//   queue's +4 (+0x80) = 127. EAX = this.
 //
 // Known difference: the original constructors have SEH frames that destroy
 // the members built so far when a callee throws; ours don't (SetRect and
@@ -173,6 +184,13 @@ struct GroupStack {
     std::uint32_t unk14;            // 0x14
 };
 static_assert(sizeof(GroupStack) == 0x18);
+// The message queue of a CScreen (at +0x7c), as its constructor sets it.
+struct ScreenQueueFields {
+    std::uint32_t vtable;  // 0x00 WCQueue<MsgConsole, WCValSList<MsgConsole>>
+    std::uint32_t unk04;   // 0x04 127
+    std::uint32_t unk08[4];
+};
+static_assert(sizeof(ScreenQueueFields) == 0x18);
 #pragma pack(pop)
 
 struct Message {
@@ -186,6 +204,13 @@ constexpr std::uint32_t kImageButtonElement = 0x60;
 constexpr std::uint32_t kAnimatedButtonElement = 0x68;
 constexpr std::uint32_t kTextButtonElement = 0x74;
 constexpr std::uint32_t kGroupElement = 0x80;
+constexpr std::uint32_t kGroupControlElement = 0xb8;
+constexpr std::uint32_t kGroupControlGroup = 0x38;  // the CScreenGroup part of a CGroupControl
+constexpr std::uint32_t kScreenElement = 0x98;
+constexpr std::uint32_t kScreenQueue = 0x7c;
+constexpr std::uint32_t kScreenQueueUnk04 = 127;
+constexpr LONG kScreenWidth = 800;   // a screen's rect: the menu resolution
+constexpr LONG kScreenHeight = 600;
 // CGroupControl, from its group part's element: the control's element and
 // the group's vbtable pointer.
 constexpr std::uint32_t kGroupControlControl = 0x7c;
@@ -226,6 +251,7 @@ constexpr std::uintptr_t kBoolListBase = 0x00428bf0;          // WCIsvSListBase<
 constexpr std::uintptr_t kChildVectorBase = 0x00428e70;       // WCBareVectorBase<CScreenElement*>(capacity) (ours)
 constexpr std::uintptr_t kTextAddress = 0x005faaa0;           // CGraphicsData::TextAddress (ours)
 constexpr std::uintptr_t kSequenceFrameCount = 0x005fad20;    // CGraphicsData::SequenceFrameCount (ours)
+constexpr std::uintptr_t kGroupConstruct = 0x00416c70;        // CScreenGroup::CScreenGroup (ours)
 
 using Thiscall0 = std::uint32_t(__fastcall*)(std::uintptr_t self, void* edx);
 using Thiscall1 = std::uint32_t(__fastcall*)(std::uintptr_t self, void* edx, std::uint32_t a);
@@ -572,6 +598,43 @@ std::uintptr_t __fastcall CAnimatedButton_Construct(std::uintptr_t self, void*, 
     return self;
 }
 
+// Purpose: Builds a control that is also a group of elements (list boxes,
+// dropdowns, scroll bars).
+std::uintptr_t __fastcall CGroupControl_Construct(std::uintptr_t self, void*, RECT rect, std::uint32_t mostDerived) {
+    if (mostDerived != 0) {
+        Field<std::uint32_t>(self + 4) = vbtables::kCGroupControl;
+        Field<std::uint32_t>(self + kGroupControlGroup + 4) = vbtables::kCGroupControl_group;
+        reinterpret_cast<Thiscall1>(kElementConstructRect)(self + kGroupControlElement, nullptr,
+                                                           reinterpret_cast<std::uint32_t>(&rect));
+    }
+    reinterpret_cast<ControlConstructFn>(kControlConstruct)(self, nullptr, rect, 0);
+    reinterpret_cast<Thiscall2>(kGroupConstruct)(self + kGroupControlGroup, nullptr, reinterpret_cast<std::uint32_t>(&rect),
+                                                 0);
+    Field<std::uint32_t>(self + kGroupControlGroup) = vtables::kCGroupControl_group;
+    StoreVtables(self, vtables::kCGroupControl, vtables::kCGroupControl_element, kGroupControlElement);
+    return self;
+}
+
+// Purpose: Builds a screen (a whole menu page): an 800 x 600 group with an
+// empty message queue.
+std::uintptr_t __fastcall CScreen_Construct(std::uintptr_t self, void*, std::uint32_t mostDerived) {
+    if (mostDerived != 0) {
+        Field<std::uint32_t>(self + 4) = vbtables::kCScreen;
+        reinterpret_cast<Thiscall0>(kElementConstruct)(self + kScreenElement, nullptr);
+    }
+    const RECT screen{0, 0, kScreenWidth, kScreenHeight};
+    reinterpret_cast<Thiscall2>(kGroupConstruct)(self, nullptr, reinterpret_cast<std::uint32_t>(&screen), 0);
+    auto* queue = reinterpret_cast<ScreenQueueFields*>(self + kScreenQueue);
+    queue->unk04 = 0;
+    for (std::uint32_t& word : queue->unk08) {
+        word = 0;
+    }
+    queue->vtable = vtables::kWCQueue_MsgConsole;
+    StoreVtables(self, vtables::kCScreen, vtables::kCScreen_element, kScreenElement);
+    queue->unk04 = kScreenQueueUnk04;
+    return self;
+}
+
 using DestroyFn = void(__fastcall*)(std::uintptr_t, void*);
 using ImageButtonConstructFn = std::uintptr_t(__fastcall*)(std::uintptr_t, void*, const RECT*, std::uint32_t,
                                                            std::uint32_t, std::uint32_t, std::uint32_t,
@@ -610,6 +673,10 @@ S3RE_HOOK(0x0041b640, CTextButton_ConstructTextId, TextButtonConstructIdFn, Orig
 S3RE_HOOK(0x0042ab70, CTextButton_Destroy, Thiscall0, Original_CTextButton_Destroy, CTextButton_Destroy);
 S3RE_HOOK(0x0041c680, CStaticText_ConstructTextId, StaticTextConstructIdFn, Original_CStaticText_ConstructTextId,
           CStaticText_ConstructTextId);
+using ScreenConstructFn = std::uintptr_t(__fastcall*)(std::uintptr_t, void*, std::uint32_t);
+S3RE_HOOK(0x0041a5a0, CGroupControl_Construct, ControlConstructFn, Original_CGroupControl_Construct,
+          CGroupControl_Construct);
+S3RE_HOOK(0x00417d10, CScreen_Construct, ScreenConstructFn, Original_CScreen_Construct, CScreen_Construct);
 S3RE_HOOK(0x0041b0a0, CAnimatedButton_Construct, AnimatedButtonConstructFn, Original_CAnimatedButton_Construct,
           CAnimatedButton_Construct);
 
@@ -737,13 +804,14 @@ void InstallStubs() {
     Install<kElementListBase, 0>();
     Install<kBoolListBase, 0>();
     Install<kChildVectorBase, 1>();
+    Install<kGroupConstruct, 2, 0>();
     const void* clock = reinterpret_cast<const void*>(&FakeTimeGetTime);
     test::PatchBytes(reinterpret_cast<std::uintptr_t>(&g_importTimeGetTime), &clock, sizeof(clock));
 }
 
 void RemoveStubs() {
     test::UnpatchBytes(reinterpret_cast<std::uintptr_t>(&g_importTimeGetTime));
-    for (std::uintptr_t callee : {kChildVectorBase, kBoolListBase, kElementListBase, kListBase, kButtonDestroy,
+    for (std::uintptr_t callee : {kGroupConstruct, kChildVectorBase, kBoolListBase, kElementListBase, kListBase, kButtonDestroy,
                                   kImageButtonConstruct, kStaticControlConstruct, kSequenceFrameCount, kTextAddress,
                                   kGraphicsData, kListInsert, kNewLink, kButtonConstruct, kShowTooltip, kControlOnTimer,
                                   kControlDestroy, kControlConstruct, kIsOffScreen, kElementSetRect,
@@ -865,6 +933,8 @@ struct Members {
     Thiscall0 textButtonDestroy = &CTextButton_Destroy;
     StaticTextConstructIdFn staticTextConstructId = &CStaticText_ConstructTextId;
     AnimatedButtonConstructFn animatedButtonConstruct = &CAnimatedButton_Construct;
+    ControlConstructFn groupControlConstruct = &CGroupControl_Construct;
+    ScreenConstructFn screenConstruct = &CScreen_Construct;
 };
 
 const Members* g_members = nullptr;
@@ -1105,9 +1175,10 @@ void CompareAll(test::Context& ctx, const Members& ours, int cases) {
             return g_members->postMessage(reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, m);
         }});
 
-    // CScreenGroup::CScreenGroup: the rect in the arena.
+    // CScreenGroup::CScreenGroup: the rect in the arena; its own stub is
+    // removed while it is compared.
     Compare(
-        ctx, "CScreenGroup::CScreenGroup", 0, cases, ConstructorArena<0x80>,
+        ctx, "CScreenGroup::CScreenGroup", kGroupConstruct, cases, ConstructorArena<0x80>,
         CallFn{[](std::uint8_t* b, std::uint64_t s) {
             return static_cast<std::uint32_t>(Original_CScreenGroup_Construct(
                 reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, reinterpret_cast<const RECT*>(b + 0x100),
@@ -1197,6 +1268,31 @@ void CompareAll(test::Context& ctx, const Members& ours, int cases) {
                 msvc6::GameOperatorDelete(block);
             }
             return after;
+        }});
+    Compare(
+        ctx, "CGroupControl::CGroupControl", 0, cases,
+        [](test::Rng& rng, std::uint8_t* buffer) {
+            ConstructorArena<0xb8>(rng, buffer);
+            VbTable(rng, buffer, kObject + 0x3c, 0x7c, 1);
+        },
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            return static_cast<std::uint32_t>(Original_CGroupControl_Construct(
+                reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, ArgRect(s), MostDerived(s)));
+        }},
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            return static_cast<std::uint32_t>(
+                g_members->groupControlConstruct(reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, ArgRect(s),
+                                                 MostDerived(s)));
+        }});
+    Compare(
+        ctx, "CScreen::CScreen", 0, cases, ConstructorArena<0x98>,
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            return static_cast<std::uint32_t>(
+                Original_CScreen_Construct(reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, MostDerived(s)));
+        }},
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            return static_cast<std::uint32_t>(
+                g_members->screenConstruct(reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, MostDerived(s)));
         }});
     // CAnimatedButton: the first sequence sometimes -1.
     Compare(

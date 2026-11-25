@@ -579,3 +579,11 @@ SPECS += [
          virtual_effects={0x0c: ds_write_out(2, ds_new_buffer, always=True)}),
     Spec("DirectX_CSoundEffectBuffer_Construct", 0x005c28b0, "thiscall", [anything]),
 ]
+
+
+# App::WaitTime (wait_times.cpp, session 57): kinds 0..8, the -debug
+# switch (0x7e916c) zero or not.
+SPECS += [
+    Spec("App_WaitTime", 0x0040d0e0, "fastcall", [below(9), anything],
+         globals=lambda rng, pool, args: [(0x7e916c, rng.choice([0, 0, 1, 0x100]), 4)]),
+]

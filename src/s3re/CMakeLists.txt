@@ -18,6 +18,7 @@ add_library(s3re SHARED
     msvc6/deleting_destructors.cpp
     msvc6/exceptions.cpp
     msvc6/string.cpp
+    msvc6/string_search.cpp
     msvc6/wstring.cpp
 
     # watcom/: Watcom container library code
@@ -258,6 +259,7 @@ add_library(s3re SHARED
     game/framework/framework_small.cpp
     game/framework/misc_helpers.cpp
     game/framework/string_members.cpp
+    game/framework/wait_times.cpp
     game/framework/win32_classes.cpp
     game/framework/win32_detach.cpp
     game/framework/win32_errors.cpp

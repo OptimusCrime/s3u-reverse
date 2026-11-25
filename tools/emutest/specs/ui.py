@@ -886,3 +886,22 @@ SPECS += [
           uictl_most_derived],
          presets=uictl_objects(0x68), callees=uictl_callees(0x0041b0a0)),
 ]
+
+
+def uictl_group_control(rng, pool, args):
+    """CGroupControl: the control's vbptr (+4) and the group part's (+0x3c)
+    share the vbtable, so the group's base lands 0x38 further."""
+    return uictl_objects(0xb8)(rng, pool, args) + [(UICTL_OBJECT + 0x3c, WORLD_BASE + UICTL_VBTABLE, 4)]
+
+
+# CScreenGroup's constructor, probed with its rect (a local) by contents.
+UICTL_CALLEES[0x416c70] = (2, "thiscall", "probe", None,
+                           lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)), args[1]))
+
+SPECS += [
+    Spec("CGroupControl_Construct", 0x0041a5a0, "fastcall",
+         [one_of(UICTL_OBJ), anything] + [uictl_rect] * 4 + [uictl_most_derived],
+         presets=uictl_group_control, callees=uictl_callees(0x0041a5a0)),
+    Spec("CScreen_Construct", 0x00417d10, "fastcall", [one_of(UICTL_OBJ), anything, uictl_most_derived],
+         presets=uictl_objects(0x98), callees=uictl_callees(0x00417d10)),
+]

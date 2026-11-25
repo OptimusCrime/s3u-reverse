@@ -326,3 +326,22 @@ SPECS += [
           lambda rng, pool: rng.randrange(40)], presets=wstring_world),
     Spec("Allocator_Deallocate", 0x00486920, "thiscall", [anything, anything]),
 ]
+
+
+# -- c_str, find and != with C text (string_search.cpp, session 57) --------
+# `this` from string_world (world offset 0), the text at STRING_TEXT.
+def string_find_pos(rng, pool):
+    return rng.choice([0, 1, 2, rng.randrange(0x60), rng.randrange(0x60), 0xFFFFFFFF])
+
+
+def string_find_count(rng, pool):
+    return rng.choice([0, 0, 1, 1, 2, 3, rng.randrange(8), rng.randrange(0x60)])
+
+
+SPECS += [
+    Spec("String_CStr", 0x00411fc0, "thiscall", [], presets=string_world),
+    Spec("String_Find", 0x00409b40, "thiscall", [one_of(STRING_TEXT_PTR), string_find_pos, string_find_count],
+         presets=string_world),
+    Spec("String_NotEqualText", 0x00413ad0, "fastcall", [one_of(WORLD_BASE + STRING_SELF), text_or_null],
+         presets=string_world),
+]
