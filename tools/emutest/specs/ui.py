@@ -280,3 +280,30 @@ SPECS += [
     Spec("GameSettings_StartGoods", 0x00412300, "fastcall", [scratch(0)], max_cases=200),
     Spec("GamePlayerSetup_Colour", 0x0049fec0, "fastcall", [scratch(0)], max_cases=200),
 ]
+
+
+# -- GameSettings::MapName (game_settings.cpp, session 55) ---------------------
+# ECX = the world as the settings object: its map name (+0x2c) any kind of
+# string (common.string_fields: empty, consistent, odd, shared counts,
+# frozen); the result a scratch string, sometimes the map name itself.
+def map_name_settings(rng, pool, args):
+    fields, _ = string_fields(rng, 0x2c, STRING_SELF_BUFFER)
+    return fields
+
+
+def null_string_count(rng, pool, args):
+    """The count byte before the static empty string: a name with a length
+    but no buffer is shared from there unless it is 0xfe or more."""
+    return [(NULL_STRING_COUNT, rng.choice([0, 0, 1, 0xfe, 0xff]), 1)]
+
+
+SPECS += [
+    # Dead blocks: 0x436a8c (a length above 0xffffffff); when the result is
+    # the map name itself, its fields were just cleared, so the length is 0:
+    # 0x436a9d (std::_Xran for a position past it), 0x436ab8 and 0x436adf
+    # (the erase of a non-empty tail).
+    Spec("GameSettings_MapName", 0x00436a60, "thiscall",
+         [lambda rng, pool: WORLD_BASE + 0x2c if rng.random() < 0.1 else STRING_RESULT_PTR],
+         presets=map_name_settings, globals=null_string_count,
+         exempt_blocks=(0x436a8c, 0x436a9d, 0x436ab8, 0x436adf)),
+]

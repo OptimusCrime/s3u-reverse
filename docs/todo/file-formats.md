@@ -17,10 +17,15 @@ LOGBOOK session entry).
   range in re/source_files.csv probably wrongly includes the CMapFile
   stream 0x4a55e0..0x4a5c80.
 - **Reimplementation order (the CMapFile container, LoadSaveGame, LoadMap
-  and its callees are verified, sessions 51-54; re/file_formats.md):** next
-  the savegame writer `CLogicThread::SaveGame` 0x509980 (1,365 lines, 131
-  calls: directories, the game setup writer 0x433490, the computer players'
-  save 0x551220, which sits in the AI range). Optional: the Watcom skip list
+  and its callees are verified, sessions 51-54; the savegame writer
+  `CLogicThread::SaveGame` 0x509980 and `GameSettings::MapName` 0x436a60
+  since session 55; re/file_formats.md):** left on the savegame path:
+  `GameSettings::SaveSetup` 0x433490 (chunks 0x14/0x1a/0x1b/0x1e; Watcom
+  vector code of the player setups, GamePlayerSetup getters
+  0x49f4d0/0x49f590/0x49f350/0x49f510/0x49f580/0x49fed0), the
+  `Dirk::CMapFile` destructor 0x4a5b50, the CRT's `_mkdir` 0x621556 and
+  `time` 0x61f6a7 (SaveGame calls the originals), and the caller
+  `CLogicThread::SaveGameToSlot` 0x50ac40. Optional: the Watcom skip list
   (0x60bab0/0x60bbe0/0x60be20) and `GameSettings::PlayerSetup` 0x4351e0
   (LoadMap calls the original; Watcom vector code behind a mutex) as our
   code.

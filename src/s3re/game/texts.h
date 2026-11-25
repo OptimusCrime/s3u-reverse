@@ -74,6 +74,31 @@ inline constexpr GameText kClearingObjective{0x6a6494};       // "LoadGame: clea
 inline constexpr GameText kLoadingObjectiveTimeout{0x6a6464};   // "LoadGame: loading NewGameObjectiveTimeout..."
 inline constexpr GameText kClearingObjectiveTimeout{0x6a6434};  // "LoadGame: clearing NewGameObjectiveTimeout..."
 inline constexpr GameText kDroppedEco{0x6a641c};              // "LOAD: Dropped eco %i"
+// CLogicThread::SaveGame (0x509980): the folders, the source file and the
+// out-of-memory labels of the chunk buffers (the chunks' original names).
+inline constexpr GameText kSaveFolder{0x6a66bc};              // "Save"
+inline constexpr GameText kSaveMultiFolder{0x69e6dc};         // "Save\Multi"
+inline constexpr GameText kSaveFolderPrefix{0x69ec30};        // "Save\"
+inline constexpr GameText kGameDataSaveFile{0x6a6698};        // "E:\Siedler3\Volker\GameDataSave.cpp"
+inline constexpr GameText kSaveLabelDesc{0x6a6690};           // "desc" (chunk 0)
+inline constexpr GameText kSaveLabelGeneral{0x6a6688};        // "general" (1)
+inline constexpr GameText kSaveLabelEvents{0x6a6680};         // "events" (2)
+inline constexpr GameText kSaveLabelSectors{0x6a6678};        // "sectors" (4)
+inline constexpr GameText kSaveLabelPlayer{0x6a6670};         // "player" (6)
+inline constexpr GameText kSaveLabelSettler{0x6a6668};        // "settler" (7)
+inline constexpr GameText kSaveLabelBuildings{0x6a665c};      // "buildings" (8)
+inline constexpr GameText kSaveLabelPiles{0x6a6654};          // "piles" (9)
+inline constexpr GameText kSaveLabelDiggerTab{0x6a6648};      // "diggertab" (10)
+inline constexpr GameText kSaveLabelActiveSettlers{0x6a6638};  // "activesettlers" (12)
+inline constexpr GameText kSaveLabelTrade{0x6a6630};          // "trade" (13)
+inline constexpr GameText kSaveLabelTimer{0x6a6628};          // "timer" (14)
+inline constexpr GameText kSaveLabelMessages{0x6a661c};       // "messages" (15)
+inline constexpr GameText kSaveLabelWarMap{0x6a6614};         // "warmap" (16)
+inline constexpr GameText kSaveLabelVictoryConditions{0x6a6600};  // "GCVictoryConditions" (0x18)
+inline constexpr GameText kSaveLabelPlayerColors{0x6a65f0};   // "GCPlayerColors" (0x19)
+inline constexpr GameText kSaveLabelProdStat{0x6a65e4};       // "GCProdStat" (0x1c)
+inline constexpr GameText kSaveLabelObjective{0x6a65d0};      // "GCNewGameObjective" (0x1d)
+inline constexpr GameText kSaveLabelObjectiveTimeout{0x6a65b4};  // "GCNewGameObjectiveTimeout" (0x1f)
 inline constexpr GameText kProtocolFile{0x7a34fc};      // "E:\Siedler3\Dirk\protocol.cpp"
 inline constexpr GameText kNewDataName{0x7a3570};       // "lpNewData"
 inline constexpr GameText kDuringResize{0x7a355c};      // "PROT: During Resize"

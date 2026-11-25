@@ -157,8 +157,8 @@ The original names come from SaveGame's out-of-memory labels (`Win32::ThrowOutOf
 
 | type | label | content (world = CGameData) |
 |---|---|---|
-| 0 | - | header 0x120: +8 version (0xa0 in slot 1), 0x7a8000, 0x7a8004, mission-1, local player's +4, time(), +0x20 map name (string from 0x436a60). LoadSaveGame only reads the version (gates: <0x82 no 0x18/0x19; <0x86 no 0x1c; <0x89 clears player+8; <0x96 no 0x1d; <0x99 no 0x1f, timeout 60) |
-| 0x14, 0x1a, 0x1b, 0x1e | - | game setup, written by GameSetup 0x433490 (read by GameSettings::LoadSaveGame 0x432b00, not analysed) |
+| 0 | desc | header 0x120: +8 version (g_versionNumber, 0xa0), +0xc g_buildInfo (2 dwords), +0x14 mission-1, +0x18 the local player's race (Player +4), +0x1c time(), +0x20 map name (GameSettings::MapName 0x436a60, strcpy). LoadSaveGame only reads the version (gates: <0x82 no 0x18/0x19; <0x86 no 0x1c; <0x89 clears player+8; <0x96 no 0x1d; <0x99 no 0x1f, timeout 60) |
+| 0x14, 0x1a, 0x1b, 0x1e | - | game setup, written by GameSettings::SaveSetup 0x433490 (read by GameSettings::LoadSaveGame 0x432b00, not analysed); see "Verified savegame writer" |
 | 1 | general | +8 world+0x2d254, +0xc +0x2d258, +0x10/+0x14 camera_x/y (+0x2d25c/+0x2d260), +0x18 map size, +0x1c..+0x20 RNG state (3 words at +0x2d2dc), +0x24/+0x28 +0x110a57c/+0x110a580 (+0x2c +0x110a584, ignored on load: forced to 0x3f), +0x30 0x7dfd4c, +0x34 g_gameTick, +0x38 20 player-info records of 0x134 bytes (2 dwords, name chars 0x100, 11 dwords) -> 0x7acfa8 table, +0x1848 active player count (0x7acfa4), +0x184c g_gameOutcome, +0x1850 mission-1, +0x1854/+0x1858 world +0x2d304/+0x2d308, +0x185c world+0xde7444 |
 | 2/0, 2/1 | events | two dwords + 3000 dwords each: pending_events (+0x2f990, counts +0x32870/4) and events (+0x32878, counts +0x366f8/c) |
 | 3/row | - | one chunk per tile row (sub = row): size*24 raw tile bytes (WriteChunkData) |
@@ -174,9 +174,9 @@ The original names come from SaveGame's out-of-memory labels (`Win32::ThrowOutOf
 | 14 | timer | effects_high_water +0x67440, (n+1) * 0x14 records at +0x36700 |
 | 15 | messages | notifications (0x12c0 bytes at +0x2d320) + 0x13b0 bytes at +0x2e5e0 |
 | 16 | warmap | presence_a/presence_b (2 * 0xb400 at +0xde7448/+0xdf2848) |
-| 0x15..0x17 | - | computer players (0x551220 per active AI at CLogicThread+0x350; AI load 0x596380) |
+| 0x15..0x17 | - | computer players: AI::SaveGlobals 0x551220 once per computer player at CLogicThread+0x350, each time the same three global tables (0x7e37d0 0x20f8 bytes, 0x7e5ef8 0x1ad8, 0x7e58c8 0x51c); AI load 0x596380 |
 | 0x18 | GCVictoryConditions | 0x77 bytes, world+0x15394b1 |
-| 0x19 | GCPlayerColors | 40 bytes, g_playerColourIndex 0x7ace64 |
+| 0x19 | GCPlayerColors | g_playerColourIndex 0x7ace64: 20 indexes copied into the buffer, but the header's size is 40 *with* the header, so the file holds 16 |
 | 0x1c | GCProdStat | 0x2d000 bytes at world+0x38 ("ProdStatArray", statistics) |
 | 0x1d | GCNewGameObjective | +0x1195dcc, +0x1195dd0 |
 | 0x1f | GCNewGameObjectiveTimeout | world+0x2d248 |
@@ -234,6 +234,64 @@ version gate), with these details:
   already.
 - In the three savegames of the installation (version 0xa0, 704 x 704, 732
   chunks) every chunk the loader asks for exists.
+
+## Verified savegame writer (session 55)
+
+`CLogicThread::SaveGame` (0x509980, `const std::string* name` ret 4, a bool
+in AL: false when the file had an error before or after Close) is replaced
+(`src/s3re/game/logic/save_game.cpp`), with `GameSettings::MapName`
+(0x436a60, `src/s3re/game/ui/game_settings.cpp`). It creates
+g_gameFolder + "Save" and + "Save\Multi" (_mkdir), opens g_gameFolder +
+"Save\" + name in mode 2 (a CMapFile on its stack) and writes, in this
+order: 0, the setup (0x14, 0x1a, 0x1b, 0x1e), 1, 2/0, 2/1, 3/row for
+rows 0..map_size-1 (WriteChunkData, the map size re-read per row), 4, 6,
+7, 8, 9, 10, 11 (WriteChunkData), 12, 13, 14, 15, 16, 0x15..0x17 per
+computer player, 0x18, 0x19, 0x1c, 0x1d, 0x1f. Each chunk is built in a
+game-heap buffer (operator new, "out of memory" with the chunk's label
+and the GameDataSave.cpp line otherwise) and freed after its write; the
+tables (7, 8, 9, 13, 14), the events and the sectors go out as a header
+buffer plus the world records as WriteChunkWithTail's tail.
+
+- **g_gameFolder** (0x7a7c80, a std::string: the folder prefix of the
+  game's files) is where the paths come from; the tests point it at
+  `%TEMP%\s3re-savegame-test\` (no hook needed), so they never write
+  under Settlers3Ultimate.
+- **Bytes nobody writes** (so the file holds heap or stack leftovers;
+  two saves of the same world differ there): chunk 0 after the map name's
+  zero; chunk 1 +0x22..+0x23 (after the RNG state) and each player name's
+  bytes after its zero; from GameSettings::SaveSetup's stack buffers
+  chunk 0x14 byte +0xb of every saved player record and the records past
+  the setup count, and chunk 0x1a +0x22..+0x23. The tests mask exactly
+  these; measured on the 3 savegames, 14 maps and 12 random worlds, the
+  masked bytes of chunks 0, 1 and 0x14 differed between the two runs (0x1a
+  never did). The time (chunk 0 +0x1c) is checked to lie within each call.
+- Chunk 2/1 holds the whole event ring (16,000 bytes; the loader reads
+  12,000). Chunk 0x19 holds 16 colours (see the table). The map name and
+  the player names are copied with strcpy (no bound: a name of 256+
+  characters runs into the next fields, overwritten afterwards; a map name
+  of 256+ past the 0x120-byte buffer).
+- Chunk 0x14 (SaveSetup): +8 the player-setup count (GameSettings +0x6c,
+  the count of the vector at +0x58), then 20 records of 0x18 bytes: dword
+  0, 7 bytes from the setup's getters (0x49f4d0, the index, 0x49f590,
+  0x49f350, 0x49f510, 0x49f580, 0), one unwritten byte, three dwords
+  (GamePlayerSetup +0xa8, +0xac, +0xb0). 0x1a (0x24 bytes): GameSettings
+  +0x78 (the local player id, also logged "CFG: Saving local player id
+  %i"), +0xb0..+0xbc, the logic thread's tick (CLogicThread +0x70), the
+  RNG's first word. 0x1b (0x10): +0xc8, +0x74 (start goods). 0x1e (0xa):
+  bytes +0xcc (random races include the Amazons), +0xcd.
+- Evidence: `CLogicThread_SaveGame_AllSaveGames` (the 3 savegames, loaded
+  with LoadSaveGame), `_Maps` (every 12th map, 14, loaded with LoadMap),
+  `_RandomWorlds_MatchOriginal` (12 random worlds, names of every length):
+  the original and ours write two files that are byte-identical chunk by
+  chunk outside the masked bytes (same keys, sizes, order, valid
+  checksums), same result, DebugLog calls and S3.EXE globals (CRT heap and
+  time() cache left out), the world untouched; round trip: our file loaded
+  with LoadSaveGame over a copy gives the world and the globals back (map
+  and random worlds after one save/load, which normalizes the fields the
+  loader sets). Emulator spec `CLogicThread_SaveGame` (the file members
+  probed, chunk buffers recorded byte for byte, out-of-memory paths of
+  chunks 0..10; the rest is COVERED_ELSEWHERE because the emulator's heap
+  can't hold chunk 10's 578 KB buffer).
 
 ## Verified LoadMap callees (session 53)
 
