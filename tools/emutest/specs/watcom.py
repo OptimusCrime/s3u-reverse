@@ -253,3 +253,59 @@ SPECS += [
     Spec("ChunkDescriptionInsertAt", 0x00499980, "thiscall", [INSERT_INDEX, scratch(3)],
          presets=plain_vector_state, new_fails=0.15),
 ]
+
+
+# -- string vector insertAt / removeAt (string_vector.cpp, session 56) ------
+# A consistent vector at world offset 0: count strings (entries in scratch
+# slot 0, buffers in slots 1..), filled = length = count, capacity count or
+# up to 2 more, grow 0..2 or -1 (the vector shrinks by one: the length
+# clamp after the resize); the value string at scratch slot 7 (its buffer in
+# slot 8; sometimes sharing an element's buffer), or an element itself.
+STRING_VALUE = SCRATCH + 7 * SCRATCH_SLOT_BYTES
+
+
+def string_vector_room(rng, pool, args):
+    count = rng.randrange(6)
+    if len(args) > 1 and args[1] != WORLD_BASE + STRING_VALUE:
+        count = rng.randint(3, 5)  # the value is one of the first three elements
+    capacity = count + rng.randrange(3)
+    fields = [(0, FAKE_VTABLE, 4), (8, WORLD_BASE + SCRATCH if capacity else rng.choice([0, WORLD_BASE + SCRATCH]), 4),
+              (0xc, capacity, 4), (0x10, count, 4), (0x14, count, 4), (0x18, rng.choice([0, 1, 2, 0xFFFFFFFF]), 4)]
+    ptrs = []
+    for i in range(count):
+        shared = rng.choice(ptrs) if ptrs and rng.random() < 0.3 else None
+        entry, ptr = string_fields(rng, SCRATCH + 16 * i, SCRATCH + SCRATCH_SLOT_BYTES + 0x100 * i,
+                                   shared_ptr=shared)
+        fields += entry
+        if ptr:
+            ptrs.append(ptr)
+    value, _ = string_fields(rng, STRING_VALUE, STRING_VALUE + SCRATCH_SLOT_BYTES,
+                             shared_ptr=rng.choice(ptrs) if ptrs else None)
+    return fields + value
+
+
+def string_value(rng, pool):
+    if rng.random() < 0.15:
+        return WORLD_BASE + SCRATCH + 16 * rng.randrange(3)  # an element (if there is one)
+    return WORLD_BASE + STRING_VALUE
+
+
+def null_string_count(rng, pool, args):
+    # The static empty string's count byte: frozen or full makes a source
+    # without buffer take the copy path (its text read from 0x6553a0).
+    return [(NULL_STRING_COUNT, rng.choice([0, 0, 1, 0xfe, 0xff]), 1)]
+
+
+# Dead, in the inlined operator= (assign(x, 0, npos)): the count clamp to
+# npos (lengths are at most npos) and the self-assignment path (insertAt:
+# its _Xran, as the count is the string's own length; removeAt: never an
+# element from itself).
+SPECS += [
+    Spec("StringVector_InsertAt", 0x004148a0, "thiscall", [lambda rng, pool: rng.randint(-2, 7) & 0xFFFFFFFF, string_value],
+         presets=string_vector_room, globals=null_string_count, new_fails=0.1,
+         exempt_blocks=(0x004149f8, 0x00414a0b)),
+    Spec("StringVector_RemoveAt", 0x00429750, "thiscall", [lambda rng, pool: rng.randrange(5)],
+         presets=string_vector_room, globals=null_string_count,
+         exempt_blocks=(0x00429793, 0x00429799, 0x004297a2, 0x004297a7, 0x004297b7, 0x004297b9, 0x004297bd,
+                        0x004297e5, 0x004297ed)),
+]
