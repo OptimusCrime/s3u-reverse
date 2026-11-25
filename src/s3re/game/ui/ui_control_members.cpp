@@ -11,8 +11,10 @@
 //   returns the byte zero-extended.
 // CControl::SetTooltipTextId (0x00418330; this = the control): (text id)
 //   ret 4: id 0: the tooltip text (+0x10) = "" (0x7a7868); otherwise
-//   Dialog::GraphicsData 0x4168c0(id, -1) on the virtual base (this + 4 +
-//   vbtable[1]), CGraphicsData::TextAddress 0x5faaa0 on its result, and that
+//   Dialog::GraphicsData 0x4168c0 on the virtual base (this + 4 +
+//   vbtable[1]; it takes no arguments, the original pushes TextAddress's
+//   (id, -1) before calling it), CGraphicsData::TextAddress 0x5faaa0(id, -1)
+//   on its result, and that
 //   text assigned (std::string assign_cstr_or_empty 0x413d70). EAX = the
 //   assign's.
 // CScreen::HasQueuedMessages (0x00417f50; this = the screen): EAX = (the
@@ -201,9 +203,10 @@ std::uint32_t __fastcall CControl_SetTooltipTextId(ui::CControl* self, void*, st
     if (textId == 0) {
         return reinterpret_cast<Thiscall1>(kAssignText)(tooltipText, nullptr, static_cast<std::uint32_t>(texts::kEmpty.address()));
     }
-    const std::uint32_t graphics =
-        reinterpret_cast<Thiscall2>(kGraphicsData)(VirtualBase(control, 4), nullptr, textId, 0xFFFFFFFFu);
-    const std::uint32_t text = reinterpret_cast<Thiscall0>(kTextAddress)(graphics, nullptr);
+    // GraphicsData takes no arguments (`mov eax, [g]; ret`); the original
+    // pushes TextAddress's two arguments before calling it.
+    const std::uint32_t graphics = reinterpret_cast<Thiscall0>(kGraphicsData)(VirtualBase(control, 4), nullptr);
+    const std::uint32_t text = reinterpret_cast<Thiscall2>(kTextAddress)(graphics, nullptr, textId, 0xFFFFFFFFu);
     return reinterpret_cast<Thiscall1>(kAssignText)(tooltipText, nullptr, text);
 }
 
@@ -514,8 +517,8 @@ void __cdecl DeleteStub(void* block) {
 
 void InstallStubs() {
     test::PatchJump(kDrawRect, reinterpret_cast<const void*>(&RecordingStub<kDrawRect, 0, 1, 2>));
-    test::PatchJump(kGraphicsData, reinterpret_cast<const void*>(&RecordingStub<kGraphicsData, 0, 1>));
-    test::PatchJump(kTextAddress, reinterpret_cast<const void*>(&RecordingStub<kTextAddress>));
+    test::PatchJump(kGraphicsData, reinterpret_cast<const void*>(&RecordingStub<kGraphicsData>));
+    test::PatchJump(kTextAddress, reinterpret_cast<const void*>(&RecordingStub<kTextAddress, 0, 1>));
     test::PatchJump(kAssignText, reinterpret_cast<const void*>(&RecordingStub<kAssignText, 0>));
     test::PatchJump(kElementOnLButtonDown, reinterpret_cast<const void*>(&MessageStub<kElementOnLButtonDown>));
     test::PatchJump(kControlOnLButtonDown, reinterpret_cast<const void*>(&MessageStub<kControlOnLButtonDown>));

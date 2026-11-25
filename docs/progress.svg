@@ -1,32 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1258" fill="#ffffff"/>
-<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">32.3%</text>
+<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">32.5%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="328.4" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 23.4%</title></rect>
 <text x="334.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">23.4%</text>
-<rect x="498.4" y="100" width="126" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.0%</title></rect>
-<text x="561.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.0%</text>
-<rect x="624.4" y="100" width="280.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 19.9%</title></rect>
-<text x="764.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">19.9%</text>
-<rect x="904.7" y="100" width="671.3" height="40" fill="#e8a39b"><title>Not understood yet: 47.7%</title></rect>
-<text x="1240.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">47.7%</text>
+<rect x="498.4" y="100" width="127.9" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.1%</title></rect>
+<text x="562.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.1%</text>
+<rect x="626.3" y="100" width="279.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 19.9%</title></rect>
+<text x="766" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">19.9%</text>
+<rect x="905.7" y="100" width="670.3" height="40" fill="#e8a39b"><title>Not understood yet: 47.7%</title></rect>
+<text x="1240.8" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">47.7%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="232.3" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 16.5%</title></rect>
 <text x="286.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">16.5%</text>
-<rect x="402.3" y="154" width="95.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.8%</title></rect>
-<text x="450" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.8%</text>
-<rect x="497.7" y="154" width="505.5" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.0%</title></rect>
-<text x="750.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.0%</text>
-<rect x="1003.2" y="154" width="572.8" height="40" fill="#e8a39b"><title>Not understood yet: 40.7%</title></rect>
-<text x="1289.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">40.7%</text>
+<rect x="402.3" y="154" width="97" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.9%</title></rect>
+<text x="450.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.9%</text>
+<rect x="499.3" y="154" width="504.6" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 35.9%</title></rect>
+<text x="751.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">35.9%</text>
+<rect x="1003.9" y="154" width="572.1" height="40" fill="#e8a39b"><title>Not understood yet: 40.7%</title></rect>
+<text x="1289.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">40.7%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
 <rect x="869.6" y="216" width="16" height="16" fill="#f2c86b"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
 <rect x="1233.2" y="216" width="16" height="16" fill="#e8a39b"/><text x="1257.2" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1109.1" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 32.3% verified (23.4% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 32.5% verified (23.4% in a whole game)</text>
 <g><title>(free functions): 989 functions</title><rect x="2" y="19" width="520.4" height="671.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="259.4" height="186.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -4078,8 +4078,8 @@
 3376 bytes — Identified (purpose known)</title></rect>
 <rect x="949.5" y="555.5" width="15.6" height="20.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::SetText @ 0x0041c810
 480 bytes — Identified (purpose known)</title></rect>
-<rect x="965.1" y="555.5" width="13" height="20.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::CStaticText_textId @ 0x0041c680
-400 bytes — Identified (purpose known)</title></rect>
+<rect x="965.1" y="555.5" width="13" height="20.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::CStaticText_textId @ 0x0041c680
+400 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="978" y="555.5" width="12.5" height="20.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::CStaticText @ 0x0041c3e0
 384 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="990.5" y="555.5" width="13" height="13.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::~CStaticText @ 0x0041c580
@@ -4238,8 +4238,8 @@
 368 bytes — Identified (purpose known)</title></rect>
 <rect x="700" y="689" width="17.4" height="12.3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CScreenGroup::OnMouseMove @ 0x004176b0
 320 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="717.4" y="689" width="16.5" height="12.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CScreenGroup::CScreenGroup @ 0x00416c70
-304 bytes — Classified (class/role known)</title></rect>
+<rect x="717.4" y="689" width="16.5" height="12.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CScreenGroup::CScreenGroup @ 0x00416c70
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="700" y="701.2" width="17" height="11.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CScreenGroup::OnShow @ 0x004177f0
 304 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="716.9" y="701.2" width="17" height="11.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CScreenGroup::OnMoved @ 0x00417ab0
@@ -4310,14 +4310,14 @@
 <g><title>CTextButton: 8 functions</title><rect x="678.7" y="794.9" width="55.7" height="52.6" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="679.2" y="795.4" width="33.9" height="51.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CTextButton::Draw @ 0x0041b980
 2624 bytes — Identified (purpose known)</title></rect>
-<rect x="713.1" y="795.4" width="20.9" height="14.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CTextButton::CTextButton_textId @ 0x0041b640
-464 bytes — Identified (purpose known)</title></rect>
-<rect x="713.1" y="810.2" width="20.9" height="14.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CTextButton::CTextButton @ 0x0041b470
-448 bytes — Classified (class/role known)</title></rect>
+<rect x="713.1" y="795.4" width="20.9" height="14.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CTextButton::CTextButton_textId @ 0x0041b640
+464 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="713.1" y="810.2" width="20.9" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CTextButton::CTextButton @ 0x0041b470
+448 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="713.1" y="824.6" width="20.9" height="10.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CTextButton::SetText @ 0x0041b810
 336 bytes — Identified (purpose known)</title></rect>
-<rect x="713.1" y="835.3" width="14.5" height="11.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CTextButton::~CTextButton @ 0x0042ab70
-256 bytes — Identified (purpose known)</title></rect>
+<rect x="713.1" y="835.3" width="14.5" height="11.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CTextButton::~CTextButton @ 0x0042ab70
+256 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="727.6" y="835.3" width="6.3" height="5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CTextButton::scalar_deleting_destructor @ 0x0042ab40
 48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="727.6" y="840.3" width="6.3" height="3.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CTextButton::vbase_destructor @ 0x00439520
@@ -6020,8 +6020,8 @@
 16 bytes — Identified (purpose known)</title></rect>
 </g>
 <g><title>CAnimatedButton: 5 functions</title><rect x="924.6" y="815.9" width="24.2" height="24.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="925.1" y="816.4" width="12" height="14.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CAnimatedButton::CAnimatedButton @ 0x0041b0a0
-272 bytes — Classified (class/role known)</title></rect>
+<rect x="925.1" y="816.4" width="12" height="14.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CAnimatedButton::CAnimatedButton @ 0x0041b0a0
+272 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="937" y="816.4" width="11.3" height="14.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CAnimatedButton::OnTimer @ 0x0041b1b0
 256 bytes — Identified (purpose known)</title></rect>
 <rect x="925.1" y="830.9" width="17.6" height="9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CAnimatedButton::Draw @ 0x0041b2b0
@@ -17965,7 +17965,7 @@
 </g>
 </g>
 <g><rect x="1109.1" y="567.5" width="241.2" height="432.5" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="1114.1" y="580.5" font-size="12" font-weight="600" fill="#ffffff">Watcom container library — 8.3% verified (1.3% in a whole game)</text>
+<text x="1114.1" y="580.5" font-size="12" font-weight="600" fill="#ffffff">Watcom container library — 8.6% verified (1.3% in a whole game)</text>
 <g><title>Menus::priv::CGameSetupDialog: 3 functions</title><rect x="1111.1" y="586.5" width="139.7" height="81" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="1113.1" y="595" font-size="8.5" fill="#ffffff">Menus::priv::CGameSetupDi…</text>
 <rect x="1111.6" y="598" width="77.1" height="69" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Menus::priv::CGameSetupDialog::CGameSetupDialog @ 0x00484410
@@ -18107,8 +18107,8 @@
 256 bytes — Classified (class/role known)</title></rect>
 <rect x="1135.9" y="848.9" width="7.3" height="11.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_String::ctor_or_dtor_5fda00 @ 0x005fda00
 128 bytes — Classified (class/role known)</title></rect>
-<rect x="1143.1" y="848.9" width="6.4" height="11.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_String::WCBareVectorBase_String_capacity @ 0x00428c10
-112 bytes — Identified (purpose known)</title></rect>
+<rect x="1143.1" y="848.9" width="6.4" height="11.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_String::WCBareVectorBase_String_capacity @ 0x00428c10
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1135.9" y="860" width="13.6" height="3.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_String::base_init_upto @ 0x0040a1d0
 80 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -18795,8 +18795,8 @@
 <g><title>WCBareVectorBase_CListView_CColumn: 3 functions</title><rect x="1239.4" y="901.2" width="15" height="14.1" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1239.9" y="901.7" width="11.2" height="7.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_CListView_CColumn::~WCBareVectorBase_CListView_CColumn @ 0x004290f0
 144 bytes — Identified (purpose known)</title></rect>
-<rect x="1239.9" y="909.1" width="11.2" height="5.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_CListView_CColumn::WCBareVectorBase_CListView_CColumn_capacity @ 0x00429080
-112 bytes — Identified (purpose known)</title></rect>
+<rect x="1239.9" y="909.1" width="11.2" height="5.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_CListView_CColumn::WCBareVectorBase_CListView_CColumn_capacity @ 0x00429080
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1251.1" y="901.7" width="2.8" height="13.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_CListView_CColumn::base_init_upto @ 0x00429040
 64 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -18809,8 +18809,8 @@
 <g><title>WCBareVectorBase_CListView_CLine: 3 functions</title><rect x="1239.4" y="929.5" width="15" height="14.1" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1239.9" y="930" width="11.2" height="7.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_CListView_CLine::~WCBareVectorBase_CListView_CLine @ 0x00429480
 144 bytes — Identified (purpose known)</title></rect>
-<rect x="1239.9" y="937.4" width="11.2" height="5.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_CListView_CLine::WCBareVectorBase_CListView_CLine_capacity @ 0x00429410
-112 bytes — Identified (purpose known)</title></rect>
+<rect x="1239.9" y="937.4" width="11.2" height="5.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_CListView_CLine::WCBareVectorBase_CListView_CLine_capacity @ 0x00429410
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1251.1" y="930" width="2.8" height="13.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_CListView_CLine::base_init_upto @ 0x004293d0
 64 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -19283,8 +19283,8 @@
 128 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>WCBareVectorBase_CScreenElement: 1 functions</title><rect x="1306.3" y="974.4" width="9.4" height="7.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1306.8" y="974.9" width="8.4" height="6.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_CScreenElement::WCBareVectorBase_CScreenElement_capacity @ 0x00428e70
-112 bytes — Identified (purpose known)</title></rect>
+<rect x="1306.8" y="974.9" width="8.4" height="6.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_CScreenElement::WCBareVectorBase_CScreenElement_capacity @ 0x00428e70
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>WCValListBase_Win32_CWin32Waitable_WCIsvSListBase_WCNIsvSLink_Win32_CWin32Waitable_WCNIsvSLink_Win32_CWin32Waitable: 1 functions</title><rect x="1306.3" y="982.3" width="9.4" height="7.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1306.8" y="982.8" width="8.4" height="6.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValListBase_Win32_CWin32Waitable_WCIsvSListBase_WCNIsvSLink_Win32_CWin32Waitable_WCNIsvSLink_Win32_CWin32Waitable::ctor_or_dtor_462f80 @ 0x00462f80

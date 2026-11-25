@@ -53,6 +53,42 @@
 //   memory: the queue's error handler 0x59f200 (an empty function); EAX =
 //   0.
 //
+// CScreenGroup::CScreenGroup (0x00416c70): (const RECT*, most derived) ret
+//   8: most derived: vbptr = 0x655bac and CScreenElement(rect) on +0x80.
+//   "Only inside" (+8) = 1; the children vector (+0xc: WCBareVectorBase
+//   (capacity 10) 0x428e70, length 0, +0x24 = 5, vtable 0x655b9c); focus,
+//   +0x2c, captured = 0; the three modal stacks (+0x34, +0x4c, +0x64:
+//   their list bases 0x41b080 / 0x428bd0 / 0x428bf0, +0x10/+0x14 = 0,
+//   vtables 0x655b8c, 0x655b8c, 0x655b7c); vtables 0x655b70 / 0x655aec,
+//   vtordisp vbtable[1] - 0x7c; SetRect(rect); then the vector's +4 = 110.
+//   EAX = this.
+// CTextButton::CTextButton (0x0041b470): (const RECT*, const string& text,
+//   toggle, GFX file, most derived) ret 0x14, and the text-id variant
+//   (0x0041b640, a text id instead of the string): most derived: vbptr =
+//   0x6560cc and CScreenElement() on +0x74. CImageButton(rect, toggle,
+//   file, frames 0, 1, -1, 0); the text (+0x5c, its allocator byte = the
+//   low byte of "most derived") = text (an inlined assign(text, 0, npos);
+//   the text-id variant: after the vtables, TextAddress(id, -1) of the
+//   element's graphics data or "", through a temporary as
+//   assign_cstr_or_empty 0x413d70 does); style (+0x6c) = 4; vtables
+//   0x6560c8 / 0x656044, vtordisp vbtable[1] - 0x70. EAX = this.
+// CTextButton::~CTextButton (0x0042ab70, this = +0x74): the text's
+//   ~string inlined, then ~CButton (this - 0x24). EAX unused.
+// CStaticText::CStaticText (0x0041c680, text-id variant): (const RECT*,
+//   text id, font) ret 0xc: CStaticControl(rect) 0x41c3c0; +0x20 = 0; the
+//   text empty (allocator byte = the low byte of rect); +0x38 = 0, font
+//   (0x24 for 0), style 5, vtable 0x65615c, flag1f = 1; then the text as
+//   in CTextButton's text-id variant (GraphicsData on the label itself).
+//   EAX = this.
+// CAnimatedButton::CAnimatedButton (0x0041b0a0): (const RECT*, toggle, a,
+//   b, c, d, most derived) ret 0x1c: most derived: vbptr = 0x656038 and
+//   CScreenElement() on +0x68; CButton(*rect, toggle, 0); current sequence
+//   (+0x4c) = 0, frame (+0x50) = 0; vtables 0x656034 / 0x655fb0, vtordisp
+//   vbtable[1] - 0x64; the sequences +0x54.. = a, b, d, c (the original
+//   stores the last two arguments swapped); the frame = the first
+//   sequence's frame count (CGraphicsData::SequenceFrameCount 0x5fad20, its
+//   low 16 bits) - 1, or -1 for sequence -1. EAX = this.
+//
 // Known difference: the original constructors have SEH frames that destroy
 // the members built so far when a callee throws; ours don't (SetRect and
 // the base constructors don't throw in practice; the tooltip text is still
@@ -115,6 +151,28 @@ struct MessageLink {
     std::uint32_t message[5];
 };
 static_assert(sizeof(MessageLink) == 0x18);
+// CAnimatedButton's (after the CButton part and its vtordisp).
+struct CAnimatedButtonFields {
+    std::uint8_t button[0x4c];      // 0x00 CButton
+    std::uint32_t current;          // 0x4c the current sequence (index into sequences)
+    std::uint32_t frame;            // 0x50 the last frame of the current sequence (-1: none)
+    std::uint32_t sequences[4];     // 0x54 GFX sequence ids (-1 = none)
+};
+static_assert(sizeof(CAnimatedButtonFields) == 0x64);
+// CTextButton's (after the CImageButton part).
+struct CTextButtonFields {
+    std::uint8_t image_button[0x5c];  // 0x00 CImageButton
+    msvc6::String text;               // 0x5c
+    std::uint32_t style;              // 0x6c 4
+};
+static_assert(sizeof(CTextButtonFields) == 0x70);
+// A Watcom stack of CScreenGroup (WCStack over a WCValSList).
+struct GroupStack {
+    std::uint8_t list[0x10];        // 0x00 the list base (vtable, links, count)
+    std::uint32_t unk10;            // 0x10
+    std::uint32_t unk14;            // 0x14
+};
+static_assert(sizeof(GroupStack) == 0x18);
 #pragma pack(pop)
 
 struct Message {
@@ -125,6 +183,9 @@ struct Message {
 constexpr std::uint32_t kControlElement = 0x3c;
 constexpr std::uint32_t kButtonElement = 0x50;
 constexpr std::uint32_t kImageButtonElement = 0x60;
+constexpr std::uint32_t kAnimatedButtonElement = 0x68;
+constexpr std::uint32_t kTextButtonElement = 0x74;
+constexpr std::uint32_t kGroupElement = 0x80;
 // CGroupControl, from its group part's element: the control's element and
 // the group's vbtable pointer.
 constexpr std::uint32_t kGroupControlControl = 0x7c;
@@ -132,6 +193,15 @@ constexpr std::uint32_t kGroupControlVbptr = 0xb4;
 
 constexpr std::uint32_t kTooltipDelay = 600;  // ms without mouse movement
 constexpr std::uint32_t kLinkBytes = sizeof(MessageLink);
+constexpr std::uint32_t kGroupChildCapacity = 10;
+constexpr std::uint32_t kGroupUnk24 = 5;
+constexpr std::uint32_t kGroupVectorUnk04 = 110;  // set last (meaning unknown)
+constexpr std::uint32_t kTextButtonStyle = 4;
+constexpr std::uint32_t kTextButtonPressedFrame = 1;
+constexpr std::uint32_t kNoFrame = 0xffffffffu;
+constexpr std::uint32_t kAllTextIds = 0xffffffffu;  // TextAddress's second argument
+constexpr std::uint32_t kStaticTextDefaultFont = 0x24;
+constexpr std::uint32_t kStaticTextDefaultStyle = 5;
 
 constexpr std::uintptr_t kElementConstruct = 0x00415610;      // CScreenElement::CScreenElement (ours)
 constexpr std::uintptr_t kElementConstructRect = 0x00415660;  // CScreenElement::CScreenElement(rect) (ours)
@@ -146,6 +216,16 @@ constexpr std::uintptr_t kButtonConstruct = 0x0041a830;       // CButton::CButto
 constexpr std::uintptr_t kNewLink = 0x00429900;               // WCValSList<MsgConsole>::NewLink (ours)
 constexpr std::uintptr_t kQueueOutOfMemory = 0x0059f200;      // the queue's error handler (empty)
 constexpr std::uintptr_t kListInsert = 0x0060b430;            // WCIsvList::insert (ours)
+constexpr std::uintptr_t kGraphicsData = 0x004168c0;          // Dialog::GraphicsData (ours, no arguments)
+constexpr std::uintptr_t kStaticControlConstruct = 0x0041c3c0;  // CStaticControl::CStaticControl (ours)
+constexpr std::uintptr_t kImageButtonConstruct = 0x0041abe0;  // CImageButton::CImageButton (ours)
+constexpr std::uintptr_t kButtonDestroy = 0x0041a900;         // CButton::~CButton (ours)
+constexpr std::uintptr_t kListBase = 0x0041b080;              // WCIsvListBase::WCIsvListBase (ours)
+constexpr std::uintptr_t kElementListBase = 0x00428bd0;       // WCIsvSListBase<CScreenElement*> (ours)
+constexpr std::uintptr_t kBoolListBase = 0x00428bf0;          // WCIsvSListBase<bool> (ours)
+constexpr std::uintptr_t kChildVectorBase = 0x00428e70;       // WCBareVectorBase<CScreenElement*>(capacity) (ours)
+constexpr std::uintptr_t kTextAddress = 0x005faaa0;           // CGraphicsData::TextAddress (ours)
+constexpr std::uintptr_t kSequenceFrameCount = 0x005fad20;    // CGraphicsData::SequenceFrameCount (ours)
 
 using Thiscall0 = std::uint32_t(__fastcall*)(std::uintptr_t self, void* edx);
 using Thiscall1 = std::uint32_t(__fastcall*)(std::uintptr_t self, void* edx, std::uint32_t a);
@@ -154,6 +234,11 @@ using ControlConstructFn = std::uintptr_t(__fastcall*)(std::uintptr_t self, void
 using ButtonConstructFn = std::uintptr_t(__fastcall*)(std::uintptr_t self, void* edx, RECT rect,
                                                       std::uint32_t toggle, std::uint32_t mostDerived);
 using AllocatorFn = std::uint32_t(__fastcall*)(std::uint32_t size);
+using Thiscall2 = std::uint32_t(__fastcall*)(std::uintptr_t self, void* edx, std::uint32_t a, std::uint32_t b);
+using ImageButtonCtorFn = std::uintptr_t(__fastcall*)(std::uintptr_t self, void* edx, const RECT* rect,
+                                                      std::uint32_t toggle, std::uint32_t file, std::uint32_t normal,
+                                                      std::uint32_t pressed, std::uint32_t hover,
+                                                      std::uint32_t mostDerived);
 
 template <typename T>
 T& Field(std::uintptr_t address) {  // raw-ok: fields around a virtual base, see the header
@@ -177,6 +262,21 @@ void StoreVtables(std::uintptr_t object, std::uint32_t own, std::uint32_t elemen
     Field<std::uint32_t>(VirtualBase(object + 4)) = element;
     const std::int32_t displacement = Displacement(object + 4);
     Field<std::int32_t>(object + displacement) = displacement - (classBytes - 4);
+}
+
+// The text with this id from the graphics data the element `element` sees
+// (null when there is none).
+const char* TextById(std::uintptr_t element, std::uint32_t textId) {
+    const std::uint32_t graphics = reinterpret_cast<Thiscall0>(kGraphicsData)(element, nullptr);
+    return reinterpret_cast<const char*>(reinterpret_cast<Thiscall2>(kTextAddress)(graphics, nullptr, textId, kAllTextIds));
+}
+
+// An empty string member whose allocator byte is `allocator`.
+void EmptyString(msvc6::String& text, std::uint32_t allocator) {
+    text.allocator = static_cast<std::uint8_t>(allocator);  // (the compiler's shared stack slot)
+    text.ptr = nullptr;
+    text.len = 0;
+    text.res = 0;
 }
 
 std::uint32_t CallSlot0(std::uint32_t object, std::uint32_t argument) {
@@ -334,6 +434,144 @@ std::uint32_t __fastcall CScreen_PostMessage(std::uintptr_t self, void*, Message
     return result;
 }
 
+
+// Purpose: Builds a group of UI elements (dialogs, list rows): no children
+// yet, room for ten, placed at `rect`.
+std::uintptr_t __fastcall CScreenGroup_Construct(std::uintptr_t self, void*, const RECT* rect,
+                                                 std::uint32_t mostDerived) {
+    if (mostDerived != 0) {
+        Field<std::uint32_t>(self + 4) = vbtables::kCScreenGroup;
+        reinterpret_cast<Thiscall1>(kElementConstructRect)(self + kGroupElement, nullptr,
+                                                           reinterpret_cast<std::uint32_t>(rect));
+    }
+    auto* group = reinterpret_cast<ui::CScreenGroup*>(self);
+    group->only_inside = 1;
+    reinterpret_cast<Thiscall1>(kChildVectorBase)(reinterpret_cast<std::uintptr_t>(&group->children), nullptr,
+                                                  kGroupChildCapacity);
+    group->children.length = 0;
+    group->unk24 = kGroupUnk24;
+    group->children.vtable = vtables::kWCValOrderedVector_CScreenElementP;
+    group->focus = 0;
+    group->unk2c = 0;
+    group->captured = 0;
+    const struct {
+        std::uint8_t* stack;
+        std::uintptr_t base;
+        std::uint32_t vtable;
+    } stacks[] = {{group->unk34, kListBase, vtables::kWCStack_CScreenElementP},
+                  {group->unk4c, kElementListBase, vtables::kWCStack_CScreenElementP},
+                  {group->unk64, kBoolListBase, vtables::kWCStack_bool}};
+    for (const auto& entry : stacks) {
+        auto* stack = reinterpret_cast<GroupStack*>(entry.stack);
+        reinterpret_cast<Thiscall0>(entry.base)(reinterpret_cast<std::uintptr_t>(stack), nullptr);
+        stack->unk10 = 0;
+        stack->unk14 = 0;
+        Field<std::uint32_t>(reinterpret_cast<std::uintptr_t>(stack)) = entry.vtable;
+    }
+    StoreVtables(self, vtables::kCScreenGroup, vtables::kCScreenGroup_element, kGroupElement);
+    reinterpret_cast<Thiscall1>(kElementSetRect)(VirtualBase(self + 4), nullptr, reinterpret_cast<std::uint32_t>(rect));
+    group->children.unknown04 = kGroupVectorUnk04;
+    return self;
+}
+
+namespace {
+
+// The part both CTextButton constructors share: the image button (frames
+// 0 / 1 / none) and the empty text.
+CTextButtonFields* ConstructTextButtonBase(std::uintptr_t self, const RECT* rect, std::uint32_t toggle,
+                                           std::uint32_t file, std::uint32_t mostDerived) {
+    if (mostDerived != 0) {
+        Field<std::uint32_t>(self + 4) = vbtables::kCTextButton;
+        reinterpret_cast<Thiscall0>(kElementConstruct)(self + kTextButtonElement, nullptr);
+    }
+    reinterpret_cast<ImageButtonCtorFn>(kImageButtonConstruct)(self, nullptr, rect, toggle, file, 0,
+                                                               kTextButtonPressedFrame, kNoFrame, 0);
+    auto* button = reinterpret_cast<CTextButtonFields*>(self);
+    EmptyString(button->text, mostDerived);
+    return button;
+}
+
+void StoreTextButtonVtables(std::uintptr_t self) {
+    reinterpret_cast<CTextButtonFields*>(self)->style = kTextButtonStyle;
+    StoreVtables(self, vtables::kCTextButton, vtables::kCTextButton_element, kTextButtonElement);
+}
+
+}  // namespace
+
+// Purpose: Builds a button with a text label (most menu buttons).
+std::uintptr_t __fastcall CTextButton_Construct(std::uintptr_t self, void*, const RECT* rect,
+                                                const msvc6::String* text, std::uint32_t toggle, std::uint32_t file,
+                                                std::uint32_t mostDerived) {
+    CTextButtonFields* button = ConstructTextButtonBase(self, rect, toggle, file, mostDerived);
+    msvc6::String_AssignSubstr(&button->text, nullptr, text, 0, msvc6::detail::Npos());
+    StoreTextButtonVtables(self);
+    return self;
+}
+
+// Purpose: Builds a button labelled with a text from the game's text table.
+std::uintptr_t __fastcall CTextButton_ConstructTextId(std::uintptr_t self, void*, const RECT* rect,
+                                                      std::uint32_t textId, std::uint32_t toggle, std::uint32_t file,
+                                                      std::uint32_t mostDerived) {
+    CTextButtonFields* button = ConstructTextButtonBase(self, rect, toggle, file, mostDerived);
+    StoreTextButtonVtables(self);
+    const char* text = TextById(VirtualBase(self + 4), textId);
+    msvc6::String_AssignTextOrEmpty(&button->text, nullptr, text);
+    return self;
+}
+
+// Purpose: Destroys a text button (its label, then the button).
+std::uint32_t __fastcall CTextButton_Destroy(std::uintptr_t self, void*) {
+    const std::uintptr_t object = self - kTextButtonElement;
+    msvc6::String_Destroy(&reinterpret_cast<CTextButtonFields*>(object)->text, nullptr);
+    return reinterpret_cast<Thiscall0>(kButtonDestroy)(object + kButtonElement, nullptr);
+}
+
+// Purpose: Builds a text label showing a text from the game's text table.
+std::uintptr_t __fastcall CStaticText_ConstructTextId(std::uintptr_t self, void*, const RECT* rect,
+                                                      std::uint32_t textId, std::uint32_t font) {
+    reinterpret_cast<Thiscall1>(kStaticControlConstruct)(self, nullptr, reinterpret_cast<std::uint32_t>(rect));
+    auto* label = reinterpret_cast<ui::CStaticText*>(self);
+    label->unk20 = 0;
+    EmptyString(label->text, reinterpret_cast<std::uint32_t>(rect));
+    label->unk38 = 0;
+    label->font = font != 0 ? font : kStaticTextDefaultFont;
+    label->style = kStaticTextDefaultStyle;
+    label->element.vtable = vtables::kCStaticText;
+    label->element.flag1f = 1;
+    const char* text = TextById(self, textId);
+    msvc6::String_AssignTextOrEmpty(&label->text, nullptr, text);
+    return self;
+}
+
+// Purpose: Builds an animated button (GFX sequences for its states),
+// showing the first sequence's last frame.
+std::uintptr_t __fastcall CAnimatedButton_Construct(std::uintptr_t self, void*, const RECT* rect,
+                                                    std::uint32_t toggle, std::uint32_t a, std::uint32_t b,
+                                                    std::uint32_t c, std::uint32_t d, std::uint32_t mostDerived) {
+    if (mostDerived != 0) {
+        Field<std::uint32_t>(self + 4) = vbtables::kCAnimatedButton;
+        reinterpret_cast<Thiscall0>(kElementConstruct)(self + kAnimatedButtonElement, nullptr);
+    }
+    reinterpret_cast<ButtonConstructFn>(kButtonConstruct)(self, nullptr, *rect, toggle, 0);
+    auto* button = reinterpret_cast<CAnimatedButtonFields*>(self);
+    button->current = 0;
+    button->frame = 0;
+    StoreVtables(self, vtables::kCAnimatedButton, vtables::kCAnimatedButton_element, kAnimatedButtonElement);
+    button->sequences[0] = a;
+    button->sequences[1] = b;
+    button->sequences[2] = d;  // (swapped in the original)
+    button->sequences[3] = c;
+    const std::uint32_t sequence = button->sequences[button->current];
+    if (sequence == kNoFrame) {
+        button->frame = kNoFrame;
+        return self;
+    }
+    const std::uint32_t graphics = reinterpret_cast<Thiscall0>(kGraphicsData)(VirtualBase(self + 4), nullptr);
+    const std::uint32_t frames = reinterpret_cast<Thiscall1>(kSequenceFrameCount)(graphics, nullptr, sequence);
+    button->frame = (frames & 0xffff) - 1;
+    return self;
+}
+
 using DestroyFn = void(__fastcall*)(std::uintptr_t, void*);
 using ImageButtonConstructFn = std::uintptr_t(__fastcall*)(std::uintptr_t, void*, const RECT*, std::uint32_t,
                                                            std::uint32_t, std::uint32_t, std::uint32_t,
@@ -351,6 +589,29 @@ S3RE_HOOK(0x0041abe0, CImageButton_Construct, ImageButtonConstructFn, Original_C
           CImageButton_Construct);
 S3RE_HOOK(0x00429900, MsgConsoleList_NewLink, NewLinkFn, Original_MsgConsoleList_NewLink, MsgConsoleList_NewLink);
 S3RE_HOOK(0x00417fa0, CScreen_PostMessage, PostMessageFn, Original_CScreen_PostMessage, CScreen_PostMessage);
+
+using GroupConstructFn = std::uintptr_t(__fastcall*)(std::uintptr_t, void*, const RECT*, std::uint32_t);
+using TextButtonConstructFn = std::uintptr_t(__fastcall*)(std::uintptr_t, void*, const RECT*, const msvc6::String*,
+                                                          std::uint32_t, std::uint32_t, std::uint32_t);
+using TextButtonConstructIdFn = std::uintptr_t(__fastcall*)(std::uintptr_t, void*, const RECT*, std::uint32_t,
+                                                            std::uint32_t, std::uint32_t, std::uint32_t);
+using StaticTextConstructIdFn = std::uintptr_t(__fastcall*)(std::uintptr_t, void*, const RECT*, std::uint32_t,
+                                                            std::uint32_t);
+using AnimatedButtonConstructFn = std::uintptr_t(__fastcall*)(std::uintptr_t, void*, const RECT*, std::uint32_t,
+                                                              std::uint32_t, std::uint32_t, std::uint32_t,
+                                                              std::uint32_t, std::uint32_t);
+
+S3RE_HOOK(0x00416c70, CScreenGroup_Construct, GroupConstructFn, Original_CScreenGroup_Construct,
+          CScreenGroup_Construct);
+S3RE_HOOK(0x0041b470, CTextButton_Construct, TextButtonConstructFn, Original_CTextButton_Construct,
+          CTextButton_Construct);
+S3RE_HOOK(0x0041b640, CTextButton_ConstructTextId, TextButtonConstructIdFn, Original_CTextButton_ConstructTextId,
+          CTextButton_ConstructTextId);
+S3RE_HOOK(0x0042ab70, CTextButton_Destroy, Thiscall0, Original_CTextButton_Destroy, CTextButton_Destroy);
+S3RE_HOOK(0x0041c680, CStaticText_ConstructTextId, StaticTextConstructIdFn, Original_CStaticText_ConstructTextId,
+          CStaticText_ConstructTextId);
+S3RE_HOOK(0x0041b0a0, CAnimatedButton_Construct, AnimatedButtonConstructFn, Original_CAnimatedButton_Construct,
+          CAnimatedButton_Construct);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -372,6 +633,9 @@ constexpr std::size_t kObject = 0x800;   // the object's start
 constexpr std::size_t kTables = 0x1e00;  // vbtables, the fake vtable
 constexpr std::size_t kFunctor = 0x1d00; // functor / tooltip objects
 constexpr std::size_t kAllocated = 0x1c00;
+constexpr std::size_t kText = 0x1a80;        // TextAddress's text
+constexpr std::size_t kArgString = 0x1980;   // a string argument (its buffer at 0x1900)
+constexpr std::size_t kCaptured = 0x1a00;    // heap strings' contents after a run
 
 struct CallLog {
     std::uintptr_t callee;
@@ -412,6 +676,10 @@ std::uint32_t __fastcall Stub(std::uint32_t self, void*, Dword<I>... args) {
     }
     g_log->push_back(entry);
     std::uint32_t result = Result(Callee, self);
+    if constexpr (Callee == kTextAddress) {
+        // A text in the arena, or none.
+        result = (result & 3) == 0 ? 0 : static_cast<std::uint32_t>(g_base + kText);
+    }
     if constexpr (Callee == kNewLink) {
         // A link in the arena (or none), so the insert and the queue see it.
         result = (result & 3) == 0 ? 0 : static_cast<std::uint32_t>(g_base + kAllocated);
@@ -459,13 +727,25 @@ void InstallStubs() {
     Install<kButtonConstruct, 6>();
     Install<kNewLink, 1>();
     Install<kListInsert, 1>();
+    Install<kGraphicsData, 0>();
+    Install<kTextAddress, 2>();
+    Install<kSequenceFrameCount, 1>();
+    Install<kStaticControlConstruct, 1>();
+    Install<kImageButtonConstruct, 7>();
+    Install<kButtonDestroy, 0>();
+    Install<kListBase, 0>();
+    Install<kElementListBase, 0>();
+    Install<kBoolListBase, 0>();
+    Install<kChildVectorBase, 1>();
     const void* clock = reinterpret_cast<const void*>(&FakeTimeGetTime);
     test::PatchBytes(reinterpret_cast<std::uintptr_t>(&g_importTimeGetTime), &clock, sizeof(clock));
 }
 
 void RemoveStubs() {
     test::UnpatchBytes(reinterpret_cast<std::uintptr_t>(&g_importTimeGetTime));
-    for (std::uintptr_t callee : {kListInsert, kNewLink, kButtonConstruct, kShowTooltip, kControlOnTimer,
+    for (std::uintptr_t callee : {kChildVectorBase, kBoolListBase, kElementListBase, kListBase, kButtonDestroy,
+                                  kImageButtonConstruct, kStaticControlConstruct, kSequenceFrameCount, kTextAddress,
+                                  kGraphicsData, kListInsert, kNewLink, kButtonConstruct, kShowTooltip, kControlOnTimer,
                                   kControlDestroy, kControlConstruct, kIsOffScreen, kElementSetRect,
                                   kElementConstructRect, kElementConstruct}) {
         test::UnpatchJump(callee);
@@ -579,6 +859,12 @@ struct Members {
     ImageButtonConstructFn imageButtonConstruct = &CImageButton_Construct;
     NewLinkFn newLink = &MsgConsoleList_NewLink;
     PostMessageFn postMessage = &CScreen_PostMessage;
+    GroupConstructFn groupConstruct = &CScreenGroup_Construct;
+    TextButtonConstructFn textButtonConstruct = &CTextButton_Construct;
+    TextButtonConstructIdFn textButtonConstructId = &CTextButton_ConstructTextId;
+    Thiscall0 textButtonDestroy = &CTextButton_Destroy;
+    StaticTextConstructIdFn staticTextConstructId = &CStaticText_ConstructTextId;
+    AnimatedButtonConstructFn animatedButtonConstruct = &CAnimatedButton_Construct;
 };
 
 const Members* g_members = nullptr;
@@ -630,6 +916,49 @@ void ControlStringArena(test::Rng& rng, std::uint8_t* buffer) {
     text->ptr = block + 1;
     text->len = length;
     text->res = capacity;
+}
+
+// A string member that ended up with a buffer on the heap: its count byte
+// and text are copied into the arena, the pointer replaced by a marker and
+// the buffer freed (the member holds its only reference).
+void CaptureString(std::uint8_t* buffer, std::size_t offset) {
+    auto* text = reinterpret_cast<msvc6::String*>(buffer + offset);
+    const auto ptr = reinterpret_cast<std::uint32_t>(text->ptr);
+    if (ptr == 0 || Normalize(ptr) != ptr) {
+        return;  // none, or in the arena (compared there)
+    }
+    const std::size_t bytes = text->len + 2 < 0x7f ? text->len + 2 : 0x7f;
+    std::memcpy(buffer + kCaptured, text->ptr - 1, bytes);
+    msvc6::GameOperatorDelete(text->ptr - 1);
+    text->ptr = reinterpret_cast<char*>(0xc0de0000u);
+}
+
+// A text for TextAddress (random letters, sometimes empty) and a string
+// argument in the arena: its own buffer (count 0, shared or frozen) or
+// none.
+void TextArena(test::Rng& rng, std::uint8_t* buffer) {
+    const std::uint32_t length = rng.Chance(1, 5) ? 0 : rng.Below(40);
+    for (std::uint32_t i = 0; i < length; ++i) {
+        buffer[kText + i] = static_cast<std::uint8_t>('A' + rng.Below(26));
+    }
+    buffer[kText + length] = 0;
+    auto* text = reinterpret_cast<msvc6::String*>(buffer + kArgString);
+    const std::uint32_t argLength = rng.Chance(1, 5) ? 0 : rng.Below(40);
+    const std::uint8_t counts[] = {0, 0, 1, 0xfd, 0xfe, 0xff};
+    buffer[0x1900] = counts[rng.Below(6)];
+    for (std::uint32_t i = 0; i < argLength; ++i) {
+        buffer[0x1901 + i] = static_cast<std::uint8_t>('a' + rng.Below(26));
+    }
+    buffer[0x1901 + argLength] = 0;
+    text->ptr = rng.Chance(1, 6) ? nullptr : reinterpret_cast<char*>(buffer + 0x1901);
+    text->len = text->ptr != nullptr ? argLength : 0;
+    text->res = text->len + rng.Below(4);
+}
+
+template <std::int32_t Element>
+void ConstructorTextArena(test::Rng& rng, std::uint8_t* buffer) {
+    ConstructorArena<Element>(rng, buffer);
+    TextArena(rng, buffer);
 }
 
 void CompareAll(test::Context& ctx, const Members& ours, int cases) {
@@ -775,6 +1104,113 @@ void CompareAll(test::Context& ctx, const Members& ours, int cases) {
             const Message m{{Arg(s, 0), Arg(s, 1), Arg(s, 2), Arg(s, 3), Arg(s, 4)}};
             return g_members->postMessage(reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, m);
         }});
+
+    // CScreenGroup::CScreenGroup: the rect in the arena.
+    Compare(
+        ctx, "CScreenGroup::CScreenGroup", 0, cases, ConstructorArena<0x80>,
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            return static_cast<std::uint32_t>(Original_CScreenGroup_Construct(
+                reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, reinterpret_cast<const RECT*>(b + 0x100),
+                MostDerived(s)));
+        }},
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            return static_cast<std::uint32_t>(g_members->groupConstruct(
+                reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, reinterpret_cast<const RECT*>(b + 0x100),
+                MostDerived(s)));
+        }});
+    // The CTextButton constructors: the text member's heap buffer (when it
+    // got one) captured after the run.
+    Compare(
+        ctx, "CTextButton::CTextButton", 0, cases, ConstructorTextArena<0x74>,
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            const auto r = static_cast<std::uint32_t>(Original_CTextButton_Construct(
+                reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, reinterpret_cast<const RECT*>(b + 0x100),
+                reinterpret_cast<const msvc6::String*>(b + kArgString), Arg(s, 1), Arg(s, 2), MostDerived(s)));
+            CaptureString(b, kObject + 0x5c);
+            return r;
+        }},
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            const auto r = static_cast<std::uint32_t>(g_members->textButtonConstruct(
+                reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, reinterpret_cast<const RECT*>(b + 0x100),
+                reinterpret_cast<const msvc6::String*>(b + kArgString), Arg(s, 1), Arg(s, 2), MostDerived(s)));
+            CaptureString(b, kObject + 0x5c);
+            return r;
+        }});
+    Compare(
+        ctx, "CTextButton::CTextButton(text id)", 0, cases, ConstructorTextArena<0x74>,
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            const auto r = static_cast<std::uint32_t>(Original_CTextButton_ConstructTextId(
+                reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, reinterpret_cast<const RECT*>(b + 0x100),
+                Arg(s, 0), Arg(s, 1), Arg(s, 2), MostDerived(s)));
+            CaptureString(b, kObject + 0x5c);
+            return r;
+        }},
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            const auto r = static_cast<std::uint32_t>(g_members->textButtonConstructId(
+                reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, reinterpret_cast<const RECT*>(b + 0x100),
+                Arg(s, 0), Arg(s, 1), Arg(s, 2), MostDerived(s)));
+            CaptureString(b, kObject + 0x5c);
+            return r;
+        }});
+    Compare(
+        ctx, "CStaticText::CStaticText(text id)", 0, cases, ConstructorTextArena<0x20>,
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            const auto r = static_cast<std::uint32_t>(Original_CStaticText_ConstructTextId(
+                reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, reinterpret_cast<const RECT*>(b + 0x100 + (s & 0xc)),
+                Arg(s, 0), (s & 0x30) == 0 ? 0 : Arg(s, 1)));
+            CaptureString(b, kObject + 0x28);
+            return r;
+        }},
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            const auto r = static_cast<std::uint32_t>(g_members->staticTextConstructId(
+                reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, reinterpret_cast<const RECT*>(b + 0x100 + (s & 0xc)),
+                Arg(s, 0), (s & 0x30) == 0 ? 0 : Arg(s, 1)));
+            CaptureString(b, kObject + 0x28);
+            return r;
+        }});
+    // ~CTextButton: a real string at +0x5c (as ~CControl's test).
+    Compare(
+        ctx, "CTextButton::~CTextButton", 0, cases,
+        [](test::Rng& rng, std::uint8_t* buffer) {
+            ControlStringArena(rng, buffer);
+            std::memcpy(buffer + kObject + 0x5c, buffer + kObject + 0x10, sizeof(msvc6::String));
+            std::memset(buffer + kObject + 0x10, 0, sizeof(msvc6::String));
+        },
+        CallFn{[](std::uint8_t* b, std::uint64_t) {
+            const auto* text = reinterpret_cast<msvc6::String*>(b + kObject + 0x5c);
+            char* block = text->ptr != nullptr ? text->ptr - 1 : nullptr;
+            const std::uint8_t count = block != nullptr ? static_cast<std::uint8_t>(block[0]) : 0;
+            Original_CTextButton_Destroy(reinterpret_cast<std::uintptr_t>(b + kObject + 0x74), nullptr);
+            const std::uint32_t after = block != nullptr && count != 0 && count != 0xff ? static_cast<std::uint8_t>(block[0]) : 0x100;
+            if (after != 0x100) {
+                msvc6::GameOperatorDelete(block);
+            }
+            return after;
+        }},
+        CallFn{[](std::uint8_t* b, std::uint64_t) {
+            const auto* text = reinterpret_cast<msvc6::String*>(b + kObject + 0x5c);
+            char* block = text->ptr != nullptr ? text->ptr - 1 : nullptr;
+            const std::uint8_t count = block != nullptr ? static_cast<std::uint8_t>(block[0]) : 0;
+            g_members->textButtonDestroy(reinterpret_cast<std::uintptr_t>(b + kObject + 0x74), nullptr);
+            const std::uint32_t after = block != nullptr && count != 0 && count != 0xff ? static_cast<std::uint8_t>(block[0]) : 0x100;
+            if (after != 0x100) {
+                msvc6::GameOperatorDelete(block);
+            }
+            return after;
+        }});
+    // CAnimatedButton: the first sequence sometimes -1.
+    Compare(
+        ctx, "CAnimatedButton::CAnimatedButton", 0, cases, ConstructorArena<0x68>,
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            return static_cast<std::uint32_t>(Original_CAnimatedButton_Construct(
+                reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, reinterpret_cast<const RECT*>(b + 0x100),
+                Arg(s, 1), (s & 0x300) == 0 ? 0xffffffffu : Arg(s, 2), Arg(s, 3), Arg(s, 4), Arg(s, 5), MostDerived(s)));
+        }},
+        CallFn{[](std::uint8_t* b, std::uint64_t s) {
+            return static_cast<std::uint32_t>(g_members->animatedButtonConstruct(
+                reinterpret_cast<std::uintptr_t>(b + kObject), nullptr, reinterpret_cast<const RECT*>(b + 0x100),
+                Arg(s, 1), (s & 0x300) == 0 ? 0xffffffffu : Arg(s, 2), Arg(s, 3), Arg(s, 4), Arg(s, 5), MostDerived(s)));
+        }});
 }
 
 // Wrong implementations.
@@ -796,6 +1232,11 @@ std::uint32_t __fastcall WrongOnTimer(std::uintptr_t self, void*) {
     }
     return CallSlot0(control->timer_functor, static_cast<std::uint32_t>(VirtualBase(object + 4))) | 1;
 }
+std::uintptr_t __fastcall WrongAnimatedButton(std::uintptr_t self, void* edx, const RECT* rect, std::uint32_t toggle,
+                                             std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d,
+                                             std::uint32_t mostDerived) {
+    return CAnimatedButton_Construct(self, edx, rect, toggle, a, b, d, c, mostDerived);  // not swapped
+}
 std::uint32_t __fastcall WrongButtonDestroy(std::uintptr_t self, void*) {
     // Forgets the state listener.
     const std::uintptr_t object = self - kButtonElement;
@@ -810,9 +1251,11 @@ S3RE_TEST(UiControls_MatchOriginal) {
 }
 
 S3RE_TEST(UiControls_ComparisonDetectsWrongImplementation) {
-    for (int k = 0; k < 3; ++k) {
+    for (int k = 0; k < 4; ++k) {
         Members wrong;
-        if (k == 0) {
+        if (k == 3) {
+            wrong.animatedButtonConstruct = &WrongAnimatedButton;
+        } else if (k == 0) {
             wrong.controlConstruct = &WrongControlConstruct;
         } else if (k == 1) {
             wrong.onTimer = &WrongOnTimer;

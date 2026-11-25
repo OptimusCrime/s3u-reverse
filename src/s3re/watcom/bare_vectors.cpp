@@ -72,6 +72,10 @@
 //   0x00458a60   32  CChatMessage
 //   0x004586f0  284  CGroup
 //   0x004377a0  204  CPlayer
+//   0x00428c10   16  String
+//   0x00428e70    4  CScreenElement*
+//   0x00429080   32  CListView::CColumn
+//   0x00429410   20  CListView::CLine
 
 #include "watcom/vector_base.h"
 
@@ -283,6 +287,18 @@ VectorBase* __fastcall BareVectorConstructor_4586f0(VectorBase* self, void*, std
 VectorBase* __fastcall BareVectorConstructor_4377a0(VectorBase* self, void*, std::uint32_t capacity) {
     return ConstructBareVector(self, capacity, 204, vt::kWCBareVectorBase_CPlayer);
 }
+VectorBase* __fastcall BareVectorConstructor_428c10(VectorBase* self, void*, std::uint32_t capacity) {
+    return ConstructBareVector(self, capacity, 16, vt::kWCBareVectorBase_String);
+}
+VectorBase* __fastcall BareVectorConstructor_428e70(VectorBase* self, void*, std::uint32_t capacity) {
+    return ConstructBareVector(self, capacity, 4, vt::kWCBareVectorBase_CScreenElementP);
+}
+VectorBase* __fastcall BareVectorConstructor_429080(VectorBase* self, void*, std::uint32_t capacity) {
+    return ConstructBareVector(self, capacity, 32, vt::kWCBareVectorBase_CColumn);
+}
+VectorBase* __fastcall BareVectorConstructor_429410(VectorBase* self, void*, std::uint32_t capacity) {
+    return ConstructBareVector(self, capacity, 20, vt::kWCBareVectorBase_CLine);
+}
 
 S3RE_HOOK(0x004143b0, VectorDestructor_4143b0, DestructorFn, Original_VectorDestructor_4143b0,
           VectorDestructor_4143b0);
@@ -382,6 +398,14 @@ S3RE_HOOK(0x004586f0, BareVectorConstructor_4586f0, BareConstructorFn, Original_
           BareVectorConstructor_4586f0);
 S3RE_HOOK(0x004377a0, BareVectorConstructor_4377a0, BareConstructorFn, Original_BareVectorConstructor_4377a0,
           BareVectorConstructor_4377a0);
+S3RE_HOOK(0x00428c10, BareVectorConstructor_428c10, BareConstructorFn, Original_BareVectorConstructor_428c10,
+          BareVectorConstructor_428c10);
+S3RE_HOOK(0x00428e70, BareVectorConstructor_428e70, BareConstructorFn, Original_BareVectorConstructor_428e70,
+          BareVectorConstructor_428e70);
+S3RE_HOOK(0x00429080, BareVectorConstructor_429080, BareConstructorFn, Original_BareVectorConstructor_429080,
+          BareVectorConstructor_429080);
+S3RE_HOOK(0x00429410, BareVectorConstructor_429410, BareConstructorFn, Original_BareVectorConstructor_429410,
+          BareVectorConstructor_429410);
 
 // ---------------------------------------------------------------------------
 // Tests: every instantiation, original against ours, on random objects.
@@ -466,6 +490,10 @@ const BareConstructorPair kBareConstructors[] = {
     {Original_BareVectorConstructor_458a60, &BareVectorConstructor_458a60, 0x458a60},
     {Original_BareVectorConstructor_4586f0, &BareVectorConstructor_4586f0, 0x4586f0},
     {Original_BareVectorConstructor_4377a0, &BareVectorConstructor_4377a0, 0x4377a0},
+    {Original_BareVectorConstructor_428c10, &BareVectorConstructor_428c10, 0x428c10},
+    {Original_BareVectorConstructor_428e70, &BareVectorConstructor_428e70, 0x428e70},
+    {Original_BareVectorConstructor_429080, &BareVectorConstructor_429080, 0x429080},
+    {Original_BareVectorConstructor_429410, &BareVectorConstructor_429410, 0x429410},
 };
 
 std::uint32_t RandomCapacity(test::Rng& rng) {

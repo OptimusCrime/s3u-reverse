@@ -80,6 +80,16 @@ inline constexpr std::uint32_t kCButton = 0x655f00;               // CButton
 inline constexpr std::uint32_t kCButton_element = 0x655e7c;       // its CScreenElement part
 inline constexpr std::uint32_t kCImageButton = 0x655f94;          // CImageButton
 inline constexpr std::uint32_t kCImageButton_element = 0x655f10;  // its CScreenElement part
+inline constexpr std::uint32_t kCTextButton = 0x6560c8;           // CTextButton
+inline constexpr std::uint32_t kCTextButton_element = 0x656044;   // its CScreenElement part
+inline constexpr std::uint32_t kCAnimatedButton = 0x656034;          // CAnimatedButton
+inline constexpr std::uint32_t kCAnimatedButton_element = 0x655fb0;  // its CScreenElement part
+inline constexpr std::uint32_t kCScreenGroup = 0x655b70;           // CScreenGroup
+inline constexpr std::uint32_t kCScreenGroup_element = 0x655aec;   // its CScreenElement part
+// CScreenGroup's members: the children vector and the three modal stacks.
+inline constexpr std::uint32_t kWCValOrderedVector_CScreenElementP = 0x655b9c;  // WCValOrderedVector<CScreenElement*>
+inline constexpr std::uint32_t kWCStack_CScreenElementP = 0x655b8c;  // WCStack<CScreenElement*, WCValSList<..>>
+inline constexpr std::uint32_t kWCStack_bool = 0x655b7c;             // WCStack<bool, WCValSList<bool>>
 // Lobby::*
 inline constexpr std::uint32_t kCMemoryBlock = 0x65d4f4;    // Lobby::CMemoryBlock
 inline constexpr std::uint32_t kCLMMessageBlock = 0x65d4fc;  // Lobby::CLMMessageBlock
@@ -125,6 +135,8 @@ inline constexpr std::uint32_t kWCValOrderedVector_ushort = 0x657410;  // WCValO
 inline constexpr std::uint32_t kWCBareVectorBase_voidp = 0x657440;            // WCBareVectorBase<void*>
 inline constexpr std::uint32_t kWCBareVectorBase_HFONT = 0x656a14;            // WCBareVectorBase<HFONT__*>
 inline constexpr std::uint32_t kWCBareVectorBase_CScreenElementP = 0x655bb8;  // WCBareVectorBase<CScreenElement*>
+inline constexpr std::uint32_t kWCBareVectorBase_CColumn = 0x656a20;          // WCBareVectorBase<CListView::CColumn>
+inline constexpr std::uint32_t kWCBareVectorBase_CLine = 0x656a2c;            // WCBareVectorBase<CListView::CLine>
 inline constexpr std::uint32_t kWCBareVectorBase_CStatusMessage = 0x65702c;   // <LobbyClient::CStatusMessage>
 inline constexpr std::uint32_t kWCBareVectorBase_ulong = 0x6576a0;            // WCBareVectorBase<unsigned long>
 inline constexpr std::uint32_t kWCBareVectorBase_long = 0x65852c;             // WCBareVectorBase<long>
@@ -174,6 +186,9 @@ inline constexpr std::uint32_t kCDataError = 0x65d4c0;         // Lobby::priv::C
 inline constexpr std::uint32_t kCControl = 0x655d2c;      // CControl
 inline constexpr std::uint32_t kCButton = 0x655f04;       // CButton
 inline constexpr std::uint32_t kCImageButton = 0x655f98;  // CImageButton
+inline constexpr std::uint32_t kCTextButton = 0x6560cc;      // CTextButton
+inline constexpr std::uint32_t kCAnimatedButton = 0x656038;  // CAnimatedButton
+inline constexpr std::uint32_t kCScreenGroup = 0x655bac;     // CScreenGroup
 }  // namespace vbtables
 
 // _ThrowInfo records passed to _CxxThrowException.

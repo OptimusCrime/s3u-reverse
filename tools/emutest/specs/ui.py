@@ -569,7 +569,7 @@ SPECS += [
 MEMBER_THIS = SCRATCH + 4 * SCRATCH_SLOT_BYTES + 0x800
 MEMBER_VBTABLE = SCRATCH + 6 * SCRATCH_SLOT_BYTES
 MEMBER_CALLEES = {
-    0x415af0: (3, "thiscall", "probe"), 0x4168c0: (2, "thiscall", "probe"), 0x5faaa0: (0, "thiscall", "probe"),
+    0x415af0: (3, "thiscall", "probe"), 0x4168c0: (0, "thiscall", "probe"), 0x5faaa0: (2, "thiscall", "probe"),
     0x413d70: (1, "thiscall", "probe"), 0x415c80: (5, "thiscall", "probe"), 0x418380: (5, "thiscall", "probe"),
     0x417ab0: (2, "thiscall", "probe"), 0x417be0: (1, "thiscall", "probe"),
     0x4156e0: (1, "thiscall", "probe", None, lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)),)),
@@ -714,7 +714,17 @@ UICTL_RECT_PROBE = (1, "thiscall", "probe", None, lambda m, ecx, args: (bytes(m.
 UICTL_CALLEES = {0x415610: (0, "thiscall", "probe"), 0x415660: UICTL_RECT_PROBE, 0x4156e0: UICTL_RECT_PROBE,
                  0x415840: (0, "thiscall", "probe"), 0x418550: (0, "thiscall", "probe"),
                  0x417fe0: (5, "thiscall", "probe"), 0x4180a0: (0, "thiscall", "probe"),
-                 0x4183c0: (0, "thiscall", "probe"), 0x41a830: (6, "thiscall", "probe")}
+                 0x4183c0: (0, "thiscall", "probe"), 0x41a830: (6, "thiscall", "probe"),
+                 0x4168c0: (0, "thiscall", "probe"), 0x5faaa0: (2, "thiscall", lambda h: uictl_text(h)),
+                 0x5fad20: (1, "thiscall", "probe"), 0x41c3c0: (1, "thiscall", "probe"),
+                 0x41abe0: (7, "thiscall", "probe"), 0x41a900: (0, "thiscall", "probe"),
+                 0x41b080: (0, "thiscall", "probe"), 0x428bd0: (0, "thiscall", "probe"),
+                 0x428bf0: (0, "thiscall", "probe"), 0x428e70: (1, "thiscall", "probe")}
+UICTL_TEXT = SCRATCH + 0x300  # TextAddress's text (random letters)
+
+
+def uictl_text(h):
+    return 0 if h % 4 == 0 else WORLD_BASE + UICTL_TEXT
 
 
 def uictl_callees(own):
@@ -806,4 +816,73 @@ SPECS += [
          callees={0x59f200: (0, "thiscall", uictl_link)}),
     Spec("CScreen_PostMessage", 0x00417fa0, "fastcall", [one_of(UICTL_OBJ + 0x1c), anything] + [anything] * 5,
          callees={0x429900: (1, "thiscall", uictl_link), 0x60b430: (1, "thiscall", "probe")}),
+]
+
+
+# Session 57, second part: CScreenGroup, CTextButton, CStaticText (text id),
+# CAnimatedButton (controls.cpp). TextAddress returns the text at
+# UICTL_TEXT or null; CTextButton's string argument is a std::string at
+# scratch + 0x400 (common.string_fields, buffer at scratch + 0x500).
+
+
+def uictl_texts(size, string_at=None):
+    base = uictl_objects(size)
+
+    def presets(rng, pool, args):
+        out = base(rng, pool, args)
+        length = rng.choice([0, 1, rng.randrange(40)])
+        out += [(UICTL_TEXT + i, rng.randint(1, 255), 1) for i in range(length)] + [(UICTL_TEXT + length, 0, 1)]
+        if string_at is not None:
+            fields, _ = string_fields(rng, string_at, SCRATCH + 0x500)
+            out += fields
+        return out
+    return presets
+
+
+def uictl_rect_ptr(rng, pool):
+    return WORLD_BASE + SCRATCH + 0x100 + 4 * rng.randrange(4)
+
+
+def uictl_text_button_to_destroy(rng, pool, args):
+    fields, _ = string_fields(rng, UICTL_OBJECT + 0x5c, SCRATCH)
+    return fields
+
+
+def uictl_sequence(rng, pool):
+    return rng.choice([0xFFFFFFFF, 0, rng.randrange(300), rng.getrandbits(32)])
+
+
+SPECS += [
+    Spec("CScreenGroup_Construct", 0x00416c70, "fastcall", [one_of(UICTL_OBJ), anything, uictl_rect_ptr, uictl_most_derived],
+         presets=uictl_objects(0x80), callees=uictl_callees(0x00416c70)),
+    # Exempt: the inlined assign's "argument is this string" branch
+    # (0x41b507..0x41b563; the argument would have to be the button's own
+    # text member, which the constructor has only just cleared) and its
+    # clamp of n to npos (0x41b500, n = the length can't exceed it). The
+    # static empty string's count is varied (a null buffer then copies).
+    Spec("CTextButton_Construct", 0x0041b470, "fastcall",
+         [one_of(UICTL_OBJ), anything, uictl_rect_ptr, one_of(WORLD_BASE + SCRATCH + 0x400), anything, anything,
+          uictl_most_derived],
+         presets=uictl_texts(0x74, SCRATCH + 0x400), callees=uictl_callees(0x0041b470), globals=null_string_count,
+         exempt_blocks=(0x0041b500, 0x0041b507, 0x0041b511, 0x0041b516, 0x0041b526, 0x0041b528, 0x0041b52c, 0x0041b554,
+                        0x0041b55c)),
+    # The text-id variants' dead blocks: the temporary's release by operator
+    # delete (the member always shares the temporary's unshared buffer, so
+    # the release only decrements) and the copy of "" (0x7a7868 is empty:
+    # _Grow(0) is false).
+    Spec("CTextButton_ConstructTextId", 0x0041b640, "fastcall",
+         [one_of(UICTL_OBJ), anything, uictl_rect_ptr, anything, anything, anything, uictl_most_derived],
+         presets=uictl_texts(0x74), callees=uictl_callees(0x0041b640), exempt_blocks=(0x0041b79f, 0x0041b7cd)),
+    # Dead (as in CStaticText_Destroy): the inlined ~string's _Eos after
+    # erase(0, npos) and its release's decrement.
+    Spec("CTextButton_Destroy", 0x0042ab70, "fastcall", [one_of(UICTL_OBJ + 0x74), anything], eax_mask=0,
+         presets=uictl_text_button_to_destroy, callees=uictl_callees(0x0042ab70),
+         exempt_blocks=(0x0042ac0d, 0x0042ac2f)),
+    Spec("CStaticText_ConstructTextId", 0x0041c680, "fastcall",
+         [one_of(UICTL_OBJ), anything, uictl_rect_ptr, anything, lambda rng, pool: rng.choice([0, rng.getrandbits(32)])],
+         presets=uictl_texts(0x44), callees=uictl_callees(0x0041c680), exempt_blocks=(0x0041c7a0, 0x0041c7ce)),
+    Spec("CAnimatedButton_Construct", 0x0041b0a0, "fastcall",
+         [one_of(UICTL_OBJ), anything, uictl_rect_ptr, anything, uictl_sequence, anything, anything, anything,
+          uictl_most_derived],
+         presets=uictl_objects(0x68), callees=uictl_callees(0x0041b0a0)),
 ]
