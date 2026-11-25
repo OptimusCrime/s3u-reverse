@@ -376,9 +376,11 @@ using SleepImport = void(__stdcall*)(std::uint32_t milliseconds);
 using CloseHandleImport = int(__stdcall*)(void* handle);
 using TimeGetTimeImport = std::uint32_t(__stdcall*)();
 using OutputDebugStringAImport = void(__stdcall*)(const char* text);
+using GetDriveTypeAImport = std::uint32_t(__stdcall*)(const char* root);
 inline constexpr GameGlobal<SleepImport> g_importSleep{0x6550dc};
 inline constexpr GameGlobal<CloseHandleImport> g_importCloseHandle{0x655180};
 inline constexpr GameGlobal<TimeGetTimeImport> g_importTimeGetTime{0x655358};  // from _INMM.dll
 inline constexpr GameGlobal<OutputDebugStringAImport> g_importOutputDebugStringA{0x6550b0};
+inline constexpr GameGlobal<GetDriveTypeAImport> g_importGetDriveTypeA{0x6550a4};
 
 }  // namespace s3re::game

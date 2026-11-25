@@ -808,3 +808,37 @@ for _kind, _address, _extra in (("Sprite", 0x005fadb0, {}),
     _generators, _presets = draw_case(_kind)
     SPECS.append(Spec(f"GfxDword_Draw{_kind}", _address, "thiscall", _generators, eax_mask=0, presets=_presets,
                       globals=shadow_globals, max_cases=1000, **_extra))
+
+# -- session 55 (gfx): Close and IsPathOnRemovableDrive (gfx_files.cpp) ------
+#
+# Close: the gfx object at world 0 with views mapped or not (group 0
+# mostly) and fake mapping objects (vtable emu.FAKE_VTABLE, slot 1 = +4
+# probed). UnmapView 0x61aa40 is probed: it calls UnmapViewOfFile, which
+# the emulator doesn't run. IsPathOnRemovableDrive: a std::string at
+# scratch 0 with no buffer (the empty-string buffer 0x6553a0 is read) or a
+# lazily random one; GetDriveTypeA is an API probe.
+
+GFX_MAPPINGS = SCRATCH + 30 * SCRATCH_SLOT_BYTES
+
+
+def close_world(rng, pool, args):
+    fields = []
+    for g in range(70):
+        mapped = rng.random() < (0.8 if g == 0 else 0.5)
+        fields.append((0x264 + 4 * g, rng.getrandbits(32) | 1 if mapped else 0, 4))
+        fields.append((0x14c + 4 * g, WORLD_BASE + GFX_MAPPINGS + 0x40 * g, 4))
+        fields.append((GFX_MAPPINGS + 0x40 * g, FAKE_VTABLE, 4))
+    return fields
+
+
+def removable_path(rng, pool, args):
+    buffer = 0 if rng.random() < 0.25 else WORLD_BASE + SCRATCH + 0x100
+    return [(SCRATCH + 4, buffer, 4)]
+
+
+SPECS += [
+    Spec("CGraphicsData_Close", 0x005fa690, "thiscall", [], eax_mask=0, presets=close_world,
+         callees={0x0061aa40: (1, "thiscall", "probe")}, virtuals={0x04: 0}),
+    Spec("IsPathOnRemovableDrive", 0x005fa750, "thiscall", [one_of(WORLD_BASE + SCRATCH), anything],
+         presets=removable_path),
+]
