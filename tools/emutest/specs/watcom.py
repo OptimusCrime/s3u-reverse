@@ -338,3 +338,71 @@ SPECS += [Spec(f"SkipListDestructor_{a:x}", a, "thiscall", [], presets=skip_dict
 # follows it (0x5ffc90).
 SPECS += [Spec("SoundEffectDictIter_KeyValue", 0x005ffc80, "thiscall", [], presets=skip_iter_node,
                cover_until=0x005ffc8e)]
+
+
+# -- the intrusive singly linked list (isv_slist.cpp, wip/ddraw-render) ------
+# The list at world 0 (+8 the last link, +0xc the count, +0x10 the
+# allocator), a circle of up to 12 links at ISV_LINKS in random order; an
+# iterator at ISV_ITER (+8 the list, +0xc the current link, +0x10 state).
+# The list's vtable is FAKE_VTABLE (slot 1: destroy a link); the allocator
+# is a probe (fastcall size in ECX: recorded with ECX) that hands out
+# ISV_BLOCK or null.
+ISV_LINKS = 0x100
+ISV_ITER = 0x80
+ISV_VALUE = 0x60
+ISV_BLOCK = SCRATCH + 70 * SCRATCH_SLOT_BYTES
+ISV_ALLOC_SLOT = 0x3B0
+ISV_VIRTUAL_CODE = FAKE_VTABLE + 0x1000   # emu.VIRTUAL_CODE
+
+
+def isv_link(k):
+    return WORLD_BASE + ISV_LINKS + 8 * k
+
+
+def isv_world(rng, pool, args):
+    links = 0 if rng.random() < 0.15 else rng.randint(1, 12)
+    order = list(range(links))
+    rng.shuffle(order)
+    fields = [(0, FAKE_VTABLE, 4)]
+    for i, k in enumerate(order):
+        fields.append((ISV_LINKS + 8 * k, isv_link(order[(i + 1) % links]), 4))
+    count = links if links == 0 or rng.random() < 0.75 else rng.choice([0, 1, 5, 20])
+    fields += [(8, isv_link(order[-1]) if links else 0, 4), (0xC, count, 4),
+               (0x10, rng.choice([0, ISV_VIRTUAL_CODE + ISV_ALLOC_SLOT]), 4),
+               (ISV_ITER + 8, rng.choice([0, WORLD_BASE, WORLD_BASE, WORLD_BASE]), 4),
+               (ISV_ITER + 0xC, rng.choice([0, isv_link(rng.choice(order))]) if links else 0, 4),
+               (ISV_ITER + 0x10, rng.choice([0, 0, 2, rng.getrandbits(32)]), 4)]
+    return fields
+
+
+def isv_link_arg(rng, pool):
+    return isv_link(rng.randrange(12)) if rng.random() < 0.9 else 0
+
+
+def isv_index(rng, pool):
+    return rng.choice([rng.randrange(14), -rng.randrange(3) & 0xFFFFFFFF, rng.randrange(40), rng.getrandbits(32)])
+
+
+def isv_allocate(h):
+    return 0 if h % 4 == 0 else WORLD_BASE + ISV_BLOCK
+
+
+ISV_VIRTUALS = {0x04: 1, ISV_ALLOC_SLOT: (0, {}, {"returns": isv_allocate})}
+
+
+def isv_spec(name, address, args, **kwargs):
+    return Spec(name, address, "thiscall", args, presets=isv_world, virtuals=ISV_VIRTUALS, **kwargs)
+
+
+SPECS += [
+    # base_next(link, reset): the link is one of the list's when it is not reset.
+    isv_spec("WCIsvSListBase_Next", 0x0060b400, [isv_link_arg, one_of(0, 0, 1, 0x100)]),
+    isv_spec("WCIsvSListBase_IndexCheck", 0x0060b460, [isv_index]),
+    isv_spec("WCIsvSListBase_BeforeFind", 0x0060b4b0, [isv_index]),
+    isv_spec("WCIsvSListBase_Get", 0x0060b500, [isv_index]),
+    isv_spec("WCIsvSListBase_Clear", 0x0060b550, []),
+    isv_spec("WCIsvSListBase_ClearAndDestroy", 0x0060b560, []),
+    Spec("WCIsvSListIter_Advance", 0x0060b5f0, "fastcall",
+         [one_of(WORLD_BASE + ISV_ITER), anything, isv_index], presets=isv_world, virtuals=ISV_VIRTUALS),
+    isv_spec("WCPtrListBase_NewLink", 0x00463b50, [one_of(WORLD_BASE + ISV_VALUE)], new_fails=0.2),
+]

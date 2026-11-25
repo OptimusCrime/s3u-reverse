@@ -446,3 +446,45 @@ same base_destroy_node shape and could get that name too.
   the continuation of 0x5c4520 after its catch block), 0x5c46b0, 0x5c46e0
   (a CLobbyServer-like pair-of-strings constructor), 0x5c4820, 0x5c4830.
 
+
+## Verified wrappers (wip/ddraw-render, 2026-11-26)
+
+All of Ddraw.cpp's CDirectDraw / surface / CPalette members are ours and
+verified (src/s3re/game/framework/directx_draw.cpp; in-process tests
+against a scripted DirectDraw, test/fake_ddraw.cpp; emulator specs
+`DirectX_C*` in specs/framework.py). What reading them settled:
+
+- Error names confirm the methods: RestoreIfLost's IsLost call reports
+  "CSurface::IsLost"; 0x5bf1a0 is DDGetBltStatus (DD_OK,
+  DDERR_WASSTILLDRAWING and DDERR_NOBLTHW pass, others go through
+  CheckResult); the flip surface's Flip error is "CSurface::DDFlip".
+- CDirectDraw: +8 is "owns the IDirectDraw2" (1 when constructed without
+  another CDirectDraw; Disconnect releases only then). Disconnect calls
+  slots 5 and 6 with 0 (release surfaces / palettes) first.
+- DDCreateSurface returns the interface version: 3 when QueryInterface for
+  IDirectDrawSurface3 succeeds, 1 on E_NOINTERFACE (the plain interface is
+  kept with an AddRef); the created interface is always released. Its out
+  locals start as its own stack slots (the `desc` argument slot, the pushed
+  ECX), which only matters for a DirectDraw that returns success without
+  writing them.
+- Lock(rect, desc, flags): flags 0 become DDLOCK_WAIT, then masked to 0x33
+  (versions 1 and 2) or 0x833 (version 3); other versions keep all bits.
+- DDRestore: DDERR_WRONGMODE / DDERR_NOEXCLUSIVEMODE -> DebugLog "DDRAW:
+  WrongMode oder NoExclusiveMode" and CAppNotActiveException; any other
+  failure -> CDirectDrawException("CSurface::DDRestore").
+- CFlipSurface (+4 back-buffer count, +8 an object the destructor deletes
+  but nothing in Ddraw.cpp sets, +0xc the back-buffer CSimpleSurface);
+  GetBackBuffer builds it once as CSimpleSurface(owner, +8, +8, version)
+  of the CSurface base. CPrimaryFlipSurface::Create asks for the attached
+  surface with DDSCAPS_BACKBUFFER for one back buffer and with no caps for
+  two; more asserts "mehr als Triplebuffering nicht unterstuetzt".
+- The primary surfaces' Creates fill only the DDSURFACEDESC fields they
+  name (the original's stack local is otherwise uninitialized; ours zero:
+  a known difference DirectDraw ignores). COffscreenSurface /
+  COverlaySurface::Create zero the whole description.
+- SetPixelFormat leaves EAX as its caller had it; DDGetSurfaceDesc returns
+  SetRect's result; DDUpdateOverlay with a destination returns the
+  destination interface's Release count.
+- The intrusive list code these classes use (WCIsvSListBase::base_next,
+  get, clearAndDestroy, the iterator's +=, WCPtrListBase::base_new_link
+  0x463b50) is verified too (src/s3re/watcom/isv_slist.cpp).

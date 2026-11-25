@@ -956,3 +956,282 @@ SPECS += [
     cd_spec("Win32_CCDAudio_DoStop", 0x00615f90, [], ()),
     cd_spec("Win32_CCDAudio_GetTrackCount", 0x00615fc0, [], ((8, 4),)),
 ]
+
+
+# -- wip/ddraw-render: the DirectDraw wrappers (directx_draw.cpp) ------------
+# Called "fastcall": args[0] = `this` (ECX), args[1] = EDX (ignored by both),
+# so the virtual-base parts can point into the object. The object sits at
+# DDW_OBJ (room below for a flip surface's parts), a second CDirectDraw or
+# destination surface at DDW_OTHER, the argument buffers after it. COM
+# objects (vtable FAKE_VTABLE): the IDirectDraw2 at DDW_COM, surfaces
+# 0x10 apart after it, a palette at +0x100. The owner (a CDirectDraw: game
+# vtable FAKE_VTABLE + DS_GAME_SLOTS, +4 the IDirectDraw2) at DDW_OWNER.
+# Imports go to probes through their import slots (globals): SetRect,
+# SendMessageA, CoCreateInstance; DirectDrawEnumerateA is GetProcAddress'
+# PROC_SLOT. The surface descriptions the Creates build on the stack are
+# recorded by the fields they set; CreateSurface's effect copies a named
+# pixel format to DDW_PF_SEEN, so it is compared as memory.
+DDW_OBJ = 0x100
+DDW_OTHER = 0x200
+DDW_DESC = 0x280
+DDW_RECT = 0x300
+DDW_CAPS_A = 0x400
+DDW_CAPS_B = 0x580
+DDW_PF = 0x700
+DDW_OUT = 0x740
+DDW_COM = SCRATCH + 60 * SCRATCH_SLOT_BYTES
+DDW_OWNER = SCRATCH + 61 * SCRATCH_SLOT_BYTES
+DDW_GAMEOBJ = SCRATCH + 62 * SCRATCH_SLOT_BYTES
+DDW_PF_SEEN = SCRATCH + 63 * SCRATCH_SLOT_BYTES
+DDW_APP = SCRATCH + 64 * SCRATCH_SLOT_BYTES
+DDW_SETRECT_SLOT = 0x3C0
+DDW_SENDMESSAGE_SLOT = 0x3C4
+DDW_COCREATE_SLOT = 0x3C8
+DDW_VIRTUAL_CODE = FAKE_VTABLE + 0x1000   # emu.VIRTUAL_CODE
+DDW_GAME_VTABLE = FAKE_VTABLE + DS_GAME_SLOTS
+DDW_CODES = (0x887601C2, 0x8876021C, 0x8876023F, 0x8876024B, 0x887600E1, 0x80004002, 0x80004005, 1)
+
+
+def ddw_hresult(h):
+    """DD_OK most often, else one of the codes the wrappers test (lost,
+    still drawing, no blit hardware, wrong mode, no exclusive mode, no
+    interface), E_FAIL or a success code."""
+    choice = h % 16
+    return 0 if choice < 8 else DDW_CODES[choice - 8]
+
+
+def ddw_surface(h):
+    return WORLD_BASE + DDW_COM + 0x10 * (1 + ((h >> 12) & 7))
+
+
+def ddw_write(index, value):
+    """Effect: *args[index] = value(h), when the pointer is given."""
+    def effect(machine, ecx, args, h):
+        if args[index]:
+            machine.guest_write(args[index], struct.pack("<I", value(h) & 0xFFFFFFFF))
+    return effect
+
+
+def ddw_create_surface(machine, ecx, args, h):
+    """CreateSurface(desc, out, outer): *out = a fake surface; a pixel
+    format the flags name is copied to DDW_PF_SEEN."""
+    flags = struct.unpack("<I", machine.guest_read(args[1] + 4, 4))[0]
+    if flags & 0x1000:
+        machine.guest_write(WORLD_BASE + DDW_PF_SEEN, machine.guest_read(args[1] + 0x48, 32))
+    if args[2]:
+        machine.guest_write(args[2], struct.pack("<I", ddw_surface(h)))
+
+
+def ddw_fill_desc(index):
+    """Effect: a surface description with random height, width, pitch,
+    refresh rate and bit count."""
+    def effect(machine, ecx, args, h):
+        desc = args[index]
+        if desc:
+            for offset, value in ((8, (480, 600, 768, h & 0x7FF)[(h >> 2) & 3]),
+                                  (0xC, (640, 800, 1024, (h >> 11) & 0x7FF)[(h >> 22) & 3]),
+                                  (0x10, (h >> 24) & 0xFFF), (0x18, (0, 60, 75, (h >> 36) & 0x7F)[(h >> 34) & 3]),
+                                  (0x54, (16, 16, 8, (h >> 44) & 0x3F)[(h >> 42) & 3])):
+                machine.guest_write(desc + offset, struct.pack("<I", value))
+    return effect
+
+
+def ddw_com(*entries):
+    """COM methods (offset, stack arguments incl. the interface, pointers)
+    returning ddw_hresult, plus AddRef / Release, the owner's and the
+    CDirectDraw's game slots (3 restore, 4 restore all, 5 and 6 release
+    surfaces / palettes (bool), 0 the deleting destructor)."""
+    v = {DS_GAME_SLOTS + 0x00: 1, DS_GAME_SLOTS + 0x0C: 0, DS_GAME_SLOTS + 0x10: 0,
+         DS_GAME_SLOTS + 0x14: 1, DS_GAME_SLOTS + 0x18: 1,
+         0x04: (1, {}, {"com": True}), 0x08: (1, {}, {"com": True})}
+    for offset, count, pointers in entries:
+        v[offset] = (count, pointers, {"com": True, "returns": ddw_hresult})
+    return v
+
+
+DDW_SETRECT = (DDW_SETRECT_SLOT, 5, {})
+DDW_GET_SURFACE_DESC = (0x58, 2, {1: ((0, 4),)})   # its stack local: dwSize
+DDW_QUERY = (0x00, 3, {1: 16, 2: ()})              # the IID, a stack out slot
+DDW_THROWERS = {**EXCEPTION_CTORS,
+                0x00610960: (1, "thiscall", "throw"),   # ThrowOutOfMemory(text, file, line)
+                0x006119b0: (1, "thiscall", "throw")}   # ThrowAssertmentFailed(text, file, line)
+DDW_SURFACE_EFFECTS = {0x58: ddw_fill_desc(1), 0x00: ddw_write(2, ddw_surface), 0x18: ddw_create_surface}
+
+
+def ddw_globals(rng, pool, args):
+    return [(0x00655330, DDW_VIRTUAL_CODE + DDW_SETRECT_SLOT, 4),
+            (0x006552F4, DDW_VIRTUAL_CODE + DDW_SENDMESSAGE_SLOT, 4),
+            (0x00655384, DDW_VIRTUAL_CODE + DDW_COCREATE_SLOT, 4),
+            (0x007E9168, WORLD_BASE + DDW_APP, 4)]
+
+
+def ddw_surface_fields(rng, at, null_interface=False):
+    """A CSurface at world `at`: fake interfaces, the owner, a version, a
+    pixel format or none."""
+    fields = [(at + 4, 0 if null_interface else ddw_surface(rng.getrandbits(32)), 4),
+              (at + 8, ddw_surface(rng.getrandbits(32)), 4), (at + 0xC, WORLD_BASE + DDW_OWNER, 4),
+              (at + 0x10, rng.choice([1, 2, 3, 3, 0, 4, rng.getrandbits(32)]), 4)]
+    if rng.random() < 0.5:
+        fields.append((at + 0x18, 0, 4))
+    return fields
+
+
+def ddw_world(kind, null_interface=0.0):
+    """The object at DDW_OBJ by kind ("draw", "surface", "flip", "primary",
+    "primaryflip", "palette", None), the fake COM objects, the owner, a
+    second object at DDW_OTHER and the argument buffers."""
+    def presets(rng, pool, args):
+        fields = [(DDW_COM + 0x10 * k, FAKE_VTABLE, 4) for k in range(9)]
+        fields += [(DDW_COM + 0x100, FAKE_VTABLE, 4), (DDW_OWNER, DDW_GAME_VTABLE, 4),
+                   (DDW_OWNER + 4, WORLD_BASE + DDW_COM, 4),
+                   (DDW_GAMEOBJ, DDW_GAME_VTABLE, 4), (DDW_GAMEOBJ + 0x40, DDW_GAME_VTABLE, 4),
+                   (DDW_APP + 0x1C, rng.choice([1, 1, 1, 0, rng.getrandbits(8)]), 1),
+                   (DDW_OTHER + 4, ddw_surface(rng.getrandbits(32)), 4),
+                   (DDW_DESC + 4, rng.choice([0x1027, 0x21, 1, rng.getrandbits(32)]), 4)]
+        nulls = rng.random() < null_interface
+        if kind == "draw":
+            fields += [(DDW_OBJ, DDW_GAME_VTABLE, 4), (DDW_OBJ + 4, 0 if nulls else WORLD_BASE + DDW_COM, 4),
+                       (DDW_OBJ + 8, rng.choice([0, 1, 1, rng.getrandbits(8)]), 1)]
+        elif kind == "surface":
+            fields += ddw_surface_fields(rng, DDW_OBJ, nulls)
+        elif kind == "flip":
+            fields += [(DDW_OBJ, 0x0065CDC4, 4),
+                       (DDW_OBJ + 8, rng.choice([0, WORLD_BASE + DDW_GAMEOBJ]), 4),
+                       (DDW_OBJ + 0xC, rng.choice([0, WORLD_BASE + DDW_GAMEOBJ + 0x40]), 4)]
+            fields += ddw_surface_fields(rng, DDW_OBJ + 0x10, nulls)
+        elif kind == "primary":
+            fields += [(DDW_OBJ, 0x0065CDDC, 4)] + ddw_surface_fields(rng, DDW_OBJ + 4, nulls)
+        elif kind == "primaryflip":
+            fields += [(DDW_OBJ, 0x0065CDFC, 4), (DDW_OBJ + 4, 0x0065CDF4, 4),
+                       (DDW_OBJ + 8, rng.choice([1, 1, 2, 2, 0, 3, rng.getrandbits(32)]), 4),
+                       (DDW_OBJ + 0xC, rng.choice([0, WORLD_BASE + DDW_GAMEOBJ]), 4),
+                       (DDW_OBJ + 0x10, rng.choice([0, WORLD_BASE + DDW_GAMEOBJ + 0x40]), 4)]
+            fields += ddw_surface_fields(rng, DDW_OBJ + 0x14, nulls)
+        elif kind == "palette":
+            fields += [(DDW_OBJ + 4, rng.choice([0, WORLD_BASE + DDW_COM + 0x100]), 4)]
+        return fields
+    return presets
+
+
+def ddw_self(offset=0):
+    return lambda rng, pool: WORLD_BASE + DDW_OBJ + offset
+
+
+def ddw_at(offset, null_chance=0.0):
+    return lambda rng, pool: 0 if rng.random() < null_chance else WORLD_BASE + offset
+
+
+def ddw_flags(rng, pool):
+    return rng.choice([0, 0, rng.randrange(0x1000), rng.getrandbits(32)])
+
+
+def ddw_count(rng, pool):
+    return rng.choice([1, 1, 2, 2, 0, 3, rng.getrandbits(32)])
+
+
+def ddw_size(rng, pool):
+    return rng.choice([640, 800, 1024, rng.randrange(5000)])
+
+
+def ddw_spec(name, address, args, kind, virtuals=None, effects=None, null_interface=0.0, self_offset=0,
+             **kwargs):
+    return Spec(name, address, "fastcall", [ddw_self(self_offset), anything] + args,
+                presets=ddw_world(kind, null_interface), globals=ddw_globals, virtuals=virtuals or ddw_com(),
+                virtual_effects=effects, callees=DDW_THROWERS, **kwargs)
+
+
+def ddw_create(fields):
+    """CreateSurface(desc, out, outer); out is the caller's stack local."""
+    return (0x18, 4, {**fields, 2: ()})
+
+
+DDW_SURFACE_DESC_FIELDS = {1: ((0, 16), (0x14, 4), (0x68, 4))}   # offscreen / overlay: size, flags, height, width
+DDW_PRIMARY_DESC_FIELDS = {1: ((0, 8), (0x68, 4))}                # primary: size, flags, caps
+DDW_FLIP_DESC_FIELDS = {1: ((0, 8), (0x14, 4), (0x68, 4))}        # flip chain: + the back buffer count
+
+SPECS += [
+    ddw_spec("DirectX_CDirectDraw_Construct", 0x005bead0, [ddw_at(DDW_OTHER, 0.5)], None),
+    ddw_spec("DirectX_CDirectDraw_DeletingDestroy", 0x005beb10, [anything], "draw", null_interface=0.3),
+    ddw_spec("DirectX_CDirectDraw_Destroy", 0x005beb30, [], "draw", null_interface=0.3, eax_mask=0),
+    ddw_spec("DirectX_CDirectDraw_DDDirectDrawEnumerate", 0x005beb90, [anything, anything], "draw",
+             virtuals=ddw_com((DS_PROC_SLOT, 2, {}))),
+    ddw_spec("DirectX_CDirectDraw_Connect", 0x005bec00, [ddw_at(DDW_RECT, 0.5)], "draw",
+             virtuals=ddw_com((DDW_COCREATE_SLOT, 5, {0: 16, 3: 16}), (0x48, 2, {})),
+             effects={DDW_COCREATE_SLOT: ddw_write(4, lambda h: WORLD_BASE + DDW_COM)}),
+    ddw_spec("DirectX_CDirectDraw_Disconnect", 0x005bec50, [], "draw"),
+    ddw_spec("DirectX_CDirectDraw_DDCreateSurface", 0x005bec80, [ddw_at(DDW_DESC), ddw_at(DDW_OUT)], "draw",
+             virtuals=ddw_com(ddw_create({}), DDW_QUERY), effects=DDW_SURFACE_EFFECTS),
+    ddw_spec("DirectX_CDirectDraw_DDEnumDisplayModes", 0x005bed10,
+             [ddw_flags, ddw_at(DDW_DESC, 0.3), anything, anything], "draw", virtuals=ddw_com((0x20, 5, {}))),
+    ddw_spec("DirectX_CDirectDraw_DDRestoreDisplayMode", 0x005bed50, [], "draw", virtuals=ddw_com((0x4C, 1, {}))),
+    ddw_spec("DirectX_CDirectDraw_DDGetDisplayMode", 0x005bed70, [ddw_at(DDW_DESC)], "draw",
+             virtuals=ddw_com((0x30, 2, {})), effects={0x30: ddw_fill_desc(1)}),
+    ddw_spec("DirectX_CDirectDraw_DDGetCaps", 0x005bedb0, [ddw_at(DDW_CAPS_A), ddw_at(DDW_CAPS_B)], "draw",
+             virtuals=ddw_com((0x2C, 3, {}))),
+    ddw_spec("DirectX_CDirectDraw_DDWaitForVerticalBlank", 0x005bee00, [ddw_flags, anything], "draw",
+             virtuals=ddw_com((0x58, 3, {}))),
+    ddw_spec("DirectX_CDirectDraw_RestoreSurfaces", 0x005bee30, [], "draw", new_fails=0.1, new_fails_size=0x18),
+    ddw_spec("DirectX_CSurface_DDLock", 0x005bf010, [ddw_at(DDW_RECT, 0.3), ddw_at(DDW_DESC), ddw_flags, anything],
+             "surface", virtuals=ddw_com((0x64, 5, {}))),
+    ddw_spec("DirectX_CSurface_Lock", 0x005bf050, [ddw_at(DDW_RECT, 0.3), ddw_at(DDW_DESC), ddw_flags], "surface",
+             virtuals=ddw_com((0x64, 5, {}))),
+    ddw_spec("DirectX_CSimpleSurface_DDGetBltStatus", 0x005bf1a0, [ddw_flags], "surface",
+             virtuals=ddw_com((0x34, 2, {}))),
+    ddw_spec("DirectX_CSimpleSurface_GetInterface", 0x005bf1e0, [], "surface", null_interface=0.3),
+    ddw_spec("DirectX_CSurface_UseOwnInterfaceForDrawing", 0x005bf2a0, [], "surface"),
+    ddw_spec("DirectX_CSimpleSurface_SetDirectDraw", 0x005bf2b0, [anything], "surface"),
+    ddw_spec("DirectX_CSurface_DDGetSurfaceDesc", 0x005bf310, [], "surface",
+             virtuals=ddw_com(DDW_GET_SURFACE_DESC, DDW_SETRECT), effects=DDW_SURFACE_EFFECTS),
+    ddw_spec("DirectX_CSurface_RestoreIfLost", 0x005bf390, [], "surface",
+             virtuals=ddw_com((0x60, 1, {}), (0x6C, 1, {})), new_fails=0.1),
+    ddw_spec("DirectX_CSurface_SetCaps", 0x005bf3d0, [anything], "surface"),
+    # SetPixelFormat leaves EAX as the caller had it (both callers ignore it).
+    ddw_spec("DirectX_CSurface_SetPixelFormat", 0x005bf3e0, [ddw_at(DDW_PF)], "surface", eax_mask=0),
+    ddw_spec("DirectX_CSurface_DDRestore", 0x005bf400, [], "surface", virtuals=ddw_com((0x6C, 1, {})),
+             new_fails=0.1),
+    ddw_spec("DirectX_CFlipSurface_Construct", 0x005bf5c0, [ddw_count, one_of(0, 1, 2, 0x100)], "flip"),
+    ddw_spec("DirectX_CFlipSurface_DeletingDestroy", 0x005bf610, [anything], "flip", null_interface=0.3,
+             self_offset=0x10),
+    # The destructors' EAX is what their last call left; the deleting
+    # destructors (their only callers) overwrite it.
+    ddw_spec("DirectX_CFlipSurface_Destroy", 0x005bf640, [], "flip", self_offset=0x10, eax_mask=0),
+    ddw_spec("DirectX_CFlipSurface_GetBackBuffer", 0x005bf670, [], "flip", new_fails=0.2),
+    ddw_spec("DirectX_CFlipSurface_Flip", 0x005bf710, [one_of(0, WORLD_BASE + DDW_COM + 0x10)], "flip",
+             virtuals=ddw_com((0x2C, 3, {}))),
+    ddw_spec("DirectX_CFlipSurface_DDFlip", 0x005bf740, [one_of(0, WORLD_BASE + DDW_COM + 0x10), ddw_flags], "flip",
+             virtuals=ddw_com((0x2C, 3, {}))),
+    ddw_spec("DirectX_CPrimarySurface_Construct", 0x005bf790, [one_of(0, 1, 2, 0x100)], "primary"),
+    ddw_spec("DirectX_CPrimarySurface_DeletingDestroy", 0x005bf7d0, [anything], "primary", null_interface=0.3,
+             self_offset=4),
+    ddw_spec("DirectX_CPrimarySurface_Create", 0x005bf800, [], "primary",
+             virtuals=ddw_com(ddw_create(DDW_PRIMARY_DESC_FIELDS), DDW_QUERY, DDW_GET_SURFACE_DESC, DDW_SETRECT),
+             effects=DDW_SURFACE_EFFECTS),
+    ddw_spec("DirectX_CPrimaryFlipSurface_Construct", 0x005bf890, [ddw_count, one_of(0, 1, 2, 0x100)],
+             "primaryflip"),
+    ddw_spec("DirectX_CPrimaryFlipSurface_DeletingDestroy", 0x005bf930, [anything], "primaryflip",
+             null_interface=0.3, self_offset=0x14),
+    ddw_spec("DirectX_CPrimaryFlipSurface_Destroy", 0x005bf960, [], "primaryflip", self_offset=0x14, eax_mask=0),
+    ddw_spec("DirectX_CPrimaryFlipSurface_Create", 0x005bf9b0, [], "primaryflip",
+             virtuals=ddw_com(ddw_create(DDW_FLIP_DESC_FIELDS), DDW_QUERY, DDW_GET_SURFACE_DESC, DDW_SETRECT,
+                              (0x30, 3, {1: 4})),   # GetAttachedSurface(&caps, &base->surface)
+             effects={**DDW_SURFACE_EFFECTS, 0x30: ddw_write(2, ddw_surface)}),
+    ddw_spec("DirectX_COffscreenSurface_Construct", 0x005bfab0, [], None),
+    ddw_spec("DirectX_COffscreenSurface_DeletingDestroy", 0x005bfad0, [anything], "surface", null_interface=0.3),
+    ddw_spec("DirectX_COffscreenSurface_Create", 0x005bfaf0, [ddw_size, ddw_size], "surface",
+             virtuals=ddw_com(ddw_create(DDW_SURFACE_DESC_FIELDS), DDW_QUERY, DDW_GET_SURFACE_DESC, DDW_SETRECT),
+             effects=DDW_SURFACE_EFFECTS),
+    ddw_spec("DirectX_COffscreenSurface_RestoreIfLost", 0x005bfb80, [], "surface",
+             virtuals=ddw_com((0x60, 1, {}), (0x6C, 1, {})), new_fails=0.1),
+    ddw_spec("DirectX_COverlaySurface_Construct", 0x005bfba0, [], None),
+    ddw_spec("DirectX_COverlaySurface_Create", 0x005bfbc0, [ddw_size, ddw_size], "surface",
+             virtuals=ddw_com(ddw_create(DDW_SURFACE_DESC_FIELDS), DDW_QUERY, DDW_GET_SURFACE_DESC, DDW_SETRECT),
+             effects=DDW_SURFACE_EFFECTS),
+    ddw_spec("DirectX_COverlaySurface_Hide", 0x005bfc50, [ddw_at(DDW_OTHER, 0.4)], "surface",
+             virtuals=ddw_com((0x84, 6, {}))),
+    ddw_spec("DirectX_COverlaySurface_DDUpdateOverlay", 0x005bfc70,
+             [ddw_at(DDW_RECT, 0.3), ddw_at(DDW_OTHER, 0.4), ddw_at(DDW_RECT, 0.3), ddw_flags, anything], "surface",
+             virtuals=ddw_com((0x84, 6, {}))),
+    # cover_until: Ghidra's function also takes in the padding and the
+    # static initializer that follow it (0x5bfd80).
+    ddw_spec("DirectX_CPalette_Release", 0x005bfd60, [], "palette", cover_until=0x005bfd79),
+]

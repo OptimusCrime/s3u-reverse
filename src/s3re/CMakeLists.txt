@@ -9,6 +9,7 @@ add_library(s3re SHARED
 
     # test/: the differential test harness
     test/difftest.cpp
+    test/fake_ddraw.cpp
     test/fake_dsound.cpp
     test/fake_win32.cpp
     test/harness_selftest.cpp
@@ -23,6 +24,7 @@ add_library(s3re SHARED
 
     # watcom/: Watcom container library code
     watcom/bare_vectors.cpp
+    watcom/isv_slist.cpp
     watcom/list_iterators.cpp
     watcom/skiplist_dicts.cpp
     watcom/ptr_vector.cpp
@@ -260,6 +262,8 @@ add_library(s3re SHARED
     game/sound/sound_effects.cpp
     game/sound/sound_effects_tests.cpp
     # game/framework/: WinMain, Win32/DirectX framework classes, exceptions, strings
+    game/framework/directx_draw.cpp
+    game/framework/directx_draw_tests.cpp
     game/framework/directx_sound.cpp
     game/framework/directx_sound_tests.cpp
     game/framework/directx_sound_effect.cpp

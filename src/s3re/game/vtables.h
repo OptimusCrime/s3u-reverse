@@ -191,6 +191,19 @@ inline constexpr std::uint32_t kWCValOrderedVector_CPlayer = 0x656b6c;        //
 // Standard library
 inline constexpr std::uint32_t kStdLogicError = 0x65a548;  // std::logic_error
 inline constexpr std::uint32_t kStdOutOfRange = 0x65a538;  // std::out_of_range
+// ---- wip/ddraw-render: DirectDraw wrappers (Ddraw.cpp). The classes with
+// a virtual CSurface base have a vbtable per part and their own vtable in
+// the CSurface part.
+inline constexpr std::uint32_t kCDirectDraw = 0x65cd80;             // DirectX::CDirectDraw
+inline constexpr std::uint32_t kCFlipSurface_vbtable = 0x65cdc4;     // DirectX::CFlipSurface
+inline constexpr std::uint32_t kCFlipSurface_base = 0x65cdb8;        // its CSurface part
+inline constexpr std::uint32_t kCPrimarySurface_vbtable = 0x65cddc;  // DirectX::CPrimarySurface
+inline constexpr std::uint32_t kCPrimarySurface_base = 0x65cdd0;     // its CSurface part
+inline constexpr std::uint32_t kCPrimaryFlipSurface_vbtable = 0x65cdfc;       // DirectX::CPrimaryFlipSurface
+inline constexpr std::uint32_t kCPrimaryFlipSurface_flipVbtable = 0x65cdf4;   // its CFlipSurface part
+inline constexpr std::uint32_t kCPrimaryFlipSurface_base = 0x65cde8;          // its CSurface part
+inline constexpr std::uint32_t kCOffscreenSurface = 0x65ce08;       // DirectX::COffscreenSurface
+inline constexpr std::uint32_t kCOverlaySurface = 0x65ce18;         // DirectX::COverlaySurface
 }  // namespace vtables
 
 // Virtual-base tables (vbptr targets) of the exception classes with a

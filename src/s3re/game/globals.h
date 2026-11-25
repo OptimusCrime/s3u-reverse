@@ -511,4 +511,21 @@ inline constexpr GameGlobal<std::uint32_t> g_soundDuplicateCounter{0x7a0c00};
 // GetSystemInfo (dwPageSize) and kept (0 until the first call).
 inline constexpr GameGlobal<std::uint32_t> g_detachPageSize{0x7e9220};
 
+// ---- wip/ddraw-render: the DirectDraw wrappers (game/framework/directx_draw*.cpp)
+using SetRectImport = int(__stdcall*)(void* rect, std::int32_t left, std::int32_t top, std::int32_t right,
+                                      std::int32_t bottom);
+using SendMessageAImport = std::int32_t(__stdcall*)(void* window, std::uint32_t message, std::uint32_t wParam,
+                                                    std::uint32_t lParam);
+using CoCreateInstanceImport = std::int32_t(__stdcall*)(const void* clsid, void* outer, std::uint32_t context,
+                                                        const void* iid, void** out);
+inline constexpr GameGlobal<SetRectImport> g_importSetRect{0x655330};                    // USER32.dll
+inline constexpr GameGlobal<SendMessageAImport> g_importSendMessageA{0x6552f4};          // USER32.dll
+inline constexpr GameGlobal<CoCreateInstanceImport> g_importCoCreateInstance{0x655384};  // ole32.dll
+// The DirectX::CGameDrawer (in the game the CDrawer); set by its
+// constructor 0x5b6c80, cleared by the destructor.
+inline constexpr GameGlobal<void*> g_drawer{0x7e8bf0};
+// The primary surface's RECT (0, 0, width, height), copied by
+// CGameDrawer::SetPrimarySurface 0x5b7040, zeroed when it goes.
+inline constexpr GameGlobal<std::int32_t[4]> g_primarySurfaceRect{0x7e8bf8};
+
 }  // namespace s3re::game

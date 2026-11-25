@@ -490,4 +490,33 @@ inline constexpr GameText kAiDigIn{0x732d40};
 inline constexpr GameText kAiDefendTower{0x732d08};
 // "WRONG EVENT - readID: %d type: %d data1: %d data2: %d" (DebugLog of AI::ProcessWorldEvents 0x590da0 for an unknown event type)
 inline constexpr GameText kAiWrongEvent{0x732cd0};
+// ---- wip/ddraw-render: DirectDraw wrapper names (DirectX\Ddraw.cpp), the
+// `where` of ThrowIfDDFailed / CSurface::CheckResult.
+inline constexpr GameText kDDEnumerate3{0x7a0018};       // "CDirectDraw::DDDirectDrawEnumerate.3"
+inline constexpr GameText kDDEnumerate2{0x7a0040};       // "CDirectDraw::DDDirectDrawEnumerate.2"
+inline constexpr GameText kDirectDrawEnumerateA{0x7a0068};  // "DirectDrawEnumerateA"
+inline constexpr GameText kDDEnumerate1{0x7a0080};       // "CDirectDraw::DDDirectDrawEnumerate.1"
+inline constexpr GameText kDDrawDll{0x7a00a8};           // "ddraw.dll"
+inline constexpr GameText kDDConnect2{0x7a00b4};         // "CDirectDraw::Connect.2"
+inline constexpr GameText kDDConnect1{0x7a00cc};         // "CDirectDraw:Connect.1" (sic)
+inline constexpr GameText kDDCreateSurface3{0x7a00e4};   // "CDirectDraw::DDCreateSurface.3"
+inline constexpr GameText kDDCreateSurface1{0x7a0104};   // "CDirectDraw::DDCreateSurface.1"
+inline constexpr GameText kDDEnumDisplayModes{0x7a0124};     // "CDirectDraw::DDEnumDisplayModes"
+inline constexpr GameText kDDRestoreDisplayMode{0x7a0144};   // "CDirectDraw::DDRestoreDisplayMode"
+inline constexpr GameText kDDGetDisplayMode{0x7a0168};       // "CDirectDraw::DDGetDisplayMode"
+inline constexpr GameText kDDGetCaps{0x7a0188};              // "DirectX::CDirectDraw::DDGetCaps"
+inline constexpr GameText kDDWaitForVerticalBlank{0x7a01a8};  // "CDirectDraw::DDWaitForVerticalBlank"
+inline constexpr GameText kDDLock{0x7a01cc};             // "CSurface::DDLock"
+inline constexpr GameText kDDGetBltStatus{0x7a0204};     // "CSimpleSurface::DDGetBltStatus"
+inline constexpr GameText kDDIsLost{0x7a0224};           // "CSurface::IsLost"
+inline constexpr GameText kDDWrongMode{0x7a0238};        // "DDRAW: WrongMode oder NoExclusiveMode" (DebugLog)
+inline constexpr GameText kDDRestore{0x7a0260};          // "CSurface::DDRestore"
+inline constexpr GameText kDdrawCppFile{0x7a029c};       // "E:\Siedler3\DirectX\Ddraw.cpp" (__FILE__)
+inline constexpr GameText kLpBackBuffer{0x7a02bc};       // "lpBackBuffer" (ThrowOutOfMemory)
+inline constexpr GameText kDDFlip{0x7a02cc};             // "CSurface::DDFlip"
+// "mehr als Triplebuffering nicht unterstuetzt" (more than triple buffering is not supported; an assert)
+inline constexpr GameText kNoMoreThanTripleBuffering{0x7a0334};
+inline constexpr GameText kDDGetAttachedSurface{0x7a0360};  // "CSurface::DDGetAttachedSurface"
+inline constexpr GameText kDDUpdateOverlay{0x7a0380};       // "DirectX::COverlaySurface::DDUpdateOverlay"
+inline constexpr GameText kDDGetSurfaceDesc{0x697790};      // "CSurface::DDGetSurfaceDesc"
 }  // namespace s3re::game::texts

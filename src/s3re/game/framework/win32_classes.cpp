@@ -193,14 +193,14 @@ S3RE_HOOK(0x005befe0, DirectX_CSimpleSurface_Construct4, Ctor4Fn, Original_Direc
           DirectX_CSimpleSurface_Construct4);
 
 // Purpose: Constructor of a DirectDraw surface wrapper from its four fields
-// (probably the surface interface and its size).
+// (owner, created interface, drawing interface, interface version).
 void* __fastcall DirectX_CSimpleSurface_Construct4(void* self, void* /*edx*/, std::uint32_t a, std::uint32_t b,
                                                    std::uint32_t c, std::uint32_t d) {
     Win32_CObject_Construct(self, nullptr);
     CSimpleSurface* const object = As<CSimpleSurface>(self);
     object->createdInterface = AsPointer(b);
     object->surface = AsPointer(c);
-    object->unk10 = d;
+    object->version = d;
     object->owner = AsPointer(a);
     object->vtable = vtables::kCSimpleSurface;
     return self;
@@ -227,9 +227,9 @@ void* __fastcall DirectX_CSurface_Construct(void* self, void* /*edx*/) {
     DirectX_CSimpleSurface_Construct(self, nullptr);
     CSurface* const object = As<CSurface>(self);
     object->simple.vtable = vtables::kCSurface;
-    object->unk14 = 0;
+    object->caps = 0;
     object->unk48 = 0;
-    object->unk18 = 0;
+    object->pixelFormat[0] = 0;
     return self;
 }
 
