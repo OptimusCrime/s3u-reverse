@@ -150,6 +150,20 @@ inline constexpr GameText kInvalidShadowMethod{0x7a2f10};  // "GFX: Invalid shad
 inline constexpr GameText kDDBltName{0x7a01e0};         // "CSurface::DDBlt"
 inline constexpr GameText kDDBltFastName{0x7a01f0};     // "CSurface::DDBltFast"
 
+// DirectX::CDirectSound and its buffers (directx_sound.cpp): DLL names and
+// the "where" names CheckDSResult puts into the exceptions.
+inline constexpr GameText kDsoundDll{0x7a0e58};             // "dsound.dll"
+inline constexpr GameText kDirectSoundCreate{0x7a0e2c};     // "DirectSoundCreate"
+inline constexpr GameText kDSConnect1{0x7a0e40};            // "CDirectSound::Connect.1"
+inline constexpr GameText kDSConnect2{0x7a0e14};            // "CDirectSound::Connect.2"
+inline constexpr GameText kDSConnect3{0x7a0dfc};            // "CDirectSound::Connect.3"
+inline constexpr GameText kDSCreateSoundBuffer{0x7a0ebc};   // "CDirectSound::DSCreateSoundBuffer"
+inline constexpr GameText kDSDuplicateSoundBuffer{0x7a0e64};  // "CDirectSound::DSDuplicateSoundBuffer"
+inline constexpr GameText kDSGetStatus{0x7a0ee0};           // "CDirectSoundBuffer::DSGetStatus"
+inline constexpr GameText kDSRestore{0x7a0f00};             // "CDirectSoundBuffer::DSRestore"
+inline constexpr GameText kDSGetVolume{0x7a0f20};           // "CDirectSoundBuffer::DSGetVolume"
+inline constexpr GameText kDSUnknownError{0x7a0d90};        // "Unknown Error Code"
+
 // ------------------------------------------------------------ simulation (DebugLog formats)
 inline constexpr GameText kGameDataInitialisingDone{0x6a5c38};  // "*** GAMEDATA Initialising done" (CGameData::FinishInitialising)
 inline constexpr GameText kSectorsDone{0x72ff08};               // "sectors done" (CGameData::InitTileShadesAndMapEdge)

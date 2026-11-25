@@ -50,6 +50,10 @@ inline constexpr std::uint32_t kChunkSkipListBase = 0x6587b0;      // WCSkipList
 inline constexpr std::uint32_t kCSimpleSurface = 0x65cda0;      // DirectX::CSimpleSurface
 inline constexpr std::uint32_t kCSurface = 0x65cda8;            // DirectX::CSurface
 inline constexpr std::uint32_t kCDirectSoundBuffer = 0x65cecc;  // DirectX::CDirectSoundBuffer
+inline constexpr std::uint32_t kCDirectSound = 0x65ceb8;        // DirectX::CDirectSound
+inline constexpr std::uint32_t kCPrimaryBuffer = 0x65cee0;      // DirectX::CPrimaryBuffer
+inline constexpr std::uint32_t kCSecondaryBuffer = 0x65cef4;    // DirectX::CSecondaryBuffer
+inline constexpr std::uint32_t kCSoundEffectBuffer = 0x65cf38;  // DirectX::CSoundEffectBuffer
 inline constexpr std::uint32_t kCLandscapeSurface = 0x65a520;   // CLandscapeSurface
 // UI
 inline constexpr std::uint32_t kCScreenElement = 0x655a68;  // CScreenElement
@@ -112,6 +116,7 @@ inline constexpr std::uintptr_t kCOutOfMemory = 0x682f58;
 inline constexpr std::uintptr_t kCDataError = 0x68bfd0;
 inline constexpr std::uintptr_t kDirectDrawException = 0x66a698;
 inline constexpr std::uintptr_t kDirectPlayException = 0x681e60;
+inline constexpr std::uintptr_t kDirectSoundException = 0x682dc8;  // DirectX::CDirectSoundException*
 inline constexpr std::uintptr_t kCTimeoutPointer = 0x674f38;  // Win32::CTimeout* (thrown by the queue waits)
 inline constexpr std::uintptr_t kCFileNotFoundPointer = 0x67b828;  // Win32::CFileNotFound* (CFile::Open)
 }  // namespace throw_info

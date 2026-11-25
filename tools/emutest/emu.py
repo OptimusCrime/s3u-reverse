@@ -340,6 +340,27 @@ def _api_find_close(machine, uc, args):
     return (0 if _api_fails(h) else 1), ("FindClose", *args)
 
 
+FAKE_MODULE = 0x7FFE0000
+# GetProcAddress hands out this probe (a slot of the fake vtable's code):
+# calling the returned function is recorded as a virtual call of slot
+# PROC_SLOT, which the spec declares (session 56: DirectSoundCreate in
+# CDirectSound::Connect).
+PROC_SLOT = 0x3F0
+
+
+def _api_load_library(machine, uc, args):
+    """LoadLibraryA(name): null or a fake module handle."""
+    h = _api_hash(machine, 0x11000000)
+    return (0 if _api_fails(h) else FAKE_MODULE), ("LoadLibraryA", _api_text(machine, args[0]))
+
+
+def _api_get_proc_address(machine, uc, args):
+    """GetProcAddress(module, name): null or the PROC_SLOT probe."""
+    h = _api_hash(machine, 0x9A000000)
+    return (0 if _api_fails(h) else VIRTUAL_CODE + PROC_SLOT), ("GetProcAddress", args[0],
+                                                                 _api_text(machine, args[1]))
+
+
 # name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
 # record holds what the call saw (rectangle contents, not pointers, which
 # differ between the original's and our stack frames).
@@ -370,6 +391,8 @@ API_HANDLERS = {
     "SetCurrentDirectoryA": (1, _api_set_current_directory),
     "FindFirstFileA": (2, _api_find_first_file),
     "FindClose": (1, _api_find_close),
+    "LoadLibraryA": (1, _api_load_library),
+    "GetProcAddress": (2, _api_get_proc_address),
 }
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,

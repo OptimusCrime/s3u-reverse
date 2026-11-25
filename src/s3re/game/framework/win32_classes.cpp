@@ -212,8 +212,8 @@ S3RE_HOOK(0x005c1f70, DirectX_CDirectSoundBuffer_Construct, CtorFn,
 // Purpose: Constructor of a DirectSound buffer wrapper (no buffer yet).
 void* __fastcall DirectX_CDirectSoundBuffer_Construct(void* self, void* /*edx*/) {
     CDirectSoundBuffer* const object = As<CDirectSoundBuffer>(self);
-    object->unk04 = 0;
-    object->unk08 = 0;
+    object->buffer = nullptr;
+    object->createFlags = 0;
     object->vtable = vtables::kCDirectSoundBuffer;
     return self;
 }

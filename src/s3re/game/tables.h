@@ -47,6 +47,15 @@ struct TowerSlotOffset {
 };
 static_assert(sizeof(TowerSlotOffset) == 12);
 
+// DirectX::DSErrorText (0x5c1c10): the DirectSound result codes and their
+// names ("DS_OK", "DSERR_ALLOCATED", ...), 16 pairs.
+struct DSErrorName {
+    std::uint32_t code;  // 0x00 HRESULT
+    const char* text;    // 0x04
+};
+static_assert(sizeof(DSErrorName) == 8);
+inline constexpr GameGlobal<const DSErrorName[16]> g_dsErrorNames{0x7a0b80};
+
 #pragma pack(pop)
 
 // ------------------------------------------------------------ map and movement

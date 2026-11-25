@@ -397,3 +397,18 @@ address,name,type,status,notes
 0x007a2dbc,g_gfxGroupNames,const char[45][4],classified,"The GFX group names (""61"", ""60"", ""48"" ... ""00"", 4 bytes apart) CGraphicsData::Open 0x5f6fd0 builds its file names from. Declared in src/s3re/game/tables.h; used by gfx_loader.cpp."
 0x007e80a8,g_aiFieldMapNil,ai::SiteTreeNode*,classified,"MSVC6 _Tree::_Nil of the farm / rice farm / vineyard finders' std::map<u8, position, greater<u8>> (library code 0x59cb70.., the same node layout as AI::SiteTree). Declared in src/s3re/game/globals.h; used by ai_work_area_finders.cpp."
 0x007e80ac,g_aiFieldMapNilRefs,uint32_t,classified,"MSVC6 _Tree::_Nilrefs of that map instance. Declared in src/s3re/game/globals.h; used by ai_work_area_finders.cpp."
+0x0065519c,g_importLoadLibraryA,LoadLibraryAImport,classified,S3.EXE's import address table slot of LoadLibraryA (DirectX::CDirectSound::Connect loads dsound.dll). Declared in src/s3re/game/globals.h; used by directx_sound.cpp.
+0x006551b4,g_importGetProcAddress,GetProcAddressImport,classified,S3.EXE's import address table slot of GetProcAddress (DirectX::CDirectSound::Connect: DirectSoundCreate). Declared in src/s3re/game/globals.h; used by directx_sound.cpp.
+0x007e8c0c,g_directSound,void*,identified,"The DirectX::CDirectSound object (in the game: the CSoundData); set by its constructor 0x5c1cc0, cleared by its destructor; the buffers create themselves through its interface. Declared in src/s3re/game/globals.h; used by directx_sound.cpp."
+0x007a0b80,g_dsErrorNames,const DSErrorName[16],identified,"DirectSound result codes and their names (DS_OK, DSERR_*), read by DirectX::DSErrorText 0x5c1c10. Declared in src/s3re/game/tables.h; used by directx_sound.cpp."
+0x007a0e58,texts::kDsoundDll,char[],identified,"String ""dsound.dll"" Declared in src/s3re/game/texts.h; used by directx_sound.cpp."
+0x007a0e2c,texts::kDirectSoundCreate,char[],identified,"String ""DirectSoundCreate"" Declared in src/s3re/game/texts.h; used by directx_sound.cpp."
+0x007a0e40,texts::kDSConnect1,char[],identified,"String ""CDirectSound::Connect.1"" Declared in src/s3re/game/texts.h; used by directx_sound.cpp."
+0x007a0e14,texts::kDSConnect2,char[],identified,"String ""CDirectSound::Connect.2"" Declared in src/s3re/game/texts.h; used by directx_sound.cpp."
+0x007a0dfc,texts::kDSConnect3,char[],identified,"String ""CDirectSound::Connect.3"" Declared in src/s3re/game/texts.h; used by directx_sound.cpp."
+0x007a0ebc,texts::kDSCreateSoundBuffer,char[],identified,"String ""CDirectSound::DSCreateSoundBuffer"" Declared in src/s3re/game/texts.h; used by directx_sound.cpp."
+0x007a0e64,texts::kDSDuplicateSoundBuffer,char[],identified,"String ""CDirectSound::DSDuplicateSoundBuffer"" Declared in src/s3re/game/texts.h; used by directx_sound.cpp."
+0x007a0ee0,texts::kDSGetStatus,char[],identified,"String ""CDirectSoundBuffer::DSGetStatus"" Declared in src/s3re/game/texts.h; used by directx_sound.cpp."
+0x007a0f00,texts::kDSRestore,char[],identified,"String ""CDirectSoundBuffer::DSRestore"" Declared in src/s3re/game/texts.h; used by directx_sound.cpp."
+0x007a0f20,texts::kDSGetVolume,char[],identified,"String ""CDirectSoundBuffer::DSGetVolume"" Declared in src/s3re/game/texts.h; used by directx_sound.cpp."
+0x007a0d90,texts::kDSUnknownError,char[],identified,"String ""Unknown Error Code"" Declared in src/s3re/game/texts.h; used by directx_sound.cpp."

@@ -430,3 +430,152 @@ SPECS += [
     Spec("Win32_DetachMemory", 0x0061ab60, "fastcall", [detach_start, detach_size], globals=detach_globals,
          callees=WIN32_THROWERS, exempt_blocks=(0x0061b111,)),  # the message's _Tidy after a thrower
 ]
+
+
+# -- session 56 (wip/sound): the DirectSound wrappers (directx_sound.cpp) ---
+#
+# The object under test sits at world 0. COM interfaces point at
+# FAKE_VTABLE (COM slots at their byte offsets, "com" virtuals); the game
+# objects' own vtables point at FAKE_VTABLE + DS_GAME_SLOTS, so their
+# thiscall slots (0x200 + 4 * slot) don't collide with the COM ones.
+# g_directSound (0x7e8c0c) points at a fake game object whose +4 is the
+# fake IDirectSound. CheckDSResult's exception constructor 0x5c15d0 is
+# probed (it builds the message strings; the thrown object is compared as
+# the constructor's `this`). GetProcAddress (emu.py) returns the probe of
+# slot DS_PROC_SLOT, so Connect's call of DirectSoundCreate is a virtual.
+
+DS_GAME_SLOTS = 0x200
+DS_PROC_SLOT = 0x3F0                            # emu.PROC_SLOT
+DS_IFACE = SCRATCH + 40 * SCRATCH_SLOT_BYTES   # fake COM interfaces (vtable FAKE_VTABLE), 0x10 apart
+DS_GAME = SCRATCH + 41 * SCRATCH_SLOT_BYTES    # the fake g_directSound object
+DS_OTHER = SCRATCH + 42 * SCRATCH_SLOT_BYTES   # a second buffer object (copy, assign)
+DS_DESC = SCRATCH + 43 * SCRATCH_SLOT_BYTES    # a DSBUFFERDESC
+DS_FORMAT = SCRATCH + 44 * SCRATCH_SLOT_BYTES  # a WAVEFORMATEX
+DS_GLOBAL = 0x007E8C0C                         # g_directSound
+
+DS_CODES = (0x88780096, 0x88780078, 0x8878000A, 0x80004005, 0x88780064, 0x80070057, 0x8007000E, 1)
+
+
+def ds_hresult(h):
+    """DS_OK half the time, else a DirectSound error (DSERR_BUFFERLOST
+    first), a success code or a random value."""
+    if h & 1:
+        return 0
+    choice = (h >> 1) % 10
+    if choice < len(DS_CODES):
+        return DS_CODES[choice]
+    return (h >> 8) & 0xFFFFFFFF
+
+
+def ds_hr_arg(rng, pool):
+    return rng.choice((0, 0, 0) + DS_CODES) if rng.random() < 0.85 else rng.getrandbits(32)
+
+
+def ds_write_out(index, value, always=False):
+    """Virtual effect: writes value(h) to the pointer argument `index`
+    (when given), but not always (the callers' uninitialized locals)."""
+    def effect(machine, ecx, args, h):
+        if args[index] != 0 and (always or h & 3):
+            machine.guest_write(args[index], struct.pack("<I", value(h)))
+    return effect
+
+
+def ds_new_buffer(h):
+    return WORLD_BASE + DS_IFACE + 0x10 * ((h >> 8) & 3)
+
+
+def ds_world(null_iface=0.2):
+    """The object at world 0: game vtable, interface (or null), flags; the
+    other buffer object, g_directSound's object, the fake interfaces and a
+    buffer description."""
+    def presets(rng, pool, args):
+        iface = 0 if rng.random() < null_iface else WORLD_BASE + DS_IFACE
+        other = 0 if rng.random() < 0.3 else WORLD_BASE + DS_IFACE
+        fields = [(0, FAKE_VTABLE + DS_GAME_SLOTS, 4), (4, iface, 4),
+                  (DS_OTHER, rng.getrandbits(32), 4), (DS_OTHER + 4, other, 4),
+                  (DS_GAME, FAKE_VTABLE + DS_GAME_SLOTS, 4), (DS_GAME + 4, WORLD_BASE + DS_IFACE, 4),
+                  (DS_DESC, 0x14, 4), (DS_DESC + 4, rng.choice([0, rng.getrandbits(32)]), 4),
+                  (DS_DESC + 16, rng.choice([0, WORLD_BASE + DS_FORMAT]), 4)]
+        fields += [(DS_IFACE + 0x10 * k, FAKE_VTABLE, 4) for k in range(4)]
+        return fields
+    return presets
+
+
+def ds_globals(rng, pool, args):
+    return [(DS_GLOBAL, WORLD_BASE + DS_GAME, 4)]
+
+
+DS_THROWERS = {0x005c15d0: (3, "thiscall", "this")}  # CDirectSoundException(hr, where, 1)
+DS_RELEASE = {0x08: (1, {}, {"com": True})}
+DS_ADDREF = {0x04: (1, {}, {"com": True})}
+DS_GAME_VIRTUALS = {DS_GAME_SLOTS + 0x04: 0, DS_GAME_SLOTS + 0x08: 0, DS_GAME_SLOTS + 0x0c: 0}
+
+
+def ds_com(offset, count, pointers=None):
+    """A COM method returning an HRESULT, plus the game objects' slots."""
+    v = dict(DS_GAME_VIRTUALS)
+    v[offset] = (count, pointers or {}, {"com": True, "returns": ds_hresult})
+    return v
+
+
+SPECS += [
+    Spec("DirectX_DSErrorText", 0x005c1c10, "fastcall", [ds_hr_arg]),
+    Spec("DirectX_CheckDSResult", 0x005c1c40, "thiscall", [ds_hr_arg, anything], callees=DS_THROWERS,
+         new_fails=0.1, new_fails_size=0x20),
+    Spec("DirectX_CDirectSound_Construct", 0x005c1cc0, "thiscall", []),
+    Spec("DirectX_CDirectSound_Destroy", 0x005c1d00, "thiscall", [], presets=ds_world(0.3),
+         virtuals=DS_RELEASE),
+    Spec("DirectX_CDirectSound_DeletingDestroy", 0x005c1ce0, "thiscall", [anything], presets=ds_world(0.3),
+         virtuals=DS_RELEASE),
+    Spec("DirectX_CDirectSound_Connect", 0x005c1d20, "thiscall", [one_of(0, WORLD_BASE + DS_FORMAT)],
+         presets=ds_world(), callees=DS_THROWERS, new_fails=0.05, new_fails_size=0x20,
+         virtuals={DS_PROC_SLOT: (3, {1: 4}, {"com": True, "returns": ds_hresult})},
+         virtual_effects={DS_PROC_SLOT: ds_write_out(1, lambda h: WORLD_BASE + DS_IFACE)}),
+    Spec("DirectX_CDirectSound_Disconnect", 0x005c1da0, "thiscall", [], presets=ds_world(0),
+         virtuals={**DS_GAME_VIRTUALS, **DS_RELEASE}),
+    Spec("DirectX_CDirectSound_DSDuplicateSoundBuffer", 0x005c1f40, "thiscall", [anything, anything],
+         presets=ds_world(0), callees=DS_THROWERS, virtuals=ds_com(0x14, 3)),
+    Spec("DirectX_CDirectSoundBuffer_Release", 0x005c2030, "thiscall", [], presets=ds_world(0),
+         virtuals=DS_RELEASE),
+    Spec("DirectX_CDirectSoundBuffer_Destroy", 0x005c1fe0, "thiscall", [], presets=ds_world(0.3),
+         virtuals=DS_RELEASE),
+    Spec("DirectX_CDirectSoundBuffer_DeletingDestroy", 0x005c1f90, "thiscall", [anything], presets=ds_world(0.3),
+         virtuals=DS_RELEASE),
+    Spec("DirectX_CPrimaryBuffer_DeletingDestroy", 0x005c21a0, "thiscall", [anything], presets=ds_world(0.3),
+         virtuals=DS_RELEASE),
+    Spec("DirectX_CDirectSoundBuffer_CopyConstruct", 0x005c1fb0, "thiscall", [one_of(WORLD_BASE + DS_OTHER)],
+         presets=ds_world(), virtuals=DS_ADDREF),
+    Spec("DirectX_CDirectSoundBuffer_Assign", 0x005c2120, "thiscall",
+         [one_of(WORLD_BASE + DS_OTHER, WORLD_BASE + DS_OTHER, WORLD_BASE)], presets=ds_world(), virtuals=DS_ADDREF),
+    Spec("DirectX_CDirectSoundBuffer_CheckResult", 0x005c2000, "thiscall", [ds_hr_arg, anything],
+         presets=ds_world(), callees=DS_THROWERS, virtuals=DS_GAME_VIRTUALS),
+    Spec("DirectX_CDirectSoundBuffer_SetCreateFlags", 0x005c2050, "thiscall", [anything]),
+    Spec("DirectX_CDirectSoundBuffer_DSCreateSoundBuffer", 0x005c2060, "thiscall", [one_of(WORLD_BASE + DS_DESC)],
+         presets=ds_world(), globals=ds_globals, callees=DS_THROWERS, virtuals=ds_com(0x0c, 4, {2: 4}),
+         virtual_effects={0x0c: ds_write_out(2, ds_new_buffer)}),
+    Spec("DirectX_CDirectSoundBuffer_DSGetStatus", 0x005c20b0, "thiscall", [], presets=ds_world(0),
+         callees=DS_THROWERS, virtuals=ds_com(0x24, 2, {1: 4}),
+         virtual_effects={0x24: ds_write_out(1, lambda h: (h >> 8) & 0xF)}),
+    Spec("DirectX_CDirectSoundBuffer_RestoreAll", 0x005c20f0, "thiscall", [], presets=ds_world(),
+         globals=ds_globals, virtuals=DS_GAME_VIRTUALS,
+         exempt_blocks=(0x5c20fb,)),  # the nop padding after its tail jump
+    Spec("DirectX_CDirectSoundBuffer_DSRestore", 0x005c2100, "thiscall", [], presets=ds_world(0),
+         callees=DS_THROWERS, virtuals=ds_com(0x50, 1)),
+    Spec("DirectX_CDirectSoundBuffer_DSGetVolume", 0x005c2150, "thiscall", [anything], presets=ds_world(0),
+         callees=DS_THROWERS, virtuals=ds_com(0x18, 2)),
+    Spec("DirectX_CPrimaryBuffer_Construct", 0x005c2180, "thiscall", []),
+    # Create's out local starts as the address of its own stack temporary
+    # (DSCreateSoundBuffer's argument slot): different in any two
+    # implementations, so it is not recorded and the fake always writes it,
+    # as DirectSound does on success (the standalone DSCreateSoundBuffer
+    # spec covers the not-written case).
+    Spec("DirectX_CPrimaryBuffer_Create", 0x005c21c0, "thiscall", [], presets=ds_world(),
+         globals=ds_globals, callees=DS_THROWERS, virtuals=ds_com(0x0c, 4, {1: 0x14, 2: ()}),
+         virtual_effects={0x0c: ds_write_out(2, ds_new_buffer, always=True)}),
+    Spec("DirectX_CSecondaryBuffer_Construct", 0x005c2200, "thiscall", []),
+    Spec("DirectX_CSecondaryBuffer_Create", 0x005c2220, "thiscall", [one_of(0, WORLD_BASE + DS_FORMAT), anything],
+         presets=ds_world(), globals=ds_globals, callees=DS_THROWERS,
+         virtuals=ds_com(0x0c, 4, {1: 0x14, 2: ()}),
+         virtual_effects={0x0c: ds_write_out(2, ds_new_buffer, always=True)}),
+    Spec("DirectX_CSoundEffectBuffer_Construct", 0x005c28b0, "thiscall", [anything]),
+]
