@@ -578,3 +578,21 @@ SPECS += [
          [lambda rng, pool: WORLD_BASE + MEMBER_A + 2 * rng.randrange(-20, 84), words_move,
           lambda rng, pool: rng.randrange(40)]),
 ]
+
+
+# GamePlayerSetup(id) (session 56): the allocator bytes are the id's low byte.
+SPECS += [
+    Spec("GamePlayerSetup_ConstructId", 0x0049e9f0, "thiscall", [anything], new_fails=0.1),
+]
+
+
+# Dirk::CTeam::PlayerIds (session 56): the team at world offset 0, its int
+# vector's block in scratch slot 0 (capacity 0..8 or not positive, filled
+# -1..capacity), the result in scratch slot 5.
+def team_ids_state(rng, pool, args):
+    capacity = rng.choice([0x80000000, 0xFFFFFFFF] + list(range(9)))
+    filled = rng.randint(-1, capacity if capacity <= 8 else 8)
+    return [(8 + 8, WORLD_BASE + SCRATCH, 4), (8 + 0xc, capacity, 4), (8 + 0x10, filled & 0xFFFFFFFF, 4)]
+
+
+SPECS += [Spec("CTeam_PlayerIds", 0x004a07b0, "thiscall", [scratch(5)], presets=team_ids_state, new_fails=0.1)]

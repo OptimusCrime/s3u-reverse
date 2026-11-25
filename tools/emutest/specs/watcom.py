@@ -309,3 +309,10 @@ SPECS += [
          exempt_blocks=(0x00429793, 0x00429799, 0x004297a2, 0x004297a7, 0x004297b7, 0x004297b9, 0x004297bd,
                         0x004297e5, 0x004297ed)),
 ]
+
+
+# The string-vector copy constructor (session 56): the source is the vector
+# StringVector_Resize gets (world offset 0); the new vector in scratch slot 9.
+SPECS += [Spec("StringVector_CopyConstruct", 0x00409c40, "fastcall",
+               [one_of(WORLD_BASE + SCRATCH + 9 * SCRATCH_SLOT_BYTES), anything, one_of(WORLD_BASE)],
+               presets=string_vector_state, new_fails=0.1)]

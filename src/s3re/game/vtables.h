@@ -108,6 +108,7 @@ inline constexpr std::uint32_t kWCBareVectorBase_ulong = 0x6576a0;            //
 inline constexpr std::uint32_t kWCBareVectorBase_long = 0x65852c;             // WCBareVectorBase<long>
 inline constexpr std::uint32_t kWCBareVectorBase_GameChunkDescription = 0x657e80;
 inline constexpr std::uint32_t kWCBareVectorBase_String = 0x655454;           // WCBareVectorBase<String>
+inline constexpr std::uint32_t kWCValOrderedVector_String = 0x655440;         // WCValOrderedVector<String>
 inline constexpr std::uint32_t kWCBareVectorBase_CPlayer = 0x655a50;          // WCBareVectorBase<Dirk::CPlayer>
 inline constexpr std::uint32_t kWCBareVectorBase_CTeam = 0x6559d8;            // WCBareVectorBase<Dirk::CTeam>
 inline constexpr std::uint32_t kWCBareVectorBase_CChatMessage = 0x657164;     // <LobbyClient::CChatMessage>

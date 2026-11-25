@@ -88,4 +88,39 @@ std::uint32_t DestroyVector(VectorBase* self, std::uint32_t vtable, std::uint32_
     return result;
 }
 
+// The copy constructors (WCValOrderedVector(const&) and the like): every
+// field from `from`, a new block of capacity * elementSize bytes when the
+// capacity is positive (signed; operator new failing: filled = capacity =
+// 0), the `filled` elements copied by copyElement(index, to, from) (filled
+// re-read, each destination null-checked), length = from's when there is
+// a block, else 0. The original first zeroes the fields; all of them are
+// overwritten. EAX = self.
+template <typename CopyElement>
+VectorBase* CopyVector(VectorBase* self, const VectorBase* from, std::uint32_t vtable, std::uint32_t elementSize,
+                       CopyElement copyElement) {
+    self->vtable = vtable;
+    self->unk04 = from->unk04;
+    self->filled = from->filled;
+    self->capacity = from->capacity;
+    if (static_cast<std::int32_t>(from->capacity) > 0) {
+        self->data = reinterpret_cast<std::uintptr_t>(msvc6::GameOperatorNew(from->capacity * elementSize));
+        if (self->data == 0) {
+            self->filled = 0;
+            self->capacity = 0;  // (then the library's empty error hook 0x59f200)
+        } else {
+            for (std::int32_t i = 0; i < self->filled; ++i) {
+                const std::uint32_t to = self->data + static_cast<std::uint32_t>(i) * elementSize;
+                if (to != 0) {
+                    copyElement(i, to, from->data + static_cast<std::uint32_t>(i) * elementSize);
+                }
+            }
+        }
+    } else {
+        self->data = 0;
+    }
+    self->grow = from->grow;
+    self->length = self->data != 0 ? from->length : 0;
+    return self;
+}
+
 }  // namespace s3re::watcom

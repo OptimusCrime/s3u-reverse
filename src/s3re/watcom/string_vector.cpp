@@ -37,6 +37,10 @@
 //   skipped if the address is null), elements length-2..index are assigned
 //   one up (assign 0x401d60), and value is assigned to `index` (inlined
 //   operator=). length and filled grow by one. EAX = 1.
+// WCValOrderedVector<String> copy constructor (0x00409c40): (const& from)
+//   ret 4: CopyVector (vector_base.h) with vtable 0x655440 and each string
+//   copy-constructed: allocator byte = the low byte of its index (the loop
+//   counter's stack slot), cleared, assign(from[i], 0, npos) 0x401d60.
 // WCValOrderedVector<String>::removeAt (0x00429750): (index) ret 4: no
 //   bounds check; elements index+1..length-1 are assigned one down (the
 //   inlined operator=, length re-read each time), the last one destroyed
@@ -216,6 +220,23 @@ std::uint32_t __fastcall StringVector_RemoveAt(PtrVector* self, void* /*edx*/, s
     return static_cast<std::uint32_t>(--self->filled);
 }
 
+using StringVectorCopyFn = VectorBase*(__fastcall*)(VectorBase* self, void* edx, const VectorBase* from);
+
+// Purpose: Copy constructor of a vector of strings (the console's command
+// list, the lobby's chat lines).
+VectorBase* __fastcall StringVector_CopyConstruct(VectorBase* self, void* /*edx*/, const VectorBase* from) {
+    return CopyVector(self, from, game::vtables::kWCValOrderedVector_String, sizeof(String),
+                      [](std::int32_t index, std::uint32_t to, std::uint32_t source) {
+                          auto* string = reinterpret_cast<String*>(to);
+                          string->allocator = static_cast<std::uint8_t>(index);  // (the loop counter's slot)
+                          msvc6::detail::Clear(string);
+                          msvc6::String_AssignSubstr(string, nullptr, reinterpret_cast<const String*>(source), 0,
+                                                     0xFFFFFFFFu);
+                      });
+}
+
+S3RE_HOOK(0x00409c40, StringVector_CopyConstruct, StringVectorCopyFn, Original_StringVector_CopyConstruct,
+          StringVector_CopyConstruct);
 S3RE_HOOK(0x004148a0, StringVector_InsertAt, StringInsertAtFn, Original_StringVector_InsertAt,
           StringVector_InsertAt);
 S3RE_HOOK(0x00429750, StringVector_RemoveAt, StringRemoveAtFn, Original_StringVector_RemoveAt,
@@ -491,6 +512,62 @@ std::uint32_t __fastcall WrongInsertAt(PtrVector* self, void* edx, std::int32_t 
     return StringVector_InsertAt(self, edx, index < 0 ? static_cast<std::int32_t>(self->length) : index, value);
 }
 
+// The copy constructor on Build's vectors (sometimes capacity <= 0 or a
+// failing size); compared: EAX, the new vector's fields (data only as null
+// or not) and strings, and the source (its buffers' counts).
+void CompareCopy(test::Context& ctx, StringVectorCopyFn candidate, int cases) {
+    char text[48];
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t count = ctx.rng().Below(7);
+        std::uint32_t lengths[8];
+        std::uint8_t counts[8];
+        int shareWith[8];
+        static constexpr std::uint8_t kCounts[] = {0, 0, 0, 1, 2, 0xfd, 0xfe, 0xff};
+        for (std::uint32_t k = 0; k < count; ++k) {
+            lengths[k] = ctx.rng().Chance(1, 8) ? 0xFFFFFFFFu : ctx.rng().Below(40);
+            counts[k] = kCounts[ctx.rng().Below(sizeof(kCounts))];
+            shareWith[k] = k > 0 && ctx.rng().Chance(1, 4) ? static_cast<int>(ctx.rng().Below(k)) : -1;
+        }
+        for (char& c : text) {
+            c = static_cast<char>(1 + ctx.rng().Below(255));
+        }
+        const auto filled = static_cast<std::int32_t>(count == 0 ? 0 : ctx.rng().Below(count + 1));
+        StringVectorGrow sa{}, sb{};
+        Build(sa.vector, count, lengths, counts, shareWith, text, filled);
+        Build(sb.vector, count, lengths, counts, shareWith, text, filled);
+        sa.vector.unknown04 = sb.vector.unknown04 = ctx.rng().Next32();
+        sa.grow = sb.grow = ctx.rng().Next32();
+        if (ctx.rng().Chance(1, 8)) {
+            sa.vector.capacity = sb.vector.capacity = 0x80000000u + ctx.rng().Below(4);  // not positive
+        }
+        VectorBase da{}, db{};
+        ctx.rng().Fill(&da, sizeof(da));
+        std::memcpy(&db, &da, sizeof(db));
+        VectorBase* ra = Original_StringVector_CopyConstruct(&da, nullptr, reinterpret_cast<VectorBase*>(&sa));
+        VectorBase* rb = candidate(&db, nullptr, reinterpret_cast<VectorBase*>(&sb));
+        bool same = S3RE_EXPECT(ra == &da && rb == &db) && SameVectors(ctx, sa.vector, sb.vector);
+        if (same && da.data == 0) {  // (no strings to compare)
+            same = S3RE_EXPECT(db.data == 0) && S3RE_EXPECT_MEM_EQ(&da, &db, sizeof(da));
+        } else if (same) {
+            same = SameVectors(ctx, *reinterpret_cast<PtrVector*>(&da), *reinterpret_cast<PtrVector*>(&db)) &&
+                   S3RE_EXPECT_EQ(da.grow, db.grow) && S3RE_EXPECT_EQ(da.unk04, db.unk04);
+        }
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: count %u, filled %d", i, count, filled);
+            return;
+        }
+    }
+}
+
+// Wrong: the copies' allocator bytes 0.
+VectorBase* __fastcall WrongCopy(VectorBase* self, void* edx, const VectorBase* from) {
+    StringVector_CopyConstruct(self, edx, from);
+    for (std::int32_t i = 0; self->data != 0 && i < self->filled; ++i) {
+        Entries(reinterpret_cast<PtrVector*>(self))[i].allocator = 0;
+    }
+    return self;
+}
+
 // Wrong: skips the last element.
 std::uint32_t __fastcall WrongDestructor(VectorBase* self, void* edx) {
     --self->filled;
@@ -508,6 +585,16 @@ S3RE_TEST(StringVector_InsertRemove_MatchOriginal) {
 S3RE_TEST(StringVector_InsertRemove_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareInsertRemove(probe, &WrongInsertAt, &StringVector_RemoveAt, 300);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(StringVector_CopyConstruct_MatchesOriginal) {
+    CompareCopy(ctx, &StringVector_CopyConstruct, 2000);
+}
+
+S3RE_TEST(StringVector_CopyConstruct_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareCopy(probe, &WrongCopy, 200);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

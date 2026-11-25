@@ -22,6 +22,10 @@
 // Dirk::CTeam::operator< (0x004a05a0): (other*) ret 4 -> AL = id < other's
 //   id (signed). The rest of EAX is this team's id (the `mov al, cl` keeps
 //   it); the one caller (0x437559, WCValSortedVector<CTeam>) masks AL.
+// Dirk::CTeam::PlayerIds (0x004a07b0): (result*) ret 4 -> result: a copy of
+//   the int vector at +8 (watcom::CopyVector, vtable WCValSortedVector<int>,
+//   the ints copied); EAX = result. Called by the game settings
+//   (0x4360e0) and the game launch dialog (PlayerIdForRow).
 // GamePlayerSetup::operator== (0x0049f100; Dirk::CPlayer): (other*) ret 4
 //   -> AL = (+0x10 == other's +0x10); the rest of EAX is this +0x10. The
 //   one caller (0x437539) masks AL.
@@ -119,6 +123,18 @@ std::uint32_t __fastcall GamePlayerSetup_Equal(const GamePlayerSetup* self, void
     return WithLowByte(self->value10, self->value10 == other->value10);
 }
 
+using TeamPlayerIdsFn = watcom::VectorBase*(__fastcall*)(const Team* self, void* edx, watcom::VectorBase* result);
+
+// Purpose: Gives a copy of a team's list of player ids (probably; the
+// game launch dialog and the settings read it).
+watcom::VectorBase* __fastcall CTeam_PlayerIds(const Team* self, void*, watcom::VectorBase* result) {
+    return watcom::CopyVector(result, &self->intList, vtables::kWCValSortedVector_int, sizeof(std::int32_t),
+                              [](std::int32_t, std::uint32_t to, std::uint32_t from) {
+                                  *reinterpret_cast<std::uint32_t*>(to) = *reinterpret_cast<const std::uint32_t*>(from);
+                              });
+}
+
+S3RE_HOOK(0x004a07b0, CTeam_PlayerIds, TeamPlayerIdsFn, Original_CTeam_PlayerIds, CTeam_PlayerIds);
 S3RE_HOOK(0x004a0200, CTeam_Construct, TeamFn, Original_CTeam_Construct, CTeam_Construct);
 S3RE_HOOK(0x004a02d0, CTeam_ConstructId, TeamIdFn, Original_CTeam_ConstructId, CTeam_ConstructId);
 S3RE_HOOK(0x004a04d0, CTeam_Destroy, TeamDestructorFn, Original_CTeam_Destroy, CTeam_Destroy);
@@ -225,6 +241,46 @@ void CompareComparisons(test::Context& ctx, TeamLessFn less, PlayerEqualFn equal
     }
 }
 
+// PlayerIds on random teams (8 ints; capacity 0..8 or not positive, filled
+// -1..capacity): EAX (as result) and
+// the copy (data as null or not, then its first `filled` ints).
+void ComparePlayerIds(test::Context& ctx, TeamPlayerIdsFn candidate, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        Team team;
+        ctx.rng().Fill(&team, sizeof(team));
+        std::uint32_t ints[8];
+        ctx.rng().Fill(ints, sizeof(ints));
+        team.intList.data = reinterpret_cast<std::uintptr_t>(ints);
+        team.intList.capacity = ctx.rng().Chance(1, 8) ? 0x80000000u : ctx.rng().Below(9);
+        // (more filled than capacity would overrun the new block in both)
+        team.intList.filled = ctx.rng().Range(-1, team.intList.capacity > 8 ? 8 : static_cast<std::int32_t>(team.intList.capacity));
+        watcom::VectorBase a, b;
+        ctx.rng().Fill(&a, sizeof(a));
+        std::memcpy(&b, &a, sizeof(b));
+        watcom::VectorBase* ra = Original_CTeam_PlayerIds(&team, nullptr, &a);
+        watcom::VectorBase* rb = candidate(&team, nullptr, &b);
+        bool same = S3RE_EXPECT(ra == &a && rb == &b) && S3RE_EXPECT_EQ(a.data == 0, b.data == 0);
+        if (same && a.data != 0 && a.filled > 0) {
+            same = S3RE_EXPECT_MEM_EQ(reinterpret_cast<void*>(a.data), reinterpret_cast<void*>(b.data), a.filled * 4u);
+        }
+        msvc6::GameOperatorDelete(reinterpret_cast<void*>(a.data));
+        msvc6::GameOperatorDelete(reinterpret_cast<void*>(b.data));
+        a.data = b.data = 0;
+        same = same && S3RE_EXPECT_MEM_EQ(&a, &b, sizeof(a));
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return;
+        }
+    }
+}
+
+// Wrong: the length copied even without a block.
+watcom::VectorBase* __fastcall WrongPlayerIds(const Team* self, void* edx, watcom::VectorBase* result) {
+    CTeam_PlayerIds(self, edx, result);
+    result->length = self->intList.length;
+    return result;
+}
+
 // Wrong implementations.
 Team* __fastcall WrongConstruct(Team* self, void* edx) {
     CTeam_Construct(self, edx);
@@ -253,7 +309,15 @@ S3RE_TEST(CTeam_Destroy_MatchesOriginal) {
 S3RE_TEST(TeamComparisons_MatchOriginal) {
     CompareComparisons(ctx, &CTeam_Less, &GamePlayerSetup_Equal, 3000);
 }
+S3RE_TEST(CTeam_PlayerIds_MatchesOriginal) {
+    ComparePlayerIds(ctx, &CTeam_PlayerIds, 2000);
+}
 S3RE_TEST(CTeam_ComparisonDetectsWrongImplementation) {
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        ComparePlayerIds(probe, &WrongPlayerIds, 100);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
     {
         test::Context probe(ctx.name(), 1, /*quiet=*/true);
         CompareConstructors(probe, &WrongConstruct, &CTeam_ConstructId, 50);

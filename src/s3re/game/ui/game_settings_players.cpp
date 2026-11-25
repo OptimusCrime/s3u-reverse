@@ -38,6 +38,11 @@
 //   +0x60, +0x68 = 0; +0x58, +0x5c, +0x74, +0x78, +0xa4, +0xb8 = 0; +0x64 =
 //   0xff (random race); +0x6c, +0x70, +0xa8..+0xb4 = -1. Not written:
 //   +0x0c..+0x0f and +0x7c..+0xa3.
+// GamePlayerSetup::GamePlayerSetup_id (0x0049e9f0; was named as a
+//   WCValOrderedVector<unsigned short> constructor): (id) ret 4, EAX =
+//   this: the same with +0x10 = id, and the three allocator bytes the low
+//   byte of id (the compiler let the empty allocator objects share the
+//   argument's stack slot; docs/reimplementation_notes.md, case a).
 //
 // Known differences:
 //  - The three strings' allocator bytes (+0x18, +0x28, +0xbc) are one
@@ -242,6 +247,23 @@ GamePlayerSetup* __fastcall GamePlayerSetup_Construct(GamePlayerSetup* self, voi
     self->colour = kUnset;
     dword(0xb8, 0);
     EmptyString(&self->textBC);
+    return self;
+}
+
+GamePlayerSetup* __fastcall GamePlayerSetup_ConstructId(GamePlayerSetup* self, void* edx, std::uint32_t id);
+using SetupConstructIdFn = GamePlayerSetup*(__fastcall*)(GamePlayerSetup* self, void* edx, std::uint32_t id);
+S3RE_HOOK(0x0049e9f0, GamePlayerSetup_ConstructId, SetupConstructIdFn, Original_GamePlayerSetup_ConstructId,
+          GamePlayerSetup_ConstructId);
+
+// Purpose: Sets up an empty player setup record for a given player id (the
+// network and game settings code).
+GamePlayerSetup* __fastcall GamePlayerSetup_ConstructId(GamePlayerSetup* self, void* edx, std::uint32_t id) {
+    GamePlayerSetup_Construct(self, edx);
+    self->value10 = id;
+    const auto allocator = static_cast<std::uint8_t>(id);  // (id's stack slot)
+    self->text18.allocator = allocator;
+    reinterpret_cast<msvc6::String*>(reinterpret_cast<std::uint8_t*>(self) + 0x28)->allocator = allocator;
+    self->textBC.allocator = allocator;
     return self;
 }
 
