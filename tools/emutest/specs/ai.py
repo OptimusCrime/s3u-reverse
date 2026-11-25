@@ -5713,6 +5713,106 @@ SPECS += [
          virtuals={0x20: 0}, callees=STEP_PROBES, max_cases=2000),
 ]
 
+
+# -- T_DO_BUILD_HOUSE_AGENT::WorkOnNote (ai_request_agents.cpp) --
+#
+# The agent at world offset 0 (fake vtable: slot 3 takes the note again,
+# slot 10 executes it and answers 0, an upper half only, or random), the
+# note in scratch 1 (state bits 2 / 4, reports around 4, a building type),
+# g_aiLandEvaluation in scratch 60 with the lists of players 0..2 (a head
+# and 0..3 nodes with areas 0..3 each, scratch 61..72). DeactivateNoteOf,
+# DoomNoteOf and ReportToRequester are probed; AreaAlongRow too (recorded
+# by the x / y words it uses, answering an area 0..3 with noise above).
+# A second spec: BLACK_BOARD_AGENT::DeleteThis on a fake object or null
+# (EAX left out: the original's is the caller's for null, and nothing
+# calls the slot).
+
+BUILD_WORK_NOTE = SCRATCH + 1 * SCRATCH_SLOT_BYTES
+BUILD_WORK_LAND = SCRATCH + 60 * SCRATCH_SLOT_BYTES
+BUILD_WORK_NODES = SCRATCH + 61 * SCRATCH_SLOT_BYTES   # per player 0..2: the head, then up to 3 nodes
+
+
+def build_work_area(h):
+    return (h % 4) | (((h >> 8) & 0xFFFF) << 16 if h & 0x80 else 0)
+
+
+def build_work_execute(h):
+    return 0 if h % 3 == 0 else (0x10000 << (h >> 4) % 16) if h % 3 == 1 else h & 0xFFFFFFFF
+
+
+BUILD_WORK_PROBES = {
+    0x00551610: (1, "thiscall", "probe"),   # DeactivateNoteOf(note)
+    0x00551760: (1, "thiscall", "probe"),   # DoomNoteOf(note)
+    0x00582480: (2, "thiscall", "probe"),   # ReportToRequester(result, value)
+    0x005996c0: (0, "cdecl", build_work_area, None,  # AreaAlongRow(x, y): words
+                 lambda m, ecx, args: (probe_reg(m, "ECX") & 0xFFFF, probe_reg(m, "EDX") & 0xFFFF)),
+}
+
+
+def build_work_world(rng, pool, args):
+    fields = [(0, FAKE_VTABLE, 4), (4, 4, 2),
+              (BUILD_WORK_NOTE + 0x1C, rng.randrange(57), 2),
+              (BUILD_WORK_NOTE + 0x24, rng.randrange(16) if rng.random() < 0.8 else rng.getrandbits(16), 2),
+              (BUILD_WORK_NOTE + 0x26, rng.randint(3, 5) if rng.random() < 0.6 else rng.getrandbits(16), 2)]
+    for player in range(3):  # (g_aiPlayerNumber is 0..2)
+        count = rng.randrange(4)
+        first = BUILD_WORK_NODES + 4 * player * SCRATCH_SLOT_BYTES
+        nodes = [WORLD_BASE + first + k * SCRATCH_SLOT_BYTES for k in range(count + 1)]
+        fields += [(BUILD_WORK_LAND + 12 * player + 4, nodes[0], 4), (BUILD_WORK_LAND + 12 * player + 8, count, 4)]
+        for k, node in enumerate(nodes):
+            offset = node - WORLD_BASE
+            fields.append((offset, nodes[(k + 1) % len(nodes)], 4))
+            if k:
+                fields.append((offset + 8, rng.randrange(4), 2))
+    return fields
+
+
+def build_work_globals(rng, pool, args):
+    return [(AI_PLAYER, rng.getrandbits(32), 4), (AI_PLAYER_NUMBER, rng.randrange(3), 1),
+            (AI_LAND_EVALUATION, WORLD_BASE + BUILD_WORK_LAND, 4)]
+
+
+SPECS += [
+    # AX: the result (the upper half is the last callee's).
+    Spec("T_DO_BUILD_HOUSE_AGENT_WorkOnNote", 0x005655c0, "thiscall", [scratch(1)], eax_mask=0xFFFF,
+         presets=build_work_world, globals=build_work_globals, callees=BUILD_WORK_PROBES,
+         virtuals={0x0C: 1, 0x28: (1, {}, {"returns": build_work_execute})}, max_cases=2000),
+    Spec("BLACK_BOARD_AGENT_DeleteThis", 0x0056faf0, "fastcall", [one_of(0, WORLD_BASE, WORLD_BASE)], eax_mask=0,
+         presets=lambda rng, pool, args: [(0, FAKE_VTABLE, 4)], virtuals={0x00: 1}, max_cases=200),
+]
+
+
+# -- T_ECONOMY_AGENT::ConsiderBuildings (ai_economy_consider.cpp) --
+#
+# The agent at world offset 0 (race +8: 0..3, sometimes another value),
+# g_aiPlayerData in scratch 3 with per-case shares of running countdowns
+# and blocked types; every condition is probed (their own specs cover
+# them), NoOp 0x59f200 runs.
+
+CONSIDER_DATA = SCRATCH + 3 * SCRATCH_SLOT_BYTES
+CONSIDER_CONDITIONS = (0x567E00, 0x568420, 0x568250, 0x5682B0, 0x568890, 0x568BC0, 0x568D80, 0x568F40, 0x569160,
+                       0x5691B0, 0x5693C0, 0x569430, 0x569490, 0x5694F0, 0x5695E0, 0x569520, 0x569590, 0x569640,
+                       0x5696D0, 0x569860, 0x569900, 0x5699D0, 0x569B00, 0x569D20, 0x569B30, 0x569C00, 0x569A00,
+                       0x569A30, 0x569AA0, 0x569330, 0x569C90)
+
+
+def consider_world(rng, pool, args):
+    race = rng.randrange(4) if rng.random() < 0.9 else rng.getrandbits(32)
+    busy = rng.choice((0.0, 0.1, 0.3, 0.6))
+    fields = [(8, race, 4)]
+    for t in range(57):
+        fields += [(CONSIDER_DATA + 0x2D2 + 2 * t, rng.getrandbits(16) | 1 if rng.random() < busy else 0, 2),
+                   (CONSIDER_DATA + 0x3B6 + t, rng.getrandbits(8) | 1 if rng.random() < busy else 0, 1)]
+    return fields
+
+
+SPECS += [
+    # EAX: left over (Run doesn't use it).
+    Spec("T_ECONOMY_AGENT_ConsiderBuildings", 0x0056a1a0, "thiscall", [], eax_mask=0, presets=consider_world,
+         globals=lambda rng, pool, args: [(AI_PLAYER_DATA, WORLD_BASE + CONSIDER_DATA, 4)],
+         callees={a: (0, "thiscall", "probe") for a in CONSIDER_CONDITIONS}, max_cases=2000),
+]
+
 # -- session 56 (wip/ai-agents): GLOBAL_EXPAND_EMPIRE_AGENT (ai_expand_empire_agent.cpp) --
 #
 # MakeBuildOrders(x, y, radius) on a 40 x 40 map (5 x 5 grid cells): per 8 x 8

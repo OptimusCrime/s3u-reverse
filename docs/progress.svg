@@ -1,23 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1258" fill="#ffffff"/>
-<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">32.2%</text>
+<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">32.3%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="328.4" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 23.4%</title></rect>
 <text x="334.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">23.4%</text>
-<rect x="498.4" y="100" width="124" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.8%</title></rect>
-<text x="560.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.8%</text>
-<rect x="622.4" y="100" width="281.1" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.0%</title></rect>
-<text x="762.9" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.0%</text>
+<rect x="498.4" y="100" width="125.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.9%</title></rect>
+<text x="561.3" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.9%</text>
+<rect x="624.1" y="100" width="279.4" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 19.9%</title></rect>
+<text x="763.8" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">19.9%</text>
 <rect x="903.5" y="100" width="672.5" height="40" fill="#e8a39b"><title>Not understood yet: 47.8%</title></rect>
 <text x="1239.8" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">47.8%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="232.3" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 16.5%</title></rect>
 <text x="286.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">16.5%</text>
-<rect x="402.3" y="154" width="93.5" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.7%</title></rect>
-<text x="449.1" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.7%</text>
-<rect x="495.9" y="154" width="506.1" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.0%</title></rect>
-<text x="748.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.0%</text>
+<rect x="402.3" y="154" width="94.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.7%</title></rect>
+<text x="449.7" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.7%</text>
+<rect x="497.1" y="154" width="504.9" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 35.9%</title></rect>
+<text x="749.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">35.9%</text>
 <rect x="1001.9" y="154" width="574.1" height="40" fill="#e8a39b"><title>Not understood yet: 40.8%</title></rect>
 <text x="1289" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">40.8%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
@@ -26,7 +26,7 @@
 <rect x="1233.2" y="216" width="16" height="16" fill="#e8a39b"/><text x="1257.2" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1109.1" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 32.2% verified (23.4% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 32.3% verified (23.4% in a whole game)</text>
 <g><title>(free functions): 993 functions</title><rect x="2" y="19" width="520.5" height="671.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="259.4" height="186" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -3427,8 +3427,8 @@
 </g>
 <g><title>T_ECONOMY_AGENT: 40 functions</title><rect x="1022.3" y="405.8" width="84.8" height="107.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="1024.3" y="414.3" font-size="8.5" fill="#ffffff">T_ECONOMY_AGENT</text>
-<rect x="1022.8" y="417.3" width="34.7" height="29.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderBuildings @ 0x0056a1a0
-1696 bytes — Identified (purpose known)</title></rect>
+<rect x="1022.8" y="417.3" width="34.7" height="29.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderBuildings @ 0x0056a1a0
+1696 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1057.5" y="417.3" width="25.9" height="29.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::TakeAreaSnapshot @ 0x00567910
 1264 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1083.4" y="417.3" width="23.2" height="29.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderStonecutter @ 0x00568420
@@ -6404,8 +6404,8 @@
 48 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>T_DO_BUILD_HOUSE_AGENT: 6 functions</title><rect x="948.8" y="959.8" width="20.3" height="19.6" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="949.3" y="960.3" width="13.9" height="10" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>T_DO_BUILD_HOUSE_AGENT::WorkOnNote @ 0x005655c0
-224 bytes — Identified (purpose known)</title></rect>
+<rect x="949.3" y="960.3" width="13.9" height="10" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_DO_BUILD_HOUSE_AGENT::WorkOnNote @ 0x005655c0
+224 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="949.3" y="970.4" width="13.9" height="8.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_DO_BUILD_HOUSE_AGENT::TakeNote @ 0x005654d0
 192 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="963.2" y="960.3" width="5.4" height="7.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_DO_BUILD_HOUSE_AGENT::NoteReported @ 0x005656a0
@@ -7026,8 +7026,8 @@
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="1042.2" y="950.3" width="5.6" height="3.2" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_AGENT::subclass_scalar_deleting_destructor @ 0x0056fad0
 32 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1042.2" y="953.5" width="5.6" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_AGENT::DeleteThis @ 0x0056faf0
-32 bytes — Classified (class/role known)</title></rect>
+<rect x="1042.2" y="953.5" width="5.6" height="3.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_AGENT::DeleteThis @ 0x0056faf0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1047.8" y="950.3" width="4.2" height="2.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_AGENT::IsBusy @ 0x0055ca80
 16 bytes — Identified (purpose known)</title></rect>
 <rect x="1047.8" y="952.5" width="4.2" height="2.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>BLACK_BOARD_AGENT::DefaultNoteSlot @ 0x0057cdc0

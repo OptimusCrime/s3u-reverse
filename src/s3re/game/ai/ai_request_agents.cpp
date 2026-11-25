@@ -721,4 +721,267 @@ S3RE_TEST(AiTakeNote_ComparisonDetectsWrongImplementation) {
     S3RE_EXPECT(quiet.failures() > 0);
 }
 
+// ---------------------------------------------------------------------------
+// The build agent's turn on its order (slot 4)
+// ---------------------------------------------------------------------------
+//
+//   0x005655c0 T_DO_BUILD_HOUSE_AGENT::WorkOnNote(note), ret 4:
+//              CComputerPlayer::DeactivateNoteOf(g_aiPlayer, note) (EDX is
+//              the caller's, as in the original); with state bit 2 (the
+//              house was placed, NoteReported 0x5656a0) the agent's own
+//              slot 10 (Execute, the note): AX != 0 is success. Otherwise,
+//              unless state bit 4 (no site), ++reports and while it is not
+//              5 the agent takes the note again (its slot 3) and returns AX
+//              = 100. Giving up (no site, or the fifth try): the area at
+//              the note's place (AI::AreaAlongRow 0x5996c0, x / y words)
+//              and in every node of g_aiLandEvaluation's list of
+//              g_aiPlayerNumber with that area (word compare)
+//              type_blocked[building type] = 0. Then (also after a success)
+//              DoomNoteOf(g_aiPlayer, note) and ReportToRequester(note,
+//              success ? 100 : 0, 0); AX = that result. (The upper halves
+//              of EAX come from the last callee; CComputerPlayer::WorkOnNote
+//              doesn't use EAX. The upper half of EDX that DoomNoteOf puts
+//              into the id is never stored: only the word goes into the
+//              list; ours passes 0.)
+
+using BuildWorkFn = std::uint32_t(__fastcall*)(BlackBoardAgent* self, void* edx, RequestNote* note);
+
+std::uint32_t __fastcall T_DO_BUILD_HOUSE_AGENT_WorkOnNote(BlackBoardAgent* self, void* edx, RequestNote* note);
+
+S3RE_HOOK(0x005655c0, T_DO_BUILD_HOUSE_AGENT_WorkOnNote, BuildWorkFn, Original_T_DO_BUILD_HOUSE_AGENT_WorkOnNote,
+          T_DO_BUILD_HOUSE_AGENT_WorkOnNote);
+
+namespace {
+
+constexpr std::uintptr_t kDoomNoteOf = 0x00551760;    // CComputerPlayer::DoomNoteOf (thiscall)
+constexpr std::uintptr_t kAreaAlongRow = 0x005996c0;  // AI::AreaAlongRow (fastcall, values)
+constexpr std::uint16_t kMaxTries = 5;                // RequestNote::reports: takes of the note before giving up
+
+using AgentNoteFn = std::uint32_t(__fastcall*)(BlackBoardAgent* self, void* edx, RequestNote* note);
+
+std::uint32_t CallAgentSlot(BlackBoardAgent* agent, std::size_t slot, RequestNote* note) {
+    return reinterpret_cast<AgentNoteFn>(agent->vtable[slot])(agent, nullptr, note);
+}
+
+// 0x565617: the order's building type may be tried again in the area.
+void UnblockTypeInArea(const RequestNote* note) {
+    using AreaFn = std::uint32_t(__fastcall*)(std::uint32_t x, std::uint32_t y);
+    const auto area = static_cast<std::uint16_t>(reinterpret_cast<AreaFn>(kAreaAlongRow)(note->x, note->y));
+    const auto* land = reinterpret_cast<const AiLandEvaluation*>(g_aiLandEvaluation.get());
+    const AiListNode* head = land->lists[g_aiPlayerNumber].head;
+    for (auto* node = reinterpret_cast<AiPlayerData*>(head->next);
+         reinterpret_cast<const AiListNode*>(node) != land->lists[g_aiPlayerNumber].head;
+         node = reinterpret_cast<AiPlayerData*>(node->next)) {
+        if (node->area == area) {
+            node->type_blocked[note->building_type] = 0;
+        }
+    }
+}
+
+}  // namespace
+
+// Purpose: The build agent's turn on a build order: carries it out once
+// the house request found and placed a site; else asks again (up to five
+// times) and finally gives the order up, letting the area try that
+// building type again.
+std::uint32_t __fastcall T_DO_BUILD_HOUSE_AGENT_WorkOnNote(BlackBoardAgent* self, void* edx, RequestNote* note) {
+    using NoteFn = std::uint32_t(__fastcall*)(ComputerPlayer* player, void* edx, RequestNote* note);
+    reinterpret_cast<NoteFn>(kDeactivateNoteOf)(g_aiPlayer, edx, note);
+    bool success = false;
+    if ((note->state & kBuildPlaced) != 0 &&
+        static_cast<std::uint16_t>(CallAgentSlot(self, agent_slot::kExecute, note)) != 0) {
+        success = true;
+    } else {
+        if ((note->state & kBuildNoSite) == 0) {
+            ++note->reports;
+            if (note->reports != kMaxTries) {
+                CallAgentSlot(self, agent_slot::kTakeNote, note);
+                return kSucceeded;
+            }
+        }
+        UnblockTypeInArea(note);
+    }
+    reinterpret_cast<NoteFn>(kDoomNoteOf)(g_aiPlayer, nullptr, note);
+    const std::uint32_t result = success ? kSucceeded : 0;
+    Report(&note->base, result, 0);
+    return result;
+}
+
+// ---- tests
+//
+// The agent with a fake vtable whose slots 3 and 10 record (slot 10
+// answers at random, sometimes with only the upper half set); the note
+// with random bytes (state bits 2 / 4, reports around 4); DeactivateNoteOf,
+// DoomNoteOf and ReportToRequester stubbed, AreaAlongRow replaced by a
+// recorder answering one of the areas 0..3; a CEvaLand per side whose list
+// of the player has 0..3 nodes (areas 0..3). Compared: AX, the note, the
+// calls and every node's type_blocked.
+
+namespace {
+
+struct BuildWorkCall {
+    std::uint32_t callee, a, b;
+    bool operator==(const BuildWorkCall& o) const { return callee == o.callee && a == o.a && b == o.b; }
+};
+
+struct BuildWorkState {
+    std::vector<BuildWorkCall>* calls = nullptr;
+    std::uint32_t executeAnswer = 0;
+    std::uint32_t area = 0;
+    std::uintptr_t note = 0;
+};
+BuildWorkState g_buildWork;
+
+// The note's address as 1 (the sides' notes are in different buffers).
+std::uint32_t Relative(std::uint32_t pointer) {
+    return pointer == g_buildWork.note ? 1 : pointer;
+}
+
+std::uint32_t __fastcall RecordTakeAgain(BlackBoardAgent*, void*, RequestNote* note) {
+    g_buildWork.calls->push_back({agent_slot::kTakeNote, Relative(reinterpret_cast<std::uint32_t>(note)), 0});
+    return 0x12340000;
+}
+
+std::uint32_t __fastcall RecordExecute(BlackBoardAgent*, void*, RequestNote* note) {
+    g_buildWork.calls->push_back({agent_slot::kExecute, Relative(reinterpret_cast<std::uint32_t>(note)), 0});
+    return g_buildWork.executeAnswer;
+}
+
+std::uint32_t __fastcall RecordAreaAlongRow(std::uint32_t x, std::uint32_t y) {
+    g_buildWork.calls->push_back({kAreaAlongRow, x & 0xffff, y & 0xffff});
+    return g_buildWork.area;
+}
+
+// A CEvaLand whose list of `player` holds nodes with the given areas.
+struct TestNodes {
+    AiLandEvaluation land{};
+    std::vector<std::vector<std::uint8_t>> buffers;
+    TestNodes(std::uint32_t player, const std::vector<std::uint16_t>& areas, std::uint32_t seed) {
+        buffers.resize(areas.size() + 1, std::vector<std::uint8_t>(sizeof(AiPlayerData)));
+        test::Rng fill(seed);
+        for (auto& b : buffers) {
+            fill.Fill(b.data(), b.size());
+        }
+        for (std::size_t k = 0; k < buffers.size(); ++k) {
+            auto* node = reinterpret_cast<AiPlayerData*>(buffers[k].data());
+            node->next = reinterpret_cast<std::uint32_t>(buffers[(k + 1) % buffers.size()].data());
+            if (k > 0) {
+                node->area = areas[k - 1];
+            }
+        }
+        land.lists[player].head = reinterpret_cast<AiListNode*>(buffers[0].data());
+        land.lists[player].count = static_cast<std::uint32_t>(areas.size());
+    }
+    std::vector<std::uint8_t> Blocked() const {
+        std::vector<std::uint8_t> out;
+        for (std::size_t k = 1; k < buffers.size(); ++k) {
+            const auto* node = reinterpret_cast<const AiPlayerData*>(buffers[k].data());
+            out.insert(out.end(), std::begin(node->type_blocked), std::end(node->type_blocked));
+        }
+        return out;
+    }
+};
+
+void CompareBuildWork(test::Context& ctx, BuildWorkFn ours, int cases) {
+    ComputerPlayer* const savedPlayer = g_aiPlayer;
+    const std::uint8_t savedNumber = g_aiPlayerNumber;
+    const std::uint32_t savedLand = g_aiLandEvaluation;
+    test::CalleeStubs stubs;
+    stubs.SetWorld(nullptr);
+    stubs.Install<1, kDeactivateNoteOf>([&](CGameData*, std::uint32_t self, const std::uint32_t* args) {
+        g_buildWork.calls->push_back({kDeactivateNoteOf, self, Relative(args[0])});
+        return 0u;
+    });
+    stubs.Install<1, kDoomNoteOf>([&](CGameData*, std::uint32_t self, const std::uint32_t* args) {
+        g_buildWork.calls->push_back({kDoomNoteOf, self, Relative(args[0])});
+        return 0u;
+    });
+    stubs.Install<2, kReportToRequester>([&](CGameData*, std::uint32_t self, const std::uint32_t* args) {
+        g_buildWork.calls->push_back({kReportToRequester, Relative(self), args[0] * 2 + (args[1] != 0 ? 1 : 0)});
+        return 0xabcd0000u;
+    });
+    test::ScopedJump area(kAreaAlongRow, reinterpret_cast<void*>(&RecordAreaAlongRow));
+    const void* vtable[16] = {};
+    vtable[agent_slot::kTakeNote] = reinterpret_cast<const void*>(&RecordTakeAgain);
+    vtable[agent_slot::kExecute] = reinterpret_cast<const void*>(&RecordExecute);
+    BlackBoardAgent agent{vtable, Value(AgentKind::DoBuildHouse)};
+    int givenUp = 0, retried = 0, executed = 0;
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        test::Rng& rng = ctx.rng();
+        const std::uint32_t player = rng.Below(3);
+        std::vector<std::uint16_t> areas(rng.Below(4));
+        for (std::uint16_t& a : areas) {
+            a = static_cast<std::uint16_t>(rng.Below(4));
+        }
+        const std::uint32_t seed = rng.Next32();
+        TestNodes nodes[2] = {TestNodes(player, areas, seed), TestNodes(player, areas, seed)};
+        std::uint8_t start[sizeof(RequestNote)];
+        rng.Fill(start, sizeof(start));
+        auto* startNote = reinterpret_cast<RequestNote*>(start);
+        startNote->building_type = static_cast<std::uint16_t>(rng.Below(kBuildingTypeCount));
+        startNote->state = static_cast<std::uint16_t>(rng.Chance(1, 4) ? rng.Next32() : rng.Below(16));
+        startNote->reports = static_cast<std::uint16_t>(rng.Chance(1, 2) ? 3 + rng.Below(3) : rng.Next32());
+        g_buildWork.executeAnswer = rng.Chance(1, 3)   ? 0
+                                    : rng.Chance(1, 4) ? 0x10000u << rng.Below(16)
+                                                       : rng.Next32();
+        g_buildWork.area = rng.Chance(1, 8) ? rng.Next32() : (rng.Below(4) | (rng.Chance(1, 4) ? rng.Next32() << 16 : 0));
+        const std::uint32_t edx = rng.Next32();
+        std::uint8_t notes[2][sizeof(RequestNote)];
+        std::vector<BuildWorkCall> calls[2];
+        std::uint32_t results[2];
+        const BuildWorkFn fns[2] = {Original_T_DO_BUILD_HOUSE_AGENT_WorkOnNote, ours};
+        for (int side = 0; side < 2; ++side) {
+            std::memcpy(notes[side], start, sizeof(start));
+            g_aiPlayer = reinterpret_cast<ComputerPlayer*>(0x5150a000u);  // (never dereferenced: stubs)
+            g_aiPlayerNumber = static_cast<std::uint8_t>(player);
+            g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&nodes[side].land);
+            g_buildWork.calls = &calls[side];
+            g_buildWork.note = reinterpret_cast<std::uintptr_t>(notes[side]);
+            results[side] = fns[side](&agent, reinterpret_cast<void*>(edx), reinterpret_cast<RequestNote*>(notes[side])) &
+                            0xffff;
+            stubs.Take();
+        }
+        for (const BuildWorkCall& c : calls[0]) {
+            givenUp += c.callee == kAreaAlongRow ? 1 : 0;
+            retried += c.callee == agent_slot::kTakeNote ? 1 : 0;
+            executed += c.callee == kReportToRequester && c.b == 2u * kSucceeded ? 1 : 0;
+        }
+        bool same = S3RE_EXPECT_EQ(results[0], results[1]);
+        same &= S3RE_EXPECT_MEM_EQ(notes[0], notes[1], sizeof(RequestNote));
+        same &= S3RE_EXPECT(calls[0] == calls[1]);
+        same &= S3RE_EXPECT(nodes[0].Blocked() == nodes[1].Blocked());
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: state %04x reports %u, %u/%u calls", i, startNote->state,
+                     startNote->reports, static_cast<unsigned>(calls[0].size()),
+                     static_cast<unsigned>(calls[1].size()));
+        }
+    }
+    if (cases >= 1000 && !S3RE_EXPECT(givenUp > cases / 10 && retried > cases / 10 && executed > cases / 20)) {
+        ctx.Fail(__FILE__, __LINE__, "  given up %d, retried %d, executed %d", givenUp, retried, executed);
+    }
+    g_aiPlayer = savedPlayer;
+    g_aiPlayerNumber = savedNumber;
+    g_aiLandEvaluation = savedLand;
+}
+
+std::uint32_t __fastcall WrongBuildWork(BlackBoardAgent* self, void* edx, RequestNote* note) {
+    // Wrong: gives up after four takes.
+    if ((note->state & (kBuildPlaced | kBuildNoSite)) == 0 && note->reports == kMaxTries - 2) {
+        ++note->reports;
+    }
+    return T_DO_BUILD_HOUSE_AGENT_WorkOnNote(self, edx, note);
+}
+
+}  // namespace
+
+S3RE_TEST(AiBuildWorkOnNote_MatchOriginal) {
+    CompareBuildWork(ctx, &T_DO_BUILD_HOUSE_AGENT_WorkOnNote, 3000);
+}
+
+S3RE_TEST(AiBuildWorkOnNote_ComparisonDetectsWrongImplementation) {
+    test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+    CompareBuildWork(quiet, &WrongBuildWork, 1000);
+    S3RE_EXPECT(quiet.failures() > 0);
+}
+
 }  // namespace s3re::game

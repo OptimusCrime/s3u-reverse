@@ -180,6 +180,7 @@ add_library(s3re SHARED
     game/ai/ai_computer_player_step.cpp
     game/ai/ai_economy_actions.cpp
     game/ai/ai_economy_conditions.cpp
+    game/ai/ai_economy_consider.cpp
     game/ai/ai_economy_snapshot.cpp
     game/ai/ai_enemy_search.cpp
     game/ai/ai_evaland.cpp

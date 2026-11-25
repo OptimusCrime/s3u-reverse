@@ -191,6 +191,21 @@ The agents' run functions (slot 8) are called from elsewhere in this tree
 (e.g. 0x550f80 step 3, the factory's callers); mapping who runs which
 agent when is the next analysis step.
 
+**ConsiderBuildings** 0x56a1a0 (V, session 57): the economy agent's
+round of conditions: woodcutter, stonecutter, sawmill, forester, the
+residences (only when all three types 26..28 are free), coal / iron
+mine, iron smelter, toolsmith, weaponsmith, fishery, farm, mill, bakery,
+waterworks, pig farm, slaughterhouse, (donkey farm: NoOp), barracks, gold
+mine / smelter, storehouse, hospital, (harbour, shipyard, marketplace:
+NoOp); then per race: Romans charcoal burner, vineyard, small / large
+temple, (catapult workshop); Egyptians gem mine, brewery, sphinx,
+pyramid, (ballista workshop); Asians sulfur mine, powder maker, rice
+farm, distillery, small pagoda, and the large temple condition under
+the **Pyramid's** type 41 (not the large pagoda 45: an original quirk,
+kept), (cannon workshop); Amazons sulfur mine 56, meadery, (laboratory),
+apiary, small / large temple 54 / 55, (large gong). A type is skipped
+while its countdown runs or it is blocked.
+
 **Build priorities** (V): `AiPlayerData::best[type]` (+0x26, 6 bytes per
 building type: priority, x, y) is filled by `AI::RecordBestCandidate`
 0x58ec50 (type, priority, x, y): it keeps the best place per type and

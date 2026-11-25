@@ -40,6 +40,10 @@
 //   (slots 11 and 12; identical code folded): calls NoOp_ret4 0x582530
 //   (value) with ECX unchanged. EAX = value (loaded for the push, kept by
 //   the no-op). Was StaticInitExpr_55ec00 (it is no static initializer).
+// BLACK_BOARD_AGENT_DeleteThis (0x0056faf0): () thiscall: slot 1 of every
+//   agent and note vtable: unless this is null, its slot 0 (the scalar
+//   deleting destructor) with 1. EAX: the destructor's (null: left over;
+//   nothing calls the slot).
 
 #include "game/ai/ai_layout.h"
 #include "game/globals.h"
@@ -198,6 +202,22 @@ S3RE_HOOK(0x0055ec00, AI_BlackBoardEmptyVirtual, ThisValueFn, Original_AI_BlackB
 std::uint32_t __fastcall AI_BlackBoardEmptyVirtual(void* self, void* /*edx*/, std::uint32_t value) {
     reinterpret_cast<ThisValueFn>(kNoOpRet4)(self, nullptr, value);
     return value;
+}
+
+std::uint32_t __fastcall BLACK_BOARD_AGENT_DeleteThis(void* self, void* edx);
+
+S3RE_HOOK(0x0056faf0, BLACK_BOARD_AGENT_DeleteThis, ThisFn, Original_BLACK_BOARD_AGENT_DeleteThis,
+          BLACK_BOARD_AGENT_DeleteThis);
+
+// Purpose: Deletes an AI agent or note through its own destructor (a
+// "delete this" helper; none of the AI code calls it, as far as seen).
+std::uint32_t __fastcall BLACK_BOARD_AGENT_DeleteThis(void* self, void* /*edx*/) {
+    if (self == nullptr) {
+        return 0;
+    }
+    constexpr std::uint32_t kDeleteMemory = 1;
+    const auto* vtable = *static_cast<const std::uintptr_t* const*>(self);
+    return reinterpret_cast<ThisValueFn>(vtable[agent_slot::kDeletingDestructor])(self, nullptr, kDeleteMemory);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,6 +447,72 @@ S3RE_TEST(AiEmptyVirtual_MatchOriginal) {
 S3RE_TEST(AiEmptyVirtual_ComparisonDetectsWrongImplementation) {
     test::Context quiet(ctx.name(), 1, /*quiet=*/true);
     CompareEmptyVirtual(quiet, &WrongEmptyVirtual, 100);
+    S3RE_EXPECT(quiet.failures() > 0);
+}
+
+// BLACK_BOARD_AGENT_DeleteThis: a fake object whose slot 0 records `this`
+// and the flags and answers at random; null objects too. The wrong version
+// passes flags 0.
+namespace {
+
+struct DeleteCall {
+    void* self = nullptr;
+    std::uint32_t flags = 0;
+    int count = 0;
+};
+DeleteCall g_deleteCall;
+std::uint32_t g_deleteAnswer = 0;
+
+std::uint32_t __fastcall RecordDelete(void* self, void*, std::uint32_t flags) {
+    g_deleteCall = {self, flags, g_deleteCall.count + 1};
+    return g_deleteAnswer;
+}
+
+void CompareDeleteThis(test::Context& ctx, ThisFn ours, int cases) {
+    const std::uintptr_t vtable[1] = {reinterpret_cast<std::uintptr_t>(&RecordDelete)};
+    struct {
+        const std::uintptr_t* vtable;
+        std::uint32_t data;
+    } object{vtable, 0};
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        void* self = ctx.rng().Chance(1, 4) ? nullptr : &object;
+        g_deleteAnswer = ctx.rng().Next32();
+        DeleteCall calls[2];
+        std::uint32_t results[2];
+        const ThisFn fns[2] = {Original_BLACK_BOARD_AGENT_DeleteThis, ours};
+        for (int side = 0; side < 2; ++side) {
+            g_deleteCall = {};
+            results[side] = fns[side](self, nullptr);
+            calls[side] = g_deleteCall;
+        }
+        bool same = S3RE_EXPECT_EQ(calls[0].count, calls[1].count);
+        same &= S3RE_EXPECT(calls[0].self == calls[1].self);
+        same &= S3RE_EXPECT_EQ(calls[0].flags, calls[1].flags);
+        if (self != nullptr) {  // (null: EAX is the caller's in the original)
+            same &= S3RE_EXPECT_EQ(results[0], results[1]);
+        }
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+        }
+    }
+}
+
+std::uint32_t __fastcall WrongDeleteThis(void* self, void*) {
+    if (self == nullptr) {
+        return 0;
+    }
+    return RecordDelete(self, nullptr, 0);  // Wrong: keeps the memory
+}
+
+}  // namespace
+
+S3RE_TEST(AiDeleteThis_MatchOriginal) {
+    CompareDeleteThis(ctx, &BLACK_BOARD_AGENT_DeleteThis, 1000);
+}
+
+S3RE_TEST(AiDeleteThis_ComparisonDetectsWrongImplementation) {
+    test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+    CompareDeleteThis(quiet, &WrongDeleteThis, 100);
     S3RE_EXPECT(quiet.failures() > 0);
 }
 
