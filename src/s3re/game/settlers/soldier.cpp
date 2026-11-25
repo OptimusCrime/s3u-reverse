@@ -1026,7 +1026,7 @@ void Compare(test::Context& ctx, SoldierFn candidate, int cases) {
         attacks += expected;
         if (!S3RE_EXPECT_EQ(expected, actual) || !S3RE_EXPECT(expectedLogs == actualLogs) ||
             !S3RE_EXPECT_MEM_EQ(after.data(), Globals::Tallies(), after.size()) ||
-            ((i % 32 == 31 || i == cases - 1) && !worlds.Checkpoint(ctx))) {
+            ((i % 32 == 31 || i == cases - 1) && !worlds.CheckpointIgnoringEffectPadding(ctx))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d (or one of the 31 before it): soldier %u", i, soldier);
             return;
         }

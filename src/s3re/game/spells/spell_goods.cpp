@@ -486,17 +486,6 @@ void SetUpGoodsWorld(test::Context& ctx, test::WorldPair& worlds) {
     std::memcpy(worlds.oursBytes(), worlds.originalBytes(), kWorld);
 }
 
-bool SameWorlds(test::Context& ctx, test::WorldPair& worlds) {
-    const std::size_t base = offsetof(CGameData, map_effects);
-    for (std::size_t slot = 0; slot < 5000; ++slot) {
-        for (std::size_t pad : {0x2a, 0x2b, 0x3b, 0x3e, 0x3f}) {
-            worlds.originalBytes()[base + slot * sizeof(MapEffect) + pad] = 0;
-            worlds.oursBytes()[base + slot * sizeof(MapEffect) + pad] = 0;
-        }
-    }
-    return worlds.Checkpoint(ctx);
-}
-
 // StealGoodFromPile and DropGoodNear (verified, but they need consistent
 // carriers and piles) are stubs: a steal fails for some piles (AL = 0 with
 // a non-zero EAX) and takes one unit otherwise.
@@ -547,7 +536,7 @@ void CompareGoodsSpells(test::Context& ctx, int cases, bool inner, Call call) {
         call(false, worlds.ours(), player, x, y, a4);
         const int actualRand = CrtRand();
         if (!S3RE_EXPECT(expectedCalls == stubs.Take()) || !S3RE_EXPECT(expectedLogs == logs.Take()) ||
-            !S3RE_EXPECT_EQ(expectedRand, actualRand) || !SameWorlds(ctx, worlds)) {
+            !S3RE_EXPECT_EQ(expectedRand, actualRand) || !worlds.CheckpointIgnoringEffectPadding(ctx)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: player %u at (%d, %d), settler %u", i, player,
                      static_cast<std::int32_t>(x), static_cast<std::int32_t>(y), a4);
             break;

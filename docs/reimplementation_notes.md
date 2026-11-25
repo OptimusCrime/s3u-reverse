@@ -16,6 +16,19 @@ on 2026-11-24.
   inventory row, leave the byte out of the in-process comparison, and
   exclude exactly that byte with `Spec.ignore_bytes` plus a self-test
   pairing.
+- **Padding of map effect records** (2026-11-25). The `MapEffect::Make_*`
+  functions build a record in an uninitialized 0x4c-byte stack temporary
+  and copy all of it, so the five bytes the constructor never writes
+  (`pad2a`, `pad3b`, `pad3e`) are stack leftovers, in the original and in
+  ours alike. They differ between the original and ours, and also between
+  our Debug and Release builds (other frame sizes and inlining leave other
+  bytes on the stack): a test can pass in Debug by luck and fail in
+  Release. Any in-process test whose cases can add map effects (directly
+  or through a callee such as `SpawnArrow`) compares the world with
+  `WorldPair::CheckpointIgnoringEffectPadding` (or calls
+  `ClearEffectPadding` first); emulator specs list the bytes in
+  `ignore_bytes` (`EFFECT_PADDING`). Found by the UpdateSoldier test
+  (tower arrows), which failed only in Release.
 - **Detours and tiny functions:** a 4-byte body such as `mov eax,[ecx+0Ch];
   ret` can be hooked when nop/int 3 padding follows it (Detours uses the
   padding; 0x601270).
