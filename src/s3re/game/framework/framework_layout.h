@@ -234,6 +234,59 @@ struct CDirectDraw {
 };
 static_assert(offsetof(CDirectDraw, owns) == 8);
 
+// Watcom's intrusive singly linked list as DirectX::CGameDrawer keeps its
+// surfaces and palettes (WCPtrSList<T>: links of next + pointer; +8 the last
+// link, its next the first; vtable slot 1 destroys a link, slot 2 compares
+// two elements; watcom/isv_slist.cpp) and an iterator over one.
+struct PtrSList {
+    std::uint32_t vtable;  // +0x00
+    std::uint32_t unk04;   // +0x04
+    void* last;            // +0x08 the last link (0: empty)
+    std::int32_t count;    // +0x0c
+    void* allocator;       // +0x10 link allocator or 0
+    void* deallocator;     // +0x14 (probably)
+};
+static_assert(sizeof(PtrSList) == 0x18);
+struct PtrSListIter {
+    std::uint32_t vtable;  // +0x00
+    std::uint32_t unk04;   // +0x04
+    PtrSList* list;        // +0x08
+    void* current;         // +0x0c the current link (0: before the first)
+    std::uint32_t state;   // +0x10 bit 1: past the end
+};
+static_assert(sizeof(PtrSListIter) == 0x14);
+// WCValOrderedVector<T> as CGameDrawer keeps its devices and display modes.
+struct ValOrderedVector {
+    std::uint32_t vtable;    // +0x00
+    std::uint32_t unk04;     // +0x04
+    void* data;              // +0x08
+    std::uint32_t capacity;  // +0x0c
+    std::int32_t unk10;      // +0x10 (Destroy keeps it only when negative)
+    std::uint32_t entries;   // +0x14
+    std::uint32_t grow;      // +0x18
+};
+static_assert(sizeof(ValOrderedVector) == 0x1c);
+
+// DirectX::CGameDrawer (vtable 0x65ca7c): the CDirectDraw the game draws
+// with (CDrawer derives from it); registered in g_drawer.
+struct CGameDrawer {
+    CDirectDraw draw;            // +0x00
+    std::uint8_t pad09[3];
+    void* window;                // +0x0c HWND (Initialize)
+    PtrSList surfaces;           // +0x10 WCPtrSList<CSurface>: every surface (restored / released together)
+    PtrSList palettes;           // +0x28 WCPtrSList<CPalette>
+    ValOrderedVector devices;    // +0x40 WCValOrderedVector<CDirectDrawDevice> (0x30-byte records)
+    ValOrderedVector modes;      // +0x5c WCValOrderedVector<CDisplayMode> (DDSURFACEDESC records)
+    void* primary;               // +0x78 the primary surface (a CPrimarySurface; its CSurface via the vbptr)
+    std::uint8_t surfacesMade;   // +0x7c 1 while the surfaces exist (cleared by ReleaseSurfaces)
+};
+static_assert(offsetof(CGameDrawer, surfaces) == 0x10);
+static_assert(offsetof(CGameDrawer, palettes) == 0x28);
+static_assert(offsetof(CGameDrawer, devices) == 0x40);
+static_assert(offsetof(CGameDrawer, modes) == 0x5c);
+static_assert(offsetof(CGameDrawer, primary) == 0x78);
+static_assert(offsetof(CGameDrawer, surfacesMade) == 0x7c);
+
 // DirectX::CPalette (no RTTI vtable): +4 the IDirectDrawPalette.
 struct CPalette {
     std::uint32_t vtable;  // +0x00

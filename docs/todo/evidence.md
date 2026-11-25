@@ -5,6 +5,28 @@ where to start. Remove an item when it is done (mention it in the
 LOGBOOK session entry).
 
 ## Evidence and testing
+- **DirectDraw renderer, what is left (wip/ddraw-render, 2026-11-26).**
+  The fake DirectDraw (`test/fake_ddraw.*`) and the emulator setup
+  (`ddw_*` / `dgd_*` in specs/framework.py: COM probes, import slots of
+  SetRect / SendMessageA / CoCreateInstance patched to probes) cover
+  Ddraw.cpp and most of CGameDrawer. Not done yet, in order of ease:
+  CDrawer::SetDisplayMode 0x42ce90 (DDGetDisplayMode, two DebugLogs,
+  SendMessageA(hwnd, 0x804, mode index), slots 5/11, RequestFullRedraw on
+  0x7e8bec; the SendMessageA probe slot DDW_SENDMESSAGE_SLOT is ready),
+  Render_sub_4c7490 (applies the resolution setting [arg+0xa0] 1/2/3:
+  layout globals 0x730f08.. and SetDisplayMode(640/800/1024, ..., 16, 0, 0),
+  g_logicStartState = 0xfa; al = 1, 0 for other values unless 0x7dfd30),
+  Render_sub_4c6d40 (+0xf0 = -1, Render::SetScreenLayout(this,
+  [g_config+0x70]) via the folded getter 0x49dec0 `mov eax,[ecx+70h]`),
+  CLandscapeSurface::CLandscapeSurface 0x54bd30 (COffscreenSurface ctor,
+  fields 0, four news with ThrowOutOfMemory "patternpointer" / "patterndata"
+  / "palette" / "palettenarray", landscape.cpp lines 31/33/35/37);
+  CGameDrawer's constructor / destructor / Shutdown / EnumDevicesCallback
+  and the display-mode callback 0x5b7810 (not in the function lists yet)
+  need the WCValOrderedVector<CDirectDrawDevice/CDisplayMode> code
+  (0x5b8080 resize, 0x5b8330, 0x5b8560, 0x5b69e0, 0x5b7ec0/0x5b7f40) and
+  ~CDirectDrawDevice 0x5b7670 first; Render_sub_54cbd0 (the landscape
+  drawing, ~2000 lines, locks the surface with CSurface::Lock) is large.
 - **ExecuteCommands whole-game evidence (session 47).** Reimplemented and
   verified (in-process + emulator); the recordings contain ids 0x01, 0x03,
   0x04, 0x05, 0x09, 0x0b, 0x0c, 0x0f, 0x10, 0x11, 0xfb. Run the round-end

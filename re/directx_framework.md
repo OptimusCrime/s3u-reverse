@@ -488,3 +488,13 @@ against a scripted DirectDraw, test/fake_ddraw.cpp; emulator specs
 - The intrusive list code these classes use (WCIsvSListBase::base_next,
   get, clearAndDestroy, the iterator's +=, WCPtrListBase::base_new_link
   0x463b50) is verified too (src/s3re/watcom/isv_slist.cpp).
+- CGameDrawer (directx_drawer.cpp, verified): AddSurface and
+  SetPrimarySurface append (new link, insert, then it becomes the last);
+  RemoveSurface finds the index with the list's compare slot and removes
+  get(index): for a surface that isn't listed the index is -1, which
+  index_check turns into 0, so the first surface's link goes instead (a
+  quirk kept). ReleaseSurfaces releases every listed surface but the
+  primary's CSurface part, then the primary's, deletes them all, clears
+  +0x78, g_primarySurfaceRect (0x7e8bf8) and +0x7c (the "surfaces made"
+  flag SetMemberByte7CToOne 0x5b7160 sets). Destroy frees the display-mode
+  array and keeps the vector's +0x10 only when it is negative.

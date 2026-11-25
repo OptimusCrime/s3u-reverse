@@ -204,6 +204,10 @@ inline constexpr std::uint32_t kCPrimaryFlipSurface_flipVbtable = 0x65cdf4;   //
 inline constexpr std::uint32_t kCPrimaryFlipSurface_base = 0x65cde8;          // its CSurface part
 inline constexpr std::uint32_t kCOffscreenSurface = 0x65ce08;       // DirectX::COffscreenSurface
 inline constexpr std::uint32_t kCOverlaySurface = 0x65ce18;         // DirectX::COverlaySurface
+// CGameDrawer's list iterators (local objects of its surface / palette walks).
+inline constexpr std::uint32_t kWCListIterBase = 0x65cb44;          // WCListIterBase (its constructor's)
+inline constexpr std::uint32_t kSurfaceListIter = 0x65cb3c;         // WCPtrSListIter<DirectX::CSurface>
+inline constexpr std::uint32_t kPaletteListIter = 0x65cb4c;         // WCPtrSListIter<DirectX::CPalette>
 }  // namespace vtables
 
 // Virtual-base tables (vbptr targets) of the exception classes with a

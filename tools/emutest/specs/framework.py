@@ -1235,3 +1235,94 @@ SPECS += [
     # static initializer that follow it (0x5bfd80).
     ddw_spec("DirectX_CPalette_Release", 0x005bfd60, [], "palette", cover_until=0x005bfd79),
 ]
+
+
+# -- wip/ddraw-render: CGameDrawer members (directx_drawer.cpp) --------------
+# The drawer at DDW_OBJ (game vtable, the IDirectDraw2 at +4), its surface
+# list (+0x10) and palette list (+0x28) with the list vtable FAKE_VTABLE +
+# DGD_LIST_SLOTS (1 destroy a link, 2 compare), no allocator (the
+# emulator's operator new), circles of links at DGD_LINKS to surface
+# objects (game vtable: 0 delete, 1 Release, 2 RestoreIfLost) or to the
+# primary's CSurface part (a CPrimarySurface at DGD_PRIMARY, real vbtable),
+# and CPalettes at DGD_PALETTES (+4 a COM palette or 0).
+DGD_LIST_SLOTS = 0x300
+DGD_LINKS = 0x500
+DGD_SURFACES = 0x600
+DGD_PRIMARY = 0x6C0
+DGD_PALETTES = 0x700
+DGD_MODE_A = 0x280
+DGD_MODE_B = DDW_RECT
+
+
+def dgd_circle(fields, list_at, link_at, elements):
+    fields += [(list_at, FAKE_VTABLE + DGD_LIST_SLOTS, 4), (list_at + 0xC, len(elements), 4), (list_at + 0x10, 0, 4)]
+    for k, element in enumerate(elements):
+        nxt = WORLD_BASE + link_at + 8 * ((k + 1) % len(elements))
+        fields += [(link_at + 8 * k, nxt, 4), (link_at + 8 * k + 4, element, 4)]
+    fields.append((list_at + 8, WORLD_BASE + link_at + 8 * (len(elements) - 1) if elements else 0, 4))
+
+
+def dgd_world(rng, pool, args):
+    fields = ddw_world("draw")(rng, pool, args)
+    surfaces = [WORLD_BASE + DGD_SURFACES + 0x10 * k for k in range(rng.randrange(7))]
+    if rng.random() < 0.5:
+        surfaces.insert(rng.randrange(len(surfaces) + 1), WORLD_BASE + DGD_PRIMARY + 4)
+    dgd_circle(fields, DDW_OBJ + 0x10, DGD_LINKS, surfaces)
+    palettes = [WORLD_BASE + DGD_PALETTES + 8 * k for k in range(rng.randrange(6))]
+    dgd_circle(fields, DDW_OBJ + 0x28, DGD_LINKS + 0x80, palettes)
+    fields += [(DGD_SURFACES + 0x10 * k, DDW_GAME_VTABLE, 4) for k in range(7)]
+    fields += [(DGD_PALETTES + 8 * k + 4, rng.choice([0, WORLD_BASE + DDW_COM + 0x100]), 4) for k in range(6)]
+    fields += [(DGD_PRIMARY, 0x0065CDDC, 4), (DGD_PRIMARY + 4, DDW_GAME_VTABLE, 4),
+               (DDW_OBJ + 0x78, rng.choice([0, WORLD_BASE + DGD_PRIMARY]), 4),
+               (DDW_OBJ + 0x64, rng.choice([0, 0, WORLD_BASE + SCRATCH]), 4)]
+    return fields
+
+
+def dgd_surface_arg(rng, pool):
+    return rng.choice([WORLD_BASE + DGD_SURFACES + 0x10 * rng.randrange(8), WORLD_BASE + DGD_PRIMARY + 4, 0,
+                       rng.getrandbits(32)])
+
+
+DGD_VIRTUALS = {**ddw_com(), DS_GAME_SLOTS + 0x04: 0, DS_GAME_SLOTS + 0x08: 0, DS_GAME_SLOTS + 0x28: 0,
+                DS_GAME_SLOTS + 0x2C: 1, DGD_LIST_SLOTS + 0x04: 1, DGD_LIST_SLOTS + 0x08: (2, {0: 4, 1: 4})}
+
+
+def dgd_spec(name, address, args, self_at=DDW_OBJ, virtuals=None, **kwargs):
+    return Spec(name, address, "fastcall", [one_of(WORLD_BASE + self_at), anything] + args, presets=dgd_world,
+                globals=ddw_globals, virtuals=virtuals or DGD_VIRTUALS, callees=DDW_THROWERS, **kwargs)
+
+
+SPECS += [
+    dgd_spec("DirectX_CDisplayMode_Construct", 0x005b6c30, [ddw_at(DGD_MODE_B, 0.3)], self_at=DGD_MODE_A),
+    dgd_spec("DirectX_CDisplayMode_IsEqual", 0x005b6c60, [ddw_at(DGD_MODE_B)], self_at=DGD_MODE_A),
+    dgd_spec("ReturnThis", 0x005b6c20, [], cover_until=0x005b6c23),
+    dgd_spec("DirectX_CGameDrawer_Initialize", 0x005b6ed0, [anything],
+             virtuals={**DGD_VIRTUALS, DS_PROC_SLOT: (2, {}, {"com": True, "returns": ddw_hresult})}),
+    dgd_spec("DirectX_CGameDrawer_CreateOnDevice", 0x005b6f60, [ddw_at(DDW_RECT, 0.5)],
+             virtuals={**DGD_VIRTUALS, DDW_COCREATE_SLOT: (5, {0: 16, 3: 16}, {"com": True, "returns": ddw_hresult}),
+                       0x48: (2, {}, {"com": True, "returns": ddw_hresult}),
+                       0x20: (5, {}, {"com": True, "returns": ddw_hresult})},
+             virtual_effects={DDW_COCREATE_SLOT: ddw_write(4, lambda h: WORLD_BASE + DDW_COM)}),
+    dgd_spec("DirectX_CGameDrawer_Create", 0x005b6f90, [ddw_at(DDW_RECT, 0.5)],
+             virtuals={**DGD_VIRTUALS, DDW_COCREATE_SLOT: (5, {0: 16, 3: 16}, {"com": True, "returns": ddw_hresult}),
+                       0x48: (2, {}, {"com": True, "returns": ddw_hresult}),
+                       0x20: (5, {}, {"com": True, "returns": ddw_hresult})},
+             virtual_effects={DDW_COCREATE_SLOT: ddw_write(4, lambda h: WORLD_BASE + DDW_COM)}),
+    # Destroy's EAX is what operator delete left (callers ignore it).
+    dgd_spec("DirectX_CGameDrawer_Destroy", 0x005b6fc0, [], eax_mask=0),
+    dgd_spec("DirectX_CGameDrawer_AddSurface", 0x005b7000, [dgd_surface_arg], new_fails=0.2),
+    # 0x5b704e: a null primary (both then crash reading its vbptr at 0x5b708b).
+    dgd_spec("DirectX_CGameDrawer_SetPrimarySurface", 0x005b7040, [one_of(WORLD_BASE + DGD_PRIMARY)], new_fails=0.2,
+             exempt_blocks=(0x5b704e,)),
+    dgd_spec("DirectX_CGameDrawer_RemoveSurface", 0x005b70c0, [dgd_surface_arg]),
+    # SetMemberByte7CToOne leaves EAX as the caller had it.
+    dgd_spec("SetMemberByte7CToOne", 0x005b7160, [anything], eax_mask=0),
+    # The exempt blocks are the iterators' "no list or no current link"
+    # fallbacks: dead, since a successful += leaves both set.
+    dgd_spec("DirectX_CGameDrawer_ReleaseSurfaces", 0x005b7170, [anything], exempt_blocks=(0x5b71e0, 0x5b7204)),
+    dgd_spec("WCListIterBase_Construct", 0x005b72b0, [anything], self_at=DGD_MODE_A),
+    dgd_spec("DirectX_CGameDrawer_RestoreSurfaces", 0x005b72e0, [], exempt_blocks=(0x5b7357,)),
+    dgd_spec("DirectX_CGameDrawer_ReleasePalettes", 0x005b7390, [anything], exempt_blocks=(0x5b73fb,)),
+    # RequestFullRedraw leaves EAX as the caller had it.
+    dgd_spec("DirectX_CGameDrawThread_RequestFullRedraw", 0x005b6730, [], eax_mask=0),
+]

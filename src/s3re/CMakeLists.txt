@@ -264,6 +264,8 @@ add_library(s3re SHARED
     # game/framework/: WinMain, Win32/DirectX framework classes, exceptions, strings
     game/framework/directx_draw.cpp
     game/framework/directx_draw_tests.cpp
+    game/framework/directx_drawer.cpp
+    game/framework/directx_drawer_tests.cpp
     game/framework/directx_sound.cpp
     game/framework/directx_sound_tests.cpp
     game/framework/directx_sound_effect.cpp
