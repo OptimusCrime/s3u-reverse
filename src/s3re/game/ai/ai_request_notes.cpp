@@ -99,8 +99,8 @@ void SetRequest(void* self, NoteType type, std::uint32_t buildingType, std::uint
     note->x = static_cast<std::uint16_t>(x);
     note->y = static_cast<std::uint16_t>(y);
     note->value22 = static_cast<std::uint16_t>(value);
-    note->unk24 = 0;
-    note->unk26 = 0;
+    note->state = 0;
+    note->reports = 0;
 }
 
 }  // namespace
@@ -229,14 +229,14 @@ void __fastcall HOUSE_GROUND_REQUEST_NOTE_Init(void* self, void* /*edx*/, std::u
     note->request.x = static_cast<std::uint16_t>(x);
     note->request.y = static_cast<std::uint16_t>(y);
     note->request.value22 = kNoValue;
-    note->request.unk24 = kNoValue;
-    note->request.unk26 = kNoValue;
+    note->request.state = kNoValue;
+    note->request.reports = kNoValue;
     reinterpret_cast<PairFn>(kSetSize)(&note->spiral, nullptr, g_aiMapSizeX, g_aiMapSizeY);
     reinterpret_cast<PairFn>(kSetPosition)(&note->spiral, nullptr, note->request.x, note->request.y);
     note->max_radius = static_cast<std::uint16_t>(radius);
     note->spiral_ring = 0;
-    note->unk28 = 0;
-    note->unk44 = 0;
+    note->found = 0;
+    note->skip_check = 0;
     const auto siteKindOf = reinterpret_cast<SiteKindFn>(kSiteKindOf);
     const auto kind = static_cast<std::uint8_t>(siteKindOf(note->request.building_type));
     note->military = kind == kMilitarySite ? 1 : 0;
@@ -382,9 +382,9 @@ void CompareRequests(test::Context& ctx, const RequestFunctions& candidate, int 
 // Wrong: HOUSE_REQUEST_NOTE's init forgets to clear +0x26.
 std::uint32_t __fastcall WrongHouseRequestInit(void* self, void* /*edx*/, std::uint32_t type, std::uint32_t x,
                                                std::uint32_t y, std::uint32_t value) {
-    const std::uint16_t keep = AsRequest(self)->unk26;
+    const std::uint16_t keep = AsRequest(self)->reports;
     HOUSE_REQUEST_NOTE_Init(self, nullptr, type, x, y, value);
-    AsRequest(self)->unk26 = keep;
+    AsRequest(self)->reports = keep;
     return 0;
 }
 

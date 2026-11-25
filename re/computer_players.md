@@ -570,3 +570,15 @@ small tower within 16 for military sites, AI::IsAllowedBeforeBasicEconomy
 0x5721a0, then OrderPlaceBuilding). Before the basic economy stands only the
 first woodcutter, stonecutter, sawmill and forester and up to four small
 towers may be placed.
+
+Session 55 (V, `ai_request_agents.cpp`): the reports back up the chain
+(slot 9). HOUSE_GROUND_REQUEST_AGENT::WorkOnNote 0x576530 checks
+`positions_per_turn` (AiPlayerSetup +0) spiral positions per turn and
+reports 100 with the site (x | y << 16) or 0 when the spiral runs out;
+HOUSE_REQUEST_AGENT::NoteReported 0x578920 waits for both children (ground
+and ware request, state bits 1 / 2, `reports`, `site` +0x28) and reports
+100 with the site only if both succeeded; T_DO_BUILD_HOUSE_AGENT::
+NoteReported 0x5656a0 sets the build order's state (2 placed, 8 site found,
+4 no site). COMPUTER_PLAYER_AGENT::Run 0x5846a0 asks for a small tower
+(priority 20000) every `small_tower_interval` (setup +0xb2) * 14 + player
+runs.

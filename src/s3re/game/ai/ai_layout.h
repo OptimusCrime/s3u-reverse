@@ -26,11 +26,14 @@ struct AiPlayerSetup {
     std::uint16_t positions_per_turn;  // 0x000 HOUSE_GROUND_REQUEST_AGENT::WorkOnNote 0x576530: spiral positions per turn
     std::uint16_t unk002;
     std::uint16_t min_mine_resources;  // 0x004 HOUSE_GROUND_REQUEST_NOTE::CheckSite: ResourceAmountNear at least this
-    std::uint8_t unk006[0xc4 - 6];
+    std::uint8_t unk006[0xb2 - 6];
+    std::uint16_t small_tower_interval;  // 0x0b2 COMPUTER_PLAYER_AGENT::Run 0x5846a0 asks for a small tower every 14 times this (+ player) runs
+    std::uint8_t unk0b4[0xc4 - 0xb4];
     std::uint16_t promotion_interval;  // 0x0c4 the economy agent promotes soldiers after more than 14 times this many steps (0x56a0f0)
     std::uint8_t unk0c6[0x180 - 0xc6];
 };
 static_assert(offsetof(AiPlayerSetup, min_mine_resources) == 4);
+static_assert(offsetof(AiPlayerSetup, small_tower_interval) == 0xb2);
 static_assert(offsetof(AiPlayerSetup, promotion_interval) == 0xc4);
 static_assert(sizeof(AiPlayerSetup) == 0x180);
 
@@ -148,12 +151,33 @@ struct RequestNote {
     std::uint16_t x;              // 0x1e (G)
     std::uint16_t y;              // 0x20 (G)
     std::uint16_t value22;        // 0x22 not in LOCAL_WARE_REQUEST_NOTE's init
-    std::uint16_t unk24;          // 0x24 0 after the init (not LOCAL_WARE_REQUEST_NOTE's)
-    std::uint16_t unk26;          // 0x26 the same
+    // 0x24 0 after the init (not LOCAL_WARE_REQUEST_NOTE's). T_DO_BUILD_HOUSE_NOTE:
+    // the request's state (NoteReported 0x5656a0: 2 placed, 8 site found
+    // but not placed, 4 no site); HOUSE_REQUEST_NOTE: bit 0 the ground
+    // request succeeded, bit 1 the ware request (0x578920).
+    std::uint16_t state;
+    std::uint16_t reports;        // 0x26 0 after the init; HOUSE_REQUEST_NOTE: its children's reports (0x578920)
 };
 static_assert(offsetof(RequestNote, building_type) == 0x1c);
 static_assert(offsetof(RequestNote, value22) == 0x22);
-static_assert(offsetof(RequestNote, unk26) == 0x26);
+static_assert(offsetof(RequestNote, reports) == 0x26);
+
+// HOUSE_REQUEST_NOTE: + the site its ground request found (x | y << 16,
+// HOUSE_REQUEST_AGENT::NoteReported 0x578920).
+struct HouseRequestNote {
+    RequestNote request;  // 0x00
+    std::uint32_t site;   // 0x28
+};
+static_assert(offsetof(HouseRequestNote, site) == 0x28);
+
+// COMPUTER_PLAYER_AGENT: + its run counter (0x5846a0).
+struct ComputerPlayerAgent {
+    std::uint32_t vtable;  // 0x00
+    std::uint16_t kind;    // 0x04
+    std::uint16_t unk06;
+    std::uint16_t runs;    // 0x08 runs since the last small tower request
+};
+static_assert(offsetof(ComputerPlayerAgent, runs) == 8);
 
 // ---------------------------------------------------------------- CComputerPlayer
 // One per computer player (20 pointers at CLogicThread+0x350; constructor
@@ -608,14 +632,14 @@ static_assert(sizeof(WrappedPos) == 16);
 // 0x575d60.
 struct HouseGroundRequestNote {
     RequestNote request;          // 0x00 (+0x22..+0x26 = 0xffff after Init)
-    std::uint16_t unk28;          // 0x28 0 after Init
+    std::uint16_t found;          // 0x28 0 after Init; 1 once WorkOnNote 0x576530 found a site
     std::uint16_t unk2a;
     WrappedPos spiral;            // 0x2c the search position: map-sized, starting at (x, y)
     std::uint16_t spiral_ring;    // 0x3c NextSpiralPosition 0x5763a0: the ring (0 after Init: not started)
     std::uint16_t spiral_side;    // 0x3e the ring's side 0..5 (WrappedPos::Step direction)
     std::uint16_t spiral_step;    // 0x40 the step on that side
     std::uint16_t max_radius;     // 0x42 Init's fourth argument
-    std::uint32_t unk44;          // 0x44 0 after Init
+    std::uint32_t skip_check;     // 0x44 0 after Init; non-zero: WorkOnNote 0x576530 clears it and moves on without checking the position
     std::uint32_t military;       // 0x48 1 if the building needs a military site (AI_SiteKindOf == 3)
 };
 static_assert(offsetof(HouseGroundRequestNote, spiral) == 0x2c);

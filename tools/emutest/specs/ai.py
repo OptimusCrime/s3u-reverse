@@ -3428,3 +3428,66 @@ SPECS += [
     Spec("BLACK_BOARD_AGENT_SubclassDeletingDestructor", 0x0056fad0, "thiscall", [anything]),
     Spec("BLACK_BOARD_AGENT_DeletingDestructor", 0x0056faa0, "thiscall", [anything]),
 ]
+
+
+# -- session 55 (wip/ai-econ): request agents' slots (ai_request_agents.cpp) --
+# Their EAX (slot 9) only reaches the upper halves of slot 4 results, which
+# CComputerPlayer::WorkOnNote ignores; WorkOnNote's AX (100) is compared.
+
+AGENT_SETUP = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+AGENT_PROBES = {0x005515C0: (1, "thiscall", "probe"), 0x00551610: (1, "thiscall", "probe"),
+                0x00582480: (2, "thiscall", "probe"),
+                0x00575DF0: (0, "thiscall", lambda h: h % 2 if h % 3 else 0),
+                0x005763A0: (0, "thiscall", lambda h: 0 if h % 7 == 0 else h)}
+
+
+def reported_notes(rng, pool, args):
+    """The parent (scratch 0: state, reports) and the child (scratch 1: its
+    type, mostly 0 or 1)."""
+    return [(SCRATCH + 0x24, rng.randrange(4), 2), (SCRATCH + 0x26, rng.randrange(3), 2),
+            (SCRATCH + SCRATCH_SLOT_BYTES + 6, rng.randrange(2) if rng.random() < 0.85 else rng.randrange(6), 2)]
+
+
+def report_result(rng, pool):
+    value = 100 if rng.random() < 0.5 else rng.randrange(3)
+    return value | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def ground_work_world(rng, pool, args):
+    """The note (scratch 0: spiral position, skip_check) on a 32 x 32 map of
+    players 0..2 in patches; the setup's positions per turn (scratch 2)."""
+    fields = [(SCRATCH + 0x2C, rng.randrange(34), 2), (SCRATCH + 0x2E, rng.randrange(32), 2),
+              (SCRATCH + 0x44, rng.getrandbits(32) if rng.random() < 0.25 else 0, 4),
+              (AGENT_SETUP, 0 if rng.random() < 0.1 else rng.randrange(1, 7), 2)]
+    for x in range(32):
+        for y in range(32):
+            k = x // 8 + y // 8
+            fields.append((tile(x, y) + 8, 0xFF if k % 4 == 3 else k % 3, 1))
+    return fields
+
+
+def agent_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, 32, 2), (AI_MAP_SIZES + 2, 32, 2),
+            (AI_PLAYER_SETUP, WORLD_BASE + AGENT_SETUP, 4), (AI_PLAYER_NUMBER, rng.randrange(3), 1),
+            (AI_PLAYER, rng.getrandbits(32), 4), (AI_PLAYER_DATA, WORLD_BASE + SCRATCH + 3 * SCRATCH_SLOT_BYTES, 4)]
+
+
+def run_agent(rng, pool, args):
+    """The agent's run counter (+8) around the limit; the setup's interval."""
+    interval = rng.randrange(8) if rng.random() < 0.9 else rng.getrandbits(16)
+    limit = interval * 14 + rng.randrange(3)
+    runs = (limit + rng.randint(-2, 1)) & 0xFFFF if rng.random() < 0.6 else rng.getrandbits(16)
+    return [(8, runs, 2), (AGENT_SETUP + 0xB2, interval, 2)]
+
+
+SPECS += [
+    Spec("T_DO_BUILD_HOUSE_AGENT_NoteReported", 0x005656a0, "thiscall",
+         [scratch(0), scratch(1), report_result, anything], eax_mask=0, presets=reported_notes,
+         globals=agent_globals, callees=AGENT_PROBES),
+    Spec("HOUSE_REQUEST_AGENT_NoteReported", 0x00578920, "thiscall",
+         [scratch(0), scratch(1), report_result, anything], eax_mask=0, presets=reported_notes,
+         globals=agent_globals, callees=AGENT_PROBES),
+    Spec("HOUSE_GROUND_REQUEST_AGENT_WorkOnNote", 0x00576530, "thiscall", [scratch(0)], eax_mask=0xFFFF,
+         presets=ground_work_world, globals=agent_globals, callees=AGENT_PROBES, max_cases=1000),
+    Spec("COMPUTER_PLAYER_AGENT_Run", 0x005846a0, "thiscall", [], presets=run_agent, globals=agent_globals),
+]

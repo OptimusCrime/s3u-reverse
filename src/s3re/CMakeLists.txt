@@ -165,6 +165,7 @@ add_library(s3re SHARED
     game/ai/ai_land_queries.cpp
     game/ai/ai_map_queries.cpp
     game/ai/ai_player_nodes.cpp
+    game/ai/ai_request_agents.cpp
     game/ai/ai_request_execute.cpp
     game/ai/ai_request_notes.cpp
     game/ai/ai_site_notes.cpp
