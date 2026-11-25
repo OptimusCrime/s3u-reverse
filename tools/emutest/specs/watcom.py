@@ -61,3 +61,12 @@ SPECS += [
     Spec("StringVector_Resize", 0x0040a580, "thiscall", [small_or_anything(0, 8)], presets=string_vector_state,
          new_fails=0.1, exempt_blocks=(0x0040a6d0, 0x0040a6fc)),
 ]
+
+
+# -- WCBareVectorBase<unsigned short> constructor (ushort_vector.cpp, session 55) --
+# n small, 0, or any (n * 2 wraps); operator new fails in some cases.
+SPECS += [
+    Spec("WCBareVectorBase_UShort_Construct", 0x00462df0, "thiscall",
+         [lambda rng, pool: rng.choice([0, 0, 1, 10, rng.randrange(64), rng.getrandbits(32), 0x80000000])],
+         new_fails=0.15),
+]

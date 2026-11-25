@@ -30,7 +30,19 @@
 // with 0 and the length set to 1. The library's error hooks the original
 // calls on the way are the empty function 0x59f200 (not called here).
 //
+// GamePlayerSetup::GamePlayerSetup (0x0049e8f0): () thiscall, EAX = this:
+//   +0x00, +0x04, +0x08 = 0; +0x10, +0x14 = -1; empty strings at +0x18 and
+//   +0xbc and an empty 16-bit string at +0x28; the vector at +0x38
+//   (WCBareVectorBase<unsigned short>(10) 0x462df0, then length +0x4c = 0,
+//   +0x50 = 5, vtable WCValOrderedVector<unsigned short>); bytes +0x54,
+//   +0x60, +0x68 = 0; +0x58, +0x5c, +0x74, +0x78, +0xa4, +0xb8 = 0; +0x64 =
+//   0xff (random race); +0x6c, +0x70, +0xa8..+0xb4 = -1. Not written:
+//   +0x0c..+0x0f and +0x7c..+0xa3.
+//
 // Known differences:
+//  - The three strings' allocator bytes (+0x18, +0x28, +0xbc) are one
+//    uninitialized local byte of the original constructor's frame; ours
+//    writes 0 (docs/reimplementation_notes.md, case b; the setups live on).
 //  - SaveSetup writes 0 into the bytes of its chunks the original leaves
 //    as stack leftovers (chunk 0x14 byte +0xb of each record and the
 //    records past the count, chunk 0x1a +0x22..+0x23).
@@ -48,9 +60,11 @@
 #include "game/framework/critical_section.h"
 #include "game/texts.h"
 #include "game/ui/game_settings_layout.h"
+#include "game/vtables.h"
 #include "hooks.h"
 #include "msvc6/game_heap.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
@@ -166,6 +180,79 @@ void WriteChunk(CMapFile* file, SaveChunk type, const void* chunk) {
 }
 
 }  // namespace
+
+using SetupConstructHookFn = GamePlayerSetup*(__fastcall*)(GamePlayerSetup* self, void* edx);
+GamePlayerSetup* __fastcall GamePlayerSetup_Construct(GamePlayerSetup* self, void* edx);
+S3RE_HOOK(0x0049e8f0, GamePlayerSetup_Construct, SetupConstructHookFn, Original_GamePlayerSetup_Construct,
+          GamePlayerSetup_Construct);
+
+namespace {
+
+using UShortVectorConstructFn = void*(__fastcall*)(void* self, void* edx, std::uint32_t n);
+constexpr std::uintptr_t kUShortVectorConstruct = 0x00462df0;  // WCBareVectorBase<unsigned short> (ours)
+constexpr std::uint32_t kSetupVectorCapacity = 10;
+constexpr std::uint32_t kSetupVectorField18 = 5;  // +0x18 of the vector (probably its growth step)
+constexpr std::uint32_t kRandomRace = 0xff;
+constexpr std::uint32_t kUnset = 0xffffffff;
+
+// An empty string: allocator byte 0 (see above), no text; the three
+// padding bytes after the allocator byte are left alone, as in the original.
+void EmptyString(void* string) {
+    auto* s = static_cast<msvc6::String*>(string);
+    s->allocator = 0;
+    s->ptr = nullptr;
+    s->len = 0;
+    s->res = 0;
+}
+
+}  // namespace
+
+// Purpose: Sets up an empty player setup record (no strings, random race,
+// no start position).
+GamePlayerSetup* __fastcall GamePlayerSetup_Construct(GamePlayerSetup* self, void* /*edx*/) {
+    auto* bytes = reinterpret_cast<std::uint8_t*>(self);
+    auto dword = [bytes](std::size_t offset, std::uint32_t value) {
+        std::memcpy(bytes + offset, &value, sizeof(value));  // raw-ok: unnamed fields of the record
+    };
+    dword(0x00, 0);
+    dword(0x04, 0);
+    dword(0x08, 0);
+    self->value10 = kUnset;
+    self->party = kUnset;
+    EmptyString(&self->text18);
+    EmptyString(bytes + 0x28);  // the 16-bit string (same layout)
+    reinterpret_cast<UShortVectorConstructFn>(kUShortVectorConstruct)(bytes + 0x38, nullptr, kSetupVectorCapacity);
+    dword(0x38 + 0x14, 0);
+    dword(0x38 + 0x18, kSetupVectorField18);
+    dword(0x38, vtables::kWCValOrderedVector_ushort);
+    bytes[0x54] = 0;
+    dword(0x58, 0);
+    self->type = 0;
+    bytes[0x60] = 0;
+    self->race = kRandomRace;
+    self->race_byte = 0;
+    dword(0x6c, kUnset);
+    dword(0x70, kUnset);
+    dword(0x74, 0);
+    dword(0x78, 0);
+    dword(0xa4, 0);
+    self->saved_values[0] = kUnset;
+    self->saved_values[1] = kUnset;
+    self->saved_values[2] = kUnset;
+    self->colour = kUnset;
+    dword(0xb8, 0);
+    EmptyString(&self->textBC);
+    return self;
+}
+
+// For the emulator's self-test and the wrong-implementation check: also
+// writes the padding byte after the allocator byte at +0x18 (which the
+// comparisons leave out).
+GamePlayerSetup* __fastcall WrongGamePlayerSetupConstruct(GamePlayerSetup* self, void* edx) {
+    GamePlayerSetup_Construct(self, edx);
+    reinterpret_cast<std::uint8_t*>(self)[0x19] = 0x5a;  // raw-ok: deliberately wrong
+    return self;
+}
 
 using PlayerSetupFn = GamePlayerSetup*(__fastcall*)(GameSettings* self, void* edx, std::int32_t index);
 using SaveSetupFn = void(__fastcall*)(GameSettings* self, void* edx, CMapFile* file, std::uint32_t tick,

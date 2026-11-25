@@ -69,6 +69,7 @@ inline constexpr std::uint32_t kWCBareVectorBase_int = 0x655a5c;        // WCBar
 inline constexpr std::uint32_t kWCVectorBase_int = 0x6559f8;            // WCVectorBase<int>
 inline constexpr std::uint32_t kWCBareVectorBase_uint = 0x657158;       // WCBareVectorBase<unsigned int>
 inline constexpr std::uint32_t kWCBareVectorBase_ushort = 0x657404;     // WCBareVectorBase<unsigned short>
+inline constexpr std::uint32_t kWCValOrderedVector_ushort = 0x657410;  // WCValOrderedVector<unsigned short>
 // Standard library
 inline constexpr std::uint32_t kStdLogicError = 0x65a548;  // std::logic_error
 inline constexpr std::uint32_t kStdOutOfRange = 0x65a538;  // std::out_of_range

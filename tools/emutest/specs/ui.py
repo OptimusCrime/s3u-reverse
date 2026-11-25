@@ -449,3 +449,21 @@ SPECS += [
     Spec("GamePlayerSetup_ScalarDeletingDestructor", 0x00437fc0, "thiscall", [below(4)],
          callees={0x0049ec80: (0, "thiscall", "probe")}),
 ]
+
+
+# -- GamePlayerSetup::GamePlayerSetup (game_settings_players.cpp, session 55) --
+# The record is the world; the base vector constructor 0x462df0 (ours,
+# verified) runs. ignore_bytes: the three allocator bytes are one
+# uninitialized local byte of the original's frame (ours writes 0); the
+# self-test pairs WrongGamePlayerSetupConstruct, which also writes the padding
+# byte +0x19 next to the first.
+SETUP_ALLOCATOR_BYTES = (0x18, 0x28, 0xbc)
+
+SPECS += [
+    Spec("GamePlayerSetup_Construct", 0x0049e8f0, "thiscall", [], ignore_bytes=SETUP_ALLOCATOR_BYTES,
+         new_fails=0.1),
+]
+SELF_TEST += [
+    Spec("WrongGamePlayerSetupConstruct", 0x0049e8f0, "thiscall", [], ignore_bytes=SETUP_ALLOCATOR_BYTES,
+         max_cases=50),
+]
