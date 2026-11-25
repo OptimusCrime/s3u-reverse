@@ -347,6 +347,12 @@ inline constexpr GameText kBuildLargeTowerQ{0x7327b8};     // "ooo RAINER Baue B
 inline constexpr GameText kBuildLargeTowerGo{0x732798};    // "ooo RAINER Baue BigTower !!!" + newline
 inline constexpr GameText kBuildCastleQ{0x73277c};         // "ooo RAINER Baue Castle ???" + newline
 inline constexpr GameText kBuildCastleGo{0x732760};        // "ooo RAINER Baue Castle !!!" + newline
+// The credits code's debug reports (ui/credits_debug.cpp; OutputDebugStringA).
+inline constexpr GameText kFileLineFormat{0x7330e0};     // "%s %d"
+inline constexpr GameText kCaughtUnknown{0x7330e8};      // "catched (...?): "
+inline constexpr GameText kCaughtCmy{0x7330fc};          // "catched cmy: "
+inline constexpr GameText kColonSpace{0x69a240};         // ": "
+inline constexpr GameText kCreatingException{0x73310c};  // "creating exception: "
 // The out-of-memory checks of the land evaluation (CEvaLand::Acquire, Init).
 inline constexpr GameText kEvalMap{0x7312e8};            // "pEvalMap"
 inline constexpr GameText kEvaLandSourceFile{0x7312f4};  // "E:\Siedler3\Rainer\Cevaland.cpp"

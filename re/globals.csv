@@ -431,3 +431,8 @@ address,name,type,status,notes
 0x00732798,texts::kBuildLargeTowerGo,char[],identified,"String ""ooo RAINER Baue BigTower !!!"" + newline. Declared in src/s3re/game/texts.h; used by ai_map_worker_agent.cpp."
 0x0073277c,texts::kBuildCastleQ,char[],identified,"String ""ooo RAINER Baue Castle ???"" + newline. Declared in src/s3re/game/texts.h; used by ai_map_worker_agent.cpp."
 0x00732760,texts::kBuildCastleGo,char[],identified,"String ""ooo RAINER Baue Castle !!!"" + newline. Declared in src/s3re/game/texts.h; used by ai_map_worker_agent.cpp."
+0x007330e0,texts::kFileLineFormat,char[],identified,"String ""%s %d"" (the credits code's debug reports). Declared in src/s3re/game/texts.h; used by credits_debug.cpp."
+0x007330e8,texts::kCaughtUnknown,char[],identified,"String ""catched (...?): "" (the credits code's debug reports). Declared in src/s3re/game/texts.h; used by credits_debug.cpp."
+0x007330fc,texts::kCaughtCmy,char[],identified,"String ""catched cmy: "" (the credits code's debug reports). Declared in src/s3re/game/texts.h; used by credits_debug.cpp."
+0x0069a240,texts::kColonSpace,char[],identified,"String "": "" (the credits code's debug reports). Declared in src/s3re/game/texts.h; used by credits_debug.cpp."
+0x0073310c,texts::kCreatingException,char[],identified,"String ""creating exception: "" (the credits code's debug reports). Declared in src/s3re/game/texts.h; used by credits_debug.cpp."
