@@ -72,6 +72,14 @@ inline constexpr std::uint32_t kCStaticText = 0x65615c;     // CStaticText
 inline constexpr std::uint32_t kCStaticImage = 0x6561e0;    // CStaticImage
 inline constexpr std::uint32_t kCStaticFrame = 0x656264;    // CStaticFrame
 inline constexpr std::uint32_t kCStaticColorIndexedFrame = 0x6562e8;  // CStaticColorIndexedFrame
+// Controls with the virtual base CScreenElement: the class's own vtable and
+// the one its constructor stores in the virtual base (game/ui/controls.cpp).
+inline constexpr std::uint32_t kCControl = 0x655d28;              // CControl
+inline constexpr std::uint32_t kCControl_element = 0x655ca4;      // its CScreenElement part
+inline constexpr std::uint32_t kCButton = 0x655f00;               // CButton
+inline constexpr std::uint32_t kCButton_element = 0x655e7c;       // its CScreenElement part
+inline constexpr std::uint32_t kCImageButton = 0x655f94;          // CImageButton
+inline constexpr std::uint32_t kCImageButton_element = 0x655f10;  // its CScreenElement part
 // Lobby::*
 inline constexpr std::uint32_t kCMemoryBlock = 0x65d4f4;    // Lobby::CMemoryBlock
 inline constexpr std::uint32_t kCLMMessageBlock = 0x65d4fc;  // Lobby::CLMMessageBlock
@@ -162,6 +170,10 @@ inline constexpr std::uint32_t kCProgrammingError = 0x65d924;  // Win32::CProgra
 inline constexpr std::uint32_t kCAssertmentFailed = 0x65d8d4;  // Win32::CAssertmentFailed
 inline constexpr std::uint32_t kCOutOfMemory = 0x65d8c0;       // Win32::COutOfMemory
 inline constexpr std::uint32_t kCDataError = 0x65d4c0;         // Lobby::priv::CDataError
+// The controls' (set by the most derived constructor; game/ui/controls.cpp).
+inline constexpr std::uint32_t kCControl = 0x655d2c;      // CControl
+inline constexpr std::uint32_t kCButton = 0x655f04;       // CButton
+inline constexpr std::uint32_t kCImageButton = 0x655f98;  // CImageButton
 }  // namespace vbtables
 
 // _ThrowInfo records passed to _CxxThrowException.

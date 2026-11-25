@@ -670,3 +670,116 @@ def static_text_to_destroy(rng, pool, args):
 # buffer unshared or frozen).
 SPECS += [Spec("CStaticText_Destroy", 0x0041c580, "thiscall", [], presets=static_text_to_destroy,
                callees={0x004156b0: (0, "thiscall", "probe")}, exempt_blocks=(0x0041c61d, 0x0041c63f))]
+
+
+# -- CControl, CButton, CImageButton, the screen's message queue (controls.cpp, session 57) --
+#
+# The object starts at world offset UICTL_OBJECT; its vbptr (+4) points at a
+# vbtable in scratch slot 6 whose displacement puts the CScreenElement
+# virtual base at the class's size or a little further (never inside the
+# class's own fields: the vtable stores would overwrite them). Functors and
+# the tooltip are fake objects (vtable emu.FAKE_VTABLE, slot 0 with one
+# argument) in scratch slot 7. The base constructors, SetRect (rects
+# recorded by contents), IsOffScreen, ShowTooltip (GDI) and the class
+# constructors/destructors called by the derived ones are probed.
+
+UICTL_OBJECT = 0x400
+UICTL_VBTABLE = SCRATCH + 6 * SCRATCH_SLOT_BYTES
+UICTL_FAKES = SCRATCH + 7 * SCRATCH_SLOT_BYTES
+UICTL_RECT_PROBE = (1, "thiscall", "probe", None, lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)),))
+UICTL_CALLEES = {0x415610: (0, "thiscall", "probe"), 0x415660: UICTL_RECT_PROBE, 0x4156e0: UICTL_RECT_PROBE,
+                 0x415840: (0, "thiscall", "probe"), 0x418550: (0, "thiscall", "probe"),
+                 0x417fe0: (5, "thiscall", "probe"), 0x4180a0: (0, "thiscall", "probe"),
+                 0x4183c0: (0, "thiscall", "probe"), 0x41a830: (6, "thiscall", "probe")}
+
+
+def uictl_callees(own):
+    """The probed callees, without the function itself."""
+    return {address: entry for address, entry in UICTL_CALLEES.items() if address != own}
+
+
+def uictl_fake(k):
+    return WORLD_BASE + UICTL_FAKES + 0x10 * k
+
+
+def uictl_objects(size, fields=(), vbptr=UICTL_OBJECT + 4):
+    """Presets: the vbtable (base at `size` from the object, +0..16) and the
+    fake objects; `fields` (object offset, generator(rng, element), size),
+    where element is the virtual base's world offset."""
+    def presets(rng, pool, args):
+        displacement = (UICTL_OBJECT + size) - vbptr + 4 * rng.randrange(5)
+        element = vbptr + displacement
+        out = [(vbptr, WORLD_BASE + UICTL_VBTABLE, 4), (UICTL_VBTABLE + 4, displacement & 0xFFFFFFFF, 4)]
+        out += [(UICTL_FAKES + 0x10 * k, FAKE_VTABLE, 4) for k in range(3)]
+        for offset, value, width in fields:
+            out.append((UICTL_OBJECT + offset if offset is not None else element + 0x1d,
+                        value(rng) & ((1 << (8 * width)) - 1), width))
+        return out
+    return presets
+
+
+def uictl_rect(rng, pool):
+    return rng.choice([0, 5, 0x7fffffff, 0x80000000, rng.randint(-50, 700) & 0xFFFFFFFF, rng.getrandbits(32)])
+
+
+def uictl_most_derived(rng, pool):
+    return rng.choice([0, 0, 1, 0x100, rng.getrandbits(32)])
+
+
+def uictl_control_to_destroy(size):
+    base = uictl_objects(size, ((0x20, lambda rng: rng.choice([0, uictl_fake(0)]), 4),))
+
+    def presets(rng, pool, args):
+        fields, _ = string_fields(rng, UICTL_OBJECT + 0x10, SCRATCH)
+        return base(rng, pool, args) + fields
+    return presets
+
+
+def uictl_link(h):
+    return 0 if h % 4 == 0 else WORLD_BASE + SCRATCH + 0x800
+
+
+UICTL_OBJ = WORLD_BASE + UICTL_OBJECT
+UICTL_ELEMENT = lambda size: one_of(UICTL_OBJ + size)  # noqa: E731  (this = the element part, no jitter: probes only)
+UICTL_TIMER_FIELDS = ((None, lambda rng: rng.choice([0, 0, 1, 0x80]), 1),  # the element's mouse_inside
+                      (0x20, lambda rng: rng.choice([0, 0, uictl_fake(0)]), 4),
+                      (0x08, lambda rng: rng.choice([0, uictl_fake(1)]), 4))
+
+SPECS += [
+    Spec("CControl_Construct", 0x00417fe0, "fastcall",
+         [one_of(UICTL_OBJ), anything] + [uictl_rect] * 4 + [uictl_most_derived],
+         presets=uictl_objects(0x3c), callees=uictl_callees(0x00417fe0)),
+    # Dead (as in CStaticText_Destroy): the inlined ~string's _Eos after
+    # erase(0, npos) and its release's decrement.
+    Spec("CControl_Destroy", 0x004180a0, "fastcall", [one_of(UICTL_OBJ + 0x3c), anything], eax_mask=0,
+         presets=uictl_control_to_destroy(0x3c), virtuals={0: 1}, callees=uictl_callees(0x004180a0),
+         exempt_blocks=(0x00418198, 0x004181b7)),
+    # Exempt 0x41840d: the functor call for a null control (this == 0x3c),
+    # whose fields would sit at address 0 (not a real control; ours keeps
+    # the check).
+    Spec("CControl_OnTimer", 0x004183c0, "fastcall", [one_of(UICTL_OBJ + 0x3c), anything], eax_mask=0xFF,
+         presets=uictl_objects(0x3c, UICTL_TIMER_FIELDS), virtuals={0: 1}, callees=uictl_callees(0x004183c0),
+         exempt_blocks=(0x0041840d,)),
+    # The group part's element at object + 0x3c + 0x7c, its vbptr 0xb4 before.
+    Spec("CGroupControl_Tick", 0x00429f10, "fastcall", [one_of(UICTL_OBJ + 0xb8), anything],
+         presets=uictl_objects(0x100, vbptr=UICTL_OBJECT + 0xb8 - 0xb4), callees=uictl_callees(0x00429f10)),
+    Spec("CButton_Construct", 0x0041a830, "fastcall",
+         [one_of(UICTL_OBJ), anything] + [uictl_rect] * 4 + [anything, uictl_most_derived],
+         presets=uictl_objects(0x50), callees=uictl_callees(0x0041a830)),
+    Spec("CButton_Destroy", 0x0041a900, "fastcall", [one_of(UICTL_OBJ + 0x50), anything],
+         presets=uictl_objects(0x50, ((0x49, lambda rng: rng.choice([0, 1, 0x80]), 1),
+                                      (0x40, lambda rng: rng.choice([0, uictl_fake(2)]), 4))),
+         virtuals={0: 1}, callees=uictl_callees(0x0041a900)),
+    Spec("CImageButton_Construct", 0x0041abe0, "fastcall",
+         [one_of(UICTL_OBJ), anything, one_of(WORLD_BASE + SCRATCH + 0x100)] + [anything] * 5 + [uictl_most_derived],
+         presets=uictl_objects(0x60), callees=uictl_callees(0x0041abe0)),
+    # The list's allocator (+0x10): 0 (operator new, sometimes failing) or a
+    # stand-in at 0x59f200 (an empty function; probed here) that hands out a
+    # link in scratch or none.
+    Spec("MsgConsoleList_NewLink", 0x00429900, "fastcall",
+         [one_of(UICTL_OBJ), anything, one_of(WORLD_BASE + SCRATCH + 0x100)], new_fails=0.2,
+         presets=lambda rng, pool, args: [(UICTL_OBJECT + 0x10, rng.choice([0, 0x59f200]), 4)],
+         callees={0x59f200: (0, "thiscall", uictl_link)}),
+    Spec("CScreen_PostMessage", 0x00417fa0, "fastcall", [one_of(UICTL_OBJ + 0x1c), anything] + [anything] * 5,
+         callees={0x429900: (1, "thiscall", uictl_link), 0x60b430: (1, "thiscall", "probe")}),
+]

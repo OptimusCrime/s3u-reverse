@@ -216,6 +216,7 @@ add_library(s3re SHARED
     game/fileformats/map_file_tests.cpp
 
     # game/ui/: CScreenElement and the controls, menu and settings layouts
+    game/ui/controls.cpp
     game/ui/credits_debug.cpp
     game/ui/game_settings.cpp
     game/ui/game_settings_players.cpp
