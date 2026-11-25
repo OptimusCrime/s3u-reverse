@@ -274,16 +274,6 @@ S3RE_HOOK(0x004fee90, CGameData_GoToNotification, GoToFn, Original_CGameData_GoT
 
 namespace {
 
-// The padding bytes of the effect records (written from stack temporaries
-// by the make functions, so they differ between any two runs).
-void ClearEffectPadding(CGameData* world) {
-    for (layout::MapEffect& record : world->map_effects.records) {
-        std::memset(record.pad2a, 0, sizeof(record.pad2a));
-        record.pad3b = 0;
-        std::memset(record.pad3e, 0, sizeof(record.pad3e));
-    }
-}
-
 using MapEffectsCtorFn = layout::MapEffectTable*(__fastcall*)(layout::MapEffectTable*, void*);
 using SetMapSizeFn = std::int32_t(__fastcall*)(layout::MapEffectTable*, void*, std::int32_t, std::int32_t);
 
@@ -321,8 +311,7 @@ void CompareGoTo(test::Context& ctx, GoToFn candidate, int cases) {
         }
         Original_CGameData_GoToNotification(full.original(), nullptr, list);
         candidate(full.ours(), nullptr, list);
-        ClearEffectPadding(full.original());
-        ClearEffectPadding(full.ours());
+        full.ClearEffectPadding();
         if (!full.Same(ctx, offsetof(CGameData, chart), offsetof(CGameData, notification_timers) - offsetof(CGameData, chart)) ||
             !full.Same(ctx, offsetof(CGameData, map_effects), sizeof(layout::MapEffectTable)) ||
             (i % 256 == 255 && !full.Checkpoint(ctx))) {

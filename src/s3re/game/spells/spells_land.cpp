@@ -934,19 +934,6 @@ void SetUpLandWorld(test::Context& ctx, test::WorldPair& worlds) {
     std::memcpy(worlds.oursBytes(), worlds.originalBytes(), kWorld);
 }
 
-// The effect table without the records' padding (the make functions'
-// stack leftovers, see spell_effects.cpp).
-void ClearEffectPadding(test::WorldPair& worlds) {
-    const std::size_t base = offsetof(CGameData, map_effects);
-    for (std::size_t slot = 0; slot < 5000; ++slot) {
-        for (std::size_t pad : {std::size_t{0x2a}, std::size_t{0x2b}, std::size_t{0x3b}, std::size_t{0x3e},
-                                std::size_t{0x3f}}) {
-            worlds.originalBytes()[base + slot * sizeof(MapEffect) + pad] = 0;
-            worlds.oursBytes()[base + slot * sizeof(MapEffect) + pad] = 0;
-        }
-    }
-}
-
 std::int32_t SpellCoordinate(test::Context& ctx, U size) {
     return ctx.rng().Chance(1, 10) ? ctx.rng().Range(-20, static_cast<std::int32_t>(size) + 20)
                                    : static_cast<std::int32_t>(ctx.rng().Below(size));
@@ -1003,7 +990,7 @@ void CompareLand(test::Context& ctx, Original original, Candidate candidate, Pic
         stubs.SetWorld(worlds.ours());
         g_fakeRandState = randSeed;
         const bool actualThrew = Threw(&RunLand, &actual);
-        ClearEffectPadding(worlds);
+        worlds.ClearEffectPadding();
         if (!S3RE_EXPECT_EQ(expectedThrew, actualThrew) || !S3RE_EXPECT(expectedCalls == stubs.Take()) ||
             !S3RE_EXPECT(expectedLogs == logs.Take()) || !worlds.Checkpoint(ctx)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: args %u %d %d %u", i, args[0], static_cast<std::int32_t>(args[1]),

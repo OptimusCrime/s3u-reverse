@@ -93,6 +93,28 @@ public:
     // Compares the whole buffers.
     bool Checkpoint(Context& ctx) { return Same(ctx, 0, size()); }
 
+    // Zeroes the padding bytes of the map effect records (MapEffect::pad*)
+    // in both worlds. The make functions build a record in an uninitialized
+    // stack temporary and copy all of it, so these bytes are stack leftovers
+    // (the original's and ours differ, and ours differ between Debug and
+    // Release builds). Every test whose cases can add map effects must clear
+    // them before comparing the effect table (docs/reimplementation_notes.md).
+    void ClearEffectPadding() { Both(&ClearEffectPaddingOf); }
+
+    // Checkpoint without the effect records' padding.
+    bool CheckpointIgnoringEffectPadding(Context& ctx) {
+        ClearEffectPadding();
+        return Checkpoint(ctx);
+    }
+
+    static void ClearEffectPaddingOf(game::CGameData* world) {
+        for (game::layout::MapEffect& record : world->map_effects.records) {
+            std::memset(record.pad2a, 0, sizeof(record.pad2a));
+            record.pad3b = 0;
+            std::memset(record.pad3e, 0, sizeof(record.pad3e));
+        }
+    }
+
 private:
     WorldBuffer original_;
     WorldBuffer ours_;

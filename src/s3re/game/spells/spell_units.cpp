@@ -589,19 +589,6 @@ void SetUpUnitWorld(test::Context& ctx, test::WorldPair& worlds) {
     std::memcpy(worlds.oursBytes(), worlds.originalBytes(), kWorld);
 }
 
-// The map effects' padding comes from the make function's stack
-// temporaries (stack leftovers, not reproducible): cleared before comparing.
-bool SameWorlds(test::Context& ctx, test::WorldPair& worlds) {
-    const std::size_t base = offsetof(CGameData, map_effects);
-    for (std::size_t slot = 0; slot < 5000; ++slot) {
-        for (std::size_t pad : {0x2a, 0x2b, 0x3b, 0x3e, 0x3f}) {
-            worlds.originalBytes()[base + slot * sizeof(MapEffect) + pad] = 0;
-            worlds.oursBytes()[base + slot * sizeof(MapEffect) + pad] = 0;
-        }
-    }
-    return worlds.Checkpoint(ctx);
-}
-
 U Coordinate(test::Context& ctx, U size) {
     return ctx.rng().Chance(1, 10) ? static_cast<U>(ctx.rng().Range(-20, static_cast<std::int32_t>(size) + 20))
                                    : ctx.rng().Below(size);
@@ -628,7 +615,7 @@ void CompareSpells(test::Context& ctx, int cases, Call call) {
         call(true, worlds.original(), player, x, y, a4, pick);
         const auto expected = logs.Take();
         call(false, worlds.ours(), player, x, y, a4, pick);
-        if (!S3RE_EXPECT(expected == logs.Take()) || !SameWorlds(ctx, worlds)) {
+        if (!S3RE_EXPECT(expected == logs.Take()) || !worlds.CheckpointIgnoringEffectPadding(ctx)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: player %u at (%d, %d), a4 %u, pick %u", i, player,
                      static_cast<std::int32_t>(x), static_cast<std::int32_t>(y), a4, pick);
             break;

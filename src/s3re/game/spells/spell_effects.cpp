@@ -188,19 +188,6 @@ namespace {
 
 constexpr std::size_t kWorld = sizeof(CGameData);
 
-// Bytes of the effect table to compare: everything but the records'
-// padding (stack leftovers of the make functions' temporaries).
-bool SameEffects(test::Context& ctx, test::WorldPair& worlds) {
-    const std::size_t base = offsetof(CGameData, map_effects);
-    for (std::size_t slot = 0; slot < 5000; ++slot) {
-        for (std::size_t pad : {std::size_t{0x2a}, std::size_t{0x2b}, std::size_t{0x3b}, std::size_t{0x3e},
-                                std::size_t{0x3f}}) {
-            worlds.originalBytes()[base + slot * sizeof(MapEffect) + pad] = 0;
-            worlds.oursBytes()[base + slot * sizeof(MapEffect) + pad] = 0;
-        }
-    }
-    return worlds.Checkpoint(ctx);
-}
 
 void SetUpEffectTable(test::Context& ctx, test::WorldPair& worlds) {
     worlds.Both([&](CGameData* w) {
@@ -231,7 +218,7 @@ void Compare(test::Context& ctx, SpawnSpellFn candidate, int cases) {
         const U a4 = ctx.rng().Next32();
         Original_CGameData_SpawnSpellEffects(worlds.original(), nullptr, a1, x, y, a4, spell);
         candidate(worlds.ours(), nullptr, a1, x, y, a4, spell);
-        if (!SameEffects(ctx, worlds)) {
+        if (!worlds.CheckpointIgnoringEffectPadding(ctx)) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: (%d, %d) spell %u", i, x, y, spell);
             break;
         }
