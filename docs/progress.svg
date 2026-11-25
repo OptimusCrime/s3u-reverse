@@ -5,21 +5,21 @@
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="328.7" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 23.4%</title></rect>
 <text x="334.3" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">23.4%</text>
-<rect x="498.7" y="100" width="78.8" height="40" fill="#4f8fc0"><title>Verified by tests only: 5.6%</title></rect>
-<text x="538.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">5.6%</text>
-<rect x="577.5" y="100" width="293.6" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.9%</title></rect>
-<text x="724.3" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.9%</text>
-<rect x="871.1" y="100" width="704.9" height="40" fill="#e8a39b"><title>Not understood yet: 50.1%</title></rect>
-<text x="1223.5" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">50.1%</text>
+<rect x="498.7" y="100" width="79.6" height="40" fill="#4f8fc0"><title>Verified by tests only: 5.7%</title></rect>
+<text x="538.5" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">5.7%</text>
+<rect x="578.3" y="100" width="292.9" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.8%</title></rect>
+<text x="724.8" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.8%</text>
+<rect x="871.2" y="100" width="704.8" height="40" fill="#e8a39b"><title>Not understood yet: 50.1%</title></rect>
+<text x="1223.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">50.1%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="232.4" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 16.5%</title></rect>
 <text x="286.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">16.5%</text>
-<rect x="402.4" y="154" width="61.5" height="40" fill="#4f8fc0"><title>Verified by tests only: 4.4%</title></rect>
-<text x="433.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">4.4%</text>
-<rect x="463.9" y="154" width="514.7" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.6%</title></rect>
-<text x="721.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.6%</text>
-<rect x="978.6" y="154" width="597.4" height="40" fill="#e8a39b"><title>Not understood yet: 42.5%</title></rect>
-<text x="1277.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.5%</text>
+<rect x="402.4" y="154" width="62.1" height="40" fill="#4f8fc0"><title>Verified by tests only: 4.4%</title></rect>
+<text x="433.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">4.4%</text>
+<rect x="464.5" y="154" width="514.2" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.6%</title></rect>
+<text x="721.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.6%</text>
+<rect x="978.7" y="154" width="597.3" height="40" fill="#e8a39b"><title>Not understood yet: 42.5%</title></rect>
+<text x="1277.4" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.5%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
 <rect x="869.6" y="216" width="16" height="16" fill="#f2c86b"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
@@ -1221,8 +1221,8 @@
 84 bytes — Identified (purpose known)</title></rect>
 <rect x="420.8" y="589.4" width="7.5" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Net_sub_470440 @ 0x00470440
 80 bytes — Classified (class/role known)</title></rect>
-<rect x="420.8" y="596.6" width="7.5" height="7.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>UI_MoveWords @ 0x00418cf0
-80 bytes — Identified (purpose known)</title></rect>
+<rect x="420.8" y="596.6" width="7.5" height="7.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>UI_MoveWords @ 0x00418cf0
+80 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="420.8" y="603.8" width="7.5" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>UI_sub_4a8f10 @ 0x004a8f10
 80 bytes — Classified (class/role known)</title></rect>
 <rect x="420.8" y="611" width="7.5" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Lobby_sub_5e1140 @ 0x005e1140
@@ -3397,8 +3397,8 @@
 64 bytes — Identified (purpose known)</title></rect>
 <rect x="733.7" y="500.6" width="4.2" height="6.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::ScrollTo @ 0x00425110
 48 bytes — Identified (purpose known)</title></rect>
-<rect x="728.1" y="507.5" width="3.3" height="5.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::GetHeaderHeight @ 0x00424590
-32 bytes — Identified (purpose known)</title></rect>
+<rect x="728.1" y="507.5" width="3.3" height="5.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CListView::GetHeaderHeight @ 0x00424590
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="731.4" y="507.5" width="3.3" height="2.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CListView::GetFullyVisibleLineCount @ 0x00424570
 16 bytes — Classified (class/role known)</title></rect>
 <rect x="731.4" y="510.4" width="3.3" height="2.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::GetLineCount @ 0x00424580
@@ -3826,8 +3826,8 @@
 48 bytes — Classified (class/role known)</title></rect>
 <rect x="668.8" y="719.6" width="5" height="5.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CEditControl::scalar_deleting_destructor @ 0x0042ad20
 48 bytes — Identified (purpose known)</title></rect>
-<rect x="673.9" y="719.6" width="4.9" height="5.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CEditControl::OnLButtonDown @ 0x00419b30
-47 bytes — Identified (purpose known)</title></rect>
+<rect x="673.9" y="719.6" width="4.9" height="5.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CEditControl::OnLButtonDown @ 0x00419b30
+47 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="668.8" y="725" width="3.4" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CEditControl::OnLButtonDown_tail @ 0x00419b5f
 33 bytes — Classified (class/role known)</title></rect>
 <rect x="672.2" y="725" width="3.3" height="5.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CEditControl::OnFocusChanged @ 0x00419b10
@@ -4644,8 +4644,8 @@
 80 bytes — Identified (purpose known)</title></rect>
 <rect x="811.6" y="657.8" width="8.3" height="5.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::scalar_deleting_destructor @ 0x0042b770
 64 bytes — Identified (purpose known)</title></rect>
-<rect x="811.6" y="662.8" width="8.3" height="5.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::OnMoved @ 0x0041e9e0
-64 bytes — Identified (purpose known)</title></rect>
+<rect x="811.6" y="662.8" width="8.3" height="5.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::OnMoved @ 0x0041e9e0
+64 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="819.9" y="657.8" width="2.1" height="10.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::vbase_destructor @ 0x0041eff0
 32 bytes — Classified (class/role known)</title></rect>
 </g>
@@ -4788,8 +4788,8 @@
 64 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1056.2" y="663.3" width="6.8" height="4.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::SetControlFlag0C @ 0x00422460
 48 bytes — Classified (class/role known)</title></rect>
-<rect x="1063" y="657.1" width="4.9" height="6.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::SetFlag1F @ 0x00422490
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="1063" y="657.1" width="4.9" height="6.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::SetFlag1F @ 0x00422490
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1063" y="663.6" width="4.9" height="4.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::vbase_destructor @ 0x004816d0
 32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -5082,8 +5082,8 @@
 128 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="906.2" y="680.9" width="10.2" height="7.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CControl::OnTimer @ 0x004183c0
 112 bytes — Identified (purpose known)</title></rect>
-<rect x="916.4" y="680.9" width="7.3" height="7.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CControl::SetTooltipTextId @ 0x00418330
-80 bytes — Identified (purpose known)</title></rect>
+<rect x="916.4" y="680.9" width="7.3" height="7.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CControl::SetTooltipTextId @ 0x00418330
+80 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="906.2" y="688.1" width="6.1" height="6.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CControl::OnLButtonDown @ 0x00418380
 64 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="906.2" y="695" width="6.1" height="6.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CControl::OnMouseLeave @ 0x004184e0
@@ -5092,14 +5092,14 @@
 48 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="917.9" y="688.1" width="5.7" height="5.5" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CControl::OnShow @ 0x00418520
 48 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="912.2" y="693.6" width="7.6" height="4.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CControl::Draw @ 0x004187d0
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="912.2" y="693.6" width="7.6" height="4.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CControl::Draw @ 0x004187d0
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="912.2" y="697.7" width="7.6" height="4.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CControl::scalar_deleting_destructor @ 0x0042a8c0
 48 bytes — Identified (purpose known)</title></rect>
 <rect x="919.8" y="693.6" width="3.8" height="5.5" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CControl::DeleteTooltip @ 0x004187b0
 32 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="919.8" y="699.1" width="3.8" height="2.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CControl::SetEnabled @ 0x00418810
-16 bytes — Identified (purpose known)</title></rect>
+<rect x="919.8" y="699.1" width="3.8" height="2.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CControl::SetEnabled @ 0x00418810
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>DirectX::CGameNetSession: 9 functions</title><rect x="924.1" y="668.4" width="37.2" height="33.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="924.6" y="668.9" width="21.3" height="21.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameNetSession::vf04 @ 0x005bcad0
@@ -6076,8 +6076,8 @@
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="944.1" y="881.5" width="6.1" height="3.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CScreen::InitDialogs @ 0x00417f30
 32 bytes — Classified (class/role known)</title></rect>
-<rect x="944.1" y="884.8" width="3.1" height="3.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CScreen::HasQueuedMessages @ 0x00417f50
-16 bytes — Identified (purpose known)</title></rect>
+<rect x="944.1" y="884.8" width="3.1" height="3.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CScreen::HasQueuedMessages @ 0x00417f50
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="947.2" y="884.8" width="3.1" height="3.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CScreen::GetScreen @ 0x00417f90
 16 bytes — Identified (purpose known)</title></rect>
 </g>
@@ -6430,18 +6430,18 @@
 <g><title>CListView::CColumn: 7 functions</title><rect x="950.7" y="979.6" width="20.4" height="18.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="951.2" y="980.1" width="8" height="17.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::CColumn::CColumn @ 0x004274c0
 224 bytes — Identified (purpose known)</title></rect>
-<rect x="959.2" y="980.1" width="5.7" height="8.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::CColumn::operator_assign @ 0x00427600
-80 bytes — Identified (purpose known)</title></rect>
-<rect x="964.9" y="980.1" width="5.7" height="8.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::CColumn::SetPosition @ 0x00427650
-80 bytes — Identified (purpose known)</title></rect>
-<rect x="959.2" y="988.8" width="4.6" height="8.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::CColumn::CColumn_copy @ 0x004275a0
-64 bytes — Identified (purpose known)</title></rect>
+<rect x="959.2" y="980.1" width="5.7" height="8.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CListView::CColumn::operator_assign @ 0x00427600
+80 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="964.9" y="980.1" width="5.7" height="8.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CListView::CColumn::SetPosition @ 0x00427650
+80 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="959.2" y="988.8" width="4.6" height="8.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CListView::CColumn::CColumn_copy @ 0x004275a0
+64 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="963.8" y="988.8" width="3.4" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CListView::CColumn::scalar_deleting_destructor @ 0x00429730
 32 bytes — Classified (class/role known)</title></rect>
 <rect x="967.2" y="988.8" width="3.4" height="5.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::CColumn::~CColumn @ 0x004275e0
 32 bytes — Identified (purpose known)</title></rect>
-<rect x="963.8" y="994.6" width="6.8" height="2.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CListView::CColumn::operator_eq @ 0x00427830
-32 bytes — Classified (class/role known)</title></rect>
+<rect x="963.8" y="994.6" width="6.8" height="2.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CListView::CColumn::operator_eq @ 0x00427830
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>DirectX::CPrimaryFlipSurface: 4 functions</title><rect x="971.1" y="860.4" width="20.5" height="18.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="971.6" y="860.9" width="9.2" height="17.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CPrimaryFlipSurface::Create @ 0x005bf9b0
@@ -6672,8 +6672,8 @@
 <g><title>CStaticColorIndexedFrame: 3 functions</title><rect x="1058.4" y="878.8" width="16.3" height="15.8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1058.9" y="879.3" width="12" height="14.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CStaticColorIndexedFrame::Draw @ 0x0041dbe0
 293 bytes — Identified (purpose known)</title></rect>
-<rect x="1070.8" y="879.3" width="3.3" height="8.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CStaticColorIndexedFrame::CStaticColorIndexedFrame @ 0x0041db90
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="1070.8" y="879.3" width="3.3" height="8.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CStaticColorIndexedFrame::CStaticColorIndexedFrame @ 0x0041db90
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1070.8" y="888.2" width="3.3" height="5.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CStaticColorIndexedFrame::SetFrame @ 0x0041dbc0
 32 bytes — Classified (class/role known)</title></rect>
 </g>
@@ -6708,12 +6708,12 @@
 <g><title>CListView::CLine: 4 functions</title><rect x="989.3" y="925.6" width="16.2" height="15" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="989.8" y="926.1" width="9" height="14" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::CLine::CLine @ 0x004276d0
 208 bytes — Identified (purpose known)</title></rect>
-<rect x="998.7" y="926.1" width="6.2" height="4.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::CLine::CLine_copy @ 0x004277a0
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="998.7" y="926.1" width="6.2" height="4.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CListView::CLine::CLine_copy @ 0x004277a0
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="998.7" y="930.8" width="6.2" height="4.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::CLine::~CLine @ 0x004277d0
 48 bytes — Identified (purpose known)</title></rect>
-<rect x="998.7" y="935.4" width="6.2" height="4.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::CLine::operator_assign @ 0x00427800
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="998.7" y="935.4" width="6.2" height="4.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CListView::CLine::operator_assign @ 0x00427800
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>cpp::exo::text::_t_Scroller: 3 functions</title><rect x="989.3" y="940.6" width="16.2" height="14.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="989.8" y="941.1" width="9.4" height="13.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>cpp::exo::text::_t_Scroller::Draw @ 0x005a1bf0
@@ -6774,8 +6774,8 @@
 <g><title>CStaticFrame: 3 functions</title><rect x="1064.4" y="894.6" width="14.4" height="15" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1064.9" y="895.1" width="13.4" height="10.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CStaticFrame::Draw @ 0x0041d9e0
 232 bytes — Identified (purpose known)</title></rect>
-<rect x="1064.9" y="905.5" width="8" height="3.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CStaticFrame::CStaticFrame @ 0x0041d960
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="1064.9" y="905.5" width="8" height="3.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CStaticFrame::CStaticFrame @ 0x0041d960
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1072.9" y="905.5" width="5.3" height="3.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CStaticFrame::SetFrame @ 0x0041d9c0
 32 bytes — Classified (class/role known)</title></rect>
 </g>
@@ -6868,8 +6868,8 @@
 <g><title>CStaticImage: 3 functions</title><rect x="1083" y="909.6" width="12.2" height="14.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1083.5" y="910.1" width="11.2" height="10.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CStaticImage::Draw @ 0x0041d7d0
 205 bytes — Identified (purpose known)</title></rect>
-<rect x="1083.5" y="920.9" width="7.5" height="2.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CStaticImage::CStaticImage @ 0x0041d7a0
-32 bytes — Classified (class/role known)</title></rect>
+<rect x="1083.5" y="920.9" width="7.5" height="2.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CStaticImage::CStaticImage @ 0x0041d7a0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1091" y="920.9" width="3.7" height="2.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CStaticImage::SetImage @ 0x0041d7c0
 16 bytes — Identified (purpose known)</title></rect>
 </g>

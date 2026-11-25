@@ -497,3 +497,84 @@ SPECS += [
     Spec("CTeam_Less", 0x004a05a0, "thiscall", [scratch(0)], presets=equal_or_close_keys(0)),
     Spec("GamePlayerSetup_Equal", 0x0049f100, "thiscall", [scratch(0)], presets=equal_or_close_keys(0x10)),
 ]
+
+
+# -- small control members (ui_control_members.cpp, session 56) ------------
+#
+# `this` at MEMBER_THIS (world offset; the controls' own fields before it are
+# lazily random), vbptrs at this + delta pointing at a vbtable in scratch
+# slot 6 whose entry [1] keeps the virtual base near `this`. Every callee is
+# probed (SetRect's rect argument recorded by its contents: it's a local of
+# the caller).
+
+MEMBER_THIS = SCRATCH + 4 * SCRATCH_SLOT_BYTES + 0x800
+MEMBER_VBTABLE = SCRATCH + 6 * SCRATCH_SLOT_BYTES
+MEMBER_CALLEES = {
+    0x415af0: (3, "thiscall", "probe"), 0x4168c0: (2, "thiscall", "probe"), 0x5faaa0: (0, "thiscall", "probe"),
+    0x413d70: (1, "thiscall", "probe"), 0x415c80: (5, "thiscall", "probe"), 0x418380: (5, "thiscall", "probe"),
+    0x417ab0: (2, "thiscall", "probe"), 0x417be0: (1, "thiscall", "probe"),
+    0x4156e0: (1, "thiscall", "probe", None, lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)),)),
+    0x41c3c0: (1, "thiscall", "probe"),
+}
+
+
+def member_state(delta=None, fields=()):
+    def presets(rng, pool, args):
+        out = [(offset, value(rng) if callable(value) else value, size) for offset, value, size in fields]
+        if delta is not None:
+            out += [(MEMBER_THIS + delta, WORLD_BASE + MEMBER_VBTABLE, 4),
+                    (MEMBER_VBTABLE + 4, (-delta + rng.randint(-0x40, 0x40)) & 0xFFFFFFFF, 4)]
+        return out
+    return presets
+
+
+def member_spec(name, address, args, this=MEMBER_THIS, **kwargs):
+    kwargs.setdefault("callees", MEMBER_CALLEES)
+    return Spec(name, address, "fastcall", [one_of(WORLD_BASE + this), anything, *args], **kwargs)
+
+
+MEMBER_A = SCRATCH + 4 * SCRATCH_SLOT_BYTES + 0x100   # a second object / a rect
+MEMBER_B = SCRATCH + 4 * SCRATCH_SLOT_BYTES + 0x200
+maybe_zero = lambda rng: rng.choice([0, rng.getrandbits(32)])  # noqa: E731
+
+
+def words_move(rng, pool):
+    return WORLD_BASE + MEMBER_A + 2 * rng.randrange(64)
+
+
+SPECS += [
+    member_spec("CControl_Draw", 0x004187d0, [anything, anything, anything], presets=member_state(-0x38)),
+    # Only AL is defined in the original (the rest is the caller's EAX; both callers overwrite it).
+    member_spec("CControl_SetEnabled", 0x00418810, [lambda rng, pool: rng.choice([0, 1, 0x100, rng.getrandbits(32)])],
+                eax_mask=0xFF),
+    member_spec("CControl_SetTooltipTextId", 0x00418330, [lambda rng, pool: maybe_zero(rng)],
+                presets=member_state(4)),
+    member_spec("CScreen_HasQueuedMessages", 0x00417f50, [],
+                presets=member_state(fields=((MEMBER_THIS + 0x84, maybe_zero, 4),))),
+    # 0x419b5f (the enabled branch) is listed as a function start, but is this function's code.
+    member_spec("CEditControl_OnLButtonDown", 0x00419b30, [anything] * 5, cover_until=0x00419b7c,
+                presets=member_state(-0x6c, ((MEMBER_THIS - 0x64, lambda rng: rng.choice([0, 1, 0x80]), 1),))),
+    member_spec("CVScrollBar_OnMoved", 0x0041e9e0, [one_of(WORLD_BASE + MEMBER_A), anything]),
+    member_spec("CDropdown_SetFlag1F", 0x00422490, [anything], presets=member_state(-0x668)),
+    member_spec("CListView_GetHeaderHeight", 0x00424590, [], this=MEMBER_A,
+                presets=member_state(fields=((MEMBER_A + 0x4f2, lambda rng: rng.choice([0, 1, 0xff]), 1),))),
+    member_spec("CColumn_CopyConstruct", 0x004275a0, [one_of(WORLD_BASE + MEMBER_A)], this=MEMBER_B),
+    # The assignments sometimes onto the source itself (which does nothing).
+    Spec("CColumn_Assign", 0x00427600, "fastcall",
+         [one_of(WORLD_BASE + MEMBER_A, WORLD_BASE + MEMBER_B), anything, one_of(WORLD_BASE + MEMBER_A)]),
+    member_spec("CLine_CopyConstruct", 0x004277a0, [one_of(WORLD_BASE + MEMBER_A)], this=MEMBER_B),
+    Spec("CLine_Assign", 0x00427800, "fastcall",
+         [one_of(WORLD_BASE + MEMBER_A, WORLD_BASE + MEMBER_B), anything, one_of(WORLD_BASE + MEMBER_A)]),
+    member_spec("CColumn_Equal", 0x00427830, [one_of(WORLD_BASE + MEMBER_B)], this=MEMBER_A,
+                presets=lambda rng, pool, args: [(MEMBER_A, (x := rng.getrandbits(32)), 4),
+                                                 (MEMBER_B, x if rng.random() < 0.5 else rng.getrandbits(32), 4)]),
+    member_spec("CColumn_SetPosition", 0x00427650, [anything, anything, anything], this=MEMBER_A,
+                presets=member_state(fields=((MEMBER_A + 0x1c, maybe_zero, 4),))),
+    member_spec("CStaticImage_Construct", 0x0041d7a0, [one_of(WORLD_BASE + MEMBER_A), anything]),
+    member_spec("CStaticFrame_Construct", 0x0041d960, [one_of(WORLD_BASE + MEMBER_A), anything, anything]),
+    member_spec("CStaticColorIndexedFrame_Construct", 0x0041db90,
+                [one_of(WORLD_BASE + MEMBER_A), anything, anything, anything]),
+    Spec("UI_MoveWords", 0x00418cf0, "fastcall",
+         [lambda rng, pool: WORLD_BASE + MEMBER_A + 2 * rng.randrange(-20, 84), words_move,
+          lambda rng, pool: rng.randrange(40)]),
+]

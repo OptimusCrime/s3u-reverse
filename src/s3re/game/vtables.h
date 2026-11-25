@@ -55,6 +55,9 @@ inline constexpr std::uint32_t kCLandscapeSurface = 0x65a520;   // CLandscapeSur
 inline constexpr std::uint32_t kCScreenElement = 0x655a68;  // CScreenElement
 inline constexpr std::uint32_t kCStaticControl = 0x6560d8;  // CStaticControl
 inline constexpr std::uint32_t kCStaticText = 0x65615c;     // CStaticText
+inline constexpr std::uint32_t kCStaticImage = 0x6561e0;    // CStaticImage
+inline constexpr std::uint32_t kCStaticFrame = 0x656264;    // CStaticFrame
+inline constexpr std::uint32_t kCStaticColorIndexedFrame = 0x6562e8;  // CStaticColorIndexedFrame
 // Lobby::*
 inline constexpr std::uint32_t kCMemoryBlock = 0x65d4f4;    // Lobby::CMemoryBlock
 inline constexpr std::uint32_t kCLMMessageBlock = 0x65d4fc;  // Lobby::CLMMessageBlock
