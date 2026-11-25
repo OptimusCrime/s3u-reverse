@@ -85,3 +85,16 @@ ExecuteSpell, HasManaForSpell, PayForSpell, SpawnSpellEffects,
 SpellRevealSpot and SpellTransformLand; the other spell handlers still
 have tests only. Note: SpellConvertGoods (0x549BD0) hangs the original game when
 cast within ~8 tiles of the map edge (kept).
+- **Spec parts: duplicate top-level names (found session 56).** `null_string_count`
+  is defined in common.py and again (differently) in ui.py; ui.py's wins for
+  every part at call time (msvc6.py's string specs included). Also
+  duplicated: PLAYER_LIST_LENGTHS, PLAYER_LISTS, ring_offsets,
+  PLAYER_RECORDS, CAMPAIGN_MISSION, GAME_TICK, SETTLER_HIGH_WATER (ai.py vs
+  common/logic/settlers). Check whether the values differ and rename; this
+  is the LOGBOOK's "tooling guard" item.
+- **GamePlayerSetup::Set 0x49f120 (session 56):** reimplemented and tested
+  (in the wip/ui-watcom history, commit dbb99b4), but not hooked: the
+  --random-map tooling has a passthrough hook at the same address
+  (tooling/random_map_start.cpp overrides the human player's race). To
+  replace it, turn the tooling hook into S3RE_HOOK_ALWAYS that applies the
+  race override and then calls ours (or the original in --original mode).

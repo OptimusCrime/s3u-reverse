@@ -201,3 +201,86 @@ SPECS += [
 SPECS += [
     Spec("String_CompareText", 0x0040a0e0, "thiscall", [one_of(STRING_TEXT_PTR)], presets=string_world),
 ]
+
+
+# -- Compiler-generated deleting destructors (deleting_destructors.cpp, session 56) --
+#
+# The class destructors and ~CScreenElement 0x4156b0 are probed (their
+# calls are what these functions do; they have their own specs). The
+# virtual-base kinds get ECX = the virtual base (world + offset), so the
+# object starts at world offset 0.
+
+DELETING_DESTRUCTORS = (  # (address, class destructor, virtual-base offset or None)
+    (0x44e300, 0x401b60, None), (0x44e320, 0x441740, None), (0x4639c0, 0x45f060, None),
+    (0x46db20, 0x49d980, None), (0x41d990, 0x41d9b0, None), (0x4993d0, 0x499620, None),
+    (0x49cb50, 0x434680, None), (0x4a5b20, 0x4a5b50, None),
+    (0x42a710, 0x42a750, 0x98), (0x42af60, 0x421fc0, 0x444), (0x42b340, 0x42b380, 0x66c),
+    (0x49b610, 0x49b650, 0x914),
+    # the Watcom vectors' and Dirk::CTeam's
+    (0x40a1b0, 0x409d50, None), (0x414390, 0x4143b0, None), (0x4281f0, 0x427de0, None),
+    (0x428210, 0x427e40, None), (0x4375d0, 0x4141a0, None), (0x437610, 0x437570, None),
+    (0x44cd70, 0x44c980, None), (0x44cd90, 0x44caa0, None), (0x44cdf0, 0x44cca0, None),
+    (0x457d10, 0x457a10, None), (0x462b60, 0x462870, None), (0x462c50, 0x462b00, None),
+    (0x4724e0, 0x4721c0, None), (0x472500, 0x472240, None), (0x472520, 0x4722e0, None),
+    (0x472540, 0x472360, None), (0x4726c0, 0x472440, None), (0x499350, 0x4990c0, None),
+    (0x4993b0, 0x4992f0, None), (0x414b90, 0x4a04d0, None),
+    (0x4375f0, 0x414240, None))
+SCREEN_ELEMENT_DESTRUCTOR = 0x4156b0
+
+
+def deleting_destructor_spec(address, destructor, offset):
+    callees = {destructor: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}
+    if offset is None:
+        return Spec(f"ScalarDeletingDestructor_{address:x}", address, "thiscall", [below(4)], callees=callees)
+    return Spec(f"ScalarDeletingDestructor_{address:x}", address, "fastcall",
+                [one_of(WORLD_BASE + offset), anything, below(4)], callees=callees)
+
+
+SPECS += [deleting_destructor_spec(*entry) for entry in DELETING_DESTRUCTORS]
+SPECS += [
+    Spec("ScalarDeletingDestructor_405360", 0x00405360, "thiscall", [below(4)]),
+    Spec("ScalarDeletingDestructor_4281d0", 0x004281d0, "thiscall", [below(4)]),
+    Spec("CompleteDestructor_421fa0", 0x00421fa0, "thiscall", [],
+         callees={0x421fc0: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_4816d0", 0x004816d0, "thiscall", [],
+         callees={0x42b380: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+]
+
+
+# -- operator[] const and append(x, pos, n) (string.cpp, session 56) --------
+SPECS += [
+    Spec("String_IndexConst", 0x00414370, "thiscall", [string_count], presets=string_world),
+    # XLEN 0x42f96c (the inlined _Grow's max_size check: needs a result of
+    # exactly 0xFFFFFFFE characters); DEAD 0x42f987, 0x42f9a1, 0x42f9a5 (the
+    # inlined _Grow's new-length-0 branches: the count is > 0 there and the
+    # npos check keeps len + count from wrapping).
+    Spec("String_AppendSubstr", 0x0042f920, "thiscall", [SELF_OR_OTHER, string_count, string_count],
+         presets=string_world, exempt_blocks=(0x0042f96c, 0x0042f987, 0x0042f9a1, 0x0042f9a5)),
+]
+
+
+# -- std::wstring _Tidy / compare, allocator<char>::deallocate (wstring.cpp, session 56) --
+# The wide string at world offset 0 with its block in scratch slot 0 (count
+# byte at +1, ptr = +2) or none. _Tidy is void in the library (EAX is left over).
+
+
+def wstring_world(rng, pool, args):
+    ptr = rng.choice([0, WORLD_BASE + SCRATCH + 2, WORLD_BASE + SCRATCH + 2, WORLD_BASE + SCRATCH + 2])
+    length = rng.randrange(40) if ptr else 0
+    fields = [(4, ptr, 4), (8, length, 4), (SCRATCH + 1, rng.choice([0, 1, 2, 0xfe, 0xff]), 1)]
+    text = [rng.choice([0x61, 0x62, 0x8061, rng.getrandbits(16)]) for _ in range(44)]
+    other = list(text) if rng.random() < 0.5 else [rng.choice([0x61, 0x62, rng.getrandbits(16)]) for _ in range(44)]
+    fields += [(SCRATCH + 2 + 2 * k, v, 2) for k, v in enumerate(text)]
+    fields += [(SCRATCH + SCRATCH_SLOT_BYTES + 2 * k, v, 2) for k, v in enumerate(other)]
+    return fields
+
+
+SPECS += [
+    Spec("WString_Tidy", 0x004286d0, "thiscall", [lambda rng, pool: rng.randrange(2) | (rng.getrandbits(24) << 8)],
+         presets=wstring_world, eax_mask=0),
+    Spec("WString_CompareChars", 0x00429980, "thiscall",
+         [lambda rng, pool: rng.randrange(42), lambda rng, pool: rng.choice([0xFFFFFFFF, rng.randrange(44)]),
+          lambda rng, pool: WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES + 2 * rng.randrange(4),
+          lambda rng, pool: rng.randrange(40)], presets=wstring_world),
+    Spec("Allocator_Deallocate", 0x00486920, "thiscall", [anything, anything]),
+]

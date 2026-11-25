@@ -526,3 +526,147 @@ SPECS += [
          virtuals={0: 1}),
     Spec("cmy_impuls_Timer_Restart", 0x0059f2a0, "thiscall", [credits_now], presets=credits_timer),
 ]
+
+
+# -- Dirk::CTeam and the team/player comparisons (game_teams.cpp, session 56) --
+# The team at world offset 0: its vectors' blocks in scratch slots 0 and 1
+# (or none), filled -2..6; ~GamePlayerSetup probed.
+
+
+def team_to_destroy(rng, pool, args):
+    return [(0x8 + 8, rng.choice([0, WORLD_BASE + SCRATCH, WORLD_BASE + SCRATCH]), 4),
+            (0x8 + 0x10, rng.randint(-2, 6) & 0xFFFFFFFF, 4),
+            (0x24 + 8, rng.choice([0, WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES] * 2 + [0]), 4),
+            (0x24 + 0x10, rng.randint(-2, 6) & 0xFFFFFFFF, 4)]
+
+
+def equal_or_close_keys(offset):
+    def presets(rng, pool, args):
+        x = rng.getrandbits(32)
+        y = rng.choice([x, x, (x + 1) & 0xFFFFFFFF, (x - 1) & 0xFFFFFFFF, rng.getrandbits(32), 0x80000000])
+        return [(offset, x, 4), (SCRATCH + offset, y, 4)]
+    return presets
+
+
+SPECS += [
+    Spec("CTeam_Construct", 0x004a0200, "thiscall", [], new_fails=0.2),
+    Spec("CTeam_ConstructId", 0x004a02d0, "thiscall", [anything], new_fails=0.2),
+    Spec("CTeam_Destroy", 0x004a04d0, "thiscall", [], presets=team_to_destroy,
+         callees={0x0049ec80: (0, "thiscall", "probe")}),
+    Spec("CTeam_Less", 0x004a05a0, "thiscall", [scratch(0)], presets=equal_or_close_keys(0)),
+    Spec("GamePlayerSetup_Equal", 0x0049f100, "thiscall", [scratch(0)], presets=equal_or_close_keys(0x10)),
+]
+
+
+# -- small control members (ui_control_members.cpp, session 56) ------------
+#
+# `this` at MEMBER_THIS (world offset; the controls' own fields before it are
+# lazily random), vbptrs at this + delta pointing at a vbtable in scratch
+# slot 6 whose entry [1] keeps the virtual base near `this`. Every callee is
+# probed (SetRect's rect argument recorded by its contents: it's a local of
+# the caller).
+
+MEMBER_THIS = SCRATCH + 4 * SCRATCH_SLOT_BYTES + 0x800
+MEMBER_VBTABLE = SCRATCH + 6 * SCRATCH_SLOT_BYTES
+MEMBER_CALLEES = {
+    0x415af0: (3, "thiscall", "probe"), 0x4168c0: (2, "thiscall", "probe"), 0x5faaa0: (0, "thiscall", "probe"),
+    0x413d70: (1, "thiscall", "probe"), 0x415c80: (5, "thiscall", "probe"), 0x418380: (5, "thiscall", "probe"),
+    0x417ab0: (2, "thiscall", "probe"), 0x417be0: (1, "thiscall", "probe"),
+    0x4156e0: (1, "thiscall", "probe", None, lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)),)),
+    0x41c3c0: (1, "thiscall", "probe"),
+}
+
+
+def member_state(delta=None, fields=()):
+    def presets(rng, pool, args):
+        out = [(offset, value(rng) if callable(value) else value, size) for offset, value, size in fields]
+        if delta is not None:
+            out += [(MEMBER_THIS + delta, WORLD_BASE + MEMBER_VBTABLE, 4),
+                    (MEMBER_VBTABLE + 4, (-delta + rng.randint(-0x40, 0x40)) & 0xFFFFFFFF, 4)]
+        return out
+    return presets
+
+
+def member_spec(name, address, args, this=MEMBER_THIS, **kwargs):
+    kwargs.setdefault("callees", MEMBER_CALLEES)
+    return Spec(name, address, "fastcall", [one_of(WORLD_BASE + this), anything, *args], **kwargs)
+
+
+MEMBER_A = SCRATCH + 4 * SCRATCH_SLOT_BYTES + 0x100   # a second object / a rect
+MEMBER_B = SCRATCH + 4 * SCRATCH_SLOT_BYTES + 0x200
+maybe_zero = lambda rng: rng.choice([0, rng.getrandbits(32)])  # noqa: E731
+
+
+def words_move(rng, pool):
+    return WORLD_BASE + MEMBER_A + 2 * rng.randrange(64)
+
+
+SPECS += [
+    member_spec("CControl_Draw", 0x004187d0, [anything, anything, anything], presets=member_state(-0x38)),
+    # Only AL is defined in the original (the rest is the caller's EAX; both callers overwrite it).
+    member_spec("CControl_SetEnabled", 0x00418810, [lambda rng, pool: rng.choice([0, 1, 0x100, rng.getrandbits(32)])],
+                eax_mask=0xFF),
+    member_spec("CControl_SetTooltipTextId", 0x00418330, [lambda rng, pool: maybe_zero(rng)],
+                presets=member_state(4)),
+    member_spec("CScreen_HasQueuedMessages", 0x00417f50, [],
+                presets=member_state(fields=((MEMBER_THIS + 0x84, maybe_zero, 4),))),
+    # 0x419b5f (the enabled branch) is listed as a function start, but is this function's code.
+    member_spec("CEditControl_OnLButtonDown", 0x00419b30, [anything] * 5, cover_until=0x00419b7c,
+                presets=member_state(-0x6c, ((MEMBER_THIS - 0x64, lambda rng: rng.choice([0, 1, 0x80]), 1),))),
+    member_spec("CVScrollBar_OnMoved", 0x0041e9e0, [one_of(WORLD_BASE + MEMBER_A), anything]),
+    member_spec("CDropdown_SetFlag1F", 0x00422490, [anything], presets=member_state(-0x668)),
+    member_spec("CListView_GetHeaderHeight", 0x00424590, [], this=MEMBER_A,
+                presets=member_state(fields=((MEMBER_A + 0x4f2, lambda rng: rng.choice([0, 1, 0xff]), 1),))),
+    member_spec("CColumn_CopyConstruct", 0x004275a0, [one_of(WORLD_BASE + MEMBER_A)], this=MEMBER_B),
+    # The assignments sometimes onto the source itself (which does nothing).
+    Spec("CColumn_Assign", 0x00427600, "fastcall",
+         [one_of(WORLD_BASE + MEMBER_A, WORLD_BASE + MEMBER_B), anything, one_of(WORLD_BASE + MEMBER_A)]),
+    member_spec("CLine_CopyConstruct", 0x004277a0, [one_of(WORLD_BASE + MEMBER_A)], this=MEMBER_B),
+    Spec("CLine_Assign", 0x00427800, "fastcall",
+         [one_of(WORLD_BASE + MEMBER_A, WORLD_BASE + MEMBER_B), anything, one_of(WORLD_BASE + MEMBER_A)]),
+    member_spec("CColumn_Equal", 0x00427830, [one_of(WORLD_BASE + MEMBER_B)], this=MEMBER_A,
+                presets=lambda rng, pool, args: [(MEMBER_A, (x := rng.getrandbits(32)), 4),
+                                                 (MEMBER_B, x if rng.random() < 0.5 else rng.getrandbits(32), 4)]),
+    member_spec("CColumn_SetPosition", 0x00427650, [anything, anything, anything], this=MEMBER_A,
+                presets=member_state(fields=((MEMBER_A + 0x1c, maybe_zero, 4),))),
+    member_spec("CStaticImage_Construct", 0x0041d7a0, [one_of(WORLD_BASE + MEMBER_A), anything]),
+    member_spec("CStaticFrame_Construct", 0x0041d960, [one_of(WORLD_BASE + MEMBER_A), anything, anything]),
+    member_spec("CStaticColorIndexedFrame_Construct", 0x0041db90,
+                [one_of(WORLD_BASE + MEMBER_A), anything, anything, anything]),
+    Spec("UI_MoveWords", 0x00418cf0, "fastcall",
+         [lambda rng, pool: WORLD_BASE + MEMBER_A + 2 * rng.randrange(-20, 84), words_move,
+          lambda rng, pool: rng.randrange(40)]),
+]
+
+
+# GamePlayerSetup(id) (session 56): the allocator bytes are the id's low byte.
+SPECS += [
+    Spec("GamePlayerSetup_ConstructId", 0x0049e9f0, "thiscall", [anything], new_fails=0.1),
+]
+
+
+# Dirk::CTeam::PlayerIds (session 56): the team at world offset 0, its int
+# vector's block in scratch slot 0 (capacity 0..8 or not positive, filled
+# -1..capacity), the result in scratch slot 5.
+def team_ids_state(rng, pool, args):
+    capacity = rng.choice([0x80000000, 0xFFFFFFFF] + list(range(9)))
+    filled = rng.randint(-1, capacity if capacity <= 8 else 8)
+    return [(8 + 8, WORLD_BASE + SCRATCH, 4), (8 + 0xc, capacity, 4), (8 + 0x10, filled & 0xFFFFFFFF, 4)]
+
+
+SPECS += [Spec("CTeam_PlayerIds", 0x004a07b0, "thiscall", [scratch(5)], presets=team_ids_state, new_fails=0.1)]
+
+
+# ~CStaticText (session 56): the label at world offset 0, its text at +0x28
+# any kind of string (common.string_fields, buffer in scratch slot 0);
+# ~CScreenElement probed.
+def static_text_to_destroy(rng, pool, args):
+    fields, _ = string_fields(rng, 0x28, SCRATCH)
+    return fields
+
+
+# Dead (DESTROY, see msvc6.py): the inlined ~string's _Eos after erase(0,
+# npos) (_Grow(0) is false) and its release's decrement (_Split left the
+# buffer unshared or frozen).
+SPECS += [Spec("CStaticText_Destroy", 0x0041c580, "thiscall", [], presets=static_text_to_destroy,
+               callees={0x004156b0: (0, "thiscall", "probe")}, exempt_blocks=(0x0041c61d, 0x0041c63f))]

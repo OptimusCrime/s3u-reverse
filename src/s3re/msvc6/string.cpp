@@ -619,6 +619,45 @@ char* __fastcall String_At(String* self, void* /*edx*/, std::uint32_t pos) {
     return reinterpret_cast<char*>(reinterpret_cast<std::uintptr_t>(self->ptr) + pos);
 }
 
+S3RE_HOOK(0x00414370, String_IndexConst, StringIndexConstFn, Original_String_IndexConst, String_IndexConst);
+
+// Purpose: Standard string: read access to one character (s[pos] on a const
+// string); without a buffer the static empty string, whatever pos is.
+const char* __fastcall String_IndexConst(const String* self, void* /*edx*/, std::uint32_t pos) {
+    if (self->ptr == nullptr) {
+        return NullString();
+    }
+    return reinterpret_cast<const char*>(reinterpret_cast<std::uintptr_t>(self->ptr) + pos);
+}
+
+S3RE_HOOK(0x0042f920, String_AppendSubstr, StringAppendSubstrFn, Original_String_AppendSubstr,
+          String_AppendSubstr);
+
+// Purpose: Standard string: append part of another string
+// (append(x, pos, n)), e.g. when the console and the menus build texts.
+// The original has _Grow inlined; it behaves as String_Grow(total, false).
+String* __fastcall String_AppendSubstr(String* self, void* /*edx*/, const String* x, std::uint32_t pos,
+                                       std::uint32_t n) {
+    if (x->len < pos) {
+        GameXran();
+    }
+    std::uint32_t count = x->len - pos;
+    if (n < count) {
+        count = n;
+    }
+    if (Npos() - self->len <= count) {
+        GameXlen();
+    }
+    if (count > 0) {
+        const std::uint32_t total = self->len + count;
+        if (String_Grow(self, nullptr, total, 0)) {
+            CopyChars(self->ptr + self->len, CStr(x) + pos, count);
+            String_Eos(self, nullptr, total);
+        }
+    }
+    return self;
+}
+
 S3RE_HOOK(0x00409e60, String_PlusString, StringPlusStringFn, Original_String_PlusString,
           String_PlusString);
 
@@ -863,6 +902,9 @@ struct StringOps {
     StringConcatCharFn concatChar;
     StringConcatCharsFn concatChars2;
     StringFromSubstrDefaultFn fromSubstrDefault;
+    // Session 56
+    StringIndexConstFn indexConst;
+    StringAppendSubstrFn appendSubstr;
 };
 
 StringOps OriginalOps() {
@@ -876,7 +918,7 @@ StringOps OriginalOps() {
             Original_String_PlusString,  Original_String_CharsPlus, Original_String_PlusChar,
             Original_String_ConcatString, Original_String_ConcatCharsLeft,
             Original_String_ConcatCharsLeft2, Original_String_ConcatChar, Original_String_ConcatChars2,
-            Original_String_FromSubstrDefault};
+            Original_String_FromSubstrDefault, Original_String_IndexConst, Original_String_AppendSubstr};
 }
 
 StringOps OurOps() {
@@ -887,7 +929,8 @@ StringOps OurOps() {
             &String_AssignText,  &String_AssignRepeat, &String_AssignTextOrEmpty, &String_At,
             &String_Freeze,      &String_PlusString, &String_CharsPlus,  &String_PlusChar,
             &String_ConcatString, &String_ConcatCharsLeft, &String_ConcatCharsLeft2,
-            &String_ConcatChar, &String_ConcatChars2, &String_FromSubstrDefault};
+            &String_ConcatChar, &String_ConcatChars2, &String_FromSubstrDefault, &String_IndexConst,
+            &String_AppendSubstr};
 }
 
 // A deliberately wrong assign(string, pos, n): never shares the buffer.
@@ -950,7 +993,7 @@ void CompareStringOperations(test::Context& ctx, const StringOps& candidate, int
         String a[kSlots] = {};
         String b[kSlots] = {};
         for (int step = 0; step < 40; ++step) {
-            const int op = static_cast<int>(ctx.rng().Below(30));
+            const int op = static_cast<int>(ctx.rng().Below(32));
             const int i = static_cast<int>(ctx.rng().Below(kSlots));
             const int j = static_cast<int>(ctx.rng().Below(kSlots));
             const std::string& text = texts[ctx.rng().Below(static_cast<std::uint32_t>(texts.size()))];
@@ -1041,6 +1084,29 @@ void CompareStringOperations(test::Context& ctx, const StringOps& candidate, int
                     resultA = a[i].allocator == lowA;
                     resultB = b[i].allocator == lowB;
                     a[i].allocator = b[i].allocator = 0;
+                    break;
+                }
+                case 30: {
+                    // append(a[j], pos, n): pos within the source (else std::_Xran throws).
+                    const std::uint32_t pos = ctx.rng().Below(a[j].len + 1);
+                    original.appendSubstr(&a[i], nullptr, &a[j], pos, n);
+                    candidate.appendSubstr(&b[i], nullptr, &b[j], pos, n);
+                    break;
+                }
+                case 31: {
+                    // operator[] const: the same position in the respective
+                    // buffer, or the static empty string.
+                    const std::uint32_t pos = ctx.rng().Below(a[i].len + 3);
+                    const char* pa = original.indexConst(&a[i], nullptr, pos);
+                    const char* pb = candidate.indexConst(&b[i], nullptr, pos);
+                    resultA = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(pa) -
+                                                         reinterpret_cast<std::uintptr_t>(a[i].ptr));
+                    resultB = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(pb) -
+                                                         reinterpret_cast<std::uintptr_t>(b[i].ptr));
+                    if (pa == NullString() || pb == NullString()) {
+                        resultA = pa == NullString();
+                        resultB = pb == NullString();
+                    }
                     break;
                 }
                 case 13: {
@@ -1136,7 +1202,7 @@ void CompareStringOperations(test::Context& ctx, const StringOps& candidate, int
                     candidate.concatChar(&b[i], &b[j], repeated);
                     break;
             }
-            const std::uint32_t mask = op == 19 ? 0xFFFFFFFFu : 0xFFu;
+            const std::uint32_t mask = op == 19 || op == 31 ? 0xFFFFFFFFu : 0xFFu;
             if (!S3RE_EXPECT_EQ(resultA & mask, resultB & mask) || !SameStrings(ctx, a, b)) {
                 ctx.Fail(__FILE__, __LINE__, "  sequence %d step %d: op %d i=%d j=%d n=0x%x",
                          sequence, step, op, i, j, n);

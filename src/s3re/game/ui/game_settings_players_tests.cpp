@@ -54,6 +54,9 @@ GamePlayerSetup* __fastcall GamePlayerSetup_Construct(GamePlayerSetup* self, voi
 using SetupConstructHookFn = GamePlayerSetup*(__fastcall*)(GamePlayerSetup* self, void* edx);
 extern SetupConstructHookFn Original_GamePlayerSetup_Construct;
 GamePlayerSetup* __fastcall WrongGamePlayerSetupConstruct(GamePlayerSetup* self, void* edx);
+GamePlayerSetup* __fastcall GamePlayerSetup_ConstructId(GamePlayerSetup* self, void* edx, std::uint32_t id);
+using SetupConstructIdFn = GamePlayerSetup*(__fastcall*)(GamePlayerSetup* self, void* edx, std::uint32_t id);
+extern SetupConstructIdFn Original_GamePlayerSetup_ConstructId;
 extern SaveSetupFn Original_GameSettings_SaveSetup;
 void __fastcall GamePlayerSetup_Destruct(void* self, void* edx);
 
@@ -448,8 +451,50 @@ void CompareSetupConstruct(test::Context& ctx, SetupConstructHookFn candidate, i
     }
 }
 
+// The id constructor: every byte but the vector's data pointer (the
+// allocator bytes are the id's low byte in both).
+void CompareSetupConstructId(test::Context& ctx, SetupConstructIdFn candidate, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        alignas(4) std::uint8_t a[sizeof(GamePlayerSetup)], b[sizeof(GamePlayerSetup)];
+        ctx.rng().Fill(a, sizeof(a));
+        std::memcpy(b, a, sizeof(a));
+        const std::uint32_t id = ctx.rng().Chance(1, 3) ? ctx.rng().Below(20) : ctx.rng().Next32();
+        auto* sa = reinterpret_cast<GamePlayerSetup*>(a);
+        auto* sb = reinterpret_cast<GamePlayerSetup*>(b);
+        GamePlayerSetup* ra = Original_GamePlayerSetup_ConstructId(sa, nullptr, id);
+        GamePlayerSetup* rb = candidate(sb, nullptr, id);
+        std::uint8_t ca[sizeof(GamePlayerSetup)], cb[sizeof(GamePlayerSetup)];
+        std::memcpy(ca, a, sizeof(ca));
+        std::memcpy(cb, b, sizeof(cb));
+        std::memset(ca + kSetupVectorData, 0, sizeof(void*));
+        std::memset(cb + kSetupVectorData, 0, sizeof(void*));
+        const bool same = S3RE_EXPECT(ra == sa && rb == sb) && S3RE_EXPECT_MEM_EQ(ca, cb, sizeof(ca));
+        GamePlayerSetup_Destruct(sa, nullptr);
+        GamePlayerSetup_Destruct(sb, nullptr);
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: id 0x%x", i, id);
+            return;
+        }
+    }
+}
+
+// Wrong: the allocator bytes 0, as in the default constructor.
+GamePlayerSetup* __fastcall WrongConstructId(GamePlayerSetup* self, void* edx, std::uint32_t id) {
+    GamePlayerSetup_ConstructId(self, edx, id);
+    self->text18.allocator = 0;
+    return self;
+}
 
 }  // namespace
+
+S3RE_TEST(GamePlayerSetup_ConstructId_MatchesOriginal) {
+    CompareSetupConstructId(ctx, &GamePlayerSetup_ConstructId, 2000);
+}
+S3RE_TEST(GamePlayerSetup_ConstructId_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSetupConstructId(probe, &WrongConstructId, 100);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(GamePlayerSetup_Construct_MatchesOriginal) {
     CompareSetupConstruct(ctx, &GamePlayerSetup_Construct, 2000);

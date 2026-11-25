@@ -176,6 +176,18 @@ using StringAtFn = char*(__fastcall*)(String* self, void* edx, std::uint32_t pos
 char* __fastcall String_At(String* self, void* edx, std::uint32_t pos);
 extern StringAtFn Original_String_At;
 
+// operator[](pos) const (0x00414370): c_str() + pos when there is a buffer,
+// else the static empty string (pos ignored).
+using StringIndexConstFn = const char*(__fastcall*)(const String* self, void* edx, std::uint32_t pos);
+const char* __fastcall String_IndexConst(const String* self, void* edx, std::uint32_t pos);
+extern StringIndexConstFn Original_String_IndexConst;
+
+// append(x, pos, n) (0x0042f920).
+using StringAppendSubstrFn = String*(__fastcall*)(String* self, void* edx, const String* x, std::uint32_t pos,
+                                                  std::uint32_t n);
+String* __fastcall String_AppendSubstr(String* self, void* edx, const String* x, std::uint32_t pos, std::uint32_t n);
+extern StringAppendSubstrFn Original_String_AppendSubstr;
+
 // _Freeze() (0x00414490).
 using StringFreezeFn = void(__fastcall*)(String* self, void* edx);
 void __fastcall String_Freeze(String* self, void* edx);
