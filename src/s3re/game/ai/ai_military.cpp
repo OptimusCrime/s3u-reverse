@@ -553,7 +553,7 @@ void Patrol(std::uint32_t player, bool unmanned) {
                 g_importOutputDebugStringA.get()(texts::kAiUnoccupiedTowerFound.c_str());
             }
         }
-        std::uint8_t& steps = (&orders.group_flags1c48[0][0])[index];
+        std::uint8_t& steps = (&orders.patrol_steps[0][0])[index];
         if (steps != 0) {
             PatrolStep(player, group, steps);
         } else if (StartPatrol(player, group, towerTarget, steps)) {
@@ -966,7 +966,7 @@ void SetUpMilitary(test::Rng& rng, CGameData* world) {
             orders.home_buildings[p][g] = SmallBuilding(rng);
             orders.home_areas[p][g] = static_cast<std::uint16_t>(rng.Below(kTestAreas));
             orders.group_flags[p][g] = static_cast<std::uint8_t>(rng.Chance(3, 4) ? 0 : 1);
-            orders.group_flags1c48[p][g] = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0 : rng.Below(9));
+            orders.patrol_steps[p][g] = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0 : rng.Below(9));
             orders.group_mages[p][g] = static_cast<std::int32_t>(rng.Below(4));
             state.attack_delays[p][g] = rng.Chance(2, 3) ? 0 : rng.Below(5);
         }
@@ -1083,7 +1083,7 @@ std::uint32_t __fastcall WrongRunMilitary(CGameData* world, std::uint32_t player
 std::uint32_t __fastcall WrongPatrolRun(CGameData* world, std::uint32_t player, std::uint32_t queue,
                                         std::uint32_t reset) {
     // Wrong: the patrol step counter starts one lower.
-    for (std::uint8_t& steps : g_aiGroupOrders.get().group_flags1c48[player]) {
+    for (std::uint8_t& steps : g_aiGroupOrders.get().patrol_steps[player]) {
         if (steps > 1) {
             --steps;
         }

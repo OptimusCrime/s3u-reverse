@@ -448,7 +448,7 @@ struct AiGroupOrders {
     std::uint8_t unk938[0x988 - 0x938];
     std::int32_t group_mages[layout::kPlayers][kUnitGroups];     // 0x988 mages per group (0x591c40, 0x5926e0)
     std::uint8_t settlers_with_orders[32000 / 8];                // 0xca8 std::bitset<32000>: group members, hunters, busy geologists
-    std::uint8_t group_flags1c48[layout::kPlayers][kUnitGroups];  // 0x1c48 per group, cleared by the reset 0x591e00 (meaning open)
+    std::uint8_t patrol_steps[layout::kPlayers][kUnitGroups];    // 0x1c48 per group the patrol steps left (AI::RunMilitary: 5..8, the low two bits choose the patrol point); was group_flags1c48
     std::int32_t highest_group[layout::kPlayers];                // 0x1d10 highest group in use
     std::int32_t group_size[layout::kPlayers];                   // 0x1d60 7 after the reset, up to 100
     AiGroupPosition gather_positions[layout::kPlayers][kUnitGroups];  // 0x1db0
