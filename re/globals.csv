@@ -493,3 +493,8 @@ address,name,type,status,notes
 0x007a115c,texts::kDSLock,char[],identified,"String ""CDirectSoundBuffer::DSLock"" Declared in src/s3re/game/texts.h; used by directx_sound_effect.cpp / directx_sound_files.cpp."
 0x007a113c,texts::kDSUnlock,char[],identified,"String ""CDirectSoundBuffer::DSUnlock"" Declared in src/s3re/game/texts.h; used by directx_sound_effect.cpp / directx_sound_files.cpp."
 0x007a128c,texts::kDSSetPan,char[],identified,"String ""CDirectSoundBuffer::DSSetPan"" Declared in src/s3re/game/texts.h; used by directx_sound_effect.cpp / directx_sound_files.cpp."
+0x0065536c,g_importMciSendCommandA,MciSendCommandAImport,classified,"S3.EXE's import address table slot of mciSendCommandA (from GOG's _INMM.dll; Win32::CCDAudio calls through it). Declared in src/s3re/game/globals.h; used by win32_cdaudio.cpp."
+0x006552f0,g_importPostMessageA,PostMessageAImport,classified,"S3.EXE's import address table slot of PostMessageA (CCDAudio::Play / Stop post to the CD window). Declared in src/s3re/game/globals.h; used by win32_cdaudio.cpp."
+0x007a4ad0,texts::kCDSetTimeFormatError,char[],identified,"String ""CD: Error during SetTimeFormat: %u"" Declared in src/s3re/game/texts.h; used by win32_cdaudio.cpp."
+0x007a4b10,texts::kCDStopError,char[],identified,"String ""CD: Error during stop: %u"" Declared in src/s3re/game/texts.h; used by win32_cdaudio.cpp."
+0x007a4b2c,texts::kCDGetTrackCountError,char[],identified,"String ""CD: Error during GetTrackCount: %u"" Declared in src/s3re/game/texts.h; used by win32_cdaudio.cpp."

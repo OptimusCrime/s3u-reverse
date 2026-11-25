@@ -229,7 +229,7 @@ DELETING_DESTRUCTORS = (  # (address, class destructor, virtual-base offset or N
     (0x5c23b0, 0x5c23d0, None), (0x5c2780, 0x5c27a0, None), (0x5c1810, 0x5c1830, None),
     (0x5b88c0, 0x5b88e0, None), (0x5c34b0, 0x5c33e0, None), (0x5c34d0, 0x5c3450, None),
     (0x5ffb20, 0x5ffa60, None), (0x5ffb40, 0x5ffb60, None), (0x5ffbc0, 0x5ffac0, None),
-    (0x5ffbe0, 0x5ffc00, None))
+    (0x5ffbe0, 0x5ffc00, None), (0x614130, 0x614150, None))
 SCREEN_ELEMENT_DESTRUCTOR = 0x4156b0
 
 

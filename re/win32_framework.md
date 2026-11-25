@@ -197,6 +197,14 @@ in scope.
 
 ### Win32::CCDAudio (Win32/cdaudio.cpp; vtable 0x65d944, 1 slot)
 
+Verified in session 57 (src/s3re/game/framework/win32_cdaudio.cpp): the
+constructor, SetTimeFormatTMSF, Play, Stop, DoStop, GetTrackCount (and
+~CMCIException / its deleting destructor). mciSendCommandA is GOG's
+_INMM.dll import (0x65536c), PostMessageA 0x6552f0. GetTrackCount treats
+MCIERR_UNSUPPORTED_FUNCTION (0x106) as "0 tracks" without a log. Left:
+Init 0x615520, Open, Close 0x615e20 and DoPlay (they need ThrowMCIError
+0x6114f0 / CMCIException 0x613fc0 first), the window procedure 0x615bd0.
+
 Global instance at **0x7a7a00** (not in re/globals.csv yet).
 
 | offset | field |

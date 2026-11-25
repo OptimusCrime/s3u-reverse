@@ -5,21 +5,21 @@
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="328.4" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 23.4%</title></rect>
 <text x="334.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">23.4%</text>
-<rect x="498.4" y="100" width="127.1" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.0%</title></rect>
-<text x="561.9" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.0%</text>
-<rect x="625.5" y="100" width="282.2" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.1%</title></rect>
-<text x="766.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.1%</text>
-<rect x="907.7" y="100" width="668.3" height="40" fill="#e8a39b"><title>Not understood yet: 47.5%</title></rect>
-<text x="1241.9" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">47.5%</text>
+<rect x="498.4" y="100" width="127.6" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.1%</title></rect>
+<text x="562.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.1%</text>
+<rect x="626" y="100" width="282" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.1%</title></rect>
+<text x="767" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.1%</text>
+<rect x="908" y="100" width="668" height="40" fill="#e8a39b"><title>Not understood yet: 47.5%</title></rect>
+<text x="1242" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">47.5%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="232.3" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 16.5%</title></rect>
 <text x="286.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">16.5%</text>
-<rect x="402.3" y="154" width="97.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.9%</title></rect>
-<text x="451" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.9%</text>
-<rect x="499.7" y="154" width="505.9" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.0%</title></rect>
-<text x="752.7" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.0%</text>
-<rect x="1005.6" y="154" width="570.4" height="40" fill="#e8a39b"><title>Not understood yet: 40.6%</title></rect>
-<text x="1290.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">40.6%</text>
+<rect x="402.3" y="154" width="97.8" height="40" fill="#4f8fc0"><title>Verified by tests only: 7.0%</title></rect>
+<text x="451.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">7.0%</text>
+<rect x="500.1" y="154" width="505.7" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.0%</title></rect>
+<text x="753" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.0%</text>
+<rect x="1005.8" y="154" width="570.2" height="40" fill="#e8a39b"><title>Not understood yet: 40.6%</title></rect>
+<text x="1290.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">40.6%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
 <rect x="869.6" y="216" width="16" height="16" fill="#f2c86b"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
@@ -5030,28 +5030,28 @@
 144 bytes — Identified (purpose known)</title></rect>
 <rect x="877.7" y="667.8" width="8.1" height="10.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::Open @ 0x00615740
 128 bytes — Identified (purpose known)</title></rect>
-<rect x="868.6" y="678.2" width="9.6" height="6.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::GetTrackCount @ 0x00615fc0
-96 bytes — Identified (purpose known)</title></rect>
+<rect x="868.6" y="678.2" width="9.6" height="6.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::GetTrackCount @ 0x00615fc0
+96 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="878.1" y="678.2" width="7.6" height="6.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::Init @ 0x00615520
 76 bytes — Classified (class/role known)</title></rect>
 <rect x="868.6" y="684.8" width="5.3" height="7.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::Close @ 0x00615e20
 64 bytes — Identified (purpose known)</title></rect>
-<rect x="868.6" y="692.7" width="5.3" height="7.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::SetTimeFormatTMSF @ 0x00615e60
-64 bytes — Identified (purpose known)</title></rect>
-<rect x="873.9" y="684.8" width="6.8" height="6.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::Play @ 0x00615ea0
-64 bytes — Identified (purpose known)</title></rect>
-<rect x="880.6" y="684.8" width="5.1" height="6.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::DoStop @ 0x00615f90
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="868.6" y="692.7" width="5.3" height="7.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::SetTimeFormatTMSF @ 0x00615e60
+64 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="873.9" y="684.8" width="6.8" height="6.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::Play @ 0x00615ea0
+64 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="880.6" y="684.8" width="5.1" height="6.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::DoStop @ 0x00615f90
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="873.9" y="690.9" width="5.3" height="5.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::Init_tail @ 0x00615601
 47 bytes — Classified (class/role known)</title></rect>
-<rect x="873.9" y="696.7" width="5.3" height="3.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::CCDAudio @ 0x006154c0
-32 bytes — Classified (class/role known)</title></rect>
+<rect x="873.9" y="696.7" width="5.3" height="3.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::CCDAudio @ 0x006154c0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="879.2" y="690.9" width="3.2" height="6.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::scalar_deleting_destructor @ 0x006154e0
 32 bytes — Classified (class/role known)</title></rect>
 <rect x="882.5" y="690.9" width="3.2" height="6.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::~CCDAudio @ 0x00615500
 32 bytes — Classified (class/role known)</title></rect>
-<rect x="879.2" y="697.4" width="6.5" height="3.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::Stop @ 0x00615f70
-32 bytes — Identified (purpose known)</title></rect>
+<rect x="879.2" y="697.4" width="6.5" height="3.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCDAudio::Stop @ 0x00615f70
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>CControl: 14 functions</title><rect x="886.2" y="667.3" width="37.4" height="33.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="886.7" y="667.8" width="18.8" height="21.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CControl::ShowTooltip @ 0x00418550
@@ -5248,10 +5248,10 @@
 960 bytes — Identified (purpose known)</title></rect>
 <rect x="811.4" y="756.8" width="17.5" height="13.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CMCIException::CMCIException @ 0x00613fc0
 368 bytes — Classified (class/role known)</title></rect>
-<rect x="829" y="756.8" width="12.2" height="13.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CMCIException::~CMCIException @ 0x00614150
-256 bytes — Classified (class/role known)</title></rect>
-<rect x="841.1" y="756.8" width="1.5" height="13.7" fill="#e8a39b"><title>Win32::CMCIException::scalar_deleting_destructor @ 0x00614130
-32 bytes — Classified (class/role known)</title></rect>
+<rect x="829" y="756.8" width="12.2" height="13.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CMCIException::~CMCIException @ 0x00614150
+256 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="841.1" y="756.8" width="1.5" height="13.7" fill="#a8c8e6"><title>Win32::CMCIException::scalar_deleting_destructor @ 0x00614130
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>DirectX::CDirectSoundException: 4 functions</title><rect x="810.9" y="771" width="32.2" height="34.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="811.4" y="771.5" width="17.5" height="27.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CDirectSoundException::Describe @ 0x005c1930

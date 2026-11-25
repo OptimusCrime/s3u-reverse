@@ -47,6 +47,7 @@
 //     0x005ffb20 WCValSkipListDict<uint, CSoundEffect*>         0x5ffa60
 //     0x005ffb40 WCSkipListBase<..uint, CSoundEffect*..>        0x5ffb60
 //     0x005ffbc0 WCValSkipListDict<uint, uint>                  0x5ffac0
+//     0x00614130 Win32::CMCIException                          0x614150
 //     0x005ffbe0 WCSkipListBase<..uint, uint..>                 0x5ffc00
 // Scalar deleting destructors of classes with the virtual base
 // CScreenElement (reached through a thunk with `this` at the virtual base,
@@ -248,6 +249,9 @@ std::uintptr_t __fastcall ScalarDeletingDestructor_5ffbc0(std::uintptr_t self, v
 std::uintptr_t __fastcall ScalarDeletingDestructor_5ffbe0(std::uintptr_t self, void*, std::uint32_t flags) {
     return DeletingDestructor(0x005ffc00, self, flags);
 }
+std::uintptr_t __fastcall ScalarDeletingDestructor_614130(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00614150, self, flags);
+}
 
 // Purpose: The same for the screen classes with the virtual base
 // CScreenElement (called with `this` at the virtual base).
@@ -372,6 +376,8 @@ S3RE_HOOK(0x005ffbc0, ScalarDeletingDestructor_5ffbc0, DeletingDestructorFn,
           Original_ScalarDeletingDestructor_5ffbc0, ScalarDeletingDestructor_5ffbc0);
 S3RE_HOOK(0x005ffbe0, ScalarDeletingDestructor_5ffbe0, DeletingDestructorFn,
           Original_ScalarDeletingDestructor_5ffbe0, ScalarDeletingDestructor_5ffbe0);
+S3RE_HOOK(0x00614130, ScalarDeletingDestructor_614130, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_614130, ScalarDeletingDestructor_614130);
 S3RE_HOOK(0x00421fa0, CompleteDestructor_421fa0, CompleteDestructorFn, Original_CompleteDestructor_421fa0,
           CompleteDestructor_421fa0);
 S3RE_HOOK(0x004816d0, CompleteDestructor_4816d0, CompleteDestructorFn, Original_CompleteDestructor_4816d0,
@@ -441,6 +447,7 @@ const DeletingCase kDeletingCases[] = {
     {Original_ScalarDeletingDestructor_5ffb40, &ScalarDeletingDestructor_5ffb40, 0x005ffb60, 0},
     {Original_ScalarDeletingDestructor_5ffbc0, &ScalarDeletingDestructor_5ffbc0, 0x005ffac0, 0},
     {Original_ScalarDeletingDestructor_5ffbe0, &ScalarDeletingDestructor_5ffbe0, 0x005ffc00, 0},
+    {Original_ScalarDeletingDestructor_614130, &ScalarDeletingDestructor_614130, 0x00614150, 0},
     {Original_ScalarDeletingDestructor_405360, &ScalarDeletingDestructor_405360, 0, 0},
     {Original_ScalarDeletingDestructor_4281d0, &ScalarDeletingDestructor_4281d0, 0, 0},
 };
@@ -472,7 +479,7 @@ void InstallStubs(test::CalleeStubs& stubs, std::uintptr_t callee) {
                   0x0044c980, 0x0044caa0, 0x0044cca0, 0x00457a10, 0x00462870, 0x00462b00,
                   0x004721c0, 0x00472240, 0x004722e0, 0x00472360, 0x00472440, 0x004990c0,
                   0x004992f0, 0x004a04d0, 0x00414240, 0x005c23d0, 0x005c27a0, 0x005c1830, 0x005b88e0,
-                  0x005c33e0, 0x005c3450, 0x005ffa60, 0x005ffb60, 0x005ffac0, 0x005ffc00>(stubs, callee);
+                  0x005c33e0, 0x005c3450, 0x005ffa60, 0x005ffb60, 0x005ffac0, 0x005ffc00, 0x00614150>(stubs, callee);
     stubs.Install<0, kScreenElementDestructor>(
         [](game::CGameData*, std::uint32_t self, const std::uint32_t*) { return self * 7 + 1; });
 }

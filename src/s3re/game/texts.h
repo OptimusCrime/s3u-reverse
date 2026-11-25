@@ -173,6 +173,10 @@ inline constexpr GameText kDsoundCppFile{0x7a1184};         // "E:\Siedler3\Dire
 inline constexpr GameText kDSLock{0x7a115c};                // "CDirectSoundBuffer::DSLock"
 inline constexpr GameText kDSUnlock{0x7a113c};              // "CDirectSoundBuffer::DSUnlock"
 inline constexpr GameText kDSSetPan{0x7a128c};              // "CDirectSoundBuffer::DSSetPan"
+// Win32\cdaudio.cpp (framework/win32_cdaudio.cpp)
+inline constexpr GameText kCDSetTimeFormatError{0x7a4ad0};  // "CD: Error during SetTimeFormat: %u"
+inline constexpr GameText kCDStopError{0x7a4b10};           // "CD: Error during stop: %u"
+inline constexpr GameText kCDGetTrackCountError{0x7a4b2c};  // "CD: Error during GetTrackCount: %u"
 
 // CSoundData (Dirk\SoundData.cpp; the sound loader, sound/sound_data.cpp)
 inline constexpr GameText kSoundDataFile{0x7a3120};        // "E:\Siedler3\Dirk\SoundData.cpp"

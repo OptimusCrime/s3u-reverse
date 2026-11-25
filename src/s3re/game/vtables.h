@@ -59,6 +59,7 @@ inline constexpr std::uint32_t kCMemorySoundFile = 0x65cf20;    // DirectX::CMem
 inline constexpr std::uint32_t kCSoundEffect = 0x65cf4c;        // DirectX::CSoundEffect
 inline constexpr std::uint32_t kCDirectSoundException = 0x65cea4;   // DirectX::CDirectSoundException
 inline constexpr std::uint32_t kCAppNotActiveException = 0x65cbb0;  // DirectX::CAppNotActiveException
+inline constexpr std::uint32_t kCCDAudio = 0x65d944;               // Win32::CCDAudio
 // CSoundEffect's dictionary of duplicate buffers and its iterators
 inline constexpr std::uint32_t kEffectBufferDict = 0x65cf54;          // WCValSkipListDict<int, CSoundEffectBuffer>
 inline constexpr std::uint32_t kEffectBufferSkipListBase = 0x65cf70;  // WCSkipListBase<...int, CSoundEffectBuffer...>

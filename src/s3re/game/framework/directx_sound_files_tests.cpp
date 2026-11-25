@@ -40,6 +40,7 @@ void* __fastcall DirectX_CDirectSoundException_Construct(void* self, void* edx, 
 String* __fastcall DirectX_CDirectSoundException_Describe(void* self, void* edx, String* result);
 std::uint32_t __fastcall DirectX_CDirectSoundException_Destroy(void* self, void* edx);
 std::uint32_t __fastcall DirectX_CAppNotActiveException_Destroy(void* self, void* edx);
+std::uint32_t __fastcall Win32_CMCIException_Destroy(void* self, void* edx);
 void* __fastcall DirectX_CAppNotActiveException_Construct(void* self, void* edx, const String* msg,
                                                           std::uint32_t mostDerived);
 std::uint32_t __fastcall CSoundData_IsEnabled(const void* self, void* edx);
@@ -67,6 +68,7 @@ extern DSExceptionConstructFn Original_DirectX_CDirectSoundException_Construct;
 extern DSExceptionDescribeFn Original_DirectX_CDirectSoundException_Describe;
 extern ExceptionDestroyFn Original_DirectX_CDirectSoundException_Destroy;
 extern ExceptionDestroyFn Original_DirectX_CAppNotActiveException_Destroy;
+extern ExceptionDestroyFn Original_Win32_CMCIException_Destroy;
 extern AppNotActiveConstructFn Original_DirectX_CAppNotActiveException_Construct;
 extern SndGetterFn Original_CSoundData_IsEnabled;
 extern SndGetterFn Original_CSoundData_GetSetNumber;
@@ -269,11 +271,15 @@ bool CompareOnce(test::Context& ctx, const Functions& ours) {
             String sb = Build(spec);
             std::memcpy(objectA + at, &sa, sizeof(sa));
             std::memcpy(objectB + at, &sb, sizeof(sb));
+            // The not-active case alternates with CMCIException's (same code).
+            const bool mci = op == kNotActiveDestroy && rng.Chance(1, 2);
             const ExceptionDestroyFn fa = op == kFileDestroy       ? originals.fileDestroy
                                           : op == kExceptionDestroy ? originals.exceptionDestroy
+                                          : mci                     ? Original_Win32_CMCIException_Destroy
                                                                     : originals.notActiveDestroy;
             const ExceptionDestroyFn fb = op == kFileDestroy       ? ours.fileDestroy
                                           : op == kExceptionDestroy ? ours.exceptionDestroy
+                                          : mci                     ? &Win32_CMCIException_Destroy
                                                                     : ours.notActiveDestroy;
             fa(objectA, nullptr);
             fb(objectB, nullptr);

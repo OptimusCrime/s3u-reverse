@@ -673,6 +673,8 @@ SPECS += [
          presets=member_strings((0x08,)), exempt_blocks=(0x005b897d, 0x005b899f)),
     Spec("DirectX_CAppNotActiveException_Construct", 0x005b8890, "thiscall", [message_ptr, mostly_derived],
          presets=string_world),
+    Spec("Win32_CMCIException_Destroy", 0x00614150, "thiscall", [], eax_mask=0,
+         presets=member_strings((0x08,)), exempt_blocks=(0x006141ed, 0x0061420f)),  # as ~CAppNotActiveException
 ]
 
 
@@ -901,4 +903,48 @@ SPECS += [
     # static initializer that follow it (0x5c3700).
     Spec("EffectBufferDictIter_Value", 0x005c3640, "thiscall", [one_of(WORLD_BASE + SFX_BLOCK)],
          presets=sfx_iter_world, virtuals=sfx_com(), cover_until=0x005c36f0),
+]
+
+
+# -- session 57: Win32::CCDAudio (win32_cdaudio.cpp) ----------------------------
+# The object at world 0 (device +8, window +0xc, often 0). The import slots
+# of mciSendCommandA and PostMessageA point at probe code (as GetProcAddress'
+# PROC_SLOT), so the calls are recorded like COM calls: the MCI parameter
+# block (on the stack) by the fields the original sets.
+CD_MCI_SLOT = 0x3D0
+CD_POST_SLOT = 0x3D4
+CD_VIRTUAL_CODE = FAKE_VTABLE + 0x1000   # emu.VIRTUAL_CODE
+
+
+def cd_world(rng, pool, args):
+    return [(8, rng.choice([0, 1, rng.getrandbits(32)]), 4), (0xC, rng.choice([0, rng.getrandbits(32)]), 4)]
+
+
+def cd_globals(rng, pool, args):
+    return [(0x0065536C, CD_VIRTUAL_CODE + CD_MCI_SLOT, 4), (0x006552F0, CD_VIRTUAL_CODE + CD_POST_SLOT, 4)]
+
+
+def cd_mci_result(h):
+    return (0, 0, 0x106, 0x101, (h >> 8) & 0xFFFFFFFF)[h % 5]
+
+
+def cd_status_return(machine, ecx, args, h):
+    if args[3]:
+        machine.guest_write(args[3] + 4, struct.pack("<I", (h >> 12) & 0x7F))
+
+
+def cd_spec(name, address, args, parameter_fields):
+    return Spec(name, address, "thiscall", args, presets=cd_world, globals=cd_globals,
+                virtuals={CD_MCI_SLOT: (4, {3: parameter_fields}, {"com": True, "returns": cd_mci_result}),
+                          CD_POST_SLOT: (4, {}, {"com": True})},
+                virtual_effects={CD_MCI_SLOT: cd_status_return} if address == 0x00615fc0 else None)
+
+
+SPECS += [
+    Spec("Win32_CCDAudio_Construct", 0x006154c0, "thiscall", []),
+    cd_spec("Win32_CCDAudio_SetTimeFormatTMSF", 0x00615e60, [], ((4, 4),)),
+    cd_spec("Win32_CCDAudio_Play", 0x00615ea0, [anything, anything], ()),
+    cd_spec("Win32_CCDAudio_Stop", 0x00615f70, [], ()),
+    cd_spec("Win32_CCDAudio_DoStop", 0x00615f90, [], ()),
+    cd_spec("Win32_CCDAudio_GetTrackCount", 0x00615fc0, [], ((8, 4),)),
 ]

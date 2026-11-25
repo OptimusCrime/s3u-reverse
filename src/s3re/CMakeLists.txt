@@ -262,6 +262,7 @@ add_library(s3re SHARED
     game/framework/framework_small.cpp
     game/framework/misc_helpers.cpp
     game/framework/string_members.cpp
+    game/framework/win32_cdaudio.cpp
     game/framework/win32_classes.cpp
     game/framework/win32_detach.cpp
     game/framework/win32_errors.cpp

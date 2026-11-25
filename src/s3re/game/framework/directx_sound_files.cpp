@@ -46,8 +46,9 @@
 //   result) ret 4: result = "DirectSound Error " + DSErrorText(hr) + "
 //   ocurred at " + where, built like CAssertmentFailed::Describe. EAX =
 //   result.
-// ~CDirectSoundException (0x005c1830) and ~CAppNotActiveException
-//   (0x005b88e0): the message at +8 destroyed (split, erase, free; inlined),
+// ~CDirectSoundException (0x005c1830), ~CAppNotActiveException
+//   (0x005b88e0) and Win32::CMCIException's (0x00614150, the CD music's
+//   exception): the message at +8 destroyed (split, erase, free; inlined),
 //   then ~CObject (0x610330). Callers ignore EAX.
 // DirectX::CAppNotActiveException::CAppNotActiveException (0x005b8890):
 //   (const string& msg, mostDerived) ret 8: if mostDerived, +4 = 0x65cbb8;
@@ -402,6 +403,17 @@ S3RE_HOOK(0x005b88e0, DirectX_CAppNotActiveException_Destroy, ExceptionDestroyFn
 // Purpose: destructor of the "application not active" exception (frees its
 // message).
 std::uint32_t __fastcall DirectX_CAppNotActiveException_Destroy(void* self, void* /*edx*/) {
+    return DestroyMessageException(self);
+}
+
+std::uint32_t __fastcall Win32_CMCIException_Destroy(void* self, void* edx);
+
+S3RE_HOOK(0x00614150, Win32_CMCIException_Destroy, ExceptionDestroyFn, Original_Win32_CMCIException_Destroy,
+          Win32_CMCIException_Destroy);
+
+// Purpose: destructor of the exception of a failed MCI call (the CD music;
+// byte-identical to the two above).
+std::uint32_t __fastcall Win32_CMCIException_Destroy(void* self, void* /*edx*/) {
     return DestroyMessageException(self);
 }
 
