@@ -68,6 +68,7 @@ address,name,type,status,notes
 0x006970f0,g_versionNumber,int32_t,identified,"Game version x100 (logged as %i.%i by CConsoleThread::OnStart); CLogicThread::SaveGame writes it as the savegame version (chunk 0 +8, 0xa0)."
 0x006974a4,texts::kFullStop,char[],identified,"String ""."" Declared in src/s3re/game/texts.h; used by win32_errors.cpp."
 0x00699000,texts::kNewline,char[],identified,"String ""\n"" Declared in src/s3re/game/texts.h; used by win32_errors.cpp."
+0x0069f974,texts::kSlotLog,char[],identified,"String ""SLOT: Ids: %i %x Version: %i Team: %i Type: %i Nation: %i Clan: %i %s"" Declared in src/s3re/game/texts.h; used by game_settings_vectors.cpp."
 0x0069f9bc,texts::kShouldManage,char[],identified,"String ""Das solltest du schon schaffen"" Declared in src/s3re/game/texts.h; used by pathing.cpp."
 0x0069f9dc,texts::kPathingFile,char[],identified,"String ""E:\Siedler3\Dirk\Pathing.cpp"" Declared in src/s3re/game/texts.h; used by pathing.cpp."
 0x0069f9fc,texts::kUnsupportedSectorType,char[],identified,"String ""Unsupported SectorType"" Declared in src/s3re/game/texts.h; used by pathing.cpp."

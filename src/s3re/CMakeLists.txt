@@ -220,6 +220,7 @@ add_library(s3re SHARED
     game/ui/game_settings.cpp
     game/ui/game_settings_players.cpp
     game/ui/game_settings_players_tests.cpp
+    game/ui/game_settings_vectors.cpp
     game/ui/game_teams.cpp
     game/ui/screen_element.cpp
     game/ui/ui_control_members.cpp

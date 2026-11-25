@@ -717,3 +717,95 @@ SPECS += [
          presets=setup_copy_strings, globals=null_string_count,
          exempt_blocks=(0x0049ee32, 0x0049ee3c, 0x0049ef20, 0x0049ef2a, 0x0049f038, 0x0049f042)),
 ]
+
+
+# -- The vectors of player setups and teams (game_settings_vectors.cpp, session 57) --
+# The vector at world offset 0, its block at GV_BLOCK (lazily random
+# elements); the element members are probed (verified on their own):
+# copy constructors record destination and source.
+GV_BLOCK = 0x10000
+GV_VALUE = SCRATCH
+GV_PLAYER_CALLEES = {
+    0x0049eaf0: (1, "thiscall", "this"),   # GamePlayerSetup copy constructor
+    0x0049edf0: (1, "thiscall", "this"),   # GamePlayerSetup::operator=
+    0x0049ec80: (0, "thiscall", "probe"),  # ~GamePlayerSetup
+    0x00437fc0: (1, "thiscall", "probe"),  # GamePlayerSetup scalar deleting destructor
+}
+GV_TEAM_CALLEES = {
+    0x004a03a0: (1, "thiscall", "this"),   # CTeam copy constructor
+    0x004a05c0: (1, "thiscall", "this"),   # CTeam::operator=
+    0x004a04d0: (0, "thiscall", "probe"),  # ~CTeam
+    0x00414b90: (1, "thiscall", "probe"),  # CTeam scalar deleting destructor
+}
+
+
+def gv_vector_fields(at: int, block: int):
+    def preset(rng, pool, args):
+        capacity = rng.choice([0, 1, 2, 3, 5, rng.randrange(8)])
+        filled = rng.choice([0, 1, 2, -1, rng.randrange(capacity + 1), capacity])
+        length = rng.choice([capacity, capacity, rng.randrange(capacity + 1), rng.randrange(8)])
+        data = rng.choice([0, WORLD_BASE + block, WORLD_BASE + block, WORLD_BASE + block])
+        # Also steps that wrap the capacity around (to 0 or below the length).
+        grow = rng.choice([0, 1, 2, 5, rng.getrandbits(32), 0xFFFFFFFF, (-capacity) & 0xFFFFFFFF])
+        return [(at + 4, rng.getrandbits(32), 4), (at + 8, data, 4), (at + 0xc, capacity, 4),
+                (at + 0x10, filled & 0xFFFFFFFF, 4), (at + 0x14, length, 4), (at + 0x18, grow, 4)]
+    return preset
+
+
+def gv_count(rng, pool):
+    return rng.choice([0, 1, 2, 3, 4, 6, rng.randrange(10), 0x10000000 + rng.getrandbits(20)])
+
+
+def gv_index(rng, pool):
+    return rng.choice([0, 1, 2, 3, 5, -1, -2, rng.randrange(8), rng.getrandbits(32)]) & 0xFFFFFFFF
+
+
+# CTeam at `at`: id, unk04, the id vector (ints at block) and the player
+# vector (elements at block + 0x8000).
+def gv_team(at: int, block: int, fake_ids_vtable: bool = False):
+    ids = gv_vector_fields(at + 8, block)
+    players = gv_vector_fields(at + 0x24, block + 0x8000)
+
+    def preset(rng, pool, args):
+        fields = [(at, rng.getrandbits(32), 4), (at + 4, rng.getrandbits(32), 4)]
+        fields += ids(rng, pool, args) + players(rng, pool, args)
+        if fake_ids_vtable:
+            fields.append((at + 8, FAKE_VTABLE, 4))
+        return fields
+    return preset
+
+
+def gv_both_teams(rng, pool, args):
+    return gv_team(0, 0x10000)(rng, pool, args) + gv_team(SCRATCH, 0x30000)(rng, pool, args)
+
+
+def gv_copy_source(rng, pool, args):
+    return gv_vector_fields(SCRATCH, 0x30000)(rng, pool, args)
+
+
+def gv_find_effect(machine, ecx, args, h):
+    """The sorted vector's find (slot 3): writes an insert position (also
+    out of range) to its third argument."""
+    machine.guest_write(args[2], struct.pack("<i", (h % 10) - 2))
+
+
+SPECS += [
+    Spec("PlayerVector_Resize", 0x00437820, "thiscall", [gv_count], presets=gv_vector_fields(0, GV_BLOCK),
+         callees=GV_PLAYER_CALLEES, new_fails=0.1),
+    Spec("TeamVector_Resize", 0x00437d00, "thiscall", [gv_count], presets=gv_vector_fields(0, GV_BLOCK),
+         callees=GV_TEAM_CALLEES, new_fails=0.1),
+    Spec("PlayerVector_InsertAt", 0x004379e0, "thiscall", [gv_index, one_of(WORLD_BASE + GV_VALUE)],
+         presets=gv_vector_fields(0, GV_BLOCK), callees=GV_PLAYER_CALLEES, new_fails=0.1),
+    Spec("TeamVector_InsertAt", 0x00438090, "thiscall", [gv_index, one_of(WORLD_BASE + GV_VALUE)],
+         presets=gv_vector_fields(0, GV_BLOCK), callees=GV_TEAM_CALLEES, new_fails=0.1),
+    Spec("PlayerBareVector_CopyContents", 0x004a13d0, "thiscall", [one_of(WORLD_BASE + SCRATCH)],
+         presets=gv_copy_source, callees=GV_PLAYER_CALLEES, new_fails=0.1, eax_mask=0, cover_until=0x004a14a0),
+    Spec("CTeam_CopyConstruct", 0x004a03a0, "thiscall", [one_of(WORLD_BASE + SCRATCH)], presets=gv_both_teams,
+         callees=GV_PLAYER_CALLEES, new_fails=0.1),
+    Spec("CTeam_Assign", 0x004a05c0, "thiscall", [one_of(WORLD_BASE + SCRATCH, WORLD_BASE + SCRATCH, WORLD_BASE)],
+         presets=gv_both_teams, callees=GV_PLAYER_CALLEES, new_fails=0.1),
+    Spec("CTeam_AddPlayerId", 0x004a06d0, "thiscall", [anything], presets=gv_team(0, 0x10000, True),
+         virtuals={0x0c: (3, {0: 4, 2: 4})}, virtual_effects={0x0c: gv_find_effect}, new_fails=0.1),
+    Spec("GamePlayerSetup_LogSlot", 0x004a01c0, "thiscall", [],
+         presets=lambda rng, pool, args: string_fields(rng, 0xbc, SCRATCH)[0]),
+]

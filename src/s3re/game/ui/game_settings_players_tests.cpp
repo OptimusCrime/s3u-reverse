@@ -27,6 +27,7 @@
 #include "game/fileformats/map_file_test_support.h"
 #include "game/fileformats/savegame_chunks.h"
 #include "game/ui/game_settings_layout.h"
+#include "game/vtables.h"
 #include "msvc6/game_heap.h"
 #include "msvc6/string.h"
 #include "msvc6/wstring.h"
@@ -36,6 +37,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -74,6 +76,34 @@ GamePlayerSetup* __fastcall GamePlayerSetup_CopyConstruct(GamePlayerSetup* self,
 GamePlayerSetup* __fastcall GamePlayerSetup_Assign(GamePlayerSetup* self, void* edx, const GamePlayerSetup* from);
 extern SetupCopyHookFn Original_GamePlayerSetup_CopyConstruct;
 extern SetupCopyHookFn Original_GamePlayerSetup_Assign;
+
+// game_settings_vectors.cpp
+using VecResizeFn = std::uint32_t(__fastcall*)(watcom::VectorBase* self, void* edx, std::uint32_t n);
+using VecInsertAtFn = std::uint32_t(__fastcall*)(watcom::VectorBase* self, void* edx, std::int32_t index,
+                                                 const void* value);
+using VecCopyContentsFn = void(__fastcall*)(watcom::VectorBase* self, void* edx, const watcom::VectorBase* from);
+using TeamCopyHookFn = CTeam*(__fastcall*)(CTeam* self, void* edx, const CTeam* from);
+using AddPlayerIdHookFn = std::uint32_t(__fastcall*)(CTeam* self, void* edx, std::int32_t id);
+using LogSlotHookFn = std::uint32_t(__fastcall*)(const GamePlayerSetup* self, void* edx);
+std::uint32_t __fastcall PlayerVector_Resize(watcom::VectorBase* self, void* edx, std::uint32_t n);
+std::uint32_t __fastcall TeamVector_Resize(watcom::VectorBase* self, void* edx, std::uint32_t n);
+std::uint32_t __fastcall PlayerVector_InsertAt(watcom::VectorBase* self, void* edx, std::int32_t index,
+                                               const void* value);
+std::uint32_t __fastcall TeamVector_InsertAt(watcom::VectorBase* self, void* edx, std::int32_t index, const void* value);
+void __fastcall PlayerBareVector_CopyContents(watcom::VectorBase* self, void* edx, const watcom::VectorBase* from);
+CTeam* __fastcall CTeam_CopyConstruct(CTeam* self, void* edx, const CTeam* from);
+CTeam* __fastcall CTeam_Assign(CTeam* self, void* edx, const CTeam* from);
+std::uint32_t __fastcall CTeam_AddPlayerId(CTeam* self, void* edx, std::int32_t id);
+std::uint32_t __fastcall GamePlayerSetup_LogSlot(const GamePlayerSetup* self, void* edx);
+extern VecResizeFn Original_PlayerVector_Resize;
+extern VecResizeFn Original_TeamVector_Resize;
+extern VecInsertAtFn Original_PlayerVector_InsertAt;
+extern VecInsertAtFn Original_TeamVector_InsertAt;
+extern VecCopyContentsFn Original_PlayerBareVector_CopyContents;
+extern TeamCopyHookFn Original_CTeam_CopyConstruct;
+extern TeamCopyHookFn Original_CTeam_Assign;
+extern AddPlayerIdHookFn Original_CTeam_AddPlayerId;
+extern LogSlotHookFn Original_GamePlayerSetup_LogSlot;
 
 namespace {
 
@@ -671,7 +701,377 @@ GamePlayerSetup* __fastcall WrongCopyConstruct(GamePlayerSetup* self, void* edx,
     return self;
 }
 
+// ---------------------------------------------------------------------------
+// The vectors of player setups and teams (game_settings_vectors.cpp)
+// ---------------------------------------------------------------------------
+//
+// Real records on the game's heap, every case built twice from one seed (one
+// side for the original, one for ours). Compared: EAX and snapshots of the
+// vectors (fields with the data pointer as null / not null, then every
+// filled element's contents: plain bytes, texts and share counts, a team's
+// ids and players), the values passed in, and the DebugLog calls.
+
+using watcom::VectorBase;
+
+std::uintptr_t Address(std::uint32_t value) {
+    return static_cast<std::uintptr_t>(value);
+}
+
+// Left out: the allocator bytes of the std::strings (+0x18, +0xbc), which
+// the copy constructor takes from the low byte of the source's address
+// (differs between the two sides' heap blocks; CompareSetupCopy checks them
+// with sources at the same address), and the padding bytes no copy function
+// writes (heap leftovers of each side's new block).
+constexpr std::size_t kUnwrittenPadding[][2] = {{0x0d, 0x10}, {0x19, 0x1c}, {0x29, 0x2c}, {0x55, 0x58},
+                                                {0x61, 0x64}, {0x69, 0x6c}, {0xbd, 0xc0}};
+
+void AppendPlayer(std::vector<std::uint8_t>& out, const GamePlayerSetup* player) {
+    const std::uintptr_t none[3] = {};
+    std::vector<std::uint8_t> snapshot = CopySnapshot(player, player, none);
+    snapshot[0x18] = snapshot[0xbc] = 0;
+    for (const auto& range : kUnwrittenPadding) {
+        std::fill(snapshot.begin() + range[0], snapshot.begin() + range[1], std::uint8_t{0});
+    }
+    out.insert(out.end(), snapshot.begin(), snapshot.end());
+}
+
+void AppendVectorFields(std::vector<std::uint8_t>& out, const VectorBase& v) {
+    VectorBase copy = v;
+    copy.data = v.data != 0 ? 1 : 0;
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(&copy);
+    out.insert(out.end(), bytes, bytes + sizeof(copy));
+}
+
+// `inBlock`: a team in a vector's block, whose unk04 the copy constructor
+// leaves as heap leftovers (left out).
+void AppendTeam(std::vector<std::uint8_t>& out, const CTeam* team, bool inBlock = false) {
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(team);
+    out.insert(out.end(), bytes, bytes + (inBlock ? 4 : 8));
+    AppendVectorFields(out, team->player_ids);
+    for (std::int32_t i = 0; i < team->player_ids.filled && team->player_ids.data != 0; ++i) {
+        const auto* id = reinterpret_cast<const std::uint8_t*>(Address(team->player_ids.data) + 4u * i);
+        out.insert(out.end(), id, id + 4);
+    }
+    AppendVectorFields(out, team->players);
+    for (std::int32_t i = 0; i < team->players.filled && team->players.data != 0; ++i) {
+        AppendPlayer(out, reinterpret_cast<const GamePlayerSetup*>(Address(team->players.data) + 0xccu * i));
+    }
+}
+
+template <typename AppendElement>
+std::vector<std::uint8_t> VectorSnapshot(const VectorBase& v, std::uint32_t size, AppendElement append) {
+    std::vector<std::uint8_t> out;
+    AppendVectorFields(out, v);
+    for (std::int32_t i = 0; i < v.filled && v.data != 0; ++i) {
+        append(out, Address(v.data) + size * static_cast<std::uint32_t>(i));
+    }
+    return out;
+}
+
+std::vector<std::uint8_t> PlayersSnapshot(const VectorBase& v) {
+    return VectorSnapshot(v, 0xcc, [](std::vector<std::uint8_t>& out, std::uintptr_t at) {
+        AppendPlayer(out, reinterpret_cast<const GamePlayerSetup*>(at));
+    });
+}
+
+std::vector<std::uint8_t> TeamsSnapshot(const VectorBase& v) {
+    return VectorSnapshot(v, sizeof(CTeam), [](std::vector<std::uint8_t>& out, std::uintptr_t at) {
+        AppendTeam(out, reinterpret_cast<const CTeam*>(at), true);
+    });
+}
+
+using TeamConstructIdFn = CTeam*(__fastcall*)(CTeam* self, void* edx, std::int32_t id);
+using TeamDestroyFn = void(__fastcall*)(CTeam* self, void* edx);
+const auto kTeamConstructId = reinterpret_cast<TeamConstructIdFn>(0x004a02d0);
+const auto kTeamDestroy = reinterpret_cast<TeamDestroyFn>(0x004a04d0);
+
+// A team with a few sorted ids (capacity 10) and up to 3 player setups.
+void FillTeam(test::Rng& rng, CTeam* team) {
+    kTeamConstructId(team, nullptr, rng.Chance(1, 4) ? -1 : static_cast<std::int32_t>(rng.Below(20)));
+    team->unk04 = rng.Next32();
+    const std::uint32_t ids = rng.Below(team->player_ids.capacity + 1);
+    std::int32_t id = static_cast<std::int32_t>(rng.Below(5)) - 2;
+    for (std::uint32_t i = 0; i < ids; ++i) {
+        reinterpret_cast<std::int32_t*>(Address(team->player_ids.data))[i] = id;
+        id += static_cast<std::int32_t>(rng.Below(4));
+    }
+    team->player_ids.filled = static_cast<std::int32_t>(ids);
+    team->player_ids.length = ids;
+    const std::uint32_t players = rng.Below(4);
+    for (std::uint32_t i = 0; i < players; ++i) {
+        FillSetupForCopy(rng, reinterpret_cast<GamePlayerSetup*>(Address(team->players.data) + 0xccu * i));
+    }
+    team->players.filled = static_cast<std::int32_t>(players);
+    team->players.length = rng.Below(players + 1);
+}
+
+void DestroyPlayers(VectorBase& v) {
+    for (std::int32_t i = 0; i < v.filled; ++i) {
+        GamePlayerSetup_Destruct(reinterpret_cast<void*>(Address(v.data) + 0xccu * i), nullptr);
+    }
+    msvc6::GameOperatorDelete(reinterpret_cast<void*>(Address(v.data)));
+    v.data = 0;
+    v.filled = 0;
+}
+
+void DestroyTeams(VectorBase& v) {
+    for (std::int32_t i = 0; i < v.filled; ++i) {
+        kTeamDestroy(reinterpret_cast<CTeam*>(Address(v.data) + sizeof(CTeam) * i), nullptr);
+    }
+    msvc6::GameOperatorDelete(reinterpret_cast<void*>(Address(v.data)));
+    v.data = 0;
+    v.filled = 0;
+}
+
+// A vector of `filled` (<= capacity) records; length <= filled, or ==
+// filled (`sameLength`, as the game's ordered vectors keep them: an insert
+// with length < filled would count a never-constructed element as filled).
+void BuildRecords(test::Rng& rng, VectorBase& v, bool teams, bool sameLength = false) {
+    const std::uint32_t size = teams ? sizeof(CTeam) : 0xcc;
+    v.vtable = teams ? vtables::kWCBareVectorBase_int : vtables::kWCValOrderedVector_CPlayer;  // (not called)
+    v.unk04 = rng.Next32();
+    v.capacity = rng.Below(5);
+    v.filled = static_cast<std::int32_t>(rng.Below(v.capacity + 1));
+    v.length = rng.Chance(2, 3) ? static_cast<std::uint32_t>(v.filled) : rng.Below(static_cast<std::uint32_t>(v.filled) + 1);
+    if (sameLength) {
+        v.length = static_cast<std::uint32_t>(v.filled);
+    }
+    v.grow = rng.Chance(1, 5) ? 0 : rng.Below(4);
+    v.data = v.capacity != 0 ? static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(
+                                   msvc6::GameOperatorNew(v.capacity * size)))
+                             : 0;
+    for (std::int32_t i = 0; i < v.filled; ++i) {
+        const std::uintptr_t at = Address(v.data) + size * static_cast<std::uint32_t>(i);
+        if (teams) {
+            FillTeam(rng, reinterpret_cast<CTeam*>(at));
+        } else {
+            FillSetupForCopy(rng, reinterpret_cast<GamePlayerSetup*>(at));
+        }
+    }
+}
+
+struct VectorFns {
+    VecResizeFn playerResize, teamResize;
+    VecInsertAtFn playerInsert, teamInsert;
+    VecCopyContentsFn copyContents;
+    TeamCopyHookFn teamCopy, teamAssign;
+    AddPlayerIdHookFn addPlayerId;
+    LogSlotHookFn logSlot;
+};
+
+VectorFns OriginalVectorFns() {
+    return {Original_PlayerVector_Resize,     Original_TeamVector_Resize,   Original_PlayerVector_InsertAt,
+            Original_TeamVector_InsertAt,     Original_PlayerBareVector_CopyContents, Original_CTeam_CopyConstruct,
+            Original_CTeam_Assign,            Original_CTeam_AddPlayerId,   Original_GamePlayerSetup_LogSlot};
+}
+
+VectorFns OurVectorFns() {
+    return {&PlayerVector_Resize,  &TeamVector_Resize, &PlayerVector_InsertAt, &TeamVector_InsertAt,
+            &PlayerBareVector_CopyContents, &CTeam_CopyConstruct, &CTeam_Assign, &CTeam_AddPlayerId,
+            &GamePlayerSetup_LogSlot};
+}
+
+struct VectorOutcome {
+    std::uint32_t eax = 0;
+    std::vector<std::uint8_t> state;
+    std::vector<DebugLogCall> log;
+    bool operator==(const VectorOutcome& o) const { return eax == o.eax && state == o.state && log == o.log; }
+};
+
+// One case of operation `op` on one side.
+VectorOutcome RunVectorCase(const VectorFns& fns, int op, std::uint64_t seed) {
+    test::Rng rng(seed);
+    VectorOutcome out;
+    const bool teams = (op & 1) != 0;
+    switch (op) {
+        case 0:
+        case 1: {  // Resize
+            VectorBase v{};
+            BuildRecords(rng, v, teams);
+            const std::uint32_t n = rng.Below(7);
+            out.eax = (teams ? fns.teamResize : fns.playerResize)(&v, nullptr, n);
+            out.state = teams ? TeamsSnapshot(v) : PlayersSnapshot(v);
+            teams ? DestroyTeams(v) : DestroyPlayers(v);
+            break;
+        }
+        case 2:
+        case 3: {  // InsertAt
+            VectorBase v{};
+            BuildRecords(rng, v, teams, true);
+            alignas(4) std::uint8_t value[sizeof(GamePlayerSetup)];
+            if (teams) {
+                FillTeam(rng, reinterpret_cast<CTeam*>(value));
+            } else {
+                FillSetupForCopy(rng, reinterpret_cast<GamePlayerSetup*>(value));
+            }
+            const std::int32_t index = static_cast<std::int32_t>(rng.Below(v.length + 5)) - 2;
+            out.eax = (teams ? fns.teamInsert : fns.playerInsert)(&v, nullptr, index, value);
+            out.state = teams ? TeamsSnapshot(v) : PlayersSnapshot(v);
+            if (teams) {
+                AppendTeam(out.state, reinterpret_cast<CTeam*>(value));
+                kTeamDestroy(reinterpret_cast<CTeam*>(value), nullptr);
+                DestroyTeams(v);
+            } else {
+                AppendPlayer(out.state, reinterpret_cast<GamePlayerSetup*>(value));
+                GamePlayerSetup_Destruct(value, nullptr);
+                DestroyPlayers(v);
+            }
+            break;
+        }
+        case 4: {  // the player vector's contents copy
+            VectorBase from{};
+            BuildRecords(rng, from, false);
+            VectorBase to;
+            rng.Fill(&to, sizeof(to));
+            fns.copyContents(&to, nullptr, &from);
+            out.state = PlayersSnapshot(to);
+            const std::vector<std::uint8_t> source = PlayersSnapshot(from);
+            out.state.insert(out.state.end(), source.begin(), source.end());
+            DestroyPlayers(to);
+            DestroyPlayers(from);
+            break;
+        }
+        case 5:
+        case 6: {  // CTeam copy constructor / operator=
+            alignas(4) std::uint8_t fromBytes[sizeof(CTeam)], toBytes[sizeof(CTeam)];
+            auto* from = reinterpret_cast<CTeam*>(fromBytes);
+            auto* to = reinterpret_cast<CTeam*>(toBytes);
+            FillTeam(rng, from);
+            const bool self = op == 6 && rng.Chance(1, 8);
+            if (op == 6) {
+                FillTeam(rng, to);
+            } else {
+                rng.Fill(toBytes, sizeof(toBytes));
+            }
+            CTeam* result = (op == 5 ? fns.teamCopy : fns.teamAssign)(to, nullptr, self ? to : from);
+            out.eax = result == to;
+            AppendTeam(out.state, to);
+            AppendTeam(out.state, from);
+            kTeamDestroy(to, nullptr);
+            kTeamDestroy(from, nullptr);
+            break;
+        }
+        case 7: {  // AddPlayerId (the real sorted vector's find)
+            alignas(4) std::uint8_t teamBytes[sizeof(CTeam)];
+            auto* team = reinterpret_cast<CTeam*>(teamBytes);
+            FillTeam(rng, team);
+            team->player_ids.grow = rng.Chance(1, 4) ? 0 : rng.Below(3);
+            const std::int32_t id = static_cast<std::int32_t>(rng.Below(30)) - 4;
+            out.eax = fns.addPlayerId(team, nullptr, id);
+            AppendTeam(out.state, team);
+            kTeamDestroy(team, nullptr);
+            break;
+        }
+        case 8: {  // LogSlot
+            alignas(4) std::uint8_t bytes[sizeof(GamePlayerSetup)];
+            auto* player = reinterpret_cast<GamePlayerSetup*>(bytes);
+            FillSetupForCopy(rng, player);
+            {
+                DebugLogRecorder recorder;
+                out.eax = fns.logSlot(player, nullptr);
+                out.log = recorder.Take();
+            }
+            // The text pointer itself differs between the sides: compare the text.
+            for (DebugLogCall& call : out.log) {
+                if (call.count == 8) {
+                    const char* text = reinterpret_cast<const char*>(static_cast<std::uintptr_t>(call.args[7]));
+                    call.args[7] = static_cast<std::uint32_t>(std::strlen(text));
+                    out.state.assign(text, text + std::strlen(text));
+                }
+            }
+            GamePlayerSetup_Destruct(player, nullptr);
+            break;
+        }
+    }
+    return out;
+}
+
+constexpr int kVectorOps = 9;
+
+void CompareVectors(test::Context& ctx, const VectorFns& candidate, int casesPerOp) {
+    const VectorFns original = OriginalVectorFns();
+    for (int op = 0; op < kVectorOps; ++op) {
+        for (int i = 0; i < casesPerOp; ++i) {
+            const std::uint64_t seed = ctx.rng().Next64();
+            const VectorOutcome a = RunVectorCase(original, op, seed);
+            const VectorOutcome b = RunVectorCase(candidate, op, seed);
+            if (!S3RE_EXPECT(a.log.size() == b.log.size()) || !S3RE_EXPECT_EQ(a.eax, b.eax) || !S3RE_EXPECT(a == b)) {
+                std::size_t at = 0;
+                while (at < a.state.size() && at < b.state.size() && a.state[at] == b.state[at]) {
+                    ++at;
+                }
+                ctx.Fail(__FILE__, __LINE__, "  op %d, case %d: state sizes %zu/%zu, first difference at %zu (%02x/%02x)",
+                         op, i, a.state.size(), b.state.size(), at, at < a.state.size() ? a.state[at] : 0,
+                         at < b.state.size() ? b.state[at] : 0);
+                return;
+            }
+        }
+    }
+}
+
+// Wrong implementations, one per function (each must be caught).
+std::uint32_t __fastcall WrongPlayerResize(VectorBase* self, void* edx, std::uint32_t n) {
+    const std::uint32_t result = PlayerVector_Resize(self, edx, n);
+    self->length = self->capacity;  // the length is left alone in the original
+    return result;
+}
+std::uint32_t __fastcall WrongTeamResize(VectorBase* self, void* edx, std::uint32_t n) {
+    return TeamVector_Resize(self, edx, n + (n == 2 ? 1 : 0));
+}
+std::uint32_t __fastcall WrongPlayerInsert(VectorBase* self, void* edx, std::int32_t index, const void* value) {
+    return PlayerVector_InsertAt(self, edx, index < 0 ? static_cast<std::int32_t>(self->length) : index, value);
+}
+std::uint32_t __fastcall WrongTeamInsert(VectorBase* self, void* edx, std::int32_t index, const void* value) {
+    return TeamVector_InsertAt(self, edx, index > 0 ? index - 1 : index, value);
+}
+void __fastcall WrongCopyContents(VectorBase* self, void* edx, const VectorBase* from) {
+    PlayerBareVector_CopyContents(self, edx, from);
+    self->unk04 = 0;
+}
+CTeam* __fastcall WrongTeamCopy(CTeam* self, void* edx, const CTeam* from) {
+    CTeam_CopyConstruct(self, edx, from);
+    self->unk04 = from->unk04;  // not copied by the original
+    return self;
+}
+CTeam* __fastcall WrongTeamAssign(CTeam* self, void* edx, const CTeam* from) {
+    CTeam_Assign(self, edx, from);
+    self->players.length = self->players.filled;
+    return self;
+}
+std::uint32_t __fastcall WrongAddPlayerId(CTeam* self, void* edx, std::int32_t id) {
+    return CTeam_AddPlayerId(self, edx, id + 1);
+}
+std::uint32_t __fastcall WrongLogSlot(const GamePlayerSetup* self, void* edx) {
+    return GamePlayerSetup_LogSlot(self, edx) + 1;
+}
+
 }  // namespace
+
+S3RE_TEST(GameSettingsVectors_MatchOriginal) {
+    CompareVectors(ctx, OurVectorFns(), 300);
+}
+S3RE_TEST(GameSettingsVectors_ComparisonDetectsWrongImplementation) {
+    const VectorFns ours = OurVectorFns();
+    for (int k = 0; k < kVectorOps; ++k) {
+        VectorFns wrong = ours;
+        switch (k) {
+            case 0: wrong.playerResize = &WrongPlayerResize; break;
+            case 1: wrong.teamResize = &WrongTeamResize; break;
+            case 2: wrong.playerInsert = &WrongPlayerInsert; break;
+            case 3: wrong.teamInsert = &WrongTeamInsert; break;
+            case 4: wrong.copyContents = &WrongCopyContents; break;
+            case 5: wrong.teamCopy = &WrongTeamCopy; break;
+            case 6: wrong.teamAssign = &WrongTeamAssign; break;
+            case 7: wrong.addPlayerId = &WrongAddPlayerId; break;
+            case 8: wrong.logSlot = &WrongLogSlot; break;
+        }
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareVectors(probe, wrong, 60);
+        if (!S3RE_EXPECT(probe.failures() > 0)) {
+            ctx.Fail(__FILE__, __LINE__, "  wrong implementation %d not caught", k);
+        }
+    }
+}
 
 S3RE_TEST(GamePlayerSetup_Set_MatchesOriginal) {
     CompareSetupSet(ctx, &GamePlayerSetup_Set, 3000);
