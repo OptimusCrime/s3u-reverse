@@ -541,3 +541,20 @@ Open questions: who makes the
 AiPlayerData nodes (one per economy area, see step 4 of 0x550f80) and
 when; what
 0x4318a0's flag is in multiplayer (G: only the host runs the AI).
+
+## Forced production, wood emergency and tools (session 55, V)
+
+`ai_force_production.cpp`. `COMP_ForceProduction` 0x572fc0 sets the area
+node's `force_production` and sends SetAreaCondition commands: on, with
+little coal (< 5) or iron (< 3) in the area, it enables the conditions for
+coal / iron production (kinds 1..9, per race 10 / 11 / 12 / 47); off resets
+them to other values (details in the function's header comment; the
+meaning of the condition kinds is still open). Its log texts are swapped
+("AUS" when switching on). `COMP_EmergencyPowersActWood` 0x573670 sets
+`short_of_wood` and stops every site still missing boards except the wood
+industry and small towers (restarts them when the emergency ends).
+`AI::EnsureGoodsSupply` 0x573760 / `AI::OrderMissingTools` 0x59bf70 /
+`LOCAL_WARE_REQUEST_AGENT::CheckWorkerOrTool` 0x57abc0 decide whether a
+building's worker can start: per building type `g_aiBuildingToolAndWorker`
+(0x732804) gives the tool and the worker's settler type; a missing tool
+raises its goods priority and forces production while a toolsmith exists.

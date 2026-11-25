@@ -158,6 +158,7 @@ add_library(s3re SHARED
     game/ai/ai_enemy_search.cpp
     game/ai/ai_evaland.cpp
     game/ai/ai_evaland_cells.cpp
+    game/ai/ai_force_production.cpp
     game/ai/ai_ground_request.cpp
     game/ai/ai_helpers.cpp
     game/ai/ai_land_queries.cpp

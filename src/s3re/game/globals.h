@@ -32,6 +32,7 @@ struct AiGroupOrders;
 struct AiLandEvaluation;
 struct AiPlayerData;
 struct AiPlayerSetup;
+struct AiToolAndWorker;
 struct AiVector;
 struct ComputerPlayer;
 }  // namespace ai
@@ -309,6 +310,10 @@ inline constexpr GameGlobal<float[4]> g_aiWantedGoldMineSlopes{0x7e12b0};
 // (0x568890; static initializers 0x566130.., 0.5, 0.5, 0.375, 0.2 from
 // g_aiWantedCarriers), stored in reverse like the tables above.
 inline constexpr GameGlobal<float[4]> g_aiResidenceSlopes{0x7e1380};
+// Per building type, the tool its worker needs and the worker's settler type
+// (a constant table in .rdata; AiToolAndWorker; AI::OrderMissingTools
+// 0x59bf70, CheckWorkerOrTool 0x57abc0; the type is not range-checked).
+inline constexpr GameGlobal<const ai::AiToolAndWorker[57]> g_aiBuildingToolAndWorker{0x732804};
 // The same slopes per race and stage for the stonecutter (0x568420) and
 // woodcutter (0x567e00) conditions: [3 - race][3 - stage] the slope of the
 // wanted cutters, [7 - race][3 - stage] that of the wanted stock (set by

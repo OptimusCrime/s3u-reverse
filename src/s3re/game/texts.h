@@ -226,6 +226,15 @@ inline constexpr GameText kAiResidentialRandom{0x731bf4};  // "RAINER - RESIDENT
 inline constexpr GameText kAiResidentialStage1{0x731bd4};  // "RAINER - RESIDENTIAL Stufe 1 "
 inline constexpr GameText kAiResidentialStage2{0x731bb4};  // "RAINER - RESIDENTIAL Stufe 2 "
 inline constexpr GameText kAiResidentialStage3{0x731b94};  // "RAINER - RESIDENTIAL Stufe 3 "
+// Computer players (Rainer\compGlobs.cpp, CompHouseReq.cpp: ai_force_production.cpp)
+inline constexpr GameText kForceProductionOn{0x7325f0};   // "FORCEPRODUCTION AN player: %u, ecosector %u" + newline
+inline constexpr GameText kForceProductionOff{0x732620};  // "FORCEPRODUCTION AUS player: %u, ecosector %u" + newline
+// "COMP_ForceProduction - EcoSector gehoert nicht dem Spieler !?!" + newline (o-umlaut in the
+// binary; the sector isn't the player's)
+inline constexpr GameText kForceProductionNotOwner{0x7325b0};
+// "COMP_EmergencyPowersActWood - EcoSector gehoert nicht dem Spieler !?!" + newline
+inline constexpr GameText kEmergencyWoodNotOwner{0x732698};
+inline constexpr GameText kAiNoSuitableTool{0x73273c};  // "KEIN PASSENDES WERKZEUG VORHANDEN" + newline (no suitable tool)
 // Computer players (Rainer\CompMapWorkerAgent.cpp).
 inline constexpr GameText kAiCenterGroup{0x732dd8};  // "Center - player: %d, group: %d \n" (OutputDebugStringA)
 inline constexpr GameText kRandom55{0x732a84};       // "RANDOM_55 wert = %u" (value, DebugLog of mission 56)

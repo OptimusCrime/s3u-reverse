@@ -625,6 +625,19 @@ static_assert(offsetof(HouseGroundRequestNote, max_radius) == 0x42);
 static_assert(offsetof(HouseGroundRequestNote, military) == 0x48);
 static_assert(sizeof(HouseGroundRequestNote) == 0x4c);
 
+// ---------------------------------------------------------------- tools
+// Per building type (g_aiBuildingToolAndWorker 0x732804, 57 entries): the
+// tool its worker needs (a goods type, 0 = none) and the worker's settler
+// type (woodcutter: axe 14 / settler 3; mines: pickaxe 15 / miner 10).
+// Read by AI::OrderMissingTools 0x59bf70 and
+// LOCAL_WARE_REQUEST_AGENT::CheckWorkerOrTool 0x57abc0.
+struct AiToolAndWorker {
+    std::uint16_t tool;     // +0 goods type
+    std::uint8_t worker;    // +2 settler type
+    std::uint8_t unk3;
+};
+static_assert(sizeof(AiToolAndWorker) == 4);
+
 // ---------------------------------------------------------------- tagged record
 // A BLACK_BOARD_AGENT's start: AI_SetWord4 (0x55ca60) stores its kind at +4
 // (the base class adds no fields; its vtable is stored by the factory

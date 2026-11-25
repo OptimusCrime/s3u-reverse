@@ -3103,3 +3103,150 @@ SPECS += [
     Spec("AI_FindStonesNearOwnFields", 0x0059a7a0, "fastcall", [scratch(0), scratch(1)], presets=own_fields_world,
          globals=own_fields_globals, max_cases=1000),
 ]
+
+
+# -- session 55 (wip/ai-econ): forced production and tools ----------------
+# (ai_force_production.cpp). The player word in scratch 0, the area word in
+# scratch 1, the flag / goods byte in scratch 2, a request note in scratch
+# 5; the land evaluation in scratch 10 with its 20 list heads in scratch 11
+# and nodes in scratch 12..17 (one per area of players 0..2, some missing);
+# the computer player (message queue) at COMMAND_PLAYER (scratch 4). The
+# command senders run as original code with IsHost and Push probed.
+
+FORCE_LAND = SCRATCH + 10 * SCRATCH_SLOT_BYTES
+FORCE_HEADS = SCRATCH + 11 * SCRATCH_SLOT_BYTES
+FORCE_NOTE = SCRATCH + 5 * SCRATCH_SLOT_BYTES
+FORCE_AREAS = 4
+FORCE_TYPES = (2, 3, 4, 5, 12, 12, 24, 15, 7, 26, 25, 37)  # tool users, toolsmiths, others
+
+
+def force_nodes(rng, need=None):
+    """The players' node lists over areas 0..3 (in 6 node slots; `need` =
+    (player, area) gets a node for sure)."""
+    fields = [(FORCE_LAND + 12 * p + 4, WORLD_BASE + FORCE_HEADS + 8 * p, 4) for p in range(20)]
+    last = {p: FORCE_HEADS + 8 * p for p in range(20)}
+    slot = 12
+    pairs = [(p, area) for p in range(3) for area in range(FORCE_AREAS)]
+    rng.shuffle(pairs)
+    chosen = ([need] if need else []) + [pair for pair in pairs if pair != need and rng.random() < 0.5]
+    for p, area in sorted(chosen[:6]):
+        node = SCRATCH + slot * SCRATCH_SLOT_BYTES
+        slot += 1
+        fields += [(last[p], WORLD_BASE + node, 4), (node + 8, area, 2), (node + 0x10, rng.getrandbits(32), 4),
+                   (node + 0x18, rng.randrange(2), 4)]
+        last[p] = node
+    for p in range(20):
+        fields.append((last[p], WORLD_BASE + FORCE_HEADS + 8 * p, 4))
+    return fields
+
+
+def force_areas(rng):
+    """Per area 0..3: coal and iron piles (around the limits 5 and 3), tool
+    piles, idle worker lists and settings1 bytes."""
+    fields, base, settler = [], rng.randint(1, 500), rng.randint(1, 500)
+    for area in range(FORCE_AREAS):
+        record = AI_AREAS + area * 0x2E0
+        for goods, most in ((5, 4), (11, 3), (14, 1), (15, 1), (16, 1), (13, 1), (32, 1), (17, 1)):
+            if goods in (5, 11) or rng.random() < 0.3:
+                head, chain = economy_pile_chain(rng, base, rng.randrange(most + 1), False)
+                fields += chain + [(record + 0xA + goods * 2, head, 2)]
+                base += 10
+            else:
+                fields.append((record + 0xA + goods * 2, 0, 2))
+        for worker in range(48):  # (the other lists empty: lazily random ones would be endless chains)
+            head = 0
+            if worker in (0, 3, 4, 6, 10, 11, 16, 17, 19) and rng.random() < 0.3:
+                head = settler
+                fields.append((SETTLERS + settler * SETTLER_BYTES + 0x10, 0, 2))
+                settler += 1
+            fields.append((record + 0x12A + worker * 2, head, 2))
+        for goods in range(36):
+            fields.append((record + 0x18A + goods, 0 if rng.random() < 0.7 else rng.randrange(1, 4), 1))
+    return fields
+
+
+def force_row_areas(rng, x, y):
+    """Areas 0..3 for (x, y) and the 17 tiles after it in +x (AI::AreaAlongRow
+    walks on while the area is 0; lazily random words would be areas far
+    past the 4096 records)."""
+    return [(tile(x + k, y) + 0x14, rng.randrange(FORCE_AREAS), 2) for k in range(18)]
+
+
+def force_buildings(rng):
+    """Up to 20 buildings: owner 0..2 or free, types FORCE_TYPES, finished
+    or sites with boards missing, workers or not, position and door on a
+    60 x 60 map whose tiles are in areas 0..3."""
+    count = rng.randrange(20)
+    fields = [(BUILDING_COUNT, count, 4)]
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        x, y, dx, dy = (rng.randrange(60) for _ in range(4))
+        fields += [(record, 0xFF if rng.random() < 0.1 else rng.randrange(3), 1),
+                   (record + 6, rng.choice(FORCE_TYPES), 1),
+                   (record + 0x21, 0 if rng.random() < 0.6 else rng.randrange(1, 256), 1),
+                   (record + 0x19, 0 if rng.random() < 0.3 else rng.randrange(1, 9), 1),
+                   (record + 8, 0 if rng.random() < 0.7 else rng.randrange(1, 500), 2),
+                   (record + 2, x, 2), (record + 4, y, 2), (record + 0xA, dx, 2), (record + 0xC, dy, 2),
+                   (tile(dx, dy) + 0x14, rng.randrange(FORCE_AREAS), 2)] + force_row_areas(rng, x, y)
+    return fields
+
+
+def force_world(rng, pool, args, need_node=False):
+    player, area = rng.randrange(3), rng.randrange(FORCE_AREAS)
+    if rng.random() < 0.05 and not need_node:
+        player = rng.randrange(3, 20)
+    fields = [(SCRATCH, player, 2), (SCRATCH + SCRATCH_SLOT_BYTES, area, 2),
+              (SCRATCH + 2 * SCRATCH_SLOT_BYTES, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1)]
+    for p in range(20):
+        race = rng.randrange(4) if rng.random() < 0.9 else rng.getrandbits(32)
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, race, 4))
+    fields += force_nodes(rng, (player, area) if need_node else None)
+    fields += force_areas(rng) + force_buildings(rng)
+    return fields
+
+
+def force_ensure_world(rng, pool, args):
+    fields = force_world(rng, pool, args)
+    goods = rng.choice((5, 11, 13, 14, 15, 16, 17, 32))
+    return [f for f in fields if f[0] != SCRATCH + 2 * SCRATCH_SLOT_BYTES] + [(SCRATCH + 2 * SCRATCH_SLOT_BYTES, goods, 1)]
+
+
+def force_note_world(rng, pool, args):
+    fields = force_world(rng, pool, args)
+    x, y = rng.randrange(60), rng.randrange(60)
+    fields += [(FORCE_NOTE + 0x1C, rng.choice(FORCE_TYPES + (0, 8, 29, 31)), 2),
+               (FORCE_NOTE + 0x1E, x, 2), (FORCE_NOTE + 0x20, y, 2)] + force_row_areas(rng, x, y)
+    return fields
+
+
+def force_globals(rng, pool, args):
+    return command_globals(rng, pool, args) + [
+        (AI_LAND_EVALUATION, WORLD_BASE + FORCE_LAND, 4), (AI_MAP_SIZES, 60, 2), (AI_MAP_SIZES + 2, 60, 2),
+        (AI_PLAYER_NUMBER, rng.randrange(3), 1)]
+
+
+FORCE_CALLEES = command_callees(LONG_GAPS)
+
+SPECS += [
+    # EAX is not used by the callers (EnsureGoodsSupply sets 1, the others
+    # return without using it).
+    Spec("COMP_ForceProduction", 0x00572fc0, "fastcall", [scratch(0), scratch(1), scratch(2)], eax_mask=0,
+         presets=force_world, globals=force_globals, callees=FORCE_CALLEES, max_cases=2000),
+    Spec("COMP_EmergencyPowersActWood", 0x00573670, "fastcall", [scratch(0), scratch(1), scratch(2)], eax_mask=0,
+         presets=force_world, globals=force_globals, callees=FORCE_CALLEES, max_cases=1500),
+    Spec("AI_EnsureGoodsSupply", 0x00573760, "fastcall", [scratch(2), scratch(0), scratch(1)],
+         presets=force_ensure_world, globals=force_globals, callees=FORCE_CALLEES, max_cases=1500),
+    # AI::IsForceProduction faults for an area without a node (as in the
+    # game): the player's area always has one. EAX is not used by 0x550f80.
+    Spec("AI_OrderMissingTools", 0x0059bf70, "fastcall", [scratch(0), scratch(1)], eax_mask=0,
+         presets=lambda rng, pool, args: force_world(rng, pool, args, need_node=True), globals=force_globals,
+         callees=FORCE_CALLEES, max_cases=1500),
+    Spec("LOCAL_WARE_REQUEST_AGENT_CheckWorkerOrTool", 0x0057abc0, "thiscall", [scratch(5)],
+         presets=force_note_world, globals=force_globals, callees=FORCE_CALLEES, max_cases=1500),
+    # DeactivateNoteOf, CheckWorkerOrTool and ReportToRequester probed (their
+    # own specs cover them); SetFlags runs on the note.
+    Spec("LOCAL_WARE_REQUEST_AGENT_WorkOnNote", 0x0057ab70, "thiscall", [scratch(5)],
+         presets=force_note_world, globals=force_globals,
+         callees={0x00551610: (1, "thiscall", "probe"), 0x0057abc0: (1, "thiscall", lambda h: h % 2 if h % 3 else h),
+                  0x00582480: (2, "thiscall", "probe")}, max_cases=300),
+]
