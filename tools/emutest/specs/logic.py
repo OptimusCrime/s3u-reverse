@@ -2207,3 +2207,23 @@ SPECS += [
                                                                  screen_coordinate(-50, 800)],
          eax_mask=0, presets=tile_at_screen_world, globals=tile_at_screen_globals),
 ]
+
+
+# --- DrawData::DrawData and its string element constructor (draw_data.cpp, session 55) ---
+# The object is the world (0xc7720 bytes, lazily random). The CRT's `eh vector
+# constructor iterator` 0x61ff7f and LogicRecord24's constructor run as they
+# are. ignore_bytes: the allocator byte of the string at +0xc66c0 is an
+# uninitialized local of the original's frame (ours writes 0); the
+# self-test pairs WrongDrawDataConstruct, which differs only in that
+# string's pointer (+0xc66c4), next to it.
+DRAW_DATA_ALLOCATOR = 0xc66c0
+
+SPECS += [
+    Spec("DrawData_Construct", 0x00523480, "thiscall", [], ignore_bytes=(DRAW_DATA_ALLOCATOR,), max_cases=200),
+    # ECX anywhere in the scratch area (the allocator byte is ECX's high byte).
+    Spec("String_EmptyHighByteAllocator", 0x00523540, "fastcall",
+         [lambda rng, pool: WORLD_BASE + SCRATCH + rng.randrange(0x1000), anything]),
+]
+SELF_TEST += [
+    Spec("WrongDrawDataConstruct", 0x00523480, "thiscall", [], ignore_bytes=(DRAW_DATA_ALLOCATOR,), max_cases=20),
+]
