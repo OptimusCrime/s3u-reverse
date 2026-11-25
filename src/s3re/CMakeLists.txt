@@ -203,6 +203,8 @@ add_library(s3re SHARED
     game/graphics/gfx_draw.cpp
     game/graphics/gfx_files.cpp
     game/graphics/gfx_images.cpp
+    game/graphics/gfx_loader.cpp
+    game/graphics/gfx_loader_tests.cpp
     game/graphics/gfx_rle.cpp
     game/graphics/gfx_spans.cpp
     game/graphics/graphics_helpers.cpp

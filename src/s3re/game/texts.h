@@ -122,6 +122,25 @@ inline constexpr GameText kAnimationNotFound{0x7a2e9c};  // "GFX: Animation not 
 inline constexpr GameText kColorIndexedAnimationNotFound{0x7a2ebc};  // "GFX: ColorIndexedAnimation not found %u:%u"
 inline constexpr GameText kShadowAnimationNotFound{0x7a2ee8};  // "GFX: ShadowAnimation not found %u:%u"
 inline constexpr GameText kGraphicsDataFile{0x7a2ca4};   // "E:\Siedler3\Dirk\graphicsdata.cpp"
+// CGraphicsData (Dirk\graphicsdata.cpp; the loader, gfx_loader.cpp)
+inline constexpr GameText kLpMapping{0x7a2c94};          // "lpMapping [i]" (the constructor's out-of-memory check)
+inline constexpr GameText kLpFile{0x7a2d5c};             // "lpFile" (Open's out-of-memory check)
+inline constexpr GameText kDwResultNotZero{0x7a2cc8};    // "dwResult != 0" (GetCurrentDirectoryA)
+inline constexpr GameText kBResult{0x696fec};            // "bResult" (SetCurrentDirectoryA, FindClose)
+inline constexpr GameText kSiedler3Prefix{0x7a2d98};     // "siedler3_"
+inline constexpr GameText kSiedler3Pattern{0x7a2dac};    // "siedler3_??."
+inline constexpr GameText kDatExtension{0x7a2da4};       // ".dat"
+inline constexpr GameText kGfxFolder{0x7a2d94};          // "Gfx"
+inline constexpr GameText kDotGfxFolder{0x7a2d8c};       // ".\Gfx"
+inline constexpr GameText kParentFolder{0x7a2d88};       // ".."
+inline constexpr GameText kGfxPreparingDetach{0x7a2d64};  // "GFX: Preparing DAT files for detach"
+inline constexpr GameText kGfxDetaching{0x7a2e70};       // "GFX: Detaching DAT files from medium ..."
+inline constexpr GameText kWrongGfxFile{0x7a2d44};       // "Falsche Gfx-Datei %i" (wrong graphics file)
+// "Wenn man Ctrl-C beim Assemblerlauf drückt, bekommt man halt ungültige
+// DAT-Dateien" (press Ctrl-C while the assembler runs and you get invalid
+// DAT files): the assertion text of a file whose magic is 0x1404.
+inline constexpr GameText kGfxHeaderAssert{0x7a2cf0};
+inline constexpr GameText kGfxPixelFormatAssert{0x7a2cd8};  // "Unsupported Pixelformat"
 inline constexpr GameText kInvalidShadowMethod{0x7a2f10};  // "GFX: Invalid shadow method"
 inline constexpr GameText kDDBltName{0x7a01e0};         // "CSurface::DDBlt"
 inline constexpr GameText kDDBltFastName{0x7a01f0};     // "CSurface::DDBltFast"

@@ -71,3 +71,14 @@ SELF_TEST += [
     Spec("Win32_CFile_Write", 0x006198d0, "thiscall", [anything, anything, out_or_null, anything],
          callees=WIN32_THROWERS),
 ]
+
+SELF_TEST += [
+    # ignore_bytes on CGraphicsData's name allocator byte (+0x24): the wrong
+    # constructor sets the name's length (+0x28) to 1.
+    Spec("WrongGfxConstruct", 0x005f67c0, "thiscall", [], ignore_bytes=(0x24,)),
+    # ignore_bytes on FindDirectoryContainingFile's result allocator byte:
+    # the wrong search drops the trailing backslash (length at +8 differs).
+    Spec("WrongFindDirectory", 0x005f6a10, "thiscall",
+         [one_of(WORLD_BASE + GFX_RESULT), one_of(WORLD_BASE + GFX_FOLDERS), one_of(WORLD_BASE + GFX_FILE)],
+         presets=gfx_folders, callees=GFX_THROWERS, ignore_bytes=(GFX_RESULT,), cover_until=0x005f6fc5),
+]

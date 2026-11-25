@@ -842,3 +842,218 @@ SPECS += [
     Spec("IsPathOnRemovableDrive", 0x005fa750, "thiscall", [one_of(WORLD_BASE + SCRATCH), anything],
          presets=removable_path),
 ]
+
+
+# -- session 55 round 2 (gfx-open): the loader (gfx_loader.cpp) ------------
+#
+# CGraphicsData at world 0. The Win32 calls of the original's callees are
+# API probes (emu.API_HANDLERS); the throwers never return (callee kind
+# "throw", see framework.py's WIN32_THROWERS). The name's allocator byte
+# (+0x24) of the constructor and FindDirectoryContainingFile's result
+# allocator byte come from the original's stack (see gfx_loader.cpp):
+# ignored, with self-test pairings (self_test.py).
+
+GFX_FOLDERS = SCRATCH + 12 * SCRATCH_SLOT_BYTES     # a WCValOrderedVector<string> (0x1c bytes)
+GFX_FOLDER_DATA = SCRATCH + 13 * SCRATCH_SLOT_BYTES  # its strings (16 bytes each)
+GFX_FOLDER_TEXT = SCRATCH + 14 * SCRATCH_SLOT_BYTES  # their texts (0x40 apart)
+GFX_FILE = SCRATCH + 15 * SCRATCH_SLOT_BYTES        # the file name string, its text at +0x20
+GFX_RESULT = SCRATCH + 16 * SCRATCH_SLOT_BYTES      # the result string
+GFX_FORMAT = SCRATCH + 17 * SCRATCH_SLOT_BYTES      # a DDPIXELFORMAT
+GFX_BASE = SCRATCH + 18 * SCRATCH_SLOT_BYTES        # the base path string, its text at +0x20
+GFX_FAKES = SCRATCH + 19 * SCRATCH_SLOT_BYTES       # fake mapping objects (0x20 apart)
+GFX_HEADERS = SCRATCH + 22 * SCRATCH_SLOT_BYTES     # fake GFX file headers (0x100 apart)
+GFX_FOUND = SCRATCH + 26 * SCRATCH_SLOT_BYTES       # FindDirectory's result buffer (Open)
+
+
+def gfx_string(guest, address):
+    """A std::string's length and text (its buffer differs between frames)."""
+    ptr, length = struct.unpack("<II", guest(address + 4, 8))
+    text = guest(ptr, min(length, 0x100)) if ptr else b""
+    return (length, text)
+
+
+def gfx_message_record(machine, ecx, args):
+    """A thrower's record without the message's allocator byte (the
+    original's comes from an uninitialized local for some calls)."""
+    from unicorn.x86_const import UC_X86_REG_EDX
+    message = machine.guest_read(args[-1], 16)[1:] if args[-1] else None
+    return (ecx, machine.uc.reg_read(UC_X86_REG_EDX), *args[:-1], message)
+
+
+GFX_THROWERS = {
+    0x00610de0: (3, "thiscall", "throw", None, gfx_message_record),   # ThrowWin32Error
+    0x00611050: (3, "thiscall", "throw", None, thrower_record),       # ThrowHResult
+    0x00611db0: (2, "thiscall", "this", None, file_not_found_record),  # CFileNotFound(name, 1)
+    0x00610960: (1, "thiscall", "throw"),                              # ThrowOutOfMemory(text, file, line)
+    0x006119b0: (1, "thiscall", "throw"),                              # ThrowAssertmentFailed(text, file, line)
+}
+
+
+def gfx_text_string(rng, offset, texts):
+    """A string at world `offset` holding one of `texts` (or nothing), its
+    buffer at offset + 0x20."""
+    text = rng.choice(texts)
+    if text is None:
+        return [(offset, 0, 4), (offset + 4, 0, 4), (offset + 8, 0, 4), (offset + 12, 0, 4)]
+    fields = [(offset, rng.getrandbits(8), 1), (offset + 4, WORLD_BASE + offset + 0x21, 4),
+              (offset + 8, len(text), 4), (offset + 12, len(text) + rng.randrange(4), 4),
+              (offset + 0x20, rng.choice([0, 0, 1]), 1)]
+    fields += [(offset + 0x21 + i, b, 1) for i, b in enumerate(text + b"\0")]
+    return fields
+
+
+def gfx_folders(rng, pool, args):
+    """0..6 folder strings in a WCValOrderedVector<string> (real vtable
+    0x655440: an empty one grows in the index check), and the file name."""
+    count = rng.choice([0, 1, 2, 3, 5, 6])
+    capacity = rng.choice([count, count + 2, 10]) if count else rng.choice([0, 0, 4])
+    fields = [(GFX_FOLDERS, 0x655440, 4), (GFX_FOLDERS + 4, 0, 4),
+              (GFX_FOLDERS + 8, WORLD_BASE + GFX_FOLDER_DATA if capacity else 0, 4),
+              (GFX_FOLDERS + 12, capacity, 4), (GFX_FOLDERS + 16, count, 4), (GFX_FOLDERS + 20, count, 4),
+              (GFX_FOLDERS + 24, rng.choice([5, 5, 0]), 4)]
+    for i in range(count):
+        text = rng.choice([b".", b"Gfx", b".\\Gfx", b"", b"..", b"D:\\S3\\Gfx"])
+        buffer = GFX_FOLDER_TEXT + 0x40 * i
+        if text:
+            fields += [(GFX_FOLDER_DATA + 16 * i + 4, WORLD_BASE + buffer + 1, 4), (buffer, 0, 1)]
+            fields += [(buffer + 1 + j, b, 1) for j, b in enumerate(text + b"\0")]
+        else:
+            fields.append((GFX_FOLDER_DATA + 16 * i + 4, 0, 4))
+        fields += [(GFX_FOLDER_DATA + 16 * i + 8, len(text), 4), (GFX_FOLDER_DATA + 16 * i + 12, len(text), 4)]
+    fields += gfx_text_string(rng, GFX_FILE, [b"siedler3_00.f8007e01f.dat", b"x.dat", None])
+    fields += [(GFX_RESULT + i, 0, 4) for i in range(0, 16, 4)]
+    return fields
+
+
+def gfx_lifetime(rng, pool, args):
+    """Mappings (fake objects, slot 0 probed) or none, views, a name."""
+    fields = gfx_text_string(rng, 0x24, [b"C:\\Games\\S3\\Gfx\\", b"", None])
+    for g in range(70):
+        mapping = 0 if rng.random() < 0.1 else WORLD_BASE + GFX_FAKES + 0x20 * g
+        fields += [(0x14c + 4 * g, mapping, 4), (GFX_FAKES + 0x20 * g, FAKE_VTABLE, 4)]
+    fields.append((0x264, rng.choice([0, rng.getrandbits(32)]), 4))
+    return fields
+
+
+def detach_probe_record(machine, ecx, args):
+    from unicorn.x86_const import UC_X86_REG_EDX
+    return (ecx, machine.uc.reg_read(UC_X86_REG_EDX))
+
+
+def detach_result(h):
+    return 0 if h & 3 else 0x80000000 | (h >> 8) & 0xFFFF
+
+
+def gfx_detach_world(rng, pool, args):
+    fields = gfx_text_string(rng, 0x24, [b"C:\\S3\\Gfx\\", b"D:\\Gfx\\", b"A:", None])
+    for g in range(70):
+        fields += [(0x264 + 4 * g, rng.getrandbits(32) | 1 if rng.random() < 0.4 else 0, 4),
+                   (0x34 + 4 * g, rng.getrandbits(32), 4)]
+    return fields
+
+
+def find_directory_record(machine, ecx, args):
+    """FindDirectoryContainingFile(result, folders, file): the folders'
+    texts and the file name (all on the caller's stack)."""
+    guest = machine.guest_read
+    length = struct.unpack("<I", guest(args[1] + 0x14, 4))[0]
+    data = struct.unpack("<I", guest(args[1] + 8, 4))[0]
+    folders = tuple(gfx_string(guest, data + 16 * i) for i in range(min(length, 8)))
+    return (ecx, length, folders, gfx_string(guest, args[2]))
+
+
+def find_directory_effect(machine, ecx, args, h):
+    """The result: "C:\\S3\\Gfx\\" in a buffer of the world (count byte 0)."""
+    text = b"C:\\S3\\Gfx\\"
+    machine.guest_write(WORLD_BASE + GFX_FOUND, b"\0" + text + b"\0")
+    machine.guest_write(args[0], struct.pack("<BxxxIII", 0, WORLD_BASE + GFX_FOUND + 1, len(text), len(text)))
+    return args[0]
+
+
+def text_record(machine, ecx, args):
+    """CFile::Open: the path's text and the other arguments."""
+    text = machine.guest_read(args[0], 0x80).split(b"\0")[0] if args[0] else None
+    return (ecx, text, *args[1:])
+
+
+def map_view_effect(machine, ecx, args, h):
+    """MapView: one of four fake file headers (sometimes the wrong magic)."""
+    return WORLD_BASE + GFX_HEADERS + 0x100 * (h & 3)
+
+
+def gfx_open_world(rng, pool, args):
+    """Mapping objects (fake, their calls probed), a pixel format (RGB565,
+    RGB555 or another), a base path, four file headers with random table
+    offsets (text tables with 0..8 languages); the name (+0x24) empty or
+    holding a folder."""
+    fields = gfx_text_string(rng, 0x24, [None, b"C:\\old\\"])
+    for g in range(70):
+        fields.append((0x14c + 4 * g, WORLD_BASE + GFX_FAKES + 0x20 * g, 4))
+    masks = rng.choice([(0xF800, 0x7E0, 0x1F), (0xF800, 0x7E0, 0x1F), (0x7C00, 0x3E0, 0x1F),
+                        (0xF800, 0x3E0, 0x1F), (0x7C00, 0x3E0, 0x3F), (0xFF0000, 0xFF00, 0xFF)])
+    fields += [(GFX_FORMAT + 4 * i, v, 4) for i, v in enumerate((0x20, 0x40, 0, 16) + masks + (0,))]
+    fields += gfx_text_string(rng, GFX_BASE, [b"", b"C:\\S3\\", None, b"..\\"])
+    for k in range(4):
+        header = GFX_HEADERS + 0x100 * k
+        magic = 0x1404 if rng.random() < 0.03 else 0x41304
+        fields.append((header, magic, 4))
+        for t in range(8):
+            fields.append((header + 0x34 + 4 * t, 0x60 + 0x10 * t if rng.random() < 0.7 else rng.randrange(0x400), 4))
+        fields.append((header + 0x60 + 0x0a, rng.choice([0, 0, 8, 1, rng.getrandbits(16)]), 2))
+    fields.append((0xC3C, rng.choice([0, 0, 3]), 4))
+    return fields
+
+
+def gfx_open_globals(rng, pool, args):
+    return [(0x007A7AF0 + 0x159, rng.choice([0, 1, 1]), 1)]  # g_config.gfx_group61
+
+
+# Never reached (exempt below). FindDirectoryContainingFile: the message
+# clean-ups after its throwers (0x5f6b08, 0x5f6bfd, 0x5f6d68, 0x5f6eb1),
+# the catch block (0x5f6c27..0x5f6c3a, only reached by a caught C++
+# exception: the in-process test GfxLoader_MatchOriginal covers it with
+# scripted SetCurrentDirectoryA failures) and the null check of a stack
+# buffer (0x5f6dda). DetachFromMedium: everything after ThrowHResult and the
+# frees of the message's "" temporaries. Destroy: the inlined string
+# destructor's _Grow(0) success (0x5f69af; it never succeeds for 0) and the
+# shared-count decrement after the split (0x5f69cf, 0x5f69d3; the split
+# leaves an unshared buffer). Open: the null-path fallback of CFile::Open's
+# name (0x5f9e93; the path is never empty).
+CLEANUP_FIND_DIRECTORY = (0x5f6b08, 0x5f6bfd, 0x5f6c27, 0x5f6c2e, 0x5f6c34, 0x5f6c3a, 0x5f6d68, 0x5f6dda,
+                          0x5f6eb1)
+CLEANUP_GFX_DETACH = (0x5fa8f0, 0x5fa8fa, 0x5fa8fe, 0x5fa904, 0x5fa95c, 0x5fa973, 0x5fa97a, 0x5fa97e, 0x5fa9a8,
+                      0x5fa9ac, 0x5fa9ae, 0x5fa9b2, 0x5fa9d7, 0x5fa9e2, 0x5fa9e6, 0x5fa9f2, 0x5fa9fc, 0x5faa00,
+                      0x5faa06, 0x5faa0f)
+CLEANUP_GFX_DESTROY = (0x5f69af, 0x5f69cf, 0x5f69d3)
+
+GFX_OPEN_CALLEES = {
+    **GFX_THROWERS,
+    0x005f6a10: (3, "thiscall", "probe", find_directory_effect, find_directory_record),  # FindDirectoryContainingFile
+    0x00619610: (7, "thiscall", "probe", None, text_record),                             # CFile::Open
+    0x0061a080: (1, "thiscall", "probe"),                                                # CFile::GetSize
+    0x0061a520: (6, "thiscall", "probe"),                                                # CFileMapping::Create
+    0x0061a7d0: (4, "thiscall", "probe", map_view_effect),                               # CFileMapping::MapView
+}
+
+SPECS += [
+    Spec("CGraphicsData_Construct", 0x005f67c0, "thiscall", [], new_fails=0.05, new_fails_size=0x2c,
+         ignore_bytes=(0x24,)),
+    Spec("CGraphicsData_Destroy", 0x005f68b0, "thiscall", [], eax_mask=0, presets=gfx_lifetime,
+         virtuals={0x00: 1}, callees={0x005fa690: (0, "thiscall", "probe")},   # Close (verified, own spec)
+         exempt_blocks=CLEANUP_GFX_DESTROY),
+    Spec("CGraphicsData_DeletingDestroy", 0x005f6890, "thiscall", [anything], presets=gfx_lifetime,
+         virtuals={0x00: 1}, callees={0x005fa690: (0, "thiscall", "probe")}),
+    Spec("CGraphicsData_FindDirectoryContainingFile", 0x005f6a10, "thiscall",
+         [one_of(WORLD_BASE + GFX_RESULT), one_of(WORLD_BASE + GFX_FOLDERS), one_of(WORLD_BASE + GFX_FILE)],
+         presets=gfx_folders, callees=GFX_THROWERS, ignore_bytes=(GFX_RESULT,), cover_until=0x005f6fc5,
+         new_fails=0.05, new_fails_size=0x28,
+         exempt_blocks=CLEANUP_FIND_DIRECTORY),
+    Spec("CGraphicsData_DetachFromMedium", 0x005fa7c0, "thiscall", [anything], presets=gfx_detach_world,
+         callees={**GFX_THROWERS, 0x0061ab60: (0, "thiscall", detach_result, None, detach_probe_record)},
+         exempt_blocks=CLEANUP_GFX_DETACH),
+    Spec("CGraphicsData_Open", 0x005f6fd0, "thiscall",
+         [one_of(WORLD_BASE + GFX_FORMAT), one_of(WORLD_BASE + GFX_BASE), one_of(0, 1, 2, 2, 3, 3, 7),
+          one_of(0, 1, 2, 3, 4, 4, 9)],
+         eax_mask=0, presets=gfx_open_world, globals=gfx_open_globals, callees=GFX_OPEN_CALLEES,
+         new_fails=0.03, new_fails_size=0x0c, max_cases=400, exempt_blocks=(0x5f9e93,)),
+]

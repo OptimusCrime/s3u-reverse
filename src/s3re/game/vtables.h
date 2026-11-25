@@ -25,6 +25,7 @@ inline constexpr std::uint32_t kCEvent = 0x65d690;             // Win32::CEvent
 inline constexpr std::uint32_t kCEvent_sub4 = 0x65d684;        // its handle part at +4
 inline constexpr std::uint32_t kCFile = 0x65d9b8;              // Win32::CFile
 inline constexpr std::uint32_t kCFileMapping = 0x65d9c4;       // Win32::CFileMapping
+inline constexpr std::uint32_t kCGraphicsData = 0x65d3e4;      // CGraphicsData
 // Its view list's vtables: WCValOrderedVector<void*> and the base classes
 // the constructor and destructor pass through.
 inline constexpr std::uint32_t kMappingViewVector = 0x65d9d0;  // WCValOrderedVector<void*>

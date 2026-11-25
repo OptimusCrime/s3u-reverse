@@ -78,7 +78,8 @@ struct GameConfig {
     std::uint32_t notification_level;  // +0x64 notifications shown if their level >= 9 - this (GetMemberDword64)
     std::uint8_t unk068[0x158 - 0x68];
     std::uint8_t random_race_amazons;  // +0x158 copied to GameSettings +0xcc by 0x431ab0
-    std::uint8_t unk159[0x189 - 0x159];
+    std::uint8_t gfx_group61;          // +0x159 CGraphicsData::Open loads GFX group 61 only when set (getter 0x413be0)
+    std::uint8_t unk15a[0x189 - 0x15a];
     std::uint8_t unk189;               // +0x189 weakens computer players in campaigns (GetMemberByte189)
 };
 static_assert(offsetof(GameConfig, notification_level) == 0x64);

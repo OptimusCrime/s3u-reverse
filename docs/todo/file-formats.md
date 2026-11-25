@@ -29,27 +29,18 @@ LOGBOOK session entry).
   (0x60bab0/0x60bbe0/0x60be20) and `GameSettings::PlayerSetup` 0x4351e0
   (LoadMap calls the original; Watcom vector code behind a mutex) as our
   code.
-- **Graphics loader (re/graphics_formats.md):** session 55 verified the
-  accessors, spans, RLE helpers, all blitters, the Draw methods and Close.
-  Left: `CGraphicsData::Open` 0x5f6fd0 (~3,500 instructions: file search,
-  CFile/CFileMapping, header checks, the 8 tables, pixel-format masks),
-  `FindDirectoryContainingFile` 0x5f6a10, `DetachFromMedium` 0x5fa7c0,
-  the constructor 0x5f67c0 / destructor 0x5f68b0 / scalar deleting
-  destructor 0x5f6890. They need the Win32 mapping classes first
-  (`Win32::CFileMapping` ctor 0x61a3a0, UnmapView 0x61aa40, MapView
-  0x61a7d0, `Win32::DetachMemory` 0x61ab60, CFile 0x6195c0..0x61a080).
-  The constructor's std::string at +0x24 gets its allocator byte from an
-  uninitialized local (docs/reimplementation_notes.md, case b). An
-  in-process test can run Open itself (no DirectDraw needed) on two
-  objects and compare. The false starts 0x5f65f2/0x5f674b
-  (DrawGuiImage_tail*) and 0x5fd902 (SequenceFrame_tail) are inside
-  verified functions.
+- **Graphics/sound loader leftovers:** the graphics loader is verified
+  (session 55 round 2). Left: CSoundData (ctor 0x5fdb60, dtor, Open
+  0x5fe760, Close, DetachFromMedium 0x5ff230, GetEffect; the SND format is
+  not analysed), and the false starts 0x5f65f2/0x5f674b
+  (DrawGuiImage_tail*), 0x5fd902 (SequenceFrame_tail) and 0x5f6c3d
+  (FindDirectoryContainingFile_tail), which are inside verified functions.
 - **Function-start fixes found in the naming pass (session 50):**
   missing starts (add as `manual` rows in re/extra_functions.tsv with
   evidence): 0x5a0920, 0x5a0950, 0x5a1a60, 0x5a42c0, 0x5a4610, 0x5a4970
   (re/picture_code.md); the 13 draw spans and the halve span were added
-  in session 55. Also missing: the static initializers 0x5f5a20,
-  0x5fda80, 0x5fdb30 after the graphics code. False starts (keep out of the counts, e.g. a
+  in session 55 (the static initializers 0x5f5a20, 0x5fda80, 0x5fdb30
+  in session 55 round 2). False starts (keep out of the counts, e.g. a
   `notfunction` kind): the 26 `ProtectCD_RunEmbeddedCheck_junk_*` rows
   inside the obfuscated 0x5b2f70, the catch-continuation points 0x5fe948,
   0x5fe9d8, 0x5feb05 inside CSoundData::Open, the `_tail` rows 0x5f6c3d,

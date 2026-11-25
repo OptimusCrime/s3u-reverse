@@ -29,6 +29,7 @@ enum CallId : std::uint32_t {
     kCallSetCurrentDirectory,
     kCallFindFirstFile,
     kCallFindClose,
+    kCallGetDriveType,
 };
 
 // Strings are logged by content and out-parameters by whether they are
@@ -222,6 +223,11 @@ int __stdcall FakeFindClose(void* find) {
     return Fails() ? 0 : 1;
 }
 
+std::uint32_t __stdcall FakeGetDriveType(const char* root) {
+    Log({kCallGetDriveType, Hash(root)});
+    return Active().config_.driveType;
+}
+
 struct Slot {
     std::uint32_t bit;
     std::uintptr_t address;
@@ -249,6 +255,7 @@ const Slot kSlots[] = {
      reinterpret_cast<const void*>(&FakeSetCurrentDirectory)},
     {kFakeFindFirstFile, g_importFindFirstFileA.address(), reinterpret_cast<const void*>(&FakeFindFirstFile)},
     {kFakeFindClose, g_importFindClose.address(), reinterpret_cast<const void*>(&FakeFindClose)},
+    {kFakeGetDriveType, g_importGetDriveTypeA.address(), reinterpret_cast<const void*>(&FakeGetDriveType)},
 };
 
 }  // namespace

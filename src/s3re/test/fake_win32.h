@@ -44,6 +44,7 @@ enum FakeImport : std::uint32_t {
     kFakeSetCurrentDirectory = 1u << 14,
     kFakeFindFirstFile = 1u << 15,
     kFakeFindClose = 1u << 16,
+    kFakeGetDriveType = 1u << 17,
 };
 
 struct FakeWin32Config {
@@ -54,6 +55,8 @@ struct FakeWin32Config {
     const char* currentDirectory = "C:\\Games\\S3";
     // Chance (out of 8) that a call fails.
     std::uint32_t failChance = 2;
+    // GetDriveTypeA's result (DRIVE_REMOVABLE 2, DRIVE_FIXED 3, DRIVE_CDROM 5).
+    std::uint32_t driveType = 3;
     // MapViewOfFile: views are returned from this list in turn (0: random).
     const std::vector<std::uint32_t>* views = nullptr;
 };
