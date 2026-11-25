@@ -1105,3 +1105,158 @@ SPECS += [
     Spec("WCIsvSListBase_ListDelete", 0x00428300, "stdcall", [one_of(0, WORLD_BASE + MEMBER_B, WORLD_BASE + MEMBER_B)],
          eax_mask=0),
 ]
+
+
+# -- wip/ui-gdi: blits and GDI text of the UI controls (ui_gdi_members.cpp) --
+# One region of the world for these specs (below SCRATCH): `this` of the
+# member, the element its vbptr leads to, the vbtables, a parent element,
+# the screen surface and its interface (FAKE_VTABLE: GetDC 0x44, ReleaseDC
+# 0x68, the owner's restore 0x0c), the root screen (FAKE_VTABLE: AddChild
+# 0x00; the control's element too: GetScreen 0x78), the rect argument and
+# the tooltip text.
+GDI_REGION = 0x1f40000
+GDI_THIS = GDI_REGION + 0x1000
+GDI_ELEMENT = GDI_REGION + 0x2000
+GDI_PARENT = GDI_REGION + 0x2800
+GDI_TABLE = GDI_REGION + 0x3000
+GDI_SURFACE = GDI_REGION + 0x4000
+GDI_IFACE = GDI_REGION + 0x4040
+GDI_OWNER = GDI_REGION + 0x4080
+GDI_SCREEN = GDI_REGION + 0x5000
+GDI_SCREEN_ELEMENT = GDI_REGION + 0x5100
+GDI_RECT = GDI_REGION + 0x6000
+GDI_TEXT = GDI_REGION + 0x7000
+GDI_RGB565 = (0xF800, 0x7E0, 0x1F)
+
+
+def gdi_rect_value(rng):
+    """Mostly an ordered rect on a screen, sometimes anything."""
+    if rng.random() < 0.12:
+        return [rng.getrandbits(32) for _ in range(4)]
+    left, top = rng.randint(-20, 640), rng.randint(-20, 480)
+    return [left & 0xFFFFFFFF, top & 0xFFFFFFFF, (left + rng.randint(-4, 300)) & 0xFFFFFFFF,
+            (top + rng.randint(-4, 200)) & 0xFFFFFFFF]
+
+
+def gdi_rect_fields(rng, offset):
+    return [(offset + 4 * k, v, 4) for k, v in enumerate(gdi_rect_value(rng))]
+
+
+def gdi_element_state(delta, client=None):
+    """A FillBackground/Draw member: the vbptr at this + delta leading to
+    the element (random flag1f, rect, parent null or set), the client rect
+    at this + client, the rect argument."""
+    def presets(rng, pool, args):
+        out = [(GDI_THIS + delta, WORLD_BASE + GDI_TABLE, 4),
+               (GDI_TABLE + 4, (GDI_ELEMENT - (GDI_THIS + delta)) & 0xFFFFFFFF, 4),
+               (GDI_ELEMENT + 0x1f, rng.choice([0, 0, 1, 0x80]), 1),
+               (GDI_ELEMENT + 0x18, rng.choice([0, WORLD_BASE + GDI_PARENT]), 4)]
+        out += gdi_rect_fields(rng, GDI_ELEMENT + 8) + gdi_rect_fields(rng, GDI_RECT)
+        if client is not None:
+            out += gdi_rect_fields(rng, GDI_THIS + client)
+        return out
+    return presets
+
+
+def gdi_progress_state(rng, pool, args):
+    out = gdi_element_state(-0x108)(rng, pool, args)
+    maximum = rng.choice([0, rng.randint(-5, 200), rng.randint(1, 200)])
+    value = rng.randint(-10, 250)
+    if rng.random() < 0.1:  # anything but INT_MIN / -1 (a divide fault in both)
+        value, maximum = rng.getrandbits(32), rng.getrandbits(32) | 2
+    return out + [(GDI_THIS - 0x8, maximum & 0xFFFFFFFF, 4), (GDI_THIS - 0xc, value & 0xFFFFFFFF, 4)]
+
+
+def gdi_pixel_format(machine, ecx, args, h):
+    """Dialog::PixelFormat(out): 8 dwords, half the time with the RGB565
+    masks (sometimes one bit off)."""
+    import struct
+    words = [(h >> (k * 7)) & 0xFFFFFFFF for k in range(8)]
+    if h & 1:
+        words[4:7] = GDI_RGB565
+        if (h >> 1) & 3 == 0:
+            words[4 + (h >> 3) % 3] ^= 1 << ((h >> 5) & 31)
+    machine.guest_write(args[0], struct.pack("<8I", *words))
+    return args[0]
+
+
+def gdi_rect_record(index):
+    return lambda m, ecx, args: tuple(bytes(m.guest_read(a, 16)) if i == index else a for i, a in enumerate(args))
+
+
+GDI_DRAW_CALLEES = {
+    0x417460: (2, "thiscall", "probe", None, gdi_rect_record(1)),   # CScreenGroup::FillBackground
+    0x417480: (3, "thiscall", "probe", None, gdi_rect_record(1)),   # CScreenGroup::Draw
+    0x5bf0c0: (5, "thiscall", "probe", None,                         # CSurface::DDBlt
+               lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)), args[1], args[2], args[3],
+                                     bytes(m.guest_read(args[4], 4)), bytes(m.guest_read(args[4] + 0x50, 4)))),
+    0x5bf130: (5, "thiscall", "probe"),                              # CSurface::DDBltFast
+    0x416880: (1, "stdcall", "probe", gdi_pixel_format, lambda m, ecx, args: ()),  # Dialog::PixelFormat
+    # The CRT's __RTtypeid and type_info::operator== (CListBox's parent
+    # check): recorded, typeid's result is what operator== gets in ECX.
+    0x61f911: (1, "cdecl", lambda h: 0x7E000000 | (h & 0xFFF0)),
+    0x61f00c: (1, "thiscall", "probe"),
+}
+
+SPECS += [
+    Spec("CStaticSurface_Draw", 0x0041df40, "fastcall",
+         [one_of(WORLD_BASE + GDI_THIS), anything, anything, anything, anything],
+         presets=lambda rng, pool, args: gdi_rect_fields(rng, GDI_THIS + 8), callees=GDI_DRAW_CALLEES),
+    Spec("CTextView_FillBackground", 0x00421a20, "fastcall",
+         [one_of(WORLD_BASE + GDI_THIS), anything, anything, one_of(WORLD_BASE + GDI_RECT)],
+         presets=gdi_element_state(-0x430, -0x44), callees=GDI_DRAW_CALLEES),
+    Spec("CListBox_FillBackground", 0x00420340, "fastcall",
+         [one_of(WORLD_BASE + GDI_THIS), anything, anything, one_of(WORLD_BASE + GDI_RECT)],
+         presets=gdi_element_state(-0x440, -0x48), callees=GDI_DRAW_CALLEES),
+    Spec("CProgressBar_Draw", 0x004232f0, "fastcall",
+         [one_of(WORLD_BASE + GDI_THIS), anything, anything, one_of(WORLD_BASE + GDI_RECT), anything],
+         presets=gdi_progress_state, callees=GDI_DRAW_CALLEES),
+]
+
+
+def gdi_tooltip_state(rng, pool, args):
+    """The control at GDI_THIS: vbptr +4 -> its element (FAKE_VTABLE), a
+    tooltip or none, the tooltip text, the mouse; the screen's element (its
+    vbptr at +4) with a screen-sized rect; the surface and its interface."""
+    out = [(GDI_THIS + 4, WORLD_BASE + GDI_TABLE, 4),
+           (GDI_TABLE + 4, (GDI_ELEMENT - (GDI_THIS + 4)) & 0xFFFFFFFF, 4),
+           (GDI_ELEMENT, FAKE_VTABLE, 4),
+           (GDI_THIS + 0x20, rng.choice([0, 0, 0, 0, 0, rng.getrandbits(32) | 1]), 4),
+           (GDI_SCREEN, FAKE_VTABLE, 4), (GDI_SCREEN + 4, WORLD_BASE + GDI_TABLE + 0x40, 4),
+           (GDI_TABLE + 0x44, (GDI_SCREEN_ELEMENT - (GDI_SCREEN + 4)) & 0xFFFFFFFF, 4),
+           (GDI_SURFACE + 8, WORLD_BASE + GDI_IFACE, 4), (GDI_SURFACE + 0xc, WORLD_BASE + GDI_OWNER, 4),
+           (GDI_IFACE, FAKE_VTABLE, 4), (GDI_OWNER, FAKE_VTABLE, 4)]
+    fields, _ = string_fields(rng, GDI_THIS + 0x10, GDI_TEXT)
+    out += fields
+    screen = [0, 0, rng.choice([640, 800, 1024]), rng.choice([480, 600, 768])]
+    if rng.random() < 0.1:
+        screen = [rng.getrandbits(32) for _ in range(4)]
+    out += [(GDI_SCREEN_ELEMENT + 8 + 4 * k, v & 0xFFFFFFFF, 4) for k, v in enumerate(screen)]
+    for offset, low, high in ((0x28, -20, 1100), (0x2c, -40, 800)):
+        value = rng.getrandbits(32) if rng.random() < 0.1 else rng.randint(low, high) & 0xFFFFFFFF
+        out.append((GDI_THIS + offset, value, 4))
+    return out
+
+
+def gdi_write_dc(machine, ecx, args, h):
+    """IDirectDrawSurface::GetDC(iface, &dc): a device context."""
+    import struct
+    machine.guest_write(args[1], struct.pack("<I", 0xDC000000 | (h & 0xFFFF)))
+
+
+SPECS += [
+    # Exempt 0x41859c: the branch for a null "" literal (the compiler's
+    # strlen guard on the constant 0x7a7868, never taken).
+    Spec("CControl_ShowTooltip", 0x00418550, "fastcall", [one_of(WORLD_BASE + GDI_THIS), anything],
+         presets=gdi_tooltip_state, new_fails=0.1, exempt_blocks=(0x0041859c,),
+         virtuals={0x00: 1, 0x0c: 0, 0x78: (0, {}, {"returns": lambda h: WORLD_BASE + GDI_SCREEN}),
+                   0x44: (2, {1: 0}, {"com": True, "returns": hresult_from}),
+                   0x68: (2, {}, {"com": True, "returns": hresult_from})},
+         virtual_effects={0x44: gdi_write_dc},
+         callees={**EXCEPTION_CTORS,
+                  0x416870: (0, "cdecl", lambda h: WORLD_BASE + GDI_SURFACE),      # Dialog::Surface
+                  0x4168a0: (1, "stdcall", "probe"),                               # Dialog::Font
+                  0x41c3e0: (3, "thiscall", "this", None, gdi_rect_record(0)),     # CStaticText::CStaticText
+                  0x41ca60: (1, "thiscall", "probe"),                              # CStaticText::SetStyle
+                  0x610960: (1, "thiscall", "throw")}),                            # Win32::ThrowOutOfMemory
+]

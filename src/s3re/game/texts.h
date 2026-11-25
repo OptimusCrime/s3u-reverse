@@ -490,4 +490,14 @@ inline constexpr GameText kAiDigIn{0x732d40};
 inline constexpr GameText kAiDefendTower{0x732d08};
 // "WRONG EVENT - readID: %d type: %d data1: %d data2: %d" (DebugLog of AI::ProcessWorldEvents 0x590da0 for an unknown event type)
 inline constexpr GameText kAiWrongEvent{0x732cd0};
+
+// ------------------------------------------------------------ wip/ui-gdi batch
+// Dirk\DGlobals.cpp and Dirk\dialog.cpp (GameConfig::PathIndexForFileKind,
+// CControl::ShowTooltip).
+inline constexpr GameText kDGlobalsFile{0x6975e0};       // "E:\Siedler3\Dirk\DGlobals.cpp"
+inline constexpr GameText kUnknownFunction{0x697688};    // "Unknown function"
+inline constexpr GameText kDialogFile{0x6976e8};         // "E:\Siedler3\Dirk\dialog.cpp"
+inline constexpr GameText kTooltipExpression{0x697cd0};  // "lpTooltip"
+inline constexpr GameText kDDGetDC{0x697704};            // "CSurface::DDGetDC"
+inline constexpr GameText kDDReleaseDC{0x697718};        // "CSurface::DDReleaseDC"
 }  // namespace s3re::game::texts

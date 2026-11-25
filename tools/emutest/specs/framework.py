@@ -291,6 +291,54 @@ SPECS += [
 ]
 
 
+# -- wip/ui-gdi: GameConfig members (game_config.cpp). `this` is the world
+# (thiscall), the outputs in CONFIG_OUT; the start map string at +0x15c. --
+CONFIG_OUT = 0x1f48000
+CONFIG_TEXT = 0x1f48800
+
+
+def config_mission(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.2 else rng.randint(-3, 52) & 0xFFFFFFFF
+
+
+def config_start_map(rng, pool, args):
+    fields, _ = string_fields(rng, 0x15c, CONFIG_TEXT)
+    return fields
+
+
+def config_kind(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.1 else rng.randint(-1, 18) & 0xFFFFFFFF
+
+
+def config_group61(rng, pool, args):
+    return [(0x7a7af0 + 0x159, rng.choice([0, 0, 1, 0x80]), 1)]
+
+
+SPECS += [
+    Spec("GameConfig_LobbyValue68", 0x00413b60, "thiscall", []),
+    Spec("GameConfig_SetLobbyValue68", 0x00413b70, "thiscall", [anything]),
+    # The two outputs: sometimes the same address.
+    Spec("GameConfig_GetLobbyPair148", 0x00413b80, "thiscall",
+         [one_of(WORLD_BASE + CONFIG_OUT), one_of(WORLD_BASE + CONFIG_OUT, WORLD_BASE + CONFIG_OUT + 4)]),
+    Spec("GameConfig_SetLobbyPair148", 0x00413ba0, "thiscall", [anything, anything]),
+    Spec("GameConfig_Byte150", 0x00413bc0, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_RandomRaceAmazons", 0x00413bd0, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_GfxGroup61", 0x00413be0, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_CampaignMissionCD", 0x00413bf0, "thiscall", [config_mission]),
+    # The copy goes to a separate string or (rarely) to the config's own.
+    # Dead: 0x413c4f (a length above npos), and in the copy-to-itself case
+    # (whose fields are cleared first, so the length is 0) the _Xran call
+    # 0x413c60 and the erase 0x413c7b / 0x413ca2.
+    Spec("GameConfig_StartMap", 0x00413c20, "thiscall",
+         [lambda rng, pool: WORLD_BASE + (0x15c if rng.random() < 0.1 else CONFIG_OUT + 4 * rng.randrange(8))],
+         presets=config_start_map, globals=null_string_count,
+         exempt_blocks=(0x00413c4f, 0x00413c60, 0x00413c7b, 0x00413ca2)),
+    Spec("GameConfig_ClearStartMap", 0x00413d50, "thiscall", [], presets=config_start_map),
+    Spec("GameConfig_PathIndexForFileKind", 0x00414050, "thiscall", [config_kind], globals=config_group61,
+         callees={0x006119b0: (1, "thiscall", "throw")}),  # Win32::ThrowAssertmentFailed
+]
+
+
 # -- session 55 round 2 (gfx-open): Win32::CFile, Win32::CFileMapping and
 # Win32::DetachMemory (win32_mapping.cpp, win32_detach.cpp) -------------
 #

@@ -191,6 +191,10 @@ inline constexpr std::uint32_t kWCValOrderedVector_CPlayer = 0x656b6c;        //
 // Standard library
 inline constexpr std::uint32_t kStdLogicError = 0x65a548;  // std::logic_error
 inline constexpr std::uint32_t kStdOutOfRange = 0x65a538;  // std::out_of_range
+// wip/ui-gdi batch: the CScreenElement parts of two controls (an element's
+// parent is such a part; CListBox::FillBackground asks for its type).
+inline constexpr std::uint32_t kCDropdown_element = 0x656600;  // CDropdown's CScreenElement part (+0x66c)
+inline constexpr std::uint32_t kCListBox_element = 0x6564a0;   // CListBox's CScreenElement part (+0x444)
 }  // namespace vtables
 
 // Virtual-base tables (vbptr targets) of the exception classes with a
@@ -236,6 +240,8 @@ inline constexpr std::uintptr_t kCHResultPointer = 0x6968d8;  // ".PAVCHResult@W
 inline constexpr std::uintptr_t kCFileNotFoundPointer = 0x69f908;  // ".PAVCFileNotFound@Win32@@" (CMapFileStream::Open)
 // ".PAVCDirectSoundException@DirectX@@" (CSoundData::Open's and Restore's catches)
 inline constexpr std::uintptr_t kCDirectSoundExceptionPointer = 0x697510;
+// wip/ui-gdi batch: ".?AVCDropdown@@" (CListBox::FillBackground 0x420340 asks typeid(*parent) == it)
+inline constexpr std::uintptr_t kCDropdown = 0x6985a8;
 }  // namespace type_descriptor
 
 }  // namespace s3re::game

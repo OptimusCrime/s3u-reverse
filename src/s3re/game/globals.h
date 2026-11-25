@@ -77,14 +77,24 @@ static_assert(sizeof(PlayerInfo) == 0x44);
 struct GameConfig {
     std::uint8_t unk000[0x64];
     std::uint32_t notification_level;  // +0x64 notifications shown if their level >= 9 - this (GetMemberDword64)
-    std::uint8_t unk068[0x158 - 0x68];
+    std::uint32_t lobby_value68;       // +0x68 read and set by the lobby dialogs (0x413b60 / 0x413b70)
+    std::uint8_t unk06c[0x148 - 0x6c];
+    std::uint32_t lobby_pair148[2];    // +0x148 two values the lobby dialog reads and stores (0x413b80 / 0x413ba0)
+    std::uint8_t byte150;              // +0x150 read by the main menu and the load dialog (0x413bc0)
+    std::uint8_t unk151[0x158 - 0x151];
     std::uint8_t random_race_amazons;  // +0x158 copied to GameSettings +0xcc by 0x431ab0
     std::uint8_t gfx_group61;          // +0x159 CGraphicsData::Open loads GFX group 61 only when set (getter 0x413be0)
-    std::uint8_t unk15a[0x189 - 0x15a];
+    std::uint8_t unk15a[2];
+    msvc6::String start_map;           // +0x15c probably the map to start from the command line (0x413c20 / 0x413d50)
+    std::uint8_t unk16c[0x189 - 0x16c];
     std::uint8_t unk189;               // +0x189 weakens computer players in campaigns (GetMemberByte189)
 };
 static_assert(offsetof(GameConfig, notification_level) == 0x64);
+static_assert(offsetof(GameConfig, lobby_value68) == 0x68);
+static_assert(offsetof(GameConfig, lobby_pair148) == 0x148);
+static_assert(offsetof(GameConfig, byte150) == 0x150);
 static_assert(offsetof(GameConfig, random_race_amazons) == 0x158);
+static_assert(offsetof(GameConfig, start_map) == 0x15c);
 static_assert(offsetof(GameConfig, unk189) == 0x189);
 
 // A colour as three uint32 channels (g_playerColours).
@@ -510,5 +520,20 @@ inline constexpr GameGlobal<std::uint32_t> g_soundDuplicateCounter{0x7a0c00};
 // Win32::DetachMemory (0x61ab60): the page size, read once with
 // GetSystemInfo (dwPageSize) and kept (0 until the first call).
 inline constexpr GameGlobal<std::uint32_t> g_detachPageSize{0x7e9220};
+
+// wip/ui-gdi batch: GDI32 imports of the UI text code (CControl::ShowTooltip
+// 0x418550 measures the tooltip text; test/fake_gdi.h fakes them).
+using SelectObjectImport = void*(__stdcall*)(void* dc, void* object);
+using GetTextExtentPoint32AImport = int(__stdcall*)(void* dc, const char* text, std::int32_t length, void* size);
+using SetBkModeImport = std::int32_t(__stdcall*)(void* dc, std::int32_t mode);
+using SetTextColorImport = std::uint32_t(__stdcall*)(void* dc, std::uint32_t colour);
+using SetBkColorImport = std::uint32_t(__stdcall*)(void* dc, std::uint32_t colour);
+using TextOutAImport = int(__stdcall*)(void* dc, std::int32_t x, std::int32_t y, const char* text, std::int32_t length);
+inline constexpr GameGlobal<SelectObjectImport> g_importSelectObject{0x655030};
+inline constexpr GameGlobal<GetTextExtentPoint32AImport> g_importGetTextExtentPoint32A{0x655038};
+inline constexpr GameGlobal<SetBkModeImport> g_importSetBkMode{0x655054};
+inline constexpr GameGlobal<SetTextColorImport> g_importSetTextColor{0x655058};
+inline constexpr GameGlobal<SetBkColorImport> g_importSetBkColor{0x655078};
+inline constexpr GameGlobal<TextOutAImport> g_importTextOutA{0x655068};
 
 }  // namespace s3re::game

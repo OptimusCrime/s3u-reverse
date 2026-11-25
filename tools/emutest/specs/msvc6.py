@@ -417,3 +417,22 @@ SPECS += [
     Spec("String_NotEqualText", 0x00413ad0, "fastcall", [one_of(WORLD_BASE + STRING_SELF), text_or_null],
          presets=string_world),
 ]
+
+
+# -- wip/ui-gdi: the old iostream's ios lock/unlock/setf (old_iostream.cpp).
+# The stream is at world IOS_STREAM; _mtlock/_mtunlock run and reach
+# Enter/LeaveCriticalSection (API probes, recorded with the section).
+IOS_STREAM = 0x1f49000
+
+
+def ios_stream(rng, pool, args):
+    flag = rng.choice([-1, -1, 0, 1, rng.randint(-5, 5), rng.getrandbits(32)])
+    return [(IOS_STREAM + 0x34, flag & 0xFFFFFFFF, 4)]
+
+
+SPECS += [
+    Spec("Ios_Lock", 0x00411490, "cdecl", [one_of(WORLD_BASE + IOS_STREAM)], presets=ios_stream),
+    Spec("Ios_Unlock", 0x004114b0, "cdecl", [one_of(WORLD_BASE + IOS_STREAM)], presets=ios_stream),
+    Spec("Ios_Setf", 0x004114d0, "fastcall", [one_of(WORLD_BASE + IOS_STREAM), anything, anything, anything],
+         presets=ios_stream),
+]
