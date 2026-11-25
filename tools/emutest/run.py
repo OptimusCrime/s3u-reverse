@@ -342,6 +342,30 @@ INDEPENDENCE_CHECKS = (("CGameData_WalkSettler", 300, "Pathing_FindPath"),
                        ("Pathing_WalkLine", 300, None))
 
 
+def ram_offset_check(bin_dir: str) -> bool:
+    """Checks that the emulator's regions don't share Unicorn RAM offsets
+    (emu.new_uc; the bug of 2026-11-25: stores to the world aliased
+    s3re.dll's code and switched the memory hooks off): code pages at the
+    start, middle and end of every code section of both images against
+    every other region, on a throwaway emulator."""
+    machine = emu.Emulator(os.path.join(ROOT, "Settlers3Ultimate", "S3.EXE"),
+                           os.path.join(bin_dir, "s3re.dll"), os.path.join(bin_dir, "s3re.map"))
+    regions = [machine.exe_range, machine.dll_range, (emu.WORLD_BASE, emu.WORLD_SIZE),
+               (emu.STACK_BASE, emu.STACK_SIZE), (emu.TEB_BASE, 0x1000)]
+    problem = None
+    for start, end in machine.code_ranges:
+        for page in sorted({start, (start + end) // 2 & ~0xFFF, end - 0x1000}):
+            others = [(base, size) for base, size in regions if not base <= page < base + size]
+            problem = emu.check_ram_offsets(machine.uc, page + 0x800, others)
+            if problem:
+                break
+        if problem:
+            break
+    print(f"{'DIFFERENT' if problem else 'separate':9} RAM offsets of the emulator's regions: "
+          f"{problem or 'no store aliases code'}", flush=True)
+    return problem is None
+
+
 def independence_check(bin_dir: str) -> bool:
     """Checks the promise run_all relies on: a spec split into parts, each
     run after another spec in the same emulator, gives the same merged
@@ -671,7 +695,8 @@ def main() -> int:
         print(f"self-test: {caught} of {len(specs.SELF_TEST)} wrong pairings caught")
         show_memory(jobs, peak)
         independent = independence_check(bin_dir)
-        passed = caught == len(specs.SELF_TEST) and independent
+        separate = ram_offset_check(bin_dir)
+        passed = caught == len(specs.SELF_TEST) and independent and separate
         if passed:
             import changed
             changed.record_passes({}, changed.harness_fingerprint())

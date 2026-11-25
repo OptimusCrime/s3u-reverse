@@ -66,6 +66,26 @@ rely on DLL startup code (the emulator doesn't run it); call the game's
 operator new/delete/memmove (0x61efb9/0x61e4ef/0x61e860) where the
 original does.
 
+- **Unicorn RAM offsets (bug found 2026-11-25):** Unicorn 2.1.4
+  gives each mapped region an offset in QEMU's `ram_addr` space (the
+  index of the dirty bitmaps and of the per-page lists of translated
+  code). Until a region has been unmapped it puts a new region after
+  the *last block of its size-sorted list* (`find_ram_offset_last`),
+  so mapping S3.EXE (0x3ed000) before the bigger s3re.dll (0x629000)
+  gave the world and the stack the same offsets as s3re.dll. A store
+  to world+X then looked like self-modifying code at s3re.dll+X: the
+  store was reported twice, and when it hit the block being run,
+  Unicorn called no memory hooks any more, so the rest of the run
+  wasn't tracked (writes not compared, lazy world not filled). Whether
+  it struck depended only on where our code sits in the DLL:
+  GenerateRandomMap's Release build failed after the unrelated ai-mil
+  merge 799fca5 moved its tile loop to s3re.dll+0x7dda0 (it stores to
+  world+0x7dda2), Debug passed. `emu.new_uc` maps and unmaps a page
+  first, which switches Unicorn to QEMU's correct gap search; `--self-test`
+  checks that no region aliases code (`ram_offset_check`). A symptom
+  to recognize: "ours" (or the original) writes far fewer bytes than
+  the other, or a mismatch that comes and goes with unrelated code
+  changes or between Debug and Release.
 - **Parallel runs:** specs run in `--jobs N` worker processes
   (default, 2026-11-23: the free logical cores minus 2, measured over
   0.5 s, so cores busy with other agents' work count as taken; capped
