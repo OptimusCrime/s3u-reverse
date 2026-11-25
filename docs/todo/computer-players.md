@@ -52,10 +52,9 @@ LOGBOOK session entry).
   emulator, `LOCKIT_PROBES`; the finders' node padding bytes are ignored
   with a self-test pairing). Next: AddArea 0x555260, FillAreaSiteLists
   0x556630 and RefillAreaSiteList 0x5579d0 (1,361 instructions each),
-  ProcessPendingEvents 0x554980, GLOBAL_EXPAND_EMPIRE_AGENT::MakeBuildOrders
-  0x56cd90 / Run 0x56cd20, T_MAP_WORKER_AGENT::MakeBuildOrders 0x57ce90
-  (3228 ins) / Run 0x57cde0, then CComputerPlayer::Init 0x550a30, the
-  constructor 0x550900 and Step 0x550f80. Not in Ghidra's list (no rows):
+  ProcessPendingEvents 0x554980, then CComputerPlayer::Init 0x550a30, the
+  constructor 0x550900 and Step 0x550f80. (The expand and map worker
+  agents' Run / MakeBuildOrders were done in session 56, wip/ai-agents.) Not in Ghidra's list (no rows):
   std::list<Area>'s constructor 0x553e70 / destructor 0x5591e0, the
   bitset constructor 0x559240, 0x596540 (a vector's free).
 - **Open (session 55 round 2):** CEvaLand::Area's copy constructor copies
@@ -74,3 +73,14 @@ LOGBOOK session entry).
   returns 0 (best distance starts at 0); `AI::FewUnownedTilesNear`
   0x59c2c0 always returns 1 (kept in the replacement, session 54); `AI::CastBattleSpells` 0x5953b0 pairs the
   Amazons' mana checks with the wrong casters.
+- **Open (session 56):** the map worker's castle order needs another own
+  castle within 60 (HasBuildingNear's result tested the other way round
+  than everywhere else) and the residences 27 / 28 use the farm's site
+  tree pointer: confirm in a game whether computer players ever build
+  castles through this path (they also get them from the safety agent).
+- **Session 56 (wip/ai-agents) also did** AdjustSoldierShares 0x56a840,
+  OnBuildingFinished 0x573890, CCentrumCheckAgent::Run 0x560e00 and the
+  credits' debug / timer helpers 0x59e6f0..0x59f2a0. Left in the AI range
+  besides the area-list group: CComputerPlayer::Init / ctor / Step,
+  COMP_EmergencyPowersActStone 0x573560 (needs SendPrioritizeSite).
+

@@ -685,7 +685,7 @@ layouts in `src/s3re/game/ai/ai_layout.h`.
   priority, x, y (AI::RecordBestCandidate; CComputerPlayer::
   RaiseBuildPriorities raises the priority by the tables 0x73295C up to
   0x7328E8); +0x2D2 per-type countdowns (reset to 0x7329D0[type], lowered
-  every 15 steps); +0x20 dword counted up per step; +0x10 / +0x14 dwords: when set,
+  every 15 steps); +0x20 dword counted up per step (`steps_since_expansion`, G: above 4200 the expand agent's MakeBuildOrders 0x56CD90 tries all six directions, "LANGE NICHT MEHR AUSGEDEHNT"; **V** read, session 56); +0x10 / +0x14 dwords: when set,
   StartBestBuilding 0x551a70 only starts woodcutter, sawmill, forester or
   small tower / stonecutter or small tower (G: short of wood / stone;
   **V** reads). **V**. Session 48
@@ -697,6 +697,14 @@ layouts in `src/s3re/game/ai/ai_layout.h`.
   fishery condition needs non-zero (probably "has fishing water"); +0xC
   dword basic_economy (AI::CheckBasicEconomy 0x5720C0). **V** (the
   conditions), **R** (writers).
+- **GLOBAL_EXPAND_EMPIRE_AGENT** (12 bytes): +8 dword military_cursor, the
+  garrisoned military building the agent expanded from last (Run
+  0x56CD20). **T_MAP_WORKER_AGENT** (20 bytes): +8 byte run counter (works
+  every 14th run, 0x57CDE0), +0xE word residence_cursor (the military
+  building the last small residence went to, MakeBuildOrders 0x57CE90),
+  +0x10 word (cleared by the constructor), +0x12 not cleared. **V**
+  (session 56). **AiPlayerSetup** +0xC2 word: the expand agent's resource
+  search radius in grid cells. **V**.
 - **CompMapWorkerAgent globals** (ai_layout.h): AiArmyState at 0x7E58C8
   (0x51C bytes): the step counters of AI::RunMilitary 0x58F990 (+0x000
   military steps, +0x050 spell steps, +0x0F0 / +0x140 thief / mage hunt

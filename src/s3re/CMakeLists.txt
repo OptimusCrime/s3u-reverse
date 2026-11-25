@@ -157,10 +157,12 @@ add_library(s3re SHARED
     game/ai/ai_army_groups.cpp
     game/ai/ai_army_orders.cpp
     game/ai/ai_battle_spells.cpp
+    game/ai/ai_building_finished.cpp
     game/ai/ai_building_orders.cpp
     game/ai/ai_building_queries.cpp
     game/ai/ai_cell_resources.cpp
     game/ai/ai_census.cpp
+    game/ai/ai_centrum_check.cpp
     game/ai/ai_census_settlers.cpp
     game/ai/ai_commands.cpp
     game/ai/ai_computer_player.cpp
@@ -169,12 +171,14 @@ add_library(s3re SHARED
     game/ai/ai_economy_snapshot.cpp
     game/ai/ai_enemy_search.cpp
     game/ai/ai_evaland.cpp
+    game/ai/ai_expand_empire_agent.cpp
     game/ai/ai_evaland_cells.cpp
     game/ai/ai_force_production.cpp
     game/ai/ai_ground_request.cpp
     game/ai/ai_helpers.cpp
     game/ai/ai_land_queries.cpp
     game/ai/ai_map_queries.cpp
+    game/ai/ai_map_worker_agent.cpp
     game/ai/ai_military.cpp
     game/ai/ai_player_nodes.cpp
     game/ai/ai_request_agents.cpp
@@ -185,6 +189,7 @@ add_library(s3re SHARED
     game/ai/ai_site_notes.cpp
     game/ai/ai_site_queries.cpp
     game/ai/ai_small_helpers.cpp
+    game/ai/ai_soldier_shares.cpp
     game/ai/ai_state.cpp
     game/ai/ai_work_areas.cpp
     game/ai/ai_work_area_finders.cpp
@@ -200,6 +205,7 @@ add_library(s3re SHARED
     game/fileformats/map_file_tests.cpp
 
     # game/ui/: CScreenElement and the controls, menu and settings layouts
+    game/ui/credits_debug.cpp
     game/ui/game_settings.cpp
     game/ui/game_settings_players.cpp
     game/ui/game_settings_players_tests.cpp

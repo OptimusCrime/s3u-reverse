@@ -1,32 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1258" fill="#ffffff"/>
-<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">28.9%</text>
+<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">30.1%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="328.8" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 23.4%</title></rect>
 <text x="334.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">23.4%</text>
-<rect x="498.8" y="100" width="77.6" height="40" fill="#4f8fc0"><title>Verified by tests only: 5.5%</title></rect>
-<text x="537.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">5.5%</text>
-<rect x="576.4" y="100" width="294.1" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.9%</title></rect>
-<text x="723.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.9%</text>
-<rect x="870.4" y="100" width="705.6" height="40" fill="#e8a39b"><title>Not understood yet: 50.2%</title></rect>
-<text x="1223.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">50.2%</text>
+<rect x="498.8" y="100" width="94.3" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.7%</title></rect>
+<text x="546" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.7%</text>
+<rect x="593.1" y="100" width="292.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.8%</title></rect>
+<text x="739.3" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.8%</text>
+<rect x="885.4" y="100" width="690.6" height="40" fill="#e8a39b"><title>Not understood yet: 49.1%</title></rect>
+<text x="1230.7" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">49.1%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="232.4" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 16.5%</title></rect>
 <text x="286.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">16.5%</text>
-<rect x="402.4" y="154" width="55.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 3.9%</title></rect>
-<text x="430.1" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">3.9%</text>
-<rect x="457.8" y="154" width="514.9" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.6%</title></rect>
-<text x="715.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.6%</text>
-<rect x="972.7" y="154" width="603.3" height="40" fill="#e8a39b"><title>Not understood yet: 42.9%</title></rect>
-<text x="1274.4" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.9%</text>
+<rect x="402.4" y="154" width="67.1" height="40" fill="#4f8fc0"><title>Verified by tests only: 4.8%</title></rect>
+<text x="436" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">4.8%</text>
+<rect x="469.5" y="154" width="513.6" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.5%</title></rect>
+<text x="726.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.5%</text>
+<rect x="983.1" y="154" width="592.9" height="40" fill="#e8a39b"><title>Not understood yet: 42.2%</title></rect>
+<text x="1279.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.2%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
 <rect x="869.6" y="216" width="16" height="16" fill="#f2c86b"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
 <rect x="1233.2" y="216" width="16" height="16" fill="#e8a39b"/><text x="1257.2" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1108.3" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 28.9% verified (23.4% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 30.1% verified (23.4% in a whole game)</text>
 <g><title>(free functions): 1003 functions</title><rect x="2" y="19" width="520.9" height="671.6" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="259.6" height="185.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -2791,8 +2791,8 @@
 848 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="594.2" y="341.3" width="24.7" height="21.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>AI::FindVineyardWorkArea @ 0x0059b430
 848 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="594.2" y="362.9" width="24.7" height="21.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>AI::OnBuildingFinished @ 0x00573890
-848 bytes — Classified (class/role known)</title></rect>
+<rect x="594.2" y="362.9" width="24.7" height="21.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::OnBuildingFinished @ 0x00573890
+848 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="594.2" y="384.5" width="24.7" height="21.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::DiscountExploitedResources @ 0x0059bc20
 848 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="618.9" y="274.1" width="23.9" height="20.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>AI::FindFisheryWorkArea @ 0x0059b780
@@ -3139,8 +3139,8 @@
 2272 bytes — Identified (purpose known)</title></rect>
 <rect x="907.5" y="342.9" width="18.8" height="36.2" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::CEvaLand::EvaluateCell @ 0x005540f0
 1088 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="868.2" y="379.1" width="18.9" height="13.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>AI::CEvaLand::HasBuildingTypeNear @ 0x00558f00
-416 bytes — Identified (purpose known)</title></rect>
+<rect x="868.2" y="379.1" width="18.9" height="13.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>AI::CEvaLand::HasBuildingTypeNear @ 0x00558f00
+416 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="868.2" y="392.9" width="18.9" height="13.3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::CEvaLand::GridSumAround @ 0x00554530
 400 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="887.1" y="379.1" width="12.2" height="16.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::CEvaLand::Init @ 0x00553ea0
@@ -3436,10 +3436,10 @@
 </g>
 <g><title>T_MAP_WORKER_AGENT: 3 functions</title><rect x="936.3" y="406.6" width="85.3" height="107.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="938.3" y="415.1" font-size="8.5" fill="#ffffff">T_MAP_WORKER_AG…</text>
-<rect x="936.8" y="418.1" width="84.3" height="94.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>T_MAP_WORKER_AGENT::MakeBuildOrders @ 0x0057ce90
-13088 bytes — Classified (class/role known)</title></rect>
-<rect x="936.8" y="512.3" width="71.4" height="1.5" fill="#f2c86b"><title>T_MAP_WORKER_AGENT::Run @ 0x0057cde0
-176 bytes — Identified (purpose known)</title></rect>
+<rect x="936.8" y="418.1" width="84.3" height="94.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_MAP_WORKER_AGENT::MakeBuildOrders @ 0x0057ce90
+13088 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="936.8" y="512.3" width="71.4" height="1.5" fill="#a8c8e6"><title>T_MAP_WORKER_AGENT::Run @ 0x0057cde0
+176 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1008.2" y="512.3" width="13" height="1.5" fill="#3d9a50"><title>T_MAP_WORKER_AGENT::T_MAP_WORKER_AGENT @ 0x0057cda0
 32 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
@@ -3459,8 +3459,8 @@
 736 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1046.6" y="447.9" width="21" height="15.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderIronSmelter @ 0x00568f40
 544 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="1067.6" y="447.9" width="21" height="15.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::AdjustSoldierShares @ 0x0056a840
-544 bytes — Classified (class/role known)</title></rect>
+<rect x="1067.6" y="447.9" width="21" height="15.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::AdjustSoldierShares @ 0x0056a840
+544 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1088.5" y="447.9" width="17.3" height="15.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderCoalMine @ 0x00568bc0
 448 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1046.6" y="463.6" width="14.9" height="18.3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>T_ECONOMY_AGENT::ConsiderIronMine @ 0x00568d80
@@ -4924,10 +4924,10 @@
 32 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>GLOBAL_EXPAND_EMPIRE_AGENT: 3 functions</title><rect x="774.7" y="669.1" width="37.7" height="39.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="775.2" y="669.6" width="36.7" height="36.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>GLOBAL_EXPAND_EMPIRE_AGENT::MakeBuildOrders @ 0x0056cd90
-2032 bytes — Classified (class/role known)</title></rect>
-<rect x="775.2" y="705.9" width="28.6" height="2.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>GLOBAL_EXPAND_EMPIRE_AGENT::Run @ 0x0056cd20
-112 bytes — Identified (purpose known)</title></rect>
+<rect x="775.2" y="669.6" width="36.7" height="36.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GLOBAL_EXPAND_EMPIRE_AGENT::MakeBuildOrders @ 0x0056cd90
+2032 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="775.2" y="705.9" width="28.6" height="2.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GLOBAL_EXPAND_EMPIRE_AGENT::Run @ 0x0056cd20
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="803.8" y="705.9" width="8.2" height="2.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GLOBAL_EXPAND_EMPIRE_AGENT::GLOBAL_EXPAND_EMPIRE_AGENT @ 0x0056cd00
 32 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
@@ -5762,8 +5762,8 @@
 32 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>CCentrumCheckAgent: 2 functions</title><rect x="876.6" y="795.7" width="27.6" height="26.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="877.1" y="796.2" width="25.4" height="25.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CCentrumCheckAgent::Run @ 0x00560e00
-1024 bytes — Identified (purpose known)</title></rect>
+<rect x="877.1" y="796.2" width="25.4" height="25.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CCentrumCheckAgent::Run @ 0x00560e00
+1024 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="902.5" y="796.2" width="1.2" height="25.9" fill="#3d9a50"><title>CCentrumCheckAgent::CCentrumCheckAgent @ 0x00560dd0
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
@@ -6138,22 +6138,22 @@
 <g><title>Credits: 9 functions</title><rect x="927.8" y="955.7" width="24" height="21.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="928.3" y="956.2" width="13" height="20.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Credits::DecodeEntity @ 0x005a0b40
 416 bytes — Identified (purpose known)</title></rect>
-<rect x="941.3" y="956.2" width="5.7" height="7.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Credits::ReportCaughtException @ 0x0059e790
-64 bytes — Identified (purpose known)</title></rect>
+<rect x="941.3" y="956.2" width="5.7" height="7.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Credits::ReportCaughtException @ 0x0059e790
+64 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="947" y="956.2" width="4.3" height="7.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>Credits::TextStyle_5a0960 @ 0x005a0960
 48 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="941.3" y="963.2" width="5" height="6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Credits::DebugPrintFileLine @ 0x0059e730
-48 bytes — Identified (purpose known)</title></rect>
-<rect x="946.3" y="963.2" width="5" height="6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Credits::ReportCaughtUnknown @ 0x0059e760
-48 bytes — Identified (purpose known)</title></rect>
-<rect x="941.3" y="969.3" width="4.3" height="7.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Credits::ReportCreatingException @ 0x0059e7d0
-48 bytes — Identified (purpose known)</title></rect>
-<rect x="945.6" y="969.3" width="5.7" height="3.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Credits::DebugPrintLine @ 0x0059e700
-32 bytes — Identified (purpose known)</title></rect>
-<rect x="945.6" y="972.8" width="2.9" height="3.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Credits::DebugPrint @ 0x0059e6f0
-16 bytes — Identified (purpose known)</title></rect>
-<rect x="948.4" y="972.8" width="2.9" height="3.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Credits::DebugPrint2 @ 0x0059e720
-16 bytes — Identified (purpose known)</title></rect>
+<rect x="941.3" y="963.2" width="5" height="6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Credits::DebugPrintFileLine @ 0x0059e730
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="946.3" y="963.2" width="5" height="6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Credits::ReportCaughtUnknown @ 0x0059e760
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="941.3" y="969.3" width="4.3" height="7.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Credits::ReportCreatingException @ 0x0059e7d0
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="945.6" y="969.3" width="5.7" height="3.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Credits::DebugPrintLine @ 0x0059e700
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="945.6" y="972.8" width="2.9" height="3.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Credits::DebugPrint @ 0x0059e6f0
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="948.4" y="972.8" width="2.9" height="3.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Credits::DebugPrint2 @ 0x0059e720
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>DirectX::CDirectSound: 7 functions</title><rect x="927.8" y="976.8" width="24" height="21.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="928.3" y="977.3" width="12" height="20.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CDirectSound::vf01 @ 0x005c1dc0
@@ -7042,14 +7042,14 @@
 64 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>cmy::impuls::Timer: 4 functions</title><rect x="1043.7" y="944.8" width="9.4" height="11.8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1044.2" y="945.3" width="8.4" height="5.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>cmy::impuls::Timer::Update @ 0x0059f250
-80 bytes — Classified (class/role known)</title></rect>
-<rect x="1044.2" y="950.6" width="3.4" height="5.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>cmy::impuls::Timer::Timer @ 0x0059f210
-32 bytes — Classified (class/role known)</title></rect>
-<rect x="1047.6" y="950.6" width="5" height="3.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>cmy::impuls::Timer::Fire @ 0x0059f230
-32 bytes — Classified (class/role known)</title></rect>
-<rect x="1047.6" y="954.2" width="5" height="1.8" fill="#e8a39b"><title>cmy::impuls::Timer::Restart @ 0x0059f2a0
-16 bytes — Classified (class/role known)</title></rect>
+<rect x="1044.2" y="945.3" width="8.4" height="5.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>cmy::impuls::Timer::Update @ 0x0059f250
+80 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1044.2" y="950.6" width="3.4" height="5.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>cmy::impuls::Timer::Timer @ 0x0059f210
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1047.6" y="950.6" width="5" height="3.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>cmy::impuls::Timer::Fire @ 0x0059f230
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1047.6" y="954.2" width="5" height="1.8" fill="#a8c8e6"><title>cmy::impuls::Timer::Restart @ 0x0059f2a0
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>AI::ArmyState: 2 functions</title><rect x="1043.7" y="956.5" width="9.4" height="10.6" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1044.2" y="957" width="8.4" height="8.5" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>AI::ArmyState::TickAttackDelays @ 0x00594000
@@ -20975,16 +20975,16 @@
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>std::list::iterator: 1 functions</title><rect x="1588.5" y="994.3" width="5.4" height="3.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1589" y="994.8" width="4.4" height="2.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>std::list::iterator::Deref_580290 @ 0x00580290
-32 bytes — Classified (class/role known)</title></rect>
+<rect x="1589" y="994.8" width="4.4" height="2.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>std::list::iterator::Deref_580290 @ 0x00580290
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>std::wstring: 1 functions</title><rect x="1593.9" y="990.6" width="4.1" height="5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1594.4" y="991.1" width="3.1" height="4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::_Eos @ 0x00428880
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
 <g><title>std::multimap::iterator: 1 functions</title><rect x="1593.9" y="995.5" width="4.1" height="2.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1594.4" y="996" width="3.1" height="1.5" fill="#e8a39b"><title>std::multimap::iterator::Deref_580260 @ 0x00580260
-16 bytes — Classified (class/role known)</title></rect>
+<rect x="1594.4" y="996" width="3.1" height="1.5" fill="#a8c8e6"><title>std::multimap::iterator::Deref_580260 @ 0x00580260
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 </g>
 </g>
