@@ -170,6 +170,7 @@ add_library(s3re SHARED
     game/ai/ai_site_queries.cpp
     game/ai/ai_small_helpers.cpp
     game/ai/ai_state.cpp
+    game/ai/ai_work_areas.cpp
     game/ai/ai_wrapped_pos.cpp
 
     # game/fileformats/: the map and savegame container (Dirk::CMapFile)

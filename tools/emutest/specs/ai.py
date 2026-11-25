@@ -3330,3 +3330,79 @@ SPECS += [
     Spec("T_DO_BUILD_HOUSE_AGENT_Execute", 0x005656e0, "thiscall", [anything], eax_mask=0xFFFF,
          callees=EXECUTE_PROBES),
 ]
+
+
+# -- session 55 (wip/ai-econ): work areas (ai_work_areas.cpp) --------------
+
+WORK_LAND = SCRATCH + 10 * SCRATCH_SLOT_BYTES
+WORK_GRID = SCRATCH + 11 * SCRATCH_SLOT_BYTES   # 8 x 8 AiGridCells (0x3100 bytes: slots 11..14)
+WORK_TYPES = (2, 3, 14, 24, 36)
+
+
+def same_type_world(rng, pool, args):
+    """type (scratch 0), player (scratch 1), x / y (scratch 2 / 3) on a 64 x
+    64 map with the row of areas after it; up to 15 buildings of the five
+    work-area types (sometimes others) with doors in areas 0..3 and work
+    points near; random distances of map offsets 150 / 300 / 400."""
+    x, y = rng.randrange(64), rng.randrange(64)
+    if rng.random() < 0.03:
+        x = rng.randrange(64, 0x10000)
+    kind = rng.choice(WORK_TYPES) if rng.random() < 0.85 else rng.choice((1, 30, 25, 40))
+    fields = [(SCRATCH, kind, 1), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(3), 1),
+              (SCRATCH + 2 * SCRATCH_SLOT_BYTES, x, 2), (SCRATCH + 3 * SCRATCH_SLOT_BYTES, y, 2)]
+    if x < 64:
+        fields += [(tile(x + k, y) + 0x14, rng.randrange(4) if k else rng.randrange(1, 4), 2) for k in range(18)]
+    for k in (150, 300, 400):
+        fields.append((0x110A588 + 16 * k + 8, rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(40), 4))
+    count = rng.randrange(15)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        dx, dy = rng.randrange(64), rng.randrange(64)
+        fields += [(record, 0xFF if rng.random() < 0.1 else rng.randrange(3), 1),
+                   (record + 6, kind if rng.random() < 0.6 else rng.choice(WORK_TYPES + (30, 1)), 1),
+                   (record + 0x21, 0 if rng.random() < 0.85 else 1, 1),
+                   (record + 0xA, dx, 2), (record + 0xC, dy, 2),
+                   (tile(dx, dy) + 0x14, rng.randrange(4), 2),
+                   (record + 0x30, min(63, max(0, (x if x < 64 else 30) + rng.randint(-30, 30))), 2),
+                   (record + 0x32, min(63, max(0, y + rng.randint(-30, 30))), 2)]
+    return fields
+
+
+def same_type_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, 64, 2), (AI_MAP_SIZES + 2, 64, 2)]
+
+
+def waterworks_world(rng, pool, args):
+    """The building (scratch 0: owner, position) on a 64 x 64 map whose
+    tiles belong in patches to players 0..2 or nobody, some with stream
+    terrain; the land evaluation (scratch 10) with an 8 x 8 grid of random
+    stream_tiles."""
+    owner = rng.randrange(3)
+    fields = [(SCRATCH, owner, 1), (SCRATCH + 2, rng.randrange(64), 2), (SCRATCH + 4, rng.randrange(64), 2),
+              (WORK_LAND + 0x140, 8, 4), (WORK_LAND + 0x144, 8, 4), (WORK_LAND + 0x158, WORLD_BASE + WORK_GRID, 4)]
+    patch = rng.choice((8, 12, 16, 24))
+    stream = rng.choice((0.0, 0.002, 0.02, 0.1, 0.3))
+    for x in range(64):
+        for y in range(64):
+            k = (x // patch) * 7 + (y // patch) * 3
+            fields += [(tile(x, y) + 8, 0xFF if k % 4 == 3 else k % 4, 1),
+                       (tile(x, y) + 6, 0x60 + rng.randrange(16) if rng.random() < stream else rng.randrange(0x60), 1)]
+    for cell in range(64):
+        fields.append((WORK_GRID + cell * 0xC4 + 2, 0 if rng.random() < 0.4 else rng.randrange(1, 60), 1))
+    return fields
+
+
+def waterworks_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, 64, 2), (AI_MAP_SIZES + 2, 64, 2),
+            (AI_LAND_EVALUATION, WORLD_BASE + WORK_LAND, 4)]
+
+
+SPECS += [
+    # The callers test AL.
+    Spec("AI_HasSameTypeWorkAreaNear", 0x0058e390, "fastcall",
+         [low_word_noise(16), scratch(0), scratch(1), scratch(2), scratch(3)], eax_mask=0xFF,
+         presets=same_type_world, globals=same_type_globals, max_cases=1500),
+    Spec("AI_FindWaterworksWorkArea", 0x0059ba90, "fastcall", [scratch(0), scratch(1), scratch(2)],
+         presets=waterworks_world, globals=waterworks_globals, max_cases=300),
+]
