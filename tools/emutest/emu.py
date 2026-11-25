@@ -90,6 +90,7 @@ FAKE_VTABLE = PROBE_BASE              # 0x400 slots
 VIRTUAL_CODE = PROBE_BASE + 0x1000
 API_CODE = PROBE_BASE + 0x2000
 PROBE_SIZE = 0x3000
+SCRATCH_PAGE = 0x00020000  # mapped and unmapped once at start (see new_uc)
 
 
 def _rect(machine, address):
@@ -179,6 +180,71 @@ def _mix(value: int) -> int:
 
 def _page_up(value: int) -> int:
     return (value + 0xFFF) & ~0xFFF
+
+
+def new_uc() -> Uc:
+    """A 32-bit x86 Unicorn whose mapped regions get disjoint RAM offsets.
+
+    Unicorn 2.1.4 gives every mem_map region an offset in QEMU's ram_addr
+    space (the dirty-memory bitmaps and the per-page lists of translated
+    code are indexed by it). As long as no region was ever unmapped, it
+    places a new region after `ram_list.last_block`, which is the last
+    block of the size-sorted block list, not the one that ends highest
+    (qemu/exec.c find_ram_offset_last). Map a region bigger than an
+    earlier one and later regions overlap it: with S3.EXE (0x3ed000
+    bytes) mapped before s3re.dll (0x629000), the world and the stack got
+    the same ram_addr range as s3re.dll. A store to world+X then counts as
+    a store to s3re.dll+X: if translated code came from there, QEMU's
+    self-modifying-code handling throws it away and reports the store
+    twice, and when it is the block being run, Unicorn calls no memory
+    hooks any more (from then on stores aren't tracked or compared and
+    reads don't fill in the lazy world). Whether it happens depends on
+    where our code sits in the DLL, so unrelated code changes made it
+    come and go (2026-11-25: GenerateRandomMap in the Release build, whose
+    tile loop at s3re.dll+0x7dda0 stored to world+0x7dda2).
+
+    Once a region has been unmapped (`ram_list.freed`), Unicorn uses
+    QEMU's gap search for every later region, which is correct; hence the
+    page mapped and unmapped here. `check_ram_offsets` tests the result
+    (run.py --self-test)."""
+    uc = Uc(UC_ARCH_X86, UC_MODE_32)
+    uc.mem_map(SCRATCH_PAGE, 0x1000)
+    uc.mem_unmap(SCRATCH_PAGE, 0x1000)
+    return uc
+
+
+def check_ram_offsets(uc: Uc, code: int, data: list[tuple[int, int]]) -> str | None:
+    """Checks that no region in `data` ((start, size) pairs) shares RAM
+    offsets with the code page at `code` (see new_uc): runs a loop at
+    `code` that stores to every page of each region at the page offset of
+    the loop's own bytes and expects each store to be reported exactly
+    once (a store to memory that aliases the running code is reported
+    twice). Overwrites the bytes at `code` and the stored-to bytes, so use
+    it on a throwaway emulator. Returns the problem, or None."""
+    body = (b"\x89\x07"                      # mov [edi], eax
+            + b"\x81\xc7\x00\x10\x00\x00"    # add edi, 0x1000
+            + b"\x39\xf7"                    # cmp edi, esi
+            + b"\x72\xf4")                   # jb (the mov)
+    uc.mem_write(code, body)
+    uc.ctl_flush_tb()
+    stores: list[int] = []
+    handle = uc.hook_add(UC_HOOK_MEM_WRITE,
+                         lambda uc_, access, address, size, value, user: stores.append(address))
+    try:
+        for start, size in data:
+            stores.clear()
+            uc.reg_write(UC_X86_REG_EDI, start + (code & 0xFFF))
+            uc.reg_write(UC_X86_REG_ESI, start + size)
+            uc.emu_start(code, code + len(body))
+            pages = size // 0x1000
+            if len(stores) != pages or len(set(stores)) != pages:
+                repeated = sorted(a for a in set(stores) if stores.count(a) > 1)
+                return (f"region {start:#x}+{size:#x}: {len(stores)} stores reported for {pages} "
+                        f"pages (repeated: {', '.join(f'{a:#x}' for a in repeated[:4]) or 'none'}); "
+                        f"it shares RAM offsets with the code at {code:#x}")
+    finally:
+        uc.hook_del(handle)
+    return None
 
 
 def map_pe(uc: Uc, path: str) -> tuple[int, int]:
@@ -272,7 +338,7 @@ class Outcome:
 
 class Emulator:
     def __init__(self, exe_path: str, dll_path: str, map_path: str):
-        self.uc = Uc(UC_ARCH_X86, UC_MODE_32)
+        self.uc = new_uc()
         self.exe_range = map_pe(self.uc, exe_path)
         self.dll_range = map_pe(self.uc, dll_path)
         self.code_ranges = code_ranges(exe_path) + code_ranges(dll_path)
