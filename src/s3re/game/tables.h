@@ -233,6 +233,12 @@ inline constexpr GameGlobal<const std::uint8_t[4][5]> g_aiWantedStoneStock{0x65a
 // The default slope of those conditions for a race above 3 (0.0f).
 inline constexpr GameGlobal<const float> g_aiDefaultSlope{0x65a57c};
 
+// The animation ids of the draw data's cell objects (CDrawer::QueueCellObject
+// 0x4d5a50; also read by 0x4d1690 / 0x4d1945): 8 per object type, 4 shadow
+// animations and then 4 sprite animations, each chosen by Render::Entry204
+// of the owner (probably the race). Indexed with 32-bit arithmetic.
+inline constexpr GameGlobal<const std::uint32_t[8]> g_cellObjectAnimations{0x6a36b8};
+
 // ------------------------------------------------------------ library data
 // std::string::npos of S3.EXE's statically linked library (read at run
 // time, like the original).

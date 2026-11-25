@@ -372,3 +372,11 @@ SPECS += [
          presets=go_to_notification_world, globals=go_to_notification_globals, max_cases=500,
          callees={0x005450d0: (5, "thiscall", "probe")}),
 ]
+
+
+# -- CGameData::BuildOffsetTable (offset_table.cpp, session 57): no inputs;
+# 3333 searches over 5000 points (~50M instructions), so a few cases.
+SPECS += [
+    Spec("CGameData_BuildOffsetTable", 0x00516530, "thiscall", [], eax_mask=0, max_cases=3, quick_cases=1,
+         max_instructions=200_000_000),
+]

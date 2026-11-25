@@ -80,6 +80,9 @@ struct CDrawer {
     std::int32_t ambient_left[kAmbientKinds];         // +0x05f588
     std::int32_t ambient_right[kAmbientKinds];        // +0x05f5cc
     std::int32_t ambient_count[kAmbientKinds];        // +0x05f610
+    std::uint8_t unk05f654[0x5f6b8 - 0x5f654];
+    void* graphics;                                   // +0x05f6b8 the CGraphicsData the sprites come from
+                                                      //           (CDrawer::QueueCellObject 0x4d5a50)
 };
 
 #pragma pack(pop)
@@ -103,6 +106,7 @@ static_assert(offsetof(CDrawer, colour_layers.used) == 0x5f584);
 static_assert(offsetof(CDrawer, ambient_left) == 0x5f588);
 static_assert(offsetof(CDrawer, ambient_right) == 0x5f5cc);
 static_assert(offsetof(CDrawer, ambient_count) == 0x5f610);
+static_assert(offsetof(CDrawer, graphics) == 0x5f6b8);
 
 template <typename T>
 CDrawer* DrawerOf(T* self) {
