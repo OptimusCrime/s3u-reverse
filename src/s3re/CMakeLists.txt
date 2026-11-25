@@ -20,9 +20,11 @@ add_library(s3re SHARED
 
     # watcom/: Watcom container library code
     watcom/bare_vectors.cpp
+    watcom/list_iterators.cpp
     watcom/ptr_vector.cpp
     watcom/string_vector.cpp
     watcom/ushort_vector.cpp
+    watcom/vector_callbacks.cpp
 
     # tooling/: launcher features: --fast, --random-map, --load-save
     tooling/fast.cpp

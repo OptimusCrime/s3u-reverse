@@ -41,6 +41,9 @@
 // the same, but each of the `filled` elements is destroyed first by
 // ~GamePlayerSetup 0x49ec80 (filled and data re-read per element):
 //   0x004141a0 WCValOrderedVector<Dirk::CPlayer>, 0x004a11a0 the same body.
+// The destructor of the sorted vector of teams (Dirk::CTeam, 0x40 bytes),
+// the same with ~CTeam 0x4a04d0:
+//   0x00414240 WCValSortedVector<Dirk::CTeam>.
 //
 // (capacity, grow) constructors, ret 8, EAX = this: +4 = 0, vtable =
 // WCBareVectorBase<T>, capacity, filled = 0, data = operator
@@ -102,6 +105,15 @@ constexpr std::uint32_t kPlayerSize = 0xcc;
 std::uint32_t DestroyPlayerVector(VectorBase* self) {
     return DestroyVector(self, vt::kWCBareVectorBase_CPlayer, vt::kWCExcept, kPlayerSize, [](std::uint32_t player) {
         reinterpret_cast<void(__fastcall*)(std::uint32_t, void*)>(kDestroyPlayer)(player, nullptr);
+    });
+}
+
+constexpr std::uintptr_t kDestroyTeam = 0x004a04d0;  // Dirk::CTeam::~CTeam (ours)
+constexpr std::uint32_t kTeamSize = 0x40;
+
+std::uint32_t DestroyTeamVector(VectorBase* self) {
+    return DestroyVector(self, vt::kWCBareVectorBase_CTeam, vt::kWCExcept, kTeamSize, [](std::uint32_t team) {
+        reinterpret_cast<void(__fastcall*)(std::uint32_t, void*)>(kDestroyTeam)(team, nullptr);
     });
 }
 
@@ -199,6 +211,12 @@ std::uint32_t __fastcall VectorDestructor_4141a0(VectorBase* self, void*) {
 }
 std::uint32_t __fastcall VectorDestructor_4a11a0(VectorBase* self, void*) {
     return DestroyPlayerVector(self);
+}
+
+// Purpose: Destructor of the game settings' sorted vector of teams: destroy
+// each team, then free the block.
+std::uint32_t __fastcall VectorDestructor_414240(VectorBase* self, void*) {
+    return DestroyTeamVector(self);
 }
 
 // Purpose: Constructors of Watcom vectors with room for `capacity`
@@ -324,6 +342,8 @@ S3RE_HOOK(0x004141a0, VectorDestructor_4141a0, DestructorFn, Original_VectorDest
           VectorDestructor_4141a0);
 S3RE_HOOK(0x004a11a0, VectorDestructor_4a11a0, DestructorFn, Original_VectorDestructor_4a11a0,
           VectorDestructor_4a11a0);
+S3RE_HOOK(0x00414240, VectorDestructor_414240, DestructorFn, Original_VectorDestructor_414240,
+          VectorDestructor_414240);
 S3RE_HOOK(0x00437630, VectorConstructor_437630, ConstructorFn, Original_VectorConstructor_437630,
           VectorConstructor_437630);
 S3RE_HOOK(0x0044ce10, VectorConstructor_44ce10, ConstructorFn, Original_VectorConstructor_44ce10,
@@ -422,6 +442,7 @@ const DestructorPair kDestructors[] = {
     {Original_VectorDestructor_4a1140, &VectorDestructor_4a1140, 0x4a1140},
     {Original_VectorDestructor_4141a0, &VectorDestructor_4141a0, 0x4141a0},
     {Original_VectorDestructor_4a11a0, &VectorDestructor_4a11a0, 0x4a11a0},
+    {Original_VectorDestructor_414240, &VectorDestructor_414240, 0x414240},
 };
 const ConstructorPair kConstructors[] = {
     {Original_VectorConstructor_437630, &VectorConstructor_437630, 0x437630},
@@ -503,11 +524,12 @@ bool CompareBareConstructors(test::Context& ctx, const BareConstructorPair& pair
     return true;
 }
 
-// Runs a destructor with ~GamePlayerSetup stubbed; its calls are recorded
+// Runs a destructor with ~GamePlayerSetup and ~CTeam stubbed; its calls are recorded
 // as offsets into the vector's block.
 std::vector<test::StubCall> RunDestructor(DestructorFn fn, VectorBase& vector, std::uint32_t& eax) {
     test::CalleeStubs stubs;
     stubs.Install<0, kDestroyPlayer>();
+    stubs.Install<0, kDestroyTeam>();
     stubs.SetWorld(reinterpret_cast<game::CGameData*>(vector.data));
     eax = fn(&vector, nullptr);
     return stubs.Take();

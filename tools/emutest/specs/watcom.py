@@ -118,3 +118,14 @@ SPECS += [Spec(f"StringVectorDestructor_{a:x}", a, "thiscall", [], presets=strin
                exempt_blocks=(dead,))
           for a, dead in ((0x409d50, 0x409df3), (0x44c980, 0x44ca23), (0x40a280, 0x40a323),
                           (0x44cf50, 0x44cff3))]
+SPECS += [Spec("VectorDestructor_414240", 0x00414240, "thiscall", [], presets=watcom_vector_to_destroy,
+               callees={0x004a04d0: (0, "thiscall", "probe")})]
+
+
+# -- list bases, skip-list iterators, vector callbacks (session 56) ---------
+SPECS += [Spec(f"IsvListConstructor_{a:x}", a, "thiscall", []) for a in (0x41b080, 0x428bd0, 0x428bf0)]
+SPECS += [Spec(f"SkipListIterConstructor_{a:x}", a, "thiscall", [anything]) for a in (0x4726e0, 0x472780, 0x499600)]
+SPECS += [Spec(name, address, "stdcall", [anything, anything], callees={member: (1, "thiscall", "probe")})
+          for name, address, member in (("PlayerVectorEquivalent", 0x437530, 0x49f100),
+                                        ("TeamVectorLessThan", 0x437550, 0x4a05a0),
+                                        ("LobbyVectorEquivalent", 0x44c4a0, 0x606ac0))]
