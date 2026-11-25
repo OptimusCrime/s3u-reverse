@@ -53,6 +53,20 @@
 //              food in stock the mine's own condition goes off, without it
 //              on (and a log line "Brot / Fleisch / Fisch vorhanden" or
 //              "KEIN ..."). Details at FoodForMines. EAX: left over.
+//   0x005724e0 COMP_FoodForMines(const u16* player, const u16* area)
+//              fastcall (CComputerPlayer::Step 0x550f80, every 841 steps):
+//              finds the area's record like the above (none: logs "...
+//              EcoSector gehört nicht dem Spieler"); reads the area's coal
+//              (halved), iron ore and gold ore (AreaGoodsAmount), logs
+//              "entry". With force_production set and no coal or no iron ore
+//              (ForceProduction, logged): the gold mines' and gem mines'
+//              food conditions all go off. Otherwise each mine type the
+//              record counts (coal, iron, gold) gets 100 - its ore's share
+//              of the three in percent, normalized to a sum of 100; all
+//              three within 25 of each other: COMP_FoodForMinesOptimum;
+//              else each counted mine's three food conditions get its
+//              percentage * 16 / 100 (logged per mine). Integer division
+//              as the original's idiv; a sum of 0 ends it. EAX: left over.
 
 #include "game/ai/ai_layout.h"
 #include "game/debug_log.h"
@@ -75,6 +89,7 @@
 #include <cstring>
 #include <iterator>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace s3re::game {
@@ -154,11 +169,14 @@ struct MineFood {
 }  // namespace
 
 using FoodForMinesFn = void(__fastcall*)(const std::uint16_t* player, const std::uint16_t* area);
+using MineFoodFn = void(__fastcall*)(const std::uint16_t* player, const std::uint16_t* area);
 using AddAreaFn = void(__fastcall*)(AiLandEvaluation* self, void* edx, std::uint32_t area, std::uint32_t player);
 
 void __fastcall COMP_FoodForMinesOptimum(const std::uint16_t* player, const std::uint16_t* area);
 void __fastcall AI_CEvaLand_AddArea(AiLandEvaluation* self, void* edx, std::uint32_t area, std::uint32_t player);
+void __fastcall COMP_FoodForMines(const std::uint16_t* player, const std::uint16_t* area);
 
+S3RE_HOOK(0x005724e0, COMP_FoodForMines, MineFoodFn, Original_COMP_FoodForMines, COMP_FoodForMines);
 S3RE_HOOK(0x00572a30, COMP_FoodForMinesOptimum, FoodForMinesFn, Original_COMP_FoodForMinesOptimum,
           COMP_FoodForMinesOptimum);
 S3RE_HOOK(0x00555260, AI_CEvaLand_AddArea, AddAreaFn, Original_AI_CEvaLand_AddArea, AI_CEvaLand_AddArea);
@@ -220,6 +238,113 @@ void __fastcall COMP_FoodForMinesOptimum(const std::uint16_t* player, const std:
         set(38, fish != 0 ? kConditionOff : kConditionOn);
         set(33, fish != 0 ? kConditionOff : kConditionOn);
         set(42, kConditionOn);
+    }
+}
+
+namespace {
+
+// COMP_FoodForMines: the three food conditions of each mine type (the kinds
+// COMP_FoodForMinesOptimum sets).
+using FoodKinds = std::array<std::uint8_t, 3>;
+constexpr FoodKinds kCoalFood = {36, 30, 40};
+constexpr FoodKinds kIronFood = {35, 31, 41};
+constexpr FoodKinds kGoldFood = {37, 32, 39};
+constexpr FoodKinds kGemFood = {38, 33, 42};
+constexpr std::int32_t kPercent = 100;
+constexpr std::int32_t kOptimumSpread = 25;    // all shares within this of each other: the optimum
+constexpr std::int32_t kConditionScale = 16;   // a share of 100 % = condition value 16 (kConditionOn)
+
+// 0x5726e7..0x572750: 100 minus the ore's share of the stock, for a mine
+// type the area has (else 0). The original's idiv; total is not 0.
+std::int32_t ShareFor(std::uint16_t count, std::uint32_t ore, std::uint32_t total) {
+    if (count == 0) {
+        return 0;
+    }
+    return kPercent - static_cast<std::int32_t>(ore * kPercent) / static_cast<std::int32_t>(total);
+}
+
+bool Within(std::int32_t a, std::int32_t b) {
+    return a <= b + kOptimumSpread && a >= b - kOptimumSpread;
+}
+
+}  // namespace
+
+// Purpose: Shares a computer player's mine food between its coal, iron and
+// gold mines by how short each ore is (probably so that the mine whose ore
+// is scarcest gets most food); when the shares are about even it falls
+// back to the plain food settings (COMP_FoodForMinesOptimum).
+void __fastcall COMP_FoodForMines(const std::uint16_t* player, const std::uint16_t* area) {
+    const auto* land = reinterpret_cast<const AiLandEvaluation*>(g_aiLandEvaluation.get());
+    const AiAreaNode* node = FindAreaNode(land, *player, *area);
+    if (node == nullptr) {
+        LogDebugString(texts::kMineFoodNotOwned);
+        return;
+    }
+    const std::uint16_t* counts = node->value.building_counts;
+    const std::uint16_t coalMines = counts[Value(B::CoalMine)];
+    const std::uint16_t ironMines = counts[Value(B::IronMine)];
+    const std::uint16_t goldMines = counts[Value(B::GoldMine)];
+    const std::uint16_t gemMines = counts[Value(B::GemMine)];
+    // 0x57256b: coal counts half (a mine needs less of it, probably).
+    const std::uint32_t coal = GoodsInArea(Good::Coal, area) >> 1;
+    const std::uint32_t ironOre = GoodsInArea(Good::IronOre, area);
+    const std::uint32_t goldOre = GoodsInArea(Good::GoldOre, area);
+    LogDebugString(texts::kMineFoodEntry);
+    const auto owner = static_cast<std::uint8_t>(*player);
+    const auto setAll = [&](const FoodKinds& kinds, std::uint8_t value) {
+        for (std::uint8_t kind : kinds) {
+            SetAreaCondition(owner, area, kind, value);
+        }
+    };
+
+    // 0x5725a7: forced production without coal or iron ore: the gold and gem
+    // mines' food off.
+    if (node->value.force_production != 0 && (coal == 0 || ironOre == 0)) {
+        LogDebugString(texts::kMineFoodForceProduction);
+        if (goldMines != 0) {
+            setAll(kGoldFood, kConditionOff);
+        }
+        if (gemMines != 0) {
+            setAll(kGemFood, kConditionOff);
+        }
+        return;
+    }
+    const std::uint32_t total = goldOre + ironOre + coal;
+    if (total == 0) {
+        return;
+    }
+    const std::int32_t coalShare = ShareFor(coalMines, coal, total);
+    const std::int32_t ironShare = ShareFor(ironMines, ironOre, total);
+    const std::int32_t goldShare = ShareFor(goldMines, goldOre, total);
+    const std::int32_t sum = goldShare + ironShare + coalShare;
+    if (sum == 0) {
+        return;
+    }
+    // 0x572761: normalized to a sum of about 100.
+    const std::int32_t coalPercent = coalShare * kPercent / sum;
+    const std::int32_t ironPercent = ironShare * kPercent / sum;
+    const std::int32_t goldPercent = goldShare * kPercent / sum;
+    if (Within(coalPercent, ironPercent) && Within(coalPercent, goldPercent) && Within(ironPercent, goldPercent)) {
+        reinterpret_cast<FoodForMinesFn>(kFoodForMines)(player, area);
+        return;
+    }
+    LogDebugString(texts::kMineFoodHeader, static_cast<std::uint32_t>(*player), static_cast<std::uint32_t>(*area));
+    // 0x5727fb: per mine type, in this order.
+    const struct {
+        std::uint16_t mines;
+        std::int32_t percent;
+        const FoodKinds& kinds;
+        const GameText& log;
+    } shares[] = {{coalMines, coalPercent, kCoalFood, texts::kMineFoodCoalPercent},
+                  {ironMines, ironPercent, kIronFood, texts::kMineFoodIronPercent},
+                  {goldMines, goldPercent, kGoldFood, texts::kMineFoodGoldPercent}};
+    for (const auto& share : shares) {
+        if (share.mines == 0) {
+            continue;
+        }
+        const std::int32_t value = share.percent * kConditionScale / kPercent;
+        setAll(share.kinds, static_cast<std::uint8_t>(value));
+        LogDebugString(share.log, value);
     }
 }
 
@@ -714,8 +839,9 @@ void __stdcall RecordString(const char* text) {
     }
 }
 
-constexpr std::uint8_t kGoodsOfInterest[] = {Value(Good::Meat), Value(Good::Fish), Value(Good::Bread),
-                                             Value(Good::Rice)};
+constexpr std::uint8_t kGoodsOfInterest[] = {Value(Good::Meat), Value(Good::Fish),    Value(Good::Bread),
+                                             Value(Good::Rice), Value(Good::Coal),    Value(Good::IronOre),
+                                             Value(Good::GoldOre)};
 
 void SetUpEconomy(test::Rng& rng, CGameData* world) {
     const std::uint32_t count = rng.Below(60);
@@ -847,6 +973,77 @@ void CompareFoodForMines(test::Context& ctx, FoodForMinesFn ours, int cases) {
     }
 }
 
+// COMP_FoodForMines: like the above, with force_production on in a third of
+// the records; counts which way each case went (not owned, forced, the
+// optimum, the shares).
+void CompareMineFood(test::Context& ctx, MineFoodFn ours, int cases) {
+    Harness harness;
+    int paths[4] = {};
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        test::Rng& rng = ctx.rng();
+        if (i % 20 == 0) {
+            SetUpMap(rng, harness.world(), harness.cells());
+        }
+        SetUpEconomy(rng, harness.world());
+        TestLand land(harness.cells());
+        const std::uint16_t player = static_cast<std::uint16_t>(rng.Below(3));
+        auto* record = static_cast<AiArea*>(msvc6::GameOperatorNew(sizeof(AiArea)));
+        // (mostly the queried area; often all three shared mine types, so
+        // that the shares can be even)
+        const std::uint16_t area = static_cast<std::uint16_t>(rng.Below(rng.Chance(1, 10) ? 5 : 4));
+        for (std::uint32_t k = rng.Chance(1, 10) ? 0 : 1 + rng.Below(3); k > 0; --k) {
+            MakeRecord(rng, record, rng.Chance(2, 3) ? area : static_cast<std::uint16_t>(rng.Below(4)));
+            RandomCounts(rng, record);
+            if (rng.Chance(1, 2)) {
+                for (B mine : {B::CoalMine, B::IronMine, B::GoldMine}) {
+                    record->building_counts[Value(mine)] = static_cast<std::uint16_t>(1 + rng.Below(2));
+                }
+            }
+            record->force_production = rng.Chance(1, 3) ? 1 + rng.Below(3) : 0;
+            land.Append(player, record);
+            DestroyRecord(record);
+        }
+        msvc6::GameOperatorDelete(record);
+        if (area < 5 && rng.Chance(1, 3)) {
+            // About even ore stocks (coal counts half): the optimum's way.
+            const std::uint32_t amount = 1 + rng.Below(4);
+            const std::pair<Good, std::uint32_t> ores[] = {
+                {Good::Coal, 2 * amount + 1}, {Good::IronOre, amount}, {Good::GoldOre, amount}};
+            for (const auto& [goods, value] : ores) {
+                const std::uint16_t pile = harness.world()->areas[area].piles_by_goods[Value(goods)];
+                if (pile != 0) {
+                    harness.world()->piles[pile].amount = static_cast<std::uint8_t>(value);
+                }
+            }
+        }
+        g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&land.land);
+        const Captured a = harness.Capture([&] { Original_COMP_FoodForMines(&player, &area); });
+        const Captured b = harness.Capture([&] { ours(&player, &area); });
+        const auto logged = [&](const GameText& text) {
+            for (const std::string& line : a.strings) {
+                if (line.compare(0, 30, text.c_str(), 30) == 0) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        ++paths[logged(texts::kMineFoodNotOwned)          ? 0
+                : logged(texts::kMineFoodForceProduction) ? 1
+                : logged(texts::kFoodForMinesHeader)      ? 2
+                                                          : 3];
+        if (!S3RE_EXPECT(a == b)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, player %u, area %u: %u/%u commands, %u/%u lines", i, player, area,
+                     static_cast<unsigned>(a.messages.size()), static_cast<unsigned>(b.messages.size()),
+                     static_cast<unsigned>(a.strings.size()), static_cast<unsigned>(b.strings.size()));
+        }
+    }
+    if (cases >= 500 && !S3RE_EXPECT(paths[0] > 0 && paths[1] > cases / 20 && paths[2] > cases / 20 &&
+                                     paths[3] > cases / 20)) {
+        ctx.Fail(__FILE__, __LINE__, "  paths: not owned %d, forced %d, optimum %d, shares %d", paths[0], paths[1],
+                 paths[2], paths[3]);
+    }
+}
+
 // The new records of a list: fields (without the copy's padding), trees
 // and type -> tree indexes.
 std::vector<std::uint8_t> RecordContents(const AiArea& record, bool pointers) {
@@ -944,6 +1141,20 @@ void __fastcall WrongFoodForMines(const std::uint16_t* player, const std::uint16
     }
 }
 
+void __fastcall WrongMineFood(const std::uint16_t* player, const std::uint16_t* area) {
+    // Wrong: forced production without coal or iron ore also turns the coal
+    // mines' food off.
+    COMP_FoodForMines(player, area);
+    const auto* land = reinterpret_cast<const AiLandEvaluation*>(g_aiLandEvaluation.get());
+    const AiAreaNode* node = FindAreaNode(land, *player, *area);
+    if (node != nullptr && node->value.force_production != 0 && node->value.building_counts[Value(B::CoalMine)] != 0 &&
+        ((GoodsInArea(Good::Coal, area) >> 1) == 0 || GoodsInArea(Good::IronOre, area) == 0)) {
+        for (std::uint8_t kind : kCoalFood) {
+            SetAreaCondition(static_cast<std::uint8_t>(*player), area, kind, kConditionOff);
+        }
+    }
+}
+
 void __fastcall WrongAddArea(AiLandEvaluation* self, void* edx, std::uint32_t area, std::uint32_t player) {
     // Wrong: without the basic economy only the coal mine waits.
     AI_CEvaLand_AddArea(self, edx, area, player);
@@ -957,6 +1168,7 @@ void __fastcall WrongAddArea(AiLandEvaluation* self, void* edx, std::uint32_t ar
 
 S3RE_TEST(AiAreaEvents_MatchOriginal) {
     CompareFoodForMines(ctx, &COMP_FoodForMinesOptimum, 1000);
+    CompareMineFood(ctx, &COMP_FoodForMines, 1500);
     CompareAddArea(ctx, &AI_CEvaLand_AddArea, 300);
 }
 
@@ -964,6 +1176,11 @@ S3RE_TEST(AiAreaEvents_ComparisonDetectsWrongImplementation) {
     {
         test::Context quiet(ctx.name(), 1, /*quiet=*/true);
         CompareFoodForMines(quiet, &WrongFoodForMines, 1000);
+        S3RE_EXPECT(quiet.failures() > 0);
+    }
+    {
+        test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+        CompareMineFood(quiet, &WrongMineFood, 1000);
         S3RE_EXPECT(quiet.failures() > 0);
     }
     {

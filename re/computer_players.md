@@ -175,7 +175,17 @@ same step:
    WorkOnNextActiveNote; see the note life cycle above) and
    `StartBestBuilding` 0x551a70.
 8. Every 841 steps (`timer27c`): `0x59bf70`, `0x5724e0`, `0x5720c0`.
-9. `CComputerPlayer::RaiseBuildPriorities` (V) and `++data->+0x20`.
+9. `CComputerPlayer::RaiseBuildPriorities` (V) and `++data->+0x20`
+   (`steps_since_expansion`).
+
+Verified and replaced in session 57 (ai_computer_player_step.cpp). Exact
+details: the player dword is used whole in the timer comparisons
+(`timer > p + period`, unsigned) and as the list index; step 1 restarts
+timer274 at p, step 6 timer278 at p + 1 and step 8 timer27c at p + 4,
+with periods 15, 71 and 841 steps; `0x59bc20` gets ECX = p's low word
+with the upper half of p + 71 (0 for real players); the word arguments
+of `0x59c0f0`, `0x59bf70`, `0x5724e0`, `0x5720c0` sit in stack dwords
+whose upper halves are leftovers (the callees read words).
 
 The agents' run functions (slot 8) are called from elsewhere in this tree
 (e.g. 0x550f80 step 3, the factory's callers); mapping who runs which
@@ -826,6 +836,20 @@ military buildings, have none).
   SetAreaCondition commands (kinds 30..42; 0 off, 16 on): food in stock
   switches the mine's food conditions off, none switches them on (log
   lines "Brot / Fleisch / Fisch vorhanden" or "KEIN ...").
+- **COMP_FoodForMines** 0x5724e0 (V, session 57; every 841 steps from
+  0x550f80 step 8) shares the food between coal, iron and gold mines by
+  how short their ore is: stocks coal / 2 (halved), iron ore, gold ore
+  (AreaGoodsAmount). With `force_production` set and no coal or no iron
+  ore it only switches the gold and gem mines' food conditions off
+  (ForceProduction). Otherwise per mine type the record counts: share =
+  100 - ore * 100 / total, normalized to percent = share * 100 / sum
+  (integer idiv); all three within 25 of each other: plain
+  COMP_FoodForMinesOptimum; else each counted mine's three food
+  conditions (coal 36/30/40, iron 35/31/41, gold 37/32/39) get
+  percent * 16 / 100 (0..16, the scale of "on" = 16), so the mine with
+  the scarcest ore gets the most food. A type the area doesn't have
+  counts 0, so the optimum needs all three types (a sum of 0 or a stock
+  of 0 ends it without commands).
 - The 20 lists' constructor 0x553e70 / destructor 0x5591e0 and the grid
   cells' bitset constructor 0x559240 have no function starts in Ghidra's
   list (re/extra_functions.tsv).

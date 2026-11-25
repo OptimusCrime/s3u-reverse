@@ -177,6 +177,7 @@ add_library(s3re SHARED
     game/ai/ai_commands.cpp
     game/ai/ai_computer_player.cpp
     game/ai/ai_computer_player_init.cpp
+    game/ai/ai_computer_player_step.cpp
     game/ai/ai_economy_actions.cpp
     game/ai/ai_economy_conditions.cpp
     game/ai/ai_economy_snapshot.cpp

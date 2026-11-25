@@ -35,6 +35,11 @@
 //   building record (world + 0x1499e64 + id * 0x3a) if id <= the building
 //   count (+0x1499e60, unsigned) and its first byte is not 0xff (unused
 //   slot), else null.
+// AI_BlackBoardEmptyVirtual (0x0055ec00): (value) thiscall, ret 4: an empty
+//   virtual shared by the notes' vtables (slots 2 and 3) and the agents'
+//   (slots 11 and 12; identical code folded): calls NoOp_ret4 0x582530
+//   (value) with ECX unchanged. EAX = value (loaded for the push, kept by
+//   the no-op). Was StaticInitExpr_55ec00 (it is no static initializer).
 
 #include "game/ai/ai_layout.h"
 #include "game/globals.h"
@@ -179,6 +184,20 @@ void* __fastcall AI_BuildingIfUsed_58e1c0(std::uint32_t id) {
     }
     layout::Building* record = &world->buildings[id];
     return record->owner != 0xff ? record : nullptr;
+}
+
+constexpr std::uintptr_t kNoOpRet4 = 0x00582530;  // NoOp_ret4 (ret 4)
+
+std::uint32_t __fastcall AI_BlackBoardEmptyVirtual(void* self, void* edx, std::uint32_t value);
+
+S3RE_HOOK(0x0055ec00, AI_BlackBoardEmptyVirtual, ThisValueFn, Original_AI_BlackBoardEmptyVirtual,
+          AI_BlackBoardEmptyVirtual);
+
+// Purpose: A virtual of the AI notes and agents that does nothing (none of
+// the computer player's code calls those slots, as far as seen).
+std::uint32_t __fastcall AI_BlackBoardEmptyVirtual(void* self, void* /*edx*/, std::uint32_t value) {
+    reinterpret_cast<ThisValueFn>(kNoOpRet4)(self, nullptr, value);
+    return value;
 }
 
 // ---------------------------------------------------------------------------
@@ -376,6 +395,39 @@ S3RE_TEST(AiSmallHelpers_ComparisonDetectsWrongImplementation) {
         CompareWorld(probe, wrong, 20000);
         S3RE_EXPECT(probe.failures() > 0);
     }
+}
+
+// AI_BlackBoardEmptyVirtual: EAX and the stack (callee pops the argument)
+// for random values and objects. The wrong version returns the object.
+namespace {
+
+void CompareEmptyVirtual(test::Context& ctx, ThisValueFn ours, int cases) {
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        const std::uint32_t value = ctx.rng().Next32();
+        void* self = reinterpret_cast<void*>(static_cast<std::uintptr_t>(ctx.rng().Next32()));  // never dereferenced
+        const std::uint32_t a = Original_AI_BlackBoardEmptyVirtual(self, nullptr, value);
+        const std::uint32_t b = ours(self, nullptr, value);
+        if (!S3RE_EXPECT_EQ(a, b)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, value %08x", i, value);
+        }
+    }
+}
+
+std::uint32_t __fastcall WrongEmptyVirtual(void* self, void* edx, std::uint32_t value) {
+    AI_BlackBoardEmptyVirtual(self, edx, value);
+    return reinterpret_cast<std::uint32_t>(self);  // Wrong: EAX = this
+}
+
+}  // namespace
+
+S3RE_TEST(AiEmptyVirtual_MatchOriginal) {
+    CompareEmptyVirtual(ctx, &AI_BlackBoardEmptyVirtual, 2000);
+}
+
+S3RE_TEST(AiEmptyVirtual_ComparisonDetectsWrongImplementation) {
+    test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+    CompareEmptyVirtual(quiet, &WrongEmptyVirtual, 100);
+    S3RE_EXPECT(quiet.failures() > 0);
 }
 
 }  // namespace s3re::game
