@@ -570,11 +570,11 @@ SPECS += [
 MEMBER_THIS = SCRATCH + 4 * SCRATCH_SLOT_BYTES + 0x800
 MEMBER_VBTABLE = SCRATCH + 6 * SCRATCH_SLOT_BYTES
 MEMBER_CALLEES = {
-    0x415af0: (3, "thiscall", "probe"), 0x4168c0: (2, "thiscall", "probe"), 0x5faaa0: (0, "thiscall", "probe"),
+    0x415af0: (3, "thiscall", "probe"), 0x4168c0: (0, "thiscall", "probe"), 0x5faaa0: (2, "thiscall", "probe"),
     0x413d70: (1, "thiscall", "probe"), 0x415c80: (5, "thiscall", "probe"), 0x418380: (5, "thiscall", "probe"),
     0x417ab0: (2, "thiscall", "probe"), 0x417be0: (1, "thiscall", "probe"),
     0x4156e0: (1, "thiscall", "probe", None, lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)),)),
-    0x41c3c0: (1, "thiscall", "probe"),
+    0x41c3c0: (1, "thiscall", "probe"), 0x4180a0: (0, "thiscall", "probe"),
 }
 
 
@@ -584,6 +584,20 @@ def member_state(delta=None, fields=()):
         if delta is not None:
             out += [(MEMBER_THIS + delta, WORLD_BASE + MEMBER_VBTABLE, 4),
                     (MEMBER_VBTABLE + 4, (-delta + rng.randint(-0x40, 0x40)) & 0xFFFFFFFF, 4)]
+        return out
+    return presets
+
+
+def member_vbptrs(*deltas):
+    """Presets: vbptrs at this + delta, all pointing at the member vbtable
+    (one displacement, so their bases sit at distinct places), plus the
+    rect at MEMBER_A sometimes small (the up-down's halves round both
+    ways)."""
+    def presets(rng, pool, args):
+        out = [(MEMBER_THIS + delta, WORLD_BASE + MEMBER_VBTABLE, 4) for delta in deltas]
+        out.append((MEMBER_VBTABLE + 4, rng.randint(0x600, 0x700), 4))
+        if rng.random() < 0.5:
+            out += [(MEMBER_A + 4 * k, rng.randint(-9, 9) & 0xFFFFFFFF, 4) for k in range(4)]
         return out
     return presets
 
@@ -634,6 +648,16 @@ SPECS += [
     member_spec("CStaticFrame_Construct", 0x0041d960, [one_of(WORLD_BASE + MEMBER_A), anything, anything]),
     member_spec("CStaticColorIndexedFrame_Construct", 0x0041db90,
                 [one_of(WORLD_BASE + MEMBER_A), anything, anything, anything]),
+    member_spec("CVScrollBar_OnResized", 0x0041e940, [one_of(WORLD_BASE + MEMBER_A), anything],
+                presets=member_vbptrs(-0x238, -0x1b8)),
+    member_spec("CDropdown_OnResized", 0x004224c0, [one_of(WORLD_BASE + MEMBER_A), anything],
+                presets=member_vbptrs(-0x5b0, -0x520, -0x4a0)),
+    member_spec("CUpDown_OnResized", 0x00422d90, [one_of(WORLD_BASE + MEMBER_A), anything],
+                presets=member_vbptrs(-0x124, -0xa4)),
+    # The text's buffer in MEMBER_B (count byte 0, 0xff or shared) or none.
+    member_spec("CEditControl_Destroy", 0x00421f50, [],
+                presets=member_state(fields=((MEMBER_THIS - 0x20, lambda rng: rng.choice([0, WORLD_BASE + MEMBER_B + 2]), 4),
+                                             (MEMBER_B + 1, lambda rng: rng.choice([0, 0xff, 1, 2, 0xfe]), 1)))),
     Spec("UI_MoveWords", 0x00418cf0, "fastcall",
          [lambda rng, pool: WORLD_BASE + MEMBER_A + 2 * rng.randrange(-20, 84), words_move,
           lambda rng, pool: rng.randrange(40)]),
@@ -809,4 +833,275 @@ SPECS += [
          virtuals={0x0c: (3, {0: 4, 2: 4})}, virtual_effects={0x0c: gv_find_effect}, new_fails=0.1),
     Spec("GamePlayerSetup_LogSlot", 0x004a01c0, "thiscall", [],
          presets=lambda rng, pool, args: string_fields(rng, 0xbc, SCRATCH)[0]),
+]
+
+
+# -- CControl, CButton, CImageButton, the screen's message queue (controls.cpp, session 57) --
+#
+# The object starts at world offset UICTL_OBJECT; its vbptr (+4) points at a
+# vbtable in scratch slot 6 whose displacement puts the CScreenElement
+# virtual base at the class's size or a little further (never inside the
+# class's own fields: the vtable stores would overwrite them). Functors and
+# the tooltip are fake objects (vtable emu.FAKE_VTABLE, slot 0 with one
+# argument) in scratch slot 7. The base constructors, SetRect (rects
+# recorded by contents), IsOffScreen, ShowTooltip (GDI) and the class
+# constructors/destructors called by the derived ones are probed.
+
+UICTL_OBJECT = 0x400
+UICTL_VBTABLE = SCRATCH + 6 * SCRATCH_SLOT_BYTES
+UICTL_FAKES = SCRATCH + 7 * SCRATCH_SLOT_BYTES
+UICTL_RECT_PROBE = (1, "thiscall", "probe", None, lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)),))
+UICTL_CALLEES = {0x415610: (0, "thiscall", "probe"), 0x415660: UICTL_RECT_PROBE, 0x4156e0: UICTL_RECT_PROBE,
+                 0x415840: (0, "thiscall", "probe"), 0x418550: (0, "thiscall", "probe"),
+                 0x417fe0: (5, "thiscall", "probe"), 0x4180a0: (0, "thiscall", "probe"),
+                 0x4183c0: (0, "thiscall", "probe"), 0x41a830: (6, "thiscall", "probe"),
+                 0x4168c0: (0, "thiscall", "probe"), 0x5faaa0: (2, "thiscall", lambda h: uictl_text(h)),
+                 0x5fad20: (1, "thiscall", "probe"), 0x41c3c0: (1, "thiscall", "probe"),
+                 0x41abe0: (7, "thiscall", "probe"), 0x41a900: (0, "thiscall", "probe"),
+                 0x41b080: (0, "thiscall", "probe"), 0x428bd0: (0, "thiscall", "probe"),
+                 0x428bf0: (0, "thiscall", "probe"), 0x428e70: (1, "thiscall", "probe")}
+UICTL_TEXT = SCRATCH + 0x300  # TextAddress's text (random letters)
+
+
+def uictl_text(h):
+    return 0 if h % 4 == 0 else WORLD_BASE + UICTL_TEXT
+
+
+def uictl_callees(own):
+    """The probed callees, without the function itself."""
+    return {address: entry for address, entry in UICTL_CALLEES.items() if address != own}
+
+
+def uictl_fake(k):
+    return WORLD_BASE + UICTL_FAKES + 0x10 * k
+
+
+def uictl_objects(size, fields=(), vbptr=UICTL_OBJECT + 4):
+    """Presets: the vbtable (base at `size` from the object, +0..16) and the
+    fake objects; `fields` (object offset, generator(rng, element), size),
+    where element is the virtual base's world offset."""
+    def presets(rng, pool, args):
+        displacement = (UICTL_OBJECT + size) - vbptr + 4 * rng.randrange(5)
+        element = vbptr + displacement
+        out = [(vbptr, WORLD_BASE + UICTL_VBTABLE, 4), (UICTL_VBTABLE + 4, displacement & 0xFFFFFFFF, 4)]
+        out += [(UICTL_FAKES + 0x10 * k, FAKE_VTABLE, 4) for k in range(3)]
+        for offset, value, width in fields:
+            out.append((UICTL_OBJECT + offset if offset is not None else element + 0x1d,
+                        value(rng) & ((1 << (8 * width)) - 1), width))
+        return out
+    return presets
+
+
+def uictl_rect(rng, pool):
+    return rng.choice([0, 5, 0x7fffffff, 0x80000000, rng.randint(-50, 700) & 0xFFFFFFFF, rng.getrandbits(32)])
+
+
+def uictl_most_derived(rng, pool):
+    return rng.choice([0, 0, 1, 0x100, rng.getrandbits(32)])
+
+
+def uictl_control_to_destroy(size):
+    base = uictl_objects(size, ((0x20, lambda rng: rng.choice([0, uictl_fake(0)]), 4),))
+
+    def presets(rng, pool, args):
+        fields, _ = string_fields(rng, UICTL_OBJECT + 0x10, SCRATCH)
+        return base(rng, pool, args) + fields
+    return presets
+
+
+def uictl_link(h):
+    return 0 if h % 4 == 0 else WORLD_BASE + SCRATCH + 0x800
+
+
+UICTL_OBJ = WORLD_BASE + UICTL_OBJECT
+UICTL_ELEMENT = lambda size: one_of(UICTL_OBJ + size)  # noqa: E731  (this = the element part, no jitter: probes only)
+UICTL_TIMER_FIELDS = ((None, lambda rng: rng.choice([0, 0, 1, 0x80]), 1),  # the element's mouse_inside
+                      (0x20, lambda rng: rng.choice([0, 0, uictl_fake(0)]), 4),
+                      (0x08, lambda rng: rng.choice([0, uictl_fake(1)]), 4))
+
+SPECS += [
+    Spec("CControl_Construct", 0x00417fe0, "fastcall",
+         [one_of(UICTL_OBJ), anything] + [uictl_rect] * 4 + [uictl_most_derived],
+         presets=uictl_objects(0x3c), callees=uictl_callees(0x00417fe0)),
+    # Dead (as in CStaticText_Destroy): the inlined ~string's _Eos after
+    # erase(0, npos) and its release's decrement.
+    Spec("CControl_Destroy", 0x004180a0, "fastcall", [one_of(UICTL_OBJ + 0x3c), anything], eax_mask=0,
+         presets=uictl_control_to_destroy(0x3c), virtuals={0: 1}, callees=uictl_callees(0x004180a0),
+         exempt_blocks=(0x00418198, 0x004181b7)),
+    # Exempt 0x41840d: the functor call for a null control (this == 0x3c),
+    # whose fields would sit at address 0 (not a real control; ours keeps
+    # the check).
+    Spec("CControl_OnTimer", 0x004183c0, "fastcall", [one_of(UICTL_OBJ + 0x3c), anything], eax_mask=0xFF,
+         presets=uictl_objects(0x3c, UICTL_TIMER_FIELDS), virtuals={0: 1}, callees=uictl_callees(0x004183c0),
+         exempt_blocks=(0x0041840d,)),
+    # The group part's element at object + 0x3c + 0x7c, its vbptr 0xb4 before.
+    Spec("CGroupControl_Tick", 0x00429f10, "fastcall", [one_of(UICTL_OBJ + 0xb8), anything],
+         presets=uictl_objects(0x100, vbptr=UICTL_OBJECT + 0xb8 - 0xb4), callees=uictl_callees(0x00429f10)),
+    Spec("CButton_Construct", 0x0041a830, "fastcall",
+         [one_of(UICTL_OBJ), anything] + [uictl_rect] * 4 + [anything, uictl_most_derived],
+         presets=uictl_objects(0x50), callees=uictl_callees(0x0041a830)),
+    Spec("CButton_Destroy", 0x0041a900, "fastcall", [one_of(UICTL_OBJ + 0x50), anything],
+         presets=uictl_objects(0x50, ((0x49, lambda rng: rng.choice([0, 1, 0x80]), 1),
+                                      (0x40, lambda rng: rng.choice([0, uictl_fake(2)]), 4))),
+         virtuals={0: 1}, callees=uictl_callees(0x0041a900)),
+    Spec("CImageButton_Construct", 0x0041abe0, "fastcall",
+         [one_of(UICTL_OBJ), anything, one_of(WORLD_BASE + SCRATCH + 0x100)] + [anything] * 5 + [uictl_most_derived],
+         presets=uictl_objects(0x60), callees=uictl_callees(0x0041abe0)),
+    # The list's allocator (+0x10): 0 (operator new, sometimes failing) or a
+    # stand-in at 0x59f200 (an empty function; probed here) that hands out a
+    # link in scratch or none.
+    Spec("MsgConsoleList_NewLink", 0x00429900, "fastcall",
+         [one_of(UICTL_OBJ), anything, one_of(WORLD_BASE + SCRATCH + 0x100)], new_fails=0.2,
+         presets=lambda rng, pool, args: [(UICTL_OBJECT + 0x10, rng.choice([0, 0x59f200]), 4)],
+         callees={0x59f200: (0, "thiscall", uictl_link)}),
+    # NewLink gets the address of the by-value message (a stack slot):
+    # recorded by its contents.
+    Spec("CScreen_PostMessage", 0x00417fa0, "fastcall", [one_of(UICTL_OBJ + 0x1c), anything] + [anything] * 5,
+         callees={0x429900: (1, "thiscall", uictl_link, None, lambda m, ecx, args: (bytes(m.guest_read(args[0], 20)),)),
+                  0x60b430: (1, "thiscall", "probe")}),
+]
+
+
+# Session 57, second part: CScreenGroup, CTextButton, CStaticText (text id),
+# CAnimatedButton (controls.cpp). TextAddress returns the text at
+# UICTL_TEXT or null; CTextButton's string argument is a std::string at
+# scratch + 0x400 (common.string_fields, buffer at scratch + 0x500).
+
+
+def uictl_texts(size, string_at=None):
+    base = uictl_objects(size)
+
+    def presets(rng, pool, args):
+        out = base(rng, pool, args)
+        length = rng.choice([0, 1, rng.randrange(40)])
+        out += [(UICTL_TEXT + i, rng.randint(1, 255), 1) for i in range(length)] + [(UICTL_TEXT + length, 0, 1)]
+        if string_at is not None:
+            fields, _ = string_fields(rng, string_at, SCRATCH + 0x500)
+            out += fields
+        return out
+    return presets
+
+
+def uictl_rect_ptr(rng, pool):
+    return WORLD_BASE + SCRATCH + 0x100 + 4 * rng.randrange(4)
+
+
+def uictl_text_button_to_destroy(rng, pool, args):
+    fields, _ = string_fields(rng, UICTL_OBJECT + 0x5c, SCRATCH)
+    return fields
+
+
+def uictl_sequence(rng, pool):
+    return rng.choice([0xFFFFFFFF, 0, rng.randrange(300), rng.getrandbits(32)])
+
+
+SPECS += [
+    Spec("CScreenGroup_Construct", 0x00416c70, "fastcall", [one_of(UICTL_OBJ), anything, uictl_rect_ptr, uictl_most_derived],
+         presets=uictl_objects(0x80), callees=uictl_callees(0x00416c70)),
+    # Exempt: the inlined assign's "argument is this string" branch
+    # (0x41b507..0x41b563; the argument would have to be the button's own
+    # text member, which the constructor has only just cleared) and its
+    # clamp of n to npos (0x41b500, n = the length can't exceed it). The
+    # static empty string's count is varied (a null buffer then copies).
+    Spec("CTextButton_Construct", 0x0041b470, "fastcall",
+         [one_of(UICTL_OBJ), anything, uictl_rect_ptr, one_of(WORLD_BASE + SCRATCH + 0x400), anything, anything,
+          uictl_most_derived],
+         presets=uictl_texts(0x74, SCRATCH + 0x400), callees=uictl_callees(0x0041b470), globals=null_string_count,
+         exempt_blocks=(0x0041b500, 0x0041b507, 0x0041b511, 0x0041b516, 0x0041b526, 0x0041b528, 0x0041b52c, 0x0041b554,
+                        0x0041b55c)),
+    # The text-id variants' dead blocks: the temporary's release by operator
+    # delete (the member always shares the temporary's unshared buffer, so
+    # the release only decrements) and the copy of "" (0x7a7868 is empty:
+    # _Grow(0) is false).
+    Spec("CTextButton_ConstructTextId", 0x0041b640, "fastcall",
+         [one_of(UICTL_OBJ), anything, uictl_rect_ptr, anything, anything, anything, uictl_most_derived],
+         presets=uictl_texts(0x74), callees=uictl_callees(0x0041b640), exempt_blocks=(0x0041b79f, 0x0041b7cd)),
+    # Dead (as in CStaticText_Destroy): the inlined ~string's _Eos after
+    # erase(0, npos) and its release's decrement.
+    Spec("CTextButton_Destroy", 0x0042ab70, "fastcall", [one_of(UICTL_OBJ + 0x74), anything], eax_mask=0,
+         presets=uictl_text_button_to_destroy, callees=uictl_callees(0x0042ab70),
+         exempt_blocks=(0x0042ac0d, 0x0042ac2f)),
+    Spec("CStaticText_ConstructTextId", 0x0041c680, "fastcall",
+         [one_of(UICTL_OBJ), anything, uictl_rect_ptr, anything, lambda rng, pool: rng.choice([0, rng.getrandbits(32)])],
+         presets=uictl_texts(0x44), callees=uictl_callees(0x0041c680), exempt_blocks=(0x0041c7a0, 0x0041c7ce)),
+    Spec("CAnimatedButton_Construct", 0x0041b0a0, "fastcall",
+         [one_of(UICTL_OBJ), anything, uictl_rect_ptr, anything, uictl_sequence, anything, anything, anything,
+          uictl_most_derived],
+         presets=uictl_objects(0x68), callees=uictl_callees(0x0041b0a0)),
+]
+
+
+def uictl_group_control(rng, pool, args):
+    """CGroupControl: the control's vbptr (+4) and the group part's (+0x3c)
+    share the vbtable, so the group's base lands 0x38 further."""
+    return uictl_objects(0xb8)(rng, pool, args) + [(UICTL_OBJECT + 0x3c, WORLD_BASE + UICTL_VBTABLE, 4)]
+
+
+# CScreenGroup's constructor, probed with its rect (a local) by contents.
+UICTL_CALLEES[0x416c70] = (2, "thiscall", "probe", None,
+                           lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)), args[1]))
+
+SPECS += [
+    Spec("CGroupControl_Construct", 0x0041a5a0, "fastcall",
+         [one_of(UICTL_OBJ), anything] + [uictl_rect] * 4 + [uictl_most_derived],
+         presets=uictl_group_control, callees=uictl_callees(0x0041a5a0)),
+    Spec("CScreen_Construct", 0x00417d10, "fastcall", [one_of(UICTL_OBJ), anything, uictl_most_derived],
+         presets=uictl_objects(0x98), callees=uictl_callees(0x00417d10)),
+]
+
+
+# CListView::Draw / FillBackground, the column vector's base_equivalent and
+# WCListDelete (ui_control_members.cpp, session 57). The list view's vbptrs
+# at this-0x598, -0xa4, -0x400 share the member vbtable; the rect callees
+# are probed with their rects by contents; IntersectRects writes a result
+# fixed by its inputs (so the callers' reads of it are compared).
+
+
+def uictl_intersect(machine, ecx, args, h):
+    a = [int.from_bytes(machine.guest_read(args[1] + 4 * k, 4), "little") for k in range(4)]
+    b = [int.from_bytes(machine.guest_read(args[2] + 4 * k, 4), "little") for k in range(4)]
+    out = [a[0] ^ b[1], (a[1] + b[0]) & 0xFFFFFFFF, (a[2] - b[3]) & 0xFFFFFFFF, a[3] ^ b[2]]
+    machine.guest_write(args[0], b"".join(v.to_bytes(4, "little") for v in out))
+    return args[0]
+
+
+def uictl_rect_arg(index):
+    return lambda m, ecx, args: tuple(bytes(m.guest_read(a, 16)) if i == index else a for i, a in enumerate(args))
+
+
+LIST_VIEW_CALLEES = {
+    0x415af0: (3, "thiscall", "probe"),
+    0x415aa0: (2, "thiscall", "probe", None, uictl_rect_arg(1)),
+    0x4156d0: (0, "thiscall", lambda h: WORLD_BASE + MEMBER_A + 0x40),
+    0x415b20: (3, "thiscall", "probe", uictl_intersect,
+               lambda m, ecx, args: (bytes(m.guest_read(args[1], 16)), bytes(m.guest_read(args[2], 16)))),
+    0x417480: (3, "thiscall", "probe", None, uictl_rect_arg(1)),
+    0x417460: (2, "thiscall", "probe"),
+    0x5bf0c0: (5, "thiscall", "probe", None,
+               lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)), args[1], args[2], args[3],
+                                     bytes(m.guest_read(args[4], 4)), bytes(m.guest_read(args[4] + 0x50, 4)))),
+    0x427830: (1, "thiscall", "probe"),
+}
+
+
+def list_view_state(rng, pool, args):
+    displacement = rng.randint(0x600, 0x700)
+    out = [(MEMBER_THIS + d, WORLD_BASE + MEMBER_VBTABLE, 4) for d in (-0x598, -0xa4, -0x400)]
+    out += [(MEMBER_VBTABLE + 4, displacement, 4),
+            (MEMBER_THIS - 0x598 + displacement + 0x1f, rng.choice([0, 0, 1]), 1),
+            (MEMBER_THIS - 0xaa, rng.choice([0, 1]), 1), (MEMBER_THIS - 0xac, rng.choice([0, 0x80]), 1)]
+    return out
+
+
+SPECS += [
+    Spec("CListView_Draw", 0x004267c0, "fastcall",
+         [one_of(WORLD_BASE + MEMBER_THIS), anything, anything, one_of(WORLD_BASE + MEMBER_A),
+          one_of(WORLD_BASE + MEMBER_B)], presets=list_view_state, callees=LIST_VIEW_CALLEES),
+    Spec("CListView_FillBackground", 0x004273f0, "fastcall",
+         [one_of(WORLD_BASE + MEMBER_THIS), anything, anything, one_of(WORLD_BASE + MEMBER_A)],
+         presets=list_view_state, callees=LIST_VIEW_CALLEES),
+    Spec("CColumnVector_BaseEquivalent", 0x00427fc0, "stdcall", [one_of(WORLD_BASE + MEMBER_A), anything],
+         callees=LIST_VIEW_CALLEES),
+    Spec("WCIsvSListBase_ListDelete", 0x00428300, "stdcall", [one_of(0, WORLD_BASE + MEMBER_B, WORLD_BASE + MEMBER_B)],
+         eax_mask=0),
 ]

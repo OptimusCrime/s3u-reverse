@@ -86,6 +86,30 @@ inline constexpr std::uint32_t kCStaticText = 0x65615c;     // CStaticText
 inline constexpr std::uint32_t kCStaticImage = 0x6561e0;    // CStaticImage
 inline constexpr std::uint32_t kCStaticFrame = 0x656264;    // CStaticFrame
 inline constexpr std::uint32_t kCStaticColorIndexedFrame = 0x6562e8;  // CStaticColorIndexedFrame
+// Controls with the virtual base CScreenElement: the class's own vtable and
+// the one its constructor stores in the virtual base (game/ui/controls.cpp).
+inline constexpr std::uint32_t kCControl = 0x655d28;              // CControl
+inline constexpr std::uint32_t kCControl_element = 0x655ca4;      // its CScreenElement part
+inline constexpr std::uint32_t kCButton = 0x655f00;               // CButton
+inline constexpr std::uint32_t kCButton_element = 0x655e7c;       // its CScreenElement part
+inline constexpr std::uint32_t kCImageButton = 0x655f94;          // CImageButton
+inline constexpr std::uint32_t kCImageButton_element = 0x655f10;  // its CScreenElement part
+inline constexpr std::uint32_t kCTextButton = 0x6560c8;           // CTextButton
+inline constexpr std::uint32_t kCTextButton_element = 0x656044;   // its CScreenElement part
+inline constexpr std::uint32_t kCAnimatedButton = 0x656034;          // CAnimatedButton
+inline constexpr std::uint32_t kCAnimatedButton_element = 0x655fb0;  // its CScreenElement part
+inline constexpr std::uint32_t kCScreenGroup = 0x655b70;           // CScreenGroup
+inline constexpr std::uint32_t kCScreenGroup_element = 0x655aec;   // its CScreenElement part
+// CScreenGroup's members: the children vector and the three modal stacks.
+inline constexpr std::uint32_t kWCValOrderedVector_CScreenElementP = 0x655b9c;  // WCValOrderedVector<CScreenElement*>
+inline constexpr std::uint32_t kWCStack_CScreenElementP = 0x655b8c;  // WCStack<CScreenElement*, WCValSList<..>>
+inline constexpr std::uint32_t kWCStack_bool = 0x655b7c;             // WCStack<bool, WCValSList<bool>>
+inline constexpr std::uint32_t kCGroupControl = 0x655e64;           // CGroupControl
+inline constexpr std::uint32_t kCGroupControl_group = 0x655e58;     // its CScreenGroup part (+0x38)
+inline constexpr std::uint32_t kCGroupControl_element = 0x655dd4;   // its CScreenElement part
+inline constexpr std::uint32_t kCScreen = 0x655c80;                 // CScreen
+inline constexpr std::uint32_t kCScreen_element = 0x655bfc;         // its CScreenElement part
+inline constexpr std::uint32_t kWCQueue_MsgConsole = 0x655c8c;      // WCQueue<MsgConsole, WCValSList<MsgConsole>> (CScreen +0x7c)
 // Lobby::*
 inline constexpr std::uint32_t kCMemoryBlock = 0x65d4f4;    // Lobby::CMemoryBlock
 inline constexpr std::uint32_t kCLMMessageBlock = 0x65d4fc;  // Lobby::CLMMessageBlock
@@ -131,6 +155,8 @@ inline constexpr std::uint32_t kWCValOrderedVector_ushort = 0x657410;  // WCValO
 inline constexpr std::uint32_t kWCBareVectorBase_voidp = 0x657440;            // WCBareVectorBase<void*>
 inline constexpr std::uint32_t kWCBareVectorBase_HFONT = 0x656a14;            // WCBareVectorBase<HFONT__*>
 inline constexpr std::uint32_t kWCBareVectorBase_CScreenElementP = 0x655bb8;  // WCBareVectorBase<CScreenElement*>
+inline constexpr std::uint32_t kWCBareVectorBase_CColumn = 0x656a20;          // WCBareVectorBase<CListView::CColumn>
+inline constexpr std::uint32_t kWCBareVectorBase_CLine = 0x656a2c;            // WCBareVectorBase<CListView::CLine>
 inline constexpr std::uint32_t kWCBareVectorBase_CStatusMessage = 0x65702c;   // <LobbyClient::CStatusMessage>
 inline constexpr std::uint32_t kWCBareVectorBase_ulong = 0x6576a0;            // WCBareVectorBase<unsigned long>
 inline constexpr std::uint32_t kWCBareVectorBase_long = 0x65852c;             // WCBareVectorBase<long>
@@ -176,6 +202,16 @@ inline constexpr std::uint32_t kCProgrammingError = 0x65d924;  // Win32::CProgra
 inline constexpr std::uint32_t kCAssertmentFailed = 0x65d8d4;  // Win32::CAssertmentFailed
 inline constexpr std::uint32_t kCOutOfMemory = 0x65d8c0;       // Win32::COutOfMemory
 inline constexpr std::uint32_t kCDataError = 0x65d4c0;         // Lobby::priv::CDataError
+// The controls' (set by the most derived constructor; game/ui/controls.cpp).
+inline constexpr std::uint32_t kCControl = 0x655d2c;      // CControl
+inline constexpr std::uint32_t kCButton = 0x655f04;       // CButton
+inline constexpr std::uint32_t kCImageButton = 0x655f98;  // CImageButton
+inline constexpr std::uint32_t kCTextButton = 0x6560cc;      // CTextButton
+inline constexpr std::uint32_t kCAnimatedButton = 0x656038;  // CAnimatedButton
+inline constexpr std::uint32_t kCScreenGroup = 0x655bac;     // CScreenGroup
+inline constexpr std::uint32_t kCGroupControl = 0x655e70;          // CGroupControl
+inline constexpr std::uint32_t kCGroupControl_group = 0x655e68;    // its CScreenGroup part (+0x3c)
+inline constexpr std::uint32_t kCScreen = 0x655c98;                // CScreen
 inline constexpr std::uint32_t kCDirectSoundException = 0x65ceac;   // DirectX::CDirectSoundException
 inline constexpr std::uint32_t kCAppNotActiveException = 0x65cbb8;  // DirectX::CAppNotActiveException
 }  // namespace vbtables

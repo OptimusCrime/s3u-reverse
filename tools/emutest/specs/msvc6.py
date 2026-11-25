@@ -225,6 +225,28 @@ DELETING_DESTRUCTORS = (  # (address, class destructor, virtual-base offset or N
     (0x472540, 0x472360, None), (0x4726c0, 0x472440, None), (0x499350, 0x4990c0, None),
     (0x4993b0, 0x4992f0, None), (0x414b90, 0x4a04d0, None),
     (0x4375f0, 0x414240, None),
+    # session 57: the UI range's (plain, virtual-base, and "sub" with this = object + 4)
+    (0x41c560, 0x41c580, None), (0x41de80, 0x41dea0, None), (0x428230, 0x427ea0, None),
+    (0x428250, 0x427f10, None), (0x428270, 0x428290, None), (0x428320, 0x427fe0, None),
+    (0x428340, 0x428070, None), (0x428360, 0x428120, None), (0x428380, 0x4283a0, None),
+    (0x429730, 0x4275e0, None), (0x429c30, 0x429c70, 0x10c), (0x42a060, 0x42a0a0, 0xc4),
+    (0x42a250, 0x42a280, 0x68), (0x42a340, 0x42a380, 0x434), (0x42a630, 0x416da0, 0x80),
+    (0x42a8c0, 0x4180a0, 0x3c), (0x42a980, 0x41a900, 0x50), (0x42aa60, 0x41b630, 0x60),
+    (0x42ab40, 0x42ab70, 0x74), (0x42ad20, 0x421f50, 0x70), (0x42ae10, 0x41e210, 0xb8),
+    (0x42b0c0, 0x42b100, 0x224), (0x42b600, 0x423870, 0x59c), (0x42b770, 0x41f010, 0x2f4),
+    (0x42c310, 0x42c340, 0x4), (0x42c9b0, 0x42ca00, None), (0x430440, 0x430460, None),
+    (0x4308b0, 0x4308e0, 0x4), (0x457d30, 0x457a90, None), (0x457d50, 0x457bb0, None),
+    (0x457d70, 0x457d90, None), (0x457e80, 0x457cb0, None), (0x45ad40, 0x45ad60, None),
+    (0x45d4e0, 0x45d500, None), (0x45d560, 0x45d580, None), (0x462b80, 0x4628f0, None),
+    (0x462ba0, 0x462bc0, None), (0x4639a0, 0x463020, None), (0x469050, 0x469070, None),
+    (0x497e20, 0x497e40, None), (0x499370, 0x499150, None), (0x499390, 0x499290, None),
+    (0x49a190, 0x49a1d0, 0x158), (0x49a4b0, 0x492620, 0x1a8), (0x49a630, 0x492c50, 0xf4),
+    (0x49a7a0, 0x49a7e0, 0x96c), (0x49ab60, 0x486950, 0x32e4), (0x49acd0, 0x49ad10, 0xbe0),
+    (0x49b180, 0x49b1c0, 0xaa4), (0x49b4a0, 0x4797e0, 0xaec), (0x49b9d0, 0x4816f0, 0x269c),
+    (0x49bb40, 0x492270, 0x73c), (0x49bcb0, 0x49bcf0, 0xcfc), (0x49da90, 0x49dab0, None),
+    (0x4a6c00, 0x4a6a40, None), (0x4a6c20, 0x4a6c40, None), (0x4a6ca0, 0x4a6b40, None),
+    (0x4a6cc0, 0x4a6ce0, None), (0x4a7840, 0x4a7860, None), (0x4a8e70, 0x4a8e10, None),
+    (0x4a8e90, 0x4a8eb0, None),
     # the sound classes' and their dictionaries' (session 57)
     (0x5c23b0, 0x5c23d0, None), (0x5c2780, 0x5c27a0, None), (0x5c1810, 0x5c1830, None),
     (0x5b88c0, 0x5b88e0, None), (0x5c34b0, 0x5c33e0, None), (0x5c34d0, 0x5c3450, None),
@@ -249,6 +271,26 @@ SPECS += [
          callees={0x421fc0: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
     Spec("CompleteDestructor_4816d0", 0x004816d0, "thiscall", [],
          callees={0x42b380: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_41e270", 0x0041e270, "thiscall", [],
+         callees={0x41b630: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_41eff0", 0x0041eff0, "thiscall", [],
+         callees={0x41f010: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_421f30", 0x00421f30, "thiscall", [],
+         callees={0x421f50: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_423850", 0x00423850, "thiscall", [],
+         callees={0x416da0: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_439520", 0x00439520, "thiscall", [],
+         callees={0x42ab70: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_4416e0", 0x004416e0, "thiscall", [],
+         callees={0x42a380: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_441700", 0x00441700, "thiscall", [],
+         callees={0x423870: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_441720", 0x00441720, "thiscall", [],
+         callees={0x42a280: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_476ef0", 0x00476ef0, "thiscall", [],
+         callees={0x41a900: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_486930", 0x00486930, "thiscall", [],
+         callees={0x42b100: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
 ]
 
 
@@ -355,4 +397,23 @@ SPECS += [
     Spec("WString_AssignSubstr", 0x00428400, "thiscall",
          [one_of(STRING_SELF_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR), string_count, string_count],
          presets=wide_string_world, globals=wstring_null_count, exempt_blocks=(0x00428442, 0x004284a0)),
+]
+
+
+# -- c_str, find and != with C text (string_search.cpp, session 57) --------
+# `this` from string_world (world offset 0), the text at STRING_TEXT.
+def string_find_pos(rng, pool):
+    return rng.choice([0, 1, 2, rng.randrange(0x60), rng.randrange(0x60), 0xFFFFFFFF])
+
+
+def string_find_count(rng, pool):
+    return rng.choice([0, 0, 1, 1, 2, 3, rng.randrange(8), rng.randrange(0x60)])
+
+
+SPECS += [
+    Spec("String_CStr", 0x00411fc0, "thiscall", [], presets=string_world),
+    Spec("String_Find", 0x00409b40, "thiscall", [one_of(STRING_TEXT_PTR), string_find_pos, string_find_count],
+         presets=string_world),
+    Spec("String_NotEqualText", 0x00413ad0, "fastcall", [one_of(WORLD_BASE + STRING_SELF), text_or_null],
+         presets=string_world),
 ]

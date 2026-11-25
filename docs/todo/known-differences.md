@@ -38,6 +38,22 @@ LOGBOOK session entry).
   GPLv3-compatible); our layout-compatible versions stay in
   `src/s3re/watcom/`.
 
+- **UI control constructors without SEH unwinding (session 57,
+  game/ui/controls.cpp):** CControl, CButton, CImageButton, CTextButton,
+  CAnimatedButton, CScreenGroup, CGroupControl and CScreen constructors
+  have exception frames in the original that destroy the members built so
+  far if a callee throws; ours have none (the callees don't throw in
+  practice; only an out-of-memory in a string or vector would). Add
+  cleanup if a whole-game check or a crash ever points there.
+- **UI range leftovers (session 57, wip/ui-controls):** not done in
+  0x400000..0x4c0000: CControl::ShowTooltip 0x418550 and the
+  FillBackground/Draw members that call GDI (CTextView/CListBox
+  FillBackground, CProgressBar::Draw, CStaticSurface::Draw) need fake
+  DC/font API handlers in emu.py; the App_sub helpers around
+  0x411490..0x4114d0 call the old iostream lock (MSVCIRT 0x61d1b5); the
+  small CCampaignDialog / lobby getters (0x413b80, 0x413ba0, 0x413bf0)
+  want their classes named first.
+
 ## Postponed by decision
 - **Network and lobby code** (CNetThread, Lobby::*, LobbyClient::*,
   DirectPlay, CLM* messages): skipped since 2026-11-09 (single player

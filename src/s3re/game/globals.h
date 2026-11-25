@@ -178,6 +178,9 @@ inline constexpr GameGlobal<std::uint8_t[0x1c]> g_crtSmallBlockHeap{0x7e9728};
 inline constexpr GameGlobal<std::uint8_t[0x18]> g_crtTimeCache{0x7e93b0};
 // The application object (DirectX::CGameApp; returned by 0x53ba50).
 inline constexpr GameGlobal<std::uint8_t*> g_app{0x7e9168};
+// 1 when the command line has "-debug" (set by the parser 0x405e50); picks the
+// debug column of App::WaitTime 0x40d0e0 (game/framework/wait_times.cpp).
+inline constexpr GameGlobal<std::uint32_t> g_debugSwitch{0x7e916c};
 // Outcome of the current game: -1 while undecided, then set by the game-end
 // check 0x511c50 (1 or 0 by the mission's goals).
 inline constexpr GameGlobal<std::int32_t> g_gameOutcome{0x730f64};

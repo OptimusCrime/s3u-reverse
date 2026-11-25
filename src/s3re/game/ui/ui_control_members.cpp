@@ -11,8 +11,10 @@
 //   returns the byte zero-extended.
 // CControl::SetTooltipTextId (0x00418330; this = the control): (text id)
 //   ret 4: id 0: the tooltip text (+0x10) = "" (0x7a7868); otherwise
-//   Dialog::GraphicsData 0x4168c0(id, -1) on the virtual base (this + 4 +
-//   vbtable[1]), CGraphicsData::TextAddress 0x5faaa0 on its result, and that
+//   Dialog::GraphicsData 0x4168c0 on the virtual base (this + 4 +
+//   vbtable[1]; it takes no arguments, the original pushes TextAddress's
+//   (id, -1) before calling it), CGraphicsData::TextAddress 0x5faaa0(id, -1)
+//   on its result, and that
 //   text assigned (std::string assign_cstr_or_empty 0x413d70). EAX = the
 //   assign's.
 // CScreen::HasQueuedMessages (0x00417f50; this = the screen): EAX = (the
@@ -47,6 +49,43 @@
 //   ret 8 / 0xc / 0x10: CStaticControl(rect) 0x41c3c0, the class vtable
 //   (0x6561e0 / 0x656264 / 0x6562e8) and the values at +0x20, +0x24,
 //   +0x28. EAX = this.
+// CVScrollBar::OnResized (0x0041e940), CDropdown::OnResized (0x004224c0),
+//   CUpDown::OnResized (0x00422d90): (rect*, size delta) ret 8: place the
+//   member controls with CScreenElement::SetRect 0x4156e0 (each one's
+//   element through its vbptr, the up-down's edit field directly), the rect
+//   re-read after each call. Scroll bar: up arrow {l, t, r, t + 12} (vbptr
+//   this-0x238), down arrow {l, b - 12, r, b} (this-0x1b8), then the track
+//   (this-0x24) = {l, t + 12, r, b - 12}; EAX = t + 12. Dropdown: the edit
+//   field {l, t, r - 14, b} (this-0x5b0), the button {r - 12, t, r, b}
+//   (this-0x520), the drop list {l - 4, b + 2, r - 10, b + 40} (this-0x4a0).
+//   Up-down: the field {l, t, r - 12, b} (this-0x16c), up {r - 12, t, r,
+//   (t + b) / 2} (this-0x124), down {r - 12, (t + b) / 2, r, b} (this-0xa4;
+//   the halves rounded toward zero). EAX = the last SetRect's.
+// CEditControl::~CEditControl (0x00421f50, this = the element, +0x70): the
+//   text (a 16-bit string at this-0x24: buffer this-0x20, its count byte
+//   just before it, the block 2 bytes before) released: count 0 or 0xff:
+//   operator delete, else the count decremented; buffer/length/capacity =
+//   0; then ~CControl 0x4180a0 (this - 0x34). EAX = its.
+// CListView::Draw (0x004267c0, this = the list view's element part,
+//   the fields relative to it): (surface, clip rect, b) ret 0xc: the base's
+//   DrawRect 0x415af0(surface, clip, b) (vbptr this-0x598); with the
+//   header shown (byte this-0xaa) the header's DrawClipped 0x415aa0(surface,
+//   clip) (vbptr this-0xa4); with a frame (byte this-0xac) the frame's
+//   (vbptr this-0x400) DrawClipped(surface, IntersectRects(its Rect, clip));
+//   then the rows group (this-0x4e4) CScreenGroup::Draw 0x417480(surface,
+//   IntersectRects(this-0xbc, clip), b). EAX = Draw's.
+// CListView::FillBackground (0x004273f0): (surface, rect) ret 8: unless the
+//   base is transparent (flag1f): the rows group's FillBackground 0x417460
+//   (surface, rect), then the client area (IntersectRects(this-0xbc, rect))
+//   filled with colour this-0x4d8 (CSurface::DDBlt 0x5bf0c0(area, 0, 0,
+//   DDBLT_COLORFILL, fx); only fx.dwSize = 0x64 and dwFillColor are set).
+//   EAX = DDBlt's, or the vbtable address (transparent).
+// WCValOrderedVector<CListView::CColumn>::base_equivalent (0x00427fc0):
+//   (a, b) ret 8 (ECX unused): CColumn::operator== 0x427830 (this = a, b);
+//   EAX = its AL.
+// WCIsvSListBase::WCListDelete (0x00428300): (link) ret 4 (ECX unused): a
+//   non-null link: the empty function 0x428720 (the link's folded
+//   destructor) on it, then operator delete. EAX unused.
 // UI_MoveWords (0x00418cf0): fastcall (ECX = to, EDX = from, stack: count)
 //   ret 4: memmove of 16-bit characters (backwards when the ranges overlap
 //   with from < to). EAX = to.
@@ -144,8 +183,49 @@ constexpr std::uintptr_t kGroupOnMoved = 0x00417ab0;          // CScreenGroup::O
 constexpr std::uintptr_t kGroupSetFlag1F = 0x00417be0;        // CScreenGroup::SetFlag1F (ours)
 constexpr std::uintptr_t kSetRect = 0x004156e0;               // CScreenElement::SetRect (ours)
 constexpr std::uintptr_t kStaticControl = 0x0041c3c0;         // CStaticControl::CStaticControl (ours)
+constexpr std::uintptr_t kControlDestroy = 0x004180a0;        // CControl::~CControl (ours)
+constexpr std::uintptr_t kOperatorDelete = 0x0061e4ef;        // the game's operator delete
+constexpr std::uintptr_t kDrawClipped = 0x00415aa0;           // CScreenElement::DrawClipped (ours)
+constexpr std::uintptr_t kIntersectRects = 0x00415b20;        // CScreenElement::IntersectRects (ours)
+constexpr std::uintptr_t kElementRect = 0x004156d0;           // CScreenElement::Rect (ours)
+constexpr std::uintptr_t kGroupFillBackground = 0x00417460;   // CScreenGroup::FillBackground (ours)
+constexpr std::uintptr_t kGroupDraw = 0x00417480;             // CScreenGroup::Draw (ours)
+constexpr std::uintptr_t kSurfaceBlt = 0x005bf0c0;            // DirectX::CSurface::DDBlt (ours)
+constexpr std::uintptr_t kColumnEqual = 0x00427830;           // CListView::CColumn::operator== (ours)
+constexpr std::uintptr_t kLinkDestroy = 0x00428720;           // the links' destructor (an empty function)
 
 constexpr std::uint32_t kScrollArrowHeight = 12;  // the scroll bar's arrow buttons
+constexpr LONG kDropButtonWidth = 12;     // the dropdown's and up-down's buttons
+constexpr LONG kDropFieldGap = 14;        // the dropdown's field ends 14 before the right edge
+constexpr LONG kDropListOverhang = 4;     // the drop list reaches 4 left of the field
+constexpr LONG kDropListRightInset = 10;
+constexpr LONG kDropListTop = 2;          // below the field
+constexpr LONG kDropListBottom = 40;
+
+using SetRectFn = std::uint32_t(__fastcall*)(std::uintptr_t self, void* edx, const RECT* rect);
+
+#pragma pack(push, 1)
+// DDBLTFX as the fill uses it (0x64 bytes; only these two fields are set).
+struct BltFx {
+    std::uint32_t size;          // 0x00
+    std::uint8_t unk04[0x4c];
+    std::uint32_t fill_colour;   // 0x50
+    std::uint8_t unk54[0x10];
+};
+static_assert(sizeof(BltFx) == 0x64);
+#pragma pack(pop)
+constexpr std::uint32_t kBltColourFill = 0x400;  // DDBLT_COLORFILL
+
+using IntersectFn = RECT*(__fastcall*)(std::uintptr_t self, void* edx, RECT* out, const RECT* a, const RECT* b);
+using Thiscall2Ptr = std::uint32_t(__fastcall*)(std::uintptr_t self, void* edx, std::uint32_t a, const RECT* b);
+using BltFn = std::uint32_t(__fastcall*)(std::uint32_t surface, void* edx, const RECT* area, std::uint32_t source,
+                                         const RECT* sourceRect, std::uint32_t flags, BltFx* fx);
+
+// SetRect on the element of the member whose vbptr is at self + delta.
+std::uint32_t PlaceMember(std::uintptr_t self, std::int32_t delta, LONG left, LONG top, LONG right, LONG bottom) {
+    const RECT rect{left, top, right, bottom};
+    return reinterpret_cast<SetRectFn>(kSetRect)(VirtualBase(self, delta), nullptr, &rect);
+}
 
 }  // namespace
 
@@ -168,9 +248,10 @@ std::uint32_t __fastcall CControl_SetTooltipTextId(ui::CControl* self, void*, st
     if (textId == 0) {
         return reinterpret_cast<Thiscall1>(kAssignText)(tooltipText, nullptr, static_cast<std::uint32_t>(texts::kEmpty.address()));
     }
-    const std::uint32_t graphics =
-        reinterpret_cast<Thiscall2>(kGraphicsData)(VirtualBase(control, 4), nullptr, textId, 0xFFFFFFFFu);
-    const std::uint32_t text = reinterpret_cast<Thiscall0>(kTextAddress)(graphics, nullptr);
+    // GraphicsData takes no arguments (`mov eax, [g]; ret`); the original
+    // pushes TextAddress's two arguments before calling it.
+    const std::uint32_t graphics = reinterpret_cast<Thiscall0>(kGraphicsData)(VirtualBase(control, 4), nullptr);
+    const std::uint32_t text = reinterpret_cast<Thiscall2>(kTextAddress)(graphics, nullptr, textId, 0xFFFFFFFFu);
     return reinterpret_cast<Thiscall1>(kAssignText)(tooltipText, nullptr, text);
 }
 
@@ -291,6 +372,116 @@ StaticFrameFields* __fastcall CStaticColorIndexedFrame_Construct(StaticFrameFiel
     return self;
 }
 
+// Purpose: A vertical scroll bar was resized: places its arrow buttons at
+// the ends and the track between them.
+std::uint32_t __fastcall CVScrollBar_OnResized(std::uintptr_t self, void*, const RECT* rect, std::uint32_t) {
+    const LONG arrow = static_cast<LONG>(kScrollArrowHeight);
+    PlaceMember(self, -0x238, rect->left, rect->top, rect->right, rect->top + arrow);
+    PlaceMember(self, -0x1b8, rect->left, rect->bottom - arrow, rect->right, rect->bottom);
+    RECT& track = Field<RECT>(self, -0x24);
+    const RECT now = *rect;
+    track.left = now.left;
+    track.top = now.top + arrow;
+    track.right = now.right;
+    track.bottom = now.bottom - arrow;
+    return static_cast<std::uint32_t>(track.top);
+}
+
+// Purpose: A dropdown was resized: places its edit field, its button and
+// its (closed) drop list.
+std::uint32_t __fastcall CDropdown_OnResized(std::uintptr_t self, void*, const RECT* rect, std::uint32_t) {
+    PlaceMember(self, -0x5b0, rect->left, rect->top, rect->right - kDropFieldGap, rect->bottom);
+    PlaceMember(self, -0x520, rect->right - kDropButtonWidth, rect->top, rect->right, rect->bottom);
+    return PlaceMember(self, -0x4a0, rect->left - kDropListOverhang, rect->bottom + kDropListTop,
+                       rect->right - kDropListRightInset, rect->bottom + kDropListBottom);
+}
+
+// Purpose: An up-down control was resized: its number field on the left,
+// the up and down buttons stacked on the right.
+std::uint32_t __fastcall CUpDown_OnResized(std::uintptr_t self, void*, const RECT* rect, std::uint32_t) {
+    {
+        const RECT field{rect->left, rect->top, rect->right - kDropButtonWidth, rect->bottom};
+        reinterpret_cast<SetRectFn>(kSetRect)(self - 0x16c, nullptr, &field);  // (the field's element itself)
+    }
+    const LONG upMiddle = (rect->top + rect->bottom) / 2;
+    PlaceMember(self, -0x124, rect->right - kDropButtonWidth, rect->top, rect->right, upMiddle);
+    const LONG downMiddle = (rect->top + rect->bottom) / 2;
+    return PlaceMember(self, -0xa4, rect->right - kDropButtonWidth, downMiddle, rect->right, rect->bottom);
+}
+
+// Purpose: Destroys an edit field: releases its text, then the control.
+std::uint32_t __fastcall CEditControl_Destroy(std::uintptr_t self, void*) {
+    auto*& text = Field<std::uint8_t*>(self, -0x20);
+    if (text != nullptr) {
+        std::uint8_t& count = text[-1];
+        if (count != 0 && count != 0xff) {
+            --count;  // still shared
+        } else {
+            reinterpret_cast<void(__cdecl*)(void*)>(kOperatorDelete)(text - 2);
+        }
+    }
+    text = nullptr;
+    Field<std::uint32_t>(self, -0x1c) = 0;
+    Field<std::uint32_t>(self, -0x18) = 0;
+    return reinterpret_cast<Thiscall0>(kControlDestroy)(self - 0x34, nullptr);
+}
+
+// Purpose: Draws a list view: its frame, header, border and the visible
+// rows (clipped to the client area).
+std::uint32_t __fastcall CListView_Draw(std::uintptr_t self, void*, std::uint32_t surface, std::uint32_t a,
+                                        std::uint32_t b) {
+    const auto* clip = reinterpret_cast<const RECT*>(a);
+    reinterpret_cast<Thiscall3>(kDrawRect)(VirtualBase(self, -0x598), nullptr, surface, a, b);
+    if (Field<std::uint8_t>(self, -0xaa) != 0) {
+        reinterpret_cast<Thiscall2>(kDrawClipped)(VirtualBase(self, -0xa4), nullptr, surface, a);
+    }
+    if (Field<std::uint8_t>(self, -0xac) != 0) {
+        const auto* frame = reinterpret_cast<const RECT*>(
+            reinterpret_cast<Thiscall0>(kElementRect)(VirtualBase(self, -0x400), nullptr));
+        RECT inside;
+        const RECT* part =
+            reinterpret_cast<IntersectFn>(kIntersectRects)(VirtualBase(self, -0x598), nullptr, &inside, frame, clip);
+        reinterpret_cast<Thiscall2>(kDrawClipped)(VirtualBase(self, -0x400), nullptr, surface,
+                                                  reinterpret_cast<std::uint32_t>(part));
+    }
+    RECT client;
+    const RECT rows = *reinterpret_cast<IntersectFn>(kIntersectRects)(VirtualBase(self, -0x598), nullptr, &client,
+                                                                      &Field<RECT>(self, -0xbc), clip);
+    return reinterpret_cast<Thiscall3>(kGroupDraw)(self - 0x4e4, nullptr, surface, reinterpret_cast<std::uint32_t>(&rows),
+                                                   b);
+}
+
+// Purpose: Fills a list view's background: the rows group's, then the
+// client area in the list's colour (nothing for a transparent list).
+std::uint32_t __fastcall CListView_FillBackground(std::uintptr_t self, void*, std::uint32_t surface, const RECT* rect) {
+    const std::uintptr_t base = VirtualBase(self, -0x598);
+    if (reinterpret_cast<const ui::CScreenElement*>(base)->flag1f != 0) {
+        return Field<std::uint32_t>(self, -0x598);  // (EAX left over: the vbtable address)
+    }
+    RECT client;
+    const RECT area = *reinterpret_cast<IntersectFn>(kIntersectRects)(base, nullptr, &client, &Field<RECT>(self, -0xbc),
+                                                                      rect);
+    reinterpret_cast<Thiscall2Ptr>(kGroupFillBackground)(self - 0x4e4, nullptr, surface, rect);
+    BltFx fx;
+    fx.size = sizeof(BltFx);
+    fx.fill_colour = Field<std::uint32_t>(self, -0x4d8);
+    return reinterpret_cast<BltFn>(kSurfaceBlt)(surface, nullptr, &area, 0, nullptr, kBltColourFill, &fx);
+}
+
+// Purpose: The Watcom column vector's element comparison (CColumn ==).
+std::uint32_t __stdcall CColumnVector_BaseEquivalent(std::uint32_t a, std::uint32_t b) {
+    return reinterpret_cast<Thiscall1>(kColumnEqual)(a, nullptr, b) & 0xff;
+}
+
+// Purpose: Frees a link of a Watcom intrusive list.
+void __stdcall WCIsvSListBase_ListDelete(std::uint32_t link) {
+    if (link == 0) {
+        return;
+    }
+    reinterpret_cast<Thiscall0>(kLinkDestroy)(link, nullptr);
+    reinterpret_cast<void(__cdecl*)(void*)>(kOperatorDelete)(reinterpret_cast<void*>(link));
+}
+
 // Purpose: Moves 16-bit characters inside a wide-character buffer (the edit
 // field's text when inserting or deleting).
 std::uint16_t* __fastcall UI_MoveWords(std::uint16_t* to, const std::uint16_t* from, std::uint32_t count) {
@@ -323,6 +514,11 @@ using StaticFrameFn = StaticFrameFields*(__fastcall*)(StaticFrameFields*, void*,
 using StaticColorFrameFn = StaticFrameFields*(__fastcall*)(StaticFrameFields*, void*, std::uint32_t, std::uint32_t,
                                                            std::uint32_t, std::uint32_t);
 using MoveWordsFn = std::uint16_t*(__fastcall*)(std::uint16_t*, const std::uint16_t*, std::uint32_t);
+using OnResizedFn = std::uint32_t(__fastcall*)(std::uintptr_t, void*, const RECT*, std::uint32_t);
+using ListFillFn = std::uint32_t(__fastcall*)(std::uintptr_t, void*, std::uint32_t, const RECT*);
+using BaseEquivalentFn = std::uint32_t(__stdcall*)(std::uint32_t, std::uint32_t);
+using ListDeleteFn = void(__stdcall*)(std::uint32_t);
+using DestroyFn = std::uint32_t(__fastcall*)(std::uintptr_t, void*);
 
 S3RE_HOOK(0x004187d0, CControl_Draw, ControlDrawFn, Original_CControl_Draw, CControl_Draw);
 S3RE_HOOK(0x00418810, CControl_SetEnabled, SetEnabledFn, Original_CControl_SetEnabled, CControl_SetEnabled);
@@ -349,6 +545,17 @@ S3RE_HOOK(0x0041d960, CStaticFrame_Construct, StaticFrameFn, Original_CStaticFra
 S3RE_HOOK(0x0041db90, CStaticColorIndexedFrame_Construct, StaticColorFrameFn,
           Original_CStaticColorIndexedFrame_Construct, CStaticColorIndexedFrame_Construct);
 S3RE_HOOK(0x00418cf0, UI_MoveWords, MoveWordsFn, Original_UI_MoveWords, UI_MoveWords);
+S3RE_HOOK(0x0041e940, CVScrollBar_OnResized, OnResizedFn, Original_CVScrollBar_OnResized, CVScrollBar_OnResized);
+S3RE_HOOK(0x004224c0, CDropdown_OnResized, OnResizedFn, Original_CDropdown_OnResized, CDropdown_OnResized);
+S3RE_HOOK(0x00422d90, CUpDown_OnResized, OnResizedFn, Original_CUpDown_OnResized, CUpDown_OnResized);
+S3RE_HOOK(0x004267c0, CListView_Draw, ControlDrawFn, Original_CListView_Draw, CListView_Draw);
+S3RE_HOOK(0x004273f0, CListView_FillBackground, ListFillFn, Original_CListView_FillBackground,
+          CListView_FillBackground);
+S3RE_HOOK(0x00427fc0, CColumnVector_BaseEquivalent, BaseEquivalentFn, Original_CColumnVector_BaseEquivalent,
+          CColumnVector_BaseEquivalent);
+S3RE_HOOK(0x00428300, WCIsvSListBase_ListDelete, ListDeleteFn, Original_WCIsvSListBase_ListDelete,
+          WCIsvSListBase_ListDelete);
+S3RE_HOOK(0x00421f50, CEditControl_Destroy, DestroyFn, Original_CEditControl_Destroy, CEditControl_Destroy);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -413,10 +620,52 @@ std::uint32_t __fastcall MessageStub(std::uint32_t self, void*, Message message)
     return static_cast<std::uint32_t>(Callee) ^ Normalize(self);
 }
 
+// operator delete (cdecl): recorded, nothing freed (the blocks are in the
+// test buffer).
+void __cdecl DeleteStub(void* block) {
+    g_log->push_back(CallLog{kOperatorDelete, Normalize(reinterpret_cast<std::uint32_t>(block)), {}, {}});
+}
+
+// IntersectRects: records both rects' contents, writes a result fixed by
+// them (so the callers' later reads are compared too) and returns `out`.
+RECT* __fastcall IntersectStub(std::uint32_t self, void*, RECT* out, const RECT* a, const RECT* b) {
+    CallLog entry{kIntersectRects, Normalize(self), {}, {}};
+    std::memcpy(entry.pointee, a, 16);
+    std::memcpy(entry.args, b, 16);
+    g_log->push_back(entry);
+    *out = RECT{a->left ^ b->top, a->top + b->left, a->right - b->bottom, a->bottom ^ b->right};
+    return out;
+}
+// Calls with a rect argument (by contents): DrawClipped(surface, rect),
+// CScreenGroup::Draw(surface, rect, b), FillBackground(surface, rect).
+template <std::uintptr_t Callee, std::size_t... I>
+std::uint32_t __fastcall RectStub(std::uint32_t self, void*, std::uint32_t surface, const RECT* rect, Dword<I>... more) {
+    const std::uint32_t extra[sizeof...(I) + 1] = {more..., 0};
+    CallLog entry{Callee, Normalize(self), {Normalize(surface), Normalize(extra[0])}, {}};
+    std::memcpy(entry.pointee, rect, 16);
+    g_log->push_back(entry);
+    return static_cast<std::uint32_t>(Callee * 3 + g_log->size());
+}
+std::uint32_t __fastcall BltStub(std::uint32_t surface, void*, const RECT* area, std::uint32_t source,
+                                 const RECT* sourceRect, std::uint32_t flags, BltFx* fx) {
+    CallLog entry{kSurfaceBlt, Normalize(surface),
+                  {source, reinterpret_cast<std::uint32_t>(sourceRect), flags, fx->size ^ (fx->fill_colour * 3)}, {}};
+    std::memcpy(entry.pointee, area, 16);
+    g_log->push_back(entry);
+    return 0x88760000u + static_cast<std::uint32_t>(g_log->size());
+}
+std::uint32_t __fastcall ElementRectStub(std::uint32_t self, void*) {
+    g_log->push_back(CallLog{kElementRect, Normalize(self), {}, {}});
+    return static_cast<std::uint32_t>(g_base + 0x140);  // a rect in the buffer
+}
+void __fastcall LinkDestroyStub(std::uint32_t self, void*) {
+    g_log->push_back(CallLog{kLinkDestroy, Normalize(self), {}, {}});
+}
+
 void InstallStubs() {
     test::PatchJump(kDrawRect, reinterpret_cast<const void*>(&RecordingStub<kDrawRect, 0, 1, 2>));
-    test::PatchJump(kGraphicsData, reinterpret_cast<const void*>(&RecordingStub<kGraphicsData, 0, 1>));
-    test::PatchJump(kTextAddress, reinterpret_cast<const void*>(&RecordingStub<kTextAddress>));
+    test::PatchJump(kGraphicsData, reinterpret_cast<const void*>(&RecordingStub<kGraphicsData>));
+    test::PatchJump(kTextAddress, reinterpret_cast<const void*>(&RecordingStub<kTextAddress, 0, 1>));
     test::PatchJump(kAssignText, reinterpret_cast<const void*>(&RecordingStub<kAssignText, 0>));
     test::PatchJump(kElementOnLButtonDown, reinterpret_cast<const void*>(&MessageStub<kElementOnLButtonDown>));
     test::PatchJump(kControlOnLButtonDown, reinterpret_cast<const void*>(&MessageStub<kControlOnLButtonDown>));
@@ -424,10 +673,21 @@ void InstallStubs() {
     test::PatchJump(kGroupSetFlag1F, reinterpret_cast<const void*>(&RecordingStub<kGroupSetFlag1F, 0>));
     test::PatchJump(kSetRect, reinterpret_cast<const void*>(&RecordingStub<kSetRect, 0>));
     test::PatchJump(kStaticControl, reinterpret_cast<const void*>(&RecordingStub<kStaticControl, 0>));
+    test::PatchJump(kControlDestroy, reinterpret_cast<const void*>(&RecordingStub<kControlDestroy>));
+    test::PatchJump(kOperatorDelete, reinterpret_cast<const void*>(&DeleteStub));
+    test::PatchJump(kIntersectRects, reinterpret_cast<const void*>(&IntersectStub));
+    test::PatchJump(kDrawClipped, reinterpret_cast<const void*>(&RectStub<kDrawClipped>));
+    test::PatchJump(kGroupDraw, reinterpret_cast<const void*>(&RectStub<kGroupDraw, 0>));
+    test::PatchJump(kGroupFillBackground, reinterpret_cast<const void*>(&RectStub<kGroupFillBackground>));
+    test::PatchJump(kSurfaceBlt, reinterpret_cast<const void*>(&BltStub));
+    test::PatchJump(kElementRect, reinterpret_cast<const void*>(&ElementRectStub));
+    test::PatchJump(kColumnEqual, reinterpret_cast<const void*>(&RecordingStub<kColumnEqual, 0>));
+    test::PatchJump(kLinkDestroy, reinterpret_cast<const void*>(&LinkDestroyStub));
 }
 
 void RemoveStubs() {
-    for (std::uintptr_t callee : {kStaticControl, kSetRect, kGroupSetFlag1F, kGroupOnMoved, kControlOnLButtonDown,
+    for (std::uintptr_t callee : {kLinkDestroy, kColumnEqual, kElementRect, kSurfaceBlt, kGroupFillBackground,
+                                  kGroupDraw, kDrawClipped, kIntersectRects, kOperatorDelete, kControlDestroy, kStaticControl, kSetRect, kGroupSetFlag1F, kGroupOnMoved, kControlOnLButtonDown,
                                   kElementOnLButtonDown, kAssignText, kTextAddress, kGraphicsData, kDrawRect}) {
         test::UnpatchJump(callee);
     }
@@ -517,6 +777,14 @@ struct Members {
     StaticFrameFn staticFrame = &CStaticFrame_Construct;
     StaticColorFrameFn staticColorFrame = &CStaticColorIndexedFrame_Construct;
     MoveWordsFn moveWords = &UI_MoveWords;
+    OnResizedFn scrollResized = &CVScrollBar_OnResized;
+    OnResizedFn dropdownResized = &CDropdown_OnResized;
+    OnResizedFn upDownResized = &CUpDown_OnResized;
+    DestroyFn editDestroy = &CEditControl_Destroy;
+    ControlDrawFn listDraw = &CListView_Draw;
+    ListFillFn listFill = &CListView_FillBackground;
+    BaseEquivalentFn baseEquivalent = &CColumnVector_BaseEquivalent;
+    ListDeleteFn listDelete = &WCIsvSListBase_ListDelete;
 };
 
 void CompareAll(test::Context& ctx, const Members& ours, int cases) {
@@ -736,6 +1004,108 @@ void CompareAll(test::Context& ctx, const Members& ours, int cases) {
         ctx, "UI_MoveWords", RandomBuffer,
         [&](std::uintptr_t base, std::uint64_t s) { return moveCall(Original_UI_MoveWords, base, s); },
         [&](std::uintptr_t base, std::uint64_t s) { return moveCall(ours.moveWords, base, s); }, cases);
+
+    // The OnResized handlers: the rect at 0x100 (its coordinates sometimes
+    // small, so that the halves round both ways), vbptrs near `this`.
+    struct Resized {
+        const char* name;
+        OnResizedFn original;
+        OnResizedFn ours;
+        std::int32_t deltas[3];  // 0 = none
+    };
+    const Resized resized[] = {
+        {"CVScrollBar::OnResized", Original_CVScrollBar_OnResized, ours.scrollResized, {-0x238, -0x1b8, 0}},
+        {"CDropdown::OnResized", Original_CDropdown_OnResized, ours.dropdownResized, {-0x5b0, -0x520, -0x4a0}},
+        {"CUpDown::OnResized", Original_CUpDown_OnResized, ours.upDownResized, {-0x124, -0xa4, 0}},
+    };
+    for (const Resized& r : resized) {
+        CompareMember(
+            ctx, r.name,
+            [&r](test::Rng& rng, std::uint8_t* buf) {
+                RandomBuffer(rng, buf);
+                for (std::size_t k = 0; k < 3 && r.deltas[k] != 0; ++k) {
+                    VbTable(rng, buf, r.deltas[k], 0x40 + 0x10 * k);
+                }
+                if (rng.Chance(1, 2)) {
+                    for (int k = 0; k < 4; ++k) {
+                        const std::int32_t v = rng.Range(-9, 9);
+                        std::memcpy(buf + 0x100 + 4 * k, &v, 4);
+                    }
+                }
+            },
+            [&](std::uintptr_t base, std::uint64_t s) {
+                return r.original(at(base, kThis), nullptr, reinterpret_cast<const RECT*>(at(base, 0x100)), arg(s, 0));
+            },
+            [&](std::uintptr_t base, std::uint64_t s) {
+                return r.ours(at(base, kThis), nullptr, reinterpret_cast<const RECT*>(at(base, 0x100)), arg(s, 0));
+            },
+            cases);
+    }
+    // ~CEditControl: the text buffer in the buffer (or none), its count
+    // byte 0, 0xff or shared.
+    CompareMember(
+        ctx, "CEditControl::~CEditControl",
+        [](test::Rng& rng, std::uint8_t* buf) {
+            RandomBuffer(rng, buf);
+            const std::uint32_t text =
+                rng.Chance(1, 4) ? 0 : static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(buf + 0x302));
+            std::memcpy(buf + kThis - 0x20, &text, 4);
+            const std::uint8_t counts[] = {0, 0xff, 1, 2, 0xfe};
+            buf[0x301] = counts[rng.Below(5)];
+        },
+        [&](std::uintptr_t base, std::uint64_t) { return Original_CEditControl_Destroy(at(base, kThis), nullptr); },
+        [&](std::uintptr_t base, std::uint64_t) { return ours.editDestroy(at(base, kThis), nullptr); }, cases);
+
+    // CListView::Draw / FillBackground: vbptrs at this-0x598, -0xa4, -0x400;
+    // the flags and rects random; the a/b arguments rects in the buffer.
+    auto listSetup = [](test::Rng& rng, std::uint8_t* buf) {
+        RandomBuffer(rng, buf);
+        VbTable(rng, buf, -0x598, 0x70);
+        VbTable(rng, buf, -0xa4, 0x80);
+        VbTable(rng, buf, -0x400, 0x90);
+        buf[kThis - 0xaa] = rng.Chance(1, 2) ? 0 : 1;
+        buf[kThis - 0xac] = rng.Chance(1, 2) ? 0 : 0x80;
+        std::int32_t displacement = 0;
+        std::memcpy(&displacement, buf + kTable + 0x70 + 4, 4);
+        buf[kThis - 0x598 + displacement + 0x1f] = rng.Chance(1, 3) ? 1 : 0;
+    };
+    CompareMember(
+        ctx, "CListView::Draw", listSetup,
+        [&](std::uintptr_t base, std::uint64_t s) {
+            return Original_CListView_Draw(at(base, kThis), nullptr, arg(s, 0), at(base, 0x100), at(base, 0x120));
+        },
+        [&](std::uintptr_t base, std::uint64_t s) {
+            return ours.listDraw(at(base, kThis), nullptr, arg(s, 0), at(base, 0x100), at(base, 0x120));
+        },
+        cases);
+    CompareMember(
+        ctx, "CListView::FillBackground", listSetup,
+        [&](std::uintptr_t base, std::uint64_t s) {
+            return Original_CListView_FillBackground(at(base, kThis), nullptr, arg(s, 0),
+                                                     reinterpret_cast<const RECT*>(at(base, 0x100)));
+        },
+        [&](std::uintptr_t base, std::uint64_t s) {
+            return ours.listFill(at(base, kThis), nullptr, arg(s, 0), reinterpret_cast<const RECT*>(at(base, 0x100)));
+        },
+        cases);
+    CompareMember(
+        ctx, "WCValOrderedVector<CColumn>::base_equivalent", RandomBuffer,
+        [&](std::uintptr_t base, std::uint64_t) {
+            return Original_CColumnVector_BaseEquivalent(at(base, 0x100), at(base, 0x200));
+        },
+        [&](std::uintptr_t base, std::uint64_t) { return ours.baseEquivalent(at(base, 0x100), at(base, 0x200)); },
+        cases);
+    CompareMember(
+        ctx, "WCIsvSListBase::WCListDelete", RandomBuffer,
+        [&](std::uintptr_t base, std::uint64_t s) {
+            Original_WCIsvSListBase_ListDelete(small(s, 0) == 0 ? 0 : at(base, 0x300));
+            return 0u;
+        },
+        [&](std::uintptr_t base, std::uint64_t s) {
+            ours.listDelete(small(s, 0) == 0 ? 0 : at(base, 0x300));
+            return 0u;
+        },
+        cases);
 }
 
 // Wrong implementations.
@@ -750,6 +1120,17 @@ std::uint16_t* __fastcall WrongMoveWords(std::uint16_t* to, const std::uint16_t*
     }
     return to;
 }
+std::uint32_t __fastcall WrongListDraw(std::uintptr_t self, void* edx, std::uint32_t surface, std::uint32_t a,
+                                       std::uint32_t b) {
+    return CListView_Draw(self, edx, surface, b, a);  // the rects swapped
+}
+std::uint32_t __fastcall WrongUpDownResized(std::uintptr_t self, void* edx, const RECT* rect, std::uint32_t delta) {
+    RECT shifted = *rect;  // a negative odd sum's half rounded down instead of toward zero
+    if (((shifted.top + shifted.bottom) & 1) != 0 && shifted.top + shifted.bottom < 0) {
+        ++shifted.bottom;
+    }
+    return CUpDown_OnResized(self, edx, &shifted, delta);
+}
 ListLine* __fastcall WrongLineCopy(ListLine* self, void*, ListLine* other) {
     std::memcpy(self, other, sizeof(*self));  // copies the padding too
     other->row = 0;
@@ -763,10 +1144,14 @@ S3RE_TEST(UiControlMembers_MatchOriginal) {
 }
 
 S3RE_TEST(UiControlMembers_ComparisonDetectsWrongImplementation) {
-    for (int k = 0; k < 3; ++k) {
+    for (int k = 0; k < 5; ++k) {
         Members wrong;
-        if (k == 0) {
+        if (k == 4) {
+            wrong.listDraw = &WrongListDraw;
+        } else if (k == 0) {
             wrong.onMoved = &WrongOnMoved;
+        } else if (k == 3) {
+            wrong.upDownResized = &WrongUpDownResized;
         } else if (k == 1) {
             wrong.moveWords = &WrongMoveWords;
         } else {
