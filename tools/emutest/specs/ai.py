@@ -2999,3 +2999,327 @@ SPECS += [
     for name, address in (("T_ECONOMY_AGENT_ConsiderWoodcutter", 0x00567e00),
                           ("T_ECONOMY_AGENT_ConsiderStonecutter", 0x00568420))
 ]
+
+# -- session 55 (wip/ai-mil): army groups and attack work ------------------
+#
+# ai_army_groups.cpp (FindSpareGroup, RebuildAssignedSettlers,
+# AssignIdleUnits) and ai_army_attack.cpp (TickAttackDelays,
+# AttackEnemyCatapults, RecruitGeologistsAndThieves). `this` is the world
+# base (the army fields at their offsets) unless a function uses the
+# globals itself. AssignSoldier / AssignMage, ResetUnitGroup,
+# TeamHasActivePlayer, TileDistance and CGameData::Random run as original
+# code on both sides; the command senders are probed.
+
+AI_ATTACK_DELAYS = AI_ARMY_STATE + 0x194
+AI_CATAPULT_VECTORS = 0x007E7A24   # g_aiCatapultVectors: 20 x {begin, end, ...}, stride 16
+SOLDIER_LIST_TYPES = (5, 32, 35, 8, 30, 33, 15, 31, 34, 36)  # AssignIdleUnits' chains (36 = mages)
+
+
+def spare_group_world(rng, pool, args):
+    """army_player_groups (army at the base, the player's lists), the first
+    members' positions and the building's x."""
+    fields = army_player_groups(rng, pool, args[:1])
+    player = args[0]
+    for g in range(10):
+        member = SETTLERS + rng.randrange(1, ARMY_SETTLERS) * SETTLER_BYTES
+        fields.append((PLAYER_LISTS + (player * 10 + g) * 200, (member - SETTLERS) // SETTLER_BYTES, 2))
+        fields += [(member + 4, rng.randrange(200), 2), (member + 6, rng.randrange(200), 2)]
+    fields.append((BUILDINGS + (args[1] & 0xFFF) * BUILDING_BYTES + 2, rng.randrange(200), 2))
+    return fields
+
+
+def spare_group_globals(rng, pool, args):
+    """The census targets of the player (often 0) and its attack delays
+    (often 0), also the dword before its group 0 (read for -1)."""
+    fields = army_player_globals(rng, pool, args)
+    player = args[0]
+    for g in range(-1, 10):
+        index = player * 10 + g
+        delay = 0 if rng.random() < 0.5 else rng.getrandbits(32) if rng.random() < 0.3 else rng.randrange(1, 50)
+        fields.append((AI_ATTACK_DELAYS + 4 * index, delay, 4))
+        if g >= 0 and rng.random() < 0.6:
+            fields.append((AI_CENSUS_TARGETS + 2 * index, 0, 2))
+    return fields
+
+
+def spare_building(rng, pool):
+    return 0 if rng.random() < 0.4 else rng.randrange(1, 13)
+
+
+def byte_flag(rng, pool):
+    return rng.choice((0, 0, 1, 0x100, 0xFFFFFF00, rng.getrandbits(32)))
+
+
+def rebuild_world(rng, pool, args):
+    """Every player's active flag (often 2), lists (members from the
+    settler pool, a few >= 32000: _Xran probed) and the pool's types (some
+    mages)."""
+    fields = []
+    for p in range(20):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES, rng.choice((0, 1, 2, 2, 2)), 4))
+        for g in range(10):
+            index = p * 10 + g
+            length = 0 if rng.random() < 0.3 else rng.randrange(1, 12) if rng.random() < 0.8 else rng.randrange(101)
+            fields.append((PLAYER_LIST_LENGTHS + 4 * index, length, 4))
+            for k in range(length):
+                fields.append((PLAYER_LISTS + index * 200 + 2 * k, army_member(rng), 2))
+    for settler in range(1, ARMY_SETTLERS, 7):
+        fields.append((SETTLERS + settler * SETTLER_BYTES + 1, 36 if rng.random() < 0.3 else rng.randrange(48), 1))
+    return fields
+
+
+def rebuild_globals(rng, pool, args):
+    """The hunter vectors: per player 0..5 entries in scratch slot 0 (the
+    hunter ids from the pool, a few >= 32000)."""
+    fields = [(AI_MAP_WORLD, WORLD_BASE, 4)]
+    for p in range(20):
+        begin = WORLD_BASE + SCRATCH + p * 64
+        count = rng.choice((0, 0, 1, 2, 5))
+        fields += [(AI_HUNTER_VECTORS + 16 * p, begin, 4), (AI_HUNTER_VECTORS + 16 * p + 4, begin + 8 * count, 4)]
+    return fields
+
+
+def rebuild_scratch(rng, pool, args):
+    return [(SCRATCH + 8 * k, army_member(rng), 4) for k in range(20 * 8)]
+
+
+def idle_units_world(rng, pool, args):
+    """army_soldier_world for the player (army, lists, areas, buildings)
+    and its ten settler chains (0..4 settlers each, distinct ids, sometimes
+    already in a group: bit set)."""
+    player = args[0]
+    fields = army_player_groups(rng, pool, args[:1]) + buildings_in_areas(rng, pool, args)
+    high = rng.randrange(6)
+    fields.append((AREA_HIGH_WATER, high, 4))
+    for area in range(6):
+        owner = 0xFF if rng.random() < 0.15 else rng.choice((player, player, rng.randrange(3)))
+        fields.append((AI_AREAS + area * 0x2E0, owner, 1))
+    settler = 3100 + rng.randrange(50)
+    for art in SOLDIER_LIST_TYPES:
+        head = 0
+        for _ in range(rng.choice((0, 0, 1, 2, 4))):
+            record = SETTLERS + settler * SETTLER_BYTES
+            fields += [(record + 0x10, head, 2), (record + 1, art, 1), (record + 4, rng.randrange(400), 2),
+                       (record + 6, rng.randrange(400), 2)]
+            if rng.random() < 0.2:
+                fields.append((ARMY_BITSET + 4 * (settler >> 5), 0xFFFFFFFF, 4))
+            head = settler
+            settler += 1 + rng.randrange(3)
+        fields.append((PLAYER_RECORDS + player * PLAYER_RECORD_BYTES + 0x20 + 2 * art, head, 2))
+    return fields
+
+
+def tick_delays_world(rng, pool, args):
+    """The delays at this + 0x194 (players 0..19, groups 0..9): mostly 0, 1,
+    2, sometimes negative or large."""
+    fields = []
+    for index in range(200):
+        roll = rng.random()
+        delay = (rng.randrange(3) if roll < 0.6 else rng.randint(-5, -1) & 0xFFFFFFFF if roll < 0.75
+                 else rng.getrandbits(32))
+        fields.append((0x194 + 4 * index, delay, 4))
+    return fields
+
+
+def tick_delays_globals(rng, pool, args):
+    return [(AI_MAP_WORLD, WORLD_BASE, 4), (AI_WORLD, WORLD_BASE, 4)]
+
+
+def catapults_world(rng, pool, args):
+    """Players 0..19 (active 0..2, teams 0..2), the player's group lists
+    (lengths 0..3 or more, first members), catapult settlers 3500.. on
+    tiles whose areas 0..5 belong to the player or others."""
+    player = args[0]
+    fields = []
+    for p in range(20):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        fields += [(record, rng.choice((0, 1, 2, 2)), 4), (record + 0xC, rng.randrange(3), 4)]
+    for g in range(10):
+        index = player * 10 + g
+        fields += [(PLAYER_LIST_LENGTHS + 4 * index, rng.choice((0, 1, 2, 3, rng.randrange(100))), 4),
+                   (PLAYER_LISTS + index * 200, rng.randrange(1, 3000), 2)]
+    for area in range(6):
+        owner = rng.choice((player, player, (player + 1) % 20, 0xFF))
+        fields.append((AI_AREAS + area * 0x2E0, owner, 1))
+    for k in range(40):
+        record = SETTLERS + (3500 + k) * SETTLER_BYTES
+        x, y = rng.randrange(150), rng.randrange(150)
+        fields += [(record + 4, x, 2), (record + 6, y, 2), (TILES + (x * 0x300 + y) * 24 + 0x14, rng.randrange(6), 2)]
+    return fields
+
+
+def catapults_globals(rng, pool, args):
+    """The catapult vectors (0..4 entries in scratch, ids 3500..3539), the
+    player's defending flags and group preys (often catapults)."""
+    player = args[0]
+    fields = [(AI_MAP_WORLD, WORLD_BASE, 4), (AI_WORLD, WORLD_BASE, 4)]
+    for p in range(20):
+        begin = WORLD_BASE + SCRATCH + 32 * p
+        count = rng.choice((0, 1, 2, 4))
+        fields += [(AI_CATAPULT_VECTORS + 16 * p, begin, 4), (AI_CATAPULT_VECTORS + 16 * p + 4, begin + 4 * count, 4)]
+    for g in range(10):
+        index = player * 10 + g
+        prey = 3500 + rng.randrange(40) if rng.random() < 0.5 else rng.getrandbits(16)
+        fields += [(AI_CENSUS_DEFENDING + index, 0 if rng.random() < 0.7 else 1, 1),
+                   (AI_GROUP_TARGETS + 6 * index + 4, prey, 2)]
+    return fields
+
+
+def catapults_scratch(rng, pool, args):
+    return [(SCRATCH + 4 * k, 3500 + rng.randrange(40), 4) for k in range(20 * 8)]
+
+
+AI_CENSUS_BUILDINGS = AI_CENSUS + 0x714   # [20][57] dwords
+
+
+def recruit_world(rng, pool, args):
+    """Players 0..19 (often computers), areas 0..7 (owners, carrier list
+    heads; high-water mark 0..7, sometimes -1)."""
+    fields = [(AREA_HIGH_WATER, 0xFFFFFFFF if rng.random() < 0.05 else rng.randrange(8), 4)]
+    for p in range(20):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES, rng.choice((0, 1, 2, 2, 2)), 4))
+    for area in range(8):
+        record = AI_AREAS + area * 0x2E0
+        fields += [(record, rng.choice((0xFF, rng.randrange(20), rng.randrange(4))), 1),
+                   (record + 0x12A, 0 if rng.random() < 0.3 else rng.randrange(1, 3000), 2)]
+    return fields
+
+
+def recruit_globals(rng, pool, args):
+    """The census: buildings counted (byte +1), residences, other settlers
+    (around multiples of 64, sometimes negative), geologists and thieves."""
+    fields = [(AI_MAP_WORLD, WORLD_BASE, 4), (AI_WORLD, WORLD_BASE, 4),
+              (AI_CENSUS + 1, 0 if rng.random() < 0.15 else rng.randrange(1, 256), 1)]
+    for p in range(20):
+        for art in (26, 27, 28):
+            value = 0 if rng.random() < 0.6 else rng.choice((1, 2, rng.getrandbits(32)))
+            fields.append((AI_CENSUS_BUILDINGS + (p * 57 + art) * 4, value, 4))
+        others = rng.choice((rng.randrange(400), 64 * rng.randrange(6) + rng.choice((-1, 0, 1)),
+                             rng.randint(-200, -1), rng.getrandbits(32)))
+        fields += [(AI_CENSUS + 0x3A4 + 4 * p, others & 0xFFFFFFFF, 4),
+                   (AI_CENSUS + 0x2B4 + 4 * p, rng.randint(-2, 8) & 0xFFFFFFFF, 4),
+                   (AI_CENSUS + 0x304 + 4 * p, rng.randint(-2, 8) & 0xFFFFFFFF, 4)]
+    return fields
+
+
+SPECS += [
+    Spec("AI_Army_FindSpareGroup", 0x005923e0, "thiscall", [below(20), spare_building, byte_flag],
+         presets=spare_group_world, globals=spare_group_globals, max_cases=1500),
+    # EAX is not used by the caller (0x58f990 returns right after).
+    Spec("AI_Army_RebuildAssignedSettlers", 0x00591c40, "thiscall", [], eax_mask=0, presets=lambda r, p, a: rebuild_world(r, p, a) + rebuild_scratch(r, p, a),
+         globals=rebuild_globals, callees=XRAN_PROBE, max_cases=300),
+    # EAX is not used by the caller (0x58f990).
+    Spec("AI_Army_AssignIdleUnits", 0x00593cd0, "thiscall", [below(3)], eax_mask=0, presets=idle_units_world,
+         globals=army_player_globals, callees=XRAN_PROBE, max_cases=600),
+    # EAX is not used by the caller (0x58f990).
+    Spec("AI_ArmyState_TickAttackDelays", 0x00594000, "thiscall", [], eax_mask=0, presets=tick_delays_world,
+         globals=tick_delays_globals, max_cases=300),
+    # EAX is not used by the caller (0x58f990 returns it, T_ATTACK_AGENT::Run
+    # returns that, CComputerPlayer's slot 8 call ignores it).
+    Spec("AI_Army_AttackEnemyCatapults", 0x00593180, "thiscall", [below(3)], eax_mask=0, presets=lambda r, p, a: catapults_world(r, p, a) + catapults_scratch(r, p, a),
+        
+         globals=catapults_globals, callees=ORDER_CALLEES, max_cases=1000),
+    # EAX is not used (see AttackEnemyCatapults).
+    Spec("AI_RecruitGeologistsAndThieves", 0x00592e60, "thiscall", [], eax_mask=0, presets=recruit_world,
+         globals=recruit_globals, callees={0x00590C10: (5, "thiscall", "probe")}, max_cases=800),
+]
+
+
+# SendHunter / HuntEnemyThieves / HuntEnemyMages (ai_army_attack.cpp).
+HUNTER_TYPES = (5, 32, 35, 15, 31, 34, 8, 30, 33)
+HUNT_SETTLERS = range(3600, 3700)   # prey, hunters and group members
+
+
+def hunter_settler(rng):
+    return rng.choice(HUNT_SETTLERS)
+
+
+def send_hunter_world(rng, pool, args):
+    """The player's groups (lengths 0..3 or more; first and last members
+    from the hunt pool, last ones often soldiers), the hunt pool's
+    positions (close together, so that "within 4" happens) and types; the
+    hunter vector in scratch slot 1 (entries: hunters from the pool,
+    targets 0, the prey or others)."""
+    player, prey = args[0], args[1]
+    fields = []
+    for g in range(10):
+        index = player * 10 + g
+        length = rng.choice((0, 1, 2, 3, rng.randrange(2, 100)))
+        fields += [(PLAYER_LIST_LENGTHS + 4 * index, length, 4),
+                   (PLAYER_LISTS + index * 200, hunter_settler(rng), 2)]
+        if length >= 1:
+            fields.append((PLAYER_LISTS + index * 200 + 2 * (length - 1), hunter_settler(rng), 2))
+    for settler in HUNT_SETTLERS:
+        record = SETTLERS + settler * SETTLER_BYTES
+        art = rng.choice(HUNTER_TYPES) if rng.random() < 0.6 else rng.randrange(48)
+        fields += [(record + 1, art, 1), (record + 4, rng.randrange(40), 2), (record + 6, rng.randrange(40), 2)]
+    for k in range(8):
+        target = rng.choice((0, 0, prey, hunter_settler(rng)))
+        fields += [(SCRATCH + SCRATCH_SLOT_BYTES + 8 * k, hunter_settler(rng), 4),
+                   (SCRATCH + SCRATCH_SLOT_BYTES + 8 * k + 4, target, 4)]
+    return fields
+
+
+def send_hunter_globals(rng, pool, args):
+    """The player's hunter vector: 0..6 entries in scratch slot 1, capacity
+    equal to the end (grows), larger, smaller (garbage) or a null vector."""
+    player = args[0]
+    begin = WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES
+    roll = rng.random()
+    if roll < 0.1:
+        begin_value = end = cap = 0
+    else:
+        count = rng.randrange(7)
+        begin_value, end = begin, begin + 8 * count
+        cap = rng.choice((end, end, end + 8 * rng.randrange(1, 4), begin, end - 8 if count else end))
+    vector = AI_HUNTER_VECTORS + 16 * player
+    return [(AI_MAP_WORLD, WORLD_BASE, 4), (AI_WORLD, WORLD_BASE, 4),
+            (vector, begin_value, 4), (vector + 4, end, 4), (vector + 8, cap, 4)]
+
+
+def hunt_prey(rng, pool):
+    return hunter_settler(rng)
+
+
+def hunt_world(rng, pool, args):
+    """Players 0..19 (active, teams) with thief and mage chains of settlers
+    3600.. standing on tiles of areas 0..5 (owned by the player or not)."""
+    player = args[0]
+    fields = []
+    for p in range(20):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        fields += [(record, rng.choice((0, 1, 2, 2)), 4), (record + 0xC, rng.randrange(3), 4)]
+        for art in (23, 36):
+            fields.append((record + 0x20 + 2 * art, 0 if rng.random() < 0.3 else hunter_settler(rng), 2))
+    for settler in HUNT_SETTLERS:
+        record = SETTLERS + settler * SETTLER_BYTES
+        x, y = rng.randrange(60), rng.randrange(60)
+        nxt = 0 if rng.random() < 0.3 or settler + 5 >= HUNT_SETTLERS.stop else settler + rng.randrange(1, 5)
+        fields += [(record + 4, x, 2), (record + 6, y, 2), (record + 0x10, nxt, 2),
+                   (TILES + (x * 0x300 + y) * 24 + 0x14, rng.randrange(6), 2)]
+    for area in range(6):
+        fields.append((AI_AREAS + area * 0x2E0, rng.choice((player, player, (player + 1) % 20, 0xFF)), 1))
+    return fields
+
+
+# SendHunter's inlined vector insert (position = end) never moves entries:
+# 0x5939f9 / 0x593a40 / 0x593a54 (room in place) and 0x59397a / 0x59397c /
+# 0x59398f (after a reallocation) copy the range [end, end), and
+# 0x593a56..0x593aa9 is the branch for a position before the end. 0x593926
+# (a negative new capacity) needs end < begin, after which the copy loop
+# walks the whole address space before it could get there.
+SEND_HUNTER_DEAD = (0x593926, 0x59397a, 0x59397c, 0x59398f, 0x5939f9, 0x593a40, 0x593a54, 0x593a56, 0x593a61,
+                    0x593a7e, 0x593a8b, 0x593aa0, 0x593aa9)
+
+SPECS += [
+    # EAX is not used by the callers (0x593ad0 / 0x593bd0). The blocks of
+    # the inlined vector insert that move entries after the insert position
+    # are dead: the position is always the end.
+    Spec("AI_Army_SendHunter", 0x005935b0, "thiscall", [below(3), hunt_prey], eax_mask=0,
+         presets=send_hunter_world, globals=send_hunter_globals, callees=ORDER_CALLEES,
+         exempt_blocks=SEND_HUNTER_DEAD, max_cases=2000),
+    Spec("AI_Army_HuntEnemyThieves", 0x00593ad0, "thiscall", [below(3)], eax_mask=0, presets=hunt_world,
+         globals=tick_delays_globals, callees={0x005935B0: (2, "thiscall", "probe")}, max_cases=800),
+    Spec("AI_Army_HuntEnemyMages", 0x00593bd0, "thiscall", [below(3)], eax_mask=0, presets=hunt_world,
+         globals=tick_delays_globals, callees={0x005935B0: (2, "thiscall", "probe")}, max_cases=800),
+]

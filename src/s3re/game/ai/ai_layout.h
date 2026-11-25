@@ -16,7 +16,7 @@ namespace s3re::game::ai {
 // The AI code reaches the game through globals set before each player's
 // turn (AI_SetCurrentPlayer and 0x551b80): g_aiWorld, g_aiPlayer,
 // g_aiPlayerData, ... in game/globals.h.
-constexpr std::size_t kAgentVectorCount = 20;  // g_aiAgentVectors
+constexpr std::size_t kAgentVectorCount = 20;  // g_aiCatapultVectors
 
 #pragma pack(push, 1)
 
@@ -466,11 +466,14 @@ struct AiAgentData {
     std::uint32_t team_strength[20];     // 0x25c per player: soldiers and towers of its team (0x55bea0)
     std::uint8_t team_strength_valid;    // 0x2ac set to 1 by 0x55bea0
     std::uint8_t unk2ad[7];
-    std::uint32_t dwords2b4[20];         // 0x2b4
-    std::uint32_t dwords304[20];         // 0x304
-    std::uint32_t dwords354[20];         // 0x354
-    std::uint32_t dwords3a4[20];         // 0x3a4
-    std::uint32_t dwords3f4[20];         // 0x3f4
+    // Per player settler counts of CountSettlers 0x55b880 (re/computer_players_naming.md;
+    // were dwords2b4..dwords3f4); RecruitGeologistsAndThieves 0x592e60 raises
+    // geologists / thieves by what it orders.
+    std::int32_t geologists[20];         // 0x2b4 type 22
+    std::int32_t thieves[20];            // 0x304 type 23
+    std::int32_t pioneers[20];           // 0x354 type 40
+    std::int32_t other_settlers[20];     // 0x3a4 the other types (a population figure)
+    std::int32_t all_settlers[20];       // 0x3f4 all settlers
     std::uint32_t soldiers[20][kCensusSoldierKinds];      // 0x444 per player
     std::uint32_t buildings[20][kBuildingTypeCount];      // 0x714 finished buildings per player and type
     std::uint32_t dwords18e4[0x7d];      // 0x18e4..0x1ad4
@@ -479,8 +482,8 @@ static_assert(offsetof(AiAgentData, group_target_buildings) == 0x4);
 static_assert(offsetof(AiAgentData, group_defending) == 0x194);
 static_assert(offsetof(AiAgentData, team_strength) == 0x25c);
 static_assert(offsetof(AiAgentData, team_strength_valid) == 0x2ac);
-static_assert(offsetof(AiAgentData, dwords2b4) == 0x2b4);
-static_assert(offsetof(AiAgentData, dwords3f4) == 0x3f4);
+static_assert(offsetof(AiAgentData, geologists) == 0x2b4);
+static_assert(offsetof(AiAgentData, all_settlers) == 0x3f4);
 static_assert(offsetof(AiAgentData, soldiers) == 0x444);
 static_assert(offsetof(AiAgentData, buildings) == 0x714);
 static_assert(offsetof(AiAgentData, dwords18e4) == 0x18e4);
@@ -568,7 +571,7 @@ static_assert(offsetof(AiLandEvaluation, height) == 0x144);
 static_assert(offsetof(AiLandEvaluation, cells) == 0x158);
 static_assert(sizeof(AiLandEvaluation) == 0x15c);
 
-// A vector of 16-byte entries (the 20 of g_aiAgentVectors).
+// A vector of 16-byte entries (the 20 of g_aiCatapultVectors).
 struct AiVector {
     std::uint32_t begin;  // +0
     std::uint32_t end;    // +4 (end = begin empties it)

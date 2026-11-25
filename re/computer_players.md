@@ -350,6 +350,29 @@ military buildings with a garrison or one on the way;
 FirstUnassignedMilitaryBuilding 0x58ae90 returns the first tower / castle
 without that bit that no group patrols.
 
+Session 55 (V, `ai_army_groups.cpp`, `ai_army_attack.cpp`): the periodic
+army work. `FindSpareGroup` 0x5923e0 picks a spare group for an attack
+(quirk: TileDistance gets the building's x twice); `RebuildAssignedSettlers`
+0x591c40 rebuilds the settler bitset from groups and hunters and recounts
+mages; `AssignIdleUnits` 0x593cd0 puts the soldier and mage chains into
+groups. `TickAttackDelays` 0x594000 resets groups whose delay runs out.
+`AttackEnemyCatapults` 0x593180 sends the nearest group (>= 2 members, not
+defending) after each enemy catapult in the player's land (the per-player
+vectors at 0x7e7a24 are the catapults counted by the census:
+g_aiCatapultVectors, was g_aiAgentVectors); the group's AiGroupTarget prey
+is the catapult, the delay 70 - r % 17. `HuntEnemyThieves` /
+`HuntEnemyMages` 0x593ad0 / 0x593bd0 call `SendHunter` 0x5935b0 for every
+enemy thief / mage in the player's land: a free hunter of the player's
+hunter vector, else a soldier taken from the nearest group. Original bug:
+the soldier search tests the type of the group's last member eleven times
+instead of walking the members, so only a last member that is a
+swordsman, pikeman or bowman is taken. `RecruitGeologistsAndThieves`
+0x592e60 orders ConvertCarriers (want = other settlers / 64 + 1) in every
+area of a player with a residence while its census count is below that
+(the count is not re-checked per area, so every area gets an order). The
+census fields +0x2b4..+0x3f4 are now named (geologists, thieves, pioneers,
+other_settlers, all_settlers).
+
 ## How decisions reach the simulation
 
 Most decisions don't write the world directly (the world is read through

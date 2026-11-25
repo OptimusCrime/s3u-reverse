@@ -90,7 +90,7 @@ std::uint32_t __fastcall T_ECONOMY_AGENT_TakeAreaSnapshot(Agent* agent, void* /*
     const AiAgentData& census = g_aiCensus;
     if (census.settlers_counted != 0) {
         // The census's settlers of the player (the low word).
-        agent->population = static_cast<std::uint16_t>(census.dwords3f4[g_aiPlayerNumber]);
+        agent->population = static_cast<std::uint16_t>(census.all_settlers[g_aiPlayerNumber]);
     } else {
         agent->population = static_cast<std::uint16_t>(reinterpret_cast<PopulationFn>(kAreaPopulation)(&agent->area));
     }
@@ -213,13 +213,13 @@ struct Saved {
     std::uint8_t number = g_aiPlayerNumber;
     std::uint8_t counted = g_aiCensus.get().settlers_counted;
     std::uint32_t settlers[layout::kPlayers];
-    Saved() { std::memcpy(settlers, g_aiCensus.get().dwords3f4, sizeof(settlers)); }
+    Saved() { std::memcpy(settlers, g_aiCensus.get().all_settlers, sizeof(settlers)); }
     ~Saved() {
         g_aiWorld = world;
         g_aiPlayerData = data;
         g_aiPlayerNumber = number;
         g_aiCensus.get().settlers_counted = counted;
-        std::memcpy(g_aiCensus.get().dwords3f4, settlers, sizeof(settlers));
+        std::memcpy(g_aiCensus.get().all_settlers, settlers, sizeof(settlers));
     }
 };
 
@@ -299,7 +299,7 @@ void CompareSnapshot(test::Context& ctx, SnapshotFn candidate, AreaPopulationFn 
         dataB = dataA;
         g_aiPlayerNumber = static_cast<std::uint8_t>(ctx.rng().Below(layout::kPlayers));
         g_aiCensus.get().settlers_counted = static_cast<std::uint8_t>(ctx.rng().Chance(1, 2) ? 0 : 1 + ctx.rng().Below(255));
-        ctx.rng().Fill(g_aiCensus.get().dwords3f4, sizeof(g_aiCensus.get().dwords3f4));
+        ctx.rng().Fill(g_aiCensus.get().all_settlers, sizeof(g_aiCensus.get().all_settlers));
 
         std::uint32_t ra = 0, rb = 0;
         if (ctx.rng().Chance(1, 4)) {

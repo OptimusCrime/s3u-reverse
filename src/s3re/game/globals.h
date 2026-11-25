@@ -293,10 +293,12 @@ inline constexpr GameGlobal<std::uint32_t> g_aiMarkBuildingTypesPending{0x7312ac
 inline constexpr GameGlobal<std::uint32_t> g_aiPlayersTakingPart{0x7e02f0};
 // Cleared by InitAiGlobals; no other access found.
 inline constexpr GameGlobal<std::uint32_t> g_aiUnk7e340c{0x7e340c};
-// 20 vectors emptied by AI_ResetAgentData.
-inline constexpr GameGlobal<ai::AiVector[20]> g_aiAgentVectors{0x7e7a24};
+// Per player a std::vector<u32> of the settler ids of its catapults (filled
+// by AI::Census::CountSettlers 0x55b880, read by AI::Army::AttackEnemyCatapults
+// 0x593180; emptied by AI_ResetAgentData). Was g_aiAgentVectors.
+inline constexpr GameGlobal<ai::AiVector[20]> g_aiCatapultVectors{0x7e7a24};
 // Per player a std::vector of {hunter settler, target settler} pairs (the
-// 16-byte vector objects start at 0x7e3688; like g_aiAgentVectors this
+// 16-byte vector objects start at 0x7e3688; like g_aiCatapultVectors this
 // array starts at the first vector's begin pointer). AI::Army::Reset
 // (0x591e00) empties them.
 inline constexpr GameGlobal<ai::AiVector[20]> g_aiHunterVectors{0x7e368c};
