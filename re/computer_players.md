@@ -753,3 +753,23 @@ four sides of 2r cells, -x, +y, +x, -y) and return a cell centre.
 The stored values' padding byte is an uninitialized stack byte in the
 original (ours 0; the nodes are freed before the return; emulator
 ignore_bytes with the self-test WrongFarmKeys).
+
+## Area records and the CEvaLand's construction (session 55 round 2, V)
+
+`ai_area_records.cpp`; layouts `AiArea` (0x73c bytes, value offsets) and
+`AiAreaNode` (0x744) in ai_layout.h. Findings:
+- The record has 39 site trees at +0x4cc (not 38); `AiPlayerData::unk550`
+  (the fishery condition 0x5693c0) is `site_trees[7].size`.
+- The copy constructor 0x55a440 skips the padding bytes and copies the
+  per-type tree pointers (+0x3e8, 57) verbatim: in a copy they still point
+  at the source record's trees (AddArea appends a copy of its stack
+  record; whether something refreshes them is open, G).
+- RemoveArea 0x558e80 removes only the first record with the area id and
+  sets `areas_changed[player]`; EAX = the new size (head when not found).
+- Acquire 0x553d30 / constructor 0x553e10 / Init 0x553ea0: grid side =
+  map size / 8 (signed), cells constructed (bitsets 0x559240 through the
+  vector constructor iterator 0x42c9d0) then zeroed, EvaluateAllCells,
+  SumAllCells, g_aiLandEvaluation = this. Out of memory: "pEvalMap" (line
+  70) / "map_part_list_ptr" (line 141). The 20 lists' allocator byte is
+  the high byte of each list's own address (constructor 0x553e70 reads it
+  from the saved ECX).

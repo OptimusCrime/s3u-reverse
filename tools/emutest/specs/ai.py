@@ -4606,7 +4606,7 @@ def _site_tree_shape(rng, nil, black_height, red_chance):
     return black(black_height)
 
 
-def site_tree_model(rng, count, base=SITE_TREE_NODES, max_key=8):
+def site_tree_model(rng, count, base=SITE_TREE_NODES, max_key=8, random_shapes=True):
     """(head, nil, nodes in order): usually `count` nodes with keys below
     max_key (often equal keys), inserted in random order; sometimes (a third)
     a tree of random shape and colouring (also all-black ones, which
@@ -4623,7 +4623,7 @@ def site_tree_model(rng, count, base=SITE_TREE_NODES, max_key=8):
             walk(node.left)
             nodes.append(node)
             walk(node.right)
-    if count > 0 and rng.random() < 0.35:
+    if random_shapes and count > 0 and rng.random() < 0.35:
         for _ in range(20):
             root = _site_tree_shape(rng, nil, rng.randint(1, 4), rng.choice((0.0, 0.15, 0.4)))
             walk(root)
@@ -4945,4 +4945,159 @@ SPECS += [
     finder_spec("AI_FindWoodcutterWorkArea", 0x0059a3a0),
     finder_spec("AI_FindStonecutterWorkArea", 0x0059a8d0),
     finder_spec("AI_FindFisheryWorkArea", 0x0059b780),
+]
+
+
+# -- session 55 round 2 (ai-step): CEvaLand area records and lists, the -------
+# -- CEvaLand's construction (ai_area_records.cpp) -----------------------------
+#
+# Area records (0x73c bytes) with 39 small site trees: the trees' heads and
+# nodes 0xe0 bytes apart per tree (head + up to 6 nodes) from AREA_TREE_NODES
+# on, the shared nil node of the site tree specs. A list node is 0x744 bytes
+# (next, prev, record).
+
+AREA_SOURCE = SCRATCH                                # a record (copy / insert source)
+AREA_TREE_NODES = SCRATCH + 1 * SCRATCH_SLOT_BYTES    # up to 4 records' trees: slots 1..8
+AREA_TREES_PER_RECORD = 39
+AREA_TREE_STRIDE = 0xe0
+AREA_LIST_NODES = SCRATCH + 12 * SCRATCH_SLOT_BYTES   # list nodes, one per slot (12..16)
+AREA_TREES_OFFSET = 0x4cc
+AREA_PADDING = (0x2, 0x3, 0x15, 0x16, 0x17, 0x3e7)
+
+
+def area_record_fields(rng, record, first_tree, max_nodes=4, area=None):
+    """A record at world offset `record` with random fields and 39 trees
+    (often empty) whose nodes start at tree slot `first_tree`."""
+    fields = [(record + k, rng.getrandbits(32), 4) for k in range(0, AREA_TREES_OFFSET, 4)]
+    if area is not None:
+        fields.append((record, area, 2))
+    for t in range(AREA_TREES_PER_RECORD):
+        base = AREA_TREE_NODES + (first_tree + t) * AREA_TREE_STRIDE
+        count = 0 if rng.random() < 0.5 else rng.randint(1, max_nodes)
+        head, nil, nodes = site_tree_model(rng, count, base=base, random_shapes=False)
+        fields += site_tree_fields(rng, head, nil, nodes, tree=record + AREA_TREES_OFFSET + 0x10 * t)
+    return fields
+
+
+def area_copy_world(rng, pool, args):
+    """The source record at scratch 0 (args[0]); the destination (offset
+    0) lazily random."""
+    return area_record_fields(rng, AREA_SOURCE, 0)
+
+
+def area_destruct_world(rng, pool, args):
+    return area_record_fields(rng, 0, 0)
+
+
+def area_list_world(rng, pool, args):
+    """The list at offset 0 (unk0, head, size) with 0..4 nodes; args[1] =
+    one of its nodes or the head (where); the source record at scratch 0."""
+    count = rng.randrange(5)
+    head = WORLD_BASE + AREA_LIST_NODES
+    nodes = [head] + [WORLD_BASE + AREA_LIST_NODES + (k + 1) * SCRATCH_SLOT_BYTES for k in range(count)]
+    fields = [(4, head, 4), (8, count, 4)]
+    for k, node in enumerate(nodes):
+        offset = node - WORLD_BASE
+        fields += [(offset, nodes[(k + 1) % len(nodes)], 4), (offset + 4, nodes[k - 1], 4)]
+    args[1] = rng.choice(nodes)
+    if rng.random() < 0.2:  # MSVC6 _Buynode links a node to itself when prev is null
+        fields.append((args[1] - WORLD_BASE + 4, 0, 4))
+    return fields + area_record_fields(rng, AREA_SOURCE, 0)
+
+
+def remove_area_world(rng, pool, args):
+    """The CEvaLand at offset 0; lists[player] (args[1]) with 0..3 nodes of
+    area ids 0..4 whose records have small trees; args[0] = an area id
+    (sometimes with high bits)."""
+    player = args[1] & 0xFFFF
+    count = rng.randrange(4)
+    head = WORLD_BASE + AREA_LIST_NODES
+    nodes = [head] + [WORLD_BASE + AREA_LIST_NODES + (k + 1) * SCRATCH_SLOT_BYTES for k in range(count)]
+    fields = [(12 * player + 4, head, 4), (12 * player + 8, count, 4), (0xF0 + 4 * player, rng.choice((0, 0, 1)), 4)]
+    for k, node in enumerate(nodes):
+        offset = node - WORLD_BASE
+        fields += [(offset, nodes[(k + 1) % len(nodes)], 4), (offset + 4, nodes[k - 1], 4)]
+        if k:
+            fields += area_record_fields(rng, offset + 8, (k - 1) * AREA_TREES_PER_RECORD, max_nodes=2,
+                                         area=rng.randrange(5))
+    return fields
+
+
+def area_destruct_globals(rng, pool, args):
+    """As site_tree_globals with 1..40 references, so that the last one
+    goes with any of the 39 trees (the inlined destructors of trees 0..7
+    free the nil node when refs is 32..39)."""
+    return [(SITE_TREE_NIL_GLOBAL, WORLD_BASE + SITE_TREE_NIL, 4), (SITE_TREE_REFS_GLOBAL, rng.randint(1, 40), 4)]
+
+
+def remove_area_args(rng, pool):
+    return rng.randrange(6) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+def remove_area_player(rng, pool):
+    return rng.randrange(20) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+SPECS += [
+    Spec("AI_CEvaLand_Area_Copy", 0x0055a440, "thiscall", [one_of(WORLD_BASE + AREA_SOURCE)],
+         presets=area_copy_world, globals=site_tree_globals, callees=LOCKIT_PROBES, max_cases=300),
+    # EAX: the last lock call's leftover (callers don't use it).
+    Spec("AI_CEvaLand_Area_Destruct", 0x00556080, "thiscall", [], eax_mask=0,
+         presets=area_destruct_world, globals=area_destruct_globals, callees=LOCKIT_PROBES, max_cases=600),
+    # EAX: left over (AreaList::insert doesn't use it).
+    Spec("AI_AreaList_Construct", 0x0055a3d0, "fastcall", [one_of(WORLD_BASE, WORLD_BASE, 0),
+                                                           one_of(WORLD_BASE + AREA_SOURCE)], eax_mask=0,
+         presets=area_copy_world, globals=site_tree_globals, callees=LOCKIT_PROBES, max_cases=300),
+    # Dead 0x559512: a null `where` (where->prev is read before the test).
+    Spec("AI_AreaList_insert", 0x005594f0, "thiscall", [scratch(20), anything, one_of(WORLD_BASE + AREA_SOURCE)],
+         presets=area_list_world, globals=site_tree_globals, callees=LOCKIT_PROBES, max_cases=300,
+         exempt_blocks=(0x00559512,)),
+    Spec("AI_CEvaLand_RemoveArea", 0x00558e80, "thiscall", [remove_area_args, remove_area_player],
+         presets=remove_area_world, globals=site_tree_globals, callees=LOCKIT_PROBES, max_cases=600),
+]
+
+
+EVALAND_PLAYER = SCRATCH + 20 * SCRATCH_SLOT_BYTES  # a ComputerPlayer: world (+0x75c) = the world
+EVALAND_EXISTING = SCRATCH + 21 * SCRATCH_SLOT_BYTES
+
+
+def evaland_build_world(rng, pool, args):
+    """The map size (0..71: grids of 0..8 x 8 cells); tiles lazily random."""
+    return [(MAP_SIZE, rng.randrange(72) if rng.random() < 0.9 else rng.choice((0, 7, 8, 64)), 4),
+            (EVALAND_PLAYER + 0x75c, WORLD_BASE, 4)]
+
+
+def evaland_build_globals(rng, pool, args):
+    """g_aiPlayer, g_aiWorld, the map sizes; the reference count and the
+    instance (none, or one at EVALAND_EXISTING)."""
+    return [(AI_PLAYER, WORLD_BASE + EVALAND_PLAYER, 4), (AI_WORLD, WORLD_BASE, 4),
+            (AI_MAP_SIZES, rng.randint(40, 80), 2), (AI_MAP_SIZES + 2, rng.randint(40, 80), 2),
+            (0x007e0568, rng.choice((0, 0, 1, 2, rng.getrandbits(32))), 4),
+            (0x007e056c, 0 if rng.random() < 0.8 else WORLD_BASE + EVALAND_EXISTING, 4),
+            (0x007e3134, rng.getrandbits(32), 4)]
+
+
+EVALAND_GRID_SIZES = tuple(k * k * 0xC4 for k in range(9))
+
+
+def vector_ctor_count(rng, pool):
+    """-3..30 (INT_MIN would construct 2^31 elements: a time-out in both)."""
+    return rng.randint(-3, 30) & 0xFFFFFFFF if rng.random() < 0.95 else rng.choice((0x80000001, 0xFFFFFFFF))
+
+
+SPECS += [
+    # The constructor's grid allocation or Acquire's object fail sometimes
+    # (Win32::ThrowOutOfMemory runs and throws).
+    Spec("AI_CEvaLand_Acquire", 0x00553d30, "stdcall", [], presets=evaland_build_world,
+         globals=evaland_build_globals, new_fails=0.1, new_fails_size=(0x15C,) + EVALAND_GRID_SIZES,
+         max_cases=150),
+    # cover_until: padding before the list constructor 0x553e70.
+    Spec("AI_CEvaLand_Construct", 0x00553e10, "thiscall", [], presets=evaland_build_world, cover_until=0x00553e69,
+         globals=evaland_build_globals, new_fails=0.1, new_fails_size=EVALAND_GRID_SIZES, max_cases=150),
+    # EAX: left over (callers don't use it).
+    Spec("AI_CEvaLand_Init", 0x00553ea0, "thiscall", [], eax_mask=0, presets=evaland_build_world,
+         globals=evaland_build_globals, new_fails=0.1, new_fails_size=EVALAND_GRID_SIZES, max_cases=150),
+    # The bitset constructor 0x559240 of the grid cells; EAX left over.
+    Spec("VectorConstructorIterator", 0x0042c9d0, "stdcall",
+         [scratch(1), one_of(8, 12, 1, 0xC4), vector_ctor_count, one_of(0x00559240)], eax_mask=0),
 ]

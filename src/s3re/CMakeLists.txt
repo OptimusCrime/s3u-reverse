@@ -145,6 +145,7 @@ add_library(s3re SHARED
     # game/ai/: computer players (Rainer/*.cpp)
     game/ai/ai_agent_slots.cpp
     game/ai/ai_agents.cpp
+    game/ai/ai_area_records.cpp
     game/ai/ai_army.cpp
     game/ai/ai_army_attack.cpp
     game/ai/ai_army_groups.cpp

@@ -779,6 +779,55 @@ struct SiteTreeInsertResult {
 };
 static_assert(sizeof(SiteTreeInsertResult) == 8);
 
+// ---------------------------------------------------------------- area records
+// CEvaLand::Area (ai_area_records.cpp): the 0x73c-byte value of a node of
+// CEvaLand::lists[player], one per economy area the computer player owns
+// (AddArea 0x555260 / RemoveArea 0x558e80). AiPlayerData is the same record
+// seen as the list node (offsets + 8); its field names are used here too.
+// The copy constructor 0x55a440 copies the fields below (the padding bytes
+// +0x02, +0x15..+0x17, +0x3e7 are not copied) and copy-constructs the 39
+// site trees; the type -> tree pointers are copied as they are (they still
+// point at the source record's trees: probably refreshed by the callers, G).
+struct AiArea {
+    std::uint16_t area;                                  // 0x000 the economy area
+    std::uint16_t unk002;
+    std::uint32_t basic_economy;                         // 0x004
+    std::uint32_t short_of_wood;                         // 0x008
+    std::uint32_t short_of_stone;                        // 0x00c
+    std::uint32_t force_production;                      // 0x010
+    std::uint8_t unk014;
+    std::uint8_t unk015[3];
+    std::uint32_t unk018;
+    std::uint16_t sites;                                 // 0x01c construction sites in the area (AddArea; +1 on a new site)
+    AiCandidate best[114];                               // 0x01e
+    std::uint16_t candidate_values[kBuildingTypeCount];  // 0x2ca
+    std::uint16_t building_counts[kBuildingTypeCount];   // 0x33c
+    std::uint8_t type_blocked[kBuildingTypeCount];       // 0x3ae
+    std::uint8_t unk3e7;
+    SiteTree* site_tree_of_type[kBuildingTypeCount];     // 0x3e8 per building type: one of site_trees (shared by types)
+    SiteTree site_trees[39];                             // 0x4cc
+};
+static_assert(offsetof(AiArea, basic_economy) + 8 == offsetof(AiPlayerData, basic_economy));
+static_assert(offsetof(AiArea, force_production) + 8 == offsetof(AiPlayerData, force_production));
+static_assert(offsetof(AiArea, best) + 8 == offsetof(AiPlayerData, best));
+static_assert(offsetof(AiArea, candidate_values) + 8 == offsetof(AiPlayerData, candidate_values));
+static_assert(offsetof(AiArea, building_counts) + 8 == offsetof(AiPlayerData, building_counts));
+static_assert(offsetof(AiArea, type_blocked) + 8 == offsetof(AiPlayerData, type_blocked));
+static_assert(offsetof(AiArea, site_tree_of_type) == 0x3e8);
+static_assert(offsetof(AiArea, site_trees) == 0x4cc);
+// AiPlayerData::unk550 (the fishery condition 0x5693c0) is site_trees[7].size.
+static_assert(offsetof(AiArea, site_trees) + 7 * sizeof(SiteTree) + offsetof(SiteTree, size) + 8 ==
+              offsetof(AiPlayerData, unk550));
+static_assert(sizeof(AiArea) == 0x73c);
+
+// A node of CEvaLand::lists[player] (0x744 bytes; MSVC6 std::list node).
+struct AiAreaNode {
+    AiAreaNode* next;  // 0x0
+    AiAreaNode* prev;  // 0x4
+    AiArea value;      // 0x8
+};
+static_assert(sizeof(AiAreaNode) == 0x744);
+
 #pragma pack(pop)
 
 }  // namespace s3re::game::ai
