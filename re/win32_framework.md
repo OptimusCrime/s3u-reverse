@@ -139,6 +139,36 @@ ThrowAssertmentFailed 0x6119b0, ThrowOutOfMemory 0x610960, ThrowWin32Error
 0x610de0, ThrowTimeout 0x610ba0, ThrowHResult 0x611050, ThrowMMError
 0x6112a0, ThrowMCIError 0x6114f0.
 
+### Exception classes and throwers (verified, session 58)
+
+Reimplemented in `src/s3re/game/framework/win32_throwers.cpp` (header
+comment has every detail):
+
+- Win32::CHResult (0x2c bytes): +0x18 HRESULT, +0x1c a second string, the
+  "location" argument of ThrowWin32Error / ThrowHResult (every caller
+  seen passes an empty string built from 0x7a7868). Describe 0x6134d0
+  formats with the CRT's sprintf into a 4 KB stack buffer: "Windows error
+  #%x (%s) occured at %s." with FormatMessageA's text minus its last two
+  characters, or "Windows error #%x occurred at %s." when FormatMessageA
+  fails for a facility-Win32 code. For any other facility the original
+  ignores FormatMessageA's result and reads the (then uninitialized)
+  text pointer.
+- ThrowWin32Error turns a GetLastError code into an HRESULT itself: 0
+  stays 0, otherwise (code & 0xffff) | 0x80070000. ThrowWin32Error,
+  ThrowHResult, ThrowTimeout and ThrowMMError share the message code of
+  ThrowOutOfMemory byte for byte ("<expression>, file <file>, line
+  <n>"); ThrowMCIError builds the same text from five strings.
+- CTimeout (0x18), CMMException and CMCIException (0x1c, code at +0x18).
+  CMMException::Describe: "Multimedia Error #<n> at <message>";
+  CMCIException::Describe: "MCI Error #<n> (<mciGetErrorStringA text>) at
+  <message>".
+- Every exception destructor without own members has one shape (15
+  copies: ~CException, ~CRunTimeError (0x5b93c0, far from Classes.cpp),
+  ~COutOfMemory, ~CProgrammingError, ~CAssertmentFailed, ~CTimeout,
+  ~CMMException, ~CMCIException, ~CStructuredException, the DirectX
+  exceptions, ~CDataError ...); ~CException's inlined split uses
+  _Grow + memcpy instead of assign, the same behaviour.
+
 ### Corrections of existing names (not in the TSV)
 
 **Done 2026-11-24:** 0x463100 is `Win32::CWin32WaitableBag_Win32_CWin32Waitable::WaitFor`
@@ -201,9 +231,11 @@ Verified in session 57 (src/s3re/game/framework/win32_cdaudio.cpp): the
 constructor, SetTimeFormatTMSF, Play, Stop, DoStop, GetTrackCount (and
 ~CMCIException / its deleting destructor). mciSendCommandA is GOG's
 _INMM.dll import (0x65536c), PostMessageA 0x6552f0. GetTrackCount treats
-MCIERR_UNSUPPORTED_FUNCTION (0x106) as "0 tracks" without a log. Left:
-Init 0x615520, Open, Close 0x615e20 and DoPlay (they need ThrowMCIError
-0x6114f0 / CMCIException 0x613fc0 first), the window procedure 0x615bd0.
+MCIERR_UNSUPPORTED_FUNCTION (0x106) as "0 tracks" without a log. Session
+58 added Open, Close, DoPlay and ~CCDAudio (the checks test only the low
+word of the MCIERROR; DoPlay's MCI_TO is left out for the last track, so
+it plays to the disc's end). Left: Init 0x615520 (catch handlers),
+CreateCallbackWindow 0x6157c0 and the window procedure 0x615bd0.
 
 Global instance at **0x7a7a00** (not in re/globals.csv yet).
 

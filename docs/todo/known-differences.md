@@ -54,6 +54,17 @@ LOGBOOK session entry).
   small CCampaignDialog / lobby getters (0x413b80, 0x413ba0, 0x413bf0)
   want their classes named first.
 
+- **Framework throwers and VERIFY wrappers (session 58,
+  wip/framework-errors):** ThrowWin32Error / ThrowHResult / ThrowTimeout /
+  ThrowMMError / ThrowMCIError leak their message while unwinding (no
+  exception frame, as ThrowOutOfMemory); CHResult::Describe of a
+  non-Win32 HRESULT whose FormatMessageA fails reads an uninitialized
+  pointer in the original (ours: null, text skipped). Still open in the
+  framework: the CRegistryKey members, CTimer Start/Stop, CThread::Start,
+  CMessageQueue::ProcessMessage and the other ThrowWin32Error callers in
+  0x5b0000..0x620000 (same VERIFY shape as win32_synchronize.cpp; the
+  ThrowLastError helper there fits them).
+
 ## Postponed by decision
 - **Network and lobby code** (CNetThread, Lobby::*, LobbyClient::*,
   DirectPlay, CLM* messages): skipped since 2026-11-09 (single player

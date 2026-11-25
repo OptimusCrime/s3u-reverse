@@ -25,6 +25,25 @@
 //   during GetTrackCount: %u") and gives 0, success the returned count.
 //   Without a device EAX = 0 (the device field).
 //
+// Session 58 (wip/framework-errors), with ThrowMCIError done:
+// Open (0x00615740): mciSendCommandA(0, MCI_OPEN (0x803), MCI_OPEN_TYPE |
+//   MCI_OPEN_SHAREABLE (0x2100), {callback = the window (+0xc), device 0,
+//   type "cdaudio", no element, no alias}); an error (its low word) goes to
+//   Win32::ThrowMCIError("error check", cdaudio.cpp, 83, error); then +8 =
+//   the device id from the block. EAX: the device id.
+// Close (0x00615e20): mciSendCommandA(device, MCI_CLOSE (0x804), 0, null);
+//   an error (low word) to ThrowMCIError(..., 155, error); +8 = 0. EAX:
+//   mciSendCommandA's result.
+// DoPlay (0x00615ee0): (from, to) ret 8, on the CD window's thread: with a
+//   device, mciSendCommandA(device, MCI_PLAY (0x806), flags, {callback =
+//   the window, from = from & 0xff, to = (to + 1) & 0xff}): MCI_NOTIFY with
+//   a window, MCI_FROM unless from is -1, MCI_TO when to is not -1 and less
+//   than GetTrackCount() (so the last track plays to the disc's end); an
+//   error is logged ("CD: Error during play: %u"). EAX: 0, the error, or
+//   the null device.
+// ~CCDAudio (0x00615500): vtable 0x65d944; Close when a device is open
+//   (EAX: Close's, or the null device).
+//
 // The parameter blocks' callback fields are uninitialized locals in the
 // original (MCI_NOTIFY is not set, so they are not read); ours are 0.
 
@@ -35,6 +54,10 @@
 #include "hooks.h"
 #include "test/callee_stub.h"
 #include "test/difftest.h"
+
+#include "msvc6/catch_match.h"
+
+#include <windows.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -67,6 +90,33 @@ constexpr std::uint32_t kStatusNumberOfTracks = 3;   // MCI_STATUS_NUMBER_OF_TRA
 constexpr std::uint32_t kUnsupportedFunction = 0x106;  // MCIERR_UNSUPPORTED_FUNCTION
 constexpr std::uint32_t kMessagePlay = 0x600;       // to the CD window: play (lParam: to << 16 | from)
 constexpr std::uint32_t kMessageStop = 0x601;
+constexpr std::uint32_t kMciOpen = 0x803;
+constexpr std::uint32_t kMciClose = 0x804;
+constexpr std::uint32_t kMciPlay = 0x806;
+constexpr std::uint32_t kOpenTypeShareable = 0x2100;  // MCI_OPEN_TYPE | MCI_OPEN_SHAREABLE
+constexpr std::uint32_t kMciNotify = 1;               // MCI_NOTIFY
+constexpr std::uint32_t kMciFrom = 4;                 // MCI_FROM
+constexpr std::uint32_t kMciTo = 8;                   // MCI_TO
+constexpr std::uint32_t kMciErrorMask = 0xFFFF;       // the error code part of an MCIERROR
+constexpr std::uint32_t kNoTrack = 0xFFFFFFFF;        // DoPlay's "from the start" / "to the end"
+constexpr std::uint32_t kTrackMask = 0xFF;            // MCI_MAKE_TMSF(track, 0, 0, 0)
+constexpr std::uint32_t kLineOpen = 83;               // the checks' lines in cdaudio.cpp
+constexpr std::uint32_t kLineClose = 155;
+constexpr std::uintptr_t kThrowMCIError = 0x006114f0;
+constexpr std::uintptr_t kGetTrackCount = 0x00615fc0;
+constexpr std::uintptr_t kClose = 0x00615e20;
+
+using ThrowMCIErrorFn = void(__fastcall*)(const char* expression, const char* file, std::uint32_t line,
+                                          std::uint32_t error);
+using CDCountFn = std::uint32_t(__fastcall*)(void* self, void* edx);
+
+// The MCI checks: an error (its low word) is thrown as CMCIException.
+void CheckMci(std::uint32_t error, std::uint32_t line) {
+    if ((error & kMciErrorMask) != 0) {
+        reinterpret_cast<ThrowMCIErrorFn>(kThrowMCIError)(texts::kErrorCheck.c_str(), texts::kCDAudioFile.c_str(),
+                                                          line, error);
+    }
+}
 
 CCDAudio* AsCD(void* self) {
     return static_cast<CCDAudio*>(self);
@@ -96,6 +146,10 @@ std::uint32_t __fastcall Win32_CCDAudio_Play(void* self, void* edx, std::uint32_
 std::uint32_t __fastcall Win32_CCDAudio_Stop(void* self, void* edx);
 std::uint32_t __fastcall Win32_CCDAudio_DoStop(void* self, void* edx);
 std::uint32_t __fastcall Win32_CCDAudio_GetTrackCount(void* self, void* edx);
+std::uint32_t __fastcall Win32_CCDAudio_Open(void* self, void* edx);
+std::uint32_t __fastcall Win32_CCDAudio_Close(void* self, void* edx);
+std::uint32_t __fastcall Win32_CCDAudio_DoPlay(void* self, void* edx, std::uint32_t from, std::uint32_t to);
+std::uint32_t __fastcall Win32_CCDAudio_Destroy(void* self, void* edx);
 
 S3RE_HOOK(0x006154c0, Win32_CCDAudio_Construct, CDThisFn, Original_Win32_CCDAudio_Construct, Win32_CCDAudio_Construct);
 
@@ -183,6 +237,69 @@ std::uint32_t __fastcall Win32_CCDAudio_GetTrackCount(void* self, void* /*edx*/)
     return parameters[1];
 }
 
+S3RE_HOOK(0x00615740, Win32_CCDAudio_Open, CDValueFn, Original_Win32_CCDAudio_Open, Win32_CCDAudio_Open);
+
+// Purpose: opens the CD audio device (on GOG: _INMM.dll's track files);
+// MCI notifications go to the hidden callback window.
+std::uint32_t __fastcall Win32_CCDAudio_Open(void* self, void* /*edx*/) {
+    CCDAudio* const cd = AsCD(self);
+    // MCI_OPEN_PARMS: callback, device id, device type, element, alias.
+    std::uint32_t parameters[5] = {reinterpret_cast<std::uint32_t>(cd->window), 0,
+                                   reinterpret_cast<std::uint32_t>(texts::kCDAudioDevice.c_str()), 0, 0};
+    const std::uint32_t error = SendCommand(0, kMciOpen, kOpenTypeShareable, parameters);
+    CheckMci(error, kLineOpen);
+    cd->device = parameters[1];
+    return parameters[1];
+}
+
+S3RE_HOOK(0x00615e20, Win32_CCDAudio_Close, CDValueFn, Original_Win32_CCDAudio_Close, Win32_CCDAudio_Close);
+
+// Purpose: closes the CD audio device.
+std::uint32_t __fastcall Win32_CCDAudio_Close(void* self, void* /*edx*/) {
+    const std::uint32_t result = SendCommand(AsCD(self)->device, kMciClose, 0, nullptr);
+    CheckMci(result, kLineClose);
+    AsCD(self)->device = 0;
+    return result;
+}
+
+S3RE_HOOK(0x00615ee0, Win32_CCDAudio_DoPlay, CDPlayFn, Original_Win32_CCDAudio_DoPlay, Win32_CCDAudio_DoPlay);
+
+// Purpose: plays tracks `from` to `to` (on the CD window's thread, posted by
+// Play); the window is told when the music ends.
+std::uint32_t __fastcall Win32_CCDAudio_DoPlay(void* self, void* /*edx*/, std::uint32_t from, std::uint32_t to) {
+    CCDAudio* const cd = AsCD(self);
+    if (cd->device == 0) {
+        return 0;
+    }
+    // MCI_PLAY_PARMS: callback, from, to.
+    std::uint32_t parameters[3] = {reinterpret_cast<std::uint32_t>(cd->window), from & kTrackMask,
+                                   (to + 1) & kTrackMask};
+    std::uint32_t flags = cd->window != nullptr ? kMciNotify : 0;
+    if (from != kNoTrack) {
+        flags |= kMciFrom;
+    }
+    if (to != kNoTrack && to < reinterpret_cast<CDCountFn>(kGetTrackCount)(self, nullptr)) {
+        flags |= kMciTo;
+    }
+    const std::uint32_t error = SendCommand(cd->device, kMciPlay, flags, parameters);
+    if (error != 0) {
+        return LogError(texts::kCDPlayError, error);
+    }
+    return 0;
+}
+
+S3RE_HOOK(0x00615500, Win32_CCDAudio_Destroy, CDValueFn, Original_Win32_CCDAudio_Destroy, Win32_CCDAudio_Destroy);
+
+// Purpose: destructor of the CD music player (closes the device).
+std::uint32_t __fastcall Win32_CCDAudio_Destroy(void* self, void* /*edx*/) {
+    CCDAudio* const cd = AsCD(self);
+    cd->vtable = vtables::kCCDAudio;
+    if (cd->device == 0) {
+        return 0;
+    }
+    return reinterpret_cast<CDCountFn>(kClose)(self, nullptr);
+}
+
 // ---------------------------------------------------------------------------
 // Tests: random objects; mciSendCommandA and PostMessageA replaced (their
 // import slots) by fakes that record the call (the parameter block's
@@ -203,16 +320,23 @@ std::uint32_t __stdcall FakeMciSendCommand(std::uint32_t device, std::uint32_t m
                                            void* parameters) {
     g_mci->calls.insert(g_mci->calls.end(), {0x3c1u, device, message, flags, parameters != nullptr ? 1u : 0u});
     if (parameters != nullptr) {
-        // The fields the original sets (time format; status item), not the
-        // uninitialized ones.
-        const auto* words = static_cast<const std::uint32_t*>(parameters);
-        g_mci->calls.push_back(message == kMciStatus ? words[2] : words[1]);
+        // The fields the original sets (time format; status item; the open
+        // and play blocks), not the uninitialized ones.
+        auto* words = static_cast<std::uint32_t*>(parameters);
+        if (message == kMciOpen) {
+            g_mci->calls.insert(g_mci->calls.end(), {words[0], words[1], words[2], words[3], words[4]});
+            words[1] = g_mci->rng.Chance(1, 4) ? g_mci->rng.Next32() : g_mci->rng.Below(8);  // the device id
+        } else if (message == kMciPlay) {
+            g_mci->calls.insert(g_mci->calls.end(), {words[0], words[1], words[2]});
+        } else {
+            g_mci->calls.push_back(message == kMciStatus ? words[2] : words[1]);
+        }
         if (message == kMciStatus) {
-            static_cast<std::uint32_t*>(parameters)[1] = g_mci->rng.Below(100);
+            words[1] = g_mci->rng.Below(100);
         }
     }
-    static const std::uint32_t kResults[] = {0, 0, 0, kUnsupportedFunction, 0x101, 0x113};
-    return g_mci->rng.Chance(1, 8) ? g_mci->rng.Next32() : kResults[g_mci->rng.Below(6)];
+    static const std::uint32_t kResults[] = {0, 0, 0, kUnsupportedFunction, 0x101, 0x113, 0x10000};
+    return g_mci->rng.Chance(1, 8) ? g_mci->rng.Next32() : kResults[g_mci->rng.Below(7)];
 }
 
 int __stdcall FakePostMessage(void* window, std::uint32_t message, std::uint32_t wParam, std::uint32_t lParam) {
@@ -227,13 +351,79 @@ struct Functions {
     CDValueFn stop;
     CDValueFn doStop;
     CDValueFn trackCount;
+    CDValueFn open;
+    CDValueFn close;
+    CDPlayFn doPlay;
+    CDValueFn destroy;
 };
+
+// A thrown game exception (ThrowMCIError): its vtable, code (+0x18) and
+// message text.
+struct Thrown {
+    bool threw = false;
+    std::uint32_t vtable = 0;
+    std::uint32_t code = 0;
+    std::vector<char> message;
+    bool operator==(const Thrown& o) const {
+        return threw == o.threw && vtable == o.vtable && code == o.code && message == o.message;
+    }
+};
+
+int ThrowFilter(const EXCEPTION_POINTERS* info, Thrown* out) {
+    const EXCEPTION_RECORD* record = info->ExceptionRecord;
+    if (record->ExceptionCode != 0xE06D7363 || record->NumberParameters < 3) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    out->threw = true;
+    void* const object = *reinterpret_cast<void* const*>(record->ExceptionInformation[1]);
+    if (object != nullptr) {
+        const auto* bytes = static_cast<const std::uint8_t*>(object);
+        std::memcpy(&out->vtable, bytes, 4);
+        std::memcpy(&out->code, bytes + 0x18, 4);
+        const char* text = nullptr;
+        std::uint32_t length = 0;
+        std::memcpy(&text, bytes + 0xc, 4);
+        std::memcpy(&length, bytes + 0x10, 4);
+        if (text != nullptr) {
+            out->message.assign(text, text + length);
+        }
+    }
+    msvc6::DeleteCaughtException(object);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+std::uint32_t CallOp(const Functions& f, std::uint32_t op, void* self, std::uint32_t from, std::uint32_t to) {
+    switch (op) {
+        case 0: return reinterpret_cast<std::uint32_t>(f.construct(self, nullptr)) == reinterpret_cast<std::uint32_t>(self);
+        case 1: return f.setTimeFormat(self, nullptr);
+        case 2: return f.play(self, nullptr, from, to);
+        case 3: return f.stop(self, nullptr);
+        case 4: return f.doStop(self, nullptr);
+        case 5: return f.trackCount(self, nullptr);
+        case 6: return f.open(self, nullptr);
+        case 7: return f.close(self, nullptr);
+        case 8: return f.doPlay(self, nullptr, from, to);
+        default: return f.destroy(self, nullptr);
+    }
+}
+
+// The call under SEH (no objects to unwind here).
+std::uint32_t Guarded(const Functions& f, std::uint32_t op, void* self, std::uint32_t from, std::uint32_t to,
+                      Thrown* thrown) {
+    std::uint32_t eax = 0;
+    __try {
+        eax = CallOp(f, op, self, from, to);
+    } __except (ThrowFilter(GetExceptionInformation(), thrown)) {
+    }
+    return eax;
+}
 
 struct Outcome {
     std::uint32_t eax;
     std::vector<std::uint32_t> calls;
     std::vector<DebugLogCall> logs;
     std::uint8_t object[0x20];
+    Thrown thrown;
 };
 
 Outcome RunOne(const Functions& f, std::uint32_t op, const std::uint8_t* initial, std::uint64_t seed,
@@ -249,14 +439,7 @@ Outcome RunOne(const Functions& f, std::uint32_t op, const std::uint8_t* initial
     test::PatchBytes(g_importPostMessageA.address(), &post, 4);
     SetDebugLogCapture(&out.logs);
     void* const self = out.object + 4;
-    switch (op) {
-        case 0: out.eax = reinterpret_cast<std::uint32_t>(f.construct(self, nullptr)) == reinterpret_cast<std::uint32_t>(self); break;
-        case 1: out.eax = f.setTimeFormat(self, nullptr); break;
-        case 2: out.eax = f.play(self, nullptr, from, to); break;
-        case 3: out.eax = f.stop(self, nullptr); break;
-        case 4: out.eax = f.doStop(self, nullptr); break;
-        default: out.eax = f.trackCount(self, nullptr); break;
-    }
+    out.eax = Guarded(f, op, self, from, to, &out.thrown);
     SetDebugLogCapture(nullptr);
     test::UnpatchBytes(g_importPostMessageA.address());
     test::UnpatchBytes(g_importMciSendCommandA.address());
@@ -268,7 +451,9 @@ Outcome RunOne(const Functions& f, std::uint32_t op, const std::uint8_t* initial
 void Compare(test::Context& ctx, const Functions& ours, int cases) {
     const Functions originals{Original_Win32_CCDAudio_Construct, Original_Win32_CCDAudio_SetTimeFormatTMSF,
                               Original_Win32_CCDAudio_Play,      Original_Win32_CCDAudio_Stop,
-                              Original_Win32_CCDAudio_DoStop,    Original_Win32_CCDAudio_GetTrackCount};
+                              Original_Win32_CCDAudio_DoStop,    Original_Win32_CCDAudio_GetTrackCount,
+                              Original_Win32_CCDAudio_Open,      Original_Win32_CCDAudio_Close,
+                              Original_Win32_CCDAudio_DoPlay,    Original_Win32_CCDAudio_Destroy};
     for (int i = 0; i < cases; ++i) {
         std::uint8_t initial[0x20];
         ctx.rng().Fill(initial, sizeof(initial));
@@ -278,16 +463,23 @@ void Compare(test::Context& ctx, const Functions& ours, int cases) {
         if (ctx.rng().Chance(1, 4)) {
             std::memset(initial + 4 + 0xc, 0, 4);  // no window
         }
-        const std::uint32_t op = ctx.rng().Below(6);
+        const std::uint32_t op = ctx.rng().Below(10);
         const std::uint64_t seed = ctx.rng().Next64();
-        const std::uint32_t from = ctx.rng().Next32(), to = ctx.rng().Next32();
+        // Track numbers (DoPlay compares `to` with the track count), -1, or anything.
+        auto track = [&]() {
+            return ctx.rng().Chance(1, 4) ? 0xFFFFFFFFu : ctx.rng().Chance(1, 2) ? ctx.rng().Below(110) : ctx.rng().Next32();
+        };
+        const std::uint32_t from = track(), to = track();
         const Outcome a = RunOne(originals, op, initial, seed, from, to);
         const Outcome b = RunOne(ours, op, initial, seed, from, to);
         // After a log, the original's EAX is what our DebugLog passthrough
         // leaves (the game's DebugLog is a bare ret: EAX = the error, as ours).
-        const bool logged = (op == 1 || op == 4) && !a.logs.empty();
-        if (!S3RE_EXPECT_EQ(logged ? 0 : a.eax, logged ? 0 : b.eax) ||
-            !S3RE_EXPECT_EQ(logged ? a.logs[0].args[0] : 0, logged ? b.eax : 0) || !S3RE_EXPECT(a.calls == b.calls) || !S3RE_EXPECT(a.logs == b.logs) ||
+        const bool logged = (op == 1 || op == 4 || op == 8) && !a.logs.empty() &&
+                            (op != 8 || a.logs.back().format == texts::kCDPlayError.address());
+        // A throw leaves EAX undefined.
+        const bool threw = a.thrown.threw || b.thrown.threw;
+        if (!S3RE_EXPECT(a.thrown == b.thrown) || !S3RE_EXPECT_EQ(logged || threw ? 0 : a.eax, logged || threw ? 0 : b.eax) ||
+            !S3RE_EXPECT_EQ(logged ? a.logs.back().args[0] : 0, logged ? b.eax : 0) || !S3RE_EXPECT(a.calls == b.calls) || !S3RE_EXPECT(a.logs == b.logs) ||
             !S3RE_EXPECT_MEM_EQ(a.object, b.object, sizeof(a.object))) {
             ctx.Fail(__FILE__, __LINE__, "  case %d: op %u", i, op);
             return;
@@ -310,22 +502,36 @@ std::uint32_t __fastcall WrongTrackCount(void* self, void*) {
     return parameters[1];
 }
 
+// Wrong: the last track gets MCI_TO too.
+std::uint32_t __fastcall WrongDoPlay(void* self, void* edx, std::uint32_t from, std::uint32_t to) {
+    return Win32_CCDAudio_DoPlay(self, edx, from, to == 0xFFFFFFFF ? to : to + 1);
+}
+
 }  // namespace
 
 S3RE_TEST(CDAudio_MatchOriginal) {
     Compare(ctx,
             {&Win32_CCDAudio_Construct, &Win32_CCDAudio_SetTimeFormatTMSF, &Win32_CCDAudio_Play, &Win32_CCDAudio_Stop,
-             &Win32_CCDAudio_DoStop, &Win32_CCDAudio_GetTrackCount},
-            5000);
+             &Win32_CCDAudio_DoStop, &Win32_CCDAudio_GetTrackCount, &Win32_CCDAudio_Open, &Win32_CCDAudio_Close,
+             &Win32_CCDAudio_DoPlay, &Win32_CCDAudio_Destroy},
+            10000);
 }
 
 S3RE_TEST(CDAudio_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     Compare(probe,
             {&Win32_CCDAudio_Construct, &Win32_CCDAudio_SetTimeFormatTMSF, &Win32_CCDAudio_Play, &Win32_CCDAudio_Stop,
-             &Win32_CCDAudio_DoStop, &WrongTrackCount},
+             &Win32_CCDAudio_DoStop, &WrongTrackCount, &Win32_CCDAudio_Open, &Win32_CCDAudio_Close,
+             &Win32_CCDAudio_DoPlay, &Win32_CCDAudio_Destroy},
             2000);
     S3RE_EXPECT(probe.failures() > 0);
+    test::Context probe2(ctx.name(), 2, /*quiet=*/true);
+    Compare(probe2,
+            {&Win32_CCDAudio_Construct, &Win32_CCDAudio_SetTimeFormatTMSF, &Win32_CCDAudio_Play, &Win32_CCDAudio_Stop,
+             &Win32_CCDAudio_DoStop, &Win32_CCDAudio_GetTrackCount, &Win32_CCDAudio_Open, &Win32_CCDAudio_Close,
+             &WrongDoPlay, &Win32_CCDAudio_Destroy},
+            2000);
+    S3RE_EXPECT(probe2.failures() > 0);
 }
 
 }  // namespace s3re::game

@@ -956,3 +956,191 @@ SPECS += [
     cd_spec("Win32_CCDAudio_DoStop", 0x00615f90, [], ()),
     cd_spec("Win32_CCDAudio_GetTrackCount", 0x00615fc0, [], ((8, 4),)),
 ]
+
+
+# -- session 58 (wip/framework-errors): CHResult, CTimeout, CMMException,
+# CMCIException, their throwers and the message destructors
+# (win32_throwers.cpp) ----------------------------------------------------
+#
+# Constructors build the object at world offset 0 from the message in
+# STRING_OTHER and (CHResult) the location in STRING_OTHER + 0x10
+# (member_strings); the Describe functions read an object at world 0 (its
+# message at +8 from string_fields, the code at +0x18) and write the result
+# into STRING_RESULT. FormatMessageA, LocalFree and mciGetErrorStringA are
+# API probes (emu.py). The throwers end in _CxxThrowException (compared).
+
+THROWER_CODES = (0, 1, 2, 5, 0x57, 0x106, 0x113, 0x101, 0x80070002, 0x80070005, 0x8007000E, 0x80004005,
+                 0x88780078, 0x00070005, 0x1FFF0000, 0x80060005)
+
+
+def thrower_code(rng, pool) -> int:
+    roll = rng.random()
+    if roll < 0.25:
+        return rng.getrandbits(32)
+    if roll < 0.5:
+        return (rng.getrandbits(32) & 0xE000FFFF) | 0x70000  # other Win32 HRESULTs
+    return rng.choice(THROWER_CODES)
+
+
+def code_exception(rng, pool, args):
+    """An exception object at world 0: its message (+8) and code (+0x18)."""
+    fields, _ = string_fields(rng, 0x08, STRING_SELF_BUFFER)
+    return fields + [(0x18, thrower_code(rng, pool), 4)]
+
+
+def message_or_location(rng, pool) -> int:
+    return STRING_OTHER_PTR + 0x10 if rng.random() < 0.1 else STRING_OTHER_PTR
+
+
+THROWER_STRINGS = member_strings((), (0x0, 0x10))
+
+
+def message_destructor_spec(name, address):
+    # Dead: start + 0x9d is the _Eos after erase(0, npos) (the new length is
+    # 0, for which _Grow returns false); start + 0xbf decrements the count of
+    # a buffer the split has just made unshared (as ~CDirectSoundException).
+    return Spec(name, address, "thiscall", [], eax_mask=0, presets=member_strings((0x08,)),
+                exempt_blocks=(address + 0x9d, address + 0xbf))
+
+
+SPECS += [
+    # Dead: 0x6132ed is the _Eos after erase(0, npos) of the description
+    # temporary (the new length is 0, for which _Grow returns false).
+    Spec("Win32_CHResult_Construct", 0x00613220, "thiscall",
+         [message_or_location, thrower_code, one_of(STRING_OTHER_PTR + 0x10), mostly_derived],
+         presets=THROWER_STRINGS, exempt_blocks=(0x006132ed,)),
+    # ignore_bytes: the result's allocator byte is an uninitialized local of
+    # the original (never read). Dead: 0x6137e5 is the _Eos after erase(0,
+    # npos) of the system text (as above).
+    Spec("Win32_CHResult_Describe", 0x006134d0, "thiscall", [one_of(STRING_RESULT_PTR)],
+         presets=code_exception, ignore_bytes=(STRING_RESULT,), exempt_blocks=(0x006137e5,)),
+    # Dead (both strings): the _Eos after erase(0, npos) (0x6133dd,
+    # 0x61346f) and the count decrement after the split (0x6133ff, 0x613491).
+    Spec("Win32_CHResult_Destroy", 0x00613340, "thiscall", [], eax_mask=0, presets=member_strings((0x08, 0x1c)),
+         exempt_blocks=(0x006133dd, 0x006133ff, 0x0061346f, 0x00613491)),
+    Spec("Win32_ThrowWin32Error", 0x00610de0, "fastcall",
+         [text_or_null, text_or_null, anything, thrower_code, one_of(STRING_OTHER_PTR + 0x10)],
+         presets=THROWER_STRINGS, new_fails=0.2, new_fails_size=0x2c),
+    Spec("Win32_ThrowHResult", 0x00611050, "fastcall",
+         [text_or_null, text_or_null, anything, thrower_code, one_of(STRING_OTHER_PTR + 0x10)],
+         presets=THROWER_STRINGS, new_fails=0.2, new_fails_size=0x2c),
+    Spec("Win32_CTimeout_Construct", 0x00615120, "thiscall", [message_ptr, mostly_derived], presets=string_world),
+    Spec("Win32_ThrowTimeout", 0x00610ba0, "fastcall", [text_or_null, text_or_null, anything],
+         presets=string_world, new_fails=0.2, new_fails_size=0x18),
+    # Dead (both constructors): the inlined split of the description
+    # temporary (0x613abb..0x613b0f, 0x61403b..0x61408f: Describe's result
+    # never shares its buffer, its count is 0), the _Eos after erase(0, npos)
+    # (0x613b47, 0x6140c7) and the count decrement (0x613b68 / 0x613b6c,
+    # 0x6140e8 / 0x6140ec).
+    Spec("Win32_CMMException_Construct", 0x00613a40, "thiscall", [message_ptr, thrower_code, mostly_derived],
+         presets=string_world,
+         exempt_blocks=(0x00613abb, 0x00613ac0, 0x00613aef, 0x00613b0f, 0x00613b47, 0x00613b68, 0x00613b6c)),
+    Spec("Win32_CMMException_Describe", 0x00613cd0, "thiscall", [one_of(STRING_RESULT_PTR)],
+         presets=code_exception, ignore_bytes=(STRING_RESULT,)),
+    Spec("Win32_ThrowMMError", 0x006112a0, "fastcall", [text_or_null, text_or_null, anything, thrower_code],
+         presets=string_world, new_fails=0.2, new_fails_size=0x1c),
+    Spec("Win32_CMCIException_Construct", 0x00613fc0, "thiscall", [message_ptr, thrower_code, mostly_derived],
+         presets=string_world,
+         exempt_blocks=(0x0061403b, 0x00614040, 0x0061406f, 0x0061408f, 0x006140c7, 0x006140e8, 0x006140ec)),
+    Spec("Win32_CMCIException_Describe", 0x00614250, "thiscall", [one_of(STRING_RESULT_PTR)],
+         presets=code_exception, ignore_bytes=(STRING_RESULT,)),
+    Spec("Win32_ThrowMCIError", 0x006114f0, "fastcall", [text_or_null, text_or_null, anything, thrower_code],
+         presets=string_world, new_fails=0.2, new_fails_size=0x1c),
+    message_destructor_spec("Win32_CRunTimeError_Destroy", 0x005b93c0),
+    message_destructor_spec("Win32_COutOfMemory_Destroy", 0x00612790),
+    message_destructor_spec("Win32_CProgrammingError_Destroy", 0x00612c80),
+    message_destructor_spec("Win32_CAssertmentFailed_Destroy", 0x00612d80),
+    message_destructor_spec("Win32_CTimeout_Destroy", 0x00615170),
+    message_destructor_spec("Win32_CMMException_Destroy", 0x00613bd0),
+    message_destructor_spec("Win32_CStructuredException_Destroy", 0x0060e490),
+    message_destructor_spec("DirectX_CDirectInputException_Destroy", 0x005b94c0),
+    message_destructor_spec("DirectX_CDirectDrawException_Destroy", 0x005be3e0),
+    message_destructor_spec("DirectX_CDirectPlayException_Destroy", 0x005c0010),
+    message_destructor_spec("Lobby_CDataError_Destroy", 0x00600400),
+    # ~CException splits with _Grow + memcpy instead of assign (other block
+    # addresses). Dead: the _Eos after erase (0x6108f7) and the count
+    # decrement after the split (0x610919), as above.
+    Spec("Win32_CException_Destroy", 0x00610830, "thiscall", [], eax_mask=0, presets=member_strings((0x08,)),
+         exempt_blocks=(0x006108f7, 0x00610919)),
+]
+
+
+# -- session 58 (wip/framework-errors): the synchronization objects, threads
+# and windows (win32_synchronize.cpp) --------------------------------------
+#
+# The object at world 0: handle at +8 (the CWin32Handle at +4), HWND at +4;
+# a CMessagedThread's virtual-base table at SYNC_VBTABLE (entry 1 = the
+# offset of its CThread part, whose thread id is at +0x14). The Windows
+# calls are API probes (emu.py); a failed VERIFY runs the real
+# ThrowWin32Error / ThrowTimeout and ends in _CxxThrowException. Their
+# names are null or STRING_TEXT; 0x7a7868 (the location's "") is sometimes
+# not empty (empty_text).
+SYNC_VBTABLE = SCRATCH + 20 * SCRATCH_SLOT_BYTES
+
+
+def sync_object(rng, pool, args):
+    offset = rng.choice([0x10, 0x20, 0x24, 0x34])
+    return [(0x04, rng.choice([0, 1, rng.getrandbits(32)]), 4), (0x08, rng.getrandbits(32), 4),
+            (0x00, WORLD_BASE + SYNC_VBTABLE, 4), (SYNC_VBTABLE + 4, offset, 4),
+            (offset + 0x14, rng.getrandbits(32), 4)]
+
+
+def sync_name(rng, pool) -> int:
+    return rng.choice([0, STRING_TEXT_PTR])
+
+
+def sync_world(rng, pool, args):
+    """sync_object and a name text at STRING_TEXT."""
+    text = [(STRING_TEXT + i, rng.randint(1, 255), 1) for i in range(rng.randrange(0x20))]
+    return sync_object(rng, pool, args) + text + [(STRING_TEXT + len(text), 0, 1)]
+
+
+def sync_spec(name, address, args, exempt=()):
+    # Dead (exempt): the first block is the free of the location's first
+    # temporary, whose buffer (when 0x7a7868 is not empty) is always shared
+    # with the location by then (count >= 1); the others are the code after
+    # the ThrowWin32Error / ThrowTimeout call, which destroys the location
+    # as if the throw returned.
+    return Spec(name, address, "thiscall", args, presets=sync_world, globals=empty_text, exempt_blocks=exempt)
+
+
+SPECS += [
+    sync_spec("Win32_CEvent_Set", 0x0042cf80, [],
+              exempt=(0x42d076, 0x42d0cd, 0x42d0e4, 0x42d0eb, 0x42d0f0, 0x42d118, 0x42d120, 0x42d122, 0x42d126, 0x42d14c, 0x42d158, 0x42d15c, 0x42d161, 0x42d16b, 0x42d16f, 0x42d185)),
+    sync_spec("Win32_CEvent_Reset", 0x00523110, [],
+              exempt=(0x523206, 0x52325d, 0x523274, 0x52327b, 0x523280, 0x5232a8, 0x5232b0, 0x5232b2, 0x5232b6, 0x5232dc, 0x5232e8, 0x5232ec, 0x5232f1, 0x5232fb, 0x5232ff, 0x523315)),
+    sync_spec("Win32_CEvent_Pulse", 0x0047fc80, [],
+              exempt=(0x47fd71, 0x47fdc8, 0x47fddf, 0x47fde6, 0x47fdeb, 0x47fe13, 0x47fe1b, 0x47fe1d, 0x47fe21, 0x47fe47, 0x47fe53, 0x47fe57, 0x47fe5c, 0x47fe66, 0x47fe6a, 0x47fe80)),
+    sync_spec("Win32_CSemaphore_Release", 0x0053e830, [anything],
+              exempt=(0x53e92d, 0x53e984, 0x53e99b, 0x53e9a2, 0x53e9a7, 0x53e9cf, 0x53e9d7, 0x53e9d9, 0x53e9dd, 0x53ea03, 0x53ea0f, 0x53ea13, 0x53ea18, 0x53ea22, 0x53ea26, 0x53ea3e)),
+    sync_spec("Win32_CEvent_Create", 0x0060c530, [anything, anything, anything, sync_name],
+              exempt=(0x60c63e, 0x60c695, 0x60c6ac, 0x60c6b3, 0x60c6b8, 0x60c6e0, 0x60c6e8, 0x60c6ea, 0x60c6ee, 0x60c714, 0x60c720, 0x60c724, 0x60c729, 0x60c733, 0x60c737, 0x60c73d)),
+    sync_spec("Win32_CSemaphore_Create", 0x0060c7a0, [anything, anything, anything, sync_name],
+              exempt=(0x60c8ae, 0x60c905, 0x60c91c, 0x60c923, 0x60c928, 0x60c950, 0x60c958, 0x60c95a, 0x60c95e, 0x60c984, 0x60c990, 0x60c994, 0x60c999, 0x60c9a3, 0x60c9a7, 0x60c9ad)),
+    sync_spec("Win32_CMutex_Create", 0x0060ca30, [anything, anything, sync_name],
+              exempt=(0x60cb3a, 0x60cb91, 0x60cba8, 0x60cbaf, 0x60cbb4, 0x60cbdc, 0x60cbe4, 0x60cbe6, 0x60cbea, 0x60cc10, 0x60cc1c, 0x60cc20, 0x60cc25, 0x60cc2f, 0x60cc33, 0x60cc39)),
+    sync_spec("Win32_CWin32Waitable_Wait", 0x0060c060, [anything, lambda rng, pool: rng.choice([0, 1, 0x100, 0x101])],
+              exempt=(0x60c1a3, 0x60c1f3, 0x60c20a, 0x60c211, 0x60c216, 0x60c23e, 0x60c246, 0x60c248, 0x60c24c, 0x60c272, 0x60c27e, 0x60c282, 0x60c287, 0x60c291, 0x60c295, 0x60c29b)),
+    sync_spec("Win32_CThread_SetPriority", 0x0060e9d0, [anything],
+              exempt=(0x60eacb, 0x60eb22, 0x60eb39, 0x60eb40, 0x60eb45, 0x60eb6d, 0x60eb75, 0x60eb77, 0x60eb7b, 0x60eba1, 0x60ebad, 0x60ebb3, 0x60ebb8, 0x60ebc2, 0x60ebc6, 0x60ebde)),
+    sync_spec("Win32_CMessagedThread_PostThreadMessage", 0x0060f480, [anything, anything, anything],
+              exempt=(0x60f59d, 0x60f5f4, 0x60f5fb, 0x60f600, 0x60f62a, 0x60f633, 0x60f635, 0x60f639, 0x60f65f, 0x60f66b, 0x60f671, 0x60f675, 0x60f67f, 0x60f683, 0x60f689)),
+    sync_spec("Win32_CWindowBase_PostMessage", 0x0060f9b0, [anything, anything, anything],
+              exempt=(0x60fab6, 0x60fb0d, 0x60fb24, 0x60fb2b, 0x60fb30, 0x60fb58, 0x60fb60, 0x60fb62, 0x60fb66, 0x60fb8c, 0x60fb98, 0x60fb9c, 0x60fba1, 0x60fbab, 0x60fbaf, 0x60fbc7)),
+    sync_spec("Win32_CWindowBase_Destroy", 0x0060fbf0, [],
+              exempt=(0x60fced, 0x60fd44, 0x60fd5a, 0x60fd61, 0x60fd66, 0x60fd92, 0x60fd9a, 0x60fd9c, 0x60fda0, 0x60fdc6, 0x60fdd2, 0x60fdda, 0x60fde0, 0x60fdea, 0x60fdee, 0x60fe08, 0x60fe11)),
+]
+
+
+# -- session 58: CCDAudio Open, Close, DoPlay, ~CCDAudio (win32_cdaudio.cpp).
+# mciSendCommandA is the emu.py API probe here (the import slot is left
+# alone; it records the parameter blocks by message), so a failed check
+# runs the real ThrowMCIError and ends in _CxxThrowException.
+SPECS += [
+    Spec("Win32_CCDAudio_Open", 0x00615740, "thiscall", [], presets=cd_world),
+    Spec("Win32_CCDAudio_Close", 0x00615e20, "thiscall", [], presets=cd_world),
+    Spec("Win32_CCDAudio_DoPlay", 0x00615ee0, "thiscall",
+         [lambda rng, pool: rng.choice([0xFFFFFFFF, 1, 5, 99, rng.getrandbits(32)]),
+          lambda rng, pool: rng.choice([0xFFFFFFFF, 0, 3, 50, 126, 127, rng.getrandbits(32)])], presets=cd_world),
+    Spec("Win32_CCDAudio_Destroy", 0x00615500, "thiscall", [], presets=cd_world),
+]

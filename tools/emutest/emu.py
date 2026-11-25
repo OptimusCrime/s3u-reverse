@@ -361,6 +361,89 @@ def _api_get_proc_address(machine, uc, args):
                                                                  _api_text(machine, args[1]))
 
 
+# FormatMessageA's text (session 58): world memory below specs.SCRATCH.
+FORMAT_MESSAGE_TEXT = WORLD_BASE + 0x01F80000
+
+
+def _api_text_bytes(h, length):
+    """`length` non-zero bytes fixed by the hash `h`."""
+    return bytes((_mix(h + i) & 0xFF) | 1 for i in range(length))
+
+
+def _api_format_message(machine, uc, args):
+    """FormatMessageA(flags, source, id, language, buffer, size, arguments)
+    with FORMAT_MESSAGE_ALLOCATE_BUFFER: *buffer = FORMAT_MESSAGE_TEXT, a
+    text of 0..39 bytes (mostly ending in CR LF; sometimes 0 or 1 bytes),
+    written also when the call fails (returns 0 in about one call in four;
+    otherwise the length)."""
+    h = _api_hash(machine, 0xF0000000)
+    length = (h >> 8) % 2 if (h >> 4) % 6 == 0 else (h >> 8) % 40
+    text = bytearray(_api_text_bytes(h, length))
+    if length >= 2 and (h >> 40) & 3:
+        text[-2:] = b"\r\n"
+    machine.guest_write(FORMAT_MESSAGE_TEXT, bytes(text) + b"\0")
+    machine.guest_write(args[4], struct.pack("<I", FORMAT_MESSAGE_TEXT))
+    record = ("FormatMessageA", args[0], args[1], args[2], args[3], args[5], args[6])
+    return (0 if _api_fails(h) else length), record
+
+
+def _api_local_free(machine, uc, args):
+    return 0, ("LocalFree", args[0])
+
+
+def _api_mci_get_error_string(machine, uc, args):
+    """mciGetErrorStringA(error, text, size): records the buffer's first and
+    last four bytes (as the caller prepared it), then mostly writes a text
+    of 0..49 bytes; returns 0 or 1."""
+    h = _api_hash(machine, 0x3C000000)
+    error, text, size = args
+    record = ("mciGetErrorStringA", error, size, machine.guest_read(text, 4), machine.guest_read(text + size - 4, 4))
+    if (h >> 4) & 3:
+        machine.guest_write(text, _api_text_bytes(h, (h >> 8) % 50) + b"\0")
+    return (h >> 12) & 1, record
+
+
+def _api_success(name, salt, texts=()):
+    """A Windows call that returns success (1, or a random non-zero value:
+    a handle, a count) or 0 (failure, about one call in four); records its
+    arguments (those in `texts` by their C text)."""
+    def handler(machine, uc, args):
+        h = _api_hash(machine, salt)
+        record = tuple(_api_text(machine, a) if i in texts else a for i, a in enumerate(args))
+        return (0 if _api_fails(h) else (1 if h & 0x10 else _api_value(h) | 1)), (name, *record)
+    return handler
+
+
+def _api_mci_send_command(machine, uc, args):
+    """mciSendCommandA(device, message, flags, parameters) (session 58):
+    records the parameter fields the callers set (MCI_OPEN 0x803: all five,
+    then writes a device id; MCI_PLAY 0x806: callback, from, to;
+    MCI_STATUS 0x814: the item, then writes the result), returns 0 or an
+    MCI error."""
+    h = _api_hash(machine, 0x3C100000)
+    device, message, flags, block = args
+    fields = ()
+    if block:
+        if message == 0x803:
+            fields = struct.unpack("<5I", machine.guest_read(block, 20))
+            machine.guest_write(block + 4, struct.pack("<I", (h >> 20) & 7 if h & 0x100 else (h >> 24)))
+        elif message == 0x806:
+            fields = struct.unpack("<3I", machine.guest_read(block, 12))
+        elif message == 0x814:
+            fields = struct.unpack("<I", machine.guest_read(block + 8, 4))
+            machine.guest_write(block + 4, struct.pack("<I", (h >> 12) & 0x7F))
+    result = (0, 0, 0x106, 0x101, 0x10000, (h >> 8) & 0xFFFFFFFF)[(h >> 4) % 6]
+    return result, ("mciSendCommandA", device, message, flags, block != 0, *fields)
+
+
+def _api_wait_for_single_object(machine, uc, args):
+    """WaitForSingleObject: WAIT_OBJECT_0, WAIT_TIMEOUT, WAIT_ABANDONED,
+    WAIT_FAILED, or any value."""
+    h = _api_hash(machine, 0x3A170000)
+    choices = (0, 0, 0x102, 0x102, 0x80, 0xFFFFFFFF, 1, (h >> 8) & 0xFFFFFFFF)
+    return choices[(h >> 4) & 7], ("WaitForSingleObject", *args)
+
+
 # name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
 # record holds what the call saw (rectangle contents, not pointers, which
 # differ between the original's and our stack frames).
@@ -393,6 +476,22 @@ API_HANDLERS = {
     "FindClose": (1, _api_find_close),
     "LoadLibraryA": (1, _api_load_library),
     "GetProcAddress": (2, _api_get_proc_address),
+    "FormatMessageA": (7, _api_format_message),
+    "LocalFree": (1, _api_local_free),
+    "mciGetErrorStringA": (3, _api_mci_get_error_string),
+    "SetEvent": (1, _api_success("SetEvent", 0x5E000001)),
+    "ResetEvent": (1, _api_success("ResetEvent", 0x5E000002)),
+    "PulseEvent": (1, _api_success("PulseEvent", 0x5E000003)),
+    "ReleaseSemaphore": (3, _api_success("ReleaseSemaphore", 0x5E000004)),
+    "CreateEventA": (4, _api_success("CreateEventA", 0x5E000005, texts=(3,))),
+    "CreateSemaphoreA": (4, _api_success("CreateSemaphoreA", 0x5E000006, texts=(3,))),
+    "CreateMutexA": (3, _api_success("CreateMutexA", 0x5E000007, texts=(2,))),
+    "SetThreadPriority": (2, _api_success("SetThreadPriority", 0x5E000008)),
+    "PostThreadMessageA": (4, _api_success("PostThreadMessageA", 0x5E000009)),
+    "DestroyWindow": (1, _api_success("DestroyWindow", 0x5E00000A)),
+    "PostMessageA": (4, _api_success("PostMessageA", 0x5E00000B)),
+    "WaitForSingleObject": (2, _api_wait_for_single_object),
+    "mciSendCommandA": (4, _api_mci_send_command),
 }
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,
