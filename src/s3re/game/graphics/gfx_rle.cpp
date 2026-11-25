@@ -50,6 +50,8 @@
 // The dither masks: g_ditherMasks (0x7a2b58), 8 rows of 16 bytes.
 
 #include "game/globals.h"
+#include "game/graphics/gfx_layout.h"
+#include "game/graphics/gfx_test_sprites.h"
 #include "game/tables.h"
 #include "hooks.h"
 #include "test/difftest.h"
@@ -64,33 +66,9 @@
 
 namespace s3re::game {
 
-namespace gfx_rle {
 
-#pragma pack(push, 1)
-// DirectDraw's DDSURFACEDESC as the blitters use it.
-struct SurfaceDesc {
-    std::uint8_t unk00[0x10];
-    std::int32_t pitch;       // +0x10 lPitch, bytes per row
-    std::uint8_t unk14[0x10];
-    std::uint32_t surface;    // +0x24 lpSurface
-    std::uint8_t unk28[0x6c - 0x28];
-};
-static_assert(offsetof(SurfaceDesc, pitch) == 0x10);
-static_assert(offsetof(SurfaceDesc, surface) == 0x24);
-static_assert(sizeof(SurfaceDesc) == 0x6c);
-
-struct ClipRect {
-    std::int32_t left;
-    std::int32_t top;
-    std::int32_t right;
-    std::int32_t bottom;
-};
-#pragma pack(pop)
-
-}  // namespace gfx_rle
-
-using gfx_rle::ClipRect;
-using gfx_rle::SurfaceDesc;
+using gfx::ClipRect;
+using gfx::SurfaceDesc;
 
 namespace {
 
@@ -664,118 +642,12 @@ void __fastcall ShadowSkipRows(const SurfaceDesc* desc, std::int32_t rowsA, std:
 
 namespace {
 
+using gfx_test::GfxSprites;
+using gfx_test::LoadGfxSprites;
+using gfx_test::MakeRle;
+
 std::uint32_t Address(const void* p) {
     return reinterpret_cast<std::uint32_t>(p);
-}
-
-// A synthetic RLE sprite: rows of runs within width w.
-std::vector<std::uint8_t> MakeRle(test::Rng& rng, std::uint32_t width, std::uint32_t height, std::uint32_t pixelBytes) {
-    std::vector<std::uint8_t> data;
-    for (std::uint32_t row = 0; row < height; ++row) {
-        std::uint32_t x = 0;
-        do {
-            const std::uint32_t skip = rng.Below(width - x + 1) & kSkipMask;
-            x += skip;
-            const std::uint32_t count = x < width ? rng.Below(width - x + 1) : 0;
-            x += count;
-            const bool last = x >= width || rng.Chance(1, 4);
-            data.push_back(static_cast<std::uint8_t>(count));
-            data.push_back(static_cast<std::uint8_t>(skip | (last ? kLastRun : 0)));
-            for (std::uint32_t i = 0; i < count * pixelBytes; ++i) {
-                data.push_back(static_cast<std::uint8_t>(rng.Next32()));
-            }
-            if (last) {
-                break;
-            }
-        } while (true);
-    }
-    return data;
-}
-
-// --- the GFX files -----------------------------------------------------------
-
-struct MappedFile {
-    HANDLE file = INVALID_HANDLE_VALUE;
-    HANDLE mapping = nullptr;
-    const std::uint8_t* view = nullptr;
-    std::uint32_t size = 0;
-};
-
-// Every image of the three sprite-list tables (header +0x40, +0x44, +0x48).
-struct GfxSprites {
-    std::vector<MappedFile> files;
-    std::vector<std::uint32_t> images[3];  // 16-bit, colour-indexed, shadow
-};
-
-std::string GfxDirectory() {
-    char path[MAX_PATH] = {};
-    GetModuleFileNameA(nullptr, path, MAX_PATH);
-    std::string dir(path);
-    dir = dir.substr(0, dir.find_last_of("\\/") + 1);
-    return dir + "GFX\\";
-}
-
-constexpr std::uint32_t kGfxMagic = 0x00041304;  // raw-ok: the file header magic, not an offset
-constexpr std::uint32_t kSpriteHeaderSize = 0x0c;
-
-void CollectList(const MappedFile& file, std::uint32_t tableOffset, std::vector<std::uint32_t>& out) {
-    if (tableOffset == 0 || tableOffset + 8 > file.size) {
-        return;
-    }
-    const std::uint8_t* table = file.view + tableOffset;
-    const std::uint16_t count = *reinterpret_cast<const std::uint16_t*>(table + 6);
-    for (std::uint32_t i = 0; i < count; ++i) {
-        const std::uint32_t listOffset = reinterpret_cast<const std::uint32_t*>(table + 8)[i];
-        if (listOffset == 0 || listOffset + 8 > file.size) {
-            continue;
-        }
-        const std::uint8_t* list = file.view + listOffset;
-        for (std::uint32_t k = 0; k < list[7]; ++k) {
-            const std::uint32_t image = listOffset + reinterpret_cast<const std::uint32_t*>(list + 8)[k];
-            if (image + kSpriteHeaderSize < file.size &&
-                *reinterpret_cast<const std::uint32_t*>(file.view + image) == kSpriteHeaderSize) {
-                out.push_back(Address(file.view + image));
-            }
-        }
-    }
-}
-
-const GfxSprites& LoadGfxSprites() {
-    static GfxSprites sprites;
-    static bool loaded = false;
-    if (loaded) {
-        return sprites;
-    }
-    loaded = true;
-    const std::string dir = GfxDirectory();
-    WIN32_FIND_DATAA found;
-    HANDLE search = FindFirstFileA((dir + "siedler3_??.f8007e01f.dat").c_str(), &found);
-    if (search == INVALID_HANDLE_VALUE) {
-        return sprites;
-    }
-    do {
-        MappedFile file;
-        file.file = CreateFileA((dir + found.cFileName).c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-                                OPEN_EXISTING, 0, nullptr);
-        if (file.file == INVALID_HANDLE_VALUE) {
-            continue;
-        }
-        file.size = GetFileSize(file.file, nullptr);
-        file.mapping = CreateFileMappingA(file.file, nullptr, PAGE_READONLY, 0, 0, nullptr);
-        file.view = file.mapping ? static_cast<const std::uint8_t*>(MapViewOfFile(file.mapping, FILE_MAP_READ, 0, 0, 0))
-                                 : nullptr;
-        if (file.view == nullptr || file.size < 0x54 ||
-            *reinterpret_cast<const std::uint32_t*>(file.view) != kGfxMagic) {
-            continue;  // e.g. siedler3_18, which is an executable
-        }
-        const auto* header = reinterpret_cast<const std::uint32_t*>(file.view);
-        CollectList(file, header[0x40 / 4], sprites.images[0]);
-        CollectList(file, header[0x44 / 4], sprites.images[1]);
-        CollectList(file, header[0x48 / 4], sprites.images[2]);
-        sprites.files.push_back(file);
-    } while (FindNextFileA(search, &found));
-    FindClose(search);
-    return sprites;
 }
 
 // --- surfaces ------------------------------------------------------------------

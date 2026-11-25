@@ -641,3 +641,170 @@ SPECS += [
     Spec("ColorIndexedSkipRows", 0x005fc810, "fastcall", _color_skip_args, eax_mask=0, presets=_color_skip_presets),
     Spec("ShadowSkipRows", 0x005fd040, "fastcall", _shadow_skip_args, eax_mask=0, presets=_shadow_skip_presets),
 ]
+
+# -- session 55 (gfx): Draw methods, colour-indexed and shadow blitters ------
+# (gfx_draw.cpp). Cases are built as a whole like blit_case: a synthetic
+# sprite, a clip rectangle and a position whose classification picks the
+# blitter under test (the Draw specs take any of them). Colour palettes
+# are lazily random world memory; the shadow span is the original dither
+# or halve span (0x7e8e20).
+
+SHADOW_SPAN_GLOBAL = 0x007e8e20
+DRAW_IMAGE = 0x180000      # world offset of the image (header + RLE rows)
+DRAW_DESC = 0x1f0000       # the surface description
+DRAW_POS = 0x1f1000
+DRAW_CLIP = 0x1f1010
+DRAW_PALETTE = 0x1f2000
+
+
+def placement(rng, width: int, height: int):
+    """A clip rectangle and a position overlapping it inside the surface."""
+    while True:
+        left = rng.randrange(40)
+        top = rng.randrange(30)
+        right = left + 1 + rng.randrange(BLIT_SURFACE_WIDTH - left)
+        bottom = top + 1 + rng.randrange(BLIT_SURFACE_HEIGHT - top)
+        x = left - width + rng.randrange(right - left + width)
+        y = top - height + rng.randrange(bottom - top + height)
+        if 0 <= x and x + width <= BLIT_SURFACE_WIDTH and 0 <= y and y + height <= BLIT_SURFACE_HEIGHT:
+            return (left, top, right, bottom), x, y
+
+
+def layer_side(x: int, width: int, clip) -> str:
+    if x < clip[0]:
+        return "ClipLeft"
+    return "ClipRight" if x + width >= clip[2] else "Unclipped"
+
+
+def random_desc(rng):
+    desc = [rng.getrandbits(32) for _ in range(DESC_DWORDS)]
+    desc[4] = (BLIT_SURFACE_WIDTH + 2 * rng.randrange(3)) * 2
+    desc[9] = WORLD_BASE + BLIT_SURFACE
+    return desc
+
+
+def point(x: int, y: int) -> int:
+    return (x & 0xFFFF) | (y & 0xFFFF) << 16
+
+
+def layer_case(shadow: bool, side: str):
+    state = {}
+
+    def build(rng, pool):
+        while True:
+            width, height = rng.randint(1, 48), rng.randint(1, 24)
+            clip, x, y = placement(rng, width, height)
+            if layer_side(x, width, clip) != side:
+                continue
+            state["rle"] = synthetic_rle(rng, width, height, 0 if shadow else 1)
+            if shadow:
+                kept = height if rng.random() < 0.6 else rng.randint(0, height)
+                hidden = height - kept
+                origin = point(x + rng.randrange(80) - 40, y + hidden - rng.randrange(40))
+                state["args"] = ([hidden, WORLD_BASE + BLIT_RLE] + random_desc(rng) +
+                                 [point(x, y + hidden), width | kept << 16] + list(clip) + [origin])
+            else:
+                state["args"] = ([WORLD_BASE + BLIT_RLE, WORLD_BASE + DRAW_PALETTE] + random_desc(rng) +
+                                 [point(x, y), width | height << 16] + list(clip))
+            return state["args"][0]
+
+    def part(i):
+        return lambda rng, pool: state["args"][i]
+
+    def presets(rng, pool, args):
+        return [(BLIT_RLE + i, b, 1) for i, b in enumerate(state["rle"])]
+
+    count = 2 + DESC_DWORDS + 2 + 4 + (1 if shadow else 0)
+    return [build] + [part(i) for i in range(1, count)], presets
+
+
+def shadow_globals(rng, pool, args):
+    fields = blit_globals(rng, pool, args)
+    fields.append((SHADOW_SPAN_GLOBAL, rng.choice([0x005fd080, 0x005fd0c0]), 4))
+    return fields
+
+
+for _side, _address in (("Unclipped", 0x005fc860), ("ClipRight", 0x005fc9a0), ("ClipLeft", 0x005fcb30)):
+    _generators, _presets = layer_case(False, _side)
+    SPECS.append(Spec(f"BlitColorIndexed_{_side}", _address, "fastcall", _generators, eax_mask=0, presets=_presets,
+                      max_cases=1000))
+# Dead blocks of the shadow blitters: the negative branches of C's % 32 on
+# values that are never negative there: the second remainder after a
+# negative origin coordinate was made positive (two per blitter), (origin y
+# mod 32 + skipTop) (skipTop from ShadowVerticalClip is >= 0) and the row
+# parity + 1.
+SHADOW_DEAD_BLOCKS = {
+    "Unclipped": (0x5fd1f6, 0x5fd218, 0x5fd233, 0x5fd2da),
+    "ClipRight": (0x5fd3d8, 0x5fd3ec, 0x5fd409, 0x5fd52f),
+    "ClipLeft": (0x5fd638, 0x5fd64c, 0x5fd669, 0x5fd78b),
+}
+for _side, _address in (("Unclipped", 0x005fd120), ("ClipRight", 0x005fd310), ("ClipLeft", 0x005fd570)):
+    _generators, _presets = layer_case(True, _side)
+    SPECS.append(Spec(f"BlitShadow_{_side}", _address, "fastcall", _generators, eax_mask=0, presets=_presets,
+                      globals=shadow_globals, max_cases=1000, exempt_blocks=SHADOW_DEAD_BLOCKS[_side]))
+
+
+def draw_case(kind: str):
+    """thiscall: the GfxDword at world 0 points at an image at DRAW_IMAGE
+    (sprite header + extra bytes + RLE rows, or a GUI header); desc, pos and
+    clip in world memory (DrawGuiImage takes pos and clip by value)."""
+    state = {}
+
+    def build(rng, pool):
+        width, height = rng.randint(1, 48), rng.randint(1, 24)
+        clip, x, y = placement(rng, width, height)
+        if rng.random() < 0.1:  # sometimes entirely outside the clip
+            x = clip[2] + rng.randrange(1, 20) if clip[2] + 21 < BLIT_SURFACE_WIDTH else x
+        offset_x, offset_y = rng.randrange(40) - 20, rng.randrange(40) - 20
+        extra = rng.randrange(6)
+        pixel_bytes = {"Sprite": 2, "GuiImage": 2, "ColorIndexed": 1, "Shadow": 0}[kind]
+        rle = synthetic_rle(rng, width, height, pixel_bytes)
+        if kind == "GuiImage":
+            header = struct.pack("<HHhhB", width, height, offset_x, offset_y, extra)
+        else:
+            header = struct.pack("<IHHhhB", 0x0C, width, height, offset_x, offset_y, extra)
+        image = header + bytes(rng.getrandbits(8) for _ in range(extra))
+        if len(image) % 2:
+            image += b"\x00"
+        state["image"] = image + rle
+        state["desc"] = random_desc(rng)
+        state["clip"] = clip
+        pos = point(x - offset_x, y - offset_y)
+        state["pos"] = pos
+        fraction = rng.choice([0, 0x10000, rng.randrange(0x10001), rng.randrange(0x10001)])
+        brightness = rng.choice([248 + rng.randrange(8), rng.randrange(256), rng.randrange(256)])
+        desc_ptr = WORLD_BASE + DRAW_DESC
+        if kind == "Sprite":
+            state["args"] = [desc_ptr, WORLD_BASE + DRAW_POS, WORLD_BASE + DRAW_CLIP, brightness, fraction]
+        elif kind == "ColorIndexed":
+            state["args"] = [desc_ptr, WORLD_BASE + DRAW_POS, WORLD_BASE + DRAW_CLIP, WORLD_BASE + DRAW_PALETTE]
+        elif kind == "Shadow":
+            state["args"] = [desc_ptr, WORLD_BASE + DRAW_POS, WORLD_BASE + DRAW_CLIP,
+                             (rng.randrange(200) - 100) & 0xFFFFFFFF, fraction]
+        else:
+            state["args"] = [desc_ptr, pos] + list(clip) + [brightness]
+        return state["args"][0]
+
+    def part(i):
+        return lambda rng, pool: state["args"][i]
+
+    def presets(rng, pool, args):
+        fields = [(0, WORLD_BASE + DRAW_IMAGE, 4)]
+        fields += [(DRAW_IMAGE + i, b, 1) for i, b in enumerate(state["image"])]
+        fields += [(DRAW_DESC + 4 * i, v, 4) for i, v in enumerate(state["desc"])]
+        fields += [(DRAW_POS, state["pos"], 4)]
+        fields += [(DRAW_CLIP + 4 * i, v, 4) for i, v in enumerate(state["clip"])]
+        return fields
+
+    count = 7 if kind == "GuiImage" else (4 if kind == "ColorIndexed" else 5)
+    return [build] + [part(i) for i in range(1, count)], presets
+
+
+# The GUI image draw's false starts 0x5f65f2 / 0x5f674b (DrawGuiImage_tail*)
+# are inside it; the coverage runs to the next real function.
+for _kind, _address, _extra in (("Sprite", 0x005fadb0, {}),
+                                ("GuiImage", 0x005f64c0, {"cover_until": 0x005f67b0}),
+                                ("ColorIndexed", 0x005fc5f0, {}), ("Shadow", 0x005fcdc0, {})):
+    _generators, _presets = draw_case(_kind)
+    SPECS.append(Spec(f"GfxDword_Draw{_kind}", _address, "thiscall", _generators, eax_mask=0, presets=_presets,
+                      globals=shadow_globals, max_cases=1000, **_extra))

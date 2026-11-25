@@ -78,6 +78,27 @@ struct SequenceTable {
 };
 static_assert(offsetof(SequenceTable, sequences) == 0x08);
 
+// DirectDraw's DDSURFACEDESC as the drawing code uses it (passed by
+// pointer to the Draw* functions and by value to the blitters).
+struct SurfaceDesc {
+    std::uint8_t unk00[0x10];
+    std::int32_t pitch;       // +0x10 lPitch, bytes per row
+    std::uint8_t unk14[0x10];
+    std::uint32_t surface;    // +0x24 lpSurface
+    std::uint8_t unk28[0x6c - 0x28];
+};
+static_assert(offsetof(SurfaceDesc, pitch) == 0x10);
+static_assert(offsetof(SurfaceDesc, surface) == 0x24);
+static_assert(sizeof(SurfaceDesc) == 0x6c);
+
+// A clip rectangle (left/top inclusive, right/bottom exclusive).
+struct ClipRect {
+    std::int32_t left;
+    std::int32_t top;
+    std::int32_t right;
+    std::int32_t bottom;
+};
+
 // CGraphicsData (RTTI; base Win32::CObject), 0xc44 bytes.
 struct CGraphicsData {
     std::uint32_t vtable;                        // +0x000 0x65d3e4 (slot 0: scalar deleting destructor 0x5f6890)
