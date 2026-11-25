@@ -277,4 +277,14 @@ inline constexpr GameGlobal<const char[kGfxGroupNameCount][4]> g_gfxGroupNames{0
 // PCM stereo 16-bit at 22050, 22050 and 11025 Hz.
 inline constexpr GameGlobal<const std::uint8_t[3][0x18]> g_primaryFormats{0x7a2fb8};
 
+// wip/ui-gdi batch: the serial number check digit (GameConfig::SerialCheckDigit
+// 0x411fd0, a Verhoeff-like scheme over 12 positions). The tables are read
+// as one dword array each; the original indexes the position table with the
+// digit's character code ('0' = 48), so it reads past it into the tables
+// after it (deliberately reproduced).
+inline constexpr GameGlobal<const std::int32_t> g_serialMultiply{0x65545c};    // 8 x 10 (a dihedral group table)
+inline constexpr GameGlobal<const std::int32_t> g_serialPermute{0x655554};     // 12 x 10, indexed (pos % 12) * 10 + char
+inline constexpr GameGlobal<const std::int32_t> g_serialInverse{0x6555ec};     // 10
+inline constexpr GameGlobal<const std::int32_t> g_serialFinal{0x6557f4};       // indexed (pos % 12) * 10 + value
+
 }  // namespace s3re::game

@@ -59,6 +59,8 @@ constexpr std::uintptr_t kGfxGroup61 = 0x00413be0;              // GameConfig::G
 constexpr std::uintptr_t kAssignSubstr = 0x00401d60;            // std::string::assign(x, pos, n) (ours)
 constexpr std::uintptr_t kAssignTextOrEmpty = 0x00413d70;       // std::string::assign_cstr_or_empty (ours)
 constexpr std::uintptr_t kThrowAssertmentFailed = 0x006119b0;   // Win32::ThrowAssertmentFailed (ours)
+constexpr std::uintptr_t kStringTidy = 0x00402170;              // std::string::_Tidy (ours)
+constexpr std::uintptr_t kIsDigit = 0x0061f824;                 // the CRT's isdigit
 
 constexpr std::int32_t kFirstMissionCDMission = 24;  // missions 0..23: CD 3
 constexpr std::int32_t kSecondMissionCDMission = 48;  // 24..47: CD 4, then 5
@@ -81,6 +83,9 @@ using ConfigMissionCDFn = std::uint32_t(__fastcall*)(const void* self, void* edx
 using ConfigStartMapFn = msvc6::String*(__fastcall*)(const GameConfig* self, void* edx, msvc6::String* out);
 using ConfigClearFn = std::uint32_t(__fastcall*)(GameConfig* self, void* edx);
 using ConfigPathIndexFn = std::int32_t(__fastcall*)(const void* self, void* edx, std::int32_t kind);
+using ConfigPathStringFn = msvc6::String*(__fastcall*)(const GameConfig* self, void* edx, msvc6::String* out,
+                                                       std::uint32_t index);
+using ConfigCheckDigitFn = std::uint32_t(__fastcall*)(const void* self, void* edx, const char* text);
 
 // Purpose: Reads a configuration value the lobby dialogs use.
 std::uint32_t __fastcall GameConfig_LobbyValue68(const GameConfig* self, void*) {
@@ -172,6 +177,87 @@ std::int32_t __fastcall GameConfig_PathIndexForFileKind(const void*, void*, std:
     return 0;  // (not reached: the assert throws)
 }
 
+// Purpose: Gives a copy of the configuration's serial number (CMainMenu::
+// CheckSerialNumber and the lobby read it).
+msvc6::String* __fastcall GameConfig_SerialNumber(const GameConfig* self, void*, msvc6::String* out) {
+    // The same inlined copy constructor as StartMap's.
+    out->allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(out));
+    out->ptr = nullptr;
+    out->len = 0;
+    out->res = 0;
+    const std::uint32_t npos = g_stringNpos.get();
+    reinterpret_cast<msvc6::StringAssignSubstrFn>(kAssignSubstr)(out, nullptr, &self->string04, 0, npos);
+    return out;
+}
+
+// Purpose: Gives a copy of one of the configured data paths (the slot
+// PathIndexForFileKind picks; 5 and anything else give the last one).
+msvc6::String* __fastcall GameConfig_PathString(const GameConfig* self, void*, msvc6::String* out,
+                                                std::uint32_t index) {
+    out->allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(out));
+    constexpr std::uint32_t kLastPath = 5;
+    if (index < kLastPath) {
+        reinterpret_cast<msvc6::StringTidyFn>(kStringTidy)(out, nullptr, 0);
+    } else {
+        out->ptr = nullptr;  // (the last case has _Tidy(false) inlined)
+        out->len = 0;
+        out->res = 0;
+    }
+    // n is the constant -1 here, not read from npos.
+    reinterpret_cast<msvc6::StringAssignSubstrFn>(kAssignSubstr)(out, nullptr,
+                                                                 &self->paths[index < kLastPath ? index : kLastPath],
+                                                                 0, 0xffffffffu);
+    return out;
+}
+
+namespace {
+
+// A dword of one of the serial tables at `index` (any index: the original
+// reads past the tables; 32-bit address arithmetic as in the original).
+std::int32_t SerialTable(const std::int32_t& table, std::int32_t index) {
+    const std::uint32_t address = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&table)) +
+                                  static_cast<std::uint32_t>(index) * 4u;
+    return *reinterpret_cast<const std::int32_t*>(static_cast<std::uintptr_t>(address));  // raw-ok: table read past its end
+}
+
+constexpr std::int32_t kSerialPositions = 12;
+constexpr std::int32_t kSerialRow = 10;
+
+}  // namespace
+
+// Purpose: Computes the check digit of a serial number (or of one part of
+// it): a Verhoeff-like checksum over the digits; a non-digit starts a second
+// sum, the second non-digit ends the text. Returns the digit as a character.
+std::uint32_t __fastcall GameConfig_SerialCheckDigit(const void*, void*, const char* text) {
+    using IsDigitFn = int(__cdecl*)(int c);
+    std::int32_t first = 0;    // the sum before the separator
+    std::int32_t second = -1;  // the sum after it (-1: no separator yet)
+    std::int32_t separator = -1;
+    for (std::int32_t i = 0; text[i] != 0; ++i) {
+        const int c = static_cast<signed char>(text[i]);
+        if (reinterpret_cast<IsDigitFn>(kIsDigit)(c) != 0 && i != separator) {
+            // The character code, not the digit, indexes the row (reads
+            // past the position table; reproduced).
+            const std::int32_t permuted = SerialTable(g_serialPermute.get(), (i % kSerialPositions) * kSerialRow + c);
+            if (second >= 0) {
+                second = SerialTable(g_serialMultiply.get(), second * kSerialRow + permuted);
+            } else {
+                first = SerialTable(g_serialMultiply.get(), first * kSerialRow + permuted);
+            }
+            continue;
+        }
+        if (separator >= 0 && i != separator) {
+            break;
+        }
+        separator = i;
+        second = 0;
+    }
+    const std::int32_t combined = SerialTable(g_serialInverse.get(), first) * kSerialRow +
+                                  SerialTable(g_serialInverse.get(), second);
+    const std::int32_t value = SerialTable(g_serialMultiply.get(), combined);
+    return static_cast<std::uint32_t>(SerialTable(g_serialFinal.get(), (separator % kSerialPositions) * kSerialRow + value) + '0');
+}
+
 S3RE_HOOK(0x00413b60, GameConfig_LobbyValue68, ConfigGetterFn, Original_GameConfig_LobbyValue68,
           GameConfig_LobbyValue68);
 S3RE_HOOK(0x00413b70, GameConfig_SetLobbyValue68, ConfigSetFn, Original_GameConfig_SetLobbyValue68,
@@ -191,6 +277,11 @@ S3RE_HOOK(0x00413d50, GameConfig_ClearStartMap, ConfigClearFn, Original_GameConf
           GameConfig_ClearStartMap);
 S3RE_HOOK(0x00414050, GameConfig_PathIndexForFileKind, ConfigPathIndexFn, Original_GameConfig_PathIndexForFileKind,
           GameConfig_PathIndexForFileKind);
+S3RE_HOOK(0x00411a90, GameConfig_SerialNumber, ConfigStartMapFn, Original_GameConfig_SerialNumber,
+          GameConfig_SerialNumber);
+S3RE_HOOK(0x00412b00, GameConfig_PathString, ConfigPathStringFn, Original_GameConfig_PathString, GameConfig_PathString);
+S3RE_HOOK(0x00411fd0, GameConfig_SerialCheckDigit, ConfigCheckDigitFn, Original_GameConfig_SerialCheckDigit,
+          GameConfig_SerialCheckDigit);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -210,6 +301,9 @@ struct ConfigFunctions {
     ConfigStartMapFn startMap;
     ConfigClearFn clearStartMap;
     ConfigPathIndexFn pathIndex;
+    ConfigStartMapFn serialNumber;
+    ConfigPathStringFn pathString;
+    ConfigCheckDigitFn checkDigit;
 };
 
 ConfigFunctions OriginalConfigFunctions() {
@@ -218,14 +312,17 @@ ConfigFunctions OriginalConfigFunctions() {
             Original_GameConfig_Byte150,         Original_GameConfig_RandomRaceAmazons,
             Original_GameConfig_GfxGroup61,      Original_GameConfig_CampaignMissionCD,
             Original_GameConfig_StartMap,        Original_GameConfig_ClearStartMap,
-            Original_GameConfig_PathIndexForFileKind};
+            Original_GameConfig_PathIndexForFileKind,
+            Original_GameConfig_SerialNumber,    Original_GameConfig_PathString,
+            Original_GameConfig_SerialCheckDigit};
 }
 
 ConfigFunctions OurConfigFunctions() {
     return {&GameConfig_LobbyValue68,   &GameConfig_SetLobbyValue68, &GameConfig_GetLobbyPair148,
             &GameConfig_SetLobbyPair148, &GameConfig_Byte150,        &GameConfig_RandomRaceAmazons,
             &GameConfig_GfxGroup61,      &GameConfig_CampaignMissionCD, &GameConfig_StartMap,
-            &GameConfig_ClearStartMap,   &GameConfig_PathIndexForFileKind};
+            &GameConfig_ClearStartMap,   &GameConfig_PathIndexForFileKind,
+            &GameConfig_SerialNumber,    &GameConfig_PathString,      &GameConfig_SerialCheckDigit};
 }
 
 constexpr std::size_t kConfigBytes = 0x200;
@@ -267,10 +364,9 @@ bool CompareAccessors(test::Context& ctx, const ConfigFunctions& ours, int cases
 
 using FromCharsFn = msvc6::String*(__fastcall*)(msvc6::String* self, void* edx, const char* s, std::uint32_t n);
 
-// A config whose start map is `text` (empty: no buffer) with the given
+// A string member that is `text` (empty: no buffer) with the given
 // reference count byte.
-void MakeStartMap(GameConfig* config, const char* text, std::uint8_t count) {
-    msvc6::String& s = config->start_map;
+void MakeMember(msvc6::String& s, const char* text, std::uint8_t count) {
     s.ptr = nullptr;
     s.len = 0;
     s.res = 0;
@@ -294,10 +390,25 @@ std::uint8_t LowByteDelta(const msvc6::String& s) {
     return static_cast<std::uint8_t>(s.allocator - static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(&s)));
 }
 
-// StartMap / ClearStartMap on configs whose string is empty, unshared,
-// shared, nearly full of references or frozen; the copy goes to a separate
-// string or (rarely) to the config's own.
-bool CompareStartMap(test::Context& ctx, const ConfigFunctions& ours, int cases) {
+enum class CopyOp { StartMap, ClearStartMap, SerialNumber, PathString };
+
+// The string member an operation reads.
+msvc6::String& SourceOf(GameConfig* config, CopyOp op, std::uint32_t index) {
+    switch (op) {
+    case CopyOp::SerialNumber:
+        return config->string04;
+    case CopyOp::PathString:
+        return config->paths[index < 5 ? index : 5];
+    default:
+        return config->start_map;
+    }
+}
+
+// The string copies (StartMap, SerialNumber, PathString) and ClearStartMap
+// on configs whose string is empty, unshared, shared, nearly full of
+// references or frozen; the copy goes to a separate string or (rarely) to
+// the source itself.
+bool CompareStringMembers(test::Context& ctx, const ConfigFunctions& ours, int cases) {
     const ConfigFunctions original = OriginalConfigFunctions();
     static const char* const kTexts[] = {"", "Map\\User\\Test.map", "x", "Ein langer Kartenname mit Leerzeichen"};
     static const std::uint8_t kCounts[] = {0, 1, 0xfd, 0xfe, 0xff};
@@ -307,54 +418,83 @@ bool CompareStartMap(test::Context& ctx, const ConfigFunctions& ours, int cases)
         std::memcpy(bufB, bufA, sizeof(bufA));
         auto* ca = reinterpret_cast<GameConfig*>(bufA);
         auto* cb = reinterpret_cast<GameConfig*>(bufB);
+        const auto op = static_cast<CopyOp>(ctx.rng().Below(4));
+        const std::uint32_t index = ctx.rng().Chance(1, 8) ? ctx.rng().Next32() : ctx.rng().Below(7);
         const char* text = kTexts[ctx.rng().Below(4)];
         const std::uint8_t count = kCounts[ctx.rng().Below(5)];
-        MakeStartMap(ca, text, count);
-        MakeStartMap(cb, text, count);
-        const bool clear = ctx.rng().Chance(1, 3);
+        msvc6::String& sa = SourceOf(ca, op, index);
+        msvc6::String& sb = SourceOf(cb, op, index);
+        MakeMember(sa, text, count);
+        MakeMember(sb, text, count);
+        const bool clear = op == CopyOp::ClearStartMap;
         const bool self = !clear && ctx.rng().Chance(1, 8);
         // Separate outputs at the same offset of two buffers (the allocator
         // byte is the low byte of the address).
         alignas(16) std::uint8_t outsA[64], outsB[64];
         const std::size_t at = ctx.rng().Below(12) * 4;
-        auto* outA = self ? &ca->start_map : reinterpret_cast<msvc6::String*>(outsA + at);
-        auto* outB = self ? &cb->start_map : reinterpret_cast<msvc6::String*>(outsB + at);
+        auto* outA = self ? &sa : reinterpret_cast<msvc6::String*>(outsA + at);
+        auto* outB = self ? &sb : reinterpret_cast<msvc6::String*>(outsB + at);
         bool ok = true;
         if (clear) {
             const std::uint32_t ea = original.clearStartMap(ca, nullptr);
             const std::uint32_t eb = ours.clearStartMap(cb, nullptr);
             ok = S3RE_EXPECT_EQ(ea - reinterpret_cast<std::uint32_t>(ca), eb - reinterpret_cast<std::uint32_t>(cb));
         } else {
-            const msvc6::String* ra = original.startMap(ca, nullptr, outA);
-            const msvc6::String* rb = ours.startMap(cb, nullptr, outB);
+            const msvc6::String* ra = op == CopyOp::StartMap       ? original.startMap(ca, nullptr, outA)
+                                      : op == CopyOp::SerialNumber ? original.serialNumber(ca, nullptr, outA)
+                                                                   : original.pathString(ca, nullptr, outA, index);
+            const msvc6::String* rb = op == CopyOp::StartMap       ? ours.startMap(cb, nullptr, outB)
+                                      : op == CopyOp::SerialNumber ? ours.serialNumber(cb, nullptr, outB)
+                                                                   : ours.pathString(cb, nullptr, outB, index);
             ok = S3RE_EXPECT(ra == outA && rb == outB) &&
                  S3RE_EXPECT_EQ(LowByteDelta(*outA), LowByteDelta(*outB)) &&
                  S3RE_EXPECT_EQ(outA->len, outB->len) && S3RE_EXPECT_EQ(outA->res, outB->res) &&
-                 S3RE_EXPECT_EQ(outA->ptr == ca->start_map.ptr, outB->ptr == cb->start_map.ptr) &&
+                 S3RE_EXPECT_EQ(outA->ptr == sa.ptr, outB->ptr == sb.ptr) &&
                  S3RE_EXPECT_EQ(outA->ptr == nullptr, outB->ptr == nullptr);
             if (ok && outA->ptr != nullptr) {
                 ok = S3RE_EXPECT(std::strcmp(outA->ptr, outB->ptr) == 0) && S3RE_EXPECT_EQ(outA->ptr[-1], outB->ptr[-1]);
             }
         }
-        // The config itself: its string's fields and count, the rest unchanged.
-        const msvc6::String& sa = ca->start_map;
-        const msvc6::String& sb = cb->start_map;
+        // The source itself: its fields and count, the rest of the config unchanged.
+        const std::size_t member = static_cast<std::size_t>(reinterpret_cast<std::uint8_t*>(&sa) - bufA);
         ok = ok && S3RE_EXPECT_EQ(sa.len, sb.len) && S3RE_EXPECT_EQ(sa.res, sb.res) &&
-             S3RE_EXPECT_EQ(self ? LowByteDelta(sa) : sa.allocator, self ? LowByteDelta(sb) : sb.allocator) && S3RE_EXPECT_EQ(sa.ptr == nullptr, sb.ptr == nullptr) &&
+             S3RE_EXPECT_EQ(self ? LowByteDelta(sa) : sa.allocator, self ? LowByteDelta(sb) : sb.allocator) &&
+             S3RE_EXPECT_EQ(sa.ptr == nullptr, sb.ptr == nullptr) &&
              S3RE_EXPECT(sa.ptr == nullptr || (std::strcmp(sa.ptr, sb.ptr) == 0 && sa.ptr[-1] == sb.ptr[-1])) &&
-             S3RE_EXPECT(std::memcmp(bufA, bufB, offsetof(GameConfig, start_map)) == 0) &&
-             S3RE_EXPECT(std::memcmp(bufA + offsetof(GameConfig, start_map) + 16,
-                                     bufB + offsetof(GameConfig, start_map) + 16,
-                                     sizeof(bufA) - offsetof(GameConfig, start_map) - 16) == 0);
+             S3RE_EXPECT(std::memcmp(bufA, bufB, member) == 0) &&
+             S3RE_EXPECT(std::memcmp(bufA + member + 16, bufB + member + 16, sizeof(bufA) - member - 16) == 0);
         if (!clear && !self) {
-            if (outA->ptr != ca->start_map.ptr) FreeString(outA);
-            if (outB->ptr != cb->start_map.ptr) FreeString(outB);
+            if (outA->ptr != sa.ptr) FreeString(outA);
+            if (outB->ptr != sb.ptr) FreeString(outB);
         }
-        FreeString(&ca->start_map);
-        FreeString(&cb->start_map);
+        FreeString(&sa);
+        FreeString(&sb);
         if (!ok) {
-            ctx.Fail(__FILE__, __LINE__, "  case %d (text \"%s\", count %u, clear %d, self %d)", i, text, count,
-                     clear, self);
+            ctx.Fail(__FILE__, __LINE__, "  case %d (op %d, index %u, text \"%s\", count %u, self %d)", i,
+                     static_cast<int>(op), index, text, count, self);
+            return false;
+        }
+    }
+    return true;
+}
+
+// The check digit on serial-like texts: digits, a separator or two,
+// letters, high characters, empty.
+bool CompareCheckDigit(test::Context& ctx, const ConfigFunctions& ours, int cases) {
+    const ConfigFunctions original = OriginalConfigFunctions();
+    static const char kChars[] = "0123456789012345678901234567890123456789--- ABCxyz\xe4\xfc\x80\xff";
+    for (int i = 0; i < cases; ++i) {
+        char text[40] = {};
+        const std::uint32_t length = ctx.rng().Below(30);
+        const bool digitsOnly = ctx.rng().Chance(1, 3);
+        for (std::uint32_t k = 0; k < length; ++k) {
+            text[k] = digitsOnly ? static_cast<char>('0' + ctx.rng().Below(10))
+                                 : kChars[ctx.rng().Below(sizeof(kChars) - 1)];
+        }
+        const std::uint32_t ea = original.checkDigit(nullptr, nullptr, text);
+        const std::uint32_t eb = ours.checkDigit(nullptr, nullptr, text);
+        if (!S3RE_EXPECT_EQ(ea, eb)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, text \"%s\"", i, text);
             return false;
         }
     }
@@ -409,12 +549,26 @@ msvc6::String* __fastcall WrongStartMap(const GameConfig* self, void* edx, msvc6
 std::int32_t __fastcall WrongPathIndex(const void* self, void* edx, std::int32_t kind) {
     return kind == 11 ? -1 : GameConfig_PathIndexForFileKind(self, edx, kind);
 }
+msvc6::String* __fastcall WrongPathString(const GameConfig* self, void* edx, msvc6::String* out, std::uint32_t index) {
+    GameConfig_PathString(self, edx, out, index);
+    out->allocator = static_cast<std::uint8_t>(out->allocator + (index >= 5 ? 1 : 0));  // the default case's byte off
+    return out;
+}
+std::uint32_t __fastcall WrongCheckDigit(const void* self, void* edx, const char* text) {
+    // Uses the digit's value instead of its character code.
+    char copy[64] = {};
+    for (int i = 0; i < 63 && text[i] != 0; ++i) {
+        copy[i] = text[i] >= '5' && text[i] <= '9' ? static_cast<char>(text[i] - 5) : text[i];
+    }
+    return GameConfig_SerialCheckDigit(self, edx, copy);
+}
 
 }  // namespace
 
 S3RE_TEST(GameConfig_MatchesOriginal) {
     const ConfigFunctions ours = OurConfigFunctions();
-    CompareAccessors(ctx, ours, 2000) && CompareStartMap(ctx, ours, 1000) && ComparePathIndex(ctx, ours, 500);
+    CompareAccessors(ctx, ours, 2000) && CompareStringMembers(ctx, ours, 2000) && ComparePathIndex(ctx, ours, 500) &&
+        CompareCheckDigit(ctx, ours, 3000);
 }
 
 S3RE_TEST(GameConfig_ComparisonDetectsWrongImplementation) {
@@ -426,14 +580,17 @@ S3RE_TEST(GameConfig_ComparisonDetectsWrongImplementation) {
         {"mission CD", [](ConfigFunctions& f) { f.missionCD = &WrongMissionCD; }, 0},
         {"start map", [](ConfigFunctions& f) { f.startMap = &WrongStartMap; }, 1},
         {"path index", [](ConfigFunctions& f) { f.pathIndex = &WrongPathIndex; }, 2},
+        {"path string", [](ConfigFunctions& f) { f.pathString = &WrongPathString; }, 1},
+        {"check digit", [](ConfigFunctions& f) { f.checkDigit = &WrongCheckDigit; }, 3},
     };
     for (const auto& wrong : kWrong) {
         ConfigFunctions candidate = OurConfigFunctions();
         wrong.patch(candidate);
         test::Context quiet("wrong", 7, true);
         const bool passed = wrong.which == 0   ? CompareAccessors(quiet, candidate, 2000)
-                            : wrong.which == 1 ? CompareStartMap(quiet, candidate, 1000)
-                                               : ComparePathIndex(quiet, candidate, 500);
+                            : wrong.which == 1 ? CompareStringMembers(quiet, candidate, 1000)
+                            : wrong.which == 2 ? ComparePathIndex(quiet, candidate, 500)
+                                               : CompareCheckDigit(quiet, candidate, 3000);
         if (!S3RE_EXPECT(!passed)) {
             ctx.Fail(__FILE__, __LINE__, "  the wrong %s was not caught", wrong.name);
         }

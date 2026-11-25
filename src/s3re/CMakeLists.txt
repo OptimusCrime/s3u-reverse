@@ -273,6 +273,7 @@ add_library(s3re SHARED
     game/framework/framework_helpers.cpp
     game/framework/framework_small.cpp
     game/framework/game_config.cpp
+    game/framework/game_config_fields.cpp
     game/framework/misc_helpers.cpp
     game/framework/string_members.cpp
     game/framework/wait_times.cpp

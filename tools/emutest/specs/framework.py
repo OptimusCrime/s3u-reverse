@@ -339,6 +339,87 @@ SPECS += [
 ]
 
 
+def config_serial(rng, pool, args):
+    fields, _ = string_fields(rng, 0x04, CONFIG_TEXT)
+    return fields
+
+
+def config_path(rng, pool, args):
+    """The path string PathString(out, index) copies (index 5 and above: +0x110)."""
+    index = args[1]
+    fields, _ = string_fields(rng, 0xc0 + 0x10 * min(index, 5), CONFIG_TEXT)
+    return fields
+
+
+def config_path_out(rng, pool):
+    return WORLD_BASE + CONFIG_OUT + 4 * rng.randrange(8)
+
+
+def config_path_index(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(7)
+
+
+CONFIG_SERIAL_TEXT = 0x1f48c00
+CONFIG_SERIAL_CHARS = b"0123456789" * 4 + b"--- ABCxyz\xe4\xfc\x80\xff"
+
+
+def config_serial_text(rng, pool, args):
+    """A serial-like text at CONFIG_SERIAL_TEXT: digits only, or digits with
+    separators, letters and high characters."""
+    length = rng.randrange(30)
+    digits = rng.random() < 0.35
+    text = bytes(rng.choice(b"0123456789" if digits else CONFIG_SERIAL_CHARS) for _ in range(length))
+    return [(CONFIG_SERIAL_TEXT + i, c, 1) for i, c in enumerate(text + b"\0")]
+
+
+SPECS += [
+    # Dead as in GameConfig_StartMap (the same inlined copy).
+    Spec("GameConfig_SerialNumber", 0x00411a90, "thiscall",
+         [lambda rng, pool: WORLD_BASE + (0x04 if rng.random() < 0.1 else CONFIG_OUT + 4 * rng.randrange(8))],
+         presets=config_serial, globals=null_string_count,
+         exempt_blocks=(0x00411abc, 0x00411acd, 0x00411ae8, 0x00411b0f)),
+    Spec("GameConfig_PathString", 0x00412b00, "thiscall", [config_path_out, config_path_index],
+         presets=config_path, globals=null_string_count),
+    Spec("GameConfig_SerialCheckDigit", 0x00411fd0, "thiscall", [one_of(WORLD_BASE + CONFIG_SERIAL_TEXT)],
+         presets=config_serial_text),
+]
+
+
+# -- wip/ui-gdi: GameConfig field accessors (game_config_fields.cpp); `this` is the world. --
+SPECS += [
+    Spec("GameConfig_Dword28", 0x004120a0, "thiscall", []),
+    Spec("GameConfig_Dword78", 0x00412310, "thiscall", []),
+    Spec("GameConfig_Dword7C", 0x00412320, "thiscall", []),
+    Spec("GameConfig_Dword80", 0x00412330, "thiscall", []),
+    Spec("GameConfig_Dword94", 0x00412370, "thiscall", []),
+    Spec("GetMemberDword84", 0x00412340, "thiscall", []),
+    Spec("GetMemberDword8C", 0x00412350, "thiscall", []),
+    Spec("GetMemberDword90", 0x00412360, "thiscall", []),
+    Spec("GameConfig_SetDword28", 0x004120b0, "thiscall", [anything]),
+    Spec("GameConfig_SetDword2C", 0x004120c0, "thiscall", [anything]),
+    Spec("GameConfig_Byte30", 0x004120d0, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte38", 0x004120f0, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte39", 0x00412100, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte24", 0x00412270, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte58", 0x00412290, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte59", 0x004122a0, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte5A", 0x004122b0, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte5B", 0x004122c0, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte5C", 0x004122e0, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte5D", 0x004122d0, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte5E", 0x00412810, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte5F", 0x00412820, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte6C", 0x00412800, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_Byte15A", 0x00414020, "thiscall", [], eax_mask=0xFF),
+    Spec("GameConfig_SetByte24", 0x00412280, "thiscall", [anything], eax_mask=0xFF),
+    Spec("GameConfig_SetByte5C", 0x004122f0, "thiscall", [anything], eax_mask=0xFF),
+    Spec("GameConfig_SetByte189", 0x00414040, "thiscall", [anything], eax_mask=0xFF),
+    Spec("GameConfig_Object3C", 0x00412110, "thiscall", []),
+    Spec("GameConfig_String14", 0x00412120, "thiscall", []),
+    Spec("GameConfig_HasDirectPlay", 0x004120e0, "thiscall", []),
+]
+
+
 # -- session 55 round 2 (gfx-open): Win32::CFile, Win32::CFileMapping and
 # Win32::DetachMemory (win32_mapping.cpp, win32_detach.cpp) -------------
 #
