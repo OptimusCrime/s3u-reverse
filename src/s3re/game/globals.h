@@ -35,6 +35,7 @@ struct AiPlayerSetup;
 struct AiToolAndWorker;
 struct AiVector;
 struct ComputerPlayer;
+struct SiteTreeNode;
 }  // namespace ai
 
 namespace gfx {
@@ -329,6 +330,10 @@ inline constexpr GameGlobal<ai::AiLandEvaluation*> g_aiEvaLand{0x7e056c};
 // CComputerPlayer::InitAiGlobals (0x551b80); the AI code reads the land grid
 // and the per-player area lists through it.
 inline constexpr GameGlobal<std::uint32_t> g_aiLandEvaluation{0x7e3134};
+// The nil node shared by every AI::SiteTree (MSVC6 _Tree::_Nil; black, made
+// by the first tree, freed with the last) and the number of trees using it.
+inline constexpr GameGlobal<ai::SiteTreeNode*> g_aiSiteTreeNil{0x7e0570};
+inline constexpr GameGlobal<std::uint32_t> g_aiSiteTreeNilRefs{0x7e0574};
 // 1 until the first computer player's set-up (0x550a30) has run
 // AI::MarkBuildingTypesInLandGrid (0x5723a0); set by InitAiGlobals.
 inline constexpr GameGlobal<std::uint32_t> g_aiMarkBuildingTypesPending{0x7312ac};

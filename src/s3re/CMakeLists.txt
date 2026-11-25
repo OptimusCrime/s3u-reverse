@@ -174,6 +174,7 @@ add_library(s3re SHARED
     game/ai/ai_request_execute.cpp
     game/ai/ai_request_notes.cpp
     game/ai/ai_safety_agent.cpp
+    game/ai/ai_site_tree.cpp
     game/ai/ai_site_notes.cpp
     game/ai/ai_site_queries.cpp
     game/ai/ai_small_helpers.cpp

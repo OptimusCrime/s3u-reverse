@@ -54,7 +54,10 @@ HRESULTs); a pointer argument's recorded bytes can be `((offset, size),
 ...)` for structures with uninitialized fields. `Spec.callees` probes
 calls of S3.EXE functions that are not reimplemented and can't run in
 the emulator (exception constructors, the CRT's free): recorded with
-their arguments, returning `this` or a probe value. `_CxxThrowException`
+their arguments, returning `this` or a probe value. `specs.LOCKIT_PROBES` (session 55) probes std::_Lockit
+(0x61e6e3 / 0x61e77f, the critical section of the MSVC6 tree code):
+recorded without the lock object's address, order compared; add it to
+the callees of every spec whose code reaches tree functions. `_CxxThrowException`
 0x61f027 ends the run like _Xlen/_Xran and is compared with the thrown
 object pointer and throw info. In-process, a game C++ exception can be
 caught with SEH (`__try`/`__except`, code 0xE06D7363; ExceptionInformation

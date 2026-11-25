@@ -64,3 +64,11 @@ SELF_TEST += [
     Spec("WrongDescribe", 0x00612e80, "thiscall", [one_of(STRING_RESULT_PTR)],
          presets=assertment_object, ignore_bytes=(STRING_RESULT,)),
 ]
+
+SELF_TEST += [
+    # ignore_bytes on bytes 5..7 of SiteTree::insert's result pair: the wrong
+    # insert reports "not inserted" (byte 4) for the first node of a tree.
+    Spec("WrongSiteTreeInsertFlag", 0x00559270, "thiscall", [scratch(11), scratch(12)],
+         presets=site_tree_insert_world, globals=site_tree_globals, callees=LOCKIT_PROBES,
+         ignore_bytes=(SITE_TREE_OUT + 5, SITE_TREE_OUT + 6, SITE_TREE_OUT + 7)),
+]

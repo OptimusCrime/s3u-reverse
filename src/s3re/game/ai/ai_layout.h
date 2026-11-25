@@ -726,6 +726,59 @@ struct AiTaggedRecord {
 };
 static_assert(offsetof(AiTaggedRecord, tag) == 4);
 
+// ---------------------------------------------------------------- site trees
+// AI::SiteTree (ai_site_tree.cpp): an MSVC6 std::_Tree instance
+// (multiset/multimap) of 6-byte site values ordered by their first byte;
+// the CEvaLand area records hold 38 of them (node+0x4d4..+0x734, stride
+// 0x10). All instances share the nil node g_aiSiteTreeNil (0x7e0570),
+// created on first use and freed with the last tree (g_aiSiteTreeNilRefs).
+struct SiteValue {
+    std::uint8_t key;   // +0 the order (probably a rating)
+    std::uint8_t pad;   // +1 copied along (dword + word copies), never read
+    std::uint16_t x;    // +2 (probably)
+    std::uint16_t y;    // +4
+};
+static_assert(sizeof(SiteValue) == 6);
+
+struct SiteTreeNode {
+    SiteTreeNode* left;    // 0x00
+    SiteTreeNode* parent;  // 0x04
+    SiteTreeNode* right;   // 0x08
+    SiteValue value;       // 0x0c
+    std::uint16_t unk12;   // 0x12 never written (heap leftovers)
+    std::uint32_t color;   // 0x14 kTreeRed / kTreeBlack
+};
+static_assert(offsetof(SiteTreeNode, value) == 0x0c);
+static_assert(offsetof(SiteTreeNode, color) == 0x14);
+static_assert(sizeof(SiteTreeNode) == 0x18);
+
+constexpr std::uint32_t kTreeRed = 0;    // MSVC6 _Redbl
+constexpr std::uint32_t kTreeBlack = 1;
+
+// The head node: parent = root, left = leftmost, right = rightmost (the
+// head itself in an empty tree).
+struct SiteTree {
+    std::uint8_t allocator;   // 0x00 empty allocator object (copied, never read)
+    std::uint8_t comparator;  // 0x01 empty std::less<uint8_t> (copied, never read)
+    std::uint16_t unk02;
+    SiteTreeNode* head;       // 0x04
+    std::uint8_t multi;       // 0x08 _Multi: 1 = equal keys allowed (the site trees)
+    std::uint8_t unk09[3];
+    std::uint32_t size;       // 0x0c
+};
+static_assert(offsetof(SiteTree, head) == 0x04);
+static_assert(offsetof(SiteTree, multi) == 0x08);
+static_assert(sizeof(SiteTree) == 0x10);
+
+// SiteTree::insert's result (std::pair<iterator, bool>): bytes 5..7 are
+// padding the original leaves as stack leftovers.
+struct SiteTreeInsertResult {
+    SiteTreeNode* where;    // 0x0
+    std::uint8_t inserted;  // 0x4
+    std::uint8_t pad[3];
+};
+static_assert(sizeof(SiteTreeInsertResult) == 8);
+
 #pragma pack(pop)
 
 }  // namespace s3re::game::ai

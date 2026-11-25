@@ -706,3 +706,26 @@ NoteReported 0x5656a0 sets the build order's state (2 placed, 8 site found,
 4 no site). COMPUTER_PLAYER_AGENT::Run 0x5846a0 asks for a small tower
 (priority 20000) every `small_tower_interval` (setup +0xb2) * 14 + player
 runs.
+
+## The site trees (session 55 round 2, V)
+
+`AI::SiteTree` (ai_site_tree.cpp, layout in ai_layout.h) is MSVC 6.0's
+`std::_Tree` (red-black tree, `<xtree>`) compiled into Cevaland.cpp: 38
+per CEvaLand area record, values of 6 bytes (`SiteValue`: key byte, a
+padding byte copied along, two words), ordered by the key, equal keys
+after the older ones (`_Multi` = 1). Node 0x18 bytes: left, parent,
+right, value +0xc, colour dword +0x14 (0 red, 1 black); +0x12..+0x13
+never written. The nil node is shared by all site trees
+(`g_aiSiteTreeNil` 0x7e0570, made by the first tree, freed with the last:
+`g_aiSiteTreeNilRefs` 0x7e0574); the farm / rice farm / vineyard finders'
+`map<u8, position, greater<u8>>` is a second instance with its own nil
+(0x7e80a8 / 0x7e80ac; library rows 0x59c330.., not reimplemented).
+Verified: constructor, destructor, _Init, copy constructor, _Copy (both),
+insert, _Insert, erase (with rebalancing), erase(first, last), clear,
+_Erase, ++ / --, and MakeBuildOrders' erase / it-- wrappers 0x580240 /
+0x580270. Every operation takes `std::_Lockit` (0x61e6e3 / 0x61e77f) like
+the library code, also nested in the inlined _Min / _Max / rotations; the
+replacements take it at the same places (msvc6/lockit.h) and the
+emulator compares the order of those calls (LOCKIT_PROBES). Quirks of the
+library code kept: erase writes the nil node's parent link; insert's
+result pair has 3 padding bytes of stack leftovers (ours 0).
