@@ -1,6 +1,19 @@
 // A computer player's economy areas in the CEvaLand (Rainer\Cevaland.cpp,
-// Rainer\compGlobs.cpp; re/computer_players.md "The area site lists"):
-// adding an area record and the mine food conditions sent with it.
+// Rainer\compGlobs.cpp; re/computer_players.md "The area site lists" and
+// "The AI event ring"): adding an area record, the mine food conditions
+// sent with it, and the world's AI event ring.
+//
+//   0x00554980 CEvaLand::ProcessPendingEvents() thiscall: drains the ring
+//              world+0x2f990 (types 1..8, see AiEvent and the handlers
+//              below); returns 1 right after a computer player's new site
+//              (event 2), else 0 once the ring is empty. Event 3's place is
+//              kept for the following 6 in two stack slots that are
+//              uninitialized until a 3 comes (ours 0; CrushBuilding always
+//              queues 3 then 6). The x of event 7's ReevaluateAroundTile
+//              has the world pointer's high word in the original (the
+//              callee uses the low word; ours 0).
+//   0x00573890 AI::OnBuildingFinished(building) fastcall: see
+//              AI_OnBuildingFinished.
 //
 //   0x00555260 CEvaLand::AddArea(area, player) thiscall, ret 8: builds a
 //              record on the stack (39 site trees constructed with pointers
