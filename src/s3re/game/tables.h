@@ -249,4 +249,9 @@ inline constexpr GameGlobal<const std::uint8_t[8][16]> g_ditherMasks{0x7a2b58};
 inline constexpr std::size_t kGfxGroupNameCount = 45;
 inline constexpr GameGlobal<const char[kGfxGroupNameCount][4]> g_gfxGroupNames{0x7a2dbc};
 
+// CSoundData::Open (0x5fe760): the primary buffer's WAVEFORMATEX per sound
+// format (Open's last argument 1, 2, 4 -> entry 0, 1, 2; 0x18 bytes apart):
+// PCM stereo 16-bit at 22050, 22050 and 11025 Hz.
+inline constexpr GameGlobal<const std::uint8_t[3][0x18]> g_primaryFormats{0x7a2fb8};
+
 }  // namespace s3re::game

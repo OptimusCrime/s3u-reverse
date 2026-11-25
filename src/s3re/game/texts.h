@@ -164,6 +164,26 @@ inline constexpr GameText kDSRestore{0x7a0f00};             // "CDirectSoundBuff
 inline constexpr GameText kDSGetVolume{0x7a0f20};           // "CDirectSoundBuffer::DSGetVolume"
 inline constexpr GameText kDSUnknownError{0x7a0d90};        // "Unknown Error Code"
 
+// CSoundData (Dirk\SoundData.cpp; the sound loader, sound/sound_data.cpp)
+inline constexpr GameText kSoundDataFile{0x7a3120};        // "E:\Siedler3\Dirk\SoundData.cpp"
+inline constexpr GameText kSndFolder{0x7a3230};            // "Snd"
+inline constexpr GameText kDotSndFolder{0x7a3228};         // ".\Snd"
+inline constexpr GameText kSndPreparingDetach{0x7a3204};   // "SND: Preparing DAT files for detach"
+inline constexpr GameText kSndDetaching{0x7a3314};         // "SND: Detaching DAT files from medium ..."
+inline constexpr GameText kDSCannotCreate{0x7a32f0};       // "DSOUND: Cannot create DSound object"
+inline constexpr GameText kDSSetCooperativeLevel{0x7a32cc};  // "CDirectSound::DSSetCooperativeLevel"
+inline constexpr GameText kDSNoPriorityLevel{0x7a32a0};    // "DSOUND: Cannot optain priority coop level"
+inline constexpr GameText kDSSetFormat{0x7a3270};          // "CPrimaryBuffer::DSSetFormat"
+// "DSOUND: PrimaryBuffer is not capable of requested format"
+inline constexpr GameText kDSFormatNotCapable{0x7a3234};
+inline constexpr GameText kDSPlay{0x7a1250};                // "CDirectSoundBuffer::DSPlay"
+inline constexpr GameText kDSSetVolume{0x7a126c};           // "CDirectSoundBuffer::DSSetVolume"
+inline constexpr GameText kInvalidSoundFormat{0x7a328c};    // "Invalid soundformat"
+inline constexpr GameText kLpPrimary{0x6991c0};             // "lpPrimary"
+inline constexpr GameText kDSCannotRestore{0x7a31dc};       // "DSOUND: Cannot restore DSound object"
+inline constexpr GameText kLpEffectBuffer{0x7a336c};        // "lpEffectBuffer"
+inline constexpr GameText kGetEffectException{0x7a3340};    // "Exception during CSoundData::GetEffect (%x)"
+
 // ------------------------------------------------------------ simulation (DebugLog formats)
 inline constexpr GameText kGameDataInitialisingDone{0x6a5c38};  // "*** GAMEDATA Initialising done" (CGameData::FinishInitialising)
 inline constexpr GameText kSectorsDone{0x72ff08};               // "sectors done" (CGameData::InitTileShadesAndMapEdge)

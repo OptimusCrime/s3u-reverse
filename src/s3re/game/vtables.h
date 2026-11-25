@@ -54,6 +54,13 @@ inline constexpr std::uint32_t kCDirectSound = 0x65ceb8;        // DirectX::CDir
 inline constexpr std::uint32_t kCPrimaryBuffer = 0x65cee0;      // DirectX::CPrimaryBuffer
 inline constexpr std::uint32_t kCSecondaryBuffer = 0x65cef4;    // DirectX::CSecondaryBuffer
 inline constexpr std::uint32_t kCSoundEffectBuffer = 0x65cf38;  // DirectX::CSoundEffectBuffer
+// CSoundData (Dirk\SoundData.cpp) and its two skip-list dictionaries
+inline constexpr std::uint32_t kCSoundData = 0x65d3ec;               // CSoundData
+inline constexpr std::uint32_t kSoundEffectDict = 0x65d41c;          // WCValSkipListDict<uint, DirectX::CSoundEffect*>
+inline constexpr std::uint32_t kSoundUseDict = 0x65d400;             // WCValSkipListDict<uint, uint>
+inline constexpr std::uint32_t kSoundEffectSkipListBase = 0x65d438;  // WCSkipListBase<...CSoundEffect...>
+inline constexpr std::uint32_t kSoundUseSkipListBase = 0x65d454;     // WCSkipListBase<...uint, uint...>
+inline constexpr std::uint32_t kStringVector = 0x655440;             // WCValOrderedVector<String>
 inline constexpr std::uint32_t kCLandscapeSurface = 0x65a520;   // CLandscapeSurface
 // UI
 inline constexpr std::uint32_t kCScreenElement = 0x655a68;  // CScreenElement
@@ -126,6 +133,8 @@ namespace type_descriptor {
 inline constexpr std::uintptr_t kCTimeoutPointer = 0x698e98;  // ".PAVCTimeout@Win32@@" (ExecuteCommands' catch)
 inline constexpr std::uintptr_t kCHResultPointer = 0x6968d8;  // ".PAVCHResult@Win32@@" (CMapFileStream's catches)
 inline constexpr std::uintptr_t kCFileNotFoundPointer = 0x69f908;  // ".PAVCFileNotFound@Win32@@" (CMapFileStream::Open)
+// ".PAVCDirectSoundException@DirectX@@" (CSoundData::Open's and Restore's catches)
+inline constexpr std::uintptr_t kCDirectSoundExceptionPointer = 0x697510;
 }  // namespace type_descriptor
 
 }  // namespace s3re::game
