@@ -6,6 +6,15 @@
 // with CGameData::Random as 1..34 (Random % 34 + 1), skipping ids already
 // chosen and 21, 25, 27..31, 33, 34, 35.
 //
+// CGameData::ChooseNewGameObjectives (0x004ffbc0): () thiscall, called by CLogicThread::OnStart; EAX unused.
+//   Nothing if the objectives are off. Else objective_timeout (+0x2d248) =
+//   GameSettings::NgoTimeout 0x437470 of g_gameSettings, DebugLog "*** NGO
+//   TimeOut: %u min (new) ***" with it, end_warning_minutes (+0x2d24c) =
+//   10; then seven objectives: id = Random() % 34 + 1 (a byte), drawn again
+//   while IsNgoObjectiveChosen(id) (called through its address; the upper
+//   bytes of its argument are the caller's stack leftovers, it reads the
+//   low byte only) or the id is 21, 25, 27..31, 33, 34 (35: never drawn);
+//   finally g_victoryProtectActive (0x7deb54) = 1.
 // CGameData::IsNgoObjectiveChosen (0x004ffb90): (id) -> AL = 1 if one of
 //   the seven bytes equals the low byte of `id`, else 0; the upper bits of
 //   EAX are the caller's (only AL is used). thiscall, ret 4.
@@ -24,7 +33,10 @@
 //   CheckVictoryConditions outside campaigns, where the victory conditions
 //   name players by colour. thiscall, ret 4.
 
+#include "game/debug_log.h"
 #include "game/globals.h"
+#include "game/texts.h"
+#include "game/ui/game_settings_layout.h"
 #include "game/replacements.h"
 #include "game/world.h"
 #include "hooks.h"
@@ -32,6 +44,7 @@
 #include "test/world_buffer.h"
 
 #include <cstdint>
+#include <vector>
 
 namespace s3re::game {
 
@@ -125,6 +138,56 @@ std::int32_t __fastcall CGameData_PlayerOfColour(CGameData* world, void*, std::u
     return 0;
 }
 
+namespace {
+
+constexpr std::uint32_t kNgoObjectiveIds = 34;     // ids 1..34 are drawn
+constexpr std::int32_t kEndWarningMinutes = 10;
+// Drawn ids that are never used as objectives.
+constexpr std::uint8_t kExcludedObjectives[] = {21, 25, 27, 28, 29, 30, 31, 33, 34, 35};
+
+// CGameData::Random through its address.
+std::uint32_t Random(CGameData* world) {
+    return reinterpret_cast<std::uint16_t(__fastcall*)(CGameData*, void*)>(0x004feb70)(world, nullptr);
+}
+
+bool IsExcludedObjective(std::uint8_t id) {
+    for (const std::uint8_t excluded : kExcludedObjectives) {
+        if (id == excluded) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+using ChooseObjectivesFn = void(__fastcall*)(CGameData* world, void* edx);
+void __fastcall CGameData_ChooseNewGameObjectives(CGameData* world, void* edx);
+
+// Purpose: At the start of a game with "new game objectives", sets their
+// time limit and draws the seven goods the teams compete for.
+void __fastcall CGameData_ChooseNewGameObjectives(CGameData* world, void*) {
+    if (NgoEnabled(world) == 0) {
+        return;
+    }
+    using GetterFn = std::uint32_t(__fastcall*)(const GameSettings*, void*);
+    const std::uint32_t timeout = reinterpret_cast<GetterFn>(0x00437470)(&g_gameSettings.get(), nullptr);
+    world->objective_timeout = static_cast<std::int32_t>(timeout);
+    GameDebugLog(texts::kNgoTimeoutNew, timeout);
+    world->end_warning_minutes = kEndWarningMinutes;
+    for (std::uint32_t k = 0; k < kNgoObjectiveCount;) {
+        const auto id = static_cast<std::uint8_t>(Random(world) % kNgoObjectiveIds + 1);
+        if (reinterpret_cast<IsChosenFn>(0x004ffb90)(world, nullptr, id) || IsExcludedObjective(id)) {
+            continue;
+        }
+        NgoObjectives(world)[k] = id;
+        ++k;
+    }
+    g_victoryProtectActive = 1;
+}
+
+S3RE_HOOK(0x004ffbc0, CGameData_ChooseNewGameObjectives, ChooseObjectivesFn,
+          Original_CGameData_ChooseNewGameObjectives, CGameData_ChooseNewGameObjectives);
 S3RE_HOOK(0x004ffb90, CGameData_IsNgoObjectiveChosen, IsChosenFn, Original_CGameData_IsNgoObjectiveChosen,
           CGameData_IsNgoObjectiveChosen);
 S3RE_HOOK(0x004ffc80, CGameData_DecideNgoOutcome, DecideNgoOutcomeFn, Original_CGameData_DecideNgoOutcome,
@@ -173,6 +236,64 @@ bool __fastcall WrongIsNgoObjectiveChosen(CGameData* world, void*, std::uint32_t
 }
 
 }  // namespace
+
+namespace {
+
+// ChooseNewGameObjectives on random worlds (objectives on or off, random
+// RNG states and objective bytes), with a random NGO time in g_gameSettings
+// (restored). Compared: the world up past the objectives, the DebugLog
+// calls and g_victoryProtectActive.
+void CompareChooseObjectives(test::Context& ctx, ChooseObjectivesFn candidate, int cases) {
+    test::WorldPair worlds(ctx, kTestWorld);
+    const std::uint32_t savedTimeout = g_gameSettings->ngo_timeout;
+    const std::uint8_t savedFlag = g_victoryProtectActive;
+    for (int i = 0; i < cases; ++i) {
+        const auto enabled = static_cast<std::uint8_t>(ctx.rng().Chance(1, 8) ? 0 : 1 + ctx.rng().Below(255));
+        worlds.Both([&](CGameData* w) { NgoEnabled(w) = enabled; });
+        g_gameSettings->ngo_timeout = ctx.rng().Next32();
+        const auto flag = static_cast<std::uint8_t>(ctx.rng().Below(2));
+        std::vector<DebugLogCall> logA, logB;
+        std::uint8_t flagA, flagB;
+        {
+            DebugLogRecorder recorder;
+            g_victoryProtectActive = flag;
+            Original_CGameData_ChooseNewGameObjectives(worlds.original(), nullptr);
+            flagA = g_victoryProtectActive;
+            logA = recorder.Take();
+            g_victoryProtectActive = flag;
+            candidate(worlds.ours(), nullptr);
+            flagB = g_victoryProtectActive;
+            logB = recorder.Take();
+        }
+        if (!S3RE_EXPECT_EQ(flagA, flagB) || !S3RE_EXPECT(logA == logB) || !worlds.Checkpoint(ctx)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            break;
+        }
+    }
+    g_gameSettings->ngo_timeout = savedTimeout;
+    g_victoryProtectActive = savedFlag;
+}
+
+// Wrong: id 32 is excluded too.
+void __fastcall WrongChooseNewGameObjectives(CGameData* world, void* edx) {
+    CGameData_ChooseNewGameObjectives(world, edx);
+    for (std::uint32_t k = 0; k < kNgoObjectiveCount; ++k) {
+        if (NgoObjectives(world)[k] == 32) {
+            NgoObjectives(world)[k] = 20;
+        }
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(CGameData_ChooseNewGameObjectives_MatchesOriginal) {
+    CompareChooseObjectives(ctx, &CGameData_ChooseNewGameObjectives, 300);
+}
+S3RE_TEST(CGameData_ChooseNewGameObjectives_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareChooseObjectives(probe, &WrongChooseNewGameObjectives, 100);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(CGameData_IsNgoObjectiveChosen_MatchesOriginal) {
     CompareIsChosen(ctx, &CGameData_IsNgoObjectiveChosen, 20000);

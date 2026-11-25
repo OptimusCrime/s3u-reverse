@@ -85,6 +85,10 @@ inline constexpr GameGlobal<const std::uint32_t[]> g_settlerAnimations{0x6a8060}
 // ------------------------------------------------------------ races
 // Per race the eight spells it can cast.
 inline constexpr GameGlobal<const std::uint32_t[][8]> g_raceSpells{0x658d64};
+// Per spell (the numbers of g_raceSpells) the value a player's spell_mana
+// slot starts with (CGameData::InitAfterMapLoad 0x4fd020; probably the
+// spell's mana cost): 15, 10, 20, 4, 12, ...
+inline constexpr GameGlobal<const std::uint32_t[]> g_spellInitialMana{0x658e64};
 // Per spell (the numbers of g_raceSpells) the range in tiles around the
 // priest (ExecuteCommands 0x15: TileDistance - 2 must be below it).
 inline constexpr GameGlobal<const std::uint32_t[]> g_spellCastRange{0x658de4};

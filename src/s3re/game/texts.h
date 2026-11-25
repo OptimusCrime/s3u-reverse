@@ -119,6 +119,8 @@ inline constexpr GameText kSlotSaveName{0x6a66d4};            // "slot%2i.sav"
 inline constexpr GameText kMultiplayerSaveName{0x6a66c4};     // "Multi	emp.mps"
 // GameSettings::SaveSetup (0x433490)
 inline constexpr GameText kSavingLocalPlayerId{0x6995bc};     // "CFG: Saving local player id %i"
+// CGameData::ChooseNewGameObjectives (0x4ffbc0)
+inline constexpr GameText kNgoTimeoutNew{0x6a5f38};  // "*** NGO TimeOut: %u min (new) ***"
 // GamePlayerSetup::LogSlot (0x4a01c0)
 inline constexpr GameText kSlotLog{0x69f974};  // "SLOT: Ids: %i %x Version: %i Team: %i Type: %i Nation: %i Clan: %i %s"
 inline constexpr GameText kProtocolFile{0x7a34fc};      // "E:\Siedler3\Dirk\protocol.cpp"

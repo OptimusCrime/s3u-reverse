@@ -110,6 +110,9 @@ struct GameSettings {
     std::uint32_t valueC8;       // +0xc8 read by CNetThread::OnStart and CNetSession; chunk 0x1b
     std::uint8_t randomRaceAmazons;  // +0xcc whether random races include the Amazons (random.cpp)
     std::uint8_t goods_objective;    // +0xcd the "NGO" goods objective is on (re/game_setup.md); chunk 0x1e
+    std::uint8_t unk0ce[2];
+    std::uint32_t ngo_timeout;       // +0xd0 the new game objectives' time in minutes (GameSettings::NgoTimeout
+                                     //       0x437470; CGameData::ChooseNewGameObjectives logs it)
 };
 static_assert(offsetof(GameSettings, map_name) == 0x2c);
 static_assert(offsetof(GameSettings, player_setups) == 0x58);
@@ -122,6 +125,7 @@ static_assert(offsetof(GameSettings, game_guid) == 0xb0);
 static_assert(offsetof(GameSettings, valueC8) == 0xc8);
 static_assert(offsetof(GameSettings, randomRaceAmazons) == 0xcc);
 static_assert(offsetof(GameSettings, goods_objective) == 0xcd);
+static_assert(offsetof(GameSettings, ngo_timeout) == 0xd0);
 
 #pragma pack(pop)
 

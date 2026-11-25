@@ -52,7 +52,9 @@ add_library(s3re SHARED
     game/world/random.cpp
     game/world/statistics.cpp
     game/world/world_search.cpp
+    game/world/init_after_map_load.cpp
     game/world/offset_table.cpp
+    game/world/world_object.cpp
     game/world/world_tables.cpp
 
     # game/map/: tiles, directions, areas and regions, territory, fog of war, minimap
