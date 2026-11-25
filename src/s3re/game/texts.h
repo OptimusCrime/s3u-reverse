@@ -236,6 +236,10 @@ inline constexpr GameText kForceProductionNotOwner{0x7325b0};
 inline constexpr GameText kEmergencyWoodNotOwner{0x732698};
 inline constexpr GameText kAiNoSuitableTool{0x73273c};  // "KEIN PASSENDES WERKZEUG VORHANDEN" + newline (no suitable tool)
 inline constexpr GameText kAiNoChildNote{0x731b78};  // "Kein ChildNote gefunden! " + newline (no child note found)
+// The out-of-memory checks of the request agents' TakeNote (Win32::ThrowOutOfMemory's text and file).
+inline constexpr GameText kNotePtr{0x731b44};                 // "notePtr"
+inline constexpr GameText kBuildHouseSourceFile{0x731b4c};    // "E:\Siedler3\Rainer\CompDoBuildHouseReq.cpp"
+inline constexpr GameText kHouseRequestSourceFile{0x732718};  // "E:\Siedler3\Rainer\CompHouseReq.cpp"
 // Computer players (Rainer\CompMapWorkerAgent.cpp).
 inline constexpr GameText kAiCenterGroup{0x732dd8};  // "Center - player: %d, group: %d \n" (OutputDebugStringA)
 inline constexpr GameText kRandom55{0x732a84};       // "RANDOM_55 wert = %u" (value, DebugLog of mission 56)

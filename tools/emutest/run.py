@@ -276,6 +276,8 @@ def run_spec(machine: emu.Emulator, spec: specs.Spec, cases: int, seed: int,
         machine.begin_case(rng.getrandbits(32), pool, presets)
         machine.new_fails = spec.new_fails > 0 and rng.random() < spec.new_fails
         machine.new_fails_size = spec.new_fails_size
+        if isinstance(spec.new_fails_size, tuple):  # one of several sizes per case
+            machine.new_fails_size = rng.choice(spec.new_fails_size)
         if spec.globals:
             for address, value, size in spec.globals(rng, pool, args):
                 mask = (1 << (8 * size)) - 1

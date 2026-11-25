@@ -37,7 +37,10 @@
 #include "game/enums/buildings.h"
 #include "game/globals.h"
 #include "game/layout.h"
+#include "game/texts.h"
+#include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/game_heap.h"
 #include "test/callee_stub.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
@@ -465,6 +468,257 @@ S3RE_TEST(AiRequestAgents_ComparisonDetectsWrongImplementation) {
         CompareAgents(quiet, wrong, 4000);
         S3RE_EXPECT(quiet.failures() > 0);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Taking a note: the build agent and the house request agent (slot 3)
+// ---------------------------------------------------------------------------
+//
+//   0x005654d0 T_DO_BUILD_HOUSE_AGENT::TakeNote(note), ret 4: marks the
+//              note taken (BLACK_BOARD_NOTE::SetFlags(2), handler = the
+//              agent's kind), makes a HOUSE_REQUEST_NOTE (operator new
+//              0x2c, vtable 0x65a558, Init 0x578760 with the note's type,
+//              x, y and value words) and adds it under the note
+//              (CComputerPlayer::AddNoteUnder 0x551230). Out of memory:
+//              Win32::ThrowOutOfMemory(0x731b44, 0x731b4c, line 176). AX =
+//              100 (the upper half is AddNoteUnder's).
+//   0x005787c0 HOUSE_REQUEST_AGENT::TakeNote(note), ret 4: the same with
+//              two children: a HOUSE_GROUND_REQUEST_NOTE (0x4c bytes;
+//              vtable 0x65a56c, the WrappedPos constructor 0x597070 on
+//              +0x2c, vtable 0x65a598, Init 0x575d60 with type, x, y and
+//              the value word as the search radius; line 177) and a
+//              LOCAL_WARE_REQUEST_NOTE (0x24 bytes; vtable 0x65a5ac, Init
+//              0x57ab20 with type, x, y; line 182), each added under the
+//              note. The Init arguments are pushed as dwords whose upper
+//              halves are register or stack leftovers; every Init reads
+//              only the low words.
+// The SEH frames of the originals only delete the new note when its Init
+// throws (they don't).
+
+using TakeNoteFn = std::uint32_t(__fastcall*)(void* self, void* edx, RequestNote* note);
+
+std::uint32_t __fastcall T_DO_BUILD_HOUSE_AGENT_TakeNote(void* self, void* edx, RequestNote* note);
+std::uint32_t __fastcall HOUSE_REQUEST_AGENT_TakeNote(void* self, void* edx, RequestNote* note);
+
+S3RE_HOOK(0x005654d0, T_DO_BUILD_HOUSE_AGENT_TakeNote, TakeNoteFn, Original_T_DO_BUILD_HOUSE_AGENT_TakeNote,
+          T_DO_BUILD_HOUSE_AGENT_TakeNote);
+S3RE_HOOK(0x005787c0, HOUSE_REQUEST_AGENT_TakeNote, TakeNoteFn, Original_HOUSE_REQUEST_AGENT_TakeNote,
+          HOUSE_REQUEST_AGENT_TakeNote);
+
+namespace {
+
+constexpr std::uintptr_t kOperatorNew = 0x0061efb9;
+constexpr std::uintptr_t kThrowOutOfMemory = 0x00610960;      // Win32::ThrowOutOfMemory (never returns)
+constexpr std::uintptr_t kAddNoteUnder = 0x00551230;          // CComputerPlayer::AddNoteUnder (thiscall)
+constexpr std::uintptr_t kHouseRequestInit = 0x00578760;      // HOUSE_REQUEST_NOTE::Init
+constexpr std::uintptr_t kGroundRequestInit = 0x00575d60;     // HOUSE_GROUND_REQUEST_NOTE::Init
+constexpr std::uintptr_t kLocalWareRequestInit = 0x0057ab20;  // LOCAL_WARE_REQUEST_NOTE::Init
+constexpr std::uintptr_t kWrappedPosConstruct = 0x00597070;   // AI::WrappedPos::WrappedPos
+constexpr std::uint32_t kNoteFlagTaken = 2;                   // kNoteTaken
+// The source lines of the out-of-memory checks (Rainer\CompDoBuildHouseReq.cpp, CompHouseReq.cpp).
+constexpr std::uint32_t kBuildHouseNewLine = 176;
+constexpr std::uint32_t kGroundRequestNewLine = 177;
+constexpr std::uint32_t kWareRequestNewLine = 182;
+// The sizes of the new notes.
+constexpr std::uint32_t kHouseRequestNoteBytes = 0x2c;
+constexpr std::uint32_t kGroundRequestNoteBytes = 0x4c;
+constexpr std::uint32_t kWareRequestNoteBytes = 0x24;  // (RequestNote without +0x24..+0x27)
+static_assert(sizeof(HouseRequestNote) == kHouseRequestNoteBytes);
+static_assert(sizeof(HouseGroundRequestNote) == kGroundRequestNoteBytes);
+
+void* NewNote(std::uint32_t size) {
+    using Fn = void*(__cdecl*)(std::uint32_t size);
+    return reinterpret_cast<Fn>(kOperatorNew)(size);
+}
+
+void ThrowOutOfMemory(const GameText& file, std::uint32_t line) {
+    using Fn = void(__fastcall*)(const char* text, const char* file, std::uint32_t line);
+    reinterpret_cast<Fn>(kThrowOutOfMemory)(texts::kNotePtr.c_str(), file.c_str(), line);
+}
+
+std::uint32_t AddNoteUnder(void* child, RequestNote* parent, void* agent) {
+    using Fn = std::uint32_t(__fastcall*)(ComputerPlayer* player, void* edx, void* note, void* parent, void* agent);
+    return reinterpret_cast<Fn>(kAddNoteUnder)(g_aiPlayer, nullptr, child, parent, agent);
+}
+
+void TakeNote(void* self, RequestNote* note) {
+    SetFlags(&note->base, kNoteFlagTaken);
+    note->base.handler = static_cast<const BlackBoardAgent*>(self)->kind;
+}
+
+}  // namespace
+
+// Purpose: The build agent takes an order to build a house and asks for
+// the house (a HOUSE_REQUEST_NOTE under it).
+std::uint32_t __fastcall T_DO_BUILD_HOUSE_AGENT_TakeNote(void* self, void* /*edx*/, RequestNote* note) {
+    TakeNote(self, note);
+    void* request = NewNote(kHouseRequestNoteBytes);
+    if (request != nullptr) {
+        *static_cast<std::uint32_t*>(request) = vtables::kHouseRequestNote;
+        using InitFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t type, std::uint32_t x,
+                                                  std::uint32_t y, std::uint32_t value);
+        reinterpret_cast<InitFn>(kHouseRequestInit)(request, nullptr, note->building_type, note->x, note->y,
+                                                    note->value22);
+    } else {
+        ThrowOutOfMemory(texts::kBuildHouseSourceFile, kBuildHouseNewLine);
+    }
+    const std::uint32_t added = AddNoteUnder(request, note, self);
+    return (added & 0xffff0000u) | kSucceeded;
+}
+
+// Purpose: The house request agent takes a house request and asks for the
+// ground (a HOUSE_GROUND_REQUEST_NOTE) and the worker's tool (a
+// LOCAL_WARE_REQUEST_NOTE) under it.
+std::uint32_t __fastcall HOUSE_REQUEST_AGENT_TakeNote(void* self, void* /*edx*/, RequestNote* note) {
+    TakeNote(self, note);
+    void* ground = NewNote(kGroundRequestNoteBytes);
+    if (ground != nullptr) {
+        *static_cast<std::uint32_t*>(ground) = vtables::kBlackBoardNote;  // the base constructor, inlined
+        using PosFn = std::uint32_t(__fastcall*)(void* self, void* edx);
+        reinterpret_cast<PosFn>(kWrappedPosConstruct)(&static_cast<HouseGroundRequestNote*>(ground)->spiral, nullptr);
+        *static_cast<std::uint32_t*>(ground) = vtables::kHouseGroundRequestNote;
+        using InitFn = void(__fastcall*)(void* self, void* edx, std::uint32_t type, std::uint32_t x, std::uint32_t y,
+                                         std::uint32_t radius);
+        reinterpret_cast<InitFn>(kGroundRequestInit)(ground, nullptr, note->building_type, note->x, note->y,
+                                                     note->value22);
+    } else {
+        ThrowOutOfMemory(texts::kHouseRequestSourceFile, kGroundRequestNewLine);
+    }
+    AddNoteUnder(ground, note, self);
+    void* ware = NewNote(kWareRequestNoteBytes);
+    if (ware != nullptr) {
+        *static_cast<std::uint32_t*>(ware) = vtables::kLocalWareRequestNote;
+        using InitFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t type, std::uint32_t x,
+                                                  std::uint32_t y);
+        reinterpret_cast<InitFn>(kLocalWareRequestInit)(ware, nullptr, note->building_type, note->x, note->y);
+    } else {
+        ThrowOutOfMemory(texts::kHouseRequestSourceFile, kWareRequestNewLine);
+    }
+    const std::uint32_t added = AddNoteUnder(ware, note, self);
+    return (added & 0xffff0000u) | kSucceeded;
+}
+
+// Tests: the callees stubbed (SetFlags, the Inits, the WrappedPos
+// constructor, AddNoteUnder; recorded), operator new real (the new notes
+// are compared byte for byte up to the stubs, relative to their own
+// address). The out-of-memory path is covered by the emulator specs.
+
+namespace {
+
+struct TakeCall {
+    std::uint32_t callee, self, args[5];
+    bool operator==(const TakeCall& other) const {
+        return callee == other.callee && self == other.self && std::memcmp(args, other.args, sizeof(args)) == 0;
+    }
+};
+
+void CompareTakeNote(test::Context& ctx, TakeNoteFn candidate, TakeNoteFn original, int cases) {
+    ComputerPlayer* const savedPlayer = g_aiPlayer;
+    std::vector<TakeCall>* log = nullptr;
+    std::vector<std::uint32_t> newBlocks;
+    std::uint32_t addResult = 0;
+    const auto record = [&](std::uintptr_t callee, std::uint32_t self, const std::uint32_t* args, int count) {
+        TakeCall call{static_cast<std::uint32_t>(callee), self, {0, 0, 0, 0, 0}};
+        // The Inits' arguments: only their low words (the originals push
+        // register leftovers in the upper halves; every Init reads words).
+        const bool words = callee == kHouseRequestInit || callee == kGroundRequestInit ||
+                           callee == kLocalWareRequestInit;
+        for (int k = 0; k < count; ++k) {
+            call.args[k] = words ? args[k] & 0xffff : args[k];
+        }
+        log->push_back(call);
+    };
+    test::CalleeStubs stubs;
+    stubs.SetWorld(nullptr);
+    stubs.Install<1, kSetFlags>([&](CGameData*, std::uint32_t self, const std::uint32_t* args) {
+        record(kSetFlags, self, args, 1);
+        return 0u;
+    });
+    stubs.Install<4, kHouseRequestInit>([&](CGameData*, std::uint32_t self, const std::uint32_t* args) {
+        record(kHouseRequestInit, *reinterpret_cast<const std::uint32_t*>(self), args, 4);  // (its vtable)
+        return 0u;
+    });
+    stubs.Install<4, kGroundRequestInit>([&](CGameData*, std::uint32_t self, const std::uint32_t* args) {
+        record(kGroundRequestInit, *reinterpret_cast<const std::uint32_t*>(self), args, 4);
+        return 0u;
+    });
+    stubs.Install<3, kLocalWareRequestInit>([&](CGameData*, std::uint32_t self, const std::uint32_t* args) {
+        record(kLocalWareRequestInit, *reinterpret_cast<const std::uint32_t*>(self), args, 3);
+        return 0u;
+    });
+    stubs.Install<0, kWrappedPosConstruct>([&](CGameData*, std::uint32_t self, const std::uint32_t*) {
+        // the note's vtable at the time, relative position
+        record(kWrappedPosConstruct, *reinterpret_cast<const std::uint32_t*>(self - 0x2c), nullptr, 0);
+        return 0u;
+    });
+    stubs.Install<3, kAddNoteUnder>([&](CGameData*, std::uint32_t self, const std::uint32_t* args) {
+        newBlocks.push_back(args[0]);
+        const std::uint32_t relative[3] = {*reinterpret_cast<const std::uint32_t*>(args[0]), args[1], args[2]};
+        record(kAddNoteUnder, self, relative, 3);
+        return addResult;
+    });
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        test::Rng& rng = ctx.rng();
+        std::uint8_t a[0x30], b[0x30];
+        rng.Fill(a, sizeof(a));
+        std::memcpy(b, a, sizeof(a));
+        g_aiPlayer = reinterpret_cast<ComputerPlayer*>(rng.Next32());
+        addResult = rng.Next32();
+        std::uint8_t agent[8];
+        rng.Fill(agent, sizeof(agent));
+        std::vector<TakeCall> logA, logB;
+        log = &logA;
+        const std::uint32_t ra = original(agent, nullptr, reinterpret_cast<RequestNote*>(a));
+        log = &logB;
+        const std::uint32_t rb = candidate(agent, nullptr, reinterpret_cast<RequestNote*>(b));
+        // Relative note addresses in the logs (args[1] = the parent note).
+        for (TakeCall& call : logA) {
+            for (std::uint32_t& arg : call.args) {
+                arg -= arg == reinterpret_cast<std::uint32_t>(a) ? arg : 0;
+            }
+            call.self -= call.self == reinterpret_cast<std::uint32_t>(a) ? call.self : 0;
+        }
+        for (TakeCall& call : logB) {
+            for (std::uint32_t& arg : call.args) {
+                arg -= arg == reinterpret_cast<std::uint32_t>(b) ? arg : 0;
+            }
+            call.self -= call.self == reinterpret_cast<std::uint32_t>(b) ? call.self : 0;
+        }
+        bool same = S3RE_EXPECT_EQ(ra, rb);
+        same &= S3RE_EXPECT_MEM_EQ(a, b, sizeof(a));
+        same &= S3RE_EXPECT(logA == logB);
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+        }
+        for (std::uint32_t block : newBlocks) {
+            msvc6::GameOperatorDelete(reinterpret_cast<void*>(block));
+        }
+        newBlocks.clear();
+        stubs.Take();
+    }
+    g_aiPlayer = savedPlayer;
+}
+
+std::uint32_t __fastcall WrongHouseTakeNote(void* self, void* edx, RequestNote* note) {
+    // Wrong: the radius is the note's y.
+    const std::uint16_t value = note->value22;
+    note->value22 = note->y;
+    const std::uint32_t result = HOUSE_REQUEST_AGENT_TakeNote(self, edx, note);
+    note->value22 = value;
+    return result;
+}
+
+}  // namespace
+
+S3RE_TEST(AiTakeNote_MatchOriginal) {
+    CompareTakeNote(ctx, &T_DO_BUILD_HOUSE_AGENT_TakeNote, Original_T_DO_BUILD_HOUSE_AGENT_TakeNote, 300);
+    CompareTakeNote(ctx, &HOUSE_REQUEST_AGENT_TakeNote, Original_HOUSE_REQUEST_AGENT_TakeNote, 300);
+}
+
+S3RE_TEST(AiTakeNote_ComparisonDetectsWrongImplementation) {
+    test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+    CompareTakeNote(quiet, &WrongHouseTakeNote, Original_HOUSE_REQUEST_AGENT_TakeNote, 300);
+    S3RE_EXPECT(quiet.failures() > 0);
 }
 
 }  // namespace s3re::game

@@ -3491,3 +3491,25 @@ SPECS += [
          presets=ground_work_world, globals=agent_globals, callees=AGENT_PROBES, max_cases=1000),
     Spec("COMPUTER_PLAYER_AGENT_Run", 0x005846a0, "thiscall", [], presets=run_agent, globals=agent_globals),
 ]
+
+
+# TakeNote of the build agent and the house request agent: the agent at
+# world +0, the note in scratch 0; the new notes' Inits run (verified),
+# AddNoteUnder is probed; new_fails reaches Win32::ThrowOutOfMemory (only
+# the notes' sizes fail, so its own allocations work).
+
+def take_note_world(rng, pool, args):
+    return [(SCRATCH + 0x1C, rng.choice((15, 2, 24, 3, rng.randrange(60))), 2), (SCRATCH + 0x1E, rng.randrange(400), 2),
+            (SCRATCH + 0x20, rng.randrange(400), 2), (SCRATCH + 0x22, rng.randrange(40), 2)]
+
+
+TAKE_NOTE_CALLEES = {0x00551230: (3, "thiscall", "probe")}
+
+SPECS += [
+    Spec("T_DO_BUILD_HOUSE_AGENT_TakeNote", 0x005654d0, "thiscall", [scratch(0)],
+         presets=take_note_world, globals=ai_world_400, callees=TAKE_NOTE_CALLEES, new_fails=0.1,
+         new_fails_size=0x2C, max_cases=500),
+    Spec("HOUSE_REQUEST_AGENT_TakeNote", 0x005787c0, "thiscall", [scratch(0)],
+         presets=take_note_world, globals=ai_world_400, callees=TAKE_NOTE_CALLEES, new_fails=0.2,
+         new_fails_size=(0x4C, 0x24), max_cases=500),
+]

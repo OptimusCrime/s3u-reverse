@@ -55,6 +55,9 @@ inline constexpr std::uint32_t kCComputerPlayer = 0x65a530;  // CComputerPlayer
 inline constexpr std::uint32_t kBlackBoardNote = 0x65a56c;    // BLACK_BOARD_NOTE
 inline constexpr std::uint32_t kBlackBoardAgent = 0x65a828;   // BLACK_BOARD_AGENT (the base class)
 inline constexpr std::uint32_t kDoBuildHouseNote = 0x65a584;  // T_DO_BUILD_HOUSE_NOTE
+inline constexpr std::uint32_t kHouseRequestNote = 0x65a558;        // HOUSE_REQUEST_NOTE
+inline constexpr std::uint32_t kHouseGroundRequestNote = 0x65a598;  // HOUSE_GROUND_REQUEST_NOTE
+inline constexpr std::uint32_t kLocalWareRequestNote = 0x65a5ac;    // LOCAL_WARE_REQUEST_NOTE
 // Watcom container library
 inline constexpr std::uint32_t kWCExcept = 0x655438;                    // WCExcept (base of the containers)
 inline constexpr std::uint32_t kWCIsvListBase = 0x655fa4;               // WCIsvListBase

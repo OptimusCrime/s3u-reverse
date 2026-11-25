@@ -112,8 +112,9 @@ class Spec:
     # reach the out-of-memory paths).
     new_fails: float = 0.0
     # With new_fails: only allocations of this size fail (e.g. the exception
-    # object, not the strings built before it).
-    new_fails_size: int | None = None
+    # object, not the strings built before it); a tuple: one of them per
+    # case (session 55: the two notes of HOUSE_REQUEST_AGENT::TakeNote).
+    new_fails_size: int | tuple[int, ...] | None = None
     # Calls of S3.EXE functions that are recorded instead of run (see
     # emu.Emulator.set_callees): {address: (stack argument count,
     # "cdecl"/"stdcall"/"thiscall", "this"/"probe")}. Only for callees that
