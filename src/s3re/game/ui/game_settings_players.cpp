@@ -38,11 +38,6 @@
 //   +0x60, +0x68 = 0; +0x58, +0x5c, +0x74, +0x78, +0xa4, +0xb8 = 0; +0x64 =
 //   0xff (random race); +0x6c, +0x70, +0xa8..+0xb4 = -1. Not written:
 //   +0x0c..+0x0f and +0x7c..+0xa3.
-// GamePlayerSetup::Set (0x0049f120): (type, byte60, party, race, raceByte,
-//   a, b, c, colour) ret 0x24: +0x60 = byte60 (low byte), +0x5c = type,
-//   +0x14 = party, +0x70 = party if it was -1, +0x64 = race, +0x6c = race if
-//   it was -1, +0x68 = raceByte (low byte), +0xa8/+0xac/+0xb0 = a/b/c, +0xb4
-//   = colour. EAX = colour.
 // GamePlayerSetup::GamePlayerSetup_id (0x0049e9f0; was named as a
 //   WCValOrderedVector<unsigned short> constructor): (id) ret 4, EAX =
 //   this: the same with +0x10 = id, and the three allocator bytes the low
@@ -253,43 +248,6 @@ GamePlayerSetup* __fastcall GamePlayerSetup_Construct(GamePlayerSetup* self, voi
     dword(0xb8, 0);
     EmptyString(&self->textBC);
     return self;
-}
-
-using SetupSetFn = std::uint32_t(__fastcall*)(GamePlayerSetup* self, void* edx, std::uint32_t type,
-                                             std::uint32_t byte60, std::uint32_t party, std::uint32_t race,
-                                             std::uint32_t raceByte, std::uint32_t a, std::uint32_t b, std::uint32_t c,
-                                             std::uint32_t colour);
-std::uint32_t __fastcall GamePlayerSetup_Set(GamePlayerSetup* self, void* edx, std::uint32_t type, std::uint32_t byte60,
-                                             std::uint32_t party, std::uint32_t race, std::uint32_t raceByte,
-                                             std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t colour);
-S3RE_HOOK(0x0049f120, GamePlayerSetup_Set, SetupSetFn, Original_GamePlayerSetup_Set, GamePlayerSetup_Set);
-
-// Purpose: Fills in a player setup (type, party, race, start position
-// values, colour) when the game setup dialogs or the map loader set a
-// player up; the "initial" party and race (+0x70, +0x6c) are only set once.
-std::uint32_t __fastcall GamePlayerSetup_Set(GamePlayerSetup* self, void*, std::uint32_t type, std::uint32_t byte60,
-                                             std::uint32_t party, std::uint32_t race, std::uint32_t raceByte,
-                                             std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t colour) {
-    auto* bytes = reinterpret_cast<std::uint8_t*>(self);
-    auto dword = [bytes](std::size_t offset) -> std::uint32_t& {
-        return *reinterpret_cast<std::uint32_t*>(bytes + offset);  // raw-ok: unnamed fields of the record
-    };
-    bytes[0x60] = static_cast<std::uint8_t>(byte60);  // raw-ok: unnamed byte of the record
-    self->type = type;
-    self->party = party;
-    if (dword(0x70) == kUnset) {
-        dword(0x70) = party;
-    }
-    self->race = race;
-    if (dword(0x6c) == kUnset) {
-        dword(0x6c) = race;
-    }
-    self->race_byte = static_cast<std::uint8_t>(raceByte);
-    self->saved_values[0] = a;
-    self->saved_values[1] = b;
-    self->saved_values[2] = c;
-    self->colour = colour;
-    return colour;
 }
 
 GamePlayerSetup* __fastcall GamePlayerSetup_ConstructId(GamePlayerSetup* self, void* edx, std::uint32_t id);

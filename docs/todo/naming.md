@@ -22,3 +22,17 @@ LOGBOOK session entry).
   reader is the draw code), world +0x2d2ec/+0x2d304..+0x2d310. Name them
   when their readers (UpdateSettlers, ExecuteCommands, PrepareDrawData)
   are reimplemented.
+- **GamePlayerSetup is RTTI's Dirk::CPlayer (session 56, wip/ui-watcom).**
+  The Watcom vectors of the game settings are WCValOrderedVector<Dirk::CPlayer>
+  with 0xcc-byte elements, whose element functions are our GamePlayerSetup
+  ones (constructor 0x49e8f0, destructor 0x49ec80, operator== 0x49f100);
+  Dirk::CTeam (0x40 bytes) holds a WCValSortedVector<int> (+8, probably the
+  player ids) and a WCValOrderedVector<Dirk::CPlayer> (+0x24). Rename
+  GamePlayerSetup -> Dirk::CPlayer everywhere (inventory, structs, code,
+  re/structs.md) in a quiet moment: it touches game_settings*.cpp and the
+  savegame writer.
+- **Watcom instantiation names (session 56):** the vector destructors and
+  constructors verified in bare_vectors.cpp are named after the class whose
+  scalar deleting destructor calls them, or `WCBareVectorBase_T::...` with
+  the address; the "ctor_or_dtor" survey names of the remaining
+  instantiations (lobby and network vectors) can be named the same way.

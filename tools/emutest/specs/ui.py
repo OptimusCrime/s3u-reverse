@@ -598,15 +598,6 @@ def team_ids_state(rng, pool, args):
 SPECS += [Spec("CTeam_PlayerIds", 0x004a07b0, "thiscall", [scratch(5)], presets=team_ids_state, new_fails=0.1)]
 
 
-# GamePlayerSetup::Set (session 56): the record at world offset 0, its
-# "initial" party and race (+0x70, +0x6c) often -1.
-def setup_set_state(rng, pool, args):
-    return [(at, rng.choice([0xFFFFFFFF, rng.getrandbits(32)]), 4) for at in (0x6c, 0x70)]
-
-
-SPECS += [Spec("GamePlayerSetup_Set", 0x0049f120, "thiscall", [anything] * 9, presets=setup_set_state)]
-
-
 # ~CStaticText (session 56): the label at world offset 0, its text at +0x28
 # any kind of string (common.string_fields, buffer in scratch slot 0);
 # ~CScreenElement probed.
