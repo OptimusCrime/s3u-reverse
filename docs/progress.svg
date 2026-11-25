@@ -5,20 +5,20 @@
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="328.4" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 23.4%</title></rect>
 <text x="334.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">23.4%</text>
-<rect x="498.4" y="100" width="128.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.2%</title></rect>
-<text x="562.8" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.2%</text>
-<rect x="627.1" y="100" width="279.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 19.9%</title></rect>
-<text x="766.8" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">19.9%</text>
+<rect x="498.4" y="100" width="129.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.2%</title></rect>
+<text x="563" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.2%</text>
+<rect x="627.6" y="100" width="278.9" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 19.8%</title></rect>
+<text x="767" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">19.8%</text>
 <rect x="906.5" y="100" width="669.5" height="40" fill="#e8a39b"><title>Not understood yet: 47.6%</title></rect>
 <text x="1241.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">47.6%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="232.3" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 16.5%</title></rect>
 <text x="286.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">16.5%</text>
-<rect x="402.3" y="154" width="97.6" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.9%</title></rect>
-<text x="451.1" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.9%</text>
-<rect x="499.9" y="154" width="504.6" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 35.9%</title></rect>
-<text x="752.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">35.9%</text>
-<rect x="1004.4" y="154" width="571.6" height="40" fill="#e8a39b"><title>Not understood yet: 40.7%</title></rect>
+<rect x="402.3" y="154" width="97.9" height="40" fill="#4f8fc0"><title>Verified by tests only: 7.0%</title></rect>
+<text x="451.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">7.0%</text>
+<rect x="500.2" y="154" width="504.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 35.9%</title></rect>
+<text x="752.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">35.9%</text>
+<rect x="1004.5" y="154" width="571.5" height="40" fill="#e8a39b"><title>Not understood yet: 40.7%</title></rect>
 <text x="1290.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">40.7%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
@@ -3335,12 +3335,12 @@
 272 bytes — Identified (purpose known)</title></rect>
 <rect x="726" y="470.4" width="11.8" height="13.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::SetCellUpDown @ 0x00424c70
 256 bytes — Identified (purpose known)</title></rect>
-<rect x="700.9" y="483.6" width="10.5" height="14.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::Draw @ 0x004267c0
-256 bytes — Identified (purpose known)</title></rect>
+<rect x="700.9" y="483.6" width="10.5" height="14.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CListView::Draw @ 0x004267c0
+256 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="700.9" y="498.5" width="10.5" height="13.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::SetCellProgress @ 0x00424d70
 240 bytes — Identified (purpose known)</title></rect>
-<rect x="711.4" y="483.6" width="11.6" height="9.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::FillBackground @ 0x004273f0
-176 bytes — Identified (purpose known)</title></rect>
+<rect x="711.4" y="483.6" width="11.6" height="9.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CListView::FillBackground @ 0x004273f0
+176 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="723" y="483.6" width="8.4" height="9.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::SelectLine @ 0x00425090
 128 bytes — Identified (purpose known)</title></rect>
 <rect x="731.4" y="483.6" width="6.3" height="9.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CListView::GetCellEdit @ 0x00424eb0
@@ -6252,8 +6252,8 @@
 144 bytes — Identified (purpose known)</title></rect>
 <rect x="1100.1" y="831.4" width="3.2" height="6.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_CListView_CColumn::resize @ 0x00429940
 32 bytes — Classified (class/role known)</title></rect>
-<rect x="1103.4" y="831.4" width="3.2" height="6.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_CListView_CColumn::base_equivalent @ 0x00427fc0
-32 bytes — Identified (purpose known)</title></rect>
+<rect x="1103.4" y="831.4" width="3.2" height="6.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_CListView_CColumn::base_equivalent @ 0x00427fc0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>Lobby::CUDPSession: 3 functions</title><rect x="949" y="838.1" width="20.7" height="21.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="949.5" y="838.6" width="19.7" height="13.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Lobby::CUDPSession::~CUDPSession @ 0x005ee0e0
@@ -6664,8 +6664,8 @@
 48 bytes — Classified (class/role known)</title></rect>
 <rect x="1048.3" y="885.9" width="6" height="4.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCIsvSListBase::base_bfind @ 0x0060b4b0
 48 bytes — Classified (class/role known)</title></rect>
-<rect x="1048.3" y="890.8" width="6" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCIsvSListBase::WCListDelete @ 0x00428300
-32 bytes — Classified (class/role known)</title></rect>
+<rect x="1048.3" y="890.8" width="6" height="3.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCIsvSListBase::WCListDelete @ 0x00428300
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1054.3" y="885.9" width="3.6" height="5.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCIsvSListBase::find @ 0x0060b4e0
 32 bytes — Classified (class/role known)</title></rect>
 <rect x="1054.3" y="891.3" width="3.6" height="2.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCIsvSListBase::clear @ 0x0060b550

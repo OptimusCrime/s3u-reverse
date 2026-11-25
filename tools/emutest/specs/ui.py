@@ -905,3 +905,60 @@ SPECS += [
     Spec("CScreen_Construct", 0x00417d10, "fastcall", [one_of(UICTL_OBJ), anything, uictl_most_derived],
          presets=uictl_objects(0x98), callees=uictl_callees(0x00417d10)),
 ]
+
+
+# CListView::Draw / FillBackground, the column vector's base_equivalent and
+# WCListDelete (ui_control_members.cpp, session 57). The list view's vbptrs
+# at this-0x598, -0xa4, -0x400 share the member vbtable; the rect callees
+# are probed with their rects by contents; IntersectRects writes a result
+# fixed by its inputs (so the callers' reads of it are compared).
+
+
+def uictl_intersect(machine, ecx, args, h):
+    a = [int.from_bytes(machine.guest_read(args[1] + 4 * k, 4), "little") for k in range(4)]
+    b = [int.from_bytes(machine.guest_read(args[2] + 4 * k, 4), "little") for k in range(4)]
+    out = [a[0] ^ b[1], (a[1] + b[0]) & 0xFFFFFFFF, (a[2] - b[3]) & 0xFFFFFFFF, a[3] ^ b[2]]
+    machine.guest_write(args[0], b"".join(v.to_bytes(4, "little") for v in out))
+    return args[0]
+
+
+def uictl_rect_arg(index):
+    return lambda m, ecx, args: tuple(bytes(m.guest_read(a, 16)) if i == index else a for i, a in enumerate(args))
+
+
+LIST_VIEW_CALLEES = {
+    0x415af0: (3, "thiscall", "probe"),
+    0x415aa0: (2, "thiscall", "probe", None, uictl_rect_arg(1)),
+    0x4156d0: (0, "thiscall", lambda h: WORLD_BASE + MEMBER_A + 0x40),
+    0x415b20: (3, "thiscall", "probe", uictl_intersect,
+               lambda m, ecx, args: (bytes(m.guest_read(args[1], 16)), bytes(m.guest_read(args[2], 16)))),
+    0x417480: (3, "thiscall", "probe", None, uictl_rect_arg(1)),
+    0x417460: (2, "thiscall", "probe"),
+    0x5bf0c0: (5, "thiscall", "probe", None,
+               lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)), args[1], args[2], args[3],
+                                     bytes(m.guest_read(args[4], 4)), bytes(m.guest_read(args[4] + 0x50, 4)))),
+    0x427830: (1, "thiscall", "probe"),
+}
+
+
+def list_view_state(rng, pool, args):
+    displacement = rng.randint(0x600, 0x700)
+    out = [(MEMBER_THIS + d, WORLD_BASE + MEMBER_VBTABLE, 4) for d in (-0x598, -0xa4, -0x400)]
+    out += [(MEMBER_VBTABLE + 4, displacement, 4),
+            (MEMBER_THIS - 0x598 + displacement + 0x1f, rng.choice([0, 0, 1]), 1),
+            (MEMBER_THIS - 0xaa, rng.choice([0, 1]), 1), (MEMBER_THIS - 0xac, rng.choice([0, 0x80]), 1)]
+    return out
+
+
+SPECS += [
+    Spec("CListView_Draw", 0x004267c0, "fastcall",
+         [one_of(WORLD_BASE + MEMBER_THIS), anything, anything, one_of(WORLD_BASE + MEMBER_A),
+          one_of(WORLD_BASE + MEMBER_B)], presets=list_view_state, callees=LIST_VIEW_CALLEES),
+    Spec("CListView_FillBackground", 0x004273f0, "fastcall",
+         [one_of(WORLD_BASE + MEMBER_THIS), anything, anything, one_of(WORLD_BASE + MEMBER_A)],
+         presets=list_view_state, callees=LIST_VIEW_CALLEES),
+    Spec("CColumnVector_BaseEquivalent", 0x00427fc0, "stdcall", [one_of(WORLD_BASE + MEMBER_A), anything],
+         callees=LIST_VIEW_CALLEES),
+    Spec("WCIsvSListBase_ListDelete", 0x00428300, "stdcall", [one_of(0, WORLD_BASE + MEMBER_B, WORLD_BASE + MEMBER_B)],
+         eax_mask=0),
+]
