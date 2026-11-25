@@ -3323,3 +3323,81 @@ SPECS += [
     Spec("AI_Army_HuntEnemyMages", 0x00593bd0, "thiscall", [below(3)], eax_mask=0, presets=hunt_world,
          globals=tick_delays_globals, callees={0x005935B0: (2, "thiscall", "probe")}, max_cases=800),
 ]
+
+
+# T_SAFETY_AGENT (ai_safety_agent.cpp): the agent at the world base (run
+# count +8, cell cursor +0xa / +0xc); a CEvaLand with a grid of up to 9 x 9
+# cells, the player setup, a ComputerPlayer with a few site notes and an
+# AiPlayerData node in scratch. All callees run as original code.
+SAFETY_LAND = SCRATCH + 6 * SCRATCH_SLOT_BYTES
+SAFETY_SETUP = SCRATCH + 7 * SCRATCH_SLOT_BYTES
+SAFETY_DATA = SCRATCH + 8 * SCRATCH_SLOT_BYTES
+SAFETY_CELLS = SCRATCH + 10 * SCRATCH_SLOT_BYTES
+SAFETY_PLAYER = SCRATCH + 2 * SCRATCH_SLOT_BYTES   # (AI_NOTES_PLAYER)
+SAFETY_NOTES = SCRATCH + 3 * SCRATCH_SLOT_BYTES
+SAFETY_WEIGHTS = range(0x14C, 0x166, 2)
+
+
+def safety_world(rng, pool, args):
+    """The grid (bitsets of players 0..2: few bits, often military ones),
+    the cursor (often at a row's or the grid's end), the setup (weights
+    0..120, sometimes anything; percents 0..119), owners of the cells'
+    centre tiles, races, buildings near the centres, site notes of
+    large towers / castles (type 4) near them."""
+    width, height = rng.randrange(1, 10), rng.randrange(1, 10)
+    fields = [(SAFETY_LAND + 0x140, width, 4), (SAFETY_LAND + 0x144, height, 4),
+              (SAFETY_LAND + 0x158, WORLD_BASE + SAFETY_CELLS, 4)]
+    for k in range(width * height):
+        cell = SAFETY_CELLS + k * 0xC4
+        for p in range(3):
+            low = rng.getrandbits(32) & rng.getrandbits(32) & rng.getrandbits(32)
+            high = rng.getrandbits(32) & rng.getrandbits(32) & rng.getrandbits(32)
+            if rng.random() < 0.3:
+                low |= 1 << rng.choice((16, 18))
+            fields += [(cell + 0x24 + 8 * p, low, 4), (cell + 0x28 + 8 * p, high, 4)]
+    fields += [(8, rng.randrange(6), 2),
+               (0xA, rng.choice((width - 1, rng.randrange(width), 0xFFFF)), 2),
+               (0xC, rng.choice((height - 1, rng.randrange(height), 0xFFFF)), 2)]
+    for offset in SAFETY_WEIGHTS:
+        fields.append((SAFETY_SETUP + offset, rng.randrange(120) if rng.random() < 0.9 else rng.getrandbits(16), 2))
+    fields += [(SAFETY_SETUP + 0x148, rng.randrange(5), 2), (SAFETY_SETUP + 0x14A, rng.randrange(5), 2),
+               (SAFETY_SETUP + 0x166, rng.randrange(120), 2), (SAFETY_SETUP + 0x168, rng.randrange(120), 2)]
+    for x in range(width):
+        for y in range(height):
+            owner = rng.choice((1, 1, 1, 0, 2, 0xFF))
+            fields.append((TILES + ((x * 8 + 4) * 0x300 + y * 8 + 4) * 24 + 8, owner, 1))
+    for p in range(20):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, rng.randrange(4) if rng.random() < 0.9
+                       else rng.getrandbits(32), 4))
+    count = rng.randrange(20)
+    fields.append((BUILDING_COUNT, count, 4))
+    for b in range(1, count + 2):
+        record = BUILDINGS + b * BUILDING_BYTES
+        fields += [(record, rng.choice((1, 1, 0, 2)), 1), (record + 6, rng.choice((16, 18, 16, 18, 2)), 1),
+                   (record + 2, rng.randrange(width * 8), 2), (record + 4, rng.randrange(height * 8), 2)]
+    for n in range(300):
+        pointer = WORLD_BASE + SAFETY_NOTES + n * 0x24 if n < 6 and rng.random() < 0.5 else 0
+        fields.append((SAFETY_PLAYER + 0x280 + 4 * n, pointer, 4))
+        if pointer:
+            note = SAFETY_NOTES + n * 0x24
+            fields += [(note + 6, 4, 2), (note + 0x1C, rng.choice((16, 18)), 2),
+                       (note + 0x1E, rng.randrange(width * 8), 2), (note + 0x20, rng.randrange(height * 8), 2)]
+    return fields
+
+
+def safety_globals(rng, pool, args):
+    size_x, size_y = 80, 80
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_WORLD, WORLD_BASE, 4), (AI_PLAYER_NUMBER, rng.choice((1, 1, 0, 2)), 1),
+            (AI_LAND_EVALUATION, WORLD_BASE + SAFETY_LAND, 4), (AI_PLAYER_SETUP, WORLD_BASE + SAFETY_SETUP, 4),
+            (AI_PLAYER, WORLD_BASE + SAFETY_PLAYER, 4), (AI_PLAYER_DATA, WORLD_BASE + SAFETY_DATA, 4),
+            (AI_MAP_SIZES, size_y, 2), (AI_MAP_SIZES + 2, size_x, 2)]
+
+
+SPECS += [
+    # EAX is not used: Run ignores it, and CComputerPlayer ignores Run's.
+    # 0x586cbd is alignment padding (lea ecx,[ecx]) before the jump table.
+    Spec("T_SAFETY_AGENT_CheckNextGridCell", 0x005868a0, "thiscall", [], eax_mask=0, presets=safety_world,
+         globals=safety_globals, exempt_blocks=(0x586cbd,), max_cases=2000),
+    Spec("T_SAFETY_AGENT_Run", 0x00586850, "thiscall", [], eax_mask=0, presets=safety_world,
+         globals=safety_globals, max_cases=600),
+]

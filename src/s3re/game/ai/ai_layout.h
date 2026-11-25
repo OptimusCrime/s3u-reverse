@@ -28,10 +28,34 @@ struct AiPlayerSetup {
     std::uint16_t min_mine_resources;  // 0x004 HOUSE_GROUND_REQUEST_NOTE::CheckSite: ResourceAmountNear at least this
     std::uint8_t unk006[0xc4 - 6];
     std::uint16_t promotion_interval;  // 0x0c4 the economy agent promotes soldiers after more than 14 times this many steps (0x56a0f0)
-    std::uint8_t unk0c6[0x180 - 0xc6];
+    std::uint8_t unk0c6[0x148 - 0xc6];
+    // T_SAFETY_AGENT (0x586850 / 0x5868a0): how often it checks the land
+    // grid, and the danger weights of the player's buildings in the 5 x 5
+    // cells around a cell (a sum of 100 asks for a large tower or castle).
+    std::uint16_t safety_interval;         // 0x148 runs between two checks
+    std::uint16_t safety_cells_per_check;  // 0x14a
+    std::uint16_t gold_smelter_weight;     // 0x14c
+    std::uint16_t gold_mine_weight;        // 0x14e
+    std::uint16_t storehouse_weight;       // 0x150
+    std::uint16_t weaponsmith_weight;      // 0x152
+    std::uint16_t toolsmith_weight;        // 0x154
+    std::uint16_t coal_mine_weight;        // 0x156
+    std::uint16_t iron_mine_weight;        // 0x158
+    std::uint16_t iron_smelter_weight;     // 0x15a
+    std::uint16_t harbour_weight;          // 0x15c
+    std::uint16_t war_workshop_weight;     // 0x15e the race's catapult / ballista / cannon workshop or large gong
+    std::uint16_t small_temple_weight;     // 0x160 the race's small temple
+    std::uint16_t large_temple_weight;     // 0x162 the race's large temple
+    std::uint16_t rice_farm_weight;        // 0x164 Asians only
+    std::uint16_t safety_skip_percent;     // 0x166 a Random % 100 below this skips a dangerous cell
+    std::uint16_t castle_percent;          // 0x168 above a sum of 200: a Random % 100 below this asks for a castle
+    std::uint8_t unk16a[0x180 - 0x16a];
 };
 static_assert(offsetof(AiPlayerSetup, min_mine_resources) == 4);
 static_assert(offsetof(AiPlayerSetup, promotion_interval) == 0xc4);
+static_assert(offsetof(AiPlayerSetup, safety_interval) == 0x148);
+static_assert(offsetof(AiPlayerSetup, rice_farm_weight) == 0x164);
+static_assert(offsetof(AiPlayerSetup, castle_percent) == 0x168);
 static_assert(sizeof(AiPlayerSetup) == 0x180);
 
 // ---------------------------------------------------------------- blackboard
@@ -367,6 +391,22 @@ static_assert(offsetof(EconomyAgent, donkey_farms) == 0x80);
 static_assert(offsetof(EconomyAgent, hospitals) == 0x90);
 static_assert(offsetof(EconomyAgent, laboratories) == 0x9e);
 static_assert(sizeof(EconomyAgent) == 0xa0);
+
+// ---------------------------------------------------------------- T_SAFETY_AGENT
+// The safety agent (kind 9; vtable 0x65a5f8, constructor 0x586830 clears the
+// five dwords from +8; ai_safety_agent.cpp).
+struct SafetyAgent {
+    std::uint32_t vtable;      // 0x00
+    std::uint16_t kind;        // 0x04 9
+    std::uint16_t unk06;
+    std::uint16_t run_count;   // 0x08 runs since the last check (Run 0x586850)
+    std::uint16_t cell_x;      // 0x0a the grid cell checked last (CheckNextGridCell 0x5868a0)
+    std::uint16_t cell_y;      // 0x0c
+    std::uint8_t unk0e[0x1c - 0x0e];
+};
+static_assert(offsetof(SafetyAgent, run_count) == 0x08);
+static_assert(offsetof(SafetyAgent, cell_y) == 0x0c);
+static_assert(sizeof(SafetyAgent) == 0x1c);
 
 // ---------------------------------------------------------------- CompMapWorkerAgent globals
 // Two global objects of Rainer\CompMapWorkerAgent.cpp (computer players

@@ -373,6 +373,20 @@ area of a player with a residence while its census count is below that
 census fields +0x2b4..+0x3f4 are now named (geologists, thieves, pioneers,
 other_settlers, all_settlers).
 
+Session 55 (V, `ai_safety_agent.cpp`): the T_SAFETY_AGENT (kind 9) runs
+every AiPlayerSetup +0x148 turns and then checks +0x14a grid cells: a cell
+whose centre tile is the player's gets a 16-bit danger sum over the 5 x 5
+cells around it from the player's building-type bitsets (AiGridCell
++0x24): setup weights +0x14c..+0x164 for gold smelter, gold mine,
+storehouse, weaponsmith, toolsmith, coal mine, iron mine, iron smelter,
+harbour and the race's war workshop, small and large temple (and the
+Asians' rice farm), -250 per large tower and -350 per castle cell. At 100
+or more, unless a Random % 100 falls below +0x166, it asks for a large
+tower (or, above 200 and a Random % 100 below +0x168, a castle) at the
+cell centre with priority 30000 (RecordBestCandidate), when fewer than 3
+of that type stand within 48 (64) and no site note of it is there.
+SafetyAgent in ai_layout.h.
+
 ## How decisions reach the simulation
 
 Most decisions don't write the world directly (the world is read through
