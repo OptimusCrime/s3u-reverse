@@ -129,3 +129,77 @@ SPECS += [Spec(name, address, "stdcall", [anything, anything], callees={member: 
           for name, address, member in (("PlayerVectorEquivalent", 0x437530, 0x49f100),
                                         ("TeamVectorLessThan", 0x437550, 0x4a05a0),
                                         ("LobbyVectorEquivalent", 0x44c4a0, 0x606ac0))]
+
+
+# -- inline comparison callbacks (vector_callbacks.cpp, session 56) ---------
+# a and b point into scratch slots 0 and 1 (offset 0x20, so the skip-list
+# keys before them are inside); slot 1 often repeats slot 0's bytes. The
+# string callback gets strings there (buffers in slots 2 and 3).
+
+
+def callback_buffers(rng, pool, args):
+    a = [rng.getrandbits(8) for _ in range(0x160)]
+    b = list(a) if rng.random() < 0.7 else [rng.getrandbits(8) for _ in range(0x160)]
+    for _ in range(rng.randrange(3)):
+        b[rng.randrange(0x160)] = rng.getrandbits(8)
+    if rng.random() < 0.3:
+        b[0x20 - 0x14 + rng.randrange(0x18)] ^= 1
+    return ([(SCRATCH + i, v, 1) for i, v in enumerate(a)] +
+            [(SCRATCH + SCRATCH_SLOT_BYTES + i, v, 1) for i, v in enumerate(b)])
+
+
+def string_callback_buffers(rng, pool, args):
+    fields = callback_buffers(rng, pool, args)
+    letters = [0x61, 0x62, 0x80, 0xff]
+    first = None
+    for slot in (0, 1):
+        length = rng.randrange(13)
+        text = [first[k] if first and k < len(first) and rng.random() < 0.75 else rng.choice(letters)
+                for k in range(length)]
+        first = first or text
+        buffer = SCRATCH + (2 + slot) * SCRATCH_SLOT_BYTES
+        none = length == 0 and rng.random() < 0.5
+        base = SCRATCH + slot * SCRATCH_SLOT_BYTES + 0x20
+        fields += [(buffer + k, v, 1) for k, v in enumerate(text + [0])]
+        fields += [(base + 4, 0 if none else WORLD_BASE + buffer, 4), (base + 8, length, 4)]
+    return fields
+
+
+CALLBACK_ARGS = [lambda rng, pool: WORLD_BASE + SCRATCH + 0x20,
+                 lambda rng, pool: WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES + 0x20]
+SPECS += [Spec(name, address, "stdcall", CALLBACK_ARGS, presets=callback_buffers)
+          for name, address in (("UShortVectorEquivalent", 0x462850), ("ChunkDescriptionEquivalent", 0x499050),
+                                ("SkipDictKeyLess_457a70", 0x457a70), ("SkipDictKeyLess_4a6b20", 0x4a6b20),
+                                ("SkipDictKeyLess_428100", 0x428100), ("SkipDictKeyEqual_4a6b00", 0x4a6b00))]
+SPECS += [Spec("StringVectorLessThan", 0x0044c910, "stdcall", CALLBACK_ARGS, presets=string_callback_buffers)]
+
+
+# -- base_init_upto (vector_init.cpp, session 56) ---------------------------
+# The vector at world offset 0, its block 2 elements into scratch slot 0
+# (filled may be -2); the element constructors probed (the CTeam one is
+# ours, with its own spec). The library declares the function void; EAX is
+# left over (callers don't read it).
+
+
+def init_upto_state(size):
+    def presets(rng, pool, args):
+        n = args[0] - (1 << 32) if args[0] & 0x80000000 else args[0]
+        # A null block only with filled 0 and n <= 0 (other elements would
+        # be wild addresses in both versions).
+        data = rng.choice([WORLD_BASE + SCRATCH + 2 * size] * 3 + ([0] if n <= 0 else []))
+        filled = rng.randint(-2, 8) if data else 0
+        return [(8, data, 4), (0x10, filled & 0xFFFFFFFF, 4)]
+    return presets
+
+
+def init_upto_n(rng, pool):
+    return rng.randint(-2, 8) & 0xFFFFFFFF
+
+
+INIT_UPTO_CONSTRUCTORS = {0x4274a0: (0, "thiscall", "probe"), 0x4276b0: (0, "thiscall", "probe"),
+                          0x49e8f0: (0, "thiscall", "probe"), 0x4a0200: (0, "thiscall", "probe"),
+                          0x5bb040: (0, "thiscall", "probe")}
+SPECS += [Spec(f"InitUpTo_{address:x}", address, "thiscall", [init_upto_n],
+               presets=init_upto_state(size), eax_mask=0, callees=INIT_UPTO_CONSTRUCTORS)
+          for address, size in ((0x428e50, 4), (0x40a1d0, 16), (0x429040, 0x20), (0x4293d0, 0x14),
+                                (0x414650, 0xcc), (0x414b10, 0x40), (0x463350, 0x60))]

@@ -25,6 +25,7 @@ add_library(s3re SHARED
     watcom/string_vector.cpp
     watcom/ushort_vector.cpp
     watcom/vector_callbacks.cpp
+    watcom/vector_init.cpp
 
     # tooling/: launcher features: --fast, --random-map, --load-save
     tooling/fast.cpp
