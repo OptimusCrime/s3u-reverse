@@ -39,6 +39,10 @@ LOGBOOK session entry).
   other exception destructors of the same shape as 0x5c1830 (0x5b93c0,
   0x5b94c0, 0x5be3e0, 0x5c0010, 0x60e490, 0x612790, 0x612c80, and the lobby
   ones) could share DestroyMessageException (directx_sound_files.cpp).
+  CD music (Win32::CCDAudio, session 57 did the small members): Init
+  0x615520, Open, Close 0x615e20, DoPlay, the window procedure 0x615bd0
+  (missing function start) need ThrowMCIError 0x6114f0 / CMCIException
+  0x613fc0 / Describe 0x614250 first (re/win32_framework.md).
   The false starts 0x5f65f2/0x5f674b
   (DrawGuiImage_tail*), 0x5fd902 (SequenceFrame_tail) and 0x5f6c3d
   (FindDirectoryContainingFile_tail) sit inside verified functions.
