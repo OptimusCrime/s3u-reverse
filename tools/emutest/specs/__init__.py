@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import os as _os
 
-PARTS = ['common', 'ai', 'buildings', 'economy', 'environment', 'fileformats', 'framework', 'graphics', 'logic', 'map', 'mapgen', 'msvc6', 'net', 'pathing', 'settlers', 'spells', 'ui', 'watcom', 'world', 'self_test', 'covered_elsewhere']
+PARTS = ['common', 'ai', 'buildings', 'economy', 'environment', 'fileformats', 'framework', 'graphics', 'logic', 'map', 'mapgen', 'msvc6', 'net', 'pathing', 'settlers', 'sound', 'spells', 'ui', 'watcom', 'world', 'self_test', 'covered_elsewhere']
 
 
 def _load() -> None:

@@ -47,6 +47,15 @@ struct TowerSlotOffset {
 };
 static_assert(sizeof(TowerSlotOffset) == 12);
 
+// DirectX::DSErrorText (0x5c1c10): the DirectSound result codes and their
+// names ("DS_OK", "DSERR_ALLOCATED", ...), 16 pairs.
+struct DSErrorName {
+    std::uint32_t code;  // 0x00 HRESULT
+    const char* text;    // 0x04
+};
+static_assert(sizeof(DSErrorName) == 8);
+inline constexpr GameGlobal<const DSErrorName[16]> g_dsErrorNames{0x7a0b80};
+
 #pragma pack(pop)
 
 // ------------------------------------------------------------ map and movement
@@ -244,5 +253,10 @@ inline constexpr GameGlobal<const std::uint8_t[8][16]> g_ditherMasks{0x7a2b58};
 // highest down, 4 bytes apart; re/graphics_formats.md).
 inline constexpr std::size_t kGfxGroupNameCount = 45;
 inline constexpr GameGlobal<const char[kGfxGroupNameCount][4]> g_gfxGroupNames{0x7a2dbc};
+
+// CSoundData::Open (0x5fe760): the primary buffer's WAVEFORMATEX per sound
+// format (Open's last argument 1, 2, 4 -> entry 0, 1, 2; 0x18 bytes apart):
+// PCM stereo 16-bit at 22050, 22050 and 11025 Hz.
+inline constexpr GameGlobal<const std::uint8_t[3][0x18]> g_primaryFormats{0x7a2fb8};
 
 }  // namespace s3re::game

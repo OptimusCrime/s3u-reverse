@@ -200,7 +200,9 @@ C++ code.
     - platform side: `ui/` (CScreenElement and controls, menu layouts),
       `graphics/` (graphics data, DirectDraw surface), `net/` (CNetThread,
       lobby buffer), `framework/` (WinMain, Win32/DirectX framework
-      classes, exceptions, string members).
+      classes incl. the DirectSound wrappers, exceptions, string
+      members), `sound/` (CSoundData: the SND files and sound effects,
+      re/sound_formats.md).
     Rules: a new file goes into the subsystem folder of its main function
     (a new folder needs a line here and a group in
     `src/s3re/CMakeLists.txt`); `.cpp` base names stay unique across

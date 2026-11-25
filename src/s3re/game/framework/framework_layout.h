@@ -202,12 +202,30 @@ static_assert(offsetof(CLandscapeSurface, colours) == 0xa0);
 static_assert(offsetof(CLandscapeSurface, tableA4) == 0xa4);
 static_assert(sizeof(CLandscapeSurface) == 0xa8);
 
-// DirectX::CDirectSoundBuffer.
-struct CDirectSoundBuffer {
+// DirectX::CDirectSound (vtable 0x65ceb8): the
+// DirectSound object. Its constructor registers it in g_directSound
+// (0x7e8c0c), which the buffers use to create themselves.
+struct CDirectSound {
     std::uint32_t vtable;  // +0x00
-    std::uint32_t unk04;   // +0x04
-    std::uint32_t unk08;   // +0x08
+    void* sound;           // +0x04 IDirectSound* (0 until Connect)
 };
+static_assert(sizeof(CDirectSound) == 8);
+
+// DirectX::CDirectSoundBuffer (vtable 0x65cecc) and its subclasses
+// CPrimaryBuffer (0x65cee0), CSecondaryBuffer (0x65cef4) and
+// CSoundEffectBuffer (0x65cf38, + the owning effect at +0x0c).
+struct CDirectSoundBuffer {
+    std::uint32_t vtable;       // +0x00
+    void* buffer;               // +0x04 IDirectSoundBuffer* (0 until created)
+    std::uint32_t createFlags;  // +0x08 DSBCAPS flags or'ed into the buffer description
+};
+static_assert(sizeof(CDirectSoundBuffer) == 12);
+
+struct CSoundEffectBuffer {
+    CDirectSoundBuffer base;  // +0x00
+    void* effect;             // +0x0c the DirectX::CSoundEffect this buffer plays
+};
+static_assert(sizeof(CSoundEffectBuffer) == 0x10);
 
 // DirectX::CPlayer (a network player record).
 struct CPlayer {

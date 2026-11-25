@@ -247,6 +247,6 @@ The unknowns in the fourth item are not renamed yet.
 
 ## Not done
 
-SND file format (`SND\Siedler3_00.dat` header `44 15 01 00 02 00 ...`) not analysed. CSoundData vf02,
+SND file format: analysed in session 56, re/sound_formats.md. CSoundData vf02,
 0x5ff4e0, 0x5ff9f0, 0x5fff00 (Lobby callers) skipped. The blitters' inner loops weren't read in
 detail (their names come from the branch structure of the callers).

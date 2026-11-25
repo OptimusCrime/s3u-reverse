@@ -81,6 +81,13 @@ SELF_TEST += [
     Spec("WrongFindDirectory", 0x005f6a10, "thiscall",
          [one_of(WORLD_BASE + GFX_RESULT), one_of(WORLD_BASE + GFX_FOLDERS), one_of(WORLD_BASE + GFX_FILE)],
          presets=gfx_folders, callees=GFX_THROWERS, ignore_bytes=(GFX_RESULT,), cover_until=0x005f6fc5),
+    # ignore_bytes on CSoundData's folder allocator byte (+0x10): the wrong
+    # constructor sets the folder's length (+0x18) to 1 (session 56).
+    Spec("WrongSoundConstruct", 0x005fdb60, "thiscall", [], ignore_bytes=(0x10,)),
+    # The same for CSoundData::FindDirectoryContainingFile's result.
+    Spec("WrongSoundFindDirectory", 0x005fdfc0, "thiscall",
+         [one_of(WORLD_BASE + GFX_RESULT), one_of(WORLD_BASE + GFX_FOLDERS), one_of(WORLD_BASE + GFX_FILE)],
+         presets=gfx_folders, callees=GFX_THROWERS, ignore_bytes=(GFX_RESULT,), cover_until=0x005fe752),
     # ignore_bytes on bytes 5..7 of SiteTree::insert's result pair: the wrong
     # insert reports "not inserted" (byte 4) for the first node of a tree.
     Spec("WrongSiteTreeInsertFlag", 0x00559270, "thiscall", [scratch(11), scratch(12)],
