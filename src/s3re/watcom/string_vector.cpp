@@ -14,8 +14,20 @@
 //   inline (split if shared, erase, release), the old block is freed, and
 //   filled = keep, data = the new block, capacity = n. `length` (+0x14) is
 //   left alone. EAX = 1.
+//
+// Destructors of vectors of strings (session 56; thiscall, no arguments):
+// vtable = WCBareVectorBase<String> 0x655454; if data: the empty error
+// hook 0x59f200, each of the `filled` strings destroyed inline (as
+// ~string 0x401b60 does: erase, release the buffer; filled and data re-read
+// per element), operator delete(data); vtable = WCExcept 0x655438. EAX =
+// operator delete's, or 0 without a block. Four copies of the same code:
+//   0x00409d50 WCValOrderedVector<String>  0x0044c980 WCValSortedVector<String>
+//   0x0040a280, 0x0044cf50 (WCBareVectorBase<String> bodies, callers' classes not named)
 
 #include "watcom/ptr_vector.h"
+#include "watcom/vector_base.h"
+
+#include "game/vtables.h"
 
 #include "hooks.h"
 #include "msvc6/string.h"
@@ -76,6 +88,41 @@ std::uint32_t __fastcall StringVector_Resize(PtrVector* self, void* /*edx*/, std
     self->capacity = n;
     return 1;
 }
+
+using StringVectorDestructorFn = std::uint32_t(__fastcall*)(VectorBase* self, void* edx);
+
+namespace {
+
+std::uint32_t DestroyStringVector(VectorBase* self) {
+    return DestroyVector(self, game::vtables::kWCBareVectorBase_String, game::vtables::kWCExcept, sizeof(String),
+                         [](std::uint32_t string) { msvc6::String_Destroy(reinterpret_cast<String*>(string), nullptr); });
+}
+
+}  // namespace
+
+// Purpose: Destructors of the console's and menus' vectors of strings:
+// destroy each string, then free the block.
+std::uint32_t __fastcall StringVectorDestructor_409d50(VectorBase* self, void*) {
+    return DestroyStringVector(self);
+}
+std::uint32_t __fastcall StringVectorDestructor_44c980(VectorBase* self, void*) {
+    return DestroyStringVector(self);
+}
+std::uint32_t __fastcall StringVectorDestructor_40a280(VectorBase* self, void*) {
+    return DestroyStringVector(self);
+}
+std::uint32_t __fastcall StringVectorDestructor_44cf50(VectorBase* self, void*) {
+    return DestroyStringVector(self);
+}
+
+S3RE_HOOK(0x00409d50, StringVectorDestructor_409d50, StringVectorDestructorFn,
+          Original_StringVectorDestructor_409d50, StringVectorDestructor_409d50);
+S3RE_HOOK(0x0044c980, StringVectorDestructor_44c980, StringVectorDestructorFn,
+          Original_StringVectorDestructor_44c980, StringVectorDestructor_44c980);
+S3RE_HOOK(0x0040a280, StringVectorDestructor_40a280, StringVectorDestructorFn,
+          Original_StringVectorDestructor_40a280, StringVectorDestructor_40a280);
+S3RE_HOOK(0x0044cf50, StringVectorDestructor_44cf50, StringVectorDestructorFn,
+          Original_StringVectorDestructor_44cf50, StringVectorDestructor_44cf50);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -188,7 +235,91 @@ std::uint32_t __fastcall WrongResize(PtrVector* self, void* edx, std::uint32_t n
     return r;
 }
 
+// The destructors on the same kind of vectors (the PtrVector layout is the
+// first 0x18 bytes of VectorBase). One more string outside the vector
+// shares the buffer of a random element, so the destructor's release of a
+// shared buffer is visible: compared are EAX (without a block), the
+// vector's bytes (data aside) and that string's count byte and text.
+void CompareDestructor(test::Context& ctx, StringVectorDestructorFn original, StringVectorDestructorFn candidate,
+                       int cases) {
+    char text[48];
+    for (int i = 0; i < cases; ++i) {
+        const std::uint32_t count = ctx.rng().Below(7);
+        std::uint32_t lengths[8];
+        std::uint8_t counts[8];
+        int shareWith[8];
+        static constexpr std::uint8_t kCounts[] = {0, 0, 0, 1, 2, 0xfd};
+        for (std::uint32_t k = 0; k < count; ++k) {
+            lengths[k] = ctx.rng().Chance(1, 8) ? 0xFFFFFFFFu : ctx.rng().Below(40);
+            counts[k] = kCounts[ctx.rng().Below(sizeof(kCounts))];
+            shareWith[k] = k > 0 && ctx.rng().Chance(1, 4) ? static_cast<int>(ctx.rng().Below(k)) : -1;
+        }
+        for (char& c : text) {
+            c = static_cast<char>(1 + ctx.rng().Below(255));
+        }
+        const auto filled = static_cast<std::int32_t>(count == 0 ? 0 : ctx.rng().Below(count + 1));
+        const std::uint32_t outside = count == 0 ? 0 : ctx.rng().Below(count);
+        VectorBase va{}, vb{};
+        PtrVector* pa = reinterpret_cast<PtrVector*>(&va);
+        PtrVector* pb = reinterpret_cast<PtrVector*>(&vb);
+        Build(*pa, count, lengths, counts, shareWith, text, filled);
+        Build(*pb, count, lengths, counts, shareWith, text, filled);
+        va.grow = vb.grow = 0x5eed;
+        // The outside string: shares element `outside`'s buffer (if it has one).
+        String outA{}, outB{};
+        if (count != 0 && Entries(pa)[outside].ptr != nullptr &&
+            static_cast<std::uint8_t>(Entries(pa)[outside].ptr[-1]) < 0xfd) {
+            outA = Entries(pa)[outside];
+            outB = Entries(pb)[outside];
+            ++outA.ptr[-1];
+            ++outB.ptr[-1];
+        }
+        const bool block = va.data != 0;
+        const std::uint32_t ra = original(&va, nullptr);
+        const std::uint32_t rb = candidate(&vb, nullptr);
+        va.data = vb.data = 0;
+        bool same = S3RE_EXPECT_MEM_EQ(&va, &vb, sizeof(va));
+        if (!block) {
+            same = S3RE_EXPECT_EQ(ra, rb) && same;
+        }
+        same = S3RE_EXPECT_EQ(outA.ptr == nullptr, outB.ptr == nullptr) && same;
+        if (same && outA.ptr != nullptr) {
+            same = S3RE_EXPECT_EQ(static_cast<std::uint8_t>(outA.ptr[-1]), static_cast<std::uint8_t>(outB.ptr[-1])) &&
+                   S3RE_EXPECT_MEM_EQ(outA.ptr, outB.ptr, outA.len + 1);
+        }
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, count %u, filled %d", i, count, filled);
+            return;
+        }
+        if (outA.ptr != nullptr) {
+            msvc6::String_Destroy(&outA, nullptr);
+            msvc6::String_Destroy(&outB, nullptr);
+        }
+    }
+}
+
+// Wrong: skips the last element.
+std::uint32_t __fastcall WrongDestructor(VectorBase* self, void* edx) {
+    --self->filled;
+    const std::uint32_t r = StringVectorDestructor_409d50(self, edx);
+    ++self->filled;
+    return r;
+}
+
 }  // namespace
+
+S3RE_TEST(StringVectorDestructors_MatchOriginal) {
+    CompareDestructor(ctx, Original_StringVectorDestructor_409d50, &StringVectorDestructor_409d50, 1000);
+    CompareDestructor(ctx, Original_StringVectorDestructor_44c980, &StringVectorDestructor_44c980, 1000);
+    CompareDestructor(ctx, Original_StringVectorDestructor_40a280, &StringVectorDestructor_40a280, 1000);
+    CompareDestructor(ctx, Original_StringVectorDestructor_44cf50, &StringVectorDestructor_44cf50, 1000);
+}
+
+S3RE_TEST(StringVectorDestructors_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareDestructor(probe, Original_StringVectorDestructor_409d50, &WrongDestructor, 500);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(StringVector_Resize_MatchesOriginal) {
     CompareResize(ctx, &StringVector_Resize, 5000);

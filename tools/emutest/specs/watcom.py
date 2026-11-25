@@ -70,3 +70,51 @@ SPECS += [
          [lambda rng, pool: rng.choice([0, 0, 1, 10, rng.randrange(64), rng.getrandbits(32), 0x80000000])],
          new_fails=0.15),
 ]
+
+
+# -- Watcom vector constructors and destructors (bare_vectors.cpp, session 56) --
+#
+# The vector at world offset 0. Destructors: data 0 or a block in scratch
+# slot 0, filled -2..6 (the player-vector destructors call
+# ~GamePlayerSetup 0x49ec80 per element: probed). Constructors: capacity
+# small, 0 or any (the product wraps), operator new fails in some cases.
+
+WATCOM_TRIVIAL_VECTOR_DESTRUCTORS = (
+    0x4143b0, 0x427de0, 0x427e40, 0x437570, 0x44caa0, 0x44cca0, 0x457a10, 0x462870, 0x462b00,
+    0x4721c0, 0x472240, 0x4722e0, 0x472360, 0x472440, 0x4990c0, 0x4992f0, 0x44e240, 0x462eb0,
+    0x462f10, 0x466190, 0x472660, 0x472bb0, 0x472c10, 0x472e00, 0x473000, 0x473060, 0x4a1140)
+WATCOM_PLAYER_VECTOR_DESTRUCTORS = (0x4141a0, 0x4a11a0)
+WATCOM_VECTOR_CONSTRUCTORS = (
+    0x437630, 0x44ce10, 0x462c70, 0x466110, 0x472700, 0x4727a0, 0x4728a0, 0x472920, 0x44ce90,
+    0x457fb0, 0x457f20, 0x458500, 0x457ea0, 0x472820, 0x462cf0)
+WATCOM_BARE_VECTOR_CONSTRUCTORS = (0x437c90, 0x458a60, 0x4586f0, 0x4377a0)
+
+
+def watcom_vector_to_destroy(rng, pool, args):
+    return [(8, rng.choice([0, WORLD_BASE + SCRATCH, WORLD_BASE + SCRATCH]), 4),
+            (0x10, rng.randint(-2, 6) & 0xFFFFFFFF, 4)]
+
+
+def watcom_capacity(rng, pool):
+    return rng.choice([0, 0, 1, 2, rng.randrange(65), rng.randrange(65), rng.getrandbits(32),
+                       0x40000000 + rng.randrange(4), 0x80000000])
+
+
+SPECS += [Spec(f"VectorDestructor_{a:x}", a, "thiscall", [], presets=watcom_vector_to_destroy)
+          for a in WATCOM_TRIVIAL_VECTOR_DESTRUCTORS]
+SPECS += [Spec(f"VectorDestructor_{a:x}", a, "thiscall", [], presets=watcom_vector_to_destroy,
+               callees={0x0049ec80: (0, "thiscall", "probe")})
+          for a in WATCOM_PLAYER_VECTOR_DESTRUCTORS]
+SPECS += [Spec(f"VectorConstructor_{a:x}", a, "thiscall", [watcom_capacity, anything], new_fails=0.2)
+          for a in WATCOM_VECTOR_CONSTRUCTORS]
+SPECS += [Spec(f"BareVectorConstructor_{a:x}", a, "thiscall", [watcom_capacity], new_fails=0.2)
+          for a in WATCOM_BARE_VECTOR_CONSTRUCTORS]
+
+# The string-vector destructors (string_vector.cpp, session 56) on the same
+# vectors as StringVector_Resize. Dead in the inlined ~string: the _Eos
+# after erase(0, npos) (new length 0: _Grow returns false), as 0x40a6d0 in
+# StringVector_Resize.
+SPECS += [Spec(f"StringVectorDestructor_{a:x}", a, "thiscall", [], presets=string_vector_state,
+               exempt_blocks=(dead,))
+          for a, dead in ((0x409d50, 0x409df3), (0x44c980, 0x44ca23), (0x40a280, 0x40a323),
+                          (0x44cf50, 0x44cff3))]

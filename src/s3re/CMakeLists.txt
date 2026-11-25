@@ -14,10 +14,12 @@ add_library(s3re SHARED
 
     # msvc6/: MSVC 6.0 library code (std::string, exceptions)
     msvc6/catch_match.cpp
+    msvc6/deleting_destructors.cpp
     msvc6/exceptions.cpp
     msvc6/string.cpp
 
     # watcom/: Watcom container library code
+    watcom/bare_vectors.cpp
     watcom/ptr_vector.cpp
     watcom/string_vector.cpp
     watcom/ushort_vector.cpp
@@ -203,6 +205,7 @@ add_library(s3re SHARED
     game/ui/game_settings.cpp
     game/ui/game_settings_players.cpp
     game/ui/game_settings_players_tests.cpp
+    game/ui/game_teams.cpp
     game/ui/screen_element.cpp
     game/ui/ui_static_text.cpp
 

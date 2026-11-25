@@ -201,3 +201,38 @@ SPECS += [
 SPECS += [
     Spec("String_CompareText", 0x0040a0e0, "thiscall", [one_of(STRING_TEXT_PTR)], presets=string_world),
 ]
+
+
+# -- Compiler-generated deleting destructors (deleting_destructors.cpp, session 56) --
+#
+# The class destructors and ~CScreenElement 0x4156b0 are probed (their
+# calls are what these functions do; they have their own specs). The
+# virtual-base kinds get ECX = the virtual base (world + offset), so the
+# object starts at world offset 0.
+
+DELETING_DESTRUCTORS = (  # (address, class destructor, virtual-base offset or None)
+    (0x44e300, 0x401b60, None), (0x44e320, 0x441740, None), (0x4639c0, 0x45f060, None),
+    (0x46db20, 0x49d980, None), (0x41d990, 0x41d9b0, None), (0x4993d0, 0x499620, None),
+    (0x49cb50, 0x434680, None), (0x4a5b20, 0x4a5b50, None),
+    (0x42a710, 0x42a750, 0x98), (0x42af60, 0x421fc0, 0x444), (0x42b340, 0x42b380, 0x66c),
+    (0x49b610, 0x49b650, 0x914))
+SCREEN_ELEMENT_DESTRUCTOR = 0x4156b0
+
+
+def deleting_destructor_spec(address, destructor, offset):
+    callees = {destructor: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}
+    if offset is None:
+        return Spec(f"ScalarDeletingDestructor_{address:x}", address, "thiscall", [below(4)], callees=callees)
+    return Spec(f"ScalarDeletingDestructor_{address:x}", address, "fastcall",
+                [one_of(WORLD_BASE + offset), anything, below(4)], callees=callees)
+
+
+SPECS += [deleting_destructor_spec(*entry) for entry in DELETING_DESTRUCTORS]
+SPECS += [
+    Spec("ScalarDeletingDestructor_405360", 0x00405360, "thiscall", [below(4)]),
+    Spec("ScalarDeletingDestructor_4281d0", 0x004281d0, "thiscall", [below(4)]),
+    Spec("CompleteDestructor_421fa0", 0x00421fa0, "thiscall", [],
+         callees={0x421fc0: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+    Spec("CompleteDestructor_4816d0", 0x004816d0, "thiscall", [],
+         callees={0x42b380: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
+]

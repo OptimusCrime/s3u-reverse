@@ -1,0 +1,608 @@
+// Watcom vector instantiations: constructors and destructors (layout and
+// shared code in vector_base.h). Each address is its own copy of the
+// template code; only the vtables and the element size differ, so every
+// hook below is a short wrapper around the shared helper.
+//
+// Destructors of vectors with trivially destructible elements (thiscall,
+// no arguments): vtable = WCBareVectorBase<T>; if data: the empty error
+// hook 0x59f200, operator delete(data); vtable = WCExcept 0x655438. EAX =
+// operator delete's, or 0 without a block. (The derived classes' own
+// vtables are not stored: the first store is the bare base's.)
+//   address    WCBareVectorBase<T> vtable        class (from its scalar deleting destructor or the vtable)
+//   0x004143b0 kWCBareVectorBase_int                    WCValSortedVector<int>
+//   0x00427de0 kWCBareVectorBase_HFONT                  WCValOrderedVector<HFONT>
+//   0x00427e40 kWCBareVectorBase_CScreenElementP        WCValOrderedVector<CScreenElement*>
+//   0x00437570 kWCBareVectorBase_int                    WCValOrderedVector<int>
+//   0x0044caa0 kWCBareVectorBase_uint                   WCValOrderedVector<unsigned int>
+//   0x0044cca0 kWCBareVectorBase_CStatusMessage         WCValOrderedVector<LobbyClient::CStatusMessage>
+//   0x00457a10 kWCBareVectorBase_uint                   WCValSortedVector<unsigned int>
+//   0x00462870 kWCBareVectorBase_ushort                 WCValOrderedVector<unsigned short>
+//   0x00462b00 kWCBareVectorBase_voidp                  WCPtrSortedVector<DirectX::CPlayer>
+//   0x004721c0 kWCBareVectorBase_voidp                  WCPtrSortedVector<CExecuteType>
+//   0x00472240 kWCBareVectorBase_voidp                  WCPtrOrderedVector<CRequestType>
+//   0x004722e0 kWCBareVectorBase_voidp                  WCPtrSortedVector<CAnnounceType>
+//   0x00472360 kWCBareVectorBase_voidp                  WCPtrOrderedVector<CAcknowledgeType>
+//   0x00472440 kWCBareVectorBase_ulong                  WCValSortedVector<unsigned long>
+//   0x004990c0 kWCBareVectorBase_GameChunkDescription   WCValOrderedVector<GameChunkDescription>
+//   0x004992f0 kWCBareVectorBase_long                   WCValOrderedVector<long>
+//   0x0044e240 kWCBareVectorBase_CStatusMessage         WCBareVectorBase<LobbyClient::CStatusMessage>
+//   0x00462eb0 kWCBareVectorBase_voidp                  WCBareVectorBase<void*>
+//   0x00462f10 kWCBareVectorBase_voidp                  WCBareVectorBase<void*>
+//   0x00466190 kWCBareVectorBase_uint                   WCBareVectorBase<unsigned int>
+//   0x00472660 kWCBareVectorBase_voidp                  WCBareVectorBase<void*>
+//   0x00472bb0 kWCBareVectorBase_voidp                  WCBareVectorBase<void*>
+//   0x00472c10 kWCBareVectorBase_voidp                  WCBareVectorBase<void*>
+//   0x00472e00 kWCBareVectorBase_voidp                  WCBareVectorBase<void*>
+//   0x00473000 kWCBareVectorBase_ulong                  WCBareVectorBase<unsigned long>
+//   0x00473060 kWCBareVectorBase_ulong                  WCBareVectorBase<unsigned long>
+//   0x004a1140 kWCBareVectorBase_ushort                 WCBareVectorBase<unsigned short>
+//
+// Destructors of vectors of Dirk::CPlayer (0xcc bytes; our GamePlayerSetup):
+// the same, but each of the `filled` elements is destroyed first by
+// ~GamePlayerSetup 0x49ec80 (filled and data re-read per element):
+//   0x004141a0 WCValOrderedVector<Dirk::CPlayer>, 0x004a11a0 the same body.
+//
+// (capacity, grow) constructors, ret 8, EAX = this: +4 = 0, vtable =
+// WCBareVectorBase<T>, capacity, filled = 0, data = operator
+// new(capacity * size) (none for 0; capacity = 0 if it returns null),
+// length = 0, +0x18 = grow, then the class's own vtable.
+//   address    size  T                     class
+//   0x00437630    4  int                   WCOrderedVectorBase_int
+//   0x0044ce10    4  uint                  WCVectorBase_uint
+//   0x00462c70    4  voidp                 WCSortedVectorBase_voidp
+//   0x00466110    4  uint                  WCOrderedVectorBase_uint
+//   0x00472700    4  ulong                 WCSortedVectorBase_ulong
+//   0x004727a0    4  voidp                 WCOrderedVectorBase_voidp
+//   0x004728a0    4  voidp                 WCPtrSortedVector_CExecuteType
+//   0x00472920    4  ulong                 WCVectorBase_ulong
+//   0x0044ce90   32  CChatMessage          WCVectorBase_CChatMessage
+//   0x00457fb0   32  CChatMessage          WCOrderedVectorBase_CChatMessage
+//   0x00457f20  284  CGroup                WCSortedVectorBase_CGroup
+//   0x00458500  284  CGroup                WCVectorBase_CGroup
+//   0x00457ea0   16  String                WCOrderedVectorBase_String
+//   0x00472820   64  CConnectionShortcut   WCVectorBase_CConnectionShortcut
+//   0x00462cf0   96  CRunningSession       WCVectorBase_CRunningSession
+//
+// (capacity) constructors, ret 4, EAX = this: the bare part only.
+//   address    size  T
+//   0x00437c90   64  CTeam
+//   0x00458a60   32  CChatMessage
+//   0x004586f0  284  CGroup
+//   0x004377a0  204  CPlayer
+
+#include "watcom/vector_base.h"
+
+#include "game/vtables.h"
+#include "hooks.h"
+#include "test/callee_stub.h"
+#include "test/difftest.h"
+
+#include <cstdint>
+#include <cstring>
+#include <vector>
+
+namespace s3re::watcom {
+
+namespace vt = game::vtables;
+
+using DestructorFn = std::uint32_t(__fastcall*)(VectorBase* self, void* edx);
+using ConstructorFn = VectorBase*(__fastcall*)(VectorBase* self, void* edx, std::uint32_t capacity,
+                                               std::uint32_t grow);
+using BareConstructorFn = VectorBase*(__fastcall*)(VectorBase* self, void* edx, std::uint32_t capacity);
+
+namespace {
+
+std::uint32_t DestroyTrivialVector(VectorBase* self, std::uint32_t vtable) {
+    return DestroyVector(self, vtable, vt::kWCExcept, 0, [](std::uint32_t) {});
+}
+
+constexpr std::uintptr_t kDestroyPlayer = 0x0049ec80;  // GamePlayerSetup::~GamePlayerSetup (ours)
+constexpr std::uint32_t kPlayerSize = 0xcc;
+
+std::uint32_t DestroyPlayerVector(VectorBase* self) {
+    return DestroyVector(self, vt::kWCBareVectorBase_CPlayer, vt::kWCExcept, kPlayerSize, [](std::uint32_t player) {
+        reinterpret_cast<void(__fastcall*)(std::uint32_t, void*)>(kDestroyPlayer)(player, nullptr);
+    });
+}
+
+}  // namespace
+
+// Purpose: Destructors of the game's Watcom vectors of plain values or
+// pointers (UI child lists, fonts, ids, chunk lists, network request
+// lists, ...): free the element block.
+std::uint32_t __fastcall VectorDestructor_4143b0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_int);
+}
+std::uint32_t __fastcall VectorDestructor_427de0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_HFONT);
+}
+std::uint32_t __fastcall VectorDestructor_427e40(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_CScreenElementP);
+}
+std::uint32_t __fastcall VectorDestructor_437570(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_int);
+}
+std::uint32_t __fastcall VectorDestructor_44caa0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_uint);
+}
+std::uint32_t __fastcall VectorDestructor_44cca0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_CStatusMessage);
+}
+std::uint32_t __fastcall VectorDestructor_457a10(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_uint);
+}
+std::uint32_t __fastcall VectorDestructor_462870(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_ushort);
+}
+std::uint32_t __fastcall VectorDestructor_462b00(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_4721c0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_472240(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_4722e0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_472360(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_472440(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_ulong);
+}
+std::uint32_t __fastcall VectorDestructor_4990c0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_GameChunkDescription);
+}
+std::uint32_t __fastcall VectorDestructor_4992f0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_long);
+}
+std::uint32_t __fastcall VectorDestructor_44e240(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_CStatusMessage);
+}
+std::uint32_t __fastcall VectorDestructor_462eb0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_462f10(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_466190(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_uint);
+}
+std::uint32_t __fastcall VectorDestructor_472660(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_472bb0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_472c10(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_472e00(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_473000(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_ulong);
+}
+std::uint32_t __fastcall VectorDestructor_473060(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_ulong);
+}
+std::uint32_t __fastcall VectorDestructor_4a1140(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_ushort);
+}
+
+// Purpose: Destructors of the vectors of player setups (Dirk::CPlayer):
+// destroy each setup, then free the block.
+std::uint32_t __fastcall VectorDestructor_4141a0(VectorBase* self, void*) {
+    return DestroyPlayerVector(self);
+}
+std::uint32_t __fastcall VectorDestructor_4a11a0(VectorBase* self, void*) {
+    return DestroyPlayerVector(self);
+}
+
+// Purpose: Constructors of Watcom vectors with room for `capacity`
+// elements and a growth step (the elements are constructed later, as they
+// are added).
+VectorBase* __fastcall VectorConstructor_437630(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_int, vt::kWCOrderedVectorBase_int);
+}
+VectorBase* __fastcall VectorConstructor_44ce10(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_uint, vt::kWCVectorBase_uint);
+}
+VectorBase* __fastcall VectorConstructor_462c70(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_voidp, vt::kWCSortedVectorBase_voidp);
+}
+VectorBase* __fastcall VectorConstructor_466110(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_uint, vt::kWCOrderedVectorBase_uint);
+}
+VectorBase* __fastcall VectorConstructor_472700(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_ulong, vt::kWCSortedVectorBase_ulong);
+}
+VectorBase* __fastcall VectorConstructor_4727a0(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_voidp, vt::kWCOrderedVectorBase_voidp);
+}
+VectorBase* __fastcall VectorConstructor_4728a0(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_voidp, vt::kWCPtrSortedVector_CExecuteType);
+}
+VectorBase* __fastcall VectorConstructor_472920(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_ulong, vt::kWCVectorBase_ulong);
+}
+VectorBase* __fastcall VectorConstructor_44ce90(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 32, vt::kWCBareVectorBase_CChatMessage, vt::kWCVectorBase_CChatMessage);
+}
+VectorBase* __fastcall VectorConstructor_457fb0(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 32, vt::kWCBareVectorBase_CChatMessage, vt::kWCOrderedVectorBase_CChatMessage);
+}
+VectorBase* __fastcall VectorConstructor_457f20(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 284, vt::kWCBareVectorBase_CGroup, vt::kWCSortedVectorBase_CGroup);
+}
+VectorBase* __fastcall VectorConstructor_458500(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 284, vt::kWCBareVectorBase_CGroup, vt::kWCVectorBase_CGroup);
+}
+VectorBase* __fastcall VectorConstructor_457ea0(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 16, vt::kWCBareVectorBase_String, vt::kWCOrderedVectorBase_String);
+}
+VectorBase* __fastcall VectorConstructor_472820(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 64, vt::kWCBareVectorBase_CConnectionShortcut, vt::kWCVectorBase_CConnectionShortcut);
+}
+VectorBase* __fastcall VectorConstructor_462cf0(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 96, vt::kWCBareVectorBase_CRunningSession, vt::kWCVectorBase_CRunningSession);
+}
+
+// Purpose: Constructors of the bare part of a Watcom vector (room for
+// `capacity` elements); the derived constructors inlined around them set
+// the rest.
+VectorBase* __fastcall BareVectorConstructor_437c90(VectorBase* self, void*, std::uint32_t capacity) {
+    return ConstructBareVector(self, capacity, 64, vt::kWCBareVectorBase_CTeam);
+}
+VectorBase* __fastcall BareVectorConstructor_458a60(VectorBase* self, void*, std::uint32_t capacity) {
+    return ConstructBareVector(self, capacity, 32, vt::kWCBareVectorBase_CChatMessage);
+}
+VectorBase* __fastcall BareVectorConstructor_4586f0(VectorBase* self, void*, std::uint32_t capacity) {
+    return ConstructBareVector(self, capacity, 284, vt::kWCBareVectorBase_CGroup);
+}
+VectorBase* __fastcall BareVectorConstructor_4377a0(VectorBase* self, void*, std::uint32_t capacity) {
+    return ConstructBareVector(self, capacity, 204, vt::kWCBareVectorBase_CPlayer);
+}
+
+S3RE_HOOK(0x004143b0, VectorDestructor_4143b0, DestructorFn, Original_VectorDestructor_4143b0,
+          VectorDestructor_4143b0);
+S3RE_HOOK(0x00427de0, VectorDestructor_427de0, DestructorFn, Original_VectorDestructor_427de0,
+          VectorDestructor_427de0);
+S3RE_HOOK(0x00427e40, VectorDestructor_427e40, DestructorFn, Original_VectorDestructor_427e40,
+          VectorDestructor_427e40);
+S3RE_HOOK(0x00437570, VectorDestructor_437570, DestructorFn, Original_VectorDestructor_437570,
+          VectorDestructor_437570);
+S3RE_HOOK(0x0044caa0, VectorDestructor_44caa0, DestructorFn, Original_VectorDestructor_44caa0,
+          VectorDestructor_44caa0);
+S3RE_HOOK(0x0044cca0, VectorDestructor_44cca0, DestructorFn, Original_VectorDestructor_44cca0,
+          VectorDestructor_44cca0);
+S3RE_HOOK(0x00457a10, VectorDestructor_457a10, DestructorFn, Original_VectorDestructor_457a10,
+          VectorDestructor_457a10);
+S3RE_HOOK(0x00462870, VectorDestructor_462870, DestructorFn, Original_VectorDestructor_462870,
+          VectorDestructor_462870);
+S3RE_HOOK(0x00462b00, VectorDestructor_462b00, DestructorFn, Original_VectorDestructor_462b00,
+          VectorDestructor_462b00);
+S3RE_HOOK(0x004721c0, VectorDestructor_4721c0, DestructorFn, Original_VectorDestructor_4721c0,
+          VectorDestructor_4721c0);
+S3RE_HOOK(0x00472240, VectorDestructor_472240, DestructorFn, Original_VectorDestructor_472240,
+          VectorDestructor_472240);
+S3RE_HOOK(0x004722e0, VectorDestructor_4722e0, DestructorFn, Original_VectorDestructor_4722e0,
+          VectorDestructor_4722e0);
+S3RE_HOOK(0x00472360, VectorDestructor_472360, DestructorFn, Original_VectorDestructor_472360,
+          VectorDestructor_472360);
+S3RE_HOOK(0x00472440, VectorDestructor_472440, DestructorFn, Original_VectorDestructor_472440,
+          VectorDestructor_472440);
+S3RE_HOOK(0x004990c0, VectorDestructor_4990c0, DestructorFn, Original_VectorDestructor_4990c0,
+          VectorDestructor_4990c0);
+S3RE_HOOK(0x004992f0, VectorDestructor_4992f0, DestructorFn, Original_VectorDestructor_4992f0,
+          VectorDestructor_4992f0);
+S3RE_HOOK(0x0044e240, VectorDestructor_44e240, DestructorFn, Original_VectorDestructor_44e240,
+          VectorDestructor_44e240);
+S3RE_HOOK(0x00462eb0, VectorDestructor_462eb0, DestructorFn, Original_VectorDestructor_462eb0,
+          VectorDestructor_462eb0);
+S3RE_HOOK(0x00462f10, VectorDestructor_462f10, DestructorFn, Original_VectorDestructor_462f10,
+          VectorDestructor_462f10);
+S3RE_HOOK(0x00466190, VectorDestructor_466190, DestructorFn, Original_VectorDestructor_466190,
+          VectorDestructor_466190);
+S3RE_HOOK(0x00472660, VectorDestructor_472660, DestructorFn, Original_VectorDestructor_472660,
+          VectorDestructor_472660);
+S3RE_HOOK(0x00472bb0, VectorDestructor_472bb0, DestructorFn, Original_VectorDestructor_472bb0,
+          VectorDestructor_472bb0);
+S3RE_HOOK(0x00472c10, VectorDestructor_472c10, DestructorFn, Original_VectorDestructor_472c10,
+          VectorDestructor_472c10);
+S3RE_HOOK(0x00472e00, VectorDestructor_472e00, DestructorFn, Original_VectorDestructor_472e00,
+          VectorDestructor_472e00);
+S3RE_HOOK(0x00473000, VectorDestructor_473000, DestructorFn, Original_VectorDestructor_473000,
+          VectorDestructor_473000);
+S3RE_HOOK(0x00473060, VectorDestructor_473060, DestructorFn, Original_VectorDestructor_473060,
+          VectorDestructor_473060);
+S3RE_HOOK(0x004a1140, VectorDestructor_4a1140, DestructorFn, Original_VectorDestructor_4a1140,
+          VectorDestructor_4a1140);
+S3RE_HOOK(0x004141a0, VectorDestructor_4141a0, DestructorFn, Original_VectorDestructor_4141a0,
+          VectorDestructor_4141a0);
+S3RE_HOOK(0x004a11a0, VectorDestructor_4a11a0, DestructorFn, Original_VectorDestructor_4a11a0,
+          VectorDestructor_4a11a0);
+S3RE_HOOK(0x00437630, VectorConstructor_437630, ConstructorFn, Original_VectorConstructor_437630,
+          VectorConstructor_437630);
+S3RE_HOOK(0x0044ce10, VectorConstructor_44ce10, ConstructorFn, Original_VectorConstructor_44ce10,
+          VectorConstructor_44ce10);
+S3RE_HOOK(0x00462c70, VectorConstructor_462c70, ConstructorFn, Original_VectorConstructor_462c70,
+          VectorConstructor_462c70);
+S3RE_HOOK(0x00466110, VectorConstructor_466110, ConstructorFn, Original_VectorConstructor_466110,
+          VectorConstructor_466110);
+S3RE_HOOK(0x00472700, VectorConstructor_472700, ConstructorFn, Original_VectorConstructor_472700,
+          VectorConstructor_472700);
+S3RE_HOOK(0x004727a0, VectorConstructor_4727a0, ConstructorFn, Original_VectorConstructor_4727a0,
+          VectorConstructor_4727a0);
+S3RE_HOOK(0x004728a0, VectorConstructor_4728a0, ConstructorFn, Original_VectorConstructor_4728a0,
+          VectorConstructor_4728a0);
+S3RE_HOOK(0x00472920, VectorConstructor_472920, ConstructorFn, Original_VectorConstructor_472920,
+          VectorConstructor_472920);
+S3RE_HOOK(0x0044ce90, VectorConstructor_44ce90, ConstructorFn, Original_VectorConstructor_44ce90,
+          VectorConstructor_44ce90);
+S3RE_HOOK(0x00457fb0, VectorConstructor_457fb0, ConstructorFn, Original_VectorConstructor_457fb0,
+          VectorConstructor_457fb0);
+S3RE_HOOK(0x00457f20, VectorConstructor_457f20, ConstructorFn, Original_VectorConstructor_457f20,
+          VectorConstructor_457f20);
+S3RE_HOOK(0x00458500, VectorConstructor_458500, ConstructorFn, Original_VectorConstructor_458500,
+          VectorConstructor_458500);
+S3RE_HOOK(0x00457ea0, VectorConstructor_457ea0, ConstructorFn, Original_VectorConstructor_457ea0,
+          VectorConstructor_457ea0);
+S3RE_HOOK(0x00472820, VectorConstructor_472820, ConstructorFn, Original_VectorConstructor_472820,
+          VectorConstructor_472820);
+S3RE_HOOK(0x00462cf0, VectorConstructor_462cf0, ConstructorFn, Original_VectorConstructor_462cf0,
+          VectorConstructor_462cf0);
+S3RE_HOOK(0x00437c90, BareVectorConstructor_437c90, BareConstructorFn, Original_BareVectorConstructor_437c90,
+          BareVectorConstructor_437c90);
+S3RE_HOOK(0x00458a60, BareVectorConstructor_458a60, BareConstructorFn, Original_BareVectorConstructor_458a60,
+          BareVectorConstructor_458a60);
+S3RE_HOOK(0x004586f0, BareVectorConstructor_4586f0, BareConstructorFn, Original_BareVectorConstructor_4586f0,
+          BareVectorConstructor_4586f0);
+S3RE_HOOK(0x004377a0, BareVectorConstructor_4377a0, BareConstructorFn, Original_BareVectorConstructor_4377a0,
+          BareVectorConstructor_4377a0);
+
+// ---------------------------------------------------------------------------
+// Tests: every instantiation, original against ours, on random objects.
+// Constructors: capacity 0..64 (sometimes 2^30 + 0..3, so the product
+// wraps); the objects' bytes (data only as null or not)
+// and EAX. Destructors: random objects with a block from the game's
+// operator new (or none) and filled -2..6; the objects' bytes and, without
+// a block, EAX (with one it is the heap's). ~GamePlayerSetup is replaced by
+// a recording stub during the destructor runs (its calls compared as
+// offsets into the block).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+struct DestructorPair {
+    DestructorFn original;
+    DestructorFn ours;
+    std::uint32_t address;
+};
+struct ConstructorPair {
+    ConstructorFn original;
+    ConstructorFn ours;
+    std::uint32_t address;
+};
+struct BareConstructorPair {
+    BareConstructorFn original;
+    BareConstructorFn ours;
+    std::uint32_t address;
+};
+
+const DestructorPair kDestructors[] = {
+    {Original_VectorDestructor_4143b0, &VectorDestructor_4143b0, 0x4143b0},
+    {Original_VectorDestructor_427de0, &VectorDestructor_427de0, 0x427de0},
+    {Original_VectorDestructor_427e40, &VectorDestructor_427e40, 0x427e40},
+    {Original_VectorDestructor_437570, &VectorDestructor_437570, 0x437570},
+    {Original_VectorDestructor_44caa0, &VectorDestructor_44caa0, 0x44caa0},
+    {Original_VectorDestructor_44cca0, &VectorDestructor_44cca0, 0x44cca0},
+    {Original_VectorDestructor_457a10, &VectorDestructor_457a10, 0x457a10},
+    {Original_VectorDestructor_462870, &VectorDestructor_462870, 0x462870},
+    {Original_VectorDestructor_462b00, &VectorDestructor_462b00, 0x462b00},
+    {Original_VectorDestructor_4721c0, &VectorDestructor_4721c0, 0x4721c0},
+    {Original_VectorDestructor_472240, &VectorDestructor_472240, 0x472240},
+    {Original_VectorDestructor_4722e0, &VectorDestructor_4722e0, 0x4722e0},
+    {Original_VectorDestructor_472360, &VectorDestructor_472360, 0x472360},
+    {Original_VectorDestructor_472440, &VectorDestructor_472440, 0x472440},
+    {Original_VectorDestructor_4990c0, &VectorDestructor_4990c0, 0x4990c0},
+    {Original_VectorDestructor_4992f0, &VectorDestructor_4992f0, 0x4992f0},
+    {Original_VectorDestructor_44e240, &VectorDestructor_44e240, 0x44e240},
+    {Original_VectorDestructor_462eb0, &VectorDestructor_462eb0, 0x462eb0},
+    {Original_VectorDestructor_462f10, &VectorDestructor_462f10, 0x462f10},
+    {Original_VectorDestructor_466190, &VectorDestructor_466190, 0x466190},
+    {Original_VectorDestructor_472660, &VectorDestructor_472660, 0x472660},
+    {Original_VectorDestructor_472bb0, &VectorDestructor_472bb0, 0x472bb0},
+    {Original_VectorDestructor_472c10, &VectorDestructor_472c10, 0x472c10},
+    {Original_VectorDestructor_472e00, &VectorDestructor_472e00, 0x472e00},
+    {Original_VectorDestructor_473000, &VectorDestructor_473000, 0x473000},
+    {Original_VectorDestructor_473060, &VectorDestructor_473060, 0x473060},
+    {Original_VectorDestructor_4a1140, &VectorDestructor_4a1140, 0x4a1140},
+    {Original_VectorDestructor_4141a0, &VectorDestructor_4141a0, 0x4141a0},
+    {Original_VectorDestructor_4a11a0, &VectorDestructor_4a11a0, 0x4a11a0},
+};
+const ConstructorPair kConstructors[] = {
+    {Original_VectorConstructor_437630, &VectorConstructor_437630, 0x437630},
+    {Original_VectorConstructor_44ce10, &VectorConstructor_44ce10, 0x44ce10},
+    {Original_VectorConstructor_462c70, &VectorConstructor_462c70, 0x462c70},
+    {Original_VectorConstructor_466110, &VectorConstructor_466110, 0x466110},
+    {Original_VectorConstructor_472700, &VectorConstructor_472700, 0x472700},
+    {Original_VectorConstructor_4727a0, &VectorConstructor_4727a0, 0x4727a0},
+    {Original_VectorConstructor_4728a0, &VectorConstructor_4728a0, 0x4728a0},
+    {Original_VectorConstructor_472920, &VectorConstructor_472920, 0x472920},
+    {Original_VectorConstructor_44ce90, &VectorConstructor_44ce90, 0x44ce90},
+    {Original_VectorConstructor_457fb0, &VectorConstructor_457fb0, 0x457fb0},
+    {Original_VectorConstructor_457f20, &VectorConstructor_457f20, 0x457f20},
+    {Original_VectorConstructor_458500, &VectorConstructor_458500, 0x458500},
+    {Original_VectorConstructor_457ea0, &VectorConstructor_457ea0, 0x457ea0},
+    {Original_VectorConstructor_472820, &VectorConstructor_472820, 0x472820},
+    {Original_VectorConstructor_462cf0, &VectorConstructor_462cf0, 0x462cf0},
+};
+const BareConstructorPair kBareConstructors[] = {
+    {Original_BareVectorConstructor_437c90, &BareVectorConstructor_437c90, 0x437c90},
+    {Original_BareVectorConstructor_458a60, &BareVectorConstructor_458a60, 0x458a60},
+    {Original_BareVectorConstructor_4586f0, &BareVectorConstructor_4586f0, 0x4586f0},
+    {Original_BareVectorConstructor_4377a0, &BareVectorConstructor_4377a0, 0x4377a0},
+};
+
+std::uint32_t RandomCapacity(test::Rng& rng) {
+    if (rng.Chance(1, 4)) {
+        return 0;
+    }
+    if (rng.Chance(1, 10)) {
+        // The product wraps to a small block for every element size here
+        // (the emulator spec tries any value; a huge block may succeed for
+        // one side and fail for the other in the real heap).
+        return 0x40000000u + rng.Below(4);
+    }
+    return rng.Below(65);
+}
+
+// Compares two constructed objects (the data pointers only as null or
+// not) and frees their blocks.
+bool SameConstructed(test::Context& ctx, VectorBase& a, VectorBase& b) {
+    const bool nullA = a.data == 0, nullB = b.data == 0;
+    msvc6::GameOperatorDelete(reinterpret_cast<void*>(a.data));
+    msvc6::GameOperatorDelete(reinterpret_cast<void*>(b.data));
+    a.data = b.data = 0;
+    return S3RE_EXPECT_EQ(nullA, nullB) && S3RE_EXPECT_MEM_EQ(&a, &b, sizeof(a));
+}
+
+bool CompareConstructors(test::Context& ctx, const ConstructorPair& pair, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        VectorBase a, b;
+        ctx.rng().Fill(&a, sizeof(a));
+        std::memcpy(&b, &a, sizeof(a));
+        const std::uint32_t capacity = RandomCapacity(ctx.rng());
+        const std::uint32_t grow = ctx.rng().Next32();
+        VectorBase* ra = pair.original(&a, nullptr, capacity, grow);
+        VectorBase* rb = pair.ours(&b, nullptr, capacity, grow);
+        if (!S3RE_EXPECT(ra == &a && rb == &b) || !SameConstructed(ctx, a, b)) {
+            ctx.Fail(__FILE__, __LINE__, "  0x%x case %d: capacity %u", pair.address, i, capacity);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool CompareBareConstructors(test::Context& ctx, const BareConstructorPair& pair, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        VectorBase a, b;
+        ctx.rng().Fill(&a, sizeof(a));
+        std::memcpy(&b, &a, sizeof(a));
+        const std::uint32_t capacity = RandomCapacity(ctx.rng());
+        VectorBase* ra = pair.original(&a, nullptr, capacity);
+        VectorBase* rb = pair.ours(&b, nullptr, capacity);
+        if (!S3RE_EXPECT(ra == &a && rb == &b) || !SameConstructed(ctx, a, b)) {
+            ctx.Fail(__FILE__, __LINE__, "  0x%x case %d: capacity %u", pair.address, i, capacity);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Runs a destructor with ~GamePlayerSetup stubbed; its calls are recorded
+// as offsets into the vector's block.
+std::vector<test::StubCall> RunDestructor(DestructorFn fn, VectorBase& vector, std::uint32_t& eax) {
+    test::CalleeStubs stubs;
+    stubs.Install<0, kDestroyPlayer>();
+    stubs.SetWorld(reinterpret_cast<game::CGameData*>(vector.data));
+    eax = fn(&vector, nullptr);
+    return stubs.Take();
+}
+
+bool CompareDestructors(test::Context& ctx, const DestructorPair& pair, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        VectorBase a, b;
+        ctx.rng().Fill(&a, sizeof(a));
+        a.filled = ctx.rng().Range(-2, 6);
+        std::memcpy(&b, &a, sizeof(a));
+        const bool block = ctx.rng().Chance(3, 4);
+        a.data = block ? reinterpret_cast<std::uintptr_t>(msvc6::GameOperatorNew(6 * kPlayerSize)) : 0;
+        b.data = block ? reinterpret_cast<std::uintptr_t>(msvc6::GameOperatorNew(6 * kPlayerSize)) : 0;
+        std::uint32_t ra = 0, rb = 0;
+        const auto callsA = RunDestructor(pair.original, a, ra);
+        const auto callsB = RunDestructor(pair.ours, b, rb);
+        a.data = b.data = 0;  // freed (or none)
+        bool same = S3RE_EXPECT(callsA == callsB) && S3RE_EXPECT_MEM_EQ(&a, &b, sizeof(a));
+        if (!block) {
+            same = S3RE_EXPECT_EQ(ra, rb) && same;
+        }
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  0x%x case %d: block %d, filled %d", pair.address, i, block, a.filled);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Wrong implementations, one per kind.
+// (The first vtable store is overwritten by the last one, so it is not
+// observable; a wrong EAX is.)
+std::uint32_t __fastcall WrongDestructor(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_int) | 1;
+}
+std::uint32_t __fastcall WrongPlayerDestructor(VectorBase* self, void*) {
+    --self->filled;  // one element fewer
+    const std::uint32_t result = DestroyPlayerVector(self);
+    ++self->filled;
+    return result;
+}
+VectorBase* __fastcall WrongConstructor(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 32, vt::kWCBareVectorBase_CChatMessage,
+                           vt::kWCOrderedVectorBase_CChatMessage);  // 0x457fb0's class, not 0x44ce90's
+}
+VectorBase* __fastcall WrongBareConstructor(VectorBase* self, void* edx, std::uint32_t capacity) {
+    BareVectorConstructor_437c90(self, edx, capacity);
+    self->unk04 = 1;
+    return self;
+}
+
+}  // namespace
+
+S3RE_TEST(WatcomVectorDestructors_MatchOriginal) {
+    for (const DestructorPair& pair : kDestructors) {
+        if (!CompareDestructors(ctx, pair, 300)) {
+            return;
+        }
+    }
+}
+S3RE_TEST(WatcomVectorConstructors_MatchOriginal) {
+    for (const ConstructorPair& pair : kConstructors) {
+        if (!CompareConstructors(ctx, pair, 300)) {
+            return;
+        }
+    }
+    for (const BareConstructorPair& pair : kBareConstructors) {
+        if (!CompareBareConstructors(ctx, pair, 300)) {
+            return;
+        }
+    }
+}
+S3RE_TEST(WatcomVectors_ComparisonDetectsWrongImplementation) {
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareDestructors(probe, {Original_VectorDestructor_4143b0, &WrongDestructor, 0x4143b0}, 50);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareDestructors(probe, {Original_VectorDestructor_4141a0, &WrongPlayerDestructor, 0x4141a0}, 50);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareConstructors(probe, {Original_VectorConstructor_44ce90, &WrongConstructor, 0x44ce90}, 50);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareBareConstructors(probe, {Original_BareVectorConstructor_437c90, &WrongBareConstructor, 0x437c90},
+                                50);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+}
+
+}  // namespace s3re::watcom

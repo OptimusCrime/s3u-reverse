@@ -84,11 +84,46 @@ inline constexpr std::uint32_t kCentrumCheckAgent = 0x65a5c0;        // CCentrum
 // Watcom container library
 inline constexpr std::uint32_t kWCExcept = 0x655438;                    // WCExcept (base of the containers)
 inline constexpr std::uint32_t kWCIsvListBase = 0x655fa4;               // WCIsvListBase
+inline constexpr std::uint32_t kWCIterExcept = 0x656a38;                // WCIterExcept (base of the iterators)
 inline constexpr std::uint32_t kWCBareVectorBase_int = 0x655a5c;        // WCBareVectorBase<int>
 inline constexpr std::uint32_t kWCVectorBase_int = 0x6559f8;            // WCVectorBase<int>
 inline constexpr std::uint32_t kWCBareVectorBase_uint = 0x657158;       // WCBareVectorBase<unsigned int>
 inline constexpr std::uint32_t kWCBareVectorBase_ushort = 0x657404;     // WCBareVectorBase<unsigned short>
 inline constexpr std::uint32_t kWCValOrderedVector_ushort = 0x657410;  // WCValOrderedVector<unsigned short>
+// More WCBareVectorBase<T> instantiations (watcom/bare_vectors.cpp)
+inline constexpr std::uint32_t kWCBareVectorBase_voidp = 0x657440;            // WCBareVectorBase<void*>
+inline constexpr std::uint32_t kWCBareVectorBase_HFONT = 0x656a14;            // WCBareVectorBase<HFONT__*>
+inline constexpr std::uint32_t kWCBareVectorBase_CScreenElementP = 0x655bb8;  // WCBareVectorBase<CScreenElement*>
+inline constexpr std::uint32_t kWCBareVectorBase_CStatusMessage = 0x65702c;   // <LobbyClient::CStatusMessage>
+inline constexpr std::uint32_t kWCBareVectorBase_ulong = 0x6576a0;            // WCBareVectorBase<unsigned long>
+inline constexpr std::uint32_t kWCBareVectorBase_long = 0x65852c;             // WCBareVectorBase<long>
+inline constexpr std::uint32_t kWCBareVectorBase_GameChunkDescription = 0x657e80;
+inline constexpr std::uint32_t kWCBareVectorBase_String = 0x655454;           // WCBareVectorBase<String>
+inline constexpr std::uint32_t kWCBareVectorBase_CPlayer = 0x655a50;          // WCBareVectorBase<Dirk::CPlayer>
+inline constexpr std::uint32_t kWCBareVectorBase_CTeam = 0x6559d8;            // WCBareVectorBase<Dirk::CTeam>
+inline constexpr std::uint32_t kWCBareVectorBase_CChatMessage = 0x657164;     // <LobbyClient::CChatMessage>
+inline constexpr std::uint32_t kWCBareVectorBase_CGroup = 0x657094;           // <LobbyClient::CGroup>
+inline constexpr std::uint32_t kWCBareVectorBase_CConnectionShortcut = 0x657364;  // <DirectX::CConnectionShortcut>
+inline constexpr std::uint32_t kWCBareVectorBase_CRunningSession = 0x65739c;  // <DirectX::CRunningSession>
+// The classes the (capacity, grow) constructors end with.
+inline constexpr std::uint32_t kWCOrderedVectorBase_int = 0x656b98;           // WCOrderedVectorBase<int>
+inline constexpr std::uint32_t kWCVectorBase_uint = 0x657170;                 // WCVectorBase<unsigned int>
+inline constexpr std::uint32_t kWCSortedVectorBase_voidp = 0x6573d4;          // WCSortedVectorBase<void*>
+inline constexpr std::uint32_t kWCOrderedVectorBase_uint = 0x6574bc;          // WCOrderedVectorBase<unsigned int>
+inline constexpr std::uint32_t kWCSortedVectorBase_ulong = 0x65776c;          // WCSortedVectorBase<unsigned long>
+inline constexpr std::uint32_t kWCOrderedVectorBase_voidp = 0x65779c;         // WCOrderedVectorBase<void*>
+inline constexpr std::uint32_t kWCPtrSortedVector_CExecuteType = 0x657670;    // WCPtrSortedVector<CExecuteType>
+inline constexpr std::uint32_t kWCVectorBase_ulong = 0x65765c;                // WCVectorBase<unsigned long>
+inline constexpr std::uint32_t kWCVectorBase_CChatMessage = 0x657108;         // WCVectorBase<LobbyClient::CChatMessage>
+inline constexpr std::uint32_t kWCOrderedVectorBase_CChatMessage = 0x65711c;  // <LobbyClient::CChatMessage>
+inline constexpr std::uint32_t kWCSortedVectorBase_CGroup = 0x6570b0;         // <LobbyClient::CGroup>
+inline constexpr std::uint32_t kWCVectorBase_CGroup = 0x6571d0;               // WCVectorBase<LobbyClient::CGroup>
+inline constexpr std::uint32_t kWCOrderedVectorBase_String = 0x657130;        // WCOrderedVectorBase<String>
+inline constexpr std::uint32_t kWCVectorBase_CConnectionShortcut = 0x6574e4;  // <DirectX::CConnectionShortcut>
+inline constexpr std::uint32_t kWCVectorBase_CRunningSession = 0x657370;      // <DirectX::CRunningSession>
+// Dirk::CTeam's members (game/ui/game_teams.cpp)
+inline constexpr std::uint32_t kWCValSortedVector_int = 0x655a0c;             // WCValSortedVector<int> (+8)
+inline constexpr std::uint32_t kWCValOrderedVector_CPlayer = 0x656b6c;        // WCValOrderedVector<Dirk::CPlayer> (+0x24)
 // Standard library
 inline constexpr std::uint32_t kStdLogicError = 0x65a548;  // std::logic_error
 inline constexpr std::uint32_t kStdOutOfRange = 0x65a538;  // std::out_of_range

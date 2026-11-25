@@ -467,3 +467,33 @@ SELF_TEST += [
     Spec("WrongGamePlayerSetupConstruct", 0x0049e8f0, "thiscall", [], ignore_bytes=SETUP_ALLOCATOR_BYTES,
          max_cases=50),
 ]
+
+
+# -- Dirk::CTeam and the team/player comparisons (game_teams.cpp, session 56) --
+# The team at world offset 0: its vectors' blocks in scratch slots 0 and 1
+# (or none), filled -2..6; ~GamePlayerSetup probed.
+
+
+def team_to_destroy(rng, pool, args):
+    return [(0x8 + 8, rng.choice([0, WORLD_BASE + SCRATCH, WORLD_BASE + SCRATCH]), 4),
+            (0x8 + 0x10, rng.randint(-2, 6) & 0xFFFFFFFF, 4),
+            (0x24 + 8, rng.choice([0, WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES] * 2 + [0]), 4),
+            (0x24 + 0x10, rng.randint(-2, 6) & 0xFFFFFFFF, 4)]
+
+
+def equal_or_close_keys(offset):
+    def presets(rng, pool, args):
+        x = rng.getrandbits(32)
+        y = rng.choice([x, x, (x + 1) & 0xFFFFFFFF, (x - 1) & 0xFFFFFFFF, rng.getrandbits(32), 0x80000000])
+        return [(offset, x, 4), (SCRATCH + offset, y, 4)]
+    return presets
+
+
+SPECS += [
+    Spec("CTeam_Construct", 0x004a0200, "thiscall", [], new_fails=0.2),
+    Spec("CTeam_ConstructId", 0x004a02d0, "thiscall", [anything], new_fails=0.2),
+    Spec("CTeam_Destroy", 0x004a04d0, "thiscall", [], presets=team_to_destroy,
+         callees={0x0049ec80: (0, "thiscall", "probe")}),
+    Spec("CTeam_Less", 0x004a05a0, "thiscall", [scratch(0)], presets=equal_or_close_keys(0)),
+    Spec("GamePlayerSetup_Equal", 0x0049f100, "thiscall", [scratch(0)], presets=equal_or_close_keys(0x10)),
+]
