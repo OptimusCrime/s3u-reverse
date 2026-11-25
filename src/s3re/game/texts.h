@@ -259,4 +259,10 @@ inline constexpr GameText kAiNextPatrolPoint1{0x732a98};
 inline constexpr GameText kAiNewPatrolPoint0{0x732a44};
 // "Marcus: FOE ATTACK EXCEPTION!" (DebugLog of T_ATTACK_AGENT::Run 0x55ec10 when RunMilitary throws)
 inline constexpr GameText kAiFoeAttackException{0x731464};
+// "Start Attack - player: %d, group: %d, building: %d \n" (AI::StartAttack 0x594080)
+inline constexpr GameText kAiStartAttack{0x732edc};
+// "Start Gather - player: %d, group: %d, building: %d \n" (AI::StartAttack 0x594080)
+inline constexpr GameText kAiStartGather{0x732ea4};
+// "Start Steal - player: %d, group: %d, building: %d \n" (AI::StartAttack 0x594080)
+inline constexpr GameText kAiStartSteal{0x732e70};
 }  // namespace s3re::game::texts

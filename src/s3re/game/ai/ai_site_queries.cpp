@@ -332,7 +332,7 @@ std::uint32_t __fastcall AI_ArmyState_Reset(AiArmyState* self, void* /*edx*/) {
     for (std::size_t p = 0; p < kPlayers; ++p) {
         self->per_player000[p] = kPlayerStep000 * static_cast<std::uint32_t>(p);
         self->per_player050[p] = 0;
-        self->per_player0a0[p] = 0;
+        self->gather_countdowns[p] = 0;
         self->per_player0f0[p] = 0;
         self->per_player140[p] = 0;
         g_aiPerPlayer7e79d0[p] = 0;
@@ -342,7 +342,7 @@ std::uint32_t __fastcall AI_ArmyState_Reset(AiArmyState* self, void* /*edx*/) {
             self->attack_delays[p][group] = 10 + 2 * group;
         }
     }
-    self->unk190 = 0;
+    self->start_attack_calls = 0;
     self->unk504 = kUnk504;
     self->unk50c = kUnk50c;
     for (std::uint32_t& value : self->unk510) {

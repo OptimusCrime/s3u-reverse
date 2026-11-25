@@ -72,6 +72,52 @@
 //              its thieves (Player::settler_lists[23]) / mages ([36]) that
 //              stands in an economy area of `player` gets SendHunter (with
 //              this `this`). EAX is not used by the caller.
+//   0x00594080 AI::StartAttack(player ECX, float ratio), ret 4: in mission
+//              56 from tick 81000 on, Mission56FinalAssault 0x594d40 instead.
+//              Otherwise the first 31 calls only count (g_aiArmyState
+//              +0x190), and nothing happens while a gather building is set
+//              (+0x898) or fewer than 15 soldiers are counted (census
+//              soldiers, 9 kinds, 0 for an inactive player). The enemy is
+//              the other team's playing player with a tower, castle or
+//              barracks (census buildings) whose start position is in the
+//              same walk region (StartPositionWalkRegion 0x55b6e0) with the
+//              weakest team strength (census +0x25c, signed, first on a
+//              tie); a computer enemy whose team has no active player
+//              (TeamHasActivePlayer 0x593140) counts only on a Random draw
+//              below 200 (no draw in mission 70 for player 2, mission 72
+//              for player 1, and for humans). A group already attacking
+//              (target building, not defending) ends it. With an enemy
+//              with soldiers it attacks (x87, done in double: the soldiers
+//              times `ratio` (s, also kept as a float) times 0.75 above the
+//              enemy's soldiers, or the enemy's team strength times 2.2
+//              below its own times `ratio`, unordered counting as below;
+//              or more than 4 times the enemy's soldiers; or the mission 70
+//              / 72 exceptions): the target is the enemy's weakest frontier
+//              building in its walk region (0x58a7e0), dropped (0) when more
+//              than s (float) times 1.5 enemy soldiers are within 60 of it
+//              (CountEnemySoldiersNear 0x58a2c0); when the enemy has no
+//              towers or castles but barracks and the player at least as
+//              many spare groups (0x591fb0) as the enemy has barracks, the
+//              enemy's first finished barracks is the target. Then
+//              CountSpareGroups and CountSpareSoldiers run (results
+//              unused), the gather building is the nearest interior one to
+//              the target (0x58acd0; the gather countdown +0xa0 becomes
+//              15) and up to 50 spare groups (FindSpareGroup 0x5923e0,
+//              any delay) get the target (census +4), lose their patrol
+//              buildings and steal flag, add 2200 - r % 550 to their
+//              attack delay (Random, logged "RANDOM_55 wert = %u" through
+//              DebugLog) and go (logged "Start Attack ..." or "Start Gather
+//              ...", SendMoveGroup) to the target or the gather building.
+//              Otherwise (a steal), when its soldiers minus its towers and
+//              castles are above 10: the first finished military building
+//              (SiteKindOf 0x58ed70 == 3) of another team's playing player
+//              (a computer one only on a Random draw below 200) for which
+//              a spare group without delay exists whose first member is in
+//              the door's walk region, at most 120 tiles away, and whose
+//              tenth (unsigned) reaches the enemy soldiers within 60 of
+//              the building: that group gets it as target with the steal
+//              flag, 900 - r % 225 delay ("Start Steal ...") and goes there.
+//              EAX is not used by the caller.
 
 #include "game/ai/ai_layout.h"
 #include "game/enums/buildings.h"
@@ -127,6 +173,39 @@ constexpr std::uintptr_t kOperatorNew = 0x0061efb9;       // the game's operator
 constexpr std::uintptr_t kOperatorDelete = 0x0061e4ef;    // the game's operator delete (cdecl)
 constexpr std::int32_t kHuntersNear = 4;                  // a hunter after a target this close to the prey: nothing to do
 constexpr std::int32_t kGroupHunters = 2;                 // a group needs this many members to give a hunter
+constexpr std::uintptr_t kMission56FinalAssault = 0x00594d40;  // AI::Mission56FinalAssault
+constexpr std::uintptr_t kStartPositionWalkRegion = 0x0055b6e0;  // AI::StartPositionWalkRegion (thiscall on the census)
+constexpr std::uintptr_t kWeakestFrontier = 0x0058a7e0;    // AI::WeakestFrontierMilitaryBuilding
+constexpr std::uintptr_t kCountEnemySoldiers = 0x0058a2c0;  // AI::CountEnemySoldiersNear
+constexpr std::uintptr_t kCountSpareGroups = 0x00591fb0;   // AI::Army::CountSpareGroups
+constexpr std::uintptr_t kCountSpareSoldiers = 0x00592100;  // AI::Army::CountSpareSoldiers
+constexpr std::uintptr_t kFindSpareGroup = 0x005923e0;     // AI::Army::FindSpareGroup
+constexpr std::uintptr_t kNearestInterior = 0x0058acd0;    // AI::NearestInteriorMilitaryBuilding
+constexpr std::uintptr_t kSiteKindOf = 0x0058ed70;         // AI::SiteKindOf (fastcall, CX)
+constexpr std::int32_t kFinalAssaultMission = 56;
+constexpr std::uint32_t kFinalAssaultTick = 81000;
+constexpr std::int32_t kMission70 = 70;                    // player 2 attacks without the strength checks
+constexpr std::uint32_t kMission70Player = 2;
+constexpr std::int32_t kMission72 = 72;
+constexpr std::uint32_t kMission72Player = 1;
+constexpr std::uint32_t kWarmUpCalls = 30;                 // StartAttack does nothing in its first 31 calls
+constexpr std::int32_t kMinSoldiers = 15;
+constexpr std::uint16_t kLonelyComputerDraw = 200;         // a computer enemy without an active teammate counts below this
+constexpr float kAttackSoldierShare = 0.75f;               // 0x65a8f0
+constexpr float kTeamStrengthMargin = 2.2f;                // 0x65a8ec
+constexpr float kDefenderShare = 1.5f;                     // 0x65a8e8
+constexpr std::int32_t kOutnumbering = 4;
+constexpr std::uint32_t kAttackDistance = 60;              // enemies counted around the target
+constexpr std::int32_t kGatherCountdown = 15;
+constexpr std::int32_t kMaxAttackingGroups = 50;
+constexpr std::uint32_t kAttackDelay = 2200;               // - up to 549
+constexpr std::uint32_t kAttackDelaySpread = 550;
+constexpr std::int32_t kStealSurplus = 10;                 // soldiers beyond the towers and castles needed to steal
+constexpr std::uint8_t kMilitarySite = 3;                  // AI::SiteKindOf of a military building
+constexpr std::int32_t kStealReach = 120;
+constexpr std::uint32_t kStealDelay = 900;                 // - up to 224
+constexpr std::uint32_t kStealDelaySpread = 225;
+constexpr std::uint32_t kStealShare = 10;                  // a tenth of the group must reach the defenders
 
 std::uint32_t Random() {
     using Fn = std::uint32_t(__fastcall*)(CGameData* world, void* edx);
@@ -352,6 +431,226 @@ void HuntEnemies(AiGroupOrders* self, std::uint32_t player, SettlerType type) {
     }
 }
 
+// 0x5940e2..0x594172: the census soldiers of a player (0 if not playing),
+// summed as the original does (three kinds at a time, wrapping).
+std::int32_t CensusSoldiers(std::uint32_t player) {
+    if (g_aiMapWorld.get()->players[player].active == 0) {
+        return 0;
+    }
+    const std::uint32_t* soldiers = g_aiCensus.get().soldiers[player];
+    const std::uint32_t first = soldiers[2] + soldiers[1] + soldiers[0];
+    const std::uint32_t second = soldiers[5] + soldiers[4] + soldiers[3];
+    const std::uint32_t third = soldiers[6] + soldiers[8] + soldiers[7];
+    return static_cast<std::int32_t>(third + first + second);
+}
+
+std::uint32_t CensusBuildings(std::uint32_t player, BuildingType type) {
+    return g_aiCensus.get().buildings[player][Value(type)];
+}
+
+// Towers and castles of a player in the census (wrapping like the original).
+std::uint32_t CensusTowers(std::uint32_t player) {
+    return CensusBuildings(player, BuildingType::Castle) + CensusBuildings(player, BuildingType::LargeTower) +
+           CensusBuildings(player, BuildingType::SmallTower);
+}
+
+std::uint32_t StartRegion(std::uint32_t player) {
+    using Fn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t player);
+    return reinterpret_cast<Fn>(kStartPositionWalkRegion)(&g_aiCensus.get(), nullptr, player);
+}
+
+bool TeamHasActivePlayer(std::uint32_t player) {
+    using TeamFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t player);
+    return (reinterpret_cast<TeamFn>(kTeamHasActivePlayer)(&g_aiGroupOrders.get(), nullptr, player) & 0xff) != 0;
+}
+
+std::int32_t FindSpareGroup(std::uint32_t player, std::uint32_t building, std::uint32_t anyDelay) {
+    using Fn = std::int32_t(__fastcall*)(void* self, void* edx, std::uint32_t player, std::uint32_t building,
+                                         std::uint32_t anyDelay);
+    return reinterpret_cast<Fn>(kFindSpareGroup)(&g_aiGroupOrders.get(), nullptr, player, building, anyDelay);
+}
+
+std::uint32_t CountEnemySoldiersNear(std::uint32_t x, std::uint32_t y, std::uint32_t distance, std::uint32_t player) {
+    using Fn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t, std::uint32_t, std::uint32_t,
+                                          std::uint32_t);
+    return reinterpret_cast<Fn>(kCountEnemySoldiers)(&g_aiEnemySearch.get(), nullptr, x, y, distance, player);
+}
+
+const layout::Building& BuildingAt(const CGameData* world, std::uint32_t id) { return (&world->buildings[0])[id]; }
+
+void SendGroup(std::uint32_t player, std::uint32_t group, std::uint32_t building) {
+    const layout::Building& record = BuildingAt(g_aiMapWorld, building);
+    using SendFn = std::uint32_t(__fastcall*)(AiCommandSender* self, void* edx, std::uint32_t player,
+                                              std::uint32_t group, std::uint32_t x, std::uint32_t y);
+    reinterpret_cast<SendFn>(kSendMoveGroup)(&g_aiCommandSender.get(), nullptr, player, group, record.x, record.y);
+}
+
+// 0x5941aa..0x5942a4: the enemy to measure up to: -1 if none.
+std::int32_t ChooseEnemy(std::uint32_t player) {
+    const std::int32_t mission = g_campaignMission;
+    std::int32_t weakest = kFarthest;
+    std::int32_t enemy = -1;
+    for (std::uint32_t other = 0; other < kPlayers; ++other) {
+        const CGameData* world = g_aiMapWorld;
+        if (world->players[other].active == 0 || world->players[other].team == world->players[player].team) {
+            continue;
+        }
+        if (static_cast<std::int32_t>(CensusTowers(other)) <= 0 &&
+            static_cast<std::int32_t>(CensusBuildings(other, BuildingType::Barracks)) <= 0) {
+            continue;
+        }
+        const std::uint32_t region = StartRegion(other);
+        if (region != StartRegion(player)) {
+            continue;
+        }
+        const bool scripted = (mission == kMission70 && player == kMission70Player) ||
+                              (mission == kMission72 && player == kMission72Player);
+        if (!scripted && g_aiMapWorld.get()->players[other].active != kHumanPlayer && !TeamHasActivePlayer(other) &&
+            (Random() & 0xffff) >= kLonelyComputerDraw) {
+            continue;
+        }
+        const auto strength = static_cast<std::int32_t>(g_aiCensus.get().team_strength[other]);
+        if (strength < weakest) {
+            weakest = strength;
+            enemy = static_cast<std::int32_t>(other);
+        }
+    }
+    return enemy;
+}
+
+// 0x594428..0x5946eb: an attack on the enemy's weakest frontier building
+// (or its barracks), or a gathering first.
+void LaunchAttack(std::uint32_t player, std::uint32_t enemy, float strength, bool enemyWithoutTowers) {
+    const std::uint32_t region = StartRegion(player);
+    using WeakestFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t unused, std::uint32_t player,
+                                                 std::uint32_t region);
+    std::uint32_t target = reinterpret_cast<WeakestFn>(kWeakestFrontier)(&g_aiEnemySearch.get(), nullptr, player,
+                                                                         enemy, region);
+    const layout::Building& weakest = BuildingAt(g_aiMapWorld, target);
+    const auto defenders = static_cast<std::int32_t>(CountEnemySoldiersNear(weakest.x, weakest.y, kAttackDistance, player));
+    // 0x594479: x87 (fild, fld float, fmul float, fcompp); unordered counts as below
+    if (!(static_cast<double>(strength) * static_cast<double>(kDefenderShare) >= static_cast<double>(defenders))) {
+        target = 0;
+    }
+    using CountFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t player);
+    if (enemyWithoutTowers) {
+        const auto barracks = static_cast<std::int32_t>(CensusBuildings(enemy, BuildingType::Barracks));
+        if (barracks > 0 && static_cast<std::int32_t>(reinterpret_cast<CountFn>(kCountSpareGroups)(
+                                &g_aiGroupOrders.get(), nullptr, player)) >= barracks) {
+            // 0x5944c1..0x5944f9: the enemy's first finished barracks
+            const CGameData* world = g_aiMapWorld;
+            const std::uint32_t end = world->building_high_water + 1;
+            for (std::uint32_t id = 1; id < end; ++id) {
+                const layout::Building& building = BuildingAt(world, id);
+                if (building.owner == enemy && building.buildup == 0 && building.art == Value(BuildingType::Barracks)) {
+                    target = id;
+                    break;
+                }
+            }
+        }
+    }
+    reinterpret_cast<CountFn>(kCountSpareGroups)(&g_aiGroupOrders.get(), nullptr, player);    // (unused)
+    reinterpret_cast<CountFn>(kCountSpareSoldiers)(&g_aiGroupOrders.get(), nullptr, player);  // (unused)
+    std::int32_t group = FindSpareGroup(player, target, 1);
+    AiGroupOrders& orders = g_aiGroupOrders.get();
+    if (static_cast<std::int32_t>(target) > 0) {
+        const layout::Building& record = BuildingAt(g_aiMapWorld, target);
+        using NearestFn = std::int32_t(__fastcall*)(void* self, void* edx, std::uint32_t player, std::uint32_t x,
+                                                    std::uint32_t y);
+        const std::int32_t gather =
+            reinterpret_cast<NearestFn>(kNearestInterior)(&g_aiEnemySearch.get(), nullptr, player, record.x, record.y);
+        if (gather > 0) {
+            orders.gather_buildings[player] = static_cast<std::uint32_t>(gather);
+            g_aiArmyState.get().gather_countdowns[player] = kGatherCountdown;
+        }
+    }
+    if (group == -1) {
+        return;
+    }
+    for (std::int32_t sent = 0; static_cast<std::int32_t>(target) > 0 && sent < kMaxAttackingGroups; ++sent) {
+        const std::uint32_t index = player * kUnitGroups + static_cast<std::uint32_t>(group);
+        (&g_aiCensus.get().group_target_buildings[0][0])[index] = static_cast<std::uint16_t>(target);
+        AiGroupTarget& groupTarget = (&orders.group_targets[0][0])[index];
+        groupTarget.patrol0 = 0;
+        groupTarget.patrol1 = 0;
+        (&orders.group_flags[0][0])[index] = 0;
+        const std::uint32_t draw = LoggedRandom();
+        (&g_aiArmyState.get().attack_delays[0][0])[index] += kAttackDelay - draw % kAttackDelaySpread;
+        const std::uint32_t gather = orders.gather_buildings[player];
+        if (gather == 0) {
+            LogDebugString(texts::kAiStartAttack, player, group, target);
+            SendGroup(player, static_cast<std::uint32_t>(group), target);
+        } else {
+            LogDebugString(texts::kAiStartGather, player, group, gather);
+            SendGroup(player, static_cast<std::uint32_t>(group), orders.gather_buildings[player]);
+        }
+        group = FindSpareGroup(player, target, 1);
+        if (group == -1) {
+            return;
+        }
+    }
+}
+
+// 0x594702..0x594921: a steal: a spare group goes for a weakly guarded
+// enemy military building near it.
+void TrySteal(std::uint32_t player, std::int32_t mySoldiers) {
+    const auto surplus = static_cast<std::int32_t>(static_cast<std::uint32_t>(mySoldiers) - CensusTowers(player));
+    if (surplus <= kStealSurplus) {
+        return;
+    }
+    for (std::uint32_t id = 1; id < g_aiMapWorld.get()->building_high_water + 1; ++id) {
+        const CGameData* world = g_aiMapWorld;
+        const layout::Building& building = BuildingAt(world, id);
+        const std::uint32_t owner = building.owner;
+        if (owner == 0xff || building.buildup != 0) {
+            continue;
+        }
+        using KindFn = std::uint32_t(__fastcall*)(std::uint32_t type);
+        if ((reinterpret_cast<KindFn>(kSiteKindOf)(building.art) & 0xff) != kMilitarySite) {
+            continue;
+        }
+        world = g_aiMapWorld;
+        const std::int32_t active = world->players[owner].active;
+        if (active == 0 || owner == player || world->players[owner].team == world->players[player].team) {
+            continue;
+        }
+        if (active != kHumanPlayer && (Random() & 0xffff) >= kLonelyComputerDraw) {
+            continue;
+        }
+        const std::int32_t group = FindSpareGroup(player, id, 0);
+        if (group == -1) {
+            continue;
+        }
+        world = g_aiMapWorld;
+        const std::uint32_t index = player * kUnitGroups + static_cast<std::uint32_t>(group);
+        const layout::Settler& first = FirstMember(world, index);
+        const layout::Building& target = BuildingAt(world, id);
+        const layout::Tile* tiles = &world->tiles[0][0];
+        if (tiles[target.door_x * layout::kMapRowTiles + target.door_y].walk_region !=
+            tiles[first.x * layout::kMapRowTiles + first.y].walk_region) {
+            continue;
+        }
+        if (TileDistance(first.x, first.y, target.x, target.y) > kStealReach) {
+            continue;
+        }
+        const std::uint32_t defenders = CountEnemySoldiersNear(target.x, target.y, kAttackDistance, player);
+        if (static_cast<std::uint32_t>(ListLength(g_aiMapWorld, index)) / kStealShare < defenders) {
+            continue;
+        }
+        AiGroupOrders& orders = g_aiGroupOrders.get();
+        (&g_aiCensus.get().group_target_buildings[0][0])[index] = static_cast<std::uint16_t>(id);
+        AiGroupTarget& groupTarget = (&orders.group_targets[0][0])[index];
+        groupTarget.patrol0 = 0;
+        groupTarget.patrol1 = 0;
+        (&orders.group_flags[0][0])[index] = 1;
+        const std::uint32_t draw = LoggedRandom();
+        (&g_aiArmyState.get().attack_delays[0][0])[index] += kStealDelay - draw % kStealDelaySpread;
+        LogDebugString(texts::kAiStartSteal, player, group, id);
+        SendGroup(player, static_cast<std::uint32_t>(group), id);
+        return;
+    }
+}
+
 }  // namespace
 
 using TickDelaysFn = void(__fastcall*)(AiArmyState* self, void* edx);
@@ -366,6 +665,8 @@ void __fastcall AI_Army_HuntEnemyThieves(AiGroupOrders* self, void* edx, std::ui
 void __fastcall AI_Army_HuntEnemyMages(AiGroupOrders* self, void* edx, std::uint32_t player);
 
 using SendHunterFn = void(__fastcall*)(AiGroupOrders* self, void* edx, std::uint32_t player, std::uint32_t prey);
+using StartAttackFn = void(__fastcall*)(std::uint32_t player, void* edx, float ratio);
+void __fastcall AI_StartAttack(std::uint32_t player, void* edx, float ratio);
 
 S3RE_HOOK(0x00594000, AI_ArmyState_TickAttackDelays, TickDelaysFn, Original_AI_ArmyState_TickAttackDelays,
           AI_ArmyState_TickAttackDelays);
@@ -375,6 +676,7 @@ S3RE_HOOK(0x005935b0, AI_Army_SendHunter, SendHunterFn, Original_AI_Army_SendHun
 S3RE_HOOK(0x00593ad0, AI_Army_HuntEnemyThieves, CatapultsFn, Original_AI_Army_HuntEnemyThieves,
           AI_Army_HuntEnemyThieves);
 S3RE_HOOK(0x00593bd0, AI_Army_HuntEnemyMages, CatapultsFn, Original_AI_Army_HuntEnemyMages, AI_Army_HuntEnemyMages);
+S3RE_HOOK(0x00594080, AI_StartAttack, StartAttackFn, Original_AI_StartAttack, AI_StartAttack);
 S3RE_HOOK(0x00592e60, AI_RecruitGeologistsAndThieves, RecruitFn, Original_AI_RecruitGeologistsAndThieves,
           AI_RecruitGeologistsAndThieves);
 
@@ -516,6 +818,73 @@ void __fastcall AI_Army_HuntEnemyMages(AiGroupOrders* self, void* /*edx*/, std::
     HuntEnemies(self, player, SettlerType::Mage);
 }
 
+// Purpose: The computer player's decision to attack: picks the weakest
+// enemy within reach and, when strong enough, sends its spare unit groups
+// against the enemy's weakest frontier building (gathering first), or else
+// lets a group steal a weakly guarded enemy building.
+void __fastcall AI_StartAttack(std::uint32_t player, void* /*edx*/, float ratio) {
+    if (g_campaignMission == kFinalAssaultMission && g_gameTick >= kFinalAssaultTick) {
+        using NoArgFn = std::uint32_t(__fastcall*)(void* ecx, void* edx);
+        reinterpret_cast<NoArgFn>(kMission56FinalAssault)(nullptr, nullptr);
+        return;
+    }
+    std::uint32_t& warmUp = g_aiArmyState.get().start_attack_calls;
+    if (static_cast<std::int32_t>(warmUp) <= static_cast<std::int32_t>(kWarmUpCalls)) {
+        ++warmUp;
+        return;
+    }
+    if (static_cast<std::int32_t>(g_aiGroupOrders.get().gather_buildings[player]) > 0) {
+        return;
+    }
+    const std::int32_t mySoldiers = CensusSoldiers(player);
+    if (mySoldiers < kMinSoldiers) {
+        return;
+    }
+    const std::int32_t enemy = ChooseEnemy(player);
+    std::int32_t enemySoldiers = 0;
+    bool enemyWithoutTowers = false;
+    if (enemy > -1) {
+        const auto e = static_cast<std::uint32_t>(enemy);
+        enemySoldiers = CensusSoldiers(e);
+        enemyWithoutTowers = CensusTowers(e) == 0;
+    }
+    // 0x594365..0x594392: a group already attacking: nothing new
+    for (std::uint32_t group = kFirstGroup; group <= kLastGroup; ++group) {
+        const std::uint32_t index = player * kUnitGroups + group;
+        if ((&g_aiCensus.get().group_target_buildings[0][0])[index] != 0 &&
+            (&g_aiCensus.get().group_defending[0][0])[index] == 0) {
+            return;
+        }
+    }
+    if (enemySoldiers <= 0 || enemy <= -1) {
+        TrySteal(player, mySoldiers);
+        return;
+    }
+    const auto e = static_cast<std::uint32_t>(enemy);
+    // 0x5943a5..0x5943f8: x87 (fild, fmul float, fst float, fmul float, fcompp), in double
+    const double strength = static_cast<double>(mySoldiers) * static_cast<double>(ratio);
+    const auto strengthFloat = static_cast<float>(strength);
+    const auto ownTeam = static_cast<std::int32_t>(g_aiCensus.get().team_strength[player]);
+    const auto enemyTeam = static_cast<std::int32_t>(g_aiCensus.get().team_strength[e]);
+    const std::int32_t mission = g_campaignMission;
+    bool attack = !(static_cast<double>(enemySoldiers) >= strength * static_cast<double>(kAttackSoldierShare));
+    attack = attack || !(static_cast<double>(enemyTeam) * static_cast<double>(kTeamStrengthMargin) >=
+                         static_cast<double>(ownTeam) * static_cast<double>(ratio));
+    attack = attack || mySoldiers > static_cast<std::int32_t>(static_cast<std::uint32_t>(enemySoldiers) * kOutnumbering);
+    if (!attack) {
+        if (mission == kMission70) {
+            attack = player == kMission70Player && mySoldiers >= enemySoldiers;
+        } else if (mission == kMission72) {
+            attack = player == kMission72Player;
+        }
+    }
+    if (attack) {
+        LaunchAttack(player, e, strengthFloat, enemyWithoutTowers);
+    } else {
+        TrySteal(player, mySoldiers);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -588,17 +957,20 @@ struct AttackFunctions {
     RecruitFn recruit;
     SendHunterFn sendHunter;
     CatapultsFn huntThieves, huntMages;
+    StartAttackFn startAttack;
 };
 
 AttackFunctions OriginalAttackFunctions() {
     return {Original_AI_ArmyState_TickAttackDelays, Original_AI_Army_AttackEnemyCatapults,
             Original_AI_RecruitGeologistsAndThieves, Original_AI_Army_SendHunter,
-            Original_AI_Army_HuntEnemyThieves,      Original_AI_Army_HuntEnemyMages};
+            Original_AI_Army_HuntEnemyThieves,      Original_AI_Army_HuntEnemyMages,
+            Original_AI_StartAttack};
 }
 
 AttackFunctions OurAttackFunctions() {
     return {&AI_ArmyState_TickAttackDelays, &AI_Army_AttackEnemyCatapults, &AI_RecruitGeologistsAndThieves,
-            &AI_Army_SendHunter,            &AI_Army_HuntEnemyThieves,     &AI_Army_HuntEnemyMages};
+            &AI_Army_SendHunter,            &AI_Army_HuntEnemyThieves,     &AI_Army_HuntEnemyMages,
+            &AI_StartAttack};
 }
 
 void SetUpAttack(test::Rng& rng, CGameData* world) {
@@ -728,6 +1100,68 @@ HunterVectorEnd TakeHunters(std::uint32_t player) {
     return end;
 }
 
+constexpr std::uint32_t kTestBuildings = 30;
+
+// StartAttack's state: census soldiers, buildings and team strengths,
+// start positions (walk regions), world buildings, group members' tiles.
+void SetUpStartAttack(test::Rng& rng, CGameData* world) {
+    AiAgentData& census = g_aiCensus.get();
+    for (std::uint32_t p = 0; p < kPlayers; ++p) {
+        for (std::uint32_t& soldiers : census.soldiers[p]) {
+            soldiers = rng.Chance(1, 3) ? 0 : rng.Chance(1, 10) ? rng.Next32() : rng.Below(6);
+        }
+        for (BuildingType type : {BuildingType::SmallTower, BuildingType::LargeTower, BuildingType::Castle,
+                                  BuildingType::Barracks}) {
+            census.buildings[p][Value(type)] = rng.Chance(1, 2) ? 0 : rng.Chance(1, 10) ? rng.Next32() : rng.Below(3);
+        }
+        census.team_strength[p] = rng.Chance(1, 10) ? rng.Next32() : rng.Below(60);
+        world->players[p].start_x = static_cast<std::int32_t>(rng.Below(kTestMap));
+        world->players[p].start_y = static_cast<std::int32_t>(rng.Below(kTestMap));
+        g_aiGroupOrders.get().gather_buildings[p] = rng.Chance(2, 3) ? 0 : rng.Chance(1, 2) ? rng.Next32() : rng.Below(5);
+        g_aiGroupOrders.get().group_size[p] = static_cast<std::int32_t>(rng.Below(20));
+        for (std::uint32_t g = 0; g < kUnitGroups; ++g) {
+            census.group_target_buildings[p][g] = static_cast<std::uint16_t>(rng.Chance(4, 5) ? 0 : 1 + rng.Below(5));
+            g_aiGroupOrders.get().home_areas[p][g] = static_cast<std::uint16_t>(rng.Below(3));
+            if (rng.Chance(1, 2)) {
+                g_aiArmyState.get().attack_delays[p][g] = 0;
+            }
+        }
+    }
+    for (std::uint32_t x = 0; x < kTestMap; ++x) {
+        for (std::uint32_t y = 0; y < kTestMap; ++y) {
+            world->tiles[x][y].walk_region = static_cast<std::uint8_t>(rng.Chance(7, 8) ? 1 : rng.Below(3));
+        }
+    }
+    world->building_high_water = rng.Chance(1, 20) ? 0xffffffffu : rng.Below(kTestBuildings);
+    constexpr std::uint8_t kTypes[] = {15, 16, 18, 19, 19, 2, 17};
+    for (std::uint32_t id = 1; id < kTestBuildings; ++id) {
+        layout::Building& building = world->buildings[id];
+        building.owner = static_cast<std::uint8_t>(rng.Chance(1, 8) ? 0xff : rng.Below(4));
+        building.art = kTypes[rng.Below(sizeof(kTypes))];
+        building.buildup = static_cast<std::uint8_t>(rng.Chance(1, 5) ? 1 + rng.Below(50) : 0);
+        building.x = static_cast<std::uint16_t>(rng.Below(kTestMap));
+        building.y = static_cast<std::uint16_t>(rng.Below(kTestMap));
+        building.door_x = static_cast<std::uint16_t>(rng.Below(kTestMap));
+        building.door_y = static_cast<std::uint16_t>(rng.Below(kTestMap));
+        building.garrison = 0;
+    }
+}
+
+float RandomRatio(test::Rng& rng) {
+    switch (rng.Below(5)) {
+    case 0: return 1.0f;
+    case 1: return static_cast<float>(rng.Below(300)) / 100.0f;
+    case 2: return static_cast<float>(rng.Below(400)) * 0.00390625f;
+    case 3: {
+        const std::uint32_t bits = rng.Next32();
+        float value;
+        std::memcpy(&value, &bits, sizeof(value));
+        return value;
+    }
+    default: return 1.0f / static_cast<float>(1 + rng.Below(9));
+    }
+}
+
 void CompareAttackFunctions(test::Context& ctx, const AttackFunctions& candidate, int cases) {
     const AttackFunctions original = OriginalAttackFunctions();
     test::WorldBuffer buffer(sizeof(CGameData));
@@ -736,9 +1170,13 @@ void CompareAttackFunctions(test::Context& ctx, const AttackFunctions& candidate
     const std::vector<std::uint8_t> savedHunters = Bytes(&g_aiHunterVectors.get(), sizeof(AiVector) * kPlayers);
     CGameData* savedMapWorld = g_aiMapWorld;
     CGameData* savedWorld = g_aiWorld;
+    const std::int32_t savedMission = g_campaignMission;
+    const std::uint32_t savedTick = g_gameTick;
     g_aiMapWorld = world;
     g_aiWorld = world;
 
+    std::vector<std::uint32_t> enemyCounts;
+    std::size_t nextCount = 0;
     test::CalleeStubs stubs;
     stubs.SetWorld(nullptr);
     stubs.Install<4, kSendMoveGroup>([](CGameData*, std::uint32_t, const std::uint32_t* args) {
@@ -746,6 +1184,9 @@ void CompareAttackFunctions(test::Context& ctx, const AttackFunctions& candidate
     });
     stubs.Install<5, kSendConvertCarriers>([](CGameData*, std::uint32_t, const std::uint32_t*) { return 0x5160u; });
     stubs.Install<4, kSendMoveSettler>([](CGameData*, std::uint32_t, const std::uint32_t*) { return 0x5170u; });
+    stubs.Install<4, kCountEnemySoldiers>([&](CGameData*, std::uint32_t, const std::uint32_t*) {
+        return enemyCounts[nextCount++ % enemyCounts.size()];
+    });
     const auto recorder = reinterpret_cast<std::uint32_t>(&RecordString);
     test::PatchBytes(reinterpret_cast<std::uintptr_t>(&g_importOutputDebugStringA.get()), &recorder, sizeof(recorder));
 
@@ -754,7 +1195,18 @@ void CompareAttackFunctions(test::Context& ctx, const AttackFunctions& candidate
         if (i % 3 == 0) {
             SetUpAttack(rng, world);
         }
-        const int op = static_cast<int>(rng.Below(6));
+        const int op = static_cast<int>(rng.Below(7));
+        if (op == 6) {
+            SetUpStartAttack(rng, world);
+            g_campaignMission = rng.Chance(1, 2) ? 0 : static_cast<std::int32_t>(rng.Chance(1, 2) ? 56 : 70 + 2 * rng.Below(2));
+            g_gameTick = rng.Chance(1, 2) ? 80999 + rng.Below(3) : rng.Below(100000);
+            g_aiArmyState.get().start_attack_calls = rng.Chance(1, 10) ? 29 + rng.Below(4) : 31 + rng.Below(3);
+        }
+        const float ratio = RandomRatio(rng);
+        enemyCounts.clear();
+        for (int k = 0; k < 16; ++k) {
+            enemyCounts.push_back(rng.Chance(1, 2) ? 0 : rng.Below(rng.Chance(1, 4) ? 60 : 6));
+        }
         const std::uint32_t player = rng.Below(3);
         const std::uint32_t prey = 1 + rng.Below(kTestSettlers - 1);
         const HunterVectorStart hunters = RandomHunters(rng);
@@ -773,6 +1225,7 @@ void CompareAttackFunctions(test::Context& ctx, const AttackFunctions& candidate
         };
         auto run = [&](const AttackFunctions& f) {
             start.Restore(world);
+            nextCount = 0;
             BuildHunters(player, hunters);
             Outcome out{};
             g_strings = &out.strings;
@@ -782,7 +1235,8 @@ void CompareAttackFunctions(test::Context& ctx, const AttackFunctions& candidate
             case 2: f.recruit(nullptr, nullptr); break;
             case 3: f.sendHunter(&g_aiGroupOrders.get(), nullptr, player, prey); break;
             case 4: f.huntThieves(&g_aiGroupOrders.get(), nullptr, player); break;
-            default: f.huntMages(&g_aiGroupOrders.get(), nullptr, player); break;
+            case 5: f.huntMages(&g_aiGroupOrders.get(), nullptr, player); break;
+            default: f.startAttack(player, nullptr, ratio); break;
             }
             g_strings = nullptr;
             out.state = AttackState::Capture(world);
@@ -807,6 +1261,8 @@ void CompareAttackFunctions(test::Context& ctx, const AttackFunctions& candidate
     test::UnpatchBytes(reinterpret_cast<std::uintptr_t>(&g_importOutputDebugStringA.get()));
     saved.Restore(world);
     std::memcpy(&g_aiHunterVectors.get(), savedHunters.data(), savedHunters.size());
+    g_campaignMission = savedMission;
+    g_gameTick = savedTick;
     g_aiMapWorld = savedMapWorld;
     g_aiWorld = savedWorld;
 }
@@ -884,10 +1340,15 @@ void __fastcall WrongHuntThieves(AiGroupOrders* self, void* edx, std::uint32_t p
     }
 }
 
+void __fastcall WrongStartAttack(std::uint32_t player, void* edx, float ratio) {
+    // Wrong: the defenders check uses the ratio once more.
+    AI_StartAttack(player, edx, ratio == ratio && ratio > 0.5f ? ratio * 1.25f : ratio);
+}
+
 }  // namespace
 
 S3RE_TEST(AiArmyAttack_MatchOriginal) {
-    CompareAttackFunctions(ctx, OurAttackFunctions(), 6000);
+    CompareAttackFunctions(ctx, OurAttackFunctions(), 9000);
 }
 
 S3RE_TEST(AiArmyAttack_ComparisonDetectsWrongImplementation) {
@@ -907,6 +1368,7 @@ S3RE_TEST(AiArmyAttack_ComparisonDetectsWrongImplementation) {
     probe([](AttackFunctions& f) { f.recruit = &WrongRecruit; });
     probe([](AttackFunctions& f) { f.sendHunter = &WrongSendHunter; });
     probe([](AttackFunctions& f) { f.huntThieves = &WrongHuntThieves; });
+    probe([](AttackFunctions& f) { f.startAttack = &WrongStartAttack; });
 }
 
 }  // namespace s3re::game

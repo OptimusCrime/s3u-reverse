@@ -470,10 +470,10 @@ static_assert(sizeof(AiGroupOrders) == 0x20f8);
 struct AiArmyState {
     std::uint32_t per_player000[layout::kPlayers];               // 0x000 25 * player after the reset
     std::uint32_t per_player050[layout::kPlayers];               // 0x050
-    std::uint32_t per_player0a0[layout::kPlayers];               // 0x0a0
+    std::uint32_t gather_countdowns[layout::kPlayers];           // 0x0a0 15 when StartAttack 0x594080 sets a gather building; RunMilitary counts it down and clears the gather building at 0 (was per_player0a0)
     std::uint32_t per_player0f0[layout::kPlayers];               // 0x0f0
     std::uint32_t per_player140[layout::kPlayers];               // 0x140
-    std::uint32_t unk190;                                // 0x190
+    std::uint32_t start_attack_calls;                    // 0x190 StartAttack 0x594080 does nothing in its first 31 calls (was unk190)
     std::uint32_t attack_delays[layout::kPlayers][kUnitGroups];  // 0x194 countdowns; 0x594000 resets the group when one runs out (groups 1..9: 10 + 2 * group after the reset)
     std::uint32_t geologist_timers[layout::kPlayers];            // 0x4b4 per player: calls of SendGeologists 0x595050 since it last worked (works above 6); 2000000 after the reset
     std::uint32_t unk504;                                // 0x504 300 after the reset
@@ -481,7 +481,7 @@ struct AiArmyState {
     std::uint32_t unk50c;                                // 0x50c 500
     std::uint32_t unk510[3];                             // 0x510 2000000
 };
-static_assert(offsetof(AiArmyState, unk190) == 0x190);
+static_assert(offsetof(AiArmyState, start_attack_calls) == 0x190);
 static_assert(offsetof(AiArmyState, attack_delays) == 0x194);
 static_assert(offsetof(AiArmyState, geologist_timers) == 0x4b4);
 static_assert(offsetof(AiArmyState, unk504) == 0x504);

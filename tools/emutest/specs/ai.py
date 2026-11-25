@@ -3401,3 +3401,168 @@ SPECS += [
     Spec("T_SAFETY_AGENT_Run", 0x00586850, "thiscall", [], eax_mask=0, presets=safety_world,
          globals=safety_globals, max_cases=600),
 ]
+
+
+# StartAttack (ai_army_attack.cpp). CountEnemySoldiersNear and the senders
+# are probed (ORDER_CALLEES); the others run as original code: the army
+# functions on g_aiGroupOrders (FindSpareGroup, CountSpareGroups /
+# Soldiers), the building searches, StartPositionWalkRegion,
+# TeamHasActivePlayer, SiteKindOf, Mission56FinalAssault, Random.
+CAMPAIGN_MISSION = 0x007DFDB0
+GAME_TICK = 0x007DFD48
+AI_START_ATTACK_CALLS = AI_ARMY_STATE + 0x190
+AI_GATHER_BUILDINGS = AI_GROUP_ORDERS + 0x898
+
+
+def attack_scenario(args):
+    """Every fourth EDX value (args[1] % 4 == 0) selects a prepared attack:
+    the player against a human enemy (player + 1) % 4 with a frontier tower,
+    a barracks and the player's own interior tower; both worlds and globals
+    read it from the arguments."""
+    return args[1] % 4 == 0
+
+
+def attack_scenario_world(rng, args):
+    player = args[0]
+    enemy = (player + 1) % 4
+    fields = [(MAP_SIZE, 120, 4), (BUILDING_COUNT, 3 + rng.randrange(2), 4)]
+    for p in range(20):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        active = 2 if p == player else 1 if p == enemy else 0
+        fields += [(record, active, 4), (record + 0xC, 1 if p == enemy else 0, 4)]
+        if p in (player, enemy):
+            x, y = (40, 40) if p == player else (80, 80)
+            fields += [(record + 0x10, x, 4), (record + 0x14, y, 4), (TILES + (x * 0x300 + y) * 24 + 0x10, 1, 1),
+                       (TILES + (x * 0x300 + y) * 24 + 0xA, 0, 1)]
+    # 1: the enemy's frontier tower (80, 60), 2: the player's tower (40, 60),
+    # 3: the enemy's barracks (90, 90)
+    for b, owner, art, x, y in ((1, enemy, 15, 80, 60), (2, player, 15, 40, 60), (3, enemy, 19, 90, 90),
+                                (4, player, 19, 30, 30)):
+        record = BUILDINGS + b * BUILDING_BYTES
+        fields += [(record, owner, 1), (record + 6, art, 1), (record + 0x21, 0, 1), (record + 2, x, 2),
+                   (record + 4, y, 2), (record + 0xA, x + 1, 2), (record + 0xC, y + 1, 2), (record + 8, 0, 2),
+                   area_tile(x + 1, y + 1, 1), (TILES + ((x + 1) * 0x300 + y + 1) * 24 + 0x10, 1, 1)]
+    r = 5  # the frontier radius (offset 3500's distance 0)
+    fields.append((OFFSET_TABLE + 16 * 3500 + 8, 0, 4))
+    for x, y in ((80 - r, 60), (80 + r, 60), (80 - r // 2, 60 - r), (80 + r // 2, 60 + r)):
+        fields.append(area_tile(x, y, 2 if rng.random() < 0.5 else 1))
+    for x, y in ((40 - 18, 60), (40 + 18, 60), (80 - 9, 60 - 18), (80 + 9, 60 + 18), (90 - 9, 60 - 18),
+                 (90 + 9, 60 + 18)):
+        fields += [area_tile(x, y, 1), (TILES + (x * 0x300 + y) * 24 + 0xA, 0, 1)]
+    for g in range(10):
+        index = player * 10 + g
+        member = 3000 + index
+        fields += [(PLAYER_LIST_LENGTHS + 4 * index, 10 if g in (1, 2, 3, 4) else 0, 4),
+                   (PLAYER_LISTS + index * 200, member, 2),
+                   (SETTLERS + member * SETTLER_BYTES + 4, 45, 2), (SETTLERS + member * SETTLER_BYTES + 6, 45, 2),
+                   (TILES + (45 * 0x300 + 45) * 24 + 0x10, 1, 1)]
+    return fields
+
+
+def attack_scenario_globals(rng, args):
+    player = args[0]
+    enemy = (player + 1) % 4
+    fields = order_globals(rng, None, args)
+    for p, soldiers in ((player, 20), (enemy, rng.choice((0, 3, 5, 30)))):
+        fields += [(AI_CENSUS + 0x444 + (p * 9 + k) * 4, soldiers if k == 0 else 0, 4) for k in range(9)]
+        fields.append((AI_CENSUS + 0x25C + 4 * p, rng.randrange(40), 4))
+    towers = rng.choice((0, 1))
+    fields += [(AI_CENSUS_BUILDINGS + (enemy * 57 + 15) * 4, towers, 4),
+               (AI_CENSUS_BUILDINGS + (enemy * 57 + 16) * 4, 0, 4), (AI_CENSUS_BUILDINGS + (enemy * 57 + 18) * 4, 0, 4),
+               (AI_CENSUS_BUILDINGS + (enemy * 57 + 19) * 4, rng.choice((1, 1, 5)), 4),
+               (AI_GROUP_ORDERS + ARMY_GROUP_SIZE + 4 * player, 10, 4)]
+    for g in range(10):
+        index = player * 10 + g
+        fields += [(AI_GROUP_ORDERS + ARMY_HOME_AREAS + 2 * index, 0, 2), (AI_ATTACK_DELAYS + 4 * index, 0, 4),
+                   (AI_CENSUS_TARGETS + 2 * index, 0, 2), (AI_CENSUS_DEFENDING + index, 0, 1)]
+    fields += [(CAMPAIGN_MISSION, rng.choice((0, 0, 70, 72)), 4), (AI_START_ATTACK_CALLS, 40, 4),
+               (AI_GATHER_BUILDINGS + 4 * player, 0, 4)]
+    return fields
+
+
+def start_attack_world(rng, pool, args):
+    """military_buildings (owners 0..3), players 0..3 playing (teams,
+    start positions on walk region 1 or 2), the player's group lists
+    (lengths, first members on tiles of walk region 1 or 2)."""
+    if attack_scenario(args):
+        return attack_scenario_world(rng, args)
+    player = args[0]
+    fields = military_buildings(rng, pool, args, owner_choices=(0, 1, 2, 3))
+    for p in range(20):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        x, y = rng.randrange(20, 100), rng.randrange(20, 100)
+        fields += [(record, rng.choice((0, 1, 2, 2)) if p < 4 else 0, 4), (record + 0xC, rng.randrange(3), 4),
+                   (record + 0x10, x, 4), (record + 0x14, y, 4),
+                   (TILES + (x * 0x300 + y) * 24 + 0x10, rng.choice((1, 1, 2)), 1)]
+    for g in range(10):
+        index = player * 10 + g
+        member = 3000 + index
+        x, y = rng.randrange(20, 100), rng.randrange(20, 100)
+        fields += [(PLAYER_LIST_LENGTHS + 4 * index, rng.choice((0, 2, 5, 10, 20, 40)), 4),
+                   (PLAYER_LISTS + index * 200, member, 2),
+                   (SETTLERS + member * SETTLER_BYTES + 4, x, 2), (SETTLERS + member * SETTLER_BYTES + 6, y, 2),
+                   (TILES + (x * 0x300 + y) * 24 + 0x10, rng.choice((1, 1, 2)), 1)]
+    for b in range(1, 13):
+        record = BUILDINGS + b * BUILDING_BYTES
+        fields.append((record + 0x21, 0 if rng.random() < 0.8 else rng.randrange(1, 256), 1))
+    if rng.random() < 0.5:  # NearestInteriorMilitaryBuilding's probes around any target: area 0 (no border)
+        position = {}
+        for offset, value, size in fields:
+            for b in range(1, 13):
+                record = BUILDINGS + b * BUILDING_BYTES
+                if offset in (record + 2, record + 4) and size == 2:
+                    position.setdefault(b, {})[offset - record] = value
+        for b, pos in position.items():
+            for t, tpos in position.items():
+                if 2 in tpos and 4 in pos:
+                    for x, y in ((tpos[2] - 9, pos[4] - 18), (tpos[2] + 9, pos[4] + 18)):
+                        # area 0, and not blocked (FreeTileArea 0x58b480 would walk on along x)
+                        fields += [area_tile(x, y, 0), (TILES + (x * 0x300 + y) * 24 + 0xA, 0, 1)]
+            if 2 in pos and 4 in pos:
+                for x in (pos[2] - 18, pos[2] + 18):
+                    fields.append((TILES + (x * 0x300 + pos[4]) * 24 + 0xA, 0, 1))
+    return fields
+
+
+def start_attack_globals(rng, pool, args):
+    """order_globals, the census (soldiers, towers and barracks, team
+    strengths of players 0..3; targets and defending flags mostly clear),
+    the army (group sizes, home areas, delays mostly 0), the warm-up
+    counter around 30, the gather building, mission and tick."""
+    if attack_scenario(args):
+        return attack_scenario_globals(rng, args)
+    player = args[0]
+    fields = order_globals(rng, pool, args)
+    for p in range(4):
+        for k in range(9):
+            value = 0 if rng.random() < 0.3 else rng.randrange(8) if rng.random() < 0.95 else rng.getrandbits(32)
+            fields.append((AI_CENSUS + 0x444 + (p * 9 + k) * 4, value, 4))
+        for art in (15, 16, 18, 19):
+            value = 0 if rng.random() < 0.5 else rng.randrange(1, 3) if rng.random() < 0.9 else rng.getrandbits(32)
+            fields.append((AI_CENSUS_BUILDINGS + (p * 57 + art) * 4, value, 4))
+        fields.append((AI_CENSUS + 0x25C + 4 * p, rng.randrange(60) if rng.random() < 0.9 else rng.getrandbits(32), 4))
+        fields += [(AI_GROUP_ORDERS + ARMY_GROUP_SIZE + 4 * p, rng.randrange(20), 4)]
+        for g in range(10):
+            index = p * 10 + g
+            fields += [(AI_GROUP_ORDERS + ARMY_HOME_AREAS + 2 * index, rng.randrange(2), 2),
+                       (AI_ATTACK_DELAYS + 4 * index, 0 if rng.random() < 0.6 else rng.randrange(1, 100), 4)]
+            if p == player:
+                fields += [(AI_CENSUS_TARGETS + 2 * index, 0 if rng.random() < 0.9 else rng.randrange(1, 13), 2),
+                           (AI_CENSUS_DEFENDING + index, 0 if rng.random() < 0.7 else 1, 1)]
+    mission = rng.choice((0, 0, 0, 56, 70, 70, 72))
+    tick = rng.choice((80999, 81000, rng.randrange(200000)))
+    calls = rng.choice((29, 30, 31, 40, 40, 40, 40))
+    gather = 0 if rng.random() < 0.85 else rng.choice((rng.randrange(1, 13), rng.getrandbits(32)))
+    fields += [(CAMPAIGN_MISSION, mission, 4), (GAME_TICK, tick, 4), (AI_START_ATTACK_CALLS, calls, 4),
+               (AI_GATHER_BUILDINGS + 4 * player, gather, 4)]
+    return fields
+
+
+SPECS += [
+    # EAX is not used by the caller (0x58f990). 0x5942e7, 0x594307 and
+    # 0x59432e (the enemy's soldiers when it isn't playing) are dead: the
+    # enemy is always a playing player.
+    Spec("AI_StartAttack", 0x00594080, "fastcall", [below(4), anything, ratio_bits], eax_mask=0,
+         presets=start_attack_world, globals=start_attack_globals, callees=ORDER_CALLEES,
+         exempt_blocks=(0x5942e7, 0x594307, 0x59432e), max_cases=3000),
+]

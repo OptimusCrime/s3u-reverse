@@ -387,6 +387,28 @@ cell centre with priority 30000 (RecordBestCandidate), when fewer than 3
 of that type stand within 48 (64) and no site note of it is there.
 SafetyAgent in ai_layout.h.
 
+Session 55 (V, `ai_army_attack.cpp`): `StartAttack` 0x594080 (from
+RunMilitary with ratio = Player::soldier_strength / 256). In mission 56
+from tick 81000 the scripted assault; otherwise nothing in the first 31
+calls (AiArmyState +0x190), while a gather building is pending, below 15
+census soldiers, or while a group attacks. The enemy is the playing
+player of another team with towers / castles / barracks whose start
+position shares the player's walk region and whose team strength is the
+lowest (a computer enemy without an active teammate only on a Random draw
+below 200). Attack when soldiers x ratio x 0.75 exceed the enemy's, the
+enemy's team strength x 2.2 is below the own x ratio, or the soldiers
+exceed 4x the enemy's (missions 70 / 72 have exceptions for players 2 /
+1): the target is the enemy's weakest frontier building, dropped when more
+than 1.5 x (soldiers x ratio, as float) enemy soldiers are within 60; an
+enemy without towers but with barracks loses its first barracks instead
+when the player has enough spare groups. Up to 50 spare groups get the
+target (delay 2200 - r % 550) and go there, or first to the gather
+building (nearest interior military building, countdown 15). Otherwise a
+"steal": when soldiers minus own towers exceed 10, the first enemy
+military building with a spare, ready group in the same walk region within
+120 tiles whose tenth is at least the defenders within 60 (delay 900 - r %
+225, steal flag 1).
+
 ## How decisions reach the simulation
 
 Most decisions don't write the world directly (the world is read through
