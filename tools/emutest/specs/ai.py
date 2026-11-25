@@ -774,19 +774,19 @@ SPECS += [
 EH_VECTOR_DESTRUCTOR = {0x0061f18a: (4, "stdcall", "probe")}
 
 
-def evaland_object(rng, pool, args):
+def evaland_release_object(rng, pool, args):
     return [(0x158, rng.choice([0, WORLD_BASE + SCRATCH]), 4)]
 
 
-def evaland_globals(rng, pool, args):
+def evaland_release_globals(rng, pool, args):
     return [(0x007e0568, rng.choice([1, 1, 2, 3, 0, rng.getrandbits(32)]), 4),
             (0x007e056c, rng.choice([WORLD_BASE, WORLD_BASE, 0]), 4),
             (0x007e3134, rng.getrandbits(32), 4)]
 
 SPECS += [
-    Spec("AI_CEvaLand_Destroy", 0x00553fe0, "thiscall", [], eax_mask=0, presets=evaland_object,
-         globals=evaland_globals, callees=EH_VECTOR_DESTRUCTOR),
-    Spec("AI_CEvaLand_Release", 0x00553dc0, "stdcall", [], presets=evaland_object, globals=evaland_globals,
+    Spec("AI_CEvaLand_Destroy", 0x00553fe0, "thiscall", [], eax_mask=0, presets=evaland_release_object,
+         globals=evaland_release_globals, callees=EH_VECTOR_DESTRUCTOR),
+    Spec("AI_CEvaLand_Release", 0x00553dc0, "stdcall", [], presets=evaland_release_object, globals=evaland_release_globals,
          callees=EH_VECTOR_DESTRUCTOR),
 ]
 
@@ -1931,7 +1931,7 @@ def notes_near_globals(rng, pool, args):
             (AI_MAP_SIZES + 2, size if rng.random() < 0.5 else rng.randint(20, 420), 2)]
 
 
-def ground_note_globals(rng, pool, args):
+def ground_note_init_globals(rng, pool, args):
     edge = lambda: rng.getrandbits(16) if rng.random() < 0.1 else rng.randint(1, 500)  # noqa: E731
     return [(AI_MAP_SIZES, edge(), 2), (AI_MAP_SIZES + 2, edge(), 2)]
 
@@ -1947,7 +1947,7 @@ SPECS += [
     # ECX = the world: the note is world bytes 0..0x4b. EAX (AI_SiteKindOf's)
     # is not used by the caller.
     Spec("HOUSE_GROUND_REQUEST_NOTE_Init", 0x00575d60, "thiscall",
-         [low_word_noise(71), anything, anything, anything], eax_mask=0, globals=ground_note_globals,
+         [low_word_noise(71), anything, anything, anything], eax_mask=0, globals=ground_note_init_globals,
          max_cases=600),
 ]
 

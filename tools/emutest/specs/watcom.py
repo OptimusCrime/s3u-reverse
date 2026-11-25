@@ -290,7 +290,7 @@ def string_value(rng, pool):
     return WORLD_BASE + STRING_VALUE
 
 
-# globals: null_string_count (ui.py's, which is in effect for all parts:
+# globals: name_null_string_count (ui.py's:
 # the static empty string's count byte 0, 1, 0xfe or 0xff, so a source
 # without buffer sometimes takes the copy path).
 # Dead, in the inlined operator= (assign(x, 0, npos)): the count clamp to
@@ -299,10 +299,10 @@ def string_value(rng, pool):
 # element from itself).
 SPECS += [
     Spec("StringVector_InsertAt", 0x004148a0, "thiscall", [lambda rng, pool: rng.randint(-2, 7) & 0xFFFFFFFF, string_value],
-         presets=string_vector_room, globals=null_string_count, new_fails=0.1,
+         presets=string_vector_room, globals=name_null_string_count, new_fails=0.1,
          exempt_blocks=(0x004149f8, 0x00414a0b)),
     Spec("StringVector_RemoveAt", 0x00429750, "thiscall", [lambda rng, pool: rng.randrange(5)],
-         presets=string_vector_room, globals=null_string_count,
+         presets=string_vector_room, globals=name_null_string_count,
          exempt_blocks=(0x00429793, 0x00429799, 0x004297a2, 0x004297a7, 0x004297b7, 0x004297b9, 0x004297bd,
                         0x004297e5, 0x004297ed)),
 ]
