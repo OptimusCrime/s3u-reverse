@@ -129,6 +129,14 @@ through our Open.
   writes 11.2 MB chunks with all
   three writers and compares the files.
 
+Session 55 added the destructor `~CMapFile` (0x4a5b50, same file): it
+closes the file if it is still open (so a savegame left open gets its
+checksum), clears both dictionaries and destroys the path and the stream's
+file handle. A memory-only file (AddChunk, random maps) is never open, so
+its cached chunk buffers are not freed by the destructor (the dictionary
+nodes are): unless someone calls Close first, they leak, in the original
+as well.
+
 ## Map chunks (CGameData::LoadMap 0x4fd540 and the menus)
 
 All multi-byte fields are little-endian. LoadMap assembles them byte by byte.

@@ -44,8 +44,10 @@ void __fastcall CMapFile_WriteChunkWithTail(CMapFile* self, void* edx, std::uint
                                             const std::uint8_t* tail);
 void __fastcall CMapFile_WriteChunkData(CMapFile* self, void* edx, std::uint32_t type, std::uint32_t subIndex,
                                         std::uint32_t size, const std::uint8_t* data);
+void __fastcall CMapFile_Destruct(CMapFile* self, void* edx);
 extern ConstructFn Original_CMapFile_Construct;
 extern OpenFn Original_CMapFile_Open;
+extern CloseFn Original_CMapFile_Destruct;
 extern CloseFn Original_CMapFile_Close;
 extern WriteChunkFn Original_CMapFile_WriteChunk;
 extern WriteChunkWithTailFn Original_CMapFile_WriteChunkWithTail;
@@ -442,6 +444,110 @@ S3RE_TEST(MapFileClose_MatchOriginal) {
         Drop(original, a);
         Drop(original, b);
     }
+}
+
+// ~CMapFile on two objects brought into the same state by the original
+// members (from the same random state): never opened; opened for reading
+// with cached chunks (the destructor closes); written and left open (it
+// closes and stores the checksum); closed already; memory-only with added
+// chunks (not open: the chunk buffers are not freed, as in the original).
+// Compared: the objects afterwards (vtables, dictionaries, stream, path),
+// the random state, the written files.
+using AddChunkFn = std::uint32_t(__fastcall*)(CMapFile* self, void* edx, std::uint32_t type, std::uint32_t subIndex,
+                                              const std::uint8_t* data);
+using MemoryOnlyFn = void(__fastcall*)(CMapFile* self, void* edx);
+const auto kAddChunk = reinterpret_cast<AddChunkFn>(0x004a63f0);
+const auto kSetMemoryOnly = reinterpret_cast<MemoryOnlyFn>(0x004a60c0);
+
+void CompareDestruct(test::Context& ctx, CloseFn candidate, int cases) {
+    const IoFunctions original = OriginalIo();
+    const std::string readPath = TempFolder() + "\\destruct.bin";
+    const std::string pathA = TempFolder() + "\\destruct-a.sav";
+    const std::string pathB = TempFolder() + "\\destruct-b.sav";
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        test::Rng& rng = ctx.rng();
+        const int state = i % 5;
+        std::vector<std::uint8_t> bytes;
+        std::vector<WriteOp> ops;
+        if (state == 1) {
+            bytes = RandomChunkedFile(rng);
+            WriteWholeFile(readPath, bytes);
+        } else if (state == 2 || state == 3) {
+            ops = RandomWrites(rng);
+        } else if (state == 4) {
+            bytes = RandomChunkedFile(rng);
+        }
+        const RandomState random0 = RandomState::Save();
+        CMapFile* files[2] = {};
+        RandomState after[2] = {};
+        for (int k = 0; k < 2; ++k) {
+            random0.Restore();
+            CMapFile* file = Construct(original, 0, 0);
+            files[k] = file;
+            const std::string& path = k == 0 ? pathA : pathB;
+            if (state == 1) {
+                Open(original, file, readPath, fileformats::kOpenRead | fileformats::kOpenNoChecksum);
+                // Every other chunk cached, the second of each pair twice
+                // (reference count 2).
+                std::uint32_t n = 0;
+                for (const ParsedChunk& chunk : ParseContainer(bytes)) {
+                    for (std::uint32_t times = 0; times < n % 3; ++times) {
+                        Original_CMapFile_GetChunk(file, nullptr, chunk.key & 0xffff, chunk.key >> 16);
+                    }
+                    ++n;
+                }
+            } else if (state == 2 || state == 3) {
+                Open(original, file, path, fileformats::kOpenWrite);
+                for (const WriteOp& op : ops) {
+                    ApplyWrite(original, file, op);
+                }
+                if (state == 3) {
+                    original.close(file, nullptr);
+                }
+            } else if (state == 4) {
+                kSetMemoryOnly(file, nullptr);
+                for (const ParsedChunk& chunk : ParseContainer(bytes)) {
+                    if (!chunk.bytes.empty()) {
+                        kAddChunk(file, nullptr, chunk.key & 0xffff, chunk.key >> 16, chunk.bytes.data());
+                    }
+                }
+            }
+            (k == 0 ? Original_CMapFile_Destruct : candidate)(file, nullptr);
+            after[k] = RandomState::Save();
+        }
+        const int failures = ctx.failures();
+        CompareOpened(ctx, files[0], files[1]);
+        S3RE_EXPECT(after[0] == after[1]);
+        if (state == 2 || state == 3) {
+            S3RE_EXPECT(ReadWholeFile(pathA) == ReadWholeFile(pathB));
+        }
+        if (ctx.failures() != failures) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (state %d)", i, state);
+        }
+        msvc6::GameOperatorDelete(files[0]);
+        msvc6::GameOperatorDelete(files[1]);
+    }
+    DeleteFileA(readPath.c_str());
+    DeleteFileA(pathA.c_str());
+    DeleteFileA(pathB.c_str());
+}
+
+// Wrong: the checksum not written (the file left open is only closed).
+void __fastcall WrongDestruct(CMapFile* self, void* edx) {
+    if (self->open != 0 && self->mode == fileformats::kOpenWrite) {
+        self->mode = fileformats::kOpenWrite | fileformats::kOpenRead;
+    }
+    CMapFile_Destruct(self, edx);
+}
+
+S3RE_TEST(MapFileDestruct_MatchOriginal) {
+    CompareDestruct(ctx, &CMapFile_Destruct, 100);
+}
+
+S3RE_TEST(MapFileDestruct_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareDestruct(probe, &WrongDestruct, 10);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 S3RE_TEST(MapFileIo_ComparisonDetectsWrongImplementation) {

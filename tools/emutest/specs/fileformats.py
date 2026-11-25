@@ -360,6 +360,12 @@ def mapfile_close_world(rng, pool, args):
     return [(MF_MODE, mode, 4), (MF_POSITION, 0, 4), (MF_ERROR, 0, 4)] + mapfile_cache(rng, 0)
 
 
+def mapfile_destruct_world(rng, pool, args):
+    """~CMapFile: open or not, a cached chunk or not, any kind of path."""
+    fields, _ = string_fields(rng, MF_PATH, STRING_SELF_BUFFER)
+    return fields + [(5, rng.choice((0, 1, rng.getrandbits(8))), 1)] + mapfile_cache(rng, 0)
+
+
 def _mf_open_path(rng, pool):
     return WORLD_BASE + (MF_PATH if rng.random() < 0.2 else STRING_OTHER)
 
@@ -384,6 +390,14 @@ SPECS += [
     # (neither can happen at the loop's start).
     Spec("CMapFile_Close", 0x004a5f40, "thiscall", [], eax_mask=0, presets=mapfile_close_world,
          callees=MF_FILE_PROBES, exempt_blocks=(0x004a5fd3,)),
+    # ~CMapFile (session 55): Close (verified) and the file handle's
+    # destructor (Win32::CWin32Handle, the original) are probed; the
+    # dictionaries' clear (0x60bd80) runs on the cache of mapfile_cache.
+    # Dead: 0x4a5c36, the _Eos after the path's erase(0, npos) (new length
+    # 0: _Grow returns false).
+    Spec("CMapFile_Destruct", 0x004a5b50, "thiscall", [], eax_mask=0, presets=mapfile_destruct_world,
+         callees={0x004a5f40: (0, "thiscall", "probe"), 0x0060beb0: (0, "thiscall", "probe")},
+         exempt_blocks=(0x004a5c36,)),
     Spec("CMapFile_WriteChunk", 0x004a6540, "thiscall", [anything, anything, one_of(WORLD_BASE + MF_CHUNK_ARG)],
          eax_mask=0, presets=mapfile_write_chunk, callees=MF_WRITE_PROBES, new_fails=0.03),
     Spec("CMapFile_WriteChunkWithTail", 0x004a6600, "thiscall",
