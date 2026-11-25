@@ -234,4 +234,10 @@ inline constexpr GameGlobal<const std::uint32_t[8]> g_maskedSpans{0x7a2c58};
 // row maskStart + row for the dissolving top rows of a sprite (gfx_rle.cpp).
 inline constexpr GameGlobal<const std::uint8_t[8][16]> g_ditherMasks{0x7a2b58};
 
+// The GFX group names CGraphicsData::Open (0x5f6fd0) builds its file names
+// from ("61", "60", "48", ... "01", "00": the 45 groups that exist, from the
+// highest down, 4 bytes apart; re/graphics_formats.md).
+inline constexpr std::size_t kGfxGroupNameCount = 45;
+inline constexpr GameGlobal<const char[kGfxGroupNameCount][4]> g_gfxGroupNames{0x7a2dbc};
+
 }  // namespace s3re::game

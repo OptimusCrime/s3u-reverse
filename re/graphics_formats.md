@@ -5,9 +5,11 @@ and checked against the game's files in `GFX\` (headers of all 45 files)
 and `SND\`. Session 55 (gfx batch) reimplemented and verified the table
 accessors, the image accessors, all span functions, the RLE row helpers,
 every blitter, the four Draw methods and Close (sections marked
-"verified" below; the code is in `src/s3re/game/graphics/gfx_*.cpp`). Not
-yet reimplemented: the loader (Open, FindDirectoryContainingFile,
-DetachFromMedium, constructor/destructor). Function names are in
+"verified" below; the code is in `src/s3re/game/graphics/gfx_*.cpp`).
+Session 55 round 2 (gfx-open) verified the loader: constructor,
+destructors, FindDirectoryContainingFile, DetachFromMedium and Open
+(`gfx_loader.cpp`, section "Loader, verified"), with the Win32 file and
+mapping classes it uses (re/win32_framework.md). Function names are in
 `re/functions.csv` (notes "Named (session 50, ...)").
 
 
@@ -165,6 +167,35 @@ Function starts added (manual rows in `re/extra_functions.tsv`, session 55): sha
 0x5f4920, 0x5f4a00, 0x5f4c00, 0x5f5070, 0x5f59e0; masked spans 0x5fb470, 0x5fb410, 0x5fb3a0,
 0x5fb340, 0x5fb2d0, 0x5fb260, 0x5fb180; shadow span 0x5fd0c0. Lobby_sub_5f4830 now ends at
 0x5f48d5 (a vector reserve of 0x18-byte records, not graphics code).
+
+## Loader, verified (session 55 round 2)
+
+* **Group names**: a local array of 70 strings: "00".."17", "20".."27",
+  "30".."37", "40".."48", "60", "61" at their group numbers, the others
+  empty (the literals sit 4 bytes apart at 0x7a2dbc.."61" .. 0x7a2e6c "00").
+  groupSet 0, 1, 3 empties group 60; groupSet not 1, 3, 4 empties 40..49
+  (the add-on race); group 61 is kept only when g_config byte +0x159 is set
+  (getter 0x413be0). These replace the "probably" of the paragraph below.
+* **Search**: the file looked for is group 00's file ("siedler3_00.<fmt>.dat");
+  a "siedler3_??." pattern is built first and overwritten (dead code of the
+  original). Folders in order: ".", base + "Gfx", ".\Gfx", base, base + "..".
+  The found folder (current directory after SetCurrentDirectoryA, plus a
+  trailing backslash) becomes +0x24. Restoring the saved directory between
+  folders is wrapped in `catch (Win32::CHResult*)` (failures swallowed).
+* **Detach**: mode 2 always, mode 3 if the folder is on a removable/CD drive;
+  then the files are mapped PAGE_WRITECOPY / FILE_MAP_COPY and
+  DetachFromMedium later touches every page (Win32::DetachMemory).
+* Every name is opened with GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING,
+  FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN; the CFile objects are
+  owned (and deleted) by the group's CFileMapping. A file whose first dword
+  is 0x1404 asserts with "Wenn man Ctrl-C beim Assemblerlauf drückt,
+  bekommt man halt ungültige DAT-Dateien" (line 476); a pixel format other
+  than RGB565/555 asserts "Unsupported Pixelformat" (line 585) after
+  mapping everything.
+* languageCount = the language count of the first text table that has one.
+* Known differences: allocator bytes of strings built from uninitialized
+  locals (the constructor's name, FindDirectory's result); local strings
+  leak when a call throws (the original's frames free them).
 
 ## Load call tree
 

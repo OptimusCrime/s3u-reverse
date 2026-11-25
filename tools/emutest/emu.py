@@ -171,6 +171,173 @@ def _api_rpc_string_free(machine, uc, args):
     text = struct.unpack("<I", machine.guest_read(args[0], 4))[0]
     uc.mem_write(args[0], bytes(4))
     return 0, ("RpcStringFreeA", text)
+def _api_hash(machine, salt):
+    """A value fixed by the case, the probe calls so far and a salt."""
+    return _mix((machine.seed << 32) ^ (salt + len(machine.probe_calls)))
+
+
+def _api_text(machine, address, size=64):
+    """A C string argument by content (null: None); its buffer may differ
+    between the two frames."""
+    if address == 0:
+        return None
+    return machine.guest_read(address, size).split(b"\0")[0]
+
+
+def _api_fails(h):
+    """True for about one call in four."""
+    return (h & 3) == 0
+
+
+def _api_value(h):
+    """A 32-bit result that is never -1."""
+    v = (h >> 8) & 0xFFFFFFFF
+    return 0 if v == 0xFFFFFFFF else v
+
+
+def _api_create_file(machine, uc, args):
+    """CreateFileA: INVALID_HANDLE_VALUE or a handle."""
+    h = _api_hash(machine, 0xCF000000)
+    record = ("CreateFileA", _api_text(machine, args[0]), *args[1:])
+    return (0xFFFFFFFF if _api_fails(h) else _api_value(h)), record
+
+
+def _api_get_last_error(machine, uc, args):
+    """GetLastError: mostly 0, 2, 3 or 5 (the codes the callers test), else
+    any value."""
+    h = _api_hash(machine, 0x6E000000)
+    choices = (0, 2, 3, 5)
+    return (choices[(h >> 4) & 3] if h & 7 else (h >> 8) & 0xFFFFFFFF), ("GetLastError",)
+
+
+def _api_file_transfer(name, salt):
+    def handler(machine, uc, args):
+        """ReadFile / WriteFile(file, buffer, size, done, overlapped): fails
+        or not; `done` (when given) gets a random count."""
+        h = _api_hash(machine, salt)
+        if args[3] != 0:
+            machine.guest_write(args[3], struct.pack("<I", (h >> 16) & 0xFFFFFFFF))
+        return (0 if _api_fails(h) else _api_value(h) | 1), (name, *args)
+    return handler
+
+
+def _api_set_file_pointer(machine, uc, args):
+    """SetFilePointer(file, low, high*, method): -1 or a position; *high
+    (when given) is recorded and gets a random value."""
+    h = _api_hash(machine, 0x5E000000)
+    high = None
+    if args[2] != 0:
+        high = machine.guest_read(args[2], 4)
+        machine.guest_write(args[2], struct.pack("<I", (h >> 16) & 0xFFFFFFFF))
+    return (0xFFFFFFFF if _api_fails(h) else _api_value(h)), ("SetFilePointer", *args, high)
+
+
+def _api_get_file_size(machine, uc, args):
+    """GetFileSize(file, high*): -1 or a size; *high gets a random value."""
+    h = _api_hash(machine, 0x65000000)
+    if args[1] != 0:
+        machine.guest_write(args[1], struct.pack("<I", (h >> 16) & 0xFFFFFFFF))
+    return (0xFFFFFFFF if _api_fails(h) else _api_value(h)), ("GetFileSize", *args)
+
+
+def _api_create_file_mapping(machine, uc, args):
+    h = _api_hash(machine, 0xC3000000)
+    record = ("CreateFileMappingA", *args[:5], _api_text(machine, args[5]))
+    return (0 if _api_fails(h) else _api_value(h) | 1), record
+
+
+def _api_map_view(machine, uc, args):
+    h = _api_hash(machine, 0x3A000000)
+    return (0 if _api_fails(h) else _api_value(h) | 1), ("MapViewOfFile", *args)
+
+
+def _api_unmap_view(machine, uc, args):
+    h = _api_hash(machine, 0x0A000000)
+    return (h >> 8) & 0xFFFFFFFF, ("UnmapViewOfFile", *args)
+
+
+def _api_get_system_info(machine, uc, args):
+    """GetSystemInfo(info): random fields, a page size of 0x800..0x2000 at
+    +4 (the buffer is the caller's stack)."""
+    h = _api_hash(machine, 0x51000000)
+    info = bytearray(_mix(h + i) & 0xFF for i in range(36))
+    info[4:8] = struct.pack("<I", (0x800, 0x1000, 0x2000, 0x1000)[h & 3])
+    machine.guest_write(args[0], bytes(info))
+    return 0, ("GetSystemInfo",)
+
+
+# The memory DetachMemory walks in its spec (world offsets): VirtualQuery
+# reports committed regions inside it.
+DETACH_LOW = 0x01E00000
+DETACH_HIGH = 0x01E40000
+_PROTECTS = (0x02, 0x04, 0x08, 0x80, 0x01, 0x104, 0x20, 0x40, 0x202)
+
+
+def _api_virtual_query(machine, uc, args):
+    """VirtualQuery(address, info, size): a committed region from up to two
+    pages below the address to past it, inside the DETACH area of the
+    world (or reaching past its end), with one of a set of protections;
+    sometimes a short count (the caller's error check)."""
+    h = _api_hash(machine, 0x71000000)
+    address, info, size = args
+    low, high = WORLD_BASE + DETACH_LOW, WORLD_BASE + DETACH_HIGH
+    page = address & ~0xFFF
+    if address >= 0x80000000:
+        return 0, ("VirtualQuery", address, size)  # kernel space: fails, as in Windows
+    if not low <= address < high:
+        # Outside the area: one inaccessible region up to 0x80000000
+        # (nothing is touched).
+        machine.guest_write(info, struct.pack("<7I", page, page, 0x01, 0x80000000 - page, 0x1000, 0x01, 0x20000))
+        machine.last_protect = 0x01
+        return 28, ("VirtualQuery", address, size)
+    base = max(low, page - ((h >> 4) % 3) * 0x1000)
+    below = page - base
+    room = max(1, (high - page) // 0x1000)
+    if (h >> 20) & 3 == 0:
+        region = (high - base) + ((h >> 8) & 0x2FFF)
+    else:
+        region = below + (((h >> 24) % room) + 1) * 0x1000
+    protect = _PROTECTS[(h >> 32) % len(_PROTECTS)]
+    machine.last_protect = protect
+    machine.guest_write(info, struct.pack("<7I", base, base, 0x04, region, 0x1000, protect, 0x40000))
+    result = 28 if (h >> 40) & 15 else (h >> 44) % 28
+    return result, ("VirtualQuery", address, size)
+
+
+def _api_virtual_protect(machine, uc, args):
+    """VirtualProtect(address, size, protect, old*): *old is the protection
+    the last VirtualQuery reported (or sometimes another); fails sometimes."""
+    h = _api_hash(machine, 0x7B000000)
+    old = getattr(machine, "last_protect", 4) if h & 7 else (h >> 8) & 0xFFFFFFFF
+    machine.guest_write(args[3], struct.pack("<I", old))
+    return (0 if (h >> 40) & 15 == 0 else 1), ("VirtualProtect", *args[:3])
+
+
+def _api_get_current_directory(machine, uc, args):
+    """GetCurrentDirectoryA(size, buffer): 0 (failure) or a path."""
+    h = _api_hash(machine, 0x6C000000)
+    if _api_fails(h):
+        return 0, ("GetCurrentDirectoryA", args[0])
+    text = b"C:\\Games\\S3\\Gfx%u" % ((h >> 8) & 3)
+    machine.guest_write(args[1], text + b"\0")
+    return len(text), ("GetCurrentDirectoryA", args[0])
+
+
+def _api_set_current_directory(machine, uc, args):
+    h = _api_hash(machine, 0x5C000000)
+    return (0 if _api_fails(h) else 1), ("SetCurrentDirectoryA", _api_text(machine, args[0]))
+
+
+def _api_find_first_file(machine, uc, args):
+    """FindFirstFileA(name, data): INVALID_HANDLE_VALUE or a handle; the
+    data buffer (the caller's stack) is left alone."""
+    h = _api_hash(machine, 0xFF000000)
+    return (0xFFFFFFFF if (h & 1) == 0 else _api_value(h)), ("FindFirstFileA", _api_text(machine, args[0]))
+
+
+def _api_find_close(machine, uc, args):
+    h = _api_hash(machine, 0xFC000000)
+    return (0 if _api_fails(h) else 1), ("FindClose", *args)
 
 
 # name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
@@ -187,6 +354,22 @@ API_HANDLERS = {
     "GetDriveTypeA": (1, _api_get_drive_type),
     "UuidToStringA": (2, _api_uuid_to_string),
     "RpcStringFreeA": (1, _api_rpc_string_free),
+    "CreateFileA": (7, _api_create_file),
+    "GetLastError": (0, _api_get_last_error),
+    "ReadFile": (5, _api_file_transfer("ReadFile", 0x4E000000)),
+    "WriteFile": (5, _api_file_transfer("WriteFile", 0x3F000000)),
+    "SetFilePointer": (4, _api_set_file_pointer),
+    "GetFileSize": (2, _api_get_file_size),
+    "CreateFileMappingA": (6, _api_create_file_mapping),
+    "MapViewOfFile": (5, _api_map_view),
+    "UnmapViewOfFile": (1, _api_unmap_view),
+    "GetSystemInfo": (1, _api_get_system_info),
+    "VirtualQuery": (3, _api_virtual_query),
+    "VirtualProtect": (4, _api_virtual_protect),
+    "GetCurrentDirectoryA": (2, _api_get_current_directory),
+    "SetCurrentDirectoryA": (1, _api_set_current_directory),
+    "FindFirstFileA": (2, _api_find_first_file),
+    "FindClose": (1, _api_find_close),
 }
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,
@@ -528,7 +711,10 @@ class Emulator:
         {address: (stack argument count, convention, returns)} with convention
         "cdecl" (caller pops), "stdcall" or "thiscall" (ECX recorded too) and
         returns "this" (EAX = ECX, a constructor), "probe" (0, 1 or random,
-        as for virtual calls) or a function returns(h) -> EAX (h: a random
+        as for virtual calls), "throw" (a function that never returns, such
+        as Win32::ThrowWin32Error: the call is recorded and ends the run as
+        a throw, compared like _CxxThrowException) or a function
+        returns(h) -> EAX (h: a random
         64-bit value fixed by the case and the call's position). An optional
         fourth element effect(machine, ECX, arguments, h) runs after the
         call is recorded (a callee's side effects, written with
@@ -554,6 +740,10 @@ class Emulator:
         ecx = uc.reg_read(UC_X86_REG_ECX) if convention == "thiscall" else None
         recorded = tuple(args) if record is None else tuple(record(self, ecx, args))
         self.probe_calls.append(("callee", address, ecx, *recorded))
+        if returns == "throw":  # never returns: ends the run like _CxxThrowException
+            self.thrown = (address,)
+            uc.emu_stop()
+            return
         if callable(returns):
             eax = returns(_mix((self.seed << 32) ^ (0xCA11E000 + len(self.probe_calls))))
         else:

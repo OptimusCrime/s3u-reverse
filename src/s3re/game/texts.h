@@ -19,6 +19,21 @@ inline constexpr GameText kCommaFile{0x7a2a3c};  // ", file "
 inline constexpr GameText kAssertmentFailed{0x7a4758};  // "Assertment failed: "
 inline constexpr GameText kNotEnoughMemoryAt{0x7a4694};  // "Not enough memory at "
 
+// ------------------------------------------------------------ Win32\*.cpp
+// The VERIFY expressions and files Win32\Mapping.cpp and Win32\Detach.cpp
+// pass to Win32::ThrowWin32Error / ThrowHResult.
+inline constexpr GameText kMappingFile{0x7a4f7c};           // "E:\Siedler3\Win32\Mapping.cpp"
+inline constexpr GameText kDetachFile{0x7a5080};            // "E:\Siedler3\Win32\Detach.cpp"
+inline constexpr GameText kFileHandleValid{0x7a4f5c};       // "hFile != INVALID_HANDLE_VALUE"
+inline constexpr GameText kRetvalNotFalse{0x7a4f9c};        // "bRetval != FALSE"
+inline constexpr GameText kRetvalValid{0x7a4fec};           // "dwRetval != 0xffffffff"
+// "(dwRetval != 0xffffffff) && (GetLastError () != NO_ERROR)"
+inline constexpr GameText kRetvalValidHigh{0x7a4fb0};
+inline constexpr GameText kMappingNotNull{0x7a5054};        // "hMapping != NULL"
+inline constexpr GameText kBaseAddressNotNull{0x7a5068};    // "lpBaseAddress != NULL"
+inline constexpr GameText kFalse{0x7a2b50};                 // "false"
+inline constexpr GameText kErrorCheck{0x697024};            // "error check"
+
 // ------------------------------------------------------------ Dirk\*.cpp
 inline constexpr GameText kPathingFile{0x69f9dc};       // "E:\Siedler3\Dirk\Pathing.cpp"
 inline constexpr GameText kShouldManage{0x69f9bc};      // "Das solltest du schon schaffen"
@@ -112,6 +127,25 @@ inline constexpr GameText kAnimationNotFound{0x7a2e9c};  // "GFX: Animation not 
 inline constexpr GameText kColorIndexedAnimationNotFound{0x7a2ebc};  // "GFX: ColorIndexedAnimation not found %u:%u"
 inline constexpr GameText kShadowAnimationNotFound{0x7a2ee8};  // "GFX: ShadowAnimation not found %u:%u"
 inline constexpr GameText kGraphicsDataFile{0x7a2ca4};   // "E:\Siedler3\Dirk\graphicsdata.cpp"
+// CGraphicsData (Dirk\graphicsdata.cpp; the loader, gfx_loader.cpp)
+inline constexpr GameText kLpMapping{0x7a2c94};          // "lpMapping [i]" (the constructor's out-of-memory check)
+inline constexpr GameText kLpFile{0x7a2d5c};             // "lpFile" (Open's out-of-memory check)
+inline constexpr GameText kDwResultNotZero{0x7a2cc8};    // "dwResult != 0" (GetCurrentDirectoryA)
+inline constexpr GameText kBResult{0x696fec};            // "bResult" (SetCurrentDirectoryA, FindClose)
+inline constexpr GameText kSiedler3Prefix{0x7a2d98};     // "siedler3_"
+inline constexpr GameText kSiedler3Pattern{0x7a2dac};    // "siedler3_??."
+inline constexpr GameText kDatExtension{0x7a2da4};       // ".dat"
+inline constexpr GameText kGfxFolder{0x7a2d94};          // "Gfx"
+inline constexpr GameText kDotGfxFolder{0x7a2d8c};       // ".\Gfx"
+inline constexpr GameText kParentFolder{0x7a2d88};       // ".."
+inline constexpr GameText kGfxPreparingDetach{0x7a2d64};  // "GFX: Preparing DAT files for detach"
+inline constexpr GameText kGfxDetaching{0x7a2e70};       // "GFX: Detaching DAT files from medium ..."
+inline constexpr GameText kWrongGfxFile{0x7a2d44};       // "Falsche Gfx-Datei %i" (wrong graphics file)
+// "Wenn man Ctrl-C beim Assemblerlauf drückt, bekommt man halt ungültige
+// DAT-Dateien" (press Ctrl-C while the assembler runs and you get invalid
+// DAT files): the assertion text of a file whose magic is 0x1404.
+inline constexpr GameText kGfxHeaderAssert{0x7a2cf0};
+inline constexpr GameText kGfxPixelFormatAssert{0x7a2cd8};  // "Unsupported Pixelformat"
 inline constexpr GameText kInvalidShadowMethod{0x7a2f10};  // "GFX: Invalid shadow method"
 inline constexpr GameText kDDBltName{0x7a01e0};         // "CSurface::DDBlt"
 inline constexpr GameText kDDBltFastName{0x7a01f0};     // "CSurface::DDBltFast"

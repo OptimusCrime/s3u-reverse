@@ -368,7 +368,35 @@ patcher handles.
 
 ### Win32/Mapping.cpp
 
-Nothing new beyond session 50. `CTextException::vf01` 0x618250
+Verified in session 55 round 2 (gfx-open; `src/s3re/game/framework/
+win32_mapping.cpp`, `win32_detach.cpp`): CFile::Open/Read/Write/Seek/
+GetSize, CFileMapping ctor/dtor/scalar deleting destructor/Close/Create/
+MapView/UnmapView and DetachMemory. Findings:
+
+- **VERIFY macro**: every Windows call is checked with
+  `Win32::ThrowWin32Error` 0x610de0, fastcall (ECX = the expression text,
+  EDX = the source file, stack: line, GetLastError(), `const string*`
+  message) - three stack arguments, not two; it never returns (no `ret`).
+  The message is an empty string whose allocator byte is a stack leftover
+  (reproducible per function: the failed handle's low byte, the
+  `overlapped`/`method`/`high` argument's low byte). Detach.cpp also uses
+  `ThrowHResult` 0x611050 (line, HRESULT, message) with "error check" and
+  E_UNEXPECTED.
+- **CFile::Seek / GetSize with a high dword** check
+  `VERIFY((r != -1) && (GetLastError() != NO_ERROR))` (the text is in
+  the binary, 0x7a4fb0): they throw when a call *succeeds* and leaves the
+  last error at 0. An original bug; no caller in the graphics loader
+  passes a high dword.
+- **CFileMapping** (0x2c bytes): CWin32Handle (mapping handle), +0xc the
+  CFile it owns (Close deletes it), +0x10 a `WCValOrderedVector<void*>` of
+  mapped views (vtable 0x65d9d0; capacity 10, grow 5; +4 = 0x7f after the
+  constructor). MapView appends the view (insertAt inlined), UnmapView
+  removes it with the vector's find (slot 3, 0x499da0).
+- **DetachMemory** walks the range with VirtualQuery; an uncommitted
+  region doesn't advance the walk (it would loop forever; mapped views are
+  always committed). The page size is cached in 0x7e9220.
+
+Earlier (session 50): `CTextException::vf01` 0x618250
 (`mov eax,[ecx+4]; ret`) is a linker-folded getter shared by 132 call
 sites (e.g. the CFile handle in CFileMapping::Create); proposed
 `Folded_GetMember4` (like `NoOp_retN`).

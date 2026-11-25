@@ -994,3 +994,6 @@ address	kind	evidence
 0x0061e612	rtti	virtual function (vtable entry)
 0x0061f061	rtti	virtual function (vtable entry)
 0x00621660	rtti	virtual function (vtable entry)
+0x005f5a20	manual	static initializer: its address is in the CRT initializer table (file offset 0x2958d0); body: call 0x5f5a30, jmp 0x5f5a50; preceded by ret 8 at 0x5f5a18 (end of the shade span 0x5f59e0) and nop padding
+0x005fda80	manual	static initializer: its address is in the CRT initializer table (file offset 0x295928); body: sets bit 0 of the guard byte 0x7e9724 once, jmp 0x5fdaa0 (atexit(0x428720)); preceded by ret 8 at 0x5fda78 (end of 0x5fda00) and nop padding
+0x005fdb30	manual	static initializer: its address is in the CRT initializer table (file offset 0x29592c); body: the same guard byte 0x7e9724, jmp 0x5fdb50 (atexit(0x428720)); preceded by ret 8 at 0x5fdb25 (end of Point16::Add 0x5fdb00) and nop padding

@@ -24,6 +24,13 @@ inline constexpr std::uint32_t kCThread_sub4 = 0x65d704;       // its waitable p
 inline constexpr std::uint32_t kCEvent = 0x65d690;             // Win32::CEvent
 inline constexpr std::uint32_t kCEvent_sub4 = 0x65d684;        // its handle part at +4
 inline constexpr std::uint32_t kCFile = 0x65d9b8;              // Win32::CFile
+inline constexpr std::uint32_t kCFileMapping = 0x65d9c4;       // Win32::CFileMapping
+inline constexpr std::uint32_t kCGraphicsData = 0x65d3e4;      // CGraphicsData
+// Its view list's vtables: WCValOrderedVector<void*> and the base classes
+// the constructor and destructor pass through.
+inline constexpr std::uint32_t kMappingViewVector = 0x65d9d0;  // WCValOrderedVector<void*>
+inline constexpr std::uint32_t kMappingViewVectorBase = 0x657440;  // WCBareVectorBase<void*>
+inline constexpr std::uint32_t kMappingViewVectorRoot = 0x655438;  // the destructor's last vtable
 inline constexpr std::uint32_t kCRegistryKey = 0x65d98c;       // Win32::CRegistryKey
 inline constexpr std::uint32_t kCRegistryValueInfo = 0x65d984;  // Win32::CRegistryValueInfo
 inline constexpr std::uint32_t kCException = 0x65d890;         // Win32::CException
@@ -94,6 +101,7 @@ inline constexpr std::uintptr_t kCDataError = 0x68bfd0;
 inline constexpr std::uintptr_t kDirectDrawException = 0x66a698;
 inline constexpr std::uintptr_t kDirectPlayException = 0x681e60;
 inline constexpr std::uintptr_t kCTimeoutPointer = 0x674f38;  // Win32::CTimeout* (thrown by the queue waits)
+inline constexpr std::uintptr_t kCFileNotFoundPointer = 0x67b828;  // Win32::CFileNotFound* (CFile::Open)
 }  // namespace throw_info
 
 // Type descriptors (catch types).
