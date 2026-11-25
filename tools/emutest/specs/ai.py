@@ -3250,3 +3250,83 @@ SPECS += [
          callees={0x00551610: (1, "thiscall", "probe"), 0x0057abc0: (1, "thiscall", lambda h: h % 2 if h % 3 else h),
                   0x00582480: (2, "thiscall", "probe")}, max_cases=300),
 ]
+
+
+# -- session 55 (wip/ai-econ): the request Execute chain and ---------------
+# -- IsAllowedBeforeBasicEconomy (ai_request_execute.cpp) ------------------
+
+EARLY_TYPES = (2, 3, 4, 5, 15, 16, 18, 24, 1, 0, 6, 14)
+
+
+def early_data(rng):
+    """g_aiPlayerData at scratch 0: basic_economy mostly 0, the building
+    counts small (often 0)."""
+    fields = [(SCRATCH + 0xC, rng.getrandbits(32) if rng.random() < 0.15 else 0, 4)]
+    fields += [(SCRATCH + 0x344 + 2 * t, 0 if rng.random() < 0.5 else rng.randrange(6), 2) for t in range(57)]
+    return fields
+
+
+def early_globals(rng, pool, args):
+    """The player number 0..2 (races 0..3 or any word), the data."""
+    fields = [(AI_WORLD, WORLD_BASE, 4), (AI_PLAYER_DATA, WORLD_BASE + SCRATCH, 4),
+              (AI_PLAYER_NUMBER, rng.randrange(3), 1)]
+    return fields
+
+
+def early_world(rng, pool, args):
+    fields = early_data(rng)
+    for p in range(3):
+        race = rng.randrange(4) if rng.random() < 0.85 else rng.getrandbits(32)
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, race, 4))
+    return fields
+
+
+def early_type(rng, pool):
+    value = rng.choice(EARLY_TYPES) if rng.random() < 0.9 else rng.randrange(60)
+    return value | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def place_world(rng, pool, args):
+    """The note at world +0 (type +0x1c, spiral position +0x2c / +0x2e on a
+    48 x 48 map), tile owners in patches, the row of areas after the
+    position, small towers and other buildings near it, the data."""
+    fields = early_world(rng, pool, args)
+    x, y = rng.randrange(48), rng.randrange(48)
+    fields += [(0x1C, rng.choice(EARLY_TYPES), 2), (0x2C, x, 2), (0x2E, y, 2),
+               (tile(x, y) + 8, rng.choice((0, 1, 2, 0xFF)) if rng.random() < 0.3 else rng.randrange(3), 1)]
+    fields += [(tile(x + k, y) + 0x14, rng.randrange(4), 2) for k in range(18)]
+    count = rng.randrange(12)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        bx = min(47, max(0, x + rng.randint(-20, 20)))
+        by = min(47, max(0, y + rng.randint(-20, 20)))
+        fields += [(record, 0xFF if rng.random() < 0.1 else rng.randrange(3), 1),
+                   (record + 6, 15 if rng.random() < 0.6 else rng.choice(EARLY_TYPES), 1),
+                   (record + 2, bx, 2), (record + 4, by, 2)]
+    return fields
+
+
+def place_globals(rng, pool, args):
+    return early_globals(rng, pool, args) + command_globals(rng, pool, args) + [
+        (AI_MAP_SIZES, 48, 2), (AI_MAP_SIZES + 2, 48, 2)]
+
+
+EXECUTE_PROBES = {0x00576430: (0, "thiscall", "probe"),
+                  0x005824D0: (1, "thiscall", lambda h: 0 if h % 3 == 0 else h),
+                  0x00582510: (0, "thiscall", lambda h: h & 0xFFFF0000 if h % 3 == 0 else h)}
+
+SPECS += [
+    Spec("AI_IsAllowedBeforeBasicEconomy", 0x005721a0, "fastcall", [early_type, anything], presets=early_world,
+         globals=early_globals, max_cases=2000),
+    # The callers (the Execute chain) test AX only; the upper half is what
+    # the failing callee left.
+    Spec("HOUSE_GROUND_REQUEST_NOTE_PlaceBuilding", 0x00576430, "thiscall", [], eax_mask=0xFFFF,
+         presets=place_world, globals=place_globals, callees=command_callees((3, 11)), max_cases=2000),
+    Spec("HOUSE_GROUND_REQUEST_AGENT_Execute", 0x00576610, "thiscall", [anything], callees=EXECUTE_PROBES),
+    Spec("HOUSE_REQUEST_AGENT_Execute", 0x005789b0, "thiscall", [anything], callees=EXECUTE_PROBES),
+    # Without a child: AX = 0 on top of OutputDebugStringA's EAX (the caller
+    # 0x5655c0 tests AX).
+    Spec("T_DO_BUILD_HOUSE_AGENT_Execute", 0x005656e0, "thiscall", [anything], eax_mask=0xFFFF,
+         callees=EXECUTE_PROBES),
+]

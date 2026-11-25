@@ -183,6 +183,8 @@ address,name,type,status,notes
 0x007311d0,texts::kManaNeeded,char[],identified,"String ""xxx Godevent mana needed: %u at slot: %u"" Declared in src/s3re/game/texts.h; used by godly_events.cpp."
 0x00731278,texts::kTooManyColours,char[],identified,"String ""Error ! zu viele Farben"" Declared in src/s3re/game/texts.h; used by landscape_colours.cpp."
 0x00731488,g_aiPlayerSetups,ai::AiPlayerSetup[],classified,"The settings table g_aiPlayerSetup points into (0x180-byte entries). Declared in src/s3re/game/globals.h; used by ai_helpers.cpp, ai_layout.h."
+0x00731b78,texts::kAiNoChildNote,char[],identified,"String ""Kein ChildNote gefunden! 
+"" (no child note found; OutputDebugStringA of T_DO_BUILD_HOUSE_AGENT::Execute 0x5656e0). Declared in src/s3re/game/texts.h; used by ai_request_execute.cpp."
 0x00731b94,texts::kAiResidentialStage3,char[],identified,"String ""RAINER - RESIDENTIAL Stufe 3 "" (DebugLog of 0x568890). Declared in src/s3re/game/texts.h; used by ai_economy_conditions.cpp."
 0x00731bb4,texts::kAiResidentialStage2,char[],identified,"String ""RAINER - RESIDENTIAL Stufe 2 "" (DebugLog of 0x568890). Declared in src/s3re/game/texts.h; used by ai_economy_conditions.cpp."
 0x00731bd4,texts::kAiResidentialStage1,char[],identified,"String ""RAINER - RESIDENTIAL Stufe 1 "" (DebugLog of 0x568890). Declared in src/s3re/game/texts.h; used by ai_economy_conditions.cpp."

@@ -558,3 +558,15 @@ industry and small towers (restarts them when the emergency ends).
 building's worker can start: per building type `g_aiBuildingToolAndWorker`
 (0x732804) gives the tool and the worker's settler type; a missing tool
 raises its goods priority and forces production while a toolsmith exists.
+
+## The Execute chain (session 55, V)
+
+`ai_request_execute.cpp`: slot 10 of the request agents carries a build
+request out: T_DO_BUILD_HOUSE_AGENT::Execute 0x5656e0 -> its child of type
+2 -> HOUSE_REQUEST_AGENT::Execute 0x5789b0 (100 if placed) -> its child of
+type 1 -> HOUSE_GROUND_REQUEST_AGENT::Execute 0x576610 ->
+HOUSE_GROUND_REQUEST_NOTE::PlaceBuilding 0x576430 (tile still own, no own
+small tower within 16 for military sites, AI::IsAllowedBeforeBasicEconomy
+0x5721a0, then OrderPlaceBuilding). Before the basic economy stands only the
+first woodcutter, stonecutter, sawmill and forester and up to four small
+towers may be placed.

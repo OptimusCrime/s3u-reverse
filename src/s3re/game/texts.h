@@ -235,6 +235,7 @@ inline constexpr GameText kForceProductionNotOwner{0x7325b0};
 // "COMP_EmergencyPowersActWood - EcoSector gehoert nicht dem Spieler !?!" + newline
 inline constexpr GameText kEmergencyWoodNotOwner{0x732698};
 inline constexpr GameText kAiNoSuitableTool{0x73273c};  // "KEIN PASSENDES WERKZEUG VORHANDEN" + newline (no suitable tool)
+inline constexpr GameText kAiNoChildNote{0x731b78};  // "Kein ChildNote gefunden! " + newline (no child note found)
 // Computer players (Rainer\CompMapWorkerAgent.cpp).
 inline constexpr GameText kAiCenterGroup{0x732dd8};  // "Center - player: %d, group: %d \n" (OutputDebugStringA)
 inline constexpr GameText kRandom55{0x732a84};       // "RANDOM_55 wert = %u" (value, DebugLog of mission 56)
