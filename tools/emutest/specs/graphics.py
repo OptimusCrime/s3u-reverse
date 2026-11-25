@@ -109,6 +109,34 @@ SPECS += [
          presets=lambda rng, pool, args: [(0x204, WORLD_BASE + SCRATCH, 4)]),
 ]
 
+# -- Render::DrawValueBar (value_bar.cpp, session 55) ------------------------
+# The drawing object of PutPixel16 (put_pixel_world: pitch, pixels in the
+# scratch area), the drawing origin and a random pixel format; right is at
+# least left + 2 (a width of 0 divides by zero, a negative one would draw
+# 4 billion columns in both), top and bottom at least 1 (bottom 0 would run
+# the inner rows to 0xffffffff).
+def bar_limit(rng, pool):
+    return rng.choice([0, 1, 2, rng.randrange(20), rng.randrange(5000), rng.getrandbits(17)])
+
+
+def bar_value(rng, pool):
+    return rng.choice([0, 1, 2, 3, rng.randrange(20), rng.randrange(5000), rng.getrandbits(17),
+                       rng.getrandbits(32)])
+
+
+def bar_globals(rng, pool, args):
+    fields = [(0x00730f3c, rng.randrange(32), 4), (0x00730f40, rng.randrange(32), 4)]
+    return fields + [(0x007dfba0 + 4 * i, rng.getrandbits(32) if rng.random() < 0.2 else rng.randrange(16), 4)
+                     for i in range(6)]
+
+
+SPECS += [
+    Spec("Render_DrawValueBar", 0x004d79c0, "thiscall",
+         [below(40), lambda rng, pool: 1 + rng.randrange(20), lambda rng, pool: 42 + rng.randrange(40),
+          lambda rng, pool: 1 + rng.randrange(40), bar_value, bar_limit],
+         eax_mask=0, presets=put_pixel_world, globals=bar_globals),
+]
+
 # -- batch 26: CSurface release and destructors (directx_surface.cpp) --------
 #
 # The surface at world offset 0 with its interface (+4) at SURFACE_IFACE

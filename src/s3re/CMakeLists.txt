@@ -207,6 +207,7 @@ add_library(s3re SHARED
     game/graphics/gfx_rle.cpp
     game/graphics/gfx_spans.cpp
     game/graphics/graphics_helpers.cpp
+    game/graphics/value_bar.cpp
     game/graphics/landscape_colours.cpp
     game/graphics/screen_layout.cpp
 
