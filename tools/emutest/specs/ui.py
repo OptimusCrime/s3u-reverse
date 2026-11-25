@@ -1260,3 +1260,128 @@ SPECS += [
                   0x41ca60: (1, "thiscall", "probe"),                              # CStaticText::SetStyle
                   0x610960: (1, "thiscall", "throw")}),                            # Win32::ThrowOutOfMemory
 ]
+
+
+# -- wip/ui-gdi: CButton, CVScrollBar, CDropdown members (ui_button_scroll.cpp).
+# The object at BTN_OBJECT; its vbptr (+4) leads to its element (FAKE_VTABLE:
+# Invalidate 0x1c, PostMessage 0x7c); functors and the dropdown's group use
+# FAKE_VTABLE slot 0 (and RemoveChild 4). --
+BTN_REGION = 0x1f50000
+BTN_OBJECT = BTN_REGION + 0x400
+BTN_TABLE = BTN_REGION + 0x2400
+BTN_FUNCTORS = BTN_REGION + 0x2200
+BTN_LIST_ELEMENT = BTN_REGION + 0x2600
+
+
+def btn_small(rng):
+    return rng.choice([0, 0, 1, rng.randint(2, 255)])
+
+
+def btn_functor(rng):
+    return rng.choice([0, WORLD_BASE + BTN_FUNCTORS, WORLD_BASE + BTN_FUNCTORS + 0x10])
+
+
+def btn_common(element_offset):
+    out = [(BTN_OBJECT + 4, WORLD_BASE + BTN_TABLE, 4),
+           (BTN_TABLE + 4, (element_offset - 4) & 0xFFFFFFFF, 4),
+           (BTN_OBJECT + element_offset, FAKE_VTABLE, 4),
+           (BTN_FUNCTORS, FAKE_VTABLE, 4), (BTN_FUNCTORS + 0x10, FAKE_VTABLE, 4)]
+    return out
+
+
+def btn_button_state(commands):
+    def presets(rng, pool, args):
+        out = btn_common(0x50)
+        out += [(BTN_OBJECT + 0x0c, btn_small(rng), 1), (BTN_OBJECT + 0x48, btn_small(rng), 1),
+                (BTN_OBJECT + 0x49, btn_small(rng), 1), (BTN_OBJECT + 0x4a, btn_small(rng), 1),
+                (BTN_OBJECT + 0x38, btn_functor(rng), 4), (BTN_OBJECT + 0x3c, btn_functor(rng), 4),
+                (BTN_OBJECT + 0x40, btn_functor(rng), 4),
+                (BTN_OBJECT + 0x44, rng.getrandbits(32) if commands and rng.random() < 0.6 else 0, 4)]
+        return out
+    return presets
+
+
+def btn_scroll_state(rng, pool, args):
+    out = btn_common(0x300)
+    rng_range, page = rng.randint(0, 40), rng.randint(0, 12)
+    position = rng.randint(-3, 40)
+    if rng.random() < 0.1:
+        rng_range, position = rng.getrandbits(32), rng.getrandbits(32)
+    out += [(BTN_OBJECT + 0xb4, btn_functor(rng), 4), (BTN_OBJECT + 0x2e0, rng_range & 0xFFFFFFFF, 4),
+            (BTN_OBJECT + 0x2e4, position & 0xFFFFFFFF, 4), (BTN_OBJECT + 0x2e8, page, 4)]
+    return out
+
+
+def btn_dropdown_state(rng, pool, args):
+    out = btn_common(0x66c)
+    out += [(BTN_OBJECT + 0x38, FAKE_VTABLE, 4),
+            (BTN_OBJECT + 0x1cc, WORLD_BASE + BTN_TABLE + 0x10, 4),
+            (BTN_TABLE + 0x14, (BTN_LIST_ELEMENT - (BTN_OBJECT + 0x1cc)) & 0xFFFFFFFF, 4),
+            (BTN_OBJECT + 0x660, btn_small(rng), 1),
+            (BTN_OBJECT + 0x664, rng.randint(-5, 300) & 0xFFFFFFFF, 4)]
+    out += gdi_rect_fields(rng, BTN_OBJECT + 0x66c + 8)
+    return out
+
+
+def btn_open_dropdown(rng, pool, args):
+    return [(0x7a8244, rng.choice([WORLD_BASE + BTN_OBJECT, 0, 0x12345678]), 4)]
+
+
+def btn_small_arg(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.12 else rng.randint(-6, 45) & 0xFFFFFFFF
+
+
+BTN_CALLEES = {
+    0x4156e0: (1, "thiscall", "probe", None, lambda m, ecx, args: (bytes(m.guest_read(args[0], 16)),)),  # SetRect
+    0x415bd0: (0, "thiscall", "probe"),   # CScreenElement::KillFocus
+    0x417480: (3, "thiscall", "probe"),   # CScreenGroup::Draw
+    0x418380: (5, "thiscall", "probe"),   # CControl::OnLButtonDown
+    0x4184e0: (5, "thiscall", "probe"),   # CControl::OnMouseLeave
+}
+BTN_VIRTUALS_1 = {0x00: 1, 0x04: 1, 0x1c: 0}
+BTN_VIRTUALS_2 = {0x00: 2, 0x1c: 0}
+BTN_THIS = one_of(WORLD_BASE + BTN_OBJECT)
+BTN_ELEMENT = one_of(WORLD_BASE + BTN_OBJECT + 0x50)
+BTN_DROP_ELEMENT = one_of(WORLD_BASE + BTN_OBJECT + 0x66c)
+# Exempt blocks below: the original's null-object branches (`this ? element
+# : 0` with `this` the object itself, never null).
+
+SPECS += [
+    Spec("CButton_IsPressed", 0x0041a990, "fastcall", [BTN_THIS, anything], presets=btn_button_state(False),
+         eax_mask=0xFF),
+    # Exempt 0x41a9ee: the command message (its other 15 bytes are an
+    # uninitialized local of the original's frame; compared in-process).
+    Spec("CButton_Click", 0x0041a9b0, "fastcall", [BTN_THIS, anything], presets=btn_button_state(False),
+         virtuals=BTN_VIRTUALS_1, callees=BTN_CALLEES, exempt_blocks=(0x0041a9ee, 0x0041a9d4)),
+    Spec("CButton_SetChecked", 0x0041aa20, "fastcall", [BTN_THIS, anything, below(3)],
+         presets=btn_button_state(False), virtuals=BTN_VIRTUALS_1, callees=BTN_CALLEES, eax_mask=0xFF),
+    Spec("CButton_KillFocus", 0x0041aa40, "fastcall", [BTN_ELEMENT, anything], presets=btn_button_state(False),
+         virtuals=BTN_VIRTUALS_1, callees=BTN_CALLEES),
+    Spec("CButton_OnLButtonDown", 0x0041aaa0, "fastcall", [BTN_ELEMENT, anything] + [anything] * 5,
+         presets=btn_button_state(False), virtuals=BTN_VIRTUALS_1, callees=BTN_CALLEES, eax_mask=0xFF),
+    Spec("CButton_OnLButtonUp", 0x0041ab10, "fastcall", [BTN_ELEMENT, anything] + [anything] * 5,
+         presets=btn_button_state(False), virtuals=BTN_VIRTUALS_1, callees=BTN_CALLEES, eax_mask=0xFF),
+    Spec("CButton_OnMouseLeave", 0x0041ab70, "fastcall", [BTN_ELEMENT, anything] + [anything] * 5,
+         presets=btn_button_state(False), virtuals=BTN_VIRTUALS_1, callees=BTN_CALLEES, eax_mask=0xFF),
+    Spec("CVScrollBar_ScrollBy", 0x0041e290, "fastcall", [BTN_THIS, anything, btn_small_arg],
+         presets=btn_scroll_state, virtuals=BTN_VIRTUALS_2, exempt_blocks=(0x0041e2fa,)),
+    # EAX: the caller's when the position doesn't change (every caller
+    # overwrites it), so not compared.
+    Spec("CVScrollBar_SetPosition", 0x0041e330, "fastcall", [BTN_THIS, anything, btn_small_arg],
+         presets=btn_scroll_state, virtuals=BTN_VIRTUALS_2, eax_mask=0,
+         exempt_blocks=(0x0041e353,)),
+    Spec("CVScrollBar_SetRange", 0x0041e380, "fastcall",
+         [BTN_THIS, anything, below(4), below(4), below(4)], presets=btn_scroll_state, virtuals=BTN_VIRTUALS_2,
+         exempt_blocks=(0x0041e3ca,)),
+    # GetPosition's body ends at 0x41e407; the button callback after it
+    # (0x41e410) is not a listed function start.
+    Spec("CVScrollBar_GetPosition", 0x0041e400, "fastcall", [BTN_THIS, anything], presets=btn_scroll_state,
+         cover_until=0x0041e407),
+    Spec("CDropdown_OnArrowClicked", 0x00422590, "fastcall", [BTN_THIS, anything, anything],
+         presets=btn_dropdown_state, globals=btn_open_dropdown, virtuals=BTN_VIRTUALS_1, callees=BTN_CALLEES),
+    Spec("CDropdown_OnFocusChanged", 0x00422770, "fastcall", [BTN_DROP_ELEMENT, anything, anything],
+         presets=btn_dropdown_state, globals=btn_open_dropdown, virtuals=BTN_VIRTUALS_1, callees=BTN_CALLEES,
+         eax_mask=0xFF),
+    Spec("CDropdown_Draw", 0x004227d0, "fastcall", [BTN_DROP_ELEMENT, anything, anything, anything, anything],
+         presets=btn_dropdown_state, globals=btn_open_dropdown, virtuals=BTN_VIRTUALS_1, callees=BTN_CALLEES),
+]

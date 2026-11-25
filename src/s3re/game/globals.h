@@ -565,5 +565,8 @@ inline constexpr GameGlobal<SetBkModeImport> g_importSetBkMode{0x655054};
 inline constexpr GameGlobal<SetTextColorImport> g_importSetTextColor{0x655058};
 inline constexpr GameGlobal<SetBkColorImport> g_importSetBkColor{0x655078};
 inline constexpr GameGlobal<TextOutAImport> g_importTextOutA{0x655068};
+// wip/ui-gdi batch: the dropdown whose list is open (CDropdown::OnArrowClicked
+// 0x422590 sets it; OnFocusChanged and Draw close other open lists).
+inline constexpr GameGlobal<std::uint32_t> g_openDropdown{0x7a8244};
 
 }  // namespace s3re::game

@@ -1,32 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1258" fill="#ffffff"/>
-<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">33.8%</text>
+<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">33.9%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="368.8" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 26.2%</title></rect>
 <text x="354.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">26.2%</text>
-<rect x="538.8" y="100" width="106.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 7.6%</title></rect>
-<text x="591.9" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">7.6%</text>
-<rect x="645.1" y="100" width="271" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 19.3%</title></rect>
-<text x="780.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">19.3%</text>
+<rect x="538.8" y="100" width="107.5" height="40" fill="#4f8fc0"><title>Verified by tests only: 7.6%</title></rect>
+<text x="592.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">7.6%</text>
+<rect x="646.3" y="100" width="0" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<rect x="646.4" y="100" width="269.7" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 19.2%</title></rect>
+<text x="781.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">19.2%</text>
 <rect x="916.1" y="100" width="659.9" height="40" fill="#e8a39b"><title>Not understood yet: 46.9%</title></rect>
 <text x="1246" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">46.9%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="262.1" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 18.6%</title></rect>
 <text x="301.1" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">18.6%</text>
-<rect x="432.1" y="154" width="82.8" height="40" fill="#4f8fc0"><title>Verified by tests only: 5.9%</title></rect>
-<text x="473.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">5.9%</text>
-<rect x="515" y="154" width="497.7" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 35.4%</title></rect>
-<text x="763.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">35.4%</text>
+<rect x="432.1" y="154" width="83.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.0%</title></rect>
+<text x="474" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.0%</text>
+<rect x="515.8" y="154" width="0" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<rect x="515.9" y="154" width="496.8" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 35.3%</title></rect>
+<text x="764.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">35.3%</text>
 <rect x="1012.7" y="154" width="563.3" height="40" fill="#e8a39b"><title>Not understood yet: 40.1%</title></rect>
 <text x="1294.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">40.1%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
-<rect x="869.6" y="216" width="16" height="16" fill="#f2c86b"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
-<rect x="1233.2" y="216" width="16" height="16" fill="#e8a39b"/><text x="1257.2" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
+<rect x="869.6" y="216" width="16" height="16" fill="#a9d18e"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Reimplemented, not verified yet</text>
+<rect x="1214.8" y="216" width="16" height="16" fill="#f2c86b"/><text x="1238.8" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
+<rect x="1578.4" y="216" width="16" height="16" fill="#e8a39b"/><text x="1602.4" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1108.2" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 33.8% verified (26.2% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 33.9% verified (26.2% in a whole game)</text>
 <g><title>(free functions): 930 functions</title><rect x="2" y="19" width="516.6" height="669.1" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="257.5" height="187.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -4504,16 +4507,16 @@
 272 bytes — Identified (purpose known)</title></rect>
 <rect x="765" y="624.6" width="9" height="16.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::~CVScrollBar @ 0x0041f010
 224 bytes — Classified (class/role known)</title></rect>
-<rect x="754.1" y="641.1" width="9.9" height="10.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::ScrollBy @ 0x0041e290
-160 bytes — Identified (purpose known)</title></rect>
+<rect x="754.1" y="641.1" width="9.9" height="10.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::ScrollBy @ 0x0041e290
+160 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="764" y="641.1" width="9.9" height="10.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::OnResized @ 0x0041e940
 160 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="754.1" y="651.7" width="9.9" height="8.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::SetRange @ 0x0041e380
-128 bytes — Identified (purpose known)</title></rect>
-<rect x="754.1" y="660.2" width="9.9" height="7.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::GetPosition @ 0x0041e400
-112 bytes — Identified (purpose known)</title></rect>
-<rect x="764" y="651.7" width="9.9" height="5.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::SetPosition @ 0x0041e330
-80 bytes — Identified (purpose known)</title></rect>
+<rect x="754.1" y="651.7" width="9.9" height="8.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::SetRange @ 0x0041e380
+128 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="754.1" y="660.2" width="9.9" height="7.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::GetPosition @ 0x0041e400
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="764" y="651.7" width="9.9" height="5.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::SetPosition @ 0x0041e330
+80 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="764" y="657" width="5" height="8.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::scalar_deleting_destructor @ 0x0042b770
 64 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="769" y="657" width="5" height="8.5" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CVScrollBar::OnMoved @ 0x0041e9e0
@@ -4646,16 +4649,16 @@
 656 bytes — Identified (purpose known)</title></rect>
 <rect x="752.9" y="880.5" width="11.2" height="15" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::OnListSelect @ 0x00422670
 256 bytes — Identified (purpose known)</title></rect>
-<rect x="764.2" y="880.5" width="9.8" height="15" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::OnArrowClicked @ 0x00422590
-224 bytes — Identified (purpose known)</title></rect>
+<rect x="764.2" y="880.5" width="9.8" height="15" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::OnArrowClicked @ 0x00422590
+224 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="752.9" y="895.5" width="11.4" height="12" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::OnResized @ 0x004224c0
 208 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="764.3" y="895.5" width="9.6" height="12" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::SetSelection @ 0x00422120
 176 bytes — Identified (purpose known)</title></rect>
-<rect x="752.9" y="907.6" width="10.5" height="6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::OnFocusChanged @ 0x00422770
-96 bytes — Identified (purpose known)</title></rect>
-<rect x="752.9" y="913.6" width="10.5" height="6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::Draw @ 0x004227d0
-96 bytes — Identified (purpose known)</title></rect>
+<rect x="752.9" y="907.6" width="10.5" height="6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::OnFocusChanged @ 0x00422770
+96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="752.9" y="913.6" width="10.5" height="6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::Draw @ 0x004227d0
+96 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="763.5" y="907.6" width="6" height="7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::scalar_deleting_destructor @ 0x0042b340
 64 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="769.5" y="907.6" width="4.5" height="7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::SetControlFlag0C @ 0x00422460
@@ -5782,24 +5785,24 @@
 208 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1046.5" y="764.8" width="9.8" height="9.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CButton::~CButton @ 0x0041a900
 144 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1032.3" y="774.2" width="8.2" height="8.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CButton::Click @ 0x0041a9b0
-112 bytes — Identified (purpose known)</title></rect>
-<rect x="1032.3" y="782.9" width="8.2" height="8.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CButton::OnLButtonDown @ 0x0041aaa0
-112 bytes — Identified (purpose known)</title></rect>
-<rect x="1040.5" y="774.2" width="7.9" height="7.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CButton::KillFocus @ 0x0041aa40
-96 bytes — Identified (purpose known)</title></rect>
-<rect x="1048.5" y="774.2" width="7.9" height="7.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CButton::OnLButtonUp @ 0x0041ab10
-96 bytes — Identified (purpose known)</title></rect>
-<rect x="1040.5" y="781.9" width="6.3" height="9.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CButton::OnMouseLeave @ 0x0041ab70
-96 bytes — Identified (purpose known)</title></rect>
+<rect x="1032.3" y="774.2" width="8.2" height="8.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CButton::Click @ 0x0041a9b0
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1032.3" y="782.9" width="8.2" height="8.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CButton::OnLButtonDown @ 0x0041aaa0
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1040.5" y="774.2" width="7.9" height="7.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CButton::KillFocus @ 0x0041aa40
+96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1048.5" y="774.2" width="7.9" height="7.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CButton::OnLButtonUp @ 0x0041ab10
+96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1040.5" y="781.9" width="6.3" height="9.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CButton::OnMouseLeave @ 0x0041ab70
+96 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1046.9" y="781.9" width="5.7" height="5.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CButton::scalar_deleting_destructor @ 0x0042a980
 48 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1052.6" y="781.9" width="3.8" height="5.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CButton::SetChecked @ 0x0041aa20
-32 bytes — Identified (purpose known)</title></rect>
+<rect x="1052.6" y="781.9" width="3.8" height="5.4" fill="#a9d18e" stroke="#ffffff" stroke-width="0.3"><title>CButton::SetChecked @ 0x0041aa20
+32 bytes — Reimplemented, not verified</title></rect>
 <rect x="1046.9" y="787.3" width="4.8" height="4.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CButton::vbase_destructor @ 0x00476ef0
 32 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1051.6" y="787.3" width="2.4" height="4.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CButton::IsPressed @ 0x0041a990
-16 bytes — Identified (purpose known)</title></rect>
+<rect x="1051.6" y="787.3" width="2.4" height="4.3" fill="#a9d18e" stroke="#ffffff" stroke-width="0.3"><title>CButton::IsPressed @ 0x0041a990
+16 bytes — Reimplemented, not verified</title></rect>
 <rect x="1054" y="787.3" width="2.4" height="4.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CButton::IsChecked @ 0x0041a9a0
 16 bytes — Identified (purpose known)</title></rect>
 </g>

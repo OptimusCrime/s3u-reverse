@@ -46,6 +46,24 @@ LOGBOOK session entry).
   practice; only an out-of-memory in a string or vector would). Add
   cleanup if a whole-game check or a crash ever points there.
 
+- **CButton::IsPressed 0x41a990 / SetChecked 0x41aa20 unverified (session 58,
+  wip/ui-gdi, ui_button_scroll.cpp):** both start with `mov al, [ecx+disp8]`;
+  called through their Detours trampolines in-process, the originals
+  returned a wrong AL (0x71 / 0x30 where the bytes give 1 / 0), so they
+  are S3RE_HOOK_UNVERIFIED with emulator evidence only. Find out whether
+  the trampoline (4-byte body + nop padding) is broken, which would also
+  matter for other tiny hooks.
+- **UI range left after wip/ui-gdi:** CScreenGroup::~CScreenGroup 0x416da0
+  (needs WCIsvSListBase::clearAndDestroy 0x60b560 / base_next 0x60b400)
+  unblocks the CGroupControl, CDialog, CVScrollBar, CProgressBar, CUpDown,
+  CTextView destructors; CStaticText::SetText 0x41c810 unblocks
+  CUpDown::UpdateText/SetValue/SetRange and CProgressBar::SetProgress;
+  CListBox::UpdateLayout 0x41f550 (OnResized); the remaining GameConfig
+  members (0x412380, 0x4125c0, 0x412830, 0x411bc0, 0x411d10 serial check,
+  0x413f20); CEventFile, CCreditsDialog::OnMessage20 0x492750,
+  CMenuSharedData::IsRequestSuperseded 0x4682d0, the reciprocal table
+  0x4a1eb0 (CGameData constructor).
+
 ## Postponed by decision
 - **Network and lobby code** (CNetThread, Lobby::*, LobbyClient::*,
   DirectPlay, CLM* messages): skipped since 2026-11-09 (single player
