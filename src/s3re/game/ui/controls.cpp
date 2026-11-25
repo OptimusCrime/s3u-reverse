@@ -792,7 +792,7 @@ void InstallStubs() {
     Install<kControlOnTimer, 0>();
     Install<kShowTooltip, 0>();
     Install<kButtonConstruct, 6>();
-    Install<kNewLink, 1>();
+    Install<kNewLink, 1, 0>();  // (the message: a stack slot, by contents)
     Install<kListInsert, 1>();
     Install<kGraphicsData, 0>();
     Install<kTextAddress, 2>();

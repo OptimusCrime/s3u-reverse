@@ -814,8 +814,11 @@ SPECS += [
          [one_of(UICTL_OBJ), anything, one_of(WORLD_BASE + SCRATCH + 0x100)], new_fails=0.2,
          presets=lambda rng, pool, args: [(UICTL_OBJECT + 0x10, rng.choice([0, 0x59f200]), 4)],
          callees={0x59f200: (0, "thiscall", uictl_link)}),
+    # NewLink gets the address of the by-value message (a stack slot):
+    # recorded by its contents.
     Spec("CScreen_PostMessage", 0x00417fa0, "fastcall", [one_of(UICTL_OBJ + 0x1c), anything] + [anything] * 5,
-         callees={0x429900: (1, "thiscall", uictl_link), 0x60b430: (1, "thiscall", "probe")}),
+         callees={0x429900: (1, "thiscall", uictl_link, None, lambda m, ecx, args: (bytes(m.guest_read(args[0], 20)),)),
+                  0x60b430: (1, "thiscall", "probe")}),
 ]
 
 
