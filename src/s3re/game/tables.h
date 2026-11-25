@@ -226,5 +226,8 @@ inline constexpr GameGlobal<const std::uint32_t[4]> g_guidNull{0x65c0b8};
 // brightness >> 5). Addresses of the functions in S3.EXE.
 inline constexpr GameGlobal<const std::uint32_t[32]> g_shadeSpans{0x7a2bd8};
 inline constexpr GameGlobal<const std::uint32_t[8]> g_maskedSpans{0x7a2c58};
+// The dither masks of the masked spans: 8 rows of 16 bytes (non-zero = draw),
+// row maskStart + row for the dissolving top rows of a sprite (gfx_rle.cpp).
+inline constexpr GameGlobal<const std::uint8_t[8][16]> g_ditherMasks{0x7a2b58};
 
 }  // namespace s3re::game

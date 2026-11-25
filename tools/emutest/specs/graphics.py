@@ -471,3 +471,173 @@ SPECS += [
     Spec("Point16_Add", 0x005fdb00, "thiscall", [OUT_SLOT, scratch(22)], presets=point_other,
          cover_until=0x005fdb28),
 ]
+
+# -- session 55 (gfx): RLE rows and the 16-bit blitters (gfx_rle.cpp) --------
+#
+# A blitter case is drawn as a whole by the first argument generator
+# (sprite size, clip rectangle, a position classified the way
+# GfxDword::DrawSprite 0x5fadb0 picks the blitter, construction progress,
+# synthetic RLE rows); the other generators return its parts and the
+# preset writes the RLE rows. The surface is lazily random world memory
+# at BLIT_SURFACE; the spans are the original ones (globals).
+
+BLIT_SURFACE = 0x100000
+BLIT_RLE = 0x180000
+BLIT_SURFACE_WIDTH = 160
+BLIT_SURFACE_HEIGHT = 120
+DESC_DWORDS = 27
+
+
+def synthetic_rle(rng, width: int, height: int, pixel_bytes: int) -> bytes:
+    out = bytearray()
+    for _ in range(height):
+        x = 0
+        while True:
+            skip = rng.randrange(width - x + 1) & 0x7F
+            x += skip
+            count = rng.randrange(width - x + 1) if x < width else 0
+            x += count
+            last = x >= width or rng.random() < 0.25
+            out += bytes([count, skip | (0x80 if last else 0)])
+            out += bytes(rng.getrandbits(8) for _ in range(count * pixel_bytes))
+            if last:
+                break
+    return bytes(out)
+
+
+def blit_case(kind: str):
+    """Generators for (visible, hidden, desc[27], pos, size, rle, clip[4])
+    and the preset writing the RLE rows; kind = the blitter."""
+    state = {}
+
+    def build(rng, pool):
+        while True:
+            width, height = rng.randint(1, 48), rng.randint(1, 24)
+            left = rng.randrange(40)
+            top = rng.randrange(30)
+            right = left + 1 + rng.randrange(BLIT_SURFACE_WIDTH - left)
+            bottom = top + 1 + rng.randrange(BLIT_SURFACE_HEIGHT - top)
+            x = left - width + rng.randrange(right - left + width)
+            y = top - height + rng.randrange(bottom - top + height)
+            if x < 0 or x + width > BLIT_SURFACE_WIDTH or y < 0 or y + height > BLIT_SURFACE_HEIGHT:
+                continue
+            if rng.random() < 0.5:
+                visible, hidden, h = height + 8, 0, height
+            else:
+                fraction = rng.randint(1, 0xFFFF)
+                visible = ((height + 8) * fraction) >> 16
+                kept = min(height, visible)
+                hidden, h, y = height - kept, kept, y + height - kept
+            if x < left:
+                pick = "ClipLeft" if x + width < right else "ClipBoth"
+            elif x + width >= right:
+                pick = "ClipRight"
+            else:
+                pick = rng.choice(["Shaded", "FullBright"])
+            if pick != kind:
+                continue
+            pitch = (BLIT_SURFACE_WIDTH + 2 * rng.randrange(3)) * 2
+            desc = [rng.getrandbits(32) for _ in range(DESC_DWORDS)]
+            desc[4] = pitch
+            desc[9] = WORLD_BASE + BLIT_SURFACE
+            state["rle"] = synthetic_rle(rng, width, height, 2)
+            state["args"] = ([visible, hidden] + desc + [(x & 0xFFFF) | (y & 0xFFFF) << 16, width | h << 16,
+                             WORLD_BASE + BLIT_RLE, left, top, right, bottom])
+            return state["args"][0]
+
+    def part(i):
+        return lambda rng, pool: state["args"][i]
+
+    def presets(rng, pool, args):
+        return [(BLIT_RLE + i, b, 1) for i, b in enumerate(state["rle"])]
+
+    return [build] + [part(i) for i in range(1, 2 + DESC_DWORDS + 7)], presets
+
+
+def blit_globals(rng, pool, args):
+    """RGB565 masks and a random pair of spans."""
+    pixel565 = (0x7bef, 0x39e7, 0x18e3, 0x861, 0x20)
+    fields = []
+    for k in range(5):
+        fields += [(SHADE_MASKS + 4 * k, pixel565[k], 4), (SHADE_MASKS + 0x14 + 4 * k, pixel565[k] * 0x10001, 4)]
+    fields += [(0x007e8c74, rng.choice(SHADE_SPAN_ADDRESSES), 4), (0x007e8c70, rng.choice(MASKED_SPAN_ADDRESSES), 4)]
+    return fields
+
+
+for _kind, _address in (("ClipLeft", 0x005fb4f0), ("ClipBoth", 0x005fb850), ("ClipRight", 0x005fbdf0),
+                        ("Shaded", 0x005fc160), ("FullBright", 0x005fc350)):
+    _generators, _presets = blit_case(_kind)
+    SPECS.append(Spec(f"BlitRle16_{_kind}", _address, "fastcall", _generators, eax_mask=0, presets=_presets,
+                      globals=blit_globals, max_cases=1000))
+
+
+def clip_cells(rng, pool) -> int:
+    """One of four cells in scratch 0 (two arguments may alias)."""
+    return WORLD_BASE + SCRATCH + 4 * rng.randrange(4)
+
+
+def point_arg(rng, pool) -> int:
+    return (rng.randrange(600) - 300) & 0xFFFF | ((rng.randrange(600) - 300) & 0xFFFF) << 16
+
+
+def size_arg(rng, pool) -> int:
+    return rng.getrandbits(16) | rng.randrange(120) << 16
+
+
+def signed_small(n: int) -> Generator:
+    return lambda rng, pool: (rng.randrange(2 * n) - n) & 0xFFFFFFFF
+
+
+def skip_rows_case(pixel_bytes: int, two_counts: bool):
+    """(desc*, rowsA, [rowsB,] &rle, &dst) with RLE rows at scratch slot 4."""
+    state = {}
+
+    def desc(rng, pool):
+        state["rle"] = synthetic_rle(rng, rng.randint(1, 60), 40, pixel_bytes)
+        return WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES
+
+    def presets(rng, pool, args):
+        fields = [(SCRATCH + 4 * SCRATCH_SLOT_BYTES + i, b, 1) for i, b in enumerate(state["rle"])]
+        fields += [(SCRATCH, WORLD_BASE + SCRATCH + 4 * SCRATCH_SLOT_BYTES, 4),
+                   (SCRATCH + SCRATCH_SLOT_BYTES + 0x10,
+                    rng.getrandbits(32) if rng.random() < 0.2 else rng.randrange(4000), 4)]
+        return fields
+
+    if two_counts:
+        counts = [below(20), below(20)]
+    else:
+        counts = [lambda rng, pool: (rng.randrange(20) - 3) & 0xFFFFFFFF]
+    return [desc] + counts + [one_of(WORLD_BASE + SCRATCH), one_of(WORLD_BASE + SCRATCH + 4)], presets
+
+
+def rle16_clip_args():
+    """(visible, &skipTop, pos, size, clip[4], &rowsAfter, &masked,
+    &maskStart); visible equals the height in about a third of the cases."""
+    state = {}
+
+    def first(rng, pool):
+        state["size"] = size_arg(rng, pool)
+        if rng.random() < 0.35:
+            return state["size"] >> 16
+        return (rng.randrange(140) - 4) & 0xFFFFFFFF
+
+    return [first, clip_cells, point_arg, lambda rng, pool: state["size"], anything, signed_small(200), anything,
+            signed_small(300), clip_cells, clip_cells, clip_cells]
+
+
+_rle16_skip_args, _rle16_skip_presets = skip_rows_case(2, True)
+_color_skip_args, _color_skip_presets = skip_rows_case(1, False)
+_shadow_skip_args, _shadow_skip_presets = skip_rows_case(0, True)
+
+SPECS += [
+    Spec("Rle16VerticalClip", 0x005fb050, "fastcall", rle16_clip_args(), eax_mask=0),
+    Spec("ColorIndexedVerticalClip", 0x005fc7d0, "fastcall",
+         [clip_cells, clip_cells, point_arg, size_arg, anything, signed_small(200), anything, signed_small(300)],
+         eax_mask=0),
+    Spec("ShadowVerticalClip", 0x005fcff0, "fastcall",
+         [clip_cells, clip_cells, point_arg, size_arg, anything, signed_small(200), anything, signed_small(300)],
+         eax_mask=0),
+    Spec("Rle16SkipRows", 0x005fb130, "fastcall", _rle16_skip_args, eax_mask=0, presets=_rle16_skip_presets),
+    Spec("ColorIndexedSkipRows", 0x005fc810, "fastcall", _color_skip_args, eax_mask=0, presets=_color_skip_presets),
+    Spec("ShadowSkipRows", 0x005fd040, "fastcall", _shadow_skip_args, eax_mask=0, presets=_shadow_skip_presets),
+]

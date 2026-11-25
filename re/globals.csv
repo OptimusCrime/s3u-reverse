@@ -304,3 +304,4 @@ address,name,type,status,notes
 0x007a2ee8,texts::kShadowAnimationNotFound,char[],identified,"String ""GFX: ShadowAnimation not found %u:%u"" Declared in src/s3re/game/texts.h; used by gfx_images.cpp."
 0x007a2ca4,texts::kGraphicsDataFile,char[],identified,"String ""E:\Siedler3\Dirk\graphicsdata.cpp"" Declared in src/s3re/game/texts.h; used by gfx_spans.cpp."
 0x007a2f10,texts::kInvalidShadowMethod,char[],identified,"String ""GFX: Invalid shadow method"" Declared in src/s3re/game/texts.h; used by gfx_spans.cpp."
+0x007a2b58,g_ditherMasks,const uint8_t[8][16],identified,"Dither masks of the masked spans (8 rows of 16 bytes), indexed by maskStart + row in the 16-bit blitters. Declared in src/s3re/game/tables.h; used by gfx_rle.cpp."
