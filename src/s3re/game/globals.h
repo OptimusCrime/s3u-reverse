@@ -305,6 +305,10 @@ inline constexpr GameGlobal<ai::AiVector[20]> g_aiHunterVectors{0x7e368c};
 // (stages[s + 1] - stages[s])). Stored in reverse: stage s at [3 - s].
 inline constexpr GameGlobal<float[4]> g_aiWantedWeaponsmithSlopes{0x7e1290};
 inline constexpr GameGlobal<float[4]> g_aiWantedGoldMineSlopes{0x7e12b0};
+// The extra carriers wanted per settler for the residences condition
+// (0x568890; static initializers 0x566130.., 0.5, 0.5, 0.375, 0.2 from
+// g_aiWantedCarriers), stored in reverse like the tables above.
+inline constexpr GameGlobal<float[4]> g_aiResidenceSlopes{0x7e1380};
 // The same slopes per race and stage for the stonecutter (0x568420) and
 // woodcutter (0x567e00) conditions: [3 - race][3 - stage] the slope of the
 // wanted cutters, [7 - race][3 - stage] that of the wanted stock (set by

@@ -301,7 +301,9 @@ struct EconomyAgent {
     std::int32_t stock_ratio;           // 0x2c buildings * 100 / wanted, of the last stage-based condition
     std::uint32_t last_priority;        // 0x30 the last priority of the forester, woodcutter, stonecutter, coal/iron mine and iron smelter conditions (was forester_priority)
     std::uint16_t stage;                // 0x34 population stage 0..3 (g_aiPopulationStages)
-    std::uint8_t unk36[8];
+    std::uint16_t unk36;
+    float residence_slope;              // 0x38 g_aiResidenceSlopes[3 - stage] (0x568890)
+    std::uint16_t wanted_carriers;      // 0x3c carriers wanted for the population (0x568890)
     std::uint16_t population;           // 0x3e settlers of class 0 in the area (CGameData::CountAreaSettlersOfClass0), or a per-player global
     std::uint16_t carriers;             // 0x40 settlers of type 0 in the area (0x59dc70)
     std::uint16_t logs;                 // 0x42 goods in the area
@@ -357,6 +359,8 @@ static_assert(offsetof(EconomyAgent, area) == 0x0c);
 static_assert(offsetof(EconomyAgent, run_count) == 0x10);
 static_assert(offsetof(EconomyAgent, stock_ratio) == 0x2c);
 static_assert(offsetof(EconomyAgent, stage) == 0x34);
+static_assert(offsetof(EconomyAgent, residence_slope) == 0x38);
+static_assert(offsetof(EconomyAgent, wanted_carriers) == 0x3c);
 static_assert(offsetof(EconomyAgent, population) == 0x3e);
 static_assert(offsetof(EconomyAgent, logs) == 0x42);
 static_assert(offsetof(EconomyAgent, gold_ore) == 0x4c);

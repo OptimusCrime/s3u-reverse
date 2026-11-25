@@ -674,4 +674,141 @@ S3RE_TEST(AiMapQueries_ComparisonDetectsWrongImplementation) {
     probe([](MapQueries& f) { f.resourceAmount = f.resourceKind; });
 }
 
+// ---------------------------------------------------------------------------
+// 0x599760 AI::AreaInDirection (session 55)
+// ---------------------------------------------------------------------------
+//
+//   0x00599760 AI_AreaInDirection(x, y, direction) fastcall (const u16* x,
+//              const u16* y, stack const u16* direction; ret 4): Tile::area
+//              of (x, y), or while it is 0 of the tile one step further in
+//              the direction (at most 10 steps; 0 x+1, 1 x+1 y+1, 2 y+1,
+//              3 x-1, 4 x-1 y-1, 5 y-1, others stay; jump table 0x599850;
+//              clamped to the map; the direction word is read again for
+//              every step). AX = 0xffff off the map (upper half the
+//              caller's); else EAX's upper half is that of the area word's
+//              index (x * 0x300 + y + 0x44d9). Its caller
+//              (GLOBAL_EXPAND_EMPIRE_AGENT::MakeBuildOrders 0x56cd90) uses AX.
+
+using DirectionAreaFn = std::uint32_t(__fastcall*)(const std::uint16_t* x, const std::uint16_t* y,
+                                                   const std::uint16_t* direction);
+
+std::uint32_t __fastcall AI_AreaInDirection(const std::uint16_t* x, const std::uint16_t* y,
+                                            const std::uint16_t* direction);
+
+S3RE_HOOK(0x00599760, AI_AreaInDirection, DirectionAreaFn, Original_AI_AreaInDirection, AI_AreaInDirection);
+
+namespace {
+
+constexpr int kDirectionSearchSteps = 10;
+
+// One step in a direction, clamped to the map (0x5997c4..0x599812).
+void StepInDirection(std::uint16_t direction, std::uint32_t& x, std::uint32_t& y) {
+    const std::uint32_t sizeX = g_aiMapSizeX, sizeY = g_aiMapSizeY;
+    const auto right = [&] { x = x + 1 == sizeX ? sizeX - 1 : x + 1; };
+    const auto down = [&] { y = y + 1 == sizeY ? sizeY - 1 : y + 1; };
+    const auto left = [&] { x = x == 0 ? 0 : x - 1; };
+    const auto up = [&] { y = y == 0 ? 0 : y - 1; };
+    switch (direction) {
+    case 0: right(); break;
+    case 1: right(); down(); break;
+    case 2: down(); break;
+    case 3: left(); break;
+    case 4: left(); up(); break;
+    case 5: up(); break;
+    default: break;  // no step
+    }
+}
+
+}  // namespace
+
+// Purpose: The economy area at a map position for the computer players; on
+// a tile without an area it looks up to 10 tiles further in a direction
+// (probably towards where the empire should expand).
+std::uint32_t __fastcall AI_AreaInDirection(const std::uint16_t* x, const std::uint16_t* y,
+                                            const std::uint16_t* direction) {
+    if (!OnAiMap(*x, *y)) {
+        return kNone;  // AX only (the upper half is the caller's)
+    }
+    std::uint32_t tx = *x, ty = *y;
+    for (int steps = 0; steps < kDirectionSearchSteps && AiTile(static_cast<std::uint16_t>(tx),
+                                                                static_cast<std::uint16_t>(ty)).area == 0;
+         ++steps) {
+        StepInDirection(*direction, tx, ty);
+    }
+    const auto fx = static_cast<std::uint16_t>(tx), fy = static_cast<std::uint16_t>(ty);
+    return AreaAddressHigh(fx, fy) | AiTile(fx, fy).area;
+}
+
+// Tests: small maps (sizes 1..40) whose tiles mostly have area 0, positions
+// near and past the edges, directions 0..7 (sometimes with an upper word).
+// Off the map only AX is compared.
+
+namespace {
+
+void CompareAreaInDirection(test::Context& ctx, DirectionAreaFn candidate, int cases) {
+    SavedState saved;
+    test::WorldBuffer buffer(sizeof(CGameData));
+    CGameData* world = buffer.world();
+    g_aiWorld = world;
+    int nonZero = 0;
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        test::Rng& rng = ctx.rng();
+        if (i % 20 == 0) {
+            for (std::uint32_t tx = 0; tx < 48; ++tx) {
+                for (std::uint32_t ty = 0; ty < 48; ++ty) {
+                    world->tiles[tx][ty].area = static_cast<std::uint16_t>(rng.Chance(1, 12) ? 1 + rng.Below(5) : 0);
+                }
+            }
+        }
+        g_aiMapSizeX = static_cast<std::uint16_t>(1 + rng.Below(40));
+        g_aiMapSizeY = static_cast<std::uint16_t>(1 + rng.Below(40));
+        const auto x = static_cast<std::uint16_t>(rng.Chance(1, 20) ? rng.Next32() : rng.Below(44));
+        const auto y = static_cast<std::uint16_t>(rng.Chance(1, 20) ? rng.Next32() : rng.Below(44));
+        const auto direction = static_cast<std::uint16_t>(rng.Chance(1, 10) ? rng.Next32() : rng.Below(8));
+        const std::uint32_t ra = Original_AI_AreaInDirection(&x, &y, &direction);
+        const std::uint32_t rb = candidate(&x, &y, &direction);
+        const std::uint32_t mask = OnAiMap(x, y) ? 0xffffffffu : 0xffffu;
+        nonZero += (ra & 0xffff) != 0 && (ra & 0xffff) != kNone ? 1 : 0;
+        if (!S3RE_EXPECT_EQ(ra & mask, rb & mask)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: (%u, %u) direction %u, map %u x %u", i, x, y, direction,
+                     static_cast<unsigned>(g_aiMapSizeX), static_cast<unsigned>(g_aiMapSizeY));
+        }
+    }
+    if (cases >= 1000 && !S3RE_EXPECT(nonZero >= cases / 20)) {
+        ctx.Fail(__FILE__, __LINE__, "  only %d areas found", nonZero);
+    }
+}
+
+std::uint32_t __fastcall WrongAreaInDirection(const std::uint16_t* x, const std::uint16_t* y,
+                                              const std::uint16_t* direction) {
+    // Wrong: direction 4 steps x-1, y+1.
+    if (*direction != 4) {
+        return AI_AreaInDirection(x, y, direction);
+    }
+    if (!OnAiMap(*x, *y)) {
+        return kNone;
+    }
+    std::uint32_t tx = *x, ty = *y;
+    for (int steps = 0; steps < kDirectionSearchSteps && AiTile(static_cast<std::uint16_t>(tx),
+                                                                static_cast<std::uint16_t>(ty)).area == 0;
+         ++steps) {
+        StepInDirection(3, tx, ty);
+        StepInDirection(2, tx, ty);
+    }
+    const auto fx = static_cast<std::uint16_t>(tx), fy = static_cast<std::uint16_t>(ty);
+    return AreaAddressHigh(fx, fy) | AiTile(fx, fy).area;
+}
+
+}  // namespace
+
+S3RE_TEST(AiAreaInDirection_MatchOriginal) {
+    CompareAreaInDirection(ctx, &AI_AreaInDirection, 20000);
+}
+
+S3RE_TEST(AiAreaInDirection_ComparisonDetectsWrongImplementation) {
+    test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+    CompareAreaInDirection(quiet, &WrongAreaInDirection, 20000);
+    S3RE_EXPECT(quiet.failures() > 0);
+}
+
 }  // namespace s3re::game

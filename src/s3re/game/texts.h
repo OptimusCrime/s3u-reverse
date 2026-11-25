@@ -221,6 +221,11 @@ inline constexpr GameText kWideCannotDeleteTemp{0x730224};  // L"Cannot delete t
 // Computer players (Rainer\CompMapWorkerAgent.cpp)
 inline constexpr GameText kAiCountResourceDefault{0x733070};  // "RAINER - DEFAULT IN SWITCH CountResourceInOwnersLand"
 inline constexpr GameText kAiCountAroundDefault{0x7330a8};  // "RAINER - DEFAULT IN SWITCH CountPlayersResourcesAround"
+// Computer players (Rainer\CompDoBuildHouseReq.cpp, the residences condition 0x568890)
+inline constexpr GameText kAiResidentialRandom{0x731bf4};  // "RAINER - RESIDENTIAL random wert = %u" (sprintf)
+inline constexpr GameText kAiResidentialStage1{0x731bd4};  // "RAINER - RESIDENTIAL Stufe 1 "
+inline constexpr GameText kAiResidentialStage2{0x731bb4};  // "RAINER - RESIDENTIAL Stufe 2 "
+inline constexpr GameText kAiResidentialStage3{0x731b94};  // "RAINER - RESIDENTIAL Stufe 3 "
 // Computer players (Rainer\CompMapWorkerAgent.cpp).
 inline constexpr GameText kAiCenterGroup{0x732dd8};  // "Center - player: %d, group: %d \n" (OutputDebugStringA)
 inline constexpr GameText kRandom55{0x732a84};       // "RANDOM_55 wert = %u" (value, DebugLog of mission 56)

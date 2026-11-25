@@ -2968,3 +2968,138 @@ SPECS += [
     for name, address in (("T_ECONOMY_AGENT_ConsiderWoodcutter", 0x00567e00),
                           ("T_ECONOMY_AGENT_ConsiderStonecutter", 0x00568420))
 ]
+
+
+# -- session 55 (wip/ai-econ): the residences condition 0x568890 -----------
+# (ai_economy_conditions.cpp). The agent at world +0, sites of the residence
+# types (and others) for AI::CountSitesOfType, the players' surplus carriers,
+# random residence slopes (the static initializers' values, rounding edges,
+# any bits) and the world's random state (lazily random). sprintf and
+# DebugLog (a bare ret) run as original code on both sides.
+
+AI_RESIDENCE_SLOPES = 0x007E1380  # g_aiResidenceSlopes: float[4]
+RESIDENCE_SLOPES = (0.2, 0.375, 0.5, 0.5)
+
+
+def residence_agent(rng, pool, args):
+    area = rng.randrange(4)
+    race = rng.randrange(4)
+    fields = [(8, race, 4), (0xC, area, 2)]
+    low, high = rng.choice(((0, 40), (40, 101), (101, 501), (500, 2001), (2000, 2500), (0, 0x10000)))
+    population = rng.choice((0, 39, 40, 41, 99, 100, 101, 499, 500, 501, 1999, 2000, 2001)) \
+        if rng.random() < 0.25 else rng.randrange(low, high)
+    carriers = rng.getrandbits(16) if rng.random() < 0.1 else rng.randrange(600)
+    fields += [(0x3E, population, 2), (0x40, carriers, 2)]
+    count = 0 if rng.random() < 0.4 else rng.randrange(12)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        x, y = rng.randrange(400), rng.randrange(400)
+        fields += [(record, 0xFF if rng.random() < 0.15 else rng.randrange(3), 1),
+                   (record + 6, rng.choice((26, 27, 28, 24, 1)), 1),
+                   (record + 0x21, 0 if rng.random() < 0.4 else rng.randrange(1, 256), 1),
+                   (record + 0xA, x, 2), (record + 0xC, y, 2),
+                   (TILES + (x * 0x300 + y) * 24 + 0x14, area if rng.random() < 0.6 else rng.randrange(4), 2)]
+    for player in range(3):
+        surplus = 0 if rng.random() < 0.5 else rng.getrandbits(32) if rng.random() < 0.2 else rng.randrange(1, 30)
+        fields.append((PLAYER_RECORDS + player * PLAYER_RECORD_BYTES + 0xD4, surplus, 4))
+    return fields
+
+
+def residence_globals(rng, pool, args):
+    fields = economy_globals(rng, pool, args)
+    for s in range(4):
+        roll = rng.random()
+        if roll < 0.15:
+            bits = rng.getrandbits(32)
+        else:
+            value = 1 / 3 if roll < 0.3 else rng.randint(1, 20) / rng.randint(1, 500) if roll < 0.45 \
+                else RESIDENCE_SLOPES[s]
+            bits = struct.unpack("<I", struct.pack("<f", value))[0]
+        fields.append((AI_RESIDENCE_SLOPES + 4 * s, bits, 4))
+    return fields
+
+
+SPECS += [
+    # EAX is not used by the caller (0x56a1a0).
+    Spec("T_ECONOMY_AGENT_ConsiderResidences", 0x00568890, "thiscall", [], eax_mask=0, presets=residence_agent,
+         globals=residence_globals, max_cases=2000),
+]
+
+
+# -- session 55 (wip/ai-econ): AreaInDirection (ai_map_queries.cpp), ------
+# -- FindTrees/StonesNearOwnFields (ai_cell_resources.cpp) ------------------
+
+
+def direction_world(rng, pool, args):
+    """x, y, direction in scratch 0..2 (positions near and past the map's
+    edges, directions 0..7 or any word); tile areas mostly 0 around."""
+    x = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(64)
+    y = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(64)
+    direction = rng.getrandbits(16) if rng.random() < 0.1 else rng.randrange(8)
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2), (SCRATCH + 2 * SCRATCH_SLOT_BYTES, direction, 2)]
+    density = rng.choice((0.02, 0.1, 0.3))
+    for tx in range(max(0, x - 11), min(64, x + 12)):
+        for ty in range(max(0, y - 11), min(64, y + 12)):
+            area = rng.randrange(1, 6) if rng.random() < density else 0
+            fields.append((TILES + (tx * 0x300 + ty) * 24 + 0x14, area, 2))
+    return fields
+
+
+FIELD_TYPES = (24, 14, 36, 24, 14, 36, 2)
+
+
+def own_fields_world(rng, pool, args):
+    """x, y (scratch 0 / 1), the land evaluation (scratch 2; grid 1..9 x
+    1..9 at CELL_GRID with trees_around / stones_around), up to 12 buildings
+    (farms, vineyards, rice farms, woodcutters; owners 0..2 or free;
+    finished or not) with door tiles in areas and work points near (x, y),
+    and resource tiles around the work points' cells."""
+    x, y = rng.randrange(8, 72), rng.randrange(8, 72)
+    if rng.random() < 0.05:
+        x = rng.getrandbits(16)
+    land = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2), (land + 0x140, rng.randrange(1, 10), 4),
+              (land + 0x144, rng.randrange(1, 10), 4), (land + 0x158, WORLD_BASE + CELL_GRID, 4)]
+    for cell in range(81):
+        base = CELL_GRID + cell * 0xC4
+        fields += [(base + 3, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1),
+                   (base + 4, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1),
+                   (base + 0xF, 0 if rng.random() < 0.4 else rng.randrange(1, 256), 1),
+                   (base + 0x10, 0 if rng.random() < 0.4 else rng.choice((0x100, rng.randrange(1, 300))), 2)]
+    area = rng.randrange(1, 3)
+    if x < 72 and y < 72:
+        fields.append((TILES + (x * 0x300 + y) * 24 + 0x14, area if rng.random() < 0.9 else 0, 2))
+    count = rng.randrange(12)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        dx, dy = rng.randrange(64), rng.randrange(64)
+        wx = min(63, max(0, (x if x < 72 else 30) + rng.randint(-40, 40)))
+        wy = min(63, max(0, y + rng.randint(-40, 40)))
+        owner = 0xFF if rng.random() < 0.1 else rng.randrange(3)
+        fields += [(record, owner, 1), (record + 6, rng.choice(FIELD_TYPES), 1),
+                   (record + 0x21, 0 if rng.random() < 0.8 else rng.randrange(1, 256), 1),
+                   (record + 0xA, dx, 2), (record + 0xC, dy, 2), (record + 0x30, wx, 2), (record + 0x32, wy, 2),
+                   (TILES + (dx * 0x300 + dy) * 24 + 0x14, area if rng.random() < 0.7 else rng.randrange(3), 2)]
+        if rng.random() < 0.4:
+            fields += resource_tiles(rng, (wx // 8 - 1) * 8, (wy // 8 - 1) * 8, 18, owner & 3)
+    return fields
+
+
+def own_fields_globals(rng, pool, args):
+    """The map 40..72 square, the land evaluation in scratch 2, the player
+    number 0..2."""
+    return resource_cell_globals(rng, pool, args) + [(AI_PLAYER_NUMBER, rng.randrange(3), 1)]
+
+
+SPECS += [
+    # Its caller (MakeBuildOrders 0x56cd90) compares AX; off the map the
+    # upper half is the caller's EAX.
+    Spec("AI_AreaInDirection", 0x00599760, "fastcall", [scratch(0), scratch(1), scratch(2)], eax_mask=0xFFFF,
+         presets=direction_world, globals=ai_small_map, max_cases=2000),
+    Spec("AI_FindTreesNearOwnFields", 0x0059a260, "fastcall", [scratch(0), scratch(1)], presets=own_fields_world,
+         globals=own_fields_globals, max_cases=1000),
+    Spec("AI_FindStonesNearOwnFields", 0x0059a7a0, "fastcall", [scratch(0), scratch(1)], presets=own_fields_world,
+         globals=own_fields_globals, max_cases=1000),
+]

@@ -231,9 +231,18 @@ smelters, tool- and weaponsmiths, distilleries, powder makers; iron users:
 the smiths; one smelter per two smiths). They store the last ratio in
 +0x2c and the result in +0x30 (`last_priority`, was forester_priority);
 the iron mine stores the iron (goods 11) in stock, the smelter the iron
-ore (goods 7), in +0x4a (`ore`). Still open in this family: 0x567e00
-(woodcutter), 0x568420 (stonecutter; both with two float curves per race
-and stage, 0x7e1300..0x7e137c) and 0x568890 (residences, Random).
+ore (goods 7), in +0x4a (`ore`). The woodcutter 0x567e00 and stonecutter
+0x568420 (two float curves per race and stage, 0x7e1280..0x7e137c) are V
+since session 54. Session 55 (V): the residences 0x568890 skip while any
+residence site is in the area; they want carriers by the population
+(`g_aiWantedCarriers` 0, 20, 50, 200, 500 per stage start, slopes
+`g_aiResidenceSlopes` 0x7e1380, stored in the agent: +0x38 the slope, +0x3c
+the wanted count), grade carriers * 100 / wanted (65000 below 30 %, 45000,
+35000, 15000 below 100 %), take 45000 while the player has surplus
+carriers (Player +0xd4), and draw Random % 100 for the size: stage 0
+medium; 1 small below 15 %; 2 small below 10 %, medium below 60 %, else
+large; 3 small 5 %, medium 10 %, large 85 %. With nothing wanted all
+three get priority 0.
 The snapshot 0x567910 is done too (V, session 51, `ai_economy_snapshot.cpp`):
 the "per-player global" population is the census's settler figure
 (`g_aiCensus.dwords3f4[player]`, low word) once `settlers_counted` is set,
