@@ -857,3 +857,18 @@ ClearToolGoodsSettings for a toolsmith; EnsureGoodsSupply hammer (and
 shovel for a large residence); a finished **gem mine tears down all the
 owner's gold mines and gold smelters** (G: the Egyptians trade gold for
 gems).
+
+## Construction (session 56, V)
+
+`ai_computer_player_init.cpp`. `CComputerPlayer::CComputerPlayer` 0x550900
+(world, message queue, player, first): fields, vtable 0x65a530; with
+`first` non-zero InitAiGlobals 0x551b80 (the first computer player of a
+game); g_aiMilitaryResetRequest (0x7e3410) takes `first` while it is 0;
+then `Init` 0x550a30: empty blackboard (handlers and note lists 0xffff),
+one agent per kind of g_aiAgentKinds (0x7312b0: 0..10), the shared
+CEvaLand (Acquire), and for every economy area the player owns: AddArea,
+SendToolSetting10 1, transport orders (SendChangeTransportOrder (3, 3),
+(2, 3), (1, 3); Egyptians (3, 3), (1, 3), (2, 3)), area conditions
+(Egyptians 25, Asians 5 and 6, everyone 2; value 8). Once per game
+MarkBuildingTypesInLandGrid. `area` = 0xffffffff (the first step takes
+the first node).

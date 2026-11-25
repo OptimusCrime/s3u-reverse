@@ -198,6 +198,7 @@ address,name,type,status,notes
 0x007311d0,texts::kManaNeeded,char[],identified,"String ""xxx Godevent mana needed: %u at slot: %u"" Declared in src/s3re/game/texts.h; used by godly_events.cpp."
 0x00731278,texts::kTooManyColours,char[],identified,"String ""Error ! zu viele Farben"" Declared in src/s3re/game/texts.h; used by landscape_colours.cpp."
 0x00731488,g_aiPlayerSetups,ai::AiPlayerSetup[],classified,"The settings table g_aiPlayerSetup points into (0x180-byte entries). Declared in src/s3re/game/globals.h; used by ai_helpers.cpp, ai_layout.h."
+0x007312b0,g_aiAgentKinds,const uint16_t[],identified,"The agent kinds 0..10 a computer player makes, ending at 0xffff (CComputerPlayer::Init 0x550a30 creates one agent per entry). Declared in src/s3re/game/tables.h; used by ai_computer_player_init.cpp."
 0x007312e8,texts::kEvalMap,char[],identified,"String ""pEvalMap"" (ThrowOutOfMemory text of AI::CEvaLand::Acquire 0x553d30; the object's original name is probably EvalMap). Declared in src/s3re/game/texts.h; used by ai_area_records.cpp."
 0x00731328,texts::kAiDemolitionMixup,char[],identified,"String ""RAINER: Durcheinander bei ABRISS!"" (DebugLog of ProcessPendingEvents 0x554980, event 6). Declared in src/s3re/game/texts.h; used by ai_area_events.cpp."
 0x0073134c,texts::kAiSameTypeStillThere,char[],identified,"String ""RAINER: Hier ist noch ein Haus dieses Types!"" (DebugLog of ProcessPendingEvents 0x554980, event 6). Declared in src/s3re/game/texts.h; used by ai_area_events.cpp."

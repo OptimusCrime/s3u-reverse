@@ -5557,3 +5557,59 @@ SPECS += [
          globals=event_globals,
          callees={**FORCE_CALLEES, **{a: v for a, v in EVENT_PROBES.items() if a != 0x00573890}}, max_cases=3000),
 ]
+
+
+# CComputerPlayer::Init and the constructor (ai_computer_player_init.cpp).
+# The ComputerPlayer at world offset 0 (ECX); areas 0..8 owned by players
+# 0..2 or nobody, a high-water mark 0..8 (sometimes 0xffffffff), races
+# 0..3 (sometimes others). CreateAgent (ECX = the kind; returns a fake
+# agent), AddAgent, CEvaLand::Acquire (returns a fake land), AddArea and
+# MarkBuildingTypesInLandGrid are probed; SetCurrentPlayer and the command
+# senders run (IsHost and Push probed). Constructor: Init and InitAiGlobals
+# probed, Win32::CObject's constructor runs.
+
+INIT_LAND = WORLD_BASE + SCRATCH + 40 * SCRATCH_SLOT_BYTES
+
+INIT_PROBES = {
+    0x0056f6d0: (0, "cdecl", lambda h: WORLD_BASE + SCRATCH + 41 * SCRATCH_SLOT_BYTES + 0x40 * (h % 32), None,
+                 lambda m, ecx, args: (probe_reg(m, "ECX"),)),
+    0x00551400: (1, "thiscall", "probe"),
+    0x00553d30: (0, "cdecl", lambda h: INIT_LAND),
+    0x00555260: (2, "thiscall", "probe"),
+    0x005723a0: (0, "cdecl", "probe"),
+}
+
+
+def init_world(rng, pool, args):
+    player = rng.randrange(3) | (rng.getrandbits(16) << 16 if rng.random() < 0.05 else 0)
+    fields = [(0x75C, WORLD_BASE, 4), (0x760, rng.getrandbits(32), 4), (0x76C, player, 4),
+              (0x770, rng.randrange(3), 4), (0xE115DC, 0xFFFFFFFF if rng.random() < 0.05 else rng.randrange(9), 4)]
+    for area in range(10):
+        fields.append((AI_AREAS + area * 0x2E0, 0xFF if rng.random() < 0.25 else rng.randrange(3), 1))
+    for p in range(3):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4,
+                       rng.randrange(8) if rng.random() < 0.1 else rng.randrange(4), 4))
+    return fields
+
+
+def init_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_WORLD, WORLD_BASE, 4),
+            (0x007312ac, rng.choice((0, 1, 1, 2)), 4)]
+
+
+def construct_world(rng, pool, args):
+    fields = init_world(rng, pool, args)
+    args[2] = next(v for o, v, s in fields if o == 0x76C)
+    return [f for f in fields if f[0] != 0x76C]
+
+
+SPECS += [
+    # EAX: left over (the constructor doesn't use it).
+    Spec("CComputerPlayer_Init", 0x00550a30, "thiscall", [], eax_mask=0, presets=init_world,
+         globals=init_globals, callees={**FORCE_CALLEES, **INIT_PROBES}, max_cases=1500),
+    Spec("CComputerPlayer_Construct", 0x00550900, "thiscall",
+         [one_of(WORLD_BASE), anything, anything, lambda rng, pool: rng.choice((0, 0, 1, rng.getrandbits(32)))],
+         presets=construct_world,
+         globals=lambda rng, pool, args: init_globals(rng, pool, args) + [(0x007e3410, rng.choice((0, 0, 5)), 1)],
+         callees={0x00550a30: (0, "thiscall", "probe"), 0x00551b80: (0, "thiscall", "probe")}, max_cases=300),
+]
