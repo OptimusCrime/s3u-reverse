@@ -290,12 +290,9 @@ def string_value(rng, pool):
     return WORLD_BASE + STRING_VALUE
 
 
-def null_string_count(rng, pool, args):
-    # The static empty string's count byte: frozen or full makes a source
-    # without buffer take the copy path (its text read from 0x6553a0).
-    return [(NULL_STRING_COUNT, rng.choice([0, 0, 1, 0xfe, 0xff]), 1)]
-
-
+# globals: null_string_count (ui.py's, which is in effect for all parts:
+# the static empty string's count byte 0, 1, 0xfe or 0xff, so a source
+# without buffer sometimes takes the copy path).
 # Dead, in the inlined operator= (assign(x, 0, npos)): the count clamp to
 # npos (lengths are at most npos) and the self-assignment path (insertAt:
 # its _Xran, as the count is the string's own length; removeAt: never an

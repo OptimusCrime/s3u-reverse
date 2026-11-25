@@ -1,32 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1258" fill="#ffffff"/>
-<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">29.2%</text>
+<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">29.3%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="328.6" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 23.4%</title></rect>
 <text x="334.3" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">23.4%</text>
-<rect x="498.6" y="100" width="82.5" height="40" fill="#4f8fc0"><title>Verified by tests only: 5.9%</title></rect>
-<text x="539.8" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">5.9%</text>
-<rect x="581" y="100" width="292.2" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.8%</title></rect>
-<text x="727.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.8%</text>
-<rect x="873.2" y="100" width="702.8" height="40" fill="#e8a39b"><title>Not understood yet: 50.0%</title></rect>
-<text x="1224.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">50.0%</text>
+<rect x="498.6" y="100" width="82.8" height="40" fill="#4f8fc0"><title>Verified by tests only: 5.9%</title></rect>
+<text x="540" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">5.9%</text>
+<rect x="581.4" y="100" width="292.1" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.8%</title></rect>
+<text x="727.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.8%</text>
+<rect x="873.4" y="100" width="702.6" height="40" fill="#e8a39b"><title>Not understood yet: 50.0%</title></rect>
+<text x="1224.7" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">50.0%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="232.4" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 16.5%</title></rect>
 <text x="286.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">16.5%</text>
-<rect x="402.4" y="154" width="64.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 4.6%</title></rect>
-<text x="434.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">4.6%</text>
-<rect x="466.7" y="154" width="513.7" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.5%</title></rect>
-<text x="723.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.5%</text>
-<rect x="980.4" y="154" width="595.6" height="40" fill="#e8a39b"><title>Not understood yet: 42.4%</title></rect>
-<text x="1278.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.4%</text>
+<rect x="402.4" y="154" width="64.5" height="40" fill="#4f8fc0"><title>Verified by tests only: 4.6%</title></rect>
+<text x="434.7" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">4.6%</text>
+<rect x="466.9" y="154" width="513.7" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.5%</title></rect>
+<text x="723.7" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.5%</text>
+<rect x="980.6" y="154" width="595.4" height="40" fill="#e8a39b"><title>Not understood yet: 42.4%</title></rect>
+<text x="1278.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.4%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
 <rect x="869.6" y="216" width="16" height="16" fill="#f2c86b"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
 <rect x="1233.2" y="216" width="16" height="16" fill="#e8a39b"/><text x="1257.2" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1109.1" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 29.2% verified (23.4% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 29.3% verified (23.4% in a whole game)</text>
 <g><title>(free functions): 1002 functions</title><rect x="2" y="19" width="520.9" height="671.6" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="259.6" height="185.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -4102,8 +4102,8 @@
 400 bytes — Identified (purpose known)</title></rect>
 <rect x="978.1" y="555.9" width="12.5" height="20.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::CStaticText @ 0x0041c3e0
 384 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="990.6" y="555.9" width="13" height="13.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::~CStaticText @ 0x0041c580
-256 bytes — Classified (class/role known)</title></rect>
+<rect x="990.6" y="555.9" width="13" height="13.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::~CStaticText @ 0x0041c580
+256 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="990.6" y="569" width="4.3" height="7.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::SetTextId @ 0x0041c9f0
 48 bytes — Identified (purpose known)</title></rect>
 <rect x="994.9" y="569" width="5.8" height="3.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::scalar_deleting_destructor @ 0x0041c560
@@ -5348,8 +5348,8 @@
 256 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="822.9" y="888.9" width="10.7" height="15.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GamePlayerSetup::GamePlayerSetup_id @ 0x0049e9f0
 256 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="833.6" y="888.9" width="10" height="7.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>GamePlayerSetup::Set @ 0x0049f120
-112 bytes — Identified (purpose known)</title></rect>
+<rect x="833.6" y="888.9" width="10" height="7.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GamePlayerSetup::Set @ 0x0049f120
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="833.6" y="896.1" width="6.2" height="5" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>GamePlayerSetup::SavedValues @ 0x0049fed0
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="833.6" y="901.1" width="6.2" height="3.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GamePlayerSetup::operator_eq @ 0x0049f100

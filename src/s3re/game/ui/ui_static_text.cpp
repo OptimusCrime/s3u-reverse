@@ -13,12 +13,16 @@
 //   slot); the fields above. EAX = this.
 // CStaticText_SetStyle (0x0041ca60, our name): (style) ret 4: +0x40 = style;
 //   EAX = style.
+// CStaticText::~CStaticText (0x0041c580): the text's ~string inlined (as
+//   0x401b60: split a shared buffer, erase, release), then
+//   CScreenElement::~CScreenElement 0x4156b0. EAX = the latter's.
 
 #include "game/ui/screen_element_layout.h"
 #include "game/vtables.h"
 #include "hooks.h"
 #include "msvc6/game_heap.h"
 #include "msvc6/string.h"
+#include "test/callee_stub.h"
 #include "test/difftest.h"
 
 #include <windows.h>
@@ -54,6 +58,19 @@ using SetStyleFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32
 void* __fastcall CStaticText_Construct(void* self, void* edx, const RECT* rect, const String* text,
                                        std::uint32_t font);
 std::uint32_t __fastcall CStaticText_SetStyle(void* self, void* edx, std::uint32_t style);
+
+using StaticTextDestroyFn = std::uint32_t(__fastcall*)(void* self, void* edx);
+std::uint32_t __fastcall CStaticText_Destroy(void* self, void* edx);
+S3RE_HOOK(0x0041c580, CStaticText_Destroy, StaticTextDestroyFn, Original_CStaticText_Destroy, CStaticText_Destroy);
+
+constexpr std::uintptr_t kScreenElementDestroy = 0x004156b0;  // CScreenElement::~CScreenElement (ours)
+
+// Purpose: Destructor of a text label: releases its text, then destroys
+// the element part.
+std::uint32_t __fastcall CStaticText_Destroy(void* self, void* /*edx*/) {
+    msvc6::String_Destroy(&TextOf(self)->text, nullptr);
+    return reinterpret_cast<StaticTextDestroyFn>(kScreenElementDestroy)(self, nullptr);
+}
 
 S3RE_HOOK(0x0041c3e0, CStaticText_Construct, StaticTextCtorFn, Original_CStaticText_Construct,
           CStaticText_Construct);
@@ -167,6 +184,81 @@ void* __fastcall WrongStaticText(void* self, void* edx, const RECT* rect, const 
 }
 
 }  // namespace
+
+namespace {
+
+// The destructor on labels with a random text (sometimes shared with a
+// string outside, sometimes none, sometimes frozen), ~CScreenElement
+// stubbed (returns a value fixed by the call): EAX, the stub calls, the
+// label's bytes and the outside string's count byte and text.
+void CompareDestroy(test::Context& ctx, StaticTextDestroyFn candidate, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        alignas(4) std::uint8_t initial[sizeof(CStaticText)];
+        ctx.rng().Fill(initial, sizeof(initial));
+        char text[40];
+        const std::uint32_t length = ctx.rng().Below(sizeof(text));
+        for (std::uint32_t k = 0; k < length; ++k) {
+            text[k] = static_cast<char>(1 + ctx.rng().Below(255));
+        }
+        const int kind = static_cast<int>(ctx.rng().Below(4));  // 0 none, 1 own, 2 shared, 3 frozen
+        auto run = [&](StaticTextDestroyFn fn, std::uint8_t* label, String& outside, std::uint32_t& eax) {
+            std::memcpy(label, initial, sizeof(initial));
+            String& member = TextOf(label)->text;
+            msvc6::detail::Clear(&member);
+            outside = String{};
+            if (kind != 0) {
+                msvc6::String_AssignChars(&member, nullptr, text, length);
+            }
+            if (kind == 2 && member.ptr != nullptr) {
+                msvc6::String_AssignSubstr(&outside, nullptr, &member, 0, 0xFFFFFFFFu);
+            }
+            if (kind == 3) {
+                msvc6::String_Freeze(&member, nullptr);
+            }
+            test::CalleeStubs stubs;
+            stubs.Install<0, kScreenElementDestroy>([](CGameData*, std::uint32_t, const std::uint32_t*) {
+                return 0x5eedu;
+            });
+            stubs.SetWorld(reinterpret_cast<CGameData*>(label));
+            eax = fn(label, nullptr);
+            return stubs.Take();
+        };
+        alignas(4) std::uint8_t a[sizeof(CStaticText)], b[sizeof(CStaticText)];
+        String outA{}, outB{};
+        std::uint32_t ra = 0, rb = 0;
+        const auto callsA = run(Original_CStaticText_Destroy, a, outA, ra);
+        const auto callsB = run(candidate, b, outB, rb);
+        bool same = S3RE_EXPECT_EQ(ra, rb) && S3RE_EXPECT(callsA == callsB) && S3RE_EXPECT_MEM_EQ(a, b, sizeof(a));
+        same = same && S3RE_EXPECT_EQ(outA.ptr == nullptr, outB.ptr == nullptr);
+        if (same && outA.ptr != nullptr) {
+            same = S3RE_EXPECT_EQ(static_cast<std::uint8_t>(outA.ptr[-1]), static_cast<std::uint8_t>(outB.ptr[-1])) &&
+                   S3RE_EXPECT_MEM_EQ(outA.ptr, outB.ptr, outA.len + 1);
+            msvc6::String_Destroy(&outA, nullptr);
+            msvc6::String_Destroy(&outB, nullptr);
+        }
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: kind %d, length %u", i, kind, length);
+            return;
+        }
+    }
+}
+
+// Wrong: the text released without erasing it first (a shared buffer keeps
+// its text, but the label's string fields aren't cleared).
+std::uint32_t __fastcall WrongDestroy(void* self, void* /*edx*/) {
+    return reinterpret_cast<StaticTextDestroyFn>(kScreenElementDestroy)(self, nullptr);
+}
+
+}  // namespace
+
+S3RE_TEST(CStaticText_Destroy_MatchesOriginal) {
+    CompareDestroy(ctx, &CStaticText_Destroy, 2000);
+}
+S3RE_TEST(CStaticText_Destroy_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareDestroy(probe, &WrongDestroy, 100);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(CStaticText_MatchOriginal) {
     CompareStaticText(ctx, &CStaticText_Construct, &CStaticText_SetStyle, 20000);

@@ -54,6 +54,14 @@ GamePlayerSetup* __fastcall GamePlayerSetup_Construct(GamePlayerSetup* self, voi
 using SetupConstructHookFn = GamePlayerSetup*(__fastcall*)(GamePlayerSetup* self, void* edx);
 extern SetupConstructHookFn Original_GamePlayerSetup_Construct;
 GamePlayerSetup* __fastcall WrongGamePlayerSetupConstruct(GamePlayerSetup* self, void* edx);
+using SetupSetFn = std::uint32_t(__fastcall*)(GamePlayerSetup* self, void* edx, std::uint32_t type,
+                                             std::uint32_t byte60, std::uint32_t party, std::uint32_t race,
+                                             std::uint32_t raceByte, std::uint32_t a, std::uint32_t b, std::uint32_t c,
+                                             std::uint32_t colour);
+std::uint32_t __fastcall GamePlayerSetup_Set(GamePlayerSetup* self, void* edx, std::uint32_t type, std::uint32_t byte60,
+                                             std::uint32_t party, std::uint32_t race, std::uint32_t raceByte,
+                                             std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t colour);
+extern SetupSetFn Original_GamePlayerSetup_Set;
 GamePlayerSetup* __fastcall GamePlayerSetup_ConstructId(GamePlayerSetup* self, void* edx, std::uint32_t id);
 using SetupConstructIdFn = GamePlayerSetup*(__fastcall*)(GamePlayerSetup* self, void* edx, std::uint32_t id);
 extern SetupConstructIdFn Original_GamePlayerSetup_ConstructId;
@@ -478,6 +486,41 @@ void CompareSetupConstructId(test::Context& ctx, SetupConstructIdFn candidate, i
     }
 }
 
+// Set on random records (+0x6c / +0x70 often -1) with random arguments:
+// every byte and EAX.
+void CompareSetupSet(test::Context& ctx, SetupSetFn candidate, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        alignas(4) std::uint8_t a[sizeof(GamePlayerSetup)], b[sizeof(GamePlayerSetup)];
+        ctx.rng().Fill(a, sizeof(a));
+        for (const std::size_t at : {std::size_t{0x6c}, std::size_t{0x70}}) {
+            if (ctx.rng().Chance(1, 2)) {
+                std::memset(a + at, 0xff, 4);
+            }
+        }
+        std::memcpy(b, a, sizeof(a));
+        std::uint32_t args[9];
+        ctx.rng().Fill(args, sizeof(args));
+        const std::uint32_t ra = Original_GamePlayerSetup_Set(reinterpret_cast<GamePlayerSetup*>(a), nullptr, args[0],
+                                                              args[1], args[2], args[3], args[4], args[5], args[6],
+                                                              args[7], args[8]);
+        const std::uint32_t rb = candidate(reinterpret_cast<GamePlayerSetup*>(b), nullptr, args[0], args[1], args[2],
+                                           args[3], args[4], args[5], args[6], args[7], args[8]);
+        if (!S3RE_EXPECT_EQ(ra, rb) || !S3RE_EXPECT_MEM_EQ(a, b, sizeof(a))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return;
+        }
+    }
+}
+
+// Wrong: the initial party always set.
+std::uint32_t __fastcall WrongSet(GamePlayerSetup* self, void* edx, std::uint32_t type, std::uint32_t byte60,
+                                  std::uint32_t party, std::uint32_t race, std::uint32_t raceByte, std::uint32_t a,
+                                  std::uint32_t b, std::uint32_t c, std::uint32_t colour) {
+    const std::uint32_t result = GamePlayerSetup_Set(self, edx, type, byte60, party, race, raceByte, a, b, c, colour);
+    std::memcpy(reinterpret_cast<std::uint8_t*>(self) + 0x70, &party, 4);
+    return result;
+}
+
 // Wrong: the allocator bytes 0, as in the default constructor.
 GamePlayerSetup* __fastcall WrongConstructId(GamePlayerSetup* self, void* edx, std::uint32_t id) {
     GamePlayerSetup_ConstructId(self, edx, id);
@@ -486,6 +529,15 @@ GamePlayerSetup* __fastcall WrongConstructId(GamePlayerSetup* self, void* edx, s
 }
 
 }  // namespace
+
+S3RE_TEST(GamePlayerSetup_Set_MatchesOriginal) {
+    CompareSetupSet(ctx, &GamePlayerSetup_Set, 3000);
+}
+S3RE_TEST(GamePlayerSetup_Set_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSetupSet(probe, &WrongSet, 100);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(GamePlayerSetup_ConstructId_MatchesOriginal) {
     CompareSetupConstructId(ctx, &GamePlayerSetup_ConstructId, 2000);
