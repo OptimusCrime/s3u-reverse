@@ -128,6 +128,11 @@ bool IsInstalled(HookKind kind);
 
 void UninstallAll();
 
+// The hook registered as `name`: its address and its original pointer (the
+// trampoline once installed), for tests that run a chain of hooked
+// functions as original code. False if there is none.
+bool FindHook(const char* name, std::uintptr_t* address, const void** original);
+
 }  // namespace s3re::hooks
 
 // Registers `installed` (the function Detours redirects to) for the hook;

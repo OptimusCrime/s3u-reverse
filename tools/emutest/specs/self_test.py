@@ -119,3 +119,14 @@ SELF_TEST += [
          callees={**FORCE_CALLEES, **LOCKIT_PROBES, 0x00556630: (2, "thiscall", "probe", None, add_area_record_fill)},
          ignore_bytes=ADD_AREA_IGNORED, max_cases=100),
 ]
+
+SELF_TEST += [
+    # ignore_bytes on CMemorySoundFile's name allocator byte (+4) and on the
+    # DirectSound error text's result allocator byte: the wrong versions flip
+    # the padding byte right after it (session 57).
+    Spec("WrongMemorySoundFileName", 0x005c24e0, "thiscall",
+         [one_of(WORLD_BASE + SFX_FORMAT), anything, anything, sfx_mode], presets=sfx_format,
+         ignore_bytes=(0x04,)),
+    Spec("WrongDSExceptionDescribe", 0x005c1930, "thiscall", [one_of(STRING_RESULT_PTR)],
+         presets=sfx_exception, ignore_bytes=(STRING_RESULT,)),
+]
