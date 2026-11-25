@@ -468,24 +468,29 @@ static_assert(sizeof(AiGroupOrders) == 0x20f8);
 // 0x17). The per-group target building and defending flag once placed
 // behind it (+0x634, +0x7c4) belong to the census g_aiCensus (AiAgentData).
 struct AiArmyState {
-    std::uint32_t per_player000[layout::kPlayers];               // 0x000 25 * player after the reset
-    std::uint32_t per_player050[layout::kPlayers];               // 0x050
+    // The step counters of AI::RunMilitary 0x58f990 (per player unless
+    // noted); each runs its task when it passes its limit and restarts.
+    std::uint32_t military_steps[layout::kPlayers];              // 0x000 above 150: the attack part, else upkeep (25 * player after the reset; was per_player000)
+    std::uint32_t spell_steps[layout::kPlayers];                 // 0x050 above 75: CastBattleSpells 0x5953b0 (was per_player050)
     std::uint32_t gather_countdowns[layout::kPlayers];           // 0x0a0 15 when StartAttack 0x594080 sets a gather building; RunMilitary counts it down and clears the gather building at 0 (was per_player0a0)
-    std::uint32_t per_player0f0[layout::kPlayers];               // 0x0f0
-    std::uint32_t per_player140[layout::kPlayers];               // 0x140
+    std::uint32_t thief_hunt_steps[layout::kPlayers];            // 0x0f0 above 420: HuntEnemyThieves 0x593ad0 (was per_player0f0)
+    std::uint32_t mage_hunt_steps[layout::kPlayers];             // 0x140 above 550: HuntEnemyMages 0x593bd0 (was per_player140)
     std::uint32_t start_attack_calls;                    // 0x190 StartAttack 0x594080 does nothing in its first 31 calls (was unk190)
     std::uint32_t attack_delays[layout::kPlayers][kUnitGroups];  // 0x194 countdowns; 0x594000 resets the group when one runs out (groups 1..9: 10 + 2 * group after the reset)
     std::uint32_t geologist_timers[layout::kPlayers];            // 0x4b4 per player: calls of SendGeologists 0x595050 since it last worked (works above 6); 2000000 after the reset
-    std::uint32_t unk504;                                // 0x504 300 after the reset
-    std::uint32_t unk508;                                // 0x508 0
-    std::uint32_t unk50c;                                // 0x50c 500
-    std::uint32_t unk510[3];                             // 0x510 2000000
+    std::uint32_t disband_steps;                         // 0x504 shared: above 1100 DisbandWeakGroups 0x592bf0 (300 after the reset; was unk504)
+    std::uint32_t rebuild_steps;                         // 0x508 shared: above 2000 RebuildAssignedSettlers 0x591c40 (was unk508)
+    std::uint32_t recruit_steps;                         // 0x50c shared: above 2800 RecruitGeologistsAndThieves 0x592e60 (500 after the reset; was unk50c)
+    std::uint32_t settler_census_steps;                  // 0x510 shared: above 1900 AI::Census::CountSettlers 0x55b880 (was unk510[0])
+    std::uint32_t building_census_steps;                 // 0x514 shared: above 700 AI::Census::CountBuildings 0x55be00 (was unk510[1])
+    std::uint32_t unk518;                                // 0x518 2000000 after the reset (was unk510[2]; no other access found)
 };
 static_assert(offsetof(AiArmyState, start_attack_calls) == 0x190);
 static_assert(offsetof(AiArmyState, attack_delays) == 0x194);
 static_assert(offsetof(AiArmyState, geologist_timers) == 0x4b4);
-static_assert(offsetof(AiArmyState, unk504) == 0x504);
-static_assert(offsetof(AiArmyState, unk510) == 0x510);
+static_assert(offsetof(AiArmyState, disband_steps) == 0x504);
+static_assert(offsetof(AiArmyState, settler_census_steps) == 0x510);
+static_assert(offsetof(AiArmyState, unk518) == 0x518);
 static_assert(sizeof(AiArmyState) == 0x51c);
 
 // ---------------------------------------------------------------- agent data

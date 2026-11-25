@@ -3749,3 +3749,203 @@ SPECS += [
     Spec("AI_MilitaryBuildingNearestStart", 0x0058b1a0, "thiscall", [below(3)], presets=nearest_start_world,
          globals=order_globals, max_cases=1500),
 ]
+
+
+# AI::RunMilitary and T_ATTACK_AGENT::Run (ai_military.cpp). The world
+# (ECX = the world base) holds players 0..3, buildings 1..12, a settler
+# pool 3800..3899 (soldiers, thieves, mages, geologists, catapults) in
+# chains and groups, a few events; the globals the army, census and army
+# state with every counter near its limit. The command senders and the
+# enemy counts are probed; everything else runs as original code.
+MILITARY_POOL = range(3800, 3900)
+ARMY_POOL_TYPES = (5, 32, 35, 8, 30, 33, 15, 31, 34, 36, 23, 22, 41, 0, 1)
+MILITARY_CALLEES = {**ORDER_CALLEES, 0x0058A610: (4, "thiscall", enemy_count),
+                    0x00590BB0: (3, "thiscall", "probe"), 0x00590C10: (5, "thiscall", "probe"),
+                    0x00590990: (5, "thiscall", "probe"), **XRAN_PROBE, **GARRISON_XRAN_PROBE}
+AI_RESET_REQUEST = 0x007E3410
+AI_REBUILD_PENDING = 0x007E7CC8
+AI_SKIP_RESET = 0x007E7CC9
+AI_CATAPULT_HUNT_STEPS = 0x007E79D0
+AI_STEP_FLAGS = AI_GROUP_ORDERS + 0x1C48
+MILITARY_HUNTERS = SCRATCH + 4 * SCRATCH_SLOT_BYTES     # 20 x 32 {hunter, target}, room for 32
+MILITARY_CATAPULTS = SCRATCH + 9 * SCRATCH_SLOT_BYTES   # 20 x 32 ids
+
+
+def near_limit(rng, limit):
+    return rng.randrange(limit + 3) if rng.random() < 0.3 else limit - 1 + rng.randrange(4)
+
+
+def military_world(rng, pool, args):
+    player = args[1] & 3
+    fields = military_buildings(rng, pool, args, owner_choices=(0, 1, 2, 3))
+    fields += [(MAP_SIZE, 120, 4), (SETTLER_HIGH_WATER, rng.randrange(49) if rng.random() < 0.8 else 3899, 4),
+               (AREA_HIGH_WATER, rng.randrange(6), 4)]
+    for b in range(1, 13):
+        record = BUILDINGS + b * BUILDING_BYTES
+        for k in (0x19, 0x1B, 0x1F):
+            fields.append((record + k, 0 if rng.random() < 0.85 else 1, 1))
+    for area in range(6):
+        fields += [(AI_AREAS + area * 0x2E0, rng.randrange(4), 1),
+                   (AI_AREAS + area * 0x2E0 + 0x12A, rng.choice((0, rng.choice(MILITARY_POOL))), 2)]
+    if rng.random() < 0.2:  # a tower of the player at id 4000 (the garrison bitset's _Xran), often far away
+        fields.append((BUILDING_COUNT, 4000 + rng.randrange(2), 4))
+        fields += [(BUILDINGS + b * BUILDING_BYTES, 0xFF, 1) for b in range(13, 4000)]
+        record = BUILDINGS + 4000 * BUILDING_BYTES
+        x, y = rng.choice(((118, 118), (2, 2), (60, 60)))
+        fields += [(record, player, 1), (record + 6, 15, 1), (record + 0x21, 0, 1), (record + 2, x, 2),
+                   (record + 4, y, 2), (record + 8, 0 if rng.random() < 0.7 else rng.choice(MILITARY_POOL), 2),
+                   (record + 0x19, 0 if rng.random() < 0.8 else 1, 1), (record + 0x1B, 0, 1), (record + 0x1F, 0, 1)]
+    for settler in MILITARY_POOL:
+        record = SETTLERS + settler * SETTLER_BYTES
+        x, y = rng.randrange(20, 100), rng.randrange(20, 100)
+        nxt = 0 if rng.random() < 0.4 or settler + 4 >= MILITARY_POOL.stop else settler + rng.randrange(1, 4)
+        # (race +2 within 0..3: CastBattleSpells reads past its four race flags for others)
+        fields += [(record, rng.randrange(4), 1), (record + 1, rng.choice(ARMY_POOL_TYPES), 1),
+                   (record + 2, rng.randrange(4), 1), (record + 4, x, 2),
+                   (record + 6, y, 2), (record + 0x10, nxt, 2), area_tile(x, y, rng.choice((0, 1, 1, 2, 3))),
+                   (TILES + (x * 0x300 + y) * 24 + 0x10, rng.choice((1, 1, 2)), 1)]
+    for p in range(20):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        fields += [(record, rng.choice((2, 2, 1)) if p < 4 else 0, 4), (record + 4, rng.randrange(4), 4),
+                   (record + 0xC, rng.randrange(3), 4), (record + 0x10, rng.randrange(20, 100), 4),
+                   (record + 0x14, rng.randrange(20, 100), 4),
+                   (record + 0x80, rng.randrange(1000) if rng.random() < 0.9 else rng.getrandbits(32), 4)]
+        if p < 4:
+            for art in (5, 8, 15, 30, 31, 32, 33, 34, 35, 36, 22, 23):
+                fields.append((record + 0x20 + 2 * art, 0 if rng.random() < 0.5 else rng.choice(MILITARY_POOL), 2))
+            for g in range(10):
+                index = p * 10 + g
+                length = rng.choice((0, 0, 1, 2, 3, 6, 12))
+                fields.append((PLAYER_LIST_LENGTHS + 4 * index, length, 4))
+                for k in range(max(1, length)):
+                    fields.append((PLAYER_LISTS + index * 200 + 2 * k, rng.choice(MILITARY_POOL), 2))
+    if args[2] % 3 == 0:
+        # every settler at (50, 50) in area 1, and the interior-building
+        # searches' probes around buildings 1..12 inside (area 1 or 0, not
+        # blocked: FreeTileArea 0x58b480 walks on along x over blocked tiles)
+        for settler in MILITARY_POOL:
+            record = SETTLERS + settler * SETTLER_BYTES
+            fields += [(record + 4, 50, 2), (record + 6, 50, 2)]
+        fields += [area_tile(50, 50, 1), (TILES + (50 * 0x300 + 50) * 24 + 0xA, 0, 1)]
+        # building 1 (every other time): the player's unmanned tower far from the groups
+        record = BUILDINGS + BUILDING_BYTES if args[2] % 6 == 0 else SCRATCH + 12 * SCRATCH_SLOT_BYTES
+        fields += [(record, player, 1), (record + 6, 15, 1), (record + 0x21, 0, 1), (record + 2, 110, 2),  # (x + 9 on the map)
+                   (record + 4, 118, 2), (record + 0xA, 111, 2), (record + 0xC, 119, 2), (record + 8, 0, 2),
+                   (record + 0x19, 0, 1), (record + 0x1B, 0, 1), (record + 0x1F, 0, 1)]
+        places = {}
+        for offset, value, size in fields:
+            for b in list(range(1, 13)) + [4000]:
+                record = BUILDINGS + b * BUILDING_BYTES
+                if offset in (record + 2, record + 4) and size == 2:
+                    places.setdefault(b, {})[offset - record] = value
+        xs = [50] + [place.get(2, 0) for place in places.values()]  # the searched points' x
+        for b, place in places.items():
+            bx, by = place.get(2, 0), place.get(4, 0)
+            fields += [area_tile(bx + 1, by + 1, 1), area_tile(bx, by, 1)]
+            probes = [(bx - 18, by, 1), (bx + 18, by, 1)]
+            probes += [(x - 9, by - 18, 0) for x in xs] + [(x + 9, by + 18, 0) for x in xs]
+            for x, y, area in probes:
+                fields += [area_tile(x, y, area), (TILES + ((x & 0xFFFF) * 0x300 + (y & 0xFFFF)) * 24 + 0xA, 0, 1)]
+    count = rng.randrange(4)
+    read = rng.randrange(1000)
+    fields += [(EVENT_INDEX, read, 4), (EVENT_INDEX + 4, (read + count) % 1000, 4)]
+    for k in range(count):
+        event = EVENTS + ((read + k) % 1000) * 16
+        kind = rng.randrange(1, 7)
+        a = rng.choice(MILITARY_POOL) if kind in (1, 5) else rng.randrange(13)
+        b = rng.choice((41, 5, 8)) if kind in (1, 5) else rng.randrange(4)
+        fields += [(event, kind, 4), (event + 4, a, 4), (event + 8, b, 4), (event + 12, rng.randrange(4), 4)]
+    for p in range(20):
+        for k in range(8):
+            fields += [(MILITARY_HUNTERS + (p * 32 + k) * 8, rng.choice(MILITARY_POOL), 4),
+                       (MILITARY_HUNTERS + (p * 32 + k) * 8 + 4, 0 if rng.random() < 0.5 else rng.choice(MILITARY_POOL), 4),
+                       (MILITARY_CATAPULTS + (p * 32 + k) * 4, rng.choice(MILITARY_POOL), 4)]
+    return fields
+
+
+def military_globals(rng, pool, args):
+    player = args[1] & 3
+    fields = order_globals(rng, pool, args)
+    fields += [(AI_CENSUS, rng.randrange(2), 1), (AI_CENSUS + 1, rng.randrange(2), 1), (AI_CENSUS + 2, rng.randrange(2), 1),
+               (AI_CENSUS + 0x2AC, 0 if rng.random() < 0.2 else 1, 1),
+               (AI_START_ATTACK_CALLS, rng.choice((40, 40, 10)), 4),
+               (AI_ARMY_STATE + 0x504, near_limit(rng, 1100), 4), (AI_ARMY_STATE + 0x508, near_limit(rng, 2000), 4),
+               (AI_ARMY_STATE + 0x50C, near_limit(rng, 2800), 4), (AI_ARMY_STATE + 0x510, near_limit(rng, 1900), 4),
+               (AI_ARMY_STATE + 0x514, near_limit(rng, 700), 4),
+               (AI_REBUILD_PENDING, 1 if rng.random() < 0.1 else 0, 1), (AI_SKIP_RESET, rng.randrange(2), 1),
+               (AI_CENSUS_STEP, rng.randrange(9), 4), (AI_CENSUS_CURSOR, rng.randrange(60), 4),
+               (CAMPAIGN_MISSION, 0, 4), (AI_ENEMY_SEARCH, rng.choice((500, 5000)), 4)]
+    for p in range(4):
+        fields += [(AI_CATAPULT_HUNT_STEPS + 4 * p, near_limit(rng, 50), 4),
+                   (AI_ARMY_STATE + 0xF0 + 4 * p, near_limit(rng, 420), 4),
+                   (AI_ARMY_STATE + 0x140 + 4 * p, near_limit(rng, 550), 4),
+                   (AI_ARMY_STATE + 4 * p, near_limit(rng, 150), 4),
+                   (AI_ARMY_STATE + 0x50 + 4 * p, near_limit(rng, 75), 4),
+                   (AI_ARMY_STATE + 0xA0 + 4 * p, rng.randrange(4), 4),
+                   (AI_GATHER_BUILDINGS + 4 * p, 0 if rng.random() < 0.6 else rng.randrange(13), 4),
+                   (AI_GROUP_ORDERS + ARMY_HIGHEST_GROUP + 4 * p, rng.randrange(10), 4),
+                   (AI_GROUP_ORDERS + ARMY_GROUP_SIZE + 4 * p, rng.randrange(12), 4),
+                   (AI_GROUP_ORDERS + 0x8E8 + 4 * p, 0, 4),
+                   (AI_CENSUS + 0x25C + 4 * p, rng.randrange(60), 4)]
+        for k in range(9):
+            fields.append((AI_CENSUS + 0x444 + (p * 9 + k) * 4, 0 if rng.random() < 0.3 else rng.randrange(8), 4))
+        for art in (15, 16, 18, 19, 26, 27, 28):
+            fields.append((AI_CENSUS_BUILDINGS + (p * 57 + art) * 4, rng.randrange(3), 4))
+        for g in range(10):
+            index = p * 10 + g
+            fields += [(AI_GROUP_ORDERS + ARMY_HOME_AREAS + 2 * index, rng.randrange(3), 2),
+                       (AI_HOME_BUILDINGS + 2 * index, 0 if rng.random() < 0.5 else rng.randrange(13), 2),
+                       (AI_GROUP_TARGETS + 6 * index + 4, 0 if rng.random() < 0.6 else rng.choice(MILITARY_POOL), 2),
+                       (AI_STEP_FLAGS + index, 0 if rng.random() < 0.5 else rng.choice((1, 2, 3, 5, 8, 0x80, 0xFF)), 1),
+                       (AI_ATTACK_DELAYS + 4 * index, 0 if rng.random() < 0.7 else rng.randrange(1, 5), 4),
+                       (AI_GROUP_ORDERS + ARMY_MAGES + 4 * index, rng.randrange(3), 4)]
+    for p in range(20):
+        hunters = WORLD_BASE + MILITARY_HUNTERS + p * 256
+        catapults = WORLD_BASE + MILITARY_CATAPULTS + p * 128
+        fields += [(AI_HUNTER_VECTORS + 16 * p, hunters, 4), (AI_HUNTER_VECTORS + 16 * p + 4, hunters + 8 * rng.randrange(5), 4),
+                   (AI_HUNTER_VECTORS + 16 * p + 8, hunters + 256, 4),
+                   (AI_CATAPULT_VECTORS + 16 * p, catapults, 4),
+                   (AI_CATAPULT_VECTORS + 16 * p + 4, catapults + 4 * rng.randrange(5), 4),
+                   (AI_CATAPULT_VECTORS + 16 * p + 8, catapults + 128, 4)]
+    for word in range(8):
+        fields.append((AI_GARRISONED_BUILDINGS + 4 * word, 0 if rng.random() < 0.6 else rng.getrandbits(32), 4))
+    if args[2] % 3 == 0:  # (military_world's patrol scenario: building 1 unmanned, no group patrols it)
+        fields.append((AI_GARRISONED_BUILDINGS, 0, 4))
+        for g in range(10):
+            index = player * 10 + g
+            fields += [(AI_GROUP_TARGETS + 6 * index, 0, 2), (AI_GROUP_TARGETS + 6 * index + 2, 0, 2)]
+    return fields
+
+
+def reset_byte(rng, pool):
+    return rng.choice((0, 0, 0, 0, 0, 0, 0, 0, 1, 0x100, 0xFFFFFF00, 0x80))
+
+
+def attack_agent_globals(rng, pool, args):
+    """g_aiWorld, the player number, g_aiPlayer (scratch slot 3, queue at
+    +0x760) and the reset request."""
+    player_object = SCRATCH + 3 * SCRATCH_SLOT_BYTES
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_PLAYER_NUMBER, rng.randrange(20), 1),
+            (AI_PLAYER, WORLD_BASE + player_object, 4), (AI_RESET_REQUEST, rng.choice((0, 0, 1, 0x80)), 1)]
+
+
+def attack_agent_world(rng, pool, args):
+    return [(SCRATCH + 3 * SCRATCH_SLOT_BYTES + 0x760, rng.getrandbits(32), 4)]
+
+
+def record_run_military(machine, ecx, args):
+    from unicorn.x86_const import UC_X86_REG_EDX
+    return (machine.uc.reg_read(UC_X86_REG_EDX), *args[:1], args[1] & 0xFF)
+
+
+SPECS += [
+    # EAX is not used: T_ATTACK_AGENT::Run returns it and CComputerPlayer
+    # ignores slot 8's result. Dead: the reset's erase loops 0x58fa03 /
+    # 0x58fa39 (they move [end, end)) and the fix-ups 0x590361 / 0x5905af of
+    # a signed remainder of a value masked to 16 bits (never negative).
+    Spec("AI_RunMilitary", 0x0058f990, "fastcall", [one_of(WORLD_BASE), below(4), anything, reset_byte], eax_mask=0,
+         presets=military_world, globals=military_globals, callees=MILITARY_CALLEES,
+         exempt_blocks=(0x58fa03, 0x58fa39, 0x590361, 0x5905af), max_cases=3000),
+    Spec("T_ATTACK_AGENT_Run", 0x0055ec10, "thiscall", [], presets=attack_agent_world, globals=attack_agent_globals,
+         callees={0x0058F990: (2, "thiscall", "probe", None, record_run_military)}, max_cases=300),
+]

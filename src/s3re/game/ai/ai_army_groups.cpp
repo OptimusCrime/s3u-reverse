@@ -1126,7 +1126,7 @@ S3RE_TEST(AiArmyGroups_ComparisonDetectsWrongImplementation) {
 S3RE_TEST(AiArmyConstructors_MatchOriginal) {
     std::vector<std::uint8_t> vectorsStart(sizeof(AiVector) * kPlayers);
     const std::vector<std::uint8_t> savedVectors = Bytes(&g_aiHunterVectors.get(), vectorsStart.size());
-    const std::vector<std::uint8_t> savedMarker = Bytes(&g_aiPerPlayer7e79d0.get(), sizeof(std::uint32_t[20]));
+    const std::vector<std::uint8_t> savedMarker = Bytes(&g_aiCatapultHuntSteps.get(), sizeof(std::uint32_t[20]));
     for (int i = 0; i < 40 && ctx.failures() == 0; ++i) {
         std::vector<std::uint8_t> a(sizeof(AiGroupOrders) + 32), b;
         ctx.rng().Fill(a.data(), a.size());
@@ -1155,7 +1155,7 @@ S3RE_TEST(AiArmyConstructors_MatchOriginal) {
         }
     }
     std::memcpy(&g_aiHunterVectors.get(), savedVectors.data(), savedVectors.size());
-    std::memcpy(&g_aiPerPlayer7e79d0.get(), savedMarker.data(), savedMarker.size());
+    std::memcpy(&g_aiCatapultHuntSteps.get(), savedMarker.data(), savedMarker.size());
 }
 
 }  // namespace s3re::game

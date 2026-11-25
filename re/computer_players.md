@@ -431,6 +431,38 @@ doors. AiGroupOrders +0x190 is `home_buildings`. The census
 0x7e06e0, cursor 0x7e0578), all at once on maps with fewer than 50 settler
 slots, and fills the catapult vectors.
 
+Session 55 (V, `ai_military.cpp`): **`AI::RunMilitary` 0x58f990** and
+`T_ATTACK_AGENT::Run` 0x55ec10 (the attack agent only calls it; its catch
+(...) logs "Marcus: FOE ATTACK EXCEPTION!" and rethrows). Per call:
+ProcessWorldEvents, then one task chosen by step counters (each fires when
+its old value is above the limit and restarts at 0): catapult hunt (> 50,
+g_aiCatapultHuntSteps 0x7e79d0), thief hunt (> 420), mage hunt (> 550),
+then by the military steps (> 150) the attack part or the upkeep. Upkeep:
+PruneHunters, then DisbandWeakGroups (> 1100, shared), CastBattleSpells
+(> 75), RebuildAssignedSettlers (> 2000 or the pending flag 0x7e7cc8 set by
+LoadState), RecruitGeologistsAndThieves (> 2800 once the settlers are
+counted), CountSettlers (> 1900; 1895 while a pass runs, so the slices
+follow each other), CountBuildings (> 700), else ComputeTeamStrength once
+both counts and census +2 are set. Attack part: ratio =
+soldier_strength / 256 (float); TickAttackDelays; gather countdown (groups
+with a target go to the gather building, "Gathering"); once the team
+strengths are valid: CheckGroupTargets, attacking groups that steal or
+of which at most 22 % fight are sent on ("Attack or Steal"), StartAttack,
+the garrison check (g_aiGarrisonedBuildings: a military building without
+garrison or soldiers on the way gets QueueChangeGarrison 5 (swordsman) or 3
+(bowman) from each group with such a soldier within 64; else "Eine Turm ist
+nicht besetzt" and the patrols go there first), AssignIdleUnits, patrol
+point 0 renewal or ReturnGroupHome, SendThieves, SendGeologists, then the
+patrols: each group of 1..highest without target or delay walks between
+its two patrol buildings for 5..8 steps (AiGroupOrders +0x1c48, the low
+two bits choose the point; "Next Step ..."), or gets new patrol points
+(the call ends after a new point 0: delay 500 - r % 125 near an unmanned
+tower, else v - r2 % (v / 4) with v = 10 + r1 % 16; a group standing in
+area 0 goes home, delay 35 - (r & 7)). Finding: AI::CastBattleSpells
+0x5953b0 indexes its four per-race flag dwords with the first mage's race
+byte (settler +2) unchecked: a race above 3 reads the caller's stack
+(never in a game: races are 0..3).
+
 ## How decisions reach the simulation
 
 Most decisions don't write the world directly (the world is read through
