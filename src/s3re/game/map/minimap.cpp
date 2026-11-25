@@ -283,10 +283,15 @@ namespace {
 
 constexpr std::size_t kWorld = sizeof(CGameData);
 
+// Player colour slots: g_playerColourIndex (0x7ace64) holds one index per
+// player into the 20 entries of g_playerColours (0x7ace90).
+constexpr U kPlayerColourSlots = 20;
+
 struct SavedGlobals {
     std::int32_t width, mode, buildings, settlers;
     U shifts[3], scales[3];
     std::int32_t dirty[64];
+    std::uint16_t colourIndex[kPlayerColourSlots];
     SavedGlobals() {
         width = g_minimapWidth;
         mode = g_minimapMode;
@@ -295,6 +300,7 @@ struct SavedGlobals {
         std::memcpy(shifts, g_pixelFormat->shift, sizeof(shifts));
         std::memcpy(scales, g_pixelFormat->scale, sizeof(scales));
         std::memcpy(dirty, &g_minimapSliceDirty, sizeof(dirty));
+        std::memcpy(colourIndex, &g_playerColourIndex[0], sizeof(colourIndex));
     }
     ~SavedGlobals() {
         g_minimapWidth = width;
@@ -304,6 +310,7 @@ struct SavedGlobals {
         std::memcpy(g_pixelFormat->shift, shifts, sizeof(shifts));
         std::memcpy(g_pixelFormat->scale, scales, sizeof(scales));
         std::memcpy(&g_minimapSliceDirty, dirty, sizeof(dirty));
+        std::memcpy(&g_playerColourIndex[0], colourIndex, sizeof(colourIndex));
     }
 };
 
@@ -317,6 +324,11 @@ void RandomGlobals(test::Context& ctx) {
     const U format = rng.Below(3);
     std::memcpy(g_pixelFormat->shift, kShifts[format], sizeof(kShifts[0]));
     std::memcpy(g_pixelFormat->scale, kScales[format], sizeof(kScales[0]));
+    // Valid colour indices: other tests (LoadMap's) leave 0xffff for
+    // players without a colour, which both versions read out of range.
+    for (U p = 0; p < kPlayerColourSlots; ++p) {
+        g_playerColourIndex[p] = static_cast<std::uint16_t>(rng.Below(kPlayerColourSlots));
+    }
 }
 
 // Tiles around the minimap's area with fog levels, borders, footprints,

@@ -498,7 +498,57 @@ file names, what to do with code in unnamed files, and a `source_file`
 column in `re/functions.csv` filled from `tools/source_files.py`.
 
 
-## Session log (sessions 1-51, newest first)
+## Session log (sessions 1-52, newest first)
+
+### 2026-11-24 (52): savegame loader, computer players A2/A4, progress page
+
+- **Computer players (`wip/ai-a4`)**, 28 functions verified (in-process
+  tests with wrong-implementation checks; emulator specs run `--full`, 0
+  mismatches, all blocks covered). A2: AI::CountSitesOfType 0x59db30
+  (quirk kept: a non-zero area counts all the player's sites),
+  FirstBuildingInArea 0x58b410, FirstMilitaryBuildingInArea 0x58b380,
+  MineSuccessPercent 0x573810, ResourceAmountOfKindAt 0x571f60,
+  ResourceAmountNear 0x571fa0, IsFarmLand 0x59a720, NextSparseMapOffset
+  0x58a250, Army::GroupFightingShareAbove 0x593040 (x87 share in double,
+  original order), Army::PruneHunters 0x5934a0 (skip-after-erase bug
+  kept). A4 (ai_commands.cpp): 18 command senders 0x58e220..0x58ebc0 and
+  0x590990..0x590c80, pushed message bytes compared; 0x4318a0 named
+  GameSettings::IsHost (medium). Known difference: the economy senders
+  leave header byte 3 and some payload bytes as stack leftovers (ours 0),
+  which no handler reads. Not replaced: SendPrioritizeSite 0x58e510 (its
+  handler reads the unwritten byte 6: behaviour depends on stack
+  contents; docs/todo/computer-players.md).
+- **Savegame loader (`wip/savegame`)**, 7 functions verified:
+  `CLogicThread::LoadSaveGame` 0x508fa0 (logic/load_save_game.cpp, chunk
+  structs in fileformats/savegame_chunks.h) and the rest of the CMapFile
+  container: constructor 0x4a5a70, Open 0x4a5c80, Close 0x4a5f40,
+  WriteChunk 0x4a6540, WriteChunkWithTail 0x4a6600, WriteChunkData
+  0x4a66d0 (fileformats/map_file_io.cpp). Evidence: all 3 savegames (read
+  only) and 26 synthetic ones loaded by the original and ours into two
+  worlds: whole world, S3.EXE globals, DebugLog calls and chunk cache
+  identical; all 181 game files opened through our Open; 120 random
+  savegames written to temp files byte-identical; emulator specs full
+  coverage. Findings (re/file_formats.md): chunk 0 is never released;
+  chunk 2/1 restores only 750 of 1000 events; the game's savegames hold
+  16 colours in chunk 0x19 but 20 are copied (8 heap bytes past the
+  chunk; the savegame test skips colours 16..19); Close writes the
+  checksum only in mode 2; known difference: a failed read in Open uses
+  uninitialized stack in the original (only the error code can differ).
+  New globals g_playerInfo 0x7acfa8, g_lastDrawnTick 0x7dfd4c,
+  g_victoryProtectActive 0x7deb54. debug_log.cpp ignores calls from six
+  Watcom destructors folded onto DebugLog's address (original-mode
+  tooling version 7).
+- Evidence on the merged main (both batches): Debug and Release build;
+  `--test` 620/620; full emulator suite `--full --require-coverage`: 768
+  functions, 0 mismatches, 0 with incomplete coverage (16 workers,
+  1,152 s); inventory check clean. Verified: 733 -> 768. Not yet run
+  (needs the game window): check_save.py against the original.
+- **Progress page** (frontend-design subagent, on the user's request: the
+  session 50 redesign was harder to read): a headline share, two stacked
+  bars (game code, all code) whose segments show their own shares (the
+  old strips showed running totals), a table with plain-word groups; the
+  seven detailed statuses became the treemap legend; the README picture
+  follows. Kept: treemap and hover card.
 
 ### 2026-11-24 (51): computer players A2 leftovers, CMapFile container, specs split
 

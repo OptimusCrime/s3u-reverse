@@ -13,35 +13,40 @@ to `docs/todo/`). The archive is for searching, not for reading whole.
 
 ## Current focus
 
-**Next (updated in session 54). The user's priority (2026-11-24): function
+**Next (updated in session 55). The user's priority (2026-11-24): function
 batches (reimplement + verify), less cleanup; cleanup only where it blocks
 a batch.**
-1. **Graphics (the user's choice for the next round, 2026-11-24):** the
-   loader of the memory-mapped `GFX\siedler3_NN.<pixel format>.dat` files
-   (CGraphicsData, 8 tables, RLE sprites, palettes by brightness) and the
-   sprite decoding, verified by comparing decoded bytes
-   (`re/graphics_formats.md`, `docs/todo/file-formats.md` "Graphics").
-   Session 54 already did the CDrawer draw queues (graphics/drawer_queues.cpp).
-2. **Computer players, continued** (`docs/todo/computer-players.md`):
-   small READY helpers 0x58ae90, 0x599760, 0x59a260, 0x59a7a0, 0x573670,
-   FillAreaSiteLists 0x556630; residences 0x568890 (x87, like
-   ConsiderCutters); SendHunter 0x5935b0, StartAttack 0x594080;
-   SendPrioritizeSite 0x58e510 needs a runtime look; then A5 Cevaland, A6
-   the agents' run functions, 0x550a30 / 0x550f80. Start from the names
-   and `re/computer_players_naming.md`.
-3. **File formats** (`docs/todo/file-formats.md`): LoadMap is verified
-   (session 54). Next: the savegame writer `CLogicThread::SaveGame`
-   0x509980 (1,365 lines; needs a way to redirect its `Save\` writes to
-   temp files; calls the AI save 0x551220). GameSettings::PlayerSetup
-   0x4351e0 is still called as the original.
+1. **Computer players, the rest** (`docs/todo/computer-players.md`): the
+   military side is done up to RunMilitary 0x58f990 / T_ATTACK_AGENT::Run.
+   Left: the SiteTree containers and the farm / rice farm / vineyard /
+   fishery work-area finders (std::_Lockit needs emulator probes; an
+   uninitialized padding byte lands in freed tree nodes), CEvaLand
+   Init / ctor, FillAreaSiteLists 0x556630 (1,361 ins), AI::CreateAgent,
+   AI::LoadState 0x596380, AI::SaveGlobals 0x551220, the remaining agents'
+   run functions, then 0x550a30 / CComputerPlayer::Step 0x550f80.
+   SendPrioritizeSite 0x58e510 needs a runtime look (log message byte 6
+   against the site owner in a game with computer players).
+2. **Graphics** (`re/graphics_formats.md`, `docs/todo/file-formats.md`):
+   drawing is verified (session 55). Next: CGraphicsData::Open 0x5f6fd0
+   and the rest of the loader, which need the Win32 file-mapping classes
+   (CFileMapping 0x61a3a0, MapView/UnmapView, CFile) first; three static
+   initializers without function starts (0x5f5a20, 0x5fda80, 0x5fdb30);
+   CSoundData.
+3. **File formats:** LoadMap and SaveGame are verified. Left:
+   GameSettings::SaveSetup 0x433490 and PlayerSetup 0x4351e0 (Watcom,
+   settings side), CLogicThread::SaveGameToSlot 0x50ac40.
 4. **Other READY functions** (`frontier.py --library-done`): DrawData
-   0x523480 (SEH, string-allocator byte), CGameData::FindNearest_b
-   0x4ff170 (screen-to-tile conversion?), Logic_sub_4d79c0.
-5. Open from session 49: the live-vs-replay header/rest hash difference
+   0x523480, CGameData::FindNearest_b 0x4ff170, Logic_sub_4d79c0; the UI
+   range 0x400000..0x4c0000 has ~265 READY (mostly Watcom containers and
+   controls).
+5. **Open (session 55):** the Release-only emulator mismatch of
+   CGameData_GenerateRandomMap since the wip/ai-mil merge, and the
+   Release-only in-process failure of CGameData_UpdateSoldier_MatchesOriginal
+   (older); being debugged on wip/emufix.
+6. Open from session 49: the live-vs-replay header/rest hash difference
    of the user's full game (backlog "Evidence and testing").
-6. Later, only when it blocks a batch: readability leftovers
-   (`docs/todo/readability.md`; the session 54 typed-access audit found
-   ~0.9% raw access, gaps in typed_access_lint.py and opaque classes:
+7. Later, only when it blocks a batch: readability leftovers
+   (`docs/todo/readability.md`; the session 54 typed-access audit,
    postponed by the user) and the source layout follow-ups.
 
 **Standing decisions** (details in `CLAUDE.md` and the archive):
@@ -114,6 +119,73 @@ testing".
   classes by default; they might be library code.
 
 ## Session log (recent sessions; older ones in docs/history/)
+
+### 2026-11-25 (55): graphics drawing, savegame writer, computer players economy and military
+
+Parallel round of four batch agents (wip/gfx, wip/savewriter, wip/ai-econ,
+wip/ai-mil), merged serially; verified 871 -> 1031.
+- **Graphics drawing (`wip/gfx`, the user's choice)**, 104 functions in
+  graphics/gfx_spans.cpp, gfx_images.cpp, gfx_rle.cpp, gfx_draw.cpp,
+  gfx_files.cpp: the 32 shade spans, 8 masked spans, shadow spans, the
+  16-bit / colour-indexed / shadow RLE blitters and their clip variants,
+  the Draw methods, the table accessors, CGraphicsData::Close; 14 missing
+  function starts added (re/extra_functions.tsv). Evidence: every image of
+  the RGB565 set (52,892 sprites, 47,121 colour layers, 49,223 shadows,
+  1,617 GUI images; GFX read only) drawn by both, whole surfaces with
+  guard bytes compared. Findings (re/graphics_formats.md "Drawing,
+  verified"): RLE skip = bits 0..6, bit 7 ends the row; shade level i =
+  (i+1)/32 (level 0 black); construction draws the bottom
+  min(h, ((h+8)*f)>>16) rows plus up to 8 dissolving rows; shadow method
+  1 is a checkerboard phased by origin mod 32. Known difference: the
+  SequenceFrame ctor has no catch(...) (the original only logs, a no-op,
+  and rethrows). Not done: CGraphicsData::Open (needs the Win32
+  file-mapping classes).
+- **Savegame writer (`wip/savewriter`)**: CLogicThread::SaveGame 0x509980
+  (logic/save_game.cpp), GameSettings::MapName 0x436a60, ~CMapFile
+  0x4a5b50. Tests redirect g_gameFolder (0x7a7c80) to %TEMP%; files from
+  original and ours byte-identical (3 savegames, 14 maps, 12 random worlds)
+  outside bytes neither writes (heap/stack leftovers after names, SaveSetup
+  record byte 0xb; documented), round trip through LoadSaveGame. Findings
+  (re/file_formats.md "Verified savegame writer"): chunk 0x19's size counts
+  its header (16 of 20 colours saved: why the loader overreads 8 bytes);
+  AI chunks 0x15-0x17 written once per computer player; names copied
+  without length limit. Still the original: GameSettings::SaveSetup
+  0x433490, AI::SaveGlobals 0x551220.
+- **Computer players, economy (`wip/ai-econ`)**, 38 functions:
+  ConsiderResidences 0x568890 (x87 as double; g_aiWantedCarriers,
+  g_aiResidenceSlopes), forced production / wood emergency / tool supply
+  (ai_force_production.cpp), the request Execute chain down to
+  PlaceBuilding (ai_request_execute.cpp; before the basic economy only the
+  first woodcutter, stonecutter, sawmill, forester and 4 small towers),
+  agent slots and request agents, work-area searches. Quirks kept:
+  ForceProduction logs "AUS" when switching on; HasSameTypeWorkAreaNear's
+  radius is a leftover register for other types. emu.py: new_fails_size
+  may be a tuple. Skipped: SiteTree containers and farm/fishery finders
+  (std::_Lockit, uninitialized padding in tree nodes).
+- **Computer players, military (`wip/ai-mil`)**, 24 functions up to
+  AI::RunMilitary 0x58f990 and T_ATTACK_AGENT::Run 0x55ec10 (ai_military.cpp,
+  ai_army_attack.cpp, ai_safety_agent.cpp, ai_census_settlers.cpp,
+  ai_world_events.cpp). AiGroupTarget = two patrol buildings + a prey
+  settler; RunMilitary's step counters named; g_aiGarrisonedBuildings is a
+  bitset<4000>. Bugs kept: SendHunter tests the last member's type 11
+  times; FindSpareGroup passes x twice; ProcessWorldEvents skips the entry
+  after an erased catapult. SendPrioritizeSite still needs a runtime look.
+- **Round end:** a full `--test` found the minimap tests crashing after
+  the LoadMap tests (both original and ours read colour entry 0xffff left
+  in g_playerColourIndex); the minimap tests now set and restore the
+  colour indices themselves. Evidence on the merged main: Debug and
+  Release build; inventory check clean; `--test` 787/787; emulator
+  `--self-test` 21/21; full emulator suite `--full --require-coverage`:
+  1031 functions, 1 mismatch: CGameData_GenerateRandomMap fails in the
+  Release DLL only (Debug: 10/10 cases, full coverage; in-process Release
+  passes). Bisected to the wip/ai-mil merge (only AI code); a debugging
+  agent is on it (wip/emufix). Whole-game checks against the original:
+  check_save slots 1-3 (2,000 ticks), check_random_map 384,0 and 448,3
+  (1,000 ticks), the scripted-seed127 replay (3,000 ticks, it has computer
+  players: the new AI code runs in it): all identical; call counts
+  recorded. Identical in a whole-game check: 582 -> 726.
+- Also: the hung cl.exe from session 54 ended (the user's OK); old
+  worktrees removed.
 
 ### 2026-11-24/25 (54): LoadMap, computer players land and army, logic/draw helpers
 
@@ -236,53 +308,3 @@ wip/ai-army, wip/logic-misc), merged serially; 75 functions verified.
   identical; call counts recorded (re/whole_game_calls.csv). Identical in
   a whole-game check: 470 -> 539 functions; every verified function now
   has a whole-game row (257 with tests only).
-
-### 2026-11-24 (52): savegame loader, computer players A2/A4, progress page
-
-- **Computer players (`wip/ai-a4`)**, 28 functions verified (in-process
-  tests with wrong-implementation checks; emulator specs run `--full`, 0
-  mismatches, all blocks covered). A2: AI::CountSitesOfType 0x59db30
-  (quirk kept: a non-zero area counts all the player's sites),
-  FirstBuildingInArea 0x58b410, FirstMilitaryBuildingInArea 0x58b380,
-  MineSuccessPercent 0x573810, ResourceAmountOfKindAt 0x571f60,
-  ResourceAmountNear 0x571fa0, IsFarmLand 0x59a720, NextSparseMapOffset
-  0x58a250, Army::GroupFightingShareAbove 0x593040 (x87 share in double,
-  original order), Army::PruneHunters 0x5934a0 (skip-after-erase bug
-  kept). A4 (ai_commands.cpp): 18 command senders 0x58e220..0x58ebc0 and
-  0x590990..0x590c80, pushed message bytes compared; 0x4318a0 named
-  GameSettings::IsHost (medium). Known difference: the economy senders
-  leave header byte 3 and some payload bytes as stack leftovers (ours 0),
-  which no handler reads. Not replaced: SendPrioritizeSite 0x58e510 (its
-  handler reads the unwritten byte 6: behaviour depends on stack
-  contents; docs/todo/computer-players.md).
-- **Savegame loader (`wip/savegame`)**, 7 functions verified:
-  `CLogicThread::LoadSaveGame` 0x508fa0 (logic/load_save_game.cpp, chunk
-  structs in fileformats/savegame_chunks.h) and the rest of the CMapFile
-  container: constructor 0x4a5a70, Open 0x4a5c80, Close 0x4a5f40,
-  WriteChunk 0x4a6540, WriteChunkWithTail 0x4a6600, WriteChunkData
-  0x4a66d0 (fileformats/map_file_io.cpp). Evidence: all 3 savegames (read
-  only) and 26 synthetic ones loaded by the original and ours into two
-  worlds: whole world, S3.EXE globals, DebugLog calls and chunk cache
-  identical; all 181 game files opened through our Open; 120 random
-  savegames written to temp files byte-identical; emulator specs full
-  coverage. Findings (re/file_formats.md): chunk 0 is never released;
-  chunk 2/1 restores only 750 of 1000 events; the game's savegames hold
-  16 colours in chunk 0x19 but 20 are copied (8 heap bytes past the
-  chunk; the savegame test skips colours 16..19); Close writes the
-  checksum only in mode 2; known difference: a failed read in Open uses
-  uninitialized stack in the original (only the error code can differ).
-  New globals g_playerInfo 0x7acfa8, g_lastDrawnTick 0x7dfd4c,
-  g_victoryProtectActive 0x7deb54. debug_log.cpp ignores calls from six
-  Watcom destructors folded onto DebugLog's address (original-mode
-  tooling version 7).
-- Evidence on the merged main (both batches): Debug and Release build;
-  `--test` 620/620; full emulator suite `--full --require-coverage`: 768
-  functions, 0 mismatches, 0 with incomplete coverage (16 workers,
-  1,152 s); inventory check clean. Verified: 733 -> 768. Not yet run
-  (needs the game window): check_save.py against the original.
-- **Progress page** (frontend-design subagent, on the user's request: the
-  session 50 redesign was harder to read): a headline share, two stacked
-  bars (game code, all code) whose segments show their own shares (the
-  old strips showed running totals), a table with plain-word groups; the
-  seven detailed statuses became the treemap legend; the README picture
-  follows. Kept: treemap and hover card.
