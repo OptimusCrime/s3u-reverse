@@ -93,3 +93,22 @@ SELF_TEST += [
     # farm finder stores every key one higher (node byte +0xc).
     finder_spec("WrongFarmKeys", 0x0059ac50),
 ]
+
+SELF_TEST += [
+    # ignore_bytes on byte +0xd of every fake-heap block (the site lists'
+    # new nodes): the wrong FillAreaSiteLists rates a Roman player's coal
+    # mine places twice (more nodes, other keys).
+    Spec("WrongFillSiteLists", 0x00556630, "thiscall", [one_of(WORLD_BASE + AREA_SOURCE), one_of(0, 1, 2)],
+         eax_mask=0, presets=fill_site_lists_world, globals=site_list_globals, callees=LOCKIT_PROBES,
+         ignore_bytes=SITE_LIST_NODE_PADDING),
+]
+
+SELF_TEST += [
+    # ignore_bytes on AddArea's new node (tree comparator / allocator bytes,
+    # four type -> tree pointers): the wrong AddArea leaves the iron mine's
+    # countdown at 0 without the basic economy.
+    Spec("WrongAddArea", 0x00555260, "thiscall", [add_area_area, add_area_player], eax_mask=0,
+         presets=add_area_world, globals=add_area_globals,
+         callees={**FORCE_CALLEES, **LOCKIT_PROBES, 0x00556630: (2, "thiscall", "probe", None, add_area_record_fill)},
+         ignore_bytes=ADD_AREA_IGNORED, max_cases=100),
+]

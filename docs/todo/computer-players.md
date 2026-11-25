@@ -58,13 +58,16 @@ LOGBOOK session entry).
   constructor 0x550900 and Step 0x550f80. Not in Ghidra's list (no rows):
   std::list<Area>'s constructor 0x553e70 / destructor 0x5591e0, the
   bitset constructor 0x559240, 0x596540 (a vector's free).
-- **Open (session 55 round 2):** CEvaLand::Area's copy constructor copies
-  the per-type site tree pointers (+0x3e8) verbatim, so a list record's
-  pointers point at AddArea's stack record's trees unless something
-  refreshes them; check in AddArea / FillAreaSiteLists. The woodcutter /
+- **Open (session 55 round 2):** the woodcutter /
   stonecutter finders pick the cell with the FEWEST trees / stones when the
   area stocks more than 10 (an ascending SiteTree): looks like an original
-  quirk or intent (thinning); confirm when the agents are done.
+  quirk or intent (thinning); confirm when the agents are done. (The
+  Area copy's tree pointers are settled: AddArea resets them, session 56.)
+- **Who reads the site trees:** the map worker's MakeBuildOrders 0x57ce90
+  and the economy's site search take candidates from
+  `site_tree_of_type[type]`; check that nobody reads it for types 0, 15,
+  16, 18 (uninitialized there, session 56) and whether RefillAreaSiteList's
+  workshop quirk (ratings into tree 34) matters in a game.
 - **Open:** a world-field list of the AI range with
   `tools/world_fields.py`.
 - **Left from the naming-pass corrections (session 51 did the code and

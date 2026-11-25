@@ -43,6 +43,17 @@
 //              grid zeroed, areas_changed cleared, EvaluateAllCells
 //              0x5540a0, SumAllCells 0x5546c0, g_aiLandEvaluation = this.
 //              EAX: left over (not used).
+//   0x00553e70 AreaList::AreaList() thiscall (no function start in
+//              Ghidra's list, re/extra_functions.tsv): the allocator byte
+//              (+0) = byte 3 of the stack slot where it saved ECX, i.e. the
+//              high byte of the list's own address; head = a new 0x744-byte
+//              node linked to itself (operator new, no null check); size 0.
+//              EAX = the head node.
+//   0x005591e0 AreaList::~AreaList() thiscall (no function start): unlinks,
+//              destroys (~Area 0x556080) and frees every node, --size each
+//              time, then frees the head; head = size = 0. EAX = 0.
+//   0x00559240 std::bitset<57>::bitset() thiscall (no function start): the
+//              two words cleared, the second first. EAX = this.
 //   0x0042c9d0 `vector constructor iterator'(array, size, count, ctor)
 //              stdcall, ret 0x10 (compiler helper): ctor(ECX = element)
 //              for each of count elements (none for -INT_MAX..0; INT_MIN
@@ -157,6 +168,60 @@ S3RE_HOOK(0x00553e10, AI_CEvaLand_Construct, EvaLandConstructFn, Original_AI_CEv
 S3RE_HOOK(0x00553ea0, AI_CEvaLand_Init, EvaLandInitFn, Original_AI_CEvaLand_Init, AI_CEvaLand_Init);
 S3RE_HOOK(0x0042c9d0, VectorConstructorIterator, VectorConstructorFn, Original_VectorConstructorIterator,
           VectorConstructorIterator);
+
+using ListConstructFn = AiAreaNode*(__fastcall*)(AiList* self, void* edx);
+using ListDestructFn = std::uint32_t(__fastcall*)(AiList* self, void* edx);
+using BitsetConstructFn = std::uint32_t*(__fastcall*)(std::uint32_t* self, void* edx);
+
+AiAreaNode* __fastcall AI_AreaList_Construct_List(AiList* self, void* edx);
+std::uint32_t __fastcall AI_AreaList_Destruct(AiList* self, void* edx);
+std::uint32_t* __fastcall BuildingTypeBits_Construct(std::uint32_t* self, void* edx);
+
+S3RE_HOOK(0x00553e70, AI_AreaList_Construct_List, ListConstructFn, Original_AI_AreaList_Construct_List,
+          AI_AreaList_Construct_List);
+S3RE_HOOK(0x005591e0, AI_AreaList_Destruct, ListDestructFn, Original_AI_AreaList_Destruct, AI_AreaList_Destruct);
+S3RE_HOOK(0x00559240, BuildingTypeBits_Construct, BitsetConstructFn, Original_BuildingTypeBits_Construct,
+          BuildingTypeBits_Construct);
+
+// Purpose: Constructs a computer player's (empty) list of area records in
+// the land evaluation object.
+AiAreaNode* __fastcall AI_AreaList_Construct_List(AiList* self, void* /*edx*/) {
+    // The empty allocator object is a byte the original takes from its own
+    // saved ECX: the high byte of the list's address.
+    self->unk0 = (self->unk0 & 0xffffff00u) | static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(self) >> 24);
+    auto* head = static_cast<AiAreaNode*>(msvc6::GameOperatorNew(sizeof(AiAreaNode)));
+    head->next = head;
+    head->prev = head;
+    self->head = reinterpret_cast<AiListNode*>(head);
+    self->count = 0;
+    return head;
+}
+
+// Purpose: Destroys a list of area records (with the land evaluation object).
+std::uint32_t __fastcall AI_AreaList_Destruct(AiList* self, void* /*edx*/) {
+    auto* const head = reinterpret_cast<AiAreaNode*>(self->head);
+    for (AiAreaNode* node = head->next; node != head;) {
+        AiAreaNode* const next = node->next;
+        node->prev->next = node->next;
+        node->next->prev = node->prev;
+        reinterpret_cast<AreaDestructFn>(kAreaDestruct)(&node->value, nullptr);
+        msvc6::GameOperatorDelete(node);
+        --self->count;
+        node = next;
+    }
+    msvc6::GameOperatorDelete(self->head);
+    self->head = nullptr;
+    self->count = 0;
+    return 0;
+}
+
+// Purpose: Clears a grid cell's per-player set of building types
+// (std::bitset<57>'s constructor).
+std::uint32_t* __fastcall BuildingTypeBits_Construct(std::uint32_t* self, void* /*edx*/) {
+    self[1] = 0;
+    self[0] = 0;
+    return self;
+}
 
 // Purpose: Copies an area record of the land evaluation (AddArea appends a
 // copy of the record it built to the player's list).
@@ -713,13 +778,84 @@ AreaFns OurAreaFns() {
 
 }  // namespace
 
+// AreaList's constructor and destructor, the bitset constructor: lists in
+// heap blocks (constructor: the allocator byte must be the high byte of the
+// list's address; destructor: lists of 0..4 records with random trees, the
+// nil node's references and the list's words afterwards); bitsets of
+// random words.
+struct ListFns {
+    ListConstructFn construct;
+    ListDestructFn destruct;
+    BitsetConstructFn bits;
+};
+
+void CompareListObjects(test::Context& ctx, const ListFns& ours, int cases) {
+    const ListFns original{Original_AI_AreaList_Construct_List, Original_AI_AreaList_Destruct,
+                           Original_BuildingTypeBits_Construct};
+    const std::uint32_t refs = g_aiSiteTreeNilRefs;
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        test::Rng& rng = ctx.rng();
+        bool same = true;
+        auto* lists = static_cast<AiList*>(msvc6::GameOperatorNew(2 * sizeof(AiList)));
+        rng.Fill(&lists[0], sizeof(AiList));
+        lists[1] = lists[0];
+        const std::uint32_t start = lists[0].unk0;
+        const ListFns* fns[2] = {&original, &ours};
+        const std::uint32_t count = rng.Below(5);
+        for (int side = 0; side < 2; ++side) {
+            AiList& list = lists[side];
+            AiAreaNode* head = fns[side]->construct(&list, nullptr);
+            same &= S3RE_EXPECT_EQ(head, reinterpret_cast<AiAreaNode*>(list.head));
+            same &= S3RE_EXPECT(head->next == head && head->prev == head && list.count == 0);
+            same &= S3RE_EXPECT_EQ(list.unk0, (start & 0xffffff00u) |
+                                                  static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&list) >> 24));
+            auto* record = static_cast<AiArea*>(msvc6::GameOperatorNew(sizeof(AiArea)));
+            for (std::uint32_t k = 0; k < count; ++k) {
+                MakeArea(rng, record);
+                AiAreaNode* out;
+                Original_AI_AreaList_insert(&list, nullptr, &out, head, record);
+                DestroyArea(record);
+            }
+            msvc6::GameOperatorDelete(record);
+            const std::uint32_t before = list.unk0;
+            same &= S3RE_EXPECT_EQ(fns[side]->destruct(&list, nullptr), 0u);
+            same &= S3RE_EXPECT(list.unk0 == before && list.head == nullptr && list.count == 0);
+            same &= S3RE_EXPECT_EQ(g_aiSiteTreeNilRefs.get(), refs);
+        }
+        std::uint32_t bits[2][3];
+        rng.Fill(bits[0], sizeof(bits[0]));
+        std::memcpy(bits[1], bits[0], sizeof(bits[0]));
+        same &= S3RE_EXPECT_EQ(original.bits(bits[0], nullptr), &bits[0][0]);
+        same &= S3RE_EXPECT_EQ(ours.bits(bits[1], nullptr), &bits[1][0]);
+        same &= S3RE_EXPECT_MEM_EQ(bits[0], bits[1], sizeof(bits[0]));
+        msvc6::GameOperatorDelete(lists);
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+        }
+    }
+}
+
+std::uint32_t __fastcall WrongListDestruct(AiList* self, void* edx) {
+    // Wrong: the size isn't cleared.
+    const std::uint32_t count = self->count;
+    AI_AreaList_Destruct(self, edx);
+    self->count = count + 1;
+    return 0;
+}
+
 S3RE_TEST(AiAreaRecords_MatchOriginal) {
+    CompareListObjects(ctx, {&AI_AreaList_Construct_List, &AI_AreaList_Destruct, &BuildingTypeBits_Construct}, 200);
     CompareAreas(ctx, OurAreaFns(), 600);
     CompareEvaLandConstruction(ctx, &AI_CEvaLand_Acquire, 60);
     CompareVectorConstructor(ctx, &VectorConstructorIterator);
 }
 
 S3RE_TEST(AiAreaRecords_ComparisonDetectsWrongImplementation) {
+    {
+        test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+        CompareListObjects(quiet, {&AI_AreaList_Construct_List, &WrongListDestruct, &BuildingTypeBits_Construct}, 50);
+        S3RE_EXPECT(quiet.failures() > 0);
+    }
     {
         AreaFns wrong = OurAreaFns();
         wrong.copy = &WrongAreaCopy;

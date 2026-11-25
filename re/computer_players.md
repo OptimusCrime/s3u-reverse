@@ -763,7 +763,7 @@ ignore_bytes with the self-test WrongFarmKeys).
 - The copy constructor 0x55a440 skips the padding bytes and copies the
   per-type tree pointers (+0x3e8, 57) verbatim: in a copy they still point
   at the source record's trees (AddArea appends a copy of its stack
-  record; whether something refreshes them is open, G).
+  record and resets them in the new node right away, session 56).
 - RemoveArea 0x558e80 removes only the first record with the area id and
   sets `areas_changed[player]`; EAX = the new size (head when not found).
 - Acquire 0x553d30 / constructor 0x553e10 / Init 0x553ea0: grid side =
@@ -773,3 +773,59 @@ ignore_bytes with the self-test WrongFarmKeys).
   70) / "map_part_list_ptr" (line 141). The 20 lists' allocator byte is
   the high byte of each list's own address (constructor 0x553e70 reads it
   from the saved ECX).
+
+## The area site lists (session 56, V)
+
+`ai_area_site_lists.cpp`, `ai_area_events.cpp`. Each area record keeps,
+per building type, the candidate places of the area: grid cell centres
+in a site tree ordered by a rating byte (`kSiteTreeOfType` in
+ai_layout.h maps the 57 types to the 39 trees; the races' variants share
+a tree: 31 drinks, 33 small temples, 34 large temples, 35 workshops and
+the gong, 36 residences, 5 both sulfur mines; types 0, 15, 16, 18, the
+military buildings, have none).
+- **FillAreaSiteLists** 0x556630 empties all 39 trees and visits the cells
+  whose centre tile the player owns and lies in the area. Own resources:
+  woodcutter / stonecutter when the 3 x 3 trees / stones sum is above 5
+  (key = CountPlayersResourcesAround), iron / coal / gold mines (sum > 5,
+  key = CountResourceInOwnersLand of the cell), Asian sulfur and Egyptian
+  gem mines only for that race, fishery (fish sum > 5 and fish in the
+  cell; key = the sum's low byte), farm (grain land > 20 %), rice farm
+  (rice sum > 5), vineyard (wine land > 10 %), waterworks (stream tiles
+  and water; key = the stream tiles). Then the building types in the
+  3 x 3 cells' per-player bitsets: "military" = small towers + 2 large
+  towers + 3 castles, added to every rating; e.g. iron smelter = military
+  + 8 (iron mines + coal mines), sawmill = military + 2 (4 woodcutters -
+  sawmills), forester = military + 2 (2 (2 (2 (woodcutters - farms) - iron
+  smelters) - iron mines - coal mines) - foresters). The full list is in
+  the code. A rating > 0 goes in with its low byte as the key (wraps at
+  256). The race's tail: Romans the charcoal burner, Asians the powder
+  maker, Amazons the apiary.
+- **RefillAreaSiteList** 0x5579d0 (player, area, type) does it for one
+  type of one area (ProcessPendingEvents after a site was placed, the map
+  worker's MakeBuildOrders). Quirks kept: the mines' keys come from
+  CountPlayersResourcesAround (3 x 3) instead of the cell count, the
+  waterworks' key is the water count, a storehouse counts barracks four
+  times (Fill: twice), the charcoal burner / powder maker / apiary are
+  rated for every race, and the workshops (31, 47, 48, 50) are rated into
+  tree 34 (the large temples') while tree 35 is emptied: after a refill
+  the workshops' candidates are gone and the large temples get extra ones.
+  Residences, the lookout tower and the hospital are never emptied.
+- **AddArea** 0x555260 builds the record on its stack (force_production
+  1, unk014 0xff, the residences' countdowns from g_aiCandidateDefaults),
+  fills it, appends a copy and then works on the new node: building
+  counts, without the basic economy the countdowns coal mine 400, iron
+  mine / iron smelter 500, `sites`, COMP_FoodForMinesOptimum, and the
+  type -> tree pointers. **Open point resolved:** the copy constructor's
+  verbatim pointers (into AddArea's stack record) are replaced right after
+  the insert for every type with a tree; types 0, 15, 16, 18 keep the
+  stack record's uninitialized pointers (nobody reads them for those
+  types as far as seen). std::list never moves nodes, so the pointers
+  stay valid.
+- **COMP_FoodForMinesOptimum** 0x572a30: per mine type in the record
+  (coal: bread, iron: meat, gold and gem mines: fish, sulfur: rice) three
+  SetAreaCondition commands (kinds 30..42; 0 off, 16 on): food in stock
+  switches the mine's food conditions off, none switches them on (log
+  lines "Brot / Fleisch / Fisch vorhanden" or "KEIN ...").
+- The 20 lists' constructor 0x553e70 / destructor 0x5591e0 and the grid
+  cells' bitset constructor 0x559240 have no function starts in Ghidra's
+  list (re/extra_functions.tsv).

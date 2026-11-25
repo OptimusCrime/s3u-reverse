@@ -312,6 +312,20 @@ inline constexpr GameText kHouseRequestSourceFile{0x732718};  // "E:\Siedler3\Ra
 inline constexpr GameText kEvalMap{0x7312e8};            // "pEvalMap"
 inline constexpr GameText kEvaLandSourceFile{0x7312f4};  // "E:\Siedler3\Rainer\Cevaland.cpp"
 inline constexpr GameText kMapPartListPtr{0x731314};     // "map_part_list_ptr"
+// CEvaLand::ProcessPendingEvents 0x554980 (DebugLog texts).
+inline constexpr GameText kAiSiteBuildingGone{0x7313b8};     // "RAINER: Haus das Gebaut werden soll gibt es nicht mehr!"
+inline constexpr GameText kAiOwnerChangeBuildingGone{0x73137c};  // "RAINER: Haus das Besitzer wechseln soll gibt es nicht mehr!"
+inline constexpr GameText kAiSameTypeStillThere{0x73134c};   // "RAINER: Hier ist noch ein Haus dieses Types!"
+inline constexpr GameText kAiDemolitionMixup{0x731328};      // "RAINER: Durcheinander bei ABRISS!"
+// COMP_FoodForMinesOptimum 0x572a30 (OutputDebugStringA texts; each ends in a line feed).
+inline constexpr GameText kFoodForMinesHeader{0x73257c};     // "COMP_FoodForMinesOptimum player: %u, ecosector %u" (sprintf)
+inline constexpr GameText kFoodForMinesNotOwned{0x732534};   // "COMP_FoodForMinesOptimum - EcoSector gehört nicht dem Spieler ???????"
+inline constexpr GameText kFoodForMinesBread{0x732504};      // "*** COMP_FoodForMinesOptimum - Brot vorhanden"
+inline constexpr GameText kFoodForMinesNoBread{0x7324d0};    // "*** COMP_FoodForMinesOptimum - KEIN Brot vorhanden"
+inline constexpr GameText kFoodForMinesMeat{0x73249c};       // "*** COMP_FoodForMinesOptimum - Fleisch vorhanden"
+inline constexpr GameText kFoodForMinesNoMeat{0x732464};     // "*** COMP_FoodForMinesOptimum - KEIN Fleisch vorhanden"
+inline constexpr GameText kFoodForMinesFish{0x732434};       // "*** COMP_FoodForMinesOptimum - Fisch vorhanden"
+inline constexpr GameText kFoodForMinesNoFish{0x7323fc};     // "*** COMP_FoodForMinesOptimum - KEIN Fisch vorhanden"
 // The out-of-memory check of AI::CreateAgent 0x56f6d0.
 inline constexpr GameText kAgentPtr{0x73228c};              // "agentPtr"
 inline constexpr GameText kCompGlobsSourceFile{0x732098};   // "E:\Siedler3\Rainer\compGlobs.cpp"

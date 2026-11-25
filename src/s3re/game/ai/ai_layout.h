@@ -787,7 +787,8 @@ static_assert(sizeof(SiteTreeInsertResult) == 8);
 // The copy constructor 0x55a440 copies the fields below (the padding bytes
 // +0x02, +0x15..+0x17, +0x3e7 are not copied) and copy-constructs the 39
 // site trees; the type -> tree pointers are copied as they are (they still
-// point at the source record's trees: probably refreshed by the callers, G).
+// point at the source record's trees; AddArea 0x555260 resets them in the
+// new node at once, see kSiteTreeOfType).
 struct AiArea {
     std::uint16_t area;                                  // 0x000 the economy area
     std::uint16_t unk002;
@@ -819,6 +820,16 @@ static_assert(offsetof(AiArea, site_trees) == 0x4cc);
 static_assert(offsetof(AiArea, site_trees) + 7 * sizeof(SiteTree) + offsetof(SiteTree, size) + 8 ==
               offsetof(AiPlayerData, unk550));
 static_assert(sizeof(AiArea) == 0x73c);
+
+// The site tree of each building type (AiArea::site_trees index; AddArea
+// 0x555260 points site_tree_of_type[type] at it, -1: left as it was): the
+// military buildings (small / large tower, castle) and type 0 have none;
+// trees 5, 31, 33, 34, 35, 36 are shared by the races' variants
+// (re/computer_players.md "The area site lists").
+inline constexpr std::int8_t kSiteTreeOfType[kBuildingTypeCount] = {
+    -1, 23, 0,  1,  13, 14, 21, 3,  4,  2,  12, 9,  10, 11, 24, -1, -1, 16, -1, 22,
+    17, 19, 31, 18, 15, 7,  36, 36, 36, 5,  8,  35, 25, 26, 27, 28, 29, 6,  31, 30,
+    32, 34, 33, 34, 33, 34, 33, 35, 35, 20, 35, 37, 31, 38, 33, 34, 5};
 
 // A node of CEvaLand::lists[player] (0x744 bytes; MSVC6 std::list node).
 struct AiAreaNode {
