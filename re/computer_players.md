@@ -409,6 +409,28 @@ military building with a spare, ready group in the same walk region within
 120 tiles whose tenth is at least the defenders within 60 (delay 900 - r %
 225, steal flag 1).
 
+Session 55 (V, `ai_world_events.cpp`, `ai_census_settlers.cpp`):
+`ProcessWorldEvents` 0x590da0 consumes the world's event ring
+(CGameData::events, read index advanced; the only reader): 1 / 5 a settler
+is gone (bitset bit cleared, hunter entry erased, hunters after it stop; a
+catapult leaves its owner's catapult vector and the groups hunting it are
+reset; otherwise empty groups are dissolved: "Army %d ist killed"); 2 a
+building is gone (garrison bit cleared, attacks on it reset, home and
+patrol buildings cleared); 3 a building changed hands (the new computer
+owner asks for its garrison and the first group that attacked it guards
+it: gather position, patrol building, home area and home building, unless
+a group already has that home area); 4 a building of a computer player is
+attacked: when its towers exceed twice its highest group and the attacker
+has three times its soldiers, or the enemies within 30 exceed twice its
+soldiers, all groups retreat into the castle (else tower) nearest to the
+start ("Einigeln", MilitaryBuildingNearestStart 0x58b1a0); otherwise the
+nearest groups defend it until their members reach the enemies ("Defend
+Tower"); 6 the areas changed: home areas follow the home buildings'
+doors. AiGroupOrders +0x190 is `home_buildings`. The census
+(`CountSettlers` 0x55b880) counts the settlers in 8 slices per pass (step
+0x7e06e0, cursor 0x7e0578), all at once on maps with fewer than 50 settler
+slots, and fills the catapult vectors.
+
 ## How decisions reach the simulation
 
 Most decisions don't write the world directly (the world is read through

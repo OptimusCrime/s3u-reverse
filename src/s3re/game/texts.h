@@ -265,4 +265,14 @@ inline constexpr GameText kAiStartAttack{0x732edc};
 inline constexpr GameText kAiStartGather{0x732ea4};
 // "Start Steal - player: %d, group: %d, building: %d \n" (AI::StartAttack 0x594080)
 inline constexpr GameText kAiStartSteal{0x732e70};
+// "Delete Catapult nr. %i Iterator: %x start: %x , end: %x, size: %i\n" (AI::ProcessWorldEvents 0x590da0, event 1/5 of a catapult)
+inline constexpr GameText kAiDeleteCatapult{0x732d94};
+// "player: %d, Army %d ist killed\n" (AI::ProcessWorldEvents 0x590da0)
+inline constexpr GameText kAiArmyKilled{0x732d74};
+// "Einigeln - player: %d, group: %d, building: %d \n" (dig in; AI::ProcessWorldEvents 0x590da0, event 4)
+inline constexpr GameText kAiDigIn{0x732d40};
+// "Defend Tower - player: %d, group: %d, building: %d \n" (AI::ProcessWorldEvents 0x590da0, event 4)
+inline constexpr GameText kAiDefendTower{0x732d08};
+// "WRONG EVENT - readID: %d type: %d data1: %d data2: %d" (DebugLog of AI::ProcessWorldEvents 0x590da0 for an unknown event type)
+inline constexpr GameText kAiWrongEvent{0x732cd0};
 }  // namespace s3re::game::texts

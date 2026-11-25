@@ -111,7 +111,7 @@ AiGroupOrders* __fastcall AI_Army_Reset(AiGroupOrders* self, void* /*edx*/) {
             self->group_flags1c48[p][group] = 0;
             self->group_targets[p][group] = AiGroupTarget{0, 0, 0};
             self->home_areas[p][group] = 0;
-            self->unk190[p][group] = 0;
+            self->home_buildings[p][group] = 0;
             self->group_flags[p][group] = 0;
             self->group_mages[p][group] = 0;
         }

@@ -3636,3 +3636,116 @@ SPECS += [
          presets=lambda rng, pool, args: [(SCRATCH + 2 * SCRATCH_SLOT_BYTES, rng.getrandbits(32), 4)],
          max_cases=400),
 ]
+
+
+# ProcessWorldEvents / MilitaryBuildingNearestStart (ai_world_events.cpp).
+# The events ring, players 0..3, buildings 1..12 and the groups are world
+# presets; the army, census, army state, the hunter and catapult vectors
+# (in scratch slots 1 and 2) and the garrison bits are globals.
+# CountEnemySoldiersNear, SendMoveGroup and QueueChangeGarrison are probed;
+# ResetUnitGroup, MoveLastGroupInto, CountSpareSoldiers, the nearest-start
+# search, TileDistance and Random run as original code.
+EVENTS = 0x32878
+EVENT_INDEX = 0x366F8
+EVENT_HUNTERS = SCRATCH + SCRATCH_SLOT_BYTES        # 20 x 6 {hunter, target}
+EVENT_CATAPULTS = SCRATCH + 2 * SCRATCH_SLOT_BYTES  # 20 x 6 settler ids
+EVENT_SETTLERS = range(3700, 3740)
+AI_HOME_BUILDINGS = AI_GROUP_ORDERS + 0x190
+AI_GATHER_POSITIONS = AI_GROUP_ORDERS + 0x1DB0
+EVENT_CALLEES = {**ORDER_CALLEES, 0x00590BB0: (3, "thiscall", "probe"), **XRAN_PROBE, **GARRISON_XRAN_PROBE}
+
+
+def event_settler(rng):
+    return rng.choice(EVENT_SETTLERS)
+
+
+def events_world(rng, pool, args):
+    """military_buildings (owners 0..3), players 0..3 (active, start
+    positions), their groups (lengths, first members), the hunter and
+    catapult entries in scratch, 0..8 events ending near the ring's wrap."""
+    fields = military_buildings(rng, pool, args, owner_choices=(0, 1, 2, 3))
+    for p in range(20):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        fields += [(record, rng.choice((2, 2, 1, 0)) if p < 4 else 0, 4),
+                   (record + 0x10, rng.randrange(20, 100), 4), (record + 0x14, rng.randrange(20, 100), 4)]
+        for g in range(10):
+            index = p * 10 + g
+            if p < 4:
+                fields += [(PLAYER_LIST_LENGTHS + 4 * index, rng.choice((0, 0, 1, 5, 20)), 4),
+                           (PLAYER_LISTS + index * 200, event_settler(rng), 2)]
+        for k in range(6):
+            fields += [(EVENT_HUNTERS + (p * 6 + k) * 8, event_settler(rng), 4),
+                       (EVENT_HUNTERS + (p * 6 + k) * 8 + 4, 0 if rng.random() < 0.4 else event_settler(rng), 4),
+                       (EVENT_CATAPULTS + (p * 6 + k) * 4, event_settler(rng), 4)]
+    for settler in EVENT_SETTLERS:
+        record = SETTLERS + settler * SETTLER_BYTES
+        fields += [(record + 4, rng.randrange(20, 100), 2), (record + 6, rng.randrange(20, 100), 2)]
+    count = rng.randrange(9)
+    read = rng.choice((995, 996, 997, 998, 999, rng.randrange(1000)))
+    fields += [(EVENT_INDEX, read, 4), (EVENT_INDEX + 4, (read + count) % 1000, 4)]
+    for k in range(count):
+        event = EVENTS + ((read + k) % 1000) * 16
+        kind = rng.choice((1, 1, 2, 3, 3, 4, 4, 4, 5, 6, 0, 7))
+        if kind in (1, 5):
+            catapult = rng.random() < 0.4
+            a = event_settler(rng) if rng.random() < 0.97 else rng.randrange(32000, 32100)
+            b = 41 if catapult else rng.randrange(48)
+            c = rng.randrange(4)
+        else:
+            a = rng.randrange(13) if rng.random() < 0.97 else rng.randrange(4000, 4100)
+            b = rng.randrange(4)
+            c = rng.randrange(4)
+        fields += [(event, kind, 4), (event + 4, a, 4), (event + 8, b, 4), (event + 12, c, 4)]
+    return fields
+
+
+def events_globals(rng, pool, args):
+    """order_globals; the army (highest groups, home areas 0..2 and home
+    buildings, patrols, preys, gather positions), census soldiers and
+    towers of players 0..3, the vectors, the garrison bits."""
+    fields = order_globals(rng, pool, args)
+    for p in range(4):
+        fields.append((AI_GROUP_ORDERS + ARMY_HIGHEST_GROUP + 4 * p, rng.randrange(10), 4))
+        for k in range(9):
+            fields.append((AI_CENSUS + 0x444 + (p * 9 + k) * 4, 0 if rng.random() < 0.3 else rng.randrange(8), 4))
+        for art in (15, 16, 18):
+            fields.append((AI_CENSUS_BUILDINGS + (p * 57 + art) * 4, rng.randrange(4) if rng.random() < 0.6
+                           else rng.randrange(10, 30), 4))
+        for g in range(10):
+            index = p * 10 + g
+            fields += [(AI_GROUP_ORDERS + ARMY_HOME_AREAS + 2 * index, rng.randrange(3), 2),
+                       (AI_HOME_BUILDINGS + 2 * index, 0 if rng.random() < 0.4 else rng.randrange(13), 2),
+                       (AI_GROUP_TARGETS + 6 * index + 4, event_settler(rng), 2),
+                       (AI_CENSUS_TARGETS + 2 * index, 0 if rng.random() < 0.5 else rng.randrange(13), 2)]
+    for p in range(20):
+        hunters = WORLD_BASE + EVENT_HUNTERS + p * 48
+        catapults = WORLD_BASE + EVENT_CATAPULTS + p * 24
+        fields += [(AI_HUNTER_VECTORS + 16 * p, hunters, 4), (AI_HUNTER_VECTORS + 16 * p + 4,
+                                                             hunters + 8 * rng.randrange(7), 4),
+                   (AI_CATAPULT_VECTORS + 16 * p, 0 if rng.random() < 0.1 else catapults, 4)]
+        fields.append((AI_CATAPULT_VECTORS + 16 * p + 4,
+                       0 if fields[-1][1] == 0 else catapults + 4 * rng.randrange(7), 4))
+    for word in range(4):
+        fields.append((AI_GARRISONED_BUILDINGS + 4 * word, rng.getrandbits(32), 4))
+    return fields
+
+
+def nearest_start_world(rng, pool, args):
+    fields = military_buildings(rng, pool, args, owner_choices=(0, 1, 2))
+    for p in range(3):
+        record = PLAYER_RECORDS + p * PLAYER_RECORD_BYTES
+        fields += [(record + 0x10, rng.randrange(150), 4), (record + 0x14, rng.randrange(150), 4)]
+    return fields
+
+
+SPECS += [
+    # EAX is not used by the caller (0x58f990). Dead: 0x590f35 (a null
+    # catapult vector's size when one of its entries matched: the walk would
+    # have read address 0) and 0x5915ee / 0x59160e / 0x591635 (the
+    # defender's soldiers when it isn't playing: it is a computer player).
+    Spec("AI_ProcessWorldEvents", 0x00590da0, "thiscall", [], eax_mask=0, presets=events_world,
+         globals=events_globals, callees=EVENT_CALLEES, exempt_blocks=(0x590f35, 0x5915ee, 0x59160e, 0x591635),
+         max_cases=3000),
+    Spec("AI_MilitaryBuildingNearestStart", 0x0058b1a0, "thiscall", [below(3)], presets=nearest_start_world,
+         globals=order_globals, max_cases=1500),
+]

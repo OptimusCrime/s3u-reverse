@@ -440,7 +440,7 @@ static_assert(sizeof(AiGroupPosition) == 4);
 // re/computer_players_naming.md ("Army object 0x7e37d0").
 struct AiGroupOrders {
     std::uint16_t home_areas[layout::kPlayers][kUnitGroups];     // 0x000 area of the own military building nearest to the group (0x592820)
-    std::uint16_t unk190[layout::kPlayers][kUnitGroups];         // 0x190 cleared per group by the reset (meaning open)
+    std::uint16_t home_buildings[layout::kPlayers][kUnitGroups];  // 0x190 the military building a group was given to guard after it took it (ProcessWorldEvents 0x590da0 event 3; its door area refreshes home_areas on event 6); was unk190
     std::uint8_t group_flags[layout::kPlayers][kUnitGroups];     // 0x320 steal flag: the group goes for a weakly guarded enemy building (0x594080; 0x590c80 tests it)
     AiGroupTarget group_targets[layout::kPlayers][kUnitGroups];  // 0x3e8
     std::uint32_t gather_buildings[layout::kPlayers];            // 0x898 the gather building of a pending attack (0x594080)
