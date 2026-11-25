@@ -29,6 +29,7 @@
 #include "game/ui/game_settings_layout.h"
 #include "msvc6/game_heap.h"
 #include "msvc6/string.h"
+#include "msvc6/wstring.h"
 #include "test/difftest.h"
 
 #include <windows.h>
@@ -59,6 +60,20 @@ using SetupConstructIdFn = GamePlayerSetup*(__fastcall*)(GamePlayerSetup* self, 
 extern SetupConstructIdFn Original_GamePlayerSetup_ConstructId;
 extern SaveSetupFn Original_GameSettings_SaveSetup;
 void __fastcall GamePlayerSetup_Destruct(void* self, void* edx);
+using SetupSetFn = std::uint32_t(__fastcall*)(GamePlayerSetup* self, void* edx, std::uint32_t type,
+                                             std::uint32_t byte60, std::uint32_t party, std::uint32_t race,
+                                             std::uint32_t raceByte, std::uint32_t a, std::uint32_t b, std::uint32_t c,
+                                             std::uint32_t colour);
+std::uint32_t __fastcall GamePlayerSetup_Set(GamePlayerSetup* self, void* edx, std::uint32_t type, std::uint32_t byte60,
+                                             std::uint32_t party, std::uint32_t race, std::uint32_t raceByte,
+                                             std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t colour);
+extern SetupSetFn Original_GamePlayerSetup_Set;
+using SetupCopyHookFn = GamePlayerSetup*(__fastcall*)(GamePlayerSetup* self, void* edx, const GamePlayerSetup* from);
+GamePlayerSetup* __fastcall GamePlayerSetup_CopyConstruct(GamePlayerSetup* self, void* edx,
+                                                          const GamePlayerSetup* from);
+GamePlayerSetup* __fastcall GamePlayerSetup_Assign(GamePlayerSetup* self, void* edx, const GamePlayerSetup* from);
+extern SetupCopyHookFn Original_GamePlayerSetup_CopyConstruct;
+extern SetupCopyHookFn Original_GamePlayerSetup_Assign;
 
 namespace {
 
@@ -485,7 +500,205 @@ GamePlayerSetup* __fastcall WrongConstructId(GamePlayerSetup* self, void* edx, s
     return self;
 }
 
+// ---------------------------------------------------------------------------
+// Set, copy constructor, operator=
+// ---------------------------------------------------------------------------
+
+// Set on random records (+0x6c / +0x70 often -1) with random arguments:
+// every byte and EAX.
+void CompareSetupSet(test::Context& ctx, SetupSetFn candidate, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        alignas(4) std::uint8_t a[sizeof(GamePlayerSetup)], b[sizeof(GamePlayerSetup)];
+        ctx.rng().Fill(a, sizeof(a));
+        for (const std::size_t at : {std::size_t{0x6c}, std::size_t{0x70}}) {
+            if (ctx.rng().Chance(1, 2)) {
+                std::memset(a + at, 0xff, 4);
+            }
+        }
+        std::memcpy(b, a, sizeof(a));
+        std::uint32_t args[9];
+        ctx.rng().Fill(args, sizeof(args));
+        const std::uint32_t ra = Original_GamePlayerSetup_Set(reinterpret_cast<GamePlayerSetup*>(a), nullptr, args[0],
+                                                              args[1], args[2], args[3], args[4], args[5], args[6],
+                                                              args[7], args[8]);
+        const std::uint32_t rb = candidate(reinterpret_cast<GamePlayerSetup*>(b), nullptr, args[0], args[1], args[2],
+                                           args[3], args[4], args[5], args[6], args[7], args[8]);
+        if (!S3RE_EXPECT_EQ(ra, rb) || !S3RE_EXPECT_MEM_EQ(a, b, sizeof(a))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return;
+        }
+    }
+}
+
+// Wrong: the initial party always set.
+std::uint32_t __fastcall WrongSet(GamePlayerSetup* self, void* edx, std::uint32_t type, std::uint32_t byte60,
+                                  std::uint32_t party, std::uint32_t race, std::uint32_t raceByte, std::uint32_t a,
+                                  std::uint32_t b, std::uint32_t c, std::uint32_t colour) {
+    const std::uint32_t result = GamePlayerSetup_Set(self, edx, type, byte60, party, race, raceByte, a, b, c, colour);
+    std::memcpy(reinterpret_cast<std::uint8_t*>(self) + 0x70, &party, 4);
+    return result;
+}
+
+constexpr std::size_t kWideName = 0x28;
+// The pointer fields: the strings' text pointers and the vector's data.
+constexpr std::size_t kTextPointers[] = {0x18 + 4, kWideName + 4, 0xbc + 4};
+
+msvc6::WString* WideOf(GamePlayerSetup* setup) {
+    return reinterpret_cast<msvc6::WString*>(reinterpret_cast<std::uint8_t*>(setup) + kWideName);
+}
+
+// A setup as FillSetup makes it, with a 16-bit text and odd share counts
+// (0xfe: copied instead of shared; 0xff frozen; 1: shared with nobody).
+void FillSetupForCopy(test::Rng& rng, GamePlayerSetup* setup) {
+    FillSetup(rng, setup);
+    std::vector<std::uint16_t> words(2 + rng.Below(30), 0);
+    words[0] = 0xff00;  // a frozen source: copied, never shared
+    for (std::size_t k = 1; k + 1 < words.size(); ++k) {
+        words[k] = static_cast<std::uint16_t>(1 + rng.Below(0xfffe));
+    }
+    msvc6::WString source{};
+    source.ptr = &words[1];
+    source.len = static_cast<std::uint32_t>(words.size() - 2);
+    source.res = source.len;
+    msvc6::WString_AssignSubstr(WideOf(setup), nullptr, &source, 0, 0xFFFFFFFFu);
+    for (const std::size_t at : kTextPointers) {
+        std::uint8_t* text = nullptr;
+        std::memcpy(&text, reinterpret_cast<std::uint8_t*>(setup) + at, sizeof(text));
+        if (text != nullptr && rng.Chance(1, 3)) {
+            static constexpr std::uint8_t kCounts[] = {1, 0xfd, 0xfe, 0xff};
+            text[-1] = kCounts[rng.Below(4)];
+        }
+    }
+}
+
+// A setup's bytes with its pointers replaced by what they point to
+// relative to `from` (1 = from's buffer, 2 = null, 3 = its own old buffer,
+// 4 = another block), then its texts and share counts.
+std::vector<std::uint8_t> CopySnapshot(const GamePlayerSetup* setup, const GamePlayerSetup* from,
+                                       const std::uintptr_t (&oldPointers)[3]) {
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(setup);
+    std::vector<std::uint8_t> out(bytes, bytes + sizeof(GamePlayerSetup));
+    for (int k = 0; k < 3; ++k) {
+        const std::size_t at = kTextPointers[k];
+        std::uintptr_t ptr = 0, fromPtr = 0;
+        std::memcpy(&ptr, bytes + at, sizeof(ptr));
+        std::memcpy(&fromPtr, reinterpret_cast<const std::uint8_t*>(from) + at, sizeof(fromPtr));
+        const std::uint32_t kind = ptr == 0 ? 2 : ptr == fromPtr ? 1 : ptr == oldPointers[k] ? 3 : 4;
+        std::memcpy(out.data() + at, &kind, 4);
+        std::uint32_t len = 0;
+        std::memcpy(&len, bytes + at + 4, 4);
+        if (ptr != 0) {
+            const auto* text = reinterpret_cast<const std::uint8_t*>(ptr);
+            const std::size_t size = (k == 1 ? 2 : 1) * (len + 1);
+            out.insert(out.end(), text - 1, text + size);
+        }
+    }
+    const std::uint32_t dataKind = std::uint32_t{0x00da7a00} | (*reinterpret_cast<void* const*>(bytes + 0x40) != nullptr);
+    std::memcpy(out.data() + 0x40, &dataKind, 4);
+    return out;
+}
+
+void PointersOf(const GamePlayerSetup* setup, std::uintptr_t (&pointers)[3]) {
+    for (int k = 0; k < 3; ++k) {
+        std::memcpy(&pointers[k], reinterpret_cast<const std::uint8_t*>(setup) + kTextPointers[k], sizeof(pointers[k]));
+    }
+}
+
+// The copy constructor on random target bytes, operator= on a second filled
+// setup (and on itself). Both sides build their records from one seed.
+// Compared: the target and the source (snapshots), EAX.
+void CompareSetupCopy(test::Context& ctx, SetupCopyHookFn candidate, bool assign, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        const std::uint64_t seed = ctx.rng().Next64();
+        const bool self = assign && ctx.rng().Chance(1, 8);
+        std::vector<std::uint8_t> snapshots[2][2];
+        std::uint32_t results[2] = {};
+        for (int side = 0; side < 2; ++side) {
+            test::Rng rng(seed);
+            alignas(4) std::uint8_t fromBytes[sizeof(GamePlayerSetup)], toBytes[sizeof(GamePlayerSetup)];
+            auto* from = reinterpret_cast<GamePlayerSetup*>(fromBytes);
+            auto* to = reinterpret_cast<GamePlayerSetup*>(toBytes);
+            FillSetupForCopy(rng, from);
+            if (assign) {
+                FillSetupForCopy(rng, to);
+            } else {
+                rng.Fill(toBytes, sizeof(toBytes));
+            }
+            const GamePlayerSetup* source = self ? to : from;
+            std::uintptr_t oldPointers[3];
+            PointersOf(to, oldPointers);
+            const SetupCopyHookFn fn = side == 0 ? (assign ? Original_GamePlayerSetup_Assign
+                                                           : Original_GamePlayerSetup_CopyConstruct)
+                                                 : candidate;
+            GamePlayerSetup* result = fn(to, nullptr, source);
+            results[side] = result == to;
+            snapshots[side][0] = CopySnapshot(to, source, oldPointers);
+            std::uintptr_t fromPointers[3];
+            PointersOf(from, fromPointers);
+            snapshots[side][1] = CopySnapshot(from, from, fromPointers);
+            if (!self) {
+                GamePlayerSetup_Destruct(to, nullptr);
+            }
+            GamePlayerSetup_Destruct(self ? to : from, nullptr);
+            if (self) {
+                GamePlayerSetup_Destruct(from, nullptr);
+            }
+        }
+        // The copy constructor's allocator bytes are the low byte of `from`'s
+        // address: the same on both sides (the same stack slot).
+        if (!S3RE_EXPECT_EQ(results[0], results[1]) ||
+            !S3RE_EXPECT(snapshots[0][0] == snapshots[1][0]) || !S3RE_EXPECT(snapshots[0][1] == snapshots[1][1])) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d (self %d)", i, self);
+            return;
+        }
+    }
+}
+
+// Wrong: operator= that never shares (always copies the narrow strings).
+GamePlayerSetup* __fastcall WrongAssign(GamePlayerSetup* self, void* edx, const GamePlayerSetup* from) {
+    GamePlayerSetup_Assign(self, edx, from);
+    if (self != from && self->text18.ptr != nullptr && self->text18.ptr == from->text18.ptr) {
+        msvc6::String_Copy(&self->text18, nullptr, self->text18.len);
+    }
+    return self;
+}
+
+// Wrong: the copy constructor's allocator byte of +0xbc from the source
+// string instead of the argument's low byte (differ in their lowest bit).
+GamePlayerSetup* __fastcall WrongCopyConstruct(GamePlayerSetup* self, void* edx, const GamePlayerSetup* from) {
+    GamePlayerSetup_CopyConstruct(self, edx, from);
+    self->textBC.allocator ^= 1;
+    return self;
+}
+
 }  // namespace
+
+S3RE_TEST(GamePlayerSetup_Set_MatchesOriginal) {
+    CompareSetupSet(ctx, &GamePlayerSetup_Set, 3000);
+}
+S3RE_TEST(GamePlayerSetup_Set_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSetupSet(probe, &WrongSet, 100);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(GamePlayerSetup_CopyConstruct_MatchesOriginal) {
+    CompareSetupCopy(ctx, &GamePlayerSetup_CopyConstruct, false, 1500);
+}
+S3RE_TEST(GamePlayerSetup_CopyConstruct_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSetupCopy(probe, &WrongCopyConstruct, false, 100);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(GamePlayerSetup_Assign_MatchesOriginal) {
+    CompareSetupCopy(ctx, &GamePlayerSetup_Assign, true, 1500);
+}
+S3RE_TEST(GamePlayerSetup_Assign_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSetupCopy(probe, &WrongAssign, true, 100);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(GamePlayerSetup_ConstructId_MatchesOriginal) {
     CompareSetupConstructId(ctx, &GamePlayerSetup_ConstructId, 2000);

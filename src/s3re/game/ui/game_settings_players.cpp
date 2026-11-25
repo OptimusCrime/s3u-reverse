@@ -44,6 +44,31 @@
 //   byte of id (the compiler let the empty allocator objects share the
 //   argument's stack slot; docs/reimplementation_notes.md, case a).
 //
+// GamePlayerSetup::GamePlayerSetup(const GamePlayerSetup& from)
+//   (0x0049eaf0) ret 4, EAX = this: the plain fields (below), the strings
+//   +0x18 and +0xbc (allocator byte = the low byte of `from`, the
+//   argument's stack slot; then std::string::assign(x, 0, -1) 0x401d60), the
+//   16-bit string +0x28 (allocator byte = from's; std::wstring::assign(x, 0,
+//   npos) 0x428400), and a new empty vector at +0x38 as in the
+//   constructor (not copied).
+// GamePlayerSetup::operator=(const GamePlayerSetup& from) (0x0049edf0)
+//   ret 4, EAX = this: nothing if from == this; else the same plain fields
+//   and the three strings (inlined assign(x): a full copy shares the buffer
+//   below count 0xfe; the 16-bit one first, then +0x18, then +0xbc); the
+//   vector and the allocator bytes stay.
+//   Plain fields of both: +0x00..+0x0c, byte +0x0c, +0x10..+0x17, byte
+//   +0x54, +0x58..+0x60, byte +0x60, +0x64..+0x67, byte +0x68,
+//   +0x6c..+0xbb. Not copied: +0x0d..+0x0f, +0x55..+0x57, +0x61..+0x63,
+//   +0x69..+0x6b (padding of byte fields).
+// GamePlayerSetup::Set (0x0049f120): (type, byte60, party, race, raceByte,
+//   a, b, c, colour) ret 0x24: +0x60 = byte60 (low byte), +0x5c = type,
+//   +0x14 = party, +0x70 = party if it was -1, +0x64 = race, +0x6c = race if
+//   it was -1, +0x68 = raceByte (low byte), +0xa8/+0xac/+0xb0 = a/b/c, +0xb4
+//   = colour. EAX = colour. The installed hook is S3RE_HOOK_ALWAYS: it first
+//   applies the --race override of the --random-map tooling
+//   (tooling/random_map_start.cpp), then runs ours (the original in
+//   original mode).
+//
 // Known differences:
 //  - The three strings' allocator bytes (+0x18, +0x28, +0xbc) are one
 //    uninitialized local byte of the original constructor's frame; ours
@@ -63,11 +88,14 @@
 #include "game/fileformats/map_file.h"
 #include "game/fileformats/savegame_chunks.h"
 #include "game/framework/critical_section.h"
+#include "game/tables.h"
 #include "game/texts.h"
 #include "game/ui/game_settings_layout.h"
 #include "game/vtables.h"
 #include "hooks.h"
 #include "msvc6/game_heap.h"
+#include "msvc6/wstring.h"
+#include "tooling/random_map_start.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -265,6 +293,143 @@ GamePlayerSetup* __fastcall GamePlayerSetup_ConstructId(GamePlayerSetup* self, v
     reinterpret_cast<msvc6::String*>(reinterpret_cast<std::uint8_t*>(self) + 0x28)->allocator = allocator;
     self->textBC.allocator = allocator;
     return self;
+}
+
+namespace {
+
+// The plain fields both copy functions copy ([begin, end) byte ranges).
+constexpr std::size_t kCopiedFields[][2] = {{0x00, 0x0d}, {0x10, 0x18}, {0x54, 0x55},
+                                            {0x58, 0x61}, {0x64, 0x69}, {0x6c, 0xbc}};
+constexpr std::size_t kWideName = 0x28;  // the 16-bit string (no name known)
+constexpr std::size_t kNamesVector = 0x38;
+
+void CopyPlainFields(GamePlayerSetup* self, const GamePlayerSetup* from) {
+    for (const auto& range : kCopiedFields) {
+        std::memcpy(reinterpret_cast<std::uint8_t*>(self) + range[0],  // raw-ok: unnamed fields of the record
+                    reinterpret_cast<const std::uint8_t*>(from) + range[0], range[1] - range[0]);
+    }
+}
+
+msvc6::WString* WideNameOf(GamePlayerSetup* setup) {
+    return reinterpret_cast<msvc6::WString*>(reinterpret_cast<std::uint8_t*>(setup) + kWideName);
+}
+const msvc6::WString* WideNameOf(const GamePlayerSetup* setup) {
+    return reinterpret_cast<const msvc6::WString*>(reinterpret_cast<const std::uint8_t*>(setup) + kWideName);
+}
+
+// std::string::assign(x, 0, n) 0x401d60 and std::wstring::assign(x, 0, n)
+// 0x428400 through their S3.EXE addresses (ours in the game).
+void AssignString(msvc6::String* self, const msvc6::String* x, std::uint32_t n) {
+    reinterpret_cast<msvc6::StringAssignSubstrFn>(0x00401d60)(self, nullptr, x, 0, n);
+}
+void AssignWide(msvc6::WString* self, const msvc6::WString* x, std::uint32_t n) {
+    reinterpret_cast<msvc6::WStringAssignSubstrFn>(0x00428400)(self, nullptr, x, 0, n);
+}
+
+}  // namespace
+
+using SetupCopyHookFn = GamePlayerSetup*(__fastcall*)(GamePlayerSetup* self, void* edx, const GamePlayerSetup* from);
+GamePlayerSetup* __fastcall GamePlayerSetup_CopyConstruct(GamePlayerSetup* self, void* edx,
+                                                          const GamePlayerSetup* from);
+GamePlayerSetup* __fastcall GamePlayerSetup_Assign(GamePlayerSetup* self, void* edx, const GamePlayerSetup* from);
+S3RE_HOOK(0x0049eaf0, GamePlayerSetup_CopyConstruct, SetupCopyHookFn, Original_GamePlayerSetup_CopyConstruct,
+          GamePlayerSetup_CopyConstruct);
+S3RE_HOOK(0x0049edf0, GamePlayerSetup_Assign, SetupCopyHookFn, Original_GamePlayerSetup_Assign,
+          GamePlayerSetup_Assign);
+
+// Purpose: Copies a player setup into a new record (the player-setup
+// vector's growth, the game settings dialogs); the strings are shared or
+// copied, the vector at +0x38 starts empty.
+GamePlayerSetup* __fastcall GamePlayerSetup_CopyConstruct(GamePlayerSetup* self, void* /*edx*/,
+                                                          const GamePlayerSetup* from) {
+    // The allocator bytes of the two std::strings: the low byte of `from`
+    // (the compiler let the empty allocators share the argument's stack slot).
+    const auto allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(from));
+    CopyPlainFields(self, from);
+    EmptyString(&self->text18);
+    self->text18.allocator = allocator;
+    AssignString(&self->text18, &from->text18, 0xFFFFFFFFu);  // (a literal -1, not npos)
+    EmptyString(WideNameOf(self));
+    WideNameOf(self)->allocator = WideNameOf(from)->allocator;
+    AssignWide(WideNameOf(self), WideNameOf(from), g_wstringNpos);
+    auto* bytes = reinterpret_cast<std::uint8_t*>(self);
+    reinterpret_cast<UShortVectorConstructFn>(kUShortVectorConstruct)(bytes + kNamesVector, nullptr,
+                                                                     kSetupVectorCapacity);
+    const std::uint32_t vectorFields[3] = {vtables::kWCValOrderedVector_ushort, 0, kSetupVectorField18};
+    std::memcpy(bytes + kNamesVector, &vectorFields[0], 4);          // raw-ok: the vector's vtable
+    std::memcpy(bytes + kNamesVector + 0x14, &vectorFields[1], 8);  // raw-ok: its +0x14 and +0x18
+    EmptyString(&self->textBC);
+    self->textBC.allocator = allocator;
+    AssignString(&self->textBC, &from->textBC, 0xFFFFFFFFu);
+    return self;
+}
+
+// Purpose: Copies one player setup over another (GameSettings::SaveSetup's
+// local copy, the setup dialogs); the vector at +0x38 is not copied.
+GamePlayerSetup* __fastcall GamePlayerSetup_Assign(GamePlayerSetup* self, void* /*edx*/, const GamePlayerSetup* from) {
+    if (self == from) {
+        return self;
+    }
+    CopyPlainFields(self, from);
+    AssignWide(WideNameOf(self), WideNameOf(from), g_wstringNpos);
+    AssignString(&self->text18, &from->text18, g_stringNpos);
+    AssignString(&self->textBC, &from->textBC, g_stringNpos);
+    return self;
+}
+
+using SetupSetFn = std::uint32_t(__fastcall*)(GamePlayerSetup* self, void* edx, std::uint32_t type,
+                                             std::uint32_t byte60, std::uint32_t party, std::uint32_t race,
+                                             std::uint32_t raceByte, std::uint32_t a, std::uint32_t b, std::uint32_t c,
+                                             std::uint32_t colour);
+std::uint32_t __fastcall GamePlayerSetup_Set(GamePlayerSetup* self, void* edx, std::uint32_t type, std::uint32_t byte60,
+                                             std::uint32_t party, std::uint32_t race, std::uint32_t raceByte,
+                                             std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t colour);
+std::uint32_t __fastcall GamePlayerSetup_SetHook(GamePlayerSetup* self, void* edx, std::uint32_t type,
+                                                 std::uint32_t byte60, std::uint32_t party, std::uint32_t race,
+                                                 std::uint32_t raceByte, std::uint32_t a, std::uint32_t b,
+                                                 std::uint32_t c, std::uint32_t colour);
+// Stays installed in original mode, for the --race override of --random-map.
+S3RE_HOOK_ALWAYS(0x0049f120, GamePlayerSetup_Set, SetupSetFn, Original_GamePlayerSetup_Set, GamePlayerSetup_SetHook);
+
+// Purpose: Fills in a player setup (type, party, race, start position
+// values, colour) when the game setup dialogs or the map loader set a
+// player up; the "initial" party and race (+0x70, +0x6c) are only set once.
+std::uint32_t __fastcall GamePlayerSetup_Set(GamePlayerSetup* self, void*, std::uint32_t type, std::uint32_t byte60,
+                                             std::uint32_t party, std::uint32_t race, std::uint32_t raceByte,
+                                             std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t colour) {
+    auto* bytes = reinterpret_cast<std::uint8_t*>(self);
+    auto dword = [bytes](std::size_t offset) -> std::uint32_t& {
+        return *reinterpret_cast<std::uint32_t*>(bytes + offset);  // raw-ok: unnamed fields of the record
+    };
+    bytes[0x60] = static_cast<std::uint8_t>(byte60);  // raw-ok: unnamed byte of the record
+    self->type = type;
+    self->party = party;
+    if (dword(0x70) == kUnset) {
+        dword(0x70) = party;
+    }
+    self->race = race;
+    if (dword(0x6c) == kUnset) {
+        dword(0x6c) = race;
+    }
+    self->race_byte = static_cast<std::uint8_t>(raceByte);
+    self->saved_values[0] = a;
+    self->saved_values[1] = b;
+    self->saved_values[2] = c;
+    self->colour = colour;
+    return colour;
+}
+
+// The installed hook: the tooling's race override, then ours (or the
+// original in original mode).
+std::uint32_t __fastcall GamePlayerSetup_SetHook(GamePlayerSetup* self, void* edx, std::uint32_t type,
+                                                 std::uint32_t byte60, std::uint32_t party, std::uint32_t race,
+                                                 std::uint32_t raceByte, std::uint32_t a, std::uint32_t b,
+                                                 std::uint32_t c, std::uint32_t colour) {
+    tooling::ApplyHumanRaceOverride(type, party, race, raceByte);
+    if (hooks::OriginalMode()) {
+        return Original_GamePlayerSetup_Set(self, edx, type, byte60, party, race, raceByte, a, b, c, colour);
+    }
+    return GamePlayerSetup_Set(self, edx, type, byte60, party, race, raceByte, a, b, c, colour);
 }
 
 // For the emulator's self-test and the wrong-implementation check: also

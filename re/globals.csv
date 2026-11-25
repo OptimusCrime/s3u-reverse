@@ -4,6 +4,8 @@ address,name,type,status,notes
 0x00655358,g_importTimeGetTime,TimeGetTimeImport,classified,S3.EXE's import address table slot of timeGetTime (from _INMM.dll); CControl_OnMouseMove calls through it and the in-process tests point it at a fake clock. Declared in src/s3re/game/globals.h; used by screen_element.cpp.
 0x00655390,g_stringNpos,const volatile uint32_t,classified,"std::string::npos of S3.EXE's statically linked library (read at run time, like the original). Declared in src/s3re/game/tables.h; used by win32_exceptions.cpp, string.cpp."
 0x006553a0,g_stringNullBuffer,char[1],classified,"The shared empty buffer of S3.EXE's std::string (a zero byte). Declared in src/s3re/game/tables.h; used by exceptions.cpp, string.cpp."
+0x00655dc8,g_wstringNullBuffer,uint16_t[1],classified,"The shared empty buffer of S3.EXE's std::wstring (a zero word; the byte before it is read as its count and assign can increment it). Declared in src/s3re/game/tables.h; used by wstring.cpp."
+0x00655dcc,g_wstringNpos,const volatile uint32_t,classified,"std::wstring::npos of S3.EXE's statically linked library (0xFFFFFFFF; read at run time like the original). Declared in src/s3re/game/tables.h; used by wstring.cpp."
 0x0065857c,g_terrainCost,const int8_t[256],classified,Pathing cost per terrain type (signed). Declared in src/s3re/game/tables.h; used by pathing.cpp.
 0x0065867c,g_directionDx,const int32_t[6],classified,x and y steps of the six directions. Declared in src/s3re/game/tables.h; used by pathing.cpp.
 0x00658694,g_directionDy,const int32_t[6],classified,x and y steps of the six directions. Declared in src/s3re/game/tables.h; used by pathing.cpp.

@@ -23,9 +23,9 @@ LOGBOOK session entry).
   the caller `CLogicThread::SaveGameToSlot` 0x50ac40 since session 55;
   re/file_formats.md):** left on the savegame path: the CRT's `_mkdir`
   0x621556 and `time` 0x61f6a7 (SaveGame calls the originals),
-  AI::SaveGlobals 0x551220 (AI range). Settings side: the GamePlayerSetup
-  copy constructor 0x49eaf0 and operator= 0x49edf0 (inlined string and
-  16-bit string assigns; the 16-bit `assign_substr` 0x428400 first) and
+  AI::SaveGlobals 0x551220 (AI range). Settings side (the GamePlayerSetup
+  copy constructor, operator= and Set and the 16-bit string members
+  _Copy/_Grow/_Split/assign_substr are verified, session 57):
   `GameSettings::LoadSaveGame` 0x432b00 (~730 lines; needs the Watcom
   vector members 0x437820, 0x437d00, 0x4379e0, 0x433e50, 0x4a01c0..0x4a06d0
   first). Optional: the Watcom skip list (0x60bab0/0x60bbe0/0x60be20).

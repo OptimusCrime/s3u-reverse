@@ -670,3 +670,50 @@ def static_text_to_destroy(rng, pool, args):
 # buffer unshared or frozen).
 SPECS += [Spec("CStaticText_Destroy", 0x0041c580, "thiscall", [], presets=static_text_to_destroy,
                callees={0x004156b0: (0, "thiscall", "probe")}, exempt_blocks=(0x0041c61d, 0x0041c63f))]
+
+
+# -- GamePlayerSetup::Set, copy constructor, operator= (session 57) ----------
+# Set: the record at world offset 0, its "initial" party and race (+0x70,
+# +0x6c) often -1.
+def setup_set_state(rng, pool, args):
+    return [(at, rng.choice([0xFFFFFFFF, rng.getrandbits(32)]), 4) for at in (0x6c, 0x70)]
+
+
+# Copy: `this` at world offset 0 (its strings' buffers in scratch slots
+# 14..16), the source at scratch slot 10 (buffers in slots 11..13, the
+# strings sometimes sharing `this`'s); std::string at +0x18 and +0xbc, the
+# 16-bit string at +0x28. Both string assigns and the vector constructor
+# 0x462df0 run (ours against the originals).
+SETUP_COPY_FROM = SCRATCH + 10 * SCRATCH_SLOT_BYTES
+
+
+def setup_copy_strings(rng, pool, args):
+    fields, ptrs = [], {}
+    for k, offset in enumerate((0x18, 0x28, 0xbc)):
+        make = wstring_fields if offset == 0x28 else string_fields
+        f, ptrs[offset] = make(rng, offset, SCRATCH + (14 + k) * SCRATCH_SLOT_BYTES)
+        fields += f
+    for k, offset in enumerate((0x18, 0x28, 0xbc)):
+        make = wstring_fields if offset == 0x28 else string_fields
+        f, _ = make(rng, SETUP_COPY_FROM + offset, SCRATCH + (11 + k) * SCRATCH_SLOT_BYTES, shared_ptr=ptrs[offset])
+        fields += f
+    return fields
+
+
+def setup_copy_source(self_chance: float):
+    def generate(rng, pool):
+        return WORLD_BASE if rng.random() < self_chance else WORLD_BASE + SETUP_COPY_FROM
+    return generate
+
+
+SPECS += [
+    Spec("GamePlayerSetup_Set", 0x0049f120, "thiscall", [anything] * 9, presets=setup_set_state),
+    Spec("GamePlayerSetup_CopyConstruct", 0x0049eaf0, "thiscall", [setup_copy_source(0.0)],
+         presets=setup_copy_strings, globals=null_string_count, new_fails=0.05),
+    # Dead in the three inlined assigns: 0x49ee32, 0x49ef20, 0x49f038 (a
+    # length above npos 0xffffffff) and 0x49ee3c, 0x49ef2a, 0x49f042 (the
+    # member is its own source: `this` != from there).
+    Spec("GamePlayerSetup_Assign", 0x0049edf0, "thiscall", [setup_copy_source(0.1)],
+         presets=setup_copy_strings, globals=null_string_count,
+         exempt_blocks=(0x0049ee32, 0x0049ee3c, 0x0049ef20, 0x0049ef2a, 0x0049f038, 0x0049f042)),
+]

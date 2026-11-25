@@ -17,4 +17,11 @@ std::uint32_t StartPositions(std::uint32_t size);
 // the game was not started that way (or not yet).
 recording::GameSetup AppliedGameSetup();
 
+// Called by the GamePlayerSetup::Set hook (0x49f120, game_settings_players.cpp)
+// before the record is set: while the -map start's NewGame runs with
+// --race, a human player's (type 0) race becomes the chosen one and its
+// race-given flag 1, as a chunk 2 race would; otherwise nothing changes.
+void ApplyHumanRaceOverride(std::uint32_t type, std::uint32_t party, std::uint32_t& race,
+                            std::uint32_t& raceGiven);
+
 }  // namespace s3re::tooling

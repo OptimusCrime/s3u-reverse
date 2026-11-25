@@ -239,6 +239,11 @@ inline constexpr GameGlobal<const float> g_aiDefaultSlope{0x65a57c};
 inline constexpr GameGlobal<const volatile std::uint32_t> g_stringNpos{0x655390};
 // The shared empty buffer of S3.EXE's std::string (a zero byte).
 inline constexpr GameGlobal<char[1]> g_stringNullBuffer{0x6553a0};
+// The same for std::wstring (16-bit characters): the shared empty buffer
+// (a zero word; its "count byte" 0x655dc7 is read and can be incremented
+// by assign) and npos.
+inline constexpr GameGlobal<std::uint16_t[1]> g_wstringNullBuffer{0x655dc8};
+inline constexpr GameGlobal<const volatile std::uint32_t> g_wstringNpos{0x655dcc};
 // GUID_NULL (16 zero bytes).
 inline constexpr GameGlobal<const std::uint32_t[4]> g_guidNull{0x65c0b8};
 // The 16-bit span functions by brightness (SelectBrightnessSpans 0x5fb4c0):

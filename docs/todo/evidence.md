@@ -92,9 +92,3 @@ cast within ~8 tiles of the map edge (kept).
   PLAYER_RECORDS, CAMPAIGN_MISSION, GAME_TICK, SETTLER_HIGH_WATER (ai.py vs
   common/logic/settlers). Check whether the values differ and rename; this
   is the LOGBOOK's "tooling guard" item.
-- **GamePlayerSetup::Set 0x49f120 (session 56):** reimplemented and tested
-  (in the wip/ui-watcom history, commit dbb99b4), but not hooked: the
-  --random-map tooling has a passthrough hook at the same address
-  (tooling/random_map_start.cpp overrides the human player's race). To
-  replace it, turn the tooling hook into S3RE_HOOK_ALWAYS that applies the
-  race override and then calls ours (or the original in --original mode).
