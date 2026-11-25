@@ -535,10 +535,11 @@ S3RE_TEST(FrameworkHelpers_ComparisonDetectsWrongImplementation) {
 }
 
 // ---------------------------------------------------------------------------
-// NetHelp_Destroy_49ec80 (0x0049ec80)
+// GamePlayerSetup_Destruct (0x0049ec80)
 // ---------------------------------------------------------------------------
 //
-// () thiscall, a destructor (members only, no vtable of its own; Dirk\
+// () thiscall, the GamePlayerSetup destructor (game_settings_layout.h;
+// members only, no vtable of its own; Dirk\
 // nethelp.cpp, 26 callers): in this order
 //   - ~string of +0xbc (inlined: erase(), then _Tidy(true));
 //   - a Watcom vector at +0x38: vtable 0x657404; if its buffer +0x40 is not
@@ -551,18 +552,18 @@ S3RE_TEST(FrameworkHelpers_ComparisonDetectsWrongImplementation) {
 // EAX is not used by callers.
 
 using DestroyMembersFn = void(__fastcall*)(void* self, void* edx);
-void __fastcall NetHelp_Destroy_49ec80(void* self, void* edx);
+void __fastcall GamePlayerSetup_Destruct(void* self, void* edx);
 
 namespace {
 
 }  // namespace
 
-S3RE_HOOK(0x0049ec80, NetHelp_Destroy_49ec80, DestroyMembersFn, Original_NetHelp_Destroy_49ec80,
-          NetHelp_Destroy_49ec80);
+S3RE_HOOK(0x0049ec80, GamePlayerSetup_Destruct, DestroyMembersFn, Original_GamePlayerSetup_Destruct,
+          GamePlayerSetup_Destruct);
 
 // Purpose: Destructor of a network helper record with three texts and a
 // list (probably a message or session description of the network code).
-void __fastcall NetHelp_Destroy_49ec80(void* self, void* /*edx*/) {
+void __fastcall GamePlayerSetup_Destruct(void* self, void* /*edx*/) {
     NetHelpRecord* const record = As<NetHelpRecord>(self);
     msvc6::String_Destroy(&record->textBc, nullptr);
     record->vector38.vtable = vtables::kWCBareVectorBase_ushort;
@@ -633,7 +634,7 @@ NetBuffers PrepareNet(std::uint8_t* object, std::uint32_t mode, const std::uint8
     return buffers;
 }
 
-void CompareNetDestroy(test::Context& ctx, DestroyMembersFn candidate, int cases) {
+void CompareSetupDestruct(test::Context& ctx, DestroyMembersFn candidate, int cases) {
     std::uint8_t a[kNetObject], b[kNetObject];
     static constexpr std::uint8_t kCounts[] = {0, 0, 1, 2, 0xfe, 0xff};
     for (int i = 0; i < cases; ++i) {
@@ -645,7 +646,7 @@ void CompareNetDestroy(test::Context& ctx, DestroyMembersFn candidate, int cases
         std::memcpy(b, a, sizeof(b));
         const NetBuffers ba = PrepareNet(a, mode, counts, length);
         const NetBuffers bb = PrepareNet(b, mode, counts, length);
-        Original_NetHelp_Destroy_49ec80(a, nullptr);
+        Original_GamePlayerSetup_Destruct(a, nullptr);
         candidate(b, nullptr);
         bool same = true;
         // Count bytes of the buffers that survive (shared ones are only
@@ -672,19 +673,19 @@ void CompareNetDestroy(test::Context& ctx, DestroyMembersFn candidate, int cases
 }
 
 void __fastcall WrongNetDestroy(void* self, void* edx) {
-    NetHelp_Destroy_49ec80(self, edx);
+    GamePlayerSetup_Destruct(self, edx);
     As<NetHelpRecord>(self)->vector38.vtable = vtables::kWCBareVectorBase_ushort;  // wrong: the base vtable is not restored
 }
 
 }  // namespace
 
-S3RE_TEST(NetHelpDestroy_MatchOriginal) {
-    CompareNetDestroy(ctx, &NetHelp_Destroy_49ec80, 5000);
+S3RE_TEST(GamePlayerSetup_Destruct_MatchOriginal) {
+    CompareSetupDestruct(ctx, &GamePlayerSetup_Destruct, 5000);
 }
 
-S3RE_TEST(NetHelpDestroy_ComparisonDetectsWrongImplementation) {
+S3RE_TEST(GamePlayerSetup_Destruct_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareNetDestroy(probe, &WrongNetDestroy, 200);
+    CompareSetupDestruct(probe, &WrongNetDestroy, 200);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

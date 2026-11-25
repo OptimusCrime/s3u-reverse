@@ -9,6 +9,10 @@
 
 #include "msvc6/string.h"
 
+namespace s3re::game::fileformats {
+struct CMapFile;
+}
+
 #include <cstddef>
 #include <cstdint>
 
@@ -16,40 +20,86 @@ namespace s3re::game {
 
 #pragma pack(push, 1)
 
+// One player's setup (0xcc bytes; the vector at GameSettings +0x58;
+// filled by GamePlayerSetup::Set 0x49f120). Members: constructor 0x49e8f0,
+// copy constructor 0x49eaf0, operator= 0x49edf0, destructor 0x49ec80 (it
+// owns std::strings at +0x18 and +0xbc, a 16-bit string at +0x28 and a
+// Watcom vector at +0x38, which the copy functions don't copy).
+struct GamePlayerSetup {
+    std::uint8_t unk000[0x10];
+    std::uint32_t value10;  // +0x10 saved as a byte in chunk 0x14 (getter 0x49f4d0)
+    std::uint32_t party;    // +0x14 Set's third argument (getter 0x49f590)
+    msvc6::String text18;   // +0x18
+    std::uint8_t unk028[0x5c - 0x28];
+    std::uint32_t type;     // +0x5c 0 human, 2 computer (Set's first argument; getter 0x49f350)
+    std::uint8_t unk060[0x64 - 0x60];
+    std::uint32_t race;     // +0x64 0xff = random (Set's fourth argument; getter GetMemberDword64 0x49f510)
+    std::uint8_t race_byte; // +0x68 Set's fifth argument (a byte; getter 0x49f580)
+    std::uint8_t unk069[0xa8 - 0x69];
+    std::uint32_t saved_values[3];  // +0xa8 Set's arguments 6..8; chunk 0x14 +0xc..+0x14 (getter 0x49fed0)
+    std::uint32_t colour;  // +0xb4 colour index: LoadMap copies it into g_playerColourIndex (getter 0x49fec0)
+    std::uint8_t unk0b8[4];
+    msvc6::String textBC;  // +0xbc
+};
+static_assert(sizeof(GamePlayerSetup) == 0xcc);
+static_assert(offsetof(GamePlayerSetup, value10) == 0x10);
+static_assert(offsetof(GamePlayerSetup, text18) == 0x18);
+static_assert(offsetof(GamePlayerSetup, type) == 0x5c);
+static_assert(offsetof(GamePlayerSetup, race) == 0x64);
+static_assert(offsetof(GamePlayerSetup, race_byte) == 0x68);
+static_assert(offsetof(GamePlayerSetup, saved_values) == 0xa8);
+static_assert(offsetof(GamePlayerSetup, colour) == 0xb4);
+static_assert(offsetof(GamePlayerSetup, textBC) == 0xbc);
+
+// The player-setup vector (a Watcom value vector of GamePlayerSetup, the
+// layout of watcom/ptr_vector.h with 0xcc-byte elements). Its element
+// access is inlined into GameSettings::PlayerSetup 0x4351e0 and SaveSetup
+// 0x433490 (game_settings_players.cpp).
+struct PlayerSetupVector {
+    std::uint32_t vtable;    // +0x00 slot 1 is called with 0 when an empty vector gets its first element
+    std::uint32_t unk04;
+    GamePlayerSetup* data;   // +0x08 the elements (the game's operator new)
+    std::uint32_t capacity;  // +0x0c elements allocated
+    std::int32_t filled;     // +0x10 elements constructed (signed)
+    std::uint32_t length;    // +0x14 elements in use
+};
+static_assert(sizeof(PlayerSetupVector) == 0x18);
+
 struct GameSettings {
-    std::uint8_t unk000[0x2c];
+    std::uint8_t lock[0x18];     // +0x00 a Win32::CCriticalSection (a CRITICAL_SECTION): PlayerSetup holds it
+    std::uint8_t unk018[0x2c - 0x18];
     msvc6::String map_name;      // +0x2c probably the map's name: GameSettings::MapName 0x436a60 returns a copy,
                                  //       CLogicThread::SaveGame writes it into the savegame header
-    std::uint8_t unk03c[0x6c - 0x3c];    // +0x58 the player-setup vector (Watcom; element access 0x4351e0)
-    std::uint32_t player_setup_count;   // +0x6c its element count (+0x14 of the vector); GameSettings::SaveSetup
-                                        //       0x433490 saves this many records
+    std::uint8_t unk03c[0x58 - 0x3c];
+    PlayerSetupVector player_setups;  // +0x58 one record per player; its length (+0x6c) is the player count
+                                      //       GameSettings::SaveSetup 0x433490 saves
     std::uint8_t unk070[0x74 - 0x70];
     std::uint32_t start_goods;   // +0x74 NewGame arg 9: 0 the map's own, 1 low, 2 medium, 3 high (re/game_setup.md;
                                  //       getter GameSettings::StartGoods 0x412300)
-    std::uint8_t unk078[0x88 - 0x78];
+    std::uint32_t local_player_id;  // +0x78 logged by SaveSetup ("CFG: Saving local player id %i"), chunk 0x1a
+    std::uint8_t unk07c[0x84 - 0x7c];
+    fileformats::CMapFile* map_file;  // +0x84 the map or savegame being started (a random map: a memory file
+                                      //       with chunk 5, re/game_setup.md)
     std::uint16_t seed;          // +0x88 the game's random seed (CGameData::SeedRandom; re/globals.csv)
     std::uint8_t unk08a[0xb0 - 0x8a];
-    std::uint32_t valuesB0[4];   // +0xb0 four values copied as one (GameParams_CopyRectB0 0x437400;
-                                 //       read by CNetSession and the savegame code; probably a rectangle)
-    std::uint8_t unk0c0[0xcc - 0xc0];
+    std::uint32_t game_guid[4];  // +0xb0 the game's GUID (NewGame; GameSettings::GameGuid 0x437400 copies it,
+                                 //       CLogicThread::SaveGameToSlot turns it into text with UuidToStringA)
+    std::uint8_t unk0c0[0xc8 - 0xc0];
+    std::uint32_t valueC8;       // +0xc8 read by CNetThread::OnStart and CNetSession; chunk 0x1b
     std::uint8_t randomRaceAmazons;  // +0xcc whether random races include the Amazons (random.cpp)
+    std::uint8_t goods_objective;    // +0xcd the "NGO" goods objective is on (re/game_setup.md); chunk 0x1e
 };
 static_assert(offsetof(GameSettings, map_name) == 0x2c);
-static_assert(offsetof(GameSettings, player_setup_count) == 0x6c);
+static_assert(offsetof(GameSettings, player_setups) == 0x58);
+static_assert(offsetof(GameSettings, player_setups) + offsetof(PlayerSetupVector, length) == 0x6c);
 static_assert(offsetof(GameSettings, start_goods) == 0x74);
-
-// One player's setup (0xcc bytes; the vector at GameSettings +0x58, element
-// access GameSettings 0x4351e0; filled by GamePlayerSetup::Set 0x49f120).
-struct GamePlayerSetup {
-    std::uint8_t unk000[0xb4];
-    std::uint32_t colour;  // +0xb4 colour index: LoadMap copies it into g_playerColourIndex (getter 0x49fec0)
-    std::uint8_t unk0b8[0xcc - 0xb8];
-};
-static_assert(sizeof(GamePlayerSetup) == 0xcc);
-static_assert(offsetof(GamePlayerSetup, colour) == 0xb4);
+static_assert(offsetof(GameSettings, local_player_id) == 0x78);
+static_assert(offsetof(GameSettings, map_file) == 0x84);
 static_assert(offsetof(GameSettings, seed) == 0x88);
-static_assert(offsetof(GameSettings, valuesB0) == 0xb0);
+static_assert(offsetof(GameSettings, game_guid) == 0xb0);
+static_assert(offsetof(GameSettings, valueC8) == 0xc8);
 static_assert(offsetof(GameSettings, randomRaceAmazons) == 0xcc);
+static_assert(offsetof(GameSettings, goods_objective) == 0xcd);
 
 #pragma pack(pop)
 

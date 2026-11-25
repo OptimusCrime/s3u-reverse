@@ -18,6 +18,7 @@ add_library(s3re SHARED
     # watcom/: Watcom container library code
     watcom/ptr_vector.cpp
     watcom/string_vector.cpp
+    watcom/ushort_vector.cpp
 
     # tooling/: launcher features: --fast, --random-map, --load-save
     tooling/fast.cpp
@@ -126,6 +127,8 @@ add_library(s3re SHARED
     game/logic/load_save_game_tests.cpp
     game/logic/save_game.cpp
     game/logic/save_game_tests.cpp
+    game/logic/save_game_to_slot.cpp
+    game/logic/draw_data.cpp
     game/logic/logic_helpers.cpp
     game/logic/logic_thread.cpp
     game/logic/logic_thread_members.cpp
@@ -192,6 +195,8 @@ add_library(s3re SHARED
 
     # game/ui/: CScreenElement and the controls, menu and settings layouts
     game/ui/game_settings.cpp
+    game/ui/game_settings_players.cpp
+    game/ui/game_settings_players_tests.cpp
     game/ui/screen_element.cpp
     game/ui/ui_static_text.cpp
 
@@ -204,6 +209,7 @@ add_library(s3re SHARED
     game/graphics/gfx_rle.cpp
     game/graphics/gfx_spans.cpp
     game/graphics/graphics_helpers.cpp
+    game/graphics/value_bar.cpp
     game/graphics/landscape_colours.cpp
     game/graphics/screen_layout.cpp
 

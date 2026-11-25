@@ -18,17 +18,17 @@ LOGBOOK session entry).
   stream 0x4a55e0..0x4a5c80.
 - **Reimplementation order (the CMapFile container, LoadSaveGame, LoadMap
   and its callees are verified, sessions 51-54; the savegame writer
-  `CLogicThread::SaveGame` 0x509980, `GameSettings::MapName` 0x436a60 and
-  `~CMapFile` 0x4a5b50 since session 55; re/file_formats.md):** left on the savegame path:
-  `GameSettings::SaveSetup` 0x433490 (chunks 0x14/0x1a/0x1b/0x1e; Watcom
-  vector code of the player setups, GamePlayerSetup getters
-  0x49f4d0/0x49f590/0x49f350/0x49f510/0x49f580/0x49fed0; its chunks hold
-  stack leftovers, see re/file_formats.md), the CRT's `_mkdir` 0x621556 and
-  `time` 0x61f6a7 (SaveGame calls the originals), and the caller
-  `CLogicThread::SaveGameToSlot` 0x50ac40. Optional: the Watcom skip list
-  (0x60bab0/0x60bbe0/0x60be20) and `GameSettings::PlayerSetup` 0x4351e0
-  (LoadMap calls the original; Watcom vector code behind a mutex) as our
-  code.
+  `CLogicThread::SaveGame` 0x509980 with `GameSettings::MapName`,
+  `SaveSetup` 0x433490, `PlayerSetup` 0x4351e0 and the caller
+  `CLogicThread::SaveGameToSlot` 0x50ac40 since session 55;
+  re/file_formats.md):** left on the savegame path: the CRT's `_mkdir`
+  0x621556 and `time` 0x61f6a7 (SaveGame calls the originals),
+  AI::SaveGlobals 0x551220 (AI range). Settings side: the GamePlayerSetup
+  copy constructor 0x49eaf0 and operator= 0x49edf0 (inlined string and
+  16-bit string assigns; the 16-bit `assign_substr` 0x428400 first) and
+  `GameSettings::LoadSaveGame` 0x432b00 (~730 lines; needs the Watcom
+  vector members 0x437820, 0x437d00, 0x4379e0, 0x433e50, 0x4a01c0..0x4a06d0
+  first). Optional: the Watcom skip list (0x60bab0/0x60bbe0/0x60be20).
 - **Shared catch-type helper:** the SEH filter that matches MSVC 6.0
   catchable types exists twice (execute_commands.cpp,
   map_file_stream.cpp); make it one helper.

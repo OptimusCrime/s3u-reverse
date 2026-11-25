@@ -1280,18 +1280,18 @@ address,name,source,ticks,calls,commit,date,note
 0x00436a60,GameSettings::MapName,save:slot 1.sav,2000,0,799fca5,2026-11-25,
 0x00436a60,GameSettings::MapName,save:slot 2.sav,2000,0,799fca5,2026-11-25,
 0x00436a60,GameSettings::MapName,save:slot 3.sav,2000,0,799fca5,2026-11-25,
-0x00437400,GameParams::CopyRectB0,"random:384,0 seed 1234",1000,0,799fca5,2026-11-25,
-0x00437400,GameParams::CopyRectB0,"random:448,3 seed 1234",1000,0,799fca5,2026-11-25,
-0x00437400,GameParams::CopyRectB0,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
-0x00437400,GameParams::CopyRectB0,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
-0x00437400,GameParams::CopyRectB0,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
-0x00437400,GameParams::CopyRectB0,replay:fullgame-20261124-0055-seed10779,138402,0,4080b11,2026-11-24,seed 10779
-0x00437400,GameParams::CopyRectB0,replay:fun8-seed2024-input31,5000,0,d85015d,2026-11-23,seed 2024
-0x00437400,GameParams::CopyRectB0,replay:random768-seed4321-input7,1500,0,d85015d,2026-11-23,seed 4321
-0x00437400,GameParams::CopyRectB0,replay:scripted-seed127,3000,0,799fca5,2026-11-25,seed 1234
-0x00437400,GameParams::CopyRectB0,save:slot 1.sav,2000,0,799fca5,2026-11-25,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x00437400,GameParams::CopyRectB0,save:slot 2.sav,2000,0,799fca5,2026-11-25,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x00437400,GameParams::CopyRectB0,save:slot 3.sav,2000,0,799fca5,2026-11-25,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x00437400,GameSettings::GameGuid,"random:384,0 seed 1234",1000,0,799fca5,2026-11-25,
+0x00437400,GameSettings::GameGuid,"random:448,3 seed 1234",1000,0,799fca5,2026-11-25,
+0x00437400,GameSettings::GameGuid,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,0,5536f09,2026-11-10,
+0x00437400,GameSettings::GameGuid,"random:512,1 seed 1234",1500,0,21f1f01,2026-11-10,
+0x00437400,GameSettings::GameGuid,"random:640,2 seed 1234",1500,0,21f1f01,2026-11-10,
+0x00437400,GameSettings::GameGuid,replay:fullgame-20261124-0055-seed10779,138402,0,4080b11,2026-11-24,seed 10779
+0x00437400,GameSettings::GameGuid,replay:fun8-seed2024-input31,5000,0,d85015d,2026-11-23,seed 2024
+0x00437400,GameSettings::GameGuid,replay:random768-seed4321-input7,1500,0,d85015d,2026-11-23,seed 4321
+0x00437400,GameSettings::GameGuid,replay:scripted-seed127,3000,0,799fca5,2026-11-25,seed 1234
+0x00437400,GameSettings::GameGuid,save:slot 1.sav,2000,0,799fca5,2026-11-25,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x00437400,GameSettings::GameGuid,save:slot 2.sav,2000,0,799fca5,2026-11-25,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
+0x00437400,GameSettings::GameGuid,save:slot 3.sav,2000,0,799fca5,2026-11-25,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x00437480,std::string::ConcatChars2,"random:384,0 seed 1234",2000,6,57b8acf,2026-11-23,
 0x00437480,std::string::ConcatChars2,"random:448,3 seed 1234",1000,128,5932023,2026-11-24,
 0x00437480,std::string::ConcatChars2,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,6,5536f09,2026-11-10,
@@ -1508,18 +1508,18 @@ address,name,source,ticks,calls,commit,date,note
 0x0049d980,Net::DeletePointee_49d980,save:slot 1.sav,2000,0,799fca5,2026-11-25,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x0049d980,Net::DeletePointee_49d980,save:slot 2.sav,2000,0,799fca5,2026-11-25,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
 0x0049d980,Net::DeletePointee_49d980,save:slot 3.sav,2000,0,799fca5,2026-11-25,backfilled from re/savegame_checks.md (batch 27 runs); 0 = not in its list of newly called functions
-0x0049ec80,NetHelp::Destroy_49ec80,"random:384,0 seed 1234",1000,5,799fca5,2026-11-25,
-0x0049ec80,NetHelp::Destroy_49ec80,"random:448,3 seed 1234",1000,5,799fca5,2026-11-25,
-0x0049ec80,NetHelp::Destroy_49ec80,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,5,5536f09,2026-11-10,
-0x0049ec80,NetHelp::Destroy_49ec80,"random:512,1 seed 1234",1500,5,21f1f01,2026-11-10,
-0x0049ec80,NetHelp::Destroy_49ec80,"random:640,2 seed 1234",1500,5,21f1f01,2026-11-10,
-0x0049ec80,NetHelp::Destroy_49ec80,replay:fullgame-20261124-0055-seed10779,138402,5,4080b11,2026-11-24,seed 10779
-0x0049ec80,NetHelp::Destroy_49ec80,replay:fun8-seed2024-input31,5000,22,d85015d,2026-11-23,seed 2024
-0x0049ec80,NetHelp::Destroy_49ec80,replay:random768-seed4321-input7,1500,7,d85015d,2026-11-23,seed 4321
-0x0049ec80,NetHelp::Destroy_49ec80,replay:scripted-seed127,3000,5,799fca5,2026-11-25,seed 1234
-0x0049ec80,NetHelp::Destroy_49ec80,save:slot 1.sav,2000,5,799fca5,2026-11-25,
-0x0049ec80,NetHelp::Destroy_49ec80,save:slot 2.sav,2000,5,799fca5,2026-11-25,
-0x0049ec80,NetHelp::Destroy_49ec80,save:slot 3.sav,2000,5,799fca5,2026-11-25,
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,"random:384,0 seed 1234",1000,5,799fca5,2026-11-25,
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,"random:448,3 seed 1234",1000,5,799fca5,2026-11-25,
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap",300,5,5536f09,2026-11-10,
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,"random:512,1 seed 1234",1500,5,21f1f01,2026-11-10,
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,"random:640,2 seed 1234",1500,5,21f1f01,2026-11-10,
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,replay:fullgame-20261124-0055-seed10779,138402,5,4080b11,2026-11-24,seed 10779
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,replay:fun8-seed2024-input31,5000,22,d85015d,2026-11-23,seed 2024
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,replay:random768-seed4321-input7,1500,7,d85015d,2026-11-23,seed 4321
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,replay:scripted-seed127,3000,5,799fca5,2026-11-25,seed 1234
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,save:slot 1.sav,2000,5,799fca5,2026-11-25,
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,save:slot 2.sav,2000,5,799fca5,2026-11-25,
+0x0049ec80,GamePlayerSetup::~GamePlayerSetup,save:slot 3.sav,2000,5,799fca5,2026-11-25,
 0x0049f510,GetMemberDword64,"random:384,0 seed 1234",1000,4,799fca5,2026-11-25,
 0x0049f510,GetMemberDword64,"random:448,3 seed 1234",1000,4,799fca5,2026-11-25,
 0x0049f510,GetMemberDword64,replay:fullgame-20261124-0055-seed10779,138402,5,4080b11,2026-11-24,seed 10779

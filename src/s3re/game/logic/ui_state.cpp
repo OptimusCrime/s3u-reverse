@@ -906,4 +906,204 @@ S3RE_TEST(CGameData_PickHitArea_ComparisonDetectsWrongImplementation) {
     S3RE_EXPECT(probe.failures() > 0);
 }
 
+// ---------------------------------------------------------------------------
+// Session 55 (settings).
+//
+// CGameData::TileAtScreenPoint (0x004ff170, was CGameData::FindNearest_b):
+//   (x, y) thiscall, ret 8: the map tile under the screen position (x, y)
+//   goes to last_search_x / _y (+0x2d2e4 / +0x2d2e8); nothing happens when
+//   x is left of the game view (x < g_sidebarWidth). Called by
+//   ProcessEvents for clicks and the mouse cursor. EAX not used.
+//   The screen position is moved into map pixels (camera_drawn_x/_y
+//   +0x2d254/+0x2d258, minus 280 and the sidebar shift of the display mode:
+//   32, 64, 96 for modes 1..3; y minus 200), then into the tile grid:
+//   column = trunc((px + 796) / 8) - mapSize - 100; an odd column is a
+//   half-row lower (y - 9); row = trunc((py + 1800) / 18) - 100; tile x =
+//   column/2 (rounded up when odd, arithmetic shift) + row, tile y = odd +
+//   2 * row. Then it walks the tiles down the screen (x + 1, y + 2, 18
+//   pixels per step) until a tile's height (tile byte +4; 0 off the map) no
+//   longer reaches the point, and takes that tile or the one before,
+//   whichever is nearer (the distances compared unsigned). The result is
+//   clamped to the map. Divisions truncate toward zero, sums wrap at 32
+//   bits; the on-map checks are signed (the walk tests the row offset x *
+//   0x300 for < 0, not x: with a tile x below about -2^31 / 0x300, from
+//   camera or screen values far outside the map, the offset wraps positive
+//   and the height is read far outside the world; kept).
+
+namespace {
+
+constexpr std::int32_t kViewOriginX = 280;          // 0x118
+constexpr std::int32_t kViewOriginY = 200;          // 0xc8
+constexpr std::int32_t kColumnBias = 796;           // 0x31c
+constexpr std::int32_t kRowBias = 1800;             // 0x708
+constexpr std::int32_t kGridBias = 100;             // 0x64
+constexpr std::int32_t kRowPixels = 18;             // a tile row (two y steps)
+constexpr std::int32_t kHalfRowPixels = 9;
+constexpr std::int32_t kColumnPixels = 8;
+
+std::int32_t Wrap(std::uint32_t value) {
+    return static_cast<std::int32_t>(value);
+}
+std::int32_t Add(std::int32_t a, std::int32_t b) {
+    return Wrap(static_cast<std::uint32_t>(a) + static_cast<std::uint32_t>(b));
+}
+
+// The sidebar shift per display mode (0x4ff196..0x4ff1b5).
+std::int32_t DisplayModeShift(std::int32_t mode) {
+    switch (mode) {
+    case 1: return 32;
+    case 2: return 64;
+    case 3: return 96;
+    default: return 0;
+    }
+}
+
+// The height of the tile at row offset `rowOffset` (x * 0x300) and y; the
+// address is computed like the original's ([world + (rowOffset + y) * 24 + 0x67448]).
+std::uint8_t HeightAt(const CGameData* world, std::int32_t rowOffset, std::int32_t y) {
+    const std::uint32_t index = static_cast<std::uint32_t>(rowOffset) + static_cast<std::uint32_t>(y);
+    return (&world->tiles[0][0] + index)->height;
+}
+
+}  // namespace
+
+using TileAtScreenPointFn = void(__fastcall*)(CGameData* world, void* edx, std::int32_t x, std::int32_t y);
+
+// Purpose: Finds the map tile under a screen position (a click or the mouse
+// cursor) and remembers it for the UI.
+void __fastcall CGameData_TileAtScreenPoint(CGameData* world, void*, std::int32_t screenX, std::int32_t screenY) {
+    if (screenX < g_sidebarWidth) {
+        return;
+    }
+    std::int32_t px = Add(Add(world->camera_drawn_x, screenX), -kViewOriginX);
+    px = Add(px, -DisplayModeShift(g_displayMode));
+    std::int32_t py = Add(Add(world->camera_drawn_y, screenY), -kViewOriginY);
+    const auto size = static_cast<std::int32_t>(world->map_size);
+
+    const std::int32_t column = Add(Add(Add(px, kColumnBias) / kColumnPixels, -size), -kGridBias);
+    std::int32_t x;
+    std::int32_t y;
+    if ((column & 1) == 0) {
+        x = column >> 1;
+        y = 0;
+    } else {
+        x = (column >> 1) + 1;
+        y = 1;
+        py = Add(py, -kHalfRowPixels);
+    }
+    const std::int32_t row = Add(Add(py, kRowBias) / kRowPixels, -kGridBias);
+    x = Add(x, row);
+    y = Add(y, Add(row, row));
+    const std::int32_t offset = Add(py, Wrap(static_cast<std::uint32_t>(row) * static_cast<std::uint32_t>(-kRowPixels)));
+
+    // How far the point is below the start tile's top (its height counted).
+    std::int32_t below = offset;
+    if (x >= 0 && x < size && y >= 0 && y < size) {
+        below = Add(world->tiles[x][y].height, offset);
+    }
+    // Walk down until a tile's top is below the point.
+    std::int32_t step = -offset;
+    std::int32_t rowOffset = Wrap(static_cast<std::uint32_t>(x) * static_cast<std::uint32_t>(layout::kMapRowTiles));
+    std::int32_t above = 0;
+    while (above == 0) {
+        rowOffset = Add(rowOffset, static_cast<std::int32_t>(layout::kMapRowTiles));
+        x = Add(x, 1);
+        y = Add(y, 2);
+        step = Add(step, kRowPixels);
+        std::int32_t distance = step;
+        if (rowOffset >= 0 && x < size && y >= 0 && y < size) {
+            distance = Add(step, -static_cast<std::int32_t>(HeightAt(world, rowOffset, y)));
+        }
+        if (distance < 0) {
+            below = Wrap(0u - static_cast<std::uint32_t>(distance));
+        } else {
+            above = distance;
+        }
+    }
+    if (static_cast<std::uint32_t>(below) < static_cast<std::uint32_t>(above)) {
+        x = Add(x, -1);
+        y = Add(y, -2);
+    }
+    x = Add(x, 1);
+    y = Add(y, 2);
+    x = x < 0 ? 0 : x;
+    x = x < size ? x : size - 1;
+    y = y < 0 ? 0 : y;
+    y = y < size ? y : size - 1;
+    world->last_search_x = x;
+    world->last_search_y = y;
+}
+
+S3RE_HOOK(0x004ff170, CGameData_TileAtScreenPoint, TileAtScreenPointFn, Original_CGameData_TileAtScreenPoint,
+          CGameData_TileAtScreenPoint);
+
+namespace {
+
+constexpr std::uint32_t kTestMapTiles = 64;
+
+void CompareTileAtScreenPoint(test::Context& ctx, TileAtScreenPointFn candidate, int cases) {
+    const std::int32_t savedMode = g_displayMode, savedSidebar = g_sidebarWidth;
+    test::WorldPair worlds(ctx, offsetof(CGameData, tiles) + kTestMapTiles * sizeof(CGameData::tiles[0]));
+    for (int i = 0; i < cases; ++i) {
+        test::Rng& rng = ctx.rng();
+        const std::uint32_t size = rng.Chance(1, 20) ? rng.Below(3) : 4 + rng.Below(kTestMapTiles - 3);
+        // Far-off positions stay within a million pixels: past about 2^31 / 0x300
+        // tiles the walk's row offset wraps and both functions read far outside
+        // the map (the original faults).
+        const std::int32_t cameraX = rng.Chance(1, 10) ? rng.Range(-1000000, 1000000)
+                                                       : rng.Range(-200, static_cast<std::int32_t>(size) * 16 + 600);
+        const std::int32_t cameraY = rng.Chance(1, 10) ? rng.Range(-1000000, 1000000)
+                                                       : rng.Range(-200, static_cast<std::int32_t>(size) * 9 + 300);
+        const std::int32_t screenX = rng.Chance(1, 20) ? rng.Range(-1000000, 1000000) : rng.Range(-50, 1100);
+        const std::int32_t screenY = rng.Chance(1, 20) ? rng.Range(-1000000, 1000000) : rng.Range(-50, 800);
+        g_displayMode = static_cast<std::int32_t>(rng.Below(5));
+        static constexpr std::int32_t kSidebars[] = {136, 176, 216, 0, -5};
+        g_sidebarWidth = kSidebars[rng.Below(5)];
+        const bool flat = rng.Chance(1, 4);
+        worlds.Both([&](CGameData* w) {
+            w->map_size = size;
+            w->camera_drawn_x = cameraX;
+            w->camera_drawn_y = cameraY;
+        });
+        for (std::uint32_t tx = 0; tx < size; ++tx) {
+            for (std::uint32_t ty = 0; ty < size; ++ty) {
+                const auto h = static_cast<std::uint8_t>(flat ? rng.Below(8) : rng.Next32());
+                worlds.Both([&](CGameData* w) { w->tiles[tx][ty].height = h; });
+            }
+        }
+        Original_CGameData_TileAtScreenPoint(worlds.original(), nullptr, screenX, screenY);
+        candidate(worlds.ours(), nullptr, screenX, screenY);
+        if (!worlds.SameField(ctx, [](CGameData* w) -> auto& { return w->last_search_x; }) ||
+            !worlds.SameField(ctx, [](CGameData* w) -> auto& { return w->last_search_y; })) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: size %u camera %d,%d screen %d,%d mode %d", i, size, cameraX,
+                     cameraY, screenX, screenY, g_displayMode.get());
+            break;
+        }
+    }
+    S3RE_EXPECT(worlds.Same(ctx, 0, worlds.size()));
+    g_displayMode = savedMode;
+    g_sidebarWidth = savedSidebar;
+}
+
+// Wrong: always takes the tile where the walk stopped.
+void __fastcall WrongTileAtScreenPoint(CGameData* world, void* edx, std::int32_t x, std::int32_t y) {
+    CGameData_TileAtScreenPoint(world, edx, x, y);
+    if (x >= g_sidebarWidth && world->last_search_x > 0 && world->last_search_y > 1 &&
+        ((x ^ y) & 3) == 0) {
+        world->last_search_x -= 1;
+        world->last_search_y -= 2;
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(CGameData_TileAtScreenPoint_MatchesOriginal) {
+    CompareTileAtScreenPoint(ctx, &CGameData_TileAtScreenPoint, 5000);
+}
+S3RE_TEST(CGameData_TileAtScreenPoint_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareTileAtScreenPoint(probe, &WrongTileAtScreenPoint, 2000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 }  // namespace s3re::game

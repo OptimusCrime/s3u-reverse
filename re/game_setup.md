@@ -28,7 +28,10 @@ thiscall on the global `GameSettings` 0x7a7a18 (`game_settings_layout.h`),
 | 12 | +0xcd | "NGO" (goods objective) enabled -> world +0x1195dcc | checkbox +0x13ac | 0 |
 | 13 | +0xd0 | NGO time-out in minutes (DebugLog "*** NGO TimeOut: %u min") | +0x31e4 | 60 |
 
-NewGame also stores `rand()` as the game seed (+0x88) and a GUID (+0xb0).
+NewGame also stores `rand()` as the game seed (+0x88) and a GUID (+0xb0;
+GameSettings::GameGuid 0x437400 copies it, savegame chunk 0x1a holds it,
+CLogicThread::SaveGameToSlot formats it with UuidToStringA and drops the
+text).
 
 **Players.** For each party p and each of its `players[p]` players NewGame
 fills one record (`GamePlayerSetup::Set` 0x49f120): type 0 (human) for the

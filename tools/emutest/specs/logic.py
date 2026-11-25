@@ -1950,7 +1950,7 @@ SPECS += [
 # stack address in an argument is recorded as "stack". Also probed: the
 # CRT's _mkdir (the path's text) and time, GameSettings::MapName (its
 # effect fills the result string: empty, unshared, frozen or shared
-# buffer), GameSettings::SaveSetup and AI::SaveGlobals (both stay the
+# buffer), GameSettings::SaveSetup (verified on its own) and AI::SaveGlobals (the
 # original). GetError returns 0, 1 or a failure, so both results occur.
 #
 # The emulator's heap (emu.HEAP_SIZE, 0x30000 bytes) can't hold the
@@ -2137,4 +2137,93 @@ SPECS += [
     Spec("CLogicThread_SaveGame", 0x00509980, "logicthread", [lambda rng, pool: WORLD_BASE + SG_NAME],
          eax_mask=0xFF, presets=save_game_state, globals=save_game_globals, callees=SG_CALLEES, max_cases=300,
          exempt_blocks=SG_DEAD_STRING_BLOCKS),
+]
+
+
+# --- CLogicThread::SaveGameToSlot (save_game_to_slot.cpp) ---
+# SaveGame 0x509980 (verified on its own) is probed: the name it gets is
+# recorded as text, length and capacity (the string lives in the caller's
+# frame) and its result is random, so both results reach the caller. The
+# game's sprintf runs; GameSettings::GameGuid runs on g_gameSettings, whose
+# GUID (+0xb0) is random per case; UuidToStringA / RpcStringFreeA are API
+# probes (emu.py: the GUID bytes, the text pointer).
+STS_GUID = 0x007a7ac8  # g_gameSettings + 0xb0
+
+
+def _sts_record_save(m, ecx, args):
+    pointer, length, capacity = struct.unpack("<III", m.guest_read(args[0] + 4, 12))
+    return (_sg_stack(args[0]), bytes(m.guest_read(pointer, length)) if pointer else b"", length, capacity)
+
+
+def save_slot_globals(rng, pool, args):
+    return [(STS_GUID + 4 * i, rng.getrandbits(32), 4) for i in range(4)]
+
+
+def save_slot(rng, pool):
+    roll = rng.random()
+    if roll < 0.7:
+        return rng.randrange(12)
+    return rng.randrange(-200, 1000) & 0xFFFFFFFF if roll < 0.85 else rng.getrandbits(32)
+
+
+SPECS += [
+    # Dead blocks: 0x50adbd and 0x50af24, the _Eos(0) of the inlined erase()
+    # of the name: _Grow(0, false) returns false (the length is 0 then).
+    Spec("CLogicThread_SaveGameToSlot", 0x0050ac40, "logicthread",
+         [one_of(0, 1, 0x100, 0xff01, 0x12345600), save_slot], eax_mask=0xFF, globals=save_slot_globals,
+         callees={0x00509980: (1, "thiscall", lambda h: h & 0x1ff, None, _sts_record_save)},
+         exempt_blocks=(0x50adbd, 0x50af24)),
+]
+
+
+# --- CGameData::TileAtScreenPoint (ui_state.cpp, session 55) ---
+# The map size (small, sometimes 0..2), the drawn camera position (around the
+# map, sometimes far off but within a million pixels: further out the walk's
+# row offset wraps and both read outside the world), the display mode and the
+# sidebar width; tile heights are lazily random.
+def tile_at_screen_world(rng, pool, args):
+    size = rng.choice([0, 1, 2]) if rng.random() < 0.05 else rng.randrange(4, 65)
+    far = lambda: rng.randrange(-1000000, 1000000) & 0xFFFFFFFF
+    camera_x = far() if rng.random() < 0.1 else rng.randrange(-200, size * 16 + 600) & 0xFFFFFFFF
+    camera_y = far() if rng.random() < 0.1 else rng.randrange(-200, size * 9 + 300) & 0xFFFFFFFF
+    return [(MAP_SIZE, size, 4), (0x2d254, camera_x, 4), (0x2d258, camera_y, 4)]
+
+
+def tile_at_screen_globals(rng, pool, args):
+    return [(0x00730f08, rng.randrange(5), 4),  # g_displayMode
+            (0x00730f24, rng.choice([136, 176, 216, 0, 0xFFFFFFFB]), 4)]  # g_sidebarWidth
+
+
+def screen_coordinate(low, high):
+    def generate(rng, pool):
+        if rng.random() < 0.05:
+            return rng.randrange(-1000000, 1000000) & 0xFFFFFFFF
+        return rng.randrange(low, high) & 0xFFFFFFFF
+    return generate
+
+
+SPECS += [
+    Spec("CGameData_TileAtScreenPoint", 0x004ff170, "thiscall", [screen_coordinate(-50, 1100),
+                                                                 screen_coordinate(-50, 800)],
+         eax_mask=0, presets=tile_at_screen_world, globals=tile_at_screen_globals),
+]
+
+
+# --- DrawData::DrawData and its string element constructor (draw_data.cpp, session 55) ---
+# The object is the world (0xc7720 bytes, lazily random). The CRT's `eh vector
+# constructor iterator` 0x61ff7f and LogicRecord24's constructor run as they
+# are. ignore_bytes: the allocator byte of the string at +0xc66c0 is an
+# uninitialized local of the original's frame (ours writes 0); the
+# self-test pairs WrongDrawDataConstruct, which differs only in that
+# string's pointer (+0xc66c4), next to it.
+DRAW_DATA_ALLOCATOR = 0xc66c0
+
+SPECS += [
+    Spec("DrawData_Construct", 0x00523480, "thiscall", [], ignore_bytes=(DRAW_DATA_ALLOCATOR,), max_cases=200),
+    # ECX anywhere in the scratch area (the allocator byte is ECX's high byte).
+    Spec("String_EmptyHighByteAllocator", 0x00523540, "fastcall",
+         [lambda rng, pool: WORLD_BASE + SCRATCH + rng.randrange(0x1000), anything]),
+]
+SELF_TEST += [
+    Spec("WrongDrawDataConstruct", 0x00523480, "thiscall", [], ignore_bytes=(DRAW_DATA_ALLOCATOR,), max_cases=20),
 ]

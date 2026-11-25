@@ -99,6 +99,11 @@ inline constexpr GameText kSaveLabelPlayerColors{0x6a65f0};   // "GCPlayerColors
 inline constexpr GameText kSaveLabelProdStat{0x6a65e4};       // "GCProdStat" (0x1c)
 inline constexpr GameText kSaveLabelObjective{0x6a65d0};      // "GCNewGameObjective" (0x1d)
 inline constexpr GameText kSaveLabelObjectiveTimeout{0x6a65b4};  // "GCNewGameObjectiveTimeout" (0x1f)
+// CLogicThread::SaveGameToSlot (0x50ac40): the savegame names.
+inline constexpr GameText kSlotSaveName{0x6a66d4};            // "slot%2i.sav"
+inline constexpr GameText kMultiplayerSaveName{0x6a66c4};     // "Multi	emp.mps"
+// GameSettings::SaveSetup (0x433490)
+inline constexpr GameText kSavingLocalPlayerId{0x6995bc};     // "CFG: Saving local player id %i"
 inline constexpr GameText kProtocolFile{0x7a34fc};      // "E:\Siedler3\Dirk\protocol.cpp"
 inline constexpr GameText kNewDataName{0x7a3570};       // "lpNewData"
 inline constexpr GameText kDuringResize{0x7a355c};      // "PROT: During Resize"

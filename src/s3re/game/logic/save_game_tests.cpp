@@ -1,4 +1,5 @@
-// Tests of CLogicThread::SaveGame (save_game.cpp): the original and ours
+// Tests of CLogicThread::SaveGame (save_game.cpp) and SaveGameToSlot
+// (save_game_to_slot.cpp, at the end): the original and ours
 // save the same world into two files, which must be the same.
 //
 // Output: SaveGame writes g_gameFolder + "Save\" + name (and creates
@@ -68,6 +69,12 @@ bool __fastcall CLogicThread_SaveGame(CLogicThread* self, void* edx, const msvc6
 using SaveGameFn = bool(__fastcall*)(CLogicThread* self, void* edx, const msvc6::String* name);
 extern SaveGameFn Original_CLogicThread_SaveGame;
 
+std::uint32_t __fastcall CLogicThread_SaveGameToSlot(CLogicThread* self, void* edx, std::uint32_t multiplayer,
+                                                     std::int32_t slot);
+using SaveGameToSlotFn = std::uint32_t(__fastcall*)(CLogicThread* self, void* edx, std::uint32_t multiplayer,
+                                                    std::int32_t slot);
+extern SaveGameToSlotFn Original_CLogicThread_SaveGameToSlot;
+
 void __fastcall CLogicThread_LoadSaveGame(CLogicThread* self, void* edx, CMapFile* file);
 void __fastcall CGameData_LoadMap(CGameData* world, void* edx, CMapFile* file, const std::uint32_t* slotToPlayer);
 
@@ -109,6 +116,7 @@ public:
     TempGameFolder& operator=(const TempGameFolder&) = delete;
 
     std::string SavePath(const std::string& name) const { return folder_ + "Save\\" + name; }
+    std::string MultiplayerSavePath() const { return folder_ + kMultiFolder + "\\temp.mps"; }
 
     // Removes the (empty) Save and Save\Multi folders, so that a save has to
     // create them again.
@@ -283,7 +291,7 @@ struct MaskInputs {
         for (std::uint32_t i = 0; i < kInfoPlayers; ++i) {
             m.nameLengths[i] = g_playerInfo[i].name.len;
         }
-        m.setupCount = g_gameSettings->player_setup_count;
+        m.setupCount = g_gameSettings->player_setups.length;
         return m;
     }
 };
@@ -758,6 +766,90 @@ void CompareRandomWorlds(test::Context& ctx, SaveGameFn candidate, std::uint32_t
 }
 
 // ---------------------------------------------------------------------------
+// CLogicThread::SaveGameToSlot (save_game_to_slot.cpp)
+// ---------------------------------------------------------------------------
+//
+// The original and ours save the same random world into a slot (any slot
+// number, also negative and wide ones) or the multiplayer file; the file
+// must appear under the expected name and match like SaveGame's (both call
+// our SaveGame, so this checks the name and the result).
+
+struct SlotSaved {
+    std::uint32_t eax = 0;
+    Saved saved;
+};
+
+SlotSaved SaveToSlot(SaveGameToSlotFn fn, CLogicThread* thread, const TempGameFolder& folder,
+                     std::uint32_t multiplayer, std::int32_t slot) {
+    std::string path;
+    if (static_cast<std::uint8_t>(multiplayer) != 0) {
+        path = folder.MultiplayerSavePath();
+    } else {
+        char name[32];
+        std::snprintf(name, sizeof(name), "slot%2i.sav", slot);
+        path = folder.SavePath(name);
+    }
+    DeleteFileA(path.c_str());
+    SlotSaved out;
+    DebugLogRecorder log;
+    out.saved.timeFrom = kTime(nullptr);
+    out.eax = fn(thread, nullptr, multiplayer, slot);
+    out.saved.timeTo = kTime(nullptr);
+    out.saved.log = log.Take();
+    out.saved.ok = (out.eax & 0xff) != 0;
+    out.saved.foldersMade = folder.SaveFoldersExist();
+    out.saved.bytes = ReadWholeFile(path);
+    DeleteFileA(path.c_str());
+    return out;
+}
+
+void CompareSlotSaves(test::Context& ctx, SaveGameToSlotFn candidate, std::uint32_t cases) {
+    SavedGlobals savedGlobals;
+    TempGameFolder folder;
+    PrepareSettings();
+    test::WorldBuffer world(sizeof(CGameData));
+    for (std::uint32_t c = 0; c < cases; ++c) {
+        test::Rng& rng = ctx.rng();
+        rng.Fill(world.data(), world.size());
+        CGameData* w = world.world();
+        w->map_size = rng.Below(20);
+        w->local_player = static_cast<std::int32_t>(rng.Below(layout::kPlayers));
+        w->area_high_water = rng.Below(4096);
+        w->settler_high_water = rng.Below(3000);
+        w->building_high_water = rng.Below(400);
+        w->pile_high_water = rng.Below(3000);
+        w->trade_high_water = rng.Below(100);
+        w->effects_high_water = rng.Below(1000);
+        AssignText(&g_gameSettings->map_name, RandomText(rng, rng.Below(64)));
+        FakeLogicThread thread;
+        SetUpThread(rng, thread, w);
+        static constexpr std::uint32_t kFlags[] = {0, 0, 1, 1, 0x100, 0xff01};
+        const std::uint32_t multiplayer = kFlags[rng.Below(static_cast<std::uint32_t>(std::size(kFlags)))];
+        const std::int32_t slot = rng.Chance(3, 4) ? static_cast<std::int32_t>(rng.Below(12))
+                                                   : rng.Chance(1, 2) ? rng.Range(-120, 1000)
+                                                                      : static_cast<std::int32_t>(rng.Next32());
+        const SlotSaved a = SaveToSlot(Original_CLogicThread_SaveGameToSlot, thread.get(), folder, multiplayer, slot);
+        const SlotSaved b = SaveToSlot(candidate, thread.get(), folder, multiplayer, slot);
+        const bool ok = S3RE_EXPECT_EQ(a.eax & 0xff, b.eax & 0xff) && CompareFilesOf(ctx, a.saved, b.saved,
+                                                                                         MaskInputs::Now());
+        if (!ok) {
+            ctx.Fail(__FILE__, __LINE__, "  case %u: multiplayer 0x%x slot %d", c, multiplayer, slot);
+            return;
+        }
+    }
+}
+
+// Wrong: the slot number off by one.
+std::uint32_t __fastcall WrongSlot(CLogicThread* self, void* edx, std::uint32_t multiplayer, std::int32_t slot) {
+    return CLogicThread_SaveGameToSlot(self, edx, multiplayer, slot + 1);
+}
+
+// Wrong: a multiplayer flag with only bit 8 set counts.
+std::uint32_t __fastcall WrongFlag(CLogicThread* self, void* edx, std::uint32_t multiplayer, std::int32_t slot) {
+    return CLogicThread_SaveGameToSlot(self, edx, multiplayer != 0 ? 1 : 0, slot);
+}
+
+// ---------------------------------------------------------------------------
 // Wrong implementations
 // ---------------------------------------------------------------------------
 
@@ -810,6 +902,19 @@ S3RE_TEST(CLogicThread_SaveGame_ComparisonDetectsWrongImplementation) {
     for (SaveGameFn wrong : wrongs) {
         test::Context probe(ctx.name(), 1, /*quiet=*/true);
         CompareRandomWorlds(probe, wrong, 1, false);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+}
+
+S3RE_TEST(CLogicThread_SaveGameToSlot_MatchesOriginal) {
+    CompareSlotSaves(ctx, &CLogicThread_SaveGameToSlot, 40);
+}
+
+S3RE_TEST(CLogicThread_SaveGameToSlot_ComparisonDetectsWrongImplementation) {
+    const SaveGameToSlotFn wrongs[] = {&WrongSlot, &WrongFlag};
+    for (SaveGameToSlotFn wrong : wrongs) {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareSlotSaves(probe, wrong, 20);
         S3RE_EXPECT(probe.failures() > 0);
     }
 }

@@ -1,10 +1,10 @@
 // Small helpers from several files that don't fit elsewhere yet.
 //
-// GameParams_CopyRectB0 (0x00437400): (out) thiscall, ret 4: copies the four
+// GameSettings_GameGuid (0x00437400): (out) thiscall, ret 4: copies the four
 //   dwords at this+0xb0 to out; EAX = out. Unnamed file between
 //   Dirk\GameParams.cpp and Dirk\LobbyDialogs.cpp; called by CNetSession and
-//   the savegame code (probably a rectangle or four values of the game
-//   settings).
+//   the savegame code: the game's GUID (NewGame stores it; SaveGameToSlot
+//   turns it into text with UuidToStringA). Was GameParams_CopyRectB0.
 // Watcom_CopyByte (0x004584f0): (dst, src) cdecl: *dst = *src (one byte);
 //   EAX = src. Called by the Watcom vectors' destructors (probably the
 //   copy of an empty allocator or a one-byte element).
@@ -40,20 +40,20 @@ using CopyByteFn = const void*(__cdecl*)(std::uint8_t* dst, const std::uint8_t* 
 using EqualFn = std::uint32_t(__fastcall*)(const void* self, void* edx, const void* other);
 using PngFreeFn = std::uint32_t(__cdecl*)(const void* a, void* b);
 
-void* __fastcall GameParams_CopyRectB0(void* self, void* edx, std::uint32_t* out);
+void* __fastcall GameSettings_GameGuid(void* self, void* edx, std::uint32_t* out);
 const void* __cdecl Watcom_CopyByte(std::uint8_t* dst, const std::uint8_t* src);
 std::uint32_t __fastcall Lobby_EqualField4(const void* self, void* edx, const void* other);
 std::uint32_t __cdecl png_free(const void* a, void* b);
 
-S3RE_HOOK(0x00437400, GameParams_CopyRectB0, CopyRectFn, Original_GameParams_CopyRectB0, GameParams_CopyRectB0);
+S3RE_HOOK(0x00437400, GameSettings_GameGuid, CopyRectFn, Original_GameSettings_GameGuid, GameSettings_GameGuid);
 
 // Purpose: Returns a copy of four values stored at +0xb0 of a settings-like
 // object (probably a rectangle), used by the network session and savegames.
-void* __fastcall GameParams_CopyRectB0(void* self, void* /*edx*/, std::uint32_t* out) {
+void* __fastcall GameSettings_GameGuid(void* self, void* /*edx*/, std::uint32_t* out) {
     // Called on g_gameSettings (0x7a7a18).
     const GameSettings* const settings = static_cast<const GameSettings*>(self);
     for (std::size_t k = 0; k < 4; ++k) {
-        out[k] = settings->valuesB0[k];
+        out[k] = settings->game_guid[k];
     }
     return out;
 }
@@ -103,7 +103,7 @@ struct MiscFunctions {
 };
 
 void CompareMisc(test::Context& ctx, const MiscFunctions& candidate, int cases) {
-    const MiscFunctions original{Original_GameParams_CopyRectB0, Original_Watcom_CopyByte, Original_Lobby_EqualField4,
+    const MiscFunctions original{Original_GameSettings_GameGuid, Original_Watcom_CopyByte, Original_Lobby_EqualField4,
                                  Original_png_free};
     std::vector<std::uint8_t> a(0x100), b(0x100);
     for (int i = 0; i < cases; ++i) {
@@ -155,12 +155,12 @@ std::uint32_t __fastcall WrongEqual(const void* self, void* edx, const void* oth
 }  // namespace
 
 S3RE_TEST(MiscHelpers_MatchOriginal) {
-    CompareMisc(ctx, {&GameParams_CopyRectB0, &Watcom_CopyByte, &Lobby_EqualField4, &png_free}, 20000);
+    CompareMisc(ctx, {&GameSettings_GameGuid, &Watcom_CopyByte, &Lobby_EqualField4, &png_free}, 20000);
 }
 
 S3RE_TEST(MiscHelpers_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareMisc(probe, {&GameParams_CopyRectB0, &Watcom_CopyByte, &WrongEqual, &png_free}, 5000);
+    CompareMisc(probe, {&GameSettings_GameGuid, &Watcom_CopyByte, &WrongEqual, &png_free}, 5000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

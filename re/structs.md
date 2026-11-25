@@ -551,9 +551,38 @@ loaded game starts). **S** (savegame_start.cpp).
 
 ## GameSettings (g_gameSettings, 0x7A7A18; no RTTI)
 
-+0x88 word: the game seed; +0xB0 four dwords copied together
-(GameParams_CopyRectB0 0x437400; CNetSession and savegame code); +0xCC
-byte: random races include the Amazons. **V** (layout of these fields).
+Layout in `src/s3re/game/ui/game_settings_layout.h`. +0x00 a
+Win32::CCriticalSection (CRITICAL_SECTION; GameSettings::PlayerSetup holds
+it through Win32::CLock); +0x2C std::string map name; +0x58 the
+player-setup vector (Watcom value vector: +0x58 vtable, +0x60 data,
++0x64 capacity, +0x68 filled, +0x6C length = player count; elements are
+0xCC-byte GamePlayerSetup records); +0x74 start goods; +0x78 local player
+id; +0x88 word: the game seed; +0xB0 the game's GUID (NewGame;
+GameSettings::GameGuid 0x437400 copies it, SaveGameToSlot formats it with
+UuidToStringA); +0xC8 a dword read by the network code (chunk 0x1b); +0xCC
+byte: random races include the Amazons; +0xCD byte: the goods objective
+(NGO) is on. **V** (layout of these fields, session 55).
+
+## GamePlayerSetup (0xCC bytes; Dirk\nethelp.cpp; no RTTI)
+
+One player of the game setup (GameSettings +0x58). Constructor 0x49e8f0,
+copy constructor 0x49eaf0, operator= 0x49edf0, destructor 0x49ec80
+(GamePlayerSetup_Destruct), filled by GamePlayerSetup::Set 0x49f120.
+
+| Off | Meaning | Conf. |
+|---|---|---|
+| +0x10 | dword, saved as a byte in chunk 0x14 (getter 0x49f4d0) | V |
+| +0x14 | party (Set argument 3; getter 0x49f590) | M |
+| +0x18 | std::string | V |
+| +0x28 | 16-bit string (MSVC6 basic_string<unsigned short>) | V |
+| +0x38 | Watcom vector (vtable 0x657410, capacity 10 on construction; not copied by the copy functions) | V |
+| +0x5C | type: 0 human, 2 computer (getter 0x49f350) | M |
+| +0x64 | race, 0xFF random (getter 0x49f510) | M |
+| +0x68 | byte, Set argument 5 (getter 0x49f580) | V |
+| +0x6C, +0x70 | set from Set's arguments 4 and 3 only while -1 | M |
+| +0xA8..+0xB0 | three values saved in chunk 0x14 (getter GamePlayerSetup::SavedValues 0x49fed0) | V |
+| +0xB4 | colour index (getter 0x49fec0) | V |
+| +0xBC | std::string | V |
 
 ## CLogicThread (fields our code uses; `logic_thread_layout.h`)
 

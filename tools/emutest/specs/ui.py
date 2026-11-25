@@ -307,3 +307,163 @@ SPECS += [
          presets=map_name_settings, globals=null_string_count,
          exempt_blocks=(0x436a8c, 0x436a9d, 0x436ab8, 0x436adf)),
 ]
+
+
+# -- GameSettings::PlayerSetup / SaveSetup (game_settings_players.cpp, session 55) --
+# ECX = the world as the settings object; the player-setup vector at +0x58
+# (vtable at emu.FAKE_VTABLE: slot 1 is the length notification), its data
+# block at GS_SETUPS. The scoped lock (Win32::CLock ctor 0x60da00 / dtor
+# 0x60da20) is probed: the lock object lives in the caller's frame, so ECX
+# is not recorded ("stdcall"), only the critical section passed. The
+# GamePlayerSetup members the vector code calls stay the original and are
+# probed: the copy constructor 0x49eaf0 (records destination and source),
+# the destructor 0x49ec80 (ours too, verified on its own) and, in SaveSetup,
+# operator= 0x49edf0, whose effect copies the plain fields the saved values
+# come from (+0x00..+0x18, +0x54..+0xbc) into the local copy; the local's
+# constructor 0x49e8f0 and destructor run (empty strings, the vector at
+# +0x38 from operator new).
+GS_VECTOR = 0x58
+GS_SETUPS = 0x20000          # world offset of the data block (lazily random elements)
+GS_SETUP_BYTES = 0xcc
+GS_STACK = (0x00200000, 0x00300000)  # emu.STACK_BASE, + STACK_SIZE
+
+
+def _gs_stack(value):
+    return "stack" if GS_STACK[0] <= value < GS_STACK[1] else value
+
+
+def player_setup_vector(rng, pool, args):
+    capacity = rng.choice([0, 0, 1, 2, 4, rng.getrandbits(32)])
+    filled = rng.choice([0, 1, 2, -1, rng.randrange(5)])
+    length = rng.choice([0, 0, 1, 2, 3, 5, 0x80000000 + rng.randrange(3), rng.getrandbits(32)])
+    data = rng.choice([0, WORLD_BASE + GS_SETUPS])
+    return [(GS_VECTOR, FAKE_VTABLE, 4), (GS_VECTOR + 8, data, 4), (GS_VECTOR + 0xc, capacity, 4),
+            (GS_VECTOR + 0x10, filled & 0xFFFFFFFF, 4), (GS_VECTOR + 0x14, length, 4)]
+
+
+def setup_index(rng, pool):
+    return rng.choice([0, 1, 2, 4, -1, -3, rng.getrandbits(32)]) & 0xFFFFFFFF
+
+
+GS_LOCK_CALLEES = {
+    0x0060da00: (1, "stdcall", "probe"),   # Win32::CLock::CLock(cs)
+    0x0060da20: (0, "stdcall", "probe"),   # Win32::CLock::~CLock
+}
+GS_ELEMENT_CALLEES = {
+    0x0049eaf0: (1, "thiscall", "this"),   # GamePlayerSetup copy constructor
+    0x0049ec80: (0, "thiscall", "probe"),  # GamePlayerSetup destructor
+}
+
+
+def _gs_assign(m, ecx, args, h):
+    """GamePlayerSetup::operator=(from) on the local copy: the plain fields."""
+    from unicorn.x86_const import UC_X86_REG_ECX
+    to = m.uc.reg_read(UC_X86_REG_ECX)
+    for start, end in ((0x00, 0x18), (0x54, 0xbc)):
+        m.guest_write(to + start, bytes(m.guest_read(args[0] + start, end - start)))
+    return to
+
+
+# Chunk 0x14's record byte +0xb and the records past the count, and chunk
+# 0x1a's +0x22..+0x23, are the original's stack leftovers (ours writes 0):
+# the recorded chunk bytes leave exactly those out (the in-process test
+# GameSettings_SaveSetup_MatchesOriginal compares the same way, and its
+# wrong-implementation check shows a changed record byte is caught).
+def _gs_record_chunk(m, ecx, args):
+    chunk_type, sub, buffer = args
+    size = struct.unpack("<I", m.guest_read(buffer + 4, 4))[0]
+    data = bytearray(m.guest_read(buffer, min(size, 0x400)))
+    if chunk_type == 0x14:
+        count = struct.unpack("<I", bytes(data[8:12]))[0]
+        for r in range(20):
+            at = 0xc + 0x18 * r
+            if r < count:
+                data[at + 0xb] = 0
+            else:
+                data[at:at + 0x18] = bytes(0x18)
+    elif chunk_type == 0x1a:
+        data[0x22:0x24] = b"\0\0"
+    return (chunk_type, sub, bytes(data))
+
+
+SAVE_SETUP_CALLEES = {
+    0x0049edf0: (1, "stdcall", "probe", _gs_assign, lambda m, ecx, args: (args[0],)),  # operator=
+    0x004a6540: (3, "stdcall", "probe", None, _gs_record_chunk),                    # CMapFile::WriteChunk
+}
+
+
+def save_setup_settings(rng, pool, args):
+    count = rng.choice([0, 1, 2, 5, 8, 20, rng.randrange(21)])
+    return [(GS_VECTOR, FAKE_VTABLE, 4), (GS_VECTOR + 8, WORLD_BASE + GS_SETUPS, 4),
+            (GS_VECTOR + 0xc, count + rng.randrange(3), 4), (GS_VECTOR + 0x10, count, 4),
+            (GS_VECTOR + 0x14, count, 4)]
+
+
+# SaveSetup's inlined vector access runs only for indexes below the length
+# (unsigned), so the growth of an empty vector (0x433520..0x43363b) is dead;
+# the clamping of an out-of-range index (0x433518, 0x433642..0x43364c) needs
+# a length of 0x80000001 or more (the signed range check), and such a loop
+# would run 2^31 times. The same inlined code is covered by the
+# GameSettings_PlayerSetup spec (our two functions share it).
+SAVE_SETUP_DEAD_BLOCKS = (
+    0x433518, 0x433520, 0x433539, 0x433545, 0x43354d, 0x433568, 0x433576, 0x433584, 0x4335a4, 0x4335b3,
+    0x4335c8, 0x4335d1, 0x4335d3, 0x4335ed, 0x4335f1, 0x43361a, 0x43362d, 0x433632, 0x433642, 0x433646,
+    0x43364a, 0x43364c)
+
+SPECS += [
+    # Dead block: 0x435315, the length clamp after the growth (the length is
+    # 0 on that path).
+    Spec("GameSettings_PlayerSetup", 0x004351e0, "thiscall", [setup_index], presets=player_setup_vector,
+         callees={**GS_LOCK_CALLEES, **GS_ELEMENT_CALLEES}, virtuals={4: 1}, new_fails=0.1,
+         new_fails_size=GS_SETUP_BYTES, exempt_blocks=(0x435315,)),
+    Spec("GameSettings_SaveSetup", 0x00433490, "thiscall", [lambda rng, pool: WORLD_BASE + SCRATCH, anything,
+                                                             anything],
+         eax_mask=0, presets=save_setup_settings, callees=SAVE_SETUP_CALLEES, virtuals={4: 1},
+         exempt_blocks=SAVE_SETUP_DEAD_BLOCKS),
+]
+
+
+# -- GameSettings::RandomMapSize / RandomMapSymmetry, GamePlayerSetup's
+# deleting destructor (game_settings.cpp, session 55) -------------------------
+# The settings object is the world; its map file (+0x84) a scratch pointer.
+# CMapFile::GetChunk (verified) is probed: it returns chunk 5 (a lazily
+# random scratch buffer) or 0; ReleaseChunk is probed. The destructor
+# 0x49ec80 (verified) is probed in the deleting destructor.
+GS_MAP_FILE = SCRATCH + 0x3000
+GS_CHUNK5 = SCRATCH + 0x4000
+GS_CHUNK_CALLEES = {
+    0x004a60f0: (2, "thiscall", lambda h: 0 if h % 4 == 0 else WORLD_BASE + GS_CHUNK5),  # GetChunk
+    0x004a6310: (2, "thiscall", "probe"),                                                # ReleaseChunk
+}
+
+
+def random_map_settings(rng, pool, args):
+    return [(0x84, WORLD_BASE + GS_MAP_FILE, 4)]
+
+
+SPECS += [
+    Spec("GameSettings_RandomMapSize", 0x00436ff0, "thiscall", [], presets=random_map_settings,
+         callees=GS_CHUNK_CALLEES),
+    Spec("GameSettings_RandomMapSymmetry", 0x00437020, "thiscall", [], presets=random_map_settings,
+         callees=GS_CHUNK_CALLEES),
+    Spec("GamePlayerSetup_ScalarDeletingDestructor", 0x00437fc0, "thiscall", [below(4)],
+         callees={0x0049ec80: (0, "thiscall", "probe")}),
+]
+
+
+# -- GamePlayerSetup::GamePlayerSetup (game_settings_players.cpp, session 55) --
+# The record is the world; the base vector constructor 0x462df0 (ours,
+# verified) runs. ignore_bytes: the three allocator bytes are one
+# uninitialized local byte of the original's frame (ours writes 0); the
+# self-test pairs WrongGamePlayerSetupConstruct, which also writes the padding
+# byte +0x19 next to the first.
+SETUP_ALLOCATOR_BYTES = (0x18, 0x28, 0xbc)
+
+SPECS += [
+    Spec("GamePlayerSetup_Construct", 0x0049e8f0, "thiscall", [], ignore_bytes=SETUP_ALLOCATOR_BYTES,
+         new_fails=0.1),
+]
+SELF_TEST += [
+    Spec("WrongGamePlayerSetupConstruct", 0x0049e8f0, "thiscall", [], ignore_bytes=SETUP_ALLOCATOR_BYTES,
+         max_cases=50),
+]

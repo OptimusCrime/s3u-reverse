@@ -428,5 +428,9 @@ inline constexpr GameGlobal<CloseHandleImport> g_importCloseHandle{0x655180};
 inline constexpr GameGlobal<TimeGetTimeImport> g_importTimeGetTime{0x655358};  // from _INMM.dll
 inline constexpr GameGlobal<OutputDebugStringAImport> g_importOutputDebugStringA{0x6550b0};
 inline constexpr GameGlobal<GetDriveTypeAImport> g_importGetDriveTypeA{0x6550a4};
+using UuidToStringAImport = std::int32_t(__stdcall*)(const void* uuid, char** text);
+using RpcStringFreeAImport = std::int32_t(__stdcall*)(char** text);
+inline constexpr GameGlobal<UuidToStringAImport> g_importUuidToStringA{0x655298};    // RPCRT4.dll
+inline constexpr GameGlobal<RpcStringFreeAImport> g_importRpcStringFreeA{0x65529c};  // RPCRT4.dll
 
 }  // namespace s3re::game

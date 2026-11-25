@@ -152,6 +152,27 @@ def _api_get_drive_type(machine, uc, args):
     return (value % 7 if value & 0x700 else value & 0xFFFFFFFF), ("GetDriveTypeA", root)
 
 
+# The text pointer UuidToStringA hands out (never dereferenced by the game:
+# SaveGameToSlot only frees it again).
+RPC_STRING = 0x5EED0000
+
+
+def _api_uuid_to_string(machine, uc, args):
+    """UuidToStringA(uuid, &text): records the 16 GUID bytes, stores
+    RPC_STRING as the text (RPC_S_OK)."""
+    guid = machine.guest_read(args[0], 16)
+    uc.mem_write(args[1], struct.pack("<I", RPC_STRING))
+    return 0, ("UuidToStringA", guid)
+
+
+def _api_rpc_string_free(machine, uc, args):
+    """RpcStringFreeA(&text): records the text pointer and clears it, as
+    RPCRT4 does."""
+    text = struct.unpack("<I", machine.guest_read(args[0], 4))[0]
+    uc.mem_write(args[0], bytes(4))
+    return 0, ("RpcStringFreeA", text)
+
+
 # name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
 # record holds what the call saw (rectangle contents, not pointers, which
 # differ between the original's and our stack frames).
@@ -164,6 +185,8 @@ API_HANDLERS = {
     "CloseHandle": (1, _api_close_handle),
     "OutputDebugStringA": (1, _api_output_debug_string),
     "GetDriveTypeA": (1, _api_get_drive_type),
+    "UuidToStringA": (2, _api_uuid_to_string),
+    "RpcStringFreeA": (1, _api_rpc_string_free),
 }
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,
