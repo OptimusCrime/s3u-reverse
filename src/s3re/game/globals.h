@@ -495,6 +495,8 @@ using GetProcAddressImport = void*(__stdcall*)(void* module, const char* name);
 inline constexpr GameGlobal<LoadLibraryAImport> g_importLoadLibraryA{0x65519c};
 inline constexpr GameGlobal<GetProcAddressImport> g_importGetProcAddress{0x6551b4};
 inline constexpr GameGlobal<void*> g_directSound{0x7e8c0c};
+// DirectX::CSoundEffect::Play (0x5c2fc0): the next key of a duplicate buffer.
+inline constexpr GameGlobal<std::uint32_t> g_soundDuplicateCounter{0x7a0c00};
 
 // Win32::DetachMemory (0x61ab60): the page size, read once with
 // GetSystemInfo (dwPageSize) and kept (0 until the first call).

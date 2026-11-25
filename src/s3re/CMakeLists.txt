@@ -229,6 +229,8 @@ add_library(s3re SHARED
     # game/sound/: the sound data (CSoundData, the SND files)
     game/sound/sound_data.cpp
     game/sound/sound_data_tests.cpp
+    game/sound/sound_effects.cpp
+    game/sound/sound_effects_tests.cpp
     # game/framework/: WinMain, Win32/DirectX framework classes, exceptions, strings
     game/framework/directx_sound.cpp
     game/framework/directx_sound_tests.cpp

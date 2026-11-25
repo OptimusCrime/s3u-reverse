@@ -29,13 +29,21 @@ LOGBOOK session entry).
   `GameSettings::LoadSaveGame` 0x432b00 (~730 lines; needs the Watcom
   vector members 0x437820, 0x437d00, 0x4379e0, 0x433e50, 0x4a01c0..0x4a06d0
   first). Optional: the Watcom skip list (0x60bab0/0x60bbe0/0x60be20).
-- **Graphics/sound loader leftovers:** the graphics loader is verified
-  (session 55 round 2; the shared MSVC 6.0 catch-type helper is
-  msvc6/catch_match.h). Left: CSoundData (ctor 0x5fdb60, dtor, Open
-  0x5fe760, Close, DetachFromMedium 0x5ff230, GetEffect; the SND format is
-  not analysed), and the false starts 0x5f65f2/0x5f674b
+- **Graphics/sound loader leftovers:** the graphics loader (session 55
+  round 2) and the sound loader (session 56: CSoundData ctor/dtors, Open,
+  Close, Detach, GetEffect, PurgeEffects, volume; the DirectSound wrapper
+  classes; re/sound_formats.md) are verified. Left on the sound side:
+  DirectX::CSoundEffect (ctor 0x5c2aa0, dtor 0x5c2b00, Load 0x5c2ba0,
+  Restore 0x5c2d20, Play 0x5c2fc0, PurgeStoppedDuplicates 0x5c3210,
+  0x5c2ce0), CSoundEffectBuffer::Restore 0x5c28e0 / DuplicateInto
+  0x5c2a60, CSoundFile / CMemorySoundFile (0x5c2270.., 0x5c24e0..), the
+  sound dictionaries' Watcom code (0x5c33a0..0x5c3730, 0x5ffa60..0x5ffc80),
+  CDirectSound slot 1 0x5c1dc0 (needs the app-active check 0x5b8c00),
+  CDirectSoundException (0x5c15d0, 0x5c1930), the trivial getters
+  IsEnabled 0x5ff4d0 / 0x5ff4e0, and the lobby-side CSoundData callers
+  0x5fff00 / 0x600170. The false starts 0x5f65f2/0x5f674b
   (DrawGuiImage_tail*), 0x5fd902 (SequenceFrame_tail) and 0x5f6c3d
-  (FindDirectoryContainingFile_tail), which are inside verified functions.
+  (FindDirectoryContainingFile_tail) sit inside verified functions.
 - **Test isolation (session 55):** MapFileStream_MatchOriginal failed once
   while two worktrees ran it at the same time (shared %TEMP% file names);
   give temp files per-process names.

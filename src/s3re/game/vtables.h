@@ -61,6 +61,9 @@ inline constexpr std::uint32_t kSoundUseDict = 0x65d400;             // WCValSki
 inline constexpr std::uint32_t kSoundEffectSkipListBase = 0x65d438;  // WCSkipListBase<...CSoundEffect...>
 inline constexpr std::uint32_t kSoundUseSkipListBase = 0x65d454;     // WCSkipListBase<...uint, uint...>
 inline constexpr std::uint32_t kStringVector = 0x655440;             // WCValOrderedVector<String>
+inline constexpr std::uint32_t kSoundEffectDictIter = 0x65d470;      // WCValSkipListDictIter<uint, CSoundEffect*>
+inline constexpr std::uint32_t kUIntVector = 0x656d44;               // WCValOrderedVector<unsigned int>
+inline constexpr std::uint32_t kUIntVectorBase = 0x657170;           // its base, set before the destructor
 inline constexpr std::uint32_t kCLandscapeSurface = 0x65a520;   // CLandscapeSurface
 // UI
 inline constexpr std::uint32_t kCScreenElement = 0x655a68;  // CScreenElement

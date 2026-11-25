@@ -110,7 +110,8 @@ std::uint32_t __stdcall Release(FakeComObject* self) {
 std::int32_t __stdcall CreateSoundBuffer(FakeComObject* self, const std::uint32_t* desc, void** out, void* outer) {
     Log({kLogTag | ObjectId(self) << 8 | 3, Given(out), DSoundLogPointer(outer)});
     if (desc != nullptr) {
-        Log({desc[0], desc[1], desc[2], desc[3], DSoundLogPointer(reinterpret_cast<const void*>(desc[4]))});
+        // The format by content (it may sit in a heap block).
+        Log({desc[0], desc[1], desc[2], desc[3], desc[4] != 0 ? 1u : 0u});
         if (desc[4] != 0) {
             Log({Hash(reinterpret_cast<const void*>(desc[4]), 18)});  // the WAVEFORMATEX
         }

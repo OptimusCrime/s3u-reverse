@@ -21,7 +21,7 @@
 
 namespace s3re::test {
 
-inline constexpr std::size_t kFakeSoundBuffers = 24;
+inline constexpr std::size_t kFakeSoundBuffers = 512;
 inline constexpr std::size_t kFakeGameObjects = 4;
 
 // A fake COM object: vtable first, like every interface.

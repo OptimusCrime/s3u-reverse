@@ -54,18 +54,26 @@ of PCM data. Every sample of 00.dat is mono 16-bit 22,050 Hz PCM; the two of
 packed without gaps: table, then per sound its header and its samples, in
 table order, up to the file size.
 
-## Use (code only; GetEffect 0x5ff4f0, not reimplemented yet)
+## Use (verified: GetEffect 0x5ff4f0, PurgeEffects 0x5ff700)
 
 A sound id is `file << 16 | index`. GetEffect(id, variant) returns the
 DirectX::CSoundEffect of that sample, created on first use from the mapped
 sample (new CMemorySoundFile(format = sample + 4, data = sample + 0x16,
-bytes = size - 0x16, CSoundData +8), CSoundEffect::Load); variant -1 picks
-`rand() % n` (the CRT rand). Effects are cached in the dictionary at
-CSoundData +0x40 under the key `id << 24 | variant`, which keeps only the
-low 8 bits of the index and drops the file number (so 0:0 and 1:0 would
-share an entry; guess: harmless because the game's ids don't collide), and
-the time of the last use goes into the dictionary at +0xc0, then 0x5ff700
-(probably purges effects unused for a while) runs.
+bytes = size - 0x16, CSoundData +8), CSoundEffect::Load, which copies the
+data into a secondary DirectSound buffer); variant -1 picks `rand() % n`
+(the CRT rand). Effects are cached in the dictionary at CSoundData +0x40
+under the key `id << 24 | variant`: only the low 8 bits of the index
+survive and the file number is lost, so sound 0:0 and 1:0 (and 0:k and
+0:k+256) share an entry (quirk, kept; the shipped files have 119 + 1 sounds,
+so only 0:0 / 1:0 can collide; guess: the game never asks for 1:0 and 0:0
+in the same game). The time of the last use goes into the dictionary at
++0xc0. Then PurgeEffects(-1, -1, key): at most once per 60 s (since +0x144)
+it deletes every effect whose duplicates have all stopped
+(CSoundEffect::PurgeStoppedDuplicates), except the one just asked for and
+except, by a `!=` that was probably meant as `>`, effects whose last use
+was exactly 300,000 ms ago. So effects are not kept for 5 minutes as
+intended: a stopped effect is reloaded from the mapped file on its next
+use.
 
 ## The primary buffer (verified with a scripted DirectSound)
 
@@ -97,7 +105,7 @@ CDrawer::InitSurfaces / Menus CDrawer::CreateSurfaces:
     FindDirectoryContainingFile 0x5fdfc0, IsPathOnRemovableDrive 0x5fa750
     per file: CFile, CFile::Open, GetSize, CFileMapping::Create, MapView
   CSoundData::DetachFromMedium 0x5ff230
-drawing code (settlers 0x4c85a0, 0x4d3050, ...): IsEnabled 0x5ff4d0, GetEffect 0x5ff4f0, CSoundEffect::Play 0x5c2fc0
+drawing code (settlers 0x4c85a0, 0x4d3050, ...): IsEnabled 0x5ff4d0, GetEffect 0x5ff4f0 (-> PurgeEffects 0x5ff700), CSoundEffect::Play 0x5c2fc0
 options: SetVolume 0x5ff9f0, GetVolume 0x5ffa30
 CDirectSound::Disconnect 0x5c1da0 -> CSoundData::ReleaseBuffers 0x5fde20 (vtable slot 2)
 lost buffers: CDirectSoundBuffer::CheckResult -> RestoreAll -> CDirectSound slot 1 0x5c1dc0 -> CSoundData::Restore 0x5fdef0
@@ -114,6 +122,8 @@ destructor 0x5fdc90 -> Close 0x5ff1c0
 * CDirectSoundBuffer::operator= doesn't release the old buffer.
 * CSoundData::ReleaseBuffers releases the primary buffer without checking
   its interface (a second call crashes); Close deletes it afterwards.
+* GetEffect's cache key drops the file number; PurgeEffects keeps only
+  effects last used exactly 300 s ago (see above).
 * CheckDSResult treats every result other than DS_OK as an error, success
   codes included.
 
@@ -124,6 +134,8 @@ destructor 0x5fdc90 -> Close 0x5ff1c0
   uninitialized stack bytes of the original (never read).
 * Open's local strings and folder vector leak when a call throws (the
   original's frame frees them; only on the way to a fatal error).
+* GetEffect's catch (...) logs from an SEH filter, before the inner frames
+  are unwound (the original logs after them; none of them logs).
 * Open's and Restore's catch blocks are SEH filters: a code the original
   catches and rethrows (`throw;`) is not caught at all, the same for every
   caller.

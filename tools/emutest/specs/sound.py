@@ -227,3 +227,150 @@ SPECS += [
          new_fails=0.03, new_fails_size=(0x0c,), cover_until=0x005ff1bd, max_cases=600,
          exempt_blocks=SND_OPEN_CATCHES),
 ]
+
+
+# -- GetEffect and PurgeEffects (sound_effects.cpp) --------------------------
+#
+# A fake SND view in the world (SND_VIEW: a table of 8 sounds with 1..4
+# variants, samples with a size field) for file 0 (and file 1 = the same
+# view). The Watcom dictionary calls (find 0x60bab0, insert 0x60bbe0,
+# remove 0x60be20) are probed: they are the library, run unchanged by both;
+# find answers "missing" or one of the preset nodes, insert one of the
+# nodes (their values: effect pointers or null), each recorded with the
+# dictionary and the key it was given. The CSoundEffect / CMemorySoundFile
+# code (constructors, Load, PurgeStoppedDuplicates, the destructor), the
+# CRT's rand and GetEffect's call of PurgeEffects (own spec) are probed.
+# GetEffect's catch (...) block (0x5ff6e6..: only reached through an
+# exception) is exempt.
+
+SND_VIEW = SCRATCH + 55 * SCRATCH_SLOT_BYTES   # the fake SND file (both files)
+SND_SOUNDS = 8
+
+
+def snd_node(h):
+    return WORLD_BASE + SND_NODES + 0x10 * ((h >> 8) & 7) + 8
+
+
+def snd_key_record(machine, ecx, args):
+    key = struct.unpack("<I", machine.guest_read(args[0], 4))[0] if args[0] else None
+    return (ecx, key)
+
+
+def snd_last_now(machine):
+    """The value of the case's last timeGetTime call (emu._api_time_get_time)."""
+    from emu import _mix
+    for index in range(len(machine.probe_calls) - 1, -1, -1):
+        if machine.probe_calls[index] == ("timeGetTime",):
+            return _mix((machine.seed << 32) ^ (0x71AE0000 + index)) & 0xFFFFFFFF
+    return 0
+
+
+def snd_lookup(missing):
+    """find / insert: a node (or, for find, sometimes none); a last-use
+    node often gets exactly now - 300000 ms (PurgeEffects' quirk)."""
+    def effect(machine, ecx, args, h):
+        node = 0 if missing and h % 3 == 0 else snd_node(h)
+        if node and ecx == WORLD_BASE + 0xC0 and (h >> 20) & 1:
+            machine.guest_write(node - 4, struct.pack("<I", (snd_last_now(machine) - 300000) & 0xFFFFFFFF))
+        return node
+    return effect
+
+
+SND_DICT_PROBES = {
+    0x0060bab0: (1, "thiscall", "probe", snd_lookup(True), snd_key_record),   # base_find
+    0x0060bbe0: (1, "thiscall", "probe", snd_lookup(False), snd_key_record),  # base_insert
+    0x0060be20: (1, "thiscall", "probe", None, snd_key_record),               # base_remove
+}
+
+
+def snd_view(fields, rng):
+    """The fake file: header, table (8 sounds), sounds and samples."""
+    table = 0x1C
+    fields += [(SND_VIEW + 0x18, table, 4), (SND_VIEW + table, 0x11F74, 4),
+               (SND_VIEW + table + 4, 8 + 4 * SND_SOUNDS, 2), (SND_VIEW + table + 6, SND_SOUNDS, 2)]
+    offset = 0x200
+    for s in range(SND_SOUNDS):
+        count = rng.choice([1, 1, 2, 3, 4])
+        fields.append((SND_VIEW + table + 8 + 4 * s, offset, 4))
+        fields.append((SND_VIEW + offset, count, 4))
+        sample = offset + 4 + 4 * count
+        for v in range(count):
+            size = 0x16 + 2 * rng.randrange(1, 32)
+            fields += [(SND_VIEW + offset + 4 + 4 * v, sample, 4), (SND_VIEW + sample, size, 4)]
+            sample += size
+        offset = (sample + 3) & ~3
+    return fields
+
+
+def snd_effect_world(rng, pool, args):
+    fields = [(0x8, rng.choice([1, 2, 4]), 4), (0xC, rng.choice([1, 1, 1, 0]), 1),
+              (0x144, rng.getrandbits(32), 4)]
+    for f in range(2):
+        fields += [(0x30 + 4 * f, WORLD_BASE + SND_VIEW, 4), (0x38 + 4 * f, WORLD_BASE + SND_VIEW + 0x1C, 4)]
+    fields = snd_view(fields, rng)
+    entries = [(rng.getrandbits(32), 0 if rng.random() < 0.2 else WORLD_BASE + SND_EFFECTS + 0x20 * i)
+               for i in range(rng.choice([0, 1, 3, 6]))]
+    fields = snd_dict(fields, 0x40, sorted(entries), rng)
+    fields = snd_dict(fields, 0xC0, [], rng)
+    # Values of the nodes find / insert hand out (effects or null), last-use
+    # times.
+    for k in range(8):
+        node = SND_NODES + 0x10 * k
+        if k >= len(entries):
+            fields += [(node + 4, rng.choice([0, WORLD_BASE + SND_EFFECTS + 0x20 * k, rng.getrandbits(32)]), 4)]
+    return fields
+
+
+def snd_effect_id(rng, pool):
+    file = rng.choice([0, 0, 0, 1])
+    return file << 16 | rng.randrange(SND_SOUNDS)
+
+
+def snd_variant(rng, pool):
+    return 0xFFFFFFFF if rng.random() < 0.4 else rng.randrange(1)
+
+
+SND_EFFECT_CALLEES = {
+    **GFX_THROWERS, **SND_DICT_PROBES,
+    0x0061f802: (0, "cdecl", "probe"),                 # the CRT's rand
+    0x005c2aa0: (0, "thiscall", "this"),               # CSoundEffect::CSoundEffect
+    0x005c24e0: (4, "thiscall", "this"),               # CMemorySoundFile(format, data, bytes, kind)
+    0x005c2ba0: (2, "thiscall", "probe"),              # CSoundEffect::Load(file, own)
+    0x005ff700: (3, "thiscall", "probe"),              # PurgeEffects (own spec)
+}
+
+SND_PURGE_CALLEES = {
+    **SND_DICT_PROBES,
+    0x005c3210: (0, "thiscall", "probe"),              # CSoundEffect::PurgeStoppedDuplicates
+    0x005c2b00: (0, "thiscall", "probe"),              # ~CSoundEffect
+}
+
+
+def snd_purge_id(rng, pool):
+    return 0xFFFFFFFF if rng.random() < 0.6 else snd_effect_id(rng, pool)
+
+
+def snd_purge_world(rng, pool, args):
+    fields = snd_effect_world(rng, pool, args)
+    # Last-use times near "now - 300000" (the quirk) and the 60 s interval.
+    for k in range(8):
+        fields.append((SND_NODES + 0x10 * k + 4 + 0x80, rng.getrandbits(32), 4))
+    return fields
+
+
+def snd_purge_globals(rng, pool, args):
+    return []
+
+
+SPECS += [
+    Spec("CSoundData_GetEffect", 0x005ff4f0, "thiscall", [snd_effect_id, snd_variant], presets=snd_effect_world,
+         callees=SND_EFFECT_CALLEES, new_fails=0.05, new_fails_size=(0xC0, 0x38),
+         # catch (...) (see above); a failed insert (no memory for a node),
+         # after which the original writes through a null pointer (kept).
+         exempt_blocks=(0x5ff6e6, 0x5ff649, 0x5ff6b4)),
+    Spec("CSoundData_PurgeEffects", 0x005ff700, "thiscall", [snd_purge_id, snd_variant, anything],
+         eax_mask=0, presets=snd_purge_world, callees=SND_PURGE_CALLEES,
+         # The iterator's "no current node" branches right after a successful
+         # operator++ (which leaves a node): dead.
+         exempt_blocks=(0x5ff7b4, 0x5ff7e0, 0x5ff833)),
+]
