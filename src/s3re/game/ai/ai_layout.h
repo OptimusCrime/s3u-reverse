@@ -28,7 +28,8 @@ struct AiPlayerSetup {
     std::uint16_t min_mine_resources;  // 0x004 HOUSE_GROUND_REQUEST_NOTE::CheckSite: ResourceAmountNear at least this
     std::uint8_t unk006[0xb2 - 6];
     std::uint16_t small_tower_interval;  // 0x0b2 COMPUTER_PLAYER_AGENT::Run 0x5846a0 asks for a small tower every 14 times this (+ player) runs
-    std::uint8_t unk0b4[0xc4 - 0xb4];
+    std::uint8_t unk0b4[0xc2 - 0xb4];
+    std::uint16_t expand_search_radius;  // 0x0c2 GLOBAL_EXPAND_EMPIRE_AGENT::MakeBuildOrders 0x56cd90: grid cells searched around the new tower's place
     std::uint16_t promotion_interval;  // 0x0c4 the economy agent promotes soldiers after more than 14 times this many steps (0x56a0f0)
     std::uint8_t unk0c6[0x148 - 0xc6];
     // T_SAFETY_AGENT (0x586850 / 0x5868a0): how often it checks the land
@@ -55,6 +56,7 @@ struct AiPlayerSetup {
 };
 static_assert(offsetof(AiPlayerSetup, min_mine_resources) == 4);
 static_assert(offsetof(AiPlayerSetup, small_tower_interval) == 0xb2);
+static_assert(offsetof(AiPlayerSetup, expand_search_radius) == 0xc2);
 static_assert(offsetof(AiPlayerSetup, promotion_interval) == 0xc4);
 static_assert(offsetof(AiPlayerSetup, safety_interval) == 0x148);
 static_assert(offsetof(AiPlayerSetup, rice_farm_weight) == 0x164);
@@ -268,6 +270,34 @@ static_assert(offsetof(ComputerPlayer, land_evaluation) == 0x774);
 static_assert(offsetof(ComputerPlayer, data) == 0x778);
 static_assert(sizeof(ComputerPlayer) == 0x780);
 
+// ---------------------------------------------------------------- expand / map worker agents
+// GLOBAL_EXPAND_EMPIRE_AGENT (kind 3, 12 bytes; constructor 0x56cd00 clears
+// +8; ai_expand_empire_agent.cpp).
+struct ExpandEmpireAgent {
+    std::uint32_t vtable;           // 0x00
+    std::uint16_t kind;             // 0x04 3
+    std::uint16_t unk06;
+    std::uint32_t military_cursor;  // 0x08 the garrisoned military building it expanded from last (Run 0x56cd20)
+};
+static_assert(offsetof(ExpandEmpireAgent, military_cursor) == 8);
+static_assert(sizeof(ExpandEmpireAgent) == 12);
+
+// T_MAP_WORKER_AGENT (kind 6, 20 bytes; constructor 0x57cda0 clears
+// +0x08..+0x11; ai_map_worker_agent.cpp).
+struct MapWorkerAgent {
+    std::uint32_t vtable;              // 0x00
+    std::uint16_t kind;                // 0x04 6
+    std::uint16_t unk06;
+    std::uint8_t run_count;            // 0x08 Run 0x57cde0 works every 14th run
+    std::uint8_t unk09[5];
+    std::uint16_t residence_cursor;    // 0x0e the garrisoned military building a small residence went to last (MakeBuildOrders 0x57ce90)
+    std::uint16_t unk10;
+    std::uint16_t unk12;               // (not cleared by the constructor)
+};
+static_assert(offsetof(MapWorkerAgent, run_count) == 8);
+static_assert(offsetof(MapWorkerAgent, residence_cursor) == 0xe);
+static_assert(sizeof(MapWorkerAgent) == 0x14);
+
 // ---------------------------------------------------------------- AI player data
 // g_aiPlayerData: the best place found per candidate index (probably per
 // building type, AI_RecordBestCandidate) and a per-index value reset to
@@ -297,7 +327,13 @@ struct AiPlayerData {
     std::uint32_t short_of_wood;          // 0x010
     std::uint32_t short_of_stone;         // 0x014
     std::uint32_t force_production;       // 0x018 set by COMP_ForceProduction 0x572fc0, read by AI::IsForceProduction 0x572fa0
-    std::uint8_t unk01c[0x0a];
+    std::uint8_t unk01c[4];
+    // 0x020 +1 per computer-player step (0x550f80 step 9); above 4200 the
+    // expand agent's MakeBuildOrders 0x56cd90 looks around in all six
+    // directions ("LANGE NICHT MEHR AUSGEDEHNT", G: steps since the last
+    // expansion; AiArea::unk018).
+    std::uint32_t steps_since_expansion;
+    std::uint16_t sites;                  // 0x024 AiArea::sites
     // Indexes 0..56 are building types: best[type].score is the build
     // priority that 0x551b10 raises by g_aiBuildPrioritySteps[type] up to
     // g_aiBuildPriorityCaps[type] (only while non-zero); candidate_values
@@ -319,6 +355,7 @@ static_assert(offsetof(AiPlayerData, basic_economy) == 0xc);
 static_assert(offsetof(AiPlayerData, force_production) == 0x18);
 static_assert(offsetof(AiPlayerData, short_of_wood) == 0x10);
 static_assert(offsetof(AiPlayerData, short_of_stone) == 0x14);
+static_assert(offsetof(AiPlayerData, steps_since_expansion) == 0x20);
 static_assert(offsetof(AiPlayerData, best) == 0x26);
 static_assert(offsetof(AiPlayerData, candidate_values) == 0x2d2);
 static_assert(offsetof(AiPlayerData, building_counts) == 0x344);

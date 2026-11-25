@@ -57,18 +57,7 @@ namespace {
 constexpr std::uint16_t kCentrumCheckInitial = 140;  // 0x560dd0: word +8 after the clearing
 
 // The subclasses' fields these constructors clear (meanings unknown).
-struct GlobalExpandEmpireAgent {
-    AiTaggedRecord base;
-    std::uint16_t unk06;
-    std::uint32_t unk08;
-};
-struct MapWorkerAgent {
-    AiTaggedRecord base;
-    std::uint16_t unk06;
-    std::uint32_t unk08;
-    std::uint32_t unk0c;
-    std::uint16_t unk10;
-};
+// (ExpandEmpireAgent and MapWorkerAgent are in ai_layout.h.)
 struct AttackAgent {
     AiTaggedRecord base;
     std::uint16_t unk06;
@@ -87,8 +76,6 @@ struct CentrumCheckAgent {
     std::uint16_t unk0a;
     std::uint32_t unk0c[7];
 };
-static_assert(offsetof(GlobalExpandEmpireAgent, unk08) == 8);
-static_assert(offsetof(MapWorkerAgent, unk10) == 0x10);
 static_assert(sizeof(SafetyAgentDwords) == 0x1c);
 static_assert(sizeof(CentrumCheckAgent) == 0x28);
 
@@ -137,7 +124,7 @@ S3RE_HOOK(0x0056cd00, GLOBAL_EXPAND_EMPIRE_AGENT_Construct, ThisFn, Original_GLO
 // (kind 3).
 std::uint32_t __fastcall GLOBAL_EXPAND_EMPIRE_AGENT_Construct(void* self, void* /*edx*/) {
     SetKind(self, AgentKind::GlobalExpandEmpire);
-    static_cast<GlobalExpandEmpireAgent*>(self)->unk08 = 0;
+    static_cast<ExpandEmpireAgent*>(self)->military_cursor = 0;
     return 0;
 }
 
@@ -158,8 +145,9 @@ S3RE_HOOK(0x0057cda0, T_MAP_WORKER_AGENT_Construct, ThisFn, Original_T_MAP_WORKE
 std::uint32_t __fastcall T_MAP_WORKER_AGENT_Construct(void* self, void* /*edx*/) {
     SetKind(self, AgentKind::MapWorker);
     auto* agent = static_cast<MapWorkerAgent*>(self);
-    agent->unk08 = 0;
-    agent->unk0c = 0;
+    agent->run_count = 0;  // (the original clears +0x08..+0x11 as two dwords and a word)
+    std::memset(agent->unk09, 0, sizeof(agent->unk09));
+    agent->residence_cursor = 0;
     agent->unk10 = 0;
     return 0;
 }

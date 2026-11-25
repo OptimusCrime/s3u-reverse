@@ -5149,3 +5149,296 @@ SPECS += [
     Spec("AI_CreateAgent", 0x0056f6d0, "fastcall", [agent_kind], new_fails=0.6,
          new_fails_size=(8, 12, 16, 20, 28, 40, 160), max_cases=600),
 ]
+
+# -- session 56 (wip/ai-agents): GLOBAL_EXPAND_EMPIRE_AGENT (ai_expand_empire_agent.cpp) --
+#
+# MakeBuildOrders(x, y, radius) on a 40 x 40 map (5 x 5 grid cells): per 8 x 8
+# block an area (0 sometimes), a walk region and an owner, with noise; the
+# CEvaLand at COUNT_LAND with the grid at CELL_GRID (small resource sums, so
+# that every test decides both ways); the area node in scratch 1 (site tree
+# sizes, often 0; steps_since_expansion around 4200), the setup in scratch 2
+# (the search radius +0xc2), g_aiPlayer in scratch 3 with a few small tower
+# notes (scratch 9). AddNote, the notes' Init, HasSiteNoteNear, Random and
+# the map queries run (verified); new_fails reaches Win32::ThrowOutOfMemory.
+
+EXPAND_MAP = 40
+EXPAND_GRID = EXPAND_MAP // 8
+EXPAND_DATA = SCRATCH + 1 * SCRATCH_SLOT_BYTES
+EXPAND_SETUP = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+EXPAND_PLAYER = SCRATCH + 3 * SCRATCH_SLOT_BYTES
+EXPAND_NOTES = SCRATCH + 9 * SCRATCH_SLOT_BYTES
+EXPAND_PLAYERS = 0x11943DC  # CGameData::players (0x148 bytes each; race at +4)
+EXPAND_CASE = {}  # the current case's player number
+
+
+def expand_map_tiles(rng, player):
+    """Tiles of the 40 x 40 map: area, walk region and owner per 8 x 8 block."""
+    fields = []
+    for bx in range(EXPAND_GRID):
+        for by in range(EXPAND_GRID):
+            area = 0 if rng.random() < 0.12 else rng.randint(1, 4)
+            region = rng.randint(1, 2)
+            owner = rng.choice((0xFF, (player + 1) % 3, player, player))
+            for x in range(bx * 8, bx * 8 + 8):
+                for y in range(by * 8, by * 8 + 8):
+                    tile = TILES + (x * 0x300 + y) * 24
+                    fields += [(tile + 0x14, rng.randrange(5) if rng.random() < 0.06 else area, 2),
+                               (tile + 0x10, rng.randrange(3) if rng.random() < 0.03 else region, 1),
+                               (tile + 8, rng.randrange(3) if rng.random() < 0.06 else owner, 1)]
+    return fields
+
+
+def expand_grid_cells(rng):
+    """The CEvaLand object and its 5 x 5 cells with small sums."""
+    fields = [(COUNT_LAND + 0x140, EXPAND_GRID, 4), (COUNT_LAND + 0x144, EXPAND_GRID, 4),
+              (COUNT_LAND + 0x158, WORLD_BASE + CELL_GRID, 4)]
+    for cell in range(EXPAND_GRID * EXPAND_GRID):
+        base = CELL_GRID + cell * 0xC4
+        fields += [(base, rng.getrandbits(16), 2), (base + 2, 0 if rng.random() < 0.75 else rng.randrange(4), 1),
+                   (base + 0xF, rng.randrange(14), 1), (base + 0x10, rng.randrange(14), 2),
+                   (base + 0x1E, rng.randrange(24), 1), (base + 0x1F, rng.randrange(6), 1),
+                   (base + 0x20, rng.randrange(6), 1)]
+        fields += [(base + 0x12 + 2 * k, rng.randrange(4) if rng.random() < 0.75 else rng.randrange(8), 2)
+                   for k in range(6)]
+    return fields
+
+
+def expand_notes(rng):
+    """g_aiPlayer's note pointers: a few small tower orders (and others)."""
+    fields = [(EXPAND_PLAYER + 0x280 + 4 * n, 0, 4) for n in range(300)]
+    for k in range(rng.randrange(8)):
+        note = EXPAND_NOTES + k * 0x28
+        fields += [(EXPAND_PLAYER + 0x280 + 4 * rng.randrange(300), WORLD_BASE + note, 4),
+                   (note + 6, 4 if rng.random() < 0.75 else rng.randrange(5), 2),
+                   (note + 0x1C, 15 if rng.random() < 0.75 else rng.randrange(20), 2),
+                   (note + 0x1E, rng.randrange(EXPAND_MAP), 2), (note + 0x20, rng.randrange(EXPAND_MAP), 2)]
+    return fields
+
+
+def expand_world(rng, pool, args):
+    player = rng.randrange(3)
+    EXPAND_CASE["player"] = player  # (read by expand_globals, which runs after the presets)
+    fields = expand_map_tiles(rng, player) + expand_grid_cells(rng) + expand_notes(rng)
+    fields += [(EXPAND_PLAYERS + player * 0x148 + 4, rng.randrange(4), 4),
+               (EXPAND_SETUP + 0xC2, rng.getrandbits(16) if rng.random() < 0.05 else
+                0 if rng.random() < 0.1 else rng.randrange(4), 2)]
+    steps = 4200 + rng.randint(-1, 1) if rng.random() < 0.3 else rng.randrange(8400)
+    fields.append((EXPAND_DATA + 0x20, steps, 4))
+    fields += [(EXPAND_DATA + 0x4E0 + 0x10 * k, 0 if rng.random() < 0.35 else rng.randrange(1, 5), 4)
+               for k in range(39)]
+    return fields
+
+
+def expand_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, EXPAND_MAP, 2), (AI_MAP_SIZES + 2, EXPAND_MAP, 2),
+            (AI_LAND_EVALUATION, WORLD_BASE + COUNT_LAND, 4), (AI_PLAYER_SETUP, WORLD_BASE + EXPAND_SETUP, 4),
+            (AI_PLAYER, WORLD_BASE + EXPAND_PLAYER, 4), (AI_PLAYER_DATA, WORLD_BASE + EXPAND_DATA, 4),
+            (AI_PLAYER_NUMBER, EXPAND_CASE.get("player", 0), 1)]
+
+
+def expand_coordinate(rng, pool):
+    """A tile coordinate (upper half often garbage, as the callers push it;
+    sometimes off the map)."""
+    value = rng.getrandbits(16) if rng.random() < 0.04 else rng.randrange(EXPAND_MAP)
+    return value | (rng.getrandbits(16) << 16 if rng.random() < 0.5 else 0)
+
+
+def expand_run_world(rng, pool, args):
+    """The agent's cursor (+8), buildings to pick from, the tower candidate."""
+    fields = near_buildings(rng, pool, args)
+    cursor = 0xFFFF if rng.random() < 0.1 else rng.randrange(45)
+    fields += [(8, cursor | (rng.getrandbits(16) << 16 if rng.random() < 0.3 else 0), 4),
+               (EXPAND_DATA + 0x1D6, 0 if rng.random() < 0.3 else rng.getrandbits(16), 2)]
+    return fields
+
+
+def expand_run_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_PLAYER_DATA, WORLD_BASE + EXPAND_DATA, 4),
+            (AI_PLAYER_NUMBER, rng.randrange(3), 1)]
+
+
+# MakeBuildOrders probed in Run: its x and y are pushed with leftover upper
+# halves (it reads words), so only their low words are recorded.
+EXPAND_RUN_CALLEES = {0x0056CD90: (3, "thiscall", "probe", None,
+                                   lambda machine, ecx, args: (args[0] & 0xFFFF, args[1] & 0xFFFF, args[2]))}
+
+# Note: the probe's own EAX (MakeBuildOrders') goes through to Run's EAX;
+# MakeBuildOrders' AX is 0 or 100 (its upper half is a register leftover).
+SPECS += [
+    Spec("GLOBAL_EXPAND_EMPIRE_AGENT_MakeBuildOrders", 0x0056cd90, "thiscall",
+         [expand_coordinate, expand_coordinate, below(12)], eax_mask=0xFFFF, presets=expand_world,
+         globals=expand_globals, new_fails=0.1, new_fails_size=0x28, max_cases=1500),
+    Spec("GLOBAL_EXPAND_EMPIRE_AGENT_Run", 0x0056cd20, "thiscall", [], presets=expand_run_world,
+         globals=expand_run_globals, callees=EXPAND_RUN_CALLEES),
+]
+
+# -- session 56 (wip/ai-agents): T_MAP_WORKER_AGENT (ai_map_worker_agent.cpp) --
+#
+# MakeBuildOrders(type, &x, &y): the agent at world +0 (residence_cursor
+# +0xe), x / y words in scratch 0 / 1; g_aiPlayer in scratch 2 (area +0x77c,
+# player word +0x272, a few notes in scratch 3 whose tiles are often in the
+# player's area); the area node in scratch 4 with a valid site tree (MSVC6
+# insert, nodes in scratch 8/9, nil in scratch 10) at the type's tree (empty
+# sometimes) and site_tree_of_type[24] pointing at it; buildings near the
+# origin (HasBuildingNear, NextGarrisonedMilitaryBuilding); the CEvaLand in
+# scratch 12 with a small grid (scratch 13) for the forester's check.
+# CEvaLand::RefillAreaSiteList (not ours yet) is probed: it reads its three
+# arguments as words, so only those are recorded (the original pushes a
+# register leftover in the player's upper half). std::_Lockit is probed.
+
+MAP_WORKER_PLAYER = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+MAP_WORKER_NOTES = SCRATCH + 3 * SCRATCH_SLOT_BYTES
+MAP_WORKER_DATA = SCRATCH + 4 * SCRATCH_SLOT_BYTES
+MAP_WORKER_LAND = SCRATCH + 12 * SCRATCH_SLOT_BYTES
+MAP_WORKER_GRID = SCRATCH + 13 * SCRATCH_SLOT_BYTES
+# Site tree index per building type (kRules in ai_map_worker_agent.cpp).
+MAP_WORKER_TREES = {1: 23, 2: 0, 3: 1, 4: 13, 5: 14, 6: 3, 7: 3, 8: 4, 9: 2, 10: 12, 11: 9, 12: 10, 13: 11,
+                    14: 24, 17: 16, 19: 22, 20: 17, 21: 19, 22: 31, 23: 18, 24: 15, 25: 7, 27: 15, 28: 15, 29: 5,
+                    30: 8, 31: 35, 32: 25, 33: 26, 34: 27, 35: 28, 36: 29, 37: 6, 38: 31, 39: 30, 40: 32,
+                    41: 34, 42: 33, 43: 34, 44: 33, 45: 34, 46: 33, 47: 35, 48: 35, 50: 35, 51: 37, 52: 31,
+                    53: 38, 54: 33, 55: 34}
+
+
+def map_worker_type(rng, pool):
+    if rng.random() < 0.04:
+        return rng.choice((0, 15, 49, 56, 57, 0xFFFF, rng.getrandbits(32)))
+    return rng.randint(1, 55) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+def map_worker_world(rng, pool, args):
+    kind = args[0] & 0xFFFF
+    player = rng.randrange(3)
+    area = rng.randrange(1, 4)
+    MAP_WORKER_CASE["player"] = player
+    fields = near_buildings(rng, pool, args)
+    fields += [(0, rng.getrandbits(32), 4), (0xE, 0xFFFF if rng.random() < 0.1 else rng.randrange(45), 2),
+               (SCRATCH, rng.randrange(60), 2), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(60), 2),
+               (MAP_WORKER_PLAYER + 0x272, player, 1),
+               (MAP_WORKER_PLAYER + 0x273, 0 if rng.random() < 0.8 else rng.randrange(256), 1),
+               (MAP_WORKER_PLAYER + 0x77C, area | (rng.getrandbits(16) << 16 if rng.random() < 0.3 else 0), 4)]
+    # notes: build orders and ground requests of a few types, often in the area
+    fields += [(MAP_WORKER_PLAYER + 0x280 + 4 * n, 0, 4) for n in range(300)]
+    for k in range(rng.randrange(6)):
+        note = MAP_WORKER_NOTES + k * 0x28
+        x, y = rng.randrange(60), rng.randrange(60)
+        same = kind if rng.random() < 0.5 else rng.randrange(57)
+        fields += [(MAP_WORKER_PLAYER + 0x280 + 4 * rng.randrange(300), WORLD_BASE + note, 4),
+                   (note + 6, rng.choice((4, 4, 2, 0)), 2), (note + 0x1C, same, 2), (note + 0x1E, x, 2),
+                   (note + 0x20, y, 2), (TILES + (x * 0x300 + y) * 24 + 0x14, area if rng.random() < 0.6 else 0, 2)]
+    # the area node: basic economy often (IsAllowedBeforeBasicEconomy says yes)
+    data = MAP_WORKER_DATA
+    fields.append((data + 0xC, 1 if rng.random() < 0.7 else 0, 4))
+    tree_index = MAP_WORKER_TREES.get(kind, rng.randrange(39))
+    tree = data + 0x4D4 + 0x10 * tree_index
+    count = 0 if rng.random() < 0.15 else rng.randint(1, 6) if rng.random() < 0.7 else rng.randint(7, 40)
+    head, nil, nodes = site_tree_model(rng, count)
+    fields += site_tree_fields(rng, head, nil, nodes, tree=tree)
+    for node in nodes:  # small positions, so that the checks decide both ways
+        offset = node.address - WORLD_BASE
+        fields += [(offset + 0xE, rng.randrange(60), 2), (offset + 0x10, rng.randrange(60), 2)]
+    fields.append((data + 0x450, WORLD_BASE + tree, 4))
+    # the land grid of the forester's check (positions given as cells)
+    fields += [(MAP_WORKER_LAND + 0x140, rng.randint(1, 12), 4), (MAP_WORKER_LAND + 0x144, rng.randint(1, 12), 4),
+               (MAP_WORKER_LAND + 0x158, WORLD_BASE + MAP_WORKER_GRID, 4)]
+    for cell in range(144):
+        bits = rng.getrandbits(32) if rng.random() < 0.05 else (1 << 5 if rng.random() < 0.02 else 0)
+        fields.append((MAP_WORKER_GRID + cell * 0xC4 + 0x24 + player * 8, bits, 4))
+    return fields
+
+
+MAP_WORKER_CASE = {}  # the current case's player number
+
+
+def map_worker_globals(rng, pool, args):
+    return (site_tree_globals(rng, pool, args)
+            + [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, 64, 2), (AI_MAP_SIZES + 2, 64, 2),
+               (AI_PLAYER, WORLD_BASE + MAP_WORKER_PLAYER, 4), (AI_PLAYER_DATA, WORLD_BASE + MAP_WORKER_DATA, 4),
+               (AI_LAND_EVALUATION, WORLD_BASE + MAP_WORKER_LAND, 4),
+               (AI_PLAYER_NUMBER, MAP_WORKER_CASE.get("player", 0), 1)])
+
+
+MAP_WORKER_CALLEES = {
+    **LOCKIT_PROBES,
+    0x005579D0: (3, "thiscall", "probe", None,
+                 lambda machine, ecx, args: (args[0] & 0xFFFF, args[1] & 0xFFFF, args[2] & 0xFFFF)),
+}
+
+
+def map_worker_run_world(rng, pool, args):
+    """The run counter around 13 and taken candidates of some types."""
+    fields = [(8, rng.choice((12, 13, 13, 13, 255, rng.randrange(256))), 1)]
+    for kind in range(57):
+        score = 0 if rng.random() < 0.7 else rng.getrandbits(16)
+        base = MAP_WORKER_DATA + 0x26 + (57 + kind) * 6
+        fields += [(base, score, 2), (base + 2, rng.getrandbits(16), 2), (base + 4, rng.getrandbits(16), 2)]
+    return fields
+
+
+def deref_node(rng, pool, args):
+    """An iterator (scratch 0) holding any node address."""
+    return [(SCRATCH, rng.getrandbits(32), 4)]
+
+
+def map_worker_run_globals(rng, pool, args):
+    return [(AI_PLAYER_DATA, WORLD_BASE + MAP_WORKER_DATA, 4)]
+
+
+# MakeBuildOrders probed in Run: its x / y arguments point at stack copies;
+# the words there are recorded.
+MAP_WORKER_RUN_CALLEES = {
+    0x0057CE90: (3, "thiscall", "probe", None,
+                 lambda machine, ecx, args: (args[0], machine.guest_read(args[1], 2), machine.guest_read(args[2], 2))),
+}
+
+SPECS += [
+    Spec("T_MAP_WORKER_AGENT_MakeBuildOrders", 0x0057ce90, "thiscall", [map_worker_type, scratch(0), scratch(1)],
+         eax_mask=0, presets=map_worker_world, globals=map_worker_globals, callees=MAP_WORKER_CALLEES,
+         new_fails=0.3, new_fails_size=0x28, case_scale=3),
+    Spec("T_MAP_WORKER_AGENT_Run", 0x0057cde0, "thiscall", [], eax_mask=0, presets=map_worker_run_world,
+         globals=map_worker_run_globals, callees=MAP_WORKER_RUN_CALLEES),
+    Spec("std_list_iterator_Deref_580290", 0x00580290, "fastcall", [scratch(0)], presets=deref_node),
+    Spec("std_multimap_iterator_Deref_580260", 0x00580260, "fastcall", [scratch(0)], presets=deref_node),
+]
+
+
+def type_near_world(rng, pool, args):
+    """The CEvaLand at world +0 (ECX): a grid of 0..12 x 0..12 cells (scratch
+    13) whose bitsets of the player sometimes have bits."""
+    player = rng.randrange(4)
+    MAP_WORKER_CASE["player"] = player
+    fields = [(0x140, rng.randrange(13), 4), (0x144, rng.randrange(13), 4), (0x158, WORLD_BASE + MAP_WORKER_GRID, 4)]
+    kind = args[2] & 0xFFFF
+    for cell in range(144):
+        base = MAP_WORKER_GRID + cell * 0xC4 + 0x24 + player * 8
+        low = rng.getrandbits(32) if rng.random() < 0.02 else 0
+        high = rng.getrandbits(32) if rng.random() < 0.02 else 0
+        if kind < 57 and rng.random() < 0.03:
+            low, high = (low | 1 << kind, high) if kind < 32 else (low, high | 1 << (kind - 32))
+        fields += [(base, low, 4), (base + 4, high, 4)]
+    return fields
+
+
+def type_near_globals(rng, pool, args):
+    return [(AI_PLAYER_NUMBER, MAP_WORKER_CASE.get("player", 0), 1)]
+
+
+def type_near_kind(rng, pool):
+    kind = rng.randrange(57) if rng.random() < 0.95 else rng.randrange(57, 70)
+    return kind | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+def type_near_radius(rng, pool):
+    radius = rng.randrange(7)  # (from 32768 on the original loops forever)
+    return radius | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+def type_near_coordinate(rng, pool):
+    value = rng.randint(-3, 14) & 0xFFFF if rng.random() < 0.9 else rng.getrandbits(16)
+    return value | (rng.getrandbits(16) << 16 if rng.random() < 0.3 else 0)
+
+
+SPECS += [
+    Spec("AI_CEvaLand_HasBuildingTypeNear", 0x00558f00, "thiscall",
+         [type_near_coordinate, type_near_coordinate, type_near_kind, type_near_radius],
+         presets=type_near_world, globals=type_near_globals, max_cases=1500),
+]

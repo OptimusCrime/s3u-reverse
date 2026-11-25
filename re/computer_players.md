@@ -773,3 +773,60 @@ ignore_bytes with the self-test WrongFarmKeys).
   70) / "map_part_list_ptr" (line 141). The 20 lists' allocator byte is
   the high byte of each list's own address (constructor 0x553e70 reads it
   from the saved ECX).
+
+## The expand agent (session 56, V)
+
+`ai_expand_empire_agent.cpp`. GLOBAL_EXPAND_EMPIRE_AGENT::Run 0x56CD20
+works only when StartBestBuilding has taken a small tower
+(best[57 + 15].score): it steps its cursor to the next garrisoned military
+building and calls MakeBuildOrders 0x56CD90 with that building's position
+and territory radius (AI::TerritoryRadius). MakeBuildOrders looks at the
+point radius + 5 steps away (AI::WrappedPos::Advance):
+- when the area node's `steps_since_expansion` (+0x20, counted up per
+  step) is above 4200, in all six directions; the first point in another
+  area of the same walk region, not another player's tile, next to foreign
+  land (HasForeignCellAround) gets the small tower;
+- otherwise in one random direction (CGameData::Random % 6), the same
+  checks without the owner test. Then a second Random % options (one
+  option per kind of site the area has no sites of: trees, stones, iron,
+  coal, gold, fish, water, farmland; by race vineyard / gems / rice land and
+  sulfur) decides between building at once (0, unless trees or stones are
+  missing) and a search of the grid cells within the setup's radius
+  (+0xC2) for a cell in another area with a wanted resource (trees > 10 /
+  stones > 10 first when missing, else water, fish, race resources, coal,
+  iron, gold, farmland > 20).
+Quirk kept: the search only decides *whether* to build; the tower always
+goes to the advanced point, not to the cell found. The order is a
+T_DO_BUILD_HOUSE_NOTE (small tower, value 32) unless one is within 24
+(HasSiteNoteNear). The site trees' sizes it reads show what the 39 trees
+of an area record hold (index: 0 trees, 1 stones, 2 iron, 3 coal, 4 gold,
+5 sulfur, 6 gems, 7 fish, 8 water, 15 farmland, 24 vineyard, 29 rice land).
+
+## The map worker agent (session 56, V)
+
+`ai_map_worker_agent.cpp`. T_MAP_WORKER_AGENT::Run 0x57CDE0: every 14th
+run, MakeBuildOrders 0x57CE90 for each taken candidate best[57 + type]
+with a score, then clears it. MakeBuildOrders is a switch of 55 nearly
+identical cases, written as a table (kRules): IsAllowedBeforeBasicEconomy,
+then the highest-keyed site of the type's site tree (index per type, e.g.
+storehouse 23, sawmill 13, forester 14, the temples share 33 / 34, the war
+workshops 35), erased from the tree; an empty tree asks
+CEvaLand::RefillAreaSiteList 0x5579D0 for new sites and stops. Then one or
+two checks (no order of the type in the area; no order near; no own
+building of a type near; for the forester no forester bit in the grid
+cells around, CEvaLand::HasBuildingTypeNear 0x558F00 given the tile
+position as a cell position) and a T_DO_BUILD_HOUSE_NOTE with a value per
+type (6 for mines, 16..48 for others). Special cases: large tower / castle
+at the candidate's own position (with OutputDebugStringA "ooo RAINER Baue
+BigTower / Castle"); the castle is only ordered when another own castle is
+within 60 (the HasBuildingNear test is inverted against all the others;
+kept); the small residence goes to the next garrisoned military building;
+the medium and large residence take their site from the tree the farm's
+type pointer (site_tree_of_type[24]) names and never refill it; the
+lookout tower (6) orders a coal mine (7); the Amazon large temple (55) asks
+IsAllowedBeforeBasicEconomy about the large pagoda (45); the mill checks for
+waterworks within 24. The small tower (15) and donkey farm (49) do
+nothing here (the expand agent places towers).
+HasBuildingTypeNear's rings all start at (x + 1, y - 1) (shifted squares
+instead of rings; kept).
+
