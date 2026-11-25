@@ -443,6 +443,12 @@ using UuidToStringAImport = std::int32_t(__stdcall*)(const void* uuid, char** te
 using RpcStringFreeAImport = std::int32_t(__stdcall*)(char** text);
 inline constexpr GameGlobal<UuidToStringAImport> g_importUuidToStringA{0x655298};    // RPCRT4.dll
 inline constexpr GameGlobal<RpcStringFreeAImport> g_importRpcStringFreeA{0x65529c};  // RPCRT4.dll
+using MciSendCommandAImport = std::uint32_t(__stdcall*)(std::uint32_t device, std::uint32_t message,
+                                                         std::uint32_t flags, void* parameters);
+using PostMessageAImport = int(__stdcall*)(void* window, std::uint32_t message, std::uint32_t wParam,
+                                           std::uint32_t lParam);
+inline constexpr GameGlobal<MciSendCommandAImport> g_importMciSendCommandA{0x65536c};  // from _INMM.dll
+inline constexpr GameGlobal<PostMessageAImport> g_importPostMessageA{0x6552f0};        // USER32.dll
 
 // Win32\Mapping.cpp, Win32\Detach.cpp and the graphics loader.
 using CreateFileAImport = void*(__stdcall*)(const char* name, std::uint32_t access, std::uint32_t share,

@@ -10,6 +10,8 @@
 //   0x004726e0 WCSkipListIterBase<WCSkipListDictKeyVal<unsigned long, WCPtrSortedVector<CExecuteType>>> 0x65778c
 //   0x00472780 WCSkipListIterBase<WCSkipListDictKeyVal<unsigned long, CNetSession::CSyncInfo>>         0x657794
 //   0x00499600 WCSkipListIterBase<WCSkipListDictKeyVal<int, String>>                                   0x65854c
+//   0x005c34f0 WCSkipListIterBase<WCSkipListDictKeyVal<int, DirectX::CSoundEffectBuffer>>             0x65cf94
+//   0x005ffc60 WCSkipListIterBase<WCSkipListDictKeyVal<unsigned int, DirectX::CSoundEffect*>>          0x65d478
 // WCSkipListIterBase::operator++ (0x00499df0; shared by the instantiations,
 // 10 callers): () -> bool. Without a dictionary, or past the end (+0x10):
 // past the end = 1, the library's empty error hook 0x59f200, false. A fresh
@@ -94,6 +96,12 @@ SkipListIterBase* __fastcall SkipListIterConstructor_472780(SkipListIterBase* se
 SkipListIterBase* __fastcall SkipListIterConstructor_499600(SkipListIterBase* self, void*, std::uint32_t dictionary) {
     return ConstructSkipListIter(self, dictionary, vt::kWCSkipListIterBase_IntString);
 }
+SkipListIterBase* __fastcall SkipListIterConstructor_5c34f0(SkipListIterBase* self, void*, std::uint32_t dictionary) {
+    return ConstructSkipListIter(self, dictionary, vt::kEffectBufferIterBase);
+}
+SkipListIterBase* __fastcall SkipListIterConstructor_5ffc60(SkipListIterBase* self, void*, std::uint32_t dictionary) {
+    return ConstructSkipListIter(self, dictionary, vt::kSoundEffectIterBase);
+}
 
 constexpr std::uint32_t kDictionaryHeader = 0x70;  // the skip list's header node in the dictionary
 
@@ -131,6 +139,10 @@ S3RE_HOOK(0x00472780, SkipListIterConstructor_472780, SkipListIterConstructFn,
           Original_SkipListIterConstructor_472780, SkipListIterConstructor_472780);
 S3RE_HOOK(0x00499600, SkipListIterConstructor_499600, SkipListIterConstructFn,
           Original_SkipListIterConstructor_499600, SkipListIterConstructor_499600);
+S3RE_HOOK(0x005c34f0, SkipListIterConstructor_5c34f0, SkipListIterConstructFn,
+          Original_SkipListIterConstructor_5c34f0, SkipListIterConstructor_5c34f0);
+S3RE_HOOK(0x005ffc60, SkipListIterConstructor_5ffc60, SkipListIterConstructFn,
+          Original_SkipListIterConstructor_5ffc60, SkipListIterConstructor_5ffc60);
 
 // ---------------------------------------------------------------------------
 // Tests: random objects and arguments, every instantiation; the bytes and
@@ -157,6 +169,8 @@ const IterPair kIterPairs[] = {
     {Original_SkipListIterConstructor_4726e0, &SkipListIterConstructor_4726e0},
     {Original_SkipListIterConstructor_472780, &SkipListIterConstructor_472780},
     {Original_SkipListIterConstructor_499600, &SkipListIterConstructor_499600},
+    {Original_SkipListIterConstructor_5c34f0, &SkipListIterConstructor_5c34f0},
+    {Original_SkipListIterConstructor_5ffc60, &SkipListIterConstructor_5ffc60},
 };
 
 bool CompareIsv(test::Context& ctx, const IsvPair& pair, int cases) {

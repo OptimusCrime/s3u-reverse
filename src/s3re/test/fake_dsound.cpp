@@ -205,6 +205,19 @@ std::int32_t __stdcall Lock(FakeComObject* self, std::uint32_t offset, std::uint
         if (size2 != nullptr) {
             *size2 = 0;
         }
+    } else if (Active().config_.lockAlwaysWrites) {
+        if (part1 != nullptr) {
+            *part1 = LockArea();
+        }
+        if (size1 != nullptr) {
+            *size1 = 0;
+        }
+        if (part2 != nullptr) {
+            *part2 = nullptr;
+        }
+        if (size2 != nullptr) {
+            *size2 = 0;
+        }
     }
     return hr;
 }

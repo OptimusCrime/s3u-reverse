@@ -54,6 +54,19 @@ inline constexpr std::uint32_t kCDirectSound = 0x65ceb8;        // DirectX::CDir
 inline constexpr std::uint32_t kCPrimaryBuffer = 0x65cee0;      // DirectX::CPrimaryBuffer
 inline constexpr std::uint32_t kCSecondaryBuffer = 0x65cef4;    // DirectX::CSecondaryBuffer
 inline constexpr std::uint32_t kCSoundEffectBuffer = 0x65cf38;  // DirectX::CSoundEffectBuffer
+inline constexpr std::uint32_t kCSoundFile = 0x65cf08;          // DirectX::CSoundFile
+inline constexpr std::uint32_t kCMemorySoundFile = 0x65cf20;    // DirectX::CMemorySoundFile
+inline constexpr std::uint32_t kCSoundEffect = 0x65cf4c;        // DirectX::CSoundEffect
+inline constexpr std::uint32_t kCDirectSoundException = 0x65cea4;   // DirectX::CDirectSoundException
+inline constexpr std::uint32_t kCAppNotActiveException = 0x65cbb0;  // DirectX::CAppNotActiveException
+inline constexpr std::uint32_t kCCDAudio = 0x65d944;               // Win32::CCDAudio
+// CSoundEffect's dictionary of duplicate buffers and its iterators
+inline constexpr std::uint32_t kEffectBufferDict = 0x65cf54;          // WCValSkipListDict<int, CSoundEffectBuffer>
+inline constexpr std::uint32_t kEffectBufferSkipListBase = 0x65cf70;  // WCSkipListBase<...int, CSoundEffectBuffer...>
+inline constexpr std::uint32_t kEffectBufferDictIter = 0x65cf8c;      // WCValSkipListDictIter<int, CSoundEffectBuffer>
+inline constexpr std::uint32_t kEffectBufferIterBase = 0x65cf94;      // WCSkipListIterBase<...int, CSoundEffectBuffer...>
+inline constexpr std::uint32_t kSoundEffectIterBase = 0x65d478;       // WCSkipListIterBase<...uint, CSoundEffect*...>
+inline constexpr std::uint32_t kWCValOrderedVector_int = 0x656b58;    // WCValOrderedVector<int>
 // CSoundData (Dirk\SoundData.cpp) and its two skip-list dictionaries
 inline constexpr std::uint32_t kCSoundData = 0x65d3ec;               // CSoundData
 inline constexpr std::uint32_t kSoundEffectDict = 0x65d41c;          // WCValSkipListDict<uint, DirectX::CSoundEffect*>
@@ -162,6 +175,8 @@ inline constexpr std::uint32_t kCProgrammingError = 0x65d924;  // Win32::CProgra
 inline constexpr std::uint32_t kCAssertmentFailed = 0x65d8d4;  // Win32::CAssertmentFailed
 inline constexpr std::uint32_t kCOutOfMemory = 0x65d8c0;       // Win32::COutOfMemory
 inline constexpr std::uint32_t kCDataError = 0x65d4c0;         // Lobby::priv::CDataError
+inline constexpr std::uint32_t kCDirectSoundException = 0x65ceac;   // DirectX::CDirectSoundException
+inline constexpr std::uint32_t kCAppNotActiveException = 0x65cbb8;  // DirectX::CAppNotActiveException
 }  // namespace vbtables
 
 // _ThrowInfo records passed to _CxxThrowException.
@@ -172,6 +187,7 @@ inline constexpr std::uintptr_t kCDataError = 0x68bfd0;
 inline constexpr std::uintptr_t kDirectDrawException = 0x66a698;
 inline constexpr std::uintptr_t kDirectPlayException = 0x681e60;
 inline constexpr std::uintptr_t kDirectSoundException = 0x682dc8;  // DirectX::CDirectSoundException*
+inline constexpr std::uintptr_t kAppNotActiveException = 0x67aee8;  // DirectX::CAppNotActiveException*
 inline constexpr std::uintptr_t kCTimeoutPointer = 0x674f38;  // Win32::CTimeout* (thrown by the queue waits)
 inline constexpr std::uintptr_t kCFileNotFoundPointer = 0x67b828;  // Win32::CFileNotFound* (CFile::Open)
 }  // namespace throw_info

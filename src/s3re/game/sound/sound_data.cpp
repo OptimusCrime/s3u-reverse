@@ -40,6 +40,11 @@
 // CSoundData::GetVolume (0x005ffa30): if enabled and there is a primary
 //   buffer: DSGetVolume (0x5c2150) into a local that starts at 0; EAX = it
 //   (0 otherwise).
+// CSoundData::IsEnabled (0x005ff4d0): AL = enabled (+0xc; the rest of EAX
+//   is the caller's, every caller tests AL; ours zero-extends).
+// CSoundData::GetSetNumber (0x005ff4e0, was Sound_sub_5ff4e0): EAX = +0x148
+//   (header +0x14 of the first SND file where it isn't -1; read by the
+//   lobby code 0x498120 and 0x4c6f83, which compares it with 4).
 // CSoundData::DetachFromMedium (0x005ff230): (otherwise) ret 4: only when
 //   enabled; if IsPathOnRemovableDrive(folder, otherwise) (0x5fa750):
 //   DebugLog("SND: Detaching DAT files from medium ..."), DetachMemory(view,
@@ -717,6 +722,27 @@ std::int32_t __fastcall CSoundData_GetVolume(void* self, void* /*edx*/) {
         CallAt<GetVolumeFn>(kBufferGetVolume)(sound->primary, nullptr, &volume);
     }
     return volume;
+}
+
+using SndGetterFn = std::uint32_t(__fastcall*)(const void* self, void* edx);
+std::uint32_t __fastcall CSoundData_IsEnabled(const void* self, void* edx);
+std::uint32_t __fastcall CSoundData_GetSetNumber(const void* self, void* edx);
+
+S3RE_HOOK(0x005ff4d0, CSoundData_IsEnabled, SndGetterFn, Original_CSoundData_IsEnabled, CSoundData_IsEnabled);
+
+// Purpose: whether sound effects are on (the drawing code asks before it
+// plays a settler's or building's sound).
+std::uint32_t __fastcall CSoundData_IsEnabled(const void* self, void* /*edx*/) {
+    return static_cast<const CSoundData*>(self)->enabled;
+}
+
+S3RE_HOOK(0x005ff4e0, CSoundData_GetSetNumber, SndGetterFn, Original_CSoundData_GetSetNumber,
+          CSoundData_GetSetNumber);
+
+// Purpose: the number from the SND files' headers (+0x14; probably a sound
+// set or language number).
+std::uint32_t __fastcall CSoundData_GetSetNumber(const void* self, void* /*edx*/) {
+    return static_cast<std::uint32_t>(static_cast<const CSoundData*>(self)->unk148);
 }
 
 S3RE_HOOK(0x005ff230, CSoundData_DetachFromMedium, SndDetachFn, Original_CSoundData_DetachFromMedium,

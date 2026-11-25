@@ -23,6 +23,7 @@ add_library(s3re SHARED
     # watcom/: Watcom container library code
     watcom/bare_vectors.cpp
     watcom/list_iterators.cpp
+    watcom/skiplist_dicts.cpp
     watcom/ptr_vector.cpp
     watcom/string_vector.cpp
     watcom/ushort_vector.cpp
@@ -254,11 +255,16 @@ add_library(s3re SHARED
     # game/framework/: WinMain, Win32/DirectX framework classes, exceptions, strings
     game/framework/directx_sound.cpp
     game/framework/directx_sound_tests.cpp
+    game/framework/directx_sound_effect.cpp
+    game/framework/directx_sound_effect_tests.cpp
+    game/framework/directx_sound_files.cpp
+    game/framework/directx_sound_files_tests.cpp
     game/framework/folded_getters.cpp
     game/framework/framework_helpers.cpp
     game/framework/framework_small.cpp
     game/framework/misc_helpers.cpp
     game/framework/string_members.cpp
+    game/framework/win32_cdaudio.cpp
     game/framework/win32_classes.cpp
     game/framework/win32_detach.cpp
     game/framework/win32_errors.cpp

@@ -163,6 +163,20 @@ inline constexpr GameText kDSGetStatus{0x7a0ee0};           // "CDirectSoundBuff
 inline constexpr GameText kDSRestore{0x7a0f00};             // "CDirectSoundBuffer::DSRestore"
 inline constexpr GameText kDSGetVolume{0x7a0f20};           // "CDirectSoundBuffer::DSGetVolume"
 inline constexpr GameText kDSUnknownError{0x7a0d90};        // "Unknown Error Code"
+// DirectX\Dsound.cpp: the effect classes (framework/directx_sound_effect.cpp,
+// directx_sound_files.cpp)
+inline constexpr GameText kMemoryMappedFile{0x7a0fe0};      // "memory mapped file" (CMemorySoundFile's name)
+inline constexpr GameText kDirectSoundError{0x7a0d6c};      // "DirectSound Error "
+inline constexpr GameText kOcurredAt{0x7a0d80};             // " ocurred at "
+inline constexpr GameText kTempBuffer{0x7a1178};            // "TempBuffer"
+inline constexpr GameText kDsoundCppFile{0x7a1184};         // "E:\Siedler3\DirectX\Dsound.cpp"
+inline constexpr GameText kDSLock{0x7a115c};                // "CDirectSoundBuffer::DSLock"
+inline constexpr GameText kDSUnlock{0x7a113c};              // "CDirectSoundBuffer::DSUnlock"
+inline constexpr GameText kDSSetPan{0x7a128c};              // "CDirectSoundBuffer::DSSetPan"
+// Win32\cdaudio.cpp (framework/win32_cdaudio.cpp)
+inline constexpr GameText kCDSetTimeFormatError{0x7a4ad0};  // "CD: Error during SetTimeFormat: %u"
+inline constexpr GameText kCDStopError{0x7a4b10};           // "CD: Error during stop: %u"
+inline constexpr GameText kCDGetTrackCountError{0x7a4b2c};  // "CD: Error during GetTrackCount: %u"
 
 // CSoundData (Dirk\SoundData.cpp; the sound loader, sound/sound_data.cpp)
 inline constexpr GameText kSoundDataFile{0x7a3120};        // "E:\Siedler3\Dirk\SoundData.cpp"
