@@ -2174,3 +2174,36 @@ SPECS += [
          callees={0x00509980: (1, "thiscall", lambda h: h & 0x1ff, None, _sts_record_save)},
          exempt_blocks=(0x50adbd, 0x50af24)),
 ]
+
+
+# --- CGameData::TileAtScreenPoint (ui_state.cpp, session 55) ---
+# The map size (small, sometimes 0..2), the drawn camera position (around the
+# map, sometimes far off but within a million pixels: further out the walk's
+# row offset wraps and both read outside the world), the display mode and the
+# sidebar width; tile heights are lazily random.
+def tile_at_screen_world(rng, pool, args):
+    size = rng.choice([0, 1, 2]) if rng.random() < 0.05 else rng.randrange(4, 65)
+    far = lambda: rng.randrange(-1000000, 1000000) & 0xFFFFFFFF
+    camera_x = far() if rng.random() < 0.1 else rng.randrange(-200, size * 16 + 600) & 0xFFFFFFFF
+    camera_y = far() if rng.random() < 0.1 else rng.randrange(-200, size * 9 + 300) & 0xFFFFFFFF
+    return [(MAP_SIZE, size, 4), (0x2d254, camera_x, 4), (0x2d258, camera_y, 4)]
+
+
+def tile_at_screen_globals(rng, pool, args):
+    return [(0x00730f08, rng.randrange(5), 4),  # g_displayMode
+            (0x00730f24, rng.choice([136, 176, 216, 0, 0xFFFFFFFB]), 4)]  # g_sidebarWidth
+
+
+def screen_coordinate(low, high):
+    def generate(rng, pool):
+        if rng.random() < 0.05:
+            return rng.randrange(-1000000, 1000000) & 0xFFFFFFFF
+        return rng.randrange(low, high) & 0xFFFFFFFF
+    return generate
+
+
+SPECS += [
+    Spec("CGameData_TileAtScreenPoint", 0x004ff170, "thiscall", [screen_coordinate(-50, 1100),
+                                                                 screen_coordinate(-50, 800)],
+         eax_mask=0, presets=tile_at_screen_world, globals=tile_at_screen_globals),
+]
