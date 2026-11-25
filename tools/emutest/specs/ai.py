@@ -5101,3 +5101,51 @@ SPECS += [
     Spec("VectorConstructorIterator", 0x0042c9d0, "stdcall",
          [scratch(1), one_of(8, 12, 1, 0xC4), vector_ctor_count, one_of(0x00559240)], eax_mask=0),
 ]
+
+
+# -- session 55 round 2 (ai-step): AI::LoadState and the load / save -----------
+# -- wrappers (ai_state.cpp) ---------------------------------------------------
+# ECX = a fake CMapFile; GetChunk (verified; it reads the file) is a callee
+# probe that returns lazily random chunk data per type (chunk 0x15 missing
+# in a third of the cases: a new game); ReleaseChunk is probed too. The
+# resets run (verified) on the globals.
+
+AI_STATE_CHUNKS = {0x15: SCRATCH + 2 * SCRATCH_SLOT_BYTES, 0x16: SCRATCH + 5 * SCRATCH_SLOT_BYTES,
+                   0x17: SCRATCH + 7 * SCRATCH_SLOT_BYTES}
+
+
+def ai_state_get_chunk(machine, ecx, args, h):
+    if args[0] == 0x15 and h % 3 == 0:
+        return 0
+    return WORLD_BASE + AI_STATE_CHUNKS.get(args[0], SCRATCH + 9 * SCRATCH_SLOT_BYTES)
+
+
+AI_STATE_CALLEES = {0x004a60f0: (2, "thiscall", "probe", ai_state_get_chunk), 0x004a6310: (2, "thiscall", "probe")}
+
+SPECS += [
+    # Dead 0x5963db / 0x596411 / 0x5964c1 / 0x5964f7: the copy loops of the
+    # inlined vector::erase(begin, end), which run over [end, end).
+    # cover_until: 0x596540 is the next function (no function start in
+    # Ghidra's list).
+    Spec("AI_LoadState", 0x00596380, "fastcall", [scratch(1), anything], callees=AI_STATE_CALLEES, max_cases=300,
+         exempt_blocks=(0x005963db, 0x00596411, 0x005964c1, 0x005964f7), cover_until=0x00596540),
+    Spec("AI_LoadGlobals", 0x00551210, "stdcall", [scratch(1)], callees=AI_STATE_CALLEES, max_cases=100),
+    # EAX: SaveState's leftover (not used by the savegame writer).
+    Spec("AI_SaveGlobals", 0x00551220, "stdcall", [scratch(1)], eax_mask=0,
+         callees={0x004a66d0: (4, "thiscall", "probe")}, max_cases=100),
+]
+
+
+# -- session 55 round 2 (ai-step): AI::CreateAgent (ai_agent_factory.cpp) -----
+
+
+def agent_kind(rng, pool):
+    return rng.randrange(13) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+SPECS += [
+    # The agents' constructors run (verified); operator new fails sometimes
+    # (Win32::ThrowOutOfMemory runs and throws).
+    Spec("AI_CreateAgent", 0x0056f6d0, "fastcall", [agent_kind], new_fails=0.6,
+         new_fails_size=(8, 12, 16, 20, 28, 40, 160), max_cases=600),
+]
