@@ -44,10 +44,27 @@ LOGBOOK session entry).
   known difference). The other 18 senders are verified (ai_commands.cpp).
 - **Package A5: Cevaland** (land evaluation) and **A6: the agents' run
   functions** (slot 8), smallest first; then 0x550f80 and the
-  constructor 0x550900 / 0x550a30. Session 55 round 2 did the SiteTree
-  (all 16 functions) and the six work-area finders (std::_Lockit is
-  probed by the emulator, `LOCKIT_PROBES`; the finders' node padding bytes
-  are ignored with a self-test pairing).
+  constructor 0x550900 / 0x550a30. Session 55 round 2 (wip/ai-step) did
+  the SiteTree (16 functions), the six work-area finders, the area
+  records (copy, ~Area, AreaList insert/_Construct, RemoveArea), the
+  CEvaLand's Acquire / constructor / Init, AI::LoadState with the
+  load/save wrappers and AI::CreateAgent (std::_Lockit is probed by the
+  emulator, `LOCKIT_PROBES`; the finders' node padding bytes are ignored
+  with a self-test pairing). Next: AddArea 0x555260, FillAreaSiteLists
+  0x556630 and RefillAreaSiteList 0x5579d0 (1,361 instructions each),
+  ProcessPendingEvents 0x554980, GLOBAL_EXPAND_EMPIRE_AGENT::MakeBuildOrders
+  0x56cd90 / Run 0x56cd20, T_MAP_WORKER_AGENT::MakeBuildOrders 0x57ce90
+  (3228 ins) / Run 0x57cde0, then CComputerPlayer::Init 0x550a30, the
+  constructor 0x550900 and Step 0x550f80. Not in Ghidra's list (no rows):
+  std::list<Area>'s constructor 0x553e70 / destructor 0x5591e0, the
+  bitset constructor 0x559240, 0x596540 (a vector's free).
+- **Open (session 55 round 2):** CEvaLand::Area's copy constructor copies
+  the per-type site tree pointers (+0x3e8) verbatim, so a list record's
+  pointers point at AddArea's stack record's trees unless something
+  refreshes them; check in AddArea / FillAreaSiteLists. The woodcutter /
+  stonecutter finders pick the cell with the FEWEST trees / stones when the
+  area stocks more than 10 (an ascending SiteTree): looks like an original
+  quirk or intent (thinning); confirm when the agents are done.
 - **Open:** a world-field list of the AI range with
   `tools/world_fields.py`.
 - **Left from the naming-pass corrections (session 51 did the code and
