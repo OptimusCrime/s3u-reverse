@@ -620,6 +620,18 @@ layouts in `src/s3re/game/ai/ai_layout.h`.
   the current AiPlayerData node; +0x77C its key (node word +8). **V**
   (lists, notes, node pointer, cursor, agents, handlers: batch 1 and
   package A3 functions), **R** (the rest).
+- **CEvaLand area record** (`AiArea`, 0x73C bytes; the value of a 0x744-byte
+  node of `CEvaLand::lists[p]`, so AiPlayerData offsets are these + 8):
+  +0x000 area id word, +0x004 basic economy, +0x008 / +0x00C short of
+  wood / stone, +0x010 force production, +0x01C construction sites,
+  +0x01E best[114] (6 bytes), +0x2CA candidate countdowns[57], +0x33C
+  building counts[57], +0x3AE type blocked[57], +0x3E8 per type a pointer
+  to one of the site trees, +0x4CC 39 site trees (`SiteTree`, 0x10 bytes:
+  +0 allocator byte, +1 comparator byte, +4 head, +8 _Multi, +0xC size;
+  nodes 0x18: left, parent, right, 6-byte value +0xC (key, pad, x, y),
+  colour dword +0x14, 0 red 1 black; shared nil 0x7E0570). AiPlayerData
+  +0x550 = site tree 7's size. **V** (session 55 round 2: copy constructor,
+  destructor, the tree code).
 - **BLACK_BOARD_NOTE** (0x1A bytes + subclass fields): +0 vtable, +4 flags
   (1 dispatched, 2 taken by an agent, 4 active), +6 type, +8 own id, +0xA
   word and +0xC dword (0 after a reset), +0x10 parent id, +0x12 next
