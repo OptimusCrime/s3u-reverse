@@ -212,6 +212,56 @@ struct SaveTimeoutChunk {             // chunk 0x1f
     std::int32_t objective_timeout;   // +0x08
 };
 
+// The game setup chunks GameSettings::SaveSetup (0x433490) writes from
+// stack buffers. Bytes it doesn't write keep the stack's old contents in
+// the original (marked "unwritten"; ours writes 0 there).
+inline constexpr std::uint32_t kSavedPlayerSetups = 20;
+
+struct SavedPlayerSetup {             // 0x18 bytes, one per GamePlayerSetup
+    std::uint32_t zero;               // +0x00 always 0
+    std::uint8_t value10;             // +0x04 GamePlayerSetup +0x10
+    std::uint8_t index;               // +0x05 the record's index in the vector
+    std::uint8_t party;               // +0x06 +0x14
+    std::uint8_t type;                // +0x07 +0x5c
+    std::uint8_t race;                // +0x08 +0x64
+    std::uint8_t race_byte;           // +0x09 +0x68
+    std::uint8_t zero_a;              // +0x0a always 0
+    std::uint8_t unwritten_b;         // +0x0b
+    std::uint32_t saved_values[3];    // +0x0c GamePlayerSetup +0xa8, +0xac, +0xb0
+};
+static_assert(sizeof(SavedPlayerSetup) == 0x18);
+
+struct SaveSetupPlayersChunk {        // chunk 0x14, 0x1ec bytes
+    ChunkHeader header;
+    std::uint32_t count;              // +0x08 the player-setup vector's length
+    SavedPlayerSetup players[kSavedPlayerSetups];  // +0x0c records past `count` are unwritten
+};
+static_assert(sizeof(SaveSetupPlayersChunk) == 0x1ec);
+
+struct SaveSetup1AChunk {             // chunk 0x1a, 0x24 bytes
+    ChunkHeader header;
+    std::uint32_t local_player_id;    // +0x08 GameSettings +0x78
+    std::uint32_t game_guid[4];       // +0x0c GameSettings +0xb0..+0xbc
+    std::uint32_t tick;               // +0x1c the logic thread's tick (SaveSetup's second argument)
+    std::uint16_t seed;               // +0x20 the RNG's first word (its third argument)
+    std::uint8_t unwritten_22[2];     // +0x22
+};
+static_assert(sizeof(SaveSetup1AChunk) == 0x24);
+
+struct SaveSetup1BChunk {             // chunk 0x1b, 0x10 bytes
+    ChunkHeader header;
+    std::uint32_t valueC8;            // +0x08 GameSettings +0xc8
+    std::uint32_t start_goods;        // +0x0c GameSettings +0x74
+};
+static_assert(sizeof(SaveSetup1BChunk) == 0x10);
+
+struct SaveSetup1EChunk {             // chunk 0x1e, 0x0a bytes
+    ChunkHeader header;
+    std::uint8_t random_race_amazons;  // +0x08 GameSettings +0xcc
+    std::uint8_t goods_objective;      // +0x09 GameSettings +0xcd
+};
+static_assert(sizeof(SaveSetup1EChunk) == 0x0a);
+
 #pragma pack(pop)
 
 }  // namespace s3re::game::fileformats

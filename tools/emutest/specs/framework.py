@@ -109,7 +109,7 @@ def equal_ids(rng, pool, args):
     return [(4, value, 4), (SCRATCH + 4, other, 4)]
 
 SPECS += [
-    Spec("GameParams_CopyRectB0", 0x00437400, "thiscall", [scratch(0)]),
+    Spec("GameSettings_GameGuid", 0x00437400, "thiscall", [scratch(0)]),
     Spec("Watcom_CopyByte", 0x004584f0, "stdcall", [scratch(0), scratch(1)]),
     Spec("Lobby_EqualField4", 0x00606ac0, "thiscall", [scratch(0)], presets=equal_ids),
     # The C runtime's free (0x621b7e) locks the heap and calls HeapFree: probed.
@@ -159,7 +159,7 @@ SPECS += [
     # DEAD 0x49ecf7 / 0x49edbf: the inlined erase() of ~string removes every
     # character, so its _Grow(0, false) is false and the _Eos after it never
     # runs (as in String_Destroy).
-    Spec("NetHelp_Destroy_49ec80", 0x0049ec80, "thiscall", [], eax_mask=0, presets=net_destroy_world,
+    Spec("GamePlayerSetup_Destruct", 0x0049ec80, "thiscall", [], eax_mask=0, presets=net_destroy_world,
          exempt_blocks=(0x0049ecf7, 0x0049edbf)),
 ]
 
@@ -280,4 +280,12 @@ SPECS += [
 SPECS += [
     Spec("GetMemberDword64", 0x0049f510, "thiscall", []),
     Spec("GetMemberByte189", 0x00414030, "thiscall", [], eax_mask=0xFF),
+    Spec("GetMemberDword10", 0x0049f4d0, "thiscall", []),
+    Spec("GetMemberDword14", 0x0049f590, "thiscall", []),
+    Spec("GetMemberDword5C", 0x0049f350, "thiscall", []),
+    Spec("GetMemberByte68", 0x0049f580, "thiscall", [], eax_mask=0xFF),
+    # The three outputs: scratch slots, sometimes the same slot twice.
+    Spec("GamePlayerSetup_SavedValues", 0x0049fed0, "thiscall",
+         [scratch(0), lambda rng, pool: WORLD_BASE + SCRATCH + rng.choice([0, 0x1000]),
+          lambda rng, pool: WORLD_BASE + SCRATCH + rng.choice([0x1000, 0x2000])]),
 ]

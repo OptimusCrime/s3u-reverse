@@ -283,7 +283,7 @@ struct MaskInputs {
         for (std::uint32_t i = 0; i < kInfoPlayers; ++i) {
             m.nameLengths[i] = g_playerInfo[i].name.len;
         }
-        m.setupCount = g_gameSettings->player_setup_count;
+        m.setupCount = g_gameSettings->player_setups.length;
         return m;
     }
 };

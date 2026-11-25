@@ -1950,7 +1950,7 @@ SPECS += [
 # stack address in an argument is recorded as "stack". Also probed: the
 # CRT's _mkdir (the path's text) and time, GameSettings::MapName (its
 # effect fills the result string: empty, unshared, frozen or shared
-# buffer), GameSettings::SaveSetup and AI::SaveGlobals (both stay the
+# buffer), GameSettings::SaveSetup (verified on its own) and AI::SaveGlobals (the
 # original). GetError returns 0, 1 or a failure, so both results occur.
 #
 # The emulator's heap (emu.HEAP_SIZE, 0x30000 bytes) can't hold the

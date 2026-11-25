@@ -166,7 +166,7 @@ The original names come from SaveGame's out-of-memory labels (`Win32::ThrowOutOf
 | type | label | content (world = CGameData) |
 |---|---|---|
 | 0 | desc | header 0x120: +8 version (g_versionNumber, 0xa0), +0xc g_buildInfo (2 dwords), +0x14 mission-1, +0x18 the local player's race (Player +4), +0x1c time(), +0x20 map name (GameSettings::MapName 0x436a60, strcpy). LoadSaveGame only reads the version (gates: <0x82 no 0x18/0x19; <0x86 no 0x1c; <0x89 clears player+8; <0x96 no 0x1d; <0x99 no 0x1f, timeout 60) |
-| 0x14, 0x1a, 0x1b, 0x1e | - | game setup, written by GameSettings::SaveSetup 0x433490 (read by GameSettings::LoadSaveGame 0x432b00, not analysed); see "Verified savegame writer" |
+| 0x14, 0x1a, 0x1b, 0x1e | - | game setup, written by GameSettings::SaveSetup 0x433490 (ours since session 55; read by GameSettings::LoadSaveGame 0x432b00, not analysed); see "Verified savegame writer" |
 | 1 | general | +8 world+0x2d254, +0xc +0x2d258, +0x10/+0x14 camera_x/y (+0x2d25c/+0x2d260), +0x18 map size, +0x1c..+0x20 RNG state (3 words at +0x2d2dc), +0x24/+0x28 +0x110a57c/+0x110a580 (+0x2c +0x110a584, ignored on load: forced to 0x3f), +0x30 0x7dfd4c, +0x34 g_gameTick, +0x38 20 player-info records of 0x134 bytes (2 dwords, name chars 0x100, 11 dwords) -> 0x7acfa8 table, +0x1848 active player count (0x7acfa4), +0x184c g_gameOutcome, +0x1850 mission-1, +0x1854/+0x1858 world +0x2d304/+0x2d308, +0x185c world+0xde7444 |
 | 2/0, 2/1 | events | two dwords + 3000 dwords each: pending_events (+0x2f990, counts +0x32870/4) and events (+0x32878, counts +0x366f8/c) |
 | 3/row | - | one chunk per tile row (sub = row): size*24 raw tile bytes (WriteChunkData) |
@@ -300,6 +300,17 @@ buffer plus the world records as WriteChunkWithTail's tail.
   probed, chunk buffers recorded byte for byte, out-of-memory paths of
   chunks 0..10; the rest is COVERED_ELSEWHERE because the emulator's heap
   can't hold chunk 10's 578 KB buffer).
+- **GameSettings::SaveSetup 0x433490 is ours too** (session 55,
+  `src/s3re/game/ui/game_settings_players.cpp`; chunk structs
+  `SaveSetupPlayersChunk`, `SaveSetup1AChunk`, `SaveSetup1BChunk`,
+  `SaveSetup1EChunk` in `savegame_chunks.h`). It copies each player setup
+  into a local GamePlayerSetup (the original operator= 0x49edf0) and
+  reads the saved values from the copy; record byte +5 is the index's low
+  byte. Ours writes 0 where the original leaves stack bytes. With more
+  than 20 setups the original would write past its 20-record stack buffer
+  (the game has at most 20 players). Its vector access is the same
+  inlined Watcom operator[] as GameSettings::PlayerSetup 0x4351e0 (also
+  ours): an empty vector without capacity grows to one element.
 
 ## Verified LoadMap callees (session 53)
 

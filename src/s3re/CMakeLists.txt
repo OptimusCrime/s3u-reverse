@@ -192,6 +192,8 @@ add_library(s3re SHARED
 
     # game/ui/: CScreenElement and the controls, menu and settings layouts
     game/ui/game_settings.cpp
+    game/ui/game_settings_players.cpp
+    game/ui/game_settings_players_tests.cpp
     game/ui/screen_element.cpp
     game/ui/ui_static_text.cpp
 

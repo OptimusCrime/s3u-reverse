@@ -20,8 +20,8 @@
 // otherwise). Quirks kept:
 //  - Fields the original doesn't write keep the heap block's old bytes:
 //    chunk 0 after the map name's zero, chunk 1 +0x22..+0x23 and each player
-//    name after its zero. (So do the stack bytes SaveSetup leaves in its
-//    chunks 0x14 and 0x1a; it stays the original.)
+//    name after its zero. (The original SaveSetup leaves stack bytes in its
+//    chunks 0x14 and 0x1a; ours, game_settings_players.cpp, writes 0 there.)
 //  - The map name and the player names are copied with strcpy: a map name
 //    of 256 characters or more runs past the 0x120-byte header, a player
 //    name of 256 or more into the fields after it (overwritten afterwards;
@@ -86,7 +86,7 @@ constexpr std::uintptr_t kWriteChunkData = 0x004a66d0;       // verified
 constexpr std::uintptr_t kMakeDirectory = 0x00621556;        // the CRT's _mkdir
 constexpr std::uintptr_t kTime = 0x0061f6a7;                 // the CRT's time
 constexpr std::uintptr_t kMapName = 0x00436a60;              // GameSettings::MapName
-constexpr std::uintptr_t kSaveSetup = 0x00433490;            // GameSettings::SaveSetup (original)
+constexpr std::uintptr_t kSaveSetup = 0x00433490;            // GameSettings::SaveSetup (ours, verified)
 constexpr std::uintptr_t kAiSave = 0x00551220;               // AI::SaveGlobals (AI range)
 constexpr std::uintptr_t kThrowOutOfMemory = 0x00610960;     // Win32::ThrowOutOfMemory, never returns
 
