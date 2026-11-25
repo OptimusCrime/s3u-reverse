@@ -378,7 +378,11 @@ AllocTable36700Record (0x4FEFD0) stores ten words; UpdateEnvironment
   int32 dx, int32 dy, int32 ring distance (0, 1 x6, 2 x12, ...,
   non-decreasing; 75 at the end), int32 direction sector 0..5. Entry 0 is
   (0, 0, 0, 0); entries 1..6 the neighbours in direction order; the last
-  entry (19999) is all zero. Dump-verified. **V**.
+  entry (19999) is all zero. Dump-verified. **V**. Built by
+  BuildOffsetTable (verified, session 57): 5000 hex points (ring r,
+  step a < r) by distance 2500 (2r - a)^2 + 7569 a^2, the 3333 nearest
+  each written in its 6 rotations; the ring field is a counter that grows
+  after each point with a = 0.
 - **Presence block** (20 bytes = one byte per player, 48 x 48 at
   world+0xDE7448, block (bx, by) at +bx*960 + by*20): non-zero where the
   player is present. Second map at +0xDF2848 with the same shape.
@@ -564,7 +568,8 @@ id; +0x88 word: the game seed; +0xB0 the game's GUID (NewGame;
 GameSettings::GameGuid 0x437400 copies it, SaveGameToSlot formats it with
 UuidToStringA); +0xC8 a dword read by the network code (chunk 0x1b); +0xCC
 byte: random races include the Amazons; +0xCD byte: the goods objective
-(NGO) is on. **V** (layout of these fields, session 55).
+(NGO) is on; +0xD0 dword: the NGO time in minutes (GameSettings::NgoTimeout
+0x437470). **V** (layout of these fields, session 55; +0xD0 session 57).
 
 ## GamePlayerSetup (0xCC bytes; Dirk\nethelp.cpp; no RTTI)
 
@@ -574,7 +579,9 @@ copy constructor 0x49eaf0, operator= 0x49edf0, destructor 0x49ec80
 
 | Off | Meaning | Conf. |
 |---|---|---|
-| +0x10 | dword, saved as a byte in chunk 0x14 (getter 0x49f4d0) | V |
+| +0x04 | "Ids" second value, printed %x by LogSlot 0x4a01c0 | S |
+| +0x08 | "Version" in the LogSlot line | S |
+| +0x10 | dword, saved as a byte in chunk 0x14 (getter 0x49f4d0); the first "Ids" value (probably the network id) | V |
 | +0x14 | party (Set argument 3; getter 0x49f590) | M |
 | +0x18 | std::string | V |
 | +0x28 | 16-bit string (MSVC6 basic_string<unsigned short>) | V |
@@ -585,7 +592,23 @@ copy constructor 0x49eaf0, operator= 0x49edf0, destructor 0x49ec80
 | +0x6C, +0x70 | set from Set's arguments 4 and 3 only while -1 | M |
 | +0xA8..+0xB0 | three values saved in chunk 0x14 (getter GamePlayerSetup::SavedValues 0x49fed0) | V |
 | +0xB4 | colour index (getter 0x49fec0) | V |
-| +0xBC | std::string | V |
+| +0xB8 | "Clan" in the LogSlot line | S |
+| +0xBC | std::string, the text LogSlot ends with (probably the player's name) | V |
+
+The copy constructor and operator= copy +0x00..+0x0c, byte +0x0c,
++0x10..+0x17, byte +0x54, +0x58..+0x60, byte +0x60, +0x64..+0x67, byte
++0x68, +0x6C..+0xBB and the three strings (shared where the count allows);
+the padding bytes +0x0D..+0x0F, +0x55..+0x57, +0x61..+0x63, +0x69..+0x6B
+and the vector stay. The copy constructor's std::string allocator bytes
+are the low byte of the source's address (session 57, verified).
+
+## Dirk::CTeam (0x40 bytes; RTTI)
+
++0x00 id (sort key, -1 by default), +0x04 not copied by the copy
+constructor 0x4a03a0 or operator= 0x4a05c0, +0x08 WCValSortedVector<int>
+(the player ids; AddPlayerId 0x4a06d0 inserts at the position of its
+virtual find, slot 3, mode 3), +0x24 WCValOrderedVector<Dirk::CPlayer>
+(GamePlayerSetup elements). **V** (session 57).
 
 ## CLogicThread (fields our code uses; `logic_thread_layout.h`)
 
