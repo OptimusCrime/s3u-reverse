@@ -126,6 +126,7 @@ add_library(s3re SHARED
     game/logic/load_save_game_tests.cpp
     game/logic/save_game.cpp
     game/logic/save_game_tests.cpp
+    game/logic/save_game_to_slot.cpp
     game/logic/logic_helpers.cpp
     game/logic/logic_thread.cpp
     game/logic/logic_thread_members.cpp

@@ -311,6 +311,13 @@ buffer plus the world records as WriteChunkWithTail's tail.
   (the game has at most 20 players). Its vector access is the same
   inlined Watcom operator[] as GameSettings::PlayerSetup 0x4351e0 (also
   ours): an empty vector without capacity grows to one element.
+- **The caller `CLogicThread::SaveGameToSlot` 0x50ac40 is ours** (session
+  55, `src/s3re/game/logic/save_game_to_slot.cpp`): single player saves
+  as `sprintf("slot%2i.sav", slot)` (so slot 3 is `slot 3.sav`, slot 12
+  `slot12.sav`); multiplayer as `Multi\temp.mps`, after formatting the
+  game GUID (GameSettings +0xb0) with UuidToStringA, a text it never uses
+  and frees again (probably a leftover of per-game file names). It returns
+  SaveGame's result byte.
 
 ## Verified LoadMap callees (session 53)
 

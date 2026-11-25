@@ -2138,3 +2138,39 @@ SPECS += [
          eax_mask=0xFF, presets=save_game_state, globals=save_game_globals, callees=SG_CALLEES, max_cases=300,
          exempt_blocks=SG_DEAD_STRING_BLOCKS),
 ]
+
+
+# --- CLogicThread::SaveGameToSlot (save_game_to_slot.cpp) ---
+# SaveGame 0x509980 (verified on its own) is probed: the name it gets is
+# recorded as text, length and capacity (the string lives in the caller's
+# frame) and its result is random, so both results reach the caller. The
+# game's sprintf runs; GameSettings::GameGuid runs on g_gameSettings, whose
+# GUID (+0xb0) is random per case; UuidToStringA / RpcStringFreeA are API
+# probes (emu.py: the GUID bytes, the text pointer).
+STS_GUID = 0x007a7ac8  # g_gameSettings + 0xb0
+
+
+def _sts_record_save(m, ecx, args):
+    pointer, length, capacity = struct.unpack("<III", m.guest_read(args[0] + 4, 12))
+    return (_sg_stack(args[0]), bytes(m.guest_read(pointer, length)) if pointer else b"", length, capacity)
+
+
+def save_slot_globals(rng, pool, args):
+    return [(STS_GUID + 4 * i, rng.getrandbits(32), 4) for i in range(4)]
+
+
+def save_slot(rng, pool):
+    roll = rng.random()
+    if roll < 0.7:
+        return rng.randrange(12)
+    return rng.randrange(-200, 1000) & 0xFFFFFFFF if roll < 0.85 else rng.getrandbits(32)
+
+
+SPECS += [
+    # Dead blocks: 0x50adbd and 0x50af24, the _Eos(0) of the inlined erase()
+    # of the name: _Grow(0, false) returns false (the length is 0 then).
+    Spec("CLogicThread_SaveGameToSlot", 0x0050ac40, "logicthread",
+         [one_of(0, 1, 0x100, 0xff01, 0x12345600), save_slot], eax_mask=0xFF, globals=save_slot_globals,
+         callees={0x00509980: (1, "thiscall", lambda h: h & 0x1ff, None, _sts_record_save)},
+         exempt_blocks=(0x50adbd, 0x50af24)),
+]
