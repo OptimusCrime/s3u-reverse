@@ -163,6 +163,20 @@ inline constexpr GameText kDSGetStatus{0x7a0ee0};           // "CDirectSoundBuff
 inline constexpr GameText kDSRestore{0x7a0f00};             // "CDirectSoundBuffer::DSRestore"
 inline constexpr GameText kDSGetVolume{0x7a0f20};           // "CDirectSoundBuffer::DSGetVolume"
 inline constexpr GameText kDSUnknownError{0x7a0d90};        // "Unknown Error Code"
+// DirectX\Dsound.cpp: the effect classes (framework/directx_sound_effect.cpp,
+// directx_sound_files.cpp)
+inline constexpr GameText kMemoryMappedFile{0x7a0fe0};      // "memory mapped file" (CMemorySoundFile's name)
+inline constexpr GameText kDirectSoundError{0x7a0d6c};      // "DirectSound Error "
+inline constexpr GameText kOcurredAt{0x7a0d80};             // " ocurred at "
+inline constexpr GameText kTempBuffer{0x7a1178};            // "TempBuffer"
+inline constexpr GameText kDsoundCppFile{0x7a1184};         // "E:\Siedler3\DirectX\Dsound.cpp"
+inline constexpr GameText kDSLock{0x7a115c};                // "CDirectSoundBuffer::DSLock"
+inline constexpr GameText kDSUnlock{0x7a113c};              // "CDirectSoundBuffer::DSUnlock"
+inline constexpr GameText kDSSetPan{0x7a128c};              // "CDirectSoundBuffer::DSSetPan"
+// Win32\cdaudio.cpp (framework/win32_cdaudio.cpp)
+inline constexpr GameText kCDSetTimeFormatError{0x7a4ad0};  // "CD: Error during SetTimeFormat: %u"
+inline constexpr GameText kCDStopError{0x7a4b10};           // "CD: Error during stop: %u"
+inline constexpr GameText kCDGetTrackCountError{0x7a4b2c};  // "CD: Error during GetTrackCount: %u"
 
 // CSoundData (Dirk\SoundData.cpp; the sound loader, sound/sound_data.cpp)
 inline constexpr GameText kSoundDataFile{0x7a3120};        // "E:\Siedler3\Dirk\SoundData.cpp"
@@ -407,6 +421,14 @@ inline constexpr GameText kFoodForMinesMeat{0x73249c};       // "*** COMP_FoodFo
 inline constexpr GameText kFoodForMinesNoMeat{0x732464};     // "*** COMP_FoodForMinesOptimum - KEIN Fleisch vorhanden"
 inline constexpr GameText kFoodForMinesFish{0x732434};       // "*** COMP_FoodForMinesOptimum - Fisch vorhanden"
 inline constexpr GameText kFoodForMinesNoFish{0x7323fc};     // "*** COMP_FoodForMinesOptimum - KEIN Fisch vorhanden"
+// COMP_FoodForMines 0x5724e0 (OutputDebugStringA texts; each ends in a line feed).
+inline constexpr GameText kMineFoodNotOwned{0x7323bc};       // "COMP_FoodForMines - EcoSector gehört nicht dem Spieler ???????"
+inline constexpr GameText kMineFoodEntry{0x73239c};          // "*** COMP_FoodForMines entry "
+inline constexpr GameText kMineFoodForceProduction{0x732374};  // "*** COMP_FoodForMines ForceProduction"
+inline constexpr GameText kMineFoodHeader{0x732334};         // "*** COMP_FoodForMines Food for mines player: %u, ecosector %u" (sprintf)
+inline constexpr GameText kMineFoodCoalPercent{0x732300};    // "*** COMP_FoodForMines Food for coalmine percent %i" (sprintf)
+inline constexpr GameText kMineFoodIronPercent{0x7322cc};    // "*** COMP_FoodForMines Food for oremine percent %i" (sprintf)
+inline constexpr GameText kMineFoodGoldPercent{0x732298};    // "*** COMP_FoodForMines Food for goldmine percent %i" (sprintf)
 // The out-of-memory check of AI::CreateAgent 0x56f6d0.
 inline constexpr GameText kAgentPtr{0x73228c};              // "agentPtr"
 inline constexpr GameText kCompGlobsSourceFile{0x732098};   // "E:\Siedler3\Rainer\compGlobs.cpp"

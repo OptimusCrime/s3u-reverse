@@ -291,7 +291,7 @@ def map_name_settings(rng, pool, args):
     return fields
 
 
-def null_string_count(rng, pool, args):
+def name_null_string_count(rng, pool, args):
     """The count byte before the static empty string: a name with a length
     but no buffer is shared from there unless it is 0xfe or more."""
     return [(NULL_STRING_COUNT, rng.choice([0, 0, 1, 0xfe, 0xff]), 1)]
@@ -304,7 +304,7 @@ SPECS += [
     # (the erase of a non-empty tail).
     Spec("GameSettings_MapName", 0x00436a60, "thiscall",
          [lambda rng, pool: WORLD_BASE + 0x2c if rng.random() < 0.1 else STRING_RESULT_PTR],
-         presets=map_name_settings, globals=null_string_count,
+         presets=map_name_settings, globals=name_null_string_count,
          exempt_blocks=(0x436a8c, 0x436a9d, 0x436ab8, 0x436adf)),
 ]
 

@@ -47,8 +47,16 @@ LOGBOOK session entry).
   ProcessPendingEvents, COMP_FoodForMinesOptimum, the list ctor/dtor and
   bitset ctor (manual function starts), Init and the constructor) and the
   expand / map worker agents, OnBuildingFinished, HasBuildingTypeNear,
-  AdjustSoldierShares, CCentrumCheckAgent::Run (wip/ai-agents). Left:
-  CComputerPlayer::Step 0x550f80. Not in Ghidra's list (no rows): 0x596540
+  AdjustSoldierShares, CCentrumCheckAgent::Run (wip/ai-agents). Session
+  57 (wip/ai-step2) did CComputerPlayer::Step 0x550f80,
+  COMP_FoodForMines 0x5724e0, T_DO_BUILD_HOUSE_AGENT::WorkOnNote
+  0x5655c0, BLACK_BOARD_AGENT::DeleteThis 0x56faf0 and the empty virtual
+  0x55ec00. Blocked only by COMP_EmergencyPowersActStone (and so by
+  SendPrioritizeSite): T_ECONOMY_AGENT::UpdateMaterialShortages 0x56aa60
+  and Run 0x567890 (ConsiderBuildings 0x56a1a0 done; check in a game
+  whether the Asians' large-temple gate on the Pyramid's countdown is
+  visible). 0x551637 is a false
+  function start inside DeactivateNote (verified with it). Not in Ghidra's list (no rows): 0x596540
   (a vector's free).
 - **Open (session 55 round 2):** the woodcutter /
   stonecutter finders pick the cell with the FEWEST trees / stones when the
@@ -77,6 +85,6 @@ LOGBOOK session entry).
 - **Session 56 (wip/ai-agents) also did** AdjustSoldierShares 0x56a840,
   OnBuildingFinished 0x573890, CCentrumCheckAgent::Run 0x560e00 and the
   credits' debug / timer helpers 0x59e6f0..0x59f2a0. Left in the AI range
-  besides the area-list group: CComputerPlayer::Init / ctor / Step,
-  COMP_EmergencyPowersActStone 0x573560 (needs SendPrioritizeSite).
+  (session 57): COMP_EmergencyPowersActStone 0x573560 (needs
+  SendPrioritizeSite).
 

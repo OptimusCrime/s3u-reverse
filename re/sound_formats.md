@@ -105,7 +105,7 @@ CDrawer::InitSurfaces / Menus CDrawer::CreateSurfaces:
     FindDirectoryContainingFile 0x5fdfc0, IsPathOnRemovableDrive 0x5fa750
     per file: CFile, CFile::Open, GetSize, CFileMapping::Create, MapView
   CSoundData::DetachFromMedium 0x5ff230
-drawing code (settlers 0x4c85a0, 0x4d3050, ...): IsEnabled 0x5ff4d0, GetEffect 0x5ff4f0 (-> PurgeEffects 0x5ff700), CSoundEffect::Play 0x5c2fc0
+drawing code (settlers 0x4c85a0, 0x4d3050, ...): IsEnabled 0x5ff4d0, GetEffect 0x5ff4f0 (-> PurgeEffects 0x5ff700), CSoundEffect::Play 0x5c2fc0 (-> PurgeStoppedDuplicates 0x5c3210, DuplicateInto 0x5c2a60)
 options: SetVolume 0x5ff9f0, GetVolume 0x5ffa30
 CDirectSound::Disconnect 0x5c1da0 -> CSoundData::ReleaseBuffers 0x5fde20 (vtable slot 2)
 lost buffers: CDirectSoundBuffer::CheckResult -> RestoreAll -> CDirectSound slot 1 0x5c1dc0 -> CSoundData::Restore 0x5fdef0
@@ -139,3 +139,52 @@ destructor 0x5fdc90 -> Close 0x5ff1c0
 * Open's and Restore's catch blocks are SEH filters: a code the original
   catches and rethrows (`throw;`) is not caught at all, the same for every
   caller.
+
+## The effect classes (session 57, wip/sound-fx; verified)
+
+Code: `src/s3re/game/framework/directx_sound_effect.cpp`,
+`directx_sound_files.cpp`, layouts `directx_sound_layout.h`.
+
+* **DirectX::CMemorySoundFile** (0x38 bytes, base DirectX::CSoundFile with
+  a name, here "memory mapped file"): the sample's format, data, size, a
+  read position and a conversion mode. GetEffect passes CSoundData +8 (Open's
+  sound format 1, 2 or 4) as the mode: 1 copies; 2 turns 16-bit samples
+  into 8-bit (high byte + 0x80; size, block align, bytes per second halved);
+  4 also halves the rate (every other sample) when the sample is 16-bit and
+  at least 22,050 Hz, else it falls back to 2, and 2 to 1 for 8-bit
+  samples. So sound format 4 (the 11 kHz primary format) plays the SND
+  files' 22 kHz samples at 11 kHz 8-bit.
+* **DirectX::CSoundEffect** (0xc0): a master CSoundEffectBuffer created
+  DSBCAPS_STATIC | volume | pan | frequency and filled once by Load (Lock
+  the whole buffer, copy, Unlock), plus a WCValSkipListDict<int,
+  CSoundEffectBuffer> of duplicates (IDirectSound::DuplicateSoundBuffer, so
+  they share the sample memory). Play: if the master is not playing it plays
+  (pan, volume, then Play with the flags); otherwise the last stopped
+  duplicate is reused, or a new one is made with the key from the global
+  counter 0x7a0c00 (shared by all effects, never reset). Play returns the
+  key (0 = master). PurgeStoppedDuplicates (at most every 2,500 ms per
+  effect) removes the stopped duplicates and returns true when nothing is
+  left playing, which CSoundData::PurgeEffects uses to delete the effect.
+* **Lost buffers:** CheckResult on DSERR_BUFFERLOST calls the buffer's slot
+  3: for an effect buffer CSoundEffectBuffer::Restore (0x5c28e0), for the
+  others CDirectSound slot 1 (0x5c1dc0, CSoundData::Restore). Both check
+  DirectX::CApplication::IsActive (the byte +0x1c of g_app, compared with 1)
+  and otherwise throw a CAppNotActiveException with an empty message.
+  CSoundEffect::Restore re-reads the sample from its file into the master
+  and every duplicate.
+* **CDirectSoundException::Describe**: "DirectSound Error <DSErrorText> ocurred
+  at <call>" (sic); the constructor builds and drops it once (a removed log
+  call).
+
+Quirks kept: Load and Restore pass uninitialized locals to Lock (Load's
+first size is its `file` argument's stack slot); after a DSERR_BUFFERLOST
+from Lock (CheckResult restores instead of throwing) they copy with those
+values. Load's second argument (GetEffect passes 1) is never read.
+Unload is the effect's only virtual (slot 0), not a destructor.
+
+Known differences: CMemorySoundFile's name allocator byte and Describe's
+result allocator byte (never read); the throwers' message string leaks when
+the CAppNotActiveException unwinds (no frame in ours). The temporary buffer
+copies and Purge's key vector are destroyed during unwinding as in the
+original (RAII in ours; checked by SoundEffect_MatchOriginal, whose
+sequences end in DirectSound exceptions).

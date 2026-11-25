@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <detours.h>
 
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -58,6 +59,17 @@ HookRegistrar::HookRegistrar(const char* name, std::uintptr_t address, HookKind 
                              void** original, void* replacement,
                              CallStats* stats) {
     Registry().push_back({name, address, kind, original, replacement, stats});
+}
+
+bool FindHook(const char* name, std::uintptr_t* address, const void** original) {
+    for (const Hook& hook : Registry()) {
+        if (std::strcmp(hook.name, name) == 0) {
+            *address = hook.address;
+            *original = *hook.original;
+            return true;
+        }
+    }
+    return false;
 }
 
 void LogCallCounts() {

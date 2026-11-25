@@ -124,7 +124,8 @@ SPECS += [Spec("VectorDestructor_414240", 0x00414240, "thiscall", [], presets=wa
 
 # -- list bases, skip-list iterators, vector callbacks (session 56) ---------
 SPECS += [Spec(f"IsvListConstructor_{a:x}", a, "thiscall", []) for a in (0x41b080, 0x428bd0, 0x428bf0)]
-SPECS += [Spec(f"SkipListIterConstructor_{a:x}", a, "thiscall", [anything]) for a in (0x4726e0, 0x472780, 0x499600)]
+SPECS += [Spec(f"SkipListIterConstructor_{a:x}", a, "thiscall", [anything]) for a in (0x4726e0, 0x472780, 0x499600,
+                                                                                       0x5c34f0, 0x5ffc60)]
 SPECS += [Spec(name, address, "stdcall", [anything, anything], callees={member: (1, "thiscall", "probe")})
           for name, address, member in (("PlayerVectorEquivalent", 0x437530, 0x49f100),
                                         ("TeamVectorLessThan", 0x437550, 0x4a05a0),
@@ -170,7 +171,8 @@ CALLBACK_ARGS = [lambda rng, pool: WORLD_BASE + SCRATCH + 0x20,
 SPECS += [Spec(name, address, "stdcall", CALLBACK_ARGS, presets=callback_buffers)
           for name, address in (("UShortVectorEquivalent", 0x462850), ("ChunkDescriptionEquivalent", 0x499050),
                                 ("SkipDictKeyLess_457a70", 0x457a70), ("SkipDictKeyLess_4a6b20", 0x4a6b20),
-                                ("SkipDictKeyLess_428100", 0x428100), ("SkipDictKeyEqual_4a6b00", 0x4a6b00))]
+                                ("SkipDictKeyLess_428100", 0x428100), ("SkipDictKeyEqual_4a6b00", 0x4a6b00),
+                                ("SkipDictKeyEqual_5c33a0", 0x5c33a0), ("SkipDictKeyLess_5c33c0", 0x5c33c0))]
 SPECS += [Spec("StringVectorLessThan", 0x0044c910, "stdcall", CALLBACK_ARGS, presets=string_callback_buffers)]
 
 
@@ -290,7 +292,7 @@ def string_value(rng, pool):
     return WORLD_BASE + STRING_VALUE
 
 
-# globals: null_string_count (ui.py's, which is in effect for all parts:
+# globals: name_null_string_count (ui.py's:
 # the static empty string's count byte 0, 1, 0xfe or 0xff, so a source
 # without buffer sometimes takes the copy path).
 # Dead, in the inlined operator= (assign(x, 0, npos)): the count clamp to
@@ -299,10 +301,10 @@ def string_value(rng, pool):
 # element from itself).
 SPECS += [
     Spec("StringVector_InsertAt", 0x004148a0, "thiscall", [lambda rng, pool: rng.randint(-2, 7) & 0xFFFFFFFF, string_value],
-         presets=string_vector_room, globals=null_string_count, new_fails=0.1,
+         presets=string_vector_room, globals=name_null_string_count, new_fails=0.1,
          exempt_blocks=(0x004149f8, 0x00414a0b)),
     Spec("StringVector_RemoveAt", 0x00429750, "thiscall", [lambda rng, pool: rng.randrange(5)],
-         presets=string_vector_room, globals=null_string_count,
+         presets=string_vector_room, globals=name_null_string_count,
          exempt_blocks=(0x00429793, 0x00429799, 0x004297a2, 0x004297a7, 0x004297b7, 0x004297b9, 0x004297bd,
                         0x004297e5, 0x004297ed)),
 ]
@@ -313,3 +315,26 @@ SPECS += [
 SPECS += [Spec("StringVector_CopyConstruct", 0x00409c40, "fastcall",
                [one_of(WORLD_BASE + SCRATCH + 9 * SCRATCH_SLOT_BYTES), anything, one_of(WORLD_BASE)],
                presets=string_vector_state, new_fails=0.1)]
+
+
+# -- the sound code's skip-list destructors (skiplist_dicts.cpp, session 57) --
+# A random dictionary at world 0 (count sometimes 0); clear and the pair's
+# ~CDirectSoundBuffer probed (the library and verified code, own specs);
+# the empty error hook 0x59f200 runs.
+SKIP_DESTROY_CALLEES = {0x0060bd80: (0, "thiscall", "probe"), 0x005c1fe0: (0, "thiscall", "probe")}
+
+
+def skip_dict_count(rng, pool, args):
+    return [(0x74, rng.choice([0, 0, 1, rng.getrandbits(32)]), 4)]
+
+
+def skip_iter_node(rng, pool, args):
+    return [(0x0C, rng.choice([0, rng.getrandbits(32)]), 4)]
+
+
+SPECS += [Spec(f"SkipListDestructor_{a:x}", a, "thiscall", [], presets=skip_dict_count, callees=SKIP_DESTROY_CALLEES)
+          for a in (0x5c3450, 0x5ffa60, 0x5ffb60, 0x5ffac0, 0x5ffc00, 0x5c33e0)]
+# cover_until: Ghidra's function also takes in the static initializer that
+# follows it (0x5ffc90).
+SPECS += [Spec("SoundEffectDictIter_KeyValue", 0x005ffc80, "thiscall", [], presets=skip_iter_node,
+               cover_until=0x005ffc8e)]

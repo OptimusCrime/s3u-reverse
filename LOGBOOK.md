@@ -13,38 +13,29 @@ to `docs/todo/`). The archive is for searching, not for reading whole.
 
 ## Current focus
 
-**Next (updated in session 55). The user's priority (2026-11-24): function
+**Next (updated in session 56). The user's priority (2026-11-24): function
 batches (reimplement + verify), less cleanup; cleanup only where it blocks
-a batch.**
-1. **Computer players, the rest** (`docs/todo/computer-players.md`): done
-   up to RunMilitary, the SiteTree containers, the work-area finders,
-   CEvaLand construction and AI load/save (session 55). Left: AddArea
-   0x555260, FillAreaSiteLists 0x556630 and RefillAreaSiteList 0x5579d0
-   (~1.4k ins each), ProcessPendingEvents 0x554980, the expand-empire and
-   map-worker agents' MakeBuildOrders (0x56cd90, 0x57ce90) and Run, then
-   0x550900 / 0x550a30 and CComputerPlayer::Step 0x550f80. Three helpers
-   without function starts (0x553e70, 0x5591e0, 0x559240) need manual
-   rows. SendPrioritizeSite 0x58e510 needs a runtime look (log message
-   byte 6 against the site owner in a game with computer players).
-2. **Sound and the rest of the data loaders**: CSoundData (ctor 0x5fdb60,
-   Open 0x5fe760, DetachFromMedium 0x5ff230, GetEffect; SND format not
-   analysed yet). The graphics loader and drawing are verified.
-3. **Settings / savegame leftovers** (`docs/todo/file-formats.md`):
-   GameSettings::LoadSaveGame 0x432b00 (Watcom vector members first), the
-   GamePlayerSetup copy constructor 0x49eaf0 / operator= 0x49edf0 (16-bit
-   string assign 0x428400 first).
-4. **Other READY functions** (`frontier.py --library-done`): the UI range
-   0x400000..0x4c0000 has ~265 READY (mostly Watcom containers and
-   controls).
-5. **Tooling guard (session 55):** spec parts share one namespace and
-   names resolve at call time, so a redefinition in a later part silently
-   changes earlier specs (GFX_HEADERS, fixed). Add a check that fails on
-   top-level names defined twice with different values.
-6. Open from session 49: the live-vs-replay header/rest hash difference
-   of the user's full game (backlog "Evidence and testing").
-7. Later, only when it blocks a batch: readability leftovers
-   (`docs/todo/readability.md`; the session 54 typed-access audit,
-   postponed by the user) and the source layout follow-ups.
+a batch. The user wants each round followed by the next right away.**
+
+Round 2 of session 56 is running (worktrees made from main b1769a6; the
+agents hit the usage limit once and are resumed with SendMessage):
+1. `wip/ai-step2`: the emulator spec-namespace guard (top-level names
+   defined in two spec parts with different values; existing clashes
+   evaland_object, evaland_globals, ground_note_globals, ring_offsets,
+   null_string_count), then CComputerPlayer::Step 0x550f80 and the rest
+   of the AI range (not SendPrioritizeSite / EmergencyPowersActStone).
+2. `wip/sound-fx`: DirectX::CSoundEffect (Play 0x5c2fc0 ...),
+   CMemorySoundFile / CSoundFile, the sound dictionaries, CD audio.
+3. `wip/ui-controls`: UI range controls (CControl::OnTimer 0x4183c0,
+   ~CControl 0x4180a0, CButton, list boxes, dropdowns, CScreen messages).
+4. `wip/settings-logic`: 16-bit string assign 0x428400, GamePlayerSetup
+   copy ctor / operator= / Set (hook clash with the --random-map
+   passthrough), GameSettings::LoadSaveGame 0x432b00, then logic-range
+   READY functions (BuildOffsetTable, InitPlayerInfo, ...).
+
+After that: SendPrioritizeSite 0x58e510 needs a runtime look; the
+live-vs-replay header hash difference from session 49 (backlog
+"Evidence and testing"); readability leftovers only when they block.
 
 **Standing decisions** (details in `CLAUDE.md` and the archive):
 core gameplay first, no network/lobby code (2026-11-09); reimplementation
@@ -116,6 +107,44 @@ testing".
   classes by default; they might be library code.
 
 ## Session log (recent sessions; older ones in docs/history/)
+
+### 2026-11-25 (56): AI agents and area lists, sound loader, UI Watcom containers
+
+Parallel round of four batch agents (wip/ai-agents, wip/ai-areas,
+wip/sound, wip/ui-watcom), merged serially; verified 1102 -> 1324.
+- **Computer players, agents (wip/ai-agents)**, 23 functions: the
+  expand-empire and map-worker agents' Run / MakeBuildOrders (the
+  55-case switch as a rule table), HasBuildingTypeNear, AdjustSoldierShares,
+  OnBuildingFinished, CentrumCheck, credits debug helpers. Quirks kept:
+  castle ordered only when an own castle is within 60 (inverted test); the
+  mill checks for waterworks; a finished gem mine tears down the owner's
+  gold mines and smelters; the expand agent always builds at the advanced
+  position.
+- **Computer players, area lists (wip/ai-areas)**, 13 functions:
+  FillAreaSiteLists, RefillAreaSiteList, AddArea, ProcessPendingEvents,
+  COMP_FoodForMinesOptimum, CComputerPlayer::Init and ctor, the AreaList
+  ctor/dtor and bitset ctor (manual rows). AddArea re-points the per-type
+  site tree pointers after the insert (open point closed). Event types
+  documented. Both AI agents had done OnBuildingFinished: the ai-agents one
+  kept at merge. Only CComputerPlayer::Step is left in the AI.
+- **Sound (wip/sound)**, 39 functions: CSoundData (ctor, Open,
+  DetachFromMedium, Close, Restore, volume), GetEffect / PurgeEffects, 26
+  DirectSound wrappers (framework/directx_sound.cpp, fake DirectSound in
+  test/fake_dsound.*). SND format in re/sound_formats.md. Quirks kept: the
+  effect cache key drops the file number; PurgeEffects spares only effects
+  used exactly 300,000 ms ago. New subsystem folder game/sound/.
+- **UI range (wip/ui-watcom)**, 152 functions: Watcom vectors with one
+  shared helper (watcom/vector_base.h), 37 deleting destructors, MSVC6
+  string/wstring members, 22 small control members, Dirk::CTeam.
+  GamePlayerSetup is RTTI's Dirk::CPlayer (rename in docs/todo/naming.md).
+- Evidence on the merged main: Debug and Release build; inventory check
+  clean; emulator `--self-test` 32/32 + RAM check "separate"; `--test`
+  894/894 (Debug); full emulator suite `--full --require-coverage`: 1324
+  functions, 0 mismatches, 0 incomplete coverage; whole-game checks against
+  the original: check_save slots 1-3 (2,000 ticks), check_random_map 384,0
+  and 448,3 (1,000 ticks), the scripted-seed127 replay (3,000 ticks): all
+  identical; call counts recorded. Identical in a whole-game check: 777 ->
+  858.
 
 ### 2026-11-25 (55, round 2): emulator fix, AI land side, settings, graphics loader
 
@@ -244,125 +273,3 @@ wip/ai-mil), merged serially; verified 871 -> 1031.
   recorded. Identical in a whole-game check: 582 -> 726.
 - Also: the hung cl.exe from session 54 ended (the user's OK); old
   worktrees removed.
-
-### 2026-11-24/25 (54): LoadMap, computer players land and army, logic/draw helpers
-
-Parallel round of four batch agents (worktrees wip/loadmap2, wip/ai-land,
-wip/ai-army, wip/logic-misc), merged serially; 75 functions verified.
-- **`CGameData::LoadMap` 0x4fd540 (`wip/loadmap2`)**, map/load_map.cpp,
-  split into helpers per chunk, the colours, UnblockCastleTiles and the
-  campaign fix-ups (missions 49, 50, 53, 59, 61, 70). Evidence: all 166
-  maps under Map\ (read only) loaded by both into ConstructWorld worlds
-  (whole world, writable S3.EXE bytes, DebugLog, CRT rand, CMapFile
-  caches), 30 synthetic variants, a wrong-implementation test, emulator
-  spec 170/170 blocks. GameSettings::PlayerSetup 0x4351e0 stays the
-  original (called through a typed pointer). Findings in
-  re/file_formats.md "Verified map loader" (chunk 2's 45-byte slot
-  records, untaken slots, garrison record byte 6, mission fix-ups; 100 of
-  166 maps have only chunk 6; one tile uses slot 191, past the 20-entry
-  table). SaveGame 0x509980 not started (see Current focus).
-- **Computer players, land (`wip/ai-land`)**, 19 functions:
-  CEvaLand::EvaluateCell 0x5540f0, EvaluateAllCells, UpdateNextCells,
-  ReevaluateAroundTile, DiscountExploitedResources, HasForeignCellAround,
-  FewUnownedTilesNear, MarkBuildingTypesInLandGrid (ai_evaland_cells.cpp);
-  CountResourceInOwnersLand / CountPlayersResourcesAround;
-  HOUSE_GROUND_REQUEST_NOTE CheckSite / CheckAndImproveSite /
-  NextSpiralPosition (ai_ground_request.cpp); four order helpers
-  (ai_building_orders.cpp); InitAiGlobals, SaveState (ai_state.cpp).
-  AiGridCell fully named (re/computer_players.md "The land evaluation
-  grid"). Quirks kept: amounts > 250 stored as 250, others halved; a
-  shift count wraps to 31; fish not counted (DebugLog per tile).
-- **Computer players, army (`wip/ai-army`)**, 21 functions: the army
-  group bookkeeping (ai_army_groups.cpp, 9), the military-building
-  searches, CheckGroupTargets (x87 compare as double), Mission56FinalAssault,
-  RandomPointNearSettler(Far), SendThieves, SendGeologists
-  (ai_army_orders.cpp), DemolishSurplusResidence, PromoteSoldiers
-  (ai_economy_actions.cpp), ConsiderWoodcutter / ConsiderStonecutter (x87
-  as double). emu.py records OutputDebugStringA and sprintf'd DebugLog
-  texts; `--self-test` 21/21. Findings: mission 56's assault targets
-  player 0's building; AssignSoldier's 0x592aeb is dead; AiGroupTarget
-  x/y are probably building ids. Residences 0x568890 not started.
-- **Logic and draw helpers (`wip/logic-misc`)**, 34 functions: CLogicThread
-  members (logic_thread_members.cpp; the message ring and draw fields
-  named in logic_thread_layout.h), the CDrawer draw queues (were
-  Logic_sub_4d7xxx: shadows, sprites, colour layers per row;
-  graphics/drawer_queues.cpp, drawer_layout.h), screen layout and ambient
-  sound pan/volume (graphics/screen_layout.cpp), CGameData
-  FinishInitialising (was Logic_sub_4fce90), PickHitArea (was
-  FindNearest_a), BuildStatisticsChart, GoToNotification, BuildMinimap,
-  RebuildFogOfWar, InitTileShadesAndMapEdge, the MapEffect queries.
-- **Typed-access audit** (read-only agent, user's question): ~0.9% of
-  access sites raw (~100 lines in code, the rest in tests); CGameData
-  fully mapped; opaque: logic_thread_layout.h (~90% unknown bytes),
-  menus/game-settings layouts; typed_access_lint.py misses byte casts of
-  non-world pointers, small-object offsets, inline hex arithmetic, C
-  casts. Postponed by the user.
-- Evidence on the merged main: Debug and Release build; inventory check
-  clean; full emulator suite `--full --require-coverage` on main after
-  the first two merges (816 functions, 0 mismatches, full coverage), then
-  `--changed --require-coverage` after all four (151 specs, 0
-  mismatches; LoadSaveGame run `--full` alone: 40/40 blocks);
-  `--test` 727/727 (Debug); whole-game checks against the original: check_save slots
-  1-3 (2,000 ticks) and the scripted-seed127 replay (3,000 ticks)
-  identical; check_random_map 384,0 and 448,3 (1,000 ticks) identical
-  (call counts recorded; the replay's were not). Identical in a
-  whole-game check: 539 -> 582. Verified: 796 -> 871.
-- Lessons: `check_random_map.py` reads `s3re.log` in the bin folder, so a
-  concurrent `--test` from the same build overwrites it ("random map was
-  not set up"); run it after the tests. The army agent left a hung
-  cl.exe (PID 10656) locking files in its worktree (its kill was denied;
-  left for the user).
-
-### 2026-11-24 (53): computer players battle spells and queries, map loader callees
-
-- **Computer players (`wip/ai-spells`)**, 22 functions verified (in-process
-  tests with wrong-implementation checks, emulator specs with all blocks
-  covered; the branch's full `--test` 636/636). Battle spells
-  (ai_battle_spells.cpp): the ten casters 0x5957c0..0x596210,
-  AI::CastBattleSpells 0x5953b0 (the crossed Amazon casters kept),
-  AI::InitBattleSpellSlots 0x590870. Enemy counts 0x58a2c0 / 0x58a610
-  (ai_enemy_search.cpp); cell resources OwnersLandHasResource 0x599df0,
-  WorkCellHasTrees/Stones 0x59a380 / 0x59a8b0, FindResourceCellAround
-  0x59a120 (ai_cell_resources.cpp); FindNode 0x573be0, IsForceProduction
-  0x572fa0 (ai_player_nodes.cpp); HasSiteNoteNear 0x571c40;
-  HOUSE_GROUND_REQUEST_NOTE::Init 0x575d60. Findings in
-  re/computer_players.md "Battle spells": per mage a mana check by its own
-  race, then the race's casters in fixed order, each with one Random draw
-  (low word > 25000, ~24%); enemies within 20 tiles; the Romans cast
-  nothing in campaign mission 67; several old caster notes corrected.
-  Known difference: a mage of race > 3 makes the original read leftover
-  stack bytes as its mana bits (at most a side-effect-free enemy count,
-  never a cast); ours skips it.
-- **Map loader callees (`wip/loadmap`)**, 7 functions verified (in-process
-  tests incl. whole-world comparisons on worlds built by the original
-  CGameData constructor + GenerateRandomMap, emulator specs full
-  coverage; the branch's full `--test` 632/632): PrepareLoadedTerrain
-  0x519540 (water depth bands from the shore; map/load_map.cpp),
-  SpawnSettlersOnWater 0x50dc10, PlaceTown 0x506cf0 and AddPlayerTowns
-  0x5074b0 (map/player_towns.cpp), GameSettings::StartGoods 0x412300 and
-  GamePlayerSetup::Colour 0x49fec0 (ui/game_settings.cpp). 0x4351e0 is
-  GameSettings::PlayerSetup(index) (identified; Watcom vector access, UI
-  side). Findings: the start building is a small tower (type 15) with a
-  Swordsman1 garrison (job 23); start goods from GameSettings +0x74;
-  AddPlayerTowns mirrors teams 1..3 by the symmetry (world +0x2d274);
-  quirk kept: symmetry 3 with given start positions places teams 2/3
-  whenever team 1 exists (PlaceTown(-1), never reached by the game). Test
-  support for LoadMap: map/map_test_support.h.
-- The residences condition 0x568890 also uses x87 float curves, like the
-  woodcutter and stonecutter conditions. **Decision (the user,
-  2026-11-24): x87 code is written as `double` in the original's order,
-  with `_ftol` truncation and emulator specs near rounding edges**
-  (CLAUDE.md "Floating point", docs/reimplementation_notes.md); the
-  runtime check of the x87 control word is in the backlog. The three
-  conditions are unblocked.
-- Evidence on the merged main (both batches): Debug and Release build;
-  `--test` 648/648; full emulator suite `--full --require-coverage`: 796
-  functions, 0 mismatches, 0 with incomplete coverage (16 workers,
-  1,299 s); inventory check clean. Verified: 768 -> 796.
-- **Whole-game checks against the original** (run over the user's Remote
-  Desktop session: works): `check_save.py` slots 1, 2, 3 (2,000 ticks
-  each), `check_random_map.py` 384,0 and 448,3 (1,000 ticks), and
-  `check_replay.py --recording scripted-seed127` (3,000 ticks): all
-  identical; call counts recorded (re/whole_game_calls.csv). Identical in
-  a whole-game check: 470 -> 539 functions; every verified function now
-  has a whole-game row (257 with tests only).

@@ -22,6 +22,8 @@
 //   0x004a6b20 WCValSkipListDict<unsigned int, ...> base_less_than: key at a-8 < *b (unsigned)
 //   0x00428100 WCValSkipListDict<int, ...> base_less_than: key at a-8 < *b (signed)
 //   0x004a6b00 WCValSkipListDict<unsigned int, ...> base_equivalent: key at a-8 == *b
+//   0x005c33a0 WCValSkipListDict<int, DirectX::CSoundEffectBuffer> base_equivalent: key at a-0x14 == *b
+//   0x005c33c0 WCValSkipListDict<int, DirectX::CSoundEffectBuffer> base_less_than: key at a-0x14 < *b (signed)
 
 #include "hooks.h"
 #include "msvc6/string.h"
@@ -142,6 +144,13 @@ std::uint32_t __stdcall SkipDictKeyLess_428100(std::uint32_t node, std::uint32_t
 std::uint32_t __stdcall SkipDictKeyEqual_4a6b00(std::uint32_t node, std::uint32_t key) {
     return ReadAt<std::uint32_t>(node - 8) == ReadAt<std::uint32_t>(key) ? 1 : 0;
 }
+// The sound effects' dictionaries of duplicate buffers.
+std::uint32_t __stdcall SkipDictKeyEqual_5c33a0(std::uint32_t node, std::uint32_t key) {
+    return ReadAt<std::int32_t>(node - 0x14) == ReadAt<std::int32_t>(key) ? 1 : 0;
+}
+std::uint32_t __stdcall SkipDictKeyLess_5c33c0(std::uint32_t node, std::uint32_t key) {
+    return ReadAt<std::int32_t>(node - 0x14) < ReadAt<std::int32_t>(key) ? 1 : 0;
+}
 
 S3RE_HOOK(0x00462850, UShortVectorEquivalent, VectorCallbackFn, Original_UShortVectorEquivalent,
           UShortVectorEquivalent);
@@ -156,6 +165,10 @@ S3RE_HOOK(0x00428100, SkipDictKeyLess_428100, VectorCallbackFn, Original_SkipDic
           SkipDictKeyLess_428100);
 S3RE_HOOK(0x004a6b00, SkipDictKeyEqual_4a6b00, VectorCallbackFn, Original_SkipDictKeyEqual_4a6b00,
           SkipDictKeyEqual_4a6b00);
+S3RE_HOOK(0x005c33a0, SkipDictKeyEqual_5c33a0, VectorCallbackFn, Original_SkipDictKeyEqual_5c33a0,
+          SkipDictKeyEqual_5c33a0);
+S3RE_HOOK(0x005c33c0, SkipDictKeyLess_5c33c0, VectorCallbackFn, Original_SkipDictKeyLess_5c33c0,
+          SkipDictKeyLess_5c33c0);
 S3RE_HOOK(0x00437530, PlayerVectorEquivalent, VectorCallbackFn, Original_PlayerVectorEquivalent,
           PlayerVectorEquivalent);
 S3RE_HOOK(0x00437550, TeamVectorLessThan, VectorCallbackFn, Original_TeamVectorLessThan, TeamVectorLessThan);
@@ -216,6 +229,8 @@ const InlineCase kInlineCases[] = {
     {Original_SkipDictKeyLess_4a6b20, &SkipDictKeyLess_4a6b20},
     {Original_SkipDictKeyLess_428100, &SkipDictKeyLess_428100},
     {Original_SkipDictKeyEqual_4a6b00, &SkipDictKeyEqual_4a6b00},
+    {Original_SkipDictKeyEqual_5c33a0, &SkipDictKeyEqual_5c33a0},
+    {Original_SkipDictKeyLess_5c33c0, &SkipDictKeyLess_5c33c0},
 };
 
 constexpr std::size_t kBuffer = 0x160;

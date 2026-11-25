@@ -26,8 +26,8 @@ SND_OBJECT_BYTES = 0x14c
 SND_PROBES = {
     0x0060bd80: (0, "thiscall", "probe"),  # WCSkipNonTempBase::clear (Watcom library)
     0x005c1da0: (0, "thiscall", "probe"),  # CDirectSound::Disconnect (own spec)
-    0x005c2b00: (0, "thiscall", "probe"),  # ~CSoundEffect (not reimplemented)
-    0x005c2d20: (0, "thiscall", "probe"),  # CSoundEffect::Restore (not reimplemented)
+    0x005c2b00: (0, "thiscall", "probe"),  # ~CSoundEffect (own spec)
+    0x005c2d20: (0, "thiscall", "probe"),  # CSoundEffect::Restore (own spec)
     0x0061aa40: (1, "thiscall", "probe"),  # CFileMapping::UnmapView (own spec)
 }
 
@@ -373,4 +373,11 @@ SPECS += [
          # The iterator's "no current node" branches right after a successful
          # operator++ (which leaves a node): dead.
          exempt_blocks=(0x5ff7b4, 0x5ff7e0, 0x5ff833)),
+]
+
+
+# -- the getters (session 57): random objects; IsEnabled sets only AL.
+SPECS += [
+    Spec("CSoundData_IsEnabled", 0x005ff4d0, "thiscall", [], eax_mask=0xFF),
+    Spec("CSoundData_GetSetNumber", 0x005ff4e0, "thiscall", []),
 ]

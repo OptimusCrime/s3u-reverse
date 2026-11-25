@@ -587,3 +587,372 @@ SPECS += [
     Spec("App_WaitTime", 0x0040d0e0, "fastcall", [below(9), anything],
          globals=lambda rng, pool, args: [(0x7e916c, rng.choice([0, 0, 1, 0x100]), 4)]),
 ]
+
+
+# -- session 57 (wip/sound-fx): the sound files and the DirectSound exception
+# (directx_sound_files.cpp) ---------------------------------------------------
+#
+# Objects at world offset 0. CSoundFile's name is a copy of the string in
+# scratch slot 0 (string_world; sometimes its own member at +4, the
+# self-assignment path). CMemorySoundFile gets a WAVEFORMATEX in SFX_FORMAT;
+# Read reads from SFX_DATA into SFX_OUT.
+
+SFX_FORMAT = SCRATCH + 80 * SCRATCH_SLOT_BYTES
+SFX_DATA = SCRATCH + 81 * SCRATCH_SLOT_BYTES
+SFX_OUT = SCRATCH + 82 * SCRATCH_SLOT_BYTES
+
+
+def sfx_name_ptr(rng, pool) -> int:
+    return WORLD_BASE + 4 if rng.random() < 0.1 else STRING_OTHER_PTR
+
+
+def sfx_format(rng, pool, args):
+    """A WAVEFORMATEX: mostly 8- or 16-bit, rates around 22,050 Hz."""
+    fields = [(SFX_FORMAT + k, rng.getrandbits(8), 1) for k in range(0x12)]
+    fields.append((SFX_FORMAT + 4, rng.choice([22050, 22049, 22051, 44100, 11025, rng.getrandbits(32)]), 4))
+    fields.append((SFX_FORMAT + 0xE, rng.choice([16, 16, 8, 24, rng.getrandbits(16)]), 2))
+    return fields
+
+
+def sfx_mode(rng, pool) -> int:
+    return rng.choice([1, 2, 4, 4, 2, 0, 3, rng.getrandbits(32)])
+
+
+def sfx_read_file(rng, pool, args):
+    """A CMemorySoundFile reading SFX_DATA from a small position."""
+    return [(0x28, WORLD_BASE + SFX_DATA, 4), (0x30, rng.randrange(0x40), 4),
+            (0x34, rng.choice([1, 2, 4, 1, 2, 4, 0, 3, rng.getrandbits(32)]), 4)]
+
+
+def sfx_exception(rng, pool, args):
+    """A CDirectSoundException: its code and the call's name (or null)."""
+    fields = string_world(rng, pool, args)
+    fields.append((0x18, rng.choice(DS_CODES + (0, 0, rng.getrandbits(32))), 4))
+    fields.append((0x1C, rng.choice([0, STRING_TEXT_PTR, STRING_TEXT_PTR]), 4))
+    return fields
+
+
+SPECS += [
+    # Dead: 0x5c229e caps a length above 0xFFFFFFFF; 0x5c22af, 0x5c22ca and
+    # 0x5c22f2 are the _Xran, erase-memmove and _Eos of the inlined
+    # self-assignment, whose length the constructor has just set to 0 (as in
+    # Win32_CException_Construct); 0x5c237c reads the static empty string
+    # for a source without buffer but with a length, which string_fields
+    # makes only as an over-long string (an invalid case: it faults).
+    Spec("DirectX_CSoundFile_Construct", 0x005c2270, "thiscall", [sfx_name_ptr], presets=string_world,
+         exempt_blocks=(0x005c229e, 0x005c22af, 0x005c22ca, 0x005c22f2, 0x005c237c)),
+    # Dead: 0x5c2492 is the _Eos after erase(0, npos) (the new length is 0,
+    # for which _Grow returns false); 0x5c24b3 decrements the count of a
+    # buffer that the split before has just made unshared.
+    Spec("DirectX_CSoundFile_Destroy", 0x005c23d0, "thiscall", [], eax_mask=0, presets=member_strings((0x04,)),
+         exempt_blocks=(0x005c2492, 0x005c24b3)),
+    # ignore_bytes: the name's allocator byte (+4) is the low byte of the
+    # address of the constructor's own temporary (CSoundFile's copy takes it
+    # from its argument's slot); never read. Dead: 0x5c25c6 deletes the
+    # first temporary's buffer, which the name always shares by then (count
+    # >= 1); 0x5c266b is the _Eos after erase(0, npos) (see above); 0x5c2689
+    # / 0x5c268d test and decrement the count of the name's buffer after the
+    # split made it unshared.
+    Spec("DirectX_CMemorySoundFile_Construct", 0x005c24e0, "thiscall",
+         [one_of(WORLD_BASE + SFX_FORMAT), anything, anything, sfx_mode], presets=sfx_format,
+         ignore_bytes=(0x04,), exempt_blocks=(0x005c25c6, 0x005c266b, 0x005c2689, 0x005c268d)),
+    Spec("DirectX_CMemorySoundFile_Rewind", 0x005c27b0, "thiscall", [], eax_mask=0),
+    Spec("DirectX_CMemorySoundFile_GetFormat", 0x005c27c0, "thiscall",
+         [one_of(WORLD_BASE + SFX_OUT), one_of(WORLD_BASE + SFX_OUT + 0x20)]),
+    Spec("DirectX_CMemorySoundFile_Read", 0x005c2800, "thiscall",
+         [lambda rng, pool: rng.choice([0, 1, 2, 3, 4, 5, rng.randrange(0x100)]), one_of(WORLD_BASE + SFX_OUT)],
+         presets=sfx_read_file),
+    # Dead: 0x5c16f8 / 0x5c1722 erase the message "" (length 0: no memmove,
+    # _Grow(0) false); 0x5c1776 / 0x5c177a split the description, whose
+    # buffer is unshared (Describe frees the temporary it was copied from);
+    # 0x5c17d7 is the _Eos after its erase(0, npos).
+    Spec("DirectX_CDirectSoundException_Construct", 0x005c15d0, "thiscall",
+         [lambda rng, pool: rng.choice(DS_CODES + (0, rng.getrandbits(32))), text_or_null, mostly_derived],
+         presets=string_world, exempt_blocks=(0x005c16f8, 0x005c1722, 0x005c1776, 0x005c177a, 0x005c17d7)),
+    # ignore_bytes: the result's allocator byte comes from an uninitialized
+    # local of the original (never read), as in Win32_CAssertmentFailed_Describe.
+    Spec("DirectX_CDirectSoundException_Describe", 0x005c1930, "thiscall", [one_of(STRING_RESULT_PTR)],
+         presets=sfx_exception, ignore_bytes=(STRING_RESULT,)),
+    # Dead (both destructors): the _Eos after erase(0, npos) (0x5c18cd,
+    # 0x5b897d) and the count decrement after the split (0x5c18ef, 0x5b899f).
+    Spec("DirectX_CDirectSoundException_Destroy", 0x005c1830, "thiscall", [], eax_mask=0,
+         presets=member_strings((0x08,)), exempt_blocks=(0x005c18cd, 0x005c18ef)),
+    Spec("DirectX_CAppNotActiveException_Destroy", 0x005b88e0, "thiscall", [], eax_mask=0,
+         presets=member_strings((0x08,)), exempt_blocks=(0x005b897d, 0x005b899f)),
+    Spec("DirectX_CAppNotActiveException_Construct", 0x005b8890, "thiscall", [message_ptr, mostly_derived],
+         presets=string_world),
+    Spec("Win32_CMCIException_Destroy", 0x00614150, "thiscall", [], eax_mask=0,
+         presets=member_strings((0x08,)), exempt_blocks=(0x006141ed, 0x0061420f)),  # as ~CAppNotActiveException
+]
+
+
+# -- session 57: DirectX::CSoundEffect and its dictionary of duplicates
+# (directx_sound_effect.cpp) --------------------------------------------------
+#
+# The effect sits at world 0 (0xc0 bytes): its dictionary (+4) is a level-0
+# chain of SFX_NODES (0x20 apart: key, a CSoundEffectBuffer, next; a node
+# pointer points at its next field), the master (+0x90) and the duplicates
+# have the real CSoundEffectBuffer vtable (their Release / DSRestore /
+# GetStatus run) and fake interfaces (DS_IFACE); the file (+0xa0) is a fake
+# game object (FAKE_VTABLE + DS_GAME_SLOTS: delete, Open, Close, GetFormat,
+# Read). The Watcom library's find / insert / remove / clear and the base
+# constructor are probed (as in sound.py), so are the functions with specs
+# of their own where these call them (Unload, Restore, the lost-buffer
+# restore 0x5c28e0, PurgeStoppedDuplicates, DuplicateInto) and the
+# exception constructors. Lock writes its four outputs (a lock area in
+# SFX_LOCK).
+
+SFX_NODES = SCRATCH + 83 * SCRATCH_SLOT_BYTES
+SFX_FILE = SCRATCH + 84 * SCRATCH_SLOT_BYTES
+SFX_LOCK = SCRATCH + 85 * SCRATCH_SLOT_BYTES
+SFX_APP = SCRATCH + 86 * SCRATCH_SLOT_BYTES
+SFX_PAIR = SCRATCH + 87 * SCRATCH_SLOT_BYTES
+SFX_BLOCK = SCRATCH + 88 * SCRATCH_SLOT_BYTES
+SFX_ALLOC_FN = 0x00401000   # code addresses the node allocator presets point at (probed)
+SFX_FREE_FN = 0x00401004
+SFX_EFFECT_VTABLE = 0x0065cf4c
+SFX_BUFFER_VTABLE = 0x0065cf38
+SFX_NODE_COUNT = 4
+
+
+def sfx_node(k):
+    return WORLD_BASE + SFX_NODES + 0x20 * k + 0x14
+
+
+def sfx_buffer(fields, offset, rng, effect=WORLD_BASE):
+    """A CSoundEffectBuffer at world `offset` with a fake interface."""
+    iface = WORLD_BASE + DS_IFACE + 0x10 * rng.randrange(4)
+    fields += [(offset, SFX_BUFFER_VTABLE, 4), (offset + 4, iface, 4),
+               (offset + 8, rng.choice([0, 8, rng.getrandbits(32)]), 4),
+               (offset + 0xC, rng.choice([effect, effect, 0, rng.getrandbits(32)]), 4)]
+    return fields
+
+
+def sfx_common(fields, rng):
+    fields += [(DS_IFACE + 0x10 * k, FAKE_VTABLE, 4) for k in range(4)]
+    fields += [(DS_GAME, FAKE_VTABLE + DS_GAME_SLOTS, 4), (DS_GAME + 4, WORLD_BASE + DS_IFACE, 4),
+               (SFX_FILE, FAKE_VTABLE + DS_GAME_SLOTS, 4), (SFX_APP + 0x1C, rng.choice([1, 1, 0, 2]), 1)]
+    return fields
+
+
+def sfx_dict(fields, offset, rng, count=None):
+    """The duplicates' dictionary at world `offset`: header, level-0 chain."""
+    n = rng.choice([0, 1, 2, 3, 4]) if count is None else count
+    header = offset + 8
+    fields += [(offset + 0x70, WORLD_BASE + header, 4), (offset + 0x74, n, 4), (offset + 0x6C, 0, 4),
+               (offset + 0x64, 8, 4), (offset + 0x5C, 0, 4), (offset + 0x60, 0, 4)]
+    fields += [(header + 4 * k, 0, 4) for k in range(20)]
+    previous = header
+    keys = sorted(rng.sample(range(-3, 40), SFX_NODE_COUNT))
+    for k in range(SFX_NODE_COUNT):
+        node = SFX_NODES + 0x20 * k
+        fields.append((node, keys[k] & 0xFFFFFFFF, 4))
+        sfx_buffer(fields, node + 4, rng)
+        fields.append((node + 0x14, 0, 4))
+        if k < n:
+            fields.append((previous, sfx_node(k), 4))
+            previous = node + 0x14
+    sfx_buffer(fields, offset + 0x7C, rng)
+    return fields
+
+
+def sfx_effect_world(rng, pool, args):
+    fields = [(0, SFX_EFFECT_VTABLE, 4), (0xA0, rng.choice([WORLD_BASE + SFX_FILE] * 4 + [0]), 4),
+              (0xB8, rng.choice([0, 1, 2, 4, rng.randrange(0x80)]), 4), (0xBC, rng.getrandbits(32), 4)]
+    fields = sfx_dict(fields, 4, rng)
+    sfx_buffer(fields, 0x90, rng)
+    return sfx_common(fields, rng)
+
+
+def sfx_globals(rng, pool, args):
+    return [(DS_GLOBAL, WORLD_BASE + DS_GAME, 4), (0x007E9168, WORLD_BASE + SFX_APP, 4),
+            (0x007A0C00, rng.choice([0, 7, rng.getrandbits(32)]), 4)]
+
+
+def sfx_lookup(missing):
+    """find / insert: one of the nodes, or none (find often, insert rarely)."""
+    def returns(h):
+        if (missing and h % 3 == 0) or (not missing and h % 17 == 0):
+            return 0
+        return sfx_node((h >> 8) % SFX_NODE_COUNT)
+    return returns
+
+
+def sfx_lock(machine, ecx, args, h):
+    """Lock's outputs: the first part in SFX_LOCK, sometimes a second one."""
+    size = args[2] & 0xFFFF
+    first = size if h & 1 else size // 2
+    second = size - first
+    for index, value in ((3, WORLD_BASE + SFX_LOCK), (4, first),
+                         (5, WORLD_BASE + SFX_LOCK + 0x800 if second else 0), (6, second)):
+        if args[index]:
+            machine.guest_write(args[index], struct.pack("<I", value & 0xFFFFFFFF))
+
+
+def sfx_get_format(machine, ecx, args, h):
+    """The file's GetFormat: a format and a small size."""
+    if args[0]:
+        machine.guest_write(args[0], bytes(((h >> (k % 56)) & 0xFF) for k in range(0x12)))
+    if args[1]:
+        machine.guest_write(args[1], struct.pack("<I", (h >> 20) & 0x7F))
+
+
+def sfx_key_record(machine, ecx, args):
+    """A find / insert / remove call: the dictionary and the key's value."""
+    key = struct.unpack("<I", machine.guest_read(args[0], 4))[0] if args[0] else None
+    return (ecx, key)
+
+
+SFX_DICT_PROBES = {
+    0x0060bab0: (1, "thiscall", sfx_lookup(True), None, sfx_key_record),   # base_find
+    0x0060bbe0: (1, "thiscall", sfx_lookup(False), None, sfx_key_record),  # base_insert
+    0x0060be20: (1, "thiscall", "probe", None, sfx_key_record),            # base_remove
+    0x0060bd80: (0, "thiscall", "probe"),                                  # clear
+}
+SFX_CALLEES = {
+    **DS_THROWERS, **SFX_DICT_PROBES,
+    0x00610960: (1, "thiscall", "throw"),   # ThrowOutOfMemory(text, file, line)
+    # CSoundEffectBuffer::Restore (a lost buffer; own spec), recorded
+    # without ECX: on the duplicates it is a stack copy's address.
+    0x005c28e0: (0, "stdcall", "probe"),
+}
+
+
+def sfx_com(*entries):
+    """COM methods (offset, argument count, pointers) returning HRESULTs,
+    plus the file's slots and AddRef / Release."""
+    v = {DS_GAME_SLOTS + 0x00: 1, DS_GAME_SLOTS + 0x04: 0, DS_GAME_SLOTS + 0x08: 0,
+         DS_GAME_SLOTS + 0x0c: (2, {}), DS_GAME_SLOTS + 0x10: 2,
+         0x04: (1, {}, {"com": True}), 0x08: (1, {}, {"com": True})}
+    for offset, count, pointers in entries:
+        v[offset] = (count, pointers, {"com": True, "returns": ds_hresult})
+    return v
+
+
+SFX_LOCK_VIRTUAL = (0x2C, 8, {3: (), 4: (), 5: (), 6: ()})
+SFX_UNLOCK_VIRTUAL = (0x4C, 5, {})
+# GetStatus' out local starts as the stack slot of DSGetStatus' ECX, on the
+# duplicates a stack copy's address: not recorded.
+SFX_STATUS_VIRTUAL = (0x24, 2, {1: ()})
+SFX_EFFECTS = {0x2C: sfx_lock, DS_GAME_SLOTS + 0x0c: sfx_get_format,
+               0x24: ds_write_out(1, lambda h: (h >> 8) & 0xF),
+               0x0C: ds_write_out(2, ds_new_buffer, always=True)}
+
+
+def sfx_dict_world(rng, pool, args):
+    fields = sfx_dict([], 0, rng)
+    fields += [(0x5C, rng.choice([0, 0, SFX_ALLOC_FN]), 4), (0x60, rng.choice([0, 0, SFX_FREE_FN]), 4)]
+    fields.append((SFX_PAIR, rng.choice([0, 5, rng.getrandbits(32)]), 4))
+    sfx_buffer(fields, SFX_PAIR + 4, rng)
+    return sfx_common(fields, rng)
+
+
+def sfx_iter_world(rng, pool, args):
+    fields = sfx_dict([], 0x40, rng, count=SFX_NODE_COUNT)
+    fields += [(0, 0x0065cf8c, 4), (8, WORLD_BASE + 0x40, 4),
+               (0x0C, rng.choice([0, sfx_node(0), sfx_node(1), sfx_node(3)]), 4), (0x10, 0, 4)]
+    return sfx_common(fields, rng)
+
+
+def sfx_buffer_world(rng, pool, args):
+    fields = sfx_buffer([], 0, rng, effect=WORLD_BASE + 0x100)
+    sfx_buffer(fields, SFX_PAIR, rng)
+    return sfx_common(fields, rng)
+
+
+def sfx_sound_world(rng, pool, args):
+    return sfx_common([(0, FAKE_VTABLE + DS_GAME_SLOTS, 4)], rng)
+
+
+SPECS += [
+    Spec("DirectX_CSoundEffect_Construct", 0x005c2aa0, "thiscall", [],
+         callees={0x0060b9f0: (3, "thiscall", "this")}),    # WCSkipNonTempBase (Watcom library)
+    Spec("DirectX_CSoundEffect_Destroy", 0x005c2b00, "thiscall", [], eax_mask=0, presets=sfx_effect_world,
+         callees={**SFX_CALLEES, 0x005c2ce0: (0, "thiscall", "probe")}, virtuals=sfx_com()),
+    Spec("DirectX_CSoundEffect_Unload", 0x005c2ce0, "thiscall", [], presets=sfx_effect_world,
+         callees=SFX_CALLEES, virtuals=sfx_com()),
+    Spec("DirectX_CSoundEffect_Load", 0x005c2ba0, "thiscall", [one_of(WORLD_BASE + SFX_FILE), anything],
+         eax_mask=0, presets=sfx_effect_world, globals=sfx_globals, callees=SFX_CALLEES, new_fails=0.05,
+         virtuals=sfx_com(SFX_LOCK_VIRTUAL, SFX_UNLOCK_VIRTUAL, (0x0C, 4, {1: 0x14, 2: ()})),
+         virtual_effects=SFX_EFFECTS),
+    Spec("DirectX_CSoundEffect_Restore", 0x005c2d20, "thiscall", [], eax_mask=0, presets=sfx_effect_world,
+         globals=sfx_globals, callees=SFX_CALLEES, new_fails=0.05,
+         virtuals=sfx_com(SFX_LOCK_VIRTUAL, SFX_UNLOCK_VIRTUAL, (0x50, 1, {})), virtual_effects=SFX_EFFECTS),
+    Spec("DirectX_CSoundEffect_Play", 0x005c2fc0, "thiscall",
+         [lambda rng, pool: -rng.randrange(10001) & 0xFFFFFFFF,
+          lambda rng, pool: rng.randint(-10000, 10000) & 0xFFFFFFFF, below(2)],
+         presets=sfx_effect_world, globals=sfx_globals,
+         callees={**SFX_CALLEES, 0x005c3210: (0, "thiscall", "probe"), 0x005c2a60: (1, "thiscall", "probe")},
+         virtuals=sfx_com(SFX_STATUS_VIRTUAL, (0x30, 4, {}), (0x3C, 2, {}), (0x40, 2, {})),
+         virtual_effects=SFX_EFFECTS,
+         # The iterator's "no current node" branch right after a successful
+         # operator++ (which leaves a node): dead (as in PurgeEffects).
+         exempt_blocks=(0x005c30b3,)),
+    Spec("DirectX_CSoundEffect_PurgeStoppedDuplicates", 0x005c3210, "thiscall", [], eax_mask=0xFF,
+         presets=sfx_effect_world, globals=sfx_globals, callees=SFX_CALLEES,
+         virtuals=sfx_com(SFX_STATUS_VIRTUAL), virtual_effects=SFX_EFFECTS,
+         exempt_blocks=(0x005c32d4,)),   # the same dead branch as in Play
+    Spec("DirectX_CSoundEffectBuffer_Restore", 0x005c28e0, "thiscall", [], presets=sfx_buffer_world,
+         globals=sfx_globals, callees={0x005c2d20: (0, "thiscall", "probe")}, new_fails=0.1, new_fails_size=0x18),
+    Spec("DirectX_CDirectSound_RestoreIfActive", 0x005c1dc0, "thiscall", [], presets=sfx_sound_world,
+         globals=sfx_globals, virtuals={DS_GAME_SLOTS + 0x0c: 0}, new_fails=0.1, new_fails_size=0x18),
+    Spec("DirectX_CSoundEffectBuffer_DuplicateInto", 0x005c2a60, "thiscall", [one_of(WORLD_BASE + SFX_PAIR)],
+         presets=sfx_buffer_world, globals=sfx_globals, callees=DS_THROWERS,
+         virtuals=sfx_com((0x14, 3, {}))),
+    Spec("EffectBufferDict_NewNode", 0x005c3510, "thiscall", [one_of(WORLD_BASE + SFX_PAIR), below(8)],
+         presets=sfx_dict_world, new_fails=0.1, virtuals=sfx_com(),
+         callees={SFX_ALLOC_FN: (0, "thiscall", lambda h: 0 if h % 5 == 0 else WORLD_BASE + SFX_BLOCK)}),
+    Spec("EffectBufferDict_DestroyNode", 0x005c35c0, "thiscall",
+         [lambda rng, pool: rng.choice([0, sfx_node(0), sfx_node(2)]), below(8)],
+         presets=sfx_dict_world, virtuals=sfx_com(), callees={SFX_FREE_FN: (0, "thiscall", "probe")}),
+    Spec("EffectBufferDict_Index", 0x005c3600, "thiscall", [one_of(WORLD_BASE + SFX_PAIR)],
+         presets=sfx_dict_world, callees=SFX_DICT_PROBES),
+    # cover_until: Ghidra's function also takes in the padding and the
+    # static initializer that follow it (0x5c3700).
+    Spec("EffectBufferDictIter_Value", 0x005c3640, "thiscall", [one_of(WORLD_BASE + SFX_BLOCK)],
+         presets=sfx_iter_world, virtuals=sfx_com(), cover_until=0x005c36f0),
+]
+
+
+# -- session 57: Win32::CCDAudio (win32_cdaudio.cpp) ----------------------------
+# The object at world 0 (device +8, window +0xc, often 0). The import slots
+# of mciSendCommandA and PostMessageA point at probe code (as GetProcAddress'
+# PROC_SLOT), so the calls are recorded like COM calls: the MCI parameter
+# block (on the stack) by the fields the original sets.
+CD_MCI_SLOT = 0x3D0
+CD_POST_SLOT = 0x3D4
+CD_VIRTUAL_CODE = FAKE_VTABLE + 0x1000   # emu.VIRTUAL_CODE
+
+
+def cd_world(rng, pool, args):
+    return [(8, rng.choice([0, 1, rng.getrandbits(32)]), 4), (0xC, rng.choice([0, rng.getrandbits(32)]), 4)]
+
+
+def cd_globals(rng, pool, args):
+    return [(0x0065536C, CD_VIRTUAL_CODE + CD_MCI_SLOT, 4), (0x006552F0, CD_VIRTUAL_CODE + CD_POST_SLOT, 4)]
+
+
+def cd_mci_result(h):
+    return (0, 0, 0x106, 0x101, (h >> 8) & 0xFFFFFFFF)[h % 5]
+
+
+def cd_status_return(machine, ecx, args, h):
+    if args[3]:
+        machine.guest_write(args[3] + 4, struct.pack("<I", (h >> 12) & 0x7F))
+
+
+def cd_spec(name, address, args, parameter_fields):
+    return Spec(name, address, "thiscall", args, presets=cd_world, globals=cd_globals,
+                virtuals={CD_MCI_SLOT: (4, {3: parameter_fields}, {"com": True, "returns": cd_mci_result}),
+                          CD_POST_SLOT: (4, {}, {"com": True})},
+                virtual_effects={CD_MCI_SLOT: cd_status_return} if address == 0x00615fc0 else None)
+
+
+SPECS += [
+    Spec("Win32_CCDAudio_Construct", 0x006154c0, "thiscall", []),
+    cd_spec("Win32_CCDAudio_SetTimeFormatTMSF", 0x00615e60, [], ((4, 4),)),
+    cd_spec("Win32_CCDAudio_Play", 0x00615ea0, [anything, anything], ()),
+    cd_spec("Win32_CCDAudio_Stop", 0x00615f70, [], ()),
+    cd_spec("Win32_CCDAudio_DoStop", 0x00615f90, [], ()),
+    cd_spec("Win32_CCDAudio_GetTrackCount", 0x00615fc0, [], ((8, 4),)),
+]

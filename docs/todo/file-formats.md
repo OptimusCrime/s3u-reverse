@@ -32,16 +32,18 @@ LOGBOOK session entry).
 - **Graphics/sound loader leftovers:** the graphics loader (session 55
   round 2) and the sound loader (session 56: CSoundData ctor/dtors, Open,
   Close, Detach, GetEffect, PurgeEffects, volume; the DirectSound wrapper
-  classes; re/sound_formats.md) are verified. Left on the sound side:
-  DirectX::CSoundEffect (ctor 0x5c2aa0, dtor 0x5c2b00, Load 0x5c2ba0,
-  Restore 0x5c2d20, Play 0x5c2fc0, PurgeStoppedDuplicates 0x5c3210,
-  0x5c2ce0), CSoundEffectBuffer::Restore 0x5c28e0 / DuplicateInto
-  0x5c2a60, CSoundFile / CMemorySoundFile (0x5c2270.., 0x5c24e0..), the
-  sound dictionaries' Watcom code (0x5c33a0..0x5c3730, 0x5ffa60..0x5ffc80),
-  CDirectSound slot 1 0x5c1dc0 (needs the app-active check 0x5b8c00),
-  CDirectSoundException (0x5c15d0, 0x5c1930), the trivial getters
-  IsEnabled 0x5ff4d0 / 0x5ff4e0, and the lobby-side CSoundData callers
-  0x5fff00 / 0x600170. The false starts 0x5f65f2/0x5f674b
+  classes; re/sound_formats.md) are verified. The effect classes (CSoundEffect, CMemorySoundFile/CSoundFile, the
+  dictionaries' Watcom code, CDirectSoundException, CDirectSound slot 1, the
+  getters 0x5ff4d0/0x5ff4e0) followed in session 57 (wip/sound-fx). Left on
+  the sound side: the lobby-side CSoundData callers 0x5fff00 / 0x600170; the
+  other exception destructors of the same shape as 0x5c1830 (0x5b93c0,
+  0x5b94c0, 0x5be3e0, 0x5c0010, 0x60e490, 0x612790, 0x612c80, and the lobby
+  ones) could share DestroyMessageException (directx_sound_files.cpp).
+  CD music (Win32::CCDAudio, session 57 did the small members): Init
+  0x615520, Open, Close 0x615e20, DoPlay, the window procedure 0x615bd0
+  (missing function start) need ThrowMCIError 0x6114f0 / CMCIException
+  0x613fc0 / Describe 0x614250 first (re/win32_framework.md).
+  The false starts 0x5f65f2/0x5f674b
   (DrawGuiImage_tail*), 0x5fd902 (SequenceFrame_tail) and 0x5f6c3d
   (FindDirectoryContainingFile_tail) sit inside verified functions.
 - **Test isolation (session 55):** MapFileStream_MatchOriginal failed once

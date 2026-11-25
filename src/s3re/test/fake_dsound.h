@@ -46,6 +46,11 @@ struct FakeDSoundConfig {
     std::uint32_t failChance = 2;
     // The failure codes to choose from (0: the standard set).
     const std::vector<std::int32_t>* failures = nullptr;
+    // A failed Lock still writes its out values (the first part: the lock
+    // area with 0 bytes, no second part), so that code that goes on after a
+    // DSERR_BUFFERLOST (CheckResult doesn't throw then) copies nothing
+    // instead of using its uninitialized locals.
+    bool lockAlwaysWrites = false;
 };
 
 class FakeDSound {
