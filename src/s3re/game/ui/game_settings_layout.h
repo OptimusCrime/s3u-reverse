@@ -9,6 +9,10 @@
 
 #include "msvc6/string.h"
 
+namespace s3re::game::fileformats {
+struct CMapFile;
+}
+
 #include <cstddef>
 #include <cstdint>
 
@@ -73,7 +77,9 @@ struct GameSettings {
     std::uint32_t start_goods;   // +0x74 NewGame arg 9: 0 the map's own, 1 low, 2 medium, 3 high (re/game_setup.md;
                                  //       getter GameSettings::StartGoods 0x412300)
     std::uint32_t local_player_id;  // +0x78 logged by SaveSetup ("CFG: Saving local player id %i"), chunk 0x1a
-    std::uint8_t unk07c[0x88 - 0x7c];
+    std::uint8_t unk07c[0x84 - 0x7c];
+    fileformats::CMapFile* map_file;  // +0x84 the map or savegame being started (a random map: a memory file
+                                      //       with chunk 5, re/game_setup.md)
     std::uint16_t seed;          // +0x88 the game's random seed (CGameData::SeedRandom; re/globals.csv)
     std::uint8_t unk08a[0xb0 - 0x8a];
     std::uint32_t game_guid[4];  // +0xb0 the game's GUID (NewGame; GameSettings::GameGuid 0x437400 copies it,
@@ -88,6 +94,7 @@ static_assert(offsetof(GameSettings, player_setups) == 0x58);
 static_assert(offsetof(GameSettings, player_setups) + offsetof(PlayerSetupVector, length) == 0x6c);
 static_assert(offsetof(GameSettings, start_goods) == 0x74);
 static_assert(offsetof(GameSettings, local_player_id) == 0x78);
+static_assert(offsetof(GameSettings, map_file) == 0x84);
 static_assert(offsetof(GameSettings, seed) == 0x88);
 static_assert(offsetof(GameSettings, game_guid) == 0xb0);
 static_assert(offsetof(GameSettings, valueC8) == 0xc8);

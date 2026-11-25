@@ -421,3 +421,31 @@ SPECS += [
          eax_mask=0, presets=save_setup_settings, callees=SAVE_SETUP_CALLEES, virtuals={4: 1},
          exempt_blocks=SAVE_SETUP_DEAD_BLOCKS),
 ]
+
+
+# -- GameSettings::RandomMapSize / RandomMapSymmetry, GamePlayerSetup's
+# deleting destructor (game_settings.cpp, session 55) -------------------------
+# The settings object is the world; its map file (+0x84) a scratch pointer.
+# CMapFile::GetChunk (verified) is probed: it returns chunk 5 (a lazily
+# random scratch buffer) or 0; ReleaseChunk is probed. The destructor
+# 0x49ec80 (verified) is probed in the deleting destructor.
+GS_MAP_FILE = SCRATCH + 0x3000
+GS_CHUNK5 = SCRATCH + 0x4000
+GS_CHUNK_CALLEES = {
+    0x004a60f0: (2, "thiscall", lambda h: 0 if h % 4 == 0 else WORLD_BASE + GS_CHUNK5),  # GetChunk
+    0x004a6310: (2, "thiscall", "probe"),                                                # ReleaseChunk
+}
+
+
+def random_map_settings(rng, pool, args):
+    return [(0x84, WORLD_BASE + GS_MAP_FILE, 4)]
+
+
+SPECS += [
+    Spec("GameSettings_RandomMapSize", 0x00436ff0, "thiscall", [], presets=random_map_settings,
+         callees=GS_CHUNK_CALLEES),
+    Spec("GameSettings_RandomMapSymmetry", 0x00437020, "thiscall", [], presets=random_map_settings,
+         callees=GS_CHUNK_CALLEES),
+    Spec("GamePlayerSetup_ScalarDeletingDestructor", 0x00437fc0, "thiscall", [below(4)],
+         callees={0x0049ec80: (0, "thiscall", "probe")}),
+]
