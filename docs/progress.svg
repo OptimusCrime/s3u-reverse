@@ -5,21 +5,21 @@
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="328.7" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 23.4%</title></rect>
 <text x="334.3" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">23.4%</text>
-<rect x="498.7" y="100" width="80.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 5.7%</title></rect>
-<text x="538.7" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">5.7%</text>
-<rect x="578.8" y="100" width="292.5" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.8%</title></rect>
-<text x="725.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.8%</text>
-<rect x="871.3" y="100" width="704.7" height="40" fill="#e8a39b"><title>Not understood yet: 50.1%</title></rect>
-<text x="1223.7" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">50.1%</text>
+<rect x="498.7" y="100" width="81.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 5.8%</title></rect>
+<text x="539.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">5.8%</text>
+<rect x="579.8" y="100" width="292.2" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.8%</title></rect>
+<text x="725.9" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.8%</text>
+<rect x="872.1" y="100" width="703.9" height="40" fill="#e8a39b"><title>Not understood yet: 50.1%</title></rect>
+<text x="1224" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">50.1%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="232.4" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 16.5%</title></rect>
 <text x="286.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">16.5%</text>
-<rect x="402.4" y="154" width="62.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 4.4%</title></rect>
-<text x="433.7" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">4.4%</text>
-<rect x="464.9" y="154" width="513.9" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.6%</title></rect>
-<text x="721.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.6%</text>
-<rect x="978.8" y="154" width="597.2" height="40" fill="#e8a39b"><title>Not understood yet: 42.5%</title></rect>
-<text x="1277.4" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.5%</text>
+<rect x="402.4" y="154" width="63.1" height="40" fill="#4f8fc0"><title>Verified by tests only: 4.5%</title></rect>
+<text x="434" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">4.5%</text>
+<rect x="465.6" y="154" width="513.7" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.5%</title></rect>
+<text x="722.4" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.5%</text>
+<rect x="979.3" y="154" width="596.7" height="40" fill="#e8a39b"><title>Not understood yet: 42.4%</title></rect>
+<text x="1277.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.4%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
 <rect x="869.6" y="216" width="16" height="16" fill="#f2c86b"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
@@ -5894,12 +5894,12 @@
 16 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>WCValOrderedVector_GameChunkDescription: 3 functions</title><rect x="930.2" y="794.5" width="26.2" height="24.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="930.7" y="795" width="20.1" height="13.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_GameChunkDescription::insertAt @ 0x00499980
-432 bytes — Classified (class/role known)</title></rect>
+<rect x="930.7" y="795" width="20.1" height="13.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_GameChunkDescription::insertAt @ 0x00499980
+432 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="930.7" y="808.7" width="20.1" height="10.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_GameChunkDescription::base_index_check @ 0x00499840
 320 bytes — Classified (class/role known)</title></rect>
-<rect x="950.8" y="795" width="5.1" height="23.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_GameChunkDescription::resize @ 0x00499fb0
-192 bytes — Classified (class/role known)</title></rect>
+<rect x="950.8" y="795" width="5.1" height="23.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_GameChunkDescription::resize @ 0x00499fb0
+192 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>DirectX::CTCPConnectionShortcut: 2 functions</title><rect x="956.4" y="794.5" width="26.2" height="24.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="956.9" y="795" width="24.4" height="23.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CTCPConnectionShortcut::CTCPConnectionShortcut @ 0x005bacb0
@@ -6740,8 +6740,8 @@
 336 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>watcom::PtrVector: 1 functions</title><rect x="1005.4" y="894.6" width="14.7" height="15" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1005.9" y="895.1" width="13.7" height="14" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>watcom::PtrVector::insertAt @ 0x00428d10
-320 bytes — Identified (purpose known)</title></rect>
+<rect x="1005.9" y="895.1" width="13.7" height="14" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>watcom::PtrVector::insertAt @ 0x00428d10
+320 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>WCOrderedVectorBase: 3 functions</title><rect x="1020.2" y="894.6" width="14.7" height="15" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1020.7" y="895.1" width="8.2" height="10.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCOrderedVectorBase::base_index_check @ 0x00499700
@@ -7008,8 +7008,8 @@
 32 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>WCBareVectorBase_GameChunkDescription: 1 functions</title><rect x="1096.1" y="923.9" width="10.7" height="11.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1096.6" y="924.4" width="9.7" height="10.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_GameChunkDescription::resize @ 0x00499790
-176 bytes — Classified (class/role known)</title></rect>
+<rect x="1096.6" y="924.4" width="9.7" height="10.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCBareVectorBase_GameChunkDescription::resize @ 0x00499790
+176 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>WCIsvSListIter: 1 functions</title><rect x="1042.8" y="935.3" width="10.9" height="11.1" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1043.3" y="935.8" width="9.9" height="10.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCIsvSListIter::operator_plus_assign @ 0x0060b5f0

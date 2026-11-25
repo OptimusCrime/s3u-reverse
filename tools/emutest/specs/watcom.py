@@ -225,3 +225,31 @@ def skip_iter_state(rng, pool, args):
 
 
 SPECS += [Spec("SkipListIter_Increment", 0x00499df0, "thiscall", [], presets=skip_iter_state)]
+
+
+# -- resize / insertAt of plain-element vectors (vector_insert.cpp, session 56) --
+# The vector at world offset 0 with its block in scratch slot 0 (or none),
+# capacity 0..6, filled -1..capacity, length 0..capacity, grow 0..3 or odd
+# (2^30: the block size wraps; -1: the vector shrinks by one, which reaches
+# the keep = new capacity, no-block and length clamp branches); the inserted value in scratch slot 3. Operator new fails in
+# some cases.
+
+
+def plain_vector_state(rng, pool, args):
+    capacity = rng.randrange(7)
+    data = WORLD_BASE + SCRATCH if capacity or rng.random() < 0.5 else 0
+    return [(8, data, 4), (0xc, capacity, 4), (0x10, rng.randint(-1, capacity) & 0xFFFFFFFF, 4),
+            (0x14, rng.randint(0, capacity), 4), (0x18, rng.choice([0, 1, 2, 3, 0x40000000, 0xFFFFFFFF]), 4)]
+
+
+INSERT_INDEX = lambda rng, pool: rng.choice([rng.randint(-2, 8), rng.getrandbits(32)]) & 0xFFFFFFFF  # noqa: E731
+SPECS += [
+    Spec("ChunkDescriptionBareResize", 0x00499790, "thiscall", [small_or_anything(0, 8)],
+         presets=plain_vector_state, new_fails=0.15),
+    Spec("ChunkDescriptionResize", 0x00499fb0, "thiscall", [small_or_anything(0, 8)],
+         presets=plain_vector_state, new_fails=0.15),
+    Spec("WordVectorInsertAt", 0x00428d10, "thiscall", [INSERT_INDEX, scratch(3)],
+         presets=plain_vector_state, new_fails=0.15),
+    Spec("ChunkDescriptionInsertAt", 0x00499980, "thiscall", [INSERT_INDEX, scratch(3)],
+         presets=plain_vector_state, new_fails=0.15),
+]
