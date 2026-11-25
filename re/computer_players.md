@@ -763,7 +763,7 @@ ignore_bytes with the self-test WrongFarmKeys).
 - The copy constructor 0x55a440 skips the padding bytes and copies the
   per-type tree pointers (+0x3e8, 57) verbatim: in a copy they still point
   at the source record's trees (AddArea appends a copy of its stack
-  record; whether something refreshes them is open, G).
+  record and resets them in the new node right away, session 56).
 - RemoveArea 0x558e80 removes only the first record with the area id and
   sets `areas_changed[player]`; EAX = the new size (head when not found).
 - Acquire 0x553d30 / constructor 0x553e10 / Init 0x553ea0: grid side =
@@ -773,6 +773,97 @@ ignore_bytes with the self-test WrongFarmKeys).
   70) / "map_part_list_ptr" (line 141). The 20 lists' allocator byte is
   the high byte of each list's own address (constructor 0x553e70 reads it
   from the saved ECX).
+
+## The area site lists (session 56, V)
+
+`ai_area_site_lists.cpp`, `ai_area_events.cpp`. Each area record keeps,
+per building type, the candidate places of the area: grid cell centres
+in a site tree ordered by a rating byte (`kSiteTreeOfType` in
+ai_layout.h maps the 57 types to the 39 trees; the races' variants share
+a tree: 31 drinks, 33 small temples, 34 large temples, 35 workshops and
+the gong, 36 residences, 5 both sulfur mines; types 0, 15, 16, 18, the
+military buildings, have none).
+- **FillAreaSiteLists** 0x556630 empties all 39 trees and visits the cells
+  whose centre tile the player owns and lies in the area. Own resources:
+  woodcutter / stonecutter when the 3 x 3 trees / stones sum is above 5
+  (key = CountPlayersResourcesAround), iron / coal / gold mines (sum > 5,
+  key = CountResourceInOwnersLand of the cell), Asian sulfur and Egyptian
+  gem mines only for that race, fishery (fish sum > 5 and fish in the
+  cell; key = the sum's low byte), farm (grain land > 20 %), rice farm
+  (rice sum > 5), vineyard (wine land > 10 %), waterworks (stream tiles
+  and water; key = the stream tiles). Then the building types in the
+  3 x 3 cells' per-player bitsets: "military" = small towers + 2 large
+  towers + 3 castles, added to every rating; e.g. iron smelter = military
+  + 8 (iron mines + coal mines), sawmill = military + 2 (4 woodcutters -
+  sawmills), forester = military + 2 (2 (2 (2 (woodcutters - farms) - iron
+  smelters) - iron mines - coal mines) - foresters). The full list is in
+  the code. A rating > 0 goes in with its low byte as the key (wraps at
+  256). The race's tail: Romans the charcoal burner, Asians the powder
+  maker, Amazons the apiary.
+- **RefillAreaSiteList** 0x5579d0 (player, area, type) does it for one
+  type of one area (ProcessPendingEvents after a site was placed, the map
+  worker's MakeBuildOrders). Quirks kept: the mines' keys come from
+  CountPlayersResourcesAround (3 x 3) instead of the cell count, the
+  waterworks' key is the water count, a storehouse counts barracks four
+  times (Fill: twice), the charcoal burner / powder maker / apiary are
+  rated for every race, and the workshops (31, 47, 48, 50) are rated into
+  tree 34 (the large temples') while tree 35 is emptied: after a refill
+  the workshops' candidates are gone and the large temples get extra ones.
+  Residences, the lookout tower and the hospital are never emptied.
+- **AddArea** 0x555260 builds the record on its stack (force_production
+  1, unk014 0xff, the residences' countdowns from g_aiCandidateDefaults),
+  fills it, appends a copy and then works on the new node: building
+  counts, without the basic economy the countdowns coal mine 400, iron
+  mine / iron smelter 500, `sites`, COMP_FoodForMinesOptimum, and the
+  type -> tree pointers. **Open point resolved:** the copy constructor's
+  verbatim pointers (into AddArea's stack record) are replaced right after
+  the insert for every type with a tree; types 0, 15, 16, 18 keep the
+  stack record's uninitialized pointers (nobody reads them for those
+  types as far as seen). std::list never moves nodes, so the pointers
+  stay valid.
+- **COMP_FoodForMinesOptimum** 0x572a30: per mine type in the record
+  (coal: bread, iron: meat, gold and gem mines: fish, sulfur: rice) three
+  SetAreaCondition commands (kinds 30..42; 0 off, 16 on): food in stock
+  switches the mine's food conditions off, none switches them on (log
+  lines "Brot / Fleisch / Fisch vorhanden" or "KEIN ...").
+- The 20 lists' constructor 0x553e70 / destructor 0x5591e0 and the grid
+  cells' bitset constructor 0x559240 have no function starts in Ghidra's
+  list (re/extra_functions.tsv).
+
+## The AI event ring (session 56, V)
+
+`CEvaLand::ProcessPendingEvents` 0x554980 (step 2 of 0x550f80) drains the
+world's ring of AI events (world+0x2f990, 1000 x {type, a, b}; queued by
+CGameData::QueuePendingEvent 0x4e8ba0) and keeps the land evaluation up
+to date; `ai_area_events.cpp`.
+
+| Type | Queued by | a, b | Handling |
+|---|---|---|---|
+| 1 | BuildingDone | building | AI::OnBuildingFinished 0x573890 |
+| 2 | CheckBuildingSite | site | owner a computer player: its type bit in the cell, the record's count and `sites` + 1, then the dependent types' site lists refilled (woodcutter: forester, sawmill; coal mine: tool/weapon smith, iron/gold smelter; iron mine: iron smelter; iron smelter: the smiths; mill, waterworks: bakery; bakery: mill; farm: mill, bakery; small tower: record `steps_since_expansion` = 0, the list head's bytes when there is no record); **returns 1** (one new site per step) |
+| 3 | CrushBuilding | x, y | kept for the next 6 |
+| 6 | CrushBuilding | type, player | the type's bit cleared unless a building of the type stands in the 8 x 8 block (log "Hier ist noch ein Haus dieses Types!"); the record (area at the block's last tile) count - 1 ("Durcheinander bei ABRISS!" if another stands and the count hits 0) |
+| 4 | area functions | area | the record follows the area's owner: RemoveArea / AddArea, or FillAreaSiteLists + CountNodeBuildingsByType while populated (AreaPopulation) |
+| 5 | UpdateSoldier | building, old owner | the type bit moves from the old to the new owner (computer players only) |
+| 7 | UpdateSettlers | building | G: the worker finds nothing: a woodcutter gets a new work area (FindWoodcutterWorkArea), a stonecutter one from **the farm finder** 0x59ac50 (quirk kept; FindStonecutterWorkArea is 0x59a8d0), coal, gold, iron, sulfur and gem mines are torn down |
+| 8 | UpdateEnvironment | x, y | ReevaluateAroundTile |
+
+Event 1: `AI::OnBuildingFinished` 0x573890, see "A finished building" below.
+
+## Construction (session 56, V)
+
+`ai_computer_player_init.cpp`. `CComputerPlayer::CComputerPlayer` 0x550900
+(world, message queue, player, first): fields, vtable 0x65a530; with
+`first` non-zero InitAiGlobals 0x551b80 (the first computer player of a
+game); g_aiMilitaryResetRequest (0x7e3410) takes `first` while it is 0;
+then `Init` 0x550a30: empty blackboard (handlers and note lists 0xffff),
+one agent per kind of g_aiAgentKinds (0x7312b0: 0..10), the shared
+CEvaLand (Acquire), and for every economy area the player owns: AddArea,
+SendToolSetting10 1, transport orders (SendChangeTransportOrder (3, 3),
+(2, 3), (1, 3); Egyptians (3, 3), (1, 3), (2, 3)), area conditions
+(Egyptians 25, Asians 5 and 6, everyone 2; value 8). Once per game
+MarkBuildingTypesInLandGrid. `area` = 0xffffffff (the first step takes
+the first node).
 
 ## The expand agent (session 56, V)
 

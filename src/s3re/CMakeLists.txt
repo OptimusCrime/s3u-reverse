@@ -152,7 +152,9 @@ add_library(s3re SHARED
     game/ai/ai_agent_factory.cpp
     game/ai/ai_agent_slots.cpp
     game/ai/ai_agents.cpp
+    game/ai/ai_area_events.cpp
     game/ai/ai_area_records.cpp
+    game/ai/ai_area_site_lists.cpp
     game/ai/ai_army.cpp
     game/ai/ai_army_attack.cpp
     game/ai/ai_army_groups.cpp
@@ -167,6 +169,7 @@ add_library(s3re SHARED
     game/ai/ai_census_settlers.cpp
     game/ai/ai_commands.cpp
     game/ai/ai_computer_player.cpp
+    game/ai/ai_computer_player_init.cpp
     game/ai/ai_economy_actions.cpp
     game/ai/ai_economy_conditions.cpp
     game/ai/ai_economy_snapshot.cpp

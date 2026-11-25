@@ -324,8 +324,8 @@ std::uint32_t __fastcall AI_SendDestroyBuilding(const void* building, const void
 }
 
 // Purpose: Changes the soldiers a computer player wants in a tower or
-// castle (probably; the argument order of its caller 0x573890 is not
-// read yet).
+// castle (probably). Its caller AI::OnBuildingFinished 0x573890 passes
+// (owner, building, 1) for a finished large tower or castle.
 std::uint32_t __fastcall AI_SendChangeGarrison(std::uint32_t op, std::uint32_t building, std::uint32_t third) {
     Message message{};
     Header(message, CommandId::ChangeGarrison, kShortCommand);

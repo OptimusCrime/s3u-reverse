@@ -14,9 +14,9 @@ LOGBOOK session entry).
   residences, AreaInDirection, trees / stones near own fields, forced
   production and tools, the request Execute chain and slots; session 55
   (ai-mil): RunMilitary 0x58f990 and T_ATTACK_AGENT::Run with all their
-  callees, the safety agent). Next: FillAreaSiteLists 0x556630, the
-  SiteTree containers and CEvaLand Init/ctor (see below), AI::LoadState
-  0x596380. AiGroupTarget holds two patrol buildings and a prey settler;
+  callees, the safety agent; session 56: the area lists and the
+  CComputerPlayer construction). Next: the READY ones below.
+  AiGroupTarget holds two patrol buildings and a prey settler;
   AiGroupOrders +0x1c48 is `patrol_steps` (session 55).
 - **Table names to revisit:** g_aiWantedGoldMines 0x65a8c8 /
   g_aiWantedWeaponsmiths 0x65a8d2 and g_aiWantedGoldMineSlopes 0x7e12b0 /
@@ -42,28 +42,24 @@ LOGBOOK session entry).
   AI) that logs byte 6 and the site's owner in a real game with computer
   players, then decide (reproduce the observed value, or document a
   known difference). The other 18 senders are verified (ai_commands.cpp).
-- **Package A5: Cevaland** (land evaluation) and **A6: the agents' run
-  functions** (slot 8), smallest first; then 0x550f80 and the
-  constructor 0x550900 / 0x550a30. Session 55 round 2 (wip/ai-step) did
-  the SiteTree (16 functions), the six work-area finders, the area
-  records (copy, ~Area, AreaList insert/_Construct, RemoveArea), the
-  CEvaLand's Acquire / constructor / Init, AI::LoadState with the
-  load/save wrappers and AI::CreateAgent (std::_Lockit is probed by the
-  emulator, `LOCKIT_PROBES`; the finders' node padding bytes are ignored
-  with a self-test pairing). Next: AddArea 0x555260, FillAreaSiteLists
-  0x556630 and RefillAreaSiteList 0x5579d0 (1,361 instructions each),
-  ProcessPendingEvents 0x554980, then CComputerPlayer::Init 0x550a30, the
-  constructor 0x550900 and Step 0x550f80. (The expand and map worker
-  agents' Run / MakeBuildOrders were done in session 56, wip/ai-agents.) Not in Ghidra's list (no rows):
-  std::list<Area>'s constructor 0x553e70 / destructor 0x5591e0, the
-  bitset constructor 0x559240, 0x596540 (a vector's free).
-- **Open (session 55 round 2):** CEvaLand::Area's copy constructor copies
-  the per-type site tree pointers (+0x3e8) verbatim, so a list record's
-  pointers point at AddArea's stack record's trees unless something
-  refreshes them; check in AddArea / FillAreaSiteLists. The woodcutter /
+- **Package A5/A6: what is left of the CComputerPlayer.** Session 56
+  did the area lists (wip/ai-areas: AddArea, Fill/RefillAreaSiteList(s),
+  ProcessPendingEvents, COMP_FoodForMinesOptimum, the list ctor/dtor and
+  bitset ctor (manual function starts), Init and the constructor) and the
+  expand / map worker agents, OnBuildingFinished, HasBuildingTypeNear,
+  AdjustSoldierShares, CCentrumCheckAgent::Run (wip/ai-agents). Left:
+  CComputerPlayer::Step 0x550f80. Not in Ghidra's list (no rows): 0x596540
+  (a vector's free).
+- **Open (session 55 round 2):** the woodcutter /
   stonecutter finders pick the cell with the FEWEST trees / stones when the
   area stocks more than 10 (an ascending SiteTree): looks like an original
-  quirk or intent (thinning); confirm when the agents are done.
+  quirk or intent (thinning); confirm when the agents are done. (The
+  Area copy's tree pointers are settled: AddArea resets them, session 56.)
+- **Who reads the site trees:** the map worker's MakeBuildOrders 0x57ce90
+  and the economy's site search take candidates from
+  `site_tree_of_type[type]`; check that nobody reads it for types 0, 15,
+  16, 18 (uninitialized there, session 56) and whether RefillAreaSiteList's
+  workshop quirk (ratings into tree 34) matters in a game.
 - **Open:** a world-field list of the AI range with
   `tools/world_fields.py`.
 - **Left from the naming-pass corrections (session 51 did the code and

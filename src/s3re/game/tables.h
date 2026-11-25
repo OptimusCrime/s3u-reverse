@@ -190,6 +190,9 @@ inline constexpr GameGlobal<const NotificationKind[]> g_notificationKinds{0x659d
 // ------------------------------------------------------------ computer players
 // Default per-candidate value (AI_RecordBestCandidate).
 inline constexpr GameGlobal<const std::uint16_t[]> g_aiCandidateDefaults{0x7329d0};
+// The agent kinds a computer player makes, in order (0..10, ends at 0xffff;
+// CComputerPlayer::Init 0x550a30).
+inline constexpr GameGlobal<const std::uint16_t[]> g_aiAgentKinds{0x7312b0};
 // Per building type: the minimum distance a computer player keeps between
 // two buildings of that type (0 = none; woodcutter 4, mines 8, fields 24;
 // HOUSE_GROUND_REQUEST_NOTE::CheckSite 0x5760d0).

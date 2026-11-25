@@ -5150,6 +5150,459 @@ SPECS += [
          new_fails_size=(8, 12, 16, 20, 28, 40, 160), max_cases=600),
 ]
 
+
+# -- session 56 (ai-areas): the area site lists (ai_area_site_lists.cpp) -----
+# ECX = the CEvaLand at world offset 0 (also g_aiLandEvaluation): a grid of
+# 1..5 x 1..5 random cells at SITE_LIST_GRID (resource bytes, sums and
+# per-player building bitsets); tiles of a 48 x 48 map with owners 0..2 /
+# none and areas 0..3 in patches; players 0..2 of races 0..3. Fill: the
+# record at AREA_SOURCE with random trees; Refill: lists[player] with 1..3
+# records of areas 0..3. Every new tree node is a 0x18-byte block of the
+# fake heap, 0x20 apart: byte +0xd is the inserted value's padding byte, an
+# uninitialized byte of the original's frame (ours 0), ignored
+# (SITE_LIST_NODE_PADDING; self-test pairing WrongFillSiteLists).
+
+SITE_LIST_GRID = SCRATCH + 24 * SCRATCH_SLOT_BYTES
+SITE_LIST_MAP = 48
+SITE_LIST_NODE_PADDING = tuple(emu_heap + 0x20 * k + 0xd for emu_heap in (0x01fc0000,) for k in range(0x30000 // 0x20))
+
+
+def site_list_map(rng):
+    side_x, side_y = rng.randint(1, 5), rng.randint(1, 5)
+    fields = [(0x140, side_x if rng.random() < 0.95 else 0, 4), (0x144, side_y, 4),
+              (0x158, WORLD_BASE + SITE_LIST_GRID, 4), (MAP_SIZE, SITE_LIST_MAP, 4)]
+    patch = rng.choice((4, 8, 12, 24))
+    phase = rng.randrange(4)
+    for x in range(SITE_LIST_MAP):
+        for y in range(SITE_LIST_MAP):
+            k = (x // patch) * 7 + (y // patch) * 3 + phase
+            owner = rng.randrange(4) if rng.random() < 0.05 else 0xFF if k % 4 == 3 else k % 3
+            area = rng.randrange(4) if rng.random() < 0.05 else k % 4
+            fields += [(tile(x, y) + 8, owner, 1), (tile(x, y) + 0x14, area, 2)]
+    for cell in range(side_x * side_y):
+        base = SITE_LIST_GRID + cell * 0xC4
+        fields += [(base + b, rng.randrange(12) if rng.random() < 0.3 else rng.randrange(256), 1)
+                   for b in range(0x24)]
+        for p in range(4):
+            density = rng.randrange(5)
+            if density == 4:  # a few types (woodcutters and towers more often)
+                bits = 0
+                for _ in range(rng.randint(1, 4)):
+                    bits |= 1 << rng.choice((2, 2, 15, 16, 18, rng.randrange(57)))
+                fields += [(base + 0x24 + 8 * p, bits & 0xFFFFFFFF, 4), (base + 0x28 + 8 * p, bits >> 32, 4)]
+                continue
+            for half in range(2):
+                bits = 0 if density == 0 else rng.getrandbits(32) & (
+                    rng.getrandbits(32) & rng.getrandbits(32) if density == 1 else 0xFFFFFFFF)
+                fields.append((base + 0x24 + 8 * p + 4 * half, bits, 4))
+    for p in range(3):
+        race = rng.randrange(4) if rng.random() < 0.9 else rng.getrandbits(32)
+        fields.append((AI_PLAYERS + p * 0x148 + 4, race, 4))
+    return fields
+
+
+def site_list_globals(rng, pool, args):
+    return site_tree_globals(rng, pool, args) + [
+        (AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, SITE_LIST_MAP, 2), (AI_MAP_SIZES + 2, SITE_LIST_MAP, 2),
+        (AI_LAND_EVALUATION, WORLD_BASE, 4)]
+
+
+def site_list_player(rng, pool):
+    return rng.randrange(3) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+def fill_site_lists_world(rng, pool, args):
+    return site_list_map(rng) + area_record_fields(rng, AREA_SOURCE, 0, max_nodes=3, area=rng.randrange(4))
+
+
+def refill_site_list_world(rng, pool, args):
+    player = args[0] & 0xFFFF
+    count = rng.randint(1, 3) if rng.random() < 0.95 else 0
+    head = WORLD_BASE + AREA_LIST_NODES
+    nodes = [head] + [WORLD_BASE + AREA_LIST_NODES + (k + 1) * SCRATCH_SLOT_BYTES for k in range(count)]
+    fields = [(12 * player + 4, head, 4), (12 * player + 8, count, 4)]
+    areas = [rng.randrange(4) for _ in range(count)]
+    for k, node in enumerate(nodes):
+        offset = node - WORLD_BASE
+        fields += [(offset, nodes[(k + 1) % len(nodes)], 4), (offset + 4, nodes[k - 1], 4)]
+        if k:
+            fields += area_record_fields(rng, offset + 8, (k - 1) * AREA_TREES_PER_RECORD, max_nodes=2,
+                                         area=areas[k - 1])
+    if areas and rng.random() < 0.8:  # mostly an area that has a record
+        args[1] = (args[1] & 0xFFFF0000) | rng.choice(areas)
+    return site_list_map(rng) + fields
+
+
+def refill_area(rng, pool):
+    return rng.randrange(5) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+def refill_type(rng, pool):
+    kind = rng.randrange(60) if rng.random() < 0.95 else rng.randrange(256)
+    return kind | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+SPECS += [
+    # EAX: left over (callers don't use it).
+    Spec("AI_CEvaLand_FillAreaSiteLists", 0x00556630, "thiscall", [one_of(WORLD_BASE + AREA_SOURCE), site_list_player],
+         eax_mask=0, presets=fill_site_lists_world, globals=site_list_globals, callees=LOCKIT_PROBES,
+         ignore_bytes=SITE_LIST_NODE_PADDING, max_cases=500),
+    # cover_until: the jump tables 0x558cac.. follow the code.
+    Spec("AI_CEvaLand_RefillAreaSiteList", 0x005579d0, "thiscall", [site_list_player, refill_area, refill_type],
+         eax_mask=0, presets=refill_site_list_world, globals=site_list_globals, callees=LOCKIT_PROBES,
+         ignore_bytes=SITE_LIST_NODE_PADDING, max_cases=2000, cover_until=0x00558cac),
+]
+
+
+# COMP_FoodForMinesOptimum (ai_area_events.cpp): force_world's land and
+# nodes with random mine counts (coal, gold, iron, sulfur, gem mines) and
+# piles of meat, fish, bread and rice in areas 0..3; the senders run with
+# IsHost and Push probed.
+
+FOOD_MINES = (7, 8, 9, 29, 37)
+FOOD_GOODS = (4, 8, 24, 27)
+
+
+def food_world(rng, pool, args):
+    fields = force_world(rng, pool, args)
+    if rng.random() < 0.85:  # mostly an area the player has a node for
+        fields = [f for f in fields if f[0] != SCRATCH + SCRATCH_SLOT_BYTES]
+        fields = force_world_need(rng, fields)
+    for slot in range(12, 18):
+        node = SCRATCH + slot * SCRATCH_SLOT_BYTES
+        fields += [(node + 0x344 + 2 * t, 0 if rng.random() < 0.5 else rng.randint(1, 3), 2) for t in FOOD_MINES]
+    base = 600
+    for area in range(FORCE_AREAS):
+        for goods in FOOD_GOODS:
+            head, chain = economy_pile_chain(rng, base, rng.randrange(3) if rng.random() < 0.7 else 0, False)
+            fields += chain + [(AI_AREAS + area * 0x2E0 + 0xA + goods * 2, head, 2)]
+            base += 10
+    return fields
+
+
+def force_world_need(rng, fields):
+    """The area word (scratch 1) set to an area the player (scratch 0) has a
+    node for, when there is one."""
+    player = next(f[1] for f in fields if f[0] == SCRATCH)
+    heads = {f[0]: f[1] for f in fields}
+    areas = []
+    node = heads.get(FORCE_HEADS + 8 * player)
+    while node is not None and node != WORLD_BASE + FORCE_HEADS + 8 * player and len(areas) < 8:
+        areas.append(heads.get(node - WORLD_BASE + 8, 0))
+        node = heads.get(node - WORLD_BASE)
+    return fields + [(SCRATCH + SCRATCH_SLOT_BYTES, rng.choice(areas) if areas else rng.randrange(FORCE_AREAS), 2)]
+
+
+SPECS += [
+    # EAX: left over (callers don't use it).
+    Spec("COMP_FoodForMinesOptimum", 0x00572a30, "fastcall", [scratch(0), scratch(1)], eax_mask=0,
+         presets=food_world, globals=force_globals, callees=FORCE_CALLEES, max_cases=1500),
+]
+
+
+# CEvaLand::AddArea (ai_area_events.cpp): the CEvaLand at world offset 0
+# (also g_aiLandEvaluation) with lists[player] of 0..2 records; buildings,
+# areas and goods as for FoodForMines. FillAreaSiteLists is probed (its own
+# spec covers it; recorded: ECX, the player and the record's area word, as
+# the record is on each function's own stack), so the stack record's 39
+# trees stay empty: with the nil node present the heap holds their heads
+# (39 x 0x20), then the new list node at ADD_AREA_NODE. Ignored there: the
+# trees' comparator / allocator bytes (+0, +1 of each tree: copied from the
+# original's uninitialized stack bytes, ours 0) and the type -> tree pointers
+# of types 0, 15, 16, 18 (copied from the stack record, never set).
+
+ADD_AREA_NODE = 0x01fc0000 + 39 * 0x20
+ADD_AREA_IGNORED = tuple(
+    [ADD_AREA_NODE + 8 + 0x3E8 + 4 * t + b for t in (0, 15, 16, 18) for b in range(4)] +
+    [ADD_AREA_NODE + 8 + 0x4CC + 0x10 * k + b for k in range(39) for b in range(2)])
+
+
+def add_area_record_fill(machine, ecx, args):
+    return (ecx, args[1], struct.unpack("<H", machine.guest_read(args[0], 2))[0])
+
+
+def add_area_world(rng, pool, args):
+    player = args[1] & 0xFFFF
+    fields = [f for f in force_world(rng, pool, args) if not (FORCE_LAND <= f[0] < FORCE_LAND + 0xF0)]
+    count = rng.randrange(3)
+    head = WORLD_BASE + AREA_LIST_NODES
+    nodes = [head] + [WORLD_BASE + AREA_LIST_NODES + (k + 1) * SCRATCH_SLOT_BYTES for k in range(count)]
+    fields += [(12 * player + 4, head, 4), (12 * player + 8, count, 4)]
+    for k, node in enumerate(nodes):
+        offset = node - WORLD_BASE
+        fields += [(offset, nodes[(k + 1) % len(nodes)], 4), (offset + 4, nodes[k - 1], 4)]
+        if k:
+            fields += area_record_fields(rng, offset + 8, (k - 1) * AREA_TREES_PER_RECORD, max_nodes=2,
+                                         area=rng.randrange(FORCE_AREAS))
+    for area in range(FORCE_AREAS):
+        for goods in FOOD_GOODS:
+            fields.append((AI_AREAS + area * 0x2E0 + 0xA + goods * 2, 0, 2))
+    return fields
+
+
+def add_area_globals(rng, pool, args):
+    return [f for f in force_globals(rng, pool, args) if f[0] != AI_LAND_EVALUATION] + site_tree_globals(
+        rng, pool, args) + [(AI_LAND_EVALUATION, WORLD_BASE, 4)]
+
+
+def add_area_player(rng, pool):
+    return rng.randrange(3) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+def add_area_area(rng, pool):
+    return rng.randrange(FORCE_AREAS + 1) | (rng.getrandbits(16) << 16 if rng.random() < 0.2 else 0)
+
+
+SPECS += [
+    # EAX: left over (callers don't use it). Dead 0x555db1, 0x555e37,
+    # 0x555ebd, 0x555f43, 0x555fc9, 0x556041: the inlined tree destructors'
+    # "last reference: free the nil node" (the new node's 39 copies still
+    # hold references then).
+    Spec("AI_CEvaLand_AddArea", 0x00555260, "thiscall", [add_area_area, add_area_player], eax_mask=0,
+         presets=add_area_world, globals=add_area_globals,
+         callees={**FORCE_CALLEES, **LOCKIT_PROBES,
+                  0x00556630: (2, "thiscall", "probe", None, add_area_record_fill)},
+         ignore_bytes=ADD_AREA_IGNORED, max_cases=300,
+         exempt_blocks=(0x00555db1, 0x00555e37, 0x00555ebd, 0x00555f43, 0x00555fc9, 0x00556041)),
+]
+
+
+# AreaList's constructor / destructor and the bitset constructor
+# (ai_area_records.cpp; no function starts in Ghidra's list: cover_until
+# ends each at its padding). The list at world offset 0.
+
+
+def area_list_destruct_world(rng, pool, args):
+    """The list at offset 0 with 0..3 nodes whose records have small trees."""
+    count = rng.randrange(4)
+    head = WORLD_BASE + AREA_LIST_NODES
+    nodes = [head] + [WORLD_BASE + AREA_LIST_NODES + (k + 1) * SCRATCH_SLOT_BYTES for k in range(count)]
+    fields = [(0, rng.getrandbits(32), 4), (4, head, 4), (8, count, 4)]
+    for k, node in enumerate(nodes):
+        offset = node - WORLD_BASE
+        fields += [(offset, nodes[(k + 1) % len(nodes)], 4), (offset + 4, nodes[k - 1], 4)]
+        if k:
+            fields += area_record_fields(rng, offset + 8, (k - 1) * AREA_TREES_PER_RECORD, max_nodes=2)
+    return fields
+
+
+SPECS += [
+    Spec("AI_AreaList_Construct_List", 0x00553e70, "thiscall", [], cover_until=0x00553e99, max_cases=100),
+    Spec("AI_AreaList_Destruct", 0x005591e0, "thiscall", [], presets=area_list_destruct_world,
+         globals=area_destruct_globals, callees=LOCKIT_PROBES, cover_until=0x00559238, max_cases=300),
+    Spec("BuildingTypeBits_Construct", 0x00559240, "thiscall", [], cover_until=0x00559259, max_cases=50),
+]
+
+
+# CEvaLand::ProcessPendingEvents (OnBuildingFinished: the ai-agents spec below)
+# (ai_area_events.cpp). The CEvaLand at world offset 0 (also
+# g_aiLandEvaluation; grid of 9 x 9 cells at SITE_LIST_GRID), lists of 0..2
+# bare records (area word, counts lazily random) for players 0..3; up to 20
+# buildings (force_buildings) with their tiles marked; players 0..3 active
+# 0..2; areas 0..4 owned by 0..2 or nobody; a ring of 0..10 events (a 3
+# always followed by a 6). The record keepers (AddArea, Fill / Refill,
+# RemoveArea, OnBuildingFinished), ReevaluateAroundTile, AreaPopulation, the
+# work-area finders and the command senders are probed (their own specs
+# cover them; pointer arguments recorded by the values they point at).
+
+EVENT_HEADS = SCRATCH + 30 * SCRATCH_SLOT_BYTES
+EVENT_NODES = SCRATCH + 31 * SCRATCH_SLOT_BYTES   # 0x800 bytes per node, slots 31..34
+PENDING_EVENT_RING = 0x2F990
+PENDING_EVENT_INDEX = 0x32870
+
+
+def probe_reg(machine, name):
+    from unicorn import x86_const
+    return machine.uc.reg_read(getattr(x86_const, "UC_X86_REG_" + name))
+
+
+def probe_word(machine, address):
+    return struct.unpack("<H", machine.guest_read(address, 2))[0]
+
+
+def probe_byte(machine, address):
+    return machine.guest_read(address, 1)[0]
+
+
+EVENT_PROBES = {
+    0x00555260: (2, "thiscall", "probe"),                  # AddArea(area, player)
+    0x00556630: (2, "thiscall", "probe"),                  # FillAreaSiteLists(record, player)
+    0x005579d0: (3, "thiscall", "probe"),                  # RefillAreaSiteList(player, area, type)
+    0x00558e80: (2, "thiscall", "probe"),                  # RemoveArea(area, player)
+    0x00573890: (0, "thiscall", "probe"),                  # OnBuildingFinished(ECX = building)
+    # ReevaluateAroundTile(x, y): recorded as words (it uses only those; the
+    # original's x of event 7 has the world pointer's high word left over).
+    0x005548b0: (2, "thiscall", "probe", None, lambda m, ecx, args: (args[0] & 0xFFFF, args[1] & 0xFFFF)),
+    0x0059dcc0: (0, "cdecl", lambda h: h % 2, None,        # AreaPopulation(ECX = &area)
+                 lambda m, ecx, args: (probe_word(m, probe_reg(m, "ECX")),)),
+    0x0058e220: (2, "stdcall", "probe", None,              # SendSetWorkArea(&id, &owner; &x, &y)
+                 lambda m, ecx, args: (probe_word(m, probe_reg(m, "ECX")), probe_byte(m, probe_reg(m, "EDX")),
+                                       probe_word(m, args[0]), probe_word(m, args[1]))),
+    0x0058e5c0: (0, "cdecl", "probe", None,                # SendDestroyBuilding(&id, &owner)
+                 lambda m, ecx, args: (probe_word(m, probe_reg(m, "ECX")), probe_byte(m, probe_reg(m, "EDX")))),
+    0x0058e630: (1, "stdcall", "probe", None,              # SendChangeGarrison(owner, id; 1)
+                 lambda m, ecx, args: (probe_reg(m, "ECX"), probe_reg(m, "EDX"), args[0])),
+    0x0058e930: (0, "cdecl", "probe", None,                # ClearToolGoodsSettings(&id)
+                 lambda m, ecx, args: (struct.unpack("<I", m.guest_read(probe_reg(m, "ECX"), 4))[0],)),
+    0x00573760: (1, "stdcall", "probe", None,              # EnsureGoodsSupply(&goods, &owner; &area)
+                 lambda m, ecx, args: (probe_byte(m, probe_reg(m, "ECX")), probe_byte(m, probe_reg(m, "EDX")), probe_word(m, args[0]))),
+}
+for _finder in (0x0059a3a0, 0x0059ac50, 0x0059b0a0, 0x0059b430, 0x0059b780, 0x0059ba90):
+    EVENT_PROBES[_finder] = (1, "stdcall", "probe", None,  # finder(building, &x; &y)
+                             lambda m, ecx, args: (probe_reg(m, "ECX"), probe_word(m, probe_reg(m, "EDX")), probe_word(m, args[0])))
+
+
+def event_land(rng):
+    fields = [(0x140, 9, 4), (0x144, 9, 4), (0x148, 81, 4), (0x14C, 64, 4), (0x158, WORLD_BASE + SITE_LIST_GRID, 4)]
+    slot = 0
+    for p in range(20):
+        head = EVENT_HEADS + 8 * p
+        fields += [(12 * p + 4, WORLD_BASE + head, 4), (12 * p + 8, 0, 4)]
+        nodes = []
+        for _ in range(rng.randrange(3) if p < 4 else 0):
+            if slot < 8:
+                nodes.append(EVENT_NODES + 0x800 * slot)
+                slot += 1
+        chain = [head] + nodes
+        for k, node in enumerate(chain):
+            fields += [(node, WORLD_BASE + chain[(k + 1) % len(chain)], 4),
+                       (node + 4, WORLD_BASE + chain[k - 1], 4)]
+            if k:
+                fields += [(node + 8, rng.randrange(5), 2), (node + 0x24, rng.randrange(3), 2)]
+                fields += [(node + 0x344 + 2 * t, rng.choice((0, 1, 1, 2)), 2) for t in range(57)]
+    return fields
+
+
+EVENT_BUILDING_TYPES = (2, 3, 7, 8, 9, 10, 12, 14, 15, 16, 18, 24, 25, 27, 28, 29, 30, 36, 37, 11, 17, 20)
+
+
+def event_buildings(rng):
+    fields = force_buildings(rng)
+    count = next(v for o, v, s in fields if o == BUILDING_COUNT)
+    values = {o: v for o, v, s in fields}
+    positions = [(values[BUILDINGS + b * BUILDING_BYTES + 2], values[BUILDINGS + b * BUILDING_BYTES + 4])
+                 for b in range(1, count + 1)]
+    types = []
+    for b in range(1, count + 1):
+        kind = rng.choice(EVENT_BUILDING_TYPES) if rng.random() < 0.98 else rng.randint(57, 70)  # (_Xran)
+        fields.append((BUILDINGS + b * BUILDING_BYTES + 6, kind, 1))
+        types.append(kind)
+        x, y = positions[b - 1]
+        fields += [(tile(x, y) + 2, 0 if rng.random() < 0.2 else b, 2),
+                   (tile(x, y) + 0xA, 0x20 if rng.random() < 0.8 else 0, 1)]
+    return fields, count, positions, types
+
+
+def event_ring(rng, count, positions, types):
+    read = rng.choice((rng.randrange(1000), rng.randint(995, 999)))
+    events, write = [], read
+
+    def building():
+        return rng.randint(1, count + 2) if rng.random() < 0.9 else rng.randrange(4000)
+    for _ in range(rng.randrange(11)):
+        kind = rng.randrange(10)
+        if kind in (3, 6):
+            k = rng.randrange(count) if count else None
+            x, y = positions[k] if k is not None and rng.random() < 0.7 else (rng.randrange(60), rng.randrange(60))
+            events.append((3, x, y))
+            gone = types[k] if k is not None and rng.random() < 0.6 else rng.randrange(57)
+            if rng.random() < 0.02:
+                gone = rng.randint(57, 70)
+            events.append((6, gone, rng.randrange(3)))
+        elif kind in (1, 2, 7):
+            events.append((kind, building() | (rng.getrandbits(16) << 16 if rng.random() < 0.1 else 0), 0))
+        elif kind == 4:
+            events.append((4, rng.randrange(5) | (rng.getrandbits(16) << 16 if rng.random() < 0.1 else 0), 0))
+        elif kind == 5:
+            events.append((5, building(), rng.randrange(4)))
+        else:
+            events.append((kind, rng.randrange(68), rng.randrange(68)))
+    fields = []
+    for kind, a, b in events:
+        base = PENDING_EVENT_RING + 12 * write
+        fields += [(base, kind, 4), (base + 4, a & 0xFFFFFFFF, 4), (base + 8, b, 4)]
+        write = (write + 1) % 1000
+    return fields + [(PENDING_EVENT_INDEX, read, 4), (PENDING_EVENT_INDEX + 4, write, 4)]
+
+
+def event_world(rng, pool, args):
+    fields, count, positions, types = event_buildings(rng)
+    for p in range(4):
+        fields += [(PLAYER_RECORDS + p * PLAYER_RECORD_BYTES, rng.randrange(3) if rng.random() < 0.3 else 2, 4),
+                   (PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, rng.randrange(4), 4)]
+    for area in range(5):
+        fields.append((AI_AREAS + area * 0x2E0, 0xFF if rng.random() < 0.2 else rng.randrange(3), 1))
+    fields += event_land(rng) + event_ring(rng, count, positions, types)
+    return fields
+
+
+def event_globals(rng, pool, args):
+    return command_globals(rng, pool, args) + [
+        (AI_LAND_EVALUATION, WORLD_BASE, 4), (AI_MAP_SIZES, 60, 2), (AI_MAP_SIZES + 2, 60, 2)]
+
+
+SPECS += [
+    Spec("AI_CEvaLand_ProcessPendingEvents", 0x00554980, "thiscall", [], presets=event_world,
+         globals=event_globals, callees={**FORCE_CALLEES, **EVENT_PROBES}, max_cases=3000),
+]
+
+
+# CComputerPlayer::Init and the constructor (ai_computer_player_init.cpp).
+# The ComputerPlayer at world offset 0 (ECX); areas 0..8 owned by players
+# 0..2 or nobody, a high-water mark 0..8 (sometimes 0xffffffff), races
+# 0..3 (sometimes others). CreateAgent (ECX = the kind; returns a fake
+# agent), AddAgent, CEvaLand::Acquire (returns a fake land), AddArea and
+# MarkBuildingTypesInLandGrid are probed; SetCurrentPlayer and the command
+# senders run (IsHost and Push probed). Constructor: Init and InitAiGlobals
+# probed, Win32::CObject's constructor runs.
+
+INIT_LAND = WORLD_BASE + SCRATCH + 40 * SCRATCH_SLOT_BYTES
+
+INIT_PROBES = {
+    0x0056f6d0: (0, "cdecl", lambda h: WORLD_BASE + SCRATCH + 41 * SCRATCH_SLOT_BYTES + 0x40 * (h % 32), None,
+                 lambda m, ecx, args: (probe_reg(m, "ECX"),)),
+    0x00551400: (1, "thiscall", "probe"),
+    0x00553d30: (0, "cdecl", lambda h: INIT_LAND),
+    0x00555260: (2, "thiscall", "probe"),
+    0x005723a0: (0, "cdecl", "probe"),
+}
+
+
+def init_world(rng, pool, args):
+    player = rng.randrange(3) | (rng.getrandbits(16) << 16 if rng.random() < 0.05 else 0)
+    fields = [(0x75C, WORLD_BASE, 4), (0x760, rng.getrandbits(32), 4), (0x76C, player, 4),
+              (0x770, rng.randrange(3), 4), (0xE115DC, 0xFFFFFFFF if rng.random() < 0.05 else rng.randrange(9), 4)]
+    for area in range(10):
+        fields.append((AI_AREAS + area * 0x2E0, 0xFF if rng.random() < 0.25 else rng.randrange(3), 1))
+    for p in range(3):
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4,
+                       rng.randrange(8) if rng.random() < 0.1 else rng.randrange(4), 4))
+    return fields
+
+
+def init_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_WORLD, WORLD_BASE, 4),
+            (0x007312ac, rng.choice((0, 1, 1, 2)), 4)]
+
+
+def construct_world(rng, pool, args):
+    fields = init_world(rng, pool, args)
+    args[2] = next(v for o, v, s in fields if o == 0x76C)
+    return [f for f in fields if f[0] != 0x76C]
+
+
+SPECS += [
+    # EAX: left over (the constructor doesn't use it).
+    Spec("CComputerPlayer_Init", 0x00550a30, "thiscall", [], eax_mask=0, presets=init_world,
+         globals=init_globals, callees={**FORCE_CALLEES, **INIT_PROBES}, max_cases=1500),
+    Spec("CComputerPlayer_Construct", 0x00550900, "thiscall",
+         [one_of(WORLD_BASE), anything, anything, lambda rng, pool: rng.choice((0, 0, 1, rng.getrandbits(32)))],
+         presets=construct_world,
+         globals=lambda rng, pool, args: init_globals(rng, pool, args) + [(0x007e3410, rng.choice((0, 0, 5)), 1)],
+         callees={0x00550a30: (0, "thiscall", "probe"), 0x00551b80: (0, "thiscall", "probe")}, max_cases=300),
+]
+
+
 # -- session 56 (wip/ai-agents): GLOBAL_EXPAND_EMPIRE_AGENT (ai_expand_empire_agent.cpp) --
 #
 # MakeBuildOrders(x, y, radius) on a 40 x 40 map (5 x 5 grid cells): per 8 x 8
