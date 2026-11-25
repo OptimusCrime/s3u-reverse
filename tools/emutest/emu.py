@@ -426,7 +426,7 @@ def _api_mci_send_command(machine, uc, args):
     if block:
         if message == 0x803:
             fields = struct.unpack("<5I", machine.guest_read(block, 20))
-            machine.guest_write(block + 4, struct.pack("<I", (h >> 20) & 7 if h & 0x100 else (h >> 24)))
+            machine.guest_write(block + 4, struct.pack("<I", (h >> 20) & 7 if h & 0x100 else (h >> 24) & 0xFFFFFFFF))
         elif message == 0x806:
             fields = struct.unpack("<3I", machine.guest_read(block, 12))
         elif message == 0x814:
