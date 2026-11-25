@@ -17,6 +17,7 @@ add_library(s3re SHARED
     msvc6/deleting_destructors.cpp
     msvc6/exceptions.cpp
     msvc6/string.cpp
+    msvc6/wstring.cpp
 
     # watcom/: Watcom container library code
     watcom/bare_vectors.cpp

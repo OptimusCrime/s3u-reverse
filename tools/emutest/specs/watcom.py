@@ -203,3 +203,25 @@ SPECS += [Spec(f"InitUpTo_{address:x}", address, "thiscall", [init_upto_n],
                presets=init_upto_state(size), eax_mask=0, callees=INIT_UPTO_CONSTRUCTORS)
           for address, size in ((0x428e50, 4), (0x40a1d0, 16), (0x429040, 0x20), (0x4293d0, 0x14),
                                 (0x414650, 0xcc), (0x414b10, 0x40), (0x463350, 0x60))]
+
+
+# -- WCSkipListIterBase::operator++ (list_iterators.cpp, session 56) --------
+# The iterator at world offset 0; the dictionary in scratch slot 0 (header
+# pointer at +0x70 -> a header node at +0xb0), a chain of up to 4 nodes at
+# +0x80 + 0x10 k.
+
+
+def skip_iter_state(rng, pool, args):
+    base = WORLD_BASE + SCRATCH
+    nodes = rng.randrange(5)
+    fields = [(SCRATCH + 0x70, base + 0xb0, 4)]
+    for k in range(nodes + 1):
+        at = 0xb0 if k == 0 else 0x80 + 0x10 * (k - 1)
+        fields.append((SCRATCH + at, base + 0x80 + 0x10 * k if k < nodes else 0, 4))
+    current = 0 if nodes == 0 or rng.random() < 0.4 else base + 0x80 + 0x10 * rng.randrange(nodes)
+    fields += [(8, rng.choice([0, base, base, base]), 4), (0xc, current, 4),
+               (0x10, rng.choice([0, 0, 0, 1, 2]), 4)]
+    return fields
+
+
+SPECS += [Spec("SkipListIter_Increment", 0x00499df0, "thiscall", [], presets=skip_iter_state)]

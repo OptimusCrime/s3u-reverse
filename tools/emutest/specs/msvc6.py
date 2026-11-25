@@ -245,3 +245,42 @@ SPECS += [
     Spec("CompleteDestructor_4816d0", 0x004816d0, "thiscall", [],
          callees={0x42b380: (0, "thiscall", "probe"), SCREEN_ELEMENT_DESTRUCTOR: (0, "thiscall", "probe")}),
 ]
+
+
+# -- operator[] const and append(x, pos, n) (string.cpp, session 56) --------
+SPECS += [
+    Spec("String_IndexConst", 0x00414370, "thiscall", [string_count], presets=string_world),
+    # XLEN 0x42f96c (the inlined _Grow's max_size check: needs a result of
+    # exactly 0xFFFFFFFE characters); DEAD 0x42f987, 0x42f9a1, 0x42f9a5 (the
+    # inlined _Grow's new-length-0 branches: the count is > 0 there and the
+    # npos check keeps len + count from wrapping).
+    Spec("String_AppendSubstr", 0x0042f920, "thiscall", [SELF_OR_OTHER, string_count, string_count],
+         presets=string_world, exempt_blocks=(0x0042f96c, 0x0042f987, 0x0042f9a1, 0x0042f9a5)),
+]
+
+
+# -- std::wstring _Tidy / compare, allocator<char>::deallocate (wstring.cpp, session 56) --
+# The wide string at world offset 0 with its block in scratch slot 0 (count
+# byte at +1, ptr = +2) or none. _Tidy is void in the library (EAX is left over).
+
+
+def wstring_world(rng, pool, args):
+    ptr = rng.choice([0, WORLD_BASE + SCRATCH + 2, WORLD_BASE + SCRATCH + 2, WORLD_BASE + SCRATCH + 2])
+    length = rng.randrange(40) if ptr else 0
+    fields = [(4, ptr, 4), (8, length, 4), (SCRATCH + 1, rng.choice([0, 1, 2, 0xfe, 0xff]), 1)]
+    text = [rng.choice([0x61, 0x62, 0x8061, rng.getrandbits(16)]) for _ in range(44)]
+    other = list(text) if rng.random() < 0.5 else [rng.choice([0x61, 0x62, rng.getrandbits(16)]) for _ in range(44)]
+    fields += [(SCRATCH + 2 + 2 * k, v, 2) for k, v in enumerate(text)]
+    fields += [(SCRATCH + SCRATCH_SLOT_BYTES + 2 * k, v, 2) for k, v in enumerate(other)]
+    return fields
+
+
+SPECS += [
+    Spec("WString_Tidy", 0x004286d0, "thiscall", [lambda rng, pool: rng.randrange(2) | (rng.getrandbits(24) << 8)],
+         presets=wstring_world, eax_mask=0),
+    Spec("WString_CompareChars", 0x00429980, "thiscall",
+         [lambda rng, pool: rng.randrange(42), lambda rng, pool: rng.choice([0xFFFFFFFF, rng.randrange(44)]),
+          lambda rng, pool: WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES + 2 * rng.randrange(4),
+          lambda rng, pool: rng.randrange(40)], presets=wstring_world),
+    Spec("Allocator_Deallocate", 0x00486920, "thiscall", [anything, anything]),
+]
