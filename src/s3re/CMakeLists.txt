@@ -146,6 +146,7 @@ add_library(s3re SHARED
     game/ai/ai_agent_slots.cpp
     game/ai/ai_agents.cpp
     game/ai/ai_army.cpp
+    game/ai/ai_army_attack.cpp
     game/ai/ai_army_groups.cpp
     game/ai/ai_army_orders.cpp
     game/ai/ai_battle_spells.cpp
@@ -153,6 +154,7 @@ add_library(s3re SHARED
     game/ai/ai_building_queries.cpp
     game/ai/ai_cell_resources.cpp
     game/ai/ai_census.cpp
+    game/ai/ai_census_settlers.cpp
     game/ai/ai_commands.cpp
     game/ai/ai_computer_player.cpp
     game/ai/ai_economy_actions.cpp
@@ -166,15 +168,18 @@ add_library(s3re SHARED
     game/ai/ai_helpers.cpp
     game/ai/ai_land_queries.cpp
     game/ai/ai_map_queries.cpp
+    game/ai/ai_military.cpp
     game/ai/ai_player_nodes.cpp
     game/ai/ai_request_agents.cpp
     game/ai/ai_request_execute.cpp
     game/ai/ai_request_notes.cpp
+    game/ai/ai_safety_agent.cpp
     game/ai/ai_site_notes.cpp
     game/ai/ai_site_queries.cpp
     game/ai/ai_small_helpers.cpp
     game/ai/ai_state.cpp
     game/ai/ai_work_areas.cpp
+    game/ai/ai_world_events.cpp
     game/ai/ai_wrapped_pos.cpp
 
     # game/fileformats/: the map and savegame container (Dirk::CMapFile)

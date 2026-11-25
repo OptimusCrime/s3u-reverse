@@ -281,4 +281,46 @@ inline constexpr GameText kAiAttackOwnBuilding{0x732fa0};
 inline constexpr GameText kAiStealTargetDeleted{0x732f64};  // "Tower steal: Attack target %d is deleted for all armys! \n"
 // "Reset global Attack - player: %d, group: %d, building: %d ^gegner ist zu stark\n" (the enemy is too strong)
 inline constexpr GameText kAiGlobalAttackReset{0x732f14};
+// "RESET wegen abgelaufenem Attackdelay player: %d, group: %d\n" (the attack delay ran out; AI::ArmyState::TickAttackDelays 0x594000)
+inline constexpr GameText kAiAttackDelayReset{0x732e34};
+// "Catapult fight - player: %d, group: %d, settler: %d \n" (AI::Army::AttackEnemyCatapults 0x593180)
+inline constexpr GameText kAiCatapultFight{0x732dfc};
+// "Gathering: player: %d, group: %d, building: %d \n" (AI::RunMilitary 0x58f990)
+inline constexpr GameText kAiGathering{0x732c9c};
+// "Attack or Steal -  player: %d, group: %d, building: %d \n" (AI::RunMilitary 0x58f990)
+inline constexpr GameText kAiAttackOrSteal{0x732c60};
+// "RAINER -> Eine Turm ist nicht besetzt : UnoccupiedTowers=true\n" (a tower has no garrison; AI::RunMilitary 0x58f990)
+inline constexpr GameText kAiTowerUnoccupied{0x732c20};
+// "Renew Patrouillie point 0 -player: %d,  group: %d, building: %d \n" (AI::RunMilitary 0x58f990)
+inline constexpr GameText kAiRenewPatrolPoint0{0x732bdc};
+// "RAINER -> UnoccupiedTowers - n\xe4chster Turm gefunden!\n" (next tower found; AI::RunMilitary 0x58f990)
+inline constexpr GameText kAiUnoccupiedTowerFound{0x732ba4};
+// "RAINER -> UnoccupiedTowers - schickt Truppe zum Turm\n" (sends a troop to the tower; AI::RunMilitary 0x58f990)
+inline constexpr GameText kAiSendTroopToTower{0x732b6c};
+// "Next Step Patrouilie point 0 -player: %d, group: %d, building: %d \n" (both step bits set; AI::RunMilitary 0x58f990)
+inline constexpr GameText kAiNextPatrolPoint0Both{0x732b28};
+// "Next Step Patrouilie point 0 - player: %d, group: %d, building: %d \n" (AI::RunMilitary 0x58f990)
+inline constexpr GameText kAiNextPatrolPoint0{0x732ae0};
+// "Next Step Patrouilie point 1 - player: %d, group: %d, building: %d \n" (AI::RunMilitary 0x58f990)
+inline constexpr GameText kAiNextPatrolPoint1{0x732a98};
+// "New Patrouilie point 0 - player: %d, group: %d, building: %d \n" (AI::RunMilitary 0x58f990)
+inline constexpr GameText kAiNewPatrolPoint0{0x732a44};
+// "Marcus: FOE ATTACK EXCEPTION!" (DebugLog of T_ATTACK_AGENT::Run 0x55ec10 when RunMilitary throws)
+inline constexpr GameText kAiFoeAttackException{0x731464};
+// "Start Attack - player: %d, group: %d, building: %d \n" (AI::StartAttack 0x594080)
+inline constexpr GameText kAiStartAttack{0x732edc};
+// "Start Gather - player: %d, group: %d, building: %d \n" (AI::StartAttack 0x594080)
+inline constexpr GameText kAiStartGather{0x732ea4};
+// "Start Steal - player: %d, group: %d, building: %d \n" (AI::StartAttack 0x594080)
+inline constexpr GameText kAiStartSteal{0x732e70};
+// "Delete Catapult nr. %i Iterator: %x start: %x , end: %x, size: %i\n" (AI::ProcessWorldEvents 0x590da0, event 1/5 of a catapult)
+inline constexpr GameText kAiDeleteCatapult{0x732d94};
+// "player: %d, Army %d ist killed\n" (AI::ProcessWorldEvents 0x590da0)
+inline constexpr GameText kAiArmyKilled{0x732d74};
+// "Einigeln - player: %d, group: %d, building: %d \n" (dig in; AI::ProcessWorldEvents 0x590da0, event 4)
+inline constexpr GameText kAiDigIn{0x732d40};
+// "Defend Tower - player: %d, group: %d, building: %d \n" (AI::ProcessWorldEvents 0x590da0, event 4)
+inline constexpr GameText kAiDefendTower{0x732d08};
+// "WRONG EVENT - readID: %d type: %d data1: %d data2: %d" (DebugLog of AI::ProcessWorldEvents 0x590da0 for an unknown event type)
+inline constexpr GameText kAiWrongEvent{0x732cd0};
 }  // namespace s3re::game::texts

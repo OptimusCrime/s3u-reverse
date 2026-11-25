@@ -260,9 +260,9 @@ static_assert(offsetof(AiAgentData, buildings) + (19 * kBuildingTypeCount + 256)
 constexpr std::size_t kMaxBuildings = 600;
 constexpr std::size_t kWorldBytes = offsetof(CGameData, buildings) + (kMaxBuildings + 1) * sizeof(layout::Building);
 // The 20 vectors up to g_aiMapWorld (set per side), which follows them.
-constexpr std::size_t kVectorsBytes = g_aiMapWorld.address() - g_aiAgentVectors.address();
+constexpr std::size_t kVectorsBytes = g_aiMapWorld.address() - g_aiCatapultVectors.address();
 static_assert(kVectorsBytes == kAgentVectorCount * sizeof(AiVector) - 4);
-void* VectorsLow() { return &g_aiAgentVectors; }
+void* VectorsLow() { return &g_aiCatapultVectors; }
 
 void FillWorld(test::Rng& rng, test::WorldPair& worlds, std::uint32_t mapSize) {
     const std::uint32_t count = rng.Chance(1, 20) ? rng.Below(2) : rng.Below(kMaxBuildings);

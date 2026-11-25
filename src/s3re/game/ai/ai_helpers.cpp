@@ -572,10 +572,10 @@ std::uint32_t __fastcall AI_ResetAgentData(void* self, void* /*edx*/) {
     std::memset(data->buildings, 0, sizeof(data->buildings));
     data->buildings_counted = 0;
     std::memset(data->soldiers, 0, sizeof(data->soldiers));
-    for (std::uint32_t* array : {data->dwords3a4, data->dwords354, data->dwords2b4, data->dwords304, data->dwords3f4}) {
-        std::memset(array, 0, sizeof(data->dwords3a4));
+    for (std::int32_t* array : {data->other_settlers, data->pioneers, data->geologists, data->thieves, data->all_settlers}) {
+        std::memset(array, 0, sizeof(data->other_settlers));
     }
-    AiVector* vectors = g_aiAgentVectors;
+    AiVector* vectors = g_aiCatapultVectors;
     for (std::size_t k = 0; k < kAgentVectorCount; ++k) {
         vectors[k].end = vectors[k].begin;
     }
@@ -584,10 +584,10 @@ std::uint32_t __fastcall AI_ResetAgentData(void* self, void* /*edx*/) {
     data->team_strength_valid = 0;
     for (std::size_t p = 0; p < layout::kPlayers; ++p) {
         data->team_strength[p] = 0;
-        data->dwords2b4[p] = 0;
-        data->dwords304[p] = 0;
-        data->dwords354[p] = 0;
-        data->dwords3f4[p] = 0;
+        data->geologists[p] = 0;
+        data->thieves[p] = 0;
+        data->pioneers[p] = 0;
+        data->all_settlers[p] = 0;
         for (std::size_t group = 0; group < kUnitGroups; ++group) {
             data->group_target_buildings[p][group] = 0;
             data->group_defending[p][group] = 0;
@@ -988,7 +988,7 @@ Ai25Functions OurAi25() {
 static_assert(g_aiEvaLand.address() == g_aiEvaLandRefCount.address() + 4);
 constexpr std::size_t kVectorsBytes = kAgentVectorCount * sizeof(AiVector) + 4;
 void* GlobalsLow() { return &g_aiEvaLandRefCount; }
-void* VectorsLow() { return &g_aiAgentVectors; }
+void* VectorsLow() { return &g_aiCatapultVectors; }
 
 void CompareAi25(test::Context& ctx, const Ai25Functions& candidate, int cases) {
     const Ai25Functions original = OriginalAi25();

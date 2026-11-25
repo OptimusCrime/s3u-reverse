@@ -16,7 +16,7 @@ namespace s3re::game::ai {
 // The AI code reaches the game through globals set before each player's
 // turn (AI_SetCurrentPlayer and 0x551b80): g_aiWorld, g_aiPlayer,
 // g_aiPlayerData, ... in game/globals.h.
-constexpr std::size_t kAgentVectorCount = 20;  // g_aiAgentVectors
+constexpr std::size_t kAgentVectorCount = 20;  // g_aiCatapultVectors
 
 #pragma pack(push, 1)
 
@@ -30,11 +30,35 @@ struct AiPlayerSetup {
     std::uint16_t small_tower_interval;  // 0x0b2 COMPUTER_PLAYER_AGENT::Run 0x5846a0 asks for a small tower every 14 times this (+ player) runs
     std::uint8_t unk0b4[0xc4 - 0xb4];
     std::uint16_t promotion_interval;  // 0x0c4 the economy agent promotes soldiers after more than 14 times this many steps (0x56a0f0)
-    std::uint8_t unk0c6[0x180 - 0xc6];
+    std::uint8_t unk0c6[0x148 - 0xc6];
+    // T_SAFETY_AGENT (0x586850 / 0x5868a0): how often it checks the land
+    // grid, and the danger weights of the player's buildings in the 5 x 5
+    // cells around a cell (a sum of 100 asks for a large tower or castle).
+    std::uint16_t safety_interval;         // 0x148 runs between two checks
+    std::uint16_t safety_cells_per_check;  // 0x14a
+    std::uint16_t gold_smelter_weight;     // 0x14c
+    std::uint16_t gold_mine_weight;        // 0x14e
+    std::uint16_t storehouse_weight;       // 0x150
+    std::uint16_t weaponsmith_weight;      // 0x152
+    std::uint16_t toolsmith_weight;        // 0x154
+    std::uint16_t coal_mine_weight;        // 0x156
+    std::uint16_t iron_mine_weight;        // 0x158
+    std::uint16_t iron_smelter_weight;     // 0x15a
+    std::uint16_t harbour_weight;          // 0x15c
+    std::uint16_t war_workshop_weight;     // 0x15e the race's catapult / ballista / cannon workshop or large gong
+    std::uint16_t small_temple_weight;     // 0x160 the race's small temple
+    std::uint16_t large_temple_weight;     // 0x162 the race's large temple
+    std::uint16_t rice_farm_weight;        // 0x164 Asians only
+    std::uint16_t safety_skip_percent;     // 0x166 a Random % 100 below this skips a dangerous cell
+    std::uint16_t castle_percent;          // 0x168 above a sum of 200: a Random % 100 below this asks for a castle
+    std::uint8_t unk16a[0x180 - 0x16a];
 };
 static_assert(offsetof(AiPlayerSetup, min_mine_resources) == 4);
 static_assert(offsetof(AiPlayerSetup, small_tower_interval) == 0xb2);
 static_assert(offsetof(AiPlayerSetup, promotion_interval) == 0xc4);
+static_assert(offsetof(AiPlayerSetup, safety_interval) == 0x148);
+static_assert(offsetof(AiPlayerSetup, rice_farm_weight) == 0x164);
+static_assert(offsetof(AiPlayerSetup, castle_percent) == 0x168);
 static_assert(sizeof(AiPlayerSetup) == 0x180);
 
 // ---------------------------------------------------------------- blackboard
@@ -396,6 +420,22 @@ static_assert(offsetof(EconomyAgent, hospitals) == 0x90);
 static_assert(offsetof(EconomyAgent, laboratories) == 0x9e);
 static_assert(sizeof(EconomyAgent) == 0xa0);
 
+// ---------------------------------------------------------------- T_SAFETY_AGENT
+// The safety agent (kind 9; vtable 0x65a5f8, constructor 0x586830 clears the
+// five dwords from +8; ai_safety_agent.cpp).
+struct SafetyAgent {
+    std::uint32_t vtable;      // 0x00
+    std::uint16_t kind;        // 0x04 9
+    std::uint16_t unk06;
+    std::uint16_t run_count;   // 0x08 runs since the last check (Run 0x586850)
+    std::uint16_t cell_x;      // 0x0a the grid cell checked last (CheckNextGridCell 0x5868a0)
+    std::uint16_t cell_y;      // 0x0c
+    std::uint8_t unk0e[0x1c - 0x0e];
+};
+static_assert(offsetof(SafetyAgent, run_count) == 0x08);
+static_assert(offsetof(SafetyAgent, cell_y) == 0x0c);
+static_assert(sizeof(SafetyAgent) == 0x1c);
+
 // ---------------------------------------------------------------- CompMapWorkerAgent globals
 // Two global objects of Rainer\CompMapWorkerAgent.cpp (computer players
 // A2, session 48; meanings mostly unknown, G: the computer players' unit
@@ -404,10 +444,15 @@ static_assert(sizeof(EconomyAgent) == 0xa0);
 // player * 10 + group.
 constexpr std::size_t kUnitGroups = 10;
 
+// A unit group's orders (AI::RunMilitary 0x58f990): two own military
+// buildings it patrols between ("Patrouille point 0 / 1", building ids
+// from NearestFreeInteriorMilitaryBuilding 0x58aa70 and friends; was x / y)
+// and the enemy settler it hunts (a catapult, AttackEnemyCatapults
+// 0x593180; was unk4; SendMoveGroup 0x590c80 tests it).
 struct AiGroupTarget {
-    std::uint16_t x;   // +0 (probably; 0x590649 / 0x593180)
-    std::uint16_t y;   // +2
-    std::uint16_t unk4;  // +4 (0x590c80 tests it)
+    std::uint16_t patrol0;  // +0 building id, 0 = none
+    std::uint16_t patrol1;  // +2 building id, 0 = none
+    std::uint16_t prey;     // +4 settler id, 0 = none
 };
 static_assert(sizeof(AiGroupTarget) == 6);
 
@@ -423,7 +468,7 @@ static_assert(sizeof(AiGroupPosition) == 4);
 // re/computer_players_naming.md ("Army object 0x7e37d0").
 struct AiGroupOrders {
     std::uint16_t home_areas[layout::kPlayers][kUnitGroups];     // 0x000 area of the own military building nearest to the group (0x592820)
-    std::uint16_t unk190[layout::kPlayers][kUnitGroups];         // 0x190 cleared per group by the reset (meaning open)
+    std::uint16_t home_buildings[layout::kPlayers][kUnitGroups];  // 0x190 the military building a group was given to guard after it took it (ProcessWorldEvents 0x590da0 event 3; its door area refreshes home_areas on event 6); was unk190
     std::uint8_t group_flags[layout::kPlayers][kUnitGroups];     // 0x320 steal flag: the group goes for a weakly guarded enemy building (0x594080; 0x590c80 tests it)
     AiGroupTarget group_targets[layout::kPlayers][kUnitGroups];  // 0x3e8
     std::uint32_t gather_buildings[layout::kPlayers];            // 0x898 the gather building of a pending attack (0x594080)
@@ -431,7 +476,7 @@ struct AiGroupOrders {
     std::uint8_t unk938[0x988 - 0x938];
     std::int32_t group_mages[layout::kPlayers][kUnitGroups];     // 0x988 mages per group (0x591c40, 0x5926e0)
     std::uint8_t settlers_with_orders[32000 / 8];                // 0xca8 std::bitset<32000>: group members, hunters, busy geologists
-    std::uint8_t group_flags1c48[layout::kPlayers][kUnitGroups];  // 0x1c48 per group, cleared by the reset 0x591e00 (meaning open)
+    std::uint8_t patrol_steps[layout::kPlayers][kUnitGroups];    // 0x1c48 per group the patrol steps left (AI::RunMilitary: 5..8, the low two bits choose the patrol point); was group_flags1c48
     std::int32_t highest_group[layout::kPlayers];                // 0x1d10 highest group in use
     std::int32_t group_size[layout::kPlayers];                   // 0x1d60 7 after the reset, up to 100
     AiGroupPosition gather_positions[layout::kPlayers][kUnitGroups];  // 0x1db0
@@ -451,24 +496,29 @@ static_assert(sizeof(AiGroupOrders) == 0x20f8);
 // 0x17). The per-group target building and defending flag once placed
 // behind it (+0x634, +0x7c4) belong to the census g_aiCensus (AiAgentData).
 struct AiArmyState {
-    std::uint32_t per_player000[layout::kPlayers];               // 0x000 25 * player after the reset
-    std::uint32_t per_player050[layout::kPlayers];               // 0x050
-    std::uint32_t per_player0a0[layout::kPlayers];               // 0x0a0
-    std::uint32_t per_player0f0[layout::kPlayers];               // 0x0f0
-    std::uint32_t per_player140[layout::kPlayers];               // 0x140
-    std::uint32_t unk190;                                // 0x190
+    // The step counters of AI::RunMilitary 0x58f990 (per player unless
+    // noted); each runs its task when it passes its limit and restarts.
+    std::uint32_t military_steps[layout::kPlayers];              // 0x000 above 150: the attack part, else upkeep (25 * player after the reset; was per_player000)
+    std::uint32_t spell_steps[layout::kPlayers];                 // 0x050 above 75: CastBattleSpells 0x5953b0 (was per_player050)
+    std::uint32_t gather_countdowns[layout::kPlayers];           // 0x0a0 15 when StartAttack 0x594080 sets a gather building; RunMilitary counts it down and clears the gather building at 0 (was per_player0a0)
+    std::uint32_t thief_hunt_steps[layout::kPlayers];            // 0x0f0 above 420: HuntEnemyThieves 0x593ad0 (was per_player0f0)
+    std::uint32_t mage_hunt_steps[layout::kPlayers];             // 0x140 above 550: HuntEnemyMages 0x593bd0 (was per_player140)
+    std::uint32_t start_attack_calls;                    // 0x190 StartAttack 0x594080 does nothing in its first 31 calls (was unk190)
     std::uint32_t attack_delays[layout::kPlayers][kUnitGroups];  // 0x194 countdowns; 0x594000 resets the group when one runs out (groups 1..9: 10 + 2 * group after the reset)
     std::uint32_t geologist_timers[layout::kPlayers];            // 0x4b4 per player: calls of SendGeologists 0x595050 since it last worked (works above 6); 2000000 after the reset
-    std::uint32_t unk504;                                // 0x504 300 after the reset
-    std::uint32_t unk508;                                // 0x508 0
-    std::uint32_t unk50c;                                // 0x50c 500
-    std::uint32_t unk510[3];                             // 0x510 2000000
+    std::uint32_t disband_steps;                         // 0x504 shared: above 1100 DisbandWeakGroups 0x592bf0 (300 after the reset; was unk504)
+    std::uint32_t rebuild_steps;                         // 0x508 shared: above 2000 RebuildAssignedSettlers 0x591c40 (was unk508)
+    std::uint32_t recruit_steps;                         // 0x50c shared: above 2800 RecruitGeologistsAndThieves 0x592e60 (500 after the reset; was unk50c)
+    std::uint32_t settler_census_steps;                  // 0x510 shared: above 1900 AI::Census::CountSettlers 0x55b880 (was unk510[0])
+    std::uint32_t building_census_steps;                 // 0x514 shared: above 700 AI::Census::CountBuildings 0x55be00 (was unk510[1])
+    std::uint32_t unk518;                                // 0x518 2000000 after the reset (was unk510[2]; no other access found)
 };
-static_assert(offsetof(AiArmyState, unk190) == 0x190);
+static_assert(offsetof(AiArmyState, start_attack_calls) == 0x190);
 static_assert(offsetof(AiArmyState, attack_delays) == 0x194);
 static_assert(offsetof(AiArmyState, geologist_timers) == 0x4b4);
-static_assert(offsetof(AiArmyState, unk504) == 0x504);
-static_assert(offsetof(AiArmyState, unk510) == 0x510);
+static_assert(offsetof(AiArmyState, disband_steps) == 0x504);
+static_assert(offsetof(AiArmyState, settler_census_steps) == 0x510);
+static_assert(offsetof(AiArmyState, unk518) == 0x518);
 static_assert(sizeof(AiArmyState) == 0x51c);
 
 // ---------------------------------------------------------------- agent data
@@ -489,11 +539,14 @@ struct AiAgentData {
     std::uint32_t team_strength[20];     // 0x25c per player: soldiers and towers of its team (0x55bea0)
     std::uint8_t team_strength_valid;    // 0x2ac set to 1 by 0x55bea0
     std::uint8_t unk2ad[7];
-    std::uint32_t dwords2b4[20];         // 0x2b4
-    std::uint32_t dwords304[20];         // 0x304
-    std::uint32_t dwords354[20];         // 0x354
-    std::uint32_t dwords3a4[20];         // 0x3a4
-    std::uint32_t dwords3f4[20];         // 0x3f4
+    // Per player settler counts of CountSettlers 0x55b880 (re/computer_players_naming.md;
+    // were dwords2b4..dwords3f4); RecruitGeologistsAndThieves 0x592e60 raises
+    // geologists / thieves by what it orders.
+    std::int32_t geologists[20];         // 0x2b4 type 22
+    std::int32_t thieves[20];            // 0x304 type 23
+    std::int32_t pioneers[20];           // 0x354 type 40
+    std::int32_t other_settlers[20];     // 0x3a4 the other types (a population figure)
+    std::int32_t all_settlers[20];       // 0x3f4 all settlers
     std::uint32_t soldiers[20][kCensusSoldierKinds];      // 0x444 per player
     std::uint32_t buildings[20][kBuildingTypeCount];      // 0x714 finished buildings per player and type
     std::uint32_t dwords18e4[0x7d];      // 0x18e4..0x1ad4
@@ -502,8 +555,8 @@ static_assert(offsetof(AiAgentData, group_target_buildings) == 0x4);
 static_assert(offsetof(AiAgentData, group_defending) == 0x194);
 static_assert(offsetof(AiAgentData, team_strength) == 0x25c);
 static_assert(offsetof(AiAgentData, team_strength_valid) == 0x2ac);
-static_assert(offsetof(AiAgentData, dwords2b4) == 0x2b4);
-static_assert(offsetof(AiAgentData, dwords3f4) == 0x3f4);
+static_assert(offsetof(AiAgentData, geologists) == 0x2b4);
+static_assert(offsetof(AiAgentData, all_settlers) == 0x3f4);
 static_assert(offsetof(AiAgentData, soldiers) == 0x444);
 static_assert(offsetof(AiAgentData, buildings) == 0x714);
 static_assert(offsetof(AiAgentData, dwords18e4) == 0x18e4);
@@ -591,7 +644,7 @@ static_assert(offsetof(AiLandEvaluation, height) == 0x144);
 static_assert(offsetof(AiLandEvaluation, cells) == 0x158);
 static_assert(sizeof(AiLandEvaluation) == 0x15c);
 
-// A vector of 16-byte entries (the 20 of g_aiAgentVectors).
+// A vector of 16-byte entries (the 20 of g_aiCatapultVectors).
 struct AiVector {
     std::uint32_t begin;  // +0
     std::uint32_t end;    // +4 (end = begin empties it)

@@ -336,10 +336,12 @@ inline constexpr GameGlobal<std::uint32_t> g_aiMarkBuildingTypesPending{0x7312ac
 inline constexpr GameGlobal<std::uint32_t> g_aiPlayersTakingPart{0x7e02f0};
 // Cleared by InitAiGlobals; no other access found.
 inline constexpr GameGlobal<std::uint32_t> g_aiUnk7e340c{0x7e340c};
-// 20 vectors emptied by AI_ResetAgentData.
-inline constexpr GameGlobal<ai::AiVector[20]> g_aiAgentVectors{0x7e7a24};
+// Per player a std::vector<u32> of the settler ids of its catapults (filled
+// by AI::Census::CountSettlers 0x55b880, read by AI::Army::AttackEnemyCatapults
+// 0x593180; emptied by AI_ResetAgentData). Was g_aiAgentVectors.
+inline constexpr GameGlobal<ai::AiVector[20]> g_aiCatapultVectors{0x7e7a24};
 // Per player a std::vector of {hunter settler, target settler} pairs (the
-// 16-byte vector objects start at 0x7e3688; like g_aiAgentVectors this
+// 16-byte vector objects start at 0x7e3688; like g_aiCatapultVectors this
 // array starts at the first vector's begin pointer). AI::Army::Reset
 // (0x591e00) empties them.
 inline constexpr GameGlobal<ai::AiVector[20]> g_aiHunterVectors{0x7e368c};
@@ -380,7 +382,31 @@ inline constexpr GameGlobal<ai::AiCommandSender> g_aiCommandSender{0x7e5de8};
 // The computer players' census (savegame chunk 0x16; AI_ResetAgentData,
 // the AI_Census functions).
 inline constexpr GameGlobal<ai::AiAgentData> g_aiCensus{0x7e5ef8};
-inline constexpr GameGlobal<std::uint32_t[20]> g_aiPerPlayer7e79d0{0x7e79d0};
+// AI::Census::CountSettlers 0x55b880: the step 0..8 of its slice state
+// machine and the last settler id counted so far.
+inline constexpr GameGlobal<std::uint32_t> g_aiCensusStep{0x7e06e0};
+inline constexpr GameGlobal<std::uint32_t> g_aiCensusCursor{0x7e0578};
+// AI::RunMilitary 0x58f990: per player the steps since the last
+// AttackEnemyCatapults 0x593180 (runs above 50; was g_aiPerPlayer7e79d0).
+inline constexpr GameGlobal<std::uint32_t[20]> g_aiCatapultHuntSteps{0x7e79d0};
+// AI::RunMilitary: 1 asks the upkeep to run RebuildAssignedSettlers at once
+// (AI::LoadState 0x596380 sets it); 1 also skips the next reset request
+// (g_aiSkipMilitaryReset).
+inline constexpr GameGlobal<std::uint8_t> g_aiRebuildSettlersPending{0x7e7cc8};
+// 1 asks T_ATTACK_AGENT::Run 0x55ec10 to pass the reset request to
+// AI::RunMilitary (set by the CComputerPlayer constructor 0x550900, cleared
+// after each Run).
+inline constexpr GameGlobal<std::uint8_t> g_aiMilitaryResetRequest{0x7e3410};
+inline constexpr GameGlobal<std::uint8_t> g_aiSkipMilitaryReset{0x7e7cc9};
+// Cleared by RunMilitary's reset (no other access found).
+inline constexpr GameGlobal<std::uint32_t> g_aiUnk7e7ccc{0x7e7ccc};
+inline constexpr GameGlobal<std::uint32_t> g_aiUnk7e7cd0{0x7e7cd0};
+// std::bitset<4000> of buildings (Rainer\CompMapWorkerAgent.cpp): a computer
+// player's military building whose bit is set has a garrison or one on the
+// way (set by AI::RunMilitary 0x58f990, read by
+// AI::FirstUnassignedMilitaryBuilding 0x58ae90; cleared by
+// AI::ProcessWorldEvents 0x590da0). Index checks call _Xran 0x58b520.
+inline constexpr GameGlobal<std::uint32_t[125]> g_aiGarrisonedBuildings{0x7e77dc};
 
 // ------------------------------------------------------------ Watcom skip lists
 // WCSkipNonTempBase::base_random_level (0x60bca0) draws node levels two bits

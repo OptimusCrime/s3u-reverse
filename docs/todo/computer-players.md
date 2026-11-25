@@ -12,13 +12,12 @@ LOGBOOK session entry).
   military-building searches, CheckGroupTargets, thieves/geologists,
   economy actions, woodcutter/stonecutter; session 55 (ai-econ): the
   residences, AreaInDirection, trees / stones near own fields, forced
-  production and tools, the request Execute chain and slots). Next: small
-  ones 0x58ae90 FirstUnassignedMilitaryBuilding, then FillAreaSiteLists
-  0x556630. Then SendHunter 0x5935b0 (unblocks HuntEnemyThieves/Mages)
-  and StartAttack 0x594080. Open: the meaning of AiGroupOrders +0x1c48
-  (`group_flags1c48`) and whether AiGroupTarget x / y are building ids
-  (NearestFreeInteriorMilitaryBuilding 0x58aa70 compares them with
-  building ids).
+  production and tools, the request Execute chain and slots; session 55
+  (ai-mil): RunMilitary 0x58f990 and T_ATTACK_AGENT::Run with all their
+  callees, the safety agent). Next: FillAreaSiteLists 0x556630, the
+  SiteTree containers and CEvaLand Init/ctor (see below), AI::LoadState
+  0x596380. AiGroupTarget holds two patrol buildings and a prey settler;
+  AiGroupOrders +0x1c48 is `patrol_steps` (session 55).
 - **Table names to revisit:** g_aiWantedGoldMines 0x65a8c8 /
   g_aiWantedWeaponsmiths 0x65a8d2 and g_aiWantedGoldMineSlopes 0x7e12b0 /
   g_aiWantedWeaponsmithSlopes 0x7e1290 are rows (Roman, Asian) of the
@@ -35,9 +34,14 @@ LOGBOOK session entry).
   which this sender never writes (stack garbage); the handler does
   nothing unless that byte equals the site's owner. So whether a computer
   player's site prioritisation works depends on the original's stack
-  contents. Next: log byte 6 against the site owner in a real game
-  (runtime observation), then decide how to reimplement it. The other 18
-  senders are verified (ai_commands.cpp).
+  contents. Session 55 confirmed it statically: the message is built on
+  the sender's own stack frame (bytes 3, 6, 7 never written), so byte 6
+  is whatever COMP_EmergencyPowersActStone 0x573560's earlier callees
+  left there; it can't be settled without running the game. Next: a
+  pass-through on 0x58e510 (or on MessageQueue::Push for id 0xf5 from the
+  AI) that logs byte 6 and the site's owner in a real game with computer
+  players, then decide (reproduce the observed value, or document a
+  known difference). The other 18 senders are verified (ai_commands.cpp).
 - **Package A5: Cevaland** (land evaluation) and **A6: the agents' run
   functions** (slot 8), smallest first; then 0x550f80 and the
   constructor 0x550900 / 0x550a30. Session 55 left the MSVC6 tree code

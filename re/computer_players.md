@@ -348,6 +348,130 @@ The economy agent tears down a residence when more than 10 beds are free
 soldiers (0x56a0f0, kinds 0x81..0x83) after 14 x AiPlayerSetup +0xc4 steps,
 at most 3 times (ComputerPlayer +0x768).
 
+Session 55 (V, `ai_army_orders.cpp`): the group "targets" at AiGroupOrders
++0x3e8 are two patrol buildings and a prey settler (AiGroupTarget
+`patrol0` / `patrol1` / `prey`; AI::RunMilitary 0x58f990 logs "Patrouille
+point 0 / 1" and sends the group to those buildings' positions). The three
+interior searches 0x58aa70 / 0x58acd0 / 0x58af60 are one body copied with
+small differences (InteriorSearch); 0x58af60 never finds anything
+(original bug). g_aiGarrisonedBuildings 0x7e77dc (std::bitset<4000>) marks
+military buildings with a garrison or one on the way;
+FirstUnassignedMilitaryBuilding 0x58ae90 returns the first tower / castle
+without that bit that no group patrols.
+
+Session 55 (V, `ai_army_groups.cpp`, `ai_army_attack.cpp`): the periodic
+army work. `FindSpareGroup` 0x5923e0 picks a spare group for an attack
+(quirk: TileDistance gets the building's x twice); `RebuildAssignedSettlers`
+0x591c40 rebuilds the settler bitset from groups and hunters and recounts
+mages; `AssignIdleUnits` 0x593cd0 puts the soldier and mage chains into
+groups. `TickAttackDelays` 0x594000 resets groups whose delay runs out.
+`AttackEnemyCatapults` 0x593180 sends the nearest group (>= 2 members, not
+defending) after each enemy catapult in the player's land (the per-player
+vectors at 0x7e7a24 are the catapults counted by the census:
+g_aiCatapultVectors, was g_aiAgentVectors); the group's AiGroupTarget prey
+is the catapult, the delay 70 - r % 17. `HuntEnemyThieves` /
+`HuntEnemyMages` 0x593ad0 / 0x593bd0 call `SendHunter` 0x5935b0 for every
+enemy thief / mage in the player's land: a free hunter of the player's
+hunter vector, else a soldier taken from the nearest group. Original bug:
+the soldier search tests the type of the group's last member eleven times
+instead of walking the members, so only a last member that is a
+swordsman, pikeman or bowman is taken. `RecruitGeologistsAndThieves`
+0x592e60 orders ConvertCarriers (want = other settlers / 64 + 1) in every
+area of a player with a residence while its census count is below that
+(the count is not re-checked per area, so every area gets an order). The
+census fields +0x2b4..+0x3f4 are now named (geologists, thieves, pioneers,
+other_settlers, all_settlers).
+
+Session 55 (V, `ai_safety_agent.cpp`): the T_SAFETY_AGENT (kind 9) runs
+every AiPlayerSetup +0x148 turns and then checks +0x14a grid cells: a cell
+whose centre tile is the player's gets a 16-bit danger sum over the 5 x 5
+cells around it from the player's building-type bitsets (AiGridCell
++0x24): setup weights +0x14c..+0x164 for gold smelter, gold mine,
+storehouse, weaponsmith, toolsmith, coal mine, iron mine, iron smelter,
+harbour and the race's war workshop, small and large temple (and the
+Asians' rice farm), -250 per large tower and -350 per castle cell. At 100
+or more, unless a Random % 100 falls below +0x166, it asks for a large
+tower (or, above 200 and a Random % 100 below +0x168, a castle) at the
+cell centre with priority 30000 (RecordBestCandidate), when fewer than 3
+of that type stand within 48 (64) and no site note of it is there.
+SafetyAgent in ai_layout.h.
+
+Session 55 (V, `ai_army_attack.cpp`): `StartAttack` 0x594080 (from
+RunMilitary with ratio = Player::soldier_strength / 256). In mission 56
+from tick 81000 the scripted assault; otherwise nothing in the first 31
+calls (AiArmyState +0x190), while a gather building is pending, below 15
+census soldiers, or while a group attacks. The enemy is the playing
+player of another team with towers / castles / barracks whose start
+position shares the player's walk region and whose team strength is the
+lowest (a computer enemy without an active teammate only on a Random draw
+below 200). Attack when soldiers x ratio x 0.75 exceed the enemy's, the
+enemy's team strength x 2.2 is below the own x ratio, or the soldiers
+exceed 4x the enemy's (missions 70 / 72 have exceptions for players 2 /
+1): the target is the enemy's weakest frontier building, dropped when more
+than 1.5 x (soldiers x ratio, as float) enemy soldiers are within 60; an
+enemy without towers but with barracks loses its first barracks instead
+when the player has enough spare groups. Up to 50 spare groups get the
+target (delay 2200 - r % 550) and go there, or first to the gather
+building (nearest interior military building, countdown 15). Otherwise a
+"steal": when soldiers minus own towers exceed 10, the first enemy
+military building with a spare, ready group in the same walk region within
+120 tiles whose tenth is at least the defenders within 60 (delay 900 - r %
+225, steal flag 1).
+
+Session 55 (V, `ai_world_events.cpp`, `ai_census_settlers.cpp`):
+`ProcessWorldEvents` 0x590da0 consumes the world's event ring
+(CGameData::events, read index advanced; the only reader): 1 / 5 a settler
+is gone (bitset bit cleared, hunter entry erased, hunters after it stop; a
+catapult leaves its owner's catapult vector and the groups hunting it are
+reset; otherwise empty groups are dissolved: "Army %d ist killed"); 2 a
+building is gone (garrison bit cleared, attacks on it reset, home and
+patrol buildings cleared); 3 a building changed hands (the new computer
+owner asks for its garrison and the first group that attacked it guards
+it: gather position, patrol building, home area and home building, unless
+a group already has that home area); 4 a building of a computer player is
+attacked: when its towers exceed twice its highest group and the attacker
+has three times its soldiers, or the enemies within 30 exceed twice its
+soldiers, all groups retreat into the castle (else tower) nearest to the
+start ("Einigeln", MilitaryBuildingNearestStart 0x58b1a0); otherwise the
+nearest groups defend it until their members reach the enemies ("Defend
+Tower"); 6 the areas changed: home areas follow the home buildings'
+doors. AiGroupOrders +0x190 is `home_buildings`. The census
+(`CountSettlers` 0x55b880) counts the settlers in 8 slices per pass (step
+0x7e06e0, cursor 0x7e0578), all at once on maps with fewer than 50 settler
+slots, and fills the catapult vectors.
+
+Session 55 (V, `ai_military.cpp`): **`AI::RunMilitary` 0x58f990** and
+`T_ATTACK_AGENT::Run` 0x55ec10 (the attack agent only calls it; its catch
+(...) logs "Marcus: FOE ATTACK EXCEPTION!" and rethrows). Per call:
+ProcessWorldEvents, then one task chosen by step counters (each fires when
+its old value is above the limit and restarts at 0): catapult hunt (> 50,
+g_aiCatapultHuntSteps 0x7e79d0), thief hunt (> 420), mage hunt (> 550),
+then by the military steps (> 150) the attack part or the upkeep. Upkeep:
+PruneHunters, then DisbandWeakGroups (> 1100, shared), CastBattleSpells
+(> 75), RebuildAssignedSettlers (> 2000 or the pending flag 0x7e7cc8 set by
+LoadState), RecruitGeologistsAndThieves (> 2800 once the settlers are
+counted), CountSettlers (> 1900; 1895 while a pass runs, so the slices
+follow each other), CountBuildings (> 700), else ComputeTeamStrength once
+both counts and census +2 are set. Attack part: ratio =
+soldier_strength / 256 (float); TickAttackDelays; gather countdown (groups
+with a target go to the gather building, "Gathering"); once the team
+strengths are valid: CheckGroupTargets, attacking groups that steal or
+of which at most 22 % fight are sent on ("Attack or Steal"), StartAttack,
+the garrison check (g_aiGarrisonedBuildings: a military building without
+garrison or soldiers on the way gets QueueChangeGarrison 5 (swordsman) or 3
+(bowman) from each group with such a soldier within 64; else "Eine Turm ist
+nicht besetzt" and the patrols go there first), AssignIdleUnits, patrol
+point 0 renewal or ReturnGroupHome, SendThieves, SendGeologists, then the
+patrols: each group of 1..highest without target or delay walks between
+its two patrol buildings for 5..8 steps (AiGroupOrders +0x1c48, the low
+two bits choose the point; "Next Step ..."), or gets new patrol points
+(the call ends after a new point 0: delay 500 - r % 125 near an unmanned
+tower, else v - r2 % (v / 4) with v = 10 + r1 % 16; a group standing in
+area 0 goes home, delay 35 - (r & 7)). Finding: AI::CastBattleSpells
+0x5953b0 indexes its four per-race flag dwords with the first mage's race
+byte (settler +2) unchecked: a race above 3 reads the caller's stack
+(never in a game: races are 0..3).
+
 ## How decisions reach the simulation
 
 Most decisions don't write the world directly (the world is read through

@@ -84,6 +84,33 @@
 //              its gather position (SendMoveGroup 0x590c80, x and y sign-
 //              extended). EAX = player * 5 (a leftover) for a small group,
 //              the bowmen count, or SendMoveGroup's.
+//   0x005923e0 AI::Army::FindSpareGroup(player, building, anyDelay)
+//              thiscall, ret 0xc: pairs the groups like CountSpareGroups,
+//              then among the spare groups 1..9 without a target building
+//              (census +4) that have at least half the group size members
+//              (signed): with building 0, the first whose attack delay
+//              (g_aiArmyState +0x194) is 0 is returned at once; otherwise
+//              the one whose first member is nearest (signed TileDistance,
+//              first on a tie) to the building: original quirk, kept,
+//              TileDistance gets the building's x as both x and y. The
+//              nearest one (or -1) becomes -1 when its attack delay is not
+//              0 and the byte `anyDelay` is 0 (for -1 that reads the dword
+//              before the player's group 0 delay; reproduced).
+//   0x00591c40 AI::Army::RebuildAssignedSettlers() thiscall: clears the
+//              settler bitset (+0xca8, 1000 dwords from the top down), then
+//              for every computer player (Player::active == 2) sets the bits
+//              of the members of groups 1..9 and counts the mages (type 36)
+//              per group (+0x988), and sets the bits of the hunters in the
+//              player's hunter vector (g_aiHunterVectors). Bitset indexes >=
+//              32000 call _Xran 0x596570. EAX is not used by the caller.
+//   0x00593cd0 AI::Army::AssignIdleUnits(player) thiscall, ret 4: walks the
+//              player's settler lists (Player::settler_lists, chains by
+//              Settler::next) of the nine soldier types in the order
+//              Swordsman1, Swordsman2, Swordsman3, Bowman1, Bowman2,
+//              Bowman3, Pikeman1, Pikeman2, Pikeman3 and of the mages in
+//              parallel, one settler of each per round: soldiers go to
+//              AssignSoldier 0x592820, mages to AssignMage 0x5926e0, until
+//              all ten chains ended. EAX is not used by the caller.
 
 #include "game/ai/ai_layout.h"
 #include "game/enums/settler_types.h"
@@ -98,6 +125,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -134,6 +162,8 @@ constexpr std::uintptr_t kSprintf = 0x0061f27e;              // the CRT's sprint
 constexpr std::uintptr_t kFirstMilitaryBuilding = 0x0058b380;  // AI::FirstMilitaryBuildingInArea (stdcall)
 constexpr std::uintptr_t kFirstBuilding = 0x0058b410;        // AI::FirstBuildingInArea (stdcall)
 constexpr std::uintptr_t kTileDistance = 0x004ff320;         // TileDistance (stdcall)
+constexpr std::uintptr_t kAssignSoldier = 0x00592820;        // AI::Army::AssignSoldier
+constexpr std::uintptr_t kAssignMage = 0x005926e0;           // AI::Army::AssignMage
 
 // A unit group's list length and members in the world (flat index player *
 // 10 + group, not range-checked).
@@ -257,6 +287,15 @@ std::uint32_t __fastcall AI_Army_AssignSoldier(AiGroupOrders* self, void* edx, s
 std::uint32_t __fastcall AI_Army_DisbandWeakGroups(AiGroupOrders* self, void* edx);
 std::uint32_t __fastcall AI_Army_ReturnGroupHome(AiGroupOrders* self, void* edx, std::uint32_t player,
                                                  std::uint32_t group);
+std::int32_t __fastcall AI_Army_FindSpareGroup(AiGroupOrders* self, void* edx, std::uint32_t player,
+                                               std::uint32_t building, std::uint8_t anyDelay);
+void __fastcall AI_Army_RebuildAssignedSettlers(AiGroupOrders* self, void* edx);
+void __fastcall AI_Army_AssignIdleUnits(AiGroupOrders* self, void* edx, std::uint32_t player);
+
+using FindSpareGroupFn = std::int32_t(__fastcall*)(AiGroupOrders* self, void* edx, std::uint32_t player,
+                                                   std::uint32_t building, std::uint8_t anyDelay);
+using RebuildFn = void(__fastcall*)(AiGroupOrders* self, void* edx);
+using AssignIdleFn = void(__fastcall*)(AiGroupOrders* self, void* edx, std::uint32_t player);
 
 S3RE_HOOK(0x00591c10, AI_Army_Army, ArmyCtorFn, Original_AI_Army_Army, AI_Army_Army);
 S3RE_HOOK(0x00593f40, AI_ArmyState_ArmyState, ArmyStateCtorFn, Original_AI_ArmyState_ArmyState,
@@ -272,6 +311,12 @@ S3RE_HOOK(0x00592820, AI_Army_AssignSoldier, ArmyPlayerGroupFn, Original_AI_Army
           AI_Army_AssignSoldier);
 S3RE_HOOK(0x00592bf0, AI_Army_DisbandWeakGroups, ArmyNoArgFn, Original_AI_Army_DisbandWeakGroups,
           AI_Army_DisbandWeakGroups);
+S3RE_HOOK(0x005923e0, AI_Army_FindSpareGroup, FindSpareGroupFn, Original_AI_Army_FindSpareGroup,
+          AI_Army_FindSpareGroup);
+S3RE_HOOK(0x00591c40, AI_Army_RebuildAssignedSettlers, RebuildFn, Original_AI_Army_RebuildAssignedSettlers,
+          AI_Army_RebuildAssignedSettlers);
+S3RE_HOOK(0x00593cd0, AI_Army_AssignIdleUnits, AssignIdleFn, Original_AI_Army_AssignIdleUnits,
+          AI_Army_AssignIdleUnits);
 S3RE_HOOK(0x00592620, AI_Army_ReturnGroupHome, ArmyPlayerGroupFn, Original_AI_Army_ReturnGroupHome,
           AI_Army_ReturnGroupHome);
 
@@ -352,12 +397,12 @@ std::uint32_t __fastcall AI_Army_MoveLastGroupInto(AiGroupOrders* self, void* /*
     targetBuildings[from] = 0;
     attackDelays[to] = 0;
     AiGroupTarget* targets = &self->group_targets[0][0];
-    targets[to].x = targets[from].x;
-    targets[to].y = targets[from].y;
-    targets[to].unk4 = targets[from].unk4;
-    targets[from].x = 0;
-    targets[from].y = 0;
-    targets[from].unk4 = 0;
+    targets[to].patrol0 = targets[from].patrol0;
+    targets[to].patrol1 = targets[from].patrol1;
+    targets[to].prey = targets[from].prey;
+    targets[from].patrol0 = 0;
+    targets[from].patrol1 = 0;
+    targets[from].prey = 0;
     std::uint8_t* defending = &census.group_defending[0][0];
     defending[to] = defending[from];
     defending[from] = 0;
@@ -556,6 +601,109 @@ std::uint32_t __fastcall AI_Army_ReturnGroupHome(AiGroupOrders* self, void* /*ed
                                                     gather.y);
 }
 
+// Purpose: Picks a computer player's spare unit group for an attack: the
+// one nearest to the target building, or (without a building) the first
+// one ready to go.
+std::int32_t __fastcall AI_Army_FindSpareGroup(AiGroupOrders* self, void* /*edx*/, std::uint32_t player,
+                                               std::uint32_t building, std::uint8_t anyDelay) {
+    bool spare[kUnitGroups];
+    FindSpareGroups(self, g_aiMapWorld, player, spare);
+    const std::uint32_t* delays = &g_aiArmyState.get().attack_delays[0][0];
+    const std::int32_t base = static_cast<std::int32_t>(player * kUnitGroups);
+    std::int32_t nearest = kFarthest;
+    std::int32_t result = -1;
+    for (std::uint32_t group = kFirstGroup; group <= kLastGroup; ++group) {
+        const std::uint32_t index = player * kUnitGroups + group;
+        CGameData* world = g_aiMapWorld;
+        if (!spare[group] || TargetBuilding(index) != 0 || ListLength(world, index) < self->group_size[player] / 2) {
+            continue;
+        }
+        if (building == 0 && delays[index] == 0) {
+            return static_cast<std::int32_t>(group);
+        }
+        const layout::Settler& first = world->settlers[ListMembers(world, index)[0]];
+        const std::uint16_t bx = (&world->buildings[0])[building].x;
+        using DistanceFn = std::int32_t(__stdcall*)(std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+        // original quirk: the building's x twice
+        const std::int32_t distance = reinterpret_cast<DistanceFn>(kTileDistance)(bx, bx, first.x, first.y);
+        if (distance < nearest) {
+            nearest = distance;
+            result = static_cast<std::int32_t>(group);
+        }
+    }
+    if (delays[base + result] != 0 && anyDelay == 0) {  // (index base - 1 for -1, reproduced)
+        result = -1;
+    }
+    return result;
+}
+
+// Purpose: Rebuilds the bitset of settlers that have military orders from
+// the computer players' unit groups and hunters (and recounts the mages per
+// group), every so often.
+void __fastcall AI_Army_RebuildAssignedSettlers(AiGroupOrders* self, void* /*edx*/) {
+    for (std::size_t word = sizeof(self->settlers_with_orders) / 4; word-- > 0;) {
+        reinterpret_cast<std::uint32_t*>(self->settlers_with_orders)[word] = 0;
+    }
+    for (std::uint32_t player = 0; player < kPlayers; ++player) {
+        if (g_aiMapWorld.get()->players[player].active != kComputerControlled) {
+            continue;
+        }
+        for (std::uint32_t group = kFirstGroup; group <= kLastGroup; ++group) {
+            const std::uint32_t index = player * kUnitGroups + group;
+            std::int32_t& mages = (&self->group_mages[0][0])[index];
+            mages = 0;
+            for (std::uint32_t k = 0; k < static_cast<std::uint32_t>(ListLength(g_aiMapWorld, index)); ++k) {
+                const std::uint32_t member = ListMembers(g_aiMapWorld, index)[k];
+                OrderWord(self->settlers_with_orders, member) |= OrderMask(member);
+                if (g_aiMapWorld.get()->settlers[ListMembers(g_aiMapWorld, index)[k]].art ==
+                    Value(SettlerType::Mage)) {
+                    ++mages;
+                }
+            }
+        }
+        const AiVector& hunters = g_aiHunterVectors.get()[player];
+        for (std::uint32_t entry = hunters.begin; entry != hunters.end; entry += 8) {
+            const std::uint32_t hunter = *reinterpret_cast<const std::uint32_t*>(entry);
+            OrderWord(self->settlers_with_orders, hunter) |= OrderMask(hunter);
+        }
+    }
+}
+
+// Purpose: Puts all of a computer player's soldiers and mages that are not
+// in a unit group yet into one, every so often.
+void __fastcall AI_Army_AssignIdleUnits(AiGroupOrders* self, void* /*edx*/, std::uint32_t player) {
+    // 0x593cf0..0x593d62: the chains in the original's order.
+    constexpr SettlerType kSoldierTypes[] = {
+        SettlerType::Swordsman1, SettlerType::Swordsman2, SettlerType::Swordsman3,
+        SettlerType::Bowman1,    SettlerType::Bowman2,    SettlerType::Bowman3,
+        SettlerType::Pikeman1,   SettlerType::Pikeman2,   SettlerType::Pikeman3,
+    };
+    const layout::Player& record = g_aiMapWorld.get()->players[player];
+    std::uint32_t soldiers[std::size(kSoldierTypes)];
+    for (std::size_t k = 0; k < std::size(kSoldierTypes); ++k) {
+        soldiers[k] = record.settler_lists[Value(kSoldierTypes[k])];
+    }
+    std::uint32_t mage = record.settler_lists[Value(SettlerType::Mage)];
+    using AssignFn = std::uint32_t(__fastcall*)(AiGroupOrders* self, void* edx, std::uint32_t player,
+                                                std::uint32_t settler);
+    bool any = false;
+    do {
+        any = false;
+        for (std::uint32_t& soldier : soldiers) {
+            if (soldier != 0) {
+                reinterpret_cast<AssignFn>(kAssignSoldier)(self, nullptr, player, soldier);
+                soldier = g_aiMapWorld.get()->settlers[soldier].next;
+                any = true;
+            }
+        }
+        if (mage != 0) {
+            reinterpret_cast<AssignFn>(kAssignMage)(self, nullptr, player, mage);
+            mage = g_aiMapWorld.get()->settlers[mage].next;
+            any = true;
+        }
+    } while (any);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -626,18 +774,23 @@ struct GroupFunctions {
     ArmyPlayerFn countSpareGroups, countSpareSoldiers;
     ArmyPlayerGroupFn moveLastGroupInto, assignMage, assignSoldier, returnGroupHome;
     ArmyNoArgFn disbandWeakGroups;
+    FindSpareGroupFn findSpareGroup;
+    RebuildFn rebuild;
+    AssignIdleFn assignIdle;
 };
 
 GroupFunctions OriginalGroupFunctions() {
     return {Original_AI_Army_CountSpareGroups, Original_AI_Army_CountSpareSoldiers, Original_AI_Army_MoveLastGroupInto,
             Original_AI_Army_AssignMage,       Original_AI_Army_AssignSoldier,      Original_AI_Army_ReturnGroupHome,
-            Original_AI_Army_DisbandWeakGroups};
+            Original_AI_Army_DisbandWeakGroups, Original_AI_Army_FindSpareGroup,
+            Original_AI_Army_RebuildAssignedSettlers, Original_AI_Army_AssignIdleUnits};
 }
 
 GroupFunctions OurGroupFunctions() {
     return {&AI_Army_CountSpareGroups, &AI_Army_CountSpareSoldiers, &AI_Army_MoveLastGroupInto,
             &AI_Army_AssignMage,       &AI_Army_AssignSoldier,      &AI_Army_ReturnGroupHome,
-            &AI_Army_DisbandWeakGroups};
+            &AI_Army_DisbandWeakGroups, &AI_Army_FindSpareGroup,
+            &AI_Army_RebuildAssignedSettlers, &AI_Army_AssignIdleUnits};
 }
 
 std::int32_t RandomLength(test::Rng& rng, std::int32_t size) {
@@ -656,8 +809,22 @@ std::int32_t RandomLength(test::Rng& rng, std::int32_t size) {
 // A random army: groups with lengths around the group size, members drawn
 // from a pool of settlers with soldier types, few home areas (so groups
 // pair up), small targets, flags and bitset words.
+// The hunter vectors' storage during the tests ({hunter, target} pairs).
+constexpr std::uint32_t kHuntersPerPlayer = 6;
+std::uint32_t g_testHunters[kPlayers][kHuntersPerPlayer][2];
+
 void SetUpArmy(test::Rng& rng, CGameData* world) {
     AiGroupOrders& orders = g_aiGroupOrders.get();
+    AiVector* hunters = g_aiHunterVectors;
+    for (std::uint32_t p = 0; p < kPlayers; ++p) {
+        const std::uint32_t count = rng.Chance(1, 3) ? 0 : rng.Below(kHuntersPerPlayer + 1);
+        for (std::uint32_t k = 0; k < kHuntersPerPlayer; ++k) {
+            g_testHunters[p][k][0] = 1 + rng.Below(kTestSettlers - 1);
+            g_testHunters[p][k][1] = rng.Below(kTestSettlers);
+        }
+        hunters[p].begin = reinterpret_cast<std::uint32_t>(&g_testHunters[p][0][0]);
+        hunters[p].end = hunters[p].begin + count * 8;
+    }
     rng.Fill(&orders, sizeof(orders));
     rng.Fill(&g_aiArmyState.get(), sizeof(AiArmyState));
     AiAgentData& census = g_aiCensus.get();
@@ -682,9 +849,18 @@ void SetUpArmy(test::Rng& rng, CGameData* world) {
     }
     for (std::uint32_t settler = 1; settler < kTestSettlers; ++settler) {
         layout::Settler& record = world->settlers[settler];
-        record.art = static_cast<std::uint8_t>(rng.Chance(1, 2) ? rng.Below(48) : 5 + rng.Below(31));
+        record.art = static_cast<std::uint8_t>(rng.Chance(1, 2) ? rng.Below(48) : 5 + rng.Below(32));
         record.x = static_cast<std::uint16_t>(rng.Below(64));
         record.y = static_cast<std::uint16_t>(rng.Below(64));
+        // chains of the settler lists: a later settler or the end
+        record.next = static_cast<std::uint16_t>(rng.Chance(1, 4) || settler + 40 >= kTestSettlers
+                                                     ? 0
+                                                     : settler + 1 + rng.Below(40));
+    }
+    for (std::uint32_t p = 0; p < kPlayers; ++p) {
+        for (std::uint16_t& head : world->players[p].settler_lists) {
+            head = static_cast<std::uint16_t>(rng.Chance(1, 3) ? 0 : 1 + rng.Below(kTestSettlers - 1));
+        }
     }
     if (rng.Chance(2, 3)) {  // sparse groups make "no melee soldier" likely
         for (std::uint32_t settler = 1; settler < kTestSettlers; ++settler) {
@@ -738,7 +914,7 @@ void CompareGroupFunctions(test::Context& ctx, const GroupFunctions& candidate, 
     for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
         test::Rng& rng = ctx.rng();
         SetUpArmy(rng, world);
-        const int op = static_cast<int>(rng.Below(7));
+        const int op = static_cast<int>(rng.Below(10));
         const std::uint32_t player = rng.Below(kPlayers);
         const std::uint32_t group = rng.Below(static_cast<std::uint32_t>(kUnitGroups));
         const std::uint32_t settler = 1 + rng.Below(kTestSettlers - 1);
@@ -750,6 +926,16 @@ void CompareGroupFunctions(test::Context& ctx, const GroupFunctions& candidate, 
         }
         bowmen = rng.Chance(1, 3) ? static_cast<std::int32_t>(rng.Below(3)) - 1 : 0;
         sendResult = rng.Next32();
+        const std::uint32_t building = rng.Chance(1, 3) ? 0 : rng.Below(kTestBuildings);
+        const auto anyDelay = static_cast<std::uint8_t>(rng.Chance(1, 2) ? 0 : 1 + rng.Below(255));
+        if (op == 7 && rng.Chance(1, 2)) {  // FindSpareGroup: some groups ready (delay 0)
+            for (std::uint32_t& delay : g_aiArmyState.get().attack_delays[player]) {
+                delay = rng.Chance(1, 2) ? 0 : delay;
+            }
+            for (std::uint16_t& target : g_aiCensus.get().group_target_buildings[player]) {
+                target = rng.Chance(2, 3) ? 0 : target;
+            }
+        }
         const ArmyBytes start = ArmyBytes::Capture(world);
         auto run = [&](const GroupFunctions& f, std::vector<std::string>& strings) {
             start.Restore(world);
@@ -762,7 +948,10 @@ void CompareGroupFunctions(test::Context& ctx, const GroupFunctions& candidate, 
             case 3: result = f.assignMage(self, nullptr, player, settler); break;
             case 4: result = f.assignSoldier(self, nullptr, player, settler); break;
             case 5: result = f.returnGroupHome(self, nullptr, player, group); break;
-            default: result = f.disbandWeakGroups(self, nullptr); break;
+            case 6: result = f.disbandWeakGroups(self, nullptr); break;
+            case 7: result = static_cast<std::uint32_t>(f.findSpareGroup(self, nullptr, player, building, anyDelay)); break;
+            case 8: f.rebuild(self, nullptr); break;
+            default: f.assignIdle(self, nullptr, player); break;
             }
             g_debugStrings = nullptr;
             return result;
@@ -870,6 +1059,44 @@ std::uint32_t __fastcall WrongReturnGroupHome(AiGroupOrders* self, void* edx, st
     return AI_Army_ReturnGroupHome(self, edx, player, group);
 }
 
+std::int32_t __fastcall WrongFindSpareGroup(AiGroupOrders* self, void* edx, std::uint32_t player,
+                                            std::uint32_t building, std::uint8_t anyDelay) {
+    // Wrong: the building's y instead of x twice ("fixes" the quirk the other way).
+    const std::uint32_t saved = g_aiMapWorld.get()->buildings[building].x;
+    g_aiMapWorld.get()->buildings[building].x = g_aiMapWorld.get()->buildings[building].y;
+    const std::int32_t result = AI_Army_FindSpareGroup(self, edx, player, building, anyDelay);
+    g_aiMapWorld.get()->buildings[building].x = static_cast<std::uint16_t>(saved);
+    return result;
+}
+
+void __fastcall WrongRebuild(AiGroupOrders* self, void* edx) {
+    // Wrong: forgets the hunters.
+    AiVector* hunters = g_aiHunterVectors;
+    std::uint32_t ends[kPlayers];
+    for (std::uint32_t p = 0; p < kPlayers; ++p) {
+        ends[p] = hunters[p].end;
+        hunters[p].end = hunters[p].begin;
+    }
+    AI_Army_RebuildAssignedSettlers(self, edx);
+    for (std::uint32_t p = 0; p < kPlayers; ++p) {
+        hunters[p].end = ends[p];
+    }
+}
+
+void __fastcall WrongAssignIdle(AiGroupOrders* self, void* edx, std::uint32_t player) {
+    // Wrong: the mages first.
+    layout::Player& record = g_aiMapWorld.get()->players[player];
+    std::uint16_t saved[std::size(record.settler_lists)];
+    std::memcpy(saved, record.settler_lists, sizeof(saved));
+    std::memset(record.settler_lists, 0, sizeof(saved));
+    record.settler_lists[Value(SettlerType::Mage)] = saved[Value(SettlerType::Mage)];
+    AI_Army_AssignIdleUnits(self, edx, player);
+    std::memcpy(record.settler_lists, saved, sizeof(saved));
+    record.settler_lists[Value(SettlerType::Mage)] = 0;
+    AI_Army_AssignIdleUnits(self, edx, player);
+    record.settler_lists[Value(SettlerType::Mage)] = saved[Value(SettlerType::Mage)];
+}
+
 }  // namespace
 
 S3RE_TEST(AiArmyGroups_MatchOriginal) {
@@ -889,6 +1116,9 @@ S3RE_TEST(AiArmyGroups_ComparisonDetectsWrongImplementation) {
     probe([](GroupFunctions& f) { f.assignSoldier = &WrongAssignSoldier; });
     probe([](GroupFunctions& f) { f.disbandWeakGroups = &WrongDisbandWeakGroups; });
     probe([](GroupFunctions& f) { f.returnGroupHome = &WrongReturnGroupHome; });
+    probe([](GroupFunctions& f) { f.findSpareGroup = &WrongFindSpareGroup; });
+    probe([](GroupFunctions& f) { f.rebuild = &WrongRebuild; });
+    probe([](GroupFunctions& f) { f.assignIdle = &WrongAssignIdle; });
 }
 
 // The constructors: on scratch copies (the army's on a buffer, with the
@@ -896,7 +1126,7 @@ S3RE_TEST(AiArmyGroups_ComparisonDetectsWrongImplementation) {
 S3RE_TEST(AiArmyConstructors_MatchOriginal) {
     std::vector<std::uint8_t> vectorsStart(sizeof(AiVector) * kPlayers);
     const std::vector<std::uint8_t> savedVectors = Bytes(&g_aiHunterVectors.get(), vectorsStart.size());
-    const std::vector<std::uint8_t> savedMarker = Bytes(&g_aiPerPlayer7e79d0.get(), sizeof(std::uint32_t[20]));
+    const std::vector<std::uint8_t> savedMarker = Bytes(&g_aiCatapultHuntSteps.get(), sizeof(std::uint32_t[20]));
     for (int i = 0; i < 40 && ctx.failures() == 0; ++i) {
         std::vector<std::uint8_t> a(sizeof(AiGroupOrders) + 32), b;
         ctx.rng().Fill(a.data(), a.size());
@@ -925,7 +1155,7 @@ S3RE_TEST(AiArmyConstructors_MatchOriginal) {
         }
     }
     std::memcpy(&g_aiHunterVectors.get(), savedVectors.data(), savedVectors.size());
-    std::memcpy(&g_aiPerPlayer7e79d0.get(), savedMarker.data(), savedMarker.size());
+    std::memcpy(&g_aiCatapultHuntSteps.get(), savedMarker.data(), savedMarker.size());
 }
 
 }  // namespace s3re::game

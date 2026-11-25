@@ -149,7 +149,7 @@ FreeGrid, GridCellOfTile, GridCellWrapped, GridSumAround, ResetGlobals),
   of counting the area).
 - **`g_aiGroupOrders` (0x7e37d0) is 0x20f8 bytes** (chunk 0x15), not 0x898;
   0x7e37d0 + 0x20f8 = 0x7e58c8.
-- AI::LoadGlobals 0x551210 / 0x596380 also copy `g_aiAgentVectors[i].begin`
+- AI::LoadGlobals 0x551210 / 0x596380 also copy `g_aiCatapultVectors[i].begin`
   into `.end` (0x7e3690 <- 0x7e368c and 0x7e7a28 <- 0x7e7a24 per 16 bytes:
   two arrays of 20 vectors, emptied) and set 0x7e7cc8 = 0x7e7cc9 = 1.
 - Census fields from AI::Census::CountSettlers 0x55b880:
@@ -158,7 +158,7 @@ FreeGrid, GridCellOfTile, GridCellWrapped, GridSumAround, ResetGlobals),
   "kinds 2/5/8 double" of ComputeTeamStrength are the level-3 soldiers.
   `dwords2b4` geologists (22), `dwords304` thieves (23), `dwords354`
   pioneers (40), `dwords3a4` all other settlers, `dwords3f4` all settlers
-  per player. `g_aiAgentVectors[p]` (0x7e7a24) = per player vector of the
+  per player. `g_aiCatapultVectors[p]` (0x7e7a24) = per player vector of the
   settler numbers of its catapults (type 41); rename to e.g.
   `g_aiCatapults`. Counting runs in 8 slices of the settler high-water
   mark (0x12a5e5c; state 0x7e06e0, position 0x7e0578), maps under 50
@@ -489,7 +489,7 @@ target building, census defending flag (plus g_aiGroupOrders +0x320/+0x3e8).
   SaveGame_sub_4a6310 = release chunk (id, 0). Worth naming in the
   SaveGames batch.
 - On load the AI also empties 20 vectors at 0x7e3688 (stride 0x10, 8-byte
-  elements; begin +4 = 0x7e368c, end +8 = 0x7e3690) and g_aiAgentVectors
+  elements; begin +4 = 0x7e368c, end +8 = 0x7e3690) and g_aiCatapultVectors
   0x7e7a24, and zeroes 0x7e79d0[20] and 0x7e40b8[20] (only when loading a
   saved state). Bytes 0x7e7cc8 / 0x7e7cc9 are set to 1 (0x7e7cc9 is set to
   0 before the fresh-game initialisation: probably an "AI state valid"

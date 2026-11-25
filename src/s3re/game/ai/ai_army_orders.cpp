@@ -7,7 +7,7 @@
 //              thiscall on g_aiEnemySearch, ret 0xc: among the player's
 //              finished small / large towers, castles and barracks (owner
 //              byte against the whole dword) that no unit group 1..9 of the
-//              player names in its target words (AiGroupTarget x or y)
+//              player patrols (AiGroupTarget patrol0 / patrol1)
 //              and that are not at the border, the nearest to (x, y)
 //              (TileDistance, signed, first on a tie) whose door area is
 //              the area of (x, y), or any if that is 0; its id, else 0.
@@ -16,6 +16,23 @@
 //              by), (bx + 18, by), (x - 9, by - 18) or (x + 9, by + 18)
 //              (original quirk, kept: the last two use the searched x
 //              instead of the building's).
+//   0x0058acd0 AI::NearestInteriorMilitaryBuilding(player, x, y) thiscall
+//              on g_aiEnemySearch, ret 0xc: the same search without the
+//              group patrol check and without the area of (x, y): the
+//              nearest interior one of those buildings (first on a tie).
+//   0x0058af60 AI::FreeInteriorMilitaryBuildingNear_AlwaysNone(player, x, y)
+//              thiscall on g_aiEnemySearch, ret 0xc: the same as
+//              0x58aa70 for small / large towers and castles (no
+//              barracks), but its best distance starts at 0 and a
+//              building is kept only when TileDistance is below it
+//              (signed): original bug, it always returns 0 (TileDistance
+//              is never negative). Kept.
+//   0x0058ae90 AI::FirstUnassignedMilitaryBuilding(player) thiscall on
+//              g_aiEnemySearch (unused), ret 4: the first of the player's
+//              small / large towers and castles (any buildup) whose bit
+//              in g_aiGarrisonedBuildings (std::bitset<4000>; an id >=
+//              4000 calls its _Xran 0x58b520, which throws) is clear and
+//              that no group 1..9 of the player patrols; its id, else 0.
 //   0x0058a7e0 AI::WeakestFrontierMilitaryBuilding(unused, player, region)
 //              thiscall on g_aiEnemySearch, ret 0xc: among the player's
 //              finished small / large towers and castles whose door tile is
@@ -117,6 +134,7 @@ namespace {
 
 constexpr std::uint32_t kGroupSlots = 100;
 constexpr std::uint32_t kOrderBits = 32000;
+constexpr std::uint32_t kGarrisonBits = 4000;         // g_aiGarrisonedBuildings is a std::bitset<4000>
 constexpr std::uint32_t kFirstGroup = 1;
 constexpr std::uint32_t kLastGroup = 9;
 constexpr std::int32_t kFarthest = 0x7fffffff;
@@ -164,6 +182,7 @@ constexpr std::uintptr_t kSendPatrolSettler = 0x00590af0;     // AI::SendPatrolS
 constexpr std::uintptr_t kSendMoveGroup = 0x00590c80;         // AI::SendMoveGroup
 constexpr std::uintptr_t kSprintf = 0x0061f27e;               // the CRT's sprintf
 constexpr std::uintptr_t kDebugLog = 0x00428720;              // DebugLog (cdecl)
+constexpr std::uintptr_t kGarrisonXran = 0x0058b520;          // std::bitset::_Xran of g_aiGarrisonedBuildings (throws)
 
 std::uint32_t Random() {
     using Fn = std::uint32_t(__fastcall*)(CGameData* world, void* edx);
@@ -246,7 +265,7 @@ std::uint32_t& OrderWord(std::uint32_t settler) {
 bool UsedByGroup(std::uint32_t player, std::uint32_t building) {
     const AiGroupTarget* targets = &g_aiGroupOrders.get().group_targets[0][0] + player * kUnitGroups;
     for (std::uint32_t group = kFirstGroup; group <= kLastGroup; ++group) {
-        if (targets[group].x == building || targets[group].y == building) {
+        if (targets[group].patrol0 == building || targets[group].patrol1 == building) {
             return true;
         }
     }
@@ -258,6 +277,84 @@ bool OtherAreaAt(std::uint32_t x, std::uint32_t y, std::uint32_t area) {
     using Fn = std::int32_t(__stdcall*)(std::uint32_t x, std::uint32_t y);
     const auto found = static_cast<std::uint32_t>(reinterpret_cast<Fn>(kFreeTileArea)(x, y));
     return found != area && found != 0;
+}
+
+// The three searches for an own military building away from the border
+// (0x58aa70, 0x58acd0, 0x58af60: one body in the original, copied three
+// times with these differences).
+struct InteriorSearch {
+    bool barracks;               // barracks count (not in 0x58af60)
+    bool skipPatrolled;          // skip buildings a group patrols (not in 0x58acd0)
+    std::int32_t startDistance;  // the best distance at the start
+    bool samePointArea;          // keep only doors in the area of (x, y), or any if that is 0 (not in 0x58acd0)
+};
+constexpr InteriorSearch kNearestFreeSearch{true, true, kFarthest, true};  // 0x58aa70
+constexpr InteriorSearch kNearestSearch{true, false, kFarthest, false};    // 0x58acd0
+// 0x58af60: original bug, the best distance starts at 0 and only a smaller
+// (negative) TileDistance would be kept, so it finds nothing.
+constexpr InteriorSearch kAlwaysNoneSearch{false, true, 0, true};
+
+std::uint32_t FindInteriorMilitaryBuilding(std::uint32_t player, std::uint32_t x, std::uint32_t y,
+                                           const InteriorSearch& search) {
+    // (0x58acd0 doesn't read the point's tile at all)
+    const std::uint16_t pointArea = search.samePointArea ? TileAt(g_aiMapWorld, x, y).area : 0;
+    std::int32_t nearest = search.startDistance;
+    std::uint32_t result = 0;
+    for (std::uint32_t id = 1; id < g_aiMapWorld.get()->building_high_water + 1; ++id) {
+        const layout::Building& building = BuildingAt(g_aiMapWorld, id);
+        if (building.owner != player || building.buildup != 0) {
+            continue;
+        }
+        switch (static_cast<BuildingType>(building.art)) {
+        case BuildingType::SmallTower:
+        case BuildingType::LargeTower:
+        case BuildingType::Castle:
+            break;
+        case BuildingType::Barracks:
+            if (search.barracks) {
+                break;
+            }
+            continue;
+        default:
+            continue;
+        }
+        if (search.skipPatrolled && UsedByGroup(player, id)) {
+            continue;
+        }
+        const std::uint32_t bx = building.x;
+        const std::uint32_t by = building.y;
+        const std::uint16_t area = TileAt(g_aiMapWorld, building.door_x, building.door_y).area;
+        bool border = OtherAreaAt(bx - kBorderStep, by, area);
+        border |= OtherAreaAt(bx + kBorderStep, by, area);
+        border |= OtherAreaAt(x - kBorderHalfStep, by - kBorderStep, area);  // the searched x (original quirk)
+        if (OtherAreaAt(x + kBorderHalfStep, by + kBorderStep, area) || border) {
+            continue;
+        }
+        const std::int32_t distance = TileDistance(x, y, building.x, building.y);
+        if (distance >= nearest) {
+            continue;
+        }
+        if (search.samePointArea) {
+            const layout::Building& again = BuildingAt(g_aiMapWorld, id);
+            const std::uint16_t doorArea = TileAt(g_aiMapWorld, again.door_x, again.door_y).area;
+            if (doorArea != pointArea && pointArea != 0) {
+                continue;
+            }
+        }
+        nearest = distance;
+        result = id;
+    }
+    return result;
+}
+
+// The dword of g_aiGarrisonedBuildings holding a building's bit, checked
+// like std::bitset<4000> (>= 4000: _Xran 0x58b520, which throws).
+std::uint32_t GarrisonWord(std::uint32_t building) {
+    if (building >= kGarrisonBits) {
+        using XranFn = void(__fastcall*)(void* self, void* edx);
+        reinterpret_cast<XranFn>(kGarrisonXran)(&g_aiGarrisonedBuildings.get(), nullptr);
+    }
+    return g_aiGarrisonedBuildings.get()[building >> 5];
 }
 
 // The territory radius of the military building types the frontier search
@@ -329,6 +426,7 @@ using NearestFreeFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uin
 using WeakestFrontierFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t unused,
                                                      std::uint32_t player, std::int32_t region);
 using NoArgFn = std::uint32_t(__fastcall*)(void* ecx, void* edx);
+using FirstUnassignedFn = std::uint32_t(__fastcall*)(void* self, void* edx, std::uint32_t player);
 using CheckTargetsFn = void(__fastcall*)(std::uint32_t player, void* edx, float ratio);
 using PlayerFn = void(__fastcall*)(std::uint32_t player, void* edx);
 
@@ -336,6 +434,12 @@ std::uint32_t __fastcall AI_NearestFreeInteriorMilitaryBuilding(void* self, void
                                                                 std::uint32_t x, std::uint32_t y);
 std::uint32_t __fastcall AI_WeakestFrontierMilitaryBuilding(void* self, void* edx, std::uint32_t unused,
                                                             std::uint32_t player, std::int32_t region);
+std::uint32_t __fastcall AI_NearestInteriorMilitaryBuilding(void* self, void* edx, std::uint32_t player,
+                                                            std::uint32_t x, std::uint32_t y);
+std::uint32_t __fastcall AI_FreeInteriorMilitaryBuildingNear_AlwaysNone(void* self, void* edx,
+                                                                        std::uint32_t player, std::uint32_t x,
+                                                                        std::uint32_t y);
+std::uint32_t __fastcall AI_FirstUnassignedMilitaryBuilding(void* self, void* edx, std::uint32_t player);
 std::uint32_t __fastcall AI_Mission56FinalAssault(void* ecx, void* edx);
 void __fastcall AI_Army_CheckGroupTargets(std::uint32_t player, void* edx, float ratio);
 std::uint32_t __fastcall AI_RandomPointNearSettler(std::uint32_t settler, std::int32_t* x, std::int32_t* y);
@@ -345,6 +449,12 @@ void __fastcall AI_SendGeologists(std::uint32_t player, void* edx);
 
 S3RE_HOOK(0x0058aa70, AI_NearestFreeInteriorMilitaryBuilding, NearestFreeFn,
           Original_AI_NearestFreeInteriorMilitaryBuilding, AI_NearestFreeInteriorMilitaryBuilding);
+S3RE_HOOK(0x0058acd0, AI_NearestInteriorMilitaryBuilding, NearestFreeFn, Original_AI_NearestInteriorMilitaryBuilding,
+          AI_NearestInteriorMilitaryBuilding);
+S3RE_HOOK(0x0058af60, AI_FreeInteriorMilitaryBuildingNear_AlwaysNone, NearestFreeFn,
+          Original_AI_FreeInteriorMilitaryBuildingNear_AlwaysNone, AI_FreeInteriorMilitaryBuildingNear_AlwaysNone);
+S3RE_HOOK(0x0058ae90, AI_FirstUnassignedMilitaryBuilding, FirstUnassignedFn,
+          Original_AI_FirstUnassignedMilitaryBuilding, AI_FirstUnassignedMilitaryBuilding);
 S3RE_HOOK(0x0058a7e0, AI_WeakestFrontierMilitaryBuilding, WeakestFrontierFn,
           Original_AI_WeakestFrontierMilitaryBuilding, AI_WeakestFrontierMilitaryBuilding);
 S3RE_HOOK(0x00594d40, AI_Mission56FinalAssault, NoArgFn, Original_AI_Mission56FinalAssault, AI_Mission56FinalAssault);
@@ -358,50 +468,53 @@ S3RE_HOOK(0x00594e70, AI_SendThieves, PlayerFn, Original_AI_SendThieves, AI_Send
 S3RE_HOOK(0x00595050, AI_SendGeologists, PlayerFn, Original_AI_SendGeologists, AI_SendGeologists);
 
 // Purpose: Finds the computer player's nearest military building inside
-// its land (not at the border, not used by a unit group), probably as a
-// gathering place for a unit group.
+// its land (not at the border, not used by a unit group), as a unit
+// group's patrol point.
 std::uint32_t __fastcall AI_NearestFreeInteriorMilitaryBuilding(void* /*self*/, void* /*edx*/, std::uint32_t player,
                                                                 std::uint32_t x, std::uint32_t y) {
-    const std::uint16_t pointArea = TileAt(g_aiMapWorld, x, y).area;
-    std::int32_t nearest = kFarthest;
-    std::uint32_t result = 0;
+    return FindInteriorMilitaryBuilding(player, x, y, kNearestFreeSearch);
+}
+
+// Purpose: Finds the computer player's nearest military building inside
+// its land (not at the border), as the place a new attack's soldiers
+// gather (StartAttack 0x594080).
+std::uint32_t __fastcall AI_NearestInteriorMilitaryBuilding(void* /*self*/, void* /*edx*/, std::uint32_t player,
+                                                            std::uint32_t x, std::uint32_t y) {
+    return FindInteriorMilitaryBuilding(player, x, y, kNearestSearch);
+}
+
+// Purpose: Meant to find a free interior tower or castle near a point as a
+// unit group's patrol point, but it never finds one (original bug, see
+// the file header).
+std::uint32_t __fastcall AI_FreeInteriorMilitaryBuildingNear_AlwaysNone(void* /*self*/, void* /*edx*/,
+                                                                        std::uint32_t player, std::uint32_t x,
+                                                                        std::uint32_t y) {
+    return FindInteriorMilitaryBuilding(player, x, y, kAlwaysNoneSearch);
+}
+
+// Purpose: Finds the computer player's first tower or castle that has no
+// garrison (and none on the way) and that no unit group patrols, so that
+// a group can be sent to guard it.
+std::uint32_t __fastcall AI_FirstUnassignedMilitaryBuilding(void* /*self*/, void* /*edx*/, std::uint32_t player) {
     for (std::uint32_t id = 1; id < g_aiMapWorld.get()->building_high_water + 1; ++id) {
         const layout::Building& building = BuildingAt(g_aiMapWorld, id);
-        if (building.owner != player || building.buildup != 0) {
+        if (building.owner != player) {
             continue;
         }
         switch (static_cast<BuildingType>(building.art)) {
         case BuildingType::SmallTower:
         case BuildingType::LargeTower:
         case BuildingType::Castle:
-        case BuildingType::Barracks:
             break;
         default:
             continue;
         }
-        if (UsedByGroup(player, id)) {
+        if ((GarrisonWord(id) & (1u << (id & 31))) != 0 || UsedByGroup(player, id)) {
             continue;
         }
-        const std::uint32_t bx = building.x;
-        const std::uint32_t by = building.y;
-        const std::uint16_t area = TileAt(g_aiMapWorld, building.door_x, building.door_y).area;
-        bool border = OtherAreaAt(bx - kBorderStep, by, area);
-        border |= OtherAreaAt(bx + kBorderStep, by, area);
-        border |= OtherAreaAt(x - kBorderHalfStep, by - kBorderStep, area);  // the searched x (original quirk)
-        if (OtherAreaAt(x + kBorderHalfStep, by + kBorderStep, area) || border) {
-            continue;
-        }
-        const std::int32_t distance = TileDistance(x, y, building.x, building.y);
-        if (distance < nearest) {
-            const layout::Building& again = BuildingAt(g_aiMapWorld, id);
-            const std::uint16_t doorArea = TileAt(g_aiMapWorld, again.door_x, again.door_y).area;
-            if (doorArea == pointArea || pointArea == 0) {
-                nearest = distance;
-                result = id;
-            }
-        }
+        return id;
     }
-    return result;
+    return 0;
 }
 
 // Purpose: Finds the computer player's weakest guarded military building
@@ -474,9 +587,9 @@ std::uint32_t __fastcall AI_Mission56FinalAssault(void* /*ecx*/, void* /*edx*/) 
     std::uint32_t sent = 0;
     for (std::uint32_t group = kFirstGroup; group <= kLastGroup; ++group) {
         AiGroupTarget& words = orders.group_targets[kAttacker][group];
-        words.x = 0;
-        words.y = 0;
-        words.unk4 = 0;
+        words.patrol0 = 0;
+        words.patrol1 = 0;
+        words.prey = 0;
         g_aiCensus.get().group_target_buildings[kAttacker][group] = static_cast<std::uint16_t>(target);
         orders.group_flags[kAttacker][group] = 0;
         const std::uint32_t draw = Random() & 0xffff;
@@ -729,20 +842,26 @@ struct OrderFunctions {
     CheckTargetsFn checkTargets;
     PointFn pointNear, pointFar;
     PlayerFn sendThieves, sendGeologists;
+    NearestFreeFn nearest, alwaysNone;
+    FirstUnassignedFn firstUnassigned;
 };
 
 OrderFunctions OriginalOrderFunctions() {
     return {Original_AI_NearestFreeInteriorMilitaryBuilding, Original_AI_WeakestFrontierMilitaryBuilding,
             Original_AI_Mission56FinalAssault,              Original_AI_Army_CheckGroupTargets,
             Original_AI_RandomPointNearSettler,             Original_AI_RandomPointNearSettlerFar,
-            Original_AI_SendThieves,                        Original_AI_SendGeologists};
+            Original_AI_SendThieves,                        Original_AI_SendGeologists,
+            Original_AI_NearestInteriorMilitaryBuilding,    Original_AI_FreeInteriorMilitaryBuildingNear_AlwaysNone,
+            Original_AI_FirstUnassignedMilitaryBuilding};
 }
 
 OrderFunctions OurOrderFunctions() {
     return {&AI_NearestFreeInteriorMilitaryBuilding, &AI_WeakestFrontierMilitaryBuilding,
             &AI_Mission56FinalAssault,              &AI_Army_CheckGroupTargets,
             &AI_RandomPointNearSettler,             &AI_RandomPointNearSettlerFar,
-            &AI_SendThieves,                        &AI_SendGeologists};
+            &AI_SendThieves,                        &AI_SendGeologists,
+            &AI_NearestInteriorMilitaryBuilding,    &AI_FreeInteriorMilitaryBuildingNear_AlwaysNone,
+            &AI_FirstUnassignedMilitaryBuilding};
 }
 
 std::uint16_t SmallCoordinate(test::Rng& rng) { return static_cast<std::uint16_t>(rng.Below(kTestMap)); }
@@ -825,10 +944,13 @@ void SetUpOrders(test::Rng& rng, CGameData* world) {
                 static_cast<std::uint16_t>(rng.Chance(1, 3) ? 0 : 1 + rng.Below(kTestBuildings - 1));
             census.group_defending[p][g] = static_cast<std::uint8_t>(rng.Chance(2, 3) ? 0 : 1);
             orders.group_flags[p][g] = static_cast<std::uint8_t>(rng.Chance(2, 3) ? 0 : 1);
-            orders.group_targets[p][g].x = static_cast<std::uint16_t>(rng.Chance(1, 2) ? 0 : rng.Below(kTestBuildings));
-            orders.group_targets[p][g].y = static_cast<std::uint16_t>(rng.Chance(1, 2) ? 0 : rng.Below(kTestBuildings));
+            orders.group_targets[p][g].patrol0 = static_cast<std::uint16_t>(rng.Chance(1, 2) ? 0 : rng.Below(kTestBuildings));
+            orders.group_targets[p][g].patrol1 = static_cast<std::uint16_t>(rng.Chance(1, 2) ? 0 : rng.Below(kTestBuildings));
             orders.home_areas[p][g] = static_cast<std::uint16_t>(rng.Below(3));
         }
+    }
+    for (std::uint32_t& word : g_aiGarrisonedBuildings.get()) {
+        word = rng.Chance(1, 2) ? 0 : rng.Next32() & rng.Next32();
     }
     for (std::uint32_t word = 0; word < kTestSettlers / 32 + 1; ++word) {
         reinterpret_cast<std::uint32_t*>(orders.settlers_with_orders)[word] = rng.Chance(1, 2) ? 0 : rng.Next32();
@@ -856,6 +978,8 @@ void CompareOrderFunctions(test::Context& ctx, const OrderFunctions& candidate, 
     test::WorldBuffer buffer(sizeof(CGameData));
     CGameData* world = buffer.world();
     const OrderState saved = OrderState::Capture(world);
+    const std::vector<std::uint8_t> savedGarrisons =
+        Bytes(&g_aiGarrisonedBuildings.get(), sizeof(g_aiGarrisonedBuildings.get()));
     CGameData* savedMapWorld = g_aiMapWorld;
     CGameData* savedWorld = g_aiWorld;
     g_aiMapWorld = world;
@@ -881,7 +1005,7 @@ void CompareOrderFunctions(test::Context& ctx, const OrderFunctions& candidate, 
         if (i % 4 == 0) {
             SetUpOrders(rng, world);
         }
-        const int op = static_cast<int>(rng.Below(8));
+        const int op = static_cast<int>(rng.Below(11));
         const std::uint32_t player = rng.Below(3);
         const std::uint32_t x = rng.Below(kTestMap);
         const std::uint32_t y = rng.Below(kTestMap);
@@ -914,7 +1038,10 @@ void CompareOrderFunctions(test::Context& ctx, const OrderFunctions& candidate, 
             case 4: out.result = f.pointNear(settler, &out.px, &out.py); break;
             case 5: out.result = f.pointFar(settler, &out.px, &out.py); break;
             case 6: f.sendThieves(player, nullptr); break;
-            default: f.sendGeologists(player, nullptr); break;
+            case 7: f.sendGeologists(player, nullptr); break;
+            case 8: out.result = f.nearest(&g_aiEnemySearch.get(), nullptr, player, x, y); break;
+            case 9: out.result = f.alwaysNone(&g_aiEnemySearch.get(), nullptr, player, x, y); break;
+            default: out.result = f.firstUnassigned(&g_aiEnemySearch.get(), nullptr, player); break;
             }
             g_strings = nullptr;
             out.state = OrderState::Capture(world);
@@ -941,6 +1068,7 @@ void CompareOrderFunctions(test::Context& ctx, const OrderFunctions& candidate, 
     }
     test::UnpatchBytes(reinterpret_cast<std::uintptr_t>(&g_importOutputDebugStringA.get()));
     saved.Restore(world);
+    std::memcpy(&g_aiGarrisonedBuildings.get(), savedGarrisons.data(), savedGarrisons.size());
     g_aiMapWorld = savedMapWorld;
     g_aiWorld = savedWorld;
 }
@@ -1034,6 +1162,30 @@ void __fastcall WrongSendGeologists(std::uint32_t player, void* edx) {
     AI_SendGeologists(player, edx);
 }
 
+std::uint32_t __fastcall WrongNearest(void* self, void* edx, std::uint32_t player, std::uint32_t x, std::uint32_t y) {
+    // Wrong: skips the buildings a group patrols.
+    (void)self;
+    (void)edx;
+    return FindInteriorMilitaryBuilding(player, x, y, InteriorSearch{true, true, kFarthest, false});
+}
+
+std::uint32_t __fastcall WrongAlwaysNone(void* self, void* edx, std::uint32_t player, std::uint32_t x,
+                                         std::uint32_t y) {
+    // Wrong: fixes the original bug (the best distance starts at the farthest).
+    (void)self;
+    (void)edx;
+    return FindInteriorMilitaryBuilding(player, x, y, InteriorSearch{false, true, kFarthest, true});
+}
+
+std::uint32_t __fastcall WrongFirstUnassigned(void* self, void* edx, std::uint32_t player) {
+    // Wrong: ignores the garrison bits.
+    std::vector<std::uint8_t> bits = Bytes(&g_aiGarrisonedBuildings.get(), sizeof(g_aiGarrisonedBuildings.get()));
+    std::memset(&g_aiGarrisonedBuildings.get(), 0, bits.size());
+    const std::uint32_t result = AI_FirstUnassignedMilitaryBuilding(self, edx, player);
+    std::memcpy(&g_aiGarrisonedBuildings.get(), bits.data(), bits.size());
+    return result;
+}
+
 }  // namespace
 
 S3RE_TEST(AiArmyOrders_MatchOriginal) {
@@ -1058,6 +1210,9 @@ S3RE_TEST(AiArmyOrders_ComparisonDetectsWrongImplementation) {
     probe([](OrderFunctions& f) { f.pointNear = &WrongPointNear; });
     probe([](OrderFunctions& f) { f.sendThieves = &WrongSendThieves; });
     probe([](OrderFunctions& f) { f.sendGeologists = &WrongSendGeologists; });
+    probe([](OrderFunctions& f) { f.nearest = &WrongNearest; });
+    probe([](OrderFunctions& f) { f.alwaysNone = &WrongAlwaysNone; });
+    probe([](OrderFunctions& f) { f.firstUnassigned = &WrongFirstUnassigned; });
 }
 
 }  // namespace s3re::game

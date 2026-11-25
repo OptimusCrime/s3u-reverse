@@ -45,7 +45,7 @@
 //   0x00593f50 AI_ArmyState_Reset() thiscall (on g_aiArmyState): the
 //              per-player arrays (25 * player, zeros, 2000000), group
 //              attack delays 1..9 = 10 + 2 * group, the scalars (300, 500,
-//              2000000) and g_aiPerPlayer7e79d0 = 0. EAX = this.
+//              2000000) and g_aiCatapultHuntSteps = 0. EAX = this.
 
 #include "game/ai/ai_layout.h"
 #include "game/enums/races.h"
@@ -319,9 +319,9 @@ std::uint32_t __stdcall AI_ResetUnitGroup(std::uint32_t player, std::uint32_t gr
     (&census.group_target_buildings[0][0])[index] = 0;
     (&army.attack_delays[0][0])[index] = 0;
     AiGroupTarget& target = (&orders.group_targets[0][0])[index];
-    target.x = 0;
-    target.y = 0;
-    target.unk4 = 0;
+    target.patrol0 = 0;
+    target.patrol1 = 0;
+    target.prey = 0;
     (&orders.group_flags[0][0])[index] = 0;
     return index;
 }
@@ -330,25 +330,25 @@ std::uint32_t __stdcall AI_ResetUnitGroup(std::uint32_t player, std::uint32_t gr
 // and when the AI state is loaded).
 std::uint32_t __fastcall AI_ArmyState_Reset(AiArmyState* self, void* /*edx*/) {
     for (std::size_t p = 0; p < kPlayers; ++p) {
-        self->per_player000[p] = kPlayerStep000 * static_cast<std::uint32_t>(p);
-        self->per_player050[p] = 0;
-        self->per_player0a0[p] = 0;
-        self->per_player0f0[p] = 0;
-        self->per_player140[p] = 0;
-        g_aiPerPlayer7e79d0[p] = 0;
+        self->military_steps[p] = kPlayerStep000 * static_cast<std::uint32_t>(p);
+        self->spell_steps[p] = 0;
+        self->gather_countdowns[p] = 0;
+        self->thief_hunt_steps[p] = 0;
+        self->mage_hunt_steps[p] = 0;
+        g_aiCatapultHuntSteps[p] = 0;
         self->geologist_timers[p] = kFar;
         // Groups 1..9 (the original's row pointer starts at +0x198).
         for (std::uint32_t group = 1; group < kUnitGroups; ++group) {
             self->attack_delays[p][group] = 10 + 2 * group;
         }
     }
-    self->unk190 = 0;
-    self->unk504 = kUnk504;
-    self->unk50c = kUnk50c;
-    for (std::uint32_t& value : self->unk510) {
-        value = kFar;
+    self->start_attack_calls = 0;
+    self->disband_steps = kUnk504;
+    self->recruit_steps = kUnk50c;
+    for (std::uint32_t* value : {&self->settler_census_steps, &self->building_census_steps, &self->unk518}) {
+        *value = kFar;
     }
-    self->unk508 = 0;
+    self->rebuild_steps = 0;
     return reinterpret_cast<std::uint32_t>(self);
 }
 
@@ -402,7 +402,7 @@ struct Saved {
     std::vector<std::uint8_t> army{ArmyBlock(), ArmyBlock() + kArmyBlockBytes};
     AiGroupOrders orders = g_aiGroupOrders;
     std::uint32_t perPlayer[kPlayers];
-    Saved() { std::memcpy(perPlayer, g_aiPerPlayer7e79d0.get(), sizeof(perPlayer)); }
+    Saved() { std::memcpy(perPlayer, g_aiCatapultHuntSteps.get(), sizeof(perPlayer)); }
     ~Saved() {
         g_aiWorld = world;
         g_aiPlayer = player;
@@ -410,7 +410,7 @@ struct Saved {
         g_aiMapSizeY = sizeY;
         std::memcpy(ArmyBlock(), army.data(), kArmyBlockBytes);
         g_aiGroupOrders = orders;
-        std::memcpy(g_aiPerPlayer7e79d0.get(), perPlayer, sizeof(perPlayer));
+        std::memcpy(g_aiCatapultHuntSteps.get(), perPlayer, sizeof(perPlayer));
     }
 };
 
@@ -546,15 +546,15 @@ void CompareSiteQueries(test::Context& ctx, const SiteQueries& candidate, int ca
         default: {
             ctx.rng().Fill(a.data(), a.size());
             b = a;
-            ctx.rng().Fill(g_aiPerPlayer7e79d0.get(), 4 * kPlayers);
+            ctx.rng().Fill(g_aiCatapultHuntSteps.get(), 4 * kPlayers);
             ra = original.armyReset(reinterpret_cast<AiArmyState*>(a.data()), nullptr) -
                  reinterpret_cast<std::uint32_t>(a.data());
-            std::memcpy(perA.data(), g_aiPerPlayer7e79d0.get(), perA.size());
-            ctx.rng().Fill(g_aiPerPlayer7e79d0.get(), 4 * kPlayers);
+            std::memcpy(perA.data(), g_aiCatapultHuntSteps.get(), perA.size());
+            ctx.rng().Fill(g_aiCatapultHuntSteps.get(), 4 * kPlayers);
             rb = candidate.armyReset(reinterpret_cast<AiArmyState*>(b.data()), nullptr) -
                  reinterpret_cast<std::uint32_t>(b.data());
             same &= S3RE_EXPECT_MEM_EQ(a.data(), b.data(), a.size());
-            same &= S3RE_EXPECT_MEM_EQ(perA.data(), g_aiPerPlayer7e79d0.get(), perA.size());
+            same &= S3RE_EXPECT_MEM_EQ(perA.data(), g_aiCatapultHuntSteps.get(), perA.size());
             break;
         }
         }

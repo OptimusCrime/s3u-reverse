@@ -75,7 +75,7 @@ struct AttackAgent {
     std::uint32_t unk08;
     std::uint32_t unk0c;
 };
-struct SafetyAgent {
+struct SafetyAgentDwords {  // ai::SafetyAgent names the fields (ai_safety_agent.cpp)
     AiTaggedRecord base;
     std::uint16_t unk06;
     std::uint32_t unk08[5];
@@ -89,7 +89,7 @@ struct CentrumCheckAgent {
 };
 static_assert(offsetof(GlobalExpandEmpireAgent, unk08) == 8);
 static_assert(offsetof(MapWorkerAgent, unk10) == 0x10);
-static_assert(sizeof(SafetyAgent) == 0x1c);
+static_assert(sizeof(SafetyAgentDwords) == 0x1c);
 static_assert(sizeof(CentrumCheckAgent) == 0x28);
 
 void SetKind(void* self, AgentKind kind) { AI_SetWord4(self, nullptr, static_cast<std::uint16_t>(kind)); }
@@ -196,7 +196,7 @@ S3RE_HOOK(0x00586830, T_SAFETY_AGENT_Construct, ThisFn, Original_T_SAFETY_AGENT_
 // Purpose: Constructor of the safety (defence) agent (kind 9).
 std::uint32_t __fastcall T_SAFETY_AGENT_Construct(void* self, void* /*edx*/) {
     SetKind(self, AgentKind::Safety);
-    for (std::uint32_t& value : static_cast<SafetyAgent*>(self)->unk08) {
+    for (std::uint32_t& value : static_cast<SafetyAgentDwords*>(self)->unk08) {
         value = 0;
     }
     return 0;

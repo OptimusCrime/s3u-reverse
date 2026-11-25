@@ -657,12 +657,21 @@ layouts in `src/s3re/game/ai/ai_layout.h`.
   dword basic_economy (AI::CheckBasicEconomy 0x5720C0). **V** (the
   conditions), **R** (writers).
 - **CompMapWorkerAgent globals** (ai_layout.h): AiArmyState at 0x7E58C8
-  (+0x000..+0x140 five per-player dword arrays, +0x194 dwords and +0x634
-  words and +0x7C4 bytes per player and unit group, +0x4B4 per player
-  2000000 after the reset, +0x504 / +0x50C / +0x510.. scalars, +0x630 the
-  economy agent's population source flag); AiGroupOrders at 0x7E37D0
-  (+0x320 a byte and +0x3E8 a 3-word target per player and unit group).
-  **V** (0x593F50, 0x5930F0), meanings **G**.
+  (0x51C bytes): the step counters of AI::RunMilitary 0x58F990 (+0x000
+  military steps, +0x050 spell steps, +0x0F0 / +0x140 thief / mage hunt
+  steps per player; +0x504 disband, +0x508 rebuild, +0x50C recruit, +0x510
+  settler census, +0x514 building census, shared), +0x0A0 the gather
+  countdowns, +0x190 StartAttack's warm-up calls, +0x194 the attack delays
+  per player and unit group, +0x4B4 the geologist timers. AiGroupOrders
+  at 0x7E37D0 (0x20F8 bytes): +0x000 home areas, +0x190 home buildings,
+  +0x320 steal flags, +0x3E8 AiGroupTarget {patrol0, patrol1, prey} per
+  player and unit group, +0x898 gather buildings, +0x8E8 thief cursors,
+  +0x988 mages per group, +0xCA8 the settler bitset, +0x1C48 patrol step
+  counters, +0x1D10 highest group, +0x1D60 group size, +0x1DB0 gather
+  positions, +0x20D0 gather offsets. **V** (session 55: RunMilitary,
+  ProcessWorldEvents, StartAttack and their callees).
+- **T_SAFETY_AGENT** (SafetyAgent, 0x1C bytes; kind 9): +8 run counter,
+  +0xA / +0xC the grid cell cursor. **V** (0x586850, 0x5868A0).
 - **T_ECONOMY_AGENT** (EconomyAgent, 0xA0 bytes; kind 8): +8 race
   (Player::race), +0xC the node's area, +0x10 run counter, +0x2C the last
   have * 100 / wanted ratio, +0x30 the forester condition's priority,
@@ -673,8 +682,12 @@ layouts in `src/s3re/game/ai/ai_layout.h`.
   race-specific words hold the race's own building). Snapshot by 0x567910;
   read by the 25 conditions 0x568250..0x569D20. **V** (conditions), **R**
   (0x567910).
-- **AI census** (AiAgentData, 0x1AD8 bytes; constructor 0x55B6B0): +1
-  buildings counted, +2 set by the count, +0x25C team strength per
+- **AI census** (AiAgentData, 0x1AD8 bytes; constructor 0x55B6B0): +0
+  settlers counted, +1 buildings counted, +2 set by the counts, +4 / +0x194
+  per player and unit group the target building / defending flag,
+  +0x2B4 / +0x304 / +0x354 / +0x3A4 / +0x3F4 geologists, thieves,
+  pioneers, other settlers, all settlers per player (CountSettlers
+  0x55B880), +0x25C team strength per
   player (20 dwords), +0x2AC its valid flag, +0x444 soldiers per player
   (20 x 9 dwords), +0x714 finished buildings per player and type (20 x
   57 dwords). **V** (0x55BE00, 0x55BEA0).
