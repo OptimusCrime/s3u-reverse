@@ -1,23 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1258" fill="#ffffff"/>
-<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">32.3%</text>
+<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">32.4%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="328.7" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 23.4%</title></rect>
 <text x="334.3" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">23.4%</text>
-<rect x="498.7" y="100" width="126" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.0%</title></rect>
-<text x="561.7" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.0%</text>
-<rect x="624.6" y="100" width="281.6" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.0%</title></rect>
-<text x="765.5" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.0%</text>
+<rect x="498.7" y="100" width="126.5" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.0%</title></rect>
+<text x="561.9" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.0%</text>
+<rect x="625.2" y="100" width="281.1" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 20.0%</title></rect>
+<text x="765.7" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">20.0%</text>
 <rect x="906.3" y="100" width="669.7" height="40" fill="#e8a39b"><title>Not understood yet: 47.6%</title></rect>
 <text x="1241.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">47.6%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="232.3" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 16.5%</title></rect>
 <text x="286.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">16.5%</text>
-<rect x="402.3" y="154" width="96" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.8%</title></rect>
-<text x="450.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.8%</text>
-<rect x="498.4" y="154" width="506.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.0%</title></rect>
-<text x="751.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.0%</text>
+<rect x="402.3" y="154" width="96.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.9%</title></rect>
+<text x="450.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.9%</text>
+<rect x="498.7" y="154" width="505.9" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 36.0%</title></rect>
+<text x="751.7" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.0%</text>
 <rect x="1004.6" y="154" width="571.4" height="40" fill="#e8a39b"><title>Not understood yet: 40.6%</title></rect>
 <text x="1290.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">40.6%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
@@ -26,7 +26,7 @@
 <rect x="1233.2" y="216" width="16" height="16" fill="#e8a39b"/><text x="1257.2" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1108.2" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 32.3% verified (23.4% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 32.4% verified (23.4% in a whole game)</text>
 <g><title>(free functions): 984 functions</title><rect x="2" y="19" width="518.4" height="670.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="258.4" height="186.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -3864,8 +3864,8 @@
 704 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="660.2" y="810.4" width="16.3" height="23.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>MapEffects::SpawnArrow @ 0x00545150
 672 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="622.8" y="833.4" width="15.3" height="21.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>MapEffects::CollectVisible @ 0x00544390
-592 bytes — Identified (purpose known)</title></rect>
+<rect x="622.8" y="833.4" width="15.3" height="21.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>MapEffects::CollectVisible @ 0x00544390
+592 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="622.8" y="855.1" width="15.3" height="11.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>MapEffects::SpawnProjectile2 @ 0x00545730
 304 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="638.1" y="833.4" width="11.5" height="11.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>MapEffects::Spawn_544f80 @ 0x00544f80

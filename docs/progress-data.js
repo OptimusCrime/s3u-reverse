@@ -6005,7 +6005,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-25","statuses":["unknown","classifi
 [5522064,48,6,259,"MapEffect::SetLinks","+0x40 = list, +0x44/+0x48 unless -1"],
 [5522112,96,6,260,"MapEffects::MapEffects","() default-constructs the 5000 records (0x543830), zeroes the counters and the 10000 cell heads"],
 [5522208,112,6,260,"MapEffects::SetMapSize","(a, b) on the effect table (world+0x14d2bc8): +0x668b4 = 24a+2b, +0x668b8 = 9a+2b, +0x668a4/+0x668a8 = (each-1)/256+1, +0x668b0 = product/16."],
-[5522320,592,2,260,"MapEffects::CollectVisible","(world, tick, x0, y0, x1, y1, out records, max) ret 0x20, from PrepareDrawData: walks the cells (CellOfPosition) of the clipped view rectangle"],
+[5522320,592,4,260,"MapEffects::CollectVisible","Replaced by MapEffects_CollectVisible (session 57, src/s3re/game/environment/map_effect_queries.cpp; emulator spec full coverage)."],
 [5522912,80,6,260,"MapEffects::Add","(const MapEffect*) copies the record into a free slot and links it into the cell of its end position (+0x10, +0x14)."],
 [5522992,960,6,260,"MapEffects::Spawn_544630","Five effects (Make_543b40, 543bc0 x3, 543df0; graphics 0xd0024.. by race and 0xd002a sparks) with values from tables the original builds on its\u2026"],
 [5523952,976,6,260,"MapEffects::Spawn_5449f0","Stack tables indexed by a3 + 4*a2 (0..15): a3 < 2: one Make_543d60 effect (0xd002b)"],
@@ -11138,6 +11138,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-25","statuses":["unknown","classifi
 [5522064,4929,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fullgame-20261124-0055-seed10779":0,"replay:fun8-seed2024-input31":0,"replay:random768-seed4321-input7":0,"replay:scripted-seed127":0,"save:slot 1.sav":4929,"save:slot 2.sav":480,"save:slot 3.sav":259},[]],
 [5522112,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5522208,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap":1,"random:512,1 seed 1234":1,"random:640,2 seed 1234":1,"replay:fullgame-20261124-0055-seed10779":1,"replay:fun8-seed2024-input31":1,"replay:random768-seed4321-input7":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
+[5522320,null,{},[]],
 [5522912,1792,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fullgame-20261124-0055-seed10779":12,"replay:fun8-seed2024-input31":0,"replay:random768-seed4321-input7":0,"replay:scripted-seed127":0,"save:slot 1.sav":1792,"save:slot 2.sav":266,"save:slot 3.sav":128},[]],
 [5522992,674,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"replay:fullgame-20261124-0055-seed10779":674,"replay:fun8-seed2024-input31":0,"replay:random768-seed4321-input7":0,"replay:scripted-seed127":0,"save:slot 1.sav":34,"save:slot 2.sav":35,"save:slot 3.sav":17},[]],
 [5523952,954,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"replay:fullgame-20261124-0055-seed10779":954,"replay:fun8-seed2024-input31":0,"replay:random768-seed4321-input7":0,"replay:scripted-seed127":0,"save:slot 1.sav":65,"save:slot 2.sav":57,"save:slot 3.sav":27},[]],
@@ -12019,4 +12020,5 @@ window.PROGRESS_DATA = {"generated":"2026-11-25","statuses":["unknown","classifi
 ["2026-11-25","0298bf7",1172,506893,1323597,373148,777],
 ["2026-11-25","b1769a6",1324,521340,1336173,373148,777],
 ["2026-11-25","ef1c271",1331,523780,1337357,373148,777],
-["2026-11-25","25cfc44",1340,526580,1340157,373148,777]]};
+["2026-11-25","25cfc44",1340,526580,1340157,373148,777],
+["2026-11-25","28f1ec1",1342,527396,1340557,373148,777]]};
