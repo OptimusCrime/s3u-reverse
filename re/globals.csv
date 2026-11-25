@@ -311,3 +311,5 @@ address,name,type,status,notes
 0x00732edc,texts::kAiStartAttack,char[],identified,"String ""Start Attack - player: %d, group: %d, building: %d \n"" (AI::StartAttack 0x594080). Declared in src/s3re/game/texts.h; used by ai_army_attack.cpp."
 0x00732ea4,texts::kAiStartGather,char[],identified,"String ""Start Gather - player: %d, group: %d, building: %d \n"" (AI::StartAttack 0x594080). Declared in src/s3re/game/texts.h; used by ai_army_attack.cpp."
 0x00732e70,texts::kAiStartSteal,char[],identified,"String ""Start Steal - player: %d, group: %d, building: %d \n"" (AI::StartAttack 0x594080). Declared in src/s3re/game/texts.h; used by ai_army_attack.cpp."
+0x007e06e0,g_aiCensusStep,uint32_t,classified,"The step 0..8 of AI::Census::CountSettlers 0x55b880 (0 clears the counts, 1..8 count a slice of the settlers each). Declared in src/s3re/game/globals.h; used by ai_census_settlers.cpp."
+0x007e0578,g_aiCensusCursor,uint32_t,classified,"The last settler id counted by AI::Census::CountSettlers 0x55b880 in its current pass. Declared in src/s3re/game/globals.h; used by ai_census_settlers.cpp."

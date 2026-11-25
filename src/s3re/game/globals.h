@@ -331,6 +331,10 @@ inline constexpr GameGlobal<ai::AiCommandSender> g_aiCommandSender{0x7e5de8};
 // The computer players' census (savegame chunk 0x16; AI_ResetAgentData,
 // the AI_Census functions).
 inline constexpr GameGlobal<ai::AiAgentData> g_aiCensus{0x7e5ef8};
+// AI::Census::CountSettlers 0x55b880: the step 0..8 of its slice state
+// machine and the last settler id counted so far.
+inline constexpr GameGlobal<std::uint32_t> g_aiCensusStep{0x7e06e0};
+inline constexpr GameGlobal<std::uint32_t> g_aiCensusCursor{0x7e0578};
 inline constexpr GameGlobal<std::uint32_t[20]> g_aiPerPlayer7e79d0{0x7e79d0};
 // std::bitset<4000> of buildings (Rainer\CompMapWorkerAgent.cpp): a computer
 // player's military building whose bit is set has a garrison or one on the

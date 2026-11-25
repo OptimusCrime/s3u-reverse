@@ -3566,3 +3566,73 @@ SPECS += [
          presets=start_attack_world, globals=start_attack_globals, callees=ORDER_CALLEES,
          exempt_blocks=(0x5942e7, 0x594307, 0x59432e), max_cases=3000),
 ]
+
+
+# AI::Census::CountSettlers and UninitializedFillPtrs
+# (ai_census_settlers.cpp). The census is `this` at the world base; the
+# catapult vectors point into scratch slot 1 (capacity at the end: grows,
+# above: in place, null vectors).
+AI_CENSUS_STEP = 0x007E06E0
+AI_CENSUS_CURSOR = 0x007E0578
+SETTLER_HIGH_WATER = 0x12A5E5C
+CENSUS_TYPES = (8, 30, 33, 15, 31, 34, 5, 32, 35, 22, 23, 40, 41, 41, 0, 1, 4, 36, 42, 60)
+
+
+def census_world(rng, pool, args):
+    """Settlers 1..high-water mark (0..48: one go, or up to 399; owners
+    mostly 0..3, some 20..255) with census types."""
+    high = rng.randrange(49) if rng.random() < 0.3 else rng.randrange(49, 400)
+    fields = [(SETTLER_HIGH_WATER, high, 4)]
+    for settler in range(1, high + 2):
+        record = SETTLERS + settler * SETTLER_BYTES
+        owner = rng.randrange(4) if rng.random() < 0.9 else rng.randrange(18, 256)
+        fields += [(record, owner, 1), (record + 1, rng.choice(CENSUS_TYPES), 1)]
+    for k in range(20 * 8):
+        fields.append((SCRATCH + SCRATCH_SLOT_BYTES + 4 * k, rng.getrandbits(32), 4))
+    return fields
+
+
+def census_globals(rng, pool, args):
+    """The step 0..8, the cursor, the catapult vectors."""
+    fields = [(AI_MAP_WORLD, WORLD_BASE, 4), (AI_CENSUS_STEP, rng.randrange(9), 4),
+              (AI_CENSUS_CURSOR, rng.randrange(300), 4)]
+    for p in range(20):
+        begin = WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES + 32 * p
+        roll = rng.random()
+        if roll < 0.15:
+            values = (0, 0, 0)
+        else:
+            count = rng.randrange(5)
+            end = begin + 4 * count
+            values = (begin, end, rng.choice((end, end, end + 4 * rng.randrange(1, 3), begin)))
+        fields += [(AI_CATAPULT_VECTORS + 16 * p + 4 * k, v, 4) for k, v in enumerate(values)]
+    return fields
+
+
+def fill_target(rng, pool):
+    return 0 if rng.random() < 0.15 else WORLD_BASE + SCRATCH + 8
+
+
+def fill_count(rng, pool):
+    return rng.choice((0, 1, 2, 5, 9))
+
+
+SPECS += [
+    # EAX is not used by the caller (0x58f990). The erase loops 0x55b90d /
+    # 0x55ba24 (they move [end, end)) and the insert's branch for a
+    # position before the end (0x55bcc3, 0x55bcd6..0x55bd14) are dead. The
+    # step above 8 (0x55b9a6) is never written by the game (the original
+    # would count a range from uninitialized stack): not generated. 0x55bbfc
+    # (a negative new capacity) needs end < begin, after which the copy loop
+    # walks the address space first.
+    Spec("AI_Census_CountSettlers", 0x0055b880, "thiscall", [], eax_mask=0, presets=census_world,
+         globals=census_globals,
+         exempt_blocks=(0x55b90d, 0x55ba24, 0x55bcc3, 0x55bcd6, 0x55bcf1, 0x55bd00, 0x55bd07, 0x55bd14, 0x55b9a6,
+                        0x55bbfc),
+         max_cases=600),
+    # (a null range longer than one writes to address 4: such cases fault on
+    # both sides and count as invalid)
+    Spec("AI_UninitializedFillPtrs", 0x0055c020, "stdcall", [fill_target, fill_count, scratch(2)],
+         presets=lambda rng, pool, args: [(SCRATCH + 2 * SCRATCH_SLOT_BYTES, rng.getrandbits(32), 4)],
+         max_cases=400),
+]
