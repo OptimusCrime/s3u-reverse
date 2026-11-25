@@ -220,5 +220,11 @@ inline constexpr GameGlobal<const volatile std::uint32_t> g_stringNpos{0x655390}
 inline constexpr GameGlobal<char[1]> g_stringNullBuffer{0x6553a0};
 // GUID_NULL (16 zero bytes).
 inline constexpr GameGlobal<const std::uint32_t[4]> g_guidNull{0x65c0b8};
+// The 16-bit span functions by brightness (SelectBrightnessSpans 0x5fb4c0):
+// 32 shade spans (index brightness >> 3; level i scales a pixel by about
+// (i + 1) / 32, level 0 writes black) and 8 masked "dissolve" spans (index
+// brightness >> 5). Addresses of the functions in S3.EXE.
+inline constexpr GameGlobal<const std::uint32_t[32]> g_shadeSpans{0x7a2bd8};
+inline constexpr GameGlobal<const std::uint32_t[8]> g_maskedSpans{0x7a2c58};
 
 }  // namespace s3re::game

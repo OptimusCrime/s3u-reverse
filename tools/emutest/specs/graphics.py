@@ -249,3 +249,225 @@ SPECS += [
     Spec("CDrawer_AmbientSoundVolume", 0x004c7a50, "thiscall",
          [below(17), between(0, 1000), between(1001, 4000), between(-12000, 3000)], presets=ambient_sources),
 ]
+
+# -- session 55 (gfx): span functions (gfx_spans.cpp) -------------------------
+#
+# Fastcall spans: ECX = &dst (cell in scratch 0), EDX = dst end, then &src
+# (cell +4) and the rest. The cells are set by the preset so that dst runs
+# up to EDX in whole steps; pixels come from the lazily random world. The
+# pixel-format masks are RGB565, RGB555 or random. EAX is not compared:
+# the spans are only called through function pointers by the blitters,
+# which don't read it (gfx_spans.cpp).
+
+SHADE_MASKS = 0x007e8dd8
+SPAN_CELLS = WORLD_BASE + SCRATCH
+SPAN_DST = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+SPAN_SRC = SCRATCH + 4 * SCRATCH_SLOT_BYTES
+SHADE_SPAN_ADDRESSES = (0x5f48e0, 0x5f4920, 0x5f4980, 0x5f4a00, 0x5f4a60, 0x5f4ae0, 0x5f4b60, 0x5f4c00,
+                        0x5f4c60, 0x5f4ce0, 0x5f4d60, 0x5f4e00, 0x5f4e80, 0x5f4f20, 0x5f4fc0, 0x5f5070,
+                        0x5f50d0, 0x5f5140, 0x5f51b0, 0x5f5250, 0x5f52c0, 0x5f5360, 0x5f5400, 0x5f54b0,
+                        0x5f5520, 0x5f55c0, 0x5f5660, 0x5f5710, 0x5f57b0, 0x5f5860, 0x5f5910, 0x5f59e0)
+MASKED_SPAN_ADDRESSES = (0x5fb470, 0x5fb410, 0x5fb3a0, 0x5fb340, 0x5fb2d0, 0x5fb260, 0x5fb1d0, 0x5fb180)
+
+
+def shade_masks(rng, pool, args):
+    pixel565 = (0x7bef, 0x39e7, 0x18e3, 0x861, 0x20)
+    pixel555 = (0x3def, 0x1ce7, 0xc63, 0x421, 0)
+    kind = rng.randrange(3)
+    fields = []
+    for k in range(5):
+        if kind < 2:
+            pixel = (pixel565, pixel555)[kind][k]
+            pair = pixel << 16 | pixel
+        else:
+            pixel, pair = rng.getrandbits(32), rng.getrandbits(32)
+        fields += [(SHADE_MASKS + 4 * k, pixel, 4), (SHADE_MASKS + 0x14 + 4 * k, pair, 4)]
+    fields += [(SHADE_MASKS + 0x28, rng.getrandbits(32), 4), (SHADE_MASKS + 0x2c, rng.getrandbits(32), 4)]
+    return fields
+
+
+def span_end(rng, pool) -> int:
+    return WORLD_BASE + SPAN_DST + 0x800 + 2 * rng.randrange(0x40)
+
+
+def span_cells(step: int, max_units: int, past_end: float = 0.0):
+    """dst = EDX - step * n (n 0..max_units-1, sometimes dst past the end),
+    src (or the shadow phase) in the cell after it."""
+    def presets(rng, pool, args):
+        units = 0 if rng.random() < 0.1 else rng.randrange(max_units)
+        dst = args[1] - step * units
+        if rng.random() < past_end:
+            dst = args[1] + 2 * rng.randrange(1, 8)
+        return [(SCRATCH, dst, 4), (SCRATCH + 4, WORLD_BASE + SPAN_SRC + 2 * rng.randrange(0x80), 4)]
+    return presets
+
+
+def odd_flag(rng, pool) -> int:
+    return rng.choice([0, 1, 0x100, 0xFFFFFF01, rng.getrandbits(32)])
+
+
+def masked_cells(rng, pool, args):
+    fields = span_cells(2, 120)(rng, pool, args)
+    fields.append((SCRATCH + 8, rng.randrange(16) if rng.random() < 0.95 else rng.getrandbits(32) & 0xFF, 4))
+    mask = SCRATCH + SCRATCH_SLOT_BYTES
+    fields += [(mask + i, rng.choice([0, 1, 0, 1, rng.getrandbits(8)]), 1) for i in range(16)]
+    return fields
+
+
+def shadow_cells(rng, pool, args):
+    fields = span_cells(2, 120, past_end=0.1)(rng, pool, args)
+    return fields[:1] + [(SCRATCH + 4, rng.randrange(32) if rng.random() < 0.8 else rng.getrandbits(32), 4)]
+
+
+SPECS += [
+    Spec(f"ShadeSpan16_Level{level:02d}", address, "fastcall",
+         [one_of(SPAN_CELLS), span_end, one_of(SPAN_CELLS + 4), odd_flag], eax_mask=0,
+         presets=span_cells(4, 100), globals=shade_masks)
+    for level, address in enumerate(SHADE_SPAN_ADDRESSES)
+] + [
+    Spec(f"MaskedSpan16_Level{level}", address, "fastcall",
+         [one_of(SPAN_CELLS), span_end, one_of(SPAN_CELLS + 4), one_of(WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES),
+          one_of(SPAN_CELLS + 8)], eax_mask=0, presets=masked_cells, globals=shade_masks)
+    for level, address in enumerate(MASKED_SPAN_ADDRESSES)
+] + [
+    Spec("ShadowSpan_Dither", 0x005fd080, "fastcall",
+         [one_of(SPAN_CELLS), span_end, one_of(SPAN_CELLS + 4), one_of(0, 1, 2, 0xFFFFFFFF)], eax_mask=0,
+         presets=shadow_cells, globals=shade_masks),
+    Spec("ShadowSpan_Halve", 0x005fd0c0, "fastcall",
+         [one_of(SPAN_CELLS), span_end, one_of(SPAN_CELLS + 4), anything], eax_mask=0,
+         presets=shadow_cells, globals=shade_masks),
+    # Brightness above 255 reads past the tables (no range check), as the original.
+    Spec("SelectBrightnessSpans", 0x005fb4c0, "fastcall",
+         [lambda rng, pool: rng.randrange(256) if rng.random() < 0.95 else rng.randrange(0x800)], eax_mask=0),
+    # Method 2.. asserts (Win32::ThrowAssertmentFailed throws; compared).
+    Spec("SetShadowSpan", 0x005fcd30, "fastcall", [anything, anything, anything, anything, one_of(0, 1, 2, 0xFFFFFFFF)],
+         eax_mask=0),
+    Spec("CGraphicsData_SetShadowMethod", 0x005faa70, "thiscall", [one_of(0, 1, 1, 0, 7)], eax_mask=0,
+         globals=shade_masks),
+]
+
+# -- session 55 (gfx): image and table accessors (gfx_images.cpp) -----------
+#
+# GfxDword methods: the reference at world 0 points into scratch slot 21
+# (lazily random image bytes); out arguments point at scratch slot 20.
+# CGraphicsData methods: gfx_world builds a graphics object at a world
+# offset (0 for ECX = world, GFX_OTHER for SequenceFrame's argument): groups
+# 0..3 with views = WORLD_BASE (offsets are world offsets) and all seven
+# table kinds pointing at lists (slots 8..11, lazily random headers) or,
+# for sequences, at frame records (slot 12).
+
+IMAGE_REF = WORLD_BASE + SCRATCH + 21 * SCRATCH_SLOT_BYTES
+OUT_SLOT = scratch(20)
+GFX_OTHER = 0x10000
+GFX_LISTS = SCRATCH + 8 * SCRATCH_SLOT_BYTES
+GFX_RECORDS = SCRATCH + 12 * SCRATCH_SLOT_BYTES
+GFX_TABLE_FIELDS = (0x494, 0x5ac, 0x6c4, 0x7dc, 0x8f4, 0xa0c, 0xb24)
+
+
+def image_ref(null_chance: float = 0.0):
+    def presets(rng, pool, args):
+        image = 0 if rng.random() < null_chance else IMAGE_REF + rng.randrange(0x100)
+        return [(0, image, 4)]
+    return presets
+
+
+def animation_id(rng, pool) -> int:
+    if rng.random() < 0.25:
+        return 0xFFFFFFFF
+    return rng.randrange(4) << 16 | rng.randrange(72)
+
+
+def gfx_world(base: int):
+    def presets(rng, pool, args):
+        fields = []
+        for g in range(4):
+            fields.append((base + 0x264 + 4 * g, WORLD_BASE, 4))
+            for kind, field in enumerate(GFX_TABLE_FIELDS):
+                table = SCRATCH + (1 + kind // 2) * SCRATCH_SLOT_BYTES + (kind % 2) * 0x800 + g * 0x200
+                fields.append((base + field + 4 * g, WORLD_BASE + table, 4))
+                fields.append((table + 6, rng.randrange(80), 2))
+                for i in range(76):
+                    if field == 0xb24:
+                        entry = GFX_RECORDS + 24 * rng.randrange(80)
+                    else:
+                        entry = GFX_LISTS + 0x40 * rng.randrange(0x100)
+                    fields.append((table + 8 + 4 * i, entry, 4))
+        for r in range(100):
+            record = GFX_RECORDS + 4 + 24 * r
+            fields += [(record, rng.getrandbits(32), 4), (record + 4, animation_id(rng, pool), 4),
+                       (record + 8, animation_id(rng, pool), 4), (record + 12, animation_id(rng, pool), 4),
+                       (record + 16, rng.randrange(48), 2),
+                       (record + 18, rng.randrange(48) if rng.random() < 0.8 else rng.getrandbits(16), 2),
+                       (record + 20, rng.choice([0xFFFFFFFF, rng.getrandbits(32)]), 4)]
+        return fields
+    return presets
+
+
+def gfx_id4(rng, pool) -> int:
+    return rng.randrange(4) << 16 | rng.choice([0, 1, 2, rng.randrange(72)])
+
+
+def list_index(rng, pool) -> int:
+    return rng.choice([0, 1, rng.randrange(48), rng.randrange(300), 0xFFFFFFFF, rng.getrandbits(32) | 0x80000000])
+
+
+def frame_fields(rng, pool, args):
+    """A sequence frame at world 0 (sound -1 sometimes)."""
+    return [(0x10, rng.choice([0xFFFFFFFF, rng.getrandbits(32)]), 4)]
+
+
+def point_other(rng, pool, args):
+    return [(SCRATCH + 22 * SCRATCH_SLOT_BYTES, rng.getrandbits(32), 4)]
+
+
+# SequenceFrame::SequenceFrame: the three catch(...) blocks (log and
+# rethrow) are only reachable through an exception; ours has none
+# (gfx_images.cpp, known difference). 0x5fd902 is a false start inside it.
+SEQUENCE_FRAME_CATCHES = (0x5fd8ba, 0x5fd8de, 0x5fd950)
+
+SPECS += [
+    Spec("GfxDword_PointAt4", 0x005f6430, "thiscall", [OUT_SLOT], presets=image_ref()),
+    Spec("GfxDword_SpriteRleData16", 0x005f6440, "thiscall", [], presets=image_ref()),
+    Spec("GfxDword_IsValid", 0x005f6460, "thiscall", [], presets=image_ref(0.3)),
+    Spec("GfxDword_PointAt0", 0x005f6470, "thiscall", [OUT_SLOT], presets=image_ref()),
+    Spec("GfxDword_GuiExtraBytes", 0x005f6480, "thiscall", [], presets=image_ref()),
+    Spec("GfxDword_GuiExtraCount", 0x005f6490, "thiscall", [], presets=image_ref()),
+    Spec("GfxDword_GuiRleData", 0x005f64a0, "thiscall", [], presets=image_ref()),
+    Spec("GfxDword_TextureExtraBytes", 0x005fc550, "thiscall", [], presets=image_ref()),
+    Spec("GfxDword_TextureExtraCount", 0x005fc560, "thiscall", [], presets=image_ref()),
+    Spec("GfxDword_TextureExtraByte", 0x005fc570, "thiscall", [below(256)], presets=image_ref()),
+    Spec("GfxDword_TextureRleData", 0x005fc580, "thiscall", [], presets=image_ref()),
+    Spec("GfxDword_ListImage", 0x005fc5a0, "thiscall", [OUT_SLOT, below(300)], presets=image_ref()),
+    Spec("GfxDword_SpriteExtraBytes", 0x005fc5d0, "thiscall", [], presets=image_ref()),
+    Spec("GfxDword_SpriteExtraCount", 0x005fc5e0, "thiscall", [], presets=image_ref()),
+    Spec("GfxDword_ListImageChecked", 0x005fcce0, "thiscall", [OUT_SLOT, list_index], presets=image_ref()),
+    Spec("GfxDword_SpriteRleData", 0x005fcda0, "thiscall", [], presets=image_ref()),
+    Spec("CGraphicsData_GetPixelFormat", 0x005fa730, "thiscall", [OUT_SLOT]),
+    Spec("CGraphicsData_LanguageCount", 0x005faa50, "thiscall", []),
+    Spec("CGraphicsData_SetLanguage", 0x005faa60, "thiscall", [anything]),
+    Spec("CGraphicsData_ColorIndexedAnimationPointer", 0x005fab50, "thiscall", [OUT_SLOT, gfx_id4],
+         presets=gfx_world(0)),
+    Spec("CGraphicsData_ShadowAnimationPointer", 0x005fabb0, "thiscall", [OUT_SLOT, gfx_id4], presets=gfx_world(0)),
+    Spec("CGraphicsData_PalettePointer", 0x005fac10, "thiscall", [gfx_id4, below(256, 0.1)], presets=gfx_world(0)),
+    Spec("CGraphicsData_GuiImagePointerAt", 0x005faca0, "thiscall", [OUT_SLOT, gfx_id4, below(8)],
+         presets=gfx_world(0)),
+    Spec("CGraphicsData_LandscapeTexturePointer", 0x005face0, "thiscall", [OUT_SLOT, gfx_id4], presets=gfx_world(0)),
+    Spec("CGraphicsData_GetSequenceFrame", 0x005fad50, "thiscall", [OUT_SLOT, gfx_id4, below(20)],
+         presets=gfx_world(0), max_cases=500),
+    Spec("SequenceFrame_SequenceFrame_default", 0x005fd7d0, "thiscall", []),
+    Spec("SequenceFrame_SequenceFrame", 0x005fd800, "thiscall",
+         [one_of(WORLD_BASE + GFX_OTHER), lambda rng, pool: WORLD_BASE + GFX_RECORDS + 4 + 24 * rng.randrange(99)],
+         presets=gfx_world(GFX_OTHER), cover_until=0x005fd980, exempt_blocks=SEQUENCE_FRAME_CATCHES, max_cases=500),
+    # AX only: the upper half of EAX is the caller's (every caller sign-extends AX).
+    Spec("SequenceFrame_OffsetX", 0x005fd980, "thiscall", [], eax_mask=0xFFFF),
+    Spec("SequenceFrame_OffsetY", 0x005fd990, "thiscall", [], eax_mask=0xFFFF),
+    Spec("SequenceFrame_BodyImage", 0x005fd9a0, "thiscall", [OUT_SLOT]),
+    Spec("SequenceFrame_ColorIndexedImage", 0x005fd9b0, "thiscall", [OUT_SLOT]),
+    Spec("SequenceFrame_ShadowImage", 0x005fd9c0, "thiscall", [OUT_SLOT]),
+    Spec("SequenceFrame_SoundId", 0x005fd9d0, "thiscall", [], presets=frame_fields),
+    Spec("SequenceFrame_SoundHighByte", 0x005fd9f0, "thiscall", [], presets=frame_fields),
+    Spec("Point16_Negate", 0x005fdad0, "thiscall", [OUT_SLOT]),
+    # Ends with ret 8 at 0x5fdb25; 0x5fdb30 is the next (static initializer) code, no known start.
+    Spec("Point16_Add", 0x005fdb00, "thiscall", [OUT_SLOT, scratch(22)], presets=point_other,
+         cover_until=0x005fdb28),
+]

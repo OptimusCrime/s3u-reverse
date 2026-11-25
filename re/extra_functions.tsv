@@ -932,6 +932,20 @@ address	kind	evidence
 0x005eef60	rtti	virtual function (vtable entry)
 0x005f3da0	rtti	virtual function (vtable entry)
 0x005f3dc0	rtti	virtual function (vtable entry)
+0x005f48e0	manual	shade span: entry 0 of the span table 0x7a2bd8 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c74); preceded by ret 4 at 0x5f48d5 (end of 0x5f4830) and nop padding
+0x005f4920	manual	shade span: entry 1 of the span table 0x7a2bd8 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c74); preceded by ret 8 at 0x5f4917 and nop padding
+0x005f4a00	manual	shade span: entry 3 of the span table 0x7a2bd8 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c74); preceded by ret 8 at 0x5f49ee and nop padding
+0x005f4c00	manual	shade span: entry 7 of the span table 0x7a2bd8 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c74); preceded by ret 8 at 0x5f4bf0 and nop padding
+0x005f5070	manual	shade span: entry 15 of the span table 0x7a2bd8 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c74); preceded by ret 8 at 0x5f506a and nop padding
+0x005f59e0	manual	shade span: entry 31 of the span table 0x7a2bd8 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c74); preceded by ret 8 at 0x5f59d2 and nop padding
+0x005fb180	manual	masked span: entry 7 of the span table 0x7a2c58 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c70); preceded by ret 0Ch at 0x5fb178 (end of Rle16SkipRows 0x5fb130) and nop padding
+0x005fb260	manual	masked span: entry 5 of the span table 0x7a2c58 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c70); preceded by ret 0Ch at 0x5fb250 and nop padding
+0x005fb2d0	manual	masked span: entry 4 of the span table 0x7a2c58 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c70); preceded by ret 0Ch at 0x5fb2c4 and nop padding
+0x005fb340	manual	masked span: entry 3 of the span table 0x7a2c58 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c70); preceded by ret 0Ch at 0x5fb334 and nop padding
+0x005fb3a0	manual	masked span: entry 2 of the span table 0x7a2c58 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c70); preceded by ret 0Ch at 0x5fb396 and nop padding
+0x005fb410	manual	masked span: entry 1 of the span table 0x7a2c58 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c70); preceded by ret 0Ch at 0x5fb405 and nop padding
+0x005fb470	manual	masked span: entry 0 of the span table 0x7a2c58 (read by SelectBrightnessSpans 0x5fb4c0, called through 0x7e8c70); preceded by ret 0Ch at 0x5fb467 and nop padding
+0x005fd0c0	manual	shadow span (method 0): SetShadowSpan 0x5fcd30 stores 0x5fd0c0 into 0x7e8e20, called by the shadow blitters; preceded by ret 8 at 0x5fd0b6 and nop padding
 0x00609920	rtti	virtual function (vtable entry)
 0x006099e0	rtti	virtual function (vtable entry)
 0x00609a00	rtti	virtual function (vtable entry)

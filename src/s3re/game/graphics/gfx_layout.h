@@ -45,8 +45,8 @@ static_assert(offsetof(TextTable, offsets) == 0x0c);
 
 // A table of per-frame offsets (from the group's view) with a count:
 // CGraphicsData::animationTables (CGraphicsData::AnimationPointer 0x5faaf0
-// checks the count) and ::guiImageTables (CGraphicsData::GuiImagePointer
-// 0x5fac70, no check).
+// checks the count), colorIndexedTables and shadowTables (the same check),
+// guiImageTables and landscapeTextureTables (no check).
 struct OffsetTable {
     std::uint8_t unk00[6];
     std::uint16_t count;        // +0x06 (the animation table's number of entries)
@@ -54,6 +54,19 @@ struct OffsetTable {
 };
 static_assert(offsetof(OffsetTable, count) == 0x06);
 static_assert(offsetof(OffsetTable, offsets) == 0x08);
+
+// A group's palette table (CGraphicsData::paletteTables; group 01; read by
+// CGraphicsData::PalettePointer 0x5fac10): like OffsetTable with one more
+// dword (0x100) before the offsets. Each palette is 8 brightness levels of
+// 256 16-bit colours (0x200 bytes per level).
+struct PaletteTable {
+    std::uint8_t unk00[6];
+    std::uint16_t count;        // +0x06 number of palettes (20 in siedler3_01)
+    std::uint32_t unk08;        // +0x08 0x100 in the files
+    std::uint32_t offsets[1];   // +0x0c variable length
+};
+static_assert(offsetof(PaletteTable, count) == 0x06);
+static_assert(offsetof(PaletteTable, offsets) == 0x0c);
 
 // A group's sequence table (CGraphicsData::sequenceTables;
 // CGraphicsData::SequenceFrameCount 0x5fad20): per sequence (animation) the address of its header, relative to
@@ -68,34 +81,35 @@ static_assert(offsetof(SequenceTable, sequences) == 0x08);
 // CGraphicsData (RTTI; base Win32::CObject), 0xc44 bytes.
 struct CGraphicsData {
     std::uint32_t vtable;                        // +0x000 0x65d3e4 (slot 0: scalar deleting destructor 0x5f6890)
-    std::uint8_t unk004[0x24 - 0x04];
+    std::uint8_t pixelFormat[0x20];              // +0x004 the DDPIXELFORMAT the files were opened for (GetPixelFormat 0x5fa730)
     msvc6::String name;                          // +0x024 probably the GFX folder or file name
-    std::uint32_t unk034[kGroups];               // +0x034 not cleared by Close
+    std::uint32_t fileSizes[kGroups];            // +0x034 size of each group's file (CFile::GetSize); not cleared by Close
     std::uint32_t mappings[kGroups];             // +0x14c Win32::CFileMapping* per group (new 0x2c, ctor 0x61a3a0)
     std::uint32_t views[kGroups];                // +0x264 the group's mapped file view (0: not loaded); every
                                                  //        table offset is relative to it
     const TextTable* textTables[kGroups];        // +0x37c texts (8 languages)
     const OffsetTable* animationTables[kGroups]; // +0x494
     const OffsetTable* guiImageTables[kGroups];  // +0x5ac GUI image tables (GUI groups only), read by GuiImagePointer
-    std::uint32_t unk6c4[kGroups];               // +0x6c4 a table per group (zeroed by Close)
-    std::uint32_t unk7dc[kGroups];               // +0x7dc a table per group (zeroed by Close)
-    std::uint32_t unk8f4[kGroups];               // +0x8f4 a table per group (zeroed by Close)
-    std::uint32_t unka0c[kGroups];               // +0xa0c a table per group (zeroed by Close)
+    const OffsetTable* landscapeTextureTables[kGroups];  // +0x6c4 landscape textures (group 00; LandscapeTexturePointer)
+    const OffsetTable* colorIndexedTables[kGroups];  // +0x7dc image lists of 8-bit player-colour sprites
+    const OffsetTable* shadowTables[kGroups];    // +0x8f4 image lists of shadow masks
+    const PaletteTable* paletteTables[kGroups];  // +0xa0c palettes (group 01; PalettePointer)
     const SequenceTable* sequenceTables[kGroups];  // +0xb24
     std::uint32_t languageCount;                 // +0xc3c zeroed by the constructor and Close
     std::uint32_t language;                      // +0xc40 the current language (TextAddress uses it for -1)
 };
 static_assert(offsetof(CGraphicsData, name) == 0x024);
-static_assert(offsetof(CGraphicsData, unk034) == 0x034);
+static_assert(offsetof(CGraphicsData, pixelFormat) == 0x004);
+static_assert(offsetof(CGraphicsData, fileSizes) == 0x034);
 static_assert(offsetof(CGraphicsData, mappings) == 0x14c);
 static_assert(offsetof(CGraphicsData, views) == 0x264);
 static_assert(offsetof(CGraphicsData, textTables) == 0x37c);
 static_assert(offsetof(CGraphicsData, animationTables) == 0x494);
 static_assert(offsetof(CGraphicsData, guiImageTables) == 0x5ac);
-static_assert(offsetof(CGraphicsData, unk6c4) == 0x6c4);
-static_assert(offsetof(CGraphicsData, unk7dc) == 0x7dc);
-static_assert(offsetof(CGraphicsData, unk8f4) == 0x8f4);
-static_assert(offsetof(CGraphicsData, unka0c) == 0xa0c);
+static_assert(offsetof(CGraphicsData, landscapeTextureTables) == 0x6c4);
+static_assert(offsetof(CGraphicsData, colorIndexedTables) == 0x7dc);
+static_assert(offsetof(CGraphicsData, shadowTables) == 0x8f4);
+static_assert(offsetof(CGraphicsData, paletteTables) == 0xa0c);
 static_assert(offsetof(CGraphicsData, sequenceTables) == 0xb24);
 static_assert(offsetof(CGraphicsData, languageCount) == 0xc3c);
 static_assert(offsetof(CGraphicsData, language) == 0xc40);

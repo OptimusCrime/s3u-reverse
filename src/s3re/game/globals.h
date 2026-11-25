@@ -98,6 +98,30 @@ struct PixelFormat {
 };
 static_assert(sizeof(PixelFormat) == 0x18);
 
+// The pixel-format masks of the 16-bit shading code (Dirk\graphicsdata.cpp),
+// set at the end of CGraphicsData::Open (0x5fa011..0x5fa0fe): per k = 1..5
+// the mask that keeps, after x >> k, only the bits that stayed inside their
+// colour channel. RGB565: 0x7bef, 0x39e7, 0x18e3, 0x861, 0x20; RGB555:
+// 0x3def, 0x1ce7, 0xc63, 0x421, 0.
+struct ShadeMasks {
+    std::uint32_t pixel[5];  // +0x00 one 16-bit pixel, for x >> 1 .. x >> 5
+    std::uint32_t pair[5];   // +0x14 the same for two pixels in a dword (0x7bef7bef, ...)
+    std::uint32_t shadow[2]; // +0x28 pair[0] again; CGraphicsData::SetShadowMethod passes them on
+};
+static_assert(sizeof(ShadeMasks) == 0x30);
+
+// The shadow drawing state, set by SetShadowSpan (0x5fcd30).
+struct ShadowSpanState {
+    std::uint32_t method;      // +0x00 0 = halve the destination, 1 = black checkerboard
+    std::uint32_t halfMask16;  // +0x04 copies of the masks it was given (not read by the spans)
+    std::uint32_t halfMask32;  // +0x08
+    std::uint32_t unk0c;       // +0x0c not written by SetShadowSpan
+    std::uint32_t mask18;      // +0x10
+    std::uint32_t mask1c;      // +0x14
+    std::uint32_t span;        // +0x18 the span function the shadow blitters call (0x5fd0c0 or 0x5fd080)
+};
+static_assert(sizeof(ShadowSpanState) == 0x1c);
+
 // One hit area of a drawn object (g_hitAreas): what was drawn where, so a
 // click can be matched to it (CDrawer::AddHitArea 0x4d8240).
 struct HitArea {
@@ -223,6 +247,13 @@ inline constexpr GameGlobal<std::uint32_t> g_screenHeight{0x730f1c};
 // Origin added to drawing positions (Render helpers, graphics_helpers.cpp).
 inline constexpr GameGlobal<std::uint32_t> g_drawOriginX{0x730f3c};
 inline constexpr GameGlobal<std::uint32_t> g_drawOriginY{0x730f40};
+// The 16-bit shading masks (ShadeMasks) and the shadow state.
+inline constexpr GameGlobal<ShadeMasks> g_shadeMasks{0x7e8dd8};
+inline constexpr GameGlobal<ShadowSpanState> g_shadowSpan{0x7e8e08};
+// The span functions the 16-bit sprite blitters call, picked by brightness
+// (SelectBrightnessSpans 0x5fb4c0 from g_shadeSpans / g_maskedSpans).
+inline constexpr GameGlobal<std::uint32_t> g_maskedSpan{0x7e8c70};
+inline constexpr GameGlobal<std::uint32_t> g_shadeSpan{0x7e8c74};
 // Minimap: width (and height) in pixels, colour mode, what it shows, and
 // which of its 64 slices were recomputed.
 inline constexpr GameGlobal<std::int32_t> g_minimapWidth{0x730f28};
