@@ -34,6 +34,7 @@
 #include "game/typed_fields.h"
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/catch_match.h"
 #include "game/enums/settler_types.h"
 #include "game/enums/buildings.h"
 #include "game/enums/job_ids.h"
@@ -758,68 +759,20 @@ void ExecuteMessages(CLogicThread* thread, FrameLocals& frame, std::uint32_t& st
 // ".PAVCTimeout@Win32@@" at 0x698e98), thrown by the queue's wait when no
 // message comes in time. Matched like MSVC's handler does, by the thrown
 // type's catchable types.
-constexpr DWORD kCxxExceptionCode = 0xe06d7363;
-constexpr ULONG_PTR kCxxMagic = 0x19930520;
-constexpr std::uintptr_t kTimeoutPointerType = type_descriptor::kCTimeoutPointer;
 constexpr char kTimeoutPointerName[] = ".PAVCTimeout@Win32@@";
-
-#pragma pack(push, 4)
-struct CatchableType {
-    std::uint32_t properties;
-    const std::uint8_t* type;  // TypeDescriptor: vtable, spare, then the decorated name
-    std::int32_t mdisp, pdisp, vdisp;
-    std::int32_t size;
-    void* copy;
-};
-struct CatchableTypeArray {
-    std::int32_t count;
-    const CatchableType* types[1];
-};
-struct ThrowInfo {
-    std::uint32_t attributes;
-    void* unwind;
-    void* forward_compat;
-    const CatchableTypeArray* catchable;
-};
-#pragma pack(pop)
 
 struct CaughtTimeout {
     void* object = nullptr;
 };
 
-bool IsTimeoutPointer(const CatchableType* type) {
-    if (reinterpret_cast<std::uintptr_t>(type->type) == kTimeoutPointerType) {
-        return true;
-    }
-    return std::strcmp(reinterpret_cast<const char*>(type->type + 8), kTimeoutPointerName) == 0;
-}
-
 int TimeoutFilter(const EXCEPTION_RECORD* record, CaughtTimeout* caught) {
-    if (record->ExceptionCode != kCxxExceptionCode || record->NumberParameters < 3 ||
-        record->ExceptionInformation[0] != kCxxMagic || record->ExceptionInformation[2] == 0) {
+    const msvc6::CatchMatch match =
+        msvc6::MatchPointerCatch(record, type_descriptor::kCTimeoutPointer, kTimeoutPointerName);
+    if (!match.matched) {
         return EXCEPTION_CONTINUE_SEARCH;
     }
-    const auto* info = reinterpret_cast<const ThrowInfo*>(record->ExceptionInformation[2]);
-    const CatchableTypeArray* types = info->catchable;
-    for (std::int32_t i = 0; i < types->count; ++i) {
-        const CatchableType* type = types->types[i];
-        if (!IsTimeoutPointer(type)) {
-            continue;
-        }
-        // The thrown value is the pointer; adjust it to the caught type (__AdjustPointer).
-        auto* thrown = *reinterpret_cast<std::uint8_t**>(record->ExceptionInformation[1]);
-        if (thrown != nullptr) {
-            std::uint8_t* adjusted = thrown + type->mdisp;
-            if (type->pdisp >= 0) {
-                const auto* vbtable = *reinterpret_cast<std::uint8_t* const*>(thrown + type->pdisp);
-                adjusted += *reinterpret_cast<const std::int32_t*>(vbtable + type->vdisp) + type->pdisp;
-            }
-            thrown = adjusted;
-        }
-        caught->object = thrown;
-        return EXCEPTION_EXECUTE_HANDLER;
-    }
-    return EXCEPTION_CONTINUE_SEARCH;
+    caught->object = match.object;
+    return EXCEPTION_EXECUTE_HANDLER;
 }
 
 // Runs the body inside the equivalent of the original's try block; true if

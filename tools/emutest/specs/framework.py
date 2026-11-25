@@ -281,3 +281,144 @@ SPECS += [
     Spec("GetMemberDword64", 0x0049f510, "thiscall", []),
     Spec("GetMemberByte189", 0x00414030, "thiscall", [], eax_mask=0xFF),
 ]
+
+
+# -- session 55 round 2 (gfx-open): Win32::CFile, Win32::CFileMapping and
+# Win32::DetachMemory (win32_mapping.cpp, win32_detach.cpp) -------------
+#
+# The object is at world 0 (CFile: CWin32Handle layout; CFileMapping: the
+# handle, the file at +0xc, the view list at +0x10). The Windows calls are
+# API probes (emu.API_HANDLERS: results fixed by the case and the call's
+# position, failures included). Win32::ThrowWin32Error 0x610de0 and
+# ThrowHResult 0x611050 never return: probed as throwers (the run ends
+# there, compared with ECX = the expression, EDX = the file, line, error
+# and the message string's 16 bytes, whose buffer is on each frame's own
+# stack). CFileNotFound's constructor 0x611db0 is probed (it builds a
+# message string: not needed to show the thrower's own logic); the
+# _CxxThrowException after it ends the run. The blocks after a thrower
+# call are the original's never-reached clean-up of the message string.
+
+MAPPING_FILE = SCRATCH + 8 * SCRATCH_SLOT_BYTES       # a fake CFile (vtable FAKE_VTABLE)
+MAPPING_VIEWS = SCRATCH + 9 * SCRATCH_SLOT_BYTES      # the view list's entries
+WIN32_TEXT = SCRATCH + 10 * SCRATCH_SLOT_BYTES        # a file name
+WIN32_OUT = SCRATCH + 11 * SCRATCH_SLOT_BYTES         # out-parameters (done, high)
+DETACH_AREA_LOW = 0x01E00000                          # emu.DETACH_LOW
+
+
+def thrower_record(machine, ecx, args):
+    """ECX, EDX, line, code and the message string's bytes."""
+    from unicorn.x86_const import UC_X86_REG_EDX
+    message = machine.guest_read(args[-1], 16) if args[-1] else None
+    return (ecx, machine.uc.reg_read(UC_X86_REG_EDX), *args[:-1], message)
+
+
+def file_not_found_record(machine, ecx, args):
+    text = machine.guest_read(args[0], 64).split(b"\0")[0] if args[0] else None
+    return (text, args[1])
+
+
+WIN32_THROWERS = {
+    0x00610de0: (3, "thiscall", "throw", None, thrower_record),   # ThrowWin32Error(line, error, &message)
+    0x00611050: (3, "thiscall", "throw", None, thrower_record),   # ThrowHResult(line, hr, &message)
+    0x00611db0: (2, "thiscall", "this", None, file_not_found_record),  # CFileNotFound(name, 1)
+}
+
+
+def win32_text(rng, pool, args):
+    """A short file name at WIN32_TEXT."""
+    text = rng.choice([b"Gfx\\siedler3_00.f8007e01f.dat", b"x", b"", b"..\\Snd\\Siedler3_00.dat"])
+    return [(WIN32_TEXT + i, b, 1) for i, b in enumerate(text + b"\0")]
+
+
+def name_or_null(rng, pool):
+    return 0 if rng.random() < 0.15 else WORLD_BASE + WIN32_TEXT
+
+
+def out_or_null(rng, pool):
+    return 0 if rng.random() < 0.4 else WORLD_BASE + WIN32_OUT
+
+
+def mapping_world(rng, pool, args):
+    """A CFileMapping at world 0: a fake file or none, and a view list with
+    entries at MAPPING_VIEWS (length sometimes negative or at capacity,
+    growth sometimes 0; vtable the real WCValOrderedVector<void*> one, whose
+    find (slot 3) runs)."""
+    fields = win32_text(rng, pool, args)
+    fields.append((0x0c, 0 if rng.random() < 0.3 else WORLD_BASE + MAPPING_FILE, 4))
+    fields.append((MAPPING_FILE, FAKE_VTABLE, 4))
+    capacity = rng.choice([0, 1, 2, 5, 10, 10])
+    length = rng.choice([0, capacity, capacity, rng.randint(0, max(capacity, 1)), -rng.randint(1, 3)])
+    if rng.random() < 0.05:
+        capacity = length = 0xFFFFFFFE  # full; capacity + grow wraps: the length is clamped
+    fields += [(0x10, 0x65D9D0, 4), (0x18, WORLD_BASE + MAPPING_VIEWS, 4), (0x1c, capacity, 4),
+               (0x20, rng.choice([length, rng.getrandbits(32)]) & 0xFFFFFFFF, 4), (0x24, length & 0xFFFFFFFF, 4),
+               (0x28, rng.choice([5, 5, 0, 1]), 4)]
+    view_pool = [0x10000, 0x20000, 0x30000, 0x40000]
+    for i in range(12):
+        fields.append((MAPPING_VIEWS + 4 * i, rng.choice(view_pool), 4))
+    return fields
+
+
+def view_arg(rng, pool):
+    return rng.choice([0x10000, 0x20000, 0x30000, 0x40000, rng.getrandbits(32)])
+
+
+def detach_start(rng, pool):
+    return WORLD_BASE + DETACH_AREA_LOW + rng.randrange(0x30000)
+
+
+def detach_size(rng, pool):
+    return rng.choice([0, rng.randrange(0x100), rng.randrange(0x8000), rng.randrange(0x30000),
+                       rng.getrandbits(32)])
+
+
+def detach_globals(rng, pool, args):
+    return [(0x007E9220, rng.choice([0, 0, 0x1000, 0x800]), 4)]  # g_detachPageSize
+
+
+# Never reached (exempt below): the clean-up of the message string after
+# the thrower call (it never returns), and the frees of the temporaries the
+# message is built from, which hold "" and never get a buffer. MapView's
+# 0x61a9f7 (the shift loop of insertAt) needs index <= length - 2 with
+# index = 0, which only happens with a negative length: dead.
+CLEANUP_WIN32_CFILEMAPPING_MAPVIEW = (0x61a911, 0x61a930, 0x61a932, 0x61a936, 0x61a960, 0x61a96c, 0x61a9f7)
+CLEANUP_WIN32_CFILEMAPPING_CREATE = (0x61a63b, 0x61a645, 0x61a649, 0x61a64f, 0x61a6a6, 0x61a6bc, 0x61a6c3, 0x61a6c8, 0x61a6f2, 0x61a6fa, 0x61a6fc, 0x61a700, 0x61a726, 0x61a732, 0x61a738, 0x61a744, 0x61a74e, 0x61a752, 0x61a758, 0x61a761)
+CLEANUP_WIN32_CFILE_GETSIZE = (0x61a1b5, 0x61a1d4, 0x61a1d6, 0x61a1da, 0x61a204, 0x61a20e, 0x61a318, 0x61a337, 0x61a339, 0x61a33d, 0x61a367, 0x61a371, 0x61a37f)
+CLEANUP_WIN32_CFILE_SEEK = (0x619e8f, 0x619eae, 0x619eb0, 0x619eb4, 0x619ede, 0x619ee8, 0x619ff2, 0x61a011, 0x61a013, 0x61a017, 0x61a041, 0x61a04b, 0x61a059)
+CLEANUP_WIN32_CFILE_WRITE = (0x619c06, 0x619c10, 0x619c14, 0x619c1a, 0x619c6e, 0x619c85, 0x619c8c, 0x619c91, 0x619cb9, 0x619cc1, 0x619cc3, 0x619cc7, 0x619ced, 0x619cf9, 0x619cfd, 0x619d02, 0x619d0c, 0x619d10, 0x619d28)
+CLEANUP_WIN32_CFILE_READ = (0x6199c6, 0x6199d0, 0x6199d4, 0x6199da, 0x619a2e, 0x619a45, 0x619a4c, 0x619a51, 0x619a79, 0x619a81, 0x619a83, 0x619a87, 0x619aad, 0x619ab9, 0x619abd, 0x619ac2, 0x619acc, 0x619ad0, 0x619ae8)
+CLEANUP_WIN32_CFILE_OPEN = (0x619774, 0x61977e, 0x619782, 0x619788, 0x6197d8, 0x6197ee, 0x6197f5, 0x6197fa, 0x619822, 0x61982a, 0x61982c, 0x619830, 0x619856, 0x619862, 0x619868, 0x619874, 0x61987e, 0x619882, 0x619888, 0x619891)
+
+SPECS += [
+    Spec("Win32_CFile_Open", 0x00619610, "thiscall",
+         [name_or_null, anything, anything, anything, anything, anything, anything],
+         presets=win32_text, callees=WIN32_THROWERS, new_fails=0.1, new_fails_size=0x28,
+         exempt_blocks=CLEANUP_WIN32_CFILE_OPEN),
+    Spec("Win32_CFile_Read", 0x006198d0, "thiscall", [anything, anything, out_or_null, anything],
+         callees=WIN32_THROWERS,
+         exempt_blocks=CLEANUP_WIN32_CFILE_READ),
+    Spec("Win32_CFile_Write", 0x00619b10, "thiscall", [anything, anything, out_or_null, anything],
+         callees=WIN32_THROWERS,
+         exempt_blocks=CLEANUP_WIN32_CFILE_WRITE),
+    Spec("Win32_CFile_Seek", 0x00619d50, "thiscall", [anything, out_or_null, anything],
+         callees=WIN32_THROWERS,
+         exempt_blocks=CLEANUP_WIN32_CFILE_SEEK),
+    Spec("Win32_CFile_GetSize", 0x0061a080, "thiscall", [out_or_null], callees=WIN32_THROWERS,
+         exempt_blocks=CLEANUP_WIN32_CFILE_GETSIZE),
+    Spec("Win32_CFileMapping_Construct", 0x0061a3a0, "thiscall", [], new_fails=0.2),
+    Spec("Win32_CFileMapping_Destroy", 0x0061a460, "thiscall", [], presets=mapping_world,
+         virtuals={0x00: 1}, exempt_blocks=(0x0061a4de,)),  # data was just set to 0: base destructor's delete
+    Spec("Win32_CFileMapping_DeletingDestroy", 0x0061a440, "thiscall", [anything], presets=mapping_world,
+         virtuals={0x00: 1}),
+    Spec("Win32_CFileMapping_Close", 0x0061a7a0, "thiscall", [], presets=mapping_world, virtuals={0x00: 1}),
+    Spec("Win32_CFileMapping_Create", 0x0061a520, "thiscall",
+         [one_of(0, 0, WORLD_BASE + MAPPING_FILE), anything, anything, anything, anything, name_or_null],
+         presets=mapping_world, callees=WIN32_THROWERS,
+         exempt_blocks=CLEANUP_WIN32_CFILEMAPPING_CREATE),
+    Spec("Win32_CFileMapping_MapView", 0x0061a7d0, "thiscall", [anything, anything, anything, anything],
+         presets=mapping_world, callees=WIN32_THROWERS,
+         exempt_blocks=CLEANUP_WIN32_CFILEMAPPING_MAPVIEW),
+    Spec("Win32_CFileMapping_UnmapView", 0x0061aa40, "thiscall", [view_arg], presets=mapping_world),
+    Spec("Win32_DetachMemory", 0x0061ab60, "fastcall", [detach_start, detach_size], globals=detach_globals,
+         callees=WIN32_THROWERS, exempt_blocks=(0x0061b111,)),  # the message's _Tidy after a thrower
+]

@@ -40,6 +40,40 @@ struct CWin32Handle {
 };
 static_assert(sizeof(CWin32Handle) == 0xc);
 
+// Win32::CFile (vtable 0x65d9b8, 0xc bytes, Win32\Mapping.cpp): a
+// CWin32Handle whose handle is a file (CreateFileA). Members:
+// win32_mapping.cpp.
+
+// WCValOrderedVector<void*> as Win32::CFileMapping embeds it (0x1c bytes;
+// vtable 0x65d9d0, slot 3 = WCOrderedVectorBase::base_find_from 0x499da0):
+// the watcom::PtrVector layout plus the growth step. The constructor
+// leaves unk04 = 0x7f (probably the Watcom container's exception-state
+// flags; never read by the mapping code).
+struct WCPtrOrderedVector {
+    std::uint32_t vtable;    // +0x00
+    std::uint32_t unk04;     // +0x04 0x7f after the constructor
+    std::uint32_t data;      // +0x08 the entries (game operator new)
+    std::uint32_t capacity;  // +0x0c entries allocated (10 at first)
+    std::int32_t filled;     // +0x10 entries that hold a value
+    std::int32_t length;     // +0x14 entries in use
+    std::uint32_t grow;      // +0x18 entries added when full (5)
+};
+static_assert(offsetof(WCPtrOrderedVector, data) == 0x08);
+static_assert(offsetof(WCPtrOrderedVector, length) == 0x14);
+static_assert(sizeof(WCPtrOrderedVector) == 0x1c);
+
+// Win32::CFileMapping (vtable 0x65d9c4, 0x2c bytes from CGraphicsData's
+// operator new): a CWin32Handle holding the mapping object, the CFile it
+// maps (owned: Close deletes it) and the list of views mapped from it.
+struct CFileMapping {
+    CWin32Handle handle;        // +0x00 (vtable, mapping handle, owned)
+    std::uint32_t file;         // +0x0c Win32::CFile* or 0 (a mapping of the paging file)
+    WCPtrOrderedVector views;   // +0x10 addresses returned by MapView
+};
+static_assert(offsetof(CFileMapping, file) == 0x0c);
+static_assert(offsetof(CFileMapping, views) == 0x10);
+static_assert(sizeof(CFileMapping) == 0x2c);
+
 // Win32::CWaitable (also the layout of Win32::CEvent): a CWin32Handle
 // sub-object at +4.
 struct CWaitable {

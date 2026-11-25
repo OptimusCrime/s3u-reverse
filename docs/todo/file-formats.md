@@ -29,9 +29,6 @@ LOGBOOK session entry).
   (0x60bab0/0x60bbe0/0x60be20) and `GameSettings::PlayerSetup` 0x4351e0
   (LoadMap calls the original; Watcom vector code behind a mutex) as our
   code.
-- **Shared catch-type helper:** the SEH filter that matches MSVC 6.0
-  catchable types exists twice (execute_commands.cpp,
-  map_file_stream.cpp); make it one helper.
 - **Graphics loader (re/graphics_formats.md):** session 55 verified the
   accessors, spans, RLE helpers, all blitters, the Draw methods and Close.
   Left: `CGraphicsData::Open` 0x5f6fd0 (~3,500 instructions: file search,

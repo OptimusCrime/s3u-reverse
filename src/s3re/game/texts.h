@@ -19,6 +19,21 @@ inline constexpr GameText kCommaFile{0x7a2a3c};  // ", file "
 inline constexpr GameText kAssertmentFailed{0x7a4758};  // "Assertment failed: "
 inline constexpr GameText kNotEnoughMemoryAt{0x7a4694};  // "Not enough memory at "
 
+// ------------------------------------------------------------ Win32\*.cpp
+// The VERIFY expressions and files Win32\Mapping.cpp and Win32\Detach.cpp
+// pass to Win32::ThrowWin32Error / ThrowHResult.
+inline constexpr GameText kMappingFile{0x7a4f7c};           // "E:\Siedler3\Win32\Mapping.cpp"
+inline constexpr GameText kDetachFile{0x7a5080};            // "E:\Siedler3\Win32\Detach.cpp"
+inline constexpr GameText kFileHandleValid{0x7a4f5c};       // "hFile != INVALID_HANDLE_VALUE"
+inline constexpr GameText kRetvalNotFalse{0x7a4f9c};        // "bRetval != FALSE"
+inline constexpr GameText kRetvalValid{0x7a4fec};           // "dwRetval != 0xffffffff"
+// "(dwRetval != 0xffffffff) && (GetLastError () != NO_ERROR)"
+inline constexpr GameText kRetvalValidHigh{0x7a4fb0};
+inline constexpr GameText kMappingNotNull{0x7a5054};        // "hMapping != NULL"
+inline constexpr GameText kBaseAddressNotNull{0x7a5068};    // "lpBaseAddress != NULL"
+inline constexpr GameText kFalse{0x7a2b50};                 // "false"
+inline constexpr GameText kErrorCheck{0x697024};            // "error check"
+
 // ------------------------------------------------------------ Dirk\*.cpp
 inline constexpr GameText kPathingFile{0x69f9dc};       // "E:\Siedler3\Dirk\Pathing.cpp"
 inline constexpr GameText kShouldManage{0x69f9bc};      // "Das solltest du schon schaffen"

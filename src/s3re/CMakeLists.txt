@@ -9,9 +9,11 @@ add_library(s3re SHARED
 
     # test/: the differential test harness
     test/difftest.cpp
+    test/fake_win32.cpp
     test/harness_selftest.cpp
 
     # msvc6/: MSVC 6.0 library code (std::string, exceptions)
+    msvc6/catch_match.cpp
     msvc6/exceptions.cpp
     msvc6/string.cpp
 
@@ -218,8 +220,11 @@ add_library(s3re SHARED
     game/framework/misc_helpers.cpp
     game/framework/string_members.cpp
     game/framework/win32_classes.cpp
+    game/framework/win32_detach.cpp
     game/framework/win32_errors.cpp
     game/framework/win32_exceptions.cpp
+    game/framework/win32_mapping.cpp
+    game/framework/win32_mapping_tests.cpp
     game/framework/winmain.cpp
 )
 

@@ -64,3 +64,10 @@ SELF_TEST += [
     Spec("WrongDescribe", 0x00612e80, "thiscall", [one_of(STRING_RESULT_PTR)],
          presets=assertment_object, ignore_bytes=(STRING_RESULT,)),
 ]
+
+SELF_TEST += [
+    # Thrower callees ("throw"): Write against Read, which throws with
+    # another line (0x3c against 0x44) when the call fails.
+    Spec("Win32_CFile_Write", 0x006198d0, "thiscall", [anything, anything, out_or_null, anything],
+         callees=WIN32_THROWERS),
+]

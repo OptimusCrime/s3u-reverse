@@ -428,5 +428,50 @@ inline constexpr GameGlobal<CloseHandleImport> g_importCloseHandle{0x655180};
 inline constexpr GameGlobal<TimeGetTimeImport> g_importTimeGetTime{0x655358};  // from _INMM.dll
 inline constexpr GameGlobal<OutputDebugStringAImport> g_importOutputDebugStringA{0x6550b0};
 inline constexpr GameGlobal<GetDriveTypeAImport> g_importGetDriveTypeA{0x6550a4};
+// Win32\Mapping.cpp, Win32\Detach.cpp and the graphics loader.
+using CreateFileAImport = void*(__stdcall*)(const char* name, std::uint32_t access, std::uint32_t share,
+                                            void* security, std::uint32_t disposition, std::uint32_t flags,
+                                            void* templateFile);
+using ReadFileImport = int(__stdcall*)(void* file, void* buffer, std::uint32_t size, std::uint32_t* done,
+                                       void* overlapped);
+using WriteFileImport = int(__stdcall*)(void* file, const void* buffer, std::uint32_t size, std::uint32_t* done,
+                                        void* overlapped);
+using SetFilePointerImport = std::uint32_t(__stdcall*)(void* file, std::int32_t low, std::int32_t* high,
+                                                       std::uint32_t method);
+using GetFileSizeImport = std::uint32_t(__stdcall*)(void* file, std::uint32_t* high);
+using CreateFileMappingAImport = void*(__stdcall*)(void* file, void* security, std::uint32_t protect,
+                                                   std::uint32_t sizeHigh, std::uint32_t sizeLow, const char* name);
+using MapViewOfFileImport = void*(__stdcall*)(void* mapping, std::uint32_t access, std::uint32_t offsetHigh,
+                                              std::uint32_t offsetLow, std::uint32_t size);
+using UnmapViewOfFileImport = int(__stdcall*)(const void* view);
+using GetLastErrorImport = std::uint32_t(__stdcall*)();
+using GetSystemInfoImport = void(__stdcall*)(void* info);
+using VirtualQueryImport = std::uint32_t(__stdcall*)(const void* address, void* info, std::uint32_t size);
+using VirtualProtectImport = int(__stdcall*)(void* address, std::uint32_t size, std::uint32_t protect,
+                                             std::uint32_t* old);
+using GetCurrentDirectoryAImport = std::uint32_t(__stdcall*)(std::uint32_t size, char* buffer);
+using SetCurrentDirectoryAImport = int(__stdcall*)(const char* path);
+using FindFirstFileAImport = void*(__stdcall*)(const char* name, void* data);
+using FindCloseImport = int(__stdcall*)(void* find);
+inline constexpr GameGlobal<CreateFileAImport> g_importCreateFileA{0x655194};
+inline constexpr GameGlobal<ReadFileImport> g_importReadFile{0x6551f4};
+inline constexpr GameGlobal<WriteFileImport> g_importWriteFile{0x6551a0};
+inline constexpr GameGlobal<SetFilePointerImport> g_importSetFilePointer{0x6551f8};
+inline constexpr GameGlobal<GetFileSizeImport> g_importGetFileSize{0x655190};
+inline constexpr GameGlobal<CreateFileMappingAImport> g_importCreateFileMappingA{0x65518c};
+inline constexpr GameGlobal<MapViewOfFileImport> g_importMapViewOfFile{0x655188};
+inline constexpr GameGlobal<UnmapViewOfFileImport> g_importUnmapViewOfFile{0x655184};
+inline constexpr GameGlobal<GetLastErrorImport> g_importGetLastError{0x6550e8};
+inline constexpr GameGlobal<GetSystemInfoImport> g_importGetSystemInfo{0x655200};
+inline constexpr GameGlobal<VirtualQueryImport> g_importVirtualQuery{0x6551fc};
+inline constexpr GameGlobal<VirtualProtectImport> g_importVirtualProtect{0x6550a8};
+inline constexpr GameGlobal<GetCurrentDirectoryAImport> g_importGetCurrentDirectoryA{0x6550b8};
+inline constexpr GameGlobal<SetCurrentDirectoryAImport> g_importSetCurrentDirectoryA{0x6550c8};
+inline constexpr GameGlobal<FindFirstFileAImport> g_importFindFirstFileA{0x65508c};
+inline constexpr GameGlobal<FindCloseImport> g_importFindClose{0x655098};
+
+// Win32::DetachMemory (0x61ab60): the page size, read once with
+// GetSystemInfo (dwPageSize) and kept (0 until the first call).
+inline constexpr GameGlobal<std::uint32_t> g_detachPageSize{0x7e9220};
 
 }  // namespace s3re::game
