@@ -209,3 +209,7 @@ recording is `replay-check/recording.s3rec` next to the DLL).
   check** (session 54): `check_random_map.py` reads `s3re.log` next to the
   DLL, and a concurrent `s3re_launcher --test` overwrites it, so the check
   reports "the random map was not set up".
+- **Keep the game window focused during whole-game checks** (session 55):
+  if it loses focus (a click elsewhere, a locked screen), the game throws
+  `CAppNotActiveException` ("Application is not active") and the check
+  reports "run failed (exit code 4294967295)". Rerun that check.

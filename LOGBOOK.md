@@ -16,33 +16,30 @@ to `docs/todo/`). The archive is for searching, not for reading whole.
 **Next (updated in session 55). The user's priority (2026-11-24): function
 batches (reimplement + verify), less cleanup; cleanup only where it blocks
 a batch.**
-1. **Computer players, the rest** (`docs/todo/computer-players.md`): the
-   military side is done up to RunMilitary 0x58f990 / T_ATTACK_AGENT::Run.
-   Left: the SiteTree containers and the farm / rice farm / vineyard /
-   fishery work-area finders (std::_Lockit needs emulator probes; an
-   uninitialized padding byte lands in freed tree nodes), CEvaLand
-   Init / ctor, FillAreaSiteLists 0x556630 (1,361 ins), AI::CreateAgent,
-   AI::LoadState 0x596380, AI::SaveGlobals 0x551220, the remaining agents'
-   run functions, then 0x550a30 / CComputerPlayer::Step 0x550f80.
-   SendPrioritizeSite 0x58e510 needs a runtime look (log message byte 6
-   against the site owner in a game with computer players).
-2. **Graphics** (`re/graphics_formats.md`, `docs/todo/file-formats.md`):
-   drawing is verified (session 55). Next: CGraphicsData::Open 0x5f6fd0
-   and the rest of the loader, which need the Win32 file-mapping classes
-   (CFileMapping 0x61a3a0, MapView/UnmapView, CFile) first; three static
-   initializers without function starts (0x5f5a20, 0x5fda80, 0x5fdb30);
-   CSoundData.
-3. **File formats:** LoadMap and SaveGame are verified. Left:
-   GameSettings::SaveSetup 0x433490 and PlayerSetup 0x4351e0 (Watcom,
-   settings side), CLogicThread::SaveGameToSlot 0x50ac40.
-4. **Other READY functions** (`frontier.py --library-done`): DrawData
-   0x523480, CGameData::FindNearest_b 0x4ff170, Logic_sub_4d79c0; the UI
-   range 0x400000..0x4c0000 has ~265 READY (mostly Watcom containers and
+1. **Computer players, the rest** (`docs/todo/computer-players.md`): done
+   up to RunMilitary, the SiteTree containers, the work-area finders,
+   CEvaLand construction and AI load/save (session 55). Left: AddArea
+   0x555260, FillAreaSiteLists 0x556630 and RefillAreaSiteList 0x5579d0
+   (~1.4k ins each), ProcessPendingEvents 0x554980, the expand-empire and
+   map-worker agents' MakeBuildOrders (0x56cd90, 0x57ce90) and Run, then
+   0x550900 / 0x550a30 and CComputerPlayer::Step 0x550f80. Three helpers
+   without function starts (0x553e70, 0x5591e0, 0x559240) need manual
+   rows. SendPrioritizeSite 0x58e510 needs a runtime look (log message
+   byte 6 against the site owner in a game with computer players).
+2. **Sound and the rest of the data loaders**: CSoundData (ctor 0x5fdb60,
+   Open 0x5fe760, DetachFromMedium 0x5ff230, GetEffect; SND format not
+   analysed yet). The graphics loader and drawing are verified.
+3. **Settings / savegame leftovers** (`docs/todo/file-formats.md`):
+   GameSettings::LoadSaveGame 0x432b00 (Watcom vector members first), the
+   GamePlayerSetup copy constructor 0x49eaf0 / operator= 0x49edf0 (16-bit
+   string assign 0x428400 first).
+4. **Other READY functions** (`frontier.py --library-done`): the UI range
+   0x400000..0x4c0000 has ~265 READY (mostly Watcom containers and
    controls).
-5. **Open (session 55):** the Release-only emulator mismatch of
-   CGameData_GenerateRandomMap since the wip/ai-mil merge, and the
-   Release-only in-process failure of CGameData_UpdateSoldier_MatchesOriginal
-   (older); being debugged on wip/emufix.
+5. **Tooling guard (session 55):** spec parts share one namespace and
+   names resolve at call time, so a redefinition in a later part silently
+   changes earlier specs (GFX_HEADERS, fixed). Add a check that fails on
+   top-level names defined twice with different values.
 6. Open from session 49: the live-vs-replay header/rest hash difference
    of the user's full game (backlog "Evidence and testing").
 7. Later, only when it blocks a batch: readability leftovers
@@ -119,6 +116,67 @@ testing".
   classes by default; they might be library code.
 
 ## Session log (recent sessions; older ones in docs/history/)
+
+### 2026-11-25 (55, round 2): emulator fix, AI land side, settings, graphics loader
+
+Round 2 of session 55: three batch agents (wip/ai-step, wip/gfx-open,
+wip/settings) and two debugging agents (wip/emufix, wip/soldierfix);
+verified 1031 -> 1102. All agents hit the 5-hour usage limit once and
+were resumed.
+- **Emulator harness bug (wip/emufix):** Unicorn 2.1.4 placed regions in
+  its RAM address space after the last block of a size-sorted list until
+  something had been unmapped, so the world shared RAM offsets with
+  s3re.dll code; a store to world+X then counted as self-modifying code
+  at s3re.dll+X and Unicorn stopped calling the memory hooks for the rest
+  of the run (writes untracked). This caused the Release-only
+  GenerateRandomMap mismatch (the ai-mil merge only moved code). Fix:
+  emu.new_uc() maps and unmaps a scratch page first; `--self-test` now
+  checks that no store aliases code. With the fix, all specs rerun: 0
+  mismatches (docs/tools/emulator.md "Unicorn RAM offsets").
+- **UpdateSoldier Release-only failure (wip/soldierfix):** a test issue:
+  map effect records are built in an uninitialized stack temporary, so
+  pad2a/pad3b/pad3e hold stack leftovers in both versions; Debug's happened
+  to match. Shared WorldPair helper (ClearEffectPadding /
+  CheckpointIgnoringEffectPadding) replaces five local copies
+  (docs/reimplementation_notes.md "Padding of map effect records").
+- **Computer players (wip/ai-step)**, 46 functions: AI::SiteTree (MSVC6
+  _Tree, 16 functions, ai_site_tree.cpp; std::_Lockit calls compared as
+  probes, specs.LOCKIT_PROBES), the six work-area finders
+  (ai_work_area_finders.cpp; the finders' freed-node padding byte +0xd
+  ignored with a self-test pairing), area records and CEvaLand
+  construction (ai_area_records.cpp), AI LoadState / LoadGlobals /
+  SaveGlobals, CreateAgent. Findings: woodcutter/stonecutter finders take
+  the cell with the fewest trees/stones once stock > 10; farm-type finders
+  key a unique map by the score's low byte (first cell wins); area
+  records have 39 site trees.
+- **Graphics loader (wip/gfx-open)**, 19 functions: Win32 CFile and
+  CFileMapping (framework/win32_mapping.cpp), DetachMemory, CGraphicsData
+  ctor/dtor, FindDirectoryContainingFile, DetachFromMedium and Open
+  (graphics/gfx_loader.cpp; Open run on the real GFX folder in both pixel
+  formats and all group sets). Shared MSVC6 catch matcher
+  msvc6/catch_match.h (backlog item done); test/fake_win32.h; emu.py file
+  and memory API handlers and a "throw" callee kind. Quirks kept: CFile
+  Seek/GetSize throw on success in one case (inverted VERIFY);
+  DetachMemory never advances past an uncommitted region. Known
+  difference: Open's local strings leak when a call throws (missing file).
+- **Settings side (wip/settings)**, 18 functions: GameSettings::PlayerSetup
+  and SaveSetup (ui/game_settings_players.cpp), SaveGameToSlot
+  (single-player "slot%2i.sav", multiplayer Multi\temp.mps; the game GUID
+  at GameSettings +0xb0 is formatted and discarded), TileAtScreenPoint
+  (was FindNearest_b), DrawValueBar (was Logic_sub_4d79c0), DrawData,
+  GamePlayerSetup ctor and getters. Renames: GamePlayerSetup::~GamePlayerSetup
+  (was NetHelp::Destroy_49ec80), GameSettings::GameGuid (was CopyRectB0).
+- Spec namespace clash found at merge: graphics.py redefined GFX_HEADERS
+  (used by economy/logic/settlers helpers at call time); renamed to
+  GFX_FAKE_HEADERS.
+- Evidence on the merged main: Debug and Release build; inventory check
+  clean; `--self-test` 26/26 + RAM check "separate"; `--test` 831/831 (Debug); full emulator suite
+  `--full --require-coverage`: 1102 functions, 0 mismatches, 0 with
+  incomplete coverage; whole-game checks against the original: check_save
+  slots 1-3, check_random_map 384,0 and 448,3, the scripted-seed127 replay:
+  all identical (slot 2 first failed with CAppNotActiveException when the
+  game window lost focus; rerun identical). Identical in a whole-game check:
+  726 -> 777.
 
 ### 2026-11-25 (55): graphics drawing, savegame writer, computer players economy and military
 
