@@ -193,6 +193,10 @@ inline constexpr GameGlobal<const std::uint16_t[58]> g_aiBuildPrioritySteps{0x73
 // The T_ECONOMY_AGENT's population stages (EconomyAgent::population):
 // stage s while population < stages[s + 1] (0, 40, 100, 500, 2000).
 inline constexpr GameGlobal<const std::uint16_t[5]> g_aiPopulationStages{0x65a85c};
+// Carriers wanted at the start of each population stage (0, 20, 50, 200,
+// 500; the residences condition 0x568890); the static initializers derive
+// g_aiResidenceSlopes from them and the stages.
+inline constexpr GameGlobal<const std::uint16_t[5]> g_aiWantedCarriers{0x65a868};
 // Buildings wanted at the start of each population stage (0x5696d0 gold
 // mines 0, 2, 3, 5, 7; 0x5691b0 weaponsmiths 0, 1, 2, 3, 4); the static
 // initializers derive the per-stage slopes (g_aiWantedGoldMineSlopes,

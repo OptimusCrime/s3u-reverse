@@ -67,6 +67,7 @@
 
 #include "game/ai/ai_layout.h"
 #include "game/debug_log.h"
+#include "game/enums/buildings.h"
 #include "game/enums/goods.h"
 #include "game/enums/resources.h"
 #include "game/enums/terrain.h"
@@ -757,5 +758,219 @@ S3RE_TEST(AiResourceCounts_ComparisonDetectsWrongImplementation) {
     }
 }
 
+
+// ---------------------------------------------------------------------------
+// Trees and stones near the computer player's fields (session 55)
+// ---------------------------------------------------------------------------
+//
+//   0x0059a260 AI::FindTreesNearOwnFields(u16* x, u16* y) fastcall: the
+//              area of (x, y) (AI::AreaAlongRow; 0xffff: EAX = 0); then for
+//              the buildings 1, 2, ... (AI_GetBuilding until its error
+//              flag): a finished (buildup 0) farm, vineyard or rice farm of
+//              g_aiPlayerNumber in that area (AI_BuildingArea, 16-bit
+//              compare) whose work point is closer than 30 (TileDistance)
+//              to (*x, *y) and whose grid cell (GridCellOfTile) has trees
+//              around (AiGridCell::trees_around): *x, *y = the work point,
+//              and if AI::FindResourceCellAround(x, y, player, logs) finds
+//              a cell, EAX = 1. Else the search goes on, measuring from the
+//              work point just tried (the original keeps it in *x, *y).
+//              EAX = 0 at the end. The player dword's upper half is that
+//              of the grid cell's address (left in EAX by `movzx ax`).
+//   0x0059a7a0 AI::FindStonesNearOwnFields(u16* x, u16* y) fastcall: the
+//              same within 45 tiles, with stones around
+//              (AiGridCell::stones_around, a word), the building's owner
+//              byte as the player and goods stone.
+
+using FindNearFieldsFn = std::uint32_t(__fastcall*)(std::uint16_t* x, std::uint16_t* y);
+
+std::uint32_t __fastcall AI_FindTreesNearOwnFields(std::uint16_t* x, std::uint16_t* y);
+std::uint32_t __fastcall AI_FindStonesNearOwnFields(std::uint16_t* x, std::uint16_t* y);
+
+S3RE_HOOK(0x0059a260, AI_FindTreesNearOwnFields, FindNearFieldsFn, Original_AI_FindTreesNearOwnFields,
+          AI_FindTreesNearOwnFields);
+S3RE_HOOK(0x0059a7a0, AI_FindStonesNearOwnFields, FindNearFieldsFn, Original_AI_FindStonesNearOwnFields,
+          AI_FindStonesNearOwnFields);
+
+namespace {
+
+constexpr std::uintptr_t kAreaAlongRow = 0x005996c0;           // AI::AreaAlongRow (fastcall, values)
+constexpr std::uintptr_t kGetBuilding = 0x0058e170;            // AI_GetBuilding (fastcall)
+constexpr std::uintptr_t kBuildingArea = 0x00599610;           // AI_BuildingArea (fastcall)
+constexpr std::uintptr_t kTileDistance = 0x004ff320;           // TileDistance (stdcall)
+constexpr std::uintptr_t kGridCellOfTile = 0x00554770;         // AI::CEvaLand::GridCellOfTile (thiscall)
+constexpr std::uintptr_t kFindResourceCellAround = 0x0059a120;  // AI::FindResourceCellAround
+
+constexpr std::uint16_t kNoArea = 0xffff;
+constexpr std::uint32_t kTreeSearchDistance = 30;
+constexpr std::uint32_t kStoneSearchDistance = 45;
+
+bool IsFieldBuilding(std::uint8_t art) {
+    return art == Value(BuildingType::RiceFarm) || art == Value(BuildingType::Vineyard) ||
+           art == Value(BuildingType::Farm);
+}
+
+// The shared search of 0x59a260 / 0x59a7a0.
+std::uint32_t FindNearOwnFields(std::uint16_t* x, std::uint16_t* y, bool stones, std::uint32_t maxDistance) {
+    using AreaFn = std::uint32_t(__fastcall*)(std::uint32_t x, std::uint32_t y);
+    using GetBuildingFn = const layout::Building*(__fastcall*)(std::uint32_t id, std::uint32_t* error);
+    using BuildingAreaFn = std::uint32_t(__fastcall*)(const std::uint32_t* building);
+    using DistanceFn = std::uint32_t(__stdcall*)(std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+    using CellOfTileFn = const AiGridCell*(__fastcall*)(std::uint32_t self, void* edx, std::uint32_t x,
+                                                        std::uint32_t y);
+    const auto area = static_cast<std::uint16_t>(reinterpret_cast<AreaFn>(kAreaAlongRow)(*x, *y));
+    if (area == kNoArea) {
+        return 0;
+    }
+    std::uint32_t error = 0;
+    std::uint32_t id = 0;
+    do {
+        ++id;
+        const layout::Building* building = reinterpret_cast<GetBuildingFn>(kGetBuilding)(id, &error);
+        if (building == nullptr || building->owner != g_aiPlayerNumber || building->buildup != 0 ||
+            !IsFieldBuilding(building->art)) {
+            continue;
+        }
+        const std::uint32_t number = id;
+        if (static_cast<std::uint16_t>(reinterpret_cast<BuildingAreaFn>(kBuildingArea)(&number)) != area) {
+            continue;
+        }
+        const std::uint32_t distance =
+            reinterpret_cast<DistanceFn>(kTileDistance)(building->work_x, building->work_y, *x, *y);
+        if (distance >= maxDistance) {
+            continue;
+        }
+        const AiGridCell* cell =
+            reinterpret_cast<CellOfTileFn>(kGridCellOfTile)(g_aiLandEvaluation, nullptr, building->work_x,
+                                                            building->work_y);
+        if (stones ? cell->stones_around == 0 : cell->trees_around == 0) {
+            continue;
+        }
+        *x = building->work_x;
+        *y = building->work_y;
+        const std::uint8_t owner = stones ? building->owner : g_aiPlayerNumber.get();
+        const std::uint32_t player = (reinterpret_cast<std::uint32_t>(cell) & 0xffff0000u) | owner;
+        if (reinterpret_cast<FindCellFn>(kFindResourceCellAround)(x, y, player, stones ? kGoodsStone : kGoodsLog) !=
+            0) {
+            return 1;
+        }
+    } while (error == 0);
+    return 0;
+}
+
+}  // namespace
+
+// Purpose: Finds trees next to the computer player's farms, vineyards or
+// rice farms near a tile, as a work area for a woodcutter (probably to
+// clear the trees off the field land).
+std::uint32_t __fastcall AI_FindTreesNearOwnFields(std::uint16_t* x, std::uint16_t* y) {
+    return FindNearOwnFields(x, y, /*stones=*/false, kTreeSearchDistance);
+}
+
+// Purpose: The same for stones, as a work area for a stonecutter.
+std::uint32_t __fastcall AI_FindStonesNearOwnFields(std::uint16_t* x, std::uint16_t* y) {
+    return FindNearOwnFields(x, y, /*stones=*/true, kStoneSearchDistance);
+}
+
+// Tests: the 80 x 80 test map of the cell queries (owners, trees, stones),
+// a 9 x 9 grid (width and height 1..9) with random trees_around /
+// stones_around, and up to 30 buildings: farms, vineyards, rice farms and
+// others, owners 0..2 or free, finished or not, door tiles in areas 0..3,
+// work points on the map. Compared: EAX, *x, *y.
+
+namespace {
+
+void SetUpFieldBuildings(test::Rng& rng, CGameData* world, std::vector<AiGridCell>& cells) {
+    constexpr std::uint8_t kTypes[] = {Value(BuildingType::Farm), Value(BuildingType::Vineyard),
+                                       Value(BuildingType::RiceFarm), Value(BuildingType::Woodcutter)};
+    const std::uint32_t count = rng.Below(30);
+    world->building_high_water = count;
+    for (std::uint32_t id = 1; id <= count; ++id) {
+        layout::Building& building = world->buildings[id];
+        building.owner = static_cast<std::uint8_t>(rng.Chance(1, 8) ? 0xff : rng.Below(3));
+        building.art = kTypes[rng.Below(4)];
+        building.buildup = static_cast<std::uint8_t>(rng.Chance(1, 5) ? 1 + rng.Below(200) : 0);
+        building.door_x = static_cast<std::uint16_t>(rng.Below(kTestMap));
+        building.door_y = static_cast<std::uint16_t>(rng.Below(kTestMap));
+        building.work_x = static_cast<std::uint16_t>(rng.Below(kTestMap - 8));
+        building.work_y = static_cast<std::uint16_t>(rng.Below(kTestMap - 8));
+    }
+    for (std::uint32_t x = 0; x < kTestMap; ++x) {
+        for (std::uint32_t y = 0; y < kTestMap; ++y) {
+            world->tiles[x][y].area = static_cast<std::uint16_t>(rng.Chance(1, 10) ? 0 : 1 + rng.Below(2));
+        }
+    }
+    for (AiGridCell& cell : cells) {
+        cell.trees_around = static_cast<std::uint8_t>(rng.Chance(1, 3) ? 0 : 1 + rng.Below(200));
+        cell.stones_around = static_cast<std::uint16_t>(rng.Chance(1, 3) ? 0 : rng.Chance(1, 8) ? 0x100 : 1 + rng.Below(200));
+    }
+}
+
+void CompareNearOwnFields(test::Context& ctx, FindNearFieldsFn trees, FindNearFieldsFn stones, int cases) {
+    SavedGlobals saved;
+    test::WorldBuffer buffer(sizeof(CGameData));
+    CGameData* world = buffer.world();
+    std::vector<AiGridCell> cells(kGridSide * kGridSide);
+    AiLandEvaluation land{};
+    land.cells = cells.data();
+    g_aiWorld = world;
+    g_aiLandEvaluation = reinterpret_cast<std::uint32_t>(&land);
+    const std::uint8_t number = g_aiPlayerNumber;
+    int found = 0;
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        test::Rng& rng = ctx.rng();
+        if (i % 10 == 0) {
+            SetUpMap(rng, world, cells);
+            SetUpFieldBuildings(rng, world, cells);
+        }
+        g_aiMapSizeX = static_cast<std::uint16_t>(kTestMap - rng.Below(20));
+        g_aiMapSizeY = static_cast<std::uint16_t>(kTestMap - rng.Below(20));
+        land.width = 1 + rng.Below(kGridSide);
+        land.height = 1 + rng.Below(kGridSide);
+        g_aiPlayerNumber = static_cast<std::uint8_t>(rng.Below(3));
+        const bool stone = rng.Chance(1, 2);
+        std::uint16_t xa = static_cast<std::uint16_t>(rng.Chance(1, 20) ? rng.Next32() : rng.Below(kTestMap));
+        std::uint16_t ya = static_cast<std::uint16_t>(rng.Chance(1, 20) ? rng.Next32() : rng.Below(kTestMap));
+        std::uint16_t xb = xa, yb = ya;
+        const std::uint32_t ra = (stone ? Original_AI_FindStonesNearOwnFields : Original_AI_FindTreesNearOwnFields)(&xa, &ya);
+        const std::uint32_t rb = (stone ? stones : trees)(&xb, &yb);
+        found += ra != 0 ? 1 : 0;
+        bool same = S3RE_EXPECT_EQ(ra, rb);
+        same &= S3RE_EXPECT_EQ(xa, xb);
+        same &= S3RE_EXPECT_EQ(ya, yb);
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, stones %d", i, stone ? 1 : 0);
+        }
+    }
+    g_aiPlayerNumber = number;
+    if (cases >= 1000 && !S3RE_EXPECT(found >= cases / 40)) {
+        ctx.Fail(__FILE__, __LINE__, "  only %d searches found something", found);
+    }
+}
+
+std::uint32_t __fastcall WrongTrees(std::uint16_t* x, std::uint16_t* y) {
+    // Wrong: the stones' distance limit.
+    return FindNearOwnFields(x, y, /*stones=*/false, kStoneSearchDistance);
+}
+
+std::uint32_t __fastcall WrongStones(std::uint16_t* x, std::uint16_t* y) {
+    // Wrong: the trees' distance limit.
+    return FindNearOwnFields(x, y, /*stones=*/true, kTreeSearchDistance);
+}
+
+}  // namespace
+
+S3RE_TEST(AiNearOwnFields_MatchOriginal) {
+    CompareNearOwnFields(ctx, &AI_FindTreesNearOwnFields, &AI_FindStonesNearOwnFields, 3000);
+}
+
+S3RE_TEST(AiNearOwnFields_ComparisonDetectsWrongImplementation) {
+    const FindNearFieldsFn pairs[][2] = {{&WrongTrees, &AI_FindStonesNearOwnFields},
+                                         {&AI_FindTreesNearOwnFields, &WrongStones}};
+    for (const auto& pair : pairs) {
+        test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+        CompareNearOwnFields(quiet, pair[0], pair[1], 3000);
+        S3RE_EXPECT(quiet.failures() > 0);
+    }
+}
 
 }  // namespace s3re::game

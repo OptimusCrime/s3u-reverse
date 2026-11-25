@@ -82,8 +82,23 @@
 //              temples -> 35000 (Egyptian sphinx 45000).
 //   0x00569c00 the race's large temple: a small one and no large one ->
 //              35000.
+//   0x00568890 Residences (small, medium, large): nothing while a site of
+//              any of them exists in the area (AI::CountSitesOfType); the
+//              carriers wanted for the population (g_aiWantedCarriers +
+//              (population - stage start) * g_aiResidenceSlopes, x87 done
+//              in double; stored in wanted_carriers, the slope in
+//              residence_slope); carriers * 100 / wanted graded 65000 /
+//              65000 / 45000 / 35000 / 15000 into last_priority; 45000
+//              instead of 0 while the player has surplus carriers. Then
+//              Random % 100 (DebugLog "RAINER - RESIDENTIAL random wert =
+//              %u" through sprintf) picks the size by population stage
+//              (stage 0 medium; 1: small below 15, else medium; 2: small
+//              below 10, medium below 60, else large; 3: small below 5,
+//              medium below 15, else large; DebugLog "Stufe 1/2/3" in
+//              stages 0..2). Priority 0: all three get 0, without a draw.
 
 #include "game/ai/ai_layout.h"
+#include "game/debug_log.h"
 #include "game/enums/races.h"
 #include "game/enums/buildings.h"
 #include "game/enums/goods.h"
@@ -91,6 +106,7 @@
 #include "game/globals.h"
 #include "game/layout.h"
 #include "game/tables.h"
+#include "game/texts.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
@@ -1285,6 +1301,267 @@ S3RE_TEST(AiEconomyConditions_ComparisonDetectsWrongImplementation) {
     probe(27, &WrongIronSmelter);
     probe(28, &WrongWoodcutter);
     probe(29, &WrongStonecutter);
+}
+
+// ---------------------------------------------------------------------------
+// 0x568890: the residences
+// ---------------------------------------------------------------------------
+
+void __fastcall T_ECONOMY_AGENT_ConsiderResidences(Agent* agent, void* edx);
+
+S3RE_HOOK(0x00568890, T_ECONOMY_AGENT_ConsiderResidences, ConditionFn, Original_T_ECONOMY_AGENT_ConsiderResidences,
+          T_ECONOMY_AGENT_ConsiderResidences);
+
+namespace {
+
+constexpr std::uintptr_t kCountSitesOfType = 0x0059db30;  // AI::CountSitesOfType (fastcall)
+constexpr std::uintptr_t kRandom = 0x004feb70;            // CGameData::Random (thiscall)
+constexpr std::uintptr_t kSprintf = 0x0061f27e;           // the CRT's sprintf
+constexpr std::uintptr_t kDebugLog = 0x00428720;          // DebugLog (cdecl)
+constexpr std::size_t kTextBytes = 256;                   // the original's stack buffer (0x100 bytes)
+
+constexpr B kResidences[] = {B::SmallResidence, B::MediumResidence, B::LargeResidence};
+
+// AI::CountSitesOfType(&g_aiPlayerNumber, &type, &agent.area) != 0 (AX).
+bool HasSiteOfType(Agent& agent, B type) {
+    using Fn = std::uint32_t(__fastcall*)(const std::uint8_t* player, const std::uint8_t* type,
+                                          const std::uint16_t* area);
+    const std::uint8_t typeByte = Value(type);
+    return static_cast<std::uint16_t>(
+               reinterpret_cast<Fn>(kCountSitesOfType)(&g_aiPlayerNumber.get(), &typeByte, &agent.area)) != 0;
+}
+
+// The carriers wanted for the population (0x5688f4..0x568990): the stage's
+// start value plus (population - stage start) times the stage's slope.
+// x87 code done in double: fild of the difference, fmul of the float slope
+// (as stored in the agent), fiadd of the start value, _ftol; the low word
+// is kept.
+std::uint16_t WantedCarriers(Agent& agent) {
+    const std::uint16_t population = agent.population;
+    const std::uint16_t stage = PopulationStage(population);
+    agent.stage = stage;
+    // (copied as bits: the original moves the float through an integer register)
+    std::memcpy(&agent.residence_slope, &g_aiResidenceSlopes.get()[kStages - 1 - stage], sizeof(float));
+    const std::int32_t above = population - g_aiPopulationStages[stage];
+    const double product = static_cast<double>(above) * static_cast<double>(agent.residence_slope);
+    return static_cast<std::uint16_t>(Ftol(product + static_cast<double>(g_aiWantedCarriers[stage])));
+}
+
+// The size by the population stage and a draw 0..99 (0x568a69..0x568b7f);
+// stages 0..2 log their number.
+B ResidenceFor(std::uint16_t population, std::uint32_t draw) {
+    if (population < g_aiPopulationStages[1]) {
+        GameDebugLog(texts::kAiResidentialStage1);
+        return B::MediumResidence;
+    }
+    if (population < g_aiPopulationStages[2]) {
+        GameDebugLog(texts::kAiResidentialStage2);
+        return draw < 15 ? B::SmallResidence : B::MediumResidence;
+    }
+    if (population < g_aiPopulationStages[3]) {
+        GameDebugLog(texts::kAiResidentialStage3);
+        return draw < 10 ? B::SmallResidence : draw < 60 ? B::MediumResidence : B::LargeResidence;
+    }
+    return draw < 5 ? B::SmallResidence : draw < 15 ? B::MediumResidence : B::LargeResidence;
+}
+
+}  // namespace
+
+// Purpose: Asks for a residence (for more carriers) when the area has fewer
+// carriers than its population wants, or the player has surplus carriers;
+// the size is drawn at random, larger ones as the population grows.
+void __fastcall T_ECONOMY_AGENT_ConsiderResidences(Agent* agent, void* /*edx*/) {
+    for (B type : kResidences) {
+        if (HasSiteOfType(*agent, type)) {
+            return;
+        }
+    }
+    const std::uint16_t wanted = WantedCarriers(*agent);
+    agent->wanted_carriers = wanted;
+    agent->last_priority = 0;
+    if (wanted != 0) {
+        const std::int32_t ratio = agent->carriers * 100 / wanted;
+        agent->stock_ratio = ratio;
+        agent->last_priority = PriorityForRatio(ratio, {65000, 65000, 45000, 35000, 15000});
+    }
+    if (agent->last_priority == 0) {
+        const CGameData* world = g_aiWorld;
+        // (the player number is not range-checked)
+        if ((&world->players[0])[g_aiPlayerNumber].surplus_carriers != 0) {
+            agent->last_priority = 45000;
+        }
+    }
+    if (static_cast<std::int32_t>(agent->last_priority) <= 0) {
+        for (B type : kResidences) {
+            Request(type, 0);
+        }
+        return;
+    }
+    using RandomFn = std::uint32_t(__fastcall*)(CGameData* world, void* edx);
+    const std::uint32_t draw = (reinterpret_cast<RandomFn>(kRandom)(g_aiWorld, nullptr) & 0xffff) % 100;
+    char text[kTextBytes];
+    using SprintfFn = int(__cdecl*)(char* buffer, const char* format, ...);
+    reinterpret_cast<SprintfFn>(kSprintf)(text, texts::kAiResidentialRandom.c_str(), draw);
+    using DebugLogFn = void(__cdecl*)(const char* text);
+    reinterpret_cast<DebugLogFn>(kDebugLog)(text);
+    const B type = ResidenceFor(agent->population, draw);
+    Request(type, static_cast<std::uint16_t>(agent->last_priority));
+}
+
+// Tests: the agent (its population around the stage limits), random
+// residence slopes (also rounding edges and any bits), construction sites
+// of the residences and other types in the agent's area or others, the
+// players' surplus carriers, and the world's random state. Compared: the
+// agent, the player data, the random state and the DebugLog calls.
+
+namespace {
+
+struct SavedResidenceState {
+    CGameData* world = g_aiWorld;
+    AiPlayerData* data = g_aiPlayerData;
+    std::uint8_t number = g_aiPlayerNumber;
+    std::uint16_t sizeX = g_aiMapSizeX, sizeY = g_aiMapSizeY;
+    float slopes[kStages];
+    SavedResidenceState() { std::memcpy(slopes, g_aiResidenceSlopes.get(), sizeof(slopes)); }
+    ~SavedResidenceState() {
+        g_aiWorld = world;
+        g_aiPlayerData = data;
+        g_aiPlayerNumber = number;
+        g_aiMapSizeX = sizeX;
+        g_aiMapSizeY = sizeY;
+        std::memcpy(g_aiResidenceSlopes.get(), slopes, sizeof(slopes));
+    }
+};
+
+void SetUpResidenceSites(test::Context& ctx, test::WorldPair& worlds) {
+    constexpr std::uint8_t kTypes[] = {Value(B::SmallResidence), Value(B::MediumResidence), Value(B::LargeResidence),
+                                       Value(B::Farm), Value(B::Woodcutter)};
+    const std::uint32_t count = ctx.rng().Chance(1, 3) ? 0 : ctx.rng().Below(12);
+    worlds.Both([&](CGameData* w) { w->building_high_water = count; });
+    for (std::uint32_t id = 1; id <= count; ++id) {
+        const auto owner = static_cast<std::uint8_t>(ctx.rng().Chance(1, 6) ? 0xff : ctx.rng().Below(3));
+        const std::uint8_t art = kTypes[ctx.rng().Below(5)];
+        const auto buildup = static_cast<std::uint8_t>(ctx.rng().Chance(1, 3) ? 0 : 1 + ctx.rng().Below(200));
+        const auto x = static_cast<std::uint16_t>(ctx.rng().Below(kMapSize));
+        const auto y = static_cast<std::uint16_t>(ctx.rng().Below(kMapSize));
+        const auto tileArea = static_cast<std::uint16_t>(ctx.rng().Below(kAreas));
+        worlds.Both([&](CGameData* w) {
+            layout::Building& record = w->buildings[id];
+            record.owner = owner;
+            record.art = art;
+            record.buildup = buildup;
+            record.door_x = x;
+            record.door_y = y;
+            w->tiles[x][y].area = tileArea;
+        });
+    }
+    for (std::uint32_t p = 0; p < 3; ++p) {
+        const std::uint32_t surplus = ctx.rng().Chance(1, 2)   ? 0
+                                      : ctx.rng().Chance(1, 4) ? ctx.rng().Next32()
+                                                               : 1 + ctx.rng().Below(30);
+        worlds.Both([&](CGameData* w) { w->players[p].surplus_carriers = surplus; });
+    }
+}
+
+void RandomResidenceSlopes(test::Context& ctx) {
+    float* slopes = g_aiResidenceSlopes.get();
+    constexpr float kReal[kStages] = {0.2f, 0.375f, 0.5f, 0.5f};
+    for (std::size_t s = 0; s < kStages; ++s) {
+        switch (ctx.rng().Below(6)) {
+        case 0: {
+            const std::uint32_t bits = ctx.rng().Next32();
+            std::memcpy(&slopes[s], &bits, 4);
+            break;
+        }
+        case 1: slopes[s] = 1.0f / 3.0f; break;
+        case 2:
+            slopes[s] = static_cast<float>(1 + ctx.rng().Below(20)) / static_cast<float>(1 + ctx.rng().Below(500));
+            break;
+        default: slopes[s] = kReal[s]; break;
+        }
+    }
+}
+
+std::uint16_t RandomPopulation(test::Rng& rng) {
+    constexpr std::uint16_t kEdges[] = {0, 39, 40, 41, 99, 100, 101, 499, 500, 501, 1999, 2000, 2001};
+    switch (rng.Below(4)) {
+    case 0: return kEdges[rng.Below(sizeof(kEdges) / sizeof(kEdges[0]))];
+    case 1: return static_cast<std::uint16_t>(rng.Next32());
+    default: return static_cast<std::uint16_t>(rng.Below(2500));
+    }
+}
+
+void CompareResidences(test::Context& ctx, ConditionFn candidate, int cases) {
+    SavedResidenceState saved;
+    g_aiMapSizeX = static_cast<std::uint16_t>(kMapSize);
+    g_aiMapSizeY = static_cast<std::uint16_t>(kMapSize);
+    test::WorldPair worlds(ctx, sizeof(CGameData));
+    std::vector<std::uint8_t> agentA(kAgentBytes), agentB(kAgentBytes), dataA(kDataBytes), dataB(kDataBytes);
+    DebugLogRecorder logs;
+    int drawn = 0;
+    for (int i = 0; i < cases && ctx.failures() == 0; ++i) {
+        if (i % 8 == 0) {
+            SetUpResidenceSites(ctx, worlds);
+        }
+        const auto area = static_cast<std::uint16_t>(ctx.rng().Below(kAreas));
+        RandomAgent(ctx, agentA.data(), area);
+        auto* agent = reinterpret_cast<Agent*>(agentA.data());
+        agent->population = RandomPopulation(ctx.rng());
+        agent->carriers =
+            static_cast<std::uint16_t>(ctx.rng().Chance(1, 10) ? ctx.rng().Next32() : ctx.rng().Below(600));
+        agentB = agentA;
+        ctx.rng().Fill(dataA.data(), dataA.size());
+        dataB = dataA;
+        g_aiPlayerNumber = static_cast<std::uint8_t>(ctx.rng().Below(3));
+        RandomResidenceSlopes(ctx);
+        const auto seed = static_cast<std::uint16_t>(ctx.rng().Next32());
+        worlds.Both([&](CGameData* w) { w->random_state[0] = seed; });
+
+        g_aiWorld = worlds.original();
+        g_aiPlayerData = reinterpret_cast<AiPlayerData*>(dataA.data());
+        Original_T_ECONOMY_AGENT_ConsiderResidences(reinterpret_cast<Agent*>(agentA.data()), nullptr);
+        const std::vector<DebugLogCall> logsA = logs.Take();
+        g_aiWorld = worlds.ours();
+        g_aiPlayerData = reinterpret_cast<AiPlayerData*>(dataB.data());
+        candidate(reinterpret_cast<Agent*>(agentB.data()), nullptr);
+        const std::vector<DebugLogCall> logsB = logs.Take();
+
+        bool same = S3RE_EXPECT_MEM_EQ(agentA.data(), agentB.data(), agentA.size());
+        same &= S3RE_EXPECT_MEM_EQ(dataA.data(), dataB.data(), dataA.size());
+        same &= worlds.SameField(ctx, [&](CGameData* w) -> auto& { return w->random_state; });
+        same &= S3RE_EXPECT(logsA == logsB);
+        drawn += worlds.original()->random_state[0] != seed ? 1 : 0;
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, population %u", i, static_cast<unsigned>(agent->population));
+        }
+    }
+    if (cases >= 1000 && !S3RE_EXPECT(drawn >= cases / 10)) {
+        ctx.Fail(__FILE__, __LINE__, "  only %d cases drew a random number", drawn);
+    }
+}
+
+void __fastcall WrongResidences(Agent* agent, void* /*edx*/) {
+    // Wrong: stage 2 never picks a large residence (it draws as stage 1).
+    const std::uint16_t population = agent->population;
+    if (population >= g_aiPopulationStages[2] && population < g_aiPopulationStages[3]) {
+        agent->population = static_cast<std::uint16_t>(g_aiPopulationStages[2] - 1);
+        T_ECONOMY_AGENT_ConsiderResidences(agent, nullptr);
+        agent->population = population;
+        return;
+    }
+    T_ECONOMY_AGENT_ConsiderResidences(agent, nullptr);
+}
+
+}  // namespace
+
+S3RE_TEST(AiConsiderResidences_MatchOriginal) {
+    CompareResidences(ctx, &T_ECONOMY_AGENT_ConsiderResidences, 6000);
+}
+
+S3RE_TEST(AiConsiderResidences_ComparisonDetectsWrongImplementation) {
+    test::Context quiet(ctx.name(), 1, /*quiet=*/true);
+    CompareResidences(quiet, &WrongResidences, 6000);
+    S3RE_EXPECT(quiet.failures() > 0);
 }
 
 }  // namespace s3re::game

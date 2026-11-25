@@ -143,6 +143,7 @@ add_library(s3re SHARED
     game/logic/commands/execute_commands_units.cpp
 
     # game/ai/: computer players (Rainer/*.cpp)
+    game/ai/ai_agent_slots.cpp
     game/ai/ai_agents.cpp
     game/ai/ai_army.cpp
     game/ai/ai_army_groups.cpp
@@ -160,16 +161,20 @@ add_library(s3re SHARED
     game/ai/ai_enemy_search.cpp
     game/ai/ai_evaland.cpp
     game/ai/ai_evaland_cells.cpp
+    game/ai/ai_force_production.cpp
     game/ai/ai_ground_request.cpp
     game/ai/ai_helpers.cpp
     game/ai/ai_land_queries.cpp
     game/ai/ai_map_queries.cpp
     game/ai/ai_player_nodes.cpp
+    game/ai/ai_request_agents.cpp
+    game/ai/ai_request_execute.cpp
     game/ai/ai_request_notes.cpp
     game/ai/ai_site_notes.cpp
     game/ai/ai_site_queries.cpp
     game/ai/ai_small_helpers.cpp
     game/ai/ai_state.cpp
+    game/ai/ai_work_areas.cpp
     game/ai/ai_wrapped_pos.cpp
 
     # game/fileformats/: the map and savegame container (Dirk::CMapFile)

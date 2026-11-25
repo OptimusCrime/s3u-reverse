@@ -231,9 +231,18 @@ smelters, tool- and weaponsmiths, distilleries, powder makers; iron users:
 the smiths; one smelter per two smiths). They store the last ratio in
 +0x2c and the result in +0x30 (`last_priority`, was forester_priority);
 the iron mine stores the iron (goods 11) in stock, the smelter the iron
-ore (goods 7), in +0x4a (`ore`). Still open in this family: 0x567e00
-(woodcutter), 0x568420 (stonecutter; both with two float curves per race
-and stage, 0x7e1300..0x7e137c) and 0x568890 (residences, Random).
+ore (goods 7), in +0x4a (`ore`). The woodcutter 0x567e00 and stonecutter
+0x568420 (two float curves per race and stage, 0x7e1280..0x7e137c) are V
+since session 54. Session 55 (V): the residences 0x568890 skip while any
+residence site is in the area; they want carriers by the population
+(`g_aiWantedCarriers` 0, 20, 50, 200, 500 per stage start, slopes
+`g_aiResidenceSlopes` 0x7e1380, stored in the agent: +0x38 the slope, +0x3c
+the wanted count), grade carriers * 100 / wanted (65000 below 30 %, 45000,
+35000, 15000 below 100 %), take 45000 while the player has surplus
+carriers (Player +0xd4), and draw Random % 100 for the size: stage 0
+medium; 1 small below 15 %; 2 small below 10 %, medium below 60 %, else
+large; 3 small 5 %, medium 10 %, large 85 %. With nothing wanted all
+three get priority 0.
 The snapshot 0x567910 is done too (V, session 51, `ai_economy_snapshot.cpp`):
 the "per-player global" population is the census's settler figure
 (`g_aiCensus.dwords3f4[player]`, low word) once `settlers_counted` is set,
@@ -532,3 +541,44 @@ Open questions: who makes the
 AiPlayerData nodes (one per economy area, see step 4 of 0x550f80) and
 when; what
 0x4318a0's flag is in multiplayer (G: only the host runs the AI).
+
+## Forced production, wood emergency and tools (session 55, V)
+
+`ai_force_production.cpp`. `COMP_ForceProduction` 0x572fc0 sets the area
+node's `force_production` and sends SetAreaCondition commands: on, with
+little coal (< 5) or iron (< 3) in the area, it enables the conditions for
+coal / iron production (kinds 1..9, per race 10 / 11 / 12 / 47); off resets
+them to other values (details in the function's header comment; the
+meaning of the condition kinds is still open). Its log texts are swapped
+("AUS" when switching on). `COMP_EmergencyPowersActWood` 0x573670 sets
+`short_of_wood` and stops every site still missing boards except the wood
+industry and small towers (restarts them when the emergency ends).
+`AI::EnsureGoodsSupply` 0x573760 / `AI::OrderMissingTools` 0x59bf70 /
+`LOCAL_WARE_REQUEST_AGENT::CheckWorkerOrTool` 0x57abc0 decide whether a
+building's worker can start: per building type `g_aiBuildingToolAndWorker`
+(0x732804) gives the tool and the worker's settler type; a missing tool
+raises its goods priority and forces production while a toolsmith exists.
+
+## The Execute chain (session 55, V)
+
+`ai_request_execute.cpp`: slot 10 of the request agents carries a build
+request out: T_DO_BUILD_HOUSE_AGENT::Execute 0x5656e0 -> its child of type
+2 -> HOUSE_REQUEST_AGENT::Execute 0x5789b0 (100 if placed) -> its child of
+type 1 -> HOUSE_GROUND_REQUEST_AGENT::Execute 0x576610 ->
+HOUSE_GROUND_REQUEST_NOTE::PlaceBuilding 0x576430 (tile still own, no own
+small tower within 16 for military sites, AI::IsAllowedBeforeBasicEconomy
+0x5721a0, then OrderPlaceBuilding). Before the basic economy stands only the
+first woodcutter, stonecutter, sawmill and forester and up to four small
+towers may be placed.
+
+Session 55 (V, `ai_request_agents.cpp`): the reports back up the chain
+(slot 9). HOUSE_GROUND_REQUEST_AGENT::WorkOnNote 0x576530 checks
+`positions_per_turn` (AiPlayerSetup +0) spiral positions per turn and
+reports 100 with the site (x | y << 16) or 0 when the spiral runs out;
+HOUSE_REQUEST_AGENT::NoteReported 0x578920 waits for both children (ground
+and ware request, state bits 1 / 2, `reports`, `site` +0x28) and reports
+100 with the site only if both succeeded; T_DO_BUILD_HOUSE_AGENT::
+NoteReported 0x5656a0 sets the build order's state (2 placed, 8 site found,
+4 no site). COMPUTER_PLAYER_AGENT::Run 0x5846a0 asks for a small tower
+(priority 20000) every `small_tower_interval` (setup +0xb2) * 14 + player
+runs.

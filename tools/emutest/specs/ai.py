@@ -2968,3 +2968,548 @@ SPECS += [
     for name, address in (("T_ECONOMY_AGENT_ConsiderWoodcutter", 0x00567e00),
                           ("T_ECONOMY_AGENT_ConsiderStonecutter", 0x00568420))
 ]
+
+
+# -- session 55 (wip/ai-econ): the residences condition 0x568890 -----------
+# (ai_economy_conditions.cpp). The agent at world +0, sites of the residence
+# types (and others) for AI::CountSitesOfType, the players' surplus carriers,
+# random residence slopes (the static initializers' values, rounding edges,
+# any bits) and the world's random state (lazily random). sprintf and
+# DebugLog (a bare ret) run as original code on both sides.
+
+AI_RESIDENCE_SLOPES = 0x007E1380  # g_aiResidenceSlopes: float[4]
+RESIDENCE_SLOPES = (0.2, 0.375, 0.5, 0.5)
+
+
+def residence_agent(rng, pool, args):
+    area = rng.randrange(4)
+    race = rng.randrange(4)
+    fields = [(8, race, 4), (0xC, area, 2)]
+    low, high = rng.choice(((0, 40), (40, 101), (101, 501), (500, 2001), (2000, 2500), (0, 0x10000)))
+    population = rng.choice((0, 39, 40, 41, 99, 100, 101, 499, 500, 501, 1999, 2000, 2001)) \
+        if rng.random() < 0.25 else rng.randrange(low, high)
+    carriers = rng.getrandbits(16) if rng.random() < 0.1 else rng.randrange(600)
+    fields += [(0x3E, population, 2), (0x40, carriers, 2)]
+    count = 0 if rng.random() < 0.4 else rng.randrange(12)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        x, y = rng.randrange(400), rng.randrange(400)
+        fields += [(record, 0xFF if rng.random() < 0.15 else rng.randrange(3), 1),
+                   (record + 6, rng.choice((26, 27, 28, 24, 1)), 1),
+                   (record + 0x21, 0 if rng.random() < 0.4 else rng.randrange(1, 256), 1),
+                   (record + 0xA, x, 2), (record + 0xC, y, 2),
+                   (TILES + (x * 0x300 + y) * 24 + 0x14, area if rng.random() < 0.6 else rng.randrange(4), 2)]
+    for player in range(3):
+        surplus = 0 if rng.random() < 0.5 else rng.getrandbits(32) if rng.random() < 0.2 else rng.randrange(1, 30)
+        fields.append((PLAYER_RECORDS + player * PLAYER_RECORD_BYTES + 0xD4, surplus, 4))
+    return fields
+
+
+def residence_globals(rng, pool, args):
+    fields = economy_globals(rng, pool, args)
+    for s in range(4):
+        roll = rng.random()
+        if roll < 0.15:
+            bits = rng.getrandbits(32)
+        else:
+            value = 1 / 3 if roll < 0.3 else rng.randint(1, 20) / rng.randint(1, 500) if roll < 0.45 \
+                else RESIDENCE_SLOPES[s]
+            bits = struct.unpack("<I", struct.pack("<f", value))[0]
+        fields.append((AI_RESIDENCE_SLOPES + 4 * s, bits, 4))
+    return fields
+
+
+SPECS += [
+    # EAX is not used by the caller (0x56a1a0).
+    Spec("T_ECONOMY_AGENT_ConsiderResidences", 0x00568890, "thiscall", [], eax_mask=0, presets=residence_agent,
+         globals=residence_globals, max_cases=2000),
+]
+
+
+# -- session 55 (wip/ai-econ): AreaInDirection (ai_map_queries.cpp), ------
+# -- FindTrees/StonesNearOwnFields (ai_cell_resources.cpp) ------------------
+
+
+def direction_world(rng, pool, args):
+    """x, y, direction in scratch 0..2 (positions near and past the map's
+    edges, directions 0..7 or any word); tile areas mostly 0 around."""
+    x = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(64)
+    y = rng.getrandbits(16) if rng.random() < 0.05 else rng.randrange(64)
+    direction = rng.getrandbits(16) if rng.random() < 0.1 else rng.randrange(8)
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2), (SCRATCH + 2 * SCRATCH_SLOT_BYTES, direction, 2)]
+    density = rng.choice((0.02, 0.1, 0.3))
+    for tx in range(max(0, x - 11), min(64, x + 12)):
+        for ty in range(max(0, y - 11), min(64, y + 12)):
+            area = rng.randrange(1, 6) if rng.random() < density else 0
+            fields.append((TILES + (tx * 0x300 + ty) * 24 + 0x14, area, 2))
+    return fields
+
+
+FIELD_TYPES = (24, 14, 36, 24, 14, 36, 2)
+
+
+def own_fields_world(rng, pool, args):
+    """x, y (scratch 0 / 1), the land evaluation (scratch 2; grid 1..9 x
+    1..9 at CELL_GRID with trees_around / stones_around), up to 12 buildings
+    (farms, vineyards, rice farms, woodcutters; owners 0..2 or free;
+    finished or not) with door tiles in areas and work points near (x, y),
+    and resource tiles around the work points' cells."""
+    x, y = rng.randrange(8, 72), rng.randrange(8, 72)
+    if rng.random() < 0.05:
+        x = rng.getrandbits(16)
+    land = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+    fields = [(SCRATCH, x, 2), (SCRATCH + SCRATCH_SLOT_BYTES, y, 2), (land + 0x140, rng.randrange(1, 10), 4),
+              (land + 0x144, rng.randrange(1, 10), 4), (land + 0x158, WORLD_BASE + CELL_GRID, 4)]
+    for cell in range(81):
+        base = CELL_GRID + cell * 0xC4
+        fields += [(base + 3, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1),
+                   (base + 4, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1),
+                   (base + 0xF, 0 if rng.random() < 0.4 else rng.randrange(1, 256), 1),
+                   (base + 0x10, 0 if rng.random() < 0.4 else rng.choice((0x100, rng.randrange(1, 300))), 2)]
+    area = rng.randrange(1, 3)
+    if x < 72 and y < 72:
+        fields.append((TILES + (x * 0x300 + y) * 24 + 0x14, area if rng.random() < 0.9 else 0, 2))
+    count = rng.randrange(12)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        dx, dy = rng.randrange(64), rng.randrange(64)
+        wx = min(63, max(0, (x if x < 72 else 30) + rng.randint(-40, 40)))
+        wy = min(63, max(0, y + rng.randint(-40, 40)))
+        owner = 0xFF if rng.random() < 0.1 else rng.randrange(3)
+        fields += [(record, owner, 1), (record + 6, rng.choice(FIELD_TYPES), 1),
+                   (record + 0x21, 0 if rng.random() < 0.8 else rng.randrange(1, 256), 1),
+                   (record + 0xA, dx, 2), (record + 0xC, dy, 2), (record + 0x30, wx, 2), (record + 0x32, wy, 2),
+                   (TILES + (dx * 0x300 + dy) * 24 + 0x14, area if rng.random() < 0.7 else rng.randrange(3), 2)]
+        if rng.random() < 0.4:
+            fields += resource_tiles(rng, (wx // 8 - 1) * 8, (wy // 8 - 1) * 8, 18, owner & 3)
+    return fields
+
+
+def own_fields_globals(rng, pool, args):
+    """The map 40..72 square, the land evaluation in scratch 2, the player
+    number 0..2."""
+    return resource_cell_globals(rng, pool, args) + [(AI_PLAYER_NUMBER, rng.randrange(3), 1)]
+
+
+SPECS += [
+    # Its caller (MakeBuildOrders 0x56cd90) compares AX; off the map the
+    # upper half is the caller's EAX.
+    Spec("AI_AreaInDirection", 0x00599760, "fastcall", [scratch(0), scratch(1), scratch(2)], eax_mask=0xFFFF,
+         presets=direction_world, globals=ai_small_map, max_cases=2000),
+    Spec("AI_FindTreesNearOwnFields", 0x0059a260, "fastcall", [scratch(0), scratch(1)], presets=own_fields_world,
+         globals=own_fields_globals, max_cases=1000),
+    Spec("AI_FindStonesNearOwnFields", 0x0059a7a0, "fastcall", [scratch(0), scratch(1)], presets=own_fields_world,
+         globals=own_fields_globals, max_cases=1000),
+]
+
+
+# -- session 55 (wip/ai-econ): forced production and tools ----------------
+# (ai_force_production.cpp). The player word in scratch 0, the area word in
+# scratch 1, the flag / goods byte in scratch 2, a request note in scratch
+# 5; the land evaluation in scratch 10 with its 20 list heads in scratch 11
+# and nodes in scratch 12..17 (one per area of players 0..2, some missing);
+# the computer player (message queue) at COMMAND_PLAYER (scratch 4). The
+# command senders run as original code with IsHost and Push probed.
+
+FORCE_LAND = SCRATCH + 10 * SCRATCH_SLOT_BYTES
+FORCE_HEADS = SCRATCH + 11 * SCRATCH_SLOT_BYTES
+FORCE_NOTE = SCRATCH + 5 * SCRATCH_SLOT_BYTES
+FORCE_AREAS = 4
+FORCE_TYPES = (2, 3, 4, 5, 12, 12, 24, 15, 7, 26, 25, 37)  # tool users, toolsmiths, others
+
+
+def force_nodes(rng, need=None):
+    """The players' node lists over areas 0..3 (in 6 node slots; `need` =
+    (player, area) gets a node for sure)."""
+    fields = [(FORCE_LAND + 12 * p + 4, WORLD_BASE + FORCE_HEADS + 8 * p, 4) for p in range(20)]
+    last = {p: FORCE_HEADS + 8 * p for p in range(20)}
+    slot = 12
+    pairs = [(p, area) for p in range(3) for area in range(FORCE_AREAS)]
+    rng.shuffle(pairs)
+    chosen = ([need] if need else []) + [pair for pair in pairs if pair != need and rng.random() < 0.5]
+    for p, area in sorted(chosen[:6]):
+        node = SCRATCH + slot * SCRATCH_SLOT_BYTES
+        slot += 1
+        fields += [(last[p], WORLD_BASE + node, 4), (node + 8, area, 2), (node + 0x10, rng.getrandbits(32), 4),
+                   (node + 0x18, rng.randrange(2), 4)]
+        last[p] = node
+    for p in range(20):
+        fields.append((last[p], WORLD_BASE + FORCE_HEADS + 8 * p, 4))
+    return fields
+
+
+def force_areas(rng):
+    """Per area 0..3: coal and iron piles (around the limits 5 and 3), tool
+    piles, idle worker lists and settings1 bytes."""
+    fields, base, settler = [], rng.randint(1, 500), rng.randint(1, 500)
+    for area in range(FORCE_AREAS):
+        record = AI_AREAS + area * 0x2E0
+        for goods, most in ((5, 4), (11, 3), (14, 1), (15, 1), (16, 1), (13, 1), (32, 1), (17, 1)):
+            if goods in (5, 11) or rng.random() < 0.3:
+                head, chain = economy_pile_chain(rng, base, rng.randrange(most + 1), False)
+                fields += chain + [(record + 0xA + goods * 2, head, 2)]
+                base += 10
+            else:
+                fields.append((record + 0xA + goods * 2, 0, 2))
+        for worker in range(48):  # (the other lists empty: lazily random ones would be endless chains)
+            head = 0
+            if worker in (0, 3, 4, 6, 10, 11, 16, 17, 19) and rng.random() < 0.3:
+                head = settler
+                fields.append((SETTLERS + settler * SETTLER_BYTES + 0x10, 0, 2))
+                settler += 1
+            fields.append((record + 0x12A + worker * 2, head, 2))
+        for goods in range(36):
+            fields.append((record + 0x18A + goods, 0 if rng.random() < 0.7 else rng.randrange(1, 4), 1))
+    return fields
+
+
+def force_row_areas(rng, x, y):
+    """Areas 0..3 for (x, y) and the 17 tiles after it in +x (AI::AreaAlongRow
+    walks on while the area is 0; lazily random words would be areas far
+    past the 4096 records)."""
+    return [(tile(x + k, y) + 0x14, rng.randrange(FORCE_AREAS), 2) for k in range(18)]
+
+
+def force_buildings(rng):
+    """Up to 20 buildings: owner 0..2 or free, types FORCE_TYPES, finished
+    or sites with boards missing, workers or not, position and door on a
+    60 x 60 map whose tiles are in areas 0..3."""
+    count = rng.randrange(20)
+    fields = [(BUILDING_COUNT, count, 4)]
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        x, y, dx, dy = (rng.randrange(60) for _ in range(4))
+        fields += [(record, 0xFF if rng.random() < 0.1 else rng.randrange(3), 1),
+                   (record + 6, rng.choice(FORCE_TYPES), 1),
+                   (record + 0x21, 0 if rng.random() < 0.6 else rng.randrange(1, 256), 1),
+                   (record + 0x19, 0 if rng.random() < 0.3 else rng.randrange(1, 9), 1),
+                   (record + 8, 0 if rng.random() < 0.7 else rng.randrange(1, 500), 2),
+                   (record + 2, x, 2), (record + 4, y, 2), (record + 0xA, dx, 2), (record + 0xC, dy, 2),
+                   (tile(dx, dy) + 0x14, rng.randrange(FORCE_AREAS), 2)] + force_row_areas(rng, x, y)
+    return fields
+
+
+def force_world(rng, pool, args, need_node=False):
+    player, area = rng.randrange(3), rng.randrange(FORCE_AREAS)
+    if rng.random() < 0.05 and not need_node:
+        player = rng.randrange(3, 20)
+    fields = [(SCRATCH, player, 2), (SCRATCH + SCRATCH_SLOT_BYTES, area, 2),
+              (SCRATCH + 2 * SCRATCH_SLOT_BYTES, 0 if rng.random() < 0.5 else rng.randrange(1, 256), 1)]
+    for p in range(20):
+        race = rng.randrange(4) if rng.random() < 0.9 else rng.getrandbits(32)
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, race, 4))
+    fields += force_nodes(rng, (player, area) if need_node else None)
+    fields += force_areas(rng) + force_buildings(rng)
+    return fields
+
+
+def force_ensure_world(rng, pool, args):
+    fields = force_world(rng, pool, args)
+    goods = rng.choice((5, 11, 13, 14, 15, 16, 17, 32))
+    return [f for f in fields if f[0] != SCRATCH + 2 * SCRATCH_SLOT_BYTES] + [(SCRATCH + 2 * SCRATCH_SLOT_BYTES, goods, 1)]
+
+
+def force_note_world(rng, pool, args):
+    fields = force_world(rng, pool, args)
+    x, y = rng.randrange(60), rng.randrange(60)
+    fields += [(FORCE_NOTE + 0x1C, rng.choice(FORCE_TYPES + (0, 8, 29, 31)), 2),
+               (FORCE_NOTE + 0x1E, x, 2), (FORCE_NOTE + 0x20, y, 2)] + force_row_areas(rng, x, y)
+    return fields
+
+
+def force_globals(rng, pool, args):
+    return command_globals(rng, pool, args) + [
+        (AI_LAND_EVALUATION, WORLD_BASE + FORCE_LAND, 4), (AI_MAP_SIZES, 60, 2), (AI_MAP_SIZES + 2, 60, 2),
+        (AI_PLAYER_NUMBER, rng.randrange(3), 1)]
+
+
+FORCE_CALLEES = command_callees(LONG_GAPS)
+
+SPECS += [
+    # EAX is not used by the callers (EnsureGoodsSupply sets 1, the others
+    # return without using it).
+    Spec("COMP_ForceProduction", 0x00572fc0, "fastcall", [scratch(0), scratch(1), scratch(2)], eax_mask=0,
+         presets=force_world, globals=force_globals, callees=FORCE_CALLEES, max_cases=2000),
+    Spec("COMP_EmergencyPowersActWood", 0x00573670, "fastcall", [scratch(0), scratch(1), scratch(2)], eax_mask=0,
+         presets=force_world, globals=force_globals, callees=FORCE_CALLEES, max_cases=1500),
+    Spec("AI_EnsureGoodsSupply", 0x00573760, "fastcall", [scratch(2), scratch(0), scratch(1)],
+         presets=force_ensure_world, globals=force_globals, callees=FORCE_CALLEES, max_cases=1500),
+    # AI::IsForceProduction faults for an area without a node (as in the
+    # game): the player's area always has one. EAX is not used by 0x550f80.
+    Spec("AI_OrderMissingTools", 0x0059bf70, "fastcall", [scratch(0), scratch(1)], eax_mask=0,
+         presets=lambda rng, pool, args: force_world(rng, pool, args, need_node=True), globals=force_globals,
+         callees=FORCE_CALLEES, max_cases=1500),
+    Spec("LOCAL_WARE_REQUEST_AGENT_CheckWorkerOrTool", 0x0057abc0, "thiscall", [scratch(5)],
+         presets=force_note_world, globals=force_globals, callees=FORCE_CALLEES, max_cases=1500),
+    # DeactivateNoteOf, CheckWorkerOrTool and ReportToRequester probed (their
+    # own specs cover them); SetFlags runs on the note.
+    Spec("LOCAL_WARE_REQUEST_AGENT_WorkOnNote", 0x0057ab70, "thiscall", [scratch(5)],
+         presets=force_note_world, globals=force_globals,
+         callees={0x00551610: (1, "thiscall", "probe"), 0x0057abc0: (1, "thiscall", lambda h: h % 2 if h % 3 else h),
+                  0x00582480: (2, "thiscall", "probe")}, max_cases=300),
+]
+
+
+# -- session 55 (wip/ai-econ): the request Execute chain and ---------------
+# -- IsAllowedBeforeBasicEconomy (ai_request_execute.cpp) ------------------
+
+EARLY_TYPES = (2, 3, 4, 5, 15, 16, 18, 24, 1, 0, 6, 14)
+
+
+def early_data(rng):
+    """g_aiPlayerData at scratch 0: basic_economy mostly 0, the building
+    counts small (often 0)."""
+    fields = [(SCRATCH + 0xC, rng.getrandbits(32) if rng.random() < 0.15 else 0, 4)]
+    fields += [(SCRATCH + 0x344 + 2 * t, 0 if rng.random() < 0.5 else rng.randrange(6), 2) for t in range(57)]
+    return fields
+
+
+def early_globals(rng, pool, args):
+    """The player number 0..2 (races 0..3 or any word), the data."""
+    fields = [(AI_WORLD, WORLD_BASE, 4), (AI_PLAYER_DATA, WORLD_BASE + SCRATCH, 4),
+              (AI_PLAYER_NUMBER, rng.randrange(3), 1)]
+    return fields
+
+
+def early_world(rng, pool, args):
+    fields = early_data(rng)
+    for p in range(3):
+        race = rng.randrange(4) if rng.random() < 0.85 else rng.getrandbits(32)
+        fields.append((PLAYER_RECORDS + p * PLAYER_RECORD_BYTES + 4, race, 4))
+    return fields
+
+
+def early_type(rng, pool):
+    value = rng.choice(EARLY_TYPES) if rng.random() < 0.9 else rng.randrange(60)
+    return value | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def place_world(rng, pool, args):
+    """The note at world +0 (type +0x1c, spiral position +0x2c / +0x2e on a
+    48 x 48 map), tile owners in patches, the row of areas after the
+    position, small towers and other buildings near it, the data."""
+    fields = early_world(rng, pool, args)
+    x, y = rng.randrange(48), rng.randrange(48)
+    fields += [(0x1C, rng.choice(EARLY_TYPES), 2), (0x2C, x, 2), (0x2E, y, 2),
+               (tile(x, y) + 8, rng.choice((0, 1, 2, 0xFF)) if rng.random() < 0.3 else rng.randrange(3), 1)]
+    fields += [(tile(x + k, y) + 0x14, rng.randrange(4), 2) for k in range(18)]
+    count = rng.randrange(12)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        bx = min(47, max(0, x + rng.randint(-20, 20)))
+        by = min(47, max(0, y + rng.randint(-20, 20)))
+        fields += [(record, 0xFF if rng.random() < 0.1 else rng.randrange(3), 1),
+                   (record + 6, 15 if rng.random() < 0.6 else rng.choice(EARLY_TYPES), 1),
+                   (record + 2, bx, 2), (record + 4, by, 2)]
+    return fields
+
+
+def place_globals(rng, pool, args):
+    return early_globals(rng, pool, args) + command_globals(rng, pool, args) + [
+        (AI_MAP_SIZES, 48, 2), (AI_MAP_SIZES + 2, 48, 2)]
+
+
+EXECUTE_PROBES = {0x00576430: (0, "thiscall", "probe"),
+                  0x005824D0: (1, "thiscall", lambda h: 0 if h % 3 == 0 else h),
+                  0x00582510: (0, "thiscall", lambda h: h & 0xFFFF0000 if h % 3 == 0 else h)}
+
+SPECS += [
+    Spec("AI_IsAllowedBeforeBasicEconomy", 0x005721a0, "fastcall", [early_type, anything], presets=early_world,
+         globals=early_globals, max_cases=2000),
+    # The callers (the Execute chain) test AX only; the upper half is what
+    # the failing callee left.
+    Spec("HOUSE_GROUND_REQUEST_NOTE_PlaceBuilding", 0x00576430, "thiscall", [], eax_mask=0xFFFF,
+         presets=place_world, globals=place_globals, callees=command_callees((3, 11)), max_cases=2000),
+    Spec("HOUSE_GROUND_REQUEST_AGENT_Execute", 0x00576610, "thiscall", [anything], callees=EXECUTE_PROBES),
+    Spec("HOUSE_REQUEST_AGENT_Execute", 0x005789b0, "thiscall", [anything], callees=EXECUTE_PROBES),
+    # Without a child: AX = 0 on top of OutputDebugStringA's EAX (the caller
+    # 0x5655c0 tests AX).
+    Spec("T_DO_BUILD_HOUSE_AGENT_Execute", 0x005656e0, "thiscall", [anything], eax_mask=0xFFFF,
+         callees=EXECUTE_PROBES),
+]
+
+
+# -- session 55 (wip/ai-econ): work areas (ai_work_areas.cpp) --------------
+
+WORK_LAND = SCRATCH + 10 * SCRATCH_SLOT_BYTES
+WORK_GRID = SCRATCH + 11 * SCRATCH_SLOT_BYTES   # 8 x 8 AiGridCells (0x3100 bytes: slots 11..14)
+WORK_TYPES = (2, 3, 14, 24, 36)
+
+
+def same_type_world(rng, pool, args):
+    """type (scratch 0), player (scratch 1), x / y (scratch 2 / 3) on a 64 x
+    64 map with the row of areas after it; up to 15 buildings of the five
+    work-area types (sometimes others) with doors in areas 0..3 and work
+    points near; random distances of map offsets 150 / 300 / 400."""
+    x, y = rng.randrange(64), rng.randrange(64)
+    if rng.random() < 0.03:
+        x = rng.randrange(64, 0x10000)
+    kind = rng.choice(WORK_TYPES) if rng.random() < 0.85 else rng.choice((1, 30, 25, 40))
+    fields = [(SCRATCH, kind, 1), (SCRATCH + SCRATCH_SLOT_BYTES, rng.randrange(3), 1),
+              (SCRATCH + 2 * SCRATCH_SLOT_BYTES, x, 2), (SCRATCH + 3 * SCRATCH_SLOT_BYTES, y, 2)]
+    if x < 64:
+        fields += [(tile(x + k, y) + 0x14, rng.randrange(4) if k else rng.randrange(1, 4), 2) for k in range(18)]
+    for k in (150, 300, 400):
+        fields.append((0x110A588 + 16 * k + 8, rng.getrandbits(32) if rng.random() < 0.1 else rng.randrange(40), 4))
+    count = rng.randrange(15)
+    fields.append((BUILDING_COUNT, count, 4))
+    for building in range(1, count + 1):
+        record = BUILDINGS + building * BUILDING_BYTES
+        dx, dy = rng.randrange(64), rng.randrange(64)
+        fields += [(record, 0xFF if rng.random() < 0.1 else rng.randrange(3), 1),
+                   (record + 6, kind if rng.random() < 0.6 else rng.choice(WORK_TYPES + (30, 1)), 1),
+                   (record + 0x21, 0 if rng.random() < 0.85 else 1, 1),
+                   (record + 0xA, dx, 2), (record + 0xC, dy, 2),
+                   (tile(dx, dy) + 0x14, rng.randrange(4), 2),
+                   (record + 0x30, min(63, max(0, (x if x < 64 else 30) + rng.randint(-30, 30))), 2),
+                   (record + 0x32, min(63, max(0, y + rng.randint(-30, 30))), 2)]
+    return fields
+
+
+def same_type_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, 64, 2), (AI_MAP_SIZES + 2, 64, 2)]
+
+
+def waterworks_world(rng, pool, args):
+    """The building (scratch 0: owner, position) on a 64 x 64 map whose
+    tiles belong in patches to players 0..2 or nobody, some with stream
+    terrain; the land evaluation (scratch 10) with an 8 x 8 grid of random
+    stream_tiles."""
+    owner = rng.randrange(3)
+    fields = [(SCRATCH, owner, 1), (SCRATCH + 2, rng.randrange(64), 2), (SCRATCH + 4, rng.randrange(64), 2),
+              (WORK_LAND + 0x140, 8, 4), (WORK_LAND + 0x144, 8, 4), (WORK_LAND + 0x158, WORLD_BASE + WORK_GRID, 4)]
+    patch = rng.choice((8, 12, 16, 24))
+    stream = rng.choice((0.0, 0.002, 0.02, 0.1, 0.3))
+    for x in range(64):
+        for y in range(64):
+            k = (x // patch) * 7 + (y // patch) * 3
+            fields += [(tile(x, y) + 8, 0xFF if k % 4 == 3 else k % 4, 1),
+                       (tile(x, y) + 6, 0x60 + rng.randrange(16) if rng.random() < stream else rng.randrange(0x60), 1)]
+    for cell in range(64):
+        fields.append((WORK_GRID + cell * 0xC4 + 2, 0 if rng.random() < 0.4 else rng.randrange(1, 60), 1))
+    return fields
+
+
+def waterworks_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, 64, 2), (AI_MAP_SIZES + 2, 64, 2),
+            (AI_LAND_EVALUATION, WORLD_BASE + WORK_LAND, 4)]
+
+
+SPECS += [
+    # The callers test AL.
+    Spec("AI_HasSameTypeWorkAreaNear", 0x0058e390, "fastcall",
+         [low_word_noise(16), scratch(0), scratch(1), scratch(2), scratch(3)], eax_mask=0xFF,
+         presets=same_type_world, globals=same_type_globals, max_cases=1500),
+    Spec("AI_FindWaterworksWorkArea", 0x0059ba90, "fastcall", [scratch(0), scratch(1), scratch(2)],
+         presets=waterworks_world, globals=waterworks_globals, max_cases=300),
+]
+
+
+# -- session 55 (wip/ai-econ): small agent slots (ai_agent_slots.cpp) ------
+# The agent / note at world +0 (ECX = the world).
+
+SPECS += [
+    Spec(name, address, "thiscall", [scratch(0)])
+    for name, address in (("T_DO_BUILD_HOUSE_AGENT_GetNoteTypes", 0x005654c0),
+                          ("HOUSE_GROUND_REQUEST_AGENT_GetNoteTypes", 0x00576500),
+                          ("HOUSE_REQUEST_AGENT_GetNoteTypes", 0x005787b0),
+                          ("LOCAL_WARE_REQUEST_AGENT_GetNoteTypes", 0x0057ab60))
+] + [
+    Spec("HOUSE_GROUND_REQUEST_AGENT_TakeNote", 0x00576510, "thiscall", [scratch(1)],
+         globals=lambda rng, pool, args: [(AI_PLAYER, rng.getrandbits(32), 4)],
+         callees={0x005515C0: (1, "thiscall", "probe")}),
+    Spec("T_ECONOMY_AGENT_vf11", 0x00567870, "thiscall", [anything]),
+    # EAX is the caller's (the destructor doesn't touch it); its only caller
+    # 0x56fad0 sets EAX = this afterwards.
+    Spec("BLACK_BOARD_AGENT_Destructor", 0x0056fac0, "thiscall", [], eax_mask=0),
+    Spec("BLACK_BOARD_AGENT_SubclassDeletingDestructor", 0x0056fad0, "thiscall", [anything]),
+    Spec("BLACK_BOARD_AGENT_DeletingDestructor", 0x0056faa0, "thiscall", [anything]),
+]
+
+
+# -- session 55 (wip/ai-econ): request agents' slots (ai_request_agents.cpp) --
+# Their EAX (slot 9) only reaches the upper halves of slot 4 results, which
+# CComputerPlayer::WorkOnNote ignores; WorkOnNote's AX (100) is compared.
+
+AGENT_SETUP = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+AGENT_PROBES = {0x005515C0: (1, "thiscall", "probe"), 0x00551610: (1, "thiscall", "probe"),
+                0x00582480: (2, "thiscall", "probe"),
+                0x00575DF0: (0, "thiscall", lambda h: h % 2 if h % 3 else 0),
+                0x005763A0: (0, "thiscall", lambda h: 0 if h % 7 == 0 else h)}
+
+
+def reported_notes(rng, pool, args):
+    """The parent (scratch 0: state, reports) and the child (scratch 1: its
+    type, mostly 0 or 1)."""
+    return [(SCRATCH + 0x24, rng.randrange(4), 2), (SCRATCH + 0x26, rng.randrange(3), 2),
+            (SCRATCH + SCRATCH_SLOT_BYTES + 6, rng.randrange(2) if rng.random() < 0.85 else rng.randrange(6), 2)]
+
+
+def report_result(rng, pool):
+    value = 100 if rng.random() < 0.5 else rng.randrange(3)
+    return value | (rng.getrandbits(16) << 16 if rng.random() < 0.25 else 0)
+
+
+def ground_work_world(rng, pool, args):
+    """The note (scratch 0: spiral position, skip_check) on a 32 x 32 map of
+    players 0..2 in patches; the setup's positions per turn (scratch 2)."""
+    fields = [(SCRATCH + 0x2C, rng.randrange(34), 2), (SCRATCH + 0x2E, rng.randrange(32), 2),
+              (SCRATCH + 0x44, rng.getrandbits(32) if rng.random() < 0.25 else 0, 4),
+              (AGENT_SETUP, 0 if rng.random() < 0.1 else rng.randrange(1, 7), 2)]
+    for x in range(32):
+        for y in range(32):
+            k = x // 8 + y // 8
+            fields.append((tile(x, y) + 8, 0xFF if k % 4 == 3 else k % 3, 1))
+    return fields
+
+
+def agent_globals(rng, pool, args):
+    return [(AI_WORLD, WORLD_BASE, 4), (AI_MAP_SIZES, 32, 2), (AI_MAP_SIZES + 2, 32, 2),
+            (AI_PLAYER_SETUP, WORLD_BASE + AGENT_SETUP, 4), (AI_PLAYER_NUMBER, rng.randrange(3), 1),
+            (AI_PLAYER, rng.getrandbits(32), 4), (AI_PLAYER_DATA, WORLD_BASE + SCRATCH + 3 * SCRATCH_SLOT_BYTES, 4)]
+
+
+def run_agent(rng, pool, args):
+    """The agent's run counter (+8) around the limit; the setup's interval."""
+    interval = rng.randrange(8) if rng.random() < 0.9 else rng.getrandbits(16)
+    limit = interval * 14 + rng.randrange(3)
+    runs = (limit + rng.randint(-2, 1)) & 0xFFFF if rng.random() < 0.6 else rng.getrandbits(16)
+    return [(8, runs, 2), (AGENT_SETUP + 0xB2, interval, 2)]
+
+
+SPECS += [
+    Spec("T_DO_BUILD_HOUSE_AGENT_NoteReported", 0x005656a0, "thiscall",
+         [scratch(0), scratch(1), report_result, anything], eax_mask=0, presets=reported_notes,
+         globals=agent_globals, callees=AGENT_PROBES),
+    Spec("HOUSE_REQUEST_AGENT_NoteReported", 0x00578920, "thiscall",
+         [scratch(0), scratch(1), report_result, anything], eax_mask=0, presets=reported_notes,
+         globals=agent_globals, callees=AGENT_PROBES),
+    Spec("HOUSE_GROUND_REQUEST_AGENT_WorkOnNote", 0x00576530, "thiscall", [scratch(0)], eax_mask=0xFFFF,
+         presets=ground_work_world, globals=agent_globals, callees=AGENT_PROBES, max_cases=1000),
+    Spec("COMPUTER_PLAYER_AGENT_Run", 0x005846a0, "thiscall", [], presets=run_agent, globals=agent_globals),
+]
+
+
+# TakeNote of the build agent and the house request agent: the agent at
+# world +0, the note in scratch 0; the new notes' Inits run (verified),
+# AddNoteUnder is probed; new_fails reaches Win32::ThrowOutOfMemory (only
+# the notes' sizes fail, so its own allocations work).
+
+def take_note_world(rng, pool, args):
+    return [(SCRATCH + 0x1C, rng.choice((15, 2, 24, 3, rng.randrange(60))), 2), (SCRATCH + 0x1E, rng.randrange(400), 2),
+            (SCRATCH + 0x20, rng.randrange(400), 2), (SCRATCH + 0x22, rng.randrange(40), 2)]
+
+
+TAKE_NOTE_CALLEES = {0x00551230: (3, "thiscall", "probe")}
+
+SPECS += [
+    Spec("T_DO_BUILD_HOUSE_AGENT_TakeNote", 0x005654d0, "thiscall", [scratch(0)],
+         presets=take_note_world, globals=ai_world_400, callees=TAKE_NOTE_CALLEES, new_fails=0.1,
+         new_fails_size=0x2C, max_cases=500),
+    Spec("HOUSE_REQUEST_AGENT_TakeNote", 0x005787c0, "thiscall", [scratch(0)],
+         presets=take_note_world, globals=ai_world_400, callees=TAKE_NOTE_CALLEES, new_fails=0.2,
+         new_fails_size=(0x4C, 0x24), max_cases=500),
+]

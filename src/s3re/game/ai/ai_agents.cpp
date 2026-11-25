@@ -62,11 +62,6 @@ struct GlobalExpandEmpireAgent {
     std::uint16_t unk06;
     std::uint32_t unk08;
 };
-struct ComputerPlayerAgent {
-    AiTaggedRecord base;
-    std::uint16_t unk06;
-    std::uint16_t unk08;
-};
 struct MapWorkerAgent {
     AiTaggedRecord base;
     std::uint16_t unk06;
@@ -152,7 +147,7 @@ S3RE_HOOK(0x00584680, COMPUTER_PLAYER_AGENT_Construct, ThisFn, Original_COMPUTER
 // Purpose: Constructor of the computer player's general agent (kind 5).
 std::uint32_t __fastcall COMPUTER_PLAYER_AGENT_Construct(void* self, void* /*edx*/) {
     SetKind(self, AgentKind::ComputerPlayer);
-    static_cast<ComputerPlayerAgent*>(self)->unk08 = 0;
+    static_cast<ComputerPlayerAgent*>(self)->runs = 0;
     return 0;
 }
 
