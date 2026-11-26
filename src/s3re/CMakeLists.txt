@@ -48,6 +48,7 @@ add_library(s3re SHARED
     tooling/replay/command_log.cpp
 
     # game/world/: CGameData basics: RNG, players, statistics, counters, tables
+    game/world/game_data_ctor.cpp
     game/world/counting.cpp
     game/world/finish_initialising.cpp
     game/world/id_allocators.cpp

@@ -280,6 +280,15 @@ inline constexpr GameGlobal<std::int32_t> g_unk7dfd34{0x7dfd34};
 inline constexpr GameGlobal<std::int32_t> g_unk7dfd38{0x7dfd38};
 inline constexpr GameGlobal<std::int32_t> g_unk7dfd3c{0x7dfd3c};
 inline constexpr GameGlobal<std::int32_t> g_unk7dfd40{0x7dfd40};
+// Set by CGameData::CGameData 0x4fc990 (meaning unknown): 0x7dfd70..0x7dfd7c
+// = 0, 0x730f4c = 1, 0x730f50 = 3, 0x7deb4c = 0.
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd70{0x7dfd70};
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd74{0x7dfd74};
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd78{0x7dfd78};
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd7c{0x7dfd7c};
+inline constexpr GameGlobal<std::int32_t> g_unk730f4c{0x730f4c};
+inline constexpr GameGlobal<std::int32_t> g_unk730f50{0x730f50};
+inline constexpr GameGlobal<std::int32_t> g_unk7deb4c{0x7deb4c};
 // The pathfinder's progress marker (pathing.h, PathPhase).
 inline constexpr GameGlobal<volatile std::uint32_t> g_pathPhase{0x7a9d98};
 

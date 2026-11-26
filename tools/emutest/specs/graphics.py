@@ -1199,3 +1199,13 @@ SPECS += [
          presets=change_display_options, globals=change_display_globals, callees=DISPLAY_MODE_CALLEES,
          virtuals={0x14: 1, 0x2c: 1}, eax_mask=0xFF),
 ]
+
+
+# -- wip/logic-r4: CLandscapeSurface::CLandscapeSurface (directx_surface.cpp) --
+# The base constructor runs (verified); operator new fails for one of the
+# four table sizes in some cases; ThrowOutOfMemory ends the run as a throw.
+SPECS += [
+    Spec("CLandscapeSurface_Construct", 0x0054bd30, "thiscall", [anything],
+         callees={0x00610960: (1, "thiscall", "throw")}, new_fails=0.4,
+         new_fails_size=(0x364, 1000000, 0x202, 0x10000)),
+]

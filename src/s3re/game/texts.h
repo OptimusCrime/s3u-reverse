@@ -580,6 +580,14 @@ inline constexpr GameText kFinishGameCancelled{0x730a78};  // "*** FinishGame ca
 // Dirk\Draw.cpp: CDrawer::SetDisplayMode.
 inline constexpr GameText kOldDisplayMode{0x698f6c};          // "GFX: Old display mode: %ux%ux%u"
 inline constexpr GameText kSkippingSetDisplayMode{0x698f4c};  // "GFX: Skipping SetDisplayMode"
+// Volker\landscape.cpp: CLandscapeSurface's constructor (its tables' out-of-memory checks).
+inline constexpr GameText kPatternPointer{0x731244};  // "patternpointer" (+0x94)
+inline constexpr GameText kPatternData{0x731238};     // "patterndata" (+0x9c)
+inline constexpr GameText kPalette{0x731230};         // "palette" (+0xa0)
+inline constexpr GameText kPalettenArray{0x731220};   // "palettenarray" (+0xa4)
+inline constexpr GameText kLandscapeFile{0x731254};   // "E:\Siedler3\Volker\landscape.cpp"
+// CGameData::CGameData (game_data_ctor.cpp).
+inline constexpr GameText kInitialisingGlobals{0x6a5c20};  // "Initialising globals"
 // The thread destructors (win32_thread_destructors.cpp).
 inline constexpr GameText kThreadDestroyedRunning{0x7a42c4};  // "Thread destruction before it's finished"
 inline constexpr GameText kGameThreadCoInitOpen{0x79df58};    // "CGameThread::~CGameThread:: iCoInitOpen"
