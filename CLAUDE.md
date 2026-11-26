@@ -157,6 +157,18 @@ round to nearest); confirm that once at runtime. If a difference ever
 shows up, that function gets inline x87 assembly instead. Details:
 `docs/reimplementation_notes.md`.
 
+**Library and compiler code (decided 2026-11-26).** Compiler-generated
+code (static-initializer stubs, atexit destructor registrations, the
+starts Ghidra missed between them), the Watcom containers and the
+statically linked libpng/zlib/PaintLib are reimplemented and verified like
+game code, in dedicated batches (compiler stubs table-driven, specs
+generated). The statically linked MSVC 6 C runtime is not rewritten
+wholesale: functions whose behaviour the game depends on (`_ftol`,
+operator new/delete, memmove, string formatting, sorting, anything the
+simulation calls) are verified; the rest get a separate status
+("provided by the platform library", counted apart from verified;
+backlog `docs/todo/evidence.md`).
+
 Rejected alternatives: a from-scratch rewrite can't prove equivalence. Matching
 decompilation (byte-identical recompile with MSVC 6) is too slow for this much
 C++ code.

@@ -5,6 +5,12 @@ where to start. Remove an item when it is done (mention it in the
 LOGBOOK session entry).
 
 ## Evidence and testing
+- **C runtime status "provided by the platform library" (user decision
+  2026-11-26, CLAUDE.md "Library and compiler code").** Add the status
+  (inventory.py, progress.py/progress.html as its own colour, not
+  counted as verified), list which CRT functions the game's behaviour
+  depends on (verify those: _ftol, new/delete, memmove, sprintf-family,
+  qsort, rand if used, anything the simulation calls) and mark the rest.
 - **DirectDraw renderer, what is left (wip/ddraw-render, 2026-11-26).**
   The fake DirectDraw (`test/fake_ddraw.*`) and the emulator setup
   (`ddw_*` / `dgd_*` in specs/framework.py: COM probes, import slots of
