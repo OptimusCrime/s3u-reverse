@@ -297,4 +297,12 @@ inline constexpr GameGlobal<const std::int32_t> g_serialPermute{0x655554};     /
 inline constexpr GameGlobal<const std::int32_t> g_serialInverse{0x6555ec};     // 10
 inline constexpr GameGlobal<const std::int32_t> g_serialFinal{0x6557f4};       // indexed (pos % 12) * 10 + value
 
+// wip/images-r4 batch: libpng 1.0.2 / zlib 1.1.3 constants (src/s3re/thirdparty/).
+inline constexpr GameGlobal<const std::uint32_t[256]> g_zlibCrcTable{0x65c1c4};  // zlib's crc_table (crc32 0x5aa130)
+inline constexpr GameGlobal<const char[16]> g_pngHexDigits{0x65c1b4};           // "0123456789ABCDEF" (png_format_buffer)
+inline constexpr GameGlobal<const std::uint8_t[8]> g_pngSignature{0x7335e0};     // 89 50 4e 47 0d 0a 1a 0a (png_sig_cmp)
+inline constexpr GameGlobal<const std::uint8_t[256]> g_pngOneBppSwap{0x733884};  // png_do_packswap: bit order reversed
+inline constexpr GameGlobal<const std::uint8_t[256]> g_pngTwoBppSwap{0x733984};  // 2-bit pixels reversed
+inline constexpr GameGlobal<const std::uint8_t[256]> g_pngFourBppSwap{0x733a84}; // nibbles swapped
+
 }  // namespace s3re::game
