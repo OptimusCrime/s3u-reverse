@@ -34,6 +34,12 @@ using LockFn = decltype(&CTextSurface_Lock);
 using UnlockFn = decltype(&CTextSurface_Unlock);
 using DrawTextFn = decltype(&CTextSurface_DrawText);
 using DrawTextFFn = decltype(&CTextSurface_DrawTextF);
+using AddFontFn = decltype(&CTextSurface_AddFont);
+using CreateFn = decltype(&CTextSurface_Create);
+using DrawWideTextFn = decltype(&CTextSurface_DrawWideText);
+extern DrawWideTextFn Original_CTextSurface_DrawWideText;
+extern AddFontFn Original_CTextSurface_AddFont;
+extern CreateFn Original_CTextSurface_Create;
 extern LockFn Original_CTextSurface_Lock;
 extern UnlockFn Original_CTextSurface_Unlock;
 extern DrawTextFn Original_CTextSurface_DrawText;
@@ -48,22 +54,28 @@ constexpr std::uintptr_t kFontsFind = 0x0060bab0;
 constexpr std::uintptr_t kFontsInsert = 0x0060bbe0;
 constexpr std::uintptr_t kDrawText = 0x004a8090;
 constexpr std::uint32_t kFontEntries = 8;
+constexpr std::uintptr_t kConfigDword28 = 0x004120a0;
 
 struct Functions {
     LockFn lock;
     UnlockFn unlock;
     DrawTextFn drawText;
     DrawTextFFn drawTextF;
+    AddFontFn addFont;
+    CreateFn create;
+    DrawWideTextFn drawWideText;
 };
 
 Functions OriginalFunctions() {
     return {Original_CTextSurface_Lock, Original_CTextSurface_Unlock, Original_CTextSurface_DrawText,
-            Original_CTextSurface_DrawTextF};
+            Original_CTextSurface_DrawTextF, Original_CTextSurface_AddFont, Original_CTextSurface_Create,
+            Original_CTextSurface_DrawWideText};
 }
 
-const Functions kOurs{&CTextSurface_Lock, &CTextSurface_Unlock, &CTextSurface_DrawText, &CTextSurface_DrawTextF};
+const Functions kOurs{&CTextSurface_Lock, &CTextSurface_Unlock, &CTextSurface_DrawText, &CTextSurface_DrawTextF,
+                      &CTextSurface_AddFont, &CTextSurface_Create, &CTextSurface_DrawWideText};
 
-enum class Op { Lock, Unlock, DrawText, DrawTextF };
+enum class Op { Lock, Unlock, DrawText, DrawTextF, AddFont, Create, DrawWideText, Count };
 
 // One call: plain data only (the __try frame must not hold C++ objects).
 struct Call {
@@ -77,6 +89,7 @@ struct Call {
     const char* format;
     std::uint32_t a, b;
     const char* s;
+    const msvc6::WString* wide;
 };
 
 std::uint32_t Dispatch(const Functions* f, const Call* c) {
@@ -89,6 +102,14 @@ std::uint32_t Dispatch(const Functions* f, const Call* c) {
     case Op::DrawTextF:
         return reinterpret_cast<std::uint32_t>(
             f->drawTextF(c->surface, c->result, c->font, c->rect, c->flags, c->format, c->a, c->s, c->b));
+    case Op::AddFont: return f->addFont(c->surface, nullptr, c->font, c->text, static_cast<std::int32_t>(c->a), c->b,
+                                        c->flags);
+    case Op::Create:
+        return f->create(c->surface, nullptr, static_cast<std::int32_t>(c->a), static_cast<std::int32_t>(c->b));
+    case Op::DrawWideText:
+        return reinterpret_cast<std::uint32_t>(
+            f->drawWideText(c->surface, nullptr, c->result, c->font, c->rect, c->flags, c->wide));
+    case Op::Count: break;
     }
     return 0;
 }
@@ -149,6 +170,11 @@ void RunSide(const Functions& f, Side& side, Call call, std::uint64_t seed, std:
         side.log.insert(side.log.end(), {0x1e5, self, a[0] - base, key});
         return entry(key + 1);
     });
+    const std::uint32_t language = (findMisses & 0x80000000u) != 0 ? 7u : (findMisses >> 24) & 15;
+    stubs.Install<0, kConfigDword28>([&](CGameData*, std::uint32_t self, const std::uint32_t*) -> std::uint32_t {
+        side.log.insert(side.log.end(), {0x28, self + base});
+        return language;
+    });
     if (stubDrawText) {
         stubs.Install<5, kDrawText>([&](CGameData*, std::uint32_t self, const std::uint32_t* a) -> std::uint32_t {
             const auto* text = reinterpret_cast<const msvc6::String*>(a[4]);
@@ -169,9 +195,13 @@ void RunSide(const Functions& f, Side& side, Call call, std::uint64_t seed, std:
     side.outcome = Run(&f, &call);
     win32.Uninstall();
     gdi.Uninstall();
-    if ((call.op == Op::DrawText || call.op == Op::DrawTextF) && !side.outcome.caught.threw) {
+    if ((call.op == Op::DrawText || call.op == Op::DrawTextF || call.op == Op::DrawWideText) &&
+        !side.outcome.caught.threw) {
         // EAX is the result buffer: compare it relative to the side.
         side.outcome.eax -= reinterpret_cast<std::uint32_t>(&side.result);
+    }
+    if (call.op == Op::AddFont && !side.outcome.caught.threw) {
+        side.outcome.eax -= reinterpret_cast<std::uint32_t>(side.fonts);  // an entry of the fake table
     }
     side.log.insert(side.log.end(), gdi.log().begin(), gdi.log().end());
     side.log.insert(side.log.end(), win32.log().begin(), win32.log().end());
@@ -208,7 +238,7 @@ void CompareTextSurface(test::Context& ctx, const Functions& candidate, int case
         string.res = string.len;
 
         Call call{};
-        call.op = static_cast<Op>(rng.Below(4));
+        call.op = static_cast<Op>(rng.Below(static_cast<std::uint32_t>(Op::Count)));
         call.font = rng.Chance(1, 4) ? static_cast<std::int32_t>(rng.Next32()) : rng.Range(0, 5);
         call.rect = &rect;
         call.flags = rng.Chance(1, 4) ? rng.Next32() : rng.Below(128);
@@ -217,12 +247,27 @@ void CompareTextSurface(test::Context& ctx, const Functions& candidate, int case
         call.a = rng.Chance(1, 2) ? rng.Below(1000) : rng.Next32();
         call.s = kArguments[rng.Below(4)];
         call.b = rng.Next32();
+        if (call.op == Op::AddFont) {
+            text[31] = 0;  // the face is strcpy'd into LOGFONTA's 32 bytes
+            if (rng.Chance(1, 2)) {
+                call.b &= ~0xffu;  // `bold` is tested by its low byte only
+            }
+        }
         if (call.format == kFormats[4] || call.format == kFormats[6]) {
             call.a = reinterpret_cast<std::uint32_t>(call.s);  // the first conversion is the %s
         }
         const std::uint32_t findMisses = rng.Next32();
         const std::uint64_t seed = rng.Next64();
-        const bool stubDrawText = call.op == Op::DrawTextF;
+        std::uint16_t wideCharacters[64];
+        for (std::uint32_t k = 0; k < 64; ++k) {
+            wideCharacters[k] = static_cast<std::uint8_t>(text[k]);
+        }
+        msvc6::WString wide{};
+        wide.ptr = rng.Chance(1, 8) ? nullptr : wideCharacters;
+        wide.len = wide.ptr != nullptr ? length : 0;
+        wide.res = wide.len;
+        call.wide = &wide;
+        const bool stubDrawText = call.op == Op::DrawTextF || call.op == Op::DrawWideText;
         RunSide(original, a, call, seed, findMisses, stubDrawText);
         RunSide(candidate, b, call, seed, findMisses, stubDrawText);
         bool same = S3RE_EXPECT_EQ(a.outcome.eax, b.outcome.eax);

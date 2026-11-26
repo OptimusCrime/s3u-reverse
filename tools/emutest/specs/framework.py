@@ -1823,3 +1823,35 @@ SPECS += [
          eax_mask=0, callees={0x0060d660: (0, "thiscall", "probe"), 0x0060dff0: (0, "thiscall", "probe")},
          virtuals={0: 1}),
 ]
+
+
+# -- WideToNarrowString (wide_to_narrow.cpp, wip/text-r6) --------------------
+# ECX = the result at SCRATCH (a string the function constructs), EDX = a
+# wide string at SCRATCH + 1 slot with characters 1..0xff (see
+# CTextSurface_DrawWideText's spec for why no others); sometimes empty or
+# without a buffer. wcstombs runs (CRT code); the buffer comes from the
+# bump allocator (null in some cases: no conversion).
+W2N_WIDE = SCRATCH + 1 * SCRATCH_SLOT_BYTES
+W2N_CHARS = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+
+
+def w2n_world(rng, pool, args):
+    length = rng.choice([0, rng.randrange(1, 8), rng.randrange(1, 64)])
+    fields = []
+    for i in range(length):
+        c = rng.randrange(32, 127) if rng.random() < 0.9 else rng.randrange(1, 0x100)
+        fields.append((W2N_CHARS + 2 * i, c, 2))
+    fields.append((W2N_CHARS + 2 * length, 0, 2))
+    pointer = 0 if rng.random() < 0.1 else WORLD_BASE + W2N_CHARS
+    return fields + [(W2N_WIDE + 4, pointer, 4), (W2N_WIDE + 8, length if pointer else 0, 4),
+                     (W2N_WIDE + 12, length, 4)]
+
+
+SPECS += [
+    Spec("WideToNarrowString", 0x0060b6a0, "fastcall",
+         [one_of(WORLD_BASE + SCRATCH), one_of(WORLD_BASE + W2N_WIDE)], presets=w2n_world, new_fails=0.05,
+         # 0x60b710: no buffer but a length (wcstombs of the empty text returns
+         # 0: the original loops forever); 0x60b809: erase(0, npos) leaves
+         # length 0, for which _Grow returns false
+         exempt_blocks=(0x60b710, 0x60b809)),
+]

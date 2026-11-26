@@ -25,6 +25,11 @@ enum CallId : std::uint32_t {
     kCallDeleteDC,
     kCallGdiFlush,
     kCallDrawText,
+    kCallGetStockObject,
+    kCallCreateFontIndirect,
+    kCallGetDC,
+    kCallReleaseDC,
+    kCallCreateDIBSection,
 };
 
 // With failures on: true for about one call in eight.
@@ -147,6 +152,63 @@ std::int32_t __stdcall FakeDrawText(void* dc, const char* text, std::int32_t len
     return rng.Chance(1, 8) ? static_cast<std::int32_t>(rng.Next32()) : rng.Range(0, 60);
 }
 
+void* __stdcall FakeGetStockObject(std::int32_t object) {
+    Log({kCallGetStockObject, static_cast<std::uint32_t>(object)});
+    if (Fails()) {
+        return nullptr;
+    }
+    return reinterpret_cast<void*>(g_active->rng_.Next32() | 1);
+}
+
+// CreateFontIndirectA(logFont): logs the 60 bytes of the LOGFONTA.
+void* __stdcall FakeCreateFontIndirect(const void* logFont) {
+    Log({kCallCreateFontIndirect});
+    std::uint32_t words[15];
+    std::memcpy(words, logFont, sizeof(words));
+    for (std::uint32_t word : words) {
+        Log({word});
+    }
+    if (g_active->rng_.Chance(1, 8)) {
+        return nullptr;
+    }
+    return reinterpret_cast<void*>(g_active->rng_.Next32() | 1);
+}
+
+void* __stdcall FakeGetDC(void* window) {
+    Log({kCallGetDC, U(window)});
+    if (Fails()) {
+        return nullptr;
+    }
+    return reinterpret_cast<void*>(g_active->rng_.Next32() | 1);
+}
+
+int __stdcall FakeReleaseDC(void* window, void* dc) {
+    Log({kCallReleaseDC, U(window), U(dc)});
+    return g_active->rng_.Range(0, 1);
+}
+
+// CreateDIBSection(dc, info, usage, bits*, section, offset): logs the 48
+// bytes of the BITMAPINFO; on success writes a fake bits pointer.
+void* __stdcall FakeCreateDIBSection(void* dc, const void* info, std::uint32_t usage, void** bits, void* section,
+                                     std::uint32_t offset) {
+    Log({kCallCreateDIBSection, U(dc), usage, bits != nullptr ? 1u : 0u, U(section), offset});
+    std::uint32_t words[12];
+    std::memcpy(words, info, sizeof(words));
+    for (std::uint32_t word : words) {
+        Log({word});
+    }
+    if (Fails()) {
+        if (bits != nullptr && g_active->rng_.Chance(1, 2)) {
+            *bits = nullptr;
+        }
+        return nullptr;
+    }
+    if (bits != nullptr) {
+        *bits = reinterpret_cast<void*>(g_active->rng_.Next32());
+    }
+    return reinterpret_cast<void*>(g_active->rng_.Next32() | 1);
+}
+
 struct Slot {
     std::uintptr_t address;
     const void* fake;
@@ -163,6 +225,11 @@ const Slot kSlots[] = {
     {g_importDeleteDC.address(), reinterpret_cast<const void*>(&FakeDeleteDC)},
     {g_importGdiFlush.address(), reinterpret_cast<const void*>(&FakeGdiFlush)},
     {g_importDrawTextA.address(), reinterpret_cast<const void*>(&FakeDrawText)},
+    {g_importGetStockObject.address(), reinterpret_cast<const void*>(&FakeGetStockObject)},
+    {g_importCreateFontIndirectA.address(), reinterpret_cast<const void*>(&FakeCreateFontIndirect)},
+    {g_importGetDC.address(), reinterpret_cast<const void*>(&FakeGetDC)},
+    {g_importReleaseDC.address(), reinterpret_cast<const void*>(&FakeReleaseDC)},
+    {g_importCreateDIBSection.address(), reinterpret_cast<const void*>(&FakeCreateDIBSection)},
 };
 
 }  // namespace

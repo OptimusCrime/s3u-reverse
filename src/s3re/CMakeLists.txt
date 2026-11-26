@@ -264,6 +264,7 @@ add_library(s3re SHARED
     game/ui/ui_static_text.cpp
 
     # game/graphics/: graphics data, landscape colours, DirectDraw surface
+    game/graphics/draw_thread.cpp
     game/graphics/drawer_display_mode.cpp
     game/graphics/directx_surface.cpp
     game/graphics/drawer_buildings.cpp
@@ -278,9 +279,13 @@ add_library(s3re SHARED
     game/graphics/gfx_rle.cpp
     game/graphics/gfx_spans.cpp
     game/graphics/graphics_helpers.cpp
+    game/graphics/text_panels.cpp
+    game/graphics/text_panels_tests.cpp
     game/graphics/text_surface.cpp
     game/graphics/text_surface_tests.cpp
     game/graphics/value_bar.cpp
+    game/graphics/landscape_blit.cpp
+    game/graphics/landscape_blit_tests.cpp
     game/graphics/landscape_colours.cpp
     game/graphics/screen_layout.cpp
 
@@ -294,6 +299,8 @@ add_library(s3re SHARED
     game/sound/sound_effects.cpp
     game/sound/sound_effects_tests.cpp
     # game/framework/: WinMain, Win32/DirectX framework classes, exceptions, strings
+    game/framework/wide_to_narrow.cpp
+    game/framework/wide_to_narrow_tests.cpp
     game/framework/directx_draw.cpp
     game/framework/directx_draw_tests.cpp
     game/framework/directx_drawer.cpp

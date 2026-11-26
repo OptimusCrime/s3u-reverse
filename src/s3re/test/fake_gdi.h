@@ -13,7 +13,9 @@
 // functions through the same slots (game/globals.h, g_importSelectObject
 // ...), as the original does.
 //
-// wip/text-r6: CreateCompatibleDC, DeleteDC, GdiFlush and DrawTextA (the
+// wip/text-r6: CreateCompatibleDC, DeleteDC, GdiFlush, DrawTextA,
+// GetStockObject, CreateFontIndirectA, GetDC, ReleaseDC and
+// CreateDIBSection (the
 // text surface, Dirk\Text.cpp) are faked as well. With `failures` set,
 // every fake fails now and then the way its VERIFY check tests (null,
 // 0 or CLR_INVALID); without it the results are drawn as before.

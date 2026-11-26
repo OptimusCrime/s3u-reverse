@@ -626,4 +626,16 @@ inline constexpr GameText kSetBkColorBlack{0x69fed8};      // "::SetBkColor (hDC
 inline constexpr GameText kSetTextColorWhite{0x69fe9c};    // "::SetTextColor (hDC, RGB (255, 255, 255)) != CLR_INVALID"
 inline constexpr GameText kSelectFont{0x69fe74};           // "::SelectObject (hDC, vFonts [iFontId])"
 inline constexpr GameText kDeleteDc{0x69fe5c};             // "::DeleteDC (hDC) != 0"
+inline constexpr GameText kDefaultFontNotNull{0x697778};   // "hDefaultFont != NULL"
+inline constexpr GameText kBitmapNotNull{0x69fda0};        // "hBitmap != NULL"
+// The panel fonts' faces (CDrawer::InitPanelFonts 0x4c6f60).
+inline constexpr GameText kTimesNewRoman{0x69fff0};     // "Times New Roman"
+inline constexpr GameText kArial{0x69ffe8};             // "Arial"
+inline constexpr GameText kSmallFonts{0x69ffdc};        // "Small Fonts"
+inline constexpr GameText kMsSansSerif{0x69742c};       // "MS Sans Serif"
+// The panel number formats (CDrawer::PanelNumber, PanelPercent, PanelHundredths; text_panels.cpp).
+inline constexpr GameText kFormatUnsigned{0x696ba0};    // "%u"
+inline constexpr GameText kFormatPercent{0x6a57b8};     // "%u%%"
+inline constexpr GameText kFormatTwoDecimals{0x6a57b0}; // "%2.2f"
+inline constexpr GameText kFormatOneDecimal{0x6a57a8};  // "%2.1f"
 }  // namespace s3re::game::texts

@@ -695,6 +695,17 @@ inline constexpr GameGlobal<CreateCompatibleDCImport> g_importCreateCompatibleDC
 inline constexpr GameGlobal<DeleteDCImport> g_importDeleteDC{0x655064};
 inline constexpr GameGlobal<GdiFlushImport> g_importGdiFlush{0x655080};
 inline constexpr GameGlobal<DrawTextAImport> g_importDrawTextA{0x6552ec};  // USER32.dll
+using GetStockObjectImport = void*(__stdcall*)(std::int32_t object);
+using CreateFontIndirectAImport = void*(__stdcall*)(const void* logFont);
+inline constexpr GameGlobal<GetStockObjectImport> g_importGetStockObject{0x65503c};
+inline constexpr GameGlobal<CreateFontIndirectAImport> g_importCreateFontIndirectA{0x655040};
+using GetDCImport = void*(__stdcall*)(void* window);
+using ReleaseDCImport = int(__stdcall*)(void* window, void* dc);
+using CreateDIBSectionImport = void*(__stdcall*)(void* dc, const void* info, std::uint32_t usage, void** bits,
+                                                 void* section, std::uint32_t offset);
+inline constexpr GameGlobal<GetDCImport> g_importGetDC{0x6552b4};          // USER32.dll
+inline constexpr GameGlobal<ReleaseDCImport> g_importReleaseDC{0x6552d8};  // USER32.dll
+inline constexpr GameGlobal<CreateDIBSectionImport> g_importCreateDIBSection{0x655060};
 // wip/ui-gdi batch: the dropdown whose list is open (CDropdown::OnArrowClicked
 // 0x422590 sets it; OnFocusChanged and Draw close other open lists).
 inline constexpr GameGlobal<std::uint32_t> g_openDropdown{0x7a8244};

@@ -4,6 +4,7 @@
 // surface the panel texts are drawn into, and its functions.
 
 #include "msvc6/string.h"
+#include "msvc6/wstring.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -40,6 +41,11 @@ std::uint32_t __fastcall CTextSurface_Lock(void* self, void* edx);
 void __fastcall CTextSurface_Unlock(void* self, void* edx);
 TextRect* __fastcall CTextSurface_DrawText(void* self, void* edx, TextRect* result, std::int32_t font,
                                            const TextRect* rect, std::uint32_t flags, const msvc6::String* text);
+TextRect* __fastcall CTextSurface_DrawWideText(void* self, void* edx, TextRect* result, std::int32_t font,
+                                               const TextRect* rect, std::uint32_t flags, const msvc6::WString* text);
+std::uint32_t __fastcall CTextSurface_Create(void* self, void* edx, std::int32_t width, std::int32_t height);
+std::uint32_t __fastcall CTextSurface_AddFont(void* self, void* edx, std::int32_t font, const msvc6::String* face,
+                                              std::int32_t height, std::uint32_t bold, std::uint32_t italic);
 TextRect* __cdecl CTextSurface_DrawTextF(void* self, TextRect* result, std::int32_t font, const TextRect* rect,
                                          std::uint32_t flags, const char* format, ...);
 
