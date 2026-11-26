@@ -63,7 +63,7 @@ LOGBOOK session entry).
   members (0x412380, 0x4125c0, 0x412830, 0x411bc0, 0x411d10 serial check,
   0x413f20); CEventFile, CCreditsDialog::OnMessage20 0x492750,
   CMenuSharedData::IsRequestSuperseded 0x4682d0, the reciprocal table
-  0x4a1eb0 (CGameData constructor).
+  (0x4a1eb0, the CGameData constructor: done in wip/logic-r4).
 
 - **Framework throwers and VERIFY wrappers (session 58,
   wip/framework-errors):** ThrowWin32Error / ThrowHResult / ThrowTimeout /

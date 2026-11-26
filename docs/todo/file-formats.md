@@ -31,8 +31,7 @@ LOGBOOK session entry).
   CGameData::DumpTableToFile 0x4ff6d0 (debug dumps to d:\*.dmp through
   the CRT's fopen/fprintf; a test would need a redirected path);
   Logic_sub_4d6740 (debug text through 0x4a8bd0 / 0x4a8e00) and
-  Logic_sub_4d8400 (draws with it); CLogicThread::~CLogicThread 0x53c7d0
-  (needs ~CGameThread 0x5b60a0 and the Watcom list code). The row
+  Logic_sub_4d8400 (draws with it; ~CLogicThread done in wip/logic-r4). The row
   CLogicThread::ExecuteCommands_tail 0x53b839 is not a function (frontier
   lists it as READY; it belongs to the false starts below). Optional: the Watcom skip list (0x60bab0/0x60bbe0/0x60be20).
 - **Graphics/sound loader leftovers:** the graphics loader (session 55

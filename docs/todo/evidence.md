@@ -9,18 +9,10 @@ LOGBOOK session entry).
   The fake DirectDraw (`test/fake_ddraw.*`) and the emulator setup
   (`ddw_*` / `dgd_*` in specs/framework.py: COM probes, import slots of
   SetRect / SendMessageA / CoCreateInstance patched to probes) cover
-  Ddraw.cpp and most of CGameDrawer. Not done yet, in order of ease:
-  CDrawer::SetDisplayMode 0x42ce90 (DDGetDisplayMode, two DebugLogs,
-  SendMessageA(hwnd, 0x804, mode index), slots 5/11, RequestFullRedraw on
-  0x7e8bec; the SendMessageA probe slot DDW_SENDMESSAGE_SLOT is ready),
-  Render_sub_4c7490 (applies the resolution setting [arg+0xa0] 1/2/3:
-  layout globals 0x730f08.. and SetDisplayMode(640/800/1024, ..., 16, 0, 0),
-  g_logicStartState = 0xfa; al = 1, 0 for other values unless 0x7dfd30),
-  Render_sub_4c6d40 (+0xf0 = -1, Render::SetScreenLayout(this,
-  [g_config+0x70]) via the folded getter 0x49dec0 `mov eax,[ecx+70h]`),
-  CLandscapeSurface::CLandscapeSurface 0x54bd30 (COffscreenSurface ctor,
-  fields 0, four news with ThrowOutOfMemory "patternpointer" / "patterndata"
-  / "palette" / "palettenarray", landscape.cpp lines 31/33/35/37);
+  Ddraw.cpp and most of CGameDrawer. Done in wip/logic-r4: SetDisplayMode
+  0x42ce90, ChangeDisplayMode 0x4c7490, ApplyScreenLayout 0x4c6d40, the
+  CLandscapeSurface constructor 0x54bd30, PlayAmbientSounds 0x4c7730.
+  Not done yet:
   CGameDrawer's constructor / destructor / Shutdown / EnumDevicesCallback
   and the display-mode callback 0x5b7810 (not in the function lists yet)
   need the WCValOrderedVector<CDirectDrawDevice/CDisplayMode> code
