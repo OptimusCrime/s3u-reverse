@@ -19,6 +19,14 @@ LOGBOOK session entry).
   paths. GetSubKey's local key is closed while an exception unwinds (as in
   the original); if that RegCloseKey also fails, both terminate.
 
+- **Flaky in-process test WatcomIsvSList_MatchOriginal (found in
+  wip/app-r4, also fails on main's Release build about one run in three):**
+  the arena comparison relocates every word that points into an arena, so
+  a random fill word that happens to fall inside one side's arena (heap
+  addresses differ per run) is rebased on that side only. Fix: relocate
+  only the words the functions wrote as links, or fill with values outside
+  both arenas.
+
 ## Libraries and the standalone build
 - **C runtime functions the game code calls, and which behaviour must be
   copied exactly (session 51).** In hook mode the game's statically
