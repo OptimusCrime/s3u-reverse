@@ -94,3 +94,28 @@ used for what the menu thread reads besides (chunk 0x40).
   sets only UI fields (+0x2d298 message, +0x2d27c refresh), which the
   determinism trace skips. Multiplayer saves are commands ("Starting
   multiplayersave", ExecuteCommands).
+
+## Loading a savegame's setup and the local player (session 58)
+
+`GameSettings::LoadSaveGame` 0x432b00 (game_settings_load.cpp) rebuilds
+the settings from the savegame chunks GameSettings::SaveSetup wrote:
+chunk 0x14's records are (byte +4 net id, +5 slot, +6 party, +7 type, +8
+race, +0xa colour, dwords +0xc..+0x14 for Set's arguments 6..8); a saved
+type 1 (the local player) becomes 0 (human) and 3 becomes 2 (computer).
+Teams are appended until the party exists. The net ids go into the int
+vector +0x90 ("NET: Mapping %i to %i"); chunk 0x1a's +8 (the saved local
+player id) becomes +0xac, the id SetupLocalPlayer searches for. Without
+chunk 0x1a a new GUID is made (CoCreateGuid). Result 2: chunk 0x1e asks
+for the Amazons and GameConfig +0x158 is 0.
+
+`GameSettings::SetupLocalPlayer` 0x433e50 picks the local slot (loading:
+the slot whose net id is +0xac; new game: the first human, or by clan
+the first human of FindTeamForClan's party), gives it the lowest free
+net id (LowestFreeNetId 0x433c80, stored at +0x78), makes it type 1
+(SetType 0x49f360) and attaches the net player (AttachNetPlayer
+0x49f190; in single player none). GamePlayerSetup types: 0 human, 1 the
+local player, 2 computer, 3 unknown (InitPlayerInfo shows its lobby
+name in parentheses; SetType keeps its race and +0x18 text).
+`CGameData::InitPlayerInfo` 0x4fd0d0 names the player info records:
+type 1 "text 0x900c1" in single player or the lobby name, type 2 text
+0x90053, type 3 "(lobby name)".

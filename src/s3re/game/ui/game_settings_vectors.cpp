@@ -61,6 +61,15 @@
 //   text at +0xbc (the static empty string 0x6553a0 without buffer)). EAX:
 //   DebugLog is a bare `ret`, so it is +0x10, the last value loaded.
 //
+// The index checks of operator[] (session 58, wip/settings-load; the
+// behaviour in game_settings_vectors.h), (index) ret 4 -> the index:
+//   0x00437950 CPlayer: the growth through Resize 0x437820, the length
+//              clamped to 1 (unsigned)
+//   0x00437e20 CTeam:   the same through Resize 0x437d00
+// WCValOrderedVector<Dirk::CPlayer>::resize (0x00438070; (n) ret 4): Resize
+//   0x437820, then the length clamped to n (unsigned) if that succeeded; EAX
+//   = Resize's result.
+//
 // Known difference: an exception thrown by a copy constructor (only out of
 // memory) is not unwound like the original's frames do.
 
@@ -68,6 +77,7 @@
 #include "game/tables.h"
 #include "game/texts.h"
 #include "game/ui/game_settings_layout.h"
+#include "game/ui/game_settings_vectors.h"
 #include "game/vtables.h"
 #include "hooks.h"
 #include "msvc6/game_heap.h"
@@ -407,11 +417,101 @@ std::uint32_t __fastcall CTeam_AddPlayerId(CTeam* self, void*, std::int32_t id) 
 // when the game settings are built or loaded.
 std::uint32_t __fastcall GamePlayerSetup_LogSlot(const GamePlayerSetup* self, void*) {
     std::uint32_t clan;
-    std::memcpy(&clan, self->unk0b8, sizeof(clan));
+    clan = self->clan;
     const char* name = self->textBC.ptr != nullptr ? self->textBC.ptr : g_stringNullBuffer.get();
     GameDebugLog(texts::kSlotLog, self->value10, self->id04, self->version, self->party, self->type, self->race,
                  clan, name);
     return self->value10;  // (DebugLog is a bare `ret`)
+}
+
+// ---------------------------------------------------------------------------
+// The index checks (session 58)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+using VectorResizeFn = std::uint32_t(__fastcall*)(VectorBase* self, void* edx, std::uint32_t n);
+constexpr std::uintptr_t kPlayerVectorResize = 0x00437820;
+constexpr std::uintptr_t kTeamVectorResize = 0x00437d00;
+
+std::uint32_t GrowToOne(VectorBase* vector, std::uintptr_t resize) {
+    if (reinterpret_cast<VectorResizeFn>(resize)(vector, nullptr, 1) == 0) {
+        return 0;
+    }
+    if (vector->length > 1) {
+        vector->length = 1;
+    }
+    return 1;
+}
+
+}  // namespace
+
+std::uint32_t GrowPlayerVectorToOne(VectorBase* vector) {
+    return GrowToOne(vector, kPlayerVectorResize);
+}
+
+std::uint32_t GrowTeamVectorToOne(VectorBase* vector) {
+    return GrowToOne(vector, kTeamVectorResize);
+}
+
+std::uint32_t GrowPlayerVectorInline(VectorBase* vector) {
+    if (!Reallocate(vector, 1, kPlayerOps, kPlayerOps.destroyInInsert)) {
+        return 0;
+    }
+    if (vector->length > 1) {
+        vector->length = 1;
+    }
+    return 1;
+}
+
+std::int32_t CheckedVectorIndex(VectorBase* vector, std::int32_t index, std::uint32_t (*resize1)(VectorBase*)) {
+    const std::uint32_t length = vector->length;
+    const auto last = static_cast<std::int32_t>(length - 1);
+    if (index >= 0 && index <= last) {
+        return index;
+    }
+    if (length != 0) {
+        return index < 0 ? 0 : last;  // (after the empty error hook 0x59f200)
+    }
+    if (vector->capacity == 0 && resize1(vector) == 0) {
+        return 0;
+    }
+    using NotifyFn = void(__fastcall*)(VectorBase*, void*, std::uint32_t);
+    reinterpret_cast<const NotifyFn*>(static_cast<std::uintptr_t>(vector->vtable))[1](vector, nullptr, 0);
+    vector->length = 1;
+    return 0;
+}
+
+using IndexFn = std::int32_t(__fastcall*)(VectorBase* self, void* edx, std::int32_t index);
+std::int32_t __fastcall PlayerVector_Index(VectorBase* self, void* edx, std::int32_t index);
+std::int32_t __fastcall TeamVector_Index(VectorBase* self, void* edx, std::int32_t index);
+std::uint32_t __fastcall PlayerVector_ResizeClampLength(VectorBase* self, void* edx, std::uint32_t n);
+
+S3RE_HOOK(0x00437950, PlayerVector_Index, IndexFn, Original_PlayerVector_Index, PlayerVector_Index);
+S3RE_HOOK(0x00437e20, TeamVector_Index, IndexFn, Original_TeamVector_Index, TeamVector_Index);
+S3RE_HOOK(0x00438070, PlayerVector_ResizeClampLength, ResizeFn, Original_PlayerVector_ResizeClampLength,
+          PlayerVector_ResizeClampLength);
+
+// Purpose: The bounds check of an access to the settings' player setups:
+// an index outside the vector becomes the nearest valid one, and an empty
+// vector first gets one setup.
+std::int32_t __fastcall PlayerVector_Index(VectorBase* self, void*, std::int32_t index) {
+    return PlayerVectorIndex(self, index);
+}
+
+// Purpose: The same for the settings' teams.
+std::int32_t __fastcall TeamVector_Index(VectorBase* self, void*, std::int32_t index) {
+    return TeamVectorIndex(self, index);
+}
+
+// Purpose: Changes how many player setups the vector has room for and
+// shortens its used length to that (the public resize of the vector).
+std::uint32_t __fastcall PlayerVector_ResizeClampLength(VectorBase* self, void*, std::uint32_t n) {
+    const std::uint32_t result = reinterpret_cast<VectorResizeFn>(kPlayerVectorResize)(self, nullptr, n);
+    if (result != 0 && self->length > n) {
+        self->length = n;
+    }
+    return result;
 }
 
 }  // namespace s3re::game

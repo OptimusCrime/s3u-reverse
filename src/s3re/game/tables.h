@@ -277,4 +277,10 @@ inline constexpr GameGlobal<const char[kGfxGroupNameCount][4]> g_gfxGroupNames{0
 // PCM stereo 16-bit at 22050, 22050 and 11025 Hz.
 inline constexpr GameGlobal<const std::uint8_t[3][0x18]> g_primaryFormats{0x7a2fb8};
 
+// ---- wip/settings-load (session 58)
+// A 16-bit text GamePlayerSetup::SetType 0x49f360 and AttachNetPlayer
+// 0x49f190 reset the setup's 16-bit string +0x28 to (zero in the image;
+// written elsewhere: 0x419065, 0x48d7a0 and the lobby).
+inline constexpr GameGlobal<const std::uint16_t[1]> g_setupWideText{0x7a8248};
+
 }  // namespace s3re::game

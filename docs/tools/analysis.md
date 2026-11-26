@@ -20,6 +20,14 @@ Moved out of `CLAUDE.md` on 2026-11-24.
   identified library functions (stl/mfc/watcom/compiler) separately;
   `--library-done` counts those as done (they are not verified). Batches
   pick from READY, preferring simulation functions with callers.
+- **False starts** (session 58): `re/false_starts.tsv` lists starts in
+  the function lists that are code inside another function (catch
+  continuations, epilogues with jump tables, obfuscated junk, e.g.
+  `CLogicThread::ExecuteCommands_tail` 0x53b839). `frontier.py` never
+  lists them and counts them as done when something jumps there. They
+  stay in `re/*_functions.tsv` on purpose: those lists feed the
+  emulator's coverage analysis and fingerprints (`changed.py`), so a
+  change there would invalidate every recorded pass.
 - **Trivial functions count as done, proven by their bytes** (user
   decision 2026-11-09). Some bodies are too short for a Detours hook and
   have nothing to reimplement. `python tools/trivial.py list|apply|check`
