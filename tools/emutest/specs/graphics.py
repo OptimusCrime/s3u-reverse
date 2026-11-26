@@ -469,6 +469,8 @@ SPECS += [
     Spec("GfxDword_SpriteExtraBytes", 0x005fc5d0, "thiscall", [], presets=image_ref()),
     Spec("GfxDword_SpriteExtraCount", 0x005fc5e0, "thiscall", [], presets=image_ref()),
     Spec("GfxDword_ListImageChecked", 0x005fcce0, "thiscall", [OUT_SLOT, list_index], presets=image_ref()),
+    Spec("GfxDword_ListImageChecked_4b19c0", 0x004b19c0, "thiscall", [OUT_SLOT, list_index], presets=image_ref()),
+    Spec("GfxDword_Construct_609900", 0x00609900, "thiscall", [anything]),
     Spec("GfxDword_SpriteRleData", 0x005fcda0, "thiscall", [], presets=image_ref()),
     Spec("CGraphicsData_GetPixelFormat", 0x005fa730, "thiscall", [OUT_SLOT]),
     Spec("CGraphicsData_LanguageCount", 0x005faa50, "thiscall", []),
@@ -1129,4 +1131,114 @@ SPECS += [
     Spec("CDrawer_QueueCellObject", 0x004d5a50, "thiscall",
          [one_of(WORLD_BASE + QCO_DATA), below(130), below(130), anything, anything],
          presets=qco_sequence, callees=QCO_CALLEES, eax_mask=0, cover_until=0x004d5bd0),
+]
+
+
+# -- CDrawer::QueueLandscapeObject (drawer_landscape.cpp, session 59) --------
+# The drawer at world offset 0 (its +0x5f6b8 graphics, +0x5f6bc sound data
+# and ambient count 16 are lazily random), the draw data at QLO_DATA; the
+# presets give the cell of (column, row) and the draw data's mode fields
+# values the branches test. The callees are probed like QueueCellObject's
+# (the getters write into their out argument: the animation pointer a
+# sequence record at QLO_SEQUENCE, lazily random but with a small frame
+# count often); CDrawer::AddHitArea runs (it writes S3.EXE globals, compared).
+QLO_DATA = 0x100000
+QLO_SEQUENCE = SCRATCH
+QLO_CELLS = QLO_DATA + 0x500
+
+QLO_CALLEES = {
+    0x004c7ab0: (1, "thiscall", lambda h: h & 3),  # Render::Entry204
+    0x005fabb0: (2, "thiscall", "probe", qco_out(lambda h, a: h & 0xFFFFFFFF), lambda m, ecx, a: (a[1],)),
+    0x005fab50: (2, "thiscall", "probe", qco_out(lambda h, a: (h >> 4) & 0xFFFFFFFF), lambda m, ecx, a: (a[1],)),
+    0x005faaf0: (2, "thiscall", "probe", qco_out(lambda h, a: WORLD_BASE + QLO_SEQUENCE), lambda m, ecx, a: (a[1],)),
+    0x005fac10: (2, "thiscall", "probe"),  # CGraphicsData::PalettePointer
+    # (`this` is a stack local: "stdcall" leaves ECX out, its value is recorded)
+    0x005fcce0: (2, "stdcall", "probe", qco_out(lambda h, a: (h >> 8) & 0xFFFFFFFF),
+                 lambda m, ecx, a: (qco_this_value(m), a[1])),
+    0x005fc5a0: (2, "stdcall", "probe", qco_out(lambda h, a: (h >> 12) & 0xFFFFFFFF),
+                 lambda m, ecx, a: (qco_this_value(m), a[1])),
+    0x004d7c90: (4, "thiscall", "probe"),  # CDrawer::QueueShadow
+    0x004d7e10: (5, "thiscall", "probe"),  # CDrawer::QueueSprite
+    0x004d8170: (5, "thiscall", "probe"),  # CDrawer::QueueColourLayer
+    0x004d8050: (6, "thiscall", "probe"),  # CDrawer::QueueSpriteWithColour
+    0x004c7b50: (2, "thiscall", "probe"),  # Render::IsNearView
+    0x004c7a50: (4, "thiscall", "probe"),  # CDrawer::AmbientSoundVolume
+    0x004c79f0: (1, "thiscall", "probe"),  # CDrawer::AmbientSoundPan
+    0x005ff4d0: (0, "thiscall", "probe"),  # CSoundData::IsEnabled
+    0x005ff4f0: (2, "thiscall", "probe"),  # CSoundData::GetEffect
+    0x005c2fc0: (3, "thiscall", "probe"),  # DirectX::CSoundEffect::Play
+    0x0061f802: (0, "cdecl", lambda h: h & 0x7FFF),  # rand
+}
+
+# Objects: every branch's values and their edges, sometimes any byte or dword.
+QLO_OBJECTS = (0, 0, 0, 0xff, 0xfe, 0x44, 0x4a, 0x51, 0x54) + tuple(range(0x55, 0x70)) + (0x70, 0x71, 0x72, 0x73, 0x7f, 0x80, 0x87, 0xb7, 0xb8, 0xcf, 0xd0, 0xe7) + tuple(range(0xe8, 0xfe)) \
+    + (1, 12, 13, 16, 17, 0x14, 0x15, 0x1c, 0x1d, 0x22, 0x23, 0x43, 0x52, 0x53)
+
+
+def qlo_object(rng, pool):
+    r = rng.random()
+    if r < 0.8:
+        return rng.choice(QLO_OBJECTS)
+    if r < 0.95:
+        return rng.randrange(256)
+    return anything(rng, pool)
+
+
+def qlo_presets(rng, pool, args):
+    cell = QLO_CELLS + (args[1] * 130 + args[2]) * 0x30
+    fields = [(QLO_SEQUENCE + 7, rng.choice([0, 1, 2, 5, 20, rng.randrange(256)]), 1),
+              (QLO_DATA + 0x60, rng.choice([1, 1, 4, 4, 0, rng.getrandbits(32)]), 4),
+              (QLO_DATA + 0x64, rng.choice([0, 1, 2, 3, 4, 5]), 4),
+              (QLO_DATA + 0x68, rng.choice([rng.randrange(14), rng.randrange(6, 13)]), 4),
+              (QLO_DATA + 0x74, rng.choice([rng.randrange(16), rng.getrandbits(32)]), 4),
+              (QLO_DATA + 0x94, rng.randrange(5), 4),
+              (QLO_DATA + 0xa4, rng.choice([0x22, 0x21, 2, 3, 0x1e, 5, 0xe, 0x19, 0x24, 0x18, 0x33,
+                                            rng.randrange(0x40)]), 4),
+              (cell + 0x07, rng.choice([rng.randrange(0x24), rng.randrange(256)]), 1)]
+    if rng.random() < 0.5:
+        fields += [(QLO_DATA + 0x264, args[1], 4), (QLO_DATA + 0x268, args[2], 4)]
+    if rng.random() < 0.7:
+        fields.append((cell + 0x02, rng.choice([0x50, 0x50, 2, 7, 8, 1, rng.randrange(10)]), 1))
+    if rng.random() < 0.4:
+        fields.append((cell + 0x0a, 0, 2))
+    if rng.random() < 0.6:  # the direction's parameter above 72 (the water animations)
+        fields.append((cell + 0x05, rng.randrange(19, 64), 1))
+    if rng.random() < 0.4:  # the selection sprites: mode 1, a group and item, a marker
+        fields += [(QLO_DATA + 0x60, 1, 4), (QLO_DATA + 0x64, rng.randrange(1, 5), 4),
+                   (QLO_DATA + 0x68, rng.randrange(1, 13), 4), (cell + 0x07, rng.randrange(1, 0x21), 1)]
+    if args[5] == 0 and rng.random() < 0.8:  # the water animations: a clock that puts a hash into
+        fields += qlo_water_clock(rng, args, cell)  # (or next to) a time window
+    return fields
+
+
+QLO_WATER_STARTS = (0, 2000, 3100, 8000, 11500, 13000)
+QLO_WAVE_STARTS = (0, 5000, 13000, 18000, 26000, 35000, 41000, 50000, 60000, 61000, 64000, 80000, 84000,
+                   90000, 95000, 100000, 105000, 113000, 125000, 131000)
+
+
+def qlo_water_clock(rng, args, cell):
+    origin_column, origin_row, lift = rng.randrange(1024), rng.randrange(1024), rng.randrange(256)
+    column, row = (origin_column + args[1]) & 0xFFFFFFFF, (origin_row + args[2]) & 0xFFFFFFFF
+    first = rng.random() < 0.5
+    terrain = 0x50 if first else rng.choice([2, 5, 7, 0x50])
+    if first:  # the first animation (unk02 0x50)
+        mixed = ((column * 0x521) ^ (-(row * 0x23b)) ^ (lift * 0x1677)) & 0xFFFFFFFF
+        target, mask = rng.choice(QLO_WATER_STARTS) + rng.randrange(-1, 16), 0x3FFF
+    else:  # the second one (level from +0xc; level 0 has all windows)
+        mixed = ((column * 0x4521) ^ (-(row * 0x23b))) & 0xFFFFFFFF
+        target, mask = rng.choice(QLO_WAVE_STARTS) + rng.randrange(-1, 16), 0x1FFFF
+    quarter = (target - mixed) & mask
+    clock = ((quarter + (rng.getrandbits(14) << 17)) << 2 | rng.randrange(4)) & 0xFFFFFFFF
+    result = [(QLO_DATA + 0x24, origin_column, 4), (QLO_DATA + 0x28, origin_row, 4), (cell + 0x00, lift, 1),
+            (QLO_DATA + 0x48, clock, 4), (cell + 0x0c, rng.choice([0xF, 0xE, rng.randrange(256)]), 1),
+            (cell + 0x02, terrain, 1), (cell + 0x05, rng.randrange(19, 64), 1)]
+    if rng.random() < 0.8:
+        result.append((cell + 0x0a, 0, 2))
+    return result
+
+
+SPECS += [
+    Spec("CDrawer_QueueLandscapeObject", 0x004d3050, "thiscall",
+         [one_of(WORLD_BASE + QLO_DATA), below(130), below(130), anything, anything, qlo_object],
+         presets=qlo_presets, callees=QLO_CALLEES, eax_mask=0, case_scale=3),
 ]

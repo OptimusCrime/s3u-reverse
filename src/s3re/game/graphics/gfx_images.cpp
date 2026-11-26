@@ -241,6 +241,9 @@ std::uint32_t __fastcall GfxDword_ListImage(void* self, void* edx, std::uint32_t
 std::uint32_t __fastcall GfxDword_SpriteExtraBytes(void* self, void* edx);
 std::uint32_t __fastcall GfxDword_SpriteExtraCount(void* self, void* edx);
 std::uint32_t __fastcall GfxDword_ListImageChecked(void* self, void* edx, std::uint32_t out, std::uint32_t index);
+std::uint32_t __fastcall GfxDword_ListImageChecked_4b19c0(void* self, void* edx, std::uint32_t out,
+                                                          std::uint32_t index);
+std::uint32_t __fastcall GfxDword_Construct_609900(void* self, void* edx, std::uint32_t value);
 std::uint32_t __fastcall GfxDword_SpriteRleData(void* self, void* edx);
 
 S3RE_HOOK(0x005f6430, GfxDword_PointAt4, Getter1Fn, Original_GfxDword_PointAt4, GfxDword_PointAt4);
@@ -371,6 +374,32 @@ std::uint32_t __fastcall GfxDword_ListImageChecked(void* self, void* /*edx*/, st
     const bool inRange = signedIndex >= 0 && signedIndex < static_cast<std::int32_t>(TypedAt<ImageList>(list)->count);
     OutAt(out) = Construct(list + TypedAt<ImageList>(list)->offsets[inRange ? index : 0]);
     return out;
+}
+
+S3RE_HOOK(0x004b19c0, GfxDword_ListImageChecked_4b19c0, Getter2Fn, Original_GfxDword_ListImageChecked_4b19c0,
+          GfxDword_ListImageChecked_4b19c0);
+
+// Purpose: the same as ListImageChecked, a copy in Volker\DrawBuilding.cpp's
+// object file that stores the image without the GfxDword constructor (the
+// building, settler and frame drawers call it).
+std::uint32_t __fastcall GfxDword_ListImageChecked_4b19c0(void* self, void* /*edx*/, std::uint32_t out,
+                                                          std::uint32_t index) {
+    const std::uint32_t list = As<GfxDword>(self)->image;
+    const std::int32_t signedIndex = static_cast<std::int32_t>(index);
+    const bool inRange = signedIndex >= 0 && signedIndex < static_cast<std::int32_t>(TypedAt<ImageList>(list)->count);
+    OutAt(out) = list + TypedAt<ImageList>(list)->offsets[inRange ? index : 0];
+    return out;
+}
+
+S3RE_HOOK(0x00609900, GfxDword_Construct_609900, Getter1Fn, Original_GfxDword_Construct_609900,
+          GfxDword_Construct_609900);
+
+// Purpose: a copy of GfxDword::Construct (0x5fc540; +0 = value, EAX = this)
+// in another object file; the building drawer 0x4a9960 and the lobby
+// 0x6042e0 call it.
+std::uint32_t __fastcall GfxDword_Construct_609900(void* self, void* /*edx*/, std::uint32_t value) {
+    As<GfxDword>(self)->image = value;
+    return reinterpret_cast<std::uint32_t>(self);
 }
 
 S3RE_HOOK(0x005fcda0, GfxDword_SpriteRleData, Getter0Fn, Original_GfxDword_SpriteRleData, GfxDword_SpriteRleData);
@@ -843,6 +872,8 @@ std::vector<Case> AllCases() {
         {"SpriteExtraBytes", S3RE_G0(GfxDword_SpriteExtraBytes), Self::Image, {}},
         {"SpriteExtraCount", S3RE_G0(GfxDword_SpriteExtraCount), Self::Image, {}},
         {"ListImageChecked", S3RE_G2(GfxDword_ListImageChecked), Self::Image, {Arg::Out, Arg::Index}},
+        {"ListImageChecked_4b19c0", S3RE_G2(GfxDword_ListImageChecked_4b19c0), Self::Image, {Arg::Out, Arg::Index}},
+        {"Construct_609900", S3RE_G1(GfxDword_Construct_609900), Self::Point, {Arg::Any}},
         {"SpriteRleData", S3RE_G0(GfxDword_SpriteRleData), Self::Image, {}},
         {"GetPixelFormat", S3RE_G1(CGraphicsData_GetPixelFormat), Self::Gfx, {Arg::Out}},
         {"LanguageCount", S3RE_G0(CGraphicsData_LanguageCount), Self::Gfx, {}},
@@ -993,7 +1024,9 @@ void CompareImages(test::Context& ctx, bool wrongSoundId, int rounds) {
             }
             // Addresses in the output areas (out arguments, frames returning
             // this) compare relative to their area.
-            const bool returnsOutput = c.args[0] == Arg::Out || c.self == Self::Frame;
+            // (Construct_609900 returns its `this`, in the output area too.)
+            const bool returnsOutput = c.args[0] == Arg::Out || c.self == Self::Frame ||
+                                       std::strcmp(c.name, "Construct_609900") == 0;
             if (returnsOutput && ra - Address(g_outA.bytes) < sizeof(g_outA.bytes)) {
                 ra -= Address(g_outA.bytes);
                 rb -= Address(g_outB.bytes);

@@ -243,6 +243,22 @@ inline constexpr GameGlobal<const float> g_aiDefaultSlope{0x65a57c};
 // of the owner (probably the race). Indexed with 32-bit arithmetic.
 inline constexpr GameGlobal<const std::uint32_t[8]> g_cellObjectAnimations{0x6a36b8};
 
+// Landscape objects of the draw cells (CDrawer::QueueLandscapeObject
+// 0x4d3050): {sprite, shadow} animation ids of the trees (objects
+// 0x44..0x51; the original indexes 0x6a33f0 + object * 8) and of the eight
+// tree kinds of objects 0x80..0xe7 (index object & 7; the eighth pair is 0).
+inline constexpr GameGlobal<const std::uint32_t[14][2]> g_treeAnimations{0x6a3610};
+inline constexpr GameGlobal<const std::uint32_t[8][2]> g_growingTreeAnimations{0x6a3680};
+// Sprite animation ids of objects 0xf7..0xfd (the original indexes
+// 0x6a3218 + object * 4).
+inline constexpr GameGlobal<const std::uint32_t[7]> g_objectF7Animations{0x6a35f4};
+// Animation ids per slot and race (4 per slot: the settler GFX groups 13,
+// 23, 33, 43 of the four races), chosen by Render::Entry204 of the owner.
+// Slots 12..14: a marker's shadow / colour layer / sprite (object 0xff),
+// 15..17 the same for 0xfe; other slots: the selection sprites of
+// QueueLandscapeObject, settlers (0x4c85a0), buildings (0x4a9960).
+inline constexpr GameGlobal<const std::uint32_t[][4]> g_raceAnimations{0x6a3b38};
+
 // ------------------------------------------------------------ library data
 // std::string::npos of S3.EXE's statically linked library (read at run
 // time, like the original).
