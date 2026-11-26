@@ -24,7 +24,12 @@
 //   destroyed). Every key but Enter sets the dirty flag +0x410 and returns
 //   1. Upper bytes of EAX are the caller's / a callee's in the original;
 //   ours are 0.
-// The inlined assign(x, 0, npos) of both is std::wstring::assign
+// MessageLine::Assign (0x00523330; operator=, wip/logic-r4): (const
+//   MessageLine& x) thiscall, ret 4, EAX = this: text = x.text (the inlined
+//   assign(x, 0, npos), its self-assignment path included), then lifetime,
+//   kind and dirty copied. Used by PrepareDrawData for the draw data's
+//   message lines.
+// The inlined assign(x, 0, npos) of all three is std::wstring::assign
 // 0x428400's x != this path; ours calls that function (verified).
 
 #include "game/globals.h"
@@ -141,6 +146,19 @@ std::uint32_t __fastcall CLogicThread_ChatInputKey(CLogicThread* self, void*, st
     return 1;
 }
 
+using MessageLineAssignFn = MessageLine*(__fastcall*)(MessageLine* self, void* edx, const MessageLine* x);
+
+// Purpose: Copies a message line (text, time left, kind, redraw flag), e.g.
+// into the draw data.
+MessageLine* __fastcall MessageLine_Assign(MessageLine* self, void*, const MessageLine* x) {
+    Assign(TextOf(*self), reinterpret_cast<const WString*>(x->text), 0, g_wstringNpos);
+    self->lifetime = x->lifetime;
+    self->kind = x->kind;
+    self->dirty = x->dirty;
+    return self;
+}
+
+S3RE_HOOK(0x00523330, MessageLine_Assign, MessageLineAssignFn, Original_MessageLine_Assign, MessageLine_Assign);
 S3RE_HOOK(0x0051e440, CLogicThread_ShowMessage, ShowMessageFn, Original_CLogicThread_ShowMessage,
           CLogicThread_ShowMessage);
 S3RE_HOOK(0x0051e160, CLogicThread_ChatInputKey, ChatInputKeyFn, Original_CLogicThread_ChatInputKey,
@@ -298,7 +316,7 @@ Case RandomCase(test::Rng& rng) {
         }
     }
     CLogicThread* t = reinterpret_cast<CLogicThread*>(c.image.data());
-    t->message_count = rng.Chance(1, 8) ? rng.Range(1, 30) : 20;
+    t->message_count = rng.Chance(1, 8) ? rng.Range(1, 20) : 20;  // (more would write past the 20 lines)
     t->message_index = rng.Range(0, 19);
     ChatOf(t)->prompt_length = rng.Chance(1, 3) ? 0 : rng.Below(12);
     static const std::int32_t kKinds[] = {0, 5, 19, 20, 21, 100, 249, 250, 251, 253, 254};
@@ -308,7 +326,7 @@ Case RandomCase(test::Rng& rng) {
 }
 
 // Runs one function on a materialized copy of the case.
-Snapshot Run(const Case& c, bool chat, ShowMessageFn show, ChatInputKeyFn key) {
+Snapshot Run(const Case& c, int mode, ShowMessageFn show, ChatInputKeyFn key, MessageLineAssignFn assign) {
     std::vector<std::uint8_t> image = c.image;
     WString argument{};
     argument.allocator = static_cast<std::uint8_t>(c.kind);
@@ -318,10 +336,15 @@ Snapshot Run(const Case& c, bool chat, ShowMessageFn show, ChatInputKeyFn key) {
     stubs.SetWorld(reinterpret_cast<CGameData*>(image.data()));
     stubs.Install<1, kPushUiFeedback>();
     std::uint32_t eax = 0;
-    if (chat) {
+    if (mode == 1) {
         eax = key(t, nullptr, c.key) & 0xff;
-    } else {
+    } else if (mode == 0) {
         show(t, nullptr, argument, c.kind);
+    } else {
+        MessageLine* to = &t->messages[c.key % 20];
+        const MessageLine* from = &t->messages[static_cast<std::uint32_t>(c.kind) % 20];
+        eax = static_cast<std::uint32_t>(reinterpret_cast<std::uint8_t*>(assign(to, nullptr, from)) - image.data());
+        DestroyText(argument);  // (the argument isn't used: release its reference like ShowMessage does)
     }
     // (the argument's own fields are gone with the call; its buffer is in
     // the pool and shows in the strings that share it)
@@ -332,11 +355,17 @@ Snapshot Run(const Case& c, bool chat, ShowMessageFn show, ChatInputKeyFn key) {
     return s;
 }
 
-void CompareMessages(test::Context& ctx, bool chat, ShowMessageFn show, ChatInputKeyFn key, int cases) {
+void CompareMessages(test::Context& ctx, int mode, ShowMessageFn show, ChatInputKeyFn key, int cases,
+                     MessageLineAssignFn assign = &MessageLine_Assign) {
+    const bool chat = mode == 1;
     for (int i = 0; i < cases; ++i) {
-        const Case c = RandomCase(ctx.rng());
-        const Snapshot expected = Run(c, chat, Original_CLogicThread_ShowMessage, Original_CLogicThread_ChatInputKey);
-        const Snapshot actual = Run(c, chat, show, key);
+        Case c = RandomCase(ctx.rng());
+        if (mode == 2 && ctx.rng().Chance(1, 4)) {
+            c.kind = static_cast<std::int32_t>(c.key % 20);  // self-assignment
+        }
+        const Snapshot expected = Run(c, mode, Original_CLogicThread_ShowMessage, Original_CLogicThread_ChatInputKey,
+                                      Original_MessageLine_Assign);
+        const Snapshot actual = Run(c, mode, show, key, assign);
         bool same = S3RE_EXPECT_EQ(expected.eax, actual.eax);
         same &= S3RE_EXPECT(expected.fields == actual.fields);
         same &= S3RE_EXPECT(expected.other == actual.other);
@@ -356,6 +385,14 @@ void CompareMessages(test::Context& ctx, bool chat, ShowMessageFn show, ChatInpu
     }
 }
 
+// Wrong: the dirty flag is not copied.
+MessageLine* __fastcall WrongMessageLineAssign(MessageLine* self, void* edx, const MessageLine* x) {
+    const std::uint8_t dirty = self->dirty;
+    MessageLine_Assign(self, edx, x);
+    self->dirty = dirty;
+    return self;
+}
+
 // Wrong: kinds of exactly 250 keep 800 ticks.
 void __fastcall WrongShowMessage(CLogicThread* self, void* edx, WString text, std::int32_t kind) {
     const std::int32_t index = self->message_index;
@@ -368,15 +405,23 @@ void __fastcall WrongShowMessage(CLogicThread* self, void* edx, WString text, st
 }  // namespace
 
 S3RE_TEST(CLogicThread_ShowMessage_MatchesOriginal) {
-    CompareMessages(ctx, false, &CLogicThread_ShowMessage, &CLogicThread_ChatInputKey, 1500);
+    CompareMessages(ctx, 0, &CLogicThread_ShowMessage, &CLogicThread_ChatInputKey, 1500);
 }
 S3RE_TEST(CLogicThread_ShowMessage_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareMessages(probe, false, &WrongShowMessage, &CLogicThread_ChatInputKey, 500);
+    CompareMessages(probe, 0, &WrongShowMessage, &CLogicThread_ChatInputKey, 500);
     S3RE_EXPECT(probe.failures() > 0);
 }
 S3RE_TEST(CLogicThread_ChatInputKey_MatchesOriginal) {
-    CompareMessages(ctx, true, &CLogicThread_ShowMessage, &CLogicThread_ChatInputKey, 1500);
+    CompareMessages(ctx, 1, &CLogicThread_ShowMessage, &CLogicThread_ChatInputKey, 1500);
+}
+S3RE_TEST(MessageLine_Assign_MatchesOriginal) {
+    CompareMessages(ctx, 2, &CLogicThread_ShowMessage, &CLogicThread_ChatInputKey, 1500);
+}
+S3RE_TEST(MessageLine_Assign_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareMessages(probe, 2, &CLogicThread_ShowMessage, &CLogicThread_ChatInputKey, 500, &WrongMessageLineAssign);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 }  // namespace s3re::game

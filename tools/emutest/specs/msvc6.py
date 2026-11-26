@@ -610,3 +610,54 @@ SPECS += [
          exempt_blocks=(_address + 0xdd, _address + 0xfa, _address + 0xfe))
     for _address, _dest, _left in STATIC_CONCAT_INITS
 ]
+
+
+# WString_CopyConstruct (wstring.cpp, wip/logic-r4): this = STRING_SELF
+# (its old contents are overwritten), x = the other string (sometimes with
+# the static empty string's count byte at 0xfe+: then copied).
+SPECS += [
+    # Dead: the self-assignment branch 0x534d5d..0x534dac (a constructor's
+    # argument is never the object itself) and 0x534d57 (a length above npos).
+    Spec("WString_CopyConstruct", 0x00534d30, "thiscall", [lambda rng, pool: STRING_OTHER_PTR],
+         presets=wide_string_world, globals=wstring_null_count,
+         exempt_blocks=(0x00534d57, 0x00534d5d, 0x00534d63, 0x00534d68, 0x00534d78, 0x00534d7a, 0x00534d7e, 0x00534da4,
+                        0x00534dac)),
+]
+
+
+# WString_ConcatWcsLeft (wstring.cpp, wip/logic-r4): cdecl (result, text,
+# right): the result at STRING_SELF (overwritten), the right side the other
+# string, the text a wide C string in the world (WCONCAT_TEXT: 0..40
+# characters).
+WCONCAT_TEXT = 0x3d000
+
+
+def wconcat_text(rng, pool, args):
+    length = rng.choice([0, 1, 5, rng.randrange(41)])
+    fields = [(WCONCAT_TEXT + 2 * i, rng.randint(1, 0xffff), 2) for i in range(length)]
+    return fields + [(WCONCAT_TEXT + 2 * length, 0, 2)] + wide_string_world(rng, pool, args)
+
+
+SPECS += [
+    # Dead: _Xlen 0x54192d (a length of 2^32 - 1); the local's free 0x5419c4
+    # (the result always shares a non-empty local, raising its count to 1).
+    Spec("WString_ConcatWcsLeft", 0x005418a0, "cdecl",
+         [lambda rng, pool: STRING_SELF_PTR, lambda rng, pool: WORLD_BASE + WCONCAT_TEXT,
+          lambda rng, pool: STRING_OTHER_PTR],
+         presets=wconcat_text, globals=wstring_null_count, exempt_blocks=(0x0054192d, 0x005419c4)),
+]
+
+
+# WString_SubstrConstruct (wstring.cpp, wip/logic-r4): this = STRING_SELF
+# (overwritten), x = the other string, pos and n as for assign, the
+# allocator argument a byte in the world.
+SPECS += [
+    # Dead: the self-assignment branch 0x541454..0x5414f4 (a constructor's
+    # argument is never the object itself).
+    Spec("WString_SubstrConstruct", 0x00541410, "thiscall",
+         [lambda rng, pool: STRING_OTHER_PTR, string_count, string_count,
+          lambda rng, pool: WORLD_BASE + 0x3e000 + rng.randrange(16)],
+         presets=wide_string_world, globals=wstring_null_count,
+         exempt_blocks=(0x00541454, 0x00541463, 0x00541468, 0x00541478, 0x0054147a, 0x0054147e, 0x005414a5,
+                        0x005414ad, 0x005414bd, 0x005414bf, 0x005414c7, 0x005414ec)),
+]

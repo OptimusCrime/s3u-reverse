@@ -46,6 +46,25 @@ WString* __fastcall WString_AssignSubstr(WString* self, void* edx, const WString
                                          std::uint32_t n);
 extern WStringAssignSubstrFn Original_WString_AssignSubstr;
 
+// The copy constructor wstring(const wstring& x) (0x00534d30), EAX = this.
+using WStringCopyConstructFn = WString*(__fastcall*)(WString* self, void* edx, const WString* x);
+WString* __fastcall WString_CopyConstruct(WString* self, void* edx, const WString* x);
+extern WStringCopyConstructFn Original_WString_CopyConstruct;
+
+// operator+(const wchar_t* text, const wstring& right) (0x005418a0), cdecl,
+// the result object first; EAX = result.
+using WStringConcatWcsLeftFn = WString*(__cdecl*)(WString* result, const std::uint16_t* text, const WString* right);
+WString* __cdecl WString_ConcatWcsLeft(WString* result, const std::uint16_t* text, const WString* right);
+extern WStringConcatWcsLeftFn Original_WString_ConcatWcsLeft;
+
+// wstring(const wstring& x, pos, n, const allocator& a) (0x00541410), ret 0x10,
+// EAX = this.
+using WStringSubstrConstructFn = WString*(__fastcall*)(WString* self, void* edx, const WString* x, std::uint32_t pos,
+                                                       std::uint32_t n, const std::uint8_t* allocator);
+WString* __fastcall WString_SubstrConstruct(WString* self, void* edx, const WString* x, std::uint32_t pos,
+                                            std::uint32_t n, const std::uint8_t* allocator);
+extern WStringSubstrConstructFn Original_WString_SubstrConstruct;
+
 // erase(pos, n) (0x00428730), EAX = this.
 using WStringEraseFn = WString*(__fastcall*)(WString* self, void* edx, std::uint32_t pos, std::uint32_t n);
 WString* __fastcall WString_Erase(WString* self, void* edx, std::uint32_t pos, std::uint32_t n);

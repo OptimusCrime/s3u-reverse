@@ -1,25 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1258" fill="#ffffff"/>
-<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">36.3%</text>
+<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">36.4%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="382.3" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 27.2%</title></rect>
 <text x="361.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">27.2%</text>
-<rect x="552.3" y="100" width="128.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.1%</title></rect>
-<text x="616.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.1%</text>
-<rect x="680.5" y="100" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
-<rect x="680.6" y="100" width="248.7" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 17.7%</title></rect>
-<text x="805" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">17.7%</text>
+<rect x="552.3" y="100" width="129.5" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.2%</title></rect>
+<text x="617" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.2%</text>
+<rect x="681.7" y="100" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<rect x="681.9" y="100" width="247.4" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 17.6%</title></rect>
+<text x="805.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">17.6%</text>
 <rect x="929.3" y="100" width="646.7" height="40" fill="#e8a39b"><title>Not understood yet: 46.0%</title></rect>
 <text x="1252.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">46.0%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="273.7" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 19.5%</title></rect>
 <text x="306.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">19.5%</text>
-<rect x="443.7" y="154" width="118.1" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.4%</title></rect>
-<text x="502.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.4%</text>
-<rect x="561.8" y="154" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
-<rect x="561.9" y="154" width="460.1" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 32.7%</title></rect>
-<text x="792" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">32.7%</text>
+<rect x="443.7" y="154" width="119" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.5%</title></rect>
+<text x="503.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.5%</text>
+<rect x="562.7" y="154" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<rect x="562.8" y="154" width="459.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 32.7%</title></rect>
+<text x="792.4" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">32.7%</text>
 <rect x="1022" y="154" width="554" height="40" fill="#e8a39b"><title>Not understood yet: 39.4%</title></rect>
 <text x="1299" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">39.4%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
@@ -29,7 +29,7 @@
 <rect x="1578.4" y="216" width="16" height="16" fill="#e8a39b"/><text x="1602.4" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1108.6" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 36.3% verified (27.2% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 36.4% verified (27.2% in a whole game)</text>
 <g><title>(free functions): 915 functions</title><rect x="2" y="19" width="513.7" height="667.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="256" height="188.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -4153,12 +4153,12 @@
 <g><title>std::wstring: 16 functions</title><rect x="674.2" y="739.2" width="55.1" height="53.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="674.7" y="739.7" width="16.3" height="21.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::assign_substr @ 0x00428400
 528 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="674.7" y="761.3" width="16.3" height="17" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::wstring_substr @ 0x00541410
-416 bytes — Identified (purpose known)</title></rect>
+<rect x="674.7" y="761.3" width="16.3" height="17" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::wstring_substr @ 0x00541410
+416 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="674.7" y="778.3" width="16.3" height="13.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::erase @ 0x00428730
 336 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="691" y="739.7" width="12.8" height="17.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::concat_wcs_left @ 0x005418a0
-336 bytes — Identified (purpose known)</title></rect>
+<rect x="691" y="739.7" width="12.8" height="17.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::concat_wcs_left @ 0x005418a0
+336 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="703.8" y="739.7" width="12.8" height="17.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::assign_copy @ 0x00523a40
 336 bytes — Identified (purpose known)</title></rect>
 <rect x="716.6" y="739.7" width="12.2" height="17.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::concat_wcs @ 0x00534e50
@@ -4167,8 +4167,8 @@
 304 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="691" y="774.6" width="11.6" height="17.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::operator_plus_string @ 0x00429600
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="702.7" y="757.2" width="14.7" height="13" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::wstring_copy @ 0x00534d30
-288 bytes — Identified (purpose known)</title></rect>
+<rect x="702.7" y="757.2" width="14.7" height="13" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::wstring_copy @ 0x00534d30
+288 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="717.4" y="757.2" width="11.4" height="13" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::_Split @ 0x00428af0
 224 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="702.7" y="770.3" width="12.7" height="11.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::wstring_from_wcs @ 0x0053ba60
@@ -6735,8 +6735,8 @@
 48 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>MessageLine: 1 functions</title><rect x="1002.1" y="892.4" width="15.5" height="15" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1002.6" y="892.9" width="14.5" height="14" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>MessageLine::Assign @ 0x00523330
-336 bytes — Identified (purpose known)</title></rect>
+<rect x="1002.6" y="892.9" width="14.5" height="14" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>MessageLine::Assign @ 0x00523330
+336 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>Lobby::CLMAddGroupToGroup2: 1 functions</title><rect x="1017.5" y="892.4" width="15.5" height="15" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1018" y="892.9" width="14.5" height="14" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Lobby::CLMAddGroupToGroup2::CLMAddGroupToGroup2 @ 0x005e3b40

@@ -2462,3 +2462,27 @@ SPECS += [
          exempt_blocks=(0x0051e1f6, 0x0051e200, 0x0051e224, 0x0051e240, 0x0051e26e, 0x0051e276, 0x0051e27b,
                         0x0051e2aa)),
 ]
+
+
+# MessageLine::Assign (message_lines.cpp): this = the line at world +0, the
+# source at +0x40 or this itself (self-assignment); both texts from
+# msg_buffer (shared or not).
+def msg_line_pair(rng, pool, args):
+    fields = []
+    buffers = [msg_buffer(rng, fields, k) for k in range(1 + rng.randrange(4))]
+    for at in (0, 0x40):
+        msg_string(rng, fields, at, buffers)
+    if rng.random() < 0.15:  # a source without buffer but a length (reads the static empty string)
+        fields += [(0x40 + 4, 0, 4), (0x40 + 8, rng.randrange(1, 4), 4)]
+    return fields
+
+
+SPECS += [
+    # Dead: 0x523349 (a length above npos); in the self-assignment
+    # (assign(x, 0, npos) of itself) the _Xran 0x523354 and the erase of
+    # the rest 0x52336f / 0x523396 (count = the length, nothing to erase).
+    Spec("MessageLine_Assign", 0x00523330, "thiscall",
+         [lambda rng, pool: WORLD_BASE + rng.choice([0x40, 0x40, 0x40, 0])],
+         presets=msg_line_pair, globals=msg_null_count,
+         exempt_blocks=(0x00523349, 0x00523354, 0x0052336f, 0x00523396)),
+]
