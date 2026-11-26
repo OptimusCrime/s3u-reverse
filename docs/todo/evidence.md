@@ -5,6 +5,20 @@ where to start. Remove an item when it is done (mention it in the
 LOGBOOK session entry).
 
 ## Evidence and testing
+- **Static-initializer stubs left over (stubs-r5, 2026-11-26).**
+  `python tools/static_inits.py scan` lists them as class `other` (plus
+  the ctor stubs): 28 compiler rows, ~1.5 KB. The constructor stubs
+  (`mov ecx, g; jmp ctor`, 9; `push 10; push 5; mov ecx, g; call
+  WCValOrderedVector_HFONT ctor 0x427d60`, `push 3; push 8; ... 0x616020`)
+  would fit JumpWithThis/CallWithThis and the emulator's callee probes,
+  but an in-process test can't re-run a container constructor on the
+  live global safely (save/restore the object and compare what the
+  constructor writes, ignoring heap addresses). Also: the eh vector
+  constructor/destructor iterator calls (0x546950/0x546980, 0x58f8c0/
+  0x58f8f0, 0x58f940/0x58f970: stdcall 0x61ff7f / 0x61f18a), the guarded
+  destructor stubs 0x4155f0 / 0x615bb0, the constant stores 0x58f860
+  (`= 500`) / 0x5a0930 (`= 0`), 0x60b9e0 (`g = rand()`), and the
+  iostream initializers of the CRT (0x61ca0a.., 0x61d61c..).
 - **C runtime status "provided by the platform library" (user decision
   2026-11-26, CLAUDE.md "Library and compiler code").** Add the status
   (inventory.py, progress.py/progress.html as its own colour, not

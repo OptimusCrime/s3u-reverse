@@ -654,3 +654,5 @@ address,name,type,status,notes
 0x00655380,g_importCoUninitialize,CoUninitializeImport,classified,S3.EXE's import address table slot of CoUninitialize (DirectX::CGameThread::OnExit). Declared in src/s3re/game/globals.h; used by win32_synchronize.cpp.
 0x0065512c,g_importResumeThread,ResumeThreadImport,classified,S3.EXE's import address table slot of ResumeThread (Win32::CThread::Start). Declared in src/s3re/game/globals.h; used by win32_synchronize.cpp.
 0x007a430c,texts::kThreadNotNull,char[],identified,"String ""hThread != NULL"" (Win32::CThread::Start's VERIFY). Declared in src/s3re/game/texts.h; used by win32_synchronize.cpp."
+0x007eaac0,g_onexitEnd,uintptr_t*,identified,__onexitend of the C runtime: one past the last atexit entry (_onexit 0x61e794 stores there and adds 4). Declared in src/s3re/game/globals.h; used by static_stubs.cpp.
+0x007eaac4,g_onexitBegin,uintptr_t*,identified,__onexitbegin of the C runtime: the atexit table (realloc-grown by _onexit 0x61e794). Declared in src/s3re/game/globals.h; used by static_stubs.cpp.

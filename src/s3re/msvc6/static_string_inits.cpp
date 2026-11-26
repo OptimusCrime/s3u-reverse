@@ -20,6 +20,7 @@
 
 #include "game/tables.h"
 #include "hooks.h"
+#include "msvc6/static_stubs.h"
 #include "msvc6/string.h"
 #include "test/difftest.h"
 
@@ -36,7 +37,10 @@ constexpr std::uintptr_t kPlusChars = 0x00401c70;     // operator+(const string&
 constexpr std::uintptr_t kAssignSubstr = 0x00401d60;  // assign(const string&, pos, n)
 constexpr std::uintptr_t kDestroy = 0x00401b60;       // ~string
 
-// The body all of them share.
+}  // namespace
+
+// The body all of them share (also used by the 183 more of them in
+// static_stub_concat.cpp, stubs-r5).
 void ConcatInit(std::uintptr_t destination, std::uintptr_t left, std::uintptr_t text) {
     String temp;
     using PlusFn = String*(__fastcall*)(String* result, const String* left, const char* text);
@@ -51,8 +55,6 @@ void ConcatInit(std::uintptr_t destination, std::uintptr_t left, std::uintptr_t 
     reinterpret_cast<AssignFn>(kAssignSubstr)(dest, nullptr, &temp, 0, game::g_stringNpos);
     reinterpret_cast<void(__fastcall*)(String*, void*)>(kDestroy)(&temp, nullptr);
 }
-
-}  // namespace
 
 using StaticInitFn = void(__cdecl*)();
 
