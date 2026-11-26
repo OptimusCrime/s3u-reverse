@@ -766,3 +766,35 @@ layouts in `src/s3re/game/ai/ai_layout.h`.
   player (20 dwords), +0x2AC its valid flag, +0x444 soldiers per player
   (20 x 9 dwords), +0x714 finished buildings per player and type (20 x
   57 dwords). **V** (0x55BE00, 0x55BEA0).
+
+---
+
+## Draw cell (48 bytes, 130 x 130 at DrawData +0x500, [column][row])
+
+The visible part of the map in the draw data (filled by PrepareDrawData
+0x51f110). Read by CDrawer::QueueCellObject 0x4d5a50,
+QueueLandscapeObject 0x4d3050 and QueueBuilding 0x4a9960 (session 59; C++
+in src/s3re/game/graphics/draw_data_layout.h and drawer_buildings.cpp).
+The DrawData header fields they read: +0x24/+0x28 map column/row of cell
+(0, 0), +0x48 the animation clock, +0x60 a UI mode (1 selection sprites,
+4 placement markers) with +0x64/+0x68 group/item, +0x74, +0x94 (variant
+0..3), +0xa4, +0x264/+0x268 the selected cell.
+
+| Off | Size | Meaning | Conf. |
+|---|---|---|---|
+| 0x00 | u8 | lift: drawn this many pixels higher | V |
+| 0x02 | u8 | compared with 0x50 (water animation A), 2..7 (B), <= 7 (objects 13..16) | S |
+| 0x03 | u8 | landscape object (tile byte 7) | V |
+| 0x04 | u8 | owner (0xff none) | V |
+| 0x05 | u8 | low 6 bits: the sprites' parameter / 4 (> 72 enables hit areas, smoke, water) | V |
+| 0x07 | u8 | cell marker 1..0x20 | V |
+| 0x08 | u16 | seen object (0xf800 bits 0x1800: an object, low byte) | S |
+| 0x0a | u16 | animated object (frame + 1 in bits 0..6, type in 7..14); for a building cell its number (compared with g_selectedBuilding) | V |
+| 0x0c | u8 | building: race 0..3; water: level (low nibble) | V |
+| 0x0d | u8 | building type 1..0x38 | V |
+| 0x0e | u8 | building: frame of the extra sprite | V |
+| 0x10 | u8 | building: construction progress (0 finished, 1 nothing, 2..255 part) | V |
+| 0x11 | u8 | building: number of sequence animations (types 0x17, 0x31) | V |
+| 0x12..0x17 | u8[6] | building: worker animation flags; +0x13 is also the stock (types 0x1f, 0x2f, 0x30) | V |
+| 0x1c | u8 | building: 255 - smoke amount | V |
+| 0x1d | u8 | building flags: bit 2 hides type 0x11's sprite | V |

@@ -259,6 +259,22 @@ inline constexpr GameGlobal<const std::uint32_t[7]> g_objectF7Animations{0x6a35f
 // QueueLandscapeObject, settlers (0x4c85a0), buildings (0x4a9960).
 inline constexpr GameGlobal<const std::uint32_t[][4]> g_raceAnimations{0x6a3b38};
 
+// Buildings of the draw cells (CDrawer::QueueBuilding 0x4a9960):
+// the worker animation's position {dx, dy} per race + type * 4;
+inline constexpr GameGlobal<const std::int32_t[][2]> g_buildingWorkOffsets{0x6a159c};
+// the extra workers {dx, dy, frame} per race, 36 entries (types 0xf from 0,
+// 0x10 from 12, 0x12 from 24);
+inline constexpr GameGlobal<const std::int32_t[4][36][3]> g_buildingWorkerSprites{0x6596f0};
+// smoke puff positions {dx, dy} per race of types 0xf (3), 0x10 (6), 0x12 (10);
+inline constexpr GameGlobal<const std::int32_t[4][3][2]> g_smokePositionsSmall{0x658834};
+inline constexpr GameGlobal<const std::int32_t[4][6][2]> g_smokePositionsMedium{0x658894};
+inline constexpr GameGlobal<const std::int32_t[4][10][2]> g_smokePositionsLarge{0x658954};
+// sequence animation positions {dx, dy} per race of types 0x17 (5) and 0x31 (3);
+inline constexpr GameGlobal<const std::int32_t[4][5][2]> g_buildingSequencePositions17{0x6a1cbc};
+inline constexpr GameGlobal<const std::int32_t[4][3][2]> g_buildingSequencePositions31{0x6a1d5c};
+// the extra sprite's position {dx, dy, ...} (24 bytes) per type + race * 57.
+inline constexpr GameGlobal<const std::int32_t[][6]> g_buildingExtraSpritePositions{0x6a1dbc};
+
 // ------------------------------------------------------------ library data
 // std::string::npos of S3.EXE's statically linked library (read at run
 // time, like the original).

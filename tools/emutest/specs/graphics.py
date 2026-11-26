@@ -1242,3 +1242,91 @@ SPECS += [
          [one_of(WORLD_BASE + QLO_DATA), below(130), below(130), anything, anything, qlo_object],
          presets=qlo_presets, callees=QLO_CALLEES, eax_mask=0, case_scale=3),
 ]
+
+
+# -- CDrawer::QueueBuilding (drawer_buildings.cpp, session 59) ---------------
+# Like QueueLandscapeObject's spec: the drawer at world 0, the draw data at
+# QB_DATA, the animation getters probed (they return an image list at
+# QB_LIST, lazily random but with small counts often), so the frame lookups
+# (GfxDword::ListImageChecked / its copy 0x4b19c0 / ListImage, inlined in
+# places) run on it; the queue functions, palette and sequence getters are
+# probed (GetSequenceFrame writes a random frame record);
+# Win32::ThrowAssertmentFailed ends the run as a throw (types outside
+# 1..0x38 under construction). g_selectedBuilding is the cell's building
+# number in half of the cases.
+QB_DATA = 0x100000
+QB_LIST = SCRATCH
+QB_CELLS = QB_DATA + 0x500
+
+
+def qb_list_out(m, ecx, args, h):
+    m.guest_write(args[0], struct.pack("<I", WORLD_BASE + QB_LIST))
+    return args[0]
+
+
+def qb_sequence_frame(m, ecx, args, h):
+    m.guest_write(args[0], struct.pack("<5I", *[(h >> (k * 7)) & 0xFFFFFFFF for k in range(5)]))
+    return args[0]
+
+
+QB_CALLEES = {
+    0x004c7ab0: (1, "thiscall", lambda h: h & 3),  # Render::Entry204
+    0x005fabb0: (2, "thiscall", "probe", qb_list_out, lambda m, ecx, a: (a[1],)),
+    0x005fab50: (2, "thiscall", "probe", qb_list_out, lambda m, ecx, a: (a[1],)),
+    0x005faaf0: (2, "thiscall", "probe", qb_list_out, lambda m, ecx, a: (a[1],)),
+    0x005fac10: (2, "thiscall", "probe"),  # CGraphicsData::PalettePointer
+    0x005fad20: (1, "thiscall", lambda h: 0xABCD0000 | (1 + h % 50)),  # SequenceFrameCount (AX)
+    0x005fad50: (3, "thiscall", "probe", qb_sequence_frame, lambda m, ecx, a: (a[1], a[2])),
+    0x004d7c90: (4, "thiscall", "probe"),  # CDrawer::QueueShadow
+    0x004d7d50: (5, "thiscall", "probe"),  # CDrawer::QueueShadowPart
+    0x004d7e10: (5, "thiscall", "probe"),  # CDrawer::QueueSprite
+    0x004d7f30: (6, "thiscall", "probe"),  # CDrawer::QueueSpritePart
+    0x004d8170: (5, "thiscall", "probe"),  # CDrawer::QueueColourLayer
+    0x004d8050: (6, "thiscall", "probe"),  # CDrawer::QueueSpriteWithColour
+    0x006119b0: (1, "thiscall", "throw"),  # Win32::ThrowAssertmentFailed
+}
+
+
+def qb_building(args):
+    return (args[1] * 131 + args[2] * 7 + 5) & 0xFFFF
+
+
+def qb_presets(rng, pool, args):
+    cell = QB_CELLS + (args[1] * 130 + args[2]) * 0x30
+    r = rng.random()
+    progress = 0 if r < 0.45 else rng.choice([1, 2, 3]) if r < 0.55 else rng.choice([124, 125, 126, 255]) \
+        if r < 0.65 else rng.randrange(256)
+    fields = [(QB_LIST + 7, rng.choice([0, 1, 2, 3, 6, 40, rng.randrange(256)]), 1),
+              (cell + 0x0c, rng.randrange(4), 1),
+              (cell + 0x0d, rng.randrange(1, 0x39) if rng.random() < 0.97 else rng.randrange(256), 1),
+              (cell + 0x10, progress, 1)]
+    if rng.random() < 0.6:  # the direction's parameter above 72 (hit areas, smoke, sequences)
+        fields.append((cell + 0x05, rng.randrange(19, 64), 1))
+    if args[3] & 1:
+        fields.append((cell + 0x0a, qb_building(args), 2))
+    if rng.random() < 0.5:
+        fields.append((cell + 0x11, rng.randrange(6), 1))
+    if rng.random() < 0.5:
+        fields.append((cell + 0x13, rng.choice([0, 1, 6, 7, 12, 13, 25, 30, rng.randrange(256)]), 1))
+    if rng.random() < 0.5:
+        fields.append((cell + 0x0e, rng.randrange(8), 1))
+    for flag in range(6):
+        if rng.random() < 0.3:
+            fields.append((cell + 0x12 + flag, rng.choice([0, 0, 1]), 1))
+    if rng.random() < 0.5:
+        fields.append((cell + 0x1c, rng.choice([0, 0x20, 0x80, 0xff, rng.randrange(256)]), 1))
+    if rng.random() < 0.3:
+        fields.append((cell + 0x1d, rng.randrange(4), 1))
+    return fields
+
+
+def qb_globals(rng, pool, args):
+    return [(0x007dfd6c, qb_building(args), 4)]  # g_selectedBuilding
+
+
+SPECS += [
+    Spec("CDrawer_QueueBuilding", 0x004a9960, "thiscall",
+         [one_of(WORLD_BASE + QB_DATA), below(130), below(130), anything, anything],
+         presets=qb_presets, globals=qb_globals, callees=QB_CALLEES, eax_mask=0, case_scale=3,
+         exempt_blocks=(0x4b17ff,)),  # the alignment byte between the last ret and the jump table 0x4b1800
+]

@@ -587,4 +587,10 @@ inline constexpr GameText kPngCrcError{0x733dc8};       // "CRC error"
 inline constexpr GameText kPngWidthTooLarge{0x733bf0};
 inline constexpr GameText kZlibVersion{0x733754};       // "1.1.3" (ZLIB_VERSION, inflateInit2_ checks its first character)
 inline constexpr GameText kPngRowbytesOverflow{0x734868};  // "Width too large to process image data; rowbytes will overflow."  // "Width too large for libpng to process image data."
+
+// ------------------------------------------------------------ wip/draw-r5 batch
+// Volker\DrawBuilding.cpp (CDrawer::QueueBuilding's assert).
+inline constexpr GameText kDrawBuildingFile{0x69ff80};           // "E:\Siedler3\Volker\DrawBuilding.cpp"
+inline constexpr GameText kBuildingPhaseUndefined{0x69ff60};     // "Gebäudebauphase nicht definiert" (Latin-1)
+inline constexpr GameText kBuildingPhaseUndefinedLog{0x69ffa4};  // "! Gebäudebauphase nicht definiert: %u"
 }  // namespace s3re::game::texts

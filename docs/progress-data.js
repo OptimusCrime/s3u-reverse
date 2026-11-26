@@ -4180,7 +4180,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 [4888816,48,2,0,"StaticDtorReg_7aa090"],
 [4888864,32,2,0,"StaticInit_7aa080"],
 [4888896,32,2,0,"StaticDtorReg_7aa080"],
-[4888928,32864,1,69,"Render_sub_4a9960","References the __FILE__ path(s) Volker/DrawBuilding.cpp (assert macro)"],
+[4888928,32864,4,94,"CDrawer::QueueBuilding","One function, not merged ones (one 0x7c8-byte frame, the 52 ret 14h are switch-case epilogues; jump tables 0x4b1800 / 0x4b18dc)."],
 [4921792,64,4,205,"GfxDword::ListImageChecked_4b19c0","A copy of GfxDword::ListImageChecked 0x5fcce0 without the GfxDword constructor call (DrawBuilding.cpp's object file)."],
 [4921856,704,1,69,"Render_sub_4b1a00"],
 [4922560,32,2,0,"StaticInit_7aa330"],
@@ -11009,6 +11009,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 [4880448,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [4886128,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"replay:scripted-seed127":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
 [4886160,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"replay:scripted-seed127":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
+[4888928,null,{},[]],
 [4921792,null,{},[]],
 [5008752,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5011952,419,{"random:384,0 seed 1234":2,"random:448,3 seed 1234":3,"replay:scripted-seed127":54,"save:slot 1.sav":119,"save:slot 2.sav":419,"save:slot 3.sav":162},[]],
@@ -12595,4 +12596,5 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 ["2026-11-26","9dc0e27",1772,593460,1367965,439614,935],
 ["2026-11-26","18e14d4",1812,595796,1366381,439614,935],
 ["2026-11-26","d0a4452",1772,593460,1367965,455438,1034],
-["2026-11-26","e19771f",1870,605172,1368429,455438,1034]]};
+["2026-11-26","e19771f",1870,605172,1368429,455438,1034],
+["2026-11-26","15634a7",1873,616004,1379261,455438,1034]]};
