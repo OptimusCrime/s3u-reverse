@@ -26,9 +26,8 @@
 //   is set; the object at +0x38: its +4 part's slot 0 (1) (a deleting
 //   destructor); the critical section at +0x34: destroyed and freed (game
 //   operator delete); then ~CThread.
-// DirectX::CGameThread::scalar_deleting_destructor (0x005b6070): (flags)
-//   ret 4: ~CGameThread, then with bit 0 operator delete(self - 4); EAX =
-//   self - 4.
+// (DirectX::CGameThread's scalar deleting destructor 0x5b6070 is in
+// msvc6/deleting_destructors.cpp.)
 
 #include "game/debug_log.h"
 #include "game/globals.h"
@@ -188,17 +187,6 @@ std::uint32_t __fastcall DirectX_CGameThread_Destroy(void* self, void*) {
     return 0;
 }
 
-// Purpose: The game thread's deleting destructor (delete through the
-// vtable).
-std::uint32_t __fastcall DirectX_CGameThread_DeletingDestroy(void* self, void*, std::uint32_t flags) {
-    CallThis(kGameThreadDestroy, self);
-    const std::uint32_t object = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(self)) - 4;
-    if ((flags & 1) != 0) {
-        GameDelete(object);
-    }
-    return object;
-}
-
 S3RE_HOOK(0x0060beb0, Win32_CWin32Handle_Destroy, DestroyFn, Original_Win32_CWin32Handle_Destroy,
           Win32_CWin32Handle_Destroy);
 S3RE_HOOK(0x0060bfe0, Win32_CWin32Waitable_Destroy, DestroyFn, Original_Win32_CWin32Waitable_Destroy,
@@ -208,8 +196,6 @@ S3RE_HOOK(0x0060d660, Win32_CCriticalSection_Destroy, CriticalSectionDestroyFn,
           Original_Win32_CCriticalSection_Destroy, Win32_CCriticalSection_Destroy);
 S3RE_HOOK(0x005b60a0, DirectX_CGameThread_Destroy, DestroyFn, Original_DirectX_CGameThread_Destroy,
           DirectX_CGameThread_Destroy);
-S3RE_HOOK(0x005b6070, DirectX_CGameThread_DeletingDestroy, DeletingDestroyFn,
-          Original_DirectX_CGameThread_DeletingDestroy, DirectX_CGameThread_DeletingDestroy);
 
 // ---------------------------------------------------------------------------
 // Tests: each destructor on random object images, with the next base
@@ -367,11 +353,6 @@ std::uint32_t CallGameThread(void* self, bool original, std::uint32_t) {
     (original ? Original_DirectX_CGameThread_Destroy : &DirectX_CGameThread_Destroy)(self, nullptr);
     return 0;
 }
-std::uint32_t CallGameThreadDeleting(void* self, bool original, std::uint32_t flags) {
-    const std::uint32_t eax = (original ? Original_DirectX_CGameThread_DeletingDestroy
-                                        : &DirectX_CGameThread_DeletingDestroy)(self, nullptr, flags);
-    return eax - static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(self));
-}
 
 // Wrong: the bag pointer is left set.
 std::uint32_t CallWrongWaitable(void* self, bool original, std::uint32_t flags) {
@@ -392,7 +373,6 @@ S3RE_TEST(ThreadDestructors_MatchOriginal) {
     CompareDestructor(ctx, &CallThread, kWaitableDestroy, 300);
     CompareDestructor(ctx, &CallCriticalSection, 0, 100);
     CompareDestructor(ctx, &CallGameThread, kThreadDestroy, 300);
-    CompareDestructor(ctx, &CallGameThreadDeleting, kGameThreadDestroy, 300);
 }
 
 S3RE_TEST(ThreadDestructors_ComparisonDetectsWrongImplementation) {

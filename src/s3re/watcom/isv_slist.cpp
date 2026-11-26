@@ -334,6 +334,23 @@ void Compare(test::Context& ctx, const Functions& ours, int cases) {
     for (int i = 0; i < cases; ++i) {
         const int op = static_cast<int>(rng.Below(8));
         rng.Fill(bytes.data(), bytes.size());
+        // A random word that happens to point into one side's arena or
+        // allocation block would be compared relocated on that side only (a
+        // false mismatch, seen in a full --test run after a DLL layout
+        // change, wip/logic-r4): move such words away.
+        for (std::size_t k = 0; k + 4 <= bytes.size(); k += 4) {
+            std::uint32_t word;
+            std::memcpy(&word, bytes.data() + k, 4);
+            const auto inside = [word](const void* base, std::size_t size) {
+                const auto start = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(base));
+                return word - start < size;
+            };
+            if (inside(g_allocated, sizeof(g_allocated)) || inside(arenas[0].data(), kArenaBytes) ||
+                inside(arenas[1].data(), kArenaBytes)) {
+                word ^= 0x80000000u;
+                std::memcpy(bytes.data() + k, &word, 4);
+            }
+        }
         const std::uint32_t links = rng.Chance(1, 6) ? 0 : 1 + rng.Below(kMaxLinks);
         // A random circle of the links.
         std::uint32_t order[kMaxLinks];

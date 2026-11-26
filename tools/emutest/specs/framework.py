@@ -1686,6 +1686,4 @@ SPECS += [
     Spec("DirectX_CGameThread_Destroy", 0x005b60a0, "fastcall", [thread_self, anything], presets=thread_parts,
          eax_mask=0, callees={0x0060d660: (0, "thiscall", "probe"), 0x0060dff0: (0, "thiscall", "probe")},
          virtuals={0: 1}),
-    Spec("DirectX_CGameThread_DeletingDestroy", 0x005b6070, "fastcall", [thread_self, anything, below(4)],
-         callees={0x005b60a0: (0, "thiscall", "probe")}),
 ]

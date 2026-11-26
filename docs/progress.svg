@@ -5,13 +5,13 @@
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="382.3" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 27.2%</title></rect>
 <text x="361.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">27.2%</text>
-<rect x="552.3" y="100" width="130.1" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.3%</title></rect>
-<text x="617.3" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.3%</text>
-<rect x="682.4" y="100" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<rect x="552.3" y="100" width="130.1" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.2%</title></rect>
+<text x="617.3" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.2%</text>
+<rect x="682.3" y="100" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
 <rect x="682.5" y="100" width="247.4" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 17.6%</title></rect>
 <text x="806.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">17.6%</text>
 <rect x="929.9" y="100" width="646.1" height="40" fill="#e8a39b"><title>Not understood yet: 46.0%</title></rect>
-<text x="1253" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">46.0%</text>
+<text x="1252.9" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">46.0%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="273.7" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 19.5%</title></rect>
 <text x="306.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">19.5%</text>
@@ -20,7 +20,7 @@
 <rect x="563.1" y="154" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
 <rect x="563.2" y="154" width="459.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 32.7%</title></rect>
 <text x="792.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">32.7%</text>
-<rect x="1022.5" y="154" width="553.5" height="40" fill="#e8a39b"><title>Not understood yet: 39.4%</title></rect>
+<rect x="1022.4" y="154" width="553.6" height="40" fill="#e8a39b"><title>Not understood yet: 39.4%</title></rect>
 <text x="1299.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">39.4%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
@@ -5371,8 +5371,8 @@
 144 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="822.6" y="992.8" width="8.8" height="4.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::SetActive @ 0x005b64b0
 64 bytes — Identified (purpose known)</title></rect>
-<rect x="831.3" y="982.1" width="4.7" height="6.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::scalar_deleting_destructor @ 0x005b6070
-48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="831.3" y="982.1" width="4.7" height="6.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::scalar_deleting_destructor @ 0x005b6070
+48 bytes — Classified (class/role known)</title></rect>
 <rect x="836.1" y="982.1" width="4.7" height="6.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::Start @ 0x005b6130
 48 bytes — Identified (purpose known)</title></rect>
 <rect x="831.3" y="988.7" width="5.9" height="5.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::RequestStop @ 0x005b64f0

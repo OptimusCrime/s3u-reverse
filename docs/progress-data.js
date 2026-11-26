@@ -8407,7 +8407,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 [5987920,80,2,174,"DirectX::CGameMainWindow::OnSysCommand","Window slot 10 (WM_SYSCOMMAND): swallows SC_KEYMENU ((wParam & 0xfff0) == 0xf100, the Alt menu), everything else to DefWindowProcA(hwnd, 0x112, ...)."],
 [5988000,192,2,174,"DirectX::CGameMainWindow::WindowProc","Window slot 3: WM_PAINT -> slot 8, WM_CLOSE -> slot 6, WM_ERASEBKGND -> slot 7, WM_SETCURSOR -> slot 9, WM_SYSCOMMAND -> slot 10, all others to\u2026"],
 [5988192,243,1,177,"DirectX::CGameThread::CGameThread"],
-[5988464,48,4,177,"DirectX::CGameThread::scalar_deleting_destructor","Replaced by DirectX_CGameThread_DeletingDestroy (wip/logic-r4, win32_thread_destructors.cpp)."],
+[5988464,48,1,177,"DirectX::CGameThread::scalar_deleting_destructor"],
 [5988512,144,4,177,"DirectX::CGameThread::~CGameThread","Replaced by DirectX_CGameThread_Destroy (wip/logic-r4, win32_thread_destructors.cpp): DebugLog iCoInitOpen when +0x40, the +0x38 object's +4 part\u2026"],
 [5988656,48,2,177,"DirectX::CGameThread::Start","Passes ECX (this) through to Win32::CThread::Start 0x60e060 (_beginthreadex suspended with proc 0x60ec20, ResumeThread) with the application thread\u2026"],
 [5988704,624,2,177,"DirectX::CGameThread::OnStart","Thread slot 4: Win32::CThread::OnStart (0x60e5d0), then CoInitializeEx via GetProcAddress(GetModuleHandle(\"ole32\")) with CoInitialize fallback,\u2026"],
@@ -11912,7 +11912,6 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 [5894816,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"replay:scripted-seed127":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
 [5900640,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fullgame-20261124-0055-seed10779":0,"replay:fun8-seed2024-input31":0,"replay:random768-seed4321-input7":0,"replay:scripted-seed127":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
 [5939360,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fullgame-20261124-0055-seed10779":0,"replay:fun8-seed2024-input31":0,"replay:random768-seed4321-input7":0,"replay:scripted-seed127":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
-[5988464,null,{},[]],
 [5988512,null,{},[]],
 [5990192,null,{},[]],
 [5990288,2,{"random:384,0 seed 1234":2,"random:448,3 seed 1234":2,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap":2,"random:512,1 seed 1234":2,"random:640,2 seed 1234":2,"replay:fullgame-20261124-0055-seed10779":2,"replay:fun8-seed2024-input31":2,"replay:random768-seed4321-input7":2,"replay:scripted-seed127":2,"save:slot 1.sav":2,"save:slot 2.sav":2,"save:slot 3.sav":2},[]],
@@ -12583,4 +12582,5 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 ["2026-11-26","539d795",1737,592228,1367229,439614,935],
 ["2026-11-26","5465d56",1739,593732,1368461,439614,935],
 ["2026-11-26","0314d24",1856,629300,1368461,439614,935],
-["2026-11-26","3ed7e37",1860,630676,1368461,439614,935]]};
+["2026-11-26","3ed7e37",1860,630676,1368461,439614,935],
+["2026-11-26","2654081",1861,631380,1369165,439614,935]]};
