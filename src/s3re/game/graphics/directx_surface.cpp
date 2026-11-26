@@ -500,8 +500,8 @@ std::uint32_t __fastcall DirectX_CSurface_Release(void* self, void* /*edx*/) {
     (*reinterpret_cast<ReleaseFn*>(*static_cast<std::uint8_t**>(surface) + 8))(surface);
     s->simple.createdInterface = nullptr;
     s->simple.surface = nullptr;
-    s->unk18 = 0;
-    s->unk14 = 0;
+    s->pixelFormat[0] = 0;  // no pixel format
+    s->caps = 0;
     return 0;
 }
 
@@ -664,7 +664,7 @@ void CompareDestroy(test::Context& ctx, const DestroyFunctions& candidate, int c
 
 std::uint32_t __fastcall WrongRelease(void* self, void* edx) {
     const std::uint32_t r = DirectX_CSurface_Release(self, edx);
-    static_cast<framework::CSurface*>(self)->unk18 = 1;  // wrong: +0x18 not cleared
+    static_cast<framework::CSurface*>(self)->pixelFormat[0] = 1;  // wrong: +0x18 not cleared
     return r;
 }
 

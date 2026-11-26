@@ -277,4 +277,10 @@ inline constexpr GameGlobal<const char[kGfxGroupNameCount][4]> g_gfxGroupNames{0
 // PCM stereo 16-bit at 22050, 22050 and 11025 Hz.
 inline constexpr GameGlobal<const std::uint8_t[3][0x18]> g_primaryFormats{0x7a2fb8};
 
+// ---- wip/ddraw-render: COM identifiers DirectX::CDirectDraw uses
+// (GUIDs in .rdata, 16 bytes each).
+inline constexpr GameGlobal<const std::uint8_t[16]> g_clsidDirectDraw{0x65a908};       // CLSID_DirectDraw
+inline constexpr GameGlobal<const std::uint8_t[16]> g_iidDirectDraw2{0x65a938};        // IID_IDirectDraw2
+inline constexpr GameGlobal<const std::uint8_t[16]> g_iidDirectDrawSurface3{0x65a978};  // IID_IDirectDrawSurface3
+
 }  // namespace s3re::game

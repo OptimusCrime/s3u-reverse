@@ -161,25 +161,137 @@ static_assert(sizeof(ComObject) == 4);
 // DirectX::CSimpleSurface.
 struct CSimpleSurface {
     std::uint32_t vtable;    // +0x00
-    void* createdInterface;  // +0x04 the interface the surface was created with (released by Release)
-    void* surface;           // +0x08 the IDirectDrawSurface DDBlt uses (probably a later version)
-    void* owner;             // +0x0c probably the DirectDraw owner (its slot 0x0c restores lost surfaces)
-    std::uint32_t unk10;     // +0x10
+    void* createdInterface;  // +0x04 the IDirectDrawSurface (QueryInterface'd to IDirectDrawSurface3 when
+                             //       available) the surface was created with (released by Release)
+    void* surface;           // +0x08 the interface Blt/BltFast/Lock/GetSurfaceDesc use: = +0x04
+                             //       (UseOwnInterfaceForDrawing 0x5bf2a0), or a flip chain's back buffer
+    void* owner;             // +0x0c the DirectX::CDirectDraw (SetDirectDraw 0x5bf2b0); its slot 3
+                             //       restores lost surfaces, its DDCreateSurface creates this one
+    std::uint32_t version;   // +0x10 interface version (1 or 3, DDCreateSurface); masks the DDLOCK flags
 };
 static_assert(sizeof(CSimpleSurface) == 0x14);
 static_assert(offsetof(CSimpleSurface, owner) == 0x0c);
+static_assert(offsetof(CSimpleSurface, version) == 0x10);
 
-// DirectX::CSurface, derived from CSimpleSurface.
+// DirectX::CSurface, derived from CSimpleSurface (vtable 0x65cda8).
 struct CSurface {
-    CSimpleSurface simple;  // +0x00
-    std::uint32_t unk14;    // +0x14
-    std::uint32_t unk18;    // +0x18
-    std::uint8_t unk1c[0x48 - 0x1c];
-    std::uint32_t unk48;    // +0x48
+    CSimpleSurface simple;        // +0x00
+    std::uint32_t caps;           // +0x14 extra DDSCAPS bits (SetCaps 0x5bf3d0), or-ed in by every Create
+    std::uint32_t pixelFormat[8]; // +0x18 DDPIXELFORMAT (SetPixelFormat 0x5bf3e0); dwSize ([0]) 0 = none
+    std::int32_t rect[4];         // +0x38 RECT 0, 0, width, height (DDGetSurfaceDesc 0x5bf310)
+    std::uint32_t unk48;          // +0x48 zeroed by the constructor (unknown)
 };
-static_assert(offsetof(CSurface, unk14) == 0x14);
-static_assert(offsetof(CSurface, unk18) == 0x18);
+static_assert(offsetof(CSurface, caps) == 0x14);
+static_assert(offsetof(CSurface, pixelFormat) == 0x18);
+static_assert(offsetof(CSurface, rect) == 0x38);
 static_assert(offsetof(CSurface, unk48) == 0x48);
+static_assert(sizeof(CSurface) == 0x4c);
+
+// DirectX::COffscreenSurface (vtable 0x65ce08) and COverlaySurface
+// (0x65ce18): a CSurface; the offscreen one adds a flag.
+struct COffscreenSurface {
+    CSurface surface;             // +0x00
+    std::uint32_t contentsValid;  // +0x4c 1 after Create, 0 after a restore (the owner must redraw it)
+};
+static_assert(sizeof(COffscreenSurface) == 0x50);
+
+// The surface classes with a virtual CSurface base (Ddraw.cpp): each part
+// starts with its vbptr; vbtable[1] is the offset of the CSurface.
+// DirectX::CFlipSurface: the flip-chain part.
+struct CFlipSurface {
+    std::uint32_t vbtable;           // +0x00
+    std::uint32_t backBufferCount;   // +0x04 1 or 2 (CPrimaryFlipSurface::Create)
+    void* unk08;                     // +0x08 an object deleted (slot 0) by the destructor; never set here
+    void* backBuffer;                // +0x0c CSimpleSurface* made by GetBackBuffer 0x5bf670
+};
+static_assert(sizeof(CFlipSurface) == 0x10);
+// DirectX::CFlipSurface as a whole object: the CSurface follows at +0x10.
+struct CFlipSurfaceObject {
+    CFlipSurface flip;  // +0x00
+    CSurface base;      // +0x10
+};
+// DirectX::CPrimarySurface: vbptr, CSurface at +4 (0x50 bytes).
+struct CPrimarySurfaceObject {
+    std::uint32_t vbtable;  // +0x00
+    CSurface base;          // +0x04
+};
+static_assert(sizeof(CPrimarySurfaceObject) == 0x50);
+// DirectX::CPrimaryFlipSurface : CPrimarySurface, CFlipSurface (0x60).
+struct CPrimaryFlipSurfaceObject {
+    std::uint32_t vbtable;  // +0x00 the CPrimarySurface part
+    CFlipSurface flip;      // +0x04
+    CSurface base;          // +0x14
+};
+static_assert(offsetof(CPrimaryFlipSurfaceObject, base) == 0x14);
+static_assert(sizeof(CPrimaryFlipSurfaceObject) == 0x60);
+
+// DirectX::CDirectDraw (vtable 0x65cd80): the IDirectDraw2 wrapper; the
+// base of DirectX::CGameDrawer and so of CDrawer.
+struct CDirectDraw {
+    std::uint32_t vtable;  // +0x00
+    void* directDraw;      // +0x04 IDirectDraw2* (Connect; another CDirectDraw's when constructed from one)
+    std::uint8_t owns;     // +0x08 1 when it was not constructed from another one (Disconnect releases)
+};
+static_assert(offsetof(CDirectDraw, owns) == 8);
+
+// Watcom's intrusive singly linked list as DirectX::CGameDrawer keeps its
+// surfaces and palettes (WCPtrSList<T>: links of next + pointer; +8 the last
+// link, its next the first; vtable slot 1 destroys a link, slot 2 compares
+// two elements; watcom/isv_slist.cpp) and an iterator over one.
+struct PtrSList {
+    std::uint32_t vtable;  // +0x00
+    std::uint32_t unk04;   // +0x04
+    void* last;            // +0x08 the last link (0: empty)
+    std::int32_t count;    // +0x0c
+    void* allocator;       // +0x10 link allocator or 0
+    void* deallocator;     // +0x14 (probably)
+};
+static_assert(sizeof(PtrSList) == 0x18);
+struct PtrSListIter {
+    std::uint32_t vtable;  // +0x00
+    std::uint32_t unk04;   // +0x04
+    PtrSList* list;        // +0x08
+    void* current;         // +0x0c the current link (0: before the first)
+    std::uint32_t state;   // +0x10 bit 1: past the end
+};
+static_assert(sizeof(PtrSListIter) == 0x14);
+// WCValOrderedVector<T> as CGameDrawer keeps its devices and display modes.
+struct ValOrderedVector {
+    std::uint32_t vtable;    // +0x00
+    std::uint32_t unk04;     // +0x04
+    void* data;              // +0x08
+    std::uint32_t capacity;  // +0x0c
+    std::int32_t unk10;      // +0x10 (Destroy keeps it only when negative)
+    std::uint32_t entries;   // +0x14
+    std::uint32_t grow;      // +0x18
+};
+static_assert(sizeof(ValOrderedVector) == 0x1c);
+
+// DirectX::CGameDrawer (vtable 0x65ca7c): the CDirectDraw the game draws
+// with (CDrawer derives from it); registered in g_drawer.
+struct CGameDrawer {
+    CDirectDraw draw;            // +0x00
+    std::uint8_t pad09[3];
+    void* window;                // +0x0c HWND (Initialize)
+    PtrSList surfaces;           // +0x10 WCPtrSList<CSurface>: every surface (restored / released together)
+    PtrSList palettes;           // +0x28 WCPtrSList<CPalette>
+    ValOrderedVector devices;    // +0x40 WCValOrderedVector<CDirectDrawDevice> (0x30-byte records)
+    ValOrderedVector modes;      // +0x5c WCValOrderedVector<CDisplayMode> (DDSURFACEDESC records)
+    void* primary;               // +0x78 the primary surface (a CPrimarySurface; its CSurface via the vbptr)
+    std::uint8_t surfacesMade;   // +0x7c 1 while the surfaces exist (cleared by ReleaseSurfaces)
+};
+static_assert(offsetof(CGameDrawer, surfaces) == 0x10);
+static_assert(offsetof(CGameDrawer, palettes) == 0x28);
+static_assert(offsetof(CGameDrawer, devices) == 0x40);
+static_assert(offsetof(CGameDrawer, modes) == 0x5c);
+static_assert(offsetof(CGameDrawer, primary) == 0x78);
+static_assert(offsetof(CGameDrawer, surfacesMade) == 0x7c);
+
+// DirectX::CPalette (no RTTI vtable): +4 the IDirectDrawPalette.
+struct CPalette {
+    std::uint32_t vtable;  // +0x00
+    void* palette;         // +0x04 IDirectDrawPalette*
+};
 
 // CLandscapeSurface (the map's terrain surface, Volker\landscape.cpp), derived
 // from DirectX::COffscreenSurface -> CSurface; 0xa8 bytes (operator new at

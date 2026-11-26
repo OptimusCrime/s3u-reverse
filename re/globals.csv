@@ -511,3 +511,37 @@ address,name,type,status,notes
 0x007a4b10,texts::kCDStopError,char[],identified,"String ""CD: Error during stop: %u"" Declared in src/s3re/game/texts.h; used by win32_cdaudio.cpp."
 0x007a4b2c,texts::kCDGetTrackCountError,char[],identified,"String ""CD: Error during GetTrackCount: %u"" Declared in src/s3re/game/texts.h; used by win32_cdaudio.cpp."
 0x006a36b8,g_cellObjectAnimations,const uint32_t[8 * types],classified,"Animation ids of the draw data's cell objects: per type 4 shadow ids then 4 sprite ids, chosen by Render::Entry204 of the owner (CDrawer::QueueCellObject 0x4d5a50; also 0x4d1690, 0x4d1945). Declared in src/s3re/game/tables.h; used by drawer_objects.cpp."
+0x00655330,g_importSetRect,SetRectImport,classified,S3.EXE's import address table slot of SetRect (CSurface::DDGetSurfaceDesc). Declared in src/s3re/game/globals.h; used by directx_draw.cpp.
+0x006552f4,g_importSendMessageA,SendMessageAImport,classified,S3.EXE's import address table slot of SendMessageA (CDrawer::SetDisplayMode). Declared in src/s3re/game/globals.h.
+0x00655384,g_importCoCreateInstance,CoCreateInstanceImport,classified,S3.EXE's import address table slot of CoCreateInstance (CDirectDraw::Connect). Declared in src/s3re/game/globals.h; used by directx_draw.cpp.
+0x007e8bf0,g_drawer,void*,classified,"The DirectX::CGameDrawer (in the game the CDrawer): set by its constructor 0x5b6c80, cleared by the destructor. Declared in src/s3re/game/globals.h."
+0x007e8bf8,g_primarySurfaceRect,int32_t[4],classified,"The primary surface's RECT (0, 0, width, height): copied by CGameDrawer::SetPrimarySurface 0x5b7040, zeroed by RemoveSurface / ReleaseSurfaces. Declared in src/s3re/game/globals.h."
+0x0065a908,g_clsidDirectDraw,const uint8_t[16],classified,CLSID_DirectDraw (CDirectDraw::Connect). Declared in src/s3re/game/tables.h; used by directx_draw.cpp.
+0x0065a938,g_iidDirectDraw2,const uint8_t[16],classified,IID_IDirectDraw2 (CDirectDraw::Connect). Declared in src/s3re/game/tables.h; used by directx_draw.cpp.
+0x0065a978,g_iidDirectDrawSurface3,const uint8_t[16],classified,IID_IDirectDrawSurface3 (CDirectDraw::DDCreateSurface). Declared in src/s3re/game/tables.h; used by directx_draw.cpp.
+0x007a0018,texts::kDDEnumerate3,char[],identified,"String ""CDirectDraw::DDDirectDrawEnumerate.3"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0040,texts::kDDEnumerate2,char[],identified,"String ""CDirectDraw::DDDirectDrawEnumerate.2"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0068,texts::kDirectDrawEnumerateA,char[],identified,"String ""DirectDrawEnumerateA"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0080,texts::kDDEnumerate1,char[],identified,"String ""CDirectDraw::DDDirectDrawEnumerate.1"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a00a8,texts::kDDrawDll,char[],identified,"String ""ddraw.dll"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a00b4,texts::kDDConnect2,char[],identified,"String ""CDirectDraw::Connect.2"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a00cc,texts::kDDConnect1,char[],identified,"String ""CDirectDraw:Connect.1"" (sic) Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a00e4,texts::kDDCreateSurface3,char[],identified,"String ""CDirectDraw::DDCreateSurface.3"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0104,texts::kDDCreateSurface1,char[],identified,"String ""CDirectDraw::DDCreateSurface.1"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0124,texts::kDDEnumDisplayModes,char[],identified,"String ""CDirectDraw::DDEnumDisplayModes"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0144,texts::kDDRestoreDisplayMode,char[],identified,"String ""CDirectDraw::DDRestoreDisplayMode"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0168,texts::kDDGetDisplayMode,char[],identified,"String ""CDirectDraw::DDGetDisplayMode"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0188,texts::kDDGetCaps,char[],identified,"String ""DirectX::CDirectDraw::DDGetCaps"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a01a8,texts::kDDWaitForVerticalBlank,char[],identified,"String ""CDirectDraw::DDWaitForVerticalBlank"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a01cc,texts::kDDLock,char[],identified,"String ""CSurface::DDLock"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0204,texts::kDDGetBltStatus,char[],identified,"String ""CSimpleSurface::DDGetBltStatus"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0224,texts::kDDIsLost,char[],identified,"String ""CSurface::IsLost"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0238,texts::kDDWrongMode,char[],identified,"String ""DDRAW: WrongMode oder NoExclusiveMode"" (DebugLog) Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0260,texts::kDDRestore,char[],identified,"String ""CSurface::DDRestore"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a029c,texts::kDdrawCppFile,char[],identified,"String ""E:\Siedler3\DirectX\Ddraw.cpp"" (__FILE__) Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a02bc,texts::kLpBackBuffer,char[],identified,"String ""lpBackBuffer"" (ThrowOutOfMemory) Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a02cc,texts::kDDFlip,char[],identified,"String ""CSurface::DDFlip"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0360,texts::kDDGetAttachedSurface,char[],identified,"String ""CSurface::DDGetAttachedSurface"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0380,texts::kDDUpdateOverlay,char[],identified,"String ""DirectX::COverlaySurface::DDUpdateOverlay"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x00697790,texts::kDDGetSurfaceDesc,char[],identified,"String ""CSurface::DDGetSurfaceDesc"" Declared in src/s3re/game/texts.h; used by directx_draw.cpp."
+0x007a0334,texts::kNoMoreThanTripleBuffering,char[],identified,"String ""mehr als Triplebuffering nicht unterstützt"" (more than triple buffering is not supported; CPrimaryFlipSurface::Create asserts it) Declared in src/s3re/game/texts.h; used by directx_draw.cpp."

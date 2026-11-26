@@ -83,6 +83,7 @@
 // other throwers (win32_errors.cpp).
 
 #include "game/framework/directx_sound.h"
+#include "game/framework/app_not_active.h"
 #include "game/framework/directx_sound_layout.h"
 
 #include "game/globals.h"
@@ -370,8 +371,11 @@ private:
     KeyVector* keys_;
 };
 
-// "throw new CAppNotActiveException(string(""), 1)".
-[[noreturn]] void ThrowNotActive() {
+}  // namespace
+
+// "throw new CAppNotActiveException(string(""), 1)" (also used by the
+// DirectDraw wrappers: app_not_active.h).
+[[noreturn]] void framework::ThrowAppNotActive() {
     void* object = msvc6::GameOperatorNew(kExceptionBytes);
     if (object != nullptr) {
         const std::uint8_t allocator = 0;  // the original's are uninitialized (copied with 0 by CException)
@@ -397,6 +401,8 @@ private:
     CallAt<ThrowFn>(kCxxThrowException)(&object, throw_info::kAppNotActiveException);
     __assume(0);
 }
+
+namespace {
 
 bool ApplicationActive() {
     void* const application = reinterpret_cast<void*>(CallAt<ThisFn>(kGetApplication)(nullptr, nullptr));
@@ -632,7 +638,7 @@ S3RE_HOOK(0x005c28e0, DirectX_CSoundEffectBuffer_Restore, EffectValueFn, Origina
 // active application, else throws "application not active".
 std::uint32_t __fastcall DirectX_CSoundEffectBuffer_Restore(void* self, void* /*edx*/) {
     if (!ApplicationActive()) {
-        ThrowNotActive();
+        framework::ThrowAppNotActive();
     }
     return CallAt<ThisFn>(kEffectRestore)(static_cast<CSoundEffectBuffer*>(self)->effect, nullptr);
 }
@@ -644,7 +650,7 @@ S3RE_HOOK(0x005c1dc0, DirectX_CDirectSound_RestoreIfActive, EffectValueFn,
 // Restore) if the game is the active application, else throws.
 std::uint32_t __fastcall DirectX_CDirectSound_RestoreIfActive(void* self, void* /*edx*/) {
     if (!ApplicationActive()) {
-        ThrowNotActive();
+        framework::ThrowAppNotActive();
     }
     return Virtual(self, kSlotSoundRestore);
 }
