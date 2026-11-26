@@ -466,8 +466,10 @@ def _api_counted_text(machine, address, length):
 
 
 def _api_select_object(machine, uc, args):
-    """SelectObject(dc, object): a random previous object."""
-    return (_api_hash(machine, 0x5E100000) >> 8) & 0xFFFFFFFF, ("SelectObject", *args)
+    """SelectObject(dc, object): a random previous object; null (failure)
+    about one call in sixteen (wip/text-r6)."""
+    h = _api_hash(machine, 0x5E100000)
+    return (0 if (h >> 44) & 15 == 0 else (h >> 8) & 0xFFFFFFFF), ("SelectObject", *args)
 
 
 def _api_get_text_extent_point(machine, uc, args):
@@ -491,9 +493,22 @@ def _api_set_bk_mode(machine, uc, args):
 
 def _api_set_colour(name, salt):
     def handler(machine, uc, args):
-        """SetTextColor / SetBkColor(dc, colour): a random previous colour."""
-        return (_api_hash(machine, salt) >> 8) & 0xFFFFFF, (name, *args)
+        """SetTextColor / SetBkColor(dc, colour): a random previous colour;
+        CLR_INVALID about one call in sixteen (wip/text-r6)."""
+        h = _api_hash(machine, salt)
+        return (0xFFFFFFFF if (h >> 44) & 15 == 0 else (h >> 8) & 0xFFFFFF), (name, *args)
     return handler
+
+
+def _api_draw_text(machine, uc, args):
+    """DrawTextA(dc, text, length, rect, format) (wip/text-r6): records the
+    text by contents and the rect's four values; returns a text-like
+    height, sometimes any value."""
+    dc, text, length, rect, fmt = args
+    h = _api_hash(machine, 0xD7000000)
+    box = struct.unpack("<4I", machine.guest_read(rect, 16)) if rect else None
+    height = (h >> 8) & 0xFFFFFFFF if (h >> 40) & 7 == 0 else ((h >> 8) & 0xFF) % 61
+    return height, ("DrawTextA", dc, _api_counted_text(machine, text, length), length, box, fmt)
 
 
 def _api_text_out(machine, uc, args):
@@ -708,6 +723,10 @@ API_HANDLERS = {
     "SetTextColor": (2, _api_set_colour("SetTextColor", 0x7C000000)),
     "SetBkColor": (2, _api_set_colour("SetBkColor", 0xBC000000)),
     "TextOutA": (5, _api_text_out),
+    "CreateCompatibleDC": (1, _api_success("CreateCompatibleDC", 0x5E00000E)),
+    "DeleteDC": (1, _api_success("DeleteDC", 0x5E00000F)),
+    "GdiFlush": (0, _api_success("GdiFlush", 0x5E000010)),
+    "DrawTextA": (5, _api_draw_text),
     "EnterCriticalSection": (1, _api_critical_section("EnterCriticalSection")),
     "LeaveCriticalSection": (1, _api_critical_section("LeaveCriticalSection")),
     "RegOpenKeyExA": (5, _api_reg_open),

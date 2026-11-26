@@ -12,6 +12,11 @@
 // so a crashing test can't leave them behind. Our replacements call these
 // functions through the same slots (game/globals.h, g_importSelectObject
 // ...), as the original does.
+//
+// wip/text-r6: CreateCompatibleDC, DeleteDC, GdiFlush and DrawTextA (the
+// text surface, Dirk\Text.cpp) are faked as well. With `failures` set,
+// every fake fails now and then the way its VERIFY check tests (null,
+// 0 or CLR_INVALID); without it the results are drawn as before.
 
 #include "test/difftest.h"
 
@@ -22,7 +27,7 @@ namespace s3re::test {
 
 class FakeGdi {
 public:
-    explicit FakeGdi(std::uint64_t seed) : rng_(seed) {}
+    explicit FakeGdi(std::uint64_t seed, bool failures = false) : rng_(seed), failures_(failures) {}
     ~FakeGdi() { Uninstall(); }
     FakeGdi(const FakeGdi&) = delete;
     FakeGdi& operator=(const FakeGdi&) = delete;
@@ -37,6 +42,7 @@ public:
     Rng rng_;
     std::vector<std::uint32_t> log_;
     bool installed_ = false;
+    bool failures_ = false;
 };
 
 }  // namespace s3re::test

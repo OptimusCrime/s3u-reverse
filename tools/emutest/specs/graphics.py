@@ -1443,3 +1443,122 @@ SPECS += [
          presets=qb_presets, globals=qb_globals, callees=QB_CALLEES, eax_mask=0, case_scale=3,
          exempt_blocks=(0x4b17ff,)),  # the alignment byte between the last ret and the jump table 0x4b1800
 ]
+
+
+# -- Dirk::CTextSurface (text_surface.cpp, wip/text-r6) ---------------------
+# The surface at world 0. The GDI calls are API probes (CreateCompatibleDC,
+# SelectObject, SetBkMode, SetBkColor, SetTextColor, DrawTextA, DeleteDC,
+# GdiFlush; each fails now and then the way its VERIFY tests).
+# Win32::ThrowWin32Error 0x610de0 ends the run as a throw (WIN32_THROWERS,
+# framework.py), compared with the message string's bytes, except where the
+# original's allocator byte is an uninitialized stack byte (Lock; DrawText's
+# DeleteDC check, line 0xb1): there the record leaves out byte 0. The font
+# dictionary's find 0x60bab0 and insert 0x60bbe0 (Watcom code, not ours)
+# are probed: find returns 0 (not there) or a pointer just past an HFONT
+# slot in TS_FONTS, insert always one. The blocks after a thrower call are
+# the original's never-reached clean-up of the message string.
+TS_RESULT = SCRATCH                                   # the result rect
+TS_RECT = SCRATCH + 1 * SCRATCH_SLOT_BYTES            # the rect argument (at an offset 0..255)
+TS_STRING = SCRATCH + 2 * SCRATCH_SLOT_BYTES          # a std::string
+TS_TEXT = SCRATCH + 3 * SCRATCH_SLOT_BYTES            # its characters / a format
+TS_FONTS = SCRATCH + 4 * SCRATCH_SLOT_BYTES           # HFONT slots
+TS_ARGUMENT = SCRATCH + 5 * SCRATCH_SLOT_BYTES        # a %s argument
+
+
+def ts_thrower_record(machine, ecx, args):
+    """thrower_record without the message's padding bytes 1..3 (the
+    original writes only the allocator byte, the rest is whatever its
+    frame held), and without the allocator byte too where that is an
+    uninitialized stack byte in the original (Lock line 0xd4, DrawText
+    line 0xb1)."""
+    record = thrower_record(machine, ecx, args)
+    message = record[-1]
+    if message is not None:
+        kept = message[4:] if args[0] in (0xb1, 0xd4) else message[:1] + message[4:]
+        record = record[:-1] + (kept,)
+    return record
+
+
+TS_CALLEES = {
+    0x00610de0: (3, "thiscall", "throw", None, ts_thrower_record),   # ThrowWin32Error(line, error, &message)
+    0x0060bab0: (1, "thiscall", lambda h: 0 if h & 1 else WORLD_BASE + TS_FONTS + 4 + 8 * ((h >> 4) % 8)),
+    0x0060bbe0: (1, "thiscall", lambda h: WORLD_BASE + TS_FONTS + 4 + 8 * ((h >> 4) % 8)),
+}
+
+
+def ts_rect_arg(rng, pool):
+    return WORLD_BASE + TS_RECT + rng.randrange(256)
+
+
+def ts_flags(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.2 else rng.randrange(128)
+
+
+def ts_font(rng, pool):
+    return rng.getrandbits(32) if rng.random() < 0.2 else rng.randrange(6)
+
+
+def ts_string(rng, pool, args):
+    """The std::string at TS_STRING: characters at TS_TEXT (sometimes none)."""
+    length = rng.randrange(41)
+    text = bytes(rng.randrange(32, 127) for _ in range(length))
+    fields = [(TS_TEXT + i, b, 1) for i, b in enumerate(text + b"\0")]
+    pointer = 0 if rng.random() < 0.1 else WORLD_BASE + TS_TEXT
+    fields += [(TS_STRING + 4, pointer, 4), (TS_STRING + 8, length if pointer else 0, 4),
+               (TS_STRING + 12, length, 4)]
+    return fields
+
+
+TS_FORMATS = [b"", b"Holz", b"%d", b"%u / %u", b"%s: %d", b"100%%", b"%s", b"Steine %d%%", b"%x %s %u",
+              b"lang\nzweizeilig", b"%-5d|%05u"]
+
+
+TS_ARGUMENT_2 = TS_ARGUMENT + 0x100
+
+
+def ts_format_world(rng, pool, args):
+    """DrawTextF: a format at TS_TEXT (picked by args[9], an extra argument
+    vsprintf never reads) and texts at TS_ARGUMENT / TS_ARGUMENT_2, which
+    the first two variable arguments point at (so a %s there is valid; a
+    number conversion prints the pointer)."""
+    fmt = TS_FORMATS[args[9] % len(TS_FORMATS)]
+    fields = [(TS_TEXT + i, b, 1) for i, b in enumerate(fmt + b"\0")]
+    for where in (TS_ARGUMENT, TS_ARGUMENT_2):
+        argument = rng.choice([b"", b"Baumeister", b"a", b"Kohle und Eisen"])
+        fields += [(where + i, b, 1) for i, b in enumerate(argument + b"\0")]
+    return fields
+
+
+def ts_format_index(rng, pool):
+    return rng.randrange(len(TS_FORMATS))
+
+
+# Unreachable after a thrower call (it never returns): the clean-up of the
+# message string and the frees of temporaries that never get a buffer.
+CLEANUP_CTEXTSURFACE_LOCK = (0x4a8cb3, 0x4a8cbd, 0x4a8cc1, 0x4a8cc7, 0x4a8d1e, 0x4a8d35, 0x4a8d3c, 0x4a8d41,
+                             0x4a8d6d, 0x4a8d75, 0x4a8d77, 0x4a8d7b, 0x4a8da1, 0x4a8dad, 0x4a8db5, 0x4a8dba,
+                             0x4a8dc4, 0x4a8dc8, 0x4a8dce)
+CLEANUP_CTEXTSURFACE_DRAWTEXT = (0x4a81f6, 0x4a82f4, 0x4a83e9, 0x4a84de, 0x4a85d2, 0x4a86f6, 0x4a877f)
+# DrawTextF: the string built from the buffer is never shared when it is
+# freed: the temporary's buffer has count 1 when it is released (0x4a88db:
+# count 0 / frozen), and the string's destructor finds count 0, so its
+# split (0x4a896a, 0x4a896f) and the shared release (0x4a89f0, 0x4a89f4)
+# don't run; erase(0, npos) leaves length 0, for which _Grow returns false
+# (0x4a89d1).
+CLEANUP_CTEXTSURFACE_DRAWTEXTF = (0x4a88db, 0x4a896a, 0x4a896f, 0x4a89d1, 0x4a89f0, 0x4a89f4)
+
+SPECS += [
+    Spec("CTextSurface_Unlock", 0x004a8e00, "thiscall", [], eax_mask=0),
+    Spec("CTextSurface_Lock", 0x004a8bd0, "thiscall", [], callees=TS_CALLEES,
+         exempt_blocks=CLEANUP_CTEXTSURFACE_LOCK),
+    Spec("CTextSurface_DrawText", 0x004a8090, "thiscall",
+         [one_of(WORLD_BASE + TS_RESULT), ts_font, ts_rect_arg, ts_flags, one_of(WORLD_BASE + TS_STRING)],
+         presets=ts_string, callees=TS_CALLEES, exempt_blocks=CLEANUP_CTEXTSURFACE_DRAWTEXT),
+    # cdecl (this, result, font, rect, flags, format, ...): "stdcall" passes
+    # everything on the stack; both pop nothing. The nested DrawText runs.
+    Spec("CTextSurface_DrawTextF", 0x004a87d0, "stdcall",
+         [one_of(WORLD_BASE), one_of(WORLD_BASE + TS_RESULT), ts_font, ts_rect_arg, ts_flags,
+          one_of(WORLD_BASE + TS_TEXT), one_of(WORLD_BASE + TS_ARGUMENT), one_of(WORLD_BASE + TS_ARGUMENT_2),
+          anything, ts_format_index],
+         presets=ts_format_world, callees=TS_CALLEES, exempt_blocks=CLEANUP_CTEXTSURFACE_DRAWTEXTF),
+]

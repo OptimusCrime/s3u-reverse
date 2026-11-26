@@ -615,4 +615,15 @@ inline constexpr GameText kGameThreadCoInitOpen{0x79df58};    // "CGameThread::~
 inline constexpr GameText kDrawBuildingFile{0x69ff80};           // "E:\Siedler3\Volker\DrawBuilding.cpp"
 inline constexpr GameText kBuildingPhaseUndefined{0x69ff60};     // "Gebäudebauphase nicht definiert" (Latin-1)
 inline constexpr GameText kBuildingPhaseUndefinedLog{0x69ffa4};  // "! Gebäudebauphase nicht definiert: %u"
+// ------------------------------------------------------------ wip/text-r6 batch
+// Dirk\Text.cpp: the VERIFY expressions of CTextSurface::DrawText and Lock.
+inline constexpr GameText kTextFile{0x69fdbc};             // "E:\Siedler3\Dirk\Text.cpp"
+inline constexpr GameText kGdiFlush{0x69ff54};             // "GdiFlush ()"
+inline constexpr GameText kDcNotNull{0x69fdb0};            // "hDC != NULL"
+inline constexpr GameText kSelectBitmap{0x69ff2c};         // "::SelectObject (hDC, hBitmap) != NULL"
+inline constexpr GameText kSetBkModeOpaque{0x69ff0c};      // "::SetBkMode (hDC, OPAQUE) != 0"
+inline constexpr GameText kSetBkColorBlack{0x69fed8};      // "::SetBkColor (hDC, RGB (0, 0, 0)) != CLR_INVALID"
+inline constexpr GameText kSetTextColorWhite{0x69fe9c};    // "::SetTextColor (hDC, RGB (255, 255, 255)) != CLR_INVALID"
+inline constexpr GameText kSelectFont{0x69fe74};           // "::SelectObject (hDC, vFonts [iFontId])"
+inline constexpr GameText kDeleteDc{0x69fe5c};             // "::DeleteDC (hDC) != 0"
 }  // namespace s3re::game::texts

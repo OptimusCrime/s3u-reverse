@@ -107,6 +107,23 @@ struct Counting<R(__cdecl*)(A...), Target> {
     }
 };
 
+// A variadic cdecl replacement (e.g. CTextSurface::DrawTextF 0x4a87d0):
+// the thunk can't know how many variable arguments there are, so it passes
+// on the first 16 dwords after the fixed ones. The caller pops its
+// arguments (cdecl), and dwords past the real ones are only read from the
+// caller's frame, so the replacement's va_list sees exactly the values the
+// caller pushed.
+template <typename R, typename... A, R(__cdecl* Target)(A..., ...)>
+struct Counting<R(__cdecl*)(A..., ...), Target> {
+    static inline CallStats stats;
+    using W = std::uint32_t;
+    static R __cdecl Call(A... args, W v0, W v1, W v2, W v3, W v4, W v5, W v6, W v7, W v8, W v9, W v10, W v11,
+                          W v12, W v13, W v14, W v15) {
+        CountCall(stats);
+        return Target(args..., v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15);
+    }
+};
+
 }  // namespace detail
 
 // Installs every registered hook. Returns false if any of them failed, in which

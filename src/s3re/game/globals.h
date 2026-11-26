@@ -684,6 +684,17 @@ inline constexpr GameGlobal<SetBkModeImport> g_importSetBkMode{0x655054};
 inline constexpr GameGlobal<SetTextColorImport> g_importSetTextColor{0x655058};
 inline constexpr GameGlobal<SetBkColorImport> g_importSetBkColor{0x655078};
 inline constexpr GameGlobal<TextOutAImport> g_importTextOutA{0x655068};
+// wip/text-r6 batch: the text surface (Dirk\Text.cpp: CTextSurface::DrawText
+// 0x4a8090, Lock 0x4a8bd0; test/fake_gdi.h fakes them).
+using CreateCompatibleDCImport = void*(__stdcall*)(void* dc);
+using DeleteDCImport = int(__stdcall*)(void* dc);
+using GdiFlushImport = int(__stdcall*)();
+using DrawTextAImport = std::int32_t(__stdcall*)(void* dc, const char* text, std::int32_t length, void* rect,
+                                                 std::uint32_t format);
+inline constexpr GameGlobal<CreateCompatibleDCImport> g_importCreateCompatibleDC{0x65506c};
+inline constexpr GameGlobal<DeleteDCImport> g_importDeleteDC{0x655064};
+inline constexpr GameGlobal<GdiFlushImport> g_importGdiFlush{0x655080};
+inline constexpr GameGlobal<DrawTextAImport> g_importDrawTextA{0x6552ec};  // USER32.dll
 // wip/ui-gdi batch: the dropdown whose list is open (CDropdown::OnArrowClicked
 // 0x422590 sets it; OnFocusChanged and Draw close other open lists).
 inline constexpr GameGlobal<std::uint32_t> g_openDropdown{0x7a8244};
