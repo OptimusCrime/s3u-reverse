@@ -89,6 +89,7 @@ struct CDrawer {
     std::uint8_t unk05f654[0x5f6b8 - 0x5f654];
     void* graphics;                                   // +0x05f6b8 the CGraphicsData the sprites come from
                                                       //           (CDrawer::QueueCellObject 0x4d5a50)
+    void* sound;                                      // +0x05f6bc the CSoundData (PlayAmbientSounds 0x4c7730)
 };
 
 #pragma pack(pop)

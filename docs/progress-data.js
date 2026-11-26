@@ -4321,7 +4321,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 [5008752,496,6,294,"Render::SetScreenLayout","Sets the layout globals 0x730f08..0x730f40 and 0x7dfd58"],
 [5009248,1328,1,69,"Render_sub_4c6f60"],
 [5010576,672,4,94,"CDrawer::ChangeDisplayMode","Replaced by CDrawer_ChangeDisplayMode (wip/logic-r4, drawer_display_mode.cpp): (options) ret 4, AL: options +0xa0 = display mode 1..3 (250 passes\u2026"],
-[5011248,704,1,69,"Render_sub_4c7730"],
+[5011248,704,4,94,"CDrawer::PlayAmbientSounds","Replaced by CDrawer_PlayAmbientSounds (wip/logic-r4, src/s3re/game/graphics/screen_layout.cpp): seven ambient sounds as a table (kind, minimum\u2026"],
 [5011952,96,6,94,"CDrawer::AmbientSoundPan","DirectSound pan from the kind's sources left (+0x5f588) and right (+0x5f5cc) of the screen centre, -10000..10000 (faults on 0 + 0 like the original)."],
 [5012048,96,6,94,"CDrawer::AmbientSoundVolume","DirectSound volume (count +0x5f610 capped at high - low) * 1500 / (high - low) + offset - 1500, clamped to -10000..0."],
 [5012144,16,6,294,"Render::Entry204","Dword i of the table at [+0x204]."],
@@ -11017,6 +11017,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 [5008704,null,{},[]],
 [5008752,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5010576,null,{},[]],
+[5011248,null,{},[]],
 [5011952,419,{"random:384,0 seed 1234":2,"random:448,3 seed 1234":3,"replay:scripted-seed127":54,"save:slot 1.sav":119,"save:slot 2.sav":419,"save:slot 3.sav":162},[]],
 [5012048,419,{"random:384,0 seed 1234":2,"random:448,3 seed 1234":3,"replay:scripted-seed127":54,"save:slot 1.sav":119,"save:slot 2.sav":419,"save:slot 3.sav":162},[]],
 [5012144,36313113,{"random:384,0 seed 1234":14650368,"random:448,3 seed 1234":13270486,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap":2550753,"random:512,1 seed 1234":14715436,"random:640,2 seed 1234":14651586,"replay:fullgame-20261124-0055-seed10779":7868208,"replay:fun8-seed2024-input31":36313113,"replay:random768-seed4321-input7":337565,"replay:scripted-seed127":17966781,"save:slot 1.sav":3008385,"save:slot 2.sav":247763,"save:slot 3.sav":538955},[]],
@@ -12581,4 +12582,5 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 ["2026-11-26","f4c5637",1734,590980,1367229,439614,935],
 ["2026-11-26","539d795",1737,592228,1367229,439614,935],
 ["2026-11-26","5465d56",1739,593732,1368461,439614,935],
-["2026-11-26","0314d24",1856,629300,1368461,439614,935]]};
+["2026-11-26","0314d24",1856,629300,1368461,439614,935],
+["2026-11-26","3ed7e37",1860,630676,1368461,439614,935]]};

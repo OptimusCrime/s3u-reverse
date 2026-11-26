@@ -1209,3 +1209,37 @@ SPECS += [
          callees={0x00610960: (1, "thiscall", "throw")}, new_fails=0.4,
          new_fails_size=(0x364, 1000000, 0x202, 0x10000)),
 ]
+
+
+# -- wip/logic-r4: CDrawer::PlayAmbientSounds (screen_layout.cpp) -------------
+# The drawer at the world base: source counts around the seven sounds'
+# minimums, left/right counts not both 0 (the pan divides by their sum);
+# the draw data in the scratch area (ticks -1 or not, 0..10 queued
+# effects). IsEnabled, GetEffect (returns a fake effect) and Play are probed,
+# the CRT's rand probed (0..0x7fff); Pan and Volume run (verified).
+AMBIENT_COUNTS = (0, 199, 200, 201, 400, 401, 800, 801, 2000, 2001, 8000, 8001, 30000)
+
+
+def ambient_play_state(rng, pool, args):
+    fields = [(0x5f6bc, 0x10000000 + rng.getrandbits(16) * 4, 4)]
+    for k in range(17):
+        left = rng.randrange(1, 40)
+        fields += [(0x5f610 + 4 * k, rng.choice(AMBIENT_COUNTS), 4), (0x5f588 + 4 * k, left, 4),
+                   (0x5f5cc + 4 * k, rng.randrange(0, 40), 4)]
+    data = SCRATCH
+    fields += [(data + 0x5c, rng.choice([0xFFFFFFFF, 0, 1, 5]), 4),
+               (data + 0x260, rng.choice([0, 0, 1, 3, rng.randrange(11)]), 4)]
+    return fields
+
+
+AMBIENT_PLAY_CALLEES = {
+    0x005ff4d0: (0, "thiscall", lambda h: 1 if h % 5 else 0),             # CSoundData::IsEnabled
+    0x005ff4f0: (5, "thiscall", lambda h: 0x20000000 + (h & 0xFFF0)),     # CSoundData::GetEffect
+    0x005c2fc0: (0, "thiscall", "probe"),                                 # CSoundEffect::Play
+    0x0061f802: (0, "cdecl", lambda h: (h >> 8) & 0x7FFF if h & 3 else 29000 + (h >> 8) % 3800),  # rand
+}
+
+SPECS += [
+    Spec("CDrawer_PlayAmbientSounds", 0x004c7730, "thiscall", [lambda rng, pool: WORLD_BASE + SCRATCH],
+         eax_mask=0, presets=ambient_play_state, callees=AMBIENT_PLAY_CALLEES),
+]

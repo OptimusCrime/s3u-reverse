@@ -653,11 +653,15 @@ SPECS += [
 # allocator argument a byte in the world.
 SPECS += [
     # Dead: the self-assignment branch 0x541454..0x5414f4 (a constructor's
-    # argument is never the object itself).
+    # argument is never the object itself); in the sharing branch the
+    # release of the old buffer 0x541520..0x541532 (the constructor has just
+    # set it to null) and the static empty string 0x541550 (sharing needs a
+    # non-zero length, which a string without buffer doesn't have).
     Spec("WString_SubstrConstruct", 0x00541410, "thiscall",
          [lambda rng, pool: STRING_OTHER_PTR, string_count, string_count,
           lambda rng, pool: WORLD_BASE + 0x3e000 + rng.randrange(16)],
          presets=wide_string_world, globals=wstring_null_count,
          exempt_blocks=(0x00541454, 0x00541463, 0x00541468, 0x00541478, 0x0054147a, 0x0054147e, 0x005414a5,
-                        0x005414ad, 0x005414bd, 0x005414bf, 0x005414c7, 0x005414ec)),
+                        0x005414ad, 0x005414bd, 0x005414bf, 0x005414c7, 0x005414ec, 0x00541520, 0x00541527,
+                        0x0054152b, 0x00541532, 0x00541550)),
 ]
