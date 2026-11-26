@@ -65,6 +65,10 @@ it.
 - The original game install lives in `Settlers3Ultimate/` and is gitignored.
   Never commit original game files (executables, DLLs, GFX, sounds, maps, music).
 - The reimplementation loads game data from the user's own installation at runtime.
+- Never quote serial numbers (S3.EXE's serial blacklist at 0x697108 is
+  referred to only by address) and never add tooling that skips the
+  serial or CD checks; reimplementing them exactly is fine (2026-11-26,
+  the repo may go public).
 - Do not commit raw decompiler output. Commit hand-written, cleaned-up
   reimplementations with meaningful names.
 - Line endings are normalized to LF via `.gitattributes` (repo is used on
