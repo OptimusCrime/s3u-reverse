@@ -54,6 +54,16 @@
 //   0x004a6b00 WCValSkipListDict<unsigned int, ...> base_equivalent: key at a-8 == *b
 //   0x005c33a0 WCValSkipListDict<int, DirectX::CSoundEffectBuffer> base_equivalent: key at a-0x14 == *b
 //   0x005c33c0 WCValSkipListDict<int, DirectX::CSoundEffectBuffer> base_less_than: key at a-0x14 < *b (signed)
+//   (wip/watcom-r6) 0x006099e0 / 0x00609a00 WCValSkipListDict<unsigned int, Lobby::CLMMessageBlock>
+//              base_equivalent / base_less_than: key at a-0x28 == / < *b (unsigned)
+//   0x004723c0 / 0x004723e0 WCValSkipListDict<unsigned long, CNetSession::CSyncInfo>: the
+//              same with the key at a-0xc
+// and the value lists' and the sorted int vector's:
+//   0x00427f80 WCStack<bool, ..> base_equivalent: the bytes *a == *b
+//   0x00427fa0 WCQueue<MsgConsole, ..> base_equivalent: the 20 bytes at a and b equal
+//   0x00414180 WCValSortedVector<int> base_less_than: *a < *b (signed)
+//   0x00609ce0 WCValOrderedVector<Lobby::CLMMessageBlock> base_equivalent:
+//              key(a) == key(b), key = 0x601500 (thiscall; a forwarder to 0x618250)
 
 #include "hooks.h"
 #include "msvc6/string.h"
@@ -271,6 +281,43 @@ std::uint32_t __stdcall SkipDictKeyEqual_5c33a0(std::uint32_t node, std::uint32_
 std::uint32_t __stdcall SkipDictKeyLess_5c33c0(std::uint32_t node, std::uint32_t key) {
     return ReadAt<std::int32_t>(node - 0x14) < ReadAt<std::int32_t>(key) ? 1 : 0;
 }
+// The lobby's message blocks and the network's sync records.
+std::uint32_t __stdcall SkipDictKeyEqual_6099e0(std::uint32_t node, std::uint32_t key) {
+    return ReadAt<std::uint32_t>(node - 0x28) == ReadAt<std::uint32_t>(key) ? 1 : 0;
+}
+std::uint32_t __stdcall SkipDictKeyLess_609a00(std::uint32_t node, std::uint32_t key) {
+    return ReadAt<std::uint32_t>(node - 0x28) < ReadAt<std::uint32_t>(key) ? 1 : 0;
+}
+std::uint32_t __stdcall SkipDictKeyEqual_4723c0(std::uint32_t node, std::uint32_t key) {
+    return ReadAt<std::uint32_t>(node - 0xc) == ReadAt<std::uint32_t>(key) ? 1 : 0;
+}
+std::uint32_t __stdcall SkipDictKeyLess_4723e0(std::uint32_t node, std::uint32_t key) {
+    return ReadAt<std::uint32_t>(node - 0xc) < ReadAt<std::uint32_t>(key) ? 1 : 0;
+}
+
+// Purpose: Equality callbacks of the screens' bool stack and message
+// queue, and the ordering callback of the sorted int vector.
+std::uint32_t __stdcall BoolListEquivalent(std::uint32_t a, std::uint32_t b) {
+    return ReadAt<std::uint8_t>(a) == ReadAt<std::uint8_t>(b) ? 1 : 0;
+}
+std::uint32_t __stdcall MessageListEquivalent(std::uint32_t a, std::uint32_t b) {
+    constexpr std::size_t kMessageBytes = 20;  // MsgConsole
+    return std::memcmp(reinterpret_cast<const void*>(a), reinterpret_cast<const void*>(b), kMessageBytes) == 0 ? 1 : 0;
+}
+std::uint32_t __stdcall IntVectorLessThan(std::uint32_t a, std::uint32_t b) {
+    return ReadAt<std::int32_t>(a) < ReadAt<std::int32_t>(b) ? 1 : 0;
+}
+
+namespace {
+constexpr std::uintptr_t kMessageBlockKey = 0x00601500;  // a message block's key (forwards to 0x618250)
+using KeyFn = std::uint32_t(__fastcall*)(std::uint32_t self, void* edx);
+}  // namespace
+
+// Purpose: Equality callback of the lobby's vector of message blocks.
+std::uint32_t __stdcall MessageBlockVectorEquivalent(std::uint32_t a, std::uint32_t b) {
+    const std::uint32_t keyA = reinterpret_cast<KeyFn>(kMessageBlockKey)(a, nullptr);
+    return keyA == reinterpret_cast<KeyFn>(kMessageBlockKey)(b, nullptr) ? 1 : 0;
+}
 
 S3RE_HOOK(0x00462850, UShortVectorEquivalent, VectorCallbackFn, Original_UShortVectorEquivalent,
           UShortVectorEquivalent);
@@ -344,6 +391,14 @@ S3RE_HOOK(0x005f3da0, VectorCallback_5f3da0, VectorCallbackFn, Original_VectorCa
           VectorCallback_5f3da0);
 S3RE_HOOK(0x005f3dc0, VectorCallback_5f3dc0, VectorCallbackFn, Original_VectorCallback_5f3dc0,
           VectorCallback_5f3dc0);
+S3RE_HOOK(0x006099e0, SkipDictKeyEqual_6099e0, VectorCallbackFn, Original_SkipDictKeyEqual_6099e0, SkipDictKeyEqual_6099e0);
+S3RE_HOOK(0x00609a00, SkipDictKeyLess_609a00, VectorCallbackFn, Original_SkipDictKeyLess_609a00, SkipDictKeyLess_609a00);
+S3RE_HOOK(0x004723c0, SkipDictKeyEqual_4723c0, VectorCallbackFn, Original_SkipDictKeyEqual_4723c0, SkipDictKeyEqual_4723c0);
+S3RE_HOOK(0x004723e0, SkipDictKeyLess_4723e0, VectorCallbackFn, Original_SkipDictKeyLess_4723e0, SkipDictKeyLess_4723e0);
+S3RE_HOOK(0x00427f80, BoolListEquivalent, VectorCallbackFn, Original_BoolListEquivalent, BoolListEquivalent);
+S3RE_HOOK(0x00427fa0, MessageListEquivalent, VectorCallbackFn, Original_MessageListEquivalent, MessageListEquivalent);
+S3RE_HOOK(0x00414180, IntVectorLessThan, VectorCallbackFn, Original_IntVectorLessThan, IntVectorLessThan);
+S3RE_HOOK(0x00609ce0, MessageBlockVectorEquivalent, VectorCallbackFn, Original_MessageBlockVectorEquivalent, MessageBlockVectorEquivalent);
 
 // ---------------------------------------------------------------------------
 // Tests: the operator replaced by a recording stub that returns a random
@@ -401,10 +456,17 @@ const InlineCase kInlineCases[] = {
     {Original_SkipDictKeyEqual_4a6b00, &SkipDictKeyEqual_4a6b00},
     {Original_SkipDictKeyEqual_5c33a0, &SkipDictKeyEqual_5c33a0},
     {Original_SkipDictKeyLess_5c33c0, &SkipDictKeyLess_5c33c0},
+    {Original_SkipDictKeyEqual_6099e0, &SkipDictKeyEqual_6099e0},
+    {Original_SkipDictKeyLess_609a00, &SkipDictKeyLess_609a00},
+    {Original_SkipDictKeyEqual_4723c0, &SkipDictKeyEqual_4723c0},
+    {Original_SkipDictKeyLess_4723e0, &SkipDictKeyLess_4723e0},
+    {Original_BoolListEquivalent, &BoolListEquivalent},
+    {Original_MessageListEquivalent, &MessageListEquivalent},
+    {Original_IntVectorLessThan, &IntVectorLessThan},
 };
 
 constexpr std::size_t kBuffer = 0x160;
-constexpr std::size_t kKeyOffset = 0x20;  // a and b point this far into their buffers
+constexpr std::size_t kKeyOffset = 0x30;  // a and b point this far into their buffers (keys up to 0x28 before)
 
 void PutString(test::Rng& rng, std::uint8_t* buffer, char* text, const char* other) {
     const std::uint32_t len = rng.Below(13);
@@ -434,7 +496,7 @@ bool CompareInline(test::Context& ctx, const InlineCase& c, int cases) {
                 b[rng.Below(sizeof(b))] = static_cast<std::uint8_t>(rng.Next32());
             }
             if (rng.Chance(1, 3)) {
-                b[kKeyOffset - 0x14 + rng.Below(0x18)] ^= 1;  // near the keys
+                b[kKeyOffset - 0x28 + rng.Below(0x2c)] ^= 1;  // near the keys
             }
         }
         // Strings (allocator, ptr, len, res) at the key offset (12 random
@@ -533,12 +595,56 @@ std::uint32_t __stdcall WrongByteCallback(std::uint32_t a, std::uint32_t b) {
 
 }  // namespace
 
+// The message-block callback: the key function stubbed (keys 0..3 for a
+// and b, so often equal).
+std::uint32_t g_keys[2] = {};
+int g_nextKey = 0;
+
+bool CompareKeyCallback(test::Context& ctx, VectorCallbackFn candidate, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        g_keys[0] = ctx.rng().Below(4);
+        g_keys[1] = ctx.rng().Below(4);
+        std::uint32_t words[2];
+        ctx.rng().Fill(words, sizeof(words));
+        const auto a = reinterpret_cast<std::uint32_t>(&words[0]);
+        const auto b = reinterpret_cast<std::uint32_t>(&words[1]);
+        std::uint32_t ra = 0, rb = 0;
+        std::vector<test::StubCall> callsA, callsB;
+        {
+            test::CalleeStubs stubs;
+            stubs.Install<0, kMessageBlockKey>([](game::CGameData*, std::uint32_t, const std::uint32_t*) {
+                const std::uint32_t key = g_keys[g_nextKey];
+                g_nextKey = 1 - g_nextKey;
+                return key;
+            });
+            g_nextKey = 0;
+            ra = Original_MessageBlockVectorEquivalent(a, b);
+            callsA = stubs.Take();
+            g_nextKey = 0;
+            rb = candidate(a, b);
+            callsB = stubs.Take();
+        }
+        if (!S3RE_EXPECT_EQ(ra, rb) || !S3RE_EXPECT(callsA == callsB)) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Wrong: the keys read in the other order.
+std::uint32_t __stdcall WrongKeyCallback(std::uint32_t a, std::uint32_t b) {
+    const std::uint32_t keyB = reinterpret_cast<KeyFn>(kMessageBlockKey)(b, nullptr);
+    return keyB == reinterpret_cast<KeyFn>(kMessageBlockKey)(a, nullptr) ? 1 : 0;
+}
+
 S3RE_TEST(WatcomMemberCallbacks_MatchOriginal) {
     for (const MemberCase& c : kMemberCases) {
         if (!c.compare(ctx, c.original, c.ours, 200)) {
             return;
         }
     }
+    CompareKeyCallback(ctx, &MessageBlockVectorEquivalent, 200);
 }
 
 S3RE_TEST(WatcomMemberCallbacks_ComparisonDetectsWrongImplementation) {
@@ -550,6 +656,11 @@ S3RE_TEST(WatcomMemberCallbacks_ComparisonDetectsWrongImplementation) {
     {
         test::Context probe(ctx.name(), 1, /*quiet=*/true);
         CompareMember<0x005c0f80>(probe, Original_VectorCallback_462ac0, &WrongByteCallback, 20);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareKeyCallback(probe, &WrongKeyCallback, 20);
         S3RE_EXPECT(probe.failures() > 0);
     }
 }

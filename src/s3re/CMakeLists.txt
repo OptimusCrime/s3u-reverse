@@ -31,6 +31,7 @@ add_library(s3re SHARED
     watcom/slist_destructors.cpp
     watcom/isv_slist.cpp
     watcom/list_iterators.cpp
+    watcom/skiplist_base.cpp
     watcom/skiplist_dicts.cpp
     watcom/skiplist_nodes.cpp
     watcom/sorted_find.cpp

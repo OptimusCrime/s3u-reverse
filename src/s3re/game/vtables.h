@@ -251,6 +251,11 @@ inline constexpr std::uint32_t kWCValSkipListDict_UIntString = 0x65719c;        
 inline constexpr std::uint32_t kWCValSkipListDict_IntString = 0x6580b8;         // WCValSkipListDict<int, String>
 inline constexpr std::uint32_t kWCValSkipListDict_UIntStringVector = 0x6571e4;  // <unsigned int, WCValOrderedVector<String>>
 inline constexpr std::uint32_t kWCValSkipListDict_ULongExecuteTypes = 0x6575d8;  // <unsigned long, WCPtrSortedVector<CExecuteType>>
+inline constexpr std::uint32_t kWCSkipNonTempBase = 0x65d638;                 // WCSkipNonTempBase (the skip lists' base)
+inline constexpr std::uint32_t kWCValSkipListDict_HWNDCDAudio = 0x65d94c;      // WCValSkipListDict<HWND__*, Win32::CCDAudio*>
+inline constexpr std::uint32_t kWCPtrListBase_CWin32Waitable = 0x657454;       // WCPtrListBase<Win32::CWin32Waitable, WCValSList<..*>>
+inline constexpr std::uint32_t kWCValSList_CPaletteP = 0x65cb78;               // WCValSList<DirectX::CPalette*>
+inline constexpr std::uint32_t kWCValSList_CSurfaceP = 0x65cb68;               // WCValSList<DirectX::CSurface*>
 // session 58 (wip/framework-errors): the framework's other exceptions
 inline constexpr std::uint32_t kCHResult = 0x65d8e0;      // Win32::CHResult
 inline constexpr std::uint32_t kCMCIException = 0x65d908;  // Win32::CMCIException

@@ -665,3 +665,33 @@ SPECS += [Spec(f"SkipDestroyNode_{a:x}", a, "thiscall",
           for a, d in SKIP_DESTROY_NODES]
 SPECS += [Spec(f"OrderedFind_{a:x}", a, "thiscall", SORTED_FIND_ARGS, presets=sorted_find_state, virtuals={0x08: 2})
           for a in (0x5b83e0, 0x5b8290, 0x499b30, 0x468550)]
+
+
+# -- wip/watcom-r6 batch 3 --------------------------------------------------
+# More inline callbacks (vector_callbacks.cpp): a and b 0x30 into scratch
+# slots 0 and 1 (keys up to 0x28 before them), on callback_buffers.
+CALLBACK_ARGS_30 = [lambda rng, pool: WORLD_BASE + SCRATCH + 0x30,
+                    lambda rng, pool: WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES + 0x30]
+SPECS += [Spec(name, address, "stdcall", CALLBACK_ARGS_30, presets=callback_buffers)
+          for name, address in (("SkipDictKeyEqual_6099e0", 0x6099e0), ("SkipDictKeyLess_609a00", 0x609a00),
+                                ("SkipDictKeyEqual_4723c0", 0x4723c0), ("SkipDictKeyLess_4723e0", 0x4723e0),
+                                ("BoolListEquivalent", 0x427f80), ("MessageListEquivalent", 0x427fa0),
+                                ("IntVectorLessThan", 0x414180))]
+SPECS += [Spec("MessageBlockVectorEquivalent", 0x00609ce0, "stdcall", CALLBACK_ARGS_30,
+               callees={0x00601500: (0, "thiscall", "probe")})]
+
+# The skip-list base and its derived constructors (skiplist_base.cpp):
+# base_init and the base constructor (ours, own spec) probed.
+SKIP_BASE_CALLEES = {0x0060bb80: (2, "thiscall", "probe"), 0x0060b9f0: (3, "thiscall", "probe")}
+SPECS += [Spec("WCSkipNonTempBase_Construct", 0x0060b9f0, "thiscall", [anything, anything, anything],
+               callees={0x0060bb80: (2, "thiscall", "probe")})]
+SPECS += [Spec(f"SkipListConstructor_{a:x}", a, "thiscall", [anything, anything, anything], callees=SKIP_BASE_CALLEES)
+          for a in (0x609f20, 0x609ed0, 0x458030)]
+SPECS += [Spec("SkipDictConstructor_616020", 0x00616020, "thiscall", [anything, anything], callees=SKIP_BASE_CALLEES)]
+SPECS += [Spec(f"SkipInsert_{a:x}", a, "thiscall", [anything], callees={0x0060bbe0: (1, "thiscall", "probe")})
+          for a in (0x609b90, 0x472400)]
+
+# List constructors (list_iterators.cpp). cover_until: a static initializer
+# follows 0x53ea60 inside Ghidra's function.
+SPECS += [Spec("IsvListConstructor_53ea60", 0x0053ea60, "thiscall", [], cover_until=0x0053ea74)]
+SPECS += [Spec(f"SListConstructor_{a:x}", a, "thiscall", [anything, anything]) for a in (0x4639e0, 0x5b7d40, 0x5b7e00)]

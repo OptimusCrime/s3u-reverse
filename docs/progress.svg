@@ -14,12 +14,12 @@
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="283.6" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 20.2%</title></rect>
 <text x="311.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">20.2%</text>
-<rect x="453.6" y="154" width="164.9" height="40" fill="#4f8fc0"><title>Verified by tests only: 11.7%</title></rect>
-<text x="536" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">11.7%</text>
-<rect x="618.5" y="154" width="446" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 31.7%</title></rect>
-<text x="841.4" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">31.7%</text>
-<rect x="1064.4" y="154" width="511.6" height="40" fill="#e8a39b"><title>Not understood yet: 36.4%</title></rect>
-<text x="1320.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.4%</text>
+<rect x="453.6" y="154" width="165.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 11.8%</title></rect>
+<text x="536.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">11.8%</text>
+<rect x="619" y="154" width="445.9" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 31.7%</title></rect>
+<text x="841.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">31.7%</text>
+<rect x="1064.9" y="154" width="511.1" height="40" fill="#e8a39b"><title>Not understood yet: 36.4%</title></rect>
+<text x="1320.4" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.4%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
 <rect x="869.6" y="216" width="16" height="16" fill="#f2c86b"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
@@ -17975,7 +17975,7 @@
 </g>
 </g>
 <g><rect x="1108.6" y="566.9" width="242.1" height="433.1" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="1113.6" y="579.9" font-size="12" font-weight="600" fill="#ffffff">Watcom container library — 28.2% verified (5.8% in a whole game)</text>
+<text x="1113.6" y="579.9" font-size="12" font-weight="600" fill="#ffffff">Watcom container library — 28.8% verified (5.8% in a whole game)</text>
 <g><title>Menus::priv::CGameSetupDialog: 3 functions</title><rect x="1110.6" y="585.9" width="140.2" height="80.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="1112.6" y="594.4" font-size="8.5" fill="#ffffff">Menus::priv::CGameSetupDi…</text>
 <rect x="1111.1" y="597.4" width="77.4" height="68.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Menus::priv::CGameSetupDialog::CGameSetupDialog @ 0x00484410
@@ -18343,8 +18343,8 @@
 768 bytes — Classified (class/role known)</title></rect>
 <rect x="1304.1" y="823.1" width="13.2" height="4.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValSortedVector_int::~WCValSortedVector_int @ 0x004143b0
 96 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1317.2" y="823.1" width="4.4" height="4.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCValSortedVector_int::LessThan @ 0x00414180
-32 bytes — Identified (purpose known)</title></rect>
+<rect x="1317.2" y="823.1" width="4.4" height="4.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSortedVector_int::LessThan @ 0x00414180
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1321.6" y="823.1" width="4.4" height="4.4" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCValSortedVector_int::scalar_deleting_destructor @ 0x00414390
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
@@ -18515,8 +18515,8 @@
 96 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1210.9" y="889.1" width="5.4" height="7.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_String::base_destroy_node @ 0x00458ff0
 64 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1216.3" y="889.1" width="6.7" height="4.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_String::WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_String @ 0x00458030
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="1216.3" y="889.1" width="6.7" height="4.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_String::WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_String @ 0x00458030
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1216.3" y="893.4" width="6.7" height="2.9" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_String::scalar_deleting_destructor @ 0x00457d50
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
@@ -18695,10 +18695,10 @@
 96 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1324.2" y="872.6" width="6.8" height="5.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock::base_destroy_node @ 0x0060a760
 64 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1324.2" y="878.1" width="6.8" height="4.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock::WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock @ 0x00609ed0
-48 bytes — Classified (class/role known)</title></rect>
-<rect x="1324.2" y="882.3" width="3.4" height="5.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock::vf05 @ 0x00609b90
-32 bytes — Classified (class/role known)</title></rect>
+<rect x="1324.2" y="878.1" width="6.8" height="4.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock::WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock @ 0x00609ed0
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1324.2" y="882.3" width="3.4" height="5.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock::insert @ 0x00609b90
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1327.6" y="882.3" width="3.4" height="5.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_Lobby_CLMMessageBlock::scalar_deleting_destructor @ 0x00609df0
 32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -18779,10 +18779,10 @@
 128 bytes — Classified (class/role known)</title></rect>
 <rect x="1272.3" y="895.8" width="10.5" height="6.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock::~WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock @ 0x00609aa0
 112 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1282.8" y="888.7" width="4.2" height="4.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock::vf01 @ 0x006099e0
-32 bytes — Classified (class/role known)</title></rect>
-<rect x="1282.8" y="893.2" width="4.2" height="4.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock::vf02 @ 0x00609a00
-32 bytes — Classified (class/role known)</title></rect>
+<rect x="1282.8" y="888.7" width="4.2" height="4.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock::base_equivalent @ 0x006099e0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1282.8" y="893.2" width="4.2" height="4.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock::base_less_than @ 0x00609a00
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1282.8" y="897.6" width="4.2" height="4.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int_Lobby_CLMMessageBlock::scalar_deleting_destructor @ 0x00609dd0
 32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -18847,8 +18847,8 @@
 80 bytes — Classified (class/role known)</title></rect>
 <rect x="1248.4" y="945.4" width="5.9" height="6.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo::vf04 @ 0x00472eb0
 64 bytes — Classified (class/role known)</title></rect>
-<rect x="1248.4" y="951.6" width="5.9" height="3.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo::vf05 @ 0x00472400
-32 bytes — Classified (class/role known)</title></rect>
+<rect x="1248.4" y="951.6" width="5.9" height="3.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo::insert @ 0x00472400
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1248.4" y="954.8" width="5.9" height="3.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_long_CNetSession_CSyncInfo::scalar_deleting_destructor @ 0x004725e0
 32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -18895,8 +18895,8 @@
 <g><title>WCValOrderedVector_Lobby_CLMMessageBlock: 3 functions</title><rect x="1296.9" y="902.5" width="13.2" height="12.1" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1297.4" y="903" width="8.1" height="11.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Lobby_CLMMessageBlock::~WCValOrderedVector_Lobby_CLMMessageBlock @ 0x00609d10
 160 bytes — Classified (class/role known)</title></rect>
-<rect x="1305.5" y="903" width="4.1" height="6.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Lobby_CLMMessageBlock::vf02 @ 0x00609ce0
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="1305.5" y="903" width="4.1" height="6.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Lobby_CLMMessageBlock::base_equivalent @ 0x00609ce0
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1305.5" y="909.6" width="4.1" height="4.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_Lobby_CLMMessageBlock::scalar_deleting_destructor @ 0x00609e30
 32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -18967,10 +18967,10 @@
 <g><title>WCValSkipListDict_unsigned_long_CNetSession_CSyncInfo: 4 functions</title><rect x="1254.7" y="986.9" width="11.4" height="11.1" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1255.2" y="987.4" width="5.2" height="10.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_long_CNetSession_CSyncInfo::~WCValSkipListDict_unsigned_long_CNetSession_CSyncInfo @ 0x00472580
 96 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1260.5" y="987.4" width="5.2" height="3.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_long_CNetSession_CSyncInfo::vf01 @ 0x004723c0
-32 bytes — Classified (class/role known)</title></rect>
-<rect x="1260.5" y="990.7" width="5.2" height="3.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_long_CNetSession_CSyncInfo::vf02 @ 0x004723e0
-32 bytes — Classified (class/role known)</title></rect>
+<rect x="1260.5" y="987.4" width="5.2" height="3.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_long_CNetSession_CSyncInfo::base_equivalent @ 0x004723c0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1260.5" y="990.7" width="5.2" height="3.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_long_CNetSession_CSyncInfo::base_less_than @ 0x004723e0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1260.5" y="994.1" width="5.2" height="3.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_long_CNetSession_CSyncInfo::scalar_deleting_destructor @ 0x00472560
 32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -18993,16 +18993,16 @@
 <g><title>WCValSList_DirectX_CSurface: 3 functions</title><rect x="1302.4" y="914.6" width="12.1" height="10.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1302.9" y="915.1" width="6.5" height="9.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSList_DirectX_CSurface::~WCValSList_DirectX_CSurface @ 0x005b7d90
 112 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1309.4" y="915.1" width="4.6" height="5.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValSList_DirectX_CSurface::WCValSList_DirectX_CSurface @ 0x005b7d40
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="1309.4" y="915.1" width="4.6" height="5.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSList_DirectX_CSurface::WCValSList_DirectX_CSurface @ 0x005b7d40
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1309.4" y="920.8" width="4.6" height="3.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSList_DirectX_CSurface::scalar_deleting_destructor @ 0x005b7d70
 32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>WCValSList_DirectX_CPalette: 3 functions</title><rect x="1314.5" y="914.6" width="12.1" height="10.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1315" y="915.1" width="6.5" height="9.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSList_DirectX_CPalette::~WCValSList_DirectX_CPalette @ 0x005b7e50
 112 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1321.4" y="915.1" width="4.6" height="5.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValSList_DirectX_CPalette::WCValSList_DirectX_CPalette @ 0x005b7e00
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="1321.4" y="915.1" width="4.6" height="5.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSList_DirectX_CPalette::WCValSList_DirectX_CPalette @ 0x005b7e00
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1321.4" y="920.8" width="4.6" height="3.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSList_DirectX_CPalette::scalar_deleting_destructor @ 0x005b7e30
 32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -19017,16 +19017,16 @@
 112 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1344.5" y="915.1" width="3.7" height="4.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCStack_bool_WCValSList_bool::scalar_deleting_destructor @ 0x00428250
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1344.5" y="919.8" width="3.7" height="4.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCStack_bool_WCValSList_bool::base_equivalent @ 0x00427f80
-32 bytes — Identified (purpose known)</title></rect>
+<rect x="1344.5" y="919.8" width="3.7" height="4.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCStack_bool_WCValSList_bool::base_equivalent @ 0x00427f80
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>WCQueue_MsgConsole_WCValSList_MsgConsole: 3 functions</title><rect x="1266.2" y="925.1" width="11.2" height="10.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1266.7" y="925.6" width="6.5" height="9.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCQueue_MsgConsole_WCValSList_MsgConsole::~WCQueue_MsgConsole_WCValSList_MsgConsole @ 0x00428290
 112 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1273.2" y="925.6" width="3.7" height="4.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCQueue_MsgConsole_WCValSList_MsgConsole::scalar_deleting_destructor @ 0x00428270
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="1273.2" y="930.3" width="3.7" height="4.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCQueue_MsgConsole_WCValSList_MsgConsole::base_equivalent @ 0x00427fa0
-32 bytes — Identified (purpose known)</title></rect>
+<rect x="1273.2" y="930.3" width="3.7" height="4.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCQueue_MsgConsole_WCValSList_MsgConsole::base_equivalent @ 0x00427fa0
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>WCValOrderedVector_CListView_CColumn: 2 functions</title><rect x="1266.2" y="935.5" width="11.2" height="10.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1266.7" y="936" width="8.3" height="9.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValOrderedVector_CListView_CColumn::~WCValOrderedVector_CListView_CColumn @ 0x00427fe0
@@ -19037,8 +19037,8 @@
 <g><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_int: 3 functions</title><rect x="1266.2" y="945.9" width="11.2" height="10.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1266.7" y="946.4" width="5.6" height="9.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_int::~WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_int @ 0x004a6c40
 96 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1272.3" y="946.4" width="4.6" height="5.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_int::WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_int @ 0x00609f20
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="1272.3" y="946.4" width="4.6" height="5.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_int::WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_int @ 0x00609f20
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1272.3" y="952.1" width="4.6" height="3.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>WCSkipListBase_WCSkipListDictKeyVal_unsigned_int_int::scalar_deleting_destructor @ 0x004a6c20
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 </g>
@@ -19051,8 +19051,8 @@
 <g><title>WCValSkipListDict_HWND___Win32_CCDAudio: 3 functions</title><rect x="1266.2" y="966.8" width="11.2" height="10.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1266.7" y="967.3" width="5.6" height="9.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_HWND___Win32_CCDAudio::~WCValSkipListDict_HWND___Win32_CCDAudio @ 0x00616050
 96 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1272.3" y="967.3" width="4.6" height="5.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_HWND___Win32_CCDAudio::WCValSkipListDict_HWND___Win32_CCDAudio @ 0x00616020
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="1272.3" y="967.3" width="4.6" height="5.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_HWND___Win32_CCDAudio::WCValSkipListDict_HWND___Win32_CCDAudio @ 0x00616020
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1272.3" y="972.9" width="4.6" height="3.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_HWND___Win32_CCDAudio::scalar_deleting_destructor @ 0x00616110
 32 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -19077,8 +19077,8 @@
 64 bytes — Classified (class/role known)</title></rect>
 </g>
 <g><title>WCSkipNonTempBase: 3 functions</title><rect x="1289.3" y="925.1" width="10.8" height="9.8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1289.8" y="925.6" width="6.9" height="8.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCSkipNonTempBase::WCSkipNonTempBase @ 0x0060b9f0
-112 bytes — Classified (class/role known)</title></rect>
+<rect x="1289.8" y="925.6" width="6.9" height="8.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipNonTempBase::WCSkipNonTempBase @ 0x0060b9f0
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1296.6" y="925.6" width="2.9" height="5.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipNonTempBase::scalar_deleting_destructor @ 0x0060bc80
 32 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1296.6" y="931.5" width="2.9" height="2.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCSkipNonTempBase::~WCSkipNonTempBase @ 0x00423a10
@@ -19351,8 +19351,8 @@
 64 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>WCIsvSListBase_WCNIsvSLink_Win32_CWin32Waitable: 2 functions</title><rect x="1322.2" y="979.2" width="6.2" height="6.8" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1322.7" y="979.7" width="5.2" height="4.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>WCIsvSListBase_WCNIsvSLink_Win32_CWin32Waitable::WCIsvSListBase @ 0x0053ea60
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="1322.7" y="979.7" width="5.2" height="4.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCIsvSListBase_WCNIsvSLink_Win32_CWin32Waitable::WCIsvSListBase_WCNIsvSLink_Win32_CWin32Waitable @ 0x0053ea60
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1322.7" y="984.1" width="5.2" height="1.5" fill="#a8c8e6"><title>WCIsvSListBase_WCNIsvSLink_Win32_CWin32Waitable::~WCIsvSListBase_WCNIsvSLink_Win32_CWin32Waitable @ 0x00462f70
 16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
@@ -19383,8 +19383,8 @@
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>WCPtrListBase_Win32_CWin32Waitable_WCValSList_Win32_CWin32Waitable: 1 functions</title><rect x="1343.6" y="972.4" width="5.1" height="6.3" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1344.1" y="972.9" width="4.1" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>WCPtrListBase_Win32_CWin32Waitable_WCValSList_Win32_CWin32Waitable::WCPtrListBase_Win32_CWin32Waitable_WCValSList_Win32_CWin32Waitable @ 0x004639e0
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="1344.1" y="972.9" width="4.1" height="5.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCPtrListBase_Win32_CWin32Waitable_WCValSList_Win32_CWin32Waitable::WCPtrListBase_Win32_CWin32Waitable_WCValSList_Win32_CWin32Waitable @ 0x004639e0
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>WCPtrSListIter_Win32_CWin32Waitable: 1 functions</title><rect x="1328.4" y="978.7" width="4.9" height="6.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1328.9" y="979.2" width="3.9" height="5.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>WCPtrSListIter_Win32_CWin32Waitable::WCPtrSListIter_Win32_CWin32Waitable @ 0x00463be0

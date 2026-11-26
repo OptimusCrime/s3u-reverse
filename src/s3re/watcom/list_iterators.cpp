@@ -6,6 +6,13 @@
 //   0x00428bd0 WCIsvSListBase<WCNIsvSLink<CScreenElement*>>     0x655bc4
 //   0x00428bf0 WCIsvSListBase<WCNIsvSLink<bool>>                0x655be0
 //   0x005de110 WCIsvSListBase<WCNIsvSLink<LobbyClient::CStatusMessage>> 0x65d2c4
+//   0x0053ea60 WCIsvSListBase<WCNIsvSLink<Win32::CWin32Waitable*>>  0x657424 (a static
+//              initializer follows it inside Ghidra's function)
+// Singly linked lists with link allocators, (allocate, deallocate) ret 8:
+// +4 = +8 = +0xc = 0, +0x10 = allocate, +0x14 = deallocate, vtable.
+//   0x004639e0 WCPtrListBase<Win32::CWin32Waitable, WCValSList<..*>>  0x657454
+//   0x005b7d40 WCValSList<DirectX::CSurface*>                         0x65cb68
+//   0x005b7e00 WCValSList<DirectX::CPalette*>                         0x65cb78
 // Skip-list iterator bases, (dictionary) ret 4: +4 = 0, +8 = the
 // dictionary, +0xc = +0x10 = 0, vtable.
 //   0x004726e0 WCSkipListIterBase<WCSkipListDictKeyVal<unsigned long, WCPtrSortedVector<CExecuteType>>> 0x65778c
@@ -47,6 +54,11 @@ struct IsvListBase {
     std::uint32_t last;   // +0x08 the last node (0: empty)
     std::uint32_t count;  // +0x0c
 };
+struct AllocatingSList {
+    IsvListBase base;
+    std::uint32_t allocate;    // +0x10 the link allocator (0: operator new)
+    std::uint32_t deallocate;  // +0x14 the link deallocator (0: operator delete)
+};
 struct SkipListIterBase {
     std::uint32_t vtable;
     std::uint32_t unk04;
@@ -57,6 +69,7 @@ struct SkipListIterBase {
 #pragma pack(pop)
 static_assert(sizeof(IsvListBase) == 0x10);
 static_assert(sizeof(SkipListIterBase) == 0x14);
+static_assert(sizeof(AllocatingSList) == 0x18);
 
 namespace {
 
@@ -105,6 +118,40 @@ IsvListBase* __fastcall IsvListConstructor_428bf0(IsvListBase* self, void*) {
 }
 IsvListBase* __fastcall IsvListConstructor_5de110(IsvListBase* self, void*) {
     return ConstructIsvList(self, vt::kWCIsvSListBase_CStatusMessage);
+}
+IsvListBase* __fastcall IsvListConstructor_53ea60(IsvListBase* self, void*) {
+    return ConstructIsvList(self, vt::kWaitableIsvSListBase);
+}
+
+using SListConstructFn = AllocatingSList*(__fastcall*)(AllocatingSList* self, void* edx, std::uint32_t allocate,
+                                                       std::uint32_t deallocate);
+
+namespace {
+AllocatingSList* ConstructSList(AllocatingSList* self, std::uint32_t allocate, std::uint32_t deallocate,
+                                std::uint32_t vtable) {
+    self->base.unk04 = 0;
+    self->base.last = 0;
+    self->base.count = 0;
+    self->allocate = allocate;
+    self->deallocate = deallocate;
+    self->base.vtable = vtable;
+    return self;
+}
+}  // namespace
+
+// Purpose: Constructors of the network thread's waitable list and the draw
+// thread's surface and palette lists (with their link allocators).
+AllocatingSList* __fastcall SListConstructor_4639e0(AllocatingSList* self, void*, std::uint32_t allocate,
+                                                    std::uint32_t deallocate) {
+    return ConstructSList(self, allocate, deallocate, vt::kWCPtrListBase_CWin32Waitable);
+}
+AllocatingSList* __fastcall SListConstructor_5b7d40(AllocatingSList* self, void*, std::uint32_t allocate,
+                                                    std::uint32_t deallocate) {
+    return ConstructSList(self, allocate, deallocate, vt::kWCValSList_CSurfaceP);
+}
+AllocatingSList* __fastcall SListConstructor_5b7e00(AllocatingSList* self, void*, std::uint32_t allocate,
+                                                    std::uint32_t deallocate) {
+    return ConstructSList(self, allocate, deallocate, vt::kWCValSList_CPaletteP);
 }
 
 // Purpose: Constructors of iterators over the skip-list dictionaries (the
@@ -188,6 +235,14 @@ S3RE_HOOK(0x005c34f0, SkipListIterConstructor_5c34f0, SkipListIterConstructFn,
           Original_SkipListIterConstructor_5c34f0, SkipListIterConstructor_5c34f0);
 S3RE_HOOK(0x005ffc60, SkipListIterConstructor_5ffc60, SkipListIterConstructFn,
           Original_SkipListIterConstructor_5ffc60, SkipListIterConstructor_5ffc60);
+S3RE_HOOK(0x0053ea60, IsvListConstructor_53ea60, IsvListConstructFn, Original_IsvListConstructor_53ea60,
+          IsvListConstructor_53ea60);
+S3RE_HOOK(0x004639e0, SListConstructor_4639e0, SListConstructFn, Original_SListConstructor_4639e0,
+          SListConstructor_4639e0);
+S3RE_HOOK(0x005b7d40, SListConstructor_5b7d40, SListConstructFn, Original_SListConstructor_5b7d40,
+          SListConstructor_5b7d40);
+S3RE_HOOK(0x005b7e00, SListConstructor_5b7e00, SListConstructFn, Original_SListConstructor_5b7e00,
+          SListConstructor_5b7e00);
 S3RE_HOOK(0x005de110, IsvListConstructor_5de110, IsvListConstructFn, Original_IsvListConstructor_5de110,
           IsvListConstructor_5de110);
 S3RE_HOOK(0x00609fd0, SkipListIterConstructor_609fd0, SkipListIterConstructFn,
@@ -221,6 +276,7 @@ const IsvPair kIsvPairs[] = {
     {Original_IsvListConstructor_428bd0, &IsvListConstructor_428bd0},
     {Original_IsvListConstructor_428bf0, &IsvListConstructor_428bf0},
     {Original_IsvListConstructor_5de110, &IsvListConstructor_5de110},
+    {Original_IsvListConstructor_53ea60, &IsvListConstructor_53ea60},
 };
 const IterPair kIterPairs[] = {
     {Original_SkipListIterConstructor_4726e0, &SkipListIterConstructor_4726e0},
@@ -341,6 +397,41 @@ S3RE_TEST(WatcomListIteratorConstructors_MatchOriginal) {
             return;
         }
     }
+}
+
+// The allocating lists' constructors on random objects and arguments.
+bool CompareSListConstruct(test::Context& ctx, SListConstructFn original, SListConstructFn ours, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        AllocatingSList a, b;
+        ctx.rng().Fill(&a, sizeof(a));
+        std::memcpy(&b, &a, sizeof(a));
+        const std::uint32_t allocate = ctx.rng().Next32(), deallocate = ctx.rng().Next32();
+        AllocatingSList* ra = original(&a, nullptr, allocate, deallocate);
+        AllocatingSList* rb = ours(&b, nullptr, allocate, deallocate);
+        if (!S3RE_EXPECT(ra == &a && rb == &b) || !S3RE_EXPECT_MEM_EQ(&a, &b, sizeof(a))) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Wrong: the allocators swapped.
+AllocatingSList* __fastcall WrongSListConstruct(AllocatingSList* self, void* edx, std::uint32_t allocate,
+                                                std::uint32_t deallocate) {
+    return SListConstructor_5b7d40(self, edx, deallocate, allocate);
+}
+
+S3RE_TEST(WatcomSListConstructors_MatchOriginal) {
+    CompareSListConstruct(ctx, Original_SListConstructor_4639e0, &SListConstructor_4639e0, 100) &&
+        CompareSListConstruct(ctx, Original_SListConstructor_5b7d40, &SListConstructor_5b7d40, 100) &&
+        CompareSListConstruct(ctx, Original_SListConstructor_5b7e00, &SListConstructor_5b7e00, 100);
+}
+
+S3RE_TEST(WatcomSListConstructors_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSListConstruct(probe, Original_SListConstructor_5b7d40, &WrongSListConstruct, 10);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 // The base destructors on random words.
