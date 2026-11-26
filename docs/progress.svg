@@ -14,11 +14,11 @@
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="283.6" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 20.2%</title></rect>
 <text x="311.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">20.2%</text>
-<rect x="453.6" y="154" width="157.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 11.2%</title></rect>
-<text x="532.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">11.2%</text>
-<rect x="610.7" y="154" width="0.9" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.1%</title></rect>
-<rect x="611.7" y="154" width="439.5" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 31.3%</title></rect>
-<text x="831.4" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">31.3%</text>
+<rect x="453.6" y="154" width="162.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 11.6%</title></rect>
+<text x="534.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">11.6%</text>
+<rect x="616.3" y="154" width="0.9" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.1%</title></rect>
+<rect x="617.2" y="154" width="434" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 30.9%</title></rect>
+<text x="834.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">30.9%</text>
 <rect x="1051.2" y="154" width="524.8" height="40" fill="#e8a39b"><title>Not understood yet: 37.3%</title></rect>
 <text x="1313.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">37.3%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
@@ -20504,7 +20504,7 @@
 </g>
 </g>
 <g><rect x="1350.7" y="783.1" width="207" height="216.9" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="1355.7" y="796.1" font-size="12" font-weight="600" fill="#ffffff">Third-party libraries (zlib, libpng) — 37.1% verified (0.0% in a whole game)</text>
+<text x="1355.7" y="796.1" font-size="12" font-weight="600" fill="#ffffff">Third-party libraries (zlib, libpng) — 51.2% verified (0.0% in a whole game)</text>
 <g><title>(free functions): 98 functions</title><rect x="1352.7" y="802.1" width="145.9" height="195.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="1354.7" y="810.6" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="1353.2" y="813.6" width="60.7" height="39.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_do_background @ 0x005a7900
@@ -20515,22 +20515,22 @@
 2576 bytes — Identified (purpose known)</title></rect>
 <rect x="1353.2" y="853.1" width="27.2" height="31.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_build_gamma_table @ 0x005a93d0
 1472 bytes — Identified (purpose known)</title></rect>
-<rect x="1353.2" y="884.7" width="27.2" height="29.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_tRNS @ 0x005ace60
-1360 bytes — Identified (purpose known)</title></rect>
+<rect x="1353.2" y="884.7" width="27.2" height="29.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_tRNS @ 0x005ace60
+1360 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1353.2" y="913.9" width="27.2" height="28.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_sRGB @ 0x005ac920
 1344 bytes — Identified (purpose known)</title></rect>
 <rect x="1353.2" y="942.8" width="27.2" height="28.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_pCAL @ 0x005ae430
 1344 bytes — Identified (purpose known)</title></rect>
-<rect x="1353.2" y="971.7" width="27.2" height="25.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_bKGD @ 0x005ad3b0
-1200 bytes — Identified (purpose known)</title></rect>
+<rect x="1353.2" y="971.7" width="27.2" height="25.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_bKGD @ 0x005ad3b0
+1200 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1380.4" y="853.1" width="23.8" height="27.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_PLTE @ 0x005aaea0
 1120 bytes — Identified (purpose known)</title></rect>
-<rect x="1404.2" y="853.1" width="23.5" height="27.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_sBIT @ 0x005ab8b0
-1104 bytes — Identified (purpose known)</title></rect>
+<rect x="1404.2" y="853.1" width="23.5" height="27.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_sBIT @ 0x005ab8b0
+1104 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1427.7" y="853.1" width="23.5" height="27.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_read_row @ 0x005a5440
 1104 bytes — Identified (purpose known)</title></rect>
-<rect x="1451.1" y="853.1" width="23.5" height="27.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_hIST @ 0x005ad860
-1104 bytes — Identified (purpose known)</title></rect>
+<rect x="1451.1" y="853.1" width="23.5" height="27.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_hIST @ 0x005ad860
+1104 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1474.6" y="853.1" width="23.5" height="27.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_do_read_interlace @ 0x005af7f0
 1104 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1380.4" y="880.6" width="25.9" height="24.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_gAMA @ 0x005ab470
@@ -20541,18 +20541,18 @@
 1024 bytes — Identified (purpose known)</title></rect>
 <rect x="1380.4" y="953" width="25.9" height="22.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_do_gamma @ 0x005a8900
 1008 bytes — Identified (purpose known)</title></rect>
-<rect x="1380.4" y="975.8" width="25.9" height="21.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_pHYs @ 0x005adcb0
-960 bytes — Identified (purpose known)</title></rect>
-<rect x="1406.3" y="880.6" width="23.4" height="24" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_oFFs @ 0x005ae070
-960 bytes — Identified (purpose known)</title></rect>
-<rect x="1429.7" y="880.6" width="23.4" height="24" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_tIME @ 0x005ae970
-960 bytes — Identified (purpose known)</title></rect>
+<rect x="1380.4" y="975.8" width="25.9" height="21.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_pHYs @ 0x005adcb0
+960 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1406.3" y="880.6" width="23.4" height="24" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_oFFs @ 0x005ae070
+960 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1429.7" y="880.6" width="23.4" height="24" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_tIME @ 0x005ae970
+960 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1453.1" y="880.6" width="22.7" height="24" fill="#a9d18e" stroke="#ffffff" stroke-width="0.3"><title>png_read_finish_row @ 0x005afe20
 928 bytes — Reimplemented, not verified</title></rect>
 <rect x="1475.8" y="880.6" width="22.3" height="24" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_do_expand @ 0x005a8f20
 912 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1406.3" y="904.6" width="27.3" height="19.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_IHDR @ 0x005aab20
-896 bytes — Identified (purpose known)</title></rect>
+<rect x="1406.3" y="904.6" width="27.3" height="19.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_IHDR @ 0x005aab20
+896 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1433.6" y="904.6" width="24.4" height="19.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_combine_row @ 0x005af4d0
 800 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1458" y="904.6" width="21.5" height="19.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_read_info @ 0x005a5180
@@ -20577,8 +20577,8 @@
 464 bytes — Identified (purpose known)</title></rect>
 <rect x="1439.3" y="923.8" width="16.3" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_tEXt @ 0x005aed30
 400 bytes — Identified (purpose known)</title></rect>
-<rect x="1455.6" y="923.8" width="15" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_IEND @ 0x005ab300
-368 bytes — Identified (purpose known)</title></rect>
+<rect x="1455.6" y="923.8" width="15" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_handle_IEND @ 0x005ab300
+368 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1470.6" y="923.8" width="13.7" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_crc_finish @ 0x005aa930
 336 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1484.3" y="923.8" width="13.7" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_create_read_struct @ 0x005a5030

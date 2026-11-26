@@ -117,9 +117,19 @@ struct PngStruct {
     std::uint8_t sig_bytes;             // 0x124
     std::uint8_t pad125;                // 0x125
     std::uint16_t filler;               // 0x126 png_set_filler 0x5a5e20
-    std::uint8_t unk128[0x144 - 0x128]; // 0x128 background gamma type/value, background, background_1
+    std::uint8_t unk128[0x130 - 0x128]; // 0x128 background gamma type and value
+    PngColor16 background;              // 0x130 png_handle_bKGD 0x5ad3b0
+    PngColor16 background_1;            // 0x13a
     void* output_flush_fn;              // 0x144 png_set_read_fn 0x5a9af0
-    std::uint8_t unk148[0x20c - 0x148]; // 0x148
+    std::uint8_t unk148[0x174 - 0x148]; // 0x148 flush, gamma fields and tables
+    PngColor8 sig_bit;                  // 0x174 png_handle_sBIT 0x5ab8b0
+    PngColor8 shift;                    // 0x179
+    std::uint8_t pad17e[2];             // 0x17e
+    std::uint8_t* trans;                // 0x180 png_handle_tRNS 0x5ace60
+    PngColor16 trans_values;            // 0x184
+    std::uint8_t unk18e[0x1ec - 0x18e]; // 0x18e
+    std::uint16_t* hist;                // 0x1ec png_handle_hIST 0x5ad860
+    std::uint8_t unk1f0[0x20c - 0x1f0]; // 0x1f0
 };
 static_assert(offsetof(PngStruct, error_fn) == 0x40);
 static_assert(offsetof(PngStruct, io_ptr) == 0x5c);
@@ -133,7 +143,12 @@ static_assert(offsetof(PngStruct, crc) == 0x108);
 static_assert(offsetof(PngStruct, num_trans) == 0x112);
 static_assert(offsetof(PngStruct, chunk_name) == 0x114);
 static_assert(offsetof(PngStruct, filler) == 0x126);
+static_assert(offsetof(PngStruct, background) == 0x130);
 static_assert(offsetof(PngStruct, output_flush_fn) == 0x144);
+static_assert(offsetof(PngStruct, sig_bit) == 0x174);
+static_assert(offsetof(PngStruct, trans) == 0x180);
+static_assert(offsetof(PngStruct, trans_values) == 0x184);
+static_assert(offsetof(PngStruct, hist) == 0x1ec);
 static_assert(sizeof(PngStruct) == 0x20c);
 
 // png_info (png.h 1.0.2), 0xb8 bytes (png_create_info_struct 0x5a4f30).
@@ -217,6 +232,8 @@ inline constexpr std::uint32_t kPngFlagCrcAncillaryUse = 0x0100;
 inline constexpr std::uint32_t kPngFlagCrcAncillaryNoWarn = 0x0200;
 inline constexpr std::uint32_t kPngFlagCrcCriticalUse = 0x0400;
 inline constexpr std::uint32_t kPngFlagCrcCriticalIgnore = 0x0800;
+inline constexpr std::uint32_t kPngFlagFreeTrans = 0x2000;
+inline constexpr std::uint32_t kPngFlagFreeHist = 0x4000;
 inline constexpr std::uint32_t kPngFlagCrcAncillaryMask = kPngFlagCrcAncillaryUse | kPngFlagCrcAncillaryNoWarn;
 
 // png_info.valid bits.

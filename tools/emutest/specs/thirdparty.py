@@ -1154,3 +1154,137 @@ SPECS += [
              lambda rng, pool: rng.getrandbits(32) & ~0x10000 | rng.choice((0, 0x10000))],
             presets=pr_interlace_presets, eax_mask=0, max_cases=1000),
 ]
+
+
+# -- png_rutil_chunks.cpp --------------------------------------------------------
+#
+# A chunk handler reads its data through the read callback: here its effect
+# copies the next bytes of a stream in the world (PH_STREAM, cursor at
+# PH_CURSOR): the chunk's data (made for the handler, sometimes of the wrong
+# length or with bad values), its CRC (right 70 % of the time: png->crc is
+# preset to the CRC of the chunk name, as png_read_info leaves it) and
+# random bytes. Palettes and buffers in scratch; png_malloc's malloc probed.
+
+import zlib as _ph_zlib
+
+PH_STREAM = SCRATCH + 0x30000
+PH_CURSOR = SCRATCH + 0x2FFF0
+
+
+def ph_read(machine, ecx, args, h):
+    data, length = args[1], args[2]
+    cursor = int.from_bytes(machine.guest_read(WORLD_BASE + PH_CURSOR, 4), "little")
+    length = min(length, 0x4000)
+    if length:
+        machine.guest_write(data, machine.guest_read(WORLD_BASE + PH_STREAM + cursor, length))
+    machine.guest_write(WORLD_BASE + PH_CURSOR, (cursor + length).to_bytes(4, "little"))
+    return None
+
+
+PH_CALLEES = dict(TP_CALLEES)
+PH_CALLEES[TP_READ_CB] = (3, "cdecl", "probe", ph_read, lambda m, ecx, a: (a[0], a[2]))
+
+
+def ph_colour(rng):
+    """(colour type, bit depth, channels): consistent mostly."""
+    ct = rng.choice((0, 2, 3, 4, 6, 0, 2, 3, rng.randrange(8)))
+    depth = rng.choice({0: (1, 2, 4, 8, 16), 2: (8, 16), 3: (1, 2, 4, 8), 4: (8, 16), 6: (8, 16)}.get(ct, (8,)))
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(ct, rng.randint(1, 4))
+    return ct, depth, channels
+
+
+def ph_case(rng, name, data_fn):
+    """One handler call: {"png", "info", "length", "presets"}."""
+    presets = tp_png_struct(rng)
+    ct, depth, channels = ph_colour(rng)
+    mode = rng.choice((0, 1, 3, 5, 7, 1, 3, 1, rng.getrandbits(5)))
+    num_palette = rng.choice((0, 1, 16, 256, rng.randrange(300)))
+    data = data_fn(rng, ct, depth, channels, num_palette)
+    length = len(data) if rng.random() < 0.8 else rng.choice((0, 1, len(data) + 1, max(len(data) - 1, 0),
+                                                              rng.randrange(40)))
+    body = (data + bytes(max(0, length - len(data))))[:length]
+    stream = body
+    if rng.random() < 0.5:
+        stream += _ph_zlib.crc32(name + body).to_bytes(4, "big")
+    stream += bytes(rng.getrandbits(8) for _ in range(16))
+    presets += [(TP_PNG + 0x60, mode, 4), (TP_PNG + 0x11e, ct, 1), (TP_PNG + 0x11f, depth, 1),
+                (TP_PNG + 0x122, channels, 1), (TP_PNG + 0x110, num_palette, 2),
+                (TP_PNG + 0x10c, WORLD_BASE + TP_TABLES, 4),
+                (TP_PNG + 0x108, _ph_zlib.crc32(name), 4),
+                (TP_INFO + 0x08, rng.getrandbits(32) if rng.random() < 0.3 else 0, 4),
+                (PH_CURSOR, 0, 4), (PH_STREAM, int.from_bytes(stream, "little"), len(stream))]
+    if rng.random() < 0.8:  # the real name, or with the ancillary bit flipped
+        presets.append((TP_PNG + 0x114, int.from_bytes(name, "little") ^ (0x20 if rng.random() < 0.4 else 0), 4))
+    info = 0 if rng.random() < 0.05 else TP_INFO_PTR
+    return {"png": TP_PNG_PTR, "info": info, "length": length, "presets": presets}
+
+
+def ph_spec(name, address, chunk, data_fn, **kwargs):
+    kwargs.setdefault("max_cases", 6000)
+    kwargs.setdefault("case_scale", 3)
+    return Spec(name, address, "stdcall", zi_args(lambda rng: ph_case(rng, chunk, data_fn), "png", "info", "length"),
+                presets=zi_presets, callees=PH_CALLEES, eax_mask=0, **kwargs)
+
+
+def ph_bytes(rng, n):
+    return bytes(rng.getrandbits(8) for _ in range(n))
+
+
+def ph_ihdr(rng, ct, depth, channels, num_palette):
+    """A valid header, now and then with one field wrong."""
+    ct = rng.choice((0, 2, 3, 4, 6))
+    depth = rng.choice({0: (1, 2, 4, 8, 16), 2: (8, 16), 3: (1, 2, 4, 8, 16), 4: (8, 16), 6: (8, 16)}[ct])
+    fields = [rng.choice((1, 16, 300, rng.randint(1, 0x7FFFFFFF))), rng.choice((1, 16, 300, rng.randint(1, 0x7FFFFFFF))),
+              depth, ct, 0, 0, rng.choice((0, 1))]
+    if rng.random() < 0.4:
+        k = rng.choice((0, 1, 2, 2, 2, 3, 3, 4, 5, 6))
+        fields[k] = rng.choice(((0, 0x80000000, 0xFFFFFFFF, 0x7FFFFFFF), (0, 0x80000000, 0x7FFFFFFF),
+                                (0, 3, 5, 32, 7, 1, 2, 4), (1, 5, 7, 8, 255, 2, 4, 6),
+                                (1, 255), (1, 2), (2, 3, 255))[k])
+    return (fields[0].to_bytes(4, "big") + fields[1].to_bytes(4, "big") + bytes(fields[2:]))
+
+
+def ph_sbit(rng, ct, depth, channels, num_palette):
+    return ph_bytes(rng, 3 if ct == 3 else channels)
+
+
+def ph_trns(rng, ct, depth, channels, num_palette):
+    if ct == 3:
+        return ph_bytes(rng, rng.choice((0, 1, num_palette, min(num_palette, 256), rng.randrange(300))))
+    return ph_bytes(rng, 6 if ct == 2 else 2)
+
+
+def ph_bkgd(rng, ct, depth, channels, num_palette):
+    return ph_bytes(rng, 1 if ct == 3 else 6 if ct & 2 else 2)
+
+
+def ph_hist(rng, ct, depth, channels, num_palette):
+    return ph_bytes(rng, 2 * num_palette)
+
+
+def ph_nine(rng, ct, depth, channels, num_palette):
+    return ph_bytes(rng, 9)
+
+
+def ph_time(rng, ct, depth, channels, num_palette):
+    return ph_bytes(rng, 7)
+
+
+def ph_iend(rng, ct, depth, channels, num_palette):
+    return b"" if rng.random() < 0.8 else ph_bytes(rng, rng.randint(1, 30))
+
+
+SPECS += [
+    ph_spec("png_handle_IHDR", 0x005aab20, b"IHDR", ph_ihdr),
+    ph_spec("png_handle_IEND", 0x005ab300, b"IEND", ph_iend),
+    ph_spec("png_handle_sBIT", 0x005ab8b0, b"sBIT", ph_sbit),
+    ph_spec("png_handle_tRNS", 0x005ace60, b"tRNS", ph_trns),
+    ph_spec("png_handle_bKGD", 0x005ad3b0, b"bKGD", ph_bkgd),
+    ph_spec("png_handle_hIST", 0x005ad860, b"hIST", ph_hist),
+    ph_spec("png_handle_pHYs", 0x005adcb0, b"pHYs", ph_nine),
+    ph_spec("png_handle_oFFs", 0x005ae070, b"oFFs", ph_nine),
+    # info+0x43: the padding byte of tIME's png_time, stack garbage in the
+    # original (see png_rutil_chunks.cpp); its neighbours (second at +0x42,
+    # the year at +0x3c) are compared.
+    ph_spec("png_handle_tIME", 0x005ae970, b"tIME", ph_time, ignore_bytes=(TP_INFO + 0x43,)),
+]
