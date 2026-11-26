@@ -251,10 +251,12 @@ add_library(s3re SHARED
     game/ui/game_teams.cpp
     game/ui/screen_element.cpp
     game/ui/ui_button_scroll.cpp
+    game/ui/ui_control_destructors.cpp
     game/ui/ui_control_members.cpp
     game/ui/ui_gdi_members.cpp
     game/ui/ui_group_members.cpp
     game/ui/ui_static_text.cpp
+    game/ui/ui_text_getters.cpp
     game/ui/ui_updown.cpp
 
     # game/graphics/: graphics data, landscape colours, DirectDraw surface

@@ -1939,3 +1939,80 @@ SPECS += [
     Spec("CDialog_SetParent", 0x00427d20, "fastcall", [one_of(GM_OBJ + 0xc0), anything, anything],
          presets=gm_dialog, virtuals={0xc: 1}, callees={0x004157d0: (1, "thiscall", "probe", gm_move_element)}),
 ]
+
+
+# -- wip/menus-r5: ui_control_destructors.cpp ---------------------------------
+# `this` at world 0x800; the destructors they call probed (their own
+# specs); the strings they release from common.string_fields (buffers in
+# scratch). Dead in each: the base pointer's null check (an object at
+# address 0xb8) and, in the inlined ~string, the _Eos after erase(0, npos)
+# where it is a call (_Grow(0) is false).
+CD_THIS = 0x800
+CD_CALLEES = {address: (0, "thiscall", "probe") for address in
+              (0x00416da0, 0x004180a0, 0x0041a900, 0x004156b0, 0x0060b560, 0x0060b5a0)}
+
+
+def cd_strings(*offsets):
+    def presets(rng, pool, args):
+        out = []
+        for k, offset in enumerate(offsets):
+            fields, _ = string_fields(rng, CD_THIS + offset, SCRATCH + k * SCRATCH_SLOT_BYTES)
+            out += fields
+        return out
+    return presets
+
+
+def cd_screen_list(rng, pool, args):
+    return [(CD_THIS - 0x1c + 8, rng.choice([0, rng.getrandbits(32)]), 4)]
+
+
+CD_OBJ = one_of(WORLD_BASE + CD_THIS)
+
+SPECS += [
+    Spec("CGroupControl_Destroy", 0x0041e210, "fastcall", [CD_OBJ, anything], callees=CD_CALLEES),
+    Spec("CDialog_Destroy", 0x0042a0a0, "fastcall", [CD_OBJ, anything], callees=CD_CALLEES),
+    Spec("CScreen_Destroy", 0x0042a750, "fastcall", [CD_OBJ, anything], presets=cd_screen_list, callees=CD_CALLEES),
+    Spec("CVScrollBar_Destroy", 0x0041f010, "fastcall", [CD_OBJ, anything], callees=CD_CALLEES,
+         exempt_blocks=(0x0041f0b4,)),
+    Spec("CProgressBar_Destroy", 0x00429c70, "fastcall", [CD_OBJ, anything], presets=cd_strings(-0x58 + 0x28),
+         callees=CD_CALLEES, exempt_blocks=(0x00429ced, 0x00429d2a)),
+    Spec("CUpDown_Destroy", 0x0042b100, "fastcall", [CD_OBJ, anything], presets=cd_strings(-0x16c + 0x28),
+         callees=CD_CALLEES, exempt_blocks=(0x0042b1ac, 0x0042b1e5)),
+    Spec("CTextView_Destroy", 0x0042a380, "fastcall", [CD_OBJ, anything], presets=cd_strings(-0x24),
+         callees=CD_CALLEES, exempt_blocks=(0x0042a3f6, 0x0042a491, 0x0042a4d4)),
+]
+
+
+# -- wip/menus-r5: ui_text_getters.cpp -----------------------------------------
+# The object at world offset 0, its member from string_fields /
+# wstring_fields (buffer in scratch slot 0); the result object in scratch
+# slot 1 at one of a few addresses (GetText's allocator byte is its low
+# byte), its bytes lazily random.
+def tg_text_view(rng, pool, args):
+    fields, _ = string_fields(rng, 0x410, SCRATCH)
+    return fields
+
+
+def tg_edit(rng, pool, args):
+    fields, _ = wstring_fields(rng, 0x4c, SCRATCH)
+    return fields
+
+
+def tg_result(rng, pool):
+    return WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES + rng.choice([0, 4, 0x31, 0x80])
+
+
+SPECS += [
+    # Dead: 0x42078f caps the length at 0xFFFFFFFF; 0x420796..0x4207ea is
+    # the self-assignment branch (the result is a new object).
+    Spec("CTextView_GetText", 0x00420760, "fastcall", [one_of(WORLD_BASE), anything, tg_result],
+         presets=tg_text_view, globals=null_string_count,
+         exempt_blocks=(0x0042078f, 0x00420796, 0x004207a0, 0x004207a5, 0x004207b5, 0x004207b7, 0x004207bb,
+                        0x004207e2, 0x004207ea)),
+    # Dead: 0x418bef caps the length at npos (0xFFFFFFFF); 0x418bf5..0x418c44,
+    # the self-assignment branch.
+    Spec("CEditControl_GetTextW", 0x00418bc0, "fastcall", [one_of(WORLD_BASE), anything, tg_result],
+         presets=tg_edit, globals=wstring_null_count,
+         exempt_blocks=(0x00418bef, 0x00418bf5, 0x00418bfb, 0x00418c00, 0x00418c10, 0x00418c12, 0x00418c16, 0x00418c3c,
+                        0x00418c44)),
+]
