@@ -695,3 +695,35 @@ SPECS += [Spec(f"SkipInsert_{a:x}", a, "thiscall", [anything], callees={0x0060bb
 # follows 0x53ea60 inside Ghidra's function.
 SPECS += [Spec("IsvListConstructor_53ea60", 0x0053ea60, "thiscall", [], cover_until=0x0053ea74)]
 SPECS += [Spec(f"SListConstructor_{a:x}", a, "thiscall", [anything, anything]) for a in (0x4639e0, 0x5b7d40, 0x5b7e00)]
+
+
+# -- copy constructors (bare_vectors.cpp, string_vector.cpp; wip/watcom-r6) --
+# The source is the vector at world 0 (plain_vector_state; its block in
+# scratch slot 0), the copy in scratch slot 9.
+SPECS += [Spec(f"VectorCopy_{a:x}", a, "fastcall",
+               [one_of(WORLD_BASE + SCRATCH + 9 * SCRATCH_SLOT_BYTES), anything, one_of(WORLD_BASE)],
+               presets=plain_vector_state, new_fails=0.1)
+          for a in (0x5f3cc0, 0x5f3e40)]
+# 0x4582b0 (key, vector): the key word in scratch slot 10, the vector as
+# StringVector_CopyConstruct's source; the pair in scratch slot 9.
+SPECS += [Spec("KeyedStringVector_Construct", 0x004582b0, "fastcall",
+               [one_of(WORLD_BASE + SCRATCH + 9 * SCRATCH_SLOT_BYTES), anything,
+                one_of(WORLD_BASE + SCRATCH + 10 * SCRATCH_SLOT_BYTES), one_of(WORLD_BASE)],
+               presets=string_vector_state, new_fails=0.1)]
+
+
+# -- wip/watcom-r6 batch 5: more vector constructors / destructors ---------
+SPECS += [Spec("VectorDestructor_5bdbd0", 0x005bdbd0, "thiscall", [], presets=watcom_vector_to_destroy)]
+SPECS += [Spec(f"VectorConstructor_{a:x}", a, "thiscall", [watcom_capacity, anything], new_fails=0.2)
+          for a in (0x5dde80, 0x609ff0, 0x609e50, 0x60a070, 0x5ddf90, 0x5ddf10)]
+SPECS += [Spec(f"BareVectorConstructor_{a:x}", a, "thiscall", [watcom_capacity], new_fails=0.2)
+          for a in (0x5de330, 0x5df8d0, 0x5de570)]
+SPECS += [Spec(f"ElementVectorDestructor_{a:x}", a, "thiscall", [], presets=element_vector_to_destroy(size),
+               virtuals={0x00: 1})
+          for a, size in ((0x609c40, 0x0c), (0x609d10, 0x24))]
+# The pairs' destructors of a value at +4 (ECX = world - 4): 0x459550 as
+# 0x4583d0 (dead: the _Eos after erase), 0x473290 a pointer vector.
+SPECS += [Spec("StringVectorDestructor_459550", 0x00459550, "fastcall", [one_of(WORLD_BASE - 4), anything],
+               presets=string_vector_state, exempt_blocks=(0x004595f6,)),
+          Spec("VectorDestructor_473290", 0x00473290, "fastcall", [one_of(WORLD_BASE - 4), anything],
+               presets=watcom_vector_to_destroy)]

@@ -33,6 +33,8 @@
 //   0x004627b0  0x40  DirectX::CConnectionShortcut   WCValOrderedVector<DirectX::CConnectionShortcut>
 //   0x00468420  0x40  DirectX::CConnectionShortcut   WCBareVectorBase<DirectX::CConnectionShortcut>
 //   0x00472b10  0x40  DirectX::CConnectionShortcut   WCBareVectorBase<DirectX::CConnectionShortcut>
+//   0x00609c40  0x0c  Lobby::priv::CPlayerIndex      WCValOrderedVector<Lobby::priv::CPlayerIndex>
+//   0x00609d10  0x24  Lobby::CLMMessageBlock         WCValOrderedVector<Lobby::CLMMessageBlock>
 // Elements destroyed by a direct call of their destructor:
 //   0x00427fe0  0x20  CListView::CColumn (~CColumn 0x4275e0)  WCValOrderedVector<CListView::CColumn>
 //   0x004290f0  0x20  CListView::CColumn                      WCBareVectorBase<CListView::CColumn>
@@ -106,6 +108,8 @@ constexpr std::uint32_t kChatMessageSize = 0x20;
 constexpr std::uint32_t kGenericMessageSize = 0x14;
 constexpr std::uint32_t kPrivateChatSize = 0x17c;
 constexpr std::uint32_t kConnectionShortcutSize = 0x40;
+constexpr std::uint32_t kPlayerIndexSize = 0x0c;
+constexpr std::uint32_t kMessageBlockSize = 0x24;
 
 constexpr std::uint32_t kRunningSessionSize = 0x60;
 constexpr std::uint32_t kImageDescriptionSize = 0x18;
@@ -192,6 +196,12 @@ std::uint32_t __fastcall ElementVectorDestructor_468420(VectorBase* self, void*)
 }
 std::uint32_t __fastcall ElementVectorDestructor_472b10(VectorBase* self, void*) {
     return DestroyVirtualElementVector(self, vt::kWCBareVectorBase_CConnectionShortcut, kConnectionShortcutSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_609c40(VectorBase* self, void*) {
+    return DestroyVirtualElementVector(self, vt::kWCBareVectorBase_LobbyPlayerIndex, kPlayerIndexSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_609d10(VectorBase* self, void*) {
+    return DestroyVirtualElementVector(self, vt::kWCBareVectorBase_CLMMessageBlock, kMessageBlockSize);
 }
 
 // Purpose: Destructors of the list views' vectors of columns and lines.
@@ -298,6 +308,10 @@ S3RE_HOOK(0x00468420, ElementVectorDestructor_468420, ElementVectorDestructorFn,
           Original_ElementVectorDestructor_468420, ElementVectorDestructor_468420);
 S3RE_HOOK(0x00472b10, ElementVectorDestructor_472b10, ElementVectorDestructorFn,
           Original_ElementVectorDestructor_472b10, ElementVectorDestructor_472b10);
+S3RE_HOOK(0x00609c40, ElementVectorDestructor_609c40, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_609c40, ElementVectorDestructor_609c40);
+S3RE_HOOK(0x00609d10, ElementVectorDestructor_609d10, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_609d10, ElementVectorDestructor_609d10);
 S3RE_HOOK(0x00427fe0, ElementVectorDestructor_427fe0, ElementVectorDestructorFn,
           Original_ElementVectorDestructor_427fe0, ElementVectorDestructor_427fe0);
 S3RE_HOOK(0x004290f0, ElementVectorDestructor_4290f0, ElementVectorDestructorFn,
@@ -375,6 +389,8 @@ const ElementPair kElementPairs[] = {
     {Original_ElementVectorDestructor_4627b0, &ElementVectorDestructor_4627b0, 0x4627b0, kConnectionShortcutSize},
     {Original_ElementVectorDestructor_468420, &ElementVectorDestructor_468420, 0x468420, kConnectionShortcutSize},
     {Original_ElementVectorDestructor_472b10, &ElementVectorDestructor_472b10, 0x472b10, kConnectionShortcutSize},
+    {Original_ElementVectorDestructor_609c40, &ElementVectorDestructor_609c40, 0x609c40, kPlayerIndexSize},
+    {Original_ElementVectorDestructor_609d10, &ElementVectorDestructor_609d10, 0x609d10, kMessageBlockSize},
     {Original_ElementVectorDestructor_427fe0, &ElementVectorDestructor_427fe0, 0x427fe0, kColumnSize},
     {Original_ElementVectorDestructor_4290f0, &ElementVectorDestructor_4290f0, 0x4290f0, kColumnSize},
     {Original_ElementVectorDestructor_428070, &ElementVectorDestructor_428070, 0x428070, kLineSize},
