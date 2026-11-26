@@ -66,7 +66,18 @@ Moved out of `CLAUDE.md` on 2026-11-24.
   with kind `funclet`, which are never counted. Regenerate it with
   `tools/import_ghidra_functions.py` from an REA evidence bundle
   (instructions in the script). Together with `re/extra_functions.tsv`, that
-  makes 9,837 known functions.
+  makes 17,181 known functions (9,837 before stubs-r5).
+- **Static-initializer stubs** (stubs-r5, 2026-11-26): `python
+  tools/static_inits.py scan|list CLASS|missed|apply-starts|gen` reads the
+  CRT initializer table `__xc_a..__xc_z` (0x692000..0x695970, run by
+  `_initterm` 0x61f075), follows each entry to its initializer, atexit
+  registration and destructor stub, and classifies every stub by byte
+  pattern (classes in the script's docstring). Ghidra had missed 7,344 of
+  these starts (the table entries, the destructor stubs and the bodies of
+  the float initializers): they are `manual` rows in
+  `re/extra_functions.tsv`, so the old StaticDtorReg_ rows no longer
+  swallow the stubs after them. Adding them changed the harness
+  fingerprint (every recorded emulator pass had to be rerun).
 - `re/functions.csv` holds one row per function we have identified. The
   columns are documented in `tools/inventory.py`. Names use `Class::Method`.
   The `source_file` column is generated (never edited by hand) by `python
