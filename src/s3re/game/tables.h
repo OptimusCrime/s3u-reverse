@@ -282,5 +282,10 @@ inline constexpr GameGlobal<const std::uint8_t[3][0x18]> g_primaryFormats{0x7a2f
 inline constexpr GameGlobal<const std::uint8_t[16]> g_clsidDirectDraw{0x65a908};       // CLSID_DirectDraw
 inline constexpr GameGlobal<const std::uint8_t[16]> g_iidDirectDraw2{0x65a938};        // IID_IDirectDraw2
 inline constexpr GameGlobal<const std::uint8_t[16]> g_iidDirectDrawSurface3{0x65a978};  // IID_IDirectDrawSurface3
+// ---- wip/settings-load (session 58)
+// A 16-bit text GamePlayerSetup::SetType 0x49f360 and AttachNetPlayer
+// 0x49f190 reset the setup's 16-bit string +0x28 to (zero in the image;
+// written elsewhere: 0x419065, 0x48d7a0 and the lobby).
+inline constexpr GameGlobal<const std::uint16_t[1]> g_setupWideText{0x7a8248};
 
 }  // namespace s3re::game

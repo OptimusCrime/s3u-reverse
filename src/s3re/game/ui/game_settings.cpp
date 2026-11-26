@@ -180,7 +180,7 @@ std::uint32_t __fastcall WrongStartGoods(const GameSettings* self, void*) {
 // Wrong: reads the dword after the field.
 std::uint32_t __fastcall WrongColour(const GamePlayerSetup* self, void*) {
     std::uint32_t value;
-    std::memcpy(&value, self->unk0b8, sizeof(value));
+    value = self->clan;
     return value;
 }
 

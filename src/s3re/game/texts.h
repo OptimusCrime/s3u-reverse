@@ -550,4 +550,13 @@ inline constexpr GameText kVerifyRes{0x7a423c};            // "res"
 inline constexpr GameText kVerifyDestroyWindow{0x7a4580};  // "DestroyWindow (hWnd)"
 inline constexpr GameText kVerifySuccess{0x7a4540};        // "Success"
 inline constexpr GameText kWaitForTimeout{0x7a4034};       // "Win32::CWin32Waitable::WaitFor"
+// ---- wip/settings-load (session 58): GameSettings::LoadSaveGame and SetupLocalPlayer
+inline constexpr GameText kLpMapFile{0x699514};          // "lpMapFile" (LoadSaveGame's out-of-memory check)
+inline constexpr GameText kGameParamsFile{0x699498};     // "E:\Siedler3\Dirk\GameParams.cpp"
+inline constexpr GameText kCfgCounter{0x6995ac};         // "CFG: Counter %i" (LoadSaveGame, chunk 0x1a's tick)
+inline constexpr GameText kNetMapping{0x699594};         // "NET: Mapping %i to %i" (LoadSaveGame)
+inline constexpr GameText kSearchingForNetId{0x6995ec};  // "CFG: Searching for NetId %i" (SetupLocalPlayer)
+inline constexpr GameText kReadingName{0x69f95c};        // "NET: Reading name %i %s" (AttachNetPlayer)
+inline constexpr GameText kOpenParenthesis{0x69a8b0};    // "(" (CGameData::InitPlayerInfo, a type-3 player's name)
+inline constexpr GameText kCloseParenthesis{0x69ed3c};   // ")"
 }  // namespace s3re::game::texts

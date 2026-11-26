@@ -1,0 +1,47 @@
+# Function starts in re/ghidra_functions.tsv / re/extra_functions.tsv that are not
+# functions (code inside another function: catch continuations, epilogues, jump
+# tables, obfuscated junk). tools/frontier.py never lists them; their inventory rows
+# stay as notes. Kept apart from the start lists, which the emulator's coverage
+# analysis and fingerprints use (session 58).
+# address	inside	evidence
+0x0053b839	CLogicThread::ExecuteCommands 0x535990	the epilogue after the catch of Win32::CTimeout* at 0x53b823, then the jump tables 0x53b850/0x53b874 (re/functions.csv row)
+0x005b2fb3	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b3007	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b3032	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b3070	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b30e9	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b3111	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b317b	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b31cf	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b31fa	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b3238	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b32b1	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b32d9	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b333b	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b3552	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b37ba	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b39c4	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b3bde	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b3df7	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b4017	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b422c	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b442b	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b4634	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b4848	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b4a7c	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b4c85	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b4e99	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005b50ad	ProtectCD_RunEmbeddedCheck 0x5b2f70	inside the obfuscated copy-protection check (docs/todo/file-formats.md)
+0x005fe948	CSoundData::Open 0x5fe760	catch continuation point
+0x005fe9d8	CSoundData::Open 0x5fe760	catch continuation point
+0x005feb05	CSoundData::Open 0x5fe760	catch continuation point
+0x005f6c3d	CGraphicsData::FindDirectoryContainingFile	code after a catch inside the verified function
+0x005f65f2	GfxDword::DrawGuiImage	code inside the verified function
+0x005f674b	GfxDword::DrawGuiImage	code inside the verified function
+0x005fd902	SequenceFrame::SequenceFrame	code inside the verified function
+0x00551637	DeactivateNote	code inside the function
+0x005c45e3	0x5c4520	after a catch of 0x5c4520 (re/directx_framework.md)
+0x00615601	Win32::CCDAudio::Init 0x615520	after a catch (re/win32_framework.md)
+0x00419b5f	CEditControl::OnLButtonDown	re/ui_classes.md
+0x00427cab	(UI range)	re/ui_classes.md
+0x0049859c	Menus::priv::CDrawer::InitSurfaces	re/ui_classes.md

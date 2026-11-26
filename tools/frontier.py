@@ -53,7 +53,7 @@ import sys
 from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from asm_tools import ROOT, containing, load_inventory, load_starts, read_asm  # noqa: E402
+from asm_tools import ROOT, containing, load_false_starts, load_inventory, load_starts, read_asm  # noqa: E402
 from trivial import find_trivial  # noqa: E402
 
 CRT_START = 0x61e4ef
@@ -126,6 +126,7 @@ def main():
     asm = read_asm(args.asm)
     starts = load_starts()
     inventory = load_inventory()
+    false_starts = load_false_starts()  # code inside other functions: never listed, done as callees
     trivial = {} if args.no_trivial else find_trivial(starts)
     # Graph over all game code, so caller counts are complete.
     graph = build_graph(asm, starts, GAME_LOW, GAME_HIGH)
@@ -150,7 +151,7 @@ def main():
     def done(address, depth=0):
         row = inventory.get(address, {})
         done_statuses = ("verified",) if args.verified_only else ("verified", "reimplemented")
-        if (row.get("status") in done_statuses or address >= CRT_START
+        if (row.get("status") in done_statuses or address >= CRT_START or address in false_starts
                 or address == DEBUG_LOG or row.get("category") == "crt"
                 or (args.library_done and is_library(address))):
             return True

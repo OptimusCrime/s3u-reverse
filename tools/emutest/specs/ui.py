@@ -1105,3 +1105,324 @@ SPECS += [
     Spec("WCIsvSListBase_ListDelete", 0x00428300, "stdcall", [one_of(0, WORLD_BASE + MEMBER_B, WORLD_BASE + MEMBER_B)],
          eax_mask=0),
 ]
+
+
+# -- GameSettings::LoadSaveGame, SetupLocalPlayer and helpers (game_settings_load.cpp,
+#    game_settings_local_player.cpp, the index checks in game_settings_vectors.cpp; session 58) --
+# The settings object is the world (ECX = WORLD_BASE): teams at +0x3c,
+# player setups at +0x58 (data block GS_SETUPS), net ids at +0x90; every
+# vector's vtable is emu.FAKE_VTABLE (slot 1, offset 4: base_init_upto, the
+# notification of an index check; slot 3, offset 0xc: the sorted find).
+# Element copies, assignments and destructors are probed (verified on their
+# own); a copy's source on the stack (a local of the function) is recorded
+# as "stack".
+GSL_TEAMS = 0x3c
+GSL_PLAYERS = 0x58
+GSL_NET_IDS = 0x90
+GSL_TEAM_BLOCK = 0x28000
+GSL_NET_BLOCK = 0x2c000
+
+
+def gsl_stack_source(machine, ecx, args):
+    return (_gs_stack(args[0]),)
+
+
+GSL_ELEMENT_CALLEES = {
+    0x0049eaf0: (1, "thiscall", "this", None, gsl_stack_source),  # GamePlayerSetup copy constructor
+    0x0049edf0: (1, "thiscall", "this", None, gsl_stack_source),  # GamePlayerSetup::operator=
+    0x0049ec80: (0, "thiscall", "probe"),                         # ~GamePlayerSetup
+    0x00437fc0: (1, "thiscall", "probe"),                         # GamePlayerSetup scalar deleting destructor
+    0x004a03a0: (1, "thiscall", "this", None, gsl_stack_source),  # CTeam copy constructor
+    0x004a05c0: (1, "thiscall", "this", None, gsl_stack_source),  # CTeam::operator=
+    0x00414b90: (1, "thiscall", "probe"),                         # CTeam scalar deleting destructor
+    0x004a04d0: (0, "thiscall", "probe"),                         # ~CTeam
+}
+
+
+def gsl_vector(at: int, block: int, empty_chance: float = 0.3):
+    """A vector at world `at` with FAKE_VTABLE; mostly small, sometimes empty
+    (the growth of the index checks)."""
+    def preset(rng, pool, args):
+        if rng.random() < empty_chance:
+            capacity = rng.choice([0, 0, 1, 2])
+            data = WORLD_BASE + block if capacity else rng.choice([0, WORLD_BASE + block])
+            return [(at, FAKE_VTABLE, 4), (at + 8, data, 4), (at + 0xc, capacity, 4),
+                    (at + 0x10, rng.choice([0, 0, 1, -1]) & 0xFFFFFFFF, 4), (at + 0x14, 0, 4),
+                    (at + 0x18, rng.choice([0, 1, 5]), 4)]
+        length = rng.choice([1, 1, 2, 3, 4, 6, rng.randrange(1, 9)])
+        capacity = length + rng.choice([0, 0, 1, 3])
+        return [(at, FAKE_VTABLE, 4), (at + 8, WORLD_BASE + block, 4), (at + 0xc, capacity, 4),
+                (at + 0x10, length, 4), (at + 0x14, length, 4), (at + 0x18, rng.choice([1, 5]), 4)]
+    return preset
+
+
+def gsl_setup_values(rng, count: int = 10, clan_values=(0, 0, 1, 2, 3)):
+    """Small types, parties, clans and net ids for the first setups of the
+    player block (the rest of each setup stays lazily random)."""
+    fields = []
+    for i in range(count):
+        at = GS_SETUPS + i * GS_SETUP_BYTES
+        fields += [(at + 0x5c, rng.choice([0, 0, 1, 2, 3, rng.getrandbits(32)]), 4),
+                   (at + 0x14, rng.choice([0, 1, 2, 3, rng.randrange(8)]), 4),
+                   (at + 0xb8, rng.choice(clan_values), 4),
+                   (at + 0x10, rng.choice([0xFFFFFFFF, 0, 1, 2, 3, 4, rng.randrange(10)]), 4)]
+    return fields
+
+
+def gsl_team_ids(rng, team_block: int, count: int = 6):
+    """Each team's player-id vector (+8) with FAKE_VTABLE and a few small ids."""
+    fields = []
+    for t in range(count):
+        at = team_block + t * 0x40
+        ids = rng.choice([0, 1, 2, 3])
+        block = 0x2e000 + t * 0x100
+        fields += [(at + 8, FAKE_VTABLE, 4), (at + 0x10, WORLD_BASE + block, 4), (at + 0x14, ids + 1, 4),
+                   (at + 0x18, ids, 4), (at + 0x1c, ids, 4), (at + 0x20, 5, 4)]
+        fields += [(block + 4 * k, rng.randrange(8), 4) for k in range(ids)]
+    return fields
+
+
+def gsl_settings(rng, pool, args):
+    fields = gsl_vector(GSL_TEAMS, GSL_TEAM_BLOCK)(rng, pool, args)
+    fields += gsl_vector(GSL_PLAYERS, GS_SETUPS)(rng, pool, args)
+    fields += gsl_vector(GSL_NET_IDS, GSL_NET_BLOCK)(rng, pool, args)
+    fields += [(0x28, rng.choice([0, 1]), 1), (0x2b, rng.choice([0, 1]), 1),
+               (0xac, rng.choice([0, 1, 2, 3, rng.getrandbits(32)]), 4)]
+    fields += [(GSL_NET_BLOCK + 4 * k, rng.choice([0, 1, 2, 3, 4]), 4) for k in range(10)]
+    fields += gsl_setup_values(rng) + gsl_team_ids(rng, GSL_TEAM_BLOCK)
+    return fields
+
+
+def gsl_clan(rng, pool):
+    return rng.choice([0, 1, 2, 3, 4, rng.getrandbits(32)])
+
+
+def gsl_net_player(rng, pool):
+    return rng.choice([0, 0, WORLD_BASE + SCRATCH])
+
+
+def gsl_player_setup_result(h):
+    return WORLD_BASE + GS_SETUPS + (h % 6) * GS_SETUP_BYTES
+
+
+GSL_PLAYER_SETUP_CALLEE = {0x004351e0: (1, "thiscall", gsl_player_setup_result)}  # g_gameSettings.PlayerSetup
+
+
+def gsl_team(rng, pool, args):
+    return gsl_team_ids(rng, 0, 1) + gsl_setup_values(rng, 6, (0, 0, 0, 1, 5, rng.getrandbits(32)))
+
+
+def gsl_config(rng, pool, args):
+    return [(0x158, rng.choice([0, 1, 2, 0xff]), 1)]
+
+
+SETUP_LOCAL_CALLEES = {
+    **GS_LOCK_CALLEES, **GSL_ELEMENT_CALLEES,
+    0x00433a90: (1, "thiscall", "probe"),  # FindTeamForClan
+    0x00433c80: (0, "thiscall", "probe"),  # LowestFreeNetId
+    0x004a0e10: (1, "thiscall", "probe"),  # CTeam::CheckClans
+    0x0049f360: (1, "thiscall", "probe"),  # GamePlayerSetup::SetType
+    0x0049f190: (4, "thiscall", "probe"),  # GamePlayerSetup::AttachNetPlayer
+    0x004a01c0: (0, "thiscall", "probe"),  # GamePlayerSetup::LogSlot
+}
+
+SPECS += [
+    Spec("GameConfig_RandomRaceAmazons", 0x00413bd0, "thiscall", [], presets=gsl_config, eax_mask=0xff),
+    Spec("GamePlayerSetup_Clan", 0x004a01b0, "thiscall", []),
+    # Dead blocks: the length clamp after the growth (0x437995, 0x437e65): the
+    # length is 0 on that path.
+    Spec("PlayerVector_Index", 0x00437950, "thiscall", [gv_index], presets=gsl_vector(0, GV_BLOCK, 0.4),
+         callees=GSL_ELEMENT_CALLEES, virtuals={4: 1}, new_fails=0.1, exempt_blocks=(0x437995,)),
+    Spec("TeamVector_Index", 0x00437e20, "thiscall", [gv_index], presets=gsl_vector(0, GV_BLOCK, 0.4),
+         callees=GSL_ELEMENT_CALLEES, virtuals={4: 1}, new_fails=0.1, exempt_blocks=(0x437e65,)),
+    Spec("PlayerVector_ResizeClampLength", 0x00438070, "thiscall", [gv_count], presets=gv_vector_fields(0, GV_BLOCK),
+         callees=GSL_ELEMENT_CALLEES, new_fails=0.1),
+    # The team at world 0, its players' setups from the probed
+    # g_gameSettings.PlayerSetup (one of the first setups of GS_SETUPS).
+    # Dead blocks (these and FindTeamForClan's): the inlined index checks
+    # inside loops that run only while the index is below the length; an
+    # out-of-range index needs a length of 0x80000001 or more (the signed
+    # check), and such a loop would run 2^31 times. The same check is
+    # covered by PlayerVector_Index / TeamVector_Index / PtrVector_Index.
+    Spec("CTeam_FirstClan", 0x004a0cd0, "thiscall", [], presets=gsl_team, callees=GSL_PLAYER_SETUP_CALLEE,
+         virtuals={4: 1}, new_fails=0.1, exempt_blocks=(0x4a0d05, 0x4a0d0d, 0x4a0d22, 0x4a0d2a, 0x4a0d2f, 0x4a0d3f, 0x4a0d4a, 0x4a0d50, 0x4a0d52, 0x4a0d56, 0x4a0d5e, 0x4a0d66, 0x4a0d87, 0x4a0d9a, 0x4a0d9f, 0x4a0daf, 0x4a0db3, 0x4a0db7, 0x4a0db9)),
+    Spec("CTeam_CheckClans", 0x004a0e10, "thiscall", [gsl_clan], presets=gsl_team, callees=GSL_PLAYER_SETUP_CALLEE,
+         virtuals={4: 1}, new_fails=0.1, exempt_blocks=(0x4a0e47, 0x4a0e4f, 0x4a0e64, 0x4a0e6c, 0x4a0e71, 0x4a0e81, 0x4a0e8c, 0x4a0e92, 0x4a0e94, 0x4a0e98, 0x4a0ea0, 0x4a0ea8, 0x4a0ec9, 0x4a0edc, 0x4a0ee1, 0x4a0ef1, 0x4a0ef5, 0x4a0ef9, 0x4a0efb)),
+    Spec("GameSettings_FindTeamForClan", 0x00433a90, "thiscall", [gsl_clan], presets=gsl_settings,
+         callees={**GSL_ELEMENT_CALLEES, 0x004a0cd0: (0, "thiscall", "probe")}, virtuals={4: 1}, new_fails=0.1,
+         exempt_blocks=(0x433acd, 0x433ad1, 0x433ae6, 0x433af3, 0x433af7, 0x433b0b, 0x433b0f, 0x433b13, 0x433b15, 0x433b47, 0x433b4b, 0x433b60, 0x433b6d, 0x433b71, 0x433b85, 0x433b89, 0x433b8d, 0x433b8f, 0x433bf7, 0x433bfb, 0x433c15, 0x433c21, 0x433c26, 0x433c29, 0x433c39, 0x433c3d, 0x433c41, 0x433c45, 0x433c47)),
+    # The settings' lock getters: AL (the rest of EAX is the lock's leftover).
+    Spec("GameSettings_IsHost", 0x004318a0, "thiscall", [], callees=GS_LOCK_CALLEES, eax_mask=0xff),
+    Spec("GameSettings_IsMultiplayer", 0x004318d0, "thiscall", [], callees=GS_LOCK_CALLEES, eax_mask=0xff),
+    # Dead blocks: the second loop's inlined index check (as FirstClan's).
+    Spec("GameSettings_LowestFreeNetId", 0x00433c80, "thiscall", [], presets=gsl_settings,
+         callees={**GS_LOCK_CALLEES, **GSL_ELEMENT_CALLEES}, virtuals={4: 1}, new_fails=0.05,
+         exempt_blocks=(0x433d7a, 0x433d7e, 0x433d98, 0x433da6, 0x433dac, 0x433db0, 0x433dc1, 0x433dc5, 0x433dc9,
+                        0x433dcd, 0x433dcf)),
+    # Dead blocks: the inlined index checks before AttachNetPlayer
+    # (0x434034..0x434050, 0x4340b7..0x4340d7): SetType's access through
+    # 0x437950 just before made the vector non-empty (or its growth failed,
+    # and so does this one: operator new fails for the whole case), and the
+    # slot is never negative; the LogSlot loop's inline growth
+    # 0x434129..0x434248 (the loop runs only while the index is below the
+    # length; see FirstClan).
+    Spec("GameSettings_SetupLocalPlayer", 0x00433e50, "thiscall", [gsl_net_player, gsl_clan], presets=gsl_settings,
+         callees=SETUP_LOCAL_CALLEES, virtuals={4: 1}, new_fails=0.1,
+         exempt_blocks=(0x434034, 0x434039, 0x43403c, 0x434050, 0x4340b7, 0x4340bc, 0x4340bf, 0x4340d7, 0x434129,
+                        0x434131, 0x43414a, 0x434152, 0x43415a, 0x434166, 0x43417d, 0x434193, 0x43419d, 0x4341ba,
+                        0x4341c5, 0x4341d3, 0x4341dc, 0x4341de, 0x4341fa, 0x4341fe, 0x43421f, 0x434222, 0x43422a,
+                        0x43423e, 0x434242, 0x434246, 0x434248)),
+]
+
+
+# SetType / AttachNetPlayer on the setup at world 0: the std::string +0x18
+# (buffer in scratch slot 14), the 16-bit string +0x28 (slot 15); the
+# 16-bit text at 0x7a8248 they assign is set per case (empty in the image).
+# The net player at scratch slot 0: its name, a std::string at +0xc (buffer
+# in slot 1). IsHost, the host notification 0x49fea0, the net player's data
+# read 0x49fbc0 and size 0x5c0f70 (network code) are probed, as is
+# assign_cstr_or_empty 0x413d70 (verified; its text is the static "").
+SETUP_WIDE_TEXT = 0x007a8248
+GSL_NET_PLAYER = SCRATCH
+
+
+def gsl_wide_text(rng, pool, args):
+    n = rng.choice([0, 0, 1, 2, 5, 31, 32, rng.randrange(40)])
+    chars = [rng.randint(1, 0xffff) for _ in range(n)] + [0]
+    return [(SETUP_WIDE_TEXT + 2 * k, c, 2) for k, c in enumerate(chars)] + null_string_count(rng, pool, args)
+
+
+def gsl_setup_state(rng, pool, args):
+    fields, _ = string_fields(rng, 0x18, SCRATCH + 14 * SCRATCH_SLOT_BYTES)
+    wide, _ = wstring_fields(rng, 0x28, SCRATCH + 15 * SCRATCH_SLOT_BYTES)
+    name, _ = string_fields(rng, GSL_NET_PLAYER + 0xc, SCRATCH + 1 * SCRATCH_SLOT_BYTES)
+    fields += wide + name
+    fields += [(0x5c, rng.choice([0, 1, 1, 2, 3, rng.getrandbits(32)]), 4), (0x68, rng.choice([0, 1]), 1),
+               (0x00, rng.choice([0, WORLD_BASE + GSL_NET_PLAYER, rng.getrandbits(32)]), 4)]
+    return fields
+
+
+def gsl_type(rng, pool):
+    return rng.choice([0, 1, 2, 3, 4, rng.getrandbits(32)])
+
+
+def gsl_attach_net_player(rng, pool):
+    return rng.choice([0, 0, WORLD_BASE + GSL_NET_PLAYER, WORLD_BASE + GSL_NET_PLAYER])
+
+
+SETUP_STATE_CALLEES = {
+    0x004318a0: (0, "thiscall", "probe"),  # GameSettings::IsHost (on g_gameSettings)
+    0x0049fea0: (0, "thiscall", "probe"),  # the host's notification (network)
+    0x00413d70: (1, "thiscall", "this"),   # std::string::assign_cstr_or_empty
+    0x0049fbc0: (0, "thiscall", "probe"),  # reads the net player's data (network)
+    0x005c0f70: (0, "thiscall", "probe"),  # the net player's data size
+}
+
+SPECS += [
+    # Dead block: std::_Xlen 0x49f3ac (a text of more than 0x7ffffffd characters).
+    Spec("GamePlayerSetup_SetType", 0x0049f360, "thiscall", [gsl_type], presets=gsl_setup_state,
+         globals=gsl_wide_text, callees=SETUP_STATE_CALLEES, eax_mask=0, exempt_blocks=(0x49f3ac,)),
+    # Dead blocks: the name's length clamped to npos (0x49f258: npos is
+    # 0xffffffff) and the self-assignment (0x49f262: the net player's name
+    # is not the setup's own string).
+    Spec("GamePlayerSetup_AttachNetPlayer", 0x0049f190, "thiscall",
+         [anything, anything, gsl_attach_net_player, lambda rng, pool: rng.choice([0, 1, 0x100, 0x101])],
+         presets=gsl_setup_state, globals=gsl_wide_text, callees=SETUP_STATE_CALLEES,
+         exempt_blocks=(0x49f258, 0x49f262)),
+]
+
+
+# LoadSaveGame: the CMapFile members are probed: the constructor (EAX =
+# this; its vtable set to FAKE_VTABLE, slot 0 = the deleting destructor),
+# Open, GetError (0 or negative), GetChunk (a chunk at a fixed world offset
+# per type, or none), ReleaseChunk, Close; ThrowOutOfMemory and ThrowHResult
+# end the run (the latter's string argument, a local, by its fields after
+# the allocator byte). The vector members run (element copies probed); the
+# CTeam and GamePlayerSetup constructors and destructors run;
+# GameConfig's flag, Set, AddPlayerId, LogSlot and SetupLocalPlayer (each
+# verified on its own) are probed.
+GSL_CHUNK_AT = {0x00: 0x30000, 0x14: 0x31000, 0x1a: 0x32000, 0x1b: 0x33000, 0x1e: 0x34000}
+
+
+def gsl_map_file_construct(machine, ecx, args, h):
+    machine.guest_write(ecx, struct.pack("<I", FAKE_VTABLE))
+
+
+def gsl_get_chunk(machine, ecx, args, h):
+    at = GSL_CHUNK_AT.get(args[0])
+    if at is None or h % 9 == 0:
+        return 0
+    return WORLD_BASE + at
+
+
+def gsl_get_error(h):
+    return (0, 0, 0, 0, 0xFFFFFFFF, 0x80004005)[h % 6]
+
+
+def gsl_throw_hresult_record(machine, ecx, args):
+    return (args[0], args[1], bytes(machine.guest_read(args[2] + 4, 12)))
+
+
+LOAD_SAVE_CALLEES = {
+    **GSL_ELEMENT_CALLEES,
+    # The destructors also run on LoadSaveGame's locals (ECX on the stack):
+    # recorded without ECX.
+    0x0049ec80: (0, "stdcall", "probe"),                          # ~GamePlayerSetup
+    0x004a04d0: (0, "stdcall", "probe"),                          # ~CTeam
+    0x004a5a70: (1, "thiscall", "this", gsl_map_file_construct),  # Dirk::CMapFile::CMapFile
+    0x004a5c80: (2, "thiscall", "probe"),                         # Open
+    0x004a60d0: (0, "thiscall", gsl_get_error),                   # GetError
+    0x004a60f0: (2, "thiscall", "probe", gsl_get_chunk),          # GetChunk
+    0x004a6310: (2, "thiscall", "probe"),                         # ReleaseChunk
+    0x004a5f40: (0, "thiscall", "probe"),                         # Close
+    0x00610960: (1, "thiscall", "throw"),                         # Win32::ThrowOutOfMemory
+    0x00611050: (3, "thiscall", "throw", None, gsl_throw_hresult_record),  # Win32::ThrowHResult
+    0x00413bd0: (0, "thiscall", "probe"),                         # GameConfig::RandomRaceAmazons
+    0x0049f120: (9, "thiscall", "probe"),                         # GamePlayerSetup::Set
+    0x004a06d0: (1, "thiscall", "probe"),                         # CTeam::AddPlayerId
+    0x004a01c0: (0, "thiscall", "probe"),                         # GamePlayerSetup::LogSlot
+    0x00433e50: (2, "thiscall", "probe"),                         # SetupLocalPlayer
+}
+
+
+def gsl_load_settings(rng, pool, args):
+    fields = gsl_vector(GSL_TEAMS, GSL_TEAM_BLOCK, 0.6)(rng, pool, args)
+    fields += gsl_vector(GSL_PLAYERS, GS_SETUPS, 0.6)(rng, pool, args)
+    fields += gsl_vector(GSL_NET_IDS, GSL_NET_BLOCK, 0.6)(rng, pool, args)
+    for at in (GSL_TEAMS, GSL_PLAYERS, GSL_NET_IDS):  # nothing filled: Resize(0) frees only the block
+        fields.append((at + 0x10, 0, 4))
+        fields.append((at + 0x18, 5, 4))  # the game's growth step: with 0 the team loop never ends
+    header = GSL_CHUNK_AT[0x00]
+    name = rng.choice([0, 1, 5, 20, rng.randrange(60)])
+    fields += [(header + 0x20 + k, rng.randint(1, 255), 1) for k in range(name)] + [(header + 0x20 + name, 0, 1)]
+    players = GSL_CHUNK_AT[0x14]
+    count = rng.choice([0, 1, 2, 3, 4, rng.randrange(9), rng.randrange(21), 0x80000000 | rng.getrandbits(8)])
+    fields.append((players + 8, count, 4))
+    for r in range(20):
+        at = players + 0xc + 0x18 * r
+        fields += [(at + 4, rng.randrange(8), 1), (at + 5, rng.choice([0, 1, 2, 3, rng.randrange(12)]), 1),
+                   (at + 6, rng.choice([0, 0, 1, 2, 3, rng.randrange(12)]), 1),
+                   (at + 7, rng.choice([0, 1, 2, 3, 4, rng.getrandbits(8)]), 1)]
+    fields.append((GSL_CHUNK_AT[0x1e] + 8, rng.choice([0, 0, 1, 2]), 1))
+    return fields
+
+
+SPECS += [
+    # NOT YET PASSING (session 58, out of time): the first runs timed out
+    # (vectors with growth step 0 made the team loop endless; fixed above);
+    # rerun, then set the exempt blocks below. LoadSaveGame stays
+    # S3RE_HOOK_UNVERIFIED until then (docs/todo/file-formats.md).
+    # Dead blocks: 0x432c8b..0x432cd6 (the map name from a null text: the
+    # text is inside chunk 0), the null check of the static "" at 0x432e5a
+    # (its branch target 0x432f02 is reached anyway), 0x432f3c's cleanup
+    # 0x432f53..0x432fc9 (after ThrowHResult, which never returns); the final
+    # loop's growth of an empty net-id vector 0x432da1..0x432de4 and
+    # 0x4333e3..0x433435 (the loop runs only while the index is below the
+    # length). The exact list is set after the first coverage run.
+    Spec("GameSettings_LoadSaveGame", 0x00432b00, "thiscall",
+         [lambda rng, pool: WORLD_BASE + SCRATCH, lambda rng, pool: rng.choice([0, 1, 0x100])],
+         presets=gsl_load_settings, callees=LOAD_SAVE_CALLEES,
+         # Only the map file's allocation fails (ThrowOutOfMemory): a failing
+         # team insert makes the team loop run forever in both versions.
+         virtuals={0: 1, 4: 1, 0x0c: (3, {0: 4, 2: 4})}, new_fails=0.05, new_fails_size=0x134),
+]

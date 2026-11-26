@@ -52,6 +52,8 @@ add_library(s3re SHARED
     game/world/notifications.cpp
     game/world/player_presence.cpp
     game/world/player_queries.cpp
+    game/world/player_info.cpp
+    game/world/player_info_tests.cpp
     game/world/players.cpp
     game/world/random.cpp
     game/world/statistics.cpp
@@ -230,6 +232,9 @@ add_library(s3re SHARED
     game/ui/game_settings.cpp
     game/ui/game_settings_players.cpp
     game/ui/game_settings_players_tests.cpp
+    game/ui/game_settings_load.cpp
+    game/ui/game_settings_load_tests.cpp
+    game/ui/game_settings_local_player.cpp
     game/ui/game_settings_vectors.cpp
     game/ui/game_teams.cpp
     game/ui/screen_element.cpp

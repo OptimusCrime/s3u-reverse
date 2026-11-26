@@ -195,6 +195,18 @@ def _api_value(h):
     return 0 if v == 0xFFFFFFFF else v
 
 
+def _api_co_create_guid(machine, uc, args):
+    """CoCreateGuid(guid): mostly S_OK with 16 random bytes written, about
+    one call in four an error HRESULT (bit 31 set) without writing (session
+    58, GameSettings::LoadSaveGame)."""
+    h = _api_hash(machine, 0x60110000)
+    if _api_fails(h):
+        return 0x80000000 | ((h >> 8) & 0xFFFF), ("CoCreateGuid", args[0])
+    guid = struct.pack("<QQ", _mix(h ^ 0x1111), _mix(h ^ 0x2222))
+    machine.guest_write(args[0], guid)
+    return 0, ("CoCreateGuid", args[0])
+
+
 def _api_create_file(machine, uc, args):
     """CreateFileA: INVALID_HANDLE_VALUE or a handle."""
     h = _api_hash(machine, 0xCF000000)
@@ -458,6 +470,7 @@ API_HANDLERS = {
     "GetDriveTypeA": (1, _api_get_drive_type),
     "UuidToStringA": (2, _api_uuid_to_string),
     "RpcStringFreeA": (1, _api_rpc_string_free),
+    "CoCreateGuid": (1, _api_co_create_guid),
     "CreateFileA": (7, _api_create_file),
     "GetLastError": (0, _api_get_last_error),
     "ReadFile": (5, _api_file_transfer("ReadFile", 0x4E000000)),

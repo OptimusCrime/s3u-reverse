@@ -48,6 +48,14 @@ def load_starts() -> list[int]:
     return sorted(starts)
 
 
+def load_false_starts() -> set[int]:
+    """Starts that are not functions (re/false_starts.tsv)."""
+    path = os.path.join(ROOT, "re", "false_starts.tsv")
+    if not os.path.exists(path):
+        return set()
+    return {int(line.split("	")[0], 16) for line in open(path, encoding="utf-8") if line.startswith("0x")}
+
+
 def load_inventory() -> dict[int, dict]:
     rows = {}
     with open(os.path.join(ROOT, "re", "functions.csv"), encoding="utf-8") as f:

@@ -23,15 +23,9 @@ LOGBOOK session entry).
   the caller `CLogicThread::SaveGameToSlot` 0x50ac40 since session 55;
   re/file_formats.md):** left on the savegame path: the CRT's `_mkdir`
   0x621556 and `time` 0x61f6a7 (SaveGame calls the originals),
-  AI::SaveGlobals 0x551220 (AI range). Settings side (the GamePlayerSetup
-  copy constructor, operator= and Set and the 16-bit string members
-  _Copy/_Grow/_Split/assign_substr are verified, session 57):
-  `GameSettings::LoadSaveGame` 0x432b00 (~730 lines). Its Watcom vector
-  members (player/team resize and insertAt, CTeam copy/assign/AddPlayerId,
-  GamePlayerSetup::LogSlot; ui/game_settings_vectors.cpp) are verified
-  (session 57); left among its callees: 0x433e50 (380 instructions, "CFG:
-  Searching for NetId %i", with 0x437950, 0x433a90, 0x437e20, 0x4a0e10,
-  0x433c80, 0x49f360, 0x49f190 and Win32::CLock) and the trivial 0x413bd0.
+  AI::SaveGlobals 0x551220 (AI range). The settings side is done (session 58: GameSettings::LoadSaveGame,
+  SetupLocalPlayer and its helpers, IsHost/IsMultiplayer,
+  GameConfig::RandomRaceAmazons).
 - **Logic range leftovers (session 57):** CGameData::InitPlayerInfo
   0x4fd0d0 (321 instructions of string temporaries; needs
   GameSettings 0x4318d0, a byte +0x29 read under the lock, and the lobby

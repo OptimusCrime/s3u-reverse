@@ -556,3 +556,13 @@ address,name,type,status,notes
 0x007a4848,texts::kCloseParenthesisAt,char[],identified,"String "") at "" Declared in src/s3re/game/texts.h; used by win32_throwers.cpp."
 0x007a4804,texts::kMultimediaError,char[],identified,"String ""Multimedia Error #"" Declared in src/s3re/game/texts.h; used by win32_throwers.cpp."
 0x0079ec70,texts::kSpaceAt,char[],identified,"String "" at "" Declared in src/s3re/game/texts.h; used by win32_throwers.cpp."
+0x00655378,g_importCoCreateGuid,CoCreateGuidImport,classified,S3.EXE's import slot of CoCreateGuid (ole32); GameSettings::LoadSaveGame calls through it for a savegame without chunk 0x1a. Declared in src/s3re/game/globals.h (session 58).
+0x007a8248,g_setupWideText,const uint16_t[1],classified,A 16-bit text GamePlayerSetup::SetType / AttachNetPlayer reset a setup's +0x28 string to (zero in the image). Declared in src/s3re/game/tables.h (session 58).
+0x00699514,texts::kLpMapFile,char[],identified,"String ""lpMapFile"" (LoadSaveGame). Declared in src/s3re/game/texts.h."
+0x00699498,texts::kGameParamsFile,char[],identified,"String ""E:\Siedler3\Dirk\GameParams.cpp"". Declared in src/s3re/game/texts.h."
+0x006995ac,texts::kCfgCounter,char[],identified,"String ""CFG: Counter %i"". Declared in src/s3re/game/texts.h."
+0x00699594,texts::kNetMapping,char[],identified,"String ""NET: Mapping %i to %i"". Declared in src/s3re/game/texts.h."
+0x006995ec,texts::kSearchingForNetId,char[],identified,"String ""CFG: Searching for NetId %i"". Declared in src/s3re/game/texts.h."
+0x0069f95c,texts::kReadingName,char[],identified,"String ""NET: Reading name %i %s"". Declared in src/s3re/game/texts.h."
+0x0069a8b0,texts::kOpenParenthesis,char[],identified,"String ""("" (InitPlayerInfo). Declared in src/s3re/game/texts.h."
+0x0069ed3c,texts::kCloseParenthesis,char[],identified,"String "")"" (InitPlayerInfo). Declared in src/s3re/game/texts.h."

@@ -446,6 +446,9 @@ using UuidToStringAImport = std::int32_t(__stdcall*)(const void* uuid, char** te
 using RpcStringFreeAImport = std::int32_t(__stdcall*)(char** text);
 inline constexpr GameGlobal<UuidToStringAImport> g_importUuidToStringA{0x655298};    // RPCRT4.dll
 inline constexpr GameGlobal<RpcStringFreeAImport> g_importRpcStringFreeA{0x65529c};  // RPCRT4.dll
+// ---- wip/settings-load (session 58): GameSettings::LoadSaveGame's GUID for a savegame without chunk 0x1a.
+using CoCreateGuidImport = std::int32_t(__stdcall*)(void* guid);
+inline constexpr GameGlobal<CoCreateGuidImport> g_importCoCreateGuid{0x655378};  // ole32.dll
 using MciSendCommandAImport = std::uint32_t(__stdcall*)(std::uint32_t device, std::uint32_t message,
                                                          std::uint32_t flags, void* parameters);
 using PostMessageAImport = int(__stdcall*)(void* window, std::uint32_t message, std::uint32_t wParam,
