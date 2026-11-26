@@ -1288,3 +1288,169 @@ SPECS += [
     # the year at +0x3c) are compared.
     ph_spec("png_handle_tIME", 0x005ae970, b"tIME", ph_time, ignore_bytes=(TP_INFO + 0x43,)),
 ]
+
+
+def ph_text(rng, ct, depth, channels, num_palette):
+    key = bytes(0x61 + rng.randrange(26) for _ in range(rng.randrange(12)))
+    sep = b"" if rng.random() < 0.15 else b"\0"
+    text = bytes(0 if rng.random() < 0.05 else 32 + rng.randrange(90) for _ in range(rng.randrange(60)))
+    return key + sep + text
+
+
+def ph_unknown_case(rng):
+    case = ph_case(rng, b"abCd", lambda rng, *rest: ph_bytes(rng, rng.randrange(40)))
+    name = bytes(rng.getrandbits(8) if rng.random() < 0.1 else rng.choice((0x41, 0x61)) + rng.randrange(26)
+                 for _ in range(4))
+    case["presets"].append((TP_PNG + 0x114, int.from_bytes(name, "little"), 4))
+    return case
+
+
+def ph_text_info(rng):
+    """png_set_text's info: no text array or one with room for 0..2 more."""
+    num = rng.randrange(4)
+    if rng.random() < 0.33:
+        # (no room: with room, png_set_text would write through the null pointer)
+        return [(TP_INFO + 0x30, num, 4), (TP_INFO + 0x34, rng.choice((0, -rng.randrange(8) & 0xFFFFFFFF)), 4),
+                (TP_INFO + 0x38, 0, 4)]
+    return [(TP_INFO + 0x30, num, 4), (TP_INFO + 0x34, num + rng.randrange(3), 4),
+            (TP_INFO + 0x38, WORLD_BASE + TP_TABLES + 0x800, 4)]
+
+
+def ph_text_case(rng):
+    case = ph_case(rng, b"tEXt", ph_text)
+    case["presets"] += ph_text_info(rng)
+    return case
+
+
+PH_ENTRIES = SCRATCH + 0x3C000
+PH_STRINGS = SCRATCH + 0x3D000
+
+
+def ph_set_text_case(rng):
+    presets = tp_png_struct(rng) + ph_text_info(rng)
+    count = rng.choice((0, 1, 2, 3, 1))
+    for k in range(count):
+        string = PH_STRINGS + 0x100 * k
+        text = rng.choice((0, WORLD_BASE + string, WORLD_BASE + string, WORLD_BASE + string + rng.randrange(40)))
+        presets += [(PH_ENTRIES + 16 * k, rng.choice((0xFFFFFFFF, 0, 1)), 4),
+                    (PH_ENTRIES + 16 * k + 4, WORLD_BASE + string + 0x80, 4), (PH_ENTRIES + 16 * k + 8, text, 4),
+                    (string + rng.randrange(40), 0, 1)]
+        if text and rng.random() < 0.25:
+            presets.append((text - WORLD_BASE, 0, 1))
+    return {"png": 0 if rng.random() < 0.05 else TP_PNG_PTR, "info": 0 if rng.random() < 0.05 else TP_INFO_PTR,
+            "text": WORLD_BASE + PH_ENTRIES, "count": count, "presets": presets}
+
+
+SPECS += [
+    Spec("png_handle_tEXt", 0x005aed30, "stdcall", zi_args(ph_text_case, "png", "info", "length"),
+         presets=zi_presets, callees=PH_CALLEES, eax_mask=0, max_cases=6000, case_scale=3),
+    # The exempt blocks: the critical-chunk halves of the inlined CRC check,
+    # reached only after png_chunk_error("unknown critical chunk") returned,
+    # which it never does.
+    Spec("png_handle_unknown", 0x005af300, "stdcall", zi_args(ph_unknown_case, "png", "info", "length"),
+         presets=zi_presets, callees=PH_CALLEES, eax_mask=0, max_cases=6000, case_scale=3,
+         exempt_blocks=(0x005af41a, 0x005af495)),
+    Spec("png_set_text", 0x005b19a0, "stdcall", zi_args(ph_set_text_case, "png", "info", "text", "count"),
+         presets=zi_presets, callees=PH_CALLEES, eax_mask=0, max_cases=2000),
+]
+
+
+def ph_plte(rng, ct, depth, channels, num_palette):
+    return ph_bytes(rng, 3 * rng.randrange(260) if rng.random() < 0.8 else rng.randrange(40))
+
+
+def ph_plte_case(rng):
+    case = ph_case(rng, b"PLTE", ph_plte)
+    case["presets"].append((TP_PNG + 0x112, rng.choice((0, 1, 16, 300, rng.randrange(400))), 2))
+    return case
+
+
+SPECS += [
+    Spec("png_handle_PLTE", 0x005aaea0, "stdcall", zi_args(ph_plte_case, "png", "info", "length"),
+         presets=zi_presets, callees=PH_CALLEES, eax_mask=0, max_cases=6000, case_scale=3),
+]
+
+
+# -- png_read_destroy.cpp ----------------------------------------------------------
+#
+# The png_struct at TP_PNG and two infos (TP_INFO, PD_END_INFO); everything
+# they free is null or a block in scratch (free probed: the order of the
+# frees is compared); 16-bit gamma tables of 1 << (8 - gamma_shift) rows; an
+# inflate stream without state (inflateEnd returns at once).
+
+PD_END_INFO = 0x1200
+PD_AREA = SCRATCH + 0x40000
+PD_SLOTS = SCRATCH + 0x4F000
+
+
+def pd_block(rng, k):
+    return 0 if rng.random() < 0.25 else WORLD_BASE + PD_AREA + 0x10 * (k % 0x100)
+
+
+def pd_info(rng, base, area):
+    presets = []
+    num = rng.randrange(4)
+    presets.append((base + 0x30, num, 4))
+    if rng.random() < 0.66:
+        presets.append((base + 0x38, WORLD_BASE + area, 4))  # the text array
+        presets += [(area + 16 * i + 4, pd_block(rng, rng.getrandbits(8)), 4) for i in range(num)]
+    else:
+        presets.append((base + 0x38, 0, 4))
+    nparams = rng.randrange(4)
+    presets += [(base + 0xa0, pd_block(rng, rng.getrandbits(8)), 4), (base + 0xac, pd_block(rng, rng.getrandbits(8)), 4),
+                (base + 0xb5, nparams, 1)]
+    if rng.random() < 0.66:
+        presets.append((base + 0xb0, WORLD_BASE + area + 0x100, 4))
+        presets += [(area + 0x100 + 4 * i, pd_block(rng, rng.getrandbits(8)), 4) for i in range(nparams)]
+    else:
+        presets.append((base + 0xb0, 0, 4))
+    return presets
+
+
+def pd_presets(rng, pool, args):
+    presets = [(TP_PNG + off, pd_block(rng, k), 4)
+               for k, off in enumerate((0xa4, 0xe4, 0xe0, 0x1e4, 0x1e8, 0x15c, 0x160, 0x164, 0x208, 0x1a8, 0x10c,
+                                        0x180, 0x1ec))]
+    shift = rng.randrange(9)
+    presets += [(TP_PNG + 0x64, rng.getrandbits(32), 4), (TP_PNG + 0x150, shift, 4), (TP_PNG + 0x6c + 0x1c, 0, 4)]
+    for k in range(3):
+        if rng.random() < 0.33:
+            presets.append((TP_PNG + 0x168 + 4 * k, 0, 4))
+            continue
+        table = SCRATCH + 0x44000 + 0x400 * k
+        presets.append((TP_PNG + 0x168 + 4 * k, WORLD_BASE + table, 4))
+        presets += [(table + 4 * r, pd_block(rng, r + 40 * k), 4) for r in range(1 << (8 - shift))]
+    presets += pd_info(rng, TP_INFO, SCRATCH + 0x48000) + pd_info(rng, PD_END_INFO, SCRATCH + 0x49000)
+    presets += [(PD_SLOTS, TP_PNG_PTR, 4), (PD_SLOTS + 4, rng.choice((0, TP_INFO_PTR, TP_INFO_PTR)), 4),
+                (PD_SLOTS + 8, rng.choice((0, WORLD_BASE + PD_END_INFO)), 4)]
+    return presets
+
+
+PD_INFO_ARG = one_of(0, TP_INFO_PTR, TP_INFO_PTR, TP_INFO_PTR)
+PD_END_ARG = one_of(0, WORLD_BASE + PD_END_INFO)
+
+SPECS += [
+    tp_spec("png_info_destroy", 0x005a4f60, [TP_PNG_ARG, one_of(TP_INFO_PTR)], presets=pd_presets, eax_mask=0),
+    tp_spec("png_read_destroy", 0x005a5b90, [TP_PNG_ARG, PD_INFO_ARG, PD_END_ARG], presets=pd_presets, eax_mask=0),
+    tp_spec("png_destroy_read_struct", 0x005a5b00,
+            [one_of(0, WORLD_BASE + PD_SLOTS, WORLD_BASE + PD_SLOTS), one_of(0, WORLD_BASE + PD_SLOTS + 4),
+             one_of(0, WORLD_BASE + PD_SLOTS + 8)], presets=pd_presets, eax_mask=0),
+]
+
+
+def ph_gama(rng, ct, depth, channels, num_palette):
+    value = rng.choice((45000, 45455, 0, rng.getrandbits(32) >> rng.randrange(32), 100000, 45454))
+    return value.to_bytes(4, "big")
+
+
+def ph_gama_case(rng):
+    case = ph_case(rng, b"gAMA", ph_gama)
+    case["presets"].append((TP_INFO + 0x08, rng.choice((0, 0x800, 0x801, 1, rng.getrandbits(32))), 4))
+    return case
+
+
+SPECS += [
+    # (A null info_ptr crashes both once a value is read: invalid cases.)
+    Spec("png_handle_gAMA", 0x005ab470, "stdcall", zi_args(ph_gama_case, "png", "info", "length"),
+         presets=zi_presets, callees=PH_CALLEES, eax_mask=0, max_cases=6000, case_scale=3),
+]

@@ -42,6 +42,7 @@ add_library(s3re SHARED
     thirdparty/png_core.cpp
     thirdparty/png_error.cpp
     thirdparty/png_mem.cpp
+    thirdparty/png_read_destroy.cpp
     thirdparty/png_rtran_rows.cpp
     thirdparty/png_rutil_chunks.cpp
     thirdparty/png_rutil_rows.cpp

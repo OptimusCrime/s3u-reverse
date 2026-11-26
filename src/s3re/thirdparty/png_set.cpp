@@ -21,12 +21,20 @@
 // png_set_tRNS (0x005b1ae0): (png, info, trans, num_trans, trans_values):
 //   the table pointer if not null, the colour if not null (then a count of 0
 //   becomes 1), the count.
+// png_set_text (0x005b19a0): (png, info, text_ptr, num_text): appends the
+//   png_text entries (16 bytes: compression, key, text, text_length) to
+//   info->text, growing it by png_malloc (8 spare entries) and copying the
+//   old ones; a null text becomes "", an empty one gets compression NONE
+//   (-1) and length 0. The texts themselves are not copied. Tested with the
+//   chunk handlers (png_rutil_chunks.cpp).
 
 #include "game/texts.h"
 #include "hooks.h"
 #include "test/difftest.h"
 #include "thirdparty/png_calls.h"
 #include "thirdparty/png_struct.h"
+
+#include <intrin.h>
 
 #include <cstdint>
 #include <cstring>
@@ -100,6 +108,53 @@ S3RE_HOOK(0x005b1920, png_set_sRGB_gAMA_and_cHRM, SetSrgbFn, Original_png_set_sR
           png_set_sRGB_gAMA_and_cHRM);
 S3RE_HOOK(0x005b1ab0, png_set_tIME, SetTimeFn, Original_png_set_tIME, png_set_tIME);
 S3RE_HOOK(0x005b1ae0, png_set_tRNS, SetTrnsFn, Original_png_set_tRNS, png_set_tRNS);
+
+using SetTextFn = void(__cdecl*)(PngStruct* png, PngInfo* info, PngText* text, std::int32_t count);
+void __cdecl png_set_text(PngStruct* png, PngInfo* info, PngText* text, std::int32_t count);
+S3RE_HOOK(0x005b19a0, png_set_text, SetTextFn, Original_png_set_text, png_set_text);
+
+// Purpose: Adds the texts of tEXt / zTXt chunks to the info structure.
+void __cdecl png_set_text(PngStruct* png, PngInfo* info, PngText* text, std::int32_t count) {
+    if (png == nullptr || info == nullptr || count == 0) {
+        return;
+    }
+    if (info->num_text + count > info->max_text) {
+        const auto malloc = calls::At<calls::PngMallocFn>(calls::kPngMalloc);
+        if (info->text != nullptr) {
+            const std::int32_t oldMax = info->max_text;
+            void* const oldText = info->text;
+            info->max_text = info->num_text + count + 8;
+            info->text = malloc(png, static_cast<std::uint32_t>(info->max_text) * sizeof(PngText));
+            // rep movsd / rep movsb, as MSVC 6 inlines memcpy
+            const std::uint32_t bytes = static_cast<std::uint32_t>(oldMax) * sizeof(PngText);
+            auto* dst = static_cast<unsigned char*>(info->text);
+            const auto* src = static_cast<const unsigned char*>(oldText);
+            __movsd(reinterpret_cast<unsigned long*>(dst), reinterpret_cast<const unsigned long*>(src), bytes / 4);
+            __movsb(dst + (bytes & ~3u), src + (bytes & ~3u), bytes % 4);
+            calls::At<calls::PngFreeFn>(calls::kPngFree)(png, oldText);
+        } else {
+            info->max_text = count + 8;
+            info->num_text = 0;
+            info->text = malloc(png, static_cast<std::uint32_t>(info->max_text) * sizeof(PngText));
+        }
+    }
+    for (std::int32_t i = 0; i < count; ++i) {
+        PngText& entry = static_cast<PngText*>(info->text)[info->num_text];
+        if (text[i].text == nullptr) {
+            text[i].text = const_cast<char*>(game::texts::kEmpty.c_str());
+        }
+        if (text[i].text[0] == 0) {
+            entry.text_length = 0;
+            entry.compression = kPngTextCompressionNone;
+        } else {
+            entry.text_length = static_cast<std::uint32_t>(std::strlen(text[i].text));
+            entry.compression = text[i].compression;
+        }
+        entry.text = text[i].text;
+        entry.key = text[i].key;
+        ++info->num_text;
+    }
+}
 
 // Purpose: Stores the background colour of a bKGD chunk.
 void __cdecl png_set_bKGD(PngStruct* png, PngInfo* info, const PngColor16* colour) {

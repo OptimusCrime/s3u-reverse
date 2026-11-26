@@ -14,6 +14,18 @@
 // png_handle_tIME (0x005ae970): the ancillary chunks of those names. Out of
 //   place, duplicate or wrongly sized ones are skipped with a warning (a
 //   missing IHDR is an error).
+// png_handle_tEXt (0x005aed30): a keyword, a 0 byte and the text, kept in one
+//   png_malloc block (the text points into it), added with png_set_text.
+// png_handle_PLTE (0x005aaea0): the palette, in a png_zalloc block (3 bytes
+//   per entry); its CRC result is ignored (the palette is used either way);
+//   a tRNS read before it with more entries is cut to the palette size.
+// png_handle_gAMA (0x005ab470): the file gamma, 100000 times the value; 0 is
+//   ignored, and with sRGB anything but 45000 (a warning and a line on
+//   stderr). png->gamma gets the float, png_set_gAMA the double product
+//   (x87: fild * 1e-5f, as the original); info_ptr is not checked for null
+//   there (a crash in both).
+// png_handle_unknown (0x005af300): any other chunk: a name with a non-letter
+//   or an unknown critical chunk is an error, an ancillary one is skipped.
 //
 // Quirks kept: after png_error (which never returns) the code goes on as if
 // it had (IEND: `if (info_ptr == NULL) return;`, the others: the length
@@ -23,6 +35,8 @@
 // that byte out); IHDR has no "palette with more than 8 bits" check, so
 // 16-bit palette images pass (later libpng versions reject them).
 
+#include "game/globals.h"
+#include "game/tables.h"
 #include "game/texts.h"
 #include "hooks.h"
 #include "test/callee_stub.h"
@@ -38,6 +52,10 @@
 namespace s3re::thirdparty {
 
 using ChunkHandlerFn = void(__cdecl*)(PngStruct* png, PngInfo* info, std::uint32_t length);
+using SetTextFn = void(__cdecl*)(PngStruct* png, PngInfo* info, PngText* text, std::int32_t count);
+using SetPlteFn = void(__cdecl*)(PngStruct* png, PngInfo* info, void* palette, std::int32_t count);
+using ZallocFn = void*(__cdecl*)(PngStruct* png, std::uint32_t items, std::uint32_t size);
+using SetGamaFn = void(__cdecl*)(PngStruct* png, PngInfo* info, double gamma);
 
 void __cdecl png_handle_IHDR(PngStruct* png, PngInfo* info, std::uint32_t length);
 void __cdecl png_handle_IEND(PngStruct* png, PngInfo* info, std::uint32_t length);
@@ -48,6 +66,10 @@ void __cdecl png_handle_hIST(PngStruct* png, PngInfo* info, std::uint32_t length
 void __cdecl png_handle_pHYs(PngStruct* png, PngInfo* info, std::uint32_t length);
 void __cdecl png_handle_oFFs(PngStruct* png, PngInfo* info, std::uint32_t length);
 void __cdecl png_handle_tIME(PngStruct* png, PngInfo* info, std::uint32_t length);
+void __cdecl png_handle_tEXt(PngStruct* png, PngInfo* info, std::uint32_t length);
+void __cdecl png_handle_unknown(PngStruct* png, PngInfo* info, std::uint32_t length);
+void __cdecl png_handle_PLTE(PngStruct* png, PngInfo* info, std::uint32_t length);
+void __cdecl png_handle_gAMA(PngStruct* png, PngInfo* info, std::uint32_t length);
 
 S3RE_HOOK(0x005aab20, png_handle_IHDR, ChunkHandlerFn, Original_png_handle_IHDR, png_handle_IHDR);
 S3RE_HOOK(0x005ab300, png_handle_IEND, ChunkHandlerFn, Original_png_handle_IEND, png_handle_IEND);
@@ -58,6 +80,10 @@ S3RE_HOOK(0x005ad860, png_handle_hIST, ChunkHandlerFn, Original_png_handle_hIST,
 S3RE_HOOK(0x005adcb0, png_handle_pHYs, ChunkHandlerFn, Original_png_handle_pHYs, png_handle_pHYs);
 S3RE_HOOK(0x005ae070, png_handle_oFFs, ChunkHandlerFn, Original_png_handle_oFFs, png_handle_oFFs);
 S3RE_HOOK(0x005ae970, png_handle_tIME, ChunkHandlerFn, Original_png_handle_tIME, png_handle_tIME);
+S3RE_HOOK(0x005aed30, png_handle_tEXt, ChunkHandlerFn, Original_png_handle_tEXt, png_handle_tEXt);
+S3RE_HOOK(0x005af300, png_handle_unknown, ChunkHandlerFn, Original_png_handle_unknown, png_handle_unknown);
+S3RE_HOOK(0x005aaea0, png_handle_PLTE, ChunkHandlerFn, Original_png_handle_PLTE, png_handle_PLTE);
+S3RE_HOOK(0x005ab470, png_handle_gAMA, ChunkHandlerFn, Original_png_handle_gAMA, png_handle_gAMA);
 
 namespace {
 
@@ -83,6 +109,12 @@ constexpr std::uintptr_t kPngSetHist = 0x005b1630;
 constexpr std::uintptr_t kPngSetPhys = 0x005b1890;
 constexpr std::uintptr_t kPngSetOffs = 0x005b1720;
 constexpr std::uintptr_t kPngSetTime = 0x005b1ab0;
+constexpr std::uintptr_t kPngSetText = 0x005b19a0;
+constexpr std::uintptr_t kPngSetPlte = 0x005b18c0;
+constexpr std::uintptr_t kPngZalloc = 0x005a4e30;
+constexpr std::uintptr_t kPngSetGama = 0x005b1600;
+constexpr std::uint32_t kSrgbGamma = 45000;  // 1.0.2 accepts exactly 45000 (0.45) with sRGB, not 45455
+constexpr std::uint32_t kPngFlagFreePalette = 0x1000;
 
 constexpr std::uint32_t kIhdrLength = 13;
 constexpr std::uint32_t kPhysLength = 9;   // pHYs and oFFs: two 32-bit values and a unit
@@ -465,6 +497,145 @@ void __cdecl png_handle_tIME(PngStruct* png, PngInfo* info, std::uint32_t length
     calls::At<SetTimeFn>(kPngSetTime)(png, info, &modTime);
 }
 
+// Purpose: The palette.
+void __cdecl png_handle_PLTE(PngStruct* png, PngInfo* info, std::uint32_t length) {
+    namespace t = game::texts;
+    if ((png->mode & kPngHaveIhdr) == 0) {
+        Error(png, t::kPngPlteMissingIhdr);
+    } else if ((png->mode & kPngHaveIdat) != 0) {
+        SkipChunk(png, length, t::kPngPlteAfterIdat);
+        return;
+    } else if ((png->mode & kPngHavePlte) != 0) {
+        Error(png, t::kPngPlteDuplicate);
+    }
+    png->mode |= kPngHavePlte;
+    if (length % 3 != 0) {
+        if (png->color_type != kPngColorTypePalette) {
+            SkipChunk(png, length, t::kPngInvalidPalette);
+            return;
+        }
+        Error(png, t::kPngInvalidPalette);
+    }
+    const std::int32_t count = static_cast<std::int32_t>(length) / 3;
+    auto* const palette = static_cast<std::uint8_t*>(
+        calls::At<ZallocFn>(kPngZalloc)(png, static_cast<std::uint32_t>(count), 3));
+    png->flags |= kPngFlagFreePalette;
+    for (std::int32_t i = 0; i < count; ++i) {
+        std::uint8_t buf[3];
+        CrcRead(png, buf, 3);
+        palette[3 * i] = buf[0];
+        palette[3 * i + 1] = buf[1];
+        palette[3 * i + 2] = buf[2];
+    }
+    CrcFinish(png, 0);  // (a CRC error that only warns still uses the palette)
+    png->palette = palette;
+    png->num_palette = static_cast<std::uint16_t>(count);
+    calls::At<SetPlteFn>(kPngSetPlte)(png, info, palette, count);
+    if (png->color_type == kPngColorTypePalette && HasInfo(info, kPngInfoTrns) && png->num_trans > png->num_palette) {
+        Warning(png, t::kPngTruncatingTrns);
+        png->num_trans = png->num_palette;
+    }
+}
+
+// Purpose: The image's gamma.
+void __cdecl png_handle_gAMA(PngStruct* png, PngInfo* info, std::uint32_t length) {
+    namespace t = game::texts;
+    if ((png->mode & kPngHaveIhdr) == 0) {
+        Error(png, t::kPngGamaMissingIhdr);
+    } else if ((png->mode & kPngHaveIdat) != 0) {
+        SkipChunk(png, length, t::kPngGamaAfterIdat);
+        return;
+    } else if ((png->mode & kPngHavePlte) != 0) {
+        Warning(png, t::kPngGamaOutOfPlace);  // should be an error, but can be coped with
+    } else if (HasInfo(info, kPngInfoGama) && (info->valid & kPngInfoSrgb) == 0) {
+        SkipChunk(png, length, t::kPngGamaDuplicate);
+        return;
+    }
+    if (length != 4) {
+        SkipChunk(png, length, t::kPngGamaLength);
+        return;
+    }
+    std::uint8_t buf[4];
+    CrcRead(png, buf, 4);
+    if (CrcFinish(png, 0)) {
+        return;
+    }
+    const std::uint32_t igamma = Uint32(buf);
+    if (igamma == 0) {
+        return;
+    }
+    if ((info->valid & kPngInfoSrgb) != 0 && igamma != kSrgbGamma) {  // (info not checked for null)
+        Warning(png, t::kPngGamaWithSrgb);
+        calls::At<calls::FprintfFn>(calls::kFprintf)(&game::g_crtStderr, t::kPngGamaPrint, igamma);
+        return;
+    }
+    const double fileGamma = static_cast<double>(igamma) * static_cast<double>(game::g_pngGammaScale.get());
+    png->gamma = static_cast<float>(fileGamma);
+    calls::At<SetGamaFn>(kPngSetGama)(png, info, fileGamma);
+}
+
+// Purpose: A text chunk (keyword and text).
+void __cdecl png_handle_tEXt(PngStruct* png, PngInfo* info, std::uint32_t length) {
+    if ((png->mode & kPngHaveIhdr) == 0) {
+        Error(png, game::texts::kPngTextMissingIhdr);
+    }
+    if ((png->mode & kPngHaveIdat) != 0) {
+        png->mode |= kPngAfterIdat;
+    }
+    const auto malloc = calls::At<calls::PngMallocFn>(calls::kPngMalloc);
+    const auto free = calls::At<calls::PngFreeFn>(calls::kPngFree);
+    auto* const key = static_cast<char*>(malloc(png, length + 1));
+    CrcRead(png, reinterpret_cast<std::uint8_t*>(key), length);
+    if (CrcFinish(png, 0)) {
+        free(png, key);
+        return;
+    }
+    key[length] = 0;
+    char* text = key;
+    while (*text != 0) {  // the end of the keyword
+        ++text;
+    }
+    if (text != key + length) {
+        ++text;
+    }
+    auto* const entry = static_cast<PngText*>(malloc(png, sizeof(PngText)));
+    entry->compression = kPngTextCompressionNone;
+    entry->key = key;
+    entry->text = text;
+    calls::At<SetTextFn>(kPngSetText)(png, info, entry, 1);
+    free(png, entry);
+}
+
+namespace {
+
+bool NotALetter(std::uint8_t c) {  // libpng's isnonalpha: also the six bytes between Z and a pass
+    return c < 41 || c > 122 || (c > 90 && c < 97);
+}
+
+}  // namespace
+
+// Purpose: A chunk the decoder doesn't know: skipped if ancillary.
+void __cdecl png_handle_unknown(PngStruct* png, PngInfo* info, std::uint32_t length) {
+    const std::uint8_t* name = png->chunk_name;
+    if (NotALetter(name[0]) || NotALetter(name[1]) || NotALetter(name[2]) || NotALetter(name[3])) {
+        calls::At<calls::PngMessageFn>(calls::kPngChunkError)(png, game::texts::kPngInvalidChunkType);
+    }
+    if ((name[0] & kPngChunkAncillary) == 0) {
+        calls::At<calls::PngMessageFn>(calls::kPngChunkError)(png, game::texts::kPngUnknownCriticalChunk);
+        if (info == nullptr) {  // (quiets a compiler warning in libpng)
+            return;
+        }
+    }
+    if ((png->mode & kPngHaveIdat) != 0) {
+        png->mode |= kPngAfterIdat;
+    }
+    CrcFinish(png, length);
+}
+
+// png_set.cpp
+void __cdecl png_set_text(PngStruct* png, PngInfo* info, PngText* text, std::int32_t count);
+extern SetTextFn Original_png_set_text;
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -476,7 +647,8 @@ void __cdecl png_handle_tIME(PngStruct* png, PngInfo* info, std::uint32_t length
 // of another length or with bad values) with a right or wrong CRC, read
 // through a test read callback. malloc and free (0x621784 / 0x621b7e) jump
 // to an arena allocator that logs its calls, so both runs get the same
-// blocks; png_error's callback throws, warnings are logged. Compared:
+// blocks, fprintf (0x6214d6, gAMA's stderr line) to a logger; png_error's
+// callback throws, warnings are logged. Compared:
 // png_struct, png_info (but mod_time[7], see above), the palette, the arena,
 // the log and how far the stream was read.
 
@@ -528,6 +700,13 @@ void* __cdecl ChunkMalloc(std::size_t size) {
     void* block = g_chunkWorld->arena + g_chunkUsed;
     g_chunkUsed += (size + 15) & ~std::size_t{15};
     return block;
+}
+
+// gAMA's fprintf(stderr, "igamma = %lu...", igamma): logged.
+int __cdecl ChunkFprintf(void* /*file*/, const char* format, std::uint32_t value) {
+    g_chunkLog->push_back(0xf9000000u + MessageTag(format));
+    g_chunkLog->push_back(value);
+    return 0;
 }
 
 void __cdecl ChunkFree(void* block) {
@@ -596,23 +775,81 @@ std::vector<std::uint8_t> HandlerData(test::Rng& rng, int handler, std::uint8_t 
         case 5: return RandomBytes(rng, 2u * numPalette);                   // hIST
         case 6:
         case 7: return RandomBytes(rng, 9);  // pHYs, oFFs
-        default: return RandomBytes(rng, 7);  // tIME
+        case 8: return RandomBytes(rng, 7);  // tIME
+        case 9: {  // tEXt: keyword, 0, text (sometimes no 0, or nothing)
+            std::vector<std::uint8_t> d;
+            for (std::uint32_t k = rng.Below(12); k-- > 0;) {
+                d.push_back(static_cast<std::uint8_t>(0x61 + rng.Below(26)));
+            }
+            if (!rng.Chance(1, 6)) {
+                d.push_back(0);
+            }
+            for (std::uint32_t k = rng.Below(rng.Chance(1, 2) ? 3 : 60); k-- > 0;) {
+                d.push_back(static_cast<std::uint8_t>(rng.Chance(1, 20) ? 0 : 32 + rng.Below(90)));
+            }
+            return d;
+        }
+        case 11: return RandomBytes(rng, rng.Chance(4, 5) ? 3 * rng.Below(260) : rng.Below(40));  // PLTE
+        case 12: {  // gAMA: sRGB's value, 0, or anything
+            const std::uint32_t g = rng.Chance(1, 4) ? 45000 : rng.Chance(1, 8) ? 0 : rng.Next32() >> rng.Below(32);
+            std::vector<std::uint8_t> d;
+            PutUint32(d, g);
+            return d;
+        }
+        default: return RandomBytes(rng, rng.Below(40));  // unknown chunks
     }
 }
 
-void CompareHandlers(test::Context& ctx, const ChunkHandlerFn* candidates, int cases) {
-    static const char* const kNames[] = {"IHDR", "IEND", "sBIT", "tRNS", "bKGD", "hIST", "pHYs", "oFFs", "tIME"};
+// png_set_text's arguments: 0..3 entries in the arena, keys and texts
+// (some null or empty) after them.
+void MakeTextEntries(test::Rng& rng, std::uint8_t* arena, std::int32_t& count) {
+    constexpr std::size_t kEntries = 0xc000, kStrings = 0xd000;
+    count = static_cast<std::int32_t>(rng.Below(4));
+    auto* entries = reinterpret_cast<PngText*>(arena + kEntries);
+    for (std::int32_t k = 0; k < count; ++k) {
+        char* str = reinterpret_cast<char*>(arena + kStrings + 0x100 * k);
+        str[rng.Below(40)] = 0;
+        entries[k].compression = static_cast<std::int32_t>(rng.Below(3)) - 1;
+        entries[k].key = str + 0x80;
+        entries[k].text = rng.Chance(1, 5) ? nullptr : rng.Chance(1, 5) ? str + rng.Below(40) : str;
+        if (entries[k].text != nullptr && rng.Chance(1, 4)) {
+            entries[k].text[0] = 0;
+        }
+    }
+}
+
+// A text array already in the info structure (or none).
+void MakeInfoText(test::Rng& rng, PngInfo& info, std::uint8_t* arena) {
+    constexpr std::size_t kOldText = 0x8000;
+    info.num_text = static_cast<std::int32_t>(rng.Below(4));
+    if (rng.Chance(1, 3)) {
+        info.text = nullptr;  // (with room left, png_set_text would write through the null pointer)
+        info.max_text = rng.Chance(1, 2) ? 0 : static_cast<std::int32_t>(rng.Below(8)) - 8;
+    } else {
+        info.text = arena + kOldText;
+        info.max_text = info.num_text + static_cast<std::int32_t>(rng.Below(3));
+    }
+}
+
+constexpr int kHandlerCount = 13;
+
+void CompareHandlers(test::Context& ctx, const ChunkHandlerFn* candidates, SetTextFn setText, int cases) {
+    static const char* const kNames[] = {"IHDR", "IEND", "sBIT", "tRNS", "bKGD", "hIST", "pHYs",
+                                         "oFFs", "tIME", "tEXt", "abCd", "PLTE", "gAMA", "text"};
     const ChunkHandlerFn originals[] = {Original_png_handle_IHDR, Original_png_handle_IEND, Original_png_handle_sBIT,
                                         Original_png_handle_tRNS, Original_png_handle_bKGD, Original_png_handle_hIST,
-                                        Original_png_handle_pHYs, Original_png_handle_oFFs, Original_png_handle_tIME};
+                                        Original_png_handle_pHYs, Original_png_handle_oFFs, Original_png_handle_tIME,
+                                        Original_png_handle_tEXt, Original_png_handle_unknown,
+                                        Original_png_handle_PLTE, Original_png_handle_gAMA};
     auto a = std::make_unique<ChunkWorld>();
     auto initial = std::make_unique<ChunkWorld>();
     auto results = std::make_unique<ChunkWorld>();
     test::ScopedJump mallocJump(calls::kMalloc, reinterpret_cast<const void*>(&ChunkMalloc));
     test::ScopedJump freeJump(calls::kFree, reinterpret_cast<const void*>(&ChunkFree));
+    test::ScopedJump fprintfJump(calls::kFprintf, reinterpret_cast<const void*>(&ChunkFprintf));
     for (int i = 0; i < cases; ++i) {
         test::Rng& rng = ctx.rng();
-        const int handler = static_cast<int>(rng.Below(9));
+        const int handler = static_cast<int>(rng.Below(kHandlerCount + 1));  // the last: png_set_text itself
         rng.Fill(a.get(), sizeof(ChunkWorld));
         PngStruct& png = a->png;
         static const std::uint8_t kTypes[] = {0, 2, 3, 4, 6, 0, 3};
@@ -635,9 +872,19 @@ void CompareHandlers(test::Context& ctx, const ChunkHandlerFn* candidates, int c
         png.warning_fn = reinterpret_cast<void*>(&ChunkWarning);
         png.read_data_fn = reinterpret_cast<void*>(&ChunkRead);
         std::memcpy(png.chunk_name, kNames[handler], 4);
+        if (handler == 10) {  // unknown: letters mostly, the ancillary bit either way
+            for (int k = 0; k < 4; ++k) {
+                png.chunk_name[k] = static_cast<std::uint8_t>(
+                    rng.Chance(1, 10) ? rng.Below(256) : (rng.Chance(1, 2) ? 0x61 : 0x41) + rng.Below(26));
+            }
+        }
         if (rng.Chance(1, 3)) {
             png.chunk_name[0] ^= kPngChunkAncillary;
         }
+        MakeInfoText(rng, a->info, a->arena);
+        std::int32_t textCount = 0;
+        MakeTextEntries(rng, a->arena, textCount);
+        const bool noPng = rng.Chance(1, 20);
         png.crc = Crc32Of(png.chunk_name, 4);
         a->info.valid = rng.Chance(3, 10) ? rng.Next32() : 0;
 
@@ -653,7 +900,7 @@ void CompareHandlers(test::Context& ctx, const ChunkHandlerFn* candidates, int c
         }
         const std::vector<std::uint8_t> tail = RandomBytes(rng, 8);
         stream.insert(stream.end(), tail.begin(), tail.end());
-        const bool noInfo = rng.Chance(1, 20);
+        const bool noInfo = handler != 12 && rng.Chance(1, 20);  // (gAMA would crash on a null info)
 
         *initial = *a;
         std::vector<std::uint32_t> logs[2];
@@ -669,7 +916,13 @@ void CompareHandlers(test::Context& ctx, const ChunkHandlerFn* candidates, int c
             g_chunkUsed = 0;
             g_chunkLog = &logs[run];
             try {
-                (run == 0 ? originals[handler] : candidates[handler])(&a->png, noInfo ? nullptr : &a->info, length);
+                PngInfo* const info = noInfo ? nullptr : &a->info;
+                if (handler == kHandlerCount) {
+                    auto* const entries = reinterpret_cast<PngText*>(a->arena + 0xc000);
+                    (run == 0 ? Original_png_set_text : setText)(noPng ? nullptr : &a->png, info, entries, textCount);
+                } else {
+                    (run == 0 ? originals[handler] : candidates[handler])(&a->png, info, length);
+                }
             } catch (const ChunkErrorThrown&) {
                 logs[run].push_back(0xdead);
             }
@@ -688,9 +941,10 @@ void CompareHandlers(test::Context& ctx, const ChunkHandlerFn* candidates, int c
     g_chunkLog = nullptr;
 }
 
-const ChunkHandlerFn kOurHandlers[] = {&png_handle_IHDR, &png_handle_IEND, &png_handle_sBIT,
-                                       &png_handle_tRNS, &png_handle_bKGD, &png_handle_hIST,
-                                       &png_handle_pHYs, &png_handle_oFFs, &png_handle_tIME};
+const ChunkHandlerFn kOurHandlers[] = {&png_handle_IHDR, &png_handle_IEND, &png_handle_sBIT, &png_handle_tRNS,
+                                       &png_handle_bKGD, &png_handle_hIST, &png_handle_pHYs, &png_handle_oFFs,
+                                       &png_handle_tIME, &png_handle_tEXt, &png_handle_unknown,
+                                       &png_handle_PLTE, &png_handle_gAMA};
 
 // Wrong: tIME stores the month as the day too.
 void __cdecl WrongTime(PngStruct* png, PngInfo* info, std::uint32_t length) {
@@ -703,15 +957,15 @@ void __cdecl WrongTime(PngStruct* png, PngInfo* info, std::uint32_t length) {
 }  // namespace
 
 S3RE_TEST(PngChunkHandlers_MatchOriginal) {
-    CompareHandlers(ctx, kOurHandlers, 8000);
+    CompareHandlers(ctx, kOurHandlers, &png_set_text, 8000);
 }
 
 S3RE_TEST(PngChunkHandlers_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    ChunkHandlerFn wrong[9];
+    ChunkHandlerFn wrong[kHandlerCount];
     std::memcpy(wrong, kOurHandlers, sizeof(wrong));
     wrong[8] = &WrongTime;
-    CompareHandlers(probe, wrong, 8000);
+    CompareHandlers(probe, wrong, &png_set_text, 8000);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

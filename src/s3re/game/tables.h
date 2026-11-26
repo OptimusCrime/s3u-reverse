@@ -353,6 +353,7 @@ inline constexpr GameGlobal<const std::int32_t[7]> g_pngPassInc{0x73368c};     /
 inline constexpr GameGlobal<const std::int32_t[7]> g_pngPassYstart{0x7336a8};  // png_pass_ystart: first row
 inline constexpr GameGlobal<const std::int32_t[7]> g_pngPassYinc{0x7336c4};    // png_pass_yinc: row step
 inline constexpr GameGlobal<const std::uint8_t[5]> g_pngIdat{0x7335f0};        // png_IDAT: "IDAT"
+inline constexpr GameGlobal<const float> g_pngGammaScale{0x65c5c8};       // 1e-5f (png_handle_gAMA)
 // wip/logic-r4: the CD music (CLogicThread::PlayNextMusicTrack 0x53f5f0).
 // Four playlists per CD version (one per race; the Amazons' CD has four
 // tracks per list, the others three), and the playlist lengths

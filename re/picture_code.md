@@ -282,3 +282,45 @@ Findings while reimplementing:
   with FILLER_AFTER; 16-bit rows addressed as 8-bit; wrong rowbytes and,
   grey before, pixel depth); reproduced.
 - png_set_sRGB_gAMA_and_cHRM stores gamma 0.45 (0x3ee66666), not .45455.
+
+
+## Reimplementation (wip/png-r6, 2026-11-27)
+
+Done and verified: zlib's decoder (inflate, inflate_blocks, inflate_codes,
+inflate_fast, inflate_flush, huft_build, inflate_trees_bits/dynamic;
+`zlib_inflate.cpp`, tests with a test deflate encoder and the whole
+original decoder jumped to its trampolines, `zlib_inflate_tests.cpp`);
+png_read_filter_row, png_combine_row, png_do_read_interlace; the chunk
+handlers IHDR, PLTE, IEND, gAMA, sBIT, tRNS, bKGD, hIST, pHYs, oFFs, tIME,
+tEXt, unknown; png_set_text; png_info_destroy, png_read_destroy,
+png_destroy_read_struct. png_read_start_row / png_read_finish_row are
+written but unverified (S3RE_HOOK_UNVERIFIED; best tested inside a whole
+PNG decode).
+
+Findings:
+- png_struct (1.0.2): width +0xc0, height +0xc4, num_rows +0xc8, rowbytes
+  +0xd0, irowbytes +0xd4, iwidth +0xd8, row_number +0xdc, prev_row +0xe0,
+  row_buf +0xe4, row_info +0xf8, idat_size +0x104, palette +0x10c,
+  num_palette +0x110, num_trans +0x112, background +0x130, gamma_shift
+  +0x150, gamma +0x154, gamma tables +0x15c..+0x170, sig_bit +0x174, trans
+  +0x180, trans_values +0x184, save_buffer +0x1a8, palette_lookup /
+  dither_index +0x1e4/+0x1e8, hist +0x1ec, time_buffer +0x208. png_info
+  pCAL: purpose +0xa0, X0/X1 +0xa4/+0xa8, units +0xac, params +0xb0, type
+  +0xb4, nparams +0xb5. flags: FREE_PALETTE 0x1000, FREE_TRANS 0x2000,
+  FREE_HIST 0x4000.
+- png_handle_IHDR has no "palette with more than 8 bits" check (16-bit
+  palette images pass).
+- png_handle_gAMA accepts only 45000 (0.45) together with sRGB (later
+  libpng: 45455) and dereferences info_ptr without a null check; png->gamma
+  gets the float, png_set_gAMA the unrounded double product.
+- png_handle_PLTE ignores its CRC result (the palette is used either way).
+- png_crc_finish is inlined into every handler; calling it gives the same
+  behaviour.
+- png_read_start_row's gray-to-RGB depth rule has no FILLER term.
+
+Left: png_handle_cHRM, sRGB, zTXt, pCAL, png_set_pCAL; gamma
+(png_build_gamma_table, png_do_gamma, png_do_background);
+png_init_read_transformations, png_do_read_transformations; png_read_info,
+png_read_row, png_read_image, png_read_end, png_create_read_struct (setjmp);
+verification of png_read_start_row / finish_row; PaintLib DoDecode,
+MakeBmp/MakeBmpFromFile, raiseError, CTextException ctors, CFileSource.

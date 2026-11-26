@@ -121,7 +121,17 @@ struct PngStruct {
     PngColor16 background;              // 0x130 png_handle_bKGD 0x5ad3b0
     PngColor16 background_1;            // 0x13a
     void* output_flush_fn;              // 0x144 png_set_read_fn 0x5a9af0
-    std::uint8_t unk148[0x174 - 0x148]; // 0x148 flush, gamma fields and tables
+    std::uint32_t flush_dist;           // 0x148 (write side)
+    std::uint32_t flush_rows;           // 0x14c
+    std::int32_t gamma_shift;           // 0x150 png_read_destroy 0x5a5b90
+    float gamma;                        // 0x154 png_handle_gAMA 0x5ab470
+    float screen_gamma;                 // 0x158
+    std::uint8_t* gamma_table;          // 0x15c
+    std::uint8_t* gamma_from_1;         // 0x160
+    std::uint8_t* gamma_to_1;           // 0x164
+    std::uint16_t** gamma_16_table;     // 0x168
+    std::uint16_t** gamma_16_from_1;    // 0x16c
+    std::uint16_t** gamma_16_to_1;      // 0x170
     PngColor8 sig_bit;                  // 0x174 png_handle_sBIT 0x5ab8b0
     PngColor8 shift;                    // 0x179
     std::uint8_t pad17e[2];             // 0x17e
@@ -145,6 +155,7 @@ static_assert(offsetof(PngStruct, chunk_name) == 0x114);
 static_assert(offsetof(PngStruct, filler) == 0x126);
 static_assert(offsetof(PngStruct, background) == 0x130);
 static_assert(offsetof(PngStruct, output_flush_fn) == 0x144);
+static_assert(offsetof(PngStruct, gamma) == 0x154);
 static_assert(offsetof(PngStruct, sig_bit) == 0x174);
 static_assert(offsetof(PngStruct, trans) == 0x180);
 static_assert(offsetof(PngStruct, trans_values) == 0x184);
@@ -191,8 +202,16 @@ struct PngInfo {
     std::uint8_t pad79[3];             // 0x79
     void* hist;                        // 0x7c png_set_hIST 0x5b1630
     float chrm[8];                     // 0x80 x/y of white, red, green, blue (png_set_cHRM 0x5b1590)
-    std::uint8_t unka0[0xb8 - 0xa0];   // 0xa0 pCAL fields
+    char* pcal_purpose;                // 0xa0 png_info_destroy 0x5a4f60
+    std::int32_t pcal_X0;              // 0xa4
+    std::int32_t pcal_X1;              // 0xa8
+    char* pcal_units;                  // 0xac
+    char** pcal_params;                // 0xb0
+    std::uint8_t pcal_type;            // 0xb4
+    std::uint8_t pcal_nparams;         // 0xb5
+    std::uint8_t padb6[2];             // 0xb6
 };
+static_assert(offsetof(PngInfo, pcal_params) == 0xb0);
 static_assert(offsetof(PngInfo, bit_depth) == 0x18);
 static_assert(offsetof(PngInfo, gamma) == 0x28);
 static_assert(offsetof(PngInfo, mod_time) == 0x3c);
@@ -205,7 +224,19 @@ static_assert(offsetof(PngInfo, hist) == 0x7c);
 static_assert(offsetof(PngInfo, chrm) == 0x80);
 static_assert(sizeof(PngInfo) == 0xb8);
 
+// png_text (png.h 1.0.2), 16 bytes.
+struct PngText {
+    std::int32_t compression;   // 0x00 -1: none, 0: zTXt deflate
+    char* key;                  // 0x04
+    char* text;                 // 0x08
+    std::uint32_t text_length;  // 0x0c
+};
+static_assert(sizeof(PngText) == 16);
+
 #pragma pack(pop)
+
+inline constexpr std::int32_t kPngTextCompressionNone = -1;
+inline constexpr std::int32_t kPngTextCompressionZtxt = 0;
 
 // png_struct.transformations bits (png.h 1.0.2).
 inline constexpr std::uint32_t kPngBgr = 0x0001;
