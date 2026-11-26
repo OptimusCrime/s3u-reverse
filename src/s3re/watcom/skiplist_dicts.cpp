@@ -1,5 +1,5 @@
-// Destructors of the sound code's Watcom skip-list dictionaries (template
-// instantiations; only the vtables differ) and the effects iterator's
+// Destructors of the Watcom skip-list dictionaries (first the sound code's;
+// template instantiations; only the vtables differ) and the effects iterator's
 // key/value accessor. thiscall; the callers ignore the destructors' EAX
 // (ours returns what the original leaves: clear's result).
 //
@@ -12,9 +12,30 @@
 //   0x005ffb60 WCSkipListBase<KeyVal<unsigned int, CSoundEffect*>>        0x65d438
 //   0x005ffac0 WCValSkipListDict<unsigned int, unsigned int>              0x65d454 (the base's vtable)
 //   0x005ffc00 WCSkipListBase<KeyVal<unsigned int, unsigned int>>         0x65d454
+// and (wip/watcom-r6) the other instantiations of the same code (the
+// WCValSkipListDicts with the base's vtable):
+//   0x00428120 WCValSkipListDict<int, CScreenElement*>                                0x656934
+//   0x004283a0 WCSkipListBase<KeyVal<int, CScreenElement*>>                           0x656934
+//   0x00457bb0 WCSkipListBase<KeyVal<unsigned int, String>>                           0x657200
+//   0x00457cb0 WCSkipListBase<KeyVal<unsigned int, WCValOrderedVector<String>>>       0x65721c
+//   0x0045d500 WCValSkipListDict<int, HICON>                                          0x6572d4
+//   0x00472120 WCSkipListBase<KeyVal<unsigned long, WCPtrSortedVector<CExecuteType>>> 0x6575f4
+//   0x00472580 WCValSkipListDict<unsigned long, CNetSession::CSyncInfo>               0x657750
+//   0x00472600 WCSkipListBase<KeyVal<unsigned long, CNetSession::CSyncInfo>>          0x657750
+//   0x00499290 WCSkipListBase<KeyVal<int, String>>                                    0x6580d4
+//   0x004a6a40 WCValSkipListDict<unsigned int, int>                                   0x6587cc
+//   0x004a6b40 WCValSkipListDict<unsigned int, void*>                                 0x6587b0
+//   0x004a6c40 WCSkipListBase<KeyVal<unsigned int, int>>                              0x6587cc
+//   0x004a6ce0 WCSkipListBase<KeyVal<unsigned int, void*>>                            0x6587b0
+//   0x004a8e10 WCValSkipListDict<int, HFONT>                                          0x658814
+//   0x004a8eb0 WCSkipListBase<KeyVal<int, HFONT>>                                     0x658814
+//   0x00609bb0 WCSkipListBase<KeyVal<unsigned int, Lobby::CLMMessageBlock>>           0x65d588
+//   0x00616050 WCValSkipListDict<HWND, Win32::CCDAudio*>                              0x65d968
 // WCValSkipListDict<int, DirectX::CSoundEffectBuffer> (0x005c33e0): vtable
 //   0x65cf54, ~CDirectSoundBuffer (0x5c1fe0) of the key/value pair's buffer
 //   (+0x7c), then as above with 0x65cf70.
+// WCValSkipListDict<unsigned int, Lobby::CLMMessageBlock> (0x00609aa0): the
+//   same with vtable 0x65d56c, ~CLMMessageBlock (0x6014b0) and 0x65d588.
 // WCValSkipListDictIter<unsigned int, CSoundEffect*>'s current key/value
 //   pair (0x005ffc80): the node (+0xc) - 8, or 0 without a node.
 
@@ -36,8 +57,9 @@ namespace {
 constexpr std::uintptr_t kDictClear = 0x0060bd80;      // WCSkipNonTempBase::clear
 constexpr std::uintptr_t kNoOp = 0x0059f200;           // the library's empty error hook
 constexpr std::uintptr_t kBufferDestroy = 0x005c1fe0;  // DirectX::CDirectSoundBuffer::~CDirectSoundBuffer
+constexpr std::uintptr_t kMessageBlockDestroy = 0x006014b0;  // Lobby::CLMMessageBlock::~CLMMessageBlock
 constexpr std::uint32_t kCount = 0x74;                 // the dictionary's node count
-constexpr std::uint32_t kPairBuffer = 0x7c;            // the key/value pair's CSoundEffectBuffer
+constexpr std::uint32_t kPairBuffer = 0x7c;            // the key/value pair's value (CSoundEffectBuffer, CLMMessageBlock)
 constexpr std::uint32_t kIterNode = 0x0c;
 constexpr std::uint32_t kNodePair = 8;                 // key and value sit before a node's forward array
 
@@ -86,6 +108,66 @@ std::uint32_t __fastcall SkipListDestructor_5c33e0(std::uint32_t self, void*) {
     return DestroySkipList(self, vt::kEffectBufferSkipListBase);
 }
 
+// Purpose: destructors of the other skip-list dictionaries (the screens'
+// element and font tables, the menus' string tables, the network's request
+// and sync tables, the CD audio windows, the lobby's message blocks).
+std::uint32_t __fastcall SkipListDestructor_428120(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_IntScreenElement);
+}
+std::uint32_t __fastcall SkipListDestructor_4283a0(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_IntScreenElement);
+}
+std::uint32_t __fastcall SkipListDestructor_457bb0(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_UIntString);
+}
+std::uint32_t __fastcall SkipListDestructor_457cb0(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_UIntStringVector);
+}
+std::uint32_t __fastcall SkipListDestructor_45d500(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_IntHICON);
+}
+std::uint32_t __fastcall SkipListDestructor_472120(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_ULongExecuteTypes);
+}
+std::uint32_t __fastcall SkipListDestructor_472580(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_ULongSyncInfo);
+}
+std::uint32_t __fastcall SkipListDestructor_472600(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_ULongSyncInfo);
+}
+std::uint32_t __fastcall SkipListDestructor_499290(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_IntString);
+}
+std::uint32_t __fastcall SkipListDestructor_4a6a40(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kReferenceSkipListBase);
+}
+std::uint32_t __fastcall SkipListDestructor_4a6b40(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kChunkSkipListBase);
+}
+std::uint32_t __fastcall SkipListDestructor_4a6c40(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kReferenceSkipListBase);
+}
+std::uint32_t __fastcall SkipListDestructor_4a6ce0(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kChunkSkipListBase);
+}
+std::uint32_t __fastcall SkipListDestructor_4a8e10(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_IntHFONT);
+}
+std::uint32_t __fastcall SkipListDestructor_4a8eb0(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_IntHFONT);
+}
+std::uint32_t __fastcall SkipListDestructor_609bb0(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_UIntMessageBlock);
+}
+std::uint32_t __fastcall SkipListDestructor_616050(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_HWNDCDAudio);
+}
+std::uint32_t __fastcall SkipListDestructor_609aa0(std::uint32_t self, void*) {
+    Field(self, 0) = vt::kWCValSkipListDict_UIntMessageBlock;
+    reinterpret_cast<ThisFn>(kMessageBlockDestroy)(self + kPairBuffer, nullptr);
+    return DestroySkipList(self, vt::kWCSkipListBase_UIntMessageBlock);
+}
+
 using IterPairFn = std::uint32_t(__fastcall*)(std::uint32_t self, void* edx);
 
 // Purpose: the key/value pair at the sound data's effect iterator.
@@ -106,6 +188,42 @@ S3RE_HOOK(0x005ffc00, SkipListDestructor_5ffc00, SkipListDestroyFn, Original_Ski
           SkipListDestructor_5ffc00);
 S3RE_HOOK(0x005c33e0, SkipListDestructor_5c33e0, SkipListDestroyFn, Original_SkipListDestructor_5c33e0,
           SkipListDestructor_5c33e0);
+S3RE_HOOK(0x00428120, SkipListDestructor_428120, SkipListDestroyFn, Original_SkipListDestructor_428120,
+          SkipListDestructor_428120);
+S3RE_HOOK(0x004283a0, SkipListDestructor_4283a0, SkipListDestroyFn, Original_SkipListDestructor_4283a0,
+          SkipListDestructor_4283a0);
+S3RE_HOOK(0x00457bb0, SkipListDestructor_457bb0, SkipListDestroyFn, Original_SkipListDestructor_457bb0,
+          SkipListDestructor_457bb0);
+S3RE_HOOK(0x00457cb0, SkipListDestructor_457cb0, SkipListDestroyFn, Original_SkipListDestructor_457cb0,
+          SkipListDestructor_457cb0);
+S3RE_HOOK(0x0045d500, SkipListDestructor_45d500, SkipListDestroyFn, Original_SkipListDestructor_45d500,
+          SkipListDestructor_45d500);
+S3RE_HOOK(0x00472120, SkipListDestructor_472120, SkipListDestroyFn, Original_SkipListDestructor_472120,
+          SkipListDestructor_472120);
+S3RE_HOOK(0x00472580, SkipListDestructor_472580, SkipListDestroyFn, Original_SkipListDestructor_472580,
+          SkipListDestructor_472580);
+S3RE_HOOK(0x00472600, SkipListDestructor_472600, SkipListDestroyFn, Original_SkipListDestructor_472600,
+          SkipListDestructor_472600);
+S3RE_HOOK(0x00499290, SkipListDestructor_499290, SkipListDestroyFn, Original_SkipListDestructor_499290,
+          SkipListDestructor_499290);
+S3RE_HOOK(0x004a6a40, SkipListDestructor_4a6a40, SkipListDestroyFn, Original_SkipListDestructor_4a6a40,
+          SkipListDestructor_4a6a40);
+S3RE_HOOK(0x004a6b40, SkipListDestructor_4a6b40, SkipListDestroyFn, Original_SkipListDestructor_4a6b40,
+          SkipListDestructor_4a6b40);
+S3RE_HOOK(0x004a6c40, SkipListDestructor_4a6c40, SkipListDestroyFn, Original_SkipListDestructor_4a6c40,
+          SkipListDestructor_4a6c40);
+S3RE_HOOK(0x004a6ce0, SkipListDestructor_4a6ce0, SkipListDestroyFn, Original_SkipListDestructor_4a6ce0,
+          SkipListDestructor_4a6ce0);
+S3RE_HOOK(0x004a8e10, SkipListDestructor_4a8e10, SkipListDestroyFn, Original_SkipListDestructor_4a8e10,
+          SkipListDestructor_4a8e10);
+S3RE_HOOK(0x004a8eb0, SkipListDestructor_4a8eb0, SkipListDestroyFn, Original_SkipListDestructor_4a8eb0,
+          SkipListDestructor_4a8eb0);
+S3RE_HOOK(0x00609bb0, SkipListDestructor_609bb0, SkipListDestroyFn, Original_SkipListDestructor_609bb0,
+          SkipListDestructor_609bb0);
+S3RE_HOOK(0x00616050, SkipListDestructor_616050, SkipListDestroyFn, Original_SkipListDestructor_616050,
+          SkipListDestructor_616050);
+S3RE_HOOK(0x00609aa0, SkipListDestructor_609aa0, SkipListDestroyFn, Original_SkipListDestructor_609aa0,
+          SkipListDestructor_609aa0);
 S3RE_HOOK(0x005ffc80, SoundEffectDictIter_KeyValue, IterPairFn, Original_SoundEffectDictIter_KeyValue,
           SoundEffectDictIter_KeyValue);
 
@@ -130,6 +248,24 @@ const DestructorCase kDestructorCases[] = {
     {Original_SkipListDestructor_5ffac0, &SkipListDestructor_5ffac0},
     {Original_SkipListDestructor_5ffc00, &SkipListDestructor_5ffc00},
     {Original_SkipListDestructor_5c33e0, &SkipListDestructor_5c33e0},
+    {Original_SkipListDestructor_428120, &SkipListDestructor_428120},
+    {Original_SkipListDestructor_4283a0, &SkipListDestructor_4283a0},
+    {Original_SkipListDestructor_457bb0, &SkipListDestructor_457bb0},
+    {Original_SkipListDestructor_457cb0, &SkipListDestructor_457cb0},
+    {Original_SkipListDestructor_45d500, &SkipListDestructor_45d500},
+    {Original_SkipListDestructor_472120, &SkipListDestructor_472120},
+    {Original_SkipListDestructor_472580, &SkipListDestructor_472580},
+    {Original_SkipListDestructor_472600, &SkipListDestructor_472600},
+    {Original_SkipListDestructor_499290, &SkipListDestructor_499290},
+    {Original_SkipListDestructor_4a6a40, &SkipListDestructor_4a6a40},
+    {Original_SkipListDestructor_4a6b40, &SkipListDestructor_4a6b40},
+    {Original_SkipListDestructor_4a6c40, &SkipListDestructor_4a6c40},
+    {Original_SkipListDestructor_4a6ce0, &SkipListDestructor_4a6ce0},
+    {Original_SkipListDestructor_4a8e10, &SkipListDestructor_4a8e10},
+    {Original_SkipListDestructor_4a8eb0, &SkipListDestructor_4a8eb0},
+    {Original_SkipListDestructor_609bb0, &SkipListDestructor_609bb0},
+    {Original_SkipListDestructor_616050, &SkipListDestructor_616050},
+    {Original_SkipListDestructor_609aa0, &SkipListDestructor_609aa0},
 };
 
 std::uint32_t g_clearResult = 0;
@@ -155,6 +291,7 @@ bool CompareDestructor(test::Context& ctx, const DestructorCase& c, int cases) {
             });
             stubs.Install<0, kNoOp>();
             stubs.Install<0, kBufferDestroy>();
+            stubs.Install<0, kMessageBlockDestroy>();
             stubs.SetWorld(reinterpret_cast<game::CGameData*>(a));
             ra = c.original(reinterpret_cast<std::uint32_t>(a), nullptr);
             callsA = stubs.Take();

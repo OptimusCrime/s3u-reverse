@@ -36,11 +36,21 @@
 //   0x00473000 kWCBareVectorBase_ulong                  WCBareVectorBase<unsigned long>
 //   0x00473060 kWCBareVectorBase_ulong                  WCBareVectorBase<unsigned long>
 //   0x004a1140 kWCBareVectorBase_ushort                 WCBareVectorBase<unsigned short>
+//   0x004145f0 kWCBareVectorBase_int                        (wip/watcom-r6)
+//   0x0042f8c0 kWCBareVectorBase_int                        (wip/watcom-r6)
+//   0x00499630 kWCBareVectorBase_int                        (wip/watcom-r6)
+//   0x0049b7f0 kWCBareVectorBase_GameChunkDescription       (wip/watcom-r6)
+//   0x00541690 kWCBareVectorBase_CGamePlayerStatus          (wip/watcom-r6)
+//   0x005b7c10 kWCBareVectorBase_CDisplayMode               (wip/watcom-r6)
+//   0x005de270 kWCBareVectorBase_uint                       (wip/watcom-r6)
+//   0x005de2d0 kWCBareVectorBase_uint                       (wip/watcom-r6)
+//   0x005f3de0 kWCBareVectorBase_voidp                      (wip/watcom-r6)
+//   0x0061aab0 kWCBareVectorBase_voidp                      (wip/watcom-r6)
 //
 // Destructors of vectors of Dirk::CPlayer (0xcc bytes; our GamePlayerSetup):
 // the same, but each of the `filled` elements is destroyed first by
 // ~GamePlayerSetup 0x49ec80 (filled and data re-read per element):
-//   0x004141a0 WCValOrderedVector<Dirk::CPlayer>, 0x004a11a0 the same body.
+//   0x004141a0 WCValOrderedVector<Dirk::CPlayer>, 0x004a11a0 and 0x004146d0 the same body.
 // The destructor of the sorted vector of teams (Dirk::CTeam, 0x40 bytes),
 // the same with ~CTeam 0x4a04d0:
 //   0x00414240 WCValSortedVector<Dirk::CTeam>.
@@ -65,6 +75,18 @@
 //   0x00457ea0   16  String                WCOrderedVectorBase_String
 //   0x00472820   64  CConnectionShortcut   WCVectorBase_CConnectionShortcut
 //   0x00462cf0   96  CRunningSession       WCVectorBase_CRunningSession
+//   0x00414410    4  int                   WCSortedVectorBase_int
+//   0x00427d60    4  HFONT                 WCValOrderedVector_HFONT
+//   0x00468330    4  voidp                 WCVectorBase_voidp
+//   0x00499580    4  long                  WCOrderedVectorBase_long
+//   0x00609f50    4  uint                  WCSortedVectorBase_uint
+//   0x00414510   16  String                WCVectorBase_String
+//   0x004993f0   16  String                WCSortedVectorBase_String
+//   0x005fda00   16  String                WCValOrderedVector_String
+//   0x005dde00   32  CLobbyServer          WCSortedVectorBase_CLobbyServer
+//   0x005de010   32  CServerData           WCVectorBase_CServerData
+//   0x005de090   32  CLobbyServer          WCVectorBase_CLobbyServer
+//   0x005f3f40   32  CServerData           WCOrderedVectorBase_CServerData
 //
 // (capacity) constructors, ret 4, EAX = this: the bare part only.
 //   address    size  T
@@ -76,6 +98,8 @@
 //   0x00428e70    4  CScreenElement*
 //   0x00429080   32  CListView::CColumn
 //   0x00429410   20  CListView::CLine
+//   0x005de130    4  uint
+//   0x004683b0   64  CConnectionShortcut
 
 #include "watcom/vector_base.h"
 
@@ -207,6 +231,36 @@ std::uint32_t __fastcall VectorDestructor_473060(VectorBase* self, void*) {
 std::uint32_t __fastcall VectorDestructor_4a1140(VectorBase* self, void*) {
     return DestroyTrivialVector(self, vt::kWCBareVectorBase_ushort);
 }
+std::uint32_t __fastcall VectorDestructor_4145f0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_int);
+}
+std::uint32_t __fastcall VectorDestructor_42f8c0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_int);
+}
+std::uint32_t __fastcall VectorDestructor_499630(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_int);
+}
+std::uint32_t __fastcall VectorDestructor_49b7f0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_GameChunkDescription);
+}
+std::uint32_t __fastcall VectorDestructor_541690(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_CGamePlayerStatus);
+}
+std::uint32_t __fastcall VectorDestructor_5b7c10(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_CDisplayMode);
+}
+std::uint32_t __fastcall VectorDestructor_5de270(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_uint);
+}
+std::uint32_t __fastcall VectorDestructor_5de2d0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_uint);
+}
+std::uint32_t __fastcall VectorDestructor_5f3de0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
+std::uint32_t __fastcall VectorDestructor_61aab0(VectorBase* self, void*) {
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
 
 // Purpose: Destructors of the vectors of player setups (Dirk::CPlayer):
 // destroy each setup, then free the block.
@@ -214,6 +268,9 @@ std::uint32_t __fastcall VectorDestructor_4141a0(VectorBase* self, void*) {
     return DestroyPlayerVector(self);
 }
 std::uint32_t __fastcall VectorDestructor_4a11a0(VectorBase* self, void*) {
+    return DestroyPlayerVector(self);
+}
+std::uint32_t __fastcall VectorDestructor_4146d0(VectorBase* self, void*) {
     return DestroyPlayerVector(self);
 }
 
@@ -271,6 +328,42 @@ VectorBase* __fastcall VectorConstructor_472820(VectorBase* self, void*, std::ui
 VectorBase* __fastcall VectorConstructor_462cf0(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
     return ConstructVector(self, capacity, grow, 96, vt::kWCBareVectorBase_CRunningSession, vt::kWCVectorBase_CRunningSession);
 }
+VectorBase* __fastcall VectorConstructor_414410(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_int, vt::kWCSortedVectorBase_int);
+}
+VectorBase* __fastcall VectorConstructor_427d60(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_HFONT, vt::kWCValOrderedVector_HFONT);
+}
+VectorBase* __fastcall VectorConstructor_468330(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_voidp, vt::kWCVectorBase_voidp);
+}
+VectorBase* __fastcall VectorConstructor_499580(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_long, vt::kWCOrderedVectorBase_long);
+}
+VectorBase* __fastcall VectorConstructor_609f50(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 4, vt::kWCBareVectorBase_uint, vt::kWCSortedVectorBase_uint);
+}
+VectorBase* __fastcall VectorConstructor_414510(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 16, vt::kWCBareVectorBase_String, vt::kWCVectorBase_String);
+}
+VectorBase* __fastcall VectorConstructor_4993f0(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 16, vt::kWCBareVectorBase_String, vt::kWCSortedVectorBase_String);
+}
+VectorBase* __fastcall VectorConstructor_5fda00(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 16, vt::kWCBareVectorBase_String, vt::kWCValOrderedVector_String);
+}
+VectorBase* __fastcall VectorConstructor_5dde00(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 32, vt::kWCBareVectorBase_CLobbyServer, vt::kWCSortedVectorBase_CLobbyServer);
+}
+VectorBase* __fastcall VectorConstructor_5de010(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 32, vt::kWCBareVectorBase_CServerData, vt::kWCVectorBase_CServerData);
+}
+VectorBase* __fastcall VectorConstructor_5de090(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 32, vt::kWCBareVectorBase_CLobbyServer, vt::kWCVectorBase_CLobbyServer);
+}
+VectorBase* __fastcall VectorConstructor_5f3f40(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 32, vt::kWCBareVectorBase_CServerData, vt::kWCOrderedVectorBase_CServerData);
+}
 
 // Purpose: Constructors of the bare part of a Watcom vector (room for
 // `capacity` elements); the derived constructors inlined around them set
@@ -298,6 +391,12 @@ VectorBase* __fastcall BareVectorConstructor_429080(VectorBase* self, void*, std
 }
 VectorBase* __fastcall BareVectorConstructor_429410(VectorBase* self, void*, std::uint32_t capacity) {
     return ConstructBareVector(self, capacity, 20, vt::kWCBareVectorBase_CLine);
+}
+VectorBase* __fastcall BareVectorConstructor_5de130(VectorBase* self, void*, std::uint32_t capacity) {
+    return ConstructBareVector(self, capacity, 4, vt::kWCBareVectorBase_uint);
+}
+VectorBase* __fastcall BareVectorConstructor_4683b0(VectorBase* self, void*, std::uint32_t capacity) {
+    return ConstructBareVector(self, capacity, 64, vt::kWCBareVectorBase_CConnectionShortcut);
 }
 
 S3RE_HOOK(0x004143b0, VectorDestructor_4143b0, DestructorFn, Original_VectorDestructor_4143b0,
@@ -406,6 +505,56 @@ S3RE_HOOK(0x00429080, BareVectorConstructor_429080, BareConstructorFn, Original_
           BareVectorConstructor_429080);
 S3RE_HOOK(0x00429410, BareVectorConstructor_429410, BareConstructorFn, Original_BareVectorConstructor_429410,
           BareVectorConstructor_429410);
+S3RE_HOOK(0x004145f0, VectorDestructor_4145f0, DestructorFn, Original_VectorDestructor_4145f0,
+          VectorDestructor_4145f0);
+S3RE_HOOK(0x0042f8c0, VectorDestructor_42f8c0, DestructorFn, Original_VectorDestructor_42f8c0,
+          VectorDestructor_42f8c0);
+S3RE_HOOK(0x00499630, VectorDestructor_499630, DestructorFn, Original_VectorDestructor_499630,
+          VectorDestructor_499630);
+S3RE_HOOK(0x0049b7f0, VectorDestructor_49b7f0, DestructorFn, Original_VectorDestructor_49b7f0,
+          VectorDestructor_49b7f0);
+S3RE_HOOK(0x00541690, VectorDestructor_541690, DestructorFn, Original_VectorDestructor_541690,
+          VectorDestructor_541690);
+S3RE_HOOK(0x005b7c10, VectorDestructor_5b7c10, DestructorFn, Original_VectorDestructor_5b7c10,
+          VectorDestructor_5b7c10);
+S3RE_HOOK(0x005de270, VectorDestructor_5de270, DestructorFn, Original_VectorDestructor_5de270,
+          VectorDestructor_5de270);
+S3RE_HOOK(0x005de2d0, VectorDestructor_5de2d0, DestructorFn, Original_VectorDestructor_5de2d0,
+          VectorDestructor_5de2d0);
+S3RE_HOOK(0x005f3de0, VectorDestructor_5f3de0, DestructorFn, Original_VectorDestructor_5f3de0,
+          VectorDestructor_5f3de0);
+S3RE_HOOK(0x0061aab0, VectorDestructor_61aab0, DestructorFn, Original_VectorDestructor_61aab0,
+          VectorDestructor_61aab0);
+S3RE_HOOK(0x004146d0, VectorDestructor_4146d0, DestructorFn, Original_VectorDestructor_4146d0,
+          VectorDestructor_4146d0);
+S3RE_HOOK(0x00414410, VectorConstructor_414410, ConstructorFn, Original_VectorConstructor_414410,
+          VectorConstructor_414410);
+S3RE_HOOK(0x00427d60, VectorConstructor_427d60, ConstructorFn, Original_VectorConstructor_427d60,
+          VectorConstructor_427d60);
+S3RE_HOOK(0x00468330, VectorConstructor_468330, ConstructorFn, Original_VectorConstructor_468330,
+          VectorConstructor_468330);
+S3RE_HOOK(0x00499580, VectorConstructor_499580, ConstructorFn, Original_VectorConstructor_499580,
+          VectorConstructor_499580);
+S3RE_HOOK(0x00609f50, VectorConstructor_609f50, ConstructorFn, Original_VectorConstructor_609f50,
+          VectorConstructor_609f50);
+S3RE_HOOK(0x00414510, VectorConstructor_414510, ConstructorFn, Original_VectorConstructor_414510,
+          VectorConstructor_414510);
+S3RE_HOOK(0x004993f0, VectorConstructor_4993f0, ConstructorFn, Original_VectorConstructor_4993f0,
+          VectorConstructor_4993f0);
+S3RE_HOOK(0x005fda00, VectorConstructor_5fda00, ConstructorFn, Original_VectorConstructor_5fda00,
+          VectorConstructor_5fda00);
+S3RE_HOOK(0x005dde00, VectorConstructor_5dde00, ConstructorFn, Original_VectorConstructor_5dde00,
+          VectorConstructor_5dde00);
+S3RE_HOOK(0x005de010, VectorConstructor_5de010, ConstructorFn, Original_VectorConstructor_5de010,
+          VectorConstructor_5de010);
+S3RE_HOOK(0x005de090, VectorConstructor_5de090, ConstructorFn, Original_VectorConstructor_5de090,
+          VectorConstructor_5de090);
+S3RE_HOOK(0x005f3f40, VectorConstructor_5f3f40, ConstructorFn, Original_VectorConstructor_5f3f40,
+          VectorConstructor_5f3f40);
+S3RE_HOOK(0x005de130, BareVectorConstructor_5de130, BareConstructorFn, Original_BareVectorConstructor_5de130,
+          BareVectorConstructor_5de130);
+S3RE_HOOK(0x004683b0, BareVectorConstructor_4683b0, BareConstructorFn, Original_BareVectorConstructor_4683b0,
+          BareVectorConstructor_4683b0);
 
 // ---------------------------------------------------------------------------
 // Tests: every instantiation, original against ours, on random objects.
@@ -467,6 +616,17 @@ const DestructorPair kDestructors[] = {
     {Original_VectorDestructor_4141a0, &VectorDestructor_4141a0, 0x4141a0},
     {Original_VectorDestructor_4a11a0, &VectorDestructor_4a11a0, 0x4a11a0},
     {Original_VectorDestructor_414240, &VectorDestructor_414240, 0x414240},
+    {Original_VectorDestructor_4145f0, &VectorDestructor_4145f0, 0x4145f0},
+    {Original_VectorDestructor_42f8c0, &VectorDestructor_42f8c0, 0x42f8c0},
+    {Original_VectorDestructor_499630, &VectorDestructor_499630, 0x499630},
+    {Original_VectorDestructor_49b7f0, &VectorDestructor_49b7f0, 0x49b7f0},
+    {Original_VectorDestructor_541690, &VectorDestructor_541690, 0x541690},
+    {Original_VectorDestructor_5b7c10, &VectorDestructor_5b7c10, 0x5b7c10},
+    {Original_VectorDestructor_5de270, &VectorDestructor_5de270, 0x5de270},
+    {Original_VectorDestructor_5de2d0, &VectorDestructor_5de2d0, 0x5de2d0},
+    {Original_VectorDestructor_5f3de0, &VectorDestructor_5f3de0, 0x5f3de0},
+    {Original_VectorDestructor_61aab0, &VectorDestructor_61aab0, 0x61aab0},
+    {Original_VectorDestructor_4146d0, &VectorDestructor_4146d0, 0x4146d0},
 };
 const ConstructorPair kConstructors[] = {
     {Original_VectorConstructor_437630, &VectorConstructor_437630, 0x437630},
@@ -484,6 +644,18 @@ const ConstructorPair kConstructors[] = {
     {Original_VectorConstructor_457ea0, &VectorConstructor_457ea0, 0x457ea0},
     {Original_VectorConstructor_472820, &VectorConstructor_472820, 0x472820},
     {Original_VectorConstructor_462cf0, &VectorConstructor_462cf0, 0x462cf0},
+    {Original_VectorConstructor_414410, &VectorConstructor_414410, 0x414410},
+    {Original_VectorConstructor_427d60, &VectorConstructor_427d60, 0x427d60},
+    {Original_VectorConstructor_468330, &VectorConstructor_468330, 0x468330},
+    {Original_VectorConstructor_499580, &VectorConstructor_499580, 0x499580},
+    {Original_VectorConstructor_609f50, &VectorConstructor_609f50, 0x609f50},
+    {Original_VectorConstructor_414510, &VectorConstructor_414510, 0x414510},
+    {Original_VectorConstructor_4993f0, &VectorConstructor_4993f0, 0x4993f0},
+    {Original_VectorConstructor_5fda00, &VectorConstructor_5fda00, 0x5fda00},
+    {Original_VectorConstructor_5dde00, &VectorConstructor_5dde00, 0x5dde00},
+    {Original_VectorConstructor_5de010, &VectorConstructor_5de010, 0x5de010},
+    {Original_VectorConstructor_5de090, &VectorConstructor_5de090, 0x5de090},
+    {Original_VectorConstructor_5f3f40, &VectorConstructor_5f3f40, 0x5f3f40},
 };
 const BareConstructorPair kBareConstructors[] = {
     {Original_BareVectorConstructor_437c90, &BareVectorConstructor_437c90, 0x437c90},
@@ -494,6 +666,8 @@ const BareConstructorPair kBareConstructors[] = {
     {Original_BareVectorConstructor_428e70, &BareVectorConstructor_428e70, 0x428e70},
     {Original_BareVectorConstructor_429080, &BareVectorConstructor_429080, 0x429080},
     {Original_BareVectorConstructor_429410, &BareVectorConstructor_429410, 0x429410},
+    {Original_BareVectorConstructor_5de130, &BareVectorConstructor_5de130, 0x5de130},
+    {Original_BareVectorConstructor_4683b0, &BareVectorConstructor_4683b0, 0x4683b0},
 };
 
 std::uint32_t RandomCapacity(test::Rng& rng) {

@@ -23,6 +23,8 @@
 // operator delete's, or 0 without a block. Four copies of the same code:
 //   0x00409d50 WCValOrderedVector<String>  0x0044c980 WCValSortedVector<String>
 //   0x0040a280, 0x0044cf50 (WCBareVectorBase<String> bodies, callers' classes not named)
+//   and (wip/watcom-r6) 0x005df310 (the same bytes) and 0x00414770 (11
+//   callers; its ~string has the buffer split inlined too).
 //
 // WCValOrderedVector<String>::insertAt (0x004148a0; 18 callers):
 //   (index, const String* value) ret 8. The index is clamped to 0..length.
@@ -135,6 +137,12 @@ std::uint32_t __fastcall StringVectorDestructor_40a280(VectorBase* self, void*) 
     return DestroyStringVector(self);
 }
 std::uint32_t __fastcall StringVectorDestructor_44cf50(VectorBase* self, void*) {
+    return DestroyStringVector(self);
+}
+std::uint32_t __fastcall StringVectorDestructor_5df310(VectorBase* self, void*) {
+    return DestroyStringVector(self);
+}
+std::uint32_t __fastcall StringVectorDestructor_414770(VectorBase* self, void*) {
     return DestroyStringVector(self);
 }
 
@@ -250,6 +258,10 @@ S3RE_HOOK(0x0040a280, StringVectorDestructor_40a280, StringVectorDestructorFn,
           Original_StringVectorDestructor_40a280, StringVectorDestructor_40a280);
 S3RE_HOOK(0x0044cf50, StringVectorDestructor_44cf50, StringVectorDestructorFn,
           Original_StringVectorDestructor_44cf50, StringVectorDestructor_44cf50);
+S3RE_HOOK(0x005df310, StringVectorDestructor_5df310, StringVectorDestructorFn,
+          Original_StringVectorDestructor_5df310, StringVectorDestructor_5df310);
+S3RE_HOOK(0x00414770, StringVectorDestructor_414770, StringVectorDestructorFn,
+          Original_StringVectorDestructor_414770, StringVectorDestructor_414770);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -603,6 +615,8 @@ S3RE_TEST(StringVectorDestructors_MatchOriginal) {
     CompareDestructor(ctx, Original_StringVectorDestructor_44c980, &StringVectorDestructor_44c980, 1000);
     CompareDestructor(ctx, Original_StringVectorDestructor_40a280, &StringVectorDestructor_40a280, 1000);
     CompareDestructor(ctx, Original_StringVectorDestructor_44cf50, &StringVectorDestructor_44cf50, 1000);
+    CompareDestructor(ctx, Original_StringVectorDestructor_5df310, &StringVectorDestructor_5df310, 1000);
+    CompareDestructor(ctx, Original_StringVectorDestructor_414770, &StringVectorDestructor_414770, 1000);
 }
 
 S3RE_TEST(StringVectorDestructors_ComparisonDetectsWrongImplementation) {

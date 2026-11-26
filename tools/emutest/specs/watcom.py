@@ -406,3 +406,108 @@ SPECS += [
          [one_of(WORLD_BASE + ISV_ITER), anything, isv_index], presets=isv_world, virtuals=ISV_VIRTUALS),
     isv_spec("WCPtrListBase_NewLink", 0x00463b50, [one_of(WORLD_BASE + ISV_VALUE)], new_fails=0.2),
 ]
+
+
+# -- wip/watcom-r6: more instantiations of the vector constructors and
+# destructors (bare_vectors.cpp), on the presets above.
+WATCOM_R6_TRIVIAL_VECTOR_DESTRUCTORS = (0x4145f0, 0x42f8c0, 0x499630, 0x49b7f0, 0x541690, 0x5b7c10, 0x5de270,
+                                        0x5de2d0, 0x5f3de0, 0x61aab0)
+WATCOM_R6_VECTOR_CONSTRUCTORS = (0x414410, 0x427d60, 0x468330, 0x499580, 0x609f50, 0x414510, 0x4993f0, 0x5fda00,
+                                 0x5dde00, 0x5de010, 0x5de090, 0x5f3f40)
+WATCOM_R6_BARE_VECTOR_CONSTRUCTORS = (0x5de130, 0x4683b0)
+SPECS += [Spec(f"VectorDestructor_{a:x}", a, "thiscall", [], presets=watcom_vector_to_destroy)
+          for a in WATCOM_R6_TRIVIAL_VECTOR_DESTRUCTORS]
+SPECS += [Spec("VectorDestructor_4146d0", 0x004146d0, "thiscall", [], presets=watcom_vector_to_destroy,
+               callees={0x0049ec80: (0, "thiscall", "probe")})]
+SPECS += [Spec(f"VectorConstructor_{a:x}", a, "thiscall", [watcom_capacity, anything], new_fails=0.2)
+          for a in WATCOM_R6_VECTOR_CONSTRUCTORS]
+SPECS += [Spec(f"BareVectorConstructor_{a:x}", a, "thiscall", [watcom_capacity], new_fails=0.2)
+          for a in WATCOM_R6_BARE_VECTOR_CONSTRUCTORS]
+
+
+# -- destructors of vectors whose elements have a destructor (element_vectors.cpp) --
+# The vector at world offset 0, its block (or none) in scratch slot 0 with
+# room for 6 elements; filled -2..6. Virtual elements: each element's
+# vtable is FAKE_VTABLE (slot 0, the scalar deleting destructor, probed with
+# its flags). ~CColumn / ~CLine probed.
+def element_vector_to_destroy(size):
+    def presets(rng, pool, args):
+        data = rng.choice([0, WORLD_BASE + SCRATCH, WORLD_BASE + SCRATCH])
+        fields = [(8, data, 4), (0x10, rng.randint(-2, 6) & 0xFFFFFFFF, 4)]
+        return fields + [(SCRATCH + k * size, FAKE_VTABLE, 4) for k in range(6)]
+    return presets
+
+
+VIRTUAL_ELEMENT_VECTOR_DESTRUCTORS = (
+    (0x44c4e0, 0x54), (0x44d290, 0x54), (0x5de3b0, 0x54), (0x5de450, 0x54),
+    (0x44c580, 0x11c), (0x44d690, 0x11c), (0x458770, 0x11c), (0x458980, 0x11c),
+    (0x44cbe0, 0x20), (0x44dd10, 0x20), (0x44de40, 0x20), (0x458d80, 0x20),
+    (0x609940, 0x14), (0x60a130, 0x14), (0x60a590, 0x14), (0x60a630, 0x14),
+    (0x44cb20, 0x17c), (0x44db90, 0x17c), (0x5dfd90, 0x17c),
+    (0x4627b0, 0x40), (0x468420, 0x40), (0x472b10, 0x40))
+SPECS += [Spec(f"ElementVectorDestructor_{a:x}", a, "thiscall", [], presets=element_vector_to_destroy(size),
+               virtuals={0x00: 1})
+          for a, size in VIRTUAL_ELEMENT_VECTOR_DESTRUCTORS]
+SPECS += [Spec(f"ElementVectorDestructor_{a:x}", a, "thiscall", [], presets=element_vector_to_destroy(size),
+               callees={destroy: (0, "thiscall", "probe")})
+          for a, size, destroy in ((0x427fe0, 0x20, 0x4275e0), (0x4290f0, 0x20, 0x4275e0),
+                                   (0x428070, 0x14, 0x4277d0), (0x429480, 0x14, 0x4277d0))]
+
+
+# -- the other skip-list destructors (skiplist_dicts.cpp, wip/watcom-r6) ----
+SPECS += [Spec(f"SkipListDestructor_{a:x}", a, "thiscall", [], presets=skip_dict_count, callees=SKIP_DESTROY_CALLEES)
+          for a in (0x428120, 0x4283a0, 0x457bb0, 0x457cb0, 0x45d500, 0x472120, 0x472580, 0x472600, 0x499290,
+                    0x4a6a40, 0x4a6b40, 0x4a6c40, 0x4a6ce0, 0x4a8e10, 0x4a8eb0, 0x609bb0, 0x616050)]
+SPECS += [Spec("SkipListDestructor_609aa0", 0x00609aa0, "thiscall", [], presets=skip_dict_count,
+               callees={0x0060bd80: (0, "thiscall", "probe"), 0x006014b0: (0, "thiscall", "probe")})]
+
+
+# -- list destructors (slist_destructors.cpp, wip/watcom-r6) ----------------
+# clearAndDestroy and ~WCIsvListBase (ours, own specs) probed; the list's
+# last link 0 or not.
+def slist_last(rng, pool, args):
+    return [(8, rng.choice([0, 0, rng.getrandbits(32)]), 4)]
+
+
+SLIST_CALLEES = {0x0060b560: (0, "thiscall", "probe"), 0x0060b5a0: (0, "thiscall", "probe")}
+SPECS += [Spec(f"SListDestructor_{a:x}", a, "thiscall", [], presets=slist_last, callees=SLIST_CALLEES)
+          for a in (0x427ea0, 0x427f10, 0x428290, 0x4628f0, 0x462bc0, 0x462f80, 0x5b7950, 0x5b79c0, 0x5b7a30,
+                    0x5b7d90, 0x5b7e50, 0x5ddaf0, 0x5ddd70, 0x5dfe80)]
+# cover_until: the 11 bytes before the int 3 padding (a tail jump, so
+# no ret marks the end).
+SPECS += [Spec(f"IsvSListDestructor_{a:x}", a, "thiscall", [], callees=SLIST_CALLEES, cover_until=a + 11)
+          for a in (0x428fd0, 0x428fe0, 0x428ff0, 0x462f70, 0x5b7fd0, 0x5b7fe0, 0x5b8030, 0x5dfe30)]
+
+
+# -- more list and iterator constructors, the base destructors (list_iterators.cpp) --
+# The base destructors leave EAX as the caller had it (void).
+SPECS += [
+    Spec("IsvListConstructor_5de110", 0x005de110, "thiscall", []),
+    Spec("SkipListIterConstructor_609fd0", 0x00609fd0, "thiscall", [anything]),
+    Spec("ListIterConstructor_463be0", 0x00463be0, "thiscall", [anything]),
+    Spec("ListIterConstructor_5b7d10", 0x005b7d10, "thiscall", [anything]),
+    Spec("WCIterExcept_Destroy", 0x00499620, "thiscall", [], eax_mask=0),
+    Spec("WCSkipNonTempBase_Destroy", 0x00423a10, "thiscall", [], eax_mask=0),
+]
+
+
+# -- member callbacks of the value and pointer vectors (vector_callbacks.cpp) --
+# a and b point into scratch (random words); the member probed.
+MEMBER_CALLBACKS = (
+    (0x44cb00, 0x5dc780), (0x44cbc0, 0x5dc460), (0x462960, 0x5bb340), (0x462980, 0x5bb3a0), (0x4682f0, 0x5ba970),
+    (0x541650, 0x5ec200), (0x541670, 0x5ec250), (0x5b7aa0, 0x5b69c0), (0x5b7bf0, 0x5b6c60), (0x5bdbb0, 0x5bd260),
+    (0x5dd740, 0x5ebfd0), (0x5dd880, 0x5ed220), (0x5ddb80, 0x5c4830), (0x609920, 0x6027d0),
+    (0x472180, 0x49d990), (0x4721a0, 0x49d9c0), (0x472220, 0x49d7f0), (0x4722a0, 0x49d940), (0x4722c0, 0x49d900),
+    (0x472340, 0x49d9f0), (0x5b7930, 0x60ec00),
+    (0x462ac0, 0x5c0f80), (0x462ae0, 0x5c0fa0), (0x5f3da0, 0x5ed220), (0x5f3dc0, 0x5ed3e0))
+SPECS += [Spec(f"VectorCallback_{a:x}", a, "stdcall", CALLBACK_ARGS, callees={member: (1, "thiscall", "probe")})
+          for a, member in MEMBER_CALLBACKS]
+
+
+# The string-vector destructors of wip/watcom-r6, on the same vectors:
+# 0x5df310 is 0x409d50's bytes; 0x414770 has the buffer split inlined too.
+SPECS += [Spec("StringVectorDestructor_5df310", 0x005df310, "thiscall", [], presets=string_vector_state,
+               exempt_blocks=(0x005df3b3,)),
+          # Dead: 0x414840, the _Eos after erase(0, npos) (as 0x409df3).
+          Spec("StringVectorDestructor_414770", 0x00414770, "thiscall", [], presets=string_vector_state,
+               exempt_blocks=(0x00414840,))]

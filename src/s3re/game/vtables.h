@@ -196,6 +196,54 @@ inline constexpr std::uint32_t kWCVectorBase_CRunningSession = 0x657370;      //
 // Dirk::CTeam's members (game/ui/game_teams.cpp)
 inline constexpr std::uint32_t kWCValSortedVector_int = 0x655a0c;             // WCValSortedVector<int> (+8)
 inline constexpr std::uint32_t kWCValOrderedVector_CPlayer = 0x656b6c;        // WCValOrderedVector<Dirk::CPlayer> (+0x24)
+// wip/watcom-r6: more Watcom instantiations (watcom/*.cpp, msvc6/deleting_destructors.cpp)
+inline constexpr std::uint32_t kWCBareVectorBase_CGamePlayerStatus = 0x65a194;  // <Lobby::CGamePlayerStatus>
+inline constexpr std::uint32_t kWCBareVectorBase_CDisplayMode = 0x65cb30;       // <DirectX::CDisplayMode>
+inline constexpr std::uint32_t kWCBareVectorBase_LobbyPlayer = 0x657070;        // <LobbyClient::CPlayer>
+inline constexpr std::uint32_t kWCBareVectorBase_CLMGeneric = 0x65d5e0;         // <Lobby::CLMGeneric>
+inline constexpr std::uint32_t kWCBareVectorBase_CPrivateChat = 0x65704c;       // <LobbyClient::CPrivateChat>
+inline constexpr std::uint32_t kWCBareVectorBase_CLobbyServer = 0x65d2e0;       // <LobbyClient::priv::CLobbyServer>
+inline constexpr std::uint32_t kWCBareVectorBase_CServerData = 0x65d2b8;        // <Lobby::CLMLobbyServerList::CServerData>
+inline constexpr std::uint32_t kWCSortedVectorBase_int = 0x655a38;              // WCSortedVectorBase<int>
+inline constexpr std::uint32_t kWCValOrderedVector_HFONT = 0x656a00;            // WCValOrderedVector<HFONT__*>
+inline constexpr std::uint32_t kWCVectorBase_voidp = 0x6573a8;                  // WCVectorBase<void*>
+inline constexpr std::uint32_t kWCOrderedVectorBase_long = 0x658538;            // WCOrderedVectorBase<long>
+inline constexpr std::uint32_t kWCSortedVectorBase_uint = 0x65d1b0;             // WCSortedVectorBase<unsigned int>
+inline constexpr std::uint32_t kWCVectorBase_String = 0x655a24;                 // WCVectorBase<String>
+inline constexpr std::uint32_t kWCSortedVectorBase_String = 0x656d2c;           // WCSortedVectorBase<String>
+inline constexpr std::uint32_t kWCSortedVectorBase_CLobbyServer = 0x65d1ec;     // <LobbyClient::priv::CLobbyServer>
+inline constexpr std::uint32_t kWCVectorBase_CLobbyServer = 0x65d1d8;           // <LobbyClient::priv::CLobbyServer>
+inline constexpr std::uint32_t kWCVectorBase_CServerData = 0x65d2ec;            // <Lobby::CLMLobbyServerList::CServerData>
+inline constexpr std::uint32_t kWCOrderedVectorBase_CServerData = 0x65d3d0;     // <Lobby::CLMLobbyServerList::CServerData>
+// WCSkipListBase<WCSkipListDictKeyVal<K, V>> and WCValSkipListDict<K, V>
+inline constexpr std::uint32_t kWCSkipListBase_IntScreenElement = 0x656934;     // <int, CScreenElement*>
+inline constexpr std::uint32_t kWCSkipListBase_UIntString = 0x657200;           // <unsigned int, String>
+inline constexpr std::uint32_t kWCSkipListBase_UIntStringVector = 0x65721c;     // <unsigned int, WCValOrderedVector<String>>
+inline constexpr std::uint32_t kWCSkipListBase_IntHICON = 0x6572d4;             // <int, HICON__*>
+inline constexpr std::uint32_t kWCSkipListBase_ULongExecuteTypes = 0x6575f4;    // <unsigned long, WCPtrSortedVector<CExecuteType>>
+inline constexpr std::uint32_t kWCSkipListBase_ULongSyncInfo = 0x657750;        // <unsigned long, CNetSession::CSyncInfo>
+inline constexpr std::uint32_t kWCSkipListBase_IntString = 0x6580d4;            // <int, String>
+inline constexpr std::uint32_t kWCSkipListBase_IntHFONT = 0x658814;             // <int, HFONT__*>
+inline constexpr std::uint32_t kWCSkipListBase_UIntMessageBlock = 0x65d588;     // <unsigned int, Lobby::CLMMessageBlock>
+inline constexpr std::uint32_t kWCSkipListBase_HWNDCDAudio = 0x65d968;          // <HWND__*, Win32::CCDAudio*>
+inline constexpr std::uint32_t kWCValSkipListDict_UIntMessageBlock = 0x65d56c;  // WCValSkipListDict<unsigned int, Lobby::CLMMessageBlock>
+// WCValListBase<T, WCIsvSListBase<WCNIsvSLink<T>>, ...> and its WCIsvSListBase
+inline constexpr std::uint32_t kWCValListBase_CScreenElementP = 0x655bd0;
+inline constexpr std::uint32_t kWCValListBase_bool = 0x655bec;
+inline constexpr std::uint32_t kWCValListBase_MsgConsole = 0x656a4c;
+inline constexpr std::uint32_t kWCValListBase_CGameThreadP = 0x65c928;
+inline constexpr std::uint32_t kWCValListBase_CSurfaceP = 0x65caf8;
+inline constexpr std::uint32_t kWCValListBase_CPaletteP = 0x65cb14;
+inline constexpr std::uint32_t kWCValListBase_CStatusMessage = 0x65d2d0;
+inline constexpr std::uint32_t kWCIsvSListBase_MsgConsole = 0x656a40;
+inline constexpr std::uint32_t kWCIsvSListBase_CGameThreadP = 0x65c91c;
+inline constexpr std::uint32_t kWCIsvSListBase_CSurfaceP = 0x65cb54;
+inline constexpr std::uint32_t kWCIsvSListBase_CPaletteP = 0x65cb08;
+inline constexpr std::uint32_t kWCIsvSListBase_CStatusMessage = 0x65d2c4;
+// iterators
+inline constexpr std::uint32_t kWCPtrSListIter_CWin32Waitable = 0x657464;       // WCPtrSListIter<Win32::CWin32Waitable>
+inline constexpr std::uint32_t kWCValListIterBase_CGameThreadP = 0x65cb60;      // WCValListIterBase<CGameThread*, WCPtrSList<..>, ..>
+inline constexpr std::uint32_t kWCSkipListIterBase_UIntMessageBlock = 0x65d61c;  // <unsigned int, Lobby::CLMMessageBlock>
 // session 58 (wip/framework-errors): the framework's other exceptions
 inline constexpr std::uint32_t kCHResult = 0x65d8e0;      // Win32::CHResult
 inline constexpr std::uint32_t kCMCIException = 0x65d908;  // Win32::CMCIException
