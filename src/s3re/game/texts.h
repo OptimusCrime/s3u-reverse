@@ -557,6 +557,6 @@ inline constexpr GameText kCfgCounter{0x6995ac};         // "CFG: Counter %i" (L
 inline constexpr GameText kNetMapping{0x699594};         // "NET: Mapping %i to %i" (LoadSaveGame)
 inline constexpr GameText kSearchingForNetId{0x6995ec};  // "CFG: Searching for NetId %i" (SetupLocalPlayer)
 inline constexpr GameText kReadingName{0x69f95c};        // "NET: Reading name %i %s" (AttachNetPlayer)
-inline constexpr GameText kOpenParenthesis{0x69a8b0};    // "(" (CGameData::InitPlayerInfo, a type-3 player's name)
+inline constexpr GameText kOpenParenthesisOnly{0x69a8b0};    // "(" (CGameData::InitPlayerInfo, a type-3 player's name)
 inline constexpr GameText kCloseParenthesis{0x69ed3c};   // ")"
 }  // namespace s3re::game::texts

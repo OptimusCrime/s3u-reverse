@@ -139,7 +139,7 @@ void SetName(String* name, std::uint32_t player) {
         String* got = LobbyName(player, &lobby);
         String open;
         reinterpret_cast<String*(__fastcall*)(String*, const char*, const String*)>(kConcatCharsLeft)(
-            &open, texts::kOpenParenthesis.c_str(), got);
+            &open, texts::kOpenParenthesisOnly.c_str(), got);
         String closed;
         reinterpret_cast<String*(__fastcall*)(String*, const String*, const char*)>(kConcatChars)(
             &closed, &open, texts::kCloseParenthesis.c_str());

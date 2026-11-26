@@ -564,5 +564,5 @@ address,name,type,status,notes
 0x00699594,texts::kNetMapping,char[],identified,"String ""NET: Mapping %i to %i"". Declared in src/s3re/game/texts.h."
 0x006995ec,texts::kSearchingForNetId,char[],identified,"String ""CFG: Searching for NetId %i"". Declared in src/s3re/game/texts.h."
 0x0069f95c,texts::kReadingName,char[],identified,"String ""NET: Reading name %i %s"". Declared in src/s3re/game/texts.h."
-0x0069a8b0,texts::kOpenParenthesis,char[],identified,"String ""("" (InitPlayerInfo). Declared in src/s3re/game/texts.h."
+0x0069a8b0,texts::kOpenParenthesisOnly,char[],identified,"String ""("" (InitPlayerInfo). Declared in src/s3re/game/texts.h."
 0x0069ed3c,texts::kCloseParenthesis,char[],identified,"String "")"" (InitPlayerInfo). Declared in src/s3re/game/texts.h."
