@@ -130,3 +130,19 @@ SELF_TEST += [
     Spec("WrongDSExceptionDescribe", 0x005c1930, "thiscall", [one_of(STRING_RESULT_PTR)],
          presets=sfx_exception, ignore_bytes=(STRING_RESULT,)),
 ]
+
+# stubs-r5: each static-initializer stub class paired with its neighbour's
+# replacement (other callee arguments, another destination, other sources).
+SELF_TEST += [
+    Spec(STATIC_STUB_ENTRIES[1][1], STATIC_STUB_ENTRIES[0][0], "stdcall", [], max_cases=3,
+         callees={STATIC_STUB_ENTRIES[0][2]: (0, "cdecl", "probe"), STATIC_STUB_ENTRIES[0][3]: (0, "cdecl", "probe"),
+                  STATIC_STUB_ENTRIES[1][2]: (0, "cdecl", "probe"), STATIC_STUB_ENTRIES[1][3]: (0, "cdecl", "probe")}),
+    Spec(STATIC_STUB_ATEXIT[1][1], STATIC_STUB_ATEXIT[0][0], "stdcall", [], max_cases=3,
+         callees={0x0061e812: (1, "cdecl", "probe")}),
+    Spec(STATIC_STUB_DTORS[1][1], STATIC_STUB_DTORS[0][0], "stdcall", [], max_cases=3,
+         callees={0x00401b60: (0, "thiscall", "probe")}),
+    Spec(STATIC_STUB_STRINGS[1][1], STATIC_STUB_STRINGS[0][0], "stdcall", [], max_cases=3,
+         callees={0x00401a10: (2, "thiscall", "this")}),
+    Spec(STATIC_STUB_FLOATS[1][1], STATIC_STUB_FLOATS[0][0], "stdcall", [], eax_mask=0, max_cases=20,
+         globals=static_stub_ratio_sources(STATIC_STUB_FLOATS[0][3:7])),
+]

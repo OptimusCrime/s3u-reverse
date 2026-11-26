@@ -697,4 +697,10 @@ inline constexpr GameGlobal<CrtFile> g_crtStderr{0x7a5a90};
 // PaintLib's trace file name (operator new copy; ~CPicDecoder frees it).
 inline constexpr GameGlobal<char*> g_paintlibTraceFile{0x7e8bbc};
 
+// stubs-r5 batch: the C runtime's atexit table (__onexitbegin/__onexitend,
+// grown by _onexit 0x61e794; exit() runs it backwards). The in-process
+// tests of the static-initializer stubs take back the entries they add.
+inline constexpr GameGlobal<std::uintptr_t*> g_onexitEnd{0x7eaac0};
+inline constexpr GameGlobal<std::uintptr_t*> g_onexitBegin{0x7eaac4};
+
 }  // namespace s3re::game

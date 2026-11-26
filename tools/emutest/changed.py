@@ -181,6 +181,13 @@ def spec_units(source: str) -> list[tuple[ast.expr, str]]:
             for element in statement.value.elts:
                 parts = [ast.unparse(element)] + [text(n) for n in sorted(closure(element))]
                 units.append((element, hashlib.sha1("\n\0".join(parts).encode()).hexdigest()))
+        elif isinstance(statement, ast.AugAssign) and isinstance(statement.value, ast.ListComp) \
+                and isinstance(statement.target, ast.Name) and statement.target.id == "SPECS":
+            # SPECS += [Spec(...) for ... in TABLE]: one unit for all of them,
+            # with the table (stubs-r5; until then these had no spec fingerprint)
+            element = statement.value
+            parts = [ast.unparse(element)] + [text(n) for n in sorted(closure(element))]
+            units.append((element, hashlib.sha1("\n\0".join(parts).encode()).hexdigest()))
     return units
 
 
@@ -204,7 +211,7 @@ def changed_spec_names(specs_module, old_fingerprints: list[str]) -> set[str]:
         # Which specs this entry makes (a Spec(...) or a *[... for ...]).
         value = element.value if isinstance(element, ast.Starred) else element
         produced = eval(compile(ast.Expression(value), SPECS_PATH, "eval"), namespace)  # noqa: S307
-        for spec in (list(produced) if isinstance(element, ast.Starred) else [produced]):
+        for spec in (list(produced) if isinstance(element, (ast.Starred, ast.ListComp)) else [produced]):
             names.add(spec.ours)
     return names
 
@@ -587,7 +594,7 @@ def spec_fingerprints(specs_module) -> dict[str, str]:
     for element, fingerprint in spec_units(current):
         value = element.value if isinstance(element, ast.Starred) else element
         produced = eval(compile(ast.Expression(value), SPECS_PATH, "eval"), namespace)  # noqa: S307
-        for spec in (list(produced) if isinstance(element, ast.Starred) else [produced]):
+        for spec in (list(produced) if isinstance(element, (ast.Starred, ast.ListComp)) else [produced]):
             result[f"{spec.ours}@{spec.original:#x}"] = fingerprint
     return result
 

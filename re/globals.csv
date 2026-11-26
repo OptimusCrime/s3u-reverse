@@ -629,3 +629,5 @@ address,name,type,status,notes
 0x00730b30,g_musicTracksGold1,int32_t[4][3],classified,CD music: Gold Edition CD 1 tracks. Declared in src/s3re/game/tables.h.
 0x00730b60,g_musicTracksGold2,int32_t[4][3],classified,CD music: Gold Edition CD 2 tracks. Declared in src/s3re/game/tables.h.
 0x00730b90,g_musicListLengths,int32_t[4][4],classified,"CD music: playlist lengths [CD version: ORG, AMZ, Gold 1, Gold 2][playlist]. Declared in src/s3re/game/tables.h."
+0x007eaac0,g_onexitEnd,uintptr_t*,identified,__onexitend of the C runtime: one past the last atexit entry (_onexit 0x61e794 stores there and adds 4). Declared in src/s3re/game/globals.h; used by static_stubs.cpp.
+0x007eaac4,g_onexitBegin,uintptr_t*,identified,__onexitbegin of the C runtime: the atexit table (realloc-grown by _onexit 0x61e794). Declared in src/s3re/game/globals.h; used by static_stubs.cpp.

@@ -848,19 +848,38 @@ def read_dll_symbols(map_path: str) -> dict[str, int]:
     return symbols
 
 
+_SYMBOLS_BY_NAME: dict[int, tuple[dict[str, int], dict[str, list[tuple[str, int]]]]] = {}
+
+
+def _symbols_named(symbols: dict[str, int], name: str) -> list[tuple[str, int]]:
+    """The (symbol, address) pairs of `symbols` that start with `?name@`,
+    from an index built once per symbol table (12,000 specs since
+    stubs-r5: a linear scan per lookup took minutes)."""
+    cached = _SYMBOLS_BY_NAME.get(id(symbols))
+    if cached is None or cached[0] is not symbols:
+        index: dict[str, list[tuple[str, int]]] = {}
+        for symbol, address in symbols.items():
+            if symbol.startswith("?"):
+                at = symbol.find("@")
+                if at > 1:
+                    index.setdefault(symbol[1:at], []).append((symbol, address))
+        cached = (symbols, index)
+        _SYMBOLS_BY_NAME[id(symbols)] = cached
+    return cached[1].get(name, [])
+
+
 def find_our_function(symbols: dict[str, int], name: str) -> int:
     """Address of our replacement `name` in s3re.dll (see
     Emulator.our_function)."""
-    found = [address for symbol, address in symbols.items()
-             if symbol.startswith(f"?{name}@") and "Counting" not in symbol
-             and not symbol.startswith(f"?{name}@@3")]
+    named = _symbols_named(symbols, name)
+    found = [address for symbol, address in named
+             if "Counting" not in symbol and not symbol.startswith(f"?{name}@@3")]
     if len(found) > 1:
         # A helper of the same name in an anonymous namespace (e.g.
         # NextDirection in world_create.cpp) doesn't count; functions only
         # in an anonymous namespace (the self-test's Wrong*) still match.
-        found = [address for symbol, address in symbols.items()
-                 if symbol.startswith(f"?{name}@") and "Counting" not in symbol
-                 and not symbol.startswith(f"?{name}@@3")
+        found = [address for symbol, address in named
+                 if "Counting" not in symbol and not symbol.startswith(f"?{name}@@3")
                  and not symbol.startswith(f"?{name}@?A0x")]
     if len(found) != 1:
         raise KeyError(f"{name}: {len(found)} matching symbols in s3re.map")
@@ -1148,8 +1167,13 @@ class Emulator:
             end = self.function_starts[bisect.bisect_right(self.function_starts, start)]
         code = bytes(self.uc.mem_read(start, end - start))
         instructions = list(self.disassembler.disasm(code, start))
+        # Without a ret (a stub that ends in a tail jump, stubs-r5), the
+        # body ends at its last instruction that is not nop/int 3 padding.
+        body = list(instructions)
+        while body and body[-1].mnemonic in ("nop", "int3"):
+            body.pop()
         last_ret = max((ins.address for ins in instructions
-                        if capstone.CS_GRP_RET in ins.groups), default=end)
+                        if capstone.CS_GRP_RET in ins.groups), default=body[-1].address if body else end)
         leaders = {start}
         constants = set()
         for i, ins in enumerate(instructions):
