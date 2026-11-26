@@ -84,6 +84,14 @@ LOGBOOK session entry).
   0x5b0000..0x620000 (same VERIFY shape as win32_synchronize.cpp; the
   ThrowLastError helper there fits them).
 
+- **png_chunk_warning / png_chunk_error 0x5a9f80 / 0x5a9ea0 (wip/images-r4,
+  thirdparty/png_error.cpp):** libpng 1.0.2's stack buffer is 0x50 bytes,
+  but png_format_buffer writes up to 82 (four non-letter chunk name bytes
+  as "[XX]" plus ": " plus 64 message bytes), overwriting the low half of
+  the return address; the original png_chunk_warning then returns to a
+  wrong address. Ours has room for 82 bytes. Only a corrupt PNG with a
+  non-letter chunk name gets there (and only the lobby banner uses PNG).
+
 ## Postponed by decision
 - **Network and lobby code** (CNetThread, Lobby::*, LobbyClient::*,
   DirectPlay, CLM* messages): skipped since 2026-11-09 (single player

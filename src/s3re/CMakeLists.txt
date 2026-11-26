@@ -36,6 +36,16 @@ add_library(s3re SHARED
     watcom/vector_init.cpp
     watcom/vector_insert.cpp
 
+    # thirdparty/: libpng 1.0.2, zlib 1.1.3 and PaintLib (the PNG decoder)
+    thirdparty/paintlib.cpp
+    thirdparty/png_core.cpp
+    thirdparty/png_error.cpp
+    thirdparty/png_mem.cpp
+    thirdparty/png_rtran_rows.cpp
+    thirdparty/png_set.cpp
+    thirdparty/zlib_checksums.cpp
+    thirdparty/zlib_inflate_setup.cpp
+
     # tooling/: launcher features: --fast, --random-map, --load-save
     tooling/fast.cpp
     tooling/random_map_start.cpp

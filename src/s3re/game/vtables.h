@@ -217,6 +217,12 @@ inline constexpr std::uint32_t kPaletteListIter = 0x65cb4c;         // WCPtrSLis
 // parent is such a part; CListBox::FillBackground asks for its type).
 inline constexpr std::uint32_t kCDropdown_element = 0x656600;  // CDropdown's CScreenElement part (+0x66c)
 inline constexpr std::uint32_t kCListBox_element = 0x6564a0;   // CListBox's CScreenElement part (+0x444)
+// wip/images-r4 batch: PaintLib (src/s3re/thirdparty/paintlib.cpp).
+inline constexpr std::uint32_t kCTextException = 0x65c0cc;
+inline constexpr std::uint32_t kCAnyBmp = 0x65c0dc;
+inline constexpr std::uint32_t kCPicDecoder = 0x65c110;
+inline constexpr std::uint32_t kCBmp = 0x65c124;
+inline constexpr std::uint32_t kCDataSource = 0x65c608;
 }  // namespace vtables
 
 // Virtual-base tables (vbptr targets) of the exception classes with a

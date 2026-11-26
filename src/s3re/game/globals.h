@@ -662,4 +662,13 @@ inline constexpr GameGlobal<TextOutAImport> g_importTextOutA{0x655068};
 // 0x422590 sets it; OnFocusChanged and Draw close other open lists).
 inline constexpr GameGlobal<std::uint32_t> g_openDropdown{0x7a8244};
 
+// wip/images-r4 batch: the C runtime's stderr (&_iob[2]), where libpng's
+// default error and warning handlers print (png_error 0x5a9e20).
+struct CrtFile {
+    std::uint8_t opaque[0x20];  // MSVC 6 FILE
+};
+inline constexpr GameGlobal<CrtFile> g_crtStderr{0x7a5a90};
+// PaintLib's trace file name (operator new copy; ~CPicDecoder frees it).
+inline constexpr GameGlobal<char*> g_paintlibTraceFile{0x7e8bbc};
+
 }  // namespace s3re::game

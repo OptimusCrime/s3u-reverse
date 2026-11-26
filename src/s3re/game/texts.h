@@ -573,4 +573,18 @@ inline constexpr GameText kDialogFile{0x6976e8};         // "E:\Siedler3\Dirk\di
 inline constexpr GameText kTooltipExpression{0x697cd0};  // "lpTooltip"
 inline constexpr GameText kDDGetDC{0x697704};            // "CSurface::DDGetDC"
 inline constexpr GameText kDDReleaseDC{0x697718};        // "CSurface::DDReleaseDC"
+
+// ------------------------------------------------------------ wip/images-r4 batch
+// libpng 1.0.2's messages (src/s3re/thirdparty/).
+inline constexpr GameText kPngErrorFormat{0x733d04};    // "libpng error: %s\n"
+inline constexpr GameText kPngWarningFormat{0x733d18};  // "libpng warning: %s\n"
+inline constexpr GameText kPngOutOfMemory{0x733d2c};    // "Out of Memory"
+inline constexpr GameText kPngNullReadFn{0x733c24};     // "Call to NULL read function"
+inline constexpr GameText kPngBothRwFn1{0x733c74};      // "It's an error to set both read_data_fn and write_data_fn in the "
+inline constexpr GameText kPngBothRwFn2{0x733c40};      // "same structure.  Resetting write_data_fn to NULL."
+inline constexpr GameText kPngReadError{0x733cb8};      // "Read Error"
+inline constexpr GameText kPngCrcError{0x733dc8};       // "CRC error"
+inline constexpr GameText kPngWidthTooLarge{0x733bf0};
+inline constexpr GameText kZlibVersion{0x733754};       // "1.1.3" (ZLIB_VERSION, inflateInit2_ checks its first character)
+inline constexpr GameText kPngRowbytesOverflow{0x734868};  // "Width too large to process image data; rowbytes will overflow."  // "Width too large for libpng to process image data."
 }  // namespace s3re::game::texts

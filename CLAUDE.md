@@ -212,7 +212,8 @@ C++ code.
     function sat in is data (`re/source_files.csv`), not a folder.
     MSVC 6.0 library code that game data depends on (e.g. `std::string`
     layout) goes under `src/s3re/msvc6/`, Watcom container code under
-    `src/s3re/watcom/`.
+    `src/s3re/watcom/`, the statically linked libpng 1.0.2 / zlib 1.1.3 /
+    PaintLib (the PNG decoder, re/picture_code.md) under `src/s3re/thirdparty/`.
   - `src/s3re/test/`: the differential test harness (`difftest.h`).
   - `src/s3re/tooling/`: original-mode tooling (`--fast`, `--random-map`,
     `--load-save`), with `tooling/trace/` (determinism trace) and
