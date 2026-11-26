@@ -1227,7 +1227,6 @@ SETUP_LOCAL_CALLEES = {
 }
 
 SPECS += [
-    Spec("GameConfig_RandomRaceAmazons", 0x00413bd0, "thiscall", [], presets=gsl_config, eax_mask=0xff),
     Spec("GamePlayerSetup_Clan", 0x004a01b0, "thiscall", []),
     # Dead blocks: the length clamp after the growth (0x437995, 0x437e65): the
     # length is 0 on that path.

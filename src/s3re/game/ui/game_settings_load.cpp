@@ -353,6 +353,7 @@ using ConfigFlagFn = std::uint32_t(__fastcall*)(const GameConfig* self, void* ed
 
 std::uint32_t __fastcall GameSettings_LoadSaveGame(GameSettings* self, void* edx, const msvc6::String* path,
                                                    std::uint32_t multiplayer);
+// GameConfig::RandomRaceAmazons 0x413bd0 is hooked in framework/game_config.cpp.
 std::uint32_t __fastcall GameConfig_RandomRaceAmazons(const GameConfig* self, void* edx);
 using SettingsFlagFn = std::uint32_t(__fastcall*)(GameSettings* self, void* edx);
 std::uint32_t __fastcall GameSettings_IsHost(GameSettings* self, void* edx);
@@ -363,8 +364,6 @@ S3RE_HOOK_UNVERIFIED(0x00432b00, GameSettings_LoadSaveGame, LoadSaveGameFn, Orig
 S3RE_HOOK(0x004318a0, GameSettings_IsHost, SettingsFlagFn, Original_GameSettings_IsHost, GameSettings_IsHost);
 S3RE_HOOK(0x004318d0, GameSettings_IsMultiplayer, SettingsFlagFn, Original_GameSettings_IsMultiplayer,
           GameSettings_IsMultiplayer);
-S3RE_HOOK(0x00413bd0, GameConfig_RandomRaceAmazons, ConfigFlagFn, Original_GameConfig_RandomRaceAmazons,
-          GameConfig_RandomRaceAmazons);
 
 // Purpose: The first step of loading a savegame: opens the file and takes
 // the game's setup from it (map name, players, teams, network ids, options),
@@ -399,12 +398,6 @@ std::uint32_t __fastcall GameSettings_LoadSaveGame(GameSettings* self, void*, co
         GameDebugLog(texts::kNetMapping, id, i);
     }
     return result;
-}
-
-// Purpose: Whether the Amazons are installed (they came with the Mission
-// CD); loading a savegame that needs them fails without.
-std::uint32_t __fastcall GameConfig_RandomRaceAmazons(const GameConfig* self, void*) {
-    return self->random_race_amazons;
 }
 
 // Purpose: Whether this computer hosts the game being set up (savegames
