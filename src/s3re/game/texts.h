@@ -569,4 +569,15 @@ inline constexpr GameText kDialogFile{0x6976e8};         // "E:\Siedler3\Dirk\di
 inline constexpr GameText kTooltipExpression{0x697cd0};  // "lpTooltip"
 inline constexpr GameText kDDGetDC{0x697704};            // "CSurface::DDGetDC"
 inline constexpr GameText kDDReleaseDC{0x697718};        // "CSurface::DDReleaseDC"
+// ------------------------------------------------------------ wip/logic-r4 batch
+// Volker\LogicInit.cpp: the CD music (CLogicThread::PlayNextMusicTrack) and FinishGame.
+inline constexpr GameText kPlayOriginalTrack{0x730bd0};  // "xxx CDAUDIOPLAY about to play ORG track #%u"
+inline constexpr GameText kPlayAmazonTrack{0x730bfc};    // "xxx CDAUDIOPLAY about to play AMZ track #%u"
+inline constexpr GameText kPlayGold1Track{0x730c28};     // "xxx CDAUDIOPLAY about to play Gold CD1 track #%u"
+inline constexpr GameText kPlayGold2Track{0x730c5c};     // "xxx CDAUDIOPLAY about to play Gold CD2 track #%u"
+inline constexpr GameText kFinishGameCalled{0x730aa4};   // "*** FinishGame() called ***"
+inline constexpr GameText kFinishGameCancelled{0x730a78};  // "*** FinishGame cancelled (already called)"
+// Dirk\Draw.cpp: CDrawer::SetDisplayMode.
+inline constexpr GameText kOldDisplayMode{0x698f6c};          // "GFX: Old display mode: %ux%ux%u"
+inline constexpr GameText kSkippingSetDisplayMode{0x698f4c};  // "GFX: Skipping SetDisplayMode"
 }  // namespace s3re::game::texts

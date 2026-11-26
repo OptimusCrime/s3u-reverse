@@ -511,6 +511,15 @@ def _api_critical_section(name):
     return handler
 
 
+def _api_interlocked_exchange(machine, uc, args):
+    """InterlockedExchange(target, value) (wip/logic-r4): stores value at
+    target, returns the old value (the target lies in the compared memory)."""
+    target, value = args
+    old = struct.unpack("<I", bytes(machine.guest_read(target, 4)))[0]
+    machine.guest_write(target, struct.pack("<I", value))
+    return old, ("InterlockedExchange", target, value)
+
+
 # name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
 # record holds what the call saw (rectangle contents, not pointers, which
 # differ between the original's and our stack frames).
@@ -558,6 +567,8 @@ API_HANDLERS = {
     "PostThreadMessageA": (4, _api_success("PostThreadMessageA", 0x5E000009)),
     "DestroyWindow": (1, _api_success("DestroyWindow", 0x5E00000A)),
     "PostMessageA": (4, _api_success("PostMessageA", 0x5E00000B)),
+    "InterlockedExchange": (2, _api_interlocked_exchange),
+    "SendMessageA": (4, _api_success("SendMessageA", 0x5E00000D)),
     "WaitForSingleObject": (2, _api_wait_for_single_object),
     "mciSendCommandA": (4, _api_mci_send_command),
     "SelectObject": (2, _api_select_object),

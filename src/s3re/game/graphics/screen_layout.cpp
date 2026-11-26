@@ -7,6 +7,9 @@
 //   sets the layout globals (g_displayMode .. g_drawOriginY, g_layout7dfd58,
 //   values below); any other mode changes nothing. EAX: 480 for mode 0, 8
 //   for modes 1 and 2, else the mode (the caller ignores it).
+// CDrawer::ApplyScreenLayout (0x004c6d40, was Render_sub_4c6d40; wip/logic-r4):
+//   () thiscall: +0xf0 = -1, then SetScreenLayout(g_config's screen layout,
+//   read with the folded getter 0x49dec0); EAX is SetScreenLayout's.
 // Render::IsNearView (0x004c7b50, was Render_sub_4c7b50): (x, y) stdcall,
 //   ret 8: 1 if the screen position is within 30 pixels around the drawn
 //   area (g_drawOriginX - 30 <= x < g_displayWidth + 30 and -30 <= y <=
@@ -139,6 +142,19 @@ std::int32_t __fastcall CDrawer_AmbientSoundVolume(CDrawer* self, void*, std::ui
     return volume > 0 ? 0 : volume;
 }
 
+using ApplyLayoutFn = std::uint32_t(__fastcall*)(CDrawer* self, void* edx);
+
+// Purpose: Sets up the screen layout (sizes of the map view and panels) for
+// the display mode chosen in the configuration.
+std::uint32_t __fastcall CDrawer_ApplyScreenLayout(CDrawer* self, void*) {
+    self->unk0f0 = -1;
+    using GetterFn = std::uint32_t(__fastcall*)(const void*, void*);
+    const std::uint32_t mode = reinterpret_cast<GetterFn>(0x0049dec0)(&g_config.get(), nullptr);  // GetMemberDword70
+    return reinterpret_cast<ModeFn>(0x004c6d70)(mode);  // Render::SetScreenLayout
+}
+
+S3RE_HOOK(0x004c6d40, CDrawer_ApplyScreenLayout, ApplyLayoutFn, Original_CDrawer_ApplyScreenLayout,
+          CDrawer_ApplyScreenLayout);
 S3RE_HOOK(0x004c6d70, Render_SetScreenLayout, ModeFn, Original_Render_SetScreenLayout, Render_SetScreenLayout);
 S3RE_HOOK(0x004c7b50, Render_IsNearView, NearViewFn, Original_Render_IsNearView, Render_IsNearView);
 S3RE_HOOK(0x004c79f0, CDrawer_AmbientSoundPan, PanFn, Original_CDrawer_AmbientSoundPan, CDrawer_AmbientSoundPan);
@@ -215,6 +231,52 @@ S3RE_TEST(Render_SetScreenLayout_MatchesOriginal) {
 S3RE_TEST(Render_SetScreenLayout_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareScreenLayout(probe, &WrongScreenLayout, 200);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+namespace {
+
+// ApplyScreenLayout on random drawers and configured modes; compared: EAX,
+// the drawer, the layout globals.
+void CompareApplyLayout(test::Context& ctx, ApplyLayoutFn candidate, int cases) {
+    const SavedLayout saved;
+    const std::uint32_t savedMode = g_config->screen_layout;
+    test::WorldPair drawers(ctx, sizeof(CDrawer));
+    std::uint8_t start[kLayoutBytes], expected[kLayoutBytes];
+    for (int i = 0; i < cases; ++i) {
+        ctx.rng().Fill(start, sizeof(start));
+        const std::uint32_t mode = ctx.rng().Chance(1, 5) ? ctx.rng().Next32() : ctx.rng().Below(4);
+        g_config->screen_layout = mode;
+        drawers.Both([&](CGameData* w) { DrawerOf(w)->unk0f0 = static_cast<std::int32_t>(i); });
+        std::memcpy(SavedLayout::Block(), start, kLayoutBytes);
+        const std::uint32_t a = Original_CDrawer_ApplyScreenLayout(DrawerOf(drawers.original()), nullptr);
+        std::memcpy(expected, SavedLayout::Block(), kLayoutBytes);
+        std::memcpy(SavedLayout::Block(), start, kLayoutBytes);
+        const std::uint32_t b = candidate(DrawerOf(drawers.ours()), nullptr);
+        bool same = S3RE_EXPECT_EQ(a, b);
+        same &= S3RE_EXPECT_MEM_EQ(expected, SavedLayout::Block(), kLayoutBytes);
+        same &= drawers.Same(ctx, 0, sizeof(CDrawer));
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: mode %u", i, mode);
+            break;
+        }
+    }
+    g_config->screen_layout = savedMode;
+}
+
+// Wrong: +0xf0 is left alone.
+std::uint32_t __fastcall WrongApplyLayout(CDrawer* self, void*) {
+    return Render_SetScreenLayout(g_config->screen_layout);
+}
+
+}  // namespace
+
+S3RE_TEST(CDrawer_ApplyScreenLayout_MatchesOriginal) {
+    CompareApplyLayout(ctx, &CDrawer_ApplyScreenLayout, 300);
+}
+S3RE_TEST(CDrawer_ApplyScreenLayout_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareApplyLayout(probe, &WrongApplyLayout, 50);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

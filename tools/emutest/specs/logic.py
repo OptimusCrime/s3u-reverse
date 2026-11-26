@@ -2246,3 +2246,81 @@ SPECS += [
     Spec("CGameData_ChooseNewGameObjectives", 0x004ffbc0, "thiscall", [], eax_mask=0, presets=ngo_choose_state,
          globals=ngo_choose_globals, max_instructions=300_000),
 ]
+
+
+# -- wip/logic-r4: the CD music (logic_music.cpp) -----------------------------
+# The installed CD (0x7a7c18) and the music switch (g_config +0x5e) random;
+# the thread's music fields small (a large playlist reads outside the
+# image in both versions); CCDAudio Play/Stop probed (verified on their own).
+MUSIC_CALLEES = {
+    0x00615ea0: (2, "thiscall", "probe"),  # Win32::CCDAudio::Play(from, to)
+    0x00615f70: (0, "thiscall", "probe"),  # Win32::CCDAudio::Stop
+}
+
+
+def music_globals(rng, pool, args):
+    return [(0x007a7c18, rng.choice([0, 1, 2, 3, 4, 5, 6, rng.getrandbits(32)]), 4),
+            (0x007a7af0 + 0x5e, rng.choice([0, 1, 1, 1, rng.getrandbits(8)]), 1)]
+
+
+def music_thread(rng, pool, args):
+    t = LOGIC_THREAD
+    return [(t + 0x654, rng.choice([0, 0, 0, 1, rng.getrandbits(8)]), 1),
+            (t + 0x658, rng.randrange(-2, 6) & 0xFFFFFFFF, 4),
+            (t + 0x65c, rng.choice([0xFFFFFFFF, 0xFFFFFFFF, rng.randrange(-2, 6) & 0xFFFFFFFF]), 4),
+            (t + 0x660, rng.randrange(-1, 5) & 0xFFFFFFFF, 4)]
+
+
+SPECS += [
+    Spec("CLogicThread_PlayNextMusicTrack", 0x0053f5f0, "logicthread", [], eax_mask=0, presets=music_thread,
+         globals=music_globals, callees=MUSIC_CALLEES),
+    Spec("CLogicThread_StartMusic", 0x0053f580, "logicthread",
+         [lambda rng, pool: rng.choice([0xFFFFFFFF, rng.randrange(-2, 6) & 0xFFFFFFFF])], eax_mask=0,
+         presets=music_thread, globals=music_globals, callees=MUSIC_CALLEES),
+    Spec("CLogicThread_StopMusic", 0x0053f5c0, "logicthread", [], eax_mask=0, presets=music_thread,
+         globals=music_globals, callees=MUSIC_CALLEES),
+]
+
+
+# -- wip/logic-r4: CLogicThread::FinishGame (finish_game.cpp) ----------------
+# The player info table (0x7acfa8, 20 x 0x44 bytes) gets random ranks (+4)
+# and fields (+0x18..+0x40; equal scores in some cases), the world players
+# random active flags; PostThreadMessage probed (verified on its own).
+def finish_game_globals(rng, pool, args):
+    # One write of the whole table (one write_image per global is slow); the
+    # names (+0x08..+0x17) keep their zero image bytes.
+    table = bytearray(0x44 * 20)
+    equal = rng.random() < 0.3
+    for p in range(20):
+        base = 0x44 * p
+        struct.pack_into("<I", table, base + 4, rng.choice([0, 0, 0, rng.randrange(1, 21), rng.getrandbits(32)]))
+        for k in range(11):
+            value = 1 if equal and k >= 3 else rng.choice([rng.randrange(50), rng.getrandbits(32)])
+            struct.pack_into("<I", table, base + 0x18 + 4 * k, value)
+    return [(0x007acfa8, int.from_bytes(table, "little"), len(table))]
+
+
+def finish_game_state(rng, pool, args):
+    fields = [(LOGIC_THREAD + 0x234, rng.choice([0, 0, 0, 1, rng.getrandbits(8)]), 1)]
+    for p in range(20):
+        fields.append((0x11943dc + 0x148 * p, rng.choice([0, rng.getrandbits(32) | 1]), 4))
+    return fields
+
+
+SPECS += [
+    Spec("CLogicThread_FinishGame", 0x0053e720, "logicthread", [], eax_mask=0, presets=finish_game_state,
+         globals=finish_game_globals, callees={0x0060f480: (3, "thiscall", "probe")}),
+]
+
+
+# -- wip/logic-r4: CLogicThread::PublishDrawData (draw_data_publish.cpp) -----
+# The shared slot (+0x3cc) points into the scratch area (InterlockedExchange
+# is an API probe that stores); CEvent::Set probed.
+def publish_draw_data_state(rng, pool, args):
+    return [(LOGIC_THREAD + 0x3cc, WORLD_BASE + SCRATCH + 4 * rng.randrange(64), 4)]
+
+
+SPECS += [
+    Spec("CLogicThread_PublishDrawData", 0x0051f0e0, "logicthread", [], presets=publish_draw_data_state,
+         callees={0x0042cf80: (0, "thiscall", "probe")}),
+]

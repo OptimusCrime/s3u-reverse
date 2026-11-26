@@ -283,6 +283,7 @@ SPECS += [
     Spec("GetMemberDword10", 0x0049f4d0, "thiscall", []),
     Spec("GetMemberDword14", 0x0049f590, "thiscall", []),
     Spec("GetMemberDword5C", 0x0049f350, "thiscall", []),
+    Spec("GetMemberDword70", 0x0049dec0, "thiscall", []),
     Spec("GetMemberByte68", 0x0049f580, "thiscall", [], eax_mask=0xFF),
     # The three outputs: scratch slots, sometimes the same slot twice.
     Spec("GamePlayerSetup_SavedValues", 0x0049fed0, "thiscall",

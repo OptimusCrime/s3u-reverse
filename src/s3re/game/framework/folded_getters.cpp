@@ -16,6 +16,10 @@
 //   type +0x5c (GameSettings::SaveSetup's getters); +0x10 is also the error
 //   code of a CMapFile stream (CMapFile::GetError tail-jumps to 0x49f4d0),
 //   and network and menu objects use them.
+// GetMemberDword70 (0x0049dec0, was Net_sub_49dec0; wip/logic-r4): thiscall
+//   () -> the dword at +0x70. On the config object the screen layout
+//   setting (Render_sub_4c6d40 passes it to SetScreenLayout); network and
+//   menu code use it on their objects.
 // GetMemberByte68 (0x0049f580): thiscall () -> the byte at +0x68 in AL (the
 //   rest of EAX is the caller's; all three callers, 0x4336ac, 0x47199c,
 //   0x48df64, use only AL; ours zero-extends). On a GamePlayerSetup: the
@@ -100,6 +104,12 @@ std::uint32_t __fastcall GetMemberDword5C(void* self, void*) {
     return DwordAt<0x5c>(self);
 }
 
+// Purpose: Reads a dword field of an object (several classes), e.g. the screen layout setting of
+// the game's configuration.
+std::uint32_t __fastcall GetMemberDword70(void* self, void*) {
+    return DwordAt<0x70>(self);
+}
+
 // Purpose: Reads a byte field of an object (several classes), e.g. a player setup's race byte.
 // The original only loads AL; every caller uses only AL, so the upper bytes are zero here.
 std::uint32_t __fastcall GetMemberByte68(void* self, void*) {
@@ -123,6 +133,7 @@ std::uint32_t __fastcall GamePlayerSetup_SavedValues(const void* self, void*, st
 S3RE_HOOK(0x0049f4d0, GetMemberDword10, GetterFn, Original_GetMemberDword10, GetMemberDword10);
 S3RE_HOOK(0x0049f590, GetMemberDword14, GetterFn, Original_GetMemberDword14, GetMemberDword14);
 S3RE_HOOK(0x0049f350, GetMemberDword5C, GetterFn, Original_GetMemberDword5C, GetMemberDword5C);
+S3RE_HOOK(0x0049dec0, GetMemberDword70, GetterFn, Original_GetMemberDword70, GetMemberDword70);
 S3RE_HOOK(0x0049f580, GetMemberByte68, GetterFn, Original_GetMemberByte68, GetMemberByte68);
 S3RE_HOOK(0x0049fed0, GamePlayerSetup_SavedValues, SavedValuesFn, Original_GamePlayerSetup_SavedValues,
           GamePlayerSetup_SavedValues);
@@ -201,6 +212,9 @@ S3RE_TEST(GetMemberDword14_MatchesOriginal) {
 }
 S3RE_TEST(GetMemberDword5C_MatchesOriginal) {
     CompareFolded(ctx, Original_GetMemberDword5C, &GetMemberDword5C, 0xffffffff);
+}
+S3RE_TEST(GetMemberDword70_MatchesOriginal) {
+    CompareFolded(ctx, Original_GetMemberDword70, &GetMemberDword70, 0xffffffff);
 }
 S3RE_TEST(GetMemberByte68_MatchesOriginal) {
     CompareFolded(ctx, Original_GetMemberByte68, &GetMemberByte68, 0xff);

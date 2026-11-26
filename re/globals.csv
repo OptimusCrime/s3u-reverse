@@ -289,7 +289,7 @@ address,name,type,status,notes
 0x007dfd38,g_unk7dfd38,int32_t,classified,"Cleared by CGameData::FinishInitialising 0x4fce90 (also 0x4b26c0, CGameData::CGameData, ProcessEvents); meaning unknown. Declared in src/s3re/game/globals.h."
 0x007dfd3c,g_unk7dfd3c,int32_t,classified,"Cleared by CGameData::FinishInitialising 0x4fce90 (also 0x4b26c0, CGameData::CGameData, ProcessEvents); meaning unknown. Declared in src/s3re/game/globals.h."
 0x007dfd40,g_unk7dfd40,int32_t,classified,Cleared by CGameData::FinishInitialising 0x4fce90 (its only use). Declared in src/s3re/game/globals.h.
-0x007dfd44,g_logicStartState,uint32,classified,"CLogicThread::Step does one-time setup when this equals 0xFA, then sets it to 0."
+0x007dfd44,g_logicStartState,uint32,classified,"CLogicThread::Step does one-time setup when this equals 0xFA (250), then sets it to 0; CDrawer::ChangeDisplayMode 0x4c7490 sets it to 250 after a display mode change. Declared in src/s3re/game/globals.h."
 0x007dfd48,g_gameTick,volatile uint32_t,identified,"Simulation tick counter; copied from CLogicThread+0x70 at the end of each CLogicThread::Step. Used throughout the world update (e.g. tick & 0x3f, tick % 220). Declared in src/s3re/game/globals.h; used by building_crush.cpp, environment.cpp, logic_thread.cpp, map_effect_expiry.cpp, net_thread.cpp, settler_walk.cpp, soldier.cpp, spell_effects.cpp, spells.cpp, hooks.h, determinism.cpp."
 0x007dfd50,g_lastSaveTick,uint32_t,classified,Game tick of the last committed multiplayer save (ExecuteCommands 0xf8). Declared in src/s3re/game/globals.h; used by execute_commands_net.cpp.
 0x007dfd58,g_layout7dfd58,int32_t,classified,"Set to 0 by Render::SetScreenLayout in every mode (also CDrawer::InitSurfaces, CLandscapeSurface::BlitVisibleArea). Declared in src/s3re/game/globals.h; used by screen_layout.cpp."
@@ -586,3 +586,12 @@ address,name,type,status,notes
 0x006555ec,g_serialInverse,const int32_t[10],identified,"The serial check digit's inverse table (inside the permutation table's range; also read at index -1). Declared in src/s3re/game/tables.h; used by game_config.cpp."
 0x006557f4,g_serialFinal,const int32_t[],identified,"The serial check digit's final mapping, indexed (separator % 12) * 10 + value (GameConfig::SerialCheckDigit 0x411fd0). Declared in src/s3re/game/tables.h; used by game_config.cpp."
 0x007a8244,g_openDropdown,uint32_t,classified,"The CDropdown whose list is open (set by CDropdown::OnArrowClicked 0x422590 when it opens; OnFocusChanged 0x422770 and Draw 0x4227d0 close the list of any other). Declared in src/s3re/game/globals.h; used by ui_button_scroll.cpp."
+0x007a7c18,g_installedCd,int32_t,classified,"The installed CD: 3 the mission CD (Amazons), 4 Gold Edition CD 1, 5 Gold CD 2, else the original CD; written by 0x493af0 / 0x4976ad; chooses the music track table in CLogicThread::PlayNextMusicTrack. Declared in src/s3re/game/globals.h."
+0x007a7a00,g_cdAudio,Win32::CCDAudio,classified,The CD audio player (Play 0x615ea0 / Stop 0x615f70; the music). Declared in src/s3re/game/globals.h.
+0x007e8bec,g_drawThread,void*,classified,The game's DirectX::CGameDrawThread (RequestFullRedraw 0x5b6730); null before it exists; CDrawer::SetDisplayMode asks it for a full redraw. Declared in src/s3re/game/globals.h.
+0x006550e4,g_importInterlockedExchange,InterlockedExchangeImport,classified,S3.EXE's import address table slot of InterlockedExchange (KERNEL32; CLogicThread::PublishDrawData). Declared in src/s3re/game/globals.h.
+0x00730ac0,g_musicTracksOriginal,int32_t[4][3],classified,"CD music: track numbers of the original CD, 4 playlists (one per race) of 3. Declared in src/s3re/game/tables.h."
+0x00730af0,g_musicTracksAmazons,int32_t[4][4],classified,"CD music: the mission CD's tracks, 4 playlists of 4. Declared in src/s3re/game/tables.h."
+0x00730b30,g_musicTracksGold1,int32_t[4][3],classified,CD music: Gold Edition CD 1 tracks. Declared in src/s3re/game/tables.h.
+0x00730b60,g_musicTracksGold2,int32_t[4][3],classified,CD music: Gold Edition CD 2 tracks. Declared in src/s3re/game/tables.h.
+0x00730b90,g_musicListLengths,int32_t[4][4],classified,"CD music: playlist lengths [CD version: ORG, AMZ, Gold 1, Gold 2][playlist]. Declared in src/s3re/game/tables.h."

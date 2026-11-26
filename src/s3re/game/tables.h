@@ -297,4 +297,15 @@ inline constexpr GameGlobal<const std::int32_t> g_serialPermute{0x655554};     /
 inline constexpr GameGlobal<const std::int32_t> g_serialInverse{0x6555ec};     // 10
 inline constexpr GameGlobal<const std::int32_t> g_serialFinal{0x6557f4};       // indexed (pos % 12) * 10 + value
 
+// wip/logic-r4: the CD music (CLogicThread::PlayNextMusicTrack 0x53f5f0).
+// Four playlists per CD version (one per race; the Amazons' CD has four
+// tracks per list, the others three), and the playlist lengths
+// [version][list]. Indexed as the original does (playlist * stride +
+// track, no range checks), so declared as single dwords.
+inline constexpr GameGlobal<const std::int32_t> g_musicTracksOriginal{0x730ac0};  // [4][3]
+inline constexpr GameGlobal<const std::int32_t> g_musicTracksAmazons{0x730af0};   // [4][4] (the mission CD)
+inline constexpr GameGlobal<const std::int32_t> g_musicTracksGold1{0x730b30};     // [4][3]
+inline constexpr GameGlobal<const std::int32_t> g_musicTracksGold2{0x730b60};     // [4][3]
+inline constexpr GameGlobal<const std::int32_t> g_musicListLengths{0x730b90};     // [4][4]: ORG, AMZ, Gold 1, Gold 2
+
 }  // namespace s3re::game
