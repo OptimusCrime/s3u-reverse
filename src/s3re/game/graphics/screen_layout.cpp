@@ -173,8 +173,8 @@ static_assert(offsetof(DrawDataSounds, effect_count) == 0x260);
 namespace {
 
 constexpr std::uintptr_t kSoundIsEnabled = 0x005ff4d0;  // CSoundData::IsEnabled
-constexpr std::uintptr_t kSoundGetEffect = 0x005ff4f0;  // CSoundData::GetEffect(id, variant, volume, pan, 0)
-constexpr std::uintptr_t kEffectPlay = 0x005c2fc0;      // DirectX::CSoundEffect::Play
+constexpr std::uintptr_t kSoundGetEffect = 0x005ff4f0;  // CSoundData::GetEffect(id, variant)
+constexpr std::uintptr_t kEffectPlay = 0x005c2fc0;      // DirectX::CSoundEffect::Play(volume, pan, flags)
 constexpr std::uintptr_t kCrtRand = 0x0061f802;         // the C runtime's rand()
 constexpr std::uintptr_t kAmbientPan = 0x004c79f0;
 constexpr std::uintptr_t kAmbientVolume = 0x004c7a50;
@@ -204,12 +204,14 @@ bool SoundOn(const CDrawer* drawer) {
     return (reinterpret_cast<Fn>(kSoundIsEnabled)(drawer->sound, nullptr) & 0xff) != 0;
 }
 
+// The original pushes (id, -1, volume, pan, 0) for one call to GetEffect,
+// which takes (id, variant) and pops only those; the three left on the
+// stack are the arguments of the following Play(volume, pan, flags).
 void PlayEffect(const CDrawer* drawer, std::uint32_t id, std::int32_t volume, std::int32_t pan) {
-    using GetFn = void*(__fastcall*)(void*, void*, std::uint32_t, std::int32_t, std::int32_t, std::int32_t,
-                                     std::uint32_t);
-    void* const effect = reinterpret_cast<GetFn>(kSoundGetEffect)(drawer->sound, nullptr, id, kAnyVariant, volume,
-                                                                  pan, 0);
-    reinterpret_cast<std::uint32_t(__fastcall*)(void*, void*)>(kEffectPlay)(effect, nullptr);
+    using GetFn = void*(__fastcall*)(void*, void*, std::uint32_t, std::int32_t);
+    using PlayFn = std::uint32_t(__fastcall*)(void*, void*, std::int32_t, std::int32_t, std::uint32_t);
+    void* const effect = reinterpret_cast<GetFn>(kSoundGetEffect)(drawer->sound, nullptr, id, kAnyVariant);
+    reinterpret_cast<PlayFn>(kEffectPlay)(effect, nullptr, volume, pan, 0);
 }
 
 }  // namespace
@@ -420,10 +422,11 @@ void ComparePlayAmbient(test::Context& ctx, PlayAmbientFn candidate, int cases) 
             stubs.SetWorld(nullptr);
             stubs.Install<0, kSoundIsEnabled>(
                 [&enabled](CGameData*, std::uint32_t, const std::uint32_t*) { return enabled.Chance(4, 5) ? 1u : 0u; });
-            stubs.Install<5, kSoundGetEffect>([](CGameData*, std::uint32_t, const std::uint32_t*) {
+            // GetEffect: (id, variant) ret 8.
+            stubs.Install<2, kSoundGetEffect>([](CGameData*, std::uint32_t, const std::uint32_t*) {
                 return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(g_fakeEffect));
             });
-            stubs.Install<0, kEffectPlay>();
+            stubs.Install<3, kEffectPlay>();  // (volume, pan, flags) ret 0Ch
             randState = seed;
             CDrawer* drawer = DrawerOf(run == 0 ? drawers.original() : drawers.ours());
             (run == 0 ? Original_CDrawer_PlayAmbientSounds : candidate)(drawer, nullptr, d);

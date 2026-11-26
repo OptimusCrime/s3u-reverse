@@ -11,6 +11,7 @@
 // `--load-save`, N ticks after the tick the savegame starts at). Not
 // reimplemented.
 
+#include "crash_log.h"
 #include "game/globals.h"
 #include "game/logic/logic_thread_layout.h"
 #include "hooks.h"
@@ -71,6 +72,7 @@ BOOL CALLBACK CloseProcessWindow(HWND window, LPARAM) {
 DWORD WINAPI ShutdownWatchdog(LPVOID) {
     Sleep(15000);
     S3RE_LOG("clean shutdown did not finish within 15 s; terminating");
+    crash::LogAllThreadStacks("hang");
     TerminateProcess(GetCurrentProcess(), 0);
     return 0;
 }

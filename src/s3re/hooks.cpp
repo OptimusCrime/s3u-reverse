@@ -42,7 +42,26 @@ bool SkippedByName(const char* name) {
         return (length > 0 && length < sizeof(text)) ? "," + std::string(text, length) + ","
                                                      : std::string();
     }();
-    return !list.empty() && list.find("," + std::string(name) + ",") != std::string::npos;
+    if (list.empty()) {
+        return false;
+    }
+    if (list.find("," + std::string(name) + ",") != std::string::npos) {
+        return true;
+    }
+    // An entry ending in '*' leaves out every hook whose name starts with
+    // the text before it (e.g. "StaticInit_*": the static-initializer stubs).
+    for (std::size_t start = 1; start < list.size();) {
+        const std::size_t end = list.find(',', start);
+        if (end == std::string::npos) {
+            break;
+        }
+        if (end > start && list[end - 1] == '*' &&
+            std::strncmp(name, list.c_str() + start, end - 1 - start) == 0) {
+            return true;
+        }
+        start = end + 1;
+    }
+    return false;
 }
 
 bool Installed(const Hook& hook) {

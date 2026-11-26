@@ -1236,8 +1236,8 @@ def ambient_play_state(rng, pool, args):
 
 AMBIENT_PLAY_CALLEES = {
     0x005ff4d0: (0, "thiscall", lambda h: 1 if h % 5 else 0),             # CSoundData::IsEnabled
-    0x005ff4f0: (5, "thiscall", lambda h: 0x20000000 + (h & 0xFFF0)),     # CSoundData::GetEffect
-    0x005c2fc0: (0, "thiscall", "probe"),                                 # CSoundEffect::Play
+    0x005ff4f0: (2, "thiscall", lambda h: 0x20000000 + (h & 0xFFF0)),     # CSoundData::GetEffect(id, variant) ret 8
+    0x005c2fc0: (3, "thiscall", "probe"),                                 # CSoundEffect::Play(volume, pan, flags) ret 0Ch
     0x0061f802: (0, "cdecl", lambda h: (h >> 8) & 0x7FFF if h & 3 else 29000 + (h >> 8) % 3800),  # rand
 }
 

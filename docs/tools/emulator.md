@@ -71,7 +71,12 @@ HRESULTs); a pointer argument's recorded bytes can be `((offset, size),
 ...)` for structures with uninitialized fields. `Spec.callees` probes
 calls of S3.EXE functions that are not reimplemented and can't run in
 the emulator (exception constructors, the CRT's free): recorded with
-their arguments, returning `this` or a probe value. `specs.LOCKIT_PROBES` (session 55) probes std::_Lockit
+their arguments, returning `this` or a probe value. Take a callee's
+argument count from its `ret N`, not from the pushes before the call:
+MSVC may push the next call's arguments early (PlayAmbientSounds pushes
+5 for GetEffect's 2 and Play's 3), so a wrong count on both the probe
+and our code passes here and in-process but corrupts the stack in the
+game (session 57). `specs.LOCKIT_PROBES` (session 55) probes std::_Lockit
 (0x61e6e3 / 0x61e77f, the critical section of the MSVC6 tree code):
 recorded without the lock object's address, order compared; add it to
 the callees of every spec whose code reaches tree functions. `_CxxThrowException`

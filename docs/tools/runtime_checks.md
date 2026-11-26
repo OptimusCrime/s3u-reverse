@@ -98,7 +98,9 @@ that opens the game window, take the game lock (`docs/tools/game_lock.md`).
   a whole game diverge, or to count our callees of an original function
   (calls from our own replacements bypass the counting thunk; e.g.
   `check_random_map.py --against-original --skip-hooks CGameData_GenerateRandomMap`
-  counts ExpandTerrain and MarkTerrainEdge).
+  counts ExpandTerrain and MarkTerrainEdge). A name ending in `*` leaves
+  out every hook starting with it (session 57; e.g. `"StaticInit_*,StaticDtor_*"`
+  for the static-initializer stubs; the list is limited to 4 KB).
 - **Diagnostics in `s3re.log`:** the game's own `DebugLog` messages (688
   call sites, silent in the release build; at most 5 per call site, with
   callers; calls from our replacements show as `s3re.dll+RVA`), and for access violations in game code the registers, memory
@@ -106,6 +108,12 @@ that opens the game window, take the game lock (`docs/tools/game_lock.md`).
   crash reports to `Settlers3Ultimate/errorlog.txt`.
 - **`--exit-after-ticks` shuts the game down normally** (WM_CLOSE to its
   windows, killed after 15 s if that hangs), so threads run their OnExit.
+  When the watchdog kills it, s3re.log has "hang:" lines with EIP and the
+  return addresses on every thread's stack (module+offset; s3re.dll
+  offsets via `s3re.map`), and the "calls" lines are missing (they are
+  written at DLL detach), so the checks record no call counts. Session 57:
+  a Debug-build stack mismatch in CDrawer::PlayAmbientSounds made the
+  game lose activation and StopThreads wait forever.
 
 ## Determinism, recording and replay
 

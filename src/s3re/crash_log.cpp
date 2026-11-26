@@ -14,6 +14,7 @@
 #include "log.h"
 
 #include <windows.h>
+#include <tlhelp32.h>
 
 #include <atomic>
 #include <cstdint>
@@ -74,6 +75,37 @@ void LogBytes(const char* what, std::uintptr_t address) {
     }
 }
 
+// The module and offset an address belongs to ("S3.EXE+1234"), or "?".
+void DescribeAddress(std::uintptr_t address, char* out, std::size_t size) {
+    MEMORY_BASIC_INFORMATION info{};
+    if (VirtualQuery(reinterpret_cast<const void*>(address), &info, sizeof(info)) == 0 ||
+        info.Type != MEM_IMAGE) {
+        lstrcpynA(out, "?", static_cast<int>(size));
+        return;
+    }
+    char path[MAX_PATH] = "";
+    GetModuleFileNameA(static_cast<HMODULE>(info.AllocationBase), path, MAX_PATH);
+    const char* name = path;
+    for (const char* p = path; *p != 0; ++p) {
+        if (*p == '\\' || *p == '/') {
+            name = p + 1;
+        }
+    }
+    wsprintfA(out, "%s+%lx", name,
+              static_cast<unsigned long>(address -
+                                         reinterpret_cast<std::uintptr_t>(info.AllocationBase)));
+}
+
+// Whether the code before `address` ends in a call (E8 rel32, FF /2).
+bool AfterCall(std::uintptr_t address) {
+    if (!Readable(address - 6, 6)) {
+        return false;
+    }
+    const auto* b = reinterpret_cast<const std::uint8_t*>(address - 6);
+    return b[1] == 0xE8 || (b[0] == 0xFF && (b[1] & 0x38) == 0x10) ||
+           (b[4] == 0xFF && (b[5] & 0x38) == 0x10) || (b[3] == 0xFF && (b[4] & 0x38) == 0x10);
+}
+
 LONG CALLBACK OnException(EXCEPTION_POINTERS* info) {
     const EXCEPTION_RECORD* record = info->ExceptionRecord;
     const CONTEXT* c = info->ContextRecord;
@@ -121,6 +153,55 @@ LONG CALLBACK OnException(EXCEPTION_POINTERS* info) {
 }
 
 }  // namespace
+
+void LogAllThreadStacks(const char* why) {
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    THREADENTRY32 entry{};
+    entry.dwSize = sizeof(entry);
+    for (BOOL ok = Thread32First(snapshot, &entry); ok; ok = Thread32Next(snapshot, &entry)) {
+        if (entry.th32OwnerProcessID != GetCurrentProcessId() ||
+            entry.th32ThreadID == GetCurrentThreadId()) {
+            continue;
+        }
+        const HANDLE thread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT |
+                                             THREAD_QUERY_INFORMATION,
+                                         FALSE, entry.th32ThreadID);
+        if (thread == nullptr) {
+            continue;
+        }
+        if (SuspendThread(thread) != static_cast<DWORD>(-1)) {
+            CONTEXT c{};
+            c.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
+            if (GetThreadContext(thread, &c)) {
+                char where[MAX_PATH + 16];
+                DescribeAddress(c.Eip, where, sizeof(where));
+                S3RE_LOG("%s: thread %lu eip %08lx %s esp %08lx", why, entry.th32ThreadID, c.Eip,
+                         where, c.Esp);
+                int logged = 0;
+                for (int i = 0; i < 2048 && logged < 24; ++i) {
+                    const std::uintptr_t slot = c.Esp + i * 4;
+                    if (!Readable(slot, 4)) {
+                        break;
+                    }
+                    const std::uint32_t value = *reinterpret_cast<const std::uint32_t*>(slot);
+                    if (value >= 0x10000 && AfterCall(value)) {
+                        DescribeAddress(value, where, sizeof(where));
+                        if (where[0] != '?') {
+                            S3RE_LOG("%s:   esp+%03x: %08x %s", why, i * 4, value, where);
+                            ++logged;
+                        }
+                    }
+                }
+            }
+            ResumeThread(thread);
+        }
+        CloseHandle(thread);
+    }
+    CloseHandle(snapshot);
+}
 
 void Install() {
     AddVectoredExceptionHandler(1, OnException);
