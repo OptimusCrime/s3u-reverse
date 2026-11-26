@@ -33,9 +33,9 @@ LOGBOOK session entry).
   temporaries, plus calls of the panel helpers), Render_sub_4c85a0 (the
   settler drawer, 38 KB, 11,250 instructions; its dumpbin listing desyncs
   on a jump table, so frontier.py never lists it), Render_sub_4b26c0 (needs
-  both and 0x54cbd0), CDrawer::SetMouseCursor 0x42cb60 (needs
-  CMouseSurface::SetHotspot 0x469130 / Clear 0x469310 and
-  CCriticalSection::Enter/Leave 0x60d670/0x60d680), CDrawThread::Draw /
+  both and 0x54cbd0), CDrawer::SetMouseCursor 0x42cb60 (its callees are
+  done now; it has a catch(...) around DrawSprite that unlocks the mouse
+  surface and rethrows, which needs an exception test), CDrawThread::Draw /
   FetchDrawData (0x42c710 / 0x42c780). CTextSurface's constructor,
   destructor and its font deleter 0x4a7d30 need the Watcom skip-list code
   (0x60b9f0, 0x60bd80, the iterator), and DrawText's wide sibling caller

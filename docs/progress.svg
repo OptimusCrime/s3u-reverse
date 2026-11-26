@@ -5,19 +5,19 @@
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="396.4" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 28.2%</title></rect>
 <text x="368.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">28.2%</text>
-<rect x="566.4" y="100" width="175.6" height="40" fill="#4f8fc0"><title>Verified by tests only: 12.5%</title></rect>
-<text x="654.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">12.5%</text>
-<rect x="742" y="100" width="241" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 17.1%</title></rect>
-<text x="862.5" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">17.1%</text>
-<rect x="983" y="100" width="593" height="40" fill="#e8a39b"><title>Not understood yet: 42.2%</title></rect>
+<rect x="566.4" y="100" width="176" height="40" fill="#4f8fc0"><title>Verified by tests only: 12.5%</title></rect>
+<text x="654.5" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">12.5%</text>
+<rect x="742.5" y="100" width="240.6" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 17.1%</title></rect>
+<text x="862.8" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">17.1%</text>
+<rect x="983.1" y="100" width="592.9" height="40" fill="#e8a39b"><title>Not understood yet: 42.2%</title></rect>
 <text x="1279.5" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">42.2%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="283.6" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 20.2%</title></rect>
 <text x="311.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">20.2%</text>
-<rect x="453.6" y="154" width="158.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 11.3%</title></rect>
-<text x="532.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">11.3%</text>
-<rect x="612" y="154" width="447.8" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 31.8%</title></rect>
-<text x="835.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">31.8%</text>
+<rect x="453.6" y="154" width="158.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 11.3%</title></rect>
+<text x="532.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">11.3%</text>
+<rect x="612.3" y="154" width="447.5" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 31.8%</title></rect>
+<text x="836.1" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">31.8%</text>
 <rect x="1059.8" y="154" width="516.2" height="40" fill="#e8a39b"><title>Not understood yet: 36.7%</title></rect>
 <text x="1317.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">36.7%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
@@ -5318,8 +5318,8 @@
 <g><title>Dirk::CMouseSurface: 11 functions</title><rect x="834.7" y="758.7" width="33.2" height="32.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="835.2" y="759.2" width="15.7" height="16.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMouseSurface::IsOverlaySupported @ 0x00469470
 400 bytes — Identified (purpose known)</title></rect>
-<rect x="835.2" y="775.8" width="15.7" height="14.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMouseSurface::Clear @ 0x00469310
-352 bytes — Identified (purpose known)</title></rect>
+<rect x="835.2" y="775.8" width="15.7" height="14.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMouseSurface::Clear @ 0x00469310
+352 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="850.8" y="759.2" width="16.6" height="9.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMouseSurface::SetPosition @ 0x004691e0
 238 bytes — Identified (purpose known)</title></rect>
 <rect x="850.8" y="768.5" width="8.3" height="8.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMouseSurface::CMouseSurface @ 0x00468fe0
@@ -5330,8 +5330,8 @@
 80 bytes — Classified (class/role known)</title></rect>
 <rect x="850.8" y="783.9" width="8" height="6.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMouseSurface::Hide @ 0x00469190
 80 bytes — Classified (class/role known)</title></rect>
-<rect x="858.8" y="777.3" width="4.3" height="7.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMouseSurface::SetHotspot @ 0x00469130
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="858.8" y="777.3" width="4.3" height="7.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMouseSurface::SetHotspot @ 0x00469130
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="863.1" y="777.3" width="4.3" height="7.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMouseSurface::Show @ 0x00469160
 48 bytes — Classified (class/role known)</title></rect>
 <rect x="858.8" y="784.6" width="5" height="5.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Dirk::CMouseSurface::SetPosition_tail @ 0x004692e3
@@ -7246,10 +7246,10 @@
 16 bytes — Classified (class/role known)</title></rect>
 <rect x="1097.4" y="966.7" width="2.6" height="3.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCriticalSection::~CCriticalSection @ 0x0060d660
 16 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1094.8" y="969.9" width="2.6" height="3.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCriticalSection::Enter @ 0x0060d670
-16 bytes — Classified (class/role known)</title></rect>
-<rect x="1097.4" y="969.9" width="2.6" height="3.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCriticalSection::Leave @ 0x0060d680
-16 bytes — Classified (class/role known)</title></rect>
+<rect x="1094.8" y="969.9" width="2.6" height="3.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCriticalSection::Enter @ 0x0060d670
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1097.4" y="969.9" width="2.6" height="3.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCriticalSection::Leave @ 0x0060d680
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>WCValSkipListDict_unsigned_int: 2 functions</title><rect x="1100.4" y="966.2" width="6.1" height="7.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1100.9" y="966.7" width="5.1" height="3.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>WCValSkipListDict_unsigned_int::base_equivalent @ 0x004a6b00
@@ -7290,10 +7290,10 @@
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>Win32::CLock: 2 functions</title><rect x="1082.2" y="978.9" width="5.8" height="5.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1082.7" y="979.4" width="3.2" height="4.7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CLock::CLock @ 0x0060da00
-32 bytes — Classified (class/role known)</title></rect>
-<rect x="1085.9" y="979.4" width="1.6" height="4.7" fill="#e8a39b"><title>Win32::CLock::~CLock @ 0x0060da20
-16 bytes — Classified (class/role known)</title></rect>
+<rect x="1082.7" y="979.4" width="3.2" height="4.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CLock::CLock @ 0x0060da00
+32 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1085.9" y="979.4" width="1.6" height="4.7" fill="#a8c8e6"><title>Win32::CLock::~CLock @ 0x0060da20
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>DirectX::CDisplayMode: 1 functions</title><rect x="1082.2" y="984.6" width="5.8" height="5.7" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1082.7" y="985.1" width="4.8" height="4.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CDisplayMode::CDisplayMode @ 0x005b6c30

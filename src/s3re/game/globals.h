@@ -706,6 +706,11 @@ using CreateDIBSectionImport = void*(__stdcall*)(void* dc, const void* info, std
 inline constexpr GameGlobal<GetDCImport> g_importGetDC{0x6552b4};          // USER32.dll
 inline constexpr GameGlobal<ReleaseDCImport> g_importReleaseDC{0x6552d8};  // USER32.dll
 inline constexpr GameGlobal<CreateDIBSectionImport> g_importCreateDIBSection{0x655060};
+// The critical-section imports (Win32::CCriticalSection::Enter / Leave
+// 0x60d670 / 0x60d680; they return void, EAX is passed on).
+using CriticalSectionImport = std::uint32_t(__stdcall*)(void* section);
+inline constexpr GameGlobal<CriticalSectionImport> g_importEnterCriticalSection{0x6550fc};  // KERNEL32.dll
+inline constexpr GameGlobal<CriticalSectionImport> g_importLeaveCriticalSection{0x655128};  // KERNEL32.dll
 // wip/ui-gdi batch: the dropdown whose list is open (CDropdown::OnArrowClicked
 // 0x422590 sets it; OnFocusChanged and Draw close other open lists).
 inline constexpr GameGlobal<std::uint32_t> g_openDropdown{0x7a8244};

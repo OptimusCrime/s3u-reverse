@@ -2016,3 +2016,50 @@ SPECS += [
          callees={0x0042cf80: (0, "thiscall", "probe")},
          exempt_blocks=(0x42c818,)),  # the alignment padding after the tail jump
 ]
+
+
+# -- Dirk::CMouseSurface::SetHotspot (mouse_surface.cpp, wip/text-r6) --------
+# The surface at world 0; Enter/Leave of its section +0x4c run (ours are
+# verified; Enter/LeaveCriticalSection are API probes).
+SPECS += [
+    Spec("CMouseSurface_SetHotspot", 0x00469130, "thiscall", [anything, anything]),
+]
+
+
+# -- Dirk::CMouseSurface::Clear (mouse_surface.cpp, wip/text-r6) -------------
+# The surface at world 0 with its IDirectDrawSurface (+8) at MS_IFACE
+# (vtable FAKE_VTABLE: GetSurfaceDesc 0x58 and Unlock 0x80 as COM probes
+# returning DD_OK, DDERR_SURFACELOST or another error); CLock and the
+# critical section run (API probes); CheckResult 0x5bf2e0 probed (returns
+# its hr); CSurface::Lock 0x5bf050 probed: it writes a description of up to
+# 24 x 24 pixels at MS_PIXELS into the (stack) DDSURFACEDESC.
+MS_IFACE = SCRATCH + 11 * SCRATCH_SLOT_BYTES
+MS_PIXELS = SCRATCH + 12 * SCRATCH_SLOT_BYTES
+
+
+def ms_world(rng, pool, args):
+    return [(8, WORLD_BASE + MS_IFACE, 4), (MS_IFACE, FAKE_VTABLE, 4)]
+
+
+def ms_lock_effect(machine, ecx, args, h):
+    width = (h >> 8) % 25
+    height = (h >> 16) % 25
+    pitch = 2 * (width + (h >> 24) % 24) + ((h >> 32) & 1)
+    offset = 2 * ((h >> 40) % 16)
+    machine.guest_write(args[1] + 8, struct.pack("<III", height, width, pitch))
+    machine.guest_write(args[1] + 0x24, struct.pack("<I", WORLD_BASE + MS_PIXELS + offset))
+    return 0
+
+
+def ms_com_result(h):
+    return (0, 0, 0x887601C2, 0x887601C2, 0x88760005)[h % 5]
+
+
+SPECS += [
+    Spec("CMouseSurface_Clear", 0x00469310, "thiscall", [], presets=ms_world,
+         virtuals={0x58: (2, {1: 0x6c}, {"com": True, "returns": ms_com_result}),
+                   0x80: (2, {}, {"com": True, "returns": ms_com_result})},
+         callees={0x005bf2e0: (2, "thiscall", "probe", lambda m, ecx, args, h: args[0]),       # CheckResult
+                  0x005bf050: (3, "thiscall", "probe", ms_lock_effect,                         # CSurface::Lock
+                               lambda m, ecx, a: (a[0], a[2], bytes(m.guest_read(a[1], 0x6c))))}),
+]

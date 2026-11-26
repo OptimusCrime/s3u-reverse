@@ -287,6 +287,7 @@ add_library(s3re SHARED
     game/graphics/landscape_blit.cpp
     game/graphics/landscape_blit_tests.cpp
     game/graphics/landscape_colours.cpp
+    game/graphics/mouse_surface.cpp
     game/graphics/screen_layout.cpp
 
     # game/net/: CNetThread, lobby protocol buffer
@@ -300,6 +301,7 @@ add_library(s3re SHARED
     game/sound/sound_effects_tests.cpp
     # game/framework/: WinMain, Win32/DirectX framework classes, exceptions, strings
     game/framework/wide_to_narrow.cpp
+    game/framework/win32_locks.cpp
     game/framework/wide_to_narrow_tests.cpp
     game/framework/directx_draw.cpp
     game/framework/directx_draw_tests.cpp

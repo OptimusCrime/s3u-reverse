@@ -628,6 +628,8 @@ inline constexpr GameText kSelectFont{0x69fe74};           // "::SelectObject (h
 inline constexpr GameText kDeleteDc{0x69fe5c};             // "::DeleteDC (hDC) != 0"
 inline constexpr GameText kDefaultFontNotNull{0x697778};   // "hDefaultFont != NULL"
 inline constexpr GameText kBitmapNotNull{0x69fda0};        // "hBitmap != NULL"
+// CMouseSurface::Clear's CSurface::CheckResult name for Unlock (GetSurfaceDesc's is kDDGetSurfaceDesc).
+inline constexpr GameText kDDUnlock{0x697e7c};             // "CSurface::DDUnlock"
 // The panel fonts' faces (CDrawer::InitPanelFonts 0x4c6f60).
 inline constexpr GameText kTimesNewRoman{0x69fff0};     // "Times New Roman"
 inline constexpr GameText kArial{0x69ffe8};             // "Arial"

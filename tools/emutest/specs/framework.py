@@ -1855,3 +1855,20 @@ SPECS += [
          # length 0, for which _Grow returns false
          exempt_blocks=(0x60b710, 0x60b809)),
 ]
+
+
+# -- Win32::CCriticalSection::Enter / Leave, Win32::CLock (win32_locks.cpp,
+# wip/text-r6). The section / lock at world 0 (Enter/LeaveCriticalSection
+# are API probes recording the section's address); the lock's section
+# pointer is world 0x40 or anything.
+def lock_world(rng, pool, args):
+    return [(0, rng.choice([WORLD_BASE + 0x40, WORLD_BASE + 0x40, rng.getrandbits(32)]), 4)]
+
+
+SPECS += [
+    Spec("Win32_CCriticalSection_Enter", 0x0060d670, "thiscall", []),
+    Spec("Win32_CCriticalSection_Leave", 0x0060d680, "thiscall", []),
+    Spec("Win32_CLock_Construct", 0x0060da00, "thiscall", [one_of(WORLD_BASE + 0x40, WORLD_BASE + 0x80)]),
+    Spec("Win32_CLock_Destroy", 0x0060da20, "thiscall", [], presets=lock_world,
+         exempt_blocks=(0x60da27,)),  # the alignment padding after the tail jump
+]
