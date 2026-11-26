@@ -1823,3 +1823,123 @@ SPECS += [
          eax_mask=0, callees={0x0060d660: (0, "thiscall", "probe"), 0x0060dff0: (0, "thiscall", "probe")},
          virtuals={0: 1}),
 ]
+
+
+# -- wip/menus-r5: win32_app_members.cpp --------------------------------------
+# Objects at world offset 0 (thiscall) or 0x100 (~CApplication, whose this
+# is 0x14 into the object: its vbtable in scratch slot 0). GetTimeout's
+# kinds 0..3 (2 and 3 read the data behind the tables, as the original);
+# -debug 0, 1 or any value. The asserts end the run as a throw.
+def am_debug(rng, pool, args):
+    return [(0x007e916c, rng.choice([0, 1, rng.getrandbits(32)]), 4)]
+
+
+def am_application(rng, pool, args):
+    displacement = 0x10 + 4 * rng.randrange(8)
+    return [(0x100 - 0x10, WORLD_BASE + SCRATCH, 4), (SCRATCH + 4, displacement, 4)]
+
+
+AM_ASSERT = {0x006119b0: (1, "thiscall", "throw")}
+
+SPECS += [
+    Spec("Win32_CWindow_Construct", 0x0060fe50, "thiscall", []),
+    Spec("Win32_CMainWindow_Construct", 0x006100a0, "thiscall", []),
+    Spec("DirectX_CDirectXMainWindow_Construct", 0x005b8fc0, "thiscall", []),
+    Spec("DirectX_CGameMainWindow_Construct", 0x005b5cf0, "thiscall", []),
+    Spec("Win32_CSemaphore_Construct", 0x0060c770, "thiscall", []),
+    Spec("Win32_CMutex_Construct", 0x0060c9e0, "thiscall", []),
+    Spec("Win32_CWin32Waitable_IsSame", 0x0060c500, "thiscall", [one_of(WORLD_BASE, WORLD_BASE + 4, 0)]),
+    Spec("Win32_GetTimeout", 0x0060df50, "fastcall", [below(4), anything], globals=am_debug),
+    Spec("DirectX_GetTimeout", 0x005b8c10, "fastcall", [below(4), anything], globals=am_debug),
+    Spec("Win32_CApplication_Destroy", 0x0060ed50, "fastcall", [one_of(WORLD_BASE + 0x100), anything],
+         presets=am_application),
+    Spec("Win32_CMessageQueue_OnIdle", 0x0060d720, "thiscall", [], eax_mask=0, callees=AM_ASSERT),
+    Spec("Win32_CApplication_Start", 0x0060ed90, "thiscall", [], eax_mask=0, callees=AM_ASSERT),
+    Spec("Win32_CWindowedApp_Start", 0x0060f860, "thiscall", [], eax_mask=0, callees=AM_ASSERT),
+]
+
+
+# -- wip/menus-r5: CThread::Start, Show, HasPendingMessage, CCriticalSection,
+# CGameThread::OnExit (win32_synchronize.cpp). The object as in sync_spec;
+# _beginthreadex 0x62279a probed (a CRT function that would start a thread;
+# its handle 0 / 1 / random); the Windows calls are API probes.
+SPECS += [
+    # Dead as in sync_spec: 0x60e179 frees the location's first temporary,
+    # still shared; 0x60e1cd..0x60e28a destroy the location after the
+    # never-returning ThrowWin32Error.
+    Spec("Win32_CThread_Start", 0x0060e060, "thiscall", [anything], presets=sync_world, globals=empty_text,
+         callees={0x0062279a: (6, "cdecl", "probe")},
+         exempt_blocks=(0x60e179, 0x60e1cd, 0x60e1e3, 0x60e1ea, 0x60e1ef, 0x60e217, 0x60e21f, 0x60e221, 0x60e225,
+                        0x60e24b, 0x60e257, 0x60e25f, 0x60e26d, 0x60e277, 0x60e27b, 0x60e281, 0x60e28a)),
+    Spec("Win32_CWindowBase_Show", 0x0060fe40, "thiscall", [], presets=sync_world),
+    Spec("Win32_HasPendingMessage", 0x0060d9e0, "stdcall", []),
+    Spec("Win32_CCriticalSection_Construct", 0x0060d650, "thiscall", []),
+    Spec("DirectX_CGameThread_OnExit", 0x005b6470, "thiscall", []),
+]
+
+
+# -- wip/menus-r5: WideToNarrowString (wide_strings.cpp) ----------------------
+# fastcall: ECX = the result object (scratch slot 1), EDX = the source at
+# world 0x100, its buffer in scratch slot 2 (count byte 0): no zero
+# characters (a zero piece loops for ever in both), ASCII, Latin-1 and
+# characters above 0xff (wcstombs's -1; the unterminated buffer then reads
+# the bump allocator's lazily random bytes, the same for both). The
+# The CRT's wcstombs 0x622308 can't run here (its locale lock and errno
+# need InterlockedIncrement and the thread's TLS): a probe modelling the C
+# locale (characters up to 0xff copied, the zero included, at most `count`
+# bytes; a larger one: -1, the bytes before it written); the in-process
+# test runs the real one. The
+# result's allocator byte (+0) is an uninitialized stack byte of the
+# original: ignored (ours writes 0); the self-test pairs a wrong version
+# that drops the last character, so the bytes next to it count.
+W2N_RESULT = SCRATCH + SCRATCH_SLOT_BYTES
+W2N_TEXT = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+
+
+def w2n_source(rng, pool, args):
+    length = rng.choice([0, 0, 1, 2, rng.randrange(30), rng.randrange(30)])
+    ptr = 0 if length == 0 and rng.random() < 0.5 else WORLD_BASE + W2N_TEXT + 2
+    out = [(0x100, rng.getrandbits(8), 1), (0x104, ptr, 4), (0x108, length, 4), (0x10c, length, 4),
+           (W2N_TEXT + 1, 0, 1)]
+    for k in range(length):
+        roll = rng.random()
+        word = rng.randrange(0x20, 0x7f) if roll < 0.7 else (rng.randrange(0x80, 0x100) if roll < 0.9
+                                                              else rng.randrange(0x100, 0x10000))
+        out.append((W2N_TEXT + 2 + 2 * k, word, 2))
+    out.append((W2N_TEXT + 2 + 2 * length, 0, 2))
+    return out
+
+
+def w2n_wcstombs(machine, ecx, args, h):
+    to, source, count = args
+    out, result = bytearray(), None
+    for k in range(count):
+        word = int.from_bytes(machine.guest_read(source + 2 * k, 2), "little")
+        if word > 0xff:
+            result = 0xFFFFFFFF
+            break
+        out.append(word)
+        if word == 0:
+            result = k
+            break
+    if out:
+        machine.guest_write(to, bytes(out))
+    return len(out) if result is None else result
+
+
+W2N_CALLEES = {0x00622308: (3, "cdecl", "probe", w2n_wcstombs)}
+
+SPECS += [
+    Spec("WideToNarrowString", 0x0060b6a0, "fastcall", [one_of(WORLD_BASE + W2N_RESULT), one_of(WORLD_BASE + 0x100)],
+         presets=w2n_source, globals=null_string_count, ignore_bytes=(W2N_RESULT,), new_fails=0.05,
+         callees=W2N_CALLEES,
+         # Dead: 0x60b710, a source without buffer but with a length (it
+         # would convert "" for ever); 0x60b809, the local's _Eos after
+         # erase(0, npos) (_Grow(0) is false).
+         exempt_blocks=(0x0060b710, 0x0060b809)),
+]
+SELF_TEST += [
+    Spec("WrongWideToNarrowString", 0x0060b6a0, "fastcall",
+         [one_of(WORLD_BASE + W2N_RESULT), one_of(WORLD_BASE + 0x100)], presets=w2n_source,
+         ignore_bytes=(W2N_RESULT,), callees=W2N_CALLEES),
+]

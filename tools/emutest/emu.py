@@ -503,6 +503,21 @@ def _api_text_out(machine, uc, args):
     return ok, ("TextOutA", dc, x, y, _api_counted_text(machine, text, length), length)
 
 
+def _api_peek_message(machine, uc, args):
+    """PeekMessageA(msg, window, first, last, remove) (wip/menus-r5): the
+    message buffer is a stack local (recorded by presence); returns
+    success like _api_success (nothing is written: Win32::HasPendingMessage
+    only tests the result)."""
+    h = _api_hash(machine, 0x5E00000E)
+    eax = 0 if _api_fails(h) else (1 if h & 0x10 else _api_value(h) | 1)
+    return eax, ("PeekMessageA", args[0] != 0, *args[1:])
+
+
+def _api_co_uninitialize(machine, uc, args):
+    """CoUninitialize() (wip/menus-r5): recorded, returns nothing (EAX 0)."""
+    return 0, ("CoUninitialize",)
+
+
 def _api_critical_section(name):
     def handler(machine, uc, args):
         """Enter/LeaveCriticalSection(section): recorded (the section lies in
@@ -709,6 +724,11 @@ API_HANDLERS = {
     "SetBkColor": (2, _api_set_colour("SetBkColor", 0xBC000000)),
     "TextOutA": (5, _api_text_out),
     "EnterCriticalSection": (1, _api_critical_section("EnterCriticalSection")),
+    "InitializeCriticalSection": (1, _api_critical_section("InitializeCriticalSection")),
+    "ShowWindow": (2, _api_success("ShowWindow", 0x5E00000C)),
+    "ResumeThread": (1, _api_success("ResumeThread", 0x5E00000D)),
+    "PeekMessageA": (5, _api_peek_message),
+    "CoUninitialize": (0, _api_co_uninitialize),
     "LeaveCriticalSection": (1, _api_critical_section("LeaveCriticalSection")),
     "RegOpenKeyExA": (5, _api_reg_open),
     "RegCreateKeyExA": (9, _api_reg_create),

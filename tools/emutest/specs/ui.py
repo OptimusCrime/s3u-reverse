@@ -1720,3 +1720,332 @@ SPECS += [
     Spec("CDropdown_Draw", 0x004227d0, "fastcall", [BTN_DROP_ELEMENT, anything, anything, anything, anything],
          presets=btn_dropdown_state, globals=btn_open_dropdown, virtuals=BTN_VIRTUALS_1, callees=BTN_CALLEES),
 ]
+
+
+# -- wip/menus-r5: CStaticText::SetText (ui_static_text.cpp), CUpDown --------
+# (ui_updown.cpp)
+#
+# SetText: the label at world offset 0 (vtable = FAKE_VTABLE, Invalidate
+# slot 0x1c probed), its text member at +0x28 (common.string_fields, buffer
+# in scratch slot 0). The by-value argument's four dwords are the stack
+# arguments: allocator, a buffer (none, its own in scratch slot 1, or the
+# member's), length, capacity; the own buffer gets a count and a text of
+# about the length.
+SETTEXT_ARG_BUFFER = SCRATCH + SCRATCH_SLOT_BYTES
+
+
+def settext_arg_ptr(rng, pool):
+    return rng.choice([0, WORLD_BASE + SETTEXT_ARG_BUFFER + 1, WORLD_BASE + SETTEXT_ARG_BUFFER + 1,
+                       WORLD_BASE + SCRATCH + 1])
+
+
+def settext_length(rng, pool):
+    return rng.choice([0, 1, 2, rng.randrange(40), rng.randrange(40)])
+
+
+def settext_label(rng, pool, args):
+    fields, ptr = string_fields(rng, 0x28, SCRATCH)
+    out = [(0, FAKE_VTABLE, 4)] + fields
+    if args[1] == WORLD_BASE + SCRATCH + 1 and ptr != args[1]:
+        out += [(SCRATCH, rng.choice([0, 1, 0xff]), 1), (SCRATCH + 1, 0x41, 1), (SCRATCH + 2, 0, 1)]
+    if args[1] == WORLD_BASE + SETTEXT_ARG_BUFFER + 1:
+        length = args[2]
+        text = length if rng.random() > 0.15 else rng.randrange(length + 4)
+        out.append((SETTEXT_ARG_BUFFER, rng.choice([0, 0, 0, 1, 2, 0xfd, 0xfe, 0xff]), 1))
+        out += [(SETTEXT_ARG_BUFFER + 1 + i, rng.randint(1, 255), 1) for i in range(text)]
+        out.append((SETTEXT_ARG_BUFFER + 1 + text, 0, 1))
+    return out
+
+
+def settext_capacity(rng, pool):
+    return rng.choice([0, 31, 40, 63, rng.randrange(80)])
+
+
+# CUpDown: the object at world offset 0x400 (UICTL_OBJECT); its vbtables in
+# scratch slot 6 (UICTL_VBTABLE: the up-down's at +0, the up button's at +8,
+# the down button's at +0x10), the listener a fake object in slot 7.
+# OnButtonClicked's sender is one of the two buttons' usual elements (or a
+# random place, from random displacements) or another element.
+UD_OBJ = UICTL_OBJECT
+UD_UP_ELEMENT = UD_OBJ + 0x300
+UD_DOWN_ELEMENT = UD_OBJ + 0x380
+
+
+def ud_number(rng, pool):
+    return rng.choice([0, 1, 2, 5, 0xFFFFFFFF, 0x7FFFFFFF, 0x80000000, 0x7FFFFFFE, rng.randrange(20),
+                       rng.getrandbits(32)])
+
+
+def ud_state(rng, pool, args):
+    def number():
+        return ud_number(rng, pool)
+    lo = number()
+    hi = (lo + rng.randrange(20)) & 0xFFFFFFFF if rng.random() < 0.5 else number()
+    value = (lo + rng.randrange(20) - 2) & 0xFFFFFFFF if rng.random() < 0.5 else number()
+    up = UD_UP_ELEMENT - (UD_OBJ + 0x100) if rng.random() < 0.8 else rng.randrange(0x400)
+    down = UD_DOWN_ELEMENT - (UD_OBJ + 0x180) if rng.random() < 0.8 else rng.randrange(0x400)
+    if rng.random() < 0.1:
+        up = (UD_DOWN_ELEMENT - (UD_OBJ + 0x100)) & 0xFFFFFFFF  # both at the same element (up wins)
+    return [(UD_OBJ + 4, WORLD_BASE + UICTL_VBTABLE, 4), (UICTL_VBTABLE + 4, 0x220 + 4 * rng.randrange(4), 4),
+            (UD_OBJ + 0x100, WORLD_BASE + UICTL_VBTABLE + 8, 4), (UICTL_VBTABLE + 12, up, 4),
+            (UD_OBJ + 0x180, WORLD_BASE + UICTL_VBTABLE + 16, 4), (UICTL_VBTABLE + 20, down, 4),
+            (UD_OBJ + 0xb4, rng.choice([0, WORLD_BASE + UICTL_FAKES]), 4), (UICTL_FAKES, FAKE_VTABLE, 4),
+            (UD_OBJ + 0x1fc, lo, 4), (UD_OBJ + 0x200, hi, 4), (UD_OBJ + 0x204, value, 4)]
+
+
+def ud_sender(rng, pool):
+    return rng.choice([WORLD_BASE + UD_UP_ELEMENT, WORLD_BASE + UD_DOWN_ELEMENT, WORLD_BASE + UD_UP_ELEMENT,
+                       WORLD_BASE + UD_DOWN_ELEMENT, WORLD_BASE + UD_OBJ + 0x224])
+
+
+def ud_settext_record(m, ecx, args):
+    """SetText's argument without its allocator byte (stack garbage in the
+    original), with its buffer's count byte and text."""
+    ptr, length = args[1], args[2]
+    contents = bytes(m.guest_read(ptr - 1, min(length, 40) + 2)) if ptr else b""
+    return (ptr, length, args[3], contents)
+
+
+UD_THIS = one_of(WORLD_BASE + UD_OBJ)
+UD_SETVALUE_PROBE = {0x00422b90: (1, "thiscall", "probe")}
+
+SPECS += [
+    # Dead: 0x41c848 caps the length at npos (0xFFFFFFFF); 0x41c853..0x41c8a4
+    # is assign()'s self-assignment branch (the argument is a copy on the
+    # stack, never the member); 0x41c9bd the argument's ~string _Eos after
+    # erase(0, npos) (_Grow(0) is false). The final _Tidy's decrement is in
+    # 0x402170 (after the split the buffer is unshared or frozen).
+    Spec("CStaticText_SetText", 0x0041c810, "thiscall",
+         [anything, settext_arg_ptr, settext_length, settext_capacity], presets=settext_label,
+         globals=null_string_count, virtuals={0x1c: 0},
+         exempt_blocks=(0x0041c848, 0x0041c853, 0x0041c858, 0x0041c85d, 0x0041c86d, 0x0041c86f, 0x0041c873,
+                        0x0041c89c, 0x0041c8a4, 0x0041c9bd)),
+    Spec("CUpDown_GetValue", 0x00422b80, "fastcall", [UD_THIS, anything], presets=ud_state),
+    # UpdateText probed (its own spec). Dead: 0x422bd0, the listener call
+    # for a null up-down (this == 0).
+    Spec("CUpDown_SetValue", 0x00422b90, "fastcall", [UD_THIS, anything, ud_number], presets=ud_state,
+         virtuals={0: 1}, callees={0x00422c20: (0, "thiscall", "probe")}, exempt_blocks=(0x00422bd0,)),
+    Spec("CUpDown_SetRange", 0x00422bf0, "fastcall", [UD_THIS, anything, ud_number, ud_number], presets=ud_state,
+         callees=UD_SETVALUE_PROBE),
+    # SetText probed, its argument recorded by contents. Dead: 0x422d19 and
+    # 0x422d4a free the temporaries' buffer, which the argument still
+    # shares (count 2, then 1: both releases only decrement).
+    Spec("CUpDown_UpdateText", 0x00422c20, "fastcall", [UD_THIS, anything], presets=ud_state,
+         callees={0x0041c810: (4, "thiscall", "probe", None, ud_settext_record)},
+         exempt_blocks=(0x00422d19, 0x00422d4a)),
+    Spec("CUpDown_OnButtonClicked", 0x00422e50, "fastcall", [UD_THIS, anything, ud_sender], presets=ud_state,
+         callees={**UD_SETVALUE_PROBE, 0x006119b0: (1, "thiscall", "throw")}),
+]
+
+
+# -- wip/menus-r5: ui_group_members.cpp ---------------------------------------
+# Objects at UICTL_OBJECT (world 0x400), vbtables in UICTL_VBTABLE (one per
+# 8 bytes), fake objects and vtables as in the specs above. The children
+# vectors' find (slot 0xc) gets stack pointers: recorded by contents.
+GM_VIRTUALS = {0: 1, 4: 1, 0xc: (3, {0: 4, 2: 4})}
+
+
+def gm_vbptr(at, slot, displacement):
+    return [(at, WORLD_BASE + UICTL_VBTABLE + 8 * slot, 4), (UICTL_VBTABLE + 8 * slot + 4, displacement & 0xFFFFFFFF, 4)]
+
+
+def gm_group_to_destroy(rng, pool, args):
+    obj = UICTL_OBJECT
+    out = gm_vbptr(obj + 4, 0, 0x7c + 4 * rng.randrange(4))
+    data = rng.choice([0, WORLD_BASE + SCRATCH + 0x100, WORLD_BASE + SCRATCH + 0x100])
+    length = 0 if data == 0 else rng.choice([0, 1, 2, 4, rng.randrange(6)])
+    out += [(obj + 0xc + 8, data, 4), (obj + 0xc + 0xc, rng.choice([length, length + 1, 6]) if data else 0, 4),
+            (obj + 0xc + 0x10, rng.randrange(-1, 6) & 0xFFFFFFFF, 4), (obj + 0xc + 0x14, length, 4)]
+    for list_at in (0x34, 0x4c, 0x64):
+        out.append((obj + list_at + 8, rng.choice([0, rng.getrandbits(32)]), 4))
+    return out
+
+
+def gm_remove_last_child(machine, ecx, args, h):
+    """RemoveChild takes a child out: the vector's length - 1."""
+    at = WORLD_BASE + UICTL_OBJECT + 0x20
+    length = int.from_bytes(machine.guest_read(at, 4), "little")
+    machine.guest_write(at, ((length - 1) & 0xFFFFFFFF).to_bytes(4, "little"))
+
+
+def gm_group(rng, pool, args):
+    obj = UICTL_OBJECT
+    return [(obj, FAKE_VTABLE, 4), (obj + 0xc, FAKE_VTABLE, 4), (obj + 0x20, rng.choice([0, 1, 2]), 4)]
+
+
+def gm_list_box(rng, pool, args):
+    obj = UICTL_OBJECT
+    visible = rng.choice([0, 1, 5, 9, rng.getrandbits(32)])
+    count = rng.choice([visible, visible + 1, visible - 1, 0, rng.getrandbits(32)]) & 0xFFFFFFFF
+    out = gm_vbptr(obj + 4, 0, 0x440 + 4 * rng.randrange(3)) + gm_vbptr(obj + 0xc4, 1, 0x200 + 4 * rng.randrange(3))
+    out += [(obj + 0x38, FAKE_VTABLE, 4), (obj + 0x44, FAKE_VTABLE, 4), (obj + 0x58, rng.choice([0, 1, 2]), 4),
+            (obj + 0x3f0, rng.choice([0, 1, 0x80]), 1), (obj + 0x3f1, rng.choice([0, 1, 0x80]), 1),
+            (obj + 0x414, visible, 4), (obj + 0x434, count, 4),
+            (obj + 0x3f4, rng.choice([1, 2, 13, 16, rng.randrange(1, 0x7FFFFFFF)]), 4)]
+    return out
+
+
+def gm_rect(rng, pool):
+    return WORLD_BASE + SCRATCH + 0x200 + 16 * rng.randrange(4)
+
+
+def gm_records(rng, pool, args):
+    header = rng.choice([0, WORLD_BASE + SCRATCH + 0x300])
+    cells = rng.choice([0, WORLD_BASE + SCRATCH + 0x400])
+    displacement = 0x40 + 4 * rng.randrange(3)
+    out = [(0x1c, header, 4), (0x10, cells, 4), (SCRATCH + 0x300, FAKE_VTABLE, 4)]
+    out += gm_vbptr(SCRATCH + 0x404, 2, displacement) + [(SCRATCH + 0x404 + displacement, FAKE_VTABLE, 4)]
+    return out
+
+
+def gm_image_button(rng, pool, args):
+    obj = UICTL_OBJECT
+    displacement = 0x5c + 4 * rng.randrange(3)
+    return gm_vbptr(obj + 4, 0, displacement) + [(obj + 4 + displacement, FAKE_VTABLE, 4),
+                                                 (obj + 0x58, rng.choice([0xFFFFFFFF, 0, 0x2000a]), 4)]
+
+
+def gm_dialog(rng, pool, args):
+    obj = UICTL_OBJECT
+    out = gm_vbptr(obj, 0, 0xc0 + 4 * rng.randrange(3))
+    return out + [(obj + 0xc0 + 4 * k, FAKE_VTABLE, 4) for k in range(4)]
+
+
+def gm_move_element(machine, ecx, args, h):
+    """SetParent sometimes moves the dialog's element (its displacement + 4),
+    to compare the re-read."""
+    if h & 1:
+        at = WORLD_BASE + UICTL_VBTABLE + 4
+        displacement = int.from_bytes(machine.guest_read(at, 4), "little")
+        machine.guest_write(at, (displacement + 4).to_bytes(4, "little"))
+
+
+GM_OBJ = WORLD_BASE + UICTL_OBJECT
+
+SPECS += [
+    # The lists' clearAndDestroy / ~WCIsvListBase probed (their own specs;
+    # the lists are random); RemoveChild 0x416fe0 probed, taking a child out.
+    Spec("CScreenGroup_Destroy", 0x00416da0, "fastcall", [one_of(GM_OBJ + 0x80), anything],
+         presets=gm_group_to_destroy,
+         callees={0x00416fe0: (1, "thiscall", "probe", gm_remove_last_child),
+                  0x0060b560: (0, "thiscall", "probe"), 0x0060b5a0: (0, "thiscall", "probe")}),
+    Spec("CScreenGroup_ShowChild", 0x00417090, "fastcall", [one_of(GM_OBJ), anything, one_of(0, 1, 0x100, 0x80000000),
+                                                            anything],
+         presets=gm_group, virtuals=GM_VIRTUALS),
+    # Dead: 0x41f561 and 0x41f5a6 (the scroll bar's element for a scroll bar
+    # at address 0) and 0x41f629 (the same before AddChild). The body ends
+    # at 0x41f6a1; 0x41f6b0 starts another member (not a listed start).
+    Spec("CListBox_UpdateLayout", 0x0041f550, "fastcall", [one_of(GM_OBJ), anything], presets=gm_list_box,
+         virtuals=GM_VIRTUALS, exempt_blocks=(0x0041f561, 0x0041f5a6, 0x0041f629), cover_until=0x0041f6a1),
+    Spec("CListBox_Clear", 0x0041f1e0, "fastcall", [one_of(GM_OBJ), anything], presets=gm_list_box,
+         callees={0x0040a580: (1, "thiscall", "probe"), 0x0041e380: (3, "thiscall", "probe"),
+                  0x0041f550: (0, "thiscall", "probe")}),
+    Spec("CListBox_OnResized", 0x004204d0, "fastcall", [one_of(GM_OBJ + 0x444), anything, gm_rect, anything],
+         presets=gm_list_box, callees={0x0041f550: (0, "thiscall", "probe")}),
+    Spec("CColumn_ConstructDefault", 0x004274a0, "thiscall", []),
+    Spec("CLine_ConstructDefault", 0x004276b0, "thiscall", []),
+    # EAX without a record is the caller's (unused).
+    Spec("CColumn_Destroy", 0x004275e0, "thiscall", [], presets=gm_records, virtuals={0: 1}, eax_mask=0),
+    Spec("CLine_Destroy", 0x004277d0, "thiscall", [], presets=gm_records, virtuals={0: 1}, eax_mask=0),
+    Spec("CImageButton_OnMouseEnter", 0x0041acf0, "fastcall", [one_of(GM_OBJ + 0x60), anything] + [anything] * 5,
+         presets=gm_image_button, virtuals={0x1c: 0}, callees={0x004184b0: (5, "thiscall", "probe")}),
+    Spec("CImageButton_OnMouseLeave", 0x0041ad30, "fastcall", [one_of(GM_OBJ + 0x60), anything] + [anything] * 5,
+         presets=gm_image_button, virtuals={0x1c: 0}, callees={0x0041ab70: (5, "thiscall", "probe")}),
+    Spec("CDialog_SetParent", 0x00427d20, "fastcall", [one_of(GM_OBJ + 0xc0), anything, anything],
+         presets=gm_dialog, virtuals={0xc: 1}, callees={0x004157d0: (1, "thiscall", "probe", gm_move_element)}),
+]
+
+
+# -- wip/menus-r5: ui_control_destructors.cpp ---------------------------------
+# `this` at world 0x800; the destructors they call probed (their own
+# specs); the strings they release from common.string_fields (buffers in
+# scratch). Dead in each: the base pointer's null check (an object at
+# address 0xb8) and, in the inlined ~string, the _Eos after erase(0, npos)
+# where it is a call (_Grow(0) is false).
+CD_THIS = 0x800
+CD_CALLEES = {address: (0, "thiscall", "probe") for address in
+              (0x00416da0, 0x004180a0, 0x0041a900, 0x004156b0, 0x0060b560, 0x0060b5a0)}
+
+
+def cd_strings(*offsets):
+    def presets(rng, pool, args):
+        out = []
+        for k, offset in enumerate(offsets):
+            fields, _ = string_fields(rng, CD_THIS + offset, SCRATCH + k * SCRATCH_SLOT_BYTES)
+            out += fields
+        return out
+    return presets
+
+
+def cd_screen_list(rng, pool, args):
+    return [(CD_THIS - 0x1c + 8, rng.choice([0, rng.getrandbits(32)]), 4)]
+
+
+CD_OBJ = one_of(WORLD_BASE + CD_THIS)
+
+SPECS += [
+    Spec("CGroupControl_Destroy", 0x0041e210, "fastcall", [CD_OBJ, anything], callees=CD_CALLEES),
+    Spec("CDialog_Destroy", 0x0042a0a0, "fastcall", [CD_OBJ, anything], callees=CD_CALLEES),
+    Spec("CScreen_Destroy", 0x0042a750, "fastcall", [CD_OBJ, anything], presets=cd_screen_list, callees=CD_CALLEES),
+    Spec("CVScrollBar_Destroy", 0x0041f010, "fastcall", [CD_OBJ, anything], callees=CD_CALLEES,
+         exempt_blocks=(0x0041f0b4,)),
+    Spec("CProgressBar_Destroy", 0x00429c70, "fastcall", [CD_OBJ, anything], presets=cd_strings(-0x58 + 0x28),
+         callees=CD_CALLEES, exempt_blocks=(0x00429ced, 0x00429d2a)),
+    Spec("CUpDown_Destroy", 0x0042b100, "fastcall", [CD_OBJ, anything], presets=cd_strings(-0x16c + 0x28),
+         callees=CD_CALLEES, exempt_blocks=(0x0042b1ac, 0x0042b1e5)),
+    Spec("CTextView_Destroy", 0x0042a380, "fastcall", [CD_OBJ, anything], presets=cd_strings(-0x24),
+         callees=CD_CALLEES, exempt_blocks=(0x0042a3f6, 0x0042a491, 0x0042a4d4)),
+]
+
+
+# -- wip/menus-r5: ui_text_getters.cpp -----------------------------------------
+# The object at world offset 0, its member from string_fields /
+# wstring_fields (buffer in scratch slot 0); the result object in scratch
+# slot 1 at one of a few addresses (GetText's allocator byte is its low
+# byte), its bytes lazily random.
+def tg_text_view(rng, pool, args):
+    fields, _ = string_fields(rng, 0x410, SCRATCH)
+    return fields
+
+
+def tg_edit(rng, pool, args):
+    fields, _ = wstring_fields(rng, 0x4c, SCRATCH)
+    return fields
+
+
+def tg_result(rng, pool):
+    return WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES + rng.choice([0, 4, 0x31, 0x80])
+
+
+SPECS += [
+    # Dead: 0x42078f caps the length at 0xFFFFFFFF; 0x420796..0x4207ea is
+    # the self-assignment branch (the result is a new object).
+    Spec("CTextView_GetText", 0x00420760, "fastcall", [one_of(WORLD_BASE), anything, tg_result],
+         presets=tg_text_view, globals=null_string_count,
+         exempt_blocks=(0x0042078f, 0x00420796, 0x004207a0, 0x004207a5, 0x004207b5, 0x004207b7, 0x004207bb,
+                        0x004207e2, 0x004207ea)),
+    # Dead: 0x418bef caps the length at npos (0xFFFFFFFF); 0x418bf5..0x418c44,
+    # the self-assignment branch.
+    Spec("CEditControl_GetTextW", 0x00418bc0, "fastcall", [one_of(WORLD_BASE), anything, tg_result],
+         presets=tg_edit, globals=wstring_null_count,
+         exempt_blocks=(0x00418bef, 0x00418bf5, 0x00418bfb, 0x00418c00, 0x00418c10, 0x00418c12, 0x00418c16, 0x00418c3c,
+                        0x00418c44)),
+]
+
+
+# CEditControl::GetText (ui_text_getters.cpp): the object at world 0, its
+# 16-bit text at +0x4c from framework's w2n_source pattern (moved to 0x4c);
+# WideToNarrowString runs as original code in both (its own spec).
+def eg_edit_text(rng, pool, args):
+    return [(offset - 0x100 + 0x4c if offset < SCRATCH else offset, value, size)
+            for offset, value, size in w2n_source(rng, pool, args)]
+
+
+SPECS += [
+    Spec("CEditControl_GetText", 0x00418a10, "fastcall", [one_of(WORLD_BASE), anything, tg_result],
+         presets=eg_edit_text, globals=null_string_count, new_fails=0.05, callees=W2N_CALLEES,
+         # Dead: the local's ~string: 0x418aed (_Eos after erase(0, npos))
+         # and 0x418b0a/0x418b0e (the release's decrement: after the split
+         # the buffer is unshared or frozen).
+         exempt_blocks=(0x00418aed, 0x00418b0a, 0x00418b0e)),
+]

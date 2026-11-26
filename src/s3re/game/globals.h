@@ -225,6 +225,9 @@ inline constexpr GameGlobal<std::uint8_t*> g_app{0x7e9168};
 // 1 when the command line has "-debug" (set by the parser 0x405e50); picks the
 // debug column of App::WaitTime 0x40d0e0 (game/framework/wait_times.cpp).
 inline constexpr GameGlobal<std::uint32_t> g_debugSwitch{0x7e916c};
+// The game's main window (DirectX::CGameMainWindow; set by its constructor
+// 0x5b5cf0).
+inline constexpr GameGlobal<std::uint8_t*> g_gameMainWindow{0x7e8be8};
 // Outcome of the current game: -1 while undecided, then set by the game-end
 // check 0x511c50 (1 or 0 by the mission's goals).
 inline constexpr GameGlobal<std::int32_t> g_gameOutcome{0x730f64};
@@ -557,6 +560,18 @@ inline constexpr GameGlobal<CreateMutexAImport> g_importCreateMutexA{0x6551cc};
 inline constexpr GameGlobal<SetThreadPriorityImport> g_importSetThreadPriority{0x6551e0};
 inline constexpr GameGlobal<HandleCallImport> g_importDestroyWindow{0x655348};               // USER32.dll
 inline constexpr GameGlobal<PostThreadMessageAImport> g_importPostThreadMessageA{0x6552e0};  // USER32.dll
+// wip/menus-r5 (win32_synchronize.cpp): threads, windows, the message queue.
+using InitializeCriticalSectionImport = void(__stdcall*)(void* section);
+using ShowWindowImport = int(__stdcall*)(void* window, std::int32_t show);
+using PeekMessageAImport = int(__stdcall*)(void* msg, void* window, std::uint32_t first, std::uint32_t last,
+                                           std::uint32_t remove);
+using CoUninitializeImport = void(__stdcall*)();
+using ResumeThreadImport = std::uint32_t(__stdcall*)(void* thread);
+inline constexpr GameGlobal<InitializeCriticalSectionImport> g_importInitializeCriticalSection{0x6551d0};
+inline constexpr GameGlobal<ShowWindowImport> g_importShowWindow{0x655344};    // USER32.dll
+inline constexpr GameGlobal<PeekMessageAImport> g_importPeekMessageA{0x655334};  // USER32.dll
+inline constexpr GameGlobal<CoUninitializeImport> g_importCoUninitialize{0x655380};  // ole32.dll
+inline constexpr GameGlobal<ResumeThreadImport> g_importResumeThread{0x65512c};
 inline constexpr GameGlobal<WaitForSingleObjectImport> g_importWaitForSingleObject{0x6551c0};
 // The registry functions of Win32::CRegistryKey (win32_registry.cpp;
 // ADVAPI32.dll). Keys are HKEYs passed as numbers; results are Windows error

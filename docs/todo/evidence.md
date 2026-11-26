@@ -112,3 +112,9 @@ cast within ~8 tiles of the map edge (kept).
   PLAYER_RECORDS, CAMPAIGN_MISSION, GAME_TICK, SETTLER_HIGH_WATER (ai.py vs
   common/logic/settlers). Check whether the values differ and rename; this
   is the LOGBOOK's "tooling guard" item.
+- **Missing function start 0x41f6b0 (found by wip/menus-r5):** a CListBox
+  member right after CListBox::UpdateLayout (ret 8: stores +0x410, the
+  listener +0xb8's slot 0, Invalidate) is not in re/*_functions.tsv;
+  CListBox_UpdateLayout's spec uses cover_until=0x41f6a1. Add it as a
+  `manual` row of re/extra_functions.tsv (changes every spec's harness
+  fingerprint, so together with other list changes).

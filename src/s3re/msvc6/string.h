@@ -242,6 +242,11 @@ void Erase(String* self, std::uint32_t p0, std::uint32_t m);
 void Clear(String* s);
 // strlen.
 std::uint32_t Length(const char* s);
+// _Tidy(true) as the compiler inlines it, with the EAX it leaves: 0 without
+// a buffer, the buffer pointer with its low byte replaced by the
+// decremented count when shared, otherwise what operator delete returned.
+// Callers that pass that EAX on (CStaticText::SetText) return it.
+std::uint32_t TidyFreeReturningEax(String* s);
 }  // namespace detail
 
 }  // namespace s3re::msvc6

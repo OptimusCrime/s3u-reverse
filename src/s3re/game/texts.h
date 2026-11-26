@@ -574,6 +574,17 @@ inline constexpr GameText kTooltipExpression{0x697cd0};  // "lpTooltip"
 inline constexpr GameText kDDGetDC{0x697704};            // "CSurface::DDGetDC"
 inline constexpr GameText kDDReleaseDC{0x697718};        // "CSurface::DDReleaseDC"
 
+// ------------------------------------------------------------ wip/menus-r5 batch
+// Dirk\dialog.cpp controls (CUpDown).
+inline constexpr GameText kIntFormat{0x696c40};       // "%i" (CUpDown::UpdateText)
+inline constexpr GameText kInvalidSender{0x6987dc};   // "Invalid sender" (CUpDown::OnButtonClicked assert)
+// Win32\Classes.cpp and synchronize.ipp asserts (win32_app_members.cpp).
+inline constexpr GameText kNearlyPureVirtual{0x7a4264};   // "A nearly pure virtual function"
+// "Applications are created by running them. This one is running. So what?"
+inline constexpr GameText kApplicationsAreRun{0x7a44a0};
+// "hThread != NULL" (CThread::Start's VERIFY)
+inline constexpr GameText kThreadNotNull{0x7a430c};
+
 // ------------------------------------------------------------ wip/images-r4 batch
 // libpng 1.0.2's messages (src/s3re/thirdparty/).
 inline constexpr GameText kPngErrorFormat{0x733d04};    // "libpng error: %s\n"

@@ -62,7 +62,7 @@ inputs our debug build needs more for, `Spec.case_scale` runs N times
 `--cases` (UpdateSettlers: 12, one job family per case), and `Spec.ignore_bytes` leaves out output bytes that provably hold
 each function's own stack leftovers (padding of a copied stack
 temporary; say why at the spec and add a self-test pairing that differs
-next to them). GDI text functions (SelectObject, GetTextExtentPoint32A, SetBkMode, SetTextColor, SetBkColor, TextOutA; texts recorded by contents, sizes drawn per call) and Enter/LeaveCriticalSection are API probes as well (session 58; the in-process counterpart is test/fake_gdi.h). InterlockedExchange (stores and returns the old value), SendMessageA and DeleteCriticalSection are API probes as well (wip/logic-r4). timeGetTime and Sleep are probed too (read timeGetTime
+next to them). GDI text functions (SelectObject, GetTextExtentPoint32A, SetBkMode, SetTextColor, SetBkColor, TextOutA; texts recorded by contents, sizes drawn per call) and Enter/LeaveCriticalSection are API probes as well (session 58; the in-process counterpart is test/fake_gdi.h). InterlockedExchange (stores and returns the old value), SendMessageA and DeleteCriticalSection are API probes as well (wip/logic-r4). InitializeCriticalSection, ShowWindow, ResumeThread, PeekMessageA (its MSG buffer by presence) and CoUninitialize are API probes since wip/menus-r5. timeGetTime and Sleep are probed too (read timeGetTime
 through S3.EXE's import 0x655358, which in-process tests can point at a
 fake clock). COM methods: a `Spec.virtuals` entry `(count, pointers,
 {"com": True, "returns": f})` records the call without ECX (stdcall,

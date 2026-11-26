@@ -52,6 +52,13 @@ std::uint32_t __fastcall Win32_CMessagedThread_PostThreadMessage(void* self, voi
 std::uint32_t __fastcall Win32_CWindowBase_PostMessage(void* self, void* edx, std::uint32_t message,
                                                        std::uint32_t wParam, std::uint32_t lParam);
 std::uint32_t __fastcall Win32_CWindowBase_Destroy(void* self, void* edx);
+std::uint32_t __fastcall Win32_CThread_Start(void* self, void* edx, std::uint32_t parameter);
+std::uint32_t __fastcall Win32_CWindowBase_Show(void* self, void* edx);
+std::uint32_t __cdecl Win32_HasPendingMessage();
+void* __fastcall Win32_CCriticalSection_Construct(void* self, void* edx);
+std::uint32_t __fastcall DirectX_CGameThread_OnExit(void* self, void* edx);
+using HasPendingMessageFn = std::uint32_t(__cdecl*)();
+using ConstructFn = void*(__fastcall*)(void* self, void* edx);
 
 extern MemberFn Original_Win32_CEvent_Set;
 extern MemberFn Original_Win32_CEvent_Reset;
@@ -65,6 +72,11 @@ extern MemberArgFn Original_Win32_CThread_SetPriority;
 extern Member3Fn Original_Win32_CMessagedThread_PostThreadMessage;
 extern Member3Fn Original_Win32_CWindowBase_PostMessage;
 extern MemberFn Original_Win32_CWindowBase_Destroy;
+extern MemberArgFn Original_Win32_CThread_Start;
+extern MemberFn Original_Win32_CWindowBase_Show;
+extern HasPendingMessageFn Original_Win32_HasPendingMessage;
+extern ConstructFn Original_Win32_CCriticalSection_Construct;
+extern MemberFn Original_DirectX_CGameThread_OnExit;
 
 namespace {
 
@@ -74,6 +86,12 @@ struct Functions {
     Member4Fn createEvent, createSemaphore;
     Member3Fn createMutex, postThreadMessage, postMessage;
     Member2Fn wait;
+    // wip/menus-r5
+    MemberArgFn threadStart;
+    MemberFn show;
+    HasPendingMessageFn hasPendingMessage;
+    ConstructFn criticalSection;
+    MemberFn gameThreadOnExit;
 };
 
 Functions Originals() {
@@ -82,14 +100,18 @@ Functions Originals() {
             Original_Win32_CSemaphore_Release, Original_Win32_CThread_SetPriority,
             Original_Win32_CEvent_Create,      Original_Win32_CSemaphore_Create,
             Original_Win32_CMutex_Create,      Original_Win32_CMessagedThread_PostThreadMessage,
-            Original_Win32_CWindowBase_PostMessage, Original_Win32_CWin32Waitable_Wait};
+            Original_Win32_CWindowBase_PostMessage, Original_Win32_CWin32Waitable_Wait,
+            Original_Win32_CThread_Start, Original_Win32_CWindowBase_Show, Original_Win32_HasPendingMessage,
+            Original_Win32_CCriticalSection_Construct, Original_DirectX_CGameThread_OnExit};
 }
 
 Functions Ours() {
     return {&Win32_CEvent_Set,         &Win32_CEvent_Reset,         &Win32_CEvent_Pulse,
             &Win32_CWindowBase_Destroy, &Win32_CSemaphore_Release, &Win32_CThread_SetPriority,
             &Win32_CEvent_Create,      &Win32_CSemaphore_Create,    &Win32_CMutex_Create,
-            &Win32_CMessagedThread_PostThreadMessage, &Win32_CWindowBase_PostMessage, &Win32_CWin32Waitable_Wait};
+            &Win32_CMessagedThread_PostThreadMessage, &Win32_CWindowBase_PostMessage, &Win32_CWin32Waitable_Wait,
+            &Win32_CThread_Start, &Win32_CWindowBase_Show, &Win32_HasPendingMessage,
+            &Win32_CCriticalSection_Construct, &DirectX_CGameThread_OnExit};
 }
 
 // ---------------------------------------------------------------- the fakes
@@ -157,6 +179,40 @@ std::uint32_t __stdcall FakeGetLastError() {
     return g_fake->rng.Chance(1, 8) ? g_fake->rng.Next32() : kCodes[g_fake->rng.Below(7)];
 }
 
+// wip/menus-r5: the thread start's CRT call and the window / message /
+// COM imports. Pointers to the object are logged relative to it (each run
+// has its own object), stack pointers by presence.
+std::uintptr_t g_self = 0;
+std::uint32_t RelativeToSelf(const void* p) {
+    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(p) - g_self);
+}
+std::uint32_t __cdecl FakeBeginThreadEx(void* security, std::uint32_t stack, std::uintptr_t start, void* argument,
+                                        std::uint32_t flags, std::uint32_t* threadId) {
+    g_fake->log.insert(g_fake->log.end(), {0x20u, reinterpret_cast<std::uint32_t>(security), stack,
+                                           static_cast<std::uint32_t>(start), RelativeToSelf(argument), flags,
+                                           RelativeToSelf(threadId)});
+    return g_fake->Result();
+}
+std::uint32_t __stdcall FakeResumeThread(void* thread) {
+    g_fake->log.insert(g_fake->log.end(), {0x21u, reinterpret_cast<std::uint32_t>(thread)});
+    return g_fake->Result();
+}
+int __stdcall FakeShowWindow(void* window, std::int32_t show) {
+    g_fake->log.insert(g_fake->log.end(), {0x22u, reinterpret_cast<std::uint32_t>(window), static_cast<std::uint32_t>(show)});
+    return static_cast<int>(g_fake->Result());
+}
+int __stdcall FakePeekMessage(void* msg, void* window, std::uint32_t first, std::uint32_t last, std::uint32_t remove) {
+    g_fake->log.insert(g_fake->log.end(), {0x23u, msg != nullptr ? 1u : 0u, reinterpret_cast<std::uint32_t>(window),
+                                           first, last, remove});
+    return static_cast<int>(g_fake->Result());
+}
+void __stdcall FakeInitializeCriticalSection(void* section) {
+    g_fake->log.insert(g_fake->log.end(), {0x24u, RelativeToSelf(section)});
+}
+void __stdcall FakeCoUninitialize() {
+    g_fake->log.push_back(0x25u);
+}
+
 struct Slot {
     std::uintptr_t address;
     std::uintptr_t fake;
@@ -180,13 +236,24 @@ public:
             {g_importPostMessageA.address(), reinterpret_cast<std::uintptr_t>(&FakePostMessage)},
             {g_importWaitForSingleObject.address(), reinterpret_cast<std::uintptr_t>(&FakeWaitForSingleObject)},
             {g_importGetLastError.address(), reinterpret_cast<std::uintptr_t>(&FakeGetLastError)},
+            {g_importResumeThread.address(), reinterpret_cast<std::uintptr_t>(&FakeResumeThread)},
+            {g_importShowWindow.address(), reinterpret_cast<std::uintptr_t>(&FakeShowWindow)},
+            {g_importPeekMessageA.address(), reinterpret_cast<std::uintptr_t>(&FakePeekMessage)},
+            {g_importInitializeCriticalSection.address(),
+             reinterpret_cast<std::uintptr_t>(&FakeInitializeCriticalSection)},
+            {g_importCoUninitialize.address(), reinterpret_cast<std::uintptr_t>(&FakeCoUninitialize)},
         };
+        test::PatchJump(0x0062279a, reinterpret_cast<const void*>(&FakeBeginThreadEx));  // _beginthreadex
+        jumped_ = true;
         for (const Slot& slot : slots) {
             test::PatchBytes(slot.address, &slot.fake, 4);
             patched_.push_back(slot.address);
         }
     }
     ~InstalledFakes() {
+        if (jumped_) {
+            test::UnpatchJump(0x0062279a);
+        }
         for (auto it = patched_.rbegin(); it != patched_.rend(); ++it) {
             test::UnpatchBytes(*it);
         }
@@ -197,6 +264,7 @@ public:
 
 private:
     std::vector<std::uintptr_t> patched_;
+    bool jumped_ = false;
 };
 
 // ---------------------------------------------------------------- one case
@@ -264,6 +332,12 @@ std::uint32_t Call(const Functions& f, void* self, const Args& args) {
         case 8: return f.setPriority(self, nullptr, args.a);
         case 9: return f.postThreadMessage(self, nullptr, args.a, args.b, args.c);
         case 10: return f.postMessage(self, nullptr, args.a, args.b, args.c);
+        case 12: return f.threadStart(self, nullptr, args.a);
+        case 13: return f.show(self, nullptr);
+        case 14: return f.hasPendingMessage();
+        case 15: return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(f.criticalSection(self, nullptr)) -
+                                                   reinterpret_cast<std::uintptr_t>(self));
+        case 16: return f.gameThreadOnExit(self, nullptr);
         default: return f.destroy(self, nullptr);
     }
 }
@@ -293,6 +367,7 @@ Outcome RunOne(const Functions& f, const std::uint8_t* initial, std::uint32_t vb
     }
     Fake fake;
     fake.rng = test::Rng(seed);
+    g_self = reinterpret_cast<std::uintptr_t>(self);
     {
         InstalledFakes installed(&fake);
         out.eax = Guarded(f, self, args, &out.caught);
@@ -311,7 +386,7 @@ void Compare(test::Context& ctx, const Functions& ours, int cases) {
         std::uint8_t initial[kObject + 2 * kGuard];
         rng.Fill(initial, sizeof(initial));
         Args args{};
-        args.op = rng.Below(12);
+        args.op = rng.Below(17);
         args.a = rng.Chance(1, 2) ? rng.Below(8) : rng.Next32();
         args.b = rng.Chance(1, 2) ? rng.Below(3) : rng.Next32();
         args.c = rng.Next32();

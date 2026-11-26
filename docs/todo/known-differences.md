@@ -92,6 +92,14 @@ LOGBOOK session entry).
   wrong address. Ours has room for 82 bytes. Only a corrupt PNG with a
   non-letter chunk name gets there (and only the lobby banner uses PNG).
 
+- **WideToNarrowString 0x60b6a0 (wip/menus-r5, framework/wide_strings.cpp):**
+  the result's allocator byte is an uninitialized stack byte in the
+  original, 0 in ours (an empty allocator, never read; ignored in the
+  emulator spec). Quirks kept: each wcstombs piece replaces the text
+  instead of appending; a source whose remaining text starts with a zero
+  character loops for ever; an unconvertible character leaves the buffer
+  unterminated, so string(buffer) reads the uninitialized heap block.
+
 ## Postponed by decision
 - **Network and lobby code** (CNetThread, Lobby::*, LobbyClient::*,
   DirectPlay, CLM* messages): skipped since 2026-11-09 (single player

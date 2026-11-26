@@ -16,6 +16,15 @@
 // CStaticText::~CStaticText (0x0041c580): the text's ~string inlined (as
 //   0x401b60: split a shared buffer, erase, release), then
 //   CScreenElement::~CScreenElement 0x4156b0. EAX = the latter's.
+// CStaticText::SetText (0x0041c810): (std::string text by value) ret 0x10:
+//   text member = text (assign(text, 0, npos) inlined: a non-empty text with
+//   a count below 0xfe is shared, otherwise copied; its self-assignment
+//   branch is dead, the argument is a copy), then the element's Invalidate
+//   (slot 0x1c), then the argument's ~string inlined (split, erase, _Tidy
+//   (true)). EAX = what that last _Tidy left: 0 without a buffer, otherwise
+//   operator delete's (after the split the buffer is never shared, so the
+//   decrement path is dead). Callers (CUpDown::UpdateText, CProgressBar::
+//   SetProgress, CListView::SetCellText) return it.
 
 #include "game/ui/screen_element_layout.h"
 #include "game/vtables.h"
@@ -98,6 +107,29 @@ S3RE_HOOK(0x0041ca60, CStaticText_SetStyle, SetStyleFn, Original_CStaticText_Set
 std::uint32_t __fastcall CStaticText_SetStyle(void* self, void* /*edx*/, std::uint32_t style) {
     TextOf(self)->style = style;
     return style;
+}
+
+using SetTextFn = std::uint32_t(__fastcall*)(void* self, void* edx, String text);
+std::uint32_t __fastcall CStaticText_SetText(void* self, void* edx, String text);
+S3RE_HOOK(0x0041c810, CStaticText_SetText, SetTextFn, Original_CStaticText_SetText, CStaticText_SetText);
+
+namespace {
+using InvalidateFn = void(__fastcall*)(void* self, void* edx);
+void Invalidate(void* self) {
+    const auto* vtable = reinterpret_cast<const std::uintptr_t*>(TextOf(self)->element.vtable);
+    reinterpret_cast<InvalidateFn>(vtable[ui::element_slot::kInvalidate / 4])(self, nullptr);
+}
+}  // namespace
+
+// Purpose: Changes a text label's text (and redraws it). Used by the menus
+// for every label whose text changes: numbers of spinners and progress bars,
+// list cells, dialog titles.
+std::uint32_t __fastcall CStaticText_SetText(void* self, void* /*edx*/, String text) {
+    msvc6::String_AssignSubstr(&TextOf(self)->text, nullptr, &text, 0, msvc6::detail::Npos());
+    Invalidate(self);
+    // The by-value argument's destructor (0x41c93f..0x41c9d7).
+    msvc6::detail::Erase(&text, 0, msvc6::detail::Npos());
+    return msvc6::detail::TidyFreeReturningEax(&text);
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +281,147 @@ std::uint32_t __fastcall WrongDestroy(void* self, void* /*edx*/) {
     return reinterpret_cast<StaticTextDestroyFn>(kScreenElementDestroy)(self, nullptr);
 }
 
+// SetText on labels with a random text member (none, own, shared with an
+// outside string, frozen) and a random argument (none, own, shared with the
+// member or with an outside string, frozen; a by-value copy the caller
+// made, so its count includes it). The label's vtable is a fake whose
+// Invalidate slot records the call. Compared: EAX, the Invalidate calls,
+// the label's bytes (the text pointer as "has a buffer"), the member's text
+// and count byte, and both outside strings' count bytes and texts.
+int g_invalidateCalls = 0;
+void* g_invalidateSelf = nullptr;
+
+// operator delete for the test: frees through the CRT's free (0x621b7e, as
+// the game's) and returns a value fixed by the call count, since the real
+// one leaves free()'s stack garbage in EAX, which SetText returns. The
+// original's _Tidy(true) 0x402170 runs as original code too.
+std::uint32_t g_deleteCalls = 0;
+std::uint32_t __cdecl CountingDelete(void* block) {
+    reinterpret_cast<void(__cdecl*)(void*)>(0x00621b7e)(block);
+    return 0xde1e7e00u + ++g_deleteCalls;
+}
+void __fastcall InvalidateRecorder(void* self, void*) {
+    ++g_invalidateCalls;
+    g_invalidateSelf = self;
+}
+
+bool SameText(test::Context& ctx, const String& a, const String& b) {
+    bool same = S3RE_EXPECT_EQ(a.ptr == nullptr, b.ptr == nullptr) && S3RE_EXPECT_EQ(a.len, b.len) &&
+                S3RE_EXPECT_EQ(a.res, b.res);
+    if (same && a.ptr != nullptr) {
+        same = S3RE_EXPECT_EQ(static_cast<std::uint8_t>(a.ptr[-1]), static_cast<std::uint8_t>(b.ptr[-1])) &&
+               S3RE_EXPECT_MEM_EQ(a.ptr, b.ptr, a.len + 1);
+    }
+    return same;
+}
+
+void CompareSetText(test::Context& ctx, SetTextFn candidate, int cases) {
+    std::uintptr_t fakeVtable[32] = {};
+    fakeVtable[ui::element_slot::kInvalidate / 4] = reinterpret_cast<std::uintptr_t>(&InvalidateRecorder);
+    for (int i = 0; i < cases; ++i) {
+        alignas(4) std::uint8_t initial[sizeof(CStaticText)];
+        ctx.rng().Fill(initial, sizeof(initial));
+        char memberText[40], argText[40];
+        const std::uint32_t memberLength = ctx.rng().Below(sizeof(memberText));
+        const std::uint32_t argLength = ctx.rng().Chance(1, 8) ? 0 : ctx.rng().Below(sizeof(argText));
+        for (std::uint32_t k = 0; k < memberLength; ++k) {
+            memberText[k] = static_cast<char>(1 + ctx.rng().Below(255));
+        }
+        for (std::uint32_t k = 0; k < argLength; ++k) {
+            argText[k] = static_cast<char>(1 + ctx.rng().Below(255));
+        }
+        const int memberKind = static_cast<int>(ctx.rng().Below(4));  // 0 none, 1 own, 2 shared, 3 frozen
+        const int argKind = static_cast<int>(ctx.rng().Below(5));     // 0 none, 1 own, 2 member's, 3 shared, 4 frozen
+        const auto argAllocator = static_cast<std::uint8_t>(ctx.rng().Next32());
+        struct Result {
+            std::uint32_t eax;
+            int calls;
+            void* self;
+        };
+        auto run = [&](SetTextFn fn, std::uint8_t* label, String& outsideMember, String& outsideArg) {
+            std::memcpy(label, initial, sizeof(initial));
+            CStaticText* text = TextOf(label);
+            text->element.vtable = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(fakeVtable));
+            String& member = text->text;
+            msvc6::detail::Clear(&member);
+            outsideMember = String{};
+            outsideArg = String{};
+            if (memberKind != 0) {
+                msvc6::String_AssignChars(&member, nullptr, memberText, memberLength);
+            }
+            if (memberKind == 2 && member.ptr != nullptr) {
+                msvc6::String_AssignSubstr(&outsideMember, nullptr, &member, 0, 0xFFFFFFFFu);
+            }
+            if (memberKind == 3) {
+                msvc6::String_Freeze(&member, nullptr);
+            }
+            String arg{};
+            arg.allocator = argAllocator;
+            if (argKind == 2) {
+                msvc6::String_AssignSubstr(&arg, nullptr, &member, 0, 0xFFFFFFFFu);
+            } else if (argKind != 0) {
+                msvc6::String_AssignChars(&arg, nullptr, argText, argLength);
+                if (argKind == 3 && arg.ptr != nullptr) {
+                    msvc6::String_AssignSubstr(&outsideArg, nullptr, &arg, 0, 0xFFFFFFFFu);
+                }
+                if (argKind == 4) {
+                    msvc6::String_Freeze(&arg, nullptr);
+                }
+            }
+            g_invalidateCalls = 0;
+            g_invalidateSelf = nullptr;
+            g_deleteCalls = 0;
+            test::ScopedJump deleteJump(msvc6::kOperatorDelete, reinterpret_cast<const void*>(&CountingDelete));
+            // The original's final _Tidy(true) as original code (ours, a void
+            // function, leaves another EAX).
+            test::ScopedJump tidyJump(0x00402170, reinterpret_cast<const void*>(msvc6::Original_String_Tidy));
+            const std::uint32_t eax = fn(label, nullptr, arg);
+            return Result{eax, g_invalidateCalls, g_invalidateSelf};
+        };
+        alignas(4) std::uint8_t a[sizeof(CStaticText)], b[sizeof(CStaticText)];
+        String memberA{}, memberB{}, argA{}, argB{};
+        const Result ra = run(Original_CStaticText_SetText, a, memberA, argA);
+        const Result rb = run(candidate, b, memberB, argB);
+        String& sa = TextOf(a)->text;
+        String& sb = TextOf(b)->text;
+        bool same = S3RE_EXPECT_EQ(ra.eax, rb.eax) && S3RE_EXPECT_EQ(ra.calls, rb.calls) &&
+                    S3RE_EXPECT(ra.self == a && rb.self == b) && SameText(ctx, sa, sb) &&
+                    SameText(ctx, memberA, memberB) && SameText(ctx, argA, argB);
+        const String keptA = sa, keptB = sb;
+        sa.ptr = sb.ptr = nullptr;
+        same = same && S3RE_EXPECT_MEM_EQ(a, b, sizeof(a));
+        sa = keptA;
+        sb = keptB;
+        for (String* s : {&sa, &sb, &memberA, &memberB, &argA, &argB}) {
+            msvc6::String_Destroy(s, nullptr);
+        }
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: member kind %d, argument kind %d, lengths %u/%u", i, memberKind,
+                     argKind, memberLength, argLength);
+            return;
+        }
+    }
+}
+
+// Wrong: the argument's buffer is forgotten instead of released (a shared
+// argument keeps its count; EAX 0).
+std::uint32_t __fastcall WrongSetText(void* self, void* /*edx*/, String text) {
+    msvc6::String_AssignSubstr(&TextOf(self)->text, nullptr, &text, 0, msvc6::detail::Npos());
+    Invalidate(self);
+    msvc6::String_Tidy(&text, nullptr, 0);
+    return 0;
+}
+
 }  // namespace
+
+S3RE_TEST(CStaticText_SetText_MatchesOriginal) {
+    CompareSetText(ctx, &CStaticText_SetText, 3000);
+}
+S3RE_TEST(CStaticText_SetText_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareSetText(probe, &WrongSetText, 200);
+    S3RE_EXPECT(probe.failures() > 0);
+}
 
 S3RE_TEST(CStaticText_Destroy_MatchesOriginal) {
     CompareDestroy(ctx, &CStaticText_Destroy, 2000);
