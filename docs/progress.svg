@@ -5,9 +5,9 @@
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="368.8" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 26.2%</title></rect>
 <text x="354.4" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">26.2%</text>
-<rect x="538.8" y="100" width="107.5" height="40" fill="#4f8fc0"><title>Verified by tests only: 7.6%</title></rect>
-<text x="592.6" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">7.6%</text>
-<rect x="646.3" y="100" width="0" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<rect x="538.8" y="100" width="107.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 7.6%</title></rect>
+<text x="592.5" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">7.6%</text>
+<rect x="646.2" y="100" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
 <rect x="646.4" y="100" width="269.7" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 19.2%</title></rect>
 <text x="781.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">19.2%</text>
 <rect x="916.1" y="100" width="659.9" height="40" fill="#e8a39b"><title>Not understood yet: 46.9%</title></rect>
@@ -16,8 +16,8 @@
 <rect x="170" y="154" width="262.1" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 18.6%</title></rect>
 <text x="301.1" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">18.6%</text>
 <rect x="432.1" y="154" width="83.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.0%</title></rect>
-<text x="474" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.0%</text>
-<rect x="515.8" y="154" width="0" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<text x="473.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.0%</text>
+<rect x="515.8" y="154" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
 <rect x="515.9" y="154" width="496.8" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 35.3%</title></rect>
 <text x="764.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">35.3%</text>
 <rect x="1012.7" y="154" width="563.3" height="40" fill="#e8a39b"><title>Not understood yet: 40.1%</title></rect>
@@ -4655,8 +4655,8 @@
 208 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="764.3" y="895.5" width="9.6" height="12" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::SetSelection @ 0x00422120
 176 bytes — Identified (purpose known)</title></rect>
-<rect x="752.9" y="907.6" width="10.5" height="6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::OnFocusChanged @ 0x00422770
-96 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="752.9" y="907.6" width="10.5" height="6" fill="#a9d18e" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::OnFocusChanged @ 0x00422770
+96 bytes — Reimplemented, not verified</title></rect>
 <rect x="752.9" y="913.6" width="10.5" height="6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::Draw @ 0x004227d0
 96 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="763.5" y="907.6" width="6" height="7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CDropdown::scalar_deleting_destructor @ 0x0042b340

@@ -46,13 +46,14 @@ LOGBOOK session entry).
   practice; only an out-of-memory in a string or vector would). Add
   cleanup if a whole-game check or a crash ever points there.
 
-- **CButton::IsPressed 0x41a990 / SetChecked 0x41aa20 unverified (session 58,
+- **CButton::IsPressed 0x41a990 / SetChecked 0x41aa20 / CDropdown::OnFocusChanged 0x422770 unverified (session 58,
   wip/ui-gdi, ui_button_scroll.cpp):** both start with `mov al, [ecx+disp8]`;
   called through their Detours trampolines in-process, the originals
   returned a wrong AL (0x71 / 0x30 where the bytes give 1 / 0), so they
   are S3RE_HOOK_UNVERIFIED with emulator evidence only. Find out whether
   the trampoline (4-byte body + nop padding) is broken, which would also
-  matter for other tiny hooks.
+  matter for other tiny hooks. OnFocusChanged (Release build only) gave AL
+  0xd8 although its last call is `xor al, al` (0x415c90); Debug passed.
 - **UI range left after wip/ui-gdi:** CScreenGroup::~CScreenGroup 0x416da0
   (needs WCIsvSListBase::clearAndDestroy 0x60b560 / base_next 0x60b400)
   unblocks the CGroupControl, CDialog, CVScrollBar, CProgressBar, CUpDown,

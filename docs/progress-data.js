@@ -1397,7 +1397,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 [4334784,208,4,95,"CDropdown::OnResized","Replaced by CDropdown_OnResized (session 57, src/s3re/game/ui/ui_control_members.cpp): (rect*, delta) ret 8: edit field {l,t,r-14,b} (vbptr\u2026"],
 [4334992,224,4,95,"CDropdown::OnArrowClicked","Replaced by CDropdown_OnArrowClicked (session 58, src/s3re/game/ui/ui_button_scroll.cpp): (button, unused) ret 4: closed: the list element (vbptr\u2026"],
 [4335216,256,2,95,"CDropdown::OnListSelect","Callback object +0x648, the list box's listener (+0x27c), (list, index) ret 8: closes the list (CScreenGroup::vf01, +0x660 = 0), copies the item\u2026"],
-[4335472,96,4,95,"CDropdown::OnFocusChanged","Replaced by CDropdown_OnFocusChanged (session 58, src/s3re/game/ui/ui_button_scroll.cpp): this = dropdown+0x66c: an open list of a dropdown other\u2026"],
+[4335472,96,3,95,"CDropdown::OnFocusChanged","Replaced by CDropdown_OnFocusChanged (session 58, src/s3re/game/ui/ui_button_scroll.cpp): (re-marked) see above."],
 [4335568,96,4,95,"CDropdown::Draw","Replaced by CDropdown_Draw (session 58, src/s3re/game/ui/ui_button_scroll.cpp): (surface, a, b) ret 0xc: the same close, then\u2026"],
 [4335664,848,1,135,"CUpDown::CUpDown"],
 [4336512,16,2,135,"CUpDown::GetValue","Mov eax,[ecx+204h]"],
@@ -10673,7 +10673,6 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 [4334736,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"replay:scripted-seed127":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
 [4334784,null,{},[]],
 [4334992,null,{},[]],
-[4335472,null,{},[]],
 [4335568,null,{},[]],
 [4337040,null,{},[]],
 [4338416,null,{},[]],
@@ -12279,4 +12278,5 @@ window.PROGRESS_DATA = {"generated":"2026-11-26","statuses":["unknown","classifi
 ["2026-11-25","24fa4e5",1490,543148,1346573,420990,858],
 ["2026-11-25","c3e8e3e",1514,550228,1351197,420990,858],
 ["2026-11-26","69dab09",1533,552756,1352173,420990,858],
-["2026-11-26","1e6e7c9",1566,554052,1353469,420990,858]]};
+["2026-11-26","1e6e7c9",1566,554052,1353469,420990,858],
+["2026-11-26","cacb6e7",1578,555460,1353469,420990,858]]};
