@@ -1,27 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1258" fill="#ffffff"/>
-<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">35.8%</text>
+<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">36.1%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="382.3" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 27.2%</title></rect>
 <text x="361.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">27.2%</text>
-<rect x="552.3" y="100" width="121.6" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.7%</title></rect>
-<text x="613.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.7%</text>
-<rect x="673.9" y="100" width="3.4" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.2%</title></rect>
-<rect x="677.3" y="100" width="250.5" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 17.8%</title></rect>
-<text x="802.5" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">17.8%</text>
-<rect x="927.7" y="100" width="648.3" height="40" fill="#e8a39b"><title>Not understood yet: 46.1%</title></rect>
-<text x="1251.9" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">46.1%</text>
+<rect x="552.3" y="100" width="125.8" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.9%</title></rect>
+<text x="615.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.9%</text>
+<rect x="678" y="100" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<rect x="678.2" y="100" width="250" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 17.8%</title></rect>
+<text x="803.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">17.8%</text>
+<rect x="928.2" y="100" width="647.8" height="40" fill="#e8a39b"><title>Not understood yet: 46.1%</title></rect>
+<text x="1252.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">46.1%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="273.7" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 19.5%</title></rect>
 <text x="306.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">19.5%</text>
-<rect x="443.7" y="154" width="91.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.5%</title></rect>
-<text x="489.4" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.5%</text>
-<rect x="535.1" y="154" width="2.3" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.2%</title></rect>
-<rect x="537.4" y="154" width="483.5" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 34.4%</title></rect>
-<text x="779.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">34.4%</text>
-<rect x="1020.9" y="154" width="555.1" height="40" fill="#e8a39b"><title>Not understood yet: 39.5%</title></rect>
-<text x="1298.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">39.5%</text>
+<rect x="443.7" y="154" width="94.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.7%</title></rect>
+<text x="490.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.7%</text>
+<rect x="537.9" y="154" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<rect x="538" y="154" width="483.2" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 34.4%</title></rect>
+<text x="779.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">34.4%</text>
+<rect x="1021.2" y="154" width="554.8" height="40" fill="#e8a39b"><title>Not understood yet: 39.5%</title></rect>
+<text x="1298.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">39.5%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
 <rect x="869.6" y="216" width="16" height="16" fill="#a9d18e"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Reimplemented, not verified yet</text>
@@ -29,7 +29,7 @@
 <rect x="1578.4" y="216" width="16" height="16" fill="#e8a39b"/><text x="1602.4" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1108.6" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 35.8% verified (27.2% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 36.1% verified (27.2% in a whole game)</text>
 <g><title>(free functions): 915 functions</title><rect x="2" y="19" width="513.7" height="667.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="256" height="188.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -1913,8 +1913,8 @@
 1232 bytes — Classified (class/role known)</title></rect>
 <rect x="279.9" y="846.5" width="28.7" height="27" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CGameData::MinerJobDig @ 0x004fa220
 1168 bytes — Verified, and identical in a whole-game check</title></rect>
-<rect x="279.9" y="873.5" width="28.7" height="26.3" fill="#a9d18e" stroke="#ffffff" stroke-width="0.3"><title>CGameData::InitPlayerInfo @ 0x004fd0d0
-1136 bytes — Reimplemented, not verified</title></rect>
+<rect x="279.9" y="873.5" width="28.7" height="26.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CGameData::InitPlayerInfo @ 0x004fd0d0
+1136 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="279.9" y="899.8" width="28.7" height="26.3" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CGameData::AddBuildingSite @ 0x004dd280
 1136 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="279.9" y="926.1" width="28.7" height="24.4" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CGameData::ResetAreaConditionCounters @ 0x0051bc20
@@ -2478,8 +2478,8 @@
 448 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="880.6" y="239.8" width="15.3" height="19.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::CLogicThread @ 0x0053c5e0
 448 bytes — Identified (purpose known)</title></rect>
-<rect x="895.9" y="200.8" width="18.1" height="15.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::~CLogicThread @ 0x0053c7d0
-416 bytes — Identified (purpose known)</title></rect>
+<rect x="895.9" y="200.8" width="18.1" height="15.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::~CLogicThread @ 0x0053c7d0
+416 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="914" y="200.8" width="17.4" height="15.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::DrawBuildingRouteOverlay @ 0x005236b0
 400 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="931.3" y="200.8" width="16.7" height="15.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ChatInputKey @ 0x0051e160
@@ -2520,8 +2520,8 @@
 64 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="943.4" y="237.9" width="4.6" height="6.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ClearSelection @ 0x00542630
 48 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="931.1" y="244.7" width="6.6" height="4.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::scalar_deleting_destructor @ 0x0053c7a0
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="931.1" y="244.7" width="6.6" height="4.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::scalar_deleting_destructor @ 0x0053c7a0
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="931.1" y="249.5" width="6.6" height="4.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ClearMessages @ 0x0051e650
 48 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="931.1" y="254.2" width="6.6" height="4.7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::AgeMessages @ 0x0051e680
@@ -3474,8 +3474,8 @@
 </g>
 <g><title>GameSettings: 16 functions</title><rect x="515.7" y="787.7" width="82.4" height="71.6" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="517.7" y="796.2" font-size="8.5" fill="#ffffff">GameSettings</text>
-<rect x="516.2" y="799.2" width="43.4" height="32.1" fill="#a9d18e" stroke="#ffffff" stroke-width="0.3"><title>GameSettings::LoadSaveGame @ 0x00432b00
-2448 bytes — Reimplemented, not verified</title></rect>
+<rect x="516.2" y="799.2" width="43.4" height="32.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GameSettings::LoadSaveGame @ 0x00432b00
+2448 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="516.2" y="831.3" width="43.4" height="27.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>GameSettings::NewGame @ 0x00431ab0
 2096 bytes — Identified (purpose known)</title></rect>
 <rect x="559.5" y="799.2" width="21" height="29.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>GameSettings::SetupLocalPlayer @ 0x00433e50
@@ -4641,8 +4641,8 @@
 624 bytes — Identified (purpose known)</title></rect>
 <rect x="756.9" y="879" width="16.7" height="22.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CThread::SetPriority @ 0x0060e9d0
 560 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="756.9" y="901.1" width="8.4" height="8.8" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CThread::~CThread @ 0x0060dff0
-112 bytes — Classified (class/role known)</title></rect>
+<rect x="756.9" y="901.1" width="8.4" height="8.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CThread::~CThread @ 0x0060dff0
+112 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="765.2" y="901.1" width="8.3" height="8.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CThread::Execute @ 0x0060e2d0
 111 bytes — Identified (purpose known)</title></rect>
 <rect x="756.9" y="909.9" width="6" height="8.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CThread::OnStart @ 0x00610370
@@ -5367,12 +5367,12 @@
 243 bytes — Classified (class/role known)</title></rect>
 <rect x="833.3" y="967.8" width="7.2" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::Main @ 0x005b63d0
 160 bytes — Identified (purpose known)</title></rect>
-<rect x="822.3" y="982.2" width="8.8" height="10.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::~CGameThread @ 0x005b60a0
-144 bytes — Classified (class/role known)</title></rect>
+<rect x="822.3" y="982.2" width="8.8" height="10.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::~CGameThread @ 0x005b60a0
+144 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="822.3" y="992.8" width="8.8" height="4.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::SetActive @ 0x005b64b0
 64 bytes — Identified (purpose known)</title></rect>
-<rect x="831.1" y="982.2" width="4.7" height="6.6" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::scalar_deleting_destructor @ 0x005b6070
-48 bytes — Classified (class/role known)</title></rect>
+<rect x="831.1" y="982.2" width="4.7" height="6.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::scalar_deleting_destructor @ 0x005b6070
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="835.8" y="982.2" width="4.7" height="6.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::Start @ 0x005b6130
 48 bytes — Identified (purpose known)</title></rect>
 <rect x="831.1" y="988.7" width="5.9" height="5.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>DirectX::CGameThread::RequestStop @ 0x005b64f0
@@ -5435,8 +5435,8 @@
 288 bytes — Identified (purpose known)</title></rect>
 <rect x="852.1" y="883.5" width="17.5" height="10.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CWin32Waitable::MsgWaitFor @ 0x0060c3e0
 288 bytes — Identified (purpose known)</title></rect>
-<rect x="852.1" y="894.2" width="11.7" height="7.1" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CWin32Waitable::~CWin32Waitable @ 0x0060bfe0
-128 bytes — Classified (class/role known)</title></rect>
+<rect x="852.1" y="894.2" width="11.7" height="7.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CWin32Waitable::~CWin32Waitable @ 0x0060bfe0
+128 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="863.7" y="894.2" width="5.8" height="5.3" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CWin32Waitable::scalar_deleting_destructor @ 0x0060bf90
 48 bytes — Classified (class/role known)</title></rect>
 <rect x="863.7" y="899.5" width="5.8" height="1.8" fill="#e8a39b"><title>Win32::CWin32Waitable::IsSame @ 0x0060c500
@@ -6869,8 +6869,8 @@
 240 bytes — Verified, and identical in a whole-game check</title></rect>
 </g>
 <g><title>Win32::CWin32Handle: 5 functions</title><rect x="1016.1" y="921.2" width="11.8" height="14" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1016.6" y="921.7" width="6.8" height="7" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CWin32Handle::~CWin32Handle @ 0x0060beb0
-80 bytes — Classified (class/role known)</title></rect>
+<rect x="1016.6" y="921.7" width="6.8" height="7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CWin32Handle::~CWin32Handle @ 0x0060beb0
+80 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1023.3" y="921.7" width="4.1" height="7" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>Win32::CWin32Handle::CWin32Handle @ 0x0060be60
 48 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="1016.6" y="928.7" width="4.6" height="6.1" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>Win32::CWin32Handle::Close @ 0x0060bf20
@@ -7249,8 +7249,8 @@
 <g><title>Win32::CCriticalSection: 4 functions</title><rect x="1088.6" y="967" width="6" height="7.4" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="1089.1" y="967.5" width="2.5" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCriticalSection::CCriticalSection @ 0x0060d650
 16 bytes — Classified (class/role known)</title></rect>
-<rect x="1091.6" y="967.5" width="2.5" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCriticalSection::~CCriticalSection @ 0x0060d660
-16 bytes — Classified (class/role known)</title></rect>
+<rect x="1091.6" y="967.5" width="2.5" height="3.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCriticalSection::~CCriticalSection @ 0x0060d660
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1089.1" y="970.7" width="2.5" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCriticalSection::Enter @ 0x0060d670
 16 bytes — Classified (class/role known)</title></rect>
 <rect x="1091.6" y="970.7" width="2.5" height="3.2" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Win32::CCriticalSection::Leave @ 0x0060d680

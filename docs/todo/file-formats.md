@@ -26,10 +26,8 @@ LOGBOOK session entry).
   AI::SaveGlobals 0x551220 (AI range). The settings side is done (session 58: GameSettings::LoadSaveGame,
   SetupLocalPlayer and its helpers, IsHost/IsMultiplayer,
   GameConfig::RandomRaceAmazons).
-- **Logic range leftovers (session 57):** CGameData::InitPlayerInfo
-  0x4fd0d0 (321 instructions of string temporaries; needs
-  GameSettings 0x4318d0, a byte +0x29 read under the lock, and the lobby
-  name getter 0x5db260; InitAfterMapLoad calls the original meanwhile);
+- **Logic range leftovers (session 57; InitPlayerInfo and LoadSaveGame
+  verified in wip/logic-r4):**
   CGameData::DumpTableToFile 0x4ff6d0 (debug dumps to d:\*.dmp through
   the CRT's fopen/fprintf; a test would need a redirected path);
   Logic_sub_4d6740 (debug text through 0x4a8bd0 / 0x4a8e00) and

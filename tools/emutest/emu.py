@@ -569,6 +569,7 @@ API_HANDLERS = {
     "PostMessageA": (4, _api_success("PostMessageA", 0x5E00000B)),
     "InterlockedExchange": (2, _api_interlocked_exchange),
     "SendMessageA": (4, _api_success("SendMessageA", 0x5E00000D)),
+    "DeleteCriticalSection": (1, _api_critical_section("DeleteCriticalSection")),
     "WaitForSingleObject": (2, _api_wait_for_single_object),
     "mciSendCommandA": (4, _api_mci_send_command),
     "SelectObject": (2, _api_select_object),

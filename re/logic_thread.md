@@ -199,3 +199,15 @@ Suggested field names:
   graphic, first_frame, frame_count, brightness.
 - Not renamed (would collide with the savegame work): world +0x2d304 (`unk2d304`) is the tutorial wait
   countdown (TutorialWaitDone 0x515b00 verified), +0x2d308 the tutorial step.
+
+## wip/logic-r4 (session 56, round 4): music, FinishGame, destructors
+
+- Music fields named in logic_thread_layout.h: +0x654 `music_stopped`, +0x658 `music_track`,
+  +0x65c `music_fixed_playlist` (-1 = cycle), +0x660 `music_playlist`; +0x234 `game_finished`
+  (FinishGame runs once). g_installedCd 0x7a7c18, the track tables in tables.h.
+- FinishGame's score: info +0x20 = +0x28 + +0x2c + +0x30 + +0x34 + +0x38 + 2 * (+0x24 + +0x3c)
+  + 5 * +0x40 (then +0x34 halved); ranks 1..20 in info +0x04 (ties: the later player).
+- The destructor (ECX = object + 4, the CWin32Handle virtual base): timer +0x3bc, world +0x3a0,
+  message lines +0x414, chat wstring +0x3f8, waitable bag +0x3dc (list +0x3e0), 16 status
+  strings +0x250, then ~CGameThread (+0x34 critical section, +0x38 an owned object, +0x40 the
+  CoInitialize flag) and ~CThread (+0x18 bit 2 = still running).

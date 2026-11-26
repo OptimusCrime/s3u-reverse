@@ -510,6 +510,8 @@ inline constexpr GameGlobal<MciSendCommandAImport> g_importMciSendCommandA{0x655
 inline constexpr GameGlobal<PostMessageAImport> g_importPostMessageA{0x6552f0};        // USER32.dll
 using InterlockedExchangeImport = std::int32_t(__stdcall*)(volatile std::int32_t* target, std::int32_t value);
 inline constexpr GameGlobal<InterlockedExchangeImport> g_importInterlockedExchange{0x6550e4};  // KERNEL32.dll
+using DeleteCriticalSectionImport = void(__stdcall*)(void* section);
+inline constexpr GameGlobal<DeleteCriticalSectionImport> g_importDeleteCriticalSection{0x6550f8};  // KERNEL32.dll
 // session 58 (wip/framework-errors): the exception descriptions
 // (CHResult::Describe 0x6134d0, CMCIException::Describe 0x614250).
 using FormatMessageAImport = std::uint32_t(__stdcall*)(std::uint32_t flags, const void* source, std::uint32_t id,

@@ -401,3 +401,65 @@ SPECS += [
          callees={address: (0, "thiscall", "probe") for address in
                   (0x00519e80, 0x00518e70, 0x004fb650, 0x0050c9c0, 0x004fd0d0, 0x0051b6b0)}),
 ]
+
+
+# -- CGameData::InitPlayerInfo (player_info.cpp; spec wip/logic-r4) ----------
+# The settings' player setups are fake records in the world (PlayerSetup
+# 0x4351e0 probed: setup p at IPI_SETUPS + 0x100 * p; its type +0x5c read
+# by the original getter: 0..3 or any); IsMultiplayer probed (AL random);
+# the lobby name 0x5db260 (network code) probed: it builds a string in its
+# out argument (a buffer in the world, refcount 0, 0..20 characters) and
+# returns it (the out argument, a frame address, not recorded); the text
+# lookup probed: null or a text in the world; LogPlayerLandResources
+# probed (verified on its own). The std::string code runs; the names in
+# g_playerInfo start from the image (empty).
+IPI_SETUPS = 0x36000
+IPI_LOBBY_TEXT = 0x38000
+IPI_TEXT = 0x39000
+
+
+def ipi_setup(machine, ecx, args, h):
+    return WORLD_BASE + IPI_SETUPS + 0x100 * (args[0] & 0x1f)
+
+
+def ipi_lobby_name(machine, ecx, args, h):
+    out = args[0]
+    slot = len(machine.probe_calls) & 0x1f
+    text = WORLD_BASE + IPI_LOBBY_TEXT + 0x40 * slot + 1
+    length = (h >> 8) % 21
+    chars = bytes(0x41 + (h >> (12 + i)) % 26 for i in range(length))
+    machine.guest_write(text - 1, b"\0" + chars + b"\0")
+    machine.guest_write(out, struct.pack("<IIII", (h >> 40) & 0xFF, text if length else 0, length, length))
+    return out
+
+
+def ipi_text(h):
+    return 0 if h % 4 == 0 else WORLD_BASE + IPI_TEXT + 0x40 * ((h >> 4) % 4)
+
+
+def ipi_state(rng, pool, args):
+    fields = []
+    for p in range(20):
+        fields.append((IPI_SETUPS + 0x100 * p + 0x5c, rng.choice([0, 1, 1, 2, 2, 3, 3, rng.getrandbits(32)]), 4))
+        fields.append((0x11943dc + 0x148 * p, rng.choice([0, rng.getrandbits(32)]), 4))
+    for k in range(4):
+        length = rng.randrange(30)
+        fields += [(IPI_TEXT + 0x40 * k + i, rng.randrange(0x20, 0x7f), 1) for i in range(length)]
+        fields.append((IPI_TEXT + 0x40 * k + length, 0, 1))
+    return fields
+
+
+SPECS += [
+    # Dead blocks: 0x4fd17e (the first "" assignment's null check of the
+    # static "" 0x7a7868, a constant); 0x4fd38c/0x4fd390 (the inlined _Tidy
+    # of the "(" temporary decrementing a shared buffer: the temporary is a
+    # fresh concatenation result, refcount 0); 0x4fd483 (copying the chars
+    # of "" after _Grow(0), which returns false for 0).
+    Spec("CGameData_InitPlayerInfo", 0x004fd0d0, "thiscall", [], eax_mask=0, presets=ipi_state, max_cases=300,
+         exempt_blocks=(0x4fd17e, 0x4fd38c, 0x4fd390, 0x4fd483),
+         callees={0x004351e0: (1, "thiscall", "probe", ipi_setup),     # GameSettings::PlayerSetup
+                  0x004318d0: (0, "thiscall", "probe"),                # GameSettings::IsMultiplayer
+                  0x005db260: (1, "thiscall", "probe", ipi_lobby_name, lambda machine, ecx, args: ()),
+                  0x005faaa0: (2, "thiscall", ipi_text),               # CGraphicsData::TextAddress
+                  0x00507f60: (1, "thiscall", "probe")}),              # LogPlayerLandResources
+]

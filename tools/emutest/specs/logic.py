@@ -2324,3 +2324,54 @@ SPECS += [
     Spec("CLogicThread_PublishDrawData", 0x0051f0e0, "logicthread", [], presets=publish_draw_data_state,
          callees={0x0042cf80: (0, "thiscall", "probe")}),
 ]
+
+
+# -- wip/logic-r4: CLogicThread's destructors (logic_thread_dtor.cpp) --------
+# ECX = THREAD_SELF (framework.py; the object + 4). The timer (+0x3bc, its
+# +4 part) and the world (+0x3a0) are 0 or FAKE_VTABLE objects; the chat
+# wstring's characters (+0x3fc) 0 or a world buffer with a random refcount
+# byte; the waitable list (+0x3e0) has entries or not: get(0) is probed and
+# hands out a link (whose waitable is 0 or a FAKE_VTABLE object at its +4)
+# or empties the list (count +8 = 0, returns 0); the list's slot 1
+# (0x5b7ff0, through the game's vtable), the CRT's vector destructor
+# iterator, the list and object code and ~CGameThread are probed.
+LT_OBJECTS = 0x12000
+
+
+def lt_get_link(machine, ecx, args, h):
+    if h % 3 == 0:
+        machine.guest_write(ecx + 8, b"\0\0\0\0")
+        return 0
+    link = WORLD_BASE + LT_OBJECTS + 0x300 + 8 * ((h >> 4) & 1)
+    waitable = 0 if (h >> 8) % 4 == 0 else WORLD_BASE + LT_OBJECTS + 0x400
+    machine.guest_write(link + 4, struct.pack("<I", waitable))
+    return link
+
+
+def lt_parts(rng, pool, args):
+    full = THREAD_SELF_OFFSET - 4
+    fields = [(full + 0x3bc, rng.choice([0, WORLD_BASE + LT_OBJECTS]), 4), (LT_OBJECTS + 4, FAKE_VTABLE, 4),
+              (full + 0x3a0, rng.choice([0, WORLD_BASE + LT_OBJECTS + 0x100]), 4), (LT_OBJECTS + 0x100, FAKE_VTABLE, 4),
+              (LT_OBJECTS + 0x404, FAKE_VTABLE, 4),
+              (full + 0x3e0 + 8, rng.choice([0, 1, rng.getrandbits(32)]), 4)]
+    if rng.random() < 0.7:
+        fields += [(full + 0x3fc, WORLD_BASE + LT_OBJECTS + 0x202, 4),
+                   (LT_OBJECTS + 0x201, rng.choice([0, 0, 0xff, 1, 2, rng.getrandbits(8)]), 1)]
+    else:
+        fields.append((full + 0x3fc, 0, 4))
+    return fields
+
+
+SPECS += [
+    # Dead block 0x53c905: the list base's "still has entries" branch (the
+    # loop before it runs until the count +8 is 0, and clearAndDestroy is
+    # probed).
+    Spec("CLogicThread_Destroy", 0x0053c7d0, "fastcall", [thread_self, anything], presets=lt_parts,
+         callees={0x0061f18a: (4, "stdcall", "probe"), 0x0060b500: (1, "thiscall", "probe", lt_get_link),
+                  0x005b7ff0: (1, "thiscall", "probe"), 0x0060b560: (0, "thiscall", "probe"),
+                  0x0059f200: (0, "thiscall", "probe"), 0x0060b5a0: (0, "thiscall", "probe"),
+                  0x00610330: (0, "thiscall", "probe"), 0x005b60a0: (0, "thiscall", "probe")},
+         virtuals={0: 1}, exempt_blocks=(0x0053c905,)),
+    Spec("CLogicThread_DeletingDestroy", 0x0053c7a0, "fastcall", [thread_self, anything, below(4)],
+         callees={0x0053c7d0: (0, "thiscall", "probe")}),
+]

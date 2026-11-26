@@ -580,4 +580,7 @@ inline constexpr GameText kFinishGameCancelled{0x730a78};  // "*** FinishGame ca
 // Dirk\Draw.cpp: CDrawer::SetDisplayMode.
 inline constexpr GameText kOldDisplayMode{0x698f6c};          // "GFX: Old display mode: %ux%ux%u"
 inline constexpr GameText kSkippingSetDisplayMode{0x698f4c};  // "GFX: Skipping SetDisplayMode"
+// The thread destructors (win32_thread_destructors.cpp).
+inline constexpr GameText kThreadDestroyedRunning{0x7a42c4};  // "Thread destruction before it's finished"
+inline constexpr GameText kGameThreadCoInitOpen{0x79df58};    // "CGameThread::~CGameThread:: iCoInitOpen"
 }  // namespace s3re::game::texts

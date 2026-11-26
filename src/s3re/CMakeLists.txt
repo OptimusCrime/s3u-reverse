@@ -156,6 +156,7 @@ add_library(s3re SHARED
     game/logic/logic_helpers.cpp
     game/logic/logic_music.cpp
     game/logic/logic_thread.cpp
+    game/logic/logic_thread_dtor.cpp
     game/logic/logic_thread_members.cpp
     game/logic/objectives.cpp
     game/logic/ui_overlays.cpp
@@ -294,6 +295,7 @@ add_library(s3re SHARED
     game/framework/misc_helpers.cpp
     game/framework/string_members.cpp
     game/framework/wait_times.cpp
+    game/framework/win32_thread_destructors.cpp
     game/framework/win32_cdaudio.cpp
     game/framework/win32_classes.cpp
     game/framework/win32_detach.cpp
