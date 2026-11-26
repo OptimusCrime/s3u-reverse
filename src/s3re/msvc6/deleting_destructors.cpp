@@ -63,6 +63,11 @@
 //     0x00614ee0 Win32::CProgrammingError                      0x612c80
 //     0x00615150 Win32::CTimeout                               0x615170
 //     0x006003e0 Lobby::priv::CDataError                       0x600400
+//   and (wip/app-r4) of the DirectX / Win32 framework classes and their
+//   containers in 0x5b5d10..0x61ab10 (27 plain ones; the "sub" ones below
+//   are a second base at +4: CGameThread 0x5b6070, CGameDrawThread 0x5b6570,
+//   CWin32Waitable 0x60bf90, CEvent 0x60ca00, CTimer 0x60cf70, CThread
+//   0x60dfc0); the list with their destructors is the hook list below.
 // Scalar deleting destructors of classes with the virtual base
 // CScreenElement (reached through a thunk with `this` at the virtual base,
 // at +offset of the object): destructor(this), ~CScreenElement 0x4156b0
@@ -605,6 +610,108 @@ std::uintptr_t __fastcall ScalarDeletingDestructor_4a8e90(std::uintptr_t self, v
     return DeletingDestructor(0x004a8eb0, self, flags);  // WCSkipListBase_WCSkipListDictKeyVal_int_HFONT
 }
 
+// Purpose: The same for the DirectX and Win32 framework classes and their
+// containers (wip/app-r4); the "sub" ones are a second base at +4.
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b5d10(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b5d30, self, flags);  // DirectX::CGameMainWindow
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b6d50(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b6d70, self, flags);  // DirectX::CGameDrawer
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b7c70(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b7950, self, flags);  // WCPtrSList_DirectX_CGameThread
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b7c90(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b79c0, self, flags);  // WCPtrSList_DirectX_CSurface
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b7cb0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b7a30, self, flags);  // WCPtrSList_DirectX_CPalette
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b7cd0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b7ac0, self, flags);  // WCValOrderedVector_DirectX_CDirectDrawDevice
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b7cf0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b7c10, self, flags);  // WCValOrderedVector_DirectX_CDisplayMode
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b7d70(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b7d90, self, flags);  // WCValSList_DirectX_CSurface
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b7e30(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b7e50, self, flags);  // WCValSList_DirectX_CPalette
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b8440(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b8460, self, flags);  // Win32::CWin32WaitableBag_DirectX_CGameThread
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b8540(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b7670, self, flags);  // DirectX::CDirectDrawDevice
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b8fe0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x006100c0, self, flags);  // Win32::CMainWindow
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b9e00(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005b9e40, self, flags);  // DirectX::CDirectInputDevice
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b9e20(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005befd0, self, flags);  // DirectX::CDirectInputErrorHandler
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5ba1a0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x005ba1c0, self, flags);  // DirectX::CDIMouse
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_60bc80(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00423a10, self, flags);  // WCSkipNonTempBase
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_60be90(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x0060beb0, self, flags);  // Win32::CWin32Handle
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_60f980(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x0060f9a0, self, flags);  // Win32::CWindowBase
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_60fe70(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x0060fe90, self, flags);  // Win32::CWindow
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_612040(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00612060, self, flags);  // Win32::CFileNotFound
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_6154e0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00615500, self, flags);  // Win32::CCDAudio
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_616110(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00616050, self, flags);  // WCValSkipListDict_HWND___Win32_CCDAudio
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_616130(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00616150, self, flags);  // WCSkipListBase_WCSkipListDictKeyVal_HWND___Win32_CCDAudio
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_616300(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00616320, self, flags);  // Win32::CRegistryValueInfo
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_616440(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00616490, self, flags);  // Win32::CRegistryKey
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_6195e0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x00619600, self, flags);  // Win32::CFile
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_61ab10(std::uintptr_t self, void*, std::uint32_t flags) {
+    return DeletingDestructor(0x0061aab0, self, flags);  // WCValOrderedVector_void
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b6070(std::uintptr_t self, void*, std::uint32_t flags) {
+    return SubobjectDeletingDestructor(0x005b60a0, 0x4, self, flags);  // DirectX::CGameThread
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_5b6570(std::uintptr_t self, void*, std::uint32_t flags) {
+    return SubobjectDeletingDestructor(0x005b65a0, 0x4, self, flags);  // DirectX::CGameDrawThread
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_60bf90(std::uintptr_t self, void*, std::uint32_t flags) {
+    return SubobjectDeletingDestructor(0x0060bfe0, 0x4, self, flags);  // Win32::CWin32Waitable
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_60ca00(std::uintptr_t self, void*, std::uint32_t flags) {
+    return SubobjectDeletingDestructor(0x0060c790, 0x4, self, flags);  // Win32::CEvent
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_60cf70(std::uintptr_t self, void*, std::uint32_t flags) {
+    return SubobjectDeletingDestructor(0x0060cfa0, 0x4, self, flags);  // Win32::CTimer
+}
+std::uintptr_t __fastcall ScalarDeletingDestructor_60dfc0(std::uintptr_t self, void*, std::uint32_t flags) {
+    return SubobjectDeletingDestructor(0x0060dff0, 0x4, self, flags);  // Win32::CThread
+}
+
 // Purpose: Destroys a list box or dropdown that is a member of a dialog
 // (its own destructor, then its virtual base CScreenElement).
 std::uint32_t __fastcall CompleteDestructor_421fa0(std::uintptr_t self, void*) {
@@ -909,6 +1016,73 @@ S3RE_HOOK(0x004a8e70, ScalarDeletingDestructor_4a8e70, DeletingDestructorFn,
           Original_ScalarDeletingDestructor_4a8e70, ScalarDeletingDestructor_4a8e70);
 S3RE_HOOK(0x004a8e90, ScalarDeletingDestructor_4a8e90, DeletingDestructorFn,
           Original_ScalarDeletingDestructor_4a8e90, ScalarDeletingDestructor_4a8e90);
+// wip/app-r4: the framework classes'
+S3RE_HOOK(0x005b5d10, ScalarDeletingDestructor_5b5d10, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b5d10, ScalarDeletingDestructor_5b5d10);
+S3RE_HOOK(0x005b6d50, ScalarDeletingDestructor_5b6d50, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b6d50, ScalarDeletingDestructor_5b6d50);
+S3RE_HOOK(0x005b7c70, ScalarDeletingDestructor_5b7c70, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b7c70, ScalarDeletingDestructor_5b7c70);
+S3RE_HOOK(0x005b7c90, ScalarDeletingDestructor_5b7c90, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b7c90, ScalarDeletingDestructor_5b7c90);
+S3RE_HOOK(0x005b7cb0, ScalarDeletingDestructor_5b7cb0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b7cb0, ScalarDeletingDestructor_5b7cb0);
+S3RE_HOOK(0x005b7cd0, ScalarDeletingDestructor_5b7cd0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b7cd0, ScalarDeletingDestructor_5b7cd0);
+S3RE_HOOK(0x005b7cf0, ScalarDeletingDestructor_5b7cf0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b7cf0, ScalarDeletingDestructor_5b7cf0);
+S3RE_HOOK(0x005b7d70, ScalarDeletingDestructor_5b7d70, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b7d70, ScalarDeletingDestructor_5b7d70);
+S3RE_HOOK(0x005b7e30, ScalarDeletingDestructor_5b7e30, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b7e30, ScalarDeletingDestructor_5b7e30);
+S3RE_HOOK(0x005b8440, ScalarDeletingDestructor_5b8440, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b8440, ScalarDeletingDestructor_5b8440);
+S3RE_HOOK(0x005b8540, ScalarDeletingDestructor_5b8540, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b8540, ScalarDeletingDestructor_5b8540);
+S3RE_HOOK(0x005b8fe0, ScalarDeletingDestructor_5b8fe0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b8fe0, ScalarDeletingDestructor_5b8fe0);
+S3RE_HOOK(0x005b9e00, ScalarDeletingDestructor_5b9e00, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b9e00, ScalarDeletingDestructor_5b9e00);
+S3RE_HOOK(0x005b9e20, ScalarDeletingDestructor_5b9e20, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b9e20, ScalarDeletingDestructor_5b9e20);
+S3RE_HOOK(0x005ba1a0, ScalarDeletingDestructor_5ba1a0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5ba1a0, ScalarDeletingDestructor_5ba1a0);
+S3RE_HOOK(0x0060bc80, ScalarDeletingDestructor_60bc80, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_60bc80, ScalarDeletingDestructor_60bc80);
+S3RE_HOOK(0x0060be90, ScalarDeletingDestructor_60be90, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_60be90, ScalarDeletingDestructor_60be90);
+S3RE_HOOK(0x0060f980, ScalarDeletingDestructor_60f980, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_60f980, ScalarDeletingDestructor_60f980);
+S3RE_HOOK(0x0060fe70, ScalarDeletingDestructor_60fe70, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_60fe70, ScalarDeletingDestructor_60fe70);
+S3RE_HOOK(0x00612040, ScalarDeletingDestructor_612040, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_612040, ScalarDeletingDestructor_612040);
+S3RE_HOOK(0x006154e0, ScalarDeletingDestructor_6154e0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_6154e0, ScalarDeletingDestructor_6154e0);
+S3RE_HOOK(0x00616110, ScalarDeletingDestructor_616110, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_616110, ScalarDeletingDestructor_616110);
+S3RE_HOOK(0x00616130, ScalarDeletingDestructor_616130, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_616130, ScalarDeletingDestructor_616130);
+S3RE_HOOK(0x00616300, ScalarDeletingDestructor_616300, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_616300, ScalarDeletingDestructor_616300);
+S3RE_HOOK(0x00616440, ScalarDeletingDestructor_616440, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_616440, ScalarDeletingDestructor_616440);
+S3RE_HOOK(0x006195e0, ScalarDeletingDestructor_6195e0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_6195e0, ScalarDeletingDestructor_6195e0);
+S3RE_HOOK(0x0061ab10, ScalarDeletingDestructor_61ab10, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_61ab10, ScalarDeletingDestructor_61ab10);
+S3RE_HOOK(0x005b6070, ScalarDeletingDestructor_5b6070, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b6070, ScalarDeletingDestructor_5b6070);
+S3RE_HOOK(0x005b6570, ScalarDeletingDestructor_5b6570, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_5b6570, ScalarDeletingDestructor_5b6570);
+S3RE_HOOK(0x0060bf90, ScalarDeletingDestructor_60bf90, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_60bf90, ScalarDeletingDestructor_60bf90);
+S3RE_HOOK(0x0060ca00, ScalarDeletingDestructor_60ca00, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_60ca00, ScalarDeletingDestructor_60ca00);
+S3RE_HOOK(0x0060cf70, ScalarDeletingDestructor_60cf70, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_60cf70, ScalarDeletingDestructor_60cf70);
+S3RE_HOOK(0x0060dfc0, ScalarDeletingDestructor_60dfc0, DeletingDestructorFn,
+          Original_ScalarDeletingDestructor_60dfc0, ScalarDeletingDestructor_60dfc0);
 
 // ---------------------------------------------------------------------------
 // Tests: each destructor with its callees (the class destructors and
@@ -1051,6 +1225,40 @@ const DeletingCase kDeletingCases[] = {
     {Original_ScalarDeletingDestructor_4a7840, &ScalarDeletingDestructor_4a7840, 0x004a7860, 0x0},
     {Original_ScalarDeletingDestructor_4a8e70, &ScalarDeletingDestructor_4a8e70, 0x004a8e10, 0x0},
     {Original_ScalarDeletingDestructor_4a8e90, &ScalarDeletingDestructor_4a8e90, 0x004a8eb0, 0x0},
+    // wip/app-r4: the framework classes'
+    {Original_ScalarDeletingDestructor_5b5d10, &ScalarDeletingDestructor_5b5d10, 0x005b5d30, 0x0},
+    {Original_ScalarDeletingDestructor_5b6d50, &ScalarDeletingDestructor_5b6d50, 0x005b6d70, 0x0},
+    {Original_ScalarDeletingDestructor_5b7c70, &ScalarDeletingDestructor_5b7c70, 0x005b7950, 0x0},
+    {Original_ScalarDeletingDestructor_5b7c90, &ScalarDeletingDestructor_5b7c90, 0x005b79c0, 0x0},
+    {Original_ScalarDeletingDestructor_5b7cb0, &ScalarDeletingDestructor_5b7cb0, 0x005b7a30, 0x0},
+    {Original_ScalarDeletingDestructor_5b7cd0, &ScalarDeletingDestructor_5b7cd0, 0x005b7ac0, 0x0},
+    {Original_ScalarDeletingDestructor_5b7cf0, &ScalarDeletingDestructor_5b7cf0, 0x005b7c10, 0x0},
+    {Original_ScalarDeletingDestructor_5b7d70, &ScalarDeletingDestructor_5b7d70, 0x005b7d90, 0x0},
+    {Original_ScalarDeletingDestructor_5b7e30, &ScalarDeletingDestructor_5b7e30, 0x005b7e50, 0x0},
+    {Original_ScalarDeletingDestructor_5b8440, &ScalarDeletingDestructor_5b8440, 0x005b8460, 0x0},
+    {Original_ScalarDeletingDestructor_5b8540, &ScalarDeletingDestructor_5b8540, 0x005b7670, 0x0},
+    {Original_ScalarDeletingDestructor_5b8fe0, &ScalarDeletingDestructor_5b8fe0, 0x006100c0, 0x0},
+    {Original_ScalarDeletingDestructor_5b9e00, &ScalarDeletingDestructor_5b9e00, 0x005b9e40, 0x0},
+    {Original_ScalarDeletingDestructor_5b9e20, &ScalarDeletingDestructor_5b9e20, 0x005befd0, 0x0},
+    {Original_ScalarDeletingDestructor_5ba1a0, &ScalarDeletingDestructor_5ba1a0, 0x005ba1c0, 0x0},
+    {Original_ScalarDeletingDestructor_60bc80, &ScalarDeletingDestructor_60bc80, 0x00423a10, 0x0},
+    {Original_ScalarDeletingDestructor_60be90, &ScalarDeletingDestructor_60be90, 0x0060beb0, 0x0},
+    {Original_ScalarDeletingDestructor_60f980, &ScalarDeletingDestructor_60f980, 0x0060f9a0, 0x0},
+    {Original_ScalarDeletingDestructor_60fe70, &ScalarDeletingDestructor_60fe70, 0x0060fe90, 0x0},
+    {Original_ScalarDeletingDestructor_612040, &ScalarDeletingDestructor_612040, 0x00612060, 0x0},
+    {Original_ScalarDeletingDestructor_6154e0, &ScalarDeletingDestructor_6154e0, 0x00615500, 0x0},
+    {Original_ScalarDeletingDestructor_616110, &ScalarDeletingDestructor_616110, 0x00616050, 0x0},
+    {Original_ScalarDeletingDestructor_616130, &ScalarDeletingDestructor_616130, 0x00616150, 0x0},
+    {Original_ScalarDeletingDestructor_616300, &ScalarDeletingDestructor_616300, 0x00616320, 0x0},
+    {Original_ScalarDeletingDestructor_616440, &ScalarDeletingDestructor_616440, 0x00616490, 0x0},
+    {Original_ScalarDeletingDestructor_6195e0, &ScalarDeletingDestructor_6195e0, 0x00619600, 0x0},
+    {Original_ScalarDeletingDestructor_61ab10, &ScalarDeletingDestructor_61ab10, 0x0061aab0, 0x0},
+    {Original_ScalarDeletingDestructor_5b6070, &ScalarDeletingDestructor_5b6070, 0x005b60a0, 0x4},
+    {Original_ScalarDeletingDestructor_5b6570, &ScalarDeletingDestructor_5b6570, 0x005b65a0, 0x4},
+    {Original_ScalarDeletingDestructor_60bf90, &ScalarDeletingDestructor_60bf90, 0x0060bfe0, 0x4},
+    {Original_ScalarDeletingDestructor_60ca00, &ScalarDeletingDestructor_60ca00, 0x0060c790, 0x4},
+    {Original_ScalarDeletingDestructor_60cf70, &ScalarDeletingDestructor_60cf70, 0x0060cfa0, 0x4},
+    {Original_ScalarDeletingDestructor_60dfc0, &ScalarDeletingDestructor_60dfc0, 0x0060dff0, 0x4},
 };
 
 struct CompleteCase {
@@ -1106,6 +1314,8 @@ void InstallStubs(test::CalleeStubs& stubs, std::uintptr_t callee) {
     // session 58 (wip/framework-errors): the other exception classes' destructors
     InstallMatching<0x005b94c0, 0x005be3e0, 0x005c0010, 0x0060e490, 0x005b93c0, 0x00610830, 0x00612790,
                     0x00612d80, 0x00613340, 0x00613bd0, 0x00612c80, 0x00615170, 0x00600400>(stubs, callee);
+    // wip/app-r4: the framework classes' destructors
+    InstallMatching<0x005b5d30, 0x005b6d70, 0x005b7950, 0x005b79c0, 0x005b7a30, 0x005b7ac0, 0x005b7c10, 0x005b7d90, 0x005b7e50, 0x005b8460, 0x005b7670, 0x006100c0, 0x005b9e40, 0x005befd0, 0x005ba1c0, 0x00423a10, 0x0060beb0, 0x0060f9a0, 0x0060fe90, 0x00612060, 0x00615500, 0x00616050, 0x00616150, 0x00616320, 0x00616490, 0x00619600, 0x0061aab0, 0x005b60a0, 0x005b65a0, 0x0060bfe0, 0x0060c790, 0x0060cfa0, 0x0060dff0>(stubs, callee);
     stubs.Install<0, kScreenElementDestructor>(
         [](game::CGameData*, std::uint32_t self, const std::uint32_t*) { return self * 7 + 1; });
 }

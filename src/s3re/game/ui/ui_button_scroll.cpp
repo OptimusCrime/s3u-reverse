@@ -430,9 +430,9 @@ using ElementArgFn = std::uint32_t(__fastcall*)(std::uintptr_t self, void* edx, 
 using ElementDrawFn = std::uint32_t(__fastcall*)(std::uintptr_t self, void* edx, std::uint32_t surface, std::uint32_t a,
                                                  std::uint32_t b);
 
-S3RE_HOOK_UNVERIFIED(0x0041a990, CButton_IsPressed, ButtonGetFn, Original_CButton_IsPressed, CButton_IsPressed);
+S3RE_HOOK(0x0041a990, CButton_IsPressed, ButtonGetFn, Original_CButton_IsPressed, CButton_IsPressed);
 S3RE_HOOK(0x0041a9b0, CButton_Click, ButtonClickFn, Original_CButton_Click, CButton_Click);
-S3RE_HOOK_UNVERIFIED(0x0041aa20, CButton_SetChecked, ButtonSetFn, Original_CButton_SetChecked, CButton_SetChecked);
+S3RE_HOOK(0x0041aa20, CButton_SetChecked, ButtonSetFn, Original_CButton_SetChecked, CButton_SetChecked);
 S3RE_HOOK(0x0041aa40, CButton_KillFocus, ElementFn, Original_CButton_KillFocus, CButton_KillFocus);
 S3RE_HOOK(0x0041aaa0, CButton_OnLButtonDown, ElementMessageFn, Original_CButton_OnLButtonDown, CButton_OnLButtonDown);
 S3RE_HOOK(0x0041ab10, CButton_OnLButtonUp, ElementMessageFn, Original_CButton_OnLButtonUp, CButton_OnLButtonUp);
@@ -442,7 +442,7 @@ S3RE_HOOK(0x0041e330, CVScrollBar_SetPosition, ScrollByFn, Original_CVScrollBar_
 S3RE_HOOK(0x0041e380, CVScrollBar_SetRange, ScrollRangeFn, Original_CVScrollBar_SetRange, CVScrollBar_SetRange);
 S3RE_HOOK(0x0041e400, CVScrollBar_GetPosition, ScrollGetFn, Original_CVScrollBar_GetPosition, CVScrollBar_GetPosition);
 S3RE_HOOK(0x00422590, CDropdown_OnArrowClicked, ArrowFn, Original_CDropdown_OnArrowClicked, CDropdown_OnArrowClicked);
-S3RE_HOOK_UNVERIFIED(0x00422770, CDropdown_OnFocusChanged, ElementArgFn, Original_CDropdown_OnFocusChanged,
+S3RE_HOOK(0x00422770, CDropdown_OnFocusChanged, ElementArgFn, Original_CDropdown_OnFocusChanged,
           CDropdown_OnFocusChanged);
 S3RE_HOOK(0x004227d0, CDropdown_Draw, ElementDrawFn, Original_CDropdown_Draw, CDropdown_Draw);
 
@@ -650,7 +650,12 @@ bool CompareMember(test::Context& ctx, const char* name, Setup setup, std::uint3
             Run r{};
             g_log = &r.calls;
             g_stubCounter = 0;
-            r.eax = Normalize(call(g_base, argumentSeed)) & mask;
+            // Byte results: mask first. EAX's upper bytes are the caller's in
+            // the original and may make it look like a pointer into the
+            // buffer, which Normalize would rebase (AL included); this was
+            // the "wrong AL" of IsPressed / SetChecked / OnFocusChanged.
+            const std::uint32_t eax = call(g_base, argumentSeed);
+            r.eax = mask == 0xff ? eax & mask : Normalize(eax) & mask;
             r.openDropdown = Normalize(g_openDropdown.get());
             g_log = nullptr;
             return r;
@@ -723,14 +728,17 @@ bool CompareAll(test::Context& ctx, const Members& ours, int cases) {
     // Byte results are compared in AL (the rest of EAX is the caller's in
     // the original); SetPosition's EAX is not compared at all when nothing
     // changes (the caller's; every caller overwrites it), see below.
-    // CButton::IsPressed is left to the emulator spec: in-process, its Detours
-    // trampoline (a 4-byte body) returned a wrong AL (0x71 for a pressed byte
-    // of 1), so the original can't be called through it here.
+    ok = ok && CompareMember(ctx, "CButton::IsPressed", &SetUpButton, kAl,
+                             [&](std::uintptr_t b, std::uint64_t) { return o.isPressed(button(b), nullptr); },
+                             [&](std::uintptr_t b, std::uint64_t) { return ours.isPressed(button(b), nullptr); }, cases);
     ok = ok && CompareMember(ctx, "CButton::Click", &SetUpButton, kAll,
                              [&](std::uintptr_t b, std::uint64_t) { return o.click(button(b), nullptr); },
                              [&](std::uintptr_t b, std::uint64_t) { return ours.click(button(b), nullptr); }, cases);
-    // CButton::SetChecked likewise (its body also starts with mov al,
-    // [ecx+disp8]; the trampoline gave AL 0x30 where the code gives 0).
+    ok = ok && CompareMember(
+                   ctx, "CButton::SetChecked", &SetUpButton, kAl,
+                   [&](std::uintptr_t b, std::uint64_t s) { return o.setChecked(button(b), nullptr, Arg(s, 0)); },
+                   [&](std::uintptr_t b, std::uint64_t s) { return ours.setChecked(button(b), nullptr, Arg(s, 0)); },
+                   cases);
     ok = ok && CompareMember(ctx, "CButton::KillFocus", &SetUpButton, kAll,
                              [&](std::uintptr_t b, std::uint64_t) { return o.killFocus(element(b), nullptr); },
                              [&](std::uintptr_t b, std::uint64_t) { return ours.killFocus(element(b), nullptr); },
@@ -804,9 +812,13 @@ bool CompareAll(test::Context& ctx, const Members& ours, int cases) {
                        return ours.onArrowClicked(dropdown(b), nullptr, Arg(s, 0));
                    },
                    cases);
-    // CDropdown::OnFocusChanged: left to the emulator spec (in-process, in
-    // the Release build, the original returned AL 0xd8 although its last
-    // call is `xor al, al`; the same trampoline question as IsPressed).
+    ok = ok && CompareMember(
+                   ctx, "CDropdown::OnFocusChanged", &SetUpDropdown, kAl,
+                   [&](std::uintptr_t b, std::uint64_t s) { return o.onFocusChanged(dropElement(b), nullptr, Arg(s, 0)); },
+                   [&](std::uintptr_t b, std::uint64_t s) {
+                       return ours.onFocusChanged(dropElement(b), nullptr, Arg(s, 0));
+                   },
+                   cases);
     ok = ok && CompareMember(
                    ctx, "CDropdown::Draw", &SetUpDropdown, kAll,
                    [&](std::uintptr_t b, std::uint64_t s) {

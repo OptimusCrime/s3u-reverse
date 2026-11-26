@@ -511,6 +511,138 @@ def _api_critical_section(name):
     return handler
 
 
+# -- the registry (Win32::CRegistryKey, wip/app-r4) ---------------------------
+# Results are Windows error codes: 0 mostly, else ERROR_FILE_NOT_FOUND,
+# ERROR_ACCESS_DENIED, ERROR_MORE_DATA, ERROR_NO_MORE_ITEMS or any value.
+# Out-parameters are written on success. Pointers into the world are
+# recorded as numbers, others (stack locals, which differ between the two
+# frames) by presence.
+
+def _api_reg_result(h):
+    if (h & 3) != 0:
+        return 0
+    return (2, 5, 234, 259, 6, (h >> 16) & 0xFFFFFFFF)[(h >> 4) % 6]
+
+
+def _api_reg_pointer(p):
+    if WORLD_BASE <= p < WORLD_BASE + WORLD_SIZE:
+        return p
+    return "local" if p else 0
+
+
+def _api_reg_write32(machine, p, value):
+    if p:
+        machine.guest_write(p, struct.pack("<I", value & 0xFFFFFFFF))
+
+
+def _api_reg_bytes(machine, h, buffer, length):
+    """A name or data of up to *length bytes (at most 12); *length = the count."""
+    if not length:
+        return
+    n = min(struct.unpack("<I", machine.guest_read(length, 4))[0], 12)
+    k = (h >> 24) % (n + 1) if n else 0
+    if buffer:
+        machine.guest_write(buffer, bytes(((h >> (i % 7)) + i * 37) & 0xFF for i in range(k)))
+    machine.guest_write(length, struct.pack("<I", k))
+
+
+def _api_reg_open(machine, uc, args):
+    key, sub, options, sam, result = args
+    h = _api_hash(machine, 0x4E600000)
+    r = _api_reg_result(h)
+    if r == 0:
+        _api_reg_write32(machine, result, h >> 20)
+    return r, ("RegOpenKeyExA", key, _api_text(machine, sub), options, sam, _api_reg_pointer(result))
+
+
+def _api_reg_create(machine, uc, args):
+    key, sub, reserved, cls, options, sam, security, result, disposition = args
+    h = _api_hash(machine, 0x4E610000)
+    r = _api_reg_result(h)
+    if r == 0:
+        _api_reg_write32(machine, result, h >> 20)
+        _api_reg_write32(machine, disposition, 1 + ((h >> 8) & 1))
+    return r, ("RegCreateKeyExA", key, _api_text(machine, sub), reserved, _api_text(machine, cls), options, sam,
+               security, _api_reg_pointer(result), disposition != 0)
+
+
+def _api_reg_close(machine, uc, args):
+    return _api_reg_result(_api_hash(machine, 0x4E620000)), ("RegCloseKey", args[0])
+
+
+def _api_reg_delete(machine, uc, args):
+    return (_api_reg_result(_api_hash(machine, 0x4E630000)),
+            ("RegDeleteKeyA", args[0], _api_text(machine, args[1])))
+
+
+def _api_reg_query_info(machine, uc, args):
+    key, cls, cls_length, reserved, *counts, last_write = args
+    h = _api_hash(machine, 0x4E640000)
+    r = _api_reg_result(h)
+    if r == 0:
+        _api_reg_bytes(machine, h, cls, cls_length)
+        for i, p in enumerate(counts):
+            _api_reg_write32(machine, p, (h >> i) % 64 if (h >> (20 + i)) & 1 else _mix(h + i) >> 32)
+        if last_write:
+            machine.guest_write(last_write, struct.pack("<Q", _mix(h ^ 0x77)))
+    return r, ("RegQueryInfoKeyA", key, _api_reg_pointer(cls), _api_reg_pointer(cls_length), reserved,
+               *(_api_reg_pointer(p) for p in counts), _api_reg_pointer(last_write))
+
+
+def _api_reg_enum_key(machine, uc, args):
+    """RegEnumKeyExA: the FILETIME is written on every call (EnumKey copies
+    its local also after ERROR_NO_MORE_ITEMS, when it would be
+    uninitialized)."""
+    key, index, name, name_length, reserved, cls, cls_length, last_write = args
+    h = _api_hash(machine, 0x4E650000)
+    if last_write:
+        machine.guest_write(last_write, struct.pack("<Q", _mix(h ^ 0x55)))
+    r = _api_reg_result(h)
+    if r == 0:
+        _api_reg_bytes(machine, h, name, name_length)
+        _api_reg_bytes(machine, h >> 3, cls, cls_length)
+    return r, ("RegEnumKeyExA", key, index, _api_reg_pointer(name), _api_reg_pointer(name_length), reserved,
+               _api_reg_pointer(cls), _api_reg_pointer(cls_length), last_write != 0)
+
+
+def _api_reg_enum_value(machine, uc, args):
+    key, index, name, name_length, reserved, type_, data, data_size = args
+    h = _api_hash(machine, 0x4E660000)
+    r = _api_reg_result(h)
+    if r == 0:
+        _api_reg_bytes(machine, h, name, name_length)
+        _api_reg_write32(machine, type_, (h >> 8) % 12)
+        _api_reg_bytes(machine, h >> 5, data, data_size)
+    return r, ("RegEnumValueA", key, index, _api_reg_pointer(name), _api_reg_pointer(name_length), reserved,
+               _api_reg_pointer(type_), _api_reg_pointer(data), _api_reg_pointer(data_size))
+
+
+def _api_reg_query_value(machine, uc, args):
+    key, name, reserved, type_, data, data_size = args
+    h = _api_hash(machine, 0x4E670000)
+    size_in = struct.unpack("<I", machine.guest_read(data_size, 4))[0] if data_size else None
+    r = _api_reg_result(h)
+    if r == 0:
+        _api_reg_write32(machine, type_, (h >> 8) % 12)
+        if data == 0 and data_size:
+            # The size query (QueryString): at least 1, as for a REG_SZ with
+            # its terminator (a zero-size block would share the bump
+            # allocator's next address).
+            _api_reg_write32(machine, data_size, 1 + (h >> 24) % 12)
+        else:
+            _api_reg_bytes(machine, h >> 5, data, data_size)
+    return r, ("RegQueryValueExA", key, _api_text(machine, name), reserved, _api_reg_pointer(type_),
+               _api_reg_pointer(data), _api_reg_pointer(data_size), size_in)
+
+
+def _api_reg_set_value(machine, uc, args):
+    key, name, reserved, type_, data, size = args
+    h = _api_hash(machine, 0x4E680000)
+    first = struct.unpack("<I", machine.guest_read(data, 4))[0] if data and size >= 4 else None
+    return _api_reg_result(h), ("RegSetValueExA", key, _api_text(machine, name), reserved, type_,
+                                _api_reg_pointer(data), first, size)
+
+
 # name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
 # record holds what the call saw (rectangle contents, not pointers, which
 # differ between the original's and our stack frames).
@@ -568,6 +700,15 @@ API_HANDLERS = {
     "TextOutA": (5, _api_text_out),
     "EnterCriticalSection": (1, _api_critical_section("EnterCriticalSection")),
     "LeaveCriticalSection": (1, _api_critical_section("LeaveCriticalSection")),
+    "RegOpenKeyExA": (5, _api_reg_open),
+    "RegCreateKeyExA": (9, _api_reg_create),
+    "RegCloseKey": (1, _api_reg_close),
+    "RegDeleteKeyA": (2, _api_reg_delete),
+    "RegQueryInfoKeyA": (12, _api_reg_query_info),
+    "RegEnumKeyExA": (8, _api_reg_enum_key),
+    "RegEnumValueA": (8, _api_reg_enum_value),
+    "RegQueryValueExA": (6, _api_reg_query_value),
+    "RegSetValueExA": (6, _api_reg_set_value),
 }
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,
