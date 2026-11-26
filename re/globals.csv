@@ -593,3 +593,21 @@ address,name,type,status,notes
 0x00733984,g_pngTwoBppSwap,const uint8_t[256],identified,libpng twobppswaptable (png_do_packswap 0x5a5ec0). Declared in src/s3re/game/tables.h; used by thirdparty/png_rtran_rows.cpp.
 0x00733a84,g_pngFourBppSwap,const uint8_t[256],identified,libpng fourbppswaptable: nibbles swapped (png_do_packswap 0x5a5ec0). Declared in src/s3re/game/tables.h; used by thirdparty/png_rtran_rows.cpp.
 0x007a5a90,g_crtStderr,CrtFile,identified,The C runtime's stderr (&_iob[2]); libpng's default error and warning handlers print to it (png_error 0x5a9e20). Declared in src/s3re/game/globals.h; used by thirdparty/png_error.cpp.
+0x007e8bbc,g_paintlibTraceFile,char*,identified,PaintLib's trace file name (a heap copy; CPicDecoder's destructor 0x5a49d0 frees and clears it). Declared in src/s3re/game/globals.h; used by thirdparty/paintlib.cpp.
+0x00733754,texts::kZlibVersion,const char[],identified,"""1.1.3"" (ZLIB_VERSION; inflateInit2_ 0x5aa310 compares the first character of the caller's version). Declared in src/s3re/game/texts.h; used by thirdparty/zlib_inflate_setup.cpp."
+0x007348e0,g_zlibFixedBl,const uint32_t,identified,zlib 1.1.3 inffixed.h fixed_bl = 9 (inflate_trees_fixed 0x5b2a70). Declared in src/s3re/game/tables.h; used by thirdparty/zlib_inflate_setup.cpp.
+0x007348e4,g_zlibFixedBd,const uint32_t,identified,zlib fixed_bd = 5. Declared in src/s3re/game/tables.h; used by thirdparty/zlib_inflate_setup.cpp.
+0x007348e8,g_zlibFixedTl,const inflate_huft[512],identified,zlib fixed_tl (8-byte entries). Declared in src/s3re/game/tables.h; used by thirdparty/zlib_inflate_setup.cpp.
+0x007358e8,g_zlibFixedTd,const inflate_huft[32],identified,zlib fixed_td. Declared in src/s3re/game/tables.h; used by thirdparty/zlib_inflate_setup.cpp.
+0x00733d04,texts::kPngErrorFormat,char[],identified,"String ""libpng error: %s
+"" (png_error 0x5a9e20). Declared in src/s3re/game/texts.h; used by thirdparty/png_error.cpp."
+0x00733d18,texts::kPngWarningFormat,char[],identified,"String ""libpng warning: %s
+"" (png_warning 0x5a9e60). Declared in src/s3re/game/texts.h; used by thirdparty/png_error.cpp."
+0x00733d2c,texts::kPngOutOfMemory,char[],identified,"String ""Out of Memory"" (png_malloc 0x5aa060). Declared in src/s3re/game/texts.h; used by thirdparty/png_mem.cpp."
+0x00733c24,texts::kPngNullReadFn,char[],identified,"String ""Call to NULL read function"" (png_read_data 0x5a9ac0). Declared in src/s3re/game/texts.h; used by thirdparty/png_core.cpp."
+0x00733c74,texts::kPngBothRwFn1,char[],identified,"String ""It's an error to set both read_data_fn and write_data_fn in the "" (png_set_read_fn 0x5a9af0). Declared in src/s3re/game/texts.h; used by thirdparty/png_core.cpp."
+0x00733c40,texts::kPngBothRwFn2,char[],identified,"String ""same structure.  Resetting write_data_fn to NULL."" (png_set_read_fn 0x5a9af0). Declared in src/s3re/game/texts.h; used by thirdparty/png_core.cpp."
+0x00733cb8,texts::kPngReadError,char[],identified,"String ""Read Error"" (png_default_read_data 0x5a9b50). Declared in src/s3re/game/texts.h; used by thirdparty/png_core.cpp."
+0x00733dc8,texts::kPngCrcError,char[],identified,"String ""CRC error"" (png_crc_finish 0x5aa930). Declared in src/s3re/game/texts.h; used by thirdparty/png_core.cpp."
+0x00733bf0,texts::kPngWidthTooLarge,char[],identified,"String ""Width too large for libpng to process image data."" (png_get_IHDR 0x5a9990). Declared in src/s3re/game/texts.h; used by thirdparty/png_core.cpp."
+0x00734868,texts::kPngRowbytesOverflow,char[],identified,"String ""Width too large to process image data; rowbytes will overflow."" (png_set_IHDR 0x5b1660). Declared in src/s3re/game/texts.h; used by thirdparty/png_set.cpp."

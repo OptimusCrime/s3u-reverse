@@ -371,3 +371,175 @@ SPECS += [
     tp_spec("png_set_tRNS", 0x005b1ae0, [*TP_SET_HEAD, one_of(0, TP_TABLES_PTR), one_of(0, 0, 1, 5, 0x10000),
                                          one_of(0, TP_COLOUR_PTR)], eax_mask=0),
 ]
+
+
+# -- paintlib.cpp ----------------------------------------------------------------
+#
+# The object at world offset 0 (ECX = the world). Its vtable is the fake one
+# (virtual calls recorded) where a function calls virtuals of its own object;
+# constructors set the real vtables, so their nested virtual calls run the
+# original PaintLib code in both. Pointers to free point into scratch (the
+# fake heap records operator delete).
+
+PL_VIRTUALS = {0x0c: 0, 0x10: 4, 0x14: 0, 0x18: 0}
+PL_TRACE_FILE = 0x007E8BBC   # PaintLib's trace file name
+
+
+def pl_trace_global(rng, pool, args):
+    return [(PL_TRACE_FILE, rng.choice((0, WORLD_BASE + SCRATCH + 0x3000)), 4)]
+
+
+def pl_bitmap(rng, pool, args, fake_vtable=True):
+    """A CBmp / CAnyBmp: small sizes and depths (sometimes anything), the
+    palette, bits and line array in scratch (or null)."""
+    presets = [
+        (0x04, rng.choice((rng.randint(0, 40), rng.getrandbits(32))), 4),
+        (0x08, rng.choice((rng.randint(-2, 40), rng.randint(0, 3), rng.getrandbits(32) & 0x8000FFFF)), 4),
+        (0x0c, rng.choice((1, 2, 4, 8, 15, 16, 24, 32, 0, rng.randint(0, 40), rng.getrandbits(16))), 2),
+        (0x10, rng.choice((0, WORLD_BASE + SCRATCH, WORLD_BASE + SCRATCH)), 4),
+        (0x14, rng.choice((0, WORLD_BASE + SCRATCH + 0x1000)), 4),
+        (0x1c, rng.choice((0, WORLD_BASE + SCRATCH + 0x2000)), 4),
+    ]
+    if fake_vtable:
+        presets.append((0x00, FAKE_VTABLE, 4))
+    return presets
+
+
+def pl_decoder(rng, pool, args):
+    return [(0x10, rng.choice((0, 0, 8, 32, rng.getrandbits(32))), 4)]
+
+
+def pl_source(rng, pool, args):
+    return [(0x04, rng.choice((0, WORLD_BASE + SCRATCH + 0x1000)), 4),
+            (0x0c, rng.choice((0, WORLD_BASE + SCRATCH + 0x2000)), 4)]
+
+
+def pl_spec(name, address, args=(), presets=None, **kwargs):
+    return Spec(name, address, "thiscall", list(args), presets=presets, **kwargs)
+
+
+PL_DEPTH = lambda rng, pool: rng.choice((1, 2, 4, 8, 16, 24, 32, rng.randint(0, 40), rng.getrandbits(32)))
+PL_SIZE = lambda rng, pool: rng.choice((0, 1, 2, 16, 33, rng.randint(-2, 64)))
+PL_FLAGS = one_of(0, 1, 2, 3)
+
+SPECS += [
+    pl_spec("CPicDecoder_Construct", 0x005a4980),
+    pl_spec("CPicDecoder_Destroy", 0x005a49d0, globals=pl_trace_global, eax_mask=0),
+    pl_spec("CPicDecoder_DeletingDestructor", 0x005a4990, [PL_FLAGS], globals=pl_trace_global),
+    pl_spec("CPicDecoder_CalcDestBPP", 0x005a4cc0,
+            [lambda rng, pool: rng.choice((0, 1, 7, 8, 9, 16, 24, 32, 0xFFFFFFFF, rng.getrandbits(32)))],
+            presets=pl_decoder),
+    pl_spec("CBmp_Construct", 0x005a4ce0),
+    pl_spec("CBmp_Destroy", 0x005a4d10, eax_mask=0),
+    pl_spec("CBmp_DeletingDestructor", 0x005a4cf0, [PL_FLAGS]),
+    pl_spec("CBmp_Create", 0x005a4d20, [PL_SIZE, PL_SIZE, PL_DEPTH, anything], presets=pl_bitmap,
+            virtuals=PL_VIRTUALS),
+    # The virtual initLineArray (fake) may change bpp: initLocals reads it again
+    # (to depths below 16: 24 bits would fill 2^24 palette entries).
+    pl_spec("CBmp_initLocals", 0x005a4d50, [PL_SIZE, PL_SIZE, PL_DEPTH, anything],
+            presets=lambda rng, pool, args: [p for p in pl_bitmap(rng, pool, args) if p[0] != 0x10]
+            + [(0x10, WORLD_BASE + SCRATCH, 4)],
+            virtuals=PL_VIRTUALS,
+            virtual_effects={0x18: lambda m, ecx, a, h: m.guest_write(WORLD_BASE + 0x0c, bytes([(h >> 1) & 0x0F, 0]))
+                             if h & 1 else None},
+            # 0x5a4d8a: bpp changed to 32 by initLineArray (2^24 palette entries,
+            # too slow to emulate); the in-process test Paintlib_MatchOriginal
+            # covers it (its fake initLineArray sets 32).
+            exempt_blocks=(0x005a4d8a,), eax_mask=0, max_cases=500),
+    pl_spec("CAnyBmp_Construct", 0x005a4350, max_cases=300),
+    pl_spec("CAnyBmp_Destroy", 0x005a43e0, presets=pl_bitmap, eax_mask=0),
+    pl_spec("CAnyBmp_DeletingDestructor", 0x005a43c0, [PL_FLAGS], presets=pl_bitmap),
+    pl_spec("CAnyBmp_freeMembers", 0x005a4570, presets=pl_bitmap, eax_mask=0),
+    pl_spec("CAnyBmp_GetMemUsed", 0x005a4460, presets=pl_bitmap),
+    pl_spec("CAnyBmp_GetBytesPerLine", 0x005a44a0, presets=pl_bitmap),
+    pl_spec("CAnyBmp_internalCreate", 0x005a44b0, [PL_SIZE, PL_SIZE, PL_DEPTH, anything],
+            presets=pl_bitmap, virtuals=PL_VIRTUALS, eax_mask=0),
+    pl_spec("CAnyBmp_initLineArray", 0x005a4520, presets=pl_bitmap, virtuals=PL_VIRTUALS),
+    pl_spec("CTextException_Destroy", 0x005a4330,
+            presets=lambda rng, pool, args: [(0x08, rng.choice((0, WORLD_BASE + SCRATCH)), 4)], eax_mask=0),
+    # The copy constructor follows at 0x5a42c0 (not in the function lists):
+    # coverage up to the padding.
+    pl_spec("CTextException_DeletingDestructor", 0x005a4290, [PL_FLAGS],
+            presets=lambda rng, pool, args: [(0x08, rng.choice((0, WORLD_BASE + SCRATCH)), 4)],
+            cover_until=0x005a42bc),
+    pl_spec("CDataSource_Construct", 0x005b03f0),
+    pl_spec("CDataSource_Destroy", 0x005b0460, presets=pl_source, eax_mask=0),
+    pl_spec("CDataSource_DeletingDestructor", 0x005b0410, [PL_FLAGS], presets=pl_source),
+    # The name: a C string in scratch (random bytes up to a terminator).
+    pl_spec("CDataSource_Attach", 0x005b04a0, [one_of(WORLD_BASE + SCRATCH + 0x4000), anything, anything],
+            presets=lambda rng, pool, args: [(SCRATCH + 0x4000 + rng.randrange(40), 0, 1)]),
+    pl_spec("CDataSource_Release", 0x005b0500, presets=pl_source),
+]
+
+
+# -- zlib_inflate_setup.cpp ---------------------------------------------------------
+#
+# A z_stream at ZL_STREAM whose zalloc / zfree are zlib's zcalloc / zcfree
+# (run as they are) over the probed calloc (blocks in the world, null an
+# eighth of the time) and free; an inflate state at ZL_STATE and a blocks
+# state at ZL_BLOCKS whose check function is adler32 (run) or null.
+
+ZL_STREAM = 0x3000
+ZL_STREAM_PTR = WORLD_BASE + ZL_STREAM
+ZL_STATE = 0x3100
+ZL_BLOCKS = 0x3200
+ZL_BLOCKS_PTR = WORLD_BASE + ZL_BLOCKS
+ZL_ZCALLOC = 0x005b1520
+ZL_ZCFREE = 0x005b1540
+ZL_ADLER32 = 0x005b13f0
+ZL_VERSION = 0x00733754   # "1.1.3" in S3.EXE
+
+ZL_CALLEES = {
+    0x00622199: (2, "cdecl", tp_malloc_result),   # calloc
+    0x00621B7E: (1, "cdecl", "probe"),            # free
+}
+
+
+def zl_stream(rng, pool, args):
+    return [
+        (ZL_STREAM + 0x1c, rng.choice((0, WORLD_BASE + ZL_STATE, WORLD_BASE + ZL_STATE, WORLD_BASE + ZL_STATE)), 4),
+        (ZL_STREAM + 0x20, rng.choice((ZL_ZCALLOC, ZL_ZCALLOC, 0)), 4),
+        (ZL_STREAM + 0x24, rng.choice((ZL_ZCFREE, ZL_ZCFREE, 0)), 4),
+        (ZL_STATE + 0x0c, rng.choice((0, 1, rng.getrandbits(32))), 4),
+        (ZL_STATE + 0x14, rng.choice((0, ZL_BLOCKS_PTR, ZL_BLOCKS_PTR)), 4),
+        (ZL_BLOCKS + 0x00, rng.choice((0, 1, 4, 5, 6, 7, 9)), 4),
+        (ZL_BLOCKS + 0x04, WORLD_BASE + SCRATCH, 4),
+        (ZL_BLOCKS + 0x0c, WORLD_BASE + SCRATCH + 0x100, 4),
+        (ZL_BLOCKS + 0x38, rng.choice((0, ZL_ADLER32)), 4),
+    ]
+
+
+def zl_spec(name, address, args, presets=zl_stream, **kwargs):
+    return Spec(name, address, "stdcall", args, presets=presets, callees=ZL_CALLEES, **kwargs)
+
+
+ZL_STREAM_ARG = one_of(ZL_STREAM_PTR)
+ZL_VERSION_ARG = lambda rng, pool: rng.choice((ZL_VERSION, ZL_VERSION, ZL_VERSION, 0, WORLD_BASE + SCRATCH))
+ZL_SIZE_ARG = one_of(0x38, 0x38, 0x38, 0x34)
+
+SPECS += [
+    zl_spec("zlib_inflate_trees_fixed", 0x005b2a70,
+            [scratch(0), scratch(1), scratch(2), scratch(3), ZL_STREAM_ARG], presets=None),
+    zl_spec("zlib_inflate_codes_new", 0x005b1b50, [anything, anything, anything, anything, ZL_STREAM_ARG]),
+    zl_spec("zlib_inflate_codes_free", 0x005b2340, [anything, ZL_STREAM_ARG], eax_mask=0),
+    zl_spec("zlib_inflate_blocks_reset", 0x005b0520, [one_of(ZL_BLOCKS_PTR), ZL_STREAM_ARG, one_of(0, WORLD_BASE + SCRATCH + 0x200)],
+            eax_mask=0),
+    zl_spec("zlib_inflate_blocks_new", 0x005b05a0, [ZL_STREAM_ARG, one_of(0, ZL_ADLER32),
+                                                     lambda rng, pool: rng.choice((1, 0x100, 0x8000, rng.randint(1, 0x8000)))],
+            max_cases=600),
+    zl_spec("zlib_inflate_blocks_free", 0x005b1360, [one_of(ZL_BLOCKS_PTR), ZL_STREAM_ARG]),
+    # inflateReset with a blocks state (without one, both crash in blocks_reset).
+    zl_spec("zlib_inflateReset", 0x005aa270, [one_of(0, ZL_STREAM_PTR, ZL_STREAM_PTR, ZL_STREAM_PTR)],
+            presets=lambda rng, pool, args: zl_stream(rng, pool, args) + [(ZL_STATE + 0x14, ZL_BLOCKS_PTR, 4)]),
+    zl_spec("zlib_inflateEnd", 0x005aa2c0, [one_of(0, ZL_STREAM_PTR, ZL_STREAM_PTR, ZL_STREAM_PTR)]),
+    zl_spec("zlib_inflateInit2_", 0x005aa310,
+            [one_of(0, ZL_STREAM_PTR, ZL_STREAM_PTR, ZL_STREAM_PTR, ZL_STREAM_PTR),
+             lambda rng, pool: rng.choice((15, 15, -15, 8, 7, 16, -8, -16, 9, rng.randint(-20, 20))),
+             ZL_VERSION_ARG, ZL_SIZE_ARG], max_cases=800,
+            # 0x5aa451: the inlined inflateEnd's blocks_free after a bad
+            # window size; dead, the state's blocks pointer was set to null
+            # just before.
+            exempt_blocks=(0x005aa451,)),
+    zl_spec("zlib_inflateInit_", 0x005aa480, [one_of(0, ZL_STREAM_PTR, ZL_STREAM_PTR), ZL_VERSION_ARG, ZL_SIZE_ARG],
+            max_cases=400),
+]

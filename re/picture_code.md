@@ -253,3 +253,32 @@ format code is in 0x5a8f20..0x5b50ad.
   png_read_destroy (only caller of inflateEnd), 0x5a6220
   png_init_read_transformations, 0x5a6c30 png_do_read_transformations.
 
+
+## Reimplementation (wip/images-r4, 2026-11-26)
+
+Our code: `src/s3re/thirdparty/` (structs in `png_struct.h`; specs in
+`tools/emutest/specs/thirdparty.py`). Done and verified: zlib's checksums,
+allocator and inflate setup/teardown (inflateInit_/Init2_/Reset/End,
+inflate_blocks_new/reset/free, inflate_codes_new/free,
+inflate_trees_fixed); libpng's error and memory functions, the CRC
+helpers, png_read_data / png_set_read_fn / png_default_read_data, the
+transformation setters, 14 per-row transforms and 12 pngset setters;
+PaintLib's CBmp / CAnyBmp / CPicDecoder / CDataSource / CTextException
+small members. Still original: inflate itself (inflate, inflate_blocks,
+inflate_codes, inflate_fast, huft_build, inflate_trees_bits/dynamic,
+inflate_flush), the chunk handlers, png_read_info/row/end, the row
+filters and interlacing, gamma, png_init_read_transformations /
+png_do_read_transformations, CPNGDecoder::DoDecode, CFileSource.
+
+Findings while reimplementing:
+- png_info layout (1.0.2): gamma +0x28, srgb_intent +0x2c, text +0x30..,
+  mod_time +0x3c (8 bytes copied), sig_bit +0x44, trans +0x4c,
+  trans_values +0x50, background +0x5a, oFFs +0x64..+0x6c, pHYs
+  +0x70..+0x78, hist +0x7c, cHRM floats +0x80..+0x9c, pCAL +0xa0...
+- png_chunk_warning's message buffer is 0x50 bytes but png_format_buffer
+  can write 82 (four non-letter chunk name bytes): the original overwrites
+  the low half of its return address (docs/todo/known-differences.md).
+- png_do_read_filler has 1.0.2's bugs (first pixel's filler not written
+  with FILLER_AFTER; 16-bit rows addressed as 8-bit; wrong rowbytes and,
+  grey before, pixel depth); reproduced.
+- png_set_sRGB_gAMA_and_cHRM stores gamma 0.45 (0x3ee66666), not .45455.

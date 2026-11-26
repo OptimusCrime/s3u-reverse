@@ -304,5 +304,9 @@ inline constexpr GameGlobal<const std::uint8_t[8]> g_pngSignature{0x7335e0};    
 inline constexpr GameGlobal<const std::uint8_t[256]> g_pngOneBppSwap{0x733884};  // png_do_packswap: bit order reversed
 inline constexpr GameGlobal<const std::uint8_t[256]> g_pngTwoBppSwap{0x733984};  // 2-bit pixels reversed
 inline constexpr GameGlobal<const std::uint8_t[256]> g_pngFourBppSwap{0x733a84}; // nibbles swapped
+inline constexpr GameGlobal<const std::uint32_t> g_zlibFixedBl{0x7348e0};         // 9 (inffixed.h fixed_bl)
+inline constexpr GameGlobal<const std::uint32_t> g_zlibFixedBd{0x7348e4};         // 5 (fixed_bd)
+inline constexpr GameGlobal<const std::uint8_t[0x1000]> g_zlibFixedTl{0x7348e8};  // fixed_tl: 512 inflate_huft
+inline constexpr GameGlobal<const std::uint8_t[0x100]> g_zlibFixedTd{0x7358e8};   // fixed_td: 32 inflate_huft
 
 }  // namespace s3re::game

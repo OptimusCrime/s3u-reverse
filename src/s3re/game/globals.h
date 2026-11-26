@@ -631,5 +631,7 @@ struct CrtFile {
     std::uint8_t opaque[0x20];  // MSVC 6 FILE
 };
 inline constexpr GameGlobal<CrtFile> g_crtStderr{0x7a5a90};
+// PaintLib's trace file name (operator new copy; ~CPicDecoder frees it).
+inline constexpr GameGlobal<char*> g_paintlibTraceFile{0x7e8bbc};
 
 }  // namespace s3re::game

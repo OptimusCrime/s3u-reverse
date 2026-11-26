@@ -581,5 +581,6 @@ inline constexpr GameText kPngBothRwFn2{0x733c40};      // "same structure.  Res
 inline constexpr GameText kPngReadError{0x733cb8};      // "Read Error"
 inline constexpr GameText kPngCrcError{0x733dc8};       // "CRC error"
 inline constexpr GameText kPngWidthTooLarge{0x733bf0};
+inline constexpr GameText kZlibVersion{0x733754};       // "1.1.3" (ZLIB_VERSION, inflateInit2_ checks its first character)
 inline constexpr GameText kPngRowbytesOverflow{0x734868};  // "Width too large to process image data; rowbytes will overflow."  // "Width too large for libpng to process image data."
 }  // namespace s3re::game::texts
