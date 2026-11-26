@@ -157,6 +157,7 @@ add_library(s3re SHARED
     game/logic/logic_music.cpp
     game/logic/logic_thread.cpp
     game/logic/logic_thread_dtor.cpp
+    game/logic/message_lines.cpp
     game/logic/logic_thread_members.cpp
     game/logic/objectives.cpp
     game/logic/ui_overlays.cpp

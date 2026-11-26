@@ -45,6 +45,17 @@
 //   byte is below 0xfe is shared (x without buffer: the static empty string
 //   0x655dc8, whose count byte 0x655dc7 is then incremented); otherwise the
 //   inlined _Grow(count, true) and a copy of the characters.
+// WString_Erase (0x00428730; erase(pos, n) ret 8, EAX = this; wip/logic-r4):
+//   std::_Xran when pos > len; then an inlined _Split that differs from
+//   0x428af0: a shared buffer loses a reference, the string is emptied,
+//   and with _Grow(wcslen(text), true) (wcslen through the CRT's 0x61fe1b)
+//   the text is copied back (UI_CopyWords 0x418fb0, _Eos 0x428880); n is
+//   clamped to len - pos; for n > 0 the tail moves down (word copy,
+//   backwards if the ranges overlap that way, which they can't), _Xlen
+//   above 0x7ffffffd, and the inlined _Grow(len - n, false): a shared
+//   buffer is emptied for 0 (one reference less, _Tidy(false) 0x4286d0) or
+//   copied (_Copy), an own one truncated for 0 or grown (_Copy) when its
+//   capacity is below the new length; then len and the terminating zero.
 
 #include "msvc6/game_heap.h"
 #include "msvc6/string.h"
@@ -320,6 +331,75 @@ void __fastcall WString_Split(WString* self, void* /*edx*/) {
     self->ptr[length] = 0;
 }
 
+S3RE_HOOK(0x00428730, WString_Erase, WStringEraseFn, Original_WString_Erase, WString_Erase);
+
+// Purpose: Standard wide string: removes n characters at pos (the chat
+// input's backspace and the message lines).
+WString* __fastcall WString_Erase(WString* self, void* /*edx*/, std::uint32_t pos, std::uint32_t n) {
+    if (self->len < pos) {
+        GameXran();
+    }
+    std::uint16_t* const shared = self->ptr;
+    if (IsShared(shared)) {
+        --RefCount(shared);
+        self->ptr = nullptr;
+        self->len = 0;
+        self->res = 0;
+        using WcslenFn = std::uint32_t(__cdecl*)(const std::uint16_t*);
+        const std::uint32_t length = reinterpret_cast<WcslenFn>(0x0061fe1b)(shared);
+        if (CallGrow(self, length, 1)) {
+            using CopyWordsFn = void(__fastcall*)(std::uint16_t*, const std::uint16_t*, std::uint32_t);
+            reinterpret_cast<CopyWordsFn>(0x00418fb0)(self->ptr, shared, length);
+            CallEos(self, length);
+        }
+    }
+    const std::uint32_t rest = self->len - pos;
+    if (rest < n) {
+        n = rest;
+    }
+    if (n == 0) {
+        return self;
+    }
+    std::uint32_t tail = rest - n;
+    const std::uint16_t* from = self->ptr + pos + n;
+    std::uint16_t* to = self->ptr + pos;
+    if (from < to && to < from + tail) {
+        // (backwards; the source lies above the target, so never taken)
+        from += tail;
+        to += tail;
+        while (tail-- > 0) {
+            *--to = *--from;
+        }
+    } else {
+        while (tail-- > 0) {
+            *to++ = *from++;
+        }
+    }
+    const std::uint32_t length = self->len - n;
+    if (length > kMaxSize) {
+        GameXlen();
+    }
+    if (IsShared(self->ptr)) {
+        if (length == 0) {
+            --RefCount(self->ptr);
+            CallTidy(self, 0);
+            return self;
+        }
+        CallCopy(self, length);
+    } else if (length == 0) {
+        if (self->ptr != nullptr) {
+            self->len = 0;
+            self->ptr[0] = 0;
+        }
+        return self;
+    } else if (self->res < length) {
+        CallCopy(self, length);
+    }
+    self->len = length;
+    self->ptr[length] = 0;
+    return self;
+}
+
 S3RE_HOOK(0x00428400, WString_AssignSubstr, WStringAssignSubstrFn, Original_WString_AssignSubstr,
           WString_AssignSubstr);
 
@@ -514,6 +594,7 @@ struct WStringOps {
     WStringGrowFn grow;
     WStringSplitFn split;
     WStringAssignSubstrFn assignSubstr;
+    WStringEraseFn erase;
 };
 
 // A deliberately wrong assign(x, pos, n): never shares the buffer.
@@ -569,7 +650,7 @@ bool SameWStrings(test::Context& ctx, const WString* a, const WString* b) {
 // compare the originals on their own.)
 void CompareWStringOperations(test::Context& ctx, const WStringOps& candidate, int sequences) {
     const WStringOps original{Original_WString_Tidy, Original_WString_Copy, Original_WString_Grow,
-                              Original_WString_Split, Original_WString_AssignSubstr};
+                              Original_WString_Split, Original_WString_AssignSubstr, Original_WString_Erase};
     std::vector<Source> sources(kSources);
     for (int k = 0; k < kSources; ++k) {
         const std::uint32_t length = ctx.rng().Below(k < 3 ? 3 : 80);
@@ -587,7 +668,7 @@ void CompareWStringOperations(test::Context& ctx, const WStringOps& candidate, i
         WString a[kWSlots] = {};
         WString b[kWSlots] = {};
         for (int step = 0; step < 40; ++step) {
-            const int op = static_cast<int>(ctx.rng().Below(8));
+            const int op = static_cast<int>(ctx.rng().Below(candidate.erase != nullptr ? 10 : 8));
             const int i = static_cast<int>(ctx.rng().Below(kWSlots));
             const int j = static_cast<int>(ctx.rng().Below(kWSlots));
             const WString& source = sources[ctx.rng().Below(kSources)].string;
@@ -625,6 +706,14 @@ void CompareWStringOperations(test::Context& ctx, const WStringOps& candidate, i
                     original.tidy(&a[i], nullptr, 1);
                     candidate.tidy(&b[i], nullptr, 1);
                     break;
+                case 8:
+                case 9: {
+                    const std::uint32_t pos = ctx.rng().Below(a[i].len + 1);
+                    const std::uint32_t count = ctx.rng().Chance(1, 4) ? 0xFFFFFFFFu : ctx.rng().Below(a[i].len + 3);
+                    resultA = original.erase(&a[i], nullptr, pos, count) == &a[i];
+                    resultB = candidate.erase(&b[i], nullptr, pos, count) == &b[i];
+                    break;
+                }
                 case 7:
                     // Extra references nobody holds (only leaks): reaches the
                     // shared-buffer branches and the "count 0xfe: copy" rule.
@@ -657,14 +746,37 @@ S3RE_TEST(WString_Members_MatchOriginal) {
 }
 
 S3RE_TEST(WString_Operations_MatchOriginal) {
-    CompareWStringOperations(ctx, {&WString_Tidy, &WString_Copy, &WString_Grow, &WString_Split, &WString_AssignSubstr},
+    CompareWStringOperations(ctx, {&WString_Tidy, &WString_Copy, &WString_Grow, &WString_Split, &WString_AssignSubstr,
+                                   &WString_Erase},
                              400);
 }
 
 S3RE_TEST(WString_Operations_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
-    CompareWStringOperations(probe, {&WString_Tidy, &WString_Copy, &WString_Grow, &WString_Split, &WrongAssignSubstr},
+    CompareWStringOperations(probe, {&WString_Tidy, &WString_Copy, &WString_Grow, &WString_Split, &WrongAssignSubstr,
+                                     nullptr},
                              50);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+namespace {
+
+// Wrong: erase(pos, n) without clamping n to the rest (removes up to the end anyway, but the
+// length is reduced by the unclamped count).
+WString* __fastcall WrongErase(WString* self, void* edx, std::uint32_t pos, std::uint32_t n) {
+    if (n != 0xFFFFFFFFu && n > self->len - pos && self->len - pos > 0) {
+        return WString_Erase(self, edx, pos, self->len - pos - 1);
+    }
+    return WString_Erase(self, edx, pos, n);
+}
+
+}  // namespace
+
+S3RE_TEST(WString_Erase_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareWStringOperations(probe, {&WString_Tidy, &WString_Copy, &WString_Grow, &WString_Split,
+                                     &WString_AssignSubstr, &WrongErase},
+                             100);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

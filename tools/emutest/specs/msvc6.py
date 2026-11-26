@@ -411,6 +411,13 @@ SPECS += [
     Spec("WString_AssignSubstr", 0x00428400, "thiscall",
          [one_of(STRING_SELF_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR), string_count, string_count],
          presets=wide_string_world, globals=wstring_null_count, exempt_blocks=(0x00428442, 0x004284a0)),
+    # WString_Erase (wip/logic-r4). Dead: the backwards word copy 0x4287cc..
+    # 0x4287e4 (the source lies above the target); _Xlen 0x42880a (a length
+    # above 0x7ffffffd: the word move before it runs off the buffer first);
+    # the second _Grow's shared-buffer branch 0x428821/0x428825 (the inlined
+    # _Split at the start already gave the string its own buffer).
+    Spec("WString_Erase", 0x00428730, "thiscall", [string_count, string_count], presets=wide_string_world,
+         exempt_blocks=(0x004287cc, 0x004287d4, 0x004287e4, 0x0042880a, 0x00428821, 0x00428825)),
 ]
 
 

@@ -1,25 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1258" width="1600" height="1258" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <rect width="1600" height="1258" fill="#ffffff"/>
-<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">36.1%</text>
+<text x="24" y="66" font-size="56" font-weight="600" fill="#1e2924">36.2%</text>
 <text x="214" y="62" font-size="28" fill="#1e2924">of the game code is reimplemented and verified against the original</text>
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="382.3" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 27.2%</title></rect>
 <text x="361.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">27.2%</text>
-<rect x="552.3" y="100" width="125.8" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.9%</title></rect>
-<text x="615.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.9%</text>
-<rect x="678" y="100" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
-<rect x="678.2" y="100" width="250" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 17.8%</title></rect>
-<text x="803.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">17.8%</text>
+<rect x="552.3" y="100" width="126.9" height="40" fill="#4f8fc0"><title>Verified by tests only: 9.0%</title></rect>
+<text x="615.7" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">9.0%</text>
+<rect x="679.1" y="100" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<rect x="679.3" y="100" width="248.9" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 17.7%</title></rect>
+<text x="803.7" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">17.7%</text>
 <rect x="928.2" y="100" width="647.8" height="40" fill="#e8a39b"><title>Not understood yet: 46.1%</title></rect>
 <text x="1252.1" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">46.1%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="273.7" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 19.5%</title></rect>
 <text x="306.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">19.5%</text>
-<rect x="443.7" y="154" width="94.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.7%</title></rect>
-<text x="490.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.7%</text>
-<rect x="537.9" y="154" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
-<rect x="538" y="154" width="483.2" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 34.4%</title></rect>
-<text x="779.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">34.4%</text>
+<rect x="443.7" y="154" width="95" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.8%</title></rect>
+<text x="491.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.8%</text>
+<rect x="538.7" y="154" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<rect x="538.8" y="154" width="482.4" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 34.3%</title></rect>
+<text x="780" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">34.3%</text>
 <rect x="1021.2" y="154" width="554.8" height="40" fill="#e8a39b"><title>Not understood yet: 39.5%</title></rect>
 <text x="1298.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">39.5%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
@@ -29,7 +29,7 @@
 <rect x="1578.4" y="216" width="16" height="16" fill="#e8a39b"/><text x="1602.4" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1108.6" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 36.1% verified (27.2% in a whole game)</text>
+<text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 36.2% verified (27.2% in a whole game)</text>
 <g><title>(free functions): 915 functions</title><rect x="2" y="19" width="513.7" height="667.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="4" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="2.5" y="30.5" width="256" height="188.5" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>Render_sub_4b4d00 @ 0x004b4d00
@@ -2466,8 +2466,8 @@
 608 bytes — Identified (purpose known)</title></rect>
 <rect x="880.6" y="180.8" width="17.6" height="20" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ExecuteCommands_tail @ 0x0053b839
 535 bytes — Identified (purpose known)</title></rect>
-<rect x="898.1" y="180.8" width="17.3" height="20" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ShowMessage @ 0x0051e440
-528 bytes — Identified (purpose known)</title></rect>
+<rect x="898.1" y="180.8" width="17.3" height="20" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ShowMessage @ 0x0051e440
+528 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="915.5" y="180.8" width="16.8" height="20" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::DrawWorkAreaOverlay @ 0x00523840
 512 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="932.3" y="180.8" width="15.7" height="20" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::SelectSettlersOfType @ 0x00542b60
@@ -2482,8 +2482,8 @@
 416 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="914" y="200.8" width="17.4" height="15.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::DrawBuildingRouteOverlay @ 0x005236b0
 400 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="931.3" y="200.8" width="16.7" height="15.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ChatInputKey @ 0x0051e160
-384 bytes — Identified (purpose known)</title></rect>
+<rect x="931.3" y="200.8" width="16.7" height="15.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ChatInputKey @ 0x0051e160
+384 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="895.9" y="215.9" width="14.6" height="15.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::ChatInputChar @ 0x0051e2e0
 352 bytes — Identified (purpose known)</title></rect>
 <rect x="895.9" y="231.7" width="14.6" height="15.1" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CLogicThread::DrawOverlayLine @ 0x00523560
@@ -4155,8 +4155,8 @@
 528 bytes — Verified, and identical in a whole-game check</title></rect>
 <rect x="674.7" y="761.3" width="16.3" height="17" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::wstring_substr @ 0x00541410
 416 bytes — Identified (purpose known)</title></rect>
-<rect x="674.7" y="778.3" width="16.3" height="13.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::erase @ 0x00428730
-336 bytes — Identified (purpose known)</title></rect>
+<rect x="674.7" y="778.3" width="16.3" height="13.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::erase @ 0x00428730
+336 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="691" y="739.7" width="12.8" height="17.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::concat_wcs_left @ 0x005418a0
 336 bytes — Identified (purpose known)</title></rect>
 <rect x="703.8" y="739.7" width="12.8" height="17.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>std::wstring::assign_copy @ 0x00523a40

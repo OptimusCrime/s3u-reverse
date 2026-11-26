@@ -2375,3 +2375,90 @@ SPECS += [
     Spec("CLogicThread_DeletingDestroy", 0x0053c7a0, "fastcall", [thread_self, anything, below(4)],
          callees={0x0053c7d0: (0, "thiscall", "probe")}),
 ]
+
+
+# -- wip/logic-r4: ShowMessage / ChatInputKey (message_lines.cpp) ------------
+# The 20 message lines' texts, the chat text and the argument get wide
+# string buffers in the world (MSG_BUFFERS + 0x100 * k: count byte at +1,
+# characters from +2) or none; some share a buffer; counts random (0, small,
+# 0xfd.., frozen). message_count 20 (sometimes 1..30), message_index 0..19,
+# the prompt length small. PushUiFeedback probed (verified).
+MSG_BUFFERS = 0x3a000
+
+
+def msg_buffer(rng, fields, k):
+    at = MSG_BUFFERS + 0x100 * k
+    length = rng.randrange(30)
+    fields.append((at + 1, rng.choice([0, 0, 1, 2, 0xfd, 0xfe, 0xff]), 1))
+    for i in range(length):
+        fields.append((at + 2 + 2 * i, rng.randint(1, 0xffff), 2))
+    fields.append((at + 2 + 2 * length, 0, 2))
+    return WORLD_BASE + at + 2, length
+
+
+def msg_string(rng, fields, at, buffers):
+    if rng.random() < 0.25:
+        fields += [(at + 4, 0, 4), (at + 8, 0, 4), (at + 0xc, 0, 4)]
+        return
+    ptr, length = rng.choice(buffers)
+    fields += [(at + 4, ptr, 4), (at + 8, length, 4), (at + 0xc, length + rng.randrange(4), 4)]
+
+
+def msg_state(rng, pool, args):
+    fields = []
+    buffers = [msg_buffer(rng, fields, k) for k in range(1 + rng.randrange(8))]
+    for line in range(20):
+        msg_string(rng, fields, LOGIC_THREAD + 0x414 + 0x1c * line, buffers)
+    msg_string(rng, fields, LOGIC_THREAD + 0x3f8, buffers)
+    fields += [(LOGIC_THREAD + 0x644, 20 if rng.random() < 0.85 else rng.randint(1, 30), 4),
+               (LOGIC_THREAD + 0x648, rng.randrange(20), 4),
+               (LOGIC_THREAD + 0x40c, rng.choice([0, rng.randrange(12)]), 4)]
+    # The argument (ShowMessage): its fields are the stack arguments 0..3;
+    # its buffer, when it has one, is one of the buffers (MSG_ARG_BUFFER).
+    return fields
+
+
+def msg_argument(rng, pool):
+    return rng.getrandbits(32)
+
+
+def msg_text_ptr(rng, pool):
+    # One of the first buffers (their slots exist when msg_state made them)
+    # or none.
+    return rng.choice([0, WORLD_BASE + MSG_BUFFERS + 2])
+
+
+def msg_text_len(rng, pool):
+    return rng.randrange(30)
+
+
+MSG_CALLEES = {0x0053f560: (1, "thiscall", "probe")}  # CLogicThread::PushUiFeedback
+
+
+def msg_null_count(rng, pool, args):
+    """The count byte 0x655dc7 before the static empty wide string 0x655dc8."""
+    return [(0x00655dc7, rng.choice([0, 0, 1, 0xfd, 0xfe, 0xff]), 1)]
+
+SPECS += [
+    # Dead: the self-assignment branch 0x51e499..0x51e4f7 (the text is a
+    # stack argument, never the line's own string) and 0x51e48f (a length
+    # above npos). The static empty string's count byte is random
+    # (msg_null_count) so that a text without buffer is also copied.
+    Spec("CLogicThread_ShowMessage", 0x0051e440, "logicthread",
+         [msg_argument, msg_text_ptr, msg_text_len, msg_text_len,
+          lambda rng, pool: rng.choice([0, 5, 19, 20, 21, 249, 250, 251, 254, rng.getrandbits(32)])],
+         eax_mask=0, presets=msg_state, callees=MSG_CALLEES, globals=msg_null_count,
+         exempt_blocks=(0x0051e48f, 0x0051e499, 0x0051e4a2, 0x0051e4a7, 0x0051e4b7, 0x0051e4b9, 0x0051e4bd, 0x0051e4e4,
+                        0x0051e4ec)),
+    # Dead: the self-assignment branch 0x51e200 (the local is never the
+    # chat); 0x51e1f6 (a length above npos); the local is a fresh copy of
+    # length - 1 characters (count byte 0), so the chat always shares it
+    # when it isn't empty: the null-buffer branches 0x51e224/0x51e240, the
+    # copying branch 0x51e26e..0x51e27b and the local's free 0x51e2aa
+    # (sharing raised its count to 1) can't run.
+    Spec("CLogicThread_ChatInputKey", 0x0051e160, "logicthread",
+         [lambda rng, pool: rng.choice([8, 8, 8, 13, rng.randrange(300), rng.getrandbits(32)])],
+         eax_mask=0xFF, presets=msg_state,
+         exempt_blocks=(0x0051e1f6, 0x0051e200, 0x0051e224, 0x0051e240, 0x0051e26e, 0x0051e276, 0x0051e27b,
+                        0x0051e2aa)),
+]

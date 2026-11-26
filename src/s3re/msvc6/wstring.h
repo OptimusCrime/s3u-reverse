@@ -46,4 +46,9 @@ WString* __fastcall WString_AssignSubstr(WString* self, void* edx, const WString
                                          std::uint32_t n);
 extern WStringAssignSubstrFn Original_WString_AssignSubstr;
 
+// erase(pos, n) (0x00428730), EAX = this.
+using WStringEraseFn = WString*(__fastcall*)(WString* self, void* edx, std::uint32_t pos, std::uint32_t n);
+WString* __fastcall WString_Erase(WString* self, void* edx, std::uint32_t pos, std::uint32_t n);
+extern WStringEraseFn Original_WString_Erase;
+
 }  // namespace s3re::msvc6
