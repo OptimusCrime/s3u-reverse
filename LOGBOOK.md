@@ -17,15 +17,10 @@ to `docs/todo/`). The archive is for searching, not for reading whole.
 batches (reimplement + verify), less cleanup; cleanup only where it blocks
 a batch. The user wants each round followed by the next right away.**
 
-**First thing next session: round 3's evidence on main.** Round 3
-(wip/framework-errors, wip/settings-load, wip/ddraw-render, wip/ui-gdi)
-is merged and passes `--test` 972/972, `--self-test` 34/34 and the quick
-`run.py --changed` (one mismatch: GameSettings_LoadSaveGame, unverified,
-spec unfinished). Still to run: the full emulator suite `--full
---require-coverage` and the whole-game checks (check_save slots 1-3,
-check_random_map 384,0 and 448,3, scripted-seed127 replay, call counts).
+**Round 3's evidence is complete** (full suite and whole-game checks,
+see its session entry).
 
-Then, the round-3 leftovers (details in their backlog files):
+Next, the round-3 leftovers (details in their backlog files):
 1. GameSettings::LoadSaveGame 0x432b00 and CGameData::InitPlayerInfo
    0x4fd0d0 are S3RE_HOOK_UNVERIFIED: finish their emulator specs
    (LoadSaveGame: team-vector preset fixed, rerun) and switch to verified.
@@ -160,8 +155,15 @@ worktree (s3re-merge-r3) while round 2's whole-game checks ran; verified
   clean; `--test` 972/972; `--self-test` 34/34 + RAM check "separate";
   quick `run.py --changed --require-coverage` (all 1718 specs selected):
   0 mismatches except the unverified LoadSaveGame, 13 slow specs short of
-  coverage in quick mode. Full suite and whole-game checks not run yet
-  (first step next session).
+  coverage in quick mode.
+- Evidence completed afterwards (same day, main at e5d3a50): full emulator
+  suite `--full --require-coverage` (Release, 15 workers, 31 min): 1718
+  specs, 0 mismatches and 0 incomplete coverage except the unverified
+  GameSettings_LoadSaveGame (77/132 blocks, spec unfinished); whole-game
+  checks against the original (Debug): check_save slots 1-3 (2,000
+  ticks), check_random_map 384,0 and 448,3 (1,000 ticks), scripted-seed127
+  replay (3,000 ticks): all identical; call counts recorded. Identical in
+  a whole-game check: 935 -> 1034.
 
 ### 2026-11-26 (56, round 2): AI Step, sound effects, UI controls, settings
 
