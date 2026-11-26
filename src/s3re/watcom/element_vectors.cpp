@@ -38,11 +38,29 @@
 //   0x004290f0  0x20  CListView::CColumn                      WCBareVectorBase<CListView::CColumn>
 //   0x00428070  0x14  CListView::CLine (~CLine 0x4277d0)      WCValOrderedVector<CListView::CLine>
 //   0x00429480  0x14  CListView::CLine                        WCBareVectorBase<CListView::CLine>
+// Elements whose destructor only destroys their string members (std::string
+// 16 bytes; ~string inlined: erase(0, npos), then the buffer released, as
+// ~string 0x401b60 does), in the order given (wip/watcom-r6):
+//   0x004629a0  0x60  strings at +0x50          WCValSortedVector<DirectX::CRunningSession>
+//   0x00463730  0x60  strings at +0x50          WCBareVectorBase<DirectX::CRunningSession>
+//   0x005bde60  0x60  strings at +0x50          WCBareVectorBase<DirectX::CRunningSession>
+//   0x005dd760  0x18  strings at +0x8           WCValOrderedVector<Lobby::CImageDescription>
+//   0x005dd8a0  0x24  strings at +0x14          WCValOrderedVector<Lobby::CSocketAddress>
+//   0x005dd9c0  0x20  strings at +0x10, +0x0    WCValOrderedVector<Lobby::CLMLobbyServerList::CServerData>
+//   0x005df7a0  0x20  strings at +0x10, +0x0    WCBareVectorBase<Lobby::CLMLobbyServerList::CServerData>
+//   0x005ddba0  0x20  strings at +0x10, +0x0    WCValSortedVector<LobbyClient::priv::CLobbyServer>
+//   0x005e0390  0x20  strings at +0x10, +0x0    WCBareVectorBase<LobbyClient::priv::CLobbyServer>
+//   0x004633d0  0x60  strings at +0x50          WCBareVectorBase<DirectX::CRunningSession>
+//   0x005de5e0  0x18  strings at +0x8           WCBareVectorBase<Lobby::CImageDescription>
+//   0x005deb60  0x24  strings at +0x14          WCBareVectorBase<Lobby::CSocketAddress>
+//   0x005dff70  0x20  strings at +0x10, +0x0    WCBareVectorBase<LobbyClient::priv::CLobbyServer>
+//   0x005b7ac0  0x30  strings at +0x20, +0x10   WCValOrderedVector<DirectX::CDirectDrawDevice>
 
 #include "watcom/vector_base.h"
 
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/string.h"
 #include "test/callee_stub.h"
 #include "test/difftest.h"
 
@@ -88,6 +106,21 @@ constexpr std::uint32_t kChatMessageSize = 0x20;
 constexpr std::uint32_t kGenericMessageSize = 0x14;
 constexpr std::uint32_t kPrivateChatSize = 0x17c;
 constexpr std::uint32_t kConnectionShortcutSize = 0x40;
+
+constexpr std::uint32_t kRunningSessionSize = 0x60;
+constexpr std::uint32_t kImageDescriptionSize = 0x18;
+constexpr std::uint32_t kSocketAddressSize = 0x24;
+constexpr std::uint32_t kServerDataSize = 0x20;
+constexpr std::uint32_t kLobbyServerSize = 0x20;
+constexpr std::uint32_t kDirectDrawDeviceSize = 0x30;
+
+// Each element's string members destroyed in the given order.
+template <std::uint32_t... StringOffsets>
+std::uint32_t DestroyStringElementVector(VectorBase* self, std::uint32_t vtable, std::uint32_t elementSize) {
+    return DestroyVector(self, vtable, vt::kWCExcept, elementSize, [](std::uint32_t element) {
+        (msvc6::String_Destroy(reinterpret_cast<msvc6::String*>(element + StringOffsets), nullptr), ...);
+    });
+}
 
 }  // namespace
 
@@ -175,6 +208,52 @@ std::uint32_t __fastcall ElementVectorDestructor_429480(VectorBase* self, void*)
     return DestroyDirectElementVector<kDestroyLine>(self, vt::kWCBareVectorBase_CLine, kLineSize);
 }
 
+// Purpose: Destructors of the network's running sessions, the lobby's image
+// descriptions, socket addresses and server lists and the display devices:
+// destroy each element's strings, then free the block.
+std::uint32_t __fastcall ElementVectorDestructor_4629a0(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x50>(self, vt::kWCBareVectorBase_CRunningSession, kRunningSessionSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_463730(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x50>(self, vt::kWCBareVectorBase_CRunningSession, kRunningSessionSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5bde60(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x50>(self, vt::kWCBareVectorBase_CRunningSession, kRunningSessionSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5dd760(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x8>(self, vt::kWCBareVectorBase_CImageDescription, kImageDescriptionSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5dd8a0(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x14>(self, vt::kWCBareVectorBase_CSocketAddress, kSocketAddressSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5dd9c0(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x10, 0x0>(self, vt::kWCBareVectorBase_CServerData, kServerDataSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5df7a0(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x10, 0x0>(self, vt::kWCBareVectorBase_CServerData, kServerDataSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5ddba0(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x10, 0x0>(self, vt::kWCBareVectorBase_CLobbyServer, kLobbyServerSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5e0390(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x10, 0x0>(self, vt::kWCBareVectorBase_CLobbyServer, kLobbyServerSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_4633d0(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x50>(self, vt::kWCBareVectorBase_CRunningSession, kRunningSessionSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5de5e0(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x8>(self, vt::kWCBareVectorBase_CImageDescription, kImageDescriptionSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5deb60(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x14>(self, vt::kWCBareVectorBase_CSocketAddress, kSocketAddressSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5dff70(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x10, 0x0>(self, vt::kWCBareVectorBase_CLobbyServer, kLobbyServerSize);
+}
+std::uint32_t __fastcall ElementVectorDestructor_5b7ac0(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x20, 0x10>(self, vt::kWCBareVectorBase_CDirectDrawDevice, kDirectDrawDeviceSize);
+}
+
 S3RE_HOOK(0x0044c4e0, ElementVectorDestructor_44c4e0, ElementVectorDestructorFn,
           Original_ElementVectorDestructor_44c4e0, ElementVectorDestructor_44c4e0);
 S3RE_HOOK(0x0044d290, ElementVectorDestructor_44d290, ElementVectorDestructorFn,
@@ -227,6 +306,34 @@ S3RE_HOOK(0x00428070, ElementVectorDestructor_428070, ElementVectorDestructorFn,
           Original_ElementVectorDestructor_428070, ElementVectorDestructor_428070);
 S3RE_HOOK(0x00429480, ElementVectorDestructor_429480, ElementVectorDestructorFn,
           Original_ElementVectorDestructor_429480, ElementVectorDestructor_429480);
+S3RE_HOOK(0x004629a0, ElementVectorDestructor_4629a0, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_4629a0, ElementVectorDestructor_4629a0);
+S3RE_HOOK(0x00463730, ElementVectorDestructor_463730, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_463730, ElementVectorDestructor_463730);
+S3RE_HOOK(0x005bde60, ElementVectorDestructor_5bde60, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5bde60, ElementVectorDestructor_5bde60);
+S3RE_HOOK(0x005dd760, ElementVectorDestructor_5dd760, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5dd760, ElementVectorDestructor_5dd760);
+S3RE_HOOK(0x005dd8a0, ElementVectorDestructor_5dd8a0, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5dd8a0, ElementVectorDestructor_5dd8a0);
+S3RE_HOOK(0x005dd9c0, ElementVectorDestructor_5dd9c0, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5dd9c0, ElementVectorDestructor_5dd9c0);
+S3RE_HOOK(0x005df7a0, ElementVectorDestructor_5df7a0, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5df7a0, ElementVectorDestructor_5df7a0);
+S3RE_HOOK(0x005ddba0, ElementVectorDestructor_5ddba0, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5ddba0, ElementVectorDestructor_5ddba0);
+S3RE_HOOK(0x005e0390, ElementVectorDestructor_5e0390, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5e0390, ElementVectorDestructor_5e0390);
+S3RE_HOOK(0x004633d0, ElementVectorDestructor_4633d0, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_4633d0, ElementVectorDestructor_4633d0);
+S3RE_HOOK(0x005de5e0, ElementVectorDestructor_5de5e0, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5de5e0, ElementVectorDestructor_5de5e0);
+S3RE_HOOK(0x005deb60, ElementVectorDestructor_5deb60, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5deb60, ElementVectorDestructor_5deb60);
+S3RE_HOOK(0x005dff70, ElementVectorDestructor_5dff70, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5dff70, ElementVectorDestructor_5dff70);
+S3RE_HOOK(0x005b7ac0, ElementVectorDestructor_5b7ac0, ElementVectorDestructorFn,
+          Original_ElementVectorDestructor_5b7ac0, ElementVectorDestructor_5b7ac0);
 
 // ---------------------------------------------------------------------------
 // Tests: random objects with a block from the game's operator new (or
@@ -351,11 +458,124 @@ std::uint32_t __fastcall WrongLineDestructor(VectorBase* self, void*) {
     return DestroyDirectElementVector<kDestroyLine>(self, vt::kWCBareVectorBase_CLine, kColumnSize);
 }
 
+
+// The string-element destructors: each element's strings are null or share
+// a buffer (count byte 1..0xfd, so the destructor copies, frees the copy
+// and only decrements the shared buffer's count; the buffers outlive the
+// block). Compared: the objects' bytes, EAX without a block, and every
+// shared buffer's bytes.
+struct StringElementPair {
+    ElementVectorDestructorFn original;
+    ElementVectorDestructorFn ours;
+    std::uint32_t address;
+    std::uint32_t elementSize;
+    std::uint32_t offsets[2];
+    int strings;
+};
+
+const StringElementPair kStringElementPairs[] = {
+    {Original_ElementVectorDestructor_4629a0, &ElementVectorDestructor_4629a0, 0x4629a0, kRunningSessionSize, {0x50}, 1},
+    {Original_ElementVectorDestructor_463730, &ElementVectorDestructor_463730, 0x463730, kRunningSessionSize, {0x50}, 1},
+    {Original_ElementVectorDestructor_5bde60, &ElementVectorDestructor_5bde60, 0x5bde60, kRunningSessionSize, {0x50}, 1},
+    {Original_ElementVectorDestructor_5dd760, &ElementVectorDestructor_5dd760, 0x5dd760, kImageDescriptionSize, {0x8}, 1},
+    {Original_ElementVectorDestructor_5dd8a0, &ElementVectorDestructor_5dd8a0, 0x5dd8a0, kSocketAddressSize, {0x14}, 1},
+    {Original_ElementVectorDestructor_5dd9c0, &ElementVectorDestructor_5dd9c0, 0x5dd9c0, kServerDataSize, {0x10, 0x0}, 2},
+    {Original_ElementVectorDestructor_5df7a0, &ElementVectorDestructor_5df7a0, 0x5df7a0, kServerDataSize, {0x10, 0x0}, 2},
+    {Original_ElementVectorDestructor_5ddba0, &ElementVectorDestructor_5ddba0, 0x5ddba0, kLobbyServerSize, {0x10, 0x0}, 2},
+    {Original_ElementVectorDestructor_5e0390, &ElementVectorDestructor_5e0390, 0x5e0390, kLobbyServerSize, {0x10, 0x0}, 2},
+    {Original_ElementVectorDestructor_4633d0, &ElementVectorDestructor_4633d0, 0x4633d0, kRunningSessionSize, {0x50}, 1},
+    {Original_ElementVectorDestructor_5de5e0, &ElementVectorDestructor_5de5e0, 0x5de5e0, kImageDescriptionSize, {0x8}, 1},
+    {Original_ElementVectorDestructor_5deb60, &ElementVectorDestructor_5deb60, 0x5deb60, kSocketAddressSize, {0x14}, 1},
+    {Original_ElementVectorDestructor_5dff70, &ElementVectorDestructor_5dff70, 0x5dff70, kLobbyServerSize, {0x10, 0x0}, 2},
+    {Original_ElementVectorDestructor_5b7ac0, &ElementVectorDestructor_5b7ac0, 0x5b7ac0, kDirectDrawDeviceSize, {0x20, 0x10}, 2},
+};
+
+constexpr std::uint32_t kSharedBytes = 24;  // count byte, up to 20 characters, the zero
+
+struct StringRun {
+    std::uint32_t eax = 0;
+    std::vector<std::uint8_t> shared;  // the shared buffers' bytes afterwards
+};
+
+StringRun RunStringElements(ElementVectorDestructorFn fn, VectorBase vector, const StringElementPair& pair,
+                            test::Rng plan, bool block) {
+    StringRun run;
+    std::vector<std::uint8_t*> buffers;
+    if (block) {
+        const std::uint32_t bytes = kMaxElements * pair.elementSize;
+        auto* data = static_cast<std::uint8_t*>(msvc6::GameOperatorNew(bytes));
+        plan.Fill(data, bytes);
+        for (int k = 0; k < kMaxElements; ++k) {
+            for (int m = 0; m < pair.strings; ++m) {
+                auto* string = reinterpret_cast<msvc6::String*>(data + k * pair.elementSize + pair.offsets[m]);
+                if (plan.Chance(1, 3)) {
+                    string->ptr = nullptr;
+                    continue;
+                }
+                auto* buffer = static_cast<std::uint8_t*>(msvc6::GameOperatorNew(kSharedBytes));
+                std::memset(buffer, 0, kSharedBytes);  // (the bytes past the text are compared too)
+                const std::uint32_t len = plan.Below(21);
+                buffer[0] = static_cast<std::uint8_t>(1 + plan.Below(0xfd));
+                for (std::uint32_t c = 0; c < len; ++c) {
+                    buffer[1 + c] = static_cast<std::uint8_t>('a' + plan.Below(26));
+                }
+                buffer[1 + len] = 0;
+                string->ptr = reinterpret_cast<char*>(buffer + 1);
+                string->len = len;
+                string->res = len + plan.Below(3);
+                buffers.push_back(buffer);
+            }
+        }
+        vector.data = reinterpret_cast<std::uintptr_t>(data);
+    } else {
+        vector.data = 0;
+    }
+    run.eax = fn(&vector, nullptr);
+    for (std::uint8_t* buffer : buffers) {
+        run.shared.insert(run.shared.end(), buffer, buffer + kSharedBytes);
+        msvc6::GameOperatorDelete(buffer);
+    }
+    vector.data = 0;
+    run.shared.insert(run.shared.end(), reinterpret_cast<std::uint8_t*>(&vector),
+                      reinterpret_cast<std::uint8_t*>(&vector) + sizeof(vector));
+    return run;
+}
+
+bool CompareStringElements(test::Context& ctx, const StringElementPair& pair, int cases) {
+    for (int i = 0; i < cases; ++i) {
+        VectorBase start;
+        ctx.rng().Fill(&start, sizeof(start));
+        start.filled = ctx.rng().Range(-2, kMaxElements);
+        const bool block = ctx.rng().Chance(3, 4);
+        const test::Rng plan(ctx.rng().Next64());
+        const StringRun ra = RunStringElements(pair.original, start, pair, plan, block);
+        const StringRun rb = RunStringElements(pair.ours, start, pair, plan, block);
+        bool same = S3RE_EXPECT(ra.shared == rb.shared);
+        if (!block) {
+            same = S3RE_EXPECT_EQ(ra.eax, rb.eax) && same;
+        }
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  0x%x case %d: block %d, filled %d", pair.address, i, block, start.filled);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Wrong: only the first string of each element.
+std::uint32_t __fastcall WrongStringElements(VectorBase* self, void*) {
+    return DestroyStringElementVector<0x10>(self, vt::kWCBareVectorBase_CServerData, kServerDataSize);
+}
 }  // namespace
 
 S3RE_TEST(WatcomElementVectorDestructors_MatchOriginal) {
     for (const ElementPair& pair : kElementPairs) {
         if (!CompareElementDestructor(ctx, pair, 300)) {
+            return;
+        }
+    }
+    for (const StringElementPair& pair : kStringElementPairs) {
+        if (!CompareStringElements(ctx, pair, 300)) {
             return;
         }
     }
@@ -372,6 +592,12 @@ S3RE_TEST(WatcomElementVectorDestructors_ComparisonDetectsWrongImplementation) {
         test::Context probe(ctx.name(), 1, /*quiet=*/true);
         CompareElementDestructor(probe, {Original_ElementVectorDestructor_428070, &WrongLineDestructor, 0x428070,
                                          kLineSize}, 50);
+        S3RE_EXPECT(probe.failures() > 0);
+    }
+    {
+        test::Context probe(ctx.name(), 1, /*quiet=*/true);
+        CompareStringElements(probe, {Original_ElementVectorDestructor_5dd9c0, &WrongStringElements, 0x5dd9c0,
+                                      kServerDataSize, {0x10, 0}, 2}, 50);
         S3RE_EXPECT(probe.failures() > 0);
     }
 }

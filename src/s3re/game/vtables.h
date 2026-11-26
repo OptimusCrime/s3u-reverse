@@ -244,6 +244,13 @@ inline constexpr std::uint32_t kWCIsvSListBase_CStatusMessage = 0x65d2c4;
 inline constexpr std::uint32_t kWCPtrSListIter_CWin32Waitable = 0x657464;       // WCPtrSListIter<Win32::CWin32Waitable>
 inline constexpr std::uint32_t kWCValListIterBase_CGameThreadP = 0x65cb60;      // WCValListIterBase<CGameThread*, WCPtrSList<..>, ..>
 inline constexpr std::uint32_t kWCSkipListIterBase_UIntMessageBlock = 0x65d61c;  // <unsigned int, Lobby::CLMMessageBlock>
+inline constexpr std::uint32_t kWCBareVectorBase_CImageDescription = 0x65d2a0;  // <Lobby::CImageDescription>
+inline constexpr std::uint32_t kWCBareVectorBase_CSocketAddress = 0x65d2ac;     // <Lobby::CSocketAddress>
+inline constexpr std::uint32_t kWCBareVectorBase_CDirectDrawDevice = 0x65cb24;  // <DirectX::CDirectDrawDevice>
+inline constexpr std::uint32_t kWCValSkipListDict_UIntString = 0x65719c;        // WCValSkipListDict<unsigned int, String>
+inline constexpr std::uint32_t kWCValSkipListDict_IntString = 0x6580b8;         // WCValSkipListDict<int, String>
+inline constexpr std::uint32_t kWCValSkipListDict_UIntStringVector = 0x6571e4;  // <unsigned int, WCValOrderedVector<String>>
+inline constexpr std::uint32_t kWCValSkipListDict_ULongExecuteTypes = 0x6575d8;  // <unsigned long, WCPtrSortedVector<CExecuteType>>
 // session 58 (wip/framework-errors): the framework's other exceptions
 inline constexpr std::uint32_t kCHResult = 0x65d8e0;      // Win32::CHResult
 inline constexpr std::uint32_t kCMCIException = 0x65d908;  // Win32::CMCIException

@@ -36,11 +36,25 @@
 //   (+0x7c), then as above with 0x65cf70.
 // WCValSkipListDict<unsigned int, Lobby::CLMMessageBlock> (0x00609aa0): the
 //   same with vtable 0x65d56c, ~CLMMessageBlock (0x6014b0) and 0x65d588.
+// The dictionaries whose pair holds a string or a vector, destroyed inline
+// (wip/watcom-r6): vtable = the dictionary's; the pair's value at +0x7c
+// destroyed; then as above with the base's vtable.
+//   0x00457a90 WCValSkipListDict<unsigned int, String>    0x65719c  ~string; base 0x657200
+//   0x00499150 WCValSkipListDict<int, String>             0x6580b8  ~string; base 0x6580d4
+//   0x00457d90 WCValSkipListDict<unsigned int, WCValOrderedVector<String>> 0x6571e4  the
+//              string vector's destructor (as 0x409d50); base 0x65721c
+//   0x00472060 WCValSkipListDict<unsigned long, WCPtrSortedVector<CExecuteType>> 0x6575d8
+//              the pointer vector's destructor (as 0x472660); base 0x6575f4
+//   0x0045d580 WCSkipListBase<KeyVal<int, HICON>>         0x6572d4 (the plain form; a static
+//              initializer follows it inside Ghidra's function)
 // WCValSkipListDictIter<unsigned int, CSoundEffect*>'s current key/value
 //   pair (0x005ffc80): the node (+0xc) - 8, or 0 without a node.
 
+#include "watcom/vector_base.h"
+
 #include "game/vtables.h"
 #include "hooks.h"
+#include "msvc6/string.h"
 #include "test/callee_stub.h"
 #include "test/difftest.h"
 
@@ -168,6 +182,36 @@ std::uint32_t __fastcall SkipListDestructor_609aa0(std::uint32_t self, void*) {
     return DestroySkipList(self, vt::kWCSkipListBase_UIntMessageBlock);
 }
 
+// Purpose: destructors of the menus' string dictionaries and the network's
+// request tables, whose values are strings or vectors.
+std::uint32_t __fastcall SkipListDestructor_457a90(std::uint32_t self, void*) {
+    Field(self, 0) = vt::kWCValSkipListDict_UIntString;
+    msvc6::String_Destroy(reinterpret_cast<msvc6::String*>(self + kPairBuffer), nullptr);
+    return DestroySkipList(self, vt::kWCSkipListBase_UIntString);
+}
+std::uint32_t __fastcall SkipListDestructor_499150(std::uint32_t self, void*) {
+    Field(self, 0) = vt::kWCValSkipListDict_IntString;
+    msvc6::String_Destroy(reinterpret_cast<msvc6::String*>(self + kPairBuffer), nullptr);
+    return DestroySkipList(self, vt::kWCSkipListBase_IntString);
+}
+std::uint32_t __fastcall SkipListDestructor_457d90(std::uint32_t self, void*) {
+    Field(self, 0) = vt::kWCValSkipListDict_UIntStringVector;
+    DestroyVector(reinterpret_cast<VectorBase*>(self + kPairBuffer), vt::kWCBareVectorBase_String, vt::kWCExcept,
+                  sizeof(msvc6::String), [](std::uint32_t string) {
+                      msvc6::String_Destroy(reinterpret_cast<msvc6::String*>(string), nullptr);
+                  });
+    return DestroySkipList(self, vt::kWCSkipListBase_UIntStringVector);
+}
+std::uint32_t __fastcall SkipListDestructor_472060(std::uint32_t self, void*) {
+    Field(self, 0) = vt::kWCValSkipListDict_ULongExecuteTypes;
+    DestroyVector(reinterpret_cast<VectorBase*>(self + kPairBuffer), vt::kWCBareVectorBase_voidp, vt::kWCExcept, 0,
+                  [](std::uint32_t) {});
+    return DestroySkipList(self, vt::kWCSkipListBase_ULongExecuteTypes);
+}
+std::uint32_t __fastcall SkipListDestructor_45d580(std::uint32_t self, void*) {
+    return DestroySkipList(self, vt::kWCSkipListBase_IntHICON);
+}
+
 using IterPairFn = std::uint32_t(__fastcall*)(std::uint32_t self, void* edx);
 
 // Purpose: the key/value pair at the sound data's effect iterator.
@@ -224,6 +268,16 @@ S3RE_HOOK(0x00616050, SkipListDestructor_616050, SkipListDestroyFn, Original_Ski
           SkipListDestructor_616050);
 S3RE_HOOK(0x00609aa0, SkipListDestructor_609aa0, SkipListDestroyFn, Original_SkipListDestructor_609aa0,
           SkipListDestructor_609aa0);
+S3RE_HOOK(0x00457a90, SkipListDestructor_457a90, SkipListDestroyFn, Original_SkipListDestructor_457a90,
+          SkipListDestructor_457a90);
+S3RE_HOOK(0x00499150, SkipListDestructor_499150, SkipListDestroyFn, Original_SkipListDestructor_499150,
+          SkipListDestructor_499150);
+S3RE_HOOK(0x00457d90, SkipListDestructor_457d90, SkipListDestroyFn, Original_SkipListDestructor_457d90,
+          SkipListDestructor_457d90);
+S3RE_HOOK(0x00472060, SkipListDestructor_472060, SkipListDestroyFn, Original_SkipListDestructor_472060,
+          SkipListDestructor_472060);
+S3RE_HOOK(0x0045d580, SkipListDestructor_45d580, SkipListDestroyFn, Original_SkipListDestructor_45d580,
+          SkipListDestructor_45d580);
 S3RE_HOOK(0x005ffc80, SoundEffectDictIter_KeyValue, IterPairFn, Original_SoundEffectDictIter_KeyValue,
           SoundEffectDictIter_KeyValue);
 
@@ -266,6 +320,11 @@ const DestructorCase kDestructorCases[] = {
     {Original_SkipListDestructor_609bb0, &SkipListDestructor_609bb0},
     {Original_SkipListDestructor_616050, &SkipListDestructor_616050},
     {Original_SkipListDestructor_609aa0, &SkipListDestructor_609aa0},
+    {Original_SkipListDestructor_457a90, &SkipListDestructor_457a90},
+    {Original_SkipListDestructor_499150, &SkipListDestructor_499150},
+    {Original_SkipListDestructor_457d90, &SkipListDestructor_457d90},
+    {Original_SkipListDestructor_472060, &SkipListDestructor_472060},
+    {Original_SkipListDestructor_45d580, &SkipListDestructor_45d580},
 };
 
 std::uint32_t g_clearResult = 0;
@@ -278,6 +337,9 @@ bool CompareDestructor(test::Context& ctx, const DestructorCase& c, int cases) {
         if (ctx.rng().Chance(1, 2)) {
             std::memset(initial + kCount, 0, 4);
         }
+        // The pair's value: a string without a buffer (+0x80) or a vector
+        // without a block (+0x84); the emulator specs try full ones.
+        std::memset(initial + kPairBuffer + 4, 0, 8);
         g_clearResult = ctx.rng().Next32();
         std::uint8_t a[kBytes], b[kBytes];
         std::memcpy(a, initial, kBytes);

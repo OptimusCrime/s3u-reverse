@@ -24,7 +24,8 @@
 //   0x00409d50 WCValOrderedVector<String>  0x0044c980 WCValSortedVector<String>
 //   0x0040a280, 0x0044cf50 (WCBareVectorBase<String> bodies, callers' classes not named)
 //   and (wip/watcom-r6) 0x005df310 (the same bytes) and 0x00414770 (11
-//   callers; its ~string has the buffer split inlined too).
+//   callers; its ~string has the buffer split inlined too); 0x004583d0
+//   destroys such a vector at +4 of its object.
 //
 // WCValOrderedVector<String>::insertAt (0x004148a0; 18 callers):
 //   (index, const String* value) ret 8. The index is clamped to 0..length.
@@ -145,6 +146,11 @@ std::uint32_t __fastcall StringVectorDestructor_5df310(VectorBase* self, void*) 
 std::uint32_t __fastcall StringVectorDestructor_414770(VectorBase* self, void*) {
     return DestroyStringVector(self);
 }
+// (0x4583d0 destroys the vector at +4 of its object: an object's member
+// destructor that is only this.)
+std::uint32_t __fastcall StringVectorDestructor_4583d0(VectorBase* self, void*) {
+    return DestroyStringVector(reinterpret_cast<VectorBase*>(reinterpret_cast<std::uintptr_t>(self) + 4));
+}
 
 using StringInsertAtFn = std::uint32_t(__fastcall*)(PtrVector* self, void* edx, std::int32_t index,
                                                     const String* value);
@@ -262,6 +268,8 @@ S3RE_HOOK(0x005df310, StringVectorDestructor_5df310, StringVectorDestructorFn,
           Original_StringVectorDestructor_5df310, StringVectorDestructor_5df310);
 S3RE_HOOK(0x00414770, StringVectorDestructor_414770, StringVectorDestructorFn,
           Original_StringVectorDestructor_414770, StringVectorDestructor_414770);
+S3RE_HOOK(0x004583d0, StringVectorDestructor_4583d0, StringVectorDestructorFn,
+          Original_StringVectorDestructor_4583d0, StringVectorDestructor_4583d0);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -610,6 +618,19 @@ S3RE_TEST(StringVector_CopyConstruct_ComparisonDetectsWrongImplementation) {
     S3RE_EXPECT(probe.failures() > 0);
 }
 
+namespace {
+// 0x4583d0 gets the object whose +4 is the vector.
+VectorBase* OwnerOf(VectorBase* vector) {
+    return reinterpret_cast<VectorBase*>(reinterpret_cast<std::uintptr_t>(vector) - 4);
+}
+std::uint32_t __fastcall Original4583d0OnVector(VectorBase* vector, void*) {
+    return Original_StringVectorDestructor_4583d0(OwnerOf(vector), nullptr);
+}
+std::uint32_t __fastcall Ours4583d0OnVector(VectorBase* vector, void*) {
+    return StringVectorDestructor_4583d0(OwnerOf(vector), nullptr);
+}
+}  // namespace
+
 S3RE_TEST(StringVectorDestructors_MatchOriginal) {
     CompareDestructor(ctx, Original_StringVectorDestructor_409d50, &StringVectorDestructor_409d50, 1000);
     CompareDestructor(ctx, Original_StringVectorDestructor_44c980, &StringVectorDestructor_44c980, 1000);
@@ -617,6 +638,7 @@ S3RE_TEST(StringVectorDestructors_MatchOriginal) {
     CompareDestructor(ctx, Original_StringVectorDestructor_44cf50, &StringVectorDestructor_44cf50, 1000);
     CompareDestructor(ctx, Original_StringVectorDestructor_5df310, &StringVectorDestructor_5df310, 1000);
     CompareDestructor(ctx, Original_StringVectorDestructor_414770, &StringVectorDestructor_414770, 1000);
+    CompareDestructor(ctx, &Original4583d0OnVector, &Ours4583d0OnVector, 1000);
 }
 
 S3RE_TEST(StringVectorDestructors_ComparisonDetectsWrongImplementation) {

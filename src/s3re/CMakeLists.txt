@@ -32,6 +32,8 @@ add_library(s3re SHARED
     watcom/isv_slist.cpp
     watcom/list_iterators.cpp
     watcom/skiplist_dicts.cpp
+    watcom/skiplist_nodes.cpp
+    watcom/sorted_find.cpp
     watcom/ptr_vector.cpp
     watcom/string_vector.cpp
     watcom/ushort_vector.cpp

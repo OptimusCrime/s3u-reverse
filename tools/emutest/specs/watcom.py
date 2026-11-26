@@ -511,3 +511,157 @@ SPECS += [Spec("StringVectorDestructor_5df310", 0x005df310, "thiscall", [], pres
           # Dead: 0x414840, the _Eos after erase(0, npos) (as 0x409df3).
           Spec("StringVectorDestructor_414770", 0x00414770, "thiscall", [], presets=string_vector_state,
                exempt_blocks=(0x00414840,))]
+
+
+# -- vectors of elements with string members (element_vectors.cpp, wip/watcom-r6) --
+# The vector at world 0, its block in scratch slot 0 (6 elements) or none,
+# filled -2..6; every element's strings built by string_fields (buffers in
+# slots 1.., 0x40 bytes each, some shared).
+def string_element_vector(size, offsets):
+    def presets(rng, pool, args):
+        data = rng.choice([0, WORLD_BASE + SCRATCH, WORLD_BASE + SCRATCH])
+        fields = [(8, data, 4), (0x10, rng.randint(-2, 6) & 0xFFFFFFFF, 4)]
+        ptrs = []
+        slot = 0
+        for k in range(6):
+            for offset in offsets:
+                shared = rng.choice(ptrs) if ptrs and rng.random() < 0.3 else None
+                entry, ptr = string_fields(rng, SCRATCH + k * size + offset,
+                                           SCRATCH + SCRATCH_SLOT_BYTES + 0x40 * slot, shared_ptr=shared)
+                slot += 1
+                fields += entry
+                if ptr:
+                    ptrs.append(ptr)
+        return fields
+    return presets
+
+
+# Dead in each inlined ~string: the _Eos after erase(0, npos) (new length
+# 0: _Grow returns false), as in the string-vector destructors.
+STRING_ELEMENT_VECTORS = (
+    (0x4629a0, 0x60, (0x50,)), (0x463730, 0x60, (0x50,)), (0x5bde60, 0x60, (0x50,)), (0x4633d0, 0x60, (0x50,)),
+    (0x5dd760, 0x18, (0x8,)), (0x5de5e0, 0x18, (0x8,)), (0x5dd8a0, 0x24, (0x14,)), (0x5deb60, 0x24, (0x14,)),
+    (0x5dd9c0, 0x20, (0x10, 0)), (0x5df7a0, 0x20, (0x10, 0)), (0x5ddba0, 0x20, (0x10, 0)), (0x5e0390, 0x20, (0x10, 0)),
+    (0x5dff70, 0x20, (0x10, 0)), (0x5b7ac0, 0x30, (0x20, 0x10)))
+STRING_ELEMENT_DEAD = {0x4629a0: (0x462a46,), 0x463730: (0x4637d6,), 0x5bde60: (0x5bdf06,), 0x4633d0: (0x4634a3,),
+                       0x5dd760: (0x5dd806,), 0x5de5e0: (0x5de6b3,), 0x5dd8a0: (0x5dd946,), 0x5deb60: (0x5dec33,),
+                       0x5dd9c0: (0x5dda8c,), 0x5df7a0: (0x5df867,), 0x5ddba0: (0x5ddc6c,), 0x5e0390: (0x5e0457,),
+                       0x5dff70: (0x5e001a,), 0x5b7ac0: (0x5b7b93,)}
+SPECS += [Spec(f"ElementVectorDestructor_{a:x}", a, "thiscall", [], presets=string_element_vector(size, offsets),
+               exempt_blocks=STRING_ELEMENT_DEAD.get(a, ()))
+          for a, size, offsets in STRING_ELEMENT_VECTORS]
+
+
+# -- skip lists with a string / vector value (skiplist_dicts.cpp, wip/watcom-r6) --
+def skip_string_value(rng, pool, args):
+    entry, _ = string_fields(rng, 0x7c, SCRATCH + SCRATCH_SLOT_BYTES)
+    return skip_dict_count(rng, pool, args) + entry
+
+
+def skip_vector_value(strings):
+    def presets(rng, pool, args):
+        count = rng.randrange(5)
+        data = WORLD_BASE + SCRATCH if count or rng.random() < 0.5 else 0
+        fields = skip_dict_count(rng, pool, args) + [(0x84, data, 4), (0x88, count, 4),
+                                                     (0x8c, rng.randint(-1, count) & 0xFFFFFFFF, 4)]
+        if strings and data:
+            for i in range(count):
+                entry, _ = string_fields(rng, SCRATCH + 16 * i, SCRATCH + SCRATCH_SLOT_BYTES + 0x100 * i)
+                fields += entry
+        return fields
+    return presets
+
+
+# Dead in the inlined ~string: the _Eos after erase(0, npos), and the count
+# decrement of the release (the split before left the buffer unshared or
+# frozen), as 0x40a6d0 / 0x40a6fc in StringVector_Resize.
+SPECS += [
+    Spec("SkipListDestructor_457a90", 0x00457a90, "thiscall", [], presets=skip_string_value,
+         callees=SKIP_DESTROY_CALLEES, exempt_blocks=(0x00457b39, 0x00457b5a)),
+    Spec("SkipListDestructor_499150", 0x00499150, "thiscall", [], presets=skip_string_value,
+         callees=SKIP_DESTROY_CALLEES, exempt_blocks=(0x004991f9, 0x0049921a)),
+    Spec("SkipListDestructor_457d90", 0x00457d90, "thiscall", [], presets=skip_vector_value(True),
+         callees=SKIP_DESTROY_CALLEES),
+    Spec("SkipListDestructor_472060", 0x00472060, "thiscall", [], presets=skip_vector_value(False),
+         callees=SKIP_DESTROY_CALLEES),
+    # cover_until: a static initializer follows inside Ghidra's function.
+    Spec("SkipListDestructor_45d580", 0x0045d580, "thiscall", [], presets=skip_dict_count,
+         callees=SKIP_DESTROY_CALLEES, cover_until=0x0045d5d4),
+]
+# 0x4583d0 destroys the vector at +4 of its object: ECX = world - 4.
+SPECS += [Spec("StringVectorDestructor_4583d0", 0x004583d0, "fastcall", [one_of(WORLD_BASE - 4), anything],
+               presets=string_vector_state, exempt_blocks=(0x00458476,))]  # the _Eos after erase
+
+
+# -- the string dictionaries' base_new_node (skiplist_nodes.cpp) ----------
+# The dictionary at world 0 (+0x5c: 0 or the allocator probe, which hands
+# out ISV_BLOCK or null); the pair in scratch slot 2 (its string's buffer in
+# slot 3); level 0..12.
+def skip_node_world(rng, pool, args):
+    entry, _ = string_fields(rng, SCRATCH + 2 * SCRATCH_SLOT_BYTES + 4, SCRATCH + 3 * SCRATCH_SLOT_BYTES)
+    return [(0x5c, rng.choice([0, 0, ISV_VIRTUAL_CODE + ISV_ALLOC_SLOT]), 4)] + entry
+
+
+SKIP_NODE_ARGS = [lambda rng, pool: WORLD_BASE + SCRATCH + 2 * SCRATCH_SLOT_BYTES, lambda rng, pool: rng.randrange(13)]
+# Dead in the inlined assign(x, 0, npos): the count clamp to npos (a length
+# is at most npos) and the self-assignment path (the node is new). The empty
+# string's count byte (0x65539f) is varied so that a source without buffer
+# also takes the copy path.
+SKIP_NODE_DEAD = {0x458e20: (0x458ea1, 0x458ea8, 0x458eb2, 0x458eb7, 0x458ec7, 0x458ec9, 0x458ecd, 0x458ef5, 0x458efd),
+                  0x499b90: (0x499c11, 0x499c18, 0x499c22, 0x499c27, 0x499c37, 0x499c39, 0x499c3d, 0x499c65, 0x499c6d)}
+SPECS += [Spec(f"SkipNewNode_{a:x}", a, "thiscall", SKIP_NODE_ARGS, presets=skip_node_world,
+               virtuals=ISV_VIRTUALS, new_fails=0.2, globals=name_null_string_count, exempt_blocks=SKIP_NODE_DEAD[a])
+          for a in (0x458e20, 0x499b90)]
+
+
+# -- the sorted vectors' base_find_with_index (sorted_find.cpp) -----------
+# The vector at world 0 with vtable FAKE_VTABLE (slots 2 and 4 probed with
+# their 2 arguments; the probes' random results steer the search), its
+# block in scratch slot 0, length 0..9 or odd; the element in slot 2; the
+# index in slot 3 (random); mode 0..4.
+def sorted_find_state(rng, pool, args):
+    return [(0, FAKE_VTABLE, 4), (8, WORLD_BASE + SCRATCH, 4),
+            (0x14, rng.choice([0, 1, 2, 3, 5, 8, 9, rng.randrange(40), 0x80000000]), 4),
+            (SCRATCH + 3 * SCRATCH_SLOT_BYTES, rng.choice([rng.randint(-2, 10), rng.getrandbits(32)]) & 0xFFFFFFFF, 4)]
+
+
+SORTED_FIND_ARGS = [lambda rng, pool: WORLD_BASE + SCRATCH + 2 * SCRATCH_SLOT_BYTES,
+                    lambda rng, pool: rng.choice([0, 1, 2, 2, 3, 3, 4, rng.getrandbits(32)]),
+                    lambda rng, pool: WORLD_BASE + SCRATCH + 3 * SCRATCH_SLOT_BYTES]
+SPECS += [Spec(f"SortedFind_{a:x}", a, "thiscall", SORTED_FIND_ARGS, presets=sorted_find_state,
+               virtuals={0x08: 2, 0x10: 2})
+          for a in (0x437eb0, 0x44d330, 0x44d730, 0x44d850, 0x4585f0, 0x463840, 0x541790, 0x5bdd60, 0x5e0280)]
+
+
+# -- more base_init_upto instantiations (vector_init.cpp, wip/watcom-r6) ----
+# As InitUpTo_* above; the element constructors probed (with their 0
+# argument(s) where they take them).
+INIT_UPTO_R6 = ((0x462d70, 0x40, 0x5ba300, 0), (0x44dee0, 0x0c, 0x5dc810, 0), (0x44dc90, 0x20, 0x5dc1e0, 0),
+                (0x44d960, 0x17c, 0x5dc4e0, 0), (0x44d460, 0x11c, 0x5da750, 0), (0x44d050, 0x54, 0x5d9e20, 0),
+                (0x5deae0, 0x24, 0x5ec9f0, 2), (0x5de4f0, 0x18, 0x5ebfb0, 0), (0x60ad90, 0x24, 0x601370, 2),
+                (0x541710, 0x18, 0x5ec1e0, 0), (0x60a0f0, 0x14, 0x601e40, 0), (0x5dff30, 0x20, 0x5c46b0, 0),
+                (0x5bdc70, 0x08, 0x5bd200, 2), (0x5b82f0, 0x6c, 0x5b6c30, 1), (0x5b8040, 0x30, 0x5b6740, 0),
+                (0x60a7e0, 0x0c, 0x6065f0, 1))
+SPECS += [Spec(f"InitUpTo_{address:x}", address, "thiscall", [init_upto_n], presets=init_upto_state(size), eax_mask=0,
+               callees={constructor: (args, "thiscall", "probe")})
+          for address, size, constructor, args in INIT_UPTO_R6]
+SPECS += [Spec("InitUpTo_5df410", 0x005df410, "thiscall", [init_upto_n], presets=init_upto_state(0x20), eax_mask=0)]
+
+
+# -- the dictionaries' base_destroy_node (skiplist_nodes.cpp) -------------
+# The dictionary at world 0 (+0x60: 0 or the allocator probe as the
+# deallocator), the node in scratch slot 1 or null, level 0..12; the pair
+# destructors probed.
+def skip_destroy_node_world(rng, pool, args):
+    return [(0x60, rng.choice([0, ISV_VIRTUAL_CODE + ISV_ALLOC_SLOT]), 4)]
+
+
+SKIP_DESTROY_NODES = ((0x499d60, 0x49a070), (0x458ff0, 0x459440), (0x4591b0, 0x459550), (0x472dc0, 0x473290),
+                      (0x60a760, 0x60b2d0))
+SPECS += [Spec(f"SkipDestroyNode_{a:x}", a, "thiscall",
+               [lambda rng, pool: rng.choice([0, WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES + 0x40]),
+                lambda rng, pool: rng.randrange(13)],
+               presets=skip_destroy_node_world, virtuals=ISV_VIRTUALS, callees={d: (0, "thiscall", "probe")})
+          for a, d in SKIP_DESTROY_NODES]
+SPECS += [Spec(f"OrderedFind_{a:x}", a, "thiscall", SORTED_FIND_ARGS, presets=sorted_find_state, virtuals={0x08: 2})
+          for a in (0x5b83e0, 0x5b8290, 0x499b30, 0x468550)]
