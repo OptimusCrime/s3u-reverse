@@ -17,21 +17,39 @@ to `docs/todo/`). The archive is for searching, not for reading whole.
 batches (reimplement + verify), less cleanup; cleanup only where it blocks
 a batch. The user wants each round followed by the next right away.**
 
-Round 2 of session 56 is running (worktrees made from main b1769a6; the
-agents hit the usage limit once and are resumed with SendMessage):
-1. `wip/ai-step2`: the emulator spec-namespace guard (top-level names
-   defined in two spec parts with different values; existing clashes
-   evaland_object, evaland_globals, ground_note_globals, ring_offsets,
-   null_string_count), then CComputerPlayer::Step 0x550f80 and the rest
-   of the AI range (not SendPrioritizeSite / EmergencyPowersActStone).
-2. `wip/sound-fx`: DirectX::CSoundEffect (Play 0x5c2fc0 ...),
-   CMemorySoundFile / CSoundFile, the sound dictionaries, CD audio.
-3. `wip/ui-controls`: UI range controls (CControl::OnTimer 0x4183c0,
-   ~CControl 0x4180a0, CButton, list boxes, dropdowns, CScreen messages).
-4. `wip/settings-logic`: 16-bit string assign 0x428400, GamePlayerSetup
-   copy ctor / operator= / Set (hook clash with the --random-map
-   passthrough), GameSettings::LoadSaveGame 0x432b00, then logic-range
-   READY functions (BuildOffsetTable, InitPlayerInfo, ...).
+**First thing next session: round 3's evidence on main.** Round 3
+(wip/framework-errors, wip/settings-load, wip/ddraw-render, wip/ui-gdi)
+is merged and passes `--test` 972/972, `--self-test` 34/34 and the quick
+`run.py --changed` (one mismatch: GameSettings_LoadSaveGame, unverified,
+spec unfinished). Still to run: the full emulator suite `--full
+--require-coverage` and the whole-game checks (check_save slots 1-3,
+check_random_map 384,0 and 448,3, scripted-seed127 replay, call counts).
+
+Then, the round-3 leftovers (details in their backlog files):
+1. GameSettings::LoadSaveGame 0x432b00 and CGameData::InitPlayerInfo
+   0x4fd0d0 are S3RE_HOOK_UNVERIFIED: finish their emulator specs
+   (LoadSaveGame: team-vector preset fixed, rerun) and switch to verified.
+2. Tiny-function trampolines: CButton::IsPressed 0x41a990, SetChecked
+   0x41aa20, CDropdown::OnFocusChanged 0x422770 returned a wrong AL when
+   the original was called through its Detours trampoline in-process
+   (emulator agrees with ours). Find out whether the trampolines of tiny
+   functions are broken: it may affect other hooks
+   (docs/todo/known-differences.md).
+3. Rendering: CDrawer::SetDisplayMode 0x42ce90, Render_sub_4c7490 /
+   4c6d40, CLandscapeSurface ctor 0x54bd30 (the fake DirectDraw is ready),
+   CGameDrawer ctor/dtor (device/display-mode vectors first), the
+   landscape drawing Render_sub_54cbd0 (large) (docs/todo/evidence.md).
+4. Framework: CCDAudio::Init (two catch handlers), the CD window
+   procedure, the other ThrowWin32Error callers (CRegistryKey, CTimer,
+   CThread::Start, CMessageQueue::ProcessMessage).
+5. UI: CScreenGroup::~CScreenGroup 0x416da0, CStaticText::SetText
+   0x41c810, CListBox::UpdateLayout, the rest of GameConfig.
+6. Logic: ~CLogicThread, FinishGame, PublishDrawData (their callees are
+   done now), DumpTableToFile, Logic_sub_4d6740 / 0x4d8400.
+7. SendPrioritizeSite 0x58e510 needs one game run with computer players
+   (log message byte 6 against the site owner); asked the user, no answer
+   yet. Behind it: COMP_EmergencyPowersActStone, UpdateMaterialShortages,
+   T_ECONOMY_AGENT::Run.
 
 After that: SendPrioritizeSite 0x58e510 needs a runtime look; the
 live-vs-replay header hash difference from session 49 (backlog
@@ -107,6 +125,43 @@ testing".
   classes by default; they might be library code.
 
 ## Session log (recent sessions; older ones in docs/history/)
+
+### 2026-11-26 (56, round 3): framework errors, DirectDraw, UI GDI, settings load
+
+Round 3 (wip/framework-errors, wip/settings-load, wip/ddraw-render,
+wip/ui-gdi), stopped at a deadline set by the user and merged in a side
+worktree (s3re-merge-r3) while round 2's whole-game checks ran; verified
+1514 -> 1714.
+- **Framework errors**, 54 functions: CHResult, ThrowWin32Error,
+  ThrowHResult, CTimeout, CMMException, CMCIException and their throwers
+  (one shared message builder), 12 exception destructors, the CEvent /
+  CSemaphore / CMutex / Wait / PostMessage wrappers, CCDAudio
+  Open/Close/DoPlay (win32_throwers.cpp, win32_synchronize.cpp).
+- **DirectDraw**, 70 functions: a scripted fake DirectDraw
+  (test/fake_ddraw.*), all CDirectDraw and surface members, CGameDrawer's
+  surface management, CDisplayMode, the Watcom intrusive list code.
+  Quirk kept: RemoveSurface of an unlisted surface removes the first one.
+- **UI GDI**, 63 functions: fake GDI (in-process and emu.py),
+  ShowTooltip, CTextView/CListBox FillBackground, CProgressBar and
+  CStaticSurface Draw, 44 GameConfig functions (serial check digit reads
+  past its table, kept), old iostream lock/unlock/setf, CButton /
+  CVScrollBar / CDropdown members. 3 tiny functions unverified (see
+  Current focus).
+- **Settings load**, 15 verified: SetupLocalPlayer, LowestFreeNetId,
+  FindTeamForClan, CTeam clan helpers, GamePlayerSetup SetType /
+  AttachNetPlayer, index checks; LoadSaveGame and InitPlayerInfo
+  reimplemented, unverified. re/false_starts.tsv: 41 false function starts
+  that frontier.py now skips.
+- Merge fixes: two `kOpenParenthesis` texts (second renamed
+  kOpenParenthesisOnly); GameConfig::RandomRaceAmazons implemented by two
+  batches (kept game_config.cpp's); spec lists whose closing bracket the
+  conflict ate.
+- Evidence on the merged tree (Debug and Release build): inventory check
+  clean; `--test` 972/972; `--self-test` 34/34 + RAM check "separate";
+  quick `run.py --changed --require-coverage` (all 1718 specs selected):
+  0 mismatches except the unverified LoadSaveGame, 13 slow specs short of
+  coverage in quick mode. Full suite and whole-game checks not run yet
+  (first step next session).
 
 ### 2026-11-26 (56, round 2): AI Step, sound effects, UI controls, settings
 
