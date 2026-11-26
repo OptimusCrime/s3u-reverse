@@ -49,14 +49,19 @@ LOGBOOK session entry).
   classes; re/sound_formats.md) are verified. The effect classes (CSoundEffect, CMemorySoundFile/CSoundFile, the
   dictionaries' Watcom code, CDirectSoundException, CDirectSound slot 1, the
   getters 0x5ff4d0/0x5ff4e0) followed in session 57 (wip/sound-fx). Left on
-  the sound side: the lobby-side CSoundData callers 0x5fff00 / 0x600170; the
-  other exception destructors of the same shape as 0x5c1830 (0x5b93c0,
-  0x5b94c0, 0x5be3e0, 0x5c0010, 0x60e490, 0x612790, 0x612c80, and the lobby
-  ones) could share DestroyMessageException (directx_sound_files.cpp).
-  CD music (Win32::CCDAudio, session 57 did the small members): Init
-  0x615520, Open, Close 0x615e20, DoPlay, the window procedure 0x615bd0
-  (missing function start) need ThrowMCIError 0x6114f0 / CMCIException
-  0x613fc0 / Describe 0x614250 first (re/win32_framework.md).
+  the sound side: the lobby-side CSoundData callers 0x5fff00 / 0x600170.
+  The exception destructors and CCDAudio Open / Close / DoPlay /
+  ~CCDAudio were done in session 58 (wip/framework-errors,
+  win32_throwers.cpp / win32_cdaudio.cpp). Left of CD music: Init 0x615520
+  (two catch handlers that log "CD: Error during open:" and close again:
+  needs a way to reproduce the original's catch of the game's
+  exceptions), CreateCallbackWindow 0x6157c0 (RegisterClass/CreateWindow,
+  the HWND -> CCDAudio skip-list dictionary 0x7e9180, its Watcom insert
+  0x6160b0) and the window procedure 0x615bd0 (missing function start,
+  uses the same dictionary). The lobby exception destructors of the same
+  shape (0x5d9bc0, 0x5ed990, 0x600770, 0x600ae0) are left by the
+  no-lobby decision (they would be one hook each, DestroyMessage in
+  win32_throwers.cpp).
   The false starts 0x5f65f2/0x5f674b
   (DrawGuiImage_tail*), 0x5fd902 (SequenceFrame_tail) and 0x5f6c3d
   (FindDirectoryContainingFile_tail) sit inside verified functions.

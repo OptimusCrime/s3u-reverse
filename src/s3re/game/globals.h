@@ -452,6 +452,43 @@ using PostMessageAImport = int(__stdcall*)(void* window, std::uint32_t message, 
                                            std::uint32_t lParam);
 inline constexpr GameGlobal<MciSendCommandAImport> g_importMciSendCommandA{0x65536c};  // from _INMM.dll
 inline constexpr GameGlobal<PostMessageAImport> g_importPostMessageA{0x6552f0};        // USER32.dll
+// session 58 (wip/framework-errors): the exception descriptions
+// (CHResult::Describe 0x6134d0, CMCIException::Describe 0x614250).
+using FormatMessageAImport = std::uint32_t(__stdcall*)(std::uint32_t flags, const void* source, std::uint32_t id,
+                                                        std::uint32_t language, char* buffer, std::uint32_t size,
+                                                        void* arguments);
+using LocalFreeImport = void*(__stdcall*)(void* memory);
+using MciGetErrorStringAImport = int(__stdcall*)(std::uint32_t error, char* text, std::uint32_t size);
+inline constexpr GameGlobal<FormatMessageAImport> g_importFormatMessageA{0x6551ec};
+inline constexpr GameGlobal<LocalFreeImport> g_importLocalFree{0x6551e8};
+inline constexpr GameGlobal<MciGetErrorStringAImport> g_importMciGetErrorStringA{0x655354};  // from _INMM.dll
+// CMCIException::Describe copies this word (zero) to the start of its
+// 1024-byte text buffer (the compiler's `char text[1024] = ""`).
+inline constexpr GameGlobal<std::uint16_t> g_emptyTextWord{0x7e9178};
+// The synchronization objects and windows of the framework
+// (win32_synchronize.cpp).
+using HandleCallImport = int(__stdcall*)(void* handle);  // SetEvent, ResetEvent, PulseEvent, DestroyWindow
+using ReleaseSemaphoreImport = int(__stdcall*)(void* semaphore, std::int32_t count, std::int32_t* previous);
+using CreateEventAImport = void*(__stdcall*)(void* security, std::uint32_t manualReset, std::uint32_t initialState,
+                                             const char* name);
+using CreateSemaphoreAImport = void*(__stdcall*)(void* security, std::int32_t initial, std::int32_t maximum,
+                                                 const char* name);
+using CreateMutexAImport = void*(__stdcall*)(void* security, std::uint32_t initialOwner, const char* name);
+using SetThreadPriorityImport = int(__stdcall*)(void* thread, std::int32_t priority);
+using PostThreadMessageAImport = int(__stdcall*)(std::uint32_t thread, std::uint32_t message, std::uint32_t wParam,
+                                                 std::uint32_t lParam);
+using WaitForSingleObjectImport = std::uint32_t(__stdcall*)(void* handle, std::uint32_t milliseconds);
+inline constexpr GameGlobal<HandleCallImport> g_importSetEvent{0x6550e0};
+inline constexpr GameGlobal<HandleCallImport> g_importResetEvent{0x6550bc};
+inline constexpr GameGlobal<HandleCallImport> g_importPulseEvent{0x6550d4};
+inline constexpr GameGlobal<ReleaseSemaphoreImport> g_importReleaseSemaphore{0x6550d0};
+inline constexpr GameGlobal<CreateEventAImport> g_importCreateEventA{0x6551c4};
+inline constexpr GameGlobal<CreateSemaphoreAImport> g_importCreateSemaphoreA{0x6550f0};
+inline constexpr GameGlobal<CreateMutexAImport> g_importCreateMutexA{0x6551cc};
+inline constexpr GameGlobal<SetThreadPriorityImport> g_importSetThreadPriority{0x6551e0};
+inline constexpr GameGlobal<HandleCallImport> g_importDestroyWindow{0x655348};               // USER32.dll
+inline constexpr GameGlobal<PostThreadMessageAImport> g_importPostThreadMessageA{0x6552e0};  // USER32.dll
+inline constexpr GameGlobal<WaitForSingleObjectImport> g_importWaitForSingleObject{0x6551c0};
 
 // Win32\Mapping.cpp, Win32\Detach.cpp and the graphics loader.
 using CreateFileAImport = void*(__stdcall*)(const char* name, std::uint32_t access, std::uint32_t share,

@@ -188,6 +188,11 @@ inline constexpr std::uint32_t kWCVectorBase_CRunningSession = 0x657370;      //
 // Dirk::CTeam's members (game/ui/game_teams.cpp)
 inline constexpr std::uint32_t kWCValSortedVector_int = 0x655a0c;             // WCValSortedVector<int> (+8)
 inline constexpr std::uint32_t kWCValOrderedVector_CPlayer = 0x656b6c;        // WCValOrderedVector<Dirk::CPlayer> (+0x24)
+// session 58 (wip/framework-errors): the framework's other exceptions
+inline constexpr std::uint32_t kCHResult = 0x65d8e0;      // Win32::CHResult
+inline constexpr std::uint32_t kCMCIException = 0x65d908;  // Win32::CMCIException
+inline constexpr std::uint32_t kCMMException = 0x65d8f4;   // Win32::CMMException
+inline constexpr std::uint32_t kCTimeout = 0x65d930;       // Win32::CTimeout
 // Standard library
 inline constexpr std::uint32_t kStdLogicError = 0x65a548;  // std::logic_error
 inline constexpr std::uint32_t kStdOutOfRange = 0x65a538;  // std::out_of_range
@@ -231,6 +236,11 @@ inline constexpr std::uint32_t kCGroupControl_group = 0x655e68;    // its CScree
 inline constexpr std::uint32_t kCScreen = 0x655c98;                // CScreen
 inline constexpr std::uint32_t kCDirectSoundException = 0x65ceac;   // DirectX::CDirectSoundException
 inline constexpr std::uint32_t kCAppNotActiveException = 0x65cbb8;  // DirectX::CAppNotActiveException
+// session 58 (wip/framework-errors)
+inline constexpr std::uint32_t kCHResult = 0x65d8e8;      // Win32::CHResult
+inline constexpr std::uint32_t kCMCIException = 0x65d910;  // Win32::CMCIException
+inline constexpr std::uint32_t kCMMException = 0x65d8fc;   // Win32::CMMException
+inline constexpr std::uint32_t kCTimeout = 0x65d938;       // Win32::CTimeout
 }  // namespace vbtables
 
 // _ThrowInfo records passed to _CxxThrowException.
@@ -244,6 +254,10 @@ inline constexpr std::uintptr_t kDirectSoundException = 0x682dc8;  // DirectX::C
 inline constexpr std::uintptr_t kAppNotActiveException = 0x67aee8;  // DirectX::CAppNotActiveException*
 inline constexpr std::uintptr_t kCTimeoutPointer = 0x674f38;  // Win32::CTimeout* (thrown by the queue waits)
 inline constexpr std::uintptr_t kCFileNotFoundPointer = 0x67b828;  // Win32::CFileNotFound* (CFile::Open)
+// session 58 (wip/framework-errors)
+inline constexpr std::uintptr_t kCHResultPointer = 0x68ea98;       // Win32::CHResult* (ThrowWin32Error, ThrowHResult)
+inline constexpr std::uintptr_t kCMCIExceptionPointer = 0x68ec98;  // Win32::CMCIException* (ThrowMCIError)
+inline constexpr std::uintptr_t kCMMExceptionPointer = 0x682f68;   // Win32::CMMException* (ThrowMMError)
 }  // namespace throw_info
 
 // Type descriptors (catch types).

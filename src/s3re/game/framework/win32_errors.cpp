@@ -144,6 +144,7 @@ void* __fastcall Win32_CAssertmentFailed_Construct(void* self, void* edx, const 
 void __fastcall Win32_ThrowAssertmentFailed(const char* expression, const char* file, std::int32_t line);
 void* __fastcall Win32_COutOfMemory_Construct(void* self, void* edx, const String* msg, std::uint32_t mostDerived);
 void __fastcall Win32_ThrowOutOfMemory(const char* text, const char* file, std::int32_t line);
+void Win32_BuildPlaceMessage(String* message, const char* text, const char* file, std::int32_t line);
 
 S3RE_HOOK(0x00614eb0, Win32_CProgrammingError_Construct, CtorFn, Original_Win32_CProgrammingError_Construct,
           Win32_CProgrammingError_Construct);
@@ -286,31 +287,39 @@ void* __fastcall Win32_COutOfMemory_Construct(void* self, void* /*edx*/, const S
     return self;
 }
 
-S3RE_HOOK(0x00610960, Win32_ThrowOutOfMemory, ThrowFn, Original_Win32_ThrowOutOfMemory, Win32_ThrowOutOfMemory);
-
-// Purpose: Throws the out-of-memory exception after operator new returned
-// null, with the place (text, source file, line) in its message.
-void __fastcall Win32_ThrowOutOfMemory(const char* text, const char* file, std::int32_t line) {
+// The message the throwers build: text + ", file " + file + ", line " +
+// _itoa(line) (0x610960..0x610b23; the same code begins ThrowWin32Error,
+// ThrowHResult, ThrowTimeout and ThrowMMError, win32_throwers.cpp).
+// `message` is constructed here.
+void Win32_BuildPlaceMessage(String* message, const char* text, const char* file, std::int32_t line) {
     const std::uint8_t allocator = 0;  // the original's is uninitialized
-    String message;  // left alive: the original's unwinding frees it, ours has no frame
-    message.allocator = allocator;
-    msvc6::String_Tidy(&message, nullptr, 0);
+    message->allocator = allocator;
+    msvc6::String_Tidy(message, nullptr, 0);
     if (text != nullptr) {
-        AssignThroughTemporaries(&message, text, &allocator);
+        AssignThroughTemporaries(message, text, &allocator);
     }
     String withFileText, withFile, withLineText, whole;
-    msvc6::String_ConcatChars(&withFileText, &message, texts::kCommaFile.c_str());
+    msvc6::String_ConcatChars(&withFileText, message, texts::kCommaFile.c_str());
     msvc6::String_ConcatChars2(&withFile, &withFileText, file);
     msvc6::String_ConcatChars(&withLineText, &withFile, texts::kCommaLine.c_str());
     char digits[16];
     const char* number =
         reinterpret_cast<char*(__cdecl*)(std::int32_t, char*, std::int32_t)>(kItoa)(line, digits, kDecimal);
     msvc6::String_ConcatChars(&whole, &withLineText, number);
-    msvc6::String_AssignSubstr(&message, nullptr, &whole, 0, msvc6::detail::Npos());
+    msvc6::String_AssignSubstr(message, nullptr, &whole, 0, msvc6::detail::Npos());
     CallEraseAndFree(&whole);
     CallEraseAndFree(&withLineText);
     CallEraseAndFree(&withFile);
     CallEraseAndFree(&withFileText);
+}
+
+S3RE_HOOK(0x00610960, Win32_ThrowOutOfMemory, ThrowFn, Original_Win32_ThrowOutOfMemory, Win32_ThrowOutOfMemory);
+
+// Purpose: Throws the out-of-memory exception after operator new returned
+// null, with the place (text, source file, line) in its message.
+void __fastcall Win32_ThrowOutOfMemory(const char* text, const char* file, std::int32_t line) {
+    String message;  // left alive: the original's unwinding frees it, ours has no frame
+    Win32_BuildPlaceMessage(&message, text, file, line);
     void* error = msvc6::GameOperatorNew(kOutOfMemoryBytes);
     void* thrown = nullptr;
     if (error != nullptr) {

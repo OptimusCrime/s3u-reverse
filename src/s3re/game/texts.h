@@ -181,6 +181,10 @@ inline constexpr GameText kDSSetPan{0x7a128c};              // "CDirectSoundBuff
 inline constexpr GameText kCDSetTimeFormatError{0x7a4ad0};  // "CD: Error during SetTimeFormat: %u"
 inline constexpr GameText kCDStopError{0x7a4b10};           // "CD: Error during stop: %u"
 inline constexpr GameText kCDGetTrackCountError{0x7a4b2c};  // "CD: Error during GetTrackCount: %u"
+// session 58 (wip/framework-errors)
+inline constexpr GameText kCDPlayError{0x7a4af4};   // "CD: Error during play: %u"
+inline constexpr GameText kCDAudioFile{0x7a4a60};   // "E:\Siedler3\Win32\cdaudio.cpp"
+inline constexpr GameText kCDAudioDevice{0x7a4a80};  // "cdaudio" (the MCI device type)
 
 // CSoundData (Dirk\SoundData.cpp; the sound loader, sound/sound_data.cpp)
 inline constexpr GameText kSoundDataFile{0x7a3120};        // "E:\Siedler3\Dirk\SoundData.cpp"
@@ -519,4 +523,31 @@ inline constexpr GameText kNoMoreThanTripleBuffering{0x7a0334};
 inline constexpr GameText kDDGetAttachedSurface{0x7a0360};  // "CSurface::DDGetAttachedSurface"
 inline constexpr GameText kDDUpdateOverlay{0x7a0380};       // "DirectX::COverlaySurface::DDUpdateOverlay"
 inline constexpr GameText kDDGetSurfaceDesc{0x697790};      // "CSurface::DDGetSurfaceDesc"
+
+// ------------------------------------------------------------ session 58 (wip/framework-errors)
+// Texts of the framework's exception descriptions (Win32\Classes.cpp).
+inline constexpr GameText kWindowsErrorText{0x7a47b4};  // "Windows error #%x (%s) occured at %s."
+inline constexpr GameText kWindowsError{0x7a4790};      // "Windows error #%x occurred at %s."
+inline constexpr GameText kMciError{0x7a483c};          // "MCI Error #"
+inline constexpr GameText kOpenParenthesis{0x69ed40};   // " ("
+inline constexpr GameText kCloseParenthesisAt{0x7a4848};  // ") at "
+inline constexpr GameText kMultimediaError{0x7a4804};   // "Multimedia Error #"
+inline constexpr GameText kSpaceAt{0x79ec70};           // " at "
+// The VERIFY expressions and files of the synchronization objects and
+// windows (win32_synchronize.cpp).
+inline constexpr GameText kSynchronizeIpp{0x698fa0};       // "Win32\synchronize.ipp"
+inline constexpr GameText kSynchronizeFile{0x7a4054};      // "E:\Siedler3\Win32\Synchronize.cpp"
+inline constexpr GameText kClassesFile{0x7a42ec};          // "E:\Siedler3\Win32\Classes.cpp"
+inline constexpr GameText kVerifySetEvent{0x698f8c};       // "SetEvent (hHandle)"
+inline constexpr GameText kVerifyResetEvent{0x72ff74};     // "ResetEvent (hHandle)"
+inline constexpr GameText kVerifyPulseEvent{0x69b9f4};     // "PulseEvent (hHandle)"
+inline constexpr GameText kVerifyReleaseSemaphore{0x699044};  // "ReleaseSemaphore (hHandle, cReleaseCount, NULL)"
+inline constexpr GameText kVerifyEvent{0x7a409c};          // "hEvent != NULL"
+inline constexpr GameText kVerifySemaphore{0x7a40d0};      // "hSemaphore != NULL"
+inline constexpr GameText kVerifyMutex{0x7a4104};          // "hMutex != NULL"
+inline constexpr GameText kVerifyResult{0x7a4440};         // "result != FALSE"
+inline constexpr GameText kVerifyRes{0x7a423c};            // "res"
+inline constexpr GameText kVerifyDestroyWindow{0x7a4580};  // "DestroyWindow (hWnd)"
+inline constexpr GameText kVerifySuccess{0x7a4540};        // "Success"
+inline constexpr GameText kWaitForTimeout{0x7a4034};       // "Win32::CWin32Waitable::WaitFor"
 }  // namespace s3re::game::texts

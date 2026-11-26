@@ -318,7 +318,7 @@ S3RE_HOOK(0x0060df70, Win32_CThread_Construct, Obj2Fn, Original_Win32_CThread_Co
 std::uint32_t __fastcall Win32_CThread_Construct(void* self, void* /*edx*/, std::uint32_t a, std::uint32_t b) {
     Win32_CWaitable_Construct(self, nullptr, 0, 0);
     CThread* const thread = As<CThread>(self);
-    thread->unk14 = 0;
+    thread->threadId = 0;
     thread->unk1c = a;
     thread->unk18 = 1;
     thread->unk20 = b;

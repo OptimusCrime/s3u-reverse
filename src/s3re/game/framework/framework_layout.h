@@ -87,13 +87,13 @@ static_assert(offsetof(CWaitable, unk10) == 0x10);
 // Win32::CThread: a CWaitable plus the thread's start parameters.
 struct CThread {
     CWaitable waitable;    // +0x00
-    std::uint32_t unk14;   // +0x14
+    std::uint32_t threadId;  // +0x14 (PostThreadMessage 0x60f480 posts to it)
     std::uint32_t unk18;   // +0x18 1 after construction
     std::uint32_t unk1c;   // +0x1c first constructor argument
     std::uint32_t unk20;   // +0x20 second constructor argument
     std::uint32_t unk24;   // +0x24
 };
-static_assert(offsetof(CThread, unk14) == 0x14);
+static_assert(offsetof(CThread, threadId) == 0x14);
 static_assert(offsetof(CThread, unk1c) == 0x1c);
 static_assert(offsetof(CThread, unk24) == 0x24);
 
@@ -146,6 +146,25 @@ struct CAssertmentFailed {
 };
 static_assert(sizeof(CAssertmentFailed) == 0x24);
 static_assert(offsetof(CAssertmentFailed, expression) == 0x18);
+
+// Win32::CHResult (0x2c bytes): a CRunTimeError with an HRESULT (a Windows
+// error from ThrowWin32Error becomes 0x8007xxxx) and a second string, the
+// "location" argument of the throwers (session 58, win32_throwers.cpp).
+struct CHResult {
+    CException base;         // +0x00
+    std::uint32_t code;      // +0x18 the HRESULT
+    msvc6::String location;  // +0x1c
+};
+static_assert(sizeof(CHResult) == 0x2c);
+static_assert(offsetof(CHResult, location) == 0x1c);
+
+// Win32::CMCIException and Win32::CMMException (0x1c bytes each): a
+// CRunTimeError with the MCIERROR / MMRESULT.
+struct CCodeException {
+    CException base;     // +0x00
+    std::uint32_t code;  // +0x18
+};
+static_assert(sizeof(CCodeException) == 0x1c);
 
 // ---------------------------------------------------------------------------
 // DirectX wrappers (DirectX\*.cpp)
