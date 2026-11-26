@@ -108,6 +108,43 @@ testing".
 
 ## Session log (recent sessions; older ones in docs/history/)
 
+### 2026-11-26 (56, round 2): AI Step, sound effects, UI controls, settings
+
+Round 2 (wip/ai-step2, wip/sound-fx, wip/ui-controls, wip/settings-logic),
+merged serially; verified 1324 -> 1514. All four hit the 5-hour usage
+limit once and were resumed.
+- **Computer players (wip/ai-step2)**: CComputerPlayer::Step 0x550f80,
+  COMP_FoodForMines, ConsiderBuildings, WorkOnNote and three small ones.
+  Left in the AI: COMP_EmergencyPowersActStone / SendPrioritizeSite
+  (runtime look) and, behind them, UpdateMaterialShortages and
+  T_ECONOMY_AGENT::Run. Quirk kept: the Asians' large-temple condition uses
+  the Pyramid's countdown.
+- **Spec name-clash guard (wip/ai-step2)**: specs/__init__.py runs the
+  parts statement by statement and fails on a top-level name rebound with
+  a different value; the five old clashes renamed (docs/tools/emulator.md).
+- **Sound effects (wip/sound-fx)**, 56 functions: CSoundEffect (Play,
+  Load, Restore, PurgeStoppedDuplicates), CSoundFile / CMemorySoundFile,
+  the duplicates' dictionary, CDirectSoundException, basic CCDAudio.
+- **UI controls (wip/ui-controls)**, 104 functions: 61 deleting
+  destructors, CControl ctor/dtor/OnTimer, CGroupControl::Tick, buttons,
+  CScreen::PostMessage, App::WaitTime (the -debug switch g_debugSwitch).
+  Bug fixed in the verified CControl::SetTooltipTextId (callee argument
+  counts swapped; only worked because the stack balanced).
+- **Settings and logic (wip/settings-logic)**, 33 functions: std::wstring
+  _Copy/_Grow/_Split/assign, GamePlayerSetup copy/assign/Set (Set is now
+  S3RE_HOOK_ALWAYS with the --race override; S3RE_ORIGINAL_TOOLING_VERSION
+  8), the settings' Watcom vectors, BuildOffsetTable, InitAfterMapLoad,
+  ~CGameData.
+- Merging: re/functions.csv conflicts are resolved per row (the branch's
+  row when name/status changed, otherwise main's with the call counts).
+- Evidence on the merged main: Debug and Release build; inventory check
+  clean; `--self-test` 34/34 + RAM check "separate"; `--test` 942/942;
+  full emulator suite `--full --require-coverage`: 1514 functions, 0
+  mismatches, 0 incomplete; whole-game checks against the original
+  (check_save slots 1-3, check_random_map 384,0 and 448,3, scripted-seed127
+  replay): all identical; call counts recorded. Identical in a whole-game
+  check: 858 -> 935.
+
 ### 2026-11-25 (56): AI agents and area lists, sound loader, UI Watcom containers
 
 Parallel round of four batch agents (wip/ai-agents, wip/ai-areas,
