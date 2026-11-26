@@ -81,9 +81,27 @@ struct PngStruct {
     ZStream zstream;                    // 0x06c
     std::uint8_t* zbuf;                 // 0x0a4 png_crc_finish 0x5aa930
     std::uint32_t zbuf_size;            // 0x0a8
-    std::uint8_t unk0ac[0x108 - 0xac];  // 0x0ac zlib settings, sizes, row buffers, row_info
+    std::int32_t zlib_settings[5];      // 0x0ac zlib level, method, window bits, mem level, strategy (write side)
+    std::uint32_t width;                // 0x0c0 png_read_start_row 0x5b01c0
+    std::uint32_t height;               // 0x0c4
+    std::uint32_t num_rows;             // 0x0c8 rows in the current pass
+    std::uint32_t usr_width;            // 0x0cc
+    std::uint32_t rowbytes;             // 0x0d0
+    std::uint32_t irowbytes;            // 0x0d4 bytes of the current (interlaced) row, filter byte included
+    std::uint32_t iwidth;               // 0x0d8 pixels of the current (interlaced) row
+    std::uint32_t row_number;           // 0x0dc in the current pass (png_read_finish_row 0x5afe20)
+    std::uint8_t* prev_row;             // 0x0e0
+    std::uint8_t* row_buf;              // 0x0e4 png_combine_row 0x5af4d0
+    std::uint8_t* sub_row;              // 0x0e8 (write side)
+    std::uint8_t* up_row;               // 0x0ec
+    std::uint8_t* avg_row;              // 0x0f0
+    std::uint8_t* paeth_row;            // 0x0f4
+    PngRowInfo row_info;                // 0x0f8
+    std::uint32_t idat_size;            // 0x104 bytes left in the current IDAT chunk
     std::uint32_t crc;                  // 0x108 png_reset_crc 0x5a4ec0
-    std::uint8_t unk10c[0x114 - 0x10c]; // 0x10c palette, num_palette, num_trans
+    void* palette;                      // 0x10c
+    std::uint16_t num_palette;          // 0x110
+    std::uint16_t num_trans;            // 0x112 png_read_start_row 0x5b01c0
     std::uint8_t chunk_name[5];         // 0x114 png_format_buffer 0x5a9ef0
     std::uint8_t compression;           // 0x119
     std::uint8_t filter;                // 0x11a
@@ -107,7 +125,12 @@ static_assert(offsetof(PngStruct, error_fn) == 0x40);
 static_assert(offsetof(PngStruct, io_ptr) == 0x5c);
 static_assert(offsetof(PngStruct, zstream) == 0x6c);
 static_assert(offsetof(PngStruct, zbuf) == 0xa4);
+static_assert(offsetof(PngStruct, width) == 0xc0);
+static_assert(offsetof(PngStruct, prev_row) == 0xe0);
+static_assert(offsetof(PngStruct, row_info) == 0xf8);
+static_assert(offsetof(PngStruct, idat_size) == 0x104);
 static_assert(offsetof(PngStruct, crc) == 0x108);
+static_assert(offsetof(PngStruct, num_trans) == 0x112);
 static_assert(offsetof(PngStruct, chunk_name) == 0x114);
 static_assert(offsetof(PngStruct, filler) == 0x126);
 static_assert(offsetof(PngStruct, output_flush_fn) == 0x144);
@@ -177,8 +200,18 @@ inline constexpr std::uint32_t kPngStrip16 = 0x0400;
 inline constexpr std::uint32_t kPngExpand = 0x1000;
 inline constexpr std::uint32_t kPngGrayToRgb = 0x4000;
 inline constexpr std::uint32_t kPngFiller = 0x8000;
+inline constexpr std::uint32_t kPngPackswap = 0x10000;
+
+// png_struct.mode bits.
+inline constexpr std::uint32_t kPngHaveIhdr = 0x01;
+inline constexpr std::uint32_t kPngHavePlte = 0x02;
+inline constexpr std::uint32_t kPngHaveIdat = 0x04;
+inline constexpr std::uint32_t kPngAfterIdat = 0x08;
+inline constexpr std::uint32_t kPngHaveIend = 0x10;
 
 // png_struct.flags bits.
+inline constexpr std::uint32_t kPngFlagZlibFinished = 0x0020;
+inline constexpr std::uint32_t kPngFlagRowInit = 0x0040;
 inline constexpr std::uint32_t kPngFlagFillerAfter = 0x0080;
 inline constexpr std::uint32_t kPngFlagCrcAncillaryUse = 0x0100;
 inline constexpr std::uint32_t kPngFlagCrcAncillaryNoWarn = 0x0200;
@@ -200,7 +233,11 @@ inline constexpr std::uint32_t kPngInfoTime = 0x0200;
 inline constexpr std::uint32_t kPngInfoSrgb = 0x0800;
 
 // Colour types and the ancillary bit of a chunk name's first letter.
+inline constexpr std::uint32_t kPngColorTypeGray = 0;
+inline constexpr std::uint32_t kPngColorTypeRgb = 2;
 inline constexpr std::uint32_t kPngColorTypePalette = 3;
+inline constexpr std::uint32_t kPngColorTypeGrayAlpha = 4;
+inline constexpr std::uint32_t kPngColorTypeRgbAlpha = 6;
 inline constexpr std::uint32_t kPngColorMaskColor = 2;
 inline constexpr std::uint32_t kPngColorMaskAlpha = 4;
 inline constexpr std::uint8_t kPngChunkAncillary = 0x20;

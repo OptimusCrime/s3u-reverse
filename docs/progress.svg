@@ -14,16 +14,18 @@
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="283.6" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 20.2%</title></rect>
 <text x="311.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">20.2%</text>
-<rect x="453.6" y="154" width="149.8" height="40" fill="#4f8fc0"><title>Verified by tests only: 10.7%</title></rect>
-<text x="528.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">10.7%</text>
-<rect x="603.4" y="154" width="447.8" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 31.8%</title></rect>
-<text x="827.3" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">31.8%</text>
+<rect x="453.6" y="154" width="155.7" height="40" fill="#4f8fc0"><title>Verified by tests only: 11.1%</title></rect>
+<text x="531.4" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">11.1%</text>
+<rect x="609.3" y="154" width="2.4" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.2%</title></rect>
+<rect x="611.7" y="154" width="439.5" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 31.3%</title></rect>
+<text x="831.4" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">31.3%</text>
 <rect x="1051.2" y="154" width="524.8" height="40" fill="#e8a39b"><title>Not understood yet: 37.3%</title></rect>
 <text x="1313.6" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">37.3%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
 <rect x="607.2" y="216" width="16" height="16" fill="#4f8fc0"/><text x="631.2" y="230" font-size="19" fill="#1e2924">Verified by tests only</text>
-<rect x="869.6" y="216" width="16" height="16" fill="#f2c86b"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
-<rect x="1233.2" y="216" width="16" height="16" fill="#e8a39b"/><text x="1257.2" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
+<rect x="869.6" y="216" width="16" height="16" fill="#a9d18e"/><text x="893.6" y="230" font-size="19" fill="#1e2924">Reimplemented, not verified yet</text>
+<rect x="1214.8" y="216" width="16" height="16" fill="#f2c86b"/><text x="1238.8" y="230" font-size="19" fill="#1e2924">Understood, not reimplemented yet</text>
+<rect x="1578.4" y="216" width="16" height="16" fill="#e8a39b"/><text x="1602.4" y="230" font-size="19" fill="#1e2924">Not understood yet</text>
 <g transform="translate(0 258)">
 <g><rect x="0" y="0" width="1108.6" height="1000" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
 <text x="5" y="13" font-size="12" font-weight="600" fill="#ffffff">Game code (Blue Byte) — 39.8% verified (28.2% in a whole game)</text>
@@ -20502,7 +20504,7 @@
 </g>
 </g>
 <g><rect x="1350.7" y="783.1" width="207" height="216.9" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="1355.7" y="796.1" font-size="12" font-weight="600" fill="#ffffff">Third-party libraries (zlib, libpng) — 18.5% verified (0.0% in a whole game)</text>
+<text x="1355.7" y="796.1" font-size="12" font-weight="600" fill="#ffffff">Third-party libraries (zlib, libpng) — 33.4% verified (0.0% in a whole game)</text>
 <g><title>(free functions): 98 functions</title><rect x="1352.7" y="802.1" width="145.9" height="195.9" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="1354.7" y="810.6" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="1353.2" y="813.6" width="60.7" height="39.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_do_background @ 0x005a7900
@@ -20529,8 +20531,8 @@
 1104 bytes — Identified (purpose known)</title></rect>
 <rect x="1451.1" y="853.1" width="23.5" height="27.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_hIST @ 0x005ad860
 1104 bytes — Identified (purpose known)</title></rect>
-<rect x="1474.6" y="853.1" width="23.5" height="27.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_do_read_interlace @ 0x005af7f0
-1104 bytes — Identified (purpose known)</title></rect>
+<rect x="1474.6" y="853.1" width="23.5" height="27.5" fill="#a9d18e" stroke="#ffffff" stroke-width="0.3"><title>png_do_read_interlace @ 0x005af7f0
+1104 bytes — Reimplemented, not verified</title></rect>
 <rect x="1380.4" y="880.6" width="25.9" height="24.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_gAMA @ 0x005ab470
 1088 bytes — Identified (purpose known)</title></rect>
 <rect x="1380.4" y="905.2" width="25.9" height="24.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_zTXt @ 0x005aeec0
@@ -20545,20 +20547,20 @@
 960 bytes — Identified (purpose known)</title></rect>
 <rect x="1429.7" y="880.6" width="23.4" height="24" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_tIME @ 0x005ae970
 960 bytes — Identified (purpose known)</title></rect>
-<rect x="1453.1" y="880.6" width="22.7" height="24" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_read_finish_row @ 0x005afe20
-928 bytes — Identified (purpose known)</title></rect>
+<rect x="1453.1" y="880.6" width="22.7" height="24" fill="#a9d18e" stroke="#ffffff" stroke-width="0.3"><title>png_read_finish_row @ 0x005afe20
+928 bytes — Reimplemented, not verified</title></rect>
 <rect x="1475.8" y="880.6" width="22.3" height="24" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_do_expand @ 0x005a8f20
 912 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1406.3" y="904.6" width="27.3" height="19.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_IHDR @ 0x005aab20
 896 bytes — Identified (purpose known)</title></rect>
-<rect x="1433.6" y="904.6" width="24.4" height="19.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_combine_row @ 0x005af4d0
-800 bytes — Identified (purpose known)</title></rect>
+<rect x="1433.6" y="904.6" width="24.4" height="19.2" fill="#a9d18e" stroke="#ffffff" stroke-width="0.3"><title>png_combine_row @ 0x005af4d0
+800 bytes — Reimplemented, not verified</title></rect>
 <rect x="1458" y="904.6" width="21.5" height="19.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_read_info @ 0x005a5180
 704 bytes — Identified (purpose known)</title></rect>
 <rect x="1479.5" y="904.6" width="18.6" height="19.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_do_read_filler @ 0x005a7550
 608 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1406.3" y="923.8" width="17.5" height="18.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_read_start_row @ 0x005b01c0
-560 bytes — Identified (purpose known)</title></rect>
+<rect x="1406.3" y="923.8" width="17.5" height="18.7" fill="#a9d18e" stroke="#ffffff" stroke-width="0.3"><title>png_read_start_row @ 0x005b01c0
+560 bytes — Reimplemented, not verified</title></rect>
 <rect x="1406.3" y="942.5" width="17.5" height="18.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_do_expand_palette @ 0x005a8cf0
 560 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1406.3" y="961.2" width="17.5" height="18.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_read_destroy @ 0x005a5b90
@@ -20569,8 +20571,8 @@
 528 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1423.8" y="943.7" width="15.5" height="18.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>png_do_unshift @ 0x005a7160
 480 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1423.8" y="961.8" width="15.5" height="18.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_read_filter_row @ 0x005afc40
-480 bytes — Identified (purpose known)</title></rect>
+<rect x="1423.8" y="961.8" width="15.5" height="18.1" fill="#a9d18e" stroke="#ffffff" stroke-width="0.3"><title>png_read_filter_row @ 0x005afc40
+480 bytes — Reimplemented, not verified</title></rect>
 <rect x="1423.8" y="980" width="15.5" height="17.5" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_unknown @ 0x005af300
 464 bytes — Identified (purpose known)</title></rect>
 <rect x="1439.3" y="923.8" width="16.3" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>png_handle_tEXt @ 0x005aed30
@@ -20703,30 +20705,30 @@
 16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>zlib: 22 functions</title><rect x="1498.6" y="802.1" width="57.1" height="123.6" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
-<rect x="1499.1" y="802.6" width="56.1" height="36.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_blocks @ 0x005b0660
-3328 bytes — Identified (purpose known)</title></rect>
-<rect x="1499.1" y="838.9" width="34.5" height="34.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_codes @ 0x005b1b90
-1968 bytes — Identified (purpose known)</title></rect>
-<rect x="1533.6" y="838.9" width="21.6" height="34.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>zlib::huft_build @ 0x005b2410
-1232 bytes — Identified (purpose known)</title></rect>
-<rect x="1499.1" y="873.7" width="23.6" height="27.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate @ 0x005aa4a0
-1072 bytes — Identified (purpose known)</title></rect>
-<rect x="1499.1" y="901.5" width="23.6" height="23.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_fast @ 0x005b2be0
-912 bytes — Identified (purpose known)</title></rect>
-<rect x="1522.6" y="873.7" width="16.9" height="14.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_trees_dynamic @ 0x005b28e0
-400 bytes — Identified (purpose known)</title></rect>
+<rect x="1499.1" y="802.6" width="56.1" height="36.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_blocks @ 0x005b0660
+3328 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1499.1" y="838.9" width="34.5" height="34.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_codes @ 0x005b1b90
+1968 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1533.6" y="838.9" width="21.6" height="34.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::huft_build @ 0x005b2410
+1232 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1499.1" y="873.7" width="23.6" height="27.8" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate @ 0x005aa4a0
+1072 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1499.1" y="901.5" width="23.6" height="23.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_fast @ 0x005b2be0
+912 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1522.6" y="873.7" width="16.9" height="14.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_trees_dynamic @ 0x005b28e0
+400 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1539.6" y="873.7" width="15.6" height="14.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflateInit2_ @ 0x005aa310
 368 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1522.6" y="888.2" width="16.3" height="12" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::crc32 @ 0x005aa130
 320 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1538.9" y="888.2" width="16.3" height="12" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_flush @ 0x005b2aa0
-320 bytes — Identified (purpose known)</title></rect>
+<rect x="1538.9" y="888.2" width="16.3" height="12" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_flush @ 0x005b2aa0
+320 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1522.6" y="900.2" width="12.1" height="15.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::adler32 @ 0x005b13f0
 304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1522.6" y="915.5" width="12.1" height="9.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_blocks_new @ 0x005b05a0
 192 bytes — Verified by tests, no whole-game check yet</title></rect>
-<rect x="1534.8" y="900.2" width="11.2" height="9.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_trees_bits @ 0x005b2360
-176 bytes — Identified (purpose known)</title></rect>
+<rect x="1534.8" y="900.2" width="11.2" height="9.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_trees_bits @ 0x005b2360
+176 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1546" y="900.2" width="9.2" height="9.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_blocks_free @ 0x005b1360
 144 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1534.8" y="909.8" width="8.3" height="9.5" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>zlib::inflate_blocks_reset @ 0x005b0520

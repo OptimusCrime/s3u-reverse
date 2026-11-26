@@ -43,9 +43,12 @@ add_library(s3re SHARED
     thirdparty/png_error.cpp
     thirdparty/png_mem.cpp
     thirdparty/png_rtran_rows.cpp
+    thirdparty/png_rutil_rows.cpp
     thirdparty/png_set.cpp
     thirdparty/zlib_checksums.cpp
+    thirdparty/zlib_inflate.cpp
     thirdparty/zlib_inflate_setup.cpp
+    thirdparty/zlib_inflate_tests.cpp
 
     # tooling/: launcher features: --fast, --random-map, --load-save
     tooling/fast.cpp

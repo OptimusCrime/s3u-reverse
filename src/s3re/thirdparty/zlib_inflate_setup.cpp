@@ -38,6 +38,7 @@
 #include "hooks.h"
 #include "test/difftest.h"
 #include "thirdparty/png_struct.h"
+#include "thirdparty/zlib_state.h"
 
 #include <cstdint>
 #include <cstring>
@@ -46,67 +47,10 @@
 
 namespace s3re::thirdparty {
 
-#pragma pack(push, 1)
-
-// inflate.c's internal_state, 0x18 bytes.
-struct InflateState {
-    std::int32_t mode;     // 0x00
-    std::uint32_t sub[2];  // 0x04 method / check words / marker
-    std::int32_t nowrap;   // 0x0c no zlib header and check
-    std::uint32_t wbits;   // 0x10
-    void* blocks;          // 0x14 inflate_blocks_state
-};
-static_assert(sizeof(InflateState) == 0x18);
-
-// infblock.c's inflate_blocks_state, 0x40 bytes.
-struct InflateBlocks {
-    std::int32_t mode;      // 0x00
-    void* codes;            // 0x04 sub.decode.codes (mode CODES)
-    std::uint32_t sub08;    // 0x08
-    void* blens;            // 0x0c sub.trees.blens (modes BTREE, DTREE)
-    std::uint32_t sub10[3]; // 0x10
-    std::uint32_t bitk;     // 0x1c
-    std::uint32_t bitb;     // 0x20
-    void* hufts;            // 0x24
-    std::uint8_t* window;   // 0x28
-    std::uint8_t* end;      // 0x2c
-    std::uint8_t* read;     // 0x30
-    std::uint8_t* write;    // 0x34
-    void* checkfn;          // 0x38
-    std::uint32_t check;    // 0x3c
-};
-static_assert(sizeof(InflateBlocks) == 0x40);
-
-// infcodes.c's inflate_codes_state, 0x1c bytes.
-struct InflateCodes {
-    std::int32_t mode;      // 0x00
-    std::uint8_t sub[0x0c]; // 0x04
-    std::uint8_t lbits;     // 0x10
-    std::uint8_t dbits;     // 0x11
-    std::uint8_t pad[2];    // 0x12
-    const void* ltree;      // 0x14
-    const void* dtree;      // 0x18
-};
-static_assert(sizeof(InflateCodes) == 0x1c);
-
-#pragma pack(pop)
 
 namespace {
 
-constexpr std::int32_t kZOk = 0;
-constexpr std::int32_t kZStreamError = -2;
-constexpr std::int32_t kZMemError = -4;
-constexpr std::int32_t kZVersionError = -6;
-
-constexpr std::int32_t kBlocksType = 0;    // infblock.c modes
-constexpr std::int32_t kBlocksBtree = 4;
-constexpr std::int32_t kBlocksDtree = 5;
-constexpr std::int32_t kBlocksCodes = 6;
-constexpr std::int32_t kInflateMethod = 0;  // inflate.c modes
-constexpr std::int32_t kInflateBlocks = 7;
-
-constexpr std::uint32_t kHuftEntries = 1440;  // MANY
-constexpr std::uint32_t kHuftBytes = 8;
+constexpr std::uint32_t kHuftBytes = sizeof(InflateHuft);
 constexpr std::int32_t kDefaultWindowBits = 15;
 constexpr std::int32_t kMinWindowBits = 8;
 constexpr std::int32_t kMaxWindowBits = 15;
@@ -248,8 +192,8 @@ InflateCodes* __cdecl zlib_inflate_codes_new(std::uint32_t bl, std::uint32_t bd,
         c->mode = 0;  // START
         c->lbits = static_cast<std::uint8_t>(bl);
         c->dbits = static_cast<std::uint8_t>(bd);
-        c->ltree = tl;
-        c->dtree = td;
+        c->ltree = static_cast<const InflateHuft*>(tl);
+        c->dtree = static_cast<const InflateHuft*>(td);
     }
     return c;
 }

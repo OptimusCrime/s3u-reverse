@@ -340,6 +340,19 @@ inline constexpr GameGlobal<const std::uint32_t> g_zlibFixedBl{0x7348e0};       
 inline constexpr GameGlobal<const std::uint32_t> g_zlibFixedBd{0x7348e4};         // 5 (fixed_bd)
 inline constexpr GameGlobal<const std::uint8_t[0x1000]> g_zlibFixedTl{0x7348e8};  // fixed_tl: 512 inflate_huft
 inline constexpr GameGlobal<const std::uint8_t[0x100]> g_zlibFixedTd{0x7358e8};   // fixed_td: 32 inflate_huft
+// png-r6 batch: zlib 1.1.3's inflate tables (thirdparty/zlib_inflate.cpp).
+inline constexpr GameGlobal<const std::uint32_t[17]> g_zlibInflateMask{0x735ad8};  // infutil.c inflate_mask: (1 << n) - 1
+inline constexpr GameGlobal<const std::uint32_t[19]> g_zlibBorder{0x65c614};       // infblock.c border: order of the bit length codes
+inline constexpr GameGlobal<const std::uint32_t[31]> g_zlibCplens{0x65c690};       // inftrees.c cplens: length bases
+inline constexpr GameGlobal<const std::uint32_t[31]> g_zlibCplext{0x65c70c};       // cplext: length extra bits (112 = invalid)
+inline constexpr GameGlobal<const std::uint32_t[30]> g_zlibCpdist{0x65c788};       // cpdist: distance bases
+inline constexpr GameGlobal<const std::uint32_t[30]> g_zlibCpdext{0x65c800};       // cpdext: distance extra bits
+// png-r6 batch: libpng 1.0.2's interlace tables and chunk names (thirdparty/png_rutil_rows.cpp).
+inline constexpr GameGlobal<const std::int32_t[7]> g_pngPassStart{0x733670};   // png_pass_start: first column of each pass
+inline constexpr GameGlobal<const std::int32_t[7]> g_pngPassInc{0x73368c};     // png_pass_inc: column step
+inline constexpr GameGlobal<const std::int32_t[7]> g_pngPassYstart{0x7336a8};  // png_pass_ystart: first row
+inline constexpr GameGlobal<const std::int32_t[7]> g_pngPassYinc{0x7336c4};    // png_pass_yinc: row step
+inline constexpr GameGlobal<const std::uint8_t[5]> g_pngIdat{0x7335f0};        // png_IDAT: "IDAT"
 // wip/logic-r4: the CD music (CLogicThread::PlayNextMusicTrack 0x53f5f0).
 // Four playlists per CD version (one per race; the Amazons' CD has four
 // tracks per list, the others three), and the playlist lengths

@@ -587,6 +587,31 @@ inline constexpr GameText kPngCrcError{0x733dc8};       // "CRC error"
 inline constexpr GameText kPngWidthTooLarge{0x733bf0};
 inline constexpr GameText kZlibVersion{0x733754};       // "1.1.3" (ZLIB_VERSION, inflateInit2_ checks its first character)
 inline constexpr GameText kPngRowbytesOverflow{0x734868};  // "Width too large to process image data; rowbytes will overflow."  // "Width too large for libpng to process image data."
+// png-r6 batch: zlib 1.1.3's inflate messages (thirdparty/zlib_inflate.cpp).
+inline constexpr GameText kZlibUnknownMethod{0x733d90};      // "unknown compression method"
+inline constexpr GameText kZlibInvalidWindowSize{0x733d7c};  // "invalid window size"
+inline constexpr GameText kZlibIncorrectHeader{0x733d64};    // "incorrect header check"
+inline constexpr GameText kZlibIncorrectCheck{0x733d4c};     // "incorrect data check"
+inline constexpr GameText kZlibNeedDictionary{0x733d3c};     // "need dictionary"
+inline constexpr GameText kZlibInvalidBlockType{0x7347bc};   // "invalid block type"
+inline constexpr GameText kZlibInvalidStoredLengths{0x73479c};  // "invalid stored block lengths"
+inline constexpr GameText kZlibTooManySymbols{0x734778};     // "too many length or distance symbols"
+inline constexpr GameText kZlibInvalidRepeat{0x73475c};      // "invalid bit length repeat"
+inline constexpr GameText kZlibInvalidLiteralCode{0x7348c0}; // "invalid literal/length code"
+inline constexpr GameText kZlibInvalidDistanceCode{0x7348a8};  // "invalid distance code"
+inline constexpr GameText kZlibOversubscribedBits{0x735a0c}; // "oversubscribed dynamic bit lengths tree"
+inline constexpr GameText kZlibIncompleteBits{0x7359e8};     // "incomplete dynamic bit lengths tree"
+inline constexpr GameText kZlibOversubscribedLiterals{0x735a54};  // "oversubscribed literal/length tree"
+inline constexpr GameText kZlibIncompleteLiterals{0x735a34}; // "incomplete literal/length tree"
+inline constexpr GameText kZlibOversubscribedDistances{0x735ab8};  // "oversubscribed distance tree"
+inline constexpr GameText kZlibIncompleteDistances{0x735a9c};  // "incomplete distance tree"
+inline constexpr GameText kZlibEmptyDistances{0x735a78};     // "empty distance tree with lengths"
+// png-r6 batch: libpng 1.0.2's row reading messages (thirdparty/png_rutil_rows.cpp).
+inline constexpr GameText kPngBadFilterType{0x734714};         // "Bad adaptive filter type"
+inline constexpr GameText kPngNotEnoughImageData{0x733830};    // "Not enough image data"
+inline constexpr GameText kPngDecompressionError{0x734748};    // "Decompression Error"
+inline constexpr GameText kPngExtraCompressedData{0x733804};   // "Extra compressed data"
+inline constexpr GameText kPngExtraCompressionData{0x734730};  // "Extra compression data"
 // ------------------------------------------------------------ wip/logic-r4 batch
 // Volker\LogicInit.cpp: the CD music (CLogicThread::PlayNextMusicTrack) and FinishGame.
 inline constexpr GameText kPlayOriginalTrack{0x730bd0};  // "xxx CDAUDIOPLAY about to play ORG track #%u"
