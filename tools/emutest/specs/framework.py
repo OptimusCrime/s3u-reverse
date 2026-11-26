@@ -1643,3 +1643,139 @@ SPECS += [
           lambda rng, pool: rng.choice([0xFFFFFFFF, 0, 3, 50, 126, 127, rng.getrandbits(32)])], presets=cd_world),
     Spec("Win32_CCDAudio_Destroy", 0x00615500, "thiscall", [], presets=cd_world),
 ]
+
+
+# -- wip/app-r4: Win32::CRegistryKey (win32_registry.cpp) --------------------
+#
+# The key object at world 0 (HKEY at +4: open or 0), a second key at
+# REG_OTHER, a std::string at REG_STRING (no buffer, or STRING_TEXT), texts
+# at STRING_TEXT; out-parameters point into REG_OUT (random lengths, so the
+# probes write a few bytes). The registry functions are API probes (emu.py);
+# a failed check runs the real ThrowWin32Error and ends in
+# _CxxThrowException.
+REG_OTHER = SCRATCH + 21 * SCRATCH_SLOT_BYTES
+REG_STRING = REG_OTHER + 0x10
+REG_OUT = SCRATCH + 22 * SCRATCH_SLOT_BYTES
+
+
+def reg_world(rng, pool, args):
+    text = [(STRING_TEXT + i, rng.randint(1, 255), 1) for i in range(rng.randrange(0x20))]
+    key = lambda: rng.choice([0, 0, rng.getrandbits(32)]) if rng.random() < 0.3 else rng.getrandbits(32)
+    sizes = [(REG_OUT + 4 * i, rng.choice([0, 1, 4, 8, 13, rng.getrandbits(32)]), 4) for i in range(32)]
+    return text + [(STRING_TEXT + len(text), 0, 1), (0x04, key(), 4), (REG_OTHER + 4, key(), 4),
+                   (REG_STRING + 4, rng.choice([0, WORLD_BASE + STRING_TEXT]), 4)] + sizes
+
+
+def reg_out(rng, pool) -> int:
+    return 0 if rng.random() < 0.25 else WORLD_BASE + REG_OUT + 4 * rng.randrange(32)
+
+
+def reg_text(rng, pool) -> int:
+    return 0 if rng.random() < 0.2 else STRING_TEXT_PTR
+
+
+def reg_number(rng, pool) -> int:
+    return rng.randrange(16) if rng.random() < 0.5 else rng.getrandbits(32)
+
+
+def reg_spec(name, address, args, exempt=()):
+    # Dead (exempt): as in sync_spec, the free of the location's first
+    # temporary (its buffer is always shared by then) and the code after the
+    # ThrowWin32Error call.
+    return Spec(name, address, "thiscall", args, presets=reg_world, globals=empty_text, exempt_blocks=exempt)
+
+
+REG_STRING_PTR = WORLD_BASE + REG_STRING
+REG_OTHER_PTR = WORLD_BASE + REG_OTHER
+
+# The dead blocks of each (see reg_spec): the free of the first temporary,
+# then the code after the ThrowWin32Error call.
+REG_DEAD = {
+    0x006164a0: (0x6165bd, 0x61660b, 0x616621, 0x616628, 0x61662d, 0x616655, 0x61665d, 0x61665f, 0x616663,
+                 0x616689, 0x616695, 0x61669b, 0x61669f, 0x6166a9, 0x6166ad, 0x6166b3),
+    0x006166e0: (0x6167df, 0x61682d, 0x616843, 0x61684a, 0x61684f, 0x616877, 0x61687f, 0x616881, 0x616885,
+                 0x6168ab, 0x6168b7, 0x6168bd, 0x6168c1, 0x6168cb, 0x6168cf, 0x6168d5),
+    0x00616900: (0x616a0a, 0x616a58, 0x616a6e, 0x616a75, 0x616a7a, 0x616aa2, 0x616aaa, 0x616aac, 0x616ab0,
+                 0x616ad6, 0x616ae2, 0x616ae8, 0x616aec, 0x616af6, 0x616afa, 0x616b00),
+    0x00616b20: (0x616c26, 0x616c74, 0x616c8a, 0x616c91, 0x616c96, 0x616cc0, 0x616cc8, 0x616cca, 0x616cce,
+                 0x616cf4, 0x616d00, 0x616d06, 0x616d0a, 0x616d14, 0x616d18, 0x616d1e),
+    0x00616d50: (0x616e7c, 0x616eca, 0x616ee0, 0x616ee7, 0x616eec, 0x616f14, 0x616f1c, 0x616f1e, 0x616f22,
+                 0x616f48, 0x616f54, 0x616f5a, 0x616f5e, 0x616f68, 0x616f6c, 0x616f72),
+    0x00616f90: (0x6170bd, 0x61710e, 0x617125, 0x61712c, 0x617131, 0x617159, 0x617161, 0x617163, 0x617167,
+                 0x61718d, 0x617199, 0x61719d, 0x6171a2, 0x6171ac, 0x6171b0, 0x6171b6),
+    0x006175c0: (0x6176f5, 0x617746, 0x61775d, 0x617764, 0x617769, 0x617791, 0x617799, 0x61779b, 0x61779f,
+                 0x6177c5, 0x6177d1, 0x6177d5, 0x6177da, 0x6177e4, 0x6177e8, 0x6177ee),
+    0x00617810: (0x61791e, 0x61796f, 0x617985, 0x61798c, 0x617991, 0x6179b9, 0x6179c1, 0x6179c3, 0x6179c7,
+                 0x6179ed, 0x6179f9, 0x6179ff, 0x617a03, 0x617a0d, 0x617a11, 0x617a17),
+    0x00617c80: (0x617d8e, 0x617ddf, 0x617df5, 0x617dfc, 0x617e01, 0x617e29, 0x617e31, 0x617e33, 0x617e37,
+                 0x617e5d, 0x617e69, 0x617e6f, 0x617e73, 0x617e7d, 0x617e81, 0x617e87),
+    0x00618030: (0x61814a, 0x61819f, 0x6181a6, 0x6181ab, 0x6181d3, 0x6181dc, 0x6181de, 0x6181e2, 0x618208,
+                 0x618214, 0x618218, 0x61821c, 0x618226, 0x61822a, 0x618230),
+}
+REG_RESULT = REG_OUT + 0x200
+REG_RESULT_PTR = WORLD_BASE + REG_RESULT
+
+
+def reg_by_value(rng, pool, args):
+    """reg_world and the buffer of SetString's by-value string (args 1..4)."""
+    fields = reg_world(rng, pool, args)
+    fields.append((BY_VALUE_BUFFER, rng.choice([0, 0, 1, 2, 0xfd, 0xfe, 0xff]), 1))
+    text = args[3] if rng.random() < 0.8 else rng.randrange(0x66)
+    for i in range(text):
+        fields.append((BY_VALUE_BUFFER + 1 + i, rng.randint(1, 255), 1))
+    fields.append((BY_VALUE_BUFFER + 1 + text, 0, 1))
+    return fields
+
+
+SPECS += [
+    reg_spec("Win32_CRegistryKey_Create", 0x006164a0,
+             [reg_number, reg_text, reg_text, reg_number, reg_number, reg_number, reg_out], REG_DEAD[0x006164a0]),
+    reg_spec("Win32_CRegistryKey_DeleteSubKey", 0x006166e0, [reg_text], REG_DEAD[0x006166e0]),
+    reg_spec("Win32_CRegistryKey_Open", 0x00616900, [reg_number, reg_text, reg_number], REG_DEAD[0x00616900]),
+    reg_spec("Win32_CRegistryKey_Close", 0x00616b20, [], REG_DEAD[0x00616b20]),
+    reg_spec("Win32_CRegistryKey_QueryInfo", 0x00616d50, [reg_out] * 10, REG_DEAD[0x00616d50]),
+    reg_spec("Win32_CRegistryKey_EnumKey", 0x00616f90, [reg_number, reg_out, reg_out, reg_out, reg_out, reg_out],
+             REG_DEAD[0x00616f90]),
+    reg_spec("Win32_CRegistryKey_EnumValue", 0x006175c0, [reg_number, reg_out, reg_out, reg_out, reg_out, reg_out],
+             REG_DEAD[0x006175c0]),
+    reg_spec("Win32_CRegistryKey_QueryValue", 0x00617810, [reg_text, reg_out, reg_out, reg_out],
+             REG_DEAD[0x00617810]),
+    reg_spec("Win32_CRegistryKey_SetValue", 0x00617c80, [reg_text, reg_number, reg_out, reg_number],
+             REG_DEAD[0x00617c80]),
+    reg_spec("Win32_CRegistryKey_ValueExists", 0x00618030, [reg_text], REG_DEAD[0x00618030]),
+    reg_spec("Win32_CRegistryKey_GetSubKeyCount", 0x006171f0, []),
+    reg_spec("Win32_CRegistryKey_GetValueCount", 0x00617320, []),
+    reg_spec("Win32_CRegistryKey_QueryDword", 0x00617c40, [one_of(REG_STRING_PTR)]),
+    reg_spec("Win32_CRegistryKey_SetDword", 0x00618000, [one_of(REG_STRING_PTR), anything]),
+    # 0x61649b: alignment padding after the jmp.
+    Spec("Win32_CRegistryKey_Destroy", 0x00616490, "thiscall", [], presets=reg_world, globals=empty_text,
+         cover_until=0x0061649b),
+    reg_spec("Win32_CRegistryKey_Copy", 0x00616460, [one_of(REG_OTHER_PTR)]),
+    # From 0x61828e on: the next function (a static initializer) and padding.
+    Spec("Win32_CRegistryKey_Assign", 0x00618260, "thiscall",
+         [one_of(REG_OTHER_PTR, REG_OTHER_PTR, REG_OTHER_PTR, WORLD_BASE)], presets=reg_world, globals=empty_text,
+         cover_until=0x0061828e),
+    # Dead: 0x617b40.. the "" assigned when the buffer is null (after
+    # ThrowOutOfMemory, which throws); 0x617c0a the _Eos of the text's
+    # erase(0, npos) (_Grow(0) is false).
+    Spec("Win32_CRegistryKey_QueryString", 0x00617a40, "thiscall", [one_of(REG_RESULT_PTR), one_of(REG_STRING_PTR)],
+         presets=reg_world, globals=empty_text, new_fails=0.1, exempt_blocks=(0x617b40, 0x617b61, 0x617c0a)),
+    # Dead (exempt): the _Eos of the value's erase(0, npos) (_Grow(0) is
+    # false) and the count decrement (the erase unshares the buffer first).
+    Spec("Win32_CRegistryKey_SetString", 0x00617eb0, "thiscall",
+         [one_of(REG_STRING_PTR), below(256), one_of(0, WORLD_BASE + BY_VALUE_BUFFER + 1, WORLD_BASE + BY_VALUE_BUFFER + 1),
+          below(0x60), below(0x80), lambda rng, pool: rng.choice([0, 1, 0x100, rng.getrandbits(32)])],
+         presets=reg_by_value, globals=empty_text, eax_mask=0, exempt_blocks=(0x617fad, 0x617fcd)),
+    Spec("Win32_CRegistryKey_GetSubKey", 0x00617220, "thiscall", [one_of(REG_RESULT_PTR), reg_number],
+         presets=reg_world, globals=empty_text, new_fails=0.1),
+    # Dead: 0x617445.. the "" assigned when the buffer is null (as above);
+    # 0x617585 the _Eos of the name's erase(0, npos) (_Grow(0) is false).
+    Spec("Win32_CRegistryKey_GetValueInfo", 0x00617350, "thiscall", [one_of(REG_RESULT_PTR), reg_number],
+         presets=reg_world, globals=empty_text, new_fails=0.1, exempt_blocks=(0x617445, 0x617466, 0x617585)),
+    # Dead (exempt): as in SetString, the _Eos and the count decrement.
+    Spec("Win32_CRegistryValueInfo_Destroy", 0x00616320, "thiscall", [], eax_mask=0,
+         presets=member_strings((0x04,)), exempt_blocks=(0x6163e2, 0x616403)),
+    # From 0x61ab2e on: the next function (a static initializer).
+    Spec("ScalarDeletingDestructor_61ab10", 0x0061ab10, "thiscall", [below(4)],
+         callees={0x61aab0: (0, "thiscall", "probe")}, cover_until=0x0061ab2e),
+]

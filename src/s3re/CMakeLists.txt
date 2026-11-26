@@ -298,6 +298,8 @@ add_library(s3re SHARED
     game/framework/win32_mapping_tests.cpp
     game/framework/win32_synchronize.cpp
     game/framework/win32_synchronize_tests.cpp
+    game/framework/win32_registry.cpp
+    game/framework/win32_registry_tests.cpp
     game/framework/win32_throwers.cpp
     game/framework/win32_throwers_tests.cpp
     game/framework/winmain.cpp

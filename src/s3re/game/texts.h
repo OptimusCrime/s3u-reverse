@@ -537,6 +537,10 @@ inline constexpr GameText kSpaceAt{0x79ec70};           // " at "
 // windows (win32_synchronize.cpp).
 inline constexpr GameText kSynchronizeIpp{0x698fa0};       // "Win32\synchronize.ipp"
 inline constexpr GameText kSynchronizeFile{0x7a4054};      // "E:\Siedler3\Win32\Synchronize.cpp"
+inline constexpr GameText kRegistryFile{0x7a4c3c};        // "E:\Siedler3\Win32\Registry.cpp"
+inline constexpr GameText kRegistryName{0x7a4c5c};        // "name" (GetSubKey's buffer)
+inline constexpr GameText kRegistryLpName{0x7a4c64};      // "lpName" (GetValueInfo's buffer)
+inline constexpr GameText kRegistryLpData{0x7a4c6c};      // "lpData" (QueryString's buffer)
 inline constexpr GameText kClassesFile{0x7a42ec};          // "E:\Siedler3\Win32\Classes.cpp"
 inline constexpr GameText kVerifySetEvent{0x698f8c};       // "SetEvent (hHandle)"
 inline constexpr GameText kVerifyResetEvent{0x72ff74};     // "ResetEvent (hHandle)"

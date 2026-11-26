@@ -532,6 +532,43 @@ inline constexpr GameGlobal<SetThreadPriorityImport> g_importSetThreadPriority{0
 inline constexpr GameGlobal<HandleCallImport> g_importDestroyWindow{0x655348};               // USER32.dll
 inline constexpr GameGlobal<PostThreadMessageAImport> g_importPostThreadMessageA{0x6552e0};  // USER32.dll
 inline constexpr GameGlobal<WaitForSingleObjectImport> g_importWaitForSingleObject{0x6551c0};
+// The registry functions of Win32::CRegistryKey (win32_registry.cpp;
+// ADVAPI32.dll). Keys are HKEYs passed as numbers; results are Windows error
+// codes (0 = ERROR_SUCCESS).
+using RegOpenKeyExAImport = std::int32_t(__stdcall*)(std::uint32_t key, const char* subKey, std::uint32_t options,
+                                                     std::uint32_t sam, std::uint32_t* result);
+using RegCreateKeyExAImport = std::int32_t(__stdcall*)(std::uint32_t key, const char* subKey, std::uint32_t reserved,
+                                                       const char* keyClass, std::uint32_t options, std::uint32_t sam,
+                                                       const void* security, std::uint32_t* result,
+                                                       std::uint32_t* disposition);
+using RegCloseKeyImport = std::int32_t(__stdcall*)(std::uint32_t key);
+using RegDeleteKeyAImport = std::int32_t(__stdcall*)(std::uint32_t key, const char* subKey);
+using RegQueryInfoKeyAImport = std::int32_t(__stdcall*)(std::uint32_t key, char* keyClass, std::uint32_t* classLength,
+                                                        std::uint32_t* reserved, std::uint32_t* subKeys,
+                                                        std::uint32_t* maxSubKeyLength,
+                                                        std::uint32_t* maxClassLength, std::uint32_t* values,
+                                                        std::uint32_t* maxValueNameLength,
+                                                        std::uint32_t* maxValueLength,
+                                                        std::uint32_t* securityDescriptorSize, void* lastWrite);
+using RegEnumKeyExAImport = std::int32_t(__stdcall*)(std::uint32_t key, std::uint32_t index, char* name,
+                                                     std::uint32_t* nameLength, std::uint32_t* reserved,
+                                                     char* keyClass, std::uint32_t* classLength, void* lastWrite);
+using RegEnumValueAImport = std::int32_t(__stdcall*)(std::uint32_t key, std::uint32_t index, char* name,
+                                                     std::uint32_t* nameLength, std::uint32_t* reserved,
+                                                     std::uint32_t* type, void* data, std::uint32_t* dataSize);
+using RegQueryValueExAImport = std::int32_t(__stdcall*)(std::uint32_t key, const char* name, std::uint32_t* reserved,
+                                                        std::uint32_t* type, void* data, std::uint32_t* dataSize);
+using RegSetValueExAImport = std::int32_t(__stdcall*)(std::uint32_t key, const char* name, std::uint32_t reserved,
+                                                      std::uint32_t type, const void* data, std::uint32_t size);
+inline constexpr GameGlobal<RegQueryInfoKeyAImport> g_importRegQueryInfoKeyA{0x655000};
+inline constexpr GameGlobal<RegSetValueExAImport> g_importRegSetValueExA{0x655004};
+inline constexpr GameGlobal<RegCloseKeyImport> g_importRegCloseKey{0x655008};
+inline constexpr GameGlobal<RegCreateKeyExAImport> g_importRegCreateKeyExA{0x655010};
+inline constexpr GameGlobal<RegDeleteKeyAImport> g_importRegDeleteKeyA{0x655014};
+inline constexpr GameGlobal<RegOpenKeyExAImport> g_importRegOpenKeyExA{0x655018};
+inline constexpr GameGlobal<RegEnumKeyExAImport> g_importRegEnumKeyExA{0x65501c};
+inline constexpr GameGlobal<RegEnumValueAImport> g_importRegEnumValueA{0x655020};
+inline constexpr GameGlobal<RegQueryValueExAImport> g_importRegQueryValueExA{0x655024};
 
 // Win32\Mapping.cpp, Win32\Detach.cpp and the graphics loader.
 using CreateFileAImport = void*(__stdcall*)(const char* name, std::uint32_t access, std::uint32_t share,
