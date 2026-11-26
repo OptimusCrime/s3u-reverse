@@ -142,6 +142,8 @@ inline constexpr std::uint32_t kWCIsvListBase = 0x655fa4;               // WCIsv
 inline constexpr std::uint32_t kWCIterExcept = 0x656a38;                // WCIterExcept (base of the iterators)
 inline constexpr std::uint32_t kWCIsvSListBase_CScreenElementP = 0x655bc4;  // WCIsvSListBase<WCNIsvSLink<CScreenElement*>>
 inline constexpr std::uint32_t kWCIsvSListBase_bool = 0x655be0;            // WCIsvSListBase<WCNIsvSLink<bool>>
+inline constexpr std::uint32_t kWCValListBase_bool = 0x655bec;             // WCValListBase<bool, WCIsvSListBase<..>, ..>
+inline constexpr std::uint32_t kWCValListBase_CScreenElementP = 0x655bd0;  // WCValListBase<CScreenElement*, ..>
 // WCSkipListIterBase<WCSkipListDictKeyVal<K, V>> (watcom/list_iterators.cpp)
 inline constexpr std::uint32_t kWCSkipListIterBase_CExecuteTypes = 0x65778c;  // <unsigned long, WCPtrSortedVector<CExecuteType>>
 inline constexpr std::uint32_t kWCSkipListIterBase_CSyncInfo = 0x657794;      // <unsigned long, CNetSession::CSyncInfo>

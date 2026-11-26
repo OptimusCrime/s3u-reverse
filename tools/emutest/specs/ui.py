@@ -1821,3 +1821,121 @@ SPECS += [
     Spec("CUpDown_OnButtonClicked", 0x00422e50, "fastcall", [UD_THIS, anything, ud_sender], presets=ud_state,
          callees={**UD_SETVALUE_PROBE, 0x006119b0: (1, "thiscall", "throw")}),
 ]
+
+
+# -- wip/menus-r5: ui_group_members.cpp ---------------------------------------
+# Objects at UICTL_OBJECT (world 0x400), vbtables in UICTL_VBTABLE (one per
+# 8 bytes), fake objects and vtables as in the specs above. The children
+# vectors' find (slot 0xc) gets stack pointers: recorded by contents.
+GM_VIRTUALS = {0: 1, 4: 1, 0xc: (3, {0: 4, 2: 4})}
+
+
+def gm_vbptr(at, slot, displacement):
+    return [(at, WORLD_BASE + UICTL_VBTABLE + 8 * slot, 4), (UICTL_VBTABLE + 8 * slot + 4, displacement & 0xFFFFFFFF, 4)]
+
+
+def gm_group_to_destroy(rng, pool, args):
+    obj = UICTL_OBJECT
+    out = gm_vbptr(obj + 4, 0, 0x7c + 4 * rng.randrange(4))
+    data = rng.choice([0, WORLD_BASE + SCRATCH + 0x100, WORLD_BASE + SCRATCH + 0x100])
+    length = 0 if data == 0 else rng.choice([0, 1, 2, 4, rng.randrange(6)])
+    out += [(obj + 0xc + 8, data, 4), (obj + 0xc + 0xc, rng.choice([length, length + 1, 6]) if data else 0, 4),
+            (obj + 0xc + 0x10, rng.randrange(-1, 6) & 0xFFFFFFFF, 4), (obj + 0xc + 0x14, length, 4)]
+    for list_at in (0x34, 0x4c, 0x64):
+        out.append((obj + list_at + 8, rng.choice([0, rng.getrandbits(32)]), 4))
+    return out
+
+
+def gm_remove_last_child(machine, ecx, args, h):
+    """RemoveChild takes a child out: the vector's length - 1."""
+    at = WORLD_BASE + UICTL_OBJECT + 0x20
+    length = int.from_bytes(machine.guest_read(at, 4), "little")
+    machine.guest_write(at, ((length - 1) & 0xFFFFFFFF).to_bytes(4, "little"))
+
+
+def gm_group(rng, pool, args):
+    obj = UICTL_OBJECT
+    return [(obj, FAKE_VTABLE, 4), (obj + 0xc, FAKE_VTABLE, 4), (obj + 0x20, rng.choice([0, 1, 2]), 4)]
+
+
+def gm_list_box(rng, pool, args):
+    obj = UICTL_OBJECT
+    visible = rng.choice([0, 1, 5, 9, rng.getrandbits(32)])
+    count = rng.choice([visible, visible + 1, visible - 1, 0, rng.getrandbits(32)]) & 0xFFFFFFFF
+    out = gm_vbptr(obj + 4, 0, 0x440 + 4 * rng.randrange(3)) + gm_vbptr(obj + 0xc4, 1, 0x200 + 4 * rng.randrange(3))
+    out += [(obj + 0x38, FAKE_VTABLE, 4), (obj + 0x44, FAKE_VTABLE, 4), (obj + 0x58, rng.choice([0, 1, 2]), 4),
+            (obj + 0x3f0, rng.choice([0, 1, 0x80]), 1), (obj + 0x3f1, rng.choice([0, 1, 0x80]), 1),
+            (obj + 0x414, visible, 4), (obj + 0x434, count, 4),
+            (obj + 0x3f4, rng.choice([1, 2, 13, 16, rng.randrange(1, 0x7FFFFFFF)]), 4)]
+    return out
+
+
+def gm_rect(rng, pool):
+    return WORLD_BASE + SCRATCH + 0x200 + 16 * rng.randrange(4)
+
+
+def gm_records(rng, pool, args):
+    header = rng.choice([0, WORLD_BASE + SCRATCH + 0x300])
+    cells = rng.choice([0, WORLD_BASE + SCRATCH + 0x400])
+    displacement = 0x40 + 4 * rng.randrange(3)
+    out = [(0x1c, header, 4), (0x10, cells, 4), (SCRATCH + 0x300, FAKE_VTABLE, 4)]
+    out += gm_vbptr(SCRATCH + 0x404, 2, displacement) + [(SCRATCH + 0x404 + displacement, FAKE_VTABLE, 4)]
+    return out
+
+
+def gm_image_button(rng, pool, args):
+    obj = UICTL_OBJECT
+    displacement = 0x5c + 4 * rng.randrange(3)
+    return gm_vbptr(obj + 4, 0, displacement) + [(obj + 4 + displacement, FAKE_VTABLE, 4),
+                                                 (obj + 0x58, rng.choice([0xFFFFFFFF, 0, 0x2000a]), 4)]
+
+
+def gm_dialog(rng, pool, args):
+    obj = UICTL_OBJECT
+    out = gm_vbptr(obj, 0, 0xc0 + 4 * rng.randrange(3))
+    return out + [(obj + 0xc0 + 4 * k, FAKE_VTABLE, 4) for k in range(4)]
+
+
+def gm_move_element(machine, ecx, args, h):
+    """SetParent sometimes moves the dialog's element (its displacement + 4),
+    to compare the re-read."""
+    if h & 1:
+        at = WORLD_BASE + UICTL_VBTABLE + 4
+        displacement = int.from_bytes(machine.guest_read(at, 4), "little")
+        machine.guest_write(at, (displacement + 4).to_bytes(4, "little"))
+
+
+GM_OBJ = WORLD_BASE + UICTL_OBJECT
+
+SPECS += [
+    # The lists' clearAndDestroy / ~WCIsvListBase probed (their own specs;
+    # the lists are random); RemoveChild 0x416fe0 probed, taking a child out.
+    Spec("CScreenGroup_Destroy", 0x00416da0, "fastcall", [one_of(GM_OBJ + 0x80), anything],
+         presets=gm_group_to_destroy,
+         callees={0x00416fe0: (1, "thiscall", "probe", gm_remove_last_child),
+                  0x0060b560: (0, "thiscall", "probe"), 0x0060b5a0: (0, "thiscall", "probe")}),
+    Spec("CScreenGroup_ShowChild", 0x00417090, "fastcall", [one_of(GM_OBJ), anything, one_of(0, 1, 0x100, 0x80000000),
+                                                            anything],
+         presets=gm_group, virtuals=GM_VIRTUALS),
+    # Dead: 0x41f561 and 0x41f5a6 (the scroll bar's element for a scroll bar
+    # at address 0) and 0x41f629 (the same before AddChild). The body ends
+    # at 0x41f6a1; 0x41f6b0 starts another member (not a listed start).
+    Spec("CListBox_UpdateLayout", 0x0041f550, "fastcall", [one_of(GM_OBJ), anything], presets=gm_list_box,
+         virtuals=GM_VIRTUALS, exempt_blocks=(0x0041f561, 0x0041f5a6, 0x0041f629), cover_until=0x0041f6a1),
+    Spec("CListBox_Clear", 0x0041f1e0, "fastcall", [one_of(GM_OBJ), anything], presets=gm_list_box,
+         callees={0x0040a580: (1, "thiscall", "probe"), 0x0041e380: (3, "thiscall", "probe"),
+                  0x0041f550: (0, "thiscall", "probe")}),
+    Spec("CListBox_OnResized", 0x004204d0, "fastcall", [one_of(GM_OBJ + 0x444), anything, gm_rect, anything],
+         presets=gm_list_box, callees={0x0041f550: (0, "thiscall", "probe")}),
+    Spec("CColumn_ConstructDefault", 0x004274a0, "thiscall", []),
+    Spec("CLine_ConstructDefault", 0x004276b0, "thiscall", []),
+    # EAX without a record is the caller's (unused).
+    Spec("CColumn_Destroy", 0x004275e0, "thiscall", [], presets=gm_records, virtuals={0: 1}, eax_mask=0),
+    Spec("CLine_Destroy", 0x004277d0, "thiscall", [], presets=gm_records, virtuals={0: 1}, eax_mask=0),
+    Spec("CImageButton_OnMouseEnter", 0x0041acf0, "fastcall", [one_of(GM_OBJ + 0x60), anything] + [anything] * 5,
+         presets=gm_image_button, virtuals={0x1c: 0}, callees={0x004184b0: (5, "thiscall", "probe")}),
+    Spec("CImageButton_OnMouseLeave", 0x0041ad30, "fastcall", [one_of(GM_OBJ + 0x60), anything] + [anything] * 5,
+         presets=gm_image_button, virtuals={0x1c: 0}, callees={0x0041ab70: (5, "thiscall", "probe")}),
+    Spec("CDialog_SetParent", 0x00427d20, "fastcall", [one_of(GM_OBJ + 0xc0), anything, anything],
+         presets=gm_dialog, virtuals={0xc: 1}, callees={0x004157d0: (1, "thiscall", "probe", gm_move_element)}),
+]
