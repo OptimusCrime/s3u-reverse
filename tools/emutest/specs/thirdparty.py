@@ -1106,3 +1106,51 @@ SPECS += [
             exempt_blocks=(0x005b085b, 0x005b08c0)),
     zi_spec("zlib_inflate", 0x005aa4a0, zi_inflate_case, ("z", "f"), max_cases=1500),
 ]
+
+
+# -- png_rutil_rows.cpp --------------------------------------------------------
+#
+# Rows in the middle of the TP_ROW area, pixel depths PNG has (1..64 bits),
+# rowbytes at least one pixel (as libpng's rows always are; fewer would make
+# the average and Paeth filters loop over 4 GB in both).
+
+PR_DEPTHS = (1, 2, 4, 8, 16, 24, 32, 48, 64)
+PR_MASKS = (0xFF, 0x80, 0x08, 0x88, 0x22, 0xAA, 0x55, 0x33, 0xCC, 0x0F)
+
+
+def pr_filter_presets(rng, pool, args):
+    depth = rng.choice(PR_DEPTHS)
+    bpp = (depth + 7) // 8
+    width = rng.choice((0, 1, 2, 3, rng.randint(1, 150)))
+    rowbytes = max(bpp, (width * depth + 7) // 8)
+    return tp_png_struct(rng) + [(TP_ROW_INFO + 4, rowbytes, 4), (TP_ROW_INFO + 11, depth, 1)]
+
+
+def pr_combine_presets(rng, pool, args):
+    return tp_png_struct(rng) + [
+        (TP_PNG + 0xc0, rng.choice((0, 1, 7, 8, 9, rng.randint(1, 150))), 4),
+        (TP_PNG + 0x103, rng.choice(PR_DEPTHS), 1),
+        (TP_PNG + 0x68, rng.getrandbits(32) & ~0x10000 | rng.choice((0, 0x10000)), 4),
+        (TP_PNG + 0xe4, WORLD_BASE + TP_TABLES, 4),
+    ]
+
+
+def pr_interlace_presets(rng, pool, args):
+    return [(TP_ROW_INFO, rng.choice((0, 1, 2, 3, 7, 8, 9, rng.randint(1, 60))), 4),
+            (TP_ROW_INFO + 11, rng.choice(PR_DEPTHS), 1)]
+
+
+SPECS += [
+    tp_spec("png_read_filter_row", 0x005afc40,
+            [TP_PNG_ARG, one_of(WORLD_BASE + TP_ROW_INFO), TP_ROW_ARG, one_of(TP_TABLES_PTR),
+             lambda rng, pool: rng.choice((0, 1, 2, 3, 4, 4, 3, rng.getrandbits(32)))],
+            presets=pr_filter_presets, eax_mask=0, max_cases=1000),
+    tp_spec("png_combine_row", 0x005af4d0,
+            [TP_PNG_ARG, TP_ROW_ARG, lambda rng, pool: rng.choice(PR_MASKS + (rng.getrandbits(32),))],
+            presets=pr_combine_presets, eax_mask=0, max_cases=1000),
+    tp_spec("png_do_read_interlace", 0x005af7f0,
+            [one_of(0, WORLD_BASE + TP_ROW_INFO, WORLD_BASE + TP_ROW_INFO, WORLD_BASE + TP_ROW_INFO),
+             one_of(0, TP_ROW_PTR, TP_ROW_PTR, TP_ROW_PTR), below(7),
+             lambda rng, pool: rng.getrandbits(32) & ~0x10000 | rng.choice((0, 0x10000))],
+            presets=pr_interlace_presets, eax_mask=0, max_cases=1000),
+]

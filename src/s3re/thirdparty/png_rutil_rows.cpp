@@ -24,13 +24,17 @@
 #include "game/tables.h"
 #include "game/texts.h"
 #include "hooks.h"
+#include "test/difftest.h"
 #include "thirdparty/png_calls.h"
 #include "thirdparty/png_struct.h"
 
 #include <intrin.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <memory>
 
 namespace s3re::thirdparty {
 
@@ -49,9 +53,9 @@ void __cdecl png_do_read_interlace(PngRowInfo* rowInfo, std::uint8_t* row, std::
 void __cdecl png_read_finish_row(PngStruct* png);
 void __cdecl png_read_start_row(PngStruct* png);
 
-S3RE_HOOK_UNVERIFIED(0x005afc40, png_read_filter_row, FilterRowFn, Original_png_read_filter_row, png_read_filter_row);
-S3RE_HOOK_UNVERIFIED(0x005af4d0, png_combine_row, CombineRowFn, Original_png_combine_row, png_combine_row);
-S3RE_HOOK_UNVERIFIED(0x005af7f0, png_do_read_interlace, ReadInterlaceFn, Original_png_do_read_interlace, png_do_read_interlace);
+S3RE_HOOK(0x005afc40, png_read_filter_row, FilterRowFn, Original_png_read_filter_row, png_read_filter_row);
+S3RE_HOOK(0x005af4d0, png_combine_row, CombineRowFn, Original_png_combine_row, png_combine_row);
+S3RE_HOOK(0x005af7f0, png_do_read_interlace, ReadInterlaceFn, Original_png_do_read_interlace, png_do_read_interlace);
 S3RE_HOOK_UNVERIFIED(0x005afe20, png_read_finish_row, PngRowFn, Original_png_read_finish_row, png_read_finish_row);
 S3RE_HOOK_UNVERIFIED(0x005b01c0, png_read_start_row, PngRowFn, Original_png_read_start_row, png_read_start_row);
 
@@ -449,6 +453,132 @@ void __cdecl png_read_start_row(PngStruct* png) {
     png->prev_row = static_cast<std::uint8_t*>(malloc(png, png->rowbytes + 1));
     calls::At<MemsetCheckFn>(kPngMemsetCheck)(png, png->prev_row, 0, png->rowbytes + 1);
     png->flags |= kPngFlagRowInit;
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+//
+// png_read_filter_row, png_combine_row and png_do_read_interlace on random
+// rows of every pixel depth PNG has (1..64 bits; rowbytes at least one pixel,
+// as libpng's rows always are), every filter type (an invalid one reaches
+// png_error, whose error callback here throws), random masks and passes,
+// with and without PNG_PACKSWAP. Compared: the row buffers with guard
+// bytes, row_info, the png_struct and the error messages.
+// png_read_start_row and png_read_finish_row are compared within whole PNG
+// decodes (png_read_tests.cpp).
+
+namespace {
+
+struct RowsErrorThrown {};
+
+int g_rowErrors = 0;
+
+void __cdecl RowsTestError(PngStruct* /*png*/, const char* message) {
+    g_rowErrors = g_rowErrors * 31 + static_cast<std::uint8_t>(message[0]);
+    throw RowsErrorThrown{};
+}
+
+struct RowsFunctions {
+    FilterRowFn filter;
+    CombineRowFn combine;
+    ReadInterlaceFn interlace;
+};
+
+constexpr std::size_t kRowArea = 4096;
+
+struct RowsCase {
+    PngStruct png;
+    PngRowInfo info;
+    std::uint8_t row[kRowArea];
+    std::uint8_t prev[kRowArea];
+    std::uint8_t buf[kRowArea];
+};
+
+constexpr std::uint8_t kDepths[] = {1, 2, 4, 8, 16, 24, 32, 48, 64};
+
+int RunRows(const RowsFunctions& f, int op, RowsCase& c, std::int32_t arg, std::uint32_t transformations) {
+    g_rowErrors = 0;
+    try {
+        switch (op) {
+            case 0: f.filter(&c.png, &c.info, c.row, c.prev, arg); break;
+            case 1: f.combine(&c.png, c.row, arg); break;
+            default: f.interlace(arg < 0 ? nullptr : &c.info, c.row, arg < 0 ? 0 : arg, transformations); break;
+        }
+    } catch (const RowsErrorThrown&) {
+        return g_rowErrors | 0x40000000;
+    }
+    return g_rowErrors;
+}
+
+void CompareRowHelpers(test::Context& ctx, const RowsFunctions& candidate, int cases) {
+    const RowsFunctions original{Original_png_read_filter_row, Original_png_combine_row, Original_png_do_read_interlace};
+    auto a = std::make_unique<RowsCase>();
+    auto b = std::make_unique<RowsCase>();
+    for (int i = 0; i < cases; ++i) {
+        const int op = static_cast<int>(ctx.rng().Below(3));
+        ctx.rng().Fill(a.get(), sizeof(RowsCase));
+        const std::uint8_t depth = kDepths[ctx.rng().Below(sizeof(kDepths))];
+        const std::uint32_t bpp = (depth + 7u) / 8;
+        std::uint32_t width = ctx.rng().Chance(1, 4) ? ctx.rng().Below(10) : 1 + ctx.rng().Below(200);
+        std::int32_t arg = 0;
+        std::uint32_t transformations = ctx.rng().Next32() & ~kPngPackswap;
+        if (ctx.rng().Chance(1, 2)) {
+            transformations |= kPngPackswap;
+        }
+        a->png.error_fn = reinterpret_cast<void*>(&RowsTestError);
+        a->png.transformations = transformations;
+        a->info.pixel_depth = depth;
+        if (op == 0) {
+            a->info.rowbytes = std::max<std::uint32_t>(bpp, (width * depth + 7) / 8);
+            arg = ctx.rng().Chance(1, 12) ? static_cast<std::int32_t>(ctx.rng().Next32()) : static_cast<std::int32_t>(ctx.rng().Below(5));
+        } else if (op == 1) {
+            a->png.width = width;
+            a->png.row_info.pixel_depth = depth;
+            static const std::int32_t kMasks[] = {0xff, 0x80, 0x08, 0x88, 0x22, 0xaa, 0x55, 0x33, 0xcc, 0x0f};
+            arg = ctx.rng().Chance(1, 5) ? static_cast<std::int32_t>(ctx.rng().Next32()) : kMasks[ctx.rng().Below(10)];
+            a->png.row_buf = a->buf;
+        } else {
+            arg = ctx.rng().Chance(1, 30) ? -1 : static_cast<std::int32_t>(ctx.rng().Below(7));
+            width = std::min<std::uint32_t>(width, (kRowArea * 8 / 64) / 8);  // final width * 64 bits fits
+            a->info.width = ctx.rng().Chance(1, 20) ? 0 : std::max<std::uint32_t>(width, 1);
+        }
+        *b = *a;
+        const int ea = RunRows(original, op, *a, arg, transformations);
+        const int eb = RunRows(candidate, op, *b, arg, transformations);
+        bool same = S3RE_EXPECT_EQ(ea, eb);
+        same &= S3RE_EXPECT_MEM_EQ(a.get(), b.get(), sizeof(RowsCase));
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, op %d, depth %u, width %u, arg %d", i, op, depth, width, arg);
+            return;
+        }
+    }
+}
+
+// Wrong: the average filter rounds up.
+void __cdecl WrongFilterRow(PngStruct* png, PngRowInfo* rowInfo, std::uint8_t* row, const std::uint8_t* prevRow,
+                            std::int32_t filter) {
+    if (filter != kFilterAverage) {
+        png_read_filter_row(png, rowInfo, row, prevRow, filter);
+        return;
+    }
+    const std::uint32_t bpp = BytesPerPixel(rowInfo->pixel_depth);
+    for (std::uint32_t i = 0; i < rowInfo->rowbytes; ++i) {
+        const std::uint32_t left = i >= bpp ? row[i - bpp] : 0;
+        row[i] = static_cast<std::uint8_t>(row[i] + ((left + prevRow[i] + 1) >> 1));
+    }
+}
+
+}  // namespace
+
+S3RE_TEST(PngRowHelpers_MatchOriginal) {
+    CompareRowHelpers(ctx, {&png_read_filter_row, &png_combine_row, &png_do_read_interlace}, 6000);
+}
+
+S3RE_TEST(PngRowHelpers_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareRowHelpers(probe, {&WrongFilterRow, &png_combine_row, &png_do_read_interlace}, 6000);
+    S3RE_EXPECT(probe.failures() > 0);
 }
 
 }  // namespace s3re::thirdparty
