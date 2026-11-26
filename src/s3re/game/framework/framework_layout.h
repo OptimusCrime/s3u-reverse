@@ -318,7 +318,13 @@ struct CPalette {
 // CGraphicsData), the four tables allocated (sizes below).
 struct CLandscapeSurface {
     CSurface surface;  // +0x00
-    std::uint8_t unk4c[0x90 - 0x4c];
+    std::uint8_t unk4c[0x50 - 0x4c];
+    std::uint32_t unk50;  // +0x50 0 after the constructor
+    std::uint32_t unk54;  // +0x54 0 after the constructor
+    std::uint8_t unk58[0x84 - 0x58];
+    std::uint32_t unk84;  // +0x84 0 after the constructor
+    std::uint32_t unk88;  // +0x88 0 after the constructor
+    std::uint32_t unk8c;  // +0x8c 0 after the constructor
     void* graphics;    // +0x90 the CGraphicsData (game/graphics/gfx_layout.h)
     void* table94;     // +0x94 new(0x364) (freed by the destructor)
     void* unk98;       // +0x98 (not freed by the destructor)
@@ -326,6 +332,8 @@ struct CLandscapeSurface {
     void* colours;     // +0xa0 new(0x202): uint16 colour slots 0..256 (Landscape_FindOrAddColour)
     void* tableA4;     // +0xa4 new(0x10000)
 };
+static_assert(offsetof(CLandscapeSurface, unk50) == 0x50);
+static_assert(offsetof(CLandscapeSurface, unk84) == 0x84);
 static_assert(offsetof(CLandscapeSurface, graphics) == 0x90);
 static_assert(offsetof(CLandscapeSurface, table94) == 0x94);
 static_assert(offsetof(CLandscapeSurface, table9c) == 0x9c);

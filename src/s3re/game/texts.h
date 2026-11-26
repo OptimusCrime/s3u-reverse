@@ -587,4 +587,26 @@ inline constexpr GameText kPngCrcError{0x733dc8};       // "CRC error"
 inline constexpr GameText kPngWidthTooLarge{0x733bf0};
 inline constexpr GameText kZlibVersion{0x733754};       // "1.1.3" (ZLIB_VERSION, inflateInit2_ checks its first character)
 inline constexpr GameText kPngRowbytesOverflow{0x734868};  // "Width too large to process image data; rowbytes will overflow."  // "Width too large for libpng to process image data."
+// ------------------------------------------------------------ wip/logic-r4 batch
+// Volker\LogicInit.cpp: the CD music (CLogicThread::PlayNextMusicTrack) and FinishGame.
+inline constexpr GameText kPlayOriginalTrack{0x730bd0};  // "xxx CDAUDIOPLAY about to play ORG track #%u"
+inline constexpr GameText kPlayAmazonTrack{0x730bfc};    // "xxx CDAUDIOPLAY about to play AMZ track #%u"
+inline constexpr GameText kPlayGold1Track{0x730c28};     // "xxx CDAUDIOPLAY about to play Gold CD1 track #%u"
+inline constexpr GameText kPlayGold2Track{0x730c5c};     // "xxx CDAUDIOPLAY about to play Gold CD2 track #%u"
+inline constexpr GameText kFinishGameCalled{0x730aa4};   // "*** FinishGame() called ***"
+inline constexpr GameText kFinishGameCancelled{0x730a78};  // "*** FinishGame cancelled (already called)"
+// Dirk\Draw.cpp: CDrawer::SetDisplayMode.
+inline constexpr GameText kOldDisplayMode{0x698f6c};          // "GFX: Old display mode: %ux%ux%u"
+inline constexpr GameText kSkippingSetDisplayMode{0x698f4c};  // "GFX: Skipping SetDisplayMode"
+// Volker\landscape.cpp: CLandscapeSurface's constructor (its tables' out-of-memory checks).
+inline constexpr GameText kPatternPointer{0x731244};  // "patternpointer" (+0x94)
+inline constexpr GameText kPatternData{0x731238};     // "patterndata" (+0x9c)
+inline constexpr GameText kPalette{0x731230};         // "palette" (+0xa0)
+inline constexpr GameText kPalettenArray{0x731220};   // "palettenarray" (+0xa4)
+inline constexpr GameText kLandscapeFile{0x731254};   // "E:\Siedler3\Volker\landscape.cpp"
+// CGameData::CGameData (game_data_ctor.cpp).
+inline constexpr GameText kInitialisingGlobals{0x6a5c20};  // "Initialising globals"
+// The thread destructors (win32_thread_destructors.cpp).
+inline constexpr GameText kThreadDestroyedRunning{0x7a42c4};  // "Thread destruction before it's finished"
+inline constexpr GameText kGameThreadCoInitOpen{0x79df58};    // "CGameThread::~CGameThread:: iCoInitOpen"
 }  // namespace s3re::game::texts

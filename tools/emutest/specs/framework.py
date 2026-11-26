@@ -283,6 +283,7 @@ SPECS += [
     Spec("GetMemberDword10", 0x0049f4d0, "thiscall", []),
     Spec("GetMemberDword14", 0x0049f590, "thiscall", []),
     Spec("GetMemberDword5C", 0x0049f350, "thiscall", []),
+    Spec("GetMemberDword70", 0x0049dec0, "thiscall", []),
     Spec("GetMemberByte68", 0x0049f580, "thiscall", [], eax_mask=0xFF),
     # The three outputs: scratch slots, sometimes the same slot twice.
     Spec("GamePlayerSetup_SavedValues", 0x0049fed0, "thiscall",
@@ -1778,4 +1779,47 @@ SPECS += [
     # From 0x61ab2e on: the next function (a static initializer).
     Spec("ScalarDeletingDestructor_61ab10", 0x0061ab10, "thiscall", [below(4)],
          callees={0x61aab0: (0, "thiscall", "probe")}, cover_until=0x0061ab2e),
+]
+
+
+# -- wip/logic-r4: the thread destructor chain (win32_thread_destructors.cpp) --
+# ECX ("self", the CWin32Handle part at +4) = THREAD_SELF; each destructor's
+# next base destructor and the list code are probed; the bag (+0x10), the
+# owned object (+0x38, its +4 part) and the critical section (+0x34) are
+# 0 or objects in the world with FAKE_VTABLE (slot 0 probed); the running
+# flag (+0x18 bit 2) and CoInit flag (+0x40) random. ThrowAssertmentFailed
+# ends the run as a throw.
+THREAD_SELF_OFFSET = 0x10004
+THREAD_SELF = WORLD_BASE + THREAD_SELF_OFFSET
+THREAD_OBJECTS = 0x11000
+
+
+def thread_parts(rng, pool, args):
+    full = THREAD_SELF_OFFSET - 4
+    fields = [(full + 0x18, rng.choice([0, 4, rng.getrandbits(8)]), 1),
+              (full + 0x40, rng.choice([0, 0, 1, rng.getrandbits(32)]), 4)]
+    for at, target, part in ((0x10, 0x000, 0), (0x34, 0x100, None), (0x38, 0x200, 4)):
+        present = rng.random() < 0.7
+        fields.append((full + at, WORLD_BASE + THREAD_OBJECTS + target if present else 0, 4))
+        if part is not None:
+            fields.append((THREAD_OBJECTS + target + part, FAKE_VTABLE, 4))
+    return fields
+
+
+def thread_self(rng, pool):
+    return THREAD_SELF
+
+
+SPECS += [
+    Spec("Win32_CWin32Handle_Destroy", 0x0060beb0, "fastcall", [thread_self, anything], presets=thread_parts,
+         callees={0x0060bf20: (0, "thiscall", "probe"), 0x00610330: (0, "thiscall", "probe")}),
+    Spec("Win32_CWin32Waitable_Destroy", 0x0060bfe0, "fastcall", [thread_self, anything], presets=thread_parts,
+         callees={0x0060b560: (0, "thiscall", "probe"), 0x0060beb0: (0, "thiscall", "probe")}, virtuals={0: 1}),
+    # EAX: ~CWin32Waitable's in the original, 0 in ours (callers ignore it).
+    Spec("Win32_CThread_Destroy", 0x0060dff0, "fastcall", [thread_self, anything], presets=thread_parts,
+         eax_mask=0, callees={0x0060bfe0: (0, "thiscall", "probe"), 0x006119b0: (1, "thiscall", "throw")}),
+    Spec("Win32_CCriticalSection_Destroy", 0x0060d660, "fastcall", [thread_self, anything], eax_mask=0),
+    Spec("DirectX_CGameThread_Destroy", 0x005b60a0, "fastcall", [thread_self, anything], presets=thread_parts,
+         eax_mask=0, callees={0x0060d660: (0, "thiscall", "probe"), 0x0060dff0: (0, "thiscall", "probe")},
+         virtuals={0: 1}),
 ]

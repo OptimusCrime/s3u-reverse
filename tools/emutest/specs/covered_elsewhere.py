@@ -12,6 +12,13 @@ the names of common.py and of its own earlier lines without imports.
 # failure). Only for blocks measured as unreached by a --full run; not part
 # of the spec entries, so editing it doesn't reselect specs.
 COVERED_ELSEWHERE = {
+    # CLandscapeSurface::CLandscapeSurface after the 1,000,000-byte table
+    # (+0x9c), which the emulator's heap (0x30000 bytes) can't hold: every
+    # case ends in that out-of-memory throw (wip/logic-r4). Evidence: the
+    # in-process CLandscapeSurface_Construct_MatchesOriginal (a fake operator
+    # new, every combination of failing allocations).
+    "CLandscapeSurface_Construct": ((0x54bdd7, 0x54bdee, 0x54bdff, 0x54be16, 0x54be27),
+                                    "in-process: CLandscapeSurface_Construct_MatchesOriginal"),
     # CLogicThread::SaveGame after the allocation of chunk 10's 0x8d63a-byte
     # buffer, which the emulator's heap (0x30000 bytes) can't hold: every
     # case ends in that out-of-memory throw (2026-11-25). Evidence: the

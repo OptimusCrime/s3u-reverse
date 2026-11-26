@@ -308,5 +308,15 @@ inline constexpr GameGlobal<const std::uint32_t> g_zlibFixedBl{0x7348e0};       
 inline constexpr GameGlobal<const std::uint32_t> g_zlibFixedBd{0x7348e4};         // 5 (fixed_bd)
 inline constexpr GameGlobal<const std::uint8_t[0x1000]> g_zlibFixedTl{0x7348e8};  // fixed_tl: 512 inflate_huft
 inline constexpr GameGlobal<const std::uint8_t[0x100]> g_zlibFixedTd{0x7358e8};   // fixed_td: 32 inflate_huft
+// wip/logic-r4: the CD music (CLogicThread::PlayNextMusicTrack 0x53f5f0).
+// Four playlists per CD version (one per race; the Amazons' CD has four
+// tracks per list, the others three), and the playlist lengths
+// [version][list]. Indexed as the original does (playlist * stride +
+// track, no range checks), so declared as single dwords.
+inline constexpr GameGlobal<const std::int32_t> g_musicTracksOriginal{0x730ac0};  // [4][3]
+inline constexpr GameGlobal<const std::int32_t> g_musicTracksAmazons{0x730af0};   // [4][4] (the mission CD)
+inline constexpr GameGlobal<const std::int32_t> g_musicTracksGold1{0x730b30};     // [4][3]
+inline constexpr GameGlobal<const std::int32_t> g_musicTracksGold2{0x730b60};     // [4][3]
+inline constexpr GameGlobal<const std::int32_t> g_musicListLengths{0x730b90};     // [4][4]: ORG, AMZ, Gold 1, Gold 2
 
 }  // namespace s3re::game

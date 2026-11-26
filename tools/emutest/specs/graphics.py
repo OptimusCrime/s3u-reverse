@@ -272,6 +272,9 @@ SPECS += [
     Spec("CDrawer_DrawGlyphRow", 0x004d6950, "thiscall", [below(30), below(200), glyph_bits], eax_mask=0,
          presets=drawer_surface, globals=glyph_globals),
     Spec("Render_SetScreenLayout", 0x004c6d70, "stdcall", [below(4, 0.2)]),
+    # The configured mode (g_config +0x70) 0..3 or any.
+    Spec("CDrawer_ApplyScreenLayout", 0x004c6d40, "thiscall", [],
+         globals=lambda rng, pool, args: [(0x007a7af0 + 0x70, rng.choice([0, 1, 2, 3, rng.getrandbits(32)]), 4)]),
     Spec("Render_IsNearView", 0x004c7b50, "stdcall", [view_x, view_y], globals=view_globals),
     Spec("CDrawer_AmbientSoundPan", 0x004c79f0, "thiscall", [below(17)], presets=ambient_sources),
     Spec("CDrawer_AmbientSoundVolume", 0x004c7a50, "thiscall",
@@ -1129,4 +1132,114 @@ SPECS += [
     Spec("CDrawer_QueueCellObject", 0x004d5a50, "thiscall",
          [one_of(WORLD_BASE + QCO_DATA), below(130), below(130), anything, anything],
          presets=qco_sequence, callees=QCO_CALLEES, eax_mask=0, cover_until=0x004d5bd0),
+]
+
+
+# -- wip/logic-r4: CDrawer::SetDisplayMode / ChangeDisplayMode (drawer_display_mode.cpp)
+# The drawer (ECX = the world base) has FAKE_VTABLE (slots 5 and 11 probed)
+# and random surfaces flag +0x7c; DDGetDisplayMode is probed and writes a
+# mode into the local DDSURFACEDESC (mostly one the game uses; the
+# recorded argument, a frame address, is left out); RequestFullRedraw is
+# probed, g_drawThread (0x7e8bec) null or not; SendMessageA is an API probe.
+DISPLAY_MODES = ((640, 480, 16), (800, 600, 16), (1024, 768, 16))
+
+
+def display_mode_desc(machine, ecx, args, h):
+    width, height, bits = DISPLAY_MODES[h % 3]
+    if (h >> 8) % 8 == 0:
+        width = (h >> 12) % 2000
+    if (h >> 24) % 8 == 0:
+        height = (h >> 28) % 2000
+    if (h >> 40) % 8 == 0:
+        bits = (h >> 44) % 33
+    refresh = 0 if (h >> 50) & 1 else 60 + 10 * ((h >> 52) % 3)
+    machine.guest_write(args[0] + 8, struct.pack("<II", height, width))
+    machine.guest_write(args[0] + 0x18, struct.pack("<I", refresh))
+    machine.guest_write(args[0] + 0x54, struct.pack("<I", bits))
+
+
+DISPLAY_MODE_CALLEES = {
+    0x005bed70: (1, "thiscall", "probe", display_mode_desc, lambda machine, ecx, args: ()),  # DDGetDisplayMode
+    0x005b6730: (0, "thiscall", "probe"),  # CGameDrawThread::RequestFullRedraw
+}
+
+
+def display_mode_drawer(rng, pool, args):
+    return [(0, FAKE_VTABLE, 4), (0x7c, rng.choice([0, 1, rng.getrandbits(8)]), 1)]
+
+
+def display_mode_globals(rng, pool, args):
+    return [(0x007e8bec, rng.choice([0, 0x10000000 + rng.getrandbits(20) * 4]), 4)]
+
+
+def display_dimension(which):
+    def generate(rng, pool):
+        return rng.getrandbits(11) if rng.random() < 0.15 else rng.choice(DISPLAY_MODES)[which]
+    return generate
+
+
+def change_display_options(rng, pool, args):
+    mode = rng.choice([0, 1, 2, 3, 4, 250, rng.getrandbits(32)])
+    return display_mode_drawer(rng, pool, args) + [(SCRATCH + 0xa0, mode, 4)]
+
+
+def change_display_globals(rng, pool, args):
+    return display_mode_globals(rng, pool, args) + [
+        (0x00730f08, rng.choice([0, 1, 2, 3, 4]), 4), (0x007dfd30, rng.choice([0, 0, 1]), 4)]
+
+
+SPECS += [
+    Spec("CDrawer_SetDisplayMode", 0x0042ce90, "thiscall",
+         [display_dimension(0), display_dimension(1), lambda rng, pool: rng.choice([16, 16, 8, rng.getrandbits(6)]),
+          lambda rng, pool: rng.choice([0, 0, 60, 70, 80]), anything],
+         presets=display_mode_drawer, globals=display_mode_globals, callees=DISPLAY_MODE_CALLEES,
+         virtuals={0x14: 1, 0x2c: 1}),
+    # EAX: AL only (the caller tests it).
+    Spec("CDrawer_ChangeDisplayMode", 0x004c7490, "thiscall", [lambda rng, pool: WORLD_BASE + SCRATCH],
+         presets=change_display_options, globals=change_display_globals, callees=DISPLAY_MODE_CALLEES,
+         virtuals={0x14: 1, 0x2c: 1}, eax_mask=0xFF),
+]
+
+
+# -- wip/logic-r4: CLandscapeSurface::CLandscapeSurface (directx_surface.cpp) --
+# The base constructor runs (verified); operator new fails for one of the
+# four table sizes in some cases; ThrowOutOfMemory ends the run as a throw.
+SPECS += [
+    Spec("CLandscapeSurface_Construct", 0x0054bd30, "thiscall", [anything],
+         callees={0x00610960: (1, "thiscall", "throw")}, new_fails=0.4,
+         new_fails_size=(0x364, 1000000, 0x202, 0x10000)),
+]
+
+
+# -- wip/logic-r4: CDrawer::PlayAmbientSounds (screen_layout.cpp) -------------
+# The drawer at the world base: source counts around the seven sounds'
+# minimums, left/right counts not both 0 (the pan divides by their sum);
+# the draw data in the scratch area (ticks -1 or not, 0..10 queued
+# effects). IsEnabled, GetEffect (returns a fake effect) and Play are probed,
+# the CRT's rand probed (0..0x7fff); Pan and Volume run (verified).
+AMBIENT_COUNTS = (0, 199, 200, 201, 400, 401, 800, 801, 2000, 2001, 8000, 8001, 30000)
+
+
+def ambient_play_state(rng, pool, args):
+    fields = [(0x5f6bc, 0x10000000 + rng.getrandbits(16) * 4, 4)]
+    for k in range(17):
+        left = rng.randrange(1, 40)
+        fields += [(0x5f610 + 4 * k, rng.choice(AMBIENT_COUNTS), 4), (0x5f588 + 4 * k, left, 4),
+                   (0x5f5cc + 4 * k, rng.randrange(0, 40), 4)]
+    data = SCRATCH
+    fields += [(data + 0x5c, rng.choice([0xFFFFFFFF, 0, 1, 5]), 4),
+               (data + 0x260, rng.choice([0, 0, 1, 3, rng.randrange(11)]), 4)]
+    return fields
+
+
+AMBIENT_PLAY_CALLEES = {
+    0x005ff4d0: (0, "thiscall", lambda h: 1 if h % 5 else 0),             # CSoundData::IsEnabled
+    0x005ff4f0: (5, "thiscall", lambda h: 0x20000000 + (h & 0xFFF0)),     # CSoundData::GetEffect
+    0x005c2fc0: (0, "thiscall", "probe"),                                 # CSoundEffect::Play
+    0x0061f802: (0, "cdecl", lambda h: (h >> 8) & 0x7FFF if h & 3 else 29000 + (h >> 8) % 3800),  # rand
+}
+
+SPECS += [
+    Spec("CDrawer_PlayAmbientSounds", 0x004c7730, "thiscall", [lambda rng, pool: WORLD_BASE + SCRATCH],
+         eax_mask=0, presets=ambient_play_state, callees=AMBIENT_PLAY_CALLEES),
 ]

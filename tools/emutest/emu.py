@@ -641,6 +641,13 @@ def _api_reg_set_value(machine, uc, args):
     first = struct.unpack("<I", machine.guest_read(data, 4))[0] if data and size >= 4 else None
     return _api_reg_result(h), ("RegSetValueExA", key, _api_text(machine, name), reserved, type_,
                                 _api_reg_pointer(data), first, size)
+def _api_interlocked_exchange(machine, uc, args):
+    """InterlockedExchange(target, value) (wip/logic-r4): stores value at
+    target, returns the old value (the target lies in the compared memory)."""
+    target, value = args
+    old = struct.unpack("<I", bytes(machine.guest_read(target, 4)))[0]
+    machine.guest_write(target, struct.pack("<I", value))
+    return old, ("InterlockedExchange", target, value)
 
 
 # name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
@@ -690,6 +697,9 @@ API_HANDLERS = {
     "PostThreadMessageA": (4, _api_success("PostThreadMessageA", 0x5E000009)),
     "DestroyWindow": (1, _api_success("DestroyWindow", 0x5E00000A)),
     "PostMessageA": (4, _api_success("PostMessageA", 0x5E00000B)),
+    "InterlockedExchange": (2, _api_interlocked_exchange),
+    "SendMessageA": (4, _api_success("SendMessageA", 0x5E00000D)),
+    "DeleteCriticalSection": (1, _api_critical_section("DeleteCriticalSection")),
     "WaitForSingleObject": (2, _api_wait_for_single_object),
     "mciSendCommandA": (4, _api_mci_send_command),
     "SelectObject": (2, _api_select_object),

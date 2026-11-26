@@ -44,8 +44,8 @@
 //   to %i", id, i) for each entry of +0x90.
 //   The vector accesses are the Watcom index checks (game_settings_vectors.h).
 //
-// Status of LoadSaveGame: in-process test on every savegame and synthetic
-// ones passes; its emulator spec doesn't pass yet, so S3RE_HOOK_UNVERIFIED.
+// Status of LoadSaveGame: verified (in-process test on every savegame and
+// synthetic ones; emulator spec, every live block, wip/logic-r4).
 //
 // GameConfig::RandomRaceAmazons (0x00413bd0; on g_config 0x7a7af0): () -> AL
 //   = +0x158 (whether the Amazons are installed; the -map start passes it as
@@ -359,7 +359,7 @@ using SettingsFlagFn = std::uint32_t(__fastcall*)(GameSettings* self, void* edx)
 std::uint32_t __fastcall GameSettings_IsHost(GameSettings* self, void* edx);
 std::uint32_t __fastcall GameSettings_IsMultiplayer(GameSettings* self, void* edx);
 
-S3RE_HOOK_UNVERIFIED(0x00432b00, GameSettings_LoadSaveGame, LoadSaveGameFn, Original_GameSettings_LoadSaveGame,
+S3RE_HOOK(0x00432b00, GameSettings_LoadSaveGame, LoadSaveGameFn, Original_GameSettings_LoadSaveGame,
           GameSettings_LoadSaveGame);
 S3RE_HOOK(0x004318a0, GameSettings_IsHost, SettingsFlagFn, Original_GameSettings_IsHost, GameSettings_IsHost);
 S3RE_HOOK(0x004318d0, GameSettings_IsMultiplayer, SettingsFlagFn, Original_GameSettings_IsMultiplayer,

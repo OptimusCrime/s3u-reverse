@@ -25,8 +25,8 @@
 //   LogPlayerLandResources(p) 0x507f60, +0x88 = 1 and one more in
 //   g_strengthDivisor, any other +0x88 = 0. Last g_gameOutcome = -1.
 //
-// Status: reimplemented with an in-process test; no emulator spec yet
-// (S3RE_HOOK_UNVERIFIED, backlog docs/todo/file-formats.md).
+// Status: verified (in-process test; emulator spec with the setups, lobby
+// names and texts probed, wip/logic-r4).
 //
 // Known difference: the local strings' allocator bytes are uninitialized
 // stack bytes of the original's frame; ours are 0 (the strings are freed
@@ -156,7 +156,7 @@ void SetName(String* name, std::uint32_t player) {
 
 using WorldFn = void(__fastcall*)(CGameData* world, void* edx);
 void __fastcall CGameData_InitPlayerInfo(CGameData* world, void* edx);
-S3RE_HOOK_UNVERIFIED(0x004fd0d0, CGameData_InitPlayerInfo, WorldFn, Original_CGameData_InitPlayerInfo, CGameData_InitPlayerInfo);
+S3RE_HOOK(0x004fd0d0, CGameData_InitPlayerInfo, WorldFn, Original_CGameData_InitPlayerInfo, CGameData_InitPlayerInfo);
 
 // Purpose: Fills the table of player names and values that the statistics
 // and the end-of-game screen show (human, lobby or computer names), and

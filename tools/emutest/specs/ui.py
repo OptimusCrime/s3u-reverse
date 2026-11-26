@@ -1391,6 +1391,15 @@ def gsl_load_settings(rng, pool, args):
     for at in (GSL_TEAMS, GSL_PLAYERS, GSL_NET_IDS):  # nothing filled: Resize(0) frees only the block
         fields.append((at + 0x10, 0, 4))
         fields.append((at + 0x18, 5, 4))  # the game's growth step: with 0 the team loop never ends
+    # The map name string (+0x2c): empty or a buffer in the world (a random
+    # pointer could lead the original's refcount decrement into S3.EXE's
+    # code, which the real game can't write).
+    if rng.random() < 0.3:
+        fields += [(0x2c + 4, 0, 4), (0x2c + 8, 0, 4), (0x2c + 0xc, 0, 4)]
+    else:
+        length = rng.randrange(40)
+        fields += [(0x2c + 4, WORLD_BASE + 0x35001, 4), (0x2c + 8, length, 4),
+                   (0x2c + 0xc, length + rng.randrange(40), 4), (0x35001 + length, 0, 1)]
     header = GSL_CHUNK_AT[0x00]
     name = rng.choice([0, 1, 5, 20, rng.randrange(60)])
     fields += [(header + 0x20 + k, rng.randint(1, 255), 1) for k in range(name)] + [(header + 0x20 + name, 0, 1)]
@@ -1407,23 +1416,29 @@ def gsl_load_settings(rng, pool, args):
 
 
 SPECS += [
-    # NOT YET PASSING (session 58, out of time): the first runs timed out
-    # (vectors with growth step 0 made the team loop endless; fixed above);
-    # rerun, then set the exempt blocks below. LoadSaveGame stays
-    # S3RE_HOOK_UNVERIFIED until then (docs/todo/file-formats.md).
-    # Dead blocks: 0x432c8b..0x432cd6 (the map name from a null text: the
-    # text is inside chunk 0), the null check of the static "" at 0x432e5a
-    # (its branch target 0x432f02 is reached anyway), 0x432f3c's cleanup
-    # 0x432f53..0x432fc9 (after ThrowHResult, which never returns); the final
-    # loop's growth of an empty net-id vector 0x432da1..0x432de4 and
-    # 0x4333e3..0x433435 (the loop runs only while the index is below the
-    # length). The exact list is set after the first coverage run.
+    # Dead blocks (wip/logic-r4, after the first coverage run): the map name
+    # from a null text 0x432c8b/0x432cab (the text lies inside chunk 0);
+    # the cleanup after ThrowHResult 0x432f53..0x432fb3 (it never returns);
+    # the index checks' out-of-range paths: teams 0x433193..0x4331e3 (the
+    # party is below the length after the team loop), player setups
+    # 0x433236..0x433281 and 0x4332ef..0x43332d (the setups were inserted
+    # first, so the vector is not empty, and the slot is a byte, never
+    # negative), net ids in the final loop 0x432d99..0x432ddb and
+    # 0x4333e3..0x433441 (the loop runs only while the index is below the
+    # length). LoadSaveGame was S3RE_HOOK_UNVERIFIED until this passed.
     Spec("GameSettings_LoadSaveGame", 0x00432b00, "thiscall",
          [lambda rng, pool: WORLD_BASE + SCRATCH, lambda rng, pool: rng.choice([0, 1, 0x100])],
          presets=gsl_load_settings, callees=LOAD_SAVE_CALLEES,
          # Only the map file's allocation fails (ThrowOutOfMemory): a failing
          # team insert makes the team loop run forever in both versions.
-         virtuals={0: 1, 4: 1, 0x0c: (3, {0: 4, 2: 4})}, new_fails=0.05, new_fails_size=0x134),
+         virtuals={0: 1, 4: 1, 0x0c: (3, {0: 4, 2: 4})}, new_fails=0.05, new_fails_size=0x134,
+         exempt_blocks=(0x432c8b, 0x432cab, 0x432d99, 0x432da1, 0x432dba, 0x432dc2, 0x432dc7, 0x432ddb,
+                        0x432f53, 0x432f75, 0x432f77, 0x432f7b, 0x432fa5, 0x432faf, 0x432fb3,
+                        0x433193, 0x433197, 0x4331b1, 0x4331bd, 0x4331c2, 0x4331c5, 0x4331d5, 0x4331d9,
+                        0x4331dd, 0x4331e1, 0x4331e3, 0x433236, 0x43324b, 0x43325c, 0x433261, 0x433264,
+                        0x433279, 0x433281, 0x4332ef, 0x433304, 0x433310, 0x433315, 0x433318, 0x433325,
+                        0x43332d, 0x4333e3, 0x4333e9, 0x4333eb, 0x4333ef, 0x4333f7, 0x4333ff, 0x433420,
+                        0x433423, 0x433437, 0x43343b, 0x43343f, 0x433441)),
 ]
 
 

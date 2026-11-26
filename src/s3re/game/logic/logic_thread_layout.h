@@ -54,7 +54,8 @@ struct CLogicThread {
     std::uint32_t save_request_tick;    // +0x224 ExecuteCommands 0xf7/0xfa: game tick of the last multiplayer save request (0 = none)
     std::uint32_t save_failures;        // +0x228 ExecuteCommands 0xf7/0xf9 (multiplayer save)
     std::uint32_t save_acks;            // +0x22c ExecuteCommands 0xf7/0xf8: players that saved
-    std::uint8_t unk230[5];
+    std::uint8_t unk230[4];
+    std::uint8_t game_finished;         // +0x234 set by FinishGame (it runs once)
     std::uint8_t player_flags[20];      // +0x235 per player, cleared by ExecuteCommands 0xf2/0xfe/0xff
     std::uint8_t unk249[3];
     std::uint32_t last_game_end_check;  // +0x24c game tick of the last CheckGameEnd evaluation (every 50 ticks)
@@ -79,7 +80,13 @@ struct CLogicThread {
     MessageLine messages[20];  // +0x414 the message lines shown on the screen (a ring)
     std::int32_t message_count;  // +0x644 (ShowMessage 0x51e440)
     std::int32_t message_index;  // +0x648 the current line; ClearMessages sets it to message_count - 1
-    std::uint8_t unk64c[0x66c - 0x64c];
+    std::uint8_t unk64c[0x654 - 0x64c];
+    std::uint8_t music_stopped;   // +0x654 1 after StopMusic (PlayNextMusicTrack then does nothing)
+    std::uint8_t unk655[3];
+    std::int32_t music_track;     // +0x658 index in the playlist of the track playing (-1 before the first)
+    std::int32_t music_fixed_playlist;  // +0x65c StartMusic's playlist; -1 = cycle through the four
+    std::int32_t music_playlist;  // +0x660 the playlist playing (one per race)
+    std::uint8_t unk664[0x66c - 0x664];
     void* lobby;               // +0x66c the lobby object (Setup argument 9)
     void* lobby_client;        // +0x670 the lobby client (Setup argument 10)
     std::uint8_t unk674;
@@ -96,6 +103,9 @@ static_assert(offsetof(CLogicThread, unk074) == 0x74);
 static_assert(offsetof(CLogicThread, pending_ui_refresh) == 0x84);
 static_assert(offsetof(CLogicThread, save_request_tick) == 0x224);
 static_assert(offsetof(CLogicThread, player_flags) == 0x235);
+static_assert(offsetof(CLogicThread, game_finished) == 0x234);
+static_assert(offsetof(CLogicThread, music_stopped) == 0x654);
+static_assert(offsetof(CLogicThread, music_playlist) == 0x660);
 static_assert(offsetof(CLogicThread, last_game_end_check) == 0x24c);
 static_assert(offsetof(CLogicThread, computer_players) == 0x350);
 static_assert(offsetof(CLogicThread, step) == 0x3b0);

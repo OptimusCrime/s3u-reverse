@@ -43,6 +43,7 @@
 #include "game/vtables.h"
 #include "hooks.h"
 #include "msvc6/game_heap.h"
+#include "test/callee_stub.h"
 #include "test/difftest.h"
 
 #include <windows.h>
@@ -681,6 +682,168 @@ S3RE_TEST(DirectXSurfaceDestroy_ComparisonDetectsWrongImplementation) {
     CompareDestroy(probe, {&WrongRelease, &DirectX_CSurface_Destroy, &DirectX_CSurface_DeletingDestroy,
                            &CLandscapeSurface_Destroy, &CLandscapeSurface_DeletingDestroy},
                    500);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+// ---------------------------------------------------------------------------
+// wip/logic-r4: CLandscapeSurface::CLandscapeSurface (0x0054bd30)
+// ---------------------------------------------------------------------------
+//
+// (graphics) thiscall, ret 4, EAX = this: the COffscreenSurface base
+//   (0x5bfab0); +0x50, +0x54, +0x84, +0x88, +0x8c, +0x9c = 0, +0x90 = the
+//   CGraphicsData; vtable 0x65a520; then its four tables from operator new,
+//   each checked with ThrowOutOfMemory (Volker\landscape.cpp): +0x94 0x364
+//   bytes ("patternpointer", line 31), +0x9c 1,000,000 ("patterndata", 33),
+//   +0xa0 0x202 ("palette", 35), +0xa4 0x10000 ("palettenarray", 37).
+//   When a check throws, the original's unwinding destroys the base
+//   (CSurface::~CSurface through the thunk 0x54be60); ours does the same
+//   with a guard.
+
+namespace {
+
+constexpr std::uintptr_t kOffscreenSurfaceConstruct = 0x005bfab0;  // DirectX::COffscreenSurface::COffscreenSurface
+constexpr std::uintptr_t kLandscapeBaseDestroy = 0x0054be60;       // jmp CSurface::~CSurface
+constexpr std::uintptr_t kThrowOutOfMemory = 0x00610960;           // fastcall (expression, file; line)
+constexpr std::uintptr_t kOperatorNewAddress = 0x0061efb9;
+
+struct LandscapeTable {
+    std::size_t field;    // offset in CLandscapeSurface
+    std::uint32_t bytes;
+    std::uintptr_t name;  // GameText address
+    std::uint32_t line;
+};
+
+void* GameNew(std::uint32_t bytes) {
+    using Fn = void*(__cdecl*)(std::uint32_t);
+    return reinterpret_cast<Fn>(kOperatorNewAddress)(bytes);
+}
+
+// Destroys the base when the constructor is left by an exception.
+struct BaseGuard {
+    void* self;
+    bool done = false;
+    ~BaseGuard() {
+        if (!done) {
+            reinterpret_cast<SurfaceFn>(kLandscapeBaseDestroy)(self, nullptr);
+        }
+    }
+};
+
+}  // namespace
+
+using LandscapeConstructFn = void*(__fastcall*)(void* self, void* edx, void* graphics);
+
+// Purpose: Creates the landscape surface (the off-screen surface the map's
+// terrain is drawn into) and allocates its pattern and palette tables.
+void* __fastcall CLandscapeSurface_Construct(void* self, void* /*edx*/, void* graphics) {
+    reinterpret_cast<SurfaceFn>(kOffscreenSurfaceConstruct)(self, nullptr);
+    BaseGuard guard{self};
+    CLandscapeSurface* const landscape = AsLandscape(self);
+    landscape->unk50 = 0;
+    landscape->unk54 = 0;
+    landscape->unk84 = 0;
+    landscape->unk88 = 0;
+    landscape->unk8c = 0;
+    landscape->graphics = graphics;
+    landscape->table9c = nullptr;
+    landscape->surface.simple.vtable = vtables::kCLandscapeSurface;
+    static constexpr LandscapeTable kTables[] = {
+        {offsetof(CLandscapeSurface, table94), 0x364, texts::kPatternPointer.address(), 31},
+        {offsetof(CLandscapeSurface, table9c), 1000000, texts::kPatternData.address(), 33},
+        {offsetof(CLandscapeSurface, colours), 0x202, texts::kPalette.address(), 35},
+        {offsetof(CLandscapeSurface, tableA4), 0x10000, texts::kPalettenArray.address(), 37},
+    };
+    for (const LandscapeTable& table : kTables) {
+        void* const block = GameNew(table.bytes);
+        RawAt<void*>(landscape, table.field) = block;
+        if (block == nullptr) {
+            using ThrowFn = void(__fastcall*)(const char*, const char*, std::uint32_t);
+            reinterpret_cast<ThrowFn>(kThrowOutOfMemory)(GameText(table.name).c_str(), texts::kLandscapeFile.c_str(), table.line);
+        }
+    }
+    guard.done = true;
+    return self;
+}
+
+S3RE_HOOK(0x0054bd30, CLandscapeSurface_Construct, LandscapeConstructFn, Original_CLandscapeSurface_Construct,
+          CLandscapeSurface_Construct);
+
+namespace {
+
+// Tests: operator new is a fake that hands out static blocks (null for the
+// chosen calls) and records the sizes; ThrowOutOfMemory a recording fake
+// that returns (so both sides go on); the base constructor runs (verified).
+// Compared: the object (block pointers as "which call", null or not), the
+// log, EAX.
+
+std::vector<std::uint32_t>* g_landscapeLog = nullptr;
+std::uint32_t g_failMask = 0;
+std::uint32_t g_newCalls = 0;
+alignas(16) std::uint8_t g_landscapeBlocks[4][16];
+
+void* __cdecl FakeLandscapeNew(std::uint32_t bytes) {
+    const std::uint32_t call = g_newCalls++;
+    g_landscapeLog->insert(g_landscapeLog->end(), {0x4e3u, bytes});
+    if ((g_failMask >> call & 1) != 0 || call >= 4) {
+        return nullptr;
+    }
+    return g_landscapeBlocks[call];
+}
+
+void __fastcall FakeThrowOutOfMemory(const char* expression, const char* file, std::uint32_t line) {
+    g_landscapeLog->insert(g_landscapeLog->end(), {0x7e0u, reinterpret_cast<std::uint32_t>(expression),
+                                                    reinterpret_cast<std::uint32_t>(file), line});
+}
+
+void CompareLandscapeConstruct(test::Context& ctx, LandscapeConstructFn candidate, int cases) {
+    std::uint8_t pattern[kSurfaceObject];
+    for (int i = 0; i < cases; ++i) {
+        ctx.rng().Fill(pattern, sizeof(pattern));
+        const std::uint32_t failMask = ctx.rng().Chance(1, 2) ? 0 : ctx.rng().Below(16);
+        void* const graphics = reinterpret_cast<void*>(static_cast<std::uintptr_t>(ctx.rng().Next32()));
+        std::uint8_t objects[2][kSurfaceObject];
+        std::vector<std::uint32_t> logs[2];
+        std::uint32_t results[2];
+        test::PatchJump(kOperatorNewAddress, reinterpret_cast<const void*>(&FakeLandscapeNew));
+        test::PatchJump(kThrowOutOfMemory, reinterpret_cast<const void*>(&FakeThrowOutOfMemory));
+        for (int side = 0; side < 2; ++side) {
+            std::memcpy(objects[side], pattern, kSurfaceObject);
+            g_landscapeLog = &logs[side];
+            g_failMask = failMask;
+            g_newCalls = 0;
+            const LandscapeConstructFn f = side == 0 ? Original_CLandscapeSurface_Construct : candidate;
+            results[side] = static_cast<std::uint32_t>(static_cast<std::uint8_t*>(f(objects[side], nullptr, graphics)) -
+                                                       objects[side]);
+        }
+        test::UnpatchJump(kThrowOutOfMemory);
+        test::UnpatchJump(kOperatorNewAddress);
+        g_landscapeLog = nullptr;
+        bool same = S3RE_EXPECT_EQ(results[0], results[1]);
+        same &= S3RE_EXPECT(logs[0] == logs[1]);
+        same &= S3RE_EXPECT_MEM_EQ(objects[0], objects[1], kSurfaceObject);
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d, fail mask %u", i, failMask);
+            return;
+        }
+    }
+}
+
+// Wrong: +0x9c is not cleared before the allocations (shows when they fail).
+void* __fastcall WrongLandscapeConstruct(void* self, void* edx, void* graphics) {
+    void* const result = CLandscapeSurface_Construct(self, edx, graphics);
+    AsLandscape(self)->unk8c = 1;
+    return result;
+}
+
+}  // namespace
+
+S3RE_TEST(CLandscapeSurface_Construct_MatchesOriginal) {
+    CompareLandscapeConstruct(ctx, &CLandscapeSurface_Construct, 2000);
+}
+
+S3RE_TEST(CLandscapeSurface_Construct_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareLandscapeConstruct(probe, &WrongLandscapeConstruct, 100);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

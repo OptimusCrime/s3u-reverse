@@ -500,3 +500,8 @@ SPECS += [
     Spec("Pathing_FindPath", 0x004a1ee0, "thiscall", [between(1, 31999)], presets=route_find, max_cases=300,
          max_instructions=300_000_000, exempt_blocks=(0x4a229c, 0x4a22a6)),
 ]
+
+SPECS += [
+    # CGameData::InitReciprocals (reciprocals.cpp): no inputs; a few cases.
+    Spec("CGameData_InitReciprocals", 0x004a1eb0, "thiscall", [], max_cases=5),
+]

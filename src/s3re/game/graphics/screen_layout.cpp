@@ -7,6 +7,21 @@
 //   sets the layout globals (g_displayMode .. g_drawOriginY, g_layout7dfd58,
 //   values below); any other mode changes nothing. EAX: 480 for mode 0, 8
 //   for modes 1 and 2, else the mode (the caller ignores it).
+// CDrawer::PlayAmbientSounds (0x004c7730, was Render_sub_4c7730;
+//   wip/logic-r4): (draw data) thiscall, ret 4; called once per drawn frame
+//   (0x4b3f8b). When the draw data's +0x5c is not -1 and sound is on
+//   (CSoundData::IsEnabled 0x5ff4d0 on +0x5f6bc): for seven ambient sounds
+//   in a fixed order (kAmbientSounds), when the kind's source count is above
+//   its minimum (signed) and the CRT's rand() 0x61f802 (called only then)
+//   is above its threshold: pan = AmbientSoundPan(kind), volume =
+//   AmbientSoundVolume(kind, minimum, full, offset), and the effect
+//   GetEffect(id, -1, volume, pan, 0) 0x5ff4f0 plays (CSoundEffect::Play
+//   0x5c2fc0). Then, if sound is on (asked again), the draw data's queued
+//   sound effects (+0x238: ids, +0x260: count) play with volume and pan 0.
+//   EAX not used by the caller.
+// CDrawer::ApplyScreenLayout (0x004c6d40, was Render_sub_4c6d40; wip/logic-r4):
+//   () thiscall: +0xf0 = -1, then SetScreenLayout(g_config's screen layout,
+//   read with the folded getter 0x49dec0); EAX is SetScreenLayout's.
 // Render::IsNearView (0x004c7b50, was Render_sub_4c7b50): (x, y) stdcall,
 //   ret 8: 1 if the screen position is within 30 pixels around the drawn
 //   area (g_drawOriginX - 30 <= x < g_displayWidth + 30 and -30 <= y <=
@@ -26,12 +41,14 @@
 #include "game/globals.h"
 #include "game/graphics/drawer_layout.h"
 #include "hooks.h"
+#include "test/callee_stub.h"
 #include "test/difftest.h"
 #include "test/world_buffer.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 namespace s3re::game {
 
@@ -139,6 +156,111 @@ std::int32_t __fastcall CDrawer_AmbientSoundVolume(CDrawer* self, void*, std::ui
     return volume > 0 ? 0 : volume;
 }
 
+#pragma pack(push, 1)
+// The fields of the draw data (DrawData, draw_data.cpp) PlayAmbientSounds reads.
+struct DrawDataSounds {
+    std::uint8_t unk000[0x5c];
+    std::int32_t ticks;           // +0x5c ticks since the last fill (-1: nothing new)
+    std::uint8_t unk060[0x238 - 0x60];
+    std::uint32_t effects[10];    // +0x238 sound effect ids queued by the logic
+    std::uint32_t effect_count;   // +0x260
+};
+#pragma pack(pop)
+static_assert(offsetof(DrawDataSounds, ticks) == 0x5c);
+static_assert(offsetof(DrawDataSounds, effects) == 0x238);
+static_assert(offsetof(DrawDataSounds, effect_count) == 0x260);
+
+namespace {
+
+constexpr std::uintptr_t kSoundIsEnabled = 0x005ff4d0;  // CSoundData::IsEnabled
+constexpr std::uintptr_t kSoundGetEffect = 0x005ff4f0;  // CSoundData::GetEffect(id, variant, volume, pan, 0)
+constexpr std::uintptr_t kEffectPlay = 0x005c2fc0;      // DirectX::CSoundEffect::Play
+constexpr std::uintptr_t kCrtRand = 0x0061f802;         // the C runtime's rand()
+constexpr std::uintptr_t kAmbientPan = 0x004c79f0;
+constexpr std::uintptr_t kAmbientVolume = 0x004c7a50;
+constexpr std::int32_t kAnyVariant = -1;
+
+// One ambient sound: the source kind, the count it needs, the rand()
+// threshold, the count of full volume, the volume offset (hundredths of a
+// dB) and the effect id.
+struct AmbientSound {
+    std::uint32_t kind;
+    std::int32_t minimum;
+    std::int32_t chance;
+    std::int32_t full;
+    std::int32_t offset;
+    std::uint32_t effect;
+};
+
+constexpr AmbientSound kAmbientSounds[] = {
+    {4, 400, 30000, 6000, -2500, 0x43},  {3, 800, 30000, 2000, -2300, 0x44},
+    {2, 2000, 30000, 10000, -2500, 0x49}, {0, 8000, 30000, 22000, -2500, 0x4a},
+    {6, 200, 29000, 2000, -2000, 0x47},   {1, 2000, 32300, 17000, -2000, 0x45},
+    {3, 800, 32000, 2000, -2000, 0x46},
+};
+
+bool SoundOn(const CDrawer* drawer) {
+    using Fn = std::uint32_t(__fastcall*)(void*, void*);
+    return (reinterpret_cast<Fn>(kSoundIsEnabled)(drawer->sound, nullptr) & 0xff) != 0;
+}
+
+void PlayEffect(const CDrawer* drawer, std::uint32_t id, std::int32_t volume, std::int32_t pan) {
+    using GetFn = void*(__fastcall*)(void*, void*, std::uint32_t, std::int32_t, std::int32_t, std::int32_t,
+                                     std::uint32_t);
+    void* const effect = reinterpret_cast<GetFn>(kSoundGetEffect)(drawer->sound, nullptr, id, kAnyVariant, volume,
+                                                                  pan, 0);
+    reinterpret_cast<std::uint32_t(__fastcall*)(void*, void*)>(kEffectPlay)(effect, nullptr);
+}
+
+}  // namespace
+
+using PlayAmbientFn = std::uint32_t(__fastcall*)(CDrawer* self, void* edx, const DrawDataSounds* data);
+
+// Purpose: Plays the sounds of the surroundings (birds, sea, ...) now and
+// then, louder the more of their sources are on the screen, and the sound
+// effects the game logic queued for this frame.
+std::uint32_t __fastcall CDrawer_PlayAmbientSounds(CDrawer* self, void*, const DrawDataSounds* data) {
+    if (data->ticks != -1 && SoundOn(self)) {
+        for (const AmbientSound& sound : kAmbientSounds) {
+            if (self->ambient_count[sound.kind] <= sound.minimum) {
+                continue;
+            }
+            if (reinterpret_cast<int(__cdecl*)()>(kCrtRand)() <= sound.chance) {
+                continue;
+            }
+            using PanFnRaw = std::int32_t(__fastcall*)(CDrawer*, void*, std::uint32_t);
+            using VolumeFnRaw = std::int32_t(__fastcall*)(CDrawer*, void*, std::uint32_t, std::int32_t, std::int32_t,
+                                                          std::int32_t);
+            const std::int32_t pan = reinterpret_cast<PanFnRaw>(kAmbientPan)(self, nullptr, sound.kind);
+            const std::int32_t volume = reinterpret_cast<VolumeFnRaw>(kAmbientVolume)(
+                self, nullptr, sound.kind, sound.minimum, sound.full, sound.offset);
+            PlayEffect(self, sound.effect, volume, pan);
+        }
+    }
+    if (SoundOn(self) && data->effect_count != 0) {
+        for (std::uint32_t i = 0; i < data->effect_count; ++i) {
+            PlayEffect(self, data->effects[i], 0, 0);
+        }
+    }
+    return 0;
+}
+
+S3RE_HOOK(0x004c7730, CDrawer_PlayAmbientSounds, PlayAmbientFn, Original_CDrawer_PlayAmbientSounds,
+          CDrawer_PlayAmbientSounds);
+
+using ApplyLayoutFn = std::uint32_t(__fastcall*)(CDrawer* self, void* edx);
+
+// Purpose: Sets up the screen layout (sizes of the map view and panels) for
+// the display mode chosen in the configuration.
+std::uint32_t __fastcall CDrawer_ApplyScreenLayout(CDrawer* self, void*) {
+    self->unk0f0 = -1;
+    using GetterFn = std::uint32_t(__fastcall*)(const void*, void*);
+    const std::uint32_t mode = reinterpret_cast<GetterFn>(0x0049dec0)(&g_config.get(), nullptr);  // GetMemberDword70
+    return reinterpret_cast<ModeFn>(0x004c6d70)(mode);  // Render::SetScreenLayout
+}
+
+S3RE_HOOK(0x004c6d40, CDrawer_ApplyScreenLayout, ApplyLayoutFn, Original_CDrawer_ApplyScreenLayout,
+          CDrawer_ApplyScreenLayout);
 S3RE_HOOK(0x004c6d70, Render_SetScreenLayout, ModeFn, Original_Render_SetScreenLayout, Render_SetScreenLayout);
 S3RE_HOOK(0x004c7b50, Render_IsNearView, NearViewFn, Original_Render_IsNearView, Render_IsNearView);
 S3RE_HOOK(0x004c79f0, CDrawer_AmbientSoundPan, PanFn, Original_CDrawer_AmbientSoundPan, CDrawer_AmbientSoundPan);
@@ -215,6 +337,137 @@ S3RE_TEST(Render_SetScreenLayout_MatchesOriginal) {
 S3RE_TEST(Render_SetScreenLayout_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);
     CompareScreenLayout(probe, &WrongScreenLayout, 200);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+namespace {
+
+// ApplyScreenLayout on random drawers and configured modes; compared: EAX,
+// the drawer, the layout globals.
+void CompareApplyLayout(test::Context& ctx, ApplyLayoutFn candidate, int cases) {
+    const SavedLayout saved;
+    const std::uint32_t savedMode = g_config->screen_layout;
+    test::WorldPair drawers(ctx, sizeof(CDrawer));
+    std::uint8_t start[kLayoutBytes], expected[kLayoutBytes];
+    for (int i = 0; i < cases; ++i) {
+        ctx.rng().Fill(start, sizeof(start));
+        const std::uint32_t mode = ctx.rng().Chance(1, 5) ? ctx.rng().Next32() : ctx.rng().Below(4);
+        g_config->screen_layout = mode;
+        drawers.Both([&](CGameData* w) { DrawerOf(w)->unk0f0 = static_cast<std::int32_t>(i); });
+        std::memcpy(SavedLayout::Block(), start, kLayoutBytes);
+        const std::uint32_t a = Original_CDrawer_ApplyScreenLayout(DrawerOf(drawers.original()), nullptr);
+        std::memcpy(expected, SavedLayout::Block(), kLayoutBytes);
+        std::memcpy(SavedLayout::Block(), start, kLayoutBytes);
+        const std::uint32_t b = candidate(DrawerOf(drawers.ours()), nullptr);
+        bool same = S3RE_EXPECT_EQ(a, b);
+        same &= S3RE_EXPECT_MEM_EQ(expected, SavedLayout::Block(), kLayoutBytes);
+        same &= drawers.Same(ctx, 0, sizeof(CDrawer));
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d: mode %u", i, mode);
+            break;
+        }
+    }
+    g_config->screen_layout = savedMode;
+}
+
+// Wrong: +0xf0 is left alone.
+std::uint32_t __fastcall WrongApplyLayout(CDrawer* self, void*) {
+    return Render_SetScreenLayout(g_config->screen_layout);
+}
+
+}  // namespace
+
+namespace {
+
+// PlayAmbientSounds on random drawers (source counts around the minimums)
+// and draw data (ticks -1 or not, up to 10 queued effects); IsEnabled,
+// GetEffect and Play are recording stubs (IsEnabled scripted, GetEffect
+// returns a fake effect), Pan and Volume run (verified), the CRT's rand
+// state is the same for both. Compared: the calls (with the computed pan
+// and volume) and the rand state afterwards.
+std::uint8_t g_fakeEffect[16];
+
+void ComparePlayAmbient(test::Context& ctx, PlayAmbientFn candidate, int cases) {
+    using GetPtdFn = std::uint8_t*(__cdecl*)();
+    std::uint8_t* const ptd = reinterpret_cast<GetPtdFn>(0x0062293a)();  // _getptd: rand() state at +0x14
+    std::uint32_t& randState = *reinterpret_cast<std::uint32_t*>(ptd + 0x14);  // raw-ok: CRT per-thread data
+    const std::uint32_t savedRand = randState;
+    test::WorldPair drawers(ctx, sizeof(CDrawer));
+    std::vector<std::uint8_t> data(sizeof(DrawDataSounds));
+    static const std::int32_t kCounts[] = {0, 199, 200, 201, 400, 401, 800, 801, 2000, 2001, 8000, 8001, 30000};
+    for (int i = 0; i < cases; ++i) {
+        ctx.rng().Fill(data.data(), data.size());
+        auto* d = reinterpret_cast<DrawDataSounds*>(data.data());
+        d->ticks = ctx.rng().Chance(1, 4) ? -1 : ctx.rng().Range(0, 10);
+        d->effect_count = ctx.rng().Chance(1, 3) ? 0 : ctx.rng().Below(11);
+        drawers.Both([&](CGameData* w) { DrawerOf(w)->sound = reinterpret_cast<void*>(0x1234); });
+        for (std::size_t k = 0; k < kAmbientKinds; ++k) {
+            const std::int32_t count = kCounts[ctx.rng().Below(13)];
+            const std::int32_t side = static_cast<std::int32_t>(ctx.rng().Below(40)) + 1;
+            drawers.Both([&](CGameData* w) {
+                DrawerOf(w)->ambient_count[k] = count;
+                DrawerOf(w)->ambient_left[k] = side;
+                DrawerOf(w)->ambient_right[k] = side + 3;
+            });
+        }
+        const std::uint32_t seed = ctx.rng().Next32();
+        const std::uint64_t script = ctx.rng().Next64();
+        std::vector<test::StubCall> calls[2];
+        std::uint32_t randAfter[2];
+        for (int run = 0; run < 2; ++run) {
+            test::Rng enabled(script);
+            test::CalleeStubs stubs;
+            stubs.SetWorld(nullptr);
+            stubs.Install<0, kSoundIsEnabled>(
+                [&enabled](CGameData*, std::uint32_t, const std::uint32_t*) { return enabled.Chance(4, 5) ? 1u : 0u; });
+            stubs.Install<5, kSoundGetEffect>([](CGameData*, std::uint32_t, const std::uint32_t*) {
+                return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(g_fakeEffect));
+            });
+            stubs.Install<0, kEffectPlay>();
+            randState = seed;
+            CDrawer* drawer = DrawerOf(run == 0 ? drawers.original() : drawers.ours());
+            (run == 0 ? Original_CDrawer_PlayAmbientSounds : candidate)(drawer, nullptr, d);
+            calls[run] = stubs.Take();
+            randAfter[run] = randState;
+        }
+        bool same = S3RE_EXPECT(calls[0] == calls[1]);
+        same &= S3RE_EXPECT_EQ(randAfter[0], randAfter[1]);
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            break;
+        }
+    }
+    randState = savedRand;
+}
+
+// Wrong: the birds (kind 4) already play at exactly 400 sources.
+std::uint32_t __fastcall WrongPlayAmbient(CDrawer* self, void* edx, const DrawDataSounds* data) {
+    const std::int32_t count = self->ambient_count[4];
+    if (count == 400) {
+        self->ambient_count[4] = 401;
+    }
+    const std::uint32_t r = CDrawer_PlayAmbientSounds(self, edx, data);
+    self->ambient_count[4] = count;
+    return r;
+}
+
+}  // namespace
+
+S3RE_TEST(CDrawer_PlayAmbientSounds_MatchesOriginal) {
+    ComparePlayAmbient(ctx, &CDrawer_PlayAmbientSounds, 3000);
+}
+S3RE_TEST(CDrawer_PlayAmbientSounds_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    ComparePlayAmbient(probe, &WrongPlayAmbient, 3000);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
+S3RE_TEST(CDrawer_ApplyScreenLayout_MatchesOriginal) {
+    CompareApplyLayout(ctx, &CDrawer_ApplyScreenLayout, 300);
+}
+S3RE_TEST(CDrawer_ApplyScreenLayout_ComparisonDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 1, /*quiet=*/true);
+    CompareApplyLayout(probe, &WrongApplyLayout, 50);
     S3RE_EXPECT(probe.failures() > 0);
 }
 

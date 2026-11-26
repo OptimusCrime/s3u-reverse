@@ -2246,3 +2246,243 @@ SPECS += [
     Spec("CGameData_ChooseNewGameObjectives", 0x004ffbc0, "thiscall", [], eax_mask=0, presets=ngo_choose_state,
          globals=ngo_choose_globals, max_instructions=300_000),
 ]
+
+
+# -- wip/logic-r4: the CD music (logic_music.cpp) -----------------------------
+# The installed CD (0x7a7c18) and the music switch (g_config +0x5e) random;
+# the thread's music fields small (a large playlist reads outside the
+# image in both versions); CCDAudio Play/Stop probed (verified on their own).
+MUSIC_CALLEES = {
+    0x00615ea0: (2, "thiscall", "probe"),  # Win32::CCDAudio::Play(from, to)
+    0x00615f70: (0, "thiscall", "probe"),  # Win32::CCDAudio::Stop
+}
+
+
+def music_globals(rng, pool, args):
+    return [(0x007a7c18, rng.choice([0, 1, 2, 3, 4, 5, 6, rng.getrandbits(32)]), 4),
+            (0x007a7af0 + 0x5e, rng.choice([0, 1, 1, 1, rng.getrandbits(8)]), 1)]
+
+
+def music_thread(rng, pool, args):
+    t = LOGIC_THREAD
+    return [(t + 0x654, rng.choice([0, 0, 0, 1, rng.getrandbits(8)]), 1),
+            (t + 0x658, rng.randrange(-2, 6) & 0xFFFFFFFF, 4),
+            (t + 0x65c, rng.choice([0xFFFFFFFF, 0xFFFFFFFF, rng.randrange(-2, 6) & 0xFFFFFFFF]), 4),
+            (t + 0x660, rng.randrange(-1, 5) & 0xFFFFFFFF, 4)]
+
+
+SPECS += [
+    Spec("CLogicThread_PlayNextMusicTrack", 0x0053f5f0, "logicthread", [], eax_mask=0, presets=music_thread,
+         globals=music_globals, callees=MUSIC_CALLEES),
+    Spec("CLogicThread_StartMusic", 0x0053f580, "logicthread",
+         [lambda rng, pool: rng.choice([0xFFFFFFFF, rng.randrange(-2, 6) & 0xFFFFFFFF])], eax_mask=0,
+         presets=music_thread, globals=music_globals, callees=MUSIC_CALLEES),
+    Spec("CLogicThread_StopMusic", 0x0053f5c0, "logicthread", [], eax_mask=0, presets=music_thread,
+         globals=music_globals, callees=MUSIC_CALLEES),
+]
+
+
+# -- wip/logic-r4: CLogicThread::FinishGame (finish_game.cpp) ----------------
+# The player info table (0x7acfa8, 20 x 0x44 bytes) gets random ranks (+4)
+# and fields (+0x18..+0x40; equal scores in some cases), the world players
+# random active flags; PostThreadMessage probed (verified on its own).
+def finish_game_globals(rng, pool, args):
+    # One write of the whole table (one write_image per global is slow); the
+    # names (+0x08..+0x17) keep their zero image bytes.
+    table = bytearray(0x44 * 20)
+    equal = rng.random() < 0.3
+    for p in range(20):
+        base = 0x44 * p
+        struct.pack_into("<I", table, base + 4, rng.choice([0, 0, 0, rng.randrange(1, 21), rng.getrandbits(32)]))
+        for k in range(11):
+            value = 1 if equal and k >= 3 else rng.choice([rng.randrange(50), rng.getrandbits(32)])
+            struct.pack_into("<I", table, base + 0x18 + 4 * k, value)
+    return [(0x007acfa8, int.from_bytes(table, "little"), len(table))]
+
+
+def finish_game_state(rng, pool, args):
+    fields = [(LOGIC_THREAD + 0x234, rng.choice([0, 0, 0, 1, rng.getrandbits(8)]), 1)]
+    for p in range(20):
+        fields.append((0x11943dc + 0x148 * p, rng.choice([0, rng.getrandbits(32) | 1]), 4))
+    return fields
+
+
+SPECS += [
+    Spec("CLogicThread_FinishGame", 0x0053e720, "logicthread", [], eax_mask=0, presets=finish_game_state,
+         globals=finish_game_globals, callees={0x0060f480: (3, "thiscall", "probe")}),
+]
+
+
+# -- wip/logic-r4: CLogicThread::PublishDrawData (draw_data_publish.cpp) -----
+# The shared slot (+0x3cc) points into the scratch area (InterlockedExchange
+# is an API probe that stores); CEvent::Set probed.
+def publish_draw_data_state(rng, pool, args):
+    return [(LOGIC_THREAD + 0x3cc, WORLD_BASE + SCRATCH + 4 * rng.randrange(64), 4)]
+
+
+SPECS += [
+    Spec("CLogicThread_PublishDrawData", 0x0051f0e0, "logicthread", [], presets=publish_draw_data_state,
+         callees={0x0042cf80: (0, "thiscall", "probe")}),
+]
+
+
+# -- wip/logic-r4: CLogicThread's destructors (logic_thread_dtor.cpp) --------
+# ECX = THREAD_SELF (framework.py; the object + 4). The timer (+0x3bc, its
+# +4 part) and the world (+0x3a0) are 0 or FAKE_VTABLE objects; the chat
+# wstring's characters (+0x3fc) 0 or a world buffer with a random refcount
+# byte; the waitable list (+0x3e0) has entries or not: get(0) is probed and
+# hands out a link (whose waitable is 0 or a FAKE_VTABLE object at its +4)
+# or empties the list (count +8 = 0, returns 0); the list's slot 1
+# (0x5b7ff0, through the game's vtable), the CRT's vector destructor
+# iterator, the list and object code and ~CGameThread are probed.
+LT_OBJECTS = 0x12000
+
+
+def lt_get_link(machine, ecx, args, h):
+    if h % 3 == 0:
+        machine.guest_write(ecx + 8, b"\0\0\0\0")
+        return 0
+    link = WORLD_BASE + LT_OBJECTS + 0x300 + 8 * ((h >> 4) & 1)
+    waitable = 0 if (h >> 8) % 4 == 0 else WORLD_BASE + LT_OBJECTS + 0x400
+    machine.guest_write(link + 4, struct.pack("<I", waitable))
+    return link
+
+
+def lt_parts(rng, pool, args):
+    full = THREAD_SELF_OFFSET - 4
+    fields = [(full + 0x3bc, rng.choice([0, WORLD_BASE + LT_OBJECTS]), 4), (LT_OBJECTS + 4, FAKE_VTABLE, 4),
+              (full + 0x3a0, rng.choice([0, WORLD_BASE + LT_OBJECTS + 0x100]), 4), (LT_OBJECTS + 0x100, FAKE_VTABLE, 4),
+              (LT_OBJECTS + 0x404, FAKE_VTABLE, 4),
+              (full + 0x3e0 + 8, rng.choice([0, 1, rng.getrandbits(32)]), 4)]
+    if rng.random() < 0.7:
+        fields += [(full + 0x3fc, WORLD_BASE + LT_OBJECTS + 0x202, 4),
+                   (LT_OBJECTS + 0x201, rng.choice([0, 0, 0xff, 1, 2, rng.getrandbits(8)]), 1)]
+    else:
+        fields.append((full + 0x3fc, 0, 4))
+    return fields
+
+
+SPECS += [
+    # Dead block 0x53c905: the list base's "still has entries" branch (the
+    # loop before it runs until the count +8 is 0, and clearAndDestroy is
+    # probed).
+    Spec("CLogicThread_Destroy", 0x0053c7d0, "fastcall", [thread_self, anything], presets=lt_parts,
+         callees={0x0061f18a: (4, "stdcall", "probe"), 0x0060b500: (1, "thiscall", "probe", lt_get_link),
+                  0x005b7ff0: (1, "thiscall", "probe"), 0x0060b560: (0, "thiscall", "probe"),
+                  0x0059f200: (0, "thiscall", "probe"), 0x0060b5a0: (0, "thiscall", "probe"),
+                  0x00610330: (0, "thiscall", "probe"), 0x005b60a0: (0, "thiscall", "probe")},
+         virtuals={0: 1}, exempt_blocks=(0x0053c905,)),
+    Spec("CLogicThread_DeletingDestroy", 0x0053c7a0, "fastcall", [thread_self, anything, below(4)],
+         callees={0x0053c7d0: (0, "thiscall", "probe")}),
+]
+
+
+# -- wip/logic-r4: ShowMessage / ChatInputKey (message_lines.cpp) ------------
+# The 20 message lines' texts, the chat text and the argument get wide
+# string buffers in the world (MSG_BUFFERS + 0x100 * k: count byte at +1,
+# characters from +2) or none; some share a buffer; counts random (0, small,
+# 0xfd.., frozen). message_count 20 (sometimes 1..30), message_index 0..19,
+# the prompt length small. PushUiFeedback probed (verified).
+MSG_BUFFERS = 0x3a000
+
+
+def msg_buffer(rng, fields, k):
+    at = MSG_BUFFERS + 0x100 * k
+    length = rng.randrange(30)
+    fields.append((at + 1, rng.choice([0, 0, 1, 2, 0xfd, 0xfe, 0xff]), 1))
+    for i in range(length):
+        fields.append((at + 2 + 2 * i, rng.randint(1, 0xffff), 2))
+    fields.append((at + 2 + 2 * length, 0, 2))
+    return WORLD_BASE + at + 2, length
+
+
+def msg_string(rng, fields, at, buffers):
+    if rng.random() < 0.25:
+        fields += [(at + 4, 0, 4), (at + 8, 0, 4), (at + 0xc, 0, 4)]
+        return
+    ptr, length = rng.choice(buffers)
+    fields += [(at + 4, ptr, 4), (at + 8, length, 4), (at + 0xc, length + rng.randrange(4), 4)]
+
+
+def msg_state(rng, pool, args):
+    fields = []
+    buffers = [msg_buffer(rng, fields, k) for k in range(1 + rng.randrange(8))]
+    for line in range(20):
+        msg_string(rng, fields, LOGIC_THREAD + 0x414 + 0x1c * line, buffers)
+    msg_string(rng, fields, LOGIC_THREAD + 0x3f8, buffers)
+    fields += [(LOGIC_THREAD + 0x644, 20 if rng.random() < 0.85 else rng.randint(1, 30), 4),
+               (LOGIC_THREAD + 0x648, rng.randrange(20), 4),
+               (LOGIC_THREAD + 0x40c, rng.choice([0, rng.randrange(12)]), 4)]
+    # The argument (ShowMessage): its fields are the stack arguments 0..3;
+    # its buffer, when it has one, is one of the buffers (MSG_ARG_BUFFER).
+    return fields
+
+
+def msg_argument(rng, pool):
+    return rng.getrandbits(32)
+
+
+def msg_text_ptr(rng, pool):
+    # One of the first buffers (their slots exist when msg_state made them)
+    # or none.
+    return rng.choice([0, WORLD_BASE + MSG_BUFFERS + 2])
+
+
+def msg_text_len(rng, pool):
+    return rng.randrange(30)
+
+
+MSG_CALLEES = {0x0053f560: (1, "thiscall", "probe")}  # CLogicThread::PushUiFeedback
+
+
+def msg_null_count(rng, pool, args):
+    """The count byte 0x655dc7 before the static empty wide string 0x655dc8."""
+    return [(0x00655dc7, rng.choice([0, 0, 1, 0xfd, 0xfe, 0xff]), 1)]
+
+SPECS += [
+    # Dead: the self-assignment branch 0x51e499..0x51e4f7 (the text is a
+    # stack argument, never the line's own string) and 0x51e48f (a length
+    # above npos). The static empty string's count byte is random
+    # (msg_null_count) so that a text without buffer is also copied.
+    Spec("CLogicThread_ShowMessage", 0x0051e440, "logicthread",
+         [msg_argument, msg_text_ptr, msg_text_len, msg_text_len,
+          lambda rng, pool: rng.choice([0, 5, 19, 20, 21, 249, 250, 251, 254, rng.getrandbits(32)])],
+         eax_mask=0, presets=msg_state, callees=MSG_CALLEES, globals=msg_null_count,
+         exempt_blocks=(0x0051e48f, 0x0051e499, 0x0051e4a2, 0x0051e4a7, 0x0051e4b7, 0x0051e4b9, 0x0051e4bd, 0x0051e4e4,
+                        0x0051e4ec)),
+    # Dead: the self-assignment branch 0x51e200 (the local is never the
+    # chat); 0x51e1f6 (a length above npos); the local is a fresh copy of
+    # length - 1 characters (count byte 0), so the chat always shares it
+    # when it isn't empty: the null-buffer branches 0x51e224/0x51e240, the
+    # copying branch 0x51e26e..0x51e27b and the local's free 0x51e2aa
+    # (sharing raised its count to 1) can't run.
+    Spec("CLogicThread_ChatInputKey", 0x0051e160, "logicthread",
+         [lambda rng, pool: rng.choice([8, 8, 8, 13, rng.randrange(300), rng.getrandbits(32)])],
+         eax_mask=0xFF, presets=msg_state,
+         exempt_blocks=(0x0051e1f6, 0x0051e200, 0x0051e224, 0x0051e240, 0x0051e26e, 0x0051e276, 0x0051e27b,
+                        0x0051e2aa)),
+]
+
+
+# MessageLine::Assign (message_lines.cpp): this = the line at world +0, the
+# source at +0x40 or this itself (self-assignment); both texts from
+# msg_buffer (shared or not).
+def msg_line_pair(rng, pool, args):
+    fields = []
+    buffers = [msg_buffer(rng, fields, k) for k in range(1 + rng.randrange(4))]
+    for at in (0, 0x40):
+        msg_string(rng, fields, at, buffers)
+    if rng.random() < 0.15:  # a source without buffer but a length (reads the static empty string)
+        fields += [(0x40 + 4, 0, 4), (0x40 + 8, rng.randrange(1, 4), 4)]
+    return fields
+
+
+SPECS += [
+    # Dead: 0x523349 (a length above npos); in the self-assignment
+    # (assign(x, 0, npos) of itself) the _Xran 0x523354 and the erase of
+    # the rest 0x52336f / 0x523396 (count = the length, nothing to erase).
+    Spec("MessageLine_Assign", 0x00523330, "thiscall",
+         [lambda rng, pool: WORLD_BASE + rng.choice([0x40, 0x40, 0x40, 0])],
+         presets=msg_line_pair, globals=msg_null_count,
+         exempt_blocks=(0x00523349, 0x00523354, 0x0052336f, 0x00523396)),
+]

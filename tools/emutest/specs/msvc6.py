@@ -444,6 +444,13 @@ SPECS += [
     Spec("WString_AssignSubstr", 0x00428400, "thiscall",
          [one_of(STRING_SELF_PTR, STRING_OTHER_PTR, STRING_OTHER_PTR), string_count, string_count],
          presets=wide_string_world, globals=wstring_null_count, exempt_blocks=(0x00428442, 0x004284a0)),
+    # WString_Erase (wip/logic-r4). Dead: the backwards word copy 0x4287cc..
+    # 0x4287e4 (the source lies above the target); _Xlen 0x42880a (a length
+    # above 0x7ffffffd: the word move before it runs off the buffer first);
+    # the second _Grow's shared-buffer branch 0x428821/0x428825 (the inlined
+    # _Split at the start already gave the string its own buffer).
+    Spec("WString_Erase", 0x00428730, "thiscall", [string_count, string_count], presets=wide_string_world,
+         exempt_blocks=(0x004287cc, 0x004287d4, 0x004287e4, 0x0042880a, 0x00428821, 0x00428825)),
 ]
 
 
@@ -482,4 +489,212 @@ SPECS += [
     Spec("Ios_Unlock", 0x004114b0, "cdecl", [one_of(WORLD_BASE + IOS_STREAM)], presets=ios_stream),
     Spec("Ios_Setf", 0x004114d0, "fastcall", [one_of(WORLD_BASE + IOS_STREAM), anything, anything, anything],
          presets=ios_stream),
+]
+
+
+# -- wip/logic-r4: the static string initializers (static_string_inits.cpp) --
+# StaticInit_<dest>: dest = left + text. The left string (S3.EXE data, zero
+# in the image) gets a random text in the world (or stays empty); the
+# destination's allocator byte is an uninitialized stack byte of the
+# original's frame (ignored; ours writes 0).
+STATIC_CONCAT_INITS = [
+    (0x004c6430, 0x7aa5c0, 0x7aa5d0),
+    (0x004c6590, 0x7aa5b0, 0x7aa5d0),
+    (0x004c66f0, 0x7aa5a0, 0x7aa5d0),
+    (0x004c7c90, 0x7aa720, 0x7aa730),
+    (0x004c7df0, 0x7aa710, 0x7aa730),
+    (0x004c7f50, 0x7aa700, 0x7aa730),
+    (0x004d1d30, 0x7aa880, 0x7aa890),
+    (0x004d1e90, 0x7aa870, 0x7aa890),
+    (0x004d1ff0, 0x7aa860, 0x7aa890),
+    (0x004d2740, 0x7aa9e0, 0x7aa9f0),
+    (0x004d28a0, 0x7aa9d0, 0x7aa9f0),
+    (0x004d2a00, 0x7aa9c0, 0x7aa9f0),
+    (0x004d5cd0, 0x7aab40, 0x7aab50),
+    (0x004d5e30, 0x7aab30, 0x7aab50),
+    (0x004d5f90, 0x7aab20, 0x7aab50),
+    (0x004d8940, 0x7aaca0, 0x7aacb0),
+    (0x004d8aa0, 0x7aac90, 0x7aacb0),
+    (0x004d8c00, 0x7aac80, 0x7aacb0),
+    (0x004dfcd0, 0x7aae00, 0x7aae10),
+    (0x004dfe30, 0x7aadf0, 0x7aae10),
+    (0x004dff90, 0x7aade0, 0x7aae10),
+    (0x004e4b40, 0x7aaf60, 0x7aaf70),
+    (0x004e4ca0, 0x7aaf50, 0x7aaf70),
+    (0x004e4e00, 0x7aaf40, 0x7aaf70),
+    (0x004e6f00, 0x7ab0c0, 0x7ab0d0),
+    (0x004e7060, 0x7ab0b0, 0x7ab0d0),
+    (0x004e71c0, 0x7ab0a0, 0x7ab0d0),
+    (0x004e8d60, 0x7ab220, 0x7ab230),
+    (0x004e8ec0, 0x7ab210, 0x7ab230),
+    (0x004e9020, 0x7ab200, 0x7ab230),
+    (0x004fac10, 0x7ab380, 0x7ab390),
+    (0x004fad70, 0x7ab370, 0x7ab390),
+    (0x004faed0, 0x7ab360, 0x7ab390),
+    (0x004fc080, 0x7ab4e0, 0x7ab4f0),
+    (0x004fc1e0, 0x7ab4d0, 0x7ab4f0),
+    (0x004fc340, 0x7ab4c0, 0x7ab4f0),
+    (0x004fff50, 0x7ab640, 0x7ab650),
+    (0x005000b0, 0x7ab630, 0x7ab650),
+    (0x00500210, 0x7ab620, 0x7ab650),
+    (0x00503b10, 0x7ab7a0, 0x7ab7b0),
+    (0x00503c70, 0x7ab790, 0x7ab7b0),
+    (0x00503dd0, 0x7ab780, 0x7ab7b0),
+    (0x005063e0, 0x7ab900, 0x7ab910),
+    (0x00506540, 0x7ab8f0, 0x7ab910),
+    (0x005066a0, 0x7ab8e0, 0x7ab910),
+    (0x005085f0, 0x7aba80, 0x7aba90),
+    (0x00508750, 0x7aba70, 0x7aba90),
+    (0x005088b0, 0x7aba60, 0x7aba90),
+    (0x0050c0b0, 0x7abbe0, 0x7abbf0),
+    (0x0050c210, 0x7abbd0, 0x7abbf0),
+    (0x0050c370, 0x7abbc0, 0x7abbf0),
+    (0x00510930, 0x7abd40, 0x7abd50),
+    (0x00510a90, 0x7abd30, 0x7abd50),
+    (0x00510bf0, 0x7abd20, 0x7abd50),
+    (0x00511340, 0x7abea0, 0x7abeb0),
+    (0x005114a0, 0x7abe90, 0x7abeb0),
+    (0x00511600, 0x7abe80, 0x7abeb0),
+    (0x00514ea0, 0x7ac000, 0x7ac010),
+    (0x00515000, 0x7abff0, 0x7ac010),
+    (0x00515160, 0x7abfe0, 0x7ac010),
+    (0x00515c20, 0x7ac160, 0x7ac170),
+    (0x00515d80, 0x7ac150, 0x7ac170),
+    (0x00515ee0, 0x7ac140, 0x7ac170),
+    (0x0051d850, 0x7ac2c0, 0x7ac2d0),
+    (0x0051d9b0, 0x7ac2b0, 0x7ac2d0),
+    (0x0051db10, 0x7ac2a0, 0x7ac2d0),
+    (0x0051e7a0, 0x7ac420, 0x7ac430),
+    (0x0051e900, 0x7ac410, 0x7ac430),
+    (0x0051ea60, 0x7ac400, 0x7ac430),
+    (0x00523c80, 0x7ac580, 0x7ac590),
+    (0x00523de0, 0x7ac570, 0x7ac590),
+    (0x00523f40, 0x7ac560, 0x7ac590),
+    (0x00524690, 0x7ac6e0, 0x7ac6f0),
+    (0x005247f0, 0x7ac6d0, 0x7ac6f0),
+    (0x00524950, 0x7ac6c0, 0x7ac6f0),
+    (0x00535080, 0x7ac840, 0x7ac850),
+    (0x005351e0, 0x7ac830, 0x7ac850),
+    (0x00535340, 0x7ac820, 0x7ac850),
+    (0x0053bc30, 0x7ac9c0, 0x7ac9d0),
+    (0x0053bd90, 0x7ac9b0, 0x7ac9d0),
+    (0x0053bef0, 0x7ac9a0, 0x7ac9d0),
+    (0x0053eb80, 0x7acb40, 0x7acb50),
+    (0x0053ece0, 0x7acb30, 0x7acb50),
+    (0x0053ee40, 0x7acb20, 0x7acb50),
+    (0x00541c80, 0x7accc0, 0x7accd0),
+    (0x00541de0, 0x7accb0, 0x7accd0),
+    (0x00541f40, 0x7acca0, 0x7accd0),
+    (0x00542ea0, 0x7ace20, 0x7ace30),
+    (0x00543000, 0x7ace10, 0x7ace30),
+    (0x00543160, 0x7ace00, 0x7ace30),
+    (0x00546030, 0x7dfce8, 0x7dfcf8),
+    (0x00546190, 0x7dfcd8, 0x7dfcf8),
+    (0x005462f0, 0x7dfcc8, 0x7dfcf8),
+    (0x00546bd0, 0x7dfed8, 0x7dfee8),
+    (0x00546d30, 0x7dfec8, 0x7dfee8),
+    (0x00546e90, 0x7dfeb8, 0x7dfee8),
+    (0x0054b420, 0x7e0038, 0x7e0048),
+    (0x0054b580, 0x7e0028, 0x7e0048),
+    (0x0054b6e0, 0x7e0018, 0x7e0048),
+    (0x0054e8c0, 0x7e02b0, 0x7e02c0),
+    (0x0054ea20, 0x7e02a0, 0x7e02c0),
+    (0x0054eb80, 0x7e0290, 0x7e02c0),
+    (0x00551cf0, 0x7e0528, 0x7e0538),
+    (0x00551e50, 0x7e0518, 0x7e0538),
+    (0x00551fb0, 0x7e0508, 0x7e0538),
+    (0x0055ada0, 0x7e06a0, 0x7e06b0),
+    (0x0055af00, 0x7e0690, 0x7e06b0),
+    (0x0055b060, 0x7e0680, 0x7e06b0),
+    (0x0055c150, 0x7e0808, 0x7e0818),
+    (0x0055c2b0, 0x7e07f8, 0x7e0818),
+    (0x0055c410, 0x7e07e8, 0x7e0818),
+    (0x0055cba0, 0x7e0a78, 0x7e0a88),
+    (0x0055cd00, 0x7e0a68, 0x7e0a88),
+    (0x0055ce60, 0x7e0a58, 0x7e0a88),
+    (0x0055ed90, 0x7e0ce8, 0x7e0cf8),
+    (0x0055eef0, 0x7e0cd8, 0x7e0cf8),
+    (0x0055f050, 0x7e0cc8, 0x7e0cf8),
+]
+STATIC_INIT_TEXT = 0x3c000
+
+
+def static_init_left(left):
+    def generate(rng, pool, args):
+        if rng.random() < 0.2:
+            return [(left + 4, 0, 4), (left + 8, 0, 4), (left + 0xc, 0, 4)]
+        length = rng.randrange(1, 60)
+        text = bytes(rng.randint(0x20, 0x7e) for _ in range(length))
+        fields = [(WORLD_BASE + STATIC_INIT_TEXT - 1, rng.choice([0, 0, 1, 0xff]), 1)]
+        fields += [(WORLD_BASE + STATIC_INIT_TEXT + i, b, 1) for i, b in enumerate(text)]
+        fields += [(WORLD_BASE + STATIC_INIT_TEXT + length, 0, 1),
+                   (left + 4, WORLD_BASE + STATIC_INIT_TEXT, 4), (left + 8, length, 4),
+                   (left + 0xc, length + rng.randrange(8), 4)]
+        return fields
+    return generate
+
+
+# Dead in every one (offsets from the start): +0xdd (_Grow(0) after the
+# erase returns false), +0xfa/+0xfe (the final release of temp's buffer as
+# shared: the inlined _Split gave temp its own buffer, count 0).
+SPECS += [
+    Spec(f"StaticInit_{_dest:x}", _address, "stdcall", [], eax_mask=0, globals=static_init_left(_left),
+         ignore_bytes=(_dest - WORLD_BASE,), max_cases=200,
+         exempt_blocks=(_address + 0xdd, _address + 0xfa, _address + 0xfe))
+    for _address, _dest, _left in STATIC_CONCAT_INITS
+]
+
+
+# WString_CopyConstruct (wstring.cpp, wip/logic-r4): this = STRING_SELF
+# (its old contents are overwritten), x = the other string (sometimes with
+# the static empty string's count byte at 0xfe+: then copied).
+SPECS += [
+    # Dead: the self-assignment branch 0x534d5d..0x534dac (a constructor's
+    # argument is never the object itself) and 0x534d57 (a length above npos).
+    Spec("WString_CopyConstruct", 0x00534d30, "thiscall", [lambda rng, pool: STRING_OTHER_PTR],
+         presets=wide_string_world, globals=wstring_null_count,
+         exempt_blocks=(0x00534d57, 0x00534d5d, 0x00534d63, 0x00534d68, 0x00534d78, 0x00534d7a, 0x00534d7e, 0x00534da4,
+                        0x00534dac)),
+]
+
+
+# WString_ConcatWcsLeft (wstring.cpp, wip/logic-r4): cdecl (result, text,
+# right): the result at STRING_SELF (overwritten), the right side the other
+# string, the text a wide C string in the world (WCONCAT_TEXT: 0..40
+# characters).
+WCONCAT_TEXT = 0x3d000
+
+
+def wconcat_text(rng, pool, args):
+    length = rng.choice([0, 1, 5, rng.randrange(41)])
+    fields = [(WCONCAT_TEXT + 2 * i, rng.randint(1, 0xffff), 2) for i in range(length)]
+    return fields + [(WCONCAT_TEXT + 2 * length, 0, 2)] + wide_string_world(rng, pool, args)
+
+
+SPECS += [
+    # Dead: _Xlen 0x54192d (a length of 2^32 - 1); the local's free 0x5419c4
+    # (the result always shares a non-empty local, raising its count to 1).
+    Spec("WString_ConcatWcsLeft", 0x005418a0, "cdecl",
+         [lambda rng, pool: STRING_SELF_PTR, lambda rng, pool: WORLD_BASE + WCONCAT_TEXT,
+          lambda rng, pool: STRING_OTHER_PTR],
+         presets=wconcat_text, globals=wstring_null_count, exempt_blocks=(0x0054192d, 0x005419c4)),
+]
+
+
+# WString_SubstrConstruct (wstring.cpp, wip/logic-r4): this = STRING_SELF
+# (overwritten), x = the other string, pos and n as for assign, the
+# allocator argument a byte in the world.
+SPECS += [
+    # Dead: the self-assignment branch 0x541454..0x5414f4 (a constructor's
+    # argument is never the object itself); in the sharing branch the
+    # release of the old buffer 0x541520..0x541532 (the constructor has just
+    # set it to null) and the static empty string 0x541550 (sharing needs a
+    # non-zero length, which a string without buffer doesn't have).
+    Spec("WString_SubstrConstruct", 0x00541410, "thiscall",
+         [lambda rng, pool: STRING_OTHER_PTR, string_count, string_count,
+          lambda rng, pool: WORLD_BASE + 0x3e000 + rng.randrange(16)],
+         presets=wide_string_world, globals=wstring_null_count,
+         exempt_blocks=(0x00541454, 0x00541463, 0x00541468, 0x00541478, 0x0054147a, 0x0054147e, 0x005414a5,
+                        0x005414ad, 0x005414bd, 0x005414bf, 0x005414c7, 0x005414ec, 0x00541520, 0x00541527,
+                        0x0054152b, 0x00541532, 0x00541550)),
 ]

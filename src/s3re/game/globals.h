@@ -94,7 +94,8 @@ struct GameConfig {
     std::uint32_t notification_level;  // +0x64 notifications shown if their level >= 9 - this (GetMemberDword64)
     std::uint32_t lobby_value68;       // +0x68 read and set by the lobby dialogs (0x413b60 / 0x413b70)
     std::uint8_t byte6c;               // +0x6c (0x412800)
-    std::uint8_t unk06d[7];
+    std::uint8_t unk06d[3];
+    std::uint32_t screen_layout;       // +0x70 0/1/2 = 640x480/800x600/1024x768 (CDrawer::ApplyScreenLayout 0x4c6d40)
     std::uint32_t dwords74[9];         // +0x74..+0x94 (getters 0x412300 .. 0x412370; +0x88 has none)
     std::uint8_t unk098[0xc0 - 0x98];  // +0x98 a byte and a string (+0x9c), set by 0x412380 / 0x4125c0
     msvc6::String paths[6];            // +0xc0..+0x110 the data paths GameConfig::PathString 0x412b00 copies out
@@ -189,6 +190,9 @@ inline constexpr GameGlobal<std::uint8_t> g_worldUpdateDisabled{0x7deb55};
 inline constexpr GameGlobal<volatile std::uint32_t> g_stepCountdown{0x7dfd2c};
 // Set while CLogicThread::Step catches up (fog of war and minimap skipped).
 inline constexpr GameGlobal<std::int32_t> g_fastForwarding{0x7dfd30};
+// CLogicThread::Step does one-time setup when this is 250, then sets it to
+// 0 (the display mode change 0x4c7490 sets it to 250).
+inline constexpr GameGlobal<std::uint32_t> g_logicStartState{0x7dfd44};
 // Non-zero while the whole map is shown (reveal spell, CLogicThread).
 inline constexpr GameGlobal<std::int32_t> g_revealMap{0x7dfd84};
 // Number of the running campaign mission, 0 outside campaigns.
@@ -276,6 +280,15 @@ inline constexpr GameGlobal<std::int32_t> g_unk7dfd34{0x7dfd34};
 inline constexpr GameGlobal<std::int32_t> g_unk7dfd38{0x7dfd38};
 inline constexpr GameGlobal<std::int32_t> g_unk7dfd3c{0x7dfd3c};
 inline constexpr GameGlobal<std::int32_t> g_unk7dfd40{0x7dfd40};
+// Set by CGameData::CGameData 0x4fc990 (meaning unknown): 0x7dfd70..0x7dfd7c
+// = 0, 0x730f4c = 1, 0x730f50 = 3, 0x7deb4c = 0.
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd70{0x7dfd70};
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd74{0x7dfd74};
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd78{0x7dfd78};
+inline constexpr GameGlobal<std::int32_t> g_unk7dfd7c{0x7dfd7c};
+inline constexpr GameGlobal<std::int32_t> g_unk730f4c{0x730f4c};
+inline constexpr GameGlobal<std::int32_t> g_unk730f50{0x730f50};
+inline constexpr GameGlobal<std::int32_t> g_unk7deb4c{0x7deb4c};
 // The pathfinder's progress marker (pathing.h, PathPhase).
 inline constexpr GameGlobal<volatile std::uint32_t> g_pathPhase{0x7a9d98};
 
@@ -283,6 +296,15 @@ inline constexpr GameGlobal<volatile std::uint32_t> g_pathPhase{0x7a9d98};
 // The settings of the current game.
 inline constexpr GameGlobal<GameSettings> g_gameSettings{0x7a7a18};
 // The configuration from the registry.
+// The installed CD (3 the mission CD, 4 Gold Edition CD 1, 5 Gold CD 2,
+// anything else the original CD); written by 0x493af0 / 0x4976ad, chooses
+// the music track table (CLogicThread::PlayNextMusicTrack).
+inline constexpr GameGlobal<std::int32_t> g_installedCd{0x7a7c18};
+// The game's draw thread (DirectX::CGameDrawThread; RequestFullRedraw
+// 0x5b6730); null before it exists.
+inline constexpr GameGlobal<void*> g_drawThread{0x7e8bec};
+// The CD audio player (Win32::CCDAudio, Play 0x615ea0 / Stop 0x615f70).
+inline constexpr GameGlobal<std::uint8_t[0x10]> g_cdAudio{0x7a7a00};
 inline constexpr GameGlobal<GameConfig> g_config{0x7a7af0};
 // The folder the game's files are found in (a prefix of "Save\" and
 // "Save\Multi"; empty or ending in a backslash). CLogicThread::SaveGame
@@ -495,6 +517,10 @@ using PostMessageAImport = int(__stdcall*)(void* window, std::uint32_t message, 
                                            std::uint32_t lParam);
 inline constexpr GameGlobal<MciSendCommandAImport> g_importMciSendCommandA{0x65536c};  // from _INMM.dll
 inline constexpr GameGlobal<PostMessageAImport> g_importPostMessageA{0x6552f0};        // USER32.dll
+using InterlockedExchangeImport = std::int32_t(__stdcall*)(volatile std::int32_t* target, std::int32_t value);
+inline constexpr GameGlobal<InterlockedExchangeImport> g_importInterlockedExchange{0x6550e4};  // KERNEL32.dll
+using DeleteCriticalSectionImport = void(__stdcall*)(void* section);
+inline constexpr GameGlobal<DeleteCriticalSectionImport> g_importDeleteCriticalSection{0x6550f8};  // KERNEL32.dll
 // session 58 (wip/framework-errors): the exception descriptions
 // (CHResult::Describe 0x6134d0, CMCIException::Describe 0x614250).
 using FormatMessageAImport = std::uint32_t(__stdcall*)(std::uint32_t flags, const void* source, std::uint32_t id,

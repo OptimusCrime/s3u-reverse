@@ -17,6 +17,7 @@ add_library(s3re SHARED
 
     # msvc6/: MSVC 6.0 library code (std::string, exceptions)
     msvc6/catch_match.cpp
+    msvc6/static_string_inits.cpp
     msvc6/deleting_destructors.cpp
     msvc6/exceptions.cpp
     msvc6/old_iostream.cpp
@@ -58,6 +59,7 @@ add_library(s3re SHARED
     tooling/replay/command_log.cpp
 
     # game/world/: CGameData basics: RNG, players, statistics, counters, tables
+    game/world/game_data_ctor.cpp
     game/world/counting.cpp
     game/world/finish_initialising.cpp
     game/world/id_allocators.cpp
@@ -142,6 +144,7 @@ add_library(s3re SHARED
 
     # game/pathing/: the pathfinder (Dirk/Pathing.cpp)
     game/pathing/pathing.cpp
+    game/pathing/reciprocals.cpp
 
     # game/spells/: the god events (Volker/GodlyEvents.cpp)
     game/spells/godly_events.cpp
@@ -152,6 +155,7 @@ add_library(s3re SHARED
     game/spells/spells_land.cpp
 
     # game/logic/: CLogicThread: Step, game end, victory conditions, UI state in the world
+    game/logic/finish_game.cpp
     game/logic/game_end.cpp
     game/logic/game_end_check.cpp
     game/logic/load_save_game.cpp
@@ -160,8 +164,12 @@ add_library(s3re SHARED
     game/logic/save_game_tests.cpp
     game/logic/save_game_to_slot.cpp
     game/logic/draw_data.cpp
+    game/logic/draw_data_publish.cpp
     game/logic/logic_helpers.cpp
+    game/logic/logic_music.cpp
     game/logic/logic_thread.cpp
+    game/logic/logic_thread_dtor.cpp
+    game/logic/message_lines.cpp
     game/logic/logic_thread_members.cpp
     game/logic/objectives.cpp
     game/logic/ui_overlays.cpp
@@ -256,6 +264,7 @@ add_library(s3re SHARED
     game/ui/ui_static_text.cpp
 
     # game/graphics/: graphics data, landscape colours, DirectDraw surface
+    game/graphics/drawer_display_mode.cpp
     game/graphics/directx_surface.cpp
     game/graphics/drawer_objects.cpp
     game/graphics/drawer_queues.cpp
@@ -299,6 +308,7 @@ add_library(s3re SHARED
     game/framework/misc_helpers.cpp
     game/framework/string_members.cpp
     game/framework/wait_times.cpp
+    game/framework/win32_thread_destructors.cpp
     game/framework/win32_cdaudio.cpp
     game/framework/win32_classes.cpp
     game/framework/win32_detach.cpp
