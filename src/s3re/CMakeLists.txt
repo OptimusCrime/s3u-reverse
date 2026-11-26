@@ -17,6 +17,7 @@ add_library(s3re SHARED
 
     # msvc6/: MSVC 6.0 library code (std::string, exceptions)
     msvc6/catch_match.cpp
+    msvc6/static_string_inits.cpp
     msvc6/deleting_destructors.cpp
     msvc6/exceptions.cpp
     msvc6/old_iostream.cpp

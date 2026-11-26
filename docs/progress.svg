@@ -15,11 +15,11 @@
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="273.7" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 19.5%</title></rect>
 <text x="306.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">19.5%</text>
-<rect x="443.7" y="154" width="96" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.8%</title></rect>
-<text x="491.7" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.8%</text>
-<rect x="539.7" y="154" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
-<rect x="539.8" y="154" width="482.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 34.3%</title></rect>
-<text x="780.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">34.3%</text>
+<rect x="443.7" y="154" width="118.1" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.4%</title></rect>
+<text x="502.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.4%</text>
+<rect x="561.8" y="154" width="0.1" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.0%</title></rect>
+<rect x="561.9" y="154" width="460.1" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 32.7%</title></rect>
+<text x="792" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">32.7%</text>
 <rect x="1022" y="154" width="554" height="40" fill="#e8a39b"><title>Not understood yet: 39.4%</title></rect>
 <text x="1299" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">39.4%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
@@ -7390,7 +7390,7 @@
 </g>
 </g>
 <g><rect x="1108.6" y="0" width="491.4" height="566.9" fill="#2b2f36" stroke="#ffffff" stroke-width="2"/>
-<text x="1113.6" y="13" font-size="12" font-weight="600" fill="#ffffff">Compiler-generated — 0.0% verified (0.0% in a whole game)</text>
+<text x="1113.6" y="13" font-size="12" font-weight="600" fill="#ffffff">Compiler-generated — 9.1% verified (0.0% in a whole game)</text>
 <g><title>(free functions): 4617 functions</title><rect x="1110.6" y="19" width="487.4" height="532" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <text x="1112.6" y="27.5" font-size="8.5" fill="#ffffff">(free functions)</text>
 <rect x="1111.1" y="30.5" width="61.2" height="64.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticDtorReg_7e2fd0 @ 0x005880d0
@@ -7437,12 +7437,12 @@
 640 bytes — Identified (purpose known)</title></rect>
 <rect x="1171.7" y="166.2" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8758 @ 0x005a0010
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="177.8" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab630 @ 0x005000b0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1171.7" y="177.8" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab630 @ 0x005000b0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1171.7" y="189.5" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8748 @ 0x005a0170
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="201.1" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab620 @ 0x00500210
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1171.7" y="201.1" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab620 @ 0x00500210
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1171.7" y="212.8" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8738 @ 0x005a02d0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1171.7" y="224.4" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2830 @ 0x005803a0
@@ -7453,50 +7453,50 @@
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1171.7" y="259.3" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a8920 @ 0x00438520
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="271" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aba80 @ 0x005085f0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1171.7" y="271" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aba80 @ 0x005085f0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1171.7" y="282.6" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2810 @ 0x00580660
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1171.7" y="294.3" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a8910 @ 0x00438680
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1171.7" y="305.9" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9498 @ 0x004686d0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="317.6" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aba70 @ 0x00508750
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1171.7" y="317.6" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aba70 @ 0x00508750
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1171.7" y="329.2" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9488 @ 0x00468830
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="340.9" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aba60 @ 0x005088b0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="352.5" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abd40 @ 0x00510930
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="364.1" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aaca0 @ 0x004d8940
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1171.7" y="340.9" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aba60 @ 0x005088b0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1171.7" y="352.5" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abd40 @ 0x00510930
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1171.7" y="364.1" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aaca0 @ 0x004d8940
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1171.7" y="375.8" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9478 @ 0x00468990
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="387.4" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abd30 @ 0x00510a90
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="399.1" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aac90 @ 0x004d8aa0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1171.7" y="387.4" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abd30 @ 0x00510a90
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1171.7" y="399.1" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aac90 @ 0x004d8aa0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1171.7" y="410.7" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2350 @ 0x00578ae0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="422.4" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abd20 @ 0x00510bf0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="434" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aac80 @ 0x004d8c00
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1171.7" y="422.4" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abd20 @ 0x00510bf0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1171.7" y="434" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aac80 @ 0x004d8c00
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1171.7" y="445.7" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2340 @ 0x00578c40
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="457.3" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab220 @ 0x004e8d60
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1171.7" y="457.3" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab220 @ 0x004e8d60
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1171.7" y="468.9" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2330 @ 0x00578da0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1171.7" y="480.6" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a87b0 @ 0x00430dd0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="492.2" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab210 @ 0x004e8ec0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1171.7" y="492.2" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab210 @ 0x004e8ec0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1171.7" y="503.9" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a87a0 @ 0x00430f30
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1171.7" y="515.5" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab200 @ 0x004e9020
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1171.7" y="515.5" width="17.2" height="11.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab200 @ 0x004e9020
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1171.7" y="527.2" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa1a0 @ 0x004a9050
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1171.7" y="538.8" width="17.2" height="11.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a8790 @ 0x00431090
@@ -7511,20 +7511,20 @@
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1245.3" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa180 @ 0x004a9310
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1259.3" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abea0 @ 0x00511340
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1259.3" y="141.7" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abea0 @ 0x00511340
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1273.4" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a73b8 @ 0x004013c0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1287.5" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0f48 @ 0x00561450
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1301.6" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abe90 @ 0x005114a0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1301.6" y="141.7" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abe90 @ 0x005114a0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1315.7" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9d58 @ 0x004a15a0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1329.8" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0f38 @ 0x005615b0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1343.9" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abe80 @ 0x00511600
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1343.9" y="141.7" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abe80 @ 0x00511600
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1358" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a95f8 @ 0x004696f0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1372.1" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9d48 @ 0x004a1700
@@ -7547,28 +7547,28 @@
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1498.9" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e3238 @ 0x00589c00
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1513" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7accc0 @ 0x00541c80
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1527.1" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0528 @ 0x00551cf0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1541.1" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa880 @ 0x004d1d30
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1513" y="141.7" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7accc0 @ 0x00541c80
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1527.1" y="141.7" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0528 @ 0x00551cf0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1541.1" y="141.7" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa880 @ 0x004d1d30
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1555.2" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa300 @ 0x004b1db0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1569.3" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7accb0 @ 0x00541de0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1583.4" y="141.7" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0518 @ 0x00551e50
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1188.9" y="155.9" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa870 @ 0x004d1e90
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1569.3" y="141.7" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7accb0 @ 0x00541de0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1583.4" y="141.7" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0518 @ 0x00551e50
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1188.9" y="155.9" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa870 @ 0x004d1e90
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1188.9" y="170" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa2f0 @ 0x004b1f10
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1188.9" y="184.1" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7acca0 @ 0x00541f40
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1188.9" y="198.2" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0508 @ 0x00551fb0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1188.9" y="212.3" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa860 @ 0x004d1ff0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1188.9" y="184.1" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7acca0 @ 0x00541f40
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1188.9" y="198.2" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0508 @ 0x00551fb0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1188.9" y="212.3" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa860 @ 0x004d1ff0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1188.9" y="226.4" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa2e0 @ 0x004b2070
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1188.9" y="240.5" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e88b8 @ 0x005a2270
@@ -7589,24 +7589,24 @@
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1188.9" y="353.2" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a7528 @ 0x00402710
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1188.9" y="367.3" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa9e0 @ 0x004d2740
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1188.9" y="367.3" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa9e0 @ 0x004d2740
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1188.9" y="381.4" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2a90 @ 0x005827a0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1188.9" y="395.5" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a7518 @ 0x00402870
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1188.9" y="409.5" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa9d0 @ 0x004d28a0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1188.9" y="409.5" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa9d0 @ 0x004d28a0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1188.9" y="423.6" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2a80 @ 0x00582900
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1188.9" y="437.7" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a79c0 @ 0x0040a9f0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1188.9" y="451.8" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa9c0 @ 0x004d2a00
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1188.9" y="451.8" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa9c0 @ 0x004d2a00
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1188.9" y="465.9" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a79b0 @ 0x0040ab50
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1188.9" y="480" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab380 @ 0x004fac10
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1188.9" y="480" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab380 @ 0x004fac10
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1188.9" y="494.1" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8a18 @ 0x005a2c80
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1188.9" y="508.2" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a79a0 @ 0x0040acb0
@@ -7615,56 +7615,56 @@
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1188.9" y="536.4" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e25c0 @ 0x0057ad60
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab370 @ 0x004fad70
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1217.2" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e06a0 @ 0x0055ada0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1203.1" y="155.9" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab370 @ 0x004fad70
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1217.2" y="155.9" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e06a0 @ 0x0055ada0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1231.3" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8a08 @ 0x005a2de0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1245.4" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1710 @ 0x0056ae20
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1259.5" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ace20 @ 0x00542ea0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1259.5" y="155.9" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ace20 @ 0x00542ea0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1273.6" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e25b0 @ 0x0057aec0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1287.6" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab360 @ 0x004faed0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1301.7" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0690 @ 0x0055af00
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1287.6" y="155.9" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab360 @ 0x004faed0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1301.7" y="155.9" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0690 @ 0x0055af00
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1315.8" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e89f8 @ 0x005a2f40
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1329.9" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1700 @ 0x0056af80
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1344" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a76a8 @ 0x00402fc0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1358.1" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ace10 @ 0x00543000
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1358.1" y="155.9" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ace10 @ 0x00543000
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1372.1" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e25a0 @ 0x0057b020
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1386.2" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0680 @ 0x0055b060
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1386.2" y="155.9" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0680 @ 0x0055b060
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1400.3" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a7698 @ 0x00403120
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1414.4" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ace00 @ 0x00543160
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1414.4" y="155.9" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ace00 @ 0x00543160
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1428.5" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a7688 @ 0x00403280
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1442.6" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0038 @ 0x0054b420
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1442.6" y="155.9" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0038 @ 0x0054b420
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1456.7" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1240 @ 0x00563430
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1470.7" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a97d8 @ 0x00473480
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1484.8" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0028 @ 0x0054b580
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1484.8" y="155.9" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0028 @ 0x0054b580
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1498.9" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1230 @ 0x00563590
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1513" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a97c8 @ 0x004735e0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1527.1" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8b78 @ 0x005a3690
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1541.2" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0018 @ 0x0054b6e0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1541.2" y="155.9" width="14.1" height="14.2" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0018 @ 0x0054b6e0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1555.2" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1220 @ 0x005636f0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1569.3" y="155.9" width="14.1" height="14.2" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e33b8 @ 0x0058b700
@@ -7683,146 +7683,146 @@
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1203.1" y="240.6" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a7828 @ 0x00403a20
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="254.7" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab7a0 @ 0x00503b10
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1203.1" y="254.7" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab7a0 @ 0x00503b10
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1203.1" y="268.8" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a8360 @ 0x0042bb20
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1203.1" y="282.8" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a7fb8 @ 0x0040bb40
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1203.1" y="296.9" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a7818 @ 0x00403b80
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="311" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac9c0 @ 0x0053bc30
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="325.1" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab790 @ 0x00503c70
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1203.1" y="311" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac9c0 @ 0x0053bc30
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1203.1" y="325.1" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab790 @ 0x00503c70
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1203.1" y="339.2" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a8350 @ 0x0042bc80
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="353.3" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac580 @ 0x00523c80
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1203.1" y="353.3" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac580 @ 0x00523c80
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1203.1" y="367.4" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a7fa8 @ 0x0040bca0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1203.1" y="381.4" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a7808 @ 0x00403ce0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1203.1" y="395.5" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1e70 @ 0x00573d20
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="409.6" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac9b0 @ 0x0053bd90
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="423.7" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab780 @ 0x00503dd0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="437.8" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac570 @ 0x00523de0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1203.1" y="409.6" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac9b0 @ 0x0053bd90
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1203.1" y="423.7" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab780 @ 0x00503dd0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1203.1" y="437.8" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac570 @ 0x00523de0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1203.1" y="451.9" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a7f98 @ 0x0040be00
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1203.1" y="465.9" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1e60 @ 0x00573e80
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="480" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac9a0 @ 0x0053bef0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="494.1" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac560 @ 0x00523f40
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1203.1" y="480" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac9a0 @ 0x0053bef0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1203.1" y="494.1" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac560 @ 0x00523f40
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1203.1" y="508.2" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1e50 @ 0x00573fe0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="522.3" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab4e0 @ 0x004fc080
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1203.1" y="536.4" width="14.2" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abbe0 @ 0x0050c0b0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1203.1" y="522.3" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab4e0 @ 0x004fc080
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1203.1" y="536.4" width="14.2" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abbe0 @ 0x0050c0b0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1217.4" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a91d8 @ 0x00464100
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1231.5" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e3648 @ 0x0058c110
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1245.5" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0808 @ 0x0055c150
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1245.5" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0808 @ 0x0055c150
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1259.6" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9938 @ 0x0049c170
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1273.7" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab4d0 @ 0x004fc1e0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1287.8" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abbd0 @ 0x0050c210
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1273.7" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab4d0 @ 0x004fc1e0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1287.8" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abbd0 @ 0x0050c210
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1301.9" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a91c8 @ 0x00464260
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1315.9" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e3638 @ 0x0058c270
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1330" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e07f8 @ 0x0055c2b0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1330" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e07f8 @ 0x0055c2b0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1344.1" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9928 @ 0x0049c2d0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1358.2" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab4c0 @ 0x004fc340
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1372.2" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abbc0 @ 0x0050c370
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1358.2" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab4c0 @ 0x004fc340
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1372.2" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abbc0 @ 0x0050c370
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1386.3" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a91b8 @ 0x004643c0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1400.4" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e3628 @ 0x0058c3d0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1414.5" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa460 @ 0x004b43f0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1428.6" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e07e8 @ 0x0055c410
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1428.6" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e07e8 @ 0x0055c410
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1442.6" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9918 @ 0x0049c430
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1456.7" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa450 @ 0x004b4550
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1470.8" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac6e0 @ 0x00524690
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1470.8" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac6e0 @ 0x00524690
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1484.9" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa440 @ 0x004b46b0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1499" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac6d0 @ 0x005247f0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1499" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac6d0 @ 0x005247f0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1513" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2d10 @ 0x005847f0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1527.1" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac6c0 @ 0x00524950
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1527.1" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac6c0 @ 0x00524950
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1541.2" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2d00 @ 0x00584950
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1555.3" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2cf0 @ 0x00584ab0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1569.3" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aaf60 @ 0x004e4b40
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1583.4" y="170.2" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0a78 @ 0x0055cba0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1569.3" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aaf60 @ 0x004e4b40
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1583.4" y="170.2" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0a78 @ 0x0055cba0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1217.4" y="184.4" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9ee0 @ 0x004a4c30
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1217.4" y="198.5" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aaf50 @ 0x004e4ca0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1217.4" y="198.5" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aaf50 @ 0x004e4ca0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1217.4" y="212.6" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a81f8 @ 0x00414cb0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1217.4" y="226.7" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0a68 @ 0x0055cd00
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1217.4" y="226.7" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0a68 @ 0x0055cd00
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1217.4" y="240.7" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9ed0 @ 0x004a4d90
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1217.4" y="254.8" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aaf40 @ 0x004e4e00
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1217.4" y="254.8" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aaf40 @ 0x004e4e00
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1217.4" y="268.9" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a81e8 @ 0x00414e10
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1217.4" y="283" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9a98 @ 0x0049ce50
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1217.4" y="297" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0a58 @ 0x0055ce60
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1217.4" y="311.1" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac000 @ 0x00514ea0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1217.4" y="297" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0a58 @ 0x0055ce60
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1217.4" y="311.1" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac000 @ 0x00514ea0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1217.4" y="325.2" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9ec0 @ 0x004a4ef0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1217.4" y="339.3" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a81d8 @ 0x00414f70
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1217.4" y="353.4" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9a88 @ 0x0049cfb0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1217.4" y="367.4" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abff0 @ 0x00515000
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1217.4" y="381.5" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac840 @ 0x00535080
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1217.4" y="367.4" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abff0 @ 0x00515000
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1217.4" y="381.5" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac840 @ 0x00535080
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1217.4" y="395.6" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9a78 @ 0x0049d110
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1217.4" y="409.7" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abfe0 @ 0x00515160
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1217.4" y="409.7" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7abfe0 @ 0x00515160
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1217.4" y="423.7" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e81d0 @ 0x0059d1b0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1217.4" y="437.8" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac830 @ 0x005351e0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1217.4" y="437.8" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac830 @ 0x005351e0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1217.4" y="451.9" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a84d0 @ 0x0042d2a0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1217.4" y="466" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e81c0 @ 0x0059d310
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1217.4" y="480.1" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac820 @ 0x00535340
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1217.4" y="480.1" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac820 @ 0x00535340
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1217.4" y="494.1" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a84c0 @ 0x0042d400
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1217.4" y="508.2" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e81b0 @ 0x0059d470
@@ -7839,150 +7839,150 @@
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1273.9" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a8ee8 @ 0x0045d840
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1287.9" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac2c0 @ 0x0051d850
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1287.9" y="184.4" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac2c0 @ 0x0051d850
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1302" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1970 @ 0x0056d930
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1316.1" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e14a0 @ 0x00565970
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1330.1" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a8ed8 @ 0x0045d9a0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1344.2" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac2b0 @ 0x0051d9b0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1344.2" y="184.4" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac2b0 @ 0x0051d9b0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1358.3" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1490 @ 0x00565ad0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1372.4" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac2a0 @ 0x0051db10
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1372.4" y="184.4" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac2a0 @ 0x0051db10
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1386.4" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8d98 @ 0x005f5b20
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1400.5" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac160 @ 0x00515c20
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1400.5" y="184.4" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac160 @ 0x00515c20
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1414.6" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8d88 @ 0x005f5c80
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1428.6" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aab40 @ 0x004d5cd0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1442.7" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac150 @ 0x00515d80
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1428.6" y="184.4" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aab40 @ 0x004d5cd0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1442.7" y="184.4" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac150 @ 0x00515d80
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1456.8" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8330 @ 0x0059dde0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1470.9" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8d78 @ 0x005f5de0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1484.9" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aab30 @ 0x004d5e30
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1499" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac140 @ 0x00515ee0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1484.9" y="184.4" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aab30 @ 0x004d5e30
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1499" y="184.4" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac140 @ 0x00515ee0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1513.1" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8320 @ 0x0059df40
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1527.1" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aab20 @ 0x004d5f90
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1527.1" y="184.4" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aab20 @ 0x004d5f90
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1541.2" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9bf8 @ 0x0049dfe0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1555.3" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfce8 @ 0x00546030
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1555.3" y="184.4" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfce8 @ 0x00546030
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1569.4" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8310 @ 0x0059e0a0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1583.4" y="184.4" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9be8 @ 0x0049e140
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="198.7" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfcd8 @ 0x00546190
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1231.6" y="198.7" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfcd8 @ 0x00546190
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1231.6" y="212.7" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9bd8 @ 0x0049e2a0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="226.8" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfcc8 @ 0x005462f0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="240.9" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab900 @ 0x005063e0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="255" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa5c0 @ 0x004c6430
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1231.6" y="226.8" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfcc8 @ 0x005462f0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1231.6" y="240.9" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab900 @ 0x005063e0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1231.6" y="255" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa5c0 @ 0x004c6430
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1231.6" y="269" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9338 @ 0x004664c0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1231.6" y="283.1" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9078 @ 0x0045e530
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="297.2" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab8f0 @ 0x00506540
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="311.2" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa5b0 @ 0x004c6590
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1231.6" y="297.2" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab8f0 @ 0x00506540
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1231.6" y="311.2" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa5b0 @ 0x004c6590
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1231.6" y="325.3" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9328 @ 0x00466620
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1231.6" y="339.4" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9068 @ 0x0045e690
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="353.5" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab8e0 @ 0x005066a0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="367.5" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa5a0 @ 0x004c66f0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1231.6" y="353.5" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab8e0 @ 0x005066a0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1231.6" y="367.5" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa5a0 @ 0x004c66f0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1231.6" y="381.6" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e20e0 @ 0x00576720
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1231.6" y="395.7" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e7df8 @ 0x00596760
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1231.6" y="409.7" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9318 @ 0x00466780
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="423.8" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac420 @ 0x0051e7a0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1231.6" y="423.8" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac420 @ 0x0051e7a0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1231.6" y="437.9" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a9058 @ 0x0045e7f0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1231.6" y="452" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e20d0 @ 0x00576880
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="466" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e02b0 @ 0x0054e8c0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1231.6" y="466" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e02b0 @ 0x0054e8c0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1231.6" y="480.1" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e7de8 @ 0x005968c0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1231.6" y="494.2" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8490 @ 0x0059e8f0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="508.2" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac410 @ 0x0051e900
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1231.6" y="508.2" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac410 @ 0x0051e900
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1231.6" y="522.3" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e20c0 @ 0x005769e0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1231.6" y="536.4" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e02a0 @ 0x0054ea20
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1231.6" y="536.4" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e02a0 @ 0x0054ea20
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1245.9" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e7dd8 @ 0x00596a20
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1260" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8480 @ 0x0059ea50
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1274" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac400 @ 0x0051ea60
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1288.1" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7acb40 @ 0x0053eb80
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1302.2" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0290 @ 0x0054eb80
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1274" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ac400 @ 0x0051ea60
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1288.1" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7acb40 @ 0x0053eb80
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1302.2" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0290 @ 0x0054eb80
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1316.2" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e8470 @ 0x0059ebb0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1330.3" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfed8 @ 0x00546bd0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1344.3" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7acb30 @ 0x0053ece0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1358.4" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfec8 @ 0x00546d30
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1372.5" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0ce8 @ 0x0055ed90
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1330.3" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfed8 @ 0x00546bd0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1344.3" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7acb30 @ 0x0053ece0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1358.4" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfec8 @ 0x00546d30
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1372.5" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0ce8 @ 0x0055ed90
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1386.5" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2e70 @ 0x00586dd0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1400.6" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7acb20 @ 0x0053ee40
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1414.7" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfeb8 @ 0x00546e90
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1400.6" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7acb20 @ 0x0053ee40
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1414.7" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7dfeb8 @ 0x00546e90
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1428.7" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa040 @ 0x004a6eb0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1442.8" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0cd8 @ 0x0055eef0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1456.9" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab0c0 @ 0x004e6f00
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1442.8" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0cd8 @ 0x0055eef0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1456.9" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab0c0 @ 0x004e6f00
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1470.9" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e7c88 @ 0x0058ef00
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1485" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2e60 @ 0x00586f30
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1499.1" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa030 @ 0x004a7010
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1513.1" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0cc8 @ 0x0055f050
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1527.2" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab0b0 @ 0x004e7060
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1513.1" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e0cc8 @ 0x0055f050
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1527.2" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab0b0 @ 0x004e7060
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1541.2" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e7c78 @ 0x0058f060
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1555.3" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e2e50 @ 0x00587090
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1569.4" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa020 @ 0x004a7170
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1583.4" y="198.7" width="14.1" height="14.3" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab0a0 @ 0x004e71c0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1583.4" y="198.7" width="14.1" height="14.3" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab0a0 @ 0x004e71c0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1245.9" y="212.9" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e7c68 @ 0x0058f1c0
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1245.9" y="227" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e85f0 @ 0x0059f3c0
@@ -8011,30 +8011,30 @@
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1245.9" y="395.8" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a8620 @ 0x0042fc60
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1245.9" y="409.8" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa720 @ 0x004c7c90
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1245.9" y="423.9" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aae00 @ 0x004dfcd0
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1245.9" y="409.8" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa720 @ 0x004c7c90
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1245.9" y="423.9" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aae00 @ 0x004dfcd0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1245.9" y="438" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a8a80 @ 0x0044fd30
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1245.9" y="452" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1bf0 @ 0x0056fd60
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1245.9" y="466.1" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a8610 @ 0x0042fdc0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1245.9" y="480.1" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa710 @ 0x004c7df0
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1245.9" y="494.2" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aadf0 @ 0x004dfe30
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1245.9" y="480.1" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa710 @ 0x004c7df0
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1245.9" y="494.2" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aadf0 @ 0x004dfe30
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1245.9" y="508.3" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7a8a70 @ 0x0044fe90
 304 bytes — Identified (purpose known)</title></rect>
 <rect x="1245.9" y="522.3" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7e1be0 @ 0x0056fec0
 304 bytes — Identified (purpose known)</title></rect>
-<rect x="1245.9" y="536.4" width="14.3" height="14.1" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa700 @ 0x004c7f50
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1260.2" y="212.9" width="22.6" height="8.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab640 @ 0x004fff50
-304 bytes — Identified (purpose known)</title></rect>
-<rect x="1282.7" y="212.9" width="22.6" height="8.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aade0 @ 0x004dff90
-304 bytes — Identified (purpose known)</title></rect>
+<rect x="1245.9" y="536.4" width="14.3" height="14.1" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aa700 @ 0x004c7f50
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1260.2" y="212.9" width="22.6" height="8.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7ab640 @ 0x004fff50
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="1282.7" y="212.9" width="22.6" height="8.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>StaticInit_7aade0 @ 0x004dff90
+304 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="1305.3" y="212.9" width="21.4" height="8.9" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>StaticInitExpr_5469c0 @ 0x005469c0
 288 bytes — Classified (class/role known)</title></rect>
 <rect x="1326.7" y="212.9" width="15.4" height="8.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>StaticDtorReg_7e7b68 @ 0x0058f7f0
