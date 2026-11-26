@@ -609,4 +609,10 @@ inline constexpr GameText kInitialisingGlobals{0x6a5c20};  // "Initialising glob
 // The thread destructors (win32_thread_destructors.cpp).
 inline constexpr GameText kThreadDestroyedRunning{0x7a42c4};  // "Thread destruction before it's finished"
 inline constexpr GameText kGameThreadCoInitOpen{0x79df58};    // "CGameThread::~CGameThread:: iCoInitOpen"
+
+// ------------------------------------------------------------ wip/draw-r5 batch
+// Volker\DrawBuilding.cpp (CDrawer::QueueBuilding's assert).
+inline constexpr GameText kDrawBuildingFile{0x69ff80};           // "E:\Siedler3\Volker\DrawBuilding.cpp"
+inline constexpr GameText kBuildingPhaseUndefined{0x69ff60};     // "Gebäudebauphase nicht definiert" (Latin-1)
+inline constexpr GameText kBuildingPhaseUndefinedLog{0x69ffa4};  // "! Gebäudebauphase nicht definiert: %u"
 }  // namespace s3re::game::texts

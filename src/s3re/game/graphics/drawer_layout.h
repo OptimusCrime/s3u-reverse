@@ -89,7 +89,8 @@ struct CDrawer {
     std::uint8_t unk05f654[0x5f6b8 - 0x5f654];
     void* graphics;                                   // +0x05f6b8 the CGraphicsData the sprites come from
                                                       //           (CDrawer::QueueCellObject 0x4d5a50)
-    void* sound;                                      // +0x05f6bc the CSoundData (PlayAmbientSounds 0x4c7730)
+    void* sound;                                      // +0x05f6bc the CSoundData of the drawing's sound effects
+                                                      //           (PlayAmbientSounds 0x4c7730, CDrawer::QueueLandscapeObject 0x4d3050)
 };
 
 #pragma pack(pop)
@@ -117,6 +118,7 @@ static_assert(offsetof(CDrawer, ambient_left) == 0x5f588);
 static_assert(offsetof(CDrawer, ambient_right) == 0x5f5cc);
 static_assert(offsetof(CDrawer, ambient_count) == 0x5f610);
 static_assert(offsetof(CDrawer, graphics) == 0x5f6b8);
+static_assert(offsetof(CDrawer, sound) == 0x5f6bc);
 
 template <typename T>
 CDrawer* DrawerOf(T* self) {
