@@ -254,6 +254,10 @@ inline constexpr GameGlobal<char[1]> g_stringNullBuffer{0x6553a0};
 // by assign) and npos.
 inline constexpr GameGlobal<std::uint16_t[1]> g_wstringNullBuffer{0x655dc8};
 inline constexpr GameGlobal<const volatile std::uint32_t> g_wstringNpos{0x655dcc};
+// The wait times (ms) of Win32::GetTimeout 0x60df50 and DirectX::GetTimeout
+// 0x5b8c10: per kind {normal, with -debug} (INFINITE = 0xffffffff).
+inline constexpr GameGlobal<const std::uint32_t[2][2]> g_win32Timeouts{0x7a42b4};
+inline constexpr GameGlobal<const std::uint32_t[2][2]> g_directXTimeouts{0x79e6f0};
 // GUID_NULL (16 zero bytes).
 inline constexpr GameGlobal<const std::uint32_t[4]> g_guidNull{0x65c0b8};
 // The 16-bit span functions by brightness (SelectBrightnessSpans 0x5fb4c0):

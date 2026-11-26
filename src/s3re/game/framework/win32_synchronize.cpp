@@ -56,6 +56,9 @@
 #include "hooks.h"
 #include "msvc6/string.h"
 
+#include <windows.h>
+
+#include <cstddef>
 #include <cstdint>
 
 namespace s3re::game {
@@ -299,6 +302,110 @@ std::uint32_t __fastcall Win32_CWindowBase_Destroy(void* self, void* /*edx*/) {
     Verify(result, texts::kVerifyDestroyWindow.c_str(), texts::kClassesFile.c_str(), kLineDestroyWindow);
     static_cast<framework::CWindowBase*>(self)->window = 0;
     return result;
+}
+
+// ---------------------------------------------------------------------------
+// wip/menus-r5: CThread::Start, CWindowBase::Show, HasPendingMessage,
+// CCriticalSection's constructor, DirectX::CGameThread::OnExit
+// ---------------------------------------------------------------------------
+//
+// Win32::CThread::Start (0x0060e060): (parameter) ret 4: +0x24 = parameter;
+//   the thread is created suspended with the CRT's _beginthreadex 0x62279a
+//   (no security, 0x1000 bytes of stack, the thread procedure 0x60ec20 with
+//   this as its argument, the thread id into +0x14); VERIFY(hThread !=
+//   NULL) (Classes.cpp line 85); the handle is kept (CWin32Handle::Set
+//   0x60bf00 on +4, owned), then ResumeThread(handle). EAX = ResumeThread's.
+// Win32::CWindowBase::Show (0x0060fe40): ShowWindow(window +4, SW_SHOW).
+//   EAX = its.
+// Win32::HasPendingMessage (0x0060d9e0, no arguments): PeekMessageA(&msg,
+//   0, 0, 0, PM_NOREMOVE); AL = result != 0 (the rest of EAX is the result's).
+// Win32::CCriticalSection::CCriticalSection (0x0060d650):
+//   InitializeCriticalSection(this) (the object is the CRITICAL_SECTION).
+//   EAX = this.
+// DirectX::CGameThread::OnExit (0x005b6470): CoUninitialize(), then the
+//   counter +0x40 decremented (probably the COM initializations of the
+//   thread). EAX = the new count.
+
+namespace {
+
+constexpr std::uintptr_t kBeginThreadEx = 0x0062279a;  // the CRT's _beginthreadex
+constexpr std::uintptr_t kThreadProcedure = 0x0060ec20;  // Win32::CThread's thread procedure
+constexpr std::uint32_t kThreadStackSize = 0x1000;
+constexpr std::uint32_t kCreateSuspended = 4;   // CREATE_SUSPENDED
+constexpr std::int32_t kShowWindow = 5;          // SW_SHOW
+constexpr std::uint32_t kLineThreadStart = 85;   // Win32\Classes.cpp
+
+using BeginThreadExFn = std::uint32_t(__cdecl*)(void* security, std::uint32_t stackSize, std::uintptr_t start,
+                                                void* argument, std::uint32_t flags, std::uint32_t* threadId);
+
+#pragma pack(push, 1)
+struct GameThreadCounter {
+    std::uint8_t unk00[0x40];
+    std::int32_t comCount;  // +0x40 decremented by OnExit
+};
+#pragma pack(pop)
+static_assert(offsetof(GameThreadCounter, comCount) == 0x40);
+
+}  // namespace
+
+std::uint32_t __fastcall Win32_CThread_Start(void* self, void* edx, std::uint32_t parameter);
+std::uint32_t __fastcall Win32_CWindowBase_Show(void* self, void* edx);
+std::uint32_t __cdecl Win32_HasPendingMessage();
+void* __fastcall Win32_CCriticalSection_Construct(void* self, void* edx);
+std::uint32_t __fastcall DirectX_CGameThread_OnExit(void* self, void* edx);
+
+using HasPendingMessageFn = std::uint32_t(__cdecl*)();
+using ConstructFn = void*(__fastcall*)(void* self, void* edx);
+
+S3RE_HOOK(0x0060e060, Win32_CThread_Start, MemberArgFn, Original_Win32_CThread_Start, Win32_CThread_Start);
+S3RE_HOOK(0x0060fe40, Win32_CWindowBase_Show, MemberFn, Original_Win32_CWindowBase_Show, Win32_CWindowBase_Show);
+S3RE_HOOK(0x0060d9e0, Win32_HasPendingMessage, HasPendingMessageFn, Original_Win32_HasPendingMessage,
+          Win32_HasPendingMessage);
+S3RE_HOOK(0x0060d650, Win32_CCriticalSection_Construct, ConstructFn, Original_Win32_CCriticalSection_Construct,
+          Win32_CCriticalSection_Construct);
+S3RE_HOOK(0x005b6470, DirectX_CGameThread_OnExit, MemberFn, Original_DirectX_CGameThread_OnExit,
+          DirectX_CGameThread_OnExit);
+
+// Purpose: starts a framework thread (the game's logic, draw and network
+// threads): creates it suspended, keeps its handle, then lets it run.
+std::uint32_t __fastcall Win32_CThread_Start(void* self, void* /*edx*/, std::uint32_t parameter) {
+    auto* thread = static_cast<framework::CThread*>(self);
+    thread->unk24 = parameter;
+    const std::uint32_t handle = reinterpret_cast<BeginThreadExFn>(kBeginThreadEx)(
+        nullptr, kThreadStackSize, kThreadProcedure, self, kCreateSuspended, &thread->threadId);
+    if (handle == 0) {
+        ThrowLastError(texts::kThreadNotNull.c_str(), texts::kClassesFile.c_str(), kLineThreadStart);
+    }
+    reinterpret_cast<HandleSetFn>(kHandleSet)(&thread->waitable.handle, nullptr, reinterpret_cast<void*>(handle),
+                                              kOwned);
+    return g_importResumeThread.get()(reinterpret_cast<void*>(handle));
+}
+
+// Purpose: shows a framework window.
+std::uint32_t __fastcall Win32_CWindowBase_Show(void* self, void* /*edx*/) {
+    return static_cast<std::uint32_t>(g_importShowWindow.get()(WindowOf(self), kShowWindow));
+}
+
+// Purpose: whether the calling thread has a Windows message waiting (the
+// message stays in the queue).
+std::uint32_t __cdecl Win32_HasPendingMessage() {
+    MSG message;
+    const auto result = static_cast<std::uint32_t>(g_importPeekMessageA.get()(&message, nullptr, 0, 0, PM_NOREMOVE));
+    return (result & 0xFFFFFF00u) | (result != 0 ? 1u : 0u);
+}
+
+// Purpose: constructor of the framework's critical section wrapper.
+void* __fastcall Win32_CCriticalSection_Construct(void* self, void* /*edx*/) {
+    g_importInitializeCriticalSection.get()(self);
+    return self;
+}
+
+// Purpose: end of a DirectX game thread: undoes its COM initialization.
+std::uint32_t __fastcall DirectX_CGameThread_OnExit(void* self, void* /*edx*/) {
+    g_importCoUninitialize.get()();
+    auto* thread = static_cast<GameThreadCounter*>(self);
+    --thread->comCount;
+    return static_cast<std::uint32_t>(thread->comCount);
 }
 
 }  // namespace s3re::game

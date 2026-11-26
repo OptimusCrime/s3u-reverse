@@ -12,6 +12,10 @@
 //   16-bit text at +0x4c (this = the edit control's start); the result's
 //   allocator byte is the member's; n = min(length, wstring npos 0x655dcc).
 //   EAX = result.
+// CEditControl::GetText (0x00418a10): (std::string* result) ret 4: the 16-bit
+//   text converted (WideToNarrowString 0x60b6a0 into a local), the result
+//   = a copy of it (allocator byte: the result address's low byte; assign
+//   (local, 0, 0xFFFFFFFF)), then the local's ~string inlined. EAX = result.
 
 #include "game/tables.h"
 #include "hooks.h"
@@ -46,9 +50,11 @@ using GetTextWFn = msvc6::WString*(__fastcall*)(std::uintptr_t self, void* edx, 
 
 msvc6::String* __fastcall CTextView_GetText(std::uintptr_t self, void* edx, msvc6::String* result);
 msvc6::WString* __fastcall CEditControl_GetTextW(std::uintptr_t self, void* edx, msvc6::WString* result);
+msvc6::String* __fastcall CEditControl_GetText(std::uintptr_t self, void* edx, msvc6::String* result);
 
 S3RE_HOOK(0x00420760, CTextView_GetText, GetTextFn, Original_CTextView_GetText, CTextView_GetText);
 S3RE_HOOK(0x00418bc0, CEditControl_GetTextW, GetTextWFn, Original_CEditControl_GetTextW, CEditControl_GetTextW);
+S3RE_HOOK(0x00418a10, CEditControl_GetText, GetTextFn, Original_CEditControl_GetText, CEditControl_GetText);
 
 // Purpose: Returns a copy of a multi-line text view's text.
 msvc6::String* __fastcall CTextView_GetText(std::uintptr_t self, void* /*edx*/, msvc6::String* result) {
@@ -65,6 +71,19 @@ msvc6::WString* __fastcall CEditControl_GetTextW(std::uintptr_t self, void* /*ed
     result->len = 0;
     result->res = 0;
     return msvc6::WString_AssignSubstr(result, nullptr, text, 0, g_wstringNpos);
+}
+
+// Purpose: Returns an edit field's text as an 8-bit string (player names,
+// chat lines, savegame names).
+msvc6::String* __fastcall CEditControl_GetText(std::uintptr_t self, void* /*edx*/, msvc6::String* result) {
+    using WideToNarrowFn = msvc6::String*(__fastcall*)(msvc6::String* result, const msvc6::WString* source);
+    msvc6::String text;
+    reinterpret_cast<WideToNarrowFn>(0x0060b6a0)(&text, EditText(self));  // WideToNarrowString (ours)
+    result->allocator = static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(result));
+    msvc6::detail::Clear(result);
+    msvc6::String_AssignSubstr(result, nullptr, &text, 0, kAll);
+    msvc6::String_Destroy(&text, nullptr);
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,10 +274,77 @@ msvc6::WString* __fastcall WrongGetTextW(std::uintptr_t self, void* edx, msvc6::
 
 }  // namespace
 
+namespace {
+
+// CEditControl::GetText: a member of random printable words (or none);
+// compared: EAX, the result's allocator byte (relative to its address),
+// length, capacity, count byte and text.
+void CompareEditGetText(test::Context& ctx, GetTextFn candidate, int cases) {
+    alignas(16) static std::uint8_t objects[2][0x60];
+    alignas(16) static std::uint8_t results[2][64];
+    static std::uint16_t blocks[2][48];
+    for (int i = 0; i < cases; ++i) {
+        const std::uint64_t seed = ctx.rng().Next64();
+        const std::size_t resultAt = 4 * ctx.rng().Below(8);
+        msvc6::String* got[2] = {};
+        msvc6::String* eax[2] = {};
+        for (int side = 0; side < 2; ++side) {
+            test::Rng rng(seed);
+            rng.Fill(objects[side], sizeof(objects[side]));
+            rng.Fill(results[side], sizeof(results[side]));
+            const auto self = reinterpret_cast<std::uintptr_t>(objects[side]);
+            msvc6::WString* member = EditText(self);
+            const std::uint32_t length = rng.Chance(1, 6) ? 0 : rng.Below(40);
+            blocks[side][0] = 0;
+            for (std::uint32_t k = 0; k < length; ++k) {
+                blocks[side][1 + k] = static_cast<std::uint16_t>(0x20 + rng.Below(0xe0));
+            }
+            blocks[side][1 + length] = 0;
+            member->ptr = length == 0 && rng.Chance(1, 2) ? nullptr : blocks[side] + 1;
+            member->len = length;
+            member->res = length;
+            got[side] = reinterpret_cast<msvc6::String*>(results[side] + resultAt);
+            eax[side] = side == 0 ? Original_CEditControl_GetText(self, nullptr, got[side])
+                                  : candidate(self, nullptr, got[side]);
+        }
+        bool same = S3RE_EXPECT(eax[0] == got[0] && eax[1] == got[1]) &&
+                    S3RE_EXPECT_EQ(got[0]->allocator - static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(results[0])),
+                                   got[1]->allocator - static_cast<std::uint8_t>(reinterpret_cast<std::uintptr_t>(results[1]))) &&
+                    S3RE_EXPECT_EQ(got[0]->len, got[1]->len) && S3RE_EXPECT_EQ(got[0]->res, got[1]->res) &&
+                    S3RE_EXPECT_EQ(got[0]->ptr == nullptr, got[1]->ptr == nullptr);
+        if (same && got[0]->ptr != nullptr) {
+            same = S3RE_EXPECT_EQ(NarrowKit::Count(got[0]), NarrowKit::Count(got[1])) &&
+                   S3RE_EXPECT_MEM_EQ(got[0]->ptr, got[1]->ptr, got[0]->len + 1);
+        }
+        NarrowKit::Destroy(got[0]);
+        NarrowKit::Destroy(got[1]);
+        if (!same) {
+            ctx.Fail(__FILE__, __LINE__, "  case %d", i);
+            return;
+        }
+    }
+}
+
+msvc6::String* __fastcall WrongEditGetText(std::uintptr_t self, void* edx, msvc6::String* result) {
+    CEditControl_GetText(self, edx, result);
+    result->allocator = 0;  // wrong: not the address's low byte
+    return result;
+}
+
+}  // namespace
+
 S3RE_TEST(UiTextGetters_MatchOriginal) {
     CompareGetText(ctx, &CTextView_GetText, 3000);
     CompareGetTextW(ctx, &CEditControl_GetTextW, 3000);
+    CompareEditGetText(ctx, &CEditControl_GetText, 3000);
 }
+
+S3RE_TEST(UiTextGetters_EditGetTextDetectsWrongImplementation) {
+    test::Context probe(ctx.name(), 3, /*quiet=*/true);
+    CompareEditGetText(probe, &WrongEditGetText, 300);
+    S3RE_EXPECT(probe.failures() > 0);
+}
+
 
 S3RE_TEST(UiTextGetters_ComparisonDetectsWrongImplementation) {
     test::Context probe(ctx.name(), 1, /*quiet=*/true);

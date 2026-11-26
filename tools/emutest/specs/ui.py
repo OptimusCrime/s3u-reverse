@@ -2016,3 +2016,21 @@ SPECS += [
          exempt_blocks=(0x00418bef, 0x00418bf5, 0x00418bfb, 0x00418c00, 0x00418c10, 0x00418c12, 0x00418c16, 0x00418c3c,
                         0x00418c44)),
 ]
+
+
+# CEditControl::GetText (ui_text_getters.cpp): the object at world 0, its
+# 16-bit text at +0x4c from framework's w2n_source pattern (moved to 0x4c);
+# WideToNarrowString runs as original code in both (its own spec).
+def eg_edit_text(rng, pool, args):
+    return [(offset - 0x100 + 0x4c if offset < SCRATCH else offset, value, size)
+            for offset, value, size in w2n_source(rng, pool, args)]
+
+
+SPECS += [
+    Spec("CEditControl_GetText", 0x00418a10, "fastcall", [one_of(WORLD_BASE), anything, tg_result],
+         presets=eg_edit_text, globals=null_string_count, new_fails=0.05, callees=W2N_CALLEES,
+         # Dead: the local's ~string: 0x418aed (_Eos after erase(0, npos))
+         # and 0x418b0a/0x418b0e (the release's decrement: after the split
+         # the buffer is unshared or frozen).
+         exempt_blocks=(0x00418aed, 0x00418b0a, 0x00418b0e)),
+]

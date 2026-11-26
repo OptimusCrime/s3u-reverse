@@ -303,6 +303,8 @@ add_library(s3re SHARED
     game/framework/misc_helpers.cpp
     game/framework/string_members.cpp
     game/framework/wait_times.cpp
+    game/framework/win32_app_members.cpp
+    game/framework/wide_strings.cpp
     game/framework/win32_cdaudio.cpp
     game/framework/win32_classes.cpp
     game/framework/win32_detach.cpp
