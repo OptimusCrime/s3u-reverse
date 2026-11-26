@@ -11,6 +11,7 @@ add_library(s3re SHARED
     test/difftest.cpp
     test/fake_ddraw.cpp
     test/fake_dsound.cpp
+    test/fake_gdi.cpp
     test/fake_win32.cpp
     test/harness_selftest.cpp
 
@@ -18,6 +19,7 @@ add_library(s3re SHARED
     msvc6/catch_match.cpp
     msvc6/deleting_destructors.cpp
     msvc6/exceptions.cpp
+    msvc6/old_iostream.cpp
     msvc6/string.cpp
     msvc6/string_search.cpp
     msvc6/wstring.cpp
@@ -238,7 +240,9 @@ add_library(s3re SHARED
     game/ui/game_settings_vectors.cpp
     game/ui/game_teams.cpp
     game/ui/screen_element.cpp
+    game/ui/ui_button_scroll.cpp
     game/ui/ui_control_members.cpp
+    game/ui/ui_gdi_members.cpp
     game/ui/ui_static_text.cpp
 
     # game/graphics/: graphics data, landscape colours, DirectDraw surface
@@ -280,6 +284,8 @@ add_library(s3re SHARED
     game/framework/folded_getters.cpp
     game/framework/framework_helpers.cpp
     game/framework/framework_small.cpp
+    game/framework/game_config.cpp
+    game/framework/game_config_fields.cpp
     game/framework/misc_helpers.cpp
     game/framework/string_members.cpp
     game/framework/wait_times.cpp

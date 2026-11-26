@@ -559,4 +559,14 @@ inline constexpr GameText kSearchingForNetId{0x6995ec};  // "CFG: Searching for 
 inline constexpr GameText kReadingName{0x69f95c};        // "NET: Reading name %i %s" (AttachNetPlayer)
 inline constexpr GameText kOpenParenthesisOnly{0x69a8b0};    // "(" (CGameData::InitPlayerInfo, a type-3 player's name)
 inline constexpr GameText kCloseParenthesis{0x69ed3c};   // ")"
+
+// ------------------------------------------------------------ wip/ui-gdi batch
+// Dirk\DGlobals.cpp and Dirk\dialog.cpp (GameConfig::PathIndexForFileKind,
+// CControl::ShowTooltip).
+inline constexpr GameText kDGlobalsFile{0x6975e0};       // "E:\Siedler3\Dirk\DGlobals.cpp"
+inline constexpr GameText kUnknownFunction{0x697688};    // "Unknown function"
+inline constexpr GameText kDialogFile{0x6976e8};         // "E:\Siedler3\Dirk\dialog.cpp"
+inline constexpr GameText kTooltipExpression{0x697cd0};  // "lpTooltip"
+inline constexpr GameText kDDGetDC{0x697704};            // "CSurface::DDGetDC"
+inline constexpr GameText kDDReleaseDC{0x697718};        // "CSurface::DDReleaseDC"
 }  // namespace s3re::game::texts

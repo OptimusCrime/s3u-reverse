@@ -454,6 +454,61 @@ def _api_wait_for_single_object(machine, uc, args):
     h = _api_hash(machine, 0x3A170000)
     choices = (0, 0, 0x102, 0x102, 0x80, 0xFFFFFFFF, 1, (h >> 8) & 0xFFFFFFFF)
     return choices[(h >> 4) & 7], ("WaitForSingleObject", *args)
+# -- GDI text functions and critical sections (wip/ui-gdi, session 57) -------
+# Device contexts are plain numbers; the text functions record their text
+# by contents (at most 256 bytes: the buffers differ between the frames).
+
+def _api_counted_text(machine, address, length):
+    if address == 0:
+        return None
+    n = max(0, min(length if length < 0x80000000 else 0, 256))
+    return machine.guest_read(address, n) if n else b""
+
+
+def _api_select_object(machine, uc, args):
+    """SelectObject(dc, object): a random previous object."""
+    return (_api_hash(machine, 0x5E100000) >> 8) & 0xFFFFFFFF, ("SelectObject", *args)
+
+
+def _api_get_text_extent_point(machine, uc, args):
+    """GetTextExtentPoint32A(dc, text, length, size*): text-like sizes (cx
+    0..700, cy 0..40), sometimes any; FALSE about one call in eight."""
+    dc, text, length, size = args
+    h = _api_hash(machine, 0x7E100000)
+    if (h >> 40) & 7 == 0:
+        cx, cy = (h >> 8) & 0xFFFFFFFF, (h >> 24) & 0xFFFFFFFF
+    else:
+        cx, cy = ((h >> 8) & 0xFFFF) % 701, ((h >> 24) & 0xFF) % 41
+    if size != 0:
+        machine.guest_write(size, struct.pack("<II", cx, cy))
+    ok = 0 if (h >> 44) & 7 == 0 else 1
+    return ok, ("GetTextExtentPoint32A", dc, _api_counted_text(machine, text, length), length, size != 0)
+
+
+def _api_set_bk_mode(machine, uc, args):
+    return (_api_hash(machine, 0xB4000000) >> 8) % 3, ("SetBkMode", *args)
+
+
+def _api_set_colour(name, salt):
+    def handler(machine, uc, args):
+        """SetTextColor / SetBkColor(dc, colour): a random previous colour."""
+        return (_api_hash(machine, salt) >> 8) & 0xFFFFFF, (name, *args)
+    return handler
+
+
+def _api_text_out(machine, uc, args):
+    """TextOutA(dc, x, y, text, length): TRUE mostly."""
+    dc, x, y, text, length = args
+    ok = 0 if (_api_hash(machine, 0x70000000) & 7) == 0 else 1
+    return ok, ("TextOutA", dc, x, y, _api_counted_text(machine, text, length), length)
+
+
+def _api_critical_section(name):
+    def handler(machine, uc, args):
+        """Enter/LeaveCriticalSection(section): recorded (the section lies in
+        the compared memory, its address is the same for both)."""
+        return 0, (name, args[0])
+    return handler
 
 
 # name -> (stack argument dwords, handler(emulator, uc, args) -> (EAX, record)). The
@@ -505,6 +560,14 @@ API_HANDLERS = {
     "PostMessageA": (4, _api_success("PostMessageA", 0x5E00000B)),
     "WaitForSingleObject": (2, _api_wait_for_single_object),
     "mciSendCommandA": (4, _api_mci_send_command),
+    "SelectObject": (2, _api_select_object),
+    "GetTextExtentPoint32A": (4, _api_get_text_extent_point),
+    "SetBkMode": (2, _api_set_bk_mode),
+    "SetTextColor": (2, _api_set_colour("SetTextColor", 0x7C000000)),
+    "SetBkColor": (2, _api_set_colour("SetBkColor", 0xBC000000)),
+    "TextOutA": (5, _api_text_out),
+    "EnterCriticalSection": (1, _api_critical_section("EnterCriticalSection")),
+    "LeaveCriticalSection": (1, _api_critical_section("LeaveCriticalSection")),
 }
 
 CALLEE_SAVED = {"ebx": UC_X86_REG_EBX, "esi": UC_X86_REG_ESI, "edi": UC_X86_REG_EDI,

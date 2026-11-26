@@ -287,5 +287,14 @@ inline constexpr GameGlobal<const std::uint8_t[16]> g_iidDirectDrawSurface3{0x65
 // 0x49f190 reset the setup's 16-bit string +0x28 to (zero in the image;
 // written elsewhere: 0x419065, 0x48d7a0 and the lobby).
 inline constexpr GameGlobal<const std::uint16_t[1]> g_setupWideText{0x7a8248};
+// wip/ui-gdi batch: the serial number check digit (GameConfig::SerialCheckDigit
+// 0x411fd0, a Verhoeff-like scheme over 12 positions). The tables are read
+// as one dword array each; the original indexes the position table with the
+// digit's character code ('0' = 48), so it reads past it into the tables
+// after it (deliberately reproduced).
+inline constexpr GameGlobal<const std::int32_t> g_serialMultiply{0x65545c};    // 8 x 10 (a dihedral group table)
+inline constexpr GameGlobal<const std::int32_t> g_serialPermute{0x655554};     // 12 x 10, indexed (pos % 12) * 10 + char
+inline constexpr GameGlobal<const std::int32_t> g_serialInverse{0x6555ec};     // 10
+inline constexpr GameGlobal<const std::int32_t> g_serialFinal{0x6557f4};       // indexed (pos % 12) * 10 + value
 
 }  // namespace s3re::game

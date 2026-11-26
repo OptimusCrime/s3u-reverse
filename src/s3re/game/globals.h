@@ -75,16 +75,56 @@ static_assert(sizeof(PlayerInfo) == 0x44);
 // The configuration read from the registry at startup (g_config;
 // Dirk\DGlobals.cpp). Size not known.
 struct GameConfig {
-    std::uint8_t unk000[0x64];
+    std::uint8_t unk000[4];
+    msvc6::String string04;            // +0x04 copied out by 0x411a90
+    msvc6::String string14;            // +0x14 set by 0x412130, its address from 0x412120
+    std::uint8_t byte24;               // +0x24 (0x412270 / 0x412280)
+    std::uint8_t unk025[3];
+    std::uint32_t dword28;             // +0x28 (0x4120a0 / 0x4120b0; 14 readers)
+    std::uint32_t dword2c;             // +0x2c (set by 0x4120c0)
+    std::uint8_t byte30;               // +0x30 (0x4120d0, checked by CConsoleThread::OnStart)
+    std::uint8_t unk031[3];
+    std::uint32_t directplay;          // +0x34 non-zero when DirectPlay 6 is installed (0x4120e0)
+    std::uint8_t byte38;               // +0x38 (0x4120f0, checked by CConsoleThread::OnStart)
+    std::uint8_t byte39;               // +0x39 (0x412100)
+    std::uint8_t unk03a[2];
+    std::uint8_t object3c[0x58 - 0x3c];  // +0x3c its address from 0x412110
+    std::uint8_t bytes58[8];           // +0x58..+0x5f flags (0x412290 .. 0x412820; +0x5c set by 0x4122f0)
+    std::uint8_t unk060[4];
     std::uint32_t notification_level;  // +0x64 notifications shown if their level >= 9 - this (GetMemberDword64)
-    std::uint8_t unk068[0x158 - 0x68];
+    std::uint32_t lobby_value68;       // +0x68 read and set by the lobby dialogs (0x413b60 / 0x413b70)
+    std::uint8_t byte6c;               // +0x6c (0x412800)
+    std::uint8_t unk06d[7];
+    std::uint32_t dwords74[9];         // +0x74..+0x94 (getters 0x412300 .. 0x412370; +0x88 has none)
+    std::uint8_t unk098[0xc0 - 0x98];  // +0x98 a byte and a string (+0x9c), set by 0x412380 / 0x4125c0
+    msvc6::String paths[6];            // +0xc0..+0x110 the data paths GameConfig::PathString 0x412b00 copies out
+    std::uint8_t unk120[0x148 - 0x120];
+    std::uint32_t lobby_pair148[2];    // +0x148 two values the lobby dialog reads and stores (0x413b80 / 0x413ba0)
+    std::uint8_t byte150;              // +0x150 read by the main menu and the load dialog (0x413bc0)
+    std::uint8_t unk151[0x158 - 0x151];
     std::uint8_t random_race_amazons;  // +0x158 copied to GameSettings +0xcc by 0x431ab0
     std::uint8_t gfx_group61;          // +0x159 CGraphicsData::Open loads GFX group 61 only when set (getter 0x413be0)
-    std::uint8_t unk15a[0x189 - 0x15a];
-    std::uint8_t unk189;               // +0x189 weakens computer players in campaigns (GetMemberByte189)
+    std::uint8_t byte15a;              // +0x15a (0x414020)
+    std::uint8_t unk15b;
+    msvc6::String start_map;           // +0x15c probably the map to start from the command line (0x413c20 / 0x413d50)
+    std::uint8_t unk16c[0x189 - 0x16c];
+    std::uint8_t unk189;               // +0x189 weakens computer players in campaigns (GetMemberByte189; set by 0x414040)
 };
+static_assert(offsetof(GameConfig, string04) == 0x04);
+static_assert(offsetof(GameConfig, byte24) == 0x24);
+static_assert(offsetof(GameConfig, directplay) == 0x34);
+static_assert(offsetof(GameConfig, object3c) == 0x3c);
+static_assert(offsetof(GameConfig, bytes58) == 0x58);
 static_assert(offsetof(GameConfig, notification_level) == 0x64);
+static_assert(offsetof(GameConfig, lobby_value68) == 0x68);
+static_assert(offsetof(GameConfig, byte6c) == 0x6c);
+static_assert(offsetof(GameConfig, dwords74) == 0x74);
+static_assert(offsetof(GameConfig, paths) == 0xc0);
+static_assert(offsetof(GameConfig, lobby_pair148) == 0x148);
+static_assert(offsetof(GameConfig, byte150) == 0x150);
 static_assert(offsetof(GameConfig, random_race_amazons) == 0x158);
+static_assert(offsetof(GameConfig, byte15a) == 0x15a);
+static_assert(offsetof(GameConfig, start_map) == 0x15c);
 static_assert(offsetof(GameConfig, unk189) == 0x189);
 
 // A colour as three uint32 channels (g_playerColours).
@@ -567,5 +607,22 @@ inline constexpr GameGlobal<void*> g_drawer{0x7e8bf0};
 // The primary surface's RECT (0, 0, width, height), copied by
 // CGameDrawer::SetPrimarySurface 0x5b7040, zeroed when it goes.
 inline constexpr GameGlobal<std::int32_t[4]> g_primarySurfaceRect{0x7e8bf8};
+// wip/ui-gdi batch: GDI32 imports of the UI text code (CControl::ShowTooltip
+// 0x418550 measures the tooltip text; test/fake_gdi.h fakes them).
+using SelectObjectImport = void*(__stdcall*)(void* dc, void* object);
+using GetTextExtentPoint32AImport = int(__stdcall*)(void* dc, const char* text, std::int32_t length, void* size);
+using SetBkModeImport = std::int32_t(__stdcall*)(void* dc, std::int32_t mode);
+using SetTextColorImport = std::uint32_t(__stdcall*)(void* dc, std::uint32_t colour);
+using SetBkColorImport = std::uint32_t(__stdcall*)(void* dc, std::uint32_t colour);
+using TextOutAImport = int(__stdcall*)(void* dc, std::int32_t x, std::int32_t y, const char* text, std::int32_t length);
+inline constexpr GameGlobal<SelectObjectImport> g_importSelectObject{0x655030};
+inline constexpr GameGlobal<GetTextExtentPoint32AImport> g_importGetTextExtentPoint32A{0x655038};
+inline constexpr GameGlobal<SetBkModeImport> g_importSetBkMode{0x655054};
+inline constexpr GameGlobal<SetTextColorImport> g_importSetTextColor{0x655058};
+inline constexpr GameGlobal<SetBkColorImport> g_importSetBkColor{0x655078};
+inline constexpr GameGlobal<TextOutAImport> g_importTextOutA{0x655068};
+// wip/ui-gdi batch: the dropdown whose list is open (CDropdown::OnArrowClicked
+// 0x422590 sets it; OnFocusChanged and Draw close other open lists).
+inline constexpr GameGlobal<std::uint32_t> g_openDropdown{0x7a8244};
 
 }  // namespace s3re::game
