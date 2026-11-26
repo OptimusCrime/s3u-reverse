@@ -5,21 +5,21 @@
 <text x="24" y="127" font-size="20" font-weight="600" fill="#1e2924">Game code</text>
 <rect x="170" y="100" width="396.4" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 28.2%</title></rect>
 <text x="368.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">28.2%</text>
-<rect x="566.4" y="100" width="113.4" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.1%</title></rect>
-<text x="623.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.1%</text>
-<rect x="679.9" y="100" width="3.2" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.2%</title></rect>
-<rect x="683.1" y="100" width="245.4" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 17.5%</title></rect>
-<text x="805.8" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">17.5%</text>
+<rect x="566.4" y="100" width="114.5" height="40" fill="#4f8fc0"><title>Verified by tests only: 8.1%</title></rect>
+<text x="623.7" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">8.1%</text>
+<rect x="680.9" y="100" width="3.2" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.2%</title></rect>
+<rect x="684.2" y="100" width="244.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 17.4%</title></rect>
+<text x="806.3" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">17.4%</text>
 <rect x="928.5" y="100" width="647.5" height="40" fill="#e8a39b"><title>Not understood yet: 46.1%</title></rect>
 <text x="1252.2" y="127" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">46.1%</text>
 <text x="24" y="181" font-size="20" font-weight="600" fill="#1e2924">All code</text>
 <rect x="170" y="154" width="283.6" height="40" fill="#3d9a50"><title>Verified, identical in a whole-game check: 20.2%</title></rect>
 <text x="311.8" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">20.2%</text>
-<rect x="453.6" y="154" width="93.2" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.6%</title></rect>
-<text x="500.2" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.6%</text>
-<rect x="546.8" y="154" width="2.2" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.2%</title></rect>
-<rect x="549" y="154" width="473" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 33.6%</title></rect>
-<text x="785.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">33.6%</text>
+<rect x="453.6" y="154" width="94" height="40" fill="#4f8fc0"><title>Verified by tests only: 6.7%</title></rect>
+<text x="500.5" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#ffffff">6.7%</text>
+<rect x="547.5" y="154" width="2.2" height="40" fill="#a9d18e"><title>Reimplemented, not verified yet: 0.2%</title></rect>
+<rect x="549.7" y="154" width="472.3" height="40" fill="#f2c86b"><title>Understood, not reimplemented yet: 33.6%</title></rect>
+<text x="785.9" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">33.6%</text>
 <rect x="1022" y="154" width="554" height="40" fill="#e8a39b"><title>Not understood yet: 39.4%</title></rect>
 <text x="1299" y="181" font-size="18" font-weight="600" text-anchor="middle" fill="#1e2924">39.4%</text>
 <rect x="170" y="216" width="16" height="16" fill="#3d9a50"/><text x="194" y="230" font-size="19" fill="#1e2924">Verified, identical in a whole-game check</text>
@@ -3953,8 +3953,8 @@
 <g><title>CStaticText: 10 functions</title><rect x="948.8" y="508.5" width="54.9" height="63.5" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="949.3" y="509" width="53.9" height="41.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::Draw @ 0x0041ca70
 3376 bytes — Identified (purpose known)</title></rect>
-<rect x="949.3" y="550.8" width="15.5" height="20.6" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::SetText @ 0x0041c810
-480 bytes — Identified (purpose known)</title></rect>
+<rect x="949.3" y="550.8" width="15.5" height="20.6" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::SetText @ 0x0041c810
+480 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="964.8" y="550.8" width="13" height="20.6" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::CStaticText_textId @ 0x0041c680
 400 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
 <rect x="977.8" y="550.8" width="12.4" height="20.6" fill="#3d9a50" stroke="#ffffff" stroke-width="0.3"><title>CStaticText::CStaticText @ 0x0041c3e0
@@ -4843,24 +4843,24 @@
 <g><title>CUpDown: 10 functions</title><rect x="853" y="661.3" width="38.2" height="38.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="853.5" y="661.8" width="25.9" height="21.4" fill="#e8a39b" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::CUpDown @ 0x00422830
 848 bytes — Classified (class/role known)</title></rect>
-<rect x="879.4" y="661.8" width="11.3" height="21.4" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::UpdateText @ 0x00422c20
-368 bytes — Identified (purpose known)</title></rect>
+<rect x="879.4" y="661.8" width="11.3" height="21.4" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::UpdateText @ 0x00422c20
+368 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="853.5" y="683.2" width="11.9" height="15.8" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::~CUpDown @ 0x0042b100
 288 bytes — Identified (purpose known)</title></rect>
 <rect x="865.5" y="683.2" width="8" height="15.8" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::OnResized @ 0x00422d90
 192 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="873.4" y="683.2" width="10.6" height="9.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::OnButtonClicked @ 0x00422e50
-160 bytes — Identified (purpose known)</title></rect>
-<rect x="873.4" y="693.1" width="10.6" height="5.9" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::SetValue @ 0x00422b90
-96 bytes — Identified (purpose known)</title></rect>
+<rect x="873.4" y="683.2" width="10.6" height="9.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::OnButtonClicked @ 0x00422e50
+160 bytes — Verified by tests, no whole-game check yet</title></rect>
+<rect x="873.4" y="693.1" width="10.6" height="5.9" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::SetValue @ 0x00422b90
+96 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="884.1" y="683.2" width="6.6" height="6.3" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::scalar_deleting_destructor @ 0x0042b0c0
 64 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="884.1" y="689.5" width="6.6" height="4.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::SetRange @ 0x00422bf0
-48 bytes — Identified (purpose known)</title></rect>
+<rect x="884.1" y="689.5" width="6.6" height="4.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::SetRange @ 0x00422bf0
+48 bytes — Verified by tests, no whole-game check yet</title></rect>
 <rect x="884.1" y="694.2" width="4.4" height="4.7" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::vbase_destructor @ 0x00486930
 32 bytes — Verified by tests only (never called in a whole-game check)</title></rect>
-<rect x="888.5" y="694.2" width="2.2" height="4.7" fill="#f2c86b" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::GetValue @ 0x00422b80
-16 bytes — Identified (purpose known)</title></rect>
+<rect x="888.5" y="694.2" width="2.2" height="4.7" fill="#a8c8e6" stroke="#ffffff" stroke-width="0.3"><title>CUpDown::GetValue @ 0x00422b80
+16 bytes — Verified by tests, no whole-game check yet</title></rect>
 </g>
 <g><title>GameConfig: 41 functions</title><rect x="891.2" y="661.3" width="37.6" height="38.2" fill="#5b616b" stroke="#2b2f36" stroke-width="0.6"/>
 <rect x="891.7" y="661.8" width="12.2" height="16.3" fill="#4f8fc0" stroke="#ffffff" stroke-width="0.3"><title>GameConfig::SerialNumber @ 0x00411a90

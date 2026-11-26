@@ -574,6 +574,11 @@ inline constexpr GameText kTooltipExpression{0x697cd0};  // "lpTooltip"
 inline constexpr GameText kDDGetDC{0x697704};            // "CSurface::DDGetDC"
 inline constexpr GameText kDDReleaseDC{0x697718};        // "CSurface::DDReleaseDC"
 
+// ------------------------------------------------------------ wip/menus-r5 batch
+// Dirk\dialog.cpp controls (CUpDown).
+inline constexpr GameText kIntFormat{0x696c40};       // "%i" (CUpDown::UpdateText)
+inline constexpr GameText kInvalidSender{0x6987dc};   // "Invalid sender" (CUpDown::OnButtonClicked assert)
+
 // ------------------------------------------------------------ wip/images-r4 batch
 // libpng 1.0.2's messages (src/s3re/thirdparty/).
 inline constexpr GameText kPngErrorFormat{0x733d04};    // "libpng error: %s\n"

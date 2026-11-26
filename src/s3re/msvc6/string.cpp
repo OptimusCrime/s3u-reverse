@@ -138,6 +138,21 @@ void Release(char* ptr) { msvc6::Release(ptr); }
 void Erase(String* self, std::uint32_t p0, std::uint32_t m) { msvc6::Erase(self, p0, m); }
 void Clear(String* s) { msvc6::Clear(s); }
 std::uint32_t Length(const char* s) { return msvc6::Length(s); }
+std::uint32_t TidyFreeReturningEax(String* s) {
+    std::uint32_t eax = 0;
+    if (char* ptr = s->ptr; ptr != nullptr) {
+        const std::uint8_t count = RefCount(ptr);
+        if (count == 0 || count == kFrozen) {
+            using Fn = std::uint32_t(__cdecl*)(void*);
+            eax = reinterpret_cast<Fn>(0x0061e4ef)(ptr - 1);
+        } else {
+            RefCount(ptr) = static_cast<std::uint8_t>(count - 1);
+            eax = (reinterpret_cast<std::uintptr_t>(ptr) & 0xFFFFFF00u) | RefCount(ptr);
+        }
+    }
+    Clear(s);
+    return eax;
+}
 }  // namespace detail
 
 // ---------------------------------------------------------------------------

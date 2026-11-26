@@ -1705,3 +1705,119 @@ SPECS += [
     Spec("CDropdown_Draw", 0x004227d0, "fastcall", [BTN_DROP_ELEMENT, anything, anything, anything, anything],
          presets=btn_dropdown_state, globals=btn_open_dropdown, virtuals=BTN_VIRTUALS_1, callees=BTN_CALLEES),
 ]
+
+
+# -- wip/menus-r5: CStaticText::SetText (ui_static_text.cpp), CUpDown --------
+# (ui_updown.cpp)
+#
+# SetText: the label at world offset 0 (vtable = FAKE_VTABLE, Invalidate
+# slot 0x1c probed), its text member at +0x28 (common.string_fields, buffer
+# in scratch slot 0). The by-value argument's four dwords are the stack
+# arguments: allocator, a buffer (none, its own in scratch slot 1, or the
+# member's), length, capacity; the own buffer gets a count and a text of
+# about the length.
+SETTEXT_ARG_BUFFER = SCRATCH + SCRATCH_SLOT_BYTES
+
+
+def settext_arg_ptr(rng, pool):
+    return rng.choice([0, WORLD_BASE + SETTEXT_ARG_BUFFER + 1, WORLD_BASE + SETTEXT_ARG_BUFFER + 1,
+                       WORLD_BASE + SCRATCH + 1])
+
+
+def settext_length(rng, pool):
+    return rng.choice([0, 1, 2, rng.randrange(40), rng.randrange(40)])
+
+
+def settext_label(rng, pool, args):
+    fields, ptr = string_fields(rng, 0x28, SCRATCH)
+    out = [(0, FAKE_VTABLE, 4)] + fields
+    if args[1] == WORLD_BASE + SCRATCH + 1 and ptr != args[1]:
+        out += [(SCRATCH, rng.choice([0, 1, 0xff]), 1), (SCRATCH + 1, 0x41, 1), (SCRATCH + 2, 0, 1)]
+    if args[1] == WORLD_BASE + SETTEXT_ARG_BUFFER + 1:
+        length = args[2]
+        text = length if rng.random() > 0.15 else rng.randrange(length + 4)
+        out.append((SETTEXT_ARG_BUFFER, rng.choice([0, 0, 0, 1, 2, 0xfd, 0xfe, 0xff]), 1))
+        out += [(SETTEXT_ARG_BUFFER + 1 + i, rng.randint(1, 255), 1) for i in range(text)]
+        out.append((SETTEXT_ARG_BUFFER + 1 + text, 0, 1))
+    return out
+
+
+def settext_capacity(rng, pool):
+    return rng.choice([0, 31, 40, 63, rng.randrange(80)])
+
+
+# CUpDown: the object at world offset 0x400 (UICTL_OBJECT); its vbtables in
+# scratch slot 6 (UICTL_VBTABLE: the up-down's at +0, the up button's at +8,
+# the down button's at +0x10), the listener a fake object in slot 7.
+# OnButtonClicked's sender is one of the two buttons' usual elements (or a
+# random place, from random displacements) or another element.
+UD_OBJ = UICTL_OBJECT
+UD_UP_ELEMENT = UD_OBJ + 0x300
+UD_DOWN_ELEMENT = UD_OBJ + 0x380
+
+
+def ud_number(rng, pool):
+    return rng.choice([0, 1, 2, 5, 0xFFFFFFFF, 0x7FFFFFFF, 0x80000000, 0x7FFFFFFE, rng.randrange(20),
+                       rng.getrandbits(32)])
+
+
+def ud_state(rng, pool, args):
+    def number():
+        return ud_number(rng, pool)
+    lo = number()
+    hi = (lo + rng.randrange(20)) & 0xFFFFFFFF if rng.random() < 0.5 else number()
+    value = (lo + rng.randrange(20) - 2) & 0xFFFFFFFF if rng.random() < 0.5 else number()
+    up = UD_UP_ELEMENT - (UD_OBJ + 0x100) if rng.random() < 0.8 else rng.randrange(0x400)
+    down = UD_DOWN_ELEMENT - (UD_OBJ + 0x180) if rng.random() < 0.8 else rng.randrange(0x400)
+    if rng.random() < 0.1:
+        up = (UD_DOWN_ELEMENT - (UD_OBJ + 0x100)) & 0xFFFFFFFF  # both at the same element (up wins)
+    return [(UD_OBJ + 4, WORLD_BASE + UICTL_VBTABLE, 4), (UICTL_VBTABLE + 4, 0x220 + 4 * rng.randrange(4), 4),
+            (UD_OBJ + 0x100, WORLD_BASE + UICTL_VBTABLE + 8, 4), (UICTL_VBTABLE + 12, up, 4),
+            (UD_OBJ + 0x180, WORLD_BASE + UICTL_VBTABLE + 16, 4), (UICTL_VBTABLE + 20, down, 4),
+            (UD_OBJ + 0xb4, rng.choice([0, WORLD_BASE + UICTL_FAKES]), 4), (UICTL_FAKES, FAKE_VTABLE, 4),
+            (UD_OBJ + 0x1fc, lo, 4), (UD_OBJ + 0x200, hi, 4), (UD_OBJ + 0x204, value, 4)]
+
+
+def ud_sender(rng, pool):
+    return rng.choice([WORLD_BASE + UD_UP_ELEMENT, WORLD_BASE + UD_DOWN_ELEMENT, WORLD_BASE + UD_UP_ELEMENT,
+                       WORLD_BASE + UD_DOWN_ELEMENT, WORLD_BASE + UD_OBJ + 0x224])
+
+
+def ud_settext_record(m, ecx, args):
+    """SetText's argument without its allocator byte (stack garbage in the
+    original), with its buffer's count byte and text."""
+    ptr, length = args[1], args[2]
+    contents = bytes(m.guest_read(ptr - 1, min(length, 40) + 2)) if ptr else b""
+    return (ptr, length, args[3], contents)
+
+
+UD_THIS = one_of(WORLD_BASE + UD_OBJ)
+UD_SETVALUE_PROBE = {0x00422b90: (1, "thiscall", "probe")}
+
+SPECS += [
+    # Dead: 0x41c848 caps the length at npos (0xFFFFFFFF); 0x41c853..0x41c8a4
+    # is assign()'s self-assignment branch (the argument is a copy on the
+    # stack, never the member); 0x41c9bd the argument's ~string _Eos after
+    # erase(0, npos) (_Grow(0) is false). The final _Tidy's decrement is in
+    # 0x402170 (after the split the buffer is unshared or frozen).
+    Spec("CStaticText_SetText", 0x0041c810, "thiscall",
+         [anything, settext_arg_ptr, settext_length, settext_capacity], presets=settext_label,
+         globals=null_string_count, virtuals={0x1c: 0},
+         exempt_blocks=(0x0041c848, 0x0041c853, 0x0041c858, 0x0041c85d, 0x0041c86d, 0x0041c86f, 0x0041c873,
+                        0x0041c89c, 0x0041c8a4, 0x0041c9bd)),
+    Spec("CUpDown_GetValue", 0x00422b80, "fastcall", [UD_THIS, anything], presets=ud_state),
+    # UpdateText probed (its own spec). Dead: 0x422bd0, the listener call
+    # for a null up-down (this == 0).
+    Spec("CUpDown_SetValue", 0x00422b90, "fastcall", [UD_THIS, anything, ud_number], presets=ud_state,
+         virtuals={0: 1}, callees={0x00422c20: (0, "thiscall", "probe")}, exempt_blocks=(0x00422bd0,)),
+    Spec("CUpDown_SetRange", 0x00422bf0, "fastcall", [UD_THIS, anything, ud_number, ud_number], presets=ud_state,
+         callees=UD_SETVALUE_PROBE),
+    # SetText probed, its argument recorded by contents. Dead: 0x422d19 and
+    # 0x422d4a free the temporaries' buffer, which the argument still
+    # shares (count 2, then 1: both releases only decrement).
+    Spec("CUpDown_UpdateText", 0x00422c20, "fastcall", [UD_THIS, anything], presets=ud_state,
+         callees={0x0041c810: (4, "thiscall", "probe", None, ud_settext_record)},
+         exempt_blocks=(0x00422d19, 0x00422d4a)),
+    Spec("CUpDown_OnButtonClicked", 0x00422e50, "fastcall", [UD_THIS, anything, ud_sender], presets=ud_state,
+         callees={**UD_SETVALUE_PROBE, 0x006119b0: (1, "thiscall", "throw")}),
+]
