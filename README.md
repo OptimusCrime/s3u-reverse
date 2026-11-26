@@ -26,6 +26,8 @@ proves that each piece behaves exactly like the original.
   the original game.
 - **Not a crack or a piracy tool.** The launcher only accepts the GOG build
   of `S3.EXE` (checked by its SHA-256) and never modifies your installation.
+  The project does not bypass or help bypass serial number or CD checks,
+  and it publishes no serial numbers.
 - **Not decompiler output.** We study the original with disassemblers and
   decompilers, but the committed code is written by hand, with our own
   names, structure and comments.
