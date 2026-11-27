@@ -42,6 +42,7 @@ add_library(s3re SHARED
     watcom/skiplist_base.cpp
     watcom/skiplist_dicts.cpp
     watcom/skiplist_nodes.cpp
+    watcom/skiplist_nodes2.cpp
     watcom/sorted_find.cpp
     watcom/ptr_vector.cpp
     watcom/string_vector.cpp
@@ -58,6 +59,7 @@ add_library(s3re SHARED
     thirdparty/png_read_destroy.cpp
     thirdparty/png_rtran_rows.cpp
     thirdparty/png_rutil_chunks.cpp
+    thirdparty/png_rutil_chunks2.cpp
     thirdparty/png_rutil_rows.cpp
     thirdparty/png_set.cpp
     thirdparty/zlib_checksums.cpp

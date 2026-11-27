@@ -46,6 +46,7 @@
 //   0x005de2d0 kWCBareVectorBase_uint                       (wip/watcom-r6)
 //   0x005f3de0 kWCBareVectorBase_voidp                      (wip/watcom-r6)
 //   0x0061aab0 kWCBareVectorBase_voidp                      (wip/watcom-r6)
+//   0x005bdf70 kWCBareVectorBase_voidp                      (libs-r7)
 //   0x005bdbd0 kWCBareVectorBase_NetPlayerIndex             (its elements' destructor is the
 //              library's empty hook 0x59f200, called per element: left out like the hook)
 //
@@ -95,6 +96,8 @@
 //   0x0060a070   20  CLMGeneric            WCVectorBase_CLMGeneric
 //   0x005ddf90   36  CSocketAddress        WCVectorBase_CSocketAddress
 //   0x005ddf10   24  CImageDescription     WCVectorBase_CImageDescription
+//   0x005b7ec0   48  CDirectDrawDevice     WCVectorBase_CDirectDrawDevice (libs-r7)
+//   0x005b7f40  108  CDisplayMode          WCVectorBase_CDisplayMode (libs-r7)
 //
 // (capacity) constructors, ret 4, EAX = this: the bare part only.
 //   address    size  T
@@ -111,6 +114,7 @@
 //   0x005de330   84  LobbyPlayer
 //   0x005df8d0  380  CPrivateChat
 //   0x005de570   24  CImageDescription
+//   0x00499690   96  CRunningSession (libs-r7)
 //
 // Copy constructors of vectors of unsigned ints (from) ret 4, EAX = this
 // (CopyVector in vector_base.h; each element copied as a dword, the
@@ -278,6 +282,9 @@ std::uint32_t __fastcall VectorDestructor_5f3de0(VectorBase* self, void*) {
 std::uint32_t __fastcall VectorDestructor_61aab0(VectorBase* self, void*) {
     return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
 }
+std::uint32_t __fastcall VectorDestructor_5bdf70(VectorBase* self, void*) {  // (libs-r7; was a "constructor")
+    return DestroyTrivialVector(self, vt::kWCBareVectorBase_voidp);
+}
 std::uint32_t __fastcall VectorDestructor_5bdbd0(VectorBase* self, void*) {
     return DestroyTrivialVector(self, vt::kWCBareVectorBase_NetPlayerIndex);
 }
@@ -408,6 +415,13 @@ VectorBase* __fastcall VectorConstructor_5ddf90(VectorBase* self, void*, std::ui
 VectorBase* __fastcall VectorConstructor_5ddf10(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
     return ConstructVector(self, capacity, grow, 0x18, vt::kWCBareVectorBase_CImageDescription, vt::kWCVectorBase_CImageDescription);
 }
+VectorBase* __fastcall VectorConstructor_5b7ec0(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 0x30, vt::kWCBareVectorBase_CDirectDrawDevice,
+                           vt::kWCVectorBase_CDirectDrawDevice);
+}
+VectorBase* __fastcall VectorConstructor_5b7f40(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 0x6c, vt::kWCBareVectorBase_CDisplayMode, vt::kWCVectorBase_CDisplayMode);
+}
 
 // Purpose: Constructors of the bare part of a Watcom vector (room for
 // `capacity` elements); the derived constructors inlined around them set
@@ -441,6 +455,9 @@ VectorBase* __fastcall BareVectorConstructor_5de130(VectorBase* self, void*, std
 }
 VectorBase* __fastcall BareVectorConstructor_4683b0(VectorBase* self, void*, std::uint32_t capacity) {
     return ConstructBareVector(self, capacity, 64, vt::kWCBareVectorBase_CConnectionShortcut);
+}
+VectorBase* __fastcall BareVectorConstructor_499690(VectorBase* self, void*, std::uint32_t capacity) {
+    return ConstructBareVector(self, capacity, 0x60, vt::kWCBareVectorBase_CRunningSession);
 }
 VectorBase* __fastcall BareVectorConstructor_5de330(VectorBase* self, void*, std::uint32_t capacity) {
     return ConstructBareVector(self, capacity, 0x54, vt::kWCBareVectorBase_LobbyPlayer);
@@ -598,6 +615,8 @@ S3RE_HOOK(0x005f3de0, VectorDestructor_5f3de0, DestructorFn, Original_VectorDest
           VectorDestructor_5f3de0);
 S3RE_HOOK(0x0061aab0, VectorDestructor_61aab0, DestructorFn, Original_VectorDestructor_61aab0,
           VectorDestructor_61aab0);
+S3RE_HOOK(0x005bdf70, VectorDestructor_5bdf70, DestructorFn, Original_VectorDestructor_5bdf70,
+          VectorDestructor_5bdf70);
 S3RE_HOOK(0x004146d0, VectorDestructor_4146d0, DestructorFn, Original_VectorDestructor_4146d0,
           VectorDestructor_4146d0);
 S3RE_HOOK(0x00414410, VectorConstructor_414410, ConstructorFn, Original_VectorConstructor_414410,
@@ -628,6 +647,8 @@ S3RE_HOOK(0x005de130, BareVectorConstructor_5de130, BareConstructorFn, Original_
           BareVectorConstructor_5de130);
 S3RE_HOOK(0x004683b0, BareVectorConstructor_4683b0, BareConstructorFn, Original_BareVectorConstructor_4683b0,
           BareVectorConstructor_4683b0);
+S3RE_HOOK(0x00499690, BareVectorConstructor_499690, BareConstructorFn, Original_BareVectorConstructor_499690,
+          BareVectorConstructor_499690);
 S3RE_HOOK(0x00473290, VectorDestructor_473290, DestructorFn, Original_VectorDestructor_473290,
           VectorDestructor_473290);
 S3RE_HOOK(0x005bdbd0, VectorDestructor_5bdbd0, DestructorFn, Original_VectorDestructor_5bdbd0,
@@ -644,6 +665,10 @@ S3RE_HOOK(0x005ddf90, VectorConstructor_5ddf90, ConstructorFn, Original_VectorCo
           VectorConstructor_5ddf90);
 S3RE_HOOK(0x005ddf10, VectorConstructor_5ddf10, ConstructorFn, Original_VectorConstructor_5ddf10,
           VectorConstructor_5ddf10);
+S3RE_HOOK(0x005b7ec0, VectorConstructor_5b7ec0, ConstructorFn, Original_VectorConstructor_5b7ec0,
+          VectorConstructor_5b7ec0);
+S3RE_HOOK(0x005b7f40, VectorConstructor_5b7f40, ConstructorFn, Original_VectorConstructor_5b7f40,
+          VectorConstructor_5b7f40);
 S3RE_HOOK(0x005de330, BareVectorConstructor_5de330, BareConstructorFn, Original_BareVectorConstructor_5de330,
           BareVectorConstructor_5de330);
 S3RE_HOOK(0x005df8d0, BareVectorConstructor_5df8d0, BareConstructorFn, Original_BareVectorConstructor_5df8d0,
@@ -730,6 +755,7 @@ const DestructorPair kDestructors[] = {
     {Original_VectorDestructor_5de2d0, &VectorDestructor_5de2d0, 0x5de2d0},
     {Original_VectorDestructor_5f3de0, &VectorDestructor_5f3de0, 0x5f3de0},
     {Original_VectorDestructor_61aab0, &VectorDestructor_61aab0, 0x61aab0},
+    {Original_VectorDestructor_5bdf70, &VectorDestructor_5bdf70, 0x5bdf70},
     {Original_VectorDestructor_4146d0, &VectorDestructor_4146d0, 0x4146d0},
     {Original_VectorDestructor_5bdbd0, &VectorDestructor_5bdbd0, 0x5bdbd0},
     {&Original473290OnVector, &Ours473290OnVector, 0x473290},
@@ -768,6 +794,8 @@ const ConstructorPair kConstructors[] = {
     {Original_VectorConstructor_60a070, &VectorConstructor_60a070, 0x60a070},
     {Original_VectorConstructor_5ddf90, &VectorConstructor_5ddf90, 0x5ddf90},
     {Original_VectorConstructor_5ddf10, &VectorConstructor_5ddf10, 0x5ddf10},
+    {Original_VectorConstructor_5b7ec0, &VectorConstructor_5b7ec0, 0x5b7ec0},
+    {Original_VectorConstructor_5b7f40, &VectorConstructor_5b7f40, 0x5b7f40},
 };
 const BareConstructorPair kBareConstructors[] = {
     {Original_BareVectorConstructor_437c90, &BareVectorConstructor_437c90, 0x437c90},
@@ -780,6 +808,7 @@ const BareConstructorPair kBareConstructors[] = {
     {Original_BareVectorConstructor_429410, &BareVectorConstructor_429410, 0x429410},
     {Original_BareVectorConstructor_5de130, &BareVectorConstructor_5de130, 0x5de130},
     {Original_BareVectorConstructor_4683b0, &BareVectorConstructor_4683b0, 0x4683b0},
+    {Original_BareVectorConstructor_499690, &BareVectorConstructor_499690, 0x499690},
     {Original_BareVectorConstructor_5de330, &BareVectorConstructor_5de330, 0x5de330},
     {Original_BareVectorConstructor_5df8d0, &BareVectorConstructor_5df8d0, 0x5df8d0},
     {Original_BareVectorConstructor_5de570, &BareVectorConstructor_5de570, 0x5de570},

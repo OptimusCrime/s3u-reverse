@@ -1454,3 +1454,314 @@ SPECS += [
     Spec("png_handle_gAMA", 0x005ab470, "stdcall", zi_args(ph_gama_case, "png", "info", "length"),
          presets=zi_presets, callees=PH_CALLEES, eax_mask=0, max_cases=6000, case_scale=3),
 ]
+
+
+# -- png_rutil_rows.cpp: png_read_start_row / png_read_finish_row (libs-r7) ------
+#
+# png_read_finish_row: inflate 0x5aa4a0 is probed (its effect consumes some
+# input, now and then produces the one byte of room, and returns Z_OK,
+# Z_STREAM_END or an error, with or without a message), so every branch of
+# the end-of-image check is reached; inflateReset is probed too (its result
+# is unused). The IDAT chunk headers come from a stream as for the chunk
+# handlers (a CRC, then length, name, data, CRC per chunk; the original has
+# png_crc_finish inlined, ours calls it). zstream.next_out is left out of the comparison:
+# both point it at a byte of their own stack frame (see png_rutil_rows.cpp);
+# the self-test pairing WrongFinishRow shows the neighbouring avail_out is
+# compared.
+# png_read_start_row: png_init_read_transformations 0x5a6220 is probed (it
+# has its own spec); malloc is probed (null an eighth of the time, so
+# png_malloc's "Out of Memory" error is reached).
+
+PRF_ERROR_MSG = WORLD_BASE + SCRATCH + 0x5000
+PRF_NEXT_OUT = tuple(TP_PNG + 0x6c + 0x0c + k for k in range(4))
+
+
+def prf_inflate(machine, ecx, args, h):
+    z = args[0]
+    avail_in = int.from_bytes(machine.guest_read(z + 4, 4), "little")
+    avail_out = int.from_bytes(machine.guest_read(z + 0x10, 4), "little")
+    next_in = int.from_bytes(machine.guest_read(z, 4), "little")
+    used = min(avail_in, (h >> 8) % 3 * ((h >> 16) % (avail_in + 1)) if avail_in else 0)
+    machine.guest_write(z, (next_in + used).to_bytes(4, "little"))
+    machine.guest_write(z + 4, (avail_in - used).to_bytes(4, "little"))
+    if avail_out and (h >> 24) % 6 == 0:
+        machine.guest_write(z + 0x10, (avail_out - 1).to_bytes(4, "little"))
+    r = (h >> 32) % 16
+    if r < 9:
+        return 0
+    if r < 14:
+        return 1
+    machine.guest_write(z + 0x18, (0 if (h >> 40) & 1 else PRF_ERROR_MSG).to_bytes(4, "little"))
+    return (-3 if r == 14 else -5) & 0xFFFFFFFF
+
+
+PRF_CALLEES = dict(PH_CALLEES)
+PRF_CALLEES.update({
+    0x005AA4A0: (2, "cdecl", "probe", prf_inflate, lambda m, ecx, a: (a[0], a[1])),  # inflate
+    0x005AA270: (1, "cdecl", "probe"),   # inflateReset
+})
+
+
+def prf_rows(rng):
+    presets = tp_png_struct(rng)
+    width = rng.choice((1, 2, 7, 8, 9, 33, rng.randint(1, 300)))
+    height = rng.choice((1, 2, 5, 8, 9, rng.randint(1, 300)))
+    depth = rng.choice(PR_DEPTHS)
+    pass_ = rng.choice((0, 1, 2, 3, 4, 5, 6, 6, 7, rng.getrandbits(8)))
+    num_rows = rng.choice((1, 2, height, rng.randrange(10)))
+    row_number = rng.choice((num_rows - 1, num_rows - 1, num_rows, 0, rng.randrange(12))) & 0xFFFFFFFF
+    stream = bytearray(rng.getrandbits(8) for _ in range(4))  # the CRC of the current chunk
+    for _ in range(rng.randrange(5)):
+        size = rng.choice((0, 0, 1, 40, rng.randrange(0x500)))
+        name = b"IDAT" if rng.random() < 0.85 else rng.choice((b"IEND", b"IDAt", b"tEXt"))
+        stream += size.to_bytes(4, "big") + name + bytes(rng.getrandbits(8) for _ in range(min(size, 0x80)))
+        stream += bytes(min(size, 0x500) - min(size, 0x80))
+        stream += bytes(rng.getrandbits(8) for _ in range(4))
+    stream += bytes(rng.getrandbits(8) for _ in range(16))
+    presets += [
+        (TP_PNG + 0x60, rng.getrandbits(32), 4),
+        (TP_PNG + 0x64, rng.getrandbits(32) & ~0x20 | rng.choice((0, 0, 0x20)), 4),
+        (TP_PNG + 0x68, rng.getrandbits(32) & ~2 | rng.choice((0, 2)), 4),
+        (TP_PNG + 0x6c, WORLD_BASE + SCRATCH + 0x6000, 4),
+        (TP_PNG + 0x70, rng.choice((0, 0, 1, rng.randrange(0x100))), 4),
+        (TP_PNG + 0x84, 0, 4),
+        (TP_PNG + 0xc0, width, 4), (TP_PNG + 0xc4, height, 4), (TP_PNG + 0xc8, num_rows, 4),
+        (TP_PNG + 0xd0, rng.choice(((width * depth + 7) // 8, rng.randrange(0x400))), 4),
+        (TP_PNG + 0xdc, row_number, 4),
+        (TP_PNG + 0xe0, WORLD_BASE + SCRATCH + 0x8000, 4),
+        (TP_PNG + 0x104, rng.choice((0, 0, 1, 3, rng.randrange(0x600))), 4),
+        (TP_PNG + 0x11b, rng.choice((0, 1, 1, rng.getrandbits(8))), 1),
+        (TP_PNG + 0x11c, pass_, 1),
+        (TP_PNG + 0x121, depth, 1),
+        (PH_CURSOR, 0, 4), (PH_STREAM, int.from_bytes(bytes(stream), "little"), len(stream)),
+        (SCRATCH + 0x5000, int.from_bytes(b"zlib says no\0", "little"), 13),
+    ]
+    return {"png": TP_PNG_PTR, "presets": presets}
+
+
+def prs_rows(rng):
+    presets = tp_png_struct(rng)
+    ct, depth, channels = ph_colour(rng)
+    width = rng.choice((1, 2, 7, 8, 9, 33, rng.randint(1, 600)))
+    presets += [
+        (TP_PNG + 0x68, rng.getrandbits(32) & ~0xD006 | rng.choice((0, 0x1000, 0x8000, 0x4000, 0xD006, 0x9004,
+                                                                      0x5002, rng.getrandbits(32) & 0xD006)), 4),
+        (TP_PNG + 0xc0, width, 4), (TP_PNG + 0xc4, rng.choice((1, 2, 5, 8, 9, rng.randint(1, 300))), 4),
+        (TP_PNG + 0xd0, rng.choice(((width * depth * channels + 7) // 8, rng.randrange(0x800))), 4),
+        (TP_PNG + 0x112, rng.choice((0, 0, 1, rng.getrandbits(16))), 2),
+        (TP_PNG + 0x11b, rng.choice((0, 1, 1, rng.getrandbits(8))), 1),
+        (TP_PNG + 0x11c, rng.choice((0, 0, 0, rng.randrange(7))), 1),
+        (TP_PNG + 0x11e, ct, 1), (TP_PNG + 0x11f, depth, 1),
+        (TP_PNG + 0x121, rng.choice((depth * channels, depth * channels, rng.choice(PR_DEPTHS))), 1),
+    ]
+    return {"png": TP_PNG_PTR, "presets": presets}
+
+
+PRS_CALLEES = dict(TP_CALLEES)
+PRS_CALLEES[0x005A6220] = (1, "cdecl", "probe")  # png_init_read_transformations
+
+SPECS += [
+    Spec("png_read_finish_row", 0x005afe20, "stdcall", zi_args(prf_rows, "png"), presets=zi_presets,
+         callees=PRF_CALLEES, eax_mask=0, ignore_bytes=PRF_NEXT_OUT, max_cases=4000, case_scale=2),
+    Spec("png_read_start_row", 0x005b01c0, "stdcall", zi_args(prs_rows, "png"), presets=zi_presets,
+         callees=PRS_CALLEES, eax_mask=0, max_cases=4000, case_scale=2),
+]
+
+
+# -- png_rutil_chunks2.cpp: cHRM, sRGB, zTXt, pCAL, png_set_pCAL (libs-r7) ------
+#
+# Cases as for the other handlers (ph_case). fprintf's double arguments are
+# recorded by the format (two dwords per %f). cHRM and sRGB read
+# info_ptr->valid without a null check, so their info is never null. The
+# inflate and inflateReset calls of zTXt are probed: the effect consumes
+# input, writes some output bytes into next_out and returns Z_OK,
+# Z_STREAM_END or an error (with or without a message), so every path of the
+# text assembly is taken (the decoder itself has its own specs); a stream
+# that ends without output would make both crash in png_set_text (see
+# png_rutil_chunks2.cpp), so the probe ends the stream once the input is
+# used up.
+
+import re
+import struct as _pc_struct
+
+PC_SRGB = (31270, 32900, 64000, 33000, 30000, 60000, 15000, 6000)
+PC_ERROR_MSG = WORLD_BASE + SCRATCH + 0x5000
+
+
+def pc_fprintf_record(m, ecx, a):
+    """(file, format, the arguments by the format: %s by contents, %f as
+    two dwords, others one dword)."""
+    fmt = tp_c_string(m, a[1])
+    out, at = [a[0], fmt], 2
+    for conversion in re.findall(rb"%[-+ #0-9.l]*([a-zA-Z])", fmt):
+        if conversion == b"s":
+            out.append(tp_c_string(m, a[at]))
+            at += 1
+        elif conversion == b"f":
+            out += a[at:at + 2]
+            at += 2
+        else:
+            out.append(a[at])
+            at += 1
+    return tuple(out)
+
+
+PC_CALLEES = dict(PH_CALLEES)
+PC_CALLEES[0x006214D6] = (10, "cdecl", "probe", None, pc_fprintf_record)
+
+
+def pc_case(rng, name, data_fn):
+    """ph_case with the chunk name always set (the real one or its ancillary
+    twin): four non-letters overflow png_chunk_warning's buffer in the
+    original (known difference, docs/todo/known-differences.md)."""
+    case = ph_case(rng, name, data_fn)
+    case["presets"].append((TP_PNG + 0x114, int.from_bytes(name, "little") ^ (0x20 if rng.random() < 0.4 else 0), 4))
+    return case
+
+
+def pc_chrm(rng, ct, depth, channels, num_palette):
+    srgb = rng.random() < 0.5
+    values = []
+    for k in range(8):
+        v = PC_SRGB[k] + (rng.randrange(250) - 120 if rng.random() < 0.25 else 0) if srgb else rng.randrange(80001)
+        if rng.random() < 0.04:
+            v = rng.choice((0, 80000, 80001, 79999, 100000, 50000, 0x80000000, 0xFFFFFFFF))
+        values.append(v & 0xFFFFFFFF)
+    if rng.random() < 0.2:  # a pair summing to just over / at 1
+        pair = rng.randrange(4)
+        x = 20000 + rng.randrange(60000)
+        values[2 * pair], values[2 * pair + 1] = x, 100000 - x + rng.randrange(3)
+    return b"".join(v.to_bytes(4, "big") for v in values)
+
+
+def pc_chrm_case(rng):
+    case = pc_case(rng, b"cHRM", pc_chrm)
+    case["info"] = TP_INFO_PTR
+    case["presets"].append((TP_INFO + 0x08, rng.choice((0, 0x800, 0x804, 4, rng.getrandbits(32))), 4))
+    return case
+
+
+def pc_srgb(rng, ct, depth, channels, num_palette):
+    return bytes([rng.randrange(4) if rng.random() < 0.8 else rng.getrandbits(8)])
+
+
+def pc_float_bits(value):
+    return int.from_bytes(_pc_struct.pack("<f", value), "little")
+
+
+def pc_srgb_case(rng):
+    case = pc_case(rng, b"sRGB", pc_srgb)
+    case["info"] = TP_INFO_PTR
+    presets = case["presets"]
+    presets.append((TP_INFO + 0x08, rng.choice((0, 0x800, 1, 4, 5, rng.getrandbits(32))), 4))
+    gamma = rng.choice((0.45, 0.45455, 0.449995, 0.450005, 0.449994, 1.0, 0.0))
+    presets.append((TP_PNG + 0x154, pc_float_bits(gamma) if rng.random() < 0.9 else rng.getrandbits(32), 4))
+    for k in range(8):
+        value = PC_SRGB[k] / 100000 + ((rng.randrange(40) - 20) * 1e-4 if rng.random() < 0.15 else 0)
+        presets.append((TP_INFO + 0x80 + 4 * k, pc_float_bits(value), 4))
+    return case
+
+
+def pc_ztxt(rng, ct, depth, channels, num_palette):
+    key = bytes(0x61 + rng.randrange(26) for _ in range(rng.randrange(10)))
+    if rng.random() < 0.1:
+        return key
+    r = rng.randrange(10)
+    if r == 0:
+        return key + b"\0"
+    if r == 1:
+        return key + b"\0" + bytes([rng.randint(1, 255)]) + bytes(0x61 + rng.randrange(26)
+                                                                  for _ in range(rng.choice((0, 1, 3, 40))))
+    return key + b"\0\0" + bytes(rng.getrandbits(8) for _ in range(rng.choice((1, 5, 40, rng.randrange(300)))))
+
+
+def pc_inflate(machine, ecx, args, h):
+    z = args[0]
+
+    def get(off):
+        return int.from_bytes(machine.guest_read(z + off, 4), "little")
+    next_in, avail_in, next_out, avail_out = get(0), get(4), get(0xc), get(0x10)
+    used = min(avail_in, 1 + (h >> 8) % 40)
+    made = min(avail_out, (h >> 16) % 50)
+    if made:
+        machine.guest_write(next_out, bytes((0x41 + (h >> 24) + k) & 0xFF for k in range(made)))
+    machine.guest_write(z, (next_in + used).to_bytes(4, "little"))
+    machine.guest_write(z + 4, (avail_in - used).to_bytes(4, "little"))
+    machine.guest_write(z + 0xc, (next_out + made).to_bytes(4, "little"))
+    machine.guest_write(z + 0x10, (avail_out - made).to_bytes(4, "little"))
+    r = (h >> 32) % 20
+    if r < 2:
+        machine.guest_write(z + 0x18, (0 if (h >> 40) & 1 else PC_ERROR_MSG).to_bytes(4, "little"))
+        return (-3 if r == 0 else -2) & 0xFFFFFFFF
+    if avail_in == used and made == avail_out and (h >> 44) & 1:
+        return 0  # the input used up with the buffer full: flushed, then the loop ends
+    if r < 4 or avail_in == used:
+        return 1
+    return 0
+
+
+PC_ZTXT_CALLEES = dict(PC_CALLEES)
+PC_ZTXT_CALLEES.update({
+    0x005AA4A0: (2, "cdecl", "probe", pc_inflate, lambda m, ecx, a: (a[0], a[1])),  # inflate
+    0x005AA270: (1, "cdecl", "probe"),                                              # inflateReset
+})
+
+
+def pc_ztxt_case(rng):
+    case = pc_case(rng, b"zTXt", pc_ztxt)
+    case["presets"] += [(TP_PNG + 0x84, 0, 4),
+                        (SCRATCH + 0x5000, int.from_bytes(b"inflate says no\0", "little"), 16),
+                        (TP_INFO + 0x30, 0, 4), (TP_INFO + 0x34, 0, 4), (TP_INFO + 0x38, 0, 4)]
+    return case
+
+
+def pc_pcal(rng, ct, depth, channels, num_palette):
+    out = bytes(0x61 + rng.randrange(26) for _ in range(rng.randrange(12))) + b"\0"
+    out += rng.getrandbits(32).to_bytes(4, "big") + rng.getrandbits(32).to_bytes(4, "big")
+    t = rng.getrandbits(8) if rng.random() < 0.15 else rng.randrange(4)
+    n = (2, 3, 3, 4)[t] if t < 4 else rng.randrange(5)
+    if rng.random() < 0.12:
+        n = rng.randrange(6)
+    out += bytes([t, n]) + bytes(0x61 + rng.randrange(26) for _ in range(rng.randrange(6)))
+    for _ in range(n + (1 if rng.random() < 0.25 else 0)):
+        out += b"\0" + bytes(0x30 + rng.randrange(10) for _ in range(rng.randrange(8)))
+    if rng.random() < 0.25:
+        out = out[:rng.randint(1, len(out))]
+    return out
+
+
+def pc_pcal_case(rng):
+    case = pc_case(rng, b"pCAL", pc_pcal)
+    case["presets"].append((TP_INFO + 0x08, rng.choice((0, 0x400, rng.getrandbits(32))), 4))
+    return case
+
+
+PC_STRINGS = SCRATCH + 0x6000
+
+
+def pc_set_pcal_case(rng):
+    presets = tp_png_struct(rng)
+    for k in range(8):
+        text = bytes(0x61 + rng.randrange(26) for _ in range(rng.randrange(30))) + b"\0"
+        presets.append((PC_STRINGS + 0x80 * k, int.from_bytes(text, "little"), len(text)))
+    n = rng.randrange(6)
+    presets += [(PC_STRINGS + 0x800 + 4 * k, WORLD_BASE + PC_STRINGS + 0x100 + 0x80 * k, 4) for k in range(n)]
+    return {"png": TP_PNG_PTR if rng.random() < 0.95 else 0, "info": TP_INFO_PTR if rng.random() < 0.95 else 0,
+            "purpose": WORLD_BASE + PC_STRINGS, "x0": rng.getrandbits(32), "x1": rng.getrandbits(32),
+            "type": rng.getrandbits(32), "n": n, "units": WORLD_BASE + PC_STRINGS + 0x80,
+            "params": WORLD_BASE + PC_STRINGS + 0x800, "presets": presets}
+
+
+SPECS += [
+    Spec("png_handle_cHRM", 0x005abd00, "stdcall", zi_args(pc_chrm_case, "png", "info", "length"),
+         presets=zi_presets, callees=PC_CALLEES, eax_mask=0, max_cases=6000, case_scale=3),
+    Spec("png_handle_sRGB", 0x005ac920, "stdcall", zi_args(pc_srgb_case, "png", "info", "length"),
+         presets=zi_presets, callees=PC_CALLEES, eax_mask=0, max_cases=6000, case_scale=3),
+    Spec("png_handle_zTXt", 0x005aeec0, "stdcall", zi_args(pc_ztxt_case, "png", "info", "length"),
+         presets=zi_presets, callees=PC_ZTXT_CALLEES, eax_mask=0, max_cases=6000, case_scale=3),
+    Spec("png_handle_pCAL", 0x005ae430, "stdcall", zi_args(pc_pcal_case, "png", "info", "length"),
+         presets=zi_presets, callees=PC_CALLEES, eax_mask=0, max_cases=6000, case_scale=3),
+    Spec("png_set_pCAL", 0x005b1750, "stdcall",
+         zi_args(pc_set_pcal_case, "png", "info", "purpose", "x0", "x1", "type", "n", "units", "params"),
+         presets=zi_presets, callees=TP_CALLEES, eax_mask=0),
+]

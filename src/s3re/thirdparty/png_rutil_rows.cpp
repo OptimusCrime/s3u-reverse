@@ -581,4 +581,11 @@ S3RE_TEST(PngRowHelpers_ComparisonDetectsWrongImplementation) {
     S3RE_EXPECT(probe.failures() > 0);
 }
 
+// For the emulator's self-test (tools/emutest/specs/self_test.py): the row
+// step leaving avail_out at 1 (next to the ignored zstream.next_out).
+void __cdecl WrongFinishRow(PngStruct* png) {
+    png_read_finish_row(png);
+    png->zstream.avail_out = 1;
+}
+
 }  // namespace s3re::thirdparty

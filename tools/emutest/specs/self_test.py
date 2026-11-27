@@ -146,3 +146,10 @@ SELF_TEST += [
     Spec(STATIC_STUB_FLOATS[1][1], STATIC_STUB_FLOATS[0][0], "stdcall", [], eax_mask=0, max_cases=20,
          globals=static_stub_ratio_sources(STATIC_STUB_FLOATS[0][3:7])),
 ]
+
+SELF_TEST += [
+    # ignore_bytes on png_read_finish_row's zstream.next_out: the wrong row
+    # step leaves avail_out (the next dword) at 1.
+    Spec("WrongFinishRow", 0x005afe20, "stdcall", zi_args(prf_rows, "png"), presets=zi_presets,
+         callees=PRF_CALLEES, eax_mask=0, ignore_bytes=PRF_NEXT_OUT, max_cases=400),
+]

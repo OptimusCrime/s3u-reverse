@@ -423,6 +423,11 @@ SPECS += [Spec(f"VectorConstructor_{a:x}", a, "thiscall", [watcom_capacity, anyt
           for a in WATCOM_R6_VECTOR_CONSTRUCTORS]
 SPECS += [Spec(f"BareVectorConstructor_{a:x}", a, "thiscall", [watcom_capacity], new_fails=0.2)
           for a in WATCOM_R6_BARE_VECTOR_CONSTRUCTORS]
+# libs-r7: three more instantiations of the same code.
+SPECS += [Spec("VectorDestructor_5bdf70", 0x005bdf70, "thiscall", [], presets=watcom_vector_to_destroy),
+          Spec("VectorConstructor_5b7ec0", 0x005b7ec0, "thiscall", [watcom_capacity, anything], new_fails=0.2),
+          Spec("VectorConstructor_5b7f40", 0x005b7f40, "thiscall", [watcom_capacity, anything], new_fails=0.2),
+          Spec("BareVectorConstructor_499690", 0x00499690, "thiscall", [watcom_capacity], new_fails=0.2)]
 
 
 # -- destructors of vectors whose elements have a destructor (element_vectors.cpp) --
@@ -458,6 +463,8 @@ SPECS += [Spec(f"ElementVectorDestructor_{a:x}", a, "thiscall", [], presets=elem
 SPECS += [Spec(f"SkipListDestructor_{a:x}", a, "thiscall", [], presets=skip_dict_count, callees=SKIP_DESTROY_CALLEES)
           for a in (0x428120, 0x4283a0, 0x457bb0, 0x457cb0, 0x45d500, 0x472120, 0x472580, 0x472600, 0x499290,
                     0x4a6a40, 0x4a6b40, 0x4a6c40, 0x4a6ce0, 0x4a8e10, 0x4a8eb0, 0x609bb0, 0x616050)]
+SPECS += [Spec("SkipListDestructor_616150", 0x00616150, "thiscall", [], presets=skip_dict_count,
+               callees=SKIP_DESTROY_CALLEES)]  # (libs-r7)
 SPECS += [Spec("SkipListDestructor_609aa0", 0x00609aa0, "thiscall", [], presets=skip_dict_count,
                callees={0x0060bd80: (0, "thiscall", "probe"), 0x006014b0: (0, "thiscall", "probe")})]
 
@@ -550,6 +557,14 @@ STRING_ELEMENT_DEAD = {0x4629a0: (0x462a46,), 0x463730: (0x4637d6,), 0x5bde60: (
 SPECS += [Spec(f"ElementVectorDestructor_{a:x}", a, "thiscall", [], presets=string_element_vector(size, offsets),
                exempt_blocks=STRING_ELEMENT_DEAD.get(a, ()))
           for a, size, offsets in STRING_ELEMENT_VECTORS]
+# libs-r7: three more, with ~string's erase (or _Split) called out of line.
+# Dead: 0x5dea76 / 0x5df246 the _Eos after erase(0, npos) (as above);
+# 0x5e01fe the count decrement of the inlined _Tidy(true) after erase(0,
+# npos), which has made the string unshared (count 0) or frozen.
+SPECS += [Spec(f"ElementVectorDestructor_{a:x}", a, "thiscall", [], presets=string_element_vector(size, offsets),
+               exempt_blocks=dead)
+          for a, size, offsets, dead in ((0x5de9d0, 0x18, (0x8,), (0x5dea76,)), (0x5df1a0, 0x24, (0x14,), (0x5df246,)),
+                                         (0x5e0170, 0x20, (0x10, 0), (0x5e01fe,)))]
 
 
 # -- skip lists with a string / vector value (skiplist_dicts.cpp, wip/watcom-r6) --
@@ -664,7 +679,7 @@ SPECS += [Spec(f"SkipDestroyNode_{a:x}", a, "thiscall",
                presets=skip_destroy_node_world, virtuals=ISV_VIRTUALS, callees={d: (0, "thiscall", "probe")})
           for a, d in SKIP_DESTROY_NODES]
 SPECS += [Spec(f"OrderedFind_{a:x}", a, "thiscall", SORTED_FIND_ARGS, presets=sorted_find_state, virtuals={0x08: 2})
-          for a in (0x5b83e0, 0x5b8290, 0x499b30, 0x468550)]
+          for a in (0x5b83e0, 0x5b8290, 0x499b30, 0x468550, 0x40a220, 0x437c30, 0x44dc30, 0x462e60, 0x5de970)]
 
 
 # -- wip/watcom-r6 batch 3 --------------------------------------------------
@@ -727,3 +742,43 @@ SPECS += [Spec("StringVectorDestructor_459550", 0x00459550, "fastcall", [one_of(
                presets=string_vector_state, exempt_blocks=(0x004595f6,)),
           Spec("VectorDestructor_473290", 0x00473290, "fastcall", [one_of(WORLD_BASE - 4), anything],
                presets=watcom_vector_to_destroy)]
+
+
+# -- more base_new_node instantiations and 0x457c10 (skiplist_nodes2.cpp, libs-r7) --
+# The dictionary at world 0 (+0x5c: no allocator or the allocator probe),
+# the pair in scratch slot 2: the key, then (for the vector pairs) a vector
+# whose block of 0..6 dwords or strings is in scratch slot 3 (capacity
+# -1..8, filled -1..6, sometimes no block); level 0..12. CLMMessageBlock's
+# copy constructor 0x601470 (ours, own spec) is probed; operator new fails
+# in some cases.
+NODES2_PAIR = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+NODES2_BLOCK = SCRATCH + 3 * SCRATCH_SLOT_BYTES
+NODES2_TEXTS = SCRATCH + 4 * SCRATCH_SLOT_BYTES
+
+
+def nodes2_world(strings):
+    def presets(rng, pool, args):
+        fields = [(0x5c, rng.choice([0, 0, ISV_VIRTUAL_CODE + ISV_ALLOC_SLOT]), 4)]
+        filled = rng.randrange(7)
+        capacity = rng.choice([filled, filled + 1, filled + 2, 0, 0xFFFFFFFF])
+        fields += [(NODES2_PAIR + 4 + 0x0c, capacity, 4),
+                   (NODES2_PAIR + 4 + 0x10, rng.choice([filled, filled, filled, 0xFFFFFFFF, rng.randrange(4)]), 4),
+                   (NODES2_PAIR + 4 + 0x08, 0 if rng.random() < 0.1 else WORLD_BASE + NODES2_BLOCK, 4)]
+        if strings:
+            for k in range(7):
+                entry, _ = string_fields(rng, NODES2_BLOCK + 16 * k, NODES2_TEXTS + 0x80 * k)
+                fields += entry
+        return fields
+    return presets
+
+
+NODES2_ARGS = [lambda rng, pool: WORLD_BASE + NODES2_PAIR, lambda rng, pool: rng.randrange(13)]
+SPECS += [Spec(f"SkipNewNode_{a:x}", a, "thiscall", NODES2_ARGS, presets=nodes2_world(False), virtuals=ISV_VIRTUALS,
+               new_fails=0.2)
+          for a in (0x472e60, 0x472c70)]
+SPECS += [Spec("SkipNewNode_60a6d0", 0x0060a6d0, "thiscall", NODES2_ARGS, presets=nodes2_world(False),
+               virtuals=ISV_VIRTUALS, new_fails=0.2, callees={0x00601470: (1, "thiscall", "probe")})]
+SPECS += [Spec("SkipNewNode_459030", 0x00459030, "thiscall", NODES2_ARGS, presets=nodes2_world(True),
+               virtuals=ISV_VIRTUALS, new_fails=0.2, globals=name_null_string_count)]
+SPECS += [Spec("SkipDictConstructor_457c10", 0x00457c10, "thiscall", [anything, anything], callees=SKIP_BASE_CALLEES,
+               new_fails=0.2)]
