@@ -101,7 +101,10 @@ struct CDrawer {
     std::int32_t unk05f668;                           // +0x05f668 set to 0 by InitPanelFonts
     std::int32_t unk05f66c;                           // +0x05f66c set to g_displayWidth by InitPanelFonts
     std::int32_t unk05f670;                           // +0x05f670 set to g_displayHeight by InitPanelFonts
-    std::uint8_t unk05f674[0x5f684 - 0x5f674];
+    std::int32_t number_label_left;                   // +0x05f674 the rect of a settler's number label (catapult
+    std::int32_t number_label_top;                    // +0x05f678  stones; CDrawer::QueueSettler 0x4c85a0 sets
+    std::int32_t number_label_right;                  // +0x05f67c  it, passes it to DrawTextF and re-reads it)
+    std::int32_t number_label_bottom;                 // +0x05f680
     std::int32_t panel_text_left;                     // +0x05f684 the rect of the panel text being drawn (left,
     std::int32_t panel_text_top;                      // +0x05f688  top, right, bottom; the text helpers
     std::int32_t panel_text_right;                    // +0x05f68c  0x4d6a30..0x4d78d0 set it, pass it to
@@ -157,6 +160,7 @@ static_assert(offsetof(CDrawer, ambient_right) == 0x5f5cc);
 static_assert(offsetof(CDrawer, ambient_count) == 0x5f610);
 static_assert(offsetof(CDrawer, graphics) == 0x5f6b8);
 static_assert(offsetof(CDrawer, sound) == 0x5f6bc);
+static_assert(offsetof(CDrawer, number_label_left) == 0x5f674);
 static_assert(offsetof(CDrawer, panel_text_left) == 0x5f684);
 static_assert(offsetof(CDrawer, panel_left) == 0x5f654);
 static_assert(offsetof(CDrawer, unk05f670) == 0x5f670);

@@ -749,4 +749,11 @@ inline constexpr GameText kSoundDataNotNull{0x698f00};     // "lpSoundData"
 inline constexpr GameText kNoName{0x69ffd0};            // "no name" (the side panel's players, CDrawer::DrawPanel)
 inline constexpr GameText kFormatPlusUnsigned{0x69ffd8};  // "+%u" (the build menu's extra costs, CDrawer::DrawPanel)
 inline constexpr GameText kArrow{0x69ffcc};             // "-->" (the side panel's trade grid, CDrawer::DrawPanel)
+// ------------------------------------------------------------ wip/settlerdraw-r7 batch
+// CDrawer::QueueSettler 0x4c85a0's log lines (DebugLog).
+inline constexpr GameText kStandsOnLog{0x6a0000};            // "ist auf %u"
+inline constexpr GameText kSettlerTypeTodoLog{0x6a000c};     // "Art der Figur: %u   settlertodocount %u"
+inline constexpr GameText kIllegalAnimationLog{0x6a0034};    // "Illegale Animation bei Figur, Anim Nr. %u"
+inline constexpr GameText kSettlerTodoLog{0x6a0060};         // "art %u, owner %u, todo %u, todocount %u"
+inline constexpr GameText kSuspiciousTodoCountLog{0x6a0088}; // "extrem verdächtiger todocount"
 }  // namespace s3re::game::texts

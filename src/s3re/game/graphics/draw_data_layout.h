@@ -66,7 +66,9 @@ struct DrawDataView {
                                   //        then also draws it in the next frame)
     std::uint8_t unk044[0x48 - 0x44];
     std::uint32_t clock;          // +0x048 the animation clock (cycling animations are phased by it)
-    std::uint8_t unk04c[0x60 - 0x4c];
+    std::uint8_t unk04c[0x5c - 0x4c];
+    std::int32_t sound_level;     // +0x05c -1: no settler sounds; else a settler's work sound plays when its
+                                  //        high byte is <= this (CDrawer::QueueSettler 0x4c85a0)
     std::int32_t unk060;          // +0x060 a UI mode (1 and 4 draw markers in QueueLandscapeObject); the
                                   //        side panel's menu 1..12 (DrawPanel)
     std::int32_t unk064;          // +0x064 in mode 1: a group 1..4 of the selection sprites (the build
@@ -92,7 +94,8 @@ struct DrawDataView {
                                                 //        it draws the panel, so they are drawn again)
             std::int32_t unk090;          // +0x090 in menu 8: a text id (DrawPanel)
             std::int32_t unk094;          // +0x094 a variant 0..3 of some selection sprites (probably the race)
-            std::uint8_t unk098[0xa4 - 0x98];
+            std::int32_t local_player;    // +0x098 the player whose settlers get hit areas (CDrawer::QueueSettler)
+            std::uint8_t unk09c[0xa4 - 0x9c];
             std::int32_t unk0a4;          // +0x0a4 in mode 4: one of 11 values draws the marker
             std::uint8_t unk0a8[0x264 - 0xa8];
         };
@@ -100,7 +103,10 @@ struct DrawDataView {
 #pragma warning(pop)
     std::int32_t selected_column; // +0x264 the cell (column, row) the selection sprites are drawn at
     std::int32_t selected_row;    // +0x268
-    std::uint8_t unk26c[0x2ec - 0x26c];
+    std::uint8_t unk26c[0x294 - 0x26c];
+    std::int32_t player_team[20]; // +0x294 per player: a thief of another team is drawn as a carrier
+                                  //        (CDrawer::QueueSettler; indexed by any owner byte)
+    std::uint8_t unk2e4[0x2ec - 0x2e4];
     std::uint32_t unk2ec;         // +0x2ec in menu 3 page 4: the chosen good 1..36 (DrawPanel)
     std::uint16_t unk2f0[(0x4f0 - 0x2f0) / 2];  // +0x2f0 in menu 3 page 4: the history of the chosen good (DrawPanel)
     std::uint32_t unk4f0;         // +0x4f0 in menu 3 page 4: the history's scale (DrawPanel)
@@ -115,7 +121,10 @@ struct DrawDataView {
 };
 static_assert(offsetof(DrawDataView, origin_column) == 0x24);
 static_assert(offsetof(DrawDataView, clock) == 0x48);
+static_assert(offsetof(DrawDataView, sound_level) == 0x5c);
 static_assert(offsetof(DrawDataView, unk060) == 0x60);
+static_assert(offsetof(DrawDataView, local_player) == 0x98);
+static_assert(offsetof(DrawDataView, player_team) == 0x294);
 static_assert(offsetof(DrawDataView, unk074) == 0x74);
 static_assert(offsetof(DrawDataView, unk094) == 0x94);
 static_assert(offsetof(DrawDataView, unk0a4) == 0xa4);

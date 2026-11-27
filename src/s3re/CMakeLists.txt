@@ -294,6 +294,7 @@ add_library(s3re SHARED
     game/graphics/drawer_surfaces.cpp
     game/graphics/directx_surface.cpp
     game/graphics/drawer_buildings.cpp
+    game/graphics/drawer_settlers.cpp
     game/graphics/drawer_landscape.cpp
     game/graphics/drawer_objects.cpp
     game/graphics/drawer_queues.cpp

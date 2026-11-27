@@ -5962,7 +5962,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-27","statuses":["unknown","classifi
 [5014880,32,6,0,"StaticInit_7aa600"],
 [5014912,16,6,0,"StaticDtorReg_7aa600"],
 [5014928,16,6,0,"StaticDtor_7aa600"],
-[5014944,38544,1,69,"Render_sub_4c85a0"],
+[5014944,38544,6,94,"CDrawer::QueueSettler","Queues the settler of a draw cell."],
 [5053488,16,6,0,"StaticInitEntry_7aa8b0"],
 [5053504,32,6,0,"StaticInit_7aa8b0"],
 [5053536,16,6,0,"StaticDtorReg_7aa8b0"],
@@ -21709,6 +21709,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-27","statuses":["unknown","classifi
 [5014880,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5014912,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5014928,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
+[5014944,14479,{"save:slot 1.sav":14479},[]],
 [5053488,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5053504,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
 [5053536,1,{"random:384,0 seed 1234":1,"random:448,3 seed 1234":1,"replay:scripted-seed127":1,"save:slot 1.sav":1,"save:slot 2.sav":1,"save:slot 3.sav":1},[]],
@@ -22703,7 +22704,7 @@ window.PROGRESS_DATA = {"generated":"2026-11-27","statuses":["unknown","classifi
 [5238272,7689,{"random:384,0 seed 1234":112,"random:448,3 seed 1234":112,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap":17,"random:512,1 seed 1234":84,"random:640,2 seed 1234":84,"replay:fullgame-20261124-0055-seed10779":7689,"replay:fun8-seed2024-input31":278,"replay:random768-seed4321-input7":167,"replay:scripted-seed127":167,"save:slot 1.sav":111,"save:slot 2.sav":111,"save:slot 3.sav":111},[]],
 [5238416,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"replay:scripted-seed127":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
 [5238736,792,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fullgame-20261124-0055-seed10779":792,"replay:fun8-seed2024-input31":0,"replay:random768-seed4321-input7":0,"replay:scripted-seed127":0,"save:slot 1.sav":116,"save:slot 2.sav":28,"save:slot 3.sav":24},[]],
-[5238944,3,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"replay:scripted-seed127":1,"save:slot 1.sav":0,"save:slot 2.sav":3,"save:slot 3.sav":1},[]],
+[5238944,3,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"replay:scripted-seed127":1,"save:slot 1.sav":3,"save:slot 2.sav":3,"save:slot 3.sav":1},[]],
 [5239152,0,{"random:384,0 seed 1234":0,"random:448,3 seed 1234":0,"replay:scripted-seed127":0,"save:slot 1.sav":0,"save:slot 2.sav":0,"save:slot 3.sav":0},[]],
 [5239584,1967997,{"random:384,0 seed 1234":718,"random:448,3 seed 1234":2494,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap":2019,"random:512,1 seed 1234":3514,"random:640,2 seed 1234":1572,"replay:fullgame-20261124-0055-seed10779":1967997,"replay:fun8-seed2024-input31":21151,"replay:random768-seed4321-input7":3001,"replay:scripted-seed127":2218,"save:slot 1.sav":1548075,"save:slot 2.sav":93328,"save:slot 3.sav":247420},[]],
 [5239680,264730,{"random:384,0 seed 1234":12,"random:448,3 seed 1234":8,"random:448,3 seed 1234 skip CGameData_GenerateRandomMap":0,"random:512,1 seed 1234":0,"random:640,2 seed 1234":0,"replay:fullgame-20261124-0055-seed10779":264730,"replay:fun8-seed2024-input31":1172,"replay:random768-seed4321-input7":101,"replay:scripted-seed127":68,"save:slot 1.sav":9729,"save:slot 2.sav":1000,"save:slot 3.sav":5873},[]],
@@ -30909,4 +30910,6 @@ window.PROGRESS_DATA = {"generated":"2026-11-27","statuses":["unknown","classifi
 ["2026-11-27","0f3f534",12750,1081869,1443855,876778,11606],
 ["2026-11-27","a40ffeb",12757,1082989,1444575,876778,11606],
 ["2026-11-27","9b81abf",12764,1094144,1456289,891642,11665],
-["2026-11-27","ef65f96",12791,1096813,1457999,891642,11665]]};
+["2026-11-27","ef65f96",12791,1096813,1457999,891642,11665],
+["2026-11-27","7d10495",12766,1166048,1528193,876778,11606],
+["2026-11-27","e5c5e18",12793,1168717,1529903,965447,11691]]};
