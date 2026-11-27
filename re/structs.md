@@ -556,6 +556,28 @@ stored through the vbtable at +0x58). Own fields: +0x104 menu state (0x14
 start the startup map, 4 start the game), +0x134 byte, +0x144 (-1 when a
 loaded game starts). **S** (savegame_start.cpp).
 
+## DirectX::CGameDrawThread and CDrawThread (the in-game draw thread)
+
+CGameDrawThread (0x54 bytes; base DirectX::CGameThread, virtual base
+CWin32Handle at +4; vtables 0x65CA40 / 0x65CA34): CGameThread +0x28
+active byte; +0x44 the drawer (DirectX::CGameDrawer), +0x48 the game
+window, +0x4C Step count, +0x50 full-redraw flag (constructor 1,
+OnActivate 1, Step clears it after a frame). CDrawThread (vtables
+0x656AB0 / 0x656AA4) adds +0x54 the CDirectDraw the drawer is built on, +0x58
+the shared draw-data slot (InterlockedExchange), +0x5C its own draw data,
++0x60 the waitable the logic thread signals (slot 0 Wait(timeout, 1)),
++0x64 the "frame taken" CEvent, +0x68 no-drawer byte, +0x69 initialized,
++0x6C start message wParam, +0x70 lobby byte. **V** (wip/cursor-r7,
+directx_draw_thread.cpp, draw_thread_steps.cpp).
+
+## CDrawer (in-game drawer, 0x5F700 bytes): surfaces and cursor
+
++0x5F6C0..+0x5F6CC four surfaces (primary/flip, back, draw, one more;
+ReleaseSurfaces forgets them), +0x5F6D5 software-cursor byte, +0x5F6D8 the
+Dirk::CMouseSurface, +0x5F6DC current cursor id (-1 none), +0x5F6E0 the
+Dirk::CTextSurface. Layout: `src/s3re/game/graphics/drawer_layout.h`.
+**V** (wip/cursor-r7, drawer_surfaces.cpp).
+
 ## GameSettings (g_gameSettings, 0x7A7A18; no RTTI)
 
 Layout in `src/s3re/game/ui/game_settings_layout.h`. +0x00 a

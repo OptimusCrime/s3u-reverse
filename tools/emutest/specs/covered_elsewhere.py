@@ -12,6 +12,12 @@ the names of common.py and of its own earlier lines without imports.
 # failure). Only for blocks measured as unreached by a --full run; not part
 # of the spec entries, so editing it doesn't reselect specs.
 COVERED_ELSEWHERE = {
+    # CDrawThread::CreateDrawer's constructor call after operator new of a
+    # CDrawer (0x5f700 bytes), which the emulator's heap (0x30000 bytes)
+    # can't hold: every case takes the null path (wip/cursor-r7). Evidence:
+    # the in-process CDrawThread_CreateDrawer_MatchesOriginal (the real game
+    # heap; the constructor stubbed, throwing in some cases).
+    "CDrawThread_CreateDrawer": ((0x42c6d6,), "in-process: CDrawThread_CreateDrawer_MatchesOriginal"),
     # CLandscapeSurface::CLandscapeSurface after the 1,000,000-byte table
     # (+0x9c), which the emulator's heap (0x30000 bytes) can't hold: every
     # case ends in that out-of-memory throw (wip/logic-r4). Evidence: the

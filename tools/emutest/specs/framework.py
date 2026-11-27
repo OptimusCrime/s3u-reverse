@@ -1960,3 +1960,114 @@ SPECS += [
     Spec("Win32_CLock_Destroy", 0x0060da20, "thiscall", [], presets=lock_world,
          exempt_blocks=(0x60da27,)),  # the alignment padding after the tail jump
 ]
+
+
+# -- wip/cursor-r7: DirectX::CGameThread / CGameDrawThread (directx_draw_thread.cpp)
+# The thread at world 0 (its vtable FAKE_VTABLE where virtual slots are
+# called), the drawer +0x44 null or GDT_DRAWER (vtable FAKE_VTABLE too:
+# slots 0 delete, 7 (0x1c) Initialize, 8 (0x20) Shutdown); slot 12 (0x30,
+# CreateDrawer) may set +0x44, Shutdown may clear it. g_app (0x7e9168) null
+# or GDT_APP, whose +4 points at a vbtable with a small offset.
+# Win32::ThrowOutOfMemory ends the run as a throw. The catch handlers
+# (OnStart 0x5b6641.., Step 0x5b66ee..) run only for exceptions thrown by
+# the virtual calls (in-process: the *_MatchesOriginal tests throw
+# CAppNotActiveException*, CTimeout* and CHResult* from them).
+GDT_DRAWER = SCRATCH
+GDT_APP = SCRATCH + SCRATCH_SLOT_BYTES
+GDT_VBTABLE = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+
+
+def gdt_thread(rng, pool, args):
+    return [(0, FAKE_VTABLE, 4), (0x44, rng.choice([0, WORLD_BASE + GDT_DRAWER]), 4), (GDT_DRAWER, FAKE_VTABLE, 4)]
+
+
+def gdt_app_globals(rng, pool, args):
+    return [(0x007e9168, rng.choice([0, WORLD_BASE + GDT_APP]), 4)]
+
+
+def gdt_app(rng, pool, args):
+    return [(GDT_APP + 4, WORLD_BASE + GDT_VBTABLE, 4), (GDT_VBTABLE + 4, rng.randrange(-8, 64) & 0xFFFFFFFF, 4)]
+
+
+def gdt_set_drawer(machine, ecx, args, h):
+    if h % 4:
+        machine.guest_write(WORLD_BASE + 0x44, struct.pack("<I", WORLD_BASE + GDT_DRAWER))
+
+
+def gdt_clear_drawer(machine, ecx, args, h):
+    if h % 4 == 0:
+        machine.guest_write(WORLD_BASE + 0x44, struct.pack("<I", 0))
+
+
+SPECS += [
+    Spec("DirectX_CGameThread_Start", 0x005b6130, "thiscall", [], presets=gdt_app, globals=gdt_app_globals,
+         callees={0x0060e060: (1, "thiscall", "probe")}),
+    # EAX: AL only (the upper bytes are the caller's in the original).
+    Spec("DirectX_CGameThread_OnActivate", 0x005b6520, "thiscall", [anything], eax_mask=0xFF),
+    Spec("DirectX_CGameDrawThread_Construct", 0x005b6530, "thiscall", [],
+         callees={0x005b5f60: (0, "thiscall", "this")}),
+    # ECX = the CWin32Handle part, 4 bytes into the object.
+    Spec("DirectX_CGameDrawThread_Destroy", 0x005b65a0, "fastcall", [one_of(WORLD_BASE + 4), anything],
+         callees={0x005b60a0: (0, "thiscall", "probe")}),
+    Spec("DirectX_CGameDrawThread_StartWithWindow", 0x005b65c0, "thiscall", [anything],
+         callees={0x005b6130: (0, "thiscall", "probe")}),
+    Spec("DirectX_CGameDrawThread_OnStart", 0x005b65d0, "thiscall", [], presets=gdt_thread,
+         virtuals={0x30: 0, 0x1c: 1}, virtual_effects={0x30: gdt_set_drawer},
+         callees={0x005b6160: (0, "thiscall", "probe"), 0x00610960: (1, "thiscall", "throw")},
+         exempt_blocks=(0x5b6641, 0x5b664b, 0x5b6651)),  # catch (...) (see above)
+    # EAX: without a drawer the caller's (CThread::Execute ignores slot 6's EAX).
+    Spec("DirectX_CGameDrawThread_OnExit", 0x005b6670, "thiscall", [], presets=gdt_thread, eax_mask=0,
+         virtuals={0x20: 0, 0x0: 1}, virtual_effects={0x20: gdt_clear_drawer},
+         callees={0x005b6470: (0, "thiscall", "probe")}),
+    Spec("DirectX_CGameDrawThread_Step", 0x005b66a0, "thiscall", [], presets=gdt_thread, virtuals={0x34: 1},
+         exempt_blocks=(0x5b66ee, 0x5b66f5, 0x5b66fb)),  # catch (CAppNotActiveException*) (see above)
+    Spec("DirectX_CGameDrawThread_OnActivate", 0x005b6710, "thiscall", [anything], eax_mask=0xFF),
+]
+
+
+# -- wip/cursor-r7: CDirectDrawDevice::IsEqual, CGameDrawer's constructor
+# and Shutdown (directx_drawer_lifetime.cpp)
+# IsEqual: the GUID at world 0 against one in the scratch area (equal, one
+# byte apart, or random). The constructor's member constructors are
+# probed. Shutdown: the drawer's slot 2 (0x08) probed; the palette list +0x28
+# with vtable FAKE_VTABLE + 0x100 (its slot 1 probed as 0x104); get(0) is
+# probed and hands out the links at GDL_LINKS (or none), emptying the list
+# (+0x30 = 0) at random; the links' palettes null or objects with vtable
+# FAKE_VTABLE + 0x200 (slot 0 probed as 0x200).
+GDL_LINKS = SCRATCH
+GDL_PALETTES = SCRATCH + 0x100
+
+
+def gdl_guids(rng, pool, args):
+    guid = rng.getrandbits(128)
+    other = rng.choice([guid, guid ^ (rng.randrange(1, 256) << (8 * rng.randrange(16))), rng.getrandbits(128)])
+    return [(0, guid & (2**64 - 1), 8), (8, guid >> 64, 8), (SCRATCH, other & (2**64 - 1), 8), (SCRATCH + 8, other >> 64, 8)]
+
+
+def gdl_shutdown(rng, pool, args):
+    fields = [(0, FAKE_VTABLE, 4), (0x28, FAKE_VTABLE + 0x100, 4),
+              (0x30, rng.choice([0, WORLD_BASE + GDL_LINKS]), 4)]
+    for i in range(4):
+        fields.append((GDL_LINKS + 8 * i + 4, rng.choice([0, WORLD_BASE + GDL_PALETTES + 4 * i]), 4))
+        fields.append((GDL_PALETTES + 4 * i, FAKE_VTABLE + 0x200, 4))
+    return fields
+
+
+def gdl_get_effect(machine, ecx, args, h):
+    if h % 3 == 0:
+        machine.guest_write(WORLD_BASE + 0x30, struct.pack("<I", 0))
+    return 0 if (h >> 8) % 8 == 0 else WORLD_BASE + GDL_LINKS + 8 * ((h >> 16) % 4)
+
+
+SPECS += [
+    Spec("DirectX_CDirectDrawDevice_IsEqual", 0x005b69c0, "thiscall", [one_of(WORLD_BASE + SCRATCH)],
+         presets=gdl_guids),
+    Spec("DirectX_CGameDrawer_Construct", 0x005b6c80, "thiscall", [anything],
+         callees={0x005bead0: (1, "thiscall", "this"), 0x005b7d40: (2, "thiscall", "probe"),
+                  0x005b7e00: (2, "thiscall", "probe"), 0x005b7ec0: (2, "thiscall", "probe"),
+                  0x005b7f40: (2, "thiscall", "probe")}),
+    Spec("DirectX_CGameDrawer_Shutdown", 0x005b6f00, "thiscall", [], presets=gdl_shutdown,
+         virtuals={0x08: 0, 0x104: 1, 0x200: 1},
+         callees={0x0060b500: (1, "thiscall", "probe", gdl_get_effect), 0x0060b560: (0, "thiscall", "probe"),
+                  0x005b8080: (1, "thiscall", "probe")}),
+]

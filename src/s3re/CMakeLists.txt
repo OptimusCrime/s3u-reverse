@@ -288,6 +288,9 @@ add_library(s3re SHARED
     # game/graphics/: graphics data, landscape colours, DirectDraw surface
     game/graphics/draw_thread.cpp
     game/graphics/drawer_display_mode.cpp
+    game/graphics/drawer_lifetime.cpp
+    game/graphics/draw_thread_steps.cpp
+    game/graphics/drawer_surfaces.cpp
     game/graphics/directx_surface.cpp
     game/graphics/drawer_buildings.cpp
     game/graphics/drawer_landscape.cpp
@@ -325,7 +328,9 @@ add_library(s3re SHARED
     game/framework/win32_locks.cpp
     game/framework/directx_draw.cpp
     game/framework/directx_draw_tests.cpp
+    game/framework/directx_draw_thread.cpp
     game/framework/directx_drawer.cpp
+    game/framework/directx_drawer_lifetime.cpp
     game/framework/directx_drawer_tests.cpp
     game/framework/directx_sound.cpp
     game/framework/directx_sound_tests.cpp

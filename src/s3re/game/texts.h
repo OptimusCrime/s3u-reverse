@@ -736,4 +736,13 @@ inline constexpr GameText kFormatUnsigned{0x696ba0};    // "%u"
 inline constexpr GameText kFormatPercent{0x6a57b8};     // "%u%%"
 inline constexpr GameText kFormatTwoDecimals{0x6a57b0}; // "%2.2f"
 inline constexpr GameText kFormatOneDecimal{0x6a57a8};  // "%2.1f"
+// ------------------------------------------------------------ wip/cursor-r7 batch
+// CGameDrawThread::OnStart's out-of-memory check (DirectX\Gamebase.cpp line 506).
+inline constexpr GameText kDrawerNotNull{0x79dfb0};        // "lpDrawer"
+inline constexpr GameText kGamebaseFile{0x79df18};         // "E:\Siedler3\DirectX\Gamebase.cpp"
+inline constexpr GameText kDrawNoData{0x698e7c};           // "DRAW: Kein Daten %i %i" (CDrawThread::Draw, FetchDrawData)
+// CDrawer::CDrawer's out-of-memory checks (Dirk\Draw.cpp lines 204 / 207).
+inline constexpr GameText kDrawFile{0x698f1c};             // "E:\Siedler3\Dirk\Draw.cpp"
+inline constexpr GameText kGraphicsDataNotNull{0x698f0c};  // "lpGraphicsData"
+inline constexpr GameText kSoundDataNotNull{0x698f00};     // "lpSoundData"
 }  // namespace s3re::game::texts

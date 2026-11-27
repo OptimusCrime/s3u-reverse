@@ -2063,3 +2063,191 @@ SPECS += [
                   0x005bf050: (3, "thiscall", "probe", ms_lock_effect,                         # CSurface::Lock
                                lambda m, ecx, a: (a[0], a[2], bytes(m.guest_read(a[1], 0x6c))))}),
 ]
+
+
+# -- wip/cursor-r7: CDrawer::SetMouseCursor and the surface slots (drawer_surfaces.cpp)
+# The drawer at world 0: current cursor -1..12 or random, the argument the
+# same or another; software-cursor byte 0, 1 or random. Software cursor:
+# AnimationPointer probed (writes the list CURSOR_LIST into its out slot;
+# recorded without that stack address), the list's count byte 0..12 (or
+# random) and 13 frame offsets to images inside the scratch area (their
+# drawing offset at +8 lazily random); SetHotspot / Clear probed (verified
+# on wip/text-r6); CSurface::Lock probed (writes lpSurface into the stack
+# DDSURFACEDESC); Point16::Negate runs; DrawSprite probed (recorded: the
+# image, the pixels, the position, the clip and the two values);
+# IDirectDrawSurface::Unlock (slot 0x80 of the mouse surface's +8) a COM
+# probe returning DD_OK, DDERR_SURFACELOST or another error; CheckResult
+# probed (returns its hr). PostMessageA is an API probe. The catch (...)
+# handler 0x42ccce..0x42cd1b runs only for an exception thrown by Negate or
+# DrawSprite (in-process: CDrawer_SetMouseCursor_MatchesOriginal throws one
+# from DrawSprite in a fifth of the cases).
+CURSOR_LIST = SCRATCH
+CURSOR_MOUSE = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+CURSOR_IFACE = SCRATCH + 3 * SCRATCH_SLOT_BYTES
+CURSOR_PIXELS = SCRATCH + 4 * SCRATCH_SLOT_BYTES
+
+
+def cursor_id_value(rng):
+    return rng.choice([rng.randrange(-2, 13), rng.randrange(-2, 13), rng.getrandbits(32)]) & 0xFFFFFFFF
+
+
+def cursor_drawer(rng, pool, args):
+    current = 0xFFFFFFFF if rng.random() < 0.15 else cursor_id_value(rng)
+    if rng.random() < 0.15:
+        args[0] = current
+    fields = [(0x5f6dc, current, 4), (0x5f6d5, rng.choice([0, 1, rng.getrandbits(8)]), 1),
+              (0x5f6b8, 0x10000000 + rng.getrandbits(20) * 4, 4),
+              (0x5f6d8, WORLD_BASE + CURSOR_MOUSE, 4), (CURSOR_MOUSE + 8, WORLD_BASE + CURSOR_IFACE, 4),
+              (CURSOR_IFACE, FAKE_VTABLE, 4),
+              (CURSOR_LIST + 7, rng.choice([rng.randrange(13), rng.randrange(13), rng.getrandbits(8)]), 1)]
+    for frame in range(13):
+        fields.append((CURSOR_LIST + 8 + 4 * frame, 0x100 + 4 * rng.randrange(0x300), 4))
+    return fields
+
+
+def cursor_animation_effect(machine, ecx, args, h):
+    machine.guest_write(args[0], struct.pack("<I", WORLD_BASE + CURSOR_LIST))
+    return args[0]
+
+
+def cursor_lock_effect(machine, ecx, args, h):
+    machine.guest_write(args[1] + 0x24, struct.pack("<I", WORLD_BASE + CURSOR_PIXELS + 2 * (h % 16)))
+    return 0
+
+
+def cursor_draw_record(machine, ecx, args):
+    # (probed as stdcall, so ECX, the address of a stack local, isn't
+    # recorded; the image it points to is)
+    from unicorn.x86_const import UC_X86_REG_ECX
+    image = struct.unpack("<I", bytes(machine.guest_read(machine.uc.reg_read(UC_X86_REG_ECX), 4)))[0]
+    return (image, bytes(machine.guest_read(args[0] + 0x24, 4)), bytes(machine.guest_read(args[1], 4)),
+            bytes(machine.guest_read(args[2], 16)), args[3], args[4])
+
+
+def cursor_com_result(h):
+    return (0, 0, 0x887601C2, 0x887601C2, 0x88760005)[h % 5]
+
+
+CURSOR_CALLEES = {
+    0x005faaf0: (2, "thiscall", "probe", cursor_animation_effect, lambda m, ecx, a: (a[1],)),  # AnimationPointer
+    0x00469130: (2, "thiscall", "probe"),   # CMouseSurface::SetHotspot(x, y)
+    0x00469310: (0, "thiscall", "probe"),   # CMouseSurface::Clear
+    0x005bf050: (3, "thiscall", "probe", cursor_lock_effect, lambda m, ecx, a: (a[0], a[2])),  # CSurface::Lock
+    0x005fadb0: (5, "stdcall", "probe", None, cursor_draw_record),  # GfxDword::DrawSprite (thiscall, ret 14h)
+    0x005bf2e0: (2, "thiscall", "probe", lambda m, ecx, args, h: args[0]),  # CSurface::CheckResult
+}
+
+
+def cursor_argument(rng, pool):
+    return cursor_id_value(rng)
+
+
+# ReleaseSurfaces: the text surface +0x5f6e0 null or an object with
+# FAKE_VTABLE (slot 0 probed), the graphics data lock 0x7a800c an object
+# whose slot 0 (Wait) is probed too; CGameDrawer::ReleaseSurfaces and
+# CGraphicsData::Close probed; g_gfxData compared (an S3.EXE global).
+def release_surfaces_drawer(rng, pool, args):
+    text = rng.choice([0, WORLD_BASE + SCRATCH])
+    # (the lock's vtable starts one slot into FAKE_VTABLE: its slot 0 is probed as 0x4)
+    return [(0x5f6e0, text, 4), (SCRATCH, FAKE_VTABLE, 4), (SCRATCH + SCRATCH_SLOT_BYTES, FAKE_VTABLE + 4, 4)]
+
+
+def release_surfaces_globals(rng, pool, args):
+    return [(0x007a800c, WORLD_BASE + SCRATCH + SCRATCH_SLOT_BYTES, 4),
+            (0x007a8010, 0x10000000 + rng.getrandbits(20) * 4, 4)]
+
+
+def keep_graphics(rng, pool):
+    return rng.choice([0, 1, rng.getrandbits(32), rng.getrandbits(32) & 0xFFFFFF00])
+
+
+def restore_cursor(rng, pool, args):
+    return [(0x5f6dc, rng.choice([0xFFFFFFFF, 0xFFFFFFFF, rng.randrange(9), rng.getrandbits(32)]), 4)]
+
+
+def configured_mode_globals(rng, pool, args):
+    return [(0x00730f0c, rng.getrandbits(32), 4), (0x00730f10, rng.getrandbits(32), 4),
+            (0x00730f14, rng.getrandbits(32), 4)]
+
+
+SPECS += [
+    Spec("CDrawer_SetMouseCursor", 0x0042cb60, "thiscall", [cursor_argument], presets=cursor_drawer,
+         callees=CURSOR_CALLEES, virtuals={0x80: (2, {}, {"com": True, "returns": cursor_com_result})},
+         exempt_blocks=(0x42ccce, 0x42ccfd, 0x42cd17)),  # the catch (...) handler (see above)
+    Spec("CDrawer_RestoreSurfaces", 0x0042cb30, "thiscall", [], presets=restore_cursor,
+         callees={0x005b72e0: (0, "thiscall", "probe"), 0x0042cb60: (1, "thiscall", "probe")}),
+    Spec("CDrawer_ReleaseSurfaces", 0x0042caa0, "thiscall", [keep_graphics], presets=release_surfaces_drawer,
+         globals=release_surfaces_globals, virtuals={0x0: 1, 0x4: 2},
+         callees={0x005b7170: (1, "thiscall", "probe"), 0x005fa690: (0, "thiscall", "probe")}),
+    Spec("CDrawer_CreateSurfaces", 0x0042ca90, "thiscall", [anything],
+         presets=lambda rng, pool, args: [(0, FAKE_VTABLE, 4)], virtuals={0x30: 1}),
+    Spec("CDrawer_SetConfiguredDisplayMode", 0x0042ca70, "thiscall", [], globals=configured_mode_globals,
+         callees={0x0042ce90: (5, "thiscall", "probe")}),
+]
+
+
+# -- wip/cursor-r7: CDrawThread (draw_thread_steps.cpp) -----------------------
+# The thread at world 0 (vtable FAKE_VTABLE: slot 4 (0x10) OnStart); the
+# producer +0x60 an object with FAKE_VTABLE (slot 0: Wait(timeout, 1)); the
+# shared slot +0x58 a dword in the scratch area (InterlockedExchange is an
+# API probe); App::WaitTime probed (ECX = the kind). Draw's callees probed:
+# FetchDrawData (leaves +0x5c null in some cases), SignalFrameDone, the
+# drawer's frame 0x4b26c0; Sleep is an API probe; DebugLog runs (a bare
+# ret in S3.EXE). Draw's EAX is not used (CGameThread::Main ignores Step's).
+# The CTimeout catch of FetchDrawData (0x42c7e0..) runs only when Wait
+# throws (in-process: CDrawThread_FetchDrawData_MatchesOriginal).
+DTS_PRODUCER = SCRATCH
+DTS_SLOT = SCRATCH + SCRATCH_SLOT_BYTES
+DTS_DATA = SCRATCH + 2 * SCRATCH_SLOT_BYTES
+
+
+def dts_thread(rng, pool, args):
+    return [(0, FAKE_VTABLE, 4), (0x60, WORLD_BASE + DTS_PRODUCER, 4), (DTS_PRODUCER, FAKE_VTABLE, 4),
+            (0x58, WORLD_BASE + DTS_SLOT, 4), (0x5c, rng.choice([0, WORLD_BASE + DTS_DATA]), 4),
+            (0x68, rng.choice([0, 0, 1, rng.getrandbits(8)]), 1), (0x69, rng.choice([0, 1, 1]), 1)]
+
+
+def dts_fetch_effect(machine, ecx, args, h):
+    machine.guest_write(WORLD_BASE + 0x5c, struct.pack("<I", 0 if h % 4 == 0 else WORLD_BASE + DTS_DATA))
+
+
+SPECS += [
+    Spec("CDrawThread_Construct", 0x0042c2d0, "thiscall", [], callees={0x005b6530: (0, "thiscall", "this")}),
+    Spec("CDrawThread_Setup", 0x0042c350, "thiscall", [anything] * 7),
+    Spec("CDrawThread_OnExit", 0x0042c670, "thiscall", [], presets=dts_thread,
+         callees={0x00405a50: (0, "thiscall", "probe"), 0x005b6670: (0, "thiscall", "probe")}),
+    Spec("CDrawThread_CreateDrawer", 0x0042c6a0, "thiscall", [], new_fails=0.3,
+         callees={0x0042c820: (3, "thiscall", "this")}),
+    Spec("CDrawThread_Draw", 0x0042c710, "thiscall", [anything], presets=dts_thread, eax_mask=0,
+         virtuals={0x10: 0},
+         callees={0x0042c780: (0, "thiscall", "probe", dts_fetch_effect), 0x0042c810: (0, "thiscall", "probe"),
+                  0x004b26c0: (2, "thiscall", "probe")}),
+    Spec("CDrawThread_FetchDrawData", 0x0042c780, "thiscall", [], presets=dts_thread, virtuals={0x0: 2},
+         callees={0x0040d0e0: (0, "thiscall", "probe")},
+         exempt_blocks=(0x42c7e0, 0x42c801, 0x42c807)),  # catch (CTimeout*) (see above)
+]
+
+
+# -- wip/cursor-r7: CDrawer's constructor and destructor (drawer_lifetime.cpp)
+# The constructor: CGameDrawer's, CGraphicsData's and CSoundData's
+# constructors probed (returning this), ApplyScreenLayout probed,
+# GfxDword::Construct runs (8000 times); operator new fails for one of the
+# two data objects in some cases (ThrowOutOfMemory ends the run as a throw).
+# The unwind actions (0x633070.., not blocks of the function) run only for
+# exceptions (in-process: CDrawer_Construct_MatchesOriginal throws from the
+# stubs). The destructor: the sound / graphics data null or objects with
+# FAKE_VTABLE (slot 0 probed); ~CGameDrawer probed.
+def drawer_data_objects(rng, pool, args):
+    return [(0x5f6bc, rng.choice([0, WORLD_BASE + SCRATCH]), 4), (0x5f6b8, rng.choice([0, WORLD_BASE + SCRATCH + 0x10]), 4),
+            (SCRATCH, FAKE_VTABLE, 4), (SCRATCH + 0x10, FAKE_VTABLE, 4)]
+
+
+SPECS += [
+    Spec("CDrawer_Construct", 0x0042c820, "thiscall", [anything, anything, anything], max_cases=300,
+         new_fails=0.4, new_fails_size=(0xc44, 0x14c),
+         callees={0x005b6c80: (1, "thiscall", "this"), 0x005f67c0: (0, "thiscall", "this"),
+                  0x005fdb60: (0, "thiscall", "this"), 0x004c6d40: (0, "thiscall", "probe"),
+                  0x00610960: (1, "thiscall", "throw")}),
+    Spec("CDrawer_Destroy", 0x0042ca00, "thiscall", [], presets=drawer_data_objects, virtuals={0x0: 1},
+         callees={0x005b6d70: (0, "thiscall", "probe")}),
+]

@@ -100,13 +100,25 @@ struct CDrawer {
     std::int32_t panel_text_right;                    // +0x05f68c  0x4d6a30..0x4d78d0 set it, pass it to
     std::int32_t panel_text_bottom;                   // +0x05f690  DrawTextF and re-read it; text_panels.cpp)
     std::int32_t unk05f694[8];                        // +0x05f694 cleared by InitPanelFonts
-    std::uint8_t unk05f6b4[0x5f6b8 - 0x5f6b4];
+    std::int32_t unk05f6b4;                           // +0x05f6b4 set to -1 by the constructor 0x42c820
     void* graphics;                                   // +0x05f6b8 the CGraphicsData the sprites come from
                                                       //           (CDrawer::QueueCellObject 0x4d5a50)
     void* sound;                                      // +0x05f6bc the CSoundData of the drawing's sound effects
                                                       //           (PlayAmbientSounds 0x4c7730, CDrawer::QueueLandscapeObject 0x4d3050)
-    std::uint8_t unk05f6c0[0x5f6e0 - 0x5f6c0];
+    void* primary_surface;                            // +0x05f6c0 the surfaces CDrawer::InitSurfaces 0x42e4xx creates
+    void* back_surface;                               // +0x05f6c4  (primary = the flip surface, DoFlip 0x42cd70);
+    void* draw_surface;                               // +0x05f6c8  ReleaseSurfaces 0x42caa0 forgets all four
+    void* surface_5f6cc;                              // +0x05f6cc
+    void* draw_thread;                                // +0x05f6d0 the CDrawThread that created it (constructor 0x42c820)
+    std::uint8_t lobby;                               // +0x05f6d4 the constructor's lobby flag (CDrawThread +0x70)
+    std::uint8_t software_cursor;                     // +0x05f6d5 the cursor is drawn into mouse_surface (else Windows' cursor)
+    std::uint8_t unk05f6d6[0x5f6d8 - 0x5f6d6];
+    void* mouse_surface;                              // +0x05f6d8 the Dirk::CMouseSurface of the software cursor
+    std::int32_t cursor_id;                           // +0x05f6dc the current mouse cursor (0..8; -1 none), SetMouseCursor 0x42cb60
     void* text_surface;                               // +0x05f6e0 the Dirk::CTextSurface the panel texts are drawn into
+    std::uint8_t unk05f6e4[0x5f6f8 - 0x5f6e4];
+    void* flip_callback;                              // +0x05f6f8 called by DoFlip 0x42cd70 on draw_surface (set by InitSurfaces)
+    std::uint32_t unk05f6fc;                          // +0x05f6fc zeroed by the constructor
 };
 
 #pragma pack(pop)
@@ -141,6 +153,16 @@ static_assert(offsetof(CDrawer, unk05f670) == 0x5f670);
 static_assert(offsetof(CDrawer, unk05f694) == 0x5f694);
 static_assert(offsetof(CDrawer, panel_text_bottom) == 0x5f690);
 static_assert(offsetof(CDrawer, text_surface) == 0x5f6e0);
+static_assert(offsetof(CDrawer, primary_surface) == 0x5f6c0);
+static_assert(offsetof(CDrawer, surface_5f6cc) == 0x5f6cc);
+static_assert(offsetof(CDrawer, software_cursor) == 0x5f6d5);
+static_assert(offsetof(CDrawer, mouse_surface) == 0x5f6d8);
+static_assert(offsetof(CDrawer, cursor_id) == 0x5f6dc);
+static_assert(offsetof(CDrawer, unk05f6b4) == 0x5f6b4);
+static_assert(offsetof(CDrawer, draw_thread) == 0x5f6d0);
+static_assert(offsetof(CDrawer, lobby) == 0x5f6d4);
+static_assert(offsetof(CDrawer, flip_callback) == 0x5f6f8);
+static_assert(sizeof(CDrawer) == 0x5f700);
 
 template <typename T>
 CDrawer* DrawerOf(T* self) {

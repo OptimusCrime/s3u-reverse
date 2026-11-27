@@ -88,6 +88,8 @@
 //   0x005dde00   32  CLobbyServer          WCSortedVectorBase_CLobbyServer
 //   0x005de010   32  CServerData           WCVectorBase_CServerData
 //   0x005de090   32  CLobbyServer          WCVectorBase_CLobbyServer
+//   0x005b7ec0   48  CDirectDrawDevice     WCVectorBase_CDirectDrawDevice (wip/cursor-r7; CGameDrawer +0x40)
+//   0x005b7f40  108  CDisplayMode          WCVectorBase_CDisplayMode (wip/cursor-r7; CGameDrawer +0x5c)
 //   0x005f3f40   32  CServerData           WCOrderedVectorBase_CServerData
 //   0x005dde80   84  LobbyPlayer           WCVectorBase_LobbyPlayer
 //   0x00609ff0   36  CLMMessageBlock       WCOrderedVectorBase_CLMMessageBlock
@@ -387,6 +389,13 @@ VectorBase* __fastcall VectorConstructor_5de010(VectorBase* self, void*, std::ui
 VectorBase* __fastcall VectorConstructor_5de090(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
     return ConstructVector(self, capacity, grow, 32, vt::kWCBareVectorBase_CLobbyServer, vt::kWCVectorBase_CLobbyServer);
 }
+VectorBase* __fastcall VectorConstructor_5b7ec0(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 0x30, vt::kWCBareVectorBase_CDirectDrawDevice,
+                           vt::kWCVectorBase_CDirectDrawDevice);
+}
+VectorBase* __fastcall VectorConstructor_5b7f40(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
+    return ConstructVector(self, capacity, grow, 0x6c, vt::kWCBareVectorBase_CDisplayMode, vt::kWCVectorBase_CDisplayMode);
+}
 VectorBase* __fastcall VectorConstructor_5f3f40(VectorBase* self, void*, std::uint32_t capacity, std::uint32_t grow) {
     return ConstructVector(self, capacity, grow, 32, vt::kWCBareVectorBase_CServerData, vt::kWCOrderedVectorBase_CServerData);
 }
@@ -624,6 +633,10 @@ S3RE_HOOK(0x005de090, VectorConstructor_5de090, ConstructorFn, Original_VectorCo
           VectorConstructor_5de090);
 S3RE_HOOK(0x005f3f40, VectorConstructor_5f3f40, ConstructorFn, Original_VectorConstructor_5f3f40,
           VectorConstructor_5f3f40);
+S3RE_HOOK(0x005b7ec0, VectorConstructor_5b7ec0, ConstructorFn, Original_VectorConstructor_5b7ec0,
+          VectorConstructor_5b7ec0);
+S3RE_HOOK(0x005b7f40, VectorConstructor_5b7f40, ConstructorFn, Original_VectorConstructor_5b7f40,
+          VectorConstructor_5b7f40);
 S3RE_HOOK(0x005de130, BareVectorConstructor_5de130, BareConstructorFn, Original_BareVectorConstructor_5de130,
           BareVectorConstructor_5de130);
 S3RE_HOOK(0x004683b0, BareVectorConstructor_4683b0, BareConstructorFn, Original_BareVectorConstructor_4683b0,
@@ -762,6 +775,8 @@ const ConstructorPair kConstructors[] = {
     {Original_VectorConstructor_5de010, &VectorConstructor_5de010, 0x5de010},
     {Original_VectorConstructor_5de090, &VectorConstructor_5de090, 0x5de090},
     {Original_VectorConstructor_5f3f40, &VectorConstructor_5f3f40, 0x5f3f40},
+    {Original_VectorConstructor_5b7ec0, &VectorConstructor_5b7ec0, 0x5b7ec0},
+    {Original_VectorConstructor_5b7f40, &VectorConstructor_5b7f40, 0x5b7f40},
     {Original_VectorConstructor_5dde80, &VectorConstructor_5dde80, 0x5dde80},
     {Original_VectorConstructor_609ff0, &VectorConstructor_609ff0, 0x609ff0},
     {Original_VectorConstructor_609e50, &VectorConstructor_609e50, 0x609e50},

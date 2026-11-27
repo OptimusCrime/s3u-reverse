@@ -35,6 +35,17 @@ inline constexpr std::uint32_t kCThread = 0x65d710;            // Win32::CThread
 inline constexpr std::uint32_t kCThread_sub4 = 0x65d704;       // its waitable part at +4
 inline constexpr std::uint32_t kCGameThread = 0x65ca04;        // DirectX::CGameThread
 inline constexpr std::uint32_t kCGameThread_sub4 = 0x65c9f8;   // its handle part at +4
+inline constexpr std::uint32_t kCGameDrawThread = 0x65ca40;       // DirectX::CGameDrawThread
+inline constexpr std::uint32_t kCGameDrawThread_sub4 = 0x65ca34;  // its handle part at +4
+inline constexpr std::uint32_t kCDrawThread = 0x656ab0;           // CDrawThread (the in-game draw thread)
+inline constexpr std::uint32_t kCDrawThread_sub4 = 0x656aa4;      // its handle part at +4
+inline constexpr std::uint32_t kCGameDrawer = 0x65ca7c;           // DirectX::CGameDrawer
+inline constexpr std::uint32_t kCDrawer = 0x656aec;               // CDrawer (the in-game drawer)
+// CGameDrawer's containers (stored by its constructor 0x5b6c80 after the base constructors').
+inline constexpr std::uint32_t kWCPtrSList_CSurface = 0x65cae8;                  // +0x10 the surface list
+inline constexpr std::uint32_t kWCPtrSList_CPalette = 0x65cad8;                  // +0x28 the palette list
+inline constexpr std::uint32_t kWCValOrderedVector_CDirectDrawDevice = 0x65cac4; // +0x40 the devices
+inline constexpr std::uint32_t kWCValOrderedVector_CDisplayMode = 0x65cab0;      // +0x5c the display modes
 inline constexpr std::uint32_t kCLogicThread = 0x65a14c;       // CLogicThread
 inline constexpr std::uint32_t kCLogicThread_sub4 = 0x65a140;  // its handle part at +4
 inline constexpr std::uint32_t kCWin32WaitableBag = 0x65733c;  // Win32::CWin32WaitableBag<CWin32Waitable>
@@ -258,6 +269,8 @@ inline constexpr std::uint32_t kWCSkipListIterBase_UIntMessageBlock = 0x65d61c; 
 inline constexpr std::uint32_t kWCBareVectorBase_CImageDescription = 0x65d2a0;  // <Lobby::CImageDescription>
 inline constexpr std::uint32_t kWCBareVectorBase_CSocketAddress = 0x65d2ac;     // <Lobby::CSocketAddress>
 inline constexpr std::uint32_t kWCBareVectorBase_CDirectDrawDevice = 0x65cb24;  // <DirectX::CDirectDrawDevice>
+inline constexpr std::uint32_t kWCVectorBase_CDirectDrawDevice = 0x65cb88;      // WCVectorBase<DirectX::CDirectDrawDevice> (wip/cursor-r7)
+inline constexpr std::uint32_t kWCVectorBase_CDisplayMode = 0x65cb9c;           // WCVectorBase<DirectX::CDisplayMode> (wip/cursor-r7)
 inline constexpr std::uint32_t kWCValSkipListDict_UIntString = 0x65719c;        // WCValSkipListDict<unsigned int, String>
 inline constexpr std::uint32_t kWCValSkipListDict_IntString = 0x6580b8;         // WCValSkipListDict<int, String>
 inline constexpr std::uint32_t kWCValSkipListDict_UIntStringVector = 0x6571e4;  // <unsigned int, WCValOrderedVector<String>>
@@ -362,6 +375,7 @@ inline constexpr std::uintptr_t kCMMExceptionPointer = 0x682f68;   // Win32::CMM
 // Type descriptors (catch types).
 namespace type_descriptor {
 inline constexpr std::uintptr_t kCTimeoutPointer = 0x698e98;  // ".PAVCTimeout@Win32@@" (ExecuteCommands' catch)
+inline constexpr std::uintptr_t kCAppNotActiveExceptionPointer = 0x698dd0;  // ".PAVCAppNotActiveException@DirectX@@" (CGameDrawThread::Step's catch)
 inline constexpr std::uintptr_t kCHResultPointer = 0x6968d8;  // ".PAVCHResult@Win32@@" (CMapFileStream's catches)
 inline constexpr std::uintptr_t kCFileNotFoundPointer = 0x69f908;  // ".PAVCFileNotFound@Win32@@" (CMapFileStream::Open)
 // ".PAVCDirectSoundException@DirectX@@" (CSoundData::Open's and Restore's catches)

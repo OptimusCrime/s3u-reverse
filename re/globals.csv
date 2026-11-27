@@ -6,6 +6,7 @@ address,name,type,status,notes
 0x006553a0,g_stringNullBuffer,char[1],classified,"The shared empty buffer of S3.EXE's std::string (a zero byte). Declared in src/s3re/game/tables.h; used by exceptions.cpp, string.cpp."
 0x00655dc8,g_wstringNullBuffer,uint16_t[1],classified,"The shared empty buffer of S3.EXE's std::wstring (a zero word; the byte before it is read as its count and assign can increment it). Declared in src/s3re/game/tables.h; used by wstring.cpp."
 0x00655dcc,g_wstringNpos,const volatile uint32_t,classified,"std::wstring::npos of S3.EXE's statically linked library (0xFFFFFFFF; read at run time like the original). Declared in src/s3re/game/tables.h; used by wstring.cpp."
+0x00656a58,g_cursorResources,const CursorResource[9],identified,"Per mouse cursor id (0..8) the resource id CDrawer::SetMouseCursor 0x42cb60 posts to the game window (message 0x802) for the Windows cursor; an unlisted id reads the dword after the table (0x42c310). Declared in src/s3re/game/tables.h; used by drawer_surfaces.cpp."
 0x0065857c,g_terrainCost,const int8_t[256],classified,Pathing cost per terrain type (signed). Declared in src/s3re/game/tables.h; used by pathing.cpp.
 0x0065867c,g_directionDx,const int32_t[6],classified,x and y steps of the six directions. Declared in src/s3re/game/tables.h; used by pathing.cpp.
 0x00658694,g_directionDy,const int32_t[6],classified,x and y steps of the six directions. Declared in src/s3re/game/tables.h; used by pathing.cpp.
@@ -68,6 +69,11 @@ address,name,type,status,notes
 0x0065c0b8,g_guidNull,const uint32_t[4],classified,GUID_NULL (16 zero bytes). Declared in src/s3re/game/tables.h; used by string_members.cpp.
 0x006970f0,g_versionNumber,int32_t,identified,"Game version x100 (logged as %i.%i by CConsoleThread::OnStart); CLogicThread::SaveGame writes it as the savegame version (chunk 0 +8, 0xa0)."
 0x006974a4,texts::kFullStop,char[],identified,"String ""."" Declared in src/s3re/game/texts.h; used by win32_errors.cpp."
+0x00697e7c,texts::kDDUnlock,char[],identified,"String ""CSurface::DDUnlock"" Declared in src/s3re/game/texts.h; used by drawer_surfaces.cpp."
+0x00698e7c,texts::kDrawNoData,char[],identified,"String ""DRAW: Kein Daten %i %i"" Declared in src/s3re/game/texts.h; used by draw_thread_steps.cpp."
+0x00698f00,texts::kSoundDataNotNull,char[],identified,"String ""lpSoundData"" Declared in src/s3re/game/texts.h; used by drawer_lifetime.cpp."
+0x00698f0c,texts::kGraphicsDataNotNull,char[],identified,"String ""lpGraphicsData"" Declared in src/s3re/game/texts.h; used by drawer_lifetime.cpp."
+0x00698f1c,texts::kDrawFile,char[],identified,"String ""E:\Siedler3\Dirk\Draw.cpp"" Declared in src/s3re/game/texts.h; used by drawer_lifetime.cpp."
 0x00699000,texts::kNewline,char[],identified,"String ""\n"" Declared in src/s3re/game/texts.h; used by win32_errors.cpp."
 0x0069f974,texts::kSlotLog,char[],identified,"String ""SLOT: Ids: %i %x Version: %i Team: %i Type: %i Nation: %i Clan: %i %s"" Declared in src/s3re/game/texts.h; used by game_settings_vectors.cpp."
 0x0069f9bc,texts::kShouldManage,char[],identified,"String ""Das solltest du schon schaffen"" Declared in src/s3re/game/texts.h; used by pathing.cpp."
@@ -242,6 +248,8 @@ address,name,type,status,notes
 0x0073273c,texts::kAiNoSuitableTool,char[],identified,"String ""KEIN PASSENDES WERKZEUG VORHANDEN\n"" (no suitable tool; 0x57abc0). Declared in src/s3re/game/texts.h; used by ai_force_production.cpp."
 0x00732804,g_aiBuildingToolAndWorker,const ai::AiToolAndWorker[57],classified,"Per building type {u16 tool goods, u8 worker settler type, u8 0} (woodcutter axe 14 / 3, mines pickaxe 15 / 10, smiths hammer 13 / 11, farm scythe 32 / 16, fishery rod 17 / 17). Declared in src/s3re/game/globals.h; used by ai_force_production.cpp."
 0x007329d0,g_aiCandidateDefaults,const uint16_t[],classified,"Default per-candidate value (AI_RecordBestCandidate). Declared in src/s3re/game/tables.h; used by ai_helpers.cpp, ai_layout.h."
+0x0079df18,texts::kGamebaseFile,char[],identified,"String ""E:\Siedler3\DirectX\Gamebase.cpp"" Declared in src/s3re/game/texts.h; used by directx_draw_thread.cpp."
+0x0079dfb0,texts::kDrawerNotNull,char[],identified,"String ""lpDrawer"" Declared in src/s3re/game/texts.h; used by directx_draw_thread.cpp."
 0x007a01e0,texts::kDDBltName,char[],identified,"String ""CSurface::DDBlt"" Declared in src/s3re/game/texts.h; used by directx_surface.cpp."
 0x007a01f0,texts::kDDBltFastName,char[],identified,"String ""CSurface::DDBltFast"" Declared in src/s3re/game/texts.h; used by directx_surface.cpp."
 0x007a2a34,texts::kCommaLine,char[],identified,"String "", line "" Declared in src/s3re/game/texts.h; used by win32_errors.cpp, win32_exceptions.cpp."
@@ -260,6 +268,7 @@ address,name,type,status,notes
 0x007a8000,g_buildInfo,uint32_t[2],classified,"Written in CConsoleThread::OnStart from 0x60eff0; logged as two %x values next to the version; saved in savegame chunk 0 +0xc."
 0x007a800a,g_optionRecord,uint8,identified,Set by the -record command-line option (CConsoleThread::OnStart). Copied to CNetThread+0x89 / CNetBounceThread+0x59: write commands to Siedler3.evt.
 0x007a800b,g_optionPlay,uint8,identified,Set by the -play command-line option. Copied to CNetThread+0x8a / CNetBounceThread+0x5a: add commands from Siedler3.evt (on top of the live ones).
+0x007a800c,g_graphicsDataLock,void*,classified,"Dirk::Globals::lpGraphicsDataLock, a Win32::CSemaphore created in 0x405630; CDrawer::ReleaseSurfaces 0x42caa0 waits on it (slot 0, Wait(5000, 1)) before closing the graphics data. Declared in src/s3re/game/globals.h; used by drawer_surfaces.cpp."
 0x007a8010,g_gfxData,gfx::CGraphicsData*,classified,"The loaded graphics (gfx::CGraphicsData, game/graphics/gfx_layout.h; created by CDrawer 0x42c820). Declared in src/s3re/game/globals.h; used by logic_helpers.cpp, settler_spawn.cpp, test/fake_graphics.h."
 0x007a8020,g_dialogPixelFormat,uint32_t[8],identified,"The DDPIXELFORMAT (8 dwords) of the GDI surface, copied from its surface description by Dialog::Init 0x416190; returned by Dialog::PixelFormat 0x416880. Was g_dialogSettings. Declared in src/s3re/game/globals.h; used by screen_element.cpp."
 0x007a8064,g_dialogColors,uint32_t[14],identified,"The dialog colour table (14 entries), filled by Dialog::Init 0x416190; read by Dialog::Color 0x4168b0. Was g_dialogTable7a8064. Declared in src/s3re/game/globals.h; used by screen_element.cpp."
@@ -283,6 +292,7 @@ address,name,type,status,notes
 0x007deb58,g_syncChecksums,uint32_t[20][8],classified,"Lockstep checks (ExecuteCommands 0xf4 SyncCheck): per player seven checksum words (world, economy, trade, -, pile, settler, buildings) and at [7] the step stamp they belong to. Declared in src/s3re/game/globals.h; used by execute_commands_net.cpp."
 0x007dfb58,g_syncRandomHistory,uint16[32],classified,CLogicThread::Step stores the RNG a-word here when the tick low byte is 0 (index (tick>>8)&31) and sends it via 0x4309c0: probably the lockstep desync check. ExecuteCommands 0xfb compares another player's word with it (desync check). Declared in src/s3re/game/globals.h; used by execute_commands_net.cpp.
 0x007dfba0,g_pixelFormat,PixelFormat,classified,"Shift counts of the three colour channels in the screen's pixel format, followed by their scale factors at 0x7dfbac..0x7dfbb4 (Render::PackColour 0x4c7b00: (c * scale) >> 8 << shift per channel). Was g_pixelChannelShifts. Declared in src/s3re/game/globals.h; used by graphics_helpers.cpp, minimap.cpp."
+0x007dfd28,g_unk7dfd28,int32,identified,"Logged with g_pathPhase by CDrawThread's ""DRAW: Kein Daten %i %i"" (0x42c746, 0x42c7e0); no code writes it by address. Declared in src/s3re/game/globals.h; used by draw_thread_steps.cpp."
 0x007dfd2c,g_stepCountdown,uint32,classified,Checked and decremented in CLogicThread::Step; when non-zero some per-phase calls (0x51f110) are skipped. Purpose unknown.
 0x007dfd30,g_fastForwarding,int32_t,identified,"Set by CLogicThread::Step while g_stepCountdown catches up (0x53dc80), 0 otherwise; UpdateEnvironment then skips the fog of war cycle (and resets its counter) and the minimap. Declared in src/s3re/game/globals.h; used by environment.cpp."
 0x007dfd34,g_unk7dfd34,int32_t,classified,"Cleared by CGameData::FinishInitialising 0x4fce90 (also written by 0x4b26c0, CGameData::CGameData, ProcessEvents); meaning unknown. Declared in src/s3re/game/globals.h."

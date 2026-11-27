@@ -423,6 +423,10 @@ SPECS += [Spec(f"VectorConstructor_{a:x}", a, "thiscall", [watcom_capacity, anyt
           for a in WATCOM_R6_VECTOR_CONSTRUCTORS]
 SPECS += [Spec(f"BareVectorConstructor_{a:x}", a, "thiscall", [watcom_capacity], new_fails=0.2)
           for a in WATCOM_R6_BARE_VECTOR_CONSTRUCTORS]
+# wip/cursor-r7: CGameDrawer's two vectors (devices 0x30, display modes 0x6c bytes).
+CURSOR_R7_VECTOR_CONSTRUCTORS = (0x5b7ec0, 0x5b7f40)
+SPECS += [Spec(f"VectorConstructor_{a:x}", a, "thiscall", [watcom_capacity, anything], new_fails=0.2)
+          for a in CURSOR_R7_VECTOR_CONSTRUCTORS]
 
 
 # -- destructors of vectors whose elements have a destructor (element_vectors.cpp) --
